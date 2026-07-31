@@ -1,0 +1,23 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Go build and test outputs
+/bin/
+/dist/
+coverage.out
+*.test
+*.prof
+
+# Local multi-repository workspace only
+go.work
+go.work.sum
+
+# Editors and local agent staging
+.idea/
+.vscode/
+.codex-*
+
+# Real commercial source material stays out of version control
+/docs/reference/
