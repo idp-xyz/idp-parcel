@@ -36,6 +36,11 @@ type proof struct {
 	ContractSuiteVersion string `json:"contract_suite_version"`
 	Result               string `json:"result"`
 	CompletedAt          string `json:"completed_at"`
+
+	// AcknowledgedGovernanceMode confirms this consumer knows it is signing off
+	// on a candidate the framework produced under GovernanceMode. The framework
+	// manifest holds the authoritative value; evidencecheck compares the two.
+	AcknowledgedGovernanceMode string `json:"acknowledged_governance_mode"`
 }
 
 // TestMain writes the proof only after every contract case passed, so the file
@@ -75,6 +80,8 @@ func writeProof(path string) error {
 		ContractSuiteVersion: bentocontract.ContractSuiteVersion,
 		Result:               "PASS",
 		CompletedAt:          time.Now().UTC().Format(time.RFC3339Nano),
+
+		AcknowledgedGovernanceMode: bentocontract.GovernanceMode,
 	}, "", "  ")
 	if err != nil {
 		return err

@@ -30,13 +30,13 @@ const (
 	OriginCommit = "56322dc25373b872ab5c49a74c0d544d7c088184"
 )
 
-// Governance records the honest single maintainer state of this proof. Parcel
-// never fabricates a second reviewer.
-const (
-	GovernanceMode   = "SOLO_BOOTSTRAP"
-	ApprovalNotice   = "NO INDEPENDENT HUMAN APPROVAL"
-	BypassableNotice = "OWNER-BYPASSABLE"
-)
+// GovernanceMode is the framework governance mode this proof acknowledges.
+// Parcel records it to show it knows what it is signing off on; it never
+// fabricates a second reviewer. What the mode means — which guarantees the
+// machine gates carry and which they cannot — is the framework's to state, in
+// its maintenance governance contract. The authoritative value lives in the
+// release evidence manifest, and evidencecheck compares the two.
+const GovernanceMode = "SOLO_BOOTSTRAP"
 
 // ContractSuiteVersion is the contract matrix version the framework
 // coordination job pins. Both consumers must report the same value, otherwise
