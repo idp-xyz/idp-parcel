@@ -8,7 +8,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jackc/tern/v2 v2.4.1
-	go.idp.xyz/idp-bento-go v0.1.0-rc.1
+	go.idp.xyz/idp-bento-go v0.1.0-rc.2
 )
 
 require (
