@@ -22,8 +22,9 @@ Status: Confirmed
 - `parcel-shipment` 已确认拥有提交批次、委托、声明包裹、接受决定和接受基线；客户提交与委托接受是两个业务事件。
 - `UC-PS-001` 已确认“委托已提交”的业务语义，以及业务状态、决定记录和事件发布意图的原子提交要求。
 - `BD-PS-001` 至 `BD-PS-008` 当前仍待业务确认。它们不阻塞提交骨架和技术合同，但阻塞真实接受、拒绝、资金/信用、试点归属及生产规则。
-- `idp-bento-go` 的正式 module path、Git 远端、DNS、TLS 和 vanity metadata 已建立；当前仍没有可用于消费者基线的不可变 `v0.1.0-rc.N` tag、私有读取身份和空缓存下载证明。
-- Parcel 本地工作区已经初始化 Git `main`、`go.idp.xyz/idp-parcel` 单 module、Go `1.26.5` toolchain、`chi/v5 v5.3.1` 基础 API 和只读权限基础 CI；WSL `go vet ./...`、race test 与 build 已通过。当前仍没有首个提交、远端、业务切片或 Bento 候选依赖。
+- `idp-bento-go` 的正式 module path、Git 远端、DNS、TLS 和 vanity metadata 已建立。首个不可变候选 `v0.1.0-rc.1` 已创建，指向框架提交 `af68525`，并已通过空缓存、无 `replace`、`GOPROXY=direct` 的下载证明。
+- Parcel 已建立首个提交并绑定远端 `https://github.com/idp-xyz/idp-parcel`（private）。仓库使用 `go.idp.xyz/idp-parcel` 单 module、Go `1.26.5`、`chi/v5 v5.3.1`、`pgx/v5 v5.10.0`、`tern/v2 v2.4.1`，并锁定 Bento `v0.1.0-rc.1`。
+- `PS-W1-S1 来源保全并提交委托` 已实现，PostgreSQL 16 集成门禁与 `PBC-01`、`PBC-05`、`PBC-06`、`PBC-08` 通过。`PBC-09` 的证明 JSON、WORM/DSSE 证据和受保护 CI 仍未建立。
 
 ## 已确认决定
 
@@ -222,10 +223,10 @@ Parcel 不提供一个可以操作任意聚合的通用业务 Repository。首�
 
 ## 下一步
 
-1. 已完成本地 Git `main`、`go.idp.xyz/idp-parcel` 单 module、LF 规则、基础 API/CI 和可测试包；首个提交与远端仍未绑定。
-2. 建立业务模块目录和架构测试，并实现来源保全和`已提交`子切片；在真实 Bento RC 前不把本地 workspace 依赖提交为发布基线。
-3. 建立 PostgreSQL 16 集成测试和 `bento-contract` 脚手架，先跑可本地验证的事务、Repository、迁移与 Outbox 合同。
-4. 等 TMS 与 Parcel 都形成最小真实切片提交后，再绑定 `B-06`、创建真实 RC、执行空缓存下载和双消费者证明。
+1. 已完成：首个提交、远端、业务模块目录、架构测试、`PS-W1-S1` 来源保全与`已提交`子切片，并锁定不可变候选 `v0.1.0-rc.1`。
+2. 已完成：PostgreSQL 16 集成测试和 `bento-contract`，`PBC-01`、`PBC-05`、`PBC-06`、`PBC-08` 通过。
+3. 待完成：`PBC-02` 强类型复合键 Repository 合同、`PBC-03` 业务写入与 Outbox 同事务可见性正反证明、`PBC-04` 并发重复抑制、`PBC-07` `ErrCommitUncertain` 查询续办，以及 `PBC-09` 的证明 JSON。
+4. 待完成：`parcel-outbox` 发布进程、`chi` 接入适配器，以及与 TMS 一起执行 `B-06` 双消费者证明后再考虑稳定发布。
 
 ## 链接
 

@@ -17,9 +17,31 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       GOTOOLCHAIN: local
+      # The framework resolves through its vanity path, never through a public
+      # proxy or checksum database.
+      GOPRIVATE: go.idp.xyz
+      GOPROXY: direct
+      GONOSUMDB: go.idp.xyz
+      GOFLAGS: -mod=readonly
+      GIT_TERMINAL_PROMPT: 0
+      IDP_PARCEL_POSTGRES_DSN: postgres://idp_parcel_ci:idp_parcel_ci@127.0.0.1:5432/idp_parcel_ci?sslmode=disable
+    services:
+      postgres:
+        image: postgres:16.12-alpine@sha256:97ff59a4e30e08d1c11bdcd9455e7832368c0572b576c9092cde2df4ae5552a3
+        env:
+          POSTGRES_USER: idp_parcel_ci
+          POSTGRES_PASSWORD: idp_parcel_ci
+          POSTGRES_DB: idp_parcel_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U idp_parcel_ci -d idp_parcel_ci"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -30,6 +52,20 @@ jobs:
           go-version: 1.26.5
           cache: true
 
+      # The credential is scoped to this step's git config only. It is never
+      # written to a clone URL, a repository file, a build argument or a log.
+      - name: Authorize framework module fetch
+        env:
+          BENTO_READ_TOKEN: ${{ secrets.BENTO_READ_TOKEN }}
+        run: |
+          if [ -z "${BENTO_READ_TOKEN}" ]; then
+            echo "::error::BENTO_READ_TOKEN is required to resolve go.idp.xyz/idp-bento-go from its private repository."
+            exit 1
+          fi
+          git config --global \
+            url."https://x-access-token:${BENTO_READ_TOKEN}@github.com/".insteadOf \
+            "https://github.com/"
+
       - name: Check formatting
         run: test -z "$(gofmt -l .)"
 
@@ -37,7 +73,7 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race ./...
+        run: go test -race -count=1 ./...
 
       - name: Build
         run: go build ./...
