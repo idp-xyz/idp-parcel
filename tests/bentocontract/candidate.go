@@ -38,6 +38,7 @@ const (
 	BypassableNotic = "OWNER-BYPASSABLE"
 )
 
-// ContractSuiteVersion is the version of this contract suite. A framework
-// candidate proof cites both the candidate and the suite that produced it.
-const ContractSuiteVersion = "parcel-bento-contract-1"
+// ContractSuiteVersion is the contract matrix version the framework
+// coordination job pins. Both consumers must report the same value, otherwise
+// one side could prove a stale matrix, so this is not a Parcel-local label.
+const ContractSuiteVersion = "r05-v1"
