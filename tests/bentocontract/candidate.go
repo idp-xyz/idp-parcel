@@ -33,9 +33,9 @@ const (
 // Governance records the honest single maintainer state of this proof. Parcel
 // never fabricates a second reviewer.
 const (
-	GovernanceMode  = "SOLO_BOOTSTRAP"
-	ApprovalNotice  = "NO INDEPENDENT HUMAN APPROVAL"
-	BypassableNotic = "OWNER-BYPASSABLE"
+	GovernanceMode   = "SOLO_BOOTSTRAP"
+	ApprovalNotice   = "NO INDEPENDENT HUMAN APPROVAL"
+	BypassableNotice = "OWNER-BYPASSABLE"
 )
 
 // ContractSuiteVersion is the contract matrix version the framework
