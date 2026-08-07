@@ -22,10 +22,18 @@ import (
 // settlement-accounting, neither of which owns production types, so its two
 // halves belong to those contexts' own contract tests.
 //
-// Each test carries a `Covers:` line naming only the scenarios it actually
-// asserts, so `rg SYN-CHAIN-05` answers the coverage question mechanically. A
-// scenario that is only partly asserted is not listed; an overstated line is
-// worse than a missing one because it makes the grep lie.
+// Each test carries a `Covers:` line naming only what it actually asserts, so
+// `rg "^// Covers:.*SYN-CHAIN-05"` answers the coverage question mechanically.
+// Match the annotation lines, not bare IDs — bare IDs also hit prose like the
+// SYN-CHAIN-04 note above and would report an absent scenario as covered.
+//
+// Where a test asserts one facet of a scenario rather than all of it, say which
+// facet in parentheses. An unqualified line claims the whole scenario, and an
+// overstated claim is worse than no claim: it makes the grep lie.
+//
+// Keep each scenario on its own `// Covers:` line. A wrapped annotation puts the
+// second scenario on a continuation line the anchored pattern cannot see, which
+// reports a covered scenario as missing.
 
 const syntheticChainFixtureVersion = "SYN-CHAIN-FIXTURE-v1"
 

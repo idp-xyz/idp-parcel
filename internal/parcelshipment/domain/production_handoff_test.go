@@ -8,6 +8,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
+// Covers: S02-AT-04 (only a complete, scope-matching, queryable confirmation succeeds)
 func TestSafeHandoffConfirmsOnlyMatchingQueryableCompleteScope(t *testing.T) {
 	spec := completeHandoffSpec(t, "scope-1")
 	assessment, err := domain.AssessSafeHandoff(spec)
@@ -31,6 +32,7 @@ func TestSafeHandoffConfirmsOnlyMatchingQueryableCompleteScope(t *testing.T) {
 	}
 }
 
+// Covers: S02-AT-05 (every incomplete outcome stays unresolved and keeps a continuation)
 func TestSafeHandoffKeepsIncompleteOutcomesUnresolved(t *testing.T) {
 	continuation := mustValue(t, domain.NewOwnershipContinuationReference, "continuation-1")
 	confirmation := mustValue(t, domain.NewHandoffConfirmationReference, "confirmation-1")
@@ -165,6 +167,7 @@ func TestSafeHandoffRejectsInconsistentObservationEvidence(t *testing.T) {
 	}
 }
 
+// Covers: S02-AT-04 (OTHER authority cannot be decided without a confirmation reference)
 func TestOtherAuthorityDecisionRequiresConfirmedHandoff(t *testing.T) {
 	spec := ownershipSpec(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen, "scope-1", "rev-1")
 	spec.HandoffRef = domain.HandoffConfirmationReference{}
