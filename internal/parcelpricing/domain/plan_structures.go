@@ -281,27 +281,29 @@ func (rule SurchargeRule) ConditionalMinimumWeight() (ConditionalMinimumWeight, 
 	return *rule.minimumWeight, true
 }
 
-// amountCurrency reports the currency the rule's declared amounts are stated
-// in, or nil when the method carries no amount of its own.
-func (rule SurchargeRule) amountCurrency() *Currency {
-	return rule.calculation.currency()
+// declaredCurrencies reports the currency of every amount the rule states: a
+// fixed amount, a banded table, and each operand of a greater-of. Every one has
+// to be reported, because nothing downstream can catch a foreign amount —
+// charge totals accumulate as bare decimals and are stamped with the plan's
+// currency at the end, so an unchecked operand is billed as the plan's own on
+// an evaluation that still reads as completed. This gate is the only guard.
+// A percentage states no currency of its own; it takes the one its basis is in.
+func (rule SurchargeRule) declaredCurrencies() []Currency {
+	return rule.calculation.declaredCurrencies()
 }
 
-func (calculation SurchargeCalculation) currency() *Currency {
+func (calculation SurchargeCalculation) declaredCurrencies() []Currency {
 	switch {
 	case calculation.amount != nil:
-		currency := calculation.amount.currency
-		return &currency
+		return []Currency{calculation.amount.currency}
 	case calculation.table != nil:
-		currency := calculation.table.currency
-		return &currency
+		return []Currency{calculation.table.currency}
 	default:
+		var currencies []Currency
 		for _, operand := range calculation.operands {
-			if currency := operand.currency(); currency != nil {
-				return currency
-			}
+			currencies = append(currencies, operand.declaredCurrencies()...)
 		}
-		return nil
+		return currencies
 	}
 }
 

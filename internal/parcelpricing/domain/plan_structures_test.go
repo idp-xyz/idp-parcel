@@ -377,6 +377,31 @@ func TestPlanRefusesAConditionalMinimumStatedInAnotherWeightUnit(t *testing.T) {
 	}
 }
 
+// A greater-of states an amount on each side, so checking one of them leaves
+// the other unchecked. Nothing downstream can catch it: charge totals are
+// accumulated as bare decimals and stamped with the plan's currency at the end,
+// so a foreign amount inside an operand is billed as though it were the plan's
+// own and the evaluation still reads as completed. Formation is the only place
+// that can refuse it.
+func TestPlanRefusesAGreaterOfWhoseOperandsDisagreeOnCurrency(t *testing.T) {
+	floor, err := domain.NewFixedAmountSurcharge(money(t, "12", mustValue(t, domain.NewCurrency, "USD")))
+	if err != nil {
+		t.Fatalf("floor operand: %v", err)
+	}
+	foreign, err := domain.NewFixedAmountSurcharge(money(t, "999", mustValue(t, domain.NewCurrency, "EUR")))
+	if err != nil {
+		t.Fatalf("foreign operand: %v", err)
+	}
+	calculation, err := domain.NewGreaterOfSurcharge(floor, foreign)
+	if err != nil {
+		t.Fatalf("greater-of calculation: %v", err)
+	}
+	structures := declaredSurcharges(t, standaloneRule(t, ruleWithCalculation(t, calculation)))
+	if _, err := newPlanWithStructures(t, structures); !errors.Is(err, domain.ErrCurrencyMismatch) {
+		t.Fatalf("plan formation error = %v, want ErrCurrencyMismatch", err)
+	}
+}
+
 func structuresWithDependency(t testing.TB, excluded string) domain.PricingPlanStructures {
 	t.Helper()
 	dependency, err := domain.NewAllChargesDependency(

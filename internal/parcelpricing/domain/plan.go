@@ -215,8 +215,10 @@ func NewPricingPlanVersion(
 		return copyOfRules[left].id < copyOfRules[right].id
 	})
 	for _, surcharge := range structures.surchargeRules {
-		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != rateTable.currency {
-			return PricingPlanVersion{}, ErrCurrencyMismatch
+		for _, currency := range surcharge.declaredCurrencies() {
+			if currency != rateTable.currency {
+				return PricingPlanVersion{}, ErrCurrencyMismatch
+			}
 		}
 		for _, unit := range surcharge.declaredWeightUnits() {
 			if unit != rateTable.unit {
@@ -309,8 +311,10 @@ func (plan PricingPlanVersion) valid() bool {
 		}
 	}
 	for _, surcharge := range plan.structures.surchargeRules {
-		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != plan.rateTable.currency {
-			return false
+		for _, currency := range surcharge.declaredCurrencies() {
+			if currency != plan.rateTable.currency {
+				return false
+			}
 		}
 		for _, unit := range surcharge.declaredWeightUnits() {
 			if unit != plan.rateTable.unit {
