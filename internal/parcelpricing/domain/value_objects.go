@@ -393,7 +393,10 @@ const (
 	ArtifactRateTable       ArtifactKind = "rate-table"
 	ArtifactWeightPolicy    ArtifactKind = "weight-policy"
 	ArtifactReferenceSeries ArtifactKind = "reference-series"
-	ArtifactNumericProfile  ArtifactKind = "numeric-profile"
+	// A commercial policy version is what declares an exchange rate's quote
+	// basis. Pricing references it; party-commercial owns it.
+	ArtifactCommercialPolicy ArtifactKind = "commercial-policy"
+	ArtifactNumericProfile   ArtifactKind = "numeric-profile"
 )
 
 func NumericProfileV1Reference() VersionReference {

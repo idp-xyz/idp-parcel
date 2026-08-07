@@ -72,6 +72,28 @@ type PricingInputSnapshot struct {
 	businessAt     time.Time
 	factReferences []VersionedFactReference
 	seriesValues   []ReferenceSeriesValue
+	settlement     *Currency
+}
+
+// WithSettlementCurrency records the currency the contract settles in. ADR-0013
+// notes pricing must know it and that party-commercial already supplies it with
+// the commercial basis, so it arrives with the snapshot rather than being a new
+// source of its own.
+func (input PricingInputSnapshot) WithSettlementCurrency(settlement Currency) (PricingInputSnapshot, error) {
+	if !input.valid() || !settlement.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	updated.settlement = &settlement
+	return updated, nil
+}
+
+// SettlementCurrency reports the currency the evaluation must output in.
+func (input PricingInputSnapshot) SettlementCurrency() (Currency, bool) {
+	if input.settlement == nil {
+		return Currency{}, false
+	}
+	return *input.settlement, true
 }
 
 // WithReferenceSeries returns a copy carrying the series readings resolved for

@@ -197,6 +197,7 @@ type PricingEvaluation struct {
 	matchedRate          *RateSelection
 	chargeLines          []ChargeLine
 	total                *Money
+	conversion           *ConversionStep
 	issues               []EvaluationIssue
 	explanation          []string
 	semanticDigest       string
@@ -441,6 +442,31 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if err != nil {
 		return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
 	}
+
+	// The card prices in its own currency while the contract settles in another,
+	// and CONTEXT puts the conversion inside the evaluation so the result stays
+	// a recomputable final price rather than half a figure the settlement side
+	// has to finish.
+	if settlement, declared := request.input.SettlementCurrency(); declared && settlement != total.currency {
+		reading, resolved := series[ReferenceSeriesExchangeRate]
+		if !resolved {
+			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("EXCHANGE_RATE_UNRESOLVED",
+				fmt.Errorf("%w: settling in %s needs an exchange rate", ErrMissingReferenceSeriesValue, settlement).Error()))
+		}
+		step, conversionErr := convertAmount(total, reading, settlement)
+		if conversionErr != nil {
+			return evaluation.withCalculationError(conversionErr)
+		}
+		basis, _ := reading.QuoteBasis()
+		evaluation.conversion = &step
+		evaluation.explanation = append(evaluation.explanation,
+			fmt.Sprintf("converted %s %s to %s %s at %s from %s quoted per %s",
+				step.original.amount.String(), step.original.currency,
+				step.converted.amount.String(), step.converted.currency,
+				step.rate.String(), step.series.ID(), basis.ID()))
+		total = step.converted
+	}
+
 	evaluation.total = &total
 	evaluation.status = EvaluationCompleted
 	evaluation.semanticDigest = evaluation.calculateSemanticDigest()
@@ -518,6 +544,16 @@ func (evaluation PricingEvaluation) MatchedRate() (RateSelection, bool) {
 	return *evaluation.matchedRate, true
 }
 
+// ConversionStep reports the currency conversion this evaluation performed, if
+// any. An evaluation settling in the card's own currency performs none, and
+// recording a rate of 1 would invite a reader to think one was applied.
+func (evaluation PricingEvaluation) ConversionStep() (ConversionStep, bool) {
+	if evaluation.conversion == nil {
+		return ConversionStep{}, false
+	}
+	return *evaluation.conversion, true
+}
+
 func (evaluation PricingEvaluation) ChargeLines() []ChargeLine {
 	return append([]ChargeLine(nil), evaluation.chargeLines...)
 }
@@ -584,7 +620,14 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 	if evaluation.total == nil || len(evaluation.chargeLines) == 0 {
 		return false
 	}
+	// Charge lines stay in the card's own currency; only the total is converted.
+	// Checking them against the settlement currency would reject every converted
+	// evaluation, and converting each line instead would round the same rate
+	// many times over.
 	currency := evaluation.total.currency
+	if evaluation.conversion != nil {
+		currency = evaluation.conversion.original.currency
+	}
 	running := NewDecimalFromInt64(0)
 	seenIDs := make(map[string]struct{}, len(evaluation.chargeLines))
 	seenCodes := make(map[string]struct{}, len(evaluation.chargeLines))
@@ -628,6 +671,9 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 		if err != nil {
 			return false
 		}
+	}
+	if evaluation.conversion != nil {
+		return running.Equal(evaluation.conversion.original.amount)
 	}
 	return running.Equal(evaluation.total.amount)
 }

@@ -561,9 +561,29 @@ type canonicalEvaluationInput struct {
 }
 
 type canonicalSeriesValueDocument struct {
-	Kind      string                    `json:"kind"`
-	Reference canonicalVersionReference `json:"reference"`
-	Value     string                    `json:"value"`
+	Kind       string                     `json:"kind"`
+	Reference  canonicalVersionReference  `json:"reference"`
+	Value      string                     `json:"value"`
+	QuoteBasis *canonicalVersionReference `json:"quote_basis,omitempty"`
+}
+
+// canonicalConversionDocument keeps both sides of a conversion in the digest.
+// Hashing only the converted figure would let the original amount and the rate
+// change together and cancel out unreported.
+type canonicalConversionDocument struct {
+	Original  canonicalMoney            `json:"original"`
+	Rate      string                    `json:"rate"`
+	Series    canonicalVersionReference `json:"series"`
+	Converted canonicalMoney            `json:"converted"`
+}
+
+func canonicalConversionValue(step ConversionStep) canonicalConversionDocument {
+	return canonicalConversionDocument{
+		Original:  canonicalMoneyValue(step.original),
+		Rate:      step.rate.String(),
+		Series:    canonicalReference(step.series),
+		Converted: canonicalMoneyValue(step.converted),
+	}
 }
 
 func canonicalSeriesValues(values []ReferenceSeriesValue) []canonicalSeriesValueDocument {
@@ -572,11 +592,16 @@ func canonicalSeriesValues(values []ReferenceSeriesValue) []canonicalSeriesValue
 	}
 	documents := make([]canonicalSeriesValueDocument, 0, len(values))
 	for _, value := range values {
-		documents = append(documents, canonicalSeriesValueDocument{
+		document := canonicalSeriesValueDocument{
 			Kind:      value.kind.String(),
 			Reference: canonicalReference(value.reference),
 			Value:     value.value.String(),
-		})
+		}
+		if value.quoteBasis != nil {
+			basis := canonicalReference(*value.quoteBasis)
+			document.QuoteBasis = &basis
+		}
+		documents = append(documents, document)
 	}
 	return documents
 }
@@ -595,6 +620,7 @@ type canonicalEvaluation struct {
 	Manifest         []canonicalVersionReference     `json:"manifest"`
 	PricingWeight    *canonicalPricingWeightDocument `json:"pricing_weight,omitempty"`
 	MatchedRate      *canonicalRateSelectionDocument `json:"matched_rate,omitempty"`
+	Conversion       *canonicalConversionDocument    `json:"conversion,omitempty"`
 	ChargeLines      []canonicalChargeLineDocument   `json:"charge_lines"`
 	Total            *canonicalMoney                 `json:"total,omitempty"`
 	Issues           []canonicalEvaluationIssue      `json:"issues"`
@@ -664,6 +690,10 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	if evaluation.matchedRate != nil {
 		matched := canonicalRateSelectionValue(*evaluation.matchedRate)
 		document.MatchedRate = &matched
+	}
+	if evaluation.conversion != nil {
+		conversion := canonicalConversionValue(*evaluation.conversion)
+		document.Conversion = &conversion
 	}
 	for _, line := range evaluation.chargeLines {
 		document.ChargeLines = append(document.ChargeLines, canonicalChargeLineValue(line))
