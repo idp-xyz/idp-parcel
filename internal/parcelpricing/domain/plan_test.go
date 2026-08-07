@@ -267,8 +267,8 @@ func TestPricingPlanRequiresPurposePairedWithDirection(t *testing.T) {
 }
 
 // The purpose enum is closed. It used to accept anything shaped like an
-// identifier, which let foo's wider CalculationPurpose values through without
-// the language ever deciding to adopt them.
+// identifier, which let the reference design's wider CalculationPurpose values
+// through without the language ever deciding to adopt them.
 func TestPricingPurposeRejectsValuesOutsideTheClosedSet(t *testing.T) {
 	for _, value := range []string{"QUOTE", "ESTIMATED_COST", "ACTUAL_COST", "CUSTOMER_BILLING", "customer_charge", ""} {
 		if _, err := domain.NewPricingPurpose(value); !errors.Is(err, domain.ErrInvalidPurpose) {
