@@ -320,7 +320,7 @@ func surchargeRuleWithCalculation(t testing.TB, id, code, threshold string, calc
 	if err != nil {
 		t.Fatalf("condition: %v", err)
 	}
-	rule, err := domain.NewSurchargeRule(id, mustValue(t, domain.NewChargeCode, code), id, domain.ChargeEffectAdd, condition, calculation)
+	rule, err := domain.NewSurchargeRule(id, mustValue(t, domain.NewChargeCode, code), id, domain.ChargeEffectAdd, leafTrigger(t, condition), calculation)
 	if err != nil {
 		t.Fatalf("surcharge rule: %v", err)
 	}

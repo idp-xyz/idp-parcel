@@ -146,11 +146,11 @@ func (calculation SurchargeCalculation) valid() bool {
 // a private basis for the declaring rule.
 type ConditionalMinimumWeight struct {
 	id        string
-	condition FeatureCondition
+	condition TriggerCondition
 	minimum   Weight
 }
 
-func NewConditionalMinimumWeight(id string, condition FeatureCondition, minimum Weight) (ConditionalMinimumWeight, error) {
+func NewConditionalMinimumWeight(id string, condition TriggerCondition, minimum Weight) (ConditionalMinimumWeight, error) {
 	value := ConditionalMinimumWeight{id: id, condition: condition, minimum: minimum}
 	if !value.valid() {
 		return ConditionalMinimumWeight{}, ErrInvalidSurchargeRule
@@ -159,7 +159,7 @@ func NewConditionalMinimumWeight(id string, condition FeatureCondition, minimum 
 }
 
 func (value ConditionalMinimumWeight) ID() string                  { return value.id }
-func (value ConditionalMinimumWeight) Condition() FeatureCondition { return value.condition }
+func (value ConditionalMinimumWeight) Condition() TriggerCondition { return value.condition }
 func (value ConditionalMinimumWeight) Minimum() Weight             { return value.minimum }
 
 func (value ConditionalMinimumWeight) valid() bool {
@@ -188,7 +188,7 @@ type SurchargeRule struct {
 	chargeCode       ChargeCode
 	description      string
 	effect           ChargeEffect
-	condition        FeatureCondition
+	condition        TriggerCondition
 	calculation      SurchargeCalculation
 	exclusivity      ExclusivityStance
 	exclusivityGroup string
@@ -201,7 +201,7 @@ func NewSurchargeRule(
 	code ChargeCode,
 	description string,
 	effect ChargeEffect,
-	condition FeatureCondition,
+	condition TriggerCondition,
 	calculation SurchargeCalculation,
 ) (SurchargeRule, error) {
 	rule := SurchargeRule{
@@ -261,7 +261,7 @@ func (rule SurchargeRule) ID() string                        { return rule.id }
 func (rule SurchargeRule) Code() ChargeCode                  { return rule.chargeCode }
 func (rule SurchargeRule) Description() string               { return rule.description }
 func (rule SurchargeRule) Effect() ChargeEffect              { return rule.effect }
-func (rule SurchargeRule) Condition() FeatureCondition       { return rule.condition }
+func (rule SurchargeRule) Condition() TriggerCondition       { return rule.condition }
 func (rule SurchargeRule) Calculation() SurchargeCalculation { return rule.calculation }
 func (rule SurchargeRule) Priority() int                     { return rule.priority }
 

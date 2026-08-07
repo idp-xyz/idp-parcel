@@ -225,6 +225,27 @@ type canonicalFeatureConditionDocument struct {
 	Unit      string `json:"unit"`
 }
 
+type canonicalTriggerDocument struct {
+	Kind      string                             `json:"kind"`
+	Predicate *canonicalFeatureConditionDocument `json:"predicate"`
+	Operands  []canonicalTriggerDocument         `json:"operands"`
+}
+
+func canonicalTriggerValue(trigger TriggerCondition) canonicalTriggerDocument {
+	document := canonicalTriggerDocument{
+		Kind:     trigger.kind.String(),
+		Operands: make([]canonicalTriggerDocument, 0, len(trigger.operands)),
+	}
+	if trigger.kind == TriggerPredicate {
+		predicate := canonicalFeatureConditionValue(trigger.predicate)
+		document.Predicate = &predicate
+	}
+	for _, operand := range trigger.operands {
+		document.Operands = append(document.Operands, canonicalTriggerValue(operand))
+	}
+	return document
+}
+
 func canonicalFeatureConditionValue(condition FeatureCondition) canonicalFeatureConditionDocument {
 	// Read the threshold through the condition rather than off one field: a
 	// weight or volume threshold lives in a different field, and hashing the
@@ -271,16 +292,16 @@ func canonicalSurchargeCalculationValue(calculation SurchargeCalculation) canoni
 }
 
 type canonicalConditionalMinimumWeightDocument struct {
-	ID        string                            `json:"id"`
-	Condition canonicalFeatureConditionDocument `json:"condition"`
-	Minimum   string                            `json:"minimum"`
-	Unit      string                            `json:"unit"`
+	ID        string                   `json:"id"`
+	Condition canonicalTriggerDocument `json:"condition"`
+	Minimum   string                   `json:"minimum"`
+	Unit      string                   `json:"unit"`
 }
 
 func canonicalConditionalMinimumWeightValue(minimum ConditionalMinimumWeight) canonicalConditionalMinimumWeightDocument {
 	return canonicalConditionalMinimumWeightDocument{
 		ID:        minimum.id,
-		Condition: canonicalFeatureConditionValue(minimum.condition),
+		Condition: canonicalTriggerValue(minimum.condition),
 		Minimum:   minimum.minimum.value.String(),
 		Unit:      minimum.minimum.unit.String(),
 	}
@@ -291,7 +312,7 @@ type canonicalSurchargeRuleDocument struct {
 	Code             string                                     `json:"charge_code"`
 	Description      string                                     `json:"description"`
 	Effect           string                                     `json:"effect"`
-	Condition        canonicalFeatureConditionDocument          `json:"condition"`
+	Condition        canonicalTriggerDocument                   `json:"condition"`
 	Calculation      canonicalSurchargeCalculationDocument      `json:"calculation"`
 	Exclusivity      string                                     `json:"exclusivity"`
 	ExclusivityGroup string                                     `json:"exclusivity_group"`
@@ -305,7 +326,7 @@ func canonicalSurchargeRuleValue(rule SurchargeRule) canonicalSurchargeRuleDocum
 		Code:             rule.chargeCode.String(),
 		Description:      rule.description,
 		Effect:           string(rule.effect),
-		Condition:        canonicalFeatureConditionValue(rule.condition),
+		Condition:        canonicalTriggerValue(rule.condition),
 		Calculation:      canonicalSurchargeCalculationValue(rule.calculation),
 		Exclusivity:      rule.exclusivity.String(),
 		ExclusivityGroup: rule.exclusivityGroup,
@@ -365,7 +386,12 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // selection instead of a bracket. Batching them costs one version instead of
 // three, and every version has to be supported for as long as evaluations
 // recorded under it can be replayed.
-const canonicalizationVersion = "PPC-2"
+// PPC-3 turned a rule's condition from a single predicate into a trigger, so
+// the condition document is now a kind with an optional predicate and operands
+// rather than a bare predicate. A rule that reads one predicate serialises as a
+// PREDICATE trigger, which is a different shape from the bare predicate PPC-2
+// wrote; there is no widening that leaves the old bytes intact.
+const canonicalizationVersion = "PPC-3"
 
 // CurrentCanonicalizationVersion reports the shape this build canonicalizes
 // under. An artifact recorded under any other value cannot have its digest

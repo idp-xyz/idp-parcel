@@ -91,7 +91,7 @@ func TestConditionDigestCoversThresholdsOfEveryMeasure(t *testing.T) {
 // content digest from outside the package.
 func conditionDigest(t *testing.T, condition domain.FeatureCondition) string {
 	t.Helper()
-	minimum, err := domain.NewConditionalMinimumWeight("threshold-probe", condition, weight(t, "40", domain.WeightUnitKilogram))
+	minimum, err := domain.NewConditionalMinimumWeight("threshold-probe", leafTrigger(t, condition), weight(t, "40", domain.WeightUnitKilogram))
 	if err != nil {
 		t.Fatalf("conditional minimum weight: %v", err)
 	}

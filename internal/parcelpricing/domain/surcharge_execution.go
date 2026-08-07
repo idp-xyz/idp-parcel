@@ -123,9 +123,8 @@ func preferSurcharge(incumbent, challenger surchargeOutcome) (bool, error) {
 func (outcome surchargeOutcome) explain() string {
 	switch {
 	case !outcome.matched:
-		return fmt.Sprintf("surcharge %s did not apply: %s %s %s %s not met",
-			outcome.rule.id, outcome.rule.condition.source, outcome.rule.condition.operator,
-			outcome.rule.condition.ThresholdValue().String(), outcome.rule.condition.ThresholdUnit())
+		return fmt.Sprintf("surcharge %s did not apply: %s not met",
+			outcome.rule.id, outcome.rule.condition.describe())
 	case !outcome.selected:
 		return fmt.Sprintf("surcharge %s applied but was not collected: %s", outcome.rule.id, outcome.note)
 	default:

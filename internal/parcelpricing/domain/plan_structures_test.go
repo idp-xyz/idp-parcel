@@ -293,7 +293,7 @@ func ruleWithCalculation(t testing.TB, calculation domain.SurchargeCalculation) 
 		mustValue(t, domain.NewChargeCode, "AHS_DIMENSION"),
 		"ahs-dimension",
 		domain.ChargeEffectAdd,
-		condition,
+		leafTrigger(t, condition),
 		calculation,
 	)
 	if err != nil {
@@ -394,7 +394,7 @@ func structuresWithMinimumWeight(t testing.TB, threshold, minimum string) domain
 	}
 	conditionalMinimum, err := domain.NewConditionalMinimumWeight(
 		"oversize-minimum",
-		condition,
+		leafTrigger(t, condition),
 		weight(t, minimum, domain.WeightUnitKilogram),
 	)
 	if err != nil {
@@ -454,7 +454,7 @@ func surchargeRule(t testing.TB, id, code, threshold, amount string) domain.Surc
 		mustValue(t, domain.NewChargeCode, code),
 		id,
 		domain.ChargeEffectAdd,
-		condition,
+		leafTrigger(t, condition),
 		calculation,
 	)
 	if err != nil {

@@ -52,18 +52,45 @@ func (source FeatureSource) measure() featureMeasure {
 
 // ComparisonOperator is the closed set of comparisons a condition may use. The
 // card's conditions never need arithmetic, so no expression engine is offered.
+//
+// Both readings of each bound are carried because carriers word them both ways
+// and a band needs an upper bound at all: DHL's Non-Conveyable Piece applies
+// "between 56 lbs and 150 lbs", inclusive at each end, while the card's own
+// oversize limits read "over". Restating an inclusive bound as a strict one
+// would require the transcriber to invent the next representable value.
 type ComparisonOperator string
 
-const ComparisonGreaterThan ComparisonOperator = "GT"
+const (
+	ComparisonGreaterThan        ComparisonOperator = "GT"
+	ComparisonGreaterThanOrEqual ComparisonOperator = "GE"
+	ComparisonLessThan           ComparisonOperator = "LT"
+	ComparisonLessThanOrEqual    ComparisonOperator = "LE"
+)
 
 func (operator ComparisonOperator) String() string { return string(operator) }
 
 func (operator ComparisonOperator) valid() bool {
 	switch operator {
-	case ComparisonGreaterThan:
+	case ComparisonGreaterThan, ComparisonGreaterThanOrEqual, ComparisonLessThan, ComparisonLessThanOrEqual:
 		return true
 	default:
 		return false
+	}
+}
+
+// holds applies the operator to an already unit-checked comparison result.
+func (operator ComparisonOperator) holds(comparison int) (bool, error) {
+	switch operator {
+	case ComparisonGreaterThan:
+		return comparison > 0, nil
+	case ComparisonGreaterThanOrEqual:
+		return comparison >= 0, nil
+	case ComparisonLessThan:
+		return comparison < 0, nil
+	case ComparisonLessThanOrEqual:
+		return comparison <= 0, nil
+	default:
+		return false, ErrInvalidFeatureCondition
 	}
 }
 
@@ -178,6 +205,11 @@ func (condition FeatureCondition) ThresholdUnit() string {
 	}
 }
 
+func (condition FeatureCondition) describe() string {
+	return condition.source.String() + " " + condition.operator.String() + " " +
+		condition.ThresholdValue().String() + " " + condition.ThresholdUnit()
+}
+
 func (condition FeatureCondition) Matches(features PackageFeatures) (bool, error) {
 	if !condition.valid() || !features.valid() {
 		return false, ErrInvalidFeatureCondition
@@ -210,12 +242,7 @@ func (condition FeatureCondition) Matches(features PackageFeatures) (bool, error
 	default:
 		return false, ErrInvalidFeatureCondition
 	}
-	switch condition.operator {
-	case ComparisonGreaterThan:
-		return observed.Cmp(threshold) > 0, nil
-	default:
-		return false, ErrInvalidFeatureCondition
-	}
+	return condition.operator.holds(observed.Cmp(threshold))
 }
 
 func (condition FeatureCondition) valid() bool {
