@@ -39,8 +39,9 @@ func (issue EvaluationIssue) Message() string { return issue.message }
 type ChargeLineKind string
 
 const (
-	ChargeLineBase  ChargeLineKind = "BASE"
-	ChargeLineFixed ChargeLineKind = "FIXED"
+	ChargeLineBase      ChargeLineKind = "BASE"
+	ChargeLineFixed     ChargeLineKind = "FIXED"
+	ChargeLineSurcharge ChargeLineKind = "SURCHARGE"
 )
 
 type ChargeLine struct {
@@ -66,7 +67,7 @@ func newChargeLine(id string, kind ChargeLineKind, code ChargeCode, scope Charge
 		if scope != ChargeScopePackage || basis != ChargeBasisRateEntry || method != ChargeMethodTableLookup || effect != ChargeEffectAdd || order != 0 {
 			return ChargeLine{}, ErrInvalidChargeLine
 		}
-	case ChargeLineFixed:
+	case ChargeLineFixed, ChargeLineSurcharge:
 		if scope != ChargeScopePackage || basis != ChargeBasisFixedAmount || method != ChargeMethodFixedAmount || order < 1 {
 			return ChargeLine{}, ErrInvalidChargeLine
 		}
@@ -82,6 +83,13 @@ func newBaseChargeLine(id string, code ChargeCode, description string, amount Mo
 
 func newFixedChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
 	return newChargeLine(id, ChargeLineFixed, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
+}
+
+// A surcharge line is a fixed amount like an unconditional rule, but it is kept
+// a distinct kind because it was produced by a predicate that has to be
+// replayable — its source is a rule that could equally have missed.
+func newSurchargeChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
+	return newChargeLine(id, ChargeLineSurcharge, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
 }
 
 func (line ChargeLine) valid() bool {
@@ -218,12 +226,12 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if !request.plan.period.Contains(request.input.businessAt) || !request.plan.rateTable.period.Contains(request.input.businessAt) {
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("VERSION_NOT_APPLICABLE", ErrPricingPeriodNotApplicable.Error()))
 	}
-	// The canonical plan shape carries structures whose execution lands in later
-	// slices. Pricing only the base table and the unconditional fixed rules
-	// would under-bill a plan that declares them, and the result would carry no
-	// sign of what was skipped, so no amount forms at all.
-	if request.plan.structures.Declared() {
-		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", ErrPlanStructuresNotExecutable.Error()))
+	// Pricing a plan on the base table alone while it declares charges nobody
+	// executes would under-bill it, and the result would carry no sign of what
+	// was skipped. The gate names what it cannot do and narrows as capabilities
+	// land, rather than staying all-or-nothing.
+	if reason, blocked := request.plan.structures.unexecutable(); blocked {
+		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
 	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit)
@@ -269,6 +277,55 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("fixed rule %s %s %s %s", rule.id, rule.effect, rule.amount.amount.String(), rule.amount.currency))
 	}
+
+	if len(request.plan.structures.surchargeRules) > 0 {
+		// A condition reads the package's dimensions. Without them the rule can
+		// be neither confirmed nor excluded, which is missing evidence rather
+		// than a broken request, so the evaluation waits.
+		features, featuresErr := request.input.Features()
+		if featuresErr != nil {
+			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("SURCHARGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+		}
+		outcomes, resolveErr := request.plan.structures.resolveSurcharges(features)
+		if resolveErr != nil {
+			return evaluation.withCalculationError(resolveErr)
+		}
+		// Continue from the highest order already used, not from the line
+		// count: a plan may declare fixed rules at non-contiguous orders, and
+		// charge line order has to stay strictly increasing.
+		order := 0
+		for _, line := range evaluation.chargeLines {
+			if line.order > order {
+				order = line.order
+			}
+		}
+		order++
+		for _, outcome := range sortedSurchargeOutcomes(outcomes) {
+			evaluation.explanation = append(evaluation.explanation, outcome.explain())
+			if !outcome.selected {
+				continue
+			}
+			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
+			if lineErr != nil {
+				return evaluation.withCalculationError(lineErr)
+			}
+			evaluation.chargeLines = append(evaluation.chargeLines, line)
+			order++
+			switch outcome.rule.effect {
+			case ChargeEffectAdd:
+				runningAmount, err = runningAmount.Add(outcome.amount.amount)
+			case ChargeEffectDeduct:
+				if runningAmount.Cmp(outcome.amount.amount) < 0 {
+					return evaluation.withCalculationError(ErrNegativeChargeTotal)
+				}
+				runningAmount, err = runningAmount.Sub(outcome.amount.amount)
+			}
+			if err != nil {
+				return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
+			}
+		}
+	}
+
 	total, err := NewMoney(runningAmount, request.plan.rateTable.currency)
 	if err != nil {
 		return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
@@ -436,7 +493,7 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 			if line.kind != ChargeLineBase || line.scope != ChargeScopePackage || line.basis != ChargeBasisRateEntry || line.method != ChargeMethodTableLookup || line.effect != ChargeEffectAdd || line.order != 0 {
 				return false
 			}
-		} else if line.kind != ChargeLineFixed || line.scope != ChargeScopePackage || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
+		} else if (line.kind != ChargeLineFixed && line.kind != ChargeLineSurcharge) || line.scope != ChargeScopePackage || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
 			return false
 		}
 		if index > 0 {
