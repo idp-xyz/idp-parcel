@@ -371,6 +371,92 @@ func TestSyntheticChainStaleOwnershipMustBeReevaluatedNotReused(t *testing.T) {
 	}
 }
 
+// syntheticOperationalFacts carries the preserved source alongside the
+// operational facts other contexts own: consignment membership and seals
+// (node-operations), carrier-assigned external identifiers, and the routing
+// plan (network-routing). They travel into the derivation call site on purpose
+// — that is what lets S02-AT-09 fail if one of them ever becomes an input.
+type syntheticOperationalFacts struct {
+	preserved          domain.SourceSubmissionFingerprint
+	consignmentUnitID  string
+	sealID             string
+	lastMileTrackingNo string
+	routingPlanID      string
+}
+
+func syntheticOperationalScope(
+	t *testing.T,
+	facts syntheticOperationalFacts,
+) domain.AdmissionScope {
+	t.Helper()
+	return syntheticChainScope(t, facts.preserved)
+}
+
+// Covers: S02-AT-09
+func TestSyntheticChainOperationalChangesDoNotMoveProductionAuthority(t *testing.T) {
+	base := syntheticOperationalFacts{
+		preserved:          sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1"),
+		consignmentUnitID:  "SYN-BAG-ORIGIN-01",
+		sealID:             "SYN-SEAL-01",
+		lastMileTrackingNo: "SYN-LASTMILE-01",
+		routingPlanID:      "SYN-ROUTE-PLAN-01",
+	}
+	scope := syntheticOperationalScope(t, base)
+	revision := mustValue(t, domain.NewProductionOwnershipRevision, "SYN-CHAIN-REV-1")
+	decision := syntheticChainDecision(t, scope, domain.ProductionAuthorityIDPParcel, "SYN-CHAIN-REV-1")
+	gate, err := domain.EvaluateFutureSubmissionGate(decision, scope.Digest(), revision, syntheticChainGateAt)
+	if err != nil {
+		t.Fatalf("evaluate future submission gate: %v", err)
+	}
+	if !gate.IsAllowed() {
+		t.Fatalf("baseline gate blocked: reasons = %v", gate.BlockReasons())
+	}
+
+	changes := map[string]func(*syntheticOperationalFacts){
+		"re-bagged at a transit hub": func(facts *syntheticOperationalFacts) {
+			facts.consignmentUnitID = "SYN-BAG-TRANSIT-07"
+			facts.sealID = "SYN-SEAL-07"
+		},
+		"last-mile carrier assigned a new number": func(facts *syntheticOperationalFacts) {
+			facts.lastMileTrackingNo = "SYN-LASTMILE-99"
+		},
+		"lane closed and the plan was rerouted": func(facts *syntheticOperationalFacts) {
+			facts.routingPlanID = "SYN-ROUTE-PLAN-02"
+		},
+	}
+
+	for name, apply := range changes {
+		t.Run(name, func(t *testing.T) {
+			changed := base
+			apply(&changed)
+			if changed == base {
+				t.Fatal("the operational change left the fixture untouched, so it proves nothing")
+			}
+
+			changedScope := syntheticOperationalScope(t, changed)
+			if changedScope.Digest() != scope.Digest() {
+				t.Fatal("an operational fact reached the admission scope digest")
+			}
+			changedDecision := syntheticChainDecision(t, changedScope, domain.ProductionAuthorityIDPParcel, "SYN-CHAIN-REV-1")
+			if changedDecision != decision {
+				t.Fatal("an operational fact produced a different production ownership decision")
+			}
+			changedGate, err := domain.EvaluateFutureSubmissionGate(
+				changedDecision,
+				changedScope.Digest(),
+				revision,
+				syntheticChainGateAt,
+			)
+			if err != nil {
+				t.Fatalf("re-evaluate future submission gate: %v", err)
+			}
+			if !changedGate.IsAllowed() || len(changedGate.BlockReasons()) != 0 {
+				t.Fatalf("an operational fact disturbed the gate: reasons = %v", changedGate.BlockReasons())
+			}
+		})
+	}
+}
+
 // Covers: SYN-CHAIN-06
 func TestSyntheticChainScopeIsolationReachesTheFutureGate(t *testing.T) {
 	base := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")

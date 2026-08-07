@@ -103,6 +103,7 @@ func assessSyntheticRecovery(
 	return syntheticRecoveryAssessment{readiness: readiness, reasons: reasons}
 }
 
+// Covers: S02-AT-07 (no explicit recovery evidence keeps admission blocked)
 func TestSyntheticAdmissionRecoveryRequiresAllExplicitEvidence(t *testing.T) {
 	paused := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, "scope-1", "rev-1")
 	complete := completeSyntheticRecoveryEvidence(t, paused)
@@ -132,6 +133,7 @@ func TestSyntheticAdmissionRecoveryRequiresAllExplicitEvidence(t *testing.T) {
 	}
 }
 
+// Covers: S02-AT-07 (recovery evidence must cite the same pause, scope and revision)
 func TestSyntheticAdmissionRecoveryRejectsWrongPauseScopeOrRevision(t *testing.T) {
 	paused := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, "scope-1", "rev-1")
 	complete := completeSyntheticRecoveryEvidence(t, paused)
@@ -186,6 +188,7 @@ func TestSyntheticAdmissionRecoveryRejectsWrongPauseScopeOrRevision(t *testing.T
 	}
 }
 
+// Covers: S02-AT-07 (readiness does not open admission; authority identity is unchanged)
 func TestSyntheticRecoveryReadinessDoesNotAutomaticallyOpenAdmission(t *testing.T) {
 	paused := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, "scope-1", "rev-1")
 	evidence := completeSyntheticRecoveryEvidence(t, paused)
@@ -251,6 +254,7 @@ func assessSyntheticReleaseRollback(
 	}
 }
 
+// Covers: S02-AT-08 (a release rollback leaves business authority untouched)
 func TestSyntheticReleaseRollbackDoesNotChangeBusinessAuthority(t *testing.T) {
 	current := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen, "scope-1", "rev-1")
 	assessment := assessSyntheticReleaseRollback(current, "release-rollback-1")
@@ -353,6 +357,7 @@ func assessSyntheticTakeover(
 	return syntheticTakeoverAssessment{readiness: readiness, reasons: reasons}
 }
 
+// Covers: S02-AT-08 (takeover requires the prior authority to stop writes and a complete inventory)
 func TestSyntheticObjectTakeoverRequiresStoppedWritesAndCompleteInventory(t *testing.T) {
 	current := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, "scope-1", "rev-1")
 	complete := completeSyntheticTakeoverEvidence(t, current)
@@ -454,6 +459,7 @@ func TestSyntheticObjectTakeoverRejectsUnfixedCurrentBoundary(t *testing.T) {
 	}
 }
 
+// Covers: S02-AT-08 (readiness does not transfer authority, so no double-write window opens)
 func TestSyntheticTakeoverReadinessDoesNotTransferAuthority(t *testing.T) {
 	current := ownershipDecision(t, domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused, "scope-1", "rev-1")
 	evidence := completeSyntheticTakeoverEvidence(t, current)
