@@ -101,29 +101,23 @@ func TestSurchargeWithoutDimensionsStaysPending(t *testing.T) {
 	}
 }
 
-// The gate that refuses to price a plan carrying structures this build cannot
-// execute must narrow as capabilities land, not disappear. A greater-of
-// surcharge still has no executor, so pricing it would under-bill silently.
-func TestPlanCarryingAStillUnexecutableStructureDoesNotForm(t *testing.T) {
-	currency := mustValue(t, domain.NewCurrency, "USD")
-	first, err := domain.NewFixedAmountSurcharge(money(t, "12", currency))
-	if err != nil {
-		t.Fatalf("first operand: %v", err)
-	}
-	second, err := domain.NewFixedAmountSurcharge(money(t, "20", currency))
-	if err != nil {
-		t.Fatalf("second operand: %v", err)
-	}
-	calculation, err := domain.NewGreaterOfSurcharge(first, second)
-	if err != nil {
-		t.Fatalf("greater-of calculation: %v", err)
-	}
-	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "greater-rule", "GREATER_RULE", "48", calculation))
-	plan := planWithStructures(t, declaredSurcharges(t, rule))
-	evaluation := evaluateWithSides(t, plan, "eval-unexecutable", "50")
+// The gate narrows as capabilities land, so what it still refuses changes with
+// every slice. It therefore has to name what it could not execute: a bare
+// "not executable" leaves the reader to guess which declaration blocked the
+// plan, and the answer differs from build to build.
+func TestUnexecutableGateNamesWhatItCouldNotExecute(t *testing.T) {
+	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
+	evaluation := evaluateWithSides(t, plan, "eval-unexecutable-named", "50")
 
 	if evaluation.Status() != domain.EvaluationFailed {
-		t.Fatalf("status = %s, want FAILED while greater-of surcharges have no executor", evaluation.Status())
+		t.Fatalf("status = %s, want FAILED", evaluation.Status())
+	}
+	issues := evaluation.Issues()
+	if len(issues) != 1 || issues[0].Code() != "PLAN_STRUCTURES_NOT_EXECUTABLE" {
+		t.Fatalf("issues = %#v", issues)
+	}
+	if !strings.Contains(issues[0].Message(), "reference series") {
+		t.Fatalf("message = %q, want it to name the reference series binding", issues[0].Message())
 	}
 }
 

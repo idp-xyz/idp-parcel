@@ -28,7 +28,7 @@ func (structures PricingPlanStructures) unexecutable() (string, bool) {
 	}
 	for _, rule := range structures.surchargeRules {
 		switch rule.calculation.method {
-		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis:
+		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf:
 		default:
 			return fmt.Sprintf("%s calculation on %s", rule.calculation.method, rule.id), true
 		}
@@ -101,14 +101,14 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 		}
 		outcome := surchargeOutcome{rule: rule, matched: matched}
 		if matched {
-			// A percent charge cannot be valued yet: its basis sums charge
-			// lines that are still being collected. It is priced in a second
+			// A charge that reads a basis cannot be valued yet: the basis sums
+			// charge lines still being collected. It is priced in a second
 			// pass, ordered by dependency.
-			if rule.calculation.method == ChargeMethodPercentOfBasis {
+			if rule.calculation.needsBasis() {
 				outcome.deferred = true
 				outcome.selected = true
 			} else {
-				amount, err := rule.calculation.resolve(reading)
+				amount, err := rule.calculation.resolve(reading, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -124,10 +124,32 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 	return outcomes, nil
 }
 
+// needsBasis reports whether valuing this calculation requires charge lines
+// that are still being collected. A greater-of inherits the need from either
+// operand: comparing a flat floor against an unresolved share would always pick
+// the floor.
+func (calculation SurchargeCalculation) needsBasis() bool {
+	switch calculation.method {
+	case ChargeMethodPercentOfBasis:
+		return true
+	case ChargeMethodGreaterOf:
+		for _, operand := range calculation.operands {
+			if operand.needsBasis() {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 // resolve produces the amount a matched rule charges. A gap in a banded table
 // is a gap in the card rather than a rule that missed — the condition did fire
-// — so the lookup error travels out unchanged and the evaluation waits.
-func (calculation SurchargeCalculation) resolve(reading surchargeContext) (Money, error) {
+// — so the lookup error travels out unchanged and the evaluation waits. The
+// basis is nil in the first pass, where only calculations that do not read one
+// are valued.
+func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis *dependencyBasis) (Money, error) {
 	switch calculation.method {
 	case ChargeMethodFixedAmount:
 		amount, ok := calculation.FixedAmount()
@@ -145,6 +167,26 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext) (Money
 			return Money{}, err
 		}
 		return selection.amount, nil
+	case ChargeMethodPercentOfBasis:
+		if basis == nil {
+			return Money{}, fmt.Errorf("%w: %s valued before its basis", ErrPlanStructuresNotExecutable, calculation.method)
+		}
+		return basis.share(calculation)
+	case ChargeMethodGreaterOf:
+		var best Money
+		for index, operand := range calculation.operands {
+			amount, err := operand.resolve(reading, basis)
+			if err != nil {
+				return Money{}, err
+			}
+			if index == 0 || amount.amount.Cmp(best.amount) > 0 {
+				best = amount
+			}
+		}
+		if !best.valid() {
+			return Money{}, ErrInvalidSurchargeRule
+		}
+		return best, nil
 	default:
 		return Money{}, fmt.Errorf("%w: %s", ErrPlanStructuresNotExecutable, calculation.method)
 	}

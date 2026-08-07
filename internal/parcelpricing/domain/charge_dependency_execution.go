@@ -105,6 +105,32 @@ func percentShare(product Decimal) (Decimal, error) {
 	return shifted, nil
 }
 
+// share values one percent-of-basis calculation against the pool collected so
+// far.
+func (basis dependencyBasis) share(calculation SurchargeCalculation) (Money, error) {
+	percentage, dependencyID, ok := calculation.PercentOfBasis()
+	if !ok {
+		return Money{}, ErrInvalidSurchargeRule
+	}
+	dependency, declared := basis.dependencies[dependencyID]
+	if !declared {
+		return Money{}, fmt.Errorf("%w: undeclared basis %s", ErrInvalidChargeDependency, dependencyID)
+	}
+	amount, err := basis.sum(dependency)
+	if err != nil {
+		return Money{}, err
+	}
+	product, err := amount.amount.Mul(percentage)
+	if err != nil {
+		return Money{}, err
+	}
+	hundredths, err := percentShare(product)
+	if err != nil {
+		return Money{}, err
+	}
+	return NewMoney(hundredths, basis.currency)
+}
+
 func codeSet(codes []ChargeCode) map[string]struct{} {
 	set := make(map[string]struct{}, len(codes))
 	for _, code := range codes {
@@ -142,18 +168,18 @@ func orderPercentOutcomes(pending []*surchargeOutcome, basis dependencyBasis) ([
 			return fmt.Errorf("%w: charge %s takes part in a circular basis", ErrRateTableConflict, code)
 		}
 		state[code] = visiting
-		_, dependencyID, ok := outcome.rule.calculation.PercentOfBasis()
-		if !ok {
-			return ErrInvalidSurchargeRule
-		}
-		dependency, declared := basis.dependencies[dependencyID]
-		if !declared {
-			return fmt.Errorf("%w: %s names undeclared basis %s", ErrInvalidChargeDependency, outcome.rule.id, dependencyID)
-		}
-		for _, required := range basisCodes(dependency, basis, producedBy) {
-			if next, produced := producedBy[required]; produced && next != outcome {
-				if err := visit(next); err != nil {
-					return err
+		// A greater-of may read more than one basis, so the codes it depends on
+		// are the union over every basis its operands name.
+		for _, dependencyID := range outcome.rule.calculation.basisDependencyIDs() {
+			dependency, declared := basis.dependencies[dependencyID]
+			if !declared {
+				return fmt.Errorf("%w: %s names undeclared basis %s", ErrInvalidChargeDependency, outcome.rule.id, dependencyID)
+			}
+			for _, required := range basisCodes(dependency, basis, producedBy) {
+				if next, produced := producedBy[required]; produced && next != outcome {
+					if err := visit(next); err != nil {
+						return err
+					}
 				}
 			}
 		}

@@ -396,33 +396,18 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 
 		for _, outcome := range deferred {
-			percentage, dependencyID, ok := outcome.rule.calculation.PercentOfBasis()
-			if !ok {
-				return evaluation.withCalculationError(ErrInvalidSurchargeRule)
-			}
-			dependency, declared := basis.dependencies[dependencyID]
-			if !declared {
-				return evaluation.withCalculationError(fmt.Errorf("%w: %s names undeclared basis %s", ErrInvalidChargeDependency, outcome.rule.id, dependencyID))
-			}
-			basisAmount, sumErr := basis.sum(dependency)
-			if sumErr != nil {
-				return evaluation.withCalculationError(sumErr)
-			}
-			share, shareErr := basisAmount.amount.Mul(percentage)
-			if shareErr != nil {
-				return evaluation.withCalculationError(shareErr)
-			}
-			hundredths, divErr := percentShare(share)
-			if divErr != nil {
-				return evaluation.withCalculationError(divErr)
-			}
-			amount, moneyErr := NewMoney(hundredths, request.plan.rateTable.currency)
-			if moneyErr != nil {
-				return evaluation.withCalculationError(moneyErr)
+			amount, resolveErr := outcome.rule.calculation.resolve(surchargeContext{
+				features:      features,
+				zone:          request.input.zone,
+				pricingWeight: pricingWeight.rounded,
+			}, &basis)
+			if resolveErr != nil {
+				return evaluation.withCalculationError(resolveErr)
 			}
 			outcome.amount = amount
 			evaluation.explanation = append(evaluation.explanation,
-				fmt.Sprintf("surcharge %s charged %s%% of basis %s (%s %s) for %s", outcome.rule.id, percentage.String(), dependencyID, basisAmount.amount.String(), basisAmount.currency, amount.amount.String()))
+				fmt.Sprintf("surcharge %s charged %s over basis %s for %s %s",
+					outcome.rule.id, outcome.rule.calculation.method, strings.Join(outcome.rule.calculation.basisDependencyIDs(), "+"), amount.amount.String(), amount.currency))
 			if collectErr := collect(outcome); collectErr != nil {
 				return evaluation.withCalculationError(collectErr)
 			}
