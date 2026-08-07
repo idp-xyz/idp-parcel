@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -80,11 +81,14 @@ const (
 )
 
 type syntheticResolvedBasis struct {
+	// The settlement account is deliberately absent. party-commercial's
+	// settlement policy fixes the mode, currency and scope; the account that
+	// also fixes them is settlement-accounting's own object, resolved from
+	// these dimensions rather than carried across the boundary.
 	resolutionID     string
 	resolutionStatus string
 	mode             syntheticControlMode
 	scope            string
-	account          string
 	currency         string
 	policyVersion    string
 	asOf             time.Time
@@ -98,7 +102,7 @@ type syntheticResolvedBasis struct {
 
 func (basis syntheticResolvedBasis) valid(at time.Time) bool {
 	if basis.resolutionID == "" || basis.resolutionStatus != syntheticUniqueResolution ||
-		basis.scope == "" || basis.account == "" ||
+		basis.scope == "" ||
 		basis.currency == "" || basis.policyVersion == "" || basis.asOf.IsZero() ||
 		basis.validFrom.IsZero() || basis.currentRevision == "" ||
 		basis.fixtureVersion == "" || basis.evidence != syntheticEvidenceLevel ||
@@ -125,7 +129,6 @@ type syntheticControlRequest struct {
 	tenantID      string
 	customerID    string
 	scope         string
-	account       string
 	currency      string
 	amountMinor   int64
 	mode          syntheticControlMode
@@ -136,13 +139,13 @@ type syntheticControlRequest struct {
 func (request syntheticControlRequest) minimumValid() bool {
 	return request.requestID != "" && request.submissionID != "" &&
 		request.associationID != "" && request.tenantID != "" &&
-		request.customerID != "" && request.scope != "" && request.account != "" &&
+		request.customerID != "" && request.scope != "" &&
 		request.currency != "" && request.amountMinor > 0 && !request.requestedAt.IsZero()
 }
 
 func (request syntheticControlRequest) matchesBasis() bool {
 	return request.mode == request.basis.mode && request.scope == request.basis.scope &&
-		request.account == request.basis.account && request.currency == request.basis.currency
+		request.currency == request.basis.currency
 }
 
 func (request syntheticControlRequest) identityKey() string {
@@ -152,7 +155,7 @@ func (request syntheticControlRequest) identityKey() string {
 func (request syntheticControlRequest) fingerprint() string {
 	return strings.Join([]string{
 		request.tenantID, request.customerID, request.requestID, request.scope,
-		request.account, request.currency, fmt.Sprint(request.amountMinor),
+		request.currency, fmt.Sprint(request.amountMinor),
 		string(request.mode), request.basis.resolutionID, request.basis.policyVersion,
 		request.basis.currentRevision, request.submissionID, request.associationID,
 	}, "\x00")
@@ -183,11 +186,15 @@ type syntheticCreditRecord struct {
 }
 
 type syntheticControlResult struct {
-	status          syntheticControlStatus
-	controlID       string
-	requestDigest   string
-	associationID   string
-	mode            syntheticControlMode
+	status        syntheticControlStatus
+	controlID     string
+	requestDigest string
+	associationID string
+	mode          syntheticControlMode
+	// account is resolved by settlement from the basis dimensions, never taken
+	// from the caller. It is recorded because a confirmed charge must fix its
+	// settlement account (settlement-accounting CONTEXT.md, 费用形成与证据).
+	account         string
 	basis           syntheticResolvedBasis
 	judgedAt        time.Time
 	estimate        syntheticEstimate
@@ -197,7 +204,7 @@ type syntheticControlResult struct {
 	reason          string
 	// Explicit negative-boundary markers: this slice does not create these
 	// downstream financial facts. No control path sets them, which is the
-	// point — TestSyntheticControlBoundaryGuardsAreFalsifiable proves the
+	// point: TestSyntheticControlBoundaryGuardsAreFalsifiable proves the
 	// guard reacts when one is set, so the zero-valued assertions elsewhere
 	// mean "nothing set this" rather than "nothing could".
 	hasFee            bool
@@ -245,13 +252,12 @@ func newSyntheticControlStub() *syntheticControlStub {
 	}
 }
 
-func syntheticBasis(mode syntheticControlMode, scope, account, revision string) syntheticResolvedBasis {
+func syntheticBasis(mode syntheticControlMode, scope, revision string) syntheticResolvedBasis {
 	return syntheticResolvedBasis{
 		resolutionID:     "SYN-RES-" + strings.ToLower(scope),
 		resolutionStatus: syntheticUniqueResolution,
 		mode:             mode,
 		scope:            scope,
-		account:          account,
 		currency:         "SYN",
 		policyVersion:    "SYN-POLICY-" + string(mode) + "-v1",
 		asOf:             time.Date(2026, 8, 7, 6, 0, 0, 0, time.UTC),
@@ -264,8 +270,8 @@ func syntheticBasis(mode syntheticControlMode, scope, account, revision string) 
 	}
 }
 
-func syntheticRequest(mode syntheticControlMode, scope, account, submission, association string) syntheticControlRequest {
-	basis := syntheticBasis(mode, scope, account, "rev-1")
+func syntheticRequest(mode syntheticControlMode, scope, submission, association string) syntheticControlRequest {
+	basis := syntheticBasis(mode, scope, "rev-1")
 	return syntheticControlRequest{
 		requestID:     "SYN-REQUEST-" + submission,
 		submissionID:  submission,
@@ -273,7 +279,6 @@ func syntheticRequest(mode syntheticControlMode, scope, account, submission, ass
 		tenantID:      "SYN-TENANT-01",
 		customerID:    "SYN-CUSTOMER-01",
 		scope:         scope,
-		account:       account,
 		currency:      basis.currency,
 		amountMinor:   1250,
 		mode:          mode,
@@ -298,6 +303,7 @@ func (stub *syntheticControlStub) resultFor(request syntheticControlRequest, dig
 		requestDigest: digest,
 		associationID: request.associationID,
 		mode:          request.mode,
+		account:       stub.resolveSettlementAccount(request.basis),
 		basis:         request.basis,
 		judgedAt:      stub.now,
 		estimate: syntheticEstimate{
@@ -418,7 +424,7 @@ func (stub *syntheticControlStub) execute(request syntheticControlRequest) synth
 			break
 		}
 		result.credit = syntheticCreditRecord{
-			account:       request.account,
+			account:       stub.resolveSettlementAccount(request.basis),
 			exposureMinor: stub.creditExposure,
 			limitMinor:    stub.creditLimit,
 			posture:       stub.creditPosture,
@@ -475,7 +481,7 @@ func (stub *syntheticControlStub) compensateAfterAcceptance(result syntheticCont
 func assertSyntheticControlTrace(t *testing.T, result syntheticControlResult) {
 	t.Helper()
 	if result.controlID == "" || result.requestDigest == "" || result.associationID == "" ||
-		result.basis.resolutionID == "" || result.basis.policyVersion == "" ||
+		result.account == "" || result.basis.resolutionID == "" || result.basis.policyVersion == "" ||
 		result.basis.currentRevision == "" || result.basis.evidence != syntheticEvidenceLevel ||
 		result.basis.evidenceIndex == "" || result.judgedAt.IsZero() {
 		t.Fatalf("control trace incomplete: %#v", result)
@@ -491,6 +497,74 @@ func assertSyntheticControlTrace(t *testing.T, result syntheticControlResult) {
 // externalCalls == 0 assertions mean anything.
 func (stub *syntheticControlStub) callExternalFinancialSystem() {
 	stub.externalCalls++
+}
+
+// resolveSettlementAccount models settlement-accounting resolving its own
+// account. The commercial basis fixes the legal entity, counterparty, direction
+// and currency but publishes no account; settlement derives one from those
+// dimensions, so a caller can neither name an account nor borrow one resolved
+// for a different scope, mode or currency.
+func (stub *syntheticControlStub) resolveSettlementAccount(basis syntheticResolvedBasis) string {
+	if !basis.valid(stub.now) {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		string(basis.mode), basis.currency, basis.scope, basis.policyVersion,
+	}, "\x00")))
+	return "SYN-ACCOUNT-" + hex.EncodeToString(digest[:6])
+}
+
+// Covers: SYN-CHAIN-04 (consumer half: the account is resolved from the basis
+// dimensions, and a currency that disagrees with the basis never freezes)
+func TestSyntheticControlResolvesItsOwnAccountFromTheBasis(t *testing.T) {
+	stub := newSyntheticControlStub()
+	basis := syntheticBasis(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "rev-1")
+
+	resolved := stub.resolveSettlementAccount(basis)
+	if resolved == "" {
+		t.Fatal("a valid basis resolved no settlement account")
+	}
+	if stub.resolveSettlementAccount(basis) != resolved {
+		t.Fatal("the same basis resolved two different settlement accounts")
+	}
+
+	dimensions := map[string]func(*syntheticResolvedBasis){
+		"currency": func(value *syntheticResolvedBasis) { value.currency = "SYN2" },
+		"scope":    func(value *syntheticResolvedBasis) { value.scope = "SYN-SCOPE-PREPAID-02" },
+		"mode":     func(value *syntheticResolvedBasis) { value.mode = syntheticTermsMode },
+	}
+	for name, change := range dimensions {
+		t.Run("account follows "+name, func(t *testing.T) {
+			changed := basis
+			change(&changed)
+			if stub.resolveSettlementAccount(changed) == resolved {
+				t.Fatalf("changing %s reused the same settlement account", name)
+			}
+		})
+	}
+
+	t.Run("neither the basis nor the caller can name an account", func(t *testing.T) {
+		for _, subject := range []any{syntheticResolvedBasis{}, syntheticControlRequest{}} {
+			subjectType := reflect.TypeOf(subject)
+			for index := 0; index < subjectType.NumField(); index++ {
+				name := subjectType.Field(index).Name
+				if strings.Contains(strings.ToLower(name), "account") {
+					t.Fatalf("%s carries %s, so an account can cross the boundary unresolved",
+						subjectType.Name(), name)
+				}
+			}
+		}
+	})
+
+	t.Run("currency disagreeing with the basis never freezes", func(t *testing.T) {
+		stub := newSyntheticControlStub()
+		request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-13", "ACCEPT-13")
+		request.currency = "SYN2"
+		result := stub.execute(request)
+		if result.status != syntheticControlConflict || stub.freezeCalls != 0 {
+			t.Fatalf("a currency mismatch was accepted: %#v freezes=%d", result, stub.freezeCalls)
+		}
+	})
 }
 
 // Covers: S01-AT-08
@@ -527,7 +601,7 @@ func TestSyntheticControlBoundaryGuardsAreFalsifiable(t *testing.T) {
 // Covers: S01-AT-01
 func TestSyntheticPrepaidControlFormsEstimateAndSingleFreeze(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-01", "ACCEPT-01")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-01", "ACCEPT-01")
 	first := stub.execute(request)
 	replay := stub.execute(request)
 	if first.status != syntheticControlFrozen || replay.status != syntheticControlFrozen ||
@@ -543,16 +617,17 @@ func TestSyntheticPrepaidControlFormsEstimateAndSingleFreeze(t *testing.T) {
 // Covers: S01-AT-02
 func TestSyntheticTermsControlIsIndependentFromPrepaid(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-01", "SYN-ACCOUNT-TERMS-01", "SUB-02", "ACCEPT-02")
+	request := syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-01", "SUB-02", "ACCEPT-02")
 	result := stub.execute(request)
-	if result.status != syntheticControlCreditWithinPolicy || result.credit.account != request.account ||
+	if result.status != syntheticControlCreditWithinPolicy ||
+		result.credit.account != stub.resolveSettlementAccount(request.basis) ||
 		result.credit.limitMinor != stub.creditLimit || result.freeze.freezeID != "" || stub.freezeCalls != 0 {
 		t.Fatalf("terms control borrowed prepaid state: %#v calls=%d", result, stub.freezeCalls)
 	}
 	assertSyntheticControlTrace(t, result)
 
 	stub.creditPosture = syntheticCreditRestricted
-	restricted := stub.execute(syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-02", "SYN-ACCOUNT-TERMS-02", "SUB-03", "ACCEPT-03"))
+	restricted := stub.execute(syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-02", "SUB-03", "ACCEPT-03"))
 	if restricted.status != syntheticControlCreditRestricted || restricted.reason == "" {
 		t.Fatalf("restricted terms result = %#v", restricted)
 	}
@@ -561,14 +636,14 @@ func TestSyntheticTermsControlIsIndependentFromPrepaid(t *testing.T) {
 
 func TestSyntheticControlCannotOverrideResolvedModeOrCrossScope(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-04", "ACCEPT-04")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-04", "ACCEPT-04")
 	request.mode = syntheticTermsMode
 	invalid := stub.execute(request)
 	if invalid.status != syntheticControlConflict || invalid.reason != "RESOLVED_BASIS_SCOPE_CONFLICT" || stub.freezeCalls != 0 {
 		t.Fatalf("caller mode override was accepted: %#v", invalid)
 	}
 
-	request = syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-05", "ACCEPT-05")
+	request = syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-05", "ACCEPT-05")
 	request.scope = "SYN-SCOPE-OTHER"
 	conflict := stub.execute(request)
 	if conflict.status != syntheticControlConflict || conflict.reason != "RESOLVED_BASIS_SCOPE_CONFLICT" || stub.freezeCalls != 0 {
@@ -580,7 +655,7 @@ func TestSyntheticControlCannotOverrideResolvedModeOrCrossScope(t *testing.T) {
 func TestSyntheticUncertainAcceptanceQueriesBeforeCompensation(t *testing.T) {
 	stub := newSyntheticControlStub()
 	stub.freezeSubmit = syntheticFreezeSubmitUncertain
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-06", "ACCEPT-06")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-06", "ACCEPT-06")
 	pending := stub.execute(request)
 	if pending.status != syntheticControlPending || pending.freeze.state != syntheticFreezeUnknown {
 		t.Fatalf("initial uncertain freeze = %#v", pending)
@@ -605,7 +680,7 @@ func TestSyntheticUncertainAcceptanceQueriesBeforeCompensation(t *testing.T) {
 // Covers: S01-AT-06
 func TestSyntheticAcceptedSubmissionRetainsLegalFreeze(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-07", "ACCEPT-07")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-07", "ACCEPT-07")
 	frozen := stub.execute(request)
 	retained := stub.compensateAfterAcceptance(frozen, syntheticAcceptanceEstablished)
 	if retained.status != syntheticControlRetained || retained.freeze.state != syntheticFreezeConfirmed || stub.releaseCalls != 0 {
@@ -617,7 +692,7 @@ func TestSyntheticAcceptedSubmissionRetainsLegalFreeze(t *testing.T) {
 // Covers: S01-AT-05, S01-AT-06
 func TestSyntheticCompensationFailureRemainsPendingAndQueryable(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-08", "ACCEPT-08")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-08", "ACCEPT-08")
 	frozen := stub.execute(request)
 	stub.release = syntheticReleaseUncertain
 	pending := stub.compensateAfterAcceptance(frozen, syntheticAcceptanceNotEstablished)
@@ -635,14 +710,14 @@ func TestSyntheticCompensationFailureRemainsPendingAndQueryable(t *testing.T) {
 // Covers: S01-AT-05, S01-AT-07
 func TestSyntheticFinancialControlRejectsStaleOrUnavailableBasis(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-09", "ACCEPT-09")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-09", "ACCEPT-09")
 	request.basis.currentRevision = ""
 	stale := stub.execute(request)
 	if stale.status != syntheticControlPending || stale.reason != "BASIS_UNAVAILABLE" || stub.freezeCalls != 0 {
 		t.Fatalf("stale basis was used: %#v", stale)
 	}
 
-	request = syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-09B", "ACCEPT-09B")
+	request = syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-09B", "ACCEPT-09B")
 	request.basis.resolutionStatus = "APPLICABILITY_CONFLICT"
 	conflict := stub.execute(request)
 	if conflict.status != syntheticControlPending || conflict.reason != "BASIS_UNAVAILABLE" || stub.freezeCalls != 0 {
@@ -651,7 +726,7 @@ func TestSyntheticFinancialControlRejectsStaleOrUnavailableBasis(t *testing.T) {
 
 	stub = newSyntheticControlStub()
 	stub.authorityReady = false
-	unavailable := stub.execute(syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-01", "SYN-ACCOUNT-TERMS-01", "SUB-10", "ACCEPT-10"))
+	unavailable := stub.execute(syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-01", "SUB-10", "ACCEPT-10"))
 	if unavailable.status != syntheticControlPending || unavailable.continuationRef == "" || stub.externalCalls != 0 {
 		t.Fatalf("unavailable authority = %#v", unavailable)
 	}
@@ -661,7 +736,7 @@ func TestSyntheticFinancialControlRejectsStaleOrUnavailableBasis(t *testing.T) {
 // Covers: S01-AT-08
 func TestSyntheticControlPreservesHistoryAndNeverCreatesCashFacts(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-11", "ACCEPT-11")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-11", "ACCEPT-11")
 	frozen := stub.execute(request)
 	released := stub.compensateAfterAcceptance(frozen, syntheticAcceptanceNotEstablished)
 	if _, ok := stub.freezes[frozen.freeze.freezeID]; !ok {
@@ -675,7 +750,7 @@ func TestSyntheticControlPreservesHistoryAndNeverCreatesCashFacts(t *testing.T) 
 
 func TestSyntheticControlRejectsConflictingReplayWithoutSideEffect(t *testing.T) {
 	stub := newSyntheticControlStub()
-	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-12", "ACCEPT-12")
+	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SUB-12", "ACCEPT-12")
 	first := stub.execute(request)
 	request.amountMinor++
 	second := stub.execute(request)

@@ -3,6 +3,7 @@ package partycommercial
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -140,6 +141,7 @@ type syntheticCommercialCandidate struct {
 	priceDirection        string
 	basisSlot             string
 	policyKind            syntheticCommercialObjectKind
+	settlementCurrency    string
 	references            []syntheticCommercialReference
 }
 
@@ -160,6 +162,11 @@ type syntheticAdoptedCommercialObject struct {
 	currentRevision string
 	scopeReference  string
 	fixtureVersion  string
+	// settlementCurrency is carried only by settlement policy objects. The
+	// policy is what fixes the currency (party-commercial CONTEXT.md「结算政策」);
+	// the settlement account that also fixes it belongs to settlement-accounting
+	// and is deliberately absent here.
+	settlementCurrency string
 }
 
 func (object syntheticAdoptedCommercialObject) reference() syntheticCommercialReference {
@@ -245,6 +252,7 @@ type syntheticCommercialResolverFixture struct {
 	authorityAvailable  bool
 	authorityRevision   string
 	fixtureVersion      string
+	settlementCurrency  string
 	judgedAt            time.Time
 }
 
@@ -258,6 +266,7 @@ func newSyntheticCommercialResolverFixture() syntheticCommercialResolverFixture 
 		authorityAvailable: true,
 		authorityRevision:  "SYN-COMMERCIAL-VIEW-rev-1",
 		fixtureVersion:     syntheticCommercialFixtureVersion,
+		settlementCurrency: "SYN",
 		judgedAt:           time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 	}
 }
@@ -342,6 +351,7 @@ func (fixture *syntheticCommercialResolverFixture) addPolicyCandidate(
 		purpose:               syntheticPurposeAcceptanceControl,
 		basisSlot:             syntheticBasisSlotSettlement,
 		policyKind:            policyKind,
+		settlementCurrency:    fixture.settlementCurrency,
 		references:            references,
 	}
 	fixture.candidates = append(fixture.candidates, candidate)
@@ -445,7 +455,7 @@ func (fixture syntheticCommercialResolverFixture) checkCandidate(
 			notApplicable = true
 			continue
 		}
-		objects = append(objects, syntheticAdoptedCommercialObject{
+		adopted := syntheticAdoptedCommercialObject{
 			kind:            version.kind,
 			objectID:        version.objectID,
 			version:         version.version,
@@ -453,7 +463,11 @@ func (fixture syntheticCommercialResolverFixture) checkCandidate(
 			currentRevision: version.currentRevision,
 			scopeReference:  version.scopeReference,
 			fixtureVersion:  version.fixtureVersion,
-		})
+		}
+		if version.kind == candidate.policyKind {
+			adopted.settlementCurrency = candidate.settlementCurrency
+		}
+		objects = append(objects, adopted)
 		if version.kind == candidate.policyKind && version.scopeReference != query.serviceOrControlScope {
 			conflict = true
 		}
@@ -1033,6 +1047,51 @@ func TestSyntheticCommercialResolutionUsesSharedBaselineAndScopeSpecificPolicy(t
 	}
 }
 
+// Covers: SYN-CHAIN-04 (producer half: a unique resolution supplies every field the
+// settlement-accounting control boundary consumes, and publishes no settlement account)
+func TestSyntheticCommercialResolutionSuppliesTheFinancialControlBoundary(t *testing.T) {
+	period := syntheticPeriodFor(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	fixture := newSyntheticCommercialResolverFixture()
+	baseline := fixture.publishBaseline(t, "SYN-CONTRACT-FAMILY-BOUNDARY", period, "rev-boundary", true)
+	fixture.addPolicyCandidate(t, "SYN-COM-BOUNDARY", baseline, "SYN-SCOPE-PREPAID-01", syntheticPrepaidPolicyKind, period, "rev-boundary-p")
+
+	resolution := fixture.resolveFirstPhase(syntheticResolutionQueryForScope("SYN-SCOPE-PREPAID-01"))
+	if resolution.status != syntheticResolutionUnique {
+		t.Fatalf("resolution status = %s, want UNIQUE_RESOLVED", resolution.status)
+	}
+	assertSyntheticResolutionTrace(t, resolution)
+
+	var policy syntheticAdoptedCommercialObject
+	for _, object := range resolution.adopted {
+		if object.kind == syntheticPrepaidPolicyKind {
+			policy = object
+		}
+	}
+	if policy.objectID == "" {
+		t.Fatal("unique resolution adopted no settlement policy")
+	}
+	if policy.settlementCurrency == "" || policy.version == "" || policy.currentRevision == "" ||
+		policy.scopeReference != "SYN-SCOPE-PREPAID-01" || policy.effectivePeriod.startsAt.IsZero() ||
+		policy.fixtureVersion == "" {
+		t.Fatalf("settlement policy cannot supply the control boundary: %#v", policy)
+	}
+
+	// The settlement account is settlement-accounting's object: it fixes the
+	// legal entity, counterparty, direction and currency itself. Publishing one
+	// here would let a caller borrow another scope's account.
+	adoptedType := reflect.TypeOf(syntheticAdoptedCommercialObject{})
+	for index := 0; index < adoptedType.NumField(); index++ {
+		if name := adoptedType.Field(index).Name; strings.Contains(strings.ToLower(name), "account") {
+			t.Fatalf("the commercial basis published %s, which belongs to settlement-accounting", name)
+		}
+	}
+}
+
+// Covers: S01-AT-03 (prepaid and terms overlapping one scope yield an applicability conflict)
+// Covers: S01-AT-04 (a successful authority read with no applicable scope yields no applicable basis)
 func TestSyntheticCommercialResolutionDistinguishesZeroConflictAndPending(t *testing.T) {
 	period := syntheticPeriodFor(
 		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -1147,6 +1206,7 @@ func TestSyntheticCommercialResolutionRejectsMixedModeCandidateAndPolicyScopeReb
 	}
 }
 
+// Covers: S01-AT-05 (a failed authority read stays pending instead of collapsing to zero candidates)
 func TestSyntheticCommercialResolutionAuthorityFailureIsPendingNotZero(t *testing.T) {
 	fixture := newSyntheticCommercialResolverFixture()
 	fixture.authorityAvailable = false
