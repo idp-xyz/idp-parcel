@@ -44,7 +44,7 @@
 |---|---|---|
 | §1-5 愿景、范围、子域、统一语言、建模原则 | 已吸收 | [ADR-0012 Context](../adr/0012-parcel-pricing-context-within-idp-parcel.md)、[parcel-pricing/CONTEXT.md Language](../domain/parcel-pricing/CONTEXT.md) |
 | §6-10 限界上下文总览、内部关系、Context Map、外部集成、数据权属 | 已吸收（改判） | [ADR-0012 Decision](../adr/0012-parcel-pricing-context-within-idp-parcel.md)、[CONTEXT-MAP.md](../domain/CONTEXT-MAP.md)。参考设计的十二个上下文并非全部保留：见下方「上下文改判」 |
-| §11-20 共享内核、标识值对象、Money、Quantity、DimensionSet、TimeRange/Bitemporal、VersionRef、PartyRef、SourceReference、DomainError | 部分已吸收 | `internal/parcelpricing/domain/` 的 `decimal.go`、`value_objects.go`、`errors.go` 已覆盖精度、币种、重量、版本引用与有效期。`DimensionSet`、双时态区间和 `PartyRef` 尚无落点 → 待决 |
+| §11-20 共享内核、标识值对象、Money、Quantity、DimensionSet、TimeRange/Bitemporal、VersionRef、PartyRef、SourceReference、DomainError | 部分已吸收 | `internal/parcelpricing/domain/` 的 `decimal.go`、`value_objects.go`、`errors.go` 已覆盖精度、币种、重量、版本引用与有效期。`DimensionSet` 已定案：尺寸进入计价输入快照，最长边、次长边、长加围与体积为闭合特征来源，见 [parcel-pricing/CONTEXT.md 的「特征」](../domain/parcel-pricing/CONTEXT.md)。双时态区间和 `PartyRef` 仍尚无落点 → 待决 |
 | §21 Product & Eligibility | 已吸收（改判 `party-commercial`） | [CONTEXT-MAP.md](../domain/CONTEXT-MAP.md)、[party-commercial/CONTEXT.md](../domain/party-commercial/CONTEXT.md) |
 | §22 Pricing Catalog | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) |
 | §23 Contract Policy | 已吸收（改判 `party-commercial`） | [party-commercial/CONTEXT.md](../domain/party-commercial/CONTEXT.md) |
@@ -114,13 +114,13 @@
 | §3-4 规范性统一语言、基础数据类型 | 已吸收 | `internal/parcelpricing/domain/decimal.go`、`value_objects.go` |
 | §5 CalculationPurpose | 已吸收（收窄） | [parcel-pricing/CONTEXT.md 的「计算目的」](../domain/parcel-pricing/CONTEXT.md) 与 [GLOSSARY 词条](../domain/GLOSSARY.md)。本仓保留目的轴但首发只取三值并与价格方向一一配对，参考设计的其余取值不引入；[`PP-S03`](./pp-s03-par-set-02-03-evidence-and-synthetic-contract.md) 当初挂起的语言决策至此结清 |
 | §6-8 RatingInputSnapshot、业务时间与版本解析、Fact 选择 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的计价输入快照与版本清单；`internal/parcelpricing/domain/input.go` |
-| §9 单位换算 | 部分 | 代码仅有重量单位。多单位换算待真实参数 |
-| §10-12 Geometry 语义、地址与地理分类、包裹特征判定 | 待决 | 首期未实现。建议：由真实 `PAR-SET-02/03` 决定是否进入，不预先建模。决定方：计价与结算业务责任方 |
-| §13-17 Actual Weight、Volumetric Weight、Conditional Minimum Weight、Billable Weight、Weight Rounding | 部分已吸收 | 实重、体积重（作为消费输入）、`MAX` 比较与进位取整均已实现并已进[parcel-pricing/CONTEXT.md 的「计价重量」](../domain/parcel-pricing/CONTEXT.md)；体积系数归属、条件最低重量、混合计重与封顶按同处所记未决，待真实价卡证据 |
+| §9 单位换算 | 部分 | 真实参数已出现：`R40` 的阈值以公制声明而价表用 `LB`/`IN`，故长度单位已进 `internal/parcelpricing/domain/`，且[parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 已定「换算规则必须版本化声明，判定中不得隐式换算」。换算规则本身的声明形式尚无落点 → 待决 |
+| §10-12 Geometry 语义、地址与地理分类、包裹特征判定 | 已吸收（改判） | 真实价卡出现后已定案，不再是「不预先建模」：闭合特征来源集合与判定条件见 [parcel-pricing/CONTEXT.md 的「特征」](../domain/parcel-pricing/CONTEXT.md)，形态理由见 [计价规则模型最终设计](./pp-pricing-rule-model-final-design.md)的形态决定一。地址分类按地址性质与邮编档位两个独立维度落在同处，不用互斥组表达 |
+| §13-17 Actual Weight、Volumetric Weight、Conditional Minimum Weight、Billable Weight、Weight Rounding | 部分已吸收 | 实重、`MAX` 比较与进位取整均已实现并已进[parcel-pricing/CONTEXT.md 的「计价重量」](../domain/parcel-pricing/CONTEXT.md)。体积重已改判：由本上下文从尺寸按版本化体积系数算出，不接收外部算好的数值，系数归属按价格方向分立（采购侧属价卡、销售侧属商业价格政策）；条件最低计价重量已定为方案级、由判定条件触发、多条同时触发取最高。两项理由见[计价规则模型最终设计](./pp-pricing-rule-model-final-design.md)的形态决定二与二之二。混合计重与计价重量封顶按同处所记首发不建模，待真实价卡证据 |
 | §18 Rating Aggregation | 已确认收窄 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：首期只 `PER_PACKAGE`，票级与周期聚合不进首期 |
-| §19 价表家族 | 已确认收窄 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：首期只用 `WEIGHT_ZONE` 合成骨架，且不得成为生产默认 |
+| §19 价表家族 | 已确认收窄 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：首期只用 `WEIGHT_ZONE` 合成骨架，且不得成为生产默认。规则模型已引入[附加费价表](../domain/parcel-pricing/CONTEXT.md)这一概念，但**激活哪些价表族由 `PAR-SET-02/03` 决定，两者在[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)中仍为`待提供`**，且登记册明写「首期只激活已被真实证据证明的价表族」。价卡结构可读不等于参数集已提供，不据此放宽本行 |
 | §20 Published Tariff 与折扣 | 部分已吸收 | 费用方向已覆盖；完整折扣模型待真实价卡 |
-| §21-26 Charge 候选生成、Scope/Basis/Method、Basis 解析、Method 算法、Charge Composition、费用依赖图 | 部分已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的费用行语义与组合顺序；费用依赖图未建模，该缺口及其触发条件已在同处写明 → 待决 |
+| §21-26 Charge 候选生成、Scope/Basis/Method、Basis 解析、Method 算法、Charge Composition、费用依赖图 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的费用行语义，以及「计算方法」「附加费规则」「互斥组」「费用依赖」四个词条。费用依赖图已定案：显式声明基数构成与排除集、存在环即为冲突，不再是缺口 |
 | §27 Fuel Policy | 已确认不采纳 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：最低/封顶/多层燃油不进首期 |
 | §28 BUY 与 SELL 计算 | 已吸收 | [ADR-0012](../adr/0012-parcel-pricing-context-within-idp-parcel.md) 的方向隔离；`internal/parcelpricing/domain/evaluation_test.go` |
 | §29 多币种与汇率 | 已确认不采纳 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：复杂多币种换算不进首期 |
@@ -185,10 +185,11 @@
 | `REF-OPEN-05` | 计价 ADR 未点名 API 契约与技术设计本身 | **已定案：不另写 ADR，由本台账承担该记录。** 「不采纳参考设计的对外 API 契约与运行时技术设计」是 [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [ADR-0012](../adr/0012-parcel-pricing-context-within-idp-parcel.md) 的推论而非独立决策，为推论单写 ADR 会制造第二套口径 | 技术与产品 |
 | `REF-OPEN-06` | 领域模型 §32、§52-57 的安全、租户隔离、审计、数据保留 | **已定案并已抬升。** 不作为计价范围，按跨切面以 `PAR-GOV-*` 承接；理由与边界见 [parcel-pricing/CONTEXT.md 边界与所有权](../domain/parcel-pricing/CONTEXT.md)。该处是唯一住所，本行只作索引 | 产品与治理 |
 
-各表中仍标为`待决`但不进本清单的条目共七处，分三类，各有明确延后依据：
+各表中仍标为`待决`但不进本清单的条目共九处，分四类，各有明确延后依据。此前此处记为「七处、分三类」，漏计了领域模型 §11-20 的双时态区间与 `PartyRef`、计算语义 §38 的性能约束，并把计算语义 §40 误记为领域模型 §40：
 
-- **等真实需求出现，不预先建模**：计算语义 §10-12 Geometry 与地址分类、§30 层次分类、§31 表达式执行阶段，以及领域模型 §40 上游一致性追踪。
-- **实现时收敛，现在决定即提前决策**：领域模型 §42-47 聚合事务边界与 §49 CQRS 边界。[ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 已定模块化单体，这些边界属实现形态。
+- **等真实需求出现，不预先建模**：计算语义 §30 多段费用、计算语义 §40 上游一致性追踪，以及领域模型 §11-20 的双时态区间与 `PartyRef`。
+- **需求已出现，声明形式待建模**：计算语义 §9 的换算规则声明形式。CONTEXT 已要求换算规则版本化声明、判定中不得隐式换算，但以何种形式声明尚无落点。
+- **实现时收敛，现在决定即提前决策**：领域模型 §42-47 聚合事务边界与 §49 CQRS 边界、计算语义 §31 宏观执行阶段，以及计算语义 §38 的性能约束。[ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 已定模块化单体，这些边界属实现形态；性能约束另受[parcel-pricing/CONTEXT.md 首发实现取舍](../domain/parcel-pricing/CONTEXT.md)「无度量不优化」约束。
 - **随 `REF-OPEN-02` 一并了结**：Golden Cases §28 映射，取决于 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的闭合结果。
 
 它们标`待决`不是遗漏，是有意不在此时决定。

@@ -1,7 +1,7 @@
 # ADR-0011: 在 idp-parcel 内建立小包计价上下文
 
-Status: Superseded by [ADR-0012](./0012-parcel-pricing-context-within-idp-parcel.md)
-Date: 2026-08-06
+Status: Superseded by [ADR-0012](./0012-parcel-pricing-context-within-idp-parcel.md)  
+Date: 2026-08-06  
 Superseded: 2026-08-07
 
 ## Context

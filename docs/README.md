@@ -48,7 +48,7 @@
 - [`PN-07` 运营结算与经营核算开发交接](./design/pn-07-operational-settlement-and-accounting-development-handoff.md)：把计量、客户/供应商计价、运输发生项到预期成本、调整唯一所有权、接受前财务控制、对账单、供应商账单、真实收付映射/核销、成本分摊、经营结果、赔付/追偿金额和关务代垫组织成 W01 至 W09；通用业务编排已形成，真实参数和联合账期证据仍待提供，当前生产结论保持 `No-Go / 待参数化`。
 - [`PP-S03` 证据与合成契约开发交接](./design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md)：在无真实 SELL/BUY 参数时固定隔离 `S` 的计价验收、费用代码交接和缺映射 `PENDING` 边界；不创建结算对象或解除生产门禁。
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./design/pp-s03-w01-golden-case-source-evidence-request.md)：把源文件身份、哈希、取数范围、参考设计自述的四条源价卡差异和使用授权整理成可执行取证，并固定完全闭合、部分闭合与不可闭合三种结论；不修改参考树，不改写证据层级，也不单独构成参数状态转换。
-- [计价规则模型最终设计](./design/pp-pricing-rule-model-final-design.md)：一次性固定 `parcel-pricing` 规则模型的概念集合与形态——特征判定、附加费规则与分区分档价表、百分比与取较大值、附加费级条件最低重量、费用依赖与排除集、计价参考序列（燃油费率与汇率）、币种换算——并给出范围判据、不变量、待取证项与实施顺序；所有数值保持`待参数化`，不确定任何金额或阈值。
+- [计价规则模型最终设计](./design/pp-pricing-rule-model-final-design.md)：一次性固定 `parcel-pricing` 规则模型的概念集合与形态——特征判定、附加费规则与分区分档价表、百分比与取较大值、方案级条件最低计价重量、费用依赖与排除集、计价参考序列（燃油费率与汇率）、币种换算——并给出范围判据、待取证项与实施顺序。概念定义与不变量已抬升至[小包计价上下文](./domain/parcel-pricing/CONTEXT.md)，本文保留每条从卡上哪一处得出的推导过程；所有数值保持`待参数化`，不确定任何金额或阈值。
 - [`BD-PP-001` 不可计价结果语义决策简报](./design/pp-unratable-outcome-decision-brief.md)：记录「计价规则明确判定不可计价时形成什么结果」的定案与依据——新增「不可计价」终态、只表达价卡侧排除、与待判断/冲突/未形成互不替代、禁止零金额变通；语义本身以 `parcel-pricing` CONTEXT 为准，本文只记录决定过程与仍待价卡证据的排除条款目录。
 - [计价治理案例转录本](./design/pp-golden-case-transcript.md)：说明 136 个治理案例如何逐字转录进本仓、如何复核保真、各分组的证据层级与阻断状态，并登记未转录内容及其理由；它是审阅入口与转录说明，不构成新的验收依据，也不改变任何案例的层级。案例数据本体在 [`docs/reference/golden-cases/`](./reference/golden-cases/)。
 - [参考设计吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)：逐节登记参考设计各交付物在本仓的落点，按`已吸收`、`已确认不采纳`、`待决`三态标注并给出权威链接；它是台账，只索引不复述规则，也不替参考设计的正确性背书。
