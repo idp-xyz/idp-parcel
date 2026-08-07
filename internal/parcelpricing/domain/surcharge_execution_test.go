@@ -102,26 +102,83 @@ func TestSurchargeWithoutDimensionsStaysPending(t *testing.T) {
 }
 
 // The gate that refuses to price a plan carrying structures this build cannot
-// execute must narrow as capabilities land, not disappear. A table-lookup
+// execute must narrow as capabilities land, not disappear. A greater-of
 // surcharge still has no executor, so pricing it would under-bill silently.
 func TestPlanCarryingAStillUnexecutableStructureDoesNotForm(t *testing.T) {
 	currency := mustValue(t, domain.NewCurrency, "USD")
-	entry, err := domain.NewOpenEndedRateEntry(
-		mustValue(t, domain.NewRateEntryID, "surcharge-band"),
-		"Z1",
+	first, err := domain.NewFixedAmountSurcharge(money(t, "12", currency))
+	if err != nil {
+		t.Fatalf("first operand: %v", err)
+	}
+	second, err := domain.NewFixedAmountSurcharge(money(t, "20", currency))
+	if err != nil {
+		t.Fatalf("second operand: %v", err)
+	}
+	calculation, err := domain.NewGreaterOfSurcharge(first, second)
+	if err != nil {
+		t.Fatalf("greater-of calculation: %v", err)
+	}
+	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "greater-rule", "GREATER_RULE", "48", calculation))
+	plan := planWithStructures(t, declaredSurcharges(t, rule))
+	evaluation := evaluateWithSides(t, plan, "eval-unexecutable", "50")
+
+	if evaluation.Status() != domain.EvaluationFailed {
+		t.Fatalf("status = %s, want FAILED while greater-of surcharges have no executor", evaluation.Status())
+	}
+}
+
+// The card bands its oversize charge by zone (Q32–Q35), so a surcharge amount
+// can come from a table rather than a fixed figure. The band is read with the
+// same pricing weight the base freight used, so both read one consistent
+// weight.
+func TestTableLookupSurchargeReadsItsBandWithThePricingWeight(t *testing.T) {
+	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "oversize", "OVERSIZE", "48", tableSurcharge(t, "Z1", "18")))
+	plan := planWithStructures(t, declaredSurcharges(t, rule))
+	evaluation := evaluateWithSides(t, plan, "eval-table-surcharge", "50")
+
+	if evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
+	}
+	if total, _ := evaluation.Total(); total.Amount().String() != "28" {
+		t.Fatalf("total = %s, want 28 = 10 base + 18 banded surcharge", total.Amount().String())
+	}
+	if !hasChargeCode(evaluation, "OVERSIZE") {
+		t.Fatalf("charge lines = %#v, want one coded OVERSIZE", evaluation.ChargeLines())
+	}
+}
+
+// A surcharge table with no band for this zone is a gap in the card, not a
+// rule that missed: the condition did fire. CONTEXT puts an interval gap under
+// 待判断, so the evaluation waits rather than charging nothing.
+func TestTableLookupSurchargeWithNoBandForTheZoneStaysPending(t *testing.T) {
+	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "oversize", "OVERSIZE", "48", tableSurcharge(t, "Z9", "18")))
+	plan := planWithStructures(t, declaredSurcharges(t, rule))
+	evaluation := evaluateWithSides(t, plan, "eval-table-surcharge-gap", "50")
+
+	if evaluation.Status() != domain.EvaluationPending {
+		t.Fatalf("status = %s, issues = %#v, want PENDING", evaluation.Status(), evaluation.Issues())
+	}
+}
+
+func tableSurcharge(t testing.TB, zone, amount string) domain.SurchargeCalculation {
+	t.Helper()
+	currency := mustValue(t, domain.NewCurrency, "USD")
+	band, err := domain.NewOpenEndedRateEntry(
+		mustValue(t, domain.NewRateEntryID, "surcharge-band-"+zone),
+		zone,
 		weight(t, "0", domain.WeightUnitKilogram),
-		money(t, "18", currency),
+		money(t, amount, currency),
 	)
 	if err != nil {
 		t.Fatalf("surcharge band: %v", err)
 	}
 	table, err := domain.NewRateTableVersion(
-		versionReference(t, domain.ArtifactRateTable, "table-surcharge", "v1"),
+		versionReference(t, domain.ArtifactRateTable, "table-surcharge-"+zone, "v1"),
 		domain.RateTableFamilyWeightZone,
 		currency,
 		domain.WeightUnitKilogram,
 		effectivePeriod(t),
-		[]domain.RateEntry{entry},
+		[]domain.RateEntry{band},
 	)
 	if err != nil {
 		t.Fatalf("surcharge table: %v", err)
@@ -130,13 +187,7 @@ func TestPlanCarryingAStillUnexecutableStructureDoesNotForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("table calculation: %v", err)
 	}
-	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "table-rule", "TABLE_RULE", "48", calculation))
-	plan := planWithStructures(t, declaredSurcharges(t, rule))
-	evaluation := evaluateWithSides(t, plan, "eval-unexecutable", "50")
-
-	if evaluation.Status() != domain.EvaluationFailed {
-		t.Fatalf("status = %s, want FAILED while table-lookup surcharges have no executor", evaluation.Status())
-	}
+	return calculation
 }
 
 // A surcharged evaluation that cannot be replayed is only half formed: replay

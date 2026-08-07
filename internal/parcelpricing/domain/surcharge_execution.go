@@ -32,29 +32,41 @@ func (structures PricingPlanStructures) unexecutable() (string, bool) {
 		if rule.minimumWeight != nil {
 			return fmt.Sprintf("conditional minimum weight on %s", rule.id), true
 		}
-		if rule.calculation.method != ChargeMethodFixedAmount {
+		switch rule.calculation.method {
+		case ChargeMethodFixedAmount, ChargeMethodTableLookup:
+		default:
 			return fmt.Sprintf("%s calculation on %s", rule.calculation.method, rule.id), true
 		}
 	}
 	return "", false
 }
 
+// surchargeContext is what a rule may read beyond the package's own features:
+// the zone the shipment falls in and the pricing weight the base freight used.
+// A banded surcharge reads the same weight as the base table so the two can
+// never disagree about how heavy the parcel was.
+type surchargeContext struct {
+	features      PackageFeatures
+	zone          string
+	pricingWeight Weight
+}
+
 // resolveSurcharges decides every declared rule against the package's features
 // and then applies the card's interaction rules. Rules that stand alone are all
 // collected; rules in an exclusivity group compete, and at most one of the
 // group is charged.
-func (structures PricingPlanStructures) resolveSurcharges(features PackageFeatures) ([]surchargeOutcome, error) {
+func (structures PricingPlanStructures) resolveSurcharges(context surchargeContext) ([]surchargeOutcome, error) {
 	outcomes := make([]surchargeOutcome, 0, len(structures.surchargeRules))
 	for _, rule := range structures.surchargeRules {
-		matched, err := rule.condition.Matches(features)
+		matched, err := rule.condition.Matches(context.features)
 		if err != nil {
 			return nil, err
 		}
 		outcome := surchargeOutcome{rule: rule, matched: matched}
 		if matched {
-			amount, ok := rule.calculation.FixedAmount()
-			if !ok {
-				return nil, fmt.Errorf("%w: %s", ErrPlanStructuresNotExecutable, rule.id)
+			amount, err := rule.calculation.resolve(context)
+			if err != nil {
+				return nil, err
 			}
 			outcome.amount = amount
 			outcome.selected = true
@@ -65,6 +77,32 @@ func (structures PricingPlanStructures) resolveSurcharges(features PackageFeatur
 		return nil, err
 	}
 	return outcomes, nil
+}
+
+// resolve produces the amount a matched rule charges. A gap in a banded table
+// is a gap in the card rather than a rule that missed — the condition did fire
+// — so the lookup error travels out unchanged and the evaluation waits.
+func (calculation SurchargeCalculation) resolve(context surchargeContext) (Money, error) {
+	switch calculation.method {
+	case ChargeMethodFixedAmount:
+		amount, ok := calculation.FixedAmount()
+		if !ok {
+			return Money{}, ErrInvalidSurchargeRule
+		}
+		return amount, nil
+	case ChargeMethodTableLookup:
+		table, ok := calculation.LookupTable()
+		if !ok {
+			return Money{}, ErrInvalidSurchargeRule
+		}
+		selection, err := table.Lookup(context.zone, context.pricingWeight)
+		if err != nil {
+			return Money{}, err
+		}
+		return selection.amount, nil
+	default:
+		return Money{}, fmt.Errorf("%w: %s", ErrPlanStructuresNotExecutable, calculation.method)
+	}
 }
 
 // selectWithinExclusivityGroups keeps one member per group.

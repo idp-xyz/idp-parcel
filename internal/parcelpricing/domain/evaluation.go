@@ -286,7 +286,11 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		if featuresErr != nil {
 			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("SURCHARGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
 		}
-		outcomes, resolveErr := request.plan.structures.resolveSurcharges(features)
+		outcomes, resolveErr := request.plan.structures.resolveSurcharges(surchargeContext{
+			features:      features,
+			zone:          request.input.zone,
+			pricingWeight: pricingWeight.rounded,
+		})
 		if resolveErr != nil {
 			return evaluation.withCalculationError(resolveErr)
 		}
