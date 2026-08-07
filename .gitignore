@@ -18,3 +18,11 @@ go.work.sum
 .idea/
 .vscode/
 .codex-*
+
+# Restricted evidence instances. AGENTS.md keeps only de-identified identifiers
+# and evidence indices in the repository; the artefacts themselves live in the
+# evidence store (ADR-0008). Rate cards belong to a tenant's supplier
+# relationship, not to this product.
+/docs/reference/*.xlsx
+/docs/reference/*.xls
+/docs/reference/*.pdf

@@ -34,7 +34,7 @@
 | 声明的源文件 SHA-256 | `22ec1f558b1ec14716d53564ea6030a7c0457304a007c60bc7280b4e3becc577` |
 | 声明使用的工作表 | `UPS-Residential-C-LA` |
 | 声明使用的单元格范围 | `B4:J154`、`L3:R46` |
-| 仓库参考文件 | `docs/reference/蜴国际-美线UPS-Ground-同行价卡-260729.xlsx`（无`副本`前缀） |
+| 权威源文件 | 去掉`副本`前缀的同名文件；已按「敏感实例外置」红线移出仓库，只留哈希与坐标，见[源完整性门禁](../domain/parcel-pricing/CONTEXT.md) |
 | 该参考文件实际 SHA-256 | `9edaf27ef93004e00f73a65471897f2cf7064d5d4df05014934ef7ac5861d33d` |
 | Golden JSON 的 `$schema` | `./international-parcel-rating-golden-cases-v1.0.schema.json` |
 | Schema 文件磁盘名 | `international-parcel-rating-golden-cases-v1.0.1.schema.json` |
