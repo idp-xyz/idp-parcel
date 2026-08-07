@@ -226,11 +226,15 @@ type canonicalFeatureConditionDocument struct {
 }
 
 func canonicalFeatureConditionValue(condition FeatureCondition) canonicalFeatureConditionDocument {
+	// Read the threshold through the condition rather than off one field: a
+	// weight or volume threshold lives in a different field, and hashing the
+	// length field regardless would give every non-length condition the same
+	// empty threshold in the digest.
 	return canonicalFeatureConditionDocument{
 		Source:    condition.source.String(),
 		Operator:  condition.operator.String(),
-		Threshold: condition.lengthThreshold.value.String(),
-		Unit:      condition.lengthThreshold.unit.String(),
+		Threshold: condition.ThresholdValue().String(),
+		Unit:      condition.ThresholdUnit(),
 	}
 }
 

@@ -51,7 +51,7 @@ func length(t testing.TB, value string, unit domain.LengthUnit) domain.Length {
 
 func features(t testing.TB, sides domain.Dimensions) domain.PackageFeatures {
 	t.Helper()
-	result, err := domain.NewPackageFeatures(sides)
+	result, err := domain.NewPackageFeatures(sides, weight(t, "1", domain.WeightUnitKilogram))
 	if err != nil {
 		t.Fatalf("package features: %v", err)
 	}

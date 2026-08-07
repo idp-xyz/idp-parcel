@@ -155,7 +155,7 @@ func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 	if !declared {
 		return PackageFeatures{}, ErrMissingDimensions
 	}
-	return NewPackageFeatures(sides)
+	return NewPackageFeatures(sides, input.actualWeight)
 }
 
 func (input PricingInputSnapshot) valid() bool {

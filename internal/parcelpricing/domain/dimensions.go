@@ -59,6 +59,13 @@ func newVolume(value Decimal, unit LengthUnit) (Volume, error) {
 	return Volume{value: value, unit: unit}, nil
 }
 
+// NewVolume builds a volume that was declared rather than derived — a rate
+// card's oversize threshold is stated as a cubic measure, not computed from
+// sides.
+func NewVolume(value Decimal, unit LengthUnit) (Volume, error) {
+	return newVolume(value, unit)
+}
+
 func (volume Volume) Value() Decimal   { return volume.value }
 func (volume Volume) Unit() LengthUnit { return volume.unit }
 
