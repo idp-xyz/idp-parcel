@@ -116,11 +116,11 @@
 | §6-8 RatingInputSnapshot、业务时间与版本解析、Fact 选择 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的计价输入快照与版本清单；`internal/parcelpricing/domain/input.go` |
 | §9 单位换算 | 部分 | 代码仅有重量单位。多单位换算待真实参数 |
 | §10-12 Geometry 语义、地址与地理分类、包裹特征判定 | 待决 | 首期未实现。建议：由真实 `PAR-SET-02/03` 决定是否进入，不预先建模。决定方：计价与结算业务责任方 |
-| §13-17 Actual Weight、Volumetric Weight、Conditional Minimum Weight、Billable Weight、Weight Rounding | 部分已吸收 | 代码已有计价重量方法与取整；体积重与条件最低重量按 [`PN07-S01` 首期计价实现边界](./pn-07-operational-settlement-and-accounting-development-handoff.md)待真实证据支持 |
+| §13-17 Actual Weight、Volumetric Weight、Conditional Minimum Weight、Billable Weight、Weight Rounding | 部分已吸收 | 实重、体积重（作为消费输入）、`MAX` 比较与进位取整均已实现并已进[parcel-pricing/CONTEXT.md 的「计价重量」](../domain/parcel-pricing/CONTEXT.md)；体积系数归属、条件最低重量、混合计重与封顶按同处所记未决，待真实价卡证据 |
 | §18 Rating Aggregation | 已确认收窄 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：首期只 `PER_PACKAGE`，票级与周期聚合不进首期 |
 | §19 价表家族 | 已确认收窄 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：首期只用 `WEIGHT_ZONE` 合成骨架，且不得成为生产默认 |
 | §20 Published Tariff 与折扣 | 部分已吸收 | 费用方向已覆盖；完整折扣模型待真实价卡 |
-| §21-26 Charge 候选生成、Scope/Basis/Method、Basis 解析、Method 算法、Charge Composition、费用依赖图 | 部分已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的费用行语义与组合顺序；费用依赖图无落点 → 待决 |
+| §21-26 Charge 候选生成、Scope/Basis/Method、Basis 解析、Method 算法、Charge Composition、费用依赖图 | 部分已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的费用行语义与组合顺序；费用依赖图未建模，该缺口及其触发条件已在同处写明 → 待决 |
 | §27 Fuel Policy | 已确认不采纳 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：最低/封顶/多层燃油不进首期 |
 | §28 BUY 与 SELL 计算 | 已吸收 | [ADR-0012](../adr/0012-parcel-pricing-context-within-idp-parcel.md) 的方向隔离；`internal/parcelpricing/domain/evaluation_test.go` |
 | §29 多币种与汇率 | 已确认不采纳 | [`PN07-S01`](./pn-07-operational-settlement-and-accounting-development-handoff.md)：复杂多币种换算不进首期 |
