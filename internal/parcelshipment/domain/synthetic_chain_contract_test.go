@@ -21,6 +21,11 @@ import (
 // SYN-CHAIN-04 is absent on purpose: it spans party-commercial and
 // settlement-accounting, neither of which owns production types, so its two
 // halves belong to those contexts' own contract tests.
+//
+// Each test carries a `Covers:` line naming only the scenarios it actually
+// asserts, so `rg SYN-CHAIN-05` answers the coverage question mechanically. A
+// scenario that is only partly asserted is not listed; an overstated line is
+// worse than a missing one because it makes the grep lie.
 
 const syntheticChainFixtureVersion = "SYN-CHAIN-FIXTURE-v1"
 
@@ -96,7 +101,7 @@ func syntheticChainDecisionSpec(
 	return spec
 }
 
-// Covers: SYN-CHAIN-01, S02-AT-01, S02-AT-02
+// Covers: SYN-CHAIN-01, S02-AT-02
 func TestSyntheticChainRequiresSourceAndOwnershipBeforeFutureGate(t *testing.T) {
 	preserved := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
 	scope := syntheticChainScope(t, preserved)
@@ -167,8 +172,73 @@ func TestSyntheticChainOwnProductPathYieldsOnlyFutureAllowance(t *testing.T) {
 	}
 }
 
+func syntheticChainHandoffSpec(
+	t *testing.T,
+	scope domain.AdmissionScope,
+	observation domain.HandoffObservation,
+) domain.SafeHandoffAssessmentSpec {
+	t.Helper()
+	return domain.SafeHandoffAssessmentSpec{
+		AttemptID:       mustValue(t, domain.NewHandoffAttemptID, "SYN-CHAIN-HANDOFF-1"),
+		Scope:           scope,
+		TargetAuthority: mustValue(t, domain.NewProductionAuthorityReference, "SYN-CHAIN-AUTHORITY-OTHER-1"),
+		Observation:     observation,
+		AssessedAt:      syntheticChainDecidedAt,
+	}
+}
+
+// Covers: SYN-CHAIN-03, S02-AT-04
+func TestSyntheticChainConfirmedHandoffYieldsNeutralOtherAuthority(t *testing.T) {
+	preserved := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
+	scope := syntheticChainScope(t, preserved)
+
+	spec := syntheticChainHandoffSpec(t, scope, domain.HandoffObservationCompleteConfirmation)
+	spec.ConfirmedScopeDigest = scope.Digest()
+	spec.ConfirmationRef = mustValue(t, domain.NewHandoffConfirmationReference, "SYN-CHAIN-CONFIRM-1")
+	spec.QueryRef = mustValue(t, domain.NewHandoffQueryReference, "SYN-CHAIN-QUERY-1")
+	spec.EffectiveAt = syntheticChainAsOf
+
+	assessment, err := domain.AssessSafeHandoff(spec)
+	if err != nil {
+		t.Fatalf("assess safe handoff: %v", err)
+	}
+	if assessment.Status() != domain.SafeHandoffConfirmed {
+		t.Fatalf("status = %s, want CONFIRMED", assessment.Status())
+	}
+	confirmation, ok := assessment.ConfirmationReference()
+	if !ok {
+		t.Fatal("confirmed handoff withheld its confirmation reference")
+	}
+
+	decisionSpec := syntheticChainDecisionSpec(t, scope, domain.ProductionAuthorityOther, "SYN-CHAIN-REV-1")
+	decisionSpec.HandoffRef = confirmation
+	decision := mustDecision(t, decisionSpec)
+
+	gate, err := domain.EvaluateFutureSubmissionGate(
+		decision,
+		scope.Digest(),
+		mustValue(t, domain.NewProductionOwnershipRevision, "SYN-CHAIN-REV-1"),
+		syntheticChainGateAt,
+	)
+	if err != nil {
+		t.Fatalf("evaluate future submission gate: %v", err)
+	}
+	reasons := gate.BlockReasons()
+	if gate.IsAllowed() || len(reasons) != 1 || reasons[0] != domain.FutureSubmissionOtherAuthority {
+		t.Fatalf("other authority did not stay neutral: allowed = %t, reasons = %v", gate.IsAllowed(), reasons)
+	}
+	if got, ok := decision.HandoffReference(); !ok || got != confirmation {
+		t.Fatal("neutral association lost the handoff confirmation it must cite")
+	}
+	if _, _, ok := decision.UnresolvedDetails(); ok {
+		t.Fatal("confirmed handoff still produced unresolved details")
+	}
+}
+
 // Covers: SYN-CHAIN-03, S02-AT-05
 func TestSyntheticChainUnresolvedHandoffCannotCarryOtherAuthority(t *testing.T) {
+	preserved := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
+	scope := syntheticChainScope(t, preserved)
 	continuation := mustValue(t, domain.NewOwnershipContinuationReference, "SYN-CHAIN-CONTINUE-1")
 	confirmation := mustValue(t, domain.NewHandoffConfirmationReference, "SYN-CHAIN-CONFIRM-1")
 
@@ -183,7 +253,6 @@ func TestSyntheticChainUnresolvedHandoffCannotCarryOtherAuthority(t *testing.T) 
 			edit: func(spec *domain.SafeHandoffAssessmentSpec) {
 				spec.ConfirmedScopeDigest = spec.Scope.Digest()
 				spec.ConfirmationRef = confirmation
-				spec.ContinuationRef = continuation
 			},
 		},
 		{
@@ -192,14 +261,24 @@ func TestSyntheticChainUnresolvedHandoffCannotCarryOtherAuthority(t *testing.T) 
 			edit: func(spec *domain.SafeHandoffAssessmentSpec) {
 				spec.ConfirmedScopeDigest = spec.Scope.Digest()
 				spec.ConfirmationRef = confirmation
-				spec.ContinuationRef = continuation
 			},
+		},
+		{
+			name:        "timed out",
+			observation: domain.HandoffObservationTimedOut,
+			edit:        func(*domain.SafeHandoffAssessmentSpec) {},
+		},
+		{
+			name:        "target failure",
+			observation: domain.HandoffObservationFailed,
+			edit:        func(*domain.SafeHandoffAssessmentSpec) {},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			spec := baseHandoffSpec(t, test.observation)
+			spec := syntheticChainHandoffSpec(t, scope, test.observation)
+			spec.ContinuationRef = continuation
 			test.edit(&spec)
 			assessment, err := domain.AssessSafeHandoff(spec)
 			if err != nil {
@@ -213,17 +292,11 @@ func TestSyntheticChainUnresolvedHandoffCannotCarryOtherAuthority(t *testing.T) 
 			if ok {
 				t.Fatalf("unresolved handoff handed out confirmation evidence %q", handoffRef)
 			}
-			if _, ok := assessment.ContinuationReference(); !ok {
-				t.Fatal("unresolved handoff dropped its continuation reference")
+			if got, ok := assessment.ContinuationReference(); !ok || got != continuation {
+				t.Fatal("unresolved handoff dropped the continuation reference it must retain")
 			}
 
-			decisionSpec := ownershipSpec(
-				t,
-				domain.ProductionAuthorityOther,
-				domain.AdmissionControlOpen,
-				"scope-1",
-				"rev-1",
-			)
+			decisionSpec := syntheticChainDecisionSpec(t, scope, domain.ProductionAuthorityOther, "SYN-CHAIN-REV-1")
 			decisionSpec.HandoffRef = handoffRef
 			_, err = domain.NewProductionOwnershipDecision(decisionSpec)
 			if !errors.Is(err, domain.ErrInvalidProductionOwnershipDecision) {
@@ -233,7 +306,7 @@ func TestSyntheticChainUnresolvedHandoffCannotCarryOtherAuthority(t *testing.T) 
 	}
 }
 
-// Covers: SYN-CHAIN-05, S02-AT-09
+// Covers: SYN-CHAIN-05
 func TestSyntheticChainStaleOwnershipMustBeReevaluatedNotReused(t *testing.T) {
 	preserved := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
 	scope := syntheticChainScope(t, preserved)
@@ -290,7 +363,7 @@ func TestSyntheticChainStaleOwnershipMustBeReevaluatedNotReused(t *testing.T) {
 	}
 }
 
-// Covers: SYN-CHAIN-06, S02-AT-10
+// Covers: SYN-CHAIN-06
 func TestSyntheticChainScopeIsolationReachesTheFutureGate(t *testing.T) {
 	base := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
 	baseScope := syntheticChainScope(t, base)
@@ -334,7 +407,7 @@ func TestSyntheticChainScopeIsolationReachesTheFutureGate(t *testing.T) {
 	}
 }
 
-// Covers: SYN-CHAIN-07, S02-AT-01
+// Covers: SYN-CHAIN-07
 func TestSyntheticChainExposesNoProductionEscalationSurface(t *testing.T) {
 	preserved := sourceFingerprint(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-SOURCE-A", "SYN-KEY-1", "SYN-DIGEST-1")
 	scope := syntheticChainScope(t, preserved)
@@ -370,9 +443,12 @@ func TestSyntheticChainExposesNoProductionEscalationSurface(t *testing.T) {
 		}
 	}
 
+	// Scan well past the current enum so a newly added disposition surfaces
+	// here rather than slipping in unnoticed.
+	const dispositionScanLimit = 32
 	wantDispositions := map[string]bool{"ALLOWED": true, "BLOCKED": true}
 	gotDispositions := map[string]bool{}
-	for value := 1; value <= 12; value++ {
+	for value := 1; value <= dispositionScanLimit; value++ {
 		if name := domain.FutureSubmissionDisposition(value).String(); name != "" {
 			gotDispositions[name] = true
 		}

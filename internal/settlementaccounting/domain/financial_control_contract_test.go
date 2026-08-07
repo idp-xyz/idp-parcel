@@ -196,11 +196,18 @@ type syntheticControlResult struct {
 	continuationRef string
 	reason          string
 	// Explicit negative-boundary markers: this slice does not create these
-	// downstream financial facts.
+	// downstream financial facts. No control path sets them, which is the
+	// point — TestSyntheticControlBoundaryGuardsAreFalsifiable proves the
+	// guard reacts when one is set, so the zero-valued assertions elsewhere
+	// mean "nothing set this" rather than "nothing could".
 	hasFee            bool
 	hasReceivable     bool
 	hasPayment        bool
 	hasReconciliation bool
+}
+
+func crossesFinancialOwnershipBoundary(result syntheticControlResult) bool {
+	return result.hasFee || result.hasReceivable || result.hasPayment || result.hasReconciliation
 }
 
 type syntheticControlStub struct {
@@ -473,11 +480,51 @@ func assertSyntheticControlTrace(t *testing.T, result syntheticControlResult) {
 		result.basis.evidenceIndex == "" || result.judgedAt.IsZero() {
 		t.Fatalf("control trace incomplete: %#v", result)
 	}
-	if result.hasFee || result.hasReceivable || result.hasPayment || result.hasReconciliation {
+	if crossesFinancialOwnershipBoundary(result) {
 		t.Fatalf("control result crossed financial ownership boundary: %#v", result)
 	}
 }
 
+// callExternalFinancialSystem is the single chokepoint any outbound financial
+// call would have to pass. Nothing in this offline stub calls it; it exists so
+// externalCalls is an instrument that can move, which is what lets the
+// externalCalls == 0 assertions mean anything.
+func (stub *syntheticControlStub) callExternalFinancialSystem() {
+	stub.externalCalls++
+}
+
+// Covers: S01-AT-08
+func TestSyntheticControlBoundaryGuardsAreFalsifiable(t *testing.T) {
+	if crossesFinancialOwnershipBoundary(syntheticControlResult{}) {
+		t.Fatal("a clean control result reported a boundary crossing")
+	}
+	markers := map[string]func(*syntheticControlResult){
+		"fee":            func(result *syntheticControlResult) { result.hasFee = true },
+		"receivable":     func(result *syntheticControlResult) { result.hasReceivable = true },
+		"payment":        func(result *syntheticControlResult) { result.hasPayment = true },
+		"reconciliation": func(result *syntheticControlResult) { result.hasReconciliation = true },
+	}
+	for name, mark := range markers {
+		t.Run(name, func(t *testing.T) {
+			crossed := syntheticControlResult{}
+			mark(&crossed)
+			if !crossesFinancialOwnershipBoundary(crossed) {
+				t.Fatalf("%s marker did not trip the ownership guard", name)
+			}
+		})
+	}
+
+	stub := newSyntheticControlStub()
+	if stub.externalCalls != 0 {
+		t.Fatalf("fresh stub started at %d external calls", stub.externalCalls)
+	}
+	stub.callExternalFinancialSystem()
+	if stub.externalCalls != 1 {
+		t.Fatalf("external call counter did not move: %d", stub.externalCalls)
+	}
+}
+
+// Covers: S01-AT-01
 func TestSyntheticPrepaidControlFormsEstimateAndSingleFreeze(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-01", "ACCEPT-01")
@@ -493,6 +540,7 @@ func TestSyntheticPrepaidControlFormsEstimateAndSingleFreeze(t *testing.T) {
 	assertSyntheticControlTrace(t, first)
 }
 
+// Covers: S01-AT-02
 func TestSyntheticTermsControlIsIndependentFromPrepaid(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticTermsMode, "SYN-SCOPE-TERMS-01", "SYN-ACCOUNT-TERMS-01", "SUB-02", "ACCEPT-02")
@@ -528,6 +576,7 @@ func TestSyntheticControlCannotOverrideResolvedModeOrCrossScope(t *testing.T) {
 	}
 }
 
+// Covers: S01-AT-06
 func TestSyntheticUncertainAcceptanceQueriesBeforeCompensation(t *testing.T) {
 	stub := newSyntheticControlStub()
 	stub.freezeSubmit = syntheticFreezeSubmitUncertain
@@ -553,6 +602,7 @@ func TestSyntheticUncertainAcceptanceQueriesBeforeCompensation(t *testing.T) {
 	}
 }
 
+// Covers: S01-AT-06
 func TestSyntheticAcceptedSubmissionRetainsLegalFreeze(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-07", "ACCEPT-07")
@@ -564,6 +614,7 @@ func TestSyntheticAcceptedSubmissionRetainsLegalFreeze(t *testing.T) {
 	assertSyntheticControlTrace(t, retained)
 }
 
+// Covers: S01-AT-05, S01-AT-06
 func TestSyntheticCompensationFailureRemainsPendingAndQueryable(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-08", "ACCEPT-08")
@@ -581,6 +632,7 @@ func TestSyntheticCompensationFailureRemainsPendingAndQueryable(t *testing.T) {
 	assertSyntheticControlTrace(t, released)
 }
 
+// Covers: S01-AT-05, S01-AT-07
 func TestSyntheticFinancialControlRejectsStaleOrUnavailableBasis(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-09", "ACCEPT-09")
@@ -606,6 +658,7 @@ func TestSyntheticFinancialControlRejectsStaleOrUnavailableBasis(t *testing.T) {
 	assertSyntheticControlTrace(t, unavailable)
 }
 
+// Covers: S01-AT-08
 func TestSyntheticControlPreservesHistoryAndNeverCreatesCashFacts(t *testing.T) {
 	stub := newSyntheticControlStub()
 	request := syntheticRequest(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "SYN-ACCOUNT-PREPAID-01", "SUB-11", "ACCEPT-11")
