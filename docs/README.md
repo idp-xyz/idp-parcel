@@ -33,12 +33,13 @@
 - [应用用例](./application/README.md)：把已确认领域规则组织成面向开发的输入、结果、应用编排、失败边界和验收条件；当前已覆盖 PN-02 商业权威/接单/撤回、PN-03 接受后路由/收寄/节点作业、PN-04 常规运输/逐包裹取消/终局、PN-06 内部投影/普通客户追踪/异常索赔和 PN-07 通用运营结算，并保留关务专项协作。真实参数、联合验证和代码实现仍待推进；它不重新定义领域规则或真实试点参数。
 - [Go 首个消费者切片实施决策简报](./design/parcel-go-first-consumer-slice-decision-brief.md)：固定 Parcel 的 Go 模块化单体、PostgreSQL/显式 SQL、Bento 技术边界和 `UC-PS-001` 首个可编码子切片；未确认业务参数不得因此成为生产默认值。
 - [`PN-02` 真实参数取证与开发交接](./design/pn-02-real-parameter-evidence-and-development-handoff.md)：把商业权威发布与唯一解析、锚点商业范围、生产接入与归属、接单/决定前撤回、财务策略、接受前可达性和联合准入组织成五个工作包，并明确稳定骨架、`R/S` 配置验证和生产分支的不同门槛。
+- [代理商、Carrier 与 Carrier Service 关系开发交接](./design/party-carrier-channel-relationship-development-handoff.md)：冻结渠道服务方、账号持有人、合同与结算相对方、底层承运商、实际承运商和责任承担方的关系矩阵及最小开发字段；不新增上下文或通用 Carrier 主数据平台。
 - [`PN02-W01` 锚点商业与服务范围证据工作单](./design/pn-02-w01-anchor-commercial-scope-evidence-request.md)：把客户、责任法人、服务产品、客户合同和成熟线路作为独立对象交叉核验；只登记脱敏证据索引，不保存真实值。
 - [`PN02-W02` 生产接入与生产归属证据工作单](./design/pn-02-w02-ingress-production-ownership-evidence-request.md)：核验来源请求身份、三类生产归属、安全交接、暂停恢复和回退责任；不把入口连通或技术回执当成生产准入。
 - [`PN02-W03` 接单规则、决定授权与接受前财务控制证据工作单](./design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)：核验规则包、五类时间、人工复核与主动拒绝授权，以及结算模式、账户、价格和财务控制/补偿边界。
 - [`PN02-W04` 接受前逻辑可达性证据工作单](./design/pn-02-w04-pre-acceptance-logical-reachability-evidence-request.md)：核验服务区域、网络拓扑、日历与截单、候选资格、三值证据完整性、判断时点和失效重判；不创建路由计划或履约资源。
 - [`PN02-W05` 联合验证与生产分支准入工作单](./design/pn-02-w05-joint-verification-and-production-branch-admission.md)：把 W01 至 W04、验收矩阵和技术门槛固定到同一能力范围，形成稳定骨架、`R/S` 或提交 PN-08 的生产候选结论；不自行批准真实客户流量。
-- [`PN02-S01` 合成商业与财务控制开发交接](./design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md)：在无真实数据阶段以 `SYN-COM-01..04` 验证预付/账期唯一解析、范围冲突、无适用依据和依赖未决；只形成隔离 `S`，不改变真实参数或生产准入。
+- [`PN02-S01` 合成商业与财务控制开发交接](./design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md)：在无真实数据阶段以 `SYN-COM-01..04` 验证预付/账期唯一解析、范围冲突、无适用依据和依赖未决，并以 `S01-W03` 验证冻结、信用、查询与补偿边界；只形成隔离 `S`，不改变真实参数或生产准入。
 - [`PN02-S02` 合成来源保全与生产归属开发交接](./design/pn-02-synthetic-ingress-and-production-ownership-development-handoff.md)：验证来源保全、重复/冲突、三类归属判定、安全交接、暂停恢复和建单门禁；当前不创建生产归属端口、`已提交`聚合或持久化写入。
 - [`PN02-SYN` 合成业务契约开发任务包](./design/pn-02-synthetic-business-contract-development-task-pack.md)：把 `S01-W01..W05` 与 `S02-W01..W06` 汇总为开发任务、联合契约检查和当前可编码/禁止生产实现边界；所有结果只记为隔离 `S`。
 - [`PN-03` 网络收寄与节点作业开发交接](./design/pn-03-network-intake-and-node-operations-development-handoff.md)：把接受后初始路由、真实收寄模式、客户送站、场外揽收、有效网络收寄、正式承诺、收寄/实测后路由复核、节点集运与联合验证组织成 W01 至 W08；当前生产结论保持 `No-Go / 待参数化`。

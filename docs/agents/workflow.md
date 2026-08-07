@@ -4,6 +4,18 @@
 
 技能本身怎么用不在这里，见各 `SKILL.md` 与 `docs/<bucket>/<name>.md`；本仓的技能路由表在 [AGENTS.md](../../AGENTS.md)。
 
+## 记号
+
+本文用到的编号都在别处权威定义，这张表只给一句话和入口，不展开成第二套定义。
+
+| 记号 | 是什么 | 权威定义 |
+|---|---|---|
+| `PN-01`..`PN-08` | 首发纵向开发切片编号 | [首发开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#首发纵向开发切片) |
+| `W01`..`W09` | 一个切片内的工作包编号；全称带切片前缀，如 `PN03-W01`、`CC-S0-W01`、`S02-W01` | 各 `docs/design/*handoff*` 的「取证与开发工作包」 |
+| `P` `R` `S` `N/A` | 证据层级：真实生产、历史回放、受控模拟、本期不适用 | [验收矩阵](../product/PILOT-ACCEPTANCE-MATRIX.md#证据层级) |
+| `UC-*` | 应用用例，形如 `UC-PS-001` | [应用用例编写约定](../application/README.md#编写约定) |
+| `BD-*` | 未确认的业务选择，形如 `BD-PS-001` | 同上 |
+
 ## 本仓已经做过的上游步骤
 
 通用流程里有三步在本仓**已经有产物**。对着已有产物再跑一遍，产出的是第二套口径，违反红线「单一权威」。
@@ -22,15 +34,15 @@
 
 ```mermaid
 flowchart TD
-    A["读 PN 切片表<br/>确认切片编号与主责上下文"] --> B["读该 PN 的 docs/design/*handoff*<br/>认领一个 W 包"]
-    B --> C{"W 包的参数<br/>在登记册里是<br/>「已确认」吗？"}
-    C -- 否 --> D["只做稳定骨架 + 显式未配置分支<br/>或隔离合成 S 验证"]
-    C -- 是 --> E["按真实参数实现"]
-    D --> F["/implement<br/>内驱 /tdd 红绿切片"]
-    E --> F
-    F --> G["/code-review 双轴<br/>Standards + Spec"]
-    G -- Spec 轴对照 --> H["对应的 UC-* 文档"]
-    G --> I["提交；证据层级如实记录"]
+    slice["读 PN 切片表<br/>确认切片编号与主责上下文"] --> pack["读该 PN 的 docs/design/*handoff*<br/>认领一个 W 包"]
+    pack --> confirmed{"W 包的参数<br/>在登记册里是<br/>「已确认」吗？"}
+    confirmed -- 否 --> skeleton["只做稳定骨架 + 显式未配置分支<br/>或隔离合成 S 验证"]
+    confirmed -- 是 --> real["按真实参数实现"]
+    skeleton --> implement["/implement<br/>内驱 /tdd 红绿切片"]
+    real --> implement
+    implement --> review["/code-review 双轴<br/>Standards + Spec"]
+    review -- Spec 轴对照 --> usecase["对应的 UC-* 文档"]
+    review --> commit["提交；证据层级如实记录"]
 ```
 
 第一步的判据在 [AGENTS.md 的「开工顺序」](../../AGENTS.md#开工顺序)，这里不复述。
@@ -43,7 +55,7 @@ flowchart TD
 
 四条红线不是审查清单，是流程里的具体动作。
 
-**证据层级诚实**——在提交那一步。[验收矩阵](../product/PILOT-ACCEPTANCE-MATRIX.md)定义了 `P`（真实生产）/ `R`（历史回放）/ `S`（受控模拟）/ `N/A` 四级。三件事最容易做错：
+**证据层级诚实**——在提交那一步。三件事最容易做错：
 
 - 隔离环境跑出来的一律是 `S`，重放结果与真实完全一致也不能升级为 `R`
 - 影子运行不是第五种层级，按其实际数据来源记为 `R` 或 `S`；影子通过本身不构成 `P`
