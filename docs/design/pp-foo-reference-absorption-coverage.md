@@ -141,7 +141,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 | foo 内容 | 状态 | 落点或依据 |
 |---|---|---|
 | 治理案例概念、案例分层、通过标准 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的价卡治理案例 |
-| 136 个案例作为验收证据 | 已吸收但隔离 | [parcel-pricing/CONTEXT.md 源完整性门禁](../domain/parcel-pricing/CONTEXT.md)：83 例 `NORMATIVE_SYNTHETIC` 与 12 例 `UPSTREAM_CONSISTENCY` 只作隔离 `S`，41 例 `SOURCE_RATE_CARD` 必须隔离 |
+| 136 个案例作为验收证据 | 已吸收但隔离 | [parcel-pricing/CONTEXT.md 源完整性门禁](../domain/parcel-pricing/CONTEXT.md)：83 例 `NORMATIVE_SYNTHETIC` 与 12 例 `UPSTREAM_CONSISTENCY` 只作隔离 `S`；41 例 `SOURCE_RATE_CARD` 因四条内容差异未裁决必须隔离，且其源身份只有断言强度——`foo` 声明的副本已删除，哈希无法复核 |
 | `source_discrepancies` 声明的四条源价卡差异 | 已记录并已列入门禁，裁决未决 | `foo` 声明了 `SRC-DISC-001` 至 `004`，其中 `001` 为 `BLOCKING`。四条已逐条记入 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md)，并已列为[源完整性门禁](../domain/parcel-pricing/CONTEXT.md)的第四条件：涉及某条未裁决差异的案例单独阻断，不因 Schema 指针、源文件身份和哈希三项闭合而放行。余下的是合同裁决本身，裁决前 41 例不得用于金额验证 |
 
 ### Rating Runtime 技术设计 `V1.0.1`（`price tech/`，§0 至 §42）
