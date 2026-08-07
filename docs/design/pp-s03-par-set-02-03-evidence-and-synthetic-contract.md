@@ -85,7 +85,7 @@
 - 不创建 `settlement-accounting` 代码包、费用项目、映射表、结算账户、费用明细或账期；
 - 不猜测客户/合同/方向/适用期等费用映射唯一键；
 - 不引入独立计价平台、Quote/锁价、批量导入、周期聚合、复杂多币种或任意脚本；
-- 不把 `PricingPurpose` 扩展为 `foo` 的完整 `CalculationPurpose`。该语言决策另行处理；
+- 不把「计算目的」扩展为 `foo` 的完整 `CalculationPurpose`。该语言决策已由 [`FOO-OPEN-01`](./pp-foo-reference-absorption-coverage.md) 定案：首期取值闭合为三个，与价格方向一一成对，取值集合与配对规则一并重新确认才可拓宽；
 - 不用合成 `S` 解除 `PAR-SET-02/03`、`SET-01/10` 或 PN-08 生产门禁。
 
 ## 进入真实参数后的下一门
