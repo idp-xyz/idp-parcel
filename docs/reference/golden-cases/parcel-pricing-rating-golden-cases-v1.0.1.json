@@ -36,7 +36,7 @@
       "status": "不可复核",
       "note": "案例集自述的源文件与哈希。该副本已删除、全仓不存在，哈希无法复核；等价关系由仓库所有者断言，不由哈希证明。各案例 source_refs 内仍保留这个原始文件名，属逐字转录，不表示该文件存在，取数时请指向上面的权威价卡。"
     },
-    "not_transcribed": "原案例集的 fixtures（一张 WEIGHT_ZONE 价表与 26 项附加费的抽取结果）未转录：没有任何案例引用它，它是对源价卡的未经核实抽取，而权威价卡本身已在本仓。把一份未核实的可直接取用价表放进 docs/ 会诱使有人拿它当价卡数据，与「不制造生产默认价」冲突。将来若需要价表夹具，从权威价卡重新抽取并留下核实记录，不要复活这份抽取。原案例集的 canonical_enums 同样未转录：本仓词汇以 docs/domain/parcel-pricing/CONTEXT.md 为准，复制外部取值集合会制造第二套口径。",
+    "not_transcribed": "原案例集的 fixtures（一张 WEIGHT_ZONE 价表与 25 项附加费的抽取结果）不进本目录，改为归档在 docs/archive/reference-design-rate-card-extraction-v1.0.1.json：没有任何案例引用它，它是对源价卡的未经核实抽取，而权威价卡本身已在本仓。把一份未核实的可直接取用价表放进 docs/reference/ 会诱使有人拿它当价卡数据，与「不制造生产默认价」冲突；归档保住可追溯性，同时明确它不是现行数据。将来若需要价表夹具，从权威价卡重新抽取并留下核实记录，不要复活那份抽取。原案例集的 canonical_enums 未转录：本仓词汇以 docs/domain/parcel-pricing/CONTEXT.md 为准，复制外部取值集合会制造第二套口径。",
     "vocabulary": "案例中出现的 WEIGHT_ZONE、ADD、BUY、SELL 与本仓词汇一致；REPLAY 只作为案例的 category/operation/tags 出现，不是本仓的计算目的取值。本仓首发的计算目的为 CUSTOMER_CHARGE、SUPPLIER_COST、INTERNAL_PRICE，与三个价格方向一一对应，以 CONTEXT 为准。",
     "src_disc_mapping": "案例集未逐例声明所涉 SRC-DISC，各例 source_refs 只给到粗范围，无法按案例归因到具体差异。范围分组见 docs/design/pp-golden-case-transcript.md；那是推导结果而非声明事实，且不改变任何一例的阻断状态。",
     "authority": "docs/domain/parcel-pricing/CONTEXT.md 的 Source integrity gate"
