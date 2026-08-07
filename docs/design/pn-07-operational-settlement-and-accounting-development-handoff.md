@@ -46,7 +46,7 @@
 | 领域语言、规则和生命周期 | [结算与经营核算上下文](../domain/settlement-accounting/CONTEXT.md) | 唯一的费用、账户、对账、核销、分摊和经营结果定义 |
 | 小包价卡与纯计价 | [小包计价上下文](../domain/parcel-pricing/CONTEXT.md) | 唯一的可执行价卡、版本清单、纯评价、解释和回放定义 |
 | 跨上下文所有权 | [领域上下文地图](../domain/CONTEXT-MAP.md) | 固定来源事实、商业规则、结算结果和外部财务边界 |
-| 计价上下文决策 | [ADR-0011](../adr/0011-parcel-pricing-context-within-idp-parcel.md) | 固定 PC → PP → SA 三层边界，并禁止复制独立计费/账务平台 |
+| 计价上下文决策 | [ADR-0012](../adr/0012-parcel-pricing-context-within-idp-parcel.md) | 固定 PC → PP → SA 三层边界，并禁止复制独立计费/账务平台 |
 | 运营结算与法定财务分离 | [ADR-0007](../adr/0007-separate-operational-settlement-from-statutory-finance.md) | 固定外部资金、税务、总账和运营分户账的责任边界 |
 | 来源/有效/派生分层 | [ADR-0005](../adr/0005-source-facts-effective-events-derived-state.md) | 约束迟到、更正、撤销和派生结果不可覆盖 |
 | 试点范围与 COD 排除 | [首发试点范围](../product/PILOT-SCOPE.md) | 固定一个客户模式、一个结算币种、一个真实账期，COD 为 `N/A` |
