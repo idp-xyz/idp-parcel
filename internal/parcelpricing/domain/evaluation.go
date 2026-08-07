@@ -234,7 +234,37 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
-	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit)
+	// Features are derived before the weight is fixed because a conditional
+	// minimum is decided by a predicate yet raises the plan-level pricing
+	// weight, which the base band is then read with. Deriving them after the
+	// weight would make the raise arrive too late to affect the band it is
+	// meant to decide.
+	var features PackageFeatures
+	haveFeatures := false
+	if len(request.plan.structures.surchargeRules) > 0 {
+		derived, featuresErr := request.input.Features()
+		if featuresErr != nil {
+			// A predicate over dimensions can be neither confirmed nor excluded
+			// without them: missing evidence, not a broken request.
+			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("SURCHARGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+		}
+		features, haveFeatures = derived, true
+	}
+
+	var floors []Weight
+	if haveFeatures {
+		raises, raisesErr := request.plan.structures.resolveMinimums(features)
+		if raisesErr != nil {
+			return evaluation.withCalculationError(raisesErr)
+		}
+		if highest, found := highestMinimum(raises); found {
+			floors = append(floors, highest.minimum)
+			evaluation.explanation = append(evaluation.explanation,
+				fmt.Sprintf("conditional minimum %s raised the pricing weight to %s %s", highest.id, highest.minimum.value.String(), highest.minimum.unit))
+		}
+	}
+
+	pricingWeight, err := CalculatePricingWeight(request.input, request.plan.weight, request.plan.rateTable.unit, floors...)
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
@@ -278,14 +308,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("fixed rule %s %s %s %s", rule.id, rule.effect, rule.amount.amount.String(), rule.amount.currency))
 	}
 
-	if len(request.plan.structures.surchargeRules) > 0 {
-		// A condition reads the package's dimensions. Without them the rule can
-		// be neither confirmed nor excluded, which is missing evidence rather
-		// than a broken request, so the evaluation waits.
-		features, featuresErr := request.input.Features()
-		if featuresErr != nil {
-			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("SURCHARGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
-		}
+	if haveFeatures {
 		outcomes, resolveErr := request.plan.structures.resolveSurcharges(surchargeContext{
 			features:      features,
 			zone:          request.input.zone,

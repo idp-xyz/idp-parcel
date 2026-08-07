@@ -29,9 +29,6 @@ func (structures PricingPlanStructures) unexecutable() (string, bool) {
 		return "reference series bindings", true
 	}
 	for _, rule := range structures.surchargeRules {
-		if rule.minimumWeight != nil {
-			return fmt.Sprintf("conditional minimum weight on %s", rule.id), true
-		}
 		switch rule.calculation.method {
 		case ChargeMethodFixedAmount, ChargeMethodTableLookup:
 		default:
@@ -39,6 +36,48 @@ func (structures PricingPlanStructures) unexecutable() (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// minimumRaise is one conditional minimum that fired, kept with its rule so the
+// explanation can name the clause rather than only the number.
+type minimumRaise struct {
+	id      string
+	minimum Weight
+}
+
+// resolveMinimums reports every conditional minimum whose clause holds. The
+// clause lives inside a surcharge rule but raises the plan-level pricing weight,
+// so it is resolved before the weight is fixed rather than alongside the
+// surcharge it was declared with.
+func (structures PricingPlanStructures) resolveMinimums(features PackageFeatures) ([]minimumRaise, error) {
+	raises := make([]minimumRaise, 0, len(structures.surchargeRules))
+	for _, rule := range structures.surchargeRules {
+		if rule.minimumWeight == nil {
+			continue
+		}
+		held, err := rule.minimumWeight.condition.Matches(features)
+		if err != nil {
+			return nil, err
+		}
+		if held {
+			raises = append(raises, minimumRaise{id: rule.minimumWeight.id, minimum: rule.minimumWeight.minimum})
+		}
+	}
+	return raises, nil
+}
+
+// highestMinimum picks the floor to apply. CONTEXT: 同一评价可存在多条，同时触发时
+// 取其中最高者 — the card carries two, 40 LB and 90 LB, and a parcel tripping both
+// is billed at 90.
+func highestMinimum(raises []minimumRaise) (minimumRaise, bool) {
+	var highest minimumRaise
+	found := false
+	for _, raise := range raises {
+		if !found || raise.minimum.value.Cmp(highest.minimum.value) > 0 {
+			highest, found = raise, true
+		}
+	}
+	return highest, found
 }
 
 // surchargeContext is what a rule may read beyond the package's own features:

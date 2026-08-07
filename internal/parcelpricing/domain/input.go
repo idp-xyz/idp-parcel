@@ -184,7 +184,12 @@ type PricingWeightResult struct {
 	explanation  string
 }
 
-func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit) (PricingWeightResult, error) {
+// CalculatePricingWeight derives the weight, raises it to any floor the plan's
+// conditional minimums imposed, and only then rounds. CONTEXT fixes that order
+// — 派生、抬高、再进位 — and it is observable: a 1.2 KG floor under a whole-
+// kilogram ceiling bills 2 KG, whereas raising after rounding would bill 1.2,
+// which is not a whole increment at all.
+func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit, floors ...Weight) (PricingWeightResult, error) {
 	if !input.valid() || !policy.valid() {
 		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
@@ -218,11 +223,27 @@ func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	default:
 		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
+	derived := raw
+	raised := false
+	for _, floor := range floors {
+		if !floor.valid() || floor.unit != raw.unit {
+			return PricingWeightResult{}, ErrWeightUnitMismatch
+		}
+		if floor.value.Cmp(raw.value) > 0 {
+			raw, raised = floor, true
+		}
+	}
 	rounded, segment, err := policy.rounding.Apply(raw)
 	if err != nil {
 		return PricingWeightResult{}, err
 	}
-	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s; rounding=%s increment=%s %s%s; rounded=%s %s", policy.method, raw.value.String(), raw.unit, segment.mode, segment.increment.value.String(), segment.increment.unit, roundingSegmentScope(segment), rounded.value.String(), rounded.unit)
+	// CONTEXT requires both sides of a raise in the explanation, so a reader can
+	// see the billed weight was not the parcel's own.
+	raiseText := ""
+	if raised {
+		raiseText = fmt.Sprintf("; raised from %s %s to %s %s by a conditional minimum", derived.value.String(), derived.unit, raw.value.String(), raw.unit)
+	}
+	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s%s; rounding=%s increment=%s %s%s; rounded=%s %s", policy.method, derived.value.String(), derived.unit, raiseText, segment.mode, segment.increment.value.String(), segment.increment.unit, roundingSegmentScope(segment), rounded.value.String(), rounded.unit)
 	return PricingWeightResult{
 		method:       policy.method,
 		actual:       input.actualWeight,
