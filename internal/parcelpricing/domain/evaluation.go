@@ -87,7 +87,7 @@ func newFixedChargeLine(id string, code ChargeCode, description string, effect C
 
 // A surcharge line is a fixed amount like an unconditional rule, but it is kept
 // a distinct kind because it was produced by a predicate that has to be
-// replayable — its source is a rule that could equally have missed.
+// replayable 鈥?its source is a rule that could equally have missed.
 func newSurchargeChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
 	return newChargeLine(id, ChargeLineSurcharge, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
 }
@@ -239,6 +239,26 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	// weight, which the base band is then read with. Deriving them after the
 	// weight would make the raise arrive too late to affect the band it is
 	// meant to decide.
+	// A bound series is resolved from the snapshot before anything is priced: a
+	// missing reading is evidence this evaluation was not handed, a reading of
+	// another version is a disagreement about which rate the plan declared.
+	series, seriesErr := request.input.resolveSeries(request.plan.structures.referenceSeries)
+	if seriesErr != nil {
+		switch {
+		case errors.Is(seriesErr, ErrMissingReferenceSeriesValue):
+			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", seriesErr.Error()))
+		case errors.Is(seriesErr, ErrReferenceSeriesVersionConflict):
+			return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("REFERENCE_SERIES_VERSION_MISMATCH", seriesErr.Error()))
+		default:
+			return evaluation.withCalculationError(seriesErr)
+		}
+	}
+	for _, binding := range request.plan.structures.referenceSeries {
+		reading := series[binding.kind]
+		evaluation.explanation = append(evaluation.explanation,
+			fmt.Sprintf("reference series %s resolved to %s from %s", binding.kind, reading.value.String(), reading.reference.ID()))
+	}
+
 	var features PackageFeatures
 	haveFeatures := false
 	if len(request.plan.structures.surchargeRules) > 0 {
@@ -313,6 +333,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			features:      features,
 			zone:          request.input.zone,
 			pricingWeight: pricingWeight.rounded,
+			series:        series,
 		})
 		if resolveErr != nil {
 			return evaluation.withCalculationError(resolveErr)
@@ -400,14 +421,16 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 				features:      features,
 				zone:          request.input.zone,
 				pricingWeight: pricingWeight.rounded,
+				series:        series,
 			}, &basis)
 			if resolveErr != nil {
 				return evaluation.withCalculationError(resolveErr)
 			}
 			outcome.amount = amount
 			evaluation.explanation = append(evaluation.explanation,
-				fmt.Sprintf("surcharge %s charged %s over basis %s for %s %s",
-					outcome.rule.id, outcome.rule.calculation.method, strings.Join(outcome.rule.calculation.basisDependencyIDs(), "+"), amount.amount.String(), amount.currency))
+				fmt.Sprintf("surcharge %s charged %s over basis %s%s for %s %s",
+					outcome.rule.id, outcome.rule.calculation.method, strings.Join(outcome.rule.calculation.basisDependencyIDs(), "+"),
+					outcome.rule.calculation.describeRate(series), amount.amount.String(), amount.currency))
 			if collectErr := collect(outcome); collectErr != nil {
 				return evaluation.withCalculationError(collectErr)
 			}
@@ -669,6 +692,7 @@ func copyInputSnapshot(input PricingInputSnapshot) PricingInputSnapshot {
 		copy.dimensions = &sides
 	}
 	copy.factReferences = append([]VersionedFactReference(nil), input.factReferences...)
+	copy.seriesValues = append([]ReferenceSeriesValue(nil), input.seriesValues...)
 	return copy
 }
 

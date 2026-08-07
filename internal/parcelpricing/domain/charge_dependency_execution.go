@@ -107,9 +107,26 @@ func percentShare(product Decimal) (Decimal, error) {
 
 // share values one percent-of-basis calculation against the pool collected so
 // far.
-func (basis dependencyBasis) share(calculation SurchargeCalculation) (Money, error) {
-	percentage, dependencyID, ok := calculation.PercentOfBasis()
-	if !ok {
+func (basis dependencyBasis) share(calculation SurchargeCalculation, series map[ReferenceSeriesKind]ReferenceSeriesValue) (Money, error) {
+	if calculation.method != ChargeMethodPercentOfBasis || calculation.basis == "" {
+		return Money{}, ErrInvalidSurchargeRule
+	}
+	dependencyID := calculation.basis
+	var percentage Decimal
+	switch {
+	case calculation.seriesKind != nil:
+		reading, resolved := series[*calculation.seriesKind]
+		if !resolved {
+			return Money{}, fmt.Errorf("%w: %s", ErrMissingReferenceSeriesValue, *calculation.seriesKind)
+		}
+		rate, rateErr := calculation.effectiveRate(reading)
+		if rateErr != nil {
+			return Money{}, rateErr
+		}
+		percentage = rate
+	case calculation.percentage != nil:
+		percentage = *calculation.percentage
+	default:
 		return Money{}, ErrInvalidSurchargeRule
 	}
 	dependency, declared := basis.dependencies[dependencyID]

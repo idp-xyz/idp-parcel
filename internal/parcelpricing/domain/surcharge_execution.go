@@ -19,13 +19,14 @@ type surchargeOutcome struct {
 }
 
 // unexecutable names the first declared structure this build cannot price.
+//
 // The gate exists so a plan is never priced on the base table alone while it
-// declares charges nobody executes; it narrows as capabilities land rather than
-// being removed.
+// declares charges nobody executes. It narrowed with every capability that
+// landed and is now **vacuous**: every declared structure has an executor. It
+// is kept rather than deleted because the default branch is what catches a
+// calculation method added without one — the failure it prevents is silent
+// under-billing, which no other check would notice.
 func (structures PricingPlanStructures) unexecutable() (string, bool) {
-	if len(structures.referenceSeries) > 0 {
-		return "reference series bindings", true
-	}
 	for _, rule := range structures.surchargeRules {
 		switch rule.calculation.method {
 		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf:
@@ -86,6 +87,7 @@ type surchargeContext struct {
 	features      PackageFeatures
 	zone          string
 	pricingWeight Weight
+	series        map[ReferenceSeriesKind]ReferenceSeriesValue
 }
 
 // resolveSurcharges decides every declared rule against the package's features
@@ -171,7 +173,7 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis 
 		if basis == nil {
 			return Money{}, fmt.Errorf("%w: %s valued before its basis", ErrPlanStructuresNotExecutable, calculation.method)
 		}
-		return basis.share(calculation)
+		return basis.share(calculation, reading.series)
 	case ChargeMethodGreaterOf:
 		var best Money
 		for index, operand := range calculation.operands {

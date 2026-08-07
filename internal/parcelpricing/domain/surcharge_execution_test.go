@@ -101,23 +101,24 @@ func TestSurchargeWithoutDimensionsStaysPending(t *testing.T) {
 	}
 }
 
-// The gate narrows as capabilities land, so what it still refuses changes with
-// every slice. It therefore has to name what it could not execute: a bare
-// "not executable" leaves the reader to guess which declaration blocked the
-// plan, and the answer differs from build to build.
-func TestUnexecutableGateNamesWhatItCouldNotExecute(t *testing.T) {
-	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
-	evaluation := evaluateWithSides(t, plan, "eval-unexecutable-named", "50")
+// Every declared structure now has an executor, so the unexecutable gate can no
+// longer fire. What replaces it as the guarantee is this: a plan that declares
+// structures is priced with them, never on the base table alone. The gate used
+// to be the only thing standing between a declaration and a silent under-bill;
+// with the gate vacuous, the under-bill has to be ruled out directly.
+func TestPlanDeclaringStructuresIsNeverPricedOnTheBaseTableAlone(t *testing.T) {
+	bare := planWithStructures(t, declaredSurcharges(t))
+	declared := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
 
-	if evaluation.Status() != domain.EvaluationFailed {
-		t.Fatalf("status = %s, want FAILED", evaluation.Status())
+	bareEvaluation := evaluateWithSides(t, bare, "eval-baseline-bare", "50")
+	declaredEvaluation := evaluateWithSides(t, declared, "eval-baseline-declared", "50")
+	if bareEvaluation.Status() != domain.EvaluationCompleted || declaredEvaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("statuses = %s / %s", bareEvaluation.Status(), declaredEvaluation.Status())
 	}
-	issues := evaluation.Issues()
-	if len(issues) != 1 || issues[0].Code() != "PLAN_STRUCTURES_NOT_EXECUTABLE" {
-		t.Fatalf("issues = %#v", issues)
-	}
-	if !strings.Contains(issues[0].Message(), "reference series") {
-		t.Fatalf("message = %q, want it to name the reference series binding", issues[0].Message())
+	bareTotal, _ := bareEvaluation.Total()
+	declaredTotal, _ := declaredEvaluation.Total()
+	if bareTotal.Amount().String() == declaredTotal.Amount().String() {
+		t.Fatalf("a declared surcharge did not change the total: both %s", bareTotal.Amount().String())
 	}
 }
 

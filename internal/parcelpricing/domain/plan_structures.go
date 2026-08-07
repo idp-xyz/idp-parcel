@@ -10,12 +10,14 @@ import (
 // Keeping the parameters here rather than on the rule is what lets one rule
 // shape serve every method in the closed set.
 type SurchargeCalculation struct {
-	method     ChargeMethod
-	amount     *Money
-	table      *RateTableVersion
-	percentage *Decimal
-	basis      string
-	operands   []SurchargeCalculation
+	seriesKind   *ReferenceSeriesKind
+	seriesFactor *Decimal
+	method       ChargeMethod
+	amount       *Money
+	table        *RateTableVersion
+	percentage   *Decimal
+	basis        string
+	operands     []SurchargeCalculation
 }
 
 func NewFixedAmountSurcharge(amount Money) (SurchargeCalculation, error) {
@@ -41,6 +43,26 @@ func NewPercentOfBasisSurcharge(percentage Decimal, basisDependencyID string) (S
 // NewGreaterOfSurcharge takes the greater of two other methods. Neither operand
 // may itself be a greater-of: the card asks for a choice between two amounts,
 // not an arbitrarily nested expression.
+// NewSeriesRateSurcharge charges a share of a basis where the rate is not a
+// figure on the card but a reading the carrier publishes, discounted by a
+// factor the card does state. `L5` with `F1` is exactly this: the weekly rate
+// times 80%. Both numbers stay separate so a reader can tell a rate change from
+// a discount change.
+func NewSeriesRateSurcharge(kind ReferenceSeriesKind, factor Decimal, basisDependencyID string) (SurchargeCalculation, error) {
+	if !kind.valid() {
+		return SurchargeCalculation{}, ErrInvalidSurchargeRule
+	}
+	// The method stays 按基数百分比: what differs is where the rate comes from,
+	// not how the amount is produced. CONTEXT closes the method set at four, and
+	// a rate's provenance is a separate axis from the arithmetic.
+	return validSurcharge(SurchargeCalculation{
+		method:       ChargeMethodPercentOfBasis,
+		seriesKind:   &kind,
+		seriesFactor: &factor,
+		basis:        basisDependencyID,
+	})
+}
+
 func NewGreaterOfSurcharge(first, second SurchargeCalculation) (SurchargeCalculation, error) {
 	return validSurcharge(SurchargeCalculation{
 		method:   ChargeMethodGreaterOf,
@@ -103,11 +125,17 @@ func (calculation SurchargeCalculation) valid() bool {
 	if !calculation.method.valid() {
 		return false
 	}
+	// A percent rate is stated either as a figure on the card or as a published
+	// series discounted by a card factor — never both, and never neither.
+	seriesRate := calculation.seriesKind != nil && calculation.seriesFactor != nil
+	if (calculation.seriesKind != nil) != (calculation.seriesFactor != nil) {
+		return false
+	}
 	populated := 0
 	for _, present := range []bool{
 		calculation.amount != nil,
 		calculation.table != nil,
-		calculation.percentage != nil,
+		calculation.percentage != nil || seriesRate,
 		len(calculation.operands) > 0,
 	} {
 		if present {
@@ -117,14 +145,23 @@ func (calculation SurchargeCalculation) valid() bool {
 	if populated != 1 {
 		return false
 	}
+	if calculation.percentage != nil && seriesRate {
+		return false
+	}
 	switch calculation.method {
 	case ChargeMethodFixedAmount:
 		return calculation.amount != nil && calculation.amount.valid()
 	case ChargeMethodTableLookup:
 		return calculation.table != nil && calculation.table.valid()
 	case ChargeMethodPercentOfBasis:
-		return calculation.percentage != nil && calculation.percentage.valid() &&
-			!calculation.percentage.IsNegative() && trimmed(calculation.basis)
+		if !trimmed(calculation.basis) {
+			return false
+		}
+		if seriesRate {
+			return calculation.seriesKind.valid() &&
+				calculation.seriesFactor.valid() && !calculation.seriesFactor.IsNegative()
+		}
+		return calculation.percentage != nil && calculation.percentage.valid() && !calculation.percentage.IsNegative()
 	case ChargeMethodGreaterOf:
 		if len(calculation.operands) != 2 {
 			return false

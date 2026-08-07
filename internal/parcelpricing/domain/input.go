@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -70,6 +71,41 @@ type PricingInputSnapshot struct {
 	dimensions     *Dimensions
 	businessAt     time.Time
 	factReferences []VersionedFactReference
+	seriesValues   []ReferenceSeriesValue
+}
+
+// WithReferenceSeries returns a copy carrying the series readings resolved for
+// this evaluation. It is a separate step from the constructor because the
+// readings are looked up at the pricing base time, after the rest of the
+// snapshot is already fixed.
+func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesValue) (PricingInputSnapshot, error) {
+	if !input.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	seen := make(map[ReferenceSeriesKind]struct{}, len(values))
+	copyOfValues := make([]ReferenceSeriesValue, 0, len(values))
+	for _, value := range values {
+		if !value.valid() {
+			return PricingInputSnapshot{}, ErrInvalidReferenceSeries
+		}
+		// Two readings of one series would leave the choice to iteration order.
+		if _, exists := seen[value.kind]; exists {
+			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.kind)
+		}
+		seen[value.kind] = struct{}{}
+		copyOfValues = append(copyOfValues, value)
+	}
+	sort.SliceStable(copyOfValues, func(left, right int) bool {
+		return copyOfValues[left].kind < copyOfValues[right].kind
+	})
+	updated := copyInputSnapshot(input)
+	updated.seriesValues = copyOfValues
+	return updated, nil
+}
+
+// ReferenceSeriesValues reports the readings frozen into this snapshot.
+func (input PricingInputSnapshot) ReferenceSeriesValues() []ReferenceSeriesValue {
+	return append([]ReferenceSeriesValue(nil), input.seriesValues...)
 }
 
 func NewPricingInputSnapshot(

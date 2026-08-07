@@ -331,25 +331,22 @@ func structuresWithCalculation(t testing.TB, calculation domain.SurchargeCalcula
 	return structures
 }
 
-// The shape is fixed ahead of the behaviour, so a plan can declare rules this
-// evaluator cannot yet execute. Charging only the base rate in that case would
-// under-bill silently and still look like a completed evaluation, so the
-// evaluation must not form at all.
-// A fixed-amount surcharge is executed as of the surcharge slice, so the
-// fixture moved to a reference series binding, which still has no executor.
-// The gate narrows as capabilities land; it must never be removed while any
-// declared structure remains unexecuted.
-func TestEvaluationDoesNotCompleteWhenPlanDeclaresUnexecutableStructures(t *testing.T) {
+// This fixture used to exercise the unexecutable gate; every declared structure
+// now has an executor, so it exercises what replaced the gate. A plan bound to a
+// series the snapshot never supplied still must not complete — the rate is
+// evidence this evaluation was not handed, and charging the base rate alone
+// would under-bill silently while looking like a finished evaluation.
+func TestEvaluationDoesNotCompleteWhenABoundSeriesWasNotSupplied(t *testing.T) {
 	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
 	evaluation := evaluate(t, "eval-declared-structures", plan, syntheticInput(t, "1", "Z1"))
 	if evaluation.Status() == domain.EvaluationCompleted {
-		t.Fatal("evaluation completed while the plan declared rules the evaluator cannot execute")
+		t.Fatal("evaluation completed while a bound reference series had no reading")
 	}
 	if _, formed := evaluation.Total(); formed {
 		t.Fatal("evaluation produced a total from the base rate alone")
 	}
 	issues := evaluation.Issues()
-	if len(issues) != 1 || issues[0].Code() != "PLAN_STRUCTURES_NOT_EXECUTABLE" {
+	if len(issues) != 1 || issues[0].Code() != "REFERENCE_SERIES_UNRESOLVED" {
 		t.Fatalf("issues = %#v", issues)
 	}
 }

@@ -266,6 +266,11 @@ type canonicalSurchargeCalculationDocument struct {
 	Percentage string                                  `json:"percentage"`
 	Basis      string                                  `json:"basis"`
 	Operands   []canonicalSurchargeCalculationDocument `json:"operands"`
+	// Both halves of a series-sourced rate enter the digest separately. Hashing
+	// only their product would let a rate change and a discount change cancel
+	// out and go unreported.
+	SeriesKind   string `json:"series_kind,omitempty"`
+	SeriesFactor string `json:"series_factor,omitempty"`
 }
 
 func canonicalSurchargeCalculationValue(calculation SurchargeCalculation) canonicalSurchargeCalculationDocument {
@@ -277,6 +282,12 @@ func canonicalSurchargeCalculationValue(calculation SurchargeCalculation) canoni
 	if calculation.amount != nil {
 		amount := canonicalMoneyValue(*calculation.amount)
 		document.Amount = &amount
+	}
+	if calculation.seriesKind != nil {
+		document.SeriesKind = calculation.seriesKind.String()
+	}
+	if calculation.seriesFactor != nil {
+		document.SeriesFactor = calculation.seriesFactor.String()
 	}
 	if calculation.table != nil {
 		table := canonicalRateTableValue(*calculation.table)
@@ -543,6 +554,31 @@ type canonicalEvaluationInput struct {
 	Dimensions  *canonicalDimensionsDocument `json:"dimensions,omitempty"`
 	BusinessAt  string                       `json:"business_at"`
 	Facts       []canonicalVersionReference  `json:"facts"`
+	// Omitted when the snapshot carries no readings, so every evaluation
+	// recorded before reference series existed canonicalizes to the same bytes
+	// and keeps its digest comparable.
+	Series []canonicalSeriesValueDocument `json:"series,omitempty"`
+}
+
+type canonicalSeriesValueDocument struct {
+	Kind      string                    `json:"kind"`
+	Reference canonicalVersionReference `json:"reference"`
+	Value     string                    `json:"value"`
+}
+
+func canonicalSeriesValues(values []ReferenceSeriesValue) []canonicalSeriesValueDocument {
+	if len(values) == 0 {
+		return nil
+	}
+	documents := make([]canonicalSeriesValueDocument, 0, len(values))
+	for _, value := range values {
+		documents = append(documents, canonicalSeriesValueDocument{
+			Kind:      value.kind.String(),
+			Reference: canonicalReference(value.reference),
+			Value:     value.value.String(),
+		})
+	}
+	return documents
 }
 
 type canonicalEvaluation struct {
@@ -591,6 +627,7 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		Unit:        evaluation.input.actualWeight.unit.String(),
 		BusinessAt:  evaluation.input.businessAt.UTC().Format(time.RFC3339Nano),
 		Facts:       facts,
+		Series:      canonicalSeriesValues(evaluation.input.seriesValues),
 	}
 	if sides, ok := evaluation.input.Dimensions(); ok {
 		declared := canonicalDimensionsValue(sides)
