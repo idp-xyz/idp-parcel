@@ -49,7 +49,7 @@
 | §26 Quote Management | 已确认不采纳 | [ADR-0011 Consequences](../adr/0011-parcel-pricing-context-within-idp-parcel.md) 延后正式 Quote 生命周期；[`PP-S03` 明确不做](./pp-s03-par-set-02-03-evidence-and-synthetic-contract.md) |
 | §27-30 Charge Assessment、Financial Charging、Accrual & Settlement、Carrier Reconciliation | 已吸收（改判 `settlement-accounting`） | [settlement-accounting/CONTEXT.md](../domain/settlement-accounting/CONTEXT.md)、[`PN-07` 交接](./pn-07-operational-settlement-and-accounting-development-handoff.md) |
 | §31 Pricing Governance | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的价卡治理案例与发布生命周期 |
-| §32 Security & Administration | 待决 | 本仓无对应落点。建议：不作为计价范围处理，租户与权限属跨切面，由 PN-08 的 `PAR-GOV-*` 承接。决定方：产品与治理 |
+| §32 Security & Administration | 已确认不采纳（改判跨切面） | 本台账 `FOO-OPEN-06` 定案：不作为计价范围，由 PN-08 的 `PAR-GOV-*` 承接 |
 | §33-40 八条业务流程 | 已逐条核对 | 见下方[八条业务流程逐条核对](#八条业务流程逐条核对)；本台账 `FOO-OPEN-03` 已定案 |
 | §41 价格发布流程 | 已吸收 | [parcel-pricing/CONTEXT.md 生命周期](../domain/parcel-pricing/CONTEXT.md) |
 | §42-47 聚合事务边界、一致性模型、幂等、乐观并发、领域事件、Process Manager | 待决 | 建议不采纳：[ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 已定模块化单体，这些边界应在实现时收敛，现在决定即提前决策。决定方：技术 |
@@ -57,7 +57,7 @@
 | §49 CQRS 边界 | 待决 | 同 §42-47 |
 | §50 RatingExplanation | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的评价解释 |
 | §51 Margin 投影 | 已吸收（改判 `settlement-accounting`） | [settlement-accounting/CONTEXT.md](../domain/settlement-accounting/CONTEXT.md) 的经营指标 |
-| §52-57 审计模型、租户隔离、组织与数据范围、敏感数据分类、职责分离、数据保留与删除 | 待决 | 建议：与 §32 合并处理，属跨切面而非计价范围。决定方：产品与治理 |
+| §52-57 审计模型、租户隔离、组织与数据范围、敏感数据分类、职责分离、数据保留与删除 | 已确认不采纳（改判跨切面） | 与 §32 同一取舍，见本台账 `FOO-OPEN-06` |
 | §58-62 Repository、应用层、基础设施层、错误处理、性能约束 | 已确认不采纳 | [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [Go 首个消费者切片决策简报](./parcel-go-first-consumer-slice-decision-brief.md) 已自定本仓技术边界 |
 | §63-64 领域模型验收标准、后续专项文档输入 | 不适用 | 属 `foo` 自身交付治理 |
 
@@ -89,7 +89,7 @@
 | Facts & Classification | 拆回 `node-operations`、`parcel-shipment`、`transport-fulfillment` |
 | Charge Assessment、Financial Charging、Accrual & Settlement、Carrier Reconciliation | 合并为 `settlement-accounting` |
 | Quote Management | 已确认不采纳 |
-| Security & Administration | 待决 |
+| Security & Administration | 改判跨切面，由 PN-08 `PAR-GOV-*` 承接 |
 
 四合一到 `settlement-accounting` 是本次吸收中压缩幅度最大的一处。它在首发范围内成立，因为 [`PN-07`](./pn-07-operational-settlement-and-accounting-development-handoff.md) 的生产候选锁定在一个客户、一个币种、一个账期。范围扩大后是否需要重新拆分，见下方「触发条件」。
 
@@ -168,13 +168,19 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 | 编号 | 事项 | 结论或建议处置 | 决定方 |
 |---|---|---|---|
 | `FOO-OPEN-01` | 计算语义 §5 `CalculationPurpose` 的取值范围 | **已定案。** 核实后发现真问题不是取值多少：`PricingPurpose` 的三个常量与 `PricingDirection` 一一对应，目的轴未携带方向之外的信息，而校验只过正则不查成员，也不强制配对。结论是保留该轴并在 [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 写明首发一一对应及其解除条件，同时闭合枚举、强制配对，术语统一为「计算目的」并立 [GLOSSARY 词条](../domain/GLOSSARY.md) | 计价业务责任方 |
-| `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异 | 记录已完成：四条已进 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的取证要求。仍缺两件事——把这四条列入 [源完整性门禁](../domain/parcel-pricing/CONTEXT.md)，以及对 `BLOCKING` 的 `SRC-DISC-001` 作出合同裁决。文件身份与哈希闭合是必要不充分条件 | 计价与结算业务责任方 |
+| `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异 | **机制已闭合，业务裁决明确延后。** 四条已记入 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md)，并已列为 [源完整性门禁](../domain/parcel-pricing/CONTEXT.md)条件：涉及某条未裁决差异的案例单独阻断，不因文件身份与哈希闭合而放行。余下的是合同裁决本身——`SRC-DISC-001` 需确认违禁品收费的唯一适用金额，`002` 至 `004` 需确认标签归属、燃油口径与 AHS/OS 基准价。裁决前 41 例不得用于金额验证 | 计价与结算业务责任方 |
 | `FOO-OPEN-03` | 领域模型 §33-40 八条业务流程从未与 `UC-*` 逐条核对 | **已定案。** 核对结果见[八条业务流程逐条核对](#八条业务流程逐条核对)：§33、§35 因 Quote 不采纳而不适用，§36、§37 分别由 `UC-SA-002`、`UC-SA-004` 覆盖，§38、§39 覆盖但按经济原因分立于多个用例，§34 语义已进 CONTEXT 而无应用层用例。仅两处「未识别」——§39 的佣金与 §40 的追溯影响分析，均不在首发范围，只登记不新增用例 | 结算与计价业务责任方 |
 | `FOO-OPEN-04` | 计算语义 §36 与技术设计 §11/§13 的 Compiled Pricing Plan | **已定案：不采纳。** `fingerprint.go` 已用内容指纹解决「版本引用相同但内容不同判为冲突」这一正确性问题，编译式方案在此之上多买的是预计算与缓存，属性能诉求，而本仓无任何性能度量。将来出现度量支撑时可重新评估 | 技术 |
 | `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | **已定案：不另写 ADR，由本台账承担该记录。** 「不采纳 `foo` 的对外 API 契约与运行时技术设计」是 [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [ADR-0011](../adr/0011-parcel-pricing-context-within-idp-parcel.md) 的推论而非独立决策，为推论单写 ADR 会制造第二套口径 | 技术与产品 |
-| `FOO-OPEN-06` | 领域模型 §32、§52-57 的安全、租户隔离、审计、数据保留 | 建议按跨切面处理，由 PN-08 的 `PAR-GOV-*` 承接，不作为计价范围 | 产品与治理 |
+| `FOO-OPEN-06` | 领域模型 §32、§52-57 的安全、租户隔离、审计、数据保留 | **已定案：不作为计价范围，按跨切面由 PN-08 的 `PAR-GOV-*` 承接。** 这四样表达的是谁可以看、谁可以改、留多久，不是价格如何形成；写进 `parcel-pricing` 会让它同时拥有计价语言和治理语言，撑破自身边界。租户与授权作用域本就由共享身份能力签发，各上下文只消费 | 产品与治理 |
 
-各表中标为`待决`但未进本清单的条目（如计算语义 §10-12、§30、§31、费用依赖图、性能约束、上游一致性追踪），共同处置原则是等真实参数决定，不预先建模。
+各表中仍标为`待决`但不进本清单的条目共七处，分三类，各有明确延后依据：
+
+- **等真实需求出现，不预先建模**：计算语义 §10-12 Geometry 与地址分类、§30 层次分类、§31 表达式执行阶段，以及领域模型 §40 上游一致性追踪。
+- **实现时收敛，现在决定即提前决策**：领域模型 §42-47 聚合事务边界与 §49 CQRS 边界。[ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 已定模块化单体，这些边界属实现形态。
+- **随 `FOO-OPEN-02` 一并了结**：Golden Cases §28 映射，取决于 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的闭合结果。
+
+它们标`待决`不是遗漏，是有意不在此时决定。
 
 ## 触发条件
 
@@ -188,7 +194,11 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 
 ## 收口条件
 
-本对照达到收口的条件是：待决清单各项形成决策或明确延后依据，并回填本表状态。`FOO-OPEN-01`、`03`、`04`、`05` 已定案，余 `02`、`06` 两项。收口后 `foo/` 即为只读参考，任何人再读它都能从本表知道本仓的取舍及其依据。
+本对照达到收口的条件是：待决清单各项形成决策或明确延后依据，并回填本表状态。**六项均已达成**：`FOO-OPEN-01`、`03`、`04`、`05`、`06` 已定案，`02` 的机制侧已闭合、余下的合同裁决有明确决定方与阻断后果，属明确延后依据。
+
+`foo/` 自此为只读参考。任何人再读它，都能从本表知道本仓吸收了什么、改判到哪个上下文、确认不采纳什么，以及依据何在。本表不解释规则本身——规则以各 `CONTEXT.md` 与 ADR 为准。
+
+`SRC-DISC-001` 至 `004` 取得业务裁决后，[源完整性门禁](../domain/parcel-pricing/CONTEXT.md)随之更新，41 例 `SOURCE_RATE_CARD` 方可进入真实来源核验；那是 `PP-S03-W01` 的工作，不再回到本表。
 
 本表随权威文档变化而更新；它不是快照，也不承担解释规则的职责。
 

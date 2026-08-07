@@ -50,10 +50,13 @@ Status: Confirmed
 - `foo/international-parcel-rating-golden-cases-v1.0.1.json` 的 `$schema` 指向 `international-parcel-rating-golden-cases-v1.0.schema.json`，而仓库实际 schema 文件为 `international-parcel-rating-golden-cases-v1.0.1.schema.json`。
 - Golden JSON 声明的源文件 `副本蜴国际-美线UPS-Ground-同行价卡-260729.xlsx` 不在 `foo` 中；项目参考文件为 `docs/reference/蜴国际-美线UPS-Ground-同行价卡-260729.xlsx`。
 - Golden JSON 声明的源价卡 SHA-256 为 `22ec1f558b1ec14716d53564ea6030a7c0457304a007c60bc7280b4e3becc577`，当前参考文件实际 SHA-256 为 `9edaf27ef93004e00f73a65471897f2cf7064d5d4df05014934ef7ac5861d33d`。
+- Golden JSON 自身声明的四条源价卡内容差异 `SRC-DISC-001` 至 `004` 尚未裁决：违禁品收费在源价卡两处分别记为 5000 与 2025 美元（`BLOCKING`）、UPS 价卡中出现 FedEx 费用标签、燃油同时写作「8 折」与「附加费率 80%」、AHS/OS 缺明确基准价与折扣模型。逐条依据与裁决要求见 [`PP-S03-W01`](../../design/pp-s03-w01-golden-case-source-evidence-request.md)。
 
-按 `source_kind` 分层后，当前 136 个案例中 83 个 `NORMATIVE_SYNTHETIC` 和 12 个 `UPSTREAM_CONSISTENCY` 只能在隔离环境中作为 `S` 证据使用；它们可以验证规则语义和重放确定性，但不能升级为历史回放 `R` 或生产 `P`。41 个 `SOURCE_RATE_CARD` 案例因源文件身份、Schema 指针和哈希证据尚未闭合，必须隔离，不能用于金额验证。
+前三条是源文件身份问题，第四条是源内容问题；文件身份闭合是必要条件，不是充分条件。同一份文件校验通过，并不说明其中的金额唯一且可用。
 
-在 Schema 指针、源文件身份和哈希证据修复并重新校验前，任何 `foo` 案例都不能作为生产价卡金额、正式 `P` 验收或客户账单依据。模拟重放始终保留为 `S`；未来取得真实来源后，必须另建真实执行记录，不能把合成执行记录改写成 `R` 或 `P`。
+按 `source_kind` 分层后，当前 136 个案例中 83 个 `NORMATIVE_SYNTHETIC` 和 12 个 `UPSTREAM_CONSISTENCY` 只能在隔离环境中作为 `S` 证据使用；它们可以验证规则语义和重放确定性，但不能升级为历史回放 `R` 或生产 `P`。41 个 `SOURCE_RATE_CARD` 案例因源文件身份、Schema 指针、哈希证据和上述四条内容差异尚未闭合，必须隔离，不能用于金额验证。
+
+在 Schema 指针、源文件身份、哈希证据修复并重新校验，且 `SRC-DISC-001` 至 `004` 逐条取得业务裁决之前，任何 `foo` 案例都不能作为生产价卡金额、正式 `P` 验收或客户账单依据。涉及某条未裁决差异的案例单独阻断，不因其余条件已闭合而放行。模拟重放始终保留为 `S`；未来取得真实来源后，必须另建真实执行记录，不能把合成执行记录改写成 `R` 或 `P`。
 
 ## Rules and invariants
 
