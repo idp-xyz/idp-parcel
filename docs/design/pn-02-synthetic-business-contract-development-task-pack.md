@@ -92,6 +92,16 @@ flowchart LR
 
 对应测试契约为 [`commercial_resolution_contract_test.go`](../../internal/partycommercial/domain/commercial_resolution_contract_test.go)。它只使用内存合成夹具，所有结果等级固定为 `S`。
 
+#### `S01-W03` 执行断言
+
+- 控制请求只能消费 `UNIQUE_RESOLVED` 的商业依据。预付/账期模式、结算账户、币种、范围、策略版本和当前修订必须与该依据完全一致；调用方不能覆盖模式、借用其他范围账户或使用客户级默认值。
+- 预付分支先形成隔离估价，再提交一次冻结。相同租户、客户、请求身份和完整输入重试返回原控制/冻结结果；同一请求身份携带不同金额、范围、账户、币种、模式或版本形成 `CONTROL_CONFLICT`，不得再次冻结。
+- 账期分支只形成 `CREDIT_WITHIN_POLICY`、`CREDIT_RESTRICTED` 或 `CONTROL_PENDING`，保存暴露、额度/限制依据和实际判断版本；不得创建冻结、费用、应收、收款或核销事实。
+- 冻结提交返回不确定时先查询原冻结和接受决定。接受已成立保留合法冻结；接受确定未成立才按原关联释放；释放失败或结果不确定形成 `COMPENSATION_PENDING` 并可续办，重复查询/释放不得追加副作用。
+- 每个结果必须保存控制标识、稳定业务关联、提交版本、实际 `asOf`、策略版本、有效区间、当前修订、判断时间、夹具版本和隔离证据索引；所有输出保持 `S`，不得升级为真实财务事实。
+
+对应测试契约为 [`financial_control_contract_test.go`](../../internal/settlementaccounting/domain/financial_control_contract_test.go)。它只使用离线内存替身并计数冻结、查询、释放和外部调用，验证 `S01-AT-01/02/06` 的正向、冲突、未决和补偿边界。
+
 ## 联合契约检查
 
 联合检查只验证顺序和边界，不创建跨上下文业务事实。每项都应使用固定夹具版本和确定性时钟/标识：
@@ -136,5 +146,6 @@ flowchart LR
 - [`PN02-W02` 生产接入与生产归属证据工作单](./pn-02-w02-ingress-production-ownership-evidence-request.md)
 - [`PN02-W03` 接单规则、决定授权与接受前财务控制证据工作单](./pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)
 - [`UC-PS-001` 客户提交国际小包请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
+- [`S01-W03` 测试侧财务控制契约](../../internal/settlementaccounting/domain/financial_control_contract_test.go)
 - [`PILOT-PARAMETER-REGISTER`](../product/PILOT-PARAMETER-REGISTER.md)
 - [`PILOT-ACCEPTANCE-MATRIX`](../product/PILOT-ACCEPTANCE-MATRIX.md)

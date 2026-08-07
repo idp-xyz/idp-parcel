@@ -81,6 +81,23 @@ SYN-COM-01 和 SYN-COM-02 共享同一客户账户、责任法人、服务产品
 
 对应测试文件为 `internal/partycommercial/domain/commercial_resolution_contract_test.go`。它复用 `S01-W01` 发布夹具，只建立内存候选和结果代数，不创建生产商业解析端口、Repository、事务、Outbox、客户级 `paymentMode` 或真实合同查询。
 
+### S01-W03 合成接受前财务控制契约
+
+本工作包只消费 `S01-W02` 唯一解析出的商业依据。控制请求不能自行指定同一范围的 `PREPAID` 或 `TERMS`，也不能从客户账户名称推导结算模式。每次结果必须保存提交版本、稳定业务关联、结算账户/币种、策略版本、实际 `asOf`、当前修订、判断时间、估价或暴露范围、夹具版本和隔离证据索引。
+
+| 控制结果 | 形成条件 | 可继续动作 | 禁止推导 |
+|---|---|---|---|
+| `FROZEN` | 预付依据有效、估价可用且冻结提交确定成功 | 等待接受决定；接受失败按原关联释放 | 不等于费用确认、收款、核销或接受 |
+| `RETAINED_AFTER_ACCEPTANCE` | 接受成立，或结果不确定但查询确认冻结仍合法 | 保留冻结并转接受后流程 | 不重新冻结或回写接受决定 |
+| `RELEASED` | 接受确定未成立、撤回/放弃或依据失效，且释放确定成功 | 保留冻结和释放历史 | 不表示退款或真实资金退回 |
+| `CREDIT_WITHIN_POLICY` | 账期信用权威明确在策略范围内 | 将独立结果交给接受判断 | 不等于已付款、应收确认或无条件接受 |
+| `CREDIT_RESTRICTED` | 额度、暴露、逾期或暂停规则形成限制 | 按接单规则转人工/拒绝/未决 | 不回滚已发生运输或费用 |
+| `CONTROL_PENDING` / `COMPENSATION_PENDING` | 权威读取、提交、查询或释放暂时不可确定 | 保留尝试和续办关联 | 不默认放行、拒绝或重复副作用 |
+
+预付和账期结果保持独立。同一请求键携带不同金额、范围、账户、币种、模式或版本时形成结构化冲突且不产生第二次冻结。提交返回不确定时先查询接受决定和冻结状态；只有确认接受未成立才释放，释放失败或不确定时保持补偿未决。账期分支只形成信用暴露/业务限制，不创建冻结。
+
+对应测试文件为 `internal/settlementaccounting/domain/financial_control_contract_test.go`。它是隔离 `S` 测试替身，不代表生产结算模型或财务适配器已经获准；测试显式断言不产生费用、应收、收款或核销事实，也不调用外部端点。
+
 ## 合成夹具登记
 
 | ID | 合成输入 | 预期业务结果 | 禁止推导 |
@@ -156,4 +173,5 @@ SYN-COM-01 和 SYN-COM-02 共享同一客户账户、责任法人、服务产品
 - [`UC-PS-001` 客户提交国际小包请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
 - [`S01-W01` 测试侧商业发布契约](../../internal/partycommercial/domain/commercial_publication_contract_test.go)
 - [`S01-W02` 测试侧两阶段解析契约](../../internal/partycommercial/domain/commercial_resolution_contract_test.go)
+- [`S01-W03` 测试侧财务控制契约](../../internal/settlementaccounting/domain/financial_control_contract_test.go)
 - [`PILOT-ACCEPTANCE-MATRIX`](../product/PILOT-ACCEPTANCE-MATRIX.md)
