@@ -55,7 +55,7 @@ func canonicalRateEntryValue(entry RateEntry) canonicalRateEntryDocument {
 
 type canonicalRateTableDocument struct {
 	Reference canonicalVersionReference    `json:"reference"`
-	Kind      string                       `json:"kind"`
+	Family    string                       `json:"family"`
 	Currency  string                       `json:"currency"`
 	Unit      string                       `json:"unit"`
 	Period    string                       `json:"period"`
@@ -69,7 +69,7 @@ func canonicalRateTableValue(table RateTableVersion) canonicalRateTableDocument 
 	}
 	return canonicalRateTableDocument{
 		Reference: canonicalReference(table.reference),
-		Kind:      string(table.kind),
+		Family:    string(table.family),
 		Currency:  table.currency.String(),
 		Unit:      table.unit.String(),
 		Period:    table.period.canonicalString(),
@@ -77,22 +77,46 @@ func canonicalRateTableValue(table RateTableVersion) canonicalRateTableDocument 
 	}
 }
 
-type canonicalWeightPolicyDocument struct {
-	Reference canonicalVersionReference `json:"reference"`
-	Method    string                    `json:"method"`
-	Mode      string                    `json:"rounding_mode"`
-	Increment string                    `json:"increment"`
-	Unit      string                    `json:"unit"`
+type canonicalVolumetricFactorDocument struct {
+	Divisor    string `json:"divisor"`
+	LengthUnit string `json:"length_unit"`
+	Mode       string `json:"rounding_mode"`
+	Increment  string `json:"increment"`
+	Unit       string `json:"unit"`
 }
 
-func canonicalWeightPolicyValue(policy BillableWeightPolicy) canonicalWeightPolicyDocument {
-	return canonicalWeightPolicyDocument{
+func canonicalVolumetricFactorValue(factor VolumetricFactor) canonicalVolumetricFactorDocument {
+	return canonicalVolumetricFactorDocument{
+		Divisor:    factor.divisor.String(),
+		LengthUnit: factor.lengthUnit.String(),
+		Mode:       string(factor.rounding.mode),
+		Increment:  factor.rounding.increment.value.String(),
+		Unit:       factor.rounding.increment.unit.String(),
+	}
+}
+
+type canonicalWeightPolicyDocument struct {
+	Reference  canonicalVersionReference          `json:"reference"`
+	Method     string                             `json:"method"`
+	Mode       string                             `json:"rounding_mode"`
+	Increment  string                             `json:"increment"`
+	Unit       string                             `json:"unit"`
+	Volumetric *canonicalVolumetricFactorDocument `json:"volumetric_factor"`
+}
+
+func canonicalWeightPolicyValue(policy PricingWeightPolicy) canonicalWeightPolicyDocument {
+	document := canonicalWeightPolicyDocument{
 		Reference: canonicalReference(policy.reference),
 		Method:    string(policy.method),
 		Mode:      string(policy.rounding.mode),
 		Increment: policy.rounding.increment.value.String(),
 		Unit:      policy.rounding.increment.unit.String(),
 	}
+	if policy.volumetric != nil {
+		factor := canonicalVolumetricFactorValue(*policy.volumetric)
+		document.Volumetric = &factor
+	}
+	return document
 }
 
 type canonicalChargeRuleDocument struct {
@@ -115,18 +139,164 @@ func canonicalChargeRuleValue(rule FixedChargeRule) canonicalChargeRuleDocument 
 	}
 }
 
+type canonicalFeatureConditionDocument struct {
+	Source    string `json:"source"`
+	Operator  string `json:"operator"`
+	Threshold string `json:"threshold"`
+	Unit      string `json:"unit"`
+}
+
+func canonicalFeatureConditionValue(condition FeatureCondition) canonicalFeatureConditionDocument {
+	return canonicalFeatureConditionDocument{
+		Source:    condition.source.String(),
+		Operator:  condition.operator.String(),
+		Threshold: condition.lengthThreshold.value.String(),
+		Unit:      condition.lengthThreshold.unit.String(),
+	}
+}
+
+type canonicalSurchargeCalculationDocument struct {
+	Method     string                                  `json:"method"`
+	Amount     *canonicalMoney                         `json:"amount"`
+	Table      *canonicalRateTableDocument             `json:"table"`
+	Percentage string                                  `json:"percentage"`
+	Basis      string                                  `json:"basis"`
+	Operands   []canonicalSurchargeCalculationDocument `json:"operands"`
+}
+
+func canonicalSurchargeCalculationValue(calculation SurchargeCalculation) canonicalSurchargeCalculationDocument {
+	document := canonicalSurchargeCalculationDocument{
+		Method:   calculation.method.String(),
+		Basis:    calculation.basis,
+		Operands: make([]canonicalSurchargeCalculationDocument, 0, len(calculation.operands)),
+	}
+	if calculation.amount != nil {
+		amount := canonicalMoneyValue(*calculation.amount)
+		document.Amount = &amount
+	}
+	if calculation.table != nil {
+		table := canonicalRateTableValue(*calculation.table)
+		document.Table = &table
+	}
+	if calculation.percentage != nil {
+		document.Percentage = calculation.percentage.String()
+	}
+	for _, operand := range calculation.operands {
+		document.Operands = append(document.Operands, canonicalSurchargeCalculationValue(operand))
+	}
+	return document
+}
+
+type canonicalConditionalMinimumWeightDocument struct {
+	ID        string                            `json:"id"`
+	Condition canonicalFeatureConditionDocument `json:"condition"`
+	Minimum   string                            `json:"minimum"`
+	Unit      string                            `json:"unit"`
+}
+
+func canonicalConditionalMinimumWeightValue(minimum ConditionalMinimumWeight) canonicalConditionalMinimumWeightDocument {
+	return canonicalConditionalMinimumWeightDocument{
+		ID:        minimum.id,
+		Condition: canonicalFeatureConditionValue(minimum.condition),
+		Minimum:   minimum.minimum.value.String(),
+		Unit:      minimum.minimum.unit.String(),
+	}
+}
+
+type canonicalSurchargeRuleDocument struct {
+	ID               string                                     `json:"id"`
+	Code             string                                     `json:"charge_code"`
+	Description      string                                     `json:"description"`
+	Effect           string                                     `json:"effect"`
+	Condition        canonicalFeatureConditionDocument          `json:"condition"`
+	Calculation      canonicalSurchargeCalculationDocument      `json:"calculation"`
+	ExclusivityGroup string                                     `json:"exclusivity_group"`
+	Priority         int                                        `json:"priority"`
+	MinimumWeight    *canonicalConditionalMinimumWeightDocument `json:"conditional_minimum_weight"`
+}
+
+func canonicalSurchargeRuleValue(rule SurchargeRule) canonicalSurchargeRuleDocument {
+	document := canonicalSurchargeRuleDocument{
+		ID:               rule.id,
+		Code:             rule.chargeCode.String(),
+		Description:      rule.description,
+		Effect:           string(rule.effect),
+		Condition:        canonicalFeatureConditionValue(rule.condition),
+		Calculation:      canonicalSurchargeCalculationValue(rule.calculation),
+		ExclusivityGroup: rule.exclusivityGroup,
+		Priority:         rule.priority,
+	}
+	if rule.minimumWeight != nil {
+		minimum := canonicalConditionalMinimumWeightValue(*rule.minimumWeight)
+		document.MinimumWeight = &minimum
+	}
+	return document
+}
+
+type canonicalChargeDependencyDocument struct {
+	ID          string   `json:"id"`
+	Code        string   `json:"charge_code"`
+	Composition string   `json:"composition"`
+	Includes    []string `json:"includes"`
+	Excludes    []string `json:"excludes"`
+}
+
+func canonicalChargeDependencyValue(dependency ChargeDependency) canonicalChargeDependencyDocument {
+	document := canonicalChargeDependencyDocument{
+		ID:          dependency.id,
+		Code:        dependency.dependent.String(),
+		Composition: dependency.composition.String(),
+		Includes:    make([]string, 0, len(dependency.includes)),
+		Excludes:    make([]string, 0, len(dependency.excludes)),
+	}
+	for _, code := range dependency.includes {
+		document.Includes = append(document.Includes, code.String())
+	}
+	for _, code := range dependency.excludes {
+		document.Excludes = append(document.Excludes, code.String())
+	}
+	return document
+}
+
+type canonicalReferenceSeriesDocument struct {
+	Kind      string                    `json:"kind"`
+	Reference canonicalVersionReference `json:"reference"`
+}
+
+func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalReferenceSeriesDocument {
+	return canonicalReferenceSeriesDocument{
+		Kind:      binding.kind.String(),
+		Reference: canonicalReference(binding.reference),
+	}
+}
+
+// canonicalizationVersion identifies the shape of the canonical documents that
+// content and semantic digests are computed from. Digests are only comparable
+// within the same canonicalization version; widening the shape must bump this
+// value rather than rewrite the existing one. See ADR-0014.
+const canonicalizationVersion = "PPC-1"
+
+// CurrentCanonicalizationVersion reports the shape this build canonicalizes
+// under. An artifact recorded under any other value cannot have its digest
+// recomputed here.
+func CurrentCanonicalizationVersion() string { return canonicalizationVersion }
+
 type canonicalPricingPlan struct {
-	Reference   canonicalVersionReference     `json:"reference"`
-	Scope       string                        `json:"scope"`
-	Direction   string                        `json:"direction"`
-	Purpose     string                        `json:"purpose"`
-	BaseCode    string                        `json:"base_charge_code"`
-	Aggregation string                        `json:"aggregation"`
-	Period      string                        `json:"period"`
-	RateTable   canonicalRateTableDocument    `json:"rate_table"`
-	Weight      canonicalWeightPolicyDocument `json:"weight_policy"`
-	Rules       []canonicalChargeRuleDocument `json:"rules"`
-	Manifest    []canonicalVersionReference   `json:"manifest"`
+	Canonicalization string                              `json:"canonicalization"`
+	Reference        canonicalVersionReference           `json:"reference"`
+	Scope            string                              `json:"scope"`
+	Direction        string                              `json:"direction"`
+	Purpose          string                              `json:"purpose"`
+	BaseCode         string                              `json:"base_charge_code"`
+	Aggregation      string                              `json:"aggregation"`
+	Period           string                              `json:"period"`
+	RateTable        canonicalRateTableDocument          `json:"rate_table"`
+	Weight           canonicalWeightPolicyDocument       `json:"weight_policy"`
+	Rules            []canonicalChargeRuleDocument       `json:"rules"`
+	SurchargeRules   []canonicalSurchargeRuleDocument    `json:"surcharge_rules"`
+	Dependencies     []canonicalChargeDependencyDocument `json:"charge_dependencies"`
+	ReferenceSeries  []canonicalReferenceSeriesDocument  `json:"reference_series"`
+	Manifest         []canonicalVersionReference         `json:"manifest"`
 }
 
 func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
@@ -134,27 +304,43 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 	for _, rule := range plan.rules {
 		rules = append(rules, canonicalChargeRuleValue(rule))
 	}
+	surcharges := make([]canonicalSurchargeRuleDocument, 0, len(plan.structures.surchargeRules))
+	for _, rule := range plan.structures.surchargeRules {
+		surcharges = append(surcharges, canonicalSurchargeRuleValue(rule))
+	}
+	dependencies := make([]canonicalChargeDependencyDocument, 0, len(plan.structures.dependencies))
+	for _, dependency := range plan.structures.dependencies {
+		dependencies = append(dependencies, canonicalChargeDependencyValue(dependency))
+	}
+	series := make([]canonicalReferenceSeriesDocument, 0, len(plan.structures.referenceSeries))
+	for _, binding := range plan.structures.referenceSeries {
+		series = append(series, canonicalReferenceSeriesValue(binding))
+	}
 	manifest := make([]canonicalVersionReference, 0, len(plan.manifest.references))
 	for _, reference := range plan.manifest.references {
 		manifest = append(manifest, canonicalReference(reference))
 	}
 	document := canonicalPricingPlan{
-		Reference:   canonicalReference(plan.reference),
-		Scope:       plan.scope.String(),
-		Direction:   plan.direction.String(),
-		Purpose:     plan.purpose.String(),
-		BaseCode:    plan.baseChargeCode.String(),
-		Aggregation: string(plan.aggregation),
-		Period:      plan.period.canonicalString(),
-		RateTable:   canonicalRateTableValue(plan.rateTable),
-		Weight:      canonicalWeightPolicyValue(plan.weight),
-		Rules:       rules,
-		Manifest:    manifest,
+		Canonicalization: canonicalizationVersion,
+		Reference:        canonicalReference(plan.reference),
+		Scope:            plan.scope.String(),
+		Direction:        plan.direction.String(),
+		Purpose:          plan.purpose.String(),
+		BaseCode:         plan.baseChargeCode.String(),
+		Aggregation:      string(plan.aggregation),
+		Period:           plan.period.canonicalString(),
+		RateTable:        canonicalRateTableValue(plan.rateTable),
+		Weight:           canonicalWeightPolicyValue(plan.weight),
+		Rules:            rules,
+		SurchargeRules:   surcharges,
+		Dependencies:     dependencies,
+		ReferenceSeries:  series,
+		Manifest:         manifest,
 	}
 	return hashCanonical(document)
 }
 
-type canonicalBillableWeightDocument struct {
+type canonicalPricingWeightDocument struct {
 	Method        string `json:"method"`
 	Actual        string `json:"actual"`
 	Volumetric    string `json:"volumetric,omitempty"`
@@ -166,8 +352,8 @@ type canonicalBillableWeightDocument struct {
 	IncrementUnit string `json:"increment_unit"`
 }
 
-func canonicalBillableWeightValue(result BillableWeightResult) canonicalBillableWeightDocument {
-	document := canonicalBillableWeightDocument{
+func canonicalPricingWeightValue(result PricingWeightResult) canonicalPricingWeightDocument {
+	document := canonicalPricingWeightDocument{
 		Method:        string(result.method),
 		Actual:        result.actual.value.String(),
 		Raw:           result.raw.value.String(),
@@ -237,28 +423,28 @@ type canonicalEvaluationInput struct {
 	Zone        string                       `json:"zone"`
 	Actual      string                       `json:"actual"`
 	Unit        string                       `json:"unit"`
-	Volumetric  string                       `json:"volumetric,omitempty"`
 	Dimensions  *canonicalDimensionsDocument `json:"dimensions,omitempty"`
 	BusinessAt  string                       `json:"business_at"`
 	Facts       []canonicalVersionReference  `json:"facts"`
 }
 
 type canonicalEvaluation struct {
-	NumericProfile string                           `json:"numeric_profile"`
-	Status         string                           `json:"status"`
-	Input          canonicalEvaluationInput         `json:"input"`
-	Direction      string                           `json:"direction"`
-	Purpose        string                           `json:"purpose"`
-	PlanReference  canonicalVersionReference        `json:"plan_reference"`
-	PlanPeriod     string                           `json:"plan_period"`
-	TablePeriod    string                           `json:"table_period"`
-	PlanContent    string                           `json:"plan_content"`
-	Manifest       []canonicalVersionReference      `json:"manifest"`
-	BillableWeight *canonicalBillableWeightDocument `json:"billable_weight,omitempty"`
-	MatchedRate    *canonicalRateEntryDocument      `json:"matched_rate,omitempty"`
-	ChargeLines    []canonicalChargeLineDocument    `json:"charge_lines"`
-	Total          *canonicalMoney                  `json:"total,omitempty"`
-	Issues         []canonicalEvaluationIssue       `json:"issues"`
+	Canonicalization string                          `json:"canonicalization"`
+	NumericProfile   string                          `json:"numeric_profile"`
+	Status           string                          `json:"status"`
+	Input            canonicalEvaluationInput        `json:"input"`
+	Direction        string                          `json:"direction"`
+	Purpose          string                          `json:"purpose"`
+	PlanReference    canonicalVersionReference       `json:"plan_reference"`
+	PlanPeriod       string                          `json:"plan_period"`
+	TablePeriod      string                          `json:"table_period"`
+	PlanContent      string                          `json:"plan_content"`
+	Manifest         []canonicalVersionReference     `json:"manifest"`
+	PricingWeight    *canonicalPricingWeightDocument `json:"pricing_weight,omitempty"`
+	MatchedRate      *canonicalRateEntryDocument     `json:"matched_rate,omitempty"`
+	ChargeLines      []canonicalChargeLineDocument   `json:"charge_lines"`
+	Total            *canonicalMoney                 `json:"total,omitempty"`
+	Issues           []canonicalEvaluationIssue      `json:"issues"`
 }
 
 type canonicalEvaluationIssue struct {
@@ -289,9 +475,6 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		BusinessAt:  evaluation.input.businessAt.UTC().Format(time.RFC3339Nano),
 		Facts:       facts,
 	}
-	if volumetric, ok := evaluation.input.VolumetricWeight(); ok {
-		input.Volumetric = volumetric.value.String()
-	}
 	if sides, ok := evaluation.input.Dimensions(); ok {
 		declared := canonicalDimensionsValue(sides)
 		input.Dimensions = &declared
@@ -304,24 +487,25 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		return compareCanonicalReferences(manifest[left], manifest[right]) < 0
 	})
 	document := canonicalEvaluation{
-		NumericProfile: "decimal-bigint-v1",
-		Status:         string(evaluation.status),
-		Input:          input,
-		Direction:      evaluation.direction.String(),
-		Purpose:        evaluation.purpose.String(),
-		PlanReference:  canonicalReference(evaluation.planReference),
-		PlanPeriod:     evaluation.planPeriod.canonicalString(),
-		TablePeriod:    evaluation.tablePeriod.canonicalString(),
-		PlanContent:    evaluation.planContentDigest,
-		Manifest:       manifest,
-		Issues:         make([]canonicalEvaluationIssue, 0, len(evaluation.issues)),
+		Canonicalization: canonicalizationVersion,
+		NumericProfile:   "decimal-bigint-v1",
+		Status:           string(evaluation.status),
+		Input:            input,
+		Direction:        evaluation.direction.String(),
+		Purpose:          evaluation.purpose.String(),
+		PlanReference:    canonicalReference(evaluation.planReference),
+		PlanPeriod:       evaluation.planPeriod.canonicalString(),
+		TablePeriod:      evaluation.tablePeriod.canonicalString(),
+		PlanContent:      evaluation.planContentDigest,
+		Manifest:         manifest,
+		Issues:           make([]canonicalEvaluationIssue, 0, len(evaluation.issues)),
 	}
 	for _, issue := range evaluation.issues {
 		document.Issues = append(document.Issues, canonicalEvaluationIssueValue(issue))
 	}
-	if evaluation.billableWeight != nil {
-		billable := canonicalBillableWeightValue(*evaluation.billableWeight)
-		document.BillableWeight = &billable
+	if evaluation.pricingWeight != nil {
+		weightDocument := canonicalPricingWeightValue(*evaluation.pricingWeight)
+		document.PricingWeight = &weightDocument
 	}
 	if evaluation.matchedRate != nil {
 		matched := canonicalRateEntryValue(*evaluation.matchedRate)

@@ -57,16 +57,19 @@ func (subject EvaluationSubject) valid() bool {
 	return subject.kind.valid() && strings.TrimSpace(subject.id) != "" && strings.TrimSpace(subject.id) == subject.id
 }
 
+// PricingInputSnapshot carries the package's sides, not a volumetric weight
+// worked out elsewhere. Volumetric weight is derived here from the card's own
+// versioned divisor, so the same sides can only ever have one volumetric
+// weight and a divisor change always reaches the content digest.
 type PricingInputSnapshot struct {
-	tenantID         TenantID
-	scope            PricingScopeID
-	subject          EvaluationSubject
-	zone             string
-	actualWeight     Weight
-	volumetricWeight *Weight
-	dimensions       *Dimensions
-	businessAt       time.Time
-	factReferences   []VersionedFactReference
+	tenantID       TenantID
+	scope          PricingScopeID
+	subject        EvaluationSubject
+	zone           string
+	actualWeight   Weight
+	dimensions     *Dimensions
+	businessAt     time.Time
+	factReferences []VersionedFactReference
 }
 
 func NewPricingInputSnapshot(
@@ -75,21 +78,12 @@ func NewPricingInputSnapshot(
 	subject EvaluationSubject,
 	zone string,
 	actualWeight Weight,
-	volumetricWeight *Weight,
 	dimensions *Dimensions,
 	businessAt time.Time,
 	factReferences ...VersionedFactReference,
 ) (PricingInputSnapshot, error) {
 	if !tenantID.valid() || !scope.valid() || !subject.valid() || strings.TrimSpace(zone) == "" || strings.TrimSpace(zone) != zone || !actualWeight.valid() || !validBusinessTime(businessAt) {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
-	}
-	if volumetricWeight != nil {
-		if !volumetricWeight.valid() {
-			return PricingInputSnapshot{}, ErrPricingInputInvalid
-		}
-		if volumetricWeight.unit != actualWeight.unit {
-			return PricingInputSnapshot{}, ErrWeightUnitMismatch
-		}
 	}
 	if dimensions != nil && !dimensions.valid() {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
@@ -100,26 +94,20 @@ func NewPricingInputSnapshot(
 			return PricingInputSnapshot{}, ErrPricingInputInvalid
 		}
 	}
-	var volumetricCopy *Weight
-	if volumetricWeight != nil {
-		copy := *volumetricWeight
-		volumetricCopy = &copy
-	}
 	var dimensionsCopy *Dimensions
 	if dimensions != nil {
 		copy := *dimensions
 		dimensionsCopy = &copy
 	}
 	return PricingInputSnapshot{
-		tenantID:         tenantID,
-		scope:            scope,
-		subject:          subject,
-		zone:             zone,
-		actualWeight:     actualWeight,
-		volumetricWeight: volumetricCopy,
-		dimensions:       dimensionsCopy,
-		businessAt:       businessAt,
-		factReferences:   copyOfReferences,
+		tenantID:       tenantID,
+		scope:          scope,
+		subject:        subject,
+		zone:           zone,
+		actualWeight:   actualWeight,
+		dimensions:     dimensionsCopy,
+		businessAt:     businessAt,
+		factReferences: copyOfReferences,
 	}, nil
 }
 
@@ -150,13 +138,6 @@ func (input PricingInputSnapshot) FactReferences() []VersionedFactReference {
 	return append([]VersionedFactReference(nil), input.factReferences...)
 }
 
-func (input PricingInputSnapshot) VolumetricWeight() (Weight, bool) {
-	if input.volumetricWeight == nil {
-		return Weight{}, false
-	}
-	return *input.volumetricWeight, true
-}
-
 func (input PricingInputSnapshot) Dimensions() (Dimensions, bool) {
 	if input.dimensions == nil {
 		return Dimensions{}, false
@@ -181,9 +162,6 @@ func (input PricingInputSnapshot) valid() bool {
 	if !input.tenantID.valid() || !input.scope.valid() || !input.subject.valid() || strings.TrimSpace(input.zone) == "" || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
 		return false
 	}
-	if input.volumetricWeight != nil && (!input.volumetricWeight.valid() || input.volumetricWeight.unit != input.actualWeight.unit) {
-		return false
-	}
 	if input.dimensions != nil && !input.dimensions.valid() {
 		return false
 	}
@@ -195,8 +173,8 @@ func (input PricingInputSnapshot) valid() bool {
 	return true
 }
 
-type BillableWeightResult struct {
-	method       BillableWeightMethod
+type PricingWeightResult struct {
+	method       PricingWeightMethod
 	actual       Weight
 	volumetric   *Weight
 	raw          Weight
@@ -206,24 +184,30 @@ type BillableWeightResult struct {
 	explanation  string
 }
 
-func CalculateBillableWeight(input PricingInputSnapshot, policy BillableWeightPolicy, expectedUnit WeightUnit) (BillableWeightResult, error) {
+func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit) (PricingWeightResult, error) {
 	if !input.valid() || !policy.valid() {
-		return BillableWeightResult{}, ErrPricingInputInvalid
+		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
 	if input.actualWeight.unit != expectedUnit {
-		return BillableWeightResult{}, ErrWeightUnitMismatch
+		return PricingWeightResult{}, ErrWeightUnitMismatch
 	}
 	if policy.rounding.increment.unit != expectedUnit {
-		return BillableWeightResult{}, ErrWeightUnitMismatch
+		return PricingWeightResult{}, ErrWeightUnitMismatch
 	}
 	var raw Weight
-	volumetric, hasVolumetric := input.VolumetricWeight()
+	var volumetric Weight
+	hasVolumetric := false
 	switch policy.method {
-	case BillableWeightActualOnly:
+	case PricingWeightActualOnly:
 		raw = input.actualWeight
-	case BillableWeightMax:
-		if !hasVolumetric {
-			return BillableWeightResult{}, ErrMissingVolumetricWeight
+	case PricingWeightMax:
+		derived, err := deriveVolumetricWeight(input, policy)
+		if err != nil {
+			return PricingWeightResult{}, err
+		}
+		volumetric, hasVolumetric = derived, true
+		if volumetric.unit != expectedUnit {
+			return PricingWeightResult{}, ErrWeightUnitMismatch
 		}
 		comparison := input.actualWeight.value.Cmp(volumetric.value)
 		if comparison >= 0 {
@@ -232,18 +216,18 @@ func CalculateBillableWeight(input PricingInputSnapshot, policy BillableWeightPo
 			raw = volumetric
 		}
 	default:
-		return BillableWeightResult{}, ErrPricingInputInvalid
+		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
 	roundedValue, err := raw.value.RoundToIncrement(policy.rounding.increment.value, policy.rounding.mode)
 	if err != nil {
-		return BillableWeightResult{}, err
+		return PricingWeightResult{}, err
 	}
 	rounded, err := NewWeight(roundedValue, raw.unit)
 	if err != nil {
-		return BillableWeightResult{}, err
+		return PricingWeightResult{}, err
 	}
-	explanation := fmt.Sprintf("billable weight uses %s; raw=%s %s; rounding=%s increment=%s %s; rounded=%s %s", policy.method, raw.value.String(), raw.unit, policy.rounding.mode, policy.rounding.increment.value.String(), policy.rounding.increment.unit, rounded.value.String(), rounded.unit)
-	return BillableWeightResult{
+	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s; rounding=%s increment=%s %s; rounded=%s %s", policy.method, raw.value.String(), raw.unit, policy.rounding.mode, policy.rounding.increment.value.String(), policy.rounding.increment.unit, rounded.value.String(), rounded.unit)
+	return PricingWeightResult{
 		method:       policy.method,
 		actual:       input.actualWeight,
 		volumetric:   optionalWeightCopy(volumetric, hasVolumetric),
@@ -255,22 +239,22 @@ func CalculateBillableWeight(input PricingInputSnapshot, policy BillableWeightPo
 	}, nil
 }
 
-func (result BillableWeightResult) Method() BillableWeightMethod { return result.method }
-func (result BillableWeightResult) ActualWeight() Weight         { return result.actual }
-func (result BillableWeightResult) RawWeight() Weight            { return result.raw }
-func (result BillableWeightResult) RoundedWeight() Weight        { return result.rounded }
-func (result BillableWeightResult) RoundingMode() RoundingMode   { return result.roundingMode }
-func (result BillableWeightResult) RoundingIncrement() Weight    { return result.increment }
-func (result BillableWeightResult) Explanation() string          { return result.explanation }
+func (result PricingWeightResult) Method() PricingWeightMethod { return result.method }
+func (result PricingWeightResult) ActualWeight() Weight        { return result.actual }
+func (result PricingWeightResult) RawWeight() Weight           { return result.raw }
+func (result PricingWeightResult) RoundedWeight() Weight       { return result.rounded }
+func (result PricingWeightResult) RoundingMode() RoundingMode  { return result.roundingMode }
+func (result PricingWeightResult) RoundingIncrement() Weight   { return result.increment }
+func (result PricingWeightResult) Explanation() string         { return result.explanation }
 
-func (result BillableWeightResult) VolumetricWeight() (Weight, bool) {
+func (result PricingWeightResult) VolumetricWeight() (Weight, bool) {
 	if result.volumetric == nil {
 		return Weight{}, false
 	}
 	return *result.volumetric, true
 }
 
-func (result BillableWeightResult) valid() bool {
+func (result PricingWeightResult) valid() bool {
 	if !result.method.valid() || !result.actual.valid() || !result.raw.valid() || !result.rounded.valid() || !result.roundingMode.valid() || !result.increment.valid() || result.increment.value.Sign() <= 0 || result.increment.unit != result.actual.unit || strings.TrimSpace(result.explanation) == "" {
 		return false
 	}
@@ -278,6 +262,26 @@ func (result BillableWeightResult) valid() bool {
 		return false
 	}
 	return true
+}
+
+// deriveVolumetricWeight applies the card's declared divisor to the package's
+// sides. Sides that never arrived are a missing fact that can still turn up, so
+// the caller keeps the evaluation waiting instead of falling back to the actual
+// weight and quietly pricing a different package.
+func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPolicy) (Weight, error) {
+	factor, declared := policy.VolumetricFactor()
+	if !declared {
+		return Weight{}, ErrInvalidRoundingPolicy
+	}
+	sides, measured := input.Dimensions()
+	if !measured {
+		return Weight{}, ErrMissingDimensions
+	}
+	volume, err := sides.Volume()
+	if err != nil {
+		return Weight{}, err
+	}
+	return factor.Apply(volume)
 }
 
 func optionalWeightCopy(value Weight, present bool) *Weight {

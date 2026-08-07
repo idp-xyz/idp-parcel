@@ -22,14 +22,13 @@ func TestSyntheticContractPreservesFactReferencesAcrossEvaluationAndReplay(t *te
 		"Z1",
 		weight(t, "1.2", domain.WeightUnitKilogram),
 		nil,
-		nil,
 		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 		factReference,
 	)
 	if err != nil {
 		t.Fatalf("input: %v", err)
 	}
-	plan := syntheticPlan(t, "handoff-facts", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	plan := syntheticPlan(t, "handoff-facts", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 	request, err := domain.NewEvaluationRequest(
 		mustValue(t, domain.NewEvaluationID, "eval-handoff-facts"),
 		plan,

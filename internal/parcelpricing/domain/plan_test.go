@@ -61,9 +61,9 @@ func TestChargeCodeChangesPlanContentDigest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second rule: %v", err)
 	}
-	firstPlan := syntheticPlan(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, []domain.FixedChargeRule{firstRule})
-	baseChangedPlan := syntheticPlanWithBaseCode(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", "BASE_FREIGHT_V2", domain.BillableWeightActualOnly, []domain.FixedChargeRule{firstRule})
-	ruleChangedPlan := syntheticPlanWithBaseCode(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", "BASE_FREIGHT", domain.BillableWeightActualOnly, []domain.FixedChargeRule{secondRule})
+	firstPlan := syntheticPlan(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, []domain.FixedChargeRule{firstRule})
+	baseChangedPlan := syntheticPlanWithBaseCode(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", "BASE_FREIGHT_V2", domain.PricingWeightActualOnly, []domain.FixedChargeRule{firstRule})
+	ruleChangedPlan := syntheticPlanWithBaseCode(t, "code-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", "BASE_FREIGHT", domain.PricingWeightActualOnly, []domain.FixedChargeRule{secondRule})
 	if !firstPlan.Manifest().Equal(baseChangedPlan.Manifest()) || !firstPlan.Manifest().Equal(ruleChangedPlan.Manifest()) {
 		t.Fatal("test plans must share the same version manifest")
 	}
@@ -84,7 +84,7 @@ func TestPricingPlanRejectsDuplicateRuleOrderAndBuildsStableManifest(t *testing.
 		t.Fatal("helper unexpectedly accepted duplicate rule order")
 	}
 
-	plan := syntheticPlan(t, "manifest-order", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	plan := syntheticPlan(t, "manifest-order", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 	references := plan.Manifest().References()
 	if len(references) != 4 {
 		t.Fatalf("manifest length = %d, want 4", len(references))
@@ -120,7 +120,7 @@ func newSyntheticPlanRules(t testing.TB, suffix string, baseCode domain.ChargeCo
 	if err != nil {
 		t.Fatalf("entry: %v", err)
 	}
-	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"), domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{entry})
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"), domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{entry})
 	if err != nil {
 		t.Fatalf("table: %v", err)
 	}
@@ -128,11 +128,11 @@ func newSyntheticPlanRules(t testing.TB, suffix string, baseCode domain.ChargeCo
 	if err != nil {
 		t.Fatalf("rounding: %v", err)
 	}
-	policy, err := domain.NewBillableWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"), domain.BillableWeightActualOnly, rounding)
+	policy, err := domain.NewPricingWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"), domain.PricingWeightActualOnly, rounding, nil)
 	if err != nil {
 		t.Fatalf("weight policy: %v", err)
 	}
-	return domain.NewPricingPlanVersion(versionReference(t, domain.ArtifactPricingPlan, "plan-"+suffix, "v1"), mustValue(t, domain.NewPricingScopeID, "scope-1"), domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, baseCode, effectivePeriod(t), table, policy, rules)
+	return domain.NewPricingPlanVersion(versionReference(t, domain.ArtifactPricingPlan, "plan-"+suffix, "v1"), mustValue(t, domain.NewPricingScopeID, "scope-1"), domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, baseCode, effectivePeriod(t), table, policy, rules, domain.PricingPlanStructures{})
 }
 
 func TestMoneyAndWeightRejectMismatchedDimensions(t *testing.T) {
@@ -179,8 +179,8 @@ func TestPricingPlanContentDigestUsesStructuredRuleEncoding(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second rule: %v", err)
 	}
-	firstPlan := syntheticPlan(t, "structured-rule-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, []domain.FixedChargeRule{firstRule})
-	secondPlan := syntheticPlan(t, "structured-rule-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, []domain.FixedChargeRule{secondRule})
+	firstPlan := syntheticPlan(t, "structured-rule-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, []domain.FixedChargeRule{firstRule})
+	secondPlan := syntheticPlan(t, "structured-rule-digest", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, []domain.FixedChargeRule{secondRule})
 	if !firstPlan.Manifest().Equal(secondPlan.Manifest()) {
 		t.Fatal("test plans must share the same version manifest")
 	}
@@ -214,7 +214,7 @@ func planWithInputOrder(t testing.TB, reverse bool) domain.PricingPlanVersion {
 		entries[0], entries[1] = entries[1], entries[0]
 		rules[0], rules[1] = rules[1], rules[0]
 	}
-	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "ordered-table", "v1"), domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), entries)
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "ordered-table", "v1"), domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), entries)
 	if err != nil {
 		t.Fatalf("rate table: %v", err)
 	}
@@ -222,11 +222,11 @@ func planWithInputOrder(t testing.TB, reverse bool) domain.PricingPlanVersion {
 	if err != nil {
 		t.Fatalf("rounding: %v", err)
 	}
-	weightPolicy, err := domain.NewBillableWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "ordered-weight", "v1"), domain.BillableWeightActualOnly, rounding)
+	weightPolicy, err := domain.NewPricingWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "ordered-weight", "v1"), domain.PricingWeightActualOnly, rounding, nil)
 	if err != nil {
 		t.Fatalf("weight policy: %v", err)
 	}
-	plan, err := domain.NewPricingPlanVersion(versionReference(t, domain.ArtifactPricingPlan, "ordered-plan", "v1"), mustValue(t, domain.NewPricingScopeID, "scope-1"), domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, mustValue(t, domain.NewChargeCode, "BASE_FREIGHT"), effectivePeriod(t), table, weightPolicy, rules)
+	plan, err := domain.NewPricingPlanVersion(versionReference(t, domain.ArtifactPricingPlan, "ordered-plan", "v1"), mustValue(t, domain.NewPricingScopeID, "scope-1"), domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, mustValue(t, domain.NewChargeCode, "BASE_FREIGHT"), effectivePeriod(t), table, weightPolicy, rules, domain.PricingPlanStructures{})
 	if err != nil {
 		t.Fatalf("pricing plan: %v", err)
 	}
@@ -297,7 +297,7 @@ func pairedPlan(
 	if err != nil {
 		t.Fatalf("rate entry: %v", err)
 	}
-	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"), domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{entry})
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"), domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{entry})
 	if err != nil {
 		t.Fatalf("rate table: %v", err)
 	}
@@ -305,7 +305,7 @@ func pairedPlan(
 	if err != nil {
 		t.Fatalf("rounding: %v", err)
 	}
-	weightPolicy, err := domain.NewBillableWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"), domain.BillableWeightActualOnly, rounding)
+	weightPolicy, err := domain.NewPricingWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"), domain.PricingWeightActualOnly, rounding, nil)
 	if err != nil {
 		t.Fatalf("weight policy: %v", err)
 	}
@@ -319,5 +319,6 @@ func pairedPlan(
 		table,
 		weightPolicy,
 		nil,
+		domain.PricingPlanStructures{},
 	)
 }

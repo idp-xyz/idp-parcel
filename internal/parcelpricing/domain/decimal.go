@@ -241,6 +241,31 @@ func (value Decimal) RoundToIncrement(increment Decimal, mode RoundingMode) (Dec
 	return decimalFromBig(result, commonScale)
 }
 
+// DivRoundToIncrement divides by divisor and lands the quotient on a multiple
+// of increment. The two steps are one operation because an exact quotient need
+// not terminate in base 10: dividing first would force an undeclared precision
+// onto the intermediate. Working on the scaled integers keeps the result exact
+// for the rounding the caller declared. RoundingNone is refused for the same
+// reason — there is no terminating quotient to leave unrounded.
+func (value Decimal) DivRoundToIncrement(divisor, increment Decimal, mode RoundingMode) (Decimal, error) {
+	if !value.valid() || !divisor.valid() || !increment.valid() || value.IsNegative() || divisor.Sign() <= 0 || increment.Sign() <= 0 {
+		return Decimal{}, ErrInvalidRoundingPolicy
+	}
+	if !mode.valid() || mode == RoundingNone {
+		return Decimal{}, ErrInvalidRoundingPolicy
+	}
+	// The result is however many increments fit in value / divisor.
+	numerator := new(big.Int).Mul(value.bigCoefficient(), pow10(divisor.scale+increment.scale))
+	denominator := new(big.Int).Mul(divisor.bigCoefficient(), increment.bigCoefficient())
+	denominator.Mul(denominator, pow10(value.scale))
+	multiples, remainder := new(big.Int), new(big.Int)
+	multiples.QuoRem(numerator, denominator, remainder)
+	if remainder.Sign() != 0 && mode == RoundingCeiling {
+		multiples.Add(multiples, big.NewInt(1))
+	}
+	return decimalFromBig(multiples.Mul(multiples, increment.bigCoefficient()), increment.scale)
+}
+
 func (value Decimal) combine(other Decimal, subtract bool) (Decimal, error) {
 	if !value.valid() || !other.valid() {
 		return Decimal{}, ErrInvalidDecimal

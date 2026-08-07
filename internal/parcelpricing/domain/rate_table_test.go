@@ -25,7 +25,7 @@ func TestRateTableUsesLeftClosedRightOpenIntervals(t *testing.T) {
 	}
 	table, err := domain.NewRateTableVersion(
 		versionReference(t, domain.ArtifactRateTable, "table-boundary", "v1"),
-		domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram,
+		domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram,
 		effectivePeriod(t),
 		[]domain.RateEntry{second, first},
 	)
@@ -68,7 +68,7 @@ func TestRateTableRejectsOverlapButAllowsGapsAndZoneIsolation(t *testing.T) {
 	}
 	_, err := domain.NewRateTableVersion(
 		versionReference(t, domain.ArtifactRateTable, "table-overlap", "v1"),
-		domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram,
+		domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram,
 		effectivePeriod(t),
 		[]domain.RateEntry{entry("r-1", "Z1", "0", "2"), entry("r-2", "Z1", "1", "3")},
 	)
@@ -78,7 +78,7 @@ func TestRateTableRejectsOverlapButAllowsGapsAndZoneIsolation(t *testing.T) {
 
 	table, err := domain.NewRateTableVersion(
 		versionReference(t, domain.ArtifactRateTable, "table-gap", "v1"),
-		domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram,
+		domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram,
 		effectivePeriod(t),
 		[]domain.RateEntry{entry("r-1", "Z1", "0", "1"), entry("r-2", "Z1", "2", "3"), entry("r-3", "Z2", "0", "3")},
 	)
@@ -103,7 +103,7 @@ func TestRateTableCopiesEntrySlices(t *testing.T) {
 		t.Fatalf("entry: %v", err)
 	}
 	entries := []domain.RateEntry{entry}
-	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-copy", "v1"), domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), entries)
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-copy", "v1"), domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), entries)
 	if err != nil {
 		t.Fatalf("table: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestRateTableSupportsOnlyTerminalOpenEndedInterval(t *testing.T) {
 		t.Fatalf("open entry: %v", err)
 	}
 	table, err := domain.NewRateTableVersion(
-		versionReference(t, domain.ArtifactRateTable, "table-open", "v1"), domain.RateTableKindWeightZone,
+		versionReference(t, domain.ArtifactRateTable, "table-open", "v1"), domain.RateTableFamilyWeightZone,
 		currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{open, finite},
 	)
 	if err != nil {
@@ -154,7 +154,7 @@ func TestRateTableSupportsOnlyTerminalOpenEndedInterval(t *testing.T) {
 		t.Fatalf("late entry: %v", err)
 	}
 	if _, err := domain.NewRateTableVersion(
-		versionReference(t, domain.ArtifactRateTable, "table-open-overlap", "v1"), domain.RateTableKindWeightZone,
+		versionReference(t, domain.ArtifactRateTable, "table-open-overlap", "v1"), domain.RateTableFamilyWeightZone,
 		currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{open, lateFinite},
 	); !errors.Is(err, domain.ErrRateIntervalOverlap) {
 		t.Fatalf("open-ended overlap error = %v", err)

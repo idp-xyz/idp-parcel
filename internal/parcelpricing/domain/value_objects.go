@@ -288,15 +288,15 @@ func (mode AggregationMode) valid() bool {
 	return mode == AggregationPerPackage
 }
 
-type BillableWeightMethod string
+type PricingWeightMethod string
 
 const (
-	BillableWeightActualOnly BillableWeightMethod = "ACTUAL_ONLY"
-	BillableWeightMax        BillableWeightMethod = "MAX"
+	PricingWeightActualOnly PricingWeightMethod = "ACTUAL_ONLY"
+	PricingWeightMax        PricingWeightMethod = "MAX"
 )
 
-func (method BillableWeightMethod) valid() bool {
-	return method == BillableWeightActualOnly || method == BillableWeightMax
+func (method PricingWeightMethod) valid() bool {
+	return method == PricingWeightActualOnly || method == PricingWeightMax
 }
 
 type RoundingMode string
@@ -345,15 +345,28 @@ func (basis ChargeBasis) valid() bool {
 	return basis == ChargeBasisRateEntry || basis == ChargeBasisFixedAmount
 }
 
+// ChargeMethod is how one evaluation charge line's amount is produced. CONTEXT
+// closes the set at four and scopes it to any charge line, so a declaring rule
+// and the line it produces name the same method rather than each keeping a
+// private vocabulary. Widening the set is a version content change.
 type ChargeMethod string
 
 const (
-	ChargeMethodLookup ChargeMethod = "LOOKUP"
-	ChargeMethodFixed  ChargeMethod = "FIXED"
+	ChargeMethodFixedAmount    ChargeMethod = "FIXED_AMOUNT"
+	ChargeMethodTableLookup    ChargeMethod = "TABLE_LOOKUP"
+	ChargeMethodPercentOfBasis ChargeMethod = "PERCENT_OF_BASIS"
+	ChargeMethodGreaterOf      ChargeMethod = "GREATER_OF"
 )
 
+func (method ChargeMethod) String() string { return string(method) }
+
 func (method ChargeMethod) valid() bool {
-	return method == ChargeMethodLookup || method == ChargeMethodFixed
+	switch method {
+	case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf:
+		return true
+	default:
+		return false
+	}
 }
 
 type EvidenceKind string
@@ -376,10 +389,11 @@ func (kind EvidenceKind) valid() bool {
 type ArtifactKind string
 
 const (
-	ArtifactPricingPlan    ArtifactKind = "pricing-plan"
-	ArtifactRateTable      ArtifactKind = "rate-table"
-	ArtifactWeightPolicy   ArtifactKind = "weight-policy"
-	ArtifactNumericProfile ArtifactKind = "numeric-profile"
+	ArtifactPricingPlan     ArtifactKind = "pricing-plan"
+	ArtifactRateTable       ArtifactKind = "rate-table"
+	ArtifactWeightPolicy    ArtifactKind = "weight-policy"
+	ArtifactReferenceSeries ArtifactKind = "reference-series"
+	ArtifactNumericProfile  ArtifactKind = "numeric-profile"
 )
 
 func NumericProfileV1Reference() VersionReference {

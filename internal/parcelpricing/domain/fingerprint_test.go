@@ -10,10 +10,10 @@ func TestChargeLineConstructorEnforcesKindContract(t *testing.T) {
 	currency, _ := NewCurrency("USD")
 	amount, _ := NewMoneyFromString("1", currency)
 	code, _ := NewChargeCode("BASE_FREIGHT")
-	if _, err := newChargeLine("base:bad", ChargeLineBase, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixed, "Bad base", ChargeEffectAdd, amount, 0, "entry"); !errors.Is(err, ErrInvalidChargeLine) {
+	if _, err := newChargeLine("base:bad", ChargeLineBase, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, "Bad base", ChargeEffectAdd, amount, 0, "entry"); !errors.Is(err, ErrInvalidChargeLine) {
 		t.Fatalf("mismatched base line error = %v", err)
 	}
-	if _, err := newChargeLine("fixed:bad", ChargeLineFixed, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixed, "Bad fixed", ChargeEffectAdd, amount, 0, "rule"); !errors.Is(err, ErrInvalidChargeLine) {
+	if _, err := newChargeLine("fixed:bad", ChargeLineFixed, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, "Bad fixed", ChargeEffectAdd, amount, 0, "rule"); !errors.Is(err, ErrInvalidChargeLine) {
 		t.Fatalf("zero-order fixed line error = %v", err)
 	}
 }
@@ -136,15 +136,15 @@ func replayIntegrityFixture(t *testing.T) (PricingPlanVersion, PricingInputSnaps
 	amount, _ := NewMoneyFromString("10", currency)
 	entry, _ := NewRateEntry(entryID, "Z1", minimum, maximum, amount)
 	tableReference, _ := NewVersionReference(ArtifactRateTable, "table-replay", "v1", "digest-table")
-	table, _ := NewRateTableVersion(tableReference, RateTableKindWeightZone, currency, WeightUnitKilogram, period, []RateEntry{entry})
+	table, _ := NewRateTableVersion(tableReference, RateTableFamilyWeightZone, currency, WeightUnitKilogram, period, []RateEntry{entry})
 	increment, _ := NewWeightFromString("1", WeightUnitKilogram)
 	rounding, _ := NewWeightRoundingPolicy(RoundingNone, increment)
 	weightReference, _ := NewVersionReference(ArtifactWeightPolicy, "weight-replay", "v1", "digest-weight")
-	weightPolicy, _ := NewBillableWeightPolicy(weightReference, BillableWeightActualOnly, rounding)
+	weightPolicy, _ := NewPricingWeightPolicy(weightReference, PricingWeightActualOnly, rounding, nil)
 	planReference, _ := NewVersionReference(ArtifactPricingPlan, "plan-replay", "v1", "digest-plan")
 	scope, _ := NewPricingScopeID("scope-replay")
 	baseCode, _ := NewChargeCode("BASE_FREIGHT")
-	plan, err := NewPricingPlanVersion(planReference, scope, PricingDirectionSell, PricingPurposeCustomerCharge, baseCode, period, table, weightPolicy, nil)
+	plan, err := NewPricingPlanVersion(planReference, scope, PricingDirectionSell, PricingPurposeCustomerCharge, baseCode, period, table, weightPolicy, nil, PricingPlanStructures{})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
@@ -152,7 +152,7 @@ func replayIntegrityFixture(t *testing.T) (PricingPlanVersion, PricingInputSnaps
 	packageID, _ := NewPackageID("package-replay")
 	actualWeight, _ := NewWeightFromString("1", WeightUnitKilogram)
 	subject, _ := NewAcceptedPackageSubject(packageID)
-	input, err := NewPricingInputSnapshot(tenantID, scope, subject, "Z1", actualWeight, nil, nil, time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC))
+	input, err := NewPricingInputSnapshot(tenantID, scope, subject, "Z1", actualWeight, nil, time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("input: %v", err)
 	}

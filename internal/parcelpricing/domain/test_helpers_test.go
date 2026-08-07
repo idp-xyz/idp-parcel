@@ -113,7 +113,7 @@ func syntheticPlan(
 	direction domain.PricingDirection,
 	purpose domain.PricingPurpose,
 	baseAmount string,
-	method domain.BillableWeightMethod,
+	method domain.PricingWeightMethod,
 	rules []domain.FixedChargeRule,
 ) domain.PricingPlanVersion {
 	return syntheticPlanWithBaseCode(t, suffix, direction, purpose, baseAmount, "BASE_FREIGHT", method, rules)
@@ -126,7 +126,7 @@ func syntheticPlanWithBaseCode(
 	purpose domain.PricingPurpose,
 	baseAmount string,
 	baseCode string,
-	method domain.BillableWeightMethod,
+	method domain.PricingWeightMethod,
 	rules []domain.FixedChargeRule,
 ) domain.PricingPlanVersion {
 	t.Helper()
@@ -144,7 +144,7 @@ func syntheticPlanWithBaseCode(
 	}
 	table, err := domain.NewRateTableVersion(
 		versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"),
-		domain.RateTableKindWeightZone,
+		domain.RateTableFamilyWeightZone,
 		currency,
 		domain.WeightUnitKilogram,
 		effectivePeriod(t),
@@ -157,13 +157,29 @@ func syntheticPlanWithBaseCode(
 	if err != nil {
 		t.Fatalf("rounding policy: %v", err)
 	}
-	weightPolicy, err := domain.NewBillableWeightPolicy(
+	// MAX has to be able to reach a volumetric weight, so the synthetic card
+	// declares its own divisor the way a real one would: 5000 turns cubic
+	// centimetres into kilograms.
+	var factor *domain.VolumetricFactor
+	if method == domain.PricingWeightMax {
+		factorRounding, roundingErr := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, weight(t, "0.1", domain.WeightUnitKilogram))
+		if roundingErr != nil {
+			t.Fatalf("volumetric rounding: %v", roundingErr)
+		}
+		declared, factorErr := domain.NewVolumetricFactor(decimal(t, "5000"), domain.LengthUnitCentimeter, factorRounding)
+		if factorErr != nil {
+			t.Fatalf("volumetric factor: %v", factorErr)
+		}
+		factor = &declared
+	}
+	weightPolicy, err := domain.NewPricingWeightPolicy(
 		versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"),
 		method,
 		rounding,
+		factor,
 	)
 	if err != nil {
-		t.Fatalf("billable weight policy: %v", err)
+		t.Fatalf("pricing weight policy: %v", err)
 	}
 	plan, err := domain.NewPricingPlanVersion(
 		versionReference(t, domain.ArtifactPricingPlan, "plan-"+suffix, "v1"),
@@ -175,6 +191,7 @@ func syntheticPlanWithBaseCode(
 		table,
 		weightPolicy,
 		rules,
+		domain.PricingPlanStructures{},
 	)
 	if err != nil {
 		t.Fatalf("pricing plan: %v", err)
@@ -182,8 +199,8 @@ func syntheticPlanWithBaseCode(
 	return plan
 }
 
-func syntheticInput(t testing.TB, actual string, volumetric *string, zone string) domain.PricingInputSnapshot {
-	return syntheticInputAt(t, actual, volumetric, zone, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
+func syntheticInput(t testing.TB, actual, zone string) domain.PricingInputSnapshot {
+	return syntheticInputAt(t, actual, zone, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
 }
 
 func packageSubject(t testing.TB, id string) domain.EvaluationSubject {
@@ -204,7 +221,6 @@ func syntheticInputForSubject(t testing.TB, subject domain.EvaluationSubject, ac
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
 		nil,
-		nil,
 		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 	)
 	if err != nil {
@@ -221,7 +237,6 @@ func syntheticInputWithDimensions(t testing.TB, actual, zone string, sides domai
 		packageSubject(t, "package-1"),
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
-		nil,
 		&sides,
 		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 	)
@@ -231,20 +246,14 @@ func syntheticInputWithDimensions(t testing.TB, actual, zone string, sides domai
 	return input
 }
 
-func syntheticInputAt(t testing.TB, actual string, volumetric *string, zone string, businessAt time.Time) domain.PricingInputSnapshot {
+func syntheticInputAt(t testing.TB, actual, zone string, businessAt time.Time) domain.PricingInputSnapshot {
 	t.Helper()
-	var volumetricWeight *domain.Weight
-	if volumetric != nil {
-		value := weight(t, *volumetric, domain.WeightUnitKilogram)
-		volumetricWeight = &value
-	}
 	input, err := domain.NewPricingInputSnapshot(
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewPricingScopeID, "scope-1"),
 		packageSubject(t, "package-1"),
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
-		volumetricWeight,
 		nil,
 		businessAt,
 	)

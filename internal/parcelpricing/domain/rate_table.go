@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-type RateTableKind string
+type RateTableFamily string
 
-const RateTableKindWeightZone RateTableKind = "WEIGHT_ZONE"
+const RateTableFamilyWeightZone RateTableFamily = "WEIGHT_ZONE"
 
-func (kind RateTableKind) valid() bool {
-	return kind == RateTableKindWeightZone
+func (family RateTableFamily) valid() bool {
+	return family == RateTableFamilyWeightZone
 }
 
 type RateEntry struct {
@@ -75,7 +75,7 @@ func (entry RateEntry) contains(weight Weight) bool {
 
 type RateTableVersion struct {
 	reference VersionReference
-	kind      RateTableKind
+	family    RateTableFamily
 	currency  Currency
 	unit      WeightUnit
 	period    EffectivePeriod
@@ -84,13 +84,13 @@ type RateTableVersion struct {
 
 func NewRateTableVersion(
 	reference VersionReference,
-	kind RateTableKind,
+	family RateTableFamily,
 	currency Currency,
 	unit WeightUnit,
 	period EffectivePeriod,
 	entries []RateEntry,
 ) (RateTableVersion, error) {
-	if reference.kind != ArtifactRateTable || !reference.valid() || !kind.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(entries) == 0 {
+	if reference.kind != ArtifactRateTable || !reference.valid() || !family.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(entries) == 0 {
 		return RateTableVersion{}, ErrInvalidRateTable
 	}
 	copyOfEntries := append([]RateEntry(nil), entries...)
@@ -143,7 +143,7 @@ func NewRateTableVersion(
 	})
 	return RateTableVersion{
 		reference: reference,
-		kind:      kind,
+		family:    family,
 		currency:  currency,
 		unit:      unit,
 		period:    period,
@@ -152,7 +152,7 @@ func NewRateTableVersion(
 }
 
 func (table RateTableVersion) Reference() VersionReference      { return table.reference }
-func (table RateTableVersion) Kind() RateTableKind              { return table.kind }
+func (table RateTableVersion) Family() RateTableFamily          { return table.family }
 func (table RateTableVersion) Currency() Currency               { return table.currency }
 func (table RateTableVersion) WeightUnit() WeightUnit           { return table.unit }
 func (table RateTableVersion) EffectivePeriod() EffectivePeriod { return table.period }
@@ -162,10 +162,10 @@ func (table RateTableVersion) Entries() []RateEntry {
 }
 
 func (table RateTableVersion) valid() bool {
-	if table.reference.kind != ArtifactRateTable || !table.reference.valid() || !table.kind.valid() || !table.currency.valid() || !table.unit.valid() || !table.period.valid() || len(table.entries) == 0 {
+	if table.reference.kind != ArtifactRateTable || !table.reference.valid() || !table.family.valid() || !table.currency.valid() || !table.unit.valid() || !table.period.valid() || len(table.entries) == 0 {
 		return false
 	}
-	_, err := NewRateTableVersion(table.reference, table.kind, table.currency, table.unit, table.period, table.entries)
+	_, err := NewRateTableVersion(table.reference, table.family, table.currency, table.unit, table.period, table.entries)
 	return err == nil
 }
 

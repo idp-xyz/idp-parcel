@@ -29,29 +29,105 @@ func (policy WeightRoundingPolicy) valid() bool {
 	return err == nil
 }
 
-type BillableWeightPolicy struct {
-	reference VersionReference
-	method    BillableWeightMethod
-	rounding  WeightRoundingPolicy
+// VolumetricFactor is the card's own divisor, the length unit it reads, and the
+// precision its quotient is declared to. The card states it — L4 reads
+// "volumetric pounds = length × width × height in inches / 250" — so this
+// package never carries a divisor of its own. The weight unit comes from the
+// rounding increment, because a divisor that turns cubic inches into pounds
+// says nothing about any other pair of units.
+type VolumetricFactor struct {
+	divisor    Decimal
+	lengthUnit LengthUnit
+	rounding   WeightRoundingPolicy
 }
 
-func NewBillableWeightPolicy(
-	reference VersionReference,
-	method BillableWeightMethod,
-	rounding WeightRoundingPolicy,
-) (BillableWeightPolicy, error) {
-	if reference.kind != ArtifactWeightPolicy || !reference.valid() || !method.valid() || !rounding.valid() {
-		return BillableWeightPolicy{}, ErrInvalidRoundingPolicy
+func NewVolumetricFactor(divisor Decimal, lengthUnit LengthUnit, rounding WeightRoundingPolicy) (VolumetricFactor, error) {
+	factor := VolumetricFactor{divisor: divisor, lengthUnit: lengthUnit, rounding: rounding}
+	if !factor.valid() {
+		return VolumetricFactor{}, ErrInvalidVolumetricFactor
 	}
-	return BillableWeightPolicy{reference: reference, method: method, rounding: rounding}, nil
+	return factor, nil
 }
 
-func (policy BillableWeightPolicy) Reference() VersionReference    { return policy.reference }
-func (policy BillableWeightPolicy) Method() BillableWeightMethod   { return policy.method }
-func (policy BillableWeightPolicy) Rounding() WeightRoundingPolicy { return policy.rounding }
+func (factor VolumetricFactor) Divisor() Decimal               { return factor.divisor }
+func (factor VolumetricFactor) LengthUnit() LengthUnit         { return factor.lengthUnit }
+func (factor VolumetricFactor) WeightUnit() WeightUnit         { return factor.rounding.increment.unit }
+func (factor VolumetricFactor) Rounding() WeightRoundingPolicy { return factor.rounding }
 
-func (policy BillableWeightPolicy) valid() bool {
-	return policy.reference.kind == ArtifactWeightPolicy && policy.reference.valid() && policy.method.valid() && policy.rounding.valid()
+// Apply turns a volume into the volumetric weight the card declares. A volume
+// measured in another unit is refused rather than converted: the conversion
+// rule would itself have to be a versioned declaration.
+func (factor VolumetricFactor) Apply(volume Volume) (Weight, error) {
+	if !factor.valid() || !volume.valid() {
+		return Weight{}, ErrInvalidVolumetricFactor
+	}
+	if volume.unit != factor.lengthUnit {
+		return Weight{}, ErrLengthUnitMismatch
+	}
+	value, err := volume.value.DivRoundToIncrement(factor.divisor, factor.rounding.increment.value, factor.rounding.mode)
+	if err != nil {
+		return Weight{}, err
+	}
+	return NewWeight(value, factor.rounding.increment.unit)
+}
+
+func (factor VolumetricFactor) valid() bool {
+	// RoundingNone is excluded because an exact quotient need not terminate in
+	// base 10; the precision has to be declared rather than left to the code.
+	return factor.divisor.valid() && factor.divisor.Sign() > 0 && factor.lengthUnit.valid() &&
+		factor.rounding.valid() && factor.rounding.mode != RoundingNone
+}
+
+type PricingWeightPolicy struct {
+	reference  VersionReference
+	method     PricingWeightMethod
+	rounding   WeightRoundingPolicy
+	volumetric *VolumetricFactor
+}
+
+func NewPricingWeightPolicy(
+	reference VersionReference,
+	method PricingWeightMethod,
+	rounding WeightRoundingPolicy,
+	volumetric *VolumetricFactor,
+) (PricingWeightPolicy, error) {
+	policy := PricingWeightPolicy{reference: reference, method: method, rounding: rounding}
+	if volumetric != nil {
+		factor := *volumetric
+		policy.volumetric = &factor
+	}
+	if !policy.valid() {
+		return PricingWeightPolicy{}, ErrInvalidRoundingPolicy
+	}
+	return policy, nil
+}
+
+func (policy PricingWeightPolicy) VolumetricFactor() (VolumetricFactor, bool) {
+	if policy.volumetric == nil {
+		return VolumetricFactor{}, false
+	}
+	return *policy.volumetric, true
+}
+
+func (policy PricingWeightPolicy) Reference() VersionReference    { return policy.reference }
+func (policy PricingWeightPolicy) Method() PricingWeightMethod    { return policy.method }
+func (policy PricingWeightPolicy) Rounding() WeightRoundingPolicy { return policy.rounding }
+
+func (policy PricingWeightPolicy) valid() bool {
+	if policy.reference.kind != ArtifactWeightPolicy || !policy.reference.valid() || !policy.method.valid() || !policy.rounding.valid() {
+		return false
+	}
+	// A method that never reads a divisor must not declare one, and MAX cannot
+	// reach a volumetric weight without it.
+	switch policy.method {
+	case PricingWeightActualOnly:
+		return policy.volumetric == nil
+	case PricingWeightMax:
+		return policy.volumetric != nil && policy.volumetric.valid() &&
+			policy.volumetric.rounding.increment.unit == policy.rounding.increment.unit
+	default:
+		return false
+	}
 }
 
 type FixedChargeRule struct {
@@ -82,18 +158,20 @@ func (rule FixedChargeRule) valid() bool {
 }
 
 type PricingPlanVersion struct {
-	reference      VersionReference
-	scope          PricingScopeID
-	direction      PricingDirection
-	purpose        PricingPurpose
-	baseChargeCode ChargeCode
-	aggregation    AggregationMode
-	period         EffectivePeriod
-	rateTable      RateTableVersion
-	weight         BillableWeightPolicy
-	rules          []FixedChargeRule
-	manifest       VersionManifest
-	contentDigest  string
+	reference        VersionReference
+	scope            PricingScopeID
+	direction        PricingDirection
+	purpose          PricingPurpose
+	baseChargeCode   ChargeCode
+	aggregation      AggregationMode
+	period           EffectivePeriod
+	rateTable        RateTableVersion
+	weight           PricingWeightPolicy
+	rules            []FixedChargeRule
+	structures       PricingPlanStructures
+	manifest         VersionManifest
+	canonicalization string
+	contentDigest    string
 }
 
 func NewPricingPlanVersion(
@@ -104,11 +182,12 @@ func NewPricingPlanVersion(
 	baseChargeCode ChargeCode,
 	period EffectivePeriod,
 	rateTable RateTableVersion,
-	weight BillableWeightPolicy,
+	weight PricingWeightPolicy,
 	rules []FixedChargeRule,
+	structures PricingPlanStructures,
 	dependencies ...VersionReference,
 ) (PricingPlanVersion, error) {
-	if reference.kind != ArtifactPricingPlan || !reference.valid() || !scope.valid() || !direction.valid() || !purpose.valid() || !baseChargeCode.valid() || !period.valid() || !rateTable.valid() || !weight.valid() {
+	if reference.kind != ArtifactPricingPlan || !reference.valid() || !scope.valid() || !direction.valid() || !purpose.valid() || !baseChargeCode.valid() || !period.valid() || !rateTable.valid() || !weight.valid() || !structures.valid() {
 		return PricingPlanVersion{}, ErrInvalidPricingPlan
 	}
 	if purpose.pairedDirection() != direction {
@@ -147,48 +226,67 @@ func NewPricingPlanVersion(
 		}
 		return copyOfRules[left].id < copyOfRules[right].id
 	})
+	for _, surcharge := range structures.surchargeRules {
+		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != rateTable.currency {
+			return PricingPlanVersion{}, ErrCurrencyMismatch
+		}
+		if _, exists := seenCodes[surcharge.chargeCode.String()]; exists {
+			return PricingPlanVersion{}, fmt.Errorf("%w: %s", ErrDuplicateChargeCode, surcharge.chargeCode.String())
+		}
+		seenCodes[surcharge.chargeCode.String()] = struct{}{}
+	}
 
-	manifestReferences := make([]VersionReference, 0, 4+len(dependencies))
+	manifestReferences := make([]VersionReference, 0, 4+len(structures.referenceSeries)+len(dependencies))
 	manifestReferences = append(manifestReferences, reference, rateTable.reference, weight.reference, NumericProfileV1Reference())
+	for _, binding := range structures.referenceSeries {
+		manifestReferences = append(manifestReferences, binding.reference)
+	}
 	manifestReferences = append(manifestReferences, dependencies...)
 	manifest, err := NewVersionManifest(manifestReferences)
 	if err != nil {
 		return PricingPlanVersion{}, ErrInvalidPricingPlan
 	}
 	plan := PricingPlanVersion{
-		reference:      reference,
-		scope:          scope,
-		direction:      direction,
-		purpose:        purpose,
-		baseChargeCode: baseChargeCode,
-		aggregation:    AggregationPerPackage,
-		period:         period,
-		rateTable:      rateTable,
-		weight:         weight,
-		rules:          copyOfRules,
-		manifest:       manifest,
+		reference:        reference,
+		scope:            scope,
+		direction:        direction,
+		purpose:          purpose,
+		baseChargeCode:   baseChargeCode,
+		aggregation:      AggregationPerPackage,
+		period:           period,
+		rateTable:        rateTable,
+		weight:           weight,
+		rules:            copyOfRules,
+		structures:       structures,
+		manifest:         manifest,
+		canonicalization: canonicalizationVersion,
 	}
 	plan.contentDigest = calculatePricingPlanContentDigest(plan)
 	return plan, nil
 }
 
-func (plan PricingPlanVersion) Reference() VersionReference        { return plan.reference }
-func (plan PricingPlanVersion) Scope() PricingScopeID              { return plan.scope }
-func (plan PricingPlanVersion) Direction() PricingDirection        { return plan.direction }
-func (plan PricingPlanVersion) Purpose() PricingPurpose            { return plan.purpose }
-func (plan PricingPlanVersion) BaseChargeCode() ChargeCode         { return plan.baseChargeCode }
-func (plan PricingPlanVersion) Aggregation() AggregationMode       { return plan.aggregation }
-func (plan PricingPlanVersion) EffectivePeriod() EffectivePeriod   { return plan.period }
-func (plan PricingPlanVersion) RateTable() RateTableVersion        { return plan.rateTable }
-func (plan PricingPlanVersion) WeightPolicy() BillableWeightPolicy { return plan.weight }
+func (plan PricingPlanVersion) Reference() VersionReference       { return plan.reference }
+func (plan PricingPlanVersion) Scope() PricingScopeID             { return plan.scope }
+func (plan PricingPlanVersion) Direction() PricingDirection       { return plan.direction }
+func (plan PricingPlanVersion) Purpose() PricingPurpose           { return plan.purpose }
+func (plan PricingPlanVersion) BaseChargeCode() ChargeCode        { return plan.baseChargeCode }
+func (plan PricingPlanVersion) Aggregation() AggregationMode      { return plan.aggregation }
+func (plan PricingPlanVersion) EffectivePeriod() EffectivePeriod  { return plan.period }
+func (plan PricingPlanVersion) RateTable() RateTableVersion       { return plan.rateTable }
+func (plan PricingPlanVersion) WeightPolicy() PricingWeightPolicy { return plan.weight }
 func (plan PricingPlanVersion) Rules() []FixedChargeRule {
 	return append([]FixedChargeRule(nil), plan.rules...)
 }
-func (plan PricingPlanVersion) Manifest() VersionManifest { return plan.manifest }
-func (plan PricingPlanVersion) ContentDigest() string     { return plan.contentDigest }
+func (plan PricingPlanVersion) Structures() PricingPlanStructures { return plan.structures }
+func (plan PricingPlanVersion) Manifest() VersionManifest         { return plan.manifest }
+func (plan PricingPlanVersion) ContentDigest() string             { return plan.contentDigest }
+
+// CanonicalizationVersion reports the shape the content digest was produced
+// under. Digests are only comparable within the same value. See ADR-0014.
+func (plan PricingPlanVersion) CanonicalizationVersion() string { return plan.canonicalization }
 
 func (plan PricingPlanVersion) valid() bool {
-	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.manifest.valid() || plan.contentDigest == "" {
+	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.structures.valid() || !plan.manifest.valid() || plan.canonicalization == "" || plan.contentDigest == "" {
 		return false
 	}
 	if !plan.period.Within(plan.rateTable.period) || plan.weight.rounding.increment.unit != plan.rateTable.unit {
@@ -217,12 +315,25 @@ func (plan PricingPlanVersion) valid() bool {
 			return false
 		}
 	}
-	for _, required := range []VersionReference{
+	for _, surcharge := range plan.structures.surchargeRules {
+		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != plan.rateTable.currency {
+			return false
+		}
+		if _, exists := seenCodes[surcharge.chargeCode.String()]; exists {
+			return false
+		}
+		seenCodes[surcharge.chargeCode.String()] = struct{}{}
+	}
+	requiredReferences := []VersionReference{
 		plan.reference,
 		plan.rateTable.reference,
 		plan.weight.reference,
 		NumericProfileV1Reference(),
-	} {
+	}
+	for _, binding := range plan.structures.referenceSeries {
+		requiredReferences = append(requiredReferences, binding.reference)
+	}
+	for _, required := range requiredReferences {
 		found := false
 		for _, reference := range plan.manifest.references {
 			if reference == required {

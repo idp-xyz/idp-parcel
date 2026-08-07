@@ -2,7 +2,8 @@
 
 Status: Accepted  
 Date: 2026-08-07  
-Supersedes: [ADR-0011](./0011-parcel-pricing-context-within-idp-parcel.md)
+Supersedes: [ADR-0011](./0011-parcel-pricing-context-within-idp-parcel.md)  
+Amended by: [ADR-0013](./0013-pricing-owns-versioned-external-reference-series.md)（限定下文 Decision 中「它只消费其他上下文提供的事实快照」一句；本记录正文不改写，边界划分不变）
 
 ## Context
 

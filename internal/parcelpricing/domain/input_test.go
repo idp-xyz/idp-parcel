@@ -41,7 +41,7 @@ func TestPricingInputSnapshotDerivesFeaturesFromItsDimensions(t *testing.T) {
 // illegal request. The context keeps those two outcomes apart on purpose, so
 // the two must not arrive as the same error.
 func TestPricingInputSnapshotWithoutDimensionsReportsThemMissingNotUnusable(t *testing.T) {
-	input := syntheticInput(t, "1", nil, "Z1")
+	input := syntheticInput(t, "1", "Z1")
 
 	_, err := input.Features()
 	if !errors.Is(err, domain.ErrMissingDimensions) {
@@ -80,7 +80,7 @@ func TestPricingInputSnapshotAcceptsAnEstimateBeforeAnyPackageExists(t *testing.
 // let a replay of one pass as a faithful replay of the other, which is the one
 // thing the digest exists to prevent.
 func TestEvaluationDigestSeparatesInputsThatDifferOnlyInDimensions(t *testing.T) {
-	plan := syntheticPlan(t, "digest-dimensions", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	plan := syntheticPlan(t, "digest-dimensions", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 
 	compact := evaluate(t, "eval-compact", plan,
 		syntheticInputWithDimensions(t, "1", "Z1", dimensions(t, "10", "10", "10", domain.LengthUnitInch)))
@@ -97,7 +97,7 @@ func TestEvaluationDigestSeparatesInputsThatDifferOnlyInDimensions(t *testing.T)
 // replay could not tell an estimate apart from the evaluation that is allowed
 // to become money, which is exactly the confusion the two kinds exist to stop.
 func TestEvaluationDigestSeparatesEstimateFromPackageSharingAReference(t *testing.T) {
-	plan := syntheticPlan(t, "digest-subject", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	plan := syntheticPlan(t, "digest-subject", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 	estimate, err := domain.NewEstimateSubject("shared-reference")
 	if err != nil {
 		t.Fatalf("estimate subject: %v", err)

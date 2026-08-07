@@ -10,13 +10,15 @@ import (
 
 func TestEvaluatePricingCalculatesMaxWeightAndOrderedFixedCharges(t *testing.T) {
 	plan := syntheticPlan(
-		t, "sell-1", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightMax,
+		t, "sell-1", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightMax,
 		[]domain.FixedChargeRule{
 			fixedRule(t, "discount", domain.ChargeEffectDeduct, "1", 2),
 			fixedRule(t, "residential", domain.ChargeEffectAdd, "2", 1),
 		},
 	)
-	input := syntheticInput(t, "1.2", stringPtr("1.6"), "Z1")
+	// 20 cm cube is 8000 cm³, which the synthetic card's 5000 divisor turns
+	// into 1.6 kg — above the 1.2 kg actual weight, so MAX takes it.
+	input := syntheticInputWithDimensions(t, "1.2", "Z1", dimensions(t, "20", "20", "20", domain.LengthUnitCentimeter))
 	evaluation := evaluate(t, "eval-sell-1", plan, input)
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %v", evaluation.Status(), evaluation.Issues())
@@ -25,18 +27,18 @@ func TestEvaluatePricingCalculatesMaxWeightAndOrderedFixedCharges(t *testing.T) 
 	if !ok || total.Amount().String() != "11" || total.Currency().String() != "USD" {
 		t.Fatalf("total = %#v, present=%v", total, ok)
 	}
-	billable, ok := evaluation.BillableWeight()
-	if !ok || billable.RawWeight().Value().String() != "1.6" || billable.RoundedWeight().Value().String() != "2" {
-		t.Fatalf("billable = %#v, present=%v", billable, ok)
+	pricingWeight, ok := evaluation.PricingWeight()
+	if !ok || pricingWeight.RawWeight().Value().String() != "1.6" || pricingWeight.RoundedWeight().Value().String() != "2" {
+		t.Fatalf("pricing weight = %#v, present=%v", pricingWeight, ok)
 	}
 	lines := evaluation.ChargeLines()
 	if len(lines) != 3 || lines[0].Kind() != domain.ChargeLineBase || lines[0].Code().String() != "BASE_FREIGHT" || lines[1].ID() != "fixed:residential" || lines[1].Code().String() != "RULE_RESIDENTIAL" || lines[2].ID() != "fixed:discount" || lines[2].Code().String() != "RULE_DISCOUNT" {
 		t.Fatalf("lines = %#v", lines)
 	}
-	if lines[0].Scope() != domain.ChargeScopePackage || lines[0].Basis() != domain.ChargeBasisRateEntry || lines[0].Method() != domain.ChargeMethodLookup {
+	if lines[0].Scope() != domain.ChargeScopePackage || lines[0].Basis() != domain.ChargeBasisRateEntry || lines[0].Method() != domain.ChargeMethodTableLookup {
 		t.Fatalf("base line semantic fields = %s/%s/%s", lines[0].Scope(), lines[0].Basis(), lines[0].Method())
 	}
-	if lines[1].Scope() != domain.ChargeScopePackage || lines[1].Basis() != domain.ChargeBasisFixedAmount || lines[1].Method() != domain.ChargeMethodFixed {
+	if lines[1].Scope() != domain.ChargeScopePackage || lines[1].Basis() != domain.ChargeBasisFixedAmount || lines[1].Method() != domain.ChargeMethodFixedAmount {
 		t.Fatalf("fixed line semantic fields = %s/%s/%s", lines[1].Scope(), lines[1].Basis(), lines[1].Method())
 	}
 	if evaluation.SemanticDigest() == "" {
@@ -68,7 +70,7 @@ func TestBaseChargeCodeIsStableAcrossRateEntries(t *testing.T) {
 	}
 	table, err := domain.NewRateTableVersion(
 		versionReference(t, domain.ArtifactRateTable, "table-tiered", "v1"),
-		domain.RateTableKindWeightZone,
+		domain.RateTableFamilyWeightZone,
 		currency,
 		domain.WeightUnitKilogram,
 		effectivePeriod(t),
@@ -81,7 +83,7 @@ func TestBaseChargeCodeIsStableAcrossRateEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rounding: %v", err)
 	}
-	weightPolicy, err := domain.NewBillableWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-tiered", "v1"), domain.BillableWeightActualOnly, rounding)
+	weightPolicy, err := domain.NewPricingWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-tiered", "v1"), domain.PricingWeightActualOnly, rounding, nil)
 	if err != nil {
 		t.Fatalf("weight policy: %v", err)
 	}
@@ -95,12 +97,13 @@ func TestBaseChargeCodeIsStableAcrossRateEntries(t *testing.T) {
 		table,
 		weightPolicy,
 		nil,
+		domain.PricingPlanStructures{},
 	)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
-	light := evaluate(t, "eval-light", plan, syntheticInput(t, "0.5", nil, "Z1")).ChargeLines()[0]
-	heavy := evaluate(t, "eval-heavy", plan, syntheticInput(t, "1.5", nil, "Z1")).ChargeLines()[0]
+	light := evaluate(t, "eval-light", plan, syntheticInput(t, "0.5", "Z1")).ChargeLines()[0]
+	heavy := evaluate(t, "eval-heavy", plan, syntheticInput(t, "1.5", "Z1")).ChargeLines()[0]
 	if light.Code() != heavy.Code() || light.Code().String() != "BASE_FREIGHT" {
 		t.Fatalf("base codes = %s/%s", light.Code().String(), heavy.Code().String())
 	}
@@ -110,24 +113,24 @@ func TestBaseChargeCodeIsStableAcrossRateEntries(t *testing.T) {
 }
 
 func TestEvaluatePricingReturnsPendingWithoutTotalForMissingFactsOrRate(t *testing.T) {
-	maxPlan := syntheticPlan(t, "pending-weight", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "8", domain.BillableWeightMax, nil)
-	evaluation := evaluate(t, "eval-pending-weight", maxPlan, syntheticInput(t, "1", nil, "Z1"))
-	if evaluation.Status() != domain.EvaluationPending || hasTotal(evaluation) || evaluation.Issues()[0].Code() != "VOLUMETRIC_WEIGHT_REQUIRED" {
-		t.Fatalf("missing volumetric evaluation = %#v", evaluation)
+	maxPlan := syntheticPlan(t, "pending-weight", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "8", domain.PricingWeightMax, nil)
+	evaluation := evaluate(t, "eval-pending-weight", maxPlan, syntheticInput(t, "1", "Z1"))
+	if evaluation.Status() != domain.EvaluationPending || hasTotal(evaluation) || evaluation.Issues()[0].Code() != "DIMENSIONS_REQUIRED" {
+		t.Fatalf("missing dimensions evaluation = %#v", evaluation)
 	}
 
-	actualPlan := syntheticPlan(t, "pending-rate", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "8", domain.BillableWeightActualOnly, nil)
-	evaluation = evaluate(t, "eval-pending-rate", actualPlan, syntheticInput(t, "1", nil, "UNKNOWN"))
+	actualPlan := syntheticPlan(t, "pending-rate", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "8", domain.PricingWeightActualOnly, nil)
+	evaluation = evaluate(t, "eval-pending-rate", actualPlan, syntheticInput(t, "1", "UNKNOWN"))
 	if evaluation.Status() != domain.EvaluationPending || hasTotal(evaluation) || evaluation.Issues()[0].Code() != "RATE_NOT_FOUND" {
 		t.Fatalf("missing rate evaluation = %#v", evaluation)
 	}
 }
 
 func TestEvaluatePricingFailsWithoutFormalTotalWhenDeductionExceedsSubtotal(t *testing.T) {
-	plan := syntheticPlan(t, "negative", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, []domain.FixedChargeRule{
+	plan := syntheticPlan(t, "negative", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, []domain.FixedChargeRule{
 		fixedRule(t, "too-large-discount", domain.ChargeEffectDeduct, "11", 1),
 	})
-	evaluation := evaluate(t, "eval-negative", plan, syntheticInput(t, "1", nil, "Z1"))
+	evaluation := evaluate(t, "eval-negative", plan, syntheticInput(t, "1", "Z1"))
 	if evaluation.Status() != domain.EvaluationFailed || hasTotal(evaluation) {
 		t.Fatalf("evaluation = %#v", evaluation)
 	}
@@ -137,9 +140,9 @@ func TestEvaluatePricingFailsWithoutFormalTotalWhenDeductionExceedsSubtotal(t *t
 }
 
 func TestBuyAndSellPlansRemainIndependentAndReplayUsesFrozenManifest(t *testing.T) {
-	sellPlan := syntheticPlan(t, "sell-independent", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", domain.BillableWeightActualOnly, nil)
-	buyPlan := syntheticPlan(t, "buy-independent", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "10", domain.BillableWeightActualOnly, nil)
-	input := syntheticInput(t, "1", nil, "Z1")
+	sellPlan := syntheticPlan(t, "sell-independent", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", domain.PricingWeightActualOnly, nil)
+	buyPlan := syntheticPlan(t, "buy-independent", domain.PricingDirectionBuy, domain.PricingPurposeSupplierCost, "10", domain.PricingWeightActualOnly, nil)
+	input := syntheticInput(t, "1", "Z1")
 	sell := evaluate(t, "eval-sell", sellPlan, input)
 	buy := evaluate(t, "eval-buy", buyPlan, input)
 	if sell.Direction() != domain.PricingDirectionSell || buy.Direction() != domain.PricingDirectionBuy {
@@ -175,7 +178,7 @@ func TestBuyAndSellPlansRemainIndependentAndReplayUsesFrozenManifest(t *testing.
 		t.Fatalf("synthetic evidence upgrade error = %v", err)
 	}
 
-	changedPlan := syntheticPlan(t, "sell-independent-v2", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "16", domain.BillableWeightActualOnly, nil)
+	changedPlan := syntheticPlan(t, "sell-independent-v2", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "16", domain.PricingWeightActualOnly, nil)
 	conflict, err := domain.ReplayPricingEvaluation(
 		mustValue(t, domain.NewEvaluationID, "eval-sell-replay-conflict"), sell, changedPlan, domain.EvidenceSynthetic,
 	)
@@ -188,8 +191,8 @@ func TestBuyAndSellPlansRemainIndependentAndReplayUsesFrozenManifest(t *testing.
 }
 
 func TestEvaluationOutputsAreDefensivelyCopied(t *testing.T) {
-	plan := syntheticPlan(t, "copy", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
-	evaluation := evaluate(t, "eval-copy", plan, syntheticInput(t, "1", nil, "Z1"))
+	plan := syntheticPlan(t, "copy", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
+	evaluation := evaluate(t, "eval-copy", plan, syntheticInput(t, "1", "Z1"))
 	lines := evaluation.ChargeLines()
 	lines[0] = domain.ChargeLine{}
 	if len(evaluation.ChargeLines()) != 1 || evaluation.ChargeLines()[0].ID() != "base:entry-copy" {
@@ -203,15 +206,15 @@ func TestEvaluationOutputsAreDefensivelyCopied(t *testing.T) {
 }
 
 func TestReplayDetectsChangedPlanContentBehindSameVersionReferences(t *testing.T) {
-	originalPlan := syntheticPlan(t, "content-fingerprint", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", domain.BillableWeightActualOnly, nil)
-	changedRatePlan := syntheticPlan(t, "content-fingerprint", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "16", domain.BillableWeightActualOnly, nil)
+	originalPlan := syntheticPlan(t, "content-fingerprint", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", domain.PricingWeightActualOnly, nil)
+	changedRatePlan := syntheticPlan(t, "content-fingerprint", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "16", domain.PricingWeightActualOnly, nil)
 	if !originalPlan.Manifest().Equal(changedRatePlan.Manifest()) {
 		t.Fatal("test plans must share the same version manifest")
 	}
 	if originalPlan.ContentDigest() == changedRatePlan.ContentDigest() {
 		t.Fatal("changed rate amount did not change the plan content digest")
 	}
-	original := evaluate(t, "eval-content-original", originalPlan, syntheticInput(t, "1", nil, "Z1"))
+	original := evaluate(t, "eval-content-original", originalPlan, syntheticInput(t, "1", "Z1"))
 	replay, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-content-replay"), original, changedRatePlan, domain.EvidenceSynthetic)
 	if err != nil {
 		t.Fatalf("replay: %v", err)
@@ -222,15 +225,15 @@ func TestReplayDetectsChangedPlanContentBehindSameVersionReferences(t *testing.T
 }
 
 func TestReplayDetectsChangedChargeCodeBehindSameVersionReferences(t *testing.T) {
-	originalPlan := syntheticPlanWithBaseCode(t, "charge-code-replay", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", "BASE_FREIGHT", domain.BillableWeightActualOnly, nil)
-	changedPlan := syntheticPlanWithBaseCode(t, "charge-code-replay", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", "TRANSPORTATION", domain.BillableWeightActualOnly, nil)
+	originalPlan := syntheticPlanWithBaseCode(t, "charge-code-replay", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", "BASE_FREIGHT", domain.PricingWeightActualOnly, nil)
+	changedPlan := syntheticPlanWithBaseCode(t, "charge-code-replay", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "15", "TRANSPORTATION", domain.PricingWeightActualOnly, nil)
 	if !originalPlan.Manifest().Equal(changedPlan.Manifest()) {
 		t.Fatal("test plans must share the same version manifest")
 	}
 	if originalPlan.ContentDigest() == changedPlan.ContentDigest() {
 		t.Fatal("changed charge code did not change the plan content digest")
 	}
-	original := evaluate(t, "eval-charge-code-original", originalPlan, syntheticInput(t, "1", nil, "Z1"))
+	original := evaluate(t, "eval-charge-code-original", originalPlan, syntheticInput(t, "1", "Z1"))
 	replay, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-charge-code-replay"), original, changedPlan, domain.EvidenceSynthetic)
 	if err != nil {
 		t.Fatalf("replay: %v", err)
@@ -241,7 +244,7 @@ func TestReplayDetectsChangedChargeCodeBehindSameVersionReferences(t *testing.T)
 }
 
 func TestEvaluationRequiresBusinessTimeInsidePlanAndRateTablePeriods(t *testing.T) {
-	plan := syntheticPlan(t, "period", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	plan := syntheticPlan(t, "period", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
 	for _, test := range []struct {
@@ -254,7 +257,7 @@ func TestEvaluationRequiresBusinessTimeInsidePlanAndRateTablePeriods(t *testing.
 		{"before start", start.Add(-time.Nanosecond), domain.EvaluationConflict},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			evaluation := evaluate(t, "eval-period-"+test.name, plan, syntheticInputAt(t, "1", nil, "Z1", test.at))
+			evaluation := evaluate(t, "eval-period-"+test.name, plan, syntheticInputAt(t, "1", "Z1", test.at))
 			if evaluation.Status() != test.want {
 				t.Fatalf("status = %s, want %s; issues = %#v", evaluation.Status(), test.want, evaluation.Issues())
 			}
@@ -268,8 +271,4 @@ func TestEvaluationRequiresBusinessTimeInsidePlanAndRateTablePeriods(t *testing.
 func hasTotal(evaluation domain.PricingEvaluation) bool {
 	_, ok := evaluation.Total()
 	return ok
-}
-
-func stringPtr(value string) *string {
-	return &value
 }
