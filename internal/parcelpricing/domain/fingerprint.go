@@ -213,16 +213,33 @@ func canonicalChargeLineValue(line ChargeLine) canonicalChargeLineDocument {
 	}
 }
 
+type canonicalDimensionsDocument struct {
+	Longest  string `json:"longest"`
+	Second   string `json:"second"`
+	Shortest string `json:"shortest"`
+	Unit     string `json:"unit"`
+}
+
+func canonicalDimensionsValue(dimensions Dimensions) canonicalDimensionsDocument {
+	return canonicalDimensionsDocument{
+		Longest:  dimensions.longest.String(),
+		Second:   dimensions.second.String(),
+		Shortest: dimensions.shortest.String(),
+		Unit:     dimensions.unit.String(),
+	}
+}
+
 type canonicalEvaluationInput struct {
-	Tenant     string                      `json:"tenant"`
-	Scope      string                      `json:"scope"`
-	Package    string                      `json:"package"`
-	Zone       string                      `json:"zone"`
-	Actual     string                      `json:"actual"`
-	Unit       string                      `json:"unit"`
-	Volumetric string                      `json:"volumetric,omitempty"`
-	BusinessAt string                      `json:"business_at"`
-	Facts      []canonicalVersionReference `json:"facts"`
+	Tenant     string                       `json:"tenant"`
+	Scope      string                       `json:"scope"`
+	Package    string                       `json:"package"`
+	Zone       string                       `json:"zone"`
+	Actual     string                       `json:"actual"`
+	Unit       string                       `json:"unit"`
+	Volumetric string                       `json:"volumetric,omitempty"`
+	Dimensions *canonicalDimensionsDocument `json:"dimensions,omitempty"`
+	BusinessAt string                       `json:"business_at"`
+	Facts      []canonicalVersionReference  `json:"facts"`
 }
 
 type canonicalEvaluation struct {
@@ -272,6 +289,10 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	}
 	if volumetric, ok := evaluation.input.VolumetricWeight(); ok {
 		input.Volumetric = volumetric.value.String()
+	}
+	if sides, ok := evaluation.input.Dimensions(); ok {
+		declared := canonicalDimensionsValue(sides)
+		input.Dimensions = &declared
 	}
 	manifest := make([]canonicalVersionReference, 0, len(evaluation.manifest.references))
 	for _, reference := range evaluation.manifest.references {

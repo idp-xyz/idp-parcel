@@ -22,6 +22,7 @@ func TestSyntheticContractPreservesFactReferencesAcrossEvaluationAndReplay(t *te
 		"Z1",
 		weight(t, "1.2", domain.WeightUnitKilogram),
 		nil,
+		nil,
 		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
 		factReference,
 	)

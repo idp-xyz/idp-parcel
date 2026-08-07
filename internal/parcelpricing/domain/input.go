@@ -13,6 +13,7 @@ type PricingInputSnapshot struct {
 	zone             string
 	actualWeight     Weight
 	volumetricWeight *Weight
+	dimensions       *Dimensions
 	businessAt       time.Time
 	factReferences   []VersionedFactReference
 }
@@ -24,6 +25,7 @@ func NewPricingInputSnapshot(
 	zone string,
 	actualWeight Weight,
 	volumetricWeight *Weight,
+	dimensions *Dimensions,
 	businessAt time.Time,
 	factReferences ...VersionedFactReference,
 ) (PricingInputSnapshot, error) {
@@ -38,6 +40,9 @@ func NewPricingInputSnapshot(
 			return PricingInputSnapshot{}, ErrWeightUnitMismatch
 		}
 	}
+	if dimensions != nil && !dimensions.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
 	copyOfReferences := append([]VersionedFactReference(nil), factReferences...)
 	for _, reference := range copyOfReferences {
 		if !reference.valid() {
@@ -49,6 +54,11 @@ func NewPricingInputSnapshot(
 		copy := *volumetricWeight
 		volumetricCopy = &copy
 	}
+	var dimensionsCopy *Dimensions
+	if dimensions != nil {
+		copy := *dimensions
+		dimensionsCopy = &copy
+	}
 	return PricingInputSnapshot{
 		tenantID:         tenantID,
 		scope:            scope,
@@ -56,6 +66,7 @@ func NewPricingInputSnapshot(
 		zone:             zone,
 		actualWeight:     actualWeight,
 		volumetricWeight: volumetricCopy,
+		dimensions:       dimensionsCopy,
 		businessAt:       businessAt,
 		factReferences:   copyOfReferences,
 	}, nil
@@ -78,11 +89,34 @@ func (input PricingInputSnapshot) VolumetricWeight() (Weight, bool) {
 	return *input.volumetricWeight, true
 }
 
+func (input PricingInputSnapshot) Dimensions() (Dimensions, bool) {
+	if input.dimensions == nil {
+		return Dimensions{}, false
+	}
+	return *input.dimensions, true
+}
+
+// Features derives the decidable quantities once, so every rule in one
+// evaluation reads the same values rather than each re-deriving them.
+func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
+	if !input.valid() {
+		return PackageFeatures{}, ErrPricingInputInvalid
+	}
+	sides, declared := input.Dimensions()
+	if !declared {
+		return PackageFeatures{}, ErrMissingDimensions
+	}
+	return NewPackageFeatures(sides)
+}
+
 func (input PricingInputSnapshot) valid() bool {
 	if !input.tenantID.valid() || !input.scope.valid() || !input.packageID.valid() || strings.TrimSpace(input.zone) == "" || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
 		return false
 	}
 	if input.volumetricWeight != nil && (!input.volumetricWeight.valid() || input.volumetricWeight.unit != input.actualWeight.unit) {
+		return false
+	}
+	if input.dimensions != nil && !input.dimensions.valid() {
 		return false
 	}
 	for _, reference := range input.factReferences {

@@ -31,6 +31,40 @@ func weight(t testing.TB, value string, unit domain.WeightUnit) domain.Weight {
 	return result
 }
 
+func dimensions(t testing.TB, length, width, height string, unit domain.LengthUnit) domain.Dimensions {
+	t.Helper()
+	result, err := domain.NewDimensions(decimal(t, length), decimal(t, width), decimal(t, height), unit)
+	if err != nil {
+		t.Fatalf("dimensions %sx%sx%s %s: %v", length, width, height, unit, err)
+	}
+	return result
+}
+
+func length(t testing.TB, value string, unit domain.LengthUnit) domain.Length {
+	t.Helper()
+	result, err := domain.NewLength(decimal(t, value), unit)
+	if err != nil {
+		t.Fatalf("length %s %s: %v", value, unit, err)
+	}
+	return result
+}
+
+func features(t testing.TB, sides domain.Dimensions) domain.PackageFeatures {
+	t.Helper()
+	result, err := domain.NewPackageFeatures(sides)
+	if err != nil {
+		t.Fatalf("package features: %v", err)
+	}
+	return result
+}
+
+func assertLength(t testing.TB, label string, actual domain.Length, expected string, unit domain.LengthUnit) {
+	t.Helper()
+	if actual.Value().String() != expected || actual.Unit() != unit {
+		t.Fatalf("%s = %s %s, want %s %s", label, actual.Value().String(), actual.Unit(), expected, unit)
+	}
+}
+
 func money(t testing.TB, value string, currency domain.Currency) domain.Money {
 	t.Helper()
 	result, err := domain.NewMoney(decimal(t, value), currency)
@@ -152,6 +186,24 @@ func syntheticInput(t testing.TB, actual string, volumetric *string, zone string
 	return syntheticInputAt(t, actual, volumetric, zone, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
 }
 
+func syntheticInputWithDimensions(t testing.TB, actual, zone string, sides domain.Dimensions) domain.PricingInputSnapshot {
+	t.Helper()
+	input, err := domain.NewPricingInputSnapshot(
+		mustValue(t, domain.NewTenantID, "tenant-1"),
+		mustValue(t, domain.NewPricingScopeID, "scope-1"),
+		mustValue(t, domain.NewPackageID, "package-1"),
+		zone,
+		weight(t, actual, domain.WeightUnitKilogram),
+		nil,
+		&sides,
+		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("pricing input: %v", err)
+	}
+	return input
+}
+
 func syntheticInputAt(t testing.TB, actual string, volumetric *string, zone string, businessAt time.Time) domain.PricingInputSnapshot {
 	t.Helper()
 	var volumetricWeight *domain.Weight
@@ -166,6 +218,7 @@ func syntheticInputAt(t testing.TB, actual string, volumetric *string, zone stri
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
 		volumetricWeight,
+		nil,
 		businessAt,
 	)
 	if err != nil {

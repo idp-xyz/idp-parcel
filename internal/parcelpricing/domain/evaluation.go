@@ -458,6 +458,8 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("RATE_NOT_FOUND", err.Error()))
 	case errors.Is(err, ErrWeightUnitMismatch):
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("WEIGHT_UNIT_MISMATCH", err.Error()))
+	case errors.Is(err, ErrLengthUnitMismatch):
+		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("LENGTH_UNIT_MISMATCH", err.Error()))
 	case errors.Is(err, ErrRateTableConflict), errors.Is(err, ErrRateIntervalOverlap):
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("RATE_TABLE_CONFLICT", err.Error()))
 	case errors.Is(err, ErrNegativeChargeTotal):
