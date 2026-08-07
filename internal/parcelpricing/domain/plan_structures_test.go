@@ -336,9 +336,14 @@ func structuresWithCalculation(t testing.TB, calculation domain.SurchargeCalcula
 // series the snapshot never supplied still must not complete — the rate is
 // evidence this evaluation was not handed, and charging the base rate alone
 // would under-bill silently while looking like a finished evaluation.
+//
+// Dimensions are supplied so the missing reading is the only shortfall. The
+// fixture also declares a surcharge, and a snapshot without dimensions would be
+// short of two things at once, leaving which one gets reported up to the order
+// the evaluator happens to check them in.
 func TestEvaluationDoesNotCompleteWhenABoundSeriesWasNotSupplied(t *testing.T) {
 	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
-	evaluation := evaluate(t, "eval-declared-structures", plan, syntheticInput(t, "1", "Z1"))
+	evaluation := evaluateWithSides(t, plan, "eval-declared-structures", "50")
 	if evaluation.Status() == domain.EvaluationCompleted {
 		t.Fatal("evaluation completed while a bound reference series had no reading")
 	}

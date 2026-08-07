@@ -564,6 +564,7 @@ type PricingPlanStructures struct {
 	surchargeRules  []SurchargeRule
 	dependencies    []ChargeDependency
 	referenceSeries []ReferenceSeriesBinding
+	exclusions      []ExclusionRule
 }
 
 func NewPricingPlanStructures(
@@ -648,10 +649,41 @@ func (structures PricingPlanStructures) ReferenceSeries() []ReferenceSeriesBindi
 	return append([]ReferenceSeriesBinding(nil), structures.referenceSeries...)
 }
 
+// WithExclusionRules returns the structures carrying the card's refusal
+// clauses. It is a builder rather than a constructor parameter because a plan
+// that declares none is the common case and the existing three parameters
+// already describe what a card charges; refusal is a different axis.
+func (structures PricingPlanStructures) WithExclusionRules(rules ...ExclusionRule) (PricingPlanStructures, error) {
+	copyOfRules := append([]ExclusionRule(nil), rules...)
+	seen := make(map[string]struct{}, len(copyOfRules))
+	for _, rule := range copyOfRules {
+		if !rule.valid() {
+			return PricingPlanStructures{}, ErrInvalidExclusionRule
+		}
+		if _, exists := seen[rule.id]; exists {
+			return PricingPlanStructures{}, fmt.Errorf("%w: %s", ErrInvalidExclusionRule, rule.id)
+		}
+		seen[rule.id] = struct{}{}
+	}
+	sort.SliceStable(copyOfRules, func(left, right int) bool {
+		return copyOfRules[left].id < copyOfRules[right].id
+	})
+	structures.exclusions = copyOfRules
+	if !structures.valid() {
+		return PricingPlanStructures{}, ErrInvalidPlanStructures
+	}
+	return structures, nil
+}
+
+func (structures PricingPlanStructures) ExclusionRules() []ExclusionRule {
+	return append([]ExclusionRule(nil), structures.exclusions...)
+}
+
 // Declared reports whether the plan declares any structure the evaluator must
 // execute before it can produce a complete amount.
 func (structures PricingPlanStructures) Declared() bool {
-	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 || len(structures.referenceSeries) > 0
+	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 ||
+		len(structures.referenceSeries) > 0 || len(structures.exclusions) > 0
 }
 
 func (structures PricingPlanStructures) valid() bool {
@@ -704,6 +736,14 @@ func (structures PricingPlanStructures) valid() bool {
 			return false
 		}
 		seenKinds[binding.kind] = struct{}{}
+	}
+	for index, rule := range structures.exclusions {
+		if !rule.valid() {
+			return false
+		}
+		if index > 0 && structures.exclusions[index-1].id >= rule.id {
+			return false
+		}
 	}
 	return true
 }

@@ -375,6 +375,20 @@ func canonicalChargeDependencyValue(dependency ChargeDependency) canonicalCharge
 	return document
 }
 
+type canonicalExclusionRuleDocument struct {
+	ID        string                   `json:"id"`
+	Clause    string                   `json:"clause"`
+	Condition canonicalTriggerDocument `json:"condition"`
+}
+
+func canonicalExclusionRuleValue(rule ExclusionRule) canonicalExclusionRuleDocument {
+	return canonicalExclusionRuleDocument{
+		ID:        rule.id,
+		Clause:    rule.clause,
+		Condition: canonicalTriggerValue(rule.condition),
+	}
+}
+
 type canonicalReferenceSeriesDocument struct {
 	Kind      string                    `json:"kind"`
 	Reference canonicalVersionReference `json:"reference"`
@@ -425,6 +439,10 @@ type canonicalPricingPlan struct {
 	Dependencies     []canonicalChargeDependencyDocument `json:"charge_dependencies"`
 	ReferenceSeries  []canonicalReferenceSeriesDocument  `json:"reference_series"`
 	Manifest         []canonicalVersionReference         `json:"manifest"`
+	// Omitted when the plan refuses nothing, so every plan released before
+	// exclusion rules existed canonicalizes to the same bytes and keeps its
+	// digest comparable without spending a canonicalization version.
+	Exclusions []canonicalExclusionRuleDocument `json:"exclusions,omitempty"`
 }
 
 func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
@@ -448,8 +466,13 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 	for _, reference := range plan.manifest.references {
 		manifest = append(manifest, canonicalReference(reference))
 	}
+	var exclusions []canonicalExclusionRuleDocument
+	for _, rule := range plan.structures.exclusions {
+		exclusions = append(exclusions, canonicalExclusionRuleValue(rule))
+	}
 	document := canonicalPricingPlan{
 		Canonicalization: canonicalizationVersion,
+		Exclusions:       exclusions,
 		Reference:        canonicalReference(plan.reference),
 		Scope:            plan.scope.String(),
 		Direction:        plan.direction.String(),

@@ -13,11 +13,18 @@ const (
 	EvaluationPending   EvaluationStatus = "PENDING"
 	EvaluationConflict  EvaluationStatus = "CONFLICT"
 	EvaluationFailed    EvaluationStatus = "FAILED"
+	// EvaluationUnratable is the card saying no rather than the evaluator
+	// falling short. CONTEXT keeps the four outcomes from standing in for one
+	// another: PENDING promises that supplying more facts can produce a price,
+	// which is false here, and FAILED already means a technical or structural
+	// inability, which a caller answers with a retry rather than with a
+	// business decision.
+	EvaluationUnratable EvaluationStatus = "UNRATABLE"
 )
 
 func (status EvaluationStatus) valid() bool {
 	switch status {
-	case EvaluationCompleted, EvaluationPending, EvaluationConflict, EvaluationFailed:
+	case EvaluationCompleted, EvaluationPending, EvaluationConflict, EvaluationFailed, EvaluationUnratable:
 		return true
 	default:
 		return false
@@ -235,11 +242,39 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
-	// Features are derived before the weight is fixed because a conditional
-	// minimum is decided by a predicate yet raises the plan-level pricing
-	// weight, which the base band is then read with. Deriving them after the
-	// weight would make the raise arrive too late to affect the band it is
-	// meant to decide.
+	// Features are derived before anything is priced. Two declarations need
+	// them this early: a conditional minimum is decided by a predicate yet
+	// raises the plan-level pricing weight the base band is read with, and an
+	// exclusion clause settles the outcome outright.
+	var features PackageFeatures
+	haveFeatures := false
+	if len(request.plan.structures.surchargeRules) > 0 || len(request.plan.structures.exclusions) > 0 {
+		derived, featuresErr := request.input.Features()
+		if featuresErr != nil {
+			// A predicate over dimensions can be neither confirmed nor excluded
+			// without them: missing evidence, not a broken request.
+			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
+		}
+		features, haveFeatures = derived, true
+	}
+
+	// Refusal is settled before any shortfall can be reported. A missing series
+	// reading is 待判断, which tells the caller that supplying it will produce a
+	// price; on a parcel the card refuses that promise is false and the caller
+	// would keep retrying something that can never have one.
+	if haveFeatures {
+		rule, excluded, exclusionErr := request.plan.structures.resolveExclusions(features)
+		if exclusionErr != nil {
+			return evaluation.withCalculationError(exclusionErr)
+		}
+		if excluded {
+			evaluation.explanation = append(evaluation.explanation,
+				fmt.Sprintf("exclusion %s refused the parcel: %s; %s", rule.id, rule.clause, rule.condition.describe()))
+			return evaluation.withOutcome(EvaluationUnratable,
+				newEvaluationIssue("EXCLUDED_BY_RATE_CARD", fmt.Sprintf("%s: %s", rule.id, rule.clause)))
+		}
+	}
+
 	// A bound series is resolved from the snapshot before anything is priced: a
 	// missing reading is evidence this evaluation was not handed, a reading of
 	// another version is a disagreement about which rate the plan declared.
@@ -258,18 +293,6 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		reading := series[binding.kind]
 		evaluation.explanation = append(evaluation.explanation,
 			fmt.Sprintf("reference series %s resolved to %s from %s", binding.kind, reading.value.String(), reading.reference.ID()))
-	}
-
-	var features PackageFeatures
-	haveFeatures := false
-	if len(request.plan.structures.surchargeRules) > 0 {
-		derived, featuresErr := request.input.Features()
-		if featuresErr != nil {
-			// A predicate over dimensions can be neither confirmed nor excluded
-			// without them: missing evidence, not a broken request.
-			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("SURCHARGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
-		}
-		features, haveFeatures = derived, true
 	}
 
 	var floors []Weight

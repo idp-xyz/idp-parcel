@@ -35,6 +35,7 @@ var (
 	ErrRateTableConflict                  = errors.New("parcel pricing: rate table conflict")
 	ErrNoMatchingRate                     = errors.New("parcel pricing: no matching rate")
 	ErrInvalidRoundingPolicy              = errors.New("parcel pricing: invalid rounding policy")
+	ErrInvalidExclusionRule               = errors.New("parcel pricing: invalid exclusion rule")
 	ErrInvalidChargeRule                  = errors.New("parcel pricing: invalid charge rule")
 	ErrDuplicateChargeRule                = errors.New("parcel pricing: duplicate charge rule")
 	ErrDuplicateChargeRuleOrder           = errors.New("parcel pricing: duplicate charge rule order")
