@@ -125,7 +125,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 |---|---|---|
 | 治理案例概念、案例分层、通过标准 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的价卡治理案例 |
 | 136 个案例作为验收证据 | 已吸收但隔离 | [parcel-pricing/CONTEXT.md 源完整性门禁](../domain/parcel-pricing/CONTEXT.md)：83 例 `NORMATIVE_SYNTHETIC` 与 12 例 `UPSTREAM_CONSISTENCY` 只作隔离 `S`，41 例 `SOURCE_RATE_CARD` 必须隔离 |
-| `source_discrepancies` 声明的四条源价卡差异 | **待决（docs 未记）** | `foo` 自己声明了 `SRC-DISC-001` 至 `004`，其中一条 `BLOCKING`。本仓的源完整性门禁只记了文件身份与哈希三项，未记这四条。详见 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) |
+| `source_discrepancies` 声明的四条源价卡差异 | 已记录，门禁未列，裁决未决 | `foo` 声明了 `SRC-DISC-001` 至 `004`，其中 `001` 为 `BLOCKING`。四条已逐条记入 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md)；[源完整性门禁](../domain/parcel-pricing/CONTEXT.md)仍只列 Schema 指针、源文件身份和哈希三项，未把这四条列为门禁条件。`SRC-DISC-001` 裁决前，41 例即使那三项闭合也不能成为金额证据 |
 
 ### Rating Runtime 技术设计 `V1.0.1`（`price tech/`，§0 至 §42）
 
@@ -151,7 +151,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 | 编号 | 事项 | 结论或建议处置 | 决定方 |
 |---|---|---|---|
 | `FOO-OPEN-01` | 计算语义 §5 `CalculationPurpose` 的取值范围 | **已定案。** 核实后发现真问题不是取值多少：`PricingPurpose` 的三个常量与 `PricingDirection` 一一对应，目的轴未携带方向之外的信息，而校验只过正则不查成员，也不强制配对。结论是保留该轴并在 [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 写明首发一一对应及其解除条件，同时闭合枚举、强制配对，术语统一为「计算目的」并立 [GLOSSARY 词条](../domain/GLOSSARY.md) | 计价业务责任方 |
-| `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异未进本仓门禁 | 补进 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的取证要求。文件身份与哈希闭合是必要不充分条件，`SRC-DISC-001` 未解前那批案例仍不能成为金额证据 | 计价与结算业务责任方 |
+| `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异 | 记录已完成：四条已进 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的取证要求。仍缺两件事——把这四条列入 [源完整性门禁](../domain/parcel-pricing/CONTEXT.md)，以及对 `BLOCKING` 的 `SRC-DISC-001` 作出合同裁决。文件身份与哈希闭合是必要不充分条件 | 计价与结算业务责任方 |
 | `FOO-OPEN-03` | 领域模型 §33-40 八条业务流程从未与 `UC-*` 逐条核对 | 逐条核对并只标覆盖状态；出现「未识别」时才新增用例，不为对齐 `foo` 而补齐 | 结算与计价业务责任方 |
 | `FOO-OPEN-04` | 计算语义 §36 与技术设计 §11/§13 的 Compiled Pricing Plan | **已定案：不采纳。** `fingerprint.go` 已用内容指纹解决「版本引用相同但内容不同判为冲突」这一正确性问题，编译式方案在此之上多买的是预计算与缓存，属性能诉求，而本仓无任何性能度量。将来出现度量支撑时可重新评估 | 技术 |
 | `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | **已定案：不另写 ADR，由本台账承担该记录。** 「不采纳 `foo` 的对外 API 契约与运行时技术设计」是 [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [ADR-0011](../adr/0011-parcel-pricing-context-within-idp-parcel.md) 的推论而非独立决策，为推论单写 ADR 会制造第二套口径 | 技术与产品 |
