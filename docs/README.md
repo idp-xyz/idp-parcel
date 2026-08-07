@@ -63,6 +63,12 @@
 
 `idp-parcel` 拥有独立的产品、领域模型、业务数据库、部署和发布边界。其他项目的文档不能成为本项目领域定义的权威来源。
 
+## 导读
+
+`explain/` 下是面向新读者的导读，用具体例子解释已确认的设计，不是权威来源。导读与权威文档冲突时以权威文档为准，并回头修导读。
+
+- [代理商、Carrier 与 Carrier Service 怎么区分](./explain/carrier.md)：用一个代理商转售的完整交易例子说明商业渠道链与实际履约链为什么不能合并成一个 `carrier_id`；角色定义、最小字段和验收情形的权威在[关系开发交接](./design/party-carrier-channel-relationship-development-handoff.md)。
+
 ## 历史材料
 
 - [领域发现问答记录](./archive/DOMAIN-DISCOVERY-QA.md)：保留领域发现与决策形成过程，包含候选方案、阶段性建议和未回填确认，不是当前领域规则的权威来源。
