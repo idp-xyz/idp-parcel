@@ -228,12 +228,17 @@ func fixedAmountCalculation(t testing.TB, amount string) domain.SurchargeCalcula
 
 func tableLookupCalculation(t testing.TB) domain.SurchargeCalculation {
 	t.Helper()
+	return tableLookupCalculationIn(t, domain.WeightUnitKilogram)
+}
+
+func tableLookupCalculationIn(t testing.TB, unit domain.WeightUnit) domain.SurchargeCalculation {
+	t.Helper()
 	currency := mustValue(t, domain.NewCurrency, "USD")
 	entry, err := domain.NewRateEntry(
 		mustValue(t, domain.NewRateEntryID, "entry-surcharge"),
 		"Z2",
-		weight(t, "0", domain.WeightUnitKilogram),
-		weight(t, "10", domain.WeightUnitKilogram),
+		weight(t, "0", unit),
+		weight(t, "10", unit),
 		money(t, "7", currency),
 	)
 	if err != nil {
@@ -243,7 +248,7 @@ func tableLookupCalculation(t testing.TB) domain.SurchargeCalculation {
 		versionReference(t, domain.ArtifactRateTable, "table-surcharge", "v1"),
 		domain.RateTableFamilyWeightZone,
 		currency,
-		domain.WeightUnitKilogram,
+		unit,
 		effectivePeriod(t),
 		[]domain.RateEntry{entry},
 	)
@@ -349,6 +354,29 @@ func TestEvaluationDoesNotCompleteWhenPlanDeclaresUnexecutableStructures(t *test
 	}
 }
 
+// A banded surcharge is read with the pricing weight, and the pricing weight is
+// stated in the unit the base table bands in. A surcharge table banded in
+// another unit could therefore never be looked up: the card would form and then
+// conflict on every evaluation. The same table's currency is already refused
+// here, so the unit is refused beside it rather than left to the evaluator.
+func TestPlanRefusesASurchargeTableBandedInAnotherWeightUnit(t *testing.T) {
+	structures := declaredSurcharges(t, standaloneRule(t, ruleWithCalculation(t, tableLookupCalculationIn(t, domain.WeightUnitPound))))
+	if _, err := newPlanWithStructures(t, structures); !errors.Is(err, domain.ErrWeightUnitMismatch) {
+		t.Fatalf("plan formation error = %v, want ErrWeightUnitMismatch", err)
+	}
+}
+
+// A conditional minimum raises the pricing weight, so a floor stated in another
+// unit is refused at formation rather than compared during an evaluation. Left
+// to the evaluator it would fail only on the parcels that trip the clause, so
+// one card would price some packages and conflict on others.
+func TestPlanRefusesAConditionalMinimumStatedInAnotherWeightUnit(t *testing.T) {
+	structures := structuresWithMinimumWeightIn(t, "48", "40", domain.WeightUnitPound)
+	if _, err := newPlanWithStructures(t, structures); !errors.Is(err, domain.ErrWeightUnitMismatch) {
+		t.Fatalf("plan formation error = %v, want ErrWeightUnitMismatch", err)
+	}
+}
+
 func structuresWithDependency(t testing.TB, excluded string) domain.PricingPlanStructures {
 	t.Helper()
 	dependency, err := domain.NewAllChargesDependency(
@@ -384,6 +412,11 @@ func structuresWithGroupedSurcharge(t testing.TB, threshold, group string, prior
 
 func structuresWithMinimumWeight(t testing.TB, threshold, minimum string) domain.PricingPlanStructures {
 	t.Helper()
+	return structuresWithMinimumWeightIn(t, threshold, minimum, domain.WeightUnitKilogram)
+}
+
+func structuresWithMinimumWeightIn(t testing.TB, threshold, minimum string, unit domain.WeightUnit) domain.PricingPlanStructures {
+	t.Helper()
 	condition, err := domain.NewLengthFeatureCondition(
 		domain.FeatureLongestSide,
 		domain.ComparisonGreaterThan,
@@ -395,7 +428,7 @@ func structuresWithMinimumWeight(t testing.TB, threshold, minimum string) domain
 	conditionalMinimum, err := domain.NewConditionalMinimumWeight(
 		"oversize-minimum",
 		leafTrigger(t, condition),
-		weight(t, minimum, domain.WeightUnitKilogram),
+		weight(t, minimum, unit),
 	)
 	if err != nil {
 		t.Fatalf("conditional minimum weight: %v", err)

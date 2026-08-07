@@ -13,6 +13,7 @@ type surchargeOutcome struct {
 	rule     SurchargeRule
 	matched  bool
 	selected bool
+	deferred bool
 	amount   Money
 	note     string
 }
@@ -22,15 +23,12 @@ type surchargeOutcome struct {
 // declares charges nobody executes; it narrows as capabilities land rather than
 // being removed.
 func (structures PricingPlanStructures) unexecutable() (string, bool) {
-	if len(structures.dependencies) > 0 {
-		return "charge dependencies", true
-	}
 	if len(structures.referenceSeries) > 0 {
 		return "reference series bindings", true
 	}
 	for _, rule := range structures.surchargeRules {
 		switch rule.calculation.method {
-		case ChargeMethodFixedAmount, ChargeMethodTableLookup:
+		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis:
 		default:
 			return fmt.Sprintf("%s calculation on %s", rule.calculation.method, rule.id), true
 		}
@@ -94,21 +92,29 @@ type surchargeContext struct {
 // and then applies the card's interaction rules. Rules that stand alone are all
 // collected; rules in an exclusivity group compete, and at most one of the
 // group is charged.
-func (structures PricingPlanStructures) resolveSurcharges(context surchargeContext) ([]surchargeOutcome, error) {
+func (structures PricingPlanStructures) resolveSurcharges(reading surchargeContext) ([]surchargeOutcome, error) {
 	outcomes := make([]surchargeOutcome, 0, len(structures.surchargeRules))
 	for _, rule := range structures.surchargeRules {
-		matched, err := rule.condition.Matches(context.features)
+		matched, err := rule.condition.Matches(reading.features)
 		if err != nil {
 			return nil, err
 		}
 		outcome := surchargeOutcome{rule: rule, matched: matched}
 		if matched {
-			amount, err := rule.calculation.resolve(context)
-			if err != nil {
-				return nil, err
+			// A percent charge cannot be valued yet: its basis sums charge
+			// lines that are still being collected. It is priced in a second
+			// pass, ordered by dependency.
+			if rule.calculation.method == ChargeMethodPercentOfBasis {
+				outcome.deferred = true
+				outcome.selected = true
+			} else {
+				amount, err := rule.calculation.resolve(reading)
+				if err != nil {
+					return nil, err
+				}
+				outcome.amount = amount
+				outcome.selected = true
 			}
-			outcome.amount = amount
-			outcome.selected = true
 		}
 		outcomes = append(outcomes, outcome)
 	}
@@ -121,7 +127,7 @@ func (structures PricingPlanStructures) resolveSurcharges(context surchargeConte
 // resolve produces the amount a matched rule charges. A gap in a banded table
 // is a gap in the card rather than a rule that missed — the condition did fire
 // — so the lookup error travels out unchanged and the evaluation waits.
-func (calculation SurchargeCalculation) resolve(context surchargeContext) (Money, error) {
+func (calculation SurchargeCalculation) resolve(reading surchargeContext) (Money, error) {
 	switch calculation.method {
 	case ChargeMethodFixedAmount:
 		amount, ok := calculation.FixedAmount()
@@ -134,7 +140,7 @@ func (calculation SurchargeCalculation) resolve(context surchargeContext) (Money
 		if !ok {
 			return Money{}, ErrInvalidSurchargeRule
 		}
-		selection, err := table.Lookup(context.zone, context.pricingWeight)
+		selection, err := table.Lookup(reading.zone, reading.pricingWeight)
 		if err != nil {
 			return Money{}, err
 		}

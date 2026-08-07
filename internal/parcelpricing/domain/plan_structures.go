@@ -305,6 +305,34 @@ func (calculation SurchargeCalculation) currency() *Currency {
 	}
 }
 
+// declaredWeightUnits reports every weight unit the rule states: the unit a
+// banded table is read in, and the unit a conditional minimum raises to. Both
+// are used against the pricing weight, which the plan states in the unit its
+// base table bands in, so a unit the plan does not price in could never be
+// read. The conditional minimum is the reason this belongs at formation rather
+// than at evaluation: it would fail only on the parcels that trip its clause,
+// so one card would price some packages and conflict on others.
+func (rule SurchargeRule) declaredWeightUnits() []WeightUnit {
+	units := rule.calculation.lookupWeightUnits()
+	if rule.minimumWeight != nil {
+		units = append(units, rule.minimumWeight.minimum.unit)
+	}
+	return units
+}
+
+// lookupWeightUnits reports the unit of every rate table this calculation reads
+// a band from, including through a greater-of operand.
+func (calculation SurchargeCalculation) lookupWeightUnits() []WeightUnit {
+	if calculation.table != nil {
+		return []WeightUnit{calculation.table.unit}
+	}
+	var units []WeightUnit
+	for _, operand := range calculation.operands {
+		units = append(units, operand.lookupWeightUnits()...)
+	}
+	return units
+}
+
 func (rule SurchargeRule) valid() bool {
 	if !trimmed(rule.id) || !trimmed(rule.description) || !rule.chargeCode.valid() ||
 		!rule.effect.valid() || !rule.condition.valid() || !rule.calculation.valid() {

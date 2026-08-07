@@ -218,6 +218,11 @@ func NewPricingPlanVersion(
 		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != rateTable.currency {
 			return PricingPlanVersion{}, ErrCurrencyMismatch
 		}
+		for _, unit := range surcharge.declaredWeightUnits() {
+			if unit != rateTable.unit {
+				return PricingPlanVersion{}, ErrWeightUnitMismatch
+			}
+		}
 		if _, exists := seenCodes[surcharge.chargeCode.String()]; exists {
 			return PricingPlanVersion{}, fmt.Errorf("%w: %s", ErrDuplicateChargeCode, surcharge.chargeCode.String())
 		}
@@ -306,6 +311,11 @@ func (plan PricingPlanVersion) valid() bool {
 	for _, surcharge := range plan.structures.surchargeRules {
 		if surcharge.amountCurrency() != nil && *surcharge.amountCurrency() != plan.rateTable.currency {
 			return false
+		}
+		for _, unit := range surcharge.declaredWeightUnits() {
+			if unit != plan.rateTable.unit {
+				return false
+			}
 		}
 		if _, exists := seenCodes[surcharge.chargeCode.String()]; exists {
 			return false

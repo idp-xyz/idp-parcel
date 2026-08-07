@@ -327,28 +327,104 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			}
 		}
 		order++
-		for _, outcome := range sortedSurchargeOutcomes(outcomes) {
+
+		// A percent charge is summed over other charge lines, so the lines it
+		// reads have to carry amounts first. Everything valued on its own is
+		// collected in this pass; the percent charges follow in dependency
+		// order below.
+		basis := newDependencyBasis(request.plan.structures, request.plan.rateTable.currency)
+		for _, line := range evaluation.chargeLines {
+			if recordErr := basis.record(line.chargeCode, line.effect, line.amount); recordErr != nil {
+				return evaluation.withCalculationError(recordErr)
+			}
+		}
+
+		settled := sortedSurchargeOutcomes(outcomes)
+		deferred := make([]*surchargeOutcome, 0, len(settled))
+		for index := range settled {
+			outcome := &settled[index]
+			if outcome.selected && outcome.deferred {
+				deferred = append(deferred, outcome)
+			}
+		}
+		if len(deferred) > 0 {
+			ordered, orderErr := orderPercentOutcomes(deferred, basis)
+			if orderErr != nil {
+				return evaluation.withCalculationError(orderErr)
+			}
+			deferred = ordered
+		}
+
+		collect := func(outcome *surchargeOutcome) error {
+			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
+			if lineErr != nil {
+				return lineErr
+			}
+			evaluation.chargeLines = append(evaluation.chargeLines, line)
+			order++
+			if recordErr := basis.record(outcome.rule.chargeCode, outcome.rule.effect, outcome.amount); recordErr != nil {
+				return recordErr
+			}
+			switch outcome.rule.effect {
+			case ChargeEffectAdd:
+				var addErr error
+				runningAmount, addErr = runningAmount.Add(outcome.amount.amount)
+				return addErr
+			case ChargeEffectDeduct:
+				if runningAmount.Cmp(outcome.amount.amount) < 0 {
+					return ErrNegativeChargeTotal
+				}
+				var subErr error
+				runningAmount, subErr = runningAmount.Sub(outcome.amount.amount)
+				return subErr
+			}
+			return nil
+		}
+
+		for index := range settled {
+			outcome := &settled[index]
+			if outcome.deferred {
+				continue
+			}
 			evaluation.explanation = append(evaluation.explanation, outcome.explain())
 			if !outcome.selected {
 				continue
 			}
-			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
-			if lineErr != nil {
-				return evaluation.withCalculationError(lineErr)
+			if collectErr := collect(outcome); collectErr != nil {
+				return evaluation.withCalculationError(collectErr)
 			}
-			evaluation.chargeLines = append(evaluation.chargeLines, line)
-			order++
-			switch outcome.rule.effect {
-			case ChargeEffectAdd:
-				runningAmount, err = runningAmount.Add(outcome.amount.amount)
-			case ChargeEffectDeduct:
-				if runningAmount.Cmp(outcome.amount.amount) < 0 {
-					return evaluation.withCalculationError(ErrNegativeChargeTotal)
-				}
-				runningAmount, err = runningAmount.Sub(outcome.amount.amount)
+		}
+
+		for _, outcome := range deferred {
+			percentage, dependencyID, ok := outcome.rule.calculation.PercentOfBasis()
+			if !ok {
+				return evaluation.withCalculationError(ErrInvalidSurchargeRule)
 			}
-			if err != nil {
-				return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
+			dependency, declared := basis.dependencies[dependencyID]
+			if !declared {
+				return evaluation.withCalculationError(fmt.Errorf("%w: %s names undeclared basis %s", ErrInvalidChargeDependency, outcome.rule.id, dependencyID))
+			}
+			basisAmount, sumErr := basis.sum(dependency)
+			if sumErr != nil {
+				return evaluation.withCalculationError(sumErr)
+			}
+			share, shareErr := basisAmount.amount.Mul(percentage)
+			if shareErr != nil {
+				return evaluation.withCalculationError(shareErr)
+			}
+			hundredths, divErr := percentShare(share)
+			if divErr != nil {
+				return evaluation.withCalculationError(divErr)
+			}
+			amount, moneyErr := NewMoney(hundredths, request.plan.rateTable.currency)
+			if moneyErr != nil {
+				return evaluation.withCalculationError(moneyErr)
+			}
+			outcome.amount = amount
+			evaluation.explanation = append(evaluation.explanation,
+				fmt.Sprintf("surcharge %s charged %s%% of basis %s (%s %s) for %s", outcome.rule.id, percentage.String(), dependencyID, basisAmount.amount.String(), basisAmount.currency, amount.amount.String()))
+			if collectErr := collect(outcome); collectErr != nil {
+				return evaluation.withCalculationError(collectErr)
 			}
 		}
 	}
