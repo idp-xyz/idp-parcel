@@ -49,6 +49,7 @@
 - [`PP-S03` 证据与合成契约开发交接](./design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md)：在无真实 SELL/BUY 参数时固定隔离 `S` 的计价验收、费用代码交接和缺映射 `PENDING` 边界；不创建结算对象或解除生产门禁。
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./design/pp-s03-w01-golden-case-source-evidence-request.md)：把源文件身份、哈希、取数范围、`foo` 自述的四条源价卡差异和使用授权整理成可执行取证，并固定完全闭合、部分闭合与不可闭合三种结论；不修改 `foo/`，不改写证据层级，也不单独构成参数状态转换。
 - [`foo` 参考设计吸收覆盖对照](./design/pp-foo-reference-absorption-coverage.md)：逐节登记 `foo` 参考设计各交付物在本仓的落点，按`已吸收`、`已确认不采纳`、`待决`三态标注并给出权威链接；它是台账，只索引不复述规则，也不替 `foo` 的正确性背书。
+- [去 `foo` 权威依赖 Agent 交接](./design/pp-de-foo-authority-agent-handoff.md)：总结「用本仓自洽文档替代引用 `foo`」的结论、门禁与 FOO-OPEN 现状、SRC-DISC 核实、ADR-0011 supersede 路径、删目录前硬门槛与建议下一步；给下一任 Agent 用，不定义新规则。
 - [`PN-08` 端到端试点与阶段准入开发交接](./design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)：把同版本候选证据、历史回放、影子运行、限量生产、唯一权威、暂停恢复、对象级接管、真实主链/账期、在途盘点和正式 `Go/No-Go` 组织成 W01 至 W09；它是产品级治理编排，不新增限界上下文或全局业务状态机，当前生产结论保持 `No-Go / 待参数化`。
 - [关务切片 0 真实参数取证与生产语义准入交接](./design/customs-slice-0-business-development-handoff.md)：把锚点范围、出口/进口程序、责任承运商与来源、权限、执行/资金/异常责任及验证证据组织成有依赖的取证工作包，并逐生产分支决定只做稳定骨架、使用 `R/S` 验证或准入 `P`。
 - [`CC-S0-W01` 锚点范围首批证据请求工作单](./design/customs-slice-0-w01-evidence-request.md)：把客户、责任法人、服务产品、合同、成熟线路及出口/进口区域的真实证据要求、交叉核验、登记册动作和开发阻断整理成业务方可直接提交的工作单；不保存真实值或第二套参数状态。
