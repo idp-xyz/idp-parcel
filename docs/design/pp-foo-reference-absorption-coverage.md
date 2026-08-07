@@ -115,7 +115,7 @@
 | §28 Golden Cases 映射 | 待决 | 与 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的闭合结果一并处理 |
 | `rating-api-openapi-v1.0.1.yaml`、`rating-api-examples-v1.0.1.json`、`validate_rating_api_contract_v1_0_1.py` | 已确认不采纳 | 同上 |
 
-ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约本身。建议在 ADR-0011 补一句显式记下，避免将来有人只看契约文件就重新捡起。这是待决项，见下方清单。
+ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约本身。是否需要把这一点显式化是待决项，见下方清单。ADR-0011 状态为 Accepted，按[改文档规则](../../AGENTS.md)不得改写其正文。
 
 ### Golden Cases `V1.0.1`（§1 至 §12，含 JSON、schema）
 
@@ -152,7 +152,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 | `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异未进本仓门禁 | 补进 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的取证要求。文件身份与哈希闭合是必要不充分条件，`SRC-DISC-001` 未解前那批案例仍不能成为金额证据 | 计价与结算业务责任方 |
 | `FOO-OPEN-03` | 领域模型 §33-40 八条业务流程从未与 `UC-*` 逐条核对 | 逐条核对并只标覆盖状态；出现「未识别」时才新增用例，不为对齐 `foo` 而补齐 | 结算与计价业务责任方 |
 | `FOO-OPEN-04` | 计算语义 §36 与技术设计 §11/§13 的 Compiled Pricing Plan | 建议不采纳：本仓 `fingerprint.go` 已用内容指纹解决「版本引用相同但内容不同判为冲突」，方案更轻且有测试覆盖。需在某处记下该取舍，防止重复评估 | 技术 |
-| `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | 在 ADR-0011 的 Alternatives 或 Consequences 补一句，把「不引入 `foo` 的对外 API 契约与运行时技术设计」显式化 | 技术与产品 |
+| `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | 两条合规路径二选一：新写一份 ADR 把「不引入 `foo` 的对外 API 契约与运行时技术设计」记为独立决策；或就让本台账承担该记录，不再另立文档。ADR-0011 已是 Accepted，不得往其正文补话 | 技术与产品 |
 | `FOO-OPEN-06` | 领域模型 §32、§52-57 的安全、租户隔离、审计、数据保留 | 建议按跨切面处理，由 PN-08 的 `PAR-GOV-*` 承接，不作为计价范围 | 产品与治理 |
 
 ## 触发条件
