@@ -14,7 +14,7 @@
 | `/to-tickets` 拆带阻塞边的工单 | `docs/design/*handoff*` 的 `W01..W09` 工作包，阻塞关系写在交接文档里 | 直接认领 `W` 包，不重拆 |
 | `/setup-idp-skills` 配 tracker 与布局 | [issue-tracker.md](./issue-tracker.md)、[triage-labels.md](./triage-labels.md)、[domain.md](./domain.md) | 前置已满足，不用跑 |
 
-`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：九个 `CONTEXT.md` 和十二份 ADR 已经存在。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)——ADR 只新增或 supersede，不改写已接受的历史。
+`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：九个 `CONTEXT.md` 和十一份 ADR 已经存在。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)——ADR 只新增或 supersede，不改写已接受的历史。
 
 `.scratch/` 留给**交接文档没覆盖**的工作：外来 bug、临时需求、基线之外的探索。已经是 `W` 包的东西不进 tracker，也不要 `/triage`。
 
@@ -60,6 +60,7 @@ flowchart TD
 这些查不到，踩过才知道。
 
 - `~/.cursor/skills` 下 37 个条目是**指向 `D:\tops\idp-skills` 克隆的目录联接**（Windows 无管理员权限，用不了符号链接）。改技能要去那个克隆改并推回上游，就地编辑等于改上游工作区。更新用 `git pull`。
-- **GitHub 只能走代理。** Clash Verge 在 `127.0.0.1:7897`，但系统代理开关常是关的，导致 git 直连超时约 21 秒。`idp-skills` 与 `idp-parcel` 两个克隆都已设仓库级 `http.proxy`；新克隆需要自己加 `-c http.proxy=http://127.0.0.1:7897`。
+- **GitHub 只能走代理。** Clash Verge 在 `127.0.0.1:7897`，但系统代理开关常是关的，导致 git 直连失败——单次连接尝试约 21 秒超时，但 GitHub 有多个解析地址，git 逐个重试，整条命令实测约 5 分钟才报错，看着像卡死。`idp-skills` 与 `idp-parcel` 两个克隆都已设仓库级 `http.proxy`；新克隆需要自己加 `-c http.proxy=http://127.0.0.1:7897`。
+- **`idp-parcel` 是私有仓，远程操作必过 Git Credential Manager**（凭据存在 Windows 凭据管理器的 `git:https://github.com`）。GCM 偶尔挂住不返回，症状和没配代理一样都是命令无输出；区分靠查进程，有 `git-credential-manager get` 挂着就是凭据卡住，杀掉重跑即可，不用动代理。
 - 开发机 `idp-110-dev`（`/workspace/idp/`）上技能装在 `~/.claude/skills` 与 `~/.agents/skills`，是 `scripts/link-skills.sh` 建的符号链接，与本机布局不同。
 - 技能变更**要新开会话才加载**。当前会话的技能列表是会话开始时的快照。
