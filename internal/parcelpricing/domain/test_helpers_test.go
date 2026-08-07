@@ -186,12 +186,39 @@ func syntheticInput(t testing.TB, actual string, volumetric *string, zone string
 	return syntheticInputAt(t, actual, volumetric, zone, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
 }
 
+func packageSubject(t testing.TB, id string) domain.EvaluationSubject {
+	t.Helper()
+	subject, err := domain.NewAcceptedPackageSubject(mustValue(t, domain.NewPackageID, id))
+	if err != nil {
+		t.Fatalf("package subject %s: %v", id, err)
+	}
+	return subject
+}
+
+func syntheticInputForSubject(t testing.TB, subject domain.EvaluationSubject, actual, zone string) domain.PricingInputSnapshot {
+	t.Helper()
+	input, err := domain.NewPricingInputSnapshot(
+		mustValue(t, domain.NewTenantID, "tenant-1"),
+		mustValue(t, domain.NewPricingScopeID, "scope-1"),
+		subject,
+		zone,
+		weight(t, actual, domain.WeightUnitKilogram),
+		nil,
+		nil,
+		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("pricing input: %v", err)
+	}
+	return input
+}
+
 func syntheticInputWithDimensions(t testing.TB, actual, zone string, sides domain.Dimensions) domain.PricingInputSnapshot {
 	t.Helper()
 	input, err := domain.NewPricingInputSnapshot(
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewPricingScopeID, "scope-1"),
-		mustValue(t, domain.NewPackageID, "package-1"),
+		packageSubject(t, "package-1"),
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
 		nil,
@@ -214,7 +241,7 @@ func syntheticInputAt(t testing.TB, actual string, volumetric *string, zone stri
 	input, err := domain.NewPricingInputSnapshot(
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewPricingScopeID, "scope-1"),
-		mustValue(t, domain.NewPackageID, "package-1"),
+		packageSubject(t, "package-1"),
 		zone,
 		weight(t, actual, domain.WeightUnitKilogram),
 		volumetricWeight,

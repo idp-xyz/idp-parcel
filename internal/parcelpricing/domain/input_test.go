@@ -52,6 +52,29 @@ func TestPricingInputSnapshotWithoutDimensionsReportsThemMissingNotUnusable(t *t
 	}
 }
 
+// Comparing several suppliers' cards happens before the customer has committed
+// anything, so there is no accepted package to evaluate against yet. Forcing a
+// package identity on the snapshot would make the whole estimate impossible to
+// express, which is why the subject has two kinds rather than one.
+func TestPricingInputSnapshotAcceptsAnEstimateBeforeAnyPackageExists(t *testing.T) {
+	subject, err := domain.NewEstimateSubject("estimate-1")
+	if err != nil {
+		t.Fatalf("estimate subject: %v", err)
+	}
+	if subject.Kind() != domain.SubjectEstimate {
+		t.Fatalf("kind = %s, want %s", subject.Kind(), domain.SubjectEstimate)
+	}
+
+	input := syntheticInputForSubject(t, subject, "1", "Z1")
+
+	if got, _ := input.Subject(); got.Kind() != domain.SubjectEstimate {
+		t.Fatalf("snapshot subject kind = %s, want %s", got.Kind(), domain.SubjectEstimate)
+	}
+	if _, isPackage := input.PackageID(); isPackage {
+		t.Fatalf("an estimate snapshot must not report a package identity")
+	}
+}
+
 // Dimensions decide which rules hit, so two evaluations differing only in the
 // package's sides are different evaluations. Sharing a semantic digest would
 // let a replay of one pass as a faithful replay of the other, which is the one
@@ -66,5 +89,26 @@ func TestEvaluationDigestSeparatesInputsThatDifferOnlyInDimensions(t *testing.T)
 
 	if compact.SemanticDigest() == elongated.SemanticDigest() {
 		t.Fatalf("evaluations differing only in dimensions share digest %s", compact.SemanticDigest())
+	}
+}
+
+// The same reference string can name an estimate and, later, the package the
+// business accepted from it. If the digest recorded only the reference, a
+// replay could not tell an estimate apart from the evaluation that is allowed
+// to become money, which is exactly the confusion the two kinds exist to stop.
+func TestEvaluationDigestSeparatesEstimateFromPackageSharingAReference(t *testing.T) {
+	plan := syntheticPlan(t, "digest-subject", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.BillableWeightActualOnly, nil)
+	estimate, err := domain.NewEstimateSubject("shared-reference")
+	if err != nil {
+		t.Fatalf("estimate subject: %v", err)
+	}
+
+	accepted := evaluate(t, "eval-accepted", plan,
+		syntheticInputForSubject(t, packageSubject(t, "shared-reference"), "1", "Z1"))
+	estimated := evaluate(t, "eval-estimated", plan,
+		syntheticInputForSubject(t, estimate, "1", "Z1"))
+
+	if accepted.SemanticDigest() == estimated.SemanticDigest() {
+		t.Fatalf("estimate and accepted package share digest %s", accepted.SemanticDigest())
 	}
 }

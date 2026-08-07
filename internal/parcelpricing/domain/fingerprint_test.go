@@ -151,7 +151,8 @@ func replayIntegrityFixture(t *testing.T) (PricingPlanVersion, PricingInputSnaps
 	tenantID, _ := NewTenantID("tenant-replay")
 	packageID, _ := NewPackageID("package-replay")
 	actualWeight, _ := NewWeightFromString("1", WeightUnitKilogram)
-	input, err := NewPricingInputSnapshot(tenantID, scope, packageID, "Z1", actualWeight, nil, nil, time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC))
+	subject, _ := NewAcceptedPackageSubject(packageID)
+	input, err := NewPricingInputSnapshot(tenantID, scope, subject, "Z1", actualWeight, nil, nil, time.Date(2026, 8, 7, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("input: %v", err)
 	}

@@ -230,16 +230,17 @@ func canonicalDimensionsValue(dimensions Dimensions) canonicalDimensionsDocument
 }
 
 type canonicalEvaluationInput struct {
-	Tenant     string                       `json:"tenant"`
-	Scope      string                       `json:"scope"`
-	Package    string                       `json:"package"`
-	Zone       string                       `json:"zone"`
-	Actual     string                       `json:"actual"`
-	Unit       string                       `json:"unit"`
-	Volumetric string                       `json:"volumetric,omitempty"`
-	Dimensions *canonicalDimensionsDocument `json:"dimensions,omitempty"`
-	BusinessAt string                       `json:"business_at"`
-	Facts      []canonicalVersionReference  `json:"facts"`
+	Tenant      string                       `json:"tenant"`
+	Scope       string                       `json:"scope"`
+	SubjectKind string                       `json:"subject_kind"`
+	Subject     string                       `json:"subject"`
+	Zone        string                       `json:"zone"`
+	Actual      string                       `json:"actual"`
+	Unit        string                       `json:"unit"`
+	Volumetric  string                       `json:"volumetric,omitempty"`
+	Dimensions  *canonicalDimensionsDocument `json:"dimensions,omitempty"`
+	BusinessAt  string                       `json:"business_at"`
+	Facts       []canonicalVersionReference  `json:"facts"`
 }
 
 type canonicalEvaluation struct {
@@ -278,14 +279,15 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		return compareCanonicalReferences(facts[left], facts[right]) < 0
 	})
 	input := canonicalEvaluationInput{
-		Tenant:     evaluation.input.tenantID.String(),
-		Scope:      evaluation.input.scope.String(),
-		Package:    evaluation.input.packageID.String(),
-		Zone:       evaluation.input.zone,
-		Actual:     evaluation.input.actualWeight.value.String(),
-		Unit:       evaluation.input.actualWeight.unit.String(),
-		BusinessAt: evaluation.input.businessAt.UTC().Format(time.RFC3339Nano),
-		Facts:      facts,
+		Tenant:      evaluation.input.tenantID.String(),
+		Scope:       evaluation.input.scope.String(),
+		SubjectKind: evaluation.input.subject.kind.String(),
+		Subject:     evaluation.input.subject.id,
+		Zone:        evaluation.input.zone,
+		Actual:      evaluation.input.actualWeight.value.String(),
+		Unit:        evaluation.input.actualWeight.unit.String(),
+		BusinessAt:  evaluation.input.businessAt.UTC().Format(time.RFC3339Nano),
+		Facts:       facts,
 	}
 	if volumetric, ok := evaluation.input.VolumetricWeight(); ok {
 		input.Volumetric = volumetric.value.String()

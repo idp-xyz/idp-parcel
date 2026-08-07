@@ -18,7 +18,7 @@ func TestSyntheticContractPreservesFactReferencesAcrossEvaluationAndReplay(t *te
 	input, err := domain.NewPricingInputSnapshot(
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewPricingScopeID, "scope-1"),
-		mustValue(t, domain.NewPackageID, "package-1"),
+		packageSubject(t, "package-1"),
 		"Z1",
 		weight(t, "1.2", domain.WeightUnitKilogram),
 		nil,

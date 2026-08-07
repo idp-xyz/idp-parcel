@@ -6,10 +6,61 @@ import (
 	"time"
 )
 
+// EvaluationSubjectKind separates an evaluation of a package the business has
+// accepted from an estimate made before any package exists. Comparing several
+// suppliers' cards happens before a customer commits, so the second kind is not
+// a variant of the first — nothing downstream may turn an estimate into money.
+type EvaluationSubjectKind string
+
+const (
+	SubjectAcceptedPackage EvaluationSubjectKind = "ACCEPTED_PACKAGE"
+	SubjectEstimate        EvaluationSubjectKind = "ESTIMATE"
+)
+
+func (kind EvaluationSubjectKind) String() string { return string(kind) }
+
+func (kind EvaluationSubjectKind) valid() bool {
+	switch kind {
+	case SubjectAcceptedPackage, SubjectEstimate:
+		return true
+	default:
+		return false
+	}
+}
+
+type EvaluationSubject struct {
+	kind EvaluationSubjectKind
+	id   string
+}
+
+func NewAcceptedPackageSubject(packageID PackageID) (EvaluationSubject, error) {
+	if !packageID.valid() {
+		return EvaluationSubject{}, ErrPricingInputInvalid
+	}
+	return EvaluationSubject{kind: SubjectAcceptedPackage, id: packageID.String()}, nil
+}
+
+// NewEstimateSubject names an object that only exists for the duration of one
+// estimate. The reference is supplied by whoever asked for the estimate; this
+// context does not mint identities.
+func NewEstimateSubject(reference string) (EvaluationSubject, error) {
+	if strings.TrimSpace(reference) == "" || strings.TrimSpace(reference) != reference {
+		return EvaluationSubject{}, ErrPricingInputInvalid
+	}
+	return EvaluationSubject{kind: SubjectEstimate, id: reference}, nil
+}
+
+func (subject EvaluationSubject) Kind() EvaluationSubjectKind { return subject.kind }
+func (subject EvaluationSubject) Reference() string           { return subject.id }
+
+func (subject EvaluationSubject) valid() bool {
+	return subject.kind.valid() && strings.TrimSpace(subject.id) != "" && strings.TrimSpace(subject.id) == subject.id
+}
+
 type PricingInputSnapshot struct {
 	tenantID         TenantID
 	scope            PricingScopeID
-	packageID        PackageID
+	subject          EvaluationSubject
 	zone             string
 	actualWeight     Weight
 	volumetricWeight *Weight
@@ -21,7 +72,7 @@ type PricingInputSnapshot struct {
 func NewPricingInputSnapshot(
 	tenantID TenantID,
 	scope PricingScopeID,
-	packageID PackageID,
+	subject EvaluationSubject,
 	zone string,
 	actualWeight Weight,
 	volumetricWeight *Weight,
@@ -29,7 +80,7 @@ func NewPricingInputSnapshot(
 	businessAt time.Time,
 	factReferences ...VersionedFactReference,
 ) (PricingInputSnapshot, error) {
-	if !tenantID.valid() || !scope.valid() || !packageID.valid() || strings.TrimSpace(zone) == "" || strings.TrimSpace(zone) != zone || !actualWeight.valid() || !validBusinessTime(businessAt) {
+	if !tenantID.valid() || !scope.valid() || !subject.valid() || strings.TrimSpace(zone) == "" || strings.TrimSpace(zone) != zone || !actualWeight.valid() || !validBusinessTime(businessAt) {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
 	}
 	if volumetricWeight != nil {
@@ -62,7 +113,7 @@ func NewPricingInputSnapshot(
 	return PricingInputSnapshot{
 		tenantID:         tenantID,
 		scope:            scope,
-		packageID:        packageID,
+		subject:          subject,
 		zone:             zone,
 		actualWeight:     actualWeight,
 		volumetricWeight: volumetricCopy,
@@ -74,8 +125,25 @@ func NewPricingInputSnapshot(
 
 func (input PricingInputSnapshot) TenantID() TenantID    { return input.tenantID }
 func (input PricingInputSnapshot) Scope() PricingScopeID { return input.scope }
-func (input PricingInputSnapshot) PackageID() PackageID  { return input.packageID }
 func (input PricingInputSnapshot) Zone() string          { return input.zone }
+
+func (input PricingInputSnapshot) Subject() (EvaluationSubject, bool) {
+	return input.subject, input.subject.valid()
+}
+
+// PackageID reports the accepted package this evaluation is for. An estimate
+// has no package, so callers that turn evaluations into money must check the
+// second return value rather than assume one exists.
+func (input PricingInputSnapshot) PackageID() (PackageID, bool) {
+	if input.subject.kind != SubjectAcceptedPackage {
+		return PackageID{}, false
+	}
+	packageID, err := NewPackageID(input.subject.id)
+	if err != nil {
+		return PackageID{}, false
+	}
+	return packageID, true
+}
 func (input PricingInputSnapshot) ActualWeight() Weight  { return input.actualWeight }
 func (input PricingInputSnapshot) BusinessAt() time.Time { return input.businessAt }
 func (input PricingInputSnapshot) FactReferences() []VersionedFactReference {
@@ -110,7 +178,7 @@ func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 }
 
 func (input PricingInputSnapshot) valid() bool {
-	if !input.tenantID.valid() || !input.scope.valid() || !input.packageID.valid() || strings.TrimSpace(input.zone) == "" || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
+	if !input.tenantID.valid() || !input.scope.valid() || !input.subject.valid() || strings.TrimSpace(input.zone) == "" || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
 		return false
 	}
 	if input.volumetricWeight != nil && (!input.volumetricWeight.valid() || input.volumetricWeight.unit != input.actualWeight.unit) {
