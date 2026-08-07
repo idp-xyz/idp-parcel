@@ -191,7 +191,7 @@ func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	if input.actualWeight.unit != expectedUnit {
 		return PricingWeightResult{}, ErrWeightUnitMismatch
 	}
-	if policy.rounding.increment.unit != expectedUnit {
+	if policy.rounding.unit() != expectedUnit {
 		return PricingWeightResult{}, ErrWeightUnitMismatch
 	}
 	var raw Weight
@@ -218,23 +218,19 @@ func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	default:
 		return PricingWeightResult{}, ErrPricingInputInvalid
 	}
-	roundedValue, err := raw.value.RoundToIncrement(policy.rounding.increment.value, policy.rounding.mode)
+	rounded, segment, err := policy.rounding.Apply(raw)
 	if err != nil {
 		return PricingWeightResult{}, err
 	}
-	rounded, err := NewWeight(roundedValue, raw.unit)
-	if err != nil {
-		return PricingWeightResult{}, err
-	}
-	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s; rounding=%s increment=%s %s; rounded=%s %s", policy.method, raw.value.String(), raw.unit, policy.rounding.mode, policy.rounding.increment.value.String(), policy.rounding.increment.unit, rounded.value.String(), rounded.unit)
+	explanation := fmt.Sprintf("pricing weight uses %s; raw=%s %s; rounding=%s increment=%s %s%s; rounded=%s %s", policy.method, raw.value.String(), raw.unit, segment.mode, segment.increment.value.String(), segment.increment.unit, roundingSegmentScope(segment), rounded.value.String(), rounded.unit)
 	return PricingWeightResult{
 		method:       policy.method,
 		actual:       input.actualWeight,
 		volumetric:   optionalWeightCopy(volumetric, hasVolumetric),
 		raw:          raw,
 		rounded:      rounded,
-		roundingMode: policy.rounding.mode,
-		increment:    policy.rounding.increment,
+		roundingMode: segment.mode,
+		increment:    segment.increment,
 		explanation:  explanation,
 	}, nil
 }

@@ -6,29 +6,6 @@ import (
 	"strings"
 )
 
-type WeightRoundingPolicy struct {
-	mode      RoundingMode
-	increment Weight
-}
-
-func NewWeightRoundingPolicy(mode RoundingMode, increment Weight) (WeightRoundingPolicy, error) {
-	if !mode.valid() || !increment.valid() || increment.value.Sign() <= 0 {
-		return WeightRoundingPolicy{}, ErrInvalidRoundingPolicy
-	}
-	if mode == RoundingNone && !increment.value.Equal(NewDecimalFromInt64(1)) {
-		return WeightRoundingPolicy{}, fmt.Errorf("%w: NONE requires increment 1", ErrInvalidRoundingPolicy)
-	}
-	return WeightRoundingPolicy{mode: mode, increment: increment}, nil
-}
-
-func (policy WeightRoundingPolicy) Mode() RoundingMode { return policy.mode }
-func (policy WeightRoundingPolicy) Increment() Weight  { return policy.increment }
-
-func (policy WeightRoundingPolicy) valid() bool {
-	_, err := NewWeightRoundingPolicy(policy.mode, policy.increment)
-	return err == nil
-}
-
 // VolumetricFactor is the card's own divisor, the length unit it reads, and the
 // precision its quotient is declared to. The card states it — L4 reads
 // "volumetric pounds = length × width × height in inches / 250" — so this
@@ -51,7 +28,7 @@ func NewVolumetricFactor(divisor Decimal, lengthUnit LengthUnit, rounding Weight
 
 func (factor VolumetricFactor) Divisor() Decimal               { return factor.divisor }
 func (factor VolumetricFactor) LengthUnit() LengthUnit         { return factor.lengthUnit }
-func (factor VolumetricFactor) WeightUnit() WeightUnit         { return factor.rounding.increment.unit }
+func (factor VolumetricFactor) WeightUnit() WeightUnit         { return factor.rounding.unit() }
 func (factor VolumetricFactor) Rounding() WeightRoundingPolicy { return factor.rounding }
 
 // Apply turns a volume into the volumetric weight the card declares. A volume
@@ -64,18 +41,29 @@ func (factor VolumetricFactor) Apply(volume Volume) (Weight, error) {
 	if volume.unit != factor.lengthUnit {
 		return Weight{}, ErrLengthUnitMismatch
 	}
-	value, err := volume.value.DivRoundToIncrement(factor.divisor, factor.rounding.increment.value, factor.rounding.mode)
+	segment, ok := factor.rounding.sole()
+	if !ok {
+		return Weight{}, ErrInvalidVolumetricFactor
+	}
+	value, err := volume.value.DivRoundToIncrement(factor.divisor, segment.increment.value, segment.mode)
 	if err != nil {
 		return Weight{}, err
 	}
-	return NewWeight(value, factor.rounding.increment.unit)
+	return NewWeight(value, segment.increment.unit)
 }
 
 func (factor VolumetricFactor) valid() bool {
+	// A divisor declares the precision of one quotient, so it takes a single
+	// rounding segment: banding by weight is impossible here because the weight
+	// is what the division produces.
+	segment, ok := factor.rounding.sole()
+	if !ok {
+		return false
+	}
 	// RoundingNone is excluded because an exact quotient need not terminate in
 	// base 10; the precision has to be declared rather than left to the code.
 	return factor.divisor.valid() && factor.divisor.Sign() > 0 && factor.lengthUnit.valid() &&
-		factor.rounding.valid() && factor.rounding.mode != RoundingNone
+		factor.rounding.valid() && segment.mode != RoundingNone
 }
 
 type PricingWeightPolicy struct {
@@ -124,7 +112,7 @@ func (policy PricingWeightPolicy) valid() bool {
 		return policy.volumetric == nil
 	case PricingWeightMax:
 		return policy.volumetric != nil && policy.volumetric.valid() &&
-			policy.volumetric.rounding.increment.unit == policy.rounding.increment.unit
+			policy.volumetric.rounding.unit() == policy.rounding.unit()
 	default:
 		return false
 	}
@@ -196,7 +184,7 @@ func NewPricingPlanVersion(
 	if !period.Within(rateTable.period) {
 		return PricingPlanVersion{}, ErrPricingPeriodConflict
 	}
-	if weight.rounding.increment.unit != rateTable.unit {
+	if weight.rounding.unit() != rateTable.unit {
 		return PricingPlanVersion{}, ErrWeightUnitMismatch
 	}
 	copyOfRules := append([]FixedChargeRule(nil), rules...)
@@ -289,7 +277,7 @@ func (plan PricingPlanVersion) valid() bool {
 	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.structures.valid() || !plan.manifest.valid() || plan.canonicalization == "" || plan.contentDigest == "" {
 		return false
 	}
-	if !plan.period.Within(plan.rateTable.period) || plan.weight.rounding.increment.unit != plan.rateTable.unit {
+	if !plan.period.Within(plan.rateTable.period) || plan.weight.rounding.unit() != plan.rateTable.unit {
 		return false
 	}
 	seenRuleIDs := make(map[string]struct{}, len(plan.rules))

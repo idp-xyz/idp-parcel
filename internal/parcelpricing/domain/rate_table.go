@@ -8,10 +8,19 @@ import (
 
 type RateTableFamily string
 
-const RateTableFamilyWeightZone RateTableFamily = "WEIGHT_ZONE"
+const (
+	RateTableFamilyWeightZone    RateTableFamily = "WEIGHT_ZONE"
+	RateTableFamilyFirstContinue RateTableFamily = "FIRST_CONTINUE"
+	RateTableFamilyUnitPrice     RateTableFamily = "UNIT_PRICE"
+)
 
 func (family RateTableFamily) valid() bool {
-	return family == RateTableFamilyWeightZone
+	switch family {
+	case RateTableFamilyWeightZone, RateTableFamilyFirstContinue, RateTableFamilyUnitPrice:
+		return true
+	default:
+		return false
+	}
 }
 
 type RateEntry struct {
@@ -73,13 +82,19 @@ func (entry RateEntry) contains(weight Weight) bool {
 	return !entry.hasMaximum || weight.value.Cmp(entry.maximum.value) < 0
 }
 
+// RateTableVersion declares one family and carries only that family's rates.
+// The families do not share an entry shape — a bracket ladder, a first-plus-step
+// rate and a per-unit price hold different data — so they cannot be one slice
+// discriminated by a tag.
 type RateTableVersion struct {
-	reference VersionReference
-	family    RateTableFamily
-	currency  Currency
-	unit      WeightUnit
-	period    EffectivePeriod
-	entries   []RateEntry
+	reference     VersionReference
+	family        RateTableFamily
+	currency      Currency
+	unit          WeightUnit
+	period        EffectivePeriod
+	entries       []RateEntry
+	firstContinue []FirstContinueRate
+	unitPrice     []UnitPriceRate
 }
 
 func NewRateTableVersion(
@@ -90,8 +105,11 @@ func NewRateTableVersion(
 	period EffectivePeriod,
 	entries []RateEntry,
 ) (RateTableVersion, error) {
-	if reference.kind != ArtifactRateTable || !reference.valid() || !family.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(entries) == 0 {
+	if reference.kind != ArtifactRateTable || !reference.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(entries) == 0 {
 		return RateTableVersion{}, ErrInvalidRateTable
+	}
+	if family != RateTableFamilyWeightZone {
+		return RateTableVersion{}, fmt.Errorf("%w: bracket entries only describe %s", ErrInvalidRateTable, RateTableFamilyWeightZone)
 	}
 	copyOfEntries := append([]RateEntry(nil), entries...)
 	seenIDs := make(map[string]struct{}, len(copyOfEntries))
@@ -161,27 +179,167 @@ func (table RateTableVersion) Entries() []RateEntry {
 	return append([]RateEntry(nil), table.entries...)
 }
 
-func (table RateTableVersion) valid() bool {
-	if table.reference.kind != ArtifactRateTable || !table.reference.valid() || !table.family.valid() || !table.currency.valid() || !table.unit.valid() || !table.period.valid() || len(table.entries) == 0 {
-		return false
-	}
-	_, err := NewRateTableVersion(table.reference, table.family, table.currency, table.unit, table.period, table.entries)
-	return err == nil
+func (table RateTableVersion) FirstContinueRates() []FirstContinueRate {
+	return append([]FirstContinueRate(nil), table.firstContinue...)
 }
 
-func (table RateTableVersion) Lookup(zone string, weight Weight) (RateEntry, error) {
+func (table RateTableVersion) UnitPriceRates() []UnitPriceRate {
+	return append([]UnitPriceRate(nil), table.unitPrice...)
+}
+
+func (table RateTableVersion) valid() bool {
+	if table.reference.kind != ArtifactRateTable || !table.reference.valid() || !table.family.valid() || !table.currency.valid() || !table.unit.valid() || !table.period.valid() {
+		return false
+	}
+	switch table.family {
+	case RateTableFamilyWeightZone:
+		if len(table.entries) == 0 || len(table.firstContinue) > 0 || len(table.unitPrice) > 0 {
+			return false
+		}
+		_, err := NewRateTableVersion(table.reference, table.family, table.currency, table.unit, table.period, table.entries)
+		return err == nil
+	case RateTableFamilyFirstContinue:
+		if len(table.firstContinue) == 0 || len(table.entries) > 0 || len(table.unitPrice) > 0 {
+			return false
+		}
+		_, err := NewFirstContinueRateTable(table.reference, table.currency, table.unit, table.period, table.firstContinue)
+		return err == nil
+	case RateTableFamilyUnitPrice:
+		if len(table.unitPrice) == 0 || len(table.entries) > 0 || len(table.firstContinue) > 0 {
+			return false
+		}
+		_, err := NewUnitPriceRateTable(table.reference, table.currency, table.unit, table.period, table.unitPrice)
+		return err == nil
+	default:
+		return false
+	}
+}
+
+// NewFirstContinueRateTable declares one first-plus-step rate per zone. There
+// are no intervals to check for gaps or overlap, because a single rate prices
+// every weight in its zone.
+func NewFirstContinueRateTable(
+	reference VersionReference,
+	currency Currency,
+	unit WeightUnit,
+	period EffectivePeriod,
+	rates []FirstContinueRate,
+) (RateTableVersion, error) {
+	if reference.kind != ArtifactRateTable || !reference.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(rates) == 0 {
+		return RateTableVersion{}, ErrInvalidRateTable
+	}
+	copyOfRates := append([]FirstContinueRate(nil), rates...)
+	seenIDs := make(map[string]struct{}, len(copyOfRates))
+	seenZones := make(map[string]struct{}, len(copyOfRates))
+	for _, rate := range copyOfRates {
+		if !rate.valid() || rate.firstWeight.unit != unit || rate.firstAmount.currency != currency {
+			return RateTableVersion{}, ErrInvalidRateTable
+		}
+		if _, exists := seenIDs[rate.id.String()]; exists {
+			return RateTableVersion{}, fmt.Errorf("%w: %s", ErrDuplicateRateEntry, rate.id.String())
+		}
+		seenIDs[rate.id.String()] = struct{}{}
+		if _, exists := seenZones[rate.zone]; exists {
+			return RateTableVersion{}, fmt.Errorf("%w: zone %s", ErrRateTableConflict, rate.zone)
+		}
+		seenZones[rate.zone] = struct{}{}
+	}
+	sort.SliceStable(copyOfRates, func(left, right int) bool {
+		return copyOfRates[left].zone < copyOfRates[right].zone
+	})
+	return RateTableVersion{
+		reference:     reference,
+		family:        RateTableFamilyFirstContinue,
+		currency:      currency,
+		unit:          unit,
+		period:        period,
+		firstContinue: copyOfRates,
+	}, nil
+}
+
+// NewUnitPriceRateTable declares one per-unit price per zone.
+func NewUnitPriceRateTable(
+	reference VersionReference,
+	currency Currency,
+	unit WeightUnit,
+	period EffectivePeriod,
+	rates []UnitPriceRate,
+) (RateTableVersion, error) {
+	if reference.kind != ArtifactRateTable || !reference.valid() || !currency.valid() || !unit.valid() || !period.valid() || len(rates) == 0 {
+		return RateTableVersion{}, ErrInvalidRateTable
+	}
+	copyOfRates := append([]UnitPriceRate(nil), rates...)
+	seenIDs := make(map[string]struct{}, len(copyOfRates))
+	seenZones := make(map[string]struct{}, len(copyOfRates))
+	for _, rate := range copyOfRates {
+		if !rate.valid() || rate.amountPerUnit.currency != currency {
+			return RateTableVersion{}, ErrInvalidRateTable
+		}
+		if _, exists := seenIDs[rate.id.String()]; exists {
+			return RateTableVersion{}, fmt.Errorf("%w: %s", ErrDuplicateRateEntry, rate.id.String())
+		}
+		seenIDs[rate.id.String()] = struct{}{}
+		if _, exists := seenZones[rate.zone]; exists {
+			return RateTableVersion{}, fmt.Errorf("%w: zone %s", ErrRateTableConflict, rate.zone)
+		}
+		seenZones[rate.zone] = struct{}{}
+	}
+	sort.SliceStable(copyOfRates, func(left, right int) bool {
+		return copyOfRates[left].zone < copyOfRates[right].zone
+	})
+	return RateTableVersion{
+		reference: reference,
+		family:    RateTableFamilyUnitPrice,
+		currency:  currency,
+		unit:      unit,
+		period:    period,
+		unitPrice: copyOfRates,
+	}, nil
+}
+
+func (table RateTableVersion) Lookup(zone string, weight Weight) (RateSelection, error) {
 	if !table.valid() {
-		return RateEntry{}, ErrInvalidRateTable
+		return RateSelection{}, ErrInvalidRateTable
 	}
 	if strings.TrimSpace(zone) == "" || strings.TrimSpace(zone) != zone {
-		return RateEntry{}, ErrNoMatchingRate
+		return RateSelection{}, ErrNoMatchingRate
 	}
 	if !weight.valid() {
-		return RateEntry{}, ErrInvalidWeight
+		return RateSelection{}, ErrInvalidWeight
 	}
 	if weight.unit != table.unit {
-		return RateEntry{}, ErrWeightUnitMismatch
+		return RateSelection{}, ErrWeightUnitMismatch
 	}
+	switch table.family {
+	case RateTableFamilyWeightZone:
+		return table.lookupBracket(zone, weight)
+	case RateTableFamilyFirstContinue:
+		for _, rate := range table.firstContinue {
+			if rate.zone != zone {
+				continue
+			}
+			amount, explanation, err := rate.price(weight)
+			if err != nil {
+				return RateSelection{}, err
+			}
+			return RateSelection{family: table.family, id: rate.id, zone: zone, amount: amount, explanation: explanation}, nil
+		}
+	case RateTableFamilyUnitPrice:
+		for _, rate := range table.unitPrice {
+			if rate.zone != zone {
+				continue
+			}
+			amount, explanation, err := rate.price(weight)
+			if err != nil {
+				return RateSelection{}, err
+			}
+			return RateSelection{family: table.family, id: rate.id, zone: zone, amount: amount, explanation: explanation}, nil
+		}
+	}
+	return RateSelection{}, fmt.Errorf("%w: zone %s, weight %s %s", ErrNoMatchingRate, zone, weight.value.String(), weight.unit)
+}
+
+func (table RateTableVersion) lookupBracket(zone string, weight Weight) (RateSelection, error) {
 	var match *RateEntry
 	for index := range table.entries {
 		entry := &table.entries[index]
@@ -189,12 +347,14 @@ func (table RateTableVersion) Lookup(zone string, weight Weight) (RateEntry, err
 			continue
 		}
 		if match != nil {
-			return RateEntry{}, fmt.Errorf("%w: zone %s", ErrRateTableConflict, zone)
+			return RateSelection{}, fmt.Errorf("%w: zone %s", ErrRateTableConflict, zone)
 		}
 		match = entry
 	}
 	if match == nil {
-		return RateEntry{}, fmt.Errorf("%w: zone %s, weight %s %s", ErrNoMatchingRate, zone, weight.value.String(), weight.unit)
+		return RateSelection{}, fmt.Errorf("%w: zone %s, weight %s %s", ErrNoMatchingRate, zone, weight.value.String(), weight.unit)
 	}
-	return *match, nil
+	explanation := fmt.Sprintf("rate entry %s matched zone %s and interval [%s,%s) %s",
+		match.id.String(), match.zone, match.minimum.value.String(), rateMaximumText(*match), match.minimum.unit)
+	return RateSelection{family: table.family, id: match.id, zone: zone, amount: match.amount, explanation: explanation}, nil
 }

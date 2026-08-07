@@ -53,13 +53,67 @@ func canonicalRateEntryValue(entry RateEntry) canonicalRateEntryDocument {
 	}
 }
 
+type canonicalFirstContinueDocument struct {
+	ID          string         `json:"id"`
+	Zone        string         `json:"zone"`
+	FirstWeight string         `json:"first_weight"`
+	FirstAmount canonicalMoney `json:"first_amount"`
+	Step        string         `json:"step"`
+	StepAmount  canonicalMoney `json:"step_amount"`
+	Unit        string         `json:"unit"`
+}
+
+func canonicalFirstContinueValue(rate FirstContinueRate) canonicalFirstContinueDocument {
+	return canonicalFirstContinueDocument{
+		ID:          rate.id.String(),
+		Zone:        rate.zone,
+		FirstWeight: rate.firstWeight.value.String(),
+		FirstAmount: canonicalMoneyValue(rate.firstAmount),
+		Step:        rate.step.value.String(),
+		StepAmount:  canonicalMoneyValue(rate.stepAmount),
+		Unit:        rate.firstWeight.unit.String(),
+	}
+}
+
+type canonicalUnitPriceDocument struct {
+	ID            string         `json:"id"`
+	Zone          string         `json:"zone"`
+	AmountPerUnit canonicalMoney `json:"amount_per_unit"`
+}
+
+func canonicalUnitPriceValue(rate UnitPriceRate) canonicalUnitPriceDocument {
+	return canonicalUnitPriceDocument{
+		ID:            rate.id.String(),
+		Zone:          rate.zone,
+		AmountPerUnit: canonicalMoneyValue(rate.amountPerUnit),
+	}
+}
+
+type canonicalRateSelectionDocument struct {
+	Family string         `json:"family"`
+	ID     string         `json:"id"`
+	Zone   string         `json:"zone"`
+	Amount canonicalMoney `json:"amount"`
+}
+
+func canonicalRateSelectionValue(selection RateSelection) canonicalRateSelectionDocument {
+	return canonicalRateSelectionDocument{
+		Family: string(selection.family),
+		ID:     selection.id.String(),
+		Zone:   selection.zone,
+		Amount: canonicalMoneyValue(selection.amount),
+	}
+}
+
 type canonicalRateTableDocument struct {
-	Reference canonicalVersionReference    `json:"reference"`
-	Family    string                       `json:"family"`
-	Currency  string                       `json:"currency"`
-	Unit      string                       `json:"unit"`
-	Period    string                       `json:"period"`
-	Entries   []canonicalRateEntryDocument `json:"entries"`
+	Reference     canonicalVersionReference        `json:"reference"`
+	Family        string                           `json:"family"`
+	Currency      string                           `json:"currency"`
+	Unit          string                           `json:"unit"`
+	Period        string                           `json:"period"`
+	Entries       []canonicalRateEntryDocument     `json:"entries"`
+	FirstContinue []canonicalFirstContinueDocument `json:"first_continue"`
+	UnitPrice     []canonicalUnitPriceDocument     `json:"unit_price"`
 }
 
 func canonicalRateTableValue(table RateTableVersion) canonicalRateTableDocument {
@@ -67,40 +121,67 @@ func canonicalRateTableValue(table RateTableVersion) canonicalRateTableDocument 
 	for _, entry := range table.entries {
 		entries = append(entries, canonicalRateEntryValue(entry))
 	}
+	firstContinue := make([]canonicalFirstContinueDocument, 0, len(table.firstContinue))
+	for _, rate := range table.firstContinue {
+		firstContinue = append(firstContinue, canonicalFirstContinueValue(rate))
+	}
+	unitPrice := make([]canonicalUnitPriceDocument, 0, len(table.unitPrice))
+	for _, rate := range table.unitPrice {
+		unitPrice = append(unitPrice, canonicalUnitPriceValue(rate))
+	}
 	return canonicalRateTableDocument{
-		Reference: canonicalReference(table.reference),
-		Family:    string(table.family),
-		Currency:  table.currency.String(),
-		Unit:      table.unit.String(),
-		Period:    table.period.canonicalString(),
-		Entries:   entries,
+		FirstContinue: firstContinue,
+		UnitPrice:     unitPrice,
+		Reference:     canonicalReference(table.reference),
+		Family:        string(table.family),
+		Currency:      table.currency.String(),
+		Unit:          table.unit.String(),
+		Period:        table.period.canonicalString(),
+		Entries:       entries,
 	}
 }
 
+type canonicalRoundingSegmentDocument struct {
+	Mode      string `json:"rounding_mode"`
+	Increment string `json:"increment"`
+	Unit      string `json:"unit"`
+	Maximum   string `json:"maximum,omitempty"`
+}
+
+func canonicalRoundingValue(policy WeightRoundingPolicy) []canonicalRoundingSegmentDocument {
+	segments := make([]canonicalRoundingSegmentDocument, 0, len(policy.segments))
+	for _, segment := range policy.segments {
+		document := canonicalRoundingSegmentDocument{
+			Mode:      string(segment.mode),
+			Increment: segment.increment.value.String(),
+			Unit:      segment.increment.unit.String(),
+		}
+		if segment.hasMaximum {
+			document.Maximum = segment.maximum.value.String()
+		}
+		segments = append(segments, document)
+	}
+	return segments
+}
+
 type canonicalVolumetricFactorDocument struct {
-	Divisor    string `json:"divisor"`
-	LengthUnit string `json:"length_unit"`
-	Mode       string `json:"rounding_mode"`
-	Increment  string `json:"increment"`
-	Unit       string `json:"unit"`
+	Divisor    string                             `json:"divisor"`
+	LengthUnit string                             `json:"length_unit"`
+	Rounding   []canonicalRoundingSegmentDocument `json:"rounding"`
 }
 
 func canonicalVolumetricFactorValue(factor VolumetricFactor) canonicalVolumetricFactorDocument {
 	return canonicalVolumetricFactorDocument{
 		Divisor:    factor.divisor.String(),
 		LengthUnit: factor.lengthUnit.String(),
-		Mode:       string(factor.rounding.mode),
-		Increment:  factor.rounding.increment.value.String(),
-		Unit:       factor.rounding.increment.unit.String(),
+		Rounding:   canonicalRoundingValue(factor.rounding),
 	}
 }
 
 type canonicalWeightPolicyDocument struct {
 	Reference  canonicalVersionReference          `json:"reference"`
 	Method     string                             `json:"method"`
-	Mode       string                             `json:"rounding_mode"`
-	Increment  string                             `json:"increment"`
-	Unit       string                             `json:"unit"`
+	Rounding   []canonicalRoundingSegmentDocument `json:"rounding"`
 	Volumetric *canonicalVolumetricFactorDocument `json:"volumetric_factor"`
 }
 
@@ -108,9 +189,7 @@ func canonicalWeightPolicyValue(policy PricingWeightPolicy) canonicalWeightPolic
 	document := canonicalWeightPolicyDocument{
 		Reference: canonicalReference(policy.reference),
 		Method:    string(policy.method),
-		Mode:      string(policy.rounding.mode),
-		Increment: policy.rounding.increment.value.String(),
-		Unit:      policy.rounding.increment.unit.String(),
+		Rounding:  canonicalRoundingValue(policy.rounding),
 	}
 	if policy.volumetric != nil {
 		factor := canonicalVolumetricFactorValue(*policy.volumetric)
@@ -210,6 +289,7 @@ type canonicalSurchargeRuleDocument struct {
 	Effect           string                                     `json:"effect"`
 	Condition        canonicalFeatureConditionDocument          `json:"condition"`
 	Calculation      canonicalSurchargeCalculationDocument      `json:"calculation"`
+	Exclusivity      string                                     `json:"exclusivity"`
 	ExclusivityGroup string                                     `json:"exclusivity_group"`
 	Priority         int                                        `json:"priority"`
 	MinimumWeight    *canonicalConditionalMinimumWeightDocument `json:"conditional_minimum_weight"`
@@ -223,6 +303,7 @@ func canonicalSurchargeRuleValue(rule SurchargeRule) canonicalSurchargeRuleDocum
 		Effect:           string(rule.effect),
 		Condition:        canonicalFeatureConditionValue(rule.condition),
 		Calculation:      canonicalSurchargeCalculationValue(rule.calculation),
+		Exclusivity:      rule.exclusivity.String(),
 		ExclusivityGroup: rule.exclusivityGroup,
 		Priority:         rule.priority,
 	}
@@ -274,7 +355,13 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // content and semantic digests are computed from. Digests are only comparable
 // within the same canonicalization version; widening the shape must bump this
 // value rather than rewrite the existing one. See ADR-0014.
-const canonicalizationVersion = "PPC-1"
+// PPC-2 widened the shape in three places at once, as the rule model design
+// decided: the rate table gained the first-continue and unit-price families,
+// the rounding policy became a segment list, and a lookup now records a rate
+// selection instead of a bracket. Batching them costs one version instead of
+// three, and every version has to be supported for as long as evaluations
+// recorded under it can be replayed.
+const canonicalizationVersion = "PPC-2"
 
 // CurrentCanonicalizationVersion reports the shape this build canonicalizes
 // under. An artifact recorded under any other value cannot have its digest
@@ -441,7 +528,7 @@ type canonicalEvaluation struct {
 	PlanContent      string                          `json:"plan_content"`
 	Manifest         []canonicalVersionReference     `json:"manifest"`
 	PricingWeight    *canonicalPricingWeightDocument `json:"pricing_weight,omitempty"`
-	MatchedRate      *canonicalRateEntryDocument     `json:"matched_rate,omitempty"`
+	MatchedRate      *canonicalRateSelectionDocument `json:"matched_rate,omitempty"`
 	ChargeLines      []canonicalChargeLineDocument   `json:"charge_lines"`
 	Total            *canonicalMoney                 `json:"total,omitempty"`
 	Issues           []canonicalEvaluationIssue      `json:"issues"`
@@ -508,7 +595,7 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		document.PricingWeight = &weightDocument
 	}
 	if evaluation.matchedRate != nil {
-		matched := canonicalRateEntryValue(*evaluation.matchedRate)
+		matched := canonicalRateSelectionValue(*evaluation.matchedRate)
 		document.MatchedRate = &matched
 	}
 	for _, line := range evaluation.chargeLines {

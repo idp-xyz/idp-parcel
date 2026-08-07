@@ -168,6 +168,21 @@ func (value ConditionalMinimumWeight) valid() bool {
 
 // SurchargeRule is a versioned rule that produces a charge line beyond the base
 // freight when its condition holds.
+// ExclusivityStance is what a card says about whether this surcharge competes
+// with others or stands beside them. It is three-valued on purpose: carriers
+// disagree here — UPS puts its large-package charge in the same exclusive set
+// as additional handling while FedEx collects both — so an unset group must not
+// be readable as "stands alone". Silence is its own state and a plan refuses it.
+type ExclusivityStance string
+
+const (
+	ExclusivityUndeclared ExclusivityStance = ""
+	ExclusivityStandalone ExclusivityStance = "STANDALONE"
+	ExclusivityGrouped    ExclusivityStance = "GROUPED"
+)
+
+func (stance ExclusivityStance) String() string { return string(stance) }
+
 type SurchargeRule struct {
 	id               string
 	chargeCode       ChargeCode
@@ -175,6 +190,7 @@ type SurchargeRule struct {
 	effect           ChargeEffect
 	condition        FeatureCondition
 	calculation      SurchargeCalculation
+	exclusivity      ExclusivityStance
 	exclusivityGroup string
 	priority         int
 	minimumWeight    *ConditionalMinimumWeight
@@ -209,8 +225,21 @@ func (rule SurchargeRule) InExclusivityGroup(group string, priority int) (Surcha
 	if !trimmed(group) || priority < 1 {
 		return SurchargeRule{}, ErrInvalidSurchargeRule
 	}
+	rule.exclusivity = ExclusivityGrouped
 	rule.exclusivityGroup = group
 	rule.priority = priority
+	if !rule.valid() {
+		return SurchargeRule{}, ErrInvalidSurchargeRule
+	}
+	return rule, nil
+}
+
+// Standalone records that the card collects this surcharge alongside the
+// others. It is a declaration in its own right, not the absence of one.
+func (rule SurchargeRule) Standalone() (SurchargeRule, error) {
+	rule.exclusivity = ExclusivityStandalone
+	rule.exclusivityGroup = ""
+	rule.priority = 0
 	if !rule.valid() {
 		return SurchargeRule{}, ErrInvalidSurchargeRule
 	}
@@ -236,8 +265,10 @@ func (rule SurchargeRule) Condition() FeatureCondition       { return rule.condi
 func (rule SurchargeRule) Calculation() SurchargeCalculation { return rule.calculation }
 func (rule SurchargeRule) Priority() int                     { return rule.priority }
 
+func (rule SurchargeRule) Exclusivity() ExclusivityStance { return rule.exclusivity }
+
 func (rule SurchargeRule) ExclusivityGroup() (string, bool) {
-	if rule.exclusivityGroup == "" {
+	if rule.exclusivity != ExclusivityGrouped {
 		return "", false
 	}
 	return rule.exclusivityGroup, true
@@ -279,11 +310,16 @@ func (rule SurchargeRule) valid() bool {
 		!rule.effect.valid() || !rule.condition.valid() || !rule.calculation.valid() {
 		return false
 	}
-	if rule.exclusivityGroup == "" {
-		if rule.priority != 0 {
+	switch rule.exclusivity {
+	case ExclusivityUndeclared, ExclusivityStandalone:
+		if rule.exclusivityGroup != "" || rule.priority != 0 {
 			return false
 		}
-	} else if !trimmed(rule.exclusivityGroup) || rule.priority < 1 {
+	case ExclusivityGrouped:
+		if !trimmed(rule.exclusivityGroup) || rule.priority < 1 {
+			return false
+		}
+	default:
 		return false
 	}
 	return rule.minimumWeight == nil || rule.minimumWeight.valid()
@@ -474,6 +510,12 @@ func NewPricingPlanStructures(
 		if !rule.valid() {
 			return PricingPlanStructures{}, ErrInvalidSurchargeRule
 		}
+		// Whether this surcharge competes with the others is the carrier's rule
+		// and differs between carriers, so a card that never said cannot be
+		// published under either reading.
+		if rule.exclusivity == ExclusivityUndeclared {
+			return PricingPlanStructures{}, fmt.Errorf("%w: %s", ErrUndeclaredExclusivity, rule.id)
+		}
 		if _, exists := seenRuleIDs[rule.id]; exists {
 			return PricingPlanStructures{}, fmt.Errorf("%w: %s", ErrDuplicateSurchargeRule, rule.id)
 		}
@@ -548,7 +590,7 @@ func (structures PricingPlanStructures) Declared() bool {
 func (structures PricingPlanStructures) valid() bool {
 	seenCodes := make(map[string]struct{}, len(structures.surchargeRules))
 	for index, rule := range structures.surchargeRules {
-		if !rule.valid() {
+		if !rule.valid() || rule.exclusivity == ExclusivityUndeclared {
 			return false
 		}
 		if index > 0 && structures.surchargeRules[index-1].id >= rule.id {

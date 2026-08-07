@@ -142,7 +142,7 @@ func TestRateTableSupportsOnlyTerminalOpenEndedInterval(t *testing.T) {
 	if err != nil || matched.ID().String() != "r-open" {
 		t.Fatalf("open-ended lookup = %s, %v", matched.ID(), err)
 	}
-	if _, hasMaximum := matched.Maximum(); hasMaximum {
+	if _, hasMaximum := open.Maximum(); hasMaximum {
 		t.Fatal("open-ended entry unexpectedly has a maximum")
 	}
 

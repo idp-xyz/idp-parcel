@@ -126,7 +126,7 @@ func structuresWithReferenceSeries(t testing.TB, id, version string) domain.Pric
 		t.Fatalf("reference series binding: %v", err)
 	}
 	structures, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10")},
+		[]domain.SurchargeRule{standaloneRule(t, surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10"))},
 		nil,
 		[]domain.ReferenceSeriesBinding{binding},
 	)
@@ -134,6 +134,34 @@ func structuresWithReferenceSeries(t testing.TB, id, version string) domain.Pric
 		t.Fatalf("plan structures: %v", err)
 	}
 	return structures
+}
+
+// Whether a surcharge stands beside the others or competes with them is the
+// carrier's rule, not the engine's: UPS puts its large-package charge in the
+// same exclusive set as additional handling, FedEx charges both. Reading an
+// unset group as "stands alone" would silently apply one carrier's rule to the
+// other's traffic, so silence is refused instead of defaulted.
+func TestPlanStructuresRefuseASurchargeRuleThatNeverDeclaredItsExclusivityStance(t *testing.T) {
+	undeclared := surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10")
+	if _, err := domain.NewPricingPlanStructures([]domain.SurchargeRule{undeclared}, nil, nil); !errors.Is(err, domain.ErrUndeclaredExclusivity) {
+		t.Fatalf("undeclared exclusivity error = %v", err)
+	}
+}
+
+// Standing alone is itself a declaration — the card saying this charge may be
+// collected alongside the others — so it must be expressible and must not read
+// the same as never having said.
+func TestSurchargeRuleMayDeclareThatItStandsAlone(t *testing.T) {
+	standalone, err := surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10").Standalone()
+	if err != nil {
+		t.Fatalf("standalone: %v", err)
+	}
+	if _, err := domain.NewPricingPlanStructures([]domain.SurchargeRule{standalone}, nil, nil); err != nil {
+		t.Fatalf("plan structures: %v", err)
+	}
+	if group, grouped := standalone.ExclusivityGroup(); grouped {
+		t.Fatalf("a standalone rule reported group %q", group)
+	}
 }
 
 // A charge can never be part of its own basis; accepting that declaration would
@@ -180,7 +208,7 @@ func TestGreaterOfSurchargeRejectsANestedGreaterOfOperand(t *testing.T) {
 // a declared dependency rather than whatever charges happen to precede it.
 func TestPlanStructuresRejectPercentSurchargeWithoutItsDeclaredBasis(t *testing.T) {
 	_, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{ruleWithCalculation(t, percentOfBasisCalculation(t, "12"))},
+		[]domain.SurchargeRule{standaloneRule(t, ruleWithCalculation(t, percentOfBasisCalculation(t, "12")))},
 		nil,
 		nil,
 	)
@@ -288,7 +316,7 @@ func structuresWithCalculation(t testing.TB, calculation domain.SurchargeCalcula
 		t.Fatalf("charge dependency: %v", err)
 	}
 	structures, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{ruleWithCalculation(t, calculation)},
+		[]domain.SurchargeRule{standaloneRule(t, ruleWithCalculation(t, calculation))},
 		[]domain.ChargeDependency{dependency},
 		nil,
 	)
@@ -328,8 +356,7 @@ func structuresWithDependency(t testing.TB, excluded string) domain.PricingPlanS
 		t.Fatalf("charge dependency: %v", err)
 	}
 	structures, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10")},
-		[]domain.ChargeDependency{dependency},
+		[]domain.SurchargeRule{standaloneRule(t, surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", "48", "10"))}, []domain.ChargeDependency{dependency},
 		nil,
 	)
 	if err != nil {
@@ -369,7 +396,7 @@ func structuresWithMinimumWeight(t testing.TB, threshold, minimum string) domain
 	if err != nil {
 		t.Fatalf("conditional minimum weight: %v", err)
 	}
-	rule, err := surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", threshold, "10").
+	rule, err := standaloneRule(t, surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", threshold, "10")).
 		WithConditionalMinimumWeight(conditionalMinimum)
 	if err != nil {
 		t.Fatalf("attach conditional minimum: %v", err)
@@ -384,7 +411,7 @@ func structuresWithMinimumWeight(t testing.TB, threshold, minimum string) domain
 func structuresWithSurcharge(t testing.TB, threshold string) domain.PricingPlanStructures {
 	t.Helper()
 	structures, err := domain.NewPricingPlanStructures(
-		[]domain.SurchargeRule{surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", threshold, "10")},
+		[]domain.SurchargeRule{standaloneRule(t, surchargeRule(t, "ahs-dimension", "AHS_DIMENSION", threshold, "10"))},
 		nil,
 		nil,
 	)
@@ -392,6 +419,15 @@ func structuresWithSurcharge(t testing.TB, threshold string) domain.PricingPlanS
 		t.Fatalf("plan structures: %v", err)
 	}
 	return structures
+}
+
+func standaloneRule(t testing.TB, rule domain.SurchargeRule) domain.SurchargeRule {
+	t.Helper()
+	declared, err := rule.Standalone()
+	if err != nil {
+		t.Fatalf("standalone: %v", err)
+	}
+	return declared
 }
 
 func surchargeRule(t testing.TB, id, code, threshold, amount string) domain.SurchargeRule {

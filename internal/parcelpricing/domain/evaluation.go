@@ -186,7 +186,7 @@ type PricingEvaluation struct {
 	planCanonicalization string
 	manifest             VersionManifest
 	pricingWeight        *PricingWeightResult
-	matchedRate          *RateEntry
+	matchedRate          *RateSelection
 	chargeLines          []ChargeLine
 	total                *Money
 	issues               []EvaluationIssue
@@ -238,7 +238,9 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withCalculationError(err)
 	}
 	evaluation.matchedRate = &matchedRate
-	evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("rate entry %s matched zone %s and interval [%s,%s) %s", matchedRate.id.String(), matchedRate.zone, matchedRate.minimum.value.String(), rateMaximumText(matchedRate), matchedRate.minimum.unit))
+	// The explanation comes from the table because only it knows whether the
+	// amount was matched in a bracket or derived from a step or unit price.
+	evaluation.explanation = append(evaluation.explanation, matchedRate.explanation)
 
 	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, "Base rate", matchedRate.amount, matchedRate.id.String())
 	if err != nil {
@@ -341,9 +343,9 @@ func (evaluation PricingEvaluation) PricingWeight() (PricingWeightResult, bool) 
 	return *evaluation.pricingWeight, true
 }
 
-func (evaluation PricingEvaluation) MatchedRate() (RateEntry, bool) {
+func (evaluation PricingEvaluation) MatchedRate() (RateSelection, bool) {
 	if evaluation.matchedRate == nil {
-		return RateEntry{}, false
+		return RateSelection{}, false
 	}
 	return *evaluation.matchedRate, true
 }

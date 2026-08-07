@@ -43,6 +43,7 @@ var (
 	ErrInvalidVolumetricFactor            = errors.New("parcel pricing: invalid volumetric factor")
 	ErrInvalidSurchargeRule               = errors.New("parcel pricing: invalid surcharge rule")
 	ErrDuplicateSurchargeRule             = errors.New("parcel pricing: duplicate surcharge rule")
+	ErrUndeclaredExclusivity              = errors.New("parcel pricing: surcharge rule did not declare whether it is exclusive with the others")
 	ErrInvalidChargeDependency            = errors.New("parcel pricing: invalid charge dependency")
 	ErrInvalidReferenceSeries             = errors.New("parcel pricing: invalid reference series binding")
 	ErrInvalidPlanStructures              = errors.New("parcel pricing: invalid pricing plan structures")

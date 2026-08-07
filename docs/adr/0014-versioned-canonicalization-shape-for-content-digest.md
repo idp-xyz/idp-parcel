@@ -1,7 +1,8 @@
 # ADR-0014: 为内容摘要的规范化形状引入版本号
 
 Status: Accepted  
-Date: 2026-08-07
+Date: 2026-08-07  
+Amended by: [开发主线的产品就绪里程碑与能力范围判据](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)（限定下文 Alternatives considered 中否决「按行业形态先把三族与分段进位的结构定死」时所用的「在结构层写死未确认内容」这一条理由：该理由对自营系统成立，对面向市场的产品不成立。该替代仍不能取代本记录的 Decision——版本号与建哪些族是两个独立问题。Decision 与 Consequences 不变，本记录正文不改写）
 
 ## Context
 
