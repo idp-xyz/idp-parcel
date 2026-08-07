@@ -136,11 +136,11 @@
 
 ## 删除参考树前还缺什么
 
-本次转录只解决了案例语料这一项。剩余条件见[去 `foo` 权威依赖交接](./pp-de-foo-authority-agent-handoff.md)：活文档中其余引用尚未清理，`fixtures` 的去留未定，且删除需人类确认。
+本次转录只解决了案例语料这一项。剩余条件见[去参考设计权威依赖交接](./pp-de-reference-authority-agent-handoff.md)：活文档中其余引用尚未清理，`fixtures` 的去留未定，且删除需人类确认。
 
 ## 相关文档
 
 - [小包计价上下文](../domain/parcel-pricing/CONTEXT.md)：源完整性门禁与证据层级的权威位置
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./pp-s03-w01-golden-case-source-evidence-request.md)：四条 `SRC-DISC` 的单元格核实与裁决要求
-- [去 `foo` 权威依赖 Agent 交接](./pp-de-foo-authority-agent-handoff.md)：删除参考树的完整前置条件
-- [参考设计吸收覆盖对照](./pp-foo-reference-absorption-coverage.md)：历史索引
+- [去参考设计权威依赖 Agent 交接](./pp-de-reference-authority-agent-handoff.md)：删除参考树的完整前置条件
+- [参考设计吸收覆盖对照](./pp-reference-design-absorption-coverage.md)：历史索引
