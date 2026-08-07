@@ -1,8 +1,8 @@
 # Agent 交接：去 `foo` 权威依赖（自洽文档路径）
 
-状态：路径 **A（supersede ADR）与 B（抬升已定案 OPEN 项）已执行完毕**；**C（誊金样例）、D（scrub 活文档）未开始，`foo/` 未删**。本文件是工作摘要，不是新权威规则。规则仍以各 `CONTEXT.md` / ADR / 用例为准。
+状态：路径 **A（supersede ADR）、B（抬升已定案 OPEN 项）、C（誊金样例）已执行完毕**；**D（scrub 活文档）未开始，`foo/` 未删**。本文件是工作摘要，不是新权威规则。规则仍以各 `CONTEXT.md` / ADR / 用例为准。
 
-日期：2026-08-07（A+B 于同日执行，通道 `idp-mcp-1`）  
+日期：2026-08-07（A+B+C 于同日执行，通道 `idp-mcp-1`）  
 上一会话通道：`idp-mcp-4`  
 仓库：`idp-parcel`
 
@@ -108,8 +108,8 @@ ADR-0011 **只改状态行**为 `Superseded by ADR-0012` 并加 `Superseded: 202
 |---|---|---|
 | A | supersede ADR-0011 | **已完成**，见 §5 |
 | B | 抬升 FOO-OPEN-04/06 等到 CONTEXT/决策索引，退役台账依赖 | **已完成 OPEN-04 与 OPEN-06**；OPEN-03 残留见下 |
-| C | 誊金样例（至少 41 `SOURCE_RATE_CARD`）进 `docs/` | **未开始**。删 `foo/` 前硬门槛；`docs/` 内仍为 **0** 个 `case_id` 副本 |
-| D | scrub 活文档路径（CONTEXT/matrix/handoff/README） | **未开始**。若金样例未誊，删目录仍丢语料 |
+| C | 誊金样例（至少 41 `SOURCE_RATE_CARD`）进 `docs/` | **已完成，且扩到全部 136 例**，见[转录本](./pp-golden-case-transcript.md) |
+| D | scrub 活文档路径（CONTEXT/matrix/handoff/README） | **未开始**。语料已誊，此项不再有丢语料风险 |
 | E | 先出执行清单再动手 | 已出清单并获批 |
 
 **B 的残留：`FOO-OPEN-03`。** 其八条流程 ↔ `UC-*` 核对表仍以 `foo` 章节号为主键，删目录后无法复核。可长期保留的残余只有两处「未识别」登记——§39 的佣金、§40 的追溯调价影响分析，两者均**首发不做、只登记不新增 UC**。这两条目前仅存于吸收台账，本仓其他文档全无「佣金」字样。落点未定，需人类裁定：留在台账（台账即降级为决策索引）、进 `docs/application/README.md`，还是进首发主线基线。未定前**不要**擅自写进任一 `CONTEXT.md`——它是范围登记，不是领域语言。
@@ -122,14 +122,15 @@ ADR-0011 **只改状态行**为 `Superseded by ADR-0012` 并加 `Superseded: 202
 
 按序；未完成前一步不要删目录。
 
-1. **金样例落库（硬门槛）**  
-   - 至少转录 41 例 `SOURCE_RATE_CARD`：`case_id`、输入、期望金额/结构、单元格坐标、`source_kind`、涉及的 `SRC-DISC`。  
-   - 评估 95 例合成/上游：是否值得转录，或明确「仅语义、不落库、删目录即放弃」。  
-   - 完成标准：不打开 `foo/` 也能跑/审这 41 例的验收叙述。
+1. **金样例落库（硬门槛）** — **已完成**  
+   - ✅ 全部 136 例逐字转录至 `docs/reference/golden-cases/`，含四条 `SRC-DISC` 声明；程序生成而非手抄，逐例规范化比对 0 差异。  
+   - ✅ 95 例合成/上游一并转录，理由是门禁明写它们可作隔离 `S`，只誊 41 例会让门禁指向不存在的东西。  
+   - ⬜ 原案例集的 `fixtures`（一张价表 + 26 项附加费抽取）**未转录**，理由见转录本；这是删目录时唯一真正消失的内容，去留需人类决定。  
+   - 完成标准已达成：不打开 `foo/` 也能审这些案例。
 
-2. **重写依赖 foo 案例对比的门禁叙述**  
-   - 今日 EVD-03 等若依赖「对照 foo cases」，改为对照本仓誊本或 `docs/reference`。  
-   - 完成标准：`PP-S03-W01` / CONTEXT 无「必须打开 foo JSON」的步骤。
+2. **重写依赖 foo 案例对比的门禁叙述** — **已完成**  
+   - ✅ `PP-S03-W01` 的 `EVD-03` 与 `parcel-pricing/CONTEXT.md` 源完整性门禁改为指向本仓转录本。  
+   - 完成标准已达成：两处均无「必须打开 `foo/` JSON」的步骤。其余 `foo` 字样属称谓而非流程依赖，归 D。
 
 3. **抬升已定案 OPEN 项** — **部分完成**  
    - ✅ OPEN-04 三层理由已写入 `parcel-pricing/CONTEXT.md` 新增「首发实现取舍」节，改用本仓自有概念（发布生命周期的「草稿 → 已校验」、「版本内容摘要」、源完整性门禁）表述，无 `foo` 章节号。  
@@ -200,7 +201,9 @@ ADR-0011 **只改状态行**为 `Superseded by ADR-0012` 并加 `Superseded: 202
 | PP-S03 交接 | `docs/design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md` |
 | 验收矩阵（证据层级） | `docs/product/PILOT-ACCEPTANCE-MATRIX.md` |
 | 权威价卡文件 | `docs/reference/蜴国际-美线UPS-Ground-同行价卡-260729.xlsx` |
-| 参考树（待删） | `foo/`（~28 文件；金样例 JSON 仅在此） |
+| 案例转录本（说明） | `docs/design/pp-golden-case-transcript.md` |
+| 案例转录本（数据） | `docs/reference/golden-cases/parcel-pricing-rating-golden-cases-v1.0.1.json` |
+| 参考树（待删） | `foo/`（~28 文件；136 例案例已转录，仅 `fixtures` 尚未落库） |
 | 计价域代码 | `internal/parcelpricing/domain/`（含 `fingerprint.go`） |
 
 文档索引入口：[`docs/README.md`](../README.md)。
@@ -209,23 +212,23 @@ ADR-0011 **只改状态行**为 `Superseded by ADR-0012` 并加 `Superseded: 202
 
 ## 11. 建议下一任开场动作
 
-A + B 已完成，剩余工作按下列顺序：
+A + B + C 已完成，剩余工作按下列顺序：
 
 1. 读本文件 §1–§7，重点是 §6 的残留与 §7 未打勾项。  
-2. 向人类确认 `FOO-OPEN-03` 两处「未识别」的落点（§6），落点定了台账才能整表退役。  
-3. **C（誊 41 例金样例）** 是删 `foo/` 的硬门槛，单独排期；它与业务 `SRC-DISC-002` 裁决可并行，但勿混为一谈——誊录是搬运语料，裁决是决定金额能否用。  
-4. **D（scrub 活文档）** 在 C 之后做，否则删目录会丢语料。  
-5. 每步改完：更新本交接文状态栏，或按 `/handoff` 另开新交接；在 `docs/README.md` 为新增权威文档补一句入口。  
-6. **不要**在未誊样例、未经人类确认时删除 `foo/`。
+2. 向人类确认两件事：`FOO-OPEN-03` 两处「未识别」的落点（§6），以及原案例集 `fixtures` 的去留（§7 第 1 项）。前者定了台账才能整表退役，后者定了才知道删目录会不会丢东西。  
+3. **D（scrub 活文档）** 现在可以做：语料已誊，不再有丢语料风险。剩余 `foo` 字样多为称谓，逐处判断是改中性说法还是留作历史。  
+4. 删 `foo/` 需要人类确认，且要先过第 2 步的两个决定。  
+5. 每步改完：更新本交接文状态栏，或按 `/handoff` 另开新交接；在 `docs/README.md` 为新增权威文档补一句入口。
 
 ---
 
 ## 12. 本交接不包含的内容
 
-- 未誊任何 golden `case_id`。  
 - 未删除 `foo/`。  
 - 未 scrub 活文档中其余 `foo` 字样（路径 D）。  
 - 未为 `FOO-OPEN-03` 的两处「未识别」定落点。  
+- 未转录原案例集的 `fixtures`，其去留未决。  
+- 未核实转录案例中的任何金额；转录只保证与原交付一致，不保证与价卡一致。  
 - 未取得 `SRC-DISC-*` 业务签字。  
 - 未改变证据层级或试点 `Go/No-Go`。  
 - 未改变任何计价语义：ADR-0012 与 CONTEXT 新增内容都是既有决策的自洽重述与抬升，不新增能力范围。
