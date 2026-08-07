@@ -45,9 +45,9 @@ Status: Confirmed
 
 ## Source integrity gate
 
-当前从 `foo` 吸收的 Golden Case 资料只能作为语义和治理参考，尚未达到生产验收证据门槛：
+从外部参考设计吸收的 Golden Case 资料只能作为语义和治理参考，尚未达到生产验收证据门槛。案例本体已逐字转录进本仓，见[计价治理案例转录本](../../design/pp-golden-case-transcript.md)；核对案例不需要打开仓库外的参考树。
 
-- **Schema 指针：已澄清。** Golden JSON 的 `$schema` 指向 `international-parcel-rating-golden-cases-v1.0.schema.json`，而 `foo` 下只存在 `international-parcel-rating-golden-cases-v1.0.1.schema.json`。这是 `foo` 自身的笔误，按后者校验。
+- **Schema 指针：已澄清。** Golden JSON 的 `$schema` 指向 `international-parcel-rating-golden-cases-v1.0.schema.json`，而参考设计下只存在 `international-parcel-rating-golden-cases-v1.0.1.schema.json`。这是参考设计自身的笔误，按后者校验。
 - **源文件身份：已改判基线。** Golden JSON 声明源文件为 `副本蜴国际-美线UPS-Ground-同行价卡-260729.xlsx`，该副本已被删除，全仓不存在。现以 `docs/reference/蜴国际-美线UPS-Ground-同行价卡-260729.xlsx` 为权威源，实际 SHA-256 为 `9edaf27ef93004e00f73a65471897f2cf7064d5d4df05014934ef7ac5861d33d`。
 - **哈希证据：不可复核，且不会再闭合。** Golden JSON 声明的源价卡 SHA-256 为 `22ec1f558b1ec14716d53564ea6030a7c0457304a007c60bc7280b4e3becc577`，与上述权威源不符。两值不同即证明两份文件字节不同（最可能是副本经 Excel 重新保存），而能够复核的副本已删除。因此**两者的等价关系由仓库所有者断言，不由哈希证明**；源身份的保证强度低于哈希匹配，且无法通过后续取证提升。这不是待办事项，是一项长期声明。
 - Golden JSON 自身声明的四条源价卡内容差异 `SRC-DISC-001` 至 `004` 尚未裁决：违禁品收费在源价卡两处分别记为 5000 与 2025 美元（`BLOCKING`）、UPS 价卡中出现 FedEx 费用标签、燃油同时写作「8 折」与「附加费率 80%」、AHS/OS 缺明确基准价与折扣模型。逐条依据与裁决要求见 [`PP-S03-W01`](../../design/pp-s03-w01-golden-case-source-evidence-request.md)。
@@ -56,7 +56,7 @@ Status: Confirmed
 
 按 `source_kind` 分层后，当前 136 个案例中 83 个 `NORMATIVE_SYNTHETIC` 和 12 个 `UPSTREAM_CONSISTENCY` 只能在隔离环境中作为 `S` 证据使用；它们可以验证规则语义和重放确定性，但不能升级为历史回放 `R` 或生产 `P`。41 个 `SOURCE_RATE_CARD` 案例因上述四条内容差异尚未裁决，必须隔离，不能用于金额验证；即便将来裁决完成，其所依据的源身份仍只有断言强度。
 
-在 `SRC-DISC-001` 至 `004` 逐条取得业务裁决之前，任何 `foo` 案例都不能作为生产价卡金额、正式 `P` 验收或客户账单依据。涉及某条未裁决差异的案例单独阻断，不因其余条件已闭合而放行。任何一方要以这 41 例支撑 `P` 级金额验收时，必须同时接受上述源身份的断言强度；不接受则须另行取得可哈希复核的源。模拟重放始终保留为 `S`；未来取得真实来源后，必须另建真实执行记录，不能把合成执行记录改写成 `R` 或 `P`。
+在 `SRC-DISC-001` 至 `004` 逐条取得业务裁决之前，该案例集的任何案例都不能作为生产价卡金额、正式 `P` 验收或客户账单依据。涉及某条未裁决差异的案例单独阻断，不因其余条件已闭合而放行；但各案例只引用粗单元格范围，无法逐例归因到具体差异，因此在案例给出确切单元格之前不得据此对个别案例解除阻断，分组情况见[转录本](../../design/pp-golden-case-transcript.md)。任何一方要以这 41 例支撑 `P` 级金额验收时，必须同时接受上述源身份的断言强度；不接受则须另行取得可哈希复核的源。模拟重放始终保留为 `S`；未来取得真实来源后，必须另建真实执行记录，不能把合成执行记录改写成 `R` 或 `P`。
 
 ## Rules and invariants
 

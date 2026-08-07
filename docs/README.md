@@ -48,6 +48,7 @@
 - [`PN-07` 运营结算与经营核算开发交接](./design/pn-07-operational-settlement-and-accounting-development-handoff.md)：把计量、客户/供应商计价、运输发生项到预期成本、调整唯一所有权、接受前财务控制、对账单、供应商账单、真实收付映射/核销、成本分摊、经营结果、赔付/追偿金额和关务代垫组织成 W01 至 W09；通用业务编排已形成，真实参数和联合账期证据仍待提供，当前生产结论保持 `No-Go / 待参数化`。
 - [`PP-S03` 证据与合成契约开发交接](./design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md)：在无真实 SELL/BUY 参数时固定隔离 `S` 的计价验收、费用代码交接和缺映射 `PENDING` 边界；不创建结算对象或解除生产门禁。
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./design/pp-s03-w01-golden-case-source-evidence-request.md)：把源文件身份、哈希、取数范围、`foo` 自述的四条源价卡差异和使用授权整理成可执行取证，并固定完全闭合、部分闭合与不可闭合三种结论；不修改 `foo/`，不改写证据层级，也不单独构成参数状态转换。
+- [计价治理案例转录本](./design/pp-golden-case-transcript.md)：说明 136 个治理案例如何逐字转录进本仓、如何复核保真、各分组的证据层级与阻断状态，并登记未转录内容及其理由；它是审阅入口与转录说明，不构成新的验收依据，也不改变任何案例的层级。案例数据本体在 [`docs/reference/golden-cases/`](./reference/golden-cases/)。
 - [`foo` 参考设计吸收覆盖对照](./design/pp-foo-reference-absorption-coverage.md)：逐节登记 `foo` 参考设计各交付物在本仓的落点，按`已吸收`、`已确认不采纳`、`待决`三态标注并给出权威链接；它是台账，只索引不复述规则，也不替 `foo` 的正确性背书。
 - [去 `foo` 权威依赖 Agent 交接](./design/pp-de-foo-authority-agent-handoff.md)：总结「用本仓自洽文档替代引用 `foo`」的结论、门禁与 FOO-OPEN 现状、SRC-DISC 核实、ADR-0011 supersede 路径、删目录前硬门槛与建议下一步；给下一任 Agent 用，不定义新规则。
 - [`PN-08` 端到端试点与阶段准入开发交接](./design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)：把同版本候选证据、历史回放、影子运行、限量生产、唯一权威、暂停恢复、对象级接管、真实主链/账期、在途盘点和正式 `Go/No-Go` 组织成 W01 至 W09；它是产品级治理编排，不新增限界上下文或全局业务状态机，当前生产结论保持 `No-Go / 待参数化`。
