@@ -6,6 +6,7 @@
 
 - 仓库根 [AGENTS.md](../AGENTS.md)：开发与 Agent 的开工顺序、红线、改文档规则与 skills 路由；不替代本目录下的产品/领域权威定义。
 - [Agent skills 接线](./agents/)：issue tracker（本地 `.scratch/`）、triage 标签、领域文档消费约定；供 `/triage`、`/to-spec`、`/to-tickets`、`/implement`、`/wayfinder` 读取。
+- [技能流程在本仓的落法](./agents/workflow.md)：通用技能流程与本仓 PN 切片、交接工作包、证据层级之间的绑定关系，以及哪些上游步骤本仓已用文档做过。
 
 ## 权威文档职责
 

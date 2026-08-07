@@ -46,6 +46,8 @@ Skill 权威源是 [`idp-xyz/idp-skills`](https://github.com/idp-xyz/idp-skills)
 
 工程 skills 的 tracker / 标签 / 领域布局见下方 [Agent skills](#agent-skills)。
 
+**通用流程与本仓的绑定见 [技能流程在本仓的落法](./docs/agents/workflow.md)**：哪些上游步骤（`/wayfinder`、`/to-tickets`、`/setup-idp-skills`）本仓已用文档做过因而不必再跑、一个 PN 切片实际怎么走、红线在流程哪一步生效、以及本机环境的暗礁。
+
 ### Skill 可见执行
 
 Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skill 名。**本仓要求**在用户触发 skill（`/name`、@ 引用或口述「按某 skill 执行」）时，让人类能盯到进度：
@@ -116,3 +118,7 @@ Default category/state role strings (`bug`, `ready-for-agent`, …). See [`docs/
 ### Domain docs
 
 Multi-context map at `docs/domain/CONTEXT-MAP.md`; shared ADRs in `docs/adr/`. See [`docs/agents/domain.md`](./docs/agents/domain.md).
+
+### Flow binding
+
+How the generic skill flow maps onto this repo's PN slices, handoff work packages, and evidence levels. See [`docs/agents/workflow.md`](./docs/agents/workflow.md).
