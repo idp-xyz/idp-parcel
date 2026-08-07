@@ -1,0 +1,397 @@
+manifest_version: 1.0.1
+design_name: International Parcel Rating Runtime
+architecture_style: modular_monolith_with_horizontally_scalable_workers
+language_baseline:
+  reference_implementation: Go
+  version_policy: project-pinned stable toolchain
+  numeric_rule: decimal_only_no_binary_float_for_business_values
+required_infrastructure:
+- PostgreSQL
+- ObjectStorage
+optional_infrastructure:
+- Redis
+- ExternalMessageBroker
+semantic_hot_path_must_not_require:
+- Redis
+- ExternalMessageBroker
+- WorkflowEngine
+- RemoteRuleEvaluation
+- NonDeterministicInference
+services:
+- name: rating-api
+  deployment: required
+  responsibilities:
+  - HTTP authentication and authorization projection
+  - request validation and idempotency admission
+  - synchronous rating commands and resource queries
+  - quote commands
+  modules:
+  - http-adapter
+  - rating-application
+  - comparison-application
+  - quote-application
+- name: rating-worker
+  deployment: required_for_async
+  responsibilities:
+  - asynchronous evaluation execution
+  - batch item execution
+  - replay execution
+  modules:
+  - rating-application
+  - batch-application
+  - stage-executor
+- name: outbox-publisher
+  deployment: required
+  responsibilities:
+  - publish committed domain events from transactional outbox
+  modules:
+  - outbox-publisher
+- name: plan-compiler
+  deployment: pricing_governance_boundary
+  responsibilities:
+  - validate released pricing components
+  - compile immutable pricing artifacts
+  - publish content-addressed artifacts
+  modules:
+  - compiled-plan-runtime
+  - pricing-catalog-domain
+  - contract-policy-domain
+modules:
+- name: shared-kernel
+  layer: domain
+  depends_on: []
+- name: product-eligibility-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: contract-policy-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: pricing-catalog-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: facts-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: rating-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: quote-domain
+  layer: domain
+  depends_on:
+  - shared-kernel
+- name: rating-ports
+  layer: application
+  depends_on:
+  - shared-kernel
+  - product-eligibility-domain
+  - contract-policy-domain
+  - pricing-catalog-domain
+  - facts-domain
+  - rating-domain
+- name: decimal-kernel
+  layer: engine
+  depends_on:
+  - shared-kernel
+- name: unit-kernel
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+- name: geometry-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - unit-kernel
+  - facts-domain
+- name: weight-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - unit-kernel
+  - geometry-engine
+  - facts-domain
+- name: geography-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - pricing-catalog-domain
+  - facts-domain
+- name: rate-lookup-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - pricing-catalog-domain
+- name: charge-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - unit-kernel
+  - rate-lookup-engine
+  - pricing-catalog-domain
+  - rating-domain
+- name: currency-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - pricing-catalog-domain
+- name: aggregation-engine
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - decimal-kernel
+  - weight-engine
+  - rating-domain
+- name: compiled-plan-runtime
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - pricing-catalog-domain
+  - contract-policy-domain
+  - rating-domain
+- name: stage-executor
+  layer: engine
+  depends_on:
+  - shared-kernel
+  - rating-domain
+  - compiled-plan-runtime
+  - geometry-engine
+  - weight-engine
+  - geography-engine
+  - rate-lookup-engine
+  - charge-engine
+  - currency-engine
+  - aggregation-engine
+- name: rating-application
+  layer: application
+  depends_on:
+  - shared-kernel
+  - rating-ports
+  - product-eligibility-domain
+  - contract-policy-domain
+  - facts-domain
+  - rating-domain
+  - compiled-plan-runtime
+  - stage-executor
+- name: comparison-application
+  layer: application
+  depends_on:
+  - shared-kernel
+  - rating-application
+  - rating-domain
+- name: batch-application
+  layer: application
+  depends_on:
+  - shared-kernel
+  - rating-application
+  - rating-domain
+- name: quote-application
+  layer: application
+  depends_on:
+  - shared-kernel
+  - quote-domain
+  - rating-domain
+  - rating-ports
+- name: http-adapter
+  layer: adapter
+  depends_on:
+  - shared-kernel
+  - rating-application
+  - comparison-application
+  - batch-application
+  - quote-application
+- name: postgres-adapter
+  layer: infrastructure
+  depends_on:
+  - shared-kernel
+  - rating-ports
+  - rating-domain
+  - facts-domain
+  - quote-domain
+- name: object-storage-adapter
+  layer: infrastructure
+  depends_on:
+  - shared-kernel
+  - rating-ports
+  - compiled-plan-runtime
+- name: redis-cache-adapter
+  layer: infrastructure
+  optional: true
+  depends_on:
+  - shared-kernel
+  - rating-ports
+  - compiled-plan-runtime
+- name: outbox-publisher
+  layer: infrastructure
+  depends_on:
+  - shared-kernel
+  - rating-ports
+  - rating-domain
+  - quote-domain
+- name: telemetry-adapter
+  layer: infrastructure
+  depends_on:
+  - shared-kernel
+  - rating-ports
+execution_stages:
+- sequence: 1
+  name: RequestValidation
+  deterministic: true
+- sequence: 2
+  name: PurposeAndTimeResolution
+  deterministic: true
+- sequence: 3
+  name: SnapshotValidation
+  deterministic: true
+- sequence: 4
+  name: ProductEligibility
+  deterministic: true
+- sequence: 5
+  name: ContractPolicyResolution
+  deterministic: true
+- sequence: 6
+  name: VersionManifestResolution
+  deterministic: true
+- sequence: 7
+  name: FactSelection
+  deterministic: true
+- sequence: 8
+  name: UnitNormalization
+  deterministic: true
+- sequence: 9
+  name: GeometryNormalization
+  deterministic: true
+- sequence: 10
+  name: AddressAndGeographyClassification
+  deterministic: true
+- sequence: 11
+  name: PackageFeatureEvaluation
+  deterministic: true
+- sequence: 12
+  name: WeightCalculation
+  deterministic: true
+- sequence: 13
+  name: Aggregation
+  deterministic: true
+- sequence: 14
+  name: BaseRateLookup
+  deterministic: true
+- sequence: 15
+  name: CandidateChargeGeneration
+  deterministic: true
+- sequence: 16
+  name: ChargeBasisResolution
+  deterministic: true
+- sequence: 17
+  name: ChargeMethodExecution
+  deterministic: true
+- sequence: 18
+  name: ChargeComposition
+  deterministic: true
+- sequence: 19
+  name: DerivedCharges
+  deterministic: true
+- sequence: 20
+  name: BuySellTransformation
+  deterministic: true
+- sequence: 21
+  name: MinimumAndCap
+  deterministic: true
+- sequence: 22
+  name: MultiLegAndShipmentSummary
+  deterministic: true
+- sequence: 23
+  name: CurrencyConversion
+  deterministic: true
+- sequence: 24
+  name: RoundingFinalization
+  deterministic: true
+- sequence: 25
+  name: EvaluationValidation
+  deterministic: true
+- sequence: 26
+  name: RatingEvaluationBuild
+  deterministic: true
+core_enums:
+  CalculationPurpose:
+  - QUOTE
+  - ESTIMATED_COST
+  - ACTUAL_COST
+  - CUSTOMER_BILLING
+  - SIMULATION
+  - REPLAY
+  - DISPUTE_REVIEW
+  PriceRole:
+  - CARRIER_TARIFF
+  - BUY
+  - INTERNAL
+  - SELL
+  - PUBLIC
+  ChargeEffect:
+  - ADD
+  - DEDUCT
+  EvaluationStatus:
+  - REQUESTED
+  - EVALUATING
+  - COMPLETED
+  - FAILED
+  - CANCELLED
+  RatingAggregationMode:
+  - PER_PACKAGE
+  - SHIPMENT_TOTAL
+  - FIRST_CONTINUE_SHIPMENT
+  - MASTER_PLUS_CHILD
+  - HYBRID
+persistence_ports:
+- IdempotencyRepository
+- RatingEvaluationRepository
+- RatingSnapshotRepository
+- PricingReleaseRepository
+- CompiledPlanArtifactRepository
+- FactRepository
+- QuoteRepository
+- OperationRepository
+- OutboxRepository
+cache_layers:
+- name: L1ProcessCache
+  required: true
+  key: artifact_content_hash
+  semantic_eviction: release_or_content_hash_change
+- name: L2DistributedCache
+  required: false
+  key: artifact_content_hash
+  semantic_eviction: release_or_content_hash_change
+api_operation_mappings:
+  createEligibilityEvaluation: rating-api
+  evaluateRating: rating-api
+  getRatingEvaluation: rating-api
+  replayRatingEvaluation: rating-worker
+  createRatingComparison: rating-api
+  createRatingBatch: rating-api
+  getRatingBatch: rating-api
+  getRatingBatchResults: rating-api
+  createQuote: rating-api
+  getQuote: rating-api
+  offerQuote: rating-api
+  acceptQuote: rating-api
+  cancelQuote: rating-api
+  repriceQuote: rating-api
+forbidden_dependencies:
+- from_layer: domain
+  to_layers:
+  - application
+  - adapter
+  - infrastructure
+- from_layer: engine
+  to_layers:
+  - adapter
+  - infrastructure
