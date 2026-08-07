@@ -16,6 +16,8 @@
 | `已确认不采纳` | 存在现存决策说明本仓不取这一块 | 给出该决策的链接；无决策不得用此状态 |
 | `待决` | 既未吸收也无不采纳决策 | 给出建议处置与决定方；建议不是决定 |
 
+决策依据可以是既有权威文档，也可以是本台账本身——若某项在此处定案且不值得单独立档，就在该行写明定案范围，不再另建第二处记录。
+
 `待决`不等于遗漏。它可能是刻意留到真实参数出现之后，也可能是从未核对过。两者在下方逐项区分。
 
 ## `foo` 的权威版本
@@ -82,7 +84,7 @@
 |---|---|---|
 | §0-2 文档控制、Runtime 边界、核心不变量 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的边界与不变量 |
 | §3-4 规范性统一语言、基础数据类型 | 已吸收 | `internal/parcelpricing/domain/decimal.go`、`value_objects.go` |
-| §5 CalculationPurpose | **待决（显式挂起）** | [`PP-S03`](./pp-s03-par-set-02-03-evidence-and-synthetic-contract.md) 写明「该语言决策另行处理」，至今未处理。这是全仓唯一一处对 `foo` 显式挂起的语言决策，详见下方「待决清单」 |
+| §5 CalculationPurpose | 已吸收（收窄） | [parcel-pricing/CONTEXT.md 的「计算目的」](../domain/parcel-pricing/CONTEXT.md) 与 [GLOSSARY 词条](../domain/GLOSSARY.md)。本仓保留目的轴但首发只取三值并与价格方向一一配对，`foo` 的其余取值不引入；[`PP-S03`](./pp-s03-par-set-02-03-evidence-and-synthetic-contract.md) 当初挂起的语言决策至此结清 |
 | §6-8 RatingInputSnapshot、业务时间与版本解析、Fact 选择 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的计价输入快照与版本清单；`internal/parcelpricing/domain/input.go` |
 | §9 单位换算 | 部分 | 代码仅有重量单位。多单位换算待真实参数 |
 | §10-12 Geometry 语义、地址与地理分类、包裹特征判定 | 待决 | 首期未实现。建议：由真实 `PAR-SET-02/03` 决定是否进入，不预先建模。决定方：计价与结算业务责任方 |
@@ -100,7 +102,7 @@
 | §33 解释、证据与执行轨迹 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的评价解释与版本清单 |
 | §34 错误模型 | 部分已吸收 | `internal/parcelpricing/domain/errors.go` |
 | §35 幂等与重放 | 已吸收 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 的回放规则；`fingerprint.go` 的内容摘要冲突检测 |
-| §36 Compiled Pricing Plan | 待决 | 本仓用内容指纹解决同一问题（`fingerprint.go`），但没有任何文档记下这个取舍。详见「待决清单」 |
+| §36 Compiled Pricing Plan | 已确认不采纳 | 本台账 `FOO-OPEN-04` 定案：本仓以内容指纹（`fingerprint.go`）解决同一正确性问题，编译式方案多买的是预计算与缓存，属无度量支撑的性能优化 |
 | §37 Custom Function | 已确认不采纳 | [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md)：任意脚本与无法审计的动态函数不是首发价卡规则 |
 | §38 性能与确定性 | 部分已吸收 | 确定性已吸收（见 §48）；性能约束待决 |
 | §39 Golden Cases | 已吸收但证据隔离 | [parcel-pricing/CONTEXT.md 源完整性门禁](../domain/parcel-pricing/CONTEXT.md)；闭合路径见 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) |
@@ -115,7 +117,7 @@
 | §28 Golden Cases 映射 | 待决 | 与 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的闭合结果一并处理 |
 | `rating-api-openapi-v1.0.1.yaml`、`rating-api-examples-v1.0.1.json`、`validate_rating_api_contract_v1_0_1.py` | 已确认不采纳 | 同上 |
 
-ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约本身。是否需要把这一点显式化是待决项，见下方清单。ADR-0011 状态为 Accepted，按[改文档规则](../../AGENTS.md)不得改写其正文。
+ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约本身。本台账 `FOO-OPEN-05` 已定案：不另写 ADR，由本表承担该记录。ADR-0011 状态为 Accepted，按[改文档规则](../../AGENTS.md)也不得改写其正文。
 
 ### Golden Cases `V1.0.1`（§1 至 §12，含 JSON、schema）
 
@@ -130,7 +132,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 | foo 内容 | 状态 | 落点或依据 |
 |---|---|---|
 | §1-10、§14-35、§37-42 分层、Go 工程结构、Port/Adapter、事务边界、26 阶段执行管线、各 Engine、缓存、持久化、并发、安全、可观测性、容量、高可用、保留归档、测试策略、发布回滚、Runbook、实施分期、技术验收 | 已确认不采纳 | [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [Go 首个消费者切片决策简报](./parcel-go-first-consumer-slice-decision-brief.md) 已自定本仓技术边界 |
-| §11 Compiled Pricing Plan、§13 Artifact 格式与内容寻址 | 待决 | 与计算语义 §36 是同一取舍，见「待决清单」 |
+| §11 Compiled Pricing Plan、§13 Artifact 格式与内容寻址 | 已确认不采纳 | 与计算语义 §36 同一取舍，见本台账 `FOO-OPEN-04` |
 | §12 Plan Compiler 与发布边界 | 部分已吸收 | 发布治理语义已进 [parcel-pricing/CONTEXT.md 生命周期](../domain/parcel-pricing/CONTEXT.md)；编译器形态属实现 |
 | §36 发布与回滚 | 部分已吸收 | 业务侧「发布失败或回滚只影响新的评价选择」已进 [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) |
 | `compiled-pricing-plan-manifest-*.json`、`rating-runtime-architecture-manifest-v1.0.1.yaml`、`validate_rating_runtime_tech_design_v1_0_1.py` | 已确认不采纳 | 同上 |
@@ -144,16 +146,18 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 
 ## 待决清单
 
-以下六项没有决策，按建议处置的紧要程度排列。建议不是决定。
+按建议处置的紧要程度排列。建议不是决定。已定案的项保留在表内并注明结论，便于对照 `foo` 时知道结论从何而来。
 
-| 编号 | 待决事项 | 建议处置 | 决定方 |
+| 编号 | 事项 | 结论或建议处置 | 决定方 |
 |---|---|---|---|
-| `FOO-OPEN-01` | 计算语义 §5 `CalculationPurpose` 的取值范围。`foo` 有七个值，本仓只落两个 | 本仓把 `foo` 的七值拆成了两个维度：业务目的与执行模态，执行模态改用证据层级与回放机制表达。该拆分应写入 [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 或 ADR-0011，否则对照 `foo` 的人会认为本仓漏了五个值并来「补全」。同时把「业务目的是否需要超过两个」留为参数化问题 | 计价业务责任方 |
+| `FOO-OPEN-01` | 计算语义 §5 `CalculationPurpose` 的取值范围 | **已定案。** 核实后发现真问题不是取值多少：`PricingPurpose` 的三个常量与 `PricingDirection` 一一对应，目的轴未携带方向之外的信息，而校验只过正则不查成员，也不强制配对。结论是保留该轴并在 [parcel-pricing/CONTEXT.md](../domain/parcel-pricing/CONTEXT.md) 写明首发一一对应及其解除条件，同时闭合枚举、强制配对，术语统一为「计算目的」并立 [GLOSSARY 词条](../domain/GLOSSARY.md) | 计价业务责任方 |
 | `FOO-OPEN-02` | Golden Cases 的 `source_discrepancies` 四条差异未进本仓门禁 | 补进 [`PP-S03-W01`](./pp-s03-w01-golden-case-source-evidence-request.md) 的取证要求。文件身份与哈希闭合是必要不充分条件，`SRC-DISC-001` 未解前那批案例仍不能成为金额证据 | 计价与结算业务责任方 |
 | `FOO-OPEN-03` | 领域模型 §33-40 八条业务流程从未与 `UC-*` 逐条核对 | 逐条核对并只标覆盖状态；出现「未识别」时才新增用例，不为对齐 `foo` 而补齐 | 结算与计价业务责任方 |
-| `FOO-OPEN-04` | 计算语义 §36 与技术设计 §11/§13 的 Compiled Pricing Plan | 建议不采纳：本仓 `fingerprint.go` 已用内容指纹解决「版本引用相同但内容不同判为冲突」，方案更轻且有测试覆盖。需在某处记下该取舍，防止重复评估 | 技术 |
-| `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | 两条合规路径二选一：新写一份 ADR 把「不引入 `foo` 的对外 API 契约与运行时技术设计」记为独立决策；或就让本台账承担该记录，不再另立文档。ADR-0011 已是 Accepted，不得往其正文补话 | 技术与产品 |
+| `FOO-OPEN-04` | 计算语义 §36 与技术设计 §11/§13 的 Compiled Pricing Plan | **已定案：不采纳。** `fingerprint.go` 已用内容指纹解决「版本引用相同但内容不同判为冲突」这一正确性问题，编译式方案在此之上多买的是预计算与缓存，属性能诉求，而本仓无任何性能度量。将来出现度量支撑时可重新评估 | 技术 |
+| `FOO-OPEN-05` | ADR-0011 未点名 API 契约与技术设计本身 | **已定案：不另写 ADR，由本台账承担该记录。** 「不采纳 `foo` 的对外 API 契约与运行时技术设计」是 [ADR-0009](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md) 与 [ADR-0011](../adr/0011-parcel-pricing-context-within-idp-parcel.md) 的推论而非独立决策，为推论单写 ADR 会制造第二套口径 | 技术与产品 |
 | `FOO-OPEN-06` | 领域模型 §32、§52-57 的安全、租户隔离、审计、数据保留 | 建议按跨切面处理，由 PN-08 的 `PAR-GOV-*` 承接，不作为计价范围 | 产品与治理 |
+
+各表中标为`待决`但未进本清单的条目（如计算语义 §10-12、§30、§31、费用依赖图、性能约束、上游一致性追踪），共同处置原则是等真实参数决定，不预先建模。
 
 ## 触发条件
 
@@ -167,7 +171,7 @@ ADR-0011 否决的是「独立计费平台」这一形态，未点名 API 契约
 
 ## 收口条件
 
-本对照达到收口的条件是：待决清单六项各自形成决策或明确延后依据，并回填本表状态。收口后 `foo/` 即为只读参考，任何人再读它都能从本表知道本仓的取舍及其依据。
+本对照达到收口的条件是：待决清单各项形成决策或明确延后依据，并回填本表状态。`FOO-OPEN-01`、`04`、`05` 已定案，余 `02`、`03`、`06` 三项。收口后 `foo/` 即为只读参考，任何人再读它都能从本表知道本仓的取舍及其依据。
 
 本表随权威文档变化而更新；它不是快照，也不承担解释规则的职责。
 

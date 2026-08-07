@@ -246,8 +246,6 @@ const (
 	PricingPurposeInternalPrice  PricingPurpose = "INTERNAL_PRICE"
 )
 
-var purposePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-
 func NewPricingPurpose(value string) (PricingPurpose, error) {
 	purpose := PricingPurpose(value)
 	if !purpose.valid() {
@@ -257,7 +255,25 @@ func NewPricingPurpose(value string) (PricingPurpose, error) {
 }
 
 func (purpose PricingPurpose) valid() bool {
-	return purposePattern.MatchString(string(purpose))
+	return purpose.pairedDirection().valid()
+}
+
+// pairedDirection is the one direction this purpose may be declared with. The
+// first release keeps the two axes one-to-one, so the purpose carries no
+// information the direction does not already carry; it is reserved for telling
+// same-direction evaluations apart once real parameters prove that is needed.
+// Widening the axis means revisiting this pairing, not removing it silently.
+func (purpose PricingPurpose) pairedDirection() PricingDirection {
+	switch purpose {
+	case PricingPurposeCustomerCharge:
+		return PricingDirectionSell
+	case PricingPurposeSupplierCost:
+		return PricingDirectionBuy
+	case PricingPurposeInternalPrice:
+		return PricingDirectionInternal
+	default:
+		return ""
+	}
 }
 
 func (purpose PricingPurpose) String() string {

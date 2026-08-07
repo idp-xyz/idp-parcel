@@ -15,6 +15,7 @@ var (
 	ErrInvalidIdentifier          = errors.New("parcel pricing: invalid identifier")
 	ErrInvalidDirection           = errors.New("parcel pricing: invalid pricing direction")
 	ErrInvalidPurpose             = errors.New("parcel pricing: invalid pricing purpose")
+	ErrDirectionPurposeMismatch   = errors.New("parcel pricing: pricing purpose does not pair with direction")
 	ErrInvalidEvidenceKind        = errors.New("parcel pricing: invalid evidence kind")
 	ErrInvalidVersionReference    = errors.New("parcel pricing: invalid version reference")
 	ErrDuplicateVersionReference  = errors.New("parcel pricing: duplicate version reference")

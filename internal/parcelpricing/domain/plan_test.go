@@ -232,3 +232,92 @@ func planWithInputOrder(t testing.TB, reverse bool) domain.PricingPlanVersion {
 	}
 	return plan
 }
+
+// The first release pairs each calculation purpose with exactly one direction,
+// so a plan cannot price a customer sale while calling itself a supplier cost.
+// Widening the purpose axis means revisiting the pairing deliberately; until
+// then a mismatch is a modelling error rather than a configuration choice.
+func TestPricingPlanRequiresPurposePairedWithDirection(t *testing.T) {
+	paired := map[domain.PricingDirection]domain.PricingPurpose{
+		domain.PricingDirectionSell:     domain.PricingPurposeCustomerCharge,
+		domain.PricingDirectionBuy:      domain.PricingPurposeSupplierCost,
+		domain.PricingDirectionInternal: domain.PricingPurposeInternalPrice,
+	}
+	for direction, purpose := range paired {
+		if _, err := pairedPlan(t, "paired-"+string(direction), direction, purpose); err != nil {
+			t.Fatalf("%s with %s rejected: %v", direction, purpose, err)
+		}
+	}
+
+	mismatched := []struct {
+		direction domain.PricingDirection
+		purpose   domain.PricingPurpose
+	}{
+		{domain.PricingDirectionSell, domain.PricingPurposeSupplierCost},
+		{domain.PricingDirectionBuy, domain.PricingPurposeCustomerCharge},
+		{domain.PricingDirectionInternal, domain.PricingPurposeCustomerCharge},
+		{domain.PricingDirectionSell, domain.PricingPurposeInternalPrice},
+	}
+	for _, test := range mismatched {
+		_, err := pairedPlan(t, "mismatch", test.direction, test.purpose)
+		if !errors.Is(err, domain.ErrDirectionPurposeMismatch) {
+			t.Fatalf("%s with %s accepted: err = %v", test.direction, test.purpose, err)
+		}
+	}
+}
+
+// The purpose enum is closed. It used to accept anything shaped like an
+// identifier, which let foo's wider CalculationPurpose values through without
+// the language ever deciding to adopt them.
+func TestPricingPurposeRejectsValuesOutsideTheClosedSet(t *testing.T) {
+	for _, value := range []string{"QUOTE", "ESTIMATED_COST", "ACTUAL_COST", "CUSTOMER_BILLING", "customer_charge", ""} {
+		if _, err := domain.NewPricingPurpose(value); !errors.Is(err, domain.ErrInvalidPurpose) {
+			t.Fatalf("purpose %q accepted: err = %v", value, err)
+		}
+	}
+	for _, value := range []string{"CUSTOMER_CHARGE", "SUPPLIER_COST", "INTERNAL_PRICE"} {
+		if _, err := domain.NewPricingPurpose(value); err != nil {
+			t.Fatalf("purpose %q rejected: %v", value, err)
+		}
+	}
+}
+
+func pairedPlan(
+	t testing.TB,
+	suffix string,
+	direction domain.PricingDirection,
+	purpose domain.PricingPurpose,
+) (domain.PricingPlanVersion, error) {
+	t.Helper()
+	currency := mustValue(t, domain.NewCurrency, "USD")
+	entry, err := domain.NewRateEntry(
+		mustValue(t, domain.NewRateEntryID, "entry-"+suffix), "Z1",
+		weight(t, "0", domain.WeightUnitKilogram), weight(t, "10", domain.WeightUnitKilogram), money(t, "10", currency),
+	)
+	if err != nil {
+		t.Fatalf("rate entry: %v", err)
+	}
+	table, err := domain.NewRateTableVersion(versionReference(t, domain.ArtifactRateTable, "table-"+suffix, "v1"), domain.RateTableKindWeightZone, currency, domain.WeightUnitKilogram, effectivePeriod(t), []domain.RateEntry{entry})
+	if err != nil {
+		t.Fatalf("rate table: %v", err)
+	}
+	rounding, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, weight(t, "1", domain.WeightUnitKilogram))
+	if err != nil {
+		t.Fatalf("rounding: %v", err)
+	}
+	weightPolicy, err := domain.NewBillableWeightPolicy(versionReference(t, domain.ArtifactWeightPolicy, "weight-"+suffix, "v1"), domain.BillableWeightActualOnly, rounding)
+	if err != nil {
+		t.Fatalf("weight policy: %v", err)
+	}
+	return domain.NewPricingPlanVersion(
+		versionReference(t, domain.ArtifactPricingPlan, "plan-"+suffix, "v1"),
+		mustValue(t, domain.NewPricingScopeID, "scope-1"),
+		direction,
+		purpose,
+		mustValue(t, domain.NewChargeCode, "BASE_FREIGHT"),
+		effectivePeriod(t),
+		table,
+		weightPolicy,
+		nil,
+	)
+}

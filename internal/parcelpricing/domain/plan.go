@@ -111,6 +111,9 @@ func NewPricingPlanVersion(
 	if reference.kind != ArtifactPricingPlan || !reference.valid() || !scope.valid() || !direction.valid() || !purpose.valid() || !baseChargeCode.valid() || !period.valid() || !rateTable.valid() || !weight.valid() {
 		return PricingPlanVersion{}, ErrInvalidPricingPlan
 	}
+	if purpose.pairedDirection() != direction {
+		return PricingPlanVersion{}, ErrDirectionPurposeMismatch
+	}
 	if !period.Within(rateTable.period) {
 		return PricingPlanVersion{}, ErrPricingPeriodConflict
 	}
@@ -185,7 +188,7 @@ func (plan PricingPlanVersion) Manifest() VersionManifest { return plan.manifest
 func (plan PricingPlanVersion) ContentDigest() string     { return plan.contentDigest }
 
 func (plan PricingPlanVersion) valid() bool {
-	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.manifest.valid() || plan.contentDigest == "" {
+	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.manifest.valid() || plan.contentDigest == "" {
 		return false
 	}
 	if !plan.period.Within(plan.rateTable.period) || plan.weight.rounding.increment.unit != plan.rateTable.unit {
