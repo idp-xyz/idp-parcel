@@ -1,4 +1,4 @@
-package partycommercial
+package domain
 
 import (
 	"errors"
