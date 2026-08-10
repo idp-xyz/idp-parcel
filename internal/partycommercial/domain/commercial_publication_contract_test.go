@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// This file is a test-only contract for S01-W01. There is intentionally no
-// production party-commercial model, repository, or publication endpoint yet.
+// 本文件是 S01-W01 的测试侧合约。此刻有意还不存在生产的 party-commercial 模型、仓储或
+// 发布端点。
 type syntheticCommercialObjectKind string
 
 const (

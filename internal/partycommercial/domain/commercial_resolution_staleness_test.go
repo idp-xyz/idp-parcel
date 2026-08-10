@@ -35,7 +35,7 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 		t.Fatalf("prior outcome = %q, want UNIQUELY_RESOLVED", prior.Outcome())
 	}
 
-	// The adopted object itself is untouched; only the scope gains a rival.
+	// 被采纳的对象本身没有变动；只是范围里多了一个竞争者。
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
 	stored, found := registry.Lookup(adopted.Kind(), adopted.ObjectID(), adopted.Version())
 	if !found || stored.ContentDigest() != adopted.ContentDigest() {

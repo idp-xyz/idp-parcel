@@ -80,8 +80,7 @@ func TestHoldingAPartyRoleGrantsNoAuthority(t *testing.T) {
 		t.Fatal("fixture relationship is not effective")
 	}
 
-	// No grant exists at all; an effective carrier-agent relationship must not
-	// substitute for one.
+	// 根本不存在任何授权；一段生效中的承运代理关系不得顶替它。
 	if _, err := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
 		t.Fatalf("error = %v, want ErrNotAuthorized", err)
 	}

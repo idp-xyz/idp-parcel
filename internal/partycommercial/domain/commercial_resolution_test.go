@@ -210,8 +210,7 @@ func TestRepeatedResolutionIsStableUntilTheViewRevisionChanges(t *testing.T) {
 		t.Fatalf("resolving created commercial versions: registry holds %d", registry.Count())
 	}
 
-	// A second version of the same object changes the scope view, so the prior
-	// identity must not survive it even though the query is unchanged.
+	// 同一对象的第二个版本改变了范围视图，所以即便查询没变，先前那个身份也不得存活下来。
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v2", "sha256:c1-v2", "scope-a")
 	afterChange := domain.ResolveCommercialBasis(registry, key)
 

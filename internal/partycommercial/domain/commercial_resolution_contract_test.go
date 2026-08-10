@@ -10,9 +10,8 @@ import (
 	"time"
 )
 
-// This file is deliberately test-only. It is the S01-W02 contract for
-// two-stage commercial resolution; it does not authorize a production port,
-// repository, transaction, outbox, or external financial call.
+// 本文件刻意只存在于测试侧。它是两阶段商业解析的 S01-W02 合约；它不授权任何生产端口、仓储、
+// 事务、发件箱或对外财务调用。
 
 type syntheticResolutionStatus string
 
@@ -94,8 +93,7 @@ func (query syntheticCommercialResolutionQuery) valid() bool {
 }
 
 func (query syntheticCommercialResolutionQuery) fingerprint() string {
-	// requestEffectiveAt is intentionally excluded. The independent,
-	// versioned selection anchor is the only time used to choose a baseline.
+	// requestEffectiveAt 被有意排除。独立且版本化的选择锚点是选取基线时唯一使用的时间。
 	return strings.Join([]string{
 		query.tenantID,
 		query.customerAccountID,
@@ -162,10 +160,9 @@ type syntheticAdoptedCommercialObject struct {
 	currentRevision string
 	scopeReference  string
 	fixtureVersion  string
-	// settlementCurrency is carried only by settlement policy objects. The
-	// policy is what fixes the currency (party-commercial CONTEXT.md「结算政策」);
-	// the settlement account that also fixes it belongs to settlement-accounting
-	// and is deliberately absent here.
+	// settlementCurrency 只由结算政策对象携带。固定币种的是政策本身（party-commercial
+	// CONTEXT.md「结算政策」）；同样固定它的那个结算账户归 settlement-accounting，在这里
+	// 有意缺席。
 	settlementCurrency string
 }
 
@@ -624,8 +621,7 @@ func (fixture syntheticCommercialResolverFixture) resolveFirstPhase(
 		}
 	}
 
-	// A confirmed pair of applicable candidates is already a deterministic
-	// conflict, even if a third candidate is temporarily unreadable.
+	// 已确认的两个适用候选本身就构成一个确定的冲突，哪怕第三个候选此刻读不到。
 	if len(applicable) >= 2 || len(conflicting) > 0 {
 		resolution.status = syntheticResolutionConflict
 		resolution.reason = syntheticApplicabilityOverlap
@@ -1047,8 +1043,8 @@ func TestSyntheticCommercialResolutionUsesSharedBaselineAndScopeSpecificPolicy(t
 	}
 }
 
-// Covers: SYN-CHAIN-04 (producer half: a unique resolution supplies every field the
-// settlement-accounting control boundary consumes, and publishes no settlement account)
+// Covers: SYN-CHAIN-04（生产侧半边：唯一解析供齐 settlement-accounting 控制边界所消费的每
+// 一个字段，且不发布结算账户）
 func TestSyntheticCommercialResolutionSuppliesTheFinancialControlBoundary(t *testing.T) {
 	period := syntheticPeriodFor(
 		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -1079,9 +1075,8 @@ func TestSyntheticCommercialResolutionSuppliesTheFinancialControlBoundary(t *tes
 		t.Fatalf("settlement policy cannot supply the control boundary: %#v", policy)
 	}
 
-	// The settlement account is settlement-accounting's object: it fixes the
-	// legal entity, counterparty, direction and currency itself. Publishing one
-	// here would let a caller borrow another scope's account.
+	// 结算账户是 settlement-accounting 的对象：法律主体、对手方、方向与币种都由它自己固定。
+	// 在这里发布一个，等于让调用方借用另一个范围的账户。
 	adoptedType := reflect.TypeOf(syntheticAdoptedCommercialObject{})
 	for index := 0; index < adoptedType.NumField(); index++ {
 		if name := adoptedType.Field(index).Name; strings.Contains(strings.ToLower(name), "account") {
@@ -1090,8 +1085,8 @@ func TestSyntheticCommercialResolutionSuppliesTheFinancialControlBoundary(t *tes
 	}
 }
 
-// Covers: S01-AT-03 (prepaid and terms overlapping one scope yield an applicability conflict)
-// Covers: S01-AT-04 (a successful authority read with no applicable scope yields no applicable basis)
+// Covers: S01-AT-03（预付与账期在同一范围重叠，形成适用冲突）
+// Covers: S01-AT-04（权威读取成功但无适用范围，返回无适用依据）
 func TestSyntheticCommercialResolutionDistinguishesZeroConflictAndPending(t *testing.T) {
 	period := syntheticPeriodFor(
 		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
@@ -1206,7 +1201,7 @@ func TestSyntheticCommercialResolutionRejectsMixedModeCandidateAndPolicyScopeReb
 	}
 }
 
-// Covers: S01-AT-05 (a failed authority read stays pending instead of collapsing to zero candidates)
+// Covers: S01-AT-05（权威读取失败保持未决，而不是塌陷成零候选）
 func TestSyntheticCommercialResolutionAuthorityFailureIsPendingNotZero(t *testing.T) {
 	fixture := newSyntheticCommercialResolverFixture()
 	fixture.authorityAvailable = false

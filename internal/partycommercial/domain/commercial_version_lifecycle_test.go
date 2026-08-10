@@ -34,8 +34,7 @@ func effectiveVersion(t *testing.T, objectID, version, digest string) domain.Com
 }
 
 // Covers: party-commercial CONTEXT 已发布 → 已生效 — 到达明确生效边界才生效。
-// Publication is not effectiveness: a published version sitting before its own
-// boundary must not be usable for new resolution.
+// 发布不等于生效：一个停在自己边界之前的已发布版本，不得用于新的解析。
 func TestPublishedVersionTakesEffectOnlyAtItsBoundary(t *testing.T) {
 	published := publishedVersion(t, "product-1", "v1", "sha256:content-1")
 

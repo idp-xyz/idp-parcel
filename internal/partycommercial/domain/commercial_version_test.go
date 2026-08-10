@@ -109,8 +109,7 @@ func TestCommercialPublicationRequiresCompleteApprovalBasis(t *testing.T) {
 }
 
 // Covers: party-commercial CONTEXT — 各对象保持独立身份，不合并为一份「大配置」。
-// The closed set of nine kinds is declared by the context, so a value outside it
-// must not construct.
+// 九种类别的封闭集合由上下文声明，因此集合之外的取值不得构造出来。
 func TestCommercialObjectKindsStayIndependentAndClosed(t *testing.T) {
 	kinds := []domain.CommercialObjectKind{
 		domain.ServiceProductObject,
@@ -135,8 +134,7 @@ func TestCommercialObjectKindsStayIndependentAndClosed(t *testing.T) {
 		}
 		seen[label] = struct{}{}
 
-		// Each kind publishes on its own identity; sharing an object ID across
-		// kinds must not make them the same object.
+		// 每种类别各按自己的身份发布；跨类别共用一个对象 ID 不得让它们变成同一个对象。
 		draft := commercialDraft(t, kind, "shared-id", "v1", "sha256:"+label)
 		if draft.Kind() != kind {
 			t.Fatalf("draft lost its kind: %q", draft.Kind())
@@ -168,7 +166,6 @@ func basisWithout(t *testing.T, missing string) domain.ApprovalBasis {
 	if err == nil {
 		return basis
 	}
-	// An incomplete basis is expected not to construct; publication must reject
-	// the zero value just as firmly, which is what the caller asserts.
+	// 不完整的依据本就不该构造得出来；发布对零值也必须拒绝得同样干脆，调用方断言的正是这一点。
 	return domain.ApprovalBasis{}
 }
