@@ -152,7 +152,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 上节定了判据却没说现在站在哪里，判据因此还用不上。下表按三条判据逐切片定级，**只描述机制半边**；实例半边一律为空且不计入。代码事实核对于 `internal/` 与 `cmd/`，用例与规则事实核对于各 `CONTEXT.md` 与 `UC-*`。
 
-**本节是快照，盘于 `f327558`（2026-08-10）。** 它与本文其余部分性质不同：其余部分说明产品长期必须保持什么，本节只说明某一刻站在哪里。它记录的对象是代码，每次提交都可能使它过期——立节当天它就被并行落地的提交先后带假三次。**读到与代码不符时以代码为准**，不要据本节推断某项能力不存在。
+**本节是快照，盘于 `acbdbaa`（2026-08-10）。** 它与本文其余部分性质不同：其余部分说明产品长期必须保持什么，本节只说明某一刻站在哪里。它记录的对象是代码，每次提交都可能使它过期——立节当天即被并行落地的提交反复带假，本节此后已按下述触发条件重盘两轮。**读到与代码不符时以代码为准**，不要据本节推断某项能力不存在。
 
 重盘触发条件三项，任一成立即须重盘并更新上面的盘点戳：某上下文首次出现生产代码；某切片的状态定级发生变化；本节引用的任何计数与实际不符。
 
@@ -161,12 +161,12 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 | 切片 | 主要上下文 | 状态 | 机制半边缺什么 |
 |---|---|---|---|
 | PN-01 | 治理，无专属上下文 | 未开始 | 阶段、权威方、准入、暂停恢复、接管的**记录能力**无代码；参数槽位已在三份模板中建立 |
-| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | 三个上下文都已有生产代码：`parcel-shipment` 覆盖来源身份与保全、生产归属决定、安全交接判定、提交候选与批次，并有 `UC-PS-001` 的应用编排与自有端口；`party-commercial` 覆盖商业版本模型（生效区间、发布后内容固定、版本迁移）、发布登记册与 `UC-PC-002` 两阶段解析（含范围级权威视图修订与提交前重解）；`network-routing` 覆盖接受前可达性的三值结论与证据缺口判定。仍缺的持久化与事件事务被 ADR-0017 的闸门挡住，属下方横切缺口而非本切片自身 |
+| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | 三个上下文都已有生产代码：`parcel-shipment` 覆盖来源身份与保全、生产归属决定、安全交接判定、提交候选与批次，并有 `UC-PS-001` 的应用编排与自有端口；`party-commercial` 的领域层已基本铺满——参与方关系、服务产品、客户合同、接单规则包、结算/信用/价格政策、供应商协议、授权授予各有模型，之上是商业版本共同不变量、发布登记册、`UC-PC-002` 两阶段解析（含范围级权威视图修订与提交前重解）与引用闭包；`network-routing` 覆盖接受前可达性的三值结论与证据缺口判定。仍缺的持久化与事件事务被 ADR-0017 的闸门挡住，属下方横切缺口而非本切片自身 |
 | PN-03 | `network-routing`、`node-operations`、`transport-fulfillment`、`parcel-shipment` | 未开始 | `node-operations` 与 `transport-fulfillment` 无任何代码；`network-routing` 只有 PN-02 的接受前可达性，本切片要的初始路由与收寄/实测后路由复核无代码 |
 | PN-04 | `transport-fulfillment`、`parcel-shipment` | 未开始 | `transport-fulfillment` 无代码；`parcel-shipment` 侧的包裹终局未实现 |
 | PN-05 | `customs-compliance` | 未开始 | 无代码 |
 | PN-06 | `visibility-exception` | 未开始 | 无代码 |
-| PN-07 | `parcel-pricing`、`settlement-accounting` | 部分 | `parcel-pricing` 是本仓最成熟的上下文，规则模型七步全部有执行器；`settlement-accounting` 只有 `S01-W03` 财务控制边界的契约测试，无生产结算模型 |
+| PN-07 | `parcel-pricing`、`settlement-accounting` | 部分 | `parcel-pricing` 是本仓最成熟的上下文，规则模型七步全部有执行器；`settlement-accounting` 已开出生产模型的第一块——接受前资金冻结与可用余额，`S01-W03` 财务控制契约测试与之并存；费用确认、应收应付、对账与核销仍无执行器 |
 | PN-08 | 跨上下文治理编排 | 未开始 | 候选清单、阶段决定、生产权威区间、暂停恢复、接管与在途盘点的记录能力无代码 |
 
 **八个切片没有一个达标：两个部分，六个未开始。** 这个分布是旧口径的产物——只有计价手上有一张真实价卡可研究，别处都停在「等真实证据」。ADR-0016 解除的正是这个停顿，因此该分布此后不再有正当理由。
@@ -175,20 +175,20 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 全仓搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`，没有用空实现顶住的假完成。这使定级可信：六个「未开始」就是未开始，不是被 stub 掩盖的部分完成。已有部分仍有具名缺口，例如 `parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明的闭合集合有十项，分区、地址类型与服务选项三项分类特征需要相等而非比较，尚无执行器；代码已就地声明该延后与理由（`internal/parcelpricing/domain/feature_condition.go`），按「枚举取值与产生它的规则同时出现」处理，不单独计为缺陷。
 
-**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言；`party-commercial` 有 9 份，其中两份是契约测试；`network-routing` 有 2 份。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
+**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 16 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言；`party-commercial` 有 21 份，其中三份是契约测试；`settlement-accounting` 有 3 份、`network-routing` 有 2 份。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
 
 **参数显式未配置——目前满足，且是被刻意维持的。** 全仓唯一第三方依赖是 `github.com/go-chi/chi/v5`；生产代码中没有任何业务阈值、金额、费率或系数常量，计价的阈值一律由价卡版本携带。
 
 #### 契约测试不计入骨架完整
 
-`party-commercial`、`settlement-accounting` 与 `parcel-shipment` 的部分边界采用**只写测试的契约**（`*_contract_test.go`）：文件内自带合成类型，并明确声明不引入生产模型、仓储、事务、outbox 或外部适配器。它钉住边界形状与调用顺序，作用是防止后续实现偏离已定的边界，但判据要的是**规则有执行器**，契约测试只证明期望被写了下来。把它读成实现会高估产品就绪度，因此上表把只有契约测试的上下文记为无生产模型——现在只剩 `settlement-accounting` 一个。`party-commercial` 与 `parcel-shipment` 的契约测试此后与各自的生产模型并存：契约钉边界，模型担执行，两者不互相替代。
+`party-commercial`、`settlement-accounting` 与 `parcel-shipment` 的部分边界采用**只写测试的契约**（`*_contract_test.go`）：文件内自带合成类型，并明确声明不引入生产模型、仓储、事务、outbox 或外部适配器。它钉住边界形状与调用顺序，作用是防止后续实现偏离已定的边界，但判据要的是**规则有执行器**，契约测试只证明期望被写了下来。把它读成实现会高估产品就绪度，因此上表把只有契约测试的上下文记为无生产模型——**这一类现在一个都不剩**，`settlement-accounting` 开出资金冻结后，凡有契约测试的上下文都同时有了生产模型。三者的契约测试此后与各自的生产模型并存：契约钉边界，模型担执行，两者不互相替代。
 
 #### 横切缺口，不属任何单一切片
 
 - **应用层只有一例，端口无生产实现。** `parcel-shipment` 已有用例编排与自有端口（`application/`、`ports/`），其余上下文仍只有 `domain` 包；端口是纯接口，今天唯一的实现是测试用替身，PostgreSQL 适配器仍被 ADR-0017 的持久化闸门挡住。
 - **无持久化。** 没有仓储实现、迁移或数据库驱动依赖。这一点此前是「形状可零成本改动」的前提，[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md) 之后不再是硬约束，但它仍使「受控案例可复算」目前只在进程内成立。
 - **无事件机制**，无 outbox 或发布侧。
-- **HTTP 面只有 `/healthz` 与 `/version`**（`internal/platform/httpapi/router.go`），没有任何业务端点。
+- **HTTP 面只有 `/healthz` 与 `/version`**（`internal/platform/httpapi/router.go`），没有任何业务端点。补这一项时必须一并考虑 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md)：一线作业客户端的离线与弱网容忍会约束端点的幂等、冲突合并语义与重放形状，那是设计不出来就补不上的一类要求。
 
 这四项在八个切片里都会再出现，逐切片各补一次要重复付代价；它们的处置顺序应先于或至少并行于下一个上下文的领域建模。本节只记录现状与该观察，不在此决定顺序。
 
