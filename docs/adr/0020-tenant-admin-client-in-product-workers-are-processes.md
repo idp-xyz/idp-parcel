@@ -1,7 +1,8 @@
 # ADR-0020: 产品自带租户管理界面；后台 worker 是进程入口，一线作业界面未决
 
-Status: Accepted  
-Date: 2026-08-10
+Status: Superseded by [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md)  
+Date: 2026-08-10  
+Superseded: 2026-08-10
 
 ## Context
 
