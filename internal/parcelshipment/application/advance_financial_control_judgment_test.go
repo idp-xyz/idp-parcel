@@ -177,22 +177,51 @@ func TestARestrictiveControlIsRecordedWithoutRejectingTheRequest(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 接受条件「不得默认放行」— 控制端口调不通时不得留下任何看起来通过了
-// 的痕迹：既不记`明确无控制`，也不记一个空结果。
-func TestAFailedControlNeverBecomesADefaultPass(t *testing.T) {
-	failure := errors.New("settlement authority unavailable")
+// Covers: UC-PS-001 接受条件「不得默认放行」与结果语义契约`尚未决定`「依赖不可用……返回
+// 未决原因和安全续办引用」— 控制端口调不通时形成未决，并且不得留下任何看起来通过了的
+// 痕迹：既不记`明确无控制`，也不记一个空结果。
+func TestAnUnavailableControllerIsPendingAndNeverADefaultPass(t *testing.T) {
 	fixture := newFinancialControlFixture(t)
-	fixture.controller.err = failure
+	fixture.controller.err = errors.New("settlement authority unavailable")
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
-	if !errors.Is(err, failure) {
-		t.Fatalf("error = %v, want the dependency failure", err)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceJudgmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.FinancialControlUnavailable {
+		t.Fatalf("pending reason = %q, want FINANCIAL_CONTROL_UNAVAILABLE", result.PendingReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("a stalled dependency left no continuation to resume from")
 	}
 	if _, present := result.FinancialControlResult(); present {
 		t.Fatal("a failed control call still produced a control result")
 	}
 	if len(fixture.requests.recordedControl) != 0 {
 		t.Fatalf("recorded %d control results after the call failed", len(fixture.requests.recordedControl))
+	}
+}
+
+// Covers: UC-PS-001 步骤 9C「未决时保存当前判断、失败位置和安全续办依据」— 控制结果没能
+// 记到任务上就不算推进，接受那一步不该引用一条查不回来的控制。
+func TestAControlThatCannotBeRecordedDoesNotAdvanceTheTask(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.requests.err = errors.New("judgment task store unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.PendingReason() != application.JudgmentNotRecorded {
+		t.Fatalf("pending reason = %q, want JUDGMENT_NOT_RECORDED", result.PendingReason())
+	}
+	if _, present := result.FinancialControlResult(); present {
+		t.Fatal("an unrecorded control result was handed back as adopted")
 	}
 }
 

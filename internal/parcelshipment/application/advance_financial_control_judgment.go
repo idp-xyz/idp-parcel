@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -74,6 +73,9 @@ func NewAdvanceFinancialControlJudgmentHandler(
 // 它不形成接受或拒绝，也不在任何一步替控制作答。没有唯一依据、或本类判断没有被声明时点
 // 时，它在发起控制之前停下并保持可续办——用例对本步的要求是不得默认放行，而一次在无人
 // 授权的时点上发出的资金占用，既收不回来也解释不了自己按哪一版策略执行。
+//
+// 控制端口答不出同样形成未决而不上抛，未决原因指名是这个依赖停了。它与`明确无控制`因此
+// 分得开：后者是合同声明并带商业依据，前者是问过了没答案。
 func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
@@ -84,7 +86,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("resolve commercial basis: %w", err)
+		return handler.undecided(command, CommercialBasisUnavailable), nil
 	}
 	if basis.ResolutionID().String() == "" {
 		return handler.undecided(command, CommercialBasisNotUnique), nil
@@ -102,10 +104,12 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		AsOf:              asOf,
 	})
 	if err != nil {
-		return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("apply pre-acceptance financial control: %w", err)
+		return handler.undecided(command, FinancialControlUnavailable), nil
 	}
+	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
+	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(ctx, command.ShipmentRequestID, control); err != nil {
-		return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("record financial control result: %w", err)
+		return handler.undecided(command, JudgmentNotRecorded), nil
 	}
 
 	return AdvanceFinancialControlJudgmentResult{

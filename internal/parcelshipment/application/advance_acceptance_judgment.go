@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -105,8 +104,12 @@ func NewAdvanceAcceptanceJudgmentHandler(
 // Handle 把一个接受判断任务推进一步：采用唯一商业依据，按该依据声明的策略形成可达性
 // 判断时点，再记录路由权威返回的判断。
 //
-// 它不形成接受或拒绝，也绝不拿自己的时钟顶替声明的时点。没有唯一依据、或本类判断没有
-// 被声明时点时，它停下并保持可续办，而不是在一个无人授权的时刻上继续。
+// 它不形成接受或拒绝，也绝不拿自己的时钟顶替声明的时点。没有唯一依据、本类判断没有被
+// 声明时点、或者依赖答不出时，它停下并保持可续办，而不是在一个无人授权的时刻上继续。
+//
+// 依赖答不出形成未决而不上抛：用例把`依赖不可用`列为`尚未决定`的成因，并要求该结果带上
+// 未决原因与安全续办引用。未决原因指名是哪个依赖停了，因此「权威答不出」与「权威答了
+// 不可达」仍然分得开——这正是本步绝不形成判断的原因。
 func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
@@ -117,7 +120,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return AdvanceAcceptanceJudgmentResult{}, fmt.Errorf("resolve commercial basis: %w", err)
+		return handler.undecided(command, CommercialBasisUnavailable), nil
 	}
 	if basis.ResolutionID().String() == "" {
 		return handler.undecided(command, CommercialBasisNotUnique), nil
@@ -136,10 +139,12 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		AsOf:              asOf,
 	})
 	if err != nil {
-		return AdvanceAcceptanceJudgmentResult{}, fmt.Errorf("assess parcel reachability: %w", err)
+		return handler.undecided(command, ReachabilityAuthorityUnavailable), nil
 	}
+	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
+	// 的依据。
 	if err := handler.recorder.RecordReachabilityJudgment(ctx, command.ShipmentRequestID, judgment); err != nil {
-		return AdvanceAcceptanceJudgmentResult{}, fmt.Errorf("record reachability judgment: %w", err)
+		return handler.undecided(command, JudgmentNotRecorded), nil
 	}
 
 	return AdvanceAcceptanceJudgmentResult{

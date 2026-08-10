@@ -144,14 +144,75 @@ func undeclaredReachabilityAsOfContinuation(t *testing.T) string {
 	return result.ContinuationReference().String()
 }
 
-// Covers: UC-PS-001 一致性 — 依赖调用失败不是业务结果，必须显式浮出而不是压成未决。
-func TestDependencyFailureSurfacesRatherThanBecomingAJudgement(t *testing.T) {
-	failure := errors.New("reachability authority unavailable")
+// Covers: UC-PS-001 结果语义契约`尚未决定`「依赖不可用……返回未决原因和安全续办引用」与
+// AT-PS-008 — 依赖调不通形成本上下文自己的未决，且必须指名是哪个依赖停了。
+//
+// 它绝不能变成一次判断：可达性权威答不出与它答了`不可达`是两回事，混起来会让一次故障读成
+// 这个包裹的网络结论。所以下面既断言未决，也断言没有任何判断被形成或记录。
+func TestAnUnavailableAuthorityBecomesPendingAndNeverAJudgement(t *testing.T) {
 	fixture := newJudgmentFixture(t)
-	fixture.reachability.err = failure
+	fixture.reachability.err = errors.New("reachability authority unavailable")
 
-	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); !errors.Is(err, failure) {
-		t.Fatalf("error = %v, want the dependency failure", err)
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceJudgmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.ReachabilityAuthorityUnavailable {
+		t.Fatalf("pending reason = %q, want REACHABILITY_AUTHORITY_UNAVAILABLE", result.PendingReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("a stalled dependency left no continuation to resume from")
+	}
+	if _, present := result.ReachabilityJudgment(); present {
+		t.Fatal("an unavailable authority still produced a reachability judgement")
+	}
+	if result.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q; the request left SUBMITTED without an acceptance decision", result.State())
+	}
+}
+
+// Covers: UC-PS-001 步骤 9C「未决时保存当前判断、失败位置和安全续办依据」— 判断没能记到
+// 任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来的依据。
+func TestAJudgementThatCannotBeRecordedDoesNotAdvanceTheTask(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	fixture.requests.err = errors.New("judgment task store unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceJudgmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.JudgmentNotRecorded {
+		t.Fatalf("pending reason = %q, want JUDGMENT_NOT_RECORDED", result.PendingReason())
+	}
+	if _, present := result.ReachabilityJudgment(); present {
+		t.Fatal("an unrecorded judgement was handed back as adopted")
+	}
+}
+
+// Covers: UC-PS-001 结果语义契约`尚未决定`与 AT-PS-008 — 商业解析调不通同样形成未决，
+// 且与「解析成功但依据不唯一」用不同原因：前者要重试依赖，后者要补商业缺口。
+func TestAnUnavailableCommercialResolverIsPendingUnderItsOwnReason(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	fixture.commercial.err = errors.New("commercial resolver unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.PendingReason() != application.CommercialBasisUnavailable {
+		t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_UNAVAILABLE", result.PendingReason())
+	}
+	if fixture.reachability.calls != 0 {
+		t.Fatal("reachability was assessed although the commercial basis never resolved")
 	}
 }
 
@@ -223,6 +284,7 @@ type commercialBasisDouble struct {
 	outcome                      application.CommercialBasisOutcome
 	declaresReachabilityAsOf     bool
 	declaresFinancialControlAsOf bool
+	err                          error
 	record                       func(string)
 	calls                        int
 }
@@ -235,6 +297,9 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 	double.record("resolve-commercial-basis")
 	double.calls++
 
+	if double.err != nil {
+		return domain.CommercialBasisSnapshot{}, double.err
+	}
 	if double.outcome != application.CommercialBasisUnique {
 		return domain.CommercialBasisSnapshot{}, nil
 	}
@@ -309,6 +374,7 @@ func (double *reachabilityDouble) AssessParcelReachability(
 
 type judgmentRequestStore struct {
 	rejected        bool
+	err             error
 	recordedControl []domain.FinancialControlResult
 }
 
@@ -317,7 +383,7 @@ func (store *judgmentRequestStore) RecordReachabilityJudgment(
 	_ domain.ShipmentRequestID,
 	_ domain.ReachabilityJudgment,
 ) error {
-	return nil
+	return store.err
 }
 
 func (store *judgmentRequestStore) RecordFinancialControlResult(
@@ -325,6 +391,9 @@ func (store *judgmentRequestStore) RecordFinancialControlResult(
 	_ domain.ShipmentRequestID,
 	result domain.FinancialControlResult,
 ) error {
+	if store.err != nil {
+		return store.err
+	}
 	store.recordedControl = append(store.recordedControl, result)
 	return nil
 }
