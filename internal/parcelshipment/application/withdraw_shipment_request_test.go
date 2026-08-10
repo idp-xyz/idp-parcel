@@ -199,6 +199,67 @@ func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) 
 	}
 }
 
+// Covers: UC-PS-005 `AT-PS-068`「同一撤回请求重复到达 → 返回原撤回及原补偿关联」与步骤 6
+// 「按原业务关联幂等形成适用冻结释放」— 重复请求读回原撤回，释放按幂等重跑而不是再撤一次。
+func TestARepeatedWithdrawalReturnsTheOriginalWithdrawalAndItsCompensation(t *testing.T) {
+	first := newWithdrawalFixture(t)
+	first.release.err = errors.New("settlement authority unavailable")
+
+	original, err := first.handler.Handle(context.Background(), first.command(t))
+	if err != nil {
+		t.Fatalf("handle the first withdrawal: %v", err)
+	}
+
+	repeat := newWithdrawalFixture(t)
+	repeat.requests.withdrawn = true
+	repeat.release.err = errors.New("settlement authority unavailable")
+
+	again, err := repeat.handler.Handle(context.Background(), repeat.command(t))
+	if err != nil {
+		t.Fatalf("handle the repeated withdrawal: %v", err)
+	}
+
+	if again.Outcome() != application.WithdrawalDecisionAlreadyFormed {
+		t.Fatalf("outcome = %q, want DECISION_ALREADY_FORMED", again.Outcome())
+	}
+	record, present := again.Withdrawal()
+	if !present || record.DecisionID().String() != "decision-0" {
+		t.Fatalf("withdrawal = %#v; the repeat must read the earlier withdrawal, not form a second one", record)
+	}
+	if repeat.requests.saved != nil {
+		t.Fatal("a repeated withdrawal saved a second decision over the first")
+	}
+	if again.CompensationReference().String() != original.CompensationReference().String() {
+		t.Fatalf(
+			"repeat %q, original %q; a repeated request must resume the original compensation association",
+			again.CompensationReference(), original.CompensationReference(),
+		)
+	}
+}
+
+// Covers: UC-PS-005 `AT-PS-076`「已撤回后客户要求恢复原委托 → 原委托不恢复，建立关联新委托」
+// 与 CONTEXT「已撤回委托不得原地恢复」— 后到的请求读回原撤回，委托绝不回到`已提交`。
+func TestAWithdrawnRequestIsNeverRestoredInPlace(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.requests.withdrawn = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestWithdrawn {
+		t.Fatalf("state = %q; a withdrawn request was restored in place", result.State())
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("a request that was already withdrawn got written again")
+	}
+	// 用例把读取既有决定排在提交撤回之前，因此一份已决委托不该再消耗一个决定标识。
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d decision IDs; a request that was already decided consumed a scarce identity", fixture.identities.issued)
+	}
+}
+
 type withdrawalFixture struct {
 	handler    *application.WithdrawShipmentRequestHandler
 	requests   *rejectableRequestStore

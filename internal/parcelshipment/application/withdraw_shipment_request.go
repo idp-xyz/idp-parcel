@@ -146,6 +146,13 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		}, nil
 	}
 
+	// 用例把「读取已提交决定并返回既有结果」放在提交撤回之前（步骤 3 先于步骤 4），所以这里
+	// 先短路：一份已经决定的委托不该再消耗一个决定标识，而标识是本上下文签发的稀缺身份。
+	// 这不替代提交边界上的重查——聚合的 `decisionFormed` 闸门仍然是裁决并发竞争的那一道。
+	if request.State() != domain.ShipmentRequestSubmitted {
+		return handler.existing(ctx, command, request), nil
+	}
+
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
 		return handler.undecided(ctx, command, DecisionIdentityUnavailable), nil
@@ -160,7 +167,7 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrDecisionAlreadyFormed) {
-			return handler.existing(request), nil
+			return handler.existing(ctx, command, request), nil
 		}
 		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw by customer: %w", err)
 	}
@@ -179,15 +186,30 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	}, nil
 }
 
-// existing 交回那个先到的决定。它可能是接受、拒绝，也可能是一次既有撤回——`AT-PS-068` 要求
-// 重复撤回返回原撤回及原补偿关联，`AT-PS-071`/`AT-PS-072` 要求返回既有接受或拒绝。
+// existing 交回那个先到的决定。它可能是接受、拒绝，也可能是本方此前形成的一次撤回——
+// `AT-PS-071`/`AT-PS-072` 要求返回既有接受或拒绝，`AT-PS-068` 要求重复撤回返回原撤回及原补偿
+// 关联。已撤回委托也不在这里原地恢复：`AT-PS-076` 要求客户重新提出需求时建立关联新委托。
 //
-// 这一支不发释放：`AT-PS-071` 明说接受已经合法提交时，后到的决定前撤回请求不得释放合法冻结。
+// 撞上的是既有撤回时才重跑释放。步骤 6 本就要求「按原业务关联幂等形成适用冻结释放」，所以
+// 重跑是它的语义而不是副作用；补偿引用由原因与范围派生，因此重复请求拿到的就是原补偿关联，
+// 不必为此在聚合上再存一份待补偿状态。
+//
+// 撞上接受时绝不释放：`AT-PS-071` 明说接受已经合法提交时，后到的决定前撤回请求不得释放合法
+// 冻结。撞上拒绝时也不释放——那笔冻结归形成拒绝的那条路径处置，在这里再发一次等于两条路径
+// 同时认领同一笔补偿。
 func (handler *WithdrawShipmentRequestHandler) existing(
+	ctx context.Context,
+	command WithdrawShipmentRequestCommand,
 	request domain.ShipmentRequest,
 ) WithdrawShipmentRequestResult {
 	decision, hasDecision := request.AcceptanceDecision()
 	record, hasWithdrawal := request.Withdrawal()
+
+	compensation := domain.OwnershipContinuationReference{}
+	if hasWithdrawal {
+		compensation = handler.releaseFreeze(ctx, command)
+	}
+
 	return WithdrawShipmentRequestResult{
 		outcome:       WithdrawalDecisionAlreadyFormed,
 		state:         request.State(),
@@ -195,6 +217,7 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 		hasWithdrawal: hasWithdrawal,
 		decision:      decision,
 		hasDecision:   hasDecision,
+		compensation:  compensation,
 	}
 }
 

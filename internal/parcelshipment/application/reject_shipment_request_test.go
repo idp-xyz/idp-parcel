@@ -278,12 +278,13 @@ func (double *rejectionAuthorizerDouble) AuthorizeActiveRejection(
 	return mustValue(double.t, domain.NewRejectionAuthorityReference, "PC-REJECT-ROLE-1"), nil
 }
 
-// rejectableRequestStore 按 decided 交回一份`已提交`或一份已经接受的委托，用来验证后到的
-// 拒绝只能读取既有结果。
+// rejectableRequestStore 按 decided/withdrawn 交回一份`已提交`、一份已经决定或一份已经撤回的
+// 委托，用来验证后到的请求只能读取既有结果。
 type rejectableRequestStore struct {
-	t       *testing.T
-	decided bool
-	saved   *domain.ShipmentRequest
+	t         *testing.T
+	decided   bool
+	withdrawn bool
+	saved     *domain.ShipmentRequest
 }
 
 func (store *rejectableRequestStore) FindBySourceIdentity(
@@ -292,6 +293,20 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 ) (domain.ShipmentRequest, bool, error) {
 	store.t.Helper()
 	request := submittedRequest(store.t)
+	if store.withdrawn {
+		// 同样让它经领域真的撤一次：假状态挡不住 WithdrawByCustomer，也说明不了问题。
+		gone, err := request.WithdrawByCustomer(domain.WithdrawalSpec{
+			DecisionID: mustValue(store.t, domain.NewAcceptanceDecisionID, "decision-0"),
+			Authority:  mustValue(store.t, domain.NewWithdrawalAuthorityReference, "PC-WITHDRAW-ROLE-0"),
+			Requester:  mustValue(store.t, domain.NewWithdrawalRequesterReference, "CUSTOMER-CONTACT-0"),
+			Reason:     mustValue(store.t, domain.NewWithdrawalReasonReference, "EARLIER_WITHDRAWAL"),
+			DecidedAt:  handlerClockAt,
+		})
+		if err != nil {
+			store.t.Fatalf("form the earlier withdrawal: %v", err)
+		}
+		return gone, true, nil
+	}
 	if !store.decided {
 		return request, true, nil
 	}
