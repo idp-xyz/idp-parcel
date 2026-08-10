@@ -271,4 +271,4 @@
 
 在相关真实合同、接单规则、授权角色、财务策略、接入契约、试点治理和非功能参数完成登记及验证前，不应宣称真实生产接单流程已经完整，也不应发布固定渠道 Schema、拒绝码或客户 SLA。
 
-当前无真实数据阶段，开发只按 [`PN02-SYN` 合成业务契约开发任务包](../../design/pn-02-synthetic-business-contract-development-task-pack.md)执行隔离 `S` 的纯领域规则、命名夹具和负向契约；不得据此创建生产归属端口、`ShipmentRequest`/`已提交`聚合、接受判断任务、Repository、事务、Outbox 或真实商业/财务协作。
+当前无真实数据阶段，实例半边的真实商业/财务协作仍然阻断，隔离 `S` 的纯领域规则、命名夹具和负向契约按 [`PN02-SYN` 合成业务契约开发任务包](../../design/pn-02-synthetic-business-contract-development-task-pack.md)执行。机制半边按 [ADR-0017](../../adr/0017-admission-gates-judged-by-blocking-cause.md) 已放行：可以创建 `ShipmentRequest`/`已提交`聚合的领域形态、接受判断任务、Parcel 自有语义端口接口与应用编排，并以确定性内存替身验证。仍然禁止：任何端口的 PostgreSQL 适配器、Repository 实现、事务与 Outbox（属 Bento 持久化闸门），以及把未确认的真实合同、规则、角色、时限或阈值写成取值。

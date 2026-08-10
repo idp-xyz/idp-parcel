@@ -150,9 +150,9 @@ W05 只形成精确能力分支的联合验证结论和生产候选证据，不�
 
 ## 无真实数据阶段的合成交接
 
-当前没有真实客户、合同、账户、线路或交易数据，W01 至 W05 的真实证据路径保持阻断。开发只按以下两个合成包验证稳定业务契约：
+当前没有真实客户、合同、账户、线路或交易数据，W01 至 W05 的真实证据路径保持阻断。以下两个合成包验证稳定业务契约；机制半边的应用编排与端口接口按 [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) 另行推进，不受这里的合成范围限制：
 
-- [`PN02-S02` 来源保全与生产归属](./pn-02-synthetic-ingress-and-production-ownership-development-handoff.md)：先验证来源、重复/冲突、三类权威身份、准入门禁、安全交接、暂停恢复和未来建单门禁；遵守当前闸门，不创建生产归属端口、`已提交`聚合、接受任务或持久化写入。
+- [`PN02-S02` 来源保全与生产归属](./pn-02-synthetic-ingress-and-production-ownership-development-handoff.md)：先验证来源、重复/冲突、三类权威身份、准入门禁、安全交接、暂停恢复和未来建单门禁；该合成包本身停在契约边界，不含持久化写入。
 - [`PN02-S01` 商业与财务控制](./pn-02-synthetic-commercial-and-financial-control-development-handoff.md)：使用 `SYN-COM-01..04` 验证预付/账期范围唯一解析、冲突、无适用依据及依赖故障；它只是未来契约和隔离测试规格，不创建 `party-commercial`/`settlement-accounting` 生产应用端口、持久化、Repository、事务、Outbox，也不形成真实冻结、信用、费用、收款或核销。
 - [`PN02-SYN` 合成业务契约开发任务包](./pn-02-synthetic-business-contract-development-task-pack.md)：把 S01/S02 拆成可领取的纯业务规则、隔离夹具和负向契约任务；完成不解除真实参数、生产端口或 PN-08 阶段阻断。
 

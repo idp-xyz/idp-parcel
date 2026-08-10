@@ -40,7 +40,7 @@
 - [`PN02-W04` 接受前逻辑可达性证据工作单](./design/pn-02-w04-pre-acceptance-logical-reachability-evidence-request.md)：核验服务区域、网络拓扑、日历与截单、候选资格、三值证据完整性、判断时点和失效重判；不创建路由计划或履约资源。
 - [`PN02-W05` 联合验证与生产分支准入工作单](./design/pn-02-w05-joint-verification-and-production-branch-admission.md)：把 W01 至 W04、验收矩阵和技术门槛固定到同一能力范围，形成稳定骨架、`R/S` 或提交 PN-08 的生产候选结论；不自行批准真实客户流量。
 - [`PN02-S01` 合成商业与财务控制开发交接](./design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md)：在无真实数据阶段以 `SYN-COM-01..04` 验证预付/账期唯一解析、范围冲突、无适用依据和依赖未决，并以 `S01-W03` 验证冻结、信用、查询与补偿边界；只形成隔离 `S`，不改变真实参数或生产准入。
-- [`PN02-S02` 合成来源保全与生产归属开发交接](./design/pn-02-synthetic-ingress-and-production-ownership-development-handoff.md)：验证来源保全、重复/冲突、三类归属判定、安全交接、暂停恢复和建单门禁；当前不创建生产归属端口、`已提交`聚合或持久化写入。
+- [`PN02-S02` 合成来源保全与生产归属开发交接](./design/pn-02-synthetic-ingress-and-production-ownership-development-handoff.md)：验证来源保全、重复/冲突、三类归属判定、安全交接、暂停恢复和建单门禁；该合成包停在契约边界，不含持久化写入。
 - [`PN02-SYN` 合成业务契约开发任务包](./design/pn-02-synthetic-business-contract-development-task-pack.md)：把 `S01-W01..W05` 与 `S02-W01..W06` 汇总为开发任务、联合契约检查和当前可编码/禁止生产实现边界；所有结果只记为隔离 `S`。
 - [`PN-03` 网络收寄与节点作业开发交接](./design/pn-03-network-intake-and-node-operations-development-handoff.md)：把接受后初始路由、真实收寄模式、客户送站、场外揽收、有效网络收寄、正式承诺、收寄/实测后路由复核、节点集运与联合验证组织成 W01 至 W08；当前生产结论保持 `No-Go / 待参数化`。
 - [`PN-04` 运输履约与包裹终局开发交接](./design/pn-04-transport-fulfillment-and-parcel-finalization-development-handoff.md)：把常规运输机会、班次、容量、运输委托、订舱、收费发生项、权威交接、实际履约、派送、POD、逐包裹取消/收寄后处置、替代/退运旅程与终局组织成 W01 至 W08；当前生产结论保持 `No-Go / 待参数化`，不以监管运输专项替代常规主链。
