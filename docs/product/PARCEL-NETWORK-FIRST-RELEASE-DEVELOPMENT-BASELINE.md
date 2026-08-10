@@ -157,7 +157,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 | 切片 | 主要上下文 | 状态 | 机制半边缺什么 |
 |---|---|---|---|
 | PN-01 | 治理，无专属上下文 | 未开始 | 阶段、权威方、准入、暂停恢复、接管的**记录能力**无代码；参数槽位已在三份模板中建立 |
-| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | `parcel-shipment` 有生产代码（来源身份与保全、生产归属决定、安全交接判定、提交候选与批次）；`party-commercial` 只有 `S01-W01`／`S01-W02` 两份契约测试，无生产模型；`network-routing` 的接受前可达性无代码 |
+| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | `parcel-shipment` 有生产代码（来源身份与保全、生产归属决定、安全交接判定、提交候选与批次）；`party-commercial` 已有商业版本的生产模型（生效区间、发布后内容固定、版本迁移），`S01-W01`／`S01-W02` 契约测试仍在；`network-routing` 的接受前可达性无代码 |
 | PN-03 | `network-routing`、`node-operations`、`transport-fulfillment`、`parcel-shipment` | 未开始 | 前三个上下文无任何代码 |
 | PN-04 | `transport-fulfillment`、`parcel-shipment` | 未开始 | `transport-fulfillment` 无代码；`parcel-shipment` 侧的包裹终局未实现 |
 | PN-05 | `customs-compliance` | 未开始 | 无代码 |
@@ -171,13 +171,13 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 全仓搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`，没有用空实现顶住的假完成。这使定级可信：六个「未开始」就是未开始，不是被 stub 掩盖的部分完成。已有部分仍有具名缺口，例如 `parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明的闭合集合有十项，分区、地址类型与服务选项三项分类特征需要相等而非比较，尚无执行器；代码已就地声明该延后与理由（`internal/parcelpricing/domain/feature_condition.go`），按「枚举取值与产生它的规则同时出现」处理，不单独计为缺陷。
 
-**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
+**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言；`party-commercial` 有 5 份，其中两份是契约测试。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
 
 **参数显式未配置——目前满足，且是被刻意维持的。** 全仓唯一第三方依赖是 `github.com/go-chi/chi/v5`；生产代码中没有任何业务阈值、金额、费率或系数常量，计价的阈值一律由价卡版本携带。
 
 #### 契约测试不计入骨架完整
 
-`party-commercial`、`settlement-accounting` 与 `parcel-shipment` 的部分边界采用**只写测试的契约**（`*_contract_test.go`）：文件内自带合成类型，并明确声明不引入生产模型、仓储、事务、outbox 或外部适配器。它钉住边界形状与调用顺序，作用是防止后续实现偏离已定的边界，但判据要的是**规则有执行器**，契约测试只证明期望被写了下来。把它读成实现会高估产品就绪度，因此上表把只有契约测试的上下文记为无生产模型。
+`party-commercial`、`settlement-accounting` 与 `parcel-shipment` 的部分边界采用**只写测试的契约**（`*_contract_test.go`）：文件内自带合成类型，并明确声明不引入生产模型、仓储、事务、outbox 或外部适配器。它钉住边界形状与调用顺序，作用是防止后续实现偏离已定的边界，但判据要的是**规则有执行器**，契约测试只证明期望被写了下来。把它读成实现会高估产品就绪度，因此上表把只有契约测试的上下文记为无生产模型——现在只剩 `settlement-accounting` 一个。`party-commercial` 与 `parcel-shipment` 的契约测试此后与各自的生产模型并存：契约钉边界，模型担执行，两者不互相替代。
 
 #### 横切缺口，不属任何单一切片
 
