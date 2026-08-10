@@ -113,7 +113,7 @@ Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skil
 
 - 用例：[UC-PS-001](./docs/application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
 - 技术边界：[parcel-go-first-consumer-slice-decision-brief.md](./docs/design/parcel-go-first-consumer-slice-decision-brief.md)
-- 范围：来源保全、显式生产归属、进入`已提交`；不形成接受/拒绝/财务控制生产结果
+- 范围：机制半边已放行，实例半边与 Bento 持久化闸门仍阻断；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md) 为准，不在此复述
 
 ## Agent skills
 
