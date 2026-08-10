@@ -1,0 +1,124 @@
+package domain_test
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+)
+
+func registerable(t *testing.T, kind domain.CommercialObjectKind, objectID, version, digest string) domain.CommercialVersion {
+	t.Helper()
+	published, err := commercialDraft(t, kind, objectID, version, digest).
+		Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("publish %s/%s: %v", objectID, version, err)
+	}
+	return published
+}
+
+// Covers: party-commercial CONTEXT 已发布版本不得原地覆盖 — 同一键重复登记同样内容是
+// 重放，返回原登记而不产生第二条记录。
+func TestRegisteringTheSameContentTwiceIsAReplay(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	version := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
+
+	first, err := registry.Register(version)
+	if err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	if first != domain.RegistrationCreated {
+		t.Fatalf("first outcome = %q, want CREATED", first)
+	}
+
+	replay, err := registry.Register(version)
+	if err != nil {
+		t.Fatalf("replay register: %v", err)
+	}
+	if replay != domain.RegistrationReplay {
+		t.Fatalf("replay outcome = %q, want REPLAY", replay)
+	}
+	if got := registry.Count(); got != 1 {
+		t.Fatalf("registry holds %d versions, want 1", got)
+	}
+}
+
+// Covers: party-commercial CONTEXT 发布后正文不可覆盖 — 同一版本号携带不同语义是
+// 冲突，原登记内容不得被改写。
+func TestSameVersionWithChangedContentConflicts(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	original := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
+	if _, err := registry.Register(original); err != nil {
+		t.Fatalf("register original: %v", err)
+	}
+
+	changed := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-CHANGED")
+	outcome, err := registry.Register(changed)
+	if !errors.Is(err, domain.ErrCommercialVersionConflict) {
+		t.Fatalf("error = %v, want ErrCommercialVersionConflict", err)
+	}
+	if outcome != domain.RegistrationConflict {
+		t.Fatalf("outcome = %q, want CONFLICT", outcome)
+	}
+
+	stored, found := registry.Lookup(original.Kind(), original.ObjectID(), original.Version())
+	if !found || stored.ContentDigest() != original.ContentDigest() {
+		t.Fatalf("the conflicting attempt overwrote the registered content: %q", stored.ContentDigest())
+	}
+}
+
+// Covers: party-commercial CONTEXT 变化形成新版本，退役/到期/替代保留历史关系 —
+// 新版本与旧版本并存，登记新版本不抹掉旧的。
+func TestNewVersionCoexistsWithTheOneItReplaces(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	v1 := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
+	v2 := registerable(t, domain.ServiceProductObject, "product-1", "v2", "sha256:content-2")
+
+	for _, version := range []domain.CommercialVersion{v1, v2} {
+		if outcome, err := registry.Register(version); err != nil || outcome != domain.RegistrationCreated {
+			t.Fatalf("register %q = %q, %v", version.Version(), outcome, err)
+		}
+	}
+
+	if got := registry.Count(); got != 2 {
+		t.Fatalf("registry holds %d versions, want 2", got)
+	}
+	stored, found := registry.Lookup(v1.Kind(), v1.ObjectID(), v1.Version())
+	if !found || stored.ContentDigest() != v1.ContentDigest() {
+		t.Fatal("publishing v2 removed or rewrote v1")
+	}
+}
+
+// Covers: party-commercial CONTEXT — 各对象保持独立身份。同一标识在不同对象类型下
+// 是不同对象，不能互相覆盖或互相冲突。
+func TestSameIdentifierUnderDifferentKindsAreDifferentObjects(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	product := registerable(t, domain.ServiceProductObject, "shared-1", "v1", "sha256:product")
+	contract := registerable(t, domain.CustomerContractObject, "shared-1", "v1", "sha256:contract")
+
+	if _, err := registry.Register(product); err != nil {
+		t.Fatalf("register product: %v", err)
+	}
+	outcome, err := registry.Register(contract)
+	if err != nil || outcome != domain.RegistrationCreated {
+		t.Fatalf("a contract collided with a service product sharing an ID: %q, %v", outcome, err)
+	}
+	if got := registry.Count(); got != 2 {
+		t.Fatalf("registry holds %d versions, want 2", got)
+	}
+}
+
+// Covers: party-commercial CONTEXT 草稿可修订 — 草稿还不是受控发布，登记册只收已发布
+// 及其后续状态。
+func TestRegistryRefusesADraft(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	draft := commercialDraft(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
+
+	if _, err := registry.Register(draft); !errors.Is(err, domain.ErrCommercialVersionNotPublished) {
+		t.Fatalf("error = %v, want ErrCommercialVersionNotPublished", err)
+	}
+	if got := registry.Count(); got != 0 {
+		t.Fatalf("a draft entered the registry: %d versions", got)
+	}
+}
