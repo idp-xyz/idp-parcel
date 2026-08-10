@@ -233,10 +233,9 @@ func planWithInputOrder(t testing.TB, reverse bool) domain.PricingPlanVersion {
 	return plan
 }
 
-// The first release pairs each calculation purpose with exactly one direction,
-// so a plan cannot price a customer sale while calling itself a supplier cost.
-// Widening the purpose axis means revisiting the pairing deliberately; until
-// then a mismatch is a modelling error rather than a configuration choice.
+// Covers: CONTEXT「首发的计算目的与价格方向必须成对声明，定价方案和评价不得携带不匹配的
+// 组合。该配对是首发约束而非长期语义」— 所以方案不能一边给客户销售定价、一边自称供应商
+// 成本。拓宽目的这条轴意味着要专门重审这套配对；在那之前，不匹配是建模错误，不是配置选择。
 func TestPricingPlanRequiresPurposePairedWithDirection(t *testing.T) {
 	paired := map[domain.PricingDirection]domain.PricingPurpose{
 		domain.PricingDirectionSell:     domain.PricingPurposeCustomerCharge,
@@ -266,9 +265,8 @@ func TestPricingPlanRequiresPurposePairedWithDirection(t *testing.T) {
 	}
 }
 
-// The purpose enum is closed. It used to accept anything shaped like an
-// identifier, which let the reference design's wider CalculationPurpose values
-// through without the language ever deciding to adopt them.
+// 计算目的的取值集合是闭合的。它此前接受任何长得像标识符的东西，于是参考设计里更宽的
+// CalculationPurpose 取值一路放行，而领域语言从未决定采纳它们。
 func TestPricingPurposeRejectsValuesOutsideTheClosedSet(t *testing.T) {
 	for _, value := range []string{"QUOTE", "ESTIMATED_COST", "ACTUAL_COST", "CUSTOMER_BILLING", "customer_charge", ""} {
 		if _, err := domain.NewPricingPurpose(value); !errors.Is(err, domain.ErrInvalidPurpose) {

@@ -7,10 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// The rate card states its dimension thresholds against the longest and the
-// second longest side of a package, never against whichever side a shipper
-// happened to declare first. Deriving the order from the values is what keeps
-// a 8x70x9 package and a 70x8x9 package from being judged differently.
+// Covers: CONTEXT「最长边、次长边按尺寸三边的实际大小排序得出，不按声明顺序」— 价卡的尺寸
+// 阈值是对着最长边与次长边说的，从来不是对着发货人碰巧先填的那一边。按取值排序，才使
+// 8x70x9 与 70x8x9 两个包裹不会被判成两样。
 func TestDimensionsDeriveSideOrderFromValuesNotDeclarationOrder(t *testing.T) {
 	for _, testCase := range []struct {
 		name                  string
@@ -30,10 +29,8 @@ func TestDimensionsDeriveSideOrderFromValuesNotDeclarationOrder(t *testing.T) {
 	}
 }
 
-// Length plus girth is the card's own formula: longest side plus twice each of
-// the two remaining sides. Computing it from the ordered sides rather than the
-// declared ones is what makes the result independent of how a shipper wrote
-// the measurements down.
+// Covers: CONTEXT「长加围为最长边加其余两边各两倍」— 这是卡自己的公式。用排序后的边而不是
+// 声明顺序的边去算，结果才与发货人怎么填写测量值无关。
 func TestDimensionsComputeLengthPlusGirthFromOrderedSides(t *testing.T) {
 	for _, testCase := range []struct {
 		name                  string
@@ -57,9 +54,8 @@ func TestDimensionsComputeLengthPlusGirthFromOrderedSides(t *testing.T) {
 	}
 }
 
-// Cubic volume became a trigger in its own right for the 2026-01-26 additions,
-// so it is a feature the card reads directly rather than a by-product of the
-// side checks.
+// 体积在 2026-01-26 新增条款里成了独立的触发量，所以它是卡直接读的一个特征，不是边长检查
+// 的副产品。
 func TestDimensionsComputeCubicVolume(t *testing.T) {
 	for _, testCase := range []struct {
 		name                  string
@@ -87,9 +83,8 @@ func TestDimensionsComputeCubicVolume(t *testing.T) {
 	}
 }
 
-// A package with a zero or negative side is not a small package with an unusual
-// shape, it is an unusable measurement. Accepting one would let it pass every
-// "greater than" threshold check silently instead of holding the evaluation.
+// 某一边为零或为负的包裹不是形状特别的小包，而是一份不可用的测量。接受它会让它静默通过
+// 每一次「大于」阈值检查，而不是把评价拦下来。
 func TestDimensionsRejectUnusableMeasurements(t *testing.T) {
 	for _, testCase := range []struct {
 		name                  string

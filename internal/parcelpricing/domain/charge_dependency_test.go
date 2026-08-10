@@ -6,9 +6,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// L5 defines fuel as "(尾程派送费 + 除运费复核费以外的其他全部费用项) × 费率": an
-// all-charges basis with a named exclusion. The exclusion is what decides the
-// amount, so it has to be read from the declaration rather than assumed.
+// Covers: CONTEXT「依赖必须显式给出基数构成与排除集，不由声明顺序隐含」— L5 把燃油定义为
+// 「（尾程派送费 + 除运费复核费以外的其他全部费用项）× 费率」：全部费用构成加一个点名的
+// 排除项。排除集才是决定金额的那一半，所以它必须从声明里读出来，不能靠假定。
 func TestPercentSurchargeChargesItsDeclaredShareOfTheBasis(t *testing.T) {
 	plan := dependencyPlan(t,
 		[]domain.FixedChargeRule{
@@ -23,15 +23,15 @@ func TestPercentSurchargeChargesItsDeclaredShareOfTheBasis(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
 	}
-	// Basis is 10 base + 5 handling = 15; the audit fee is excluded. 10% is 1.5.
+	// 基数是 10 基础运费 + 5 处理费 = 15，复核费被排除；10% 即 1.5。
 	if total, _ := evaluation.Total(); total.Amount().String() != "19.5" {
 		t.Fatalf("total = %s, want 19.5 = 10 + 5 + 3 + 1.5", total.Amount().String())
 	}
 }
 
-// A listed basis names what it includes rather than what it leaves out. The two
-// compositions must not collapse into one another: reading a listed basis as
-// "everything" would silently widen what the card charges fuel on.
+// Covers: CONTEXT「基数构成的取值闭合，只有两种：本票全部其他费用，或逐项列举的费用代码」—
+// 逐项列举的基数点的是它包含什么，不是它落下什么。两种构成不得互相坍缩：把列举型基数读成
+// 「全部」，会悄悄放宽卡上燃油的计收范围。
 func TestPercentSurchargeOverAListedBasisUsesOnlyTheNamedCodes(t *testing.T) {
 	plan := dependencyPlan(t,
 		[]domain.FixedChargeRule{
@@ -46,14 +46,14 @@ func TestPercentSurchargeOverAListedBasisUsesOnlyTheNamedCodes(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
 	}
-	// Only the handling fee is in the basis: 10% of 5 is 0.5.
+	// 基数里只有处理费：5 的 10% 是 0.5。
 	if total, _ := evaluation.Total(); total.Amount().String() != "18.5" {
 		t.Fatalf("total = %s, want 18.5 = 10 + 5 + 3 + 0.5", total.Amount().String())
 	}
 }
 
-// CONTEXT: 存在环时评价为冲突. A basis that reaches back to the charge it feeds has
-// no fixed point, and picking an evaluation order would invent one.
+// Covers: CONTEXT「存在环时评价为冲突」— 一个反过来够到它所供养的那笔费用的基数没有不动点，
+// 随手挑一个求值顺序就是替它发明一个。
 func TestCircularChargeDependencyIsAConflict(t *testing.T) {
 	plan, err := newDependencyPlan(t,
 		nil,
@@ -65,8 +65,7 @@ func TestCircularChargeDependencyIsAConflict(t *testing.T) {
 		percentRule(t, "other", "SURCHARGE_OTHER", "48", "10", "other"),
 	)
 	if err != nil {
-		// A plan that cannot even be built is an acceptable place to stop a
-		// cycle, but it must be stopped somewhere.
+		// 连方案都建不起来，也是一个可以接受的截环位置，但环必须在某处被截住。
 		return
 	}
 	evaluation := evaluateWithSides(t, plan, "eval-percent-cycle", "50")
@@ -75,9 +74,8 @@ func TestCircularChargeDependencyIsAConflict(t *testing.T) {
 	}
 }
 
-// A percent charge may itself sit in another charge's basis. Resolving in
-// declaration order rather than dependency order would read a zero for a charge
-// that had not been computed yet, and quietly under-bill.
+// 一笔百分比费用本身可以落在另一笔费用的基数里。按声明顺序而不是依赖顺序求解，会给一笔
+// 尚未算出的费用读到零，从而悄悄少收。
 func TestPercentSurchargeMayFeedAnotherPercentBasis(t *testing.T) {
 	plan := dependencyPlanWith(t,
 		[]domain.FixedChargeRule{fixedRule(t, "handling", domain.ChargeEffectAdd, "10", 1)},
@@ -93,7 +91,7 @@ func TestPercentSurchargeMayFeedAnotherPercentBasis(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
 	}
-	// 10 base + 10 handling + 5 (50% of handling) + 2.5 (50% of the first percent).
+	// 10 基础运费 + 10 处理费 + 5（处理费的 50%）+ 2.5（第一笔百分比的 50%）。
 	if total, _ := evaluation.Total(); total.Amount().String() != "27.5" {
 		t.Fatalf("total = %s, want 27.5", total.Amount().String())
 	}

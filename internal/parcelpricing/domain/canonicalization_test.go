@@ -2,10 +2,9 @@ package domain
 
 import "testing"
 
-// ADR-0014 makes a content digest comparable only within the canonicalization
-// version that produced it, so an evaluation that does not record which shape
-// it used has an incomplete digest: nothing later can tell whether a difference
-// means changed content or a changed shape.
+// Covers: CONTEXT「摘要携带产生它的规范化版本，只在同一规范化版本内可比；不携带规范化
+// 版本的摘要视为不完整」（该版本化见 ADR-0014）— 不记下自己用的是哪一套形状的评价，其摘要
+// 就是不完整的：日后没有任何东西分得出一处差异是内容变了，还是形状变了。
 func TestEvaluationRecordsTheCanonicalizationVersionThatProducedItsDigest(t *testing.T) {
 	plan, input := replayIntegrityFixture(t)
 	id, _ := NewEvaluationID("eval-canonicalization-recorded")
@@ -22,11 +21,9 @@ func TestEvaluationRecordsTheCanonicalizationVersionThatProducedItsDigest(t *tes
 	}
 }
 
-// An evaluation saved by an earlier build carries that build's shape, so its
-// digest and today's are not comparable and a difference between them is no
-// evidence that the plan's content changed. Reporting a version content
-// conflict here would condemn every historical replay the moment the shape
-// widens, which is the outcome ADR-0014 exists to prevent.
+// Covers: CONTEXT「跨版本的摘要差异本身不构成内容已变的证据」— 早先构建保存的评价带着那次
+// 构建的形状，它的摘要与今天的不可比。在这里报版本内容冲突，等于形状一放宽就把全部历史重放
+// 一并判死，而那正是 ADR-0014 要挡住的结果。
 func TestReplayDoesNotReadACrossVersionDigestAsChangedContent(t *testing.T) {
 	plan, input := replayIntegrityFixture(t)
 	originalID, _ := NewEvaluationID("eval-canonicalization-original")
@@ -54,16 +51,16 @@ func TestReplayDoesNotReadACrossVersionDigestAsChangedContent(t *testing.T) {
 			t.Fatalf("cross-version digest was read as changed content: %s", issue.Code())
 		}
 	}
-	// This build can only canonicalize under the current shape, so it says it
-	// cannot perform the replay rather than claiming a faithful one.
+	// 本次构建只能按当前形状规范化，所以它声明自己做不了这次重放，而不是宣称做了一次
+	// 忠实的重放。
 	if replayed.Status() != EvaluationFailed || len(replayed.Issues()) != 1 || replayed.Issues()[0].Code() != "CANONICALIZATION_VERSION_UNSUPPORTED" {
 		t.Fatalf("cross-version replay = %s %#v", replayed.Status(), replayed.Issues())
 	}
 }
 
-// Within one canonicalization version the digest keeps its original job:
-// changed content behind an unchanged version reference is still a conflict.
-// The version must widen what a digest difference can mean, not weaken it.
+// Covers: CONTEXT「摘要不一致只有在规范化版本相同时才是版本内容冲突」— 在同一个规范化版本
+// 之内，摘要仍干它原来的活：版本引用没变而内容变了，依旧是冲突。规范化版本要拓宽的是「摘要
+// 差异可能意味着什么」，不是削弱它。
 func TestReplayStillReportsChangedContentWithinOneCanonicalizationVersion(t *testing.T) {
 	plan, input := replayIntegrityFixture(t)
 	originalID, _ := NewEvaluationID("eval-same-version-original")

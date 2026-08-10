@@ -7,10 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// Features are derived from the input snapshot so that every rule in one
-// evaluation decides against the same frozen values. If each rule reached for
-// the raw sides instead, two rules in the same evaluation could disagree about
-// the same package.
+// Covers: CONTEXT「特征」—「从计价输入快照派生、供判定条件读取的可判定量」：一次评价里的
+// 每条规则都对着同一批冻结取值做判断。若各条规则各自去够原始边长，同一次评价里的两条规则
+// 就可能对同一个包裹给出不一致的判断。
 func TestPricingInputSnapshotDerivesFeaturesFromItsDimensions(t *testing.T) {
 	input := syntheticInputWithDimensions(t, "1", "Z1", dimensions(t, "70", "8", "9", domain.LengthUnitInch))
 
@@ -36,10 +35,9 @@ func TestPricingInputSnapshotDerivesFeaturesFromItsDimensions(t *testing.T) {
 	}
 }
 
-// A snapshot that never carried dimensions is a missing fact, which can be
-// supplied and re-evaluated. Measurements that are present but unusable are an
-// illegal request. The context keeps those two outcomes apart on purpose, so
-// the two must not arrive as the same error.
+// Covers: CONTEXT「依据不足形成待判断…请求不合法或计算失败形成未形成；四者不得互相替代」—
+// 从未携带尺寸的快照是事实缺失，补齐后可以重新评价；测量在场却不可用则是请求不合法。上下文
+// 是特意把这两种结果分开的，所以它们不能以同一个错误抵达。
 func TestPricingInputSnapshotWithoutDimensionsReportsThemMissingNotUnusable(t *testing.T) {
 	input := syntheticInput(t, "1", "Z1")
 
@@ -52,10 +50,9 @@ func TestPricingInputSnapshotWithoutDimensionsReportsThemMissingNotUnusable(t *t
 	}
 }
 
-// Comparing several suppliers' cards happens before the customer has committed
-// anything, so there is no accepted package to evaluate against yet. Forcing a
-// package identity on the snapshot would make the whole estimate impossible to
-// express, which is why the subject has two kinds rather than one.
+// Covers: CONTEXT「评价对象」—「它有且只有两种：已受理包裹…试算对象，在包裹尚未存在时由
+// 发起试算的一方给出」：比几家供应商的卡发生在客户尚未承诺任何事之前，此时还没有已受理
+// 包裹可评。硬要快照带上包裹身份，整个试算就没法表达了。
 func TestPricingInputSnapshotAcceptsAnEstimateBeforeAnyPackageExists(t *testing.T) {
 	subject, err := domain.NewEstimateSubject("estimate-1")
 	if err != nil {
@@ -75,10 +72,8 @@ func TestPricingInputSnapshotAcceptsAnEstimateBeforeAnyPackageExists(t *testing.
 	}
 }
 
-// Dimensions decide which rules hit, so two evaluations differing only in the
-// package's sides are different evaluations. Sharing a semantic digest would
-// let a replay of one pass as a faithful replay of the other, which is the one
-// thing the digest exists to prevent.
+// 尺寸决定哪些规则命中，所以只差包裹边长的两次评价是两次不同的评价。共享评价语义摘要会让
+// 对其中一次的重放冒充成对另一次的忠实重放，而摘要存在的意义正是挡住这件事。
 func TestEvaluationDigestSeparatesInputsThatDifferOnlyInDimensions(t *testing.T) {
 	plan := syntheticPlan(t, "digest-dimensions", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 
@@ -92,10 +87,9 @@ func TestEvaluationDigestSeparatesInputsThatDifferOnlyInDimensions(t *testing.T)
 	}
 }
 
-// The same reference string can name an estimate and, later, the package the
-// business accepted from it. If the digest recorded only the reference, a
-// replay could not tell an estimate apart from the evaluation that is allowed
-// to become money, which is exactly the confusion the two kinds exist to stop.
+// Covers: CONTEXT「对象种类进入评价语义摘要，因此回放时不可能把一种误认成另一种」— 同一个
+// 引用串可以先指一次试算，之后再指业务据其受理的那个包裹。摘要若只记引用，重放就分不出试算
+// 与那次允许变成钱的评价。
 func TestEvaluationDigestSeparatesEstimateFromPackageSharingAReference(t *testing.T) {
 	plan := syntheticPlan(t, "digest-subject", domain.PricingDirectionSell, domain.PricingPurposeCustomerCharge, "10", domain.PricingWeightActualOnly, nil)
 	estimate, err := domain.NewEstimateSubject("shared-reference")

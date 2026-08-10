@@ -157,9 +157,8 @@ func syntheticPlanWithBaseCode(
 	if err != nil {
 		t.Fatalf("rounding policy: %v", err)
 	}
-	// MAX has to be able to reach a volumetric weight, so the synthetic card
-	// declares its own divisor the way a real one would: 5000 turns cubic
-	// centimetres into kilograms.
+	// MAX 必须够得到体积重，所以合成价卡按真卡的方式声明自己的体积系数：5000 把立方厘米
+	// 换成千克。
 	var factor *domain.VolumetricFactor
 	if method == domain.PricingWeightMax {
 		factorRounding, roundingErr := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, weight(t, "0.1", domain.WeightUnitKilogram))

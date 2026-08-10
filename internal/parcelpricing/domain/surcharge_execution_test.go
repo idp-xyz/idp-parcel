@@ -7,9 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// A declared surcharge that has never been executed is worse than one that does
-// not exist: the plan looks priced while the card's charge is missing. This is
-// the first slice that actually collects one.
+// 一条已声明却从未被执行的附加费，比它根本不存在还糟：方案看起来算过价了，卡上那笔钱却
+// 没收。本切片是第一次真的把它收上来。
 func TestSurchargeThatHitsIsCollectedOnTopOfTheBaseFreight(t *testing.T) {
 	plan := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
 	evaluation := evaluateWithSides(t, plan, "eval-surcharge-hit", "50")
@@ -26,9 +25,8 @@ func TestSurchargeThatHitsIsCollectedOnTopOfTheBaseFreight(t *testing.T) {
 	}
 }
 
-// CONTEXT requires that a rule which did not fire still leaves a trace: an
-// explanation listing only hits cannot be checked against the card, because a
-// reader cannot tell a rule that missed from a rule that was never evaluated.
+// Covers: CONTEXT「未命中的规则也要在解释中留痕，只输出命中结果视为解释不完整」— 只列
+// 命中项的解释没法拿去对卡，因为读的人分不出「判过但没命中」和「压根没判过」。
 func TestSurchargeThatMissesIsExplainedRatherThanSilentlyDropped(t *testing.T) {
 	plan := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "96", "25")))
 	evaluation := evaluateWithSides(t, plan, "eval-surcharge-miss", "50")
@@ -47,9 +45,8 @@ func TestSurchargeThatMissesIsExplainedRatherThanSilentlyDropped(t *testing.T) {
 	}
 }
 
-// 形态决定五: within one exclusivity group the card collects at most one charge,
-// chosen by declared priority first. UPS's large-package charge suppressing
-// additional handling is exactly this shape.
+// Covers: CONTEXT「互斥组内至多一条规则命中；多条同时满足时先按声明优先级取最高级」（推导
+// 见计价规则模型最终设计的形态决定五）— UPS 用大件费压住额外处理费正是这个形状。
 func TestExclusivityGroupCollectsOnlyTheHighestPriorityRule(t *testing.T) {
 	oversize := groupedSurcharge(t, surchargeRuleFor(t, "oversize", "OVERSIZE", "48", "30"), "AHS", 1)
 	handling := groupedSurcharge(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "80"), "AHS", 2)
@@ -59,8 +56,7 @@ func TestExclusivityGroupCollectsOnlyTheHighestPriorityRule(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
 	}
-	// Priority 1 outranks priority 2 even though its amount is lower, so the
-	// selection must not be a plain "take the largest".
+	// 优先级 1 压过优先级 2，哪怕它金额更低，所以选取不能是简单的「取最大值」。
 	if !hasChargeCode(evaluation, "OVERSIZE") || hasChargeCode(evaluation, "AHS_DIMENSION") {
 		t.Fatalf("charge lines = %#v, want only OVERSIZE", evaluation.ChargeLines())
 	}
@@ -69,8 +65,7 @@ func TestExclusivityGroupCollectsOnlyTheHighestPriorityRule(t *testing.T) {
 	}
 }
 
-// Same priority falls through to the highest amount, which is how the card's
-// three additional-handling variants resolve against one another.
+// 同级则落到取金额最高者，卡上三个额外处理费变体之间就是这么分出胜负的。
 func TestExclusivityGroupFallsBackToTheHighestAmountAtEqualPriority(t *testing.T) {
 	lower := groupedSurcharge(t, surchargeRuleFor(t, "ahs-a", "AHS_A", "48", "20"), "AHS", 1)
 	higher := groupedSurcharge(t, surchargeRuleFor(t, "ahs-b", "AHS_B", "48", "45"), "AHS", 1)
@@ -85,9 +80,9 @@ func TestExclusivityGroupFallsBackToTheHighestAmountAtEqualPriority(t *testing.T
 	}
 }
 
-// A condition reads the package's dimensions. Without them the rule can be
-// neither confirmed nor excluded, which is missing evidence rather than a
-// broken request, so the evaluation waits instead of failing or under-billing.
+// Covers: CONTEXT「依据不足形成待判断，明确排除形成不可计价，互斥候选形成冲突，请求不合法
+// 或计算失败形成未形成；四者不得互相替代」— 判定条件要读包裹尺寸，没有尺寸这条规则既确认
+// 不了也排除不掉，那是依据不足而不是请求不合法，所以评价等着，不失败，也不少收。
 func TestSurchargeWithoutDimensionsStaysPending(t *testing.T) {
 	plan := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
 	id := mustValue(t, domain.NewEvaluationID, "eval-surcharge-no-sides")
@@ -101,11 +96,9 @@ func TestSurchargeWithoutDimensionsStaysPending(t *testing.T) {
 	}
 }
 
-// Every declared structure now has an executor, so the unexecutable gate can no
-// longer fire. What replaces it as the guarantee is this: a plan that declares
-// structures is priced with them, never on the base table alone. The gate used
-// to be the only thing standing between a declaration and a silent under-bill;
-// with the gate vacuous, the under-bill has to be ruled out directly.
+// 如今每种已声明结构都有执行器，「不可执行」闸门再也不会触发。接替它做保证的是这一条：
+// 声明了结构的方案就要带着这些结构计价，绝不只按基础价表算。原先那道闸门是声明与静默少收
+// 之间唯一的阻拦；闸门空转之后，少收必须被直接排除掉。
 func TestPlanDeclaringStructuresIsNeverPricedOnTheBaseTableAlone(t *testing.T) {
 	bare := planWithStructures(t, declaredSurcharges(t))
 	declared := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
@@ -122,10 +115,8 @@ func TestPlanDeclaringStructuresIsNeverPricedOnTheBaseTableAlone(t *testing.T) {
 	}
 }
 
-// The card bands its oversize charge by zone (Q32–Q35), so a surcharge amount
-// can come from a table rather than a fixed figure. The band is read with the
-// same pricing weight the base freight used, so both read one consistent
-// weight.
+// 卡上按分区给超尺寸费分档（Q32–Q35），所以附加费金额可以来自一张表，而不是一个定额。
+// 分档用的是基础运费同一个计价重量，两边因而读到的是同一个一致的重量。
 func TestTableLookupSurchargeReadsItsBandWithThePricingWeight(t *testing.T) {
 	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "oversize", "OVERSIZE", "48", tableSurcharge(t, "Z1", "18")))
 	plan := planWithStructures(t, declaredSurcharges(t, rule))
@@ -142,9 +133,8 @@ func TestTableLookupSurchargeReadsItsBandWithThePricingWeight(t *testing.T) {
 	}
 }
 
-// A surcharge table with no band for this zone is a gap in the card, not a
-// rule that missed: the condition did fire. CONTEXT puts an interval gap under
-// 待判断, so the evaluation waits rather than charging nothing.
+// Covers: CONTEXT「取不到价卡、区间空档、事实缺失属待判断，不属不可计价」— 附加费表在这个
+// 分区没有档位，那是卡上的空档，不是规则没命中：条件确实触发了。所以评价等着，而不是一分不收。
 func TestTableLookupSurchargeWithNoBandForTheZoneStaysPending(t *testing.T) {
 	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "oversize", "OVERSIZE", "48", tableSurcharge(t, "Z9", "18")))
 	plan := planWithStructures(t, declaredSurcharges(t, rule))
@@ -185,10 +175,9 @@ func tableSurcharge(t testing.TB, zone, amount string) domain.SurchargeCalculati
 	return calculation
 }
 
-// A surcharged evaluation that cannot be replayed is only half formed: replay
-// is how a dispute is answered. The charge-line contract is checked on the way
-// in to a replay, not on the way out of an evaluation, so a surcharge line the
-// contract rejects completes fine and only fails later.
+// 一次收了附加费却重放不了的评价只算做了一半：争议复核是靠重放来回答的。费用行契约是在
+// 进入重放时检查的，不是在评价出口检查，所以一条被契约拒绝的附加费行能顺利完成，只会到
+// 后面才失败。
 func TestSurchargedEvaluationCanBeReplayed(t *testing.T) {
 	plan := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
 	original := evaluateWithSides(t, plan, "eval-surcharge-replay-source", "50")
@@ -213,10 +202,8 @@ func TestSurchargedEvaluationCanBeReplayed(t *testing.T) {
 	}
 }
 
-// Fixed rules declare their own order and need not be contiguous, so surcharge
-// lines have to continue from the highest order in use rather than from the
-// number of lines collected. Otherwise a plan with a rule at order 5 would
-// produce a surcharge that sorts before it.
+// 固定规则各自声明序号且不必连续，所以附加费行必须从已用的最大序号往后接，而不是从已收集
+// 的行数往后接。否则一个规则排在序号 5 的方案，会产出一条排序落在它前面的附加费。
 func TestSurchargeOrderContinuesPastNonContiguousFixedRules(t *testing.T) {
 	structures := standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25"))
 	plan := planWithStructuresAndFixedRules(t, structures, fixedRule(t, "late", domain.ChargeEffectAdd, "3", 5))

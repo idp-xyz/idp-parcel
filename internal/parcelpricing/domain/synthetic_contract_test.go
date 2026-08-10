@@ -7,9 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// PP-S03 keeps source-fact references in the pure evaluation contract. The
-// settlement context may adopt the reference, but the pricing context does
-// not create a fee item or accounting object.
+// Covers: CONTEXT「parcel-pricing 只形成纯评价、评价内计价重量/费用行、解释、版本引用和
+// 治理结果」— PP-S03 把来源事实引用留在纯评价契约里。结算上下文可以采纳该引用，但计价
+// 上下文不创建费用项目或会计对象。
 func TestSyntheticContractPreservesFactReferencesAcrossEvaluationAndReplay(t *testing.T) {
 	factReference, err := domain.NewVersionedFactReference(versionReference(t, domain.ArtifactKind("measurement"), "synthetic-measurement", "v1"))
 	if err != nil {

@@ -7,10 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// R40 excludes on three quantities at once — actual weight over 67.5 KG,
-// longest side over 274 CM, or length-plus-girth over 419 CM — and R32's
-// oversize clause adds volume. With only LONGEST_SIDE implemented none of the
-// other three could be stated, so the card's own conditions were unexpressible.
+// R40 一次按三个量排除——实重超 67.5 KG、最长边超 274 CM，或长加围超 419 CM——R32 的
+// 超尺寸条款还加上体积。只实现 LONGEST_SIDE 时，另外三个一个都表述不了，卡上自己的条件
+// 因而无法表达。
 func TestConditionsCanReadEveryQuantityTheCardDecidesOn(t *testing.T) {
 	sides := dimensions(t, "100", "40", "30", domain.LengthUnitInch)
 	packageFeatures := featuresWithWeight(t, sides, weight(t, "70", domain.WeightUnitKilogram))
@@ -21,13 +20,13 @@ func TestConditionsCanReadEveryQuantityTheCardDecidesOn(t *testing.T) {
 	second := lengthCondition(t, domain.FeatureSecondLongestSide, "39", domain.LengthUnitInch)
 	assertMatches(t, second, packageFeatures, true, "second longest side 40 > 39")
 
-	// 100 + 2×40 + 2×30 = 240
+	// 长加围 = 100 + 2×40 + 2×30 = 240
 	girth := lengthCondition(t, domain.FeatureLengthAndGirth, "239", domain.LengthUnitInch)
 	assertMatches(t, girth, packageFeatures, true, "length plus girth 240 > 239")
 	girthMiss := lengthCondition(t, domain.FeatureLengthAndGirth, "240", domain.LengthUnitInch)
 	assertMatches(t, girthMiss, packageFeatures, false, "length plus girth 240 is not > 240")
 
-	// 100 × 40 × 30 = 120000
+	// 体积 = 100 × 40 × 30 = 120000
 	volume := volumeCondition(t, "119999", domain.LengthUnitInch)
 	assertMatches(t, volume, packageFeatures, true, "volume 120000 > 119999")
 
@@ -37,9 +36,8 @@ func TestConditionsCanReadEveryQuantityTheCardDecidesOn(t *testing.T) {
 	assertMatches(t, actualMiss, packageFeatures, false, "actual weight 70 is not > 70")
 }
 
-// A threshold only means something against the quantity it measures. Pairing a
-// weight threshold with a length feature would compare two different physical
-// quantities and silently produce a hit or a miss either way.
+// 阈值只有对着它所计量的那个量才有意义。把重量阈值配到长度特征上，是拿两个不同的物理量
+// 相比，而无论结果是命中还是未命中都会被静默给出。
 func TestConditionRefusesAThresholdThatDoesNotMeasureItsFeature(t *testing.T) {
 	if _, err := domain.NewWeightFeatureCondition(domain.FeatureLongestSide, domain.ComparisonGreaterThan, weight(t, "1", domain.WeightUnitKilogram)); !errors.Is(err, domain.ErrInvalidFeatureCondition) {
 		t.Fatalf("weight threshold on a length feature error = %v", err)
@@ -52,9 +50,9 @@ func TestConditionRefusesAThresholdThatDoesNotMeasureItsFeature(t *testing.T) {
 	}
 }
 
-// Comparing across units would decide the rule on the number alone. The card
-// states metric thresholds against an imperial table, so the mismatch is real
-// traffic, not a theoretical case.
+// Covers: CONTEXT「特征判定使用的单位与价表单位可以不同，换算规则必须版本化声明，判定中
+// 不得隐式换算」— 跨单位比较等于只凭数字定规则。卡上以公制声明阈值、价表却用英制，所以
+// 这种不匹配是真实业务，不是理论情形。
 func TestConditionRefusesAThresholdMeasuredInAnotherUnit(t *testing.T) {
 	sides := dimensions(t, "100", "40", "30", domain.LengthUnitInch)
 	packageFeatures := featuresWithWeight(t, sides, weight(t, "70", domain.WeightUnitKilogram))
@@ -69,10 +67,8 @@ func TestConditionRefusesAThresholdMeasuredInAnotherUnit(t *testing.T) {
 	}
 }
 
-// The digest reads one threshold field per measure. Reading the length field
-// for every condition would give two weight conditions with different limits
-// the same fingerprint, and a released version could then move the limit
-// without reporting a content conflict.
+// 摘要按计量种类各读一个阈值字段。若对所有条件都去读长度字段，两条限值不同的重量条件会
+// 得到同一个指纹，一个已发布版本就能挪动限值而不报内容冲突。
 func TestConditionDigestCoversThresholdsOfEveryMeasure(t *testing.T) {
 	lighter := weightCondition(t, "67.5", domain.WeightUnitKilogram)
 	heavier := weightCondition(t, "110", domain.WeightUnitKilogram)
@@ -86,9 +82,8 @@ func TestConditionDigestCoversThresholdsOfEveryMeasure(t *testing.T) {
 	}
 }
 
-// conditionDigest fingerprints a plan that differs only in the condition under
-// test, which is the only way to observe the condition's contribution to the
-// content digest from outside the package.
+// conditionDigest 对一个只在被测条件上有差异的方案取指纹，这是在包外观察该条件对内容摘要
+// 有何贡献的唯一办法。
 func conditionDigest(t *testing.T, condition domain.FeatureCondition) string {
 	t.Helper()
 	minimum, err := domain.NewConditionalMinimumWeight("threshold-probe", leafTrigger(t, condition), weight(t, "40", domain.WeightUnitKilogram))

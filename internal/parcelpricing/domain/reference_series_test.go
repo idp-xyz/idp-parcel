@@ -6,10 +6,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// L5 defines fuel as the basis times a rate the carrier publishes weekly, and
-// F1 discounts that rate to 80%. Both numbers have to reach the amount: the
-// published rate alone over-bills by a quarter, the factor alone is not a rate
-// at all.
+// Covers: CONTEXT「燃油费率是承运商当周公布费率与价卡折扣系数的乘积」— L5 把燃油定为基数
+// 乘以承运商每周公布的费率，F1 又把该费率打到 80%。两个数都必须走到金额里：只用公布费率
+// 会多收四分之一，只用系数则根本不是一个费率。
 func TestFuelChargesThePublishedRateTimesTheCardFactor(t *testing.T) {
 	plan := seriesPlan(t, "0.8")
 	evaluation := evaluateWithSeries(t, plan, "eval-series-fuel", "20")
@@ -17,15 +16,14 @@ func TestFuelChargesThePublishedRateTimesTheCardFactor(t *testing.T) {
 	if evaluation.Status() != domain.EvaluationCompleted {
 		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
 	}
-	// Basis is the 10 base freight; the effective rate is 20% × 0.8 = 16%.
+	// 基数是 10 的基础运费；实际费率为 20% × 0.8 = 16%。
 	if total, _ := evaluation.Total(); total.Amount().String() != "11.6" {
 		t.Fatalf("total = %s, want 11.6 = 10 + 10 × 16%%", total.Amount().String())
 	}
 }
 
-// The series value is resolved per evaluation and frozen into the snapshot, so
-// a plan bound to a series it was not given cannot be priced. That is missing
-// evidence — the rate exists, this evaluation just was not handed it.
+// 序列取值按每次评价解析并冻结进快照，所以绑定了序列却没拿到该取值的方案算不出价。那是
+// 证据缺失——费率是存在的，只是这次评价没被递到。
 func TestPlanBoundToASeriesTheSnapshotDoesNotCarryStaysPending(t *testing.T) {
 	plan := seriesPlan(t, "0.8")
 	request, err := domain.NewEvaluationRequest(
@@ -42,9 +40,8 @@ func TestPlanBoundToASeriesTheSnapshotDoesNotCarryStaysPending(t *testing.T) {
 	}
 }
 
-// A snapshot carrying a different version of the series than the plan bound is
-// not a gap but a disagreement: replaying with whichever happened to be handed
-// over would silently price against a rate the plan never declared.
+// 快照带的序列版本与方案所绑的不同，这不是空档而是分歧：拿碰巧递过来的那个去重放，等于
+// 悄悄按一个方案从未声明过的费率计价。
 func TestSeriesVersionDisagreementIsAConflict(t *testing.T) {
 	plan := seriesPlan(t, "0.8")
 	input := syntheticInputWithDimensions(t, "5", "Z1", dimensions(t, "50", "10", "10", domain.LengthUnitInch))
@@ -61,8 +58,8 @@ func TestSeriesVersionDisagreementIsAConflict(t *testing.T) {
 	}
 }
 
-// CONTEXT: 燃油费率是承运商当周公布费率与价卡折扣系数的乘积，两者都必须写入版本清单，
-// 只保留乘积结果视为解释不完整.
+// Covers: CONTEXT「燃油费率是承运商当周公布费率与价卡折扣系数的乘积，两者都必须写入版本
+// 清单，只保留乘积结果视为解释不完整」。
 func TestFuelExplanationKeepsBothTheRateAndTheFactor(t *testing.T) {
 	plan := seriesPlan(t, "0.8")
 	evaluation := evaluateWithSeries(t, plan, "eval-series-explained", "20")
@@ -72,10 +69,8 @@ func TestFuelExplanationKeepsBothTheRateAndTheFactor(t *testing.T) {
 	}
 }
 
-// Adding an optional series field must not disturb any evaluation that carries
-// none: an absent field leaves the canonical bytes untouched, so every digest
-// recorded before this slice stays comparable and no canonicalization version
-// is owed.
+// 新增一个可选的序列字段不得惊动任何不带它的评价：字段缺席时规范化字节原样不变，因而本
+// 切片之前记下的每一个摘要仍然可比，也不欠一个新的规范化版本。
 func TestSnapshotWithoutSeriesKeepsItsDigest(t *testing.T) {
 	plan := planWithStructures(t, standaloneSurcharges(t, surchargeRuleFor(t, "ahs-dimension", "AHS_DIMENSION", "48", "25")))
 	first := evaluateWithSides(t, plan, "eval-series-neutral", "50")

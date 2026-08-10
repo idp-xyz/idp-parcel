@@ -2,10 +2,8 @@ package domain
 
 import "testing"
 
-// Two channels can round identically on both sides of a boundary and still
-// charge differently, because the boundary decides which side a weight lands
-// on. Hashing only the mode and increment would let a released version move
-// that boundary without reporting a content conflict.
+// 两个渠道可以在边界两侧以完全相同的方式进位，收的钱却不同，因为边界决定一个重量落到哪
+// 一侧。只对模式与进位单位取哈希，会让一个已发布版本挪动该边界而不报内容冲突。
 func TestRoundingSegmentBoundsEnterTheDigest(t *testing.T) {
 	fine, _ := NewWeightFromString("0.001", WeightUnitKilogram)
 	coarse, _ := NewWeightFromString("1", WeightUnitKilogram)
@@ -46,10 +44,8 @@ func TestRoundingSegmentBoundsEnterTheDigest(t *testing.T) {
 	}
 }
 
-// The first-continue amount is a sum of two amounts the card declares, so the
-// step count must be an exact integer: a fractional step would silently invent
-// a precision the card never stated. This pins the arithmetic at the awkward
-// boundaries rather than trusting the division helper's contract.
+// 首重加续重的金额是卡声明的两个金额之和，所以步数必须是精确整数：出现小数步等于凭空发明
+// 一个卡从未声明过的精度。这里把算术钉在几个别扭的边界上，而不是信赖除法辅助函数的契约。
 func TestFirstContinueStepCountIsExactAtEveryBoundary(t *testing.T) {
 	currency, _ := NewCurrency("USD")
 	id, _ := NewRateEntryID("fc-boundary")
@@ -63,12 +59,12 @@ func TestFirstContinueStepCountIsExactAtEveryBoundary(t *testing.T) {
 	}
 
 	for _, testCase := range []struct{ weight, want string }{
-		{"0.0001", "30"}, // far below the first weight
-		{"0.5", "30"},    // exactly the first weight, zero steps
-		{"0.5001", "38"}, // a sliver over starts a whole step
-		{"1", "38"},      // exactly one step, not two
-		{"1.0001", "46"}, // a sliver over one step starts the second
-		{"1.5", "46"},    // exactly two steps, not three
+		{"0.0001", "30"}, // 远低于首重
+		{"0.5", "30"},    // 恰好首重，零步
+		{"0.5001", "38"}, // 超出一丝就起一整步
+		{"1", "38"},      // 恰好一步，不是两步
+		{"1.0001", "46"}, // 超出一步一丝，起第二步
+		{"1.5", "46"},    // 恰好两步，不是三步
 	} {
 		weight, _ := NewWeightFromString(testCase.weight, WeightUnitKilogram)
 		amount, _, err := rate.price(weight)
@@ -81,9 +77,8 @@ func TestFirstContinueStepCountIsExactAtEveryBoundary(t *testing.T) {
 	}
 }
 
-// A step finer than the excess it measures must still round up to one whole
-// step. Scaled-integer division is what makes this exact; a float quotient
-// would land on 0.9999… and charge nothing.
+// 比它所计量的超出量还细的步长，仍必须进位到一整步。定标整数除法才使这一步精确；浮点商会
+// 落在 0.9999… 上，结果一分不收。
 func TestFirstContinueHandlesAStepFinerThanTheExcess(t *testing.T) {
 	currency, _ := NewCurrency("USD")
 	id, _ := NewRateEntryID("fc-fine-step")
@@ -100,7 +95,7 @@ func TestFirstContinueHandlesAStepFinerThanTheExcess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("price: %v", err)
 	}
-	// 0.0025 excess over a 0.001 step is 2.5 steps, charged as 3.
+	// 0.0025 的超出量按 0.001 的步长是 2.5 步，按 3 步计收。
 	if got := amount.amount.String(); got != "10.06" {
 		t.Fatalf("priced at %s, want 10.06 (10 + 3 × 0.02)", got)
 	}

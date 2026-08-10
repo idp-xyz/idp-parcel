@@ -6,10 +6,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// The card prices in USD while the anchor customer settles in CNY, and CONTEXT
-// puts the conversion inside the evaluation: 计价按结算币种输出. Leaving it to the
-// settlement side would make PricingEvaluation stop being the recomputable
-// final price.
+// Covers: CONTEXT「换算步骤」—「一次评价把原币金额换算为结算币种金额的过程记录」：卡按
+// USD 定价而锚点货主客户按 CNY 结算，换算落在评价之内。丢给结算侧去做，PricingEvaluation
+// 就不再是那个可复算的最终价格了。
 func TestEvaluationOutputsTheSettlementCurrency(t *testing.T) {
 	evaluation := evaluateWithConversion(t, "eval-fx-total", "7.2")
 
@@ -22,9 +21,8 @@ func TestEvaluationOutputsTheSettlementCurrency(t *testing.T) {
 	}
 }
 
-// CONTEXT: 换算必须保留原币金额与所引用的汇率序列版本，只保留结算币种金额视为解释
-// 不完整. A dispute is argued in the original currency, so the pair has to
-// survive on the evaluation rather than only in prose.
+// Covers: CONTEXT「换算必须保留原币金额与所引用的汇率序列版本，只保留结算币种金额视为解释
+// 不完整」— 争议是按原币争的，所以这一对必须活在评价上，而不是只活在说明文字里。
 func TestConversionStepKeepsTheOriginalAmountAndTheSeriesVersion(t *testing.T) {
 	evaluation := evaluateWithConversion(t, "eval-fx-step", "7.2")
 
@@ -43,12 +41,11 @@ func TestConversionStepKeepsTheOriginalAmountAndTheSeriesVersion(t *testing.T) {
 	}
 }
 
-// CONTEXT: 汇率口径——牌价类型、取值时点规则和加点规则——由商业价格政策版本化声明；
-// 不接受未声明口径的裸汇率. A number without a stated quote basis cannot be argued
-// about later: nobody can say which rate it was supposed to be.
+// Covers: CONTEXT「汇率口径——牌价类型、取值时点规则和加点规则——由商业价格政策版本化
+// 声明；不接受未声明口径的裸汇率」— 一个没有口径的数字日后没法争：谁也说不出它本该是哪
+// 一个汇率。
 func TestBareExchangeRateWithoutADeclaredQuoteBasisIsRefused(t *testing.T) {
-	// Refused at construction rather than at use: a bare rate should not exist
-	// as a value in the first place.
+	// 在构造期而不是使用期拒绝：裸汇率本来就不该作为一个取值存在。
 	if _, err := domain.NewReferenceSeriesValue(
 		domain.ReferenceSeriesExchangeRate,
 		versionReference(t, domain.ArtifactReferenceSeries, "fx-daily", "v1"),
@@ -56,8 +53,7 @@ func TestBareExchangeRateWithoutADeclaredQuoteBasisIsRefused(t *testing.T) {
 	); err == nil {
 		t.Fatal("a bare exchange rate with no declared quote basis was accepted")
 	}
-	// A fuel rate needs no such declaration: its discount factor is on the card,
-	// not in a commercial policy.
+	// 燃油费率不需要这类声明：它的折扣系数在卡上，不在商业价格政策里。
 	if _, err := domain.NewReferenceSeriesValue(
 		domain.ReferenceSeriesFuelRate,
 		versionReference(t, domain.ArtifactReferenceSeries, "fuel-weekly", "v1"),
@@ -67,9 +63,8 @@ func TestBareExchangeRateWithoutADeclaredQuoteBasisIsRefused(t *testing.T) {
 	}
 }
 
-// Settling in the currency the card is already priced in is not a conversion.
-// Recording one anyway would put a rate of 1 into every evaluation and invite a
-// reader to think a rate was applied.
+// 按卡本来就定价所用的币种结算，不算一次换算。硬记一笔会把一个 1 的汇率塞进每一次评价，
+// 引着读的人以为真的用过某个汇率。
 func TestNoConversionStepWhenSettlementMatchesTheCardCurrency(t *testing.T) {
 	plan := planWithStructures(t, declaredSurcharges(t))
 	input, err := conversionInput(t).WithSettlementCurrency(mustValue(t, domain.NewCurrency, "USD"))
@@ -89,10 +84,8 @@ func TestNoConversionStepWhenSettlementMatchesTheCardCurrency(t *testing.T) {
 	}
 }
 
-// Asking for a settlement currency the evaluation was given no rate for is
-// missing evidence, not a reason to fall back to the card's currency: falling
-// back would hand the settlement side an amount in a currency it did not ask
-// for and cannot tell apart from a converted one.
+// 要一个评价没拿到汇率的结算币种，是证据缺失，不是退回卡币种的理由：退回会把一个结算侧
+// 没有要过的币种金额交给它，而它分不出这与一个换算过的金额有何不同。
 func TestSettlementCurrencyWithoutARateStaysPending(t *testing.T) {
 	plan := planWithStructures(t, declaredSurcharges(t))
 	input, err := conversionInput(t).WithSettlementCurrency(mustValue(t, domain.NewCurrency, "CNY"))
@@ -108,8 +101,8 @@ func TestSettlementCurrencyWithoutARateStaysPending(t *testing.T) {
 	}
 }
 
-// An evaluation that never converts must canonicalize exactly as before, so
-// every digest recorded prior to this slice stays comparable.
+// Covers: CONTEXT「摘要携带产生它的规范化版本，只在同一规范化版本内可比」— 从不换算的评价
+// 必须与从前一模一样地规范化，这样本切片之前记下的每一个摘要都仍然可比。
 func TestEvaluationWithoutConversionKeepsItsCanonicalizationVersion(t *testing.T) {
 	plan := planWithStructures(t, declaredSurcharges(t))
 	evaluation := evaluateWithSides(t, plan, "eval-fx-neutral", "50")

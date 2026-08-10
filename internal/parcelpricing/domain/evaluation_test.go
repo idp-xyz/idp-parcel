@@ -16,8 +16,8 @@ func TestEvaluatePricingCalculatesMaxWeightAndOrderedFixedCharges(t *testing.T) 
 			fixedRule(t, "residential", domain.ChargeEffectAdd, "2", 1),
 		},
 	)
-	// 20 cm cube is 8000 cm³, which the synthetic card's 5000 divisor turns
-	// into 1.6 kg — above the 1.2 kg actual weight, so MAX takes it.
+	// 20 cm 立方是 8000 cm³，按合成价卡的 5000 体积系数得 1.6 kg——高于 1.2 kg 实重，
+	// 所以 MAX 取它。
 	input := syntheticInputWithDimensions(t, "1.2", "Z1", dimensions(t, "20", "20", "20", domain.LengthUnitCentimeter))
 	evaluation := evaluate(t, "eval-sell-1", plan, input)
 	if evaluation.Status() != domain.EvaluationCompleted {

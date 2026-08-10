@@ -7,9 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// PA-PP-03: a channel can round in grams below some weight and in kilograms
-// above it. A policy holding a single increment cannot express that, so the
-// segment a weight falls into has to decide how that weight is rounded.
+// PA-PP-03（产品需求假设）：同一渠道可能在某个重量以下按克进位、以上按千克进位。只持有
+// 单一进位单位的策略表达不了这件事，因而必须由重量落入的那个分段决定它怎么进位。
 func TestSegmentedRoundingAppliesTheSegmentTheRawWeightFallsInto(t *testing.T) {
 	policy := segmentedRoundingPolicy(t,
 		boundedRoundingSegment(t, "0.001", "2"),
@@ -24,8 +23,8 @@ func TestSegmentedRoundingAppliesTheSegmentTheRawWeightFallsInto(t *testing.T) {
 	}
 }
 
-// The boundary is exclusive, matching how RateEntry already treats its maximum.
-// Two adjacent segments must never both claim the same weight.
+// 分段上界取开区间，与 RateEntry 对其最大值的既有读法一致。相邻两段绝不能同时认领同一
+// 个重量。
 func TestSegmentedRoundingTreatsTheSegmentBoundaryAsExclusive(t *testing.T) {
 	policy := segmentedRoundingPolicy(t,
 		boundedRoundingSegment(t, "0.001", "2"),
@@ -36,8 +35,7 @@ func TestSegmentedRoundingTreatsTheSegmentBoundaryAsExclusive(t *testing.T) {
 	}
 }
 
-// A single-segment policy is the shape every existing plan uses. Introducing
-// segments must not change what those plans compute.
+// 单分段策略是既有方案都在用的形状。引入分段不得改变这些方案算出来的结果。
 func TestSingleSegmentPolicyRoundsExactlyAsBefore(t *testing.T) {
 	policy, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, weight(t, "1", domain.WeightUnitKilogram))
 	if err != nil {
@@ -51,9 +49,8 @@ func TestSingleSegmentPolicyRoundsExactlyAsBefore(t *testing.T) {
 	}
 }
 
-// Gaps, overlaps and a missing open end each leave some weight with either no
-// rule or two rules. Both make the rounding non-deterministic, so they must be
-// rejected at construction rather than surfacing during an evaluation.
+// Covers: CONTEXT「区间空档、边界重叠」— 空档、重叠与缺开放段各自会让某个重量落到无规则
+// 或两条规则上，两者都使进位不确定，因此必须在构造期拒绝，而不是等评价时才冒出来。
 func TestSegmentedRoundingRejectsPoliciesThatDoNotCoverEveryWeightExactlyOnce(t *testing.T) {
 	fine := boundedRoundingSegment(t, "0.001", "2")
 	wider := boundedRoundingSegment(t, "0.01", "5")
@@ -74,8 +71,8 @@ func TestSegmentedRoundingRejectsPoliciesThatDoNotCoverEveryWeightExactlyOnce(t 
 	}
 }
 
-// Each segment carries its own increment, so a mixed-unit policy would compare
-// a boundary against a weight that is not measured in the same unit.
+// 每个分段各带自己的进位单位，因而混单位的策略会拿一个边界去比一个不按同一单位计量的
+// 重量。
 func TestSegmentedRoundingRejectsMixedUnits(t *testing.T) {
 	metric := boundedRoundingSegment(t, "0.001", "2")
 	imperial, err := domain.NewOpenEndedWeightRoundingSegment(domain.RoundingCeiling, weight(t, "1", domain.WeightUnitPound))

@@ -7,9 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// PA-PP-01: a commercial express agent prices a first weight and then charges
-// per continuation step. The step is charged whole, so 0.6 kg against a 0.5 kg
-// first weight and a 0.5 kg step costs one step, not 0.2 of one.
+// PA-PP-01（产品需求假设）：商务快递代理按首重定价，超出部分按续重步长计收。步长整段
+// 计收，所以在 0.5 kg 首重加 0.5 kg 步长下，0.6 kg 收一整步，不是收 0.2 步。
 func TestFirstContinueChargesTheFirstWeightThenWholeSteps(t *testing.T) {
 	table := firstContinueTable(t)
 	for _, testCase := range []struct {
@@ -35,8 +34,8 @@ func TestFirstContinueChargesTheFirstWeightThenWholeSteps(t *testing.T) {
 	}
 }
 
-// PA-PP-01: an economy line quotes one price per unit of chargeable weight with
-// no brackets at all, so there is no interval to match 鈥?the amount is derived.
+// PA-PP-01（产品需求假设）：经济线路按计价重量乘单价报一个价，完全没有档位，因而没有
+// 区间可匹配——金额是派生出来的。
 func TestUnitPriceMultipliesTheChargeableWeight(t *testing.T) {
 	table := unitPriceTable(t)
 	selection, err := table.Lookup("Z1", weight(t, "2.5", domain.WeightUnitKilogram))
@@ -51,8 +50,9 @@ func TestUnitPriceMultipliesTheChargeableWeight(t *testing.T) {
 	}
 }
 
-// Every family is zone-keyed; a zone the table does not price must not fall
-// back to another zone's rate.
+// Covers: CONTEXT「缺少必需版本、区间空档、边界重叠、单位/币种不一致或依赖未决时，结果
+// 保持待判断或冲突，不使用隐式默认价」— 每个族都按分区查表；表没有定价的分区若回退到别的
+// 分区费率，就是拿一个隐式默认价冒充结果。
 func TestNewFamiliesKeepZonesIsolated(t *testing.T) {
 	for name, table := range map[string]domain.RateTableVersion{
 		"first-continue": firstContinueTable(t),
@@ -64,9 +64,9 @@ func TestNewFamiliesKeepZonesIsolated(t *testing.T) {
 	}
 }
 
-// The explanation is what a dispute review reads. A derived amount has no
-// bracket, so it must state how it was derived rather than borrow the
-// weight-zone wording.
+// Covers: CONTEXT「价表区间、分区、重量策略、附加费、折扣、最低/最高收费、燃油、组合方式、
+// 精度和取整顺序必须可解释、可复算」— 解释是争议复核要读的东西。派生金额没有档位可引，
+// 必须讲清自己是怎么派生出来的，不能套用重量分区那套措辞。
 func TestDerivedFamiliesExplainHowTheAmountWasReached(t *testing.T) {
 	for name, table := range map[string]domain.RateTableVersion{
 		"first-continue": firstContinueTable(t),
@@ -82,9 +82,8 @@ func TestDerivedFamiliesExplainHowTheAmountWasReached(t *testing.T) {
 	}
 }
 
-// A table declares one family and carries only that family's rates. Building
-// one with no rates leaves a zone unpriceable at evaluation time instead of at
-// construction.
+// 一张表只声明一个族，也只带该族的费率。建一张没有费率的表，等于把「这个分区查不到价」
+// 推迟到评价期才暴露；构造期就该拒绝。
 func TestNewFamiliesRejectEmptyRateSets(t *testing.T) {
 	reference := versionReference(t, domain.ArtifactRateTable, "table-empty", "v1")
 	currency := mustValue(t, domain.NewCurrency, "USD")

@@ -7,10 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// The card states its dimension triggers as strict "greater than": BND-003
-// records a 48 inch longest side as a miss and BND-004 records 48.01 as a hit.
-// The threshold is declared data in both cases, never a constant the code
-// carries, so the test supplies it the same way a rate card version would.
+// 卡把尺寸触发写成严格的「大于」：BND-003 记 48 英寸最长边为未命中，BND-004 记 48.01 为
+// 命中。两处的阈值都是声明数据，从来不是代码里带的常量，所以测试按一个价卡版本会提供它的
+// 方式供给。
 func TestLengthFeatureConditionGreaterThanExcludesTheThresholdItself(t *testing.T) {
 	for _, testCase := range []struct {
 		name        string
@@ -44,12 +43,10 @@ func TestLengthFeatureConditionGreaterThanExcludesTheThresholdItself(t *testing.
 	}
 }
 
-// R40 states its limits in centimetres while the rate table works in inches, so
-// a condition and the feature it reads can genuinely disagree on unit. This
-// package must not convert between them: the card would have to declare the
-// conversion as a versioned rule first. The disagreement is not academic — a
-// 108 inch side is 274.32 cm and clears a 274 cm limit, while comparing the
-// bare numbers would report the opposite.
+// Covers: CONTEXT「换算规则必须版本化声明，判定中不得隐式换算」— R40 以厘米声明上限而价表
+// 按英寸工作，所以一个条件与它所读的特征确实可能在单位上不一致。本包不得替它们换算：卡必须
+// 先把换算声明成一条版本化规则。这种不一致不是学术问题——108 英寸的边是 274.32 cm，越过了
+// 274 cm 的上限，而直接比裸数字会报出相反的结论。
 func TestLengthFeatureConditionRefusesToCompareAcrossUnits(t *testing.T) {
 	condition, err := domain.NewLengthFeatureCondition(
 		domain.FeatureLongestSide,

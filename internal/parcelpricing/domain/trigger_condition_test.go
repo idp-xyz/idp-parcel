@@ -7,10 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
-// `R40` on the authoritative card is one clause with three alternatives: actual
-// weight over 67.5 KG, longest side over 274 CM, or length plus girth over 419
-// CM. A single predicate cannot say that, and splitting it into three rules
-// would charge three times for what the card charges once.
+// Covers: CONTEXT「卡上一条含多个替代项的条款只计收一次，把它拆成多条规则会按替代项个数
+// 重复计收」— 权威价卡的 `R40` 就是一条含三个替代项的条款：实重超 67.5 KG、最长边超
+// 274 CM，或长加围超 419 CM。单个谓词说不出这件事。
 func TestAnyOfTriggerHitsWhenOneAlternativeHolds(t *testing.T) {
 	trigger := oversizeLimitTrigger(t)
 	for _, testCase := range []struct {
@@ -37,9 +36,8 @@ func TestAnyOfTriggerHitsWhenOneAlternativeHolds(t *testing.T) {
 	}
 }
 
-// A band needs both ends to hold at once. DHL's Non-Conveyable Piece is the
-// carrier's own example: it applies to a piece weighing between 56 and 150 lbs,
-// and a piece over 150 lbs is charged Overweight instead.
+// 区间型条款要求两端同时成立。DHL 的 Non-Conveyable Piece 就是承运商自己的例子：它适用于
+// 56 至 150 磅之间的件，超过 150 磅的件改收 Overweight。
 func TestAllOfTriggerNeedsEveryAlternativeToHold(t *testing.T) {
 	trigger := weightBandTrigger(t, "56", "150")
 	for _, testCase := range []struct {
@@ -66,9 +64,8 @@ func TestAllOfTriggerNeedsEveryAlternativeToHold(t *testing.T) {
 	}
 }
 
-// A band's ends are inclusive or exclusive by the carrier's wording, so the
-// comparison set has to carry both readings rather than force every threshold
-// to be restated as a strict one.
+// Covers: CONTEXT「把含端边界改写成严格边界会迫使转抄者自造下一个可表示值」— 区间两端是
+// 含端还是严格，取决于承运商的写法，所以比较运算集合必须把两种读法都带上。
 func TestComparisonSetCarriesBothInclusiveAndStrictBounds(t *testing.T) {
 	for _, testCase := range []struct {
 		operator domain.ComparisonOperator
@@ -93,8 +90,8 @@ func TestComparisonSetCarriesBothInclusiveAndStrictBounds(t *testing.T) {
 	}
 }
 
-// An empty combination has no truth value the card could have meant, so it is
-// refused rather than silently reading as always-true or always-false.
+// Covers: CONTEXT「空组合不成立——它没有卡可能表达的读法，当作恒真或恒假都是在替卡发明
+// 规则」— 所以它被拒绝，而不是静默读成恒真或恒假。
 func TestTriggerCombinationRefusesAnEmptyOperandList(t *testing.T) {
 	if _, err := domain.NewAnyOfTrigger(); !errors.Is(err, domain.ErrInvalidFeatureCondition) {
 		t.Fatalf("empty any-of error = %v", err)
@@ -104,8 +101,8 @@ func TestTriggerCombinationRefusesAnEmptyOperandList(t *testing.T) {
 	}
 }
 
-// Two rules that trigger on different alternatives are different rules, so the
-// combination has to reach the content digest rather than only its first leaf.
+// 在不同替代项上触发的两条规则是两条不同的规则，所以进内容摘要的必须是整个组合，而不是
+// 只有它的第一个叶子。
 func TestPricingPlanContentDigestCoversTheTriggerCombination(t *testing.T) {
 	single := planWithStructures(t, structuresWithTrigger(t, leafTrigger(t, boundedWeightCondition(t, domain.ComparisonGreaterThan, "50"))))
 	combined := planWithStructures(t, structuresWithTrigger(t, weightBandTrigger(t, "50", "150")))
@@ -194,9 +191,8 @@ func anyOfWeightTrigger(t testing.TB, lower, upper string) domain.TriggerConditi
 	return trigger
 }
 
-// oversizeLimitTrigger is `R40`: over 67.5 KG, or a longest side over 274 CM,
-// or length plus girth over 419 CM. The thresholds are card content and are
-// supplied here the way a card version would supply them.
+// oversizeLimitTrigger 就是 `R40`：超 67.5 KG，或最长边超 274 CM，或长加围超 419 CM。
+// 阈值是卡的内容，这里按一个价卡版本会提供它们的方式供给。
 func oversizeLimitTrigger(t testing.TB) domain.TriggerCondition {
 	t.Helper()
 	longest, err := domain.NewLengthFeatureCondition(
