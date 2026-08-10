@@ -152,13 +152,17 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 上节定了判据却没说现在站在哪里，判据因此还用不上。下表按三条判据逐切片定级，**只描述机制半边**；实例半边一律为空且不计入。代码事实核对于 `internal/` 与 `cmd/`，用例与规则事实核对于各 `CONTEXT.md` 与 `UC-*`。
 
+**本节是快照，盘于 `f327558`（2026-08-10）。** 它与本文其余部分性质不同：其余部分说明产品长期必须保持什么，本节只说明某一刻站在哪里。它记录的对象是代码，每次提交都可能使它过期——立节当天它就被并行落地的提交先后带假三次。**读到与代码不符时以代码为准**，不要据本节推断某项能力不存在。
+
+重盘触发条件三项，任一成立即须重盘并更新上面的盘点戳：某上下文首次出现生产代码；某切片的状态定级发生变化；本节引用的任何计数与实际不符。
+
 状态三种：**达标**（三条判据都满足）、**部分**（有生产代码但判据未齐）、**未开始**（无生产代码）。
 
 | 切片 | 主要上下文 | 状态 | 机制半边缺什么 |
 |---|---|---|---|
 | PN-01 | 治理，无专属上下文 | 未开始 | 阶段、权威方、准入、暂停恢复、接管的**记录能力**无代码；参数槽位已在三份模板中建立 |
-| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | `parcel-shipment` 有生产代码（来源身份与保全、生产归属决定、安全交接判定、提交候选与批次）；`party-commercial` 已有商业版本的生产模型（生效区间、发布后内容固定、版本迁移），`S01-W01`／`S01-W02` 契约测试仍在；`network-routing` 的接受前可达性无代码 |
-| PN-03 | `network-routing`、`node-operations`、`transport-fulfillment`、`parcel-shipment` | 未开始 | 前三个上下文无任何代码 |
+| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | 三个上下文都已有生产代码：`parcel-shipment` 覆盖来源身份与保全、生产归属决定、安全交接判定、提交候选与批次，并有 `UC-PS-001` 的应用编排与自有端口；`party-commercial` 覆盖商业版本模型（生效区间、发布后内容固定、版本迁移）、发布登记册与 `UC-PC-002` 两阶段解析（含范围级权威视图修订与提交前重解）；`network-routing` 覆盖接受前可达性的三值结论与证据缺口判定。仍缺的持久化与事件事务被 ADR-0017 的闸门挡住，属下方横切缺口而非本切片自身 |
+| PN-03 | `network-routing`、`node-operations`、`transport-fulfillment`、`parcel-shipment` | 未开始 | `node-operations` 与 `transport-fulfillment` 无任何代码；`network-routing` 只有 PN-02 的接受前可达性，本切片要的初始路由与收寄/实测后路由复核无代码 |
 | PN-04 | `transport-fulfillment`、`parcel-shipment` | 未开始 | `transport-fulfillment` 无代码；`parcel-shipment` 侧的包裹终局未实现 |
 | PN-05 | `customs-compliance` | 未开始 | 无代码 |
 | PN-06 | `visibility-exception` | 未开始 | 无代码 |
@@ -171,7 +175,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 全仓搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`，没有用空实现顶住的假完成。这使定级可信：六个「未开始」就是未开始，不是被 stub 掩盖的部分完成。已有部分仍有具名缺口，例如 `parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明的闭合集合有十项，分区、地址类型与服务选项三项分类特征需要相等而非比较，尚无执行器；代码已就地声明该延后与理由（`internal/parcelpricing/domain/feature_condition.go`），按「枚举取值与产生它的规则同时出现」处理，不单独计为缺陷。
 
-**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言；`party-commercial` 有 5 份，其中两份是契约测试。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
+**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言；`party-commercial` 有 9 份，其中两份是契约测试；`network-routing` 有 2 份。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
 
 **参数显式未配置——目前满足，且是被刻意维持的。** 全仓唯一第三方依赖是 `github.com/go-chi/chi/v5`；生产代码中没有任何业务阈值、金额、费率或系数常量，计价的阈值一律由价卡版本携带。
 
