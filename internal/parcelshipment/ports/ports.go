@@ -50,3 +50,43 @@ type SubmissionIdentityFactory interface {
 type Clock interface {
 	Now() time.Time
 }
+
+// CommercialBasisQuery is the scope parcel-shipment asks party-commercial to
+// resolve against. It carries references only: this context states what it needs
+// a basis for, never which commercial version should win.
+type CommercialBasisQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+}
+
+// CommercialBasisResolver is party-commercial's judgement as parcel-shipment
+// consumes it. A snapshot that is not valid means no unique basis was resolved;
+// the reason belongs to the owning context and is not reinterpreted here.
+type CommercialBasisResolver interface {
+	ResolveCommercialBasis(ctx context.Context, query CommercialBasisQuery) (domain.CommercialBasisSnapshot, error)
+}
+
+// ReachabilityRequest carries the anchor formed from the adopted rule package's
+// declared policy. The authority provider must verify and echo it, which is why
+// it travels explicitly rather than being left to the provider's own clock.
+type ReachabilityRequest struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	DeclaredParcelID  domain.DeclaredParcelID
+	AsOf              domain.JudgmentAsOf
+}
+
+// ReachabilityAssessor is network-routing's three-valued judgement as
+// parcel-shipment consumes it. None of the three values is an acceptance
+// decision, and this context must not derive one from them here.
+type ReachabilityAssessor interface {
+	AssessParcelReachability(ctx context.Context, request ReachabilityRequest) (domain.ReachabilityJudgment, error)
+}
+
+// AcceptanceJudgmentRecorder persists an adopted judgement against the request
+// whose acceptance task it advances.
+type AcceptanceJudgmentRecorder interface {
+	RecordReachabilityJudgment(ctx context.Context, requestID domain.ShipmentRequestID, judgment domain.ReachabilityJudgment) error
+}
