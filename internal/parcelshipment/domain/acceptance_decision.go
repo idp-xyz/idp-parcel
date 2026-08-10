@@ -95,26 +95,53 @@ func (outcome CheckOutcome) String() string {
 
 // AcceptanceCheck 是一个校验组的结果。包裹标识为零值表示该校验作用于整份提交版本，
 // 有值则表示只针对该成员。除通过外的结果都必须携带原因。
+//
+// `无法判定`还必须指名由谁来补：CONTEXT 要求三类等待各走各的续办路径，而能回答「这一项缺谁
+// 来补」的只有形成它的那次翻译。通过与未通过不带续办路径——前者没有缺口，后者是确定性结论，
+// 补什么都改不了它。
 type AcceptanceCheck struct {
-	group    AcceptanceCheckGroup
-	parcelID DeclaredParcelID
-	outcome  CheckOutcome
-	reason   CheckReason
+	group      AcceptanceCheckGroup
+	parcelID   DeclaredParcelID
+	outcome    CheckOutcome
+	reason     CheckReason
+	resumePath ResumePath
 }
 
+// NewAcceptanceCheck 形成一项已经判出结论的校验。`无法判定`走
+// NewUndeterminedAcceptanceCheck：拆成两个构造器而不是加一个可空字段，是为了让「未决必须
+// 指名续办方」成为构造期的义务，而不是一条要靠人记得的约定。
 func NewAcceptanceCheck(
 	group AcceptanceCheckGroup,
 	parcelID DeclaredParcelID,
 	outcome CheckOutcome,
 	reason CheckReason,
 ) (AcceptanceCheck, error) {
-	if !group.valid() || !outcome.valid() {
+	if !group.valid() || !outcome.valid() || outcome == CheckUndetermined {
 		return AcceptanceCheck{}, ErrInvalidAcceptanceCheck
 	}
 	if outcome != CheckPassed && !reason.valid() {
 		return AcceptanceCheck{}, ErrInvalidAcceptanceCheck
 	}
 	return AcceptanceCheck{group: group, parcelID: parcelID, outcome: outcome, reason: reason}, nil
+}
+
+// NewUndeterminedAcceptanceCheck 形成一项`无法判定`的校验，并指名这个缺口由谁来补。
+func NewUndeterminedAcceptanceCheck(
+	group AcceptanceCheckGroup,
+	parcelID DeclaredParcelID,
+	reason CheckReason,
+	resumePath ResumePath,
+) (AcceptanceCheck, error) {
+	if !group.valid() || !reason.valid() || !resumePath.valid() {
+		return AcceptanceCheck{}, ErrInvalidAcceptanceCheck
+	}
+	return AcceptanceCheck{
+		group:      group,
+		parcelID:   parcelID,
+		outcome:    CheckUndetermined,
+		reason:     reason,
+		resumePath: resumePath,
+	}, nil
 }
 
 func (check AcceptanceCheck) Group() AcceptanceCheckGroup {
@@ -259,6 +286,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	manualReview := request.manualReviewState(spec.Basis.manualReview)
 
 	failed, undetermined := 0, 0
+	awaitingSupplement := false
 	judged := make(map[DeclaredParcelID]struct{}, len(request.currentVersion.declaredParcelIDs))
 	judgedGroups := make(map[AcceptanceCheckGroup]struct{}, len(spec.Checks))
 	for _, check := range spec.Checks {
@@ -270,6 +298,9 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 			failed++
 		case CheckUndetermined:
 			undetermined++
+			if check.resumePath == ResumeByCustomerSupplement {
+				awaitingSupplement = true
+			}
 		}
 		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的
 		// 是「这一组判过没有」。
@@ -291,13 +322,25 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		request.state = ShipmentRequestRejected
 		request.decision = decision
 		request.decisionFormed = true
+		request.acceptanceTask.waitingOn = ResumePathInvalid
 		request.acceptanceTask.complete = true
 		return request, nil
 	}
+
+	// 权威结果没到齐之前不谈复核：对一份还缺判断的委托做人工复核没有意义，复核是最后一道门。
+	// 缺口同时存在客户侧与系统侧时报客户侧——只有那一条要通知外部并受补充期限约束，把它压在
+	// 内部重试后面等于让客户白等一轮。
 	if undetermined > 0 ||
-		manualReview != ManualReviewNotRequired && manualReview != ManualReviewCompleted ||
 		!everyApplicableGroupJudged(spec.Basis.applicable, judgedGroups) ||
 		!request.everyMemberJudged(judged) {
+		request.acceptanceTask.waitingOn = ResumeByInternalRetry
+		if awaitingSupplement {
+			request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
+		}
+		return request, nil
+	}
+	if manualReview != ManualReviewNotRequired && manualReview != ManualReviewCompleted {
+		request.acceptanceTask.waitingOn = ResumeByManualReview
 		return request, nil
 	}
 
@@ -305,6 +348,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	request.state = ShipmentRequestAccepted
 	request.decision = decision
 	request.decisionFormed = true
+	request.acceptanceTask.waitingOn = ResumePathInvalid
 	request.acceptanceTask.complete = true
 	request.baseline = AcceptanceBaseline{
 		declaredParcelIDs: request.currentVersion.DeclaredParcelIDs(),

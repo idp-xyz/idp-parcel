@@ -180,6 +180,63 @@ func TestARejectionReleasesTheFreezeByItsOriginalAssociation(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001:112「客户可补充缺口与系统依赖重试必须使用不同原因和续办路径」、AT-PS-006
+// 「资料不足…不映射为不可达」与 CONTEXT 接受判断任务「客户可补充缺口 → 等待受控补充」——
+// 权威已经把话说完了，说的正是声明资料不够判，所以这一轮等的是客户而不是本方重试。
+func TestAnInsufficientEvidenceJudgmentWaitsOnTheCustomerNotAnInternalRetry(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceUndecided {
+		t.Fatalf("outcome = %q; insufficient evidence formed a lifecycle decision", result.Outcome())
+	}
+	if result.PendingReason() != application.CustomerSupplementPending {
+		t.Fatalf(
+			"pending reason = %q, want CUSTOMER_SUPPLEMENT_PENDING; retrying an unchanged declaration never resolves a customer data gap",
+			result.PendingReason(),
+		)
+	}
+	if len(fixture.recorder.recordedAttempts) != 1 {
+		t.Fatalf("recorded %d attempts, want exactly 1", len(fixture.recorder.recordedAttempts))
+	}
+	if path := fixture.recorder.recordedAttempts[0].ResumePath(); path != domain.ResumeByCustomerSupplement {
+		t.Fatalf("resume path = %q, want CUSTOMER_SUPPLEMENT; the task would wait on a retry nobody can make succeed", path)
+	}
+}
+
+// Covers: CONTEXT 接受判断任务「全部所需权威结果已经到齐通过、但适用规则要求的人工复核尚未
+// 完成 → 等待人工复核」— 复核推不动于内部重试，也补不出于客户，所以它是第三条路径。
+func TestAPendingManualReviewWaitsOnTheReviewerNotAnInternalRetry(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.manualReview = domain.ManualReviewRequiredByRules
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceUndecided {
+		t.Fatalf("outcome = %q; an incomplete review formed a lifecycle decision", result.Outcome())
+	}
+	if result.PendingReason() != application.ManualReviewPending {
+		t.Fatalf(
+			"pending reason = %q, want MANUAL_REVIEW_PENDING; an internal retry never completes a human review",
+			result.PendingReason(),
+		)
+	}
+	if len(fixture.recorder.recordedAttempts) != 1 {
+		t.Fatalf("recorded %d attempts, want exactly 1", len(fixture.recorder.recordedAttempts))
+	}
+	if path := fixture.recorder.recordedAttempts[0].ResumePath(); path != domain.ResumeByManualReview {
+		t.Fatalf("resume path = %q, want MANUAL_REVIEW; the task would retry something only a reviewer can advance", path)
+	}
+}
+
 // Covers: UC-PS-001 AT-PS-035「接受已经成立…不重复控制或释放合法冻结」— 接受成立时那笔冻结
 // 是合法的，转接受后流程，不能在这里放掉。
 func TestAnAcceptanceDoesNotReleaseTheFreeze(t *testing.T) {

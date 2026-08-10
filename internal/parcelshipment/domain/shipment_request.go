@@ -79,6 +79,7 @@ type AcceptanceDecisionTask struct {
 	establishedAt       time.Time
 	processingAttempts  []ProcessingAttempt
 	reviewCompletion    ManualReviewCompletion
+	waitingOn           ResumePath
 	complete            bool
 }
 

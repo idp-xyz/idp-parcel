@@ -124,19 +124,22 @@ func NewProcessingAttemptReason(value string) (ProcessingAttemptReason, error) {
 	return ProcessingAttemptReason{required}, err
 }
 
-// ResumePath 区分这一轮该由谁来续。CONTEXT 要求「客户可补充的资料缺口与系统内部查询或
-// 重试必须使用不同原因和续办路径」：两者的后续动作不同——一个要通知客户并等新提交版本，
-// 一个要重试依赖且绝不能惊动客户。压成一个字段，等依赖抖动就会变成催客户补件。
+// ResumePath 区分这一轮该由谁来续，取值与 CONTEXT 接受判断任务的三个等待态一一对应：
+// 等待受控补充、等待内部续办、等待人工复核。CONTEXT 要求三者「使用不同原因和续办路径」，
+// 因为续办方分别是客户、系统和授权复核角色，后续动作互不替代——通知客户并等新提交版本、
+// 重试依赖且绝不惊动客户、把复核派给够格的角色。合并任意两个都会让等待对象弄错：压成一个
+// 字段，依赖抖动就会变成催客户补件；把复核算作内部重试，则会永远重试一件重试推不动的事。
 type ResumePath uint8
 
 const (
 	ResumePathInvalid ResumePath = iota
 	ResumeByCustomerSupplement
 	ResumeByInternalRetry
+	ResumeByManualReview
 )
 
 func (path ResumePath) valid() bool {
-	return path >= ResumeByCustomerSupplement && path <= ResumeByInternalRetry
+	return path >= ResumeByCustomerSupplement && path <= ResumeByManualReview
 }
 
 func (path ResumePath) String() string {
@@ -145,6 +148,8 @@ func (path ResumePath) String() string {
 		return "CUSTOMER_SUPPLEMENT"
 	case ResumeByInternalRetry:
 		return "INTERNAL_RETRY"
+	case ResumeByManualReview:
+		return "MANUAL_REVIEW"
 	default:
 		return ""
 	}
@@ -193,6 +198,14 @@ func (attempt ProcessingAttempt) ContinuationReference() OwnershipContinuationRe
 
 func (attempt ProcessingAttempt) AttemptedAt() time.Time {
 	return attempt.attemptedAt
+}
+
+// WaitingOn 交回本任务当前停在哪个等待态上；本轮形成了决定或任务已完成时报告缺席。
+//
+// 它由 Decide 在看过全部校验之后写下，而不是由编排回头推断：哪一类缺口该由谁来续是接受语言
+// 的一部分，编排照它选原因与续办路径就行。编排自己推，就等于在应用层重做一遍这条判断。
+func (task AcceptanceDecisionTask) WaitingOn() (ResumePath, bool) {
+	return task.waitingOn, task.waitingOn.valid()
 }
 
 // ProcessingAttempts 交回本任务累积的全部处理记录，按发生顺序。返回副本：追加是聚合的

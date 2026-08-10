@@ -62,7 +62,8 @@ func CommercialBasisChecksFor(
 	}
 	checks := make([]AcceptanceCheck, 0, len(groups))
 	for _, group := range groups {
-		check, err := NewAcceptanceCheck(group, DeclaredParcelID{}, outcome, reason)
+		// 解析没得出答案要由本方重问 party-commercial，客户补什么都改不了这一轮的结论。
+		check, err := newCheck(group, DeclaredParcelID{}, outcome, reason, ResumeByInternalRetry)
 		if err != nil {
 			return nil, err
 		}
@@ -92,6 +93,9 @@ func ReachabilityCheckFor(
 
 	var outcome CheckOutcome
 	var reasonValue string
+	// 资料不足由客户来补，不是重问 network-routing 就能变的：权威已经把话说完了，说的正是
+	// 声明资料不够判。拿它当内部重试会对着一份没变过的声明资料重试到底，还永远不通知客户。
+	resumePath := ResumeByInternalRetry
 	switch {
 	case judgment.Value() == ReachabilityReachable:
 		outcome = CheckPassed
@@ -101,9 +105,10 @@ func ReachabilityCheckFor(
 		outcome, reasonValue = CheckFailed, "REACHABILITY_UNREACHABLE"
 	default:
 		outcome, reasonValue = CheckUndetermined, "REACHABILITY_INSUFFICIENT_EVIDENCE"
+		resumePath = ResumeByCustomerSupplement
 	}
 
-	return checkWithReason(NetworkReachabilityCheck, judgment.DeclaredParcelID(), outcome, reasonValue)
+	return checkWithReason(NetworkReachabilityCheck, judgment.DeclaredParcelID(), outcome, reasonValue, resumePath)
 }
 
 // FinancialControlCheckFor 把一次接受前财务控制结果译成校验结果。
@@ -128,17 +133,24 @@ func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, e
 	}
 
 	// 不指名成员：控制作用在整份委托上，指名了会让聚合把它当作某个成员已被判断，从而
-	// 以遗漏方式放过其余成员。
-	return checkWithReason(PreAcceptanceFinancialControlCheck, DeclaredParcelID{}, outcome, reasonValue)
+	// 以遗漏方式放过其余成员。本组没有`无法判定`那一支，续办路径给什么都不会被用上。
+	return checkWithReason(
+		PreAcceptanceFinancialControlCheck,
+		DeclaredParcelID{},
+		outcome,
+		reasonValue,
+		ResumeByInternalRetry,
+	)
 }
 
-// checkWithReason 只在非通过时形成原因。通过的校验不带原因，与 NewAcceptanceCheck 的
-// 不变量一致：只有非通过才需要解释。
+// checkWithReason 只在非通过时形成原因。通过的校验不带原因，与构造器的不变量一致：只有非
+// 通过才需要解释。
 func checkWithReason(
 	group AcceptanceCheckGroup,
 	parcelID DeclaredParcelID,
 	outcome CheckOutcome,
 	reasonValue string,
+	resumePath ResumePath,
 ) (AcceptanceCheck, error) {
 	reason := CheckReason{}
 	if reasonValue != "" {
@@ -147,6 +159,21 @@ func checkWithReason(
 			return AcceptanceCheck{}, err
 		}
 		reason = formed
+	}
+	return newCheck(group, parcelID, outcome, reason, resumePath)
+}
+
+// newCheck 按结论挑构造器：`无法判定`必须指名续办方，其余两种不带。翻译函数都走这里，免得
+// 每个分支各写一次这个分派。
+func newCheck(
+	group AcceptanceCheckGroup,
+	parcelID DeclaredParcelID,
+	outcome CheckOutcome,
+	reason CheckReason,
+	resumePath ResumePath,
+) (AcceptanceCheck, error) {
+	if outcome == CheckUndetermined {
+		return NewUndeterminedAcceptanceCheck(group, parcelID, reason, resumePath)
 	}
 	return NewAcceptanceCheck(group, parcelID, outcome, reason)
 }

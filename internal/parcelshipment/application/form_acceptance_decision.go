@@ -57,8 +57,8 @@ func (result FormAcceptanceDecisionResult) State() domain.ShipmentRequestState {
 	return result.state
 }
 
-// AcceptanceDecision 只在本轮形成了决定时给出。未决时交回一个零值决定，下游会读到一份既非
-// 接受也非拒绝的空决定，而空决定最容易被当成没有障碍。
+// AcceptanceDecision 只在本轮形成了决定时给出。未决时若照样交回一个零值决定，下游会读到一份
+// 既非接受也非拒绝的空决定，而空决定最容易被当成没有障碍。
 func (result FormAcceptanceDecisionResult) AcceptanceDecision() (domain.AcceptanceDecision, bool) {
 	return result.decision, result.hasDecision
 }
@@ -181,7 +181,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if !formed {
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
-		return handler.undecided(ctx, command, AcceptanceJudgmentIncomplete), nil
+		return handler.undecided(ctx, command, pendingReasonFor(decided)), nil
 	}
 	if err := handler.deps.Requests.Save(ctx, command.Identity, decided); err != nil {
 		// 决定没能越过提交边界就不算形成。交回一个没落库的接受，下游会按一份查不回来的
@@ -199,6 +199,26 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		hasDecision:  true,
 		compensation: handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl),
 	}, nil
+}
+
+// pendingReasonFor 把聚合写下的等待态译成本层的未决原因。哪一类缺口该由谁来续已经由 Decide
+// 判定，这里只做一一对应；在这里另立一套判断，就是把接受语言复制到应用层，两处早晚会分叉。
+//
+// 等待态缺席时落回`判断未完成`：那说明聚合没形成决定也没说停在哪，是本层读不懂的状态，按最
+// 保守的一支处理——内部续办不会去惊动客户，也不会派出一次没人要求的复核。
+func pendingReasonFor(decided domain.ShipmentRequest) JudgmentPendingReason {
+	waiting, present := decided.AcceptanceDecisionTask().WaitingOn()
+	if !present {
+		return AcceptanceJudgmentIncomplete
+	}
+	switch waiting {
+	case domain.ResumeByCustomerSupplement:
+		return CustomerSupplementPending
+	case domain.ResumeByManualReview:
+		return ManualReviewPending
+	default:
+		return AcceptanceJudgmentIncomplete
+	}
 }
 
 // releaseIfRejected 在拒绝越过提交边界后按原关联解除资金控制，并在解除没能确定完成时交回

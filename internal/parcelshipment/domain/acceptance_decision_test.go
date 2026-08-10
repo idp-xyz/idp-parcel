@@ -29,6 +29,25 @@ func parcelCheck(t *testing.T, group domain.AcceptanceCheckGroup, parcel string,
 	return check
 }
 
+func undeterminedCheck(
+	t *testing.T,
+	group domain.AcceptanceCheckGroup,
+	reason string,
+	resumePath domain.ResumePath,
+) domain.AcceptanceCheck {
+	t.Helper()
+	check, err := domain.NewUndeterminedAcceptanceCheck(
+		group,
+		domain.DeclaredParcelID{},
+		checkReason(t, reason),
+		resumePath,
+	)
+	if err != nil {
+		t.Fatalf("new undetermined acceptance check: %v", err)
+	}
+	return check
+}
+
 func checkReason(t *testing.T, reason string) domain.CheckReason {
 	t.Helper()
 	if reason == "" {
@@ -197,7 +216,12 @@ func TestOneFailingMemberBlocksTheWholeSubmissionVersion(t *testing.T) {
 // Covers: UC-PS-001 结果语义「尚未决定」— 判断未完成不是拒绝，委托保持已提交且任务未完成。
 func TestAnUndeterminedCheckLeavesTheRequestSubmitted(t *testing.T) {
 	checks := allGroupsPassing(t)
-	checks = append(checks, versionCheck(t, domain.RequiredDocumentCheck, domain.CheckUndetermined, "AWAITING_CUSTOMER_DATA"))
+	checks = append(checks, undeterminedCheck(
+		t,
+		domain.RequiredDocumentCheck,
+		"AWAITING_CUSTOMER_DATA",
+		domain.ResumeByCustomerSupplement,
+	))
 
 	decided, err := submitted(t).Decide(decisionSpec(t, checks))
 	if err != nil {

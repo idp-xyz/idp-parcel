@@ -42,7 +42,27 @@ const (
 	DecisionNotRecorded
 	ControlReleasePending
 	RejectionAuthorityUnavailable
+	CustomerSupplementPending
+	ManualReviewPending
 )
+
+// resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的三个等待态一一对应。
+//
+// 它是原因的全函数，而不是调用点上的常量：写成常量，新增一个原因就会静默继承上一个调用点的
+// 路径，而路径错了等于催错人——依赖抖动去催客户补件，或者对着一件只有人能推进的复核无休止
+// 地内部重试。
+func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
+	switch reason {
+	case CustomerSupplementPending:
+		return domain.ResumeByCustomerSupplement
+	case ManualReviewPending:
+		return domain.ResumeByManualReview
+	default:
+		// 其余取值全是依赖答不出或声明未到，只有本方推得动。这一条不靠任何未确认规则：
+		// 客户和复核角色都补不出一个查不回来的授权，或者一次没落库的保存。
+		return domain.ResumeByInternalRetry
+	}
+}
 
 func (reason JudgmentPendingReason) String() string {
 	switch reason {
@@ -76,6 +96,10 @@ func (reason JudgmentPendingReason) String() string {
 		return "CONTROL_RELEASE_PENDING"
 	case RejectionAuthorityUnavailable:
 		return "REJECTION_AUTHORITY_UNAVAILABLE"
+	case CustomerSupplementPending:
+		return "CUSTOMER_SUPPLEMENT_PENDING"
+	case ManualReviewPending:
+		return "MANUAL_REVIEW_PENDING"
 	default:
 		return ""
 	}
@@ -88,8 +112,8 @@ func (reason JudgmentPendingReason) String() string {
 // 缺口藏起来，而调用方正是按原因决定该补缺口还是该重试依赖。这条记录本身按同一续办引用
 // 补写。
 //
-// 续办路径目前恒为内部重试：这些原因全是依赖或声明缺口，没有一条要客户补资料。`必要资料`
-// 校验组有生产者后才会出现客户补充那一支。
+// 续办路径由原因导出，不在这里给定值：谁能补上这个缺口是原因自带的属性，写死在记录处会让
+// 同一个原因在不同调用点走不同路径。
 func recordAttempt(
 	ctx context.Context,
 	recorder ports.AcceptanceJudgmentRecorder,
@@ -104,7 +128,7 @@ func recordAttempt(
 	}
 	attempt, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
 		Reason:       attemptReason,
-		ResumePath:   domain.ResumeByInternalRetry,
+		ResumePath:   reason.resumePath(),
 		Continuation: continuation,
 		AttemptedAt:  clock.Now(),
 	})
