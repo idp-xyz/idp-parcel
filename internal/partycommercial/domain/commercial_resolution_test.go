@@ -44,6 +44,7 @@ func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind
 		LegalEntityCandidate: commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
 		Scope:                commercialValue(t, domain.NewCommercialScopeReference, scope),
 		RequiredBasis:        basis,
+		Purpose:              domain.AcceptanceControlPurpose,
 		Anchor:               anchor,
 	}
 }

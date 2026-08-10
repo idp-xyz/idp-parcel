@@ -79,6 +79,61 @@ func (anchor SelectionAnchor) valid() bool {
 	return !anchor.at.IsZero() && anchor.policyVersion.valid()
 }
 
+// ResolutionPurpose is what the caller needs a basis for. It is part of the key
+// because the same scope answers differently depending on the question: an
+// acceptance-control basis and a pricing basis are not interchangeable.
+type ResolutionPurpose uint8
+
+const (
+	ResolutionPurposeInvalid ResolutionPurpose = iota
+	AcceptanceControlPurpose
+	PricingPurpose
+)
+
+func (purpose ResolutionPurpose) valid() bool {
+	return purpose >= AcceptanceControlPurpose && purpose <= PricingPurpose
+}
+
+func (purpose ResolutionPurpose) String() string {
+	switch purpose {
+	case AcceptanceControlPurpose:
+		return "ACCEPTANCE_CONTROL"
+	case PricingPurpose:
+		return "PRICING"
+	default:
+		return ""
+	}
+}
+
+// PriceDirection separates what is sold, what is bought and what moves between
+// the operator's own legal entities. The three never share a resolution or a
+// cache entry, so a SELL request can never be answered by a BUY result.
+type PriceDirection uint8
+
+const (
+	PriceDirectionInvalid PriceDirection = iota
+	BuyDirection
+	SellDirection
+	InternalDirection
+)
+
+func (direction PriceDirection) valid() bool {
+	return direction >= BuyDirection && direction <= InternalDirection
+}
+
+func (direction PriceDirection) String() string {
+	switch direction {
+	case BuyDirection:
+		return "BUY"
+	case SellDirection:
+		return "SELL"
+	case InternalDirection:
+		return "INTERNAL"
+	default:
+		return ""
+	}
+}
+
 // ResolutionKey is the full set of dimensions one required basis is selected
 // by. Dropping any of them would let one customer's resolution answer another's,
 // or let one scope borrow a basis resolved for a different one.
@@ -88,15 +143,27 @@ type ResolutionKey struct {
 	LegalEntityCandidate LegalEntityReference
 	Scope                CommercialScopeReference
 	RequiredBasis        CommercialObjectKind
-	Anchor               SelectionAnchor
+	Purpose              ResolutionPurpose
+	// PriceDirection applies to pricing only. It must be absent for any other
+	// purpose: two keys differing solely in a dimension that means nothing for
+	// their purpose would otherwise resolve to different identities.
+	PriceDirection PriceDirection
+	Anchor         SelectionAnchor
 }
 
 func (key ResolutionKey) minimumIdentityEstablished() bool {
-	return key.TenantID.valid() &&
-		key.CustomerAccountID.valid() &&
-		key.LegalEntityCandidate.valid() &&
-		key.Scope.valid() &&
-		key.RequiredBasis.valid()
+	if !key.TenantID.valid() ||
+		!key.CustomerAccountID.valid() ||
+		!key.LegalEntityCandidate.valid() ||
+		!key.Scope.valid() ||
+		!key.RequiredBasis.valid() ||
+		!key.Purpose.valid() {
+		return false
+	}
+	if key.Purpose == PricingPurpose {
+		return key.PriceDirection.valid()
+	}
+	return !key.PriceDirection.valid()
 }
 
 func (key ResolutionKey) fingerprint() string {
@@ -106,6 +173,8 @@ func (key ResolutionKey) fingerprint() string {
 		key.LegalEntityCandidate.String(),
 		key.Scope.String(),
 		key.RequiredBasis.String(),
+		key.Purpose.String(),
+		key.PriceDirection.String(),
 		key.Anchor.PolicyVersion().String(),
 		key.Anchor.At().Format(time.RFC3339Nano),
 	}, "\x00")
