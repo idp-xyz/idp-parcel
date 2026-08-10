@@ -186,8 +186,9 @@ func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
 	}
 }
 
-// Covers: AT-PC-024 — 相同输入与相同权威视图重复解析返回相同语义，不产生新商业版本。
-func TestRepeatedResolutionIsStableAndCreatesNothing(t *testing.T) {
+// Covers: AT-PC-024 — 相同输入与相同权威视图重复解析返回相同语义，不产生新商业版本；
+// 视图修订变化后则必须重新检查，不得复用原编号。
+func TestRepeatedResolutionIsStableUntilTheViewRevisionChanges(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
@@ -196,10 +197,28 @@ func TestRepeatedResolutionIsStableAndCreatesNothing(t *testing.T) {
 	second := domain.ResolveCommercialBasis(registry, key)
 
 	if first.Outcome() != second.Outcome() || first.ResolutionID() != second.ResolutionID() {
-		t.Fatalf("repeated resolution diverged: %q/%q vs %q/%q",
+		t.Fatalf("repeated resolution diverged under one view: %q/%q vs %q/%q",
 			first.Outcome(), first.ResolutionID(), second.Outcome(), second.ResolutionID())
+	}
+	firstView, _ := first.ViewRevision()
+	secondView, _ := second.ViewRevision()
+	if firstView != secondView {
+		t.Fatal("an unchanged registry reported two different view revisions")
 	}
 	if registry.Count() != 1 {
 		t.Fatalf("resolving created commercial versions: registry holds %d", registry.Count())
+	}
+
+	// A second version of the same object changes the scope view, so the prior
+	// identity must not survive it even though the query is unchanged.
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v2", "sha256:c1-v2", "scope-a")
+	afterChange := domain.ResolveCommercialBasis(registry, key)
+
+	changedView, _ := afterChange.ViewRevision()
+	if changedView == firstView {
+		t.Fatal("the view revision ignored a new candidate in the scope")
+	}
+	if afterChange.ResolutionID() == first.ResolutionID() {
+		t.Fatal("the resolution identity survived a changed authority view")
 	}
 }

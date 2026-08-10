@@ -1,6 +1,12 @@
 package domain
 
-import "errors"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"sort"
+	"strings"
+)
 
 var (
 	ErrCommercialVersionNotPublished = errors.New("party commercial: commercial version is not published")
@@ -96,4 +102,33 @@ func (registry *CommercialRegistry) Lookup(
 
 func (registry *CommercialRegistry) Count() int {
 	return len(registry.versions)
+}
+
+// ViewRevision is the scope-level authority view revision: a monotonic-by-content
+// reference proving whether the commercial view a scope was resolved under is
+// still the same one. It is derived from every version in the scope rather than
+// bumped by hand, so it cannot drift from what the registry actually holds.
+//
+// It is deliberately scope-level and not per-object. Adding a rival candidate to
+// a scope leaves the previously adopted object untouched, so checking only that
+// object would let a new overlap slip past a resolution that has since become
+// ambiguous.
+func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference) AuthorityViewRevision {
+	parts := make([]string, 0, len(registry.versions))
+	for key, version := range registry.versions {
+		if version.scope != scope {
+			continue
+		}
+		parts = append(parts, strings.Join([]string{
+			key.kind.String(),
+			key.objectID.String(),
+			key.version.String(),
+			version.contentDigest.String(),
+			version.status.String(),
+		}, "\x1f"))
+	}
+	sort.Strings(parts)
+
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\x1e")))
+	return AuthorityViewRevision{requiredValue{value: "VIEW-" + hex.EncodeToString(digest[:8])}}
 }

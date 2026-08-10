@@ -40,6 +40,17 @@ func NewAnchorPolicyVersion(value string) (AnchorPolicyVersion, error) {
 
 type ResolutionID struct{ requiredValue }
 
+// AuthorityViewRevision proves whether the commercial view a scope was resolved
+// under is still the same one. It never replaces the immutable object version:
+// a new revision means "re-check compatibility", not "the adopted version
+// changed".
+type AuthorityViewRevision struct{ requiredValue }
+
+// ContinuationReference lets a caller pick a stalled decision back up. A stale
+// or pending answer must remain continuable, because neither is a business
+// refusal the caller may act on.
+type ContinuationReference struct{ requiredValue }
+
 // SelectionAnchor is the business instant phase one selects against. It cannot
 // be built without the versioned policy that produced it, which is what stops
 // the source time, the customer's requested time, the wall clock or a candidate
@@ -138,9 +149,12 @@ func (outcome ResolutionOutcome) String() string {
 type Resolution struct {
 	outcome        ResolutionOutcome
 	resolutionID   ResolutionID
+	key            ResolutionKey
 	anchor         SelectionAnchor
 	adopted        CommercialVersion
 	hasAdopted     bool
+	viewRevision   AuthorityViewRevision
+	continuation   ContinuationReference
 	candidateCount int
 }
 
@@ -167,6 +181,17 @@ func (resolution Resolution) CandidateCount() int {
 	return resolution.candidateCount
 }
 
+func (resolution Resolution) ViewRevision() (AuthorityViewRevision, bool) {
+	if !resolution.viewRevision.valid() {
+		return AuthorityViewRevision{}, false
+	}
+	return resolution.viewRevision, true
+}
+
+func (resolution Resolution) ContinuationReference() ContinuationReference {
+	return resolution.continuation
+}
+
 // ResolveCommercialBasis performs phase one: select the single applicable
 // version of one required basis. It forms no acceptance, price, control or
 // downstream asOf; phase two is the caller's, driven by the rule package this
@@ -187,7 +212,9 @@ func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Res
 
 	candidates := registry.applicable(key)
 	result := Resolution{
+		key:            key,
 		anchor:         key.Anchor,
+		viewRevision:   registry.ViewRevision(key.Scope),
 		candidateCount: len(candidates),
 	}
 	switch len(candidates) {
@@ -197,19 +224,70 @@ func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Res
 		result.outcome = UniquelyResolved
 		result.adopted = candidates[0]
 		result.hasAdopted = true
-		result.resolutionID = resolutionIdentity(key, candidates[0])
+		result.resolutionID = resolutionIdentity(key, result.viewRevision, candidates[0])
 	default:
 		result.outcome = ApplicabilityConflict
 	}
 	return result
 }
 
-// resolutionIdentity is derived from the key and the adopted version so that
-// the same input against the same authority view answers with the same
-// identity. It is not a new commercial version and creates nothing.
-func resolutionIdentity(key ResolutionKey, adopted CommercialVersion) ResolutionID {
+// ValidateBeforeDecision re-runs phase one before the caller commits a decision.
+// It re-resolves the original query rather than inspecting the adopted object
+// alone: a rival candidate added to the same scope leaves that object untouched
+// while making the resolution ambiguous, and only re-resolution sees it.
+//
+// A prior result that never resolved uniquely is returned unchanged — there is
+// no adopted basis whose continued validity could be in question.
+func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Resolution {
+	if prior.outcome != UniquelyResolved {
+		return prior
+	}
+	// Without a readable authority the prior result can be neither confirmed nor
+	// declared stale, so it stays pending and continuable.
+	if registry == nil {
+		stalled := prior
+		stalled.outcome = ResolutionPending
+		stalled.adopted = CommercialVersion{}
+		stalled.hasAdopted = false
+		stalled.continuation = continuationFor(prior, "AUTHORITY_UNREADABLE")
+		return stalled
+	}
+
+	current := ResolveCommercialBasis(registry, prior.key)
+	if current.outcome == UniquelyResolved && current.resolutionID == prior.resolutionID {
+		return prior
+	}
+
+	stale := Resolution{
+		outcome:        ResolutionStale,
+		resolutionID:   prior.resolutionID,
+		key:            prior.key,
+		anchor:         prior.anchor,
+		viewRevision:   current.viewRevision,
+		candidateCount: current.candidateCount,
+		continuation:   continuationFor(prior, "CURRENT_RESOLUTION_CHANGED"),
+	}
+	return stale
+}
+
+func continuationFor(prior Resolution, reason string) ContinuationReference {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		reason,
+		prior.key.fingerprint(),
+		prior.resolutionID.String(),
+	}, "\x00")))
+	return ContinuationReference{requiredValue{value: "CONT-" + hex.EncodeToString(digest[:8])}}
+}
+
+// resolutionIdentity is derived from the key, the authority view revision and
+// the adopted version, so the same input against the same view answers with the
+// same identity while any change to the view produces a different one. That is
+// what lets pre-decision validation detect staleness by comparison alone. It is
+// not a new commercial version and creates nothing.
+func resolutionIdentity(key ResolutionKey, view AuthorityViewRevision, adopted CommercialVersion) ResolutionID {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		key.fingerprint(),
+		view.String(),
 		adopted.objectID.String(),
 		adopted.version.String(),
 		adopted.contentDigest.String(),
