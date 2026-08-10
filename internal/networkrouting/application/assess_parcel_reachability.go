@@ -16,9 +16,6 @@ import (
 // AssessmentOutcome 是本用例的应用处理结果，与三值领域判断分属两层。用例把这条写死：
 // `可达`、`不可达`、`资料不足`是 network-routing 拥有的领域判断，其余结果不得进入三值
 // 统计，也不得被 parcel-shipment 当作可达性事实。两者压进一个枚举就再也分不开了。
-//
-// 这里没有`不适用`：判断服务产品是否要求可达性需要 party-commercial 的商业适用依据，
-// 属本用例步骤 4，不在本切片内。缺席好过用别的取值顶替。
 type AssessmentOutcome uint8
 
 const (
@@ -28,6 +25,7 @@ const (
 	JudgmentNotFormed
 	RequestConflict
 	RequestNotAccepted
+	NotApplicable
 )
 
 func (outcome AssessmentOutcome) String() string {
@@ -42,6 +40,8 @@ func (outcome AssessmentOutcome) String() string {
 		return "REQUEST_CONFLICT"
 	case RequestNotAccepted:
 		return "REQUEST_NOT_ACCEPTED"
+	case NotApplicable:
+		return "NOT_APPLICABLE"
 	default:
 		return ""
 	}
@@ -56,6 +56,7 @@ type NotFormedReason uint8
 const (
 	NotFormedReasonNone NotFormedReason = iota
 	JudgmentStoreUnavailable
+	CommercialEligibilityUnavailable
 	NetworkEvidenceUnavailable
 	CandidateSpaceNotEstablished
 )
@@ -64,6 +65,8 @@ func (reason NotFormedReason) String() string {
 	switch reason {
 	case JudgmentStoreUnavailable:
 		return "JUDGMENT_STORE_UNAVAILABLE"
+	case CommercialEligibilityUnavailable:
+		return "COMMERCIAL_ELIGIBILITY_UNAVAILABLE"
 	case NetworkEvidenceUnavailable:
 		return "NETWORK_EVIDENCE_UNAVAILABLE"
 	case CandidateSpaceNotEstablished:
@@ -87,12 +90,13 @@ type AssessParcelReachabilityCommand struct {
 }
 
 type AssessParcelReachabilityResult struct {
-	outcome      AssessmentOutcome
-	finding      domain.ReachabilityFinding
-	hasFinding   bool
-	judgedAt     time.Time
-	reason       NotFormedReason
-	continuation ContinuationReference
+	outcome          AssessmentOutcome
+	finding          domain.ReachabilityFinding
+	hasFinding       bool
+	judgedAt         time.Time
+	reason           NotFormedReason
+	continuation     ContinuationReference
+	eligibilityBasis domain.EligibilityBasisReference
 }
 
 func (result AssessParcelReachabilityResult) Outcome() AssessmentOutcome {
@@ -117,18 +121,31 @@ func (result AssessParcelReachabilityResult) ContinuationReference() Continuatio
 	return result.continuation
 }
 
+// EligibilityBasis 只在`不适用`时给出。用例要求这个结果携带明确不适用依据——没有依据的
+// `不适用`看起来像一个结论，实际是一次没作出的判断。
+func (result AssessParcelReachabilityResult) EligibilityBasis() domain.EligibilityBasisReference {
+	return result.eligibilityBasis
+}
+
 type AssessParcelReachabilityHandler struct {
-	evidence ports.NetworkEvidenceView
-	store    ports.ReachabilityJudgmentStore
-	clock    ports.Clock
+	eligibility ports.CommercialEligibilityView
+	evidence    ports.NetworkEvidenceView
+	store       ports.ReachabilityJudgmentStore
+	clock       ports.Clock
 }
 
 func NewAssessParcelReachabilityHandler(
+	eligibility ports.CommercialEligibilityView,
 	evidence ports.NetworkEvidenceView,
 	store ports.ReachabilityJudgmentStore,
 	clock ports.Clock,
 ) *AssessParcelReachabilityHandler {
-	return &AssessParcelReachabilityHandler{evidence: evidence, store: store, clock: clock}
+	return &AssessParcelReachabilityHandler{
+		eligibility: eligibility,
+		evidence:    evidence,
+		store:       store,
+		clock:       clock,
+	}
 }
 
 // Handle 形成一个包裹的接受前可达性判断。它不形成委托接受、不选择当前有效路由、也不预占
@@ -160,6 +177,21 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 			}, nil
 		}
 		return AssessParcelReachabilityResult{outcome: RequestConflict}, nil
+	}
+
+	// 商业适用先于候选装配。顺序不能反：一个本就不要求判断的服务，没有理由先被装配一遍
+	// 候选——那次装配既是白做的，也已经读了这个客户的网络资格。
+	eligibility, err := handler.eligibility.AssessNetworkEligibility(ctx, command.Key)
+	if err != nil {
+		// 商业侧调不通形成`未形成判断`，不读成「不要求判断」。混起来会让一次商业故障
+		// 变成`不适用`，而`不适用`说的是这个问题不该问，与问过了没答案是两回事。
+		return handler.notFormed(command, CommercialEligibilityUnavailable), nil
+	}
+	if !eligibility.JudgmentRequired() {
+		return AssessParcelReachabilityResult{
+			outcome:          NotApplicable,
+			eligibilityBasis: eligibility.Basis(),
+		}, nil
 	}
 
 	candidates, gaps, err := handler.evidence.AssembleCandidates(ctx, command.Key)

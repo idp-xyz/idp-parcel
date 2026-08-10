@@ -23,6 +23,21 @@ type NetworkEvidenceView interface {
 	) ([]domain.RouteCandidate, []domain.EvidenceGap, error)
 }
 
+// CommercialEligibilityView 取商业侧对「这个服务要不要判断网络可达性」的回答，覆盖用例
+// 步骤 4 的产品形态、责任法人、合同约束与网络使用资格。
+//
+// network-routing 只消费这个回答，绝不自行推导一个：产品、合同与责任法人都属
+// party-commercial，在这里判一次就成了第二处定义，而两处口径迟早会分叉。
+//
+// 依赖调不通要作为错误返回，由应用层形成`未形成判断`。把它读成「不要求」会让一次商业侧
+// 故障变成`不适用`，而用例明写不得以`不适用`代替其他结果，也不得虚构运营网络。
+type CommercialEligibilityView interface {
+	AssessNetworkEligibility(
+		ctx context.Context,
+		key domain.ReachabilityJudgmentKey,
+	) (domain.NetworkEligibility, error)
+}
+
 // ReachabilityJudgmentRecord 是一次判断越过提交边界后留下的东西。判断时间不在
 // `ReachabilityFinding` 里，因为它不是领域结论的一部分——`asOf` 决定按哪一刻的网络证据
 // 评估，判断时间只说明这次判断何时作出，压成一个会让重放看起来像新判断。

@@ -42,6 +42,33 @@ func (double *evidenceDouble) AssembleCandidates(
 	return double.candidates, double.gaps, nil
 }
 
+// eligibilityDouble 默认回答「要求判断」，这样已有测试仍然走到候选装配那一步。
+type eligibilityDouble struct {
+	eligibility domain.NetworkEligibility
+	err         error
+	asked       int
+}
+
+func (double *eligibilityDouble) AssessNetworkEligibility(
+	_ context.Context,
+	_ domain.ReachabilityJudgmentKey,
+) (domain.NetworkEligibility, error) {
+	double.asked++
+	if double.err != nil {
+		return domain.NetworkEligibility{}, double.err
+	}
+	return double.eligibility, nil
+}
+
+func requiredEligibility(t *testing.T) *eligibilityDouble {
+	t.Helper()
+	eligibility, err := domain.NewNetworkEligibility(domain.NetworkJudgmentRequired, domain.EligibilityBasisReference{})
+	if err != nil {
+		t.Fatalf("new network eligibility: %v", err)
+	}
+	return &eligibilityDouble{eligibility: eligibility}
+}
+
 type storeDouble struct {
 	existing   ports.ReachabilityJudgmentRecord
 	found      bool
@@ -133,7 +160,7 @@ func command(t *testing.T, parcel string) application.AssessParcelReachabilityCo
 func TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf(t *testing.T) {
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -163,7 +190,7 @@ func TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf(t *testing.T) 
 func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *testing.T) {
 	evidence := &evidenceDouble{err: errors.New("network evidence view unavailable")}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -192,7 +219,7 @@ func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *
 func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
 	evidence := &evidenceDouble{candidates: nil}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -215,7 +242,7 @@ func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
 func TestIncompleteKeyIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
 
 	incomplete := command(t, "parcel-1")
 	incomplete.Key.DeclaredParcelID = domain.DeclaredParcelID{}
@@ -254,7 +281,7 @@ func TestSameScopeRetryReturnsTheExistingJudgmentWithoutReassessing(t *testing.T
 		existing: ports.ReachabilityJudgmentRecord{Key: key, Finding: finding, JudgedAt: judgedAt},
 	}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt.Add(time.Hour)})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt.Add(time.Hour)})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -278,6 +305,88 @@ func TestSameScopeRetryReturnsTheExistingJudgmentWithoutReassessing(t *testing.T
 	}
 }
 
+// Covers: UC-NR-002 启动条件「仅提供面单渠道服务且运营企业不控制端到端网络时，本用例不
+// 适用」与结果语义「不得以不适用代替不可达，也不得虚构运营网络」。
+func TestServiceThatDoesNotRequireANetworkJudgmentIsNotApplicable(t *testing.T) {
+	basis := value(t, domain.NewEligibilityBasisReference, "LABEL_ONLY_CHANNEL_SERVICE")
+	notRequired, err := domain.NewNetworkEligibility(domain.NetworkJudgmentNotRequired, basis)
+	if err != nil {
+		t.Fatalf("new network eligibility: %v", err)
+	}
+	eligibility := &eligibilityDouble{eligibility: notRequired}
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.NotApplicable {
+		t.Fatalf("outcome = %q, want NOT_APPLICABLE", result.Outcome())
+	}
+	if _, present := result.Finding(); present {
+		t.Fatal("不适用结果携带了三值领域判断——这正是用不适用冒充不可达的做法")
+	}
+	if result.EligibilityBasis() != basis {
+		t.Fatalf("basis = %q, want the explicit %q", result.EligibilityBasis(), basis)
+	}
+	if evidence.assembled != 0 {
+		t.Fatal("服务不要求判断却仍去装配候选")
+	}
+	if len(store.saved) != 0 {
+		t.Fatal("不适用不是三值判断，不该越过提交边界")
+	}
+}
+
+// Covers: UC-NR-002 步骤 4「依赖不可用时未形成判断」——商业侧调不通不得被读成「不要求
+// 判断」，否则一次商业故障就变成了不适用。
+func TestUnavailableCommercialEligibilityIsNotFormedRatherThanNotApplicable(t *testing.T) {
+	eligibility := &eligibilityDouble{err: errors.New("commercial eligibility view unavailable")}
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("商业依赖失败被当成技术错误抛出，而用例要求它形成未形成判断: %v", err)
+	}
+
+	if result.Outcome() != application.JudgmentNotFormed {
+		t.Fatalf("outcome = %q, want JUDGMENT_NOT_FORMED", result.Outcome())
+	}
+	if result.NotFormedReason() != application.CommercialEligibilityUnavailable {
+		t.Fatalf("reason = %q, want COMMERCIAL_ELIGIBILITY_UNAVAILABLE", result.NotFormedReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("未形成判断无法安全续办")
+	}
+	if evidence.assembled != 0 {
+		t.Fatal("商业适用未确定却已经装配候选")
+	}
+}
+
+// Covers: UC-NR-002 步骤顺序——商业适用（步骤 4）先于服务区域与候选装配（步骤 5、7）。
+// 顺序反了会让一个本不该判断的服务先被装配一遍候选。
+func TestCommercialEligibilityIsAskedBeforeAssemblingCandidates(t *testing.T) {
+	eligibility := requiredEligibility(t)
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+
+	if _, err := handler.Handle(context.Background(), command(t, "parcel-1")); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if eligibility.asked != 1 {
+		t.Fatalf("asked commercial eligibility %d times, want exactly one per judgment", eligibility.asked)
+	}
+	if evidence.assembled != 1 {
+		t.Fatalf("assembled candidates %d times, want exactly one", evidence.assembled)
+	}
+}
+
 // Covers: AT-NR-021「相同请求身份携带不同提交版本或输入 → 形成请求冲突；原输入和判断不被
 // 覆盖」。
 func TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite(t *testing.T) {
@@ -294,7 +403,7 @@ func TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite(t *tes
 		},
 	}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
-	handler := application.NewAssessParcelReachabilityHandler(evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-2"))
 	if err != nil {
