@@ -87,16 +87,15 @@ func TestNoControlIsIssuedUnderAnAsOfNobodyDeclared(t *testing.T) {
 // Covers: UC-PS-001 步骤 7「读取合同的版本化财务控制策略」— 策略活在客户合同里，没有
 // 唯一商业依据就没有合同可读，因而不发起控制，也不代它答`明确无控制`。
 func TestNoControlIsIssuedWithoutAUniqueCommercialBasis(t *testing.T) {
-	nonUnique := map[string]application.CommercialBasisOutcome{
-		"no applicable basis":    application.CommercialBasisNotApplicable,
-		"applicability conflict": application.CommercialBasisConflict,
-		"resolution pending":     application.CommercialBasisPending,
+	nonApplicable := map[string]domain.CommercialApplicability{
+		"no applicable basis": domain.CommerciallyNotApplicable,
+		"resolution pending":  domain.CommercialApplicabilityUndetermined,
 	}
 
-	for name, outcome := range nonUnique {
+	for name, applicability := range nonApplicable {
 		t.Run(name, func(t *testing.T) {
 			fixture := newFinancialControlFixture(t)
-			fixture.commercial.outcome = outcome
+			fixture.commercial.applicability = applicability
 
 			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 			if err != nil {
@@ -240,7 +239,7 @@ func newFinancialControlFixture(t *testing.T) *financialControlFixture {
 
 	value.commercial = &commercialBasisDouble{
 		t:                            t,
-		outcome:                      application.CommercialBasisUnique,
+		applicability:                domain.CommerciallyApplicable,
 		declaresReachabilityAsOf:     true,
 		declaresFinancialControlAsOf: true,
 		record:                       record,

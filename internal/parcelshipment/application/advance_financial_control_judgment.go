@@ -85,7 +85,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
 ) (AdvanceFinancialControlJudgmentResult, error) {
-	basis, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+	resolution, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
@@ -93,9 +93,12 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	if err != nil {
 		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
-	if basis.ResolutionID().String() == "" {
+	// 本步只推进判断，不形成决定，因此`确定不适用`与`解析未决`在这里同样停下——而且都不该
+	// 发起控制：一次没有适用合同的范围，没有理由去占用这个客户的资金。
+	if resolution.Applicability != domain.CommerciallyApplicable {
 		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
+	basis := resolution.Snapshot
 
 	asOf, declared := basis.AsOfFor(domain.FinancialControlJudgmentKind)
 	if !declared {

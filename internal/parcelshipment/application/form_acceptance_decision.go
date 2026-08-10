@@ -118,7 +118,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("form acceptance decision: %w", domain.ErrInvalidShipmentRequest)
 	}
 
-	basis, err := handler.deps.Commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+	resolution, err := handler.deps.Commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
@@ -126,17 +126,23 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if err != nil {
 		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
-	if basis.ResolutionID().String() == "" {
+	if resolution.Applicability == domain.CommercialApplicabilityUndetermined {
 		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
+	commercialChecks, err := domain.CommercialBasisChecksFor(resolution.Applicability, resolution.Reason)
+	if err != nil {
+		return FormAcceptanceDecisionResult{}, fmt.Errorf("translate commercial basis: %w", err)
+	}
+	basis := resolution.Snapshot
 
-	// 复核策略先于读回判断：规则包没有声明要不要复核时，这一轮无论如何都形成不了接受，
-	// 再去读一遍判断是白做的。
-	policy := basis.ManualReviewPolicy()
-	if !policy.Declared() {
+	// 复核策略只在依据适用时才成为门：确定性不通过要形成拒绝，而拒绝不依赖规则包的其余
+	// 声明——没有适用依据的解析本来也带不出复核策略，卡在这里等于让那个结论永远决定不了。
+	if resolution.Applicability == domain.CommerciallyApplicable && !basis.ManualReviewPolicy().Declared() {
 		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared), nil
 	}
 
+	// 依据不再适用时仍要读回判断：先前可能已经形成过冻结（`AT-PC-026` 的提交前失效），
+	// 而拒绝要按原关联把它解除。资金不会因为解析结论变了就自己回来。
 	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
 	if err != nil {
 		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable), nil
@@ -145,6 +151,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if err != nil {
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("assemble acceptance checks: %w", err)
 	}
+	checks = append(commercialChecks, checks...)
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {

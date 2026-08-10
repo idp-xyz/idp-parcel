@@ -4,6 +4,73 @@ package domain
 // 是编排里，是因为「哪个取值算失败」正是本上下文的接受语言：`network-routing` 只说可达
 // 与否，是否据此不接受由这里回答。
 
+// CommercialApplicability 是 parcel-shipment 对一次商业解析的两分：权威把话说完了（适用，
+// 或确定不适用），还是根本没得出答案。
+//
+// 它刻意不是 party-commercial 结果代数的副本。那边分`无适用依据`、`适用冲突`、`解析未决`、
+// `已失效`四种，那是它的语言；本上下文只需要接受条件矩阵自己的那两列——确定性不通过与无法
+// 判定。究竟是哪一种由原因引用带过来，不在这里重新声明一套口径。
+type CommercialApplicability uint8
+
+const (
+	CommercialApplicabilityInvalid CommercialApplicability = iota
+	CommerciallyApplicable
+	CommerciallyNotApplicable
+	CommercialApplicabilityUndetermined
+)
+
+func (applicability CommercialApplicability) String() string {
+	switch applicability {
+	case CommerciallyApplicable:
+		return "APPLICABLE"
+	case CommerciallyNotApplicable:
+		return "NOT_APPLICABLE"
+	case CommercialApplicabilityUndetermined:
+		return "UNDETERMINED"
+	default:
+		return ""
+	}
+}
+
+// CommercialBasisChecksFor 把一次商业解析的适用性译成它所回答的那三组校验结果。
+//
+// 三组共用同一个结论，因为一次唯一解析同时回答客户关系、法人合同与产品服务——那正是`唯一`
+// 的含义。解析不成立时本上下文也说不出是三者中的哪一组不成立：说得出，就意味着把
+// party-commercial 的判断在这里重做了一遍。原因引用足够按原因维度统计，那是用例的要求。
+//
+// 非通过必须携带原因，与 NewAcceptanceCheck 的不变量一致：没有原因的拒绝说不出拒的是什么。
+func CommercialBasisChecksFor(
+	applicability CommercialApplicability,
+	reason CheckReason,
+) ([]AcceptanceCheck, error) {
+	var outcome CheckOutcome
+	switch applicability {
+	case CommerciallyApplicable:
+		outcome = CheckPassed
+	case CommerciallyNotApplicable:
+		outcome = CheckFailed
+	case CommercialApplicabilityUndetermined:
+		outcome = CheckUndetermined
+	default:
+		return nil, ErrInvalidCommercialBasisSnapshot
+	}
+
+	groups := []AcceptanceCheckGroup{
+		CustomerRelationshipCheck,
+		LegalEntityAndContractCheck,
+		ProductAndServiceCheck,
+	}
+	checks := make([]AcceptanceCheck, 0, len(groups))
+	for _, group := range groups {
+		check, err := NewAcceptanceCheck(group, DeclaredParcelID{}, outcome, reason)
+		if err != nil {
+			return nil, err
+		}
+		checks = append(checks, check)
+	}
+	return checks, nil
+}
+
 // ReachabilityCheckFor 把一次包裹级三值判断译成校验结果。
 //
 // `资料不足`译成`无法判定`而不是`未通过`：用例明禁把它映射为不可达。一次缺资料可以补齐

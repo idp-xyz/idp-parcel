@@ -90,16 +90,15 @@ func TestUnreachableIsRecordedWithoutRejectingTheRequest(t *testing.T) {
 // Covers: UC-NR-002 启动条件「商业解析暂时不可用时不能伪造商业资格」— 没有唯一商业依据
 // 就不发起可达性判断，委托保持未决。
 func TestNoReachabilityRequestWithoutAUniqueCommercialBasis(t *testing.T) {
-	nonUnique := map[string]application.CommercialBasisOutcome{
-		"no applicable basis":    application.CommercialBasisNotApplicable,
-		"applicability conflict": application.CommercialBasisConflict,
-		"resolution pending":     application.CommercialBasisPending,
+	nonApplicable := map[string]domain.CommercialApplicability{
+		"no applicable basis": domain.CommerciallyNotApplicable,
+		"resolution pending":  domain.CommercialApplicabilityUndetermined,
 	}
 
-	for name, outcome := range nonUnique {
+	for name, applicability := range nonApplicable {
 		t.Run(name, func(t *testing.T) {
 			fixture := newJudgmentFixture(t)
-			fixture.commercial.outcome = outcome
+			fixture.commercial.applicability = applicability
 
 			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 			if err != nil {
@@ -284,7 +283,7 @@ func newJudgmentFixture(t *testing.T) *judgmentFixture {
 
 	value.commercial = &commercialBasisDouble{
 		t:                            t,
-		outcome:                      application.CommercialBasisUnique,
+		applicability:                domain.CommerciallyApplicable,
 		declaresReachabilityAsOf:     true,
 		declaresFinancialControlAsOf: true,
 		record:                       record,
@@ -312,7 +311,7 @@ func (value *judgmentFixture) command(t *testing.T) application.AdvanceAcceptanc
 
 type commercialBasisDouble struct {
 	t                            *testing.T
-	outcome                      application.CommercialBasisOutcome
+	applicability                domain.CommercialApplicability
 	declaresReachabilityAsOf     bool
 	declaresFinancialControlAsOf bool
 	manualReview                 domain.ManualReviewPolicy
@@ -326,16 +325,20 @@ type commercialBasisDouble struct {
 func (double *commercialBasisDouble) ResolveCommercialBasis(
 	_ context.Context,
 	_ ports.CommercialBasisQuery,
-) (domain.CommercialBasisSnapshot, error) {
+) (ports.CommercialBasisResolution, error) {
 	double.t.Helper()
 	double.record("resolve-commercial-basis")
 	double.calls++
 
 	if double.err != nil {
-		return domain.CommercialBasisSnapshot{}, double.err
+		return ports.CommercialBasisResolution{}, double.err
 	}
-	if double.outcome != application.CommercialBasisUnique {
-		return domain.CommercialBasisSnapshot{}, nil
+	if double.applicability != domain.CommerciallyApplicable {
+		// 非适用的解析没有快照，只有适用性与原因引用——这正是端口不能「只返回对象」的原因。
+		return ports.CommercialBasisResolution{
+			Applicability: double.applicability,
+			Reason:        mustValue(double.t, domain.NewCheckReason, "PC-"+double.applicability.String()),
+		}, nil
 	}
 	policies := []domain.DeclaredAsOf{}
 	if double.declaresReachabilityAsOf {
@@ -386,7 +389,10 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 	if err != nil {
 		double.t.Fatalf("new commercial basis snapshot: %v", err)
 	}
-	return snapshot, nil
+	return ports.CommercialBasisResolution{
+		Snapshot:      snapshot,
+		Applicability: domain.CommerciallyApplicable,
+	}, nil
 }
 
 type reachabilityDouble struct {

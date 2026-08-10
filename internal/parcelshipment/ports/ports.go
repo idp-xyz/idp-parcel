@@ -74,10 +74,22 @@ type CommercialBasisQuery struct {
 	SubmissionVersion domain.SubmissionVersionID
 }
 
-// CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 判断。快照
-// 无效即表示未取得唯一依据；具体原因属那个上下文的语言，本上下文不重新解释。
+// CommercialBasisResolution 是 parcel-shipment 视角下的一次商业解析结果。
+//
+// 它不只交回快照。`UC-PC-002` 的消费者端口契约明写「必须返回结构化的唯一成功、无适用依据、
+// 适用冲突、解析未决……不能只返回对象或通用错误」，原因就在这里：`无适用依据`要由本上下文
+// 形成拒绝，`解析未决`只能保持未决，而两者都表现为「没有快照」，光看快照分不出来。
+//
+// Reason 是 party-commercial 给的稳定原因引用，本上下文原样记到校验结果上，不重新解释。
+type CommercialBasisResolution struct {
+	Snapshot      domain.CommercialBasisSnapshot
+	Applicability domain.CommercialApplicability
+	Reason        domain.CheckReason
+}
+
+// CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 判断。
 type CommercialBasisResolver interface {
-	ResolveCommercialBasis(ctx context.Context, query CommercialBasisQuery) (domain.CommercialBasisSnapshot, error)
+	ResolveCommercialBasis(ctx context.Context, query CommercialBasisQuery) (CommercialBasisResolution, error)
 }
 
 // ReachabilityRequest 携带按所采用规则包声明的策略形成的判断时点。权威提供方必须校验

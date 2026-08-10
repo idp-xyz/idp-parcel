@@ -7,19 +7,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// CommercialBasisOutcome 报告是否采用了唯一商业依据。parcel-shipment 刻意不镜像
-// party-commercial 的完整结果代数：无适用依据、适用冲突与解析未决之间的区分属那个
-// 上下文的语言，复制过来就等于在两处维护同一套口径。
-type CommercialBasisOutcome uint8
-
-const (
-	CommercialBasisOutcomeInvalid CommercialBasisOutcome = iota
-	CommercialBasisUnique
-	CommercialBasisNotApplicable
-	CommercialBasisConflict
-	CommercialBasisPending
-)
-
 // AcceptanceJudgmentOutcome 是接受判断任务推进一轮的应用处理结果。两个取值都不是接受
 // 或拒绝：任务保持可续办，委托保持`已提交`。
 type AcceptanceJudgmentOutcome uint8
@@ -114,7 +101,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
 ) (AdvanceAcceptanceJudgmentResult, error) {
-	basis, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+	resolution, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
@@ -122,9 +109,12 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	if err != nil {
 		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
-	if basis.ResolutionID().String() == "" {
+	// 本步只推进判断，不形成决定，因此`确定不适用`与`解析未决`在这里同样停下：据不据一次
+	// 确定性商业失败拒绝，由形成决定那一步回答。
+	if resolution.Applicability != domain.CommerciallyApplicable {
 		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
+	basis := resolution.Snapshot
 
 	asOf, declared := basis.AsOfFor(domain.ReachabilityJudgmentKind)
 	if !declared {

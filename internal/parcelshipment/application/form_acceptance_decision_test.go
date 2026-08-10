@@ -214,6 +214,72 @@ func TestAFailedReleaseKeepsTheRejectionAndLeavesCompensationPending(t *testing.
 	}
 }
 
+// Covers: AT-PC-020「同一范围没有适用合同 → 返回无适用依据，不由 PC 形成委托拒绝」与
+// UC-PS-001 接受条件矩阵前三行「确定性不通过时按适用规则拒绝」— 拒绝由本上下文形成。
+//
+// 压成未决会让一个根本没有适用合同的客户永远等下去：未决的含义是「还没判出来」，而这里
+// 权威已经把话说完了。
+func TestNoApplicableCommercialBasisRejectsRatherThanStalling(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.applicability = domain.CommerciallyNotApplicable
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q; a determinate commercial answer was parked as undecided", result.State())
+	}
+	decision, present := result.AcceptanceDecision()
+	if !present {
+		t.Fatal("a rejection was reported without a decision")
+	}
+	if len(decision.FailedChecks()) == 0 {
+		t.Fatal("the rejection recorded no failing check")
+	}
+	for _, check := range decision.FailedChecks() {
+		if check.Reason().String() == "" {
+			t.Fatalf("failing check %q carries no structured reason", check.Group())
+		}
+	}
+}
+
+// Covers: AT-PC-027「权威读取超时 → 返回解析未决，不冒充无适用依据」的镜像 — 解析未决
+// 仍然保持未决。它与上一条走同一个入口，区别只在权威有没有把话说完。
+func TestAnUndeterminedCommercialResolutionStaysUndecided(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.applicability = domain.CommercialApplicabilityUndetermined
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.State() == domain.ShipmentRequestRejected {
+		t.Fatal("an unfinished resolution was written into a rejection")
+	}
+}
+
+// Covers: AT-PC-026「解析后合同被当前修订替代」与 AT-PS-035 — 控制先前已经形成、随后商业
+// 依据不再适用时，拒绝仍要按原关联解除那笔冻结。资金不会因为解析结论变了就自己回来。
+func TestARejectionOnLostBasisStillReleasesAnExistingFreeze(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.applicability = domain.CommerciallyNotApplicable
+	fixture.judgments.controlOutcome = domain.FinancialControlHeld
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.release.calls != 1 {
+		t.Fatalf("release calls = %d; a rejection left the funds frozen", fixture.release.calls)
+	}
+}
+
 type decisionFixture struct {
 	handler    *application.FormAcceptanceDecisionHandler
 	commercial *commercialBasisDouble
@@ -228,7 +294,7 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	value := &decisionFixture{}
 	value.commercial = &commercialBasisDouble{
 		t:                            t,
-		outcome:                      application.CommercialBasisUnique,
+		applicability:                domain.CommerciallyApplicable,
 		declaresReachabilityAsOf:     true,
 		declaresFinancialControlAsOf: true,
 		manualReview:                 domain.ManualReviewNotRequiredByRules,
