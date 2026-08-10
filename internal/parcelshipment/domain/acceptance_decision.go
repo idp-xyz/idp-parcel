@@ -18,8 +18,8 @@ func NewAcceptanceDecisionID(value string) (AcceptanceDecisionID, error) {
 	return AcceptanceDecisionID{required}, err
 }
 
-// CheckReason is the structured reason a check failed or could not be settled.
-// It is a reference rather than free text so rejections stay countable by cause.
+// CheckReason 是某个校验组未通过或无法判定的结构化原因。它是引用而非自由文本，这样
+// 拒绝才能按原因维度统计。
 type CheckReason struct{ requiredValue }
 
 func NewCheckReason(value string) (CheckReason, error) {
@@ -27,9 +27,8 @@ func NewCheckReason(value string) (CheckReason, error) {
 	return CheckReason{required}, err
 }
 
-// AcceptanceCheckGroup is the closed set of validation groups the use case
-// declares. The rule over them is uniform — every applicable group must pass —
-// so the set is complete here even though only some groups have producers yet.
+// AcceptanceCheckGroup 是 `UC-PS-001` 声明的校验组封闭集合。作用其上的规则是统一的
+// ——每个适用校验组都必须通过——所以这里放齐全集，尽管目前只有部分组有生产者。
 type AcceptanceCheckGroup uint8
 
 const (
@@ -94,9 +93,8 @@ func (outcome CheckOutcome) String() string {
 	}
 }
 
-// AcceptanceCheck is one group's result. A zero parcel ID means the check is
-// scoped to the whole submission version; a set one means it bears on that
-// member alone. Anything other than a pass must carry its reason.
+// AcceptanceCheck 是一个校验组的结果。包裹标识为零值表示该校验作用于整份提交版本，
+// 有值则表示只针对该成员。除通过外的结果都必须携带原因。
 type AcceptanceCheck struct {
 	group    AcceptanceCheckGroup
 	parcelID DeclaredParcelID
@@ -135,9 +133,8 @@ func (check AcceptanceCheck) Reason() CheckReason {
 	return check.reason
 }
 
-// ManualReviewState records whether the adopted rule package demanded a human
-// review. Review gates acceptance but never substitutes for a hard rule, so a
-// completed review cannot turn a failure into an acceptance.
+// ManualReviewState 记录所采用的接单规则包是否要求人工复核。复核是接受的一道门，但
+// 绝不替代硬规则：已完成的复核不能把一个确定性失败变成接受。
 type ManualReviewState uint8
 
 const (
@@ -151,10 +148,9 @@ func (state ManualReviewState) valid() bool {
 	return state >= ManualReviewNotRequired && state <= ManualReviewCompleted
 }
 
-// AcceptanceBaseline is the uncoverable member set fixed at acceptance. It
-// always covers the complete declared membership of the submission version:
-// this product does not accept members individually, so a partial baseline
-// could only mean a rule was skipped.
+// AcceptanceBaseline 是接受时固定下来的不可覆盖成员集合，恒覆盖该提交版本的完整声明
+// 成员：本产品不支持成员级部分接受，因此一份只覆盖部分成员的基线只可能意味着有条规则
+// 被跳过了。
 type AcceptanceBaseline struct {
 	declaredParcelIDs []DeclaredParcelID
 	submissionVersion SubmissionVersionID
@@ -173,10 +169,9 @@ func (baseline AcceptanceBaseline) FixedAt() time.Time {
 	return baseline.fixedAt
 }
 
-// ExpectedCommitment is what the operator undertook at acceptance. It stores the
-// basis in force at that moment rather than a computed date: the promised values
-// live in the product and contract versions the basis names, so a later change
-// to those versions cannot silently rewrite what was promised.
+// ExpectedCommitment 是运营企业在接受时作出的承诺。它保存的是当时生效的商业依据快照
+// 而非一个算出来的日期：承诺的数值活在依据指向的产品与合同版本里，因此日后那些版本
+// 变化也改写不了当时承诺过什么。
 type ExpectedCommitment struct {
 	basis    CommercialBasisSnapshot
 	formedAt time.Time
@@ -237,19 +232,15 @@ type AcceptanceDecisionSpec struct {
 	DecidedAt    time.Time
 }
 
-// Decide forms at most one acceptance or rejection for the current submission
-// version. Three outcomes are possible and only two of them are decisions: a
-// pass that cannot yet be settled leaves the request submitted with its
-// acceptance task still open, because "not yet decided" is processing state
-// rather than a lifecycle result.
+// Decide 为当前提交版本至多形成一个接受或拒绝。三种结果里只有两种是决定：无法判定的
+// 一轮让委托保持`已提交`、接受判断任务保持未完成，因为`尚未决定`是应用处理结果而不是
+// 生命周期结果。
 //
-// Any deterministic failure — on the version or on a single member — rejects the
-// whole version. This product does not accept members individually, so there is
-// no path here that keeps the good members and drops the bad one.
+// 任何确定性失败——无论落在整份版本还是单个成员——都拒绝整份版本。本产品不支持成员级
+// 部分接受，所以这里没有任何一条「留下合格成员、丢掉失败那个」的路径。
 func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequest, error) {
-	// The already-decided case is checked first so a second attempt on an
-	// accepted or rejected version says why it is refused, rather than reporting
-	// a generic invalid state that reads like malformed input.
+	// 已决定的情形先判，这样对已接受或已拒绝版本的第二次尝试会说出真实原因，而不是
+	// 返回一个读起来像输入格式错误的泛化「无效委托」。
 	if request.decisionFormed {
 		return ShipmentRequest{}, ErrDecisionAlreadyFormed
 	}
@@ -312,9 +303,8 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	return request, nil
 }
 
-// everyMemberJudged guards against accepting a version in which some declared
-// member was never assessed. An unjudged member is not a passing member, and
-// treating it as one would be member-level acceptance by omission.
+// everyMemberJudged 挡住「某个声明成员从未被判断过却接受了整份版本」。未被判断的成员
+// 不等于通过的成员，当作通过就是以遗漏方式实现的成员级接受。
 func (request ShipmentRequest) everyMemberJudged(judged map[DeclaredParcelID]struct{}) bool {
 	for _, parcelID := range request.currentVersion.declaredParcelIDs {
 		if _, present := judged[parcelID]; !present {

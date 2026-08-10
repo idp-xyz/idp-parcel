@@ -1,6 +1,5 @@
-// Package domain holds the settlement-accounting model: operational balances,
-// funds freezes and the pre-acceptance financial control results other contexts
-// consume. It owns no shipment decision and forms no acceptance or rejection.
+// Package domain 承载运营结算的领域模型：运营结算余额、资金冻结，以及供其他上下文
+// 消费的接受前财务控制结果。它不拥有委托决定，也不形成接受或拒绝。
 package domain
 
 import (
@@ -83,10 +82,9 @@ func NewRestrictionReason(value string) (RestrictionReason, error) {
 	return RestrictionReason{required}, err
 }
 
-// SettlementScope is what a balance belongs to. Legal entity, settlement account
-// and currency are all part of it because balances across them are not shared by
-// default: borrowing one scope's funds for another is the mistake this type
-// exists to make impossible.
+// SettlementScope 是一份余额的归属。责任法人、结算账户与币种三者都算在内，因为跨这
+// 三者的余额默认不共用：拿一个作用域的钱去冻另一个作用域，正是这个类型要让它不可能
+// 发生的错误。
 type SettlementScope struct {
 	legalEntity LegalEntityReference
 	account     SettlementAccountID
@@ -120,10 +118,9 @@ func (scope SettlementScope) valid() bool {
 	return scope.legalEntity.valid() && scope.account.valid() && scope.currency.valid()
 }
 
-// OperationalBalance carries the components separately rather than one net
-// figure. The context requires posted balance, credit limit, frozen amount and
-// confirmed-unsettled receivable to stay distinguishable, so a single number
-// could not answer why an amount is unavailable.
+// OperationalBalance 分开持有各个分量，而不是一个净值。CONTEXT 要求入账余额、当前
+// 有效授信额度、冻结金额与已确认未结应收保持可分辨，一个净数字答不出「这笔钱为什么
+// 不可用」。
 type OperationalBalance struct {
 	scope       SettlementScope
 	postedMinor int64
@@ -152,9 +149,8 @@ func (balance OperationalBalance) Scope() SettlementScope {
 	return balance.scope
 }
 
-// Available is the receivable-direction available balance: posted plus the
-// currently effective credit limit, less what is frozen and what is confirmed
-// but unsettled.
+// Available 是客户应收方向的可用余额：入账余额加当前有效授信额度，再扣除冻结金额与
+// 已确认未结应收。
 func (balance OperationalBalance) Available() int64 {
 	return balance.postedMinor + balance.creditMinor - balance.frozenMinor - balance.unsettled
 }
@@ -167,10 +163,9 @@ type FreezeRequest struct {
 	requestedAt time.Time
 }
 
-// NewFreezeRequest refuses a non-positive amount. A zero-amount freeze would be
-// a control that occupies nothing while looking like one was performed, and the
-// context forbids using exactly that to stand in for "no control applies" — that
-// answer belongs to party-commercial as an explicit inapplicability basis.
+// NewFreezeRequest 拒绝非正数金额。零金额冻结是一次什么也没占用、看上去却执行过的
+// 控制，而 CONTEXT 明禁用它冒充「明确无控制」——那个答案由 `party-commercial` 以明确
+// 的不适用依据提供。
 func NewFreezeRequest(
 	requestID ControlRequestID,
 	scope SettlementScope,
@@ -199,9 +194,8 @@ func (request FreezeRequest) AmountMinor() int64 {
 	return request.amountMinor
 }
 
-// FreezeStatus is the closed set of outcomes a freeze may have. None of them is
-// an acceptance verdict: an insufficient balance is a business restriction this
-// context reports, and whether it blocks a shipment is parcel-shipment's call.
+// FreezeStatus 是冻结可能结果的封闭集合。其中没有任何一个是接受判决：余额不足是本
+// 上下文报告的业务限制，是否据此阻断委托由 `parcel-shipment` 决定。
 type FreezeStatus uint8
 
 const (
@@ -264,9 +258,8 @@ func (freeze FundsFreeze) Reason() RestrictionReason {
 	return freeze.reason
 }
 
-// FreezeLedger records freezes without ever removing one. A release marks the
-// record and leaves the original amount and time in place, because the freeze
-// having happened is a fact its release does not undo.
+// FreezeLedger 只增不删地记录冻结。释放只是给记录打上标记，原金额与原冻结时间原样
+// 留着——冻结发生过这件事，不因释放而不曾发生。
 type FreezeLedger struct {
 	byRequest map[ControlRequestID]FreezeID
 	byFreeze  map[FreezeID]FundsFreeze
@@ -282,11 +275,9 @@ func NewFreezeLedger() *FreezeLedger {
 	}
 }
 
-// Freeze occupies funds for one control request. A repeat of the same request
-// returns the original freeze; the same identity carrying different content is a
-// conflict that neither reuses the original nor occupies more funds. An amount
-// beyond the available balance is reported as a restriction rather than an
-// error, because it is a business answer the caller must be able to act on.
+// Freeze 为一次控制请求占用资金。同一请求重复到达返回原冻结；同一请求身份携带不同
+// 内容形成冲突，既不复用原冻结也不再占用资金。超出可用余额报告为业务限制而非错误——
+// 那是一个调用方必须能据以行动的业务答案，写成 error 会逼他当技术故障处置。
 func (ledger *FreezeLedger) Freeze(request FreezeRequest, balance OperationalBalance) (FundsFreeze, error) {
 	if request.scope != balance.scope {
 		return FundsFreeze{}, ErrSettlementScopeMismatch
@@ -331,9 +322,8 @@ func (ledger *FreezeLedger) Freeze(request FreezeRequest, balance OperationalBal
 	return freeze, nil
 }
 
-// Release turns a held freeze loose. Releasing an already released freeze is the
-// same answer as the first release, including its original time: a retry after a
-// lost response must not look like a second release happened.
+// Release 把一笔已冻结资金放开。对已释放的冻结再次释放返回与首次相同的答案，包括
+// 原释放时间：响应丢失后的重试不得看起来像发生了第二次释放。
 func (ledger *FreezeLedger) Release(freezeID FreezeID, releasedAt time.Time) (FundsFreeze, error) {
 	freeze, found := ledger.byFreeze[freezeID]
 	if !found {

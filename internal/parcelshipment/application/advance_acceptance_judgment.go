@@ -11,10 +11,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// CommercialBasisOutcome reports whether a unique commercial basis was adopted.
-// parcel-shipment deliberately does not mirror party-commercial's full result
-// algebra: the distinction between no-basis, conflict and pending belongs to
-// that context, and copying it here would create a second place to maintain it.
+// CommercialBasisOutcome 报告是否采用了唯一商业依据。parcel-shipment 刻意不镜像
+// party-commercial 的完整结果代数：无适用依据、适用冲突与解析未决之间的区分属那个
+// 上下文的语言，复制过来就等于在两处维护同一套口径。
 type CommercialBasisOutcome uint8
 
 const (
@@ -25,9 +24,8 @@ const (
 	CommercialBasisPending
 )
 
-// AcceptanceJudgmentOutcome is an application processing result for one pass of
-// the acceptance decision task. Neither value is acceptance or rejection: the
-// task stays continuable and the request stays submitted.
+// AcceptanceJudgmentOutcome 是接受判断任务推进一轮的应用处理结果。两个取值都不是接受
+// 或拒绝：任务保持可续办，委托保持`已提交`。
 type AcceptanceJudgmentOutcome uint8
 
 const (
@@ -73,9 +71,8 @@ func (result AdvanceAcceptanceJudgmentResult) ContinuationReference() domain.Own
 	return result.continuation
 }
 
-// State reports the request's lifecycle state after this pass. It is always
-// submitted: an acceptance decision task advancing — however the judgement came
-// out — is not an acceptance or a rejection.
+// State 报告本轮之后委托的生命周期状态，恒为`已提交`：接受判断任务推进了一步——无论
+// 判断结果如何——都不是接受也不是拒绝。
 func (result AdvanceAcceptanceJudgmentResult) State() domain.ShipmentRequestState {
 	return domain.ShipmentRequestSubmitted
 }
@@ -101,14 +98,11 @@ func NewAdvanceAcceptanceJudgmentHandler(
 	}
 }
 
-// Handle advances one acceptance decision task by one step: adopt a unique
-// commercial basis, form the reachability anchor that basis declares, and record
-// the judgement the routing authority returns.
+// Handle 把一个接受判断任务推进一步：采用唯一商业依据，按该依据声明的策略形成可达性
+// 判断时点，再记录路由权威返回的判断。
 //
-// It never forms acceptance or rejection, and it never substitutes its own clock
-// for a declared anchor. Without a unique basis, or without a declared anchor for
-// this judgement, it stops and stays continuable rather than proceeding on an
-// instant nobody authorised.
+// 它不形成接受或拒绝，也绝不拿自己的时钟顶替声明的时点。没有唯一依据、或本类判断没有
+// 被声明时点时，它停下并保持可续办，而不是在一个无人授权的时刻上继续。
 func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,

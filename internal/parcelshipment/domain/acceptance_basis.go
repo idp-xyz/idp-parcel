@@ -11,10 +11,9 @@ var (
 	ErrInvalidReachabilityJudgment    = errors.New("parcel shipment: invalid reachability judgment")
 )
 
-// The types here are parcel-shipment's own references to facts other contexts
-// own. party-commercial and network-routing keep their models; this context
-// records the references and snapshots it adopted, which is what lets the two
-// evolve without either editing the other's objects.
+// 这里的类型是 parcel-shipment 自己对其他上下文所拥有事实的引用。party-commercial 与
+// network-routing 各自保有自己的模型；本上下文只记录所采用的引用与快照——这正是两边
+// 各自演进而互不改写对方对象的原因。
 
 type CommercialResolutionID struct{ requiredValue }
 
@@ -51,10 +50,8 @@ func NewReachabilityJudgmentID(value string) (ReachabilityJudgmentID, error) {
 	return ReachabilityJudgmentID{required}, err
 }
 
-// JudgmentKind names a downstream judgment that the adopted rule package
-// declares an as-of policy for. Values appear together with the orchestration
-// that consumes them; pre-acceptance financial control is absent because that
-// step is not orchestrated yet.
+// JudgmentKind 指名一类由所采用规则包声明 `asOf` 策略的下游判断。取值与消费它的编排
+// 同时出现；接受前财务控制暂缺，因为那一步还没有被编排。
 type JudgmentKind uint8
 
 const (
@@ -75,9 +72,8 @@ func (kind JudgmentKind) String() string {
 	}
 }
 
-// DeclaredAsOf is one per-judgment anchor the adopted rule package declared.
-// parcel-shipment forms the value; it never invents one, so a judgment with no
-// declaration simply cannot proceed.
+// DeclaredAsOf 是所采用规则包为某一类判断声明的时点。parcel-shipment 据此形成值，
+// 绝不自己发明一个，所以没有声明的判断根本无法继续。
 type DeclaredAsOf struct {
 	kind          JudgmentKind
 	at            time.Time
@@ -103,15 +99,13 @@ func (declared DeclaredAsOf) PolicyVersion() AsOfPolicyVersion {
 	return declared.policyVersion
 }
 
-// JudgmentAsOf is the anchor actually sent to an authority provider, which must
-// verify and echo it. It is the same shape as the declaration because forming a
-// value must not add anything the policy did not authorise.
+// JudgmentAsOf 是实际送给权威提供方、并由其校验回显的时点。它与声明同形，因为形成值
+// 时不得添加任何策略没有授权的东西。
 type JudgmentAsOf = DeclaredAsOf
 
-// CommercialBasisSnapshot is what parcel-shipment keeps of a unique commercial
-// resolution: the identity, the adopted rule package, the authority view
-// revision it held under, and the anchors that package declared. It holds no
-// commercial version content, because that content is party-commercial's.
+// CommercialBasisSnapshot 是 parcel-shipment 对一次唯一商业解析所保留的部分：解析
+// 标识、采用的接单规则包、解析当时的权威视图修订，以及该规则包声明的各项时点。它不
+// 持有任何商业版本内容，那些内容属 party-commercial。
 type CommercialBasisSnapshot struct {
 	resolutionID CommercialResolutionID
 	rulePackage  RulePackageReference
@@ -158,10 +152,8 @@ func (snapshot CommercialBasisSnapshot) ViewRevision() CommercialViewRevision {
 	return snapshot.viewRevision
 }
 
-// AsOfFor returns the anchor the rule package declared for one judgment. A
-// missing declaration is reported as absent rather than defaulted, because
-// substituting any instant here is exactly the global-time shortcut the use case
-// forbids.
+// AsOfFor 返回规则包为某一类判断声明的时点。没有声明时报告缺席而不是给默认值——在这里
+// 顶上任何一个时刻，正是用例禁止的「用一个全局时间代替」。
 func (snapshot CommercialBasisSnapshot) AsOfFor(kind JudgmentKind) (JudgmentAsOf, bool) {
 	for _, declared := range snapshot.declaredAsOf {
 		if declared.kind == kind {
@@ -175,9 +167,8 @@ func (snapshot CommercialBasisSnapshot) valid() bool {
 	return snapshot.resolutionID.valid() && snapshot.rulePackage.valid() && snapshot.viewRevision.valid()
 }
 
-// ReachabilityValue mirrors network-routing's three-valued finding as an adopted
-// reference. parcel-shipment never produces one: it records what the owning
-// context judged, and none of the three values is an acceptance decision.
+// ReachabilityValue 以采用引用的形式镜像 network-routing 的三值判断。parcel-shipment
+// 从不产生它，只记录拥有它的上下文判断了什么；三个取值没有一个是接受决定。
 type ReachabilityValue uint8
 
 const (

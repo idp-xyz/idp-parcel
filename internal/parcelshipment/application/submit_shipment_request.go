@@ -1,6 +1,5 @@
-// Package application orchestrates parcel-shipment use cases over the domain
-// kernel and the ports parcel-shipment owns. It holds no persistence,
-// transaction or event mechanism; those stay behind the Bento gate (ADR-0017).
+// Package application 在领域内核与 parcel-shipment 自有端口之上编排本上下文的用例。
+// 它不含任何持久化、事务或事件机制，那些仍阻断在 Bento 闸门之后（ADR-0017）。
 package application
 
 import (
@@ -12,9 +11,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// SubmitOutcome is an application processing result, not a request lifecycle
-// state. Only OutcomeSubmitted establishes a request, and none of these values
-// means the request was accepted or rejected.
+// SubmitOutcome 是应用处理结果，不是委托的生命周期状态。只有 OutcomeSubmitted 会
+// 建立委托，且这些取值没有一个表示委托已被接受或拒绝。
 type SubmitOutcome uint8
 
 const (
@@ -25,10 +23,9 @@ const (
 	OutcomeInputNotAccepted
 	OutcomeOtherProductionAuthority
 	OutcomeOwnershipUnresolved
-	// OutcomeAdmissionPaused is separate from OutcomeOwnershipUnresolved
-	// because a pause answers whether this product currently admits new work,
-	// not who owns the scope. Merging them would lose the fact that authority
-	// was established.
+	// OutcomeAdmissionPaused 与 OutcomeOwnershipUnresolved 分开，因为暂停回答的是
+	// 本产品当前是否接纳新准入，而不是这个范围归谁。合并会丢掉「权威其实已经确定」
+	// 这个事实。
 	OutcomeAdmissionPaused
 )
 
@@ -65,10 +62,9 @@ type SubmitShipmentRequestCommand struct {
 	ExpectedRevision  domain.ProductionOwnershipRevision
 }
 
-// SubmitShipmentRequestResult carries what the caller may act on. The request
-// and the ownership decision are each optional and reported through accessors:
-// a replay of input that never built a request has no request to name, and an
-// ingress conflict is answered without consulting the admission authority.
+// SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
+// 通过访问器报告：重放一份从未建过单的输入时没有委托可指名，而接入冲突根本不必问准入
+// 权威。
 type SubmitShipmentRequestResult struct {
 	outcome           SubmitOutcome
 	shipmentRequestID domain.ShipmentRequestID
@@ -118,9 +114,8 @@ func NewSubmitShipmentRequestHandler(
 	}
 }
 
-// Handle preserves the source, resolves production ownership for the whole
-// admission scope, and only then establishes a submitted request. It forms no
-// acceptance, rejection, reachability or financial control result.
+// Handle 先保全来源，再为完整拟受理范围取得生产归属，之后才建立`已提交`委托。它不形成
+// 接受、拒绝、可达性或财务控制结果。
 func (handler *SubmitShipmentRequestHandler) Handle(
 	ctx context.Context,
 	command SubmitShipmentRequestCommand,
@@ -147,8 +142,8 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("preserve source: %w", err)
 	}
 
-	// Step 3A precedes 3B: input that cannot establish a minimum request
-	// identity has no admission scope to ask the authority about.
+	// 用例步骤 3A 先于 3B：无法建立最小委托身份的输入，根本没有可拿去问准入权威的
+	// 拟受理范围。
 	candidate, err := domain.NewSubmissionCandidate(
 		incoming,
 		command.BatchID,
@@ -164,8 +159,8 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("decide production ownership: %w", err)
 	}
 
-	// One clock reading covers the gate and the submission, so a request can
-	// never be stamped outside the instant its gate was evaluated for.
+	// 门禁评估与建单共用一次时钟读数，这样委托的提交时刻绝不会落在其门禁所评估的
+	// 时刻之外。
 	decidedAt := handler.clock.Now()
 	gate, err := domain.EvaluateFutureSubmissionGate(
 		decision,
@@ -217,9 +212,8 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	}, nil
 }
 
-// resolvePreserved answers a request whose source identity was already
-// preserved. It never re-decides ownership or builds a second request: the
-// original content stands and the caller receives the original result.
+// resolvePreserved 回答来源身份已被保全过的请求。它绝不重判归属、也不建第二份委托：
+// 原内容不动，调用方拿到原结果。
 func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 	ctx context.Context,
 	existing domain.SourceSubmissionFingerprint,
@@ -249,10 +243,8 @@ func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 	return result, nil
 }
 
-// blockedOutcome keeps the three refusals distinct. Another authority owning the
-// scope, an authority that could not be established, and this product pausing
-// new admissions are different answers to different questions; a pause in
-// particular is neither a fourth authority nor a customer rejection.
+// blockedOutcome 让三种拒绝各自成立。其他权威承接该范围、权威无法确定、以及本产品暂停
+// 新准入，是对不同问题的不同回答；其中暂停既不是第四种权威身份，也不是客户业务拒绝。
 func blockedOutcome(decision domain.ProductionOwnershipDecision) SubmitOutcome {
 	switch decision.Authority() {
 	case domain.ProductionAuthorityOther:
