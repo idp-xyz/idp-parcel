@@ -8,9 +8,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// Covers: S02-AT-02 (replay classification)
-// Covers: S02-AT-03 (conflict classification)
-// Covers: S02-AT-10 (the composite key does not collapse across tenant, customer or source)
+// Covers: S02-AT-02（重放判定）
+// Covers: S02-AT-03（冲突判定）
+// Covers: S02-AT-10（复合键不跨租户、客户或来源塌陷）
 func TestClassifySourceSubmission(t *testing.T) {
 	existing := sourceFingerprint(t, "tenant-1", "customer-1", "api", "request-1", "digest-1")
 	tests := []struct {
@@ -39,7 +39,7 @@ func TestClassifySourceSubmission(t *testing.T) {
 	}
 }
 
-// Covers: S02-AT-02 (differing occurrence and receipt times do not defeat replay)
+// Covers: S02-AT-02（发生时间与接收时间不同不影响重放判定）
 func TestClassifySourceSubmissionTreatsDifferentTimesAsReplay(t *testing.T) {
 	identity := sourceIdentity(t, "tenant-1", "customer-1", "api", "request-1")
 	digest := mustValue(t, domain.NewPayloadDigest, "digest-1")
@@ -72,7 +72,7 @@ func TestClassifySourceSubmissionTreatsDifferentTimesAsReplay(t *testing.T) {
 	}
 }
 
-// Covers: S02-AT-03 (requestEffectiveAt presence is content, so changing it conflicts)
+// Covers: S02-AT-03（requestEffectiveAt 在场属于内容，改动它即构成冲突）
 func TestSourceSubmissionDigestSeparatesRequestEffectiveAtPresence(t *testing.T) {
 	identity := sourceIdentity(t, "tenant-1", "customer-1", "api", "request-effective-1")
 	occurredAt := time.Date(2026, 8, 5, 10, 0, 0, 0, time.UTC)
@@ -114,7 +114,7 @@ func TestSourceSubmissionDigestSeparatesRequestEffectiveAtPresence(t *testing.T)
 	}
 }
 
-// Covers: S02-AT-06 (incomplete input yields no classification)
+// Covers: S02-AT-06（输入不完整则不产生判定）
 func TestClassifySourceSubmissionRejectsInvalidFingerprints(t *testing.T) {
 	valid := sourceFingerprint(t, "tenant-1", "customer-1", "api", "request-1", "digest-1")
 	tests := []struct {
@@ -139,7 +139,7 @@ func TestClassifySourceSubmissionRejectsInvalidFingerprints(t *testing.T) {
 	}
 }
 
-// Covers: S02-AT-06 (minimum identity missing, no placeholder is constructed)
+// Covers: S02-AT-06（最小身份缺失，不构造占位对象）
 func TestSourceIdentityRejectsMissingScopeComponents(t *testing.T) {
 	tenantID := mustValue(t, domain.NewTenantID, "tenant-1")
 	customerAccountID := mustValue(t, domain.NewCustomerAccountID, "customer-1")
@@ -183,7 +183,7 @@ func TestSourceSubmissionKeepsTimesIndependent(t *testing.T) {
 	}
 }
 
-// Covers: S02-AT-06 (minimum source evidence missing, no placeholder is constructed)
+// Covers: S02-AT-06（最小来源证据缺失，不构造占位对象）
 func TestSourceSubmissionRejectsMissingInputs(t *testing.T) {
 	validIdentity := sourceIdentity(t, "tenant-1", "customer-1", "api", "request-1")
 	validDigest := mustValue(t, domain.NewPayloadDigest, "digest-1")

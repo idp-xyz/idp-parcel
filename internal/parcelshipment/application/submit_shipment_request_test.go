@@ -13,9 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// Covers: UC-PS-001 steps 1, 2, 3A, 3B, 3C — the source is preserved before
-// ownership is decided, and a request is established only after this product
-// holds production authority for the whole admission scope.
+// Covers: UC-PS-001 步骤 1、2、3A、3B、3C — 先保全来源再判定归属，且只有本产品对整个准入
+// 范围持有生产权威之后才建立委托。
 func TestSubmitEstablishesSubmittedRequestAfterPreservingSource(t *testing.T) {
 	fixture := newFixture(t)
 
@@ -47,8 +46,7 @@ func TestSubmitEstablishesSubmittedRequestAfterPreservingSource(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 result semantics — a replay of the same logical request
-// returns the existing result instead of creating a second request.
+// Covers: UC-PS-001 结果语义 — 同一逻辑请求的重放返回原结果，而不是造出第二份委托。
 func TestSubmitReplayReturnsExistingResultWithoutASecondRequest(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -80,9 +78,8 @@ func TestSubmitReplayReturnsExistingResultWithoutASecondRequest(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 一致性幂等与并发 — differing occurredAt/receivedAt stays a
-// replay and only appends this observation; it never re-preserves, reclassifies
-// or overwrites the original source fact.
+// Covers: UC-PS-001 一致性幂等与并发 — occurredAt/receivedAt 不同仍算重放，只追加这次观察；
+// 它不重新保全、不重新判定，也不覆盖原始来源事实。
 func TestSubmitReplayAppendsTheObservationWithoutOverwriting(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -120,8 +117,7 @@ func TestSubmitReplayAppendsTheObservationWithoutOverwriting(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 result semantics — the same logical identity carrying a
-// different normalized payload is a conflict, and never a second request.
+// Covers: UC-PS-001 结果语义 — 同一逻辑身份携带不同的规范化载荷是冲突，绝不是第二份委托。
 func TestSubmitConflictPreservesTheOriginalWithoutBuilding(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -149,9 +145,8 @@ func TestSubmitConflictPreservesTheOriginalWithoutBuilding(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 result semantics and 首发试点叠加条件 — the three refusals
-// stay distinct. A pause answers whether this product admits new work, not who
-// owns the scope, so it must not be reported as unresolved ownership.
+// Covers: UC-PS-001 结果语义与首发试点叠加条件 — 三种拒绝彼此分明。暂停回答的是本产品此刻
+// 是否接新活，而不是范围归谁，所以它不得被报成归属未决。
 func TestSubmitFormsNoRequestWhenThisProductLacksAuthority(t *testing.T) {
 	cases := map[string]struct {
 		authority domain.ProductionAuthorityKind
@@ -196,9 +191,8 @@ func TestSubmitFormsNoRequestWhenThisProductLacksAuthority(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 steps 3A before 3B — input that cannot establish a minimum
-// request identity yields no placeholder request, and has no admission scope
-// worth asking the authority about.
+// Covers: UC-PS-001 步骤 3A 先于 3B — 立不起最小委托身份的输入不产生占位委托，也没有值得
+// 拿去问权威的准入范围。
 func TestSubmitWithoutDeclaredParcelsIsNotAccepted(t *testing.T) {
 	fixture := newFixture(t)
 	command := fixture.command(t)
@@ -223,8 +217,7 @@ func TestSubmitWithoutDeclaredParcelsIsNotAccepted(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 — a lookup must not reveal that an object exists in another
-// tenant or customer scope.
+// Covers: UC-PS-001 — 一次查询不得泄露某个对象存在于另一个租户或客户范围里。
 func TestSubmitIsolatesScopesSharingASourceRequestKey(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -250,8 +243,7 @@ func TestSubmitIsolatesScopesSharingASourceRequestKey(t *testing.T) {
 	}
 }
 
-// Covers: the boundary this slice must not cross — no repository failure is
-// silently swallowed into a business outcome.
+// Covers: 本切片不得越过的边界 — 仓储失败不得被悄悄吞成一个业务结果。
 func TestSubmitSurfacesPreservationFailureRatherThanDeciding(t *testing.T) {
 	fixture := newFixture(t)
 	failure := errors.New("preservation unavailable")

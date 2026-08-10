@@ -12,28 +12,22 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// This file is deliberately test-only. It carries the parcel-shipment half of
-// the SYN-CHAIN joint checks in the PN02-SYN task pack, asserting the order
-// source preservation -> production ownership -> future submission gate over
-// existing pre-submission value objects. It introduces no orchestrator, port,
-// aggregate, domain event, repository, transaction, or outbox.
+// 本文件刻意只存在于测试侧。它承担 PN02-SYN 任务包里 SYN-CHAIN 联检的 parcel-shipment
+// 半边，在既有的提交前值对象之上断言「来源保全 → 生产归属 → 未来建单门禁」这个次序。它不
+// 引入编排器、端口、聚合、领域事件、仓储、事务或发件箱。
 //
-// SYN-CHAIN-04 is absent on purpose: it spans party-commercial and
-// settlement-accounting, neither of which owns production types, so its two
-// halves belong to those contexts' own contract tests.
+// SYN-CHAIN-04 有意缺席：它横跨 party-commercial 与 settlement-accounting，两者都不拥有
+// 生产类型，所以它的两个半边归那两个上下文自己的合约测试。
 //
-// Each test carries a `Covers:` line naming only what it actually asserts, so
-// `rg "^// Covers:.*SYN-CHAIN-05"` answers the coverage question mechanically.
-// Match the annotation lines, not bare IDs — bare IDs also hit prose like the
-// SYN-CHAIN-04 note above and would report an absent scenario as covered.
+// 每个测试带一行 `Covers:`，只写它确实断言到的东西，于是
+// `rg "^// Covers:.*SYN-CHAIN-05"` 能机械地回答覆盖问题。要匹配标注行而不是裸 ID——裸 ID
+// 也会命中上面那段关于 SYN-CHAIN-04 的散文，把一个缺席的场景报成已覆盖。
 //
-// Where a test asserts one facet of a scenario rather than all of it, say which
-// facet in parentheses. An unqualified line claims the whole scenario, and an
-// overstated claim is worse than no claim: it makes the grep lie.
+// 测试只断言场景的某个侧面而非全部时，在括号里写明是哪个侧面。不加限定的一行等于声称覆盖
+// 了整个场景，而夸大的声称比不声称更糟：它让 grep 说谎。
 //
-// Keep each scenario on its own `// Covers:` line. A wrapped annotation puts the
-// second scenario on a continuation line the anchored pattern cannot see, which
-// reports a covered scenario as missing.
+// 每个场景各占一行 `// Covers:`。折行的标注会把第二个场景挤到锚定模式看不见的续行上，于是
+// 一个已覆盖的场景被报成缺失。
 
 const syntheticChainFixtureVersion = "SYN-CHAIN-FIXTURE-v1"
 
@@ -45,10 +39,9 @@ var (
 	syntheticChainGateAt     = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 )
 
-// syntheticChainScope derives the admission scope from a preserved source
-// submission. Production keeps AdmissionScope opaque and unlinked from
-// PayloadDigest on purpose, so the derivation lives on the test side: the joint
-// checks need the lineage to assert ordering, the domain must not yet own it.
+// syntheticChainScope 从一份已保全的来源提交推导准入范围。生产侧刻意让 AdmissionScope 保持
+// 不透明、也不与 PayloadDigest 挂钩，所以推导落在测试侧：联检需要这条血缘来断言次序，而领域
+// 现在还不该拥有它。
 func syntheticChainScope(
 	t *testing.T,
 	preserved domain.SourceSubmissionFingerprint,
@@ -345,9 +338,8 @@ func TestSyntheticChainStaleOwnershipMustBeReevaluatedNotReused(t *testing.T) {
 	if !syntheticChainHasBlockReason(reevaluated, domain.FutureSubmissionDecisionStale) {
 		t.Fatalf("revision moved on but the gate stayed usable: reasons = %v", reevaluated.BlockReasons())
 	}
-	// The earlier value object is immutable and still reads ALLOWED. That is
-	// exactly why a chain step may not carry it forward: staleness is only
-	// visible by re-evaluating against the current revision.
+	// 先前那个值对象不可变，读出来仍是 ALLOWED。这恰恰是链条下一步不得把它直接带走的原因：
+	// 失效只有拿当前修订重新评价才看得见。
 	if !allowed.IsAllowed() {
 		t.Fatal("the earlier gate mutated instead of staying a fixed record")
 	}
@@ -371,11 +363,9 @@ func TestSyntheticChainStaleOwnershipMustBeReevaluatedNotReused(t *testing.T) {
 	}
 }
 
-// syntheticOperationalFacts carries the preserved source alongside the
-// operational facts other contexts own: consignment membership and seals
-// (node-operations), carrier-assigned external identifiers, and the routing
-// plan (network-routing). They travel into the derivation call site on purpose
-// — that is what lets S02-AT-09 fail if one of them ever becomes an input.
+// syntheticOperationalFacts 把已保全的来源与其他上下文拥有的运营事实放在一起：装载单元归属
+// 与封签（node-operations）、承运商分配的外部单号，以及路由计划（network-routing）。它们被
+// 有意带到推导的调用点上——正是这一点让 S02-AT-09 在其中任何一个变成输入时失败。
 type syntheticOperationalFacts struct {
 	preserved          domain.SourceSubmissionFingerprint
 	consignmentUnitID  string
@@ -537,8 +527,7 @@ func TestSyntheticChainExposesNoProductionEscalationSurface(t *testing.T) {
 		}
 	}
 
-	// Scan well past the current enum so a newly added disposition surfaces
-	// here rather than slipping in unnoticed.
+	// 扫描范围远超当前枚举，好让新加的处置在这里冒出来，而不是悄悄混进去。
 	const dispositionScanLimit = 32
 	wantDispositions := map[string]bool{"ALLOWED": true, "BLOCKED": true}
 	gotDispositions := map[string]bool{}

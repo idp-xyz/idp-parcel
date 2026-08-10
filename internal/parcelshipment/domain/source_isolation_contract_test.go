@@ -10,9 +10,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// These fixtures model the boundary consumed by parcel-shipment. They are
-// deliberately test-only: authentication, authorization, and storage remain
-// owned by shared platform capabilities or the owning business context.
+// 这些夹具模拟 parcel-shipment 所消费的那条边界。它们刻意只存在于测试侧：认证、授权与存储
+// 仍归共享平台能力或拥有它的业务上下文所有。
 type syntheticAuthorizedScope struct {
 	reference         string
 	tenantID          string
@@ -98,8 +97,7 @@ func (index syntheticSourceIndex) lookup(
 ) syntheticLookupResult {
 	record, exists := index.records[sourceKey(fingerprint.Identity())]
 	if !exists || !scope.permits(fingerprint.Identity()) {
-		// The negative result intentionally does not distinguish absence from
-		// an object outside the caller's authorized scope.
+		// 这个否定结果有意不区分「不存在」与「在调用方授权范围之外」。
 		return syntheticLookupResult{disposition: syntheticNotFoundOrNotVisible}
 	}
 	if record.fingerprint.Digest() != fingerprint.Digest() {

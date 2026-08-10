@@ -53,8 +53,8 @@ func submitSpec(t *testing.T, parcelIDs ...string) domain.SubmitShipmentRequestS
 	}
 }
 
-// Covers: UC-PS-001 step 3C — establishing the request, its current submission
-// version, declared parcels and acceptance decision task is not acceptance.
+// Covers: UC-PS-001 步骤 3C — 建立委托、它的当前提交版本、申报包裹与接受决策任务，都不等于
+// 接受。
 func TestSubmitShipmentRequestRecordsSubmittedWithoutAcceptance(t *testing.T) {
 	spec := submitSpec(t, "parcel-1", "parcel-2")
 
@@ -97,8 +97,7 @@ func TestSubmitShipmentRequestRecordsSubmittedWithoutAcceptance(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 step 3C — only production ownership held by this product
-// admits a request; a blocked gate must not produce one.
+// Covers: UC-PS-001 步骤 3C — 只有本产品持有生产归属才准入委托；被阻断的门禁不得产出委托。
 func TestSubmitShipmentRequestRefusesABlockedGate(t *testing.T) {
 	blocking := map[string]domain.FutureSubmissionGate{
 		"other authority":  blockedGate(t, domain.ProductionAuthorityOther, domain.AdmissionControlOpen),

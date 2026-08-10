@@ -240,7 +240,7 @@ func TestASubmissionVersionAcceptsOnlyOneDecision(t *testing.T) {
 func TestAcceptanceRequiresEveryDeclaredMemberToBeJudged(t *testing.T) {
 	checks := make([]domain.AcceptanceCheck, 0)
 	for _, check := range allGroupsPassing(t) {
-		// Drop parcel-2's reachability check, leaving one member unjudged.
+		// 去掉 parcel-2 的可达性检查，留一个成员未被判断。
 		if check.Group() == domain.NetworkReachabilityCheck && check.DeclaredParcelID().String() == "parcel-2" {
 			continue
 		}
