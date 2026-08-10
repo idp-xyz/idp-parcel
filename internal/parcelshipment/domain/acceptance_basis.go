@@ -220,11 +220,17 @@ type CommercialBasisSnapshot struct {
 
 // CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。
 //
-// 本包的分界是**入参数量**，不是值对象与实体之分：位置参数的构造器一律 ≤4 个入参
-// （`NewSourceIdentity`、`NewAcceptanceCheck`、`NewReachabilityJudgment`、
-// `NewFinancialControlResult` 皆为 4），Spec 结构体一律 ≥5（`SubmitShipmentRequestSpec` 5、
-// `SafeHandoffAssessmentSpec` 10、`ProductionOwnershipDecisionSpec` 12）。本构造器一度是
-// 唯一例外，且它是从 4 逐次涨到 7 的——没有人在 7 这个数上作过选择。
+// 本包的分界是**入参数量**，不是值对象与实体之分，而且它只单向成立：≥5 个输入一律用 Spec
+// 结构体（`SubmitShipmentRequestSpec` 5、`SafeHandoffAssessmentSpec` 10、
+// `ProductionOwnershipDecisionSpec` 14），零反例——本包八个多参位置构造器入参最多 4 个
+// （`NewSourceIdentity`、`NewSubmissionCandidate`、`NewAcceptanceCheck`、
+// `NewReachabilityJudgment`、`NewFinancialControlResult`、`NewSourceSubmissionFingerprint`
+// 皆为 4，`NewSubmissionBatchCandidate` 3、`NewAdmissionScope` 2）。
+//
+// 反向不成立，别照着推：≤4 时两种写法都行。`AcceptanceDecisionSpec`、
+// `ManualReviewCompletionSpec`、`ProcessingAttemptSpec` 都只有 4 个字段却用 Spec，因为三者
+// 都还要长——`BD-PS-002`、`BD-PS-001` 的参数落下来就会加字段。本构造器正是从 4 涨到 7 的，
+// 没有人在 7 这个数上作过选择；用 Spec 的好处正是这种增长不必回头改每个调用点。
 //
 // 「值对象用位置参数」不构成反对理由：`partycommercial` 的 `CommercialVersion` 自称值类型，
 // 用的同样是 Spec。跨包也不通用，`parcelpricing` 的 `NewPricingPlanVersion` 有十一个位置参数；
