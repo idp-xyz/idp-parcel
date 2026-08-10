@@ -201,21 +201,34 @@ func (handler *RejectShipmentRequestHandler) releaseFreeze(
 		SubmissionVersion: command.SubmissionVersion,
 		ControlResultID:   recorded.FinancialControl.ResultID(),
 	}); err != nil {
-		return handler.compensationReference(command, ControlReleasePending)
+		return handler.compensationReference(
+			command,
+			ControlReleasePending,
+			recorded.FinancialControl.ResultID().String(),
+		)
 	}
 	return domain.OwnershipContinuationReference{}
 }
 
+// compensationReference 派生一次补偿的续办引用。附加范围由调用方给出，因为两个调用点手里的
+// 东西不一样：判断读不回来时根本没有控制关联可带，释放失败时带得出。
+//
+// 释放失败这一条必须带上控制关联，才能与自动拒绝在 form_acceptance_decision.go 里派生的引用
+// 逐字一致——同一笔冻结因同一原因停下，两条决定路径必须给出同一个引用。不一致的话，续办方得
+// 先知道这次拒绝是规则形成的还是运营主动形成的，才查得回原次尝试，而它没有理由知道。
 func (handler *RejectShipmentRequestHandler) compensationReference(
 	command RejectShipmentRequestCommand,
 	reason JudgmentPendingReason,
+	scope ...string,
 ) domain.OwnershipContinuationReference {
 	return judgmentContinuation(
 		reason,
-		command.Identity.TenantID().String(),
-		command.Identity.CustomerAccountID().String(),
-		command.ShipmentRequestID.String(),
-		command.SubmissionVersion.String(),
+		append([]string{
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+		}, scope...)...,
 	)
 }
 

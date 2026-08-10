@@ -129,10 +129,97 @@ func TestAnUnavailableAuthorizerIsUndecidedRatherThanUnauthorized(t *testing.T) 
 	}
 }
 
+// Covers: UC-PS-001 AT-PS-035「释放失败…保持补偿未决」与 CONTEXT「撤回提交和释放属于可补偿
+// 编排」— 主动拒绝这一侧同样不因释放失败回滚已经越过提交边界的决定。
+func TestAFailedReleaseKeepsTheActiveRejectionAndLeavesCompensationPending(t *testing.T) {
+	fixture := newRejectionFixture(t)
+	fixture.release.err = errors.New("settlement authority unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q; a failed release rolled back a rejection that already crossed the boundary", result.State())
+	}
+	if result.CompensationReference().String() == "" {
+		t.Fatal("a failed release left no continuation to resume the compensation")
+	}
+}
+
+// Covers: UC-PS-001 步骤 7 与 AT-PS-035 — 读不回已记录的判断就不发释放：不知道原关联就发，
+// settlement-accounting 无从认领是哪一笔冻结。本轮把补偿留成可续办。
+func TestAnActiveRejectionWithUnreadableJudgmentsSendsNoRelease(t *testing.T) {
+	fixture := newRejectionFixture(t)
+	fixture.judgments.err = errors.New("recorded judgments unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q; an unreadable judgment store rolled back a formed rejection", result.State())
+	}
+	if fixture.release.calls != 0 {
+		t.Fatal("a release was sent without knowing which control association it would settle")
+	}
+	if result.CompensationReference().String() == "" {
+		t.Fatal("an unresolved compensation left no continuation")
+	}
+}
+
+// Covers: judgmentContinuation 的派生约定「同一范围因同一原因停滞时拿到的引用始终相同」—
+// 同一笔冻结释放失败，拒绝出自规则还是出自授权角色都必须给出同一个引用，否则续办方得先知道
+// 是哪条路径形成的拒绝才查得回原次尝试，而它没有理由知道。原因参与派生则反过来验证：换一个
+// 原因必须换一个引用，否则两类补偿会挤在同一个引用上。
+func TestBothRejectionPathsDeriveTheSameCompensationReference(t *testing.T) {
+	automatic := newDecisionFixture(t)
+	automatic.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
+	automatic.release.err = errors.New("settlement authority unavailable")
+
+	byRule, err := automatic.handler.Handle(context.Background(), automatic.command(t))
+	if err != nil {
+		t.Fatalf("handle the rule-formed rejection: %v", err)
+	}
+
+	active := newRejectionFixture(t)
+	active.release.err = errors.New("settlement authority unavailable")
+
+	byAuthority, err := active.handler.Handle(context.Background(), active.command(t))
+	if err != nil {
+		t.Fatalf("handle the active rejection: %v", err)
+	}
+
+	if byRule.CompensationReference().String() != byAuthority.CompensationReference().String() {
+		t.Fatalf(
+			"rule-formed %q, authority-formed %q; one pending compensation must carry one continuation whichever path formed the rejection",
+			byRule.CompensationReference(), byAuthority.CompensationReference(),
+		)
+	}
+
+	unreadable := newRejectionFixture(t)
+	unreadable.judgments.err = errors.New("recorded judgments unavailable")
+
+	byMissingJudgments, err := unreadable.handler.Handle(context.Background(), unreadable.command(t))
+	if err != nil {
+		t.Fatalf("handle the rejection with unreadable judgments: %v", err)
+	}
+
+	if byMissingJudgments.CompensationReference().String() == byAuthority.CompensationReference().String() {
+		t.Fatalf(
+			"both stalls derived %q; a continuation that ignores the reason cannot tell an unresolved association from a failed release",
+			byAuthority.CompensationReference(),
+		)
+	}
+}
+
 type rejectionFixture struct {
 	handler    *application.RejectShipmentRequestHandler
 	requests   *rejectableRequestStore
 	authorizer *rejectionAuthorizerDouble
+	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	identities *countingIdentityFactory
 }
@@ -142,13 +229,14 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 	value := &rejectionFixture{
 		requests:   &rejectableRequestStore{t: t},
 		authorizer: &rejectionAuthorizerDouble{t: t, granted: true},
+		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
 		identities: &countingIdentityFactory{t: t},
 	}
 	value.handler = application.NewRejectShipmentRequestHandler(application.RejectShipmentRequestDeps{
 		Requests:   value.requests,
 		Authorizer: value.authorizer,
-		Judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
+		Judgments:  value.judgments,
 		Recorder:   &judgmentRequestStore{},
 		Release:    value.release,
 		Identities: value.identities,
