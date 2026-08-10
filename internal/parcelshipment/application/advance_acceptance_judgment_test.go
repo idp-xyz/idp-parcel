@@ -14,7 +14,10 @@ import (
 
 var (
 	policyFormedAsOf = time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
-	handlerClockAt   = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	// 财务控制的时点与可达性的刻意取不同值：两类判断各按规则包为自己声明的策略形成时点，
+	// 取值相同的夹具分辨不出「按类取」和「取第一个」。
+	controlPolicyFormedAsOf = time.Date(2026, 8, 6, 17, 30, 0, 0, time.UTC)
+	handlerClockAt          = time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 )
 
 // Covers: UC-PS-001 步骤 4A/4B/6 与 UC-NR-002 — 商业解析先于逐项 asOf，逐项 asOf 先于
@@ -115,8 +118,27 @@ func TestNoReachabilityRequestWithoutAUniqueCommercialBasis(t *testing.T) {
 			if result.ContinuationReference().String() == "" {
 				t.Fatal("an undecided result offers no continuation")
 			}
+			// 缺商业依据与缺时点声明停在不同阶段，续办路径也必须不同：用例要求未决按
+			// 原因维度分别统计，两条路径共用一个引用就把两种缺口并成了一种。
+			if result.ContinuationReference().String() == undeclaredReachabilityAsOfContinuation(t) {
+				t.Fatal("a missing commercial basis continues under the same reference as an undeclared asOf")
+			}
 		})
 	}
+}
+
+// undeclaredReachabilityAsOfContinuation 取「规则包未声明可达性时点」那条路径的续办引用，
+// 供别的未决路径与之比对。
+func undeclaredReachabilityAsOfContinuation(t *testing.T) string {
+	t.Helper()
+	fixture := newJudgmentFixture(t)
+	fixture.commercial.declaresReachabilityAsOf = false
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	return result.ContinuationReference().String()
 }
 
 // Covers: UC-PS-001 一致性 — 依赖调用失败不是业务结果，必须显式浮出而不是压成未决。
@@ -162,7 +184,13 @@ func newJudgmentFixture(t *testing.T) *judgmentFixture {
 	value := &judgmentFixture{}
 	record := func(name string) { value.calls = append(value.calls, name) }
 
-	value.commercial = &commercialBasisDouble{t: t, outcome: application.CommercialBasisUnique, declaresReachabilityAsOf: true, record: record}
+	value.commercial = &commercialBasisDouble{
+		t:                            t,
+		outcome:                      application.CommercialBasisUnique,
+		declaresReachabilityAsOf:     true,
+		declaresFinancialControlAsOf: true,
+		record:                       record,
+	}
 	value.reachability = &reachabilityDouble{t: t, value: domain.ReachabilityReachable, record: record}
 	value.requests = &judgmentRequestStore{}
 	value.handler = application.NewAdvanceAcceptanceJudgmentHandler(
@@ -185,11 +213,12 @@ func (value *judgmentFixture) command(t *testing.T) application.AdvanceAcceptanc
 }
 
 type commercialBasisDouble struct {
-	t                        *testing.T
-	outcome                  application.CommercialBasisOutcome
-	declaresReachabilityAsOf bool
-	record                   func(string)
-	calls                    int
+	t                            *testing.T
+	outcome                      application.CommercialBasisOutcome
+	declaresReachabilityAsOf     bool
+	declaresFinancialControlAsOf bool
+	record                       func(string)
+	calls                        int
 }
 
 func (double *commercialBasisDouble) ResolveCommercialBasis(
@@ -208,6 +237,17 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 		policy, err := domain.NewDeclaredAsOf(
 			domain.ReachabilityJudgmentKind,
 			policyFormedAsOf,
+			mustValue(double.t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
+		)
+		if err != nil {
+			double.t.Fatalf("new declared asOf: %v", err)
+		}
+		policies = append(policies, policy)
+	}
+	if double.declaresFinancialControlAsOf {
+		policy, err := domain.NewDeclaredAsOf(
+			domain.FinancialControlJudgmentKind,
+			controlPolicyFormedAsOf,
 			mustValue(double.t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
 		)
 		if err != nil {
@@ -262,7 +302,8 @@ func (double *reachabilityDouble) AssessParcelReachability(
 }
 
 type judgmentRequestStore struct {
-	rejected bool
+	rejected        bool
+	recordedControl []domain.FinancialControlResult
 }
 
 func (store *judgmentRequestStore) RecordReachabilityJudgment(
@@ -270,6 +311,15 @@ func (store *judgmentRequestStore) RecordReachabilityJudgment(
 	_ domain.ShipmentRequestID,
 	_ domain.ReachabilityJudgment,
 ) error {
+	return nil
+}
+
+func (store *judgmentRequestStore) RecordFinancialControlResult(
+	_ context.Context,
+	_ domain.ShipmentRequestID,
+	result domain.FinancialControlResult,
+) error {
+	store.recordedControl = append(store.recordedControl, result)
 	return nil
 }
 

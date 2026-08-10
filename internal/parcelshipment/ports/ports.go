@@ -74,7 +74,30 @@ type ReachabilityAssessor interface {
 	AssessParcelReachability(ctx context.Context, request ReachabilityRequest) (domain.ReachabilityJudgment, error)
 }
 
+// FinancialControlRequest 是 parcel-shipment 请求一次接受前财务控制的范围。它按当前提交
+// 版本取，不像可达性那样按声明包裹取：控制作用在整份委托上，逐成员发起会把一份委托的资金
+// 占用重复成成员份数。
+//
+// 它同样不携带金额、账户或阈值。价格、余额与冻结属 settlement-accounting，策略属
+// party-commercial；本上下文说明要为哪份提交版本、按哪个时点控制，仅此而已。
+type FinancialControlRequest struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	AsOf              domain.JudgmentAsOf
+}
+
+// PreAcceptanceFinancialController 是 parcel-shipment 视角下的接受前财务控制。三个取值
+// 没有一个是接受决定，本上下文也不得在这里据其推导出一个。
+//
+// 依赖调不通要作为错误返回。把它读成`明确无控制`正是用例禁止的默认放行：一次故障会因此
+// 变成一个看起来通过了的接受前控制。
+type PreAcceptanceFinancialController interface {
+	ApplyPreAcceptanceFinancialControl(ctx context.Context, request FinancialControlRequest) (domain.FinancialControlResult, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(ctx context.Context, requestID domain.ShipmentRequestID, judgment domain.ReachabilityJudgment) error
+	RecordFinancialControlResult(ctx context.Context, requestID domain.ShipmentRequestID, result domain.FinancialControlResult) error
 }

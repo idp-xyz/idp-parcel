@@ -1,0 +1,269 @@
+package application_test
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"testing"
+
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+)
+
+// Covers: UC-PS-001 步骤 7 与 4B — 商业解析先于逐项 asOf，逐项 asOf 先于财务控制；本类
+// 控制采用的时点来自规则包为`接受前财务控制`声明的策略，既不是可达性的那一个，也不是
+// 编排自己的时钟。
+func TestFinancialControlRunsUnderTheAsOfDeclaredForItsOwnKind(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceJudgmentAdvanced {
+		t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
+	}
+	if got, want := fixture.calls, []string{"resolve-commercial-basis", "apply-financial-control"}; !slices.Equal(got, want) {
+		t.Fatalf("call order = %v, want %v", got, want)
+	}
+
+	requested := fixture.controller.lastAsOf
+	if !requested.At().Equal(controlPolicyFormedAsOf) {
+		t.Fatalf("control asOf = %v, want the policy-formed %v", requested.At(), controlPolicyFormedAsOf)
+	}
+	if requested.At().Equal(policyFormedAsOf) {
+		t.Fatal("the orchestration reused the reachability asOf for the financial control")
+	}
+	if requested.At().Equal(handlerClockAt) {
+		t.Fatal("the orchestration substituted its own clock for the declared asOf semantics")
+	}
+
+	control, present := result.FinancialControlResult()
+	if !present || control.Outcome() != domain.FinancialControlHeld {
+		t.Fatalf("control = %#v present = %v", control, present)
+	}
+	if !control.AsOf().At().Equal(controlPolicyFormedAsOf) {
+		t.Fatal("the provider did not echo the asOf it controlled under")
+	}
+	if len(fixture.requests.recordedControl) != 1 {
+		t.Fatalf("recorded %d control results, want the adopted one kept on the judgment task", len(fixture.requests.recordedControl))
+	}
+}
+
+// Covers: UC-PS-001 步骤 4B「不得为全部判断套用一个全局时间」与接受条件「不得默认放行」
+// —— 规则包只为可达性声明了策略时，财务控制不得借用它发起。一次已经发出的资金占用收不
+// 回来，而未决可以续办。
+func TestNoControlIsIssuedUnderAnAsOfNobodyDeclared(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.commercial.declaresFinancialControlAsOf = false
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceJudgmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if fixture.controller.calls != 0 {
+		t.Fatal("a pre-acceptance control was issued under an asOf nobody declared")
+	}
+	if _, present := result.FinancialControlResult(); present {
+		t.Fatal("an undecided round carried a financial control result")
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("an undecided result offers no continuation")
+	}
+	if result.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q; the request left SUBMITTED without an acceptance decision", result.State())
+	}
+}
+
+// Covers: UC-PS-001 步骤 7「读取合同的版本化财务控制策略」— 策略活在客户合同里，没有
+// 唯一商业依据就没有合同可读，因而不发起控制，也不代它答`明确无控制`。
+func TestNoControlIsIssuedWithoutAUniqueCommercialBasis(t *testing.T) {
+	nonUnique := map[string]application.CommercialBasisOutcome{
+		"no applicable basis":    application.CommercialBasisNotApplicable,
+		"applicability conflict": application.CommercialBasisConflict,
+		"resolution pending":     application.CommercialBasisPending,
+	}
+
+	for name, outcome := range nonUnique {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFinancialControlFixture(t)
+			fixture.commercial.outcome = outcome
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.AcceptanceJudgmentUndecided {
+				t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+			}
+			if fixture.controller.calls != 0 {
+				t.Fatal("a pre-acceptance control was issued without a unique commercial basis")
+			}
+			if _, present := result.FinancialControlResult(); present {
+				t.Fatal("an undecided round carried a financial control result")
+			}
+			if result.ContinuationReference().String() == "" {
+				t.Fatal("an undecided result offers no continuation")
+			}
+			// 缺商业依据与缺时点声明停在不同阶段，续办路径也必须不同：用例要求未决按
+			// 原因维度分别统计，两条路径共用一个引用就把两种缺口并成了一种。
+			if result.ContinuationReference().String() == undeclaredAsOfContinuation(t) {
+				t.Fatal("a missing commercial basis continues under the same reference as an undeclared asOf")
+			}
+		})
+	}
+}
+
+// undeclaredAsOfContinuation 取「规则包未声明本类时点」那条路径的续办引用，供别的未决
+// 路径与之比对。
+func undeclaredAsOfContinuation(t *testing.T) string {
+	t.Helper()
+	fixture := newFinancialControlFixture(t)
+	fixture.commercial.declaresFinancialControlAsOf = false
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	return result.ContinuationReference().String()
+}
+
+// Covers: CONTEXT「不拥有价格、余额、冻结或信用暴露」与 UC-PS-001 结果语义 — `业务限制`
+// 和`明确无控制`都是取得的判断，本步照原样记下，不在这里升格为拒绝。
+func TestARestrictiveControlIsRecordedWithoutRejectingTheRequest(t *testing.T) {
+	for _, outcome := range []domain.FinancialControlOutcome{
+		domain.FinancialControlRestricted,
+		domain.FinancialControlNotApplicable,
+	} {
+		t.Run(outcome.String(), func(t *testing.T) {
+			fixture := newFinancialControlFixture(t)
+			fixture.controller.outcome = outcome
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.AcceptanceJudgmentAdvanced {
+				t.Fatalf("outcome = %q; an authoritative control result is progress, not failure", result.Outcome())
+			}
+			control, present := result.FinancialControlResult()
+			if !present || control.Outcome() != outcome {
+				t.Fatalf("control outcome = %q, want %q", control.Outcome(), outcome)
+			}
+			if control.Basis().String() == "" {
+				t.Fatal("a non-held control result was adopted without the basis that explains it")
+			}
+			if result.State() != domain.ShipmentRequestSubmitted {
+				t.Fatalf("state = %q; the request left SUBMITTED without an acceptance decision", result.State())
+			}
+			if fixture.requests.rejected {
+				t.Fatal("a financial control result was written straight into a rejection")
+			}
+		})
+	}
+}
+
+// Covers: UC-PS-001 接受条件「不得默认放行」— 控制端口调不通时不得留下任何看起来通过了
+// 的痕迹：既不记`明确无控制`，也不记一个空结果。
+func TestAFailedControlNeverBecomesADefaultPass(t *testing.T) {
+	failure := errors.New("settlement authority unavailable")
+	fixture := newFinancialControlFixture(t)
+	fixture.controller.err = failure
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if !errors.Is(err, failure) {
+		t.Fatalf("error = %v, want the dependency failure", err)
+	}
+	if _, present := result.FinancialControlResult(); present {
+		t.Fatal("a failed control call still produced a control result")
+	}
+	if len(fixture.requests.recordedControl) != 0 {
+		t.Fatalf("recorded %d control results after the call failed", len(fixture.requests.recordedControl))
+	}
+}
+
+type financialControlFixture struct {
+	handler    *application.AdvanceFinancialControlJudgmentHandler
+	commercial *commercialBasisDouble
+	controller *financialControlDouble
+	requests   *judgmentRequestStore
+	calls      []string
+}
+
+func newFinancialControlFixture(t *testing.T) *financialControlFixture {
+	t.Helper()
+	value := &financialControlFixture{}
+	record := func(name string) { value.calls = append(value.calls, name) }
+
+	value.commercial = &commercialBasisDouble{
+		t:                            t,
+		outcome:                      application.CommercialBasisUnique,
+		declaresReachabilityAsOf:     true,
+		declaresFinancialControlAsOf: true,
+		record:                       record,
+	}
+	value.controller = &financialControlDouble{t: t, outcome: domain.FinancialControlHeld, record: record}
+	value.requests = &judgmentRequestStore{}
+	value.handler = application.NewAdvanceFinancialControlJudgmentHandler(
+		value.commercial,
+		value.controller,
+		value.requests,
+	)
+	return value
+}
+
+func (value *financialControlFixture) command(t *testing.T) application.AdvanceFinancialControlJudgmentCommand {
+	t.Helper()
+	return application.AdvanceFinancialControlJudgmentCommand{
+		Identity:          sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1"),
+		ShipmentRequestID: mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		SubmissionVersion: mustValue(t, domain.NewSubmissionVersionID, "version-1"),
+	}
+}
+
+type financialControlDouble struct {
+	t        *testing.T
+	outcome  domain.FinancialControlOutcome
+	err      error
+	record   func(string)
+	calls    int
+	lastAsOf domain.JudgmentAsOf
+}
+
+func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
+	_ context.Context,
+	request ports.FinancialControlRequest,
+) (domain.FinancialControlResult, error) {
+	double.t.Helper()
+	double.record("apply-financial-control")
+	double.calls++
+	double.lastAsOf = request.AsOf
+	if double.err != nil {
+		return domain.FinancialControlResult{}, double.err
+	}
+
+	basis := domain.ControlBasisReference{}
+	if double.outcome != domain.FinancialControlHeld {
+		basis = mustValue(double.t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1")
+	}
+	result, err := domain.NewFinancialControlResult(
+		mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1"),
+		double.outcome,
+		basis,
+		request.AsOf,
+	)
+	if err != nil {
+		double.t.Fatalf("new financial control result: %v", err)
+	}
+	return result, nil
+}
+
+var _ ports.PreAcceptanceFinancialController = (*financialControlDouble)(nil)
