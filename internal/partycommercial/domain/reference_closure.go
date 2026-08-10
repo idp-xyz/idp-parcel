@@ -53,6 +53,12 @@ func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
 	return true
 }
 
+// MinimumIdentityEstablished 让应用层在读取权威视图之前就能判断该不该查。用例明写最小
+// 身份不成立时「不得查询候选」——先查再拒，这次查询本身就已经泄露了该范围里有没有对象。
+func (key ClosureResolutionKey) MinimumIdentityEstablished() bool {
+	return key.minimumIdentityEstablished()
+}
+
 func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) ResolutionKey {
 	return ResolutionKey{
 		TenantID:             key.TenantID,
