@@ -44,6 +44,7 @@ const (
 	RejectionAuthorityUnavailable
 	CustomerSupplementPending
 	ManualReviewPending
+	WithdrawalAuthorityUnavailable
 )
 
 // resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的三个等待态一一对应。
@@ -100,6 +101,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "CUSTOMER_SUPPLEMENT_PENDING"
 	case ManualReviewPending:
 		return "MANUAL_REVIEW_PENDING"
+	case WithdrawalAuthorityUnavailable:
+		return "WITHDRAWAL_AUTHORITY_UNAVAILABLE"
 	default:
 		return ""
 	}

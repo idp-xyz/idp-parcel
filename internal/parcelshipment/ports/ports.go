@@ -166,6 +166,27 @@ type ActiveRejectionAuthorizer interface {
 	AuthorizeActiveRejection(ctx context.Context, query ActiveRejectionAuthorizationQuery) (domain.RejectionAuthorityReference, error)
 }
 
+// WithdrawalAuthorizationQuery 说明谁要以什么原因撤回哪一份待决委托。与主动拒绝那一支同样
+// 不带授权引用：调用方自带一个，就等于自己给自己签字。
+type WithdrawalAuthorizationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Requester         domain.WithdrawalRequesterReference
+	Reason            domain.WithdrawalReasonReference
+}
+
+// WithdrawalAuthorizer 回答请求方当前是否有权撤回这份委托。它与 ActiveRejectionAuthorizer
+// 分开：一个问的是货主客户或其授权代表，另一个问的是运营侧授权角色，两者的授权来源、有效
+// 期间与原因目录都不同，合并会让「客户能不能取消」和「我们能不能不接」共用一套规则。
+//
+// 未授权时交回零值引用而不是错误：那是一个业务答案（这个人不能撤这单），与「授权服务答不出」
+// 分属两回事，后者才是错误。真实撤回授权角色与原因语义仍是 `PAR-COM-14` 待提供的实例参数，
+// 本上下文不内置任何默认——`UC-PS-005` 明禁默认任何角色有撤回权。
+type WithdrawalAuthorizer interface {
+	AuthorizeWithdrawal(ctx context.Context, query WithdrawalAuthorizationQuery) (domain.WithdrawalAuthorityReference, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
