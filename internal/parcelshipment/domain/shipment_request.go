@@ -144,6 +144,9 @@ type ShipmentRequest struct {
 	decisionFormed    bool
 	baseline          AcceptanceBaseline
 	commitment        ExpectedCommitment
+	// sourceDataVersions 只追加。它与 baseline 并列而不是改写 baseline：接受基线固定的是
+	// 客户声明的服务范围，资料版本记的是此后的补充与更正，两者都要留。
+	sourceDataVersions []CustomerSourceDataVersion
 }
 
 // SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或
