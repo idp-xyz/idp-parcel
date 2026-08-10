@@ -10,7 +10,44 @@ var (
 	ErrInvalidDeclaredAsOf            = errors.New("parcel shipment: invalid declared as-of")
 	ErrInvalidReachabilityJudgment    = errors.New("parcel shipment: invalid reachability judgment")
 	ErrInvalidFinancialControlResult  = errors.New("parcel shipment: invalid financial control result")
+	ErrInvalidApplicableCheckGroups   = errors.New("parcel shipment: invalid applicable check groups")
 )
+
+// ApplicableCheckGroups 是所采用接单规则包为当前提交版本声明的适用校验组集合。
+//
+// 它区分「没有声明」与「声明了集合」，零值是前者。没有声明不等于没有组适用，而是无从知道
+// 该判哪些组——用例把适用性判给 PC-RULE，本上下文不得代它拟一个默认集合。
+//
+// 构造期拒绝空集，因此凡是声明过的集合都非空：一个不要求任何校验的规则包等于无条件接受，
+// 那不是规则包该能表达的东西。
+type ApplicableCheckGroups struct {
+	groups []AcceptanceCheckGroup
+}
+
+func NewApplicableCheckGroups(groups ...AcceptanceCheckGroup) (ApplicableCheckGroups, error) {
+	if len(groups) == 0 {
+		return ApplicableCheckGroups{}, ErrInvalidApplicableCheckGroups
+	}
+	seen := make(map[AcceptanceCheckGroup]struct{}, len(groups))
+	for _, group := range groups {
+		if !group.valid() {
+			return ApplicableCheckGroups{}, ErrInvalidApplicableCheckGroups
+		}
+		if _, exists := seen[group]; exists {
+			return ApplicableCheckGroups{}, ErrInvalidApplicableCheckGroups
+		}
+		seen[group] = struct{}{}
+	}
+	return ApplicableCheckGroups{groups: append([]AcceptanceCheckGroup(nil), groups...)}, nil
+}
+
+func (applicable ApplicableCheckGroups) Declared() bool {
+	return len(applicable.groups) > 0
+}
+
+func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
+	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
+}
 
 // 这里的类型是 parcel-shipment 自己对其他上下文所拥有事实的引用。party-commercial 与
 // network-routing 各自保有自己的模型；本上下文只记录所采用的引用与快照——这正是两边
@@ -115,6 +152,7 @@ type CommercialBasisSnapshot struct {
 	rulePackage  RulePackageReference
 	viewRevision CommercialViewRevision
 	declaredAsOf []DeclaredAsOf
+	applicable   ApplicableCheckGroups
 }
 
 func NewCommercialBasisSnapshot(
@@ -122,6 +160,7 @@ func NewCommercialBasisSnapshot(
 	rulePackage RulePackageReference,
 	viewRevision CommercialViewRevision,
 	declaredAsOf []DeclaredAsOf,
+	applicable ApplicableCheckGroups,
 ) (CommercialBasisSnapshot, error) {
 	if !resolutionID.valid() || !rulePackage.valid() || !viewRevision.valid() {
 		return CommercialBasisSnapshot{}, ErrInvalidCommercialBasisSnapshot
@@ -141,7 +180,14 @@ func NewCommercialBasisSnapshot(
 		rulePackage:  rulePackage,
 		viewRevision: viewRevision,
 		declaredAsOf: append([]DeclaredAsOf(nil), declaredAsOf...),
+		applicable:   applicable,
 	}, nil
+}
+
+// ApplicableCheckGroups 返回规则包声明的适用校验组。未声明时返回零值——`Decide` 据此保持
+// 未决，而不是按已到场的校验凑一个接受。
+func (snapshot CommercialBasisSnapshot) ApplicableCheckGroups() ApplicableCheckGroups {
+	return snapshot.applicable
 }
 
 func (snapshot CommercialBasisSnapshot) ResolutionID() CommercialResolutionID {

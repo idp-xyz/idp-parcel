@@ -70,11 +70,38 @@ func decisionSpec(t *testing.T, checks []domain.AcceptanceCheck) domain.Acceptan
 
 func acceptanceBasis(t *testing.T) domain.CommercialBasisSnapshot {
 	t.Helper()
+	return basisDeclaring(t, allApplicableGroups...)
+}
+
+var allApplicableGroups = []domain.AcceptanceCheckGroup{
+	domain.CustomerRelationshipCheck,
+	domain.LegalEntityAndContractCheck,
+	domain.ProductAndServiceCheck,
+	domain.MemberBaselineCheck,
+	domain.RequiredDocumentCheck,
+	domain.PreAcceptanceFinancialControlCheck,
+	domain.NetworkReachabilityCheck,
+}
+
+// basisDeclaring 建一份声明了指定适用校验组的商业依据快照。适用集合是规则包的声明，因此
+// 由夹具给出而不是由被测代码兜底——这正是接受路径可测而生产侧没有默认集合的原因。
+func basisDeclaring(t *testing.T, groups ...domain.AcceptanceCheckGroup) domain.CommercialBasisSnapshot {
+	t.Helper()
+	applicable, err := domain.NewApplicableCheckGroups(groups...)
+	if err != nil {
+		t.Fatalf("new applicable check groups: %v", err)
+	}
+	return basisWithApplicable(t, applicable)
+}
+
+func basisWithApplicable(t *testing.T, applicable domain.ApplicableCheckGroups) domain.CommercialBasisSnapshot {
+	t.Helper()
 	snapshot, err := domain.NewCommercialBasisSnapshot(
 		mustValue(t, domain.NewCommercialResolutionID, "RES-1"),
 		mustValue(t, domain.NewRulePackageReference, "rules-1/v1"),
 		mustValue(t, domain.NewCommercialViewRevision, "VIEW-1"),
 		nil,
+		applicable,
 	)
 	if err != nil {
 		t.Fatalf("new commercial basis snapshot: %v", err)
@@ -253,6 +280,77 @@ func TestAcceptanceRequiresEveryDeclaredMemberToBeJudged(t *testing.T) {
 	}
 	if decided.State() != domain.ShipmentRequestSubmitted {
 		t.Fatalf("state = %q; a member was accepted without ever being judged", decided.State())
+	}
+}
+
+// Covers: UC-PS-001 接受条件「每个适用校验组都必须通过」与 PC-RULE 对适用性的所有权 —
+// 规则包没有声明适用校验组时无从知道该判哪些组，因此不接受。这里不许有默认集合：拟一个
+// 出来就是把合同范围的事写成了本上下文的生产默认值。
+func TestAcceptanceWaitsUntilTheRulePackageDeclaresWhichGroupsApply(t *testing.T) {
+	spec := decisionSpec(t, allGroupsPassing(t))
+	spec.Basis = basisWithApplicable(t, domain.ApplicableCheckGroups{})
+
+	decided, err := submitted(t).Decide(spec)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if decided.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q; acceptance proceeded without knowing which groups apply", decided.State())
+	}
+	if decided.AcceptanceDecisionTask().IsComplete() {
+		t.Fatal("an undeclared applicable set closed the acceptance task")
+	}
+}
+
+// Covers: UC-PS-001 接受条件「每个适用校验组都必须通过」— 已声明适用的组从未出现过校验
+// 时不得接受。未被判断的组不等于通过的组，当作通过就是以遗漏方式实现的接受。
+func TestAnApplicableGroupThatWasNeverJudgedBlocksAcceptance(t *testing.T) {
+	checks := make([]domain.AcceptanceCheck, 0)
+	for _, check := range allGroupsPassing(t) {
+		if check.Group() == domain.RequiredDocumentCheck {
+			continue
+		}
+		checks = append(checks, check)
+	}
+
+	decided, err := submitted(t).Decide(decisionSpec(t, checks))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if decided.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q; an applicable group was accepted without ever being judged", decided.State())
+	}
+}
+
+// Covers: UC-PS-001「任一成员确定性不满足接受条件时，整份当前提交版本不能接受」— 声明
+// 只能增加要求，不能消掉失败。缩小适用集合若能甩掉一个已经失败的校验，调整声明就成了
+// 绕过硬规则的后门。
+func TestNarrowingTheApplicableSetCannotDiscardAFailure(t *testing.T) {
+	spec := decisionSpec(t, []domain.AcceptanceCheck{
+		versionCheck(t, domain.PreAcceptanceFinancialControlCheck, domain.CheckPassed, ""),
+		parcelCheck(t, domain.NetworkReachabilityCheck, "parcel-1", domain.CheckPassed, ""),
+		parcelCheck(t, domain.NetworkReachabilityCheck, "parcel-2", domain.CheckPassed, ""),
+		versionCheck(t, domain.LegalEntityAndContractCheck, domain.CheckFailed, "CONTRACT_EXPIRED"),
+	})
+	spec.Basis = basisDeclaring(t, domain.PreAcceptanceFinancialControlCheck, domain.NetworkReachabilityCheck)
+
+	decided, err := submitted(t).Decide(spec)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if decided.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q; a failing check was discarded by narrowing the applicable set", decided.State())
+	}
+}
+
+// Covers: PC-RULE 拥有适用性 — 一个不要求任何校验的规则包等于无条件接受，那不是规则包该
+// 能表达的东西，所以空集在构造期就不成立。
+func TestAnEmptyApplicableSetCannotBeDeclared(t *testing.T) {
+	if _, err := domain.NewApplicableCheckGroups(); !errors.Is(err, domain.ErrInvalidApplicableCheckGroups) {
+		t.Fatalf("error = %v, want ErrInvalidApplicableCheckGroups", err)
 	}
 }
 

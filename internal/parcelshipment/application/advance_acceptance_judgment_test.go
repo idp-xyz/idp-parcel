@@ -327,11 +327,21 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 		policies = append(policies, policy)
 	}
 
+	// 适用集合由规则包声明，因此夹具给出而不是被测代码兜底。这里声明的两组正是今天有
+	// 生产者的两组；换一个规则包就换一个集合，生产侧没有默认值。
+	applicable, err := domain.NewApplicableCheckGroups(
+		domain.PreAcceptanceFinancialControlCheck,
+		domain.NetworkReachabilityCheck,
+	)
+	if err != nil {
+		double.t.Fatalf("new applicable check groups: %v", err)
+	}
 	snapshot, err := domain.NewCommercialBasisSnapshot(
 		mustValue(double.t, domain.NewCommercialResolutionID, "RES-1"),
 		mustValue(double.t, domain.NewRulePackageReference, "rules-1/v1"),
 		mustValue(double.t, domain.NewCommercialViewRevision, "VIEW-1"),
 		policies,
+		applicable,
 	)
 	if err != nil {
 		double.t.Fatalf("new commercial basis snapshot: %v", err)

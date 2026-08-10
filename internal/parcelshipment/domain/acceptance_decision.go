@@ -253,6 +253,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 
 	failed, undetermined := 0, 0
 	judged := make(map[DeclaredParcelID]struct{}, len(request.currentVersion.declaredParcelIDs))
+	judgedGroups := make(map[AcceptanceCheckGroup]struct{}, len(spec.Checks))
 	for _, check := range spec.Checks {
 		if !check.group.valid() || !check.outcome.valid() {
 			return ShipmentRequest{}, ErrInvalidAcceptanceCheck
@@ -263,6 +264,9 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		case CheckUndetermined:
 			undetermined++
 		}
+		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的
+		// 是「这一组判过没有」。
+		judgedGroups[check.group] = struct{}{}
 		if check.parcelID.valid() && check.outcome == CheckPassed {
 			judged[check.parcelID] = struct{}{}
 		}
@@ -285,6 +289,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	}
 	if undetermined > 0 ||
 		spec.ManualReview == ManualReviewRequired ||
+		!everyApplicableGroupJudged(spec.Basis.applicable, judgedGroups) ||
 		!request.everyMemberJudged(judged) {
 		return request, nil
 	}
@@ -301,6 +306,29 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	}
 	request.commitment = ExpectedCommitment{basis: spec.Basis, formedAt: spec.DecidedAt}
 	return request, nil
+}
+
+// everyApplicableGroupJudged 挡住「某个适用校验组从未出现过却接受了整份版本」。它与
+// everyMemberJudged 是同一条规则的两个维度：未被判断的组不等于通过的组。
+//
+// 规则包没有声明适用集合时一律不接受。缺声明不是「没有组适用」，而是无从知道该判哪些组；
+// 在这里兜一个默认集合，就是把本属 PC-RULE 的适用性判断写成了本上下文的生产默认值。
+//
+// 它只能增加要求，减不掉失败：确定性失败在本函数之前就已经形成拒绝，因此缩小声明集合
+// 甩不掉一个已经失败的校验。
+func everyApplicableGroupJudged(
+	applicable ApplicableCheckGroups,
+	judgedGroups map[AcceptanceCheckGroup]struct{},
+) bool {
+	if !applicable.Declared() {
+		return false
+	}
+	for _, group := range applicable.groups {
+		if _, present := judgedGroups[group]; !present {
+			return false
+		}
+	}
+	return true
 }
 
 // everyMemberJudged 挡住「某个声明成员从未被判断过却接受了整份版本」。未被判断的成员
