@@ -218,9 +218,20 @@ type CommercialBasisSnapshot struct {
 	pendingRouting PendingRoutingAllowance
 }
 
-// CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。用结构体而不是位置参数，
-// 是因为后四项都是所采用规则包与服务产品的声明：每多一条声明就多一个参数，位置参数会
-// 让调用点变成一串认不出的同型值。与 AcceptanceDecisionSpec 同一形状。
+// CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。
+//
+// 本包的分界是**入参数量**，不是值对象与实体之分：位置参数的构造器一律 ≤4 个入参
+// （`NewSourceIdentity`、`NewAcceptanceCheck`、`NewReachabilityJudgment`、
+// `NewFinancialControlResult` 皆为 4），Spec 结构体一律 ≥5（`SubmitShipmentRequestSpec` 5、
+// `SafeHandoffAssessmentSpec` 10、`ProductionOwnershipDecisionSpec` 12）。本构造器一度是
+// 唯一例外，且它是从 4 逐次涨到 7 的——没有人在 7 这个数上作过选择。
+//
+// 「值对象用位置参数」不构成反对理由：`partycommercial` 的 `CommercialVersion` 自称值类型，
+// 用的同样是 Spec。跨包也不通用，`parcelpricing` 的 `NewPricingPlanVersion` 有十一个位置参数；
+// 这条线只在本包内成立，别据它去改那边。
+//
+// 翻转条件：本包出现一个 ≥5 入参、长期保持位置参数且调用点仍读得清楚的构造器。届时该重议的
+// 是这条线本身，不是本文件。
 type CommercialBasisSnapshotSpec struct {
 	ResolutionID   CommercialResolutionID
 	RulePackage    RulePackageReference
