@@ -28,16 +28,7 @@ func ReachabilityCheckFor(judgment ReachabilityJudgment) (AcceptanceCheck, error
 		outcome, reasonValue = CheckUndetermined, "REACHABILITY_INSUFFICIENT_EVIDENCE"
 	}
 
-	// 通过的校验不带原因，与 NewAcceptanceCheck 的不变量一致：只有非通过才需要解释。
-	reason := CheckReason{}
-	if reasonValue != "" {
-		formed, err := NewCheckReason(reasonValue)
-		if err != nil {
-			return AcceptanceCheck{}, err
-		}
-		reason = formed
-	}
-	return NewAcceptanceCheck(NetworkReachabilityCheck, judgment.DeclaredParcelID(), outcome, reason)
+	return checkWithReason(NetworkReachabilityCheck, judgment.DeclaredParcelID(), outcome, reasonValue)
 }
 
 // FinancialControlCheckFor 把一次接受前财务控制结果译成校验结果。
@@ -60,6 +51,19 @@ func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, e
 		outcome, reasonValue = CheckUndetermined, "FINANCIAL_CONTROL_NOT_FORMED"
 	}
 
+	// 不指名成员：控制作用在整份委托上，指名了会让聚合把它当作某个成员已被判断，从而
+	// 以遗漏方式放过其余成员。
+	return checkWithReason(PreAcceptanceFinancialControlCheck, DeclaredParcelID{}, outcome, reasonValue)
+}
+
+// checkWithReason 只在非通过时形成原因。通过的校验不带原因，与 NewAcceptanceCheck 的
+// 不变量一致：只有非通过才需要解释。
+func checkWithReason(
+	group AcceptanceCheckGroup,
+	parcelID DeclaredParcelID,
+	outcome CheckOutcome,
+	reasonValue string,
+) (AcceptanceCheck, error) {
 	reason := CheckReason{}
 	if reasonValue != "" {
 		formed, err := NewCheckReason(reasonValue)
@@ -68,7 +72,5 @@ func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, e
 		}
 		reason = formed
 	}
-	// 不指名成员：控制作用在整份委托上，指名了会让聚合把它当作某个成员已被判断，从而
-	// 以遗漏方式放过其余成员。
-	return NewAcceptanceCheck(PreAcceptanceFinancialControlCheck, DeclaredParcelID{}, outcome, reason)
+	return NewAcceptanceCheck(group, parcelID, outcome, reason)
 }

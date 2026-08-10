@@ -2,10 +2,7 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -23,11 +20,18 @@ type AdvanceFinancialControlJudgmentResult struct {
 	outcome      AcceptanceJudgmentOutcome
 	control      domain.FinancialControlResult
 	hasControl   bool
+	reason       JudgmentPendingReason
 	continuation domain.OwnershipContinuationReference
 }
 
 func (result AdvanceFinancialControlJudgmentResult) Outcome() AcceptanceJudgmentOutcome {
 	return result.outcome
+}
+
+// PendingReason 说明本轮停在哪一步。用例要求`尚未决定`返回未决原因，而不是只给一个续办
+// 引用：调用方据原因决定该补缺口还是该重试依赖。
+func (result AdvanceFinancialControlJudgmentResult) PendingReason() JudgmentPendingReason {
+	return result.reason
 }
 
 // FinancialControlResult 只在控制实际形成时给出。未决时交回一个零值结果，下游会读到一个
@@ -83,12 +87,12 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		return AdvanceFinancialControlJudgmentResult{}, fmt.Errorf("resolve commercial basis: %w", err)
 	}
 	if basis.ResolutionID().String() == "" {
-		return handler.undecided(command, "COMMERCIAL_BASIS_NOT_UNIQUE"), nil
+		return handler.undecided(command, CommercialBasisNotUnique), nil
 	}
 
 	asOf, declared := basis.AsOfFor(domain.FinancialControlJudgmentKind)
 	if !declared {
-		return handler.undecided(command, "FINANCIAL_CONTROL_AS_OF_NOT_DECLARED"), nil
+		return handler.undecided(command, FinancialControlAsOfNotDeclared), nil
 	}
 
 	control, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{
@@ -113,21 +117,17 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 	command AdvanceFinancialControlJudgmentCommand,
-	reason string,
+	reason JudgmentPendingReason,
 ) AdvanceFinancialControlJudgmentResult {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		reason,
-		command.Identity.TenantID().String(),
-		command.Identity.CustomerAccountID().String(),
-		command.ShipmentRequestID.String(),
-		command.SubmissionVersion.String(),
-	}, "\x00")))
-	continuation, err := domain.NewOwnershipContinuationReference("CONT-" + hex.EncodeToString(digest[:8]))
-	if err != nil {
-		return AdvanceFinancialControlJudgmentResult{outcome: AcceptanceJudgmentUndecided}
-	}
 	return AdvanceFinancialControlJudgmentResult{
-		outcome:      AcceptanceJudgmentUndecided,
-		continuation: continuation,
+		outcome: AcceptanceJudgmentUndecided,
+		reason:  reason,
+		continuation: judgmentContinuation(
+			reason,
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+		),
 	}
 }

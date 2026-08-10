@@ -76,6 +76,9 @@ func TestNoControlIsIssuedUnderAnAsOfNobodyDeclared(t *testing.T) {
 	if result.ContinuationReference().String() == "" {
 		t.Fatal("an undecided result offers no continuation")
 	}
+	if result.PendingReason() != application.FinancialControlAsOfNotDeclared {
+		t.Fatalf("pending reason = %q, want FINANCIAL_CONTROL_AS_OF_NOT_DECLARED", result.PendingReason())
+	}
 	if result.State() != domain.ShipmentRequestSubmitted {
 		t.Fatalf("state = %q; the request left SUBMITTED without an acceptance decision", result.State())
 	}
@@ -112,8 +115,11 @@ func TestNoControlIsIssuedWithoutAUniqueCommercialBasis(t *testing.T) {
 			if result.ContinuationReference().String() == "" {
 				t.Fatal("an undecided result offers no continuation")
 			}
-			// 缺商业依据与缺时点声明停在不同阶段，续办路径也必须不同：用例要求未决按
-			// 原因维度分别统计，两条路径共用一个引用就把两种缺口并成了一种。
+			// 缺商业依据与缺时点声明停在不同阶段，未决原因与续办路径都必须不同：用例
+			// 要求未决按原因维度分别统计，两条路径并成一条就把两种缺口混作一种。
+			if result.PendingReason() != application.CommercialBasisNotUnique {
+				t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_NOT_UNIQUE", result.PendingReason())
+			}
 			if result.ContinuationReference().String() == undeclaredAsOfContinuation(t) {
 				t.Fatal("a missing commercial basis continues under the same reference as an undeclared asOf")
 			}

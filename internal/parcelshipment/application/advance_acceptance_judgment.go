@@ -2,10 +2,7 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -56,11 +53,18 @@ type AdvanceAcceptanceJudgmentResult struct {
 	outcome      AcceptanceJudgmentOutcome
 	judgment     domain.ReachabilityJudgment
 	hasJudgment  bool
+	reason       JudgmentPendingReason
 	continuation domain.OwnershipContinuationReference
 }
 
 func (result AdvanceAcceptanceJudgmentResult) Outcome() AcceptanceJudgmentOutcome {
 	return result.outcome
+}
+
+// PendingReason 说明本轮停在哪一步。用例要求`尚未决定`返回未决原因，而不是只给一个续办
+// 引用：调用方据原因决定该补缺口还是该重试依赖。
+func (result AdvanceAcceptanceJudgmentResult) PendingReason() JudgmentPendingReason {
+	return result.reason
 }
 
 func (result AdvanceAcceptanceJudgmentResult) ReachabilityJudgment() (domain.ReachabilityJudgment, bool) {
@@ -116,12 +120,12 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		return AdvanceAcceptanceJudgmentResult{}, fmt.Errorf("resolve commercial basis: %w", err)
 	}
 	if basis.ResolutionID().String() == "" {
-		return handler.undecided(command, "COMMERCIAL_BASIS_NOT_UNIQUE"), nil
+		return handler.undecided(command, CommercialBasisNotUnique), nil
 	}
 
 	asOf, declared := basis.AsOfFor(domain.ReachabilityJudgmentKind)
 	if !declared {
-		return handler.undecided(command, "REACHABILITY_AS_OF_NOT_DECLARED"), nil
+		return handler.undecided(command, ReachabilityAsOfNotDeclared), nil
 	}
 
 	judgment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{
@@ -147,22 +151,18 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 
 func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
 	command AdvanceAcceptanceJudgmentCommand,
-	reason string,
+	reason JudgmentPendingReason,
 ) AdvanceAcceptanceJudgmentResult {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		reason,
-		command.Identity.TenantID().String(),
-		command.Identity.CustomerAccountID().String(),
-		command.ShipmentRequestID.String(),
-		command.SubmissionVersion.String(),
-		command.DeclaredParcelID.String(),
-	}, "\x00")))
-	continuation, err := domain.NewOwnershipContinuationReference("CONT-" + hex.EncodeToString(digest[:8]))
-	if err != nil {
-		return AdvanceAcceptanceJudgmentResult{outcome: AcceptanceJudgmentUndecided}
-	}
 	return AdvanceAcceptanceJudgmentResult{
-		outcome:      AcceptanceJudgmentUndecided,
-		continuation: continuation,
+		outcome: AcceptanceJudgmentUndecided,
+		reason:  reason,
+		continuation: judgmentContinuation(
+			reason,
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+			command.DeclaredParcelID.String(),
+		),
 	}
 }
