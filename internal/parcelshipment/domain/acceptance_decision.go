@@ -188,6 +188,17 @@ func (baseline AcceptanceBaseline) DeclaredParcelIDs() []DeclaredParcelID {
 	return append([]DeclaredParcelID(nil), baseline.declaredParcelIDs...)
 }
 
+// covers 回答某个声明包裹是否在接受时固定的成员集合里。基线是成员集合的权威，因此这个问题
+// 由它自己回答，而不是让调用方拿 DeclaredParcelIDs() 的副本去比。
+func (baseline AcceptanceBaseline) covers(parcelID DeclaredParcelID) bool {
+	for _, member := range baseline.declaredParcelIDs {
+		if member == parcelID {
+			return true
+		}
+	}
+	return false
+}
+
 func (baseline AcceptanceBaseline) SubmissionVersionID() SubmissionVersionID {
 	return baseline.submissionVersion
 }

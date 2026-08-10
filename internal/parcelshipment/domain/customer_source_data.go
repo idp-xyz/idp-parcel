@@ -9,6 +9,10 @@ var (
 	ErrInvalidSourceDataScope           = errors.New("parcel shipment: invalid source data scope")
 	ErrInvalidCustomerSourceDataVersion = errors.New("parcel shipment: invalid customer source data version")
 	ErrShipmentRequestNotAccepted       = errors.New("parcel shipment: shipment request is not accepted")
+	// ErrParcelOutsideAcceptanceBaseline 是业务拒绝而不是输入格式错：范围本身合法，只是它
+	// 指的成员不在这份委托接受时固定的集合里。两者分开，接入层才能按 UC 的结果语义各给各的
+	// 回执——一个要客户改请求，一个要客户走关联新委托。
+	ErrParcelOutsideAcceptanceBaseline = errors.New("parcel shipment: parcel is outside the acceptance baseline")
 )
 
 type SourceDataVersionID struct{ requiredValue }
@@ -261,6 +265,11 @@ func (request ShipmentRequest) AmendCustomerSourceData(
 	}
 	if version.scope.shipmentRequestID != request.shipmentRequestID {
 		return ShipmentRequest{}, ErrInvalidSourceDataScope
+	}
+	// 指名成员的版本必须落在接受基线之内。不指名成员的委托级版本不受此限——寄件人一类资料
+	// 本就作用于整份委托，拿成员去卡它会把一份合法更正拒掉。
+	if parcelID, named := version.scope.DeclaredParcelID(); named && !request.baseline.covers(parcelID) {
+		return ShipmentRequest{}, ErrParcelOutsideAcceptanceBaseline
 	}
 
 	// 复制而不是就地 append：ShipmentRequest 按值传递，共用底层数组会让两条从同一份委托

@@ -202,6 +202,68 @@ func TestCustomerSourceDataVersionsAppendWithoutOverwritingBaselineOrPriorVersio
 	}
 }
 
+// Covers: CONTEXT「接受后不得以资料更正方式新增或删除委托成员」与 `AT-PS-023`「请求新增或删除
+// 已接受委托成员 → 拒绝普通资料更正，转取消、重组或关联新委托路径」— 接受基线自己就是成员集合
+// 的权威，指向基线外包裹的资料版本不需要任何已登记目录就能拒。放过去等于让客户拿一份「更正」
+// 往已接受委托里塞成员，而基线固定的正是那份成员集合。
+func TestACustomerSourceDataVersionCannotReachAParcelOutsideTheAcceptanceBaseline(t *testing.T) {
+	accepted, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	spec := amendmentSpec(t)
+	if spec.Scope, err = domain.NewParcelScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewDeclaredParcelID, "parcel-never-declared"),
+		mustValue(t, domain.NewSourceDataGroupReference, "GOODS_DESCRIPTION"),
+	); err != nil {
+		t.Fatalf("new parcel scoped source data: %v", err)
+	}
+	intruder, err := domain.FormCustomerSourceDataVersion(spec)
+	if err != nil {
+		t.Fatalf("form customer source data version: %v", err)
+	}
+
+	if _, err := accepted.AmendCustomerSourceData(intruder); !errors.Is(
+		err, domain.ErrParcelOutsideAcceptanceBaseline,
+	) {
+		t.Fatalf("error = %v, want ErrParcelOutsideAcceptanceBaseline", err)
+	}
+	if len(accepted.CustomerSourceDataVersions()) != 0 {
+		t.Fatal("a version naming an undeclared parcel was kept anyway")
+	}
+}
+
+// Covers: 同一条规则的另一侧 — 委托级资料范围不指名成员，因此不受成员基线约束。寄件人一类
+// 资料作用于整份委托，若也拿基线成员去卡，一份合法的委托级更正会因为它没指名包裹而被拒。
+func TestAShipmentScopedSourceDataVersionNeedsNoBaselineMember(t *testing.T) {
+	accepted, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	spec := amendmentSpec(t)
+	if spec.Scope, err = domain.NewShipmentScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewSourceDataGroupReference, "CONSIGNOR_CONTACT"),
+	); err != nil {
+		t.Fatalf("new shipment scoped source data: %v", err)
+	}
+	version, err := domain.FormCustomerSourceDataVersion(spec)
+	if err != nil {
+		t.Fatalf("form customer source data version: %v", err)
+	}
+
+	amended, err := accepted.AmendCustomerSourceData(version)
+	if err != nil {
+		t.Fatalf("amend with a shipment scoped version: %v", err)
+	}
+	if len(amended.CustomerSourceDataVersions()) != 1 {
+		t.Fatalf("versions kept = %d, want the shipment scoped version", len(amended.CustomerSourceDataVersions()))
+	}
+}
+
 // acceptedWithVersions 按给定的 (版本号, 基准) 依次追加资料版本。基准用版本号表达，空串表示
 // 以接受基线为准。
 func acceptedWithVersions(t *testing.T, chain ...[2]string) domain.ShipmentRequest {
