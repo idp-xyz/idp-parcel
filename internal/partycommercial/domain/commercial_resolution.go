@@ -146,6 +146,35 @@ func (outcome ResolutionOutcome) String() string {
 	}
 }
 
+// ResolutionReason is the stable cause behind an outcome that stopped short of
+// a usable basis. It is a closed set rather than free text so that pending and
+// stale results stay countable by cause instead of by message; values appear
+// together with the rule that produces them.
+//
+// A unique resolution has no reason, which is why the zero value means absent
+// rather than unknown.
+type ResolutionReason uint8
+
+const (
+	ResolutionReasonNone ResolutionReason = iota
+	AnchorPolicyNotConfigured
+	AuthorityUnreadable
+	CurrentResolutionChanged
+)
+
+func (reason ResolutionReason) String() string {
+	switch reason {
+	case AnchorPolicyNotConfigured:
+		return "ANCHOR_POLICY_NOT_CONFIGURED"
+	case AuthorityUnreadable:
+		return "AUTHORITY_UNREADABLE"
+	case CurrentResolutionChanged:
+		return "CURRENT_RESOLUTION_CHANGED"
+	default:
+		return ""
+	}
+}
+
 type Resolution struct {
 	outcome        ResolutionOutcome
 	resolutionID   ResolutionID
@@ -154,6 +183,7 @@ type Resolution struct {
 	adopted        CommercialVersion
 	hasAdopted     bool
 	viewRevision   AuthorityViewRevision
+	reason         ResolutionReason
 	continuation   ContinuationReference
 	candidateCount int
 }
@@ -188,6 +218,13 @@ func (resolution Resolution) ViewRevision() (AuthorityViewRevision, bool) {
 	return resolution.viewRevision, true
 }
 
+// Reason names why the resolution stopped short of a usable basis. It pairs
+// with ContinuationReference: the reason says what to fix, the reference says
+// which attempt to resume.
+func (resolution Resolution) Reason() ResolutionReason {
+	return resolution.reason
+}
+
 func (resolution Resolution) ContinuationReference() ContinuationReference {
 	return resolution.continuation
 }
@@ -204,10 +241,10 @@ func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Res
 	// instance parameter that may simply not be configured yet, and the one
 	// thing that must never happen is substituting a default instant for it.
 	if !key.Anchor.valid() {
-		return Resolution{outcome: ResolutionPending}
+		return pending(key, ResolutionID{}, AnchorPolicyNotConfigured, SelectionAnchor{})
 	}
 	if registry == nil {
-		return Resolution{outcome: ResolutionPending, anchor: key.Anchor}
+		return pending(key, ResolutionID{}, AuthorityUnreadable, key.Anchor)
 	}
 
 	candidates := registry.applicable(key)
@@ -249,7 +286,8 @@ func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Reso
 		stalled.outcome = ResolutionPending
 		stalled.adopted = CommercialVersion{}
 		stalled.hasAdopted = false
-		stalled.continuation = continuationFor(prior, "AUTHORITY_UNREADABLE")
+		stalled.reason = AuthorityUnreadable
+		stalled.continuation = continuationFor(prior.key, prior.resolutionID, AuthorityUnreadable)
 		return stalled
 	}
 
@@ -265,16 +303,40 @@ func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Reso
 		anchor:         prior.anchor,
 		viewRevision:   current.viewRevision,
 		candidateCount: current.candidateCount,
-		continuation:   continuationFor(prior, "CURRENT_RESOLUTION_CHANGED"),
+		reason:         CurrentResolutionChanged,
+		continuation:   continuationFor(prior.key, prior.resolutionID, CurrentResolutionChanged),
 	}
 	return stale
 }
 
-func continuationFor(prior Resolution, reason string) ContinuationReference {
+// pending builds the one shape every undecided answer takes. Routing all of them
+// through here is what stops a result's usefulness from depending on which path
+// produced it: before this existed, a pending from pre-decision validation was
+// continuable while a pending from the first resolution was not.
+func pending(
+	key ResolutionKey,
+	priorID ResolutionID,
+	reason ResolutionReason,
+	anchor SelectionAnchor,
+) Resolution {
+	return Resolution{
+		outcome:      ResolutionPending,
+		key:          key,
+		anchor:       anchor,
+		reason:       reason,
+		continuation: continuationFor(key, priorID, reason),
+	}
+}
+
+// continuationFor derives the reference a caller resumes a stalled decision
+// with. It is derived from the query, the prior identity and the cause, so the
+// same input stalled for the same cause is always offered the same reference —
+// which is what lets the caller query the original attempt instead of guessing.
+func continuationFor(key ResolutionKey, priorID ResolutionID, reason ResolutionReason) ContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		reason,
-		prior.key.fingerprint(),
-		prior.resolutionID.String(),
+		reason.String(),
+		key.fingerprint(),
+		priorID.String(),
 	}, "\x00")))
 	return ContinuationReference{requiredValue{value: "CONT-" + hex.EncodeToString(digest[:8])}}
 }
