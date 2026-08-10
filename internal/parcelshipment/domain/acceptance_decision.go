@@ -323,7 +323,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		request.decision = decision
 		request.decisionFormed = true
 		request.acceptanceTask.waitingOn = ResumePathInvalid
-		request.acceptanceTask.complete = true
+		request.acceptanceTask.state = AcceptanceTaskComplete
 		return request, nil
 	}
 
@@ -349,7 +349,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	request.decision = decision
 	request.decisionFormed = true
 	request.acceptanceTask.waitingOn = ResumePathInvalid
-	request.acceptanceTask.complete = true
+	request.acceptanceTask.state = AcceptanceTaskComplete
 	request.baseline = AcceptanceBaseline{
 		declaredParcelIDs: request.currentVersion.DeclaredParcelIDs(),
 		submissionVersion: request.currentVersion.versionID,
@@ -411,8 +411,13 @@ func (request ShipmentRequest) everyMemberJudged(judged map[DeclaredParcelID]str
 	return true
 }
 
+// AcceptanceDecision 交回本提交版本上的接受或拒绝决定。
+//
+// 在场与否看决定本身，而不是看 `decisionFormed`：那个标志守的是三方共用的决定边界，撤回成立
+// 时同样会被置上，但撤回不是接受也不是拒绝。拿它当在场判据，会让一份已撤回委托交回一个零值
+// 决定，读的人只能把它当成「既没接受也没拒绝的空决定」，而空决定最容易被当成没有障碍。
 func (request ShipmentRequest) AcceptanceDecision() (AcceptanceDecision, bool) {
-	return request.decision, request.decisionFormed
+	return request.decision, request.decision.decisionID.valid()
 }
 
 func (request ShipmentRequest) AcceptanceBaseline() (AcceptanceBaseline, bool) {

@@ -124,7 +124,7 @@ func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (Ship
 		activeRejection: rejection,
 	}
 	request.decisionFormed = true
-	request.acceptanceTask.complete = true
+	request.acceptanceTask.state = AcceptanceTaskComplete
 	return request, nil
 }
 

@@ -31,6 +31,7 @@ const (
 	ShipmentRequestSubmitted
 	ShipmentRequestAccepted
 	ShipmentRequestRejected
+	ShipmentRequestWithdrawn
 )
 
 func (state ShipmentRequestState) String() string {
@@ -41,6 +42,8 @@ func (state ShipmentRequestState) String() string {
 		return "ACCEPTED"
 	case ShipmentRequestRejected:
 		return "REJECTED"
+	case ShipmentRequestWithdrawn:
+		return "WITHDRAWN"
 	default:
 		return ""
 	}
@@ -80,8 +83,20 @@ type AcceptanceDecisionTask struct {
 	processingAttempts  []ProcessingAttempt
 	reviewCompletion    ManualReviewCompletion
 	waitingOn           ResumePath
-	complete            bool
+	state               AcceptanceTaskState
 }
+
+// AcceptanceTaskState 区分任务的两个终态。CONTEXT 把它们分开写：`已完成`只在接受或拒绝决定
+// 越过提交边界时到达，撤回成立时到达的是`已停止`——保留已执行阶段和结果，但不再形成决定。
+// 合成一个布尔会让「这份委托判完了」与「这份委托没人再判了」在事后分不开，而两者的后续动作
+// 完全不同：前者有决定可读，后者只有撤回记录和待续的补偿。
+type AcceptanceTaskState uint8
+
+const (
+	AcceptanceTaskRunning AcceptanceTaskState = iota
+	AcceptanceTaskComplete
+	AcceptanceTaskStopped
+)
 
 func (task AcceptanceDecisionTask) TaskID() AcceptanceDecisionTaskID {
 	return task.taskID
@@ -96,7 +111,17 @@ func (task AcceptanceDecisionTask) EstablishedAt() time.Time {
 }
 
 func (task AcceptanceDecisionTask) IsComplete() bool {
-	return task.complete
+	return task.state == AcceptanceTaskComplete
+}
+
+// IsStopped 说的是撤回让这份任务收了工，而不是它判完了。两者都不再接受续办，但只有已完成
+// 那一侧有决定可读。
+func (task AcceptanceDecisionTask) IsStopped() bool {
+	return task.state == AcceptanceTaskStopped
+}
+
+func (task AcceptanceDecisionTask) running() bool {
+	return task.state == AcceptanceTaskRunning
 }
 
 type SubmitShipmentRequestSpec struct {
@@ -113,6 +138,7 @@ type ShipmentRequest struct {
 	state             ShipmentRequestState
 	currentVersion    SubmissionVersion
 	acceptanceTask    AcceptanceDecisionTask
+	withdrawal        Withdrawal
 	submittedAt       time.Time
 	decision          AcceptanceDecision
 	decisionFormed    bool

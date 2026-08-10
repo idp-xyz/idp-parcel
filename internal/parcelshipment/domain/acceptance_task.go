@@ -104,7 +104,7 @@ func (request ShipmentRequest) CompleteManualReview(completion ManualReviewCompl
 	if !completion.done() || completion.completedAt.IsZero() {
 		return ShipmentRequest{}, ErrInvalidManualReviewCompletion
 	}
-	if request.acceptanceTask.complete {
+	if !request.acceptanceTask.running() {
 		return ShipmentRequest{}, ErrAcceptanceTaskComplete
 	}
 	if request.acceptanceTask.reviewCompletion.done() {
@@ -223,7 +223,9 @@ func (request ShipmentRequest) RecordProcessingAttempt(attempt ProcessingAttempt
 	if !attempt.valid() {
 		return ShipmentRequest{}, ErrInvalidProcessingAttempt
 	}
-	if request.acceptanceTask.complete {
+	// 已完成与已停止都不再接受追加：前者决定已经越过提交边界，后者撤回已经成立，两种情况
+	// 下继续累积记录都会让一份不再判断的委托看起来还在处理中。
+	if !request.acceptanceTask.running() {
 		return ShipmentRequest{}, ErrAcceptanceTaskComplete
 	}
 
