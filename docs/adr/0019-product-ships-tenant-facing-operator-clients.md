@@ -1,7 +1,8 @@
 # ADR-0019: 产品自带面向租户的作业与治理界面，跨租户运维后台不属于产品
 
-Status: Accepted  
-Date: 2026-08-10
+Status: Superseded by [ADR-0020](./0020-tenant-admin-client-in-product-workers-are-processes.md)  
+Date: 2026-08-10  
+Superseded: 2026-08-10
 
 ## Context
 
