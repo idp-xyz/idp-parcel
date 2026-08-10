@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -17,6 +18,17 @@ func reachabilityAsOf(t *testing.T) domain.JudgmentAsOf {
 		t.Fatalf("new declared asOf: %v", err)
 	}
 	return asOf
+}
+
+func pendingRoutingAllowed(t *testing.T) domain.PendingRoutingAllowance {
+	t.Helper()
+	allowance, err := domain.NewPendingRoutingAllowance(
+		mustValue(t, domain.NewPendingRoutingBasis, "PC-PENDING-ROUTING-1"),
+	)
+	if err != nil {
+		t.Fatalf("new pending routing allowance: %v", err)
+	}
+	return allowance
 }
 
 func reachabilityJudgment(t *testing.T, value domain.ReachabilityValue) domain.ReachabilityJudgment {
@@ -37,7 +49,10 @@ func reachabilityJudgment(t *testing.T, value domain.ReachabilityValue) domain.R
 // 的第三值形成`无法判定`。译成`未通过`会让一次缺资料变成确定性拒绝，而两者的续办路径和
 // 拒绝统计都不是一回事。
 func TestInsufficientEvidenceIsUndeterminedNotUnreachable(t *testing.T) {
-	check, err := domain.ReachabilityCheckFor(reachabilityJudgment(t, domain.ReachabilityInsufficientEvidence))
+	check, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityInsufficientEvidence),
+		domain.PendingRoutingAllowance{},
+	)
 	if err != nil {
 		t.Fatalf("reachability check: %v", err)
 	}
@@ -56,7 +71,10 @@ func TestInsufficientEvidenceIsUndeterminedNotUnreachable(t *testing.T) {
 // Covers: UC-PS-001 接受条件矩阵`标准网络可达性`「明确不可达时整份当前提交版本不能直接
 // 接受」— 可达通过、不可达失败，且失败必须携带结构化原因供拒绝按原因维度统计。
 func TestReachableAndUnreachableTranslateToPassAndFailure(t *testing.T) {
-	passed, err := domain.ReachabilityCheckFor(reachabilityJudgment(t, domain.ReachabilityReachable))
+	passed, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityReachable),
+		domain.PendingRoutingAllowance{},
+	)
 	if err != nil {
 		t.Fatalf("reachability check: %v", err)
 	}
@@ -64,7 +82,10 @@ func TestReachableAndUnreachableTranslateToPassAndFailure(t *testing.T) {
 		t.Fatalf("outcome = %q, want PASSED", passed.Outcome())
 	}
 
-	failed, err := domain.ReachabilityCheckFor(reachabilityJudgment(t, domain.ReachabilityUnreachable))
+	failed, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityUnreachable),
+		domain.PendingRoutingAllowance{},
+	)
 	if err != nil {
 		t.Fatalf("reachability check: %v", err)
 	}
@@ -80,13 +101,57 @@ func TestReachableAndUnreachableTranslateToPassAndFailure(t *testing.T) {
 // 指名它判断的那个成员，否则聚合分辨不出哪个成员被判断过。
 func TestAReachabilityCheckNamesTheParcelItJudged(t *testing.T) {
 	judgment := reachabilityJudgment(t, domain.ReachabilityReachable)
-	check, err := domain.ReachabilityCheckFor(judgment)
+	check, err := domain.ReachabilityCheckFor(judgment, domain.PendingRoutingAllowance{})
 	if err != nil {
 		t.Fatalf("reachability check: %v", err)
 	}
 
 	if check.DeclaredParcelID() != judgment.DeclaredParcelID() {
 		t.Fatalf("parcel = %q, want %q", check.DeclaredParcelID(), judgment.DeclaredParcelID())
+	}
+}
+
+// Covers: UC-PS-001「只有服务产品明确允许待路由并保留该商业依据时，才可以在没有可行候选
+// 的情况下接受」与 AT-PS-007 — `不可达`就是无可行候选（network-routing 的 ConcludeReachability
+// 在候选全部评估过、无一合格且无全局缺口时才给出它），所以待路由许可正是挂在这一值上。
+func TestPendingRoutingAllowancePassesAnUnreachableParcel(t *testing.T) {
+	check, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityUnreachable),
+		pendingRoutingAllowed(t),
+	)
+	if err != nil {
+		t.Fatalf("reachability check: %v", err)
+	}
+
+	if check.Outcome() != domain.CheckPassed {
+		t.Fatalf("outcome = %q; a product that allows pending routing was still blocked", check.Outcome())
+	}
+}
+
+// Covers: UC-PS-001 接受条件矩阵`标准网络可达性`「资料不足不得映射为不可达」— 待路由许可
+// 只赦免`不可达`，不赦免`资料不足`。前者是已经查明没有可行候选，后者是还不知道；拿许可
+// 盖住未知，等于在没有判断的情况下接受。
+func TestPendingRoutingAllowanceDoesNotRescueInsufficientEvidence(t *testing.T) {
+	check, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityInsufficientEvidence),
+		pendingRoutingAllowed(t),
+	)
+	if err != nil {
+		t.Fatalf("reachability check: %v", err)
+	}
+
+	if check.Outcome() != domain.CheckUndetermined {
+		t.Fatalf("outcome = %q; an allowance was used to accept an unjudged parcel", check.Outcome())
+	}
+}
+
+// Covers: UC-PS-001「并保留该商业依据」— 没有依据的待路由许可与一次默认放行分不开，因此
+// 构造期就不成立。
+func TestAPendingRoutingAllowanceWithoutABasisCannotBeBuilt(t *testing.T) {
+	if _, err := domain.NewPendingRoutingAllowance(domain.PendingRoutingBasis{}); !errors.Is(
+		err, domain.ErrInvalidPendingRoutingAllowance,
+	) {
+		t.Fatalf("error = %v, want ErrInvalidPendingRoutingAllowance", err)
 	}
 }
 

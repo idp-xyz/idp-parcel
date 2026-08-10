@@ -137,7 +137,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if err != nil {
 		return handler.undecided(command, RecordedJudgmentsUnavailable), nil
 	}
-	checks, err := assembleChecks(recorded)
+	checks, err := assembleChecks(recorded, basis.PendingRoutingAllowance())
 	if err != nil {
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("assemble acceptance checks: %w", err)
 	}
@@ -192,10 +192,13 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 //
 // 结果存在就一律记下，哪怕规则包没把本组列为适用：一次`业务限制`不该因为不在适用集合里就
 // 被丢掉——声明只能增加要求，减不掉失败。
-func assembleChecks(recorded ports.RecordedJudgments) ([]domain.AcceptanceCheck, error) {
+func assembleChecks(
+	recorded ports.RecordedJudgments,
+	pendingRouting domain.PendingRoutingAllowance,
+) ([]domain.AcceptanceCheck, error) {
 	checks := make([]domain.AcceptanceCheck, 0, len(recorded.Reachability)+1)
 	for _, judgment := range recorded.Reachability {
-		check, err := domain.ReachabilityCheckFor(judgment)
+		check, err := domain.ReachabilityCheckFor(judgment, pendingRouting)
 		if err != nil {
 			return nil, err
 		}

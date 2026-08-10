@@ -103,6 +103,7 @@ func basisWithApplicable(t *testing.T, applicable domain.ApplicableCheckGroups) 
 		nil,
 		applicable,
 		domain.ManualReviewNotRequiredByRules,
+		domain.PendingRoutingAllowance{},
 	)
 	if err != nil {
 		t.Fatalf("new commercial basis snapshot: %v", err)

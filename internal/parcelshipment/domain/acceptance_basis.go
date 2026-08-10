@@ -11,7 +11,41 @@ var (
 	ErrInvalidReachabilityJudgment    = errors.New("parcel shipment: invalid reachability judgment")
 	ErrInvalidFinancialControlResult  = errors.New("parcel shipment: invalid financial control result")
 	ErrInvalidApplicableCheckGroups   = errors.New("parcel shipment: invalid applicable check groups")
+	ErrInvalidPendingRoutingAllowance = errors.New("parcel shipment: invalid pending routing allowance")
 )
+
+// PendingRoutingBasis 是服务产品允许「无可行候选也可接受」所依据的商业事实。依据本身属
+// party-commercial，这里只记引用。
+type PendingRoutingBasis struct{ requiredValue }
+
+func NewPendingRoutingBasis(value string) (PendingRoutingBasis, error) {
+	required, err := newRequiredValue("pending routing basis", value)
+	return PendingRoutingBasis{required}, err
+}
+
+// PendingRoutingAllowance 是所采用服务产品对待路由的明确许可。零值是「未许可」。
+//
+// 许可必须携带依据：用例只在「服务产品明确允许待路由并保留该商业依据」时才准许在没有可行
+// 候选的情况下接受，没有依据的许可与一次默认放行分不开。依据随商业依据快照进入接受决定与
+// 预计承诺，因此「保留」由快照本身完成，不需要另建一条保存路径。
+type PendingRoutingAllowance struct {
+	basis PendingRoutingBasis
+}
+
+func NewPendingRoutingAllowance(basis PendingRoutingBasis) (PendingRoutingAllowance, error) {
+	if !basis.valid() {
+		return PendingRoutingAllowance{}, ErrInvalidPendingRoutingAllowance
+	}
+	return PendingRoutingAllowance{basis: basis}, nil
+}
+
+func (allowance PendingRoutingAllowance) Allowed() bool {
+	return allowance.basis.valid()
+}
+
+func (allowance PendingRoutingAllowance) Basis() PendingRoutingBasis {
+	return allowance.basis
+}
 
 // ApplicableCheckGroups 是所采用接单规则包为当前提交版本声明的适用校验组集合。
 //
@@ -179,12 +213,13 @@ type JudgmentAsOf = DeclaredAsOf
 // 标识、采用的接单规则包、解析当时的权威视图修订，以及该规则包声明的各项时点。它不
 // 持有任何商业版本内容，那些内容属 party-commercial。
 type CommercialBasisSnapshot struct {
-	resolutionID CommercialResolutionID
-	rulePackage  RulePackageReference
-	viewRevision CommercialViewRevision
-	declaredAsOf []DeclaredAsOf
-	applicable   ApplicableCheckGroups
-	manualReview ManualReviewPolicy
+	resolutionID   CommercialResolutionID
+	rulePackage    RulePackageReference
+	viewRevision   CommercialViewRevision
+	declaredAsOf   []DeclaredAsOf
+	applicable     ApplicableCheckGroups
+	manualReview   ManualReviewPolicy
+	pendingRouting PendingRoutingAllowance
 }
 
 func NewCommercialBasisSnapshot(
@@ -194,6 +229,7 @@ func NewCommercialBasisSnapshot(
 	declaredAsOf []DeclaredAsOf,
 	applicable ApplicableCheckGroups,
 	manualReview ManualReviewPolicy,
+	pendingRouting PendingRoutingAllowance,
 ) (CommercialBasisSnapshot, error) {
 	if !resolutionID.valid() || !rulePackage.valid() || !viewRevision.valid() {
 		return CommercialBasisSnapshot{}, ErrInvalidCommercialBasisSnapshot
@@ -209,13 +245,20 @@ func NewCommercialBasisSnapshot(
 		seen[declared.kind] = struct{}{}
 	}
 	return CommercialBasisSnapshot{
-		resolutionID: resolutionID,
-		rulePackage:  rulePackage,
-		viewRevision: viewRevision,
-		declaredAsOf: append([]DeclaredAsOf(nil), declaredAsOf...),
-		applicable:   applicable,
-		manualReview: manualReview,
+		resolutionID:   resolutionID,
+		rulePackage:    rulePackage,
+		viewRevision:   viewRevision,
+		declaredAsOf:   append([]DeclaredAsOf(nil), declaredAsOf...),
+		applicable:     applicable,
+		manualReview:   manualReview,
+		pendingRouting: pendingRouting,
 	}, nil
+}
+
+// PendingRoutingAllowance 返回所采用服务产品对待路由的许可。零值即未许可——`不可达`因此
+// 拒绝整份版本，方向落在拒绝一侧。
+func (snapshot CommercialBasisSnapshot) PendingRoutingAllowance() PendingRoutingAllowance {
+	return snapshot.pendingRouting
 }
 
 // ManualReviewPolicy 返回规则包对人工复核的声明。未声明时返回零值——编排据此保持未决，

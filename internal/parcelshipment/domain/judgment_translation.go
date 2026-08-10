@@ -9,20 +9,28 @@ package domain
 // `资料不足`译成`无法判定`而不是`未通过`：用例明禁把它映射为不可达。一次缺资料可以补齐
 // 后重判，而确定性失败会拒掉整份当前提交版本。
 //
-// 缺口：用例给`不可达`留了「允许待路由产品除外」这一条，本函数尚未实现它——服务产品的
-// 待路由许可及其商业依据还没有被 CommercialBasisSnapshot 表达。在那之前`不可达`一律译成
-// `未通过`，方向落在拒绝一侧而不是接受一侧，因此不构成默认放行。
-func ReachabilityCheckFor(judgment ReachabilityJudgment) (AcceptanceCheck, error) {
+// `不可达`在服务产品明确允许待路由时译成`通过`。这一条挂在`不可达`而不是别的取值上，是因为
+// network-routing 的 ConcludeReachability 只在候选全部评估过、无一合格且无全局缺口时才给出
+// 它——那正是用例说的「没有可行候选」。空候选空间在那边被拒绝为`未形成判断`，到不了这里。
+//
+// 许可赦免不了`资料不足`：那是还不知道有没有可行候选，拿许可盖住未知等于在没有判断的情况下
+// 接受。许可所依据的商业事实随快照进入接受决定，用例要求的「保留该商业依据」由此满足。
+func ReachabilityCheckFor(
+	judgment ReachabilityJudgment,
+	pendingRouting PendingRoutingAllowance,
+) (AcceptanceCheck, error) {
 	if !judgment.valid() {
 		return AcceptanceCheck{}, ErrInvalidReachabilityJudgment
 	}
 
 	var outcome CheckOutcome
 	var reasonValue string
-	switch judgment.Value() {
-	case ReachabilityReachable:
+	switch {
+	case judgment.Value() == ReachabilityReachable:
 		outcome = CheckPassed
-	case ReachabilityUnreachable:
+	case judgment.Value() == ReachabilityUnreachable && pendingRouting.Allowed():
+		outcome = CheckPassed
+	case judgment.Value() == ReachabilityUnreachable:
 		outcome, reasonValue = CheckFailed, "REACHABILITY_UNREACHABLE"
 	default:
 		outcome, reasonValue = CheckUndetermined, "REACHABILITY_INSUFFICIENT_EVIDENCE"
