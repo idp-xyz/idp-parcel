@@ -1,7 +1,5 @@
-// Package domain holds the network-routing model: service areas, network
-// topology, route candidates and the reachability findings other contexts
-// consume. It owns no customer address, product, contract, shipment decision or
-// fulfilment resource.
+// Package domain 承载网络与路由的领域模型：服务区域、网络拓扑、路由候选，以及供其他
+// 上下文消费的可达性判断。它不拥有客户地址、服务产品、客户合同、委托决定或履约资源。
 package domain
 
 import (
@@ -44,9 +42,8 @@ func NewCandidateID(value string) (CandidateID, error) {
 	return CandidateID{required}, err
 }
 
-// CandidateReason is the stable reason a candidate was eliminated or left
-// unknown. It is a reference rather than free text so that outcomes stay
-// countable by cause instead of by log string.
+// CandidateReason 是候选被淘汰或留作证据未知的稳定原因。它是引用而非自由文本，这样
+// 结果可以按原因维度统计，而不是退化成检索日志字符串。
 type CandidateReason struct{ requiredValue }
 
 func NewCandidateReason(value string) (CandidateReason, error) {
@@ -87,9 +84,8 @@ func (outcome CandidateOutcome) String() string {
 	}
 }
 
-// RouteCandidate is one possible path considered by a reachability assessment.
-// Anything other than a qualified outcome must carry its reason, because an
-// elimination without a recorded cause cannot support an unreachable finding.
+// RouteCandidate 是一次可达性评估中被考虑的一条可能路径。除合格外的结果都必须携带
+// 原因：没有记录淘汰依据的淘汰，支撑不起一个`不可达`判断。
 type RouteCandidate struct {
 	id      CandidateID
 	outcome CandidateOutcome
@@ -118,10 +114,8 @@ func (candidate RouteCandidate) Reason() CandidateReason {
 	return candidate.reason
 }
 
-// EvidenceGapScope separates a gap that only clouds particular candidates from
-// one that bears on the assessment as a whole. The distinction decides whether a
-// proven candidate still stands: a gap elsewhere cannot overturn it, a global
-// one can.
+// EvidenceGapScope 区分只影响特定候选的缺口与影响整次评估的缺口。这个区分决定一条
+// 已证明合格的候选是否仍然成立：别处的缺口推翻不了它，全局缺口可以。
 type EvidenceGapScope uint8
 
 const (
@@ -145,9 +139,8 @@ func (scope EvidenceGapScope) String() string {
 	}
 }
 
-// EvidenceGap names a missing or indeterminate piece of business evidence. It is
-// a business fact, not a technical failure: a dependency that could not be
-// called is the application's "no finding formed", never a gap recorded here.
+// EvidenceGap 指名一处缺失或无法确定的业务证据。它是业务事实而非技术故障：调不通的
+// 依赖属于应用层的`未形成判断`，绝不记成这里的一个缺口。
 type EvidenceGap struct {
 	reference EvidenceGapReference
 	scope     EvidenceGapScope
@@ -185,10 +178,8 @@ func (gap EvidenceGap) AffectedCandidates() []CandidateID {
 	return append([]CandidateID(nil), gap.affected...)
 }
 
-// ReachabilityValue is the three-valued domain finding this context owns. There
-// is deliberately no fourth value: "no finding formed" is an application
-// processing result, and letting it into this set would put a technical failure
-// into the same tally as a business judgement.
+// ReachabilityValue 是本上下文拥有的三值领域判断。刻意没有第四个取值：`未形成判断`
+// 是应用处理结果，放进这个集合等于把技术故障和业务判断计入同一套统计。
 type ReachabilityValue uint8
 
 const (
@@ -247,23 +238,18 @@ func (finding ReachabilityFinding) candidatesWith(outcome CandidateOutcome) []Ro
 	return matches
 }
 
-// EvidenceGaps is retained on every finding, not only on insufficient ones. A
-// reachable finding keeps the other candidates' gaps because the assessment must
-// stay reproducible, and a later reviewer needs to see what was still unknown
-// when the proven candidate carried the conclusion.
+// EvidenceGaps 在每种判断上都保留，不只在`资料不足`时。`可达`判断同样保留其他候选的
+// 缺口，因为判断必须可复算：复核者需要看到结论形成时还有什么是未知的。
 func (finding ReachabilityFinding) EvidenceGaps() []EvidenceGap {
 	return append([]EvidenceGap(nil), finding.gaps...)
 }
 
-// ConcludeReachability applies the evidence matrix to an evaluated candidate
-// space. It forms only the three-valued domain finding: it never decides
-// acceptance, never selects a route, and never reports a technical failure.
+// ConcludeReachability 把证据判定矩阵应用到一个已评估的候选空间。它只形成三值领域
+// 判断：不决定接受、不选择路线、也不报告技术故障。
 //
-// An empty candidate space is refused rather than answered. Zero candidates
-// cannot show whether nothing was generated because coverage excludes the
-// destination — which belongs in an eliminated candidate — or because generation
-// itself failed, which is the application's "no finding formed". Answering it
-// either way would invent one of those.
+// 空的候选空间被拒绝而不是给出结论。零个候选分不清是覆盖范围排除了目的地——那本该记成
+// 一个带淘汰依据的候选——还是候选生成本身失败，而后者属应用层的`未形成判断`。给出任何
+// 一种结论都是在凭空发明其中之一。
 func ConcludeReachability(candidates []RouteCandidate, gaps []EvidenceGap) (ReachabilityFinding, error) {
 	if len(candidates) == 0 {
 		return ReachabilityFinding{}, ErrCandidateSpaceNotEstablished
