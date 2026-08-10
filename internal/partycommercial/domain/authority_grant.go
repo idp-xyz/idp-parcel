@@ -11,9 +11,8 @@ var (
 	ErrNotAuthorized               = errors.New("party commercial: no effective grant authorizes this request")
 )
 
-// AuthorityLevel is a commercial permission level, not a personnel grade. It is
-// a versioned business grant: nothing about someone's title, org position or
-// technical account confers it, and no party role substitutes for it.
+// AuthorityLevel 是商业权限等级，不是人事职级。它是版本化的业务授权：职务名称、
+// 组织位置或技术账号都不会带来它，任何参与方角色也不能顶替它。
 type AuthorityLevel struct{ requiredValue }
 
 func NewAuthorityLevel(value string) (AuthorityLevel, error) {
@@ -35,9 +34,8 @@ func NewEvidenceReference(value string) (EvidenceReference, error) {
 	return EvidenceReference{required}, err
 }
 
-// AuthorizedAction is what a grant permits. Manual review and active rejection
-// are separate actions because a grant to review does not carry a grant to
-// refuse the business outright.
+// AuthorizedAction 是一份授权允许做的事。人工复核与主动拒绝是两个动作，因为获准
+// 复核并不等于获准直接拒掉这单业务。
 type AuthorizedAction uint8
 
 const (
@@ -61,8 +59,8 @@ func (action AuthorizedAction) String() string {
 	}
 }
 
-// AuthorityGrant is one versioned permission: which action, at which commercial
-// authority level, for which legal entity and scope, over which interval.
+// AuthorityGrant 是一条版本化授权：在哪个有效区间内，为哪个责任法人和适用范围、
+// 以哪个商业权限等级，允许哪个动作。
 type AuthorityGrant struct {
 	version     CommercialVersion
 	action      AuthorizedAction
@@ -120,9 +118,8 @@ func (grant AuthorityGrant) permits(request AuthorizationRequest) bool {
 		grant.effective.Contains(request.at)
 }
 
-// AuthorizationRequest asks to perform one action. It deliberately carries no
-// party role: a carrier agent or channel provider holding a relationship role
-// gains nothing here, because authority comes only from a versioned grant.
+// AuthorizationRequest 请求执行一个动作。它有意不携带参与方角色：承运商代理商或
+// 渠道服务方即便持有某种关系角色，在这里也一无所得——授权只来自版本化的授权规则。
 type AuthorizationRequest struct {
 	action      AuthorizedAction
 	legalEntity LegalEntityReference
@@ -133,9 +130,8 @@ type AuthorizationRequest struct {
 	at          time.Time
 }
 
-// NewAuthorizationRequest requires a structured reason and evidence for every
-// action. An active rejection without them could not be defended afterwards, and
-// free-text justification would make refusals uncountable by cause.
+// NewAuthorizationRequest 要求每个动作都带结构化原因和证据。缺了它们的主动拒绝
+// 事后无从辩护，而自由文本理由会让拒绝无法按原因统计。
 func NewAuthorizationRequest(
 	action AuthorizedAction,
 	legalEntity LegalEntityReference,
@@ -160,8 +156,7 @@ func NewAuthorizationRequest(
 	}, nil
 }
 
-// Authorization records that a specific grant permitted a specific request,
-// together with the reason and evidence the requester gave.
+// Authorization 记录某条具体授权允许了某个具体请求，连同请求方给出的原因和证据。
 type Authorization struct {
 	action   AuthorizedAction
 	grant    AuthorityGrant
@@ -190,9 +185,8 @@ func (authorization Authorization) At() time.Time {
 	return authorization.at
 }
 
-// Authorize looks for an effective grant permitting the request. Absence of a
-// grant is a refusal, never a pass: authority is granted explicitly or not at
-// all.
+// Authorize 寻找一条允许该请求的已生效授权。没有授权就是拒绝，绝不是放行：
+// 授权要么显式授予，要么就是没有。
 func Authorize(grants []AuthorityGrant, request AuthorizationRequest) (Authorization, error) {
 	for _, grant := range grants {
 		if grant.permits(request) {
@@ -208,9 +202,8 @@ func Authorize(grants []AuthorityGrant, request AuthorizationRequest) (Authoriza
 	return Authorization{}, ErrNotAuthorized
 }
 
-// ManualReviewRequirementFor answers whether a scope demands human review.
-// Silence means not required: the context states manual review is not a default
-// step, so an absent declaration must never be read as demanding one.
+// ManualReviewRequirementFor 回答某个范围是否要求人工复核。沉默意味着不要求：
+// 本上下文规定人工复核不是默认步骤，因此没有声明绝不能被读成需要复核。
 func ManualReviewRequirementFor(
 	grants []AuthorityGrant,
 	scope CommercialScopeReference,

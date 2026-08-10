@@ -20,9 +20,8 @@ func NewCounterpartyReference(value string) (CounterpartyReference, error) {
 	return CounterpartyReference{required}, err
 }
 
-// ChargeScopeReference names the service or charge range a settlement method
-// applies to. It is what lets one customer run prepaid and terms business at the
-// same time without either borrowing the other's arrangement.
+// ChargeScopeReference 标明一种结算方式适用的服务或费用范围。正是它让同一货主
+// 可以同时存在预付与账期业务，而两者互不借用对方的约定。
 type ChargeScopeReference struct{ requiredValue }
 
 func NewChargeScopeReference(value string) (ChargeScopeReference, error) {
@@ -37,9 +36,8 @@ func NewCurrencyCode(value string) (CurrencyCode, error) {
 	return CurrencyCode{required}, err
 }
 
-// SettlementMethod is closed at two values on purpose. A third — a customer-level
-// default — is exactly what the context forbids: an unmatched scope must report
-// no applicable basis rather than fall back to a house style.
+// SettlementMethod 有意只封闭在两个取值。第三个取值——客户级默认值——正是本上下文
+// 禁止的：未命中的范围必须报出`无适用依据`，而不是回落到某种通行做法。
 type SettlementMethod uint8
 
 const (
@@ -63,10 +61,9 @@ func (method SettlementMethod) String() string {
 	}
 }
 
-// SettlementApplicability is the six-dimension range a settlement method covers.
-// All six are part of it because the context forbids collecting across legal
-// entity, counterparty, direction or currency through a broad customer
-// relationship: a policy answers only for the exact range it names.
+// SettlementApplicability 是一种结算方式覆盖的六个维度。六个都在其中，是因为本
+// 上下文禁止借宽泛的客户关系跨责任法人、相对方、收付方向或币种自动归集：一份政策
+// 只回答它自己指名的那个精确范围。
 type SettlementApplicability struct {
 	legalEntity  LegalEntityReference
 	counterparty CounterpartyReference
@@ -107,9 +104,8 @@ func (applicability SettlementApplicability) covers(query SettlementQuery) bool 
 		applicability.effective.Contains(query.at)
 }
 
-// SettlementPolicy is the content of one settlement policy version: which method
-// applies, over which range. The version carries the release invariants; this
-// type carries what the release says.
+// SettlementPolicy 是一个结算政策版本的正文：在哪个范围内适用哪种结算方式。
+// 版本承载发布相关的不变量，本类型承载这次发布说了什么。
 type SettlementPolicy struct {
 	version       CommercialVersion
 	method        SettlementMethod
@@ -141,9 +137,8 @@ func (policy SettlementPolicy) Applicability() SettlementApplicability {
 	return policy.applicability
 }
 
-// SettlementQuery is the exact range a caller needs a method for. It carries the
-// instant as well, because a policy that has left its effective interval no
-// longer answers.
+// SettlementQuery 是调用方需要结算方式的那个精确范围。它同时带上时点，因为已经
+// 离开有效区间的政策不再作答。
 type SettlementQuery struct {
 	legalEntity  LegalEntityReference
 	counterparty CounterpartyReference
@@ -175,14 +170,12 @@ func NewSettlementQuery(
 	}, nil
 }
 
-// ResolveSettlementPolicy answers which method covers one exact range.
+// ResolveSettlementPolicy 回答一个精确范围由哪种结算方式覆盖。
 //
-// Two policies covering the same range conflict even when they agree, but the
-// case the context names is the dangerous one: prepaid and terms both hitting a
-// single charge scope. Picking either would silently decide whether the customer
-// pays up front, so the overlap is reported for the commercial owner to correct.
-// Nothing matching is likewise reported rather than defaulted — a customer-level
-// fallback is exactly what must not fill the gap.
+// 两条政策覆盖同一范围即形成`适用冲突`，即使它们结论一致；本上下文点名的是危险的
+// 那种：预付与账期同时命中一个费用范围。任选其一等于静默替客户决定要不要先付钱，
+// 所以重叠如实报出，交由商业依据的所有方去更正。零候选同样报出而不取默认——
+// 客户级兜底正是不许用来填这个缺口的东西。
 func ResolveSettlementPolicy(policies []SettlementPolicy, query SettlementQuery) (SettlementPolicy, error) {
 	matches := make([]SettlementPolicy, 0, 2)
 	for _, policy := range policies {

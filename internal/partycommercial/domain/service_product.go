@@ -10,9 +10,8 @@ var (
 	ErrInvalidProductChannelMapping = errors.New("party commercial: invalid product channel mapping")
 )
 
-// ChannelProductReference points at a service offered by a channel provider —
-// a carrier's own channel, an agent, a reseller or an aggregator. It is neither
-// the operator's own service product nor the actual carrier of any shipment.
+// ChannelProductReference 指向渠道服务方提供的服务——承运商直营渠道、承运商代理商、
+// 转售商或聚合平台。它既不是运营企业自己的服务产品，也不是任何一次运输的实际承运商。
 type ChannelProductReference struct{ requiredValue }
 
 func NewChannelProductReference(value string) (ChannelProductReference, error) {
@@ -20,13 +19,11 @@ func NewChannelProductReference(value string) (ChannelProductReference, error) {
 	return ChannelProductReference{required}, err
 }
 
-// ServiceProductForm is a facet of a service product, not a separate catalogue:
-// a network product is a service product organised over the operator's own
-// network, and the context forbids building a third product catalogue beside it.
+// ServiceProductForm 是服务产品的一种服务形态，不是另一套目录：网络服务产品就是
+// 由运营企业自己的网络履约的服务产品，本上下文禁止在它旁边再建第三套产品目录。
 //
-// The standalone label-channel form is a long-term product form that `PAR-COM-12`
-// declares inapplicable for the first release, so it is deliberately absent
-// here rather than present and unimplemented.
+// 独立面单渠道服务是长期产品形态，`PAR-COM-12` 明确它对首发不适用，所以这里有意
+// 不列出它，而不是列出来却不实现。
 type ServiceProductForm uint8
 
 const (
@@ -69,11 +66,9 @@ func (product ServiceProduct) Form() ServiceProductForm {
 	return product.form
 }
 
-// ProductChannelMapping is the versioned commercial relation between a service
-// product version and the channel products usable for it. It defines a candidate
-// range and nothing more: which channel a given transaction actually uses is
-// recorded by the context that owns that transaction, so this type offers no
-// selection, preference, default or lock.
+// ProductChannelMapping 是服务产品版本与其可用渠道产品之间的版本化商业关系。它只
+// 定义候选范围，别无其他：某次交易实际用了哪个渠道，由拥有该交易的上下文记录，
+// 所以本类型不提供选择、优先级、默认值或锁定。
 type ProductChannelMapping struct {
 	product   ServiceProduct
 	channels  []ChannelProductReference
@@ -85,8 +80,8 @@ func NewProductChannelMapping(
 	channels []ChannelProductReference,
 	effective EffectiveInterval,
 ) (ProductChannelMapping, error) {
-	// A zero ServiceProduct has no valid form, so this rejects a mapping built
-	// against a product that never went through NewServiceProduct.
+	// 零值 ServiceProduct 的服务形态不合法，这一条因此挡住了基于未经 NewServiceProduct
+	// 构造的产品建立的映射。
 	if !product.form.valid() || len(channels) == 0 || !effective.valid() {
 		return ProductChannelMapping{}, ErrInvalidProductChannelMapping
 	}
@@ -111,9 +106,8 @@ func (mapping ProductChannelMapping) Product() ServiceProduct {
 	return mapping.product
 }
 
-// ChannelProducts is the mapping's full historical reference set. It stays
-// intact after expiry: an expired mapping stops offering candidates for new
-// selections but remains the basis existing shipments and transactions cite.
+// ChannelProducts 是该映射完整的历史引用集合。到期后它原样保留：过期映射不再为新的
+// 渠道选择提供候选，但仍是既有委托和交易所引用的依据。
 func (mapping ProductChannelMapping) ChannelProducts() []ChannelProductReference {
 	return append([]ChannelProductReference(nil), mapping.channels...)
 }
@@ -122,9 +116,8 @@ func (mapping ProductChannelMapping) Effective() EffectiveInterval {
 	return mapping.effective
 }
 
-// CandidatesAt lists the channels available for a new selection at an instant.
-// Outside the effective interval it lists none, which is how expiry excludes a
-// channel from new decisions without erasing what it once supported.
+// CandidatesAt 列出某个时点上可用于新选择的渠道。落在有效期之外时一个都不列——
+// 到期正是这样把渠道排除在新决定之外，同时不抹掉它当初支撑过的东西。
 func (mapping ProductChannelMapping) CandidatesAt(at time.Time) []ChannelProductReference {
 	if !mapping.effective.Contains(at) {
 		return nil
@@ -132,10 +125,8 @@ func (mapping ProductChannelMapping) CandidatesAt(at time.Time) []ChannelProduct
 	return mapping.ChannelProducts()
 }
 
-// CandidatesAllowedBy applies a customer's channel constraint. The constraint
-// only narrows: a channel the customer names but the mapping does not offer
-// never becomes a candidate, because the operator may choose only inside the
-// commercially available range.
+// CandidatesAllowedBy 施加客户的渠道约束。约束只做收窄：客户点名但映射并未提供的
+// 渠道不会因此成为候选，因为运营企业只能在商业上可用的范围内选择。
 func (mapping ProductChannelMapping) CandidatesAllowedBy(
 	allowed []ChannelProductReference,
 	at time.Time,

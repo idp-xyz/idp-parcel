@@ -12,10 +12,9 @@ var (
 	ErrPricePolicyConflict     = errors.New("party commercial: one direction and scope is covered by several price policies")
 )
 
-// PricingPlanReference points at an executable pricing plan version owned by
-// parcel-pricing. It is a reference and stays one: rate cards, rate tables and
-// charge-dependency execution belong to that context, so nothing here can
-// evaluate a price.
+// PricingPlanReference 指向 parcel-pricing 拥有的可执行定价方案版本。
+// 它只是一个引用并且始终只是引用：价卡、费率表和费用依赖计算都属于那个上下文，
+// 本上下文内不执行任何计价。
 type PricingPlanReference struct{ requiredValue }
 
 func NewPricingPlanReference(value string) (PricingPlanReference, error) {
@@ -23,14 +22,11 @@ func NewPricingPlanReference(value string) (PricingPlanReference, error) {
 	return PricingPlanReference{required}, err
 }
 
-// CommercialPricePolicy is the content of one price rule version: which price
-// direction it authorises, which executable pricing plan it binds, over which
-// scope and interval.
+// CommercialPricePolicy 是一个价格规则版本的正文：它授权哪个价格方向、绑定哪个
+// 可执行定价方案，以及适用的计价范围与有效区间。
 //
-// A bare price-rule version cannot be used to price anything, because the
-// direction and the plan binding live here rather than on the version. That is
-// deliberate: it means a generic resolution that returns only a version has not
-// produced a usable pricing basis, and the direction cannot be skipped.
+// 光有价格规则版本无法计价，因为价格方向与定价方案绑定放在这里而不在版本上。
+// 这是有意的：只返回版本的通用解析并没有产出可用的定价依据，价格方向也就跳不过去。
 type CommercialPricePolicy struct {
 	version   CommercialVersion
 	direction PriceDirection
@@ -99,13 +95,12 @@ func NewPricePolicyQuery(
 	return PricePolicyQuery{direction: direction, scope: scope, at: at.UTC()}, nil
 }
 
-// ResolveCommercialPricePolicy selects the single policy covering one direction
-// and scope. Direction is part of the match, so a BUY policy never answers a
-// SELL request and a direction with no policy of its own gets none.
+// ResolveCommercialPricePolicy 在一个价格方向与计价范围内选出唯一适用的政策。
+// 价格方向参与匹配，因此 BUY 政策永远不会回答 SELL 的请求，某个方向没有自己的
+// 政策就是没有。
 //
-// Nothing matching and several matching are both reported rather than resolved:
-// the context forbids falling back to a default price, and picking one of two
-// overlapping policies would be doing exactly that under another name.
+// 零候选与多候选都如实报出而不就地裁决：本上下文禁止回落到默认价，而在两条重叠
+// 政策里挑一条，正是换个名义做同一件事。
 func ResolveCommercialPricePolicy(
 	policies []CommercialPricePolicy,
 	query PricePolicyQuery,

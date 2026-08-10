@@ -8,11 +8,9 @@ var (
 	ErrConflictingFinancialControlBinding = errors.New("party commercial: one charge scope is both applied and inapplicable")
 )
 
-// InapplicabilityBasis is why a charge scope carries no pre-acceptance financial
-// control. The context requires an explicit basis rather than an omission,
-// because settlement-accounting is forbidden from inventing "no control" on its
-// own — a zero-amount freeze may not stand in for this answer, so this answer has
-// to exist.
+// InapplicabilityBasis 是某个费用范围不带接受前财务控制的原因。本上下文要求显式
+// 记录不适用依据而不是留空，因为 settlement-accounting 不得自行发明「无控制」——
+// 零金额冻结不能顶替这个答复，所以这个答复必须存在。
 type InapplicabilityBasis struct{ requiredValue }
 
 func NewInapplicabilityBasis(value string) (InapplicabilityBasis, error) {
@@ -20,10 +18,8 @@ func NewInapplicabilityBasis(value string) (InapplicabilityBasis, error) {
 	return InapplicabilityBasis{required}, err
 }
 
-// FinancialControlBinding says what a contract arranges for one charge scope:
-// either a named policy applies, or control is explicitly inapplicable with a
-// recorded basis. Its zero value is neither, which is what keeps an unbound
-// scope from reading as permission.
+// FinancialControlBinding 表达合同对一个费用范围的约定：要么适用一份指名的策略，
+// 要么显式不适用并记录依据。它的零值两者都不是，未绑定的范围因此读不成「允许通过」。
 type FinancialControlBinding struct {
 	scope    ChargeScopeReference
 	policy   CommercialObjectID
@@ -68,19 +64,17 @@ func (binding FinancialControlBinding) InapplicabilityBasis() InapplicabilityBas
 	return binding.basis
 }
 
-// CustomerContract is the content of one customer contract version: which
-// acceptance rule package governs it, and what it arranges for financial control
-// per charge scope.
+// CustomerContract 是一个客户合同版本的正文：它引用哪个接单规则包，以及它按费用
+// 范围对财务控制作了什么约定。
 type CustomerContract struct {
 	version     CommercialVersion
 	rulePackage CommercialObjectID
 	bindings    map[ChargeScopeReference]FinancialControlBinding
 }
 
-// NewCustomerContract requires the rule package reference up front. A contract
-// missing it could not be used to accept anything, and discovering that during
-// an acceptance decision would be discovering it too late; the context states
-// that a missing rule or policy must never be read as permission to accept.
+// NewCustomerContract 要求在构造时就给出接单规则包引用。缺了它的合同不能用于接受
+// 任何委托，而等到形成接受判断时才发现已经太晚；本上下文规定：规则或策略缺失不得
+// 被解释为允许接受。
 func NewCustomerContract(
 	version CommercialVersion,
 	rulePackage CommercialObjectID,
@@ -97,8 +91,8 @@ func NewCustomerContract(
 		if !binding.declared || !binding.scope.valid() {
 			return CustomerContract{}, ErrInvalidFinancialControlBinding
 		}
-		// A scope arranged both ways would make both readings defensible, and one
-		// of them permits acceptance without control.
+		// 同一范围被两种方式各约定一次，会让两种读法都说得通，而其中一种允许在
+		// 没有控制结果的情况下接受。
 		if _, exists := declared[binding.scope]; exists {
 			return CustomerContract{}, ErrConflictingFinancialControlBinding
 		}
@@ -115,10 +109,9 @@ func (contract CustomerContract) AcceptanceRulePackage() CommercialObjectID {
 	return contract.rulePackage
 }
 
-// FinancialControlFor reports what the contract arranges for a scope. An unbound
-// scope answers absent rather than inapplicable: "the contract says nothing" and
-// "the contract says no control applies" are different facts, and only the
-// second one permits proceeding without a control result.
+// FinancialControlFor 报出合同对某个范围的约定。未绑定的范围答「不存在」而不是
+// 「不适用」：「合同没说」与「合同说了此处无控制」是两个不同的事实，只有后者
+// 允许在没有控制结果的情况下继续。
 func (contract CustomerContract) FinancialControlFor(scope ChargeScopeReference) (FinancialControlBinding, bool) {
 	binding, found := contract.bindings[scope]
 	return binding, found

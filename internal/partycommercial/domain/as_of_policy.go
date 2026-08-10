@@ -12,10 +12,9 @@ var (
 	ErrInvalidAsOfValue        = errors.New("party commercial: invalid as-of value")
 )
 
-// AsOfSemanticsReference names which business instant a judgment is anchored
-// to. It stays an opaque reference: the actual semantics belong to the versioned
-// pilot policy registered as `PAR-COM-14`, so this context carries the reference
-// without interpreting it and without offering a set of values to choose from.
+// AsOfSemanticsReference 标明一项判断锚定到哪个业务时点。它保持为不透明引用：
+// 真正的语义属于登记为 `PAR-COM-14` 的版本化试点政策，本上下文只携带引用，
+// 既不解释它，也不提供一组取值供人挑选。
 type AsOfSemanticsReference struct{ requiredValue }
 
 func NewAsOfSemanticsReference(value string) (AsOfSemanticsReference, error) {
@@ -30,9 +29,8 @@ func NewAsOfPolicyVersion(value string) (AsOfPolicyVersion, error) {
 	return AsOfPolicyVersion{required}, err
 }
 
-// JudgmentType is the closed set of downstream judgments a rule package
-// currently declares an anchor for. Values are added together with the rules
-// that produce them, so this set grows only as those judgments are implemented.
+// JudgmentType 是规则包当前会为其声明时点锚的下游判断的封闭集合。取值随产生该
+// 判断的规则一并加入，因此这个集合只在那些判断被实现时才增长。
 type JudgmentType uint8
 
 const (
@@ -56,10 +54,9 @@ func (judgment JudgmentType) String() string {
 	}
 }
 
-// AsOfPolicy is what a rule package declares for one judgment: which instant
-// semantics apply, and under which version of the policy that says so. It never
-// carries the instant itself — choosing the value is the consumer's, per
-// judgment, which is what keeps one global time from standing in for all.
+// AsOfPolicy 是规则包针对一项判断所声明的内容：适用哪种时点语义，以及依据该政策
+// 的哪个版本。它从不携带时点值本身——取值由消费方逐项形成，正是这一点让一个全局
+// 时间无法替代所有下游判断时点。
 type AsOfPolicy struct {
 	judgment      JudgmentType
 	semantics     AsOfSemanticsReference
@@ -89,17 +86,16 @@ func (policy AsOfPolicy) PolicyVersion() AsOfPolicyVersion {
 	return policy.policyVersion
 }
 
-// AsOfDeclaration is phase two's input: the per-judgment anchors declared by the
-// rule package phase one uniquely selected.
+// AsOfDeclaration 是第二阶段的输入：由第一阶段唯一选出的规则包，为各类判断声明的
+// 时点锚。
 type AsOfDeclaration struct {
 	rulePackage CommercialVersion
 	policies    map[JudgmentType]AsOfPolicy
 }
 
-// DeclareAsOfPolicies binds per-judgment anchors to a rule package. The package
-// must be an acceptance rule package that is currently usable: a draft has not
-// been released, and one that expired, retired or was superseded no longer
-// governs new judgments.
+// DeclareAsOfPolicies 把各类判断的时点锚绑定到一个规则包上。该包必须是当前可用的
+// 接单规则包：`草稿` 尚未发布，而 `已到期`、`已退役` 或 `已替代` 的版本不再用于
+// 新的判断。
 func DeclareAsOfPolicies(rulePackage CommercialVersion, policies []AsOfPolicy) (AsOfDeclaration, error) {
 	if rulePackage.kind != AcceptanceRulePackageObject ||
 		rulePackage.status != CommercialVersionEffective {
@@ -131,9 +127,8 @@ func (declaration AsOfDeclaration) PolicyFor(judgment JudgmentType) (AsOfPolicy,
 	return policy, found
 }
 
-// JudgmentAsOf is one formed anchor: the instant the consumer chose, together
-// with the policy that authorised choosing it, so the authority provider can
-// verify and echo both.
+// JudgmentAsOf 是一个已形成的时点锚：消费方选定的时点，连同授权这次选择的政策，
+// 以便权威提供方对两者校验回显。
 type JudgmentAsOf struct {
 	judgment JudgmentType
 	at       time.Time
@@ -152,9 +147,8 @@ func (asOf JudgmentAsOf) Policy() AsOfPolicy {
 	return asOf.policy
 }
 
-// FormAsOf produces one judgment's anchor. An undeclared judgment fails rather
-// than borrowing another judgment's policy, and a zero instant fails rather
-// than being read as "now".
+// FormAsOf 形成一项判断的时点锚。未声明的判断直接失败，而不去借用另一项判断的
+// 政策；零值时点也直接失败，而不被读成「此刻」。
 func (declaration AsOfDeclaration) FormAsOf(judgment JudgmentType, at time.Time) (JudgmentAsOf, error) {
 	policy, found := declaration.policies[judgment]
 	if !found {

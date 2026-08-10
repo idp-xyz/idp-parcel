@@ -26,9 +26,8 @@ func NewPartyName(value string) (PartyName, error) {
 	return PartyName{required}, err
 }
 
-// RelationshipBasisReference points at what a relationship rests on, and at what
-// ends it. A relationship without a recorded basis could not later be defended,
-// and a revocation without one could not be distinguished from data loss.
+// RelationshipBasisReference 指向一段关系成立所依据的东西，以及终止它所依据的东西。
+// 没有记录依据的关系事后无从辩护，而没有依据的撤销与数据丢失无从区分。
 type RelationshipBasisReference struct{ requiredValue }
 
 func NewRelationshipBasisReference(value string) (RelationshipBasisReference, error) {
@@ -36,10 +35,9 @@ func NewRelationshipBasisReference(value string) (RelationshipBasisReference, er
 	return RelationshipBasisReference{required}, err
 }
 
-// BusinessParty is a stable identity and nothing more. It deliberately carries
-// no role, type or category: a party is a shipper in one relationship and a
-// supplier in another, so classifying it here would make one transaction's role
-// permanent. Identity is the ID; two parties sharing a name remain two parties.
+// BusinessParty 只是一个稳定身份，别无其他。它有意不携带角色、类型或分类：同一
+// 参与方在一段关系里是货主、在另一段里是供应商，在这里给它分类等于把一次交易的
+// 角色变成永久属性。身份就是 ID；同名的两个参与方仍然是两个参与方。
 type BusinessParty struct {
 	id   PartyID
 	name PartyName
@@ -60,8 +58,7 @@ func (party BusinessParty) Name() PartyName {
 	return party.name
 }
 
-// PartyRole is the role one party holds toward another inside a relationship.
-// Values grow with the relationships actually modelled.
+// PartyRole 是一段关系中某个参与方对另一方所持的角色。取值随实际建模的关系增长。
 type PartyRole uint8
 
 const (
@@ -94,10 +91,9 @@ func (role PartyRole) String() string {
 	}
 }
 
-// RelationshipStatus follows the context lifecycle. A relationship is a temporal
-// fact: ending one stops it supporting new decisions from its boundary onward
-// and never deletes it, because existing contracts and snapshots still refer to
-// what was true when they were formed.
+// RelationshipStatus 遵循本上下文的参与方关系生命周期。关系是时态事实：终止一段
+// 关系只是自其生效边界起不再支持新的商业决定，绝不删除它——既有合同和快照仍然引用
+// 它们形成当时为真的事实。
 type RelationshipStatus uint8
 
 const (
@@ -126,10 +122,9 @@ func (status RelationshipStatus) String() string {
 	}
 }
 
-// PartyRelationshipSpec carries everything the context requires a relationship
-// to record: both parties, the role, its direction, the applicable scope, the
-// basis and the effective interval. Direction is expressed by which party holds
-// the role toward which, rather than by a separate flag.
+// PartyRelationshipSpec 携带本上下文要求一段关系必须保存的全部内容：双方、角色、
+// 方向、适用范围、依据和有效区间。方向由「哪一方对哪一方持有该角色」表达，
+// 而不是另设一个标志位。
 type PartyRelationshipSpec struct {
 	Holder       PartyID
 	Counterparty PartyID
@@ -170,8 +165,8 @@ func NewCandidateRelationship(spec PartyRelationshipSpec) (PartyRelationship, er
 	}, nil
 }
 
-// Approve moves a complete candidate into effect. Until then the relationship
-// supports no decision: a candidate is a proposal, not a commercial fact.
+// Approve 把一个完整的候选关系推入`已生效`。在此之前该关系不支持任何决定：
+// 候选关系是提议，不是商业事实。
 func (relationship PartyRelationship) Approve(approval ApprovalReference, approvedAt time.Time) (PartyRelationship, error) {
 	if relationship.status != RelationshipCandidate || !approval.valid() || approvedAt.IsZero() {
 		return PartyRelationship{}, ErrInvalidRelationshipTransition
@@ -190,8 +185,8 @@ func (relationship PartyRelationship) Expire(at time.Time) (PartyRelationship, e
 	return relationship.end(RelationshipExpired, at, RelationshipBasisReference{}), nil
 }
 
-// Revoke ends a relationship by explicit decision and records what that decision
-// rested on, so a revocation is never indistinguishable from a missing record.
+// Revoke 以显式决定终止一段关系，并记录该决定依据什么，因此撤销永远不会与
+// 「记录缺失」混为一谈。
 func (relationship PartyRelationship) Revoke(basis RelationshipBasisReference, at time.Time) (PartyRelationship, error) {
 	if relationship.status != RelationshipEffective || !basis.valid() || at.IsZero() {
 		return PartyRelationship{}, ErrInvalidRelationshipTransition
@@ -199,8 +194,8 @@ func (relationship PartyRelationship) Revoke(basis RelationshipBasisReference, a
 	return relationship.end(RelationshipRevoked, at, basis), nil
 }
 
-// SupersededBy ends a relationship in favour of a replacement holder. Content,
-// role or scope changing forms a new relationship rather than editing this one.
+// SupersededBy 以一个接替的持有方终止本关系。关系内容、角色或范围发生变化时形成
+// 新的关系版本，而不是就地改写这一条。
 func (relationship PartyRelationship) SupersededBy(successor PartyID, at time.Time) (PartyRelationship, error) {
 	if relationship.status != RelationshipEffective || !successor.valid() || at.IsZero() {
 		return PartyRelationship{}, ErrInvalidRelationshipTransition
@@ -221,9 +216,8 @@ func (relationship PartyRelationship) end(
 	return relationship
 }
 
-// AppliesAt answers whether this relationship may support a new commercial
-// decision. Only an effective one inside its interval can; an ended one stays
-// readable as the history other snapshots reference.
+// AppliesAt 回答本关系能否支撑一个新的商业决定。只有落在有效区间内的`已生效`关系
+// 可以；已终止的关系仍可读出，作为其他快照引用的历史。
 func (relationship PartyRelationship) AppliesAt(at time.Time) bool {
 	return relationship.status == RelationshipEffective && relationship.effective.Contains(at)
 }
@@ -277,9 +271,8 @@ func (relationship PartyRelationship) Successor() (PartyID, bool) {
 	return relationship.successor, true
 }
 
-// CustomerAccount is the isolation boundary for one shipper customer. It must
-// name the customer party it belongs to: account, party, legal entity and
-// contract identifiers are distinct and none may stand in for another.
+// CustomerAccount 是一个货主客户的业务隔离边界。它必须指明所属的客户参与方：
+// 账户、参与方、法人和合同标识各自不同，任何一个都不能替代另一个。
 type CustomerAccount struct {
 	id            CustomerAccountID
 	customerParty PartyID

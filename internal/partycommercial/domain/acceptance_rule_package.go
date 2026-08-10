@@ -8,10 +8,9 @@ var (
 	ErrInvalidAcceptanceRulePackage    = errors.New("party commercial: invalid acceptance rule package")
 )
 
-// RuleReference points at a rule owned by whichever context enforces it. It is
-// only a reference: the rule's content, thresholds and values stay with that
-// owner, so assembling a package can never amount to choosing a judgement value
-// for a specific shipment.
+// RuleReference 指向一条规则，其所有权属于执行该规则的那个上下文。它只是引用：
+// 规则正文、阈值和取值都留在权威方那里，所以装配规则包永远不等于替某个具体委托
+// 选择判断值。
 type RuleReference struct{ requiredValue }
 
 func NewRuleReference(value string) (RuleReference, error) {
@@ -19,10 +18,8 @@ func NewRuleReference(value string) (RuleReference, error) {
 	return RuleReference{required}, err
 }
 
-// RuleCategory is the closed set of partitions the context requires a package to
-// distinguish. Regulatory source documents are a document requirement only:
-// the formal customs determination stays with customs-compliance and must not be
-// pulled forward into a commercial object.
+// RuleCategory 是本上下文要求规则包必须区分的封闭分区集合。监管原始资料只是资料
+// 要求：正式关务判断留在 customs-compliance，不得前移到商业对象里。
 type RuleCategory uint8
 
 const (
@@ -55,10 +52,8 @@ func (category RuleCategory) String() string {
 	}
 }
 
-// AssembledRule is one rule reference filed under one category. It holds a
-// category and a reference and nothing else — there is structurally nowhere to
-// put a threshold or a value, which is how "assembles references, never chooses
-// values" stays true rather than merely intended.
+// AssembledRule 是归入某一分类的一条规则引用。它只持有分类和引用，别无他物——
+// 结构上就没有地方放阈值或取值，「只装配引用、绝不选择取值」因此是事实而不只是意图。
 type AssembledRule struct {
 	category  RuleCategory
 	reference RuleReference
@@ -79,9 +74,8 @@ func (rule AssembledRule) Reference() RuleReference {
 	return rule.reference
 }
 
-// RulePackageApplicability is the five-dimension range a package is selected by:
-// service product, customer contract, legal entity, service or customs scope and
-// effective interval.
+// RulePackageApplicability 是选择规则包所依据的五个维度：服务产品、客户合同、
+// 责任法人、服务或关务范围，以及有效期间。
 type RulePackageApplicability struct {
 	serviceProduct CommercialObjectID
 	contract       CommercialObjectID
@@ -126,18 +120,16 @@ func (applicability RulePackageApplicability) Effective() EffectiveInterval {
 	return applicability.effective
 }
 
-// AcceptanceRulePackage is the content of one acceptance rule package version:
-// which rules apply, filed by category, over which range. It assembles other
-// contexts' rules and holds no determination of its own.
+// AcceptanceRulePackage 是一个接单规则包版本的正文：在哪个适用范围内、按分类归档
+// 的哪些规则适用。它只装配其他上下文的规则，自身不持有任何判断。
 type AcceptanceRulePackage struct {
 	version       CommercialVersion
 	applicability RulePackageApplicability
 	rules         map[RuleCategory][]AssembledRule
 }
 
-// NewAcceptanceRulePackage refuses a package with no rules at all. An empty
-// package would mean every shipment passes, and the context states that a
-// missing rule must never be read as permission to accept.
+// NewAcceptanceRulePackage 拒绝一条规则都没有的规则包。空规则包意味着任何委托都能
+// 通过，而本上下文规定：规则缺失不得被解释为允许接受。
 func NewAcceptanceRulePackage(
 	version CommercialVersion,
 	applicability RulePackageApplicability,

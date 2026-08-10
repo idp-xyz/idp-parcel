@@ -7,15 +7,12 @@ import (
 
 var ErrInvalidSupplierAgreement = errors.New("party commercial: invalid supplier agreement")
 
-// SupplierAgreement is the content of one supplier agreement version: the
-// reusable procurement conditions, the purchase-direction pricing plan it binds
-// and the settlement responsibility scope.
+// SupplierAgreement 是一个供应商商业协议版本的正文：可复用的采购条件、它绑定的
+// 采购方向定价方案，以及结算责任范围。
 //
-// It holds no fulfilment or payable fact. transport-fulfillment snapshots the
-// agreement and conditions a particular transport order adopted; settlement-
-// accounting forms expected supplier cost, bill matching and approved payables.
-// Keeping those out is what stops one commercial version from appearing to own
-// what actually happened under it.
+// 它不保存任何履约事实或应付事实。transport-fulfillment 保存一次运输委托实际采用
+// 的协议与履约条件快照，settlement-accounting 形成供应商预期成本、账单匹配和审核
+// 应付。把这些挡在外面，才不会让一个商业版本看起来拥有在它之下实际发生的事。
 type SupplierAgreement struct {
 	version       CommercialVersion
 	supplier      PartyID
@@ -63,22 +60,20 @@ func (agreement SupplierAgreement) Scope() CommercialScopeReference {
 	return agreement.scope
 }
 
-// PurchasePricingPlan is the buy-direction plan this agreement binds. Purchase,
-// sale and inter-entity pricing rules are expressed separately, so this plan is
-// never an executable price toward a customer.
+// PurchasePricingPlan 是本协议绑定的采购方向定价方案。采购、销售和法人间结算价格
+// 规则分别表达，所以这个方案永远不是面向客户的可执行价格。
 func (agreement SupplierAgreement) PurchasePricingPlan() PricingPlanReference {
 	return agreement.purchasePlan
 }
 
-// Direction is fixed at BUY. A supplier agreement arranges procurement; letting
-// it carry any other direction would make a cost look like a sellable price.
+// Direction 固定为 BUY。供应商商业协议约定的是采购；让它带上别的价格方向，
+// 等于把一笔成本装扮成可售价格。
 func (agreement SupplierAgreement) Direction() PriceDirection {
 	return BuyDirection
 }
 
-// Terminate stops the agreement supporting new procurement decisions from that
-// moment. It rewrites nothing: transport orders, fulfilment facts, supplier bill
-// claims and approved payables formed under it keep citing what was true then.
+// Terminate 自该时点起停止本协议支持新的采购决定。它不改写任何既有事实：在它之下
+// 已经形成的运输委托、履约事实、供应商账单主张和审核应付，继续引用当时有效的依据。
 func (agreement SupplierAgreement) Terminate(
 	basis RelationshipBasisReference,
 	at time.Time,
@@ -98,9 +93,8 @@ func (agreement SupplierAgreement) TerminatedAt() (time.Time, bool) {
 	return agreement.terminatedAt, true
 }
 
-// SupportsProcurementAt answers whether a new procurement decision may rest on
-// this agreement. Approval and effectiveness are both required, and termination
-// closes it from its own moment onward.
+// SupportsProcurementAt 回答一个新的采购决定能否依据本协议形成。批准生效与落在
+// 有效区间内两者都必需；终止自其自身时点起关闭后续使用。
 func (agreement SupplierAgreement) SupportsProcurementAt(at time.Time) bool {
 	if agreement.version.status != CommercialVersionEffective {
 		return false
