@@ -1,4 +1,4 @@
-package domain
+package domain_test
 
 import (
 	"crypto/sha256"
