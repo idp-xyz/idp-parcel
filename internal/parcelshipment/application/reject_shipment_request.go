@@ -115,6 +115,8 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		return handler.undecided(ctx, command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
+		// 与形成决定那一步同一判断：指名一份查不到的委托是调用方的错，不是业务结果。接
+		// HTTP 时同样必须映射为`统一不可见结果`，理由见 form_acceptance_decision.go。
 		return RejectShipmentRequestResult{}, fmt.Errorf("reject shipment request: %w", domain.ErrInvalidShipmentRequest)
 	}
 

@@ -114,7 +114,11 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	}
 	if !found {
 		// 命令指名了一份不存在的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
-		// 因此上抛而不是形成未决。
+		// 因此上抛而不是形成未决——给它一个业务取值，编程错误就会安静地混进未决统计。
+		//
+		// 接 HTTP 时这条错误必须映射为 CONTEXT 的`统一不可见结果`：FindBySourceIdentity 的
+		// 否定结果不区分「不存在」与「属于另一个租户或客户账户」，照字面映射成 404 会把
+		// 对象存在与否透露给越权的调用方。
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("form acceptance decision: %w", domain.ErrInvalidShipmentRequest)
 	}
 
