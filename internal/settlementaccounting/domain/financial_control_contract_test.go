@@ -10,9 +10,8 @@ import (
 	"time"
 )
 
-// This file is deliberately test-only. It is the S01-W03 contract for the
-// financial-control boundary. It does not introduce a production settlement
-// model, repository, transaction, outbox, or external financial adapter.
+// 本文件刻意只存在于测试侧。它是财务控制边界的 S01-W03 合约，不引入生产的结算模型、仓储、
+// 事务、发件箱或对外财务适配器。
 
 const (
 	syntheticEvidenceLevel    = "S"
@@ -81,10 +80,8 @@ const (
 )
 
 type syntheticResolvedBasis struct {
-	// The settlement account is deliberately absent. party-commercial's
-	// settlement policy fixes the mode, currency and scope; the account that
-	// also fixes them is settlement-accounting's own object, resolved from
-	// these dimensions rather than carried across the boundary.
+	// 结算账户刻意缺席。party-commercial 的结算政策固定了方式、币种与范围；同样固定这些的
+	// 那个账户是 settlement-accounting 自己的对象，由这几个维度解析得出，而不是跨边界带过来。
 	resolutionID     string
 	resolutionStatus string
 	mode             syntheticControlMode
@@ -191,9 +188,8 @@ type syntheticControlResult struct {
 	requestDigest string
 	associationID string
 	mode          syntheticControlMode
-	// account is resolved by settlement from the basis dimensions, never taken
-	// from the caller. It is recorded because a confirmed charge must fix its
-	// settlement account (settlement-accounting CONTEXT.md, 费用形成与证据).
+	// account 由结算侧从依据的各维度解析得出，绝不取自调用方。之所以记录它，是因为一笔已确认
+	// 的计费必须固定自己的结算账户（settlement-accounting CONTEXT.md，费用形成与证据）。
 	account         string
 	basis           syntheticResolvedBasis
 	judgedAt        time.Time
@@ -202,11 +198,9 @@ type syntheticControlResult struct {
 	credit          syntheticCreditRecord
 	continuationRef string
 	reason          string
-	// Explicit negative-boundary markers: this slice does not create these
-	// downstream financial facts. No control path sets them, which is the
-	// point: TestSyntheticControlBoundaryGuardsAreFalsifiable proves the
-	// guard reacts when one is set, so the zero-valued assertions elsewhere
-	// mean "nothing set this" rather than "nothing could".
+	// 显式的反向边界标记：本切片不产生这些下游财务事实。没有任何控制路径会置位它们，而这正是
+	// 要点：TestSyntheticControlBoundaryGuardsAreFalsifiable 证明有一个被置位时守卫会反应，
+	// 于是别处那些零值断言的含义是「没有东西置位过它」，而不是「没有东西能置位它」。
 	hasFee            bool
 	hasReceivable     bool
 	hasPayment        bool
@@ -491,19 +485,16 @@ func assertSyntheticControlTrace(t *testing.T, result syntheticControlResult) {
 	}
 }
 
-// callExternalFinancialSystem is the single chokepoint any outbound financial
-// call would have to pass. Nothing in this offline stub calls it; it exists so
-// externalCalls is an instrument that can move, which is what lets the
-// externalCalls == 0 assertions mean anything.
+// callExternalFinancialSystem 是任何对外财务调用都必须经过的唯一咽喉。这个离线桩里没有东西
+// 调用它；它存在是为了让 externalCalls 成为一个真会动的仪表，这才让 externalCalls == 0 的
+// 那些断言有意义。
 func (stub *syntheticControlStub) callExternalFinancialSystem() {
 	stub.externalCalls++
 }
 
-// resolveSettlementAccount models settlement-accounting resolving its own
-// account. The commercial basis fixes the legal entity, counterparty, direction
-// and currency but publishes no account; settlement derives one from those
-// dimensions, so a caller can neither name an account nor borrow one resolved
-// for a different scope, mode or currency.
+// resolveSettlementAccount 模拟 settlement-accounting 解析自己的账户。商业依据固定了法律
+// 主体、对手方、方向与币种，却不发布账户；结算侧从这些维度推导出一个，于是调用方既不能指名
+// 一个账户，也不能借用为另一个范围、方式或币种解析出来的账户。
 func (stub *syntheticControlStub) resolveSettlementAccount(basis syntheticResolvedBasis) string {
 	if !basis.valid(stub.now) {
 		return ""
@@ -514,8 +505,7 @@ func (stub *syntheticControlStub) resolveSettlementAccount(basis syntheticResolv
 	return "SYN-ACCOUNT-" + hex.EncodeToString(digest[:6])
 }
 
-// Covers: SYN-CHAIN-04 (consumer half: the account is resolved from the basis
-// dimensions, and a currency that disagrees with the basis never freezes)
+// Covers: SYN-CHAIN-04（消费侧半边：账户由依据的各维度解析得出，与依据不符的币种绝不冻结）
 func TestSyntheticControlResolvesItsOwnAccountFromTheBasis(t *testing.T) {
 	stub := newSyntheticControlStub()
 	basis := syntheticBasis(syntheticPrepaidMode, "SYN-SCOPE-PREPAID-01", "rev-1")
