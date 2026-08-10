@@ -60,11 +60,10 @@ func allGroupsPassing(t *testing.T) []domain.AcceptanceCheck {
 func decisionSpec(t *testing.T, checks []domain.AcceptanceCheck) domain.AcceptanceDecisionSpec {
 	t.Helper()
 	return domain.AcceptanceDecisionSpec{
-		DecisionID:   mustValue(t, domain.NewAcceptanceDecisionID, "decision-1"),
-		Checks:       checks,
-		ManualReview: domain.ManualReviewNotRequired,
-		Basis:        acceptanceBasis(t),
-		DecidedAt:    decidedAt,
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "decision-1"),
+		Checks:     checks,
+		Basis:      acceptanceBasis(t),
+		DecidedAt:  decidedAt,
 	}
 }
 
@@ -96,15 +95,31 @@ func basisDeclaring(t *testing.T, groups ...domain.AcceptanceCheckGroup) domain.
 
 func basisWithApplicable(t *testing.T, applicable domain.ApplicableCheckGroups) domain.CommercialBasisSnapshot {
 	t.Helper()
-	snapshot, err := domain.NewCommercialBasisSnapshot(
-		mustValue(t, domain.NewCommercialResolutionID, "RES-1"),
-		mustValue(t, domain.NewRulePackageReference, "rules-1/v1"),
-		mustValue(t, domain.NewCommercialViewRevision, "VIEW-1"),
-		nil,
-		applicable,
-		domain.ManualReviewNotRequiredByRules,
-		domain.PendingRoutingAllowance{},
-	)
+	return basisWithReviewPolicy(t, applicable, domain.ManualReviewNotRequiredByRules)
+}
+
+func basisRequiringReview(t *testing.T, groups ...domain.AcceptanceCheckGroup) domain.CommercialBasisSnapshot {
+	t.Helper()
+	applicable, err := domain.NewApplicableCheckGroups(groups...)
+	if err != nil {
+		t.Fatalf("new applicable check groups: %v", err)
+	}
+	return basisWithReviewPolicy(t, applicable, domain.ManualReviewRequiredByRules)
+}
+
+func basisWithReviewPolicy(
+	t *testing.T,
+	applicable domain.ApplicableCheckGroups,
+	policy domain.ManualReviewPolicy,
+) domain.CommercialBasisSnapshot {
+	t.Helper()
+	snapshot, err := domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+		ResolutionID: mustValue(t, domain.NewCommercialResolutionID, "RES-1"),
+		RulePackage:  mustValue(t, domain.NewRulePackageReference, "rules-1/v1"),
+		ViewRevision: mustValue(t, domain.NewCommercialViewRevision, "VIEW-1"),
+		Applicable:   applicable,
+		ManualReview: policy,
+	})
 	if err != nil {
 		t.Fatalf("new commercial basis snapshot: %v", err)
 	}
@@ -200,11 +215,20 @@ func TestAnUndeterminedCheckLeavesTheRequestSubmitted(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 步骤 8「规则显式要求时进入人工复核」与「人工不得覆盖硬规则」。
+// requiringReview 交回一份规则包要求人工复核的商业依据。复核要求来自规则包声明，不由
+// 调用方在决定时随手指定——那正是「人工绕过硬规则」得以发生的入口。
+func requiringReview(t *testing.T) domain.CommercialBasisSnapshot {
+	t.Helper()
+	return basisRequiringReview(t, allApplicableGroups...)
+}
+
+// Covers: UC-PS-001 步骤 8「规则显式要求时进入人工复核」与「人工不得覆盖硬规则」。复核要求
+// 取自商业依据快照、完成情况取自聚合自己的任务，两个来源都不是调用方传进来的——传进来就能
+// 靠谎报一个`已完成`换取一次接受。
 func TestManualReviewGatesAcceptanceButCannotOverrideAFailure(t *testing.T) {
 	t.Run("required and outstanding stays undecided", func(t *testing.T) {
 		spec := decisionSpec(t, allGroupsPassing(t))
-		spec.ManualReview = domain.ManualReviewRequired
+		spec.Basis = requiringReview(t)
 
 		decided, err := submitted(t).Decide(spec)
 		if err != nil {
@@ -217,9 +241,13 @@ func TestManualReviewGatesAcceptanceButCannotOverrideAFailure(t *testing.T) {
 
 	t.Run("completed review accepts", func(t *testing.T) {
 		spec := decisionSpec(t, allGroupsPassing(t))
-		spec.ManualReview = domain.ManualReviewCompleted
+		spec.Basis = requiringReview(t)
+		reviewed, err := submitted(t).CompleteManualReview(reviewCompletion(t))
+		if err != nil {
+			t.Fatalf("complete manual review: %v", err)
+		}
 
-		decided, err := submitted(t).Decide(spec)
+		decided, err := reviewed.Decide(spec)
 		if err != nil {
 			t.Fatalf("decide: %v", err)
 		}
@@ -232,9 +260,13 @@ func TestManualReviewGatesAcceptanceButCannotOverrideAFailure(t *testing.T) {
 		checks := allGroupsPassing(t)
 		checks = append(checks, versionCheck(t, domain.LegalEntityAndContractCheck, domain.CheckFailed, "CONTRACT_EXPIRED"))
 		spec := decisionSpec(t, checks)
-		spec.ManualReview = domain.ManualReviewCompleted
+		spec.Basis = requiringReview(t)
+		reviewed, err := submitted(t).CompleteManualReview(reviewCompletion(t))
+		if err != nil {
+			t.Fatalf("complete manual review: %v", err)
+		}
 
-		decided, err := submitted(t).Decide(spec)
+		decided, err := reviewed.Decide(spec)
 		if err != nil {
 			t.Fatalf("decide: %v", err)
 		}
@@ -353,6 +385,49 @@ func TestNarrowingTheApplicableSetCannotDiscardAFailure(t *testing.T) {
 func TestAnEmptyApplicableSetCannotBeDeclared(t *testing.T) {
 	if _, err := domain.NewApplicableCheckGroups(); !errors.Is(err, domain.ErrInvalidApplicableCheckGroups) {
 		t.Fatalf("error = %v, want ErrInvalidApplicableCheckGroups", err)
+	}
+}
+
+// Covers: AT-PC-020「同一范围没有适用合同 → 返回无适用依据，不由 PC 形成委托拒绝」— 拒绝
+// 由本上下文形成，而这种拒绝恰恰没有商业依据可带：要求它带一份，等于让「没有适用合同」这个
+// 结论永远形成不了决定。
+func TestARejectionStandsWithoutACommercialBasis(t *testing.T) {
+	spec := decisionSpec(t, []domain.AcceptanceCheck{
+		versionCheck(t, domain.LegalEntityAndContractCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS"),
+	})
+	spec.Basis = domain.CommercialBasisSnapshot{}
+
+	decided, err := submitted(t).Decide(spec)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if decided.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q, want REJECTED", decided.State())
+	}
+	decision, present := decided.AcceptanceDecision()
+	if !present || len(decision.FailedChecks()) != 1 {
+		t.Fatalf("rejection did not record the failing check: %#v", decision)
+	}
+}
+
+// Covers: CONTEXT「委托接受时……固定接受基线、预计承诺以及适用的产品、合同、映射和授权
+// 依据」— 接受仍然离不开商业依据。预计承诺保存的就是当时的依据快照，没有依据的接受形成
+// 不了承诺，因此这条路径必须走不通。
+func TestAcceptanceStillRequiresACommercialBasis(t *testing.T) {
+	spec := decisionSpec(t, allGroupsPassing(t))
+	spec.Basis = domain.CommercialBasisSnapshot{}
+
+	decided, err := submitted(t).Decide(spec)
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+
+	if decided.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q; a request was accepted without any commercial basis", decided.State())
+	}
+	if _, present := decided.ExpectedCommitment(); present {
+		t.Fatal("an expected commitment was formed with no basis to reference")
 	}
 }
 

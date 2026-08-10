@@ -44,6 +44,7 @@ type FormAcceptanceDecisionResult struct {
 	hasDecision  bool
 	reason       JudgmentPendingReason
 	continuation domain.OwnershipContinuationReference
+	compensation domain.OwnershipContinuationReference
 }
 
 func (result FormAcceptanceDecisionResult) Outcome() AcceptanceDecisionOutcome {
@@ -70,28 +71,31 @@ func (result FormAcceptanceDecisionResult) ContinuationReference() domain.Owners
 	return result.continuation
 }
 
-type FormAcceptanceDecisionHandler struct {
-	requests   ports.ShipmentRequestRepository
-	commercial ports.CommercialBasisResolver
-	judgments  ports.RecordedJudgmentReader
-	identities ports.AcceptanceDecisionIdentity
-	clock      ports.Clock
+// CompensationReference 只在决定已经成立、而随附的资金释放没能确定完成时给出。它与
+// ContinuationReference 分开：后者续办的是尚未形成的决定，前者续办的是已成立决定留下的
+// 补偿。合成一个会让调用方分不清该重判还是该重放。
+func (result FormAcceptanceDecisionResult) CompensationReference() domain.OwnershipContinuationReference {
+	return result.compensation
 }
 
-func NewFormAcceptanceDecisionHandler(
-	requests ports.ShipmentRequestRepository,
-	commercial ports.CommercialBasisResolver,
-	judgments ports.RecordedJudgmentReader,
-	identities ports.AcceptanceDecisionIdentity,
-	clock ports.Clock,
-) *FormAcceptanceDecisionHandler {
-	return &FormAcceptanceDecisionHandler{
-		requests:   requests,
-		commercial: commercial,
-		judgments:  judgments,
-		identities: identities,
-		clock:      clock,
-	}
+// FormAcceptanceDecisionDeps 收拢本编排的协作方。用结构体而不是位置参数：七个同为接口的
+// 参数在调用点是七个认不出的值，理由与 CommercialBasisSnapshotSpec 相同。
+type FormAcceptanceDecisionDeps struct {
+	Requests   ports.ShipmentRequestRepository
+	Commercial ports.CommercialBasisResolver
+	Judgments  ports.RecordedJudgmentReader
+	Recorder   ports.AcceptanceJudgmentRecorder
+	Release    ports.PreAcceptanceControlRelease
+	Identities ports.AcceptanceDecisionIdentity
+	Clock      ports.Clock
+}
+
+type FormAcceptanceDecisionHandler struct {
+	deps FormAcceptanceDecisionDeps
+}
+
+func NewFormAcceptanceDecisionHandler(deps FormAcceptanceDecisionDeps) *FormAcceptanceDecisionHandler {
+	return &FormAcceptanceDecisionHandler{deps: deps}
 }
 
 // Handle 把接受判断任务上已采用的权威判断装配成校验结果，交给委托聚合形成一次接受、拒绝
@@ -104,9 +108,9 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 ) (FormAcceptanceDecisionResult, error) {
-	request, found, err := handler.requests.FindBySourceIdentity(ctx, command.Identity)
+	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return handler.undecided(command, ShipmentRequestUnavailable), nil
+		return handler.undecided(ctx, command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
 		// 命令指名了一份不存在的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
@@ -114,45 +118,44 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("form acceptance decision: %w", domain.ErrInvalidShipmentRequest)
 	}
 
-	basis, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+	basis, err := handler.deps.Commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return handler.undecided(command, CommercialBasisUnavailable), nil
+		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
 	if basis.ResolutionID().String() == "" {
-		return handler.undecided(command, CommercialBasisNotUnique), nil
+		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
 
 	// 复核策略先于读回判断：规则包没有声明要不要复核时，这一轮无论如何都形成不了接受，
 	// 再去读一遍判断是白做的。
 	policy := basis.ManualReviewPolicy()
 	if !policy.Declared() {
-		return handler.undecided(command, ManualReviewPolicyNotDeclared), nil
+		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared), nil
 	}
 
-	recorded, err := handler.judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
+	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
 	if err != nil {
-		return handler.undecided(command, RecordedJudgmentsUnavailable), nil
+		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable), nil
 	}
 	checks, err := assembleChecks(recorded, basis.PendingRoutingAllowance())
 	if err != nil {
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("assemble acceptance checks: %w", err)
 	}
 
-	decisionID, err := handler.identities.NextAcceptanceDecisionID(ctx)
+	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
-		return handler.undecided(command, DecisionIdentityUnavailable), nil
+		return handler.undecided(ctx, command, DecisionIdentityUnavailable), nil
 	}
 
 	decided, err := request.Decide(domain.AcceptanceDecisionSpec{
-		DecisionID:   decisionID,
-		Checks:       checks,
-		ManualReview: manualReviewStateFor(policy),
-		Basis:        basis,
-		DecidedAt:    handler.clock.Now(),
+		DecisionID: decisionID,
+		Checks:     checks,
+		Basis:      basis,
+		DecidedAt:  handler.deps.Clock.Now(),
 	})
 	if err != nil {
 		// 同一提交版本已经有决定是业务答案而非故障：用例要求并发处理返回同一结果，调用方
@@ -167,20 +170,64 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if !formed {
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
-		return handler.undecided(command, AcceptanceJudgmentIncomplete), nil
+		return handler.undecided(ctx, command, AcceptanceJudgmentIncomplete), nil
 	}
-	if err := handler.requests.Save(ctx, command.Identity, decided); err != nil {
+	if err := handler.deps.Requests.Save(ctx, command.Identity, decided); err != nil {
 		// 决定没能越过提交边界就不算形成。交回一个没落库的接受，下游会按一份查不回来的
 		// 接受基线继续办。
-		return handler.undecided(command, DecisionNotRecorded), nil
+		//
+		// 这里不释放冻结：保存失败时接受成没成立无从确定，而释放要求「接受确定未成立」。
+		// 不确定就释放，会把一次其实已经落库的接受连同它合法占用的资金一起放掉。
+		return handler.undecided(ctx, command, DecisionNotRecorded), nil
 	}
 
 	return FormAcceptanceDecisionResult{
-		outcome:     AcceptanceDecided,
-		state:       decided.State(),
-		decision:    decision,
-		hasDecision: true,
+		outcome:      AcceptanceDecided,
+		state:        decided.State(),
+		decision:     decision,
+		hasDecision:  true,
+		compensation: handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl),
 	}, nil
+}
+
+// releaseIfRejected 在拒绝越过提交边界后按原关联解除资金控制，并在解除没能确定完成时交回
+// 续办引用。
+//
+// 只有拒绝触发释放：拒绝是`接受确定未成立`，而接受成立时那笔冻结是合法的，转接受后流程。
+// 释放失败不回滚拒绝——决定已经越过提交边界，回滚它等于让一次补偿失败改写业务结果；补偿
+// 按原关联另行续办，这正是 CONTEXT 说的「撤回提交和释放属于可补偿编排，不要求跨上下文
+// 分布式事务」。
+func (handler *FormAcceptanceDecisionHandler) releaseIfRejected(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	decided domain.ShipmentRequest,
+	control domain.FinancialControlResult,
+) domain.OwnershipContinuationReference {
+	if decided.State() != domain.ShipmentRequestRejected {
+		return domain.OwnershipContinuationReference{}
+	}
+	// 没有形成过控制就没有可释放的关联。凭空发一次释放会让 settlement-accounting 去认领
+	// 一笔不存在的冻结。
+	if control.Outcome() != domain.FinancialControlHeld {
+		return domain.OwnershipContinuationReference{}
+	}
+
+	if err := handler.deps.Release.ReleasePreAcceptanceControl(ctx, ports.ControlReleaseRequest{
+		Identity:          command.Identity,
+		ShipmentRequestID: command.ShipmentRequestID,
+		SubmissionVersion: command.SubmissionVersion,
+		ControlResultID:   control.ResultID(),
+	}); err != nil {
+		return judgmentContinuation(
+			ControlReleasePending,
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+			control.ResultID().String(),
+		)
+	}
+	return domain.OwnershipContinuationReference{}
 }
 
 // assembleChecks 把已记录的判断逐条译成校验结果。有结果就记，没有就不记。
@@ -215,16 +262,6 @@ func assembleChecks(
 	return append(checks, control), nil
 }
 
-// manualReviewStateFor 把规则包的复核声明变成聚合要的状态。这里到不了`已完成`：完成是运营
-// 发生的事，要由另一条授权路径写入，而那条路径的角色与条件仍是未确认参数（`BD-PS-002`）。
-// 在这里凑一个`已完成`就等于替运营签了字。
-func manualReviewStateFor(policy domain.ManualReviewPolicy) domain.ManualReviewState {
-	if policy == domain.ManualReviewRequiredByRules {
-		return domain.ManualReviewRequired
-	}
-	return domain.ManualReviewNotRequired
-}
-
 // existing 交回该提交版本已经形成的那一个决定。用例要求并发处理返回同一结果或明确冲突，
 // 不能一边接受一边拒绝。
 func (handler *FormAcceptanceDecisionHandler) existing(request domain.ShipmentRequest) FormAcceptanceDecisionResult {
@@ -238,19 +275,23 @@ func (handler *FormAcceptanceDecisionHandler) existing(request domain.ShipmentRe
 }
 
 func (handler *FormAcceptanceDecisionHandler) undecided(
+	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	reason JudgmentPendingReason,
 ) FormAcceptanceDecisionResult {
+	continuation := judgmentContinuation(
+		reason,
+		command.Identity.TenantID().String(),
+		command.Identity.CustomerAccountID().String(),
+		command.ShipmentRequestID.String(),
+		command.SubmissionVersion.String(),
+	)
+	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock, command.ShipmentRequestID, reason, continuation)
+
 	return FormAcceptanceDecisionResult{
-		outcome: AcceptanceUndecided,
-		state:   domain.ShipmentRequestSubmitted,
-		reason:  reason,
-		continuation: judgmentContinuation(
-			reason,
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-		),
+		outcome:      AcceptanceUndecided,
+		state:        domain.ShipmentRequestSubmitted,
+		reason:       reason,
+		continuation: continuation,
 	}
 }

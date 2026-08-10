@@ -1,16 +1,21 @@
 package application
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// JudgmentPendingReason 指名接受判断任务本轮为何没有推进。它是封闭集合而非自由文本，
-// 这样未决才能按依赖阶段分类统计——用例的可观测性一节明禁用自由文本聚合原因维度。
-// 取值与产生它的那条路径同时出现。
+// JudgmentPendingReason 指名本轮为何有一件事没有办完：多数取值说的是接受判断任务没能推进，
+// `ControlReleasePending` 说的是决定已经成立、随附的补偿没能确定完成。两类共用一个封闭集合，
+// 是因为续办引用由「原因 + 范围」派生，原因分成两套会让同一范围派生出两族互不相认的引用。
+//
+// 它是封闭集合而非自由文本，这样未决才能按依赖阶段分类统计——用例的可观测性一节明禁用自由
+// 文本聚合原因维度。取值与产生它的那条路径同时出现。
 //
 // 依赖调不通也在这里取值，而不是上抛技术错误。用例把`依赖不可用`列为`尚未决定`的成因，
 // 并要求该结果返回未决原因与安全续办引用，而一个 error 两样都给不出。指名是哪个依赖停了，
@@ -35,6 +40,7 @@ const (
 	DecisionIdentityUnavailable
 	AcceptanceJudgmentIncomplete
 	DecisionNotRecorded
+	ControlReleasePending
 )
 
 func (reason JudgmentPendingReason) String() string {
@@ -65,9 +71,44 @@ func (reason JudgmentPendingReason) String() string {
 		return "ACCEPTANCE_JUDGMENT_INCOMPLETE"
 	case DecisionNotRecorded:
 		return "DECISION_NOT_RECORDED"
+	case ControlReleasePending:
+		return "CONTROL_RELEASE_PENDING"
 	default:
 		return ""
 	}
+}
+
+// recordAttempt 把没能推进的这一轮追加到接受判断任务上。用例要求任务同时留下判断与处理
+// 尝试，只留成功的判断会让一份卡了十轮的委托看起来和刚建单的一样。
+//
+// 记录失败不改写本轮的未决原因：原因说的是判断为何没推进，用「记录失败」顶替它会把真实
+// 缺口藏起来，而调用方正是按原因决定该补缺口还是该重试依赖。这条记录本身按同一续办引用
+// 补写。
+//
+// 续办路径目前恒为内部重试：这些原因全是依赖或声明缺口，没有一条要客户补资料。`必要资料`
+// 校验组有生产者后才会出现客户补充那一支。
+func recordAttempt(
+	ctx context.Context,
+	recorder ports.AcceptanceJudgmentRecorder,
+	clock ports.Clock,
+	requestID domain.ShipmentRequestID,
+	reason JudgmentPendingReason,
+	continuation domain.OwnershipContinuationReference,
+) {
+	attemptReason, err := domain.NewProcessingAttemptReason(reason.String())
+	if err != nil {
+		return
+	}
+	attempt, err := domain.NewProcessingAttempt(domain.ProcessingAttemptSpec{
+		Reason:       attemptReason,
+		ResumePath:   domain.ResumeByInternalRetry,
+		Continuation: continuation,
+		AttemptedAt:  clock.Now(),
+	})
+	if err != nil {
+		return
+	}
+	_ = recorder.RecordProcessingAttempt(ctx, requestID, attempt)
 }
 
 // judgmentContinuation 由未决原因与判断范围共同派生，因此同一范围因同一原因停滞时拿到的

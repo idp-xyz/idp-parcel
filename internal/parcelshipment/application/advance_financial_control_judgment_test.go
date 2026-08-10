@@ -251,6 +251,7 @@ func newFinancialControlFixture(t *testing.T) *financialControlFixture {
 		value.commercial,
 		value.controller,
 		value.requests,
+		fixedClock{at: handlerClockAt},
 	)
 	return value
 }

@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -100,7 +101,7 @@ func TestARestrictedControlStillRejectsEvenWhenTheGroupIsNotDeclaredApplicable(t
 // 声明复核策略时不接受，也不替它在「要求」与「不要求」之间挑一个。
 func TestAnUndeclaredManualReviewPolicyBlocksAcceptance(t *testing.T) {
 	fixture := newDecisionFixture(t)
-	fixture.commercial.manualReview = domain.ManualReviewPolicyNotDeclared
+	fixture.commercial.manualReview = domain.ManualReviewNotDeclaredByRules
 
 	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 	if err != nil {
@@ -157,11 +158,69 @@ func TestOneUnreachableMemberRejectsTheWholeSubmissionVersion(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 AT-PS-035「接受提交未成立时按原关联释放冻结」— 拒绝就是接受确定未成立，
+// 冻结不能留在原处占着货主的钱。释放按原控制结果关联发起，本上下文不拥有金额或账户。
+func TestARejectionReleasesTheFreezeByItsOriginalAssociation(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q, want REJECTED", result.State())
+	}
+	if fixture.release.calls != 1 {
+		t.Fatalf("release calls = %d, want exactly 1", fixture.release.calls)
+	}
+	if fixture.release.controlResultID != "SAC-1" {
+		t.Fatalf("released %q, want the original control association SAC-1", fixture.release.controlResultID)
+	}
+}
+
+// Covers: UC-PS-001 AT-PS-035「接受已经成立…不重复控制或释放合法冻结」— 接受成立时那笔冻结
+// 是合法的，转接受后流程，不能在这里放掉。
+func TestAnAcceptanceDoesNotReleaseTheFreeze(t *testing.T) {
+	fixture := newDecisionFixture(t)
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.release.calls != 0 {
+		t.Fatalf("release calls = %d; an accepted request had its lawful freeze released", fixture.release.calls)
+	}
+}
+
+// Covers: UC-PS-001 AT-PS-035「释放失败…保持补偿未决」与 CONTEXT「撤回提交和释放属于可补偿
+// 编排」— 释放失败不回滚已经越过提交边界的拒绝，只把补偿留成可续办。
+func TestAFailedReleaseKeepsTheRejectionAndLeavesCompensationPending(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
+	fixture.release.err = errors.New("settlement authority unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("state = %q; a failed release rolled back a rejection that already crossed the boundary", result.State())
+	}
+	if result.CompensationReference().String() == "" {
+		t.Fatal("a failed release left no continuation to resume the compensation")
+	}
+}
+
 type decisionFixture struct {
 	handler    *application.FormAcceptanceDecisionHandler
 	commercial *commercialBasisDouble
 	judgments  *recordedJudgmentsDouble
 	requests   *decidableRequestStore
+	release    *controlReleaseDouble
+	recorder   *judgmentRequestStore
 }
 
 func newDecisionFixture(t *testing.T) *decisionFixture {
@@ -184,14 +243,35 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 		controlOutcome: domain.FinancialControlHeld,
 	}
 	value.requests = &decidableRequestStore{t: t}
-	value.handler = application.NewFormAcceptanceDecisionHandler(
-		value.requests,
-		value.commercial,
-		value.judgments,
-		&decisionIdentityFactory{t: t},
-		fixedClock{at: handlerClockAt},
-	)
+	value.release = &controlReleaseDouble{}
+	value.recorder = &judgmentRequestStore{}
+	value.handler = application.NewFormAcceptanceDecisionHandler(application.FormAcceptanceDecisionDeps{
+		Requests:   value.requests,
+		Commercial: value.commercial,
+		Judgments:  value.judgments,
+		Recorder:   value.recorder,
+		Release:    value.release,
+		Identities: &decisionIdentityFactory{t: t},
+		Clock:      fixedClock{at: handlerClockAt},
+	})
 	return value
+}
+
+// controlReleaseDouble 留住释放请求所携带的原控制关联。断言这个而不是"调用过就行"，是因为
+// 释放错一笔冻结与不释放同样糟——货主的另一份委托会被无故解冻。
+type controlReleaseDouble struct {
+	calls           int
+	controlResultID string
+	err             error
+}
+
+func (double *controlReleaseDouble) ReleasePreAcceptanceControl(
+	_ context.Context,
+	request ports.ControlReleaseRequest,
+) error {
+	double.calls++
+	double.controlResultID = request.ControlResultID.String()
+	return double.err
 }
 
 func (value *decisionFixture) command(t *testing.T) application.FormAcceptanceDecisionCommand {
@@ -386,7 +466,8 @@ func (factory *decisionIdentityFactory) NextAcceptanceDecisionID(
 }
 
 var (
-	_ ports.ShipmentRequestRepository  = (*decidableRequestStore)(nil)
-	_ ports.RecordedJudgmentReader     = (*recordedJudgmentsDouble)(nil)
-	_ ports.AcceptanceDecisionIdentity = (*decisionIdentityFactory)(nil)
+	_ ports.ShipmentRequestRepository   = (*decidableRequestStore)(nil)
+	_ ports.RecordedJudgmentReader      = (*recordedJudgmentsDouble)(nil)
+	_ ports.AcceptanceDecisionIdentity  = (*decisionIdentityFactory)(nil)
+	_ ports.PreAcceptanceControlRelease = (*controlReleaseDouble)(nil)
 )

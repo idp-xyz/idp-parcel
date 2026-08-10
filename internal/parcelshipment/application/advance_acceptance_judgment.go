@@ -120,15 +120,15 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return handler.undecided(command, CommercialBasisUnavailable), nil
+		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
 	if basis.ResolutionID().String() == "" {
-		return handler.undecided(command, CommercialBasisNotUnique), nil
+		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
 
 	asOf, declared := basis.AsOfFor(domain.ReachabilityJudgmentKind)
 	if !declared {
-		return handler.undecided(command, ReachabilityAsOfNotDeclared), nil
+		return handler.undecided(ctx, command, ReachabilityAsOfNotDeclared), nil
 	}
 
 	judgment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{
@@ -139,12 +139,12 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		AsOf:              asOf,
 	})
 	if err != nil {
-		return handler.undecided(command, ReachabilityAuthorityUnavailable), nil
+		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil
 	}
 	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
 	// 的依据。
 	if err := handler.recorder.RecordReachabilityJudgment(ctx, command.ShipmentRequestID, judgment); err != nil {
-		return handler.undecided(command, JudgmentNotRecorded), nil
+		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
 	}
 
 	return AdvanceAcceptanceJudgmentResult{
@@ -155,19 +155,23 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 }
 
 func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
+	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
 	reason JudgmentPendingReason,
 ) AdvanceAcceptanceJudgmentResult {
+	continuation := judgmentContinuation(
+		reason,
+		command.Identity.TenantID().String(),
+		command.Identity.CustomerAccountID().String(),
+		command.ShipmentRequestID.String(),
+		command.SubmissionVersion.String(),
+		command.DeclaredParcelID.String(),
+	)
+	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
+
 	return AdvanceAcceptanceJudgmentResult{
-		outcome: AcceptanceJudgmentUndecided,
-		reason:  reason,
-		continuation: judgmentContinuation(
-			reason,
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-			command.DeclaredParcelID.String(),
-		),
+		outcome:      AcceptanceJudgmentUndecided,
+		reason:       reason,
+		continuation: continuation,
 	}
 }

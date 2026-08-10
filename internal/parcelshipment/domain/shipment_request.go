@@ -77,6 +77,8 @@ type AcceptanceDecisionTask struct {
 	taskID              AcceptanceDecisionTaskID
 	submissionVersionID SubmissionVersionID
 	establishedAt       time.Time
+	processingAttempts  []ProcessingAttempt
+	reviewCompletion    ManualReviewCompletion
 	complete            bool
 }
 

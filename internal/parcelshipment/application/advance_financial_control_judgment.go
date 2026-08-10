@@ -53,17 +53,22 @@ type AdvanceFinancialControlJudgmentHandler struct {
 	commercial ports.CommercialBasisResolver
 	controller ports.PreAcceptanceFinancialController
 	recorder   ports.AcceptanceJudgmentRecorder
+	clock      ports.Clock
 }
 
+// 时钟只用于处理尝试的发生时间。它与判断时点分开：后者由规则包声明的策略形成，本地时钟
+// 顶替它就是用例禁止的「用一个全局时间代替不同判断」。
 func NewAdvanceFinancialControlJudgmentHandler(
 	commercial ports.CommercialBasisResolver,
 	controller ports.PreAcceptanceFinancialController,
 	recorder ports.AcceptanceJudgmentRecorder,
+	clock ports.Clock,
 ) *AdvanceFinancialControlJudgmentHandler {
 	return &AdvanceFinancialControlJudgmentHandler{
 		commercial: commercial,
 		controller: controller,
 		recorder:   recorder,
+		clock:      clock,
 	}
 }
 
@@ -86,15 +91,15 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return handler.undecided(command, CommercialBasisUnavailable), nil
+		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
 	}
 	if basis.ResolutionID().String() == "" {
-		return handler.undecided(command, CommercialBasisNotUnique), nil
+		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
 	}
 
 	asOf, declared := basis.AsOfFor(domain.FinancialControlJudgmentKind)
 	if !declared {
-		return handler.undecided(command, FinancialControlAsOfNotDeclared), nil
+		return handler.undecided(ctx, command, FinancialControlAsOfNotDeclared), nil
 	}
 
 	control, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{
@@ -104,12 +109,12 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		AsOf:              asOf,
 	})
 	if err != nil {
-		return handler.undecided(command, FinancialControlUnavailable), nil
+		return handler.undecided(ctx, command, FinancialControlUnavailable), nil
 	}
 	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
 	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(ctx, command.ShipmentRequestID, control); err != nil {
-		return handler.undecided(command, JudgmentNotRecorded), nil
+		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
 	}
 
 	return AdvanceFinancialControlJudgmentResult{
@@ -120,18 +125,22 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 }
 
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
+	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
 	reason JudgmentPendingReason,
 ) AdvanceFinancialControlJudgmentResult {
+	continuation := judgmentContinuation(
+		reason,
+		command.Identity.TenantID().String(),
+		command.Identity.CustomerAccountID().String(),
+		command.ShipmentRequestID.String(),
+		command.SubmissionVersion.String(),
+	)
+	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
+
 	return AdvanceFinancialControlJudgmentResult{
-		outcome: AcceptanceJudgmentUndecided,
-		reason:  reason,
-		continuation: judgmentContinuation(
-			reason,
-			command.Identity.TenantID().String(),
-			command.Identity.CustomerAccountID().String(),
-			command.ShipmentRequestID.String(),
-			command.SubmissionVersion.String(),
-		),
+		outcome:      AcceptanceJudgmentUndecided,
+		reason:       reason,
+		continuation: continuation,
 	}
 }

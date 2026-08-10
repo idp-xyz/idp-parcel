@@ -41,9 +41,10 @@ func ReachabilityCheckFor(
 
 // FinancialControlCheckFor 把一次接受前财务控制结果译成校验结果。
 //
-// 它接收零值而不是要求调用方先判断有没有结果：没有形成的控制译成`无法判定`，而不是让这
-// 一项校验消失。省掉它，聚合会看到「没有失败也没有待判断」而径直接受——那正是用例明禁
-// 的默认放行，只不过是以遗漏的方式实现的。
+// 从未形成的控制在这里被拒绝，而不是译成`无法判定`。防「控制没形成却接受」的是 Decide 的
+// 适用组覆盖检查——本组被声明适用却一项校验都没到场就不接受；在这里再造一项`无法判定`是
+// 同一条规则的第二处实现，而且合同本就不要求财务控制时那一项永远满足不了，反倒把不适用
+// 读成了缺一项。与 ReachabilityCheckFor 拒绝无效判断同理：译不出的输入交调用方处置。
 //
 // `明确无控制`译成`通过`。这不是默认放行：构造期已经强制该结果携带合同声明的商业不适用
 // 依据，因此它与一次没能执行的控制分得开。
@@ -56,7 +57,7 @@ func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, e
 	case FinancialControlRestricted:
 		outcome, reasonValue = CheckFailed, "FINANCIAL_CONTROL_RESTRICTED"
 	default:
-		outcome, reasonValue = CheckUndetermined, "FINANCIAL_CONTROL_NOT_FORMED"
+		return AcceptanceCheck{}, ErrInvalidFinancialControlResult
 	}
 
 	// 不指名成员：控制作用在整份委托上，指名了会让聚合把它当作某个成员已被判断，从而

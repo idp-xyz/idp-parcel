@@ -79,10 +79,6 @@ func (applicable ApplicableCheckGroups) Declared() bool {
 	return len(applicable.groups) > 0
 }
 
-func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
-	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
-}
-
 // ManualReviewPolicy 是所采用接单规则包对「这份委托要不要人工复核」的声明。
 //
 // 它刻意没有`已完成`：复核做没做完是运营发生的事，属本上下文接受判断任务的状态，规则包
@@ -94,7 +90,7 @@ func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
 type ManualReviewPolicy uint8
 
 const (
-	ManualReviewPolicyNotDeclared ManualReviewPolicy = iota
+	ManualReviewNotDeclaredByRules ManualReviewPolicy = iota
 	ManualReviewNotRequiredByRules
 	ManualReviewRequiredByRules
 )
@@ -222,20 +218,25 @@ type CommercialBasisSnapshot struct {
 	pendingRouting PendingRoutingAllowance
 }
 
-func NewCommercialBasisSnapshot(
-	resolutionID CommercialResolutionID,
-	rulePackage RulePackageReference,
-	viewRevision CommercialViewRevision,
-	declaredAsOf []DeclaredAsOf,
-	applicable ApplicableCheckGroups,
-	manualReview ManualReviewPolicy,
-	pendingRouting PendingRoutingAllowance,
-) (CommercialBasisSnapshot, error) {
-	if !resolutionID.valid() || !rulePackage.valid() || !viewRevision.valid() {
+// CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。用结构体而不是位置参数，
+// 是因为后四项都是所采用规则包与服务产品的声明：每多一条声明就多一个参数，位置参数会
+// 让调用点变成一串认不出的同型值。与 AcceptanceDecisionSpec 同一形状。
+type CommercialBasisSnapshotSpec struct {
+	ResolutionID   CommercialResolutionID
+	RulePackage    RulePackageReference
+	ViewRevision   CommercialViewRevision
+	DeclaredAsOf   []DeclaredAsOf
+	Applicable     ApplicableCheckGroups
+	ManualReview   ManualReviewPolicy
+	PendingRouting PendingRoutingAllowance
+}
+
+func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBasisSnapshot, error) {
+	if !spec.ResolutionID.valid() || !spec.RulePackage.valid() || !spec.ViewRevision.valid() {
 		return CommercialBasisSnapshot{}, ErrInvalidCommercialBasisSnapshot
 	}
-	seen := make(map[JudgmentKind]struct{}, len(declaredAsOf))
-	for _, declared := range declaredAsOf {
+	seen := make(map[JudgmentKind]struct{}, len(spec.DeclaredAsOf))
+	for _, declared := range spec.DeclaredAsOf {
 		if !declared.kind.valid() || declared.at.IsZero() || !declared.policyVersion.valid() {
 			return CommercialBasisSnapshot{}, ErrInvalidDeclaredAsOf
 		}
@@ -245,13 +246,13 @@ func NewCommercialBasisSnapshot(
 		seen[declared.kind] = struct{}{}
 	}
 	return CommercialBasisSnapshot{
-		resolutionID:   resolutionID,
-		rulePackage:    rulePackage,
-		viewRevision:   viewRevision,
-		declaredAsOf:   append([]DeclaredAsOf(nil), declaredAsOf...),
-		applicable:     applicable,
-		manualReview:   manualReview,
-		pendingRouting: pendingRouting,
+		resolutionID:   spec.ResolutionID,
+		rulePackage:    spec.RulePackage,
+		viewRevision:   spec.ViewRevision,
+		declaredAsOf:   append([]DeclaredAsOf(nil), spec.DeclaredAsOf...),
+		applicable:     spec.Applicable,
+		manualReview:   spec.ManualReview,
+		pendingRouting: spec.PendingRouting,
 	}, nil
 }
 
@@ -265,12 +266,6 @@ func (snapshot CommercialBasisSnapshot) PendingRoutingAllowance() PendingRouting
 // 不替规则包在「要求」与「不要求」之间挑一个。
 func (snapshot CommercialBasisSnapshot) ManualReviewPolicy() ManualReviewPolicy {
 	return snapshot.manualReview
-}
-
-// ApplicableCheckGroups 返回规则包声明的适用校验组。未声明时返回零值——`Decide` 据此保持
-// 未决，而不是按已到场的校验凑一个接受。
-func (snapshot CommercialBasisSnapshot) ApplicableCheckGroups() ApplicableCheckGroups {
-	return snapshot.applicable
 }
 
 func (snapshot CommercialBasisSnapshot) ResolutionID() CommercialResolutionID {

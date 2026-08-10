@@ -224,12 +224,14 @@ func (decision AcceptanceDecision) DecidedAt() time.Time {
 	return decision.decidedAt
 }
 
+// AcceptanceDecisionSpec 刻意不含人工复核状态：要不要复核由所采用规则包声明（随 Basis 到
+// 达），做没做完是本聚合任务上的事实，两者聚合都能自己看到。让调用方传进来，一个谎报的
+// `已完成`就能换一次接受——与适用组集合同一条道理。
 type AcceptanceDecisionSpec struct {
-	DecisionID   AcceptanceDecisionID
-	Checks       []AcceptanceCheck
-	ManualReview ManualReviewState
-	Basis        CommercialBasisSnapshot
-	DecidedAt    time.Time
+	DecisionID AcceptanceDecisionID
+	Checks     []AcceptanceCheck
+	Basis      CommercialBasisSnapshot
+	DecidedAt  time.Time
 }
 
 // Decide 为当前提交版本至多形成一个接受或拒绝。三种结果里只有两种是决定：无法判定的
@@ -247,9 +249,13 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	if request.state != ShipmentRequestSubmitted {
 		return ShipmentRequest{}, ErrInvalidShipmentRequest
 	}
-	if !spec.DecisionID.valid() || !spec.ManualReview.valid() || !spec.Basis.valid() || spec.DecidedAt.IsZero() {
+	// 商业依据不在这里强制：`没有适用合同`形成的拒绝恰恰带不出依据，要求它带一份等于让
+	// 那个结论永远形成不了决定。接受那一侧仍然离不开依据——没有依据就没有声明的适用组、
+	// 也没有复核策略，下面两道门各自挡住它，而预计承诺保存的正是这份依据快照。
+	if !spec.DecisionID.valid() || spec.DecidedAt.IsZero() {
 		return ShipmentRequest{}, ErrInvalidAcceptanceDecision
 	}
+	manualReview := request.manualReviewState(spec.Basis.manualReview)
 
 	failed, undetermined := 0, 0
 	judged := make(map[DeclaredParcelID]struct{}, len(request.currentVersion.declaredParcelIDs))
@@ -276,7 +282,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		decisionID:   spec.DecisionID,
 		checks:       append([]AcceptanceCheck(nil), spec.Checks...),
 		basis:        spec.Basis,
-		manualReview: spec.ManualReview,
+		manualReview: manualReview,
 		decidedAt:    spec.DecidedAt,
 	}
 
@@ -288,7 +294,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		return request, nil
 	}
 	if undetermined > 0 ||
-		spec.ManualReview == ManualReviewRequired ||
+		manualReview != ManualReviewNotRequired && manualReview != ManualReviewCompleted ||
 		!everyApplicableGroupJudged(spec.Basis.applicable, judgedGroups) ||
 		!request.everyMemberJudged(judged) {
 		return request, nil
@@ -329,6 +335,24 @@ func everyApplicableGroupJudged(
 		}
 	}
 	return true
+}
+
+// manualReviewState 由规则包的声明与本任务的完成事实合成。
+//
+// 规则包未声明复核策略时返回零值，而零值不在「不要求」与「已完成」之列，因此不接受：缺声明
+// 不等于不要求复核，在这里兜任何一边都是替规则包作答。
+func (request ShipmentRequest) manualReviewState(policy ManualReviewPolicy) ManualReviewState {
+	switch policy {
+	case ManualReviewNotRequiredByRules:
+		return ManualReviewNotRequired
+	case ManualReviewRequiredByRules:
+		if request.acceptanceTask.reviewCompletion.done() {
+			return ManualReviewCompleted
+		}
+		return ManualReviewRequired
+	default:
+		return ManualReviewStateInvalid
+	}
 }
 
 // everyMemberJudged 挡住「某个声明成员从未被判断过却接受了整份版本」。未被判断的成员

@@ -118,8 +118,29 @@ type PreAcceptanceFinancialController interface {
 	ApplyPreAcceptanceFinancialControl(ctx context.Context, request FinancialControlRequest) (domain.FinancialControlResult, error)
 }
 
+// ControlReleaseRequest 指名要释放哪一次接受前资金控制。它只携带原控制的业务关联，不带
+// 金额、账户或币种：释放哪一笔由 settlement-accounting 按原关联认领，冻结不属本上下文。
+type ControlReleaseRequest struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	ControlResultID   domain.FinancialControlResultID
+}
+
+// PreAcceptanceControlRelease 在接受确定未成立后按原关联请求解除资金控制。
+//
+// 它与 PreAcceptanceFinancialController 分开：施加控制由推进判断那一步发起，解除由形成决定
+// 那一步发起，合并成一个端口会让形成决定的编排依赖一个它根本不会调用的方法。
+type PreAcceptanceControlRelease interface {
+	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
+//
+// RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
+// 都留：只留成功的判断，一份卡了十轮的委托看起来会和刚建单的一模一样。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(ctx context.Context, requestID domain.ShipmentRequestID, judgment domain.ReachabilityJudgment) error
 	RecordFinancialControlResult(ctx context.Context, requestID domain.ShipmentRequestID, result domain.FinancialControlResult) error
+	RecordProcessingAttempt(ctx context.Context, requestID domain.ShipmentRequestID, attempt domain.ProcessingAttempt) error
 }

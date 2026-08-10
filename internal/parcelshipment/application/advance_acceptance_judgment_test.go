@@ -216,6 +216,37 @@ func TestAnUnavailableCommercialResolverIsPendingUnderItsOwnReason(t *testing.T)
 	}
 }
 
+// Covers: UC-PS-001「建立或续办独立接受判断任务并追加判断与处理尝试」— 没能推进的一轮也
+// 要在任务上留下记录，且记录带的原因与续办引用要与交回调用方的那一份一致。两处不一致，
+// 调用方按引用查回来的就是另一轮。
+func TestAnUndecidedRoundLeavesAResumableAttemptOnTheTask(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	fixture.commercial.err = errors.New("commercial resolver unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	attempts := fixture.requests.recordedAttempts
+	if len(attempts) != 1 {
+		t.Fatalf("recorded attempts = %d, want 1", len(attempts))
+	}
+	if attempts[0].Reason().String() != result.PendingReason().String() {
+		t.Fatalf(
+			"attempt reason = %q, result reason = %q; the task records a different round than the caller was told",
+			attempts[0].Reason(), result.PendingReason(),
+		)
+	}
+	if attempts[0].ContinuationReference() != result.ContinuationReference() {
+		t.Fatal("the attempt carries a different continuation than the one handed back")
+	}
+	// 依赖抖动不是客户的资料缺口。记成客户补充会让系统去催客户补一份它并不缺的资料。
+	if attempts[0].ResumePath() != domain.ResumeByInternalRetry {
+		t.Fatalf("resume path = %q, want INTERNAL_RETRY", attempts[0].ResumePath())
+	}
+}
+
 // Covers: UC-PS-001 步骤 4B「不使用一个全局时间代替」— 规则包未为可达性声明 asOf 策略
 // 时不得自行取一个时点，判断不发起。
 func TestUndeclaredAsOfPolicyStopsBeforeAssessing(t *testing.T) {
@@ -343,15 +374,15 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 	if err != nil {
 		double.t.Fatalf("new applicable check groups: %v", err)
 	}
-	snapshot, err := domain.NewCommercialBasisSnapshot(
-		mustValue(double.t, domain.NewCommercialResolutionID, "RES-1"),
-		mustValue(double.t, domain.NewRulePackageReference, "rules-1/v1"),
-		mustValue(double.t, domain.NewCommercialViewRevision, "VIEW-1"),
-		policies,
-		applicable,
-		double.manualReview,
-		double.pendingRouting,
-	)
+	snapshot, err := domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+		ResolutionID:   mustValue(double.t, domain.NewCommercialResolutionID, "RES-1"),
+		RulePackage:    mustValue(double.t, domain.NewRulePackageReference, "rules-1/v1"),
+		ViewRevision:   mustValue(double.t, domain.NewCommercialViewRevision, "VIEW-1"),
+		DeclaredAsOf:   policies,
+		Applicable:     applicable,
+		ManualReview:   double.manualReview,
+		PendingRouting: double.pendingRouting,
+	})
 	if err != nil {
 		double.t.Fatalf("new commercial basis snapshot: %v", err)
 	}
@@ -392,9 +423,10 @@ func (double *reachabilityDouble) AssessParcelReachability(
 }
 
 type judgmentRequestStore struct {
-	rejected        bool
-	err             error
-	recordedControl []domain.FinancialControlResult
+	rejected         bool
+	err              error
+	recordedControl  []domain.FinancialControlResult
+	recordedAttempts []domain.ProcessingAttempt
 }
 
 func (store *judgmentRequestStore) RecordReachabilityJudgment(
@@ -414,6 +446,17 @@ func (store *judgmentRequestStore) RecordFinancialControlResult(
 		return store.err
 	}
 	store.recordedControl = append(store.recordedControl, result)
+	return nil
+}
+
+// RecordProcessingAttempt 即便在 err 已设时也留下记录：编排把「记录尝试」与「记录判断」
+// 分开处理，前者失败不改写本轮的未决原因，测试要能看到这一点。
+func (store *judgmentRequestStore) RecordProcessingAttempt(
+	_ context.Context,
+	_ domain.ShipmentRequestID,
+	attempt domain.ProcessingAttempt,
+) error {
+	store.recordedAttempts = append(store.recordedAttempts, attempt)
 	return nil
 }
 

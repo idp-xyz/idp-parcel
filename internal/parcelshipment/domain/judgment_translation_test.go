@@ -205,22 +205,13 @@ func TestFinancialControlOutcomesTranslateToChecks(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-001 接受条件矩阵`接受前财务控制`「不得默认放行」— 控制根本没有形成时译成
-// `无法判定`。省掉这一项校验，聚合会看到「没有失败也没有待判断」而径直接受，那是一次以
-// 遗漏方式实现的默认放行。
-func TestAnUnformedControlBecomesUndeterminedRatherThanVanishing(t *testing.T) {
-	check, err := domain.FinancialControlCheckFor(domain.FinancialControlResult{})
-	if err != nil {
-		t.Fatalf("financial control check: %v", err)
-	}
-
-	if check.Outcome() != domain.CheckUndetermined {
-		t.Fatalf("outcome = %q, want UNDETERMINED", check.Outcome())
-	}
-	if check.Group() != domain.PreAcceptanceFinancialControlCheck {
-		t.Fatalf("group = %q, want PRE_ACCEPTANCE_FINANCIAL_CONTROL", check.Group())
-	}
-	if check.Reason().String() == "" {
-		t.Fatal("an undetermined check carries no structured reason")
+// Covers: UC-PS-001 接受条件矩阵`接受前财务控制`「不得默认放行」— 从未形成的控制译不出校验
+// 结果。挡住「控制没形成却接受」的是 Decide 的适用组覆盖检查；在翻译这一层再造一项
+// `无法判定`会是同一条规则的第二处实现，且合同本就不要求财务控制时它永远满足不了。
+func TestAnUnformedControlCannotBeTranslated(t *testing.T) {
+	if _, err := domain.FinancialControlCheckFor(domain.FinancialControlResult{}); !errors.Is(
+		err, domain.ErrInvalidFinancialControlResult,
+	) {
+		t.Fatalf("error = %v, want ErrInvalidFinancialControlResult", err)
 	}
 }
