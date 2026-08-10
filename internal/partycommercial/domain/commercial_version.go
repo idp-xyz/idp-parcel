@@ -1,6 +1,5 @@
-// Package domain holds the party-commercial model: party identity, commercial
-// relationships and the versioned commercial definitions other contexts resolve
-// against. It owns no executable rate card, shipment request or settlement fact.
+// Package domain 承载参与方与商业的领域模型：参与方身份、商业关系，以及供其他上下文
+// 解析的版本化商业定义。它不拥有可执行价卡、客户委托或结算事实。
 package domain
 
 import (
@@ -87,10 +86,8 @@ func NewRetirementReference(value string) (RetirementReference, error) {
 	return RetirementReference{required}, err
 }
 
-// CommercialObjectKind is the closed set of objects that follow the shared
-// commercial-version invariants. Customer accounts and legal entities are
-// deliberately absent: they are party identities with their own lifecycle, not
-// commercial versions.
+// CommercialObjectKind 是遵循商业版本共同不变量的对象封闭集合。货主客户账户与责任
+// 法人刻意不在其中：它们是参与方身份、走自己的生命周期，不是商业版本。
 type CommercialObjectKind uint8
 
 const (
@@ -135,9 +132,8 @@ func (kind CommercialObjectKind) String() string {
 	}
 }
 
-// CommercialVersionStatus follows the context lifecycle. Approval is a
-// completeness condition of publication rather than a status of its own, so
-// there is no APPROVED between draft and published.
+// CommercialVersionStatus 遵循 CONTEXT 的生命周期。批准是发布的完备性条件而非独立
+// 状态，所以草稿与已发布之间没有 `APPROVED`。
 type CommercialVersionStatus uint8
 
 const (
@@ -174,8 +170,8 @@ type EffectiveInterval struct {
 	endsAt   time.Time
 }
 
-// NewEffectiveInterval accepts an open end: a version may apply until it is
-// expired, retired or superseded rather than at a date fixed on publication.
+// NewEffectiveInterval 接受开放结束：一个版本可以一直适用到被到期、退役或替代，而不
+// 必在发布时就定死一个终止日期。
 func NewEffectiveInterval(startsAt, endsAt time.Time) (EffectiveInterval, error) {
 	if startsAt.IsZero() || (!endsAt.IsZero() && !endsAt.After(startsAt)) {
 		return EffectiveInterval{}, ErrInvalidEffectiveInterval
@@ -206,9 +202,8 @@ func (interval EffectiveInterval) valid() bool {
 		(interval.endsAt.IsZero() || interval.endsAt.After(interval.startsAt))
 }
 
-// ApprovalBasis is the approval and provenance a publication must carry. It is
-// a single value object because a reference without its source, or either
-// without a time, cannot support the publication it is meant to justify.
+// ApprovalBasis 是一次发布必须携带的批准与来源依据。它是一个整体值对象：批准引用缺了
+// 来源、或两者缺了时间，都支撑不起它本该证明的那次发布。
 type ApprovalBasis struct {
 	reference  ApprovalReference
 	source     CommercialSourceReference
@@ -251,10 +246,8 @@ type CommercialVersionSpec struct {
 	Effective     EffectiveInterval
 }
 
-// CommercialVersion is one controlled release of a commercial definition. It is
-// a value: every transition returns a new version and leaves the receiver as it
-// was, which is what makes "published content is never edited in place"
-// structural rather than a rule someone has to remember.
+// CommercialVersion 是一次受控发布形成的商业定义。它是值类型：每次转换返回新值、不改
+// 接收者——这让「发布后正文不可覆盖」成为结构性事实，而不是一条需要有人记住的规则。
 type CommercialVersion struct {
 	kind          CommercialObjectKind
 	objectID      CommercialObjectID
@@ -291,8 +284,7 @@ func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
 	}, nil
 }
 
-// Revise changes draft content. A published version refuses: its content is
-// fixed and a change must form a further version instead.
+// Revise 修订草稿内容。已发布版本会拒绝：它的正文已经固定，变化必须形成新的版本。
 func (version CommercialVersion) Revise(digest CommercialContentDigest) (CommercialVersion, error) {
 	if version.status != CommercialVersionDraft {
 		return CommercialVersion{}, ErrCommercialContentIsFixed
@@ -304,8 +296,7 @@ func (version CommercialVersion) Revise(digest CommercialContentDigest) (Commerc
 	return version, nil
 }
 
-// Publish fixes the content. Approval and provenance must be complete and the
-// publication cannot precede the approval that justifies it.
+// Publish 固定正文。批准与来源必须完备，且发布不得早于为它背书的那次批准。
 func (version CommercialVersion) Publish(basis ApprovalBasis, publishedAt time.Time) (CommercialVersion, error) {
 	if version.status != CommercialVersionDraft {
 		return CommercialVersion{}, ErrCommercialContentIsFixed
@@ -319,9 +310,8 @@ func (version CommercialVersion) Publish(basis ApprovalBasis, publishedAt time.T
 	return version, nil
 }
 
-// TakeEffect moves a published version into use once its own boundary is
-// reached. Publication is not effectiveness: a version published ahead of its
-// interval must not answer resolution before that interval opens.
+// TakeEffect 在版本自己的生效边界到达后使其投入使用。发布不等于生效：提前发布的版本
+// 在其有效区间打开之前不得参与解析。
 func (version CommercialVersion) TakeEffect(at time.Time) (CommercialVersion, error) {
 	if version.status != CommercialVersionPublished || at.IsZero() || at.Before(version.effective.StartsAt()) {
 		return CommercialVersion{}, ErrInvalidCommercialTransition
@@ -331,9 +321,8 @@ func (version CommercialVersion) TakeEffect(at time.Time) (CommercialVersion, er
 	return version, nil
 }
 
-// Expire ends a version at its own declared boundary. A version with an open
-// end has no such boundary; expiring it would invent one, so it must be retired
-// or superseded instead.
+// Expire 在版本自己声明的边界处收尾。开放结束的版本没有这样的边界，让它到期等于凭空
+// 造一个，因此只能退役或替代。
 func (version CommercialVersion) Expire(at time.Time) (CommercialVersion, error) {
 	endsAt, bounded := version.effective.EndsAt()
 	if version.status != CommercialVersionEffective || !bounded || at.IsZero() || at.Before(endsAt) {
@@ -342,8 +331,7 @@ func (version CommercialVersion) Expire(at time.Time) (CommercialVersion, error)
 	return version.close(CommercialVersionExpired, at), nil
 }
 
-// Retire ends a version by explicit decision rather than by its interval, so it
-// records the reference that decision came from.
+// Retire 按明确决定而非按有效区间收尾，因此要记录该决定出自哪个引用。
 func (version CommercialVersion) Retire(reference RetirementReference, at time.Time) (CommercialVersion, error) {
 	if version.status != CommercialVersionEffective || !reference.valid() || at.IsZero() || at.Before(version.effectiveAt) {
 		return CommercialVersion{}, ErrInvalidCommercialTransition
@@ -353,9 +341,8 @@ func (version CommercialVersion) Retire(reference RetirementReference, at time.T
 	return closed, nil
 }
 
-// SupersededBy ends a version in favour of a named successor. The successor
-// must be another version of the same object: superseding across objects or
-// kinds would destroy the predecessor/successor relation the context requires.
+// SupersededBy 以一个指名的后继替代本版本。后继必须是同一对象的另一版本：跨对象或跨
+// 类型替代会毁掉 CONTEXT 要求商业版本保有的「与前后版本的关系」。
 func (version CommercialVersion) SupersededBy(successor CommercialVersion, at time.Time) (CommercialVersion, error) {
 	sameObject := successor.kind == version.kind && successor.objectID == version.objectID
 	if version.status != CommercialVersionEffective ||
@@ -371,18 +358,16 @@ func (version CommercialVersion) SupersededBy(successor CommercialVersion, at ti
 	return closed, nil
 }
 
-// close ends participation in new resolution while leaving the fixed content,
-// approval basis and publication time untouched, because existing shipments,
-// transactions and settlements keep referring to them.
+// close 停止参与新的解析，同时原样保留已固定的正文、批准依据与发布时间——既有委托、
+// 交易与结算仍在引用它们。
 func (version CommercialVersion) close(status CommercialVersionStatus, at time.Time) CommercialVersion {
 	version.status = status
 	version.closedAt = at.UTC()
 	return version
 }
 
-// AppliesAt answers whether this version may still be selected for a new
-// resolution. Only an effective version inside its interval can; an ended one
-// remains readable as history but never applies again.
+// AppliesAt 回答本版本是否仍可被新的解析选中。只有生效中且落在有效区间内的版本可以；
+// 已收尾的版本仍可作为历史读取，但不再适用。
 func (version CommercialVersion) AppliesAt(at time.Time) bool {
 	return version.status == CommercialVersionEffective && version.effective.Contains(at)
 }

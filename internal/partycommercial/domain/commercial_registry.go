@@ -35,18 +35,16 @@ func (outcome RegistrationOutcome) String() string {
 	}
 }
 
-// commercialVersionKey is what makes two registrations the same object version.
-// Kind is part of it because a service product and a customer contract may
-// legitimately carry the same identifier without being the same object.
+// commercialVersionKey 决定两次登记是否指同一个对象版本。对象类型算在键内，因为服务
+// 产品与客户合同完全可以合法地共用同一个标识而不是同一个对象。
 type commercialVersionKey struct {
 	kind     CommercialObjectKind
 	objectID CommercialObjectID
 	version  CommercialVersionLabel
 }
 
-// CommercialRegistry is the set of controlled releases resolution selects from.
-// It only ever adds: a new version joins its predecessors rather than replacing
-// them, and a registered version's content is never rewritten.
+// CommercialRegistry 是解析据以选择的受控发布集合。它只增不改：新版本与旧版本并存
+// 而不是替换它们，已登记版本的内容也绝不被改写。
 type CommercialRegistry struct {
 	versions map[commercialVersionKey]CommercialVersion
 }
@@ -55,9 +53,8 @@ func NewCommercialRegistry() *CommercialRegistry {
 	return &CommercialRegistry{versions: make(map[commercialVersionKey]CommercialVersion)}
 }
 
-// Register admits a released version. Re-registering identical content is a
-// replay; the same version label carrying different content is a conflict for
-// the commercial owner to resolve, never a silent overwrite.
+// Register 接纳一个已发布版本。同内容重复登记是重放；同版本号携带不同内容是需要商业
+// 责任方修正的冲突，绝不是静默覆盖。
 func (registry *CommercialRegistry) Register(version CommercialVersion) (RegistrationOutcome, error) {
 	if version.status == CommercialVersionStatusInvalid || version.status == CommercialVersionDraft {
 		return RegistrationOutcomeInvalid, ErrCommercialVersionNotPublished
@@ -75,9 +72,8 @@ func (registry *CommercialRegistry) Register(version CommercialVersion) (Registr
 	return RegistrationConflict, ErrCommercialVersionConflict
 }
 
-// sameReleasedContent compares what a release fixes. Lifecycle position is
-// excluded on purpose: a version that has since taken effect or been retired is
-// still the same release, so re-registering it must not read as a conflict.
+// sameReleasedContent 比较一次发布固定了什么。生命周期位置刻意不算在内：一个后来生效
+// 或已退役的版本仍是同一次发布，重新登记它不该被读成内容冲突。
 func sameReleasedContent(left, right CommercialVersion) bool {
 	leftEnd, leftBounded := left.effective.EndsAt()
 	rightEnd, rightBounded := right.effective.EndsAt()
@@ -104,15 +100,12 @@ func (registry *CommercialRegistry) Count() int {
 	return len(registry.versions)
 }
 
-// ViewRevision is the scope-level authority view revision: a monotonic-by-content
-// reference proving whether the commercial view a scope was resolved under is
-// still the same one. It is derived from every version in the scope rather than
-// bumped by hand, so it cannot drift from what the registry actually holds.
+// ViewRevision 是范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围解析
+// 当时的商业视图是否仍是同一个。它由范围内所有版本派生，而不是手工递增——手工递增总会
+// 有人忘记，派生值不可能与登记册实际内容脱节。
 //
-// It is deliberately scope-level and not per-object. Adding a rival candidate to
-// a scope leaves the previously adopted object untouched, so checking only that
-// object would let a new overlap slip past a resolution that has since become
-// ambiguous.
+// 它刻意是范围级而非对象级。同范围新增一个竞争候选时，先前采用的那个对象一个字节都
+// 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。
 func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference) AuthorityViewRevision {
 	parts := make([]string, 0, len(registry.versions))
 	for key, version := range registry.versions {
