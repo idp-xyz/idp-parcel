@@ -80,6 +80,8 @@ tests/
 - PostgreSQL 行模型、SQLSTATE 翻译和扫描留在适配器，不进入领域对象。
 - `party-commercial`、`network-routing` 和 `settlement-accounting` 的判断通过应用端口取得；首个子切片不创建它们的空领域模型或伪造结果。
 - 模块不能直接读取其他模块拥有的表。将来同进程调用也必须通过应用端口或已确认事件语义。
+- `internal/platform` 只放进程级共享技术设施；业务 HTTP 端点一律落在 `internal/<context>/adapters/http`，不因就近而写入 `platform/httpapi`。
+- 新增进程入口与对外交付形态（额外 `cmd/` 二进制、前端或其他客户端）是加法：它们在 `internal/` 之外落位，不改变本节包布局，因此不为将来的多端形态提前重排目录或预建空壳。
 
 ## Bento 使用边界
 
