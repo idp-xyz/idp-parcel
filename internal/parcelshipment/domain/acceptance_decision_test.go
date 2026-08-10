@@ -102,6 +102,7 @@ func basisWithApplicable(t *testing.T, applicable domain.ApplicableCheckGroups) 
 		mustValue(t, domain.NewCommercialViewRevision, "VIEW-1"),
 		nil,
 		applicable,
+		domain.ManualReviewNotRequiredByRules,
 	)
 	if err != nil {
 		t.Fatalf("new commercial basis snapshot: %v", err)

@@ -388,6 +388,15 @@ func (double *shipmentRequestRepositoryDouble) Insert(
 	return nil
 }
 
+func (double *shipmentRequestRepositoryDouble) Save(
+	_ context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) error {
+	double.records[identity] = request
+	return nil
+}
+
 func (double *shipmentRequestRepositoryDouble) stored(
 	t *testing.T,
 	identity domain.SourceIdentity,

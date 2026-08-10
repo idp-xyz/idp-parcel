@@ -49,6 +49,37 @@ func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
 	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
 }
 
+// ManualReviewPolicy 是所采用接单规则包对「这份委托要不要人工复核」的声明。
+//
+// 它刻意没有`已完成`：复核做没做完是运营发生的事，属本上下文接受判断任务的状态，规则包
+// 不拥有它。把三值的 ManualReviewState 整个挂到商业依据上，等于让 party-commercial 声明
+// 一件它不拥有的事实。编排把本策略与任务侧的完成情况合成 ManualReviewState。
+//
+// 零值是「未声明」。缺声明不等于不要求复核——用例把复核触发条件判给规则包，本上下文在这里
+// 兜任何一边都是替它作答。
+type ManualReviewPolicy uint8
+
+const (
+	ManualReviewPolicyNotDeclared ManualReviewPolicy = iota
+	ManualReviewNotRequiredByRules
+	ManualReviewRequiredByRules
+)
+
+func (policy ManualReviewPolicy) Declared() bool {
+	return policy == ManualReviewNotRequiredByRules || policy == ManualReviewRequiredByRules
+}
+
+func (policy ManualReviewPolicy) String() string {
+	switch policy {
+	case ManualReviewNotRequiredByRules:
+		return "NOT_REQUIRED"
+	case ManualReviewRequiredByRules:
+		return "REQUIRED"
+	default:
+		return ""
+	}
+}
+
 // 这里的类型是 parcel-shipment 自己对其他上下文所拥有事实的引用。party-commercial 与
 // network-routing 各自保有自己的模型；本上下文只记录所采用的引用与快照——这正是两边
 // 各自演进而互不改写对方对象的原因。
@@ -153,6 +184,7 @@ type CommercialBasisSnapshot struct {
 	viewRevision CommercialViewRevision
 	declaredAsOf []DeclaredAsOf
 	applicable   ApplicableCheckGroups
+	manualReview ManualReviewPolicy
 }
 
 func NewCommercialBasisSnapshot(
@@ -161,6 +193,7 @@ func NewCommercialBasisSnapshot(
 	viewRevision CommercialViewRevision,
 	declaredAsOf []DeclaredAsOf,
 	applicable ApplicableCheckGroups,
+	manualReview ManualReviewPolicy,
 ) (CommercialBasisSnapshot, error) {
 	if !resolutionID.valid() || !rulePackage.valid() || !viewRevision.valid() {
 		return CommercialBasisSnapshot{}, ErrInvalidCommercialBasisSnapshot
@@ -181,7 +214,14 @@ func NewCommercialBasisSnapshot(
 		viewRevision: viewRevision,
 		declaredAsOf: append([]DeclaredAsOf(nil), declaredAsOf...),
 		applicable:   applicable,
+		manualReview: manualReview,
 	}, nil
+}
+
+// ManualReviewPolicy 返回规则包对人工复核的声明。未声明时返回零值——编排据此保持未决，
+// 不替规则包在「要求」与「不要求」之间挑一个。
+func (snapshot CommercialBasisSnapshot) ManualReviewPolicy() ManualReviewPolicy {
+	return snapshot.manualReview
 }
 
 // ApplicableCheckGroups 返回规则包声明的适用校验组。未声明时返回零值——`Decide` 据此保持

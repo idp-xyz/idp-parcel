@@ -284,6 +284,8 @@ type commercialBasisDouble struct {
 	outcome                      application.CommercialBasisOutcome
 	declaresReachabilityAsOf     bool
 	declaresFinancialControlAsOf bool
+	manualReview                 domain.ManualReviewPolicy
+	applicable                   []domain.AcceptanceCheckGroup
 	err                          error
 	record                       func(string)
 	calls                        int
@@ -327,12 +329,16 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 		policies = append(policies, policy)
 	}
 
-	// 适用集合由规则包声明，因此夹具给出而不是被测代码兜底。这里声明的两组正是今天有
+	// 适用集合由规则包声明，因此夹具给出而不是被测代码兜底。默认声明的两组正是今天有
 	// 生产者的两组；换一个规则包就换一个集合，生产侧没有默认值。
-	applicable, err := domain.NewApplicableCheckGroups(
-		domain.PreAcceptanceFinancialControlCheck,
-		domain.NetworkReachabilityCheck,
-	)
+	groups := double.applicable
+	if len(groups) == 0 {
+		groups = []domain.AcceptanceCheckGroup{
+			domain.PreAcceptanceFinancialControlCheck,
+			domain.NetworkReachabilityCheck,
+		}
+	}
+	applicable, err := domain.NewApplicableCheckGroups(groups...)
 	if err != nil {
 		double.t.Fatalf("new applicable check groups: %v", err)
 	}
@@ -342,6 +348,7 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 		mustValue(double.t, domain.NewCommercialViewRevision, "VIEW-1"),
 		policies,
 		applicable,
+		double.manualReview,
 	)
 	if err != nil {
 		double.t.Fatalf("new commercial basis snapshot: %v", err)

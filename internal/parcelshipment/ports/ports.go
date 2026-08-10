@@ -22,9 +22,13 @@ type SourceSubmissionRepository interface {
 
 // ShipmentRequestRepository 以产生委托的来源身份为键存储委托聚合，这样重放才能返回
 // 原委托而不是再建一份。
+//
+// Insert 与 Save 分开：建单只能发生一次，而决定是在既有委托上推进。合成一个方法会让
+// 「这是第一份还是第二份」失去表达。
 type ShipmentRequestRepository interface {
 	FindBySourceIdentity(ctx context.Context, identity domain.SourceIdentity) (domain.ShipmentRequest, bool, error)
 	Insert(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
+	Save(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
 }
 
 // ProductionOwnershipAuthority 是试点准入控制，回答完整拟受理范围当前由谁承接。
@@ -38,6 +42,24 @@ type ProductionOwnershipAuthority interface {
 type SubmissionIdentityFactory interface {
 	NextSubmissionVersionID(ctx context.Context) (domain.SubmissionVersionID, error)
 	NextAcceptanceDecisionTaskID(ctx context.Context) (domain.AcceptanceDecisionTaskID, error)
+}
+
+// AcceptanceDecisionIdentity 与 SubmissionIdentityFactory 分开：建单期签发的身份与决定期
+// 签发的身份由不同用例触发，合并会让形成决定的编排依赖它根本不签发的那两个身份。
+type AcceptanceDecisionIdentity interface {
+	NextAcceptanceDecisionID(ctx context.Context) (domain.AcceptanceDecisionID, error)
+}
+
+// RecordedJudgments 是接受判断任务上已经采用的全部权威判断。财务控制用零值表示尚未形成，
+// 而不是配一个布尔：翻译函数据零值形成`无法判定`，因此「没有控制」无法被悄悄读成通过。
+type RecordedJudgments struct {
+	Reachability     []domain.ReachabilityJudgment
+	FinancialControl domain.FinancialControlResult
+}
+
+// RecordedJudgmentReader 取回接受判断任务上已记录的判断，供形成决定那一步装配校验结果。
+type RecordedJudgmentReader interface {
+	LoadRecordedJudgments(ctx context.Context, requestID domain.ShipmentRequestID) (RecordedJudgments, error)
 }
 
 type Clock interface {

@@ -29,6 +29,12 @@ const (
 	FinancialControlAsOfNotDeclared
 	FinancialControlUnavailable
 	JudgmentNotRecorded
+	ShipmentRequestUnavailable
+	ManualReviewPolicyNotDeclared
+	RecordedJudgmentsUnavailable
+	DecisionIdentityUnavailable
+	AcceptanceJudgmentIncomplete
+	DecisionNotRecorded
 )
 
 func (reason JudgmentPendingReason) String() string {
@@ -47,6 +53,18 @@ func (reason JudgmentPendingReason) String() string {
 		return "FINANCIAL_CONTROL_UNAVAILABLE"
 	case JudgmentNotRecorded:
 		return "JUDGMENT_NOT_RECORDED"
+	case ShipmentRequestUnavailable:
+		return "SHIPMENT_REQUEST_UNAVAILABLE"
+	case ManualReviewPolicyNotDeclared:
+		return "MANUAL_REVIEW_POLICY_NOT_DECLARED"
+	case RecordedJudgmentsUnavailable:
+		return "RECORDED_JUDGMENTS_UNAVAILABLE"
+	case DecisionIdentityUnavailable:
+		return "DECISION_IDENTITY_UNAVAILABLE"
+	case AcceptanceJudgmentIncomplete:
+		return "ACCEPTANCE_JUDGMENT_INCOMPLETE"
+	case DecisionNotRecorded:
+		return "DECISION_NOT_RECORDED"
 	default:
 		return ""
 	}
