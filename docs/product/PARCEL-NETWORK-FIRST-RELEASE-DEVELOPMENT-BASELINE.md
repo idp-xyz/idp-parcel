@@ -148,6 +148,46 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **`No-Go / 待参数化` 只约束生产结论，不约束能力范围。** 「未确认参数不得成为生产默认值」这条红线完全不变——它约束的是取值，不是产品支持哪些形态。
 
+### 机制半边现状
+
+上节定了判据却没说现在站在哪里，判据因此还用不上。下表按三条判据逐切片定级，**只描述机制半边**；实例半边一律为空且不计入。代码事实核对于 `internal/` 与 `cmd/`，用例与规则事实核对于各 `CONTEXT.md` 与 `UC-*`。
+
+状态三种：**达标**（三条判据都满足）、**部分**（有生产代码但判据未齐）、**未开始**（无生产代码）。
+
+| 切片 | 主要上下文 | 状态 | 机制半边缺什么 |
+|---|---|---|---|
+| PN-01 | 治理，无专属上下文 | 未开始 | 阶段、权威方、准入、暂停恢复、接管的**记录能力**无代码；参数槽位已在三份模板中建立 |
+| PN-02 | `party-commercial`、`parcel-shipment`、`network-routing` | 部分 | `parcel-shipment` 有生产代码（来源身份与保全、生产归属决定、安全交接判定、提交候选与批次）；`party-commercial` 只有 `S01-W01`／`S01-W02` 两份契约测试，无生产模型；`network-routing` 的接受前可达性无代码 |
+| PN-03 | `network-routing`、`node-operations`、`transport-fulfillment`、`parcel-shipment` | 未开始 | 前三个上下文无任何代码 |
+| PN-04 | `transport-fulfillment`、`parcel-shipment` | 未开始 | `transport-fulfillment` 无代码；`parcel-shipment` 侧的包裹终局未实现 |
+| PN-05 | `customs-compliance` | 未开始 | 无代码 |
+| PN-06 | `visibility-exception` | 未开始 | 无代码 |
+| PN-07 | `parcel-pricing`、`settlement-accounting` | 部分 | `parcel-pricing` 是本仓最成熟的上下文，规则模型七步全部有执行器；`settlement-accounting` 只有 `S01-W03` 财务控制边界的契约测试，无生产结算模型 |
+| PN-08 | 跨上下文治理编排 | 未开始 | 候选清单、阶段决定、生产权威区间、暂停恢复、接管与在途盘点的记录能力无代码 |
+
+**八个切片没有一个达标：两个部分，六个未开始。** 这个分布是旧口径的产物——只有计价手上有一张真实价卡可研究，别处都停在「等真实证据」。ADR-0016 解除的正是这个停顿，因此该分布此后不再有正当理由。
+
+#### 三条判据各自的现状
+
+**骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 全仓搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`，没有用空实现顶住的假完成。这使定级可信：六个「未开始」就是未开始，不是被 stub 掩盖的部分完成。已有部分仍有具名缺口，例如 `parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明的闭合集合有十项，分区、地址类型与服务选项三项分类特征需要相等而非比较，尚无执行器；代码已就地声明该延后与理由（`internal/parcelpricing/domain/feature_condition.go`），按「枚举取值与产生它的规则同时出现」处理，不单独计为缺陷。
+
+**受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 14 份，含 `SYN-CHAIN` 联检与 `UC-PS-001` 编排的逐结果断言。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
+
+**参数显式未配置——目前满足，且是被刻意维持的。** 全仓唯一第三方依赖是 `github.com/go-chi/chi/v5`；生产代码中没有任何业务阈值、金额、费率或系数常量，计价的阈值一律由价卡版本携带。
+
+#### 契约测试不计入骨架完整
+
+`party-commercial`、`settlement-accounting` 与 `parcel-shipment` 的部分边界采用**只写测试的契约**（`*_contract_test.go`）：文件内自带合成类型，并明确声明不引入生产模型、仓储、事务、outbox 或外部适配器。它钉住边界形状与调用顺序，作用是防止后续实现偏离已定的边界，但判据要的是**规则有执行器**，契约测试只证明期望被写了下来。把它读成实现会高估产品就绪度，因此上表把只有契约测试的上下文记为无生产模型。
+
+#### 横切缺口，不属任何单一切片
+
+- **应用层只有一例，端口无生产实现。** `parcel-shipment` 已有用例编排与自有端口（`application/`、`ports/`），其余上下文仍只有 `domain` 包；端口是纯接口，今天唯一的实现是测试用替身，PostgreSQL 适配器仍被 ADR-0017 的持久化闸门挡住。
+- **无持久化。** 没有仓储实现、迁移或数据库驱动依赖。这一点此前是「形状可零成本改动」的前提，[ADR-0014](../adr/0014-versioned-canonicalization-shape-for-content-digest.md) 之后不再是硬约束，但它仍使「受控案例可复算」目前只在进程内成立。
+- **无事件机制**，无 outbox 或发布侧。
+- **HTTP 面只有 `/healthz` 与 `/version`**（`internal/platform/httpapi/router.go`），没有任何业务端点。
+
+这四项在八个切片里都会再出现，逐切片各补一次要重复付代价；它们的处置顺序应先于或至少并行于下一个上下文的领域建模。本节只记录现状与该观察，不在此决定顺序。
+
 ### 目标客户群
 
 **经营跨境出口小包网络的物流企业，首发以中国出口为起运侧。**
