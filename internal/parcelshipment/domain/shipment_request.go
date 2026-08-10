@@ -46,8 +46,8 @@ func (state ShipmentRequestState) String() string {
 	}
 }
 
-// SubmissionVersion is the uncoverable record of what the customer currently
-// asks for. Correction produces a further version rather than editing this one.
+// SubmissionVersion 是客户当前请求内容的不可覆盖记录。纠错形成新的提交版本，而不是
+// 就地修改这一份。
 type SubmissionVersion struct {
 	versionID         SubmissionVersionID
 	sourceSubmission  SourceSubmissionFingerprint
@@ -71,9 +71,8 @@ func (version SubmissionVersion) EstablishedAt() time.Time {
 	return version.establishedAt
 }
 
-// AcceptanceDecisionTask tracks continuable acceptance work for one submission
-// version. It is not a request state: while it is open the request stays
-// submitted, and establishing it is not acceptance.
+// AcceptanceDecisionTask 记录一个提交版本上可续办的接受判断工作。它不是委托的领域
+// 状态：任务未完成时委托仍为`已提交`，任务的建立本身也不构成接受。
 type AcceptanceDecisionTask struct {
 	taskID              AcceptanceDecisionTaskID
 	submissionVersionID SubmissionVersionID
@@ -118,8 +117,8 @@ type ShipmentRequest struct {
 	commitment        ExpectedCommitment
 }
 
-// SubmitShipmentRequest establishes a submitted request behind an allowed
-// future-submission gate. It forms no acceptance or rejection.
+// SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或
+// 拒绝。
 func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, error) {
 	if !spec.Candidate.valid() ||
 		!spec.VersionID.valid() ||

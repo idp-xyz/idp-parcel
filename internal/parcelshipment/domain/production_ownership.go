@@ -11,9 +11,8 @@ var (
 	ErrInvalidFutureSubmissionGate        = errors.New("parcel shipment: invalid future submission gate input")
 )
 
-// AdmissionScope is the immutable scope snapshot used by a production
-// ownership decision. It is intentionally separate from PayloadDigest: a
-// request payload and a governance scope answer are different facts.
+// AdmissionScope 是生产归属决定所用的不可变范围快照。它刻意与 PayloadDigest 分开：
+// 请求内容与治理范围的答案是两类不同的事实。
 type AdmissionScope struct {
 	reference AdmissionScopeReference
 	digest    AdmissionScopeDigest
@@ -211,9 +210,8 @@ func (interval OwnershipValidityInterval) valid() bool {
 		interval.validFrom.Before(interval.validUntil)
 }
 
-// ProductionOwnershipDecisionSpec is the input to the immutable decision.
-// Optional references are represented by their zero values and are validated
-// against the selected authority/control dimensions.
+// ProductionOwnershipDecisionSpec 是形成不可变决定的输入。可选引用以零值表达，并按
+// 所选的权威身份与准入控制两个维度校验其该有还是不该有。
 type ProductionOwnershipDecisionSpec struct {
 	DecisionID        ProductionOwnershipDecisionID
 	Scope             AdmissionScope
@@ -473,8 +471,8 @@ type FutureSubmissionGate struct {
 	blockReasons        []FutureSubmissionBlockReason
 }
 
-// EvaluateFutureSubmissionGate derives the future-submission result without
-// creating a request, task, event, or persistence record.
+// EvaluateFutureSubmissionGate 派生未来建单门禁结果，不创建委托、接受判断任务、领域
+// 事件或任何持久化记录。
 func EvaluateFutureSubmissionGate(
 	decision ProductionOwnershipDecision,
 	expectedScopeDigest AdmissionScopeDigest,

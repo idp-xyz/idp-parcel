@@ -239,9 +239,8 @@ func (assessment SafeHandoffAssessment) ConfirmedScopeDigest() (AdmissionScopeDi
 	return assessment.confirmedScopeDigest, true
 }
 
-// ConfirmationReference is the token an OTHER-authority ownership decision must
-// cite. An unresolved assessment withholds it even when the target replied,
-// so partial or unqueryable evidence cannot be mistaken for a completed handoff.
+// ConfirmationReference 是`其他权威`归属决定必须引用的凭据。判定未决时即便目标方已经
+// 回复也不给出它，这样部分确认或查不到的证据就不会被误当成已完成的交接。
 func (assessment SafeHandoffAssessment) ConfirmationReference() (HandoffConfirmationReference, bool) {
 	if !assessment.confirmationRef.valid() || assessment.status != SafeHandoffConfirmed {
 		return HandoffConfirmationReference{}, false

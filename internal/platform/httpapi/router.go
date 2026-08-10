@@ -1,4 +1,5 @@
-// Package httpapi owns transport-only HTTP routes shared by Parcel binaries.
+// Package httpapi 只拥有 Parcel 各二进制共享的传输层 HTTP 路由。业务端点不落在这里，
+// 按 ADR-0018 归各上下文的 adapters/http。
 package httpapi
 
 import (
@@ -11,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 )
 
-// New returns the transport router for process-level endpoints.
+// New 返回进程级端点的传输层路由。
 func New(info buildinfo.Info) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
