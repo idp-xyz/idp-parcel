@@ -258,11 +258,9 @@ func (purpose PricingPurpose) valid() bool {
 	return purpose.pairedDirection().valid()
 }
 
-// pairedDirection is the one direction this purpose may be declared with. The
-// first release keeps the two axes one-to-one, so the purpose carries no
-// information the direction does not already carry; it is reserved for telling
-// same-direction evaluations apart once real parameters prove that is needed.
-// Widening the axis means revisiting this pairing, not removing it silently.
+// pairedDirection 是本计算目的唯一可以搭配声明的价格方向。首发让两个轴一一对应，因此
+// 计算目的尚未携带价格方向之外的信息；该轴保留下来，是为了将来真实参数证明需要区分同
+// 方向评价时可以用上。拓宽这个轴意味着重新确认这套配对，而不是静默把它去掉。
 func (purpose PricingPurpose) pairedDirection() PricingDirection {
 	switch purpose {
 	case PricingPurposeCustomerCharge:
@@ -345,10 +343,9 @@ func (basis ChargeBasis) valid() bool {
 	return basis == ChargeBasisRateEntry || basis == ChargeBasisFixedAmount
 }
 
-// ChargeMethod is how one evaluation charge line's amount is produced. CONTEXT
-// closes the set at four and scopes it to any charge line, so a declaring rule
-// and the line it produces name the same method rather than each keeping a
-// private vocabulary. Widening the set is a version content change.
+// ChargeMethod 是一条评价费用行的金额如何产生。CONTEXT 把取值集合闭合为四种，且作用于
+// 任何费用行，因此声明它的规则与它产生的费用行称呼同一个计算方法，而不是各留一套私有
+// 词汇。扩充这个集合属于版本内容变化。
 type ChargeMethod string
 
 const (
@@ -393,8 +390,7 @@ const (
 	ArtifactRateTable       ArtifactKind = "rate-table"
 	ArtifactWeightPolicy    ArtifactKind = "weight-policy"
 	ArtifactReferenceSeries ArtifactKind = "reference-series"
-	// A commercial policy version is what declares an exchange rate's quote
-	// basis. Pricing references it; party-commercial owns it.
+	// 汇率的口径依据由商业价格政策版本声明。计价引用它，所有权在 party-commercial。
 	ArtifactCommercialPolicy ArtifactKind = "commercial-policy"
 	ArtifactNumericProfile   ArtifactKind = "numeric-profile"
 )
@@ -415,7 +411,7 @@ type VersionReference struct {
 	digest  string
 }
 
-// EffectivePeriod uses [startsAt, endsAt). A zero endsAt means no upper bound.
+// EffectivePeriod 采用 [startsAt, endsAt) 区间。endsAt 为零值表示没有上界。
 type EffectivePeriod struct {
 	startsAt time.Time
 	endsAt   time.Time

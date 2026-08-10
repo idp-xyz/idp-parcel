@@ -1,14 +1,12 @@
 package domain
 
-// FeatureSource is the closed set of decidable quantities a condition may read.
-// Keeping it closed is what lets an evaluation replay every rule's hit and miss
-// from the version manifest alone; an open set would need the rule text itself.
+// FeatureSource 是判定条件可以读取的可判定量的封闭集合。保持封闭，评价才能仅凭版本清单
+// 重放每条规则的命中与未命中；集合一旦开放，就还需要规则正文本身。
 //
-// The set the CONTEXT declares also names 体积重, 计价重量, 分区, 地址类型 and
-// 服务选项. None of them is a threshold on this card: the first two are what a
-// conditional minimum weight raises rather than what any condition reads, and
-// the last three are categorical, needing an equality against a value rather
-// than a comparison. They arrive with the rules that need them.
+// CONTEXT 声明的特征来源集合还包括体积重、计价重量、分区、地址类型和服务选项。它们在
+// 这张卡上都不是阈值：前两个是条件最低计价重量抬高的对象，而不是任何判定条件读取的量；
+// 后三个是类别量，需要的是与某个取值相等，而不是比较大小。它们会随需要它们的规则一起
+// 进来。
 type FeatureSource string
 
 const (
@@ -25,9 +23,8 @@ func (source FeatureSource) valid() bool {
 	return source.measure() != measureUnknown
 }
 
-// featureMeasure is the physical quantity a source produces. A threshold only
-// means something against the same measure, so the pairing is checked once here
-// rather than at every comparison.
+// featureMeasure 是一个特征来源产出的物理量。阈值只有对着同一种量纲才有意义，所以配对
+// 在这里检查一次，而不是在每次比较时都查。
 type featureMeasure int
 
 const (
@@ -50,14 +47,12 @@ func (source FeatureSource) measure() featureMeasure {
 	}
 }
 
-// ComparisonOperator is the closed set of comparisons a condition may use. The
-// card's conditions never need arithmetic, so no expression engine is offered.
+// ComparisonOperator 是判定条件可以使用的比较运算的封闭集合。卡上的条件从不需要算术，
+// 所以这里不提供任何表达式引擎。
 //
-// Both readings of each bound are carried because carriers word them both ways
-// and a band needs an upper bound at all: DHL's Non-Conveyable Piece applies
-// "between 56 lbs and 150 lbs", inclusive at each end, while the card's own
-// oversize limits read "over". Restating an inclusive bound as a strict one
-// would require the transcriber to invent the next representable value.
+// 每个边界的两种读法都保留，因为承运商两种写法都用，而区间型条款本来就需要一个上界：
+// DHL 的 Non-Conveyable Piece 适用于「56 至 150 磅之间」，两端含端；而本卡自己的超限
+// 条款读作「超过」。把含端边界改写成严格边界，会迫使转抄者自造下一个可表示值。
 type ComparisonOperator string
 
 const (
@@ -78,7 +73,7 @@ func (operator ComparisonOperator) valid() bool {
 	}
 }
 
-// holds applies the operator to an already unit-checked comparison result.
+// holds 把比较运算施加到一个已经过单位校验的比较结果上。
 func (operator ComparisonOperator) holds(comparison int) (bool, error) {
 	switch operator {
 	case ComparisonGreaterThan:
@@ -94,9 +89,8 @@ func (operator ComparisonOperator) holds(comparison int) (bool, error) {
 	}
 }
 
-// PackageFeatures holds the decidable quantities derived once for an
-// evaluation, so every rule reads the same values instead of each re-deriving
-// them from the input snapshot.
+// PackageFeatures 保存为一次评价一次性派生出来的可判定量，使每条规则读到相同的值，
+// 而不是各自从计价输入快照重新派生一遍。
 type PackageFeatures struct {
 	dimensions   Dimensions
 	actualWeight Weight
@@ -129,9 +123,8 @@ func (features PackageFeatures) length(source FeatureSource) (Length, error) {
 	}
 }
 
-// FeatureCondition is the only predicate shape the card needs: one feature, one
-// comparison, one threshold. The threshold is declared by the rate card
-// version, never carried by this package.
+// FeatureCondition 是卡唯一需要的判定条件形状：一个特征、一个比较运算、一个阈值。
+// 阈值由价卡版本声明，本包从不自带。
 type FeatureCondition struct {
 	source          FeatureSource
 	operator        ComparisonOperator
@@ -176,9 +169,8 @@ func NewWeightFeatureCondition(source FeatureSource, operator ComparisonOperator
 func (condition FeatureCondition) Source() FeatureSource        { return condition.source }
 func (condition FeatureCondition) Operator() ComparisonOperator { return condition.operator }
 
-// ThresholdValue and ThresholdUnit report the declared threshold whatever it
-// measures, so canonicalisation and explanations do not need to switch on the
-// measure themselves.
+// ThresholdValue 与 ThresholdUnit 报出已声明的阈值，无论它度量的是哪种量，
+// 使规范化与解释不必自己再按量纲分支。
 func (condition FeatureCondition) ThresholdValue() Decimal {
 	switch condition.source.measure() {
 	case measureLength:

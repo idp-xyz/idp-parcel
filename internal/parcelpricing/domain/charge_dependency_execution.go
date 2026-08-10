@@ -2,12 +2,11 @@ package domain
 
 import "fmt"
 
-// dependencyBasis resolves the amount a percent charge is charged on.
+// dependencyBasis 解析一条百分比费用所依据的基数金额。
 //
-// The basis is a sum over charge lines the card names, so a percent charge can
-// only be computed once every line it reads already carries an amount. That is
-// why the resolution is ordered by dependency rather than by declaration: two
-// percent charges declared in one order may have to be computed in the other.
+// 基数是对卡指名的那些费用行求和，所以只有当它读取的每一行都已经有金额时，百分比费用
+// 才算得出来。这就是解析按依赖顺序而不是按声明顺序进行的原因：按一种顺序声明的两条
+// 百分比费用，可能必须按相反的顺序计算。
 type dependencyBasis struct {
 	dependencies map[string]ChargeDependency
 	amounts      map[string]Decimal
@@ -22,9 +21,8 @@ func newDependencyBasis(structures PricingPlanStructures, currency Currency) dep
 	return dependencyBasis{dependencies: indexed, amounts: make(map[string]Decimal), currency: currency}
 }
 
-// record adds a settled charge line to the pool later bases are summed from.
-// Deducted lines reduce a basis for the same reason they reduce a total: the
-// card's "all other charges" means the net of them.
+// record 把一条已定值的费用行加入池中，后续基数从这个池里求和。抵减方向的行会减小
+// 基数，理由与它减小合计的理由相同：卡上的「本票全部其他费用」指的是它们的净额。
 func (basis dependencyBasis) record(code ChargeCode, effect ChargeEffect, amount Money) error {
 	existing, seen := basis.amounts[code.String()]
 	if !seen {
@@ -47,17 +45,15 @@ func (basis dependencyBasis) record(code ChargeCode, effect ChargeEffect, amount
 	return nil
 }
 
-// sum totals the codes a dependency composes. A code the evaluation never
-// produced contributes nothing rather than erroring: the card may name a charge
-// that simply did not apply to this parcel.
+// sum 对一条费用依赖所构成的各费用代码求和。本次评价从未产生过的代码贡献零而不是报错：
+// 卡完全可以指名一项对这件包裹根本不适用的费用。
 func (basis dependencyBasis) sum(dependency ChargeDependency) (Money, error) {
 	total := NewDecimalFromInt64(0)
 	var err error
 	switch dependency.composition {
 	case ChargeBasisAllCharges:
 		excluded := codeSet(dependency.excludes)
-		// The dependent charge is never part of its own basis; including it
-		// would make the amount depend on itself.
+		// 被依赖的费用行本身永不进入自己的基数；放进去会让金额依赖它自己。
 		excluded[dependency.dependent.String()] = struct{}{}
 		for code, amount := range basis.amounts {
 			if _, skip := excluded[code]; skip {
@@ -87,10 +83,9 @@ func (basis dependencyBasis) sum(dependency ChargeDependency) (Money, error) {
 	return NewMoney(total, basis.currency)
 }
 
-// percentShare divides a basis-times-percentage product by 100. Dividing by a
-// power of ten is a shift of the decimal point, so the result is exact and no
-// precision has to be declared — which matters because the card states a fuel
-// rate without stating how to round the product of applying it.
+// percentShare 把「基数乘百分比」的乘积除以 100。除以十的幂只是小数点移位，因此结果
+// 精确、无需声明精度——这一点要紧，因为卡只给出燃油费率，并没有说施加它之后的乘积
+// 该怎么取整。
 func percentShare(product Decimal) (Decimal, error) {
 	if !product.valid() {
 		return Decimal{}, ErrInvalidDecimal
@@ -105,8 +100,7 @@ func percentShare(product Decimal) (Decimal, error) {
 	return shifted, nil
 }
 
-// share values one percent-of-basis calculation against the pool collected so
-// far.
+// share 拿到目前为止收集的费用池，为一次`按基数百分比`计算定值。
 func (basis dependencyBasis) share(calculation SurchargeCalculation, series map[ReferenceSeriesKind]ReferenceSeriesValue) (Money, error) {
 	if calculation.method != ChargeMethodPercentOfBasis || calculation.basis == "" {
 		return Money{}, ErrInvalidSurchargeRule
@@ -156,12 +150,11 @@ func codeSet(codes []ChargeCode) map[string]struct{} {
 	return set
 }
 
-// orderPercentOutcomes returns the matched percent charges in an order where
-// every charge is computed after the charges its basis reads.
+// orderPercentOutcomes 按「每条费用都排在其基数所读取的费用之后」的顺序，返回已命中的
+// 百分比费用。
 //
-// A basis that reaches back to the charge it feeds has no fixed point, and
-// choosing an evaluation order would invent one, so a cycle is a conflict for a
-// human to resolve rather than a number this package picks.
+// 一个反向牵回到它所供养的那条费用的基数没有不动点，而选定一个求值顺序等于替它发明一个，
+// 所以存在环时形成`冲突`、交给人裁决，而不是由本包挑一个数出来。
 func orderPercentOutcomes(pending []*surchargeOutcome, basis dependencyBasis) ([]*surchargeOutcome, error) {
 	producedBy := make(map[string]*surchargeOutcome, len(pending))
 	for _, outcome := range pending {
@@ -185,8 +178,8 @@ func orderPercentOutcomes(pending []*surchargeOutcome, basis dependencyBasis) ([
 			return fmt.Errorf("%w: charge %s takes part in a circular basis", ErrRateTableConflict, code)
 		}
 		state[code] = visiting
-		// A greater-of may read more than one basis, so the codes it depends on
-		// are the union over every basis its operands name.
+		// 取较大值可能读取不止一个基数，所以它依赖的费用代码，是其各操作数所指名的
+		// 每一个基数的并集。
 		for _, dependencyID := range outcome.rule.calculation.basisDependencyIDs() {
 			dependency, declared := basis.dependencies[dependencyID]
 			if !declared {
@@ -213,10 +206,9 @@ func orderPercentOutcomes(pending []*surchargeOutcome, basis dependencyBasis) ([
 	return ordered, nil
 }
 
-// basisCodes names the charge codes a dependency reads. An all-charges basis
-// reads everything already recorded **and** every percent charge still pending,
-// because those join the pool before it is summed; leaving the pending ones out
-// would order the resolution as if they did not exist and read a zero for them.
+// basisCodes 指出一条费用依赖读取哪些费用代码。「本票全部其他费用」型基数读取的是已经
+// 记录在池中的全部费用**以及**所有尚未定值的百分比费用，因为后者会在求和之前加入池；
+// 漏掉待定的那些，会让解析顺序当它们不存在，从而给它们读到零。
 func basisCodes(dependency ChargeDependency, basis dependencyBasis, pending map[string]*surchargeOutcome) []string {
 	excluded := codeSet(dependency.excludes)
 	excluded[dependency.dependent.String()] = struct{}{}

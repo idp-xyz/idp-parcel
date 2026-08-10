@@ -45,8 +45,8 @@ func (length Length) valid() bool {
 	return length.value.valid() && length.unit.valid()
 }
 
-// Volume is a cubic measure. Unit reports the underlying length unit, so a
-// Volume in LengthUnitInch is a count of cubic inches.
+// Volume 是一个立方量。Unit 报出底层的长度单位，所以单位为 LengthUnitInch 的 Volume
+// 表示的是多少立方英寸。
 type Volume struct {
 	value Decimal
 	unit  LengthUnit
@@ -59,9 +59,8 @@ func newVolume(value Decimal, unit LengthUnit) (Volume, error) {
 	return Volume{value: value, unit: unit}, nil
 }
 
-// NewVolume builds a volume that was declared rather than derived — a rate
-// card's oversize threshold is stated as a cubic measure, not computed from
-// sides.
+// NewVolume 构造一个被声明出来、而不是派生出来的体积——价卡的超限阈值本身就是以立方量
+// 写明的，不是从三边算出来的。
 func NewVolume(value Decimal, unit LengthUnit) (Volume, error) {
 	return newVolume(value, unit)
 }
@@ -73,10 +72,8 @@ func (volume Volume) valid() bool {
 	return volume.value.valid() && volume.unit.valid()
 }
 
-// Dimensions holds a package's three sides ordered by magnitude rather than by
-// the order they were declared in. The rate card's dimension thresholds all
-// read "longest side" and "second longest side", so the ordering is part of the
-// value, not something each rule re-derives.
+// Dimensions 保存包裹的三边，按实际大小排序而不是按声明顺序。价卡的尺寸阈值一律写作
+// 「最长边」与「次长边」，所以这个排序是值的一部分，不是每条规则各自重新推导的东西。
 type Dimensions struct {
 	longest  Decimal
 	second   Decimal
@@ -116,8 +113,7 @@ func (dimensions Dimensions) ShortestSide() Length {
 	return Length{value: dimensions.shortest, unit: dimensions.unit}
 }
 
-// LengthPlusGirth is the card's own formula: longest side plus twice each of
-// the two remaining sides.
+// LengthPlusGirth 是卡自己的公式，即长加围：最长边加其余两边各两倍。
 func (dimensions Dimensions) LengthPlusGirth() (Length, error) {
 	if !dimensions.valid() {
 		return Length{}, ErrInvalidDimensions
@@ -137,8 +133,7 @@ func (dimensions Dimensions) LengthPlusGirth() (Length, error) {
 	return NewLength(total, dimensions.unit)
 }
 
-// Volume is the product of the three sides, carrying the unit the sides were
-// measured in.
+// Volume 是三边之积，并携带三边度量所用的单位。
 func (dimensions Dimensions) Volume() (Volume, error) {
 	if !dimensions.valid() {
 		return Volume{}, ErrInvalidDimensions

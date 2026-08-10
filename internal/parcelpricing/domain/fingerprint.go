@@ -247,10 +247,8 @@ func canonicalTriggerValue(trigger TriggerCondition) canonicalTriggerDocument {
 }
 
 func canonicalFeatureConditionValue(condition FeatureCondition) canonicalFeatureConditionDocument {
-	// Read the threshold through the condition rather than off one field: a
-	// weight or volume threshold lives in a different field, and hashing the
-	// length field regardless would give every non-length condition the same
-	// empty threshold in the digest.
+	// 通过判定条件本身读阈值，而不是直接取某一个字段：重量或体积阈值存放在另一个字段，
+	// 一律去哈希长度字段，会让所有非长度类条件在摘要里都得到同一个空阈值。
 	return canonicalFeatureConditionDocument{
 		Source:    condition.source.String(),
 		Operator:  condition.operator.String(),
@@ -266,9 +264,8 @@ type canonicalSurchargeCalculationDocument struct {
 	Percentage string                                  `json:"percentage"`
 	Basis      string                                  `json:"basis"`
 	Operands   []canonicalSurchargeCalculationDocument `json:"operands"`
-	// Both halves of a series-sourced rate enter the digest separately. Hashing
-	// only their product would let a rate change and a discount change cancel
-	// out and go unreported.
+	// 来自序列的费率，两半分别进入摘要。只哈希两者的乘积，会让一次费率变化与一次
+	// 折扣变化互相抵消而无人察觉。
 	SeriesKind   string `json:"series_kind,omitempty"`
 	SeriesFactor string `json:"series_factor,omitempty"`
 }
@@ -401,26 +398,20 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 	}
 }
 
-// canonicalizationVersion identifies the shape of the canonical documents that
-// content and semantic digests are computed from. Digests are only comparable
-// within the same canonicalization version; widening the shape must bump this
-// value rather than rewrite the existing one. See ADR-0014.
-// PPC-2 widened the shape in three places at once, as the rule model design
-// decided: the rate table gained the first-continue and unit-price families,
-// the rounding policy became a segment list, and a lookup now records a rate
-// selection instead of a bracket. Batching them costs one version instead of
-// three, and every version has to be supported for as long as evaluations
-// recorded under it can be replayed.
-// PPC-3 turned a rule's condition from a single predicate into a trigger, so
-// the condition document is now a kind with an optional predicate and operands
-// rather than a bare predicate. A rule that reads one predicate serialises as a
-// PREDICATE trigger, which is a different shape from the bare predicate PPC-2
-// wrote; there is no widening that leaves the old bytes intact.
+// canonicalizationVersion 标识内容摘要与评价语义摘要所依据的规范化文档形状。摘要只在
+// 同一规范化版本内可比；拓宽形状必须递增这个值，而不是就地改写既有形状。见 ADR-0014。
+// PPC-2 按规则模型设计的决定，一次拓宽了三处：价表新增首重加续重与计费重乘单价两个
+// 价表族，取整策略变成分段列表，查表结果改为记录一次费率选择而不是一个档位。合并成
+// 一次只花一个版本而不是三个，而每个版本都必须在「按它记录的评价还能重放」期间持续
+// 支持。
+// PPC-3 把规则的条件从单个判定条件改成触发条件，于是条件文档现在是「一个种类 + 可选
+// 判定条件 + 操作数」，不再是一个裸判定条件。只读一个判定条件的规则会序列化成
+// PREDICATE 触发条件，形状与 PPC-2 写出的裸判定条件不同；没有任何一种拓宽能让旧字节
+// 保持原样。
 const canonicalizationVersion = "PPC-3"
 
-// CurrentCanonicalizationVersion reports the shape this build canonicalizes
-// under. An artifact recorded under any other value cannot have its digest
-// recomputed here.
+// CurrentCanonicalizationVersion 报出本构建按哪套形状做规范化。按其他取值记录的工件，
+// 在这里无法重新算出其摘要。
 func CurrentCanonicalizationVersion() string { return canonicalizationVersion }
 
 type canonicalPricingPlan struct {
@@ -439,9 +430,8 @@ type canonicalPricingPlan struct {
 	Dependencies     []canonicalChargeDependencyDocument `json:"charge_dependencies"`
 	ReferenceSeries  []canonicalReferenceSeriesDocument  `json:"reference_series"`
 	Manifest         []canonicalVersionReference         `json:"manifest"`
-	// Omitted when the plan refuses nothing, so every plan released before
-	// exclusion rules existed canonicalizes to the same bytes and keeps its
-	// digest comparable without spending a canonicalization version.
+	// 方案不拒收任何东西时省略该字段，使得所有在排除规则出现之前发布的方案规范化成
+	// 相同的字节、摘要继续可比，而不必额外花掉一个规范化版本。
 	Exclusions []canonicalExclusionRuleDocument `json:"exclusions,omitempty"`
 }
 
@@ -577,9 +567,8 @@ type canonicalEvaluationInput struct {
 	Dimensions  *canonicalDimensionsDocument `json:"dimensions,omitempty"`
 	BusinessAt  string                       `json:"business_at"`
 	Facts       []canonicalVersionReference  `json:"facts"`
-	// Omitted when the snapshot carries no readings, so every evaluation
-	// recorded before reference series existed canonicalizes to the same bytes
-	// and keeps its digest comparable.
+	// 快照不带任何序列取值时省略该字段，使得所有在计价参考序列出现之前记录的评价
+	// 规范化成相同的字节、摘要继续可比。
 	Series []canonicalSeriesValueDocument `json:"series,omitempty"`
 }
 
@@ -590,9 +579,8 @@ type canonicalSeriesValueDocument struct {
 	QuoteBasis *canonicalVersionReference `json:"quote_basis,omitempty"`
 }
 
-// canonicalConversionDocument keeps both sides of a conversion in the digest.
-// Hashing only the converted figure would let the original amount and the rate
-// change together and cancel out unreported.
+// canonicalConversionDocument 把一次换算的两侧都留在摘要里。只哈希换算后的数字，
+// 会让原币金额与汇率一同变化、互相抵消而无人察觉。
 type canonicalConversionDocument struct {
 	Original  canonicalMoney            `json:"original"`
 	Rate      string                    `json:"rate"`

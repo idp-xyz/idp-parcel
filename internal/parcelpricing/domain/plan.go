@@ -6,12 +6,10 @@ import (
 	"strings"
 )
 
-// VolumetricFactor is the card's own divisor, the length unit it reads, and the
-// precision its quotient is declared to. The card states it — L4 reads
-// "volumetric pounds = length × width × height in inches / 250" — so this
-// package never carries a divisor of its own. The weight unit comes from the
-// rounding increment, because a divisor that turns cubic inches into pounds
-// says nothing about any other pair of units.
+// VolumetricFactor 是卡自己的体积系数、它读取的长度单位，以及其商所声明的精度。卡上写
+// 明了它——L4 写的是「体积磅 = 英寸计的长 × 宽 × 高 / 250」——所以本包从不自带任何系数。
+// 重量单位来自取整的进位单位，因为一个把立方英寸换成磅的除数，对任何其他单位对都无话
+// 可说。
 type VolumetricFactor struct {
 	divisor    Decimal
 	lengthUnit LengthUnit
@@ -31,9 +29,8 @@ func (factor VolumetricFactor) LengthUnit() LengthUnit         { return factor.l
 func (factor VolumetricFactor) WeightUnit() WeightUnit         { return factor.rounding.unit() }
 func (factor VolumetricFactor) Rounding() WeightRoundingPolicy { return factor.rounding }
 
-// Apply turns a volume into the volumetric weight the card declares. A volume
-// measured in another unit is refused rather than converted: the conversion
-// rule would itself have to be a versioned declaration.
+// Apply 把体积换成卡所声明的体积重。按别的单位度量的体积会被拒绝而不是隐式换算：
+// 换算规则本身也必须是一次版本化声明。
 func (factor VolumetricFactor) Apply(volume Volume) (Weight, error) {
 	if !factor.valid() || !volume.valid() {
 		return Weight{}, ErrInvalidVolumetricFactor
@@ -53,15 +50,14 @@ func (factor VolumetricFactor) Apply(volume Volume) (Weight, error) {
 }
 
 func (factor VolumetricFactor) valid() bool {
-	// A divisor declares the precision of one quotient, so it takes a single
-	// rounding segment: banding by weight is impossible here because the weight
-	// is what the division produces.
+	// 体积系数声明的是一个商的精度，因此只取单段取整：在这里没法按重量分段，
+	// 因为重量正是这次相除的产物。
 	segment, ok := factor.rounding.sole()
 	if !ok {
 		return false
 	}
-	// RoundingNone is excluded because an exact quotient need not terminate in
-	// base 10; the precision has to be declared rather than left to the code.
+	// 排除 RoundingNone，因为精确商不一定是有限小数；精度必须被声明，
+	// 而不是留给代码去定。
 	return factor.divisor.valid() && factor.divisor.Sign() > 0 && factor.lengthUnit.valid() &&
 		factor.rounding.valid() && segment.mode != RoundingNone
 }
@@ -105,8 +101,7 @@ func (policy PricingWeightPolicy) valid() bool {
 	if policy.reference.kind != ArtifactWeightPolicy || !policy.reference.valid() || !policy.method.valid() || !policy.rounding.valid() {
 		return false
 	}
-	// A method that never reads a divisor must not declare one, and MAX cannot
-	// reach a volumetric weight without it.
+	// 从不读取体积系数的重量方法不得声明系数，而 MAX 没有它就得不出体积重。
 	switch policy.method {
 	case PricingWeightActualOnly:
 		return policy.volumetric == nil
@@ -276,8 +271,8 @@ func (plan PricingPlanVersion) Structures() PricingPlanStructures { return plan.
 func (plan PricingPlanVersion) Manifest() VersionManifest         { return plan.manifest }
 func (plan PricingPlanVersion) ContentDigest() string             { return plan.contentDigest }
 
-// CanonicalizationVersion reports the shape the content digest was produced
-// under. Digests are only comparable within the same value. See ADR-0014.
+// CanonicalizationVersion 报出该内容摘要是在哪一套形状下产生的。摘要只在同一规范化
+// 版本内可比。见 ADR-0014。
 func (plan PricingPlanVersion) CanonicalizationVersion() string { return plan.canonicalization }
 
 func (plan PricingPlanVersion) valid() bool {

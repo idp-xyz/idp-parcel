@@ -13,12 +13,9 @@ const (
 	EvaluationPending   EvaluationStatus = "PENDING"
 	EvaluationConflict  EvaluationStatus = "CONFLICT"
 	EvaluationFailed    EvaluationStatus = "FAILED"
-	// EvaluationUnratable is the card saying no rather than the evaluator
-	// falling short. CONTEXT keeps the four outcomes from standing in for one
-	// another: PENDING promises that supplying more facts can produce a price,
-	// which is false here, and FAILED already means a technical or structural
-	// inability, which a caller answers with a retry rather than with a
-	// business decision.
+	// EvaluationUnratable 是卡说不，不是求值器没算出来。CONTEXT 不许四种结果互相顶替：
+	// `待判断` 承诺补齐事实就能得出价格，而在这里这个承诺是假的；`未形成` 表示技术或
+	// 结构上算不出来，调用方的应对是重试而不是形成业务决定。
 	EvaluationUnratable EvaluationStatus = "UNRATABLE"
 )
 
@@ -92,9 +89,8 @@ func newFixedChargeLine(id string, code ChargeCode, description string, effect C
 	return newChargeLine(id, ChargeLineFixed, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
 }
 
-// A surcharge line is a fixed amount like an unconditional rule, but it is kept
-// a distinct kind because it was produced by a predicate that has to be
-// replayable 鈥?its source is a rule that could equally have missed.
+// 附加费费用行和无条件固定规则一样是一个定额，但它单列一种类型，因为它由一个必须
+// 可重放的判定条件产生——它的来源是一条同样可能未命中的规则。
 func newSurchargeChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
 	return newChargeLine(id, ChargeLineSurcharge, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
 }
@@ -215,10 +211,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if !request.valid() {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("INVALID_REQUEST", ErrEvaluationRequestInvalid.Error()))
 	}
-	// A digest only means anything against the canonicalization that produced
-	// it. Replaying an evaluation recorded under a shape this build no longer
-	// implements is a structural inability to compute, not a content conflict,
-	// so it must not be reported as one. See ADR-0014.
+	// 内容摘要只在产生它的那个规范化版本内有意义。重放一次按本构建已不再实现的形状
+	// 记录的评价，是结构上算不出来，不是版本内容冲突，因此不得报成冲突。见 ADR-0014。
 	if request.expectedCanonicalization != "" && request.expectedCanonicalization != CurrentCanonicalizationVersion() {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CANONICALIZATION_VERSION_UNSUPPORTED", ErrCanonicalizationVersionUnsupported.Error()))
 	}
@@ -234,34 +228,29 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if !request.plan.period.Contains(request.input.businessAt) || !request.plan.rateTable.period.Contains(request.input.businessAt) {
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("VERSION_NOT_APPLICABLE", ErrPricingPeriodNotApplicable.Error()))
 	}
-	// Pricing a plan on the base table alone while it declares charges nobody
-	// executes would under-bill it, and the result would carry no sign of what
-	// was skipped. The gate names what it cannot do and narrows as capabilities
-	// land, rather than staying all-or-nothing.
+	// 方案声明了没人执行的费用，却只按基础价表计价，会少收，而结果上看不出漏了什么。
+	// 这道门明说自己做不到哪一项，并随能力落地逐步收窄，而不是一直全有或全无。
 	if reason, blocked := request.plan.structures.unexecutable(); blocked {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
-	// Features are derived before anything is priced. Two declarations need
-	// them this early: a conditional minimum is decided by a predicate yet
-	// raises the plan-level pricing weight the base band is read with, and an
-	// exclusion clause settles the outcome outright.
+	// 特征在计价之前先派生。有两种声明这么早就需要它：条件最低计价重量由判定条件决定，
+	// 却会抬高读取基础档位所用的方案级计价重量；而拒收条款直接就定了结果。
 	var features PackageFeatures
 	haveFeatures := false
 	if len(request.plan.structures.surchargeRules) > 0 || len(request.plan.structures.exclusions) > 0 {
 		derived, featuresErr := request.input.Features()
 		if featuresErr != nil {
-			// A predicate over dimensions can be neither confirmed nor excluded
-			// without them: missing evidence, not a broken request.
+			// 缺了尺寸，基于尺寸的判定条件既不能确认也不能排除：这是证据不足，
+			// 不是请求不合法。
 			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
 		}
 		features, haveFeatures = derived, true
 	}
 
-	// Refusal is settled before any shortfall can be reported. A missing series
-	// reading is 待判断, which tells the caller that supplying it will produce a
-	// price; on a parcel the card refuses that promise is false and the caller
-	// would keep retrying something that can never have one.
+	// 先定拒收，再谈任何缺口。缺一期序列取值是`待判断`，它等于告诉调用方补上就能得出
+	// 价格；而对一件卡明确拒收的包裹，这个承诺是假的，调用方会一直重试一个永远不会有
+	// 价格的东西。
 	if haveFeatures {
 		rule, excluded, exclusionErr := request.plan.structures.resolveExclusions(features)
 		if exclusionErr != nil {
@@ -275,9 +264,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 	}
 
-	// A bound series is resolved from the snapshot before anything is priced: a
-	// missing reading is evidence this evaluation was not handed, a reading of
-	// another version is a disagreement about which rate the plan declared.
+	// 已绑定的序列在计价之前先从快照解析：缺取值是这次评价没拿到的证据，
+	// 而拿到另一个版本的取值，是对「方案声明的是哪个费率」有分歧。
 	series, seriesErr := request.input.resolveSeries(request.plan.structures.referenceSeries)
 	if seriesErr != nil {
 		switch {
@@ -320,8 +308,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withCalculationError(err)
 	}
 	evaluation.matchedRate = &matchedRate
-	// The explanation comes from the table because only it knows whether the
-	// amount was matched in a bracket or derived from a step or unit price.
+	// 解释由价表给出，因为只有它知道这个金额是在某个档位里匹配到的，
+	// 还是由续重步长或单价推导出来的。
 	evaluation.explanation = append(evaluation.explanation, matchedRate.explanation)
 
 	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, "Base rate", matchedRate.amount, matchedRate.id.String())
@@ -362,9 +350,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		if resolveErr != nil {
 			return evaluation.withCalculationError(resolveErr)
 		}
-		// Continue from the highest order already used, not from the line
-		// count: a plan may declare fixed rules at non-contiguous orders, and
-		// charge line order has to stay strictly increasing.
+		// 从已用过的最大序号往下接，而不是从费用行条数接：方案可以在不连续的序号上
+		// 声明固定规则，而费用行序号必须保持严格递增。
 		order := 0
 		for _, line := range evaluation.chargeLines {
 			if line.order > order {
@@ -373,10 +360,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 		order++
 
-		// A percent charge is summed over other charge lines, so the lines it
-		// reads have to carry amounts first. Everything valued on its own is
-		// collected in this pass; the percent charges follow in dependency
-		// order below.
+		// 百分比费用要在其他费用行上求和，所以它读取的那些行必须先有金额。这一遍先
+		// 收齐所有能自行定值的费用；百分比费用留到下面按依赖顺序处理。
 		basis := newDependencyBasis(request.plan.structures, request.plan.rateTable.currency)
 		for _, line := range evaluation.chargeLines {
 			if recordErr := basis.record(line.chargeCode, line.effect, line.amount); recordErr != nil {
@@ -466,10 +451,8 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
 	}
 
-	// The card prices in its own currency while the contract settles in another,
-	// and CONTEXT puts the conversion inside the evaluation so the result stays
-	// a recomputable final price rather than half a figure the settlement side
-	// has to finish.
+	// 卡按自己的币种计价，合同却按另一个币种结算；CONTEXT 把换算放进评价内部，
+	// 使结果保持为一个可复算的最终价格，而不是一个还要结算侧补完的半成品数字。
 	if settlement, declared := request.input.SettlementCurrency(); declared && settlement != total.currency {
 		reading, resolved := series[ReferenceSeriesExchangeRate]
 		if !resolved {
@@ -534,9 +517,8 @@ func (evaluation PricingEvaluation) TableEffectivePeriod() EffectivePeriod {
 }
 func (evaluation PricingEvaluation) PlanContentDigest() string { return evaluation.planContentDigest }
 
-// PlanCanonicalizationVersion reports the shape the plan content digest this
-// evaluation froze was produced under. Digests are only comparable within the
-// same value. See ADR-0014.
+// PlanCanonicalizationVersion 报出本次评价冻结的方案内容摘要是在哪一套规范化形状下
+// 产生的。摘要只在同一规范化版本内可比。见 ADR-0014。
 func (evaluation PricingEvaluation) PlanCanonicalizationVersion() string {
 	return evaluation.planCanonicalization
 }
@@ -567,9 +549,8 @@ func (evaluation PricingEvaluation) MatchedRate() (RateSelection, bool) {
 	return *evaluation.matchedRate, true
 }
 
-// ConversionStep reports the currency conversion this evaluation performed, if
-// any. An evaluation settling in the card's own currency performs none, and
-// recording a rate of 1 would invite a reader to think one was applied.
+// ConversionStep 报出本次评价执行的换算步骤（如果有）。按卡本币结算的评价不执行换算，
+// 而记一个汇率 1 会让读的人以为发生过一次换算。
 func (evaluation PricingEvaluation) ConversionStep() (ConversionStep, bool) {
 	if evaluation.conversion == nil {
 		return ConversionStep{}, false
@@ -630,9 +611,8 @@ func (evaluation PricingEvaluation) valid() bool {
 	if evaluation.semanticDigest == "" {
 		return false
 	}
-	// A digest recorded under another canonicalization cannot be recomputed by
-	// this build, so it is not self-checkable here; the replay path refuses it
-	// explicitly instead of silently treating it as corrupt. See ADR-0014.
+	// 在另一个规范化版本下记录的摘要，本构建无法重新算出，因此在这里无法自校；
+	// 重放路径会显式拒绝它，而不是静默当成数据损坏。见 ADR-0014。
 	if evaluation.planCanonicalization != CurrentCanonicalizationVersion() {
 		return true
 	}
@@ -643,10 +623,8 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 	if evaluation.total == nil || len(evaluation.chargeLines) == 0 {
 		return false
 	}
-	// Charge lines stay in the card's own currency; only the total is converted.
-	// Checking them against the settlement currency would reject every converted
-	// evaluation, and converting each line instead would round the same rate
-	// many times over.
+	// 费用行保持卡本币，只有合计被换算。拿结算币种去校验费用行会把每一次发生了换算的
+	// 评价都判为不合法；改成逐行换算又会把同一个汇率反复取整多次。
 	currency := evaluation.total.currency
 	if evaluation.conversion != nil {
 		currency = evaluation.conversion.original.currency
@@ -781,9 +759,8 @@ func manifestContains(manifest VersionManifest, expected VersionReference) bool 
 	return false
 }
 
-// hasUnsupportedCanonicalization keeps a replay that could not be canonicalized
-// under its recorded shape out of the result comparison below, so it is never
-// reclassified as a mismatch. See ADR-0014.
+// hasUnsupportedCanonicalization 把「无法按记录形状重新规范化」的重放挡在下面的结果
+// 比对之外，使它永远不会被改判成结果不一致。见 ADR-0014。
 func hasUnsupportedCanonicalization(evaluation PricingEvaluation) bool {
 	for _, issue := range evaluation.issues {
 		if issue.code == "CANONICALIZATION_VERSION_UNSUPPORTED" {

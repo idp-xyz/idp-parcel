@@ -2,10 +2,9 @@ package domain
 
 import "fmt"
 
-// WeightRoundingSegment carries the rounding rule that applies below its
-// maximum. Real channel terms round in grams up to some weight and in whole
-// kilograms above it, so the increment cannot be a property of the policy as a
-// whole; see `PA-PP-03` in the first-release development baseline.
+// WeightRoundingSegment 携带在其上界以下适用的取整规则。真实渠道条款在某个重量以下按
+// 克进位、以上按整千克进位，所以进位单位不能是整个取整策略的属性；见首发开发主线中的
+// `PA-PP-03`。
 type WeightRoundingSegment struct {
 	mode       RoundingMode
 	increment  Weight
@@ -58,9 +57,8 @@ func (segment WeightRoundingSegment) valid() bool {
 	return segment.maximum.valid() && segment.maximum.value.Sign() > 0 && segment.maximum.unit == segment.increment.unit
 }
 
-// WeightRoundingPolicy is an ordered, gap-free cover of every weight: each
-// segment claims the weights below its maximum, and the last segment is open
-// so no weight is left without a rule.
+// WeightRoundingPolicy 是对所有重量的一次有序、无空档的覆盖：每一段认领其上界以下的
+// 重量，最后一段开口，因此没有任何重量落得下没有规则可用。
 type WeightRoundingPolicy struct {
 	segments []WeightRoundingSegment
 }
@@ -101,9 +99,8 @@ func (policy WeightRoundingPolicy) Segments() []WeightRoundingSegment {
 	return append([]WeightRoundingSegment(nil), policy.segments...)
 }
 
-// Apply rounds a raw weight and reports which segment decided it, so the
-// evaluation explanation can name the rule that was used rather than the
-// policy as a whole.
+// Apply 对原始重量进位，并报出是哪一段作的决定，使评价解释能指名实际用到的那条规则，
+// 而不是整个取整策略。
 func (policy WeightRoundingPolicy) Apply(raw Weight) (Weight, WeightRoundingSegment, error) {
 	segment, err := policy.segmentFor(raw)
 	if err != nil {
@@ -135,9 +132,8 @@ func (policy WeightRoundingPolicy) segmentFor(raw Weight) (WeightRoundingSegment
 	return WeightRoundingSegment{}, ErrInvalidRoundingPolicy
 }
 
-// roundingSegmentScope names the segment in an explanation only when a policy
-// actually has more than one; a single-segment policy has nothing to
-// disambiguate and naming its bound would just add noise.
+// roundingSegmentScope 只有在取整策略确实不止一段时，才在解释里点出是哪一段；单段策略
+// 没有歧义可消，点出它的界限只会添噪音。
 func roundingSegmentScope(segment WeightRoundingSegment) string {
 	if !segment.hasMaximum {
 		return ""
@@ -145,11 +141,9 @@ func roundingSegmentScope(segment WeightRoundingSegment) string {
 	return fmt.Sprintf(" (segment below %s %s)", segment.maximum.value.String(), segment.maximum.unit)
 }
 
-// sole returns the only segment of a single-segment policy. Some rules declare
-// a precision rather than a weight-banded rounding — a volumetric divisor
-// cannot band by weight, because the weight is what the division produces — and
-// those rules must refuse a segmented policy instead of silently using its
-// first segment.
+// sole 返回单段取整策略的那唯一一段。有些规则声明的是精度而不是按重量分段的取整——
+// 体积系数没法按重量分段，因为重量正是这次相除的产物——这类规则必须拒绝分段策略，
+// 而不是静默取用它的第一段。
 func (policy WeightRoundingPolicy) sole() (WeightRoundingSegment, bool) {
 	if len(policy.segments) != 1 {
 		return WeightRoundingSegment{}, false

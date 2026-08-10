@@ -2,10 +2,9 @@ package domain
 
 import "strings"
 
-// TriggerKind is how a trigger condition is built: a single predicate, or every
-// one of its operands, or any one of them. The set is closed at three, which is
-// what keeps a trigger enumerable — every leaf's hit and miss can be reported
-// from the version manifest alone, which an expression engine could not offer.
+// TriggerKind 是触发条件的构成方式：一个判定条件，或其全部操作数成立，或任一操作数
+// 成立。集合封闭为三种，正是这一点让触发条件可枚举——每个叶子的命中与未命中都能仅凭
+// 版本清单报出来，而表达式引擎给不了这个。
 type TriggerKind string
 
 const (
@@ -25,20 +24,18 @@ func (kind TriggerKind) valid() bool {
 	}
 }
 
-// TriggerCondition is what a rule declares as the thing that sets it off. The
-// card writes one clause with several alternatives rather than several clauses:
-// `R40` charges once for a piece over 67.5 KG **or** longer than 274 CM **or**
-// over 419 CM in length plus girth. Splitting that into three rules would
-// charge three times for what the card charges once, so the combination has to
-// be part of the rule rather than a property of how rules were listed.
+// TriggerCondition 是一条规则声明的「什么情况下它成立」。卡写的是一条含多个替代项的
+// 条款，而不是多条条款：`R40` 对超过 67.5 KG **或** 长于 274 CM **或** 长加围超过
+// 419 CM 的件计收一次。把它拆成三条规则，会把卡只收一次的东西收三次，所以组合必须属于
+// 规则本身，而不是规则被列出的方式的一个属性。
 type TriggerCondition struct {
 	kind      TriggerKind
 	predicate FeatureCondition
 	operands  []TriggerCondition
 }
 
-// NewTrigger wraps a single predicate. A rule always declares a trigger, so a
-// one-predicate rule states that fact rather than being a different shape.
+// NewTrigger 包装单个判定条件。规则一律声明触发条件，所以只有一个判定条件的规则也如实
+// 这么表达，而不是换成另一种形状。
 func NewTrigger(predicate FeatureCondition) (TriggerCondition, error) {
 	trigger := TriggerCondition{kind: TriggerPredicate, predicate: predicate}
 	if !trigger.valid() {
@@ -56,8 +53,7 @@ func NewAnyOfTrigger(operands ...TriggerCondition) (TriggerCondition, error) {
 }
 
 func newCombinedTrigger(kind TriggerKind, operands []TriggerCondition) (TriggerCondition, error) {
-	// An empty combination has no reading the card could have meant; treating
-	// it as always-true or always-false would invent a rule nobody declared.
+	// 空组合没有卡可能表达的读法；当作恒真或恒假，都是在发明一条没人声明过的规则。
 	if len(operands) == 0 {
 		return TriggerCondition{}, ErrInvalidFeatureCondition
 	}
@@ -81,10 +77,9 @@ func (trigger TriggerCondition) Operands() []TriggerCondition {
 	return append([]TriggerCondition(nil), trigger.operands...)
 }
 
-// Matches reports whether the trigger holds. It does not short-circuit: a
-// mismatched unit anywhere in the combination is a declaration error the card
-// has to fix, and hiding it behind an alternative that happened to hold first
-// would make the same plan explain itself differently run to run.
+// Matches 报出触发条件是否成立。它不做短路求值：组合中任何一处单位不一致都是卡必须
+// 修正的声明错误，把它藏在一个恰好先成立的替代项后面，会让同一个方案每次运行给出不同
+// 的解释。
 func (trigger TriggerCondition) Matches(features PackageFeatures) (bool, error) {
 	if !trigger.valid() || !features.valid() {
 		return false, ErrInvalidFeatureCondition
@@ -108,9 +103,8 @@ func (trigger TriggerCondition) Matches(features PackageFeatures) (bool, error) 
 	return held, nil
 }
 
-// describe renders the whole combination, not just its first leaf, so an
-// explanation of a miss says which clause was not met rather than naming one
-// alternative and leaving the rest invisible.
+// describe 呈现整个组合，而不只是它的第一个叶子，这样未命中的解释才说得出是哪一条不
+// 满足，而不是只点一个替代项、让其余的看不见。
 func (trigger TriggerCondition) describe() string {
 	switch trigger.kind {
 	case TriggerPredicate:

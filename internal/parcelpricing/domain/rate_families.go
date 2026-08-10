@@ -5,10 +5,9 @@ import (
 	"strings"
 )
 
-// FirstContinueRate prices a first weight and then charges whole continuation
-// steps. It is the shape a commercial express agent quotes; a bracket ladder
-// cannot express it, because the amount above the first weight is derived from
-// how many steps the weight reaches rather than looked up. See `PA-PP-01`.
+// FirstContinueRate 按首重计价，其上再按整数个续重步长计收，即首重加续重价表族。这是
+// 商业快递代理报价的形状；重量段阶梯表达不了它，因为首重以上的金额是由重量够到几个步长
+// 推导出来的，不是查出来的。见 `PA-PP-01`。
 type FirstContinueRate struct {
 	id          RateEntryID
 	zone        string
@@ -54,8 +53,8 @@ func (rate FirstContinueRate) valid() bool {
 		rate.firstWeight.unit == rate.step.unit && rate.firstAmount.currency == rate.stepAmount.currency
 }
 
-// price charges the first weight, then one whole step for every started step
-// above it. A partial step is a whole step: that is what "续重" means on a card.
+// price 先收首重，其上每起一个步长就收一整个步长。不足一个步长按一个整步长计：
+// 这正是卡上「续重」的意思。
 func (rate FirstContinueRate) price(weight Weight) (Money, string, error) {
 	if weight.unit != rate.firstWeight.unit {
 		return Money{}, "", ErrWeightUnitMismatch
@@ -90,8 +89,8 @@ func (rate FirstContinueRate) price(weight Weight) (Money, string, error) {
 	return amount, explanation, nil
 }
 
-// UnitPriceRate quotes one price per unit of chargeable weight with no
-// brackets. Economy lines and postal small packets price this way. See
+// UnitPriceRate 按每单位计费重报一个单价、不设档位，即计费重乘单价价表族。经济线路和
+// 邮政小包按这种方式计价。见
 // `PA-PP-01`.
 type UnitPriceRate struct {
 	id            RateEntryID
@@ -129,9 +128,8 @@ func (rate UnitPriceRate) price(weight Weight) (Money, string, error) {
 	return amount, explanation, nil
 }
 
-// RateSelection is what a lookup produces. Two of the three families derive
-// their amount rather than matching a row, so a lookup cannot return a bracket:
-// it returns the amount, the rate that produced it, and how it was reached.
+// RateSelection 是一次查表的产物。三个价表族里有两个是推导出金额而不是匹配到某一行，
+// 所以查表不能返回一个档位：它返回金额、产生该金额的费率，以及是怎么得到的。
 type RateSelection struct {
 	family      RateTableFamily
 	id          RateEntryID

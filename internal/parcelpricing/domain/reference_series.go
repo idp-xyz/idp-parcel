@@ -2,14 +2,11 @@ package domain
 
 import "fmt"
 
-// ReferenceSeriesValue is one series reading, resolved at the pricing base time
-// and frozen into the evaluation's input.
+// ReferenceSeriesValue 是一期序列取值，按计价基准时点解析并冻结进评价的输入。
 //
-// ADR-0013 gives pricing the registration and versioning of these series but
-// not their values: the fuel rate is published by the carrier and the exchange
-// rate comes from the finance side. The value therefore arrives with the
-// snapshot rather than being fetched during the evaluation — fetching it would
-// make a replay read whatever the series holds today.
+// ADR-0013 把这些序列的登记与版本化交给计价，但数值不归计价生产：燃油费率由承运商公布，
+// 汇率来自财务侧。取值因此随快照进来，而不是在评价过程中现取——现取会让重放读到序列
+// 今天的值。
 type ReferenceSeriesValue struct {
 	kind       ReferenceSeriesKind
 	reference  VersionReference
@@ -25,11 +22,9 @@ func NewReferenceSeriesValue(kind ReferenceSeriesKind, reference VersionReferenc
 	return resolved, nil
 }
 
-// NewQuotedReferenceSeriesValue carries the commercial policy version that
-// declares how the reading was quoted. CONTEXT: 汇率口径——牌价类型、取值时点规则
-// 和加点规则——由商业价格政策版本化声明；不接受未声明口径的裸汇率. A number with no
-// stated basis cannot be argued about later, because nobody can say which rate
-// it was supposed to be.
+// NewQuotedReferenceSeriesValue 携带声明该取值口径的商业价格政策版本。CONTEXT：汇率
+// 口径——牌价类型、取值时点规则和加点规则——由商业价格政策版本化声明；不接受未声明口径
+// 的裸汇率。一个没有口径的数字事后无从争辩，因为没人说得出它本该是哪个汇率。
 func NewQuotedReferenceSeriesValue(kind ReferenceSeriesKind, reference VersionReference, value Decimal, quoteBasis VersionReference) (ReferenceSeriesValue, error) {
 	resolved := ReferenceSeriesValue{kind: kind, reference: reference, value: value, quoteBasis: &quoteBasis}
 	if !resolved.valid() {
@@ -60,22 +55,18 @@ func (resolved ReferenceSeriesValue) valid() bool {
 			return false
 		}
 	}
-	// A fuel rate needs no quote basis: its discount factor is stated on the
-	// card. An exchange rate does, and the card has no say in it.
+	// 燃油费率不需要口径依据：它的折扣系数写在卡上。汇率需要，而卡对它没有发言权。
 	if resolved.kind == ReferenceSeriesExchangeRate && resolved.quoteBasis == nil {
 		return false
 	}
 	return true
 }
 
-// resolveSeries matches every series a plan bound against the readings the
-// snapshot carries.
+// resolveSeries 把方案绑定的每一个序列与快照携带的取值逐一对上。
 //
-// A binding with no reading is missing evidence: the rate exists, this
-// evaluation simply was not handed it, so the evaluation waits. A reading of a
-// different version is a disagreement rather than a gap — pricing against a
-// version the plan never declared would quietly bill at the wrong rate — so it
-// is a conflict.
+// 绑定了却没有取值是证据不足：费率是存在的，只是这次评价没拿到，所以评价保持`待判断`。
+// 拿到的是另一个版本的取值则是分歧而不是缺口——按方案从未声明过的版本计价，会静默地
+// 用错误的费率收费——所以那是`冲突`。
 func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBinding) (map[ReferenceSeriesKind]ReferenceSeriesValue, error) {
 	resolved := make(map[ReferenceSeriesKind]ReferenceSeriesValue, len(bindings))
 	for _, binding := range bindings {
@@ -101,10 +92,9 @@ func (input PricingInputSnapshot) seriesReading(kind ReferenceSeriesKind) (Refer
 	return ReferenceSeriesValue{}, false
 }
 
-// describeRate names both halves of a series-sourced rate. CONTEXT: 燃油费率是
-// 承运商当周公布费率与价卡折扣系数的乘积，两者都必须写入版本清单，只保留乘积结果
-// 视为解释不完整 — with only the product, a reader cannot tell a carrier rate
-// change from a renegotiated discount.
+// describeRate 分别写出来自序列的费率的两半。CONTEXT：燃油费率是承运商当周公布费率与
+// 价卡折扣系数的乘积，两者都必须写入版本清单，只保留乘积结果视为解释不完整——只有乘积
+// 时，读的人分不清是承运商调了费率还是重新谈了折扣。
 func (calculation SurchargeCalculation) describeRate(series map[ReferenceSeriesKind]ReferenceSeriesValue) string {
 	if calculation.seriesKind == nil || calculation.seriesFactor == nil {
 		return ""
@@ -117,11 +107,9 @@ func (calculation SurchargeCalculation) describeRate(series map[ReferenceSeriesK
 		*calculation.seriesKind, reading.value.String(), calculation.seriesFactor.String())
 }
 
-// ConversionStep records turning the card's own currency into the currency the
-// contract settles in. CONTEXT keeps both sides: 换算必须保留原币金额与所引用的
-// 汇率序列版本，只保留结算币种金额视为解释不完整 — a dispute is argued in the
-// original currency, so an evaluation holding only the converted figure cannot
-// answer it.
+// ConversionStep 记录把卡本币换算为合同结算币种的过程。CONTEXT 要求两侧都留下：换算
+// 必须保留原币金额与所引用的汇率序列版本，只保留结算币种金额视为解释不完整——争议是按
+// 原币争的，所以只留换算后数字的评价答不上来。
 type ConversionStep struct {
 	original  Money
 	rate      Decimal
@@ -141,7 +129,7 @@ func (step ConversionStep) valid() bool {
 		step.original.currency != step.converted.currency
 }
 
-// convert turns an amount into the settlement currency at the resolved rate.
+// convertAmount 按已解析的汇率把一笔金额换算成结算币种。
 func convertAmount(original Money, reading ReferenceSeriesValue, settlement Currency) (ConversionStep, error) {
 	if !original.valid() || !reading.valid() || !settlement.valid() {
 		return ConversionStep{}, ErrInvalidReferenceSeries
@@ -161,10 +149,8 @@ func convertAmount(original Money, reading ReferenceSeriesValue, settlement Curr
 	return step, nil
 }
 
-// effectiveRate is the published reading multiplied by the card's own factor.
-// CONTEXT requires both to reach the version manifest and the explanation:
-// keeping only the product would leave a reader unable to tell a rate change
-// from a discount change.
+// effectiveRate 是公布取值乘以卡自己的折扣系数。CONTEXT 要求两者都进入版本清单和解释：
+// 只留乘积会让读的人分不清是费率变了还是折扣变了。
 func (calculation SurchargeCalculation) effectiveRate(reading ReferenceSeriesValue) (Decimal, error) {
 	if calculation.seriesFactor == nil {
 		return Decimal{}, ErrInvalidSurchargeRule

@@ -5,10 +5,9 @@ import (
 	"sort"
 )
 
-// surchargeOutcome records what happened to one declared rule, including the
-// rules that did not fire. CONTEXT requires a miss to leave a trace: an
-// explanation listing only hits cannot be checked against the card, because a
-// reader cannot tell a rule that missed from a rule that was never evaluated.
+// surchargeOutcome 记录一条已声明规则的处理结果，包括那些未命中的规则。CONTEXT 要求
+// 未命中也要留痕：只列命中结果的解释无法对着卡逐条核对，因为读的人分不清一条规则是
+// 未命中，还是根本没被判定过。
 type surchargeOutcome struct {
 	rule     SurchargeRule
 	matched  bool
@@ -18,14 +17,12 @@ type surchargeOutcome struct {
 	note     string
 }
 
-// unexecutable names the first declared structure this build cannot price.
+// unexecutable 指出本构建无法计价的第一项已声明结构。
 //
-// The gate exists so a plan is never priced on the base table alone while it
-// declares charges nobody executes. It narrowed with every capability that
-// landed and is now **vacuous**: every declared structure has an executor. It
-// is kept rather than deleted because the default branch is what catches a
-// calculation method added without one — the failure it prevents is silent
-// under-billing, which no other check would notice.
+// 这道门存在的目的，是不让一个声明了无人执行的费用的方案只按基础价表计价。它随每一项
+// 能力落地而收窄，现在**已经恒不成立**：每一项已声明结构都有执行器。保留而不删除，是
+// 因为 default 分支正是用来抓「新增了一种计算方法却没有配执行器」的——它挡住的失败是
+// 静默少收，而没有别的检查会注意到这件事。
 func (structures PricingPlanStructures) unexecutable() (string, bool) {
 	for _, rule := range structures.surchargeRules {
 		switch rule.calculation.method {
@@ -37,17 +34,16 @@ func (structures PricingPlanStructures) unexecutable() (string, bool) {
 	return "", false
 }
 
-// minimumRaise is one conditional minimum that fired, kept with its rule so the
-// explanation can name the clause rather than only the number.
+// minimumRaise 是一条已触发的条件最低计价重量，连同它所属的规则一起保留，
+// 使解释能指名是哪一条条款，而不是只给出一个数字。
 type minimumRaise struct {
 	id      string
 	minimum Weight
 }
 
-// resolveMinimums reports every conditional minimum whose clause holds. The
-// clause lives inside a surcharge rule but raises the plan-level pricing weight,
-// so it is resolved before the weight is fixed rather than alongside the
-// surcharge it was declared with.
+// resolveMinimums 报出每一条条款成立的条件最低计价重量。该条款写在某条附加费规则内部，
+// 抬高的却是方案级计价重量，所以它在计价重量定下来之前解析，而不是跟着声明它的那条
+// 附加费一起处理。
 func (structures PricingPlanStructures) resolveMinimums(features PackageFeatures) ([]minimumRaise, error) {
 	raises := make([]minimumRaise, 0, len(structures.surchargeRules))
 	for _, rule := range structures.surchargeRules {
@@ -65,9 +61,8 @@ func (structures PricingPlanStructures) resolveMinimums(features PackageFeatures
 	return raises, nil
 }
 
-// highestMinimum picks the floor to apply. CONTEXT: 同一评价可存在多条，同时触发时
-// 取其中最高者 — the card carries two, 40 LB and 90 LB, and a parcel tripping both
-// is billed at 90.
+// highestMinimum 选出要施加的下限。CONTEXT：同一评价可存在多条，同时触发时取其中最高
+// 者——卡上有两条，40 LB 和 90 LB，同时触发两条的包裹按 90 计。
 func highestMinimum(raises []minimumRaise) (minimumRaise, bool) {
 	var highest minimumRaise
 	found := false
@@ -79,10 +74,9 @@ func highestMinimum(raises []minimumRaise) (minimumRaise, bool) {
 	return highest, found
 }
 
-// surchargeContext is what a rule may read beyond the package's own features:
-// the zone the shipment falls in and the pricing weight the base freight used.
-// A banded surcharge reads the same weight as the base table so the two can
-// never disagree about how heavy the parcel was.
+// surchargeContext 是一条规则在包裹自身特征之外可以读到的东西：包裹落在哪个分区，
+// 以及基础运费使用的计价重量。分档附加费读的是与基础价表同一个重量，两者因此不可能
+// 对「这件包裹有多重」产生分歧。
 type surchargeContext struct {
 	features      PackageFeatures
 	zone          string
@@ -90,10 +84,8 @@ type surchargeContext struct {
 	series        map[ReferenceSeriesKind]ReferenceSeriesValue
 }
 
-// resolveSurcharges decides every declared rule against the package's features
-// and then applies the card's interaction rules. Rules that stand alone are all
-// collected; rules in an exclusivity group compete, and at most one of the
-// group is charged.
+// resolveSurcharges 拿包裹特征逐条判定所有已声明规则，再施加卡上的相互作用规则。
+// 独立计收的规则全部收取；同一互斥组内的规则相互竞争，组内至多计收一条。
 func (structures PricingPlanStructures) resolveSurcharges(reading surchargeContext) ([]surchargeOutcome, error) {
 	outcomes := make([]surchargeOutcome, 0, len(structures.surchargeRules))
 	for _, rule := range structures.surchargeRules {
@@ -103,9 +95,8 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 		}
 		outcome := surchargeOutcome{rule: rule, matched: matched}
 		if matched {
-			// A charge that reads a basis cannot be valued yet: the basis sums
-			// charge lines still being collected. It is priced in a second
-			// pass, ordered by dependency.
+			// 读取基数的费用此刻还定不了值：基数要对仍在收集中的费用行求和。
+			// 它留到第二遍、按依赖顺序计价。
 			if rule.calculation.needsBasis() {
 				outcome.deferred = true
 				outcome.selected = true
@@ -126,10 +117,8 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 	return outcomes, nil
 }
 
-// needsBasis reports whether valuing this calculation requires charge lines
-// that are still being collected. A greater-of inherits the need from either
-// operand: comparing a flat floor against an unresolved share would always pick
-// the floor.
+// needsBasis 报出给这项计算定值是否需要仍在收集中的费用行。取较大值从任一操作数继承
+// 这个需求：拿一个定额下限去和一个尚未解出的百分比比较，结果永远是取那个下限。
 func (calculation SurchargeCalculation) needsBasis() bool {
 	switch calculation.method {
 	case ChargeMethodPercentOfBasis:
@@ -146,11 +135,9 @@ func (calculation SurchargeCalculation) needsBasis() bool {
 	}
 }
 
-// resolve produces the amount a matched rule charges. A gap in a banded table
-// is a gap in the card rather than a rule that missed — the condition did fire
-// — so the lookup error travels out unchanged and the evaluation waits. The
-// basis is nil in the first pass, where only calculations that do not read one
-// are valued.
+// resolve 产出一条已命中规则计收的金额。分档价表里的区间空档是卡的空档，不是规则未
+// 命中——触发条件确实成立了——所以查表错误原样向外传递，评价保持等待。第一遍传入的
+// basis 为 nil，那一遍只给不读取基数的计算定值。
 func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis *dependencyBasis) (Money, error) {
 	switch calculation.method {
 	case ChargeMethodFixedAmount:
@@ -194,13 +181,11 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis 
 	}
 }
 
-// selectWithinExclusivityGroups keeps one member per group.
+// selectWithinExclusivityGroups 每组只留一条。
 //
-// Precedence is by declared rank first and amount second. **Rank 1 is the
-// highest**: the rank is declared as a positive ordinal starting at 1, so the
-// first rank is the one that wins. The order matters — a group whose highest
-// rank carries the smaller amount must still charge the smaller amount, which a
-// plain "take the largest" would get wrong.
+// 先按声明优先级、后按金额定先后。**优先级 1 最高**：优先级声明为从 1 起的正序数，
+// 所以序号最靠前的那一级胜出。两者的先后次序要紧——某一组里优先级最高的那条金额反而
+// 更小时，仍必须计收较小的那个金额，而单纯「取最大」会算错。
 func selectWithinExclusivityGroups(outcomes []surchargeOutcome) error {
 	best := make(map[string]int, len(outcomes))
 	for index := range outcomes {
@@ -230,9 +215,8 @@ func selectWithinExclusivityGroups(outcomes []surchargeOutcome) error {
 	return nil
 }
 
-// preferSurcharge reports whether the incumbent keeps the group. Two rules at
-// the same rank carrying the same amount cannot be told apart, and CONTEXT
-// forbids picking arbitrarily, so that is a conflict for a human to resolve.
+// preferSurcharge 报出在位的那条是否保住该组。同级且金额相同的两条规则无从分辨，
+// 而 CONTEXT 禁止任选，因此那是一个要交给人裁决的`冲突`。
 func preferSurcharge(incumbent, challenger surchargeOutcome) (bool, error) {
 	if incumbent.rule.priority != challenger.rule.priority {
 		return incumbent.rule.priority < challenger.rule.priority, nil
@@ -245,8 +229,7 @@ func preferSurcharge(incumbent, challenger surchargeOutcome) (bool, error) {
 	return comparison > 0, nil
 }
 
-// explain renders one line per rule, hit or miss, so the explanation can be
-// read against the card rule by rule.
+// explain 为每条规则输出一行，命中与否都输出，使解释能对着卡逐条读下来。
 func (outcome surchargeOutcome) explain() string {
 	switch {
 	case !outcome.matched:
@@ -259,8 +242,7 @@ func (outcome surchargeOutcome) explain() string {
 	}
 }
 
-// sortedSurchargeOutcomes keeps the charge lines and the explanation in a
-// deterministic order regardless of map iteration above.
+// sortedSurchargeOutcomes 让费用行与解释保持确定的顺序，不受上面 map 遍历顺序影响。
 func sortedSurchargeOutcomes(outcomes []surchargeOutcome) []surchargeOutcome {
 	sorted := append([]surchargeOutcome(nil), outcomes...)
 	sort.SliceStable(sorted, func(left, right int) bool {

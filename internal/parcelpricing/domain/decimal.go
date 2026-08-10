@@ -5,15 +5,15 @@ import (
 	"strings"
 )
 
-// Decimal is an immutable, non-exponential base-10 number. The coefficient is
-// kept as text so copying a Decimal can never alias a mutable big.Int.
+// Decimal 是不可变、非指数表示的十进制数。系数以文本保存，因此复制一个 Decimal 绝不会
+// 与某个可变的 big.Int 共享底层。
 type Decimal struct {
 	coefficient string
 	scale       uint32
 }
 
 const (
-	// The limits are technical protection limits, not a currency scale.
+	// 这些上限是技术保护限制，不是币种的小数位数。
 	DecimalMaxDigits     = 256
 	DecimalMaxScale      = 128
 	DecimalMaxTextLength = DecimalMaxDigits + DecimalMaxScale + 2
@@ -76,9 +76,8 @@ func ParseDecimal(raw string) (Decimal, error) {
 	return Decimal{coefficient: digits, scale: scale}, nil
 }
 
-// ParseCanonical accepts only the canonical decimal representation emitted by
-// String. This is useful at serialization boundaries where alternate spellings
-// must not produce different content digests.
+// ParseCanonical 只接受 String 输出的那种规范十进制表示。它用在序列化边界上——
+// 那里不允许同一个数的不同写法产生不同的内容摘要。
 func ParseCanonical(raw string) (Decimal, error) {
 	value, err := ParseDecimal(raw)
 	if err != nil || value.String() != raw {
@@ -241,12 +240,10 @@ func (value Decimal) RoundToIncrement(increment Decimal, mode RoundingMode) (Dec
 	return decimalFromBig(result, commonScale)
 }
 
-// DivRoundToIncrement divides by divisor and lands the quotient on a multiple
-// of increment. The two steps are one operation because an exact quotient need
-// not terminate in base 10: dividing first would force an undeclared precision
-// onto the intermediate. Working on the scaled integers keeps the result exact
-// for the rounding the caller declared. RoundingNone is refused for the same
-// reason — there is no terminating quotient to leave unrounded.
+// DivRoundToIncrement 先除以 divisor，再把商落到 increment 的整数倍上。两步合成一次
+// 运算，是因为精确商不一定是有限小数：先做除法会给中间结果强加一个没人声明过的精度。
+// 在放大后的整数上运算，能让结果对调用方声明的取整方式保持精确。RoundingNone 因同一个
+// 理由被拒绝——根本不存在一个有限的商可以留着不进位。
 func (value Decimal) DivRoundToIncrement(divisor, increment Decimal, mode RoundingMode) (Decimal, error) {
 	if !value.valid() || !divisor.valid() || !increment.valid() || value.IsNegative() || divisor.Sign() <= 0 || increment.Sign() <= 0 {
 		return Decimal{}, ErrInvalidRoundingPolicy
@@ -254,7 +251,7 @@ func (value Decimal) DivRoundToIncrement(divisor, increment Decimal, mode Roundi
 	if !mode.valid() || mode == RoundingNone {
 		return Decimal{}, ErrInvalidRoundingPolicy
 	}
-	// The result is however many increments fit in value / divisor.
+	// 结果就是 value / divisor 里装得下多少个进位单位。
 	numerator := new(big.Int).Mul(value.bigCoefficient(), pow10(divisor.scale+increment.scale))
 	denominator := new(big.Int).Mul(divisor.bigCoefficient(), increment.bigCoefficient())
 	denominator.Mul(denominator, pow10(value.scale))

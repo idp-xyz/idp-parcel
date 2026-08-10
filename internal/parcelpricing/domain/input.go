@@ -7,10 +7,9 @@ import (
 	"time"
 )
 
-// EvaluationSubjectKind separates an evaluation of a package the business has
-// accepted from an estimate made before any package exists. Comparing several
-// suppliers' cards happens before a customer commits, so the second kind is not
-// a variant of the first — nothing downstream may turn an estimate into money.
+// EvaluationSubjectKind 区分「针对已受理包裹的评价」与「包裹尚不存在时做的试算」。
+// 多家供应商比价发生在客户下定之前，所以后一种不是前一种的变体——下游任何环节都不得
+// 把一次试算变成钱。
 type EvaluationSubjectKind string
 
 const (
@@ -41,9 +40,8 @@ func NewAcceptedPackageSubject(packageID PackageID) (EvaluationSubject, error) {
 	return EvaluationSubject{kind: SubjectAcceptedPackage, id: packageID.String()}, nil
 }
 
-// NewEstimateSubject names an object that only exists for the duration of one
-// estimate. The reference is supplied by whoever asked for the estimate; this
-// context does not mint identities.
+// NewEstimateSubject 指名一个只在该次试算内存在的试算对象。引用由发起试算的一方给出；
+// 本上下文不为它铸造身份。
 func NewEstimateSubject(reference string) (EvaluationSubject, error) {
 	if strings.TrimSpace(reference) == "" || strings.TrimSpace(reference) != reference {
 		return EvaluationSubject{}, ErrPricingInputInvalid
@@ -58,10 +56,9 @@ func (subject EvaluationSubject) valid() bool {
 	return subject.kind.valid() && strings.TrimSpace(subject.id) != "" && strings.TrimSpace(subject.id) == subject.id
 }
 
-// PricingInputSnapshot carries the package's sides, not a volumetric weight
-// worked out elsewhere. Volumetric weight is derived here from the card's own
-// versioned divisor, so the same sides can only ever have one volumetric
-// weight and a divisor change always reaches the content digest.
+// PricingInputSnapshot 携带包裹的尺寸三边，而不是别处算好的体积重。体积重在这里由卡
+// 自己版本化声明的体积系数派生，所以同一组尺寸只可能有一个体积重，而系数变化必定进入
+// 版本内容摘要。
 type PricingInputSnapshot struct {
 	tenantID       TenantID
 	scope          PricingScopeID
@@ -75,10 +72,8 @@ type PricingInputSnapshot struct {
 	settlement     *Currency
 }
 
-// WithSettlementCurrency records the currency the contract settles in. ADR-0013
-// notes pricing must know it and that party-commercial already supplies it with
-// the commercial basis, so it arrives with the snapshot rather than being a new
-// source of its own.
+// WithSettlementCurrency 记录合同的结算币种。ADR-0013 指出计价必须知道它，而
+// party-commercial 已随商业依据一并提供，所以它随快照进来，不另立一个新的来源。
 func (input PricingInputSnapshot) WithSettlementCurrency(settlement Currency) (PricingInputSnapshot, error) {
 	if !input.valid() || !settlement.valid() {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
@@ -88,7 +83,7 @@ func (input PricingInputSnapshot) WithSettlementCurrency(settlement Currency) (P
 	return updated, nil
 }
 
-// SettlementCurrency reports the currency the evaluation must output in.
+// SettlementCurrency 报出本次评价必须以哪个币种输出。
 func (input PricingInputSnapshot) SettlementCurrency() (Currency, bool) {
 	if input.settlement == nil {
 		return Currency{}, false
@@ -96,10 +91,8 @@ func (input PricingInputSnapshot) SettlementCurrency() (Currency, bool) {
 	return *input.settlement, true
 }
 
-// WithReferenceSeries returns a copy carrying the series readings resolved for
-// this evaluation. It is a separate step from the constructor because the
-// readings are looked up at the pricing base time, after the rest of the
-// snapshot is already fixed.
+// WithReferenceSeries 返回一份携带本次评价已解析序列取值的副本。它与构造函数分开，
+// 因为取值是按计价基准时点解析的，那时快照的其余部分已经固定。
 func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesValue) (PricingInputSnapshot, error) {
 	if !input.valid() {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
@@ -110,7 +103,7 @@ func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesV
 		if !value.valid() {
 			return PricingInputSnapshot{}, ErrInvalidReferenceSeries
 		}
-		// Two readings of one series would leave the choice to iteration order.
+		// 同一序列有两期取值，会把选哪一个交给遍历顺序决定。
 		if _, exists := seen[value.kind]; exists {
 			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.kind)
 		}
@@ -125,7 +118,7 @@ func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesV
 	return updated, nil
 }
 
-// ReferenceSeriesValues reports the readings frozen into this snapshot.
+// ReferenceSeriesValues 报出冻结进本快照的序列取值。
 func (input PricingInputSnapshot) ReferenceSeriesValues() []ReferenceSeriesValue {
 	return append([]ReferenceSeriesValue(nil), input.seriesValues...)
 }
@@ -177,9 +170,8 @@ func (input PricingInputSnapshot) Subject() (EvaluationSubject, bool) {
 	return input.subject, input.subject.valid()
 }
 
-// PackageID reports the accepted package this evaluation is for. An estimate
-// has no package, so callers that turn evaluations into money must check the
-// second return value rather than assume one exists.
+// PackageID 报出本次评价针对的已受理包裹。试算对象没有包裹，所以要把评价变成钱的
+// 调用方必须检查第二个返回值，不能假定它一定存在。
 func (input PricingInputSnapshot) PackageID() (PackageID, bool) {
 	if input.subject.kind != SubjectAcceptedPackage {
 		return PackageID{}, false
@@ -203,8 +195,8 @@ func (input PricingInputSnapshot) Dimensions() (Dimensions, bool) {
 	return *input.dimensions, true
 }
 
-// Features derives the decidable quantities once, so every rule in one
-// evaluation reads the same values rather than each re-deriving them.
+// Features 把可判定量一次性派生出来，使同一次评价里的每条规则读到相同的值，
+// 而不是各自重新派生一遍。
 func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 	if !input.valid() {
 		return PackageFeatures{}, ErrPricingInputInvalid
@@ -242,11 +234,10 @@ type PricingWeightResult struct {
 	explanation  string
 }
 
-// CalculatePricingWeight derives the weight, raises it to any floor the plan's
-// conditional minimums imposed, and only then rounds. CONTEXT fixes that order
-// — 派生、抬高、再进位 — and it is observable: a 1.2 KG floor under a whole-
-// kilogram ceiling bills 2 KG, whereas raising after rounding would bill 1.2,
-// which is not a whole increment at all.
+// CalculatePricingWeight 先派生重量，再抬高到方案的条件最低计价重量所施加的下限，
+// 最后才进位。CONTEXT 固定了这个顺序——派生、抬高、再进位——而且它是可观察的：整千克
+// 向上进位下的 1.2 KG 下限得出 2 KG，而先进位后抬高会得出 1.2，那根本不是一个整进位
+// 单位。
 func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPolicy, expectedUnit WeightUnit, floors ...Weight) (PricingWeightResult, error) {
 	if !input.valid() || !policy.valid() {
 		return PricingWeightResult{}, ErrPricingInputInvalid
@@ -295,8 +286,8 @@ func CalculatePricingWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	if err != nil {
 		return PricingWeightResult{}, err
 	}
-	// CONTEXT requires both sides of a raise in the explanation, so a reader can
-	// see the billed weight was not the parcel's own.
+	// CONTEXT 要求解释里同时呈现抬高前后两个值，读的人才能看出最终的计价重量并非
+	// 包裹自身的重量。
 	raiseText := ""
 	if raised {
 		raiseText = fmt.Sprintf("; raised from %s %s to %s %s by a conditional minimum", derived.value.String(), derived.unit, raw.value.String(), raw.unit)
@@ -339,10 +330,8 @@ func (result PricingWeightResult) valid() bool {
 	return true
 }
 
-// deriveVolumetricWeight applies the card's declared divisor to the package's
-// sides. Sides that never arrived are a missing fact that can still turn up, so
-// the caller keeps the evaluation waiting instead of falling back to the actual
-// weight and quietly pricing a different package.
+// deriveVolumetricWeight 把卡声明的体积系数施加到包裹尺寸上。尺寸没到是一个之后还可能
+// 补上的事实缺失，所以调用方让评价保持`待判断`，而不是退回实重、悄悄给另一件包裹计价。
 func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPolicy) (Weight, error) {
 	factor, declared := policy.VolumetricFactor()
 	if !declared {

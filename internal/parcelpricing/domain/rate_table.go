@@ -82,10 +82,9 @@ func (entry RateEntry) contains(weight Weight) bool {
 	return !entry.hasMaximum || weight.value.Cmp(entry.maximum.value) < 0
 }
 
-// RateTableVersion declares one family and carries only that family's rates.
-// The families do not share an entry shape — a bracket ladder, a first-plus-step
-// rate and a per-unit price hold different data — so they cannot be one slice
-// discriminated by a tag.
+// RateTableVersion 声明一个价表族，并且只携带该族的费率。不同族之间数据构成不同——
+// 重量段阶梯、首重加续重、计费重乘单价各自存的东西不一样——所以它们不能合成一个靠标签
+// 区分的切片。
 type RateTableVersion struct {
 	reference     VersionReference
 	family        RateTableFamily
@@ -146,9 +145,8 @@ func NewRateTableVersion(
 		}
 	}
 
-	// Keep the stored order stable even if callers provide entries in a
-	// different order. This makes evaluation and replay independent of input
-	// collection order.
+	// 即使调用方以不同顺序传入档位，也保持存储顺序稳定。这让评价与重放不依赖
+	// 输入集合的顺序。
 	sort.SliceStable(copyOfEntries, func(left, right int) bool {
 		if copyOfEntries[left].zone != copyOfEntries[right].zone {
 			return copyOfEntries[left].zone < copyOfEntries[right].zone
@@ -215,9 +213,8 @@ func (table RateTableVersion) valid() bool {
 	}
 }
 
-// NewFirstContinueRateTable declares one first-plus-step rate per zone. There
-// are no intervals to check for gaps or overlap, because a single rate prices
-// every weight in its zone.
+// NewFirstContinueRateTable 为每个分区声明一条首重加续重费率。这里没有区间需要检查
+// 空档或重叠，因为单条费率就为其分区内的所有重量定价。
 func NewFirstContinueRateTable(
 	reference VersionReference,
 	currency Currency,
@@ -257,7 +254,7 @@ func NewFirstContinueRateTable(
 	}, nil
 }
 
-// NewUnitPriceRateTable declares one per-unit price per zone.
+// NewUnitPriceRateTable 为每个分区声明一个单价。
 func NewUnitPriceRateTable(
 	reference VersionReference,
 	currency Currency,

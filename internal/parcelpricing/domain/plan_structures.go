@@ -6,9 +6,8 @@ import (
 	"strings"
 )
 
-// SurchargeCalculation carries the method and the parameters that method needs.
-// Keeping the parameters here rather than on the rule is what lets one rule
-// shape serve every method in the closed set.
+// SurchargeCalculation 携带计算方法及该方法所需的参数。把参数放在这里而不是放在规则
+// 上，才使得同一种规则形状能服务闭合集合里的每一种计算方法。
 type SurchargeCalculation struct {
 	seriesKind   *ReferenceSeriesKind
 	seriesFactor *Decimal
@@ -28,10 +27,9 @@ func NewTableLookupSurcharge(table RateTableVersion) (SurchargeCalculation, erro
 	return validSurcharge(SurchargeCalculation{method: ChargeMethodTableLookup, table: &table})
 }
 
-// NewPercentOfBasisSurcharge takes the ID of the ChargeDependency that defines
-// the basis. Naming the dependency rather than restating a code list keeps one
-// definition of the basis; the plan rejects a rule whose named basis it does
-// not declare.
+// NewPercentOfBasisSurcharge 接收定义基数的那条 ChargeDependency 的 ID。指名费用依赖
+// 而不是再抄一份费用代码清单，使基数只有一处定义；方案会拒绝那些指名了它并未声明的
+// 基数的规则。
 func NewPercentOfBasisSurcharge(percentage Decimal, basisDependencyID string) (SurchargeCalculation, error) {
 	return validSurcharge(SurchargeCalculation{
 		method:     ChargeMethodPercentOfBasis,
@@ -40,21 +38,15 @@ func NewPercentOfBasisSurcharge(percentage Decimal, basisDependencyID string) (S
 	})
 }
 
-// NewGreaterOfSurcharge takes the greater of two other methods. Neither operand
-// may itself be a greater-of: the card asks for a choice between two amounts,
-// not an arbitrarily nested expression.
-// NewSeriesRateSurcharge charges a share of a basis where the rate is not a
-// figure on the card but a reading the carrier publishes, discounted by a
-// factor the card does state. `L5` with `F1` is exactly this: the weekly rate
-// times 80%. Both numbers stay separate so a reader can tell a rate change from
-// a discount change.
+// NewSeriesRateSurcharge 按基数百分比计收，但费率不是卡上的一个数字，而是承运商公布
+// 的读数，再乘以卡上确实写明的折扣系数。`L5` 配 `F1` 正是这种情形：当周费率乘 80%。
+// 两个数分开保留，读的人才能分清是费率变了还是折扣变了。
 func NewSeriesRateSurcharge(kind ReferenceSeriesKind, factor Decimal, basisDependencyID string) (SurchargeCalculation, error) {
 	if !kind.valid() {
 		return SurchargeCalculation{}, ErrInvalidSurchargeRule
 	}
-	// The method stays 按基数百分比: what differs is where the rate comes from,
-	// not how the amount is produced. CONTEXT closes the method set at four, and
-	// a rate's provenance is a separate axis from the arithmetic.
+	// 计算方法仍是`按基数百分比`：不同的是费率从哪来，不是金额怎么产生。CONTEXT 把
+	// 计算方法闭合为四种，而费率的来源与算术是两个不同的轴。
 	return validSurcharge(SurchargeCalculation{
 		method:       ChargeMethodPercentOfBasis,
 		seriesKind:   &kind,
@@ -63,6 +55,8 @@ func NewSeriesRateSurcharge(kind ReferenceSeriesKind, factor Decimal, basisDepen
 	})
 }
 
+// NewGreaterOfSurcharge 在另外两种计算方法之间取较大值。两个操作数都不能自身又是取
+// 较大值：卡上要的是在两个金额之间二选一，不是任意嵌套的表达式。
 func NewGreaterOfSurcharge(first, second SurchargeCalculation) (SurchargeCalculation, error) {
 	return validSurcharge(SurchargeCalculation{
 		method:   ChargeMethodGreaterOf,
@@ -104,8 +98,7 @@ func (calculation SurchargeCalculation) Operands() []SurchargeCalculation {
 	return append([]SurchargeCalculation(nil), calculation.operands...)
 }
 
-// basisDependencyIDs reports every dependency ID this calculation names,
-// including through a greater-of operand.
+// basisDependencyIDs 报出本计算指名的每一个费用依赖 ID，包括藏在取较大值操作数里的。
 func (calculation SurchargeCalculation) basisDependencyIDs() []string {
 	switch calculation.method {
 	case ChargeMethodPercentOfBasis:
@@ -125,8 +118,8 @@ func (calculation SurchargeCalculation) valid() bool {
 	if !calculation.method.valid() {
 		return false
 	}
-	// A percent rate is stated either as a figure on the card or as a published
-	// series discounted by a card factor — never both, and never neither.
+	// 百分比费率要么写成卡上的一个数字，要么写成公布序列乘卡上折扣系数——
+	// 两者不能同时出现，也不能都不出现。
 	seriesRate := calculation.seriesKind != nil && calculation.seriesFactor != nil
 	if (calculation.seriesKind != nil) != (calculation.seriesFactor != nil) {
 		return false
@@ -177,10 +170,9 @@ func (calculation SurchargeCalculation) valid() bool {
 	}
 }
 
-// ConditionalMinimumWeight raises the plan-level pricing weight when its
-// condition holds. The card declares it inside a surcharge clause, but its
-// effect is the one weight the base rate lookup and every later basis read, not
-// a private basis for the declaring rule.
+// ConditionalMinimumWeight 在其触发条件成立时抬高方案级计价重量。卡把它写在某条附加费
+// 条款里，但它作用的是基础价查表与后续每一次基数读取所共用的那一个计价重量，不是声明
+// 它的那条规则的私有基数。
 type ConditionalMinimumWeight struct {
 	id        string
 	condition TriggerCondition
@@ -203,13 +195,10 @@ func (value ConditionalMinimumWeight) valid() bool {
 	return trimmed(value.id) && value.condition.valid() && value.minimum.valid() && value.minimum.value.Sign() > 0
 }
 
-// SurchargeRule is a versioned rule that produces a charge line beyond the base
-// freight when its condition holds.
-// ExclusivityStance is what a card says about whether this surcharge competes
-// with others or stands beside them. It is three-valued on purpose: carriers
-// disagree here — UPS puts its large-package charge in the same exclusive set
-// as additional handling while FedEx collects both — so an unset group must not
-// be readable as "stands alone". Silence is its own state and a plan refuses it.
+// ExclusivityStance 表达卡对「这条附加费是与其他附加费竞争，还是与它们并列计收」的
+// 说法。它有意取三个值：承运商在这一点上并不一致——UPS 把大件费与额外操作费放进同一个
+// 互斥组，FedEx 两项都收——所以未设置互斥组绝不能被读成「独立计收」。沉默本身是一种
+// 状态，方案拒绝它。
 type ExclusivityStance string
 
 const (
@@ -220,6 +209,7 @@ const (
 
 func (stance ExclusivityStance) String() string { return string(stance) }
 
+// SurchargeRule 是一条版本化规则：触发条件成立时，在基础运费之外产生一条评价费用行。
 type SurchargeRule struct {
 	id               string
 	chargeCode       ChargeCode
@@ -255,9 +245,8 @@ func NewSurchargeRule(
 	return rule, nil
 }
 
-// InExclusivityGroup returns the rule as a member of a group at the given
-// priority. A priority is only meaningful against the other members of a group,
-// so the two are declared together or not at all.
+// InExclusivityGroup 把规则作为某个互斥组的成员、以给定优先级返回。优先级只有相对于
+// 组内其他成员才有意义，所以两者要么一起声明，要么都不声明。
 func (rule SurchargeRule) InExclusivityGroup(group string, priority int) (SurchargeRule, error) {
 	if !trimmed(group) || priority < 1 {
 		return SurchargeRule{}, ErrInvalidSurchargeRule
@@ -271,8 +260,8 @@ func (rule SurchargeRule) InExclusivityGroup(group string, priority int) (Surcha
 	return rule, nil
 }
 
-// Standalone records that the card collects this surcharge alongside the
-// others. It is a declaration in its own right, not the absence of one.
+// Standalone 记录卡把这条附加费与其他附加费并列计收。它本身就是一次声明，
+// 而不是「没有声明」。
 func (rule SurchargeRule) Standalone() (SurchargeRule, error) {
 	rule.exclusivity = ExclusivityStandalone
 	rule.exclusivityGroup = ""
@@ -318,13 +307,11 @@ func (rule SurchargeRule) ConditionalMinimumWeight() (ConditionalMinimumWeight, 
 	return *rule.minimumWeight, true
 }
 
-// declaredCurrencies reports the currency of every amount the rule states: a
-// fixed amount, a banded table, and each operand of a greater-of. Every one has
-// to be reported, because nothing downstream can catch a foreign amount —
-// charge totals accumulate as bare decimals and are stamped with the plan's
-// currency at the end, so an unchecked operand is billed as the plan's own on
-// an evaluation that still reads as completed. This gate is the only guard.
-// A percentage states no currency of its own; it takes the one its basis is in.
+// declaredCurrencies 报出规则声明的每一笔金额的币种：定额、分档价表，以及取较大值的
+// 每一个操作数。一个都不能漏，因为下游没有任何环节能拦住外币金额——费用合计是以裸小数
+// 累加的，最后才盖上方案的币种，于是一个未经校验的操作数会被当作方案本币计入，而那次
+// 评价读起来仍是`已完成`。这道门是唯一的防线。
+// 百分比本身不声明币种，它取所依据基数的币种。
 func (rule SurchargeRule) declaredCurrencies() []Currency {
 	return rule.calculation.declaredCurrencies()
 }
@@ -344,13 +331,11 @@ func (calculation SurchargeCalculation) declaredCurrencies() []Currency {
 	}
 }
 
-// declaredWeightUnits reports every weight unit the rule states: the unit a
-// banded table is read in, and the unit a conditional minimum raises to. Both
-// are used against the pricing weight, which the plan states in the unit its
-// base table bands in, so a unit the plan does not price in could never be
-// read. The conditional minimum is the reason this belongs at formation rather
-// than at evaluation: it would fail only on the parcels that trip its clause,
-// so one card would price some packages and conflict on others.
+// declaredWeightUnits 报出规则声明的每一个重量单位：分档价表按哪个单位查，以及条件
+// 最低计价重量抬高到哪个单位。两者都作用于计价重量，而计价重量由方案按其基础价表的
+// 分档单位表达，所以方案不据以计价的单位根本读不出来。条件最低计价重量正是这道校验
+// 必须放在工件构造期而不是评价期的原因：放到评价期，它只会在触发该条款的包裹上失败，
+// 于是同一张卡对一部分包裹算得出价、对另一部分报冲突。
 func (rule SurchargeRule) declaredWeightUnits() []WeightUnit {
 	units := rule.calculation.lookupWeightUnits()
 	if rule.minimumWeight != nil {
@@ -359,8 +344,7 @@ func (rule SurchargeRule) declaredWeightUnits() []WeightUnit {
 	return units
 }
 
-// lookupWeightUnits reports the unit of every rate table this calculation reads
-// a band from, including through a greater-of operand.
+// lookupWeightUnits 报出本计算从中查档的每一张价表的单位，包括藏在取较大值操作数里的。
 func (calculation SurchargeCalculation) lookupWeightUnits() []WeightUnit {
 	if calculation.table != nil {
 		return []WeightUnit{calculation.table.unit}
@@ -392,9 +376,8 @@ func (rule SurchargeRule) valid() bool {
 	return rule.minimumWeight == nil || rule.minimumWeight.valid()
 }
 
-// ChargeBasisComposition says how a dependency's basis is assembled. The card
-// needs both shapes: the fuel basis is every other charge minus a named
-// exclusion, while a percentage surcharge names the charges it applies to.
+// ChargeBasisComposition 说明一条费用依赖的基数如何构成。卡两种形状都要：燃油的基数是
+// 本票全部其他费用减去指名的排除项，而百分比附加费则逐项列举它适用于哪些费用。
 type ChargeBasisComposition string
 
 const (
@@ -413,10 +396,9 @@ func (composition ChargeBasisComposition) valid() bool {
 	}
 }
 
-// ChargeDependency declares that one charge takes the subtotal of others as its
-// basis. Both the composition and the exclusion set are explicit: declaration
-// order never implies a dependency, because order is presentation and the basis
-// is a rule. A charge is never part of its own basis.
+// ChargeDependency 声明一条费用以其他费用的小计为基数。基数构成与排除集都显式给出：
+// 声明顺序永远不隐含依赖，因为顺序是呈现，基数是规则。被依赖的费用行本身永不进入
+// 自己的基数。
 type ChargeDependency struct {
 	id          string
 	dependent   ChargeCode
@@ -507,9 +489,8 @@ func sortedChargeCodes(codes []ChargeCode) []ChargeCode {
 	return sorted
 }
 
-// ReferenceSeriesKind is the closed set of external numeric series a plan may
-// resolve. ADR-0013 gives pricing the registration and versioning of these
-// series but not their values.
+// ReferenceSeriesKind 是方案可以解析的外部数值序列的封闭集合。ADR-0013 把这些序列的
+// 登记与版本化交给计价，但数值本身不归计价生产。
 type ReferenceSeriesKind string
 
 const (
@@ -528,9 +509,8 @@ func (kind ReferenceSeriesKind) valid() bool {
 	}
 }
 
-// ReferenceSeriesBinding ties a plan to one registered series version. The
-// binding names the series, never a value: the value is resolved per evaluation
-// at the pricing base time and frozen into that evaluation's manifest.
+// ReferenceSeriesBinding 把方案绑定到一个已登记的序列版本。绑定指名的是序列，绝不是
+// 取值：取值按计价基准时点在每次评价中解析，并冻结进该次评价的版本清单。
 type ReferenceSeriesBinding struct {
 	kind      ReferenceSeriesKind
 	reference VersionReference
@@ -551,15 +531,13 @@ func (binding ReferenceSeriesBinding) valid() bool {
 	return binding.kind.valid() && binding.reference.kind == ArtifactReferenceSeries && binding.reference.valid()
 }
 
-// PricingPlanStructures carries the rule structures a released plan declares
-// beyond its base table and unconditional fixed rules. The zero value declares
-// none.
+// PricingPlanStructures 携带一个已发布方案在基础价表和无条件固定规则之外声明的规则
+// 结构。零值表示一项都没声明。
 //
-// It is one value rather than several constructor parameters so that the
-// canonical plan document has a slot for every structure CONTEXT lists under
-// 版本内容摘要 before any of them is executable. Widening the canonical shape
-// after real evaluations exist would move the digest of plans that never used
-// the new structure and report every replay as a version content conflict.
+// 它做成一个值而不是几个构造参数，是为了让规范化方案文档在任何一项结构可执行之前，
+// 就为 CONTEXT 在`版本内容摘要`下列出的每一种结构都留好位置。等真实评价已经存在之后
+// 再拓宽规范化形状，会让那些从未用过新结构的方案的内容摘要发生位移，把每一次重放都
+// 报成版本内容冲突。
 type PricingPlanStructures struct {
 	surchargeRules  []SurchargeRule
 	dependencies    []ChargeDependency
@@ -578,9 +556,8 @@ func NewPricingPlanStructures(
 		if !rule.valid() {
 			return PricingPlanStructures{}, ErrInvalidSurchargeRule
 		}
-		// Whether this surcharge competes with the others is the carrier's rule
-		// and differs between carriers, so a card that never said cannot be
-		// published under either reading.
+		// 这条附加费是否与其他附加费竞争，是承运商的规则，且各家不同，
+		// 所以一张从未说过的卡，按哪一种读法都不能发布。
 		if rule.exclusivity == ExclusivityUndeclared {
 			return PricingPlanStructures{}, fmt.Errorf("%w: %s", ErrUndeclaredExclusivity, rule.id)
 		}
@@ -649,10 +626,8 @@ func (structures PricingPlanStructures) ReferenceSeries() []ReferenceSeriesBindi
 	return append([]ReferenceSeriesBinding(nil), structures.referenceSeries...)
 }
 
-// WithExclusionRules returns the structures carrying the card's refusal
-// clauses. It is a builder rather than a constructor parameter because a plan
-// that declares none is the common case and the existing three parameters
-// already describe what a card charges; refusal is a different axis.
+// WithExclusionRules 返回携带卡上拒收条款的结构集合。它做成 builder 而不是构造参数，
+// 因为一项都不声明才是常态，而已有的三个参数描述的是卡收什么费；拒收是另一个轴。
 func (structures PricingPlanStructures) WithExclusionRules(rules ...ExclusionRule) (PricingPlanStructures, error) {
 	copyOfRules := append([]ExclusionRule(nil), rules...)
 	seen := make(map[string]struct{}, len(copyOfRules))
@@ -679,8 +654,7 @@ func (structures PricingPlanStructures) ExclusionRules() []ExclusionRule {
 	return append([]ExclusionRule(nil), structures.exclusions...)
 }
 
-// Declared reports whether the plan declares any structure the evaluator must
-// execute before it can produce a complete amount.
+// Declared 报出方案是否声明了任何结构，使得求值器必须先执行它才能产出完整金额。
 func (structures PricingPlanStructures) Declared() bool {
 	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 ||
 		len(structures.referenceSeries) > 0 || len(structures.exclusions) > 0
