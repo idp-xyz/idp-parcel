@@ -1,7 +1,8 @@
 # ADR-0018: 产品内客户端应用与后端共享发布边界并落在顶层 `apps/`
 
-Status: Accepted  
-Date: 2026-08-10
+Status: Superseded by [ADR-0019](./0019-product-ships-tenant-facing-operator-clients.md)  
+Date: 2026-08-10  
+Superseded: 2026-08-10
 
 ## Context
 

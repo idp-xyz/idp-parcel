@@ -82,7 +82,7 @@ tests/
 - 模块不能直接读取其他模块拥有的表。将来同进程调用也必须通过应用端口或已确认事件语义。
 - `internal/platform` 只放进程级共享技术设施；业务 HTTP 端点一律落在 `internal/<context>/adapters/http`，不因就近而写入 `platform/httpapi`。
 - 新增进程入口与对外交付形态（额外 `cmd/` 二进制、前端或其他客户端）是加法：它们在 `internal/` 之外落位，不改变本节包布局，因此不为将来的多端形态提前重排目录或预建空壳。
-- 面向人的客户端应用落在顶层 `apps/`，每端一个子目录；端之间的共享物落在顶层 `packages/`。判据是它服务谁——服务租户自己作业与治理人员的端属于产品的一部分，与后端同仓同版本发布；租户的锚点货主客户走 [`PAR-INT-01`](../product/PILOT-PARAMETER-REGISTER.md) 登记的租户现有渠道，那不是本仓要建的界面。完整取舍、判据与被否决方案见 [ADR-0018](../adr/0018-product-clients-share-release-boundary-under-apps.md)，本节不另立口径。两个目录都等第一个真实端落地时才建，按上一条不预建空壳；端的存在也不倒推领域或应用层改动，因为用例层按 [application/README](../application/README.md) 刻意不绑定 API、文件或门户等传输方式。
+- 面向人的客户端应用落在顶层 `apps/`，每端一个子目录；端之间的共享物落在顶层 `packages/`。判据是它服务谁——服务租户自己作业与治理人员的端属于产品的一部分，与后端同仓同版本发布；租户的锚点货主客户走 [`PAR-INT-01`](../product/PILOT-PARAMETER-REGISTER.md) 登记的租户现有渠道，那不是本仓要建的界面。完整取舍、判据与被否决方案见 [ADR-0019](../adr/0019-product-ships-tenant-facing-operator-clients.md)，本节不另立口径；开发方自用的跨租户运维后台按该记录不属于产品，也不落在这里。两个目录都等第一个真实端落地时才建，按上一条不预建空壳；端的存在也不倒推领域或应用层改动，因为用例层按 [application/README](../application/README.md) 刻意不绑定 API、文件或门户等传输方式。
 
 ## Bento 使用边界
 
