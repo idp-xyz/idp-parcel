@@ -29,12 +29,18 @@ type ShipmentRequestState uint8
 const (
 	ShipmentRequestStateInvalid ShipmentRequestState = iota
 	ShipmentRequestSubmitted
+	ShipmentRequestAccepted
+	ShipmentRequestRejected
 )
 
 func (state ShipmentRequestState) String() string {
 	switch state {
 	case ShipmentRequestSubmitted:
 		return "SUBMITTED"
+	case ShipmentRequestAccepted:
+		return "ACCEPTED"
+	case ShipmentRequestRejected:
+		return "REJECTED"
 	default:
 		return ""
 	}
@@ -106,6 +112,10 @@ type ShipmentRequest struct {
 	currentVersion    SubmissionVersion
 	acceptanceTask    AcceptanceDecisionTask
 	submittedAt       time.Time
+	decision          AcceptanceDecision
+	decisionFormed    bool
+	baseline          AcceptanceBaseline
+	commitment        ExpectedCommitment
 }
 
 // SubmitShipmentRequest establishes a submitted request behind an allowed
