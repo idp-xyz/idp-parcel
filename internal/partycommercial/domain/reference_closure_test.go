@@ -148,3 +148,55 @@ func TestUnreadableAuthorityMakesTheClosurePending(t *testing.T) {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", got)
 	}
 }
+
+// Covers: UC-PC-002 解析结果语义「解析未决 → 保存缺口并安全续办」与 S01-W02 契约中每个
+// 未决都携带 reason 与 continuationRef。只报 outcome 说不出缺的是什么，也接不回去。
+func TestEveryClosurePendingNamesItsReasonAndStaysResumable(t *testing.T) {
+	unreadable := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", closureBases...))
+	if unreadable.Reason() != domain.AuthorityUnreadable {
+		t.Fatalf("reason = %q, want AUTHORITY_UNREADABLE", unreadable.Reason())
+	}
+	if unreadable.ContinuationReference().String() == "" {
+		t.Fatal("权威读不到形成的未决无法续办")
+	}
+
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+	unanchored := closureKey(t, "scope-a", closureBases...)
+	unanchored.Anchor = domain.SelectionAnchor{}
+
+	unconfigured := domain.ResolveCommercialClosure(registry, unanchored)
+	if unconfigured.Outcome() != domain.ResolutionPending {
+		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", unconfigured.Outcome())
+	}
+	if unconfigured.Reason() != domain.AnchorPolicyNotConfigured {
+		t.Fatalf("reason = %q, want ANCHOR_POLICY_NOT_CONFIGURED", unconfigured.Reason())
+	}
+	if unconfigured.ContinuationReference().String() == "" {
+		t.Fatal("锚点策略未配置形成的未决无法续办")
+	}
+
+	// 两种未决要采取的行动不同：锚点未配置等的是实例参数落地，权威读不到等的是重试。
+	// 原因一旦压平，调用方就只能靠猜。
+	if unreadable.ContinuationReference() == unconfigured.ContinuationReference() {
+		t.Fatal("两种原因的未决共用了同一个续办引用")
+	}
+}
+
+// Covers: UC-PC-002 — 同一输入因同一原因停滞时续办引用必须稳定，否则调用方查不回原次尝试；
+// 而必需依据集合不同就是另一次解析，不该借用同一个引用。
+func TestClosureContinuationIsStablePerInputAndReason(t *testing.T) {
+	key := closureKey(t, "scope-a", closureBases...)
+
+	first := domain.ResolveCommercialClosure(nil, key)
+	second := domain.ResolveCommercialClosure(nil, key)
+	if first.ContinuationReference() != second.ContinuationReference() {
+		t.Fatalf("同一输入同一原因给出了不同续办引用: %q vs %q",
+			first.ContinuationReference().String(), second.ContinuationReference().String())
+	}
+
+	fewer := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", domain.CustomerContractObject))
+	if fewer.ContinuationReference() == first.ContinuationReference() {
+		t.Fatal("必需依据集合不同的两次解析共用了续办引用")
+	}
+}

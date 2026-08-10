@@ -339,7 +339,7 @@ func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Reso
 		stalled.adopted = CommercialVersion{}
 		stalled.hasAdopted = false
 		stalled.reason = AuthorityUnreadable
-		stalled.continuation = continuationFor(prior.key, prior.resolutionID, AuthorityUnreadable)
+		stalled.continuation = continuationFor(prior.key.fingerprint(), prior.resolutionID, AuthorityUnreadable)
 		return stalled
 	}
 
@@ -356,7 +356,7 @@ func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Reso
 		viewRevision:   current.viewRevision,
 		candidateCount: current.candidateCount,
 		reason:         CurrentResolutionChanged,
-		continuation:   continuationFor(prior.key, prior.resolutionID, CurrentResolutionChanged),
+		continuation:   continuationFor(prior.key.fingerprint(), prior.resolutionID, CurrentResolutionChanged),
 	}
 	return stale
 }
@@ -375,17 +375,20 @@ func pending(
 		key:          key,
 		anchor:       anchor,
 		reason:       reason,
-		continuation: continuationFor(key, priorID, reason),
+		continuation: continuationFor(key.fingerprint(), priorID, reason),
 	}
 }
 
 // continuationFor 派生调用方续办一次停滞决定所用的引用。它由查询、原解析标识与原因
 // 共同派生，因此同一输入因同一原因停滞时拿到的引用始终相同——这正是调用方能查询原次
 // 尝试而不必靠猜的原因。
-func continuationFor(key ResolutionKey, priorID ResolutionID, reason ResolutionReason) ContinuationReference {
+//
+// 取查询指纹而不取查询本身，是为了让单依据与引用闭包两种解析共用这一处派生：两者的键
+// 形状不同，但「同一输入同一原因得到同一引用」这条对它们是同一条规则。
+func continuationFor(fingerprint string, priorID ResolutionID, reason ResolutionReason) ContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		reason.String(),
-		key.fingerprint(),
+		fingerprint,
 		priorID.String(),
 	}, "\x00")))
 	return ContinuationReference{requiredValue{value: "CONT-" + hex.EncodeToString(digest[:8])}}

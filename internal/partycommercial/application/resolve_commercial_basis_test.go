@@ -164,6 +164,14 @@ func TestUnreadableAuthorityIsPendingRatherThanNoApplicableBasis(t *testing.T) {
 	if result.Closure().Outcome() != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", result.Closure().Outcome())
 	}
+	// 只断言 outcome 说不出这次未决为何停下。锚点策略未配置等的是实例参数落地，读取失败
+	// 等的是重试；原因缺席，下游就只能靠猜要不要重试。
+	if result.Closure().Reason() != domain.AuthorityUnreadable {
+		t.Fatalf("reason = %q, want AUTHORITY_UNREADABLE", result.Closure().Reason())
+	}
+	if result.Closure().ContinuationReference().String() == "" {
+		t.Fatal("未决无法续办，而用例要求保存缺口并安全续办")
+	}
 	if len(result.Closure().Adopted()) != 0 {
 		t.Fatal("未决结果携带了已采用依据")
 	}
