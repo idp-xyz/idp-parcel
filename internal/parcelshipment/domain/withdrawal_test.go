@@ -110,6 +110,14 @@ func TestAWithdrawalWithoutItsAuditTrailCannotBeFormed(t *testing.T) {
 			s.Reason = domain.WithdrawalReasonReference{}
 			return s
 		},
+		"decision ID": func(s domain.WithdrawalSpec) domain.WithdrawalSpec {
+			s.DecisionID = domain.AcceptanceDecisionID{}
+			return s
+		},
+		"decided at": func(s domain.WithdrawalSpec) domain.WithdrawalSpec {
+			s.DecidedAt = time.Time{}
+			return s
+		},
 	}
 
 	for name, drop := range missing {

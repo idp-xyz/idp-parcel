@@ -145,6 +145,57 @@ func basisWithReviewPolicy(
 	return snapshot
 }
 
+// Covers: 本仓对时刻值的既有约定 —— `DeclaredAsOf`、`ProcessingAttempt`、`ManualReviewCompletion`
+// 与各上下文的时刻值对象都在构造期规范化到 UTC。决定时间是同一类值，而同一个聚合上的三条决定
+// 路径必须一致：一份委托上的接受时间带时区、撤回时间不带，事后比对与序列化就要分两套处理。
+func TestEveryDecisionPathNormalisesItsDecisionTimeToUTC(t *testing.T) {
+	zone := time.FixedZone("UTC+8", 8*60*60)
+	local := decidedAt.In(zone)
+
+	assertUTC := func(t *testing.T, got time.Time) {
+		t.Helper()
+		if got.Location() != time.UTC {
+			t.Fatalf("decided at = %v (location %v), want it normalised to UTC", got, got.Location())
+		}
+		if !got.Equal(decidedAt) {
+			t.Fatalf("decided at = %v, want the same instant as %v", got, decidedAt)
+		}
+	}
+
+	t.Run("acceptance", func(t *testing.T) {
+		spec := decisionSpec(t, allGroupsPassing(t))
+		spec.DecidedAt = local
+		accepted, err := submitted(t).Decide(spec)
+		if err != nil {
+			t.Fatalf("decide: %v", err)
+		}
+		decision, _ := accepted.AcceptanceDecision()
+		assertUTC(t, decision.DecidedAt())
+	})
+
+	t.Run("active rejection", func(t *testing.T) {
+		spec := activeRejectionSpec(t)
+		spec.DecidedAt = local
+		rejected, err := submitted(t).RejectByAuthority(spec)
+		if err != nil {
+			t.Fatalf("reject by authority: %v", err)
+		}
+		decision, _ := rejected.AcceptanceDecision()
+		assertUTC(t, decision.DecidedAt())
+	})
+
+	t.Run("customer withdrawal", func(t *testing.T) {
+		spec := withdrawalSpec(t)
+		spec.DecidedAt = local
+		withdrawn, err := submitted(t).WithdrawByCustomer(spec)
+		if err != nil {
+			t.Fatalf("withdraw by customer: %v", err)
+		}
+		record, _ := withdrawn.Withdrawal()
+		assertUTC(t, record.DecidedAt())
+	})
+}
+
 func submitted(t *testing.T) domain.ShipmentRequest {
 	t.Helper()
 	request, err := domain.SubmitShipmentRequest(submitSpec(t, "parcel-1", "parcel-2"))

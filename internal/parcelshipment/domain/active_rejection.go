@@ -120,7 +120,7 @@ func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (Ship
 	request.decision = AcceptanceDecision{
 		decisionID:      spec.DecisionID,
 		basis:           spec.Basis,
-		decidedAt:       spec.DecidedAt,
+		decidedAt:       spec.DecidedAt.UTC(),
 		activeRejection: rejection,
 	}
 	request.decisionFormed = true

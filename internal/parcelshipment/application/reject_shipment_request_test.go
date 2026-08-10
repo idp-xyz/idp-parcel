@@ -284,6 +284,7 @@ type rejectableRequestStore struct {
 	t         *testing.T
 	decided   bool
 	withdrawn bool
+	err       error
 	saved     *domain.ShipmentRequest
 }
 
@@ -292,6 +293,9 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 	_ domain.SourceIdentity,
 ) (domain.ShipmentRequest, bool, error) {
 	store.t.Helper()
+	if store.err != nil {
+		return domain.ShipmentRequest{}, false, store.err
+	}
 	request := submittedRequest(store.t)
 	if store.withdrawn {
 		// 同样让它经领域真的撤一次：假状态挡不住 WithdrawByCustomer，也说明不了问题。

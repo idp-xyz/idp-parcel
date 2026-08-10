@@ -260,6 +260,46 @@ func TestAWithdrawnRequestIsNeverRestoredInPlace(t *testing.T) {
 	}
 }
 
+// Covers: `UC-PS-005` 结果语义「撤回未决：已知事实、缺口、判断版本和续办入口」— 未决交回的是
+// 已知事实，而委托当前是什么状态正是本轮已经查到的事实之一。授权服务答不出时委托可能早已撤回
+// 或接受，这时报`已提交`是编出来的：调用方会据此以为这单还等着自己去撤。
+func TestAnUndecidedRoundReportsTheStateItActuallyRead(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.requests.withdrawn = true
+	fixture.authorizer.err = errors.New("party-commercial authority service unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.WithdrawalUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.State() != domain.ShipmentRequestWithdrawn {
+		t.Fatalf("state = %q, want WITHDRAWN; the round had the request in hand", result.State())
+	}
+}
+
+// Covers: 同一条结果语义的另一半 — 委托根本没取回来时，状态是未知而不是`已提交`。给一个查都
+// 没查到的委托安上生命周期状态，与上一个测试挡的是同一类编造。
+func TestAnUndecidedRoundReportsNoStateWhenItNeverReadTheRequest(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.requests.err = errors.New("shipment request store unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.WithdrawalUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.State() != domain.ShipmentRequestStateInvalid {
+		t.Fatalf("state = %q, want it reported as unknown", result.State())
+	}
+}
+
 type withdrawalFixture struct {
 	handler    *application.WithdrawShipmentRequestHandler
 	requests   *rejectableRequestStore

@@ -112,7 +112,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 ) (RejectShipmentRequestResult, error) {
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return handler.undecided(ctx, command, ShipmentRequestUnavailable), nil
+		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
 	}
 	if !found {
 		// 与形成决定那一步同一判断：指名一份查不到的委托是调用方的错，不是业务结果。接
@@ -128,7 +128,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		Reason:            command.Reason,
 	})
 	if err != nil {
-		return handler.undecided(ctx, command, RejectionAuthorityUnavailable), nil
+		return handler.undecided(ctx, command, RejectionAuthorityUnavailable, request.State()), nil
 	}
 	if authority.String() == "" {
 		// 未获授权不是未决：它是一个确定的业务答案，续办也补不出授权来。
@@ -140,7 +140,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
-		return handler.undecided(ctx, command, DecisionIdentityUnavailable), nil
+		return handler.undecided(ctx, command, DecisionIdentityUnavailable, request.State()), nil
 	}
 
 	rejected, err := request.RejectByAuthority(domain.ActiveRejectionSpec{
@@ -165,7 +165,8 @@ func (handler *RejectShipmentRequestHandler) Handle(
 	}
 
 	if err := handler.deps.Requests.Save(ctx, command.Identity, rejected); err != nil {
-		return handler.undecided(ctx, command, DecisionNotRecorded), nil
+		// 拒绝没落库，因此存着的仍是保存前那一份：交回 request 的状态而不是 rejected 的。
+		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 
 	decision, _ := rejected.AcceptanceDecision()
@@ -232,10 +233,13 @@ func (handler *RejectShipmentRequestHandler) compensationReference(
 	)
 }
 
+// undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是
+// 已知事实，而委托当前是什么状态正是本轮可能已经查到的事实之一。取不到委托的那一轮传零值。
 func (handler *RejectShipmentRequestHandler) undecided(
 	ctx context.Context,
 	command RejectShipmentRequestCommand,
 	reason JudgmentPendingReason,
+	state domain.ShipmentRequestState,
 ) RejectShipmentRequestResult {
 	continuation := judgmentContinuation(
 		reason,
@@ -248,7 +252,7 @@ func (handler *RejectShipmentRequestHandler) undecided(
 
 	return RejectShipmentRequestResult{
 		outcome:      ActiveRejectionUndecided,
-		state:        domain.ShipmentRequestSubmitted,
+		state:        state,
 		reason:       reason,
 		continuation: continuation,
 	}

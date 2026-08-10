@@ -315,7 +315,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		checks:       append([]AcceptanceCheck(nil), spec.Checks...),
 		basis:        spec.Basis,
 		manualReview: manualReview,
-		decidedAt:    spec.DecidedAt,
+		decidedAt:    spec.DecidedAt.UTC(),
 	}
 
 	if failed > 0 {

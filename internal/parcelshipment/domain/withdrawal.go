@@ -67,9 +67,12 @@ func (withdrawal Withdrawal) DecidedAt() time.Time {
 	return withdrawal.decidedAt
 }
 
+// formed 是撤回在场与否的唯一判据，决定标识也算在内——`AcceptanceDecision()` 正是拿标识在不在
+// 判在场的，两处判据不一致会让「哪个槽位算填上了」按路径而定。
 func (withdrawal Withdrawal) formed() bool {
-	return withdrawal.authority.valid() && withdrawal.requester.valid() &&
-		withdrawal.reason.valid() && !withdrawal.decidedAt.IsZero()
+	return withdrawal.decisionID.valid() && withdrawal.authority.valid() &&
+		withdrawal.requester.valid() && withdrawal.reason.valid() &&
+		!withdrawal.decidedAt.IsZero()
 }
 
 type WithdrawalSpec struct {
@@ -106,9 +109,6 @@ func (request ShipmentRequest) WithdrawByCustomer(spec WithdrawalSpec) (Shipment
 	}
 	if request.state != ShipmentRequestSubmitted {
 		return ShipmentRequest{}, ErrInvalidShipmentRequest
-	}
-	if !spec.DecisionID.valid() {
-		return ShipmentRequest{}, ErrInvalidWithdrawal
 	}
 
 	withdrawal := Withdrawal{

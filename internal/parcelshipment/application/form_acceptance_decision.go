@@ -110,7 +110,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 ) (FormAcceptanceDecisionResult, error) {
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return handler.undecided(ctx, command, ShipmentRequestUnavailable), nil
+		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
 	}
 	if !found {
 		// 命令指名了一份不存在的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
@@ -128,10 +128,10 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 	})
 	if err != nil {
-		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
+		return handler.undecided(ctx, command, CommercialBasisUnavailable, request.State()), nil
 	}
 	if resolution.Applicability == domain.CommercialApplicabilityUndetermined {
-		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
+		return handler.undecided(ctx, command, CommercialBasisNotUnique, request.State()), nil
 	}
 	commercialChecks, err := domain.CommercialBasisChecksFor(resolution.Applicability, resolution.Reason)
 	if err != nil {
@@ -142,14 +142,14 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 复核策略只在依据适用时才成为门：确定性不通过要形成拒绝，而拒绝不依赖规则包的其余
 	// 声明——没有适用依据的解析本来也带不出复核策略，卡在这里等于让那个结论永远决定不了。
 	if resolution.Applicability == domain.CommerciallyApplicable && !basis.ManualReviewPolicy().Declared() {
-		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared), nil
+		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared, request.State()), nil
 	}
 
 	// 依据不再适用时仍要读回判断：先前可能已经形成过冻结（`AT-PC-026` 的提交前失效），
 	// 而拒绝要按原关联把它解除。资金不会因为解析结论变了就自己回来。
 	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
 	if err != nil {
-		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable), nil
+		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable, request.State()), nil
 	}
 	checks, err := assembleChecks(recorded, basis.PendingRoutingAllowance())
 	if err != nil {
@@ -159,7 +159,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
-		return handler.undecided(ctx, command, DecisionIdentityUnavailable), nil
+		return handler.undecided(ctx, command, DecisionIdentityUnavailable, request.State()), nil
 	}
 
 	decided, err := request.Decide(domain.AcceptanceDecisionSpec{
@@ -181,7 +181,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if !formed {
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
-		return handler.undecided(ctx, command, pendingReasonFor(decided)), nil
+		return handler.undecided(ctx, command, pendingReasonFor(decided), request.State()), nil
 	}
 	if err := handler.deps.Requests.Save(ctx, command.Identity, decided); err != nil {
 		// 决定没能越过提交边界就不算形成。交回一个没落库的接受，下游会按一份查不回来的
@@ -189,7 +189,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		//
 		// 这里不释放冻结：保存失败时接受成没成立无从确定，而释放要求「接受确定未成立」。
 		// 不确定就释放，会把一次其实已经落库的接受连同它合法占用的资金一起放掉。
-		return handler.undecided(ctx, command, DecisionNotRecorded), nil
+		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 
 	return FormAcceptanceDecisionResult{
@@ -305,10 +305,13 @@ func (handler *FormAcceptanceDecisionHandler) existing(request domain.ShipmentRe
 	}
 }
 
+// undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是
+// 已知事实，而委托当前是什么状态正是本轮可能已经查到的事实之一。取不到委托的那一轮传零值。
 func (handler *FormAcceptanceDecisionHandler) undecided(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	reason JudgmentPendingReason,
+	state domain.ShipmentRequestState,
 ) FormAcceptanceDecisionResult {
 	continuation := judgmentContinuation(
 		reason,
@@ -321,7 +324,7 @@ func (handler *FormAcceptanceDecisionHandler) undecided(
 
 	return FormAcceptanceDecisionResult{
 		outcome:      AcceptanceUndecided,
-		state:        domain.ShipmentRequestSubmitted,
+		state:        state,
 		reason:       reason,
 		continuation: continuation,
 	}
