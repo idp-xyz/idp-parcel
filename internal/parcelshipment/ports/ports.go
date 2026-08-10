@@ -147,6 +147,25 @@ type PreAcceptanceControlRelease interface {
 	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
 }
 
+// ActiveRejectionAuthorizationQuery 说明谁要以什么原因主动拒绝哪一份提交版本。它刻意不带
+// 授权引用：调用方自带一个，就等于自己给自己签字。
+type ActiveRejectionAuthorizationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Decider           domain.DeciderReference
+	Reason            domain.RejectionReasonReference
+}
+
+// ActiveRejectionAuthorizer 回答 party-commercial 是否授权这次主动拒绝。授权引用由那边
+// 签发，parcel-shipment 只保存所采用的引用——角色等级与原因目录都不属本上下文。
+//
+// 未授权时交回零值引用而不是错误：那是一个业务答案（这个人不能拒这单），与「授权服务答不出」
+// 分属两回事，后者才是错误。
+type ActiveRejectionAuthorizer interface {
+	AuthorizeActiveRejection(ctx context.Context, query ActiveRejectionAuthorizationQuery) (domain.RejectionAuthorityReference, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样

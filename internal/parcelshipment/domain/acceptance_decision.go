@@ -186,12 +186,13 @@ func (commitment ExpectedCommitment) FormedAt() time.Time {
 }
 
 type AcceptanceDecision struct {
-	decisionID   AcceptanceDecisionID
-	accepted     bool
-	checks       []AcceptanceCheck
-	basis        CommercialBasisSnapshot
-	manualReview ManualReviewState
-	decidedAt    time.Time
+	decisionID      AcceptanceDecisionID
+	accepted        bool
+	checks          []AcceptanceCheck
+	basis           CommercialBasisSnapshot
+	manualReview    ManualReviewState
+	activeRejection ActiveRejection
+	decidedAt       time.Time
 }
 
 func (decision AcceptanceDecision) DecisionID() AcceptanceDecisionID {

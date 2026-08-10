@@ -41,6 +41,7 @@ const (
 	AcceptanceJudgmentIncomplete
 	DecisionNotRecorded
 	ControlReleasePending
+	RejectionAuthorityUnavailable
 )
 
 func (reason JudgmentPendingReason) String() string {
@@ -73,6 +74,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "DECISION_NOT_RECORDED"
 	case ControlReleasePending:
 		return "CONTROL_RELEASE_PENDING"
+	case RejectionAuthorityUnavailable:
+		return "REJECTION_AUTHORITY_UNAVAILABLE"
 	default:
 		return ""
 	}
