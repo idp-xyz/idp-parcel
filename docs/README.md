@@ -52,7 +52,7 @@
 - [`BD-PP-001` 不可计价结果语义决策简报](./design/pp-unratable-outcome-decision-brief.md)：记录「计价规则明确判定不可计价时形成什么结果」的定案与依据——新增「不可计价」终态、只表达价卡侧排除、与待判断/冲突/未形成互不替代、禁止零金额变通；语义本身以 `parcel-pricing` CONTEXT 为准，本文只记录决定过程与仍待价卡证据的排除条款目录。
 - [计价治理案例转录本](./design/pp-golden-case-transcript.md)：说明 136 个治理案例如何逐字转录进本仓、如何复核保真、各分组的证据层级与阻断状态，并登记未转录内容及其理由；它是审阅入口与转录说明，不构成新的验收依据，也不改变任何案例的层级。案例数据本体在 [`docs/reference/golden-cases/`](./reference/golden-cases/)。
 - [参考设计吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)：逐节登记参考设计各交付物在本仓的落点，按`已吸收`、`已确认不采纳`、`待决`三态标注并给出权威链接；它是台账，只索引不复述规则，也不替参考设计的正确性背书。
-- [去参考设计权威依赖 Agent 交接](./design/pp-de-reference-authority-agent-handoff.md)：总结「用本仓自洽文档替代引用参考设计」的结论、门禁与 REF-OPEN 现状、SRC-DISC 核实、ADR-0011 supersede 路径、删目录前硬门槛与剩余步骤；给下一任 Agent 用，不定义新规则。
+- [去参考设计权威依赖 Agent 交接](./design/pp-de-reference-authority-agent-handoff.md)：总结「用本仓自洽文档替代引用参考设计」的结论、门禁与 REF-OPEN 现状、SRC-DISC 核实、ADR-0011 supersede 路径、参考树去留的逐条核验与最终定案（保留并迁址，不删除）；给下一任 Agent 用，不定义新规则。
 - [`PN-08` 端到端试点与阶段准入开发交接](./design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)：把同版本候选证据、历史回放、影子运行、限量生产、唯一权威、暂停恢复、对象级接管、真实主链/账期、在途盘点和正式 `Go/No-Go` 组织成 W01 至 W09；它是产品级治理编排，不新增限界上下文或全局业务状态机，当前生产结论保持 `No-Go / 待参数化`。
 - [关务切片 0 真实参数取证与生产语义准入交接](./design/customs-slice-0-business-development-handoff.md)：把锚点范围、出口/进口程序、责任承运商与来源、权限、执行/资金/异常责任及验证证据组织成有依赖的取证工作包，并逐生产分支决定只做稳定骨架、使用 `R/S` 验证或准入 `P`。
 - [`CC-S0-W01` 锚点范围首批证据请求工作单](./design/customs-slice-0-w01-evidence-request.md)：把客户、责任法人、服务产品、合同、成熟线路及出口/进口区域的真实证据要求、交叉核验、登记册动作和开发阻断整理成业务方可直接提交的工作单；不保存真实值或第二套参数状态。
@@ -74,6 +74,7 @@
 - [领域发现问答记录](./archive/DOMAIN-DISCOVERY-QA.md)：保留领域发现与决策形成过程，包含候选方案、阶段性建议和未回填确认，不是当前领域规则的权威来源。
 - [领域发现问答工作副本](./archive/DOMAIN-DISCOVERY-QA-WORKING-COPY.md)：保留后续访谈期间产生的重复或未完成记录，仅供追溯，不是当前领域规则的权威来源。
 - [参考设计的源价卡抽取](./archive/reference-design-rate-card-extraction-v1.0.1.json)：外部参考设计对源价卡所作抽取的原样保存，含一张 `WEIGHT_ZONE` 价表与 25 项附加费金额；本仓从未核实过它，无任何案例引用它，仅供回查当初怎么抽，**不得作为价卡数据、计价夹具或验收证据使用**。
+- [参考设计（外部交付）](./reference/reference-design/)：外部提供的《国际小包计费与结算平台》整套交付物原件，28 份，含三版最终解决方案、领域模型、Rating Runtime 语义与技术设计、Rating API 契约、治理案例集与 MVP 实施设计；定性见 [ADR-0012](./adr/0012-parcel-pricing-context-within-idp-parcel.md)，**非权威、非规格、非验收依据**，任何规则若只能靠它读懂即属缺陷。原路径为根目录 `foo/`。落点与吸收结论查[吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)。
 
 ## 产品主线阅读顺序
 

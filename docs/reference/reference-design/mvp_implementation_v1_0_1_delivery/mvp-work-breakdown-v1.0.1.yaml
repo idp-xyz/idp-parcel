@@ -1,0 +1,1572 @@
+version: 1.0.1
+scope: MVP-A plus MVP-B foundations
+planning_assumption: Two-week sprints; capacity is team-dependent and story points are relative, not calendar promises.
+epics:
+- epic_id: E01
+  name: 工程与质量基线
+  objective: 建立可重复构建、CI、代码约束和发布骨架
+  target_sprints:
+  - S0
+  acceptance:
+  - main 分支所有门禁自动化
+  - 工件可复现
+  - 无手工环境差异
+  tasks:
+  - task_id: E01-T01
+    title: 初始化 Go workspace 与模块边界
+    type: ENGINEERING
+    module: repository
+    depends_on: []
+    deliverables:
+    - go.mod
+    - cmd/internal/test 目录
+    acceptance:
+    - go test ./... 通过
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 3
+    priority: MUST
+  - task_id: E01-T02
+    title: 接入格式化、静态检查和依赖边界
+    type: ENGINEERING
+    module: ci
+    depends_on:
+    - E01-T01
+    deliverables:
+    - golangci-lint
+    - 依赖规则
+    acceptance:
+    - Domain/Engine 禁止反向依赖
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E01-T03
+    title: 建立 PostgreSQL Migration Runner
+    type: ENGINEERING
+    module: postgres-adapter
+    depends_on:
+    - E01-T01
+    deliverables:
+    - migration CLI
+    - schema history
+    acceptance:
+    - checksum、advisory lock、重复执行保护
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - ops.idempotency_record
+    story_points: 5
+    priority: MUST
+  - task_id: E01-T04
+    title: 建立 PostgreSQL CI 服务
+    type: TEST
+    module: ci
+    depends_on:
+    - E01-T03
+    deliverables:
+    - CI database job
+    acceptance:
+    - 全部 baseline migration 在锁定 PostgreSQL 版本执行
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 3
+    priority: MUST
+  - task_id: E01-T05
+    title: 生成 OpenAPI Server/Client 骨架
+    type: ENGINEERING
+    module: http-adapter
+    depends_on:
+    - E01-T01
+    deliverables:
+    - generated DTO/routes
+    acceptance:
+    - 14 operationId 全部生成且不进入 Domain
+    golden_case_groups: []
+    api_operations:
+    - createEligibilityEvaluation
+    - evaluateRating
+    - getRatingEvaluation
+    - replayRatingEvaluation
+    - createRatingComparison
+    - createRatingBatch
+    - getRatingBatch
+    - getRatingBatchResults
+    - createQuote
+    - getQuote
+    - offerQuote
+    - acceptQuote
+    - cancelQuote
+    - repriceQuote
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E01-T06
+    title: 建立 Golden Case Test Harness
+    type: TEST
+    module: test/golden
+    depends_on:
+    - E01-T01
+    deliverables:
+    - JSON loader
+    - assertion runner
+    acceptance:
+    - 136 cases 可发现、分组、执行和报告
+    golden_case_groups:
+    - ALL
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E01-T07
+    title: 建立版本、构建和 SBOM
+    type: DEVOPS
+    module: release
+    depends_on:
+    - E01-T02
+    deliverables:
+    - version injection
+    - SBOM
+    - image provenance
+    acceptance:
+    - 同 commit 可复现
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 3
+    priority: MUST
+- epic_id: E02
+  name: Shared Kernel 与确定性
+  objective: 实现全平台唯一数值、单位、ID、时间和排序语义
+  target_sprints:
+  - S1
+  acceptance:
+  - 跨语言样例一致
+  - 禁止 float 进入业务
+  tasks:
+  - task_id: E02-T01
+    title: Decimal 封装与精度保护
+    type: DOMAIN
+    module: shared/decimal
+    depends_on:
+    - E01-T01
+    deliverables:
+    - Decimal API
+    acceptance:
+    - 禁止 float 构造；precision error 明确
+    golden_case_groups:
+    - UNIT_ROUNDING
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E02-T02
+    title: Money、ChargeEffect 与总计
+    type: DOMAIN
+    module: shared/money
+    depends_on:
+    - E02-T01
+    deliverables:
+    - Money/DirectedMoney
+    acceptance:
+    - 金额非负；ADD-DEDUCT 守恒
+    golden_case_groups:
+    - CHARGE_COMPOSITION
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E02-T03
+    title: Quantity、Unit 与精确换算
+    type: DOMAIN
+    module: shared/unit
+    depends_on:
+    - E02-T01
+    deliverables:
+    - Unit registry
+    - converter
+    acceptance:
+    - 1 lb=0.45359237 kg 精确
+    golden_case_groups:
+    - UNIT_GEOMETRY
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E02-T04
+    title: 时间、BusinessTime 和区间类型
+    type: DOMAIN
+    module: shared/time
+    depends_on:
+    - E01-T01
+    deliverables:
+    - BusinessTime
+    - ValidInterval
+    acceptance:
+    - 左闭右开；时区明确
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E02-T05
+    title: 稳定排序与 canonical hash
+    type: DOMAIN
+    module: shared/determinism
+    depends_on:
+    - E02-T01
+    deliverables:
+    - sorting utilities
+    - canonical JSON
+    acceptance:
+    - 输入数组/map 顺序不影响 hash
+    golden_case_groups:
+    - REPLAY
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E02-T06
+    title: 统一 DomainError 与 Problem 映射
+    type: DOMAIN
+    module: shared/errors
+    depends_on:
+    - E01-T05
+    deliverables:
+    - error registry
+    - mapper
+    acceptance:
+    - 错误码与 API Contract 一致
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+- epic_id: E03
+  name: 数据库与 Repository
+  objective: 落地 PostgreSQL 模型、RLS、事务和 Repository Port
+  target_sprints:
+  - S1
+  - S2
+  acceptance:
+  - 真实 PostgreSQL 集成测试通过
+  tasks:
+  - task_id: E03-T01
+    title: 执行 Baseline Migration 与 schema smoke test
+    type: DATABASE
+    module: migrations
+    depends_on:
+    - E01-T04
+    deliverables:
+    - 0001-0011
+    acceptance:
+    - 空库执行成功；manifest 表清单一致
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - contracting.contract_authorized_product
+    - contracting.contract_charge_override
+    - contracting.contract_policy_binding
+    - contracting.customer_pricing_contract
+    - contracting.customer_pricing_contract_version
+    - core.object_blob
+    - facts.carrier_assessment_fact
+    - facts.carrier_assessment_fact_p
+    - facts.measurement_fact
+    - facts.measurement_fact_p
+    - facts.rating_input_snapshot
+    - facts.snapshot_address
+    - facts.snapshot_package
+    - governance.compiled_plan_artifact
+    - governance.golden_case_result
+    - governance.pricing_change_set
+    - governance.pricing_release
+    - governance.pricing_release_component
+    - iam.audit_event
+    - iam.field_access_policy
+    - iam.organization
+    - iam.role_binding
+    - iam.tenant
+    - integration.inbox_message
+    - integration.outbox_event
+    - ops.idempotency_record
+    - ops.operation
+    - ops.rating_batch
+    - ops.rating_batch_item
+    - pricing.calculation_policy_version
+    - pricing.charge_definition_version
+    - pricing.index_observation
+    - pricing.index_series
+    - pricing.pricing_plan
+    - pricing.pricing_plan_version
+    - pricing.rate_table
+    - pricing.rate_table_entry
+    - pricing.rate_table_entry_p
+    - pricing.rate_table_version
+    - product.carrier
+    - product.carrier_account
+    - product.eligibility_policy_version
+    - product.service_product
+    - product.service_product_version
+    - product.service_route
+    - product.service_route_version
+    - quote.quote
+    - quote.quote_version
+    - rating.charge_line_dependency
+    - rating.evaluation_charge_line
+    - rating.evaluation_group
+    - rating.evaluation_source_ref
+    - rating.evaluation_version_manifest
+    - rating.package_evaluation
+    - rating.rating_evaluation
+    - rating.selected_fact
+    story_points: 8
+    priority: MUST
+  - task_id: E03-T02
+    title: 实现 tenant transaction 与 RLS
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - tenant tx wrapper
+    acceptance:
+    - 跨 tenant 读写全部失败
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E03-T03
+    title: 实现 Version/Release Repository
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - release repos
+    acceptance:
+    - 单请求冻结一个 release
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - governance.pricing_release
+    - governance.pricing_release_component
+    story_points: 8
+    priority: MUST
+  - task_id: E03-T04
+    title: 实现 Snapshot/Fact Repository
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - snapshot/fact repos
+    acceptance:
+    - 批量读取；append-only
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - facts.rating_input_snapshot
+    - facts.measurement_fact
+    - facts.carrier_assessment_fact
+    story_points: 8
+    priority: MUST
+  - task_id: E03-T05
+    title: 实现 Evaluation Repository 两段事务
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - evaluation repo
+    acceptance:
+    - REQUESTED/EVALUATING/COMPLETED/FAILED 恢复
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - rating.rating_evaluation
+    - rating.evaluation_charge_line
+    story_points: 13
+    priority: MUST
+  - task_id: E03-T06
+    title: 实现 Idempotency、Operation、Batch Repository
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - ops repos
+    acceptance:
+    - lease、重试、SKIP LOCKED
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - ops.idempotency_record
+    - ops.operation
+    - ops.rating_batch
+    story_points: 13
+    priority: MUST
+  - task_id: E03-T07
+    title: 实现 Outbox/Inbox Repository
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    deliverables:
+    - integration repos
+    acceptance:
+    - 状态与 outbox 同事务；消费者幂等
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - integration.outbox_event
+    - integration.inbox_message
+    story_points: 8
+    priority: MUST
+- epic_id: E04
+  name: Product、Pricing 与 Contract Domain
+  objective: 实现正式业务对象、版本和解析边界
+  target_sprints:
+  - S2
+  acceptance:
+  - 不通过数据库字段隐式创造规则
+  tasks:
+  - task_id: E04-T01
+    title: ServiceProduct 与 Eligibility Domain
+    type: DOMAIN
+    module: domain/producteligibility
+    depends_on:
+    - E02-T04
+    deliverables:
+    - aggregates
+    - policies
+    acceptance:
+    - 硬限制不可被合同放宽
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E04-T02
+    title: PricingPlan 与 RateTable Domain
+    type: DOMAIN
+    module: domain/pricingcatalog
+    depends_on:
+    - E02-T02
+    deliverables:
+    - plan/rate domain
+    acceptance:
+    - BUY/SELL role 明确；版本不可变
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E04-T03
+    title: ChargeDefinition 与 typed policy
+    type: DOMAIN
+    module: domain/pricingcatalog
+    depends_on:
+    - E04-T02
+    deliverables:
+    - charge/policy domain
+    acceptance:
+    - Scope/Basis/Method/Effect 独立
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E04-T04
+    title: CustomerContract 与显式覆盖
+    type: DOMAIN
+    module: domain/contractpolicy
+    depends_on:
+    - E04-T02
+    deliverables:
+    - contract aggregate
+    acceptance:
+    - 无隐式 BUY→SELL 继承
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E04-T05
+    title: VersionManifest 与 Release Resolver
+    type: APPLICATION
+    module: application/pricing
+    depends_on:
+    - E03-T03
+    - E04-T04
+    deliverables:
+    - resolver
+    acceptance:
+    - 冲突不静默选 latest
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E05
+  name: Snapshot 与 Fact Selection
+  objective: 建立不可变输入、物理事实和承运商认定选择
+  target_sprints:
+  - S3
+  acceptance:
+  - Fact 选择证据完整
+  tasks:
+  - task_id: E05-T01
+    title: API DTO 到 Snapshot Mapper
+    type: APPLICATION
+    module: application/rating
+    depends_on:
+    - E01-T05
+    - E03-T04
+    deliverables:
+    - snapshot builder
+    acceptance:
+    - 不预先舍入、不删邮编前导零
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E05-T02
+    title: MeasurementFact 创建和校验
+    type: APPLICATION
+    module: application/facts
+    depends_on:
+    - E03-T04
+    deliverables:
+    - fact command
+    acceptance:
+    - 物理重量/尺寸语义正确
+    golden_case_groups:
+    - FACT_SELECTION
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E05-T03
+    title: CarrierAssessmentFact 创建和校验
+    type: APPLICATION
+    module: application/facts
+    depends_on:
+    - E03-T04
+    deliverables:
+    - assessment fact command
+    acceptance:
+    - billed weight 不成为 actual weight
+    golden_case_groups:
+    - CARRIER_ASSESSMENT
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E05-T04
+    title: FactSelectionPolicy 执行器
+    type: ENGINE
+    module: engine/facts
+    depends_on:
+    - E04-T05
+    - E05-T02
+    - E05-T03
+    deliverables:
+    - selector
+    acceptance:
+    - 同优先级冲突失败；fallback 留证
+    golden_case_groups:
+    - FACT_SELECTION
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+- epic_id: E06
+  name: Compiled Plan 与发布
+  objective: 实现发布时编译、Golden Gate 和内容寻址 Artifact
+  target_sprints:
+  - S3
+  - S4
+  acceptance:
+  - Runtime 不解析任意配置
+  tasks:
+  - task_id: E06-T01
+    title: Artifact Manifest 编解码和 hash
+    type: ENGINE
+    module: engine/plan
+    depends_on:
+    - E02-T05
+    deliverables:
+    - manifest codec
+    acceptance:
+    - Schema 示例通过；hash 校验
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E06-T02
+    title: RateIndex Compiler
+    type: ENGINE
+    module: engine/plan
+    depends_on:
+    - E04-T02
+    deliverables:
+    - rate index compiler
+    acceptance:
+    - 11 种 family 编译校验
+    golden_case_groups:
+    - RATE_TABLES
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E06-T03
+    title: Charge DAG Compiler
+    type: ENGINE
+    module: engine/plan
+    depends_on:
+    - E04-T03
+    deliverables:
+    - DAG compiler
+    acceptance:
+    - 无环、稳定拓扑、类型匹配
+    golden_case_groups:
+    - CHARGE_COMPOSITION
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E06-T04
+    title: Contract sparse override compiler
+    type: ENGINE
+    module: engine/plan
+    depends_on:
+    - E04-T04
+    deliverables:
+    - resolved contract artifact
+    acceptance:
+    - 覆盖特异度唯一
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E06-T05
+    title: Golden Gate 与 Release 激活
+    type: APPLICATION
+    module: application/governance
+    depends_on:
+    - E01-T06
+    - E06-T02
+    - E06-T03
+    - E06-T04
+    deliverables:
+    - compiler pipeline
+    - release command
+    acceptance:
+    - 全部必需案例通过才可 ACTIVE
+    golden_case_groups:
+    - ALL
+    api_operations: []
+    database_tables:
+    - governance.pricing_release
+    - governance.compiled_plan_artifact
+    story_points: 13
+    priority: MUST
+  - task_id: E06-T06
+    title: L1 Artifact Cache 与 singleflight
+    type: INFRA
+    module: engine/plan
+    depends_on:
+    - E06-T01
+    deliverables:
+    - immutable cache
+    acceptance:
+    - 按 content hash；淘汰只影响性能
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E07
+  name: Geometry Engine
+  objective: 实现尺寸、体积、周长和特征边界
+  target_sprints:
+  - S4
+  acceptance:
+  - 全部几何边界 Golden Cases 通过
+  tasks:
+  - task_id: E07-T01
+    title: 尺寸校验、换算和排序
+    type: ENGINE
+    module: engine/geometry
+    depends_on:
+    - E02-T03
+    - E05-T04
+    deliverables:
+    - geometry normalizer
+    acceptance:
+    - 边>0；最长/次/短稳定
+    golden_case_groups:
+    - UNIT_GEOMETRY
+    - BOUNDARIES
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E07-T02
+    title: Dimension Rounding
+    type: ENGINE
+    module: engine/geometry
+    depends_on:
+    - E07-T01
+    deliverables:
+    - rounding stages
+    acceptance:
+    - before/after ordering 唯一
+    golden_case_groups:
+    - UNIT_ROUNDING
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E07-T03
+    title: Volume、Girth 和 irregular policy
+    type: ENGINE
+    module: engine/geometry
+    depends_on:
+    - E07-T01
+    deliverables:
+    - geometry calculators
+    acceptance:
+    - 公式和证据正确
+    golden_case_groups:
+    - UNIT_GEOMETRY
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E07-T04
+    title: Package Feature Evaluator
+    type: ENGINE
+    module: engine/geometry
+    depends_on:
+    - E07-T03
+    deliverables:
+    - feature evaluator
+    acceptance:
+    - 多分支命中但特征唯一
+    golden_case_groups:
+    - BOUNDARIES
+    - SURCHARGES
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E08
+  name: Weight Engine
+  objective: 实现实重、体积重、最低重量和计费重
+  target_sprints:
+  - S4
+  - S5
+  acceptance:
+  - 六类 Billable Method 完整
+  tasks:
+  - task_id: E08-T01
+    title: Actual/Volumetric calculator
+    type: ENGINE
+    module: engine/weight
+    depends_on:
+    - E07-T03
+    deliverables:
+    - weight candidates
+    acceptance:
+    - divisor 带单位；不重复舍入
+    golden_case_groups:
+    - WEIGHT
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E08-T02
+    title: Conditional Minimum resolver
+    type: ENGINE
+    module: engine/weight
+    depends_on:
+    - E07-T04
+    deliverables:
+    - minimum resolver
+    acceptance:
+    - MAX/FIRST/EXCLUSIVE
+    golden_case_groups:
+    - WEIGHT
+    - SURCHARGES
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E08-T03
+    title: 六类 Billable Strategy
+    type: ENGINE
+    module: engine/weight
+    depends_on:
+    - E08-T01
+    - E08-T02
+    deliverables:
+    - strategy registry
+    acceptance:
+    - MAX/ACTUAL/VOLUMETRIC/THRESHOLD/PARTIAL/BLENDED
+    golden_case_groups:
+    - WEIGHT
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E08-T04
+    title: Carrier billed weight strategy
+    type: ENGINE
+    module: engine/weight
+    depends_on:
+    - E05-T03
+    deliverables:
+    - carrier strategy
+    acceptance:
+    - 不再执行系统 billable method
+    golden_case_groups:
+    - CARRIER_ASSESSMENT
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+  - task_id: E08-T05
+    title: Weight rounding trace
+    type: ENGINE
+    module: engine/weight
+    depends_on:
+    - E08-T03
+    deliverables:
+    - rounding trace
+    acceptance:
+    - 精确倍数不多加 increment
+    golden_case_groups:
+    - UNIT_ROUNDING
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST
+- epic_id: E09
+  name: Aggregation 与 Rate Lookup
+  objective: 实现多件聚合、分摊和价表查找
+  target_sprints:
+  - S5
+  acceptance:
+  - 输入顺序不影响结果
+  tasks:
+  - task_id: E09-T01
+    title: 五种 Aggregation 模式
+    type: ENGINE
+    module: engine/aggregation
+    depends_on:
+    - E08-T05
+    deliverables:
+    - aggregation strategies
+    acceptance:
+    - PER_PACKAGE/SHIPMENT_TOTAL/FIRST_CONTINUE/MASTER/HYBRID
+    golden_case_groups:
+    - AGGREGATION
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E09-T02
+    title: 确定性最大余数分摊
+    type: ENGINE
+    module: engine/aggregation
+    depends_on:
+    - E02-T05
+    - E09-T01
+    deliverables:
+    - allocator
+    acceptance:
+    - 分摊总和严格守恒
+    golden_case_groups:
+    - AGGREGATION
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E09-T03
+    title: WEIGHT_ZONE/COUNTRY/REGION indexes
+    type: ENGINE
+    module: engine/ratelookup
+    depends_on:
+    - E06-T02
+    deliverables:
+    - lookup indexes
+    acceptance:
+    - 左闭右开、唯一命中
+    golden_case_groups:
+    - RATE_TABLES
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E09-T04
+    title: FIRST_CONTINUE/PER_UNIT/FLAT
+    type: ENGINE
+    module: engine/ratelookup
+    depends_on:
+    - E06-T02
+    deliverables:
+    - lookup strategies
+    acceptance:
+    - 续重次数 ceiling
+    golden_case_groups:
+    - RATE_TABLES
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E09-T05
+    title: Tiered/Indexed/Published/Custom lookup
+    type: ENGINE
+    module: engine/ratelookup
+    depends_on:
+    - E06-T02
+    deliverables:
+    - advanced lookup
+    acceptance:
+    - banded/progressive 区分
+    golden_case_groups:
+    - RATE_TABLES
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+- epic_id: E10
+  name: Charge、Fuel、Currency 与商业转换
+  objective: 生成可解释费用行和 BUY/SELL 转换
+  target_sprints:
+  - S6
+  - S7
+  acceptance:
+  - 费用 DAG 和总额守恒
+  tasks:
+  - task_id: E10-T01
+    title: Basis Resolver
+    type: ENGINE
+    module: engine/charge
+    depends_on:
+    - E09-T05
+    deliverables:
+    - basis resolver
+    acceptance:
+    - SelectedCharges 无自引用
+    golden_case_groups:
+    - CHARGE_COMPOSITION
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E10-T02
+    title: 11 种 Charge Method
+    type: ENGINE
+    module: engine/charge
+    depends_on:
+    - E10-T01
+    deliverables:
+    - method registry
+    acceptance:
+    - 全部方法算法一致
+    golden_case_groups:
+    - CHARGE_METHODS
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E10-T03
+    title: Composition Executor
+    type: ENGINE
+    module: engine/charge
+    depends_on:
+    - E06-T03
+    - E10-T02
+    deliverables:
+    - composition
+    acceptance:
+    - REPLACE→EXCLUSIVE→FIRST→MAX→STACK→CAP
+    golden_case_groups:
+    - CHARGE_COMPOSITION
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E10-T04
+    title: Fuel Policy
+    type: ENGINE
+    module: engine/charge
+    depends_on:
+    - E10-T03
+    deliverables:
+    - fuel node
+    acceptance:
+    - 基数 source line 和 index 证据完整
+    golden_case_groups:
+    - FUEL_DISCOUNT
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E10-T05
+    title: Currency Engine
+    type: ENGINE
+    module: engine/currency
+    depends_on:
+    - E02-T02
+    deliverables:
+    - FX conversion
+    acceptance:
+    - 方向/path/version/rounding 完整
+    golden_case_groups:
+    - CURRENCY
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E10-T06
+    title: Cost Plus 与 Target Margin
+    type: ENGINE
+    module: engine/charge
+    depends_on:
+    - E10-T03
+    - E10-T05
+    deliverables:
+    - commercial transformations
+    acceptance:
+    - target margin 公式正确；无环
+    golden_case_groups:
+    - BUY_SELL
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+- epic_id: E11
+  name: Stage Executor 与 RatingApplication
+  objective: 把 26 阶段组装为可恢复用例
+  target_sprints:
+  - S7
+  acceptance:
+  - 同步/异步共用内核
+  tasks:
+  - task_id: E11-T01
+    title: 26 Stage 类型化接口
+    type: ENGINE
+    module: engine/stage
+    depends_on:
+    - E07-T04
+    - E08-T05
+    - E09-T05
+    - E10-T06
+    deliverables:
+    - stage registry
+    acceptance:
+    - 阶段顺序与语义规范一致
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E11-T02
+    title: 稳定并行执行与合并
+    type: ENGINE
+    module: engine/stage
+    depends_on:
+    - E11-T01
+    deliverables:
+    - parallel executor
+    acceptance:
+    - 串行/并行 content hash 相同
+    golden_case_groups:
+    - ALL
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E11-T03
+    title: Evaluation Validator/Builder
+    type: ENGINE
+    module: domain/rating
+    depends_on:
+    - E11-T01
+    deliverables:
+    - draft builder
+    acceptance:
+    - Package/Line/Manifest/Total 完整
+    golden_case_groups:
+    - ALL
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E11-T04
+    title: RatingApplication 两段事务
+    type: APPLICATION
+    module: application/rating
+    depends_on:
+    - E03-T05
+    - E05-T04
+    - E06-T06
+    - E11-T03
+    deliverables:
+    - evaluate use case
+    acceptance:
+    - 崩溃恢复、幂等、Outbox
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+- epic_id: E12
+  name: API、Eligibility 与 Comparison
+  objective: 实现正式 HTTP Contract 和多渠道组合
+  target_sprints:
+  - S8
+  acceptance:
+  - 14 operation 契约测试通过
+  tasks:
+  - task_id: E12-T01
+    title: Eligibility endpoint
+    type: API
+    module: http-adapter
+    depends_on:
+    - E04-T01
+    - E05-T01
+    deliverables:
+    - createEligibilityEvaluation
+    acceptance:
+    - eligible=false 为成功判断
+    golden_case_groups: []
+    api_operations:
+    - createEligibilityEvaluation
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E12-T02
+    title: Rating create/read endpoint
+    type: API
+    module: http-adapter
+    depends_on:
+    - E11-T04
+    deliverables:
+    - evaluate/get handlers
+    acceptance:
+    - 201/202/Problem/Projection
+    golden_case_groups: []
+    api_operations:
+    - evaluateRating
+    - getRatingEvaluation
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E12-T03
+    title: Comparison Application/endpoint
+    type: APPLICATION
+    module: application/comparison
+    depends_on:
+    - E11-T04
+    deliverables:
+    - comparison use case
+    acceptance:
+    - 候选独立失败、稳定排序
+    golden_case_groups: []
+    api_operations:
+    - createRatingComparison
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E12-T04
+    title: 字段级 Cost Projection
+    type: SECURITY
+    module: application/projection
+    depends_on:
+    - E12-T02
+    deliverables:
+    - projection builder
+    acceptance:
+    - 无 cost:read 时 BUY 泄露为 0
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E12-T05
+    title: OpenAPI Contract Test
+    type: TEST
+    module: test/contract
+    depends_on:
+    - E12-T01
+    - E12-T02
+    - E12-T03
+    deliverables:
+    - contract suite
+    acceptance:
+    - 示例、未知字段、Decimal、errors 全通过
+    golden_case_groups: []
+    api_operations:
+    - createEligibilityEvaluation
+    - evaluateRating
+    - getRatingEvaluation
+    - replayRatingEvaluation
+    - createRatingComparison
+    - createRatingBatch
+    - getRatingBatch
+    - getRatingBatchResults
+    - createQuote
+    - getQuote
+    - offerQuote
+    - acceptQuote
+    - cancelQuote
+    - repriceQuote
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E13
+  name: Quote Management
+  objective: 实现报价创建、版本和状态并发
+  target_sprints:
+  - S9
+  acceptance:
+  - Quote 不越级形成收费
+  tasks:
+  - task_id: E13-T01
+    title: Quote Domain 与状态机
+    type: DOMAIN
+    module: domain/quote
+    depends_on:
+    - E02-T02
+    deliverables:
+    - quote aggregate
+    acceptance:
+    - DRAFT/OFFERED/ACCEPTED/EXPIRED/CANCELLED/SUPERSEDED
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E13-T02
+    title: Quote Repository 与 ETag
+    type: DATABASE
+    module: postgres-adapter
+    depends_on:
+    - E03-T01
+    - E13-T01
+    deliverables:
+    - quote repo
+    acceptance:
+    - If-Match 并发冲突
+    golden_case_groups: []
+    api_operations: []
+    database_tables:
+    - quote.quote
+    - quote.quote_version
+    story_points: 8
+    priority: MUST
+  - task_id: E13-T03
+    title: Quote Application commands
+    type: APPLICATION
+    module: application/quote
+    depends_on:
+    - E13-T02
+    - E12-T02
+    deliverables:
+    - create/offer/accept/cancel/reprice
+    acceptance:
+    - 仅引用 completed SELL/PUBLIC；Accept 不建应收
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E13-T04
+    title: Quote API Contract Test
+    type: TEST
+    module: test/contract
+    depends_on:
+    - E13-T03
+    deliverables:
+    - quote tests
+    acceptance:
+    - 6 Quote operation 全通过
+    golden_case_groups: []
+    api_operations:
+    - createQuote
+    - getQuote
+    - offerQuote
+    - acceptQuote
+    - cancelQuote
+    - repriceQuote
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E14
+  name: Async、Batch 与 Replay
+  objective: 实现异步 Worker、批量和历史重放
+  target_sprints:
+  - S9
+  - S10
+  acceptance:
+  - 故障重试不重复完成
+  tasks:
+  - task_id: E14-T01
+    title: Worker lease/reaper
+    type: APPLICATION
+    module: application/worker
+    depends_on:
+    - E03-T06
+    - E11-T04
+    deliverables:
+    - worker loop
+    acceptance:
+    - 过期 lease 可恢复；只有一个 COMPLETE
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E14-T02
+    title: Batch Application/API
+    type: APPLICATION
+    module: application/batch
+    depends_on:
+    - E14-T01
+    deliverables:
+    - batch use case
+    acceptance:
+    - 1000 item；局部失败；cursor
+    golden_case_groups: []
+    api_operations:
+    - createRatingBatch
+    - getRatingBatch
+    - getRatingBatchResults
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E14-T03
+    title: Replay Application/API
+    type: APPLICATION
+    module: application/replay
+    depends_on:
+    - E06-T06
+    - E14-T01
+    deliverables:
+    - replay use case
+    acceptance:
+    - 不调用 current resolver；hash 对比
+    golden_case_groups:
+    - REPLAY
+    api_operations:
+    - replayRatingEvaluation
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E14-T04
+    title: 故障注入测试
+    type: TEST
+    module: test/fault
+    depends_on:
+    - E14-T01
+    - E14-T02
+    - E14-T03
+    deliverables:
+    - fault suite
+    acceptance:
+    - 事务A后崩溃、提交不确定、artifact timeout
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+- epic_id: E15
+  name: 治理、导入与运营能力
+  objective: 提供可控价卡导入、校验、发布和解释
+  target_sprints:
+  - S10
+  acceptance:
+  - 禁止歧义价卡进入生产
+  tasks:
+  - task_id: E15-T01
+    title: RateCard staging/import
+    type: APPLICATION
+    module: application/governance
+    depends_on:
+    - E03-T01
+    - E04-T02
+    deliverables:
+    - import pipeline
+    acceptance:
+    - COPY、行错误报告、不可直接 ACTIVE
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E15-T02
+    title: UPS Ground 基线导入适配
+    type: APPLICATION
+    module: adapters/import
+    depends_on:
+    - E15-T01
+    deliverables:
+    - UPS importer
+    acceptance:
+    - 1050 基础费率与附加费一致；歧义隔离
+    golden_case_groups:
+    - UPS_SOURCE
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E15-T03
+    title: Release 审批与激活
+    type: APPLICATION
+    module: application/governance
+    depends_on:
+    - E06-T05
+    - E15-T01
+    deliverables:
+    - release workflow
+    acceptance:
+    - SoD、Golden Gate、原子激活
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E15-T04
+    title: Rating Explanation Query
+    type: APPLICATION
+    module: application/query
+    depends_on:
+    - E11-T03
+    deliverables:
+    - explanation projection
+    acceptance:
+    - 回答事实、公式、规则、价表、舍入
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+- epic_id: E16
+  name: 可观测性、安全、性能与上线
+  objective: 完成生产级门禁和试运行
+  target_sprints:
+  - S11
+  acceptance:
+  - MVP-A 上线门禁全部通过
+  tasks:
+  - task_id: E16-T01
+    title: Metrics/Tracing/Business Trace
+    type: OBSERVABILITY
+    module: telemetry-adapter
+    depends_on:
+    - E11-T04
+    deliverables:
+    - OTEL metrics/traces
+    acceptance:
+    - 无高基数/敏感字段
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E16-T02
+    title: 安全测试与审计
+    type: SECURITY
+    module: test/security
+    depends_on:
+    - E03-T02
+    - E12-T04
+    - E13-T03
+    deliverables:
+    - security suite
+    acceptance:
+    - tenant/BUY/Artifact/PII 泄露为0
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E16-T03
+    title: 性能基准与容量压测
+    type: PERFORMANCE
+    module: test/performance
+    depends_on:
+    - E12-T02
+    - E14-T02
+    deliverables:
+    - benchmark report
+    acceptance:
+    - 单包热P95目标、200包、1000批量
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E16-T04
+    title: HA、备份和恢复演练
+    type: DEVOPS
+    module: operations
+    depends_on:
+    - E03-T01
+    - E14-T01
+    deliverables:
+    - runbook
+    - restore report
+    acceptance:
+    - PITR 后 Replay hash 一致
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 13
+    priority: MUST
+  - task_id: E16-T05
+    title: 灰度发布和回滚演练
+    type: DEVOPS
+    module: release
+    depends_on:
+    - E15-T03
+    - E16-T02
+    - E16-T03
+    - E16-T04
+    deliverables:
+    - release plan
+    acceptance:
+    - pricing/app/db 各自可回滚
+    golden_case_groups: []
+    api_operations: []
+    database_tables: []
+    story_points: 8
+    priority: MUST
+  - task_id: E16-T06
+    title: MVP-A 验收与冻结
+    type: GOVERNANCE
+    module: program
+    depends_on:
+    - E16-T05
+    deliverables:
+    - acceptance report
+    acceptance:
+    - 所有 MUST 门禁为绿
+    golden_case_groups:
+    - ALL
+    api_operations: []
+    database_tables: []
+    story_points: 5
+    priority: MUST

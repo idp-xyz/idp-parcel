@@ -14,7 +14,7 @@
 
 案例对象与源价卡差异声明**逐字复制**，未作字段增删、改名或值改写。转录由程序完成而非手工誊抄，因为 136 个案例逐个手抄必然出错，而金样例一旦抄错就比没有更糟。
 
-核验方式：把转录本与原文件的案例分别按 `case_id` 排序、规范化为紧凑 JSON 后逐例比对。结果为 136 例全部一致、0 处差异，四条 `SRC-DISC` 声明一致。该比对已于 2026-08-10 删除参考树之前复跑一次，结果与本节记录相同。参考树删除后此比对不可再执行；要复核转录忠实度，只能从 git 历史取回原文件。
+核验方式：把转录本与原文件的案例分别按 `case_id` 排序、规范化为紧凑 JSON 后逐例比对。结果为 136 例全部一致、0 处差异，四条 `SRC-DISC` 声明一致。该比对已于 2026-08-10 复跑一次，结果与本节记录相同。原文件仍在仓库内（[`docs/reference/reference-design/international-parcel-rating-golden-cases-v1.0.1.json`](../reference/reference-design/international-parcel-rating-golden-cases-v1.0.1.json)），因此任何人都可以随时重跑这个比对。
 
 转录本另加了一个 `transcript` 头，记录来源、权威价卡身份、证据层级、未转录内容及其理由。头是本仓添加的说明，不属于原案例集内容。
 
@@ -136,11 +136,13 @@
 
 **原案例集的 `canonical_enums`**：不转录。本仓词汇以[小包计价上下文](../domain/parcel-pricing/CONTEXT.md)为准，复制外部取值集合会制造第二套口径。案例中实际出现的 `WEIGHT_ZONE`、`ADD`、`BUY`、`SELL` 与本仓词汇一致；`REPLAY` 只作为案例的 `category`/`operation`/`tags` 出现，不是本仓的计算目的取值。
 
-## 参考树已删除
+## 参考树的去留已定案
 
-本次转录解决的是案例语料这一项。其余条件——活文档引用清理、`fixtures` 去留、人类确认——已分别办结，参考树于 2026-08-10 删除，逐条核验记录见[去参考设计权威依赖交接](./pp-de-reference-authority-agent-handoff.md)第 7 节。
+本次转录解决的是案例语料这一项。其余条件——活文档引用清理、`fixtures` 去留、人类确认——已分别办结，逐条核验记录见[去参考设计权威依赖交接](./pp-de-reference-authority-agent-handoff.md)第 7 节。
 
-各案例的 `source_refs` 与本文件多处仍称「参考树」。那是转录当时的语境，不表示该目录还在。
+最终决定是**不删除**：参考树于 2026-08-10 从根目录 `foo/` 移入 [`docs/reference/reference-design/`](../reference/reference-design/) 并改名，目录内 `README.md` 承担非权威抬头。转录的意义不因保留而减少——转录要解决的是「门禁引用的案例不在仓库里」，而不是「原目录必须消失」；案例仍以本仓转录本为准，非权威的一手交付物只作回查。
+
+各案例的 `source_refs` 与本文件多处仍称「参考树」。那指的就是现在的 `docs/reference/reference-design/`。
 
 ## 相关文档
 

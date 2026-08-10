@@ -1,0 +1,333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.invalid/rating/compiled-pricing-plan-manifest-v1.0.1.schema.json",
+  "title": "Compiled Pricing Plan Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_format_version",
+    "artifact_id",
+    "tenant_id",
+    "pricing_release_id",
+    "price_role",
+    "calculation_purpose_compatibility",
+    "content_hash",
+    "built_at",
+    "compiler_version",
+    "components",
+    "stage_plan",
+    "charge_graph",
+    "lookup_indexes",
+    "custom_functions"
+  ],
+  "properties": {
+    "artifact_format_version": {
+      "const": "1.0.1"
+    },
+    "artifact_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "pricing_release_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "resolved_contract_policy_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "service_product_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "price_role": {
+      "enum": [
+        "CARRIER_TARIFF",
+        "BUY",
+        "INTERNAL",
+        "SELL",
+        "PUBLIC"
+      ]
+    },
+    "calculation_purpose_compatibility": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "QUOTE",
+          "ESTIMATED_COST",
+          "ACTUAL_COST",
+          "CUSTOMER_BILLING",
+          "SIMULATION",
+          "REPLAY",
+          "DISPUTE_REVIEW"
+        ]
+      }
+    },
+    "business_validity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "valid_from"
+      ],
+      "properties": {
+        "valid_from": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "valid_to": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "built_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "compiler_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "component_type",
+          "component_id",
+          "version",
+          "content_hash"
+        ],
+        "properties": {
+          "component_type": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "component_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      }
+    },
+    "stage_plan": {
+      "type": "array",
+      "minItems": 26,
+      "maxItems": 26,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sequence",
+          "name",
+          "enabled"
+        ],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 26
+          },
+          "name": {
+            "enum": [
+              "RequestValidation",
+              "PurposeAndTimeResolution",
+              "SnapshotValidation",
+              "ProductEligibility",
+              "ContractPolicyResolution",
+              "VersionManifestResolution",
+              "FactSelection",
+              "UnitNormalization",
+              "GeometryNormalization",
+              "AddressAndGeographyClassification",
+              "PackageFeatureEvaluation",
+              "WeightCalculation",
+              "Aggregation",
+              "BaseRateLookup",
+              "CandidateChargeGeneration",
+              "ChargeBasisResolution",
+              "ChargeMethodExecution",
+              "ChargeComposition",
+              "DerivedCharges",
+              "BuySellTransformation",
+              "MinimumAndCap",
+              "MultiLegAndShipmentSummary",
+              "CurrencyConversion",
+              "RoundingFinalization",
+              "EvaluationValidation",
+              "RatingEvaluationBuild"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "node_ids": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        }
+      }
+    },
+    "charge_graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodes",
+        "edges",
+        "topological_order"
+      ],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          }
+        },
+        "topological_order": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      }
+    },
+    "lookup_indexes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index_id",
+          "family",
+          "content_hash",
+          "entry_count"
+        ],
+        "properties": {
+          "index_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "family": {
+            "enum": [
+              "FLAT",
+              "PER_UNIT",
+              "WEIGHT_ZONE",
+              "COUNTRY_WEIGHT",
+              "REGION_WEIGHT",
+              "FIRST_CONTINUE",
+              "TIERED_BANDED",
+              "TIERED_PROGRESSIVE",
+              "INDEXED",
+              "PUBLISHED_DISCOUNT",
+              "CUSTOM_LOOKUP"
+            ]
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "entry_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "custom_functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "function_id",
+          "semantic_version",
+          "content_hash",
+          "deterministic"
+        ],
+        "properties": {
+          "function_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "semantic_version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "deterministic": {
+            "const": true
+          }
+        }
+      }
+    }
+  }
+}

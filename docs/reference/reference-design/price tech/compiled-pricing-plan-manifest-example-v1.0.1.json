@@ -1,0 +1,294 @@
+{
+  "artifact_format_version": "1.0.1",
+  "artifact_id": "cpp-customer-a-ups-ground-sell-v4",
+  "tenant_id": "tenant-demo",
+  "pricing_release_id": "release-2026-08-03",
+  "resolved_contract_policy_id": "resolved-contract-a-v4",
+  "service_product_id": "ups-ground-residential",
+  "price_role": "SELL",
+  "calculation_purpose_compatibility": [
+    "QUOTE",
+    "CUSTOMER_BILLING",
+    "SIMULATION"
+  ],
+  "business_validity": {
+    "valid_from": "2026-08-01T00:00:00Z",
+    "valid_to": "2027-01-01T00:00:00Z"
+  },
+  "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "built_at": "2026-08-03T10:00:00Z",
+  "compiler_version": "rating-plan-compiler-v1.0.1",
+  "components": [
+    {
+      "component_type": "PRICING_RELEASE",
+      "component_id": "release-2026-08-03",
+      "version": "1",
+      "content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "component_type": "WEIGHT_PROFILE",
+      "component_id": "ups-divisor-250",
+      "version": "2",
+      "content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    {
+      "component_type": "RATE_TABLE",
+      "component_id": "ups-ground-weight-zone",
+      "version": "3",
+      "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  ],
+  "stage_plan": [
+    {
+      "sequence": 1,
+      "name": "RequestValidation",
+      "enabled": true,
+      "node_ids": [
+        "stage-01-requestvalidation"
+      ]
+    },
+    {
+      "sequence": 2,
+      "name": "PurposeAndTimeResolution",
+      "enabled": true,
+      "node_ids": [
+        "stage-02-purposeandtimeresolution"
+      ]
+    },
+    {
+      "sequence": 3,
+      "name": "SnapshotValidation",
+      "enabled": true,
+      "node_ids": [
+        "stage-03-snapshotvalidation"
+      ]
+    },
+    {
+      "sequence": 4,
+      "name": "ProductEligibility",
+      "enabled": true,
+      "node_ids": [
+        "stage-04-producteligibility"
+      ]
+    },
+    {
+      "sequence": 5,
+      "name": "ContractPolicyResolution",
+      "enabled": true,
+      "node_ids": [
+        "stage-05-contractpolicyresolution"
+      ]
+    },
+    {
+      "sequence": 6,
+      "name": "VersionManifestResolution",
+      "enabled": true,
+      "node_ids": [
+        "stage-06-versionmanifestresolution"
+      ]
+    },
+    {
+      "sequence": 7,
+      "name": "FactSelection",
+      "enabled": true,
+      "node_ids": [
+        "stage-07-factselection"
+      ]
+    },
+    {
+      "sequence": 8,
+      "name": "UnitNormalization",
+      "enabled": true,
+      "node_ids": [
+        "stage-08-unitnormalization"
+      ]
+    },
+    {
+      "sequence": 9,
+      "name": "GeometryNormalization",
+      "enabled": true,
+      "node_ids": [
+        "stage-09-geometrynormalization"
+      ]
+    },
+    {
+      "sequence": 10,
+      "name": "AddressAndGeographyClassification",
+      "enabled": true,
+      "node_ids": [
+        "stage-10-addressandgeographyclassification"
+      ]
+    },
+    {
+      "sequence": 11,
+      "name": "PackageFeatureEvaluation",
+      "enabled": true,
+      "node_ids": [
+        "stage-11-packagefeatureevaluation"
+      ]
+    },
+    {
+      "sequence": 12,
+      "name": "WeightCalculation",
+      "enabled": true,
+      "node_ids": [
+        "stage-12-weightcalculation"
+      ]
+    },
+    {
+      "sequence": 13,
+      "name": "Aggregation",
+      "enabled": true,
+      "node_ids": [
+        "stage-13-aggregation"
+      ]
+    },
+    {
+      "sequence": 14,
+      "name": "BaseRateLookup",
+      "enabled": true,
+      "node_ids": [
+        "stage-14-baseratelookup"
+      ]
+    },
+    {
+      "sequence": 15,
+      "name": "CandidateChargeGeneration",
+      "enabled": true,
+      "node_ids": [
+        "stage-15-candidatechargegeneration"
+      ]
+    },
+    {
+      "sequence": 16,
+      "name": "ChargeBasisResolution",
+      "enabled": true,
+      "node_ids": [
+        "stage-16-chargebasisresolution"
+      ]
+    },
+    {
+      "sequence": 17,
+      "name": "ChargeMethodExecution",
+      "enabled": true,
+      "node_ids": [
+        "stage-17-chargemethodexecution"
+      ]
+    },
+    {
+      "sequence": 18,
+      "name": "ChargeComposition",
+      "enabled": true,
+      "node_ids": [
+        "stage-18-chargecomposition"
+      ]
+    },
+    {
+      "sequence": 19,
+      "name": "DerivedCharges",
+      "enabled": true,
+      "node_ids": [
+        "stage-19-derivedcharges"
+      ]
+    },
+    {
+      "sequence": 20,
+      "name": "BuySellTransformation",
+      "enabled": true,
+      "node_ids": [
+        "stage-20-buyselltransformation"
+      ]
+    },
+    {
+      "sequence": 21,
+      "name": "MinimumAndCap",
+      "enabled": true,
+      "node_ids": [
+        "stage-21-minimumandcap"
+      ]
+    },
+    {
+      "sequence": 22,
+      "name": "MultiLegAndShipmentSummary",
+      "enabled": true,
+      "node_ids": [
+        "stage-22-multilegandshipmentsummary"
+      ]
+    },
+    {
+      "sequence": 23,
+      "name": "CurrencyConversion",
+      "enabled": true,
+      "node_ids": [
+        "stage-23-currencyconversion"
+      ]
+    },
+    {
+      "sequence": 24,
+      "name": "RoundingFinalization",
+      "enabled": true,
+      "node_ids": [
+        "stage-24-roundingfinalization"
+      ]
+    },
+    {
+      "sequence": 25,
+      "name": "EvaluationValidation",
+      "enabled": true,
+      "node_ids": [
+        "stage-25-evaluationvalidation"
+      ]
+    },
+    {
+      "sequence": 26,
+      "name": "RatingEvaluationBuild",
+      "enabled": true,
+      "node_ids": [
+        "stage-26-ratingevaluationbuild"
+      ]
+    }
+  ],
+  "charge_graph": {
+    "nodes": [
+      "base",
+      "residential",
+      "ahs_dimension",
+      "fuel",
+      "minimum"
+    ],
+    "edges": [
+      {
+        "from": "base",
+        "to": "fuel"
+      },
+      {
+        "from": "residential",
+        "to": "fuel"
+      },
+      {
+        "from": "ahs_dimension",
+        "to": "fuel"
+      },
+      {
+        "from": "fuel",
+        "to": "minimum"
+      }
+    ],
+    "topological_order": [
+      "base",
+      "residential",
+      "ahs_dimension",
+      "fuel",
+      "minimum"
+    ]
+  },
+  "lookup_indexes": [
+    {
+      "index_id": "idx-ups-ground-weight-zone",
+      "family": "WEIGHT_ZONE",
+      "content_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "entry_count": 1050
+    }
+  ],
+  "custom_functions": []
+}
