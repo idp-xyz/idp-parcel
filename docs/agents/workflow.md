@@ -69,14 +69,22 @@ flowchart TD
 
 ## 本机环境
 
-这些查不到，踩过才知道。
+这些查不到，踩过才知道。分两节是因为其中一半只在当前宿主成立：**换宿主时整节删掉下面的「当前宿主」，不要逐条判断**；「与宿主无关」那节继续有效。
+
+### 当前宿主：Windows + WSL
 
 - `~/.cursor/skills` 下 37 个条目是**指向 `D:\tops\idp-skills` 克隆的目录联接**（Windows 无管理员权限，用不了符号链接）。改技能要去那个克隆改并推回上游，就地编辑等于改上游工作区。更新用 `git pull`。
-- 这 37 个里有 22 个在 `SKILL.md` 前置声明了 `disable-model-invocation: true`，**只在你显式打 `/name` 时才跑，agent 不会自主拾取**，因此不出现在 agent 的可用技能列表里。上方路由表提到的 `/which-skill`、`/ubiquitous-language`、`/implement`、`/triage`、`/to-spec`、`/to-tickets`、`/wayfinder`、`/handoff`、`/grill-with-docs`、`/improve-codebase-architecture`、`/wizard` 都属这一类：装了、能用、但看不见。看不见不等于没装，别去重装。
-- **Cursor 同时扫三个技能根**：`~/.cursor/skills-cursor`（Cursor 自带）、`~/.cursor/skills`（上面那 37 个）、`~/.codex/skills`（Codex CLI 的目录，跨工具互通一并读取）。同名技能存在于多个根时去重会挑中 `.codex` 那份，而本机 `~/.codex/skills` 磁盘上只剩六个 `.system` 技能，`domain-modeling`、`grilling`、`grill-with-docs` 的 `.codex` 副本早已删除。结果是 **agent 拿到的技能路径指向不存在的文件，读取失败**，容易误判成「这个技能没装」。两份副本内容还可能不同，`.codex` 那份是旧版。读不到时去 `~/.cursor/skills/<name>/SKILL.md` 找同名的；新开会话通常也能让路径指回 `.cursor`。
+- **`go test -race` 在 Windows 侧跑不了，走 WSL。** 竞态检测器是 LLVM ThreadSanitizer 这个 C++ 运行时的 Go 封装，链接它必须过 cgo；本机 `CGO_ENABLED=0`、`CC` 默认为 `gcc` 而 PATH 上并没有任何 C 编译器（Windows 上 Go 不附带），于是报 `-race requires cgo`。这不是缺口，`Ubuntu-24.04` 里有 `/usr/bin/gcc`，Go 装在 `/usr/local/go/bin` 且版本与 `go.mod` 一致——注意它不在非登录 shell 的 PATH 上，要写绝对路径：`wsl -d Ubuntu-24.04 -- sh -c "cd /mnt/d/tops/idp-parcel && CGO_ENABLED=1 /usr/local/go/bin/go test -race ./..."`。CI 跑的就是这一步，本地能自证就不要只标注「由 CI 覆盖」。另一条路是装 MinGW-w64 让 `gcc` 上 PATH。宿主换成 Linux 后本条整条作废：那里 `gcc` 通常就在，`go test -race ./...` 直接可用。
 - **GitHub 只能走代理。** Clash Verge 在 `127.0.0.1:7897`，但系统代理开关常是关的，导致 git 直连失败——单次连接尝试约 21 秒超时，但 GitHub 有多个解析地址，git 逐个重试，整条命令实测约 5 分钟才报错，看着像卡死。`idp-skills` 与 `idp-parcel` 两个克隆都已设仓库级 `http.proxy`；新克隆需要自己加 `-c http.proxy=http://127.0.0.1:7897`。
 - **`idp-parcel` 是私有仓，远程操作必过 Git Credential Manager**（凭据存在 Windows 凭据管理器的 `git:https://github.com`）。GCM 偶尔不返回：它要弹交互提示，而非交互 shell 没有 `/dev/tty`，于是静默三分钟后才报 `could not read Username`。这时凭据好好存着、代理也通，别去动那两样——查进程，有 `git-credential-manager` 挂着就杀掉重跑。加 `GIT_TERMINAL_PROMPT=0` 能让它立刻失败并露出真实原因，不必先干等。推送本身走代理实测 5 秒到 90 秒都有，别按固定时长判断卡没卡——要判断就查 `git-credential-manager` 进程在不在。
 - **git 写 stderr，PowerShell 把 stderr 渲染成红色报错。** `To https://github.com/...` 这类进度信息会显示成 `NativeCommandError`，看着像失败。判断成败只看 `$LASTEXITCODE`。
 - **不要用 `Set-Content` 改源文件。** 它默认不是 UTF-8，会把中文注释和破折号写成乱码，`go build` 报 `illegal UTF-8 encoding`；`-Encoding utf8` 在 Windows PowerShell 5.1 又会写入 BOM。需要脚本化批量替换时用 `[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding $false))`。
 - 开发机 `idp-110-dev`（`/workspace/idp/`）上技能装在 `~/.claude/skills` 与 `~/.agents/skills`，是 `scripts/link-skills.sh` 建的符号链接，与本机布局不同。
+
+**换宿主时要重新确认的，不是照抄新路径就完事：** 竞态检测能否直接跑（有无 C 工具链）、GitHub 出网方式与凭据存放、shell 如何渲染 stderr 与写文件编码、技能装在哪几个根。工具链版本不在此列——`go.mod` 锁的 `go1.26.5` 与 CI 的 `ubuntu-24.04` 不随宿主变化。
+
+### 与宿主无关
+
+- `~/.cursor/skills` 那 37 个里有 22 个在 `SKILL.md` 前置声明了 `disable-model-invocation: true`，**只在你显式打 `/name` 时才跑，agent 不会自主拾取**，因此不出现在 agent 的可用技能列表里。上方路由表提到的 `/which-skill`、`/ubiquitous-language`、`/implement`、`/triage`、`/to-spec`、`/to-tickets`、`/wayfinder`、`/handoff`、`/grill-with-docs`、`/improve-codebase-architecture`、`/wizard` 都属这一类：装了、能用、但看不见。看不见不等于没装，别去重装。
+- **Cursor 同时扫三个技能根**：`~/.cursor/skills-cursor`（Cursor 自带）、`~/.cursor/skills`（上面那 37 个）、`~/.codex/skills`（Codex CLI 的目录，跨工具互通一并读取）。同名技能存在于多个根时去重会挑中 `.codex` 那份，而本机 `~/.codex/skills` 磁盘上只剩六个 `.system` 技能，`domain-modeling`、`grilling`、`grill-with-docs` 的 `.codex` 副本早已删除。结果是 **agent 拿到的技能路径指向不存在的文件，读取失败**，容易误判成「这个技能没装」。两份副本内容还可能不同，`.codex` 那份是旧版。读不到时去 `~/.cursor/skills/<name>/SKILL.md` 找同名的；新开会话通常也能让路径指回 `.cursor`。
 - 技能变更**要新开会话才加载**。当前会话的技能列表是会话开始时的快照。
