@@ -25,6 +25,24 @@ type CommercialAuthorityView interface {
 	) (*domain.CommercialRegistry, error)
 }
 
+// AsOfPolicyDeclaration 取某个接单规则包为各类下游判断声明的时点锚。
+//
+// 它与 CommercialAuthorityView 分开，因为两阶段机制的全部意义就在这个分界上：第一阶段用独立
+// 于候选规则包的选择锚点选出规则包，第二阶段才由已选出的那个包声明各判断的 `asOf`。合成一个
+// 端口，规则包就有机会参与决定它自己被选中的时间。
+//
+// 租户是显式入参：时点政策按租户登记为 `PAR-COM-14`，而按 ADR-0003 跨租户必须在签名上看得见。
+//
+// 没有租户时它必然交回空声明，编排据以停在`未配置`。这正是首发唯一走得到的真实分支——那组政策
+// 属实例半边，本上下文不内置任何默认，尤其不拿系统当前时间顶替。
+type AsOfPolicyDeclaration interface {
+	LoadAsOfPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) ([]domain.AsOfPolicy, error)
+}
+
 type Clock interface {
 	Now() time.Time
 }
