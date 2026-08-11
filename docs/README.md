@@ -34,6 +34,7 @@
 - [Go 首个消费者切片实施决策简报](./design/parcel-go-first-consumer-slice-decision-brief.md)：固定 Parcel 的 Go 模块化单体、PostgreSQL/显式 SQL、Bento 技术边界和 `UC-PS-001` 首个可编码子切片；未确认业务参数不得因此成为生产默认值。
 - [`PN-02` 真实参数取证与开发交接](./design/pn-02-real-parameter-evidence-and-development-handoff.md)：把商业权威发布与唯一解析、锚点商业范围、生产接入与归属、接单/决定前撤回、财务策略、接受前可达性和联合准入组织成五个工作包，并明确稳定骨架、`R/S` 配置验证和生产分支的不同门槛。
 - [代理商、Carrier 与 Carrier Service 关系开发交接](./design/party-carrier-channel-relationship-development-handoff.md)：冻结渠道服务方、账号持有人、合同与结算相对方、底层承运商、实际承运商和责任承担方的关系矩阵及最小开发字段；不新增上下文或通用 Carrier 主数据平台。
+- [一线作业端扫描屏：离线边界与冲突语义决策简报](./design/frontline-scan-offline-and-conflict-decision-brief.md)：从工位那一屏反推 [ADR-0021](./adr/0021-frontline-operations-client-is-part-of-the-product.md) 所说的离线约束，得出离线可做的动作集合与「无有效路由」重合，难逆转取舍已由 [ADR-0023](./adr/0023-work-fact-identity-and-time-are-minted-by-the-device.md) 与 [ADR-0024](./adr/0024-directional-work-basis-carries-a-validity-interval.md) 分别裁决，本文只保留推导；不定视觉、控件或设备型号。
 - [`PN02-W01` 锚点商业与服务范围证据工作单](./design/pn-02-w01-anchor-commercial-scope-evidence-request.md)：把客户、责任法人、服务产品、客户合同和成熟线路作为独立对象交叉核验；只登记脱敏证据索引，不保存真实值。
 - [`PN02-W02` 生产接入与生产归属证据工作单](./design/pn-02-w02-ingress-production-ownership-evidence-request.md)：核验来源请求身份、三类生产归属、安全交接、暂停恢复和回退责任；不把入口连通或技术回执当成生产准入。
 - [`PN02-W03` 接单规则、决定授权与接受前财务控制证据工作单](./design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)：核验规则包、五类时间、人工复核与主动拒绝授权，以及结算模式、账户、价格和财务控制/补偿边界。
