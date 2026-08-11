@@ -20,6 +20,40 @@ func productVersion(t *testing.T, objectID string) domain.CommercialVersion {
 	return live
 }
 
+// Covers: `AT-PC-030`「首发请求独立面单渠道服务 → 按已确认 `N/A` 返回无适用生产依据，不
+// 进入面单专属主链」。此前全仓无任何 `Covers` 提及它（实测于 `cab9a45`）。
+//
+// 实现早就对了而且是有意的：`ServiceProductForm` 的注释与 `PAR-COM-12`（登记册里标的是
+// **已确认范围决策**，不是待提供）都写明首发不销售这一形态，因此枚举里根本不列它。
+//
+// 本用例与 `TestServiceProductFormIsAFacetNotASeparateCatalog` 不重复，后者有一个真实的
+// 假阴性：它只探 `ServiceProductForm(2)` 这一个写死的取值，且只问它有没有名字。实测（于
+// `cab9a45`）把面单渠道形态加在取值 **3** 上并让它 `valid()`，那条用例照绿，枚举门禁也照绿，
+// 只有本用例变红——新加的那一格取什么数，不由守卫这边说了算。
+//
+// 因此这里扫完整个 uint8 值域，并且问的是「构造得出服务产品吗」而不只是「有没有名字」：
+// 没有名字却构造得出，照样等于首发默认卖出了第二种服务形态。
+func TestNoServiceProductCanTakeAnIndependentWaybillChannelForm(t *testing.T) {
+	live := productVersion(t, "product-form-guard")
+
+	if _, err := domain.NewServiceProduct(live, domain.NetworkServiceForm); err != nil {
+		t.Fatalf("网络服务是首发唯一成立的形态，它却构造不出来: %v", err)
+	}
+
+	for value := 0; value <= 255; value++ {
+		form := domain.ServiceProductForm(value)
+		if form == domain.NetworkServiceForm {
+			continue
+		}
+		if _, err := domain.NewServiceProduct(live, form); !errors.Is(err, domain.ErrInvalidServiceProduct) {
+			t.Fatalf("服务形态取值 %d 构造出了服务产品（error = %v），而首发只允许网络服务", value, err)
+		}
+		if name := form.String(); name != "" {
+			t.Fatalf("服务形态取值 %d 已经有名字 %q，形态枚举被扩过而这道守卫没有跟上", value, name)
+		}
+	}
+}
+
 func serviceProduct(t *testing.T, objectID string) domain.ServiceProduct {
 	t.Helper()
 	product, err := domain.NewServiceProduct(productVersion(t, objectID), domain.NetworkServiceForm)

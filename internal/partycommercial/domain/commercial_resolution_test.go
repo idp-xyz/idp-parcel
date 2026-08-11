@@ -1,6 +1,8 @@
 package domain_test
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,7 +51,17 @@ func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind
 	}
 }
 
-// Covers: AT-PC-017 — 唯一适用时返回完整解析、采用版本、有效区间与选择锚点。
+// Covers: AT-PC-017「锚点、产品、合同和规则包唯一适用 → 返回完整解析、版本、**区间**和
+// **修订标识**」。
+//
+// 引的是验收项原文。原 Covers 写的是「……有效区间与选择锚点」：它一边声称覆盖有效区间，
+// 一边把验收项点名的`修订标识`换成了`选择锚点`。
+//
+// 两项的实情不同，别把它们当成一回事（均实测于 `cab9a45`）：
+//   - **有效区间当时全仓一条断言都没有。** 把解析交回的区间清成零值，改前没有任何用例会红。
+//   - **修订标识在别处有专门用例**（`TestResolutionCarriesTheAuthorityViewRevision`），
+//     缺的只是本用例自己不断却在 Covers 里点了它的名。补在这里是为了让这条 Covers 自洽，
+//     不是因为它是个洞。
 func TestUniqueCandidateResolvesWithItsAdoptedVersion(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	adopted := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
@@ -68,6 +80,134 @@ func TestUniqueCandidateResolvesWithItsAdoptedVersion(t *testing.T) {
 	}
 	if !result.Anchor().At().Equal(anchorAt) || result.Anchor().PolicyVersion().String() != "anchor-policy-v1" {
 		t.Fatal("result did not echo the selection anchor it resolved under")
+	}
+
+	// 有效区间：消费方据它判断这份依据管到什么时候，缺了它「唯一已解析」说不出有效期。
+	// 起止两端都比——只比起点时，终点被换成零值不会有任何东西变红。
+	resolved, registered := version.Effective(), adopted.Effective()
+	wantEnd, wantBounded := registered.EndsAt()
+	gotEnd, gotBounded := resolved.EndsAt()
+	if !resolved.StartsAt().Equal(registered.StartsAt()) {
+		t.Fatalf("有效区间起点 = %v, want %v", resolved.StartsAt(), registered.StartsAt())
+	}
+	if gotBounded != wantBounded || (wantBounded && !gotEnd.Equal(wantEnd)) {
+		t.Fatalf("有效区间终点 = %v/%t, want %v/%t", gotEnd, gotBounded, wantEnd, wantBounded)
+	}
+
+	// 修订标识：验收项点名要它。它证明这次解析依据的是哪一份权威视图，而步骤 8 的提交前
+	// 重解全靠比对它。
+	if view, hasView := result.ViewRevision(); !hasView || view.String() == "" {
+		t.Fatal("a successful resolution carries no authority view revision")
+	}
+}
+
+// Covers: AT-PC-019「客户回填早期业务时间试图使用已失效合同 → 不恢复旧资格，仍按独立选择
+// 锚点解析」。此前全仓无任何 `Covers` 提及它（实测于 `cab9a45`）。
+//
+// 客户回填的时间根本没有入口：解析只读 `key.Anchor`，而锚点造不出来除非带上产生它的策略
+// 版本。所以真正要守的是另一件——同一份已过期的合同在策略锚点下必须落选。
+//
+// 两个方向都断。只断「过期后落选」时，把 `AppliesAt` 整条删掉也不会红：那份合同会照样
+// 被选中，而用例根本没问过它在自己有效期内本来选不选得中。
+func TestALapsedContractIsNotRevivedByAnEarlierBusinessTime(t *testing.T) {
+	lapsedFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	lapsedUntil := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+
+	registry := domain.NewCommercialRegistry()
+	interval, err := domain.NewEffectiveInterval(lapsedFrom, lapsedUntil)
+	if err != nil {
+		t.Fatalf("new interval: %v", err)
+	}
+	spec := commercialSpec(t, domain.CustomerContractObject, "contract-lapsed", "v1", "sha256:lapsed")
+	spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, "scope-a")
+	spec.Effective = interval
+
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(approval(t, "approval-contract-lapsed"), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	live, err := published.TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	if _, err := registry.Register(live); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	// 策略锚点在合同失效之后：不恢复旧资格。
+	atPolicyAnchor := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	if atPolicyAnchor.Outcome() != domain.NoApplicableBasis {
+		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS；一份已失效的合同被回填时间救活了", atPolicyAnchor.Outcome())
+	}
+
+	// 同一份合同、同一个登记册，锚点落在它自己的有效期内时本来是选得中的。
+	withinKey := resolutionKey(t, "scope-a", domain.CustomerContractObject)
+	within, err := domain.NewSelectionAnchor(
+		time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC),
+		commercialValue(t, domain.NewAnchorPolicyVersion, "anchor-policy-v1"),
+	)
+	if err != nil {
+		t.Fatalf("new selection anchor: %v", err)
+	}
+	withinKey.Anchor = within
+	if got := domain.ResolveCommercialBasis(registry, withinKey).Outcome(); got != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED；上一断言因此是空的", got)
+	}
+}
+
+// Covers: AT-PC-029「解析成功但接受前可达性失败 → PC 结果保持商业解析，接受决定由 PS
+// 形成」。此前全仓无任何 `Covers` 提及它（实测于 `cab9a45`）。
+//
+// 本上下文要守的那一半是结构性的：商业解析结果里根本没有地方放接受判断。字段名与结果
+// 取值两道一起断——只断字段名时，往 ResolutionOutcome 里加一格`已接受`照样溜过去。
+func TestAResolutionResultHasNowhereToPutAnAcceptanceVerdict(t *testing.T) {
+	forbidden := []string{"accept", "reject", "reachab", "verdict", "approved", "denied"}
+
+	for _, resultType := range []reflect.Type{
+		reflect.TypeOf(domain.Resolution{}),
+		reflect.TypeOf(domain.CommercialClosure{}),
+	} {
+		for index := 0; index < resultType.NumField(); index++ {
+			name := strings.ToLower(resultType.Field(index).Name)
+			for _, word := range forbidden {
+				if strings.Contains(name, word) {
+					t.Fatalf("%s 带着字段 %s，接受判断因此在商业解析结果里有了落脚点",
+						resultType.Name(), resultType.Field(index).Name)
+				}
+			}
+		}
+	}
+
+	// 取值集合按**整份名单**断，不按关键词断。关键词判据在这里会当场误伤 `INPUT_NOT_ACCEPTED`
+	// ——那说的是这次输入没被受理，不是委托被接受或拒绝，两件事只是碰巧共用一个词。
+	//
+	// 按名单断反而更硬：日后往这个封闭集合里加任何一格都会红，加`已接受`的人因此必须先来
+	// 解释它为什么属于商业解析而不属于 PS 的接受判断。
+	wantOutcomes := map[string]struct{}{
+		"UNIQUELY_RESOLVED":      {},
+		"NO_APPLICABLE_BASIS":    {},
+		"APPLICABILITY_CONFLICT": {},
+		"RESOLUTION_PENDING":     {},
+		"INPUT_NOT_ACCEPTED":     {},
+		"STALE":                  {},
+		"BASIS_NOT_RESOLVED":     {},
+	}
+	for value := 0; value <= 255; value++ {
+		name := domain.ResolutionOutcome(value).String()
+		if name == "" {
+			continue
+		}
+		if _, expected := wantOutcomes[name]; !expected {
+			t.Fatalf("ResolutionOutcome 多出一格 %q；若它表达接受判断，那属于 PS 而不是本上下文", name)
+		}
+		delete(wantOutcomes, name)
+	}
+	for missing := range wantOutcomes {
+		t.Fatalf("ResolutionOutcome 少了一格 %q，本用例的名单已经与实现脱节", missing)
 	}
 }
 
@@ -163,27 +303,50 @@ func TestIncompleteKeyIsNotAcceptedWithoutTouchingCandidates(t *testing.T) {
 }
 
 // Covers: party-commercial CONTEXT 已生效 → 已到期/已退役/已替代 停止用于新的解析 —
-// 收尾过的版本不再是候选，且这不同于「从来没有」。
+// 收尾过的版本不再是候选，且这不同于「从来没有」。另覆盖 `AT-PC-026`「解析后合同被当前
+// 修订替代」的候选集一侧。
+//
+// `已替代`那一支此前一条断言都没有：相关用例走的全是 `Retire`（实测于 `cab9a45`）。两支
+// 由不同的转移产生，共用同一句 `AppliesAt` 判据只是今天如此，不是它们必然同生共死。
 func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
-	registry := domain.NewCommercialRegistry()
-	live := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-
-	retired, err := live.Retire(commercialValue(t, domain.NewRetirementReference, "retire-1"), anchorAt.AddDate(0, -1, 0))
-	if err != nil {
-		t.Fatalf("retire: %v", err)
+	ended := map[string]func(t *testing.T, live domain.CommercialVersion) domain.CommercialVersion{
+		"retired": func(t *testing.T, live domain.CommercialVersion) domain.CommercialVersion {
+			t.Helper()
+			retired, err := live.Retire(commercialValue(t, domain.NewRetirementReference, "retire-1"), anchorAt.AddDate(0, -1, 0))
+			if err != nil {
+				t.Fatalf("retire: %v", err)
+			}
+			return retired
+		},
+		"superseded": func(t *testing.T, live domain.CommercialVersion) domain.CommercialVersion {
+			t.Helper()
+			successor := registerable(t, domain.CustomerContractObject, "contract-1", "v2", "sha256:c1-v2")
+			superseded, err := live.SupersededBy(successor, anchorAt.AddDate(0, -1, 0))
+			if err != nil {
+				t.Fatalf("supersede: %v", err)
+			}
+			return superseded
+		},
 	}
-	if _, err := domain.NewCommercialRegistry().Register(retired); err != nil {
-		t.Fatalf("register retired: %v", err)
-	}
 
-	retiredOnly := domain.NewCommercialRegistry()
-	if _, err := retiredOnly.Register(retired); err != nil {
-		t.Fatalf("register retired: %v", err)
-	}
+	for name, end := range ended {
+		t.Run(name, func(t *testing.T) {
+			seed := domain.NewCommercialRegistry()
+			live := effectiveIn(t, seed, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 
-	result := domain.ResolveCommercialBasis(retiredOnly, resolutionKey(t, "scope-a", domain.CustomerContractObject))
-	if result.Outcome() != domain.NoApplicableBasis {
-		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", result.Outcome())
+			endedOnly := domain.NewCommercialRegistry()
+			if _, err := endedOnly.Register(end(t, live)); err != nil {
+				t.Fatalf("register %s: %v", name, err)
+			}
+
+			result := domain.ResolveCommercialBasis(endedOnly, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+			if result.Outcome() != domain.NoApplicableBasis {
+				t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", result.Outcome())
+			}
+			if _, present := result.AdoptedVersion(); present {
+				t.Fatalf("一个%s的版本仍被选作新解析的依据", name)
+			}
+		})
 	}
 }
 
