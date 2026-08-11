@@ -80,9 +80,10 @@ func TestHoldingAPartyRoleGrantsNoAuthority(t *testing.T) {
 		t.Fatal("fixture relationship is not effective")
 	}
 
-	// 根本不存在任何授权；一段生效中的承运代理关系不得顶替它。
-	if _, err := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
-		t.Fatalf("error = %v, want ErrNotAuthorized", err)
+	// 根本不存在任何授权；一段生效中的承运代理关系不得顶替它。这里等的是`未配置`而不是
+	// `不允许`：一条规则都没登记时，本上下文还答不了「许不许」——而关系角色照样什么都不带来。
+	if _, err := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+		t.Fatalf("error = %v, want ErrAuthorityRulesNotConfigured", err)
 	}
 
 	requestType := reflect.TypeOf(domain.AuthorizationRequest{})
@@ -107,9 +108,22 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 		}
 	})
 
-	t.Run("another scope is not authorized", func(t *testing.T) {
-		if _, err := domain.Authorize(grants, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrNotAuthorized) {
+	t.Run("another scope with no rules of its own is unconfigured", func(t *testing.T) {
+		// scope-a 的授权不为 scope-b 作答；而 scope-b 一条规则都没有，所以答案是`未配置`。
+		if _, err := domain.Authorize(grants, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
 			t.Fatalf("error = %v; a grant answered outside its scope", err)
+		}
+	})
+
+	t.Run("another scope that has its own rules refuses rather than borrowing", func(t *testing.T) {
+		// scope-b 自己有规则（只授人工复核），于是它已被配置：这次主动拒绝落`不允许`。
+		// 这一格与上一格分开，才证明得了 scope-a 那条主动拒绝授权没有越界作答——只留上一格时，
+		// 「scope-b 未配置」与「scope-a 的授权被借用了」在结果上分不开。
+		crossScope := append([]domain.AuthorityGrant{}, grants...)
+		crossScope = append(crossScope, authorityGrant(t, "auth-review-b", domain.ManualReviewAction, "level-commercial", "scope-b"))
+
+		if _, err := domain.Authorize(crossScope, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrNotAuthorized) {
+			t.Fatalf("error = %v; scope-a 的主动拒绝授权为 scope-b 作了答", err)
 		}
 	})
 
@@ -135,10 +149,43 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new request: %v", err)
 		}
-		if _, err := domain.Authorize(grants, late); !errors.Is(err, domain.ErrNotAuthorized) {
+		// 过期与从未登记同落`未配置`：在请求那个时刻，这个范围没有一条管得着的规则，两者要做
+		// 的事同为「让一条现行规则存在」。它绝不能是`不允许`——那会把一次续期疏忽说成业务拒绝。
+		if _, err := domain.Authorize(grants, late); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
 			t.Fatalf("error = %v; an expired grant still authorized", err)
 		}
 	})
+}
+
+// Covers: CONTEXT「授权只来自版本化的授权规则」与 ADR-0029「结果按消费方的恢复动作分格」。
+//
+// 「这个范围一条授权规则都没有」与「规则在，但不许你做这件事」此前共用 `ErrNotAuthorized`，
+// 而两者的恢复动作相反：前者要租户先把 `PAR-COM-14` 的授权规则登记上，后者是权威已经答过的
+// 业务拒绝，再登记也不会变。
+//
+// 这一条在首发尤其要紧：**没有租户就没有任何授权规则**，于是每一次授权请求都走未配置那一支，
+// 却被报成业务拒绝——把一个尚未配置的产品说成「你无权这么做」。
+func TestUnconfiguredAuthorityIsNotABusinessRefusal(t *testing.T) {
+	configured := []domain.AuthorityGrant{
+		authorityGrant(t, "auth-reject", domain.ActiveRejectionAction, "level-commercial", "scope-a"),
+	}
+
+	// 规则在，只是请求的等级不在其内：权威已经就这个范围表过态，这是业务拒绝。
+	_, refused := domain.Authorize(configured, rejectionRequest(t, "level-clerk", "scope-a"))
+	if !errors.Is(refused, domain.ErrNotAuthorized) {
+		t.Fatalf("error = %v, want ErrNotAuthorized", refused)
+	}
+
+	// 这个范围一条规则都没有：还没配置，不是拒绝。
+	_, unconfigured := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a"))
+	if !errors.Is(unconfigured, domain.ErrAuthorityRulesNotConfigured) {
+		t.Fatalf("error = %v, want ErrAuthorityRulesNotConfigured", unconfigured)
+	}
+
+	// 两者必须分得开，否则调用方无从选恢复动作——那正是 ADR-0029 要防的错。
+	if errors.Is(unconfigured, domain.ErrNotAuthorized) || errors.Is(refused, domain.ErrAuthorityRulesNotConfigured) {
+		t.Fatal("未配置与不允许仍然互相 Is，恢复动作因此分不开")
+	}
 }
 
 // Covers: UC-PS-001 步骤 8「人工不得覆盖硬规则」的前置 — 主动拒绝必须带结构化原因与

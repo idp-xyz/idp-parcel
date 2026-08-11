@@ -9,6 +9,13 @@ var (
 	ErrInvalidAuthorityGrant       = errors.New("party commercial: invalid authority grant")
 	ErrInvalidAuthorizationRequest = errors.New("party commercial: invalid authorization request")
 	ErrNotAuthorized               = errors.New("party commercial: no effective grant authorizes this request")
+	// ErrAuthorityRulesNotConfigured 说的是这个范围在这个时刻一条已生效的授权规则都没有，
+	// 因此本上下文还答不了「许不许」。它与 ErrNotAuthorized 的恢复动作相反：前者要租户先把
+	// `PAR-COM-14` 的授权规则登记上，后者是权威已经答过的业务拒绝，再登记也不会变。
+	//
+	// 首发尤其要紧：没有租户就没有任何授权规则，每一次请求都落在这一格上。压成`不允许`，
+	// 等于把一个尚未配置的产品说成「你无权这么做」。
+	ErrAuthorityRulesNotConfigured = errors.New("party commercial: no authorization rule is configured for this scope at this time")
 )
 
 // AuthorityLevel 是商业权限等级，不是人事职级。它是版本化的业务授权：职务名称、
@@ -187,8 +194,21 @@ func (authorization Authorization) At() time.Time {
 
 // Authorize 寻找一条允许该请求的已生效授权。没有授权就是拒绝，绝不是放行：
 // 授权要么显式授予，要么就是没有。
+//
+// 没通过分成两格，按调用方的恢复动作而不是本上下文观察到的原因（ADR-0029）：这个范围在
+// 这个时刻一条已生效规则都没有时交回`未配置`，等租户把规则登记上；有规则而本请求不在其内
+// 才是业务拒绝。
+//
+// 判据取**范围加时刻**，不取整份请求。责任法人、权限等级或动作任一不符，都说明权威已经就
+// 这个范围表过态、只是没把这一项放进去——那是它给出的答案，不是它还没被问过。反过来，规则
+// 全部过期与从未登记同落`未配置`：在请求那个时刻，这个范围都没有一条管得着的规则，两者要做
+// 的事同为「让一条现行规则存在」。
 func Authorize(grants []AuthorityGrant, request AuthorizationRequest) (Authorization, error) {
+	configured := false
 	for _, grant := range grants {
+		if grant.scope == request.scope && grant.effective.Contains(request.at) {
+			configured = true
+		}
 		if grant.permits(request) {
 			return Authorization{
 				action:   request.action,
@@ -198,6 +218,9 @@ func Authorize(grants []AuthorityGrant, request AuthorizationRequest) (Authoriza
 				at:       request.at,
 			}, nil
 		}
+	}
+	if !configured {
+		return Authorization{}, ErrAuthorityRulesNotConfigured
 	}
 	return Authorization{}, ErrNotAuthorized
 }
