@@ -295,11 +295,14 @@ func TestEveryIdentifierOnTheRehydrationSurfaceIsClassified(t *testing.T) {
 				if !typed.Name.IsExported() || !belongsToRehydrationSurface(candidate) {
 					continue
 				}
-				// 方法不许上重建面，登记它也不行。rehydrationReferencesIn 只认
-				// `<包本地名>.Name` 形状的选择器，而方法调用写成 `spec.Build()`，限定符是
-				// 变量不是包名，方法表达式的外层 X 也不是标识符——两种写法它都看不见。
-				// 于是一个方法形状的入口进了名单，名单会声称覆盖了一个门禁其实拦不住的
-				// 东西，正是这条规则要防的那类失效发生在它自己身上。
+				// 方法不许上重建面，登记它也不行。**这一条答的是「名单说不说得出它」，不是
+				// 「包外到不到得了它」**——后者由 TestNothingHandsOut… 单独守，两条不可互相
+				// 替代，理由写在那条的注释里。
+				//
+				// rehydrationReferencesIn 只认 `<包本地名>.Name` 形状的选择器，而方法调用写成
+				// `spec.Build()`，限定符是变量不是包名，方法表达式的外层 X 也不是标识符——两种
+				// 写法它都看不见。于是一个方法形状的入口进了名单，名单会声称覆盖了一个门禁其实
+				// 拦不住的东西，正是这条规则要防的那类失效发生在它自己身上。
 				if typed.Recv != nil {
 					t.Errorf("%s：重建面上出现导出方法 %s；引用扫描看不见方法调用，请改成包级函数",
 						file.path, typed.Name.Name)
@@ -350,18 +353,36 @@ func TestEveryIdentifierOnTheRehydrationSurfaceIsClassified(t *testing.T) {
 			t.Errorf("rehydrationEntryIdentifiers 里的 %q 在领域包里已不存在；名单该清理", name)
 		}
 	}
-	for name := range rehydrationSurfaceOpenIdentifiers {
+	for name, reason := range rehydrationSurfaceOpenIdentifiers {
 		if !declared[name] {
 			t.Errorf("rehydrationSurfaceOpenIdentifiers 里的 %q 在领域包里已不存在；名单该清理", name)
+		}
+		// 这份名单的全部价值在那句理由上：受限那份靠 rehydrationReferencesIn 承重，开放这份
+		// 什么都不强制，它唯一的作用是让下一个人看懂当初为什么放行。理由留空时，「有意开放」
+		// 与「懒得想、先塞进来让测试变绿」在名单里长得一模一样——而后者正是上面那条分类断言
+		// 要逼出来的东西，绕开它只需要一对空引号。
+		if strings.TrimSpace(reason) == "" {
+			t.Errorf("rehydrationSurfaceOpenIdentifiers 里的 %q 没写为什么开放；没有理由的登记与漏归类不可区分", name)
 		}
 	}
 }
 
 // TestTheRehydrationSurfaceIsNotHeldUpByNamingAlone 证并集的三条各自都能单独拦住东西。
 //
-// 今天领域包里那六个既在门那个文件里、名字又都带约定前缀，三条判出来的结果一模一样，因此
-// 上一条测试全绿并不能说明文件那半或接收者那条在起作用——把它们删掉，上一条照样绿。这条用
-// 合成取值把三条分开验，免得并集里悄悄只剩一条承重。
+// 三条今天的现实覆盖并不相同，这条测试为哪一格而写要说准，否则下一个人会按一个错的理由留着
+// 或删掉它。门那个文件里今天六个导出声明：
+//
+//   - 四个 `Rehydrate*`：名字那半独自就拦得住。
+//   - 两个 `Err*`：名字那半对它们是假（`strings.HasPrefix(name, "Rehydrate")` 不认 `Err` 开头，
+//     `ErrRehydrationStateNotSupported` 里更是 “Rehydration” 而非 “Rehydrate”），拦住它们的只有
+//     文件那半。所以**删掉文件那半，上一条不会照样绿**：这两个会从 declared 里掉出去，开放
+//     名单的反向查当场报两条「在领域包里已不存在」。文件那半有现实的承重点，而那个承重点是
+//     开放名单给的——正是它把两个不带约定前缀的哨兵拉进了反向核对。
+//   - 接收者那条：今天一个现实实例都没有。
+//
+// 于是这条测试真正不可替代的是最后一格——没有它，接收者那条子句可以被整条删掉而全仓仍然全绿。
+// 前两格留着是因为并集的形状会变：`Err*` 哪天改名带上前缀，文件那半就退回没有现实实例，与今天
+// 的接收者那条同状，而那时已经没有别的东西在证明它还活着。
 func TestTheRehydrationSurfaceIsNotHeldUpByNamingAlone(t *testing.T) {
 	t.Parallel()
 
@@ -401,16 +422,31 @@ func TestTheRehydrationSurfaceIsNotHeldUpByNamingAlone(t *testing.T) {
 // TestNothingHandsOutARestrictedTypeWithoutBeingRestricted 守住真正承重的那条性质。
 //
 // 名单式覆盖看起来在守「每个入口都登记了」，实际承重的是另一条：**受限入口只能经由一个受限
-// 类型或一个受限包级函数抵达**。今天它成立，方法因此是被传递地守住的——包外要调
-// `spec.Build()`，得先拿到一个 `RehydrateShipmentRequestSpec` 值，而领域包没有任何导出函数
-// 交回它，于是调用方只能自己指名那个类型，而类型名在受限名单里，引用扫描看得见。
+// 名字抵达**。今天它成立，方法因此是被传递地守住的——包外要调 `spec.Build()`，得先拿到一个
+// `RehydrateShipmentRequestSpec` 值，而领域包没有任何导出声明交回它，于是调用方只能自己指名
+// 那个类型，而类型名在受限名单里，引用扫描看得见。
 //
-// 哪天出现一条不必指名受限类型就能拿到它的路径——一个导出函数返回了 spec——上面整套当场就
-// 穿了，而在这条测试之前不会有任何东西变红。把那句话写成断言，是因为本仓对「约束只写在注释
-// 里」的既定态度就是它等于没有约束。
+// **这条与那条方法禁令**（TestEveryIdentifier… 里 `typed.Recv != nil` 那一支）**不重复，两者答
+// 的是不同的问题，谁也替不了谁。**那条答「名单说不说得出方法」——说不出，所以方法不许登记；
+// 这条答「包外到不到得了方法」——到不了，但靠的是可达性而不是引用扫描。方法禁令挡不住一个
+// 交回受限类型的导出函数（那时可达性没了，方法照样叫得动）；这条也挡不住一份声称覆盖了方法
+// 的名单。两条同时在，是因为它们各自的失效方式不同。
 //
-// 已知缺口：它只看函数结果。导出结构体的导出字段同样能把受限类型递出去，判那个要 go/types
-// 与类型信息，本文件这套语法扫描做不到。写在这里免得下一个人以为覆盖是全的。
+// 哪天出现一条不必指名受限类型就能拿到它的路径，上面整套当场就穿，而在这条测试之前不会有任何
+// 东西变红。今天认四种形状，它们的共同点是「给受限类型另开一个不受限的名字」：
+//
+//   - 导出函数的结果。
+//   - **类型别名**。它与定义型只差一个等号，危险度差一整级：`type X Restricted` 是新类型，包外
+//     要把它喂进重建入口必须写一次 `domain.Restricted(x)` 转换，而那是个选择器，引用扫描看得见；
+//     `type X = Restricted` 根本不是新类型，值直接就能传，全程一次都不必提受限名字。别名再配一个
+//     挂在它上面的方法（接收者名不在受限名单里，方法禁令因此不触发），就是一个四道检查全穿的
+//     第二重建入口。
+//   - 导出的包级 var/const。`var DefaultSnapshot RehydrateShipmentRequestSpec` 与别名同理。
+//   - 导出结构体的导出字段，含嵌入字段。
+//
+// **仍然看不见的**：类型由右值推导且右值不是复合字面量（`var x = build()`）、经 `any` 或接口动态
+// 递出、以及经另一个包中转。这三种都要 go/types 与类型信息，本文件这套语法扫描做不到。写在这里
+// 免得下一个人以为覆盖是全的。
 func TestNothingHandsOutARestrictedTypeWithoutBeingRestricted(t *testing.T) {
 	t.Parallel()
 
@@ -421,16 +457,9 @@ func TestNothingHandsOutARestrictedTypeWithoutBeingRestricted(t *testing.T) {
 		}
 		scanned++
 		for _, decl := range file.syntax.Decls {
-			function, isFunction := decl.(*ast.FuncDecl)
-			if !isFunction || !function.Name.IsExported() || function.Type.Results == nil {
-				continue
-			}
-			if rehydrationEntryIdentifiers[function.Name.Name] {
-				continue
-			}
-			for _, handed := range restrictedTypesIn(function.Type.Results) {
-				t.Errorf("%s：导出函数 %s 交回受限类型 %s，而它自己不在受限名单里；调用方从此不必指名任何受限标识符就能拿到它，引用扫描看不见这条路",
-					file.path, function.Name.Name, handed)
+			for _, handout := range handoutsIn(decl) {
+				t.Errorf("%s：%s，而这个名字自己不在受限名单里；调用方从此不必指名任何受限标识符就能拿到它，引用扫描看不见这条路",
+					file.path, handout)
 			}
 		}
 	}
@@ -439,12 +468,199 @@ func TestNothingHandsOutARestrictedTypeWithoutBeingRestricted(t *testing.T) {
 	}
 }
 
-// restrictedTypesIn 列出一段结果列表里提到的受限类型，按出现顺序去重。指针、切片、映射都
-// 认——递出去的是同一个类型，包了一层不改变调用方能拿到它这件事。
-func restrictedTypesIn(results *ast.FieldList) []string {
+// surfaceHandout 是一处「给受限类型另开了一个不受限的名字」。
+type surfaceHandout struct {
+	kind       string
+	name       string
+	restricted string
+}
+
+func (handout surfaceHandout) String() string {
+	return handout.kind + " " + handout.name + " 交出受限类型 " + handout.restricted
+}
+
+// handoutsIn 列出一条顶层声明交出了哪些受限类型。写成纯函数而不是就地 t.Errorf，是为了让
+// TestTheHandoutScanCanActuallyCatchAViolation 能拿合成声明喂它——四条判据里三条今天在仓里
+// 一个现实实例都没有，不用合成取值就无从证明它们真的在起作用。
+func handoutsIn(decl ast.Decl) []surfaceHandout {
+	switch typed := decl.(type) {
+	case *ast.FuncDecl:
+		if !typed.Name.IsExported() || typed.Type.Results == nil ||
+			rehydrationEntryIdentifiers[typed.Name.Name] {
+			return nil
+		}
+		return handoutsAt("导出函数", typed.Name.Name, typed.Type.Results)
+	case *ast.GenDecl:
+		var found []surfaceHandout
+		for _, spec := range typed.Specs {
+			found = append(found, specHandouts(spec)...)
+		}
+		return found
+	}
+	return nil
+}
+
+func specHandouts(spec ast.Spec) []surfaceHandout {
+	switch typed := spec.(type) {
+	case *ast.TypeSpec:
+		if !typed.Name.IsExported() || rehydrationEntryIdentifiers[typed.Name.Name] {
+			return nil
+		}
+		if typed.Assign.IsValid() {
+			return handoutsAt("类型别名", typed.Name.Name, typed.Type)
+		}
+		// 定义型（无等号）不在此列：它是新类型，包外要把它喂进重建入口必须写一次
+		// `domain.Restricted(x)` 转换，而那是个选择器，rehydrationReferencesIn 看得见。
+		structure, isStruct := typed.Type.(*ast.StructType)
+		if !isStruct || structure.Fields == nil {
+			return nil
+		}
+		var found []surfaceHandout
+		for _, field := range structure.Fields.List {
+			if !fieldReachableFromOutside(field) {
+				continue
+			}
+			found = append(found, handoutsAt("导出结构体", typed.Name.Name+" 的导出字段", field.Type)...)
+		}
+		return found
+	case *ast.ValueSpec:
+		var found []surfaceHandout
+		for _, name := range typed.Names {
+			if !name.IsExported() || rehydrationEntryIdentifiers[name.Name] {
+				continue
+			}
+			if typed.Type != nil {
+				found = append(found, handoutsAt("包级声明", name.Name, typed.Type)...)
+			}
+			// 类型由右值推导时只认复合字面量：那里的类型名写在 AST 上。调用式右值不认——
+			// `var x = RehydrateShipmentRequest(spec)` 交回的是 ShipmentRequest 而不是受限
+			// 类型，把它算成一处递出是假阳性，而假阳性会逼人给规则开例外。
+			for _, value := range typed.Values {
+				literal, isLiteral := value.(*ast.CompositeLit)
+				if !isLiteral || literal.Type == nil {
+					continue
+				}
+				found = append(found, handoutsAt("包级声明", name.Name, literal.Type)...)
+			}
+		}
+		return found
+	}
+	return nil
+}
+
+// fieldReachableFromOutside 判一个结构体字段包外取不取得到。嵌入字段拿类型名当字段名，而
+// 受限类型全是导出的，所以嵌入一律算得到。
+func fieldReachableFromOutside(field *ast.Field) bool {
+	if len(field.Names) == 0 {
+		return true
+	}
+	for _, name := range field.Names {
+		if name.IsExported() {
+			return true
+		}
+	}
+	return false
+}
+
+func handoutsAt(kind, name string, node ast.Node) []surfaceHandout {
+	var found []surfaceHandout
+	for _, restricted := range restrictedTypesIn(node) {
+		found = append(found, surfaceHandout{kind: kind, name: name, restricted: restricted})
+	}
+	return found
+}
+
+// TestTheHandoutScanCanActuallyCatchAViolation 证上一条真的拦得住，且拦的是对的那一格。
+//
+// 四条判据里只有「导出函数的结果」在仓里有过现实实例，另外三条今天一个都没有——它们全绿既
+// 可能因为没人违规，也可能因为判据压根没生效。这条用合成声明把两者分开，顺带把三处刻意不报
+// 的地方也钉住：定义型、调用式右值、未导出的名字。断言带上「哪一格报的」，免得某一格的判据
+// 坏掉之后由另一格顶上而测试照样绿。
+func TestTheHandoutScanCanActuallyCatchAViolation(t *testing.T) {
+	t.Parallel()
+
+	const restricted = "RehydrateShipmentRequestSpec"
+
+	cases := map[string]struct {
+		source string
+		want   []string
+	}{
+		"类型别名": {
+			source: "type ShipmentRequestSnapshot = " + restricted,
+			want:   []string{"类型别名 ShipmentRequestSnapshot 交出受限类型 " + restricted},
+		},
+		"定义型不算：转换时必须指名受限类型": {
+			source: "type ShipmentRequestSnapshot " + restricted,
+			want:   nil,
+		},
+		"包级变量带显式类型": {
+			source: "var DefaultSnapshot " + restricted,
+			want:   []string{"包级声明 DefaultSnapshot 交出受限类型 " + restricted},
+		},
+		"包级变量由复合字面量推导": {
+			source: "var DefaultSnapshot = " + restricted + "{}",
+			want:   []string{"包级声明 DefaultSnapshot 交出受限类型 " + restricted},
+		},
+		"包级变量由调用式推导不算：交回的不是受限类型": {
+			source: "var Built = RehydrateShipmentRequest(spec)",
+			want:   nil,
+		},
+		"未导出的包级变量不算": {
+			source: "var defaultSnapshot " + restricted,
+			want:   nil,
+		},
+		"导出结构体的导出字段": {
+			source: "type Envelope struct { Spec " + restricted + " }",
+			want:   []string{"导出结构体 Envelope 的导出字段 交出受限类型 " + restricted},
+		},
+		"导出结构体的嵌入字段": {
+			source: "type Envelope struct { " + restricted + " }",
+			want:   []string{"导出结构体 Envelope 的导出字段 交出受限类型 " + restricted},
+		},
+		"导出结构体的未导出字段不算": {
+			source: "type Envelope struct { spec " + restricted + " }",
+			want:   nil,
+		},
+		"未导出结构体不算": {
+			source: "type envelope struct { Spec " + restricted + " }",
+			want:   nil,
+		},
+		"导出函数的结果": {
+			source: "func BuildSnapshot() " + restricted + " { panic(1) }",
+			want:   []string{"导出函数 BuildSnapshot 交出受限类型 " + restricted},
+		},
+		"受限名字自己不算：它就是那个受限类型": {
+			source: "type " + restricted + " struct { Version RehydrateSubmissionVersionSpec }",
+			want:   nil,
+		},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			syntax, err := parser.ParseFile(token.NewFileSet(), "synthetic.go", "package domain\n"+test.source, 0)
+			if err != nil {
+				t.Fatalf("解析合成源码：%v", err)
+			}
+			var got []string
+			for _, decl := range syntax.Decls {
+				for _, handout := range handoutsIn(decl) {
+					got = append(got, handout.String())
+				}
+			}
+			if strings.Join(got, ";") != strings.Join(test.want, ";") {
+				t.Fatalf("handouts = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+// restrictedTypesIn 列出一段语法里提到的受限类型，按出现顺序去重。指针、切片、映射都认——
+// 递出去的是同一个类型，包了一层不改变调用方能拿到它这件事。
+func restrictedTypesIn(node ast.Node) []string {
 	var found []string
 	seen := map[string]bool{}
-	ast.Inspect(results, func(node ast.Node) bool {
+	ast.Inspect(node, func(node ast.Node) bool {
 		identifier, ok := node.(*ast.Ident)
 		if ok && rehydrationEntryIdentifiers[identifier.Name] && !seen[identifier.Name] {
 			seen[identifier.Name] = true

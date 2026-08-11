@@ -3,6 +3,7 @@
 package architecture
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -480,14 +481,107 @@ func isCrossContextAdapter(pkg string, modules map[string]bool) bool {
 	return segments[1] == "adapters" && modules[segments[2]]
 }
 
+// unfilteredSourceConsumers 是允许绕过 selectSources、直接向 loadSources 取数的函数，每条写明
+// 它为什么不需要筛空守卫。
+//
+// 不一刀切禁掉直接取数，是因为「没有过滤器」与「过滤器筛空了」是两回事：无过滤器的规则本就
+// 没有可筛空的东西，逼它经 selectSources 只会要求它编一个恒真的过滤器。要挡的是**照抄现成先例**
+// ——同一个文件里摆着两个直接调用的样板，下一条规则照着写，筛空守卫就这么悄悄没了。名单把
+// 「照抄」变成「得写一句理由」。
+var unfilteredSourceConsumers = map[string]string{
+	"selectSources": "它自己就是那道守卫。",
+	"TestProductionPackagesDoNotImportFirstPartyTestScaffolding": "判据是否定式的：跳过脚手架包本身、扫其余全部，剩下的集合不可能空。它的漂移风险在脚手架包自己会不会消失，那一格由 TestFirstPartyTestScaffoldingStillExists 的磁盘锚守着。",
+	"TestProductionPackagesDoNotImportTheFrameworkTestkit":       "没有过滤器，对全部生产文件一视同仁，没有可筛空的东西。",
+}
+
+// TestNoGateTakesSourcesWithoutEitherFilteringOrSayingWhy 让 selectSources 那句「必须」真的有
+// 东西强制。
+//
+// 在这条测试之前，那句话只写在注释里，而同一个文件里已经躺着两个直接调 loadSources 的先例——
+// 一条约束写进注释、再让门禁依赖那个约定，正是本包反复批评的那个错，只不过这回发生在它自己
+// 身上。下一条新规则照着先例写，筛空守卫不会有任何东西提醒它没了。
+//
+// 扫本包全部 `_test.go` 而不只是本文件：新门禁常常另起一个文件（`rehydration_gate_test.go`、
+// `enum_exhaustiveness_test.go` 都是），只钉住本文件等于给「换个文件写」留了同一个出口。
+func TestNoGateTakesSourcesWithoutEitherFilteringOrSayingWhy(t *testing.T) {
+	t.Parallel()
+
+	seen := map[string]bool{}
+	for _, path := range architectureTestFiles(t) {
+		syntax, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			t.Fatalf("解析 %s：%v", path, err)
+		}
+		for _, decl := range syntax.Decls {
+			function, isFunction := decl.(*ast.FuncDecl)
+			if !isFunction || function.Body == nil || !callsLoadSources(function.Body) {
+				continue
+			}
+			seen[function.Name.Name] = true
+			if _, allowed := unfilteredSourceConsumers[function.Name.Name]; !allowed {
+				t.Errorf("%s：%s 直接向 loadSources 取数而不经 selectSources；带过滤器就改用 selectSources，确实不带过滤器就补进 unfilteredSourceConsumers 并写明为什么筛不空",
+					filepath.Base(path), function.Name.Name)
+			}
+		}
+	}
+
+	for name, reason := range unfilteredSourceConsumers {
+		if !seen[name] {
+			t.Errorf("unfilteredSourceConsumers 里的 %q 已经不直接调 loadSources 了；名单该清理", name)
+		}
+		if strings.TrimSpace(reason) == "" {
+			t.Errorf("unfilteredSourceConsumers 里的 %q 没写为什么不需要筛空守卫", name)
+		}
+	}
+	// 连 selectSources 自己都没扫到，说明取数那条链已经改了形状，而上面整段仍旧全绿。
+	if !seen["selectSources"] {
+		t.Fatal("没扫到 selectSources 调 loadSources；本条门禁的扫描面已经失效")
+	}
+}
+
+// architectureTestFiles 列出本包的测试文件。它们是 `_test.go`，loadSources 与
+// parseRepositorySources 都排掉了，只能自己取。
+func architectureTestFiles(t *testing.T) []string {
+	t.Helper()
+
+	pattern := filepath.Join(repositoryRoot(t), "internal", "architecture", "*_test.go")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("列 %s：%v", pattern, err)
+	}
+	if len(matches) == 0 {
+		t.Fatalf("没找到 %s；本包已改名或搬家，钉着它的规则会永远空过", pattern)
+	}
+	return matches
+}
+
+func callsLoadSources(body *ast.BlockStmt) bool {
+	found := false
+	ast.Inspect(body, func(node ast.Node) bool {
+		call, isCall := node.(*ast.CallExpr)
+		if !isCall {
+			return true
+		}
+		if identifier, isIdent := call.Fun.(*ast.Ident); isIdent && identifier.Name == "loadSources" {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
 // selectSources 取出包名满足 matches 的源文件，一个都没选中时当场判红。
 //
-// 每条扫描型门禁都必须经这里取数，守卫才不可能被下一条规则忘掉。loadSources 自己那道
-// len(files)==0 只守「全仓一个 Go 文件都没有」，守不住「本条规则**自己的**过滤器筛出零个
+// **凡是带过滤器的扫描型门禁都必须经这里取数**，守卫才不可能被下一条规则忘掉。loadSources 自己
+// 那道 len(files)==0 只守「全仓一个 Go 文件都没有」，守不住「本条规则**自己的**过滤器筛出零个
 // 文件」——而后者才是现实会发生的那种：过滤器的判据全都靠目录命名约定（`/domain`、
 // `platform`、`/application`、`/adapters/http`），而没有任何东西强制这些名字。目录一改名
 // 或一搬家，规则扫零、恒绿，且没有任何东西会报。一条扫不到任何东西的门禁比没有门禁更坏，
 // 它看起来像在守。
+//
+// 「必须」这两个字由 TestNoGateTakesSourcesWithoutEitherFilteringOrSayingWhy 强制，不由本段注释
+// 强制。不带过滤器的规则不在此列，它们直接调 loadSources 是对的——名单与理由见
+// unfilteredSourceConsumers。
 func selectSources(t *testing.T, rule string, matches func(pkg string) bool) []sourceFile {
 	t.Helper()
 
