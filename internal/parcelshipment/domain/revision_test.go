@@ -243,7 +243,8 @@ func TestNoPackageLevelFunctionActsAsAShipmentRequestTransition(t *testing.T) {
 		t.Fatalf("解析领域包：%v", err)
 	}
 
-	found := 0
+	scannedFiles := 0
+	anchored := false
 	for _, pkg := range packages {
 		for path, file := range pkg.Files {
 			if filepath.Base(path) == filepath.Base(thisFile) {
@@ -252,26 +253,218 @@ func TestNoPackageLevelFunctionActsAsAShipmentRequestTransition(t *testing.T) {
 			if strings.HasSuffix(path, "_test.go") {
 				continue
 			}
+			scannedFiles++
+			if filepath.Base(path) == "shipment_request.go" {
+				anchored = true
+			}
 			for _, decl := range file.Decls {
 				funcDecl, isFunc := decl.(*ast.FuncDecl)
-				if !isFunc || funcDecl.Recv != nil || !funcDecl.Name.IsExported() {
+				if !isFunc || !funcDecl.Name.IsExported() {
+					continue
+				}
+				// 只跳接收者是 ShipmentRequest 的方法——它们由反射那一半枚举。**按「有没有
+				// 接收者」筛会漏掉中间那一格**：`func (spec SomeSpec) ApplyTo(r ShipmentRequest)
+				// (ShipmentRequest, error)` 既不在 ShipmentRequest 的方法集里（反射看不见），
+				// 也不是包级函数（旧筛法跳过），而它同包因此照样设得了未导出字段，是一条完整
+				// 的转移。
+				if receiverTypeNameOf(funcDecl) == "ShipmentRequest" {
 					continue
 				}
 				if !funcTakesAndReturnsNamedType(funcDecl, "ShipmentRequest") {
 					continue
 				}
-				found++
-				t.Errorf("%s：导出包级函数 %s 同时收下并交回 ShipmentRequest；"+
-					"这是一条反射枚举看不见的状态转移，请改成值接收者方法，或把它从转移角色里拿掉",
+				t.Errorf("%s：导出函数 %s 同时收下并交回 ShipmentRequest，却不是 ShipmentRequest "+
+					"上的方法；这是一条反射枚举看不见的状态转移，请改成值接收者方法，或把它从"+
+					"转移角色里拿掉",
 					filepath.Base(path), funcDecl.Name.Name)
 			}
 		}
 	}
-	// 今天期望是零。若将来真有正当的包级转移，本条要改的是分类而不是开例外——开例外
-	// 等于回到「六处都要记得」。
-	if found < 0 {
-		t.Fatal("unreachable")
+	// 今天期望是零，所以本条正常情况下永远绿——而「永远绿」既可能因为没人违规，也可能因为
+	// 扫描根本没生效。用 `found < 0` 当守卫挡不住后者：那个条件恒不成立。锚在真实实例上：
+	// 扫到了非测试文件，且扫到了聚合定义所在的那个文件。判据本身能不能看见违规，由
+	// TestTheTransitionScanSeesMethodsOnOtherTypes 用合成源码另证。
+	if scannedFiles == 0 {
+		t.Fatal("没扫到领域包的任何非测试文件；本条会永远空过")
 	}
+	if !anchored {
+		t.Fatal("没扫到 shipment_request.go；文件锚已失效，扫描面可能已经塌了")
+	}
+}
+
+// receiverTypeNameOf 取方法接收者的类型名，指针剥到底层那个标识符；包级函数交回空串。
+func receiverTypeNameOf(funcDecl *ast.FuncDecl) string {
+	if funcDecl.Recv == nil || len(funcDecl.Recv.List) == 0 {
+		return ""
+	}
+	return identName(funcDecl.Recv.List[0].Type)
+}
+
+// TestTheTransitionScanSeesMethodsOnOtherTypes 证上一条的判据真能看见那条夹在中间的漏法。
+//
+// 上一条对今天的领域包全绿，证明不了它挡得住 `func (spec SomeSpec) ApplyTo(...)`——那正是
+// 盲区本身。这条用合成源码把四种形状分开验：挂在别的类型上的方法要被认出来，包级函数照旧要
+// 被认出来，挂在 ShipmentRequest 上的方法要被跳过（反射那一半管它），既不收也不交回的不算。
+func TestTheTransitionScanSeesMethodsOnOtherTypes(t *testing.T) {
+	t.Parallel()
+
+	source := `package domain
+type SomeSpec struct{}
+func (spec SomeSpec) ApplyTo(r ShipmentRequest) (ShipmentRequest, error) { return r, nil }
+func (request ShipmentRequest) Decide(n int) (ShipmentRequest, error) { return request, nil }
+func AdvanceX(r ShipmentRequest) (ShipmentRequest, error) { return r, nil }
+func Unrelated(n int) int { return n }
+`
+	file, err := parser.ParseFile(token.NewFileSet(), "synthetic.go", source, 0)
+	if err != nil {
+		t.Fatalf("解析合成源码：%v", err)
+	}
+
+	var flagged []string
+	for _, decl := range file.Decls {
+		funcDecl, isFunc := decl.(*ast.FuncDecl)
+		if !isFunc || !funcDecl.Name.IsExported() {
+			continue
+		}
+		if receiverTypeNameOf(funcDecl) == "ShipmentRequest" {
+			continue
+		}
+		if funcTakesAndReturnsNamedType(funcDecl, "ShipmentRequest") {
+			flagged = append(flagged, funcDecl.Name.Name)
+		}
+	}
+
+	if strings.Join(flagged, ",") != "ApplyTo,AdvanceX" {
+		t.Fatalf("flagged = %v, want [ApplyTo AdvanceX]；"+
+			"ApplyTo 是挂在别的类型上的转移，按「有没有接收者」筛会让它从两半中间漏过去", flagged)
+	}
+}
+
+// TestEveryShipmentRequestFieldIsClassifiedForRehydration 守重建入口不静默漏掉新字段。
+//
+// `RehydrateShipmentRequest` 用具名字段的结构体字面量只写了七个字段，其余六个留零值——对
+// `已提交`这是对的（ADR-0030 逐条证过那六个在这个状态下必然缺席）。但 Go 的具名字段字面量
+// **不要求穷尽**：日后给 `ShipmentRequest` 加一个在`已提交`下就有值的字段，重建会静默把它
+// 留零，而 ADR-0028 说重建入口「此后是审计与评审的固定关注点」——固定关注点靠人记得是不够的。
+// 形状与 ADR-0028 亲自解决过的「第七个转移」相同，那里明否了「六处都要记得」。
+//
+// 因此这里要的不是「字段数没变」，而是**每个字段恰好落在两份名单之一**，且带进来的那一份
+// 与字面量真正写下的键**逐个相等**——只有分类名单而不比对字面量，一个字段可以登记在册却
+// 从没被赋值，而那种漏法正是本条要防的。
+func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
+	t.Parallel()
+
+	// carriedByRehydration 是重建入口必须原样带进来的字段。
+	carriedByRehydration := map[string]bool{
+		"revision":          true,
+		"shipmentRequestID": true,
+		"batchID":           true,
+		"state":             true,
+		"currentVersion":    true,
+		"acceptanceTask":    true,
+		"submittedAt":       true,
+	}
+	// absentInSubmitted 是`已提交`下必然缺席的判断产物。这扇门开到别的状态那天，它们要从
+	// 这一份挪到上一份并各自补上快照表达，而不是继续留零——ADR-0030 的入口条件说的就是它。
+	absentInSubmitted := map[string]bool{
+		"withdrawal":         true,
+		"decision":           true,
+		"decisionFormed":     true,
+		"baseline":           true,
+		"commitment":         true,
+		"sourceDataVersions": true,
+	}
+
+	aggregate := reflect.TypeOf(domain.ShipmentRequest{})
+	if aggregate.NumField() == 0 {
+		t.Fatal("没反射到任何字段；本条会永远空过")
+	}
+	declared := map[string]bool{}
+	for index := 0; index < aggregate.NumField(); index++ {
+		name := aggregate.Field(index).Name
+		declared[name] = true
+		carried, absent := carriedByRehydration[name], absentInSubmitted[name]
+		switch {
+		case carried && absent:
+			t.Errorf("ShipmentRequest.%s 两份名单都登记了；两份必须互斥", name)
+		case !carried && !absent:
+			t.Errorf("ShipmentRequest.%s 没有分类。它在`已提交`下有值，就补进 carriedByRehydration "+
+				"并在 RehydrateShipmentRequestSpec 上给它一个表达；在`已提交`下必然缺席，就补进 "+
+				"absentInSubmitted 并说明由哪条转移写下。留着不分类，重建会静默把它留零", name)
+		}
+	}
+	for name := range carriedByRehydration {
+		if !declared[name] {
+			t.Errorf("carriedByRehydration 里的 %q 在聚合上已不存在；名单该清理", name)
+		}
+	}
+	for name := range absentInSubmitted {
+		if !declared[name] {
+			t.Errorf("absentInSubmitted 里的 %q 在聚合上已不存在；名单该清理", name)
+		}
+	}
+
+	assigned := rehydrationLiteralKeys(t)
+	if len(assigned) == 0 {
+		t.Fatal("没在 RehydrateShipmentRequest 里找到 ShipmentRequest 字面量；本条后半段会永远空过")
+	}
+	for name := range carriedByRehydration {
+		if !assigned[name] {
+			t.Errorf("%s 登记为「重建要带进来」，而 RehydrateShipmentRequest 的字面量没有赋它；"+
+				"它会静默留零值", name)
+		}
+	}
+	for name := range assigned {
+		if !carriedByRehydration[name] {
+			t.Errorf("RehydrateShipmentRequest 的字面量赋了 %s，而它没登记在 carriedByRehydration 里；"+
+				"两份必须一致，否则名单说明不了这扇门到底带进来什么", name)
+		}
+	}
+}
+
+// rehydrationLiteralKeys 取 RehydrateShipmentRequest 里那个 ShipmentRequest 字面量赋了哪些字段。
+//
+// 走 AST 而不是反射：字段未导出，包外读不到值，而「赋没赋过」恰恰是要判的东西。只认顶层那个
+// 字面量的键；嵌套的 SubmissionVersion / AcceptanceDecisionTask 字面量各有自己的字段集，混进来
+// 会让两份名单对不上。
+func rehydrationLiteralKeys(t *testing.T) map[string]bool {
+	t.Helper()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("定位不了本文件")
+	}
+	path := filepath.Join(filepath.Dir(thisFile), "rehydration.go")
+	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatalf("解析 rehydration.go：%v", err)
+	}
+
+	keys := map[string]bool{}
+	for _, decl := range file.Decls {
+		funcDecl, isFunc := decl.(*ast.FuncDecl)
+		if !isFunc || funcDecl.Name.Name != "RehydrateShipmentRequest" {
+			continue
+		}
+		ast.Inspect(funcDecl, func(node ast.Node) bool {
+			literal, isLiteral := node.(*ast.CompositeLit)
+			if !isLiteral || identName(literal.Type) != "ShipmentRequest" {
+				return true
+			}
+			for _, element := range literal.Elts {
+				pair, isPair := element.(*ast.KeyValueExpr)
+				if !isPair {
+					continue
+				}
+				if key, isIdent := pair.Key.(*ast.Ident); isIdent {
+					keys[key.Name] = true
+				}
+			}
+			// 顶层那个字面量已经取到，不再往里走——嵌套字面量的键不属于本聚合。
+			return false
+		})
+	}
+	return keys
 }
 
 func funcTakesAndReturnsNamedType(funcDecl *ast.FuncDecl, typeName string) bool {
