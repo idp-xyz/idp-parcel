@@ -23,8 +23,8 @@ Status: Confirmed
 - `parcel-shipment` 已确认拥有提交批次、委托、声明包裹、接受决定和接受基线；客户提交与委托接受是两个业务事件。
 - `UC-PS-001` 已确认“委托已提交”的业务语义，以及业务状态、决定记录和事件发布意图的原子提交要求。
 - `BD-PS-001` 至 `BD-PS-008` 的接单机制已经确认，但不扩大本简报首个“来源保全并进入已提交”子切片的范围。真实合同规则、角色、金额、阈值、判断时点和试点归属参数仍阻塞生产接受。
-- `idp-bento-go` 的正式 module path、Git 远端、DNS、TLS 和 vanity metadata 已建立；当前仍没有可用于消费者基线的不可变 `v0.1.0-rc.N` tag、私有读取身份和空缓存下载证明。
-- Parcel 本地工作区已经初始化 Git `main`、`go.idp.xyz/idp-parcel` 单 module、Go `1.26.5` toolchain、`chi/v5 v5.3.1` 基础 API 和只读权限基础 CI，并建立了建单前的作用域身份、来源重放/冲突、最小委托候选与同租户提交批次候选领域内核；WSL race test、本机 `go test`、`go vet` 与 build 已通过。当前仍没有首个提交、远端、可持久化业务切片或 Bento 候选依赖。
+- `idp-bento-go` 的正式 module path、Git 远端、DNS、TLS 和 vanity metadata 已建立；`go.idp.xyz/idp-bento-go?go-get=1` 的 `go-import` 指向 `https://github.com/idp-xyz/idp-bento-go.git`，候选附注 tag `v0.1.0-rc.1` 与 `v0.1.0-rc.2` 已存在于该远端（`asOf` 2026-08-11，由 Parcel 侧 `git ls-remote` 与 vanity metadata 只读核验；`v0.1.0-rc.2` 的 tag 对象为 `5aa0974`，剥离后指向提交 `56322dc25373b872ab5c49a74c0d544d7c088184`，`PBC-09` 要绑的是后者而非 tag 对象）。按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)，tag 存在不认定工件不可变，不可变性由 module checksum 认定；空缓存下载证明仍未取得。该远端 `asOf` 同日为公开仓库，禁用凭据助手的匿名读取已核验通过，原列的「私有读取身份」前置当前不适用；仓库转为私有则该前置复活。
+- Parcel 本地工作区已经初始化 Git `main`、`go.idp.xyz/idp-parcel` 单 module、Go `1.26.5` toolchain、`chi/v5 v5.3.1` 基础 API 和只读权限基础 CI，并建立了建单前的作用域身份、来源重放/冲突、最小委托候选与同租户提交批次候选领域内核；WSL race test、本机 `go test`、`go vet` 与 build 已通过。首个提交与远端已绑定，`origin` 为 `github.com/idp-xyz/idp-parcel`；当前仍没有可持久化业务切片或 Bento 候选依赖。
 
 ## 已确认决定
 
@@ -199,16 +199,16 @@ Parcel 不提供一个可以操作任意聚合的通用业务 Repository。首�
 | `PBC-05` | Envelope v1 校验、Payload 最小化、同委托分区顺序和 At-Least-Once 重投符合框架合同 |
 | `PBC-06` | 框架迁移按 checksum 渲染，PostgreSQL 16 上 `CheckSchema`、Outbox 和 Inbox 合同通过 |
 | `PBC-07` | `application.ErrCommitUncertain` 不触发无条件自动重放，调用方能够按稳定请求关联查询原结果 |
-| `PBC-08` | 生产依赖图不包含 `testkit`，且没有业务包导入 `pgx.Tx` 或绕过 `DB.RequireExecutor` |
-| `PBC-09` | 证明 JSON 绑定 Parcel 精确提交、候选版本、module checksum、合同版本和 `PASS`，并显式记录单人治理状态 |
+| `PBC-08` | 生产依赖图不包含 `testkit`，且没有业务包导入 `pgx.Tx` 或绕过 `DB.RequireExecutor`。框架消费者合同许可的导入例外只有两处：测试文件，以及专用合同命令 |
+| `PBC-09` | 证明 JSON 按所锁候选的严格格式产出。`v0.1.0-rc.2` 为 9 字段：`format_version`、`consumer`（`PARCEL`）、`consumer_commit`、`candidate_version`、`module_path`、`module_checksum`、`contract_suite_version`、`result`（`PASS`）、`completed_at`；未知字段、尾随 JSON 值与缺失必填字段均失败 |
 
-`PBC-01` 和 `PBC-09` 在真实不可变 RC、私有读取身份和 Parcel Git 提交存在前只能建立脚手架，不能伪造为已经通过。其余合同可以先使用本地 workspace 开发，但本地结果不是 `B-06` 发布证据。
+`PBC-01` 和 `PBC-09` 在空缓存下载证明取得前只能建立脚手架，不能伪造为已经通过；Parcel Git 提交、候选 tag 与远端匿名可读这三项前置已具备。其余合同按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 直接针对精确 SemVer 候选开发，不使用本地 workspace——候选已存在时改用 workspace 只会让写出来的实现再证一遍。任何本地结果都不是 `B-06` 发布证据。
 
 ## 发布与治理边界
 
 - Parcel、TMS 和 Bento 是三个独立仓库、CI、版本和发布周期；任何一方都不是其他方宿主。
 - 当前一人阶段由 `idp-repo` / user ID `310467973` 承担责任，不用多个账号或角色名称伪造职责分离。
-- Parcel 提交给 Bento 的合同证明必须针对同一不可变候选、来自 Parcel 自身安全边界，并携带 `NO INDEPENDENT HUMAN APPROVAL` 与 `OWNER-BYPASSABLE`。
+- Parcel 提交给 Bento 的合同证明必须针对同一不可变候选、来自 Parcel 自身安全边界。单人治理状态**不进** `v0.1.0-rc.2` 的证明 JSON：该候选的格式只认 9 个字段并拒收未知字段，把 `NO INDEPENDENT HUMAN APPROVAL` 或 `OWNER-BYPASSABLE` 塞进去会让整份证明被 `proofcheck` 拒收。该确认不因此消失，也不降格——它由 Parcel 自身记录承载，只是当前没有进入框架证明的合法位置。Bento 已在 `main` 把 `acknowledged_governance_mode` 设为必填，一旦出现带该字段的候选，本条与 `PBC-09` 同时复评。
 - Bento 自动门禁、TMS/Parcel 双消费者合同、WORM/DSSE 证据、至少 24 小时冷静期和新 CI run 复验全部通过前，不得创建稳定 `v0.x`。
 - 认证授权、跨租户隔离、密码学、不可逆数据库收缩和严重安全修复进入外部客户稳定交付前需要外部专业复核。
 
@@ -234,18 +234,46 @@ Parcel 不提供一个可以操作任意聚合的通用业务 Repository。首�
 | 闸门 | 评审 `asOf` 与 Parcel 代码基线 | 权威证据引用及版本 | 当前结论 | 精确解锁范围 | 仍禁止范围 | 失效或复评触发 | 决定记录引用 |
 |---|---|---|---|---|---|---|---|
 | `PN02-W01/W02` 业务语义 | 当前本地未提交基线；首次评审须固定提交 ID 和评审时间 | 参数登记册、W01/W02 完成结论及其受控证据版本、ADR-0016、ADR-0017 | 机制半边放行；实例半边保持阻断：W01 仅有待核验候选，W02 直接参数仍待提供 | 已解锁 `parcel-shipment` 应用编排与命令处理、Parcel 自有语义端口接口、`已提交`聚合的领域形态及其确定性测试替身 | 真实客户、合同、线路、金额、阈值、角色或时限取值进入代码；任何租户流量进入生产接单；端口的 PostgreSQL 适配器（属下一道闸门） | 范围、版本、`asOf`、权威身份、交接语义或证据状态变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) |
-| Bento 持久化技术 | 当前本地未提交基线；首次评审须固定提交 ID、RC 和 checksum | ADR-0009、不可变 Bento RC、空缓存下载和适用 `PBC-*` 消费者证明 | 保持阻断：尚无可用不可变 RC 或消费者证明 | 本闸门通过后才解锁 PostgreSQL Repository、迁移、事务与 Outbox 实现 | 本地框架替身、`replace`、浮动分支、伪事务和未证明的发布基线 | RC、checksum、消费者合同、迁移或 Parcel 依赖基线变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) |
+| Bento 持久化技术 | 首次评审 `asOf` 2026-08-11，Parcel 代码基线 `0111dd9`；候选 checksum 见下节，已记入公共透明日志 | ADR-0009、ADR-0026、候选附注 tag `v0.1.0-rc.2`（剥离后指向提交 `56322dc`，`git ls-remote` 匿名只读核验）；候选 checksum 由 `sum.golang.org` 公共透明日志认定；空缓存下载已于同日以独立 `GOMODCACHE` 取证；`PBC-01`、`PBC-06` 已通过，`PBC-08` 部分通过，其余六项未取证 | 保持阻断：四项通过条件中 ADR-0009、不可变候选与空缓存下载已满足，适用 `PBC-*` 消费者证明仍缺。按 ADR-0026，为产出 `PBC-01` 至 `PBC-09` 而写的持久化实现即刻放行，闸门本身未通过 | 针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务、Outbox 实现及其合同测试，用途限于产出消费者证明 | 本地框架替身、`replace`、`go.work`、浮动分支、框架源码副本、伪事务；以及 `PBC-01` 至 `PBC-09` 全部通过前登记 `B-06` 候选基线、宣称闸门已通过或据此改写开发主线的横切缺口状态 | RC、checksum、消费者合同、迁移、Parcel 依赖基线或 Bento 远端可见性变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) |
 
-两道闸门相互独立。业务语义的机制半边放行不解锁任何持久化技术；Bento 技术候选存在也不解锁 W01/W02 的实例半边。Parcel 自有端口的确定性内存替身替的是 Parcel 的端口而非 Bento 的框架合同，不属「本地框架替身」。
+两道闸门相互独立，按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 不得联判。业务语义的机制半边放行不解锁任何持久化技术；Bento 技术候选存在也不解锁 W01/W02 的实例半边；业务语义闸门的实例半边阻断同样不延缓 Bento 侧的任何一项通过条件。Parcel 自有端口的确定性内存替身替的是 Parcel 的端口而非 Bento 的框架合同，不属「本地框架替身」。
+
+候选 checksum 的公开性已决（2026-08-11）：**接受候选 checksum 进公共透明日志 `sum.golang.org`**，`GOPRIVATE` 与 `GONOSUMDB` 对 `go.idp.xyz/idp-bento-go` 保持为空。理由是该日志恰好就是 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 认定不可变性所依赖的机制——tag 可以重打，日志条目不能改；闸门要的「不可变候选」由它直接兑现，换成自建口径反而要再证一遍它自己可信。
+
+随之接受的代价须同步给 Bento 侧，不能只留在 Parcel 这边：`v0.1.0-rc.2` 已进入公共记录，该版本号此后不可回收重打，候选内容有任何变动只能改出新版本号。
+
+该决定已于 2026-08-11 执行完毕，`go.sum` 记录的候选 checksum 为：
+
+```
+go.idp.xyz/idp-bento-go v0.1.0-rc.2 h1:W9T1KsbXwuVs3lHTNwSUcEBY0Ids00hUH7I9KuBtCEo=
+go.idp.xyz/idp-bento-go v0.1.0-rc.2/go.mod h1:RFR6ylLNIIA7e4PPGVCzojYiH6DB8eHd2s5vI9XcUgY=
+```
+
+`sum.golang.org` 的 `/lookup` 返回日志记录号 `58659836`，两行 hash 与上表逐字一致。任何人可独立复验该条目，这就是本闸门「不可变候选」一项此后所指的对象——不再指 tag。
+
+`PBC-01` 已于同日两半分别取证：编译一半由 `tests/bentocontract` 承担——该包经正式 module path 直接 import 候选，解析不到就编译不过，另有用例判 `go.mod` 钉的是精确版本、无 `replace`、仓库根无 `go.work`，并逐字核对 `go.sum` 两行 checksum；空缓存下载一半以确认为空的独立 `GOMODCACHE` 复跑，`v0.1.0-rc.2.zip` 经 `proxy.golang.org` 取得 `200`，并在该空缓存上完成编译与合同测试。`PBC-08` 的 testkit 与 `pgx` 两条负向门禁已落为 `internal/architecture` 的常驻测试并通过；其「不绕过 `DB.RequireExecutor`」一条要等持久化适配器存在才谈得上取证，因此该项记为部分通过，不记为通过。
+
+其余需真实 PostgreSQL 16 的证明所用环境已就位并钉死版本：仓库根 `compose.yaml` 起一个一次性实例，镜像钉到 `postgres:16.14`（不用浮动 tag，否则同一份证明在不同日期会指向不同数据库）。服务端自报 `PostgreSQL 16.14 (Debian 16.14-1.pgdg13+1) on x86_64-pc-linux-gnu`，库级编码 `UTF8`、collation `C.UTF-8`，`max_connections=200`，`CREATE`/`DROP DATABASE` 可用。数据落 tmpfs，跑完即消失，下一次取证读不到上一次的残留。连接串经环境变量 `IDP_PARCEL_POSTGRES_DSN` 传入，本地未设则跳过、CI 未设则失败——该门禁不得静默跳过。补丁号变更计入本闸门的复评触发。
+
+`PBC-06` 已取到前两项证据：框架迁移经 `RenderMigration` 按清单 ID 渲染、施加于真实 PostgreSQL 16.14 后 `CheckSchema` 通过；迁移历史逐条记下框架清单给出的规范 checksum、框架版本与目标 schema，重跑不重放，篡改已记录的 checksum 会以 `ErrChecksumDrift` 阻断而非静默重用。用例落在 `internal/platform/migrate`，未设 `IDP_PARCEL_POSTGRES_DSN` 时本地跳过、CI 直接失败——门禁不会因为某次 workflow 被改坏而静默蒸发。就本项证据而言要紧的一条是：**「本地全仓绿」并不等于它已被重现**，因为本机默认无 DSN，这些用例会跳过而包仍显示 `ok`。该陷阱的机制与报告口径记在 [workflow.md 的本机环境](../agents/workflow.md#本机环境)，此处不复述。第三项亦已取证：`tests/bentocontract` 用真实 Outbox / Inbox Store 与真实 `Transactor` 装配框架的 `RunOutboxContract`、`RunInboxContract`，两侧各五个子用例在同一 PostgreSQL 16.14 上全部通过（提交定序与终结、回滚去重与校验、租约过期与尝试上限、失败重试与预算、显式放弃；以及已处理去重、回滚后重新占用、消费者隔离、非法请求与状态转移、占用冲突回滚）。每个子用例经工厂取得独立数据库，不共用；框架合同明禁以内存 Store 或假 Transactor 的通过结果顶替。**`PBC-06` 三项齐备，记为通过。**
+
+迁移计划当前只含框架那一半。业务迁移要按 `parcel_shipment` 的表形状写，取决于尚在成形的领域模型；先摆一个空目录不会让任何东西更早可用。`PBC-06` 要证的也正是框架这一半。
+
+执行器另有一项**显式未决**：它把施加 SQL 与写历史记录放在同一事务里（分开会让历史撒谎——施加成功而记录失败时，下一次运行会当作没做过而重放），代价是只接受能在事务块内运行的迁移。PostgreSQL 从原理上拒绝在事务块内执行 `CREATE INDEX CONCURRENTLY` 一类语句，而那正是给已有大表加索引又不锁写的标准做法，业务表长大后几乎必然要用。届时不得顺手把那一条挑出事务：那是在没有设计的情况下重开撞谎窗口。真要支持，须同时定出该条迁移失败后的人工对账口径，作为一次摆上台面的取舍。
+
+该门禁当前对扫到的每个非测试文件一视同仁，未给「专用合同命令」留豁免。这是有意的：例外先按上表的合同口径记在此处，等那个命令真的建立时，再按它的精确包路径开豁免并同时补上验证豁免范围的用例。**不得为了让门禁变绿而放宽规则本身**——那与「注释不声称代码做不到的事」是同一条要求的反面。
+
+候选选择同日已决：**锁 `v0.1.0-rc.2`，不等下一个候选**。需同时记明一处已知偏斜：Bento `main`（`c54fae2`）已把 `acknowledged_governance_mode` 加为证明必填字段，而 rc.2 既无该字段又拒收未知字段，两侧证明格式互不兼容。按 rc.2 产出的证明因此是 9 字段。这不是疏漏而是所锁候选的既定形状；Bento 一旦切出带该字段的候选，`PBC-09` 与「发布与治理边界」中治理状态一条须同时复评。
 
 ## 下一步
 
-1. 已完成本地 Git `main`、`go.idp.xyz/idp-parcel` 单 module、LF 规则、基础 API/CI 和可测试包；首个提交与远端仍未绑定。
+1. 已完成本地 Git `main`、`go.idp.xyz/idp-parcel` 单 module、LF 规则、基础 API/CI 和可测试包；首个提交与远端已绑定。
 2. 按 [`PN-02` 真实参数取证与开发交接](./pn-02-real-parameter-evidence-and-development-handoff.md)并行取得锚点商业、接入归属、接单财务和可达性证据；未确认值继续保持显式未配置。
-3. 建单前领域内核已经覆盖作用域身份、来源重放/冲突、最小委托候选和同租户提交批次候选。按 [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md)，在此之上推进应用编排、命令处理与 Parcel 自有语义端口接口，并以确定性内存替身验证；不实现任何端口的 PostgreSQL 适配器，不写入未确认取值。
+3. 建单前领域内核已经覆盖作用域身份、来源重放/冲突、最小委托候选和同租户提交批次候选。按 [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md)，在此之上推进应用编排、命令处理与 Parcel 自有语义端口接口，并以确定性内存替身验证；端口的 PostgreSQL 适配器按下述第 5 条的用途限定推进，不写入未确认取值。
 4. 先按 [`PN02-W01`](./pn-02-w01-anchor-commercial-scope-evidence-request.md) 和 [`PN02-W02`](./pn-02-w02-ingress-production-ownership-evidence-request.md) 核验完整范围、版本、时点、当前权威和安全交接语义，再形成业务语义闸门**实例半边**的决定；机制半边不等待该决定。
-5. 等真实不可变 Bento RC、checksum 和适用消费者证明存在，且业务语义闸门同时通过后，再建立 PostgreSQL 16 Repository、迁移、事务、Outbox 及其集成合同；不得提前建立本地替身。
+5. 按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)，针对精确 SemVer 候选建立 PostgreSQL 16 Repository、迁移、事务、Outbox 及其集成合同，用途限于产出 `PBC-01` 至 `PBC-09`；不等业务语义闸门，不得建立本地替身，全部证明通过前不得登记 `B-06` 候选基线或宣称闸门已通过。取证顺序按依赖关系：`PBC-01`（须以独立 `GOMODCACHE` 复跑，空缓存下载与编译是两项证明；checksum 走公共透明日志已决，见「实现准入检查」节）与 `PBC-08` 先行，其后 `PBC-06`、`PBC-02`、`PBC-03`，最后 `PBC-04`、`PBC-07`、`PBC-05`、`PBC-09`。`PBC-04` 与 `PBC-07` 的幂等、冲突与重放形状须与 [ADR-0021](../adr/0021-frontline-operations-client-is-part-of-the-product.md) 约束下的接入面语义同时成形——离线与弱网容忍是「设计不出来就补不上」的一类要求，先把 Repository 侧冻结会返工。
 6. 等 TMS 与 Parcel 都形成适用最小切片提交后，再绑定 `B-06`、执行空缓存下载和双消费者证明。
+7. 两项机制半边缺口不受任何闸门阻断，与第 5 条并行：按 [ADR-0025](../adr/0025-cross-context-adapters-live-on-the-consumer-side.md) 落 `internal/parcelshipment/adapters/partycommercial/`，接上 `CommercialBasisResolver` 与 `UC-PC-002` 的两阶段解析；以及把 `UC-PS-001` 已成型的 HTTP 处理器接入 `cmd/parcel-api` 路由。接线须一并处理 [ADR-0022](../adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 的状态码分界、六处委托 `!found` 到`统一不可见结果`的映射，并与业务语义闸门禁止的「任何租户流量进入生产接单」显式隔开。
 
 ## 链接
 
@@ -258,3 +286,5 @@ Parcel 不提供一个可以操作任意聚合的通用业务 Repository。首�
 - [ADR-0009：采用 Go 模块化单体并复用版本化 Bento 技术合同](../adr/0009-go-modular-monolith-and-versioned-bento-contracts.md)
 - [ADR-0016：产品交付与租户试点作为两条并行验收轨道](../adr/0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md)
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](../adr/0017-admission-gates-judged-by-blocking-cause.md)
+- [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](../adr/0025-cross-context-adapters-live-on-the-consumer-side.md)
+- [ADR-0026：为产出消费者证明而写的持久化实现先于闸门通过，发布基线登记仍在闸门后](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)

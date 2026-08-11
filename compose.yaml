@@ -1,0 +1,47 @@
+# 只为 PostgreSQL 集成门禁准备的一次性数据库，不是部署描述符。
+#
+# `PBC-02`、`PBC-03`、`PBC-06`、`PBC-07` 要求在真实 PostgreSQL 16 上取证，而
+# 「真实」包含版本本身：拿一个版本不明的实例跑出的结果不能记进闸门表。因此镜像
+# 钉到精确补丁号，不用 `16` 这种浮动 tag——浮动 tag 会让同一份证明在不同日期指向
+# 不同的数据库。
+#
+# 用法：
+#   docker compose up -d
+#   $env:IDP_PARCEL_POSTGRES_DSN = "postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable"
+#   go test ./...
+#   docker compose down -v
+#
+# 凭据是本机一次性测试库的固定值，不是任何环境的密钥，也不得被当作生产默认值
+# 复制到别处。库里只允许出现命名夹具，真实客户、地址、货物与申报资料一律不进。
+
+services:
+  postgres:
+    # 与 Bento 仓内 `I-04` 验收所用的主版本一致；补丁号变更即闸门复评触发。
+    image: postgres:16.14
+    container_name: idp-parcel-postgres-gate
+    environment:
+      POSTGRES_USER: parcel
+      POSTGRES_PASSWORD: parcel
+      POSTGRES_DB: postgres
+      # 合同要求 `CheckSchema` 只读验证 UTF8 编码，初始化时就固定下来，
+      # 不依赖镜像默认值哪天变化。
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C.UTF-8"
+    ports:
+      # 宿主机 5432 已被占用，故错开。容器内仍是标准端口。
+      - "127.0.0.1:55432:5432"
+    command:
+      # 合同用例会做多轮并发领取与竞争，默认连接数不够；测试夹具还会为每个用例
+      # 建独立数据库，连接消耗高于普通应用。
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+    tmpfs:
+      # 数据落在内存里：跑完即消失，保证下一次取证不会读到上一次的残留。
+      # 不关 fsync——本库要证的正是事务可见性与回滚语义，改动存储行为会让证据失真。
+      - /var/lib/postgresql/data:size=2g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parcel -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s

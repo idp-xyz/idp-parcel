@@ -20,6 +20,25 @@ jobs:
     timeout-minutes: 10
     env:
       GOTOOLCHAIN: local
+      # 集成门禁的连接串。GitHub Actions 自动设置 CI=true，因此这一项一旦缺失，
+      # PostgreSQL 用例会失败而不是静默跳过。
+      IDP_PARCEL_POSTGRES_DSN: postgres://parcel:parcel@127.0.0.1:5432/postgres?sslmode=disable
+    services:
+      postgres:
+        # 与本机 compose.yaml 钉的是同一个精确补丁号。两处版本一旦分叉，
+        # 本地通过而 CI 失败就成了版本差异而非代码问题，最难查。
+        image: postgres:16.14
+        env:
+          POSTGRES_USER: parcel
+          POSTGRES_PASSWORD: parcel
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U parcel -d postgres"
+          --health-interval 3s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
