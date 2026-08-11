@@ -30,6 +30,12 @@ func pricePolicy(t *testing.T, objectID string, direction domain.PriceDirection,
 	return policy
 }
 
+// allPlansAdoptable 是「parcel-pricing 说每一份方案都还在」的替身，供那些不以方案存续为
+// 主题的用例使用。它显式给出而不是留空：留空的含义是没问到，那会让每一条用例都停在未决上。
+func allPlansAdoptable(domain.PricingPlanReference) domain.PricingPlanStanding {
+	return domain.PricingPlanAdoptable
+}
+
 func priceQuery(t *testing.T, direction domain.PriceDirection, scope string) domain.PricePolicyQuery {
 	t.Helper()
 	query, err := domain.NewPricePolicyQuery(
@@ -56,7 +62,7 @@ func TestEachDirectionResolvesItsOwnPolicy(t *testing.T) {
 		domain.SellDirection: "plan-sell",
 	} {
 		t.Run(direction.String(), func(t *testing.T) {
-			resolved, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, direction, "scope-a"))
+			resolved, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, direction, "scope-a"), allPlansAdoptable)
 			if err != nil {
 				t.Fatalf("resolve: %v", err)
 			}
@@ -70,7 +76,7 @@ func TestEachDirectionResolvesItsOwnPolicy(t *testing.T) {
 	}
 
 	t.Run("an undeclared direction has no policy", func(t *testing.T) {
-		if _, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.InternalDirection, "scope-a")); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
+		if _, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.InternalDirection, "scope-a"), allPlansAdoptable); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
 			t.Fatalf("error = %v; a direction without a policy borrowed another's", err)
 		}
 	})
@@ -80,7 +86,7 @@ func TestEachDirectionResolvesItsOwnPolicy(t *testing.T) {
 // 未决，不使用默认价」。
 func TestMissingOrOverlappingBindingsNeverFallBackToADefault(t *testing.T) {
 	t.Run("no policy is no applicable basis", func(t *testing.T) {
-		if _, err := domain.ResolveCommercialPricePolicy(nil, priceQuery(t, domain.SellDirection, "scope-a")); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
+		if _, err := domain.ResolveCommercialPricePolicy(nil, priceQuery(t, domain.SellDirection, "scope-a"), allPlansAdoptable); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
 			t.Fatalf("error = %v, want ErrNoApplicablePricePolicy", err)
 		}
 	})
@@ -90,7 +96,7 @@ func TestMissingOrOverlappingBindingsNeverFallBackToADefault(t *testing.T) {
 			pricePolicy(t, "policy-sell-1", domain.SellDirection, "scope-a", "plan-1"),
 			pricePolicy(t, "policy-sell-2", domain.SellDirection, "scope-a", "plan-2"),
 		}
-		resolved, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.SellDirection, "scope-a"))
+		resolved, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.SellDirection, "scope-a"), allPlansAdoptable)
 		if !errors.Is(err, domain.ErrPricePolicyConflict) {
 			t.Fatalf("error = %v, want ErrPricePolicyConflict", err)
 		}
@@ -109,8 +115,66 @@ func TestMissingOrOverlappingBindingsNeverFallBackToADefault(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new query: %v", err)
 		}
-		if _, err := domain.ResolveCommercialPricePolicy(policies, late); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
+		if _, err := domain.ResolveCommercialPricePolicy(policies, late, allPlansAdoptable); !errors.Is(err, domain.ErrNoApplicablePricePolicy) {
 			t.Fatalf("error = %v; an expired policy still answered", err)
+		}
+	})
+}
+
+// Covers: `AT-PC-036`「合同和价格政策唯一，但绑定价卡版本已退役且无替代 → 返回解析未决或
+// 无适用依据，不选择最新价卡兜底」，以及 CONTEXT「绑定缺失、过期、区间重叠或**引用未决**时
+// …不使用默认价」里此前没有任何用例的那一支。
+//
+// 政策仍在有效区间内，证明不了它绑的那份方案还在：方案由 parcel-pricing 拥有，它退役时本
+// 上下文的政策一个字节都没变，于是按方向加范围解析照样唯一命中。
+func TestAPolicyBoundToAnUnusablePlanDoesNotResolve(t *testing.T) {
+	policies := []domain.CommercialPricePolicy{
+		pricePolicy(t, "policy-sell", domain.SellDirection, "scope-a", "plan-retired"),
+	}
+
+	t.Run("a withdrawn plan is not adopted", func(t *testing.T) {
+		resolved, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.SellDirection, "scope-a"),
+			func(domain.PricingPlanReference) domain.PricingPlanStanding { return domain.PricingPlanWithdrawn })
+		if !errors.Is(err, domain.ErrPricingPlanWithdrawn) {
+			t.Fatalf("error = %v, want ErrPricingPlanWithdrawn", err)
+		}
+		if resolved.PricingPlan().String() != "" {
+			t.Fatalf("绑着已退役方案的政策仍被采用：%q", resolved.PricingPlan())
+		}
+	})
+
+	t.Run("an unanswered standing is not a pass", func(t *testing.T) {
+		if _, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.SellDirection, "scope-a"), nil); !errors.Is(err, domain.ErrPricingPlanNotConfirmed) {
+			t.Fatalf("error = %v, want ErrPricingPlanNotConfirmed", err)
+		}
+	})
+
+	// 问的必须是这份政策绑的那一份方案。问成别的，答复再准也证明不了被采用的这一份还在。
+	t.Run("the plan asked about is the bound one", func(t *testing.T) {
+		var asked []string
+		if _, err := domain.ResolveCommercialPricePolicy(policies, priceQuery(t, domain.SellDirection, "scope-a"),
+			func(plan domain.PricingPlanReference) domain.PricingPlanStanding {
+				asked = append(asked, plan.String())
+				return domain.PricingPlanAdoptable
+			}); err != nil {
+			t.Fatalf("resolve: %v", err)
+		}
+		if len(asked) != 1 || asked[0] != "plan-retired" {
+			t.Fatalf("asked %v, want exactly the bound plan", asked)
+		}
+	})
+
+	// 两种不可用必须分得开：一个要再问一次 parcel-pricing，一个要商业责任方改挂。压成一个
+	// 哨兵，调用方就会对着一份永远不会回来的方案重试到底。
+	t.Run("the two unusable answers stay distinguishable", func(t *testing.T) {
+		if errors.Is(domain.ErrPricingPlanWithdrawn, domain.ErrPricingPlanNotConfirmed) ||
+			errors.Is(domain.ErrPricingPlanNotConfirmed, domain.ErrPricingPlanWithdrawn) {
+			t.Fatal("两个哨兵互相 Is，调用方分不出该重试还是该转商业责任方")
+		}
+		for _, unusable := range []error{domain.ErrPricingPlanWithdrawn, domain.ErrPricingPlanNotConfirmed} {
+			if errors.Is(unusable, domain.ErrNoApplicablePricePolicy) {
+				t.Fatalf("%v 被读成了「这个范围没有价格政策」，而权威并没有这么说", unusable)
+			}
 		}
 	})
 }
