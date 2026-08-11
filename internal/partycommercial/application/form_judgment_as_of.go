@@ -98,16 +98,20 @@ func NewFormJudgmentAsOfHandler(
 
 // loadPrior 按标识取回第一阶段的结果，并核对它确实属于这个调用方。
 //
-// 三种取不到分开：读不回是`未决`（等依赖恢复），查无此解析是`依据未解析`（要回第一阶段），
-// 范围不符是`输入未受理`（`AT-PC-028`：不泄露候选，也不告诉对方这份解析存不存在）。合成一格，
-// 一次越权探测就与一次依赖抖动分不开，而前者不该被重试。
+// 取不到时按调用方的**恢复动作**分格，不按本上下文观察到的失败原因分格（ADR-0029）：读不回是
+// `未决`（等依赖恢复，重试同一次调用），查无此解析与范围不符同为`依据未解析`（回第一阶段重解）。
+//
+// 后两者合并是要点。它们的恢复动作相同，分开就等于回答了「这份解析存不存在」——一串标识挨个问
+// 即可枚举同租户下其他客户账户的解析，而 `AT-PC-028` 要的正是不泄露候选。读不回仍单列：它与另
+// 两者的恢复动作不同，合进去会让一次依赖抖动被当成「回去重解」，而重解解决不了它。
 func (handler *FormJudgmentAsOfHandler) loadPrior(
 	ctx context.Context,
 	caller CallerScope,
 	resolution domain.ResolutionID,
 ) (domain.CommercialClosure, JudgmentAsOfOutcome) {
 	// 身份或标识缺失时不查询：一次已经发出的查询本身就回答了「这份解析存不存在」，而用例
-	// 要求最小身份不成立时不查询、不泄露候选。
+	// 要求最小身份不成立时不查询、不泄露候选。这一支在查询之前短路，答案不依赖解析存不存在，
+	// 因此它仍是`输入未受理`而不并入下面那两格。
 	if caller.TenantID.String() == "" ||
 		caller.CustomerAccountID.String() == "" ||
 		resolution.String() == "" {
@@ -123,9 +127,10 @@ func (handler *FormJudgmentAsOfHandler) loadPrior(
 	}
 
 	// 取回之后仍要比对：端口按租户取，但同一租户下的另一个客户账户同样不该读到这份解析。
+	// 交回的取值与上面「查无此解析」同一个，两者对调用方是同一件事，可区分即可枚举。
 	key := prior.ResolutionKey()
 	if key.TenantID != caller.TenantID || key.CustomerAccountID != caller.CustomerAccountID {
-		return domain.CommercialClosure{}, JudgmentAsOfInputNotAccepted
+		return domain.CommercialClosure{}, JudgmentAsOfBasisNotResolved
 	}
 	return prior, JudgmentAsOfFormed
 }

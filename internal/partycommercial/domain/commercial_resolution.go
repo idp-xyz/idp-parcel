@@ -186,6 +186,10 @@ const (
 	ResolutionPending
 	InputNotAccepted
 	ResolutionStale
+	// BasisNotResolved 说的是调用方回指的解析标识不指向一份它可用的原解析。它刻意不区分
+	// 「从未签发」与「属于另一个客户账户」——两者的恢复动作同为回第一阶段重解，分开就等于
+	// 回答了调用方无权知道的「这份解析存不存在」（ADR-0029）。
+	BasisNotResolved
 )
 
 func (outcome ResolutionOutcome) String() string {
@@ -202,6 +206,8 @@ func (outcome ResolutionOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case ResolutionStale:
 		return "STALE"
+	case BasisNotResolved:
+		return "BASIS_NOT_RESOLVED"
 	default:
 		return ""
 	}

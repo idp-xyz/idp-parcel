@@ -60,16 +60,24 @@ func (handler *ValidateCommercialBasisHandler) Handle(
 	return handler.resultOf(domain.ValidateClosureBeforeDecision(view, prior)), nil
 }
 
-// loadPrior 按标识取回原解析并核对归属。三种取不到分别落在不同的第一阶段结果取值上：读不回
-// 是`解析未决`，查无此解析同样是`解析未决`（本上下文说不出它是不存在还是不属于你，说得出就
-// 泄露了），范围不符是`输入未受理`。
+// loadPrior 按标识取回原解析并核对归属。取不到时按调用方的**恢复动作**分格，不按本上下文
+// 观察到的失败原因分格（ADR-0029）：
 //
-// 「查无此解析」不报`无适用依据`：那是权威说了这个范围没有适用对象，与「我找不到你说的那次
-// 解析」不是一回事，混起来会让调用方拿一次查不到当作拒单理由。
+//   - 读不回 → `解析未决`，调用方重试同一次调用。
+//   - 查无此解析、范围不符 → 同一个`依据未解析`，调用方回第一阶段重新解析。
+//
+// 后两者合并是本函数的要点。两者的恢复动作相同，分开就等于回答了「这份解析存不存在」——
+// 拒绝一次越权重校验并不等于没泄露，被拒的那一次同样告诉了对方这个标识是真的，一串标识挨个
+// 问即可枚举同租户下其他客户账户的解析（`AT-PC-028`）。
+//
+// `依据未解析`不报`无适用依据`：那是权威说了这个范围没有适用对象，可以拿去拒单；而这里说的是
+// 找不到调用方指名的那次解析，混起来会让一次查不到变成一个客户的拒绝理由。
 func (handler *ValidateCommercialBasisHandler) loadPrior(
 	ctx context.Context,
 	command ValidateCommercialBasisCommand,
 ) (domain.CommercialClosure, domain.ResolutionOutcome, domain.ResolutionReason, bool) {
+	// 身份或标识缺失时不查询。这一支在任何查询发生之前短路，答案不依赖解析存不存在，因此
+	// 不构成预言机，也就不并入上面那两格。
 	if command.Caller.TenantID.String() == "" ||
 		command.Caller.CustomerAccountID.String() == "" ||
 		command.Resolution.String() == "" {
@@ -77,13 +85,16 @@ func (handler *ValidateCommercialBasisHandler) loadPrior(
 	}
 
 	prior, found, err := handler.resolutions.LoadResolution(ctx, command.Caller.TenantID, command.Resolution)
-	if err != nil || !found {
+	if err != nil {
 		return domain.CommercialClosure{}, domain.ResolutionPending, domain.AuthorityUnreadable, false
+	}
+	if !found {
+		return domain.CommercialClosure{}, domain.BasisNotResolved, domain.ResolutionReasonNone, false
 	}
 
 	key := prior.ResolutionKey()
 	if key.TenantID != command.Caller.TenantID || key.CustomerAccountID != command.Caller.CustomerAccountID {
-		return domain.CommercialClosure{}, domain.InputNotAccepted, domain.ResolutionReasonNone, false
+		return domain.CommercialClosure{}, domain.BasisNotResolved, domain.ResolutionReasonNone, false
 	}
 	return prior, domain.ResolutionOutcomeInvalid, domain.ResolutionReasonNone, true
 }

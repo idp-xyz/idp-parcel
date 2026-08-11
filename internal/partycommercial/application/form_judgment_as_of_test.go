@@ -342,8 +342,9 @@ func TestASecondPhaseOnAnUnknownResolutionRefusesWithoutAskingForPolicies(t *tes
 // Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」在
 // 第二阶段一侧（ADR-0027：解析标识不是能力凭证）。
 //
-// 只凭标识就交回闭包，任何拿到标识的人都能读走另一个客户的商业依据。这一支必须与`依据未解析`
-// 分开——后者要调用方回第一阶段重解，而这里不该给它任何可以重试的指引。
+// 只凭标识就交回闭包，任何拿到标识的人都能读走另一个客户的商业依据。这一支交回的取值与
+// 「标识从未签发」**同为**`依据未解析`：两者的恢复动作相同，分开就等于告诉越权者这个标识是真的
+// （ADR-0029）。交回「回第一阶段重解」对它没有用处——它拿自己的范围重解只会得到自己的标识。
 func TestAResolutionNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
 	policies := &asOfPolicyDouble{}
 	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))
@@ -361,8 +362,8 @@ func TestAResolutionNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
 		t.Fatalf("form as-of: %v", err)
 	}
 
-	if result.Outcome() != application.JudgmentAsOfInputNotAccepted {
-		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED——另一个客户凭标识读到了这份解析", result.Outcome())
+	if result.Outcome() != application.JudgmentAsOfBasisNotResolved {
+		t.Fatalf("outcome = %q, want BASIS_NOT_RESOLVED——另一个客户凭标识读到了这份解析", result.Outcome())
 	}
 	if policies.loadCalled != 0 {
 		t.Fatal("范围不符却仍去问了时点政策")

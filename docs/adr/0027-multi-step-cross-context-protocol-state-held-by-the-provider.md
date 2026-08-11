@@ -1,6 +1,6 @@
 # ADR-0027: 跨上下文多步协议的中间状态由提供方按解析标识保留，消费方端口按协议阶段分方法
 
-Status: Accepted（Context 按行号引用的那些代码坐标，已在本记录被实现时移位——请按引文与符号名定位；正文不追改，结论不受影响）  
+Status: Accepted（Decision 中「不一致按`输入未受理`处理」一句所指定的取值已由 [ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md) 改指为`依据未解析`，仅限「按标识取回原状态失败」这一步；该句要防的「解析标识不得成为一张能力凭证」保留且被加强，本记录其余各条不变）（Context 按行号引用的那些代码坐标，已在本记录被实现时移位——请按引文与符号名定位；正文不追改，结论不受影响）  
 Date: 2026-08-11
 
 ## Context
@@ -54,6 +54,7 @@ Date: 2026-08-11
 
 ## Links
 
+- [ADR-0029：按标识取回原状态失败时，结果代数按消费方的恢复动作分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：**本记录 Decision 中「不一致按`输入未受理`处理」一句所指定的取值已由它改指为`依据未解析`**，仅限「按标识取回原状态失败」这一步；该句要防的「解析标识不得成为一张能力凭证」保留且被加强——原先只挡读取，现在连回答也不泄。正文保留原样不改写，此处只作前向指引。它也说明了本记录点名未解决的「`输入未受理`漏项」为何仍未关闭
 - [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)：本记录补它没为多步协议留的位置，并停用其第 30 行末句，其余各条不变
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：端口接口属机制半边可先定，实现仍受限
 - [ADR-0026：为产出消费者证明而写的持久化实现先于闸门通过](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)：提供方取回责任的持久化实现按其范围与用途限定办

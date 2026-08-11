@@ -170,8 +170,9 @@ func TestARevalidationAsksTheAuthorityForTheKeyThatFormedThePriorResolution(t *t
 	}
 }
 
-// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」在
-// 第三阶段一侧（ADR-0027：解析标识不是能力凭证）。
+// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 范围拒绝且不泄露候选」在第三阶段一侧
+// （ADR-0027：解析标识不是能力凭证）。本用例压的是「拒绝」那半——越权者读不到依据，本上下文也
+// 不去读权威；「不泄露」那半由下面那条不可区分用例压。
 //
 // 第二阶段已有同名守卫，这一支单独压：两处各自取回、各自比对，漏掉任何一处，拿到标识的人都能
 // 从那一处读走另一个客户的商业依据。提交前重校验尤其要紧——它交回的是一份仍然成立的解析。
@@ -192,13 +193,64 @@ func TestARevalidationNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 
-	if revalidated.Closure().Outcome() != domain.InputNotAccepted {
-		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED——另一个客户凭标识重校验了这份解析", revalidated.Closure().Outcome())
+	// 取值是`依据未解析`而不是`输入未受理`：越权与「标识从未签发」的恢复动作同为回第一阶段
+	// 重解，因此共用一格（ADR-0029）。`输入未受理`此后只留给查询发生前就短路的那一支。
+	if revalidated.Closure().Outcome() != domain.BasisNotResolved {
+		t.Fatalf("outcome = %q, want BASIS_NOT_RESOLVED——另一个客户凭标识重校验了这份解析", revalidated.Closure().Outcome())
 	}
 	if len(revalidated.Closure().Adopted()) != 0 {
 		t.Fatal("范围不符却仍交回了已采用依据")
 	}
 	if authority.loadCalled != 0 {
 		t.Fatal("范围不符却仍去读了权威视图——那次读取本身就回答了这个范围里有没有对象")
+	}
+}
+
+// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」的
+// 后半句。上面那条压的是「拒绝」，这一条压的是「不泄露候选」。
+//
+// 拒绝一次越权重校验并不等于没泄露。若`这个标识不存在`与`这个标识存在、只是不属于你`给出两个
+// 不同的答案，同租户下任何人都能拿一串标识挨个问，凭答案的差别把别人的解析枚举出来——被拒绝
+// 的那一次同样告诉了他这份解析是真的。
+//
+// 两次探测因此只差一个变量：同一个入侵者、同一个标识，只换取回端口里有没有那份解析。调用方
+// 看得见的每一处都必须一致。一致成哪一个取值不由本用例决定——那要动 `ResolutionOutcome` 的
+// 取值集，属改领域语言；本用例只压两者不可区分。
+func TestAProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	store, owner, resolution := storedResolution(t, prior)
+	intruder := owner
+	intruder.CustomerAccountID = value(t, domain.NewCustomerAccountID, "customer-elsewhere")
+	probe := application.ValidateCommercialBasisCommand{Caller: intruder, Resolution: resolution}
+
+	existing, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一份真实存在的解析: %v", err)
+	}
+
+	// 空的取回端口交回「没找到」，代表这个标识从未签发过。
+	absent, err := application.NewValidateCommercialBasisHandler(
+		&resolutionStoreDouble{}, authority, fixedClock{at: revalidatedAt},
+	).Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一个从未签发的标识: %v", err)
+	}
+
+	if existing.Closure().Outcome() != absent.Closure().Outcome() {
+		t.Fatalf(
+			"存在但不属于你 = %q，从未签发 = %q；两者可分即可枚举同租户下其他客户账户的解析",
+			existing.Closure().Outcome(), absent.Closure().Outcome(),
+		)
+	}
+	if existing.Closure().Reason() != absent.Closure().Reason() {
+		t.Fatalf(
+			"原因分别是 %q 与 %q；取值相同而原因不同，一样把存在与否说了出去",
+			existing.Closure().Reason(), absent.Closure().Reason(),
+		)
 	}
 }
