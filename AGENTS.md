@@ -49,6 +49,7 @@
 - 改难逆转技术或产品取舍 → 新 ADR 或 supersede；不改写已接受 ADR 历史。
 - 改试点实例状态 → [参数登记册](./docs/product/PILOT-PARAMETER-REGISTER.md)，不写入领域文档当长期事实。
 - 新增权威文档 → 在 [docs/README.md](./docs/README.md) 补入口与职责一句。
+- 引另一个文件的某句或某段 → 优先用符号名，无符号可指时用引文，一律不用行号。行号失效时仍然指得很稳，只是指错了，没有任何东西会报；引文至少失配可见，但中文注释一折行就搜不中。ADR 尤其要守——它引的常是它自己要改的那份代码，Context 会在决定落地那一刻失效。
 
 ## Skills 路由
 
@@ -132,3 +133,7 @@ Multi-context map at `docs/domain/CONTEXT-MAP.md`; shared ADRs in `docs/adr/`. S
 ### Flow binding
 
 How the generic skill flow maps onto this repo's PN slices, handoff work packages, and evidence levels. See [`docs/agents/workflow.md`](./docs/agents/workflow.md).
+
+### Parallel sessions
+
+Territory, committing, and reporting when several sessions write one working tree. Single-session work does not need it. See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md).
