@@ -74,6 +74,14 @@ const (
 	SourceDataVersionIdentityUnavailable
 	AmendedRequestNotSaved
 	SourceDataVersionNotHandedOff
+	// StaleShipmentRequestRevision 说的是保存被并发写入抢先：这一份聚合读出来之后，有人
+	// 先落了一步。它与`决定没落库`分开，因为两者的运维含义相反——一个可能是库坏了，一个是
+	// 正常竞争，而续办引用由原因派生，压成一格会让两种缺口共用同一条引用。
+	//
+	// 四个保存调用点共用它，不按调用点拆：引用由原因**与范围**共同派生，而四处的范围本就
+	// 不同（资料修订那一处取的是修订请求自己的身份加资料范围）。拆开不会让引用更可分，只会
+	// 让未决统计多几行说同一件事。
+	StaleShipmentRequestRevision
 
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
@@ -103,6 +111,10 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		// 第三阶段取回那两格是**有意**落在这里的，不是漏了：`依据未解析`的恢复动作是回第一
 		// 阶段重解，而重解由本方发起；`输入未受理`是本方连身份或标识都立不起来，更只有本方
 		// 改得动。客户补件与人工复核对这两者都无能为力。
+		//
+		// `聚合版本已过期`同样是有意落在这里。它的恢复动作是重读再重放，而四个保存调用点
+		// 所在的编排**都以 FindBySourceIdentity 开头**，因此一次内部续办重入天然就重读了
+		// 一遍；客户补不出一份被别人抢先写掉的版本，复核角色也补不出（ADR-0031）。
 		return domain.ResumeByInternalRetry
 	}
 }
@@ -197,6 +209,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "AMENDED_REQUEST_NOT_SAVED"
 	case SourceDataVersionNotHandedOff:
 		return "SOURCE_DATA_VERSION_NOT_HANDED_OFF"
+	case StaleShipmentRequestRevision:
+		return "STALE_SHIPMENT_REQUEST_REVISION"
 	default:
 		return ""
 	}
@@ -213,6 +227,25 @@ var ErrUnexpectedAssessmentOutcome = errors.New("parcel shipment: unexpected aut
 
 // ErrUnexpectedRevalidationOutcome 同上，说的是提交前重校验那一支。
 var ErrUnexpectedRevalidationOutcome = errors.New("parcel shipment: unexpected commercial revalidation outcome")
+
+// ErrUnexpectedSaveOutcome 同上，说的是委托聚合的写入那一步。
+var ErrUnexpectedSaveOutcome = errors.New("parcel shipment: unexpected shipment request save outcome")
+
+// saveStallReason 把一次没能落库的写入结果译成本层的未决原因。
+//
+// 逐取值分派，不留兜底（ADR-0031）：端口日后新增一个写入结果时这里会报错而不是静默继承
+// 某一格，而那一格决定的是运维该去查库还是该等下一轮重放。
+//
+// `已保存`落在 default 是有意的：它根本不该走到这里——调用方拿着它继续办事，把它译成一个
+// 未决原因会让一次成功的保存看起来像停滞。
+func saveStallReason(outcome ports.ShipmentRequestSaveOutcome) (JudgmentPendingReason, error) {
+	switch outcome {
+	case ports.ShipmentRequestRevisionConflict:
+		return StaleShipmentRequestRevision, nil
+	default:
+		return PendingReasonNone, ErrUnexpectedSaveOutcome
+	}
+}
 
 // commercialBasisPendingReason 把一次非唯一的商业解析分到它自己的未决原因上。
 //

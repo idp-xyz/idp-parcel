@@ -441,6 +441,34 @@ func TestAnUnsavedAmendmentIsUndecidedRatherThanRecorded(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0031 —— 输给并发写入的修订与「存不进去」分属两格。
+//
+// 这一支同样不得交接：`AT-PS-031` 要的是「版本只形成一次」，而下游按一份并没落库的版本去
+// 重新判断会直接扑空。它与上一条用例共用这条断言，因为两者对下游的后果一模一样，分开的是
+// 续办方接下来该做什么。
+func TestAnAmendmentLostToAConcurrentWriterIsUndecidedNotRecorded(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.requests.saveConflict = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.StaleShipmentRequestRevision {
+		t.Fatalf("reason = %q, want STALE_SHIPMENT_REQUEST_REVISION", result.PendingReason())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("一份输给并发写入的版本被报成已形成")
+	}
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatalf("handed off %d intents for a version that never reached storage; downstream would fetch nothing", len(fixture.downstream.intents))
+	}
+}
+
 // Covers: UC-PS-002 步骤 10「发布失败只重试同一发布意图，不重复形成资料版本」与`技术未形成`
 // 「原始请求已保全，但版本或发布意图未完成提交」。
 //
@@ -666,7 +694,10 @@ type amendableRequestStore struct {
 	notYetAccepted bool
 	err            error
 	saveErr        error
-	saved          *domain.ShipmentRequest
+	// saveConflict 用布尔而不是直接收枚举：那个枚举的零值是`未设`，收它会让每一处没显式
+	// 设过的构造都变成一次端口坏了。
+	saveConflict bool
+	saved        *domain.ShipmentRequest
 }
 
 func (store *amendableRequestStore) FindBySourceIdentity(
@@ -698,12 +729,17 @@ func (store *amendableRequestStore) Save(
 	_ context.Context,
 	_ domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestSaveOutcome, error) {
 	if store.saveErr != nil {
-		return store.saveErr
+		return ports.ShipmentRequestSaveOutcomeInvalid, store.saveErr
+	}
+	if store.saveConflict {
+		// 抢先那一方已经落库，本方这一份不留：留住它会让下一次 FindBySourceIdentity 读到
+		// 一份其实没落库的聚合，而那正是这条分支要防的事。
+		return ports.ShipmentRequestRevisionConflict, nil
 	}
 	store.saved = &request
-	return nil
+	return ports.ShipmentRequestSaved, nil
 }
 
 // acceptedRequest 把 submittedRequest 经领域推到`已接受`。资料修订只对`已接受`开放，所以

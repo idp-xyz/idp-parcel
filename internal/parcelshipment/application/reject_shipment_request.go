@@ -164,9 +164,19 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		return RejectShipmentRequestResult{}, fmt.Errorf("reject by authority: %w", err)
 	}
 
-	if err := handler.deps.Requests.Save(ctx, command.Identity, rejected); err != nil {
+	saved, err := handler.deps.Requests.Save(ctx, command.Identity, rejected)
+	if err != nil {
 		// 拒绝没落库，因此存着的仍是保存前那一份：交回 request 的状态而不是 rejected 的。
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		// 同上：本方这次拒绝确定没落库。抢先那一方写下的可能是接受，因此这里不发释放——
+		// 那笔冻结归真正成立的那条决定路径处置。
+		reason, err := saveStallReason(saved)
+		if err != nil {
+			return RejectShipmentRequestResult{}, err
+		}
+		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
 
 	decision, _ := rejected.AcceptanceDecision()

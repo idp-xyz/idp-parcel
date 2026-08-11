@@ -36,6 +36,7 @@
 - [ADR-0028：聚合的重建与构造分属两扇门，重建只校验不重算；聚合携带版本，保存按预期版本写入](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)
 - [ADR-0029：按标识取回原状态失败时，结果代数按消费方的恢复动作分格，不按提供方的失败原因分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)
 - [ADR-0030：聚合重建按状态逐个开门，一个状态只有在快照能表达它可达的全部字段时才准进](./0030-rehydration-admits-one-state-at-a-time-by-snapshot-expressiveness.md)
+- [ADR-0031：自有仓储端口的写入结果是封闭代数而不是 error，预期版本由聚合携带](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)
 
 ## 已被取代决策
 

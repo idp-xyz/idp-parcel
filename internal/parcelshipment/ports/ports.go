@@ -20,15 +20,51 @@ type SourceSubmissionRepository interface {
 	AppendObservation(ctx context.Context, observed domain.SourceSubmissionFingerprint) error
 }
 
+// ShipmentRequestSaveOutcome 是一次委托聚合写入在本上下文的落点。
+//
+// `版本冲突`不译成 error。写入这条路走通了，只是有人先落了一步——那是业务答案而非技术故障，
+// 调用方要做的是重读再重放，不是把同一份过期聚合当作故障重试。译成 error 之后调用方只剩
+// 「没落库」一格，而那一格既可能是库坏了也可能是正常竞争，两者的运维动作相反（ADR-0031）。
+type ShipmentRequestSaveOutcome uint8
+
+const (
+	ShipmentRequestSaveOutcomeInvalid ShipmentRequestSaveOutcome = iota
+	ShipmentRequestSaved
+	ShipmentRequestRevisionConflict
+)
+
+func (outcome ShipmentRequestSaveOutcome) String() string {
+	switch outcome {
+	case ShipmentRequestSaved:
+		return "SAVED"
+	case ShipmentRequestRevisionConflict:
+		return "REVISION_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // ShipmentRequestRepository 以产生委托的来源身份为键存储委托聚合，这样重放才能返回
 // 原委托而不是再建一份。
 //
 // Insert 与 Save 分开：建单只能发生一次，而决定是在既有委托上推进。合成一个方法会让
 // 「这是第一份还是第二份」失去表达。
+//
+// Save 的预期版本由聚合自己携带（`request.Revision()`），不作独立参数：ADR-0028 已把
+// 「聚合只记自己是从哪一版读出来的」定为版本字段的含义，那就是预期版本；再开一个参数是
+// 造第二个来源，而两者相等由「转移一律不动版本」保证、不由本签名保证（ADR-0031）。
+//
+// Insert 不交回写入结果，这不是遗漏：它的失败答案是「这份已经建过了」，与 Save 的「有人
+// 先落了一步」恢复动作不同，合成一个代数会让调用方拿一个取值回答两个问题。那一格由
+// `PBC-04` 驱动，入口条件写在 ADR-0031 的 Consequences 里。
 type ShipmentRequestRepository interface {
 	FindBySourceIdentity(ctx context.Context, identity domain.SourceIdentity) (domain.ShipmentRequest, bool, error)
 	Insert(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
-	Save(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
+	Save(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		request domain.ShipmentRequest,
+	) (ShipmentRequestSaveOutcome, error)
 }
 
 // ProductionOwnershipAuthority 是试点准入控制，回答完整拟受理范围当前由谁承接。

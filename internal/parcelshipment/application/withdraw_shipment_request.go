@@ -207,9 +207,19 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw by customer: %w", err)
 	}
 
-	if err := handler.deps.Requests.Save(ctx, command.Identity, withdrawn); err != nil {
+	saved, err := handler.deps.Requests.Save(ctx, command.Identity, withdrawn)
+	if err != nil {
 		// 撤回没落库，因此存着的仍是保存前那一份：交回 request 的状态而不是 withdrawn 的。
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		// 同上：本方这次撤回确定没落库，抢先那一方写下的可能是接受，因此不发释放。客户重试
+		// 这次撤回时会重读到那一份，走 existing 那条路读回既有结果。
+		reason, err := saveStallReason(saved)
+		if err != nil {
+			return WithdrawShipmentRequestResult{}, err
+		}
+		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
 
 	record, _ := withdrawn.Withdrawal()

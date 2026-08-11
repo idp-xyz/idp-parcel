@@ -397,9 +397,9 @@ func (double *shipmentRequestRepositoryDouble) Save(
 	_ context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestSaveOutcome, error) {
 	double.records[identity] = request
-	return nil
+	return ports.ShipmentRequestSaved, nil
 }
 
 type ownershipAuthorityDouble struct {

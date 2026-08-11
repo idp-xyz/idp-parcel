@@ -237,6 +237,55 @@ func TestAPendingManualReviewWaitsOnTheReviewerNotAnInternalRetry(t *testing.T) 
 	}
 }
 
+// Covers: ADR-0031「版本冲突自占一格未决原因，续办路径仍是内部重试」。
+//
+// 尾段那次比对是本用例真正承重的地方。`版本冲突`与`决定没落库`若共用一个原因，两者会派生出
+// 同一条续办引用——而它们的运维含义相反：一个是库坏了要去查，一个是正常竞争等下一轮重放。
+// 续办方按引用查回来的会是另一种缺口，而这件事不会有任何东西变红。
+func TestASaveLostToAConcurrentWriterIsItsOwnPendingReason(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.requests.conflict = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.StaleShipmentRequestRevision {
+		t.Fatalf("pending reason = %q, want STALE_SHIPMENT_REQUEST_REVISION", result.PendingReason())
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("一次没能越过提交边界的接受被报成已形成；下游会按一份查不回来的接受基线继续办")
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("输给并发写入的这一轮仍然存下了聚合")
+	}
+	if len(fixture.recorder.recordedAttempts) != 1 {
+		t.Fatalf("recorded %d attempts, want exactly 1", len(fixture.recorder.recordedAttempts))
+	}
+	// 恢复动作是重读再重放，而本编排以 FindBySourceIdentity 开头，因此内部续办重入天然就
+	// 重读了一遍。客户与复核角色都补不出一份被别人抢先写掉的版本。
+	if path := fixture.recorder.recordedAttempts[0].ResumePath(); path != domain.ResumeByInternalRetry {
+		t.Fatalf("resume path = %q, want INTERNAL_RETRY", path)
+	}
+
+	unreachable := newDecisionFixture(t)
+	unreachable.requests.err = errors.New("storage unreachable")
+	notRecorded, err := unreachable.handler.Handle(context.Background(), unreachable.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if notRecorded.PendingReason() != application.DecisionNotRecorded {
+		t.Fatalf("pending reason = %q, want DECISION_NOT_RECORDED", notRecorded.PendingReason())
+	}
+	if result.ContinuationReference() == notRecorded.ContinuationReference() {
+		t.Fatal("版本冲突与决定没落库派生出了同一条续办引用；续办方按引用查回来的会是另一种缺口")
+	}
+}
+
 // Covers: UC-PS-001 AT-PS-035「接受已经成立…不重复控制或释放合法冻结」— 接受成立时那笔冻结
 // 是合法的，转接受后流程，不能在这里放掉。
 func TestAnAcceptanceDoesNotReleaseTheFreeze(t *testing.T) {
@@ -666,10 +715,14 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 }
 
 // decidableRequestStore 交回一份已提交、含两个声明成员的委托，并留住被决定后保存的那一份。
+//
+// conflict 用布尔而不是直接收一个 ports.ShipmentRequestSaveOutcome：那个枚举的零值是`未设`，
+// 收它会让每一处没显式设过的构造都变成一次端口坏了。
 type decidableRequestStore struct {
-	t     *testing.T
-	saved *domain.ShipmentRequest
-	err   error
+	t        *testing.T
+	saved    *domain.ShipmentRequest
+	err      error
+	conflict bool
 }
 
 func (store *decidableRequestStore) FindBySourceIdentity(
@@ -692,12 +745,16 @@ func (store *decidableRequestStore) Save(
 	_ context.Context,
 	_ domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestSaveOutcome, error) {
 	if store.err != nil {
-		return store.err
+		return ports.ShipmentRequestSaveOutcomeInvalid, store.err
+	}
+	if store.conflict {
+		// 抢先那一方已经落库，本方这一份不写进去：留住它会让断言读到一份其实没落库的聚合。
+		return ports.ShipmentRequestRevisionConflict, nil
 	}
 	store.saved = &request
-	return nil
+	return ports.ShipmentRequestSaved, nil
 }
 
 // submittedRequest 直接经领域构造一份含两个声明成员的`已提交`委托。不走提交编排，是因为

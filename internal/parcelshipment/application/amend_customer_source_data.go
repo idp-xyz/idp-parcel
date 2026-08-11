@@ -228,10 +228,20 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	if err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", err)
 	}
-	if err := handler.deps.Requests.Save(ctx, command.Identity, amended); err != nil {
+	saved, err := handler.deps.Requests.Save(ctx, command.Identity, amended)
+	if err != nil {
 		// 版本已形成但没落库。不交回`已记录并采用`：用例明禁「不得返回已采用或业务拒绝」，
 		// 而下游按一份并不存在的版本办事会直接扑空。本轮的续办引用就是重放这次修订的凭据。
 		return handler.undecided(command, AmendedRequestNotSaved), nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		// 同上不交回`已记录并采用`。重放这次修订时来源保全会认出同一个身份，走 existing
+		// 那条路——那时聚合已是新的一份，版本重新形成一次的风险由那条路的版本查找挡住。
+		reason, err := saveStallReason(saved)
+		if err != nil {
+			return AmendCustomerSourceDataResult{}, err
+		}
+		return handler.undecided(command, reason), nil
 	}
 
 	adoption, derived := amended.CurrentSourceDataAdoption(command.Scope)

@@ -1,6 +1,6 @@
 # ADR-0028: 聚合的重建与构造分属两扇门，重建只校验不重算；聚合携带版本，保存按预期版本写入
 
-Status: Accepted  
+Status: Accepted（**事实依据已更正**：Decision 中「聚合携带版本，`Save` 收预期版本，而推进版本是仓储的事。这一条不是取舍，是框架合同规定的：未持久化为 0、插入从 1 起、成功更新严格递增 1」一句，经对 `idp-bento-go` 逐符号实测**六项里只有三项来自框架**——「推进版本是仓储的事」成立（`Insert` 与 `Update` 都交回新 `Revision`）、「插入从 1 起」是硬要求（合同断言 `Insert` 返回 1）、「成功更新严格递增 1」只被合同钉住单点（`Update(…, 1)` 返回 2）因而相容但更弱；另三项不是：框架**没有任何符号叫 `Save`**（它要 `Update`），它为版本传递给出的形状 `Loaded[A]{Aggregate, Revision}` 与「聚合携带版本」**相反**，而「**未持久化为 0**」框架根本不规定——`Revision` 是 `int64`，0 表达得出却无定义，合同从不在 0 上跑，该约定纯由本仓的 `SubmitShipmentRequest` 不设版本与 `validForRehydration` 要求 ≥ 1 共同造成。**决定本身不变**，改由取舍论证；`expected = 0` 因此是本仓自己要填的空白，没有框架默认可继承，立场见 [ADR-0031](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)。）  
 Date: 2026-08-11
 
 ## Context
@@ -67,3 +67,4 @@ Date: 2026-08-11
 - [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)：领域不认识外面，本记录据以否决把 Repository 接口移进 domain
 - [UC-PS-001：提交委托请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：八个判断产物的不变式出处
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：`PBC-02` 的 Repository 合同与版本要求所在处
+- [ADR-0031：自有仓储端口的写入结果是封闭代数而不是 error，预期版本由聚合携带](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：落本记录「`Save` 收预期版本」那一半，并更正本记录对框架合同的事实援引（见 Status 行）

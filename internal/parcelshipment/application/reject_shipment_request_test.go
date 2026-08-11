@@ -342,9 +342,9 @@ func (store *rejectableRequestStore) Save(
 	_ context.Context,
 	_ domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestSaveOutcome, error) {
 	store.saved = &request
-	return nil
+	return ports.ShipmentRequestSaved, nil
 }
 
 type countingIdentityFactory struct {

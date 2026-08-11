@@ -188,13 +188,23 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
 		return handler.undecided(ctx, command, pendingReasonFor(decided), request.State()), nil
 	}
-	if err := handler.deps.Requests.Save(ctx, command.Identity, decided); err != nil {
+	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
+	if err != nil {
 		// 决定没能越过提交边界就不算形成。交回一个没落库的接受，下游会按一份查不回来的
 		// 接受基线继续办。
 		//
 		// 这里不释放冻结：保存失败时接受成没成立无从确定，而释放要求「接受确定未成立」。
 		// 不确定就释放，会把一次其实已经落库的接受连同它合法占用的资金一起放掉。
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		// 本方这次决定确定没落库，但抢先那一方写下了什么本方并不知道——可能正是一次接受。
+		// 所以这一支同样不释放冻结，理由与上一支相同。
+		reason, err := saveStallReason(saved)
+		if err != nil {
+			return FormAcceptanceDecisionResult{}, err
+		}
+		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
 
 	return FormAcceptanceDecisionResult{
