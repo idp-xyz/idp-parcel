@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
@@ -32,6 +33,104 @@ var closureBases = []domain.CommercialObjectKind{
 	domain.CustomerContractObject,
 	domain.AcceptanceRulePackageObject,
 	domain.SettlementPolicyObject,
+}
+
+// effectiveNaming 登记一个在正文里指名了对外引用的版本。引用属于一次受控发布固定下来的
+// 内容，因此随规格给出，而不是登记之后再挂上去。
+func effectiveNaming(
+	t *testing.T,
+	registry *domain.CommercialRegistry,
+	kind domain.CommercialObjectKind,
+	objectID, version, digest, scope string,
+	references map[domain.CommercialObjectKind]string,
+) domain.CommercialVersion {
+	t.Helper()
+	spec := commercialSpec(t, kind, objectID, version, digest)
+	spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, scope)
+	spec.References = make(map[domain.CommercialObjectKind]domain.CommercialObjectID, len(references))
+	for referencedKind, referencedID := range references {
+		spec.References[referencedKind] = commercialValue(t, domain.NewCommercialObjectID, referencedID)
+	}
+
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	live, err := published.TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	if _, err := registry.Register(live); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	return live
+}
+
+// Covers: AT-PC-002 `AT-PC-022`「合同唯一但引用规则包未发布 → 返回解析未决，不默认规则通过」。
+//
+// 合同指名的规则包只有草稿，登记册按规矩不收草稿；同范围里另有一个已发布的**别的**规则包。
+// 按「范围 + 对象类型」各自独立解析时，那一个会被静静采用——它唯一、已生效、在范围内，
+// 每一项都对，只是不是这份合同约定的那一个。
+func TestAClosureRefusesARulePackageTheContractDoesNotName(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveNaming(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a",
+		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-named"})
+	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-other", "v1", "sha256:other", "scope-a")
+
+	closure := domain.ResolveCommercialClosure(registry,
+		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject))
+
+	if closure.Outcome() != domain.ResolutionPending {
+		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", closure.Outcome())
+	}
+	if adopted, present := closure.AdoptedFor(domain.AcceptanceRulePackageObject); present {
+		t.Fatalf("闭包采用了合同没有指名的规则包 %q", adopted.Version().ObjectID())
+	}
+}
+
+// Covers: `AT-PC-022` 的另一半——指名引用核得上时必须照常唯一解出。
+//
+// 少了这一条，「一律不确认」与「确认得对」在测试上无从分辨：上一条用例对一个恒假的
+// 确认函数同样会绿，而那种实现会把每一次带指名引用的解析都判成未决。
+func TestAClosureAdoptsTheRulePackageTheContractNames(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveNaming(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a",
+		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-named"})
+	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-named", "v1", "sha256:named", "scope-a")
+
+	closure := domain.ResolveCommercialClosure(registry,
+		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject))
+
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q）", closure.Outcome(), closure.Reason())
+	}
+	adopted, present := closure.AdoptedFor(domain.AcceptanceRulePackageObject)
+	if !present {
+		t.Fatal("闭包没有采用任何规则包")
+	}
+	if adopted.Version().ObjectID().String() != "rules-named" {
+		t.Fatalf("采用的规则包 = %q, want rules-named", adopted.Version().ObjectID())
+	}
+}
+
+// Covers: 确认只覆盖本次要采用的类别这一条边界。
+//
+// 合同指名了规则包，但调用方本次只要合同。该类对象一个都不采用，也就没有采用错的风险；
+// 判成未决就是闭包替调用方扩大了请求范围，而 RequiredBases 是调用方给的。
+func TestANamedReferenceOutsideTheRequestedBasesDoesNotStallTheClosure(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveNaming(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a",
+		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-named"})
+
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", domain.CustomerContractObject))
+
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q）", closure.Outcome(), closure.Reason())
+	}
 }
 
 // Covers: UC-PC-002 步骤 4 — 一次解析出合同引用的完整依据集合，每项各自唯一，并返回

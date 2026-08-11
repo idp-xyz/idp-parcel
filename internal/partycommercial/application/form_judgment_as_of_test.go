@@ -283,7 +283,7 @@ func TestTheDeclarationIsAskedForTheRulePackageTheFirstPhaseSelected(t *testing.
 	if policies.askedTenant != prior.ResolutionKey().TenantID {
 		t.Fatalf("asked tenant = %q, want %q", policies.askedTenant, prior.ResolutionKey().TenantID)
 	}
-	if policies.askedPackage != adopted.Version() {
+	if !policies.askedPackage.SameVersionAs(adopted.Version()) {
 		t.Fatal("问的不是第一阶段选出的那个规则包")
 	}
 }
@@ -339,8 +339,9 @@ func TestASecondPhaseOnAnUnknownResolutionRefusesWithoutAskingForPolicies(t *tes
 	}
 }
 
-// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」在
-// 第二阶段一侧（ADR-0027：解析标识不是能力凭证）。
+// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 范围拒绝且不泄露候选；按标识回指时，
+// 答案必须与探测一个从未签发的标识**完全一致**，仅拒绝不足以满足本项」在第二阶段一侧
+// （ADR-0027：解析标识不是能力凭证）。
 //
 // 只凭标识就交回闭包，任何拿到标识的人都能读走另一个客户的商业依据。这一支交回的取值与
 // 「标识从未签发」**同为**`依据未解析`：两者的恢复动作相同，分开就等于告诉越权者这个标识是真的

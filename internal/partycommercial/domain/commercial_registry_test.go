@@ -68,6 +68,63 @@ func TestSameVersionWithChangedContentConflicts(t *testing.T) {
 	}
 }
 
+// publishedNaming 构造一个在正文里指名了对外引用的已发布版本，其余各项与 registerable 相同。
+func publishedNaming(
+	t *testing.T,
+	objectID, version, digest string,
+	references map[domain.CommercialObjectKind]string,
+) domain.CommercialVersion {
+	t.Helper()
+	spec := commercialSpec(t, domain.CustomerContractObject, objectID, version, digest)
+	spec.References = make(map[domain.CommercialObjectKind]domain.CommercialObjectID, len(references))
+	for kind, referencedID := range references {
+		spec.References[kind] = commercialValue(t, domain.NewCommercialObjectID, referencedID)
+	}
+
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	return published
+}
+
+// Covers: party-commercial CONTEXT 发布后正文不可覆盖 — 指名引用也属于一次发布固定下来的
+// 内容。
+//
+// 同一版本号改挂另一个规则包时内容摘要可以一字不变：摘要覆盖的是正文，而引用随规格另给。
+// 引用不参与判定，这一次改挂就会被读成重放而静默通过——它其实是一次需要商业责任方修正的
+// 冲突，且下游解析会因此换掉采用对象。
+func TestSameVersionReboundToAnotherReferenceConflicts(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	original := publishedNaming(t, "contract-1", "v1", "sha256:content-1",
+		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-a"})
+	if _, err := registry.Register(original); err != nil {
+		t.Fatalf("register original: %v", err)
+	}
+
+	rebound := publishedNaming(t, "contract-1", "v1", "sha256:content-1",
+		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-b"})
+	outcome, err := registry.Register(rebound)
+	if !errors.Is(err, domain.ErrCommercialVersionConflict) {
+		t.Fatalf("error = %v, want ErrCommercialVersionConflict", err)
+	}
+	if outcome != domain.RegistrationConflict {
+		t.Fatalf("outcome = %q, want CONFLICT", outcome)
+	}
+
+	stored, found := registry.Lookup(original.Kind(), original.ObjectID(), original.Version())
+	if !found {
+		t.Fatal("原登记不见了")
+	}
+	if named, present := stored.ReferenceTo(domain.AcceptanceRulePackageObject); !present || named.String() != "rules-a" {
+		t.Fatalf("改挂尝试覆盖了原登记的指名引用：%q", named)
+	}
+}
+
 // Covers: party-commercial CONTEXT 变化形成新版本，退役/到期/替代保留历史关系 —
 // 新版本与旧版本并存，登记新版本不抹掉旧的。
 func TestNewVersionCoexistsWithTheOneItReplaces(t *testing.T) {

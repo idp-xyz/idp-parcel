@@ -232,11 +232,43 @@ func ResolveCommercialClosure(registry *CommercialRegistry, key ClosureResolutio
 	case len(closure.unresolved) > 0:
 		closure.outcome = NoApplicableBasis
 	default:
+		// 采用之前先确认指名引用。这一步放在这里而不是逐项解析之中：「采用错了对象」只在
+		// 真要采用时才成立，已经冲突或缺项的闭包一项都不采用，没有可确认的对象。
+		if !namedReferencesConfirmed(adopted) {
+			return closurePending(key, NamedReferenceNotConfirmed, key.Anchor, closure.viewRevision)
+		}
 		closure.outcome = UniquelyResolved
 		closure.adopted = adopted
 		closure.resolutionID = closureIdentity(key, closure.viewRevision, adopted)
 	}
 	return closure
+}
+
+// namedReferencesConfirmed 核对每个采用版本在正文里指名的对外引用：凡是本次闭包也在解的
+// 那类对象，采用的必须就是被指名的那一个。
+//
+// 按「范围 + 对象类型」各自独立解析时，同范围里另一个已发布的同类对象每一项都对——唯一、
+// 已生效、在范围内——只是不是这份正文约定的那一个，于是它会被静静采用（`AT-PC-022`）。
+//
+// 只核本次要采用的那些类别。正文指名了一个调用方没有请求的对象时不在此确认：那类对象本次
+// 一个都不采用，不存在采用错的风险，而一并要求就等于闭包替调用方扩大了请求范围。
+func namedReferencesConfirmed(adopted []AdoptedBasis) bool {
+	adoptedByKind := make(map[CommercialObjectKind]CommercialObjectID, len(adopted))
+	for _, basis := range adopted {
+		adoptedByKind[basis.kind] = basis.version.objectID
+	}
+	for _, basis := range adopted {
+		for _, reference := range basis.version.references {
+			adoptedID, alsoResolvedHere := adoptedByKind[reference.kind]
+			if !alsoResolvedHere {
+				continue
+			}
+			if adoptedID != reference.objectID {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // closurePending 构造闭包所有未决答案共用的那一种形状。理由与单依据侧的 pending 相同：

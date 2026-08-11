@@ -5,6 +5,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -244,6 +245,10 @@ type CommercialVersionSpec struct {
 	Scope         CommercialScopeReference
 	ContentDigest CommercialContentDigest
 	Effective     EffectiveInterval
+	// References 是本版本正文里指名的对外引用，按被引对象类型归档。它随规格给出而不是
+	// 登记之后再挂上去：一份合同指名哪个接单规则包，与它的有效区间一样属于那次受控发布
+	// 固定下来的内容，事后可改的引用会让「发布后正文不可覆盖」出现一个缺口。
+	References map[CommercialObjectKind]CommercialObjectID
 }
 
 // CommercialVersion 是一次受控发布形成的商业定义。它是值类型：每次转换返回新值、不改
@@ -262,6 +267,28 @@ type CommercialVersion struct {
 	closedAt      time.Time
 	retirementRef RetirementReference
 	successor     CommercialVersionLabel
+	// references 存成有序切片而不是 map，是为了让引用集合有稳定的逐项比对顺序：它参与
+	// sameReleasedContent 判定「是不是同一次发布」，而声明顺序不构成不同的内容。
+	//
+	// 代价是 CommercialVersion 不再是可比较类型，这一条是有意接受的：`==` 本来也答不了
+	// 「是不是同一个版本」——同一次发布会先后处在草稿、生效、已退役几个位置上，逐字段
+	// 相等会把它们判成三个版本。要问版本身份用 SameVersionAs。
+	references []DeclaredReference
+}
+
+// DeclaredReference 是一个版本在正文里指名的一条对外引用。它只说「指向谁」，不说那个
+// 对象此刻可不可用——后者要去问引用的所有方，而这正是解析必须跟随引用的原因。
+type DeclaredReference struct {
+	kind     CommercialObjectKind
+	objectID CommercialObjectID
+}
+
+func (reference DeclaredReference) Kind() CommercialObjectKind {
+	return reference.kind
+}
+
+func (reference DeclaredReference) ObjectID() CommercialObjectID {
+	return reference.objectID
 }
 
 func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
@@ -273,6 +300,10 @@ func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
 		!spec.Effective.valid() {
 		return CommercialVersion{}, ErrInvalidCommercialVersion
 	}
+	references, err := declaredReferences(spec.Kind, spec.ObjectID, spec.References)
+	if err != nil {
+		return CommercialVersion{}, err
+	}
 	return CommercialVersion{
 		kind:          spec.Kind,
 		objectID:      spec.ObjectID,
@@ -281,7 +312,64 @@ func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
 		contentDigest: spec.ContentDigest,
 		effective:     spec.Effective,
 		status:        CommercialVersionDraft,
+		references:    references,
 	}, nil
+}
+
+// declaredReferences 把指名引用整理成稳定顺序。顺序稳定是必需的：引用集合参与「同一次
+// 发布」的判定，而声明顺序不构成不同的内容。
+//
+// 自引用被拒：一个版本指名自己所属的对象，会让「跟随引用」变成一个绕不出去的圈。
+func declaredReferences(
+	kind CommercialObjectKind,
+	objectID CommercialObjectID,
+	declared map[CommercialObjectKind]CommercialObjectID,
+) ([]DeclaredReference, error) {
+	if len(declared) == 0 {
+		return nil, nil
+	}
+	references := make([]DeclaredReference, 0, len(declared))
+	for referencedKind, referencedID := range declared {
+		if !referencedKind.valid() || !referencedID.valid() {
+			return nil, ErrInvalidCommercialVersion
+		}
+		if referencedKind == kind && referencedID == objectID {
+			return nil, ErrInvalidCommercialVersion
+		}
+		references = append(references, DeclaredReference{kind: referencedKind, objectID: referencedID})
+	}
+	sort.Slice(references, func(left, right int) bool {
+		return references[left].kind < references[right].kind
+	})
+	return references, nil
+}
+
+// DeclaredReferences 报出本版本正文指名的全部对外引用。
+func (version CommercialVersion) DeclaredReferences() []DeclaredReference {
+	return append([]DeclaredReference(nil), version.references...)
+}
+
+// ReferenceTo 报出本版本指名的某一类对象。缺席与指名是两件事：缺席说明这份正文没有
+// 对该类对象的约定，而不是「随便哪一个都行」。
+func (version CommercialVersion) ReferenceTo(kind CommercialObjectKind) (CommercialObjectID, bool) {
+	for _, reference := range version.references {
+		if reference.kind == kind {
+			return reference.objectID, true
+		}
+	}
+	return CommercialObjectID{}, false
+}
+
+// SameVersionAs 判断两个值指的是不是同一个对象版本。生命周期位置刻意不参与，理由与
+// sameReleasedContent 相同：一个后来生效或已退役的版本仍是同一次发布。
+//
+// 内容摘要参与，因为它正是同版本号被改了正文时唯一会变的那一项——登记册把那种情况判为
+// 需要商业责任方修正的冲突，此处若放过它，一份冒名的同号版本就能冒充被采用的那一个。
+func (version CommercialVersion) SameVersionAs(other CommercialVersion) bool {
+	return version.kind == other.kind &&
+		version.objectID == other.objectID &&
+		version.version == other.version &&
+		version.contentDigest == other.contentDigest
 }
 
 // Revise 修订草稿内容。已发布版本会拒绝：它的正文已经固定，变化必须形成新的版本。

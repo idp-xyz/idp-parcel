@@ -82,9 +82,24 @@ func sameReleasedContent(left, right CommercialVersion) bool {
 		left.effective.StartsAt().Equal(right.effective.StartsAt()) &&
 		leftBounded == rightBounded &&
 		(!leftBounded || leftEnd.Equal(rightEnd)) &&
+		sameDeclaredReferences(left, right) &&
 		left.approval.reference == right.approval.reference &&
 		left.approval.source == right.approval.source &&
 		left.approval.approvedAt.Equal(right.approval.approvedAt)
+}
+
+// sameDeclaredReferences 让指名引用参与「是不是同一次发布」的判定。少了它，同一版本号改
+// 挂另一个规则包会被读成重放而静默通过，而那正是一次需要商业责任方修正的内容冲突。
+func sameDeclaredReferences(left, right CommercialVersion) bool {
+	if len(left.references) != len(right.references) {
+		return false
+	}
+	for index, reference := range left.references {
+		if reference != right.references[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (registry *CommercialRegistry) Lookup(

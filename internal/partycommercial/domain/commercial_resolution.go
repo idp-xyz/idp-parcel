@@ -225,6 +225,10 @@ const (
 	AnchorPolicyNotConfigured
 	AuthorityUnreadable
 	CurrentResolutionChanged
+	// NamedReferenceNotConfirmed 说的是某个采用版本在正文里指名的对外引用，本次解析
+	// 确认不了它就是被采用的那一个。它是未决而不是`无适用依据`：权威并没有说这个范围
+	// 没有对象，是本次解析没能核实指名的那一个。
+	NamedReferenceNotConfirmed
 )
 
 func (reason ResolutionReason) String() string {
@@ -235,6 +239,8 @@ func (reason ResolutionReason) String() string {
 		return "AUTHORITY_UNREADABLE"
 	case CurrentResolutionChanged:
 		return "CURRENT_RESOLUTION_CHANGED"
+	case NamedReferenceNotConfirmed:
+		return "NAMED_REFERENCE_NOT_CONFIRMED"
 	default:
 		return ""
 	}
