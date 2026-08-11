@@ -44,10 +44,14 @@ func TestFrameworkMigrationsApplyAndSchemaCheckPasses(t *testing.T) {
 	}
 }
 
-// TestHistoryRecordsTheFrameworkArtifactIdentity 证历史表记下的是可追回不可变工件
-// 的那几项，而不只是「跑过了」。缺了 checksum 与框架版本，一个已部署的库就无法与
-// 某个精确候选对上。
-func TestHistoryRecordsTheFrameworkArtifactIdentity(t *testing.T) {
+// TestHistoryRecordsEachArtifactIdentity 证历史表记下的是可追回不可变工件的那几项，
+// 而不只是「跑过了」。缺了 checksum 与框架版本，一个已部署的库就无法与某个精确候选
+// 对上。
+//
+// 两种来源分别验，且期望不同：框架步骤的 checksum 取自框架清单并必须带框架版本；
+// 业务步骤的 checksum 由 Parcel 自己对文件内容算，且**不得**带框架版本——业务 SQL
+// 不属于任何框架候选，给它记一个版本号会让追溯指向一个它并不来自的工件。
+func TestHistoryRecordsEachArtifactIdentity(t *testing.T) {
 	dsn := pgtest.FreshDatabase(t)
 	ctx := t.Context()
 
@@ -56,12 +60,21 @@ func TestHistoryRecordsTheFrameworkArtifactIdentity(t *testing.T) {
 		t.Fatalf("施加迁移计划：%v", err)
 	}
 
-	expected := make(map[string]string)
-	for _, asset := range bentopg.Migrations() {
-		expected["framework/"+asset.ID] = asset.Checksum
+	plan, err := migrate.Plan()
+	if err != nil {
+		t.Fatalf("取迁移计划：%v", err)
 	}
-	if len(expected) == 0 {
-		t.Fatal("框架未提供迁移资产；本用例会空过")
+	expected := make(map[string]migrate.Step, len(plan))
+	frameworkCount := 0
+	for _, step := range plan {
+		expected[step.ID] = step
+		if step.Origin == migrate.OriginFramework {
+			frameworkCount++
+		}
+	}
+	if frameworkCount == 0 || len(expected) == frameworkCount {
+		t.Fatalf("计划里框架步骤 %d 条、总计 %d 条；两种来源都要有，否则本用例只验到一半",
+			frameworkCount, len(expected))
 	}
 
 	rows, err := conn.Query(ctx,
@@ -79,19 +92,26 @@ func TestHistoryRecordsTheFrameworkArtifactIdentity(t *testing.T) {
 		if err := rows.Scan(&id, &checksum, &frameworkVersion, &schema); err != nil {
 			t.Fatalf("扫描迁移历史：%v", err)
 		}
-		want, known := expected[id]
+		step, known := expected[id]
 		if !known {
 			t.Errorf("历史里出现计划外的迁移 %q", id)
 			continue
 		}
-		if checksum != want {
-			t.Errorf("%s 记录的 checksum 为 %q，框架清单为 %q", id, checksum, want)
+		if checksum != step.Checksum {
+			t.Errorf("%s 记录的 checksum 为 %q，计划为 %q", id, checksum, step.Checksum)
 		}
-		if frameworkVersion == nil || *frameworkVersion != migrate.FrameworkVersion {
-			t.Errorf("%s 记录的框架版本为 %v，应为 %q", id, frameworkVersion, migrate.FrameworkVersion)
+		if schema != step.Schema {
+			t.Errorf("%s 记录的 schema 为 %q，应为 %q", id, schema, step.Schema)
 		}
-		if schema != migrate.SchemaBento {
-			t.Errorf("%s 记录的 schema 为 %q，应为 %q", id, schema, migrate.SchemaBento)
+		switch step.Origin {
+		case migrate.OriginFramework:
+			if frameworkVersion == nil || *frameworkVersion != migrate.FrameworkVersion {
+				t.Errorf("%s 记录的框架版本为 %v，应为 %q", id, frameworkVersion, migrate.FrameworkVersion)
+			}
+		case migrate.OriginParcel:
+			if frameworkVersion != nil {
+				t.Errorf("%s 是业务迁移却记了框架版本 %q", id, *frameworkVersion)
+			}
 		}
 		seen++
 	}
@@ -99,7 +119,40 @@ func TestHistoryRecordsTheFrameworkArtifactIdentity(t *testing.T) {
 		t.Fatalf("读迁移历史：%v", err)
 	}
 	if seen != len(expected) {
-		t.Errorf("历史记录 %d 条，框架清单 %d 条", seen, len(expected))
+		t.Errorf("历史记录 %d 条，计划 %d 条", seen, len(expected))
+	}
+}
+
+// TestFrameworkChecksumsComeFromTheFrameworkManifest 证框架步骤的校验和不是自己算的。
+// 自己对渲染结果算等于给同一件事立第二个口径，模板被复制改写后两边会一起变，
+// 漂移检测就失效了。
+func TestFrameworkChecksumsComeFromTheFrameworkManifest(t *testing.T) {
+	t.Parallel()
+
+	manifest := make(map[string]string)
+	for _, asset := range bentopg.Migrations() {
+		manifest["framework/"+asset.ID] = asset.Checksum
+	}
+	if len(manifest) == 0 {
+		t.Fatal("框架未提供迁移资产；本用例会空过")
+	}
+
+	plan, err := migrate.Plan()
+	if err != nil {
+		t.Fatalf("取迁移计划：%v", err)
+	}
+	for _, step := range plan {
+		if step.Origin != migrate.OriginFramework {
+			continue
+		}
+		want, known := manifest[step.ID]
+		if !known {
+			t.Errorf("计划里的框架步骤 %q 不在框架清单中", step.ID)
+			continue
+		}
+		if step.Checksum != want {
+			t.Errorf("%s 的 checksum 为 %q，框架清单为 %q", step.ID, step.Checksum, want)
+		}
 	}
 }
 

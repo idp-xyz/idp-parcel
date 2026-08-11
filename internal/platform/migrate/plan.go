@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"go.idp.xyz/idp-bento-go/postgres"
+
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
 // 迁移作业在施加计划前创建的 schema。框架技术表留在自己的 schema 里，业务迁移
@@ -13,6 +15,8 @@ import (
 const (
 	// SchemaBento 归框架的技术表所有。
 	SchemaBento = "bento"
+	// SchemaParcelShipment 归 parcel-shipment 的业务表所有。
+	SchemaParcelShipment = "parcel_shipment"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -45,19 +49,47 @@ type Step struct {
 	UpSQL            string
 }
 
-// Plan 返回 Parcel 施加的有序迁移历史。
+// Plan 返回 Parcel 施加的有序迁移历史：先框架技术表，后业务表。
 //
-// 当前只含框架那一半。业务迁移要按 `parcel_shipment` 的表形状写，而那取决于尚在
-// 成形的领域模型；先摆一个空的业务目录不会让任何东西更早可用，只会多一处将来要
-// 改的空壳。`PBC-06` 要证的恰好也只是框架迁移这一半。
+// 框架在前不是习惯问题：业务表可以引用框架已建立的东西，反过来不成立——框架的
+// 迁移模板不知道任何业务上下文的存在。
 func Plan() ([]Step, error) {
-	return frameworkSteps()
+	steps, err := frameworkSteps()
+	if err != nil {
+		return nil, err
+	}
+	business, err := parcelShipmentSteps()
+	if err != nil {
+		return nil, err
+	}
+	return append(steps, business...), nil
 }
 
 // Schemas 返回迁移作业在施加计划前创建的 schema。生产 API 与 Outbox 账号不持有
 // 创建它们的权限。
 func Schemas() []string {
-	return []string{SchemaHistory, SchemaBento}
+	return []string{SchemaHistory, SchemaBento, SchemaParcelShipment}
+}
+
+func parcelShipmentSteps() ([]Step, error) {
+	assets, err := migrations.ParcelShipment()
+	if err != nil {
+		return nil, err
+	}
+
+	steps := make([]Step, 0, len(assets))
+	for _, asset := range assets {
+		steps = append(steps, Step{
+			ID:     asset.Module + "/" + asset.Name,
+			Origin: OriginParcel,
+			Schema: SchemaParcelShipment,
+			// 业务迁移的校验和由 Parcel 自己对文件内容计算；框架那半取框架清单里
+			// 的值。两者不混：模板归框架认定，自有 SQL 归自己认定。
+			Checksum: asset.Checksum,
+			UpSQL:    asset.SQL,
+		})
+	}
+	return steps, nil
 }
 
 func frameworkSteps() ([]Step, error) {
