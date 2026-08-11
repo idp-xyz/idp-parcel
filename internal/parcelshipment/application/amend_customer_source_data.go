@@ -20,6 +20,7 @@ const (
 	AmendmentDisallowed
 	AmendmentAlreadyHandled
 	AmendmentSourceConflict
+	AmendmentUndecided
 )
 
 func (outcome AmendmentOutcome) String() string {
@@ -36,6 +37,8 @@ func (outcome AmendmentOutcome) String() string {
 		return "ALREADY_HANDLED"
 	case AmendmentSourceConflict:
 		return "SOURCE_CONFLICT"
+	case AmendmentUndecided:
+		return "UNDECIDED"
 	default:
 		return ""
 	}
@@ -60,11 +63,13 @@ type AmendCustomerSourceDataCommand struct {
 }
 
 type AmendCustomerSourceDataResult struct {
-	outcome     AmendmentOutcome
-	version     domain.CustomerSourceDataVersion
-	hasVersion  bool
-	adoption    domain.SourceDataAdoptionJudgment
-	hasAdoption bool
+	outcome      AmendmentOutcome
+	version      domain.CustomerSourceDataVersion
+	hasVersion   bool
+	adoption     domain.SourceDataAdoptionJudgment
+	hasAdoption  bool
+	reason       JudgmentPendingReason
+	continuation domain.OwnershipContinuationReference
 }
 
 func (result AmendCustomerSourceDataResult) Outcome() AmendmentOutcome {
@@ -79,6 +84,16 @@ func (result AmendCustomerSourceDataResult) Version() (domain.CustomerSourceData
 // 采用判断说的是下游此刻该消费哪一份，两者在分叉时并不是同一个。
 func (result AmendCustomerSourceDataResult) Adoption() (domain.SourceDataAdoptionJudgment, bool) {
 	return result.adoption, result.hasAdoption
+}
+
+// PendingReason 指名本轮为何没能形成结果。它是封闭取值而非自由文本，未决才按依赖阶段统计得
+// 出来；同一个集合与决定期那几例共用，理由见 judgment_continuation.go。
+func (result AmendCustomerSourceDataResult) PendingReason() JudgmentPendingReason {
+	return result.reason
+}
+
+func (result AmendCustomerSourceDataResult) ContinuationReference() domain.OwnershipContinuationReference {
+	return result.continuation
 }
 
 type AmendCustomerSourceDataDeps struct {
@@ -127,9 +142,12 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("find shipment request: %w", err)
+		return handler.undecided(command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
+		// 命令指名了一份不存在的委托。这不是依赖答不出，而是调用方对世界的判断就是错的，
+		// 因此上抛而不是形成未决。接 HTTP 时它必须映射为`统一不可见结果`，理由与出处见
+		// form_acceptance_decision.go：否定结果不区分「不存在」与「属于别的租户」。
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
 	}
 
@@ -143,7 +161,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		},
 	)
 	if err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("authorize source data amendment: %w", err)
+		// 授权服务答不出不是「这个人不能改」：后者续办补不出授权来，前者重试就好。判成未获
+		// 授权会让客户以为自己越权，而真相是我们没问到。
+		return handler.undecided(command, SourceDataAmendmentAuthorityUnavailable), nil
 	}
 	if authorization.Authority.String() == "" {
 		// 未获授权是确定的业务答案，不是未决：续办也补不出授权来，重试只会得到同一个答案。
@@ -157,7 +177,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		Reason:   command.Reason,
 	})
 	if err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("declare source data amendment: %w", err)
+		// 矩阵读不回与矩阵答「没有这条」分开：后者等的是有人去 `PAR-COM-13` 登记，前者等的
+		// 是依赖恢复。合成一格，续办方就不知道该催人还是该重试。
+		return handler.undecided(command, SourceDataRuleUnavailable), nil
 	}
 	if allowance != ports.SourceDataAmendmentAllowed {
 		// 闸门对齐到`允许`这一格：`UC-PS-002`「未登记时只能形成未决或业务拒绝，不能以系统
@@ -175,7 +197,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 
 	versionID, err := handler.deps.Identities.NextSourceDataVersionID(ctx)
 	if err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("next source data version ID: %w", err)
+		return handler.undecided(command, SourceDataVersionIdentityUnavailable), nil
 	}
 
 	version, err := domain.FormCustomerSourceDataVersion(domain.CustomerSourceDataVersionSpec{
@@ -199,7 +221,9 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", err)
 	}
 	if err := handler.deps.Requests.Save(ctx, command.Identity, amended); err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("save amended shipment request: %w", err)
+		// 版本已形成但没落库。不交回`已记录并采用`：用例明禁「不得返回已采用或业务拒绝」，
+		// 而下游按一份并不存在的版本办事会直接扑空。本轮的续办引用就是重放这次修订的凭据。
+		return handler.undecided(command, AmendedRequestNotSaved), nil
 	}
 
 	adoption, derived := amended.CurrentSourceDataAdoption(command.Scope)
@@ -241,12 +265,50 @@ func (handler *AmendCustomerSourceDataHandler) resolvePreserved(
 
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
-		return AmendCustomerSourceDataResult{}, fmt.Errorf("find shipment request: %w", err)
+		return handler.undecided(command, ShipmentRequestUnavailable), nil
 	}
 	if !found {
+		// 同上一处：查不到是调用方的错，接 HTTP 时同样映射为`统一不可见结果`。
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
 	}
 	return handler.existing(request, command.AmendmentIdentity), nil
+}
+
+// undecided 交回本轮的未决结果：封闭原因加一个续办引用，而不是一个 error——用例要求未决同时
+// 给出原因与安全续办入口，两样 error 都给不出。
+//
+// 它不往接受判断任务上记处理尝试，这一点与决定期那几例不同：资料修订发生在委托`已接受`之后，
+// 那件任务已经完成，把修订的未决追加上去会让一件办完的任务重新看起来卡着。
+func (handler *AmendCustomerSourceDataHandler) undecided(
+	command AmendCustomerSourceDataCommand,
+	reason JudgmentPendingReason,
+) AmendCustomerSourceDataResult {
+	return AmendCustomerSourceDataResult{
+		outcome:      AmendmentUndecided,
+		reason:       reason,
+		continuation: handler.continuationReference(command, reason),
+	}
+}
+
+// continuationReference 由停下原因与本次修订的范围共同派生，因此同一次修订因同一原因停下时
+// 拿到的引用始终相同，续办方据以查回原次尝试而不必靠猜。
+//
+// 范围取修订请求自己的身份加资料范围，不取委托加提交版本：同一份已接受委托上可以并行有多处
+// 修订，按委托派生会让它们全部收敛到同一个引用，续办方就分不出该重放哪一次。
+func (handler *AmendCustomerSourceDataHandler) continuationReference(
+	command AmendCustomerSourceDataCommand,
+	reason JudgmentPendingReason,
+) domain.OwnershipContinuationReference {
+	parcelID, _ := command.Scope.DeclaredParcelID()
+	return judgmentContinuation(
+		reason,
+		command.AmendmentIdentity.TenantID().String(),
+		command.AmendmentIdentity.CustomerAccountID().String(),
+		command.AmendmentIdentity.RequestKey().String(),
+		command.Scope.ShipmentRequestID().String(),
+		parcelID.String(),
+		command.Scope.DataGroup().String(),
+	)
 }
 
 // existing 读回这次修订请求当初形成的那份版本。版本自带形成它的那次请求指纹，所以不必另存一张

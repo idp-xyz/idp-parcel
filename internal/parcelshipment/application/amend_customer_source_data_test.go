@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -213,6 +214,162 @@ func TestAnAmendmentSourceConflictNeitherOverwritesNorFormsASecondVersion(t *tes
 	}
 }
 
+// Covers: UC-PS-002 步骤 4「依赖无法确定形成待复核」与业务未决结束「规则或授权无法确定」。
+//
+// 授权服务答不出与「这个人不能改这处资料」是两回事：后者续办也补不出授权来，前者重试就好。
+// 判成未获授权会让客户以为自己越权，而真相是我们没问到；判成技术错误则连未决原因与续办引用
+// 都给不出，而用例两样都要。
+func TestAnUnavailableAmendmentAuthorizerIsUndecidedRatherThanUnauthorized(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.authorizer.err = errors.New("party-commercial unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED; an unreachable authorizer is not an answer about authority", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataAmendmentAuthorityUnavailable {
+		t.Fatalf("reason = %q, want SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE", result.PendingReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("an undecided round left no continuation reference; the caller cannot resume what it cannot name")
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("an undecided round formed a version anyway")
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d version IDs; an undecided round consumed a scarce identity", fixture.identities.issued)
+	}
+}
+
+// Covers: 同一条业务未决语义的规则一侧 — 「规则……无法确定」。
+//
+// 与未登记分开：未登记是矩阵答了「没有这条」，等的是有人去 `PAR-COM-13` 登记；读不回是矩阵没
+// 答上话，等的是依赖恢复。合成一格，续办方就不知道该催人还是该重试。
+func TestAnUnreadableSourceDataRuleIsUndecidedRatherThanAwaitingReview(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.rules.err = errors.New("rule declaration unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED; an unreadable matrix is not the same as an unregistered one", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataRuleUnavailable {
+		t.Fatalf("reason = %q, want SOURCE_DATA_RULE_UNAVAILABLE", result.PendingReason())
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d version IDs; an undecided round consumed a scarce identity", fixture.identities.issued)
+	}
+}
+
+// Covers: UC-PS-002`技术未形成`「原始请求已保全，但版本提交或发布意图未完成」与「处理阶段、
+// 失败位置和安全续办引用」— 签发不出版本标识时停在未决，来源已保全的事实不因此丢失。
+func TestAnUnavailableVersionIdentityLeavesTheRequestUndecidedAndResumable(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.identities.err = errors.New("identity factory unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataVersionIdentityUnavailable {
+		t.Fatalf("reason = %q, want SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE", result.PendingReason())
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("a round that formed no version saved the request anyway")
+	}
+	// 来源仍在：`技术未形成`的前提就是「原始请求已保全」，丢了它这一轮连续办都无从认领。
+	if _, preserved := fixture.sources.stored(t, amendmentSourceIdentity(t)); !preserved {
+		t.Fatal("an undecided round dropped the preserved source")
+	}
+}
+
+// Covers: 同一条`技术未形成`的另一处失败位置 — 版本已形成但没落库。
+//
+// 不交回`已记录并采用`：用例明禁「不得返回已采用或业务拒绝」。版本没存住，下游按它办事就会
+// 扑空，而本轮交回的续办引用正是让它重放同一次修订的凭据。
+func TestAnUnsavedAmendmentIsUndecidedRatherThanRecorded(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.requests.saveErr = errors.New("storage unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.AmendedRequestNotSaved {
+		t.Fatalf("reason = %q, want AMENDED_REQUEST_NOT_SAVED", result.PendingReason())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("a version that never reached storage was reported as formed")
+	}
+}
+
+// Covers: 同一条业务未决语义在委托读取一侧 — 依赖答不出与「指名了一份不存在的委托」分开。
+//
+// 后者仍上抛（调用方对世界的判断就是错的），前者是依赖抖动，重试就好。两者都写成错误的话，
+// 一次存储抖动会被记成调用方的编程错误。
+func TestAnUnreadableShipmentRequestIsUndecidedRatherThanAnError(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.requests.err = errors.New("storage unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.ShipmentRequestUnavailable {
+		t.Fatalf("reason = %q, want SHIPMENT_REQUEST_UNAVAILABLE", result.PendingReason())
+	}
+	if fixture.authorizer.calls != 0 {
+		t.Fatalf("authorized %d times; a round that never read the request went on to ask about authority", fixture.authorizer.calls)
+	}
+}
+
+// Covers: `judgment_continuation.go`「原因参与派生也意味着停在不同阶段的两次未决给出不同引用」。
+//
+// 两轮的范围完全一致，唯一的变量是原因；引用一旦相同就说明原因根本没进派生，那样所有按原因
+// 区分的续办断言都是假的。这一条钉的是派生本身，不是某一个调用点。
+func TestTwoDifferentAmendmentStoppingCausesNeverShareOneContinuation(t *testing.T) {
+	unavailableAuthorizer := newAmendmentFixture(t)
+	unavailableAuthorizer.authorizer.err = errors.New("party-commercial unreachable")
+	authorityStop, err := unavailableAuthorizer.handler.Handle(context.Background(), unavailableAuthorizer.command(t))
+	if err != nil {
+		t.Fatalf("handle with unavailable authorizer: %v", err)
+	}
+
+	unreadableRules := newAmendmentFixture(t)
+	unreadableRules.rules.err = errors.New("rule declaration unreachable")
+	ruleStop, err := unreadableRules.handler.Handle(context.Background(), unreadableRules.command(t))
+	if err != nil {
+		t.Fatalf("handle with unreadable rules: %v", err)
+	}
+
+	if authorityStop.ContinuationReference() == ruleStop.ContinuationReference() {
+		t.Fatalf(
+			"both stopping causes derived %q; the reason does not participate in the derivation",
+			authorityStop.ContinuationReference(),
+		)
+	}
+}
+
 type amendmentFixture struct {
 	handler    *application.AmendCustomerSourceDataHandler
 	sources    *sourceRepositoryDouble
@@ -289,9 +446,10 @@ func (value *amendmentFixture) command(t *testing.T) application.AmendCustomerSo
 // 保存过就交回保存的那一份，而不是每次都重新造：重放与冲突都要跨两次调用才谈得上，每次交回
 // 一份干净委托等于让第二次调用看不见第一次的版本，「不能创建第二个资料版本」也就无从断言。
 type amendableRequestStore struct {
-	t     *testing.T
-	err   error
-	saved *domain.ShipmentRequest
+	t       *testing.T
+	err     error
+	saveErr error
+	saved   *domain.ShipmentRequest
 }
 
 func (store *amendableRequestStore) FindBySourceIdentity(
@@ -321,6 +479,9 @@ func (store *amendableRequestStore) Save(
 	_ domain.SourceIdentity,
 	request domain.ShipmentRequest,
 ) error {
+	if store.saveErr != nil {
+		return store.saveErr
+	}
 	store.saved = &request
 	return nil
 }
@@ -419,6 +580,7 @@ func (double *sourceDataRuleDouble) DeclareSourceDataAmendment(
 
 type sourceDataIdentityFactory struct {
 	t      *testing.T
+	err    error
 	issued int
 }
 
@@ -426,6 +588,9 @@ func (factory *sourceDataIdentityFactory) NextSourceDataVersionID(
 	_ context.Context,
 ) (domain.SourceDataVersionID, error) {
 	factory.t.Helper()
+	if factory.err != nil {
+		return domain.SourceDataVersionID{}, factory.err
+	}
 	factory.issued++
 	return mustValue(factory.t, domain.NewSourceDataVersionID, "data-version-1"), nil
 }

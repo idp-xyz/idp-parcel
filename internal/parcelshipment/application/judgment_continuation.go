@@ -45,6 +45,10 @@ const (
 	CustomerSupplementPending
 	ManualReviewPending
 	WithdrawalAuthorityUnavailable
+	SourceDataAmendmentAuthorityUnavailable
+	SourceDataRuleUnavailable
+	SourceDataVersionIdentityUnavailable
+	AmendedRequestNotSaved
 )
 
 // resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的三个等待态一一对应。
@@ -103,6 +107,14 @@ func (reason JudgmentPendingReason) String() string {
 		return "MANUAL_REVIEW_PENDING"
 	case WithdrawalAuthorityUnavailable:
 		return "WITHDRAWAL_AUTHORITY_UNAVAILABLE"
+	case SourceDataAmendmentAuthorityUnavailable:
+		return "SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE"
+	case SourceDataRuleUnavailable:
+		return "SOURCE_DATA_RULE_UNAVAILABLE"
+	case SourceDataVersionIdentityUnavailable:
+		return "SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE"
+	case AmendedRequestNotSaved:
+		return "AMENDED_REQUEST_NOT_SAVED"
 	default:
 		return ""
 	}
