@@ -174,6 +174,9 @@ func TestAnUnavailableWithdrawalAuthorizerIsUndecidedRatherThanUnauthorized(t *t
 
 // Covers: judgmentContinuation 的派生约定「同一范围因同一原因停滞时拿到的引用始终相同」——
 // 同一笔冻结释放失败，撤回与主动拒绝必须给出同一个续办引用；三条路径共用一个补偿身份。
+//
+// 第三条路径由 reject_shipment_request_test.go 的「两条拒绝路径同引用」接上：那里比的是主动
+// 拒绝与规则拒绝，与本测试共用主动拒绝这一端，三条因而首尾相连。
 func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) {
 	withdrawal := newWithdrawalFixture(t)
 	withdrawal.release.err = errors.New("settlement authority unavailable")
@@ -195,6 +198,95 @@ func TestWithdrawalAndRejectionDeriveTheSameCompensationReference(t *testing.T) 
 		t.Fatalf(
 			"withdrawal %q, rejection %q; one pending compensation must carry one continuation whichever path ended the acceptance",
 			byWithdrawal.CompensationReference(), byRejection.CompensationReference(),
+		)
+	}
+}
+
+// Covers: judgmentContinuation 的派生约定「停在不同阶段的两次未决给出不同引用，用例要求二者
+// 分别统计、各走各的续办路径」——同一份委托因两种不同原因停下，绝不能收敛成同一个引用。
+//
+// 拒绝那条路上同一条性质已由 `TestBothRejectionPathsDeriveTheSameCompensationReference` 挡住，
+// 但撤回有自己的 compensationReference 与自己的两个调用点：那边全绿也拦不住这边把原因写岔。
+// `RecordedJudgmentsUnavailable`（判断读不回来，压根不知道该释放哪一笔）与 `ControlReleasePending`
+// （关联清楚，释放没确认完成）要补的东西完全不同，而只断言引用非空的测试对写岔是全盲的。
+func TestTwoDifferentStoppingCausesNeverShareOneCompensationReference(t *testing.T) {
+	unreadable := newWithdrawalFixture(t)
+	unreadable.judgments.err = errors.New("recorded judgement store unavailable")
+
+	byUnreadableJudgments, err := unreadable.handler.Handle(context.Background(), unreadable.command(t))
+	if err != nil {
+		t.Fatalf("handle the withdrawal whose judgements were unreadable: %v", err)
+	}
+
+	unreleased := newWithdrawalFixture(t)
+	unreleased.release.err = errors.New("settlement authority unavailable")
+
+	byPendingRelease, err := unreleased.handler.Handle(context.Background(), unreleased.command(t))
+	if err != nil {
+		t.Fatalf("handle the withdrawal whose release failed: %v", err)
+	}
+
+	if byUnreadableJudgments.CompensationReference().String() == "" {
+		t.Fatal("unreadable judgements left no continuation to resume the compensation")
+	}
+	if byPendingRelease.CompensationReference().String() == "" {
+		t.Fatal("a failed release left no continuation to resume the compensation")
+	}
+	if byUnreadableJudgments.CompensationReference().String() == byPendingRelease.CompensationReference().String() {
+		t.Fatalf(
+			"both stops derived %q; a compensation that never knew which freeze to release must not be filed as one that failed to release a known freeze",
+			byPendingRelease.CompensationReference(),
+		)
+	}
+
+	// 上面那条不相等挡不住原因写岔：释放失败那一轮比判断读不回来那一轮多带一个控制关联，光凭
+	// 范围就已经不同，两个调用点即便共用同一个原因也照样不相等。真正把原因钉住的是跨路径相等
+	// ——主动拒绝在同一处停下时给的是同一个范围同一个原因，两边必须逐字一致。
+	byRejection := newRejectionFixture(t)
+	byRejection.judgments.err = errors.New("recorded judgement store unavailable")
+
+	rejected, err := byRejection.handler.Handle(context.Background(), byRejection.command(t))
+	if err != nil {
+		t.Fatalf("handle the rejection whose judgements were unreadable: %v", err)
+	}
+	if byUnreadableJudgments.CompensationReference().String() != rejected.CompensationReference().String() {
+		t.Fatalf(
+			"withdrawal %q, rejection %q; one unresolved association must carry one continuation whichever path ended the acceptance",
+			byUnreadableJudgments.CompensationReference(), rejected.CompensationReference(),
+		)
+	}
+}
+
+// Covers: judgmentContinuation「由未决原因与判断范围共同派生」——原因必须真的参与派生。
+//
+// 前一个测试只能证明两个引用不同，而不同也可能全部来自范围：释放失败那一条比判断读不回来那
+// 一条多带一个控制关联。这里两轮的范围完全一致，剩下的变量只有原因，所以引用一旦相同就说明
+// 原因根本没进派生——那样一来所有按原因区分的断言都是假的，包括上一个测试。
+func TestTheReasonItselfParticipatesInTheContinuationDerivation(t *testing.T) {
+	undecided := newWithdrawalFixture(t)
+	undecided.authorizer.err = errors.New("party-commercial authority service unavailable")
+
+	byUnavailableAuthority, err := undecided.handler.Handle(context.Background(), undecided.command(t))
+	if err != nil {
+		t.Fatalf("handle the withdrawal whose authorizer was unavailable: %v", err)
+	}
+	if byUnavailableAuthority.PendingReason() != application.WithdrawalAuthorityUnavailable {
+		t.Fatalf("pending reason = %q, want WITHDRAWAL_AUTHORITY_UNAVAILABLE", byUnavailableAuthority.PendingReason())
+	}
+
+	unreadable := newWithdrawalFixture(t)
+	unreadable.judgments.err = errors.New("recorded judgement store unavailable")
+
+	byUnreadableJudgments, err := unreadable.handler.Handle(context.Background(), unreadable.command(t))
+	if err != nil {
+		t.Fatalf("handle the withdrawal whose judgements were unreadable: %v", err)
+	}
+
+	// 两条路径的范围同为租户、客户、委托与判断版本四项，没有附加范围。
+	if byUnavailableAuthority.ContinuationReference().String() == byUnreadableJudgments.CompensationReference().String() {
+		t.Fatalf(
+			"both derived %q at one identical scope; the reason is not participating in the derivation, so no reference can tell two stopping causes apart",
+			byUnavailableAuthority.ContinuationReference(),
 		)
 	}
 }
