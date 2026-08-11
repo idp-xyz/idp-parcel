@@ -33,8 +33,17 @@ func TestAcceptanceJudgmentResolvesBasisThenFormsAsOfThenAssesses(t *testing.T) 
 	if result.Outcome() != application.AcceptanceJudgmentAdvanced {
 		t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
 	}
-	if got, want := fixture.calls, []string{"resolve-commercial-basis", "assess-reachability"}; !slices.Equal(got, want) {
+	// 三步都要出现且按序：第二阶段在类型和测试中可见是 UC-PC-002 第 114 行的要求，缺了它，
+	// 「值由谁形成」就退回到编排自己拿时钟顶。
+	if got, want := fixture.calls, []string{
+		"resolve-commercial-basis",
+		"form-judgment-as-of",
+		"assess-reachability",
+	}; !slices.Equal(got, want) {
 		t.Fatalf("call order = %v, want %v", got, want)
+	}
+	if kind := fixture.commercial.lastAsOfQuery.Declared.Kind(); kind != domain.ReachabilityJudgmentKind {
+		t.Fatalf("second stage asked for %q, want REACHABILITY——按类取时点被退化成取第一个", kind)
 	}
 
 	requested := fixture.reachability.lastAsOf
@@ -90,15 +99,20 @@ func TestUnreachableIsRecordedWithoutRejectingTheRequest(t *testing.T) {
 // Covers: UC-NR-002 启动条件「商业解析暂时不可用时不能伪造商业资格」— 没有唯一商业依据
 // 就不发起可达性判断，委托保持未决。
 func TestNoReachabilityRequestWithoutAUniqueCommercialBasis(t *testing.T) {
-	nonApplicable := map[string]domain.CommercialApplicability{
-		"no applicable basis": domain.CommerciallyNotApplicable,
-		"resolution pending":  domain.CommercialApplicabilityUndetermined,
+	// 两支各有各的未决原因：`确定不适用`是权威说了没有适用依据，`解析未决`是权威没得出答案。
+	// 压成一格会让一次读取失败看起来像这个客户没有合同。
+	nonApplicable := map[string]struct {
+		applicability domain.CommercialApplicability
+		reason        application.JudgmentPendingReason
+	}{
+		"no applicable basis": {domain.CommerciallyNotApplicable, application.CommercialBasisNotApplicable},
+		"resolution pending":  {domain.CommercialApplicabilityUndetermined, application.CommercialBasisUndetermined},
 	}
 
-	for name, applicability := range nonApplicable {
+	for name, want := range nonApplicable {
 		t.Run(name, func(t *testing.T) {
 			fixture := newJudgmentFixture(t)
-			fixture.commercial.applicability = applicability
+			fixture.commercial.applicability = want.applicability
 
 			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 			if err != nil {
@@ -119,8 +133,8 @@ func TestNoReachabilityRequestWithoutAUniqueCommercialBasis(t *testing.T) {
 			}
 			// 缺商业依据与缺时点声明停在不同阶段，未决原因与续办路径都必须不同：用例
 			// 要求未决按原因维度分别统计，两条路径并成一条就把两种缺口混作一种。
-			if result.PendingReason() != application.CommercialBasisNotUnique {
-				t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_NOT_UNIQUE", result.PendingReason())
+			if result.PendingReason() != want.reason {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), want.reason)
 			}
 			if result.ContinuationReference().String() == undeclaredReachabilityAsOfContinuation(t) {
 				t.Fatal("a missing commercial basis continues under the same reference as an undeclared asOf")
@@ -268,6 +282,109 @@ func TestUndeclaredAsOfPolicyStopsBeforeAssessing(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0025「翻译必须是全函数：每个取值都要有明确落点」与 ADR-0027 — 第二阶段四种
+// 未成形要采取的动作互不相同：`未配置`等租户把 `PAR-COM-14` 的时点策略登记上，`未决`等依赖
+// 恢复，`值被拒`要本方改这次请求，`依据未解析`要回第一阶段重解。压成一格，一个没配置的租户
+// 参数就会被无休止内部重试，而重试永远等不到一次登记。
+func TestEachUnformedAsOfOutcomeStallsUnderItsOwnReason(t *testing.T) {
+	cases := map[ports.JudgmentAsOfOutcome]application.JudgmentPendingReason{
+		ports.JudgmentAsOfBasisNotResolved: application.ReachabilityAsOfBasisNotResolved,
+		ports.JudgmentAsOfNotConfigured:    application.ReachabilityAsOfNotConfigured,
+		ports.JudgmentAsOfPending:          application.ReachabilityAsOfUnavailable,
+		ports.JudgmentAsOfValueRejected:    application.ReachabilityAsOfValueRejected,
+		ports.JudgmentAsOfInputNotAccepted: application.ReachabilityAsOfInputNotAccepted,
+	}
+
+	seen := make(map[string]ports.JudgmentAsOfOutcome, len(cases))
+	for outcome, want := range cases {
+		t.Run(outcome.String(), func(t *testing.T) {
+			fixture := newJudgmentFixture(t)
+			fixture.commercial.asOfOutcome = outcome
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.AcceptanceJudgmentUndecided {
+				t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+			}
+			if result.PendingReason() != want {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), want)
+			}
+			if fixture.reachability.calls != 0 {
+				t.Fatal("时点没能形成，可达性权威却已经被问过了")
+			}
+		})
+
+		// 续办引用由原因派生，四种未成形因此必须落在四个引用上——否则调用方按引用查回来的
+		// 是另一种缺口，催的也是另一个人。
+		fixture := newJudgmentFixture(t)
+		fixture.commercial.asOfOutcome = outcome
+		result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		reference := result.ContinuationReference().String()
+		if reference == "" {
+			t.Fatalf("%q 未决却没有续办引用", outcome)
+		}
+		if clash, exists := seen[reference]; exists {
+			t.Fatalf("%q 与 %q 共用续办引用 %q", outcome, clash, reference)
+		}
+		seen[reference] = outcome
+	}
+}
+
+// Covers: ADR-0025「翻译必须是全函数」与 UC-NR-002 —「请求冲突」和「未受理」是业务答案而非
+// 技术故障，调用方必须能据以纠正这次请求。它们与「未形成判断」压成一格时，前两者会被当成
+// 故障走内部重试，而重试改不了一个拼错或冲突的请求。
+func TestARejectedRequestIsAnAnswerNotAFailure(t *testing.T) {
+	cases := map[ports.ReachabilityOutcome]application.JudgmentPendingReason{
+		ports.ReachabilityNotFormed:          application.ReachabilityJudgmentNotFormed,
+		ports.ReachabilityRequestConflict:    application.ReachabilityRequestConflict,
+		ports.ReachabilityRequestNotAccepted: application.ReachabilityRequestNotAccepted,
+	}
+
+	seen := make(map[string]ports.ReachabilityOutcome, len(cases))
+	for outcome, want := range cases {
+		fixture := newJudgmentFixture(t)
+		fixture.reachability.outcome = outcome
+
+		result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+		if err != nil {
+			t.Fatalf("%q: handle 上抛了错误，而它是一个业务答案: %v", outcome, err)
+		}
+		if result.Outcome() != application.AcceptanceJudgmentUndecided {
+			t.Fatalf("%q: outcome = %q, want UNDECIDED", outcome, result.Outcome())
+		}
+		if result.PendingReason() != want {
+			t.Fatalf("%q: pending reason = %q, want %q", outcome, result.PendingReason(), want)
+		}
+		if _, present := result.ReachabilityJudgment(); present {
+			t.Fatalf("%q 却交回了一份判断", outcome)
+		}
+
+		reference := result.ContinuationReference().String()
+		if clash, exists := seen[reference]; exists {
+			t.Fatalf("%q 与 %q 共用续办引用 %q——纠正请求与重试依赖被并成了一条路", outcome, clash, reference)
+		}
+		seen[reference] = outcome
+	}
+}
+
+// Covers: judgment_continuation.go 的分界「依赖答不出是业务结果，取回的东西根本不属于这个
+// 请求则是编程错误」— 第二阶段交回封闭集合以外的答复属后者，上抛而不是编出一个未决原因。
+func TestAnAsOfOutcomeOutsideTheClosedSetIsRaisedNotTranslated(t *testing.T) {
+	fixture := newJudgmentFixture(t)
+	fixture.commercial.asOfOutcome = ports.JudgmentAsOfOutcome(200)
+
+	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if !errors.Is(err, application.ErrUnexpectedAsOfOutcome) {
+		t.Fatalf("err = %v, want ErrUnexpectedAsOfOutcome——集合外的答复被静默译成了某个未决原因", err)
+	}
+}
+
 type judgmentFixture struct {
 	handler      *application.AdvanceAcceptanceJudgmentHandler
 	commercial   *commercialBasisDouble
@@ -320,6 +437,15 @@ type commercialBasisDouble struct {
 	err                          error
 	record                       func(string)
 	calls                        int
+
+	// 第二阶段：默认形成，测试按需改成四种未成形之一或让端口自己答不出。
+	asOfOutcome         ports.JudgmentAsOfOutcome
+	asOfErr             error
+	asOfCalls           int
+	lastAsOfQuery       ports.JudgmentAsOfQuery
+	revalidateCalls     int
+	lastRevalidation    ports.CommercialRevalidationQuery
+	revalidationOutcome ports.CommercialRevalidationOutcome
 }
 
 func (double *commercialBasisDouble) ResolveCommercialBasis(
@@ -342,26 +468,10 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 	}
 	policies := []domain.DeclaredAsOf{}
 	if double.declaresReachabilityAsOf {
-		policy, err := domain.NewDeclaredAsOf(
-			domain.ReachabilityJudgmentKind,
-			policyFormedAsOf,
-			mustValue(double.t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
-		)
-		if err != nil {
-			double.t.Fatalf("new declared asOf: %v", err)
-		}
-		policies = append(policies, policy)
+		policies = append(policies, declaredAsOfFor(double.t, domain.ReachabilityJudgmentKind))
 	}
 	if double.declaresFinancialControlAsOf {
-		policy, err := domain.NewDeclaredAsOf(
-			domain.FinancialControlJudgmentKind,
-			controlPolicyFormedAsOf,
-			mustValue(double.t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
-		)
-		if err != nil {
-			double.t.Fatalf("new declared asOf: %v", err)
-		}
-		policies = append(policies, policy)
+		policies = append(policies, declaredAsOfFor(double.t, domain.FinancialControlJudgmentKind))
 	}
 
 	// 适用集合由规则包声明，因此夹具给出而不是被测代码兜底。默认声明的两组正是今天有
@@ -395,9 +505,111 @@ func (double *commercialBasisDouble) ResolveCommercialBasis(
 	}, nil
 }
 
+// declaredAsOfFor 造一份规则包声明。它不带时刻——值由适配器在第二阶段形成，声明这一头只有
+// 语义与政策版本。
+func declaredAsOfFor(t *testing.T, kind domain.JudgmentKind) domain.DeclaredAsOf {
+	t.Helper()
+	declared, err := domain.NewDeclaredAsOf(
+		kind,
+		mustValue(t, domain.NewAsOfSemanticsReference, "ASOF-SEMANTICS-"+kind.String()),
+		mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
+	)
+	if err != nil {
+		t.Fatalf("new declared asOf: %v", err)
+	}
+	return declared
+}
+
+// formedAsOfFor 造一份已由提供方校验回显的时点，供夹具冒充第二阶段的成功答复。回显政策
+// 必须另行构造——把第一阶段的声明直接塞进 NewJudgmentAsOf 已经编译不过。
+func formedAsOfFor(t *testing.T, kind domain.JudgmentKind, at time.Time) domain.JudgmentAsOf {
+	t.Helper()
+	echoed, err := domain.NewEchoedAsOfPolicy(
+		kind,
+		mustValue(t, domain.NewAsOfSemanticsReference, "ASOF-SEMANTICS-"+kind.String()),
+		mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
+	)
+	if err != nil {
+		t.Fatalf("new echoed asOf policy: %v", err)
+	}
+	asOf, err := domain.NewJudgmentAsOf(at, echoed)
+	if err != nil {
+		t.Fatalf("new judgment asOf: %v", err)
+	}
+	return asOf
+}
+
+// FormJudgmentAsOf 冒充 UC-PC-002 第二阶段。默认交回`已形成`，因为多数用例关心的是它之后
+// 那一步；四种未成形与端口答不出各由测试显式设定。
+func (double *commercialBasisDouble) FormJudgmentAsOf(
+	_ context.Context,
+	query ports.JudgmentAsOfQuery,
+) (ports.JudgmentAsOfFormation, error) {
+	double.t.Helper()
+	double.record("form-judgment-as-of")
+	double.asOfCalls++
+	double.lastAsOfQuery = query
+
+	if double.asOfErr != nil {
+		return ports.JudgmentAsOfFormation{}, double.asOfErr
+	}
+	outcome := double.asOfOutcome
+	if outcome == ports.JudgmentAsOfOutcomeInvalid {
+		outcome = ports.JudgmentAsOfFormed
+	}
+	if outcome != ports.JudgmentAsOfFormed {
+		// 未成形一律不带时点：交回一个零值，编排会拿一个没人授权过的时刻去推进权威判断。
+		return ports.JudgmentAsOfFormation{Outcome: outcome}, nil
+	}
+
+	at := policyFormedAsOf
+	if query.Declared.Kind() == domain.FinancialControlJudgmentKind {
+		at = controlPolicyFormedAsOf
+	}
+	return ports.JudgmentAsOfFormation{
+		Outcome: ports.JudgmentAsOfFormed,
+		AsOf:    formedAsOfFor(double.t, query.Declared.Kind(), at),
+	}, nil
+}
+
+// RevalidateCommercialBasis 冒充 UC-PC-002 步骤 8。默认交回`仍然成立`；`已失效`与权威读不到
+// 由测试显式设定。
+func (double *commercialBasisDouble) RevalidateCommercialBasis(
+	ctx context.Context,
+	query ports.CommercialRevalidationQuery,
+) (ports.CommercialRevalidation, error) {
+	double.t.Helper()
+	double.record("revalidate-commercial-basis")
+	double.revalidateCalls++
+	double.lastRevalidation = query
+
+	outcome := double.revalidationOutcome
+	if outcome == ports.CommercialRevalidationOutcomeInvalid {
+		outcome = ports.CommercialBasisStillValid
+	}
+	if outcome != ports.CommercialBasisStillValid {
+		// 非`仍然成立`不带解析：带上一份，调用方会以为可以继续用它。
+		return ports.CommercialRevalidation{
+			Outcome: outcome,
+			Reason:  mustValue(double.t, domain.NewCheckReason, "PC-"+outcome.String()),
+		}, nil
+	}
+
+	resolution, err := double.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+		Identity:          query.Identity,
+		ShipmentRequestID: query.ShipmentRequestID,
+		SubmissionVersion: query.SubmissionVersion,
+	})
+	if err != nil {
+		return ports.CommercialRevalidation{}, err
+	}
+	return ports.CommercialRevalidation{Outcome: ports.CommercialBasisStillValid, Resolution: resolution}, nil
+}
+
 type reachabilityDouble struct {
 	t        *testing.T
 	value    domain.ReachabilityValue
+	outcome  ports.ReachabilityOutcome
 	err      error
 	record   func(string)
 	calls    int
@@ -407,32 +619,64 @@ type reachabilityDouble struct {
 func (double *reachabilityDouble) AssessParcelReachability(
 	_ context.Context,
 	request ports.ReachabilityRequest,
-) (domain.ReachabilityJudgment, error) {
+) (ports.ReachabilityAssessment, error) {
 	double.t.Helper()
 	double.record("assess-reachability")
 	double.calls++
 	double.lastAsOf = request.AsOf
 	if double.err != nil {
-		return domain.ReachabilityJudgment{}, double.err
+		return ports.ReachabilityAssessment{}, double.err
+	}
+	outcome := double.outcome
+	if outcome == ports.ReachabilityOutcomeInvalid {
+		outcome = ports.ReachabilityAssessed
+	}
+	if outcome != ports.ReachabilityAssessed {
+		// 非`已判断`一律不带判断：带上一份，编排会把一次没作出的判断记到任务上。
+		return ports.ReachabilityAssessment{
+			Outcome: outcome,
+			Reason:  mustValue(double.t, domain.NewCheckReason, "NR-"+outcome.String()),
+		}, nil
 	}
 
-	judgement, err := domain.NewReachabilityJudgment(
-		mustValue(double.t, domain.NewReachabilityJudgmentID, "NRJ-1"),
-		request.DeclaredParcelID,
-		double.value,
-		request.AsOf,
-	)
+	spec := domain.ReachabilityJudgmentSpec{
+		JudgmentID: mustValue(double.t, domain.NewReachabilityJudgmentID, "NRJ-1"),
+		ParcelID:   request.DeclaredParcelID,
+		Value:      double.value,
+		AsOf:       request.AsOf,
+	}
+	if double.value == domain.ReachabilityNotApplicable {
+		spec.JudgmentID = domain.ReachabilityJudgmentID{}
+		spec.Basis = mustValue(double.t, domain.NewReachabilityBasisReference, "LABEL_ONLY_CHANNEL_SERVICE")
+	}
+	judgement, err := domain.NewReachabilityJudgment(spec)
 	if err != nil {
 		double.t.Fatalf("new reachability judgement: %v", err)
 	}
-	return judgement, nil
+	return ports.ReachabilityAssessment{Outcome: ports.ReachabilityAssessed, Judgment: judgement}, nil
 }
 
 type judgmentRequestStore struct {
-	rejected         bool
-	err              error
-	recordedControl  []domain.FinancialControlResult
-	recordedAttempts []domain.ProcessingAttempt
+	rejected          bool
+	err               error
+	basisErr          error
+	recordedControl   []domain.FinancialControlResult
+	recordedAttempts  []domain.ProcessingAttempt
+	adoptedResolution []domain.CommercialResolutionID
+}
+
+// RecordAdoptedCommercialResolution 用自己的错误开关，不共用 err：记不下所采用的解析与
+// 记不下判断停在不同步骤，共用一个开关就分不出编排到底卡在哪一处。
+func (store *judgmentRequestStore) RecordAdoptedCommercialResolution(
+	_ context.Context,
+	_ domain.ShipmentRequestID,
+	resolution domain.CommercialResolutionID,
+) error {
+	if store.basisErr != nil {
+		return store.basisErr
+	}
+	store.adoptedResolution = append(store.adoptedResolution, resolution)
+	return nil
 }
 
 func (store *judgmentRequestStore) RecordReachabilityJudgment(

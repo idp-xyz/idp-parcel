@@ -337,6 +337,100 @@ func TestARejectionOnLostBasisStillReleasesAnExistingFreeze(t *testing.T) {
 	}
 }
 
+// Covers: UC-PC-002 步骤 8「业务决定提交前校验解析和关键结果仍相容」与 AT-PC-026 —— 判断
+// 已经在某次解析下形成过时，提交决定前走的必须是按那一份重解，而不是再解析一次。
+//
+// 再解析一次拿回的是决定时刻的新依据，与它自己比永远相容，提交前失效那个窗口就永远抓不到，
+// 而判断的时点策略来自旧依据。所以这里既断言走了重解，也断言带出去的是记下的那个标识。
+func TestADecisionRevalidatesTheBasisItsJudgmentsWereFormedUnder(t *testing.T) {
+	fixture := newDecisionFixture(t)
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.revalidateCalls != 1 {
+		t.Fatalf("revalidate calls = %d, want 1——提交决定前重新解析了一次，而不是按原解析重解", fixture.commercial.revalidateCalls)
+	}
+	adopted := mustValue(t, domain.NewCommercialResolutionID, "RES-1")
+	if fixture.commercial.lastRevalidation.Resolution != adopted {
+		t.Fatalf("revalidated %q, want the adopted %q", fixture.commercial.lastRevalidation.Resolution, adopted)
+	}
+}
+
+// Covers: UC-PC-002 结果语义`已失效`「重新解析；不能继续使用或覆盖原历史」与 AT-PC-026 ——
+// 原解析被推翻时要回第一阶段重解，并把新解析记为所采用的那一份。
+//
+// 不换掉所记标识，下一轮又会拿同一个失效标识去重校验，永远得到`已失效`——那是一个死循环，
+// 而它看起来只是「一直未决」。所以这里既断言重解发生了，也断言标识被换掉了。
+func TestASupersededBasisIsResolvedAgainInsteadOfRetried(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.revalidationOutcome = ports.CommercialBasisSuperseded
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.calls == 0 {
+		t.Fatal("原解析已失效却没有回第一阶段重解——重试同一次重校验只会一直失效")
+	}
+	if len(fixture.recorder.adoptedResolution) != 1 {
+		t.Fatalf("recorded %d adopted resolutions, want the re-resolved one——标识没换掉，下一轮还会拿失效的那个去比",
+			len(fixture.recorder.adoptedResolution))
+	}
+	if result.PendingReason() != application.CommercialBasisSuperseded {
+		t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_SUPERSEDED", result.PendingReason())
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("判断是在旧依据下形成的，却拿它们配新依据作出了一次决定")
+	}
+}
+
+// Covers: UC-PC-002 一致性一节「缓存过期、读取失败或修订无法确认只能形成解析未决」——
+// 重校验时权威读不到不是失效。当成失效会去重解，而重解可能选中另一份依据，等于用一次读取
+// 失败换掉了原依据。
+func TestAnUnreadableAuthorityDuringRevalidationDoesNotReplaceTheBasis(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.revalidationOutcome = ports.CommercialRevalidationUndetermined
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.calls != 0 {
+		t.Fatal("一次读取失败触发了重解——原依据可能因此被换掉")
+	}
+	if len(fixture.recorder.adoptedResolution) != 0 {
+		t.Fatal("权威读不到却改写了所采用的解析")
+	}
+	if result.PendingReason() != application.CommercialBasisUndetermined {
+		t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_UNDETERMINED", result.PendingReason())
+	}
+}
+
+// Covers: UC-PC-002 结果语义`无适用依据`「由消费方按自身规则判断拒绝」—— 还没有任何一轮
+// 采用过依据时走首次解析，而不是停下等一个不存在的原解析。
+//
+// 停下会让一个「权威确定这个范围没有适用合同」的委托从被拒绝变成永远挂着，而那正是本步该
+// 给出结论的场合。
+func TestADecisionWithoutAPriorResolutionStillResolves(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.noAdoptedResolution = true
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.revalidateCalls != 0 {
+		t.Fatal("没有原解析可比对却仍去重解")
+	}
+	if fixture.commercial.calls == 0 {
+		t.Fatal("既不重解也不解析，这份委托就此挂住")
+	}
+}
+
 type decisionFixture struct {
 	handler    *application.FormAcceptanceDecisionHandler
 	commercial *commercialBasisDouble
@@ -413,6 +507,9 @@ type recordedJudgmentsDouble struct {
 	reachability   map[string]domain.ReachabilityValue
 	controlOutcome domain.FinancialControlOutcome
 	err            error
+	// noAdoptedResolution 表示还没有任何一轮采用过商业依据。默认相反，因为多数用例是在
+	// 判断推进过之后才形成决定的。
+	noAdoptedResolution bool
 }
 
 func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
@@ -425,17 +522,25 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 	}
 
 	recorded := ports.RecordedJudgments{}
+	if !double.noAdoptedResolution {
+		recorded.AdoptedCommercialResolution = mustValue(double.t, domain.NewCommercialResolutionID, "RES-1")
+	}
 	for _, parcel := range []string{"parcel-1", "parcel-2"} {
 		value, present := double.reachability[parcel]
 		if !present {
 			continue
 		}
-		judgment, err := domain.NewReachabilityJudgment(
-			mustValue(double.t, domain.NewReachabilityJudgmentID, "NRJ-"+parcel),
-			mustValue(double.t, domain.NewDeclaredParcelID, parcel),
-			value,
-			declaredAsOfFor(double.t, domain.ReachabilityJudgmentKind, policyFormedAsOf),
-		)
+		spec := domain.ReachabilityJudgmentSpec{
+			JudgmentID: mustValue(double.t, domain.NewReachabilityJudgmentID, "NRJ-"+parcel),
+			ParcelID:   mustValue(double.t, domain.NewDeclaredParcelID, parcel),
+			Value:      value,
+			AsOf:       formedAsOfFor(double.t, domain.ReachabilityJudgmentKind, policyFormedAsOf),
+		}
+		if value == domain.ReachabilityNotApplicable {
+			spec.JudgmentID = domain.ReachabilityJudgmentID{}
+			spec.Basis = mustValue(double.t, domain.NewReachabilityBasisReference, "LABEL_ONLY_CHANNEL_SERVICE")
+		}
+		judgment, err := domain.NewReachabilityJudgment(spec)
 		if err != nil {
 			double.t.Fatalf("new reachability judgement: %v", err)
 		}
@@ -451,7 +556,7 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 			mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1"),
 			double.controlOutcome,
 			basis,
-			declaredAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf),
+			formedAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf),
 		)
 		if err != nil {
 			double.t.Fatalf("new financial control result: %v", err)
@@ -568,15 +673,6 @@ func submittedFingerprint(t *testing.T) domain.SourceSubmissionFingerprint {
 		t.Fatalf("new source fingerprint: %v", err)
 	}
 	return value
-}
-
-func declaredAsOfFor(t *testing.T, kind domain.JudgmentKind, at time.Time) domain.JudgmentAsOf {
-	t.Helper()
-	asOf, err := domain.NewDeclaredAsOf(kind, at, mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"))
-	if err != nil {
-		t.Fatalf("new declared asOf: %v", err)
-	}
-	return asOf
 }
 
 type decisionIdentityFactory struct{ t *testing.T }

@@ -1,6 +1,6 @@
 # ADR-0025: 跨上下文调用的适配器落在消费侧，翻译职责由它独占
 
-Status: Accepted  
+Status: Accepted（Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，**不进消费方 `ports`**」一句已由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) **在跨上下文多步协议场景**停用，其余各条不变）  
 Date: 2026-08-11
 
 ## Context
@@ -49,6 +49,7 @@ Date: 2026-08-11
 
 ## Links
 
+- [ADR-0027：跨上下文多步协议的中间状态由提供方按解析标识保留](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md)：**本记录 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，不进消费方 `ports`」一句已由它在跨上下文多步协议场景停用**，其余各条不变。停用是有前提的：0027 的理由是该协作者已由提供方以第二阶段用例提供、且端口只回指解析标识，因此那条限制不再必要——单次调用的适配器若真需要一个提供方未以用例提供的实例半边协作者，原句仍然成立。正文保留原样不改写，此处只作前向指引——Consequences 里点名的 `internal/parcelshipment/adapters/partycommercial/` 正是会撞上该句的地方
 - [Go 首个消费者切片决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：「同进程调用也必须通过应用端口」的出处，本记录补上它没说的落位与依赖方向
 - [ADR-0001：国际小包采用自治产品与领域边界](./0001-autonomous-product-domain-boundary.md)：自治边界，本记录把它落到包依赖上
 - [ADR-0002：国际小包采用独立数据、运行与发布边界](./0002-independent-data-runtime-release-boundary.md)：同上

@@ -46,8 +46,9 @@ func TestARevalidationSeesANewCandidateAndReportsTheResolutionStale(t *testing.T
 
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
 
-	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
-		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	store, caller, resolution := storedResolution(t, prior)
+	revalidated, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: caller, Resolution: resolution})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -86,8 +87,9 @@ func TestAnUnreadableAuthorityLeavesTheRevalidationPendingRatherThanStale(t *tes
 
 	authority.err = errors.New("authority view unavailable")
 
-	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
-		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	store, caller, resolution := storedResolution(t, prior)
+	revalidated, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: caller, Resolution: resolution})
 	if err != nil {
 		t.Fatalf("读取失败被当成技术错误抛出，而用例要求它形成解析未决: %v", err)
 	}
@@ -117,8 +119,9 @@ func TestAnUnchangedViewLetsThePriorResolutionStandWithItsOriginalIdentity(t *te
 	authority := &authorityDouble{registry: registry}
 	prior := resolvedClosure(t, authority, "scope-a")
 
-	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
-		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	store, caller, resolution := storedResolution(t, prior)
+	revalidated, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: caller, Resolution: resolution})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
@@ -150,8 +153,9 @@ func TestARevalidationAsksTheAuthorityForTheKeyThatFormedThePriorResolution(t *t
 	key := closureKey(t, "scope-a", domain.CustomerContractObject)
 
 	authority.loadCalled = 0
-	if _, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
-		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior}); err != nil {
+	store, caller, resolution := storedResolution(t, prior)
+	if _, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: caller, Resolution: resolution}); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
 
@@ -163,5 +167,38 @@ func TestARevalidationAsksTheAuthorityForTheKeyThatFormedThePriorResolution(t *t
 	}
 	if authority.askedScope != key.Scope {
 		t.Fatalf("asked scope = %q, want %q", authority.askedScope, key.Scope)
+	}
+}
+
+// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」在
+// 第三阶段一侧（ADR-0027：解析标识不是能力凭证）。
+//
+// 第二阶段已有同名守卫，这一支单独压：两处各自取回、各自比对，漏掉任何一处，拿到标识的人都能
+// 从那一处读走另一个客户的商业依据。提交前重校验尤其要紧——它交回的是一份仍然成立的解析。
+func TestARevalidationNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	store, owner, resolution := storedResolution(t, prior)
+	intruder := owner
+	intruder.CustomerAccountID = value(t, domain.NewCustomerAccountID, "customer-elsewhere")
+
+	authority.loadCalled = 0
+	revalidated, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: intruder, Resolution: resolution})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if revalidated.Closure().Outcome() != domain.InputNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED——另一个客户凭标识重校验了这份解析", revalidated.Closure().Outcome())
+	}
+	if len(revalidated.Closure().Adopted()) != 0 {
+		t.Fatal("范围不符却仍交回了已采用依据")
+	}
+	if authority.loadCalled != 0 {
+		t.Fatal("范围不符却仍去读了权威视图——那次读取本身就回答了这个范围里有没有对象")
 	}
 }

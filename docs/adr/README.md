@@ -4,6 +4,12 @@
 
 ## 已接受决策
 
+一条记录只有个别条款被后续记录停用、整体仍然有效时，标为**部分停用**：改被停用记录的 `Status` 行与 Links 节各加一条前向指针，并在本节该行后写明**被停条款**（引原句）与「其余各条不变」。若停用理由本身带前提，还要写明**适用场景**——理由有范围，结论就继承范围，不写等于把一次有条件的停用读成无条件的。两者是不同的东西，别并成一个「范围」。同一机制也用于标注正文中已失效的引用坐标：`Status` 行注明坐标已移位、按符号名与引文定位。改整份记录的去向走下面「已被取代决策」。
+
+三者都不改写正文——红线护的是「谁在何时、凭什么作了什么决定」可审，而承载它的是 Decision 与 Alternatives，不是文件字节不变（`Status` 行在本仓被取代时本就会改写，见 0011、0018、0019、0020）。
+
+跨文件引用的写法以 [AGENTS.md 的「改文档」节](../../AGENTS.md#改文档)为准，本节不复述。这里只记它在 ADR 上为何格外咬人：**一份 ADR 引的往往正是它自己要改的那份代码，因此它在自己被实现的那一刻就腐。** ADR-0027 的 Context 就是实例——它按行号引 `acceptance_basis.go`，而实现它的那次改动在被引位置上方插了近百行，坐标当场全部移位，被引的那句注释本身却一字未改。
+
 - [ADR-0001：国际小包采用自治产品与领域边界](./0001-autonomous-product-domain-boundary.md)
 - [ADR-0002：国际小包采用独立数据、运行与发布边界](./0002-independent-data-runtime-release-boundary.md)
 - [ADR-0003：采用集团租户、法人责任与货主客户账户三级边界](./0003-group-tenant-legal-entity-customer-account.md)
@@ -24,7 +30,10 @@
 - [ADR-0022：HTTP 状态码只回答「有没有形成答案」，业务判别一律进响应体](./0022-http-status-carries-answer-formed-not-business-verdict.md)
 - [ADR-0023：作业事实的身份与发生时间由设备签发，服务端不重签、不校正、不按接收顺序定序](./0023-work-fact-identity-and-time-are-minted-by-the-device.md)
 - [ADR-0024：方向性作业的依据随对象下发并携带有效区间，出区间等同无有效依据](./0024-directional-work-basis-carries-a-validity-interval.md)
-- [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)
+- [ADR-0025：跨上下文调用的适配器落在消费侧，翻译职责由它独占](./0025-cross-context-adapters-live-on-the-consumer-side.md)｜**部分停用**：其 Decision 中「适配器为此需要的实例半边协作者，其接口定义在适配器包内，不进消费方 `ports`」一句已在跨上下文多步协议场景由 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 停用——该协作者已由提供方以第二阶段用例提供，适配器直接调用，不另定接口。其余各条不变。
+- [ADR-0026：为产出消费者证明而写的持久化实现先于闸门通过，发布基线登记仍在闸门后](./0026-persistence-written-for-consumer-proof-precedes-gate-passage.md)
+- [ADR-0027：跨上下文多步协议的中间状态由提供方按解析标识保留，消费方端口按协议阶段分方法](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md)
+- [ADR-0028：聚合的重建与构造分属两扇门，重建只校验不重算；聚合携带版本，保存按预期版本写入](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)
 
 ## 已被取代决策
 

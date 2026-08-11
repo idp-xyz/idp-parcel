@@ -43,6 +43,25 @@ type AsOfPolicyDeclaration interface {
 	) ([]domain.AsOfPolicy, error)
 }
 
+// CommercialResolutionStore 按解析标识取回一次已固定的解析。
+//
+// 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回
+// 不可覆盖解析结果」，`AT-PC-024` 又要求相同输入与修订「返回原解析语义」——两处都要求本上下文
+// 对一次解析负有超出单次调用的责任。本端口就是那份责任的接口（[ADR-0027](../../../docs/adr/0027-multi-step-cross-context-protocol-state-held-by-the-provider.md)）。
+//
+// 它的存在是为了让后续阶段只回指标识：调用方带着整个闭包回来，键就可以被替换，一次「校验」
+// 便能拿另一个范围的视图去证明这份解析仍然成立。
+//
+// 租户是显式入参，与本包另外两个端口同理：按 ADR-0003 跨越租户必须在签名上看得见。取回后
+// 调用方身份仍要与解析键比对——解析标识不是一张能力凭证。
+type CommercialResolutionStore interface {
+	LoadResolution(
+		ctx context.Context,
+		tenant domain.TenantID,
+		resolution domain.ResolutionID,
+	) (domain.CommercialClosure, bool, error)
+}
+
 type Clock interface {
 	Now() time.Time
 }

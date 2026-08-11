@@ -75,6 +75,40 @@ func resolvedWithRulePackage(t *testing.T) domain.CommercialClosure {
 	return resolved.Closure()
 }
 
+// resolutionStoreDouble 冒充「按解析标识取回已固定解析」那份责任（ADR-0027）。后续阶段只回指
+// 标识，闭包由本上下文取回，因此夹具也得从这里给。
+type resolutionStoreDouble struct {
+	closure domain.CommercialClosure
+	found   bool
+	err     error
+	asked   []domain.ResolutionID
+}
+
+func (double *resolutionStoreDouble) LoadResolution(
+	_ context.Context,
+	_ domain.TenantID,
+	resolution domain.ResolutionID,
+) (domain.CommercialClosure, bool, error) {
+	double.asked = append(double.asked, resolution)
+	if double.err != nil {
+		return domain.CommercialClosure{}, false, double.err
+	}
+	return double.closure, double.found, nil
+}
+
+// storedResolution 把一份第一阶段结果放进取回端口，并交回指名它所需的调用方身份与标识。
+// 身份取自解析键本身——调用方必须是这份解析的主人，否则取回那一步会判`输入未受理`。
+func storedResolution(
+	t *testing.T,
+	prior domain.CommercialClosure,
+) (*resolutionStoreDouble, application.CallerScope, domain.ResolutionID) {
+	t.Helper()
+	key := prior.ResolutionKey()
+	return &resolutionStoreDouble{closure: prior, found: true},
+		application.CallerScope{TenantID: key.TenantID, CustomerAccountID: key.CustomerAccountID},
+		prior.ResolutionID()
+}
+
 // Covers: UC-PC-002 `AT-PC-023`「规则包选出后为网络与财务声明不同 `asOf` → 分别形成并校验，不压
 // 成全局时间」与步骤 6「不使用一个全局时间代替」。
 //
@@ -86,9 +120,11 @@ func TestEachJudgmentFormsItsOwnAsOfRatherThanSharingOneGlobalTime(t *testing.T)
 		asOfPolicy(t, domain.PreAcceptanceFinancialControlJudgment, "SEMANTICS-CONTROL-APPLIED-AT", "asof-policy-v1"),
 	}}
 
-	result, err := application.NewFormJudgmentAsOfHandler(policies).
+	store, caller, resolution := storedResolution(t, resolvedWithRulePackage(t))
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior: resolvedWithRulePackage(t),
+			Caller:     caller,
+			Resolution: resolution,
 			Judgments: []application.JudgmentAsOfRequest{
 				{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt},
 				{Judgment: domain.PreAcceptanceFinancialControlJudgment, At: financialAsOfAt},
@@ -134,9 +170,11 @@ func TestAJudgmentWithNoDeclaredPolicyStopsInsteadOfDefaultingToNow(t *testing.T
 		asOfPolicy(t, domain.NetworkReachabilityJudgment, "SEMANTICS-ROUTE-EVALUATED-AT", "asof-policy-v1"),
 	}}
 
-	result, err := application.NewFormJudgmentAsOfHandler(policies).
+	store, caller, resolution := storedResolution(t, resolvedWithRulePackage(t))
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior: resolvedWithRulePackage(t),
+			Caller:     caller,
+			Resolution: resolution,
 			// 一项已声明、一项未声明：两项都请求，「全有或全无」才验得出来。只请求未声明的
 			// 那一项时，另一项本来就不会形成，断言永远成立而咬不住任何东西。
 			Judgments: []application.JudgmentAsOfRequest{
@@ -167,9 +205,11 @@ func TestAZeroAsOfValueIsRefusedRatherThanReadAsNow(t *testing.T) {
 		asOfPolicy(t, domain.NetworkReachabilityJudgment, "SEMANTICS-ROUTE-EVALUATED-AT", "asof-policy-v1"),
 	}}
 
-	result, err := application.NewFormJudgmentAsOfHandler(policies).
+	store, caller, resolution := storedResolution(t, resolvedWithRulePackage(t))
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior: resolvedWithRulePackage(t),
+			Caller:     caller,
+			Resolution: resolution,
 			Judgments: []application.JudgmentAsOfRequest{
 				{Judgment: domain.NetworkReachabilityJudgment},
 			},
@@ -188,9 +228,11 @@ func TestAZeroAsOfValueIsRefusedRatherThanReadAsNow(t *testing.T) {
 func TestUnreadableAsOfPoliciesArePendingRatherThanNotConfigured(t *testing.T) {
 	policies := &asOfPolicyDouble{err: errors.New("as-of policy declaration unavailable")}
 
-	result, err := application.NewFormJudgmentAsOfHandler(policies).
+	store, caller, resolution := storedResolution(t, resolvedWithRulePackage(t))
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior: resolvedWithRulePackage(t),
+			Caller:     caller,
+			Resolution: resolution,
 			Judgments: []application.JudgmentAsOfRequest{
 				{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt},
 			},
@@ -219,12 +261,20 @@ func TestTheDeclarationIsAskedForTheRulePackageTheFirstPhaseSelected(t *testing.
 		t.Fatal("the first phase adopted no acceptance rule package")
 	}
 
-	if _, err := application.NewFormJudgmentAsOfHandler(policies).
+	store, caller, resolution := storedResolution(t, prior)
+	if _, err := application.NewFormJudgmentAsOfHandler(store, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior:     prior,
-			Judgments: []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+			Caller:     caller,
+			Resolution: resolution,
+			Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
 		}); err != nil {
 		t.Fatalf("form as-of: %v", err)
+	}
+
+	// 取回那一步问的必须是调用方指名的标识，不是别的：端口只回指标识，问错一个就等于换了
+	// 一份依据。
+	if len(store.asked) != 1 || store.asked[0] != resolution {
+		t.Fatalf("asked %v, want exactly the named resolution %q", store.asked, resolution)
 	}
 
 	if policies.loadCalled != 1 {
@@ -238,11 +288,15 @@ func TestTheDeclarationIsAskedForTheRulePackageTheFirstPhaseSelected(t *testing.
 	}
 }
 
-// Covers: 第二阶段的前提——第一阶段必须已经唯一解出。
+// Covers: 第二阶段的前提——第一阶段必须已经唯一解出，以及 ADR-0027「后续阶段只回指解析标识」。
 //
-// 解析未决或适用冲突时没有「已选规则包」可言，去问政策等于替一个尚未选出的包声明时点锚；而调用
-// 方拿到时点锚会以为商业依据已经定了。
-func TestASecondPhaseOnAnUnresolvedClosureRefusesWithoutAskingForPolicies(t *testing.T) {
+// 按 ADR-0027 改成只回指标识之后，未唯一解出的第一阶段连一个能指名它的引用都不会有：适用冲突
+// 与解析未决都不固定解析标识。所以「拿一份未唯一的闭包进第二阶段」这条路已经由构造关闭，剩下
+// 的等价缺口是**指名一个取不回来的标识**。
+//
+// 它必须落在`依据未解析`——那要调用方回第一阶段——而不是去问政策：替一个尚未选出的规则包声明
+// 时点锚，调用方拿到时点锚会以为商业依据已经定了。
+func TestASecondPhaseOnAnUnknownResolutionRefusesWithoutAskingForPolicies(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
@@ -257,12 +311,21 @@ func TestASecondPhaseOnAnUnresolvedClosureRefusesWithoutAskingForPolicies(t *tes
 	if conflicted.Closure().Outcome() != domain.ApplicabilityConflict {
 		t.Fatalf("outcome = %q, want APPLICABILITY_CONFLICT as the precondition", conflicted.Closure().Outcome())
 	}
+	if conflicted.Closure().ResolutionID().String() != "" {
+		t.Fatal("适用冲突固定了解析标识——调用方会据它进第二阶段，而那里没有已选规则包")
+	}
 
+	// 拿一份唯一解出的解析取得合法身份，再指名一个取不回来的标识：身份合法，标识不存在。
 	policies := &asOfPolicyDouble{}
-	result, err := application.NewFormJudgmentAsOfHandler(policies).
+	_, caller, _ := storedResolution(t, resolvedWithRulePackage(t))
+	known, _, resolution := storedResolution(t, resolvedWithRulePackage(t))
+	known.found = false
+
+	result, err := application.NewFormJudgmentAsOfHandler(known, policies).
 		Handle(context.Background(), application.FormJudgmentAsOfCommand{
-			Prior:     conflicted.Closure(),
-			Judgments: []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+			Caller:     caller,
+			Resolution: resolution,
+			Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
 		})
 	if err != nil {
 		t.Fatalf("form as-of: %v", err)
@@ -272,6 +335,36 @@ func TestASecondPhaseOnAnUnresolvedClosureRefusesWithoutAskingForPolicies(t *tes
 		t.Fatalf("outcome = %q, want BASIS_NOT_RESOLVED", result.Outcome())
 	}
 	if policies.loadCalled != 0 {
-		t.Fatal("第一阶段还没选出规则包，第二阶段却已经去问它声明了什么时点锚")
+		t.Fatal("解析都没取回来，第二阶段却已经去问某个规则包声明了什么时点锚")
+	}
+}
+
+// Covers: UC-PC-002 `AT-PC-028`「其他客户账户探测合同 → 输入未受理或范围拒绝，不泄露候选」在
+// 第二阶段一侧（ADR-0027：解析标识不是能力凭证）。
+//
+// 只凭标识就交回闭包，任何拿到标识的人都能读走另一个客户的商业依据。这一支必须与`依据未解析`
+// 分开——后者要调用方回第一阶段重解，而这里不该给它任何可以重试的指引。
+func TestAResolutionNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
+	policies := &asOfPolicyDouble{}
+	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))
+
+	intruder := owner
+	intruder.CustomerAccountID = value(t, domain.NewCustomerAccountID, "customer-elsewhere")
+
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
+		Handle(context.Background(), application.FormJudgmentAsOfCommand{
+			Caller:     intruder,
+			Resolution: resolution,
+			Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+		})
+	if err != nil {
+		t.Fatalf("form as-of: %v", err)
+	}
+
+	if result.Outcome() != application.JudgmentAsOfInputNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED——另一个客户凭标识读到了这份解析", result.Outcome())
+	}
+	if policies.loadCalled != 0 {
+		t.Fatal("范围不符却仍去问了时点政策")
 	}
 }

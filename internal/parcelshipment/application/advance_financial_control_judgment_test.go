@@ -25,8 +25,15 @@ func TestFinancialControlRunsUnderTheAsOfDeclaredForItsOwnKind(t *testing.T) {
 	if result.Outcome() != application.AcceptanceJudgmentAdvanced {
 		t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
 	}
-	if got, want := fixture.calls, []string{"resolve-commercial-basis", "apply-financial-control"}; !slices.Equal(got, want) {
+	if got, want := fixture.calls, []string{
+		"resolve-commercial-basis",
+		"form-judgment-as-of",
+		"apply-financial-control",
+	}; !slices.Equal(got, want) {
 		t.Fatalf("call order = %v, want %v", got, want)
+	}
+	if kind := fixture.commercial.lastAsOfQuery.Declared.Kind(); kind != domain.FinancialControlJudgmentKind {
+		t.Fatalf("second stage asked for %q, want FINANCIAL_CONTROL——用了可达性那一项的声明", kind)
 	}
 
 	requested := fixture.controller.lastAsOf
@@ -87,15 +94,18 @@ func TestNoControlIsIssuedUnderAnAsOfNobodyDeclared(t *testing.T) {
 // Covers: UC-PS-001 步骤 7「读取合同的版本化财务控制策略」— 策略活在客户合同里，没有
 // 唯一商业依据就没有合同可读，因而不发起控制，也不代它答`明确无控制`。
 func TestNoControlIsIssuedWithoutAUniqueCommercialBasis(t *testing.T) {
-	nonApplicable := map[string]domain.CommercialApplicability{
-		"no applicable basis": domain.CommerciallyNotApplicable,
-		"resolution pending":  domain.CommercialApplicabilityUndetermined,
+	nonApplicable := map[string]struct {
+		applicability domain.CommercialApplicability
+		reason        application.JudgmentPendingReason
+	}{
+		"no applicable basis": {domain.CommerciallyNotApplicable, application.CommercialBasisNotApplicable},
+		"resolution pending":  {domain.CommercialApplicabilityUndetermined, application.CommercialBasisUndetermined},
 	}
 
-	for name, applicability := range nonApplicable {
+	for name, want := range nonApplicable {
 		t.Run(name, func(t *testing.T) {
 			fixture := newFinancialControlFixture(t)
-			fixture.commercial.applicability = applicability
+			fixture.commercial.applicability = want.applicability
 
 			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 			if err != nil {
@@ -116,8 +126,8 @@ func TestNoControlIsIssuedWithoutAUniqueCommercialBasis(t *testing.T) {
 			}
 			// 缺商业依据与缺时点声明停在不同阶段，未决原因与续办路径都必须不同：用例
 			// 要求未决按原因维度分别统计，两条路径并成一条就把两种缺口混作一种。
-			if result.PendingReason() != application.CommercialBasisNotUnique {
-				t.Fatalf("pending reason = %q, want COMMERCIAL_BASIS_NOT_UNIQUE", result.PendingReason())
+			if result.PendingReason() != want.reason {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), want.reason)
 			}
 			if result.ContinuationReference().String() == undeclaredAsOfContinuation(t) {
 				t.Fatal("a missing commercial basis continues under the same reference as an undeclared asOf")
@@ -265,40 +275,55 @@ func (value *financialControlFixture) command(t *testing.T) application.AdvanceF
 }
 
 type financialControlDouble struct {
-	t        *testing.T
-	outcome  domain.FinancialControlOutcome
-	err      error
-	record   func(string)
-	calls    int
-	lastAsOf domain.JudgmentAsOf
+	t           *testing.T
+	outcome     domain.FinancialControlOutcome
+	portOutcome ports.PreAcceptanceControlOutcome
+	err         error
+	record      func(string)
+	calls       int
+	lastAsOf    domain.JudgmentAsOf
 }
 
 func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
 	_ context.Context,
 	request ports.FinancialControlRequest,
-) (domain.FinancialControlResult, error) {
+) (ports.PreAcceptanceControlAssessment, error) {
 	double.t.Helper()
 	double.record("apply-financial-control")
 	double.calls++
 	double.lastAsOf = request.AsOf
 	if double.err != nil {
-		return domain.FinancialControlResult{}, double.err
+		return ports.PreAcceptanceControlAssessment{}, double.err
+	}
+	outcome := double.portOutcome
+	if outcome == ports.PreAcceptanceControlOutcomeInvalid {
+		outcome = ports.PreAcceptanceControlFormed
+	}
+	if outcome != ports.PreAcceptanceControlFormed {
+		// 非`已形成`一律不带结果：带上一份，一次没能执行的控制会看起来像通过了。
+		return ports.PreAcceptanceControlAssessment{
+			Outcome: outcome,
+			Reason:  mustValue(double.t, domain.NewCheckReason, "SAC-"+outcome.String()),
+		}, nil
 	}
 
 	basis := domain.ControlBasisReference{}
+	resultID := mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1")
 	if double.outcome != domain.FinancialControlHeld {
 		basis = mustValue(double.t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1")
 	}
-	result, err := domain.NewFinancialControlResult(
-		mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1"),
-		double.outcome,
-		basis,
-		request.AsOf,
-	)
+	if double.outcome == domain.FinancialControlNotApplicable {
+		// `明确无控制`下提供方不形成冻结，也就没有结果标识可交回。
+		resultID = domain.FinancialControlResultID{}
+	}
+	result, err := domain.NewFinancialControlResult(resultID, double.outcome, basis, request.AsOf)
 	if err != nil {
 		double.t.Fatalf("new financial control result: %v", err)
 	}
-	return result, nil
+	return ports.PreAcceptanceControlAssessment{
+		Outcome: ports.PreAcceptanceControlFormed,
+		Result:  result,
+	}, nil
 }
 
 var _ ports.PreAcceptanceFinancialController = (*financialControlDouble)(nil)

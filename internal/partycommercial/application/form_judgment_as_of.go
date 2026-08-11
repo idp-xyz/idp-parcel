@@ -10,9 +10,9 @@ import (
 
 // JudgmentAsOfOutcome 是第二阶段的封闭结果集合。
 //
-// 四种未成形分开，因为要采取的动作各不相同：`未配置`等 `PAR-COM-14` 落地，`未决`等依赖恢复，
-// `值不合法`要调用方改这次请求，`依据未解析`要它先回到第一阶段。压成一个「失败」，调用方就只
-// 能靠猜——而其中只有一种是它自己能修的。
+// 五种未成形分开，因为要采取的动作各不相同：`未配置`等 `PAR-COM-14` 落地，`未决`等依赖恢复，
+// `值不合法`要调用方改这次请求，`依据未解析`要它先回到第一阶段，`输入未受理`说的是它问了一份
+// 不属于自己的解析。压成一个「失败」，调用方就只能靠猜——而其中只有一种是它自己能修的。
 type JudgmentAsOfOutcome uint8
 
 const (
@@ -22,6 +22,7 @@ const (
 	JudgmentAsOfNotConfigured
 	JudgmentAsOfPending
 	JudgmentAsOfValueInvalid
+	JudgmentAsOfInputNotAccepted
 )
 
 func (outcome JudgmentAsOfOutcome) String() string {
@@ -36,6 +37,8 @@ func (outcome JudgmentAsOfOutcome) String() string {
 		return "PENDING"
 	case JudgmentAsOfValueInvalid:
 		return "VALUE_INVALID"
+	case JudgmentAsOfInputNotAccepted:
+		return "INPUT_NOT_ACCEPTED"
 	default:
 		return ""
 	}
@@ -48,11 +51,23 @@ type JudgmentAsOfRequest struct {
 	At       time.Time
 }
 
-// FormJudgmentAsOfCommand 的输入是第一阶段的结果本身，不是调用方另给的规则包：规则包必须由
-// 第一阶段用独立锚点选出，自带一个进来就等于让它决定自己被选中的时间。
+// CallerScope 是调用方自称的身份。它与解析标识一起进来，因为标识不是一张能力凭证：只凭标识
+// 就交回闭包，任何拿到标识的人都能读走另一个客户的商业依据，而 `AT-PC-028` 要挡的正是这个。
+type CallerScope struct {
+	TenantID          domain.TenantID
+	CustomerAccountID domain.CustomerAccountID
+}
+
+// FormJudgmentAsOfCommand 只回指第一阶段的解析标识，不收调用方带回来的闭包，也不收调用方
+// 另给的规则包。
+//
+// 不收规则包：它必须由第一阶段用独立锚点选出，自带一个进来就等于让它决定自己被选中的时间。
+// 不收闭包：闭包里带着形成它的那次查询，调用方能替换它，一次「校验」就能拿另一个范围的视图
+// 去证明这份解析仍然成立。中间状态因此由本上下文按标识保留（ADR-0027）。
 type FormJudgmentAsOfCommand struct {
-	Prior     domain.CommercialClosure
-	Judgments []JudgmentAsOfRequest
+	Caller     CallerScope
+	Resolution domain.ResolutionID
+	Judgments  []JudgmentAsOfRequest
 }
 
 type FormJudgmentAsOfResult struct {
@@ -70,33 +85,81 @@ func (result FormJudgmentAsOfResult) AsOfFor(judgment domain.JudgmentType) (doma
 }
 
 type FormJudgmentAsOfHandler struct {
-	policies ports.AsOfPolicyDeclaration
+	resolutions ports.CommercialResolutionStore
+	policies    ports.AsOfPolicyDeclaration
 }
 
-func NewFormJudgmentAsOfHandler(policies ports.AsOfPolicyDeclaration) *FormJudgmentAsOfHandler {
-	return &FormJudgmentAsOfHandler{policies: policies}
+func NewFormJudgmentAsOfHandler(
+	resolutions ports.CommercialResolutionStore,
+	policies ports.AsOfPolicyDeclaration,
+) *FormJudgmentAsOfHandler {
+	return &FormJudgmentAsOfHandler{resolutions: resolutions, policies: policies}
+}
+
+// loadPrior 按标识取回第一阶段的结果，并核对它确实属于这个调用方。
+//
+// 三种取不到分开：读不回是`未决`（等依赖恢复），查无此解析是`依据未解析`（要回第一阶段），
+// 范围不符是`输入未受理`（`AT-PC-028`：不泄露候选，也不告诉对方这份解析存不存在）。合成一格，
+// 一次越权探测就与一次依赖抖动分不开，而前者不该被重试。
+func (handler *FormJudgmentAsOfHandler) loadPrior(
+	ctx context.Context,
+	caller CallerScope,
+	resolution domain.ResolutionID,
+) (domain.CommercialClosure, JudgmentAsOfOutcome) {
+	// 身份或标识缺失时不查询：一次已经发出的查询本身就回答了「这份解析存不存在」，而用例
+	// 要求最小身份不成立时不查询、不泄露候选。
+	if caller.TenantID.String() == "" ||
+		caller.CustomerAccountID.String() == "" ||
+		resolution.String() == "" {
+		return domain.CommercialClosure{}, JudgmentAsOfInputNotAccepted
+	}
+
+	prior, found, err := handler.resolutions.LoadResolution(ctx, caller.TenantID, resolution)
+	if err != nil {
+		return domain.CommercialClosure{}, JudgmentAsOfPending
+	}
+	if !found {
+		return domain.CommercialClosure{}, JudgmentAsOfBasisNotResolved
+	}
+
+	// 取回之后仍要比对：端口按租户取，但同一租户下的另一个客户账户同样不该读到这份解析。
+	key := prior.ResolutionKey()
+	if key.TenantID != caller.TenantID || key.CustomerAccountID != caller.CustomerAccountID {
+		return domain.CommercialClosure{}, JudgmentAsOfInputNotAccepted
+	}
+	return prior, JudgmentAsOfFormed
 }
 
 // Handle 执行用例第二阶段：由第一阶段选出的规则包声明各下游判断的时点锚，消费方给出值，两者
 // 在这里对起来并逐项校验。
 //
-// 全有或全无，不逐项部分成功：缺一项时调用方拿着半套时点去推进判断，而缺的那一项等的可能是实例
-// 参数落地，不是重试。与第一阶段的引用闭包同一条道理——把已经解出的成员交回去，等于引诱调用方
-// 在一份判定为不成立的依据上继续往下走。
+// 一次调用之内全有或全无，不逐项部分成功：一次请求里缺一项时，已形成的那些也不交回。与第一阶段
+// 的引用闭包同一条道理——把已经解出的成员交回去，等于引诱调用方在一份判定为不成立的依据上继续
+// 往下走。
+//
+// 这条**只管一次调用**，不要读成「调用方不可能拿着半套时点往下走」。调用方完全可以分两次调用、
+// 各要一项，其中一项形成、另一项停在`未配置`——本上下文看不见那个局面，也拦不到它。真正拦住它
+// 的在消费方：接受决定要求每个适用校验组都已判断，缺一组就不形成决定。把这里写成一条全局担保，
+// 就是声称代码做不到的事。
 func (handler *FormJudgmentAsOfHandler) Handle(
 	ctx context.Context,
 	command FormJudgmentAsOfCommand,
 ) (FormJudgmentAsOfResult, error) {
+	prior, loaded := handler.loadPrior(ctx, command.Caller, command.Resolution)
+	if loaded != JudgmentAsOfFormed {
+		return FormJudgmentAsOfResult{outcome: loaded}, nil
+	}
+
 	// 先看第一阶段成没成。没有已选规则包就去问政策，等于替一个尚未选出的包声明时点锚，而调用
 	// 方拿到时点锚会以为商业依据已经定了。
-	rulePackage, selected := command.Prior.AdoptedFor(domain.AcceptanceRulePackageObject)
-	if command.Prior.Outcome() != domain.UniquelyResolved || !selected {
+	rulePackage, selected := prior.AdoptedFor(domain.AcceptanceRulePackageObject)
+	if prior.Outcome() != domain.UniquelyResolved || !selected {
 		return FormJudgmentAsOfResult{outcome: JudgmentAsOfBasisNotResolved}, nil
 	}
 
 	declared, err := handler.policies.LoadAsOfPolicies(
 		ctx,
-		command.Prior.ResolutionKey().TenantID,
+		prior.ResolutionKey().TenantID,
 		rulePackage.Version(),
 	)
 	if err != nil {

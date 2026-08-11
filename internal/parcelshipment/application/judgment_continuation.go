@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -27,12 +28,31 @@ type JudgmentPendingReason uint8
 
 const (
 	PendingReasonNone JudgmentPendingReason = iota
-	CommercialBasisNotUnique
+	CommercialBasisNotApplicable
+	CommercialBasisUndetermined
 	CommercialBasisUnavailable
+	AdoptedCommercialBasisNotRecorded
+	CommercialBasisSuperseded
 	ReachabilityAsOfNotDeclared
+	ReachabilityAsOfBasisNotResolved
+	ReachabilityAsOfNotConfigured
+	ReachabilityAsOfUnavailable
+	ReachabilityAsOfValueRejected
+	ReachabilityAsOfInputNotAccepted
 	ReachabilityAuthorityUnavailable
+	ReachabilityJudgmentNotFormed
+	ReachabilityRequestConflict
+	ReachabilityRequestNotAccepted
 	FinancialControlAsOfNotDeclared
+	FinancialControlAsOfBasisNotResolved
+	FinancialControlAsOfNotConfigured
+	FinancialControlAsOfUnavailable
+	FinancialControlAsOfValueRejected
+	FinancialControlAsOfInputNotAccepted
 	FinancialControlUnavailable
+	FinancialControlNotFormed
+	FinancialControlRequestConflict
+	FinancialControlRequestNotAccepted
 	JudgmentNotRecorded
 	ShipmentRequestUnavailable
 	ManualReviewPolicyNotDeclared
@@ -72,18 +92,56 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 
 func (reason JudgmentPendingReason) String() string {
 	switch reason {
-	case CommercialBasisNotUnique:
-		return "COMMERCIAL_BASIS_NOT_UNIQUE"
+	case CommercialBasisNotApplicable:
+		return "COMMERCIAL_BASIS_NOT_APPLICABLE"
+	case CommercialBasisUndetermined:
+		return "COMMERCIAL_BASIS_UNDETERMINED"
 	case CommercialBasisUnavailable:
 		return "COMMERCIAL_BASIS_UNAVAILABLE"
+	case AdoptedCommercialBasisNotRecorded:
+		return "ADOPTED_COMMERCIAL_BASIS_NOT_RECORDED"
+	case CommercialBasisSuperseded:
+		return "COMMERCIAL_BASIS_SUPERSEDED"
 	case ReachabilityAsOfNotDeclared:
 		return "REACHABILITY_AS_OF_NOT_DECLARED"
+	case ReachabilityAsOfBasisNotResolved:
+		return "REACHABILITY_AS_OF_BASIS_NOT_RESOLVED"
+	case ReachabilityAsOfNotConfigured:
+		return "REACHABILITY_AS_OF_NOT_CONFIGURED"
+	case ReachabilityAsOfUnavailable:
+		return "REACHABILITY_AS_OF_UNAVAILABLE"
+	case ReachabilityAsOfValueRejected:
+		return "REACHABILITY_AS_OF_VALUE_REJECTED"
+	case ReachabilityAsOfInputNotAccepted:
+		return "REACHABILITY_AS_OF_INPUT_NOT_ACCEPTED"
 	case ReachabilityAuthorityUnavailable:
 		return "REACHABILITY_AUTHORITY_UNAVAILABLE"
+	case ReachabilityJudgmentNotFormed:
+		return "REACHABILITY_JUDGMENT_NOT_FORMED"
+	case ReachabilityRequestConflict:
+		return "REACHABILITY_REQUEST_CONFLICT"
+	case ReachabilityRequestNotAccepted:
+		return "REACHABILITY_REQUEST_NOT_ACCEPTED"
 	case FinancialControlAsOfNotDeclared:
 		return "FINANCIAL_CONTROL_AS_OF_NOT_DECLARED"
+	case FinancialControlAsOfBasisNotResolved:
+		return "FINANCIAL_CONTROL_AS_OF_BASIS_NOT_RESOLVED"
+	case FinancialControlAsOfNotConfigured:
+		return "FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED"
+	case FinancialControlAsOfUnavailable:
+		return "FINANCIAL_CONTROL_AS_OF_UNAVAILABLE"
+	case FinancialControlAsOfValueRejected:
+		return "FINANCIAL_CONTROL_AS_OF_VALUE_REJECTED"
+	case FinancialControlAsOfInputNotAccepted:
+		return "FINANCIAL_CONTROL_AS_OF_INPUT_NOT_ACCEPTED"
 	case FinancialControlUnavailable:
 		return "FINANCIAL_CONTROL_UNAVAILABLE"
+	case FinancialControlNotFormed:
+		return "FINANCIAL_CONTROL_NOT_FORMED"
+	case FinancialControlRequestConflict:
+		return "FINANCIAL_CONTROL_REQUEST_CONFLICT"
+	case FinancialControlRequestNotAccepted:
+		return "FINANCIAL_CONTROL_REQUEST_NOT_ACCEPTED"
 	case JudgmentNotRecorded:
 		return "JUDGMENT_NOT_RECORDED"
 	case ShipmentRequestUnavailable:
@@ -121,6 +179,166 @@ func (reason JudgmentPendingReason) String() string {
 	default:
 		return ""
 	}
+}
+
+// ErrUnexpectedAsOfOutcome 说明第二阶段端口交回了封闭集合以外的答复。它上抛而不形成未决：
+// 依赖答不出是业务结果，答出一个不属于这个集合的东西则是端口坏了（见 JudgmentPendingReason
+// 的分界）。
+var ErrUnexpectedAsOfOutcome = errors.New("parcel shipment: unexpected judgment as-of outcome")
+
+// ErrUnexpectedAssessmentOutcome 说明权威判断端口交回了封闭集合以外的答复。与上一条同一
+// 分界：那不是「权威答不出」，是端口本身坏了。
+var ErrUnexpectedAssessmentOutcome = errors.New("parcel shipment: unexpected authority assessment outcome")
+
+// ErrUnexpectedRevalidationOutcome 同上，说的是提交前重校验那一支。
+var ErrUnexpectedRevalidationOutcome = errors.New("parcel shipment: unexpected commercial revalidation outcome")
+
+// commercialBasisPendingReason 把一次非唯一的商业解析分到它自己的未决原因上。
+//
+// `确定不适用`是权威说了这个范围没有适用依据，`解析未决`是权威根本没得出答案。两者压成一格
+// 会让一次读取失败看起来像这个客户没有合同，而后者是能拿去拒单的结论。
+//
+// 更细的分别（`无适用依据`、`适用冲突`、`输入未受理`、`已失效`）由 party-commercial 的原因
+// 引用带过来，本上下文不重新声明一套口径；引用参与续办派生，因此四者的续办引用仍然互不相同，
+// 一次越权探测不会与一次权威读不到共用一条续办路径。
+//
+// 非法取值落在`解析未决`一侧。它不该出现——端口交回的适用性译不出时 CommercialBasisChecksFor
+// 会先失败——而落错这个方向只会多停一轮，不会放行任何东西。
+func commercialBasisPendingReason(applicability domain.CommercialApplicability) JudgmentPendingReason {
+	if applicability == domain.CommerciallyNotApplicable {
+		return CommercialBasisNotApplicable
+	}
+	return CommercialBasisUndetermined
+}
+
+// asOfPendingReasons 是一类判断在第二阶段四种未成形上各自的未决原因。
+//
+// 两类判断各配一套而不共用：运营要知道停的是哪一项判断的时点，而续办引用由原因派生——共用
+// 一套会让可达性与财务控制停在同一处时拿到同一个引用，两条各自的续办路径就此并成一条。
+type asOfPendingReasons struct {
+	basisNotResolved JudgmentPendingReason
+	notConfigured    JudgmentPendingReason
+	unavailable      JudgmentPendingReason
+	valueRejected    JudgmentPendingReason
+	inputNotAccepted JudgmentPendingReason
+}
+
+// forOutcome 逐取值分派，不留兜底。提供方日后新增一个未成形取值时这里会返回错误而不是静默
+// 继承某一格——那一格决定的是催谁，催错人比停下来更难发现。
+func (reasons asOfPendingReasons) forOutcome(outcome ports.JudgmentAsOfOutcome) (JudgmentPendingReason, error) {
+	switch outcome {
+	case ports.JudgmentAsOfBasisNotResolved:
+		return reasons.basisNotResolved, nil
+	case ports.JudgmentAsOfNotConfigured:
+		return reasons.notConfigured, nil
+	case ports.JudgmentAsOfPending:
+		return reasons.unavailable, nil
+	case ports.JudgmentAsOfValueRejected:
+		return reasons.valueRejected, nil
+	case ports.JudgmentAsOfInputNotAccepted:
+		// 本方指名了一份不属于自己的解析。这是本上下文自己的缺陷，不是权威答不出，因此它
+		// 与`未决`分开：重试改不了一个问错的标识。
+		return reasons.inputNotAccepted, nil
+	default:
+		return PendingReasonNone, ErrUnexpectedAsOfOutcome
+	}
+}
+
+// commercialBasisScope 是两个判断编排共有的那部分范围。可达性那一支还带声明包裹，但前半段
+// 用不到它——商业依据与逐项时点都按提交版本取，不按成员取。
+type commercialBasisScope struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+}
+
+// basisStall 说明前半段停在哪里。零值表示没停；scope 是要额外参与续办派生的东西。
+type basisStall struct {
+	reason JudgmentPendingReason
+	scope  []string
+}
+
+func (stall basisStall) stopped() bool {
+	return stall.reason != PendingReasonNone
+}
+
+// adoptedBasis 是前半段的产物：本轮采用的商业依据，以及该类判断经权威回显的时点。
+type adoptedBasis struct {
+	snapshot domain.CommercialBasisSnapshot
+	asOf     domain.JudgmentAsOf
+}
+
+// formAdoptedBasis 走完两个判断编排共有的前半段：解析商业依据、记下所采用的那一次、取得本类
+// 判断的时点声明，再由第二阶段形成经回显的时点。
+//
+// 两个编排共用它而不是各留一份：这一段每一步的顺序都有理由——先记标识再形成时点，否则提交
+// 决定前无从按原依据重解；值不在编排里形成，否则就是拿本地时钟顶替声明的语义。复制一份等于
+// 把这些理由也复制一份，而下一次只会有一份被改。
+//
+// 它不碰权威判断本身：哪个取值算失败是各自的接受语言，留在各自的编排里。
+func formAdoptedBasis(
+	ctx context.Context,
+	commercial ports.CommercialBasisResolver,
+	recorder ports.AcceptanceJudgmentRecorder,
+	scope commercialBasisScope,
+	kind domain.JudgmentKind,
+	asOfNotDeclared JudgmentPendingReason,
+	reasons asOfPendingReasons,
+) (adoptedBasis, basisStall, error) {
+	resolution, err := commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
+		Identity:          scope.Identity,
+		ShipmentRequestID: scope.ShipmentRequestID,
+		SubmissionVersion: scope.SubmissionVersion,
+	})
+	if err != nil {
+		return adoptedBasis{}, basisStall{reason: CommercialBasisUnavailable}, nil
+	}
+	if resolution.Applicability != domain.CommerciallyApplicable {
+		// 原因引用参与续办派生：`输入未受理`与`权威读不到`都落在`解析未决`，但两者要办的事
+		// 不同，共用一个引用会让调用方按引用查回来的是另一种缺口。
+		return adoptedBasis{}, basisStall{
+			reason: commercialBasisPendingReason(resolution.Applicability),
+			scope:  []string{resolution.Reason.String()},
+		}, nil
+	}
+	snapshot := resolution.Snapshot
+
+	// 采用哪次解析要先记下，再据它形成时点。顺序不能反：一次已经用来形成时点的解析若没留住
+	// 标识，提交决定前就无从按它重解，而判断正是在它的时点策略下形成的。
+	if err := recorder.RecordAdoptedCommercialResolution(
+		ctx,
+		scope.ShipmentRequestID,
+		snapshot.ResolutionID(),
+	); err != nil {
+		return adoptedBasis{}, basisStall{reason: AdoptedCommercialBasisNotRecorded}, nil
+	}
+
+	declared, present := snapshot.DeclaredAsOfFor(kind)
+	if !present {
+		return adoptedBasis{}, basisStall{reason: asOfNotDeclared}, nil
+	}
+
+	// 第二阶段：值按声明的语义在适配器里形成，再由 party-commercial 校验回显。编排不参与
+	// 形成——它手上只有本地时钟，而用例明禁用一个全局时间代替逐项时点。
+	formation, err := commercial.FormJudgmentAsOf(ctx, ports.JudgmentAsOfQuery{
+		Identity:          scope.Identity,
+		ShipmentRequestID: scope.ShipmentRequestID,
+		SubmissionVersion: scope.SubmissionVersion,
+		Resolution:        snapshot.ResolutionID(),
+		Declared:          declared,
+	})
+	if err != nil {
+		return adoptedBasis{}, basisStall{reason: reasons.unavailable}, nil
+	}
+	if formation.Outcome != ports.JudgmentAsOfFormed {
+		reason, err := reasons.forOutcome(formation.Outcome)
+		if err != nil {
+			return adoptedBasis{}, basisStall{}, err
+		}
+		return adoptedBasis{}, basisStall{reason: reason}, nil
+	}
+
+	return adoptedBasis{snapshot: snapshot, asOf: formation.AsOf}, basisStall{}, nil
 }
 
 // recordAttempt 把没能推进的这一轮追加到接受判断任务上。用例要求任务同时留下判断与处理

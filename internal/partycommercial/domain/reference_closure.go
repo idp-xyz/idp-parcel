@@ -119,6 +119,17 @@ type CommercialClosure struct {
 }
 
 // ResolutionKey 交回形成这份结果的那次查询，供调用方按原键读取权威视图。
+// PriorResolutionUnavailable 形成一份「没能取回原解析」的结果，供第二、三阶段在按标识取回
+// 失败时交回。
+//
+// 它刻意不是`无适用依据`：那是权威说了这个范围没有适用对象，可以拿去拒单；而这里说的是本
+// 上下文找不到调用方指名的那次解析，两者混起来会让一次查不到变成一个客户的拒绝理由。
+//
+// 它也不带解析标识与键。没取回来就没有键，凭空造一个正是本阶段要挡的事——键必须随结果走。
+func PriorResolutionUnavailable(outcome ResolutionOutcome, reason ResolutionReason) CommercialClosure {
+	return CommercialClosure{outcome: outcome, reason: reason}
+}
+
 func (closure CommercialClosure) ResolutionKey() ClosureResolutionKey {
 	return closure.key
 }

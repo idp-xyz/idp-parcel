@@ -52,9 +52,15 @@ type AcceptanceDecisionIdentity interface {
 
 // RecordedJudgments 是接受判断任务上已经采用的全部权威判断。财务控制用零值表示尚未形成，
 // 而不是配一个布尔：翻译函数据零值形成`无法判定`，因此「没有控制」无法被悄悄读成通过。
+//
+// AdoptedCommercialResolution 是这些判断形成时所采用的那次商业解析。它必须留住，否则提交
+// 决定前无从做 `UC-PC-002` 步骤 8 的重解——拿决定时刻的新解析自比永远相容，`AT-PC-026` 的
+// 提交前失效就永远抓不到，而判断是在旧依据的时点策略下形成的。零值表示还没有任何一轮采用
+// 过依据。
 type RecordedJudgments struct {
-	Reachability     []domain.ReachabilityJudgment
-	FinancialControl domain.FinancialControlResult
+	Reachability                []domain.ReachabilityJudgment
+	FinancialControl            domain.FinancialControlResult
+	AdoptedCommercialResolution domain.CommercialResolutionID
 }
 
 // RecordedJudgmentReader 取回接受判断任务上已记录的判断，供形成决定那一步装配校验结果。
@@ -87,9 +93,123 @@ type CommercialBasisResolution struct {
 	Reason        domain.CheckReason
 }
 
-// CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 判断。
+// JudgmentAsOfQuery 请 party-commercial 为某一类判断校验并回显一个时点值。
+//
+// 它只回指第一阶段的解析标识，不回传第一阶段的结果对象：跨上下文多步协议的中间状态由提供方
+// 按标识保留（ADR-0027）。
+//
+// 它刻意不带时点值。`UC-PC-002` 步骤 6 要消费方形成值，而 ADR-0025 把「消费方」定为适配器：
+// 值按声明的语义在适配器里形成，编排给不出它——编排手上只有本地时钟，拿它顶就是用例明禁的
+// 「用一个全局时间代替」。没有租户时适配器形不出值，交回`未配置`，那正是首发要停下的地方。
+type JudgmentAsOfQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Resolution        domain.CommercialResolutionID
+	Declared          domain.DeclaredAsOf
+}
+
+// JudgmentAsOfOutcome 是 party-commercial 第二阶段答复在本上下文的落点。
+//
+// 五种未成形分开而不压成一个「不可用」：`未配置`等租户把 `PAR-COM-14` 登记上，`未决`等依赖
+// 恢复，`值被拒`要本方改这次请求，`依据未解析`要回第一阶段重解，`输入未受理`说的是本方指名了
+// 一份不属于自己的解析——五者里只有一种靠重试能解决。压平之后调用方只能靠猜，而 ADR-0025
+// 要求提供方封闭集合里每个取值都有明确落点。
+type JudgmentAsOfOutcome uint8
+
+const (
+	JudgmentAsOfOutcomeInvalid JudgmentAsOfOutcome = iota
+	JudgmentAsOfFormed
+	JudgmentAsOfBasisNotResolved
+	JudgmentAsOfNotConfigured
+	JudgmentAsOfPending
+	JudgmentAsOfValueRejected
+	JudgmentAsOfInputNotAccepted
+)
+
+func (outcome JudgmentAsOfOutcome) String() string {
+	switch outcome {
+	case JudgmentAsOfFormed:
+		return "FORMED"
+	case JudgmentAsOfBasisNotResolved:
+		return "BASIS_NOT_RESOLVED"
+	case JudgmentAsOfNotConfigured:
+		return "NOT_CONFIGURED"
+	case JudgmentAsOfPending:
+		return "PENDING"
+	case JudgmentAsOfValueRejected:
+		return "VALUE_REJECTED"
+	case JudgmentAsOfInputNotAccepted:
+		return "INPUT_NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// JudgmentAsOfFormation 只在`已形成`时携带时点。其余四种一律不带：交回一个零值时点，调用方
+// 会拿一个没人授权过的时刻去推进权威判断。
+type JudgmentAsOfFormation struct {
+	Outcome JudgmentAsOfOutcome
+	AsOf    domain.JudgmentAsOf
+}
+
+// CommercialRevalidationQuery 请 party-commercial 在本方提交决定前按原查询重解一次。
+//
+// 与第二阶段同样只回指解析标识：让调用方另给一份解析键，一次「校验」就能拿另一个范围的视图
+// 去证明这份解析仍然成立（ADR-0027）。
+type CommercialRevalidationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Resolution        domain.CommercialResolutionID
+}
+
+// CommercialRevalidationOutcome 是第三阶段独有的结果代数。
+//
+// `已失效`必须与`解析未决`分开，不能一起落进 CommercialApplicability 的`无法判定`。两者要
+// 采取的动作相反：未决是等权威恢复，本方重试同一次重校验就行；`已失效`重试一万次也还是失效，
+// `UC-PC-002` 第 58 行要的是**重新解析**——回第一阶段拿当前有效的那一份。混成一格，一份被
+// 新修订推翻的依据会拿着同一个失效标识把第三阶段重试到底。
+type CommercialRevalidationOutcome uint8
+
+const (
+	CommercialRevalidationOutcomeInvalid CommercialRevalidationOutcome = iota
+	CommercialBasisStillValid
+	CommercialBasisSuperseded
+	CommercialRevalidationUndetermined
+)
+
+func (outcome CommercialRevalidationOutcome) String() string {
+	switch outcome {
+	case CommercialBasisStillValid:
+		return "STILL_VALID"
+	case CommercialBasisSuperseded:
+		return "SUPERSEDED"
+	case CommercialRevalidationUndetermined:
+		return "UNDETERMINED"
+	default:
+		return ""
+	}
+}
+
+// CommercialRevalidation 只在`仍然成立`时携带解析。`已失效`不带：交回一份，调用方会以为
+// 可以继续用它，而用例明写「不能继续使用或覆盖原历史」。
+type CommercialRevalidation struct {
+	Outcome    CommercialRevalidationOutcome
+	Resolution CommercialBasisResolution
+	Reason     domain.CheckReason
+}
+
+// CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 三步协议。
+//
+// 三个方法对应 `UC-PC-002` 的三个阶段，用例第 114 行要求「第一阶段解析与第二阶段逐项 `asOf`
+// 必须在类型和测试中可见」，第 87 行要求实现的是「两阶段端口」。它们不合成一个带开关的方法：
+// 三步由三个不同时刻的事件触发——开始判断、逐项形成时点、即将提交决定——合成会让编排依赖
+// 它当轮根本不会走的分支，也会把提交前重解提前到判断开始时做（ADR-0027）。
 type CommercialBasisResolver interface {
 	ResolveCommercialBasis(ctx context.Context, query CommercialBasisQuery) (CommercialBasisResolution, error)
+	FormJudgmentAsOf(ctx context.Context, query JudgmentAsOfQuery) (JudgmentAsOfFormation, error)
+	RevalidateCommercialBasis(ctx context.Context, query CommercialRevalidationQuery) (CommercialRevalidation, error)
 }
 
 // ReachabilityRequest 携带按所采用规则包声明的策略形成的判断时点。权威提供方必须校验
@@ -102,10 +222,54 @@ type ReachabilityRequest struct {
 	AsOf              domain.JudgmentAsOf
 }
 
-// ReachabilityAssessor 是 parcel-shipment 视角下的 network-routing 三值判断。三个
-// 取值没有一个是接受决定，本上下文也不得在这里据其推导出一个。
+// ReachabilityOutcome 是 network-routing 一次可达性答复在本上下文的落点。
+//
+// `请求冲突`与`未受理`不译成 error。它们是业务答案而非技术故障——调用方必须能据以纠正自己
+// 这次请求，而不是当作故障重试。译成 error 之后消费侧只剩「依赖答不出」一格，续办路径是
+// 内部重试，正是那句话禁止的事：对着一个拼错的请求重试到底，冲突也不会消失。
+type ReachabilityOutcome uint8
+
+const (
+	ReachabilityOutcomeInvalid ReachabilityOutcome = iota
+	ReachabilityAssessed
+	ReachabilityNotFormed
+	ReachabilityRequestConflict
+	ReachabilityRequestNotAccepted
+)
+
+func (outcome ReachabilityOutcome) String() string {
+	switch outcome {
+	case ReachabilityAssessed:
+		return "ASSESSED"
+	case ReachabilityNotFormed:
+		return "NOT_FORMED"
+	case ReachabilityRequestConflict:
+		return "REQUEST_CONFLICT"
+	case ReachabilityRequestNotAccepted:
+		return "REQUEST_NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// ReachabilityAssessment 只在`已判断`时携带判断，其余一律不带：交回一份零值判断，编排会把
+// 一次没作出的判断记到接受判断任务上。
+//
+// 提供方的`首次形成`、`重放既有`与`不适用`都落在`已判断`。前两者交回的是同一份判断，重放与
+// 首次对本上下文没有分别；`不适用`的分别由判断自身的取值与所携依据带过来，不必在这一层再
+// 声明一次——`ReachabilityValue` 已经有那一格。
+//
+// Reason 是提供方给的稳定原因引用，非`已判断`时给出，本上下文原样记录，不重新解释。
+type ReachabilityAssessment struct {
+	Outcome  ReachabilityOutcome
+	Judgment domain.ReachabilityJudgment
+	Reason   domain.CheckReason
+}
+
+// ReachabilityAssessor 是 parcel-shipment 视角下的 network-routing 可达性答复。没有一个
+// 取值是接受决定，本上下文也不得在这里据其推导出一个。
 type ReachabilityAssessor interface {
-	AssessParcelReachability(ctx context.Context, request ReachabilityRequest) (domain.ReachabilityJudgment, error)
+	AssessParcelReachability(ctx context.Context, request ReachabilityRequest) (ReachabilityAssessment, error)
 }
 
 // FinancialControlRequest 是 parcel-shipment 请求一次接受前财务控制的范围。它按当前提交
@@ -121,13 +285,56 @@ type FinancialControlRequest struct {
 	AsOf              domain.JudgmentAsOf
 }
 
-// PreAcceptanceFinancialController 是 parcel-shipment 视角下的接受前财务控制。三个取值
-// 没有一个是接受决定，本上下文也不得在这里据其推导出一个。
+// PreAcceptanceControlOutcome 是 settlement-accounting 一次接受前控制答复在本上下文的落点。
 //
-// 依赖调不通要作为错误返回。把它读成`明确无控制`正是用例禁止的默认放行：一次故障会因此
+// 与可达性同一条分界：`请求冲突`与`未受理`是业务答案，提供方明写「调用方必须能据以纠正，而
+// 不是当作故障重试」。译成 error 会让它们并进「依赖答不出」，续办路径变成内部重试。
+type PreAcceptanceControlOutcome uint8
+
+const (
+	PreAcceptanceControlOutcomeInvalid PreAcceptanceControlOutcome = iota
+	PreAcceptanceControlFormed
+	PreAcceptanceControlNotFormed
+	PreAcceptanceControlRequestConflict
+	PreAcceptanceControlRequestNotAccepted
+)
+
+func (outcome PreAcceptanceControlOutcome) String() string {
+	switch outcome {
+	case PreAcceptanceControlFormed:
+		return "FORMED"
+	case PreAcceptanceControlNotFormed:
+		return "NOT_FORMED"
+	case PreAcceptanceControlRequestConflict:
+		return "REQUEST_CONFLICT"
+	case PreAcceptanceControlRequestNotAccepted:
+		return "REQUEST_NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// PreAcceptanceControlAssessment 只在`已形成`时携带结果。提供方的`已执行`与`明确无控制`
+// 都落在`已形成`：两者的分别由 FinancialControlOutcome 与所携依据带过来。
+//
+// 其余三种一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
+// 看起来像通过了。
+type PreAcceptanceControlAssessment struct {
+	Outcome PreAcceptanceControlOutcome
+	Result  domain.FinancialControlResult
+	Reason  domain.CheckReason
+}
+
+// PreAcceptanceFinancialController 是 parcel-shipment 视角下的接受前财务控制。没有一个
+// 取值是接受决定，本上下文也不得在这里据其推导出一个。
+//
+// 依赖调不通仍作为错误返回。把它读成`明确无控制`正是用例禁止的默认放行：一次故障会因此
 // 变成一个看起来通过了的接受前控制。
 type PreAcceptanceFinancialController interface {
-	ApplyPreAcceptanceFinancialControl(ctx context.Context, request FinancialControlRequest) (domain.FinancialControlResult, error)
+	ApplyPreAcceptanceFinancialControl(
+		ctx context.Context,
+		request FinancialControlRequest,
+	) (PreAcceptanceControlAssessment, error)
 }
 
 // ControlReleaseRequest 指名要释放哪一次接受前资金控制。它只携带原控制的业务关联，不带
@@ -293,4 +500,10 @@ type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(ctx context.Context, requestID domain.ShipmentRequestID, judgment domain.ReachabilityJudgment) error
 	RecordFinancialControlResult(ctx context.Context, requestID domain.ShipmentRequestID, result domain.FinancialControlResult) error
 	RecordProcessingAttempt(ctx context.Context, requestID domain.ShipmentRequestID, attempt domain.ProcessingAttempt) error
+	// RecordAdoptedCommercialResolution 记下本轮采用的那次商业解析，供提交决定前按它重解。
+	//
+	// 它与三个判断记录方法分开：解析在任何一项判断之前就被采用，两类判断也共用同一次解析，
+	// 挂到某一个判断的记录上会让另一类判断的轮次看起来没有采用过依据。重复记录同一标识是
+	// 幂等的——一份委托的多轮判断本就该采用同一次解析。
+	RecordAdoptedCommercialResolution(ctx context.Context, requestID domain.ShipmentRequestID, resolution domain.CommercialResolutionID) error
 }

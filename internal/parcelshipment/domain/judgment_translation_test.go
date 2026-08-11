@@ -9,13 +9,12 @@ import (
 
 func reachabilityAsOf(t *testing.T) domain.JudgmentAsOf {
 	t.Helper()
-	asOf, err := domain.NewDeclaredAsOf(
-		domain.ReachabilityJudgmentKind,
+	asOf, err := domain.NewJudgmentAsOf(
 		controlPolicyFormedAsOf,
-		mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
+		echoedAsOfFor(t, domain.ReachabilityJudgmentKind),
 	)
 	if err != nil {
-		t.Fatalf("new declared asOf: %v", err)
+		t.Fatalf("new judgment asOf: %v", err)
 	}
 	return asOf
 }
@@ -33,12 +32,18 @@ func pendingRoutingAllowed(t *testing.T) domain.PendingRoutingAllowance {
 
 func reachabilityJudgment(t *testing.T, value domain.ReachabilityValue) domain.ReachabilityJudgment {
 	t.Helper()
-	judgment, err := domain.NewReachabilityJudgment(
-		mustValue(t, domain.NewReachabilityJudgmentID, "NRJ-1"),
-		mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
-		value,
-		reachabilityAsOf(t),
-	)
+	spec := domain.ReachabilityJudgmentSpec{
+		JudgmentID: mustValue(t, domain.NewReachabilityJudgmentID, "NRJ-1"),
+		ParcelID:   mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		Value:      value,
+		AsOf:       reachabilityAsOf(t),
+	}
+	if value == domain.ReachabilityNotApplicable {
+		// `不适用`那一支没有权威签发的判断标识，依据反过来是必需的。
+		spec.JudgmentID = domain.ReachabilityJudgmentID{}
+		spec.Basis = mustValue(t, domain.NewReachabilityBasisReference, "LABEL_ONLY_CHANNEL_SERVICE")
+	}
+	judgment, err := domain.NewReachabilityJudgment(spec)
 	if err != nil {
 		t.Fatalf("new reachability judgment: %v", err)
 	}
@@ -152,6 +157,67 @@ func TestAPendingRoutingAllowanceWithoutABasisCannotBeBuilt(t *testing.T) {
 		err, domain.ErrInvalidPendingRoutingAllowance,
 	) {
 		t.Fatalf("error = %v, want ErrInvalidPendingRoutingAllowance", err)
+	}
+}
+
+// Covers: ADR-0025「翻译必须是全函数：提供方封闭集合里的每个取值都要有明确落点」——
+// network-routing 的`不适用`携带 EligibilityBasis，说的是这个服务本就不要求可达性判断。
+// 译成`无法判定`会对着一个不该问的问题无休止内部重试，译成`不可达`则是在本上下文替
+// network-routing 作判断。
+func TestAServiceThatDoesNotRequireAReachabilityJudgmentPasses(t *testing.T) {
+	check, err := domain.ReachabilityCheckFor(
+		reachabilityJudgment(t, domain.ReachabilityNotApplicable),
+		domain.PendingRoutingAllowance{},
+	)
+	if err != nil {
+		t.Fatalf("reachability check: %v", err)
+	}
+
+	if check.Outcome() != domain.CheckPassed {
+		t.Fatalf("outcome = %q, want PASSED——本就不要求判断的服务被卡住了", check.Outcome())
+	}
+	if check.Reason().String() != "" {
+		t.Fatalf("reason = %q; 通过的校验不该带原因", check.Reason())
+	}
+}
+
+// Covers: UC-NR-002 结果语义「不得以不适用代替不可达，也不得虚构运营网络」——没有依据的
+// `不适用`与一次悄悄放行分不开，而本上下文正是据它形成`通过`，因此构造期就得拦住。
+func TestANotApplicableReachabilityJudgmentDemandsAnExplicitBasis(t *testing.T) {
+	_, err := domain.NewReachabilityJudgment(domain.ReachabilityJudgmentSpec{
+		ParcelID: mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		Value:    domain.ReachabilityNotApplicable,
+		AsOf:     reachabilityAsOf(t),
+	})
+	if !errors.Is(err, domain.ErrInvalidReachabilityJudgment) {
+		t.Fatalf("err = %v, want ErrInvalidReachabilityJudgment——不带依据的不适用被接受了", err)
+	}
+}
+
+// Covers: ADR-0027「消费方凭据不持有提供方不曾签发的东西」——`不适用`那一支下
+// network-routing 不形成判断，也就没有判断标识可引用；要求一个只能由适配器发明。
+// 其余三值反过来必须带标识。
+func TestOnlyAFormedReachabilityJudgmentCarriesAnAuthorityIdentifier(t *testing.T) {
+	notApplicable, err := domain.NewReachabilityJudgment(domain.ReachabilityJudgmentSpec{
+		ParcelID: mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		Value:    domain.ReachabilityNotApplicable,
+		Basis:    mustValue(t, domain.NewReachabilityBasisReference, "LABEL_ONLY_CHANNEL_SERVICE"),
+		AsOf:     reachabilityAsOf(t),
+	})
+	if err != nil {
+		t.Fatalf("new reachability judgment: %v——不适用被要求提供一个权威没签发的标识", err)
+	}
+	if notApplicable.JudgmentID().String() != "" {
+		t.Fatalf("judgment ID = %q; 不适用凭空得到了一个标识", notApplicable.JudgmentID())
+	}
+
+	_, err = domain.NewReachabilityJudgment(domain.ReachabilityJudgmentSpec{
+		ParcelID: mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		Value:    domain.ReachabilityReachable,
+		AsOf:     reachabilityAsOf(t),
+	})
+	if !errors.Is(err, domain.ErrInvalidReachabilityJudgment) {
+		t.Fatalf("err = %v, want ErrInvalidReachabilityJudgment——已形成的判断没有标识却被接受", err)
 	}
 }
 

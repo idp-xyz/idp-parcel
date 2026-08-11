@@ -133,6 +133,15 @@ type SubmitShipmentRequestSpec struct {
 }
 
 type ShipmentRequest struct {
+	// revision 是这份聚合被读出时所在的持久化版本，未持久化为零。它由仓储在写入成功后
+	// 推进，**状态转移不动它**：一次保存对应一次版本推进，而两次转移之间只保存一次，
+	// 由转移各自加一会让版本跳号，框架合同要的却是严格递增一。
+	//
+	// 转移都以值接收者复制整份聚合再返回，所以它天然被带下去。真正的风险是日后某个转移
+	// 改成重新构造一个 ShipmentRequest{...}——那会把版本悄悄刷回零，随后一次按预期版本的
+	// 写入会当作并发冲突失败，或者更糟，覆盖掉别人的写入。守它的是遍历全部转移的性质性
+	// 用例，不是这条注释。
+	revision          int64
 	shipmentRequestID ShipmentRequestID
 	batchID           SubmissionBatchID
 	state             ShipmentRequestState
@@ -182,6 +191,12 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 		},
 		submittedAt: spec.SubmittedAt,
 	}, nil
+}
+
+// Revision 交回这份聚合被读出时所在的持久化版本，未持久化为零。仓储据它按预期版本写入，
+// 从而认出并发覆盖。
+func (request ShipmentRequest) Revision() int64 {
+	return request.revision
 }
 
 func (request ShipmentRequest) ShipmentRequestID() ShipmentRequestID {

@@ -67,6 +67,28 @@ func (result AdvanceAcceptanceJudgmentResult) State() domain.ShipmentRequestStat
 	return domain.ShipmentRequestSubmitted
 }
 
+// reachabilityAsOfReasons 是可达性判断在第二阶段四种未成形上的未决原因。`未配置`与`未决`
+// 分开尤其要紧：前者等租户把 `PAR-COM-14` 的时点策略登记上，后者等依赖恢复，压成一格会对着
+// 一个没配置的租户参数无休止内部重试。
+var reachabilityAsOfReasons = asOfPendingReasons{
+	basisNotResolved: ReachabilityAsOfBasisNotResolved,
+	notConfigured:    ReachabilityAsOfNotConfigured,
+	unavailable:      ReachabilityAsOfUnavailable,
+	valueRejected:    ReachabilityAsOfValueRejected,
+	inputNotAccepted: ReachabilityAsOfInputNotAccepted,
+}
+
+// reachabilityStallReasons 是 network-routing 三种非「已判断」答复各自的未决原因。
+//
+// 与第二阶段那一套同一机制：一张写明的表加一次查表，查不到就是端口交回了封闭集合以外的东西。
+// `请求冲突`与`未受理`要本方纠正这次请求，`未形成判断`才是等依赖——三者共用一格，前两者会被
+// 当成故障重试，而重试改不了一个拼错或冲突的请求。
+var reachabilityStallReasons = map[ports.ReachabilityOutcome]JudgmentPendingReason{
+	ports.ReachabilityNotFormed:          ReachabilityJudgmentNotFormed,
+	ports.ReachabilityRequestConflict:    ReachabilityRequestConflict,
+	ports.ReachabilityRequestNotAccepted: ReachabilityRequestNotAccepted,
+}
+
 type AdvanceAcceptanceJudgmentHandler struct {
 	commercial   ports.CommercialBasisResolver
 	reachability ports.ReachabilityAssessor
@@ -101,36 +123,46 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
 ) (AdvanceAcceptanceJudgmentResult, error) {
-	resolution, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-	})
+	// 本步只推进判断，不形成决定，因此前半段任何一处停下都保持可续办：据不据一次确定性
+	// 商业失败拒绝，由形成决定那一步回答。
+	adopted, stall, err := formAdoptedBasis(
+		ctx,
+		handler.commercial,
+		handler.recorder,
+		commercialBasisScope{
+			Identity:          command.Identity,
+			ShipmentRequestID: command.ShipmentRequestID,
+			SubmissionVersion: command.SubmissionVersion,
+		},
+		domain.ReachabilityJudgmentKind,
+		ReachabilityAsOfNotDeclared,
+		reachabilityAsOfReasons,
+	)
 	if err != nil {
-		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
+		return AdvanceAcceptanceJudgmentResult{}, err
 	}
-	// 本步只推进判断，不形成决定，因此`确定不适用`与`解析未决`在这里同样停下：据不据一次
-	// 确定性商业失败拒绝，由形成决定那一步回答。
-	if resolution.Applicability != domain.CommerciallyApplicable {
-		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
-	}
-	basis := resolution.Snapshot
-
-	asOf, declared := basis.AsOfFor(domain.ReachabilityJudgmentKind)
-	if !declared {
-		return handler.undecided(ctx, command, ReachabilityAsOfNotDeclared), nil
+	if stall.stopped() {
+		return handler.undecided(ctx, command, stall.reason, stall.scope...), nil
 	}
 
-	judgment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{
+	assessment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
 		DeclaredParcelID:  command.DeclaredParcelID,
-		AsOf:              asOf,
+		AsOf:              adopted.asOf,
 	})
 	if err != nil {
 		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil
 	}
+	if assessment.Outcome != ports.ReachabilityAssessed {
+		reason, ok := reachabilityStallReasons[assessment.Outcome]
+		if !ok {
+			return AdvanceAcceptanceJudgmentResult{}, ErrUnexpectedAssessmentOutcome
+		}
+		return handler.undecided(ctx, command, reason), nil
+	}
+	judgment := assessment.Judgment
 	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
 	// 的依据。
 	if err := handler.recorder.RecordReachabilityJudgment(ctx, command.ShipmentRequestID, judgment); err != nil {
@@ -144,18 +176,23 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	}, nil
 }
 
+// undecided 的 scope 是本轮范围之外还要参与续办派生的东西，例如提供方交回的原因引用：同一
+// 未决原因下的两种缺口靠它分开。
 func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceAcceptanceJudgmentCommand,
 	reason JudgmentPendingReason,
+	scope ...string,
 ) AdvanceAcceptanceJudgmentResult {
 	continuation := judgmentContinuation(
 		reason,
-		command.Identity.TenantID().String(),
-		command.Identity.CustomerAccountID().String(),
-		command.ShipmentRequestID.String(),
-		command.SubmissionVersion.String(),
-		command.DeclaredParcelID.String(),
+		append([]string{
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+			command.DeclaredParcelID.String(),
+		}, scope...)...,
 	)
 	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
 

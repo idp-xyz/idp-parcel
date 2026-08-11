@@ -8,6 +8,7 @@ import (
 var (
 	ErrInvalidCommercialBasisSnapshot = errors.New("parcel shipment: invalid commercial basis snapshot")
 	ErrInvalidDeclaredAsOf            = errors.New("parcel shipment: invalid declared as-of")
+	ErrInvalidJudgmentAsOf            = errors.New("parcel shipment: invalid judgment as-of")
 	ErrInvalidReachabilityJudgment    = errors.New("parcel shipment: invalid reachability judgment")
 	ErrInvalidFinancialControlResult  = errors.New("parcel shipment: invalid financial control result")
 	ErrInvalidApplicableCheckGroups   = errors.New("parcel shipment: invalid applicable check groups")
@@ -174,36 +175,134 @@ func (kind JudgmentKind) String() string {
 	}
 }
 
-// DeclaredAsOf 是所采用规则包为某一类判断声明的时点。parcel-shipment 据此形成值，
-// 绝不自己发明一个，所以没有声明的判断根本无法继续。
+// AsOfSemanticsReference 标明一项判断锚到哪个业务时点。它保持为不透明引用：语义属
+// party-commercial 登记的版本化政策，本上下文只携带引用，既不解释它，也不提供一组取值
+// 供人挑选。
+type AsOfSemanticsReference struct{ requiredValue }
+
+func NewAsOfSemanticsReference(value string) (AsOfSemanticsReference, error) {
+	required, err := newRequiredValue("as-of semantics reference", value)
+	return AsOfSemanticsReference{required}, err
+}
+
+// DeclaredAsOf 是所采用规则包为某一类判断声明的时点锚：锚到哪种业务时点语义，依据该政策的
+// 哪个版本。没有声明的判断根本无法继续。
+//
+// 它刻意不带值。值由本上下文逐项形成、再由 party-commercial 校验回显（`UC-PC-002` 步骤 6），
+// 声明这一头本来就只有语义没有时刻。给它一个时刻字段，适配器就只能在第一阶段结果里填一个
+// 无人授权的值——那正是「不得用一个全局时间代替」要挡的事。
 type DeclaredAsOf struct {
 	kind          JudgmentKind
-	at            time.Time
+	semantics     AsOfSemanticsReference
 	policyVersion AsOfPolicyVersion
 }
 
-func NewDeclaredAsOf(kind JudgmentKind, at time.Time, policyVersion AsOfPolicyVersion) (DeclaredAsOf, error) {
-	if !kind.valid() || at.IsZero() || !policyVersion.valid() {
+func NewDeclaredAsOf(
+	kind JudgmentKind,
+	semantics AsOfSemanticsReference,
+	policyVersion AsOfPolicyVersion,
+) (DeclaredAsOf, error) {
+	if !kind.valid() || !semantics.valid() || !policyVersion.valid() {
 		return DeclaredAsOf{}, ErrInvalidDeclaredAsOf
 	}
-	return DeclaredAsOf{kind: kind, at: at.UTC(), policyVersion: policyVersion}, nil
+	return DeclaredAsOf{kind: kind, semantics: semantics, policyVersion: policyVersion}, nil
 }
 
 func (declared DeclaredAsOf) Kind() JudgmentKind {
 	return declared.kind
 }
 
-func (declared DeclaredAsOf) At() time.Time {
-	return declared.at
+func (declared DeclaredAsOf) Semantics() AsOfSemanticsReference {
+	return declared.semantics
 }
 
 func (declared DeclaredAsOf) PolicyVersion() AsOfPolicyVersion {
 	return declared.policyVersion
 }
 
-// JudgmentAsOf 是实际送给权威提供方、并由其校验回显的时点。它与声明同形，因为形成值
-// 时不得添加任何策略没有授权的东西。
-type JudgmentAsOf = DeclaredAsOf
+func (declared DeclaredAsOf) valid() bool {
+	return declared.kind.valid() && declared.semantics.valid() && declared.policyVersion.valid()
+}
+
+// EchoedAsOfPolicy 是 party-commercial 在第二阶段随校验结果交回的那份时点政策。
+//
+// 它与 DeclaredAsOf 内容同形却另立一型，因为两者的来路不同：声明来自第一阶段的规则包，回显
+// 来自权威对本方所形成值的确认。只有后者能证明这个时刻被授权过。同型时 NewJudgmentAsOf 会
+// 连声明一起收下，「规则包说锚在这」就能冒充「权威确认过这个时刻」——那正是本类型要挡的。
+//
+// 它只该由适配器从提供方第二阶段的答复构造，不得由第一阶段的声明转手而来。
+type EchoedAsOfPolicy struct {
+	kind          JudgmentKind
+	semantics     AsOfSemanticsReference
+	policyVersion AsOfPolicyVersion
+}
+
+func NewEchoedAsOfPolicy(
+	kind JudgmentKind,
+	semantics AsOfSemanticsReference,
+	policyVersion AsOfPolicyVersion,
+) (EchoedAsOfPolicy, error) {
+	if !kind.valid() || !semantics.valid() || !policyVersion.valid() {
+		return EchoedAsOfPolicy{}, ErrInvalidJudgmentAsOf
+	}
+	return EchoedAsOfPolicy{kind: kind, semantics: semantics, policyVersion: policyVersion}, nil
+}
+
+// Matches 报告回显交回的政策与第一阶段的声明是否一致。不一致不是本类型的错误，而是编排要
+// 处理的业务事实——规则包在两次调用之间换过了，本轮不能继续。
+func (echoed EchoedAsOfPolicy) Matches(declared DeclaredAsOf) bool {
+	return echoed.kind == declared.kind &&
+		echoed.semantics == declared.semantics &&
+		echoed.policyVersion == declared.policyVersion
+}
+
+// JudgmentAsOf 是已经形成、并由 party-commercial 校验回显过的时点：本上下文选定的值，连同
+// 提供方交回的那份政策。
+//
+// 它与 DeclaredAsOf 分成两个类型，而不是同一个类型多一个可选的值字段。送进 ReachabilityRequest
+// 与 FinancialControlRequest 的必须是回显过的那一份；两者同型时签名分不出来，一次「规则包说
+// 锚在这」会被当成「权威确认过这个时刻」用出去，而后者才是权威判断得以复核的依据。
+type JudgmentAsOf struct {
+	kind          JudgmentKind
+	at            time.Time
+	semantics     AsOfSemanticsReference
+	policyVersion AsOfPolicyVersion
+}
+
+// NewJudgmentAsOf 只收回显的政策，收不下第一阶段的声明——这一条由类型而不是注释保证。
+func NewJudgmentAsOf(at time.Time, echoed EchoedAsOfPolicy) (JudgmentAsOf, error) {
+	if at.IsZero() || !echoed.kind.valid() ||
+		!echoed.semantics.valid() || !echoed.policyVersion.valid() {
+		return JudgmentAsOf{}, ErrInvalidJudgmentAsOf
+	}
+	return JudgmentAsOf{
+		kind:          echoed.kind,
+		at:            at.UTC(),
+		semantics:     echoed.semantics,
+		policyVersion: echoed.policyVersion,
+	}, nil
+}
+
+func (asOf JudgmentAsOf) Kind() JudgmentKind {
+	return asOf.kind
+}
+
+func (asOf JudgmentAsOf) At() time.Time {
+	return asOf.at
+}
+
+func (asOf JudgmentAsOf) Semantics() AsOfSemanticsReference {
+	return asOf.semantics
+}
+
+func (asOf JudgmentAsOf) PolicyVersion() AsOfPolicyVersion {
+	return asOf.policyVersion
+}
+
+func (asOf JudgmentAsOf) valid() bool {
+	return !asOf.at.IsZero() && asOf.kind.valid() &&
+		asOf.semantics.valid() && asOf.policyVersion.valid()
+}
 
 // CommercialBasisSnapshot 是 parcel-shipment 对一次唯一商业解析所保留的部分：解析
 // 标识、采用的接单规则包、解析当时的权威视图修订，以及该规则包声明的各项时点。它不
@@ -221,11 +320,12 @@ type CommercialBasisSnapshot struct {
 // CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。
 //
 // 本包的分界是**入参数量**，不是值对象与实体之分，而且它只单向成立：≥5 个输入一律用 Spec
-// 结构体（`SubmitShipmentRequestSpec` 5、`SafeHandoffAssessmentSpec` 10、
-// `ProductionOwnershipDecisionSpec` 14），零反例——本包八个多参位置构造器入参最多 4 个
-// （`NewSourceIdentity`、`NewSubmissionCandidate`、`NewAcceptanceCheck`、
-// `NewReachabilityJudgment`、`NewFinancialControlResult`、`NewSourceSubmissionFingerprint`
-// 皆为 4，`NewSubmissionBatchCandidate` 3、`NewAdmissionScope` 2）。
+// 结构体（`SubmitShipmentRequestSpec` 5、`ReachabilityJudgmentSpec` 5、
+// `SafeHandoffAssessmentSpec` 10、`ProductionOwnershipDecisionSpec` 14），零反例——本包七个
+// 多参位置构造器入参最多 4 个（`NewSourceIdentity`、`NewSubmissionCandidate`、
+// `NewAcceptanceCheck`、`NewFinancialControlResult`、`NewSourceSubmissionFingerprint` 皆为 4，
+// `NewSubmissionBatchCandidate` 3、`NewAdmissionScope` 2）。`ReachabilityJudgmentSpec` 正是
+// 越线后改过来的：`不适用`要携带依据，入参从 4 涨到 5。
 //
 // 反向不成立，别照着推：≤4 时两种写法都行。`AcceptanceDecisionSpec`、
 // `ManualReviewCompletionSpec`、`ProcessingAttemptSpec` 都只有 4 个字段却用 Spec，因为三者
@@ -254,7 +354,7 @@ func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBas
 	}
 	seen := make(map[JudgmentKind]struct{}, len(spec.DeclaredAsOf))
 	for _, declared := range spec.DeclaredAsOf {
-		if !declared.kind.valid() || declared.at.IsZero() || !declared.policyVersion.valid() {
+		if !declared.valid() {
 			return CommercialBasisSnapshot{}, ErrInvalidDeclaredAsOf
 		}
 		if _, exists := seen[declared.kind]; exists {
@@ -297,9 +397,12 @@ func (snapshot CommercialBasisSnapshot) ViewRevision() CommercialViewRevision {
 	return snapshot.viewRevision
 }
 
-// AsOfFor 返回规则包为某一类判断声明的时点。没有声明时报告缺席而不是给默认值——在这里
-// 顶上任何一个时刻，正是用例禁止的「用一个全局时间代替」。
-func (snapshot CommercialBasisSnapshot) AsOfFor(kind JudgmentKind) (JudgmentAsOf, bool) {
+// DeclaredAsOfFor 返回规则包为某一类判断声明的时点锚。没有声明时报告缺席而不是给默认值——
+// 在这里顶上任何一个语义或时刻，正是用例禁止的「用一个全局时间代替」。
+//
+// 它交回的是声明而不是可直接送出的时点：值还没形成，形成之后还要由 party-commercial 校验
+// 回显，那是第二阶段的事。
+func (snapshot CommercialBasisSnapshot) DeclaredAsOfFor(kind JudgmentKind) (DeclaredAsOf, bool) {
 	for _, declared := range snapshot.declaredAsOf {
 		if declared.kind == kind {
 			return declared, true
@@ -312,8 +415,23 @@ func (snapshot CommercialBasisSnapshot) valid() bool {
 	return snapshot.resolutionID.valid() && snapshot.rulePackage.valid() && snapshot.viewRevision.valid()
 }
 
-// ReachabilityValue 以采用引用的形式镜像 network-routing 的三值判断。parcel-shipment
-// 从不产生它，只记录拥有它的上下文判断了什么；三个取值没有一个是接受决定。
+// ReachabilityBasisReference 指名「本服务不要求运营企业形成可达性判断」所依据的商业事实。
+// 依据属 party-commercial，由 network-routing 判定后随`不适用`交回，这里只记引用。
+type ReachabilityBasisReference struct{ requiredValue }
+
+func NewReachabilityBasisReference(value string) (ReachabilityBasisReference, error) {
+	required, err := newRequiredValue("reachability basis reference", value)
+	return ReachabilityBasisReference{required}, err
+}
+
+// ReachabilityValue 以采用引用的形式镜像 network-routing 对一次可达性请求的答复：三值判断
+// 本身，加上「这个问题不该问」。parcel-shipment 从不产生它，只记录拥有它的上下文答了什么；
+// 四个取值没有一个是接受决定。
+//
+// `不适用`与三值并列而不另设类型，与 FinancialControlOutcome 同一形状：提供方在这一支下
+// 同样不形成判断，而消费方要的是「这一组校验该怎么落」，那是同一个答复维度。它刻意不与
+// `可达`合并——合并之后一次本就不必问的判断会被记成一次问过且通得过的判断，而 UC-NR-002
+// 明禁以`不适用`代替三值判断中的任何一个。
 type ReachabilityValue uint8
 
 const (
@@ -321,10 +439,11 @@ const (
 	ReachabilityReachable
 	ReachabilityUnreachable
 	ReachabilityInsufficientEvidence
+	ReachabilityNotApplicable
 )
 
 func (value ReachabilityValue) valid() bool {
-	return value >= ReachabilityReachable && value <= ReachabilityInsufficientEvidence
+	return value >= ReachabilityReachable && value <= ReachabilityNotApplicable
 }
 
 func (value ReachabilityValue) String() string {
@@ -335,29 +454,53 @@ func (value ReachabilityValue) String() string {
 		return "UNREACHABLE"
 	case ReachabilityInsufficientEvidence:
 		return "INSUFFICIENT_EVIDENCE"
+	case ReachabilityNotApplicable:
+		return "NOT_APPLICABLE"
 	default:
 		return ""
 	}
 }
 
+// ReachabilityJudgment 是本上下文对一次可达性答复所保留的引用。
+//
+// `不适用`必须携带依据，且不要求判断标识：那一支下 network-routing 不形成判断，也就没有
+// 签发标识可引用，强行要一个只能由适配器发明；而没有依据的`不适用`与一次悄悄放行分不开。
+// 其余三值反过来必须带标识——它们都是权威已经形成的判断。
 type ReachabilityJudgment struct {
 	judgmentID ReachabilityJudgmentID
 	parcelID   DeclaredParcelID
 	value      ReachabilityValue
+	basis      ReachabilityBasisReference
 	asOf       JudgmentAsOf
 }
 
-func NewReachabilityJudgment(
-	judgmentID ReachabilityJudgmentID,
-	parcelID DeclaredParcelID,
-	value ReachabilityValue,
-	asOf JudgmentAsOf,
-) (ReachabilityJudgment, error) {
-	if !judgmentID.valid() || !parcelID.valid() || !value.valid() ||
-		asOf.at.IsZero() || !asOf.policyVersion.valid() {
+// ReachabilityJudgmentSpec 是形成一次可达性判断引用所需的全部输入。入参从 4 涨到 5，按本包
+// ≥5 用 Spec 的分界改成结构体。
+type ReachabilityJudgmentSpec struct {
+	JudgmentID ReachabilityJudgmentID
+	ParcelID   DeclaredParcelID
+	Value      ReachabilityValue
+	Basis      ReachabilityBasisReference
+	AsOf       JudgmentAsOf
+}
+
+func NewReachabilityJudgment(spec ReachabilityJudgmentSpec) (ReachabilityJudgment, error) {
+	if !spec.ParcelID.valid() || !spec.Value.valid() || !spec.AsOf.valid() {
 		return ReachabilityJudgment{}, ErrInvalidReachabilityJudgment
 	}
-	return ReachabilityJudgment{judgmentID: judgmentID, parcelID: parcelID, value: value, asOf: asOf}, nil
+	if spec.Value == ReachabilityNotApplicable && !spec.Basis.valid() {
+		return ReachabilityJudgment{}, ErrInvalidReachabilityJudgment
+	}
+	if spec.Value != ReachabilityNotApplicable && !spec.JudgmentID.valid() {
+		return ReachabilityJudgment{}, ErrInvalidReachabilityJudgment
+	}
+	return ReachabilityJudgment{
+		judgmentID: spec.JudgmentID,
+		parcelID:   spec.ParcelID,
+		value:      spec.Value,
+		basis:      spec.Basis,
+		asOf:       spec.AsOf,
+	}, nil
 }
 
 func (judgment ReachabilityJudgment) JudgmentID() ReachabilityJudgmentID {
@@ -376,8 +519,19 @@ func (judgment ReachabilityJudgment) AsOf() JudgmentAsOf {
 	return judgment.asOf
 }
 
+// Basis 只在`不适用`时给出：它说的是这个问题为什么不该问，其余三值都是问过之后的答案。
+func (judgment ReachabilityJudgment) Basis() ReachabilityBasisReference {
+	return judgment.basis
+}
+
 func (judgment ReachabilityJudgment) valid() bool {
-	return judgment.judgmentID.valid() && judgment.parcelID.valid() && judgment.value.valid()
+	if !judgment.parcelID.valid() || !judgment.value.valid() {
+		return false
+	}
+	if judgment.value == ReachabilityNotApplicable {
+		return judgment.basis.valid()
+	}
+	return judgment.judgmentID.valid()
 }
 
 type FinancialControlResultID struct{ requiredValue }
@@ -445,11 +599,15 @@ func NewFinancialControlResult(
 	basis ControlBasisReference,
 	asOf JudgmentAsOf,
 ) (FinancialControlResult, error) {
-	if !resultID.valid() || !outcome.valid() ||
-		asOf.at.IsZero() || !asOf.policyVersion.valid() {
+	if !outcome.valid() || !asOf.valid() {
 		return FinancialControlResult{}, ErrInvalidFinancialControlResult
 	}
 	if outcome != FinancialControlHeld && !basis.valid() {
+		return FinancialControlResult{}, ErrInvalidFinancialControlResult
+	}
+	// `明确无控制`不要求标识：那一支下 settlement-accounting 不形成冻结，也就没有签发结果
+	// 标识可引用。与可达性`不适用`同一条理由——强行要一个，只能由适配器发明。
+	if outcome != FinancialControlNotApplicable && !resultID.valid() {
 		return FinancialControlResult{}, ErrInvalidFinancialControlResult
 	}
 	return FinancialControlResult{resultID: resultID, outcome: outcome, basis: basis, asOf: asOf}, nil

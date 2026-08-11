@@ -7,9 +7,13 @@ package domain
 // CommercialApplicability 是 parcel-shipment 对一次商业解析的两分：权威把话说完了（适用，
 // 或确定不适用），还是根本没得出答案。
 //
-// 它刻意不是 party-commercial 结果代数的副本。那边分`无适用依据`、`适用冲突`、`解析未决`、
-// `已失效`四种，那是它的语言；本上下文只需要接受条件矩阵自己的那两列——确定性不通过与无法
-// 判定。究竟是哪一种由原因引用带过来，不在这里重新声明一套口径。
+// 它刻意不是 party-commercial 结果代数的副本。那边的非唯一取值有五种——`无适用依据`、
+// `适用冲突`、`解析未决`、`输入未受理`、`已失效`——那是它的语言；本上下文只需要接受条件矩阵
+// 自己的那两列，确定性不通过与无法判定。究竟是哪一种由原因引用带过来，不在这里重新声明
+// 一套口径。
+//
+// 压缩只发生在校验结果这一层。编排另按原因取各自的未决原因与续办引用，否则一次越权探测
+// （`AT-PC-028` 的`输入未受理`）与一次权威读不到会共用一个引用，续办时催的也是同一个人。
 type CommercialApplicability uint8
 
 const (
@@ -83,6 +87,10 @@ func CommercialBasisChecksFor(
 //
 // 许可赦免不了`资料不足`：那是还不知道有没有可行候选，拿许可盖住未知等于在没有判断的情况下
 // 接受。许可所依据的商业事实随快照进入接受决定，用例要求的「保留该商业依据」由此满足。
+//
+// `不适用`译成`通过`。这不是默认放行：构造期已经强制它携带商业不适用依据，因此与一次没能
+// 形成的判断分得开。另外两种译法都不成立——译成`无法判定`会对着一个本就不该问的问题无休止
+// 内部重试，译成`不可达`则是在这里替 network-routing 作判断。
 func ReachabilityCheckFor(
 	judgment ReachabilityJudgment,
 	pendingRouting PendingRoutingAllowance,
@@ -96,16 +104,22 @@ func ReachabilityCheckFor(
 	// 资料不足由客户来补，不是重问 network-routing 就能变的：权威已经把话说完了，说的正是
 	// 声明资料不够判。拿它当内部重试会对着一份没变过的声明资料重试到底，还永远不通知客户。
 	resumePath := ResumeByInternalRetry
-	switch {
-	case judgment.Value() == ReachabilityReachable:
+	// 逐取值分派而不是拿 default 收尾：提供方日后新增一个取值，落到兜底那一格不会有任何
+	// 测试变红，而那一格正好是本上下文的接受语言。
+	switch judgment.Value() {
+	case ReachabilityReachable, ReachabilityNotApplicable:
 		outcome = CheckPassed
-	case judgment.Value() == ReachabilityUnreachable && pendingRouting.Allowed():
-		outcome = CheckPassed
-	case judgment.Value() == ReachabilityUnreachable:
+	case ReachabilityUnreachable:
+		if pendingRouting.Allowed() {
+			outcome = CheckPassed
+			break
+		}
 		outcome, reasonValue = CheckFailed, "REACHABILITY_UNREACHABLE"
-	default:
+	case ReachabilityInsufficientEvidence:
 		outcome, reasonValue = CheckUndetermined, "REACHABILITY_INSUFFICIENT_EVIDENCE"
 		resumePath = ResumeByCustomerSupplement
+	default:
+		return AcceptanceCheck{}, ErrInvalidReachabilityJudgment
 	}
 
 	return checkWithReason(NetworkReachabilityCheck, judgment.DeclaredParcelID(), outcome, reasonValue, resumePath)

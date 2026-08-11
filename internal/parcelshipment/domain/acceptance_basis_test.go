@@ -10,15 +10,44 @@ import (
 
 var controlPolicyFormedAsOf = time.Date(2026, 8, 6, 9, 0, 0, 0, time.UTC)
 
-func financialControlAsOf(t *testing.T) domain.JudgmentAsOf {
+// declaredAsOfFor 是规则包的声明：只有语义与政策版本，没有值。
+func declaredAsOfFor(t *testing.T, kind domain.JudgmentKind) domain.DeclaredAsOf {
 	t.Helper()
-	asOf, err := domain.NewDeclaredAsOf(
-		domain.FinancialControlJudgmentKind,
-		controlPolicyFormedAsOf,
+	declared, err := domain.NewDeclaredAsOf(
+		kind,
+		mustValue(t, domain.NewAsOfSemanticsReference, "ASOF-SEMANTICS-"+kind.String()),
 		mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
 	)
 	if err != nil {
 		t.Fatalf("new declared asOf: %v", err)
+	}
+	return declared
+}
+
+// echoedAsOfFor 冒充提供方第二阶段随校验结果交回的那份政策。它与声明另立一型，因此夹具
+// 也得走这条路——把声明直接塞进 NewJudgmentAsOf 已经编译不过。
+func echoedAsOfFor(t *testing.T, kind domain.JudgmentKind) domain.EchoedAsOfPolicy {
+	t.Helper()
+	echoed, err := domain.NewEchoedAsOfPolicy(
+		kind,
+		mustValue(t, domain.NewAsOfSemanticsReference, "ASOF-SEMANTICS-"+kind.String()),
+		mustValue(t, domain.NewAsOfPolicyVersion, "asof-policy-v1"),
+	)
+	if err != nil {
+		t.Fatalf("new echoed asOf policy: %v", err)
+	}
+	return echoed
+}
+
+// financialControlAsOf 是已由提供方校验回显的时点，即第二阶段的产物。
+func financialControlAsOf(t *testing.T) domain.JudgmentAsOf {
+	t.Helper()
+	asOf, err := domain.NewJudgmentAsOf(
+		controlPolicyFormedAsOf,
+		echoedAsOfFor(t, domain.FinancialControlJudgmentKind),
+	)
+	if err != nil {
+		t.Fatalf("new judgment asOf: %v", err)
 	}
 	return asOf
 }
@@ -57,6 +86,34 @@ func TestAHeldControlResultStandsOnTheFreezeItself(t *testing.T) {
 	}
 	if result.Outcome() != domain.FinancialControlHeld {
 		t.Fatalf("outcome = %q, want HELD", result.Outcome())
+	}
+}
+
+// Covers: ADR-0027「消费方凭据不持有提供方不曾签发的东西」— settlement-accounting 在
+// `明确无控制`那一支下不形成冻结，因而没有结果标识可交回；要求一个，只能由适配器发明。
+// 其余取值反过来必须带标识。
+func TestOnlyAnExecutedControlCarriesAnAuthorityIdentifier(t *testing.T) {
+	basis := mustValue(t, domain.NewControlBasisReference, "CONTRACT_DECLARES_NO_PRE_ACCEPTANCE_CONTROL")
+	notApplicable, err := domain.NewFinancialControlResult(
+		domain.FinancialControlResultID{},
+		domain.FinancialControlNotApplicable,
+		basis,
+		financialControlAsOf(t),
+	)
+	if err != nil {
+		t.Fatalf("new financial control result: %v——无控制被要求提供一个权威没签发的标识", err)
+	}
+	if notApplicable.ResultID().String() != "" {
+		t.Fatalf("result ID = %q; 无控制凭空得到了一个标识", notApplicable.ResultID())
+	}
+
+	if _, err := domain.NewFinancialControlResult(
+		domain.FinancialControlResultID{},
+		domain.FinancialControlHeld,
+		domain.ControlBasisReference{},
+		financialControlAsOf(t),
+	); !errors.Is(err, domain.ErrInvalidFinancialControlResult) {
+		t.Fatalf("error = %v, want ErrInvalidFinancialControlResult——执行过的控制没有标识却被接受", err)
 	}
 }
 

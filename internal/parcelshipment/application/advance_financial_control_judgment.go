@@ -49,6 +49,24 @@ func (result AdvanceFinancialControlJudgmentResult) State() domain.ShipmentReque
 	return domain.ShipmentRequestSubmitted
 }
 
+// financialControlAsOfReasons 是接受前财务控制在第二阶段四种未成形上的未决原因。与可达性
+// 那一套分开：两者停在同一阶段时续办引用要分得开，否则一次财务侧的停顿会被按可达性去续办。
+var financialControlAsOfReasons = asOfPendingReasons{
+	basisNotResolved: FinancialControlAsOfBasisNotResolved,
+	notConfigured:    FinancialControlAsOfNotConfigured,
+	unavailable:      FinancialControlAsOfUnavailable,
+	valueRejected:    FinancialControlAsOfValueRejected,
+	inputNotAccepted: FinancialControlAsOfInputNotAccepted,
+}
+
+// controlStallReasons 与可达性那张表同一机制。这里尤其要紧：一次`请求冲突`若被当成故障
+// 重试，被重试的是一次占用客户资金的请求。
+var controlStallReasons = map[ports.PreAcceptanceControlOutcome]JudgmentPendingReason{
+	ports.PreAcceptanceControlNotFormed:          FinancialControlNotFormed,
+	ports.PreAcceptanceControlRequestConflict:    FinancialControlRequestConflict,
+	ports.PreAcceptanceControlRequestNotAccepted: FinancialControlRequestNotAccepted,
+}
+
 type AdvanceFinancialControlJudgmentHandler struct {
 	commercial ports.CommercialBasisResolver
 	controller ports.PreAcceptanceFinancialController
@@ -85,35 +103,46 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
 ) (AdvanceFinancialControlJudgmentResult, error) {
-	resolution, err := handler.commercial.ResolveCommercialBasis(ctx, ports.CommercialBasisQuery{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: command.SubmissionVersion,
-	})
+	// 前半段与可达性那一支共用：任何一处停下都不发起控制——一次没有适用合同的范围，没有
+	// 理由去占用这个客户的资金；一个本方自造的时刻上发出的占用，既收不回来也解释不了按哪
+	// 一版策略执行。
+	adopted, stall, err := formAdoptedBasis(
+		ctx,
+		handler.commercial,
+		handler.recorder,
+		commercialBasisScope{
+			Identity:          command.Identity,
+			ShipmentRequestID: command.ShipmentRequestID,
+			SubmissionVersion: command.SubmissionVersion,
+		},
+		domain.FinancialControlJudgmentKind,
+		FinancialControlAsOfNotDeclared,
+		financialControlAsOfReasons,
+	)
 	if err != nil {
-		return handler.undecided(ctx, command, CommercialBasisUnavailable), nil
+		return AdvanceFinancialControlJudgmentResult{}, err
 	}
-	// 本步只推进判断，不形成决定，因此`确定不适用`与`解析未决`在这里同样停下——而且都不该
-	// 发起控制：一次没有适用合同的范围，没有理由去占用这个客户的资金。
-	if resolution.Applicability != domain.CommerciallyApplicable {
-		return handler.undecided(ctx, command, CommercialBasisNotUnique), nil
-	}
-	basis := resolution.Snapshot
-
-	asOf, declared := basis.AsOfFor(domain.FinancialControlJudgmentKind)
-	if !declared {
-		return handler.undecided(ctx, command, FinancialControlAsOfNotDeclared), nil
+	if stall.stopped() {
+		return handler.undecided(ctx, command, stall.reason, stall.scope...), nil
 	}
 
-	control, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{
+	assessment, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
-		AsOf:              asOf,
+		AsOf:              adopted.asOf,
 	})
 	if err != nil {
 		return handler.undecided(ctx, command, FinancialControlUnavailable), nil
 	}
+	if assessment.Outcome != ports.PreAcceptanceControlFormed {
+		reason, ok := controlStallReasons[assessment.Outcome]
+		if !ok {
+			return AdvanceFinancialControlJudgmentResult{}, ErrUnexpectedAssessmentOutcome
+		}
+		return handler.undecided(ctx, command, reason), nil
+	}
+	control := assessment.Result
 	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
 	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(ctx, command.ShipmentRequestID, control); err != nil {
@@ -127,17 +156,21 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	}, nil
 }
 
+// undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。
 func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 	ctx context.Context,
 	command AdvanceFinancialControlJudgmentCommand,
 	reason JudgmentPendingReason,
+	scope ...string,
 ) AdvanceFinancialControlJudgmentResult {
 	continuation := judgmentContinuation(
 		reason,
-		command.Identity.TenantID().String(),
-		command.Identity.CustomerAccountID().String(),
-		command.ShipmentRequestID.String(),
-		command.SubmissionVersion.String(),
+		append([]string{
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+		}, scope...)...,
 	)
 	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
 
