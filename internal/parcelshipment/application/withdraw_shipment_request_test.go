@@ -300,13 +300,92 @@ func TestAnUndecidedRoundReportsNoStateWhenItNeverReadTheRequest(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-005 步骤 1「保全撤回来源、请求身份、对象、请求方和业务时间」— 来源先于一切
+// 业务判断保全，否则一次没能形成撤回的请求会连它到达过都无从追溯。
+func TestAWithdrawalRequestPreservesItsSourceBeforeAnythingElse(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if _, found := fixture.sources.stored(t, withdrawalSourceIdentity(t)); !found {
+		t.Fatal("a withdrawal request was handled without preserving its own source")
+	}
+	if fixture.steps[0] != "preserve-source" {
+		t.Fatalf("first step = %q; the source must be preserved before any business judgement", fixture.steps[0])
+	}
+}
+
+// Covers: UC-PS-005 `AT-PS-069`「同一请求身份携带不同内容 → 形成来源冲突，不覆盖原请求」与
+// 步骤 1「冲突不覆盖」— 同一撤回请求身份带着不同内容到达，是冲突而不是第二次撤回。
+func TestAWithdrawalSourceConflictNeitherOverwritesNorWithdrawsAgain(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+
+	first := fixture.command(t)
+	if _, err := fixture.handler.Handle(context.Background(), first); err != nil {
+		t.Fatalf("handle the first request: %v", err)
+	}
+
+	conflicting := fixture.command(t)
+	conflicting.PayloadDigest = mustValue(t, domain.NewPayloadDigest, "withdrawal-digest-2")
+
+	result, err := fixture.handler.Handle(context.Background(), conflicting)
+	if err != nil {
+		t.Fatalf("handle the conflicting request: %v", err)
+	}
+
+	if result.Outcome() != application.WithdrawalSourceConflict {
+		t.Fatalf("outcome = %q, want SOURCE_CONFLICT", result.Outcome())
+	}
+	preserved, _ := fixture.sources.stored(t, withdrawalSourceIdentity(t))
+	if preserved.Digest().String() != "withdrawal-digest-1" {
+		t.Fatalf("preserved digest = %q; a conflicting request overwrote the original source", preserved.Digest())
+	}
+	if fixture.sources.preserveCount != 1 {
+		t.Fatalf("preserved %d times; a conflict must not preserve a second source fact", fixture.sources.preserveCount)
+	}
+}
+
+// Covers: UC-PS-005 `AT-PS-068`「同一撤回请求重复到达 → 返回原撤回及原补偿关联」与步骤 1
+// 「重复返回原处理」— 重复到达在来源层就短路，不再走一遍授权与决定边界。
+func TestARepeatedWithdrawalSourceReturnsTheOriginalHandling(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle the first request: %v", err)
+	}
+	fixture.requests.withdrawn = true
+	authorizationsBefore := fixture.authorizer.calls
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle the repeated request: %v", err)
+	}
+
+	if result.Outcome() != application.WithdrawalDecisionAlreadyFormed {
+		t.Fatalf("outcome = %q, want DECISION_ALREADY_FORMED", result.Outcome())
+	}
+	if _, present := result.Withdrawal(); !present {
+		t.Fatal("a repeated request did not return the original withdrawal")
+	}
+	if fixture.authorizer.calls != authorizationsBefore {
+		t.Fatal("a replayed source went on to ask the authorizer again instead of returning the original handling")
+	}
+	if len(fixture.sources.observations) != 1 {
+		t.Fatalf("observations = %d; a replay must be appended beside the preserved fact", len(fixture.sources.observations))
+	}
+}
+
 type withdrawalFixture struct {
 	handler    *application.WithdrawShipmentRequestHandler
+	sources    *sourceRepositoryDouble
 	requests   *rejectableRequestStore
 	authorizer *withdrawalAuthorizerDouble
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	identities *countingIdentityFactory
+	steps      []string
 }
 
 func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
@@ -318,7 +397,13 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 		release:    &controlReleaseDouble{},
 		identities: &countingIdentityFactory{t: t},
 	}
+	value.sources = &sourceRepositoryDouble{
+		records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{},
+		record:  func(step string) { value.steps = append(value.steps, step) },
+	}
+	value.authorizer.record = func(step string) { value.steps = append(value.steps, step) }
 	value.handler = application.NewWithdrawShipmentRequestHandler(application.WithdrawShipmentRequestDeps{
+		Sources:    value.sources,
 		Requests:   value.requests,
 		Authorizer: value.authorizer,
 		Judgments:  value.judgments,
@@ -330,14 +415,25 @@ func newWithdrawalFixture(t *testing.T) *withdrawalFixture {
 	return value
 }
 
+// withdrawalSourceIdentity 是撤回请求自己的来源身份，与产生委托的那一次提交分开：同一个客户
+// 就同一份委托先提交后撤回，是两次来源请求，各自有各自的请求标识与内容摘要。
+func withdrawalSourceIdentity(t *testing.T) domain.SourceIdentity {
+	t.Helper()
+	return sourceIdentity(t, "tenant-1", "customer-1", "source-a", "withdrawal-key-1")
+}
+
 func (value *withdrawalFixture) command(t *testing.T) application.WithdrawShipmentRequestCommand {
 	t.Helper()
 	return application.WithdrawShipmentRequestCommand{
-		Identity:          sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1"),
-		ShipmentRequestID: mustValue(t, domain.NewShipmentRequestID, "request-1"),
-		SubmissionVersion: mustValue(t, domain.NewSubmissionVersionID, "version-1"),
-		Requester:         mustValue(t, domain.NewWithdrawalRequesterReference, "CUSTOMER-CONTACT-1"),
-		Reason:            mustValue(t, domain.NewWithdrawalReasonReference, "CUSTOMER_NO_LONGER_REQUIRES_SERVICE"),
+		Identity:           sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1"),
+		WithdrawalIdentity: withdrawalSourceIdentity(t),
+		PayloadDigest:      mustValue(t, domain.NewPayloadDigest, "withdrawal-digest-1"),
+		OccurredAt:         handlerClockAt,
+		ReceivedAt:         handlerClockAt,
+		ShipmentRequestID:  mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		SubmissionVersion:  mustValue(t, domain.NewSubmissionVersionID, "version-1"),
+		Requester:          mustValue(t, domain.NewWithdrawalRequesterReference, "CUSTOMER-CONTACT-1"),
+		Reason:             mustValue(t, domain.NewWithdrawalReasonReference, "CUSTOMER_NO_LONGER_REQUIRES_SERVICE"),
 	}
 }
 
@@ -346,6 +442,8 @@ type withdrawalAuthorizerDouble struct {
 	t       *testing.T
 	granted bool
 	err     error
+	calls   int
+	record  func(string)
 }
 
 func (double *withdrawalAuthorizerDouble) AuthorizeWithdrawal(
@@ -353,6 +451,10 @@ func (double *withdrawalAuthorizerDouble) AuthorizeWithdrawal(
 	_ ports.WithdrawalAuthorizationQuery,
 ) (domain.WithdrawalAuthorityReference, error) {
 	double.t.Helper()
+	double.calls++
+	if double.record != nil {
+		double.record("authorize-withdrawal")
+	}
 	if double.err != nil {
 		return domain.WithdrawalAuthorityReference{}, double.err
 	}

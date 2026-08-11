@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -19,6 +20,7 @@ const (
 	WithdrawalNotAuthorized
 	WithdrawalDecisionAlreadyFormed
 	WithdrawalUndecided
+	WithdrawalSourceConflict
 )
 
 func (outcome WithdrawalOutcome) String() string {
@@ -31,17 +33,27 @@ func (outcome WithdrawalOutcome) String() string {
 		return "DECISION_ALREADY_FORMED"
 	case WithdrawalUndecided:
 		return "UNDECIDED"
+	case WithdrawalSourceConflict:
+		return "SOURCE_CONFLICT"
 	default:
 		return ""
 	}
 }
 
 type WithdrawShipmentRequestCommand struct {
-	Identity          domain.SourceIdentity
-	ShipmentRequestID domain.ShipmentRequestID
-	SubmissionVersion domain.SubmissionVersionID
-	Requester         domain.WithdrawalRequesterReference
-	Reason            domain.WithdrawalReasonReference
+	// Identity 是产生委托的那一次提交的来源身份，用来找到目标委托。
+	Identity domain.SourceIdentity
+	// WithdrawalIdentity 是撤回请求自己的来源身份。它与 Identity 分开，因为同一个客户就同一份
+	// 委托先提交后撤回是两次来源请求：合用一个身份会让撤回请求被判成原提交的重放，从此再也
+	// 分不出「这单重发了」与「这单要撤」。
+	WithdrawalIdentity domain.SourceIdentity
+	PayloadDigest      domain.PayloadDigest
+	OccurredAt         time.Time
+	ReceivedAt         time.Time
+	ShipmentRequestID  domain.ShipmentRequestID
+	SubmissionVersion  domain.SubmissionVersionID
+	Requester          domain.WithdrawalRequesterReference
+	Reason             domain.WithdrawalReasonReference
 }
 
 type WithdrawShipmentRequestResult struct {
@@ -89,6 +101,7 @@ func (result WithdrawShipmentRequestResult) CompensationReference() domain.Owner
 }
 
 type WithdrawShipmentRequestDeps struct {
+	Sources    ports.SourceSubmissionRepository
 	Requests   ports.ShipmentRequestRepository
 	Authorizer ports.WithdrawalAuthorizer
 	Judgments  ports.RecordedJudgmentReader
@@ -117,6 +130,28 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 ) (WithdrawShipmentRequestResult, error) {
+	// 步骤 1 先于一切业务判断：一次没能形成撤回的请求，也必须留下它到达过的事实，否则事后
+	// 连「客户到底提没提过」都无从追溯。
+	incoming, err := domain.NewSourceSubmissionFingerprint(
+		command.WithdrawalIdentity,
+		command.PayloadDigest,
+		command.OccurredAt,
+		command.ReceivedAt,
+	)
+	if err != nil {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("preserve withdrawal source: %w", err)
+	}
+	preserved, replayed, err := handler.deps.Sources.FindPreserved(ctx, command.WithdrawalIdentity)
+	if err != nil {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("find preserved withdrawal source: %w", err)
+	}
+	if replayed {
+		return handler.resolvePreserved(ctx, command, preserved, incoming)
+	}
+	if err := handler.deps.Sources.Preserve(ctx, incoming); err != nil {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("preserve withdrawal source: %w", err)
+	}
+
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
 		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
@@ -185,6 +220,41 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		hasWithdrawal: true,
 		compensation:  handler.releaseFreeze(ctx, command),
 	}, nil
+}
+
+// resolvePreserved 回答一个来源身份已被保全过的撤回请求。
+//
+// 同身份同内容是重复到达：追加一次观察，然后交回原处理结果，绝不再走一遍授权与决定边界。
+// 走第二遍不只是浪费——授权在两次之间可能已经失效，同一个已经成立的撤回会因此读出两种回执。
+//
+// 同身份不同内容是来源冲突：原请求不被覆盖，也不形成第二次撤回。它与「决定已成立」分成两个
+// 结果，因为客户要做的事不同——一个是纠正自己这次请求的内容，一个是接受这单已经有结论了。
+func (handler *WithdrawShipmentRequestHandler) resolvePreserved(
+	ctx context.Context,
+	command WithdrawShipmentRequestCommand,
+	preserved domain.SourceSubmissionFingerprint,
+	incoming domain.SourceSubmissionFingerprint,
+) (WithdrawShipmentRequestResult, error) {
+	classification, err := domain.ClassifySourceSubmission(preserved, incoming)
+	if err != nil {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("classify withdrawal source: %w", err)
+	}
+	if classification == domain.SourceConflict {
+		return WithdrawShipmentRequestResult{outcome: WithdrawalSourceConflict}, nil
+	}
+
+	if err := handler.deps.Sources.AppendObservation(ctx, incoming); err != nil {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("append withdrawal source observation: %w", err)
+	}
+
+	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
+	if err != nil {
+		return handler.undecided(ctx, command, ShipmentRequestUnavailable, domain.ShipmentRequestStateInvalid), nil
+	}
+	if !found {
+		return WithdrawShipmentRequestResult{}, fmt.Errorf("withdraw shipment request: %w", domain.ErrInvalidShipmentRequest)
+	}
+	return handler.existing(ctx, command, request), nil
 }
 
 // existing 交回那个先到的决定。它可能是接受、拒绝，也可能是本方此前形成的一次撤回——
