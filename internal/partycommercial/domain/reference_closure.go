@@ -106,6 +106,9 @@ func (adopted AdoptedBasis) Version() CommercialVersion {
 type CommercialClosure struct {
 	outcome      ResolutionOutcome
 	resolutionID ResolutionID
+	// key 是形成这份结果的那次查询。它随结果走而不是由调用方在提交前另给一份：重校验按原
+	// 查询重解，键一旦可以替换，一次「校验」就能拿另一个范围的视图去证明这份解析仍然成立。
+	key          ClosureResolutionKey
 	anchor       SelectionAnchor
 	viewRevision AuthorityViewRevision
 	adopted      []AdoptedBasis
@@ -113,6 +116,11 @@ type CommercialClosure struct {
 	conflicting  []CommercialObjectKind
 	continuation ContinuationReference
 	reason       ResolutionReason
+}
+
+// ResolutionKey 交回形成这份结果的那次查询，供调用方按原键读取权威视图。
+func (closure CommercialClosure) ResolutionKey() ClosureResolutionKey {
+	return closure.key
 }
 
 func (closure CommercialClosure) Outcome() ResolutionOutcome {
@@ -185,6 +193,7 @@ func ResolveCommercialClosure(registry *CommercialRegistry, key ClosureResolutio
 	}
 
 	closure := CommercialClosure{
+		key:          key,
 		anchor:       key.Anchor,
 		viewRevision: registry.ViewRevision(key.Scope),
 	}
@@ -229,10 +238,51 @@ func closurePending(
 ) CommercialClosure {
 	return CommercialClosure{
 		outcome:      ResolutionPending,
+		key:          key,
 		anchor:       anchor,
 		viewRevision: view,
 		reason:       reason,
 		continuation: continuationFor(key.fingerprint(), ResolutionID{}, reason),
+	}
+}
+
+// ValidateClosureBeforeDecision 在调用方提交决定之前重跑整个引用闭包的第一阶段。
+//
+// 它与单依据侧的 ValidateBeforeDecision 是同一条规则的闭包形态：按原查询重解，而不是逐个
+// 检查已采用对象自身。同范围新增一个竞争候选时，那些对象一个字节都没变，解析却已经不再唯一。
+//
+// 原本就不是唯一解析的结果原样返回——不存在「采用依据是否仍有效」这个问题。
+func ValidateClosureBeforeDecision(registry *CommercialRegistry, prior CommercialClosure) CommercialClosure {
+	if prior.outcome != UniquelyResolved {
+		return prior
+	}
+	// 权威读不到时，原结果既不能被确认也不能被断言失效，因此保持`解析未决`且可续办。判成
+	// 失效会让调用方去重解一份其实还好好的解析，判成仍然成立则会让它在一份可能已被推翻的
+	// 依据上提交决定；两个方向都是拿一次读取失败冒充一个商业事实。
+	if registry == nil {
+		stalled := prior
+		stalled.outcome = ResolutionPending
+		stalled.adopted = nil
+		stalled.reason = AuthorityUnreadable
+		stalled.continuation = continuationFor(prior.key.fingerprint(), prior.resolutionID, AuthorityUnreadable)
+		return stalled
+	}
+
+	current := ResolveCommercialClosure(registry, prior.key)
+	if current.outcome == UniquelyResolved && current.resolutionID == prior.resolutionID {
+		return prior
+	}
+
+	return CommercialClosure{
+		outcome:      ResolutionStale,
+		resolutionID: prior.resolutionID,
+		key:          prior.key,
+		anchor:       prior.anchor,
+		viewRevision: current.viewRevision,
+		unresolved:   current.unresolved,
+		conflicting:  current.conflicting,
+		reason:       CurrentResolutionChanged,
+		continuation: continuationFor(prior.key.fingerprint(), prior.resolutionID, CurrentResolutionChanged),
 	}
 }
 

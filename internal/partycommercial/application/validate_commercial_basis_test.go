@@ -1,0 +1,167 @@
+package application_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+)
+
+// revalidatedAt 与 judgedAt 分开：重校验是另一次判断，交回同一个时刻就分不出结果是这一轮
+// 确认的还是上一轮留下的。
+var revalidatedAt = time.Date(2026, 6, 3, 14, 0, 0, 0, time.UTC)
+
+// resolvedClosure 先走完第一阶段，交回它的结果与所用的权威视图，供提交前重校验接着用。
+func resolvedClosure(t *testing.T, authority *authorityDouble, scope string) domain.CommercialClosure {
+	t.Helper()
+	resolved, err := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt}).
+		Handle(context.Background(), application.ResolveCommercialBasisCommand{
+			Key: closureKey(t, scope, domain.CustomerContractObject),
+		})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Closure().Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want the first resolution to succeed", resolved.Closure().Outcome())
+	}
+	return resolved.Closure()
+}
+
+// Covers: UC-PC-002 步骤 8「业务决定提交前校验解析和关键结果仍相容」与 `AT-PC-026`「解析后合同
+// 被当前修订替代，接受尚未提交 → 原解析失效并重解」。
+//
+// 同范围新增一个竞争候选时，已采用的那份合同一个字节都没动——逐对象去查会说它仍然有效，只有按
+// 原查询重解才看得见解析已经不再唯一。这也是重校验必须拿原解析键、而不是拿调用方现给的键去跑
+// 的原因：键跟着结果走，才不会用另一个查询去证明这一个仍然成立。
+//
+// 失效结果不带已采用依据：把它交回去等于引诱调用方在一份用例判定为不再成立的依据上继续提交。
+func TestARevalidationSeesANewCandidateAndReportsTheResolutionStale(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
+
+	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if revalidated.Closure().Outcome() != domain.ResolutionStale {
+		t.Fatalf("outcome = %q, want STALE; a second candidate in the same scope ended the uniqueness", revalidated.Closure().Outcome())
+	}
+	if revalidated.Closure().ResolutionID() != prior.ResolutionID() {
+		t.Fatalf(
+			"resolution id = %q, want the prior %q; the caller finds its stopped decision by that id",
+			revalidated.Closure().ResolutionID(), prior.ResolutionID(),
+		)
+	}
+	if revalidated.Closure().ContinuationReference().String() == "" {
+		t.Fatal("失效没有续办引用，而用例要求`已失效`重新解析，调用方得能接上原来那次决定")
+	}
+	if len(revalidated.Closure().Adopted()) != 0 {
+		t.Fatal("失效结果仍交回已采用依据，调用方会据以继续提交一个已经不成立的决定")
+	}
+	if !revalidated.JudgedAt().Equal(revalidatedAt) {
+		t.Fatalf("judged at = %s, want this round's clock reading %s", revalidated.JudgedAt(), revalidatedAt)
+	}
+}
+
+// Covers: UC-PC-002「依赖调用超时与权威确认『无适用依据』是不同结果」在重校验一侧，以及
+// `AT-PC-027`。
+//
+// 读不到权威时，原结果既不能被确认也不能被断言失效。判成`已失效`会让调用方去重解一份其实还
+// 好好的解析，判成仍然成立则会让它在一份可能已经被推翻的依据上提交决定；两个方向都是拿一次
+// 读取失败冒充一个商业事实。
+func TestAnUnreadableAuthorityLeavesTheRevalidationPendingRatherThanStale(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	authority.err = errors.New("authority view unavailable")
+
+	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	if err != nil {
+		t.Fatalf("读取失败被当成技术错误抛出，而用例要求它形成解析未决: %v", err)
+	}
+
+	if revalidated.Closure().Outcome() != domain.ResolutionPending {
+		t.Fatalf("outcome = %q, want RESOLUTION_PENDING; an unreadable view neither confirms nor invalidates", revalidated.Closure().Outcome())
+	}
+	if revalidated.Closure().Reason() != domain.AuthorityUnreadable {
+		t.Fatalf("reason = %q, want AUTHORITY_UNREADABLE", revalidated.Closure().Reason())
+	}
+	if revalidated.Closure().ContinuationReference().String() == "" {
+		t.Fatal("未决无法续办，而用例要求保存缺口并安全续办")
+	}
+	if len(revalidated.Closure().Adopted()) != 0 {
+		t.Fatal("未决结果携带了已采用依据")
+	}
+}
+
+// Covers: UC-PC-002「相同解析输入与相同修订可以返回原结果」与 `AT-PC-024`/`AT-PC-025` — 视图没
+// 变时原解析原样成立。
+//
+// 关键是不产生新的解析标识：换一个标识意味着这是另一次解析，调用方按原标识存下的引用、快照与
+// 审计就都对不上了，而它其实什么都没变。
+func TestAnUnchangedViewLetsThePriorResolutionStandWithItsOriginalIdentity(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	revalidated, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if revalidated.Closure().Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want the prior resolution to stand", revalidated.Closure().Outcome())
+	}
+	if revalidated.Closure().ResolutionID() != prior.ResolutionID() {
+		t.Fatalf(
+			"resolution id = %q, want the unchanged %q; a new id would orphan every reference the caller already stored",
+			revalidated.Closure().ResolutionID(), prior.ResolutionID(),
+		)
+	}
+	if len(revalidated.Closure().Adopted()) != len(prior.Adopted()) {
+		t.Fatalf("adopted %d bases, want the prior %d", len(revalidated.Closure().Adopted()), len(prior.Adopted()))
+	}
+}
+
+// Covers: UC-PC-002 步骤 8 与 ADR-0003 — 重校验按原解析键重解，因此它问的租户与范围必须是当初
+// 形成这份解析的那一对，而不是调用方这一刻另给的一对。
+//
+// 键由调用方现给的话，一次「校验」就能拿另一个范围的视图去证明这份解析仍然成立，跨租户探测也
+// 会因此变成一个合法调用。
+func TestARevalidationAsksTheAuthorityForTheKeyThatFormedThePriorResolution(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+	key := closureKey(t, "scope-a", domain.CustomerContractObject)
+
+	authority.loadCalled = 0
+	if _, err := application.NewValidateCommercialBasisHandler(authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Prior: prior}); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	if authority.loadCalled != 1 {
+		t.Fatalf("authority loaded %d times, want exactly one view per revalidation", authority.loadCalled)
+	}
+	if authority.askedTenant != key.TenantID {
+		t.Fatalf("asked tenant = %q, want %q", authority.askedTenant, key.TenantID)
+	}
+	if authority.askedScope != key.Scope {
+		t.Fatalf("asked scope = %q, want %q", authority.askedScope, key.Scope)
+	}
+}
