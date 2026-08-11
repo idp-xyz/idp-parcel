@@ -442,8 +442,8 @@ func TestASupersededBasisIsResolvedAgainInsteadOfRetried(t *testing.T) {
 //
 // 恢复动作与`已失效`相同，所以走同一条重解并换标识的路——不换标识就是死循环。但未决原因
 // 必须分开：`已失效`是一桩能拿去跟客户解释的商业事实，这一格却意味着本方记下的采用标识本身
-// 可疑（写坏、串号，或指向了别人的解析）。并进`已失效`，本方的记录缺陷就会计进 AT-PC-026
-// 的失效统计，而那份统计是用来看商业修订有多频繁的。
+// 可疑（写坏、串号，或指向了别人的解析）。并进`已失效`，本方的记录缺陷就会计进失效统计，
+// 而那份统计要答的是商业修订有多频繁。
 func TestAnUnrecognisedAdoptedResolutionResolvesAgainUnderItsOwnReason(t *testing.T) {
 	fixture := newDecisionFixture(t)
 	fixture.commercial.revalidationOutcome = ports.CommercialRevalidationBasisNotResolved
