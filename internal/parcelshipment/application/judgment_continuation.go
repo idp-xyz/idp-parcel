@@ -236,8 +236,11 @@ func (reasons asOfPendingReasons) forOutcome(outcome ports.JudgmentAsOfOutcome) 
 	case ports.JudgmentAsOfValueRejected:
 		return reasons.valueRejected, nil
 	case ports.JudgmentAsOfInputNotAccepted:
-		// 本方指名了一份不属于自己的解析。这是本上下文自己的缺陷，不是权威答不出，因此它
-		// 与`未决`分开：重试改不了一个问错的标识。
+		// 提供方在任何查询发生之前就短路拒绝了：身份或解析标识立不起来。这是本上下文自己
+		// 的缺陷，不是权威答不出，因此它与`未决`分开——重试改不了一份立不起来的入参。
+		//
+		// 它不再包括「指名了一份不属于自己的解析」：越权那一支按 ADR-0029 改落`依据未解析`，
+		// 与「查无此解析」同格。本落点仍有来源（短路支），因此保留。
 		return reasons.inputNotAccepted, nil
 	default:
 		return PendingReasonNone, ErrUnexpectedAsOfOutcome

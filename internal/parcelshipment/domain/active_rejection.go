@@ -125,6 +125,10 @@ func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (Ship
 	}
 	request.decisionFormed = true
 	request.acceptanceTask.state = AcceptanceTaskComplete
+	// 主动拒绝可以落在一轮未决之后，而那一轮留下的续办路径必须在这里清掉：`WaitingOn` 的
+	// 契约是决定形成后报告缺席，它自己不看决定，全靠三个终态转移各自清零。留着它，编排会
+	// 照一条活路径去续办一份已决委托。
+	request.acceptanceTask.waitingOn = ResumePathInvalid
 	return request, nil
 }
 

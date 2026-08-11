@@ -92,8 +92,12 @@ type AcceptanceDecisionTask struct {
 // 完全不同：前者有决定可读，后者只有撤回记录和待续的补偿。
 type AcceptanceTaskState uint8
 
+// 零值留给`未设`而不是`运行中`，与本包其余枚举同一约定。重建入口明言相信输入，那里
+// 「适配器忘了设状态」必须能被检测出来；零值若是一个合法值，忘填会静默过关成`运行中`。
+// 代价是构造处要显式写出`运行中`，那本就该显式。
 const (
-	AcceptanceTaskRunning AcceptanceTaskState = iota
+	AcceptanceTaskStateInvalid AcceptanceTaskState = iota
+	AcceptanceTaskRunning
 	AcceptanceTaskComplete
 	AcceptanceTaskStopped
 )
@@ -139,8 +143,9 @@ type ShipmentRequest struct {
 	//
 	// 转移都以值接收者复制整份聚合再返回，所以它天然被带下去。真正的风险是日后某个转移
 	// 改成重新构造一个 ShipmentRequest{...}——那会把版本悄悄刷回零，随后一次按预期版本的
-	// 写入会当作并发冲突失败，或者更糟，覆盖掉别人的写入。守它的是遍历全部转移的性质性
-	// 用例，不是这条注释。
+	// 写入会当作并发冲突失败，或者更糟，覆盖掉别人的写入。守它的是
+	// `TestNoStateTransitionMovesTheAggregateRevision`，不是这条注释：那条用例反射枚举全部
+	// 转移，第七个转移不在它表里就变红。
 	revision          int64
 	shipmentRequestID ShipmentRequestID
 	batchID           SubmissionBatchID
@@ -188,6 +193,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			taskID:              spec.TaskID,
 			submissionVersionID: spec.VersionID,
 			establishedAt:       spec.SubmittedAt,
+			state:               AcceptanceTaskRunning,
 		},
 		submittedAt: spec.SubmittedAt,
 	}, nil

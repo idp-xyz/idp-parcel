@@ -140,3 +140,33 @@ func TestAnActiveRejectionFormsNoBaselineOrCommitment(t *testing.T) {
 		t.Fatal("a rejection formed an expected commitment")
 	}
 }
+
+// Covers: `WaitingOn` 自身的契约「本轮形成了决定或任务已完成时报告缺席」，以及 ADR-0028
+// 列为非法的跨字段组合「`waitingOn` 有值而决定已形成」。
+//
+// 主动拒绝可以落在一轮未决之后，而那一轮留下了续办路径。另两个终态转移都自己清零，只有
+// 这里没清，于是一份已拒绝、任务已完成的委托仍会交回一条活的续办路径——编排照它续办，
+// 就是在续办一份已决委托。
+func TestAnActiveRejectionClearsTheResumePathLeftByAnUndeterminedRound(t *testing.T) {
+	undecided, err := submitted(t).Decide(decisionSpec(t, []domain.AcceptanceCheck{
+		undeterminedCheck(t, domain.CustomerRelationshipCheck, "DEPENDENCY_TIMEOUT", domain.ResumeByInternalRetry),
+	}))
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if _, waiting := undecided.AcceptanceDecisionTask().WaitingOn(); !waiting {
+		t.Fatal("前置不成立：未决的一轮没有留下续办路径")
+	}
+
+	rejected, err := undecided.RejectByAuthority(activeRejectionSpec(t))
+	if err != nil {
+		t.Fatalf("reject by authority: %v", err)
+	}
+
+	if !rejected.AcceptanceDecisionTask().IsComplete() {
+		t.Fatal("an active rejection left the acceptance judgment task open")
+	}
+	if path, waiting := rejected.AcceptanceDecisionTask().WaitingOn(); waiting {
+		t.Fatalf("waiting on %q; 决定已形成、任务已完成，续办路径却仍然活着", path)
+	}
+}
