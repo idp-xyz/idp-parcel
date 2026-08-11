@@ -26,7 +26,7 @@
 | `/to-tickets` 拆带阻塞边的工单 | `docs/design/*handoff*` 的 `W01..W09` 工作包，阻塞关系写在交接文档里 | 直接认领 `W` 包，不重拆 |
 | `/setup-idp-skills` 配 tracker 与布局 | [issue-tracker.md](./issue-tracker.md)、[triage-labels.md](./triage-labels.md)、[domain.md](./domain.md) | 前置已满足，不用跑 |
 
-`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：九个 `CONTEXT.md` 和十一份 ADR 已经存在。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)——ADR 只新增或 supersede，不改写已接受的历史。
+`/grill-with-docs` 与 `/domain-modeling` 仍然常用，但在本仓是**演进**而非创建：九个 `CONTEXT.md` 与 [ADR 索引](../adr/README.md)里已成文的全部记录都已经存在。这里不复述 ADR 份数——每新增一条就会让它过期，此前写死的「十一份」正是这样烂掉的，而现行与已被取代的划分只在那份索引里权威。改动走 [AGENTS.md 的「改文档」](../../AGENTS.md#改文档)——ADR 只新增或 supersede，不改写已接受的历史。
 
 `.scratch/` 留给**交接文档没覆盖**的工作：外来 bug、临时需求、基线之外的探索。已经是 `W` 包的东西不进 tracker，也不要 `/triage`。
 
