@@ -52,10 +52,7 @@ type sourceFile struct {
 func TestDomainPackagesDoNotDependOnInfrastructure(t *testing.T) {
 	t.Parallel()
 
-	for _, file := range loadSources(t) {
-		if !isDomainPackage(file.pkg) {
-			continue
-		}
+	for _, file := range selectSources(t, "领域包不得依赖基础设施", isDomainPackage) {
 		for _, imported := range file.imports {
 			for _, forbidden := range infrastructureImports {
 				if imported == forbidden || strings.HasPrefix(imported, forbidden+"/") {
@@ -78,11 +75,16 @@ func TestBusinessModulesDoNotReachIntoEachOther(t *testing.T) {
 	t.Parallel()
 
 	modules := businessModules(t)
-	for _, file := range loadSources(t) {
-		owner, owned := moduleOf(file.pkg, modules)
-		if !owned || isCrossContextAdapter(file.pkg, modules) {
+	ownedByAModule := func(pkg string) bool {
+		_, owned := moduleOf(pkg, modules)
+		return owned
+	}
+
+	for _, file := range selectSources(t, "业务模块不得互相伸手", ownedByAModule) {
+		if isCrossContextAdapter(file.pkg, modules) {
 			continue
 		}
+		owner, _ := moduleOf(file.pkg, modules)
 		for _, imported := range file.imports {
 			target, targeted := moduleOf(imported, modules)
 			if !targeted || target == owner {
@@ -106,14 +108,7 @@ func TestSharedPlatformDoesNotDependOnBusinessContexts(t *testing.T) {
 
 	modules := businessModules(t)
 
-	for _, file := range loadSources(t) {
-		// 按段匹配而不是前缀匹配：`internal/platformops` 之类的名字用前缀会被误认成
-		// platform 本尊，而它按黑名单口径本该算业务上下文，于是它自己的 application
-		// 导入自己的 domain 就会报出一条读起来毫无道理的假阳性。
-		segments, ok := internalSegments(file.pkg)
-		if !ok || segments[0] != "platform" {
-			continue
-		}
+	for _, file := range selectSources(t, "共享技术设施不得依赖业务上下文", isSharedPlatform) {
 		for _, imported := range file.imports {
 			if target, targeted := moduleOf(imported, modules); targeted {
 				t.Errorf("%s：共享技术设施经 %q 依赖业务上下文 %q",
@@ -161,13 +156,46 @@ func TestProductionPackagesDoNotImportFirstPartyTestScaffolding(t *testing.T) {
 	}
 }
 
+// firstPartyTestScaffoldingDirectory 是上一条规则的检测侧在磁盘上的位置。
+const firstPartyTestScaffoldingDirectory = "internal/platform/pgtest"
+
+// TestFirstPartyTestScaffoldingStillExists 把上一条的检测侧钉到磁盘上。
+//
+// 上一条的过滤器是否定式，永远筛不空，所以它不会像别的规则那样扫零恒绿；它的静默发生在
+// 检测侧：pgtest 一改名或搬走，isFirstPartyTestScaffolding 对任何导入路径都不再命中，规则
+// 照绿，而生产包从此可以随便导入那个改了名的脚手架包。
+//
+// TestTestScaffoldingRecognitionDoesNotCatchSiblings 拦不住这件事——它比对的是字符串常量，
+// `/internal/platform/pgtest` 判 true 是永真的字符串事实，目录删了它也真。它偏偏是唯一让人
+// 觉得上一条还活着的东西，因此更需要这道锚。
+//
+// 脚手架包真被删掉时这条会红，那是对的：判据没有实例了，上一条规则就该跟着重新审视，而不是
+// 继续摆在那里看起来像在守。
+func TestFirstPartyTestScaffoldingStillExists(t *testing.T) {
+	t.Parallel()
+
+	directory := filepath.Join(repositoryRoot(t), filepath.FromSlash(firstPartyTestScaffoldingDirectory))
+	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
+		t.Fatalf("%s 不在了；isFirstPartyTestScaffolding 的检测侧从此对任何导入路径都不命中，上一条规则会静默失效",
+			firstPartyTestScaffoldingDirectory)
+	}
+
+	pkg := modulePath + "/" + firstPartyTestScaffoldingDirectory
+	if !isFirstPartyTestScaffolding(pkg) {
+		t.Fatalf("isFirstPartyTestScaffolding 认不出磁盘上真实存在的脚手架包 %q；判据与目录已经对不上", pkg)
+	}
+}
+
 func TestProductionPackagesDoNotImportTheFrameworkTestkit(t *testing.T) {
 	t.Parallel()
 
 	for _, file := range loadSources(t) {
 		for _, imported := range file.imports {
-			if strings.HasPrefix(imported, frameworkTestkit) {
-				t.Errorf("%s：生产包导入 %q", file.path, frameworkTestkit)
+			// 补 `/` 边界，与本文件其余判据同口径：裸前缀会让 `…/testkitchen` 这样
+			// 只是恰好同前缀的包报出假阳性，而假阳性会逼人给规则开例外，例外正是门禁
+			// 失效的常见起点。
+			if imported == frameworkTestkit || strings.HasPrefix(imported, frameworkTestkit+"/") {
+				t.Errorf("%s：生产包导入 %q", file.path, imported)
 			}
 		}
 	}
@@ -180,11 +208,16 @@ func TestBusinessPackagesDoNotTouchTheDriverDirectly(t *testing.T) {
 	t.Parallel()
 
 	modules := businessModules(t)
-	for _, file := range loadSources(t) {
-		module, owned := moduleOf(file.pkg, modules)
-		if !owned || strings.Contains(file.pkg, "/adapters/postgres") {
+	ownedByAModule := func(pkg string) bool {
+		_, owned := moduleOf(pkg, modules)
+		return owned
+	}
+
+	for _, file := range selectSources(t, "业务包不得直接碰驱动", ownedByAModule) {
+		if isPersistenceAdapter(file.pkg) {
 			continue
 		}
+		module, _ := moduleOf(file.pkg, modules)
 		for _, imported := range file.imports {
 			if strings.HasPrefix(imported, "github.com/jackc/pgx") {
 				t.Errorf("%s：模块 %q 经 %q 在持久化适配器之外碰到驱动",
@@ -197,11 +230,7 @@ func TestBusinessPackagesDoNotTouchTheDriverDirectly(t *testing.T) {
 func TestApplicationPackagesDoNotDependOnAdapters(t *testing.T) {
 	t.Parallel()
 
-	for _, file := range loadSources(t) {
-		// 后缀与中缀都要认：`application/子包` 同样是应用层，只判后缀会让它滑过去。
-		if !strings.HasSuffix(file.pkg, "/application") && !strings.Contains(file.pkg, "/application/") {
-			continue
-		}
+	for _, file := range selectSources(t, "应用包不得依赖适配器", isApplicationPackage) {
 		for _, imported := range file.imports {
 			if strings.Contains(imported, "/adapters/") {
 				t.Errorf("%s：应用包导入适配器 %q", file.path, imported)
@@ -216,10 +245,7 @@ func TestApplicationPackagesDoNotDependOnAdapters(t *testing.T) {
 func TestHTTPAdaptersDoNotExecuteSQL(t *testing.T) {
 	t.Parallel()
 
-	for _, file := range loadSources(t) {
-		if !strings.Contains(file.pkg, "/adapters/http") {
-			continue
-		}
+	for _, file := range selectSources(t, "入站 HTTP 适配器不得直达持久化", isHTTPAdapter) {
 		for _, imported := range file.imports {
 			if strings.HasPrefix(imported, "github.com/jackc/pgx") ||
 				imported == "database/sql" ||
@@ -281,8 +307,115 @@ func TestTestScaffoldingRecognitionDoesNotCatchSiblings(t *testing.T) {
 	}
 }
 
+// TestPersistenceAdapterExemptionDoesNotCatchSiblings 与上两条同理。这条豁免曾经写成
+// 子串匹配，兄弟包一律白拿——分类器的伴生用例正是为了让这种事在改判据的当场变红。
+func TestPersistenceAdapterExemptionDoesNotCatchSiblings(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"/internal/parcelshipment/adapters/postgres":        true,
+		"/internal/parcelshipment/adapters/postgres/outbox": true,
+		"/internal/parcelshipment/adapters/postgresutil":    false,
+		"/internal/parcelshipment/adapters/postgres_legacy": false,
+		"/internal/parcelshipment/adapters/http":            false,
+		"/internal/parcelshipment/application":              false,
+		"/internal/partycommercial/adapters/parcelshipment": false,
+	}
+
+	for suffix, want := range cases {
+		if got := isPersistenceAdapter(modulePath + suffix); got != want {
+			t.Errorf("%s 判为持久化适配器 %v，应为 %v", suffix, got, want)
+		}
+	}
+}
+
+// TestSharedPlatformRecognitionDoesNotCatchSiblings 与上三条同理。isSharedPlatform 的注释
+// 声称它按段匹配是为了不把 `platformops` 误认成 platform 本尊，这条把那句声称变成用例——
+// 否则判据改回前缀匹配也不会有任何东西变红。
+func TestSharedPlatformRecognitionDoesNotCatchSiblings(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]bool{
+		"/internal/platform":               true,
+		"/internal/platform/pgtest":        true,
+		"/internal/platform/migrate":       true,
+		"/internal/platformops/domain":     false,
+		"/internal/parcelshipment/domain":  false,
+		"/internal/partycommercial/domain": false,
+	}
+
+	for suffix, want := range cases {
+		if got := isSharedPlatform(modulePath + suffix); got != want {
+			t.Errorf("%s 判为共享技术设施 %v，应为 %v", suffix, got, want)
+		}
+	}
+}
+
+// TestModulePathMatchesGoMod 把 modulePath 钉到 go.mod 上。
+//
+// 本包大半条规则的两侧不对称：过滤器侧的包名由这个常量拼出来（loadSources 用
+// filepath.Join(modulePath, relative)），检测侧的导入路径却是从源码真读的。模块路径一改
+// ——升 /v2 是最现实的那种——过滤器照常命中、检测侧全部失配，五条规则同时静默变绿，而
+// go build 不会有任何反应。一个常量漂移带走五条门禁，这是本包里最便宜的一道锚。
+func TestModulePathMatchesGoMod(t *testing.T) {
+	t.Parallel()
+
+	contents, err := os.ReadFile(filepath.Join(repositoryRoot(t), "go.mod"))
+	if err != nil {
+		t.Fatalf("读 go.mod：%v", err)
+	}
+
+	declared := ""
+	for _, line := range strings.Split(string(contents), "\n") {
+		if rest, found := strings.CutPrefix(strings.TrimSpace(line), "module "); found {
+			declared = strings.TrimSpace(rest)
+			break
+		}
+	}
+	if declared != modulePath {
+		t.Fatalf("go.mod 声明的模块是 %q，本包常量 modulePath 是 %q；两者不一致时门禁的检测侧会全面失配而不报",
+			declared, modulePath)
+	}
+}
+
 func isDomainPackage(pkg string) bool {
 	return strings.HasSuffix(pkg, "/domain") || strings.Contains(pkg, "/domain/")
+}
+
+// isSharedPlatform 按段匹配而不是前缀匹配：`internal/platformops` 之类的名字用前缀会被
+// 误认成 platform 本尊，而它按黑名单口径本该算业务上下文，于是它自己的 application 导入
+// 自己的 domain 就会报出一条读起来毫无道理的假阳性。
+func isSharedPlatform(pkg string) bool {
+	segments, ok := internalSegments(pkg)
+	return ok && segments[0] == "platform"
+}
+
+// isApplicationPackage 后缀与中缀都要认：`application/子包` 同样是应用层，只判后缀会让
+// 它滑过去。
+func isApplicationPackage(pkg string) bool {
+	return strings.HasSuffix(pkg, "/application") || strings.Contains(pkg, "/application/")
+}
+
+// isHTTPAdapter 用子串而不是分段，与 isPersistenceAdapter 相反——因为它用在**过滤器**上
+// 而不是豁免上。两者的失败方向不同：过滤器放宽顶多多扫几个包（`adapters/httpx` 被一并
+// 查一遍，假阳性），豁免放宽是把包整个摘出规则之外（假阴性，没有人发现得了）。这里宁可
+// 多扫。
+func isHTTPAdapter(pkg string) bool {
+	return strings.Contains(pkg, "/adapters/http")
+}
+
+// isPersistenceAdapter 按段匹配，与第八、九条同一口径。
+//
+// 不用子串：`adapters/postgresutil`、`adapters/postgres_legacy` 这类兄弟包都含
+// `/adapters/postgres`，一个子串豁免就把它们整包摘出去，此后它们自建 pgxpool 绕过框架
+// 事务保证，没有任何东西会变红。**过滤器放宽与豁免放宽不是一回事**：前者多扫几个文件，
+// 顶多假阳性；后者是假阴性，而假阴性在门禁上没有人发现得了。
+func isPersistenceAdapter(pkg string) bool {
+	segments, ok := internalSegments(pkg)
+	if !ok || len(segments) < 3 {
+		return false
+	}
+	return segments[1] == "adapters" && segments[2] == "postgres"
 }
 
 // businessModules 从 internal/ 的实际目录派生限界上下文根，减去不表达上下文的那几个。
@@ -345,6 +478,29 @@ func isCrossContextAdapter(pkg string, modules map[string]bool) bool {
 		return false
 	}
 	return segments[1] == "adapters" && modules[segments[2]]
+}
+
+// selectSources 取出包名满足 matches 的源文件，一个都没选中时当场判红。
+//
+// 每条扫描型门禁都必须经这里取数，守卫才不可能被下一条规则忘掉。loadSources 自己那道
+// len(files)==0 只守「全仓一个 Go 文件都没有」，守不住「本条规则**自己的**过滤器筛出零个
+// 文件」——而后者才是现实会发生的那种：过滤器的判据全都靠目录命名约定（`/domain`、
+// `platform`、`/application`、`/adapters/http`），而没有任何东西强制这些名字。目录一改名
+// 或一搬家，规则扫零、恒绿，且没有任何东西会报。一条扫不到任何东西的门禁比没有门禁更坏，
+// 它看起来像在守。
+func selectSources(t *testing.T, rule string, matches func(pkg string) bool) []sourceFile {
+	t.Helper()
+
+	var selected []sourceFile
+	for _, file := range loadSources(t) {
+		if matches(file.pkg) {
+			selected = append(selected, file)
+		}
+	}
+	if len(selected) == 0 {
+		t.Fatalf("「%s」的过滤器一个文件都没选中；判据依赖的目录约定多半已经变了，这条门禁会永远空过", rule)
+	}
+	return selected
 }
 
 // loadSources 解析仓库的非测试 Go 文件。排除测试文件，是为了不让一个仅测试用的
