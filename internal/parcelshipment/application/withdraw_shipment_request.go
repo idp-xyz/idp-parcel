@@ -213,8 +213,9 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 	if saved != ports.ShipmentRequestSaved {
-		// 同上：本方这次撤回确定没落库，抢先那一方写下的可能是接受，因此不发释放。客户重试
-		// 这次撤回时会重读到那一份，走 existing 那条路读回既有结果。
+		// 本方这次撤回确定没落库，抢先那一方写下的可能是接受，因此不发释放。客户重试这次撤回
+		// 时会重读到新的那一份，走 existing 那条路读回既有结果——交回的 state 是读取时那一份、
+		// 已知不是库里此刻那一份，理由见 form_acceptance_decision.go 的同一支。
 		reason, err := saveStallReason(saved)
 		if err != nil {
 			return WithdrawShipmentRequestResult{}, err

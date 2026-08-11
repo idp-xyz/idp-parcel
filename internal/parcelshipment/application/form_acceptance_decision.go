@@ -199,7 +199,12 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	}
 	if saved != ports.ShipmentRequestSaved {
 		// 本方这次决定确定没落库，但抢先那一方写下了什么本方并不知道——可能正是一次接受。
-		// 所以这一支同样不释放冻结，理由与上一支相同。
+		// 所以这一支同样不释放冻结，而且理由比上一支更硬：那里是「成没成立无从确定」，这里
+		// 确知有人写了东西。
+		//
+		// 交回的 state 是**读取时**那一份，不是库里此刻那一份——冲突恰恰意味着后者已经变了。
+		// 这里不为它多读一次：恢复动作本就是重读再重放，而本编排以 FindBySourceIdentity
+		// 开头，续办重入时自然会读到新的那一份。
 		reason, err := saveStallReason(saved)
 		if err != nil {
 			return FormAcceptanceDecisionResult{}, err

@@ -166,11 +166,6 @@ func TestRehydrationRefusesStatesThatTheJudgmentPathCannotProduce(t *testing.T) 
 		"等待态越界": func(snapshot *domain.RehydrateShipmentRequestSpec) {
 			snapshot.AcceptanceTask.WaitingOn = domain.ResumePath(7)
 		},
-		// 任务状态越界曾经只被 `已提交 ⇒ 运行中` 那条顺带拦住，而那条规则的前件是`已提交`：
-		// 门一开到别的状态，那个借来的拦截就没了。本格让它由自己那条值域检查拦住。
-		"任务状态越界": func(snapshot *domain.RehydrateShipmentRequestSpec) {
-			snapshot.AcceptanceTask.State = domain.AcceptanceTaskState(99)
-		},
 	}
 
 	for name, breakIt := range illegal {
@@ -336,6 +331,28 @@ func TestRehydrationTellsAnImpossibleStateFromAnUnopenedOne(t *testing.T) {
 	// 拒绝要说得出是哪个值。名字这条路对越界值走不通（`String()` 交回空串），所以印数字。
 	if !strings.Contains(err.Error(), "99") {
 		t.Fatalf("error = %v；拒绝没说出是哪个值，适配器作者只能靠猜", err)
+	}
+}
+
+// Covers: 任务状态的值域要由**它自己**那条检查回答，不能挂在另一条命题的前件上。
+//
+// 越界的任务状态还会被 `已提交 ⇒ 任务运行中` 那条撞上，而两者交回同一个哨兵——所以一条只断言
+// 哨兵的表项分不出是谁拦的：把值域检查整段拆掉，那条表项照样全绿。分得开的是报文，值域检查
+// 说得出是哪个值，另一条说的是「已收工」，而那句话对一个垃圾值本身就是错的。
+//
+// 这条断言的是「守卫在，而且守卫的守卫也在」。挂在前件上的那一下会在门开到别的状态那天消失，
+// 届时不会有任何东西变红。
+func TestRehydrationRefusesATaskStateOnItsOwnValueDomain(t *testing.T) {
+	snapshot := submittedSnapshot(t)
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskState(99)
+
+	_, err := domain.RehydrateShipmentRequest(snapshot)
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+	}
+	if !strings.Contains(err.Error(), "99") {
+		t.Fatalf("error = %v；拒绝没说出是哪个值，说明拦住它的是「已提交配已收工的任务」那条，"+
+			"而那条的前件是`已提交`，门一开到别的状态就没了", err)
 	}
 }
 

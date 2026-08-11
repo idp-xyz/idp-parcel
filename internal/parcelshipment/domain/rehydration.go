@@ -113,11 +113,10 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 // `未设`在这里判而不留给 validForRehydration：状态是本函数分派的依据，零值必须在分派处就被
 // 认出来，否则 default 分支会把一行坏数据报成「本期不支持」。
 //
-// **三个已知但未开门的状态逐个列出，default 留给「根本不是本上下文的取值」。** 上一版把两者
-// 合在 default 里，于是库里一个越界值（那一列存了 99）会被报成「本期不支持这个状态」——正是
-// 上一段点名的那个失败，只修了零值那一个实例。方向与 ADR-0030 要分开的那两个哨兵相反而病相同：
-// 运维会去等一扇永远不会为它而开的门，而不是去看那一行。报文里那个状态名当时还是**空串**，
-// 因为 `ShipmentRequestState(99).String()` 交回空串，唯一的诊断线索也一并没了。
+// **三个已知但未开门的状态逐个列出，default 留给「根本不是本上下文的取值」。** 两者合在
+// default 里的话，库里一个越界值（那一列存了 99）会被报成「本期不支持这个状态」——方向与
+// ADR-0030 要分开的那两个哨兵相反而病相同：运维会去等一扇永远不会为它而开的门，而不是去查
+// 那一行。报文也说不出是哪个值，`ShipmentRequestState(99).String()` 交回空串。
 func admitRehydratedState(state ShipmentRequestState) error {
 	switch state {
 	case ShipmentRequestSubmitted:
@@ -206,9 +205,9 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 	if !task.taskID.valid() || task.establishedAt.IsZero() {
 		return rehydrationRefusal("接受判断任务身份或建立时刻缺失")
 	}
-	// 逐取值分派，不留兜底。只拒零值的话，一个越界值（那一列存了 99）会滑过这里，今天靠
-	// `已提交 ⇒ 任务运行中` 那条**顺带**拦住——而那条规则的前件是`已提交`。这扇门一开到别的
-	// 状态，这个借来的拦截就没了，届时不会有任何东西变红。今天的绿是借来的。
+	// 逐取值分派，不留兜底。只拒零值不够：一个越界值（那一列存了 99）此外只会被
+	// `已提交 ⇒ 任务运行中` 那条撞上，而那条的前件是`已提交`——门开到别的状态时它不适用。
+	// 值域这件事要由它自己的检查回答，不能挂在另一条命题的前件上。
 	switch task.state {
 	case AcceptanceTaskRunning, AcceptanceTaskComplete, AcceptanceTaskStopped:
 	case AcceptanceTaskStateInvalid:
@@ -220,8 +219,8 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 	// `WaitingOn()` 报成**缺席**——即「这任务不等任何人」，而不是被拒成一行坏数据；产出是一份
 	// 不等人、也永远不会有人来续办的运行中任务。
 	//
-	// 同一个 `ResumePath` 在本函数里另有一处是校了的：它作为 `ProcessingAttempt.resumePath`
-	// 时经 `attempt.valid()` 查过值域。同一个类型、同一个函数、两种待遇，一边必然是错的。
+	// 同一个 `ResumePath` 作为 `ProcessingAttempt.resumePath` 时经 `attempt.valid()` 查的是
+	// 同一个值域，两处口径因此一致。
 	if task.waitingOn != ResumePathInvalid && !task.waitingOn.valid() {
 		return rehydrationRefusal(fmt.Sprintf("接受判断任务的等待态不是本上下文的取值：%d", uint8(task.waitingOn)))
 	}

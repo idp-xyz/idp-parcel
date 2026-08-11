@@ -68,7 +68,10 @@ func TestEveryEnumConstantIsNamedByItsStringMethod(t *testing.T) {
 		omissions, types := enumOmissionsIn(byPackage[pkg])
 		scanned += len(types)
 		for _, name := range types {
-			seen[name] = true
+			// 键带包限定。裸类型名在本仓会撞车——`JudgmentAsOfOutcome`、`ReachabilityValue`、
+			// `NotFormedReason` 各有两个包声明同名类型。按裸名锚只断言得了「某个包里有个叫
+			// 这名字的被扫到」，而承载那条静默链的可能恰好是没被扫到的那一个。
+			seen[strings.TrimPrefix(pkg, modulePath+"/")+"."+name] = true
 		}
 		for _, omitted := range omissions {
 			t.Errorf("%s：%s 声明了却没在它的 String() 里出现过；漏登记的取值交回空串，而空串在下游会被构造器拒绝后静默丢弃、或拌进摘要让两个不同取值归一",
@@ -86,9 +89,9 @@ func TestEveryEnumConstantIsNamedByItsStringMethod(t *testing.T) {
 	// 被它护住的那条链就重新敞开，而门禁照样全绿。同一手法见 rehydration_gate_test.go 的
 	// `anchored` 标志与那里的磁盘锚。
 	for _, anchor := range []string{
-		"JudgmentPendingReason",
-		"CommercialObjectKind",
-		"CommercialVersionStatus",
+		"internal/parcelshipment/application.JudgmentPendingReason",
+		"internal/partycommercial/domain.CommercialObjectKind",
+		"internal/partycommercial/domain.CommercialVersionStatus",
 	} {
 		if !seen[anchor] {
 			t.Errorf("%s 不在本次扫描面内；本文件开头点名它承载一条静默链，扫不到它等于那条链没人守，而本条仍会全绿", anchor)
@@ -181,6 +184,9 @@ type enumConstant struct {
 //
 // 带访问集合防环。`type A B; type B A` 编不过，但本扫描是纯语法的，编不过的源码一样解析得到，
 // 一个环就够让门禁挂死——而挂死的门禁与没有门禁的区别只在它看起来像在守。
+//
+// 全仓今天链长 ≥ 2 的声明是 0 个（实测于 c53cf4e），本函数的循环永远第一轮返回，`seen` 从未
+// 用到第二次。与上面那条同理：守的是将来，而合成用例钉着它。
 func restsOnAnIntegerBase(name string, namedTypes map[string]string) bool {
 	seen := map[string]bool{}
 	for {
@@ -217,7 +223,7 @@ func collectEnumDeclarations(decl *ast.GenDecl, namedTypes map[string]string, co
 		// 一旦某行自带值而不带类型，它就是一个新的无类型常量，后面的行也不再续用上一个
 		// 类型——照抄「记住最后一次见过的类型」会把它们全算进上一个枚举。
 		current := ""
-		for _, spec := range decl.Specs {
+		for specIndex, spec := range decl.Specs {
 			valueSpec, ok := spec.(*ast.ValueSpec)
 			if !ok {
 				continue
@@ -228,7 +234,7 @@ func collectEnumDeclarations(decl *ast.GenDecl, namedTypes map[string]string, co
 				current = ""
 				if named, ok := valueSpec.Type.(*ast.Ident); ok {
 					current = named.Name
-					zeroValued = declaresTheZeroValue(valueSpec.Values)
+					zeroValued = declaresTheZeroValue(specIndex, valueSpec.Values)
 				}
 			case len(valueSpec.Values) > 0:
 				current = ""
@@ -252,10 +258,21 @@ func collectEnumDeclarations(decl *ast.GenDecl, namedTypes map[string]string, co
 //
 // `iota + 1` 是 BinaryExpr，这里认不出来——那正是本判据要与之区分的形状，也是它存在的全部
 // 理由。省掉这个函数改回「第一个常量就是哨兵」，`SourceClassification` 那种写法会整类免检。
-func declaresTheZeroValue(values []ast.Expr) bool {
-	if len(values) != 1 {
+//
+// **全仓今天恰好一个类型命中它，而它此刻不在扫描面内**（实测于 c53cf4e）：`SourceClassification`
+// 是唯一的 `iota + 1`，三个常量在本判据下都不算哨兵、一个都不跳——但它没有 `String()`，卡在
+// `hasString` 那道口子外面。所以本函数今天守的是将来：有人给它补上 `String()` 的那一刻，
+// 三个取值同时进入强制范围，而旧判据会让第一个静默免检。**「没有实例」不等于「没有守住」，
+// 它等于「暂时没东西可守」**，两者的区别在下一个人打算删掉本函数时才显出来。
+func declaresTheZeroValue(specIndex int, values []ast.Expr) bool {
+	// 只有块内**第一个** spec 才可能声明零值：`iota` 的值由位置决定，第二行上的裸 `iota`
+	// 已经是 1 了。光看值表达式判不出这件事——`OutcomeInvalid T = iota` 与紧随其后的
+	// `Accepted T = iota` 长得一模一样，而后者的真值是 1，把它当哨兵跳掉就是一个静默免检。
+	if specIndex != 0 || len(values) == 0 {
 		return false
 	}
+	// 只看第一个值：`A, B T = iota, iota + 1` 一行两名两值，零值是 A，不是「没有零值」。
+	// 要求 `len(values) == 1` 会把这种块整块判成无哨兵，于是真正的零值也被要求有名字。
 	switch typed := values[0].(type) {
 	case *ast.Ident:
 		return typed.Name == "iota"
@@ -470,6 +487,47 @@ func (c Code) String() string {
 	}
 }`,
 			want: []string{"Code.CodeRejected"},
+		},
+		// 块内第二行重写类型再写裸 iota：它的真值是 1，不是零值哨兵。只看值表达式的判据会
+		// 把它跳掉，于是一个真取值永远免检。
+		"块内第二行的裸 iota 不是哨兵": {
+			source: `package sample
+type Outcome uint8
+const (
+	OutcomeInvalid Outcome = iota
+	Accepted       Outcome = iota
+	Rejected
+)
+func (o Outcome) String() string { return "" }`,
+			want: []string{"Outcome.Accepted", "Outcome.Rejected"},
+		},
+		// 一行两名两值：零值是第一个名字，不是「这块没有零值」。要求恰好一个值会把真正的
+		// 零值哨兵也报成遗漏——方向与上一格相反的假阳性。
+		"一行多名时零值仍是第一个": {
+			source: `package sample
+type Outcome uint8
+const (
+	OutcomeInvalid, Accepted Outcome = iota, iota + 1
+	Rejected                 Outcome = iota + 2
+)
+func (o Outcome) String() string { return "" }`,
+			want: []string{"Outcome.Accepted", "Outcome.Rejected"},
+		},
+		// 第二个 const 块重新从 iota 起，它的第一个常量真值就是 0，跳它是对的。这一格与
+		// 上面两格一起把「块内第一个」这条判据的三面都钉住。
+		"新块首行的裸 iota 仍是哨兵": {
+			source: `package sample
+type Outcome uint8
+const (
+	OutcomeInvalid Outcome = iota
+	Accepted
+)
+const (
+	Rejected Outcome = iota
+	Withdrawn
+)
+func (o Outcome) String() string { return "" }`,
+			want: []string{"Outcome.Accepted", "Outcome.Withdrawn"},
 		},
 		// 位置表按下标登记，本条无从判断新增取值登没登记，因此**有意**报它。头注释此前声称
 		// 容忍这种写法，而实现从来容忍不了；这一格钉住的是改正后的那个声称。

@@ -170,8 +170,9 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
 	}
 	if saved != ports.ShipmentRequestSaved {
-		// 同上：本方这次拒绝确定没落库。抢先那一方写下的可能是接受，因此这里不发释放——
-		// 那笔冻结归真正成立的那条决定路径处置。
+		// 本方这次拒绝确定没落库。抢先那一方写下的可能是接受，因此这里不发释放——那笔冻结
+		// 归真正成立的那条决定路径处置。交回的 state 是读取时那一份、已知不是库里此刻那一份，
+		// 理由见 form_acceptance_decision.go 的同一支。
 		reason, err := saveStallReason(saved)
 		if err != nil {
 			return RejectShipmentRequestResult{}, err
