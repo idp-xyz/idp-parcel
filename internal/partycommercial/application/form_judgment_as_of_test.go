@@ -370,3 +370,61 @@ func TestAResolutionNamedByAnotherCustomerIsNotAccepted(t *testing.T) {
 		t.Fatal("范围不符却仍去问了时点政策")
 	}
 }
+
+// Covers: `AT-PC-028`「……答案必须与探测一个从未签发的标识**完全一致**，仅拒绝不足以满足本项」
+// 在第二阶段一侧。上面那条压的是「拒绝」，这一条压的是「完全一致」。
+//
+// 两次探测只差一个变量：同一个入侵者、同一个标识，只换取回端口里有没有那份解析。调用方看得见
+// 的每一处都要一致——取值、有没有形成时点、以及有没有报错。
+//
+// **它不是在关一个洞，别当成一道新防线**（以下均实测于 `f6196c6`）：
+//   - 本阶段两条取回失败支各自被邻近用例钉在同一个字面取值上——`TestASecondPhaseOnAnUnknown
+//     ResolutionRefusesWithoutAskingForPolicies` 钉「查无此解析」，`TestAResolutionNamedBy
+//     AnotherCustomerIsNotAccepted` 钉「范围不符」。两者相等因此今天本来就成立。
+//   - 造不出只有本用例变红的变异：单改任一支，那一支自己的用例先红；两支一起改成同一个新
+//     取值，那两条红而**本用例照绿**——在取值这一维上它比那一对更弱。
+//
+// 留它的理由与检出能力无关：那一对是把两个字面量各自钉死，**没有任何一处说过这两个字面量必须
+// 相同**。哪天有人有正当理由改这个取值，他会分别去改那两条用例，而「两者必须一致」这条要求在
+// 本用例出现之前没有人写下来过。它守的是意图，不是取值。
+func TestASecondPhaseProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer(t *testing.T) {
+	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))
+
+	intruder := owner
+	intruder.CustomerAccountID = value(t, domain.NewCustomerAccountID, "customer-elsewhere")
+	probe := application.FormJudgmentAsOfCommand{
+		Caller:     intruder,
+		Resolution: resolution,
+		Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+	}
+
+	existing, err := application.NewFormJudgmentAsOfHandler(store, &asOfPolicyDouble{}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一份真实存在的解析: %v", err)
+	}
+
+	// 空的取回端口交回「没找到」，代表这个标识从未签发过。
+	absent, err := application.NewFormJudgmentAsOfHandler(&resolutionStoreDouble{}, &asOfPolicyDouble{}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一个从未签发的标识: %v", err)
+	}
+
+	if existing.Outcome() != absent.Outcome() {
+		t.Fatalf(
+			"存在但不属于你 = %q，从未签发 = %q；两者可分即可枚举同租户下其他客户账户的解析",
+			existing.Outcome(), absent.Outcome(),
+		)
+	}
+
+	// 取值相同还不够：一次形成了时点而另一次没有，差别照样把存在与否说了出去。
+	_, existingFormed := existing.AsOfFor(domain.NetworkReachabilityJudgment)
+	_, absentFormed := absent.AsOfFor(domain.NetworkReachabilityJudgment)
+	if existingFormed != absentFormed {
+		t.Fatalf("时点一次形成一次没有（%t / %t），存在与否因此仍可分", existingFormed, absentFormed)
+	}
+	if existingFormed {
+		t.Fatal("一次越权探测竟然形成了时点")
+	}
+}
