@@ -18,6 +18,8 @@ const (
 	AmendmentAwaitingReview
 	AmendmentNotAuthorized
 	AmendmentDisallowed
+	AmendmentAlreadyHandled
+	AmendmentSourceConflict
 )
 
 func (outcome AmendmentOutcome) String() string {
@@ -30,6 +32,10 @@ func (outcome AmendmentOutcome) String() string {
 		return "NOT_AUTHORIZED"
 	case AmendmentDisallowed:
 		return "DISALLOWED"
+	case AmendmentAlreadyHandled:
+		return "ALREADY_HANDLED"
+	case AmendmentSourceConflict:
+		return "SOURCE_CONFLICT"
 	default:
 		return ""
 	}
@@ -105,6 +111,15 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	)
 	if err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("preserve amendment source: %w", err)
+	}
+	// 先看这个来源身份是不是已经到过。放到业务判断之后再查就晚了：那时授权与规则已经重跑
+	// 过一遍，而重跑正是重放要挡住的事。
+	preserved, arrived, err := handler.deps.Sources.FindPreserved(ctx, command.AmendmentIdentity)
+	if err != nil {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("find preserved amendment source: %w", err)
+	}
+	if arrived {
+		return handler.resolvePreserved(ctx, command, preserved, incoming)
 	}
 	if err := handler.deps.Sources.Preserve(ctx, incoming); err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("preserve amendment source: %w", err)
@@ -195,4 +210,68 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		adoption:    adoption,
 		hasAdoption: derived,
 	}, nil
+}
+
+// resolvePreserved 回答一个来源身份已经到过的修订请求。
+//
+// 同身份同内容是重复到达：追加一次观察，再读回它当初形成的那份版本，绝不重跑授权与规则。重跑
+// 不只是浪费——授权与登记矩阵在两次之间都可能变，同一个请求身份会因此读出两种回执，而用例要求
+// 重试「返回已有结果」，且「不能创建第二个资料版本」。
+//
+// 同身份不同内容是请求冲突：原请求与原版本都不被覆盖，也不形成第二份版本。它与重复到达分成两
+// 个结果，因为客户要做的事不同——一个是这次请求已经办过了，一个是先说清到底提交的是哪一份。
+// `occurredAt`/`receivedAt` 的差异不落在这里：它们不进内容摘要，因此只会被判成重复到达。
+func (handler *AmendCustomerSourceDataHandler) resolvePreserved(
+	ctx context.Context,
+	command AmendCustomerSourceDataCommand,
+	preserved domain.SourceSubmissionFingerprint,
+	incoming domain.SourceSubmissionFingerprint,
+) (AmendCustomerSourceDataResult, error) {
+	classification, err := domain.ClassifySourceSubmission(preserved, incoming)
+	if err != nil {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("classify amendment source: %w", err)
+	}
+	if classification == domain.SourceConflict {
+		return AmendCustomerSourceDataResult{outcome: AmendmentSourceConflict}, nil
+	}
+
+	if err := handler.deps.Sources.AppendObservation(ctx, incoming); err != nil {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("append amendment source observation: %w", err)
+	}
+
+	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
+	if err != nil {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("find shipment request: %w", err)
+	}
+	if !found {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
+	}
+	return handler.existing(request, command.AmendmentIdentity), nil
+}
+
+// existing 读回这次修订请求当初形成的那份版本。版本自带形成它的那次请求指纹，所以不必另存一张
+// 请求到版本的映射——留痕本身就是索引，而多存一张映射就多一处会与版本对不上的地方。
+//
+// 找不到版本时照样交回`已有结果`，只是不带版本：上一轮可能停在`待复核`或业务拒绝，那些同样是
+// 已经形成的结果。这里不重跑一遍去补个版本出来，重跑正是本路径要挡住的事。
+func (handler *AmendCustomerSourceDataHandler) existing(
+	request domain.ShipmentRequest,
+	amendment domain.SourceIdentity,
+) AmendCustomerSourceDataResult {
+	for _, version := range request.CustomerSourceDataVersions() {
+		if version.Request().Identity() != amendment {
+			continue
+		}
+		// 采用判断按版本自己的范围读，不按本次命令的范围：交回的是那份版本，说的就该是它
+		// 所在范围此刻的采用判断。
+		adoption, derived := request.CurrentSourceDataAdoption(version.Scope())
+		return AmendCustomerSourceDataResult{
+			outcome:     AmendmentAlreadyHandled,
+			version:     version,
+			hasVersion:  true,
+			adoption:    adoption,
+			hasAdoption: derived,
+		}
+	}
+	return AmendCustomerSourceDataResult{outcome: AmendmentAlreadyHandled}
 }

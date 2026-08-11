@@ -127,6 +127,92 @@ func TestAnUnauthorizedAmendmentFormsNoVersion(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-002「同一请求身份、相同规范化内容摘要、相同目标范围和基础版本的重试返回已有
+// 结果；不能创建第二个资料版本」与 `AT-PS-016`。
+//
+// 重放不再走一遍授权与规则：授权在两次之间可能已经失效，同一份已经形成的版本会因此读出两种
+// 回执。网络重试是常态，这条路一旦缺席，一次重发就在已接受委托上多挂一份版本——而下游按范围
+// 取当前采用判断，多出来的那一份会直接改掉它消费的内容。
+func TestARepeatedAmendmentReturnsTheOriginalVersionWithoutFormingASecond(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	first, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle first: %v", err)
+	}
+	original, formed := first.Version()
+	if !formed {
+		t.Fatal("the first amendment formed no version")
+	}
+
+	repeated, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle repeat: %v", err)
+	}
+
+	if repeated.Outcome() != application.AmendmentAlreadyHandled {
+		t.Fatalf("outcome = %q, want ALREADY_HANDLED", repeated.Outcome())
+	}
+	version, present := repeated.Version()
+	if !present || version.VersionID() != original.VersionID() {
+		t.Fatalf(
+			"version = %q present = %v; a retry must read back the version it already formed (%q)",
+			version.VersionID(), present, original.VersionID(),
+		)
+	}
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d version IDs; the retry formed a second version", fixture.identities.issued)
+	}
+	if fixture.authorizer.calls != 1 {
+		t.Fatalf("authorized %d times; the retry re-ran authorization and may read a different answer", fixture.authorizer.calls)
+	}
+	if kept := fixture.requests.saved.CustomerSourceDataVersions(); len(kept) != 1 {
+		t.Fatalf("versions on the request = %d, want the one original", len(kept))
+	}
+}
+
+// Covers: UC-PS-002「同一请求身份携带不同内容、范围、基准或 `requestEffectiveAt` 形成请求冲突」
+// 与 `AT-PS-017`「原请求和原版本不被覆盖」。
+//
+// 与重放分成两个结果，因为客户要做的事不同：重放是「这次请求已经办过了」，冲突是「同一个请求
+// 身份底下压着两份不同内容，先纠正是哪一份」。按最后到达覆盖是用例明禁的。
+func TestAnAmendmentSourceConflictNeitherOverwritesNorFormsASecondVersion(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	first, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle first: %v", err)
+	}
+	original, formed := first.Version()
+	if !formed {
+		t.Fatal("the first amendment formed no version")
+	}
+
+	conflicting := fixture.command(t)
+	conflicting.PayloadDigest = mustValue(t, domain.NewPayloadDigest, "amend-digest-2")
+	result, err := fixture.handler.Handle(context.Background(), conflicting)
+	if err != nil {
+		t.Fatalf("handle conflicting: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentSourceConflict {
+		t.Fatalf("outcome = %q, want SOURCE_CONFLICT", result.Outcome())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("a conflicting request formed a version anyway")
+	}
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d version IDs; a conflicting request formed a second version", fixture.identities.issued)
+	}
+	// 原来源不被后到的内容覆盖：留痕一旦被改写，事后就分不出客户先说了什么、后说了什么。
+	preserved, kept := fixture.sources.stored(t, amendmentSourceIdentity(t))
+	if !kept || preserved.Digest().String() != "amend-digest-1" {
+		t.Fatalf("preserved digest = %q kept = %v, want the original amend-digest-1", preserved.Digest(), kept)
+	}
+	versions := fixture.requests.saved.CustomerSourceDataVersions()
+	if len(versions) != 1 || versions[0].VersionID() != original.VersionID() {
+		t.Fatalf("versions on the request = %d; the conflicting request disturbed the original", len(versions))
+	}
+}
+
 type amendmentFixture struct {
 	handler    *application.AmendCustomerSourceDataHandler
 	sources    *sourceRepositoryDouble
@@ -199,6 +285,9 @@ func (value *amendmentFixture) command(t *testing.T) application.AmendCustomerSo
 
 // amendableRequestStore 交回一份真正经领域接受过的委托。造一个「看起来已接受」的假状态挡不住
 // AmendCustomerSourceData 的状态闸门，也就证明不了编排走对了路。
+//
+// 保存过就交回保存的那一份，而不是每次都重新造：重放与冲突都要跨两次调用才谈得上，每次交回
+// 一份干净委托等于让第二次调用看不见第一次的版本，「不能创建第二个资料版本」也就无从断言。
 type amendableRequestStore struct {
 	t     *testing.T
 	err   error
@@ -212,6 +301,9 @@ func (store *amendableRequestStore) FindBySourceIdentity(
 	store.t.Helper()
 	if store.err != nil {
 		return domain.ShipmentRequest{}, false, store.err
+	}
+	if store.saved != nil {
+		return *store.saved, true, nil
 	}
 	return acceptedRequest(store.t), true, nil
 }
