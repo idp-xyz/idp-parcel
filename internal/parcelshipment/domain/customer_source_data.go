@@ -266,9 +266,7 @@ func (request ShipmentRequest) AmendCustomerSourceData(
 	if version.scope.shipmentRequestID != request.shipmentRequestID {
 		return ShipmentRequest{}, ErrInvalidSourceDataScope
 	}
-	// 指名成员的版本必须落在接受基线之内。不指名成员的委托级版本不受此限——寄件人一类资料
-	// 本就作用于整份委托，拿成员去卡它会把一份合法更正拒掉。
-	if parcelID, named := version.scope.DeclaredParcelID(); named && !request.baseline.covers(parcelID) {
+	if request.SourceDataScopeOutsideAcceptanceBaseline(version.scope) {
 		return ShipmentRequest{}, ErrParcelOutsideAcceptanceBaseline
 	}
 
@@ -278,6 +276,26 @@ func (request ShipmentRequest) AmendCustomerSourceData(
 	appended = append(appended, request.sourceDataVersions...)
 	request.sourceDataVersions = append(appended, version)
 	return request, nil
+}
+
+// SourceDataScopeOutsideAcceptanceBaseline 回答某处资料范围是否指向接受基线之外的成员。
+//
+// 指名成员的范围才受此限。不指名成员的委托级范围一律在内——寄件人一类资料本就作用于整份
+// 委托，拿成员去卡它会把一份合法更正拒掉。
+//
+// 它单独暴露，是为了让编排在形成版本之前就能问：`AT-PS-023` 的拒绝不需要任何已登记目录，
+// 基线自己就是成员集合的权威。把这一问压到 AmendCustomerSourceData 里才发生，它就落在了
+// 规则矩阵查询的下游，一次矩阵读不回会把确定的业务拒绝变成未决。两处共用这一段判断，因此
+// 权威仍然只有一处。
+//
+// 尚未接受的委托交回 false：那时没有基线可比，「越过基线」这个问题谈不上，真正的答案是
+// `还没接受`，由 AmendCustomerSourceData 的状态闸门给出。
+func (request ShipmentRequest) SourceDataScopeOutsideAcceptanceBaseline(scope SourceDataScope) bool {
+	if request.state != ShipmentRequestAccepted {
+		return false
+	}
+	parcelID, named := scope.DeclaredParcelID()
+	return named && !request.baseline.covers(parcelID)
 }
 
 // CustomerSourceDataVersions 按形成顺序交回全部版本。

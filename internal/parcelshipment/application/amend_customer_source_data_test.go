@@ -103,6 +103,85 @@ func TestADisallowedFieldStageRuleFormsABusinessRejectionRatherThanAwaitingRevie
 	}
 }
 
+// Covers: UC-PS-002 `AT-PS-023`「请求新增或删除已接受委托成员 → 拒绝普通资料更正，转取消、
+// 重组或关联新委托路径」与步骤 5「增删成员……拒绝并转关联路径」。
+//
+// 交回业务拒绝而不是上抛技术错误：拿一份「更正」往已接受委托里塞成员，是一个确定的业务答案，
+// 客户据以改走关联新委托；写成技术错误，接入层只能回一个看不出下一步该做什么的失败，而客户
+// 请求本身并没有任何格式问题。
+func TestAnAmendmentNamingAParcelOutsideTheAcceptanceBaselineIsRejectedRatherThanErroring(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	command := fixture.command(t)
+	command.Scope = outsideBaselineScope(t)
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentDisallowed {
+		t.Fatalf("outcome = %q, want DISALLOWED; reaching outside the baseline is a business answer, not a failure", result.Outcome())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("a version reached a parcel the acceptance baseline never covered")
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("a rejected amendment wrote onto the accepted request")
+	}
+}
+
+// Covers: UC-PS-002 步骤 5（成员）排在步骤 6（字段与阶段规则）之前，以及 CONTEXT「接受基线
+// 自己就是成员集合的权威」— 基线外成员的拒绝不需要任何已登记目录，因此它不问矩阵，矩阵读不
+// 回也改不了这个答案。
+//
+// 守卫一旦压到形成版本之后，它就落在了矩阵查询的下游：一次矩阵抖动会把一个确定的业务拒绝
+// 变成未决，客户被告知「等依赖恢复」，而真相是这个请求无论矩阵怎么登记都不成立。
+//
+// 同时钉住不签发版本标识。理由与撤回那一刀的短路一致：一份注定不形成版本的请求不该消耗一个
+// 本上下文签发的稀缺身份。
+func TestAnAmendmentOutsideTheBaselineIsRejectedWithoutConsultingTheRuleMatrix(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.rules.err = errors.New("rule declaration unreachable")
+	command := fixture.command(t)
+	command.Scope = outsideBaselineScope(t)
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentDisallowed {
+		t.Fatalf(
+			"outcome = %q, want DISALLOWED; the baseline answers on its own, so an unreadable matrix cannot turn this into a pending round",
+			result.Outcome(),
+		)
+	}
+	if fixture.rules.calls != 0 {
+		t.Fatalf("consulted the rule matrix %d times; membership is settled by the baseline before any registered catalogue", fixture.rules.calls)
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d version IDs; a rejected amendment consumed a scarce identity", fixture.identities.issued)
+	}
+}
+
+// Covers: UC-PS-002 目标与边界「本用例从已接受委托或包裹的客户……提出请求开始」与 CONTEXT
+// 「决定前的纠错形成新的提交版本并重新判断」。
+//
+// 尚未接受的委托根本没有接受基线，「越过基线」这个问题因此谈不上。答成 `AT-PS-023` 的业务
+// 拒绝会打发客户去走关联新委托，而他实际要做的是等这份委托决定——两条路差得很远。
+func TestAnAmendmentToARequestThatIsNotYetAcceptedIsNotReportedAsOutsideTheBaseline(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.requests.notYetAccepted = true
+	command := fixture.command(t)
+	command.Scope = outsideBaselineScope(t)
+
+	_, err := fixture.handler.Handle(context.Background(), command)
+
+	if !errors.Is(err, domain.ErrShipmentRequestNotAccepted) {
+		t.Fatalf("error = %v, want ErrShipmentRequestNotAccepted; a request that fixed no baseline cannot have been reached past one", err)
+	}
+}
+
 // Covers: UC-PS-002 步骤 4「授权不足形成业务拒绝」与`业务拒绝`结果语义 — 未获授权是确定的
 // 业务答案，不是未决，续办也补不出授权来；它与「授权服务答不出」分属两回事。
 func TestAnUnauthorizedAmendmentFormsNoVersion(t *testing.T) {
@@ -425,6 +504,21 @@ func consigneeDataScope(t *testing.T) domain.SourceDataScope {
 	return scope
 }
 
+// outsideBaselineScope 指名一个接受基线之外的成员。acceptedRequest 把基线固定为 parcel-1 与
+// parcel-2，所以 parcel-9 就是一次「拿更正往已接受委托里塞成员」——`AT-PS-023` 说的正是它。
+func outsideBaselineScope(t *testing.T) domain.SourceDataScope {
+	t.Helper()
+	scope, err := domain.NewParcelScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewDeclaredParcelID, "parcel-9"),
+		mustValue(t, domain.NewSourceDataGroupReference, "GOODS_DESCRIPTION"),
+	)
+	if err != nil {
+		t.Fatalf("new parcel scoped source data: %v", err)
+	}
+	return scope
+}
+
 func (value *amendmentFixture) command(t *testing.T) application.AmendCustomerSourceDataCommand {
 	t.Helper()
 	return application.AmendCustomerSourceDataCommand{
@@ -446,10 +540,12 @@ func (value *amendmentFixture) command(t *testing.T) application.AmendCustomerSo
 // 保存过就交回保存的那一份，而不是每次都重新造：重放与冲突都要跨两次调用才谈得上，每次交回
 // 一份干净委托等于让第二次调用看不见第一次的版本，「不能创建第二个资料版本」也就无从断言。
 type amendableRequestStore struct {
-	t       *testing.T
-	err     error
-	saveErr error
-	saved   *domain.ShipmentRequest
+	t *testing.T
+	// notYetAccepted 交回一份停在`已提交`的委托，用来分开「没有基线」与「越过基线」。
+	notYetAccepted bool
+	err            error
+	saveErr        error
+	saved          *domain.ShipmentRequest
 }
 
 func (store *amendableRequestStore) FindBySourceIdentity(
@@ -459,6 +555,9 @@ func (store *amendableRequestStore) FindBySourceIdentity(
 	store.t.Helper()
 	if store.err != nil {
 		return domain.ShipmentRequest{}, false, store.err
+	}
+	if store.notYetAccepted {
+		return submittedRequest(store.t), true, nil
 	}
 	if store.saved != nil {
 		return *store.saved, true, nil
@@ -566,12 +665,14 @@ func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
 type sourceDataRuleDouble struct {
 	allowance ports.SourceDataAmendmentAllowance
 	err       error
+	calls     int
 }
 
 func (double *sourceDataRuleDouble) DeclareSourceDataAmendment(
 	_ context.Context,
 	_ ports.SourceDataAmendmentQuery,
 ) (ports.SourceDataAmendmentAllowance, error) {
+	double.calls++
 	if double.err != nil {
 		return ports.SourceDataAmendmentNotDeclared, double.err
 	}

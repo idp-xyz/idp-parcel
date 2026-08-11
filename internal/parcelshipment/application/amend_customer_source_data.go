@@ -171,6 +171,13 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return AmendCustomerSourceDataResult{outcome: AmendmentNotAuthorized}, nil
 	}
 
+	// 步骤 5 排在步骤 6 之前，不是可换的次序：接受基线自己就是成员集合的权威，`AT-PS-023`
+	// 这一拒不需要任何已登记目录。放到矩阵查询之后，一次矩阵读不回就会把它变成未决，客户被
+	// 告知「等依赖恢复」，而真相是这个请求无论矩阵怎么登记都不成立。
+	if request.SourceDataScopeOutsideAcceptanceBaseline(command.Scope) {
+		return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
+	}
+
 	allowance, err := handler.deps.Rules.DeclareSourceDataAmendment(ctx, ports.SourceDataAmendmentQuery{
 		Identity: command.Identity,
 		Scope:    command.Scope,
