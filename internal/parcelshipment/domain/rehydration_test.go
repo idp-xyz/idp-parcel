@@ -299,7 +299,20 @@ func TestRehydrationRefusesAStateThisDoorDoesNotYetCover(t *testing.T) {
 
 			_, err := domain.RehydrateShipmentRequest(snapshot)
 			if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-				t.Fatalf("error = %v, want ErrRehydrationStateNotSupported", err)
+				// 本条同时是那笔分期债的**到期提醒**。谁把这扇门开到某个状态，这里当天变红，
+				// 而这段文字是它唯一会被读到的时刻——写在 ADR 里的话，正好是没人会在那一刻
+				// 翻开的地方。
+				t.Fatalf("error = %v, want ErrRehydrationStateNotSupported。\n"+
+					"若你正是来把这扇门开到这个状态的，本条变红是预期的；但同一天有三笔债一起到期：\n"+
+					"（1）ADR-0028 点名的三组跨字段命题今天一条都没写，因为它们在`已提交`下根本造不"+
+					"出来：`state = 已接受` 配 `decisionFormed = false`、`decision.accepted = true` "+
+					"配任务未完成、`waitingOn` 有值而决定已形成。门一开它们全都造得出来，而那份记录"+
+					"说这是「最花时间、也最容易写漏的部分」。\n"+
+					"（2）`validForRehydration` 今天唯一那条跨字段命题（`已提交` ⇒ 任务运行中）对新开"+
+					"的状态没有对应物：`已接受`/`已拒绝` 该配任务`已完成`、`已撤回` 该配`已停止`，"+
+					"今天一条都没写。\n"+
+					"（3）`absentInSubmitted` 里那几个字段要挪进 `carriedByRehydration` 并各自补上快照"+
+					"表达，见 revision_test.go 的分类用例——它会同时变红，别只修这一条。", err)
 			}
 			if errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
 				t.Fatalf("error = %v；这行数据没有毛病，缺的是门，两个哨兵不能互相冒充", err)
