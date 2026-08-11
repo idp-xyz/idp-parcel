@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,6 +140,36 @@ func TestRehydrationRefusesStatesThatTheJudgmentPathCannotProduce(t *testing.T) 
 		// 没有决定。两者只能同真同假。
 		"已提交却配已完成的任务": func(snapshot *domain.RehydrateShipmentRequestSpec) {
 			snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+		},
+		// 声明成员逐条校 + 去重，与构造路径 NewSubmissionCandidate 那三条对齐。只校「非空」
+		// 时，一个空成员或一份重复成员会原样进接受基线，而基线「恒覆盖该提交版本的完整声明
+		// 成员」——错的基线此后与真的无从分辨。
+		"声明成员立不起来": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.CurrentVersion.DeclaredParcelIDs = []domain.DeclaredParcelID{{}}
+		},
+		"声明成员里混了一个空值": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.CurrentVersion.DeclaredParcelIDs = append(
+				snapshot.CurrentVersion.DeclaredParcelIDs, domain.DeclaredParcelID{},
+			)
+		},
+		// `make([]DeclaredParcelID, 3)` 忘了填就是这个形状。它与本文件为处理记录写下的
+		// 「半截的造不出来，一批零值造得出」一字不差地成立。
+		"一批零值声明成员": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.CurrentVersion.DeclaredParcelIDs = make([]domain.DeclaredParcelID, 3)
+		},
+		"声明成员重复": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			first := snapshot.CurrentVersion.DeclaredParcelIDs[0]
+			snapshot.CurrentVersion.DeclaredParcelIDs = []domain.DeclaredParcelID{first, first}
+		},
+		// 等待态越界不校的话会被 `WaitingOn()` 报成**缺席**——「这任务不等任何人」——
+		// 而不是被拒成一行坏数据。同一个 ResumePath 作为处理记录的字段时是校了值域的。
+		"等待态越界": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.AcceptanceTask.WaitingOn = domain.ResumePath(7)
+		},
+		// 任务状态越界曾经只被 `已提交 ⇒ 运行中` 那条顺带拦住，而那条规则的前件是`已提交`：
+		// 门一开到别的状态，那个借来的拦截就没了。本格让它由自己那条值域检查拦住。
+		"任务状态越界": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.AcceptanceTask.State = domain.AcceptanceTaskState(99)
 		},
 	}
 
@@ -279,6 +310,32 @@ func TestRehydrationRefusesAStateThisDoorDoesNotYetCover(t *testing.T) {
 				t.Fatalf("error = %v；这行数据没有毛病，缺的是门，两个哨兵不能互相冒充", err)
 			}
 		})
+	}
+}
+
+// Covers: 同一条分格规则的**反方向**——一行坏数据不得被报成「本期不支持」。
+//
+// 上一条守的是「一行`已接受`没有毛病，别报成坏数据」；这一条守的是「那一列存了 99 是真坏了，
+// 别报成缺一扇门」。两者一起丢进 default 时，运维会照着一行损坏的数据去等一扇永远不会为它
+// 而开的门；而那时报文里的状态名还是**空串**——`ShipmentRequestState(99).String()` 交回空串，
+// 唯一的诊断线索也一并没了，光看哨兵与报文都分不出这是哪一种。
+//
+// `admitRehydratedState` 的注释本来就点名了这个失败（「否则 default 分支会把一行坏数据报成
+// 『本期不支持』」），当时只修了零值那一个实例。
+func TestRehydrationTellsAnImpossibleStateFromAnUnopenedOne(t *testing.T) {
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestState(99)
+
+	_, err := domain.RehydrateShipmentRequest(snapshot)
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest；一行坏数据报成缺一扇门，运维会去等一扇不会开的门", err)
+	}
+	if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+		t.Fatalf("error = %v；两个哨兵互相冒充了", err)
+	}
+	// 拒绝要说得出是哪个值。名字这条路对越界值走不通（`String()` 交回空串），所以印数字。
+	if !strings.Contains(err.Error(), "99") {
+		t.Fatalf("error = %v；拒绝没说出是哪个值，适配器作者只能靠猜", err)
 	}
 }
 

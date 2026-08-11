@@ -112,14 +112,24 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 //
 // `未设`在这里判而不留给 validForRehydration：状态是本函数分派的依据，零值必须在分派处就被
 // 认出来，否则 default 分支会把一行坏数据报成「本期不支持」。
+//
+// **三个已知但未开门的状态逐个列出，default 留给「根本不是本上下文的取值」。** 上一版把两者
+// 合在 default 里，于是库里一个越界值（那一列存了 99）会被报成「本期不支持这个状态」——正是
+// 上一段点名的那个失败，只修了零值那一个实例。方向与 ADR-0030 要分开的那两个哨兵相反而病相同：
+// 运维会去等一扇永远不会为它而开的门，而不是去看那一行。报文里那个状态名当时还是**空串**，
+// 因为 `ShipmentRequestState(99).String()` 交回空串，唯一的诊断线索也一并没了。
 func admitRehydratedState(state ShipmentRequestState) error {
 	switch state {
 	case ShipmentRequestSubmitted:
 		return nil
 	case ShipmentRequestStateInvalid:
 		return rehydrationRefusal("委托状态未设")
-	default:
+	case ShipmentRequestAccepted, ShipmentRequestRejected, ShipmentRequestWithdrawn:
 		return fmt.Errorf("%w：%s", ErrRehydrationStateNotSupported, state)
+	default:
+		// 越界值印数字而不是名字：`String()` 对它交回空串，而一个说不出是哪个值的拒绝，
+		// 适配器作者只能靠猜。
+		return rehydrationRefusal(fmt.Sprintf("委托状态不是本上下文的取值：%d", uint8(state)))
 	}
 }
 
@@ -172,6 +182,23 @@ func (version SubmissionVersion) validForRehydration() error {
 	if len(version.declaredParcelIDs) == 0 {
 		return rehydrationRefusal("提交版本没有声明成员")
 	}
+	// 逐个校 + 去重，与构造路径 `NewSubmissionCandidate` 那三条对齐。只校「非空」时，一个
+	// 空成员或一份重复成员会原样进接受基线，而 `Decide` 的接受支直接拿这个切片造基线，
+	// `acceptance_decision.go` 又写明基线「恒覆盖该提交版本的完整声明成员」——一份错的基线
+	// 此后与真的无从分辨，而 `SourceDataScopeOutsideAcceptanceBaseline` 会照它拒掉更正。
+	//
+	// 「半截的一条包外造不出来，但一批零值造得出」这句本文件已经为 processingAttempts 写过，
+	// 它对声明成员一字不差地成立：`make([]DeclaredParcelID, 3)` 忘了填就是。
+	seen := make(map[DeclaredParcelID]struct{}, len(version.declaredParcelIDs))
+	for _, parcelID := range version.declaredParcelIDs {
+		if !parcelID.valid() {
+			return rehydrationRefusal("提交版本上有一个立不起来的声明成员")
+		}
+		if _, duplicated := seen[parcelID]; duplicated {
+			return rehydrationRefusal("提交版本上有重复的声明成员")
+		}
+		seen[parcelID] = struct{}{}
+	}
 	return nil
 }
 
@@ -179,8 +206,24 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 	if !task.taskID.valid() || task.establishedAt.IsZero() {
 		return rehydrationRefusal("接受判断任务身份或建立时刻缺失")
 	}
-	if task.state == AcceptanceTaskStateInvalid {
+	// 逐取值分派，不留兜底。只拒零值的话，一个越界值（那一列存了 99）会滑过这里，今天靠
+	// `已提交 ⇒ 任务运行中` 那条**顺带**拦住——而那条规则的前件是`已提交`。这扇门一开到别的
+	// 状态，这个借来的拦截就没了，届时不会有任何东西变红。今天的绿是借来的。
+	switch task.state {
+	case AcceptanceTaskRunning, AcceptanceTaskComplete, AcceptanceTaskStopped:
+	case AcceptanceTaskStateInvalid:
 		return rehydrationRefusal("接受判断任务状态未设")
+	default:
+		return rehydrationRefusal(fmt.Sprintf("接受判断任务状态不是本上下文的取值：%d", uint8(task.state)))
+	}
+	// 等待态要么缺席（零值），要么落在三个等待态之内。完全不校的话，库里一个越界值会被
+	// `WaitingOn()` 报成**缺席**——即「这任务不等任何人」，而不是被拒成一行坏数据；产出是一份
+	// 不等人、也永远不会有人来续办的运行中任务。
+	//
+	// 同一个 `ResumePath` 在本函数里另有一处是校了的：它作为 `ProcessingAttempt.resumePath`
+	// 时经 `attempt.valid()` 查过值域。同一个类型、同一个函数、两种待遇，一边必然是错的。
+	if task.waitingOn != ResumePathInvalid && !task.waitingOn.valid() {
+		return rehydrationRefusal(fmt.Sprintf("接受判断任务的等待态不是本上下文的取值：%d", uint8(task.waitingOn)))
 	}
 	// 处理记录逐条校验。半截的一条包外造不出来——字段未导出，构造器全校验——但一批零值造得
 	// 出：`make([]ProcessingAttempt, n)` 忘了填就是，而那会让「这份委托卡过几轮」多数出几轮
