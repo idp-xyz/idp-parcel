@@ -264,8 +264,9 @@ type CommercialRevalidation struct {
 
 // CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 三步协议。
 //
-// 三个方法对应 `UC-PC-002` 的三个阶段，用例第 114 行要求「第一阶段解析与第二阶段逐项 `asOf`
-// 必须在类型和测试中可见」，第 87 行要求实现的是「两阶段端口」。它们不合成一个带开关的方法：
+// 三个方法对应 `UC-PC-002` 的三个阶段，用例「给开发的交接」要求「第一阶段解析与第二阶段逐项
+// `asOf` 必须在类型和测试中可见」，「首发试点叠加条件」要求实现的是「两阶段端口」。它们不合成
+// 一个带开关的方法：
 // 三步由三个不同时刻的事件触发——开始判断、逐项形成时点、即将提交决定——合成会让编排依赖
 // 它当轮根本不会走的分支，也会把提交前重解提前到判断开始时做（ADR-0027）。
 type CommercialBasisResolver interface {

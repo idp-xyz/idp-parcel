@@ -33,7 +33,7 @@ func TestAcceptanceJudgmentResolvesBasisThenFormsAsOfThenAssesses(t *testing.T) 
 	if result.Outcome() != application.AcceptanceJudgmentAdvanced {
 		t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
 	}
-	// 三步都要出现且按序：第二阶段在类型和测试中可见是 UC-PC-002 第 114 行的要求，缺了它，
+	// 三步都要出现且按序：第二阶段在类型和测试中可见是 UC-PC-002「给开发的交接」的要求，缺了它，
 	// 「值由谁形成」就退回到编排自己拿时钟顶。
 	if got, want := fixture.calls, []string{
 		"resolve-commercial-basis",
