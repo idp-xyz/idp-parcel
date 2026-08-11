@@ -142,10 +142,11 @@ type ShipmentRequest struct {
 	// 由转移各自加一会让版本跳号，框架合同要的却是严格递增一。
 	//
 	// 转移都以值接收者复制整份聚合再返回，所以它天然被带下去。真正的风险是日后某个转移
-	// 改成重新构造一个 ShipmentRequest{...}——那会把版本悄悄刷回零，随后一次按预期版本的
-	// 写入会当作并发冲突失败，或者更糟，覆盖掉别人的写入。守它的是
-	// `TestNoStateTransitionMovesTheAggregateRevision`，不是这条注释：那条用例反射枚举全部
-	// 转移，第七个转移不在它表里就变红。
+	// 改成重新构造一个 ShipmentRequest{...}，或改成指针接收者就地改——那会把版本悄悄刷回零，
+	// 随后一次按预期版本的写入会当作并发冲突失败，或者更糟，覆盖掉别人的写入。守它的是
+	// `TestNoStateTransitionMovesTheAggregateRevision`：反射枚举值接收者转移，并把指针接收者
+	// 与非 `(ShipmentRequest, error)` 签名直接判违规（扫不到却声称守住是假阴性）。包级函数
+	// 形状由 `TestNoPackageLevelFunctionActsAsAShipmentRequestTransition` 另守。
 	revision          int64
 	shipmentRequestID ShipmentRequestID
 	batchID           SubmissionBatchID

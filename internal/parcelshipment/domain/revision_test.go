@@ -1,7 +1,13 @@
 package domain_test
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -13,9 +19,14 @@ import (
 // 会让版本跳号，框架合同当场不成立；转移把版本刷回零更坏——随后一次按预期版本的写入要么被
 // 当成并发冲突失败，要么覆盖掉别人的写入。
 //
-// 要守的风险不是「忘了带」，是日后某个转移改成重新构造一个 `ShipmentRequest{…}`。所以本条
-// 不手工列举转移，而是反射枚举出全部转移再断言每一条都被下表盖到：ADR-0028 点名否掉了
-// 「六处都要记得」，理由是它守不到第七个转移出现那天。
+// 要守的风险不是「忘了带」，是日后某个转移改成重新构造一个 `ShipmentRequest{…}`，或改成指针
+// 接收者就地改。所以本条不手工列举转移，而是反射枚举出全部合法形状的转移再断言每一条都
+// 被下表盖到：ADR-0028 点名否掉了「六处都要记得」，理由是它守不到第七个转移出现那天。
+//
+// 合法形状由 ADR 写死：「转移以值接收者复制整份聚合再返回」。因此本条同时拒绝另外两种写法：
+// 指针接收者、以及返回值不是恰好 `(ShipmentRequest, error)` 的方法——它们不是「漏覆盖」，
+// 是形状本身违 ADR；扫不到却声称守住，比没有守卫更坏（ADR-0029 末尾同一条道理）。
+// 包级函数形状由 TestNoPackageLevelFunctionActsAsAShipmentRequestTransition 另守。
 //
 // 它直到重建入口落地才写得出来：版本非零的聚合只有那扇门造得出，`SubmitShipmentRequest`
 // 产出的永远是零，而零过一遍转移还是零——那样的断言恒真，绿得毫无意义。
@@ -53,7 +64,15 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		},
 	}
 
-	for _, name := range transitionMethodsOn(t, domain.ShipmentRequest{}) {
+	classified := classifyAggregateTransitions(reflect.TypeOf(domain.ShipmentRequest{}))
+	if len(classified.valueTransitions) == 0 {
+		t.Fatal("没有反射到任何状态转移；本用例会永远空过")
+	}
+	for _, violation := range classified.shapeViolations {
+		t.Errorf("%s；ADR-0028 要求转移以值接收者返回 (ShipmentRequest, error)，"+
+			"别的形状会让本用例扫不到它——看起来像在守，实际是假阴性", violation)
+	}
+	for _, name := range classified.valueTransitions {
 		if _, covered := transitions[name]; !covered {
 			t.Errorf("ShipmentRequest.%s 是一条状态转移，本用例却没在守它不动聚合版本；"+
 				"新转移要在表里加一行——ADR-0028 明否「六处都要记得」，它守不到第七处", name)
@@ -82,28 +101,204 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 	}
 }
 
-// transitionMethodsOn 反射列出聚合上的全部状态转移：返回 `(聚合, error)` 的导出方法。
+// TestTransitionClassificationCatchesPointerAndOddSignatures 证分类器真能看见假阴性那两类。
 //
-// 判据是签名而不是一份名字清单，这样第七个转移一写下来就会被列进来，随即因为表里没有对应行
-// 而变红。名字清单做不到——它与它本该守住的东西一起腐。
-func transitionMethodsOn(t *testing.T, aggregate domain.ShipmentRequest) []string {
-	t.Helper()
-	aggregateType := reflect.TypeOf(aggregate)
+// 上一条用例对今天的 ShipmentRequest 全绿，证明不了它挡得住「改成指针接收者」——那正是
+// 盲区本身。这条用合成类型把指针接收者与三返回值放进方法集，断言两者都进 shapeViolations，
+// 且只有值接收者的 `(T, error)` 算合法转移。
+func TestTransitionClassificationCatchesPointerAndOddSignatures(t *testing.T) {
+	t.Parallel()
+
+	classified := classifyAggregateTransitions(reflect.TypeOf(shapeProbe{}))
+	if len(classified.valueTransitions) != 1 || classified.valueTransitions[0] != "ValueMove" {
+		t.Fatalf("valueTransitions = %v, want [ValueMove]", classified.valueTransitions)
+	}
+	if !containsViolation(classified.shapeViolations, "PointerMove") {
+		t.Fatalf("shapeViolations = %v；指针接收者没被抓住——假阴性还在", classified.shapeViolations)
+	}
+	if !containsViolation(classified.shapeViolations, "TripleMove") {
+		t.Fatalf("shapeViolations = %v；非 (T, error) 签名没被抓住", classified.shapeViolations)
+	}
+	if !containsViolation(classified.shapeViolations, "PointerReturningValue") {
+		t.Fatalf("shapeViolations = %v；返回 *T 的指针方法没被抓住", classified.shapeViolations)
+	}
+}
+
+// shapeProbe 只给上一条分类器用。三个违例形状 + 一个合法形状。
+type shapeProbe struct{}
+
+func (shapeProbe) ValueMove() (shapeProbe, error) { return shapeProbe{}, nil }
+
+func (s *shapeProbe) PointerMove() (shapeProbe, error) { return *s, nil }
+
+func (shapeProbe) TripleMove() (shapeProbe, shapeProbe, error) {
+	return shapeProbe{}, shapeProbe{}, nil
+}
+
+func (s *shapeProbe) PointerReturningValue() (*shapeProbe, error) { return s, nil }
+
+func containsViolation(items []string, method string) bool {
+	for _, item := range items {
+		if len(item) >= len(method) {
+			for i := 0; i+len(method) <= len(item); i++ {
+				if item[i:i+len(method)] == method {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+type transitionClassification struct {
+	valueTransitions []string
+	shapeViolations  []string
+}
+
+// classifyAggregateTransitions 把一个聚合类型上「像转移」的导出方法分成两类：
+// 合法的值接收者 `(T, error)`，以及其他任何返回了 T / *T 的形状（含指针接收者）。
+//
+// 必须同时扫值方法集与指针方法集：只扫值方法集时，指针接收者根本不出现——那正是 N10
+// 的假阴性。值接收者方法会出现在两份方法集里，以值方法集为准去重。
+func classifyAggregateTransitions(aggregateType reflect.Type) transitionClassification {
+	if aggregateType.Kind() == reflect.Pointer {
+		aggregateType = aggregateType.Elem()
+	}
+	ptrType := reflect.PointerTo(aggregateType)
 	errorType := reflect.TypeOf((*error)(nil)).Elem()
 
-	var names []string
+	valueNames := map[string]bool{}
+	classified := transitionClassification{}
 	for index := 0; index < aggregateType.NumMethod(); index++ {
 		method := aggregateType.Method(index)
-		if method.Type.NumOut() != 2 {
+		valueNames[method.Name] = true
+		switch {
+		case isValueTransitionSignature(method.Type, aggregateType, errorType):
+			classified.valueTransitions = append(classified.valueTransitions, method.Name)
+		case returnsAggregate(method.Type, aggregateType):
+			classified = appendShape(classified,
+				aggregateType.Name()+"."+method.Name+" 返回了聚合却不是 (T, error)")
+		}
+	}
+
+	for index := 0; index < ptrType.NumMethod(); index++ {
+		method := ptrType.Method(index)
+		if valueNames[method.Name] {
 			continue
 		}
-		if method.Type.Out(0) != aggregateType || method.Type.Out(1) != errorType {
+		if !returnsAggregate(method.Type, aggregateType) {
 			continue
 		}
-		names = append(names, method.Name)
+		classified = appendShape(classified,
+			aggregateType.Name()+"."+method.Name+" 是指针接收者上的转移形状（ADR-0028 要求值接收者）")
 	}
-	if len(names) == 0 {
-		t.Fatal("没有反射到任何状态转移；本用例会永远空过")
+	return classified
+}
+
+func appendShape(classified transitionClassification, message string) transitionClassification {
+	classified.shapeViolations = append(classified.shapeViolations, message)
+	return classified
+}
+
+// isValueTransitionSignature 认 `func (T) ...(?, ...) (T, error)`。
+// reflect 的方法类型把接收者算作 In(0)。
+func isValueTransitionSignature(methodType, aggregateType, errorType reflect.Type) bool {
+	if methodType.NumOut() != 2 || methodType.NumIn() < 1 {
+		return false
 	}
-	return names
+	if methodType.In(0) != aggregateType {
+		return false
+	}
+	return methodType.Out(0) == aggregateType && methodType.Out(1) == errorType
+}
+
+func returnsAggregate(methodType, aggregateType reflect.Type) bool {
+	ptrType := reflect.PointerTo(aggregateType)
+	for index := 0; index < methodType.NumOut(); index++ {
+		out := methodType.Out(index)
+		if out == aggregateType || out == ptrType {
+			return true
+		}
+	}
+	return false
+}
+
+// TestNoPackageLevelFunctionActsAsAShipmentRequestTransition 守第三盲区：包级函数形状。
+//
+// 同包函数同样设得了未导出字段，因此 `func AdvanceX(r ShipmentRequest) (ShipmentRequest, error)`
+// 是一条完整的转移，却不在任何方法集里——反射枚举永远看不见它。今天领域包里没有这种函数
+// （Submit / Rehydrate 都不收 ShipmentRequest）；本条让它一出现就红，而不是靠人记得去改反射。
+func TestNoPackageLevelFunctionActsAsAShipmentRequestTransition(t *testing.T) {
+	t.Parallel()
+
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("定位不了本文件")
+	}
+	domainDir := filepath.Dir(thisFile)
+
+	fileSet := token.NewFileSet()
+	packages, err := parser.ParseDir(fileSet, domainDir, nil, 0)
+	if err != nil {
+		t.Fatalf("解析领域包：%v", err)
+	}
+
+	found := 0
+	for _, pkg := range packages {
+		for path, file := range pkg.Files {
+			if filepath.Base(path) == filepath.Base(thisFile) {
+				continue
+			}
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			for _, decl := range file.Decls {
+				funcDecl, isFunc := decl.(*ast.FuncDecl)
+				if !isFunc || funcDecl.Recv != nil || !funcDecl.Name.IsExported() {
+					continue
+				}
+				if !funcTakesAndReturnsNamedType(funcDecl, "ShipmentRequest") {
+					continue
+				}
+				found++
+				t.Errorf("%s：导出包级函数 %s 同时收下并交回 ShipmentRequest；"+
+					"这是一条反射枚举看不见的状态转移，请改成值接收者方法，或把它从转移角色里拿掉",
+					filepath.Base(path), funcDecl.Name.Name)
+			}
+		}
+	}
+	// 今天期望是零。若将来真有正当的包级转移，本条要改的是分类而不是开例外——开例外
+	// 等于回到「六处都要记得」。
+	if found < 0 {
+		t.Fatal("unreachable")
+	}
+}
+
+func funcTakesAndReturnsNamedType(funcDecl *ast.FuncDecl, typeName string) bool {
+	if funcDecl.Type.Results == nil || funcDecl.Type.Params == nil {
+		return false
+	}
+	takes, returns := false, false
+	for _, field := range funcDecl.Type.Params.List {
+		if identName(field.Type) == typeName {
+			takes = true
+		}
+	}
+	for _, field := range funcDecl.Type.Results.List {
+		if identName(field.Type) == typeName {
+			returns = true
+		}
+	}
+	return takes && returns
+}
+
+func identName(expr ast.Expr) string {
+	switch typed := expr.(type) {
+	case *ast.Ident:
+		return typed.Name
+	case *ast.StarExpr:
+		return identName(typed.X)
+	default:
+		return ""
+	}
 }
