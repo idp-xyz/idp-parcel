@@ -404,6 +404,11 @@ func recordAttempt(
 // judgmentContinuation 由未决原因与判断范围共同派生，因此同一范围因同一原因停滞时拿到的
 // 引用始终相同——这正是调用方能查询原次尝试而不必靠猜的原因。原因参与派生也意味着停在
 // 不同阶段的两次未决给出不同引用，用例要求二者分别统计、各走各的续办路径。
+//
+// 「不同原因给出不同引用」立在 String() 对封闭集合单射上：漏补的空串或抄重的名字都会让两个
+// 原因拼出同一份摘要，安静地建出一条撞车的引用。尾部那个错误分支对此拦不住——"CONT-"+hex
+// 永远非空，引用永远建得出来，只是建错了。单射由
+// TestEveryPendingReasonHasAStringAndAResumePath 守住，不靠这条注释。
 func judgmentContinuation(reason JudgmentPendingReason, scope ...string) domain.OwnershipContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join(append([]string{reason.String()}, scope...), "\x00")))
 	continuation, err := domain.NewOwnershipContinuationReference("CONT-" + hex.EncodeToString(digest[:8]))
