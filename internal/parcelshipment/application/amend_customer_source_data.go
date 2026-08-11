@@ -102,6 +102,7 @@ type AmendCustomerSourceDataDeps struct {
 	Authorizer ports.SourceDataAmendmentAuthorizer
 	Rules      ports.SourceDataRuleDeclaration
 	Identities ports.SourceDataVersionIdentity
+	Downstream ports.SourceDataVersionHandoff
 	Clock      ports.Clock
 }
 
@@ -234,6 +235,10 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	}
 
 	adoption, derived := amended.CurrentSourceDataAdoption(command.Scope)
+	if err := handler.handOff(ctx, command, version, adoption); err != nil {
+		return handler.undecided(command, SourceDataVersionNotHandedOff), nil
+	}
+
 	return AmendCustomerSourceDataResult{
 		outcome:     AmendmentRecorded,
 		version:     version,
@@ -241,6 +246,28 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		adoption:    adoption,
 		hasAdoption: derived,
 	}, nil
+}
+
+// handOff 执行步骤 9：把版本引用交给适用下游。
+//
+// 意图由版本标识认领，因此同一份版本无论交几次都是同一份意图，而不是第二份——`AT-PS-031`
+// 「版本只形成一次；仅重试同一发布意图」正是这个意思。本上下文不记意图完没完成：那份状态要与
+// 版本同一事务落库才算数，而事务与 outbox 仍阻断于 ADR-0017 的 Bento 闸门。在那之前重放一律
+// 重发同一意图，由下游按版本标识认领，比记一份证明不了原子性的完成标志诚实。
+// 版本与范围都取自那一份版本自己，不取本次命令：重放路径上交的是读回来的那一份，两处各取一边
+// 会让意图指着一个范围、带着另一个范围的版本。
+func (handler *AmendCustomerSourceDataHandler) handOff(
+	ctx context.Context,
+	command AmendCustomerSourceDataCommand,
+	version domain.CustomerSourceDataVersion,
+	adoption domain.SourceDataAdoptionJudgment,
+) error {
+	return handler.deps.Downstream.HandOffSourceDataVersion(ctx, ports.SourceDataVersionHandoffIntent{
+		Identity: command.Identity,
+		Version:  version.VersionID(),
+		Scope:    version.Scope(),
+		Adoption: adoption,
+	})
 }
 
 // resolvePreserved 回答一个来源身份已经到过的修订请求。
@@ -278,7 +305,7 @@ func (handler *AmendCustomerSourceDataHandler) resolvePreserved(
 		// 同上一处：查不到是调用方的错，接 HTTP 时同样映射为`统一不可见结果`。
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidShipmentRequest)
 	}
-	return handler.existing(request, command.AmendmentIdentity), nil
+	return handler.existing(ctx, command, request), nil
 }
 
 // undecided 交回本轮的未决结果：封闭原因加一个续办引用，而不是一个 error——用例要求未决同时
@@ -322,18 +349,26 @@ func (handler *AmendCustomerSourceDataHandler) continuationReference(
 // 请求到版本的映射——留痕本身就是索引，而多存一张映射就多一处会与版本对不上的地方。
 //
 // 找不到版本时照样交回`已有结果`，只是不带版本：上一轮可能停在`待复核`或业务拒绝，那些同样是
-// 已经形成的结果。这里不重跑一遍去补个版本出来，重跑正是本路径要挡住的事。
+// 已经形成的结果，也没有版本可交给下游。这里不重跑一遍去补个版本出来，重跑正是本路径要挡住的事。
+//
+// 读回版本时重发同一份意图。上一轮可能正停在交接失败上，而这条路上没有别的东西会去补发——只答
+// `已有结果`就收工，那份版本会永远停在「本上下文已形成、下游从不知道」。重发的是同一份而不是
+// 第二份：意图由版本标识认领，而版本这一路只形成过一次。
 func (handler *AmendCustomerSourceDataHandler) existing(
+	ctx context.Context,
+	command AmendCustomerSourceDataCommand,
 	request domain.ShipmentRequest,
-	amendment domain.SourceIdentity,
 ) AmendCustomerSourceDataResult {
 	for _, version := range request.CustomerSourceDataVersions() {
-		if version.Request().Identity() != amendment {
+		if version.Request().Identity() != command.AmendmentIdentity {
 			continue
 		}
 		// 采用判断按版本自己的范围读，不按本次命令的范围：交回的是那份版本，说的就该是它
 		// 所在范围此刻的采用判断。
 		adoption, derived := request.CurrentSourceDataAdoption(version.Scope())
+		if err := handler.handOff(ctx, command, version, adoption); err != nil {
+			return handler.undecided(command, SourceDataVersionNotHandedOff)
+		}
 		return AmendCustomerSourceDataResult{
 			outcome:     AmendmentAlreadyHandled,
 			version:     version,

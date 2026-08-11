@@ -43,6 +43,42 @@ func TestAnAuthorizedAmendmentFormsAVersionAndDerivesItsAdoption(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-002 步骤 9「将版本引用交给适用下游」与下游交接边界 — `UC-CC-002`、`UC-CC-003`、
+// `UC-CC-007`、路由、节点与结算各自重新判断。
+//
+// 交出去的是引用而不是内容：跨上下文只传自己拥有的事实与引用，接收方形成自己的结果。一份版本
+// 只发一份意图，下游按范围各自认领——逐下游各设一个端口会把「谁该重新判断」搬进本上下文，而那
+// 是下游自己的事。
+//
+// 意图带上采用判断，是因为下游要消费的是「此刻该用哪一份」：范围上出现分叉时，它与刚形成的这
+// 一份并不是同一个，只发版本号会让下游把一份没并的支线当成当前资料。
+func TestARecordedAmendmentHandsTheVersionReferenceToDownstream(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	version, formed := result.Version()
+	if !formed {
+		t.Fatal("the amendment formed no version")
+	}
+
+	if len(fixture.downstream.intents) != 1 {
+		t.Fatalf("handed off %d intents, want exactly one for the one version formed", len(fixture.downstream.intents))
+	}
+	intent := fixture.downstream.intents[0]
+	if intent.Version != version.VersionID() {
+		t.Fatalf("handed off %q, want the version just formed (%q)", intent.Version, version.VersionID())
+	}
+	if intent.Scope != consigneeDataScope(t) {
+		t.Fatal("the intent named a scope other than the one amended; downstream cannot tell what to re-judge")
+	}
+	if intent.Adoption.Outcome() != domain.SourceDataAdopted {
+		t.Fatalf("adoption = %q; downstream consumes the current adoption, not merely the version just formed", intent.Adoption.Outcome())
+	}
+}
+
 // Covers: UC-PS-002「具体字段、字段组、阶段和允许动作由 `PAR-COM-13` 登记……未登记时只能形成
 // 未决或业务拒绝，不能以系统便利推断允许」，以及结果语义`待补充/待复核`。
 //
@@ -100,6 +136,9 @@ func TestADisallowedFieldStageRuleFormsABusinessRejectionRatherThanAwaitingRevie
 	}
 	if fixture.requests.saved != nil {
 		t.Fatal("a disallowed amendment wrote a version onto the accepted request")
+	}
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatalf("handed off %d intents; a round that formed no version has nothing for downstream to re-judge", len(fixture.downstream.intents))
 	}
 }
 
@@ -396,6 +435,85 @@ func TestAnUnsavedAmendmentIsUndecidedRatherThanRecorded(t *testing.T) {
 	if _, present := result.Version(); present {
 		t.Fatal("a version that never reached storage was reported as formed")
 	}
+	// 交接必须排在落库之后：先告诉下游再存，存失败时下游已经按一份并不存在的版本去重新判断了。
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatalf("handed off %d intents for a version that never reached storage; downstream would fetch nothing", len(fixture.downstream.intents))
+	}
+}
+
+// Covers: UC-PS-002 步骤 10「发布失败只重试同一发布意图，不重复形成资料版本」与`技术未形成`
+// 「原始请求已保全，但版本或发布意图未完成提交」。
+//
+// 不交回`已记录并采用`：下游还没听说这份版本，而`已记录并采用`那一行的含义是「当前资料版本采用
+// 判断明确可供下游引用」。版本本身已经形成并落库——`技术未形成`的前提正是它已经存住，续办要重
+// 发的是同一份意图，不是再形成一份版本。
+func TestAnUndeliveredHandoffLeavesTheRoundUndecidedWithoutReformingTheVersion(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.downstream.err = errors.New("downstream unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED; a version no downstream has heard of is not yet available for them to reference", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataVersionNotHandedOff {
+		t.Fatalf("reason = %q, want SOURCE_DATA_VERSION_NOT_HANDED_OFF", result.PendingReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("an undelivered handoff left no continuation reference; the caller cannot resume what it cannot name")
+	}
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d version IDs, want the one version this round formed", fixture.identities.issued)
+	}
+	if kept := fixture.requests.saved.CustomerSourceDataVersions(); len(kept) != 1 {
+		t.Fatalf("versions on the request = %d; the version must survive the failed handoff, or the retry has nothing to hand off", len(kept))
+	}
+}
+
+// Covers: `AT-PS-031`「资料版本已形成但下游事件首次发布失败 → 版本只形成一次；仅重试同一发布
+// 意图」。
+//
+// 重放必须把同一份意图再交一次。只答`已有结果`就收工，那份版本会永远停在「本上下文已形成、下游
+// 从不知道」的状态——而这条路上没有别的东西会去补发：编排不记意图完没完成，那份状态要与版本同
+// 一事务落库才算数，而事务与 outbox 仍阻断于 ADR-0017。
+//
+// 两次交出去的必须是同一个版本标识。不同就说明重放又形成了一份版本，那是第二份意图而不是同一
+// 份的重试，下游会按两份互不相认的引用各判一次。
+func TestARetryAfterAFailedHandoffResendsTheSameIntentWithoutFormingASecondVersion(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.downstream.err = errors.New("downstream unreachable")
+	first, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle first: %v", err)
+	}
+	if first.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want the first round to stop at UNDECIDED", first.Outcome())
+	}
+
+	fixture.downstream.err = nil
+	retried, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle retry: %v", err)
+	}
+
+	if retried.Outcome() != application.AmendmentAlreadyHandled {
+		t.Fatalf("outcome = %q, want ALREADY_HANDLED once the same intent gets through", retried.Outcome())
+	}
+	if len(fixture.downstream.intents) != 2 {
+		t.Fatalf("handed off %d times; the retry never re-sent the intent, so downstream never hears of this version", len(fixture.downstream.intents))
+	}
+	if fixture.downstream.intents[0].Version != fixture.downstream.intents[1].Version {
+		t.Fatalf(
+			"retry carried %q but the first carried %q; that is a second intent, not a retry of the first",
+			fixture.downstream.intents[1].Version, fixture.downstream.intents[0].Version,
+		)
+	}
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d version IDs; the retry formed a second version", fixture.identities.issued)
+	}
 }
 
 // Covers: 同一条业务未决语义在委托读取一侧 — 依赖答不出与「指名了一份不存在的委托」分开。
@@ -456,6 +574,7 @@ type amendmentFixture struct {
 	authorizer *amendmentAuthorizerDouble
 	rules      *sourceDataRuleDouble
 	identities *sourceDataIdentityFactory
+	downstream *sourceDataHandoffDouble
 	steps      []string
 }
 
@@ -466,6 +585,7 @@ func newAmendmentFixture(t *testing.T) *amendmentFixture {
 		authorizer: &amendmentAuthorizerDouble{t: t, granted: true},
 		rules:      &sourceDataRuleDouble{allowance: ports.SourceDataAmendmentAllowed},
 		identities: &sourceDataIdentityFactory{t: t},
+		downstream: &sourceDataHandoffDouble{},
 	}
 	value.sources = &sourceRepositoryDouble{
 		records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{},
@@ -478,6 +598,7 @@ func newAmendmentFixture(t *testing.T) *amendmentFixture {
 		Authorizer: value.authorizer,
 		Rules:      value.rules,
 		Identities: value.identities,
+		Downstream: value.downstream,
 		Clock:      fixedClock{at: handlerClockAt},
 	})
 	return value
@@ -696,7 +817,23 @@ func (factory *sourceDataIdentityFactory) NextSourceDataVersionID(
 	return mustValue(factory.t, domain.NewSourceDataVersionID, "data-version-1"), nil
 }
 
+// sourceDataHandoffDouble 记下每一份交出去的意图。按份数而不是按布尔断言：`AT-PS-031` 要的是
+// 「版本只形成一次、仅重试同一发布意图」，而两份意图与一份重发的意图，只有计数分得开。
+type sourceDataHandoffDouble struct {
+	err     error
+	intents []ports.SourceDataVersionHandoffIntent
+}
+
+func (double *sourceDataHandoffDouble) HandOffSourceDataVersion(
+	_ context.Context,
+	intent ports.SourceDataVersionHandoffIntent,
+) error {
+	double.intents = append(double.intents, intent)
+	return double.err
+}
+
 var (
+	_ ports.SourceDataVersionHandoff      = (*sourceDataHandoffDouble)(nil)
 	_ ports.ShipmentRequestRepository     = (*amendableRequestStore)(nil)
 	_ ports.SourceDataAmendmentAuthorizer = (*amendmentAuthorizerDouble)(nil)
 	_ ports.SourceDataRuleDeclaration     = (*sourceDataRuleDouble)(nil)

@@ -256,6 +256,35 @@ type SourceDataVersionIdentity interface {
 	NextSourceDataVersionID(ctx context.Context) (domain.SourceDataVersionID, error)
 }
 
+// SourceDataVersionHandoffIntent 是步骤 9 交给下游的那份引用。
+//
+// 它只携带引用与范围，不携带资料内容：跨上下文只传自己拥有的事实与引用，`UC-CC-002` 等下游按
+// 各自的业务时间与门禁重新判断，本上下文既不替它们判断，也不把客户声明复制过去。
+//
+// Adoption 与 Version 一起交出，两者在分叉时并不是同一个。下游要消费的是「此刻该用哪一份」，
+// 只发刚形成的那个版本号，会让它把一份尚未合并的支线当成当前资料。
+type SourceDataVersionHandoffIntent struct {
+	Identity domain.SourceIdentity
+	Version  domain.SourceDataVersionID
+	Scope    domain.SourceDataScope
+	Adoption domain.SourceDataAdoptionJudgment
+}
+
+// SourceDataVersionHandoff 把一份已形成的客户原始资料版本引用交给适用下游。
+//
+// 一份版本发一份意图，而不是逐下游各设一个端口：哪些下游该重新判断，取决于范围、阶段与各自的
+// 门禁，那是下游自己的判断。按下游拆端口会把那份判断搬进本上下文，而 `UC-PS-002` 明写本用例
+// 「不形成关务、节点、运输、路由或财务决定」。
+//
+// 意图由版本标识认领，因此重发的是同一份而不是第二份——`AT-PS-031` 要的「版本只形成一次；仅
+// 重试同一发布意图」正落在这里。首次交接失败时编排停在`技术未形成`，版本不因此重形成一遍。
+//
+// 它今天没有实现：outbox 与事务发布侧仍阻断于 ADR-0017 的 Bento 持久化闸门，端口接口属机制
+// 半边因而可以先定，唯一的实现是测试用的确定性替身。
+type SourceDataVersionHandoff interface {
+	HandOffSourceDataVersion(ctx context.Context, intent SourceDataVersionHandoffIntent) error
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
