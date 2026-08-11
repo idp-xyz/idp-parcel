@@ -187,6 +187,75 @@ type WithdrawalAuthorizer interface {
 	AuthorizeWithdrawal(ctx context.Context, query WithdrawalAuthorizationQuery) (domain.WithdrawalAuthorityReference, error)
 }
 
+// SourceDataAmendmentAuthorizationQuery 说明谁要以什么原因修订哪一处资料范围。它同样不带
+// 授权引用：调用方自带一个，就等于自己给自己签字。
+type SourceDataAmendmentAuthorizationQuery struct {
+	Identity  domain.SourceIdentity
+	Scope     domain.SourceDataScope
+	Requester domain.RequesterReference
+	Reason    domain.AmendmentReasonReference
+}
+
+// SourceDataAmendmentAuthorization 交回本次修订所采用的授权依据与实际决定方。
+//
+// 两项一起由 party-commercial 给出，不由调用方声明：`UC-PS-002` 要求「登录操作人不能替代实际
+// 决定方」，而让请求方自报决定方正是那句话禁止的事。本上下文只保存所采用的那一份，不判断它
+// 够不够格——授权规则属 party-commercial。
+type SourceDataAmendmentAuthorization struct {
+	Authority domain.AmendmentAuthoritySnapshot
+	Decider   domain.DeciderReference
+}
+
+// SourceDataAmendmentAuthorizer 回答请求方当前是否有权修订这处资料范围。
+//
+// 未授权时交回零值而不是错误：那是一个业务答案（这个人不能改这处资料），与「授权服务答不出」
+// 分属两回事，后者才是错误。真实请求方、实际决定方与授权入口仍是 `BD-PS-009` 待确认的实例
+// 参数，本上下文不内置任何默认。
+type SourceDataAmendmentAuthorizer interface {
+	AuthorizeSourceDataAmendment(
+		ctx context.Context,
+		query SourceDataAmendmentAuthorizationQuery,
+	) (SourceDataAmendmentAuthorization, error)
+}
+
+// SourceDataAmendmentAllowance 是某处资料范围在当前阶段上「能不能这样改」的登记结论。
+//
+// `NotDeclared` 是零值且刻意如此：矩阵没登记就是没登记，而零值必须落在最保守的那一格。让它
+// 落在`允许`上，一个尚未登记规则的租户会因为系统便利而放行任意修订，那正是 `UC-PS-002`
+// 「未登记时只能形成未决或业务拒绝，不能以系统便利推断允许」明禁的事。
+type SourceDataAmendmentAllowance uint8
+
+const (
+	SourceDataAmendmentNotDeclared SourceDataAmendmentAllowance = iota
+	SourceDataAmendmentAllowed
+	SourceDataAmendmentDisallowed
+)
+
+// SourceDataAmendmentQuery 说明要判断哪一处资料范围在当前阶段的允许动作。
+type SourceDataAmendmentQuery struct {
+	Identity domain.SourceIdentity
+	Scope    domain.SourceDataScope
+	Reason   domain.AmendmentReasonReference
+}
+
+// SourceDataRuleDeclaration 回答已登记规则是否允许这次修订。
+//
+// 字段、字段组、阶段与允许动作由 `PAR-COM-13` 与真实合同、产品、线路和关务规则登记，属实例
+// 半边；本上下文只消费登记结论，绝不自带一份矩阵。没有租户时它必然交回 `NotDeclared`，编排
+// 据以停在`待复核`——那是「还没人说这能不能改」，不是「客户违规」。
+type SourceDataRuleDeclaration interface {
+	DeclareSourceDataAmendment(
+		ctx context.Context,
+		query SourceDataAmendmentQuery,
+	) (SourceDataAmendmentAllowance, error)
+}
+
+// SourceDataVersionIdentity 签发客户原始资料版本的内部身份。与另外两个身份工厂分开，理由
+// 相同：建单期、决定期与修订期由不同用例触发，合并会让一个编排依赖它根本不签发的身份。
+type SourceDataVersionIdentity interface {
+	NextSourceDataVersionID(ctx context.Context) (domain.SourceDataVersionID, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
