@@ -387,6 +387,105 @@ func TestASupersededBasisIsResolvedAgainInsteadOfRetried(t *testing.T) {
 	}
 }
 
+// Covers: UC-PC-002 结果语义`依据未解析`「消费方回指的解析标识不指向一份它可用的原解析 →
+// 回第一阶段重新解析；不重试同一次调用」，以及该用例交接「消费者端口必须返回结构化的……
+// 依据未解析和已失效结果」。
+//
+// 恢复动作与`已失效`相同，所以走同一条重解并换标识的路——不换标识就是死循环。但未决原因
+// 必须分开：`已失效`是一桩能拿去跟客户解释的商业事实，这一格却意味着本方记下的采用标识本身
+// 可疑（写坏、串号，或指向了别人的解析）。并进`已失效`，本方的记录缺陷就会计进 AT-PC-026
+// 的失效统计，而那份统计是用来看商业修订有多频繁的。
+func TestAnUnrecognisedAdoptedResolutionResolvesAgainUnderItsOwnReason(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.revalidationOutcome = ports.CommercialRevalidationBasisNotResolved
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.calls == 0 {
+		t.Fatal("权威不认这个标识却没有回第一阶段重解——重试同一次重校验只会一直不认")
+	}
+	if len(fixture.recorder.adoptedResolution) != 1 {
+		t.Fatalf("recorded %d adopted resolutions, want the re-resolved one——标识没换掉，下一轮还会拿它去比",
+			len(fixture.recorder.adoptedResolution))
+	}
+	if result.PendingReason() != application.CommercialRevalidationBasisNotResolved {
+		t.Fatalf("pending reason = %q, want COMMERCIAL_REVALIDATION_BASIS_NOT_RESOLVED", result.PendingReason())
+	}
+	if result.PendingReason() == application.CommercialBasisSuperseded {
+		t.Fatal("本方记坏一个标识被报成了商业依据失效")
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("原解析都不被承认，却据它作出了一次决定")
+	}
+}
+
+// Covers: UC-PC-002 结果语义`输入未受理`「最小租户、客户、范围或锚点身份无法建立 → 不查询
+// 或泄露候选商业对象」，以及 ADR-0029「`输入未受理`保留给短路支，不并入取回失败那两格」。
+//
+// 这一格与上一条的分野在动作而不只在措辞：短路支是本方连身份都立不起来，回第一阶段解析要拿
+// 同一个立不起来的身份去问，只会再停一轮。所以它不重解，也绝不改写所记标识——那份标识没有
+// 任何证据表明它坏了。
+func TestARevalidationRejectedBeforeAnyQueryDoesNotResolveAgain(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.commercial.revalidationOutcome = ports.CommercialRevalidationInputNotAccepted
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if fixture.commercial.calls != 0 {
+		t.Fatal("身份都立不起来却回第一阶段重解了——同一个身份在那边一样立不起来")
+	}
+	if len(fixture.recorder.adoptedResolution) != 0 {
+		t.Fatal("查询根本没发生，所采用的解析却被改写了")
+	}
+	if result.PendingReason() != application.CommercialRevalidationInputNotAccepted {
+		t.Fatalf("pending reason = %q, want COMMERCIAL_REVALIDATION_INPUT_NOT_ACCEPTED", result.PendingReason())
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("重校验被短路拒绝，却仍然作出了一次决定")
+	}
+}
+
+// Covers: ADR-0025「翻译必须是全函数」— 第三阶段每个封闭取值都要有明确落点，而不同取值不得
+// 落在同一个未决原因上。
+//
+// 三种停法的恢复动作都由本方发起，因此最容易被压成一格。压了之后续办引用也一样，调用方按
+// 引用查回来的是另一种缺口，而未决统计再也分不出「商业修订推翻了依据」与「我们记坏了标识」。
+func TestEachRevalidationOutcomeStallsUnderItsOwnReason(t *testing.T) {
+	cases := map[ports.CommercialRevalidationOutcome]application.JudgmentPendingReason{
+		ports.CommercialBasisSuperseded:              application.CommercialBasisSuperseded,
+		ports.CommercialRevalidationUndetermined:     application.CommercialBasisUndetermined,
+		ports.CommercialRevalidationBasisNotResolved: application.CommercialRevalidationBasisNotResolved,
+		ports.CommercialRevalidationInputNotAccepted: application.CommercialRevalidationInputNotAccepted,
+	}
+
+	seen := make(map[application.JudgmentPendingReason]ports.CommercialRevalidationOutcome, len(cases))
+	for outcome, want := range cases {
+		t.Run(outcome.String(), func(t *testing.T) {
+			fixture := newDecisionFixture(t)
+			fixture.commercial.revalidationOutcome = outcome
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.PendingReason() != want {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), want)
+			}
+		})
+		if first, duplicated := seen[want]; duplicated {
+			t.Errorf("%q 与 %q 落在同一个未决原因 %q 上；两者的续办引用会完全相同",
+				outcome, first, want)
+		}
+		seen[want] = outcome
+	}
+}
+
 // Covers: UC-PC-002 一致性一节「缓存过期、读取失败或修订无法确认只能形成解析未决」——
 // 重校验时权威读不到不是失效。当成失效会去重解，而重解可能选中另一份依据，等于用一次读取
 // 失败换掉了原依据。

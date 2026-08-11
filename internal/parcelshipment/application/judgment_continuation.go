@@ -33,6 +33,10 @@ const (
 	CommercialBasisUnavailable
 	AdoptedCommercialBasisNotRecorded
 	CommercialBasisSuperseded
+	// 第三阶段取回那一步的两种拒绝。与第二阶段的 *AsOfBasisNotResolved 各自成格：运营要
+	// 知道停的是哪一阶段，而续办引用由原因派生，共用会把两阶段的续办路径并成一条。
+	CommercialRevalidationBasisNotResolved
+	CommercialRevalidationInputNotAccepted
 	ReachabilityAsOfNotDeclared
 	ReachabilityAsOfBasisNotResolved
 	ReachabilityAsOfNotConfigured
@@ -70,6 +74,15 @@ const (
 	SourceDataVersionIdentityUnavailable
 	AmendedRequestNotSaved
 	SourceDataVersionNotHandedOff
+
+	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
+	//
+	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
+	// String() 的取值交回空串 → recordAttempt 里 NewProcessingAttemptReason 拿空串报
+	// ErrBlankValue → 处理尝试悄悄不落库，打掉用例要的「任务同时留下判断与处理尝试」；
+	// 同一个空串还会进 judgmentContinuation 的摘要，让所有漏登记的原因共用一条续办引用。
+	// 全程没有任何东西变红。守它的是 TestEveryPendingReasonHasAStringAndAResumePath。
+	judgmentPendingReasonEnd
 )
 
 // resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的三个等待态一一对应。
@@ -86,6 +99,10 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 	default:
 		// 其余取值全是依赖答不出或声明未到，只有本方推得动。这一条不靠任何未确认规则：
 		// 客户和复核角色都补不出一个查不回来的授权，或者一次没落库的保存。
+		//
+		// 第三阶段取回那两格是**有意**落在这里的，不是漏了：`依据未解析`的恢复动作是回第一
+		// 阶段重解，而重解由本方发起；`输入未受理`是本方连身份或标识都立不起来，更只有本方
+		// 改得动。客户补件与人工复核对这两者都无能为力。
 		return domain.ResumeByInternalRetry
 	}
 }
@@ -102,6 +119,10 @@ func (reason JudgmentPendingReason) String() string {
 		return "ADOPTED_COMMERCIAL_BASIS_NOT_RECORDED"
 	case CommercialBasisSuperseded:
 		return "COMMERCIAL_BASIS_SUPERSEDED"
+	case CommercialRevalidationBasisNotResolved:
+		return "COMMERCIAL_REVALIDATION_BASIS_NOT_RESOLVED"
+	case CommercialRevalidationInputNotAccepted:
+		return "COMMERCIAL_REVALIDATION_INPUT_NOT_ACCEPTED"
 	case ReachabilityAsOfNotDeclared:
 		return "REACHABILITY_AS_OF_NOT_DECLARED"
 	case ReachabilityAsOfBasisNotResolved:
@@ -361,6 +382,9 @@ func recordAttempt(
 	reason JudgmentPendingReason,
 	continuation domain.OwnershipContinuationReference,
 ) {
+	// 只有空串会走到这里，而空串只可能来自一个漏补 String() 的取值——那是编程错误，不是
+	// 依赖答不出，因此它不该变成一条记着空原因的处理尝试。它由 judgmentPendingReasonEnd 那
+	// 条遍历用例在写下当天就拦住，所以这一支在跑起来时是够不到的。
 	attemptReason, err := domain.NewProcessingAttemptReason(reason.String())
 	if err != nil {
 		return

@@ -130,16 +130,16 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable, request.State()), nil
 	}
 
-	resolution, superseded, err := handler.revalidateOrResolve(ctx, command, recorded.AdoptedCommercialResolution)
+	resolution, stalled, err := handler.revalidateOrResolve(ctx, command, recorded.AdoptedCommercialResolution)
 	if err != nil {
 		return handler.undecided(ctx, command, CommercialBasisUnavailable, request.State()), nil
 	}
-	if superseded {
-		// 原解析已被新修订推翻。本轮不形成决定：判断是在旧依据的时点策略下形成的，拿它们去
-		// 配一份新依据就是在两套依据上作一次决定。重解得到的那一份已经记为所采用，因此下一轮
-		// 判断在新依据下重做，下一次重校验也比对新的那一份——循环由此终止，而不是拿着同一个
-		// 失效标识把第三阶段重试到底。
-		return handler.undecided(ctx, command, CommercialBasisSuperseded, request.State()), nil
+	if stalled != PendingReasonNone {
+		// 重校验那一步自己就停住了本轮，且它比这里更清楚停在哪一格。原因由它交回而不是在这里
+		// 按一个布尔重新推断：第三阶段有三种停法（依据被推翻、标识不被承认、入参立不起来），
+		// 恢复动作虽然都由本方发起，未决统计与续办引用却必须分得开。压成一个布尔，三者会共用
+		// 同一条续办引用，调用方按引用查回来的是另一种缺口。
+		return handler.undecided(ctx, command, stalled, request.State()), nil
 	}
 	if resolution.Applicability == domain.CommercialApplicabilityUndetermined {
 		return handler.undecided(ctx, command, CommercialBasisUndetermined, request.State()), nil
@@ -207,7 +207,11 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 }
 
 // revalidateOrResolve 执行 `UC-PC-002` 步骤 8：已经有采用过的解析时按它重解，看这份依据在
-// 提交决定前是否仍然成立。第二个返回值报告原解析是否已被推翻。
+// 提交决定前是否仍然成立。第二个返回值是本轮的未决原因，`PendingReasonNone` 表示没停。
+//
+// 它交回原因而不是一个「是否已被推翻」的布尔：第三阶段有三种停法，而布尔只表达得了一种，
+// 其余两种要么被迫冒充`已失效`，要么落进 default 变成端口坏了。前者把本方记坏标识混进
+// `AT-PC-026` 的失效统计，后者把一个合法答复报成故障。
 //
 // 没有采用过的解析时走首次解析，而不是停下。一份还没推进过任何判断的委托同样可能要在这里
 // 定下来——权威说这个范围确定没有适用依据时，那是一次拒绝，停下会让它永远挂着。
@@ -218,10 +222,10 @@ func (handler *FormAcceptanceDecisionHandler) revalidateOrResolve(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	adopted domain.CommercialResolutionID,
-) (ports.CommercialBasisResolution, bool, error) {
+) (ports.CommercialBasisResolution, JudgmentPendingReason, error) {
 	if adopted.String() == "" {
 		resolution, err := handler.resolve(ctx, command)
-		return resolution, false, err
+		return resolution, PendingReasonNone, err
 	}
 
 	revalidation, err := handler.deps.Commercial.RevalidateCommercialBasis(ctx, ports.CommercialRevalidationQuery{
@@ -231,54 +235,71 @@ func (handler *FormAcceptanceDecisionHandler) revalidateOrResolve(
 		Resolution:        adopted,
 	})
 	if err != nil {
-		return ports.CommercialBasisResolution{}, false, err
+		return ports.CommercialBasisResolution{}, PendingReasonNone, err
 	}
 
 	switch revalidation.Outcome {
 	case ports.CommercialBasisStillValid:
-		return revalidation.Resolution, false, nil
+		return revalidation.Resolution, PendingReasonNone, nil
 	case ports.CommercialRevalidationUndetermined:
 		// 权威读不到不是失效。交回`无法判定`让编排保持未决，本方重试同一次重校验即可——
 		// 把它当成失效会去重解，而重解可能选中另一份依据，等于用一次读取失败换掉了原依据。
 		return ports.CommercialBasisResolution{
 			Applicability: domain.CommercialApplicabilityUndetermined,
 			Reason:        revalidation.Reason,
-		}, false, nil
+		}, PendingReasonNone, nil
 	case ports.CommercialBasisSuperseded:
-		return handler.resolveSuperseded(ctx, command)
+		// 原解析已被新修订推翻。本轮不形成决定：判断是在旧依据的时点策略下形成的，拿它们去
+		// 配一份新依据就是在两套依据上作一次决定。
+		return handler.resolveAdoptedAgain(ctx, command, CommercialBasisSuperseded)
+	case ports.CommercialRevalidationBasisNotResolved:
+		// 权威不承认本方记下的那个标识——它从未签发，或者不属于这个客户账户（两者由提供方
+		// 合并，本方不得拆开，见 ports 上的说明）。恢复动作与`已失效`同为回第一阶段重解，
+		// 因此走同一条路；原因分开，因为这一格意味着本方的采用记录本身可疑，而`已失效`是一
+		// 桩能拿去跟客户解释的商业事实。混进同一格，本方写坏标识就会计进失效统计。
+		return handler.resolveAdoptedAgain(ctx, command, CommercialRevalidationBasisNotResolved)
+	case ports.CommercialRevalidationInputNotAccepted:
+		// 提供方在任何查询发生之前就短路拒绝了：身份或标识立不起来。这一格**不**重解——
+		// 重解要拿同一个立不起来的身份去问第一阶段，只会再停一轮；缺口在本方的入参上。
+		return ports.CommercialBasisResolution{}, CommercialRevalidationInputNotAccepted, nil
 	default:
-		return ports.CommercialBasisResolution{}, false, fmt.Errorf(
+		return ports.CommercialBasisResolution{}, PendingReasonNone, fmt.Errorf(
 			"revalidate commercial basis: %w", ErrUnexpectedRevalidationOutcome,
 		)
 	}
 }
 
-// resolveSuperseded 在原解析被推翻后重解一次，并把新解析记为所采用的那一份。
+// resolveAdoptedAgain 在所记标识不再可用后重解一次，并把新解析记为所采用的那一份。
 //
-// 记下这一步是循环终止的地方：不换掉所记标识，下一轮又会拿同一个失效标识去重校验，永远得到
-// `已失效`。换掉之后判断在新依据下重做，重校验也比对新的那一份。
+// 记下这一步是循环终止的地方：不换掉所记标识，下一轮又会拿同一个标识去重校验，永远得到同一
+// 个答复。换掉之后判断在新依据下重做，重校验也比对新的那一份。
+//
+// 两种停法共用它，因为「回第一阶段重解并换掉所记标识」这个动作对两者字面相同；停下来时报的
+// 原因由调用处给定，不在这里推断。动作相同不等于原因相同——原因参与续办派生与未决统计，而
+// 那两样恰恰要求分得开。
 //
 // 重解本身失败或仍不唯一时不改写所记标识：那种情况下没有「新的那一份」可采用，用例要的是
 // 「无法重解保持未决」，而不是把一个不成立的解析记成已采用。
-func (handler *FormAcceptanceDecisionHandler) resolveSuperseded(
+func (handler *FormAcceptanceDecisionHandler) resolveAdoptedAgain(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
-) (ports.CommercialBasisResolution, bool, error) {
+	stalled JudgmentPendingReason,
+) (ports.CommercialBasisResolution, JudgmentPendingReason, error) {
 	resolution, err := handler.resolve(ctx, command)
 	if err != nil {
-		return ports.CommercialBasisResolution{}, false, err
+		return ports.CommercialBasisResolution{}, PendingReasonNone, err
 	}
 	if resolution.Applicability != domain.CommerciallyApplicable {
-		return resolution, false, nil
+		return resolution, PendingReasonNone, nil
 	}
 	if err := handler.deps.Recorder.RecordAdoptedCommercialResolution(
 		ctx,
 		command.ShipmentRequestID,
 		resolution.Snapshot.ResolutionID(),
 	); err != nil {
-		return ports.CommercialBasisResolution{}, false, err
+		return ports.CommercialBasisResolution{}, PendingReasonNone, err
 	}
-	return resolution, true, nil
+	return resolution, stalled, nil
 }
 
 func (handler *FormAcceptanceDecisionHandler) resolve(

@@ -172,8 +172,21 @@ type CommercialRevalidationQuery struct {
 //
 // `已失效`必须与`解析未决`分开，不能一起落进 CommercialApplicability 的`无法判定`。两者要
 // 采取的动作相反：未决是等权威恢复，本方重试同一次重校验就行；`已失效`重试一万次也还是失效，
-// `UC-PC-002` 第 58 行要的是**重新解析**——回第一阶段拿当前有效的那一份。混成一格，一份被
-// 新修订推翻的依据会拿着同一个失效标识把第三阶段重试到底。
+// `UC-PC-002` 要的是**重新解析**——回第一阶段拿当前有效的那一份。混成一格，一份被新修订
+// 推翻的依据会拿着同一个失效标识把第三阶段重试到底。
+//
+// 后两个取值属**取回那一步**的拒绝，与前两个「取回成功之后作出的判断」分属不同步骤。
+// ADR-0029 只管取回失败那一步，`已失效`不在它管辖内——因此不能援引它把`依据未解析`并进
+// `已失效`：那不是应用它的合并规则，是把它扩到它明确划出去的地方。`UC-PC-002` 的结果表也
+// 把两者列为两行，交接一节更把它们并列为消费者端口必须分别返回的结构化结果。
+//
+// 两个一起补而不是先补一个：ADR-0029 要求消费侧同轮改完，只补一个会让中间态既不全函数也
+// 不隐蔽。补它们本身不需要新记录——ADR-0027 已把「端口结果代数缺口」判为 ADR-0025「翻译
+// 必须是全函数」下的端口契约缺陷，改 ports 即可。
+//
+// **`依据未解析`刻意不可再分。** 提供方已经把「该标识从未签发」与「它属于另一个客户账户」
+// 合并进这一格，为的是不让一串标识挨个问就能枚举同租户下别人的解析。在消费侧拆回两格，就是
+// 把刚拆掉的预言机在这边重建一遍——ADR-0029 点名警告过这条下场。
 type CommercialRevalidationOutcome uint8
 
 const (
@@ -181,6 +194,8 @@ const (
 	CommercialBasisStillValid
 	CommercialBasisSuperseded
 	CommercialRevalidationUndetermined
+	CommercialRevalidationBasisNotResolved
+	CommercialRevalidationInputNotAccepted
 )
 
 func (outcome CommercialRevalidationOutcome) String() string {
@@ -191,6 +206,10 @@ func (outcome CommercialRevalidationOutcome) String() string {
 		return "SUPERSEDED"
 	case CommercialRevalidationUndetermined:
 		return "UNDETERMINED"
+	case CommercialRevalidationBasisNotResolved:
+		return "BASIS_NOT_RESOLVED"
+	case CommercialRevalidationInputNotAccepted:
+		return "INPUT_NOT_ACCEPTED"
 	default:
 		return ""
 	}
