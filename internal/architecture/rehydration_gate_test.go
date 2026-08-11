@@ -34,17 +34,20 @@ var rehydrationEntryIdentifiers = map[string]bool{
 var rehydrationSurfaceOpenIdentifiers = map[string]string{
 	"ErrInvalidRehydratedShipmentRequest": "重建拒绝的哨兵。errors.Is 它什么聚合都没造出来，落在 ADR-0028 要防的「业务代码断言判断路径造不出的结论」之外；放进受限名单等于禁止任何调用方判断这个拒绝。",
 	"ErrRehydrationStateNotSupported":     "同上，另一个拒绝理由：这扇门本期只开到`已提交`。它与上一条按 ADR-0029 分格——恢复动作不同（等门开到那个状态，还是去查库里那一行），压成一个取值会让运维照着完好的数据去找一处不存在的损坏。分期期间编排要靠它分流，更不能拦。",
+	"SubmitShipmentRequest":               "构造那扇门，按 ADR-0028 与重建分属两扇：它从零版本创生，每一条不变量都当场算，因此不需要受限——受限要防的是「相信输入」，而它谁的话都不信。它被判据四（凭空交出一个聚合）认进重建面是对的：两扇门都得登记，只有登记了，第三扇门被人加出来时才会因为「两份名单都没有」而变红。",
 }
 
 // rehydrationSurfaceFile 是 ADR-0028 那扇「另一扇门」在磁盘上的位置。
 const rehydrationSurfaceFile = "internal/parcelshipment/domain/rehydration.go"
 
-// surfaceCandidate 是一个待判定的领域包声明：它在哪个文件、叫什么、以及（是方法时）挂在
-// 哪个类型上。
+// surfaceCandidate 是一个待判定的领域包声明：它在哪个文件、叫什么、（是方法时）挂在哪个
+// 类型上，以及它会不会凭空交出一个聚合。
 type surfaceCandidate struct {
 	path         string
 	name         string
 	receiverType string
+	// yieldsAggregate 只对函数与方法有意义，其余声明恒为假。
+	yieldsAggregate bool
 }
 
 // belongsToRehydrationSurface 判领域包里一个导出声明是否属重建面。三条取并集：在门那个
@@ -65,10 +68,53 @@ type surfaceCandidate struct {
 //
 // 不取 `Snapshot` 后缀：领域包里 `CommercialBasisSnapshot`、`AmendmentAuthoritySnapshot`
 // 是判断的值对象，与重建无关。按后缀判会把这两个算进重建面，真入口反而一个都不中。
+//
+// 第四条与前三条不同类：前三条认的都是**形状**（写在哪个文件、叫什么名字、挂在哪个类型上），
+// 而真正赋予重建能力的是**包成员资格**——只要在 `package domain` 里就设得了未导出字段。三条
+// 形状判据合起来仍漏掉 `func (spec SomeSpec) Build() ShipmentRequest`：接收者不在受限名单，
+// 文件与名字两半也不中，于是四道检查全穿（实测于 1dbc680，见对照组——同一个方法只把接收者
+// 换成受限类型就在下面那条方法禁令上变红）。所以第四条按能力认：凭空交出一个聚合。
+//
+// 这不是新裁断，是把 rehydrationSurfaceOpenIdentifiers 上方那条既有裁断补齐——「该分的维度
+// 是意图，不是提供方那边是个什么东西」当初只贯彻到了分类（两份互斥名单），没贯彻到检测。
+// 检测按能力、分类按意图，`SubmitShipmentRequest` 因此落进开放名单：那不是误伤，恰恰因为
+// 构造与重建是 ADR-0028 定的两扇门，每扇都得把自己的义务写下来。
 func belongsToRehydrationSurface(candidate surfaceCandidate) bool {
 	return candidate.path == rehydrationSurfaceFile ||
 		strings.HasPrefix(candidate.name, "Rehydrate") ||
-		rehydrationEntryIdentifiers[candidate.receiverType]
+		rehydrationEntryIdentifiers[candidate.receiverType] ||
+		candidate.yieldsAggregate
+}
+
+// aggregateTypeName 是本上下文的聚合根，也是上面第四条判据的落点。
+const aggregateTypeName = "ShipmentRequest"
+
+// yieldsTheAggregateWithoutTakingOne 判一条函数声明会不会凭空造出一个聚合。
+//
+// 接收者与入参一并算作「收了一个进来」：`func (request ShipmentRequest) Decide(…) (ShipmentRequest, error)`
+// 是一次转移而不是一扇门，它由转移扫描守（那一条要求版本不动），在这里认成重建面会把领域包
+// 里每个状态转移都拖上来，而它们一个都不该登记进两份名单。
+func yieldsTheAggregateWithoutTakingOne(function *ast.FuncDecl) bool {
+	return mentionsTheAggregate(function.Type.Results) &&
+		!mentionsTheAggregate(function.Type.Params) &&
+		!mentionsTheAggregate(function.Recv)
+}
+
+// mentionsTheAggregate 判一份字段表里有没有提到聚合类型。指针、切片、映射都算——递出去的是
+// 同一个类型，包了一层不改变调用方能拿到它这件事。
+func mentionsTheAggregate(fields *ast.FieldList) bool {
+	if fields == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(fields, func(node ast.Node) bool {
+		identifier, ok := node.(*ast.Ident)
+		if ok && identifier.Name == aggregateTypeName {
+			found = true
+		}
+		return !found
+	})
+	return found
 }
 
 // receiverTypeName 取方法接收者的类型名，指针与泛型实例都剥到底层那个标识符。
@@ -288,9 +334,10 @@ func TestEveryIdentifierOnTheRehydrationSurfaceIsClassified(t *testing.T) {
 			switch typed := decl.(type) {
 			case *ast.FuncDecl:
 				candidate := surfaceCandidate{
-					path:         file.path,
-					name:         typed.Name.Name,
-					receiverType: receiverTypeName(typed),
+					path:            file.path,
+					name:            typed.Name.Name,
+					receiverType:    receiverTypeName(typed),
+					yieldsAggregate: yieldsTheAggregateWithoutTakingOne(typed),
 				}
 				if !typed.Name.IsExported() || !belongsToRehydrationSurface(candidate) {
 					continue
@@ -407,6 +454,15 @@ func TestTheRehydrationSurfaceIsNotHeldUpByNamingAlone(t *testing.T) {
 			candidate: surfaceCandidate{path: elsewhere, name: "Build", receiverType: "ShipmentRequest"},
 			want:      false,
 		},
+		// 前三条对它全不中，只有判据四认得出：这正是 N9 那个实测确认的覆盖洞。
+		"门外挂在寻常类型上、却凭空交出聚合的方法": {
+			candidate: surfaceCandidate{path: elsewhere, name: "Build", receiverType: "SomeSpec", yieldsAggregate: true},
+			want:      true,
+		},
+		"门外凭空交出聚合的包级函数": {
+			candidate: surfaceCandidate{path: elsewhere, name: "BuildShipmentRequestAt", yieldsAggregate: true},
+			want:      true,
+		},
 	}
 
 	for name, test := range cases {
@@ -414,6 +470,87 @@ func TestTheRehydrationSurfaceIsNotHeldUpByNamingAlone(t *testing.T) {
 			t.Parallel()
 			if got := belongsToRehydrationSurface(test.candidate); got != test.want {
 				t.Fatalf("belongsToRehydrationSurface(%+v) = %v, want %v", test.candidate, got, test.want)
+			}
+		})
+	}
+}
+
+// TestTheCapabilityCriterionRecognisesEveryShapeThatConjuresAnAggregate 钉住判据四的**识别**
+// 那一步。上面那张表钉的是「判据四被并进了 belongsToRehydrationSurface」，而 N9 的洞出在识别：
+// 判据认不出那个形状时，后面并不并它都一样。两条缺一不可。
+//
+// 领域包今天只有两个包级函数凭空交出聚合（`RehydrateShipmentRequest` 与 `SubmitShipmentRequest`，
+// 两者都已登记），所以下面全部用合成源码——不用合成取值就无从证明这条判据真在起作用，而这正是
+// 本包反复栽过的那一跤。
+func TestTheCapabilityCriterionRecognisesEveryShapeThatConjuresAnAggregate(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]struct {
+		declaration string
+		want        bool
+	}{
+		// 实测确认的 N9 覆盖洞：接收者不在受限名单，文件与名字两半也不中，前三条全穿。
+		"挂在寻常类型上、凭空交出聚合的方法": {
+			declaration: "func (spec SomeSpec) Build() ShipmentRequest { return ShipmentRequest{} }",
+			want:        true,
+		},
+		"指针接收者同形": {
+			declaration: "func (spec *SomeSpec) Build() ShipmentRequest { return ShipmentRequest{} }",
+			want:        true,
+		},
+		"凭空交出聚合的包级函数": {
+			declaration: "func BuildShipmentRequestAt(revision int64) ShipmentRequest { return ShipmentRequest{} }",
+			want:        true,
+		},
+		"交回聚合与错误": {
+			declaration: "func SubmitShipmentRequest(spec Spec) (ShipmentRequest, error) { return ShipmentRequest{}, nil }",
+			want:        true,
+		},
+		// 转移不是门：它收了一个进来，由转移扫描守版本不动。认成重建面会把领域包里每个状态
+		// 转移都拖上来，而它们一个都不该登记进两份名单。
+		"聚合自己的状态转移": {
+			declaration: "func (request ShipmentRequest) Decide(spec Spec) (ShipmentRequest, error) { return request, nil }",
+			want:        false,
+		},
+		"收下聚合的包级函数": {
+			declaration: "func Advance(request ShipmentRequest) ShipmentRequest { return request }",
+			want:        false,
+		},
+		// 只收不交回：它改不出一个新聚合递给包外。
+		"只收下聚合的读取方法": {
+			declaration: "func (request ShipmentRequest) State() ShipmentRequestState { return request.state }",
+			want:        false,
+		},
+		"与聚合无关的声明": {
+			declaration: "func NewSomeSpec(id string) SomeSpec { return SomeSpec{} }",
+			want:        false,
+		},
+		// 指针与切片都算递出：包了一层不改变调用方能拿到它这件事。
+		"交回聚合指针": {
+			declaration: "func Conjure() *ShipmentRequest { return nil }",
+			want:        true,
+		},
+		"交回聚合切片": {
+			declaration: "func ConjureAll() []ShipmentRequest { return nil }",
+			want:        true,
+		},
+	}
+
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			syntax, err := parser.ParseFile(
+				token.NewFileSet(), "synthetic.go", "package domain\n"+test.declaration, 0,
+			)
+			if err != nil {
+				t.Fatalf("解析合成源码：%v", err)
+			}
+			function, ok := syntax.Decls[0].(*ast.FuncDecl)
+			if !ok {
+				t.Fatalf("合成源码第一条声明不是函数：%T", syntax.Decls[0])
+			}
+			if got := yieldsTheAggregateWithoutTakingOne(function); got != test.want {
+				t.Fatalf("yieldsTheAggregateWithoutTakingOne(%s) = %v, want %v", test.declaration, got, test.want)
 			}
 		})
 	}
