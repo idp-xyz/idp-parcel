@@ -43,9 +43,17 @@ var integerBaseTypes = map[string]bool{
 // 掉了：补了 String() 才会变红，漏补反而全绿。它守的是相反的方向。
 //
 // **判据刻意宽松：只要常量在 String() 够得着的地方被提到过就算数。**不要求它出现在 case 上，
-// 也不要求方法体里有 switch——映射查表、切片下标都是合法写法，把它们判成违规就会逼人给规则
-// 开例外，而例外正是门禁失效的常见起点。要防的失败是「压根没碰 String()」，这个判据对它
-// 一样灵，代价只是放过一种现实中不会出现的写法（在别处提一次名字却不真的分派）。
+// 也不要求方法体里有 switch——`map[Outcome]string{Accepted: …}` 这种按常量名索引的查表是完整
+// 实现，把它判成违规就会逼人给规则开例外，而例外正是门禁失效的常见起点。要防的失败是「压根
+// 没碰 String()」，这个判据对它一样灵。
+//
+// **但按下标索引的位置表会被报，而且那是有意的，不是判据够不着。** `var names = [...]string{
+// "", "DISTINCT", …}` 里一个常量名都不出现，本条对它无从判断新增取值登没登记——它靠位置登记，
+// 而位置没有任何语法检查验得了。它自己还另有一条静默失败：字面量少一项或错一位，全部名字一起
+// 平移，而每个取值看起来仍然「有名字」。所以本条对位置表的答复是**别写**；真要改成位置表，
+// 该改的是那份实现而不是这条判据。这一条由 `TestTheEnumGateCanActuallyCatchAViolation` 钉住，
+// 免得它退回一句没人验的声称——它此前就是那样漂了一次：头注释声称容忍切片下标，而实现从来
+// 容忍不了。
 func TestEveryEnumConstantIsNamedByItsStringMethod(t *testing.T) {
 	t.Parallel()
 
@@ -55,30 +63,50 @@ func TestEveryEnumConstantIsNamedByItsStringMethod(t *testing.T) {
 	}
 
 	scanned := 0
+	seen := map[string]bool{}
 	for _, pkg := range sortedKeys(byPackage) {
-		omissions, count := enumOmissionsIn(byPackage[pkg])
-		scanned += count
+		omissions, types := enumOmissionsIn(byPackage[pkg])
+		scanned += len(types)
+		for _, name := range types {
+			seen[name] = true
+		}
 		for _, omitted := range omissions {
 			t.Errorf("%s：%s 声明了却没在它的 String() 里出现过；漏登记的取值交回空串，而空串在下游会被构造器拒绝后静默丢弃、或拌进摘要让两个不同取值归一",
 				strings.TrimPrefix(pkg, modulePath+"/"), omitted)
 		}
 	}
-	// 报出判过多少个，好让「收集侧悄悄少认了一批」在 -v 下看得见。下面那道守卫只挡得住
-	// 完全空过，挡不住「本该五十个却只扫到三个」——那种收缩不会有任何东西变红。
+	// 报出判过多少个，好让「收集侧悄悄少认了一批」在 -v 下看得见。
 	t.Logf("判过 %d 个带 String() 的整型枚举", scanned)
 	if scanned == 0 {
 		t.Fatal("没扫到任何带 String() 的整型枚举；本条门禁会永远空过")
 	}
+	// 空过守卫只挡得住「一个都没扫到」，挡不住「本该五十个却只扫到三个」——收集侧悄悄少认
+	// 一批不会有任何东西变红。所以把本文件开头点名的三个承重枚举钉到检测侧：它们各自承载一条
+	// 真实的静默链（处理尝试不落库、续办引用撞车、商业视图摘要该变而没变），少认了哪一个，
+	// 被它护住的那条链就重新敞开，而门禁照样全绿。同一手法见 rehydration_gate_test.go 的
+	// `anchored` 标志与那里的磁盘锚。
+	for _, anchor := range []string{
+		"JudgmentPendingReason",
+		"CommercialObjectKind",
+		"CommercialVersionStatus",
+	} {
+		if !seen[anchor] {
+			t.Errorf("%s 不在本次扫描面内；本文件开头点名它承载一条静默链，扫不到它等于那条链没人守，而本条仍会全绿", anchor)
+		}
+	}
 }
 
 // enumOmissionsIn 找出一个包里「声明了却没在自己 String() 里露过面」的枚举常量，并回报本次
-// 判过多少个枚举——扫零与全绿在输出上一模一样，调用方需要能把两者分开。
+// 判过**哪些**枚举——扫零与全绿在输出上一模一样，调用方需要能把两者分开。
+//
+// 交回名字而不只是个数：个数只答得了「有没有完全空过」，答不了「本该判到的那几个还在不在
+// 里面」。调用方拿名字去钉承重枚举，那才挡得住收集侧悄悄收缩。
 //
 // 按包收而不是按文件收：类型是包作用域的，声明类型的文件与声明常量的文件可以不是同一个，
 // 按文件判会把这种拆法误报成「有常量没类型」。
-func enumOmissionsIn(files []*ast.File) (omissions []string, scanned int) {
-	enums := map[string]bool{}
-	constants := map[string][]string{}
+func enumOmissionsIn(files []*ast.File) (omissions []string, scannedTypes []string) {
+	namedTypes := map[string]string{}
+	constants := map[string][]enumConstant{}
 	stringMethods := map[string]*ast.FuncDecl{}
 	packageValues := map[string][]ast.Expr{}
 
@@ -86,7 +114,7 @@ func enumOmissionsIn(files []*ast.File) (omissions []string, scanned int) {
 		for _, decl := range file.Decls {
 			switch typed := decl.(type) {
 			case *ast.GenDecl:
-				collectEnumDeclarations(typed, enums, constants)
+				collectEnumDeclarations(typed, namedTypes, constants)
 				collectPackageValues(typed, packageValues)
 			case *ast.FuncDecl:
 				if typed.Name.Name == "String" && returnsOneString(typed) {
@@ -98,38 +126,81 @@ func enumOmissionsIn(files []*ast.File) (omissions []string, scanned int) {
 		}
 	}
 
-	for name := range enums {
+	for name := range namedTypes {
+		if !restsOnAnIntegerBase(name, namedTypes) {
+			continue
+		}
 		declared := constants[name]
 		method, hasString := stringMethods[name]
 		if !hasString || len(declared) == 0 {
 			continue
 		}
-		scanned++
+		scannedTypes = append(scannedTypes, name)
 
 		mentioned := mentionedBy(method, packageValues)
-		for index, constant := range declared {
-			// 第一个常量是零值哨兵（`XxxInvalid`、`PendingReasonNone`），本仓一律有意让它
-			// 落进 default 交回空串——那正是「这个值不该出现」的表达，给它一个名字反而会让
-			// 一个未初始化的枚举看起来像个正经取值。
-			if index == 0 {
+		for _, constant := range declared {
+			// 零值哨兵（`XxxInvalid`、`PendingReasonNone`）本仓一律有意让它落进 default 交回
+			// 空串——那正是「这个值不该出现」的表达，给它一个名字反而会让一个未初始化的枚举
+			// 看起来像个正经取值。
+			//
+			// **按值认，不按位置认。** `iota + 1` 那种写法下零值根本没有常量，第一个常量是
+			// 真取值；按位置跳会让它永远免检，而漏补与补齐在那种形状下**一样是全绿**，唯一
+			// 差别只是位置。`SourceClassification` 正是这个形状。
+			if constant.zeroValued {
 				continue
 			}
 			// 未导出的常量不属公开值域，是上界哨兵之类的内部记号（`judgmentPendingReasonEnd`）。
 			// 它们本就不该有字符串表示。
-			if !ast.IsExported(constant) {
+			if !ast.IsExported(constant.name) {
 				continue
 			}
-			if !mentioned[constant] {
-				omissions = append(omissions, name+"."+constant)
+			if !mentioned[constant.name] {
+				omissions = append(omissions, name+"."+constant.name)
 			}
 		}
 	}
 	sort.Strings(omissions)
-	return omissions, scanned
+	sort.Strings(scannedTypes)
+	return omissions, scannedTypes
 }
 
-// collectEnumDeclarations 从一个声明块里取出整型具名类型与挂在它们名下的常量。
-func collectEnumDeclarations(decl *ast.GenDecl, enums map[string]bool, constants map[string][]string) {
+// enumConstant 是一个枚举常量，外加它是不是那个零值哨兵。
+//
+// 「是不是哨兵」得随常量一起记下来，不能等到判定时按下标推：常量可以拆在多个 const 块甚至
+// 多个文件里，届时「第几个」取决于遍历顺序，而遍历顺序不是任何人打算表达的东西。
+type enumConstant struct {
+	name       string
+	zeroValued bool
+}
+
+// restsOnAnIntegerBase 顺着具名类型链走到底，判它最终是不是落在整型上。
+//
+// 走链而不是只看一层，堵的是「给枚举另起一个名字」那条绕法：`type Code Outcome` 的底层类型是
+// 一个具名类型而不是 `uint8`，只看一层它压根进不了扫描面，于是**整包免检且扫描数不涨**。这与
+// c762b70 在重建面上堵掉的是同一个形状。
+//
+// 带访问集合防环。`type A B; type B A` 编不过，但本扫描是纯语法的，编不过的源码一样解析得到，
+// 一个环就够让门禁挂死——而挂死的门禁与没有门禁的区别只在它看起来像在守。
+func restsOnAnIntegerBase(name string, namedTypes map[string]string) bool {
+	seen := map[string]bool{}
+	for {
+		base, declared := namedTypes[name]
+		if !declared || seen[name] {
+			return false
+		}
+		seen[name] = true
+		if integerBaseTypes[base] {
+			return true
+		}
+		name = base
+	}
+}
+
+// collectEnumDeclarations 从一个声明块里取出具名类型的底层类型名，与挂在它们名下的常量。
+//
+// 底层类型**不在这里筛整型**：`type Code Outcome` 的底层是一个具名类型，当场筛掉它就等于
+// 让改名绕过整道门禁。是不是整型交给 restsOnAnIntegerBase 顺链去判。
+func collectEnumDeclarations(decl *ast.GenDecl, namedTypes map[string]string, constants map[string][]enumConstant) {
 	switch decl.Tok {
 	case token.TYPE:
 		for _, spec := range decl.Specs {
@@ -137,8 +208,8 @@ func collectEnumDeclarations(decl *ast.GenDecl, enums map[string]bool, constants
 			if !ok || typeSpec.Assign.IsValid() {
 				continue
 			}
-			if base, ok := typeSpec.Type.(*ast.Ident); ok && integerBaseTypes[base.Name] {
-				enums[typeSpec.Name.Name] = true
+			if base, ok := typeSpec.Type.(*ast.Ident); ok {
+				namedTypes[typeSpec.Name.Name] = base.Name
 			}
 		}
 	case token.CONST:
@@ -151,11 +222,13 @@ func collectEnumDeclarations(decl *ast.GenDecl, enums map[string]bool, constants
 			if !ok {
 				continue
 			}
+			zeroValued := false
 			switch {
 			case valueSpec.Type != nil:
 				current = ""
 				if named, ok := valueSpec.Type.(*ast.Ident); ok {
 					current = named.Name
+					zeroValued = declaresTheZeroValue(valueSpec.Values)
 				}
 			case len(valueSpec.Values) > 0:
 				current = ""
@@ -163,10 +236,33 @@ func collectEnumDeclarations(decl *ast.GenDecl, enums map[string]bool, constants
 			if current == "" {
 				continue
 			}
-			for _, name := range valueSpec.Names {
-				constants[current] = append(constants[current], name.Name)
+			for index, name := range valueSpec.Names {
+				// 只有带类型那一行的**头一个**名字有资格当零值哨兵。同一行写多个名字时
+				// 它们共享同一个值，后面几个不是零值的起点。
+				constants[current] = append(constants[current], enumConstant{
+					name:       name.Name,
+					zeroValued: zeroValued && index == 0,
+				})
 			}
 		}
+	}
+}
+
+// declaresTheZeroValue 认「这一行的值就是零」：裸 `iota`，或字面量 0。
+//
+// `iota + 1` 是 BinaryExpr，这里认不出来——那正是本判据要与之区分的形状，也是它存在的全部
+// 理由。省掉这个函数改回「第一个常量就是哨兵」，`SourceClassification` 那种写法会整类免检。
+func declaresTheZeroValue(values []ast.Expr) bool {
+	if len(values) != 1 {
+		return false
+	}
+	switch typed := values[0].(type) {
+	case *ast.Ident:
+		return typed.Name == "iota"
+	case *ast.BasicLit:
+		return typed.Kind == token.INT && typed.Value == "0"
+	default:
+		return false
 	}
 }
 
@@ -311,6 +407,83 @@ func (o Outcome) String() string {
 	}
 }`,
 			want: nil,
+		},
+		// `iota + 1` 下零值没有常量，第一个常量是真取值。按位置认哨兵会让它永远免检，而漏补
+		// 与补齐在这种形状下**一样全绿**，唯一差别只是位置。`SourceClassification` 就长这样。
+		"iota 加一时首个常量不是哨兵": {
+			source: `package sample
+type Outcome uint8
+const (
+	Distinct Outcome = iota + 1
+	Replay
+)
+func (o Outcome) String() string {
+	switch o {
+	case Replay:
+		return "REPLAY"
+	default:
+		return ""
+	}
+}`,
+			want: []string{"Outcome.Distinct"},
+		},
+		// 没有零值常量的类型一个都不跳。这一条与上一条分开：上一条证「哨兵认错了」，这一条钉
+		// 「此时不该有任何豁免」。
+		"没有零值常量时一个都不跳": {
+			source: `package sample
+type Outcome uint8
+const (
+	Accepted Outcome = iota + 1
+	Rejected
+)
+func (o Outcome) String() string { return "" }`,
+			want: []string{"Outcome.Accepted", "Outcome.Rejected"},
+		},
+		// 判的是值不是写法：显式赋 0 与裸 iota 同为哨兵，而它后面那个取值照判。
+		"显式赋零者是哨兵，其后照判": {
+			source: `package sample
+type Outcome uint8
+const (
+	OutcomeInvalid Outcome = 0
+	Accepted       Outcome = 1
+)
+func (o Outcome) String() string { return "" }`,
+			want: []string{"Outcome.Accepted"},
+		},
+		// 定义型改名：底层是具名类型而不是 uint8。只看一层的话它压根进不了扫描面，整包免检
+		// 且扫描数不涨——与 c762b70 在重建面上堵掉的是同一个形状。
+		"给枚举另起一个名字仍在扫描面内": {
+			source: `package sample
+type Outcome uint8
+type Code Outcome
+const (
+	CodeInvalid Code = iota
+	CodeAccepted
+	CodeRejected
+)
+func (c Code) String() string {
+	switch c {
+	case CodeAccepted:
+		return "ACCEPTED"
+	default:
+		return ""
+	}
+}`,
+			want: []string{"Code.CodeRejected"},
+		},
+		// 位置表按下标登记，本条无从判断新增取值登没登记，因此**有意**报它。头注释此前声称
+		// 容忍这种写法，而实现从来容忍不了；这一格钉住的是改正后的那个声称。
+		"按下标索引的位置表照报": {
+			source: `package sample
+type Outcome uint8
+const (
+	OutcomeInvalid Outcome = iota
+	Accepted
+	Rejected
+)
+var names = [...]string{"", "ACCEPTED", "REJECTED"}
+func (o Outcome) String() string { return names[o] }`,
+			want: []string{"Outcome.Accepted", "Outcome.Rejected"},
 		},
 		"未导出的上界哨兵不算漏": {
 			source: `package sample
@@ -471,8 +644,8 @@ const (
 	}
 
 	got, scanned := enumOmissionsIn(files)
-	if scanned != 1 {
-		t.Fatalf("scanned = %d, want 1；跨文件的枚举没被判到，本规则会对这种拆法整包免检", scanned)
+	if len(scanned) != 1 {
+		t.Fatalf("scanned = %v, want 恰好一个；跨文件的枚举没被判到，本规则会对这种拆法整包免检", scanned)
 	}
 	if strings.Join(got, ",") != "Outcome.Rejected" {
 		t.Fatalf("omissions = %v, want [Outcome.Rejected]", got)
