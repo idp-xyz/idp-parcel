@@ -186,8 +186,11 @@ func (outcome JudgmentAsOfOutcome) String() string {
 	}
 }
 
-// JudgmentAsOfFormation 只在`已形成`时携带时点。其余四种一律不带：交回一个零值时点，调用方
+// JudgmentAsOfFormation 只在`已形成`时携带时点。其余取值一律不带：交回一个零值时点，调用方
 // 会拿一个没人授权过的时刻去推进权威判断。
+//
+// 不写「其余几种」：那个数字每加一个未成形取值就过期一次，而它过期时没有任何东西会变红。
+// 上一次它就是这么错的——`输入未受理`加进来之后这里仍写着四种。
 type JudgmentAsOfFormation struct {
 	Outcome JudgmentAsOfOutcome
 	AsOf    domain.JudgmentAsOf
@@ -376,8 +379,8 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 // PreAcceptanceControlAssessment 只在`已形成`时携带结果。提供方的`已执行`与`明确无控制`
 // 都落在`已形成`：两者的分别由 FinancialControlOutcome 与所携依据带过来。
 //
-// 其余三种一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
-// 看起来像通过了。
+// 其余取值一律不带结果。交回一个零值结果正是用例禁止的默认放行——一次没能执行的控制会因此
+// 看起来像通过了。数字不写进来，理由同 JudgmentAsOfFormation。
 type PreAcceptanceControlAssessment struct {
 	Outcome PreAcceptanceControlOutcome
 	Result  domain.FinancialControlResult
