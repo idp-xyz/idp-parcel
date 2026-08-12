@@ -14,6 +14,11 @@ var (
 // ConflictResolutionBasis 是版本化投影判断的裁决依据封闭集合（CONTEXT 硬句列举的
 // 可用维度）。刻意没有「来源排名」与「最后消息」两格——全局来源排名和最后写入覆盖
 // 被硬句明禁，封闭集合让它们在类型上就进不来。
+//
+// 当前唯一产生函数是 ResolveByBusinessTime；CAUSAL_ORDER 与 AUTHORITY_SCOPE 两格
+// 等各自的裁决函数落地才会被交出——因果顺序要有事实间因果链的取数缝，权威范围要有
+// 源上下文权威边界的判定规则，两样都还没有。先占格是因为封闭集合一次立全才能挡住
+// 「排名」「最后消息」混进来；没有产生函数的格不会出现在任何判断里。
 type ConflictResolutionBasis uint8
 
 const (
