@@ -73,6 +73,11 @@ const (
 	SourceDataRuleUnavailable
 	SourceDataVersionIdentityUnavailable
 	AmendedRequestNotSaved
+	// 受控补充的两格：版本/任务身份签发不出（建单期工厂答不出，重试即可），与换代后的
+	// 委托没落库（新版本要重放这次补充）。与修订那两格分开，续办引用按原因派生，共用会
+	// 让两条路的续办互相认领。
+	SubmissionIdentityUnavailable
+	SupplementedRequestNotSaved
 	SourceDataVersionNotHandedOff
 	// AcceptanceDecisionNotHandedOff 说的是决定已越过提交边界、它的发布意图没能确定交出。
 	// 与 ControlReleasePending 同类：不是判断没推进，是已成立决定留下的随附事项。
@@ -221,6 +226,10 @@ func (reason JudgmentPendingReason) String() string {
 		return "SOURCE_DATA_VERSION_IDENTITY_UNAVAILABLE"
 	case AmendedRequestNotSaved:
 		return "AMENDED_REQUEST_NOT_SAVED"
+	case SubmissionIdentityUnavailable:
+		return "SUBMISSION_IDENTITY_UNAVAILABLE"
+	case SupplementedRequestNotSaved:
+		return "SUPPLEMENTED_REQUEST_NOT_SAVED"
 	case SourceDataVersionNotHandedOff:
 		return "SOURCE_DATA_VERSION_NOT_HANDED_OFF"
 	case AcceptanceDecisionNotHandedOff:
