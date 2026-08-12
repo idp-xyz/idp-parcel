@@ -82,3 +82,72 @@ type CreditExposureLedgerRepository interface {
 type Clock interface {
 	Now() time.Time
 }
+
+// BillReceptionKey 是供应商账单接收的幂等键：相同供应商、账期、主张身份和版本重复
+// 到达返回原结果；同一身份内容变化形成版本冲突（UC-SA-004 一致性）。
+type BillReceptionKey struct {
+	TenantID domain.TenantID
+	Claim    domain.BillClaimID
+	Version  domain.BillClaimVersion
+}
+
+// BillReceptionRecord 是一次账单接收越过提交边界留下的东西：主张本体与逐行匹配。
+// 这里刻意没有任何审核应付字段——匹配完成不是应付，审核通过才是（分步），应付由
+// 审核步骤依据本记录另行形成。
+type BillReceptionRecord struct {
+	Key                      BillReceptionKey
+	ContentDigest            string
+	Claim                    domain.SupplierBillClaim
+	Matches                  []domain.BillLineMatch
+	AuditAuthorityConfigured bool
+	RecordedAt               time.Time
+}
+
+type BillSaveOutcome uint8
+
+const (
+	BillSaveOutcomeInvalid BillSaveOutcome = iota
+	BillSaved
+	BillAlreadyRecorded
+)
+
+// BillReceptionStore 按幂等键找回并保存账单接收（写入代数同 ADR-0031：并发落败读回
+// 赢家，不覆盖）。
+type BillReceptionStore interface {
+	FindByKey(ctx context.Context, key BillReceptionKey) (BillReceptionRecord, bool, error)
+	Save(ctx context.Context, record BillReceptionRecord) (BillSaveOutcome, error)
+}
+
+// ExpectedCostView 按版本取回供应商预期成本供逐行匹配引用。found=false 表示该版本
+// 不存在——指错版本是提交矛盾，不是等谁。
+type ExpectedCostView interface {
+	LoadExpectedCost(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.SupplierCostVersionID,
+	) (domain.SupplierExpectedCost, bool, error)
+}
+
+// SupplierAuditAuthorityView 取该供应商/责任法人范围的审核授权配置。found=false 表示
+// 授权未配置——实例半边未提供时审核停在未决，不默认放行也不虚构授权人（UC-SA-004
+// 「无授权不得人工接受或拒绝」）。
+type SupplierAuditAuthorityView interface {
+	LoadSupplierAuditAuthority(
+		ctx context.Context,
+		tenant domain.TenantID,
+		supplier domain.SupplierPartyReference,
+		legalEntity domain.LegalEntityReference,
+	) (domain.AuditorReference, bool, error)
+}
+
+// SupplierBillHandoffIntent 把已提交的接收记录交给审核与对账消费。意图由幂等键认领，
+// 重放重发同一份（ADR-0043 同款纪律）。
+type SupplierBillHandoffIntent struct {
+	Record BillReceptionRecord
+}
+
+// SupplierBillHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type SupplierBillHandoff interface {
+	HandOffSupplierBill(ctx context.Context, intent SupplierBillHandoffIntent) error
+}
