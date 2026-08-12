@@ -50,15 +50,23 @@ type AsOfPolicyDeclaration interface {
 // 选出规则包与产品，内容声明只在唯一选出之后按已选对象读取。塞进解析结果，声明就有机会参与
 // 决定它自己被谁采用。
 //
-// found=false 即实例未配置。没有租户时必然如此——声明属实例半边，本上下文不内置任何默认：
-// 不默认全组适用、不默认免复核、不默认许可待路由；消费方据以停在未决，不是放行。
+// found=false 的含义按方法分，不共用一句：两个声明缺席时的安全方向相反，混说会引着读者
+// 把适配器往错的方向「修」。共同点只有一条——声明属实例半边，本上下文不内置任何默认，
+// 没有租户时两个方法必然都交回 found=false。
 type AcceptanceContentDeclaration interface {
+	// LoadAcceptanceRuleContent 的 found=false = 实例未配置。缺声明不等于没有组适用、也不
+	// 等于免复核——无从知道该判哪些组；消费方据以停在未决，不是放行（不默认全组适用、
+	// 不默认免复核）。
 	LoadAcceptanceRuleContent(
 		ctx context.Context,
 		tenant domain.TenantID,
 		rulePackage domain.CommercialVersion,
 	) (domain.AcceptanceRuleContent, bool, error)
 
+	// LoadPendingRoutingPermission 的 found=false = 未许可（零值语义），不是未决。待路由是
+	// 例外许可，UC 只认「服务产品明确允许」；没有声明就是没有许可，消费方照常推进、只是
+	// 不得走待路由接受。读取失败（error）才是未决——那是谁也没回答过，不得冒充「产品说了
+	// 不许」。
 	LoadPendingRoutingPermission(
 		ctx context.Context,
 		tenant domain.TenantID,
