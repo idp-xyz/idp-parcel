@@ -81,6 +81,12 @@ func (revision NetworkViewRevision) Valid() bool {
 // 服务产品。
 type ServicePurpose struct{ requiredValue }
 
+// Valid 供消费侧适配器核对装配参数：目的属实例半边，零值必须停下而不是拿去问另一个
+// 产品的网络资格。
+func (purpose ServicePurpose) Valid() bool {
+	return purpose.valid()
+}
+
 func NewServicePurpose(value string) (ServicePurpose, error) {
 	required, err := newRequiredValue("service purpose", value)
 	return ServicePurpose{required}, err
