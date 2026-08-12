@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -177,6 +178,81 @@ func (fixture *basisFixture) fixResolution(t *testing.T) pcdomain.CommercialClos
 	fixture.store.closure = closure
 	fixture.store.found = true
 	return closure
+}
+
+// withSettlementBasis 给夹具补上结算依据：登记一份生效政策并把结算成员加进闭包键
+//（选择器与政策适用范围逐维对齐，锚点落在有效区间内）。
+func (fixture *basisFixture) withSettlementBasis(t *testing.T, method pcdomain.SettlementMethod) {
+	t.Helper()
+	version := effectiveIn(t, fixture.registry, pcdomain.SettlementPolicyObject, "settle-1", "v1", "sha256:s1", "scope-a")
+	interval, err := pcdomain.NewEffectiveInterval(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("new effective interval: %v", err)
+	}
+	applicability, err := pcdomain.NewSettlementApplicability(
+		value(t, pcdomain.NewLegalEntityReference, "legal-1"),
+		value(t, pcdomain.NewCounterpartyReference, "customer-1"),
+		value(t, pcdomain.NewCommercialVersionLabel, "contract-1/v1"),
+		value(t, pcdomain.NewChargeScopeReference, "charge-express"),
+		value(t, pcdomain.NewCurrencyCode, "SYN"),
+		interval,
+	)
+	if err != nil {
+		t.Fatalf("new settlement applicability: %v", err)
+	}
+	policy, err := pcdomain.NewSettlementPolicy(version, method, applicability)
+	if err != nil {
+		t.Fatalf("new settlement policy: %v", err)
+	}
+	fixture.registry.RegisterSettlementPolicy(policy)
+
+	fixture.keys.key.RequiredBases = append(fixture.keys.key.RequiredBases, pcdomain.SettlementPolicyObject)
+	fixture.keys.key.Settlement = pcdomain.SettlementSelector{
+		Counterparty: value(t, pcdomain.NewCounterpartyReference, "customer-1"),
+		Contract:     value(t, pcdomain.NewCommercialVersionLabel, "contract-1/v1"),
+		ChargeScope:  value(t, pcdomain.NewChargeScopeReference, "charge-express"),
+		Currency:     value(t, pcdomain.NewCurrencyCode, "SYN"),
+	}
+}
+
+// Covers: ADR-0044 的消费侧回显与 ADR-0047 作用域缝的输入——闭包采用结算政策时，快照
+// 携带政策引用、方式与作用域三维；闭包不含结算依据时回显缺席，那是真话不是翻译失败。
+func TestAnAdoptedSettlementPolicyIsEchoedIntoTheSnapshot(t *testing.T) {
+	fixture := newBasisFixture(t, true)
+	fixture.withSettlementBasis(t, pcdomain.TermsMethod)
+
+	resolution, err := fixture.adapter.ResolveCommercialBasis(context.Background(), fixture.resolveQuery(t))
+	if err != nil {
+		t.Fatalf("resolve commercial basis: %v", err)
+	}
+	if resolution.Applicability != psdomain.CommerciallyApplicable {
+		t.Fatalf("applicability = %q reason = %q, want APPLICABLE", resolution.Applicability, resolution.Reason)
+	}
+
+	terms, present := resolution.Snapshot.SettlementTerms()
+	if !present {
+		t.Fatal("闭包采用了结算政策，快照却没带回显——作用域缝断在翻译这一步")
+	}
+	if terms.Policy().String() != "settle-1/v1" || terms.Method().String() != "TERMS" {
+		t.Fatalf("policy/method = %q/%q, want settle-1/v1 与 TERMS", terms.Policy(), terms.Method())
+	}
+	if terms.LegalEntity().String() != "legal-1" ||
+		terms.Counterparty().String() != "customer-1" ||
+		terms.Currency().String() != "SYN" {
+		t.Fatalf("scope dims = %s/%s/%s; 三维必须来自政策适用范围", terms.LegalEntity(), terms.Counterparty(), terms.Currency())
+	}
+
+	plain := newBasisFixture(t, true)
+	bare, err := plain.adapter.ResolveCommercialBasis(context.Background(), plain.resolveQuery(t))
+	if err != nil {
+		t.Fatalf("resolve without settlement basis: %v", err)
+	}
+	if _, present := bare.Snapshot.SettlementTerms(); present {
+		t.Fatal("不含结算依据的解析凭空长出了回显")
+	}
 }
 
 func (fixture *basisFixture) revalidateQuery(t *testing.T, closure pcdomain.CommercialClosure) psports.CommercialRevalidationQuery {

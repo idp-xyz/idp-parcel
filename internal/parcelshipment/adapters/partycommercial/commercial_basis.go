@@ -334,19 +334,75 @@ func snapshotFor(
 	if err != nil {
 		return psdomain.CommercialBasisSnapshot{}, fmt.Errorf("%w: view revision: %v", ErrUntranslatableAnswer, err)
 	}
+	terms, err := settlementTermsFor(closure)
+	if err != nil {
+		return psdomain.CommercialBasisSnapshot{}, err
+	}
 	snapshot, err := psdomain.NewCommercialBasisSnapshot(psdomain.CommercialBasisSnapshotSpec{
-		ResolutionID:   resolutionID,
-		RulePackage:    rulePackage,
-		ViewRevision:   revision,
-		DeclaredAsOf:   declarations.DeclaredAsOf,
-		Applicable:     declarations.Applicable,
-		ManualReview:   declarations.ManualReview,
-		PendingRouting: declarations.PendingRouting,
+		ResolutionID:    resolutionID,
+		RulePackage:     rulePackage,
+		ViewRevision:    revision,
+		DeclaredAsOf:    declarations.DeclaredAsOf,
+		Applicable:      declarations.Applicable,
+		ManualReview:    declarations.ManualReview,
+		PendingRouting:  declarations.PendingRouting,
+		SettlementTerms: terms,
 	})
 	if err != nil {
 		return psdomain.CommercialBasisSnapshot{}, fmt.Errorf("%w: commercial basis snapshot: %v", ErrUntranslatableAnswer, err)
 	}
 	return snapshot, nil
+}
+
+// settlementTermsFor 回显闭包采用的结算政策（ADR-0044 让它可观察，ADR-0047 的作用域缝
+// 靠它换取结算账户）。闭包不含结算依据时交回零值——缺席是真话，不是翻译失败；采用了却
+// 译不动才是编程错误。
+func settlementTermsFor(closure pcdomain.CommercialClosure) (psdomain.AdoptedSettlementTerms, error) {
+	basis, ok := closure.AdoptedFor(pcdomain.SettlementPolicyObject)
+	if !ok {
+		return psdomain.AdoptedSettlementTerms{}, nil
+	}
+	policy, adopted := basis.SettlementPolicy()
+	if !adopted {
+		// 采用了结算政策对象却没带政策正文，是提供方阶段契约被打破（ADR-0044 规定成功
+		// 路径必经政策采用），不是一种缺席。
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf(
+			"%w: settlement basis adopted without a policy", ErrUntranslatableAnswer)
+	}
+
+	echo, err := psdomain.NewSettlementPolicyEcho(
+		policy.Version().ObjectID().String() + "/" + policy.Version().Version().String())
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement policy echo: %v", ErrUntranslatableAnswer, err)
+	}
+	method, err := psdomain.NewSettlementMethodEcho(policy.Method().String())
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement method echo: %v", ErrUntranslatableAnswer, err)
+	}
+	applicability := policy.Applicability()
+	legalEntity, err := psdomain.NewSettlementLegalEntityEcho(applicability.LegalEntity().String())
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement legal entity echo: %v", ErrUntranslatableAnswer, err)
+	}
+	counterparty, err := psdomain.NewSettlementCounterpartyEcho(applicability.Counterparty().String())
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement counterparty echo: %v", ErrUntranslatableAnswer, err)
+	}
+	currency, err := psdomain.NewSettlementCurrencyEcho(applicability.Currency().String())
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement currency echo: %v", ErrUntranslatableAnswer, err)
+	}
+	terms, err := psdomain.NewAdoptedSettlementTerms(psdomain.AdoptedSettlementTermsSpec{
+		Policy:       echo,
+		Method:       method,
+		LegalEntity:  legalEntity,
+		Counterparty: counterparty,
+		Currency:     currency,
+	})
+	if err != nil {
+		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: adopted settlement terms: %v", ErrUntranslatableAnswer, err)
+	}
+	return terms, nil
 }
 
 // applicableGroupsFor 逐格翻译规则包声明的适用校验组。两边的封闭集合逐名对应；不用数值

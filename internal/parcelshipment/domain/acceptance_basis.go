@@ -304,17 +304,120 @@ func (asOf JudgmentAsOf) valid() bool {
 		asOf.semantics.valid() && asOf.policyVersion.valid()
 }
 
+// SettlementPolicyEcho 指名解析采用的那份结算政策版本。
+type SettlementPolicyEcho struct{ requiredValue }
+
+func NewSettlementPolicyEcho(value string) (SettlementPolicyEcho, error) {
+	required, err := newRequiredValue("settlement policy echo", value)
+	return SettlementPolicyEcho{required}, err
+}
+
+// SettlementMethodEcho 回显解析出的预付/账期方式。本上下文不按它分支（那是 SA 的事），
+// 留引用不建枚举。
+type SettlementMethodEcho struct{ requiredValue }
+
+func NewSettlementMethodEcho(value string) (SettlementMethodEcho, error) {
+	required, err := newRequiredValue("settlement method echo", value)
+	return SettlementMethodEcho{required}, err
+}
+
+// SettlementLegalEntityEcho / SettlementCounterpartyEcho / SettlementCurrencyEcho 是采用
+// 政策适用范围里推导结算作用域所需的三维。各自成类型：三个都是字符串引用，合用一个类型
+// 会让法人与相对方在调用点悄悄换位。
+type SettlementLegalEntityEcho struct{ requiredValue }
+
+func NewSettlementLegalEntityEcho(value string) (SettlementLegalEntityEcho, error) {
+	required, err := newRequiredValue("settlement legal entity echo", value)
+	return SettlementLegalEntityEcho{required}, err
+}
+
+type SettlementCounterpartyEcho struct{ requiredValue }
+
+func NewSettlementCounterpartyEcho(value string) (SettlementCounterpartyEcho, error) {
+	required, err := newRequiredValue("settlement counterparty echo", value)
+	return SettlementCounterpartyEcho{required}, err
+}
+
+type SettlementCurrencyEcho struct{ requiredValue }
+
+func NewSettlementCurrencyEcho(value string) (SettlementCurrencyEcho, error) {
+	required, err := newRequiredValue("settlement currency echo", value)
+	return SettlementCurrencyEcho{required}, err
+}
+
+// AdoptedSettlementTermsSpec 是回显一份采用结算政策所需的全部输入（≥5 入参用 Spec，
+// 分界见 CommercialBasisSnapshotSpec）。
+type AdoptedSettlementTermsSpec struct {
+	Policy       SettlementPolicyEcho
+	Method       SettlementMethodEcho
+	LegalEntity  SettlementLegalEntityEcho
+	Counterparty SettlementCounterpartyEcho
+	Currency     SettlementCurrencyEcho
+}
+
+// AdoptedSettlementTerms 是解析采用的结算政策在本上下文的回显：方式与推导结算作用域
+// 所需的三维（ADR-0044 让 PC 交得出，ADR-0047 的作用域缝在消费方用它换取结算账户）。
+// 它是引用回显不是政策内容——政策版本生命周期仍属 party-commercial。
+type AdoptedSettlementTerms struct {
+	policy       SettlementPolicyEcho
+	method       SettlementMethodEcho
+	legalEntity  SettlementLegalEntityEcho
+	counterparty SettlementCounterpartyEcho
+	currency     SettlementCurrencyEcho
+}
+
+// NewAdoptedSettlementTerms 五件全要：半截的回显推不出作用域，还会让「没带政策」与
+// 「带了但缺维」在读取处混成一格。
+func NewAdoptedSettlementTerms(spec AdoptedSettlementTermsSpec) (AdoptedSettlementTerms, error) {
+	if !spec.Policy.valid() || !spec.Method.valid() ||
+		!spec.LegalEntity.valid() || !spec.Counterparty.valid() || !spec.Currency.valid() {
+		return AdoptedSettlementTerms{}, ErrInvalidCommercialBasisSnapshot
+	}
+	return AdoptedSettlementTerms{
+		policy:       spec.Policy,
+		method:       spec.Method,
+		legalEntity:  spec.LegalEntity,
+		counterparty: spec.Counterparty,
+		currency:     spec.Currency,
+	}, nil
+}
+
+func (terms AdoptedSettlementTerms) Policy() SettlementPolicyEcho {
+	return terms.policy
+}
+
+func (terms AdoptedSettlementTerms) Method() SettlementMethodEcho {
+	return terms.method
+}
+
+func (terms AdoptedSettlementTerms) LegalEntity() SettlementLegalEntityEcho {
+	return terms.legalEntity
+}
+
+func (terms AdoptedSettlementTerms) Counterparty() SettlementCounterpartyEcho {
+	return terms.counterparty
+}
+
+func (terms AdoptedSettlementTerms) Currency() SettlementCurrencyEcho {
+	return terms.currency
+}
+
+func (terms AdoptedSettlementTerms) present() bool {
+	return terms.policy.valid()
+}
+
 // CommercialBasisSnapshot 是 parcel-shipment 对一次唯一商业解析所保留的部分：解析
 // 标识、采用的接单规则包、解析当时的权威视图修订，以及该规则包声明的各项时点。它不
 // 持有任何商业版本内容，那些内容属 party-commercial。
 type CommercialBasisSnapshot struct {
-	resolutionID   CommercialResolutionID
-	rulePackage    RulePackageReference
-	viewRevision   CommercialViewRevision
-	declaredAsOf   []DeclaredAsOf
-	applicable     ApplicableCheckGroups
-	manualReview   ManualReviewPolicy
-	pendingRouting PendingRoutingAllowance
+	resolutionID    CommercialResolutionID
+	rulePackage     RulePackageReference
+	viewRevision    CommercialViewRevision
+	declaredAsOf    []DeclaredAsOf
+	applicable      ApplicableCheckGroups
+	manualReview    ManualReviewPolicy
+	pendingRouting  PendingRoutingAllowance
+	settlementTerms AdoptedSettlementTerms
 }
 
 // CommercialBasisSnapshotSpec 是形成一次快照所需的全部输入。
@@ -349,6 +452,9 @@ type CommercialBasisSnapshotSpec struct {
 	Applicable     ApplicableCheckGroups
 	ManualReview   ManualReviewPolicy
 	PendingRouting PendingRoutingAllowance
+	// SettlementTerms 缺席即解析未采用结算政策（闭包不要求结算依据的场景）；非零值只能
+	// 来自 NewAdoptedSettlementTerms，五维齐备由它保证。
+	SettlementTerms AdoptedSettlementTerms
 }
 
 func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBasisSnapshot, error) {
@@ -366,14 +472,21 @@ func NewCommercialBasisSnapshot(spec CommercialBasisSnapshotSpec) (CommercialBas
 		seen[declared.kind] = struct{}{}
 	}
 	return CommercialBasisSnapshot{
-		resolutionID:   spec.ResolutionID,
-		rulePackage:    spec.RulePackage,
-		viewRevision:   spec.ViewRevision,
-		declaredAsOf:   append([]DeclaredAsOf(nil), spec.DeclaredAsOf...),
-		applicable:     spec.Applicable,
-		manualReview:   spec.ManualReview,
-		pendingRouting: spec.PendingRouting,
+		resolutionID:    spec.ResolutionID,
+		rulePackage:     spec.RulePackage,
+		viewRevision:    spec.ViewRevision,
+		declaredAsOf:    append([]DeclaredAsOf(nil), spec.DeclaredAsOf...),
+		applicable:      spec.Applicable,
+		manualReview:    spec.ManualReview,
+		pendingRouting:  spec.PendingRouting,
+		settlementTerms: spec.SettlementTerms,
 	}, nil
+}
+
+// SettlementTerms 交回解析采用的结算政策回显。缺席是真话：这次解析不含结算依据，作用域
+// 推导据此停下而不是拿别的引用凑。
+func (snapshot CommercialBasisSnapshot) SettlementTerms() (AdoptedSettlementTerms, bool) {
+	return snapshot.settlementTerms, snapshot.settlementTerms.present()
 }
 
 // PendingRoutingAllowance 返回所采用服务产品对待路由的许可。零值即未许可——`不可达`因此
