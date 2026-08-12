@@ -468,8 +468,13 @@ func cancelledAt(t *testing.T, at time.Time) domain.ParcelCancellation {
 
 // Covers: `AT-PS-044`「包裹在收寄事实发生前已经合法取消——保留物理来源但不重开服务」
 // 与 `AT-PS-080`「取消先成立，迟到消息证明实物后来到站——取消不被覆盖」：取消决定早于
-// 收寄发生即不采用、原因指名取消决定；`AT-PS-081`「收寄事实顺序无法裁决——保持未决，
-// 不按消息顺序选择」：收寄发生早于取消决定即顺序冲突未决。两格都按业务时间裁决。
+// 收寄发生即不采用、原因指名取消决定。
+//
+// 晚于格锚 UC-PS-006 一致性硬句「收寄与取消并发时，以不可覆盖业务决定边界及权威事实
+// 的业务发生顺序裁决，不以消息到达或客户端时间最后写入覆盖」——收寄发生早于取消决定
+// 说明取消形成时权威事实的顺序已经矛盾（AT-PS-079 要求那时不形成取消），采用侧对这份
+// 已成取消停未决是它的镜像防线；不选边，留给事实核对续办。AT-PS-081 的「来源冲突」
+// 说的是收寄事实本身的证据冲突，机制未建，此处不锚它。
 func TestTheCancellationBoundaryJudgesByBusinessTime(t *testing.T) {
 	t.Run("cancellation before the intake refuses adoption", func(t *testing.T) {
 		fixture := newIntakeFixture(t)
