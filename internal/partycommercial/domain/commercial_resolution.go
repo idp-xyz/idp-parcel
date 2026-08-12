@@ -40,6 +40,13 @@ func NewAnchorPolicyVersion(value string) (AnchorPolicyVersion, error) {
 
 type ResolutionID struct{ requiredValue }
 
+// NewResolutionID 从消费方记录的字符串重建解析标识（ADR-0027：按标识回指的入口）。
+// 它不签发新解析——身份仍由 resolutionIdentity 派生；这里只收非空引用。
+func NewResolutionID(value string) (ResolutionID, error) {
+	required, err := newRequiredValue("resolution ID", value)
+	return ResolutionID{required}, err
+}
+
 // AuthorityViewRevision 用于证明某个范围解析当时所依据的商业视图是否仍是同一个。它
 // 不替代不可变的对象版本：新修订的意思是「需要重新检查是否仍相容」，而不是「采用版本
 // 变了」。

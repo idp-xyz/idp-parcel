@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -32,6 +33,26 @@ func effectiveIn(t *testing.T, registry *domain.CommercialRegistry, kind domain.
 		t.Fatalf("register: %v", err)
 	}
 	return live
+}
+
+// NewResolutionID 是消费侧适配器按标识回指的入口（ADR-0027）：把 PS 记录的字符串重建成
+// 解析标识。空引用拒绝——空串回指没有可指的对象，静默通过只会把「没记录」伪装成一次查询。
+func TestNewResolutionIDRebuildsARecordedReference(t *testing.T) {
+	rebuilt, err := domain.NewResolutionID("RES-1234abcd")
+	if err != nil {
+		t.Fatalf("new resolution ID: %v", err)
+	}
+	if rebuilt.String() != "RES-1234abcd" {
+		t.Fatalf("resolution ID = %q, want the recorded reference back", rebuilt.String())
+	}
+
+	for name, blank := range map[string]string{"empty": "", "spaces": "   "} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := domain.NewResolutionID(blank); !errors.Is(err, domain.ErrBlankValue) {
+				t.Fatalf("error = %v, want ErrBlankValue", err)
+			}
+		})
+	}
 }
 
 func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind) domain.ResolutionKey {
