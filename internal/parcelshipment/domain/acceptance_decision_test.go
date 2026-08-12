@@ -207,6 +207,10 @@ func submitted(t *testing.T) domain.ShipmentRequest {
 
 // Covers: CONTEXT 已提交 → 已接受，以及 UC-PS-001 步骤 8「硬规则全部通过时自动接受」。
 // 接受基线必须覆盖当前提交版本的完整声明成员，预计承诺必须引用当时的商业依据。
+//
+// Covers: `AT-PS-001`「多包裹资料完整且每包可达 → 整份委托被接受，成员基线和预计承诺
+// 冻结」——基线全员与承诺引用当时依据正是本用例的断言。「没有虚构收寄、正式承诺、容量
+// 或实际履约」半边是结构性事实：本上下文没有那些对象可造，无从用断言钉。
 func TestAllChecksPassingAcceptsAndFixesBaselineAndCommitment(t *testing.T) {
 	decided, err := submitted(t).Decide(decisionSpec(t, allGroupsPassing(t)))
 	if err != nil {
@@ -240,6 +244,10 @@ func TestAllChecksPassingAcceptsAndFixesBaselineAndCommitment(t *testing.T) {
 
 // Covers: UC-PS-001「本产品不支持成员级部分接受」— 任一成员确定性不满足时整份当前提交
 // 版本不能接受，且不得形成只覆盖部分成员的基线。
+//
+// Covers: `AT-PS-002` 后半「第二份当前提交版本整体不能接受，且不得静默删除失败成员」——
+// 拒绝记下的恰是那一条失败校验，成员没有被删去重判。前半「两份委托分别判断、不因批次
+// 关系全批回滚」是结构性事实：编排按单委托 Handle，批次只归组，不存在全批回滚的路径。
 func TestOneFailingMemberBlocksTheWholeSubmissionVersion(t *testing.T) {
 	checks := allGroupsPassing(t)
 	checks = append(checks, parcelCheck(t, domain.NetworkReachabilityCheck, "parcel-2", domain.CheckFailed, "UNREACHABLE"))

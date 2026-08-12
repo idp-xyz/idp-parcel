@@ -47,6 +47,10 @@ func TestSubmitEstablishesSubmittedRequestAfterPreservingSource(t *testing.T) {
 }
 
 // Covers: UC-PS-001 结果语义 — 同一逻辑请求的重放返回原结果，而不是造出第二份委托。
+//
+// Covers: `AT-PS-003`「同一逻辑请求以相同内容重试 → 返回原结果……不创建第二份来源、
+// 归属记录或委托」的编排半边。数据库级唯一性（并发重放挤过内存判重时的最后一道）属
+// 持久化半边，仍阻断于 Bento 闸门（ADR-0017/0026），此处钉不了也不冒领。
 func TestSubmitReplayReturnsExistingResultWithoutASecondRequest(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -118,6 +122,10 @@ func TestSubmitReplayAppendsTheObservationWithoutOverwriting(t *testing.T) {
 }
 
 // Covers: UC-PS-001 结果语义 — 同一逻辑身份携带不同的规范化载荷是冲突，绝不是第二份委托。
+//
+// Covers: `AT-PS-004`「同一逻辑请求身份携带不同内容 → 返回冲突或进入受控纠正；原始提交
+// 和原决定不被覆盖」——本用例钉「冲突且原件不被覆盖」这一支；受控纠正是或语义的另一支，
+// 其接入契约属实例半边（`PAR-INT-01`），不在此冒领。
 func TestSubmitConflictPreservesTheOriginalWithoutBuilding(t *testing.T) {
 	fixture := newFixture(t)
 	ctx := context.Background()
@@ -214,6 +222,10 @@ func TestSubmitConcurrentInsertAlreadyExistsWithDifferentContentIsIngressConflic
 
 // Covers: UC-PS-001 结果语义与首发试点叠加条件 — 三种拒绝彼此分明。暂停回答的是本产品此刻
 // 是否接新活，而不是范围归谁，所以它不得被报成归属未决。
+//
+// Covers: `AT-PS-010`「试点准入规则排除整份委托 → 不建立委托接受或拒绝决定……否则保持
+// 生产归属未决」——三分支各断不建单且回报归属决定与闸门理由。真实权威方与交接证据属
+// 实例半边（`PAR-GOV-03..07` 待登记），不构成此处的洞。
 func TestSubmitFormsNoRequestWhenThisProductLacksAuthority(t *testing.T) {
 	cases := map[string]struct {
 		authority domain.ProductionAuthorityKind
