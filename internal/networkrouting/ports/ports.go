@@ -268,7 +268,8 @@ func (state CandidateReviewState) String() string {
 	}
 }
 
-// ReassessmentConclusionKind 是一次复核越过提交边界的三种领域走向。
+// ReassessmentConclusionKind 是一次复核越过提交边界的四种领域走向。`已改路`独立一格：
+// 它同时携带失效与新版本的替代关系，与「失效后无路可走」不是一种结论。
 type ReassessmentConclusionKind uint8
 
 const (
@@ -276,6 +277,7 @@ const (
 	ReassessmentStillApplicable
 	ReassessmentPlanLapsed
 	ReassessmentFirstPlanFormed
+	ReassessmentRerouted
 )
 
 func (kind ReassessmentConclusionKind) String() string {
@@ -286,24 +288,45 @@ func (kind ReassessmentConclusionKind) String() string {
 		return "PLAN_LAPSED"
 	case ReassessmentFirstPlanFormed:
 		return "FIRST_PLAN_FORMED"
+	case ReassessmentRerouted:
+		return "REROUTED"
 	default:
 		return ""
 	}
 }
 
+// AutoRerouteFactsView 按判断键取自动改路四条件的事实（政策允许、在受控节点、仅未
+// 执行受影响、限制与责任清单）。第二个返回值为 false 即「事实目录未配置」——不猜：
+// 只失效不改路，连改路建议都形不成（说不出「为什么没自动」）。依赖调不通作为错误返回。
+type AutoRerouteFactsView interface {
+	LoadAutoRerouteFacts(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+	) (domain.AutoRerouteFacts, bool, error)
+}
+
 // ReassessmentRecord 是一次复核越过提交边界后留下的东西。`已失效`的记录同时携带失效
 // 依据与候选评估状态（三件并存的硬句）；「无当前有效路由」由「已失效且无新计划」这个
 // 记录状态表达，不复用初始判断的全淘汰对象——复核失效时候选可以仍在评估。
+//
+// 改路三件只在失效路上有意义：Authority 记录三态判定（invalid=没评估——事实未配置或
+// 候选未收敛）；建议与决定互斥——建议是「没自动成，等授权角色」，决定是「自动成了」。
 type ReassessmentRecord struct {
-	Correlation    domain.RequestCorrelationID
-	Key            domain.InitialRouteJudgmentKey
-	Conclusion     ReassessmentConclusionKind
-	ReviewedPlan   domain.RoutePlanVersionID
-	LapseBasis     domain.ApplicabilityBasisReference
-	CandidateState CandidateReviewState
-	NewPlan        domain.InitialRoutePlan
-	HasNewPlan     bool
-	ReassessedAt   time.Time
+	Correlation     domain.RequestCorrelationID
+	Key             domain.InitialRouteJudgmentKey
+	Conclusion      ReassessmentConclusionKind
+	ReviewedPlan    domain.RoutePlanVersionID
+	LapseBasis      domain.ApplicabilityBasisReference
+	CandidateState  CandidateReviewState
+	NewPlan         domain.InitialRoutePlan
+	HasNewPlan      bool
+	RerouteState    domain.RerouteAuthority
+	RerouteBlockers []string
+	Suggestion      domain.RerouteSuggestion
+	HasSuggestion   bool
+	Decision        domain.RerouteDecision
+	HasDecision     bool
+	ReassessedAt    time.Time
 }
 
 // ReassessmentSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。

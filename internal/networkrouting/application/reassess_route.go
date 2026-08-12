@@ -24,6 +24,7 @@ const (
 	ReassessedStillApplicable
 	ReassessedPlanLapsed
 	ReassessedFirstPlanFormed
+	ReassessedRerouted
 	ReassessUndecided
 	ReassessExistingResult
 	ReassessTriggerConflict
@@ -38,6 +39,8 @@ func (outcome ReassessOutcome) String() string {
 		return "PLAN_LAPSED"
 	case ReassessedFirstPlanFormed:
 		return "FIRST_PLAN_FORMED"
+	case ReassessedRerouted:
+		return "REROUTED"
 	case ReassessUndecided:
 		return "UNDECIDED"
 	case ReassessExistingResult:
@@ -126,6 +129,9 @@ type ReassessRouteDeps struct {
 	Log           ports.RouteHandoffLog
 	Identities    ports.RouteIdentityFactory
 	Clock         ports.Clock
+	// AutoReroute 是 7B 自动改路四条件的事实取数缝。nil 与「事实目录未配置」同义——
+	// 失效照常落库，改路评估整段不做，连建议都不形成（说不出「为什么没自动」）。
+	AutoReroute ports.AutoRerouteFactsView
 }
 
 type ReassessRouteHandler struct {
@@ -255,10 +261,162 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			CandidateState: handler.reviewCandidates(evidence),
 			ReassessedAt:   handler.deps.Clock.Now(),
 		}
+		// 7B/7C：失效已定且候选可用时评估受控改路。任何一步评估不成都退回纯失效
+		// 记录——失效不等改路，改路也拦不住失效（硬句的另一半）。
+		if record.CandidateState == ports.CandidatesAvailable {
+			record, err = handler.rerouteAfterLapse(ctx, trigger, plan, evidence, record)
+			if err != nil {
+				return ReassessRouteResult{}, err
+			}
+		}
 		return handler.commit(ctx, trigger, record)
 	default:
 		return ReassessRouteResult{}, fmt.Errorf("network routing: unhandled review outcome %d", review.Outcome())
 	}
+}
+
+// rerouteAfterLapse 在失效记录之上评估 7B 自动改路与 7C 改路建议。三态分派：条件全立
+// 形成自动改路决定（结论升格为`已改路`）；有阻塞形成带候选与阻塞清单的建议等授权角色；
+// 硬限制禁行只记录禁行依据。事实未配置或候选取数失败退回纯失效——不猜也不含糊。
+func (handler *ReassessRouteHandler) rerouteAfterLapse(
+	ctx context.Context,
+	trigger domain.ReassessmentTrigger,
+	lapsedPlan domain.InitialRoutePlan,
+	evidence ports.InitialRouteEvidence,
+	record ports.ReassessmentRecord,
+) (ports.ReassessmentRecord, error) {
+	if handler.deps.AutoReroute == nil {
+		return record, nil
+	}
+	facts, configured, err := handler.deps.AutoReroute.LoadAutoRerouteFacts(ctx, trigger.Key())
+	if err != nil || !configured {
+		return record, nil
+	}
+
+	authority, blockers := domain.EvaluateAutoRerouteConditions(facts)
+	record.RerouteState = authority
+	record.RerouteBlockers = blockers
+
+	if authority == domain.RerouteBarred {
+		return record, nil
+	}
+
+	candidates, undecided, err := handler.evaluateCandidates(evidence)
+	if err != nil || undecided {
+		// reviewCandidates 已判定候选可用，这里失配说明证据在两次取数间变了——
+		// 退回纯失效，authority 也一并撤下（它的候选依据不成立了）。
+		record.RerouteState = domain.RerouteAuthorityInvalid
+		record.RerouteBlockers = nil
+		return record, nil
+	}
+	triggerRef, err := domain.NewRerouteTriggerReference(trigger.Correlation().String())
+	if err != nil {
+		return ports.ReassessmentRecord{}, fmt.Errorf("reroute trigger reference: %w", err)
+	}
+	now := handler.deps.Clock.Now()
+
+	switch authority {
+	case domain.SuggestionOnly:
+		suggestion, err := domain.NewRerouteSuggestion(domain.RerouteSuggestionSpec{
+			Key:         trigger.Key(),
+			Trigger:     triggerRef,
+			Candidates:  candidates,
+			Blockers:    blockers,
+			SuggestedAt: now,
+		})
+		if err != nil {
+			return ports.ReassessmentRecord{}, fmt.Errorf("new reroute suggestion: %w", err)
+		}
+		record.Suggestion = suggestion
+		record.HasSuggestion = true
+		return record, nil
+
+	case domain.AutomaticRerouteAllowed:
+		newPlan, formed, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
+		if errors.Is(err, errRouteIdentityUnavailable) {
+			// 取号依赖故障：失效已定不回滚，自动改路留给重触发——记录保留判定，
+			// 决定缺席如实表示「允许了但没形成」。
+			return record, nil
+		}
+		if err != nil {
+			return ports.ReassessmentRecord{}, err
+		}
+		if !formed {
+			// 无合格候选：自动改路形不成，退回纯失效并保留判定与阻塞（空清单如实
+			// 表示「条件都立、是选路不成」）。
+			return record, nil
+		}
+		decision, err := domain.FormRerouteDecision(domain.RerouteDecisionSpec{
+			Authority:    authority,
+			Mode:         domain.AutomaticReroute,
+			Trigger:      triggerRef,
+			OriginalPlan: lapsedPlan.Version(),
+			NewPlan:      newPlan,
+			DecidedAt:    now,
+		})
+		if err != nil {
+			return ports.ReassessmentRecord{}, fmt.Errorf("form reroute decision: %w", err)
+		}
+		record.Conclusion = ports.ReassessmentRerouted
+		record.NewPlan = newPlan
+		record.HasNewPlan = true
+		record.Decision = decision
+		record.HasDecision = true
+		return record, nil
+
+	default:
+		return ports.ReassessmentRecord{}, fmt.Errorf("network routing: unhandled reroute authority %d", authority)
+	}
+}
+
+// errRouteIdentityUnavailable 让调用方把「取号依赖故障」与领域故障分开转成未决续办。
+var errRouteIdentityUnavailable = errors.New("network routing: route identity factory unavailable")
+
+// formPlanFromEvidence 从收敛候选选路并按证据组计划。第二个返回值为 false 表示无合格
+// 候选——形不成计划但不是故障；证据答了候选却缺执行路径是装配坏，响亮报错不静默。
+func (handler *ReassessRouteHandler) formPlanFromEvidence(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+	candidates []domain.RouteCandidate,
+	evidence ports.InitialRouteEvidence,
+) (domain.InitialRoutePlan, bool, error) {
+	selected, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority)
+	if errors.Is(err, domain.ErrNoQualifiedCandidate) {
+		return domain.InitialRoutePlan{}, false, nil
+	}
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, fmt.Errorf("select route candidate: %w", err)
+	}
+	var legs []domain.PlannedLeg
+	for _, path := range evidence.Paths {
+		if path.Candidate == selected {
+			legs = path.Legs
+			break
+		}
+	}
+	if len(legs) == 0 {
+		return domain.InitialRoutePlan{}, false, ErrIncompleteRouteEvidence
+	}
+	version, err := handler.deps.Identities.NextRoutePlanVersionID(ctx)
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, errRouteIdentityUnavailable
+	}
+	judgedAt := handler.deps.Clock.Now()
+	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
+		Key:           key,
+		Version:       version,
+		Selected:      selected,
+		Candidates:    candidates,
+		Legs:          legs,
+		Strategy:      evidence.Strategy,
+		ViewRevision:  evidence.ViewRevision,
+		JudgedAt:      judgedAt,
+		EffectiveFrom: judgedAt,
+	})
+	if err != nil {
+		return domain.InitialRoutePlan{}, false, fmt.Errorf("form plan from evidence: %w", err)
+	}
+	return plan, true, nil
 }
 
 // reassessNoRoute 是原先无路由的那条线：候选评估完成且有合格候选时形成首个当前有效
@@ -285,8 +443,14 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		return handler.commit(ctx, trigger, record)
 	}
 
-	selected, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority)
-	if errors.Is(err, domain.ErrNoQualifiedCandidate) {
+	plan, formed, err := handler.formPlanFromEvidence(ctx, key, candidates, evidence)
+	if errors.Is(err, errRouteIdentityUnavailable) {
+		return handler.undecided(key, ReassessIdentityUnavailable), nil
+	}
+	if err != nil {
+		return ReassessRouteResult{}, err
+	}
+	if !formed {
 		record := ports.ReassessmentRecord{
 			Correlation:    trigger.Correlation(),
 			Key:            key,
@@ -296,39 +460,6 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		}
 		return handler.commit(ctx, trigger, record)
 	}
-	if err != nil {
-		return ReassessRouteResult{}, fmt.Errorf("select route candidate: %w", err)
-	}
-
-	var legs []domain.PlannedLeg
-	for _, path := range evidence.Paths {
-		if path.Candidate == selected {
-			legs = path.Legs
-			break
-		}
-	}
-	if len(legs) == 0 {
-		return ReassessRouteResult{}, ErrIncompleteRouteEvidence
-	}
-	version, err := handler.deps.Identities.NextRoutePlanVersionID(ctx)
-	if err != nil {
-		return handler.undecided(key, ReassessIdentityUnavailable), nil
-	}
-	judgedAt := handler.deps.Clock.Now()
-	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
-		Key:           key,
-		Version:       version,
-		Selected:      selected,
-		Candidates:    candidates,
-		Legs:          legs,
-		Strategy:      evidence.Strategy,
-		ViewRevision:  evidence.ViewRevision,
-		JudgedAt:      judgedAt,
-		EffectiveFrom: judgedAt,
-	})
-	if err != nil {
-		return ReassessRouteResult{}, fmt.Errorf("form first current plan: %w", err)
-	}
 	record := ports.ReassessmentRecord{
 		Correlation:    trigger.Correlation(),
 		Key:            key,
@@ -336,7 +467,7 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		CandidateState: ports.CandidatesAvailable,
 		NewPlan:        plan,
 		HasNewPlan:     true,
-		ReassessedAt:   judgedAt,
+		ReassessedAt:   handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, trigger, record)
 }
@@ -454,6 +585,8 @@ func outcomeFor(record ports.ReassessmentRecord) ReassessOutcome {
 		return ReassessedPlanLapsed
 	case ports.ReassessmentFirstPlanFormed:
 		return ReassessedFirstPlanFormed
+	case ports.ReassessmentRerouted:
+		return ReassessedRerouted
 	default:
 		return ReassessOutcomeInvalid
 	}
