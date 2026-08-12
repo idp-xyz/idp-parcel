@@ -100,6 +100,8 @@ type SubmitShipmentRequestCommand struct {
 	// Link 缺席即首次委托。指名出处的提交与首次提交共用全部管线（来源保全、归属、
 	// 门禁、判重）：关联新委托是一份完整的新委托，不是原委托的续篇。
 	Link PriorRequestClaim
+	// DeclaredProfiles 随首个提交版本申报的成员声明画像（ADR-0048），允许缺席或部分覆盖。
+	DeclaredProfiles []domain.DeclaredParcelProfile
 }
 
 // SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
@@ -244,7 +246,13 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		TaskID:      taskID,
 		SubmittedAt: decidedAt,
 		Link:        link,
+		Profiles:    command.DeclaredProfiles,
 	})
+	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) {
+		// 画像不贴合成员集合（指着不存在的成员、一员两张、半截测量）与候选立不起来同格：
+		// 客户输入的问题，答`输入未受理`让他改请求，不是本方的故障。
+		return SubmitShipmentRequestResult{outcome: OutcomeInputNotAccepted}, nil
+	}
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("submit shipment request: %w", err)
 	}

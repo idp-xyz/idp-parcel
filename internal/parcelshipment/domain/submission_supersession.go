@@ -23,7 +23,10 @@ type NewSubmissionVersionSpec struct {
 	TaskID            AcceptanceDecisionTaskID
 	SourceSubmission  SourceSubmissionFingerprint
 	DeclaredParcelIDs []DeclaredParcelID
-	EstablishedAt     time.Time
+	// Profiles 是随新版本申报的成员声明画像（ADR-0048）：普通资料纠错可以更正测量，
+	// 画像随本版本重报，不从旧版本静默继承——继承会把「客户改了话」与「客户没说」混掉。
+	Profiles []DeclaredParcelProfile
+	EstablishedAt time.Time
 }
 
 // FormNewSubmissionVersion 在`已提交`态用受控补充或纠错形成同一委托的新提交版本
@@ -71,6 +74,10 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 	if err != nil {
 		return ShipmentRequest{}, err
 	}
+	profiles, err := declaredProfilesFor(spec.Profiles, members)
+	if err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	// 复制而不是就地 append，理由同 AmendCustomerSourceData：聚合按值传递，共用底层数组
 	// 会让两条从同一份委托分出去的转移互相覆盖对方追加的历史。
@@ -89,6 +96,7 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 		versionID:         spec.VersionID,
 		sourceSubmission:  spec.SourceSubmission,
 		declaredParcelIDs: members,
+		profiles:          profiles,
 		establishedAt:     spec.EstablishedAt,
 	}
 	request.acceptanceTask = AcceptanceDecisionTask{

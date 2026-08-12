@@ -66,6 +66,8 @@ type FormNewSubmissionVersionCommand struct {
 	ShipmentRequestID  domain.ShipmentRequestID
 	BasisVersion       domain.SubmissionVersionID
 	DeclaredParcelIDs  []domain.DeclaredParcelID
+	// DeclaredProfiles 随新版本重报的成员声明画像（ADR-0048），允许缺席或部分覆盖。
+	DeclaredProfiles []domain.DeclaredParcelProfile
 }
 
 type FormNewSubmissionVersionResult struct {
@@ -190,6 +192,7 @@ func (handler *FormNewSubmissionVersionHandler) Handle(
 		TaskID:            taskID,
 		SourceSubmission:  incoming,
 		DeclaredParcelIDs: command.DeclaredParcelIDs,
+		Profiles:          command.DeclaredProfiles,
 		EstablishedAt:     handler.deps.Clock.Now(),
 	})
 	if err != nil {

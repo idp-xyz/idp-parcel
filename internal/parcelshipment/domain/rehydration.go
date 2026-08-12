@@ -59,7 +59,11 @@ type RehydrateSubmissionVersionSpec struct {
 	VersionID         SubmissionVersionID
 	SourceSubmission  SourceSubmissionFingerprint
 	DeclaredParcelIDs []DeclaredParcelID
-	EstablishedAt     time.Time
+	// Profiles 收成品类型，不另造 Rehydrate*Spec：画像有公开构造函数、字段未导出，
+	// 包外造不出半截的一张——理由与 ProcessingAttempts 一字不差。有画像而不带回，
+	// 一份申报过测量的版本重建后看起来像没申报过，估价装配从此永远停在缺输入。
+	Profiles      []DeclaredParcelProfile
+	EstablishedAt time.Time
 }
 
 // RehydrateAcceptanceTaskSpec 是接受判断任务在库里的样子。
@@ -95,6 +99,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			versionID:         prior.VersionID,
 			sourceSubmission:  prior.SourceSubmission,
 			declaredParcelIDs: append([]DeclaredParcelID(nil), prior.DeclaredParcelIDs...),
+			profiles:          append([]DeclaredParcelProfile(nil), prior.Profiles...),
 			establishedAt:     prior.EstablishedAt,
 		})
 	}
@@ -120,6 +125,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			versionID:         snapshot.CurrentVersion.VersionID,
 			sourceSubmission:  snapshot.CurrentVersion.SourceSubmission,
 			declaredParcelIDs: append([]DeclaredParcelID(nil), snapshot.CurrentVersion.DeclaredParcelIDs...),
+			profiles:          append([]DeclaredParcelProfile(nil), snapshot.CurrentVersion.Profiles...),
 			establishedAt:     snapshot.CurrentVersion.EstablishedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
@@ -294,6 +300,11 @@ func (version SubmissionVersion) validForRehydration() error {
 			return rehydrationRefusal("提交版本上有重复的声明成员")
 		}
 		seen[parcelID] = struct{}{}
+	}
+	// 画像与构造路径同一套贴合校验（成员集合内、每成员至多一张、半截拒收）。批量零值
+	// 造得出（make 忘填），指着集合外成员的一张画像则会让估价装配拿另一个包裹的测量。
+	if _, err := declaredProfilesFor(version.profiles, version.declaredParcelIDs); err != nil {
+		return rehydrationRefusal("提交版本上的成员声明画像立不起来")
 	}
 	return nil
 }

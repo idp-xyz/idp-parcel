@@ -55,6 +55,9 @@ type SubmissionVersion struct {
 	versionID         SubmissionVersionID
 	sourceSubmission  SourceSubmissionFingerprint
 	declaredParcelIDs []DeclaredParcelID
+	// profiles 是成员声明画像（ADR-0048）：随本版本申报的测量快照。允许部分成员无画像
+	// ——测量必填与否由真实产品定，机制不写死。
+	profiles []DeclaredParcelProfile
 	establishedAt     time.Time
 }
 
@@ -68,6 +71,54 @@ func (version SubmissionVersion) SourceSubmission() SourceSubmissionFingerprint 
 
 func (version SubmissionVersion) DeclaredParcelIDs() []DeclaredParcelID {
 	return append([]DeclaredParcelID(nil), version.declaredParcelIDs...)
+}
+
+// DeclaredProfiles 交回本版本的成员声明画像拷贝。
+func (version SubmissionVersion) DeclaredProfiles() []DeclaredParcelProfile {
+	return append([]DeclaredParcelProfile(nil), version.profiles...)
+}
+
+// ProfileFor 按成员取声明画像。缺席是真话：这个成员没申报测量，读取方（估价装配等）
+// 自己决定缺席的后果。
+func (version SubmissionVersion) ProfileFor(parcel DeclaredParcelID) (DeclaredParcelProfile, bool) {
+	for _, profile := range version.profiles {
+		if profile.parcel == parcel {
+			return profile, true
+		}
+	}
+	return DeclaredParcelProfile{}, false
+}
+
+// declaredProfilesFor 校验画像贴合成员集合并交回拷贝：画像必须指名本版本的声明成员
+// （指着不存在的成员是装配错误），每成员至多一张（两张矛盾的测量取哪张都是掷硬币），
+// 半截画像构造期已死、批量零值在这里拦（make 忘填那条路）。
+func declaredProfilesFor(
+	profiles []DeclaredParcelProfile,
+	members []DeclaredParcelID,
+) ([]DeclaredParcelProfile, error) {
+	if len(profiles) == 0 {
+		return nil, nil
+	}
+	declared := make(map[DeclaredParcelID]struct{}, len(members))
+	for _, member := range members {
+		declared[member] = struct{}{}
+	}
+	seen := make(map[DeclaredParcelID]struct{}, len(profiles))
+	copied := make([]DeclaredParcelProfile, 0, len(profiles))
+	for _, profile := range profiles {
+		if !profile.parcel.valid() || !profile.measurement.declared() {
+			return nil, ErrInvalidDeclaredMeasurement
+		}
+		if _, member := declared[profile.parcel]; !member {
+			return nil, ErrInvalidDeclaredMeasurement
+		}
+		if _, duplicated := seen[profile.parcel]; duplicated {
+			return nil, ErrInvalidDeclaredMeasurement
+		}
+		seen[profile.parcel] = struct{}{}
+		copied = append(copied, profile)
+	}
+	return copied, nil
 }
 
 func (version SubmissionVersion) EstablishedAt() time.Time {
@@ -137,6 +188,8 @@ type SubmitShipmentRequestSpec struct {
 	// Link 是关联新委托的出生属性，零值即首次委托。非零值只能来自
 	// EstablishPriorRequestLink——方向与原委托终态的互证在那里完成。
 	Link PriorRequestLink
+	// Profiles 是随首个提交版本申报的成员声明画像（ADR-0048），允许缺席或部分覆盖。
+	Profiles []DeclaredParcelProfile
 }
 
 type ShipmentRequest struct {
@@ -198,6 +251,10 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			return ShipmentRequest{}, ErrInvalidRequestLink
 		}
 	}
+	profiles, err := declaredProfilesFor(spec.Profiles, spec.Candidate.DeclaredParcelIDs())
+	if err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	return ShipmentRequest{
 		shipmentRequestID: spec.Candidate.ShipmentRequestID(),
@@ -207,6 +264,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			versionID:         spec.VersionID,
 			sourceSubmission:  spec.Candidate.SourceSubmission(),
 			declaredParcelIDs: spec.Candidate.DeclaredParcelIDs(),
+			profiles:          profiles,
 			establishedAt:     spec.SubmittedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{

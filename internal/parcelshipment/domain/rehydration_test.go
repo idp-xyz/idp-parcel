@@ -387,6 +387,50 @@ func TestRehydrationRefusesAnEmptyProcessingAttempt(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0048 的重建半边——画像随快照往返，有画像而不带回，一份申报过测量的版本
+// 重建后看起来像没申报过；指着集合外成员的一张画像是一行坏数据，收下它估价装配会拿到
+// 另一个包裹的测量。
+func TestRehydrationCarriesTheDeclaredProfiles(t *testing.T) {
+	weight, err := domain.NewDeclaredWeight(
+		mustValue(t, domain.NewMeasurementValue, "1.50"),
+		mustValue(t, domain.NewMeasurementUnitReference, "KG"),
+	)
+	if err != nil {
+		t.Fatalf("new declared weight: %v", err)
+	}
+	measurement, err := domain.NewDeclaredMeasurement(weight, domain.DeclaredDimensions{})
+	if err != nil {
+		t.Fatalf("new declared measurement: %v", err)
+	}
+	profile, err := domain.NewDeclaredParcelProfile(
+		mustValue(t, domain.NewDeclaredParcelID, "parcel-1"), measurement)
+	if err != nil {
+		t.Fatalf("new declared parcel profile: %v", err)
+	}
+
+	snapshot := submittedSnapshot(t)
+	snapshot.CurrentVersion.Profiles = []domain.DeclaredParcelProfile{profile}
+	request, err := domain.RehydrateShipmentRequest(snapshot)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	kept, present := request.CurrentSubmissionVersion().ProfileFor(mustValue(t, domain.NewDeclaredParcelID, "parcel-1"))
+	if !present || kept.Measurement().Weight().Value().String() != "1.50" {
+		t.Fatalf("profile = %#v present = %v; 画像没有随快照回来", kept, present)
+	}
+
+	foreign, err := domain.NewDeclaredParcelProfile(
+		mustValue(t, domain.NewDeclaredParcelID, "parcel-9"), measurement)
+	if err != nil {
+		t.Fatalf("new foreign profile: %v", err)
+	}
+	bad := submittedSnapshot(t)
+	bad.CurrentVersion.Profiles = []domain.DeclaredParcelProfile{foreign}
+	if _, err := domain.RehydrateShipmentRequest(bad); !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+	}
+}
+
 // Covers: 关联出处随快照往返（`AT-PS-036`/`AT-PS-076` 的重建半边）——有出处而不带回，
 // 一份关联新委托重建后看起来像首次委托；半截或自指的出处是一行坏数据，不是首次委托。
 func TestRehydrationCarriesThePriorRequestLink(t *testing.T) {
