@@ -14,7 +14,6 @@ import (
 // 端口只取事实不做评估（ADR-0046）：区域明确排除折成淘汰、地址缺信息折成资料不足，这些
 // 是领域拥有的评估规则，落在端口后面就落到了适配器手里，而适配器只翻译不判断。事实与
 // 修订一次取回而不分多次调用：两次取回之间视图一变，事实与它标的修订就不再来自同一版。
-//
 type NetworkEvidence struct {
 	ServiceAreas      []domain.ServiceAreaResolution
 	RouteRequirements []domain.RouteRequirement
