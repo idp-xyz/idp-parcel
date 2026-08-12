@@ -122,6 +122,14 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("form acceptance decision: %w", domain.ErrInvalidShipmentRequest)
 	}
 
+	// 接受（或拒绝）已经越过提交边界时，本编排只交回那一份历史决定。`UC-PC-002` 步骤 8
+	// 的重校验是提交前窗口（`AT-PC-026`）；提交后再拿退役/替代后的视图去审，会把已冻结的
+	// 快照改写成未决——那正是 `AT-PC-025` 禁止的追溯改写。并发下 Find 仍可能读到尚未
+	// 落库的旧像，那时仍靠下面 Decide 的 `ErrDecisionAlreadyFormed` 交回原决定。
+	if _, formed := request.AcceptanceDecision(); formed {
+		return handler.existing(request), nil
+	}
+
 	// 判断先读回来，因为它带着这些判断所采用的那次解析——提交决定前该走重解还是首次解析，
 	// 由它决定。依据不再适用时也要读：先前可能已经形成过冻结（`AT-PC-026` 的提交前失效），
 	// 而拒绝要按原关联把它解除。资金不会因为解析结论变了就自己回来。

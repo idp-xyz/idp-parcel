@@ -407,6 +407,50 @@ func TestADecisionRevalidatesTheBasisItsJudgmentsWereFormedUnder(t *testing.T) {
 	}
 }
 
+// Covers: AT-PC-025「解析后合同退役，但委托接受已提交 → 历史决定保留原快照，不追溯改写」。
+//
+// 与 AT-PC-026 的分野在是否已经越过提交边界：提交前依据失效要重解（或未决）；提交后同一
+// 失效信号不得把已形成的接受改写成未决，也不得用新解析覆盖当时快照。Find 必须 sticky——
+// 夹具默认恒交回崭新`已提交`，会把「已有决定」这条路径整个藏掉。
+func TestAnAcceptedDecisionSurvivesRetiredBasisOnReplay(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.requests.sticky = true
+
+	first, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	firstDecision, present := first.AcceptanceDecision()
+	if !present || !firstDecision.Accepted() {
+		t.Fatalf("first decision = %#v present = %v; 本用例要的是接受已提交之后的回放", firstDecision, present)
+	}
+	originalBasis := firstDecision.Basis().ResolutionID()
+	revalidateBeforeReplay := fixture.commercial.revalidateCalls
+
+	fixture.commercial.revalidationOutcome = ports.CommercialBasisSuperseded
+
+	second, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("second handle: %v", err)
+	}
+	if second.Outcome() != application.AcceptanceDecided {
+		t.Fatalf("second outcome = %q pending = %q; AT-PC-025 要求已提交的接受交回原决定，不因合同退役改写/抹掉",
+			second.Outcome(), second.PendingReason())
+	}
+	secondDecision, present := second.AcceptanceDecision()
+	if !present || !secondDecision.Accepted() {
+		t.Fatalf("second decision = %#v present = %v", secondDecision, present)
+	}
+	if secondDecision.Basis().ResolutionID() != originalBasis {
+		t.Fatalf("replayed basis = %q, want original %q——追溯改写了历史快照",
+			secondDecision.Basis().ResolutionID(), originalBasis)
+	}
+	if fixture.commercial.revalidateCalls != revalidateBeforeReplay {
+		t.Fatalf("revalidate calls grew from %d to %d——接受已提交后仍去重校验，等于拿退役后的视图审历史决定",
+			revalidateBeforeReplay, fixture.commercial.revalidateCalls)
+	}
+}
+
 // Covers: UC-PC-002 结果语义`已失效`「重新解析；不能继续使用或覆盖原历史」与 AT-PC-026 ——
 // 原解析被推翻时要回第一阶段重解，并把新解析记为所采用的那一份。
 //
@@ -718,11 +762,15 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 //
 // conflict 用布尔而不是直接收一个 ports.ShipmentRequestSaveOutcome：那个枚举的零值是`未设`，
 // 收它会让每一处没显式设过的构造都变成一次端口坏了。
+//
+// sticky 为真时 Find 交回已保存的那一份。默认关着，是因为多数用例测的是「尚未决定」窗口；
+// AT-PC-025 这类回放必须打开，否则永远到不了`已有决定`。
 type decidableRequestStore struct {
 	t        *testing.T
 	saved    *domain.ShipmentRequest
 	err      error
 	conflict bool
+	sticky   bool
 }
 
 func (store *decidableRequestStore) FindBySourceIdentity(
@@ -730,6 +778,9 @@ func (store *decidableRequestStore) FindBySourceIdentity(
 	_ domain.SourceIdentity,
 ) (domain.ShipmentRequest, bool, error) {
 	store.t.Helper()
+	if store.sticky && store.saved != nil {
+		return *store.saved, true, nil
+	}
 	return submittedRequest(store.t), true, nil
 }
 
