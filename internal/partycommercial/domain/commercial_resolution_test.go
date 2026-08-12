@@ -215,8 +215,8 @@ func TestAResolutionResultHasNowhereToPutAnAcceptanceVerdict(t *testing.T) {
 // 都不得由系统任选一条或伪装成客户不合格。
 //
 // Covers: `AT-PC-006`「两个合同版本在同一解析键和期间重叠 → 形成适用冲突，不按版本号任选」。
-// 006 与 021 同句：适用冲突在**解析时**成立。登记册仍可同时收纳重叠候选（见下方子测），
-// 否则 AT-PC-007 的「两历史版本保留」无处安放；不在 Register/Publish 拦重叠。
+// 与 AT-PC-021 同句。权威在解析适用冲突（CONTEXT / UC-PC-001 无引文要求 Register/Publish
+// 因区间重叠拒绝）；发布侧故意不因重叠拦，否则 AT-PC-007「两历史版本保留」无处安放。
 func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 	t.Run("zero candidates is no applicable basis", func(t *testing.T) {
 		registry := domain.NewCommercialRegistry()
