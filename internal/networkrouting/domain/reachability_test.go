@@ -26,7 +26,12 @@ func gap(t *testing.T, reference string, scope domain.EvidenceGapScope, affected
 	for index, value := range affected {
 		ids[index] = mustValue(t, domain.NewCandidateID, value)
 	}
-	built, err := domain.NewEvidenceGap(mustValue(t, domain.NewEvidenceGapReference, reference), scope, ids)
+	built, err := domain.NewEvidenceGap(
+		mustValue(t, domain.NewEvidenceGapReference, reference),
+		scope,
+		ids,
+		mustValue(t, domain.NewReassessmentCondition, "WHEN_"+reference+"_PROVIDED"),
+	)
 	if err != nil {
 		t.Fatalf("new evidence gap %q: %v", reference, err)
 	}

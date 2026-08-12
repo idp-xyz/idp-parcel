@@ -22,17 +22,16 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 
 // evidenceDouble 记录它被问到的判断范围，因为「身份不成立时不得查询」这条只有在端口是否
 // 被调用上才验得出来。revision 缺省给合法值：修订标识是答复的必备件，想演练缺失要显式
-// 置空（noRevision）。
+// 置空（noRevision）。端口按 ADR-0046 只回事实，评估在领域执行。
 type evidenceDouble struct {
-	candidates  []domain.RouteCandidate
-	gaps        []domain.EvidenceGap
+	areas       []domain.ServiceAreaResolution
 	err         error
 	noRevision  bool
 	assembled   int
 	assembleKey domain.ReachabilityJudgmentKey
 }
 
-func (double *evidenceDouble) AssembleCandidates(
+func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	key domain.ReachabilityJudgmentKey,
 ) (ports.NetworkEvidence, error) {
@@ -41,7 +40,7 @@ func (double *evidenceDouble) AssembleCandidates(
 	if double.err != nil {
 		return ports.NetworkEvidence{}, double.err
 	}
-	evidence := ports.NetworkEvidence{Candidates: double.candidates, Gaps: double.gaps}
+	evidence := ports.NetworkEvidence{ServiceAreas: double.areas}
 	if !double.noRevision {
 		revision, err := domain.NewNetworkViewRevision("net-view-rev-1")
 		if err != nil {
@@ -50,6 +49,25 @@ func (double *evidenceDouble) AssembleCandidates(
 		evidence.ViewRevision = revision
 	}
 	return evidence, nil
+}
+
+// coveringAreas 造覆盖目的地的区域解析事实——经领域评估折成合格候选，替代旧夹具直接
+// 喂候选的做法。
+func coveringAreas(t *testing.T, candidates ...string) []domain.ServiceAreaResolution {
+	t.Helper()
+	areas := make([]domain.ServiceAreaResolution, 0, len(candidates))
+	for _, candidate := range candidates {
+		resolution, err := domain.NewServiceAreaResolution(domain.ServiceAreaResolutionSpec{
+			Candidate:   value(t, domain.NewCandidateID, candidate),
+			Outcome:     domain.AreaCoversDestination,
+			AreaVersion: value(t, domain.NewServiceAreaVersionReference, "AREA-V1"),
+		})
+		if err != nil {
+			t.Fatalf("new covering resolution: %v", err)
+		}
+		areas = append(areas, resolution)
+	}
+	return areas
 }
 
 // eligibilityDouble 默认回答「要求判断」，这样已有测试仍然走到候选装配那一步。
@@ -192,7 +210,7 @@ func command(t *testing.T, parcel string) application.AssessParcelReachabilityCo
 // Covers: UC-NR-002 判断内容「判断时间」与「适用时点」并列——`asOf` 决定按哪一刻的网络
 // 证据评估，判断时间只说明这次判断何时作出，压成一个会让重放看起来像新判断。
 func TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf(t *testing.T) {
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -251,7 +269,7 @@ func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *
 // Covers: UC-NR-002 证据判定矩阵——候选生成本身失败不是`不可达`。零个候选分不清是覆盖
 // 范围排除了目的地（那本该是一个带淘汰依据的候选）还是装配失败，两者都不能凭空断言。
 func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
-	evidence := &evidenceDouble{candidates: nil}
+	evidence := &evidenceDouble{areas: nil}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -274,7 +292,7 @@ func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
 // Covers: UC-NR-002 步骤 2 与权限隔离「批量请求、错误信息、查询和指标不得泄露其他客户的
 // 存在或网络资格」——最小判断身份不成立时不得去问任何权威。
 func TestIncompleteKeyIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -314,7 +332,7 @@ func TestSameScopeRetryReturnsTheExistingJudgmentWithoutReassessing(t *testing.T
 		found:    true,
 		existing: ports.ReachabilityJudgmentRecord{Key: key, Finding: finding, JudgedAt: judgedAt},
 	}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-2")}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt.Add(time.Hour)})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
@@ -348,7 +366,7 @@ func TestServiceThatDoesNotRequireANetworkJudgmentIsNotApplicable(t *testing.T) 
 		t.Fatalf("new network eligibility: %v", err)
 	}
 	eligibility := &eligibilityDouble{eligibility: notRequired}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -378,7 +396,7 @@ func TestServiceThatDoesNotRequireANetworkJudgmentIsNotApplicable(t *testing.T) 
 // 判断」，否则一次商业故障就变成了不适用。
 func TestUnavailableCommercialEligibilityIsNotFormedRatherThanNotApplicable(t *testing.T) {
 	eligibility := &eligibilityDouble{err: errors.New("commercial eligibility view unavailable")}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -405,7 +423,7 @@ func TestUnavailableCommercialEligibilityIsNotFormedRatherThanNotApplicable(t *t
 // 顺序反了会让一个本不该判断的服务先被装配一遍候选。
 func TestCommercialEligibilityIsAskedBeforeAssemblingCandidates(t *testing.T) {
 	eligibility := requiredEligibility(t)
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
@@ -436,7 +454,7 @@ func TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite(t *tes
 			JudgedAt: judgedAt,
 		},
 	}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-2")}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-2"))
@@ -474,7 +492,7 @@ func TestAConcurrentWinnerIsReadBackRatherThanOverwritten(t *testing.T) {
 			JudgedAt: judgedAt,
 		},
 	}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt.Add(time.Hour)})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
@@ -508,7 +526,7 @@ func TestAConcurrentWinnerWithADifferentScopeIsAConflict(t *testing.T) {
 			JudgedAt: judgedAt,
 		},
 	}
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
@@ -528,7 +546,7 @@ func TestAConcurrentWinnerWithADifferentScopeIsAConflict(t *testing.T) {
 // 同一发布意图，不重复评估」——已提交的判断交出恰好一份由请求关联认领的发布意图。投递与
 // Outbox 半边仍在 Bento 闸门后（ADR-0017），本上下文不记意图完没完成（ADR-0043）。
 func TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation(t *testing.T) {
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	downstream := &handoffDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
@@ -560,7 +578,7 @@ func TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation(t *testing.T) {
 // 同 AT 的失败方向：首次发布失败不改写判断——三值结果与判断时间原样交回、判断仍在库里，
 // 发布续办引用单独留出，与`未形成判断`的续办分开。
 func TestAnUndeliveredJudgmentHandoffKeepsTheJudgmentWithAResumableIntent(t *testing.T) {
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	downstream := &handoffDouble{err: errors.New("downstream unreachable")}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
@@ -591,7 +609,7 @@ func TestAnUndeliveredJudgmentHandoffKeepsTheJudgmentWithAResumableIntent(t *tes
 // 标识**」——修订标识随判断落库并随发布意图带给消费方，它是 `AT-PS-037` 提交前失效重判
 // 的比对锚：没有它，消费方永远发现不了「判断形成后视图换过代」。
 func TestAFormedJudgmentRetainsTheEvidenceViewRevision(t *testing.T) {
-	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-1")}
 	store := &storeDouble{}
 	downstream := &handoffDouble{}
 	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
@@ -612,7 +630,7 @@ func TestAFormedJudgmentRetainsTheEvidenceViewRevision(t *testing.T) {
 // 检测不到——响亮报错，判断不落库。
 func TestEvidenceWithoutAViewRevisionIsALoudErrorNotAJudgment(t *testing.T) {
 	evidence := &evidenceDouble{
-		candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")},
+		areas:      coveringAreas(t, "candidate-1"),
 		noRevision: true,
 	}
 	store := &storeDouble{}

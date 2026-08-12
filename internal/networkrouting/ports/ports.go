@@ -9,23 +9,24 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 )
 
-// NetworkEvidence 是一次证据装配的完整答复：候选、缺口与它们共同来自的那个视图修订。
+// NetworkEvidence 是一次判断所需的版本化网络事实与它们共同来自的那个视图修订。
 //
-// 三样一次取回而不分多次调用：用例要求`可达`判断也保留其他候选的缺口，两次取回之间视图
-// 一变，结论所依据的候选与它记录的缺口就不再来自同一份证据——修订标识同理，它必须是
-// 候选与缺口实际出自的那一版，分开取就可能标错版。
+// 端口只取事实不做评估（ADR-0046）：区域明确排除折成淘汰、地址缺信息折成资料不足，这些
+// 是领域拥有的评估规则，落在端口后面就落到了适配器手里，而适配器只翻译不判断。事实与
+// 修订一次取回而不分多次调用：两次取回之间视图一变，事实与它标的修订就不再来自同一版。
+//
+// 后续增量按同一形状扩字段（日历/截单、硬约束、承诺声明），不另开第二个取数端口。
 type NetworkEvidence struct {
-	Candidates   []domain.RouteCandidate
-	Gaps         []domain.EvidenceGap
+	ServiceAreas []domain.ServiceAreaResolution
 	ViewRevision domain.NetworkViewRevision
 }
 
-// NetworkEvidenceView 为一次判断装配候选空间与业务证据缺口。
+// NetworkEvidenceView 为一次判断取回版本化网络事实。
 //
 // 它只回业务事实。调不通、超时、配置读不到都要作为错误返回，由应用层形成`未形成判断`——
 // 把技术故障装扮成一个证据缺口，会让它进入`资料不足`统计，而用例明写这两者不能混。
 type NetworkEvidenceView interface {
-	AssembleCandidates(
+	LoadNetworkEvidence(
 		ctx context.Context,
 		key domain.ReachabilityJudgmentKey,
 	) (NetworkEvidence, error)

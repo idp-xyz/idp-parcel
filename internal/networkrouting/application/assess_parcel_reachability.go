@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -210,7 +211,7 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		}, nil
 	}
 
-	evidence, err := handler.evidence.AssembleCandidates(ctx, command.Key)
+	evidence, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
 	if err != nil {
 		// 依赖调不通形成`未形成判断`，不向上抛技术错误也不记成证据缺口。用例明写依赖
 		// 失败不得伪装为`资料不足`：混起来会让一次网络故障被下游读成这个包裹的证据不全，
@@ -221,7 +222,14 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		return AssessParcelReachabilityResult{}, ErrIncompleteNetworkEvidence
 	}
 
-	finding, err := domain.ConcludeReachability(evidence.Candidates, evidence.Gaps)
+	// 评估在领域执行（ADR-0046）：区域事实折成候选与缺口。事实本身不成立（重复候选、
+	// 半截解析）是端口坏了，响亮上抛，不混进`未形成判断`的统计。
+	candidates, gaps, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
+	if err != nil {
+		return AssessParcelReachabilityResult{}, fmt.Errorf("evaluate service areas: %w", err)
+	}
+
+	finding, err := domain.ConcludeReachability(candidates, gaps)
 	if err != nil {
 		// 领域拒绝空候选空间而不是给结论。分不清是覆盖范围排除了目的地——那本该是一个带
 		// 淘汰依据的候选——还是候选生成失败，两者都不能凭空断言，所以停在未形成判断。

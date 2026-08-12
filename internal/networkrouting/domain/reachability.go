@@ -141,14 +141,23 @@ func (scope EvidenceGapScope) String() string {
 
 // EvidenceGap 指名一处缺失或无法确定的业务证据。它是业务事实而非技术故障：调不通的
 // 依赖属于应用层的`未形成判断`，绝不记成这里的一个缺口。
+//
+// 再次判断条件是缺口的必备件（`AT-NR-018`，ADR-0046）：没有出口的缺口会让`资料不足`
+// 变成一句永远续不上的否定——补什么、等什么，读缺口的人必须答得出来。
 type EvidenceGap struct {
 	reference EvidenceGapReference
 	scope     EvidenceGapScope
 	affected  []CandidateID
+	reassess  ReassessmentCondition
 }
 
-func NewEvidenceGap(reference EvidenceGapReference, scope EvidenceGapScope, affected []CandidateID) (EvidenceGap, error) {
-	if !reference.valid() || !scope.valid() {
+func NewEvidenceGap(
+	reference EvidenceGapReference,
+	scope EvidenceGapScope,
+	affected []CandidateID,
+	reassess ReassessmentCondition,
+) (EvidenceGap, error) {
+	if !reference.valid() || !scope.valid() || !reassess.valid() {
 		return EvidenceGap{}, ErrInvalidEvidenceGap
 	}
 	if scope == CandidateScopedGap && len(affected) == 0 {
@@ -163,7 +172,13 @@ func NewEvidenceGap(reference EvidenceGapReference, scope EvidenceGapScope, affe
 		reference: reference,
 		scope:     scope,
 		affected:  append([]CandidateID(nil), affected...),
+		reassess:  reassess,
 	}, nil
+}
+
+// ReassessmentCondition 交回这处缺口的出口：什么条件成立后值得再判一次。
+func (gap EvidenceGap) ReassessmentCondition() ReassessmentCondition {
+	return gap.reassess
 }
 
 func (gap EvidenceGap) Reference() EvidenceGapReference {

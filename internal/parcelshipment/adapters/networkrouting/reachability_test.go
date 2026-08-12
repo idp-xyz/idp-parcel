@@ -48,13 +48,12 @@ func (double *eligibilityDouble) AssessNetworkEligibility(
 }
 
 type evidenceDouble struct {
-	candidates []nrdomain.RouteCandidate
-	gaps       []nrdomain.EvidenceGap
-	revision   string
-	err        error
+	areas    []nrdomain.ServiceAreaResolution
+	revision string
+	err      error
 }
 
-func (double *evidenceDouble) AssembleCandidates(
+func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
 ) (nrports.NetworkEvidence, error) {
@@ -66,8 +65,7 @@ func (double *evidenceDouble) AssembleCandidates(
 		revision = "net-view-rev-1"
 	}
 	return nrports.NetworkEvidence{
-		Candidates:   double.candidates,
-		Gaps:         double.gaps,
+		ServiceAreas: double.areas,
 		ViewRevision: mustRevision(revision),
 	}, nil
 }
@@ -128,17 +126,17 @@ type reachabilityFixture struct {
 	store       *memoryStore
 }
 
-func qualifiedCandidate(t *testing.T, id string) nrdomain.RouteCandidate {
+func coveringArea(t *testing.T, id string) nrdomain.ServiceAreaResolution {
 	t.Helper()
-	candidate, err := nrdomain.NewRouteCandidate(
-		value(t, nrdomain.NewCandidateID, id),
-		nrdomain.CandidateQualified,
-		nrdomain.CandidateReason{},
-	)
+	resolution, err := nrdomain.NewServiceAreaResolution(nrdomain.ServiceAreaResolutionSpec{
+		Candidate:   value(t, nrdomain.NewCandidateID, id),
+		Outcome:     nrdomain.AreaCoversDestination,
+		AreaVersion: value(t, nrdomain.NewServiceAreaVersionReference, "AREA-V1"),
+	})
 	if err != nil {
-		t.Fatalf("new route candidate: %v", err)
+		t.Fatalf("new service area resolution: %v", err)
 	}
-	return candidate
+	return resolution
 }
 
 func newReachabilityFixture(t *testing.T) *reachabilityFixture {
@@ -149,7 +147,7 @@ func newReachabilityFixture(t *testing.T) *reachabilityFixture {
 	}
 	fixture := &reachabilityFixture{
 		eligibility: &eligibilityDouble{eligibility: eligibility},
-		evidence:    &evidenceDouble{candidates: []nrdomain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}},
+		evidence:    &evidenceDouble{areas: []nrdomain.ServiceAreaResolution{coveringArea(t, "candidate-1")}},
 		store:       newMemoryStore(),
 	}
 	fixture.adapter = adapter.NewReachabilityAdapter(adapter.ReachabilityAdapterDeps{

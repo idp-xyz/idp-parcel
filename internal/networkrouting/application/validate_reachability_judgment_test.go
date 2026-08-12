@@ -39,7 +39,7 @@ func validateCommand(t *testing.T, parcel string) application.ValidateReachabili
 func TestAValidationConfirmsOrSupersedesByTheViewRevision(t *testing.T) {
 	t.Run("same revision confirms the original judgment", func(t *testing.T) {
 		store := &storeDouble{found: true, existing: recordedJudgment(t, "parcel-1", "net-view-rev-1")}
-		evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
+		evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-2")}
 		handler := application.NewValidateReachabilityJudgmentHandler(evidence, store)
 
 		result, err := handler.Handle(context.Background(), validateCommand(t, "parcel-1"))
@@ -61,7 +61,7 @@ func TestAValidationConfirmsOrSupersedesByTheViewRevision(t *testing.T) {
 
 	t.Run("a changed revision supersedes without carrying the finding", func(t *testing.T) {
 		store := &storeDouble{found: true, existing: recordedJudgment(t, "parcel-1", "net-view-rev-0")}
-		evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
+		evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-2")}
 		handler := application.NewValidateReachabilityJudgmentHandler(evidence, store)
 
 		result, err := handler.Handle(context.Background(), validateCommand(t, "parcel-1"))
@@ -87,7 +87,7 @@ func TestAMissingOrForeignJudgmentIsUniformlyNotFound(t *testing.T) {
 	}
 	for name, store := range cases {
 		t.Run(name, func(t *testing.T) {
-			evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
+			evidence := &evidenceDouble{areas: coveringAreas(t, "candidate-2")}
 			handler := application.NewValidateReachabilityJudgmentHandler(evidence, store)
 
 			result, err := handler.Handle(context.Background(), validateCommand(t, "parcel-1"))
@@ -114,7 +114,7 @@ func TestAnUnreadableAuthorityKeepsTheValidationUnformed(t *testing.T) {
 	}{
 		"store unreadable": {
 			store:    &storeDouble{findErr: errors.New("store down")},
-			evidence: &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}},
+			evidence: &evidenceDouble{areas: coveringAreas(t, "candidate-2")},
 			want:     application.JudgmentStoreUnavailable,
 		},
 		"evidence unreadable": {
@@ -128,7 +128,7 @@ func TestAnUnreadableAuthorityKeepsTheValidationUnformed(t *testing.T) {
 				Finding:  recordedJudgment(t, "parcel-1", "net-view-rev-1").Finding,
 				JudgedAt: judgedAt,
 			}},
-			evidence: &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}},
+			evidence: &evidenceDouble{areas: coveringAreas(t, "candidate-2")},
 			want:     application.JudgmentStoreUnavailable,
 		},
 	}

@@ -121,7 +121,7 @@ func (handler *ValidateReachabilityJudgmentHandler) Handle(
 		return handler.notFormed(command, JudgmentStoreUnavailable), nil
 	}
 
-	evidence, err := handler.evidence.AssembleCandidates(ctx, command.Key)
+	evidence, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
 	if err != nil {
 		// 权威读不到时原判断既不能被确认也不能被断言换代，保持可续办的未决——判成
 		// 换代会让调用方去重判一份其实还好好的判断，判成仍然当前则是免检放行。
