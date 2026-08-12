@@ -145,6 +145,112 @@ type Clock interface {
 	Now() time.Time
 }
 
+// IntakeEligibilityOutcome 是收寄阶段资格判断的封闭三值（UC-PS-003 资格核对第 5 条）。
+// `不适用`单独一格：服务形态不承担网络责任与资格没过是两回事，用不适用代替资格失败被
+// 用例明禁。
+type IntakeEligibilityOutcome uint8
+
+const (
+	IntakeEligibilityOutcomeInvalid IntakeEligibilityOutcome = iota
+	IntakeEligibilityEstablished
+	IntakeEligibilityNotEstablished
+	IntakeServiceNotApplicable
+)
+
+func (outcome IntakeEligibilityOutcome) String() string {
+	switch outcome {
+	case IntakeEligibilityEstablished:
+		return "ESTABLISHED"
+	case IntakeEligibilityNotEstablished:
+		return "NOT_ESTABLISHED"
+	case IntakeServiceNotApplicable:
+		return "NOT_APPLICABLE"
+	default:
+		return ""
+	}
+}
+
+// IntakeEligibility 是资格答复：非`成立`必带依据——没有依据的不适用与来源缺失分不开，
+// 没有依据的不成立说不出缺哪条硬资格。
+type IntakeEligibility struct {
+	Outcome IntakeEligibilityOutcome
+	Basis   domain.CheckReason
+}
+
+// IntakeEligibilityView 按接受时固定的产品与合同规则判断收寄阶段资格（PAR-COM-16）。
+// 第二个返回值为 false 即「资格目录未配置」——保持未决，不默认通过（`AT-PS-047`）；
+// 依赖调不通作为错误返回。
+type IntakeEligibilityView interface {
+	JudgeIntakeEligibility(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		shipmentRequestID domain.ShipmentRequestID,
+		source domain.IntakeSource,
+	) (IntakeEligibility, bool, error)
+}
+
+// IntakeAdoptionKey 是采用结果的幂等键：「同一包裹、同一来源类型和同一来源结果版本
+// 只能形成一个有效网络收寄采用结果」——三维加租户隔离，全在键上。
+type IntakeAdoptionKey struct {
+	TenantID domain.TenantID
+	Parcel   domain.DeclaredParcelID
+	Kind     domain.IntakeSourceKind
+	Version  domain.SourceResultVersion
+}
+
+// IntakeAdoptionRecord 是一次采用判断越过提交边界后留下的东西：采用（带收寄与承诺）或
+// 不采用（带原因）二居其一。ContentDigest 是同一采用身份的内容比对锚——同键异内容是
+// 来源冲突，不是重放。
+type IntakeAdoptionRecord struct {
+	Key           IntakeAdoptionKey
+	ContentDigest string
+	Adopted       bool
+	Intake        domain.EffectiveNetworkIntake
+	Commitment    domain.FormalCommitment
+	RefusalBasis  domain.CheckReason
+	AdoptedAt     time.Time
+}
+
+// IntakeAdoptionSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。
+type IntakeAdoptionSaveOutcome uint8
+
+const (
+	IntakeAdoptionSaveOutcomeInvalid IntakeAdoptionSaveOutcome = iota
+	IntakeAdoptionSaved
+	IntakeAdoptionAlreadyRecorded
+)
+
+// IntakeAdoptionStore 按幂等键找回并保存采用结果；FindResponsibilityStart 按包裹找回
+// 先合法形成的责任起点——「客户送站与场外揽收都指向同一包裹时不能形成两个责任起点，
+// 先合法形成者保留」（`AT-PS-049`）。
+type IntakeAdoptionStore interface {
+	FindByKey(ctx context.Context, key IntakeAdoptionKey) (IntakeAdoptionRecord, bool, error)
+	FindResponsibilityStart(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (IntakeAdoptionRecord, bool, error)
+	Save(ctx context.Context, record IntakeAdoptionRecord) (IntakeAdoptionSaveOutcome, error)
+}
+
+// CommitmentIdentityFactory 签发正式承诺版本标识。与其余身份工厂分开的理由同
+// AcceptanceDecisionIdentity：不同用例触发的签发合并会造出用不上的依赖。
+type CommitmentIdentityFactory interface {
+	NextCommitmentVersionID(ctx context.Context) (domain.CommitmentVersionID, error)
+}
+
+// NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
+// 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
+type NetworkIntakeHandoffIntent struct {
+	Record IntakeAdoptionRecord
+}
+
+// NetworkIntakeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门，在那之前重放一律重发同一意图。
+type NetworkIntakeHandoff interface {
+	HandOffNetworkIntake(ctx context.Context, intent NetworkIntakeHandoffIntent) error
+}
+
 // CommercialBasisQuery 是 parcel-shipment 请 party-commercial 据以解析的范围。它只
 // 携带引用：本上下文说明需要哪种依据，绝不指定应当选中哪个商业版本。
 type CommercialBasisQuery struct {
