@@ -201,3 +201,115 @@ func TestBatchConclusionsDeriveOnlyFromObjectResults(t *testing.T) {
 		}
 	})
 }
+
+// Covers: `AT-TF-062`「迟到更正使原交接证据失效 → 保留原判断及全部后续事实」与 CONTEXT
+// 「来源证据被更正时，保留原事实和原判断，形成失效、替代及重新派生结果」——更正回指
+// 前身、原判断不动；被更正成拒收的新版本给不出转出引用（NO 侧已按原版本转出的控制
+// 不可逆，来源链重算由后续处置表达）。
+func TestAHandoverCorrectionFormsANewVersionWithoutOverwriting(t *testing.T) {
+	original, err := domain.FormTransportHandover(handoverSpec(t, "parcel-1", domain.ObjectHandedOver))
+	if err != nil {
+		t.Fatalf("form original handover: %v", err)
+	}
+	correctedAt := handoverJudgedAt.Add(36 * time.Hour)
+
+	corrected, err := original.Correct(domain.HandoverCorrection{
+		Verdict:     domain.HandoverRefused,
+		Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-late-correction"),
+		Version:     mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v2"),
+		CorrectedAt: correctedAt,
+	})
+	if err != nil {
+		t.Fatalf("correct handover: %v", err)
+	}
+	predecessor, present := corrected.Corrects()
+	if !present || predecessor != original.Version() {
+		t.Fatalf("corrects = %q present=%v, want v1", predecessor, present)
+	}
+	if corrected.Verdict() != domain.HandoverRefused {
+		t.Fatalf("verdict = %q, want REFUSED", corrected.Verdict())
+	}
+	if _, leaks := corrected.TransferOutBasis(); leaks {
+		t.Fatal("被更正成拒收的新版本仍交出了转出引用")
+	}
+	if at, present := corrected.CorrectedAt(); !present || !at.Equal(correctedAt) {
+		t.Fatalf("corrected at = %v present=%v", at, present)
+	}
+	if original.Verdict() != domain.ObjectHandedOver {
+		t.Fatal("更正改写了原判断")
+	}
+	if _, present := original.TransferOutBasis(); !present {
+		t.Fatal("原版本的转出引用被更正抹掉——历史派生就断了")
+	}
+	if _, present := original.Corrects(); present {
+		t.Fatal("原版本被更正动作反向打上了更正标记")
+	}
+
+	t.Run("a chain keeps every predecessor", func(t *testing.T) {
+		third, err := corrected.Correct(domain.HandoverCorrection{
+			Verdict:           domain.ObjectHandedOver,
+			ReleasingEvidence: mustValue(t, domain.NewHandoverEvidenceReference, "evidence-release-recheck"),
+			ReceivingEvidence: mustValue(t, domain.NewHandoverEvidenceReference, "evidence-receive-recheck"),
+			Rule:              mustValue(t, domain.NewHandoverRuleReference, "handover-rule/v2"),
+			Version:           mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v3"),
+			CorrectedAt:       correctedAt.Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("second correction: %v", err)
+		}
+		predecessor, _ := third.Corrects()
+		if predecessor != corrected.Version() {
+			t.Fatalf("chain broke: corrects = %q, want v2", predecessor)
+		}
+	})
+
+	t.Run("reusing the original version is an overwrite and is refused", func(t *testing.T) {
+		if _, err := original.Correct(domain.HandoverCorrection{
+			Verdict:     domain.HandoverRefused,
+			Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-x"),
+			Version:     original.Version(),
+			CorrectedAt: correctedAt,
+		}); !errors.Is(err, domain.ErrInvalidTransportHandover) {
+			t.Fatalf("error = %v; 沿用原版本号就是覆盖", err)
+		}
+	})
+
+	t.Run("a correction to handed-over still needs both evidences and the rule", func(t *testing.T) {
+		// 三件各自单独缺席，逐一隔离——一次全缺只证明得了「至少查了一件」。
+		complete := func() domain.HandoverCorrection {
+			return domain.HandoverCorrection{
+				Verdict:           domain.ObjectHandedOver,
+				ReleasingEvidence: mustValue(t, domain.NewHandoverEvidenceReference, "evidence-release-recheck"),
+				ReceivingEvidence: mustValue(t, domain.NewHandoverEvidenceReference, "evidence-receive-recheck"),
+				Rule:              mustValue(t, domain.NewHandoverRuleReference, "handover-rule/v2"),
+				Version:           mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v4"),
+				CorrectedAt:       correctedAt.Add(2 * time.Hour),
+			}
+		}
+		missing := map[string]func(*domain.HandoverCorrection){
+			"receiving evidence": func(c *domain.HandoverCorrection) { c.ReceivingEvidence = domain.HandoverEvidenceReference{} },
+			"releasing evidence": func(c *domain.HandoverCorrection) { c.ReleasingEvidence = domain.HandoverEvidenceReference{} },
+			"rule":               func(c *domain.HandoverCorrection) { c.Rule = domain.HandoverRuleReference{} },
+		}
+		for name, drop := range missing {
+			t.Run(name, func(t *testing.T) {
+				correction := complete()
+				drop(&correction)
+				if _, err := corrected.Correct(correction); !errors.Is(err, domain.ErrInvalidTransportHandover) {
+					t.Fatalf("error = %v; 更正成已交接的完备性不得低于首次裁决（缺 %s）", err, name)
+				}
+			})
+		}
+	})
+
+	t.Run("a correction before the judgment time is refused", func(t *testing.T) {
+		if _, err := original.Correct(domain.HandoverCorrection{
+			Verdict:     domain.HandoverRefused,
+			Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-x"),
+			Version:     mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v5"),
+			CorrectedAt: handoverJudgedAt.Add(-time.Hour),
+		}); !errors.Is(err, domain.ErrInvalidTransportHandover) {
+			t.Fatalf("error = %v; 更正不可能发生在被更正的判断之前", err)
+		}
+	})
+}

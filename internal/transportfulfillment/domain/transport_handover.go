@@ -125,6 +125,8 @@ type TransportHandover struct {
 	basis             HandoverBasisReference
 	version           HandoverResultVersion
 	judgedAt          time.Time
+	corrects          HandoverResultVersion
+	correctedAt       time.Time
 }
 
 // FormTransportHandover 逐格校验三值各自的完备性：
@@ -229,6 +231,77 @@ func (handover TransportHandover) Version() HandoverResultVersion {
 
 func (handover TransportHandover) JudgedAt() time.Time {
 	return handover.judgedAt
+}
+
+// Corrects 交回本版本更正的前一版本（若本版本由更正产生）。
+func (handover TransportHandover) Corrects() (HandoverResultVersion, bool) {
+	if !handover.corrects.valid() {
+		return HandoverResultVersion{}, false
+	}
+	return handover.corrects, true
+}
+
+func (handover TransportHandover) CorrectedAt() (time.Time, bool) {
+	if handover.correctedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return handover.correctedAt, true
+}
+
+// HandoverCorrection 携带一次更正给出的新裁决与新证据。对象、范围、双方与业务时间不在
+// 其中——更正改的是判断，不是那次交接发生过什么。
+type HandoverCorrection struct {
+	Verdict           HandoverVerdict
+	ReleasingEvidence HandoverEvidenceReference
+	ReceivingEvidence HandoverEvidenceReference
+	Rule              HandoverRuleReference
+	Basis             HandoverBasisReference
+	Version           HandoverResultVersion
+	CorrectedAt       time.Time
+}
+
+// Correct 依据更正证据形成新判断版本：保留原事实和原判断（值语义，接收者不动），新版本
+// 回指被更正版本（CONTEXT「来源证据被更正时，保留原事实和原判断，形成失效、替代及重新
+// 派生结果」，AT-TF-062）。沿用原版本号就是覆盖，构造期拒绝；每格的完备性要求与首次
+// 裁决相同——更正成`已交接`同样要双方证据加规则。
+//
+// `已交接`被更正为拒收/待确认时，新版本自然给不出转出引用；node-operations 按原版本
+// 已经转出的控制不可逆，那是它拥有的事实——转出依据失效后的控制来源链重算由后续处置
+// 对象表达（AT-TF-062「允许当前实物方明确但来源冲突，不简单回退早期控制」），本类型
+// 只保证版本链可追与原判断不被改写。
+func (handover TransportHandover) Correct(correction HandoverCorrection) (TransportHandover, error) {
+	if !handover.version.valid() {
+		return TransportHandover{}, ErrInvalidTransportHandover
+	}
+	if !correction.Version.valid() || correction.CorrectedAt.IsZero() {
+		return TransportHandover{}, ErrInvalidTransportHandover
+	}
+	if correction.Version == handover.version {
+		return TransportHandover{}, ErrInvalidTransportHandover
+	}
+	if correction.CorrectedAt.Before(handover.judgedAt) {
+		return TransportHandover{}, ErrInvalidTransportHandover
+	}
+	corrected, err := FormTransportHandover(TransportHandoverSpec{
+		TenantID:          handover.tenantID,
+		Object:            handover.object,
+		Scope:             handover.scope,
+		ReleasedBy:        handover.releasedBy,
+		ReceivedBy:        handover.receivedBy,
+		Verdict:           correction.Verdict,
+		ReleasingEvidence: correction.ReleasingEvidence,
+		ReceivingEvidence: correction.ReceivingEvidence,
+		Rule:              correction.Rule,
+		Basis:             correction.Basis,
+		Version:           correction.Version,
+		JudgedAt:          handover.judgedAt,
+	})
+	if err != nil {
+		return TransportHandover{}, err
+	}
+	corrected.corrects = handover.version
+	corrected.correctedAt = correction.CorrectedAt.UTC()
+	return corrected, nil
 }
 
 // TransfersControl 只在`已交接`时为真：已拒收或待确认不转出控制，此前控制方在结果
