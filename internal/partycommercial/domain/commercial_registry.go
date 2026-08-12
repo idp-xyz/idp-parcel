@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sort"
 	"strings"
+	"time"
 )
 
 var (
@@ -48,13 +49,19 @@ type commercialVersionKey struct {
 //
 // 商业价格政策与版本分开登记：版本回答「有没有这份价格规则对象」，政策回答「哪个方向
 // 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。
+//
+// 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。
 type CommercialRegistry struct {
-	versions map[commercialVersionKey]CommercialVersion
-	policies []CommercialPricePolicy
+	versions    map[commercialVersionKey]CommercialVersion
+	corrections map[commercialVersionKey]ValidityCorrection
+	policies    []CommercialPricePolicy
 }
 
 func NewCommercialRegistry() *CommercialRegistry {
-	return &CommercialRegistry{versions: make(map[commercialVersionKey]CommercialVersion)}
+	return &CommercialRegistry{
+		versions:    make(map[commercialVersionKey]CommercialVersion),
+		corrections: make(map[commercialVersionKey]ValidityCorrection),
+	}
 }
 
 // Register 接纳一个已发布版本。同内容重复登记是重放；同版本号携带不同内容是需要商业
@@ -130,6 +137,55 @@ func (registry *CommercialRegistry) Count() int {
 	return len(registry.versions)
 }
 
+// RegisterValidityCorrection 接纳一条区间更正。原版本必须已在册；原键下正文与原区间
+// 不被改写。同更正重放不推进视图；新更正写入后 ViewRevision 必变（ADR-0038）。
+func (registry *CommercialRegistry) RegisterValidityCorrection(
+	correction ValidityCorrection,
+) (AuthorityViewRevision, error) {
+	if registry == nil {
+		return AuthorityViewRevision{}, ErrValidityCorrectionInvalid
+	}
+	key := commercialVersionKey{
+		kind:     correction.kind,
+		objectID: correction.objectID,
+		version:  correction.version,
+	}
+	existing, found := registry.versions[key]
+	if !found {
+		return AuthorityViewRevision{}, ErrCommercialVersionNotPublished
+	}
+	if prior, ok := registry.corrections[key]; ok && sameValidityCorrection(prior, correction) {
+		return registry.ViewRevision(existing.scope), nil
+	}
+	registry.corrections[key] = correction
+	return registry.ViewRevision(existing.scope), nil
+}
+
+// ValidityCorrectionOf 取回指向某对象版本的区间更正（若有）。
+func (registry *CommercialRegistry) ValidityCorrectionOf(
+	kind CommercialObjectKind,
+	objectID CommercialObjectID,
+	version CommercialVersionLabel,
+) (ValidityCorrection, bool) {
+	if registry == nil {
+		return ValidityCorrection{}, false
+	}
+	found, ok := registry.corrections[commercialVersionKey{kind: kind, objectID: objectID, version: version}]
+	return found, ok
+}
+
+// selectionInterval 是解析选用时看到的有效区间：有更正则用更正后的，否则用版本原区间。
+func (registry *CommercialRegistry) selectionInterval(version CommercialVersion) EffectiveInterval {
+	if registry == nil {
+		return version.effective
+	}
+	key := commercialVersionKey{kind: version.kind, objectID: version.objectID, version: version.version}
+	if correction, ok := registry.corrections[key]; ok {
+		return correction.corrected
+	}
+	return version.effective
+}
+
 // ViewRevision 是范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围解析
 // 当时的商业视图是否仍是同一个。它由范围内所有版本派生，而不是手工递增——手工递增总会
 // 有人忘记，派生值不可能与登记册实际内容脱节。
@@ -137,7 +193,7 @@ func (registry *CommercialRegistry) Count() int {
 // 它刻意是范围级而非对象级。同范围新增一个竞争候选时，先前采用的那个对象一个字节都
 // 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。
 func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference) AuthorityViewRevision {
-	parts := make([]string, 0, len(registry.versions)+len(registry.policies))
+	parts := make([]string, 0, len(registry.versions)+len(registry.policies)+len(registry.corrections))
 	for key, version := range registry.versions {
 		if version.scope != scope {
 			continue
@@ -148,6 +204,26 @@ func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference)
 			key.version.String(),
 			version.contentDigest.String(),
 			version.status.String(),
+		}, "\x1f"))
+	}
+	for key, correction := range registry.corrections {
+		version, ok := registry.versions[key]
+		if !ok || version.scope != scope {
+			continue
+		}
+		end, bounded := correction.corrected.EndsAt()
+		endPart := ""
+		if bounded {
+			endPart = end.UTC().Format(time.RFC3339Nano)
+		}
+		parts = append(parts, strings.Join([]string{
+			"VALIDITY_CORRECTION",
+			key.kind.String(),
+			key.objectID.String(),
+			key.version.String(),
+			correction.reference.String(),
+			correction.corrected.StartsAt().UTC().Format(time.RFC3339Nano),
+			endPart,
 		}, "\x1f"))
 	}
 	for _, policy := range registry.policies {

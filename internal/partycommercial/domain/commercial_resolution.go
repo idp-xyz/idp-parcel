@@ -501,7 +501,11 @@ func (registry *CommercialRegistry) applicable(key ResolutionKey) []CommercialVe
 		if version.kind != key.RequiredBasis || version.scope != key.Scope {
 			continue
 		}
-		if !version.AppliesAt(key.Anchor.At()) {
+		// 选用区间问登记册：有效性更正不改版本值对象上的原区间（ADR-0038）。
+		if version.status != CommercialVersionEffective {
+			continue
+		}
+		if !registry.selectionInterval(version).Contains(key.Anchor.At()) {
 			continue
 		}
 		matches = append(matches, version)
