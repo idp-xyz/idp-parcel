@@ -169,7 +169,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 | PN-07 | `parcel-pricing`、`settlement-accounting` | 部分 | `parcel-pricing` 规则模型七步全部有执行器；`settlement-accounting` 全链领域面就位：接受前冻结/信用暴露、供应商预期成本（发生项+协议+BUY 评价三方合成、跨币种换算只采评价内步骤）、客户费用三段演进与调整封闭二值、供应商账单（到达≠应付、匹配五格、审核成应付、贷项不净额）、账单接收编排、客户对账单（截单快照、发布密封、后续纳入不回填）、外部资金映射与核销（映射须显式依据、分配守恒、撤销一次）、赔付与追偿金额（责任结论成额、认可≠到账）、成本分摊与经营结果（无规则不分摊、指标只派生）。剩 `UC-SA-001` 代垫回收与三闸 |
 | PN-08 | 跨上下文治理编排（`pilotgovernance`） | 部分 | 记录能力同 PN-01 行；候选版本组、阶段决定、权威区间、暂停恢复、接管与在途盘点全部有代码与测试。真实候选、证据包与阶段决定属实例半边 |
 
-**八个切片全部为部分，未开始清零。** 十一个上下文全部有生产代码（`internal/` 下 `parcelshipment`、`partycommercial`、`networkrouting`、`parcelpricing`、`settlementaccounting`、`nodeoperations`、`transportfulfillment`、`visibilityexception`、`customscompliance`、`pilotgovernance`，另有 `platform` 与 `architecture` 两个非业务目录），九个跨上下文适配器落在消费方侧。没有一个切片达标的原因收敛为同一组横切缺口：持久化、事务发布与 HTTP 准入三道闸（ADR-0017/ADR-0022）加实例参数——那正是机制半边与实例半边的分界线，不再有「等真实证据」式的停顿。
+**八个切片全部为部分，未开始清零。** 十个上下文全部有生产代码（`internal/` 下 `parcelshipment`、`partycommercial`、`networkrouting`、`parcelpricing`、`settlementaccounting`、`nodeoperations`、`transportfulfillment`、`visibilityexception`、`customscompliance`、`pilotgovernance`，另有 `platform` 与 `architecture` 两个非业务目录），九个跨上下文适配器落在消费方侧。没有一个切片达标的原因收敛为同一组横切缺口：持久化、事务发布与 HTTP 准入三道闸（ADR-0017/ADR-0022）加实例参数——那正是机制半边与实例半边的分界线，不再有「等真实证据」式的停顿。
 
 #### 三条判据各自的现状
 
