@@ -122,11 +122,12 @@ func (double *commitmentIdentityDouble) NextCommitmentVersionID(_ context.Contex
 }
 
 type intakeFixture struct {
-	handler     *application.AdoptNetworkIntakeHandler
-	requests    *shipmentRequestRepositoryDouble
-	eligibility *intakeEligibilityDouble
-	adoptions   *adoptionStoreDouble
-	downstream  *intakeDownstreamDouble
+	handler       *application.AdoptNetworkIntakeHandler
+	requests      *shipmentRequestRepositoryDouble
+	eligibility   *intakeEligibilityDouble
+	adoptions     *adoptionStoreDouble
+	downstream    *intakeDownstreamDouble
+	cancellations *cancellationViewDouble
 }
 
 func newIntakeFixture(t *testing.T) *intakeFixture {
@@ -140,17 +141,19 @@ func newIntakeFixture(t *testing.T) *intakeFixture {
 			eligibility: ports.IntakeEligibility{Outcome: ports.IntakeEligibilityEstablished},
 			configured:  true,
 		},
-		adoptions:  newAdoptionStore(),
-		downstream: &intakeDownstreamDouble{},
+		adoptions:     newAdoptionStore(),
+		downstream:    &intakeDownstreamDouble{},
+		cancellations: &cancellationViewDouble{},
 	}
 	fixture.requests.records[sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-1")] = acceptedRequest(t)
 	fixture.handler = application.NewAdoptNetworkIntakeHandler(application.AdoptNetworkIntakeDeps{
-		Requests:    fixture.requests,
-		Eligibility: fixture.eligibility,
-		Adoptions:   fixture.adoptions,
-		Identities:  &commitmentIdentityDouble{},
-		Downstream:  fixture.downstream,
-		Clock:       fixedClock{at: intakeHappenedAt.Add(time.Minute)},
+		Requests:      fixture.requests,
+		Eligibility:   fixture.eligibility,
+		Adoptions:     fixture.adoptions,
+		Identities:    &commitmentIdentityDouble{},
+		Downstream:    fixture.downstream,
+		Clock:         fixedClock{at: intakeHappenedAt.Add(time.Minute)},
+		Cancellations: fixture.cancellations,
 	})
 	return fixture
 }
@@ -426,6 +429,84 @@ func TestForeignOrUnacceptedTargetsRefuseWithoutLeaking(t *testing.T) {
 		if result.Outcome() != application.IntakeSourceNotAdopted ||
 			result.Basis().String() != "BASELINE_SUPERSEDED/version-1" {
 			t.Fatalf("outcome = %q basis = %q", result.Outcome(), result.Basis())
+		}
+	})
+}
+
+type cancellationViewDouble struct {
+	cancellation domain.ParcelCancellation
+	cancelled    bool
+	err          error
+}
+
+func (double *cancellationViewDouble) FindCancellation(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.DeclaredParcelID,
+) (domain.ParcelCancellation, bool, error) {
+	if double.err != nil {
+		return domain.ParcelCancellation{}, false, double.err
+	}
+	return double.cancellation, double.cancelled, nil
+}
+
+func cancelledAt(t *testing.T, at time.Time) domain.ParcelCancellation {
+	t.Helper()
+	cancellation, err := domain.DecideParcelCancellation(domain.ParcelCancellationSpec{
+		ID:          mustValue(t, domain.NewParcelCancellationID, "cancel-1"),
+		Parcel:      mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		Requester:   mustValue(t, domain.NewCancellationRequesterReference, "customer-1"),
+		Authority:   mustValue(t, domain.NewCancellationAuthorityReference, "CANCEL-RULE/PC-17"),
+		Reason:      mustValue(t, domain.NewCancellationReasonReference, "CUSTOMER_CHANGED_MIND"),
+		RequestedAt: at,
+	}, domain.CurrentIntakeFact{})
+	if err != nil {
+		t.Fatalf("decide parcel cancellation: %v", err)
+	}
+	return cancellation
+}
+
+// Covers: `AT-PS-044`「包裹在收寄事实发生前已经合法取消——保留物理来源但不重开服务」
+// 与 `AT-PS-080`「取消先成立，迟到消息证明实物后来到站——取消不被覆盖」：取消决定早于
+// 收寄发生即不采用、原因指名取消决定；`AT-PS-081`「收寄事实顺序无法裁决——保持未决，
+// 不按消息顺序选择」：收寄发生早于取消决定即顺序冲突未决。两格都按业务时间裁决。
+func TestTheCancellationBoundaryJudgesByBusinessTime(t *testing.T) {
+	t.Run("cancellation before the intake refuses adoption", func(t *testing.T) {
+		fixture := newIntakeFixture(t)
+		fixture.cancellations.cancellation = cancelledAt(t, intakeHappenedAt.Add(-time.Hour))
+		fixture.cancellations.cancelled = true
+
+		result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.IntakeSourceNotAdopted {
+			t.Fatalf("outcome = %q, want SOURCE_NOT_ADOPTED", result.Outcome())
+		}
+		if result.Basis().String() != "CANCELLED_BEFORE_INTAKE/cancel-1" {
+			t.Fatalf("basis = %q; 不采用必须指名取消决定", result.Basis())
+		}
+		record, present := result.Record()
+		if !present || record.Adopted {
+			t.Fatalf("record = %#v present = %v; 不采用记录保留物理来源引用", record, present)
+		}
+	})
+
+	t.Run("an intake that happened before the cancellation stalls as a conflict", func(t *testing.T) {
+		fixture := newIntakeFixture(t)
+		fixture.cancellations.cancellation = cancelledAt(t, intakeHappenedAt.Add(time.Hour))
+		fixture.cancellations.cancelled = true
+
+		result, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.IntakeEligibilityUndecided ||
+			result.UndecidedReason() != application.IntakeCancellationOrderConflict {
+			t.Fatalf("outcome = %q/%q; 顺序冲突不得选边", result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.adoptions.saved != 0 {
+			t.Fatal("冲突落了库")
 		}
 	})
 }

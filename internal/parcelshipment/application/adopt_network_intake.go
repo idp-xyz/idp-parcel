@@ -63,6 +63,8 @@ const (
 	IntakeEligibilityNotEstablishedYet
 	IntakeAdoptionStoreUnavailable
 	IntakeCommitmentIdentityUnavailable
+	IntakeCancellationViewUnavailable
+	IntakeCancellationOrderConflict
 )
 
 func (reason IntakeUndecidedReason) String() string {
@@ -79,6 +81,10 @@ func (reason IntakeUndecidedReason) String() string {
 		return "ADOPTION_STORE_UNAVAILABLE"
 	case IntakeCommitmentIdentityUnavailable:
 		return "COMMITMENT_IDENTITY_UNAVAILABLE"
+	case IntakeCancellationViewUnavailable:
+		return "CANCELLATION_VIEW_UNAVAILABLE"
+	case IntakeCancellationOrderConflict:
+		return "CANCELLATION_ORDER_CONFLICT"
 	default:
 		return ""
 	}
@@ -137,6 +143,9 @@ type AdoptNetworkIntakeDeps struct {
 	Identities  ports.CommitmentIdentityFactory
 	Downstream  ports.NetworkIntakeHandoff
 	Clock       ports.Clock
+	// Cancellations 是包裹级取消决定的读口（UC-PS-006）。nil 与「取消机制未接入」
+	// 同义：边界核验整段不做——UC-PS-006 编排落地前的装配没有取消可查。
+	Cancellations ports.ParcelCancellationView
 }
 
 type AdoptNetworkIntakeHandler struct {
@@ -192,6 +201,28 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 	// 于当前责任起点」的不采用，不是未决——重试一万次委托也不会变成已接受的那一版。
 	if refusal, refused := adoptionRefusal(request, command.SubmissionVersion, source); refused {
 		return handler.refuse(ctx, command, key, digest, refusal)
+	}
+
+	// 取消边界按业务时间裁决（AT-PS-044/080/081）：取消决定早于收寄发生——包裹在收寄
+	// 前已经合法取消，来源不采用、物理事实保留；收寄发生早于取消决定——权威事实的
+	// 业务顺序与两份决定的成立顺序矛盾（取消形成时收寄已发生却没拦住），事实冲突
+	// 保持未决，不按消息到达顺序选边。
+	if handler.deps.Cancellations != nil {
+		cancellation, cancelled, err := handler.deps.Cancellations.FindCancellation(
+			ctx, key.TenantID, source.Parcel())
+		if err != nil {
+			return handler.undecided(command, source, IntakeCancellationViewUnavailable), nil
+		}
+		if cancelled {
+			if cancellation.RequestedAt().Before(source.OccurredAt()) {
+				reason, err := domain.NewCheckReason("CANCELLED_BEFORE_INTAKE/" + cancellation.ID().String())
+				if err != nil {
+					return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
+				}
+				return handler.refuse(ctx, command, key, digest, reason)
+			}
+			return handler.undecided(command, source, IntakeCancellationOrderConflict), nil
+		}
 	}
 
 	eligibility, configured, err := handler.deps.Eligibility.JudgeIntakeEligibility(

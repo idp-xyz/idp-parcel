@@ -244,6 +244,17 @@ type CommitmentIdentityFactory interface {
 	NextCommitmentVersionID(ctx context.Context) (domain.CommitmentVersionID, error)
 }
 
+// ParcelCancellationView 按包裹读回已成立的取消决定。采用编排用它核对取消边界：
+// 取消早于收寄发生即不采用，收寄发生早于取消决定即顺序冲突保持未决——按业务时间
+// 裁决，不按消息到达顺序。
+type ParcelCancellationView interface {
+	FindCancellation(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (domain.ParcelCancellation, bool, error)
+}
+
 // NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
 // 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
 type NetworkIntakeHandoffIntent struct {
