@@ -18,7 +18,13 @@ var (
 
 func party(t *testing.T, id, name string) domain.BusinessParty {
 	t.Helper()
+	return partyInTenant(t, "tenant-1", id, name)
+}
+
+func partyInTenant(t *testing.T, tenant, id, name string) domain.BusinessParty {
+	t.Helper()
 	built, err := domain.NewBusinessParty(
+		commercialValue(t, domain.NewTenantID, tenant),
 		commercialValue(t, domain.NewPartyID, id),
 		commercialValue(t, domain.NewPartyName, name),
 	)
@@ -182,9 +188,11 @@ func TestSameNameIsNotTheSameParty(t *testing.T) {
 // Covers: CONTEXT「货主客户账户必须明确关联其客户参与方；参与方、账户、法人和合同标识
 // 不能互相替代」。
 func TestCustomerAccountMustNameItsCustomerParty(t *testing.T) {
+	customer := party(t, "party-1", "货主")
 	account, err := domain.NewCustomerAccount(
+		customer.Tenant(),
 		commercialValue(t, domain.NewCustomerAccountID, "account-1"),
-		commercialValue(t, domain.NewPartyID, "party-1"),
+		customer,
 	)
 	if err != nil {
 		t.Fatalf("new customer account: %v", err)
@@ -194,8 +202,9 @@ func TestCustomerAccountMustNameItsCustomerParty(t *testing.T) {
 	}
 
 	if _, err := domain.NewCustomerAccount(
+		customer.Tenant(),
 		commercialValue(t, domain.NewCustomerAccountID, "account-2"),
-		domain.PartyID{},
+		domain.BusinessParty{},
 	); !errors.Is(err, domain.ErrInvalidCustomerAccount) {
 		t.Fatalf("error = %v; an account exists without naming its customer party", err)
 	}
@@ -210,8 +219,9 @@ func TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately(t *testing.T) {
 	customerParty := party(t, "party-customer", "货主甲")
 	legalParty := party(t, "party-legal", "责任法人乙")
 	account, err := domain.NewCustomerAccount(
+		customerParty.Tenant(),
 		commercialValue(t, domain.NewCustomerAccountID, "account-customer"),
-		customerParty.ID(),
+		customerParty,
 	)
 	if err != nil {
 		t.Fatalf("new customer account: %v", err)
@@ -236,5 +246,39 @@ func TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately(t *testing.T) {
 	}
 	if reflect.TypeOf(customerParty.ID()) == reflect.TypeOf(legal) {
 		t.Fatal("参与方标识与责任法人引用塌成同一类型")
+	}
+}
+
+// Covers: `AT-PC-014` 并列 F（ADR-0041）：参与方与货主账户携带 TenantID；账户不得绑定他租参与方。
+// 不搅 AT-PC-028 的 Caller 探测轴。
+func TestCustomerAccountRejectsCrossTenantPartyBinding(t *testing.T) {
+	home := partyInTenant(t, "tenant-home", "party-home", "本租货主")
+	away := partyInTenant(t, "tenant-away", "party-away", "他租货主")
+
+	account, err := domain.NewCustomerAccount(
+		home.Tenant(),
+		commercialValue(t, domain.NewCustomerAccountID, "account-home"),
+		home,
+	)
+	if err != nil {
+		t.Fatalf("same-tenant account: %v", err)
+	}
+	if account.Tenant() != home.Tenant() {
+		t.Fatal("账户没有带上租户")
+	}
+	if home.Tenant() == away.Tenant() {
+		t.Fatal("夹具两租户塌成同一个")
+	}
+
+	_, err = domain.NewCustomerAccount(
+		home.Tenant(),
+		commercialValue(t, domain.NewCustomerAccountID, "account-cross"),
+		away,
+	)
+	if !errors.Is(err, domain.ErrCrossTenantCustomerAccount) {
+		t.Fatalf("error = %v, want ErrCrossTenantCustomerAccount", err)
+	}
+	if errors.Is(err, domain.ErrInvalidCustomerAccount) {
+		t.Fatal("跨租户绑定被压成了字段不全")
 	}
 }

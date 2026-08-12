@@ -10,6 +10,8 @@ var (
 	ErrInvalidPartyRelationship      = errors.New("party commercial: invalid party relationship")
 	ErrInvalidRelationshipTransition = errors.New("party commercial: invalid party relationship transition")
 	ErrInvalidCustomerAccount        = errors.New("party commercial: invalid customer account")
+	// ErrCrossTenantCustomerAccount 是账户试图绑定他租参与方（ADR-0041 / AT-PC-014 并列 F）。
+	ErrCrossTenantCustomerAccount = errors.New("party commercial: customer account binds a party from another tenant")
 )
 
 type PartyID struct{ requiredValue }
@@ -38,16 +40,23 @@ func NewRelationshipBasisReference(value string) (RelationshipBasisReference, er
 // BusinessParty 只是一个稳定身份，别无其他。它有意不携带角色、类型或分类：同一
 // 参与方在一段关系里是货主、在另一段里是供应商，在这里给它分类等于把一次交易的
 // 角色变成永久属性。身份就是 ID；同名的两个参与方仍然是两个参与方。
+//
+// TenantID 是隔离边界（ADR-0041），不是角色分类。
 type BusinessParty struct {
-	id   PartyID
-	name PartyName
+	tenant TenantID
+	id     PartyID
+	name   PartyName
 }
 
-func NewBusinessParty(id PartyID, name PartyName) (BusinessParty, error) {
-	if !id.valid() || !name.valid() {
+func NewBusinessParty(tenant TenantID, id PartyID, name PartyName) (BusinessParty, error) {
+	if !tenant.valid() || !id.valid() || !name.valid() {
 		return BusinessParty{}, ErrInvalidBusinessParty
 	}
-	return BusinessParty{id: id, name: name}, nil
+	return BusinessParty{tenant: tenant, id: id, name: name}, nil
+}
+
+func (party BusinessParty) Tenant() TenantID {
+	return party.tenant
 }
 
 func (party BusinessParty) ID() PartyID {
@@ -271,18 +280,27 @@ func (relationship PartyRelationship) Successor() (PartyID, bool) {
 	return relationship.successor, true
 }
 
-// CustomerAccount 是一个货主客户的业务隔离边界。它必须指明所属的客户参与方：
-// 账户、参与方、法人和合同标识各自不同，任何一个都不能替代另一个。
+// CustomerAccount 是一个货主客户的业务隔离边界。它必须指明所属租户与客户参与方：
+// 账户、参与方、法人和合同标识各自不同，任何一个都不能替代另一个（ADR-0041）。
 type CustomerAccount struct {
+	tenant        TenantID
 	id            CustomerAccountID
 	customerParty PartyID
 }
 
-func NewCustomerAccount(id CustomerAccountID, customerParty PartyID) (CustomerAccount, error) {
-	if !id.valid() || !customerParty.valid() {
+// NewCustomerAccount 要求账户与客户参与方同租户。跨租户绑定拒绝，不建立账户。
+func NewCustomerAccount(tenant TenantID, id CustomerAccountID, customerParty BusinessParty) (CustomerAccount, error) {
+	if !tenant.valid() || !id.valid() || !customerParty.id.valid() {
 		return CustomerAccount{}, ErrInvalidCustomerAccount
 	}
-	return CustomerAccount{id: id, customerParty: customerParty}, nil
+	if !customerParty.tenant.valid() || customerParty.tenant != tenant {
+		return CustomerAccount{}, ErrCrossTenantCustomerAccount
+	}
+	return CustomerAccount{tenant: tenant, id: id, customerParty: customerParty.id}, nil
+}
+
+func (account CustomerAccount) Tenant() TenantID {
+	return account.tenant
 }
 
 func (account CustomerAccount) ID() CustomerAccountID {

@@ -46,6 +46,7 @@
 - [ADR-0038：有效性更正保留原版本与更正关系，不改正文](./0038-validity-correction-keeps-original-and-relationship.md)
 - [ADR-0039：渠道账号使用授权发布必须有显式业务授权，技术可用不能顶替](./0039-channel-account-use-authorization-requires-business-grant.md)
 - [ADR-0040：商业版本身份键携带 TenantID，跨租户同号互不可见](./0040-commercial-version-key-carries-tenant-id.md)
+- [ADR-0041：业务参与方与货主客户账户携带 TenantID](./0041-business-party-and-customer-account-carry-tenant-id.md)
 
 ## 已被取代决策
 
