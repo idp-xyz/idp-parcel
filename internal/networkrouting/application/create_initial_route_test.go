@@ -417,6 +417,140 @@ func eliminated(t *testing.T, id, reason string) domain.RouteCandidate {
 	return candidate
 }
 
+// Covers: `AT-NR-002`「同一已接受委托包含两个包裹，因服务区域或限制不同应走不同路线
+// ——分别形成两个包裹级计划；不存在覆盖所有成员的委托级执行路线」。两份证据各选各的
+// 候选，两个计划版本各自独立。
+func TestTwoParcelsFormTwoIndependentPlans(t *testing.T) {
+	fixture := newRouteFixture(t)
+	first := routableEvidence(t)
+	second := routableEvidence(t)
+	// 第二个包裹的证据指向另一条候选与另一条段链。
+	second.ServiceAreas = coveringAreas(t, "candidate-2")
+	score, err := domain.NewCriterionScore(value(t, domain.NewRankingCriterion, "TIMELINESS"), 2)
+	if err != nil {
+		t.Fatalf("new score: %v", err)
+	}
+	scores, err := domain.NewCandidateScores(value(t, domain.NewCandidateID, "candidate-2"),
+		[]domain.CriterionScore{score})
+	if err != nil {
+		t.Fatalf("new candidate scores: %v", err)
+	}
+	second.Scores = []domain.CandidateScores{scores}
+	window, err := domain.NewPlannedTimeWindow(routeJudgedAt, routeJudgedAt.Add(72*time.Hour),
+		value(t, domain.NewWindowBasisReference, "CALENDAR-V1/BUFFER-V1"))
+	if err != nil {
+		t.Fatalf("new window: %v", err)
+	}
+	leg, err := domain.NewPlannedLeg(domain.PlannedLegSpec{
+		From:        value(t, domain.NewPlanNodeReference, "node-origin"),
+		To:          value(t, domain.NewPlanNodeReference, "node-alternate"),
+		Responsible: value(t, domain.NewResponsiblePartyReference, "party-2"),
+		Window:      window,
+	})
+	if err != nil {
+		t.Fatalf("new leg: %v", err)
+	}
+	second.Paths = []ports.CandidatePath{{
+		Candidate: value(t, domain.NewCandidateID, "candidate-2"),
+		Legs:      []domain.PlannedLeg{leg},
+	}}
+	fixture.evidence.byParcel["parcel-1"] = first
+	fixture.evidence.byParcel["parcel-2"] = second
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1", "parcel-2"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	planOne, _ := result.Parcels()[0].Plan()
+	planTwo, _ := result.Parcels()[1].Plan()
+	if planOne.SelectedCandidate() == planTwo.SelectedCandidate() {
+		t.Fatal("两个包裹被套上了同一条线路")
+	}
+	if planOne.Version() == planTwo.Version() {
+		t.Fatal("两个包裹共用了一个计划版本——委托级执行路线正是被禁的")
+	}
+	if planTwo.Nodes()[1].String() != "node-alternate" {
+		t.Fatalf("plan two nodes = %v", planTwo.Nodes())
+	}
+}
+
+// Covers: `AT-NR-006`「关务资格服务暂时不可用，无法判断候选是否合法——形成路由判断未决
+// 并安全续办；不得记录为无当前有效路由或选择未经验证的口岸」。资格状态未知折成证据未知
+// 候选，选不出也立不成无路由，停在未决。
+func TestUnknownCustomsEligibilityStaysUndecidedNotNoRoute(t *testing.T) {
+	fixture := newRouteFixture(t)
+	evidence := routableEvidence(t)
+	unknown, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
+		Candidate: value(t, domain.NewCandidateID, "candidate-1"),
+		Outcome:   domain.ConstraintStatusUnknown,
+		Missing:   value(t, domain.NewEvidenceGapReference, "CUSTOMS_ELIGIBILITY"),
+		Reassess:  value(t, domain.NewReassessmentCondition, "WHEN_CUSTOMS_AUTHORITY_ANSWERS"),
+	})
+	if err != nil {
+		t.Fatalf("new unknown constraint: %v", err)
+	}
+	evidence.HardConstraints = []domain.HardConstraintFinding{unknown}
+	fixture.evidence.byParcel["parcel-1"] = evidence
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	parcel := result.Parcels()[0]
+	if parcel.Outcome() != application.ParcelRouteUndecided ||
+		parcel.UndecidedReason() != application.RouteCandidateEvidenceIncomplete {
+		t.Fatalf("outcome = %q/%q, want UNDECIDED/CANDIDATE_EVIDENCE_INCOMPLETE",
+			parcel.Outcome(), parcel.UndecidedReason())
+	}
+	if fixture.store.saved != 0 {
+		t.Fatal("资格未知被记成了领域结果")
+	}
+}
+
+// Covers: `AT-NR-011`「路由计划提交成功但事件首次投递失败——当前有效计划及全部依据保持
+// 不变；重试同一发布意图，不重复形成计划」。首投失败留发布续办引用，重放按已有结果重发
+// 同一份意图，计划不二次形成。
+func TestAFailedIntentDeliveryIsRetriedWithoutASecondPlan(t *testing.T) {
+	fixture := newRouteFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	fixture.downstream.err = errors.New("downstream unreachable")
+
+	first, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	parcel := first.Parcels()[0]
+	if parcel.Outcome() != application.ParcelRouteFormed {
+		t.Fatalf("outcome = %q; 投递失败不得翻计划", parcel.Outcome())
+	}
+	if parcel.RouteHandoffReference().String() == "" {
+		t.Fatal("首投失败没有留发布续办引用")
+	}
+	if fixture.store.saved != 1 {
+		t.Fatalf("saved = %d", fixture.store.saved)
+	}
+
+	fixture.downstream.err = nil
+	replay, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("replay handle: %v", err)
+	}
+	if replay.Parcels()[0].Outcome() != application.ParcelExistingResult {
+		t.Fatalf("replay = %q", replay.Parcels()[0].Outcome())
+	}
+	if len(fixture.downstream.intents) != 1 {
+		t.Fatalf("intents = %d, want 1——重发的是同一份意图", len(fixture.downstream.intents))
+	}
+	if !fixture.downstream.intents[0].Record.HasPlan {
+		t.Fatal("重发的意图不带原计划")
+	}
+	if fixture.store.saved != 1 {
+		t.Fatal("重试形成了第二个计划")
+	}
+}
+
 // Covers: `AT-NR-010`「候选选出后、提交前适用线路被有效关闭——原候选不得提交为当前
 // 计划；使用新依据重新判断，不能完成时保持未决」。第一份证据选出候选，提交前重读发现
 // 修订换代且线路已被排除：提交的是按新依据重判的`无当前有效路由`，不是旧计划。
