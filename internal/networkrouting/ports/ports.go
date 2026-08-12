@@ -232,3 +232,100 @@ type InitialRouteHandoff interface {
 type RouteIdentityFactory interface {
 	NextRoutePlanVersionID(ctx context.Context) (domain.RoutePlanVersionID, error)
 }
+
+// PlanApplicabilityStore 按计划版本存取适用性记录。计划本体不可变、适用性另立记录，
+// 两者分开存正是「改后者不动前者」的存储面。
+type PlanApplicabilityStore interface {
+	FindByPlan(
+		ctx context.Context,
+		plan domain.RoutePlanVersionID,
+	) (domain.PlanApplicability, bool, error)
+	Save(ctx context.Context, applicability domain.PlanApplicability) error
+}
+
+// CandidateReviewState 是复核时替代候选评估线（6B）的独立状态。它与计划适用性分开保存
+// ——硬句要求「原计划已失效 + 无当前有效路由 + 替代候选评估未决」三件并存，压在一起
+// 就表达不出「失效已定、候选还看不清」。
+type CandidateReviewState uint8
+
+const (
+	CandidateReviewStateInvalid CandidateReviewState = iota
+	CandidatesAvailable
+	NoQualifiedCandidates
+	CandidateReviewUndecided
+)
+
+func (state CandidateReviewState) String() string {
+	switch state {
+	case CandidatesAvailable:
+		return "CANDIDATES_AVAILABLE"
+	case NoQualifiedCandidates:
+		return "NO_QUALIFIED_CANDIDATES"
+	case CandidateReviewUndecided:
+		return "CANDIDATE_REVIEW_UNDECIDED"
+	default:
+		return ""
+	}
+}
+
+// ReassessmentConclusionKind 是一次复核越过提交边界的三种领域走向。
+type ReassessmentConclusionKind uint8
+
+const (
+	ReassessmentConclusionKindInvalid ReassessmentConclusionKind = iota
+	ReassessmentStillApplicable
+	ReassessmentPlanLapsed
+	ReassessmentFirstPlanFormed
+)
+
+func (kind ReassessmentConclusionKind) String() string {
+	switch kind {
+	case ReassessmentStillApplicable:
+		return "STILL_APPLICABLE"
+	case ReassessmentPlanLapsed:
+		return "PLAN_LAPSED"
+	case ReassessmentFirstPlanFormed:
+		return "FIRST_PLAN_FORMED"
+	default:
+		return ""
+	}
+}
+
+// ReassessmentRecord 是一次复核越过提交边界后留下的东西。`已失效`的记录同时携带失效
+// 依据与候选评估状态（三件并存的硬句）；「无当前有效路由」由「已失效且无新计划」这个
+// 记录状态表达，不复用初始判断的全淘汰对象——复核失效时候选可以仍在评估。
+type ReassessmentRecord struct {
+	Correlation    domain.RequestCorrelationID
+	Key            domain.InitialRouteJudgmentKey
+	Conclusion     ReassessmentConclusionKind
+	ReviewedPlan   domain.RoutePlanVersionID
+	LapseBasis     domain.ApplicabilityBasisReference
+	CandidateState CandidateReviewState
+	NewPlan        domain.InitialRoutePlan
+	HasNewPlan     bool
+	ReassessedAt   time.Time
+}
+
+// ReassessmentSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。
+type ReassessmentSaveOutcome uint8
+
+const (
+	ReassessmentSaveOutcomeInvalid ReassessmentSaveOutcome = iota
+	ReassessmentSaved
+	ReassessmentAlreadyRecorded
+)
+
+// ReassessmentStore 按触发关联找回并保存复核结果：同一触发和输入版本已经处理即返回
+// 原结果，不重复决定。
+type ReassessmentStore interface {
+	FindByCorrelation(
+		ctx context.Context,
+		tenant domain.TenantID,
+		correlation domain.RequestCorrelationID,
+	) (ReassessmentRecord, bool, error)
+	Save(
+		ctx context.Context,
+		correlation domain.RequestCorrelationID,
+		record ReassessmentRecord,
+	) (ReassessmentSaveOutcome, error)
+}
