@@ -224,6 +224,28 @@ func TestOneParcelsIntakeNeitherWaitsForNorCoversItsSiblings(t *testing.T) {
 	if siblingRecord.Commitment.Version() == record.Commitment.Version() {
 		t.Fatal("两个成员共用了一份承诺版本")
 	}
+
+	// 负向半：后续来源停在资格未决——已成立的两份承诺不回滚（「一个成员未决或不采用
+	// 不回滚其他成员已经形成的正式承诺」）。资格检查先于责任起点检查，所以这一探停在
+	// 未决而不是不采用。
+	fixture.eligibility.configured = false
+	stalled := adoptCommand(t)
+	stalled.Source.Kind = domain.OffsitePickupSource
+	stalled.Source.Version = mustValue(t, domain.NewSourceResultVersion, "pickup-result/v1")
+	third, err := fixture.handler.Handle(context.Background(), stalled)
+	if err != nil {
+		t.Fatalf("stalled handle: %v", err)
+	}
+	if third.Outcome() != application.IntakeEligibilityUndecided {
+		t.Fatalf("outcome = %q", third.Outcome())
+	}
+	if fixture.adoptions.saved != 2 {
+		t.Fatalf("saved = %d; 未决的来源动了别人的记录", fixture.adoptions.saved)
+	}
+	survivor, found, err := fixture.adoptions.FindByKey(context.Background(), record.Key)
+	if err != nil || !found || !survivor.Adopted {
+		t.Fatalf("survivor = %#v found = %v err = %v; 已成承诺被回滚了", survivor, found, err)
+	}
 }
 
 // Covers: `AT-PS-041`「同一来源版本重复交付——返回原采用结果和承诺，不形成第二责任起点」
