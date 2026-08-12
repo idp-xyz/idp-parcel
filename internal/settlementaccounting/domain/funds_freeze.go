@@ -346,6 +346,20 @@ func (ledger *FreezeLedger) Lookup(freezeID FreezeID) (FundsFreeze, bool) {
 	return freeze, found
 }
 
+// FindByRequest 按原控制请求身份找回冻结。释放按原业务关联认领，而调用方手里只有当初的
+// 请求身份——FreezeID 是本账本签发的内部编号，不随控制结果离开本上下文重建。
+//
+// `业务限制`的记录不入账本（Freeze 对超额只交回结果不登记），因此这里找不到它——那次控制
+// 本就没有占用资金，也就没有可释放的东西。
+func (ledger *FreezeLedger) FindByRequest(requestID ControlRequestID) (FundsFreeze, bool) {
+	freezeID, found := ledger.byRequest[requestID]
+	if !found {
+		return FundsFreeze{}, false
+	}
+	freeze, found := ledger.byFreeze[freezeID]
+	return freeze, found
+}
+
 func (ledger *FreezeLedger) HeldCount() int {
 	return ledger.countWith(FreezeHeld)
 }
