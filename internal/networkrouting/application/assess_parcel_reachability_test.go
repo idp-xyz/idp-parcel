@@ -24,11 +24,12 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 // 被调用上才验得出来。revision 缺省给合法值：修订标识是答复的必备件，想演练缺失要显式
 // 置空（noRevision）。端口按 ADR-0046 只回事实，评估在领域执行。
 type evidenceDouble struct {
-	areas       []domain.ServiceAreaResolution
-	err         error
-	noRevision  bool
-	assembled   int
-	assembleKey domain.ReachabilityJudgmentKey
+	areas        []domain.ServiceAreaResolution
+	requirements []domain.RouteRequirement
+	err          error
+	noRevision   bool
+	assembled    int
+	assembleKey  domain.ReachabilityJudgmentKey
 }
 
 func (double *evidenceDouble) LoadNetworkEvidence(
@@ -40,7 +41,7 @@ func (double *evidenceDouble) LoadNetworkEvidence(
 	if double.err != nil {
 		return ports.NetworkEvidence{}, double.err
 	}
-	evidence := ports.NetworkEvidence{ServiceAreas: double.areas}
+	evidence := ports.NetworkEvidence{ServiceAreas: double.areas, RouteRequirements: double.requirements}
 	if !double.noRevision {
 		revision, err := domain.NewNetworkViewRevision("net-view-rev-1")
 		if err != nil {
@@ -681,5 +682,47 @@ func TestAReplayResendsTheSameJudgmentIntentWithoutReassessing(t *testing.T) {
 	}
 	if result.JudgmentHandoffReference().String() == "" {
 		t.Fatal("重试仍未交出，发布续办引用不该消失")
+	}
+}
+
+// Covers: `AT-NR-026` 在评估流水线里的接线——承诺声明经证据答复进入领域评估：唯一覆盖
+// 目的地的候选不满足合同承诺时，判断是带承诺依据的`不可达`，不是把承诺当偏好放行。
+// 分界规则本体的两半（偏好不淘汰、承诺不复活）钉在领域测试里。
+func TestACommittedRequirementFlowsThroughTheAssessment(t *testing.T) {
+	basis, err := domain.NewCommitmentBasisReference("CONTRACT-V7/ROUTE-X")
+	if err != nil {
+		t.Fatalf("new commitment basis: %v", err)
+	}
+	requirement, err := domain.NewRouteRequirement(domain.RouteRequirementSpec{
+		Requirement: value(t, domain.NewRouteRequirementReference, "REQUIRE_ROUTE_X"),
+		Binding:     domain.CommittedRequirement,
+		Basis:       basis,
+		Satisfies:   nil,
+	})
+	if err != nil {
+		t.Fatalf("new route requirement: %v", err)
+	}
+	evidence := &evidenceDouble{
+		areas:        coveringAreas(t, "candidate-1"),
+		requirements: []domain.RouteRequirement{requirement},
+	}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.JudgmentFormed {
+		t.Fatalf("outcome = %q, want JUDGMENT_FORMED", result.Outcome())
+	}
+	finding, present := result.Finding()
+	if !present || finding.Value() != domain.Unreachable {
+		t.Fatalf("finding = %#v present = %v, want UNREACHABLE——承诺是硬约束", finding, present)
+	}
+	eliminated := finding.EliminatedCandidates()
+	if len(eliminated) != 1 || eliminated[0].Reason().String() != "ROUTE_COMMITMENT_NOT_SATISFIED/CONTRACT-V7/ROUTE-X" {
+		t.Fatalf("eliminated = %#v; 承诺淘汰必须携带承诺依据", eliminated)
 	}
 }
