@@ -344,18 +344,35 @@ func TestEligibilityGapsStallWithoutDefaultingToACommitment(t *testing.T) {
 
 // Covers: `AT-PS-052`「跨租户或客户提交来源采用请求——拒绝越权且不泄露」（查无与越权
 // 同答）与「委托未接受/基线换代的来源不采用」——不采用记录保留原因，物理事实只读。
+//
+// 「同答」用两探同形比对钉住：越权探（目标存在但客户不对）与真查无探（目标根本不存在）
+// 的完整结果结构必须逐字段相同——任何一个可分辨面（原因、依据、续办引用）都够攻击者
+// 枚举别人的委托。存储今天按完整身份键查找让它结构性成立；这条测试守的是「换键型
+// （如按编号全局索引）时同形性不得静默失守」。
 func TestForeignOrUnacceptedTargetsRefuseWithoutLeaking(t *testing.T) {
-	t.Run("unknown or foreign request", func(t *testing.T) {
+	t.Run("a foreign probe and a miss probe are indistinguishable", func(t *testing.T) {
 		fixture := newIntakeFixture(t)
-		command := adoptCommand(t)
-		command.Identity = sourceIdentity(t, "tenant-1", "customer-2", "source-a", "key-9")
-
-		result, err := fixture.handler.Handle(context.Background(), command)
+		foreign := adoptCommand(t)
+		// 目标委托真实存在（tenant-1/customer-1），探针换了客户——若存储按编号索引，
+		// 这一探能命中并可能答出「编号不符」之类的可分辨面。
+		foreign.Identity = sourceIdentity(t, "tenant-1", "customer-2", "source-a", "key-1")
+		foreignResult, err := fixture.handler.Handle(context.Background(), foreign)
 		if err != nil {
-			t.Fatalf("handle: %v", err)
+			t.Fatalf("foreign probe: %v", err)
 		}
-		if result.Outcome() != application.IntakeRequestNotAccepted {
-			t.Fatalf("outcome = %q, want REQUEST_NOT_ACCEPTED", result.Outcome())
+
+		miss := adoptCommand(t)
+		miss.Identity = sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-nonexistent")
+		missResult, err := fixture.handler.Handle(context.Background(), miss)
+		if err != nil {
+			t.Fatalf("miss probe: %v", err)
+		}
+
+		if foreignResult != missResult {
+			t.Fatalf("foreign = %#v miss = %#v; 两探必须同形，否则可枚举", foreignResult, missResult)
+		}
+		if foreignResult.Outcome() != application.IntakeRequestNotAccepted {
+			t.Fatalf("outcome = %q, want REQUEST_NOT_ACCEPTED", foreignResult.Outcome())
 		}
 	})
 
