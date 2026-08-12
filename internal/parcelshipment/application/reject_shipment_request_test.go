@@ -257,25 +257,66 @@ func (value *rejectionFixture) command(t *testing.T) application.RejectShipmentR
 	}
 }
 
-// rejectionAuthorizerDouble 用零值引用表示未授权，与端口约定一致：未授权是业务答案，不是错误。
+// Covers: AGENTS.md 红线「实例半边留空并拒绝默认值」——运营侧拒绝权同样是 `PAR-COM-14` 待
+// 提供的实例参数。规则一条都没登记时，答案是「还没人说谁能拒」，不是「你不能拒」。
+//
+// 与撤回那一支分开测而不共用一条：三个授权端口各催各的授权规则，续办引用由原因与范围共同
+// 派生，只测一处会让另外两处靠这一条借绿。
+func TestUnconfiguredRejectionRulesStallRatherThanRefuseTheOperator(t *testing.T) {
+	fixture := newRejectionFixture(t)
+	fixture.authorizer.rulesNotConfigured = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() == application.ActiveRejectionNotAuthorized {
+		t.Fatal("一条授权规则都没登记，却答成了「这个人无权拒绝」")
+	}
+	if result.Outcome() != application.ActiveRejectionUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.RejectionAuthorityRulesNotConfigured {
+		t.Fatalf("pending reason = %q, want REJECTION_AUTHORITY_RULES_NOT_CONFIGURED", result.PendingReason())
+	}
+	if result.State() == domain.ShipmentRequestRejected {
+		t.Fatal("一次停下来的拒绝改掉了委托状态")
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d decision IDs; 一次停下来的拒绝消耗了稀缺身份", fixture.identities.issued)
+	}
+}
+
+// rejectionAuthorizerDouble 按端口约定用取值表示答案，错误只留给「授权服务答不出」。
+//
+// 两个布尔而不直接收枚举：枚举零值是`未设`，收它会让每一处没显式设过的构造都变成一次端口
+// 坏了。理由同 decidableRequestStore 的冲突开关。
 type rejectionAuthorizerDouble struct {
-	t       *testing.T
-	granted bool
-	err     error
+	t                  *testing.T
+	granted            bool
+	rulesNotConfigured bool
+	err                error
 }
 
 func (double *rejectionAuthorizerDouble) AuthorizeActiveRejection(
 	_ context.Context,
 	_ ports.ActiveRejectionAuthorizationQuery,
-) (domain.RejectionAuthorityReference, error) {
+) (ports.ActiveRejectionAuthorization, error) {
 	double.t.Helper()
 	if double.err != nil {
-		return domain.RejectionAuthorityReference{}, double.err
+		return ports.ActiveRejectionAuthorization{}, double.err
+	}
+	if double.rulesNotConfigured {
+		return ports.ActiveRejectionAuthorization{Outcome: ports.AuthorizationRulesNotConfigured}, nil
 	}
 	if !double.granted {
-		return domain.RejectionAuthorityReference{}, nil
+		return ports.ActiveRejectionAuthorization{Outcome: ports.AuthorizationRefused}, nil
 	}
-	return mustValue(double.t, domain.NewRejectionAuthorityReference, "PC-REJECT-ROLE-1"), nil
+	return ports.ActiveRejectionAuthorization{
+		Outcome:   ports.AuthorizationGranted,
+		Authority: mustValue(double.t, domain.NewRejectionAuthorityReference, "PC-REJECT-ROLE-1"),
+	}, nil
 }
 
 // rejectableRequestStore 按 decided/withdrawn 交回一份`已提交`、一份已经决定或一份已经撤回的

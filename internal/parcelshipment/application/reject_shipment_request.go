@@ -130,12 +130,20 @@ func (handler *RejectShipmentRequestHandler) Handle(
 	if err != nil {
 		return handler.undecided(ctx, command, RejectionAuthorityUnavailable, request.State()), nil
 	}
-	if authority.String() == "" {
+	switch authority.Outcome {
+	case ports.AuthorizationGranted:
+	case ports.AuthorizationRefused:
 		// 未获授权不是未决：它是一个确定的业务答案，续办也补不出授权来。
 		return RejectShipmentRequestResult{
 			outcome: ActiveRejectionNotAuthorized,
 			state:   request.State(),
 		}, nil
+	case ports.AuthorizationRulesNotConfigured:
+		// 运营侧拒绝权同样是 `PAR-COM-14` 待提供的实例参数。一条规则都没登记时说不出
+		// 「这个人不能拒」——那句话要有一份规则作依据才成立。
+		return handler.undecided(ctx, command, RejectionAuthorityRulesNotConfigured, request.State()), nil
+	default:
+		return RejectShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome
 	}
 
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
@@ -145,7 +153,7 @@ func (handler *RejectShipmentRequestHandler) Handle(
 
 	rejected, err := request.RejectByAuthority(domain.ActiveRejectionSpec{
 		DecisionID: decisionID,
-		Authority:  authority,
+		Authority:  authority.Authority,
 		Decider:    command.Decider,
 		Reason:     command.Reason,
 		Evidence:   command.Evidence,

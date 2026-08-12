@@ -83,6 +83,17 @@ const (
 	// 让未决统计多几行说同一件事。
 	StaleShipmentRequestRevision
 
+	// 三个授权端口各自的`授权规则未配置`。它与同一支上的 *AuthorityUnavailable 分开：后者
+	// 是授权服务答不出、等它恢复，前者是这个范围此刻一条现行规则都没有、等租户把
+	// `PAR-COM-14` 登记上。压成一格会对着一个没配置的租户参数无休止内部重试，而重试永远
+	// 等不到一次登记——`ReachabilityAsOfNotConfigured` 早为同一个参数写过这句话。
+	//
+	// 三处不共用一格：续办引用由原因**与范围**共同派生，而这三支催的是三份不同的授权规则
+	// （运营侧拒绝权、客户撤回权、资料修订权），共用会让运维拿一条引用查回来另一种缺口。
+	RejectionAuthorityRulesNotConfigured
+	WithdrawalAuthorityRulesNotConfigured
+	SourceDataAmendmentAuthorityRulesNotConfigured
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -211,6 +222,12 @@ func (reason JudgmentPendingReason) String() string {
 		return "SOURCE_DATA_VERSION_NOT_HANDED_OFF"
 	case StaleShipmentRequestRevision:
 		return "STALE_SHIPMENT_REQUEST_REVISION"
+	case RejectionAuthorityRulesNotConfigured:
+		return "REJECTION_AUTHORITY_RULES_NOT_CONFIGURED"
+	case WithdrawalAuthorityRulesNotConfigured:
+		return "WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED"
+	case SourceDataAmendmentAuthorityRulesNotConfigured:
+		return "SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED"
 	default:
 		return ""
 	}
@@ -230,6 +247,10 @@ var ErrUnexpectedRevalidationOutcome = errors.New("parcel shipment: unexpected c
 
 // ErrUnexpectedSaveOutcome 同上，说的是委托聚合的写入那一步。
 var ErrUnexpectedSaveOutcome = errors.New("parcel shipment: unexpected shipment request save outcome")
+
+// ErrUnexpectedAuthorizationOutcome 同上，说的是三个授权端口。三处共用一个哨兵，因为它们
+// 共用同一个封闭集合：日后多一种答复，三个调用点会一起报错，而不是各自静默归入某一格。
+var ErrUnexpectedAuthorizationOutcome = errors.New("parcel shipment: unexpected authorization outcome")
 
 // saveStallReason 把一次没能落库的写入结果译成本层的未决原因。
 //

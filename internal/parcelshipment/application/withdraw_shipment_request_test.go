@@ -529,31 +529,79 @@ func (value *withdrawalFixture) command(t *testing.T) application.WithdrawShipme
 	}
 }
 
-// withdrawalAuthorizerDouble 用零值引用表示未授权，与端口约定一致：未授权是业务答案，不是错误。
+// Covers: UC-PS-005「参数未确认时不得默认任何角色有撤回权」与 AGENTS.md 红线「实例半边留空
+// 并拒绝默认值」——授权规则一条都没登记时，客户得到的不能是「你无权撤回」。
+//
+// 这一格今天必然发生而不是偶发：撤回授权角色是 `PAR-COM-14` 待提供的实例参数，没有租户就没有
+// 任何规则，于是首发期每一次撤回都走这一支。把它答成业务拒绝，等于把一个尚未配置的产品说成
+// 对客户的判定。它与`未获授权`的恢复动作相反——一个等租户登记，一个再登记也不会变。
+//
+// `ReachabilityAsOfNotConfigured` 早为同一个 `PAR-COM-14` 写过同一条理由，只是当时只做在时点
+// 那一维。本条把它补到授权这一维。
+func TestUnconfiguredWithdrawalRulesStallRatherThanRefuseTheCustomer(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.authorizer.rulesNotConfigured = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() == application.WithdrawalNotAuthorized {
+		t.Fatal("一条授权规则都没登记，客户却被告知无权撤回——那是把未配置说成了业务拒绝")
+	}
+	if result.Outcome() != application.WithdrawalUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.WithdrawalAuthorityRulesNotConfigured {
+		t.Fatalf("pending reason = %q, want WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED", result.PendingReason())
+	}
+	// 与「授权服务答不出」必须分得开：续办引用由原因派生，共用会让运维拿一条引用查回来另一种
+	// 缺口——一个要去催租户登记规则，一个要去看服务为什么调不通。
+	if application.WithdrawalAuthorityRulesNotConfigured == application.WithdrawalAuthorityUnavailable {
+		t.Fatal("未配置与答不出共用同一个原因，两者的恢复动作因此分不开")
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d decision IDs; 一次停下来的撤回消耗了稀缺身份", fixture.identities.issued)
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("一次停下来的撤回把委托写了回去")
+	}
+}
+
+// withdrawalAuthorizerDouble 按端口约定用取值表示答案，错误只留给「授权服务答不出」。
+// 两个布尔而不直接收枚举，理由同 rejectionAuthorizerDouble。
 type withdrawalAuthorizerDouble struct {
-	t       *testing.T
-	granted bool
-	err     error
-	calls   int
-	record  func(string)
+	t                  *testing.T
+	granted            bool
+	rulesNotConfigured bool
+	err                error
+	calls              int
+	record             func(string)
 }
 
 func (double *withdrawalAuthorizerDouble) AuthorizeWithdrawal(
 	_ context.Context,
 	_ ports.WithdrawalAuthorizationQuery,
-) (domain.WithdrawalAuthorityReference, error) {
+) (ports.WithdrawalAuthorization, error) {
 	double.t.Helper()
 	double.calls++
 	if double.record != nil {
 		double.record("authorize-withdrawal")
 	}
 	if double.err != nil {
-		return domain.WithdrawalAuthorityReference{}, double.err
+		return ports.WithdrawalAuthorization{}, double.err
+	}
+	if double.rulesNotConfigured {
+		return ports.WithdrawalAuthorization{Outcome: ports.AuthorizationRulesNotConfigured}, nil
 	}
 	if !double.granted {
-		return domain.WithdrawalAuthorityReference{}, nil
+		return ports.WithdrawalAuthorization{Outcome: ports.AuthorizationRefused}, nil
 	}
-	return mustValue(double.t, domain.NewWithdrawalAuthorityReference, "PC-WITHDRAW-ROLE-1"), nil
+	return ports.WithdrawalAuthorization{
+		Outcome:   ports.AuthorizationGranted,
+		Authority: mustValue(double.t, domain.NewWithdrawalAuthorityReference, "PC-WITHDRAW-ROLE-1"),
+	}, nil
 }
 
 var _ ports.WithdrawalAuthorizer = (*withdrawalAuthorizerDouble)(nil)

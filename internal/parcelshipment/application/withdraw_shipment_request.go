@@ -173,12 +173,21 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 	if err != nil {
 		return handler.undecided(ctx, command, WithdrawalAuthorityUnavailable, request.State()), nil
 	}
-	if authority.String() == "" {
+	switch authority.Outcome {
+	case ports.AuthorizationGranted:
+	case ports.AuthorizationRefused:
 		// 未获授权不是未决：它是一个确定的业务答案，续办也补不出授权来。
 		return WithdrawShipmentRequestResult{
 			outcome: WithdrawalNotAuthorized,
 			state:   request.State(),
 		}, nil
+	case ports.AuthorizationRulesNotConfigured:
+		// 这个范围此刻一条现行授权规则都没有。它不是对客户的判定——`UC-PS-005` 明禁默认
+		// 任何角色有撤回权，而把「没有规则」答成`未获授权`同样是一次默认，只是方向朝紧。
+		return handler.undecided(ctx, command, WithdrawalAuthorityRulesNotConfigured, request.State()), nil
+	default:
+		// 逐取值分派，不留兜底：端口日后多一种答复时这里报错，而不是静默归入上面某一格。
+		return WithdrawShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome
 	}
 
 	// 用例把「读取已提交决定并返回既有结果」放在提交撤回之前（步骤 3 先于步骤 4），所以这里
@@ -195,7 +204,7 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 
 	withdrawn, err := request.WithdrawByCustomer(domain.WithdrawalSpec{
 		DecisionID: decisionID,
-		Authority:  authority,
+		Authority:  authority.Authority,
 		Requester:  command.Requester,
 		Reason:     command.Reason,
 		DecidedAt:  handler.deps.Clock.Now(),

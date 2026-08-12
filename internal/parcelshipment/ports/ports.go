@@ -57,6 +57,18 @@ func (outcome ShipmentRequestSaveOutcome) String() string {
 // Insert 不交回写入结果，这不是遗漏：它的失败答案是「这份已经建过了」，与 Save 的「有人
 // 先落了一步」恢复动作不同，合成一个代数会让调用方拿一个取值回答两个问题。那一格由
 // `PBC-04` 驱动，入口条件写在 ADR-0031 的 Consequences 里。
+//
+// **那条入口条件的第一步已经有答案了，而答案是否定的**（实测于 `1d4ae15`）。它问的是
+// 「已经建过了」在 `SubmitOutcome` 里是不是就是既有的`已有结果`：不是。建单前的重放判定
+// 走 `resolvePreserved`，它先用 `ClassifySourceSubmission` 比内容——同内容才答`已有结果`，
+// 不同内容答`接入冲突`。而 Insert 冲突意味着另一方在本次读到「没有」之后把同一个来源身份
+// 建了单，既有那一份的内容同样可能与本次不同。**直接把它译成`已有结果`会跳过那次内容比对**，
+// 对一份其实是另一个载荷的输入答「这次请求已经办过了」，而区分这两件事正是 resolvePreserved
+// 存在的理由。
+//
+// 因此这一格的含义是「回去按重放规则重答」，而不是某一个终局取值；落地时要一并解决的是
+// 本次已经 Preserve 过自己那一份之后如何重跑分类（`resolvePreserved` 还会再追加一次观察）。
+// 这一段只钉答案，不改签名——ADR-0031 写明两步顺序反了会得到一个含义未定的取值。
 type ShipmentRequestRepository interface {
 	FindBySourceIdentity(ctx context.Context, identity domain.SourceIdentity) (domain.ShipmentRequest, bool, error)
 	Insert(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
@@ -418,6 +430,44 @@ type PreAcceptanceControlRelease interface {
 	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
 }
 
+// AuthorizationOutcome 是三个授权端口共用的封闭答复集合。端口分开而答案集合共用：授权来源、
+// 有效期间与原因目录三者各不相同（那是端口分开的理由），但「答得出什么」只有这三种，且分格
+// 维度相同——按消费方的恢复动作分（ADR-0029）。共用一个集合还有一层强制力：日后多一种答复，
+// 三处译函数会一起报错，而不是各自静默归入某一格。
+//
+// `未配置`与`不允许`必须分开，这是本类型存在的全部理由：前者要租户先把 `PAR-COM-14` 的授权
+// 规则登记上，后者是权威已经答过的业务拒绝，再登记也不会变。压成一格，**没有租户的首发期
+// 每一次请求都会被答以「你无权这么做」**——而真相是还没有人给这个产品配过授权规则。那是红线
+// 「实例半边留空并拒绝默认值」在授权这一维上的同一个错。
+//
+// 这不是新裁断：`JudgmentAsOfOutcome` 早把`未配置`单列，理由一字不差，连待提供的实例参数都
+// 是同一个 `PAR-COM-14`。那次只做在时点那一维，这里补上授权这一维。
+//
+// 零值取`未设`而不取`未配置`：适配器必须说出它看到的是哪一种，靠漏填落进`未配置`会让「问过、
+// 确实没规则」与「压根没实现这一支」长得一模一样。漏填因此是一次端口坏了（译函数上抛），
+// 不是一次安静的停顿。
+type AuthorizationOutcome uint8
+
+const (
+	AuthorizationOutcomeInvalid AuthorizationOutcome = iota
+	AuthorizationGranted
+	AuthorizationRefused
+	AuthorizationRulesNotConfigured
+)
+
+func (outcome AuthorizationOutcome) String() string {
+	switch outcome {
+	case AuthorizationGranted:
+		return "GRANTED"
+	case AuthorizationRefused:
+		return "REFUSED"
+	case AuthorizationRulesNotConfigured:
+		return "RULES_NOT_CONFIGURED"
+	default:
+		return ""
+	}
+}
+
 // ActiveRejectionAuthorizationQuery 说明谁要以什么原因主动拒绝哪一份提交版本。它刻意不带
 // 授权引用：调用方自带一个，就等于自己给自己签字。
 type ActiveRejectionAuthorizationQuery struct {
@@ -428,13 +478,19 @@ type ActiveRejectionAuthorizationQuery struct {
 	Reason            domain.RejectionReasonReference
 }
 
+// ActiveRejectionAuthorization 只在`已授权`时携带授权引用，其余取值一律不带：交回一个零值
+// 引用，编排会把一次没拿到的授权记进决定。
+type ActiveRejectionAuthorization struct {
+	Outcome   AuthorizationOutcome
+	Authority domain.RejectionAuthorityReference
+}
+
 // ActiveRejectionAuthorizer 回答 party-commercial 是否授权这次主动拒绝。授权引用由那边
 // 签发，parcel-shipment 只保存所采用的引用——角色等级与原因目录都不属本上下文。
 //
-// 未授权时交回零值引用而不是错误：那是一个业务答案（这个人不能拒这单），与「授权服务答不出」
-// 分属两回事，后者才是错误。
+// 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回，包括拒绝。
 type ActiveRejectionAuthorizer interface {
-	AuthorizeActiveRejection(ctx context.Context, query ActiveRejectionAuthorizationQuery) (domain.RejectionAuthorityReference, error)
+	AuthorizeActiveRejection(ctx context.Context, query ActiveRejectionAuthorizationQuery) (ActiveRejectionAuthorization, error)
 }
 
 // WithdrawalAuthorizationQuery 说明谁要以什么原因撤回哪一份待决委托。与主动拒绝那一支同样
@@ -451,11 +507,16 @@ type WithdrawalAuthorizationQuery struct {
 // 分开：一个问的是货主客户或其授权代表，另一个问的是运营侧授权角色，两者的授权来源、有效
 // 期间与原因目录都不同，合并会让「客户能不能取消」和「我们能不能不接」共用一套规则。
 //
-// 未授权时交回零值引用而不是错误：那是一个业务答案（这个人不能撤这单），与「授权服务答不出」
-// 分属两回事，后者才是错误。真实撤回授权角色与原因语义仍是 `PAR-COM-14` 待提供的实例参数，
-// 本上下文不内置任何默认——`UC-PS-005` 明禁默认任何角色有撤回权。
+// 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回。真实撤回授权
+// 角色与原因语义仍是 `PAR-COM-14` 待提供的实例参数，本上下文不内置任何默认——`UC-PS-005`
+// 明禁默认任何角色有撤回权，而把没有规则答成`不允许`同样是一次默认，只是方向朝紧。
+type WithdrawalAuthorization struct {
+	Outcome   AuthorizationOutcome
+	Authority domain.WithdrawalAuthorityReference
+}
+
 type WithdrawalAuthorizer interface {
-	AuthorizeWithdrawal(ctx context.Context, query WithdrawalAuthorizationQuery) (domain.WithdrawalAuthorityReference, error)
+	AuthorizeWithdrawal(ctx context.Context, query WithdrawalAuthorizationQuery) (WithdrawalAuthorization, error)
 }
 
 // SourceDataAmendmentAuthorizationQuery 说明谁要以什么原因修订哪一处资料范围。它同样不带
@@ -472,16 +533,17 @@ type SourceDataAmendmentAuthorizationQuery struct {
 // 两项一起由 party-commercial 给出，不由调用方声明：`UC-PS-002` 要求「登录操作人不能替代实际
 // 决定方」，而让请求方自报决定方正是那句话禁止的事。本上下文只保存所采用的那一份，不判断它
 // 够不够格——授权规则属 party-commercial。
+// 两项只在`已授权`时携带，其余取值一律不带。
 type SourceDataAmendmentAuthorization struct {
+	Outcome   AuthorizationOutcome
 	Authority domain.AmendmentAuthoritySnapshot
 	Decider   domain.DeciderReference
 }
 
 // SourceDataAmendmentAuthorizer 回答请求方当前是否有权修订这处资料范围。
 //
-// 未授权时交回零值而不是错误：那是一个业务答案（这个人不能改这处资料），与「授权服务答不出」
-// 分属两回事，后者才是错误。真实请求方、实际决定方与授权入口仍是 `BD-PS-009` 待确认的实例
-// 参数，本上下文不内置任何默认。
+// 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回。真实请求方、
+// 实际决定方与授权入口仍是 `BD-PS-009` 待确认的实例参数，本上下文不内置任何默认。
 type SourceDataAmendmentAuthorizer interface {
 	AuthorizeSourceDataAmendment(
 		ctx context.Context,

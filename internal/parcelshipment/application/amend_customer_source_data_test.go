@@ -790,12 +790,47 @@ func acceptedRequest(t *testing.T) domain.ShipmentRequest {
 	return accepted
 }
 
+// Covers: AGENTS.md 红线「实例半边留空并拒绝默认值」——修订授权入口是 `BD-PS-009` 待确认的
+// 实例参数。规则一条都没登记时，客户得到的不能是「你无权改这处资料」。
+//
+// 这一支尤其刺眼：同一个 Handle 里往下二十行，矩阵那一格已经把「未登记」与「明确不允许」
+// 分开了（`SourceDataAmendmentNotDeclared` → `待复核`，注释写着「那是『还没人说这能不能改』，
+// 不是『客户违规』」）。同一句理由在同一个函数里成立两次，此前只做了一次。
+func TestUnconfiguredAmendmentRulesStallRatherThanRefuseTheCustomer(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.authorizer.rulesNotConfigured = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() == application.AmendmentNotAuthorized {
+		t.Fatal("一条授权规则都没登记，客户却被告知无权修订")
+	}
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataAmendmentAuthorityRulesNotConfigured {
+		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED", result.PendingReason())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("一次停下来的修订形成了版本")
+	}
+	if fixture.identities.issued != 0 {
+		t.Fatalf("issued %d version IDs; 一次停下来的修订消耗了稀缺身份", fixture.identities.issued)
+	}
+}
+
+// amendmentAuthorizerDouble 按端口约定用取值表示答案。两个布尔而不直接收枚举，理由同
+// rejectionAuthorizerDouble。
 type amendmentAuthorizerDouble struct {
-	t       *testing.T
-	granted bool
-	err     error
-	calls   int
-	record  func(string)
+	t                  *testing.T
+	granted            bool
+	rulesNotConfigured bool
+	err                error
+	calls              int
+	record             func(string)
 }
 
 func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
@@ -810,10 +845,14 @@ func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
 	if double.err != nil {
 		return ports.SourceDataAmendmentAuthorization{}, double.err
 	}
+	if double.rulesNotConfigured {
+		return ports.SourceDataAmendmentAuthorization{Outcome: ports.AuthorizationRulesNotConfigured}, nil
+	}
 	if !double.granted {
-		return ports.SourceDataAmendmentAuthorization{}, nil
+		return ports.SourceDataAmendmentAuthorization{Outcome: ports.AuthorizationRefused}, nil
 	}
 	return ports.SourceDataAmendmentAuthorization{
+		Outcome:   ports.AuthorizationGranted,
 		Authority: mustValue(double.t, domain.NewAmendmentAuthoritySnapshot, "PC-AMEND-GRANT-1"),
 		Decider:   mustValue(double.t, domain.NewDeciderReference, "OPERATOR-1"),
 	}, nil

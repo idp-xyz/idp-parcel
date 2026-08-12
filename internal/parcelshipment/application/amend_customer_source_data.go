@@ -166,10 +166,19 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		// 授权会让客户以为自己越权，而真相是我们没问到。
 		return handler.undecided(command, SourceDataAmendmentAuthorityUnavailable), nil
 	}
-	if authorization.Authority.String() == "" {
+	switch authorization.Outcome {
+	case ports.AuthorizationGranted:
+	case ports.AuthorizationRefused:
 		// 未获授权是确定的业务答案，不是未决：续办也补不出授权来，重试只会得到同一个答案。
 		// 它与「授权服务答不出」分属两回事，后者在上面那一格作为错误交回。
 		return AmendCustomerSourceDataResult{outcome: AmendmentNotAuthorized}, nil
+	case ports.AuthorizationRulesNotConfigured:
+		// 与往下二十行矩阵那一格同一条理由：没登记就是没登记，不是客户违规。那里写的是
+		// 「未登记时只能形成未决或业务拒绝，不能以系统便利推断允许」——反过来也一样，
+		// 不能以系统便利推断这个人越权。
+		return handler.undecided(command, SourceDataAmendmentAuthorityRulesNotConfigured), nil
+	default:
+		return AmendCustomerSourceDataResult{}, ErrUnexpectedAuthorizationOutcome
 	}
 
 	// 步骤 5 排在步骤 6 之前，不是可换的次序：接受基线自己就是成员集合的权威，`AT-PS-023`
