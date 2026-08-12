@@ -47,6 +47,15 @@ const (
 	ReachabilityJudgmentNotFormed
 	ReachabilityRequestConflict
 	ReachabilityRequestNotAccepted
+	// 提交前重校可达性那一步（AT-PS-037）的五格，与商业第三阶段的分格同一套理由：`已换代`
+	// 要以新时点重新请求判断，`未找回`同为重判但可观测性是关联丢失，`无法判定`与`答不出`
+	// 等权威恢复，`入参未受理`要本方改引用——续办引用由原因派生，压格就会让不同的缺口共用
+	// 一条引用。
+	ReachabilityJudgmentSuperseded
+	ReachabilityRevalidationJudgmentNotFound
+	ReachabilityRevalidationUndetermined
+	ReachabilityRevalidationUnavailable
+	ReachabilityRevalidationInputNotAccepted
 	FinancialControlAsOfNotDeclared
 	FinancialControlAsOfBasisNotResolved
 	FinancialControlAsOfNotConfigured
@@ -174,6 +183,16 @@ func (reason JudgmentPendingReason) String() string {
 		return "REACHABILITY_REQUEST_CONFLICT"
 	case ReachabilityRequestNotAccepted:
 		return "REACHABILITY_REQUEST_NOT_ACCEPTED"
+	case ReachabilityJudgmentSuperseded:
+		return "REACHABILITY_JUDGMENT_SUPERSEDED"
+	case ReachabilityRevalidationJudgmentNotFound:
+		return "REACHABILITY_REVALIDATION_JUDGMENT_NOT_FOUND"
+	case ReachabilityRevalidationUndetermined:
+		return "REACHABILITY_REVALIDATION_UNDETERMINED"
+	case ReachabilityRevalidationUnavailable:
+		return "REACHABILITY_REVALIDATION_UNAVAILABLE"
+	case ReachabilityRevalidationInputNotAccepted:
+		return "REACHABILITY_REVALIDATION_INPUT_NOT_ACCEPTED"
 	case FinancialControlAsOfNotDeclared:
 		return "FINANCIAL_CONTROL_AS_OF_NOT_DECLARED"
 	case FinancialControlAsOfBasisNotResolved:

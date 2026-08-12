@@ -90,14 +90,15 @@ func (result FormAcceptanceDecisionResult) DecisionHandoffReference() domain.Own
 // 参数在调用点认不出谁是谁，理由与 CommercialBasisSnapshotSpec 相同（不写个数——那种计数
 // 过期时没有任何东西会变红）。
 type FormAcceptanceDecisionDeps struct {
-	Requests   ports.ShipmentRequestRepository
-	Commercial ports.CommercialBasisResolver
-	Judgments  ports.RecordedJudgmentReader
-	Recorder   ports.AcceptanceJudgmentRecorder
-	Release    ports.PreAcceptanceControlRelease
-	Downstream ports.AcceptanceDecisionHandoff
-	Identities ports.AcceptanceDecisionIdentity
-	Clock      ports.Clock
+	Requests     ports.ShipmentRequestRepository
+	Commercial   ports.CommercialBasisResolver
+	Reachability ports.ReachabilityRevalidator
+	Judgments    ports.RecordedJudgmentReader
+	Recorder     ports.AcceptanceJudgmentRecorder
+	Release      ports.PreAcceptanceControlRelease
+	Downstream   ports.AcceptanceDecisionHandoff
+	Identities   ports.AcceptanceDecisionIdentity
+	Clock        ports.Clock
 }
 
 type FormAcceptanceDecisionHandler struct {
@@ -172,6 +173,16 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 声明——没有适用依据的解析本来也带不出复核策略，卡在这里等于让那个结论永远决定不了。
 	if resolution.Applicability == domain.CommerciallyApplicable && !basis.ManualReviewPolicy().Declared() {
 		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared, request.State()), nil
+	}
+
+	// 可达性判断同属提交前重校窗口（`AT-PS-037`）：判断形成后网络视图换代的，原结果不再
+	// 用于接受。提交后的视图变化不追溯——已决定的委托在上面的早退分支就交回了历史决定。
+	reachabilityStall, err := handler.revalidateReachability(ctx, command, recorded.Reachability)
+	if err != nil {
+		return FormAcceptanceDecisionResult{}, err
+	}
+	if reachabilityStall != PendingReasonNone {
+		return handler.undecided(ctx, command, reachabilityStall, request.State()), nil
 	}
 
 	checks, err := assembleChecks(recorded, basis.PendingRoutingAllowance())
@@ -365,6 +376,46 @@ func pendingReasonFor(decided domain.ShipmentRequest) JudgmentPendingReason {
 	default:
 		return AcceptanceJudgmentIncomplete
 	}
+}
+
+// revalidateReachability 在提交决定前逐项核对已记录的可达性判断是否仍基于当前网络视图。
+// 逐项而不是抽一项：判断按成员各自形成，任何一项被推翻，整份版本的接受语言就缺了一块。
+// 零值原因表示全部仍然当前。
+//
+// 时点取自那一份判断自己：重校核对的是「它形成时的依据还在不在」，拿本轮的新时点去问，
+// 问到的就是另一次判断。
+func (handler *FormAcceptanceDecisionHandler) revalidateReachability(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	judgments []domain.ReachabilityJudgment,
+) (JudgmentPendingReason, error) {
+	for _, judgment := range judgments {
+		revalidation, err := handler.deps.Reachability.RevalidateReachabilityJudgment(ctx, ports.ReachabilityRevalidationQuery{
+			Identity:          command.Identity,
+			ShipmentRequestID: command.ShipmentRequestID,
+			SubmissionVersion: command.SubmissionVersion,
+			DeclaredParcelID:  judgment.DeclaredParcelID(),
+			AsOf:              judgment.AsOf(),
+		})
+		if err != nil {
+			return ReachabilityRevalidationUnavailable, nil
+		}
+		switch revalidation.Outcome {
+		case ports.ReachabilityJudgmentStillCurrent:
+		case ports.ReachabilityJudgmentSuperseded:
+			return ReachabilityJudgmentSuperseded, nil
+		case ports.ReachabilityRevalidationJudgmentNotFound:
+			return ReachabilityRevalidationJudgmentNotFound, nil
+		case ports.ReachabilityRevalidationUndetermined:
+			return ReachabilityRevalidationUndetermined, nil
+		case ports.ReachabilityRevalidationInputNotAccepted:
+			return ReachabilityRevalidationInputNotAccepted, nil
+		default:
+			// 逐取值分派，不留兜底：端口日后新增一个取值时这里报错，而不是静默归入某一格。
+			return PendingReasonNone, ErrUnexpectedRevalidationOutcome
+		}
+	}
+	return PendingReasonNone, nil
 }
 
 // releaseIfRejected 在拒绝越过提交边界后按原关联解除资金控制，并在解除没能确定完成时交回

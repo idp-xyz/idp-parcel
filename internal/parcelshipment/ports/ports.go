@@ -300,6 +300,66 @@ type CommercialRevalidation struct {
 	Reason     domain.CheckReason
 }
 
+// ReachabilityRevalidationQuery 请 network-routing 在本方提交决定前核对一次可达性判断
+// 是否仍基于当前网络视图（`AT-PS-037` 提交前窗口）。它携带原判断形成时的标识组成——
+// 提供方按请求关联持有中间状态（ADR-0027），适配器据这些标识重建同一个关联，本上下文
+// 不持有提供方的关联或视图修订。
+type ReachabilityRevalidationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	DeclaredParcelID  domain.DeclaredParcelID
+	AsOf              domain.JudgmentAsOf
+}
+
+// ReachabilityRevalidationOutcome 是可达性重校在本上下文的封闭落点。
+//
+// `已换代`与`无法判定`分开：前者重试一万次也还是换代了，要以新时点重新请求判断；后者等
+// 权威恢复重试同一次重校即可。`判断未找回`说的是提供方找不到本方回指的那次判断——恢复
+// 动作同样是重新请求判断，但可观测性上它是关联丢失而不是正常换代，压成一格运维会把丢失
+// 当成日常。
+type ReachabilityRevalidationOutcome uint8
+
+const (
+	ReachabilityRevalidationOutcomeInvalid ReachabilityRevalidationOutcome = iota
+	ReachabilityJudgmentStillCurrent
+	ReachabilityJudgmentSuperseded
+	ReachabilityRevalidationJudgmentNotFound
+	ReachabilityRevalidationUndetermined
+	ReachabilityRevalidationInputNotAccepted
+)
+
+func (outcome ReachabilityRevalidationOutcome) String() string {
+	switch outcome {
+	case ReachabilityJudgmentStillCurrent:
+		return "STILL_CURRENT"
+	case ReachabilityJudgmentSuperseded:
+		return "SUPERSEDED"
+	case ReachabilityRevalidationJudgmentNotFound:
+		return "JUDGMENT_NOT_FOUND"
+	case ReachabilityRevalidationUndetermined:
+		return "UNDETERMINED"
+	case ReachabilityRevalidationInputNotAccepted:
+		return "INPUT_NOT_ACCEPTED"
+	default:
+		return ""
+	}
+}
+
+// ReachabilityRevalidation 不在任何取值下携带新判断：重校只回答「失效没失效」，重判是
+// 本方以新时点发起的新判断（提供方 CONTEXT 的分工句），混在一起会让一次「核对」悄悄换掉
+// 判断本体。
+type ReachabilityRevalidation struct {
+	Outcome ReachabilityRevalidationOutcome
+	Reason  domain.CheckReason
+}
+
+// ReachabilityRevalidator 与 CommercialBasisResolver 的第三阶段同属提交前重校窗口，分成
+// 两个端口：两类判断由不同权威拥有，合成一个会让某一方的适配器实现它根本答不了的方法。
+type ReachabilityRevalidator interface {
+	RevalidateReachabilityJudgment(ctx context.Context, query ReachabilityRevalidationQuery) (ReachabilityRevalidation, error)
+}
+
 // CommercialBasisResolver 是 parcel-shipment 视角下的 party-commercial 三步协议。
 //
 // 三个方法对应 `UC-PC-002` 的三个阶段，用例「给开发的交接」要求「第一阶段解析与第二阶段逐项

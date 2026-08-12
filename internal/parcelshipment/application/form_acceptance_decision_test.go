@@ -721,14 +721,15 @@ func TestADecisionWithoutAPriorResolutionStillResolves(t *testing.T) {
 }
 
 type decisionFixture struct {
-	handler    *application.FormAcceptanceDecisionHandler
-	commercial *commercialBasisDouble
-	judgments  *recordedJudgmentsDouble
-	requests   *decidableRequestStore
-	release    *controlReleaseDouble
-	recorder   *judgmentRequestStore
-	downstream *decisionHandoffDouble
-	identities *decisionIdentityFactory
+	handler      *application.FormAcceptanceDecisionHandler
+	commercial   *commercialBasisDouble
+	reachability *reachabilityRevalidatorDouble
+	judgments    *recordedJudgmentsDouble
+	requests     *decidableRequestStore
+	release      *controlReleaseDouble
+	recorder     *judgmentRequestStore
+	downstream   *decisionHandoffDouble
+	identities   *decisionIdentityFactory
 }
 
 func newDecisionFixture(t *testing.T) *decisionFixture {
@@ -755,17 +756,38 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	value.recorder = &judgmentRequestStore{}
 	value.downstream = &decisionHandoffDouble{}
 	value.identities = &decisionIdentityFactory{t: t}
+	value.reachability = &reachabilityRevalidatorDouble{outcome: ports.ReachabilityJudgmentStillCurrent}
 	value.handler = application.NewFormAcceptanceDecisionHandler(application.FormAcceptanceDecisionDeps{
-		Requests:   value.requests,
-		Commercial: value.commercial,
-		Judgments:  value.judgments,
-		Recorder:   value.recorder,
-		Release:    value.release,
-		Downstream: value.downstream,
-		Identities: value.identities,
-		Clock:      fixedClock{at: handlerClockAt},
+		Requests:     value.requests,
+		Commercial:   value.commercial,
+		Reachability: value.reachability,
+		Judgments:    value.judgments,
+		Recorder:     value.recorder,
+		Release:      value.release,
+		Downstream:   value.downstream,
+		Identities:   value.identities,
+		Clock:        fixedClock{at: handlerClockAt},
 	})
 	return value
+}
+
+// reachabilityRevalidatorDouble 缺省答`仍然当前`：重校是决定路上的新门，既有的接受/拒绝
+// 用例要能原样通过。留住查询，因为「问的是那一份判断的时点」只有在实际入参上验得出来。
+type reachabilityRevalidatorDouble struct {
+	outcome ports.ReachabilityRevalidationOutcome
+	err     error
+	asked   []ports.ReachabilityRevalidationQuery
+}
+
+func (double *reachabilityRevalidatorDouble) RevalidateReachabilityJudgment(
+	_ context.Context,
+	query ports.ReachabilityRevalidationQuery,
+) (ports.ReachabilityRevalidation, error) {
+	double.asked = append(double.asked, query)
+	if double.err != nil {
+		return ports.ReachabilityRevalidation{}, double.err
+	}
+	return ports.ReachabilityRevalidation{Outcome: double.outcome}, nil
 }
 
 // decisionHandoffDouble 留住每一份交出的意图。计数与标识都要：意图由决定标识认领，
@@ -1020,4 +1042,92 @@ var (
 	_ ports.AcceptanceDecisionIdentity  = (*decisionIdentityFactory)(nil)
 	_ ports.PreAcceptanceControlRelease = (*controlReleaseDouble)(nil)
 	_ ports.AcceptanceDecisionHandoff   = (*decisionHandoffDouble)(nil)
+	_ ports.ReachabilityRevalidator     = (*reachabilityRevalidatorDouble)(nil)
 )
+
+// Covers: `AT-PS-037`「可达性或其他关键判断形成后、接受提交前被有效新版本或限制推翻 →
+// 原结果不再用于接受并重新判断；暂时无法取得新结果时保持已提交和未决」——已换代的判断
+// 停住本轮且不形成决定；查询携带那一份判断自己的成员与时点（拿本轮新时点去问，问到的就
+// 是另一次判断）。提交后半边由 TestAnAcceptedDecisionSurvivesRetiredBasisOnReplay 承重。
+func TestADecisionStopsWhenAReachabilityJudgmentWasSuperseded(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.reachability.outcome = ports.ReachabilityJudgmentSuperseded
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED——被推翻的判断仍被用于接受", result.Outcome())
+	}
+	if result.PendingReason() != application.ReachabilityJudgmentSuperseded {
+		t.Fatalf("reason = %q, want REACHABILITY_JUDGMENT_SUPERSEDED", result.PendingReason())
+	}
+	if _, present := result.AcceptanceDecision(); present {
+		t.Fatal("判断已被推翻却仍形成了决定")
+	}
+	if len(fixture.reachability.asked) == 0 {
+		t.Fatal("重校端口没有被问到")
+	}
+	asked := fixture.reachability.asked[0]
+	if asked.DeclaredParcelID.String() == "" || asked.AsOf.At().IsZero() {
+		t.Fatalf("query = %#v; 重校必须携带那一份判断自己的成员与时点", asked)
+	}
+}
+
+// Covers: 同一 AT 的其余落点——未找回/无法判定/入参未受理/答不出各停各格，续办引用互不
+// 相认（原因参与派生）。
+func TestEveryReachabilityRevalidationAnswerLandsOnItsOwnPendingReason(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(*decisionFixture)
+		want    application.JudgmentPendingReason
+	}{
+		"judgment not found": {
+			arrange: func(fixture *decisionFixture) {
+				fixture.reachability.outcome = ports.ReachabilityRevalidationJudgmentNotFound
+			},
+			want: application.ReachabilityRevalidationJudgmentNotFound,
+		},
+		"undetermined": {
+			arrange: func(fixture *decisionFixture) {
+				fixture.reachability.outcome = ports.ReachabilityRevalidationUndetermined
+			},
+			want: application.ReachabilityRevalidationUndetermined,
+		},
+		"input not accepted": {
+			arrange: func(fixture *decisionFixture) {
+				fixture.reachability.outcome = ports.ReachabilityRevalidationInputNotAccepted
+			},
+			want: application.ReachabilityRevalidationInputNotAccepted,
+		},
+		"revalidator unavailable": {
+			arrange: func(fixture *decisionFixture) {
+				fixture.reachability.err = errors.New("revalidator down")
+			},
+			want: application.ReachabilityRevalidationUnavailable,
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newDecisionFixture(t)
+			testCase.arrange(fixture)
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.AcceptanceUndecided {
+				t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+			}
+			if result.PendingReason() != testCase.want {
+				t.Fatalf("reason = %q, want %q", result.PendingReason(), testCase.want)
+			}
+			if result.ContinuationReference().String() == "" {
+				t.Fatal("停下的重校没留续办引用")
+			}
+		})
+	}
+}
