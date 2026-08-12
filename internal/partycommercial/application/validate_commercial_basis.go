@@ -54,10 +54,10 @@ func (handler *ValidateCommercialBasisHandler) Handle(
 	if err != nil {
 		// 与第一阶段同一条分界：读不到权威是`解析未决`，不是技术错误，也不是`已失效`。空视图
 		// 是领域已定的「权威不可读」表达。
-		return handler.resultOf(domain.ValidateClosureBeforeDecision(nil, prior)), nil
+		return handler.resultOf(domain.ValidateClosureBeforeDecision(nil, prior, nil)), nil
 	}
 
-	return handler.resultOf(domain.ValidateClosureBeforeDecision(view, prior)), nil
+	return handler.resultOf(domain.ValidateClosureBeforeDecision(view, prior, nil)), nil
 }
 
 // loadPrior 按标识取回原解析并核对归属。取不到时按调用方的**恢复动作**分格，不按本上下文

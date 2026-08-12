@@ -87,9 +87,14 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 // AdoptedBasis 把一项必需依据与其采用的版本配成一对。闭包保存这样的成对结构而不是
 // 具名字段，是为了让并非由商业版本支撑的依据——比如参与方关系——能够加入，而不必
 // 改造闭包的形状。
+//
+// 计价目的下采用的价格规则还会带上商业价格政策，这样方向与定价方案绑定可被观察
+// （ADR-0034），而不是只剩一份 `CommercialVersion`。
 type AdoptedBasis struct {
-	kind    CommercialObjectKind
-	version CommercialVersion
+	kind           CommercialObjectKind
+	version        CommercialVersion
+	pricePolicy    CommercialPricePolicy
+	hasPricePolicy bool
 }
 
 func (adopted AdoptedBasis) Kind() CommercialObjectKind {
@@ -98,6 +103,11 @@ func (adopted AdoptedBasis) Kind() CommercialObjectKind {
 
 func (adopted AdoptedBasis) Version() CommercialVersion {
 	return adopted.version
+}
+
+// PricePolicy 在采用了商业价格政策时交回；其他依据缺席。
+func (adopted AdoptedBasis) PricePolicy() (CommercialPricePolicy, bool) {
+	return adopted.pricePolicy, adopted.hasPricePolicy
 }
 
 // CommercialClosure 是解析引用闭包的全有或全无结果。只要不是唯一解析成功，它就
@@ -187,10 +197,16 @@ func (closure CommercialClosure) Reason() ResolutionReason {
 // ResolveCommercialClosure 在同一个商业选择锚点和同一份权威视图下解析每一项必需
 // 依据。只有全部唯一解出才算成功。
 //
+// standingOf 传给计价目的下的价格规则路径（ADR-0034）；其他依据忽略它。
+//
 // 两者同时发生时，`适用冲突` 压过 `无适用依据`。它们要求的动作不同：冲突是商业依据
 // 所有方必须更正的区间重叠，而缺依据只是说这个范围里没有这类对象。报出较轻的那个，
 // 会让真正需要修的问题看起来无需处理。
-func ResolveCommercialClosure(registry *CommercialRegistry, key ClosureResolutionKey) CommercialClosure {
+func ResolveCommercialClosure(
+	registry *CommercialRegistry,
+	key ClosureResolutionKey,
+	standingOf PricingPlanStandingLookup,
+) CommercialClosure {
 	if !key.minimumIdentityEstablished() {
 		return CommercialClosure{outcome: InputNotAccepted}
 	}
@@ -210,11 +226,16 @@ func ResolveCommercialClosure(registry *CommercialRegistry, key ClosureResolutio
 	}
 	adopted := make([]AdoptedBasis, 0, len(key.RequiredBases))
 	for _, kind := range key.RequiredBases {
-		result := ResolveCommercialBasis(registry, key.singleBasisKey(kind))
+		result := ResolveCommercialBasis(registry, key.singleBasisKey(kind), standingOf)
 		switch result.Outcome() {
 		case UniquelyResolved:
 			version, _ := result.AdoptedVersion()
-			adopted = append(adopted, AdoptedBasis{kind: kind, version: version})
+			basis := AdoptedBasis{kind: kind, version: version}
+			if policy, ok := result.AdoptedPricePolicy(); ok {
+				basis.pricePolicy = policy
+				basis.hasPricePolicy = true
+			}
+			adopted = append(adopted, basis)
 		case ApplicabilityConflict:
 			closure.conflicting = append(closure.conflicting, kind)
 		case NoApplicableBasis:
@@ -295,7 +316,11 @@ func closurePending(
 // 检查已采用对象自身。同范围新增一个竞争候选时，那些对象一个字节都没变，解析却已经不再唯一。
 //
 // 原本就不是唯一解析的结果原样返回——不存在「采用依据是否仍有效」这个问题。
-func ValidateClosureBeforeDecision(registry *CommercialRegistry, prior CommercialClosure) CommercialClosure {
+func ValidateClosureBeforeDecision(
+	registry *CommercialRegistry,
+	prior CommercialClosure,
+	standingOf PricingPlanStandingLookup,
+) CommercialClosure {
 	if prior.outcome != UniquelyResolved {
 		return prior
 	}
@@ -311,7 +336,7 @@ func ValidateClosureBeforeDecision(registry *CommercialRegistry, prior Commercia
 		return stalled
 	}
 
-	current := ResolveCommercialClosure(registry, prior.key)
+	current := ResolveCommercialClosure(registry, prior.key, standingOf)
 	if current.outcome == UniquelyResolved && current.resolutionID == prior.resolutionID {
 		return prior
 	}

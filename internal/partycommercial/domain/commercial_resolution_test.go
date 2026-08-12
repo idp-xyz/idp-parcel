@@ -66,7 +66,7 @@ func TestUniqueCandidateResolvesWithItsAdoptedVersion(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	adopted := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 
-	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	if result.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", result.Outcome())
@@ -139,7 +139,7 @@ func TestALapsedContractIsNotRevivedByAnEarlierBusinessTime(t *testing.T) {
 	}
 
 	// 策略锚点在合同失效之后：不恢复旧资格。
-	atPolicyAnchor := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	atPolicyAnchor := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 	if atPolicyAnchor.Outcome() != domain.NoApplicableBasis {
 		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS；一份已失效的合同被回填时间救活了", atPolicyAnchor.Outcome())
 	}
@@ -154,7 +154,7 @@ func TestALapsedContractIsNotRevivedByAnEarlierBusinessTime(t *testing.T) {
 		t.Fatalf("new selection anchor: %v", err)
 	}
 	withinKey.Anchor = within
-	if got := domain.ResolveCommercialBasis(registry, withinKey).Outcome(); got != domain.UniquelyResolved {
+	if got := domain.ResolveCommercialBasis(registry, withinKey, nil).Outcome(); got != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED；上一断言因此是空的", got)
 	}
 }
@@ -218,7 +218,7 @@ func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 		registry := domain.NewCommercialRegistry()
 		effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-other")
 
-		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 		if result.Outcome() != domain.NoApplicableBasis {
 			t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", result.Outcome())
 		}
@@ -232,7 +232,7 @@ func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 		effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 		effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v9", "sha256:c2", "scope-a")
 
-		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 		if result.Outcome() != domain.ApplicabilityConflict {
 			t.Fatalf("outcome = %q, want APPLICABILITY_CONFLICT", result.Outcome())
 		}
@@ -245,7 +245,7 @@ func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 	})
 
 	t.Run("an unreadable authority view is pending, not no-basis", func(t *testing.T) {
-		result := domain.ResolveCommercialBasis(nil, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+		result := domain.ResolveCommercialBasis(nil, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 		if result.Outcome() != domain.ResolutionPending {
 			t.Fatalf("outcome = %q, want RESOLUTION_PENDING", result.Outcome())
 		}
@@ -264,7 +264,7 @@ func TestMissingAnchorPolicyIsPendingRatherThanDefaultingToNow(t *testing.T) {
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 	key.Anchor = domain.SelectionAnchor{}
 
-	result := domain.ResolveCommercialBasis(registry, key)
+	result := domain.ResolveCommercialBasis(registry, key, nil)
 	if result.Outcome() != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", result.Outcome())
 	}
@@ -291,7 +291,7 @@ func TestIncompleteKeyIsNotAcceptedWithoutTouchingCandidates(t *testing.T) {
 			key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 			breakKey(&key)
 
-			result := domain.ResolveCommercialBasis(registry, key)
+			result := domain.ResolveCommercialBasis(registry, key, nil)
 			if result.Outcome() != domain.InputNotAccepted {
 				t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
 			}
@@ -339,7 +339,7 @@ func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
 				t.Fatalf("register %s: %v", name, err)
 			}
 
-			result := domain.ResolveCommercialBasis(endedOnly, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+			result := domain.ResolveCommercialBasis(endedOnly, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 			if result.Outcome() != domain.NoApplicableBasis {
 				t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", result.Outcome())
 			}
@@ -357,8 +357,8 @@ func TestRepeatedResolutionIsStableUntilTheViewRevisionChanges(t *testing.T) {
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 
-	first := domain.ResolveCommercialBasis(registry, key)
-	second := domain.ResolveCommercialBasis(registry, key)
+	first := domain.ResolveCommercialBasis(registry, key, nil)
+	second := domain.ResolveCommercialBasis(registry, key, nil)
 
 	if first.Outcome() != second.Outcome() || first.ResolutionID() != second.ResolutionID() {
 		t.Fatalf("repeated resolution diverged under one view: %q/%q vs %q/%q",
@@ -375,7 +375,7 @@ func TestRepeatedResolutionIsStableUntilTheViewRevisionChanges(t *testing.T) {
 
 	// 同一对象的第二个版本改变了范围视图，所以即便查询没变，先前那个身份也不得存活下来。
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v2", "sha256:c1-v2", "scope-a")
-	afterChange := domain.ResolveCommercialBasis(registry, key)
+	afterChange := domain.ResolveCommercialBasis(registry, key, nil)
 
 	changedView, _ := afterChange.ViewRevision()
 	if changedView == firstView {

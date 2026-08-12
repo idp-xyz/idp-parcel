@@ -229,6 +229,11 @@ const (
 	// 确认不了它就是被采用的那一个。它是未决而不是`无适用依据`：权威并没有说这个范围
 	// 没有对象，是本次解析没能核实指名的那一个。
 	NamedReferenceNotConfirmed
+	// BoundPlanNotConfirmed / BoundPlanWithdrawn 与 ErrPricingPlan* 一一对应：同一份
+	// 政策绑的方案「没问到」与「已退役」恢复动作不同，原因必须分开（ADR-0032 / ADR-0034）。
+	// 前缀 Bound 避免与 PricingPlanStanding 的同名常量撞车。
+	BoundPlanNotConfirmed
+	BoundPlanWithdrawn
 )
 
 func (reason ResolutionReason) String() string {
@@ -241,6 +246,10 @@ func (reason ResolutionReason) String() string {
 		return "CURRENT_RESOLUTION_CHANGED"
 	case NamedReferenceNotConfirmed:
 		return "NAMED_REFERENCE_NOT_CONFIRMED"
+	case BoundPlanNotConfirmed:
+		return "BOUND_PLAN_NOT_CONFIRMED"
+	case BoundPlanWithdrawn:
+		return "BOUND_PLAN_WITHDRAWN"
 	default:
 		return ""
 	}
@@ -253,6 +262,8 @@ type Resolution struct {
 	anchor         SelectionAnchor
 	adopted        CommercialVersion
 	hasAdopted     bool
+	pricePolicy    CommercialPricePolicy
+	hasPricePolicy bool
 	viewRevision   AuthorityViewRevision
 	reason         ResolutionReason
 	continuation   ContinuationReference
@@ -273,6 +284,11 @@ func (resolution Resolution) Anchor() SelectionAnchor {
 
 func (resolution Resolution) AdoptedVersion() (CommercialVersion, bool) {
 	return resolution.adopted, resolution.hasAdopted
+}
+
+// AdoptedPricePolicy 在计价目的下采用价格政策时交回完整绑定；非计价或未采用时缺席。
+func (resolution Resolution) AdoptedPricePolicy() (CommercialPricePolicy, bool) {
+	return resolution.pricePolicy, resolution.hasPricePolicy
 }
 
 // CandidateCount 报告权威侧持有多少个适用版本。输入未受理时恒为零：去数候选本身就
@@ -301,7 +317,13 @@ func (resolution Resolution) ContinuationReference() ContinuationReference {
 // ResolveCommercialBasis 执行第一阶段：为一种必需依据选出唯一适用版本。它不形成接受、
 // 价格、财务控制或任何下游 `asOf`；第二阶段是调用方的事，由本次解析采用的接单规则包
 // 驱动。
-func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Resolution {
+//
+// standingOf 只在计价目的下的价格规则路径上被问到（ADR-0034）；其他路径忽略它。
+func ResolveCommercialBasis(
+	registry *CommercialRegistry,
+	key ResolutionKey,
+	standingOf PricingPlanStandingLookup,
+) Resolution {
 	if !key.minimumIdentityEstablished() {
 		return Resolution{outcome: InputNotAccepted}
 	}
@@ -312,6 +334,10 @@ func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Res
 	}
 	if registry == nil {
 		return pending(key, ResolutionID{}, AuthorityUnreadable, key.Anchor)
+	}
+
+	if key.RequiredBasis == PriceRuleObject && key.Purpose == PricingPurpose {
+		return resolvePriceRuleBasis(registry, key, standingOf)
 	}
 
 	candidates := registry.applicable(key)
@@ -335,12 +361,57 @@ func ResolveCommercialBasis(registry *CommercialRegistry, key ResolutionKey) Res
 	return result
 }
 
+// resolvePriceRuleBasis 经商业价格政策选用价格规则，把方向与定价方案绑定一并带回。
+func resolvePriceRuleBasis(
+	registry *CommercialRegistry,
+	key ResolutionKey,
+	standingOf PricingPlanStandingLookup,
+) Resolution {
+	result := Resolution{
+		key:          key,
+		anchor:       key.Anchor,
+		viewRevision: registry.ViewRevision(key.Scope),
+	}
+	query, err := NewPricePolicyQuery(key.PriceDirection, key.Scope, key.Anchor.At())
+	if err != nil {
+		return Resolution{outcome: InputNotAccepted}
+	}
+	policy, err := ResolveCommercialPricePolicy(registry.policies, query, standingOf)
+	switch {
+	case err == nil:
+		result.outcome = UniquelyResolved
+		result.adopted = policy.Version()
+		result.hasAdopted = true
+		result.pricePolicy = policy
+		result.hasPricePolicy = true
+		result.candidateCount = 1
+		result.resolutionID = resolutionIdentity(key, result.viewRevision, policy.Version())
+		return result
+	case errors.Is(err, ErrNoApplicablePricePolicy):
+		result.outcome = NoApplicableBasis
+		return result
+	case errors.Is(err, ErrPricePolicyConflict):
+		result.outcome = ApplicabilityConflict
+		result.candidateCount = 2
+		return result
+	case errors.Is(err, ErrPricingPlanWithdrawn):
+		return pending(key, ResolutionID{}, BoundPlanWithdrawn, key.Anchor)
+	default:
+		// 含 ErrPricingPlanNotConfirmed 与 standing 零值：没问到就是未确认。
+		return pending(key, ResolutionID{}, BoundPlanNotConfirmed, key.Anchor)
+	}
+}
+
 // ValidateBeforeDecision 在调用方提交决定之前重跑第一阶段。它按原查询重解，而不是只
 // 检查已采用对象自身：同范围新增一个竞争候选时，那个对象一个字节都没变，解析却已经
 // 不再唯一，只有重解看得见。
 //
 // 原本就不是唯一解析的结果原样返回——不存在「采用依据是否仍有效」这个问题。
-func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Resolution {
+func ValidateBeforeDecision(
+	registry *CommercialRegistry,
+	prior Resolution,
+	standingOf PricingPlanStandingLookup,
+) Resolution {
 	if prior.outcome != UniquelyResolved {
 		return prior
 	}
@@ -350,12 +421,14 @@ func ValidateBeforeDecision(registry *CommercialRegistry, prior Resolution) Reso
 		stalled.outcome = ResolutionPending
 		stalled.adopted = CommercialVersion{}
 		stalled.hasAdopted = false
+		stalled.pricePolicy = CommercialPricePolicy{}
+		stalled.hasPricePolicy = false
 		stalled.reason = AuthorityUnreadable
 		stalled.continuation = continuationFor(prior.key.fingerprint(), prior.resolutionID, AuthorityUnreadable)
 		return stalled
 	}
 
-	current := ResolveCommercialBasis(registry, prior.key)
+	current := ResolveCommercialBasis(registry, prior.key, standingOf)
 	if current.outcome == UniquelyResolved && current.resolutionID == prior.resolutionID {
 		return prior
 	}

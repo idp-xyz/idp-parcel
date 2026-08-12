@@ -17,7 +17,7 @@ func TestInitialPendingCarriesItsReasonAndContinuation(t *testing.T) {
 		key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 		key.Anchor = domain.SelectionAnchor{}
 
-		result := domain.ResolveCommercialBasis(registry, key)
+		result := domain.ResolveCommercialBasis(registry, key, nil)
 
 		if result.Outcome() != domain.ResolutionPending {
 			t.Fatalf("outcome = %q, want RESOLUTION_PENDING", result.Outcome())
@@ -31,7 +31,7 @@ func TestInitialPendingCarriesItsReasonAndContinuation(t *testing.T) {
 	})
 
 	t.Run("authority unreadable", func(t *testing.T) {
-		result := domain.ResolveCommercialBasis(nil, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+		result := domain.ResolveCommercialBasis(nil, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 		if result.Outcome() != domain.ResolutionPending {
 			t.Fatalf("outcome = %q, want RESOLUTION_PENDING", result.Outcome())
@@ -50,8 +50,8 @@ func TestInitialPendingCarriesItsReasonAndContinuation(t *testing.T) {
 func TestPendingContinuationIsStableAcrossRepeatedResolution(t *testing.T) {
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 
-	first := domain.ResolveCommercialBasis(nil, key)
-	second := domain.ResolveCommercialBasis(nil, key)
+	first := domain.ResolveCommercialBasis(nil, key, nil)
+	second := domain.ResolveCommercialBasis(nil, key, nil)
 
 	if first.ContinuationReference() != second.ContinuationReference() {
 		t.Fatalf("continuation drifted between identical pending resolutions: %q vs %q",
@@ -64,12 +64,12 @@ func TestPendingContinuationIsStableAcrossRepeatedResolution(t *testing.T) {
 func TestPendingFromPreDecisionValidationAlsoNamesItsReason(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 	if prior.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("fixture did not resolve uniquely: %q", prior.Outcome())
 	}
 
-	stalled := domain.ValidateBeforeDecision(nil, prior)
+	stalled := domain.ValidateBeforeDecision(nil, prior, nil)
 
 	if stalled.Outcome() != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", stalled.Outcome())
@@ -86,10 +86,10 @@ func TestPendingFromPreDecisionValidationAlsoNamesItsReason(t *testing.T) {
 func TestStaleNamesTheCauseThatOverturnedIt(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
-	stale := domain.ValidateBeforeDecision(registry, prior)
+	stale := domain.ValidateBeforeDecision(registry, prior, nil)
 
 	if stale.Outcome() != domain.ResolutionStale {
 		t.Fatalf("outcome = %q, want STALE", stale.Outcome())
@@ -104,7 +104,7 @@ func TestUniqueResolutionCarriesNoReason(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 
-	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	if result.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", result.Outcome())

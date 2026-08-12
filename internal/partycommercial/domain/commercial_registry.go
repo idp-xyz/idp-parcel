@@ -45,8 +45,12 @@ type commercialVersionKey struct {
 
 // CommercialRegistry 是解析据以选择的受控发布集合。它只增不改：新版本与旧版本并存
 // 而不是替换它们，已登记版本的内容也绝不被改写。
+//
+// 商业价格政策与版本分开登记：版本回答「有没有这份价格规则对象」，政策回答「哪个方向
+// 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。
 type CommercialRegistry struct {
 	versions map[commercialVersionKey]CommercialVersion
+	policies []CommercialPricePolicy
 }
 
 func NewCommercialRegistry() *CommercialRegistry {
@@ -70,6 +74,17 @@ func (registry *CommercialRegistry) Register(version CommercialVersion) (Registr
 		return RegistrationReplay, nil
 	}
 	return RegistrationConflict, ErrCommercialVersionConflict
+}
+
+// RegisterPricePolicy 接纳一份已构造的商业价格政策。它不代替 Register：政策引用的版本
+// 仍须按版本通道进入登记册；这里只把「方向 + 方案绑定」放进计价选用集合。
+func (registry *CommercialRegistry) RegisterPricePolicy(policy CommercialPricePolicy) {
+	registry.policies = append(registry.policies, policy)
+}
+
+// PricePolicies 交回当前已登记的政策切片副本，供解析与测试观察。
+func (registry *CommercialRegistry) PricePolicies() []CommercialPricePolicy {
+	return append([]CommercialPricePolicy(nil), registry.policies...)
 }
 
 // sameReleasedContent 比较一次发布固定了什么。生命周期位置刻意不算在内：一个后来生效
@@ -122,7 +137,7 @@ func (registry *CommercialRegistry) Count() int {
 // 它刻意是范围级而非对象级。同范围新增一个竞争候选时，先前采用的那个对象一个字节都
 // 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。
 func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference) AuthorityViewRevision {
-	parts := make([]string, 0, len(registry.versions))
+	parts := make([]string, 0, len(registry.versions)+len(registry.policies))
 	for key, version := range registry.versions {
 		if version.scope != scope {
 			continue
@@ -133,6 +148,19 @@ func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference)
 			key.version.String(),
 			version.contentDigest.String(),
 			version.status.String(),
+		}, "\x1f"))
+	}
+	for _, policy := range registry.policies {
+		if policy.scope != scope {
+			continue
+		}
+		// 政策参与视图修订：只改绑定、不动版本正文时，解析身份仍须跟着变。
+		parts = append(parts, strings.Join([]string{
+			"PRICE_POLICY",
+			policy.version.objectID.String(),
+			policy.version.version.String(),
+			policy.direction.String(),
+			policy.plan.String(),
 		}, "\x1f"))
 	}
 	sort.Strings(parts)

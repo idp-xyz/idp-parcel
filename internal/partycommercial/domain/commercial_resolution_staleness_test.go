@@ -12,7 +12,7 @@ func TestResolutionCarriesTheAuthorityViewRevision(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 
-	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	revision, present := result.ViewRevision()
 	if !present || revision.String() == "" {
@@ -30,7 +30,7 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 	adopted := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
 
-	prior := domain.ResolveCommercialBasis(registry, key)
+	prior := domain.ResolveCommercialBasis(registry, key, nil)
 	if prior.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("prior outcome = %q, want UNIQUELY_RESOLVED", prior.Outcome())
 	}
@@ -42,7 +42,7 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 		t.Fatal("the adopted object changed, which would make this test prove nothing")
 	}
 
-	revalidated := domain.ValidateBeforeDecision(registry, prior)
+	revalidated := domain.ValidateBeforeDecision(registry, prior, nil)
 	if revalidated.Outcome() != domain.ResolutionStale {
 		t.Fatalf("outcome = %q, want STALE", revalidated.Outcome())
 	}
@@ -53,7 +53,7 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 		t.Fatal("a stale result offers no continuation reference")
 	}
 
-	current := domain.ResolveCommercialBasis(registry, key)
+	current := domain.ResolveCommercialBasis(registry, key, nil)
 	if current.Outcome() != domain.ApplicabilityConflict {
 		t.Fatalf("re-resolution outcome = %q, want APPLICABILITY_CONFLICT", current.Outcome())
 	}
@@ -63,9 +63,9 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 func TestUnchangedAuthorityViewKeepsThePriorResolutionUsable(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
-	revalidated := domain.ValidateBeforeDecision(registry, prior)
+	revalidated := domain.ValidateBeforeDecision(registry, prior, nil)
 	if revalidated.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want the prior result to stand", revalidated.Outcome())
 	}
@@ -79,7 +79,7 @@ func TestReResolutionAfterAChangeYieldsANewResolutionIdentity(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	live := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	key := resolutionKey(t, "scope-a", domain.CustomerContractObject)
-	first := domain.ResolveCommercialBasis(registry, key)
+	first := domain.ResolveCommercialBasis(registry, key, nil)
 
 	retired, err := live.Retire(commercialValue(t, domain.NewRetirementReference, "retire-1"), anchorAt.AddDate(0, -1, 0))
 	if err != nil {
@@ -91,10 +91,10 @@ func TestReResolutionAfterAChangeYieldsANewResolutionIdentity(t *testing.T) {
 	}
 	effectiveIn(t, replacement, domain.CustomerContractObject, "contract-1", "v2", "sha256:c1-v2", "scope-a")
 
-	if domain.ValidateBeforeDecision(replacement, first).Outcome() != domain.ResolutionStale {
+	if domain.ValidateBeforeDecision(replacement, first, nil).Outcome() != domain.ResolutionStale {
 		t.Fatal("a replaced basis left the prior resolution usable")
 	}
-	again := domain.ResolveCommercialBasis(replacement, key)
+	again := domain.ResolveCommercialBasis(replacement, key, nil)
 	if again.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("re-resolution outcome = %q, want UNIQUELY_RESOLVED", again.Outcome())
 	}
@@ -108,11 +108,11 @@ func TestReResolutionAfterAChangeYieldsANewResolutionIdentity(t *testing.T) {
 func TestChangesInAnotherScopeDoNotStaleThisOne(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-9", "v1", "sha256:c9", "scope-b")
 
-	if got := domain.ValidateBeforeDecision(registry, prior).Outcome(); got != domain.UniquelyResolved {
+	if got := domain.ValidateBeforeDecision(registry, prior, nil).Outcome(); got != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q; a neighbouring scope invalidated this resolution", got)
 	}
 }
@@ -122,9 +122,9 @@ func TestChangesInAnotherScopeDoNotStaleThisOne(t *testing.T) {
 func TestUnavailableAuthorityLeavesRevalidationPendingRatherThanStale(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
-	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	prior := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 
-	if got := domain.ValidateBeforeDecision(nil, prior).Outcome(); got != domain.ResolutionPending {
+	if got := domain.ValidateBeforeDecision(nil, prior, nil).Outcome(); got != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", got)
 	}
 }
@@ -133,12 +133,12 @@ func TestUnavailableAuthorityLeavesRevalidationPendingRatherThanStale(t *testing
 // 可校验的原结果，提交前校验对它无话可说。
 func TestOnlyAUniqueResolutionCanBeRevalidated(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
-	notResolved := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject))
+	notResolved := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 	if notResolved.Outcome() != domain.NoApplicableBasis {
 		t.Fatalf("fixture outcome = %q, want NO_APPLICABLE_BASIS", notResolved.Outcome())
 	}
 
-	if got := domain.ValidateBeforeDecision(registry, notResolved).Outcome(); got != domain.NoApplicableBasis {
+	if got := domain.ValidateBeforeDecision(registry, notResolved, nil).Outcome(); got != domain.NoApplicableBasis {
 		t.Fatalf("outcome = %q; re-validating a non-result should return it unchanged", got)
 	}
 }

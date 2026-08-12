@@ -82,7 +82,7 @@ func TestAClosureRefusesARulePackageTheContractDoesNotName(t *testing.T) {
 	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-other", "v1", "sha256:other", "scope-a")
 
 	closure := domain.ResolveCommercialClosure(registry,
-		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject))
+		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject), nil)
 
 	if closure.Outcome() != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", closure.Outcome())
@@ -103,7 +103,7 @@ func TestAClosureAdoptsTheRulePackageTheContractNames(t *testing.T) {
 	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-named", "v1", "sha256:named", "scope-a")
 
 	closure := domain.ResolveCommercialClosure(registry,
-		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject))
+		closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject), nil)
 
 	if closure.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q）", closure.Outcome(), closure.Reason())
@@ -126,7 +126,7 @@ func TestANamedReferenceOutsideTheRequestedBasesDoesNotStallTheClosure(t *testin
 	effectiveNaming(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a",
 		map[domain.CommercialObjectKind]string{domain.AcceptanceRulePackageObject: "rules-named"})
 
-	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", domain.CustomerContractObject))
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", domain.CustomerContractObject), nil)
 
 	if closure.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q）", closure.Outcome(), closure.Reason())
@@ -139,7 +139,7 @@ func TestClosureResolvesEveryRequiredBasisUniquely(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	seedClosure(t, registry, "scope-a", closureBases...)
 
-	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...))
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 
 	if closure.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", closure.Outcome())
@@ -167,7 +167,7 @@ func TestAnIncompleteClosureFailsAsAWholeAndNamesTheGap(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	seedClosure(t, registry, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject)
 
-	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...))
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 
 	if closure.Outcome() != domain.NoApplicableBasis {
 		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", closure.Outcome())
@@ -187,7 +187,7 @@ func TestOneConflictingBasisMakesTheWholeClosureConflict(t *testing.T) {
 	seedClosure(t, registry, "scope-a", closureBases...)
 	effectiveIn(t, registry, domain.SettlementPolicyObject, "rival-policy", "v1", "sha256:rival", "scope-a")
 
-	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...))
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 
 	if closure.Outcome() != domain.ApplicabilityConflict {
 		t.Fatalf("outcome = %q, want APPLICABILITY_CONFLICT", closure.Outcome())
@@ -208,7 +208,7 @@ func TestConflictOutranksAMissingBasis(t *testing.T) {
 	seedClosure(t, registry, "scope-a", domain.CustomerContractObject, domain.SettlementPolicyObject)
 	effectiveIn(t, registry, domain.SettlementPolicyObject, "rival-policy", "v1", "sha256:rival", "scope-a")
 
-	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...))
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 
 	if closure.Outcome() != domain.ApplicabilityConflict {
 		t.Fatalf("outcome = %q, want APPLICABILITY_CONFLICT to outrank the missing rule package", closure.Outcome())
@@ -225,7 +225,7 @@ func TestClosureKeyRefusesADuplicateRequiredBasis(t *testing.T) {
 	seedClosure(t, registry, "scope-a", closureBases...)
 
 	key := closureKey(t, "scope-a", domain.CustomerContractObject, domain.CustomerContractObject)
-	if got := domain.ResolveCommercialClosure(registry, key).Outcome(); got != domain.InputNotAccepted {
+	if got := domain.ResolveCommercialClosure(registry, key, nil).Outcome(); got != domain.InputNotAccepted {
 		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", got)
 	}
 }
@@ -236,14 +236,14 @@ func TestClosureKeyRequiresAtLeastOneBasis(t *testing.T) {
 	key := closureKey(t, "scope-a", domain.CustomerContractObject)
 	key.RequiredBases = nil
 
-	if got := domain.ResolveCommercialClosure(registry, key).Outcome(); got != domain.InputNotAccepted {
+	if got := domain.ResolveCommercialClosure(registry, key, nil).Outcome(); got != domain.InputNotAccepted {
 		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", got)
 	}
 }
 
 // Covers: UC-PC-002 — 权威读不到时整体未决，与「该范围没有适用对象」不同。
 func TestUnreadableAuthorityMakesTheClosurePending(t *testing.T) {
-	if got := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", closureBases...)).Outcome(); got != domain.ResolutionPending {
+	if got := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", closureBases...), nil).Outcome(); got != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", got)
 	}
 }
@@ -251,7 +251,7 @@ func TestUnreadableAuthorityMakesTheClosurePending(t *testing.T) {
 // Covers: UC-PC-002 解析结果语义「解析未决 → 保存缺口并安全续办」与 S01-W02 契约中每个
 // 未决都携带 reason 与 continuationRef。只报 outcome 说不出缺的是什么，也接不回去。
 func TestEveryClosurePendingNamesItsReasonAndStaysResumable(t *testing.T) {
-	unreadable := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", closureBases...))
+	unreadable := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", closureBases...), nil)
 	if unreadable.Reason() != domain.AuthorityUnreadable {
 		t.Fatalf("reason = %q, want AUTHORITY_UNREADABLE", unreadable.Reason())
 	}
@@ -264,7 +264,7 @@ func TestEveryClosurePendingNamesItsReasonAndStaysResumable(t *testing.T) {
 	unanchored := closureKey(t, "scope-a", closureBases...)
 	unanchored.Anchor = domain.SelectionAnchor{}
 
-	unconfigured := domain.ResolveCommercialClosure(registry, unanchored)
+	unconfigured := domain.ResolveCommercialClosure(registry, unanchored, nil)
 	if unconfigured.Outcome() != domain.ResolutionPending {
 		t.Fatalf("outcome = %q, want RESOLUTION_PENDING", unconfigured.Outcome())
 	}
@@ -287,15 +287,93 @@ func TestEveryClosurePendingNamesItsReasonAndStaysResumable(t *testing.T) {
 func TestClosureContinuationIsStablePerInputAndReason(t *testing.T) {
 	key := closureKey(t, "scope-a", closureBases...)
 
-	first := domain.ResolveCommercialClosure(nil, key)
-	second := domain.ResolveCommercialClosure(nil, key)
+	first := domain.ResolveCommercialClosure(nil, key, nil)
+	second := domain.ResolveCommercialClosure(nil, key, nil)
 	if first.ContinuationReference() != second.ContinuationReference() {
 		t.Fatalf("同一输入同一原因给出了不同续办引用: %q vs %q",
 			first.ContinuationReference().String(), second.ContinuationReference().String())
 	}
 
-	fewer := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", domain.CustomerContractObject))
+	fewer := domain.ResolveCommercialClosure(nil, closureKey(t, "scope-a", domain.CustomerContractObject), nil)
 	if fewer.ContinuationReference() == first.ContinuationReference() {
 		t.Fatal("必需依据集合不同的两次解析共用了续办引用")
+	}
+}
+
+func pricingClosureKey(t *testing.T, scope string, direction domain.PriceDirection, required ...domain.CommercialObjectKind) domain.ClosureResolutionKey {
+	t.Helper()
+	key := closureKey(t, scope, required...)
+	key.Purpose = domain.PricingPurpose
+	key.PriceDirection = direction
+	return key
+}
+
+// Covers: `AT-PC-035`（闭包级）「同一客户范围分别请求 SELL 计费和 BUY 成本 → 返回各自独立
+// 的商业政策、方向和定价方案绑定，不复用另一方向结果」。
+//
+// 单元级已由 `ResolveCommercialPricePolicy` 钉住；本用例钉的是引用闭包成功路径必须经政策
+// 解析，并把方向与绑定挂在 AdoptedBasis 上（ADR-0034）。
+func TestClosureAdoptsIndependentPricePoliciesPerDirection(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+	registerPricePolicy(t, registry, "policy-sell", domain.SellDirection, "scope-a", "plan-sell")
+	registerPricePolicy(t, registry, "policy-buy", domain.BuyDirection, "scope-a", "plan-buy")
+
+	required := append([]domain.CommercialObjectKind{}, closureBases...)
+	required = append(required, domain.PriceRuleObject)
+
+	sell := domain.ResolveCommercialClosure(registry,
+		pricingClosureKey(t, "scope-a", domain.SellDirection, required...), allPlansAdoptable)
+	buy := domain.ResolveCommercialClosure(registry,
+		pricingClosureKey(t, "scope-a", domain.BuyDirection, required...), allPlansAdoptable)
+
+	if sell.Outcome() != domain.UniquelyResolved || buy.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcomes sell=%q buy=%q", sell.Outcome(), buy.Outcome())
+	}
+	if sell.ResolutionID() == buy.ResolutionID() {
+		t.Fatal("SELL and BUY closures shared one resolution identity")
+	}
+
+	sellPolicy, sellOK := mustAdoptedPricePolicy(t, sell)
+	buyPolicy, buyOK := mustAdoptedPricePolicy(t, buy)
+	if !sellOK || !buyOK {
+		t.Fatal("closure adopted a price rule without a price policy binding")
+	}
+	if sellPolicy.Direction() != domain.SellDirection || sellPolicy.PricingPlan().String() != "plan-sell" {
+		t.Fatalf("sell binding = %q/%q", sellPolicy.Direction(), sellPolicy.PricingPlan())
+	}
+	if buyPolicy.Direction() != domain.BuyDirection || buyPolicy.PricingPlan().String() != "plan-buy" {
+		t.Fatalf("buy binding = %q/%q", buyPolicy.Direction(), buyPolicy.PricingPlan())
+	}
+	if sellPolicy.PricingPlan() == buyPolicy.PricingPlan() {
+		t.Fatal("SELL reused the BUY pricing plan binding")
+	}
+}
+
+func mustAdoptedPricePolicy(t *testing.T, closure domain.CommercialClosure) (domain.CommercialPricePolicy, bool) {
+	t.Helper()
+	adopted, present := closure.AdoptedFor(domain.PriceRuleObject)
+	if !present {
+		t.Fatal("closure did not adopt a price rule")
+	}
+	return adopted.PricePolicy()
+}
+
+// Covers: ADR-0034 — 计价闭包若只登记了版本、没有政策，不得靠版本冒充带方向的绑定。
+func TestPricingClosureWithoutPolicyIsNoApplicableBasis(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+	effectiveIn(t, registry, domain.PriceRuleObject, "price-only", "v1", "sha256:p", "scope-a")
+
+	required := append([]domain.CommercialObjectKind{}, closureBases...)
+	required = append(required, domain.PriceRuleObject)
+
+	closure := domain.ResolveCommercialClosure(registry,
+		pricingClosureKey(t, "scope-a", domain.SellDirection, required...), allPlansAdoptable)
+	if closure.Outcome() != domain.NoApplicableBasis {
+		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS", closure.Outcome())
+	}
+	if _, present := closure.AdoptedFor(domain.PriceRuleObject); present {
+		t.Fatal("a version-only price rule was adopted under pricing purpose")
 	}
 }

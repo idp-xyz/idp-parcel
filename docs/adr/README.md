@@ -39,6 +39,7 @@
 - [ADR-0031：自有仓储端口的写入结果是封闭代数而不是 error，预期版本由聚合携带](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)
 - [ADR-0032：商业依据解析在采用之前必须确认正文里指名的引用，跨上下文的那一半只收所有方的答复](./0032-resolution-confirms-references-named-in-the-adopted-content.md)
 - [ADR-0033：`依据未解析` 在消费方端口自占一格，既不并进`已失效`，也不在消费侧拆回两格](./0033-basis-not-resolved-is-its-own-value-on-the-consumer-port.md)
+- [ADR-0034：计价闭包经商业价格政策采用，结果带回方向与定价方案绑定](./0034-pricing-closure-adopts-via-price-policy.md)
 
 ## 已被取代决策
 

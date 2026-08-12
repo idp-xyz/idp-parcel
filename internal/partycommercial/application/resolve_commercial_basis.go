@@ -55,7 +55,7 @@ func (handler *ResolveCommercialBasisHandler) Handle(
 	// 先判身份再读权威。顺序不能反：最小身份不成立时用例禁止查询候选，而一次已经发出的
 	// 查询无法收回，它本身就回答了「这个范围里有没有对象」。
 	if !command.Key.MinimumIdentityEstablished() {
-		return handler.resultOf(domain.ResolveCommercialClosure(nil, command.Key)), nil
+		return handler.resultOf(domain.ResolveCommercialClosure(nil, command.Key, nil)), nil
 	}
 
 	view, err := handler.authority.LoadScope(ctx, command.Key.TenantID, command.Key.Scope)
@@ -63,10 +63,10 @@ func (handler *ResolveCommercialBasisHandler) Handle(
 		// 读不到权威形成解析未决，不向上抛技术错误。用例明写依赖超时与权威确认「无适用
 		// 依据」是不同结果：合并会让一次读取失败被下游读成这个客户没有合同，进而当作
 		// 拒绝理由。空视图是领域已定的「权威不可读」表达，不是这里图省事的绕法。
-		return handler.resultOf(domain.ResolveCommercialClosure(nil, command.Key)), nil
+		return handler.resultOf(domain.ResolveCommercialClosure(nil, command.Key, nil)), nil
 	}
 
-	return handler.resultOf(domain.ResolveCommercialClosure(view, command.Key)), nil
+	return handler.resultOf(domain.ResolveCommercialClosure(view, command.Key, nil)), nil
 }
 
 // resultOf 在结论形成之后才读时钟，因此判断时间落在权威读取之后而非之前。
