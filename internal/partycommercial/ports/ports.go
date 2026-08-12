@@ -43,6 +43,29 @@ type AsOfPolicyDeclaration interface {
 	) ([]domain.AsOfPolicy, error)
 }
 
+// AcceptanceContentDeclaration 取已唯一选出对象为新委托声明的接受内容：规则包的适用校验组
+// 与人工复核指令、服务产品的待路由许可（ADR-0042）。
+//
+// 它与 CommercialAuthorityView 分开，分界与 AsOfPolicyDeclaration 同一条：第一阶段用独立锚点
+// 选出规则包与产品，内容声明只在唯一选出之后按已选对象读取。塞进解析结果，声明就有机会参与
+// 决定它自己被谁采用。
+//
+// found=false 即实例未配置。没有租户时必然如此——声明属实例半边，本上下文不内置任何默认：
+// 不默认全组适用、不默认免复核、不默认许可待路由；消费方据以停在未决，不是放行。
+type AcceptanceContentDeclaration interface {
+	LoadAcceptanceRuleContent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) (domain.AcceptanceRuleContent, bool, error)
+
+	LoadPendingRoutingPermission(
+		ctx context.Context,
+		tenant domain.TenantID,
+		serviceProduct domain.CommercialVersion,
+	) (domain.PendingRoutingPermission, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回一次已固定的解析。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回

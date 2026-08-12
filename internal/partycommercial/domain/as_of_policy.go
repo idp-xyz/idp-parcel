@@ -6,7 +6,9 @@ import (
 )
 
 var (
-	ErrUnusableRulePackage     = errors.New("party commercial: rule package cannot declare as-of policies")
+	// ErrUnusableRulePackage：非已生效接单规则包承载不了声明——asOf 政策与接受内容声明
+	// 同判据同恢复动作（换当前可用的规则包），共用这一格（ADR-0042）。
+	ErrUnusableRulePackage     = errors.New("party commercial: rule package cannot carry declarations")
 	ErrAsOfPolicyNotConfigured = errors.New("party commercial: as-of policy is not configured")
 	ErrConflictingAsOfPolicy   = errors.New("party commercial: conflicting as-of policy for one judgment")
 	ErrInvalidAsOfValue        = errors.New("party commercial: invalid as-of value")
