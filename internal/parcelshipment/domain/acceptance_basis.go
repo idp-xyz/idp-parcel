@@ -321,11 +321,14 @@ type CommercialBasisSnapshot struct {
 //
 // 本包的分界是**入参数量**，不是值对象与实体之分，而且它只单向成立：≥5 个输入一律用 Spec
 // 结构体（`SubmitShipmentRequestSpec` 5、`ReachabilityJudgmentSpec` 5、
-// `SafeHandoffAssessmentSpec` 10、`ProductionOwnershipDecisionSpec` 14），零反例——本包七个
-// 多参位置构造器入参最多 4 个（`NewSourceIdentity`、`NewSubmissionCandidate`、
-// `NewAcceptanceCheck`、`NewFinancialControlResult`、`NewSourceSubmissionFingerprint` 皆为 4，
-// `NewSubmissionBatchCandidate` 3、`NewAdmissionScope` 2）。`ReachabilityJudgmentSpec` 正是
-// 越线后改过来的：`不适用`要携带依据，入参从 4 涨到 5。
+// `SafeHandoffAssessmentSpec` 10、`ProductionOwnershipDecisionSpec` 14），零反例——凡多参
+// 位置构造器入参最多 4 个，不靠「一共几个」那种会过期且变红不了的计数（MCP-2 `C2`，实测于
+// `337e02b` 时原句写「七个」却至少漏了同文件的 `NewDeclaredAsOf` / `NewEchoedAsOfPolicy` /
+// `NewJudgmentAsOf` 与 `NewOwnershipValidityInterval`）。举例：`NewSourceIdentity`、
+// `NewSubmissionCandidate`、`NewAcceptanceCheck`、`NewFinancialControlResult`、
+// `NewSourceSubmissionFingerprint` 皆为 4，`NewSubmissionBatchCandidate` 与前三个 AsOf 类为
+// 3，`NewAdmissionScope` / `NewJudgmentAsOf` / `NewOwnershipValidityInterval` 为 2。
+// `ReachabilityJudgmentSpec` 正是越线后改过来的：`不适用`要携带依据，入参从 4 涨到 5。
 //
 // 反向不成立，别照着推：≤4 时两种写法都行。`AcceptanceDecisionSpec`、
 // `ManualReviewCompletionSpec`、`ProcessingAttemptSpec` 都只有 4 个字段却用 Spec，因为三者
