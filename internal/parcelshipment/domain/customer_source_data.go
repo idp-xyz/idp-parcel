@@ -112,6 +112,45 @@ func (scope SourceDataScope) valid() bool {
 	return scope.shipmentRequestID.valid() && scope.dataGroup.valid()
 }
 
+// AmendmentIntent 是客户声明的修订意图封闭集合（`UC-PS-002` 输入语义「修订意图」）。今天
+// 只有修订路径已实现的三格：补充、更正、显式清空；来源更正/撤销关系随其机制实现时再加
+// ——取值与产生它的规则同时出现。
+//
+// `显式清空`单独一格是 `AT-PS-020` 的机制半边：省略字段表示不变、清空必须显式声明并由字段
+// 和阶段规则允许，而矩阵收不到意图，就永远分不出「改成新值」与「清掉」——两者在同一阶段
+// 的允许性可以相反。
+type AmendmentIntent uint8
+
+const (
+	AmendmentIntentInvalid AmendmentIntent = iota
+	SupplementIntent
+	CorrectionIntent
+	ExplicitClearIntent
+)
+
+func (intent AmendmentIntent) valid() bool {
+	return intent >= SupplementIntent && intent <= ExplicitClearIntent
+}
+
+// Declared 报告调用方是否声明过意图。零值不是一种意图——省略字段连请求都不构成，构成了
+// 请求就必须说清动作。
+func (intent AmendmentIntent) Declared() bool {
+	return intent.valid()
+}
+
+func (intent AmendmentIntent) String() string {
+	switch intent {
+	case SupplementIntent:
+		return "SUPPLEMENT"
+	case CorrectionIntent:
+		return "CORRECTION"
+	case ExplicitClearIntent:
+		return "EXPLICIT_CLEAR"
+	default:
+		return ""
+	}
+}
+
 // SourceDataBasis 是本次修订所依据的基准，两种合法形态：某个既有资料版本，或接受基线——
 // 客户首次补充缺失资料时没有前序版本可依据。
 //
@@ -150,6 +189,7 @@ type CustomerSourceDataVersionSpec struct {
 	VersionID SourceDataVersionID
 	Scope     SourceDataScope
 	Basis     SourceDataBasis
+	Intent    AmendmentIntent
 	Request   SourceSubmissionFingerprint
 	Reason    AmendmentReasonReference
 	Requester RequesterReference
@@ -167,6 +207,7 @@ type CustomerSourceDataVersion struct {
 	versionID   SourceDataVersionID
 	scope       SourceDataScope
 	basis       SourceDataBasis
+	intent      AmendmentIntent
 	request     SourceSubmissionFingerprint
 	reason      AmendmentReasonReference
 	requester   RequesterReference
@@ -187,6 +228,7 @@ func FormCustomerSourceDataVersion(spec CustomerSourceDataVersionSpec) (Customer
 		versionID:   spec.VersionID,
 		scope:       spec.Scope,
 		basis:       spec.Basis,
+		intent:      spec.Intent,
 		request:     spec.Request,
 		reason:      spec.Reason,
 		requester:   spec.Requester,
@@ -196,6 +238,16 @@ func FormCustomerSourceDataVersion(spec CustomerSourceDataVersionSpec) (Customer
 		formedAt:    spec.FormedAt,
 	}
 	if !version.valid() {
+		return CustomerSourceDataVersion{}, ErrInvalidCustomerSourceDataVersion
+	}
+	// 意图与基准必须对得上号：补充是「基线上没有这项」，只能以接受基线为基准；更正改的是
+	// 某份既有版本，必须指名它。对不上号的版本声称一件它没做的事，而版本不可覆盖，留下就
+	// 永远解释不清。显式清空两种基准都合法——清掉首次提交里的值以基线为基准，清掉某次修订
+	// 引入的值以那份版本为基准。
+	if spec.Intent == SupplementIntent && !spec.Basis.OnAcceptanceBaseline() {
+		return CustomerSourceDataVersion{}, ErrInvalidCustomerSourceDataVersion
+	}
+	if spec.Intent == CorrectionIntent && spec.Basis.OnAcceptanceBaseline() {
 		return CustomerSourceDataVersion{}, ErrInvalidCustomerSourceDataVersion
 	}
 	return version, nil
@@ -211,6 +263,12 @@ func (version CustomerSourceDataVersion) Scope() SourceDataScope {
 
 func (version CustomerSourceDataVersion) Basis() SourceDataBasis {
 	return version.basis
+}
+
+// Intent 是这份版本声明的修订意图。留在版本上而不只留在请求里，因为版本不可覆盖——事后
+// 解释「这份版本清掉了值还是改成了新值」，只有它答得了。
+func (version CustomerSourceDataVersion) Intent() AmendmentIntent {
+	return version.intent
 }
 
 func (version CustomerSourceDataVersion) Request() SourceSubmissionFingerprint {
@@ -386,6 +444,7 @@ func (version CustomerSourceDataVersion) valid() bool {
 	return version.versionID.valid() &&
 		version.scope.valid() &&
 		version.basis.valid() &&
+		version.intent.valid() &&
 		version.request.valid() &&
 		version.reason.valid() &&
 		version.requester.valid() &&

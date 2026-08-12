@@ -590,9 +590,13 @@ const (
 )
 
 // SourceDataAmendmentQuery 说明要判断哪一处资料范围在当前阶段的允许动作。
+//
+// Intent 随查询进矩阵：允许性按「哪一处、哪个动作」登记，`AT-PS-020` 的显式清空与改成
+// 新值在同一阶段的允许性可以相反，矩阵收不到意图就登记不了那种规则。
 type SourceDataAmendmentQuery struct {
 	Identity domain.SourceIdentity
 	Scope    domain.SourceDataScope
+	Intent   domain.AmendmentIntent
 	Reason   domain.AmendmentReasonReference
 }
 

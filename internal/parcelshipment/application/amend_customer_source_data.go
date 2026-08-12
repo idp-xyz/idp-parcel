@@ -55,8 +55,11 @@ type AmendCustomerSourceDataCommand struct {
 	ReceivedAt        time.Time
 	Scope             domain.SourceDataScope
 	Basis             domain.SourceDataBasis
-	Reason            domain.AmendmentReasonReference
-	Requester         domain.RequesterReference
+	// Intent 是客户声明的修订意图（补充/更正/显式清空）。省略字段不在这里表达——省略即
+	// 不为该范围提交请求；清空必须显式声明（`AT-PS-020`）。
+	Intent    domain.AmendmentIntent
+	Reason    domain.AmendmentReasonReference
+	Requester domain.RequesterReference
 	// EffectiveAt 是客户声明的资料适用时间，可以缺失。缺失时保持零值，绝不用 occurredAt
 	// 或 receivedAt 顶替——`UC-PS-002` 明禁那种补齐。
 	EffectiveAt time.Time
@@ -141,6 +144,13 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("preserve amendment source: %w", err)
 	}
 
+	// 修订意图是最低业务语义（`UC-PS-002` 输入语义表）：矩阵按它分辨「改成新值」与「清掉」
+	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务
+	// 未决——续办补不出一个没声明的意图。请求到达过这件事已由上面的来源保全留痕。
+	if !command.Intent.Declared() {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidCustomerSourceDataVersion)
+	}
+
 	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
 	if err != nil {
 		return handler.undecided(command, ShipmentRequestUnavailable), nil
@@ -191,6 +201,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	allowance, err := handler.deps.Rules.DeclareSourceDataAmendment(ctx, ports.SourceDataAmendmentQuery{
 		Identity: command.Identity,
 		Scope:    command.Scope,
+		Intent:   command.Intent,
 		Reason:   command.Reason,
 	})
 	if err != nil {
@@ -221,6 +232,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		VersionID:   versionID,
 		Scope:       command.Scope,
 		Basis:       command.Basis,
+		Intent:      command.Intent,
 		Request:     incoming,
 		Reason:      command.Reason,
 		Requester:   command.Requester,

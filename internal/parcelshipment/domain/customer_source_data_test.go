@@ -33,6 +33,7 @@ func amendmentSpec(t *testing.T) domain.CustomerSourceDataVersionSpec {
 		VersionID:   mustValue(t, domain.NewSourceDataVersionID, "data-version-1"),
 		Scope:       consigneeScope(t),
 		Basis:       domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:      domain.SupplementIntent,
 		Request:     sourceFingerprint(t, "tenant-1", "customer-1", "portal", "amend-1", "digest-1"),
 		Reason:      mustValue(t, domain.NewAmendmentReasonReference, "CONSIGNEE_ADDRESS_CORRECTION"),
 		Requester:   mustValue(t, domain.NewRequesterReference, "CUSTOMER-CONTACT-1"),
@@ -70,6 +71,72 @@ func TestACustomerSourceDataVersionKeepsItsFullAuditTrail(t *testing.T) {
 	if !version.FormedAt().Equal(amendmentFormedAt) {
 		t.Fatalf("formed at = %v, want %v", version.FormedAt(), amendmentFormedAt)
 	}
+	if version.Intent() != domain.SupplementIntent {
+		t.Fatalf("intent = %q, want SUPPLEMENT——版本不留意图，事后无从解释它做了什么", version.Intent())
+	}
+}
+
+// Covers: UC-PS-002 输入语义「修订意图：补充、更正、显式清空……及原因」与 `AT-PS-020`——
+// 意图与基准必须对得上号：补充只能以接受基线为基准，更正必须指名既有版本；显式清空两种
+// 基准都合法（清首次提交的值以基线为准，清某次修订引入的值以那份版本为准）。对不上号的
+// 版本声称一件它没做的事，而版本不可覆盖，留下就永远解释不清。
+func TestAmendmentIntentMustCohereWithItsBasis(t *testing.T) {
+	priorBasis := func(t *testing.T) domain.SourceDataBasis {
+		t.Helper()
+		basis, err := domain.NewAmendmentOfVersion(mustValue(t, domain.NewSourceDataVersionID, "data-version-0"))
+		if err != nil {
+			t.Fatalf("new amendment basis: %v", err)
+		}
+		return basis
+	}
+	cases := map[string]struct {
+		intent  domain.AmendmentIntent
+		basis   func(*testing.T) domain.SourceDataBasis
+		wantErr bool
+	}{
+		"supplement on the baseline": {
+			intent: domain.SupplementIntent,
+			basis:  func(*testing.T) domain.SourceDataBasis { return domain.NewSupplementOnAcceptanceBaseline() },
+		},
+		"supplement of a prior version is incoherent": {
+			intent:  domain.SupplementIntent,
+			basis:   priorBasis,
+			wantErr: true,
+		},
+		"correction of a prior version": {
+			intent: domain.CorrectionIntent,
+			basis:  priorBasis,
+		},
+		"correction on the baseline is incoherent": {
+			intent:  domain.CorrectionIntent,
+			basis:   func(*testing.T) domain.SourceDataBasis { return domain.NewSupplementOnAcceptanceBaseline() },
+			wantErr: true,
+		},
+		"clear on the baseline": {
+			intent: domain.ExplicitClearIntent,
+			basis:  func(*testing.T) domain.SourceDataBasis { return domain.NewSupplementOnAcceptanceBaseline() },
+		},
+		"clear of a prior version": {
+			intent: domain.ExplicitClearIntent,
+			basis:  priorBasis,
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			spec := amendmentSpec(t)
+			spec.Intent = testCase.intent
+			spec.Basis = testCase.basis(t)
+
+			_, err := domain.FormCustomerSourceDataVersion(spec)
+			if testCase.wantErr && !errors.Is(err, domain.ErrInvalidCustomerSourceDataVersion) {
+				t.Fatalf("error = %v, want ErrInvalidCustomerSourceDataVersion", err)
+			}
+			if !testCase.wantErr && err != nil {
+				t.Fatalf("form customer source data version: %v", err)
+			}
+		})
+	}
 }
 
 // Covers: UC-PS-002「不得创建占位版本」与 CONTEXT 的同一条留痕清单 — 缺任一项都不成版本。
@@ -86,6 +153,10 @@ func TestACustomerSourceDataVersionWithoutItsAuditTrailCannotBeFormed(t *testing
 		},
 		"basis": func(s domain.CustomerSourceDataVersionSpec) domain.CustomerSourceDataVersionSpec {
 			s.Basis = domain.SourceDataBasis{}
+			return s
+		},
+		"intent": func(s domain.CustomerSourceDataVersionSpec) domain.CustomerSourceDataVersionSpec {
+			s.Intent = domain.AmendmentIntentInvalid
 			return s
 		},
 		"request": func(s domain.CustomerSourceDataVersionSpec) domain.CustomerSourceDataVersionSpec {
@@ -168,6 +239,7 @@ func TestCustomerSourceDataVersionsAppendWithoutOverwritingBaselineOrPriorVersio
 	if secondSpec.Basis, err = domain.NewAmendmentOfVersion(first.VersionID()); err != nil {
 		t.Fatalf("new amendment basis: %v", err)
 	}
+	secondSpec.Intent = domain.CorrectionIntent
 	second, err := domain.FormCustomerSourceDataVersion(secondSpec)
 	if err != nil {
 		t.Fatalf("form second version: %v", err)
@@ -278,10 +350,14 @@ func acceptedWithVersions(t *testing.T, chain ...[2]string) domain.ShipmentReque
 		spec.VersionID = mustValue(t, domain.NewSourceDataVersionID, link[0])
 		if link[1] == "" {
 			spec.Basis = domain.NewSupplementOnAcceptanceBaseline()
-		} else if spec.Basis, err = domain.NewAmendmentOfVersion(
-			mustValue(t, domain.NewSourceDataVersionID, link[1]),
-		); err != nil {
-			t.Fatalf("new amendment basis: %v", err)
+			spec.Intent = domain.SupplementIntent
+		} else {
+			if spec.Basis, err = domain.NewAmendmentOfVersion(
+				mustValue(t, domain.NewSourceDataVersionID, link[1]),
+			); err != nil {
+				t.Fatalf("new amendment basis: %v", err)
+			}
+			spec.Intent = domain.CorrectionIntent
 		}
 
 		version, err := domain.FormCustomerSourceDataVersion(spec)

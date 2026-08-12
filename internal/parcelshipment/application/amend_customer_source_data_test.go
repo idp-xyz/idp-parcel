@@ -678,8 +678,59 @@ func (value *amendmentFixture) command(t *testing.T) application.AmendCustomerSo
 		ReceivedAt:        handlerClockAt,
 		Scope:             consigneeDataScope(t),
 		Basis:             domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:            domain.SupplementIntent,
 		Reason:            mustValue(t, domain.NewAmendmentReasonReference, "CONSIGNEE_ADDRESS_CORRECTION"),
 		Requester:         mustValue(t, domain.NewRequesterReference, "CUSTOMER-CONTACT-1"),
+	}
+}
+
+// Covers: `AT-PS-020`「省略字段与显式清空分别提交 → 省略字段保持不变；显式清空只有在字段
+// 和阶段规则允许时才形成版本」的清空半边——矩阵必须收到修订意图，否则「改成新值」与
+// 「清掉」在规则面前是同一个查询，同一阶段允许改值不允许清空的规则就无从登记。省略半边是
+// 结构性事实：省略即不为该范围提交版本，采用派生只覆盖明确范围（步骤 8 既有用例承重）。
+func TestAnExplicitClearReachesTheRuleMatrixAsItsOwnAction(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	command := fixture.command(t)
+	command.Intent = domain.ExplicitClearIntent
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(fixture.rules.asked) != 1 || fixture.rules.asked[0].Intent != domain.ExplicitClearIntent {
+		t.Fatalf("matrix queries = %#v; 清空没有作为独立动作到达矩阵", fixture.rules.asked)
+	}
+	version, present := result.Version()
+	if result.Outcome() != application.AmendmentRecorded || !present {
+		t.Fatalf("outcome = %q, version present = %v", result.Outcome(), present)
+	}
+	if version.Intent() != domain.ExplicitClearIntent {
+		t.Fatal("版本没有留下清空意图——事后无从解释这份版本是清掉了值还是改成了新值")
+	}
+}
+
+// 同一 AT 的拒绝方向：规则未允许清空时不形成版本，闸门对齐到`允许`一格（与未登记/不允许
+// 两条既有用例同一道闸），且矩阵收到的仍是清空这一动作。
+func TestADisallowedExplicitClearFormsNoVersion(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.rules.allowance = ports.SourceDataAmendmentDisallowed
+	command := fixture.command(t)
+	command.Intent = domain.ExplicitClearIntent
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AmendmentDisallowed {
+		t.Fatalf("outcome = %q, want DISALLOWED", result.Outcome())
+	}
+	if _, present := result.Version(); present {
+		t.Fatal("规则未允许清空却形成了版本")
+	}
+	if len(fixture.rules.asked) != 1 || fixture.rules.asked[0].Intent != domain.ExplicitClearIntent {
+		t.Fatalf("matrix queries = %#v; 拒绝裁的必须是清空这一动作", fixture.rules.asked)
 	}
 }
 
@@ -858,17 +909,21 @@ func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
 	}, nil
 }
 
+// sourceDataRuleDouble 留住每一次矩阵查询：允许性按「哪一处、哪个动作」登记，矩阵收没收到
+// 意图只有在它实际收到的参数上才验得出来（AT-PS-020）。
 type sourceDataRuleDouble struct {
 	allowance ports.SourceDataAmendmentAllowance
 	err       error
 	calls     int
+	asked     []ports.SourceDataAmendmentQuery
 }
 
 func (double *sourceDataRuleDouble) DeclareSourceDataAmendment(
 	_ context.Context,
-	_ ports.SourceDataAmendmentQuery,
+	query ports.SourceDataAmendmentQuery,
 ) (ports.SourceDataAmendmentAllowance, error) {
 	double.calls++
+	double.asked = append(double.asked, query)
 	if double.err != nil {
 		return ports.SourceDataAmendmentNotDeclared, double.err
 	}
