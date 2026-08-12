@@ -343,6 +343,83 @@ type ParcelCancellationHandoff interface {
 	HandOffParcelCancellation(ctx context.Context, intent ParcelCancellationHandoffIntent) error
 }
 
+// FinalRuleJudgment 是合同终局规则对一份责任结果的答复：满足时带终局类型与规则版本，
+// 不满足时带缺口依据。类型由规则给出——网络服务不统一规定跨产品终局集合。
+type FinalRuleJudgment struct {
+	Satisfied   bool
+	Kind        domain.FinalKindReference
+	RuleVersion domain.FinalRuleVersionReference
+	Basis       domain.CheckReason
+}
+
+// FinalRuleView 按接受时固定的产品与合同解析终局规则（PAR-COM-17 实例缝）。第二个
+// 返回值为 false 即「终局规则未配置」——保持未决，不默认「有效交付即所有产品终局」
+// （红线）；依赖调不通作为错误返回。
+type FinalRuleView interface {
+	JudgeFinalOutcome(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		outcome domain.ResponsibilityOutcome,
+	) (FinalRuleJudgment, bool, error)
+}
+
+// FinalAdoptionKey 是终局采用判断的幂等键：「同一包裹、来源身份和来源版本只能形成
+// 一个终局采用判断」。
+type FinalAdoptionKey struct {
+	TenantID domain.TenantID
+	Parcel   domain.DeclaredParcelID
+	Kind     domain.ResponsibilityOutcomeKind
+	Version  domain.ResponsibilityOutcomeVersion
+}
+
+// FinalOutcomeRecord 是一次终局采用判断留下的东西：终局（首派生或重派生）或不采用
+// 二居其一。
+type FinalOutcomeRecord struct {
+	Key           FinalAdoptionKey
+	ContentDigest string
+	Finalized     bool
+	Final         domain.ParcelFinalOutcome
+	RefusalBasis  domain.CheckReason
+	AdoptedAt     time.Time
+}
+
+type FinalOutcomeSaveOutcome uint8
+
+const (
+	FinalOutcomeSaveOutcomeInvalid FinalOutcomeSaveOutcome = iota
+	FinalOutcomeSaved
+	FinalOutcomeAlreadyRecorded
+)
+
+// FinalOutcomeStore 按幂等键找回并保存终局采用判断；FindCurrentFinal 按包裹找回当前
+// 有效终局（重派生的锚与委托完成派生的读口）。
+type FinalOutcomeStore interface {
+	FindByKey(ctx context.Context, key FinalAdoptionKey) (FinalOutcomeRecord, bool, error)
+	FindCurrentFinal(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (FinalOutcomeRecord, bool, error)
+	Save(ctx context.Context, record FinalOutcomeRecord) (FinalOutcomeSaveOutcome, error)
+}
+
+// FinalIdentityFactory 签发终局判断版本标识。
+type FinalIdentityFactory interface {
+	NextFinalOutcomeVersionID(ctx context.Context) (domain.FinalOutcomeVersionID, error)
+}
+
+// FinalOutcomeHandoffIntent 把已提交的终局判断交给适用下游（追踪、异常、结算消费稳定
+// 引用，不回写终局）。意图由采用键认领，重放重发同一份（ADR-0043）。
+type FinalOutcomeHandoffIntent struct {
+	Record FinalOutcomeRecord
+}
+
+// FinalOutcomeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type FinalOutcomeHandoff interface {
+	HandOffFinalOutcome(ctx context.Context, intent FinalOutcomeHandoffIntent) error
+}
+
 // NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
 // 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
 type NetworkIntakeHandoffIntent struct {
