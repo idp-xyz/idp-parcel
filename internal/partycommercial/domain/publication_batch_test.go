@@ -65,11 +65,11 @@ func TestPublicationBatchKeepsLegalProductWhenContractConflicts(t *testing.T) {
 	if got := registry.Count(); got != before+1 {
 		t.Fatalf("registry holds %d versions, want %d (prior + product; conflict must not roll back)", got, before+1)
 	}
-	storedProduct, found := registry.Lookup(productDraft.Kind(), productDraft.ObjectID(), productDraft.Version())
+	storedProduct, found := registry.Lookup(productDraft.Tenant(), productDraft.Kind(), productDraft.ObjectID(), productDraft.Version())
 	if !found || storedProduct.ContentDigest().String() != "sha256:product-ok" {
 		t.Fatal("合同冲突把已合法产品从登记册撤走了（全量回滚）")
 	}
-	storedContract, found := registry.Lookup(prior.Kind(), prior.ObjectID(), prior.Version())
+	storedContract, found := registry.Lookup(prior.Tenant(), prior.Kind(), prior.ObjectID(), prior.Version())
 	if !found || storedContract.ContentDigest() != prior.ContentDigest() {
 		t.Fatal("冲突尝试覆盖了既有合同正文")
 	}

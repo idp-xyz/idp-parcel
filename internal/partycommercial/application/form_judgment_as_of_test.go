@@ -429,8 +429,8 @@ func TestASecondPhaseProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCusto
 	}
 }
 
-// 014 应用半边（第二阶段回指）：错租户只切换 Caller.TenantID，与从未签发同形。
-// 对象半边仍缺；完整 AT-PC-014 等两半齐——故不写 `Covers: AT-PC-014`。
+// Covers: `AT-PC-014` 应用半边（第二阶段回指）：错租户只切换 Caller.TenantID，与从未签发同形。
+// 对象半边见 domain 登记册键用例。
 func TestAResolutionNamedByAnotherTenantIsNotAccepted(t *testing.T) {
 	policies := &asOfPolicyDouble{}
 	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))

@@ -15,7 +15,7 @@ func TestValidityCorrectionKeepsOriginalAndAdvancesViewRevision(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	live := effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:contract-1", "scope-a")
 	originalInterval := live.Effective()
-	before := registry.ViewRevision(live.Scope())
+	before := registry.ViewRevision(live.Tenant(), live.Scope())
 
 	atAnchor := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 	if atAnchor.Outcome() != domain.UniquelyResolved {
@@ -43,7 +43,7 @@ func TestValidityCorrectionKeepsOriginalAndAdvancesViewRevision(t *testing.T) {
 		t.Fatal("有效性更正后 ViewRevision 没有推进")
 	}
 
-	stored, found := registry.Lookup(live.Kind(), live.ObjectID(), live.Version())
+	stored, found := registry.Lookup(live.Tenant(), live.Kind(), live.ObjectID(), live.Version())
 	if !found {
 		t.Fatal("更正后原版本从登记册消失了")
 	}
@@ -59,7 +59,7 @@ func TestValidityCorrectionKeepsOriginalAndAdvancesViewRevision(t *testing.T) {
 		t.Fatal("更正改写了原批准判断")
 	}
 
-	held, ok := registry.ValidityCorrectionOf(live.Kind(), live.ObjectID(), live.Version())
+	held, ok := registry.ValidityCorrectionOf(live.Tenant(), live.Kind(), live.ObjectID(), live.Version())
 	if !ok {
 		t.Fatal("更正关系没有留下来")
 	}

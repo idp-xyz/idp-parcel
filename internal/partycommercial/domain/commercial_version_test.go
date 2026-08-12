@@ -18,6 +18,7 @@ func commercialSpec(t *testing.T, kind domain.CommercialObjectKind, objectID, ve
 		t.Fatalf("new effective interval: %v", err)
 	}
 	return domain.CommercialVersionSpec{
+		TenantID:      commercialValue(t, domain.NewTenantID, "tenant-1"),
 		Kind:          kind,
 		ObjectID:      commercialValue(t, domain.NewCommercialObjectID, objectID),
 		Version:       commercialValue(t, domain.NewCommercialVersionLabel, version),

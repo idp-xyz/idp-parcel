@@ -290,6 +290,9 @@ func (standing NamedReferenceStanding) String() string {
 type NamedReferenceStandingLookup func(kind CommercialObjectKind, objectID CommercialObjectID) NamedReferenceStanding
 
 type CommercialVersionSpec struct {
+	// TenantID 是版本身份的最高隔离边界（ADR-0040 / ADR-0003）。跨租户可以合法共用
+	// 同一 objectID+version，二者不是同一次发布。
+	TenantID      TenantID
 	Kind          CommercialObjectKind
 	ObjectID      CommercialObjectID
 	Version       CommercialVersionLabel
@@ -305,6 +308,7 @@ type CommercialVersionSpec struct {
 // CommercialVersion 是一次受控发布形成的商业定义。它是值类型：每次转换返回新值、不改
 // 接收者——这让「发布后正文不可覆盖」成为结构性事实，而不是一条需要有人记住的规则。
 type CommercialVersion struct {
+	tenant        TenantID
 	kind          CommercialObjectKind
 	objectID      CommercialObjectID
 	version       CommercialVersionLabel
@@ -353,7 +357,8 @@ func (reference DeclaredReference) ObjectID() CommercialObjectID {
 }
 
 func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
-	if !spec.Kind.valid() ||
+	if !spec.TenantID.valid() ||
+		!spec.Kind.valid() ||
 		!spec.ObjectID.valid() ||
 		!spec.Version.valid() ||
 		!spec.Scope.valid() ||
@@ -366,6 +371,7 @@ func NewCommercialDraft(spec CommercialVersionSpec) (CommercialVersion, error) {
 		return CommercialVersion{}, err
 	}
 	return CommercialVersion{
+		tenant:        spec.TenantID,
 		kind:          spec.Kind,
 		objectID:      spec.ObjectID,
 		version:       spec.Version,
@@ -427,7 +433,8 @@ func (version CommercialVersion) ReferenceTo(kind CommercialObjectKind) (Commerc
 // 内容摘要参与，因为它正是同版本号被改了正文时唯一会变的那一项——登记册把那种情况判为
 // 需要商业责任方修正的冲突，此处若放过它，一份冒名的同号版本就能冒充被采用的那一个。
 func (version CommercialVersion) SameVersionAs(other CommercialVersion) bool {
-	return version.kind == other.kind &&
+	return version.tenant == other.tenant &&
+		version.kind == other.kind &&
 		version.objectID == other.objectID &&
 		version.version == other.version &&
 		version.contentDigest == other.contentDigest
@@ -554,6 +561,10 @@ func (version CommercialVersion) close(status CommercialVersionStatus, at time.T
 // 已收尾的版本仍可作为历史读取，但不再适用。
 func (version CommercialVersion) AppliesAt(at time.Time) bool {
 	return version.status == CommercialVersionEffective && version.effective.Contains(at)
+}
+
+func (version CommercialVersion) Tenant() TenantID {
+	return version.tenant
 }
 
 func (version CommercialVersion) Kind() CommercialObjectKind {

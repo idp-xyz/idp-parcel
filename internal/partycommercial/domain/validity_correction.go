@@ -20,12 +20,17 @@ func NewValidityCorrectionReference(value string) (ValidityCorrectionReference, 
 // ValidityCorrection 是登记册上的区间更正事实：指向原对象版本，携带新区间与更正引用。
 // 原版本键下的正文、批准与原区间不被改写（ADR-0038 / AT-PC-013）。
 type ValidityCorrection struct {
+	tenant    TenantID
 	kind      CommercialObjectKind
 	objectID  CommercialObjectID
 	version   CommercialVersionLabel
 	corrected EffectiveInterval
 	reference ValidityCorrectionReference
 	at        time.Time
+}
+
+func (correction ValidityCorrection) Tenant() TenantID {
+	return correction.tenant
 }
 
 func (correction ValidityCorrection) Kind() CommercialObjectKind {
@@ -66,6 +71,7 @@ func (version CommercialVersion) CorrectEffectiveInterval(
 		return ValidityCorrection{}, ErrValidityCorrectionInvalid
 	}
 	return ValidityCorrection{
+		tenant:    version.tenant,
 		kind:      version.kind,
 		objectID:  version.objectID,
 		version:   version.version,
@@ -78,7 +84,8 @@ func (version CommercialVersion) CorrectEffectiveInterval(
 func sameValidityCorrection(left, right ValidityCorrection) bool {
 	leftEnd, leftBounded := left.corrected.EndsAt()
 	rightEnd, rightBounded := right.corrected.EndsAt()
-	return left.kind == right.kind &&
+	return left.tenant == right.tenant &&
+		left.kind == right.kind &&
 		left.objectID == right.objectID &&
 		left.version == right.version &&
 		left.reference == right.reference &&

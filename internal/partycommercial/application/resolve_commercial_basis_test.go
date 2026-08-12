@@ -67,6 +67,7 @@ func effectiveIn(
 		t.Fatalf("new effective interval: %v", err)
 	}
 	draft, err := domain.NewCommercialDraft(domain.CommercialVersionSpec{
+		TenantID:      value(t, domain.NewTenantID, "tenant-1"),
 		Kind:          kind,
 		ObjectID:      value(t, domain.NewCommercialObjectID, objectID),
 		Version:       value(t, domain.NewCommercialVersionLabel, version),

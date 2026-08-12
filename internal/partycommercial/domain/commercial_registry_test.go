@@ -60,7 +60,7 @@ func TestSameVersionWithChangedContentConflicts(t *testing.T) {
 		t.Fatalf("outcome = %q, want CONFLICT", outcome)
 	}
 
-	stored, found := registry.Lookup(original.Kind(), original.ObjectID(), original.Version())
+	stored, found := registry.Lookup(original.Tenant(), original.Kind(), original.ObjectID(), original.Version())
 	if !found || stored.ContentDigest() != original.ContentDigest() {
 		t.Fatalf("the conflicting attempt overwrote the registered content: %q", stored.ContentDigest())
 	}
@@ -130,7 +130,7 @@ func TestSameVersionReboundToAnotherReferenceConflicts(t *testing.T) {
 		t.Fatalf("outcome = %q, want CONFLICT", outcome)
 	}
 
-	stored, found := registry.Lookup(original.Kind(), original.ObjectID(), original.Version())
+	stored, found := registry.Lookup(original.Tenant(), original.Kind(), original.ObjectID(), original.Version())
 	if !found {
 		t.Fatal("原登记不见了")
 	}
@@ -155,7 +155,7 @@ func TestNewVersionCoexistsWithTheOneItReplaces(t *testing.T) {
 	if got := registry.Count(); got != 2 {
 		t.Fatalf("registry holds %d versions, want 2", got)
 	}
-	stored, found := registry.Lookup(v1.Kind(), v1.ObjectID(), v1.Version())
+	stored, found := registry.Lookup(v1.Tenant(), v1.Kind(), v1.ObjectID(), v1.Version())
 	if !found || stored.ContentDigest() != v1.ContentDigest() {
 		t.Fatal("publishing v2 removed or rewrote v1")
 	}
@@ -191,5 +191,77 @@ func TestRegistryRefusesADraft(t *testing.T) {
 	}
 	if got := registry.Count(); got != 0 {
 		t.Fatalf("a draft entered the registry: %d versions", got)
+	}
+}
+
+func registerableInTenant(
+	t *testing.T,
+	tenant string,
+	kind domain.CommercialObjectKind,
+	objectID, version, digest string,
+) domain.CommercialVersion {
+	t.Helper()
+	spec := commercialSpec(t, kind, objectID, version, digest)
+	spec.TenantID = commercialValue(t, domain.NewTenantID, tenant)
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(
+		approval(t, "approval-"+tenant+"-"+objectID+"-"+version),
+		domain.ApprovalRoleConfirmed,
+		time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	return published
+}
+
+// Covers: `AT-PC-014`「跨租户引用参与方或规则 → 拒绝越界且不泄露另一租户内容」的**对象半边**
+// （ADR-0040）：版本身份键含 TenantID。应用半边见 Validate/FormJudgment 错租户同形用例。
+func TestCrossTenantSameObjectVersionNeitherReplaysNorLeaks(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	tenantA := registerableInTenant(t, "tenant-a", domain.CustomerContractObject, "contract-1", "v1", "sha256:a")
+	tenantB := registerableInTenant(t, "tenant-b", domain.CustomerContractObject, "contract-1", "v1", "sha256:b-DIFFERENT")
+
+	if outcome, err := registry.Register(tenantA); err != nil || outcome != domain.RegistrationCreated {
+		t.Fatalf("register tenant-a = %q, %v", outcome, err)
+	}
+	viewOnlyA := registry.ViewRevision(tenantA.Tenant(), tenantA.Scope())
+
+	outcome, err := registry.Register(tenantB)
+	if err != nil {
+		t.Fatalf("跨租户同号被当成冲突/错误: %v", err)
+	}
+	if outcome != domain.RegistrationCreated {
+		t.Fatalf("跨租户同号 outcome = %q, want CREATED（不得走 Replay/Conflict）", outcome)
+	}
+	if got := registry.Count(); got != 2 {
+		t.Fatalf("registry holds %d, want 2 tenant-isolated versions", got)
+	}
+
+	storedA, foundA := registry.Lookup(tenantA.Tenant(), tenantA.Kind(), tenantA.ObjectID(), tenantA.Version())
+	if !foundA || storedA.ContentDigest().String() != "sha256:a" {
+		t.Fatal("本租户正文被他租写入改写或盖掉")
+	}
+	storedB, foundB := registry.Lookup(tenantB.Tenant(), tenantB.Kind(), tenantB.ObjectID(), tenantB.Version())
+	if !foundB || storedB.ContentDigest().String() != "sha256:b-DIFFERENT" {
+		t.Fatal("他租版本没有独立落下")
+	}
+	if storedB.ContentDigest().String() == storedA.ContentDigest().String() {
+		t.Fatal("他租 Lookup 拿到了本租户正文")
+	}
+
+	otherTenant := commercialValue(t, domain.NewTenantID, "tenant-c")
+	if _, found := registry.Lookup(otherTenant, tenantA.Kind(), tenantA.ObjectID(), tenantA.Version()); found {
+		t.Fatal("第三租户 Lookup 看见了别人的版本（泄露）")
+	}
+	if registry.ViewRevision(tenantA.Tenant(), tenantA.Scope()) != viewOnlyA {
+		t.Fatal("他租写入推动了本租户 ViewRevision")
+	}
+	if registry.ViewRevision(tenantB.Tenant(), tenantB.Scope()) == viewOnlyA {
+		t.Fatal("两租户同 scope 却共用同一 ViewRevision")
 	}
 }

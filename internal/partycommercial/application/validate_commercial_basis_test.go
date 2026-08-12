@@ -263,8 +263,8 @@ func TestAProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer(t *test
 	}
 }
 
-// 014 应用半边（回指/重校验）：错租户只切换 Caller.TenantID，答案须与从未签发同形。
-// 对象半边（登记册键/参与方租户轴）仍缺；完整 AT-PC-014 等两半齐——故不写 `Covers: AT-PC-014`。
+// Covers: `AT-PC-014` 应用半边（回指/重校验）：错租户只切换 Caller.TenantID，与从未签发同形。
+// 对象半边（登记册键含 TenantID）见 domain `TestCrossTenantSameObjectVersionNeitherReplaysNorLeaks`。
 // 机制与 AT-PC-028 同支（TenantID 与 CustomerAccountID 一并比对）。
 func TestARevalidationNamedByAnotherTenantIsNotAccepted(t *testing.T) {
 	registry := domain.NewCommercialRegistry()

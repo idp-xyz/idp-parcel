@@ -18,7 +18,7 @@ func TestResolutionCarriesTheAuthorityViewRevision(t *testing.T) {
 	if !present || revision.String() == "" {
 		t.Fatal("a resolution carries no authority view revision")
 	}
-	if registry.ViewRevision(commercialValue(t, domain.NewCommercialScopeReference, "scope-a")) != revision {
+	if registry.ViewRevision(commercialValue(t, domain.NewTenantID, "tenant-1"), commercialValue(t, domain.NewCommercialScopeReference, "scope-a")) != revision {
 		t.Fatal("the resolution echoed a revision the registry does not report")
 	}
 }
@@ -37,7 +37,7 @@ func TestNewCandidateInTheSameScopeStalesAPriorUniqueResult(t *testing.T) {
 
 	// 被采纳的对象本身没有变动；只是范围里多了一个竞争者。
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
-	stored, found := registry.Lookup(adopted.Kind(), adopted.ObjectID(), adopted.Version())
+	stored, found := registry.Lookup(adopted.Tenant(), adopted.Kind(), adopted.ObjectID(), adopted.Version())
 	if !found || stored.ContentDigest() != adopted.ContentDigest() {
 		t.Fatal("the adopted object changed, which would make this test prove nothing")
 	}

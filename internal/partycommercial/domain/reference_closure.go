@@ -222,7 +222,7 @@ func ResolveCommercialClosure(
 	closure := CommercialClosure{
 		key:          key,
 		anchor:       key.Anchor,
-		viewRevision: registry.ViewRevision(key.Scope),
+		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
 	}
 	adopted := make([]AdoptedBasis, 0, len(key.RequiredBases))
 	for _, kind := range key.RequiredBases {

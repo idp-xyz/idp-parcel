@@ -45,6 +45,7 @@
 - [ADR-0037：发布批次是逐对象折叠，不是全有或全无的聚合](./0037-publication-batch-is-per-item-not-all-or-nothing.md)
 - [ADR-0038：有效性更正保留原版本与更正关系，不改正文](./0038-validity-correction-keeps-original-and-relationship.md)
 - [ADR-0039：渠道账号使用授权发布必须有显式业务授权，技术可用不能顶替](./0039-channel-account-use-authorization-requires-business-grant.md)
+- [ADR-0040：商业版本身份键携带 TenantID，跨租户同号互不可见](./0040-commercial-version-key-carries-tenant-id.md)
 
 ## 已被取代决策
 

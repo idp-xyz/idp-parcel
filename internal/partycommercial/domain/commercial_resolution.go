@@ -344,7 +344,7 @@ func ResolveCommercialBasis(
 	result := Resolution{
 		key:            key,
 		anchor:         key.Anchor,
-		viewRevision:   registry.ViewRevision(key.Scope),
+		viewRevision:   registry.ViewRevision(key.TenantID, key.Scope),
 		candidateCount: len(candidates),
 	}
 	switch len(candidates) {
@@ -370,7 +370,7 @@ func resolvePriceRuleBasis(
 	result := Resolution{
 		key:          key,
 		anchor:       key.Anchor,
-		viewRevision: registry.ViewRevision(key.Scope),
+		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
 	}
 	query, err := NewPricePolicyQuery(key.PriceDirection, key.Scope, key.Anchor.At())
 	if err != nil {
@@ -498,7 +498,7 @@ func resolutionIdentity(key ResolutionKey, view AuthorityViewRevision, adopted C
 func (registry *CommercialRegistry) applicable(key ResolutionKey) []CommercialVersion {
 	matches := make([]CommercialVersion, 0, 2)
 	for _, version := range registry.versions {
-		if version.kind != key.RequiredBasis || version.scope != key.Scope {
+		if version.tenant != key.TenantID || version.kind != key.RequiredBasis || version.scope != key.Scope {
 			continue
 		}
 		// 选用区间问登记册：有效性更正不改版本值对象上的原区间（ADR-0038）。

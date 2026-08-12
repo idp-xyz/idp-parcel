@@ -62,7 +62,7 @@ func (registry *CommercialRegistry) PublishBatch(
 		}
 		lookup := standing
 		if lookup == nil {
-			lookup = registry.standingOfPublishedObjects()
+			lookup = registry.standingOfPublishedObjects(item.Draft.Tenant())
 		}
 		published, err := item.Draft.Publish(item.Basis, item.RoleStanding, item.PublishedAt, lookup)
 		if err != nil {
@@ -80,15 +80,15 @@ func (registry *CommercialRegistry) PublishBatch(
 	return results
 }
 
-// standingOfPublishedObjects 把登记册里非草稿对象读成「已发布」存续。批次折叠用它补齐
-// 调用方未传入的 lookup，不猜测登记册外的事实。
-func (registry *CommercialRegistry) standingOfPublishedObjects() NamedReferenceStandingLookup {
+// standingOfPublishedObjects 把本租户登记册里非草稿对象读成「已发布」存续。批次折叠用它
+// 补齐调用方未传入的 lookup，不猜测登记册外的事实，也不跨租户作答（ADR-0040）。
+func (registry *CommercialRegistry) standingOfPublishedObjects(tenant TenantID) NamedReferenceStandingLookup {
 	return func(kind CommercialObjectKind, objectID CommercialObjectID) NamedReferenceStanding {
-		if registry == nil {
+		if registry == nil || !tenant.valid() {
 			return NamedReferenceStandingInvalid
 		}
 		for _, version := range registry.versions {
-			if version.kind != kind || version.objectID != objectID {
+			if version.tenant != tenant || version.kind != kind || version.objectID != objectID {
 				continue
 			}
 			if version.status == CommercialVersionStatusInvalid || version.status == CommercialVersionDraft {

@@ -36,9 +36,11 @@ func (outcome RegistrationOutcome) String() string {
 	}
 }
 
-// commercialVersionKey 决定两次登记是否指同一个对象版本。对象类型算在键内，因为服务
-// 产品与客户合同完全可以合法地共用同一个标识而不是同一个对象。
+// commercialVersionKey 决定两次登记是否指同一个对象版本。租户算在键内（ADR-0040）：
+// 跨租户可以合法共用同一 objectID+version。对象类型也算在键内，因为服务产品与客户合同
+// 完全可以合法地共用同一个标识而不是同一个对象。
 type commercialVersionKey struct {
+	tenant   TenantID
 	kind     CommercialObjectKind
 	objectID CommercialObjectID
 	version  CommercialVersionLabel
@@ -70,8 +72,16 @@ func (registry *CommercialRegistry) Register(version CommercialVersion) (Registr
 	if version.status == CommercialVersionStatusInvalid || version.status == CommercialVersionDraft {
 		return RegistrationOutcomeInvalid, ErrCommercialVersionNotPublished
 	}
+	if !version.tenant.valid() {
+		return RegistrationOutcomeInvalid, ErrInvalidCommercialVersion
+	}
 
-	key := commercialVersionKey{kind: version.kind, objectID: version.objectID, version: version.version}
+	key := commercialVersionKey{
+		tenant:   version.tenant,
+		kind:     version.kind,
+		objectID: version.objectID,
+		version:  version.version,
+	}
 	existing, found := registry.versions[key]
 	if !found {
 		registry.versions[key] = version
@@ -125,11 +135,14 @@ func sameDeclaredReferences(left, right CommercialVersion) bool {
 }
 
 func (registry *CommercialRegistry) Lookup(
+	tenant TenantID,
 	kind CommercialObjectKind,
 	objectID CommercialObjectID,
 	version CommercialVersionLabel,
 ) (CommercialVersion, bool) {
-	found, exists := registry.versions[commercialVersionKey{kind: kind, objectID: objectID, version: version}]
+	found, exists := registry.versions[commercialVersionKey{
+		tenant: tenant, kind: kind, objectID: objectID, version: version,
+	}]
 	return found, exists
 }
 
@@ -146,6 +159,7 @@ func (registry *CommercialRegistry) RegisterValidityCorrection(
 		return AuthorityViewRevision{}, ErrValidityCorrectionInvalid
 	}
 	key := commercialVersionKey{
+		tenant:   correction.tenant,
 		kind:     correction.kind,
 		objectID: correction.objectID,
 		version:  correction.version,
@@ -155,14 +169,15 @@ func (registry *CommercialRegistry) RegisterValidityCorrection(
 		return AuthorityViewRevision{}, ErrCommercialVersionNotPublished
 	}
 	if prior, ok := registry.corrections[key]; ok && sameValidityCorrection(prior, correction) {
-		return registry.ViewRevision(existing.scope), nil
+		return registry.ViewRevision(existing.tenant, existing.scope), nil
 	}
 	registry.corrections[key] = correction
-	return registry.ViewRevision(existing.scope), nil
+	return registry.ViewRevision(existing.tenant, existing.scope), nil
 }
 
 // ValidityCorrectionOf 取回指向某对象版本的区间更正（若有）。
 func (registry *CommercialRegistry) ValidityCorrectionOf(
+	tenant TenantID,
 	kind CommercialObjectKind,
 	objectID CommercialObjectID,
 	version CommercialVersionLabel,
@@ -170,7 +185,9 @@ func (registry *CommercialRegistry) ValidityCorrectionOf(
 	if registry == nil {
 		return ValidityCorrection{}, false
 	}
-	found, ok := registry.corrections[commercialVersionKey{kind: kind, objectID: objectID, version: version}]
+	found, ok := registry.corrections[commercialVersionKey{
+		tenant: tenant, kind: kind, objectID: objectID, version: version,
+	}]
 	return found, ok
 }
 
@@ -179,23 +196,26 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 	if registry == nil {
 		return version.effective
 	}
-	key := commercialVersionKey{kind: version.kind, objectID: version.objectID, version: version.version}
+	key := commercialVersionKey{
+		tenant: version.tenant, kind: version.kind, objectID: version.objectID, version: version.version,
+	}
 	if correction, ok := registry.corrections[key]; ok {
 		return correction.corrected
 	}
 	return version.effective
 }
 
-// ViewRevision 是范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围解析
-// 当时的商业视图是否仍是同一个。它由范围内所有版本派生，而不是手工递增——手工递增总会
-// 有人忘记，派生值不可能与登记册实际内容脱节。
+// ViewRevision 是租户+范围级的权威视图修订：一个按内容单调变化的引用，用于证明某范围
+// 解析当时的商业视图是否仍是同一个。它由该租户该范围内所有版本派生，而不是手工递增——
+// 手工递增总会有人忘记，派生值不可能与登记册实际内容脱节。
 //
 // 它刻意是范围级而非对象级。同范围新增一个竞争候选时，先前采用的那个对象一个字节都
-// 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。
-func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference) AuthorityViewRevision {
+// 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。租户轴保证
+// 另一租户的写入推不动本租户的修订（ADR-0040）。
+func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope CommercialScopeReference) AuthorityViewRevision {
 	parts := make([]string, 0, len(registry.versions)+len(registry.policies)+len(registry.corrections))
 	for key, version := range registry.versions {
-		if version.scope != scope {
+		if key.tenant != tenant || version.scope != scope {
 			continue
 		}
 		parts = append(parts, strings.Join([]string{
@@ -208,7 +228,7 @@ func (registry *CommercialRegistry) ViewRevision(scope CommercialScopeReference)
 	}
 	for key, correction := range registry.corrections {
 		version, ok := registry.versions[key]
-		if !ok || version.scope != scope {
+		if !ok || key.tenant != tenant || version.scope != scope {
 			continue
 		}
 		end, bounded := correction.corrected.EndsAt()

@@ -404,7 +404,7 @@ func TestSupersedingContractKeepsHistoryAndSelectsSuccessorUniquely(t *testing.T
 	if got := registry.Count(); got != 2 {
 		t.Fatalf("registry holds %d versions, want 2 historical versions", got)
 	}
-	storedOld, found := registry.Lookup(superseded.Kind(), superseded.ObjectID(), superseded.Version())
+	storedOld, found := registry.Lookup(superseded.Tenant(), superseded.Kind(), superseded.ObjectID(), superseded.Version())
 	if !found || storedOld.ContentDigest() != live.ContentDigest() {
 		t.Fatal("supersession rewrote or dropped the prior contract body")
 	}
