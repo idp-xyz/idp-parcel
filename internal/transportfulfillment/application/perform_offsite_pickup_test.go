@@ -362,11 +362,11 @@ func TestARescheduledSecondAttemptSucceedsWithoutTouchingTheFirst(t *testing.T) 
 	}
 }
 
-// 形状不完整的来源在提交之前停下：成功缺控制、失败带控制、空对象集都不落库、不签版本
-// ——编排不代执行方补证据，也不让伪装成控制的失败溜进记录。
-func TestMalformedSubmissionsStopBeforeSaving(t *testing.T) {
-	broken := map[string]func(*testing.T, *pickupFixture) application.PerformOffsitePickupCommand{
-		"success without control": func(t *testing.T, fixture *pickupFixture) application.PerformOffsitePickupCommand {
+// 提交自身矛盾落`来源未受理`（成功缺控制、失败带控制、空对象集、尝试形状立不起来）：
+// 恢复动作是改请求不是重试，与依赖故障的`未决`分格（ADR-0029）；都不落库、不签版本。
+func TestAContradictorySubmissionIsNotAccepted(t *testing.T) {
+	broken := map[string]func(*testing.T) application.PerformOffsitePickupCommand{
+		"success without control": func(t *testing.T) application.PerformOffsitePickupCommand {
 			submission := application.ObjectPickupSubmission{
 				Object:     value(t, domain.NewCarriedObjectReference, "parcel-1"),
 				Outcome:    domain.ObjectPickedUp,
@@ -374,33 +374,46 @@ func TestMalformedSubmissionsStopBeforeSaving(t *testing.T) {
 			}
 			return pickupCommand(t, "source-1", "attempt-1", submission)
 		},
-		"failure carrying control": func(t *testing.T, fixture *pickupFixture) application.PerformOffsitePickupCommand {
+		"failure carrying control": func(t *testing.T) application.PerformOffsitePickupCommand {
 			submission := failureSubmission(t, "parcel-1", domain.CustomerAbsent, "reason-absent-1")
 			submission.Control = value(t, domain.NewTransportControlReference, "TRANSPORT-CONTROL/TF-9")
 			return pickupCommand(t, "source-1", "attempt-1", submission)
 		},
-		"no objects": func(t *testing.T, fixture *pickupFixture) application.PerformOffsitePickupCommand {
+		"no objects": func(t *testing.T) application.PerformOffsitePickupCommand {
 			return pickupCommand(t, "source-1", "attempt-1")
+		},
+		"failure without a reason basis": func(t *testing.T) application.PerformOffsitePickupCommand {
+			submission := application.ObjectPickupSubmission{
+				Object:     value(t, domain.NewCarriedObjectReference, "parcel-1"),
+				Outcome:    domain.CustomerAbsent,
+				OccurredAt: arrivedAt.Add(5 * time.Minute),
+			}
+			return pickupCommand(t, "source-1", "attempt-1", submission)
+		},
+		"blank attempt reference": func(t *testing.T) application.PerformOffsitePickupCommand {
+			command := pickupCommand(t, "source-1", "",
+				successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-1"))
+			return command
 		},
 	}
 	for name, build := range broken {
 		t.Run(name, func(t *testing.T) {
 			fixture := newPickupFixture(t)
-			result, err := fixture.handler.Handle(context.Background(), build(t, fixture))
+			result, err := fixture.handler.Handle(context.Background(), build(t))
 			if err != nil {
 				t.Fatalf("handle: %v", err)
 			}
-			if result.Outcome() != application.PickupUndecided {
-				t.Fatalf("outcome = %q, want PICKUP_UNDECIDED", result.Outcome())
+			if result.Outcome() != application.PickupNotAccepted {
+				t.Fatalf("outcome = %q, want SOURCE_NOT_ACCEPTED", result.Outcome())
 			}
-			if result.ContinuationReference() == "" {
-				t.Fatal("未决没有留下续办引用")
+			if result.UndecidedReason() != application.PickupUndecidedReasonNone {
+				t.Fatalf("undecided reason = %q；未受理不指名依赖，指了调用方就会去等而不是改单", result.UndecidedReason())
 			}
 			if len(fixture.store.records) != 0 {
-				t.Fatal("形状不完整的来源仍然落了库")
+				t.Fatal("矛盾的来源仍然落了库")
 			}
 			if len(fixture.handoff.intents) != 0 {
-				t.Fatal("形状不完整的来源交出了意图")
+				t.Fatal("矛盾的来源交出了意图")
 			}
 		})
 	}
@@ -441,18 +454,65 @@ func TestAConcurrentLoserReadsBackTheWinner(t *testing.T) {
 	}
 }
 
-// 揽收库读不回是未决不是失败：留续办引用等依赖恢复，不猜有没有原结果。
-func TestAnUnreadableStoreLeavesTheSubmissionUndecided(t *testing.T) {
-	fixture := newPickupFixture(t)
-	fixture.store.findErr = errors.New("store down")
-	result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "source-1", "attempt-1",
-		successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-1")))
-	if err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	if result.Outcome() != application.PickupUndecided || result.ContinuationReference() == "" {
-		t.Fatalf("outcome = %q continuation = %q", result.Outcome(), result.ContinuationReference())
-	}
+// 依赖故障落`未决`并以封闭原因指名等谁：揽收库读不回等库，版本厂答不上等版本厂——
+// 不与`来源未受理`同格，也不用裸字符串标签区分（ADR-0029）。
+func TestADependencyFailureIsUndecidedWithItsReason(t *testing.T) {
+	t.Run("store unreadable", func(t *testing.T) {
+		fixture := newPickupFixture(t)
+		fixture.store.findErr = errors.New("store down")
+		result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "source-1", "attempt-1",
+			successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-1")))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.PickupUndecided {
+			t.Fatalf("outcome = %q, want PICKUP_UNDECIDED", result.Outcome())
+		}
+		if result.UndecidedReason() != application.PickupStoreUnavailable {
+			t.Fatalf("reason = %q, want PICKUP_STORE_UNAVAILABLE", result.UndecidedReason())
+		}
+		if result.ContinuationReference() == "" {
+			t.Fatal("未决没有留下续办引用")
+		}
+	})
+
+	t.Run("identity factory unavailable", func(t *testing.T) {
+		fixture := newPickupFixture(t)
+		fixture.versions.err = errors.New("factory down")
+		result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "source-1", "attempt-1",
+			successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-1")))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.PickupUndecided {
+			t.Fatalf("outcome = %q, want PICKUP_UNDECIDED", result.Outcome())
+		}
+		if result.UndecidedReason() != application.PickupIdentityUnavailable {
+			t.Fatalf("reason = %q, want PICKUP_IDENTITY_UNAVAILABLE", result.UndecidedReason())
+		}
+		if len(fixture.store.records) != 0 {
+			t.Fatal("版本没签出来却落了库")
+		}
+	})
+
+	t.Run("the undecided reason set is closed", func(t *testing.T) {
+		labels := map[string]struct{}{}
+		for _, reason := range []application.PickupUndecidedReason{
+			application.PickupStoreUnavailable, application.PickupIdentityUnavailable,
+		} {
+			label := reason.String()
+			if label == "" {
+				t.Fatalf("reason %d has no label", reason)
+			}
+			labels[label] = struct{}{}
+		}
+		if len(labels) != 2 {
+			t.Fatalf("reason labels collapsed into %d", len(labels))
+		}
+		if application.PickupUndecidedReason(len(labels)+1).String() != "" {
+			t.Fatal("第三个未决原因带了标签——封闭集合被悄悄放开")
+		}
+	})
 }
 
 // 写入代数之外的取值是编程错误，不是一种业务未决（同 ADR-0031 的封闭代数纪律）。

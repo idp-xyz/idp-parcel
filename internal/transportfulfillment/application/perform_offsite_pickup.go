@@ -21,6 +21,10 @@ var ErrUnexpectedPickupSave = errors.New("transport fulfillment: unexpected pick
 
 // PickupOutcome 是一次尝试提交的应用处理结果。逐对象成败在记录里并存（UC-TF-002：
 // 任务汇总只能由对象结果派生），这里只回答提交本身的走向。
+//
+// `来源未受理`与`未决`分格（ADR-0029 按恢复动作分格）：前者是提交自身矛盾——改请求，
+// 重来多少次都一样；后者是依赖没答上——等恢复重试同一份。折成一格调用方就不知道该
+// 改单还是该重试。
 type PickupOutcome uint8
 
 const (
@@ -28,6 +32,7 @@ const (
 	PickupAttemptRecorded
 	PickupExistingResult
 	PickupSourceConflict
+	PickupNotAccepted
 	PickupUndecided
 )
 
@@ -39,8 +44,31 @@ func (outcome PickupOutcome) String() string {
 		return "EXISTING_RESULT"
 	case PickupSourceConflict:
 		return "SOURCE_CONFLICT"
+	case PickupNotAccepted:
+		return "SOURCE_NOT_ACCEPTED"
 	case PickupUndecided:
 		return "PICKUP_UNDECIDED"
+	default:
+		return ""
+	}
+}
+
+// PickupUndecidedReason 指名提交停在哪一步等谁。封闭集合：新依赖故障必须补格，不许
+// 借用裸字符串标签（同 adopt 侧 IntakeUndecidedReason 的纪律）。
+type PickupUndecidedReason uint8
+
+const (
+	PickupUndecidedReasonNone PickupUndecidedReason = iota
+	PickupStoreUnavailable
+	PickupIdentityUnavailable
+)
+
+func (reason PickupUndecidedReason) String() string {
+	switch reason {
+	case PickupStoreUnavailable:
+		return "PICKUP_STORE_UNAVAILABLE"
+	case PickupIdentityUnavailable:
+		return "PICKUP_IDENTITY_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -76,6 +104,7 @@ type PerformOffsitePickupCommand struct {
 
 type PerformOffsitePickupResult struct {
 	outcome      PickupOutcome
+	reason       PickupUndecidedReason
 	record       ports.PickupAttemptRecord
 	hasRecord    bool
 	continuation string
@@ -84,6 +113,12 @@ type PerformOffsitePickupResult struct {
 
 func (result PerformOffsitePickupResult) Outcome() PickupOutcome {
 	return result.outcome
+}
+
+// UndecidedReason 只在`未决`时非零：它指名要等哪个依赖恢复。`来源未受理`没有它——
+// 那一格的恢复动作是改请求，不是等谁。
+func (result PerformOffsitePickupResult) UndecidedReason() PickupUndecidedReason {
+	return result.reason
 }
 
 func (result PerformOffsitePickupResult) Record() (ports.PickupAttemptRecord, bool) {
@@ -125,16 +160,14 @@ func (handler *PerformOffsitePickupHandler) Handle(
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
 		strings.TrimSpace(command.SourceID) == "" ||
 		len(command.Objects) == 0 {
-		return PerformOffsitePickupResult{outcome: PickupUndecided,
-			continuation: pickupContinuation("INCOMPLETE_PICKUP_SOURCE", command.SourceID)}, nil
+		return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 	}
 
 	key := ports.PickupAttemptKey{TenantID: command.TenantID, SourceID: command.SourceID}
 	digest := pickupContentDigest(command)
 	existing, found, err := handler.deps.Attempts.FindByKey(ctx, key)
 	if err != nil {
-		return PerformOffsitePickupResult{outcome: PickupUndecided,
-			continuation: pickupContinuation("PICKUP_STORE_UNAVAILABLE", command.SourceID)}, nil
+		return storeUndecided(command.SourceID), nil
 	}
 	if found {
 		if existing.ContentDigest != digest {
@@ -148,8 +181,8 @@ func (handler *PerformOffsitePickupHandler) Handle(
 
 	attempt, err := formAttempt(command)
 	if err != nil {
-		return PerformOffsitePickupResult{outcome: PickupUndecided,
-			continuation: pickupContinuation("INVALID_ATTEMPT_SOURCE", command.SourceID)}, nil
+		// 尝试形状立不起来是提交自身的矛盾：改请求，不是等谁（ADR-0029 的分格）。
+		return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 	}
 
 	record := ports.PickupAttemptRecord{
@@ -162,30 +195,42 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		result, err := domain.FormAttemptObjectResult(
 			attempt, submission.Object, submission.Outcome, submission.Basis, submission.OccurredAt)
 		if err != nil {
-			return PerformOffsitePickupResult{outcome: PickupUndecided,
-				continuation: pickupContinuation("INVALID_OBJECT_RESULT", command.SourceID, submission.Object.String())}, nil
+			return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 		}
 		record.Results = append(record.Results, result)
 
 		if !submission.Outcome.Succeeded() {
-			// 失败或拒收对象到此为止：没有控制依据可言，不形成场外揽收，也没有可交给
-			// parcel-shipment 的东西（步骤 6B）。带了控制依据的失败在下面被拒——那是把
-			// 失败到场伪装成取得控制。
+			// 失败或拒收对象到此为止：不形成场外揽收，也没有可交给 parcel-shipment 的
+			// 东西（步骤 6B）。带了控制依据的失败被拒——那是把失败到场伪装成取得控制。
 			if submission.Control.String() != "" {
-				return PerformOffsitePickupResult{outcome: PickupUndecided,
-					continuation: pickupContinuation("FAILURE_CARRIES_CONTROL", command.SourceID, submission.Object.String())}, nil
+				return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
 			}
 			continue
 		}
-		pickup, err := handler.formPickup(ctx, command, submission)
+		if submission.Control.String() == "" {
+			// 成功却没有控制依据：证明不了运输方取得控制，是提交矛盾不是未决。
+			return PerformOffsitePickupResult{outcome: PickupNotAccepted}, nil
+		}
+		pickup, undecided, err := handler.formPickup(ctx, command, submission)
 		if err != nil {
-			return PerformOffsitePickupResult{outcome: PickupUndecided,
-				continuation: pickupContinuation("PICKUP_NOT_FORMABLE", command.SourceID, submission.Object.String())}, nil
+			return PerformOffsitePickupResult{}, err
+		}
+		if undecided {
+			return PerformOffsitePickupResult{outcome: PickupUndecided, reason: PickupIdentityUnavailable,
+				continuation: pickupContinuation("PICKUP_IDENTITY_UNAVAILABLE", command.SourceID)}, nil
 		}
 		record.Pickups = append(record.Pickups, pickup)
 	}
 
 	return handler.commit(ctx, record)
+}
+
+func storeUndecided(sourceID string) PerformOffsitePickupResult {
+	return PerformOffsitePickupResult{
+		outcome:      PickupUndecided,
+		reason:       PickupStoreUnavailable,
+		continuation: pickupContinuation("PICKUP_STORE_UNAVAILABLE", sourceID),
+	}
 }
 
 // formAttempt 把来源字符串折成领域尝试。立不起来的输入由领域构造器拒绝，编排不代答。
@@ -223,34 +268,34 @@ func formAttempt(command PerformOffsitePickupCommand) (domain.FulfillmentAttempt
 	return domain.FormFulfillmentAttempt(spec)
 }
 
-// formPickup 为一个取得控制的对象形成场外揽收。版本逐对象签发；控制依据来自提交——
-// 缺了它领域构造器会拒绝，正是「预约成功、到场、扫描都不能替代控制」的那道门。
+// formPickup 为一个取得控制的对象形成场外揽收。版本逐对象签发；版本厂答不上是依赖
+// 未决（等恢复重试），其余入参此前都已过构造器——再失败是编排合同被打破，以错误上浮。
 func (handler *PerformOffsitePickupHandler) formPickup(
 	ctx context.Context,
 	command PerformOffsitePickupCommand,
 	submission ObjectPickupSubmission,
-) (domain.OffsitePickup, error) {
+) (domain.OffsitePickup, bool, error) {
 	version, err := handler.deps.Versions.NextPickupResultVersion(ctx)
 	if err != nil {
-		return domain.OffsitePickup{}, fmt.Errorf("next pickup result version: %w", err)
+		return domain.OffsitePickup{}, true, nil
 	}
 	task, err := domain.NewPickupTaskReference(command.Task)
 	if err != nil {
-		return domain.OffsitePickup{}, err
+		return domain.OffsitePickup{}, false, fmt.Errorf("pickup task reference: %w", err)
 	}
 	attempt, err := domain.NewAttemptReference(command.Attempt)
 	if err != nil {
-		return domain.OffsitePickup{}, err
+		return domain.OffsitePickup{}, false, fmt.Errorf("attempt reference: %w", err)
 	}
 	place, err := domain.NewPickupPlaceReference(command.Place)
 	if err != nil {
-		return domain.OffsitePickup{}, err
+		return domain.OffsitePickup{}, false, fmt.Errorf("pickup place reference: %w", err)
 	}
 	executedBy, err := domain.NewExecutingPartyReference(command.ExecutedBy)
 	if err != nil {
-		return domain.OffsitePickup{}, err
+		return domain.OffsitePickup{}, false, fmt.Errorf("executing party reference: %w", err)
 	}
-	return domain.FormOffsitePickup(domain.OffsitePickupSpec{
+	pickup, err := domain.FormOffsitePickup(domain.OffsitePickupSpec{
 		TenantID:   command.TenantID,
 		Object:     submission.Object,
 		Task:       task,
@@ -261,6 +306,10 @@ func (handler *PerformOffsitePickupHandler) formPickup(
 		Version:    version,
 		OccurredAt: submission.OccurredAt,
 	})
+	if err != nil {
+		return domain.OffsitePickup{}, false, fmt.Errorf("form offsite pickup: %w", err)
+	}
+	return pickup, false, nil
 }
 
 // commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。
@@ -270,8 +319,7 @@ func (handler *PerformOffsitePickupHandler) commit(
 ) (PerformOffsitePickupResult, error) {
 	saved, err := handler.deps.Attempts.Save(ctx, record)
 	if err != nil {
-		return PerformOffsitePickupResult{outcome: PickupUndecided,
-			continuation: pickupContinuation("PICKUP_STORE_UNAVAILABLE", record.Key.SourceID)}, nil
+		return storeUndecided(record.Key.SourceID), nil
 	}
 	switch saved {
 	case ports.PickupSaved:
@@ -281,8 +329,7 @@ func (handler *PerformOffsitePickupHandler) commit(
 	case ports.PickupAlreadyRecorded:
 		winner, found, err := handler.deps.Attempts.FindByKey(ctx, record.Key)
 		if err != nil || !found {
-			return PerformOffsitePickupResult{outcome: PickupUndecided,
-				continuation: pickupContinuation("PICKUP_STORE_UNAVAILABLE", record.Key.SourceID)}, nil
+			return storeUndecided(record.Key.SourceID), nil
 		}
 		return handler.existingResult(ctx, winner), nil
 	default:
