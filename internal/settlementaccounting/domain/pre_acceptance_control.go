@@ -100,27 +100,80 @@ func (requirement ControlRequirement) String() string {
 	}
 }
 
-// PreAcceptanceControlPolicy 是商业侧对「这个范围要不要接受前财务控制」的回答。
+// SettlementMethod 是预付/账期的封闭二值（SA 自有词汇，与 PC 的解析结果对应但不 import）。
+// 刻意没有第三格「客户默认」：未解析出方式的范围没有可执行的控制分支，那是`待判断`不是
+// 某种通行做法（ADR-0047，呼应 ADR-0044 的方式是解析输出）。
+type SettlementMethod uint8
+
+const (
+	SettlementMethodInvalid SettlementMethod = iota
+	PrepaidSettlement
+	TermsSettlement
+)
+
+func (method SettlementMethod) valid() bool {
+	return method == PrepaidSettlement || method == TermsSettlement
+}
+
+func (method SettlementMethod) String() string {
+	switch method {
+	case PrepaidSettlement:
+		return "PREPAID"
+	case TermsSettlement:
+		return "TERMS"
+	default:
+		return ""
+	}
+}
+
+// AdoptedPolicyReference 指名本次控制实际采用的结算政策。CONTEXT 硬句：每项冻结与信用
+// 暴露必须保存实际采用的结算政策、预付/账期方式及其适用范围——没有它，事后无从回答
+// 「这笔控制凭什么走的这条路」。
+type AdoptedPolicyReference struct{ requiredValue }
+
+func NewAdoptedPolicyReference(value string) (AdoptedPolicyReference, error) {
+	required, err := newRequiredValue("adopted policy reference", value)
+	return AdoptedPolicyReference{required}, err
+}
+
+// PreAcceptanceControlPolicy 是商业侧对「这个范围要不要接受前财务控制、按哪种结算方式」
+// 的回答。
 //
 // `不要求`必须携带依据。CONTEXT 明写不得用一次虚假零金额冻结或默认信用通过冒充无控制，
 // 而没有依据的`不要求`正是「默认信用通过」的做法——它让一次未执行的控制看起来像通过了。
 // 零金额那条路已经被 `NewFreezeRequest` 在构造期堵死，这里堵的是另一条。
+//
+// `要求`必须携带方式与采用的政策引用（ADR-0047）：方式决定走资金冻结还是信用暴露，
+// 政策引用让控制结果保存得下「实际采用的结算政策」。两种形状经各自的构造函数进来，
+// 混搭（要求带不适用依据、不要求带方式）没有入口。
 type PreAcceptanceControlPolicy struct {
-	requirement ControlRequirement
-	basis       ControlBasisReference
+	requirement   ControlRequirement
+	basis         ControlBasisReference
+	method        SettlementMethod
+	adoptedPolicy AdoptedPolicyReference
 }
 
-func NewPreAcceptanceControlPolicy(
-	requirement ControlRequirement,
-	basis ControlBasisReference,
+// NewNoControlPolicy 造「本范围接受前无财务控制」的回答，商业不适用依据必备。
+func NewNoControlPolicy(basis ControlBasisReference) (PreAcceptanceControlPolicy, error) {
+	if !basis.valid() {
+		return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
+	}
+	return PreAcceptanceControlPolicy{requirement: ControlNotRequired, basis: basis}, nil
+}
+
+// NewRequiredControlPolicy 造「本范围要求接受前财务控制」的回答，方式与采用政策必备。
+func NewRequiredControlPolicy(
+	method SettlementMethod,
+	adoptedPolicy AdoptedPolicyReference,
 ) (PreAcceptanceControlPolicy, error) {
-	if !requirement.valid() {
+	if !method.valid() || !adoptedPolicy.valid() {
 		return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
 	}
-	if requirement == ControlNotRequired && !basis.valid() {
-		return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
-	}
-	return PreAcceptanceControlPolicy{requirement: requirement, basis: basis}, nil
+	return PreAcceptanceControlPolicy{
+		requirement:   ControlRequired,
+		method:        method,
+		adoptedPolicy: adoptedPolicy,
+	}, nil
 }
 
 func (policy PreAcceptanceControlPolicy) Requirement() ControlRequirement {
@@ -129,6 +182,14 @@ func (policy PreAcceptanceControlPolicy) Requirement() ControlRequirement {
 
 func (policy PreAcceptanceControlPolicy) Basis() ControlBasisReference {
 	return policy.basis
+}
+
+func (policy PreAcceptanceControlPolicy) Method() SettlementMethod {
+	return policy.method
+}
+
+func (policy PreAcceptanceControlPolicy) AdoptedPolicy() AdoptedPolicyReference {
+	return policy.adoptedPolicy
 }
 
 // ControlRequired 报告是否应当继续执行控制。零值答否且不带依据，因此拿它去构造一个

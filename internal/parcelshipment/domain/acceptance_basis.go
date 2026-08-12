@@ -555,9 +555,13 @@ func NewControlBasisReference(value string) (ControlBasisReference, error) {
 }
 
 // FinancialControlOutcome 以采用引用的形式镜像 settlement-accounting 的接受前控制结果。
-// 三个取值没有一个是接受决定，也刻意没有第四个「视同通过」——用例对本步的要求是不得默认
-// 放行，而一个表示「没控制成但先过」的取值正是默认放行的载体。控制没能形成时，编排保持
-// 判断任务未决，不在这里凑一个结果。
+// 取值没有一个是接受决定，也刻意没有「视同通过」——用例对本步的要求是不得默认放行，而
+// 一个表示「没控制成但先过」的取值正是默认放行的载体。控制没能形成时，编排保持判断任务
+// 未决，不在这里凑一个结果。
+//
+// `信用暴露已记录`与`已冻结`分立（ADR-0047）：冻结说资金已占用、暴露说额度已占用，两者
+// 的释放对象不同，压成一格会让释放编排拿着暴露去找冻结账本。`AT-PS-035` 也把信用校验与
+// 预付冻结列为并列的控制种类。
 type FinancialControlOutcome uint8
 
 const (
@@ -565,10 +569,11 @@ const (
 	FinancialControlHeld
 	FinancialControlRestricted
 	FinancialControlNotApplicable
+	FinancialControlCreditExposed
 )
 
 func (outcome FinancialControlOutcome) valid() bool {
-	return outcome >= FinancialControlHeld && outcome <= FinancialControlNotApplicable
+	return outcome >= FinancialControlHeld && outcome <= FinancialControlCreditExposed
 }
 
 func (outcome FinancialControlOutcome) String() string {
@@ -579,6 +584,8 @@ func (outcome FinancialControlOutcome) String() string {
 		return "RESTRICTED"
 	case FinancialControlNotApplicable:
 		return "NOT_APPLICABLE"
+	case FinancialControlCreditExposed:
+		return "CREDIT_EXPOSED"
 	default:
 		return ""
 	}
@@ -605,7 +612,8 @@ func NewFinancialControlResult(
 	if !outcome.valid() || !asOf.valid() {
 		return FinancialControlResult{}, ErrInvalidFinancialControlResult
 	}
-	if outcome != FinancialControlHeld && !basis.valid() {
+	// `已冻结`与`信用暴露已记录`是两种执行通过，依据在占用记录本身；其余结果必须携带依据。
+	if outcome != FinancialControlHeld && outcome != FinancialControlCreditExposed && !basis.valid() {
 		return FinancialControlResult{}, ErrInvalidFinancialControlResult
 	}
 	// `明确无控制`不要求标识：那一支下 settlement-accounting 不形成冻结，也就没有签发结果

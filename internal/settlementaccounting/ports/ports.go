@@ -52,6 +52,33 @@ type FreezeLedgerRepository interface {
 	) error
 }
 
+// CreditStandingView 取一个账期作用域当前的信用状况（额度、已占用暴露、是否逾期）。
+// 与运营余额分开取：SET-03 明写预付冻结不与同一客户账期范围共用余额、额度（ADR-0047）。
+// 依赖调不通要作为错误返回，读成「有额度」同样是被禁止的默认信用通过。
+type CreditStandingView interface {
+	LoadCreditStanding(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.SettlementScope,
+	) (domain.CreditStanding, error)
+}
+
+// CreditExposureLedgerRepository 按结算作用域取回只增不删的信用暴露登记册。整册取回的
+// 理由与冻结登记册一字不差；它是另一本账，与冻结账本互不借用。
+type CreditExposureLedgerRepository interface {
+	LoadForScope(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.SettlementScope,
+	) (*domain.CreditExposureLedger, error)
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.SettlementScope,
+		ledger *domain.CreditExposureLedger,
+	) error
+}
+
 type Clock interface {
 	Now() time.Time
 }

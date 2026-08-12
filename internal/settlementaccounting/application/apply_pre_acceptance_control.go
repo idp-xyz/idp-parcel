@@ -59,6 +59,8 @@ const (
 	ControlPolicyUnavailable
 	BalanceUnavailable
 	FreezeLedgerUnavailable
+	CreditStandingUnavailable
+	ExposureLedgerUnavailable
 )
 
 func (reason NotFormedReason) String() string {
@@ -69,6 +71,10 @@ func (reason NotFormedReason) String() string {
 		return "BALANCE_UNAVAILABLE"
 	case FreezeLedgerUnavailable:
 		return "FREEZE_LEDGER_UNAVAILABLE"
+	case CreditStandingUnavailable:
+		return "CREDIT_STANDING_UNAVAILABLE"
+	case ExposureLedgerUnavailable:
+		return "EXPOSURE_LEDGER_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -105,24 +111,44 @@ func (command ApplyPreAcceptanceControlCommand) minimumIdentityEstablished() boo
 }
 
 type ApplyPreAcceptanceControlResult struct {
-	outcome      ControlOutcome
-	freeze       domain.FundsFreeze
-	hasFreeze    bool
-	controlledAt time.Time
-	asOf         domain.ControlAsOf
-	basis        domain.ControlBasisReference
-	reason       NotFormedReason
-	continuation ContinuationReference
+	outcome       ControlOutcome
+	freeze        domain.FundsFreeze
+	hasFreeze     bool
+	exposure      domain.CreditExposure
+	hasExposure   bool
+	method        domain.SettlementMethod
+	adoptedPolicy domain.AdoptedPolicyReference
+	controlledAt  time.Time
+	asOf          domain.ControlAsOf
+	basis         domain.ControlBasisReference
+	reason        NotFormedReason
+	continuation  ContinuationReference
 }
 
 func (result ApplyPreAcceptanceControlResult) Outcome() ControlOutcome {
 	return result.outcome
 }
 
-// Freeze 只在控制实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。交回一个零值
-// 冻结，正是 CONTEXT 禁止的「用虚假冻结冒充控制」。
+// Freeze 只在预付控制实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。交回一个
+// 零值冻结，正是 CONTEXT 禁止的「用虚假冻结冒充控制」。
 func (result ApplyPreAcceptanceControlResult) Freeze() (domain.FundsFreeze, bool) {
 	return result.freeze, result.hasFreeze
+}
+
+// Exposure 只在账期控制实际执行过时给出（ADR-0047）。冻结与暴露不会同时在场：一次控制
+// 请求按解析出的方式走且只走一条路。
+func (result ApplyPreAcceptanceControlResult) Exposure() (domain.CreditExposure, bool) {
+	return result.exposure, result.hasExposure
+}
+
+// Method 与 AdoptedPolicy 在控制执行过时携带实际采用的方式与结算政策引用——CONTEXT 要求
+// 每项冻结与信用暴露都保存它们。
+func (result ApplyPreAcceptanceControlResult) Method() domain.SettlementMethod {
+	return result.method
+}
+
+func (result ApplyPreAcceptanceControlResult) AdoptedPolicy() domain.AdoptedPolicyReference {
+	return result.adoptedPolicy
 }
 
 // ControlledAt 是本次控制作出的时间，与 AsOf 分开：`asOf` 决定按哪一版策略判断，控制时间
@@ -150,23 +176,31 @@ func (result ApplyPreAcceptanceControlResult) ContinuationReference() Continuati
 }
 
 type ApplyPreAcceptanceControlHandler struct {
-	policy  ports.PreAcceptanceControlPolicyView
-	balance ports.OperationalBalanceView
-	ledger  ports.FreezeLedgerRepository
-	clock   ports.Clock
+	policy    ports.PreAcceptanceControlPolicyView
+	balance   ports.OperationalBalanceView
+	ledger    ports.FreezeLedgerRepository
+	credit    ports.CreditStandingView
+	exposures ports.CreditExposureLedgerRepository
+	clock     ports.Clock
 }
 
-func NewApplyPreAcceptanceControlHandler(
-	policy ports.PreAcceptanceControlPolicyView,
-	balance ports.OperationalBalanceView,
-	ledger ports.FreezeLedgerRepository,
-	clock ports.Clock,
-) *ApplyPreAcceptanceControlHandler {
+type ApplyPreAcceptanceControlDeps struct {
+	Policy    ports.PreAcceptanceControlPolicyView
+	Balance   ports.OperationalBalanceView
+	Freezes   ports.FreezeLedgerRepository
+	Credit    ports.CreditStandingView
+	Exposures ports.CreditExposureLedgerRepository
+	Clock     ports.Clock
+}
+
+func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) *ApplyPreAcceptanceControlHandler {
 	return &ApplyPreAcceptanceControlHandler{
-		policy:  policy,
-		balance: balance,
-		ledger:  ledger,
-		clock:   clock,
+		policy:    deps.Policy,
+		balance:   deps.Balance,
+		ledger:    deps.Freezes,
+		credit:    deps.Credit,
+		exposures: deps.Exposures,
+		clock:     deps.Clock,
 	}
 }
 
@@ -196,6 +230,24 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 		}, nil
 	}
 
+	// 按解析出的结算方式分支（ADR-0047）：预付占资金、账期占额度，两本账互不借用。
+	// 方式在政策构造期已保证有效，落到 default 只能是新增取值没接分支——编程错误上抛。
+	switch policy.Method() {
+	case domain.PrepaidSettlement:
+		return handler.applyPrepaidFreeze(ctx, command, policy)
+	case domain.TermsSettlement:
+		return handler.applyTermsExposure(ctx, command, policy)
+	default:
+		return ApplyPreAcceptanceControlResult{}, fmt.Errorf(
+			"pre-acceptance control: unhandled settlement method %d", uint8(policy.Method()))
+	}
+}
+
+func (handler *ApplyPreAcceptanceControlHandler) applyPrepaidFreeze(
+	ctx context.Context,
+	command ApplyPreAcceptanceControlCommand,
+	policy domain.PreAcceptanceControlPolicy,
+) (ApplyPreAcceptanceControlResult, error) {
 	balance, err := handler.balance.LoadBalance(ctx, command.TenantID, command.Scope)
 	if err != nil {
 		return handler.notFormed(command, BalanceUnavailable), nil
@@ -234,11 +286,65 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 	}
 
 	return ApplyPreAcceptanceControlResult{
-		outcome:      ControlApplied,
-		freeze:       freeze,
-		hasFreeze:    true,
-		controlledAt: controlledAt,
-		asOf:         command.AsOf,
+		outcome:       ControlApplied,
+		freeze:        freeze,
+		hasFreeze:     true,
+		method:        policy.Method(),
+		adoptedPolicy: policy.AdoptedPolicy(),
+		controlledAt:  controlledAt,
+		asOf:          command.AsOf,
+	}, nil
+}
+
+// applyTermsExposure 是账期分支：读信用状况、在暴露账本上占用额度。逾期与超额形成
+// `业务限制`装在暴露的状态里，与预付分支的余额不足同构。
+func (handler *ApplyPreAcceptanceControlHandler) applyTermsExposure(
+	ctx context.Context,
+	command ApplyPreAcceptanceControlCommand,
+	policy domain.PreAcceptanceControlPolicy,
+) (ApplyPreAcceptanceControlResult, error) {
+	standing, err := handler.credit.LoadCreditStanding(ctx, command.TenantID, command.Scope)
+	if err != nil {
+		return handler.notFormed(command, CreditStandingUnavailable), nil
+	}
+
+	ledger, err := handler.exposures.LoadForScope(ctx, command.TenantID, command.Scope)
+	if err != nil || ledger == nil {
+		return handler.notFormed(command, ExposureLedgerUnavailable), nil
+	}
+
+	controlledAt := handler.clock.Now()
+	request, err := domain.NewExposureRequest(
+		command.RequestID,
+		command.Scope,
+		command.AmountMinor,
+		command.Association,
+		controlledAt,
+	)
+	if err != nil {
+		return ApplyPreAcceptanceControlResult{outcome: ControlRequestNotAccepted}, nil
+	}
+
+	exposure, err := ledger.Expose(request, standing)
+	if err != nil {
+		if errors.Is(err, domain.ErrControlRequestConflict) {
+			return ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
+		}
+		return ApplyPreAcceptanceControlResult{}, fmt.Errorf("expose credit: %w", err)
+	}
+
+	if err := handler.exposures.Save(ctx, command.TenantID, command.Scope, ledger); err != nil {
+		return handler.notFormed(command, ExposureLedgerUnavailable), nil
+	}
+
+	return ApplyPreAcceptanceControlResult{
+		outcome:       ControlApplied,
+		exposure:      exposure,
+		hasExposure:   true,
+		method:        policy.Method(),
+		adoptedPolicy: policy.AdoptedPolicy(),
+		controlledAt:  controlledAt,
+		asOf:          command.AsOf,
 	}, nil
 }
 

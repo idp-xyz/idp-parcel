@@ -63,6 +63,8 @@ type ReleasePreAcceptanceControlResult struct {
 	outcome      ReleaseOutcome
 	freeze       domain.FundsFreeze
 	hasFreeze    bool
+	exposure     domain.CreditExposure
+	hasExposure  bool
 	reason       NotFormedReason
 	continuation ContinuationReference
 }
@@ -71,10 +73,16 @@ func (result ReleasePreAcceptanceControlResult) Outcome() ReleaseOutcome {
 	return result.outcome
 }
 
-// Freeze 只在`已释放`时给出，携带原金额、原冻结时间与释放时间——审计要的正是这三样。
-// `无可释放`一律不带：交回一个零值冻结，对账会把它当成一笔被放掉的占用。
+// Freeze 只在释放的是一笔资金冻结时给出，携带原金额、原冻结时间与释放时间——审计要的
+// 正是这三样。`无可释放`一律不带：交回一个零值冻结，对账会把它当成一笔被放掉的占用。
 func (result ReleasePreAcceptanceControlResult) Freeze() (domain.FundsFreeze, bool) {
 	return result.freeze, result.hasFreeze
+}
+
+// Exposure 只在释放的是一笔信用暴露时给出（ADR-0047）。同一原关联不会两本账都认领到：
+// 一次控制按方式只走了一条路。
+func (result ReleasePreAcceptanceControlResult) Exposure() (domain.CreditExposure, bool) {
+	return result.exposure, result.hasExposure
 }
 
 func (result ReleasePreAcceptanceControlResult) NotFormedReason() NotFormedReason {
@@ -86,19 +94,22 @@ func (result ReleasePreAcceptanceControlResult) ContinuationReference() Continua
 }
 
 type ReleasePreAcceptanceControlHandler struct {
-	ledger ports.FreezeLedgerRepository
-	clock  ports.Clock
+	ledger    ports.FreezeLedgerRepository
+	exposures ports.CreditExposureLedgerRepository
+	clock     ports.Clock
 }
 
 func NewReleasePreAcceptanceControlHandler(
 	ledger ports.FreezeLedgerRepository,
+	exposures ports.CreditExposureLedgerRepository,
 	clock ports.Clock,
 ) *ReleasePreAcceptanceControlHandler {
-	return &ReleasePreAcceptanceControlHandler{ledger: ledger, clock: clock}
+	return &ReleasePreAcceptanceControlHandler{ledger: ledger, exposures: exposures, clock: clock}
 }
 
-// Handle 按原关联释放一笔接受前资金冻结。重复释放返回与首次相同的答案（含原释放时间），
-// 幂等由领域账本承担，本编排不换答案。
+// Handle 按原关联释放一次接受前财务控制。先在冻结账本认领、再在暴露账本认领（ADR-0047）：
+// 一次控制按方式只走了一条路，两本都没有才是`无可释放`。重复释放返回与首次相同的答案
+// （含原释放时间），幂等由领域账本承担，本编排不换答案。
 func (handler *ReleasePreAcceptanceControlHandler) Handle(
 	ctx context.Context,
 	command ReleasePreAcceptanceControlCommand,
@@ -114,27 +125,45 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 		return handler.notFormed(command, FreezeLedgerUnavailable), nil
 	}
 
-	freeze, found := ledger.FindByRequest(command.RequestID)
+	if freeze, found := ledger.FindByRequest(command.RequestID); found {
+		released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())
+		if err != nil {
+			// 刚找到的冻结释放不了，只剩编程错误或时钟异常（释放时刻早于冻结时刻）。两者都
+			// 不是调用方能据以行动的业务答案，上抛。
+			return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release freeze: %w", err)
+		}
+		if err := handler.ledger.Save(ctx, command.TenantID, command.Scope, ledger); err != nil {
+			// 释放没落库就不算释放。交回`已释放`，对账会按一笔其实还占着的资金收口。
+			return handler.notFormed(command, FreezeLedgerUnavailable), nil
+		}
+		return ReleasePreAcceptanceControlResult{
+			outcome:   ControlReleased,
+			freeze:    released,
+			hasFreeze: true,
+		}, nil
+	}
+
+	exposureLedger, err := handler.exposures.LoadForScope(ctx, command.TenantID, command.Scope)
+	if err != nil || exposureLedger == nil {
+		return handler.notFormed(command, ExposureLedgerUnavailable), nil
+	}
+
+	exposure, found := exposureLedger.FindByRequest(command.RequestID)
 	if !found {
 		return ReleasePreAcceptanceControlResult{outcome: NothingToRelease}, nil
 	}
 
-	released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())
+	released, err := exposureLedger.Release(exposure.ExposureID(), handler.clock.Now())
 	if err != nil {
-		// 刚找到的冻结释放不了，只剩编程错误或时钟异常（释放时刻早于冻结时刻）。两者都
-		// 不是调用方能据以行动的业务答案，上抛。
-		return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release freeze: %w", err)
+		return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release exposure: %w", err)
 	}
-
-	if err := handler.ledger.Save(ctx, command.TenantID, command.Scope, ledger); err != nil {
-		// 释放没落库就不算释放。交回`已释放`，对账会按一笔其实还占着的资金收口。
-		return handler.notFormed(command, FreezeLedgerUnavailable), nil
+	if err := handler.exposures.Save(ctx, command.TenantID, command.Scope, exposureLedger); err != nil {
+		return handler.notFormed(command, ExposureLedgerUnavailable), nil
 	}
-
 	return ReleasePreAcceptanceControlResult{
-		outcome:   ControlReleased,
-		freeze:    released,
-		hasFreeze: true,
+		outcome:     ControlReleased,
+		exposure:    released,
+		hasExposure: true,
 	}, nil
 }
 

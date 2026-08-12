@@ -14,7 +14,7 @@ var controlAsOfAt = time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
 // 依据由 `party-commercial` 提供，本上下文不得用一次虚假零金额冻结或默认信用通过冒充无
 // 控制」——没有依据的`不要求控制`就是那个「默认信用通过」。
 func TestDeclaringNoPreAcceptanceControlDemandsAnExplicitBasis(t *testing.T) {
-	_, err := domain.NewPreAcceptanceControlPolicy(domain.ControlNotRequired, domain.ControlBasisReference{})
+	_, err := domain.NewNoControlPolicy(domain.ControlBasisReference{})
 	if !errors.Is(err, domain.ErrInvalidControlPolicy) {
 		t.Fatalf("err = %v, want ErrInvalidControlPolicy——不带依据的无控制被接受了", err)
 	}
@@ -23,7 +23,7 @@ func TestDeclaringNoPreAcceptanceControlDemandsAnExplicitBasis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new control basis: %v", err)
 	}
-	policy, err := domain.NewPreAcceptanceControlPolicy(domain.ControlNotRequired, basis)
+	policy, err := domain.NewNoControlPolicy(basis)
 	if err != nil {
 		t.Fatalf("new control policy: %v", err)
 	}
@@ -32,6 +32,30 @@ func TestDeclaringNoPreAcceptanceControlDemandsAnExplicitBasis(t *testing.T) {
 	}
 	if policy.Basis() != basis {
 		t.Fatalf("basis = %q, want %q", policy.Basis(), basis)
+	}
+}
+
+// Covers: ADR-0047「`要求`必带方式与采用的政策引用」——方式决定走资金冻结还是信用暴露，
+// 政策引用让控制结果保存得下 CONTEXT 要求的「实际采用的结算政策」。缺任何一样构造即死。
+func TestARequiredControlPolicyCarriesItsMethodAndAdoptedPolicy(t *testing.T) {
+	adopted, err := domain.NewAdoptedPolicyReference("PC-SETTLEMENT-POLICY-V3")
+	if err != nil {
+		t.Fatalf("new adopted policy reference: %v", err)
+	}
+
+	if _, err := domain.NewRequiredControlPolicy(domain.SettlementMethodInvalid, adopted); !errors.Is(err, domain.ErrInvalidControlPolicy) {
+		t.Fatalf("err = %v, want ErrInvalidControlPolicy——没有方式的要求分不了支", err)
+	}
+	if _, err := domain.NewRequiredControlPolicy(domain.TermsSettlement, domain.AdoptedPolicyReference{}); !errors.Is(err, domain.ErrInvalidControlPolicy) {
+		t.Fatalf("err = %v, want ErrInvalidControlPolicy——没有政策引用的控制保存不下采用依据", err)
+	}
+
+	policy, err := domain.NewRequiredControlPolicy(domain.TermsSettlement, adopted)
+	if err != nil {
+		t.Fatalf("new required control policy: %v", err)
+	}
+	if !policy.ControlRequired() || policy.Method() != domain.TermsSettlement || policy.AdoptedPolicy() != adopted {
+		t.Fatalf("policy = %v/%v; 方式与采用政策没有随答复带回", policy.Method(), policy.AdoptedPolicy())
 	}
 }
 

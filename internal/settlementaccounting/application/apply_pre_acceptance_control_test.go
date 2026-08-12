@@ -125,11 +125,79 @@ func balanceWith(t *testing.T, availableMinor int64) domain.OperationalBalance {
 
 func requiredPolicy(t *testing.T) *policyDouble {
 	t.Helper()
-	policy, err := domain.NewPreAcceptanceControlPolicy(domain.ControlRequired, domain.ControlBasisReference{})
+	return &policyDouble{policy: methodPolicy(t, domain.PrepaidSettlement)}
+}
+
+func methodPolicy(t *testing.T, method domain.SettlementMethod) domain.PreAcceptanceControlPolicy {
+	t.Helper()
+	policy, err := domain.NewRequiredControlPolicy(
+		method,
+		value(t, domain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
+	)
 	if err != nil {
-		t.Fatalf("new control policy: %v", err)
+		t.Fatalf("new required control policy: %v", err)
 	}
-	return &policyDouble{policy: policy}
+	return policy
+}
+
+type creditDouble struct {
+	standing domain.CreditStanding
+	err      error
+	loaded   int
+}
+
+func (double *creditDouble) LoadCreditStanding(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SettlementScope,
+) (domain.CreditStanding, error) {
+	double.loaded++
+	if double.err != nil {
+		return domain.CreditStanding{}, double.err
+	}
+	return double.standing, nil
+}
+
+type exposureLedgerDouble struct {
+	ledger  *domain.CreditExposureLedger
+	loadErr error
+	saveErr error
+	loaded  int
+	saved   int
+}
+
+func (double *exposureLedgerDouble) LoadForScope(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SettlementScope,
+) (*domain.CreditExposureLedger, error) {
+	double.loaded++
+	if double.loadErr != nil {
+		return nil, double.loadErr
+	}
+	return double.ledger, nil
+}
+
+func (double *exposureLedgerDouble) Save(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SettlementScope,
+	_ *domain.CreditExposureLedger,
+) error {
+	if double.saveErr != nil {
+		return double.saveErr
+	}
+	double.saved++
+	return nil
+}
+
+func standingWith(t *testing.T, limitMinor, exposedMinor int64, overdue bool) domain.CreditStanding {
+	t.Helper()
+	standing, err := domain.NewCreditStanding(settlementScope(t), limitMinor, exposedMinor, overdue)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	return standing
 }
 
 func command(t *testing.T, amountMinor int64) application.ApplyPreAcceptanceControlCommand {
@@ -157,7 +225,30 @@ func newHandler(
 	balance ports.OperationalBalanceView,
 	ledger ports.FreezeLedgerRepository,
 ) *application.ApplyPreAcceptanceControlHandler {
-	return application.NewApplyPreAcceptanceControlHandler(policy, balance, ledger, fixedClock{at: controlAt})
+	return application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy:  policy,
+		Balance: balance,
+		Freezes: ledger,
+		// 预付路径不读信用；零值替身只为满足装配，被读到即是测试该失败的信号。
+		Credit:    &creditDouble{},
+		Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+		Clock:     fixedClock{at: controlAt},
+	})
+}
+
+func newTermsHandler(
+	policy ports.PreAcceptanceControlPolicyView,
+	credit ports.CreditStandingView,
+	exposures ports.CreditExposureLedgerRepository,
+) *application.ApplyPreAcceptanceControlHandler {
+	return application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy:    policy,
+		Balance:   &balanceDouble{},
+		Freezes:   &ledgerDouble{ledger: domain.NewFreezeLedger()},
+		Credit:    credit,
+		Exposures: exposures,
+		Clock:     fixedClock{at: controlAt},
+	})
 }
 
 // Covers: UC-SA-002 接受前财务控制「`可用余额 → 已冻结` 必须关联明确账户、金额、提交版本和
@@ -224,7 +315,7 @@ func TestInsufficientBalanceIsARestrictedControlResultNotAnError(t *testing.T) {
 // 信用通过」。
 func TestContractWithoutPreAcceptanceControlIsNotApplicable(t *testing.T) {
 	basis := value(t, domain.NewControlBasisReference, "CONTRACT_DECLARES_NO_PRE_ACCEPTANCE_CONTROL")
-	notRequired, err := domain.NewPreAcceptanceControlPolicy(domain.ControlNotRequired, basis)
+	notRequired, err := domain.NewNoControlPolicy(basis)
 	if err != nil {
 		t.Fatalf("new control policy: %v", err)
 	}
@@ -356,6 +447,132 @@ func TestIncompleteRequestIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
 	}
 	if policy.asked != 0 || balance.loaded != 0 || repository.loaded != 0 {
 		t.Fatal("身份不成立却已经读了权威")
+	}
+}
+
+// Covers: ADR-0047 账期分支与 SET-03「不与同一客户账期范围共用余额、额度」——TERMS 方式
+// 的控制在暴露账本上占额度：不读运营余额、不进冻结账本，结果携带实际采用的方式与政策
+// 引用（CONTEXT 对控制结果保存政策的硬句）。
+func TestATermsContractRecordsACreditExposureWithoutTouchingTheBalance(t *testing.T) {
+	policy := &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}
+	credit := &creditDouble{standing: standingWith(t, 10_000, 2_000, false)}
+	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+	balance := &balanceDouble{}
+	freezes := &ledgerDouble{ledger: domain.NewFreezeLedger()}
+	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy: policy, Balance: balance, Freezes: freezes,
+		Credit: credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+	})
+
+	result, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q, want CONTROL_APPLIED", result.Outcome())
+	}
+	exposure, present := result.Exposure()
+	if !present || exposure.Status() != domain.ExposureRecorded || exposure.AmountMinor() != 4_000 {
+		t.Fatalf("exposure = %#v, want a RECORDED 4000", exposure)
+	}
+	if _, present := result.Freeze(); present {
+		t.Fatal("账期控制交回了冻结——它占的是额度不是资金")
+	}
+	if result.Method() != domain.TermsSettlement || result.AdoptedPolicy().String() != "PC-SETTLEMENT-POLICY-V3" {
+		t.Fatalf("method/policy = %v/%q; 控制结果必须保存实际采用的方式与结算政策", result.Method(), result.AdoptedPolicy())
+	}
+	if balance.loaded != 0 || freezes.loaded != 0 {
+		t.Fatal("账期分支碰了预付那本账——两本账互不借用")
+	}
+	if exposures.saved != 1 {
+		t.Fatalf("saved exposure ledger %d times, want exactly one", exposures.saved)
+	}
+}
+
+// Covers: CONTEXT「余额不足或逾期只向订单接受等责任上下文提供信用暴露和业务限制依据」——
+// 超额与逾期都是带原因的业务限制，不是错误也不是接受判决；逾期先于额度判（账户状态与
+// 本笔金额无关）。
+func TestCreditShortfallAndOverdueEachFormARestriction(t *testing.T) {
+	cases := map[string]struct {
+		standing domain.CreditStanding
+		reason   string
+	}{
+		"headroom insufficient": {standing: standingWith(t, 5_000, 2_000, false), reason: "AVAILABLE_CREDIT_INSUFFICIENT"},
+		"account overdue":       {standing: standingWith(t, 100_000, 0, true), reason: "ACCOUNT_OVERDUE"},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			policy := &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}
+			handler := newTermsHandler(policy,
+				&creditDouble{standing: testCase.standing},
+				&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
+
+			result, err := handler.Handle(context.Background(), command(t, 4_000))
+			if err != nil {
+				t.Fatalf("业务限制被当成技术错误抛出: %v", err)
+			}
+			if result.Outcome() != application.ControlApplied {
+				t.Fatalf("outcome = %q, want CONTROL_APPLIED——限制也是一次已执行的控制", result.Outcome())
+			}
+			exposure, present := result.Exposure()
+			if !present || exposure.Status() != domain.ExposureRestricted {
+				t.Fatalf("exposure = %#v, want RESTRICTED", exposure)
+			}
+			if exposure.Reason().String() != testCase.reason {
+				t.Fatalf("reason = %q, want %q", exposure.Reason(), testCase.reason)
+			}
+		})
+	}
+}
+
+// Covers: 账期分支的幂等与冲突走同一本暴露账（AT-SA-045/051 的账期同款）：重放返回原暴露
+// 不二次占额度，同身份异金额是冲突且原暴露不被覆盖。信用侧调不通形成待判断，不读成
+// 「有额度」。
+func TestTermsExposureReplayConflictAndUnavailableStanding(t *testing.T) {
+	policy := &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}
+	ledger := domain.NewCreditExposureLedger()
+	handler := newTermsHandler(policy,
+		&creditDouble{standing: standingWith(t, 10_000, 0, false)},
+		&exposureLedgerDouble{ledger: ledger})
+
+	first, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle first: %v", err)
+	}
+	original, _ := first.Exposure()
+
+	replay, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle replay: %v", err)
+	}
+	repeated, present := replay.Exposure()
+	if !present || repeated.ExposureID() != original.ExposureID() {
+		t.Fatalf("replay exposure = %#v, want the original %#v", repeated, original)
+	}
+
+	conflicting, err := handler.Handle(context.Background(), command(t, 7_000))
+	if err != nil {
+		t.Fatalf("请求冲突被当成技术错误抛出: %v", err)
+	}
+	if conflicting.Outcome() != application.ControlRequestConflict {
+		t.Fatalf("outcome = %q, want CONTROL_REQUEST_CONFLICT", conflicting.Outcome())
+	}
+	if kept, _ := ledger.FindByRequest(original.RequestID()); kept.AmountMinor() != 4_000 {
+		t.Fatalf("原暴露被覆盖为 %#v，应保持 4000", kept)
+	}
+
+	unavailable := newTermsHandler(policy,
+		&creditDouble{err: errors.New("credit view down")},
+		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
+	result, err := unavailable.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("信用侧失败被当成技术错误抛出，而它应形成待判断: %v", err)
+	}
+	if result.Outcome() != application.ControlNotFormed ||
+		result.NotFormedReason() != application.CreditStandingUnavailable {
+		t.Fatalf("outcome/reason = %q/%q, want CONTROL_NOT_FORMED/CREDIT_STANDING_UNAVAILABLE",
+			result.Outcome(), result.NotFormedReason())
 	}
 }
 

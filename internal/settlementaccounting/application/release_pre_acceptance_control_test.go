@@ -55,6 +55,10 @@ func heldLedger(t *testing.T) (*domain.FreezeLedger, domain.FundsFreeze) {
 	return ledger, freeze
 }
 
+func emptyExposures() *exposureLedgerDouble {
+	return &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+}
+
 func releaseCommand(t *testing.T) application.ReleasePreAcceptanceControlCommand {
 	t.Helper()
 	return application.ReleasePreAcceptanceControlCommand{
@@ -71,7 +75,7 @@ func releaseCommand(t *testing.T) application.ReleasePreAcceptanceControlCommand
 func TestAHeldFreezeIsReleasedByItsOriginalAssociation(t *testing.T) {
 	ledger, frozen := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -102,12 +106,12 @@ func TestARepeatedReleaseReturnsTheOriginalAnswerWithItsOriginalTime(t *testing.
 	ledger, _ := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
 
-	first, err := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock}).
+	first, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("first handle: %v", err)
 	}
-	second, err := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock.Add(time.Hour)}).
+	second, err := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock.Add(time.Hour)}).
 		Handle(context.Background(), releaseCommand(t))
 	if err != nil {
 		t.Fatalf("second handle: %v", err)
@@ -130,7 +134,7 @@ func TestARepeatedReleaseReturnsTheOriginalAnswerWithItsOriginalTime(t *testing.
 // 也不会长出一笔冻结来。
 func TestAReleaseForARequestThatNeverFrozeIsNothingToRelease(t *testing.T) {
 	repo := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
 
 	result, err := handler.Handle(context.Background(), releaseCommand(t))
 	if err != nil {
@@ -161,7 +165,7 @@ func TestAnUnreachableLedgerKeepsTheReleaseUnformed(t *testing.T) {
 			ledger, _ := heldLedger(t)
 			repo := &ledgerDouble{ledger: ledger}
 			arrange(repo)
-			handler := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock})
+			handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
 
 			result, err := handler.Handle(context.Background(), releaseCommand(t))
 			if err != nil {
@@ -181,12 +185,68 @@ func TestAnUnreachableLedgerKeepsTheReleaseUnformed(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0047「释放按原关联双账本认领」——账期控制留下的暴露由同一释放编排放开，
+// 幂等同款；冻结账本认领不到才去暴露账本，两本都没有仍是`无可释放`。
+func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
+	scope := releaseScope(t)
+	standing, err := domain.NewCreditStanding(scope, 10_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	request, err := domain.NewExposureRequest(
+		value(t, domain.NewControlRequestID, "ctrl-req-1"),
+		scope,
+		4_000,
+		value(t, domain.NewBusinessAssociationReference, "request-1/version-1"),
+		controlAt,
+	)
+	if err != nil {
+		t.Fatalf("new exposure request: %v", err)
+	}
+	ledger := domain.NewCreditExposureLedger()
+	recorded, err := ledger.Expose(request, standing)
+	if err != nil {
+		t.Fatalf("expose: %v", err)
+	}
+	exposures := &exposureLedgerDouble{ledger: ledger}
+	handler := application.NewReleasePreAcceptanceControlHandler(
+		&ledgerDouble{ledger: domain.NewFreezeLedger()}, exposures, fixedClock{at: releasedAtClock})
+
+	result, err := handler.Handle(context.Background(), releaseCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ControlReleased {
+		t.Fatalf("outcome = %q, want CONTROL_RELEASED", result.Outcome())
+	}
+	released, present := result.Exposure()
+	if !present || released.Status() != domain.ExposureReleased || released.ExposureID() != recorded.ExposureID() {
+		t.Fatalf("exposure = %#v present = %v, want the original RELEASED", released, present)
+	}
+	if _, present := result.Freeze(); present {
+		t.Fatal("释放暴露却交回了冻结")
+	}
+	if exposures.saved != 1 {
+		t.Fatalf("saved %d times; 释放没落库就不算释放", exposures.saved)
+	}
+
+	repeat, err := handler.Handle(context.Background(), releaseCommand(t))
+	if err != nil {
+		t.Fatalf("repeat handle: %v", err)
+	}
+	repeated, _ := repeat.Exposure()
+	if !repeated.ReleasedAt().Equal(released.ReleasedAt()) {
+		t.Fatal("重复释放换了释放时间——重试看起来像第二次释放")
+	}
+}
+
 // Covers: UC-SA-002 步骤 2 同一条受理闸——最小身份不成立时不读任何权威，一次已经发出的
 // 读取本身就回答了这个租户、这个作用域存不存在。
 func TestAnIncompleteReleaseRequestIsNotAccepted(t *testing.T) {
 	ledger, _ := heldLedger(t)
 	repo := &ledgerDouble{ledger: ledger}
-	handler := application.NewReleasePreAcceptanceControlHandler(repo, fixedClock{at: releasedAtClock})
+	handler := application.NewReleasePreAcceptanceControlHandler(repo, emptyExposures(), fixedClock{at: releasedAtClock})
 
 	command := releaseCommand(t)
 	command.RequestID = domain.ControlRequestID{}

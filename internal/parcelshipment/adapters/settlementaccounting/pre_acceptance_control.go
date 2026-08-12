@@ -243,12 +243,16 @@ func assessmentFor(
 ) (psports.PreAcceptanceControlAssessment, error) {
 	switch answer.Outcome() {
 	case saapplication.ControlApplied:
-		freeze, present := answer.Freeze()
-		if !present {
-			return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: applied control carries no freeze",
-				ErrUntranslatableAnswer)
+		// `已执行`按方式携带冻结或暴露之一（ADR-0047）：预付占资金、账期占额度。
+		// 两个都不带的`已执行`是阶段契约被打破。
+		if freeze, present := answer.Freeze(); present {
+			return appliedAssessment(request, answer, freeze)
 		}
-		return appliedAssessment(request, answer, freeze)
+		if exposure, present := answer.Exposure(); present {
+			return exposedAssessment(request, answer, exposure)
+		}
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
+			"%w: applied control carries neither a freeze nor an exposure", ErrUntranslatableAnswer)
 	case saapplication.ControlNotApplicable:
 		result, err := controlResultFor(
 			psdomain.FinancialControlResultID{},
@@ -301,6 +305,42 @@ func appliedAssessment(
 	default:
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: freeze status %d",
 			ErrUntranslatableAnswer, freeze.Status())
+	}
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, err
+	}
+	return psports.PreAcceptanceControlAssessment{
+		Outcome: psports.PreAcceptanceControlFormed,
+		Result:  result,
+	}, nil
+}
+
+// exposedAssessment 译账期分支`已执行`的两种暴露状态（ADR-0047）：`已记录`译
+// `信用暴露已记录`——不冒用`已冻结`，没有资金被冻结；`业务限制`与预付分支同格。
+func exposedAssessment(
+	request psports.FinancialControlRequest,
+	answer saapplication.ApplyPreAcceptanceControlResult,
+	exposure sadomain.CreditExposure,
+) (psports.PreAcceptanceControlAssessment, error) {
+	identity := controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion)
+	resultID, err := psdomain.NewFinancialControlResultID(identity)
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control result ID: %v",
+			ErrUntranslatableAnswer, err)
+	}
+
+	var result psdomain.FinancialControlResult
+	switch exposure.Status() {
+	case sadomain.ExposureRecorded:
+		result, err = controlResultFor(resultID, psdomain.FinancialControlCreditExposed, "", answer.AsOf())
+	case sadomain.ExposureRestricted:
+		result, err = controlResultFor(resultID, psdomain.FinancialControlRestricted, exposure.Reason().String(), answer.AsOf())
+	case sadomain.ExposureReleased:
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: an applied control came back released",
+			ErrUntranslatableAnswer)
+	default:
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: exposure status %d",
+			ErrUntranslatableAnswer, exposure.Status())
 	}
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, err

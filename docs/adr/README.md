@@ -52,6 +52,7 @@
 - [ADR-0044：结算政策依据经政策采用，结果带回预付/账期方式与适用范围](./0044-settlement-basis-adopts-via-settlement-policy.md)
 - [ADR-0045：同一委托的新提交版本——当前版本单指针加历史追加，判断任务随版本重立](./0045-new-submission-version-keeps-history-and-reestablishes-the-task.md)
 - [ADR-0046：候选评估规则归 network-routing 领域，证据端口退为取数](./0046-route-candidate-evaluation-lives-in-the-domain.md)
+- [ADR-0047：账期方式的接受前控制形成信用暴露，不冒充资金冻结](./0047-terms-control-forms-credit-exposure-not-a-freeze.md)
 
 ## 已被取代决策
 

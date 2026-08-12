@@ -88,6 +88,48 @@ func (double *ledgerDouble) Save(
 	return double.saveErr
 }
 
+type creditDouble struct {
+	standing sadomain.CreditStanding
+	err      error
+}
+
+func (double *creditDouble) LoadCreditStanding(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+) (sadomain.CreditStanding, error) {
+	if double.err != nil {
+		return sadomain.CreditStanding{}, double.err
+	}
+	return double.standing, nil
+}
+
+type exposureLedgerDouble struct {
+	ledger  *sadomain.CreditExposureLedger
+	loadErr error
+	saveErr error
+}
+
+func (double *exposureLedgerDouble) LoadForScope(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+) (*sadomain.CreditExposureLedger, error) {
+	if double.loadErr != nil {
+		return nil, double.loadErr
+	}
+	return double.ledger, nil
+}
+
+func (double *exposureLedgerDouble) Save(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+	_ *sadomain.CreditExposureLedger,
+) error {
+	return double.saveErr
+}
+
 type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
@@ -96,6 +138,8 @@ var (
 	_ saports.PreAcceptanceControlPolicyView = (*policyDouble)(nil)
 	_ saports.OperationalBalanceView         = (*balanceDouble)(nil)
 	_ saports.FreezeLedgerRepository         = (*ledgerDouble)(nil)
+	_ saports.CreditStandingView             = (*creditDouble)(nil)
+	_ saports.CreditExposureLedgerRepository = (*exposureLedgerDouble)(nil)
 )
 
 type scopeSourceDouble struct {
@@ -152,7 +196,10 @@ func newControlFixture(t *testing.T) *controlFixture {
 	t.Helper()
 
 	scope := settlementScope(t)
-	policy, err := sadomain.NewPreAcceptanceControlPolicy(sadomain.ControlRequired, sadomain.ControlBasisReference{})
+	policy, err := sadomain.NewRequiredControlPolicy(
+		sadomain.PrepaidSettlement,
+		value(t, sadomain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
+	)
 	if err != nil {
 		t.Fatalf("new control policy: %v", err)
 	}
@@ -168,11 +215,18 @@ func newControlFixture(t *testing.T) *controlFixture {
 		scopes:  &scopeSourceDouble{scope: scope, formed: true},
 		amounts: &amountSourceDouble{amount: 4_000, formed: true},
 	}
+	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: saapplication.NewApplyPreAcceptanceControlHandler(
-			fixture.policy, fixture.balance, fixture.ledger, fixedClock{at: controlledAt}),
+		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+			Policy:    fixture.policy,
+			Balance:   fixture.balance,
+			Freezes:   fixture.ledger,
+			Credit:    &creditDouble{},
+			Exposures: exposures,
+			Clock:     fixedClock{at: controlledAt},
+		}),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
-			fixture.ledger, fixedClock{at: controlledAt.Add(time.Hour)}),
+			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
 		Scopes:  fixture.scopes,
 		Amounts: fixture.amounts,
 	})
@@ -283,8 +337,7 @@ func TestARestrictedFreezeCarriesItsLimitBasisAndAnIdentity(t *testing.T) {
 // 译回 `明确无控制`——依据随行、不带结果标识（那一支下提供方不形成冻结）。
 func TestAnExplicitNoControlCarriesItsCommercialBasis(t *testing.T) {
 	fixture := newControlFixture(t)
-	policy, err := sadomain.NewPreAcceptanceControlPolicy(
-		sadomain.ControlNotRequired,
+	policy, err := sadomain.NewNoControlPolicy(
 		value(t, sadomain.NewControlBasisReference, "PC-NO-CONTROL-BASIS-1"),
 	)
 	if err != nil {
@@ -308,6 +361,77 @@ func TestAnExplicitNoControlCarriesItsCommercialBasis(t *testing.T) {
 	}
 }
 
+// termsFixture 把夹具切到账期分支：TERMS 政策 + 信用状况，预付那本账留空。
+func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixture {
+	t.Helper()
+	fixture := newControlFixture(t)
+	policy, err := sadomain.NewRequiredControlPolicy(
+		sadomain.TermsSettlement,
+		value(t, sadomain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
+	)
+	if err != nil {
+		t.Fatalf("new terms policy: %v", err)
+	}
+	fixture.policy.policy = policy
+	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
+	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
+		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+			Policy:    fixture.policy,
+			Balance:   fixture.balance,
+			Freezes:   fixture.ledger,
+			Credit:    &creditDouble{standing: standing},
+			Exposures: exposures,
+			Clock:     fixedClock{at: controlledAt},
+		}),
+		Release: saapplication.NewReleasePreAcceptanceControlHandler(
+			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
+		Scopes:  fixture.scopes,
+		Amounts: fixture.amounts,
+	})
+	return fixture
+}
+
+// Covers: ADR-0047 决策三经适配器落地——账期控制通过译成 `CREDIT_EXPOSED` 而不冒用
+// `HELD`（没有资金被冻结），结果标识同一来源可供释放认领；超额译成带原因的 `RESTRICTED`，
+// 与预付分支同格。
+func TestATermsControlTranslatesToCreditExposedNotHeld(t *testing.T) {
+	scope := settlementScope(t)
+	standing, err := sadomain.NewCreditStanding(scope, 10_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	fixture := termsFixture(t, standing)
+
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+
+	if assessment.Outcome != psports.PreAcceptanceControlFormed {
+		t.Fatalf("outcome = %q, want FORMED", assessment.Outcome)
+	}
+	if assessment.Result.Outcome() != psdomain.FinancialControlCreditExposed {
+		t.Fatalf("result = %q, want CREDIT_EXPOSED——账期通过不是一笔冻结", assessment.Result.Outcome())
+	}
+	if assessment.Result.ResultID().String() != "request-1/version-1" {
+		t.Fatalf("result ID = %q; 结果标识必须与释放认领同一来源", assessment.Result.ResultID())
+	}
+
+	restrictedStanding, err := sadomain.NewCreditStanding(scope, 1_000, 0, false)
+	if err != nil {
+		t.Fatalf("new restricted standing: %v", err)
+	}
+	restricted := termsFixture(t, restrictedStanding)
+	answer, err := restricted.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), restricted.request(t))
+	if err != nil {
+		t.Fatalf("apply restricted control: %v", err)
+	}
+	if answer.Result.Outcome() != psdomain.FinancialControlRestricted ||
+		answer.Result.Basis().String() != "AVAILABLE_CREDIT_INSUFFICIENT" {
+		t.Fatalf("restricted = %q/%q; 超额是带原因的业务限制", answer.Result.Outcome(), answer.Result.Basis())
+	}
+}
+
 // Covers: 实例半边纪律——作用域与金额未配置停在`未形成`且不问提供方：作用域该来自结算
 // 政策（ADR-0044）、金额该来自估价，代拟任何一个都是拿别人的钱做实验。
 func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T) {
@@ -318,8 +442,14 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 		"no scope source": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-					Apply: saapplication.NewApplyPreAcceptanceControlHandler(
-						fixture.policy, fixture.balance, fixture.ledger, fixedClock{at: controlledAt}),
+					Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+						Policy:    fixture.policy,
+						Balance:   fixture.balance,
+						Freezes:   fixture.ledger,
+						Credit:    &creditDouble{},
+						Exposures: &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()},
+						Clock:     fixedClock{at: controlledAt},
+					}),
 					Amounts: fixture.amounts,
 				})
 			},

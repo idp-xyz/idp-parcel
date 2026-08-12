@@ -139,7 +139,7 @@ func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, e
 	var outcome CheckOutcome
 	var reasonValue string
 	switch result.Outcome() {
-	case FinancialControlHeld, FinancialControlNotApplicable:
+	case FinancialControlHeld, FinancialControlNotApplicable, FinancialControlCreditExposed:
 		outcome = CheckPassed
 	case FinancialControlRestricted:
 		outcome, reasonValue = CheckFailed, "FINANCIAL_CONTROL_RESTRICTED"
