@@ -1,6 +1,6 @@
 # ADR-0031: 自有仓储端口的写入结果是封闭代数而不是 error，预期版本由聚合携带
 
-Status: Accepted  
+Status: Accepted（**Consequences 登记的 `Insert` 已知缺口已关闭**：入口条件「已经建过了 ≠ 直接译成已有结果」已答为否；`ShipmentRequestInsertOutcome` 承接该格，编排按重放规则重答且不重复追加观察。）  
 Date: 2026-08-11
 
 ## Context
@@ -56,8 +56,8 @@ Date: 2026-08-11
 
 - `ports.ShipmentRequestRepository.Save` 的签名改变，波及四个应用层调用点与五个测试替身（`decidableRequestStore`、`rejectableRequestStore`、`amendableRequestStore`，以及 `application` 与 `adapters/http` 各一个同名的 `shipmentRequestRepositoryDouble`）。这正是 ADR-0028 Consequences 预告的那次波及，只是波及的是返回值而不是参数表。
 - **`JudgmentPendingReason` 多一个取值。** 它必须插在 `judgmentPendingReasonEnd` 之前并补 `String()`；漏补当天两道门禁会红（`TestEveryEnumConstantIsNamedByItsStringMethod`、`TestEveryPendingReasonHasAStringAndAResumePath`），所以这一处不必靠人记得。
-- **`Insert` 的冲突仍然没有结构化落点，本记录把它登记为已知缺口而不是留白。** 关闭它的入口条件是明确的：先定「已经建过了」这个答案在 `SubmitOutcome` 里是不是就是既有的`已有结果`，再改端口——两步顺序反了会得到一个含义未定的取值。这与 ADR-0030 把 `Save` 登记为遗留是同一手法。
-- **真适配器仍阻断在 [ADR-0017](./0017-admission-gates-judged-by-blocking-cause.md) 的 Bento 持久化闸门后**，所以本记录今天只落端口、调用点与替身。框架侧的形状已实测：版本冲突是 `Update` 交回的哨兵 `repository.ErrConflict`（注释「表示条件更新未满足预期 Revision」），同包另有 `ErrNotFound` 与 `ErrAlreadyExists`。**适配器那一跳因此是一对一翻译，不压平也不生歧义**——`ErrConflict` 译成`版本冲突`，其余仍作 `error` 上抛。登记为已知缺口的 `Insert` 那一格，框架侧现成对得上 `ErrAlreadyExists`。
+- **`Insert` 的冲突曾登记为已知缺口；现已关闭。** 入口条件已答：建单仓储的「已存在」**不是** `SubmitOutcome` 里既有的`已有结果`——还要按 `ClassifySourceSubmission` 比内容，同内容才答`已有结果`，不同内容答`接入冲突`。关闭落点是 `ShipmentRequestInsertOutcome`（与 Save 分代数）与提交编排的 `resolveAfterInsertConflict`（不重复 `AppendObservation`）。框架侧 `ErrAlreadyExists` 仍一对一翻译到`已存在`。原登记句保留作当时范围说明，不改写 Decision 史实。
+- **真适配器仍阻断在 [ADR-0017](./0017-admission-gates-judged-by-blocking-cause.md) 的 Bento 持久化闸门后**，所以本记录今天只落端口、调用点与替身。框架侧的形状已实测：版本冲突是 `Update` 交回的哨兵 `repository.ErrConflict`（注释「表示条件更新未满足预期 Revision」），同包另有 `ErrNotFound` 与 `ErrAlreadyExists`。**适配器那一跳因此是一对一翻译，不压平也不生歧义**——`ErrConflict` 译成`版本冲突`，`ErrAlreadyExists` 译成`已存在`，其余仍作 `error` 上抛。
 - **`expected = 0` 框架不定义，而这一格有活的后果。** 合同只跑过预期版本 1，`Insert` 被硬断言必须返回 1；`Revision` 是 `int64`，0 表达得出却没有既定语义。而今天全仓设 `revision` 的入口只有 `RehydrateShipmentRequest`（要求 ≥ 1），`SubmitShipmentRequest` 不设、转移不动它，于是**五个替身里的聚合版本恒为 0**，四个调用点在现有全部测试里递给仓储的都是 0——端口上没有任何东西表达「交给 `Save` 的聚合必须已持久化」。本记录的立场是适配器遇 0 **拒绝**而不是升格为插入：升格会让端口注释保护的「这是第一份还是第二份」在适配器内部失守，而签名上看不出任何痕迹。
 
   **「五个替身的聚合版本恒为 0」是一句会过期的现状断言，因此同样写成入口条件**：一旦有替身经重建门造出版本 ≥ 1 的聚合，上面这条论据就不再成立，届时要改的是这条立场的论证而不是悄悄留着它。重建面的导入门禁**不扫 `_test.go`**，所以没有任何东西会在那一天变红。它与上一条入口条件同形状，那里的理由一字不改地适用：比日后从一个死循环反推回来便宜。

@@ -4,6 +4,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -199,18 +200,31 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("submit shipment request: %w", err)
 	}
-	if err := handler.requests.Insert(ctx, command.Identity, request); err != nil {
+	inserted, err := handler.requests.Insert(ctx, command.Identity, request)
+	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("insert shipment request: %w", err)
 	}
-
-	return SubmitShipmentRequestResult{
-		outcome:           OutcomeSubmitted,
-		shipmentRequestID: request.ShipmentRequestID(),
-		hasRequest:        true,
-		ownershipDecision: decision,
-		hasDecision:       true,
-	}, nil
+	switch inserted {
+	case ports.ShipmentRequestInserted:
+		return SubmitShipmentRequestResult{
+			outcome:           OutcomeSubmitted,
+			shipmentRequestID: request.ShipmentRequestID(),
+			hasRequest:        true,
+			ownershipDecision: decision,
+			hasDecision:       true,
+		}, nil
+	case ports.ShipmentRequestAlreadyExists:
+		// 并发下另一方先建了单。回去按重放规则重答；本次已经 Preserve 过自己那一份，
+		// 不再走 AppendObservation（那条路是给「未保全、只是又看见」用的）。
+		return handler.resolveAfterInsertConflict(ctx, command.Identity, incoming)
+	default:
+		return SubmitShipmentRequestResult{}, ErrUnexpectedInsertOutcome
+	}
 }
+
+// ErrUnexpectedInsertOutcome 说明建单仓储交回了封闭集合以外的答复。上抛而不译成业务结果：
+// 集合外的取值没有恢复动作可派。
+var ErrUnexpectedInsertOutcome = errors.New("parcel shipment: unexpected shipment request insert outcome")
 
 // resolvePreserved 回答来源身份已被保全过的请求。它绝不重判归属、也不建第二份委托：
 // 原内容不动，调用方拿到原结果。
@@ -233,6 +247,41 @@ func (handler *SubmitShipmentRequestHandler) resolvePreserved(
 
 	result := SubmitShipmentRequestResult{outcome: OutcomeExistingResult}
 	request, found, err := handler.requests.FindBySourceIdentity(ctx, existing.Identity())
+	if err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
+	}
+	if found {
+		result.shipmentRequestID = request.ShipmentRequestID()
+		result.hasRequest = true
+	}
+	return result, nil
+}
+
+// resolveAfterInsertConflict 回答 Insert 交回「已存在」之后的那一格。与 resolvePreserved 共用
+// 分类规则，但不再追加观察：走到这里时本次已经对本份输入做过 Preserve。
+func (handler *SubmitShipmentRequestHandler) resolveAfterInsertConflict(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	incoming domain.SourceSubmissionFingerprint,
+) (SubmitShipmentRequestResult, error) {
+	existing, found, err := handler.sources.FindPreserved(ctx, identity)
+	if err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("find preserved source after insert conflict: %w", err)
+	}
+	if !found {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("insert reported already exists but preserved source is missing")
+	}
+
+	classification, err := domain.ClassifySourceSubmission(existing, incoming)
+	if err != nil {
+		return SubmitShipmentRequestResult{}, fmt.Errorf("classify source submission: %w", err)
+	}
+	if classification == domain.SourceConflict {
+		return SubmitShipmentRequestResult{outcome: OutcomeIngressConflict}, nil
+	}
+
+	result := SubmitShipmentRequestResult{outcome: OutcomeExistingResult}
+	request, found, err := handler.requests.FindBySourceIdentity(ctx, identity)
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("find existing shipment request: %w", err)
 	}

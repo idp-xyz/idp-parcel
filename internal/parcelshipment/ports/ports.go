@@ -44,6 +44,40 @@ func (outcome ShipmentRequestSaveOutcome) String() string {
 	}
 }
 
+// ShipmentRequestInsertOutcome 是一次建单写入在本上下文的落点。
+//
+// `已存在`不译成 error，理由与 Save 那一格相同：写入这条路走通了，只是另一方先把同一个来源
+// 身份建了单——那是业务答案而非技术故障。译成 error，调用方只剩「没落库」一格，而那一格既
+// 可能是库坏了也可能是一次正常的并发重复，两者的运维动作相反（ADR-0031）。
+//
+// 它与 Save 的`版本冲突`**不共用一个代数**，判据是恢复动作不同：`版本冲突`要重读再重放，
+// `已存在`要回到重放判定去重答。这一格由 `PBC-04`「并发重复不能创建第二份委托或第二个
+// EventID」驱动。
+//
+// **`已存在`不是一个终局取值。** ADR-0031 的入口条件问「已经建过了」是不是就是 `SubmitOutcome`
+// 里既有的`已有结果`，答案是否定的：建单前的重放判定先用 `ClassifySourceSubmission` 比内容，
+// 同内容才答`已有结果`，不同内容答`接入冲突`；而既有那一份的内容同样可能与本次不同。直接译成
+// `已有结果`会跳过那次内容比对，对一份其实是另一个载荷的输入答「这次请求已经办过了」。所以
+// 编排拿到它要做的是**回去按重放规则重答**，而不是照抄某一格。
+type ShipmentRequestInsertOutcome uint8
+
+const (
+	ShipmentRequestInsertOutcomeInvalid ShipmentRequestInsertOutcome = iota
+	ShipmentRequestInserted
+	ShipmentRequestAlreadyExists
+)
+
+func (outcome ShipmentRequestInsertOutcome) String() string {
+	switch outcome {
+	case ShipmentRequestInserted:
+		return "INSERTED"
+	case ShipmentRequestAlreadyExists:
+		return "ALREADY_EXISTS"
+	default:
+		return ""
+	}
+}
+
 // ShipmentRequestRepository 以产生委托的来源身份为键存储委托聚合，这样重放才能返回
 // 原委托而不是再建一份。
 //
@@ -54,24 +88,15 @@ func (outcome ShipmentRequestSaveOutcome) String() string {
 // 「聚合只记自己是从哪一版读出来的」定为版本字段的含义，那就是预期版本；再开一个参数是
 // 造第二个来源，而两者相等由「转移一律不动版本」保证、不由本签名保证（ADR-0031）。
 //
-// Insert 不交回写入结果，这不是遗漏：它的失败答案是「这份已经建过了」，与 Save 的「有人
-// 先落了一步」恢复动作不同，合成一个代数会让调用方拿一个取值回答两个问题。那一格由
-// `PBC-04` 驱动，入口条件写在 ADR-0031 的 Consequences 里。
-//
-// **那条入口条件的第一步已经有答案了，而答案是否定的**（实测于 `1d4ae15`）。它问的是
-// 「已经建过了」在 `SubmitOutcome` 里是不是就是既有的`已有结果`：不是。建单前的重放判定
-// 走 `resolvePreserved`，它先用 `ClassifySourceSubmission` 比内容——同内容才答`已有结果`，
-// 不同内容答`接入冲突`。而 Insert 冲突意味着另一方在本次读到「没有」之后把同一个来源身份
-// 建了单，既有那一份的内容同样可能与本次不同。**直接把它译成`已有结果`会跳过那次内容比对**，
-// 对一份其实是另一个载荷的输入答「这次请求已经办过了」，而区分这两件事正是 resolvePreserved
-// 存在的理由。
-//
-// 因此这一格的含义是「回去按重放规则重答」，而不是某一个终局取值；落地时要一并解决的是
-// 本次已经 Preserve 过自己那一份之后如何重跑分类（`resolvePreserved` 还会再追加一次观察）。
-// 这一段只钉答案，不改签名——ADR-0031 写明两步顺序反了会得到一个含义未定的取值。
+// Insert 与 Save 各有各的写入结果代数，理由见 ShipmentRequestInsertOutcome：两者的失败答案
+// 不是同一件事，恢复动作也不同。ADR-0031 把 Insert 那一格登记为已知缺口，本签名关闭它。
 type ShipmentRequestRepository interface {
 	FindBySourceIdentity(ctx context.Context, identity domain.SourceIdentity) (domain.ShipmentRequest, bool, error)
-	Insert(ctx context.Context, identity domain.SourceIdentity, request domain.ShipmentRequest) error
+	Insert(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		request domain.ShipmentRequest,
+	) (ShipmentRequestInsertOutcome, error)
 	Save(
 		ctx context.Context,
 		identity domain.SourceIdentity,

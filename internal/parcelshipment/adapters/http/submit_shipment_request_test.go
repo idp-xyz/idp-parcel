@@ -387,10 +387,13 @@ func (double *shipmentRequestRepositoryDouble) Insert(
 	_ context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestInsertOutcome, error) {
 	double.insertCount++
+	if _, found := double.records[identity]; found {
+		return ports.ShipmentRequestAlreadyExists, nil
+	}
 	double.records[identity] = request
-	return nil
+	return ports.ShipmentRequestInserted, nil
 }
 
 func (double *shipmentRequestRepositoryDouble) Save(

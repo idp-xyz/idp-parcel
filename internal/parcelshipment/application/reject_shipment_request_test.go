@@ -375,8 +375,8 @@ func (store *rejectableRequestStore) Insert(
 	_ context.Context,
 	_ domain.SourceIdentity,
 	_ domain.ShipmentRequest,
-) error {
-	return nil
+) (ports.ShipmentRequestInsertOutcome, error) {
+	return ports.ShipmentRequestInserted, nil
 }
 
 func (store *rejectableRequestStore) Save(

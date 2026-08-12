@@ -145,6 +145,73 @@ func TestSubmitConflictPreservesTheOriginalWithoutBuilding(t *testing.T) {
 	}
 }
 
+// Covers: PBC-04 / ADR-0031 — Insert 答「已存在」不是技术错误。同内容按重放规则答已有结果，
+// 且不追加观察：走到这一格时本次已经 Preserve 过自己那一份。
+func TestSubmitConcurrentInsertAlreadyExistsReturnsExistingResultWithoutAppendingObservation(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+
+	first, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	firstID, present := first.ShipmentRequestID()
+	if !present {
+		t.Fatal("first submit did not name a shipment request")
+	}
+	fixture.calls = nil
+	fixture.sources.missPreservedOnce = true
+
+	concurrent, err := fixture.handler.Handle(ctx, fixture.command(t))
+	if err != nil {
+		t.Fatalf("concurrent handle: %v", err)
+	}
+	if concurrent.Outcome() != application.OutcomeExistingResult {
+		t.Fatalf("outcome = %q, want EXISTING_RESULT", concurrent.Outcome())
+	}
+	replayed, present := concurrent.ShipmentRequestID()
+	if !present || replayed != firstID {
+		t.Fatal("concurrent insert conflict did not name the existing request")
+	}
+	if got := len(fixture.sources.observations); got != 0 {
+		t.Fatalf("appended observations = %d, want 0", got)
+	}
+	if fixture.requests.insertCount != 2 {
+		t.Fatalf("insert attempts = %d, want 2", fixture.requests.insertCount)
+	}
+	if len(fixture.requests.records) != 1 {
+		t.Fatalf("stored requests = %d, want 1", len(fixture.requests.records))
+	}
+}
+
+// Covers: ADR-0031 入口条件 — 「已存在」不是终局的已有结果；内容不同仍答接入冲突。
+func TestSubmitConcurrentInsertAlreadyExistsWithDifferentContentIsIngressConflict(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+
+	if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	fixture.sources.missPreservedOnce = true
+
+	changed := fixture.command(t)
+	changed.PayloadDigest = mustValue(t, domain.NewPayloadDigest, "digest-2")
+	result, err := fixture.handler.Handle(ctx, changed)
+	if err != nil {
+		t.Fatalf("concurrent handle: %v", err)
+	}
+	if result.Outcome() != application.OutcomeIngressConflict {
+		t.Fatalf("outcome = %q, want INGRESS_CONFLICT", result.Outcome())
+	}
+	if got := len(fixture.sources.observations); got != 0 {
+		t.Fatalf("appended observations = %d, want 0", got)
+	}
+	preserved, _ := fixture.sources.stored(t, fixture.identity(t))
+	if preserved.Digest().String() != "digest-1" {
+		t.Fatalf("concurrent preserve overwrote the original: %q", preserved.Digest())
+	}
+}
+
 // Covers: UC-PS-001 结果语义与首发试点叠加条件 — 三种拒绝彼此分明。暂停回答的是本产品此刻
 // 是否接新活，而不是范围归谁，所以它不得被报成归属未决。
 func TestSubmitFormsNoRequestWhenThisProductLacksAuthority(t *testing.T) {
@@ -317,17 +384,23 @@ func (value *fixture) command(t *testing.T) application.SubmitShipmentRequestCom
 }
 
 type sourceRepositoryDouble struct {
-	records       map[domain.SourceIdentity]domain.SourceSubmissionFingerprint
-	observations  []domain.SourceSubmissionFingerprint
-	record        func(string)
-	preserveErr   error
-	preserveCount int
+	records           map[domain.SourceIdentity]domain.SourceSubmissionFingerprint
+	observations      []domain.SourceSubmissionFingerprint
+	record            func(string)
+	preserveErr       error
+	preserveCount     int
+	missPreservedOnce bool
 }
 
 func (double *sourceRepositoryDouble) FindPreserved(
 	_ context.Context,
 	identity domain.SourceIdentity,
 ) (domain.SourceSubmissionFingerprint, bool, error) {
+	// 模拟并发下「读保全」尚未看见另一方刚写上的指纹，好让编排走到 Insert 的已存在分支。
+	if double.missPreservedOnce {
+		double.missPreservedOnce = false
+		return domain.SourceSubmissionFingerprint{}, false, nil
+	}
 	existing, found := double.records[identity]
 	return existing, found, nil
 }
@@ -341,6 +414,10 @@ func (double *sourceRepositoryDouble) Preserve(
 		return double.preserveErr
 	}
 	double.preserveCount++
+	// 先到先得：已保全的来源事实不可被并发后到者覆盖。
+	if _, found := double.records[submission.Identity()]; found {
+		return nil
+	}
 	double.records[submission.Identity()] = submission
 	return nil
 }
@@ -381,11 +458,14 @@ func (double *shipmentRequestRepositoryDouble) Insert(
 	_ context.Context,
 	identity domain.SourceIdentity,
 	request domain.ShipmentRequest,
-) error {
+) (ports.ShipmentRequestInsertOutcome, error) {
 	double.record("insert-request")
 	double.insertCount++
+	if _, found := double.records[identity]; found {
+		return ports.ShipmentRequestAlreadyExists, nil
+	}
 	double.records[identity] = request
-	return nil
+	return ports.ShipmentRequestInserted, nil
 }
 
 func (double *shipmentRequestRepositoryDouble) Save(
