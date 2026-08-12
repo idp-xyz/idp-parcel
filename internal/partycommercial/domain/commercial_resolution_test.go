@@ -314,6 +314,9 @@ func TestIncompleteKeyIsNotAcceptedWithoutTouchingCandidates(t *testing.T) {
 // 收尾过的版本不再是候选，且这不同于「从来没有」。另覆盖 `AT-PC-026`「解析后合同被当前
 // 修订替代」的候选集一侧。
 //
+// Covers: `AT-PC-008`「产品退役时已有已接受委托 → 停止新选择」在 **PC 侧**的那一半：退役后
+// 不再被新解析选中。不取消/不重算既有委托属 PS（AT-PC-025），本用例不声称覆盖。
+//
 // `已替代`那一支此前一条断言都没有：相关用例走的全是 `Retire`（实测于 `cab9a45`）。两支
 // 由不同的转移产生，共用同一句 `AppliesAt` 判据只是今天如此，不是它们必然同生共死。
 func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
@@ -356,6 +359,26 @@ func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("retired service product leaves new product selection", func(t *testing.T) {
+		seed := domain.NewCommercialRegistry()
+		live := effectiveIn(t, seed, domain.ServiceProductObject, "product-1", "v1", "sha256:p1", "scope-a")
+		retired, err := live.Retire(commercialValue(t, domain.NewRetirementReference, "retire-product"), anchorAt.AddDate(0, -1, 0))
+		if err != nil {
+			t.Fatalf("retire product: %v", err)
+		}
+		registry := domain.NewCommercialRegistry()
+		if _, err := registry.Register(retired); err != nil {
+			t.Fatalf("register retired product: %v", err)
+		}
+		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.ServiceProductObject), nil)
+		if result.Outcome() != domain.NoApplicableBasis {
+			t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS after product retirement", result.Outcome())
+		}
+		if retired.AppliesAt(anchorAt) {
+			t.Fatal("退役产品仍 AppliesAt，新选择没有停")
+		}
+	})
 }
 
 // Covers: `AT-PC-007`「新合同明确替代旧合同且边界无重叠 → 两个历史版本保留，新解析按

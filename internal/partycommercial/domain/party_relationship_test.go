@@ -200,3 +200,41 @@ func TestCustomerAccountMustNameItsCustomerParty(t *testing.T) {
 		t.Fatalf("error = %v; an account exists without naming its customer party", err)
 	}
 }
+
+// Covers: `AT-PC-001`「建立责任法人和客户参与方关系 → 稳定身份与时态关系分别形成，不把
+// 客户账户当法人」。
+//
+// 责任法人今天仍是 `LegalEntityReference`（无独立法人聚合生命周期）；本条只钉已经存在的
+// 半边：客户参与方身份、时态客户关系、货主账户与法人引用三者类型/绑定互不替代。
+func TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately(t *testing.T) {
+	customerParty := party(t, "party-customer", "货主甲")
+	legalParty := party(t, "party-legal", "责任法人乙")
+	account, err := domain.NewCustomerAccount(
+		commercialValue(t, domain.NewCustomerAccountID, "account-customer"),
+		customerParty.ID(),
+	)
+	if err != nil {
+		t.Fatalf("new customer account: %v", err)
+	}
+	relationship := effectiveRelationship(t, customerParty.ID().String(), "operator-1", domain.CustomerRole)
+	legal := commercialValue(t, domain.NewLegalEntityReference, "legal-entity-1")
+
+	if !relationship.AppliesAt(withinRelation) {
+		t.Fatal("客户时态关系没有形成生效")
+	}
+	if relationship.Holder() != customerParty.ID() {
+		t.Fatal("关系持有方不是稳定的客户参与方身份")
+	}
+	if account.CustomerParty() != customerParty.ID() {
+		t.Fatal("货主账户没有钉住客户参与方")
+	}
+	if customerParty.ID() == legalParty.ID() {
+		t.Fatal("客户参与方与法人参与方塌成同一身份")
+	}
+	if reflect.TypeOf(account.ID()) == reflect.TypeOf(legal) {
+		t.Fatal("客户账户标识与责任法人引用塌成同一类型，账户就能冒充法人")
+	}
+	if reflect.TypeOf(customerParty.ID()) == reflect.TypeOf(legal) {
+		t.Fatal("参与方标识与责任法人引用塌成同一类型")
+	}
+}
