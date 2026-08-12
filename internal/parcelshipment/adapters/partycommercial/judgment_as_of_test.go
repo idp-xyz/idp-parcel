@@ -30,14 +30,15 @@ func value[T any](t *testing.T, construct func(string) (T, error), raw string) T
 	return built
 }
 
-// effectiveIn 用导出 API 把一个已发布生效的商业版本放进登记册，形状照抄 party-commercial
-// 自己的应用测试夹具（那份在 _test.go 里，此处不可 import，只能重建）。
+// effectiveIn 用导出 API 把一个已发布生效的商业版本放进登记册并交回它，形状照抄
+// party-commercial 自己的应用测试夹具（那份在 _test.go 里，此处不可 import，只能重建）。
+// 交回版本是因为内容与时点声明都要按「已选出的那个包/产品」构造（ADR-0042）。
 func effectiveIn(
 	t *testing.T,
 	registry *pcdomain.CommercialRegistry,
 	kind pcdomain.CommercialObjectKind,
 	objectID, version, digest, scope string,
-) {
+) pcdomain.CommercialVersion {
 	t.Helper()
 
 	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
@@ -76,15 +77,24 @@ func effectiveIn(
 	if _, err := registry.Register(live); err != nil {
 		t.Fatalf("register: %v", err)
 	}
+	return live
 }
 
-type authorityDouble struct{ registry *pcdomain.CommercialRegistry }
+type authorityDouble struct {
+	registry   *pcdomain.CommercialRegistry
+	err        error
+	loadCalled int
+}
 
 func (double *authorityDouble) LoadScope(
 	_ context.Context,
 	_ pcdomain.TenantID,
 	_ pcdomain.CommercialScopeReference,
 ) (*pcdomain.CommercialRegistry, error) {
+	double.loadCalled++
+	if double.err != nil {
+		return nil, double.err
+	}
 	return double.registry, nil
 }
 
@@ -217,10 +227,10 @@ func newAsOfFixture(t *testing.T) *asOfFixture {
 		values:  &valueSourceDouble{at: formedValueAt, formed: true},
 		closure: closure,
 	}
-	fixture.adapter = adapter.NewCommercialBasisAdapter(
-		pcapplication.NewFormJudgmentAsOfHandler(fixture.store, fixture.policies),
-		fixture.values,
-	)
+	fixture.adapter = adapter.NewCommercialBasisAdapter(adapter.CommercialBasisAdapterDeps{
+		Judgments: pcapplication.NewFormJudgmentAsOfHandler(fixture.store, fixture.policies),
+		Values:    fixture.values,
+	})
 	return fixture
 }
 
@@ -308,10 +318,9 @@ func TestAFormedAsOfCarriesTheProvidersEchoNotTheDeclaration(t *testing.T) {
 func TestAnUnconfiguredValueSourceStopsWithoutAskingTheProvider(t *testing.T) {
 	cases := map[string]func(*asOfFixture) *adapter.CommercialBasisAdapter{
 		"no source at all": func(fixture *asOfFixture) *adapter.CommercialBasisAdapter {
-			return adapter.NewCommercialBasisAdapter(
-				pcapplication.NewFormJudgmentAsOfHandler(fixture.store, fixture.policies),
-				nil,
-			)
+			return adapter.NewCommercialBasisAdapter(adapter.CommercialBasisAdapterDeps{
+				Judgments: pcapplication.NewFormJudgmentAsOfHandler(fixture.store, fixture.policies),
+			})
 		},
 		"source cannot form this semantics": func(fixture *asOfFixture) *adapter.CommercialBasisAdapter {
 			fixture.values.formed = false

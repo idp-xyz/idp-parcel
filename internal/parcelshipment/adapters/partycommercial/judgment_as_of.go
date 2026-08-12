@@ -1,11 +1,6 @@
 // Package partycommercial 是 parcel-shipment 对 party-commercial 的消费侧适配器——
 // ADR-0025 点名的第一个跨上下文适配器。只有本包可以同时导入两个上下文；端口说消费方
 // 语言，适配器只翻译不判断，翻译必须是全函数。
-//
-// 本包目前只接了 `UC-PC-002` 第二阶段（FormJudgmentAsOf）。第一、三阶段的成功路径要把
-// 提供方闭包译成 `CommercialBasisSnapshot`，而快照所需的适用校验组、人工复核声明与待
-// 路由许可在 party-commercial 尚未建模；那半落地后本类型再补齐 `CommercialBasisResolver`
-// 其余两个方法——在此之前不放任何「尚未实现」分支冒充实现。
 package partycommercial
 
 import (
@@ -33,24 +28,6 @@ var ErrUntranslatableAnswer = errors.New("parcel shipment partycommercial adapte
 // 该重试。
 type AsOfValueSource interface {
 	FormAsOfValue(ctx context.Context, query psports.JudgmentAsOfQuery) (time.Time, bool, error)
-}
-
-// CommercialBasisAdapter 把 parcel-shipment 的商业依据端口接到 party-commercial 的应用
-// 编排上。ADR-0027 已裁：第二阶段的协作者由提供方以用例提供，适配器直接调用它，不再另定
-// 接口把提供方模型转手一遍。
-type CommercialBasisAdapter struct {
-	judgments *pcapplication.FormJudgmentAsOfHandler
-	values    AsOfValueSource
-}
-
-// NewCommercialBasisAdapter 装配第二阶段。values 允许为 nil：今天没有任何租户登记过时点
-// 语义，nil 是「显式未配置」的诚实表达，届时每次调用都停在`未配置`——那正是首发要停下的
-// 地方，不是要绕过的地方。
-func NewCommercialBasisAdapter(
-	judgments *pcapplication.FormJudgmentAsOfHandler,
-	values AsOfValueSource,
-) *CommercialBasisAdapter {
-	return &CommercialBasisAdapter{judgments: judgments, values: values}
 }
 
 // FormJudgmentAsOf 执行 `UC-PC-002` 步骤 6 的消费方半边：按声明的语义形成值，交提供方
