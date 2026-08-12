@@ -11,7 +11,7 @@ import (
 func registerable(t *testing.T, kind domain.CommercialObjectKind, objectID, version, digest string) domain.CommercialVersion {
 	t.Helper()
 	published, err := commercialDraft(t, kind, objectID, version, digest).
-		Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+		Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatalf("publish %s/%s: %v", objectID, version, err)
 	}
@@ -83,11 +83,27 @@ func publishedNaming(
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := draft.Publish(
+		approval(t, "approval-"+objectID+"-"+version),
+		domain.ApprovalRoleConfirmed,
+		time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+		namedReferencesPublished(references),
+	)
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	return published
+}
+
+// namedReferencesPublished 在发布时声明「这些指名此刻已发布」。AT-PC-022 的夹具需要它：
+// 发布闸门（005）通过后，解析时登记册里可以已经没有那份规则包。
+func namedReferencesPublished(references map[domain.CommercialObjectKind]string) domain.NamedReferenceStandingLookup {
+	return func(kind domain.CommercialObjectKind, objectID domain.CommercialObjectID) domain.NamedReferenceStanding {
+		if want, ok := references[kind]; ok && want == objectID.String() {
+			return domain.NamedReferencePublished
+		}
+		return domain.NamedReferenceUnpublished
+	}
 }
 
 // Covers: party-commercial CONTEXT 发布后正文不可覆盖 — 指名引用也属于一次发布固定下来的

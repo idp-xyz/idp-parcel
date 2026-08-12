@@ -11,7 +11,7 @@ import (
 func rulePackage(t *testing.T) domain.CommercialVersion {
 	t.Helper()
 	published, err := commercialDraft(t, domain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:rules-1").
-		Publish(approval(t, "approval-rules-1"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+		Publish(approval(t, "approval-rules-1"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatalf("publish rule package: %v", err)
 	}

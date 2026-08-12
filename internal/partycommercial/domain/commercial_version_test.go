@@ -65,7 +65,7 @@ func TestPublishedCommercialVersionRefusesInPlaceRevision(t *testing.T) {
 		t.Fatal("revising the draft mutated the original value")
 	}
 
-	published, err := revised.Publish(approval(t, "approval-1"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := revised.Publish(approval(t, "approval-1"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), nil)
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCommercialPublicationRequiresCompleteApprovalBasis(t *testing.T) {
 	}
 	for name, basis := range incomplete {
 		t.Run(name, func(t *testing.T) {
-			if _, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
+			if _, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt, nil); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
 				t.Fatalf("error = %v, want ErrIncompleteCommercialPublication", err)
 			}
 		})
@@ -102,7 +102,7 @@ func TestCommercialPublicationRequiresCompleteApprovalBasis(t *testing.T) {
 
 	t.Run("publication cannot precede approval", func(t *testing.T) {
 		early := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-		if _, err := draft.Publish(approval(t, "approval-2"), domain.ApprovalRoleConfirmed, early); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
+		if _, err := draft.Publish(approval(t, "approval-2"), domain.ApprovalRoleConfirmed, early, nil); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
 			t.Fatalf("error = %v, want ErrIncompleteCommercialPublication", err)
 		}
 	})
@@ -121,7 +121,7 @@ func TestPublicationWaitsWhenApprovalRoleIsUnconfirmed(t *testing.T) {
 		"unanswered zero value":  domain.ApprovalRoleStandingInvalid,
 	} {
 		t.Run(name, func(t *testing.T) {
-			published, err := draft.Publish(basis, standing, publishAt)
+			published, err := draft.Publish(basis, standing, publishAt, nil)
 			if !errors.Is(err, domain.ErrApprovalRoleNotConfirmed) {
 				t.Fatalf("error = %v, want ErrApprovalRoleNotConfirmed", err)
 			}
@@ -141,7 +141,7 @@ func TestPublicationWaitsWhenApprovalRoleIsUnconfirmed(t *testing.T) {
 	}
 
 	t.Run("confirmed role publishes", func(t *testing.T) {
-		published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt)
+		published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt, nil)
 		if err != nil {
 			t.Fatalf("publish: %v", err)
 		}
@@ -154,6 +154,79 @@ func TestPublicationWaitsWhenApprovalRoleIsUnconfirmed(t *testing.T) {
 		if errors.Is(domain.ErrApprovalRoleNotConfirmed, domain.ErrIncompleteCommercialPublication) ||
 			errors.Is(domain.ErrIncompleteCommercialPublication, domain.ErrApprovalRoleNotConfirmed) {
 			t.Fatal("两个哨兵互相 Is，调用方分不出该补字段还是该等角色确认")
+		}
+	})
+}
+
+// Covers: `AT-PC-005`「合同引用尚未发布的规则包 → 合同发布未决，不建立悬空生产引用」。
+//
+// 与 AT-PC-022 分清：022 是解析闭包确认；本条是发布闸门。两边都要守（ADR-0036）。
+func TestPublicationWaitsWhenNamedReferenceIsUnpublished(t *testing.T) {
+	spec := commercialSpec(t, domain.CustomerContractObject, "contract-1", "v1", "sha256:imported")
+	spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
+		domain.AcceptanceRulePackageObject: commercialValue(t, domain.NewCommercialObjectID, "rules-unpublished"),
+	}
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	publishAt := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	basis := approval(t, "approval-ready")
+
+	for name, standing := range map[string]domain.NamedReferenceStandingLookup{
+		"explicitly unpublished": func(domain.CommercialObjectKind, domain.CommercialObjectID) domain.NamedReferenceStanding {
+			return domain.NamedReferenceUnpublished
+		},
+		"unanswered nil lookup": nil,
+		"unanswered zero value": func(domain.CommercialObjectKind, domain.CommercialObjectID) domain.NamedReferenceStanding {
+			return domain.NamedReferenceStandingInvalid
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt, standing)
+			if !errors.Is(err, domain.ErrNamedReferenceNotPublished) {
+				t.Fatalf("error = %v, want ErrNamedReferenceNotPublished", err)
+			}
+			if errors.Is(err, domain.ErrIncompleteCommercialPublication) || errors.Is(err, domain.ErrApprovalRoleNotConfirmed) {
+				t.Fatal("指名引用未发布被压成了另一格未决")
+			}
+			if published.Status() == domain.CommercialVersionPublished {
+				t.Fatal("未发布引用仍建成了生产合同")
+			}
+			if draft.Status() != domain.CommercialVersionDraft {
+				t.Fatal("发布未决时草稿被改写了")
+			}
+			if draft.ContentDigest().String() != "sha256:imported" {
+				t.Fatal("导入来源正文在发布未决时丢失了")
+			}
+		})
+	}
+
+	t.Run("published named reference may publish", func(t *testing.T) {
+		published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt,
+			func(domain.CommercialObjectKind, domain.CommercialObjectID) domain.NamedReferenceStanding {
+				return domain.NamedReferencePublished
+			})
+		if err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		if published.Status() != domain.CommercialVersionPublished {
+			t.Fatalf("status = %q, want PUBLISHED", published.Status())
+		}
+	})
+
+	t.Run("the three publication refusals stay distinguishable", func(t *testing.T) {
+		refusals := []error{
+			domain.ErrIncompleteCommercialPublication,
+			domain.ErrApprovalRoleNotConfirmed,
+			domain.ErrNamedReferenceNotPublished,
+		}
+		for i := 0; i < len(refusals); i++ {
+			for j := i + 1; j < len(refusals); j++ {
+				if errors.Is(refusals[i], refusals[j]) || errors.Is(refusals[j], refusals[i]) {
+					t.Fatalf("%v 与 %v 互相 Is", refusals[i], refusals[j])
+				}
+			}
 		}
 	})
 }

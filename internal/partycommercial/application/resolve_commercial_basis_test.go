@@ -87,7 +87,7 @@ func effectiveIn(
 	if err != nil {
 		t.Fatalf("new approval basis: %v", err)
 	}
-	published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, approvedAt)
+	published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, approvedAt, nil)
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}

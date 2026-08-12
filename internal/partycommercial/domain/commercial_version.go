@@ -17,7 +17,10 @@ var (
 	ErrIncompleteCommercialPublication = errors.New("party commercial: incomplete commercial publication")
 	// ErrApprovalRoleNotConfirmed 是 AT-PC-010：依据字段可以齐全，但批准角色尚未确认。
 	// 它绝不是 Incomplete——补字段推不动，要等角色确认；草稿与来源必须原样保留（ADR-0035）。
-	ErrApprovalRoleNotConfirmed    = errors.New("party commercial: approval role is not confirmed for publication")
+	ErrApprovalRoleNotConfirmed = errors.New("party commercial: approval role is not confirmed for publication")
+	// ErrNamedReferenceNotPublished 是 AT-PC-005：正文指名的引用尚未发布。恢复动作是等被引
+	// 对象发布，草稿来源必须保留；不得压成 Incomplete 或角色未确认（ADR-0036）。
+	ErrNamedReferenceNotPublished  = errors.New("party commercial: a named reference is not published")
 	ErrCommercialContentIsFixed    = errors.New("party commercial: published commercial content is fixed")
 	ErrInvalidCommercialTransition = errors.New("party commercial: invalid commercial version transition")
 )
@@ -262,6 +265,30 @@ func (standing ApprovalRoleStanding) String() string {
 	}
 }
 
+// NamedReferenceStanding 是「正文指名的某个对象此刻是否已发布」的答复。
+// 零值 = 未确认：忘了作答不得默认放行（ADR-0036）。
+type NamedReferenceStanding uint8
+
+const (
+	NamedReferenceStandingInvalid NamedReferenceStanding = iota
+	NamedReferenceUnpublished
+	NamedReferencePublished
+)
+
+func (standing NamedReferenceStanding) String() string {
+	switch standing {
+	case NamedReferenceUnpublished:
+		return "UNPUBLISHED"
+	case NamedReferencePublished:
+		return "PUBLISHED"
+	default:
+		return ""
+	}
+}
+
+// NamedReferenceStandingLookup 由调用方（通常据登记册）回答正文指名引用的发布存续。
+type NamedReferenceStandingLookup func(kind CommercialObjectKind, objectID CommercialObjectID) NamedReferenceStanding
+
 type CommercialVersionSpec struct {
 	Kind          CommercialObjectKind
 	ObjectID      CommercialObjectID
@@ -418,13 +445,16 @@ func (version CommercialVersion) Revise(digest CommercialContentDigest) (Commerc
 	return version, nil
 }
 
-// Publish 固定正文。批准与来源必须完备，批准角色必须已确认，且发布不得早于为它背书的那次批准。
+// Publish 固定正文。批准与来源必须完备，批准角色必须已确认，正文指名引用必须已发布，
+// 且发布不得早于为它背书的那次批准。
 //
-// 角色未确认与字段不全分格（ADR-0035 / AT-PC-010）：前者保留草稿来源，后者要补齐依据。
+// 角色未确认、字段不全、指名引用未发布三者分格（ADR-0035 / ADR-0036）：恢复动作不同，
+// 草稿与导入来源在后两格与角色未确认时一律原样保留。
 func (version CommercialVersion) Publish(
 	basis ApprovalBasis,
 	roleStanding ApprovalRoleStanding,
 	publishedAt time.Time,
+	referenceStanding NamedReferenceStandingLookup,
 ) (CommercialVersion, error) {
 	if version.status != CommercialVersionDraft {
 		return CommercialVersion{}, ErrCommercialContentIsFixed
@@ -435,10 +465,33 @@ func (version CommercialVersion) Publish(
 	if roleStanding != ApprovalRoleConfirmed {
 		return CommercialVersion{}, ErrApprovalRoleNotConfirmed
 	}
+	if err := confirmNamedReferencesPublished(version.references, referenceStanding); err != nil {
+		return CommercialVersion{}, err
+	}
 	version.status = CommercialVersionPublished
 	version.approval = basis
 	version.publishedAt = publishedAt.UTC()
 	return version, nil
+}
+
+// confirmNamedReferencesPublished 拒绝悬空生产引用：正文指名了谁，发布前谁就必须已发布。
+func confirmNamedReferencesPublished(
+	references []DeclaredReference,
+	standingOf NamedReferenceStandingLookup,
+) error {
+	if len(references) == 0 {
+		return nil
+	}
+	for _, reference := range references {
+		standing := NamedReferenceStandingInvalid
+		if standingOf != nil {
+			standing = standingOf(reference.kind, reference.objectID)
+		}
+		if standing != NamedReferencePublished {
+			return ErrNamedReferenceNotPublished
+		}
+	}
+	return nil
 }
 
 // TakeEffect 在版本自己的生效边界到达后使其投入使用。发布不等于生效：提前发布的版本
