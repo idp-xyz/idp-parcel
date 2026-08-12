@@ -188,6 +188,44 @@ func TestAQualifiedIntakeFormsTheCommitmentAtThePhysicalTime(t *testing.T) {
 	}
 }
 
+// Covers: `AT-PS-040`「多包裹委托只有一个包裹先收寄——只为该包裹形成正式承诺，不等待
+// 或代替其他包裹」——先收寄的成员立即成立承诺，另一成员各凭各的来源独立成立；两份
+// 责任起点互不相扰（逐包裹提交是一致性节的硬句）。
+func TestOneParcelsIntakeNeitherWaitsForNorCoversItsSiblings(t *testing.T) {
+	fixture := newIntakeFixture(t)
+
+	first, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+	if err != nil {
+		t.Fatalf("first parcel handle: %v", err)
+	}
+	if first.Outcome() != application.IntakeCommitmentFormed {
+		t.Fatalf("outcome = %q; 先收寄的包裹不等同委托其他成员", first.Outcome())
+	}
+	record, _ := first.Record()
+	if record.Key.Parcel.String() != "parcel-1" {
+		t.Fatalf("parcel = %q", record.Key.Parcel)
+	}
+
+	sibling := adoptCommand(t)
+	sibling.Source.Parcel = mustValue(t, domain.NewDeclaredParcelID, "parcel-2")
+	sibling.Source.Object = mustValue(t, domain.NewSourceObjectReference, "handling-unit-2")
+	sibling.Source.Version = mustValue(t, domain.NewSourceResultVersion, "intake-result/v9")
+	second, err := fixture.handler.Handle(context.Background(), sibling)
+	if err != nil {
+		t.Fatalf("sibling handle: %v", err)
+	}
+	if second.Outcome() != application.IntakeCommitmentFormed {
+		t.Fatalf("outcome = %q; 成员各凭各的来源独立成立", second.Outcome())
+	}
+	if fixture.adoptions.saved != 2 {
+		t.Fatalf("saved = %d; 两个成员该有两份互不相扰的采用记录", fixture.adoptions.saved)
+	}
+	siblingRecord, _ := second.Record()
+	if siblingRecord.Commitment.Version() == record.Commitment.Version() {
+		t.Fatal("两个成员共用了一份承诺版本")
+	}
+}
+
 // Covers: `AT-PS-041`「同一来源版本重复交付——返回原采用结果和承诺，不形成第二责任起点」
 // 与 `AT-PS-042`「同一采用身份携带不同来源内容——形成冲突并保留原结果」。
 func TestAReplayReturnsTheOriginalAndAConflictOverwritesNothing(t *testing.T) {
