@@ -190,4 +190,54 @@ func TestCompletionIsDerivedPerParcelNotEdited(t *testing.T) {
 	}); !errors.Is(err, domain.ErrInvalidCompletionInput) {
 		t.Fatalf("err = %v; 重复成员被收下了——同一包裹两份答案分不出真假", err)
 	}
+	if _, err := domain.DeriveShipmentCompletion([]domain.MemberFinalState{
+		{Parcel: parcel("parcel-1"), Cancelled: true},
+	}); !errors.Is(err, domain.ErrInvalidCompletionInput) {
+		t.Fatalf("err = %v; 标了取消却没标终局的矛盾输入被收下了", err)
+	}
+}
+
+// Covers: UC-PS-006 一致性硬句「只有全部当前有效包裹均为取消终局且不存在非取消终局时，
+// 委托才派生为`已取消`」——全员取消派生已取消；一件交付加一件取消是全部完成而不是
+// 已取消（那件交付责任真实发生过）；有取消但未全终局什么都不派生。
+func TestShipmentCancelledDerivesOnlyFromAllCancelledMembers(t *testing.T) {
+	parcel := func(id string) domain.DeclaredParcelID {
+		return mustValue(t, domain.NewDeclaredParcelID, id)
+	}
+
+	allCancelled, err := domain.DeriveShipmentCompletion([]domain.MemberFinalState{
+		{Parcel: parcel("parcel-1"), Finalized: true, Cancelled: true},
+		{Parcel: parcel("parcel-2"), Finalized: true, Cancelled: true},
+	})
+	if err != nil {
+		t.Fatalf("derive all cancelled: %v", err)
+	}
+	if !allCancelled.DerivesShipmentCancelled() || allCancelled.State() != domain.CompletionComplete {
+		t.Fatalf("summary = %s cancelled = %v", allCancelled.State(), allCancelled.DerivesShipmentCancelled())
+	}
+
+	mixed, err := domain.DeriveShipmentCompletion([]domain.MemberFinalState{
+		{Parcel: parcel("parcel-1"), Finalized: true, Cancelled: true},
+		{Parcel: parcel("parcel-2"), Finalized: true},
+	})
+	if err != nil {
+		t.Fatalf("derive mixed: %v", err)
+	}
+	if mixed.DerivesShipmentCancelled() {
+		t.Fatal("存在非取消终局的委托被派生成已取消——那件交付责任真实发生过")
+	}
+	if mixed.State() != domain.CompletionComplete {
+		t.Fatalf("state = %s; 混合终局仍是全部完成", mixed.State())
+	}
+
+	partial, err := domain.DeriveShipmentCompletion([]domain.MemberFinalState{
+		{Parcel: parcel("parcel-1"), Finalized: true, Cancelled: true},
+		{Parcel: parcel("parcel-2")},
+	})
+	if err != nil {
+		t.Fatalf("derive partial: %v", err)
+	}
+	if partial.DerivesShipmentCancelled() || partial.State() != domain.CompletionPartial {
+		t.Fatalf("summary = %s cancelled = %v; 未全终局不派生已取消", partial.State(), partial.DerivesShipmentCancelled())
+	}
 }

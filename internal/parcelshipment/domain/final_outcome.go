@@ -299,36 +299,48 @@ func (state CompletionState) String() string {
 	}
 }
 
-// MemberFinalState 是完成派生的逐包裹输入：成员有没有适用终局。取消终局与履约终局
-// 在这里同格——UC-PS-006 的取消直接进汇总，本派生不区分终局从哪条路来。
+// MemberFinalState 是完成派生的逐包裹输入：成员有没有适用终局，以及那份终局是不是
+// 取消。取消终局与履约终局在完成度上同格（UC-PS-006 的取消直接进汇总），但委托级
+// `已取消`的派生要分得开两种终局——所以这里带一个取消位，而不是让调用方拼两套输入。
 type MemberFinalState struct {
 	Parcel    DeclaredParcelID
 	Finalized bool
+	Cancelled bool
 }
 
 // ShipmentCompletionSummary 是委托完成的派生摘要：逐包裹结果的汇总，不是可编辑状态。
 type ShipmentCompletionSummary struct {
-	state     CompletionState
-	finalized int
-	total     int
+	state        CompletionState
+	finalized    int
+	cancelled    int
+	total        int
+	allCancelled bool
 }
 
 // DeriveShipmentCompletion 依据当前有效包裹集合派生完成摘要（UC-PS-004 步骤 7）。
 // 输入必须覆盖当前全部有效成员且不重复——漏一个成员的「全部完成」是假话；空集合
-// 立不出摘要。单个成员未决只让摘要停在部分完成，不回滚其他终局（AT-PS-054）。
+// 立不出摘要；标了取消却没标终局的成员是矛盾输入（取消是一种终局）。单个成员未决
+// 只让摘要停在部分完成，不回滚其他终局（AT-PS-054）。
 func DeriveShipmentCompletion(members []MemberFinalState) (ShipmentCompletionSummary, error) {
 	if len(members) == 0 {
 		return ShipmentCompletionSummary{}, ErrInvalidCompletionInput
 	}
 	seen := make(map[DeclaredParcelID]bool, len(members))
 	finalized := 0
+	cancelled := 0
 	for _, member := range members {
 		if !member.Parcel.valid() || seen[member.Parcel] {
+			return ShipmentCompletionSummary{}, ErrInvalidCompletionInput
+		}
+		if member.Cancelled && !member.Finalized {
 			return ShipmentCompletionSummary{}, ErrInvalidCompletionInput
 		}
 		seen[member.Parcel] = true
 		if member.Finalized {
 			finalized++
+		}
+		if member.Cancelled {
+			cancelled++
 		}
 	}
 	state := CompletionNone
@@ -339,9 +351,11 @@ func DeriveShipmentCompletion(members []MemberFinalState) (ShipmentCompletionSum
 		state = CompletionPartial
 	}
 	return ShipmentCompletionSummary{
-		state:     state,
-		finalized: finalized,
-		total:     len(members),
+		state:        state,
+		finalized:    finalized,
+		cancelled:    cancelled,
+		total:        len(members),
+		allCancelled: cancelled == len(members),
 	}, nil
 }
 
@@ -353,6 +367,17 @@ func (summary ShipmentCompletionSummary) Finalized() int {
 	return summary.finalized
 }
 
+func (summary ShipmentCompletionSummary) Cancelled() int {
+	return summary.cancelled
+}
+
 func (summary ShipmentCompletionSummary) Total() int {
 	return summary.total
+}
+
+// DerivesShipmentCancelled 报告委托是否派生为`已取消`：只有全部当前有效包裹均为取消
+// 终局且不存在非取消终局时才成立（UC-PS-006 一致性硬句）。一件已交付加一件已取消的
+// 委托是`全部完成`而不是`已取消`——那件交付责任真实发生过。
+func (summary ShipmentCompletionSummary) DerivesShipmentCancelled() bool {
+	return summary.allCancelled
 }

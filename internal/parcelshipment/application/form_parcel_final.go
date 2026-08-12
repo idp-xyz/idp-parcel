@@ -374,22 +374,23 @@ func (handler *FormParcelFinalHandler) deriveCompletion(
 	members := request.CurrentSubmissionVersion().DeclaredParcelIDs()
 	states := make([]domain.MemberFinalState, 0, len(members))
 	for _, member := range members {
-		finalized := false
+		state := domain.MemberFinalState{Parcel: member}
 		if record, found, err := handler.deps.Finals.FindCurrentFinal(
 			ctx, command.Identity.TenantID(), member); err == nil && found && record.Finalized {
-			finalized = true
+			state.Finalized = true
 		} else if err != nil {
 			return
 		}
-		if !finalized && handler.deps.Cancellations != nil {
+		if !state.Finalized && handler.deps.Cancellations != nil {
 			if _, cancelled, err := handler.deps.Cancellations.FindCancellation(
 				ctx, command.Identity.TenantID(), member); err == nil && cancelled {
-				finalized = true
+				state.Finalized = true
+				state.Cancelled = true
 			} else if err != nil {
 				return
 			}
 		}
-		states = append(states, domain.MemberFinalState{Parcel: member, Finalized: finalized})
+		states = append(states, state)
 	}
 	summary, err := domain.DeriveShipmentCompletion(states)
 	if err != nil {
