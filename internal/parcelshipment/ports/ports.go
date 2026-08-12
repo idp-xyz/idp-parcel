@@ -255,6 +255,94 @@ type ParcelCancellationView interface {
 	) (domain.ParcelCancellation, bool, error)
 }
 
+// CancellationAuthorityJudgment 是取消授权规则的答复：允许、或不允许带依据。
+type CancellationAuthorityJudgment struct {
+	Granted bool
+	Basis   domain.CheckReason
+}
+
+// CancellationAuthorityView 按请求方与目标包裹判断取消授权（PAR-COM-17 实例缝）。
+// 第二个返回值为 false 即「授权目录未配置」——保持未决，不写默认授权（红线）；
+// 依赖调不通作为错误返回。
+type CancellationAuthorityView interface {
+	JudgeCancellationAuthority(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		requester domain.CancellationRequesterReference,
+		parcel domain.DeclaredParcelID,
+	) (CancellationAuthorityJudgment, bool, error)
+}
+
+// CancellationRequestKey 是取消请求的幂等键：同一请求身份返回原逐包裹结果。
+type CancellationRequestKey struct {
+	TenantID   domain.TenantID
+	RequestKey domain.SourceRequestKey
+	Parcel     domain.DeclaredParcelID
+}
+
+// CancellationRecordKind 是一次取消请求越过提交边界的三种走向：取消成立、边界后转
+// 待处置（收寄已先行成立，明确不能回退取消）、规则明确拒绝。
+type CancellationRecordKind uint8
+
+const (
+	CancellationRecordKindInvalid CancellationRecordKind = iota
+	RecordParcelCancelled
+	RecordDispositionPending
+	RecordCancellationRefused
+)
+
+func (kind CancellationRecordKind) String() string {
+	switch kind {
+	case RecordParcelCancelled:
+		return "PARCEL_CANCELLED"
+	case RecordDispositionPending:
+		return "DISPOSITION_PENDING"
+	case RecordCancellationRefused:
+		return "CANCELLATION_REFUSED"
+	default:
+		return ""
+	}
+}
+
+// CancellationRecord 是一次取消判断留下的东西。`待处置`记录携带越过的收寄引用——
+// 处置决定属后续独立判断，这里只登记「取消不能回退、在等明确处置」。
+type CancellationRecord struct {
+	Key           CancellationRequestKey
+	ContentDigest string
+	Kind          CancellationRecordKind
+	Cancellation  domain.ParcelCancellation
+	IntakeVersion domain.SourceResultVersion
+	RefusalBasis  domain.CheckReason
+	DecidedAt     time.Time
+}
+
+type CancellationSaveOutcome uint8
+
+const (
+	CancellationSaveOutcomeInvalid CancellationSaveOutcome = iota
+	CancellationSaved
+	CancellationAlreadyRecorded
+)
+
+// ParcelCancellationStore 按请求键找回并保存取消判断（写入代数同 ADR-0031）。
+// 采用编排的 ParcelCancellationView 读的就是这里成立的取消决定。
+type ParcelCancellationStore interface {
+	FindByKey(ctx context.Context, key CancellationRequestKey) (CancellationRecord, bool, error)
+	Save(ctx context.Context, record CancellationRecord) (CancellationSaveOutcome, error)
+}
+
+// ParcelCancellationHandoffIntent 把已提交的取消决定交给适用下游（路由释放、财务控制
+// 释放等各自独立承接）。意图由请求键认领，重放重发同一份（ADR-0043）。
+type ParcelCancellationHandoffIntent struct {
+	Record CancellationRecord
+}
+
+// ParcelCancellationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于
+// ADR-0017 的 Bento/Outbox 闸门。
+type ParcelCancellationHandoff interface {
+	HandOffParcelCancellation(ctx context.Context, intent ParcelCancellationHandoffIntent) error
+}
+
 // NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
 // 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
 type NetworkIntakeHandoffIntent struct {
