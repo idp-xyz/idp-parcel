@@ -42,6 +42,7 @@
 - [ADR-0034：计价闭包经商业价格政策采用，结果带回方向与定价方案绑定](./0034-pricing-closure-adopts-via-price-policy.md)
 - [ADR-0035：发布时「批准角色未确认」与「批准依据字段不全」分格](./0035-publication-approval-role-is-separate-from-incomplete-basis.md)
 - [ADR-0036：发布前必须确认正文指名引用已发布，未确认不得建立生产引用](./0036-publication-requires-named-references-published.md)
+- [ADR-0037：发布批次是逐对象折叠，不是全有或全无的聚合](./0037-publication-batch-is-per-item-not-all-or-nothing.md)
 
 ## 已被取代决策
 
