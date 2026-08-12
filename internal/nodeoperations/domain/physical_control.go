@@ -121,10 +121,12 @@ func (control PhysicalControl) EstablishedAt() time.Time {
 	return control.establishedAt
 }
 
-// Active 报告控制是否仍然在身。控制期间位置、测量、分拣、集拆、封装各自成事实——
-// 它们都不出现在这个类型上，任何单项作业事实都不重新定义控制起点，也不结束控制。
+// Active 报告控制是否仍然在身：成立过且尚未转出。成立在场是前提——零值（从未成立）
+// 不在身，否则「没建控制」与「控制在身」在读口上分不开。控制期间位置、测量、分拣、
+// 集拆、封装各自成事实——它们都不出现在这个类型上，任何单项作业事实都不重新定义
+// 控制起点，也不结束控制。
 func (control PhysicalControl) Active() bool {
-	return control.releasedAt.IsZero()
+	return !control.establishedAt.IsZero() && control.releasedAt.IsZero()
 }
 
 // Release 报告转出依据与时刻，只在已转出的控制上给出。

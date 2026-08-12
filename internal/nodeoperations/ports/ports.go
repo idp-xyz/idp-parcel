@@ -1,0 +1,110 @@
+// Package ports 定义 node-operations 应用层与外界的边界。领域包不依赖 HTTP/pgx 的
+// 纪律与其余上下文一致。
+package ports
+
+import (
+	"context"
+	"time"
+
+	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+)
+
+type Clock interface {
+	Now() time.Time
+}
+
+// ExternalMarkObservation 是现场对实物外部标识的一次观察。外部条码只是线索，不自动
+// 等于正式包裹（UC-NO-002 输入契约）。
+type ExternalMarkObservation struct {
+	Mark string
+}
+
+// ParcelIdentityView 用正式包裹与外部标识关联核对身份（PS 侧只读引用）。候选数决定
+// 走向：恰一个→关联；零个→待识别；多个→身份冲突。依赖调不通作为错误返回。
+type ParcelIdentityView interface {
+	ResolveParcelIdentity(
+		ctx context.Context,
+		tenant domain.TenantID,
+		observation ExternalMarkObservation,
+	) ([]domain.ParcelAssociationReference, error)
+}
+
+// ReceptionKey 是收寄判断的幂等键：同一来源身份和内容返回已有处理结果。
+type ReceptionKey struct {
+	TenantID domain.TenantID
+	SourceID string
+}
+
+// ReceptionRecordKind 是越过提交边界的四种判断走向（结果语义契约的前四格；已有结果
+// 与来源冲突是应答不是记录）。
+type ReceptionRecordKind uint8
+
+const (
+	ReceptionRecordKindInvalid ReceptionRecordKind = iota
+	RecordIntakeFormed
+	RecordPendingIdentification
+	RecordIntakeNotFormed
+	RecordReceptionUndecided
+)
+
+func (kind ReceptionRecordKind) String() string {
+	switch kind {
+	case RecordIntakeFormed:
+		return "INTAKE_FORMED"
+	case RecordPendingIdentification:
+		return "PENDING_IDENTIFICATION"
+	case RecordIntakeNotFormed:
+		return "INTAKE_NOT_FORMED"
+	case RecordReceptionUndecided:
+		return "RECEPTION_UNDECIDED"
+	default:
+		return ""
+	}
+}
+
+// ReceptionRecord 是一次收寄判断留下的东西。收寄与控制只在形成/待识别两格在场；
+// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消/终局/无路由）原样保全——
+// 它们不阻止接收，只限制后续方向性作业。
+type ReceptionRecord struct {
+	Key              ReceptionKey
+	ContentDigest    string
+	Kind             ReceptionRecordKind
+	Intake           domain.NodeIntake
+	Control          domain.PhysicalControl
+	Candidates       []domain.ParcelAssociationReference
+	IdentityConflict bool
+	RefusalReason    string
+	ServiceMarkers   []string
+	RecordedAt       time.Time
+}
+
+type ReceptionSaveOutcome uint8
+
+const (
+	ReceptionSaveOutcomeInvalid ReceptionSaveOutcome = iota
+	ReceptionSaved
+	ReceptionAlreadyRecorded
+)
+
+// ReceptionStore 按幂等键找回并保存收寄判断（写入代数同 ADR-0031）。
+type ReceptionStore interface {
+	FindByKey(ctx context.Context, key ReceptionKey) (ReceptionRecord, bool, error)
+	Save(ctx context.Context, record ReceptionRecord) (ReceptionSaveOutcome, error)
+}
+
+// IntakeIdentityFactory 签发收寄结果版本。
+type IntakeIdentityFactory interface {
+	NextIntakeResultVersion(ctx context.Context) (domain.IntakeResultVersion, error)
+}
+
+// NodeIntakeHandoffIntent 把已提交的收寄判断交给适用下游（parcel-shipment 的采用判断
+// 正是消费者）。意图由收寄键认领，重放重发同一份（ADR-0043 同款纪律）。
+type NodeIntakeHandoffIntent struct {
+	Record ReceptionRecord
+}
+
+// NodeIntakeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type NodeIntakeHandoff interface {
+	HandOffNodeIntake(ctx context.Context, intent NodeIntakeHandoffIntent) error
+}
