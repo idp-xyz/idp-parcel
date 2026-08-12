@@ -40,6 +40,10 @@ func TestAnAuthorizedCustomerWithdrawsAPendingRequest(t *testing.T) {
 
 // Covers: UC-PS-005「参数未确认时…不得默认任何角色有撤回权」与输入语义「客户备注或连接中断
 // 不构成撤回」— 未获授权是确定的业务答案，不是未决，续办也补不出授权来。
+//
+// Covers: `AT-PS-075`「其他客户账户请求撤回 → 拒绝越权操作」的拒绝半边；不泄露半边由
+// TestAWithdrawalForAnUnknownRequestIsUniformlyInvisible 承重（同一租户内的越权按完整来源
+// 身份定位，落的也是那条统一不可见出口）。
 func TestAnUnauthorizedWithdrawalFormsNothing(t *testing.T) {
 	fixture := newWithdrawalFixture(t)
 	fixture.authorizer.granted = false
@@ -63,8 +67,10 @@ func TestAnUnauthorizedWithdrawalFormsNothing(t *testing.T) {
 	}
 }
 
-// Covers: UC-PS-005 `AT-PS-071`「接受先合法提交，决定前撤回请求随后到达 → 返回接受结果，不释放
-// 合法冻结」与 `AT-PS-072`（拒绝先行）——后到者只能读既有结果。
+// Covers: UC-PS-005 `AT-PS-072`「拒绝已经先行提交 → 返回拒绝结果，不追加撤回决定」——
+// 后到者只能读既有结果。夹具里的先行决定是一次真实的 RejectByAuthority；接受先行的字面
+// 场景由下一条单独演练，两条不共用一个方向（此前本注释把两条 AT 挂在同一个拒绝夹具上，
+// 失败消息还写着 acceptance——声称与夹具不符，实测于 `d551872` 订正）。
 func TestALateWithdrawalReadsTheDecisionThatAlreadyWon(t *testing.T) {
 	fixture := newWithdrawalFixture(t)
 	fixture.requests.decided = true
@@ -88,12 +94,66 @@ func TestALateWithdrawalReadsTheDecisionThatAlreadyWon(t *testing.T) {
 		t.Fatal("a late withdrawal saved over an already decided version")
 	}
 	if fixture.release.calls != 0 {
+		t.Fatal("a late withdrawal re-ran the compensation of a rejection it did not form")
+	}
+}
+
+// Covers: UC-PS-005 `AT-PS-071`「接受先合法提交，决定前撤回请求随后到达 → 返回接受结果，
+// 不释放合法冻结」——冻结在接受成立后是合法占用，后到的撤回既不得追加决定，更不得把它
+// 放掉。「转接受后路径」半句是回执语义，UC-PS-006 未实现，此处不冒领。
+func TestALateWithdrawalAfterAnAcceptanceKeepsItsLawfulFreeze(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.requests.acceptedFirst = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.WithdrawalDecisionAlreadyFormed {
+		t.Fatalf("outcome = %q, want DECISION_ALREADY_FORMED", result.Outcome())
+	}
+	decision, present := result.AcceptanceDecision()
+	if !present || !decision.Accepted() {
+		t.Fatalf("decision = %#v; 后到的撤回读回的必须是那一次已成立的接受", decision)
+	}
+	if _, withdrawn := result.Withdrawal(); withdrawn {
+		t.Fatal("a late withdrawal recorded itself against an accepted version")
+	}
+	if fixture.requests.saved != nil {
+		t.Fatal("a late withdrawal saved over an accepted version")
+	}
+	if fixture.release.calls != 0 {
 		t.Fatal("a late withdrawal released a freeze that a formed acceptance still lawfully holds")
+	}
+}
+
+// Covers: `AT-PS-075` 的不泄露半边「其他客户账户请求撤回 → 不泄露对象」——查不到与越权在
+// 端口上是同一个否定答案（FindBySourceIdentity 以完整来源身份为键），这条出口上抛统一的
+// ErrInvalidShipmentRequest，接 HTTP 时映射`统一不可见结果`（ADR-0022）。授权在定位之后，
+// 一个查不到的对象连授权都不该问——问了，授权服务的答复本身就泄露了对象存在与否。
+func TestAWithdrawalForAnUnknownRequestIsUniformlyInvisible(t *testing.T) {
+	fixture := newWithdrawalFixture(t)
+	fixture.requests.missing = true
+
+	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+
+	if !errors.Is(err, domain.ErrInvalidShipmentRequest) {
+		t.Fatalf("err = %v, want ErrInvalidShipmentRequest——统一不可见出口没有生效", err)
+	}
+	if fixture.authorizer.calls != 0 {
+		t.Fatal("对一份查不到的委托问了授权——答复本身会泄露对象存在与否")
+	}
+	if fixture.release.calls != 0 {
+		t.Fatal("对一份查不到的委托发了释放")
 	}
 }
 
 // Covers: UC-PS-005 步骤 6「按原业务关联幂等形成适用冻结释放」与 CONTEXT「已经形成的接受前
 // 资金冻结必须通过原业务关联请求显式释放」— 撤回同样是接受确定未成立。
+//
+// Covers: `AT-PS-070`「撤回与自动接受并发，撤回先合法提交 → 适用冻结进入释放补偿」的释放
+// 半边；「接受不得再成立」半边由领域侧 TestADecisionCannotFormAfterAWithdrawalWon 承重。
 func TestAWithdrawalReleasesTheFreezeByItsOriginalAssociation(t *testing.T) {
 	fixture := newWithdrawalFixture(t)
 

@@ -80,6 +80,10 @@ func TestAWithdrawalCannotOverwriteADecisionThatAlreadyCrossedTheBoundary(t *tes
 
 // Covers: CONTEXT「撤回、接受和拒绝竞争同一个不可覆盖决定边界」的另一侧——撤回先到时，
 // 自动接受与主动拒绝都不得再成立。
+//
+// Covers: `AT-PS-070`「撤回与自动接受并发，撤回先合法提交 → 接受不得再成立」的决定边界
+// 半边；「适用冻结进入释放补偿」半边由应用侧
+// TestAWithdrawalReleasesTheFreezeByItsOriginalAssociation 承重。
 func TestADecisionCannotFormAfterAWithdrawalWon(t *testing.T) {
 	withdrawn, err := submitted(t).WithdrawByCustomer(withdrawalSpec(t))
 	if err != nil {

@@ -319,14 +319,16 @@ func (double *rejectionAuthorizerDouble) AuthorizeActiveRejection(
 	}, nil
 }
 
-// rejectableRequestStore 按 decided/withdrawn 交回一份`已提交`、一份已经决定或一份已经撤回的
-// 委托，用来验证后到的请求只能读取既有结果。
+// rejectableRequestStore 按开关交回一份`已提交`、已拒绝、已接受、已撤回或查不到的委托，
+// 用来验证后到的请求只能读取既有结果。
 type rejectableRequestStore struct {
-	t         *testing.T
-	decided   bool
-	withdrawn bool
-	err       error
-	saved     *domain.ShipmentRequest
+	t             *testing.T
+	decided       bool
+	acceptedFirst bool
+	withdrawn     bool
+	missing       bool
+	err           error
+	saved         *domain.ShipmentRequest
 }
 
 func (store *rejectableRequestStore) FindBySourceIdentity(
@@ -336,6 +338,14 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 	store.t.Helper()
 	if store.err != nil {
 		return domain.ShipmentRequest{}, false, store.err
+	}
+	if store.missing {
+		return domain.ShipmentRequest{}, false, nil
+	}
+	if store.acceptedFirst {
+		// 接受同样要真经领域 Decide 形成——AT-PS-071 撞的是一次合法成立的接受，
+		// 假状态挡不住 WithdrawByCustomer，也证明不了冻结仍被合法占用。
+		return acceptedRequest(store.t), true, nil
 	}
 	request := submittedRequest(store.t)
 	if store.withdrawn {
@@ -355,9 +365,9 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 	if !store.decided {
 		return request, true, nil
 	}
-	// 主动拒绝要撞的是一个真正越过提交边界的决定，所以这里让委托先经领域形成一次接受，
-	// 而不是造一个「看起来已接受」的假状态——假状态挡不住 RejectByAuthority 也说明不了问题。
-	accepted, err := request.RejectByAuthority(domain.ActiveRejectionSpec{
+	// 主动拒绝要撞的是一个真正越过提交边界的决定，所以这里让委托先经领域形成一次拒绝，
+	// 而不是造一个「看起来已决定」的假状态——假状态挡不住 RejectByAuthority 也说明不了问题。
+	rejected, err := request.RejectByAuthority(domain.ActiveRejectionSpec{
 		DecisionID: mustValue(store.t, domain.NewAcceptanceDecisionID, "decision-0"),
 		Authority:  mustValue(store.t, domain.NewRejectionAuthorityReference, "PC-REJECT-ROLE-0"),
 		Decider:    mustValue(store.t, domain.NewDeciderReference, "OPERATOR-0"),
@@ -368,7 +378,7 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 	if err != nil {
 		store.t.Fatalf("form the earlier decision: %v", err)
 	}
-	return accepted, true, nil
+	return rejected, true, nil
 }
 
 func (store *rejectableRequestStore) Insert(
