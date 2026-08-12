@@ -24,12 +24,14 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 // 被调用上才验得出来。revision 缺省给合法值：修订标识是答复的必备件，想演练缺失要显式
 // 置空（noRevision）。端口按 ADR-0046 只回事实，评估在领域执行。
 type evidenceDouble struct {
-	areas        []domain.ServiceAreaResolution
-	requirements []domain.RouteRequirement
-	err          error
-	noRevision   bool
-	assembled    int
-	assembleKey  domain.ReachabilityJudgmentKey
+	areas         []domain.ServiceAreaResolution
+	requirements  []domain.RouteRequirement
+	executability []domain.PathExecutability
+	constraints   []domain.HardConstraintFinding
+	err           error
+	noRevision    bool
+	assembled     int
+	assembleKey   domain.ReachabilityJudgmentKey
 }
 
 func (double *evidenceDouble) LoadNetworkEvidence(
@@ -41,7 +43,12 @@ func (double *evidenceDouble) LoadNetworkEvidence(
 	if double.err != nil {
 		return ports.NetworkEvidence{}, double.err
 	}
-	evidence := ports.NetworkEvidence{ServiceAreas: double.areas, RouteRequirements: double.requirements}
+	evidence := ports.NetworkEvidence{
+		ServiceAreas:      double.areas,
+		RouteRequirements: double.requirements,
+		PathExecutability: double.executability,
+		HardConstraints:   double.constraints,
+	}
 	if !double.noRevision {
 		revision, err := domain.NewNetworkViewRevision("net-view-rev-1")
 		if err != nil {
@@ -724,5 +731,51 @@ func TestACommittedRequirementFlowsThroughTheAssessment(t *testing.T) {
 	eliminated := finding.EliminatedCandidates()
 	if len(eliminated) != 1 || eliminated[0].Reason().String() != "ROUTE_COMMITMENT_NOT_SATISFIED/CONTRACT-V7/ROUTE-X" {
 		t.Fatalf("eliminated = %#v; 承诺淘汰必须携带承诺依据", eliminated)
+	}
+}
+
+// Covers: 层次 4/5 在评估流水线里的接线——不可执行事实淘汰一条候选、硬约束状态未知把
+// 另一条降为证据未知，缺口并入判断，结论`资料不足`。各层规则本体钉在领域测试里。
+func TestPathAndConstraintFactsFlowThroughTheAssessment(t *testing.T) {
+	notExecutable, err := domain.NewPathExecutability(domain.PathExecutabilitySpec{
+		Candidate: value(t, domain.NewCandidateID, "candidate-1"),
+		Outcome:   domain.PathNotExecutable,
+		Schedule:  value(t, domain.NewScheduleVersionReference, "SCHED-V3"),
+	})
+	if err != nil {
+		t.Fatalf("new path executability: %v", err)
+	}
+	unknownConstraint, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
+		Candidate: value(t, domain.NewCandidateID, "candidate-2"),
+		Outcome:   domain.ConstraintStatusUnknown,
+		Missing:   value(t, domain.NewEvidenceGapReference, "DANGEROUS_GOODS_CLASSIFICATION"),
+		Reassess:  value(t, domain.NewReassessmentCondition, "WHEN_GOODS_CLASSIFICATION_CONFIRMED"),
+	})
+	if err != nil {
+		t.Fatalf("new hard constraint finding: %v", err)
+	}
+	evidence := &evidenceDouble{
+		areas:         coveringAreas(t, "candidate-1", "candidate-2"),
+		executability: []domain.PathExecutability{notExecutable},
+		constraints:   []domain.HardConstraintFinding{unknownConstraint},
+	}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	finding, present := result.Finding()
+	if !present || finding.Value() != domain.InsufficientEvidence {
+		t.Fatalf("finding = %#v present = %v, want INSUFFICIENT_EVIDENCE", finding, present)
+	}
+	if len(finding.EliminatedCandidates()) != 1 || len(finding.UnknownCandidates()) != 1 {
+		t.Fatalf("candidates = %#v; 两层评估各应落下一格", finding.Candidates())
+	}
+	gaps := finding.EvidenceGaps()
+	if len(gaps) != 1 || gaps[0].Reference().String() != "DANGEROUS_GOODS_CLASSIFICATION" {
+		t.Fatalf("gaps = %#v; 硬约束缺口没有并入判断", gaps)
 	}
 }

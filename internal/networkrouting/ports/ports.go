@@ -15,10 +15,11 @@ import (
 // 是领域拥有的评估规则，落在端口后面就落到了适配器手里，而适配器只翻译不判断。事实与
 // 修订一次取回而不分多次调用：两次取回之间视图一变，事实与它标的修订就不再来自同一版。
 //
-// 后续增量按同一形状扩字段（日历/截单、硬约束），不另开第二个取数端口。
 type NetworkEvidence struct {
 	ServiceAreas      []domain.ServiceAreaResolution
 	RouteRequirements []domain.RouteRequirement
+	PathExecutability []domain.PathExecutability
+	HardConstraints   []domain.HardConstraintFinding
 	ViewRevision      domain.NetworkViewRevision
 }
 

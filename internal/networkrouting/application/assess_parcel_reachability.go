@@ -222,9 +222,10 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		return AssessParcelReachabilityResult{}, ErrIncompleteNetworkEvidence
 	}
 
-	// 评估在领域执行（ADR-0046）：区域事实折成候选与缺口，再过承诺/偏好分界。事实本身
-	// 不成立（重复候选、半截解析、缺格要求）是端口坏了，响亮上抛，不混进`未形成判断`
-	// 的统计。
+	// 评估在领域执行（ADR-0046），按 UC-NR-002 候选评估层次推进：区域事实折成候选与
+	// 缺口（层次 3）→ 承诺/偏好分界 → 逻辑路径可执行性（层次 4）→ 硬约束逐项评估
+	// （层次 5）。事实本身不成立（重复候选、半截解析、缺格要求、指向空间外的事实）是
+	// 端口坏了，响亮上抛，不混进`未形成判断`的统计。
 	candidates, gaps, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
 	if err != nil {
 		return AssessParcelReachabilityResult{}, fmt.Errorf("evaluate service areas: %w", err)
@@ -233,6 +234,15 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 	if err != nil {
 		return AssessParcelReachabilityResult{}, fmt.Errorf("evaluate route requirements: %w", err)
 	}
+	candidates, err = domain.EvaluatePathExecutability(candidates, evidence.PathExecutability)
+	if err != nil {
+		return AssessParcelReachabilityResult{}, fmt.Errorf("evaluate path executability: %w", err)
+	}
+	candidates, constraintGaps, err := domain.EvaluateHardConstraints(candidates, evidence.HardConstraints)
+	if err != nil {
+		return AssessParcelReachabilityResult{}, fmt.Errorf("evaluate hard constraints: %w", err)
+	}
+	gaps = append(gaps, constraintGaps...)
 
 	finding, err := domain.ConcludeReachability(candidates, gaps)
 	if err != nil {
