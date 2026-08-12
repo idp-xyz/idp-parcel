@@ -17,8 +17,20 @@ type ClosureResolutionKey struct {
 	Scope                CommercialScopeReference
 	Purpose              ResolutionPurpose
 	PriceDirection       PriceDirection
-	Anchor               SelectionAnchor
-	RequiredBases        []CommercialObjectKind
+	// Settlement 只在必需依据含结算政策时有意义（ADR-0044）：含则必填、不含则必缺，
+	// 纪律与 PriceDirection 相同。
+	Settlement    SettlementSelector
+	Anchor        SelectionAnchor
+	RequiredBases []CommercialObjectKind
+}
+
+func (key ClosureResolutionKey) requiresSettlementBasis() bool {
+	for _, kind := range key.RequiredBases {
+		if kind == SettlementPolicyObject {
+			return true
+		}
+	}
+	return false
 }
 
 func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
@@ -35,6 +47,13 @@ func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
 			return false
 		}
 	} else if key.PriceDirection.valid() {
+		return false
+	}
+	if key.requiresSettlementBasis() {
+		if !key.Settlement.declared() {
+			return false
+		}
+	} else if !key.Settlement.empty() {
 		return false
 	}
 
@@ -68,11 +87,14 @@ func (key ClosureResolutionKey) fingerprint() string {
 	sort.Strings(bases)
 	return strings.Join(append([]string{
 		key.singleBasisKey(CommercialObjectKindInvalid).fingerprint(),
+		key.Settlement.fingerprint(),
 	}, bases...), "\x00")
 }
 
+// singleBasisKey 只在成员就是结算政策时携带选择器：其余成员的单依据键要求选择器缺席，
+// 无差别透传会让整个闭包被误判输入未受理。
 func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) ResolutionKey {
-	return ResolutionKey{
+	single := ResolutionKey{
 		TenantID:             key.TenantID,
 		CustomerAccountID:    key.CustomerAccountID,
 		LegalEntityCandidate: key.LegalEntityCandidate,
@@ -82,6 +104,10 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 		PriceDirection:       key.PriceDirection,
 		Anchor:               key.Anchor,
 	}
+	if kind == SettlementPolicyObject {
+		single.Settlement = key.Settlement
+	}
+	return single
 }
 
 // AdoptedBasis 把一项必需依据与其采用的版本配成一对。闭包保存这样的成对结构而不是
@@ -91,10 +117,12 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 // 计价目的下采用的价格规则还会带上商业价格政策，这样方向与定价方案绑定可被观察
 // （ADR-0034），而不是只剩一份 `CommercialVersion`。
 type AdoptedBasis struct {
-	kind           CommercialObjectKind
-	version        CommercialVersion
-	pricePolicy    CommercialPricePolicy
-	hasPricePolicy bool
+	kind                CommercialObjectKind
+	version             CommercialVersion
+	pricePolicy         CommercialPricePolicy
+	hasPricePolicy      bool
+	settlementPolicy    SettlementPolicy
+	hasSettlementPolicy bool
 }
 
 func (adopted AdoptedBasis) Kind() CommercialObjectKind {
@@ -108,6 +136,12 @@ func (adopted AdoptedBasis) Version() CommercialVersion {
 // PricePolicy 在采用了商业价格政策时交回；其他依据缺席。
 func (adopted AdoptedBasis) PricePolicy() (CommercialPricePolicy, bool) {
 	return adopted.pricePolicy, adopted.hasPricePolicy
+}
+
+// SettlementPolicy 在采用了结算政策时交回——预付/账期方式与六维适用范围随闭包可观察
+// （ADR-0044）；其他依据缺席。
+func (adopted AdoptedBasis) SettlementPolicy() (SettlementPolicy, bool) {
+	return adopted.settlementPolicy, adopted.hasSettlementPolicy
 }
 
 // CommercialClosure 是解析引用闭包的全有或全无结果。只要不是唯一解析成功，它就
@@ -234,6 +268,10 @@ func ResolveCommercialClosure(
 			if policy, ok := result.AdoptedPricePolicy(); ok {
 				basis.pricePolicy = policy
 				basis.hasPricePolicy = true
+			}
+			if policy, ok := result.AdoptedSettlementPolicy(); ok {
+				basis.settlementPolicy = policy
+				basis.hasSettlementPolicy = true
 			}
 			adopted = append(adopted, basis)
 		case ApplicabilityConflict:

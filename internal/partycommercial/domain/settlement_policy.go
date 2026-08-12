@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -95,6 +96,30 @@ func NewSettlementApplicability(
 	}, nil
 }
 
+func (applicability SettlementApplicability) LegalEntity() LegalEntityReference {
+	return applicability.legalEntity
+}
+
+func (applicability SettlementApplicability) Counterparty() CounterpartyReference {
+	return applicability.counterparty
+}
+
+func (applicability SettlementApplicability) Contract() CommercialVersionLabel {
+	return applicability.contract
+}
+
+func (applicability SettlementApplicability) ChargeScope() ChargeScopeReference {
+	return applicability.chargeScope
+}
+
+func (applicability SettlementApplicability) Currency() CurrencyCode {
+	return applicability.currency
+}
+
+func (applicability SettlementApplicability) Effective() EffectiveInterval {
+	return applicability.effective
+}
+
 func (applicability SettlementApplicability) covers(query SettlementQuery) bool {
 	return applicability.legalEntity == query.legalEntity &&
 		applicability.counterparty == query.counterparty &&
@@ -135,6 +160,39 @@ func (policy SettlementPolicy) Method() SettlementMethod {
 
 func (policy SettlementPolicy) Applicability() SettlementApplicability {
 	return policy.applicability
+}
+
+// SettlementSelector 是解析键上请求结算依据时的结算专属维度（ADR-0044，镜像 PriceDirection
+// 的纪律：请求结算依据必填，其余请求必缺）。法人与时点不在其中——键上已有 LegalEntityCandidate
+// 与锚点，重复携带就允许两者不一致。
+type SettlementSelector struct {
+	Counterparty CounterpartyReference
+	Contract     CommercialVersionLabel
+	ChargeScope  ChargeScopeReference
+	Currency     CurrencyCode
+}
+
+func (selector SettlementSelector) declared() bool {
+	return selector.Counterparty.valid() &&
+		selector.Contract.valid() &&
+		selector.ChargeScope.valid() &&
+		selector.Currency.valid()
+}
+
+func (selector SettlementSelector) empty() bool {
+	return !selector.Counterparty.valid() &&
+		!selector.Contract.valid() &&
+		!selector.ChargeScope.valid() &&
+		!selector.Currency.valid()
+}
+
+func (selector SettlementSelector) fingerprint() string {
+	return strings.Join([]string{
+		selector.Counterparty.String(),
+		selector.Contract.String(),
+		selector.ChargeScope.String(),
+		selector.Currency.String(),
+	}, "\x00")
 }
 
 // SettlementQuery 是调用方需要结算方式的那个精确范围。它同时带上时点，因为已经

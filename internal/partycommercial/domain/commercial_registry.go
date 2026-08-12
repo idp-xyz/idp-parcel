@@ -54,9 +54,10 @@ type commercialVersionKey struct {
 //
 // 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。
 type CommercialRegistry struct {
-	versions    map[commercialVersionKey]CommercialVersion
-	corrections map[commercialVersionKey]ValidityCorrection
-	policies    []CommercialPricePolicy
+	versions           map[commercialVersionKey]CommercialVersion
+	corrections        map[commercialVersionKey]ValidityCorrection
+	policies           []CommercialPricePolicy
+	settlementPolicies []SettlementPolicy
 }
 
 func NewCommercialRegistry() *CommercialRegistry {
@@ -102,6 +103,18 @@ func (registry *CommercialRegistry) RegisterPricePolicy(policy CommercialPricePo
 // PricePolicies 交回当前已登记的政策切片副本，供解析与测试观察。
 func (registry *CommercialRegistry) PricePolicies() []CommercialPricePolicy {
 	return append([]CommercialPricePolicy(nil), registry.policies...)
+}
+
+// RegisterSettlementPolicy 接纳一份已构造的结算政策（ADR-0044）。与价格政策同一分工：
+// 版本回答「有没有这份结算政策对象」，政策回答「哪个精确范围适用哪种方式」。解析采用
+// 要的是后者，光有版本产不出方式与范围。
+func (registry *CommercialRegistry) RegisterSettlementPolicy(policy SettlementPolicy) {
+	registry.settlementPolicies = append(registry.settlementPolicies, policy)
+}
+
+// SettlementPolicies 交回当前已登记的结算政策切片副本，供解析与测试观察。
+func (registry *CommercialRegistry) SettlementPolicies() []SettlementPolicy {
+	return append([]SettlementPolicy(nil), registry.settlementPolicies...)
 }
 
 // sameReleasedContent 比较一次发布固定了什么。生命周期位置刻意不算在内：一个后来生效
@@ -257,6 +270,30 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			policy.version.version.String(),
 			policy.direction.String(),
 			policy.plan.String(),
+		}, "\x1f"))
+	}
+	for _, policy := range registry.settlementPolicies {
+		if policy.version.tenant != tenant || policy.version.scope != scope {
+			continue
+		}
+		// 与价格政策同理（ADR-0044）：只改方式或适用范围、不动版本正文时，解析身份仍须变。
+		end, bounded := policy.applicability.effective.EndsAt()
+		endPart := ""
+		if bounded {
+			endPart = end.UTC().Format(time.RFC3339Nano)
+		}
+		parts = append(parts, strings.Join([]string{
+			"SETTLEMENT_POLICY",
+			policy.version.objectID.String(),
+			policy.version.version.String(),
+			policy.method.String(),
+			policy.applicability.legalEntity.String(),
+			policy.applicability.counterparty.String(),
+			policy.applicability.contract.String(),
+			policy.applicability.chargeScope.String(),
+			policy.applicability.currency.String(),
+			policy.applicability.effective.StartsAt().UTC().Format(time.RFC3339Nano),
+			endPart,
 		}, "\x1f"))
 	}
 	sort.Strings(parts)

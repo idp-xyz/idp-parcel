@@ -148,7 +148,10 @@ type ResolutionKey struct {
 	// PriceDirection 只对计价目的有意义，其他目的必须缺席：否则两个仅在对该目的
 	// 毫无意义的维度上不同的键，会解析出不同的身份。
 	PriceDirection PriceDirection
-	Anchor         SelectionAnchor
+	// Settlement 只在请求结算政策依据时有意义，纪律与 PriceDirection 同（ADR-0044）：
+	// 结算必填、其余必缺，部分给出即输入未受理。
+	Settlement SettlementSelector
+	Anchor     SelectionAnchor
 }
 
 func (key ResolutionKey) minimumIdentityEstablished() bool {
@@ -158,6 +161,13 @@ func (key ResolutionKey) minimumIdentityEstablished() bool {
 		!key.Scope.valid() ||
 		!key.RequiredBasis.valid() ||
 		!key.Purpose.valid() {
+		return false
+	}
+	if key.RequiredBasis == SettlementPolicyObject {
+		if !key.Settlement.declared() {
+			return false
+		}
+	} else if !key.Settlement.empty() {
 		return false
 	}
 	if key.Purpose == PricingPurpose {
@@ -175,6 +185,7 @@ func (key ResolutionKey) fingerprint() string {
 		key.RequiredBasis.String(),
 		key.Purpose.String(),
 		key.PriceDirection.String(),
+		key.Settlement.fingerprint(),
 		key.Anchor.PolicyVersion().String(),
 		key.Anchor.At().Format(time.RFC3339Nano),
 	}, "\x00")
@@ -263,18 +274,20 @@ func (reason ResolutionReason) String() string {
 }
 
 type Resolution struct {
-	outcome        ResolutionOutcome
-	resolutionID   ResolutionID
-	key            ResolutionKey
-	anchor         SelectionAnchor
-	adopted        CommercialVersion
-	hasAdopted     bool
-	pricePolicy    CommercialPricePolicy
-	hasPricePolicy bool
-	viewRevision   AuthorityViewRevision
-	reason         ResolutionReason
-	continuation   ContinuationReference
-	candidateCount int
+	outcome             ResolutionOutcome
+	resolutionID        ResolutionID
+	key                 ResolutionKey
+	anchor              SelectionAnchor
+	adopted             CommercialVersion
+	hasAdopted          bool
+	pricePolicy         CommercialPricePolicy
+	hasPricePolicy      bool
+	settlementPolicy    SettlementPolicy
+	hasSettlementPolicy bool
+	viewRevision        AuthorityViewRevision
+	reason              ResolutionReason
+	continuation        ContinuationReference
+	candidateCount      int
 }
 
 func (resolution Resolution) Outcome() ResolutionOutcome {
@@ -296,6 +309,12 @@ func (resolution Resolution) AdoptedVersion() (CommercialVersion, bool) {
 // AdoptedPricePolicy 在计价目的下采用价格政策时交回完整绑定；非计价或未采用时缺席。
 func (resolution Resolution) AdoptedPricePolicy() (CommercialPricePolicy, bool) {
 	return resolution.pricePolicy, resolution.hasPricePolicy
+}
+
+// AdoptedSettlementPolicy 在采用结算政策依据时交回完整政策——预付/账期方式与六维适用
+// 范围因此可观察（ADR-0044）；其他依据缺席。
+func (resolution Resolution) AdoptedSettlementPolicy() (SettlementPolicy, bool) {
+	return resolution.settlementPolicy, resolution.hasSettlementPolicy
 }
 
 // CandidateCount 报告权威侧持有多少个适用版本。输入未受理时恒为零：去数候选本身就
@@ -345,6 +364,9 @@ func ResolveCommercialBasis(
 
 	if key.RequiredBasis == PriceRuleObject && key.Purpose == PricingPurpose {
 		return resolvePriceRuleBasis(registry, key, standingOf)
+	}
+	if key.RequiredBasis == SettlementPolicyObject {
+		return resolveSettlementPolicyBasis(registry, key)
 	}
 
 	candidates := registry.applicable(key)
@@ -409,6 +431,57 @@ func resolvePriceRuleBasis(
 	}
 }
 
+// resolveSettlementPolicyBasis 经结算政策选用结算依据，把方式与适用范围一并带回
+// （ADR-0044，镜像 resolvePriceRuleBasis）。候选先按政策版本的租户与范围收窄，再由
+// ResolveSettlementPolicy 按键上选择器的精确六维裁决——不同费用范围的预付与账期因此
+// 互不冲突（AT-PC-031），同一精确范围多候选仍是适用冲突（AT-PC-032）。
+func resolveSettlementPolicyBasis(registry *CommercialRegistry, key ResolutionKey) Resolution {
+	result := Resolution{
+		key:          key,
+		anchor:       key.Anchor,
+		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
+	}
+	query, err := NewSettlementQuery(
+		key.LegalEntityCandidate,
+		key.Settlement.Counterparty,
+		key.Settlement.Contract,
+		key.Settlement.ChargeScope,
+		key.Settlement.Currency,
+		key.Anchor.At(),
+	)
+	if err != nil {
+		return Resolution{outcome: InputNotAccepted}
+	}
+	inScope := make([]SettlementPolicy, 0, len(registry.settlementPolicies))
+	for _, policy := range registry.settlementPolicies {
+		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
+			continue
+		}
+		inScope = append(inScope, policy)
+	}
+	policy, err := ResolveSettlementPolicy(inScope, query)
+	switch {
+	case err == nil:
+		result.outcome = UniquelyResolved
+		result.adopted = policy.Version()
+		result.hasAdopted = true
+		result.settlementPolicy = policy
+		result.hasSettlementPolicy = true
+		result.candidateCount = 1
+		result.resolutionID = resolutionIdentity(key, result.viewRevision, policy.Version())
+		return result
+	case errors.Is(err, ErrSettlementMethodConflict):
+		result.outcome = ApplicabilityConflict
+		result.candidateCount = 2
+		return result
+	default:
+		// ResolveSettlementPolicy 只有冲突与零候选两种失败；这里就是零候选。光有已登记
+		// 版本没有政策也落在这一格：通用版本解析产不出方式与范围。
+		result.outcome = NoApplicableBasis
+		return result
+	}
+}
+
 // ValidateBeforeDecision 在调用方提交决定之前重跑第一阶段。它按原查询重解，而不是只
 // 检查已采用对象自身：同范围新增一个竞争候选时，那个对象一个字节都没变，解析却已经
 // 不再唯一，只有重解看得见。
@@ -430,6 +503,8 @@ func ValidateBeforeDecision(
 		stalled.hasAdopted = false
 		stalled.pricePolicy = CommercialPricePolicy{}
 		stalled.hasPricePolicy = false
+		stalled.settlementPolicy = SettlementPolicy{}
+		stalled.hasSettlementPolicy = false
 		stalled.reason = AuthorityUnreadable
 		stalled.continuation = continuationFor(prior.key.fingerprint(), prior.resolutionID, AuthorityUnreadable)
 		return stalled

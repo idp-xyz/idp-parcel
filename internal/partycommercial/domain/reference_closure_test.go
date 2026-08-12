@@ -10,7 +10,7 @@ import (
 func closureKey(t *testing.T, scope string, required ...domain.CommercialObjectKind) domain.ClosureResolutionKey {
 	t.Helper()
 	base := resolutionKey(t, scope, required[0])
-	return domain.ClosureResolutionKey{
+	key := domain.ClosureResolutionKey{
 		TenantID:             base.TenantID,
 		CustomerAccountID:    base.CustomerAccountID,
 		LegalEntityCandidate: base.LegalEntityCandidate,
@@ -19,13 +19,52 @@ func closureKey(t *testing.T, scope string, required ...domain.CommercialObjectK
 		Anchor:               base.Anchor,
 		RequiredBases:        required,
 	}
+	for _, kind := range required {
+		if kind == domain.SettlementPolicyObject {
+			key.Settlement = settlementSelector(t)
+		}
+	}
+	return key
+}
+
+// settlementSelector 与 registerSettlementPolicyIn 的适用范围逐维对齐：闭包请求结算依据时，
+// 键上的精确范围要能命中夹具登记的那份政策（ADR-0044）。
+func settlementSelector(t *testing.T) domain.SettlementSelector {
+	t.Helper()
+	return domain.SettlementSelector{
+		Counterparty: commercialValue(t, domain.NewCounterpartyReference, "customer-1"),
+		Contract:     commercialValue(t, domain.NewCommercialVersionLabel, "contract-1/v1"),
+		ChargeScope:  commercialValue(t, domain.NewChargeScopeReference, "charge-express"),
+		Currency:     commercialValue(t, domain.NewCurrencyCode, "SYN"),
+	}
+}
+
+func registerSettlementPolicyIn(
+	t *testing.T,
+	registry *domain.CommercialRegistry,
+	scope, objectID string,
+	method domain.SettlementMethod,
+) domain.SettlementPolicy {
+	t.Helper()
+	version := effectiveIn(t, registry, domain.SettlementPolicyObject, objectID, "v1", "sha256:"+objectID, scope)
+	policy, err := domain.NewSettlementPolicy(version, method,
+		applicability(t, "customer-1", "contract-1/v1", "charge-express", "SYN"))
+	if err != nil {
+		t.Fatalf("new settlement policy: %v", err)
+	}
+	registry.RegisterSettlementPolicy(policy)
+	return policy
 }
 
 func seedClosure(t *testing.T, registry *domain.CommercialRegistry, scope string, kinds ...domain.CommercialObjectKind) {
 	t.Helper()
-	for index, kind := range kinds {
+	for _, kind := range kinds {
+		if kind == domain.SettlementPolicyObject {
+			// 结算依据经政策采用（ADR-0044）：光登记版本闭包看不见，政策一并登记。
+			registerSettlementPolicyIn(t, registry, scope, "object-"+kind.String(), domain.PrepaidMethod)
+			continue
+		}
 		effectiveIn(t, registry, kind, "object-"+kind.String(), "v1", "sha256:"+kind.String(), scope)
-		_ = index
 	}
 }
 
@@ -190,7 +229,8 @@ func TestAnIncompleteClosureFailsAsAWholeAndNamesTheGap(t *testing.T) {
 func TestOneConflictingBasisMakesTheWholeClosureConflict(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	seedClosure(t, registry, "scope-a", closureBases...)
-	effectiveIn(t, registry, domain.SettlementPolicyObject, "rival-policy", "v1", "sha256:rival", "scope-a")
+	// 同一精确范围再登记一份账期政策：预付与账期同时命中即冲突（AT-PC-032 行为不变）。
+	registerSettlementPolicyIn(t, registry, "scope-a", "rival-policy", domain.TermsMethod)
 
 	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 
@@ -211,7 +251,7 @@ func TestOneConflictingBasisMakesTheWholeClosureConflict(t *testing.T) {
 func TestConflictOutranksAMissingBasis(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	seedClosure(t, registry, "scope-a", domain.CustomerContractObject, domain.SettlementPolicyObject)
-	effectiveIn(t, registry, domain.SettlementPolicyObject, "rival-policy", "v1", "sha256:rival", "scope-a")
+	registerSettlementPolicyIn(t, registry, "scope-a", "rival-policy", domain.TermsMethod)
 
 	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
 

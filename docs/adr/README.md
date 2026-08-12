@@ -49,6 +49,7 @@
 - [ADR-0041：业务参与方与货主客户账户携带 TenantID](./0041-business-party-and-customer-account-carry-tenant-id.md)
 - [ADR-0042：接受内容声明按对象归属建模，解析后经独立只读端口读取](./0042-acceptance-content-declarations-by-owning-object.md)
 - [ADR-0043：发布意图由结果标识认领，重放重发同一份——事务发布落地前的统一缝形](./0043-publish-intent-claimed-by-result-identity.md)
+- [ADR-0044：结算政策依据经政策采用，结果带回预付/账期方式与适用范围](./0044-settlement-basis-adopts-via-settlement-policy.md)
 
 ## 已被取代决策
 

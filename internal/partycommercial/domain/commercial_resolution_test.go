@@ -61,7 +61,7 @@ func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind
 	if err != nil {
 		t.Fatalf("new selection anchor: %v", err)
 	}
-	return domain.ResolutionKey{
+	key := domain.ResolutionKey{
 		TenantID:             commercialValue(t, domain.NewTenantID, "tenant-1"),
 		CustomerAccountID:    commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
 		LegalEntityCandidate: commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
@@ -70,6 +70,10 @@ func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind
 		Purpose:              domain.AcceptanceControlPurpose,
 		Anchor:               anchor,
 	}
+	if basis == domain.SettlementPolicyObject {
+		key.Settlement = settlementSelector(t)
+	}
+	return key
 }
 
 // Covers: AT-PC-017「锚点、产品、合同和规则包唯一适用 → 返回完整解析、版本、**区间**和
