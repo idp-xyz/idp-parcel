@@ -10,6 +10,9 @@ var (
 	ErrInvalidPricePolicyQuery = errors.New("party commercial: invalid price policy query")
 	ErrNoApplicablePricePolicy = errors.New("party commercial: no applicable commercial price policy")
 	ErrPricePolicyConflict     = errors.New("party commercial: one direction and scope is covered by several price policies")
+	// ErrPriceDirectionBindingConflict 是发布冲突：政策方向与价卡方向不一致，又没有声明转换。
+	// 它不是 ErrInvalidPricePolicy——构造参数形状可以都合法，错的是跨向绑定本身（AT-PC-033）。
+	ErrPriceDirectionBindingConflict = errors.New("party commercial: price policy direction conflicts with the bound plan without a declared conversion")
 	// ErrPricingPlanNotConfirmed 与 ErrPricingPlanWithdrawn 刻意分成两个哨兵：前者要再问一次
 	// parcel-pricing，后者要商业责任方改挂一份仍在的方案。压成一个，调用方就只能靠猜该重试
 	// 还是该转人工（ADR-0029 同一条道理）。
@@ -18,6 +21,31 @@ var (
 	ErrPricingPlanNotConfirmed = errors.New("party commercial: the bound pricing plan version could not be confirmed adoptable")
 	ErrPricingPlanWithdrawn    = errors.New("party commercial: the bound pricing plan version is withdrawn with no replacement")
 )
+
+// PlanBindingConversion 声明政策方向与价卡方向不一致时的显式转换。零值 = 未声明：方向必须一致。
+//
+// CONTEXT：「销售政策可以显式允许引用一次已冻结的采购评价，但不得把当前成本…隐式当作可执行价格。」
+type PlanBindingConversion uint8
+
+const (
+	PlanBindingConversionNone PlanBindingConversion = iota
+	PlanBindingFrozenBuyEvaluation
+)
+
+func (conversion PlanBindingConversion) String() string {
+	switch conversion {
+	case PlanBindingConversionNone:
+		return "NONE"
+	case PlanBindingFrozenBuyEvaluation:
+		return "FROZEN_BUY_EVALUATION"
+	default:
+		return ""
+	}
+}
+
+func (conversion PlanBindingConversion) valid() bool {
+	return conversion == PlanBindingConversionNone || conversion == PlanBindingFrozenBuyEvaluation
+}
 
 // PricingPlanStanding 是 parcel-pricing 对一份定价方案版本此刻还能不能被采用的答复。
 // 它只能由那个上下文给：价卡属于它，本上下文只持引用，就地推断等于替它回答。
@@ -69,17 +97,29 @@ type CommercialPricePolicy struct {
 	effective EffectiveInterval
 }
 
+// NewCommercialPricePolicy 构造一份已生效的商业价格政策。
+//
+// planDirection 是 parcel-pricing 对这份定价方案版本自身方向的答复，不是本上下文推断的。
+// 缺它就无法分辨「SELL 政策绑了 BUY 价卡」——而那正是 AT-PC-033 要挡的隐式跨向。
+// conversion 只在方向不一致时有意义：销售政策可显式声明引用一次已冻结的采购评价；
+// 未声明则发布冲突。
 func NewCommercialPricePolicy(
 	version CommercialVersion,
 	direction PriceDirection,
 	plan PricingPlanReference,
+	planDirection PriceDirection,
+	conversion PlanBindingConversion,
 	scope CommercialScopeReference,
 	effective EffectiveInterval,
 ) (CommercialPricePolicy, error) {
 	if version.kind != PriceRuleObject ||
 		version.status != CommercialVersionEffective ||
-		!direction.valid() || !plan.valid() || !scope.valid() || !effective.valid() {
+		!direction.valid() || !plan.valid() || !planDirection.valid() ||
+		!conversion.valid() || !scope.valid() || !effective.valid() {
 		return CommercialPricePolicy{}, ErrInvalidPricePolicy
+	}
+	if err := checkPlanBinding(direction, planDirection, conversion); err != nil {
+		return CommercialPricePolicy{}, err
 	}
 	return CommercialPricePolicy{
 		version:   version,
@@ -88,6 +128,27 @@ func NewCommercialPricePolicy(
 		scope:     scope,
 		effective: effective,
 	}, nil
+}
+
+// checkPlanBinding 拒绝未声明转换的跨向绑定。同向时再声明转换没有意义，也拒——否则
+// 「声明了转换」会变成永远为真的装饰字段。
+func checkPlanBinding(
+	policyDirection PriceDirection,
+	planDirection PriceDirection,
+	conversion PlanBindingConversion,
+) error {
+	if policyDirection == planDirection {
+		if conversion != PlanBindingConversionNone {
+			return ErrInvalidPricePolicy
+		}
+		return nil
+	}
+	if policyDirection == SellDirection &&
+		planDirection == BuyDirection &&
+		conversion == PlanBindingFrozenBuyEvaluation {
+		return nil
+	}
+	return ErrPriceDirectionBindingConflict
 }
 
 func (policy CommercialPricePolicy) Version() CommercialVersion {

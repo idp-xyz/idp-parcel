@@ -21,6 +21,8 @@ func pricePolicy(t *testing.T, objectID string, direction domain.PriceDirection,
 		live,
 		direction,
 		commercialValue(t, domain.NewPricingPlanReference, plan),
+		direction,
+		domain.PlanBindingConversionNone,
 		commercialValue(t, domain.NewCommercialScopeReference, scope),
 		mustInterval(t),
 	)
@@ -49,8 +51,9 @@ func priceQuery(t *testing.T, direction domain.PriceDirection, scope string) dom
 	return query
 }
 
-// Covers: CONTEXT「BUY、SELL 和 INTERNAL 的商业授权与适用范围分别表达」— 同一范围的
-// 三个方向各自解析，一个方向的政策绝不回答另一个方向。
+// Covers: CONTEXT「BUY、SELL 和 INTERNAL 的商业授权与适用范围分别表达」与 `AT-PC-035`
+// 「同一客户范围分别请求 SELL 计费和 BUY 成本 → 各自独立的商业政策、方向和定价方案绑定，
+// 不复用另一方向结果」。
 func TestEachDirectionResolvesItsOwnPolicy(t *testing.T) {
 	policies := []domain.CommercialPricePolicy{
 		pricePolicy(t, "policy-buy", domain.BuyDirection, "scope-a", "plan-buy"),
@@ -179,6 +182,113 @@ func TestAPolicyBoundToAnUnusablePlanDoesNotResolve(t *testing.T) {
 	})
 }
 
+// Covers: `AT-PC-033`「销售政策绑定一个采购方向价卡，且未声明转换 → 发布冲突；不把 BUY
+// 价卡隐式当 SELL 价卡」，以及 CONTEXT「销售政策可以显式允许引用一次已冻结的采购评价，但
+// 不得把当前成本…隐式当作可执行价格」。
+func TestSellPolicyCannotBindBuyPlanWithoutDeclaredConversion(t *testing.T) {
+	live, err := registerable(t, domain.PriceRuleObject, "policy-sell", "v1", "sha256:sell").
+		TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	scope := commercialValue(t, domain.NewCommercialScopeReference, "scope-a")
+	plan := commercialValue(t, domain.NewPricingPlanReference, "plan-buy")
+
+	t.Run("undeclared conversion is a publish conflict", func(t *testing.T) {
+		policy, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection, plan, domain.BuyDirection,
+			domain.PlanBindingConversionNone, scope, mustInterval(t),
+		)
+		if !errors.Is(err, domain.ErrPriceDirectionBindingConflict) {
+			t.Fatalf("error = %v, want ErrPriceDirectionBindingConflict", err)
+		}
+		if policy.PricingPlan().String() != "" {
+			t.Fatal("a conflict still produced a bound policy")
+		}
+	})
+
+	t.Run("frozen buy evaluation may be declared explicitly", func(t *testing.T) {
+		policy, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection, plan, domain.BuyDirection,
+			domain.PlanBindingFrozenBuyEvaluation, scope, mustInterval(t),
+		)
+		if err != nil {
+			t.Fatalf("explicit conversion rejected: %v", err)
+		}
+		if policy.Direction() != domain.SellDirection || policy.PricingPlan().String() != "plan-buy" {
+			t.Fatal("explicit conversion did not keep the sell policy bound to the buy plan")
+		}
+	})
+
+	t.Run("matching directions need no conversion", func(t *testing.T) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection, plan, domain.SellDirection,
+			domain.PlanBindingConversionNone, scope, mustInterval(t),
+		); err != nil {
+			t.Fatalf("same-direction bind: %v", err)
+		}
+	})
+
+	t.Run("conversion without a mismatch is invalid", func(t *testing.T) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection, plan, domain.SellDirection,
+			domain.PlanBindingFrozenBuyEvaluation, scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
+		}
+	})
+
+	t.Run("buy policy cannot silently bind a sell plan", func(t *testing.T) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.BuyDirection, plan, domain.SellDirection,
+			domain.PlanBindingConversionNone, scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrPriceDirectionBindingConflict) {
+			t.Fatalf("error = %v, want ErrPriceDirectionBindingConflict", err)
+		}
+	})
+}
+
+// Covers: `AT-PC-034`「商业绑定已批准，但价卡尚未通过可执行发布 → 商业版本可保留，依赖
+// 评价保持未决，不由 PC 激活价卡」。
+//
+// 「尚未可执行发布」落在 standing 零值/未确认那一格：本上下文只持引用，没有资格把缺答复
+// 读成可采用。政策对象本身仍在——那正是「商业版本可保留」。
+func TestApprovedBindingKeepsPolicyWhileUnpublishedPlanStaysPending(t *testing.T) {
+	policy := pricePolicy(t, "policy-sell", domain.SellDirection, "scope-a", "plan-unpublished")
+
+	resolved, err := domain.ResolveCommercialPricePolicy(
+		[]domain.CommercialPricePolicy{policy},
+		priceQuery(t, domain.SellDirection, "scope-a"),
+		nil,
+	)
+	if !errors.Is(err, domain.ErrPricingPlanNotConfirmed) {
+		t.Fatalf("error = %v, want ErrPricingPlanNotConfirmed", err)
+	}
+	if resolved.PricingPlan().String() != "" {
+		t.Fatal("an unconfirmed plan was still adopted")
+	}
+	if policy.Version().ObjectID().String() != "policy-sell" {
+		t.Fatal("the commercial policy version was discarded when the plan stayed pending")
+	}
+	if policy.PricingPlan().String() != "plan-unpublished" {
+		t.Fatal("the approved binding was cleared")
+	}
+
+	policyType := reflect.TypeOf(policy)
+	for index := 0; index < policyType.NumField(); index++ {
+		name := strings.ToLower(policyType.Field(index).Name)
+		if strings.Contains(name, "activ") || strings.Contains(name, "publish") || strings.Contains(name, "executable") {
+			t.Fatalf("CommercialPricePolicy carries %s——PC must not activate rate cards", policyType.Field(index).Name)
+		}
+	}
+	for index := 0; index < policyType.NumMethod(); index++ {
+		name := strings.ToLower(policyType.Method(index).Name)
+		if strings.Contains(name, "activ") {
+			t.Fatalf("CommercialPricePolicy exposes %s——PC must not activate rate cards", policyType.Method(index).Name)
+		}
+	}
+}
+
 // Covers: CONTEXT「必须显式绑定价格方向和可执行定价方案版本」— 两者缺任一都构造不出政策。
 func TestPricePolicyMustBindBothDirectionAndPlan(t *testing.T) {
 	live, err := registerable(t, domain.PriceRuleObject, "policy-x", "v1", "sha256:x").
@@ -189,13 +299,33 @@ func TestPricePolicyMustBindBothDirectionAndPlan(t *testing.T) {
 	scope := commercialValue(t, domain.NewCommercialScopeReference, "scope-a")
 
 	t.Run("no direction", func(t *testing.T) {
-		if _, err := domain.NewCommercialPricePolicy(live, domain.PriceDirectionInvalid, commercialValue(t, domain.NewPricingPlanReference, "plan-1"), scope, mustInterval(t)); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.PriceDirectionInvalid,
+			commercialValue(t, domain.NewPricingPlanReference, "plan-1"),
+			domain.SellDirection, domain.PlanBindingConversionNone,
+			scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
 			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
 		}
 	})
 
 	t.Run("no pricing plan", func(t *testing.T) {
-		if _, err := domain.NewCommercialPricePolicy(live, domain.SellDirection, domain.PricingPlanReference{}, scope, mustInterval(t)); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection, domain.PricingPlanReference{},
+			domain.SellDirection, domain.PlanBindingConversionNone,
+			scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
+		}
+	})
+
+	t.Run("no plan direction from parcel-pricing", func(t *testing.T) {
+		if _, err := domain.NewCommercialPricePolicy(
+			live, domain.SellDirection,
+			commercialValue(t, domain.NewPricingPlanReference, "plan-1"),
+			domain.PriceDirectionInvalid, domain.PlanBindingConversionNone,
+			scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
 			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
 		}
 	})
@@ -224,14 +354,20 @@ func TestPricePolicyNeedsAUsablePriceRuleVersion(t *testing.T) {
 
 	t.Run("refuses a draft", func(t *testing.T) {
 		draft := commercialDraft(t, domain.PriceRuleObject, "policy-y", "v1", "sha256:y")
-		if _, err := domain.NewCommercialPricePolicy(draft, domain.SellDirection, plan, scope, mustInterval(t)); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+		if _, err := domain.NewCommercialPricePolicy(
+			draft, domain.SellDirection, plan, domain.SellDirection,
+			domain.PlanBindingConversionNone, scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
 			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
 		}
 	})
 
 	t.Run("refuses another object kind", func(t *testing.T) {
 		contract := contractVersion(t, "contract-7")
-		if _, err := domain.NewCommercialPricePolicy(contract, domain.SellDirection, plan, scope, mustInterval(t)); !errors.Is(err, domain.ErrInvalidPricePolicy) {
+		if _, err := domain.NewCommercialPricePolicy(
+			contract, domain.SellDirection, plan, domain.SellDirection,
+			domain.PlanBindingConversionNone, scope, mustInterval(t),
+		); !errors.Is(err, domain.ErrInvalidPricePolicy) {
 			t.Fatalf("error = %v, want ErrInvalidPricePolicy", err)
 		}
 	})
