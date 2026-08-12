@@ -47,8 +47,34 @@ type ReachabilityJudgmentRecord struct {
 	JudgedAt time.Time
 }
 
+// ReachabilityJudgmentSaveOutcome 是保存一次判断的封闭写入结果。error 只留给「答不出」，
+// 「已有记录」是一个业务答案（ADR-0031 的同一裁决）：`AT-NR-028` 只允许一个结果版本越过
+// 提交边界，第二个写入方要按它读回赢家——而一个 error 分不出「库坏了」与「有人先到」，
+// 前者该重试，后者重试一万次也还是有人先到。
+type ReachabilityJudgmentSaveOutcome uint8
+
+const (
+	ReachabilityJudgmentSaveOutcomeInvalid ReachabilityJudgmentSaveOutcome = iota
+	ReachabilityJudgmentSaved
+	ReachabilityJudgmentAlreadyRecorded
+)
+
+func (outcome ReachabilityJudgmentSaveOutcome) String() string {
+	switch outcome {
+	case ReachabilityJudgmentSaved:
+		return "SAVED"
+	case ReachabilityJudgmentAlreadyRecorded:
+		return "ALREADY_RECORDED"
+	default:
+		return ""
+	}
+}
+
 // ReachabilityJudgmentStore 按请求关联找回并保存判断。租户是显式入参、不从 context 里
 // 补，因为按 ADR-0003 运营集团租户是最高数据隔离边界，跨越它必须在签名上看得见。
+//
+// Save 对同一关联只接纳第一份记录；再来的写入答`已有记录`而不覆盖——迟到结果不按到达
+// 顺序覆盖原判断（`AT-NR-028`）。
 type ReachabilityJudgmentStore interface {
 	FindByCorrelation(
 		ctx context.Context,
@@ -59,7 +85,26 @@ type ReachabilityJudgmentStore interface {
 		ctx context.Context,
 		correlation domain.RequestCorrelationID,
 		record ReachabilityJudgmentRecord,
-	) error
+	) (ReachabilityJudgmentSaveOutcome, error)
+}
+
+// ReachabilityJudgmentHandoffIntent 是一次已提交判断交给发起方一侧适用下游的那份引用。
+// 意图由请求关联认领：同一判断无论交几次都是同一份，不是第二份。
+type ReachabilityJudgmentHandoffIntent struct {
+	Correlation domain.RequestCorrelationID
+	Key         domain.ReachabilityJudgmentKey
+	Finding     domain.ReachabilityFinding
+	JudgedAt    time.Time
+}
+
+// ReachabilityJudgmentHandoff 把一份已提交的三值判断交给适用下游——`AT-NR-030` 的意图
+// 半边，发布意图这条缝的第三个样本（ADR-0043）。
+//
+// 本上下文不记意图完没完成：那份状态要与判断同一事务落库才算数，而事务与 outbox 仍阻断于
+// ADR-0017 的 Bento 闸门。在那之前重放一律重发同一意图，由下游按请求关联认领。它今天没有
+// 实现，唯一的实现是测试用的确定性替身。
+type ReachabilityJudgmentHandoff interface {
+	HandOffReachabilityJudgment(ctx context.Context, intent ReachabilityJudgmentHandoffIntent) error
 }
 
 type Clock interface {

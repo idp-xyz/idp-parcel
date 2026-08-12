@@ -70,13 +70,16 @@ func requiredEligibility(t *testing.T) *eligibilityDouble {
 }
 
 type storeDouble struct {
-	existing   ports.ReachabilityJudgmentRecord
-	found      bool
-	findErr    error
-	saveErr    error
-	saved      []ports.ReachabilityJudgmentRecord
-	askTenant  domain.TenantID
-	findCalled int
+	existing ports.ReachabilityJudgmentRecord
+	found    bool
+	findErr  error
+	saveErr  error
+	// alreadyRecorded 让 Save 答「已有记录」，并让随后的 Find 读得到 existing——并发赢家
+	// 对迟到写入方的可见性正是 AT-NR-028 要演练的东西。
+	alreadyRecorded bool
+	saved           []ports.ReachabilityJudgmentRecord
+	askTenant       domain.TenantID
+	findCalled      int
 }
 
 func (double *storeDouble) FindByCorrelation(
@@ -89,19 +92,40 @@ func (double *storeDouble) FindByCorrelation(
 	if double.findErr != nil {
 		return ports.ReachabilityJudgmentRecord{}, false, double.findErr
 	}
-	return double.existing, double.found, nil
+	if double.found || (double.alreadyRecorded && double.findCalled > 1) {
+		return double.existing, true, nil
+	}
+	return ports.ReachabilityJudgmentRecord{}, false, nil
 }
 
 func (double *storeDouble) Save(
 	_ context.Context,
 	_ domain.RequestCorrelationID,
 	record ports.ReachabilityJudgmentRecord,
-) error {
+) (ports.ReachabilityJudgmentSaveOutcome, error) {
 	if double.saveErr != nil {
-		return double.saveErr
+		return ports.ReachabilityJudgmentSaveOutcomeInvalid, double.saveErr
+	}
+	if double.alreadyRecorded {
+		return ports.ReachabilityJudgmentAlreadyRecorded, nil
 	}
 	double.saved = append(double.saved, record)
-	return nil
+	return ports.ReachabilityJudgmentSaved, nil
+}
+
+// handoffDouble 留住每一份交出的判断意图。计数与关联都要：意图由请求关联认领，「重试同一
+// 份」与「第二份」只有关联分得开（AT-NR-030）。
+type handoffDouble struct {
+	err     error
+	intents []ports.ReachabilityJudgmentHandoffIntent
+}
+
+func (double *handoffDouble) HandOffReachabilityJudgment(
+	_ context.Context,
+	intent ports.ReachabilityJudgmentHandoffIntent,
+) error {
+	double.intents = append(double.intents, intent)
+	return double.err
 }
 
 func value[T any](t *testing.T, construct func(string) (T, error), raw string) T {
@@ -160,7 +184,7 @@ func command(t *testing.T, parcel string) application.AssessParcelReachabilityCo
 func TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf(t *testing.T) {
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -190,7 +214,7 @@ func TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf(t *testing.T) 
 func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *testing.T) {
 	evidence := &evidenceDouble{err: errors.New("network evidence view unavailable")}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -219,7 +243,7 @@ func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *
 func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
 	evidence := &evidenceDouble{candidates: nil}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -242,7 +266,7 @@ func TestEmptyCandidateSpaceIsNotFormedRatherThanUnreachable(t *testing.T) {
 func TestIncompleteKeyIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	incomplete := command(t, "parcel-1")
 	incomplete.Key.DeclaredParcelID = domain.DeclaredParcelID{}
@@ -281,7 +305,7 @@ func TestSameScopeRetryReturnsTheExistingJudgmentWithoutReassessing(t *testing.T
 		existing: ports.ReachabilityJudgmentRecord{Key: key, Finding: finding, JudgedAt: judgedAt},
 	}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt.Add(time.Hour)})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt.Add(time.Hour)})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -316,7 +340,7 @@ func TestServiceThatDoesNotRequireANetworkJudgmentIsNotApplicable(t *testing.T) 
 	eligibility := &eligibilityDouble{eligibility: notRequired}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -346,7 +370,7 @@ func TestUnavailableCommercialEligibilityIsNotFormedRatherThanNotApplicable(t *t
 	eligibility := &eligibilityDouble{err: errors.New("commercial eligibility view unavailable")}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
 	if err != nil {
@@ -373,7 +397,7 @@ func TestCommercialEligibilityIsAskedBeforeAssemblingCandidates(t *testing.T) {
 	eligibility := requiredEligibility(t)
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
 	store := &storeDouble{}
-	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(eligibility, evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	if _, err := handler.Handle(context.Background(), command(t, "parcel-1")); err != nil {
 		t.Fatalf("handle: %v", err)
@@ -403,7 +427,7 @@ func TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite(t *tes
 		},
 	}
 	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-2")}}
-	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, fixedClock{at: judgedAt})
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), command(t, "parcel-2"))
 	if err != nil {
@@ -421,5 +445,172 @@ func TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite(t *tes
 	}
 	if len(store.saved) != 0 {
 		t.Fatal("冲突请求覆盖了原判断")
+	}
+}
+
+// Covers: `AT-NR-028`「同一判断请求版本并发处理 → 只允许一个结果版本越过提交边界，第二个
+// 返回已有结果或明确冲突」——保存被抢先不是故障，Save 的写入结果因此是封闭代数而不是
+// error（ADR-0031 同一裁决）。迟到方读回赢家：同范围交回它的判断，自己那一份不落库。
+func TestAConcurrentWinnerIsReadBackRatherThanOverwritten(t *testing.T) {
+	winner, err := domain.ConcludeReachability([]domain.RouteCandidate{qualifiedCandidate(t, "candidate-0")}, nil)
+	if err != nil {
+		t.Fatalf("conclude reachability: %v", err)
+	}
+	store := &storeDouble{
+		alreadyRecorded: true,
+		existing: ports.ReachabilityJudgmentRecord{
+			Key:      judgmentKey(t, "parcel-1"),
+			Finding:  winner,
+			JudgedAt: judgedAt,
+		},
+	}
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt.Add(time.Hour)})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ExistingJudgment {
+		t.Fatalf("outcome = %q, want EXISTING_JUDGMENT——迟到方要读回赢家而不是报故障", result.Outcome())
+	}
+	if !result.JudgedAt().Equal(judgedAt) {
+		t.Fatalf("judged at = %s, want the winner's %s——迟到结果按到达顺序覆盖了原判断时间", result.JudgedAt(), judgedAt)
+	}
+	if len(store.saved) != 0 {
+		t.Fatal("第二个结果版本越过了提交边界")
+	}
+}
+
+// 同一并发窗口的另一半：赢家的判断范围与本次不同，是冲突而不是本范围的结果。把它当成
+// 已有判断交回去，调用方会拿另一个范围的结论继续往下走。
+func TestAConcurrentWinnerWithADifferentScopeIsAConflict(t *testing.T) {
+	winner, err := domain.ConcludeReachability([]domain.RouteCandidate{qualifiedCandidate(t, "candidate-0")}, nil)
+	if err != nil {
+		t.Fatalf("conclude reachability: %v", err)
+	}
+	store := &storeDouble{
+		alreadyRecorded: true,
+		existing: ports.ReachabilityJudgmentRecord{
+			Key:      judgmentKey(t, "parcel-2"),
+			Finding:  winner,
+			JudgedAt: judgedAt,
+		},
+	}
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.RequestConflict {
+		t.Fatalf("outcome = %q, want REQUEST_CONFLICT", result.Outcome())
+	}
+	if _, present := result.Finding(); present {
+		t.Fatal("冲突结果携带了另一个范围的三值判断")
+	}
+}
+
+// Covers: `AT-NR-030` 的意图半边「判断结果已提交，但事件发布失败 → 保留判断结果并只重试
+// 同一发布意图，不重复评估」——已提交的判断交出恰好一份由请求关联认领的发布意图。投递与
+// Outbox 半边仍在 Bento 闸门后（ADR-0017），本上下文不记意图完没完成（ADR-0043）。
+func TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation(t *testing.T) {
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	downstream := &handoffDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(downstream.intents) != 1 {
+		t.Fatalf("handed off %d intents, want exactly one", len(downstream.intents))
+	}
+	intent := downstream.intents[0]
+	if intent.Correlation.String() != "correlation-1" {
+		t.Fatalf("intent claims %q, want the request correlation", intent.Correlation)
+	}
+	finding, present := result.Finding()
+	if !present || intent.Finding.Value() != finding.Value() {
+		t.Fatalf("intent finding = %#v, want the formed judgment", intent.Finding)
+	}
+	if !intent.JudgedAt.Equal(result.JudgedAt()) {
+		t.Fatalf("intent judged at = %s, want %s", intent.JudgedAt, result.JudgedAt())
+	}
+	if result.JudgmentHandoffReference().String() != "" {
+		t.Fatal("交付成功仍留下了发布续办引用——调用方会去重放一件已经办完的事")
+	}
+}
+
+// 同 AT 的失败方向：首次发布失败不改写判断——三值结果与判断时间原样交回、判断仍在库里，
+// 发布续办引用单独留出，与`未形成判断`的续办分开。
+func TestAnUndeliveredJudgmentHandoffKeepsTheJudgmentWithAResumableIntent(t *testing.T) {
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	downstream := &handoffDouble{err: errors.New("downstream unreachable")}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.JudgmentFormed {
+		t.Fatalf("outcome = %q, want JUDGMENT_FORMED——发布失败改写了判断结果", result.Outcome())
+	}
+	if _, present := result.Finding(); !present {
+		t.Fatal("发布失败弄丢了三值判断")
+	}
+	if len(store.saved) != 1 {
+		t.Fatalf("saved %d judgments; 发布失败不得回退已提交的判断", len(store.saved))
+	}
+	if result.JudgmentHandoffReference().String() == "" {
+		t.Fatal("首次发布失败没留下发布续办引用；没有引用，这份意图不会有人再交一次")
+	}
+	if result.ContinuationReference().String() != "" {
+		t.Fatal("发布失败混进了未形成判断的续办——判断已经形成，没有什么要重判")
+	}
+}
+
+// 重放走已有判断路径时重发同一份意图：本上下文不记意图完没完成，只答`已有结果`就收工，
+// 一份首次发布失败的判断会永远停在「本上下文已提交、下游从不知道」的状态。
+func TestAReplayResendsTheSameJudgmentIntentWithoutReassessing(t *testing.T) {
+	key := judgmentKey(t, "parcel-1")
+	finding, err := domain.ConcludeReachability([]domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}, nil)
+	if err != nil {
+		t.Fatalf("conclude reachability: %v", err)
+	}
+	store := &storeDouble{
+		found:    true,
+		existing: ports.ReachabilityJudgmentRecord{Key: key, Finding: finding, JudgedAt: judgedAt},
+	}
+	evidence := &evidenceDouble{}
+	downstream := &handoffDouble{err: errors.New("downstream unreachable")}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt.Add(time.Hour)})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ExistingJudgment {
+		t.Fatalf("outcome = %q, want EXISTING_JUDGMENT", result.Outcome())
+	}
+	if len(downstream.intents) != 1 || downstream.intents[0].Correlation.String() != "correlation-1" {
+		t.Fatalf("intents = %#v; 重放必须把同一份意图再交一次", downstream.intents)
+	}
+	if !downstream.intents[0].JudgedAt.Equal(judgedAt) {
+		t.Fatal("重发的意图不是原判断那一份——那是第二份意图，不是同一份的重试")
+	}
+	if evidence.assembled != 0 {
+		t.Fatal("重放重新评估了一遍")
+	}
+	if result.JudgmentHandoffReference().String() == "" {
+		t.Fatal("重试仍未交出，发布续办引用不该消失")
 	}
 }

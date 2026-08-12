@@ -6,12 +6,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
+
+// ErrUnexpectedJudgmentSaveOutcome 说明判断库交回了封闭集合以外的写入结果。它上抛而不
+// 形成未决：依赖答不出是业务结果，答出一个不属于这个集合的东西则是端口坏了。
+var ErrUnexpectedJudgmentSaveOutcome = errors.New("network routing: unexpected judgment save outcome")
 
 // AssessmentOutcome 是本用例的应用处理结果，与三值领域判断分属两层。用例把这条写死：
 // `可达`、`不可达`、`资料不足`是 network-routing 拥有的领域判断，其余结果不得进入三值
@@ -96,6 +101,7 @@ type AssessParcelReachabilityResult struct {
 	judgedAt         time.Time
 	reason           NotFormedReason
 	continuation     ContinuationReference
+	handoff          ContinuationReference
 	eligibilityBasis domain.EligibilityBasisReference
 }
 
@@ -121,6 +127,13 @@ func (result AssessParcelReachabilityResult) ContinuationReference() Continuatio
 	return result.continuation
 }
 
+// JudgmentHandoffReference 只在判断已越过提交边界、而它的发布意图没能确定交出时给出。
+// 它与 ContinuationReference 分开：后者续办的是尚未形成的判断，前者续办的是已提交判断
+// 留下的发布——合成一个，调用方就分不清该重判还是该重放（AT-NR-030）。
+func (result AssessParcelReachabilityResult) JudgmentHandoffReference() ContinuationReference {
+	return result.handoff
+}
+
 // EligibilityBasis 只在`不适用`时给出。用例要求这个结果携带明确不适用依据——没有依据的
 // `不适用`看起来像一个结论，实际是一次没作出的判断。
 func (result AssessParcelReachabilityResult) EligibilityBasis() domain.EligibilityBasisReference {
@@ -131,6 +144,7 @@ type AssessParcelReachabilityHandler struct {
 	eligibility ports.CommercialEligibilityView
 	evidence    ports.NetworkEvidenceView
 	store       ports.ReachabilityJudgmentStore
+	downstream  ports.ReachabilityJudgmentHandoff
 	clock       ports.Clock
 }
 
@@ -138,12 +152,14 @@ func NewAssessParcelReachabilityHandler(
 	eligibility ports.CommercialEligibilityView,
 	evidence ports.NetworkEvidenceView,
 	store ports.ReachabilityJudgmentStore,
+	downstream ports.ReachabilityJudgmentHandoff,
 	clock ports.Clock,
 ) *AssessParcelReachabilityHandler {
 	return &AssessParcelReachabilityHandler{
 		eligibility: eligibility,
 		evidence:    evidence,
 		store:       store,
+		downstream:  downstream,
 		clock:       clock,
 	}
 }
@@ -169,12 +185,7 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		// 用例要求返回原判断。范围不同却共用一个请求关联是冲突，同样不重新评估——一次
 		// 新的评估正是「静默覆盖原请求」的做法。
 		if existing.Key.SameJudgmentScope(command.Key) {
-			return AssessParcelReachabilityResult{
-				outcome:    ExistingJudgment,
-				finding:    existing.Finding,
-				hasFinding: true,
-				judgedAt:   existing.JudgedAt,
-			}, nil
+			return handler.existingJudgment(ctx, command, existing), nil
 		}
 		return AssessParcelReachabilityResult{outcome: RequestConflict}, nil
 	}
@@ -215,11 +226,30 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		Finding:  finding,
 		JudgedAt: handler.clock.Now(),
 	}
-	if err := handler.store.Save(ctx, command.Correlation, record); err != nil {
+	saved, err := handler.store.Save(ctx, command.Correlation, record)
+	if err != nil {
 		// 判断没能越过提交边界就不算形成。用例要求此时只保存请求与处理尝试，不发布
 		// 可达、不可达或资料不足——交回一个未落库的三值结果，下游就会引用一个查不回来的
 		// 判断。
 		return handler.notFormed(command, JudgmentStoreUnavailable), nil
+	}
+	switch saved {
+	case ports.ReachabilityJudgmentSaved:
+	case ports.ReachabilityJudgmentAlreadyRecorded:
+		// 有人在本轮的查与写之间先落了判断。本方这一份不落库也不覆盖（AT-NR-028），
+		// 读回赢家按同一条规则分流：同范围交回它的判断，异范围是冲突。
+		winner, found, err := handler.store.FindByCorrelation(ctx, command.Key.TenantID, command.Correlation)
+		if err != nil || !found {
+			// 写入说已有、读回却拿不到，是竞争窗口里的暂态：停在未形成，重试自然读到赢家。
+			return handler.notFormed(command, JudgmentStoreUnavailable), nil
+		}
+		if winner.Key.SameJudgmentScope(command.Key) {
+			return handler.existingJudgment(ctx, command, winner), nil
+		}
+		return AssessParcelReachabilityResult{outcome: RequestConflict}, nil
+	default:
+		// 逐取值分派，不留兜底：端口日后新增一个写入结果时这里报错，而不是静默归入某一格。
+		return AssessParcelReachabilityResult{}, ErrUnexpectedJudgmentSaveOutcome
 	}
 
 	return AssessParcelReachabilityResult{
@@ -227,7 +257,44 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		finding:    finding,
 		hasFinding: true,
 		judgedAt:   record.JudgedAt,
+		handoff:    handler.handOff(ctx, command, record),
 	}, nil
+}
+
+// existingJudgment 交回已越过提交边界的那一份判断，并把同一份发布意图再交一次。重发是
+// 因为本上下文不记意图完没完成——只答`已有结果`就收工，一份首次发布失败的判断会永远停在
+// 「本上下文已提交、下游从不知道」的状态，而这条路上没有别的东西会去补发（AT-NR-030）。
+func (handler *AssessParcelReachabilityHandler) existingJudgment(
+	ctx context.Context,
+	command AssessParcelReachabilityCommand,
+	record ports.ReachabilityJudgmentRecord,
+) AssessParcelReachabilityResult {
+	return AssessParcelReachabilityResult{
+		outcome:    ExistingJudgment,
+		finding:    record.Finding,
+		hasFinding: true,
+		judgedAt:   record.JudgedAt,
+		handoff:    handler.handOff(ctx, command, record),
+	}
+}
+
+// handOff 把已提交的判断交给适用下游，交不出去时交回发布续办引用。判断与时间取自落库的
+// 那一份记录而不取本轮变量，重放路径上交的就是读回来的那一份。失败不改写判断，也不算进
+// `未形成判断`——判断已经形成，要续办的是发布。
+func (handler *AssessParcelReachabilityHandler) handOff(
+	ctx context.Context,
+	command AssessParcelReachabilityCommand,
+	record ports.ReachabilityJudgmentRecord,
+) ContinuationReference {
+	if err := handler.downstream.HandOffReachabilityJudgment(ctx, ports.ReachabilityJudgmentHandoffIntent{
+		Correlation: command.Correlation,
+		Key:         record.Key,
+		Finding:     record.Finding,
+		JudgedAt:    record.JudgedAt,
+	}); err != nil {
+		return continuationFor(command, "JUDGMENT_NOT_HANDED_OFF")
+	}
+	return ContinuationReference{}
 }
 
 // notFormed 构造所有未形成判断共用的那一种形状，让它们全部带上原因与续办引用：一次停下
@@ -239,15 +306,17 @@ func (handler *AssessParcelReachabilityHandler) notFormed(
 	return AssessParcelReachabilityResult{
 		outcome:      JudgmentNotFormed,
 		reason:       reason,
-		continuation: continuationFor(command, reason),
+		continuation: continuationFor(command, reason.String()),
 	}
 }
 
-// continuationFor 由请求关联、判断范围与原因共同派生，因此同一请求因同一原因停滞时拿到的
-// 引用始终相同——这正是发起方能按稳定关联查询原次尝试而不必靠猜的原因。
-func continuationFor(command AssessParcelReachabilityCommand, reason NotFormedReason) ContinuationReference {
+// continuationFor 由请求关联、判断范围与停摆标签共同派生，因此同一请求因同一原因停滞时
+// 拿到的引用始终相同——这正是发起方能按稳定关联查询原次尝试而不必靠猜的原因。标签收字符
+// 串而不收 NotFormedReason：发布续办不是一种`未形成判断`，硬塞进那个枚举会把「判断已形成
+// 只欠发布」计进未形成统计。
+func continuationFor(command AssessParcelReachabilityCommand, label string) ContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		reason.String(),
+		label,
 		command.Correlation.String(),
 		command.Key.TenantID.String(),
 		command.Key.CustomerAccountID.String(),
