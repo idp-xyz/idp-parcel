@@ -162,6 +162,11 @@ type ShipmentRequest struct {
 	// sourceDataVersions 只追加。它与 baseline 并列而不是改写 baseline：接受基线固定的是
 	// 客户声明的服务范围，资料版本记的是此后的补充与更正，两者都要留。
 	sourceDataVersions []CustomerSourceDataVersion
+	// priorVersions/priorTasks 只追加，按形成顺序两两对应（ADR-0045）：currentVersion 仍是
+	// 唯一「待判断版本」的表达，历史另存而不是把当前版本退化成数组里的一个标记——「同一
+	// 时刻只有一个待判断版本」由结构保证，比由每个读者自己筛一遍可靠。
+	priorVersions []SubmissionVersion
+	priorTasks    []AcceptanceDecisionTask
 }
 
 // SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或

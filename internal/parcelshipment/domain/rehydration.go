@@ -36,6 +36,11 @@ type RehydrateShipmentRequestSpec struct {
 	SubmittedAt       time.Time
 	CurrentVersion    RehydrateSubmissionVersionSpec
 	AcceptanceTask    RehydrateAcceptanceTaskSpec
+	// PriorVersions/PriorTasks 是受控补充留下的历史（ADR-0045），按形成顺序两两对应。
+	// 首次提交的委托两者皆空；有历史而不带回，一份补充过的委托重建后看起来像从未补充过，
+	// 而「旧版本及其判断历史继续保留」正是那条转移存在的理由。
+	PriorVersions []RehydrateSubmissionVersionSpec
+	PriorTasks    []RehydrateAcceptanceTaskSpec
 }
 
 // RehydrateSubmissionVersionSpec 是客户当前请求内容那一份不可覆盖记录在库里的样子。
@@ -73,6 +78,27 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 	if err := admitRehydratedState(snapshot.State); err != nil {
 		return ShipmentRequest{}, err
 	}
+	priorVersions := make([]SubmissionVersion, 0, len(snapshot.PriorVersions))
+	for _, prior := range snapshot.PriorVersions {
+		priorVersions = append(priorVersions, SubmissionVersion{
+			versionID:         prior.VersionID,
+			sourceSubmission:  prior.SourceSubmission,
+			declaredParcelIDs: append([]DeclaredParcelID(nil), prior.DeclaredParcelIDs...),
+			establishedAt:     prior.EstablishedAt,
+		})
+	}
+	priorTasks := make([]AcceptanceDecisionTask, 0, len(snapshot.PriorTasks))
+	for _, prior := range snapshot.PriorTasks {
+		priorTasks = append(priorTasks, AcceptanceDecisionTask{
+			taskID:              prior.TaskID,
+			submissionVersionID: prior.SubmissionVersionID,
+			establishedAt:       prior.EstablishedAt,
+			state:               prior.State,
+			waitingOn:           prior.WaitingOn,
+			processingAttempts:  append([]ProcessingAttempt(nil), prior.ProcessingAttempts...),
+			reviewCompletion:    prior.ReviewCompletion,
+		})
+	}
 	request := ShipmentRequest{
 		revision:          snapshot.Revision,
 		shipmentRequestID: snapshot.ShipmentRequestID,
@@ -96,6 +122,8 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			),
 			reviewCompletion: snapshot.AcceptanceTask.ReviewCompletion,
 		},
+		priorVersions: priorVersions,
+		priorTasks:    priorTasks,
 	}
 	if err := request.validForRehydration(); err != nil {
 		return ShipmentRequest{}, err
@@ -161,9 +189,40 @@ func (request ShipmentRequest) validForRehydration() error {
 		return rehydrationRefusal("接受判断任务挂在另一个提交版本上")
 	}
 	// `已提交`与任务未收工只能同真同假：任务`已完成`只在决定越过提交边界时到达，`已停止`
-	// 只在撤回成立时到达，而这两件事都会把委托带离`已提交`。
+	// 只在撤回或版本换代时到达，而撤回会把委托带离`已提交`、换代会立起新的运行中任务。
 	if request.state == ShipmentRequestSubmitted && !request.acceptanceTask.running() {
 		return rehydrationRefusal("委托仍为已提交，接受判断任务却已收工")
+	}
+	return request.historyValidForRehydration()
+}
+
+// historyValidForRehydration 校验受控补充留下的历史（ADR-0045）。历史版本与历史任务按
+// 形成顺序两两对应；历史任务不得仍在运行——「同一时刻只有一个待判断的当前提交版本」，
+// 一份带着两个运行中任务的聚合是拼出来的。
+func (request ShipmentRequest) historyValidForRehydration() error {
+	if len(request.priorVersions) != len(request.priorTasks) {
+		return rehydrationRefusal("历史提交版本与历史判断任务数量对不上")
+	}
+	seen := map[SubmissionVersionID]struct{}{request.currentVersion.versionID: {}}
+	for index, prior := range request.priorVersions {
+		if err := prior.validForRehydration(); err != nil {
+			return err
+		}
+		if _, duplicated := seen[prior.versionID]; duplicated {
+			return rehydrationRefusal("历史提交版本与另一代版本重号")
+		}
+		seen[prior.versionID] = struct{}{}
+
+		task := request.priorTasks[index]
+		if err := task.validForRehydration(); err != nil {
+			return err
+		}
+		if task.running() {
+			return rehydrationRefusal("历史判断任务仍在运行")
+		}
+		if task.submissionVersionID != prior.versionID {
+			return rehydrationRefusal("历史判断任务挂在另一个提交版本上")
+		}
 	}
 	return nil
 }

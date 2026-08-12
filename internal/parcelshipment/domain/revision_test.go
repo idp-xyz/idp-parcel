@@ -62,6 +62,9 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 			}
 			return accepted.AmendCustomerSourceData(version)
 		},
+		"FormNewSubmissionVersion": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			return request.FormNewSubmissionVersion(supersessionSpecFor(t, "parcel-1"))
+		},
 	}
 
 	classified := classifyAggregateTransitions(reflect.TypeOf(domain.ShipmentRequest{}))
@@ -363,6 +366,9 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"currentVersion":    true,
 		"acceptanceTask":    true,
 		"submittedAt":       true,
+		// 受控补充的历史在`已提交`下就有值（ADR-0045），必须随快照往返。
+		"priorVersions": true,
+		"priorTasks":    true,
 	}
 	// absentInSubmitted 是`已提交`下必然缺席的判断产物。这扇门开到别的状态那天，它们要从
 	// 这一份挪到上一份并各自补上快照表达，而不是继续留零——ADR-0030 的入口条件说的就是它。
