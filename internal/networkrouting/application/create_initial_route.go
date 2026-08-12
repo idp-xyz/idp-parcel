@@ -89,6 +89,7 @@ const (
 	RouteIdentityUnavailable
 	RouteHandoffLogUnavailable
 	RoutingApplicabilityUnavailable
+	RouteEvidenceSuperseded
 )
 
 func (reason RouteUndecidedReason) String() string {
@@ -107,6 +108,8 @@ func (reason RouteUndecidedReason) String() string {
 		return "HANDOFF_LOG_UNAVAILABLE"
 	case RoutingApplicabilityUnavailable:
 		return "ROUTING_APPLICABILITY_UNAVAILABLE"
+	case RouteEvidenceSuperseded:
+		return "ROUTE_EVIDENCE_SUPERSEDED"
 	default:
 		return ""
 	}
@@ -261,6 +264,10 @@ func (handler *CreateInitialRouteHandler) Handle(
 }
 
 // routeOneParcel 为一个包裹形成独立结果。任何一格的未决都只属于这个包裹。
+//
+// 提交前重校（`AT-NR-010`）：候选选出后、越过提交边界前重读证据修订，换代即用新依据
+// 重新判断一轮——「原候选不得提交为当前计划」。连续换代说明视图正在滚动，保持未决
+// 比追着一个动的目标提交要诚实。
 func (handler *CreateInitialRouteHandler) routeOneParcel(
 	ctx context.Context,
 	correlation domain.RequestCorrelationID,
@@ -278,60 +285,87 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	if err != nil {
 		return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
 	}
+
+	for attempt := 0; attempt < 2; attempt++ {
+		record, undecided, err := handler.judgeParcel(ctx, key, evidence)
+		if err != nil {
+			return ParcelRouteResult{}, err
+		}
+		if undecided != nil {
+			return *undecided, nil
+		}
+
+		fresh, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+		if err != nil {
+			return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
+		}
+		if fresh.ViewRevision == evidence.ViewRevision {
+			return handler.commit(ctx, correlation, key, record)
+		}
+		evidence = fresh
+	}
+	return handler.undecidedParcel(key, RouteEvidenceSuperseded), nil
+}
+
+// judgeParcel 以一份证据执行评估管线并形成待提交记录。三种出口：记录、未决、装配错误。
+func (handler *CreateInitialRouteHandler) judgeParcel(
+	ctx context.Context,
+	key domain.InitialRouteJudgmentKey,
+	evidence ports.InitialRouteEvidence,
+) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
+	none := ports.InitialRouteRecord{}
 	if !evidence.ViewRevision.Valid() || !evidence.Strategy.Valid() {
-		return ParcelRouteResult{}, ErrIncompleteRouteEvidence
+		return none, nil, ErrIncompleteRouteEvidence
 	}
 
 	// 评估在领域执行（ADR-0046），按层次推进：区域 → 承诺分界 → 可执行性 → 硬约束 →
 	// 时间可行性。事实本身不成立是端口坏了，响亮上抛。
 	candidates, _, err := domain.EvaluateServiceAreas(evidence.ServiceAreas)
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("evaluate service areas: %w", err)
+		return none, nil, fmt.Errorf("evaluate service areas: %w", err)
 	}
 	if len(candidates) == 0 {
-		return handler.undecidedParcel(key, RouteCandidateSpaceNotEstablished), nil
+		undecided := handler.undecidedParcel(key, RouteCandidateSpaceNotEstablished)
+		return none, &undecided, nil
 	}
 	candidates, err = domain.EvaluateRouteRequirements(candidates, evidence.RouteRequirements)
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("evaluate route requirements: %w", err)
+		return none, nil, fmt.Errorf("evaluate route requirements: %w", err)
 	}
 	candidates, err = domain.EvaluatePathExecutability(candidates, evidence.PathExecutability)
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("evaluate path executability: %w", err)
+		return none, nil, fmt.Errorf("evaluate path executability: %w", err)
 	}
 	candidates, _, err = domain.EvaluateHardConstraints(candidates, evidence.HardConstraints)
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("evaluate hard constraints: %w", err)
+		return none, nil, fmt.Errorf("evaluate hard constraints: %w", err)
 	}
 	candidates, err = domain.EvaluateTimeFeasibility(candidates, evidence.Projections, evidence.CommittedBound)
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("evaluate time feasibility: %w", err)
+		return none, nil, fmt.Errorf("evaluate time feasibility: %w", err)
 	}
 
 	judgedAt := handler.deps.Clock.Now()
 	selected, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority)
 	switch {
 	case errors.Is(err, domain.ErrNoQualifiedCandidate):
-		return handler.concludeNoRoute(ctx, correlation, key, candidates, evidence, judgedAt)
-	case errors.Is(err, domain.ErrInvalidRanking):
-		return ParcelRouteResult{}, fmt.Errorf("select route candidate: %w", err)
+		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
 	case err != nil:
-		return ParcelRouteResult{}, fmt.Errorf("select route candidate: %w", err)
+		return none, nil, fmt.Errorf("select route candidate: %w", err)
 	}
-
-	return handler.concludePlan(ctx, correlation, key, selected, candidates, evidence, judgedAt)
+	return handler.planRecord(ctx, key, selected, candidates, evidence, judgedAt)
 }
 
-// concludePlan 为选中候选形成计划并提交。
-func (handler *CreateInitialRouteHandler) concludePlan(
+// planRecord 为选中候选形成待提交的计划记录。
+func (handler *CreateInitialRouteHandler) planRecord(
 	ctx context.Context,
-	correlation domain.RequestCorrelationID,
 	key domain.InitialRouteJudgmentKey,
 	selected domain.CandidateID,
 	candidates []domain.RouteCandidate,
 	evidence ports.InitialRouteEvidence,
 	judgedAt time.Time,
-) (ParcelRouteResult, error) {
+) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
+	none := ports.InitialRouteRecord{}
 	var legs []domain.PlannedLeg
 	for _, path := range evidence.Paths {
 		if path.Candidate == selected {
@@ -341,11 +375,12 @@ func (handler *CreateInitialRouteHandler) concludePlan(
 	}
 	if len(legs) == 0 {
 		// 选中的候选没有段链，计划的节点与窗口无从表达——答复缺件，不是一种未决。
-		return ParcelRouteResult{}, ErrIncompleteRouteEvidence
+		return none, nil, ErrIncompleteRouteEvidence
 	}
 	version, err := handler.deps.Identities.NextRoutePlanVersionID(ctx)
 	if err != nil {
-		return handler.undecidedParcel(key, RouteIdentityUnavailable), nil
+		undecided := handler.undecidedParcel(key, RouteIdentityUnavailable)
+		return none, &undecided, nil
 	}
 	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
 		Key:           key,
@@ -359,22 +394,20 @@ func (handler *CreateInitialRouteHandler) concludePlan(
 		EffectiveFrom: judgedAt,
 	})
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("form initial route plan: %w", err)
+		return none, nil, fmt.Errorf("form initial route plan: %w", err)
 	}
-	record := ports.InitialRouteRecord{Key: key, Plan: plan, HasPlan: true}
-	return handler.commit(ctx, correlation, key, record)
+	return ports.InitialRouteRecord{Key: key, Plan: plan, HasPlan: true}, nil, nil
 }
 
-// concludeNoRoute 在没有合格候选时区分两格：全部确定性淘汰是`无当前有效路由`，还有
+// noRouteRecord 在没有合格候选时区分两格：全部确定性淘汰是`无当前有效路由`，还有
 // 证据未知候选在场只能未决（「必须证明不存在……证据未知……的可能候选」）。
-func (handler *CreateInitialRouteHandler) concludeNoRoute(
-	ctx context.Context,
-	correlation domain.RequestCorrelationID,
+func (handler *CreateInitialRouteHandler) noRouteRecord(
 	key domain.InitialRouteJudgmentKey,
 	candidates []domain.RouteCandidate,
 	evidence ports.InitialRouteEvidence,
 	judgedAt time.Time,
-) (ParcelRouteResult, error) {
+) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
+	none := ports.InitialRouteRecord{}
 	judgment, err := domain.FormNoCurrentRouteJudgment(domain.NoCurrentRouteJudgmentSpec{
 		Key:          key,
 		Candidates:   candidates,
@@ -383,13 +416,13 @@ func (handler *CreateInitialRouteHandler) concludeNoRoute(
 		JudgedAt:     judgedAt,
 	})
 	if errors.Is(err, domain.ErrCandidateSpaceUndecided) {
-		return handler.undecidedParcel(key, RouteCandidateEvidenceIncomplete), nil
+		undecided := handler.undecidedParcel(key, RouteCandidateEvidenceIncomplete)
+		return none, &undecided, nil
 	}
 	if err != nil {
-		return ParcelRouteResult{}, fmt.Errorf("form no-current-route judgment: %w", err)
+		return none, nil, fmt.Errorf("form no-current-route judgment: %w", err)
 	}
-	record := ports.InitialRouteRecord{Key: key, NoRoute: judgment, HasNoRoute: true}
-	return handler.commit(ctx, correlation, key, record)
+	return ports.InitialRouteRecord{Key: key, NoRoute: judgment, HasNoRoute: true}, nil, nil
 }
 
 // commit 提交一份包裹级记录并交发布意图。并发下另一方先提交时读回赢家（`AT-NR-004`）。

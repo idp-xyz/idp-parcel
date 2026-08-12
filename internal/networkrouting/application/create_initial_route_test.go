@@ -111,6 +111,9 @@ func (double *applicabilityDouble) AssessRoutingApplicability(
 
 type routeEvidenceDouble struct {
 	byParcel map[string]ports.InitialRouteEvidence
+	// sequence 按次弹出，弹尽停在最后一份——演练「选出后、提交前视图换代」要让两次
+	// 取回答出不同的修订。
+	sequence map[string][]ports.InitialRouteEvidence
 	errs     map[string]error
 	loaded   int
 }
@@ -120,10 +123,18 @@ func (double *routeEvidenceDouble) LoadInitialRouteEvidence(
 	key domain.InitialRouteJudgmentKey,
 ) (ports.InitialRouteEvidence, error) {
 	double.loaded++
-	if err, present := double.errs[key.DeclaredParcelID.String()]; present {
+	parcel := key.DeclaredParcelID.String()
+	if err, present := double.errs[parcel]; present {
 		return ports.InitialRouteEvidence{}, err
 	}
-	return double.byParcel[key.DeclaredParcelID.String()], nil
+	if queued, present := double.sequence[parcel]; present && len(queued) > 0 {
+		next := queued[0]
+		if len(queued) > 1 {
+			double.sequence[parcel] = queued[1:]
+		}
+		return next, nil
+	}
+	return double.byParcel[parcel], nil
 }
 
 type routeStoreDouble struct {
@@ -404,6 +415,66 @@ func eliminated(t *testing.T, id, reason string) domain.RouteCandidate {
 		t.Fatalf("new eliminated candidate: %v", err)
 	}
 	return candidate
+}
+
+// Covers: `AT-NR-010`「候选选出后、提交前适用线路被有效关闭——原候选不得提交为当前
+// 计划；使用新依据重新判断，不能完成时保持未决」。第一份证据选出候选，提交前重读发现
+// 修订换代且线路已被排除：提交的是按新依据重判的`无当前有效路由`，不是旧计划。
+func TestAPreCommitRevisionChangeRejudgesWithTheNewEvidence(t *testing.T) {
+	fixture := newRouteFixture(t)
+	closed := unroutableEvidence(t)
+	closed.ViewRevision = value(t, domain.NewNetworkViewRevision, "net-view-rev-2")
+	fixture.evidence.sequence = map[string][]ports.InitialRouteEvidence{
+		"parcel-1": {routableEvidence(t), closed, closed},
+	}
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	parcel := result.Parcels()[0]
+	if parcel.Outcome() != application.ParcelNoCurrentRoute {
+		t.Fatalf("outcome = %q, want NO_CURRENT_ROUTE——旧候选不得提交为当前计划", parcel.Outcome())
+	}
+	noRoute, present := parcel.NoCurrentRoute()
+	if !present || noRoute.ViewRevision().String() != "net-view-rev-2" {
+		t.Fatalf("no-route revision = %#v present = %v; 提交的必须是按新依据的重判", noRoute, present)
+	}
+	if fixture.store.saved != 1 {
+		t.Fatalf("saved = %d, want 1", fixture.store.saved)
+	}
+}
+
+// Covers: `AT-NR-010` 的另半句「不能完成时保持未决」——视图连续滚动时每轮重判都在提交
+// 前再次失配，两轮后停在未决而不是追着一个动的目标提交。
+func TestARollingViewKeepsTheJudgmentUndecided(t *testing.T) {
+	fixture := newRouteFixture(t)
+	second := routableEvidence(t)
+	second.ViewRevision = value(t, domain.NewNetworkViewRevision, "net-view-rev-2")
+	third := routableEvidence(t)
+	third.ViewRevision = value(t, domain.NewNetworkViewRevision, "net-view-rev-3")
+	fixture.evidence.sequence = map[string][]ports.InitialRouteEvidence{
+		"parcel-1": {routableEvidence(t), second, third},
+	}
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	parcel := result.Parcels()[0]
+	if parcel.Outcome() != application.ParcelRouteUndecided ||
+		parcel.UndecidedReason() != application.RouteEvidenceSuperseded {
+		t.Fatalf("outcome = %q/%q, want UNDECIDED/ROUTE_EVIDENCE_SUPERSEDED",
+			parcel.Outcome(), parcel.UndecidedReason())
+	}
+	if fixture.store.saved != 0 {
+		t.Fatal("追着滚动的视图提交了结果")
+	}
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatal("未决发布了意图")
+	}
 }
 
 // Covers: `AT-NR-009`「仅面单渠道服务，运营企业不控制端到端网络——返回不适用并保留产品
