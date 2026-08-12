@@ -47,6 +47,12 @@ func NewRouteStrategyReference(value string) (RouteStrategyReference, error) {
 	return RouteStrategyReference{required}, err
 }
 
+// Valid 供应用层核对证据答复的完整性：没有策略引用的判断复算不了，与修订标识同一条
+// 「答复缺件响亮上抛」的纪律。
+func (reference RouteStrategyReference) Valid() bool {
+	return reference.valid()
+}
+
 // WindowBasisReference 指名一个计划时间窗口的形成依据（服务日历、节点处理时间与衔接
 // 缓冲的版本引用）。窗口不带依据就复算不了——计划内容清单点名要它。
 type WindowBasisReference struct{ requiredValue }

@@ -125,3 +125,110 @@ type ReachabilityJudgmentHandoff interface {
 type Clock interface {
 	Now() time.Time
 }
+
+// CandidatePath 是一个候选的路径内容：被选中后成为计划的段链。段链属候选事实——网络
+// 定义拥有节点与连接，领域只校验链形不发明节点。
+type CandidatePath struct {
+	Candidate domain.CandidateID
+	Legs      []domain.PlannedLeg
+}
+
+// InitialRouteEvidence 是一次初始路由判断所需的版本化事实（UC-NR-001 层次 1–4 的输入
+// 清单）。与可达性证据同一条 ADR-0046 纪律：端口只取事实不做评估，事实与修订一次取回。
+// 排序准则序、分值量纲、日历与缓冲取值全属实例半边（PAR-NET-14）。
+type InitialRouteEvidence struct {
+	ServiceAreas      []domain.ServiceAreaResolution
+	RouteRequirements []domain.RouteRequirement
+	PathExecutability []domain.PathExecutability
+	HardConstraints   []domain.HardConstraintFinding
+	Projections       []domain.CandidateTimeProjection
+	CommittedBound    domain.CommittedTimeBound
+	Scores            []domain.CandidateScores
+	Priority          []domain.RankingCriterion
+	Paths             []CandidatePath
+	Strategy          domain.RouteStrategyReference
+	ViewRevision      domain.NetworkViewRevision
+}
+
+// InitialRouteEvidenceView 为一次初始路由判断取回版本化事实。调不通作为错误返回，由
+// 应用层形成`路由判断未决`。
+type InitialRouteEvidenceView interface {
+	LoadInitialRouteEvidence(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+	) (InitialRouteEvidence, error)
+}
+
+// RoutingApplicabilityView 取商业侧对「这个服务要不要形成网络路由」的回答（UC-NR-001
+// 步骤 3）。复用 NetworkEligibility 语义：要求/不要求加依据，读不回是错误不是`不适用`。
+type RoutingApplicabilityView interface {
+	AssessRoutingApplicability(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+	) (domain.NetworkEligibility, error)
+}
+
+// InitialRouteRecord 是一次包裹级初始路由判断越过提交边界后留下的东西：计划或无路由
+// 二居其一。两个都带或都缺的记录是坏数据——那正是「无路由不得用空计划表达」的存储面。
+type InitialRouteRecord struct {
+	Key        domain.InitialRouteJudgmentKey
+	Plan       domain.InitialRoutePlan
+	HasPlan    bool
+	NoRoute    domain.NoCurrentRouteJudgment
+	HasNoRoute bool
+}
+
+// InitialRouteSaveOutcome 与可达性判断库同一套写入代数（ADR-0031）：`已有记录`是业务
+// 答案不是错误，第二个写入方按它读回赢家（`AT-NR-004` 并发裁决）。
+type InitialRouteSaveOutcome uint8
+
+const (
+	InitialRouteSaveOutcomeInvalid InitialRouteSaveOutcome = iota
+	InitialRouteSaved
+	InitialRouteAlreadyRecorded
+)
+
+// InitialRouteStore 按判断键找回并保存包裹级结果。键含接受基线与服务目的——「同一接受
+// 基线、同一包裹和同一初始路由目的只能形成一个当前有效初始路由结果」由键的选维承担。
+type InitialRouteStore interface {
+	FindByKey(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+	) (InitialRouteRecord, bool, error)
+	Save(ctx context.Context, record InitialRouteRecord) (InitialRouteSaveOutcome, error)
+}
+
+// RouteHandoffLog 按交接关联登记内容指纹，供重放与冲突分界（UC-NR-001 步骤 2）：同关联
+// 同指纹是重放、异指纹是冲突。Append 对同一关联只接纳第一份，再来的交回已有指纹。
+type RouteHandoffLog interface {
+	FindDigest(
+		ctx context.Context,
+		tenant domain.TenantID,
+		correlation domain.RequestCorrelationID,
+	) (string, bool, error)
+	Append(
+		ctx context.Context,
+		tenant domain.TenantID,
+		correlation domain.RequestCorrelationID,
+		digest string,
+	) error
+}
+
+// InitialRouteHandoffIntent 把一份已提交的包裹级结果交给适用下游（ADR-0043 缝形，
+// 第四个样本）。意图由判断键认领：同一结果无论交几次都是同一份。
+type InitialRouteHandoffIntent struct {
+	Correlation domain.RequestCorrelationID
+	Record      InitialRouteRecord
+}
+
+// InitialRouteHandoff 今天没有实现，唯一的实现是测试用的确定性替身；事务发布仍阻断于
+// ADR-0017 的 Bento/Outbox 闸门，在那之前重放一律重发同一意图。
+type InitialRouteHandoff interface {
+	HandOffInitialRoute(ctx context.Context, intent InitialRouteHandoffIntent) error
+}
+
+// RouteIdentityFactory 签发本上下文自己拥有的计划版本标识。刻意不从调用方接收：交接
+// 关联不得变成计划版本号。
+type RouteIdentityFactory interface {
+	NextRoutePlanVersionID(ctx context.Context) (domain.RoutePlanVersionID, error)
+}
