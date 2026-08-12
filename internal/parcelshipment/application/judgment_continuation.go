@@ -74,6 +74,9 @@ const (
 	SourceDataVersionIdentityUnavailable
 	AmendedRequestNotSaved
 	SourceDataVersionNotHandedOff
+	// AcceptanceDecisionNotHandedOff 说的是决定已越过提交边界、它的发布意图没能确定交出。
+	// 与 ControlReleasePending 同类：不是判断没推进，是已成立决定留下的随附事项。
+	AcceptanceDecisionNotHandedOff
 	// StaleShipmentRequestRevision 说的是保存被并发写入抢先：这一份聚合读出来之后，有人
 	// 先落了一步。它与`决定没落库`分开，因为两者的运维含义相反——一个可能是库坏了，一个是
 	// 正常竞争，而续办引用由原因派生，压成一格会让两种缺口共用同一条引用。
@@ -220,6 +223,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "AMENDED_REQUEST_NOT_SAVED"
 	case SourceDataVersionNotHandedOff:
 		return "SOURCE_DATA_VERSION_NOT_HANDED_OFF"
+	case AcceptanceDecisionNotHandedOff:
+		return "ACCEPTANCE_DECISION_NOT_HANDED_OFF"
 	case StaleShipmentRequestRevision:
 		return "STALE_SHIPMENT_REQUEST_REVISION"
 	case RejectionAuthorityRulesNotConfigured:

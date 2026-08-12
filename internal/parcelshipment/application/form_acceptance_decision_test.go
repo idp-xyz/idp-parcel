@@ -407,6 +407,103 @@ func TestADecisionRevalidatesTheBasisItsJudgmentsWereFormedUnder(t *testing.T) {
 	}
 }
 
+// Covers: `AT-PS-013` 的意图半边——已成立的决定交出恰好一份由决定标识认领的发布意图，
+// 交付成功不留发布续办引用。State 随意图一起交出，下游据以分流而不必回读。
+func TestAFormedDecisionHandsOffOneIntentClaimedByTheDecision(t *testing.T) {
+	fixture := newDecisionFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	decision, present := result.AcceptanceDecision()
+	if !present {
+		t.Fatalf("no decision formed: %#v", result)
+	}
+	if len(fixture.downstream.intents) != 1 {
+		t.Fatalf("handed off %d intents, want exactly one", len(fixture.downstream.intents))
+	}
+	intent := fixture.downstream.intents[0]
+	if intent.DecisionID != decision.DecisionID() {
+		t.Fatalf("intent claims %q, want the decision %q", intent.DecisionID, decision.DecisionID())
+	}
+	if intent.State != domain.ShipmentRequestAccepted {
+		t.Fatalf("intent state = %q, want ACCEPTED", intent.State)
+	}
+	if result.DecisionHandoffReference().String() != "" {
+		t.Fatal("交付成功仍留下了发布续办引用——调用方会去重放一件已经办完的事")
+	}
+}
+
+// Covers: `AT-PS-013`「接受决定提交成功但事件首次投递失败 → 委托仍为已接受且基线、预计
+// 承诺完整；重试同一发布意图，不重复接受或回退决定」——失败不改写业务结果，发布续办与
+// 判断续办分开交回。
+func TestAnUndeliveredDecisionHandoffKeepsTheAcceptanceWithAResumableIntent(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.downstream.err = errors.New("downstream unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceDecided {
+		t.Fatalf("outcome = %q, want DECIDED——投递失败改写了业务结果", result.Outcome())
+	}
+	if result.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED", result.State())
+	}
+	if fixture.requests.saved == nil || fixture.requests.saved.State() != domain.ShipmentRequestAccepted {
+		t.Fatal("投递失败回退了已落库的接受决定")
+	}
+	if _, present := fixture.requests.saved.AcceptanceBaseline(); !present {
+		t.Fatal("接受基线没有保住")
+	}
+	if _, present := fixture.requests.saved.ExpectedCommitment(); !present {
+		t.Fatal("预计承诺没有保住")
+	}
+	if result.DecisionHandoffReference().String() == "" {
+		t.Fatal("首次投递失败没留下发布续办引用；没有引用，这份意图不会有人再交一次")
+	}
+	if result.ContinuationReference().String() != "" {
+		t.Fatal("投递失败混进了判断续办——决定已经形成，没有什么要重判")
+	}
+}
+
+// Covers: `AT-PS-013`「重试同一发布意图，不重复接受或回退决定」——重放走已有决定路径，
+// 重发同一决定标识认领的意图，不再签发新决定身份。两次交出的标识不同就说明重放又形成了
+// 一份决定，那是第二份意图而不是同一份的重试。
+func TestAReplayResendsTheSameDecisionIntentWithoutDecidingAgain(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.requests.sticky = true
+	fixture.downstream.err = errors.New("downstream unreachable")
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	second, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("second handle: %v", err)
+	}
+
+	if second.Outcome() != application.AcceptanceDecided {
+		t.Fatalf("second outcome = %q, want DECIDED", second.Outcome())
+	}
+	if len(fixture.downstream.intents) != 2 {
+		t.Fatalf("handed off %d intents, want the retry to resend exactly once more", len(fixture.downstream.intents))
+	}
+	if fixture.downstream.intents[0].DecisionID != fixture.downstream.intents[1].DecisionID {
+		t.Fatal("重放交出了另一份决定标识——那是第二份意图，不是同一份的重试")
+	}
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d decision IDs, want 1——重放又签发了决定身份", fixture.identities.issued)
+	}
+	if second.DecisionHandoffReference().String() == "" {
+		t.Fatal("重试仍未交出，发布续办引用不该消失")
+	}
+}
+
 // Covers: AT-PC-025「解析后合同退役，但委托接受已提交 → 历史决定保留原快照，不追溯改写」。
 //
 // 与 AT-PC-026 的分野在是否已经越过提交边界：提交前依据失效要重解（或未决）；提交后同一
@@ -630,6 +727,8 @@ type decisionFixture struct {
 	requests   *decidableRequestStore
 	release    *controlReleaseDouble
 	recorder   *judgmentRequestStore
+	downstream *decisionHandoffDouble
+	identities *decisionIdentityFactory
 }
 
 func newDecisionFixture(t *testing.T) *decisionFixture {
@@ -654,16 +753,34 @@ func newDecisionFixture(t *testing.T) *decisionFixture {
 	value.requests = &decidableRequestStore{t: t}
 	value.release = &controlReleaseDouble{}
 	value.recorder = &judgmentRequestStore{}
+	value.downstream = &decisionHandoffDouble{}
+	value.identities = &decisionIdentityFactory{t: t}
 	value.handler = application.NewFormAcceptanceDecisionHandler(application.FormAcceptanceDecisionDeps{
 		Requests:   value.requests,
 		Commercial: value.commercial,
 		Judgments:  value.judgments,
 		Recorder:   value.recorder,
 		Release:    value.release,
-		Identities: &decisionIdentityFactory{t: t},
+		Downstream: value.downstream,
+		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
 	})
 	return value
+}
+
+// decisionHandoffDouble 留住每一份交出的意图。计数与标识都要：意图由决定标识认领，
+// 「重试同一份」与「第二份」只有标识分得开（AT-PS-013）。
+type decisionHandoffDouble struct {
+	err     error
+	intents []ports.AcceptanceDecisionHandoffIntent
+}
+
+func (double *decisionHandoffDouble) HandOffAcceptanceDecision(
+	_ context.Context,
+	intent ports.AcceptanceDecisionHandoffIntent,
+) error {
+	double.intents = append(double.intents, intent)
+	return double.err
 }
 
 // controlReleaseDouble 留住释放请求所携带的原控制关联。断言这个而不是"调用过就行"，是因为
@@ -882,12 +999,18 @@ func submittedFingerprint(t *testing.T) domain.SourceSubmissionFingerprint {
 	return value
 }
 
-type decisionIdentityFactory struct{ t *testing.T }
+// decisionIdentityFactory 数着签发次数：重放不得再签发决定身份，而「签发过几次」只有
+// 计数分得开。
+type decisionIdentityFactory struct {
+	t      *testing.T
+	issued int
+}
 
 func (factory *decisionIdentityFactory) NextAcceptanceDecisionID(
 	_ context.Context,
 ) (domain.AcceptanceDecisionID, error) {
 	factory.t.Helper()
+	factory.issued++
 	return mustValue(factory.t, domain.NewAcceptanceDecisionID, "decision-1"), nil
 }
 
@@ -896,4 +1019,5 @@ var (
 	_ ports.RecordedJudgmentReader      = (*recordedJudgmentsDouble)(nil)
 	_ ports.AcceptanceDecisionIdentity  = (*decisionIdentityFactory)(nil)
 	_ ports.PreAcceptanceControlRelease = (*controlReleaseDouble)(nil)
+	_ ports.AcceptanceDecisionHandoff   = (*decisionHandoffDouble)(nil)
 )

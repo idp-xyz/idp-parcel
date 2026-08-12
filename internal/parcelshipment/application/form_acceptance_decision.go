@@ -45,6 +45,7 @@ type FormAcceptanceDecisionResult struct {
 	reason       JudgmentPendingReason
 	continuation domain.OwnershipContinuationReference
 	compensation domain.OwnershipContinuationReference
+	handoff      domain.OwnershipContinuationReference
 }
 
 func (result FormAcceptanceDecisionResult) Outcome() AcceptanceDecisionOutcome {
@@ -78,14 +79,23 @@ func (result FormAcceptanceDecisionResult) CompensationReference() domain.Owners
 	return result.compensation
 }
 
-// FormAcceptanceDecisionDeps 收拢本编排的协作方。用结构体而不是位置参数：七个同为接口的
-// 参数在调用点是七个认不出的值，理由与 CommercialBasisSnapshotSpec 相同。
+// DecisionHandoffReference 只在决定已经成立、而它的发布意图没能确定交出时给出。与
+// CompensationReference 平行，也同样与 ContinuationReference 分开：三者续办的分别是发布、
+// 补偿与尚未形成的决定，合成一个会让调用方分不清该重放哪一件（`AT-PS-013`）。
+func (result FormAcceptanceDecisionResult) DecisionHandoffReference() domain.OwnershipContinuationReference {
+	return result.handoff
+}
+
+// FormAcceptanceDecisionDeps 收拢本编排的协作方。用结构体而不是位置参数：一排同为接口的
+// 参数在调用点认不出谁是谁，理由与 CommercialBasisSnapshotSpec 相同（不写个数——那种计数
+// 过期时没有任何东西会变红）。
 type FormAcceptanceDecisionDeps struct {
 	Requests   ports.ShipmentRequestRepository
 	Commercial ports.CommercialBasisResolver
 	Judgments  ports.RecordedJudgmentReader
 	Recorder   ports.AcceptanceJudgmentRecorder
 	Release    ports.PreAcceptanceControlRelease
+	Downstream ports.AcceptanceDecisionHandoff
 	Identities ports.AcceptanceDecisionIdentity
 	Clock      ports.Clock
 }
@@ -127,7 +137,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 快照改写成未决——那正是 `AT-PC-025` 禁止的追溯改写。并发下 Find 仍可能读到尚未
 	// 落库的旧像，那时仍靠下面 Decide 的 `ErrDecisionAlreadyFormed` 交回原决定。
 	if _, formed := request.AcceptanceDecision(); formed {
-		return handler.existing(request), nil
+		return handler.existing(ctx, command, request), nil
 	}
 
 	// 判断先读回来，因为它带着这些判断所采用的那次解析——提交决定前该走重解还是首次解析，
@@ -185,7 +195,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		// 同一提交版本已经有决定是业务答案而非故障：用例要求并发处理返回同一结果，调用方
 		// 据以读取原决定，而不是当作故障重试。
 		if errors.Is(err, domain.ErrDecisionAlreadyFormed) {
-			return handler.existing(request), nil
+			return handler.existing(ctx, command, request), nil
 		}
 		return FormAcceptanceDecisionResult{}, fmt.Errorf("decide: %w", err)
 	}
@@ -226,6 +236,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		decision:     decision,
 		hasDecision:  true,
 		compensation: handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl),
+		handoff:      handler.handOffDecision(ctx, command, decided),
 	}, nil
 }
 
@@ -428,16 +439,57 @@ func assembleChecks(
 	return append(checks, control), nil
 }
 
-// existing 交回该提交版本已经形成的那一个决定。用例要求并发处理返回同一结果或明确冲突，
-// 不能一边接受一边拒绝。
-func (handler *FormAcceptanceDecisionHandler) existing(request domain.ShipmentRequest) FormAcceptanceDecisionResult {
+// existing 交回该提交版本已经形成的那一个决定，并把同一份发布意图再交一次。用例要求并发
+// 处理返回同一结果或明确冲突；重发是因为本上下文不记意图完没完成——只答`已有结果`就收工，
+// 一份首次投递失败的决定会永远停在「本上下文已提交、下游从不知道」的状态，而这条路上没有
+// 别的东西会去补发（`AT-PS-013`「重试同一发布意图」）。
+func (handler *FormAcceptanceDecisionHandler) existing(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	request domain.ShipmentRequest,
+) FormAcceptanceDecisionResult {
 	decision, formed := request.AcceptanceDecision()
 	return FormAcceptanceDecisionResult{
 		outcome:     AcceptanceDecided,
 		state:       request.State(),
 		decision:    decision,
 		hasDecision: formed,
+		handoff:     handler.handOffDecision(ctx, command, request),
 	}
+}
+
+// handOffDecision 把已成立的决定交给适用下游，交不出去时交回发布续办引用。
+//
+// 决定与状态取自读回的聚合而不取本次命令，理由与资料修订的 handOff 相同：重放路径上交的
+// 该是读回来的那一份。没有决定可交时不发意图（例如已撤回态走到 ErrDecisionAlreadyFormed）
+// ——没有决定就没有可认领的标识。失败不改写业务结果，也不往任务上记处理尝试：决定任务已经
+// 完成，记一条「未推进」会让一份已决的委托看起来还卡着。
+func (handler *FormAcceptanceDecisionHandler) handOffDecision(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	request domain.ShipmentRequest,
+) domain.OwnershipContinuationReference {
+	decision, formed := request.AcceptanceDecision()
+	if !formed {
+		return domain.OwnershipContinuationReference{}
+	}
+	if err := handler.deps.Downstream.HandOffAcceptanceDecision(ctx, ports.AcceptanceDecisionHandoffIntent{
+		Identity:          command.Identity,
+		ShipmentRequestID: command.ShipmentRequestID,
+		SubmissionVersion: command.SubmissionVersion,
+		DecisionID:        decision.DecisionID(),
+		State:             request.State(),
+	}); err != nil {
+		return judgmentContinuation(
+			AcceptanceDecisionNotHandedOff,
+			command.Identity.TenantID().String(),
+			command.Identity.CustomerAccountID().String(),
+			command.ShipmentRequestID.String(),
+			command.SubmissionVersion.String(),
+			decision.DecisionID().String(),
+		)
+	}
+	return domain.OwnershipContinuationReference{}
 }
 
 // undecided 交回本轮的未决结果。state 由调用点给出而不是在这里假定`已提交`：未决要交回的是

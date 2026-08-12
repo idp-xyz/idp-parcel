@@ -643,6 +643,32 @@ type SourceDataVersionHandoff interface {
 	HandOffSourceDataVersion(ctx context.Context, intent SourceDataVersionHandoffIntent) error
 }
 
+// AcceptanceDecisionHandoffIntent 是一次已越过提交边界的接受决定交给适用下游的那份引用。
+//
+// 它携带决定标识、委托与提交版本的引用及决定后的生命周期状态，不携带校验明细或基线内容：
+// 跨上下文只传引用，下游按各自的门禁重新读取与判断。State 一起交出，因为接受与拒绝都是
+// 已形成的决定而下游要办的事不同——只发决定标识会逼每个下游先回读一次才能分流。
+type AcceptanceDecisionHandoffIntent struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	DecisionID        domain.AcceptanceDecisionID
+	State             domain.ShipmentRequestState
+}
+
+// AcceptanceDecisionHandoff 把一份已提交的接受决定引用交给适用下游。
+//
+// 形状与 SourceDataVersionHandoff 是同一条缝：一份结果发一份意图、意图由结果标识认领、
+// 重放重发同一份。`AT-PS-013`「重试同一发布意图，不重复接受或回退决定」正落在这里——
+// 首次投递失败不改写业务结果，决定已越过提交边界，编排交回决定本身外加一条发布续办引用。
+//
+// 本上下文不记意图完没完成：那份状态要与决定同一事务落库才算数，而事务与 outbox 仍阻断于
+// ADR-0017 的 Bento 闸门。在那之前重放一律重发同一意图，由下游按决定标识认领。它今天没有
+// 实现，唯一的实现是测试用的确定性替身。
+type AcceptanceDecisionHandoff interface {
+	HandOffAcceptanceDecision(ctx context.Context, intent AcceptanceDecisionHandoffIntent) error
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
