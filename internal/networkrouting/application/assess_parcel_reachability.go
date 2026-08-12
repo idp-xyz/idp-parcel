@@ -18,6 +18,11 @@ import (
 // 形成未决：依赖答不出是业务结果，答出一个不属于这个集合的东西则是端口坏了。
 var ErrUnexpectedJudgmentSaveOutcome = errors.New("network routing: unexpected judgment save outcome")
 
+// ErrIncompleteNetworkEvidence 说明证据端口答了候选却没带视图修订标识。它上抛而不落
+// `未形成判断`：那不是依赖答不出，是答复本身缺了 CONTEXT 要求判断保留的东西——记一份
+// 没有比对锚的判断，提交前失效永远检测不到。
+var ErrIncompleteNetworkEvidence = errors.New("network routing: network evidence carries no view revision")
+
 // AssessmentOutcome 是本用例的应用处理结果，与三值领域判断分属两层。用例把这条写死：
 // `可达`、`不可达`、`资料不足`是 network-routing 拥有的领域判断，其余结果不得进入三值
 // 统计，也不得被 parcel-shipment 当作可达性事实。两者压进一个枚举就再也分不开了。
@@ -205,15 +210,18 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		}, nil
 	}
 
-	candidates, gaps, err := handler.evidence.AssembleCandidates(ctx, command.Key)
+	evidence, err := handler.evidence.AssembleCandidates(ctx, command.Key)
 	if err != nil {
 		// 依赖调不通形成`未形成判断`，不向上抛技术错误也不记成证据缺口。用例明写依赖
 		// 失败不得伪装为`资料不足`：混起来会让一次网络故障被下游读成这个包裹的证据不全，
 		// 进而当作向客户要资料的理由。
 		return handler.notFormed(command, NetworkEvidenceUnavailable), nil
 	}
+	if !evidence.ViewRevision.Valid() {
+		return AssessParcelReachabilityResult{}, ErrIncompleteNetworkEvidence
+	}
 
-	finding, err := domain.ConcludeReachability(candidates, gaps)
+	finding, err := domain.ConcludeReachability(evidence.Candidates, evidence.Gaps)
 	if err != nil {
 		// 领域拒绝空候选空间而不是给结论。分不清是覆盖范围排除了目的地——那本该是一个带
 		// 淘汰依据的候选——还是候选生成失败，两者都不能凭空断言，所以停在未形成判断。
@@ -222,9 +230,10 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 
 	// 时钟在结论形成之后才读，因此判断时间落在证据装配之后而非之前。
 	record := ports.ReachabilityJudgmentRecord{
-		Key:      command.Key,
-		Finding:  finding,
-		JudgedAt: handler.clock.Now(),
+		Key:          command.Key,
+		Finding:      finding,
+		JudgedAt:     handler.clock.Now(),
+		ViewRevision: evidence.ViewRevision,
 	}
 	saved, err := handler.store.Save(ctx, command.Correlation, record)
 	if err != nil {
@@ -287,10 +296,11 @@ func (handler *AssessParcelReachabilityHandler) handOff(
 	record ports.ReachabilityJudgmentRecord,
 ) ContinuationReference {
 	if err := handler.downstream.HandOffReachabilityJudgment(ctx, ports.ReachabilityJudgmentHandoffIntent{
-		Correlation: command.Correlation,
-		Key:         record.Key,
-		Finding:     record.Finding,
-		JudgedAt:    record.JudgedAt,
+		Correlation:  command.Correlation,
+		Key:          record.Key,
+		Finding:      record.Finding,
+		JudgedAt:     record.JudgedAt,
+		ViewRevision: record.ViewRevision,
 	}); err != nil {
 		return continuationFor(command, "JUDGMENT_NOT_HANDED_OFF")
 	}

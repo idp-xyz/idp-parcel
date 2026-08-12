@@ -60,6 +60,22 @@ func (id RequestCorrelationID) Valid() bool {
 	return id.valid()
 }
 
+// NetworkViewRevision 标识一次判断所依据的网络证据视图版本。CONTEXT 要求每次判断保留
+// 「关键输入的有效区间和当前修订标识」——修订标识就是消费方日后发现「关键依据已经失效、
+// 被替代或修订标识变化」的比对锚（`AT-PS-037` 提交前重判的触发载体）。它与 PC 的
+// AuthorityViewRevision 同型不同主：网络视图属本上下文。
+type NetworkViewRevision struct{ requiredValue }
+
+func NewNetworkViewRevision(value string) (NetworkViewRevision, error) {
+	required, err := newRequiredValue("network view revision", value)
+	return NetworkViewRevision{required}, err
+}
+
+// Valid 供应用层核对证据答复的完整性：一份不带修订标识的证据答复，判断留不下比对锚。
+func (revision NetworkViewRevision) Valid() bool {
+	return revision.valid()
+}
+
 // ServicePurpose 是本次要判断的服务目的，取自服务产品而不是本上下文的枚举。它刻意是
 // 引用而非封闭取值集：目的由产品定义，在这里列一份就成了第二处定义，而本上下文并不拥有
 // 服务产品。

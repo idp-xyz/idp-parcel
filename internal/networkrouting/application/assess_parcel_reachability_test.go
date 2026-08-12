@@ -21,11 +21,13 @@ type fixedClock struct{ at time.Time }
 func (clock fixedClock) Now() time.Time { return clock.at }
 
 // evidenceDouble 记录它被问到的判断范围，因为「身份不成立时不得查询」这条只有在端口是否
-// 被调用上才验得出来。
+// 被调用上才验得出来。revision 缺省给合法值：修订标识是答复的必备件，想演练缺失要显式
+// 置空（noRevision）。
 type evidenceDouble struct {
 	candidates  []domain.RouteCandidate
 	gaps        []domain.EvidenceGap
 	err         error
+	noRevision  bool
 	assembled   int
 	assembleKey domain.ReachabilityJudgmentKey
 }
@@ -33,13 +35,21 @@ type evidenceDouble struct {
 func (double *evidenceDouble) AssembleCandidates(
 	_ context.Context,
 	key domain.ReachabilityJudgmentKey,
-) ([]domain.RouteCandidate, []domain.EvidenceGap, error) {
+) (ports.NetworkEvidence, error) {
 	double.assembled++
 	double.assembleKey = key
 	if double.err != nil {
-		return nil, nil, double.err
+		return ports.NetworkEvidence{}, double.err
 	}
-	return double.candidates, double.gaps, nil
+	evidence := ports.NetworkEvidence{Candidates: double.candidates, Gaps: double.gaps}
+	if !double.noRevision {
+		revision, err := domain.NewNetworkViewRevision("net-view-rev-1")
+		if err != nil {
+			return ports.NetworkEvidence{}, err
+		}
+		evidence.ViewRevision = revision
+	}
+	return evidence, nil
 }
 
 // eligibilityDouble 默认回答「要求判断」，这样已有测试仍然走到候选装配那一步。
@@ -574,6 +584,47 @@ func TestAnUndeliveredJudgmentHandoffKeepsTheJudgmentWithAResumableIntent(t *tes
 	}
 	if result.ContinuationReference().String() != "" {
 		t.Fatal("发布失败混进了未形成判断的续办——判断已经形成，没有什么要重判")
+	}
+}
+
+// Covers: NR CONTEXT「每次可达性或路由判断必须保留……关键输入的有效区间和**当前修订
+// 标识**」——修订标识随判断落库并随发布意图带给消费方，它是 `AT-PS-037` 提交前失效重判
+// 的比对锚：没有它，消费方永远发现不了「判断形成后视图换过代」。
+func TestAFormedJudgmentRetainsTheEvidenceViewRevision(t *testing.T) {
+	evidence := &evidenceDouble{candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")}}
+	store := &storeDouble{}
+	downstream := &handoffDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, downstream, fixedClock{at: judgedAt})
+
+	if _, err := handler.Handle(context.Background(), command(t, "parcel-1")); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if len(store.saved) != 1 || store.saved[0].ViewRevision.String() != "net-view-rev-1" {
+		t.Fatalf("saved = %#v; 判断没有留下证据视图修订标识", store.saved)
+	}
+	if len(downstream.intents) != 1 || downstream.intents[0].ViewRevision.String() != "net-view-rev-1" {
+		t.Fatalf("intents = %#v; 发布意图没有带上修订标识，消费方无从比对", downstream.intents)
+	}
+}
+
+// 证据答复缺修订标识是端口坏了，不是一种未决：记一份没有比对锚的判断，提交前失效永远
+// 检测不到——响亮报错，判断不落库。
+func TestEvidenceWithoutAViewRevisionIsALoudErrorNotAJudgment(t *testing.T) {
+	evidence := &evidenceDouble{
+		candidates: []domain.RouteCandidate{qualifiedCandidate(t, "candidate-1")},
+		noRevision: true,
+	}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
+
+	_, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+
+	if !errors.Is(err, application.ErrIncompleteNetworkEvidence) {
+		t.Fatalf("error = %v, want ErrIncompleteNetworkEvidence", err)
+	}
+	if len(store.saved) != 0 {
+		t.Fatal("缺比对锚的判断越过了提交边界")
 	}
 }
 

@@ -9,10 +9,18 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 )
 
-// NetworkEvidenceView 为一次判断装配候选空间与业务证据缺口。
+// NetworkEvidence 是一次证据装配的完整答复：候选、缺口与它们共同来自的那个视图修订。
 //
-// 候选与缺口一次取回而不分两次调用：用例要求`可达`判断也保留其他候选的缺口，两次取回
-// 之间视图一变，结论所依据的候选与它记录的缺口就不再来自同一份证据。
+// 三样一次取回而不分多次调用：用例要求`可达`判断也保留其他候选的缺口，两次取回之间视图
+// 一变，结论所依据的候选与它记录的缺口就不再来自同一份证据——修订标识同理，它必须是
+// 候选与缺口实际出自的那一版，分开取就可能标错版。
+type NetworkEvidence struct {
+	Candidates   []domain.RouteCandidate
+	Gaps         []domain.EvidenceGap
+	ViewRevision domain.NetworkViewRevision
+}
+
+// NetworkEvidenceView 为一次判断装配候选空间与业务证据缺口。
 //
 // 它只回业务事实。调不通、超时、配置读不到都要作为错误返回，由应用层形成`未形成判断`——
 // 把技术故障装扮成一个证据缺口，会让它进入`资料不足`统计，而用例明写这两者不能混。
@@ -20,7 +28,7 @@ type NetworkEvidenceView interface {
 	AssembleCandidates(
 		ctx context.Context,
 		key domain.ReachabilityJudgmentKey,
-	) ([]domain.RouteCandidate, []domain.EvidenceGap, error)
+	) (NetworkEvidence, error)
 }
 
 // CommercialEligibilityView 取商业侧对「这个服务要不要判断网络可达性」的回答，覆盖用例
@@ -41,10 +49,14 @@ type CommercialEligibilityView interface {
 // ReachabilityJudgmentRecord 是一次判断越过提交边界后留下的东西。判断时间不在
 // `ReachabilityFinding` 里，因为它不是领域结论的一部分——`asOf` 决定按哪一刻的网络证据
 // 评估，判断时间只说明这次判断何时作出，压成一个会让重放看起来像新判断。
+//
+// ViewRevision 同在记录而不在结论里：它是证据出处不是三值判断的一部分，留在记录上供
+// 消费方比对「判断形成后视图有没有换代」（CONTEXT「保留……当前修订标识」）。
 type ReachabilityJudgmentRecord struct {
-	Key      domain.ReachabilityJudgmentKey
-	Finding  domain.ReachabilityFinding
-	JudgedAt time.Time
+	Key          domain.ReachabilityJudgmentKey
+	Finding      domain.ReachabilityFinding
+	JudgedAt     time.Time
+	ViewRevision domain.NetworkViewRevision
 }
 
 // ReachabilityJudgmentSaveOutcome 是保存一次判断的封闭写入结果。error 只留给「答不出」，
@@ -91,10 +103,11 @@ type ReachabilityJudgmentStore interface {
 // ReachabilityJudgmentHandoffIntent 是一次已提交判断交给发起方一侧适用下游的那份引用。
 // 意图由请求关联认领：同一判断无论交几次都是同一份，不是第二份。
 type ReachabilityJudgmentHandoffIntent struct {
-	Correlation domain.RequestCorrelationID
-	Key         domain.ReachabilityJudgmentKey
-	Finding     domain.ReachabilityFinding
-	JudgedAt    time.Time
+	Correlation  domain.RequestCorrelationID
+	Key          domain.ReachabilityJudgmentKey
+	Finding      domain.ReachabilityFinding
+	JudgedAt     time.Time
+	ViewRevision domain.NetworkViewRevision
 }
 
 // ReachabilityJudgmentHandoff 把一份已提交的三值判断交给适用下游——`AT-NR-030` 的意图
