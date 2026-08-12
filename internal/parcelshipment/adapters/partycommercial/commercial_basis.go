@@ -161,9 +161,10 @@ func (adapter *CommercialBasisAdapter) RevalidateCommercialBasis(
 	}
 }
 
-// resolutionOf 是第一阶段闭包到消费方三值结果的全函数。`适用冲突`与`解析未决`都落
-// `无法判定`：三值代数里只有它既阻断新决定又不冒充商业拒绝——`无适用依据`才是权威说了
-// 「这个范围没有适用对象」，那一格由消费方按自身规则形成拒绝（AT-PC-020）。
+// resolutionOf 是第一阶段闭包到消费方三值结果的全函数。`适用冲突`、`解析未决`与`输入
+// 未受理`都落`无法判定`：三值代数里只有它既阻断新决定又不冒充商业拒绝——`无适用依据`
+// 才是权威说了「这个范围没有适用对象」，那一格由消费方按自身规则形成拒绝（AT-PC-020）。
+// 三者的恢复动作各不相同（等责任方修、重试、改本方入参），靠随行的原因引用分开，不靠格。
 func (adapter *CommercialBasisAdapter) resolutionOf(
 	ctx context.Context,
 	closure pcdomain.CommercialClosure,
@@ -212,7 +213,9 @@ func (adapter *CommercialBasisAdapter) adoptedResolution(
 	adopted, ok := closure.AdoptedFor(pcdomain.AcceptanceRulePackageObject)
 	if !ok {
 		// 唯一闭包却没采用规则包：解析键没把接单规则包列为必需依据。没有规则包就没有
-		// 校验组与时点声明，接受语言整个立不起来——这是装配缺陷，不是一种未决。
+		// 校验组与时点声明，接受语言整个立不起来——这是装配缺陷，不是一种未决。本适配器
+		// 只服务接受流；日后若有不含规则包的第二消费流（如纯结算闭包）要复用这个端口，
+		// 得先分流或放宽这一条，而不是把这里的报错当成误报绕过。
 		return psports.CommercialBasisResolution{}, fmt.Errorf("%w: adopted closure carries no acceptance rule package",
 			ErrUntranslatableAnswer)
 	}

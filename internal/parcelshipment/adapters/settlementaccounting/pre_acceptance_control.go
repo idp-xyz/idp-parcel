@@ -166,7 +166,8 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 		return fmt.Errorf("release pre-acceptance control: %s", answer.NotFormedReason())
 	case saapplication.ReleaseRequestNotAccepted:
 		// 身份是本适配器译的，被提供方拒收说明翻译或调用方的引用坏了——不是一种可重试的
-		// 未决。
+		// 未决。这条判断建立在「控制请求标识只由本适配器铸造」上（controlRequestIdentity）；
+		// 若日后出现第二个铸造点，这格要重审。
 		return fmt.Errorf("%w: release request not accepted", ErrUntranslatableAnswer)
 	default:
 		return fmt.Errorf("%w: release outcome %d", ErrUntranslatableAnswer, answer.Outcome())
