@@ -20,8 +20,9 @@ func productVersion(t *testing.T, objectID string) domain.CommercialVersion {
 	return live
 }
 
-// Covers: `AT-PC-030`「首发请求独立面单渠道服务 → 按已确认 `N/A` 返回无适用生产依据，不
-// 进入面单专属主链」。此前全仓无任何 `Covers` 提及它（实测于 `cab9a45`）。
+// Covers: `AT-PC-015`「首发尝试发布独立面单渠道服务生产范围 → 按 `PAR-COM-12` 阻断为本期
+// 不适用」与 `AT-PC-030`「首发请求独立面单渠道服务 → 按已确认 `N/A` 返回无适用生产依据，不
+// 进入面单专属主链」。此前全仓无任何 `Covers` 提及 015（030 的守卫同缝）。
 //
 // 实现早就对了而且是有意的：`ServiceProductForm` 的注释与 `PAR-COM-12`（登记册里标的是
 // **已确认范围决策**，不是待提供）都写明首发不销售这一形态，因此枚举里根本不列它。

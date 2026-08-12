@@ -33,7 +33,8 @@ func effectiveVersion(t *testing.T, objectID, version, digest string) domain.Com
 	return effective
 }
 
-// Covers: party-commercial CONTEXT 已发布 → 已生效 — 到达明确生效边界才生效。
+// Covers: party-commercial CONTEXT 已发布 → 已生效 — 到达明确生效边界才生效；以及
+// `AT-PC-004`「新版本按生效区间参与新选择」的边界半边。
 // 发布不等于生效：一个停在自己边界之前的已发布版本，不得用于新的解析。
 func TestPublishedVersionTakesEffectOnlyAtItsBoundary(t *testing.T) {
 	published := publishedVersion(t, "product-1", "v1", "sha256:content-1")

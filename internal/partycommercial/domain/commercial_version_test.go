@@ -49,10 +49,10 @@ func approval(t *testing.T, reference string) domain.ApprovalBasis {
 	return basis
 }
 
-// Covers: party-commercial CONTEXT 商业版本共同不变量 — 草稿可修订，发布后正文
-// 不可覆盖；变化形成新版本。
+// Covers: `AT-PC-012`「已发布价格正文需要修改 → 创建新价格规则版本，不原地编辑」——发布后
+// `Revise` 被 `ErrCommercialContentIsFixed` 拒绝；变化只能另起版本（并存见登记册用例）。
 func TestPublishedCommercialVersionRefusesInPlaceRevision(t *testing.T) {
-	draft := commercialDraft(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
+	draft := commercialDraft(t, domain.PriceRuleObject, "price-1", "v1", "sha256:content-1")
 
 	revised, err := draft.Revise(commercialValue(t, domain.NewCommercialContentDigest, "sha256:content-2"))
 	if err != nil {

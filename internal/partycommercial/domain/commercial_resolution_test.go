@@ -350,6 +350,71 @@ func TestEndedVersionsLeaveTheCandidateSet(t *testing.T) {
 	}
 }
 
+// Covers: `AT-PC-007`「新合同明确替代旧合同且边界无重叠 → 两个历史版本保留，新解析按
+// 边界唯一选择」。
+//
+// 替代把旧版收出候选集，后继在边界之后唯一适用；两边都仍在登记册里，旧正文不被抹掉。
+func TestSupersedingContractKeepsHistoryAndSelectsSuccessorUniquely(t *testing.T) {
+	live := effectiveVersionInScope(t, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	successor := effectiveVersionInScope(t, domain.CustomerContractObject, "contract-1", "v2", "sha256:c2", "scope-a")
+	boundary := anchorAt.AddDate(0, -1, 0)
+	superseded, err := live.SupersededBy(successor, boundary)
+	if err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+
+	registry := domain.NewCommercialRegistry()
+	if _, err := registry.Register(superseded); err != nil {
+		t.Fatalf("register superseded: %v", err)
+	}
+	if _, err := registry.Register(successor); err != nil {
+		t.Fatalf("register successor: %v", err)
+	}
+	if got := registry.Count(); got != 2 {
+		t.Fatalf("registry holds %d versions, want 2 historical versions", got)
+	}
+	storedOld, found := registry.Lookup(superseded.Kind(), superseded.ObjectID(), superseded.Version())
+	if !found || storedOld.ContentDigest() != live.ContentDigest() {
+		t.Fatal("supersession rewrote or dropped the prior contract body")
+	}
+	named, present := storedOld.Successor()
+	if !present || named != successor.Version() {
+		t.Fatalf("successor = %q present=%v, want v2", named, present)
+	}
+
+	after := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
+	if after.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("after boundary outcome = %q, want UNIQUELY_RESOLVED", after.Outcome())
+	}
+	adopted, ok := after.AdoptedVersion()
+	if !ok || adopted.Version() != successor.Version() {
+		t.Fatalf("adopted = %q, want the successor", adopted.Version())
+	}
+}
+
+func effectiveVersionInScope(
+	t *testing.T,
+	kind domain.CommercialObjectKind,
+	objectID, version, digest, scope string,
+) domain.CommercialVersion {
+	t.Helper()
+	spec := commercialSpec(t, kind, objectID, version, digest)
+	spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, scope)
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	live, err := published.TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	return live
+}
+
 // Covers: AT-PC-024 — 相同输入与相同权威视图重复解析返回相同语义，不产生新商业版本；
 // 视图修订变化后则必须重新检查，不得复用原编号。
 func TestRepeatedResolutionIsStableUntilTheViewRevisionChanges(t *testing.T) {

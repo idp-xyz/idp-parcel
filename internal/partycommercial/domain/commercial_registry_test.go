@@ -18,8 +18,7 @@ func registerable(t *testing.T, kind domain.CommercialObjectKind, objectID, vers
 	return published
 }
 
-// Covers: party-commercial CONTEXT 已发布版本不得原地覆盖 — 同一键重复登记同样内容是
-// 重放，返回原登记而不产生第二条记录。
+// Covers: `AT-PC-002`「同一来源版本与摘要重复导入 → 返回原结果，不创建第二版本」。
 func TestRegisteringTheSameContentTwiceIsAReplay(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	version := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
@@ -44,8 +43,7 @@ func TestRegisteringTheSameContentTwiceIsAReplay(t *testing.T) {
 	}
 }
 
-// Covers: party-commercial CONTEXT 发布后正文不可覆盖 — 同一版本号携带不同语义是
-// 冲突，原登记内容不得被改写。
+// Covers: `AT-PC-003`「同一来源身份携带不同正文 → 形成来源冲突，不覆盖」。
 func TestSameVersionWithChangedContentConflicts(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	original := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
@@ -125,8 +123,8 @@ func TestSameVersionReboundToAnotherReferenceConflicts(t *testing.T) {
 	}
 }
 
-// Covers: party-commercial CONTEXT 变化形成新版本，退役/到期/替代保留历史关系 —
-// 新版本与旧版本并存，登记新版本不抹掉旧的。
+// Covers: `AT-PC-004`「发布服务产品新版本 → 原版本保持不变，新版本按生效区间参与新选择」
+// 的并存半边：新版本与旧版本并存，登记新版本不抹掉旧的。
 func TestNewVersionCoexistsWithTheOneItReplaces(t *testing.T) {
 	registry := domain.NewCommercialRegistry()
 	v1 := registerable(t, domain.ServiceProductObject, "product-1", "v1", "sha256:content-1")
