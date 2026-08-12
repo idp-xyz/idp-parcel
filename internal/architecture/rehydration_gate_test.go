@@ -20,6 +20,7 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateShipmentRequestSpec":   true,
 	"RehydrateSubmissionVersionSpec": true,
 	"RehydrateAcceptanceTaskSpec":    true,
+	"RehydratePriorRequestLinkSpec":  true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。

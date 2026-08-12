@@ -387,6 +387,59 @@ func TestRehydrationRefusesAnEmptyProcessingAttempt(t *testing.T) {
 	}
 }
 
+// Covers: 关联出处随快照往返（`AT-PS-036`/`AT-PS-076` 的重建半边）——有出处而不带回，
+// 一份关联新委托重建后看起来像首次委托；半截或自指的出处是一行坏数据，不是首次委托。
+func TestRehydrationCarriesThePriorRequestLink(t *testing.T) {
+	snapshot := submittedSnapshot(t)
+	snapshot.PriorLink = domain.RehydratePriorRequestLinkSpec{
+		PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-0"),
+		Kind:           domain.LinkRejectedCorrection,
+	}
+
+	request, err := domain.RehydrateShipmentRequest(snapshot)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	link, present := request.PriorRequestLink()
+	if !present || link.PriorRequestID().String() != "request-0" || link.Kind() != domain.LinkRejectedCorrection {
+		t.Fatalf("link = %#v present = %v; 关联出处没有随快照回来", link, present)
+	}
+
+	plain, err := domain.RehydrateShipmentRequest(submittedSnapshot(t))
+	if err != nil {
+		t.Fatalf("rehydrate first request: %v", err)
+	}
+	if _, present := plain.PriorRequestLink(); present {
+		t.Fatal("首次委托重建后凭空长出了关联出处")
+	}
+}
+
+func TestRehydrationRefusesAHalfOrSelfPointingLink(t *testing.T) {
+	cases := map[string]domain.RehydratePriorRequestLinkSpec{
+		"kind without a prior": {Kind: domain.LinkRejectedCorrection},
+		"prior without a kind": {PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-0")},
+		"kind out of range": {
+			PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-0"),
+			Kind:           domain.RequestLinkKind(99),
+		},
+		"pointing at itself": {
+			PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-1"),
+			Kind:           domain.LinkWithdrawnResubmission,
+		},
+	}
+	for name, link := range cases {
+		t.Run(name, func(t *testing.T) {
+			snapshot := submittedSnapshot(t)
+			snapshot.PriorLink = link
+			if _, err := domain.RehydrateShipmentRequest(snapshot); !errors.Is(
+				err, domain.ErrInvalidRehydratedShipmentRequest,
+			) {
+				t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+		})
+	}
+}
+
 // everyGroupPassingFor 建一份全部适用校验组都通过、且指名成员都判过的校验集合。它与
 // allGroupsPassing 分开，只因为重建快照里的声明成员与 submitted 夹具不同。
 func everyGroupPassingFor(t *testing.T, parcels ...string) []domain.AcceptanceCheck {

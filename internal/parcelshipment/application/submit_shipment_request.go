@@ -28,6 +28,14 @@ const (
 	// 本产品当前是否接纳新准入，而不是这个范围归谁。合并会丢掉「权威其实已经确定」
 	// 这个事实。
 	OutcomeAdmissionPaused
+	// OutcomePriorRequestNotFound 统一回答关联指名的三种不可见：查无此委托、编号不符、
+	// 跨租户或跨客户指名。可区分即可枚举别人的委托（ADR-0029 的合并理由，`AT-PS-075`
+	// 同款纪律在关联指名上一字不差地成立）。
+	OutcomePriorRequestNotFound
+	// OutcomeLinkIneligible 说原委托找到了、也确属这个客户，只是它的状态不承认这个
+	// 关联方向——客户该走的是资料修订（待决）或等决定，不是关联新委托。与「查无」分格：
+	// 两者的续办动作不同。
+	OutcomeLinkIneligible
 )
 
 func (outcome SubmitOutcome) String() string {
@@ -46,9 +54,37 @@ func (outcome SubmitOutcome) String() string {
 		return "OWNERSHIP_UNRESOLVED"
 	case OutcomeAdmissionPaused:
 		return "ADMISSION_PAUSED"
+	case OutcomePriorRequestNotFound:
+		return "PRIOR_REQUEST_NOT_FOUND"
+	case OutcomeLinkIneligible:
+		return "LINK_INELIGIBLE"
 	default:
 		return ""
 	}
+}
+
+// PriorRequestClaim 指名一份要与之建立关联的原委托（`AT-PS-036`②③、`AT-PS-076`）：
+// 原委托的来源身份加委托编号双重指名——与撤回同一模式，编号单独出现无从校验归属——
+// 再加关联方向。零值即首次委托，不指名任何出处。
+type PriorRequestClaim struct {
+	PriorIdentity  domain.SourceIdentity
+	PriorRequestID domain.ShipmentRequestID
+	Kind           domain.RequestLinkKind
+}
+
+func (claim PriorRequestClaim) requested() bool {
+	return claim != (PriorRequestClaim{})
+}
+
+// complete 校验指名的三件套都在场。用导出访问器判空而不是领域内部的 valid()：本包在
+// 领域边界之外，判据只能是「客户根本没把话说全」这一层。
+func (claim PriorRequestClaim) complete() bool {
+	return claim.PriorIdentity.TenantID().String() != "" &&
+		claim.PriorIdentity.CustomerAccountID().String() != "" &&
+		claim.PriorIdentity.Source().String() != "" &&
+		claim.PriorIdentity.RequestKey().String() != "" &&
+		claim.PriorRequestID.String() != "" &&
+		claim.Kind.String() != ""
 }
 
 type SubmitShipmentRequestCommand struct {
@@ -61,6 +97,9 @@ type SubmitShipmentRequestCommand struct {
 	DeclaredParcelIDs []domain.DeclaredParcelID
 	AdmissionScope    domain.AdmissionScope
 	ExpectedRevision  domain.ProductionOwnershipRevision
+	// Link 缺席即首次委托。指名出处的提交与首次提交共用全部管线（来源保全、归属、
+	// 门禁、判重）：关联新委托是一份完整的新委托，不是原委托的续篇。
+	Link PriorRequestClaim
 }
 
 // SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
@@ -155,6 +194,14 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{outcome: OutcomeInputNotAccepted}, nil
 	}
 
+	link, refusal, err := handler.resolvePriorClaim(ctx, command)
+	if err != nil {
+		return SubmitShipmentRequestResult{}, err
+	}
+	if refusal != nil {
+		return *refusal, nil
+	}
+
 	decision, err := handler.ownership.DecideProductionOwnership(ctx, command.AdmissionScope)
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("decide production ownership: %w", err)
@@ -196,6 +243,7 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		VersionID:   versionID,
 		TaskID:      taskID,
 		SubmittedAt: decidedAt,
+		Link:        link,
 	})
 	if err != nil {
 		return SubmitShipmentRequestResult{}, fmt.Errorf("submit shipment request: %w", err)
@@ -290,6 +338,51 @@ func (handler *SubmitShipmentRequestHandler) resolveAfterInsertConflict(
 		result.hasRequest = true
 	}
 	return result, nil
+}
+
+// resolvePriorClaim 把关联指名换成已互证的关联出处（`AT-PS-036`②③、`AT-PS-076`）。
+//
+// 它在归属判定之前跑：指名立不住的关联没有必要消耗一次准入决定。三层裁决各归各格——
+//
+//  1. 话没说全（三件套缺项、指名自己）→ 输入未受理；
+//  2. 统一不可见：跨租户或跨客户指名**不查库直接**答`查无原委托`，与真的查无、编号
+//     不符同一个答案——可区分即可枚举别人的委托；
+//  3. 方向与原委托终态不符 → 关联不适用，由领域互证裁定。待决委托没有方向可用，
+//     普通纠错走同一委托的新提交版本。
+//
+// 原委托全程只读：出处落在新委托身上，原版本与原决定一概不动。
+func (handler *SubmitShipmentRequestHandler) resolvePriorClaim(
+	ctx context.Context,
+	command SubmitShipmentRequestCommand,
+) (domain.PriorRequestLink, *SubmitShipmentRequestResult, error) {
+	claim := command.Link
+	if !claim.requested() {
+		return domain.PriorRequestLink{}, nil, nil
+	}
+	if !claim.complete() || claim.PriorRequestID == command.ShipmentRequestID {
+		return domain.PriorRequestLink{}, &SubmitShipmentRequestResult{outcome: OutcomeInputNotAccepted}, nil
+	}
+	if claim.PriorIdentity.TenantID() != command.Identity.TenantID() ||
+		claim.PriorIdentity.CustomerAccountID() != command.Identity.CustomerAccountID() {
+		return domain.PriorRequestLink{}, &SubmitShipmentRequestResult{outcome: OutcomePriorRequestNotFound}, nil
+	}
+
+	prior, found, err := handler.requests.FindBySourceIdentity(ctx, claim.PriorIdentity)
+	if err != nil {
+		return domain.PriorRequestLink{}, nil, fmt.Errorf("find prior shipment request: %w", err)
+	}
+	if !found || prior.ShipmentRequestID() != claim.PriorRequestID {
+		return domain.PriorRequestLink{}, &SubmitShipmentRequestResult{outcome: OutcomePriorRequestNotFound}, nil
+	}
+
+	link, err := domain.EstablishPriorRequestLink(prior, claim.Kind)
+	if errors.Is(err, domain.ErrPriorStateIncompatibleWithLink) {
+		return domain.PriorRequestLink{}, &SubmitShipmentRequestResult{outcome: OutcomeLinkIneligible}, nil
+	}
+	if err != nil {
+		return domain.PriorRequestLink{}, nil, fmt.Errorf("establish prior request link: %w", err)
+	}
+	return link, nil, nil
 }
 
 // blockedOutcome 让三种拒绝各自成立。其他权威承接该范围、权威无法确定、以及本产品暂停

@@ -41,6 +41,17 @@ type RehydrateShipmentRequestSpec struct {
 	// 而「旧版本及其判断历史继续保留」正是那条转移存在的理由。
 	PriorVersions []RehydrateSubmissionVersionSpec
 	PriorTasks    []RehydrateAcceptanceTaskSpec
+	// PriorLink 是关联出处在库里的样子（`AT-PS-036`/`AT-PS-076`），首次委托两个字段皆零。
+	// 有出处而不带回，一份关联新委托重建后看起来像首次委托——「保留原版本或原决定」的
+	// 那条线索就断在重建这一步。
+	PriorLink RehydratePriorRequestLinkSpec
+}
+
+// RehydratePriorRequestLinkSpec 是关联出处的快照表达：要么两个字段都缺席（首次委托），
+// 要么都成立。半截的一份由 validForRehydration 拒绝。
+type RehydratePriorRequestLinkSpec struct {
+	PriorRequestID ShipmentRequestID
+	Kind           RequestLinkKind
 }
 
 // RehydrateSubmissionVersionSpec 是客户当前请求内容那一份不可覆盖记录在库里的样子。
@@ -124,6 +135,10 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 		},
 		priorVersions: priorVersions,
 		priorTasks:    priorTasks,
+		priorLink: PriorRequestLink{
+			prior: snapshot.PriorLink.PriorRequestID,
+			kind:  snapshot.PriorLink.Kind,
+		},
 	}
 	if err := request.validForRehydration(); err != nil {
 		return ShipmentRequest{}, err
@@ -193,7 +208,30 @@ func (request ShipmentRequest) validForRehydration() error {
 	if request.state == ShipmentRequestSubmitted && !request.acceptanceTask.running() {
 		return rehydrationRefusal("委托仍为已提交，接受判断任务却已收工")
 	}
+	if err := request.linkValidForRehydration(); err != nil {
+		return err
+	}
 	return request.historyValidForRehydration()
+}
+
+// linkValidForRehydration 校验关联出处：要么整个缺席，要么方向与指向都成立且不指自己。
+// 半截的一份（有方向没指向、或反过来）读不出它是首次委托还是关联新委托，必须拒。
+// 方向与**原委托**终态的互证不在这里重做：那要读另一份聚合，重建入口只看这一行。
+func (request ShipmentRequest) linkValidForRehydration() error {
+	link := request.priorLink
+	if link == (PriorRequestLink{}) {
+		return nil
+	}
+	if !link.kind.valid() {
+		return rehydrationRefusal(fmt.Sprintf("关联方向不是本上下文的取值：%d", uint8(link.kind)))
+	}
+	if !link.prior.valid() {
+		return rehydrationRefusal("关联出处没有指向原委托")
+	}
+	if link.prior == request.shipmentRequestID {
+		return rehydrationRefusal("关联出处指向委托自己")
+	}
+	return nil
 }
 
 // historyValidForRehydration 校验受控补充留下的历史（ADR-0045）。历史版本与历史任务按

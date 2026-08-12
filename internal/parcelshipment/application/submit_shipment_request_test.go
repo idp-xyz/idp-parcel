@@ -395,6 +395,171 @@ func (value *fixture) command(t *testing.T) application.SubmitShipmentRequestCom
 	}
 }
 
+// rejectPrior 让夹具里已建的委托真经领域越过拒绝边界（先例：supplementableRequestStore）：
+// 假状态挡不住 EstablishPriorRequestLink 的互证，也证明不了编排读回的是那份终态。
+func (value *fixture) rejectPrior(t *testing.T) domain.ShipmentRequest {
+	t.Helper()
+	prior, found := value.requests.stored(t, value.identity(t))
+	if !found {
+		t.Fatal("no prior request to reject")
+	}
+	rejected, err := prior.RejectByAuthority(domain.ActiveRejectionSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "decision-0"),
+		Authority:  mustValue(t, domain.NewRejectionAuthorityReference, "PC-REJECT-ROLE-0"),
+		Decider:    mustValue(t, domain.NewDeciderReference, "OPERATOR-0"),
+		Reason:     mustValue(t, domain.NewRejectionReasonReference, "EARLIER_DECISION"),
+		Evidence:   mustValue(t, domain.NewRejectionEvidenceReference, "EVID-0"),
+		DecidedAt:  time.Date(2026, 8, 7, 12, 30, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("reject prior: %v", err)
+	}
+	value.requests.records[value.identity(t)] = rejected
+	return rejected
+}
+
+// linkedCommand 造第二份提交：新来源身份、新委托编号，指名夹具里那份原委托。
+func (value *fixture) linkedCommand(t *testing.T, kind domain.RequestLinkKind) application.SubmitShipmentRequestCommand {
+	t.Helper()
+	command := value.command(t)
+	command.Identity = sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-2")
+	command.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "request-2")
+	command.Link = application.PriorRequestClaim{
+		PriorIdentity:  value.identity(t),
+		PriorRequestID: mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		Kind:           kind,
+	}
+	return command
+}
+
+// Covers: `AT-PS-036`②「已拒绝委托修正资料 → 关联新委托，保留原决定」与 `AT-PS-076`
+// 的建立半边——关联新委托走完整提交管线出生，出处指回原委托；原委托的状态与决定原样
+// 留在库里，没有被这次关联改写。
+func TestALinkedSubmissionIsBornCarryingItsProvenance(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+		t.Fatalf("submit prior: %v", err)
+	}
+	fixture.rejectPrior(t)
+
+	result, err := fixture.handler.Handle(ctx, fixture.linkedCommand(t, domain.LinkRejectedCorrection))
+	if err != nil {
+		t.Fatalf("submit linked: %v", err)
+	}
+
+	if result.Outcome() != application.OutcomeSubmitted {
+		t.Fatalf("outcome = %q, want SUBMITTED", result.Outcome())
+	}
+	linked, found := fixture.requests.stored(t, sourceIdentity(t, "tenant-1", "customer-1", "source-a", "key-2"))
+	if !found {
+		t.Fatal("no linked request was stored")
+	}
+	link, present := linked.PriorRequestLink()
+	if !present || link.PriorRequestID().String() != "request-1" || link.Kind() != domain.LinkRejectedCorrection {
+		t.Fatalf("link = %#v present = %v; 出处必须指回原委托并声明方向", link, present)
+	}
+	prior, _ := fixture.requests.stored(t, fixture.identity(t))
+	if prior.State() != domain.ShipmentRequestRejected {
+		t.Fatalf("prior state = %q; 建立关联改写了原委托", prior.State())
+	}
+}
+
+// Covers: 关联指名的统一不可见——查无此委托、编号不符、跨客户指名同一个答案`查无原委托`
+// （`AT-PS-075` 的纪律在关联指名上一字不差）；话没说全另归输入未受理。四种情况都不建委托。
+func TestAClaimOnAnInvisiblePriorIsUniformlyNotFound(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("never submitted", func(t *testing.T) {
+		fixture := newFixture(t)
+		result, err := fixture.handler.Handle(ctx, fixture.linkedCommand(t, domain.LinkRejectedCorrection))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.OutcomePriorRequestNotFound {
+			t.Fatalf("outcome = %q, want PRIOR_REQUEST_NOT_FOUND", result.Outcome())
+		}
+		if fixture.requests.insertCount != 0 {
+			t.Fatal("指名立不住还建了委托")
+		}
+	})
+
+	t.Run("request id mismatch", func(t *testing.T) {
+		fixture := newFixture(t)
+		if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+			t.Fatalf("submit prior: %v", err)
+		}
+		fixture.rejectPrior(t)
+		command := fixture.linkedCommand(t, domain.LinkRejectedCorrection)
+		command.Link.PriorRequestID = mustValue(t, domain.NewShipmentRequestID, "request-9")
+
+		result, err := fixture.handler.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.OutcomePriorRequestNotFound {
+			t.Fatalf("outcome = %q, want PRIOR_REQUEST_NOT_FOUND", result.Outcome())
+		}
+	})
+
+	t.Run("another customer's prior", func(t *testing.T) {
+		fixture := newFixture(t)
+		if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+			t.Fatalf("submit prior: %v", err)
+		}
+		fixture.rejectPrior(t)
+		command := fixture.linkedCommand(t, domain.LinkRejectedCorrection)
+		command.Identity = sourceIdentity(t, "tenant-1", "customer-2", "source-a", "key-2")
+
+		result, err := fixture.handler.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.OutcomePriorRequestNotFound {
+			t.Fatalf("outcome = %q, want PRIOR_REQUEST_NOT_FOUND；跨客户指名与查无必须同答", result.Outcome())
+		}
+	})
+
+	t.Run("half a claim", func(t *testing.T) {
+		fixture := newFixture(t)
+		command := fixture.linkedCommand(t, domain.LinkRejectedCorrection)
+		command.Link.PriorIdentity = domain.SourceIdentity{}
+
+		result, err := fixture.handler.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.OutcomeInputNotAccepted {
+			t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
+		}
+	})
+}
+
+// Covers: 方向与原委托终态不符时关联不适用——待决委托没有方向可用（普通纠错走同一委托
+// 的新提交版本，BD-PS-005），答复与「查无」分格，客户才知道该走哪条路。
+func TestAClaimAgainstAPendingPriorIsIneligible(t *testing.T) {
+	fixture := newFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.Handle(ctx, fixture.command(t)); err != nil {
+		t.Fatalf("submit prior: %v", err)
+	}
+
+	result, err := fixture.handler.Handle(ctx, fixture.linkedCommand(t, domain.LinkRejectedCorrection))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.OutcomeLinkIneligible {
+		t.Fatalf("outcome = %q, want LINK_INELIGIBLE", result.Outcome())
+	}
+	if fixture.requests.insertCount != 1 {
+		t.Fatalf("insert count = %d, want 1（只有原委托那一次）", fixture.requests.insertCount)
+	}
+	if fixture.ownership.decideCount != 1 {
+		t.Fatalf("decide count = %d; 指名立不住不该消耗准入决定", fixture.ownership.decideCount)
+	}
+}
+
 type sourceRepositoryDouble struct {
 	records           map[domain.SourceIdentity]domain.SourceSubmissionFingerprint
 	observations      []domain.SourceSubmissionFingerprint

@@ -134,6 +134,9 @@ type SubmitShipmentRequestSpec struct {
 	VersionID   SubmissionVersionID
 	TaskID      AcceptanceDecisionTaskID
 	SubmittedAt time.Time
+	// Link 是关联新委托的出生属性，零值即首次委托。非零值只能来自
+	// EstablishPriorRequestLink——方向与原委托终态的互证在那里完成。
+	Link PriorRequestLink
 }
 
 type ShipmentRequest struct {
@@ -167,6 +170,9 @@ type ShipmentRequest struct {
 	// 时刻只有一个待判断版本」由结构保证，比由每个读者自己筛一遍可靠。
 	priorVersions []SubmissionVersion
 	priorTasks    []AcceptanceDecisionTask
+	// priorLink 是这份委托的关联出处（零值即首次委托）。它指回一份已拒绝、已接受或
+	// 已撤回的原委托——出处在新委托这边，原委托不动（`AT-PS-036`）。
+	priorLink PriorRequestLink
 }
 
 // SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或
@@ -183,6 +189,14 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 	}
 	if !spec.Gate.IsAllowed() {
 		return ShipmentRequest{}, ErrFutureSubmissionNotAllowed
+	}
+	// 带关联时出处必须完整成立，且不得指向自己：自指的「原委托」会让关联链在第一环
+	// 就绕回，读出处的人永远走不到真正的原委托。
+	if spec.Link != (PriorRequestLink{}) {
+		if !spec.Link.established() ||
+			spec.Link.PriorRequestID() == spec.Candidate.ShipmentRequestID() {
+			return ShipmentRequest{}, ErrInvalidRequestLink
+		}
 	}
 
 	return ShipmentRequest{
@@ -202,6 +216,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			state:               AcceptanceTaskRunning,
 		},
 		submittedAt: spec.SubmittedAt,
+		priorLink:   spec.Link,
 	}, nil
 }
 
@@ -233,4 +248,9 @@ func (request ShipmentRequest) AcceptanceDecisionTask() AcceptanceDecisionTask {
 
 func (request ShipmentRequest) SubmittedAt() time.Time {
 	return request.submittedAt
+}
+
+// PriorRequestLink 交回这份委托的关联出处。首次委托报告缺席——那是真话，它没有出处。
+func (request ShipmentRequest) PriorRequestLink() (PriorRequestLink, bool) {
+	return request.priorLink, request.priorLink.established()
 }

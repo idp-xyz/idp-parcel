@@ -369,6 +369,8 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		// 受控补充的历史在`已提交`下就有值（ADR-0045），必须随快照往返。
 		"priorVersions": true,
 		"priorTasks":    true,
+		// 关联出处是出生属性，`已提交`下就有值（首次委托为零值缺席），必须随快照往返。
+		"priorLink": true,
 	}
 	// absentInSubmitted 是`已提交`下必然缺席的判断产物。这扇门开到别的状态那天，它们要从
 	// 这一份挪到上一份并各自补上快照表达，而不是继续留零——ADR-0030 的入口条件说的就是它。
