@@ -213,6 +213,10 @@ func TestAResolutionResultHasNowhereToPutAnAcceptanceVerdict(t *testing.T) {
 
 // Covers: AT-PC-020, AT-PC-021, AT-PC-027 — 零、多与读取失败是三个不同结果，任何一个
 // 都不得由系统任选一条或伪装成客户不合格。
+//
+// Covers: `AT-PC-006`「两个合同版本在同一解析键和期间重叠 → 形成适用冲突，不按版本号任选」。
+// 006 与 021 同句：适用冲突在**解析时**成立。登记册仍可同时收纳重叠候选（见下方子测），
+// 否则 AT-PC-007 的「两历史版本保留」无处安放；不在 Register/Publish 拦重叠。
 func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 	t.Run("zero candidates is no applicable basis", func(t *testing.T) {
 		registry := domain.NewCommercialRegistry()
@@ -231,6 +235,10 @@ func TestZeroMultipleAndUnavailableAreDistinctOutcomes(t *testing.T) {
 		registry := domain.NewCommercialRegistry()
 		effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 		effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v9", "sha256:c2", "scope-a")
+		// AT-PC-006 路径 A：重叠合同可以先入册；冲突只在解析出口成形。
+		if got := registry.Count(); got != 2 {
+			t.Fatalf("registry holds %d versions after overlapping register, want 2", got)
+		}
 
 		result := domain.ResolveCommercialBasis(registry, resolutionKey(t, "scope-a", domain.CustomerContractObject), nil)
 		if result.Outcome() != domain.ApplicabilityConflict {
