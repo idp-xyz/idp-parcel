@@ -262,3 +262,69 @@ func TestAProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer(t *test
 		)
 	}
 }
+
+// 014 应用半边（回指/重校验）：错租户只切换 Caller.TenantID，答案须与从未签发同形。
+// 对象半边（登记册键/参与方租户轴）仍缺；完整 AT-PC-014 等两半齐——故不写 `Covers: AT-PC-014`。
+// 机制与 AT-PC-028 同支（TenantID 与 CustomerAccountID 一并比对）。
+func TestARevalidationNamedByAnotherTenantIsNotAccepted(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	store, owner, resolution := storedResolution(t, prior)
+	intruder := owner
+	intruder.TenantID = value(t, domain.NewTenantID, "tenant-elsewhere")
+
+	authority.loadCalled = 0
+	revalidated, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), application.ValidateCommercialBasisCommand{Caller: intruder, Resolution: resolution})
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if revalidated.Closure().Outcome() != domain.BasisNotResolved {
+		t.Fatalf("outcome = %q, want BASIS_NOT_RESOLVED——另一个租户凭标识重校验了这份解析", revalidated.Closure().Outcome())
+	}
+	if len(revalidated.Closure().Adopted()) != 0 {
+		t.Fatal("错租户却仍交回了已采用依据")
+	}
+	if authority.loadCalled != 0 {
+		t.Fatal("错租户却仍去读了权威视图")
+	}
+}
+
+func TestAProbeCannotTellAMissingResolutionFromOneOwnedByAnotherTenant(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	authority := &authorityDouble{registry: registry}
+	prior := resolvedClosure(t, authority, "scope-a")
+
+	store, owner, resolution := storedResolution(t, prior)
+	intruder := owner
+	intruder.TenantID = value(t, domain.NewTenantID, "tenant-elsewhere")
+	probe := application.ValidateCommercialBasisCommand{Caller: intruder, Resolution: resolution}
+
+	existing, err := application.NewValidateCommercialBasisHandler(store, authority, fixedClock{at: revalidatedAt}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一份真实存在的解析: %v", err)
+	}
+	absent, err := application.NewValidateCommercialBasisHandler(
+		&resolutionStoreDouble{}, authority, fixedClock{at: revalidatedAt},
+	).Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一个从未签发的标识: %v", err)
+	}
+	if existing.Closure().Outcome() != absent.Closure().Outcome() {
+		t.Fatalf(
+			"存在但不属于你的租户 = %q，从未签发 = %q；两者可分即可跨租户枚举解析",
+			existing.Closure().Outcome(), absent.Closure().Outcome(),
+		)
+	}
+	if existing.Closure().Reason() != absent.Closure().Reason() {
+		t.Fatalf(
+			"原因分别是 %q 与 %q；取值相同而原因不同，一样把存在与否说了出去",
+			existing.Closure().Reason(), absent.Closure().Reason(),
+		)
+	}
+}

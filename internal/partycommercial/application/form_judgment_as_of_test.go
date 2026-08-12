@@ -428,3 +428,66 @@ func TestASecondPhaseProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCusto
 		t.Fatal("一次越权探测竟然形成了时点")
 	}
 }
+
+// 014 应用半边（第二阶段回指）：错租户只切换 Caller.TenantID，与从未签发同形。
+// 对象半边仍缺；完整 AT-PC-014 等两半齐——故不写 `Covers: AT-PC-014`。
+func TestAResolutionNamedByAnotherTenantIsNotAccepted(t *testing.T) {
+	policies := &asOfPolicyDouble{}
+	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))
+
+	intruder := owner
+	intruder.TenantID = value(t, domain.NewTenantID, "tenant-elsewhere")
+
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
+		Handle(context.Background(), application.FormJudgmentAsOfCommand{
+			Caller:     intruder,
+			Resolution: resolution,
+			Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+		})
+	if err != nil {
+		t.Fatalf("form as-of: %v", err)
+	}
+	if result.Outcome() != application.JudgmentAsOfBasisNotResolved {
+		t.Fatalf("outcome = %q, want BASIS_NOT_RESOLVED——另一个租户凭标识读到了这份解析", result.Outcome())
+	}
+	if policies.loadCalled != 0 {
+		t.Fatal("错租户却仍去问了时点政策")
+	}
+}
+
+func TestASecondPhaseProbeCannotTellAMissingResolutionFromOneOwnedByAnotherTenant(t *testing.T) {
+	store, owner, resolution := storedResolution(t, resolvedWithRulePackage(t))
+
+	intruder := owner
+	intruder.TenantID = value(t, domain.NewTenantID, "tenant-elsewhere")
+	probe := application.FormJudgmentAsOfCommand{
+		Caller:     intruder,
+		Resolution: resolution,
+		Judgments:  []application.JudgmentAsOfRequest{{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt}},
+	}
+
+	existing, err := application.NewFormJudgmentAsOfHandler(store, &asOfPolicyDouble{}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一份真实存在的解析: %v", err)
+	}
+	absent, err := application.NewFormJudgmentAsOfHandler(&resolutionStoreDouble{}, &asOfPolicyDouble{}).
+		Handle(context.Background(), probe)
+	if err != nil {
+		t.Fatalf("探测一个从未签发的标识: %v", err)
+	}
+	if existing.Outcome() != absent.Outcome() {
+		t.Fatalf(
+			"存在但不属于你的租户 = %q，从未签发 = %q；两者可分即可跨租户枚举解析",
+			existing.Outcome(), absent.Outcome(),
+		)
+	}
+	_, existingFormed := existing.AsOfFor(domain.NetworkReachabilityJudgment)
+	_, absentFormed := absent.AsOfFor(domain.NetworkReachabilityJudgment)
+	if existingFormed != absentFormed {
+		t.Fatalf("时点一次形成一次没有（%t / %t），存在与否因此仍可分", existingFormed, absentFormed)
+	}
+	if existingFormed {
+		t.Fatal("一次错租户探测竟然形成了时点")
+	}
+}
