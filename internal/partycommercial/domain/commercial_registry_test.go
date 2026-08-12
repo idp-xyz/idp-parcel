@@ -11,7 +11,7 @@ import (
 func registerable(t *testing.T, kind domain.CommercialObjectKind, objectID, version, digest string) domain.CommercialVersion {
 	t.Helper()
 	published, err := commercialDraft(t, kind, objectID, version, digest).
-		Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+		Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish %s/%s: %v", objectID, version, err)
 	}
@@ -83,7 +83,7 @@ func publishedNaming(
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}

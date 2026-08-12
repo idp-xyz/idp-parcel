@@ -15,8 +15,11 @@ var (
 	ErrInvalidCommercialVersion        = errors.New("party commercial: invalid commercial version")
 	ErrInvalidEffectiveInterval        = errors.New("party commercial: invalid effective interval")
 	ErrIncompleteCommercialPublication = errors.New("party commercial: incomplete commercial publication")
-	ErrCommercialContentIsFixed        = errors.New("party commercial: published commercial content is fixed")
-	ErrInvalidCommercialTransition     = errors.New("party commercial: invalid commercial version transition")
+	// ErrApprovalRoleNotConfirmed 是 AT-PC-010：依据字段可以齐全，但批准角色尚未确认。
+	// 它绝不是 Incomplete——补字段推不动，要等角色确认；草稿与来源必须原样保留（ADR-0035）。
+	ErrApprovalRoleNotConfirmed    = errors.New("party commercial: approval role is not confirmed for publication")
+	ErrCommercialContentIsFixed    = errors.New("party commercial: published commercial content is fixed")
+	ErrInvalidCommercialTransition = errors.New("party commercial: invalid commercial version transition")
 )
 
 type requiredValue struct {
@@ -238,6 +241,27 @@ func (basis ApprovalBasis) valid() bool {
 	return basis.reference.valid() && basis.source.valid() && !basis.approvedAt.IsZero()
 }
 
+// ApprovalRoleStanding 是「这次发布所要求的批准角色是否已确认」的答复。
+// 零值 = 未确认：忘了作答的调用点停在 AT-PC-010 那一格，而不是默认发布成功（ADR-0035）。
+type ApprovalRoleStanding uint8
+
+const (
+	ApprovalRoleStandingInvalid ApprovalRoleStanding = iota
+	ApprovalRoleUnconfirmed
+	ApprovalRoleConfirmed
+)
+
+func (standing ApprovalRoleStanding) String() string {
+	switch standing {
+	case ApprovalRoleUnconfirmed:
+		return "UNCONFIRMED"
+	case ApprovalRoleConfirmed:
+		return "CONFIRMED"
+	default:
+		return ""
+	}
+}
+
 type CommercialVersionSpec struct {
 	Kind          CommercialObjectKind
 	ObjectID      CommercialObjectID
@@ -394,13 +418,22 @@ func (version CommercialVersion) Revise(digest CommercialContentDigest) (Commerc
 	return version, nil
 }
 
-// Publish 固定正文。批准与来源必须完备，且发布不得早于为它背书的那次批准。
-func (version CommercialVersion) Publish(basis ApprovalBasis, publishedAt time.Time) (CommercialVersion, error) {
+// Publish 固定正文。批准与来源必须完备，批准角色必须已确认，且发布不得早于为它背书的那次批准。
+//
+// 角色未确认与字段不全分格（ADR-0035 / AT-PC-010）：前者保留草稿来源，后者要补齐依据。
+func (version CommercialVersion) Publish(
+	basis ApprovalBasis,
+	roleStanding ApprovalRoleStanding,
+	publishedAt time.Time,
+) (CommercialVersion, error) {
 	if version.status != CommercialVersionDraft {
 		return CommercialVersion{}, ErrCommercialContentIsFixed
 	}
 	if !basis.valid() || publishedAt.IsZero() || publishedAt.Before(basis.ApprovedAt()) {
 		return CommercialVersion{}, ErrIncompleteCommercialPublication
+	}
+	if roleStanding != ApprovalRoleConfirmed {
+		return CommercialVersion{}, ErrApprovalRoleNotConfirmed
 	}
 	version.status = CommercialVersionPublished
 	version.approval = basis

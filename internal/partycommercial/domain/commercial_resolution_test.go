@@ -20,7 +20,7 @@ func effectiveIn(t *testing.T, registry *domain.CommercialRegistry, kind domain.
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestALapsedContractIsNotRevivedByAnEarlierBusinessTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-contract-lapsed"), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := draft.Publish(approval(t, "approval-contract-lapsed"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -404,7 +404,7 @@ func effectiveVersionInScope(
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := draft.Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}

@@ -65,7 +65,7 @@ func TestPublishedCommercialVersionRefusesInPlaceRevision(t *testing.T) {
 		t.Fatal("revising the draft mutated the original value")
 	}
 
-	published, err := revised.Publish(approval(t, "approval-1"), time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	published, err := revised.Publish(approval(t, "approval-1"), domain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestCommercialPublicationRequiresCompleteApprovalBasis(t *testing.T) {
 	}
 	for name, basis := range incomplete {
 		t.Run(name, func(t *testing.T) {
-			if _, err := draft.Publish(basis, publishAt); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
+			if _, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
 				t.Fatalf("error = %v, want ErrIncompleteCommercialPublication", err)
 			}
 		})
@@ -102,8 +102,58 @@ func TestCommercialPublicationRequiresCompleteApprovalBasis(t *testing.T) {
 
 	t.Run("publication cannot precede approval", func(t *testing.T) {
 		early := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-		if _, err := draft.Publish(approval(t, "approval-2"), early); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
+		if _, err := draft.Publish(approval(t, "approval-2"), domain.ApprovalRoleConfirmed, early); !errors.Is(err, domain.ErrIncompleteCommercialPublication) {
 			t.Fatalf("error = %v, want ErrIncompleteCommercialPublication", err)
+		}
+	})
+}
+
+// Covers: `AT-PC-010`「导入成功但批准角色未确认 → 保留来源，发布保持未决」。
+//
+// 依据字段齐全时仍不得发布：角色未确认是另一格，不得压成 Incomplete（ADR-0035）。
+func TestPublicationWaitsWhenApprovalRoleIsUnconfirmed(t *testing.T) {
+	draft := commercialDraft(t, domain.CustomerContractObject, "contract-1", "v1", "sha256:imported-source")
+	publishAt := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)
+	basis := approval(t, "approval-ready")
+
+	for name, standing := range map[string]domain.ApprovalRoleStanding{
+		"explicitly unconfirmed": domain.ApprovalRoleUnconfirmed,
+		"unanswered zero value":  domain.ApprovalRoleStandingInvalid,
+	} {
+		t.Run(name, func(t *testing.T) {
+			published, err := draft.Publish(basis, standing, publishAt)
+			if !errors.Is(err, domain.ErrApprovalRoleNotConfirmed) {
+				t.Fatalf("error = %v, want ErrApprovalRoleNotConfirmed", err)
+			}
+			if errors.Is(err, domain.ErrIncompleteCommercialPublication) {
+				t.Fatal("角色未确认被压成了依据字段不全")
+			}
+			if published.Status() == domain.CommercialVersionPublished {
+				t.Fatal("角色未确认时仍然发布成功了")
+			}
+			if draft.Status() != domain.CommercialVersionDraft {
+				t.Fatal("角色未确认时草稿被改写了")
+			}
+			if draft.ContentDigest().String() != "sha256:imported-source" {
+				t.Fatal("导入来源正文在未确认发布时丢失了")
+			}
+		})
+	}
+
+	t.Run("confirmed role publishes", func(t *testing.T) {
+		published, err := draft.Publish(basis, domain.ApprovalRoleConfirmed, publishAt)
+		if err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		if published.Status() != domain.CommercialVersionPublished {
+			t.Fatalf("status = %q, want PUBLISHED", published.Status())
+		}
+	})
+
+	t.Run("the two refusals stay distinguishable", func(t *testing.T) {
+		if errors.Is(domain.ErrApprovalRoleNotConfirmed, domain.ErrIncompleteCommercialPublication) ||
+			errors.Is(domain.ErrIncompleteCommercialPublication, domain.ErrApprovalRoleNotConfirmed) {
+			t.Fatal("两个哨兵互相 Is，调用方分不出该补字段还是该等角色确认")
 		}
 	})
 }

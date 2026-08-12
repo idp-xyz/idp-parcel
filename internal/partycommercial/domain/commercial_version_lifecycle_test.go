@@ -17,7 +17,7 @@ var (
 func publishedVersion(t *testing.T, objectID, version, digest string) domain.CommercialVersion {
 	t.Helper()
 	published, err := commercialDraft(t, domain.ServiceProductObject, objectID, version, digest).
-		Publish(approval(t, "approval-"+objectID+"-"+version), publishedOn)
+		Publish(approval(t, "approval-"+objectID+"-"+version), domain.ApprovalRoleConfirmed, publishedOn)
 	if err != nil {
 		t.Fatalf("publish %s/%s: %v", objectID, version, err)
 	}
@@ -151,7 +151,7 @@ func TestSupersessionNamesASuccessorOfTheSameObject(t *testing.T) {
 
 	t.Run("refuses a successor of another kind", func(t *testing.T) {
 		contract, err := commercialDraft(t, domain.CustomerContractObject, "product-1", "v2", "sha256:contract").
-			Publish(approval(t, "approval-contract"), publishedOn)
+			Publish(approval(t, "approval-contract"), domain.ApprovalRoleConfirmed, publishedOn)
 		if err != nil {
 			t.Fatalf("publish contract: %v", err)
 		}
@@ -181,7 +181,7 @@ func TestOpenEndedVersionCannotExpire(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new draft: %v", err)
 	}
-	published, err := draft.Publish(approval(t, "approval-policy"), publishedOn)
+	published, err := draft.Publish(approval(t, "approval-policy"), domain.ApprovalRoleConfirmed, publishedOn)
 	if err != nil {
 		t.Fatalf("publish: %v", err)
 	}
