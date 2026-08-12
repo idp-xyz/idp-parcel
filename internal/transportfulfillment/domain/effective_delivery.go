@@ -7,8 +7,9 @@ import (
 
 var (
 	ErrInvalidDeliveryAttemptResult = errors.New("transport fulfillment: invalid delivery attempt result")
-	// ErrNotAnEffectiveDelivery 是 CONTEXT 交付节的硬句本体：「无人、地址错误、包装不合格、
-	// 收件人拒收或证据不足不构成有效交付」。它与形状错误分格——恢复动作不是补字段，而是
+	// ErrNotAnEffectiveDelivery 是 CONTEXT 交付节的硬句本体：「无人签收、地址错误、收件人
+	// 拒收或证据不足不构成有效交付」（UC-TF-006 同句另列「包装不合格」——那是揽收侧失败
+	// 家族的词，本类型的封闭集合不含它）。它与形状错误分格——恢复动作不是补字段，而是
 	// 承认这个对象本次没有交付。
 	ErrNotAnEffectiveDelivery   = errors.New("transport fulfillment: this outcome does not constitute an effective delivery")
 	ErrInvalidEffectiveDelivery = errors.New("transport fulfillment: invalid effective delivery")
