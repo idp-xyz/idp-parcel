@@ -201,14 +201,19 @@ type IntakeAdoptionKey struct {
 // IntakeAdoptionRecord 是一次采用判断越过提交边界后留下的东西：采用（带收寄与承诺）或
 // 不采用（带原因）二居其一。ContentDigest 是同一采用身份的内容比对锚——同键异内容是
 // 来源冲突，不是重放。
+//
+// 客户与委托维度随记录带出：审计要求采用结果关联到接受决定与委托，下游（路由复核）的
+// 触发键也要这两维——只有幂等键上的包裹身份，触发挂不回明确委托。
 type IntakeAdoptionRecord struct {
-	Key           IntakeAdoptionKey
-	ContentDigest string
-	Adopted       bool
-	Intake        domain.EffectiveNetworkIntake
-	Commitment    domain.FormalCommitment
-	RefusalBasis  domain.CheckReason
-	AdoptedAt     time.Time
+	Key               IntakeAdoptionKey
+	CustomerAccountID domain.CustomerAccountID
+	ShipmentRequestID domain.ShipmentRequestID
+	ContentDigest     string
+	Adopted           bool
+	Intake            domain.EffectiveNetworkIntake
+	Commitment        domain.FormalCommitment
+	RefusalBasis      domain.CheckReason
+	AdoptedAt         time.Time
 }
 
 // IntakeAdoptionSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。

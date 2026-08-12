@@ -191,7 +191,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 	// 委托必须已经合法接受；版本换代后旧基线的来源同样挂不上。两者都是「来源真实但不属
 	// 于当前责任起点」的不采用，不是未决——重试一万次委托也不会变成已接受的那一版。
 	if refusal, refused := adoptionRefusal(request, command.SubmissionVersion, source); refused {
-		return handler.refuse(ctx, key, digest, source, refusal)
+		return handler.refuse(ctx, command, key, digest, refusal)
 	}
 
 	eligibility, configured, err := handler.deps.Eligibility.JudgeIntakeEligibility(
@@ -228,7 +228,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		if err != nil {
 			return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
 		}
-		return handler.refuse(ctx, key, digest, source, reason)
+		return handler.refuse(ctx, command, key, digest, reason)
 	}
 
 	intake, err := domain.AdoptNetworkIntake(source, command.SubmissionVersion)
@@ -249,12 +249,14 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 	}
 
 	record := ports.IntakeAdoptionRecord{
-		Key:           key,
-		ContentDigest: digest,
-		Adopted:       true,
-		Intake:        intake,
-		Commitment:    commitment,
-		AdoptedAt:     handler.deps.Clock.Now(),
+		Key:               key,
+		CustomerAccountID: command.Identity.CustomerAccountID(),
+		ShipmentRequestID: command.ShipmentRequestID,
+		ContentDigest:     digest,
+		Adopted:           true,
+		Intake:            intake,
+		Commitment:        commitment,
+		AdoptedAt:         handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record)
 }
@@ -303,23 +305,20 @@ func adoptionRefusal(
 // refuse 提交一份不采用记录：物理事实保留、原因随记录可查，重复到达按已有结果作答。
 func (handler *AdoptNetworkIntakeHandler) refuse(
 	ctx context.Context,
+	command AdoptNetworkIntakeCommand,
 	key ports.IntakeAdoptionKey,
 	digest string,
-	source domain.IntakeSource,
 	reason domain.CheckReason,
 ) (AdoptNetworkIntakeResult, error) {
 	record := ports.IntakeAdoptionRecord{
-		Key:           key,
-		ContentDigest: digest,
-		RefusalBasis:  reason,
-		AdoptedAt:     handler.deps.Clock.Now(),
+		Key:               key,
+		CustomerAccountID: command.Identity.CustomerAccountID(),
+		ShipmentRequestID: command.ShipmentRequestID,
+		ContentDigest:     digest,
+		RefusalBasis:      reason,
+		AdoptedAt:         handler.deps.Clock.Now(),
 	}
-	result, err := handler.commit(ctx, record)
-	if err != nil {
-		return AdoptNetworkIntakeResult{}, err
-	}
-	_ = source
-	return result, nil
+	return handler.commit(ctx, record)
 }
 
 // commit 提交采用记录并交发布意图；并发下另一方先提交时读回赢家。
