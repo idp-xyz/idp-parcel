@@ -1,0 +1,133 @@
+package domain_test
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+)
+
+var claimSubmittedAt = time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
+
+func receivedClaim(t *testing.T) *domain.ClaimItem {
+	t.Helper()
+	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
+		ID:          mustValue(t, domain.NewClaimItemID, "claim-1"),
+		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
+		SubmittedAt: claimSubmittedAt,
+	})
+	if err != nil {
+		t.Fatalf("receive claim item: %v", err)
+	}
+	return claim
+}
+
+// Covers: VE CONTEXT 硬句 173「收到客户索赔、通过资格审核和确认赔偿责任是不同判断。
+// 系统必须先保留原始提交事实，再按……判断资格」——受理只留提交事实（无资格无结论）；
+// 资格审核带依据且不审第二次；资格未通过形不成责任结论；类型上没有赔付金额字段。
+func TestReceiptScreeningAndLiabilityAreThreeJudgments(t *testing.T) {
+	claim := receivedClaim(t)
+	if _, screened := claim.Screen(); screened {
+		t.Fatal("刚受理的索赔凭空有了资格结论")
+	}
+
+	if err := claim.ConcludeLiability(domain.LiabilityFullyEstablished,
+		claimSubmittedAt.Add(30*24*time.Hour), claimSubmittedAt.Add(time.Hour)); !errors.Is(err, domain.ErrClaimNotScreened) {
+		t.Fatalf("err = %v; 资格未审就下了责任结论", err)
+	}
+
+	if err := claim.ScreenEligibility(domain.ClaimEligible, "authorized; within window; materials complete", claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("screen eligibility: %v", err)
+	}
+	if err := claim.ScreenEligibility(domain.ClaimIneligible, "again", claimSubmittedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClaimAlreadyScreened) {
+		t.Fatalf("err = %v; 资格审了两次", err)
+	}
+
+	if err := claim.ConcludeLiability(domain.LiabilityPartiallyEstablished,
+		claimSubmittedAt.Add(30*24*time.Hour), claimSubmittedAt.Add(3*time.Hour)); err != nil {
+		t.Fatalf("conclude liability: %v", err)
+	}
+	conclusion, concluded := claim.Conclusion()
+	if !concluded || conclusion != domain.LiabilityPartiallyEstablished {
+		t.Fatalf("conclusion = %q concluded = %v", conclusion, concluded)
+	}
+
+	ineligible := receivedClaim(t)
+	if err := ineligible.ScreenEligibility(domain.ClaimIneligible, "outside claim window", claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("screen ineligible: %v", err)
+	}
+	if err := ineligible.ConcludeLiability(domain.LiabilityNotEstablished,
+		claimSubmittedAt.Add(30*24*time.Hour), claimSubmittedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClaimNotScreened) {
+		t.Fatalf("err = %v; 资格未通过形成了责任结论", err)
+	}
+}
+
+// Covers: VE CONTEXT 生命周期 251「最终责任结论前收到有效撤回——索赔项以已撤回结束
+// 后续审核，保留提交和证据；撤回不取消异常案件或独立追偿事项」——结论前可撤（提交
+// 事实保留）、撤后审核与结论都拒；已有结论撤不回；类型上没有案件/追偿字段。
+func TestWithdrawalEndsReviewButNotTheCase(t *testing.T) {
+	claim := receivedClaim(t)
+	if err := claim.Withdraw(claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if !claim.Withdrawn() {
+		t.Fatal("撤回没落上")
+	}
+	if claim.ID().String() != "claim-1" {
+		t.Fatal("提交事实没保留")
+	}
+	if err := claim.ScreenEligibility(domain.ClaimEligible, "basis", claimSubmittedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClaimWithdrawn) {
+		t.Fatalf("err = %v; 已撤回的索赔还在审", err)
+	}
+
+	concluded := receivedClaim(t)
+	if err := concluded.ScreenEligibility(domain.ClaimEligible, "ok", claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if err := concluded.ConcludeLiability(domain.LiabilityFullyEstablished,
+		claimSubmittedAt.Add(30*24*time.Hour), claimSubmittedAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("conclude: %v", err)
+	}
+	if err := concluded.Withdraw(claimSubmittedAt.Add(3 * time.Hour)); !errors.Is(err, domain.ErrClaimAlreadyConcluded) {
+		t.Fatalf("err = %v; 已有结论的索赔被撤回了", err)
+	}
+}
+
+// Covers: VE CONTEXT 生命周期 253/254「复核期限内出现有效异议或关键新证据——形成
+// 受控复核和新的结论版本；原结论保留」「复核期限届满……后续复核请求形成有依据的不
+// 受理，不改变原责任结论」——期限内换结论原结论进 PriorConclusion；届满独立哨兵拒；
+// 同值复核是矛盾输入。
+func TestReviewIsControlledByItsWindow(t *testing.T) {
+	claim := receivedClaim(t)
+	if err := claim.ScreenEligibility(domain.ClaimEligible, "ok", claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	reviewBy := claimSubmittedAt.Add(30 * 24 * time.Hour)
+	if err := claim.ConcludeLiability(domain.LiabilityNotEstablished, reviewBy, claimSubmittedAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("conclude: %v", err)
+	}
+
+	if err := claim.ReviewConclusion(domain.LiabilityPartiallyEstablished, reviewBy.Add(-time.Hour)); err != nil {
+		t.Fatalf("review: %v", err)
+	}
+	prior, reviewed := claim.PriorConclusion()
+	if !reviewed || prior != domain.LiabilityNotEstablished {
+		t.Fatalf("prior = %q reviewed = %v; 原结论必须保留", prior, reviewed)
+	}
+	current, _ := claim.Conclusion()
+	if current != domain.LiabilityPartiallyEstablished {
+		t.Fatalf("current = %q", current)
+	}
+
+	if err := claim.ReviewConclusion(domain.LiabilityFullyEstablished, reviewBy.Add(time.Hour)); !errors.Is(err, domain.ErrReviewWindowClosed) {
+		t.Fatalf("err = %v; 届满后复核还改了结论", err)
+	}
+	if err := claim.ReviewConclusion(domain.LiabilityPartiallyEstablished, reviewBy.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidClaim) {
+		t.Fatalf("err = %v; 同值复核分不出新旧", err)
+	}
+}
