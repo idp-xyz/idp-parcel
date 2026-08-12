@@ -181,7 +181,7 @@ func (fixture *basisFixture) fixResolution(t *testing.T) pcdomain.CommercialClos
 }
 
 // withSettlementBasis 给夹具补上结算依据：登记一份生效政策并把结算成员加进闭包键
-//（选择器与政策适用范围逐维对齐，锚点落在有效区间内）。
+// （选择器与政策适用范围逐维对齐，锚点落在有效区间内）。
 func (fixture *basisFixture) withSettlementBasis(t *testing.T, method pcdomain.SettlementMethod) {
 	t.Helper()
 	version := effectiveIn(t, fixture.registry, pcdomain.SettlementPolicyObject, "settle-1", "v1", "sha256:s1", "scope-a")

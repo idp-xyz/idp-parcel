@@ -25,7 +25,7 @@ type NewSubmissionVersionSpec struct {
 	DeclaredParcelIDs []DeclaredParcelID
 	// Profiles 是随新版本申报的成员声明画像（ADR-0048）：普通资料纠错可以更正测量，
 	// 画像随本版本重报，不从旧版本静默继承——继承会把「客户改了话」与「客户没说」混掉。
-	Profiles []DeclaredParcelProfile
+	Profiles      []DeclaredParcelProfile
 	EstablishedAt time.Time
 }
 

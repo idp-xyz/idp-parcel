@@ -57,8 +57,8 @@ type SubmissionVersion struct {
 	declaredParcelIDs []DeclaredParcelID
 	// profiles 是成员声明画像（ADR-0048）：随本版本申报的测量快照。允许部分成员无画像
 	// ——测量必填与否由真实产品定，机制不写死。
-	profiles []DeclaredParcelProfile
-	establishedAt     time.Time
+	profiles      []DeclaredParcelProfile
+	establishedAt time.Time
 }
 
 func (version SubmissionVersion) VersionID() SubmissionVersionID {
