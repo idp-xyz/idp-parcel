@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -270,5 +271,65 @@ func TestTakeoversAreBlockedByOpenIntervalsAndRecordOnce(t *testing.T) {
 	}
 	if len(fixture.intervals.intervals) != 2 {
 		t.Fatalf("intervals = %d; 重放又追加了区间", len(fixture.intervals.intervals))
+	}
+}
+
+// Covers: 评审发现①的修法（镜像 06084b6）——接管入册而区间追加失败时接管不翻但交回
+// 续办引用；重放路（TakeoverExisting）凭同一命令补追加同一份区间，补上后引用清空；
+// 已在册的区间不重复追加。
+func TestAFailedTakeoverIntervalAppendLeavesAContinuationAndReplayHeals(t *testing.T) {
+	fixture := newIncidentFixture(t)
+	fixture.intervals.appendErr = errors.New("interval store unreachable")
+
+	spec := domain.TakeoverRecordSpec{
+		StopEvidence: "evidence-pack/authority-stopped",
+		Interval: domain.AuthorityInterval{
+			ObjectScope: "pilot-scope/v1",
+			Capability:  "SHIPMENT_ACCEPTANCE",
+			FactKind:    "ACCEPTANCE_DECISION",
+			Authority:   "legacy-system",
+			From:        incidentAt,
+		},
+		AcceptedFacts:    "facts accepted as-is from prior authority",
+		PendingExternals: "two customs declarations awaiting external results",
+		ActualControl:    "objects physically at node-origin",
+		Responsibilities: "legacy operations team",
+		NextAction:       "resume manual processing",
+		Inventory:        inventory(t),
+		EffectiveAt:      incidentAt,
+	}
+
+	first, err := fixture.handler.TakeOver(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("first takeover: %v", err)
+	}
+	if first.Outcome() != application.TakeoverRecorded {
+		t.Fatalf("outcome = %q; 追加失败不得翻接管", first.Outcome())
+	}
+	if first.HandoffReference() == "" {
+		t.Fatal("追加失败没有留续办引用——接管与区间分岔无处可知")
+	}
+
+	fixture.intervals.appendErr = nil
+	replay, err := fixture.handler.TakeOver(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("replay takeover: %v", err)
+	}
+	if replay.Outcome() != application.TakeoverExisting {
+		t.Fatalf("replay = %q", replay.Outcome())
+	}
+	if replay.HandoffReference() != "" {
+		t.Fatal("补追加成功后续办引用还挂着")
+	}
+	if len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("intervals = %d; 重放没有补上区间", len(fixture.intervals.intervals))
+	}
+
+	again, err := fixture.handler.TakeOver(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("second replay: %v", err)
+	}
+	if again.HandoffReference() != "" || len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("intervals = %d; 已在册的区间被重复追加", len(fixture.intervals.intervals))
 	}
 }

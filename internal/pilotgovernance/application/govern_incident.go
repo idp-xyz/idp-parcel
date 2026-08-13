@@ -192,7 +192,11 @@ func (handler *GovernIncidentHandler) TakeOver(
 	if existing, found, err := handler.deps.Takeovers.FindByInterval(ctx, spec.Interval); err != nil {
 		return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 	} else if found {
-		return GovernIncidentResult{outcome: TakeoverExisting, takeover: existing}, nil
+		// 重放路补追加：上次区间追加失败留下的分岔在这里收口——接管不翻，只重试
+		// 同一份追加（镜像阶段评审 handler 的续办纪律，已在册不重追）。
+		result := GovernIncidentResult{outcome: TakeoverExisting, takeover: existing}
+		result.handoffRef = handler.appendTakeoverInterval(ctx, spec.Interval)
+		return result, nil
 	}
 
 	current, err := handler.deps.Intervals.ListCurrent(ctx)
@@ -214,8 +218,8 @@ func (handler *GovernIncidentHandler) TakeOver(
 	switch saved {
 	case ports.GovernanceSaved:
 		result := GovernIncidentResult{outcome: TakeoverRecorded, takeover: record}
-		if err := handler.deps.Intervals.Append(ctx, spec.Interval); err != nil {
-			result.handoffRef = "CONT-TAKEOVER-INTERVAL/" + spec.Interval.ObjectScope
+		if ref := handler.appendTakeoverInterval(ctx, spec.Interval); ref != "" {
+			result.handoffRef = ref
 			return result, nil
 		}
 		result.handoffRef = handler.handOff(ctx, ports.GovernanceHandoffIntent{Takeover: &record})
@@ -225,10 +229,32 @@ func (handler *GovernIncidentHandler) TakeOver(
 		if err != nil || !found {
 			return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 		}
-		return GovernIncidentResult{outcome: TakeoverExisting, takeover: winner}, nil
+		result := GovernIncidentResult{outcome: TakeoverExisting, takeover: winner}
+		result.handoffRef = handler.appendTakeoverInterval(ctx, spec.Interval)
+		return result, nil
 	default:
 		return GovernIncidentResult{}, fmt.Errorf("%w: %d", ErrUnexpectedGovernanceSave, saved)
 	}
+}
+
+// appendTakeoverInterval 追加接管授予的权威区间。失败不翻接管但交回续办引用（接管
+// 在册而区间缺失且无处可知，正是权威不明的双帐分岔）；已在册的区间不重复追加。
+func (handler *GovernIncidentHandler) appendTakeoverInterval(
+	ctx context.Context,
+	interval domain.AuthorityInterval,
+) string {
+	current, err := handler.deps.Intervals.ListCurrent(ctx)
+	if err == nil {
+		for _, existing := range current {
+			if existing == interval {
+				return ""
+			}
+		}
+	}
+	if err := handler.deps.Intervals.Append(ctx, interval); err != nil {
+		return "CONT-TAKEOVER-INTERVAL/" + interval.ObjectScope
+	}
+	return ""
 }
 
 // handOff 交发布意图。失败不翻记录，留续办引用重发同一份。
