@@ -229,7 +229,9 @@ func answerBookingCommand(t *testing.T, outcome domain.CarrierAcceptanceOutcome)
 	return command
 }
 
-// 委托提交：四快照冻结随记录保全，幂等分重放/冲突，意图交 SA 成本预期源。
+// Covers: CONTEXT 243「保存……协议、条件、角色和责任依据快照，不修改商业版本」的
+// 编排面（UC-TF-003 预定链前半）——四快照冻结随记录保全；同一委托标识只提交一次，
+// 重放返原、异快照同键冲突；意图交 SA 成本预期源（UC-SA-002 输入行的协议快照来源）。
 func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 	fixture := newCommissionFixture(t)
 	command := submitCommissionCommand(t)
@@ -273,8 +275,10 @@ func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 	})
 }
 
-// 应答不可覆盖：已接受的订舱不能再被拒绝（同键异应答冲突）；同应答重放返原；应答四格
-// 完备性由领域把门（超量接受、拒绝免因都未受理）。
+// Covers: CONTEXT「承运接受……不等于容量已经预占、载运对象已经分配或实际承运商已经
+// 收寄」与「只有接受成约；拒绝/失效/撤回分格带原因」的编排面——一次订舱一个应答：
+// 已接受的订舱不能再被拒绝（同键异应答冲突不覆盖，原接受保留）；同应答重放返原；
+// 应答四格完备性由 FormCarrierAcceptance 把门（超量接受、拒绝免因都未受理）。
 func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 	fixture := newCommissionFixture(t)
 	if _, err := fixture.handler.SubmitBooking(context.Background(), submitBookingCommand(t)); err != nil {
@@ -350,8 +354,10 @@ func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 	})
 }
 
-// 取消只及未开始：未开始取消成功、已取消重放返原、已开始 → TRANSPORT_STARTED 业务
-// 负向（领域哨兵编排分格）。
+// Covers: CONTEXT「首个有效出发或移动事实形成前可以取消……之后只能形成中断、改降、
+// 折返或其他实际结果」与 195「尚未消耗的运输委托或订舱范围可以取消」的编排面——
+// 未开始取消成功；已开始 → TRANSPORT_STARTED 业务负向（ErrTransportAlreadyStarted
+// 哨兵分格，恢复动作是按事实形成实际结果而非改单）；已取消重放返原不二取。
 func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 	fixture := newCommissionFixture(t)
 	if _, err := fixture.handler.SubmitCommission(context.Background(), submitCommissionCommand(t)); err != nil {
@@ -429,7 +435,9 @@ func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 	})
 }
 
-// 恢复纪律：库故障各归未决一格；投递失败不翻结果重放重发；原因集封闭。
+// Covers: ADR-0029（按恢复动作分格——依赖故障归未决且指名等谁）、ADR-0031（写入
+// 代数封闭，代数外是编程错误）与 ADR-0043（投递失败不翻结果、重放重发同一份）在
+// 本编排的恢复面；未决原因集封闭。
 func TestCommissionRecoveryDiscipline(t *testing.T) {
 	t.Run("store failures are undecided with their reasons", func(t *testing.T) {
 		fixture := newCommissionFixture(t)
