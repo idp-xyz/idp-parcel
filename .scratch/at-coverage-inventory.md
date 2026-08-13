@@ -17,10 +17,10 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 242 |
+| ① 已钉住 | 247 |
 | ② 机制候选 | 238 |
 | ③ 实例/闸门 | 148 |
-| ④ 机制未落地 | 455 |
+| ④ 机制未落地 | 450 |
 | 合计 | 1083 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
@@ -32,7 +32,7 @@
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 66 | 90 | 22 | 0 |
 | TF | 97 | 22 | 68 | 7 | 0 |
-| VE | 170 | 16 | 0 | 19 | 135 |
+| VE | 170 | 21 | 0 | 19 | 130 |
 
 ## ① 已钉住（AT → 测试）
 
@@ -269,6 +269,11 @@
 | `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-042` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-044` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
+| `AT-VE-049` | internal/visibilityexception/application/form_eta_test.go::TestSufficientFactsFormAVersionedETA |
+| `AT-VE-050` | internal/visibilityexception/application/form_eta_test.go::TestACommandMissingAnEssentialIsNotAcceptedAsAnETA |
+| `AT-VE-053` | internal/visibilityexception/application/form_eta_test.go::TestAGapIsNotFormedBeforeTheWindowElapses |
+| `AT-VE-054` | internal/visibilityexception/application/form_eta_test.go::TestAnElapsedWindowFormsTheGapWithoutConcludingLossOrStall |
+| `AT-VE-057` | internal/visibilityexception/application/form_eta_test.go::TestAGapIsIdempotentPerWindowRuleVersion |
 | `AT-VE-062` | internal/visibilityexception/application/raise_signal_test.go::TestAFirstHitOpensAnEpisodeAndConcludesTriage |
 | `AT-VE-064` | internal/visibilityexception/application/raise_signal_test.go::TestARepeatHitOnAnActiveEpisodeUpdatesItWithoutASecondEpisodeOrTriage |
 | `AT-VE-065` | internal/visibilityexception/application/raise_signal_test.go::TestAHitAfterRecoveryReopensALinkedEpisodeAndRetriages |
@@ -1038,15 +1043,10 @@
 | `AT-VE-043` | 两个有效事实无法裁决 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-047` | 外部段无内部节点明细 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-048` | 保存结果不确定 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
-| `AT-VE-049` | 有足够事实形成内部 ETA | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-050` | 只有计划时间 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-051` | 两个来源都提供 ETA | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-052` | 内部 ETA 已形成，但质量明确未达适用客户门槛 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-053` | 观察窗口未到 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-054` | 观察窗口届满且无新事实 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-055` | 外部段未承诺内部扫描 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-056` | 来源整体中断 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
-| `AT-VE-057` | 新窗口版本生效 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-058` | 缺口恢复后再次发生 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-059` | 保存结果不确定 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-060` | 接受事实形成计划偏离信号 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
@@ -1173,6 +1173,8 @@
 | 合计 | 1083 | 1083 | ±0 |
 
 SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**——所钉语义在结果契约与 CONTEXT 硬句上，验收表无对应行，按宁缺勿滥不硬点；两组继续按硬句口径计。
+
+同日追记二：VE 批收尾票（ETA 与可见性缺口编排 `FormETAHandler`）随编排落地点名 `AT-VE-049`、`AT-VE-050`（七件缺一半边）、`AT-VE-053`、`AT-VE-054`、`AT-VE-057`——①242→247、④455→450，其余桶与合计 1083 不变。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 

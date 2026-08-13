@@ -135,6 +135,12 @@ func (eta ETAPrediction) Source() ETASourceKind {
 	return eta.source
 }
 
+// Inputs 是（包裹+里程碑+输入版本）幂等键的第三维，适配器持久化也要它——不导出，
+// 编排与存储都立不起这一维。
+func (eta ETAPrediction) Inputs() PredictionInputsReference {
+	return eta.inputs
+}
+
 func (eta ETAPrediction) Model() PredictionModelReference {
 	return eta.model
 }

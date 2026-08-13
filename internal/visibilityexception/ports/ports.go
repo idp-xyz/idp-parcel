@@ -309,3 +309,56 @@ type DispositionHandoffIntent struct {
 type DispositionHandoff interface {
 	HandOffDispositionRequest(ctx context.Context, intent DispositionHandoffIntent) error
 }
+
+// ETAStore 按（包裹+里程碑）保存当前预测版本。历史版本由 Refresh 的指回关系承担，
+// 库只管当前。
+type ETAStore interface {
+	FindCurrent(
+		ctx context.Context,
+		parcel domain.TrackedParcelReference,
+		milestone domain.MilestoneReference,
+	) (domain.ETAPrediction, bool, error)
+	Save(ctx context.Context, eta domain.ETAPrediction) error
+}
+
+// ETAIdentityFactory 签发预测版本标识。与其余身份工厂分开，理由相同。
+type ETAIdentityFactory interface {
+	NextETAVersionID(ctx context.Context) (domain.ETAVersionID, error)
+}
+
+// ETAHandoffIntent 把新预测版本交给适用下游（客户视图链的重派生输入——「ETA 新版本
+// ……必须重新派生客户视图」）。意图由预测版本认领，重放重发同一份（ADR-0043）。
+type ETAHandoffIntent struct {
+	Prediction domain.ETAPrediction
+}
+
+// ETAHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type ETAHandoff interface {
+	HandOffETA(ctx context.Context, intent ETAHandoffIntent) error
+}
+
+// VisibilityGapStore 按（包裹+预期观察+窗口规则版本）保存缺口。键含窗口规则版本：
+// 「新窗口版本生效→后续采用新版本，原判断保留」——同一预期在新旧规则下是两次独立
+// 判断，压成一个键会让新版本覆盖原判断。
+type VisibilityGapStore interface {
+	FindCurrent(
+		ctx context.Context,
+		parcel domain.TrackedParcelReference,
+		expectation domain.ExpectedObservationReference,
+		windowRule domain.ObservationWindowReference,
+	) (domain.VisibilityGap, bool, error)
+	Save(ctx context.Context, gap domain.VisibilityGap) error
+}
+
+// VisibilityGapHandoffIntent 把已成立的缺口交给信号链（缺口是否命中异常规则由分诊
+// 判断，本编排不替它判）。意图由缺口身份三维认领，重放重发同一份（ADR-0043）。
+type VisibilityGapHandoffIntent struct {
+	Gap domain.VisibilityGap
+}
+
+// VisibilityGapHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type VisibilityGapHandoff interface {
+	HandOffVisibilityGap(ctx context.Context, intent VisibilityGapHandoffIntent) error
+}
