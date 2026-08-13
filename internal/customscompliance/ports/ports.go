@@ -125,6 +125,53 @@ type VerificationHandoff interface {
 	HandOffVerification(ctx context.Context, intent VerificationHandoffIntent) error
 }
 
+// ObligationInventoryView 按案件与业务截点盘出全部适用义务的关闭依据项。义务目录
+// 与逐项状态来自监管程序与案内事实（实例半边）；configured=false 即该程序的义务
+// 目录还没登记——未决，不是「没有义务所以可关」。
+type ObligationInventoryView interface {
+	LoadObligationItems(
+		ctx context.Context,
+		tenant domain.TenantID,
+		caseRef string,
+		cutoffAt time.Time,
+	) ([]domain.ClosureObligationItem, bool, error)
+}
+
+type CaseClosureSaveOutcome uint8
+
+const (
+	CaseClosureSaveOutcomeInvalid CaseClosureSaveOutcome = iota
+	CaseClosureSaved
+	CaseClosureAlreadyRecorded
+)
+
+// CaseClosureStore 按案件引用找回并保存关闭记录——单个案件不存在部分关闭，一案
+// 至多一份关闭记录（重开追加在记录内）。
+type CaseClosureStore interface {
+	FindByCase(
+		ctx context.Context,
+		tenant domain.TenantID,
+		caseRef string,
+	) (*domain.CustomsCaseClosure, bool, error)
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		closure *domain.CustomsCaseClosure,
+	) (CaseClosureSaveOutcome, error)
+}
+
+// CaseClosureHandoffIntent 把关闭决定交给适用下游（VE 的案件视图与治理审计消费它）。
+type CaseClosureHandoffIntent struct {
+	TenantID domain.TenantID
+	Closure  *domain.CustomsCaseClosure
+}
+
+// CaseClosureHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type CaseClosureHandoff interface {
+	HandOffClosure(ctx context.Context, intent CaseClosureHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
