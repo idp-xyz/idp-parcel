@@ -274,6 +274,47 @@ type GateVerificationHandoff interface {
 	HandOffGate(ctx context.Context, intent GateVerificationHandoffIntent) error
 }
 
+// FollowUpTargetKey 是后续申报动作目标的幂等键：同一触发依据对同一提交版本的同类
+// 动作只立一个目标——触发依据换了（新监管要求）或版本换了自然换键。
+type FollowUpTargetKey struct {
+	TenantID domain.TenantID
+	Trigger  domain.FollowUpTriggerReference
+	Version  domain.SubmissionVersionID
+	Kind     domain.FollowUpActionKind
+}
+
+type FollowUpSaveOutcome uint8
+
+const (
+	FollowUpSaveOutcomeInvalid FollowUpSaveOutcome = iota
+	FollowUpSaved
+	FollowUpAlreadyRecorded
+)
+
+// FollowUpStore 保存后续动作目标与替代关系。替代关系按目标键定位——一个重报目标
+// 至多一份替代关系；生效是同一关系的状态推进，走 UpdateRelation。
+type FollowUpStore interface {
+	FindTarget(ctx context.Context, key FollowUpTargetKey) (domain.FollowUpTarget, bool, error)
+	SaveTarget(ctx context.Context, key FollowUpTargetKey, target domain.FollowUpTarget) (FollowUpSaveOutcome, error)
+	FindRelation(ctx context.Context, key FollowUpTargetKey) (domain.ReplacementRelation, bool, error)
+	SaveRelation(ctx context.Context, key FollowUpTargetKey, relation domain.ReplacementRelation) (FollowUpSaveOutcome, error)
+	UpdateRelation(ctx context.Context, key FollowUpTargetKey, relation domain.ReplacementRelation) error
+}
+
+// FollowUpHandoffIntent 把目标形成与替代生效交给适用下游（申报执行方消费目标，VE
+// 与案件视图消费生效）。
+type FollowUpHandoffIntent struct {
+	Key      FollowUpTargetKey
+	Target   domain.FollowUpTarget
+	Relation *domain.ReplacementRelation
+}
+
+// FollowUpHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type FollowUpHandoff interface {
+	HandOffFollowUp(ctx context.Context, intent FollowUpHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
