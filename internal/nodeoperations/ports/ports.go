@@ -190,3 +190,42 @@ type ExecutionFactHandoffIntent struct {
 type ExecutionFactHandoff interface {
 	HandOffExecutionFact(ctx context.Context, intent ExecutionFactHandoffIntent) error
 }
+
+type ConsolidationSaveOutcome uint8
+
+const (
+	ConsolidationSaveOutcomeInvalid ConsolidationSaveOutcome = iota
+	ConsolidationSaved
+	ConsolidationAlreadyRecorded
+)
+
+// ConsolidationStore 保存集运单元实例。Save 只管开启（同 ID 重复开启交回
+// AlreadyRecorded）；加入/移出/封装/开封/关闭是同一实例的状态推进，走 Update。
+type ConsolidationStore interface {
+	FindByID(ctx context.Context, tenant domain.TenantID, id domain.ConsolidationUnitID) (*domain.ConsolidationUnit, bool, error)
+	Save(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) (ConsolidationSaveOutcome, error)
+	Update(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) error
+}
+
+// ContainmentIndex 回答一件实物当前被哪个未关闭单元直接包含。跨单元的「同一时点
+// 最多一个直接物理父级」需要仓储视野，领域对象只守住自己这一侧（重复加入拒）——
+// 加入前的跨单元核对靠这里。
+type ContainmentIndex interface {
+	CurrentParent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		member domain.HandlingUnitID,
+	) (domain.ConsolidationUnitID, bool, error)
+}
+
+// SealedSnapshotHandoffIntent 把封装快照交给适用下游（装载与交接按封装快照对货）。
+type SealedSnapshotHandoffIntent struct {
+	TenantID domain.TenantID
+	Unit     domain.ConsolidationUnitID
+	Snapshot domain.SealedSnapshot
+}
+
+// SealedSnapshotHandoff 今天没有实现，唯一实现是测试替身。
+type SealedSnapshotHandoff interface {
+	HandOffSnapshot(ctx context.Context, intent SealedSnapshotHandoffIntent) error
+}
