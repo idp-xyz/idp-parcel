@@ -74,8 +74,9 @@ func judgmentKey(t *testing.T, tenant string) domain.ReachabilityJudgmentKey {
 	}
 }
 
-// mixedFinding 造一份三态齐备的判断：一格合格、一格淘汰、一格证据未知加候选内缺口
-// ——正好落在矩阵的`资料不足`行，序列化要保住的每一类内容它都有。
+// mixedFinding 造一份三态齐备的判断：一格合格、一格淘汰、一格证据未知加候选内缺口。
+// 矩阵结论是`可达`——合格候选在场，别处的候选内缺口拦不住它（AT-NR-025 的语义）；
+// 序列化要保住的每一类内容（三态候选、理由、缺口与再判条件）它都有。
 func mixedFinding(t *testing.T) domain.ReachabilityFinding {
 	t.Helper()
 	qualified, err := domain.NewRouteCandidate(
@@ -94,10 +95,11 @@ func mixedFinding(t *testing.T) domain.ReachabilityFinding {
 	if err != nil {
 		t.Fatalf("构造淘汰候选：%v", err)
 	}
+	// 非合格候选必须带理由（领域构造器第二检查）：无据的`证据未知`支撑不起缺口。
 	unknown, err := domain.NewRouteCandidate(
 		scalar(t, domain.NewCandidateID, "candidate-3"),
 		domain.CandidateEvidenceUnknown,
-		domain.CandidateReason{},
+		scalar(t, domain.NewCandidateReason, "service-area-evidence-open"),
 	)
 	if err != nil {
 		t.Fatalf("构造未知候选：%v", err)
@@ -139,16 +141,16 @@ func TestAJudgmentIsReadBackUnchanged(t *testing.T) {
 	correlation := scalar(t, domain.NewRequestCorrelationID, "corr-1")
 	saved := record(t, "tenant-a")
 
+	// 断言留在事务闭包外：闭包里 Fatalf 会经 Goexit 跳过事务收尾，把连接挂死在池里。
+	var firstOutcome ports.ReachabilityJudgmentSaveOutcome
 	within(t, transactor, ctx, func(txCtx context.Context) error {
 		outcome, err := repository.Save(txCtx, correlation, saved)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ReachabilityJudgmentSaved {
-			t.Fatalf("首存结果 = %q，应为 SAVED", outcome)
-		}
-		return nil
+		firstOutcome = outcome
+		return err
 	})
+	if firstOutcome != ports.ReachabilityJudgmentSaved {
+		t.Fatalf("首存结果 = %q，应为 SAVED", firstOutcome)
+	}
 
 	found, exists, err := repository.FindByCorrelation(ctx, saved.Key.TenantID, correlation)
 	if err != nil {
@@ -160,8 +162,8 @@ func TestAJudgmentIsReadBackUnchanged(t *testing.T) {
 	if !found.Key.SameJudgmentScope(saved.Key) {
 		t.Errorf("键读回变形：%+v，应为 %+v", found.Key, saved.Key)
 	}
-	if found.Finding.Value() != domain.InsufficientEvidence {
-		t.Errorf("三值结论 = %q，应为 INSUFFICIENT_EVIDENCE", found.Finding.Value())
+	if found.Finding.Value() != domain.Reachable {
+		t.Errorf("三值结论 = %q，应为 REACHABLE（合格在场，别处候选内缺口不拦）", found.Finding.Value())
 	}
 	if len(found.Finding.QualifiedCandidates()) != 1 ||
 		len(found.Finding.EliminatedCandidates()) != 1 ||
@@ -199,19 +201,29 @@ func TestASecondWriterGetsAlreadyRecorded(t *testing.T) {
 	})
 
 	// 第二份换了判断时间与视图修订——内容不同也不覆盖，谁先越过提交边界谁是判断。
+	// `已有记录`必须让事务保持可用（ON CONFLICT 而非中止态），所以同一事务里紧接着
+	// 读回赢家——这正是编排的用法，捕 23505 的译法在这一步就会挂。
 	second := record(t, "tenant-a")
 	second.JudgedAt = judgedAt.Add(time.Hour)
 	second.ViewRevision = scalar(t, domain.NewNetworkViewRevision, "network-view/rev-43")
+	var secondOutcome ports.ReachabilityJudgmentSaveOutcome
+	var winnerInTx ports.ReachabilityJudgmentRecord
+	var winnerFound bool
 	within(t, transactor, ctx, func(txCtx context.Context) error {
 		outcome, err := repository.Save(txCtx, correlation, second)
 		if err != nil {
 			return err
 		}
-		if outcome != ports.ReachabilityJudgmentAlreadyRecorded {
-			t.Fatalf("第二份写入结果 = %q，应为 ALREADY_RECORDED", outcome)
-		}
-		return nil
+		secondOutcome = outcome
+		winnerInTx, winnerFound, err = repository.FindByCorrelation(txCtx, first.Key.TenantID, correlation)
+		return err
 	})
+	if secondOutcome != ports.ReachabilityJudgmentAlreadyRecorded {
+		t.Fatalf("第二份写入结果 = %q，应为 ALREADY_RECORDED", secondOutcome)
+	}
+	if !winnerFound || !winnerInTx.JudgedAt.Equal(first.JudgedAt) {
+		t.Fatalf("同事务读回赢家失败：found=%v judgedAt=%v", winnerFound, winnerInTx.JudgedAt)
+	}
 
 	found, exists, err := repository.FindByCorrelation(ctx, first.Key.TenantID, correlation)
 	if err != nil || !exists {
@@ -228,8 +240,10 @@ func TestOtherTenantsAreInvisible(t *testing.T) {
 	ctx := t.Context()
 	correlation := scalar(t, domain.NewRequestCorrelationID, "corr-shared")
 
+	// 记录在闭包外构造：构造失败的 Fatalf 若发生在事务闭包里，会跳过事务收尾挂死连接。
+	saved := record(t, "tenant-a")
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		_, err := repository.Save(txCtx, correlation, record(t, "tenant-a"))
+		_, err := repository.Save(txCtx, correlation, saved)
 		return err
 	})
 
@@ -269,8 +283,9 @@ func TestRollbackLeavesNothingBehind(t *testing.T) {
 	correlation := scalar(t, domain.NewRequestCorrelationID, "corr-1")
 	rollback := errors.New("回滚")
 
+	saved := record(t, "tenant-a")
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		if _, err := repository.Save(txCtx, correlation, record(t, "tenant-a")); err != nil {
+		if _, err := repository.Save(txCtx, correlation, saved); err != nil {
 			return err
 		}
 		return rollback

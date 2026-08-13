@@ -13,14 +13,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
-
-const uniqueViolation = "23505"
 
 // ReachabilityJudgments 实现 ports.ReachabilityJudgmentStore——写入代数（ADR-0031）
 // 落到真库的第一例：`已有记录`由主键冲突（SQLSTATE 23505）翻译，不是错误。
@@ -146,15 +143,19 @@ func (repository *ReachabilityJudgments) Save(
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
 	}
 
+	// `已有记录`用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会把
+	// 整个事务打进中止态，同一事务里的后续读写全部失败——而`已有记录`是业务答案
+	// （ADR-0031），编排拿到它还要在同一个事务里读回赢家作答。零行命中即已有记录。
 	key := record.Key
-	_, err = executor.Exec(ctx,
+	tag, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.reachability_judgment
 			(tenant_id, correlation_id,
 			 customer_account_id, shipment_request_id, submission_version_id,
 			 declared_parcel_id, service_purpose,
 			 as_of_semantic, as_of_at, as_of_strategy_version,
 			 conclusion, candidates, evidence_gaps, view_revision, judged_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
 		key.CustomerAccountID.String(),
@@ -171,11 +172,11 @@ func (repository *ReachabilityJudgments) Save(
 		record.ViewRevision.String(),
 		record.JudgedAt.UTC(),
 	)
-	if isUniqueViolation(err) {
-		return ports.ReachabilityJudgmentAlreadyRecorded, nil
-	}
 	if err != nil {
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ReachabilityJudgmentAlreadyRecorded, nil
 	}
 	return ports.ReachabilityJudgmentSaved, nil
 }
@@ -369,9 +370,4 @@ func gapScopeFrom(raw string) (domain.EvidenceGapScope, error) {
 	default:
 		return 0, fmt.Errorf("unknown evidence gap scope %q", raw)
 	}
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation
 }
