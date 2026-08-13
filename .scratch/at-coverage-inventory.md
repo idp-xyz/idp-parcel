@@ -18,9 +18,9 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 284 |
-| ② 机制候选 | 227 |
-| ③ 实例/闸门 | 147 |
+| ① 已钉住 | 289 |
+| ② 机制候选 | 226 |
+| ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1083 |
 
@@ -31,9 +31,9 @@
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
-| SA | 178 | 66 | 90 | 22 | 0 |
+| SA | 178 | 67 | 89 | 22 | 0 |
 | TF | 97 | 30 | 60 | 7 | 0 |
-| VE | 170 | 27 | 0 | 19 | 124 |
+| VE | 170 | 31 | 0 | 15 | 124 |
 
 ## ① 已钉住（AT → 测试）
 
@@ -211,14 +211,15 @@
 | `AT-SA-049` | internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control_test.go::TestAnExplicitNoControlCarriesItsCommercialBasis；internal/settlementaccounting/application/apply_pre_acceptance_control_test.go::TestContractWithoutPreAcceptanceControlIsNotApplicable |
 | `AT-SA-051` | internal/settlementaccounting/application/apply_pre_acceptance_control_test.go::TestSameRequestIdentityWithADifferentAmountIsAConflict |
 | `AT-SA-054` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACorrectionAppendsWithoutRewritingTheOriginal |
+| `AT-SA-055` | internal/settlementaccounting/application/cut_off_publish_statement_test.go::TestLateChargesGoToSubsequentPeriods |
 | `AT-SA-056` | internal/settlementaccounting/domain/customer_charge_test.go::TestAdjustmentsDemandTheirSemanticKind |
 | `AT-SA-059` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
 | `AT-SA-060` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
 | `AT-SA-063` | internal/settlementaccounting/domain/customer_statement_test.go::TestACutOffDraftAdmitsOnlyConfirmedCharges |
 | `AT-SA-064` | internal/settlementaccounting/domain/customer_statement_test.go::TestLateChargesAndAdjustmentsGoToSubsequentPeriods |
-| `AT-SA-065` | internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
+| `AT-SA-065` | internal/settlementaccounting/application/cut_off_publish_statement_test.go::TestAStatementPublishesOnlyConfirmedCharges；internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
 | `AT-SA-067` | internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
-| `AT-SA-069` | internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
+| `AT-SA-069` | internal/settlementaccounting/application/cut_off_publish_statement_test.go::TestVoidKeepsTheOriginalOnce；internal/settlementaccounting/domain/customer_statement_test.go::TestAPublishedStatementIsASealedSnapshot |
 | `AT-SA-070` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-071` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
 | `AT-SA-072` | internal/settlementaccounting/domain/customer_statement_test.go::TestADisputeIsIndependentAndScoped |
@@ -237,31 +238,31 @@
 | `AT-SA-096` | internal/settlementaccounting/application/receive_supplier_bill_test.go::TestUndecidedAndNotAcceptedSplitByRecovery；internal/settlementaccounting/domain/supplier_bill_test.go::TestLineMatchingClassifiesDifferencesPerLine |
 | `AT-SA-098` | internal/settlementaccounting/application/receive_supplier_bill_test.go::TestReplayConflictAndIntentRecovery |
 | `AT-SA-100` | internal/settlementaccounting/domain/supplier_bill_test.go::TestABillClaimArrivalIsNotAPayable |
-| `AT-SA-101` | internal/settlementaccounting/domain/external_funds_test.go::TestAnAdoptedFundsFactIsAReferenceNotABalance |
+| `AT-SA-101` | internal/settlementaccounting/application/map_external_funds_test.go::TestAFundsFactAdoptsOnceAsAReference；internal/settlementaccounting/domain/external_funds_test.go::TestAnAdoptedFundsFactIsAReferenceNotABalance |
 | `AT-SA-102` | internal/settlementaccounting/domain/external_funds_test.go::TestAnAdoptedFundsFactIsAReferenceNotABalance |
 | `AT-SA-104` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
 | `AT-SA-106` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
 | `AT-SA-107` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
 | `AT-SA-111` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
-| `AT-SA-112` | internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
+| `AT-SA-112` | internal/settlementaccounting/application/map_external_funds_test.go::TestApplicationConservesAndReversesOnce；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
 | `AT-SA-113` | internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
 | `AT-SA-114` | internal/settlementaccounting/domain/external_funds_test.go::TestAnAdoptedFundsFactIsAReferenceNotABalance |
 | `AT-SA-122` | internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
-| `AT-SA-123` | internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
+| `AT-SA-123` | internal/settlementaccounting/application/allocate_costs_test.go::TestAllocationNeedsAConfiguredRule；internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
 | `AT-SA-124` | internal/settlementaccounting/domain/cost_allocation_test.go::TestAllocationNeedsAVersionedRule |
 | `AT-SA-126` | internal/settlementaccounting/domain/cost_allocation_test.go::TestReallocationKeepsTheOriginalVersion |
-| `AT-SA-137` | internal/settlementaccounting/domain/cost_allocation_test.go::TestOperatingResultIsDerivedNotEdited |
+| `AT-SA-137` | internal/settlementaccounting/application/allocate_costs_test.go::TestOperatingResultsDeriveAndRederive；internal/settlementaccounting/domain/cost_allocation_test.go::TestOperatingResultIsDerivedNotEdited |
 | `AT-SA-138` | internal/settlementaccounting/domain/cost_allocation_test.go::TestReallocationKeepsTheOriginalVersion |
-| `AT-SA-144` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
-| `AT-SA-147` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
+| `AT-SA-144` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestClaimAmountsFormOnlyFromConclusionsAndRules；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
+| `AT-SA-147` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestClaimAmountsFormOnlyFromConclusionsAndRules；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
 | `AT-SA-148` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestRecoveryReceivableIsIndependentOfAcknowledgement |
-| `AT-SA-149` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestRecoveryReceivableIsIndependentOfAcknowledgement |
-| `AT-SA-150` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAcknowledgementCoversOnlyTheAcceptedRange |
-| `AT-SA-152` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
-| `AT-SA-153` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
+| `AT-SA-149` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestRecoveryAndAcknowledgementAreLayered；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestRecoveryReceivableIsIndependentOfAcknowledgement |
+| `AT-SA-150` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestRecoveryAndAcknowledgementAreLayered；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAcknowledgementCoversOnlyTheAcceptedRange |
+| `AT-SA-152` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestAdjustmentsAttachToExistingAmounts；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
+| `AT-SA-153` | internal/settlementaccounting/application/settle_claim_amounts_test.go::TestClaimAmountsFormOnlyFromConclusionsAndRules；internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
 | `AT-SA-155` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
 | `AT-SA-167` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
-| `AT-SA-168` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
+| `AT-SA-168` | internal/settlementaccounting/application/map_external_funds_test.go::TestApplicationConservesAndReversesOnce；internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
 | `AT-SA-170` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
 | `AT-SA-176` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACrossCurrencyCostAdoptsTheEvaluationsConversion |
 | `AT-SA-177` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestAMissingConversionStepStopsTheCost |
@@ -290,7 +291,7 @@
 | `AT-TF-066` | internal/transportfulfillment/domain/effective_delivery_test.go::TestASecondAttemptDeliversAfterAFirstFailure |
 | `AT-TF-067` | internal/transportfulfillment/domain/effective_delivery_test.go::TestADeliveredObjectFormsAnEffectiveDeliveryWithItsPOD |
 | `AT-TF-069` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
-| `AT-TF-072` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
+| `AT-TF-072` | internal/transportfulfillment/adapters/http/register_effective_delivery_test.go::TestCorrectExposesThePredecessorVersion；internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
 | `AT-TF-073` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
 | `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
@@ -320,9 +321,13 @@
 | `AT-VE-131` | internal/visibilityexception/application/handle_claim_test.go::TestARecoveryMatterOpensIndependentlyOfAnyClaim |
 | `AT-VE-133` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
 | `AT-VE-136` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
+| `AT-VE-150` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim |
+| `AT-VE-151` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestACrossAccountProbeIsIndistinguishableFromAMissingParcel |
+| `AT-VE-153` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAQueryWithoutAccountAuthorityIsMalformed |
 | `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
 | `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
+| `AT-VE-168` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnUnreadableStoreIsNoAnswerNotNotFound |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -443,7 +448,6 @@
 | `AT-SA-050` | 规则或币种版本缺失 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-052` | 同一测量通过两个来源重复到达 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-053` | 客户计费规则更正但供应商规则未变 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
-| `AT-SA-055` | 费用确认与截单并发 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-061` | 结算归属日与包裹签收日不同 | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-SA-068` | 发布请求重复 | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
 | `AT-SA-074` | 客户未回复对账单 | UC-SA-003-CUT-OFF-PUBLISH-AND-RECONCILE-CUSTOMER-STATEMENT.md |
@@ -699,14 +703,10 @@
 | `AT-VE-108` | C1/C2 同一共同案件 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-125` | 客户账户或申请人授权不匹配 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-148` | 模拟索赔/追偿通过 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-150` | C1 授权用户按本账户包裹查询 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-151` | C1 使用属于 C2 的有效外部标识查询 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-153` | 请求方只有外部运单号但没有客户账户授权 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-162` | 包裹发生真实拆分或合并 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-165` | 客户普通查询时不存在客户可见异常 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-166` | 合同要求异常主动送达，但客户已在门户查看 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-167` | 未认证收件人尝试公开查询 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-168` | 授权或视图结果保存失败 | 查询/权限/审计面（接入与持久化闸门后） | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 
 ## ④ 机制未落地（起步期上下文，等后续切片）
 
@@ -1182,6 +1182,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 同日追记四（第二轮点名票）：CC 六编排点名 20 处（建案 008/009/010、舱单 380/381/387/389、后续动作 201/202/208、处置核对 233 半边/237/250、案件关闭 307/308、内部限制 345/346/347/348/370），TF 三处新入①（061/069 半边/073）加五处增引（016/019/020/024/062 编排面），NO 合箱三处（035/036/040）——①253→279（CC 0→20、NO 13→16、TF 22→25）、②238→232、③148→147、④444→425，合计 1083 守恒。PP/PG 无 AT 清单（PG 两编排的 GOV-03/04/06/07 机制半边已在测试注释点名，不入本表）；PC 声明与 SA 费用确认维持零点。另同步 `AT-TF-027`/`AT-TF-031` 归属漂移（机会准备编排测试增引）。
 
 同日追记五（UC-TF-001 真空缺票）：监管处置承接编排 `AcceptRegulatoryDispositionHandler` 落地（新领域件 `regulatory_disposition.go` 三格决定+移动授权门、TF ports 尾部四件、编排+测试）并点名 `AT-TF-002`、`AT-TF-003`、`AT-TF-004`（授权缺口半边）、`AT-TF-006`（承接半边）、`AT-TF-010`（承接请求半边）——①279→284（TF 25→30）、②232→227，合计 1083 守恒；另同步 `AT-SA-002` 归属漂移（SA 批并行落测）。
+
+同日追记六（HTTP 接入面首两票）：VE 客户追踪视图查询 HTTP 处理器点名 `AT-VE-150`、`AT-VE-151`、`AT-VE-153`（翻译半边）、`AT-VE-168`（读侧半边）——四条自③实例/闸门迁①（查询/权限面随 HTTP 处理器解禁，ADR-0017「应用层成型后自然解除」）；索赔受理 HTTP 处理器零新点（受理回执面无对应行）。并行 SA 批再盖 `AT-SA-055` 并动 14 行 SA/TF 归属，均已同步。①284→289（VE 27→31、SA 66→67）、②227→226、③147→143、④425 不变，合计 1083 守恒。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 

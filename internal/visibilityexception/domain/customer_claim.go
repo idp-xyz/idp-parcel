@@ -172,6 +172,11 @@ func (claim *ClaimItem) Kind() ClaimKindReference {
 	return claim.kind
 }
 
+// SubmittedAt 是原始提交事实的时间——受理回执与首次索赔期限起算都读它。
+func (claim *ClaimItem) SubmittedAt() time.Time {
+	return claim.submittedAt
+}
+
 // Screen 报告资格审核结果及是否已审。
 func (claim *ClaimItem) Screen() (EligibilityScreen, bool) {
 	return claim.screen, claim.screen.valid()
