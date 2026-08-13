@@ -31,6 +31,7 @@ func (double *disclosureDouble) AssessDisclosure(
 }
 
 type viewStoreKey struct {
+	tenant   domain.TenantID
 	customer domain.CustomerAccountReference
 	parcel   domain.TrackedParcelReference
 }
@@ -48,21 +49,22 @@ func newViewStore() *viewStoreDouble {
 
 func (double *viewStoreDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	customer domain.CustomerAccountReference,
 	parcel domain.TrackedParcelReference,
 ) (domain.CustomerTrackingView, bool, error) {
 	if double.findErr != nil {
 		return domain.CustomerTrackingView{}, false, double.findErr
 	}
-	view, found := double.views[viewStoreKey{customer: customer, parcel: parcel}]
+	view, found := double.views[viewStoreKey{tenant: tenant, customer: customer, parcel: parcel}]
 	return view, found, nil
 }
 
-func (double *viewStoreDouble) Save(_ context.Context, view domain.CustomerTrackingView) error {
+func (double *viewStoreDouble) Save(_ context.Context, tenant domain.TenantID, view domain.CustomerTrackingView) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	double.views[viewStoreKey{customer: view.Customer(), parcel: view.Parcel()}] = view
+	double.views[viewStoreKey{tenant: tenant, customer: view.Customer(), parcel: view.Parcel()}] = view
 	double.saved++
 	return nil
 }
@@ -183,6 +185,7 @@ func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
 func viewCommand(t *testing.T, projectionVersion string) application.DeriveCustomerViewCommand {
 	t.Helper()
 	return application.DeriveCustomerViewCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Customer:   viewCustomer(t),
 		Projection: trackedProjection(t, projectionVersion),
 	}
@@ -459,6 +462,7 @@ func TestACommandWithoutItsMinimumIdentityIsNotAccepted(t *testing.T) {
 	}
 
 	zeroProjection, err := fixture.handler.Handle(context.Background(), application.DeriveCustomerViewCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Customer: viewCustomer(t),
 	})
 	if err != nil {

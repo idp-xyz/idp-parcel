@@ -22,9 +22,11 @@ import (
 // 账户授权的请求在翻译处就立不起来，落在这一格。
 var ErrMalformedRequest = errors.New("visibility exception http: malformed request")
 
-// TrackingViewQuery 是一次已授权的视图查询：货主客户账户来自认证结果，包裹引用来自
-// 请求定位。账户隔离在键上——查询只能问「我名下这个包裹」，问不出别人的。
+// TrackingViewQuery 是一次已授权的视图查询：租户与货主客户账户来自认证结果，包裹
+// 引用来自请求定位。隔离在键上——查询只能问「我名下这个包裹」，问不出别人的；租户
+// 是最高数据隔离边界（ADR-0003），同样只能来自认证结果。
 type TrackingViewQuery struct {
+	Tenant   domain.TenantID
 	Customer domain.CustomerAccountReference
 	Parcel   domain.TrackedParcelReference
 }
@@ -46,6 +48,7 @@ type QueryIntake interface {
 type TrackingViewReader interface {
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		customer domain.CustomerAccountReference,
 		parcel domain.TrackedParcelReference,
 	) (domain.CustomerTrackingView, bool, error)
@@ -86,7 +89,7 @@ func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingView
 			return
 		}
 
-		view, found, err := views.FindCurrent(request.Context(), query.Customer, query.Parcel)
+		view, found, err := views.FindCurrent(request.Context(), query.Tenant, query.Customer, query.Parcel)
 		if err != nil {
 			// 读不回是答案未形成，不是「无轨迹」也不是「无权」——伪装成后两者会让
 			// 调用方把一次该重试的故障当成终局（UC-VE-008 AT-VE-168 的半边）。

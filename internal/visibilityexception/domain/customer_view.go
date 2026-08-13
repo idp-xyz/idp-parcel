@@ -183,6 +183,42 @@ func (view CustomerTrackingView) PriorVersion() (CustomerViewVersionID, bool) {
 	return view.priorVersion, view.priorVersion.valid()
 }
 
+// CustomerViewSnapshot 是持久化层重建视图所需的全量状态。字段经 PublishCustomerView
+// 的同一套不变量验证；前版指回随快照携带——替代关系是已发生的历史，重建不重演
+// Supersede（重演需要原视图在手，而库里只有当前版本）。
+type CustomerViewSnapshot struct {
+	Version      CustomerViewVersionID
+	Customer     CustomerAccountReference
+	Parcel       TrackedParcelReference
+	BasedOn      ProjectionVersionID
+	Dimensions   CustomerViewDimensions
+	PriorVersion CustomerViewVersionID
+	PublishedAt  time.Time
+}
+
+// RehydrateCustomerView 从快照重建视图。读回的东西同样要过一遍不变量，否则一次坏
+// 写入会在这里变成一个看起来合法的视图。
+func RehydrateCustomerView(snapshot CustomerViewSnapshot) (CustomerTrackingView, error) {
+	view, err := PublishCustomerView(
+		snapshot.Version,
+		snapshot.Customer,
+		snapshot.Parcel,
+		snapshot.BasedOn,
+		snapshot.Dimensions,
+		snapshot.PublishedAt,
+	)
+	if err != nil {
+		return CustomerTrackingView{}, err
+	}
+	if snapshot.PriorVersion.valid() {
+		if snapshot.PriorVersion == snapshot.Version {
+			return CustomerTrackingView{}, ErrInvalidCustomerView
+		}
+		view.priorVersion = snapshot.PriorVersion
+	}
+	return view, nil
+}
+
 // Supersede 依据来源更正、有效性变化、ETA 新版本或终局更正形成新的客户视图版本
 // （CONTEXT 生命周期）：换版本、换投影锚、换维度、指回原版；原发布历史保留，但不再
 // 有效的内容不得继续显示为当前事实——「当前」由最新版本承担，原版本只是历史。

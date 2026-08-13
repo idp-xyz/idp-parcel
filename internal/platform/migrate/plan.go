@@ -21,6 +21,8 @@ const (
 	SchemaNetworkRouting = "network_routing"
 	// SchemaNodeOperations 归 node-operations 的业务表所有。
 	SchemaNodeOperations = "node_operations"
+	// SchemaVisibilityException 归 visibility-exception 的业务表所有。
+	SchemaVisibilityException = "visibility_exception"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -74,13 +76,24 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(append(append(steps, shipment...), routing...), nodes...), nil
+	visibility, err := businessSteps(migrations.VisibilityException, SchemaVisibilityException)
+	if err != nil {
+		return nil, err
+	}
+	steps = append(steps, shipment...)
+	steps = append(steps, routing...)
+	steps = append(steps, nodes...)
+	steps = append(steps, visibility...)
+	return steps, nil
 }
 
 // Schemas 返回迁移作业在施加计划前创建的 schema。生产 API 与 Outbox 账号不持有
 // 创建它们的权限。
 func Schemas() []string {
-	return []string{SchemaHistory, SchemaBento, SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations}
+	return []string{
+		SchemaHistory, SchemaBento,
+		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
+	}
 }
 
 func businessSteps(load func() ([]migrations.Asset, error), schema string) ([]Step, error) {

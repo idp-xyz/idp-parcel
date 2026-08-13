@@ -29,6 +29,7 @@ func (double intakeDouble) IntakeQuery(
 }
 
 type readerKey struct {
+	tenant   domain.TenantID
 	customer domain.CustomerAccountReference
 	parcel   domain.TrackedParcelReference
 }
@@ -40,13 +41,14 @@ type readerDouble struct {
 
 func (double readerDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	customer domain.CustomerAccountReference,
 	parcel domain.TrackedParcelReference,
 ) (domain.CustomerTrackingView, bool, error) {
 	if double.err != nil {
 		return domain.CustomerTrackingView{}, false, double.err
 	}
-	view, found := double.views[readerKey{customer: customer, parcel: parcel}]
+	view, found := double.views[readerKey{tenant: tenant, customer: customer, parcel: parcel}]
 	return view, found, nil
 }
 
@@ -62,6 +64,7 @@ func value[T any](t *testing.T, construct func(string) (T, error), raw string) T
 func queryOf(t *testing.T, customer, parcel string) visibilityhttp.TrackingViewQuery {
 	t.Helper()
 	return visibilityhttp.TrackingViewQuery{
+		Tenant:   value(t, domain.NewTenantID, "tenant-1"),
 		Customer: value(t, domain.NewCustomerAccountReference, customer),
 		Parcel:   value(t, domain.NewTrackedParcelReference, parcel),
 	}
@@ -110,7 +113,7 @@ func serve(t *testing.T, intake visibilityhttp.QueryIntake, reader visibilityhtt
 // 维只有状态没有内容，版本与投影锚逐字段在场。
 func TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim(t *testing.T) {
 	reader := readerDouble{views: map[readerKey]domain.CustomerTrackingView{
-		{value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
+		{value(t, domain.NewTenantID, "tenant-1"), value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
 	}}
 
 	recorder := serve(t, intakeDouble{query: queryOf(t, "customer-1", "parcel-1")}, reader, http.MethodGet)
@@ -161,7 +164,7 @@ func TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim(t *testing.T) {
 // 任何差异都是存在性泄露的信道。
 func TestACrossAccountProbeIsIndistinguishableFromAMissingParcel(t *testing.T) {
 	reader := readerDouble{views: map[readerKey]domain.CustomerTrackingView{
-		{value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
+		{value(t, domain.NewTenantID, "tenant-1"), value(t, domain.NewCustomerAccountReference, "customer-1"), value(t, domain.NewTrackedParcelReference, "parcel-1")}: mixedView(t),
 	}}
 
 	crossAccount := serve(t, intakeDouble{query: queryOf(t, "customer-2", "parcel-1")}, reader, http.MethodGet)

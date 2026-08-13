@@ -62,10 +62,11 @@ func (reason CustomerViewUndecidedReason) String() string {
 	}
 }
 
-// DeriveCustomerViewCommand 携带一份新派生的投影与它所属的货主客户账户。账户由调用方
-// 给出而不是从投影推导——投影面向包裹，不认识账户；而「客户视图只包含当前货主客户账户
-// 及其授权对象范围」要求账户隔离从入口就是字段。
+// DeriveCustomerViewCommand 携带一份新派生的投影与它所属的租户、货主客户账户。账户由
+// 调用方给出而不是从投影推导——投影面向包裹，不认识账户；而「客户视图只包含当前货主
+// 客户账户及其授权对象范围」要求账户隔离从入口就是字段。租户同理（ADR-0003）。
 type DeriveCustomerViewCommand struct {
+	TenantID   domain.TenantID
 	Customer   domain.CustomerAccountReference
 	Projection domain.TrackingProjection
 }
@@ -121,15 +122,16 @@ func (handler *DeriveCustomerViewHandler) Handle(
 	ctx context.Context,
 	command DeriveCustomerViewCommand,
 ) (DeriveCustomerViewResult, error) {
-	// 先判身份再读依赖：账户或投影立不起来时用例语义是未受理，而一次已经发出的查询
-	// 收不回来。
-	if command.Customer.String() == "" ||
+	// 先判身份再读依赖：租户、账户或投影立不起来时用例语义是未受理，而一次已经发出
+	// 的查询收不回来。
+	if command.TenantID.String() == "" ||
+		command.Customer.String() == "" ||
 		command.Projection.Version().String() == "" ||
 		command.Projection.Parcel().String() == "" {
 		return DeriveCustomerViewResult{outcome: CustomerViewNotAccepted}, nil
 	}
 
-	current, found, err := handler.deps.Views.FindCurrent(ctx, command.Customer, command.Projection.Parcel())
+	current, found, err := handler.deps.Views.FindCurrent(ctx, command.TenantID, command.Customer, command.Projection.Parcel())
 	if err != nil {
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil
 	}
@@ -180,7 +182,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		return DeriveCustomerViewResult{}, fmt.Errorf("publish customer tracking view: %w", err)
 	}
 
-	if err := handler.deps.Views.Save(ctx, view); err != nil {
+	if err := handler.deps.Views.Save(ctx, command.TenantID, view); err != nil {
 		// 视图没落库就不算发布：交回一个查不回来的视图，门户会按一份不存在的当前版本
 		// 展示。这一支不发意图。
 		return DeriveCustomerViewResult{outcome: CustomerViewUndecided, reason: CustomerViewStoreUnavailable}, nil

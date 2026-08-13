@@ -113,16 +113,17 @@ type DisclosurePolicyView interface {
 	) (DisclosureAnswer, bool, error)
 }
 
-// CustomerViewStore 保存客户当前视图版本。键含客户账户——账户隔离是字段不是约定，
-// 按包裹一个键会让两个客户的授权范围共用一份视图。原版本由替代关系承担历史，库只管
-// 当前。
+// CustomerViewStore 保存客户当前视图版本。键含租户与客户账户——租户是最高数据隔离
+// 边界（ADR-0003），跨越它必须在签名上看得见；账户隔离是字段不是约定，按包裹一个键
+// 会让两个客户的授权范围共用一份视图。原版本由替代关系承担历史，库只管当前。
 type CustomerViewStore interface {
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		customer domain.CustomerAccountReference,
 		parcel domain.TrackedParcelReference,
 	) (domain.CustomerTrackingView, bool, error)
-	Save(ctx context.Context, view domain.CustomerTrackingView) error
+	Save(ctx context.Context, tenant domain.TenantID, view domain.CustomerTrackingView) error
 }
 
 // CustomerViewIdentityFactory 签发客户视图版本标识。与投影身份工厂分开：投影派生与
