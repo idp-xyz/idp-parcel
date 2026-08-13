@@ -268,3 +268,44 @@ type NotificationHandoffIntent struct {
 type NotificationHandoff interface {
 	HandOffNotification(ctx context.Context, intent NotificationHandoffIntent) error
 }
+
+// ActiveCaseView 回答案件是否在场且未关闭。案件本体的读写归案件编排，这里只要一个
+// 在场判据：处置请求只能挂在活案件下——「案件范围缩小、改派、归并或关闭前必须盘点
+// 全部未完成处置请求」（CONTEXT），关闭后再挂新请求就是绕过那次盘点。
+type ActiveCaseView interface {
+	CaseActive(ctx context.Context, caseID domain.CaseID) (active bool, found bool, err error)
+}
+
+// DispositionRequestStore 按稳定身份与幂等键找回并保存处置请求。
+//
+// FindCurrent 按（案件+动作+范围）交回当前那份——未被替代的请求；同键重复到达据它
+// 短路，不重发。SaveSupersession 把被替代者与后继同一提交：只落一半，替代关系与新
+// 意图会各说各话。
+type DispositionRequestStore interface {
+	FindByID(ctx context.Context, id domain.DispositionRequestID) (*domain.DispositionRequest, bool, error)
+	FindCurrent(
+		ctx context.Context,
+		caseID domain.CaseID,
+		action domain.RequestedActionReference,
+		scope domain.RequestScopeReference,
+	) (*domain.DispositionRequest, bool, error)
+	Save(ctx context.Context, request *domain.DispositionRequest) error
+	SaveSupersession(ctx context.Context, prior, successor *domain.DispositionRequest) error
+}
+
+// DispositionRequestIdentityFactory 签发处置请求标识。与其余身份工厂分开，理由相同。
+type DispositionRequestIdentityFactory interface {
+	NextDispositionRequestID(ctx context.Context) (domain.DispositionRequestID, error)
+}
+
+// DispositionHandoffIntent 把已成立的处置请求交给发送侧下游。真实目标上下文的受理在
+// 对方——这里只是发送意图，由请求标识认领，重放重发同一份（ADR-0043）。
+type DispositionHandoffIntent struct {
+	Request *domain.DispositionRequest
+}
+
+// DispositionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type DispositionHandoff interface {
+	HandOffDispositionRequest(ctx context.Context, intent DispositionHandoffIntent) error
+}

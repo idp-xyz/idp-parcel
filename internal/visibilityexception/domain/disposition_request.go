@@ -185,6 +185,16 @@ func (request *DispositionRequest) Target() SourceContext {
 	return request.target
 }
 
+// Action 与 Scope 是（案件+动作+范围）幂等键的两维，适配器按它们建索引——不导出，
+// 存储连键都立不起来。
+func (request *DispositionRequest) Action() RequestedActionReference {
+	return request.action
+}
+
+func (request *DispositionRequest) Scope() RequestScopeReference {
+	return request.scope
+}
+
 func (request *DispositionRequest) IntentVersion() int {
 	return request.intentVersion
 }
