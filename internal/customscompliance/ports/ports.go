@@ -367,6 +367,65 @@ type ManifestHandoff interface {
 	HandOffManifest(ctx context.Context, intent ManifestHandoffIntent) error
 }
 
+// CaseRequirementJudgment 是服务产品与运营责任对「此监管范围要不要建案」的判断。
+type CaseRequirementJudgment struct {
+	Required bool
+	Basis    string
+}
+
+// CaseRequirementView 判断当前服务责任是否要求为该范围建立关务案件。规则目录属
+// 产品与合同实例；configured=false 即规则未登记——未决，不是「不要求」。
+type CaseRequirementView interface {
+	JudgeCaseRequirement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		jurisdiction domain.RegulatoryJurisdictionReference,
+		direction domain.ManifestDirection,
+		procedure domain.CustomsProcedureReference,
+	) (CaseRequirementJudgment, bool, error)
+}
+
+// CustomsCaseKey 是关务案件的身份键：固定监管范围四维——同一法律行为一案；同一
+// 包裹进入另一独立监管程序自然换键（一包裹可关联多个彼此独立的案件）。
+type CustomsCaseKey struct {
+	TenantID     domain.TenantID
+	Jurisdiction domain.RegulatoryJurisdictionReference
+	Direction    domain.ManifestDirection
+	Procedure    domain.CustomsProcedureReference
+	Obligation   domain.ObligationScopeReference
+}
+
+type CustomsCaseSaveOutcome uint8
+
+const (
+	CustomsCaseSaveOutcomeInvalid CustomsCaseSaveOutcome = iota
+	CustomsCaseSaved
+	CustomsCaseAlreadyRecorded
+)
+
+// CustomsCaseStore 按身份键找回并保存案件（写入代数同 ADR-0031）。
+type CustomsCaseStore interface {
+	FindByKey(ctx context.Context, key CustomsCaseKey) (domain.CustomsCase, bool, error)
+	Save(ctx context.Context, key CustomsCaseKey, customsCase domain.CustomsCase) (CustomsCaseSaveOutcome, error)
+}
+
+// CaseIdentityFactory 为新案件签发标识。
+type CaseIdentityFactory interface {
+	MintCaseID(ctx context.Context) (domain.CustomsCaseID, error)
+}
+
+// CustomsCaseHandoffIntent 把案件建立交给适用下游（申报链与 VE 案件视图消费）。
+type CustomsCaseHandoffIntent struct {
+	Key  CustomsCaseKey
+	Case domain.CustomsCase
+}
+
+// CustomsCaseHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type CustomsCaseHandoff interface {
+	HandOffCase(ctx context.Context, intent CustomsCaseHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
