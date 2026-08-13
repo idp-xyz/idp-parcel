@@ -151,3 +151,58 @@ type SupplierBillHandoffIntent struct {
 type SupplierBillHandoff interface {
 	HandOffSupplierBill(ctx context.Context, intent SupplierBillHandoffIntent) error
 }
+
+// ConfirmationCondition 是费用类型确认条件的核对应答：Met 时携带确认依据（交付确认、
+// 里程碑达成……），未满足时携带缺口引用——缺口是续办入口，不是拒绝理由。
+type ConfirmationCondition struct {
+	Met   bool
+	Basis domain.ConfirmationBasisReference
+	Gap   string
+}
+
+// ConfirmationConditionView 取该费用类型的确认条件核对结果。found=false 表示确认
+// 条件目录未配置——实例半边未提供时确认停在未决，不默认转正（UC-SA-002「费用已确认：
+// 确认条件已满足」，条件本身是实例参数）。
+type ConfirmationConditionView interface {
+	LoadConfirmationCondition(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerChargeID,
+		feeItem domain.FeeItemReference,
+	) (ConfirmationCondition, bool, error)
+}
+
+type ChargeSaveOutcome uint8
+
+const (
+	ChargeSaveOutcomeInvalid ChargeSaveOutcome = iota
+	ChargeSaved
+	ChargeAlreadyConfirmed
+)
+
+// CustomerChargeStore 按标识找回并保存客户费用（写入代数同 ADR-0031：并发二确落败
+// 读回赢家，不覆盖）。
+type CustomerChargeStore interface {
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.CustomerChargeID,
+	) (domain.CustomerCharge, bool, error)
+	SaveConfirmed(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerCharge,
+	) (ChargeSaveOutcome, error)
+}
+
+// ChargeConfirmationHandoffIntent 把已确认的费用交给对账单纳入消费（UC-SA-003 只
+// 纳已确认费用）。意图由费用标识认领，重放重发同一份（ADR-0043 同款纪律）。
+type ChargeConfirmationHandoffIntent struct {
+	TenantID domain.TenantID
+	Charge   domain.CustomerCharge
+}
+
+// ChargeConfirmationHandoff 今天没有实现，唯一实现是测试替身。
+type ChargeConfirmationHandoff interface {
+	HandOffChargeConfirmation(ctx context.Context, intent ChargeConfirmationHandoffIntent) error
+}
