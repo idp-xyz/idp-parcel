@@ -168,3 +168,46 @@ type OffsitePickupRegistrationIntent struct {
 type OffsitePickupRegistrationHandoff interface {
 	HandOffOffsitePickupRegistration(ctx context.Context, intent OffsitePickupRegistrationIntent) error
 }
+
+// TransportHandoverKey 是交接判断登记的幂等键：判断版本由裁决过程指名，同一
+// （租户+对象+范围+版本）只登一次；更正是新版本新登记，版本链在本体上回指。
+type TransportHandoverKey struct {
+	TenantID domain.TenantID
+	Object   domain.CarriedObjectReference
+	Scope    domain.HandoverScopeReference
+	Version  domain.HandoverResultVersion
+}
+
+// TransportHandoverRecord 是一次交接判断登记越过提交边界留下的东西。
+type TransportHandoverRecord struct {
+	Key           TransportHandoverKey
+	ContentDigest string
+	Handover      domain.TransportHandover
+	RecordedAt    time.Time
+}
+
+type HandoverSaveOutcome uint8
+
+const (
+	HandoverSaveOutcomeInvalid HandoverSaveOutcome = iota
+	HandoverSaved
+	HandoverAlreadyRegistered
+)
+
+// TransportHandoverRegistry 按幂等键找回并保存交接判断（写入代数同 ADR-0031）。
+type TransportHandoverRegistry interface {
+	FindByKey(ctx context.Context, key TransportHandoverKey) (TransportHandoverRecord, bool, error)
+	Save(ctx context.Context, record TransportHandoverRecord) (HandoverSaveOutcome, error)
+}
+
+// TransportHandoverRegistrationIntent 把交接判断交给下游消费：一份意图，消费方自分
+// ——node-operations 的控制转移只认得出 TransferOutBasis 的已交接，network-routing
+// 以 TransportHandoverControl 证据种类触发重判；拒收与待确认同样是它们要看的事实。
+type TransportHandoverRegistrationIntent struct {
+	Record TransportHandoverRecord
+}
+
+// TransportHandoverRegistrationHandoff 今天没有实现，唯一实现是测试替身。
+type TransportHandoverRegistrationHandoff interface {
+	HandOffTransportHandover(ctx context.Context, intent TransportHandoverRegistrationIntent) error
+}
