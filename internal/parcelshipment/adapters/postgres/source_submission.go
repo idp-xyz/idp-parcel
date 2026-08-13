@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -25,8 +24,6 @@ import (
 // 「原始内容一经保全不可改写」正是来源保全这一步存在的理由。调用方重试即可读到
 // 已保全记录并走重放那一支。
 var ErrAlreadyPreserved = errors.New("parcel shipment postgres: source submission already preserved")
-
-const uniqueViolation = "23505"
 
 // SourceSubmissions 实现 ports.SourceSubmissionRepository。
 type SourceSubmissions struct {
@@ -95,6 +92,11 @@ func (repository *SourceSubmissions) FindPreserved(
 // 走 RequireExecutor：无事务时它返回 ErrTransactionRequired 而不是改用连接池。
 // 这条正是框架合同要的保证——来源保全必须落在一个明确的事务里，否则它与同一步
 // 里的其他写入不再同生共死。
+//
+// 「已保全」用 ON CONFLICT DO NOTHING 加零行判定翻译，不捕 23505——同一事务里撞
+// 唯一约束会把事务打进中止态，调用方在保全之后的业务判断会被连带回滚（本仓真库
+// 纪律，本文件曾是捕码译法的孤例）。零行时仍返回 ErrAlreadyPreserved：并发竞态下
+// 后到者要读到的是错误而不是覆盖，语义与此前一致，事务保持可用。
 func (repository *SourceSubmissions) Preserve(
 	ctx context.Context,
 	submission domain.SourceSubmissionFingerprint,
@@ -105,11 +107,12 @@ func (repository *SourceSubmissions) Preserve(
 	}
 
 	identity := submission.Identity()
-	_, err = executor.Exec(ctx,
+	tag, err := executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.source_submission
 			(tenant_id, customer_account_id, source, source_request_key,
 			 payload_digest, occurred_at, received_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT (tenant_id, customer_account_id, source, source_request_key) DO NOTHING`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
 		identity.Source().String(),
@@ -118,11 +121,11 @@ func (repository *SourceSubmissions) Preserve(
 		submission.OccurredAt().UTC(),
 		submission.ReceivedAt().UTC(),
 	)
-	if isUniqueViolation(err) {
-		return fmt.Errorf("%w", ErrAlreadyPreserved)
-	}
 	if err != nil {
 		return fmt.Errorf("preserve source: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("%w", ErrAlreadyPreserved)
 	}
 	return nil
 }
@@ -158,9 +161,4 @@ func (repository *SourceSubmissions) AppendObservation(
 		return fmt.Errorf("append source observation: %w", err)
 	}
 	return nil
-}
-
-func isUniqueViolation(err error) bool {
-	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && pgErr.Code == uniqueViolation
 }

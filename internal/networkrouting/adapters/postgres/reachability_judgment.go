@@ -20,7 +20,8 @@ import (
 )
 
 // ReachabilityJudgments 实现 ports.ReachabilityJudgmentStore——写入代数（ADR-0031）
-// 落到真库的第一例：`已有记录`由主键冲突（SQLSTATE 23505）翻译，不是错误。
+// 落到真库的第一例：`已有记录`由 ON CONFLICT DO NOTHING 加零行判定翻译，不是错误
+// （不捕 23505——撞约束会把事务打进中止态，Save 之后编排还要同事务读回赢家）。
 type ReachabilityJudgments struct {
 	db *bentopg.DB
 }
