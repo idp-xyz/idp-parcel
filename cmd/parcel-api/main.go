@@ -35,7 +35,7 @@ func run(logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.New(buildinfo.Current()),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints()),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

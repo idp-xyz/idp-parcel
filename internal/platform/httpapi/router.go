@@ -1,5 +1,5 @@
 // Package httpapi 只拥有 Parcel 各二进制共享的传输层 HTTP 路由。业务端点不落在这里，
-// 按 ADR-0018 归各上下文的 adapters/http。
+// 按 ADR-0018 归各上下文的 adapters/http；本包只提供把它们挂上路由的形状。
 package httpapi
 
 import (
@@ -12,8 +12,24 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 )
 
+// BusinessEndpoint 是一个待挂载的业务端点。处理器由各上下文的 adapters/http 构造
+// （含各自的 Intake 与应用编排），这里只收成品——路由层不参与任何业务翻译。
+type BusinessEndpoint struct {
+	// Method 与 Pattern 是挂载位置。方法约束由各处理器自守（405 是处理器的答案，
+	// 不在路由层重复设卡），Pattern 只定路径。
+	Method  string
+	Pattern string
+	Handler http.Handler
+}
+
 // New 返回进程级端点的传输层路由。
 func New(info buildinfo.Info) http.Handler {
+	return NewWithEndpoints(info, nil)
+}
+
+// NewWithEndpoints 在进程级端点之外挂载业务端点。空清单合法——那正是接线闸门关着
+// 时的形状：装配缝已开，逐端点等各自的 Intake 实现（PAR-INT-01）就位。
+func NewWithEndpoints(info buildinfo.Info, endpoints []BusinessEndpoint) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
 	router.Use(middleware.Recoverer)
@@ -25,6 +41,10 @@ func New(info buildinfo.Info) http.Handler {
 		response.Header().Set("Cache-Control", "no-store")
 		writeJSON(response, http.StatusOK, info)
 	})
+
+	for _, endpoint := range endpoints {
+		router.Method(endpoint.Method, endpoint.Pattern, endpoint.Handler)
+	}
 
 	return router
 }
