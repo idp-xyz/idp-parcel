@@ -14,8 +14,9 @@ import (
 var claimSubmittedAt = time.Date(2026, 8, 13, 6, 0, 0, 0, time.UTC)
 
 type claimKey struct {
-	batch domain.ClaimBatchReference
-	item  domain.ClaimItemID
+	tenant domain.TenantID
+	batch  domain.ClaimBatchReference
+	item   domain.ClaimItemID
 }
 
 type claimStoreDouble struct {
@@ -31,21 +32,22 @@ func newClaimStore() *claimStoreDouble {
 
 func (double *claimStoreDouble) FindByBatchItem(
 	_ context.Context,
+	tenant domain.TenantID,
 	batch domain.ClaimBatchReference,
 	item domain.ClaimItemID,
 ) (*domain.ClaimItem, bool, error) {
 	if double.findErr != nil {
 		return nil, false, double.findErr
 	}
-	claim, found := double.claims[claimKey{batch: batch, item: item}]
+	claim, found := double.claims[claimKey{tenant: tenant, batch: batch, item: item}]
 	return claim, found, nil
 }
 
-func (double *claimStoreDouble) Save(_ context.Context, claim *domain.ClaimItem) error {
+func (double *claimStoreDouble) Save(_ context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	double.claims[claimKey{batch: claim.Batch(), item: claim.ID()}] = claim
+	double.claims[claimKey{tenant: tenant, batch: claim.Batch(), item: claim.ID()}] = claim
 	double.saves++
 	return nil
 }
@@ -69,6 +71,7 @@ func (double *eligibilityRuleDouble) ScreenClaim(
 }
 
 type recoveryKey struct {
+	tenant       domain.TenantID
 	caseID       domain.CaseID
 	counterparty domain.CounterpartyReference
 	scope        domain.RequestScopeReference
@@ -91,6 +94,7 @@ func newRecoveryStore() *recoveryStoreDouble {
 
 func (double *recoveryStoreDouble) FindByID(
 	_ context.Context,
+	_ domain.TenantID,
 	id domain.RecoveryMatterID,
 ) (domain.RecoveryMatter, bool, error) {
 	if double.findErr != nil {
@@ -102,6 +106,7 @@ func (double *recoveryStoreDouble) FindByID(
 
 func (double *recoveryStoreDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	caseID domain.CaseID,
 	counterparty domain.CounterpartyReference,
 	scope domain.RequestScopeReference,
@@ -109,21 +114,22 @@ func (double *recoveryStoreDouble) FindCurrent(
 	if double.findErr != nil {
 		return domain.RecoveryMatter{}, false, double.findErr
 	}
-	matter, found := double.current[recoveryKey{caseID: caseID, counterparty: counterparty, scope: scope}]
+	matter, found := double.current[recoveryKey{tenant: tenant, caseID: caseID, counterparty: counterparty, scope: scope}]
 	return matter, found, nil
 }
 
-func (double *recoveryStoreDouble) Save(_ context.Context, matter domain.RecoveryMatter) error {
+func (double *recoveryStoreDouble) Save(_ context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
 	double.byID[matter.ID()] = matter
-	double.current[recoveryKey{caseID: matter.Case(), counterparty: matter.Counterparty(), scope: matter.Scope()}] = matter
+	double.current[recoveryKey{tenant: tenant, caseID: matter.Case(), counterparty: matter.Counterparty(), scope: matter.Scope()}] = matter
 	return nil
 }
 
 func (double *recoveryStoreDouble) CountActions(
 	_ context.Context,
+	_ domain.TenantID,
 	matter domain.RecoveryMatterID,
 	kind domain.RecoveryActionKind,
 ) (int, error) {
@@ -139,7 +145,7 @@ func (double *recoveryStoreDouble) CountActions(
 	return count, nil
 }
 
-func (double *recoveryStoreDouble) AppendAction(_ context.Context, action domain.RecoveryAction) error {
+func (double *recoveryStoreDouble) AppendAction(_ context.Context, _ domain.TenantID, action domain.RecoveryAction) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
@@ -211,6 +217,7 @@ func newClaimFixture(t *testing.T) *claimFixture {
 func receiveCommand(t *testing.T, item string) application.ReceiveClaimCommand {
 	t.Helper()
 	return application.ReceiveClaimCommand{
+		TenantID:    mustValue(t, domain.NewTenantID, "tenant-1"),
 		Batch:       mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Item:        mustValue(t, domain.NewClaimItemID, item),
 		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
@@ -224,14 +231,16 @@ func receiveCommand(t *testing.T, item string) application.ReceiveClaimCommand {
 func screenCommand(t *testing.T, item string) application.ScreenClaimCommand {
 	t.Helper()
 	return application.ScreenClaimCommand{
-		Batch: mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
-		Item:  mustValue(t, domain.NewClaimItemID, item),
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
+		Batch:    mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		Item:     mustValue(t, domain.NewClaimItemID, item),
 	}
 }
 
 func concludeCommand(t *testing.T, item string) application.ConcludeClaimCommand {
 	t.Helper()
 	return application.ConcludeClaimCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Batch:      mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Item:       mustValue(t, domain.NewClaimItemID, item),
 		Conclusion: domain.LiabilityPartiallyEstablished,
@@ -242,6 +251,7 @@ func concludeCommand(t *testing.T, item string) application.ConcludeClaimCommand
 func openRecoveryCommand(t *testing.T) application.OpenRecoveryCommand {
 	t.Helper()
 	return application.OpenRecoveryCommand{
+		TenantID:     mustValue(t, domain.NewTenantID, "tenant-1"),
 		Case:         mustValue(t, domain.NewCaseID, "case-1"),
 		Counterparty: mustValue(t, domain.NewCounterpartyReference, "supplier-1"),
 		Basis:        mustValue(t, domain.NewLiabilityBasisReference, "supplier-agreement/v1"),
@@ -340,6 +350,7 @@ func TestUnconfiguredEligibilityCatalogueIsUndecidedNotDefaulted(t *testing.T) {
 			result.Outcome(), result.UndecidedReason())
 	}
 	claim, _, _ := fixture.claims.FindByBatchItem(ctx,
+		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		mustValue(t, domain.NewClaimItemID, "item-1"))
 	if _, screened := claim.Screen(); screened {
@@ -413,6 +424,7 @@ func TestAReviewWithinTheWindowFormsANewConclusionVersionKeepingThePrior(t *test
 	intentsBefore := len(fixture.settlement.intents)
 
 	reviewed, err := fixture.handler.ReviewClaim(ctx, application.ReviewClaimCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Batch:      mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Item:       mustValue(t, domain.NewClaimItemID, "item-1"),
 		Conclusion: domain.LiabilityFullyEstablished,
@@ -468,6 +480,7 @@ func TestAReviewAfterTheWindowIsRefusedKeepingTheOriginalConclusion(t *testing.T
 		Clock:       fixedClock{at: claimSubmittedAt.Add(2 * time.Hour)},
 	})
 	result, err := late.handler.ReviewClaim(ctx, application.ReviewClaimCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Batch:      mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Item:       mustValue(t, domain.NewClaimItemID, "item-1"),
 		Conclusion: domain.LiabilityFullyEstablished,
@@ -533,6 +546,7 @@ func TestRecoveryActionsKeepEveryAttemptPerKind(t *testing.T) {
 	matter, _ := opened.Recovery()
 	record := func(kind domain.RecoveryActionKind, milestone domain.RecoveryActionMilestone) application.HandleClaimResult {
 		result, err := fixture.handler.RecordRecovery(ctx, application.RecordRecoveryCommand{
+			TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 			Matter:     matter.ID(),
 			Kind:       kind,
 			ContentRef: "notice-content/v1",

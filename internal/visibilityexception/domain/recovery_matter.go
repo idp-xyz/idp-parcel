@@ -122,6 +122,18 @@ func (matter RecoveryMatter) Scope() RequestScopeReference {
 	return matter.scope
 }
 
+func (matter RecoveryMatter) LegalEntity() LegalEntityReference {
+	return matter.legalEntity
+}
+
+func (matter RecoveryMatter) Evidence() RequestEvidenceReference {
+	return matter.evidence
+}
+
+func (matter RecoveryMatter) OpenedAt() time.Time {
+	return matter.openedAt
+}
+
 // RecoveryActionKind 是追偿动作的封闭二值：预先通知与正式主张不能合并为一个模糊的
 // 「已追偿」（CONTEXT 硬句 184 末句）。
 type RecoveryActionKind uint8

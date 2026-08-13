@@ -375,15 +375,17 @@ type VisibilityGapHandoff interface {
 	HandOffVisibilityGap(ctx context.Context, intent VisibilityGapHandoffIntent) error
 }
 
-// ClaimStore 按（批次+项）找回并保存索赔项。键含批次：项标识由客户提交侧建立，
-// 批次内唯一是它的口径，跨批次撞号不该互相干扰。
+// ClaimStore 按（租户+批次+项）找回并保存索赔项。键含租户：租户是最高数据隔离边界
+// （ADR-0003），批次引用只在租户内唯一。键含批次：项标识由客户提交侧建立，批次内
+// 唯一是它的口径，跨批次撞号不该互相干扰。
 type ClaimStore interface {
 	FindByBatchItem(
 		ctx context.Context,
+		tenant domain.TenantID,
 		batch domain.ClaimBatchReference,
 		item domain.ClaimItemID,
 	) (*domain.ClaimItem, bool, error)
-	Save(ctx context.Context, claim *domain.ClaimItem) error
+	Save(ctx context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error
 }
 
 // EligibilityQuery 是资格审核规则的输入：申请人授权、客户账户、合同版本、索赔时限、
@@ -424,24 +426,31 @@ type LiabilityHandoff interface {
 	HandOffLiability(ctx context.Context, intent LiabilityHandoffIntent) error
 }
 
-// RecoveryStore 保存追偿事项与动作记录。FindCurrent 按（案件+相对方+范围）承担事项
-// 幂等；动作是只增记录，CountActions 按（事项+动作种类）计数供 attempt 递增——预先
-// 通知与正式主张各有各的尝试序列，合并计数会让一类动作吃掉另一类的次序。
+// RecoveryStore 保存追偿事项与动作记录。租户是最高数据隔离边界（ADR-0003），跨越它
+// 必须在签名上看得见。FindCurrent 按（案件+相对方+范围）承担事项幂等；动作是只增
+// 记录，CountActions 按（事项+动作种类）计数供 attempt 递增——预先通知与正式主张
+// 各有各的尝试序列，合并计数会让一类动作吃掉另一类的次序。
 type RecoveryStore interface {
-	FindByID(ctx context.Context, id domain.RecoveryMatterID) (domain.RecoveryMatter, bool, error)
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.RecoveryMatterID,
+	) (domain.RecoveryMatter, bool, error)
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		caseID domain.CaseID,
 		counterparty domain.CounterpartyReference,
 		scope domain.RequestScopeReference,
 	) (domain.RecoveryMatter, bool, error)
-	Save(ctx context.Context, matter domain.RecoveryMatter) error
+	Save(ctx context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) error
 	CountActions(
 		ctx context.Context,
+		tenant domain.TenantID,
 		matter domain.RecoveryMatterID,
 		kind domain.RecoveryActionKind,
 	) (int, error)
-	AppendAction(ctx context.Context, action domain.RecoveryAction) error
+	AppendAction(ctx context.Context, tenant domain.TenantID, action domain.RecoveryAction) error
 }
 
 // RecoveryIdentityFactory 签发追偿事项标识。与其余身份工厂分开，理由相同。

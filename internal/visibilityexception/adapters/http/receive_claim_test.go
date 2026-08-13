@@ -36,8 +36,9 @@ func (double claimIntakeDouble) IntakeClaim(
 // httpClaimStore 是给真编排充当索赔库的替身——适配器测试消费真 HandleClaimHandler，
 // 与 PS 参照同款：结果类型不可外部拼装，替身只替端口。
 type httpClaimStoreKey struct {
-	batch domain.ClaimBatchReference
-	item  domain.ClaimItemID
+	tenant domain.TenantID
+	batch  domain.ClaimBatchReference
+	item   domain.ClaimItemID
 }
 
 type httpClaimStore struct {
@@ -51,18 +52,19 @@ func newHTTPClaimStore() *httpClaimStore {
 
 func (store *httpClaimStore) FindByBatchItem(
 	_ context.Context,
+	tenant domain.TenantID,
 	batch domain.ClaimBatchReference,
 	item domain.ClaimItemID,
 ) (*domain.ClaimItem, bool, error) {
 	if store.findErr != nil {
 		return nil, false, store.findErr
 	}
-	claim, found := store.claims[httpClaimStoreKey{batch: batch, item: item}]
+	claim, found := store.claims[httpClaimStoreKey{tenant: tenant, batch: batch, item: item}]
 	return claim, found, nil
 }
 
-func (store *httpClaimStore) Save(_ context.Context, claim *domain.ClaimItem) error {
-	store.claims[httpClaimStoreKey{batch: claim.Batch(), item: claim.ID()}] = claim
+func (store *httpClaimStore) Save(_ context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error {
+	store.claims[httpClaimStoreKey{tenant: tenant, batch: claim.Batch(), item: claim.ID()}] = claim
 	return nil
 }
 
@@ -77,12 +79,13 @@ func (inertEligibility) ScreenClaim(
 
 type inertRecoveries struct{}
 
-func (inertRecoveries) FindByID(_ context.Context, _ domain.RecoveryMatterID) (domain.RecoveryMatter, bool, error) {
+func (inertRecoveries) FindByID(_ context.Context, _ domain.TenantID, _ domain.RecoveryMatterID) (domain.RecoveryMatter, bool, error) {
 	return domain.RecoveryMatter{}, false, nil
 }
 
 func (inertRecoveries) FindCurrent(
 	_ context.Context,
+	_ domain.TenantID,
 	_ domain.CaseID,
 	_ domain.CounterpartyReference,
 	_ domain.RequestScopeReference,
@@ -90,17 +93,22 @@ func (inertRecoveries) FindCurrent(
 	return domain.RecoveryMatter{}, false, nil
 }
 
-func (inertRecoveries) Save(_ context.Context, _ domain.RecoveryMatter) error { return nil }
+func (inertRecoveries) Save(_ context.Context, _ domain.TenantID, _ domain.RecoveryMatter) error {
+	return nil
+}
 
 func (inertRecoveries) CountActions(
 	_ context.Context,
+	_ domain.TenantID,
 	_ domain.RecoveryMatterID,
 	_ domain.RecoveryActionKind,
 ) (int, error) {
 	return 0, nil
 }
 
-func (inertRecoveries) AppendAction(_ context.Context, _ domain.RecoveryAction) error { return nil }
+func (inertRecoveries) AppendAction(_ context.Context, _ domain.TenantID, _ domain.RecoveryAction) error {
+	return nil
+}
 
 type inertRecoveryIdentities struct{}
 
@@ -141,6 +149,7 @@ func newClaimReceiver(store *httpClaimStore) *application.HandleClaimHandler {
 func claimCommandOf(t *testing.T) application.ReceiveClaimCommand {
 	t.Helper()
 	return application.ReceiveClaimCommand{
+		TenantID:    value(t, domain.NewTenantID, "tenant-9"),
 		Batch:       value(t, domain.NewClaimBatchReference, "claim-batch-9"),
 		Item:        value(t, domain.NewClaimItemID, "item-9"),
 		Customer:    value(t, domain.NewCustomerAccountReference, "customer-1"),

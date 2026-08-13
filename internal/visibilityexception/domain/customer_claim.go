@@ -196,6 +196,100 @@ func (claim *ClaimItem) PriorConclusion() (LiabilityConclusion, bool) {
 	return claim.priorConclusion, claim.priorConclusion.valid()
 }
 
+// ClaimItemSnapshot 是持久化层重建索赔项所需的全量状态。三判各自的状态与依据、
+// 复核前版、撤回时间都是已发生的判断历史——重建不重演三判方法（重演需要按原次序
+// 原时间走一遍，而库里只有结果）。
+type ClaimItemSnapshot struct {
+	ID              ClaimItemID
+	Batch           ClaimBatchReference
+	Customer        CustomerAccountReference
+	Contract        ContractScopeReference
+	Target          RequestScopeReference
+	Kind            ClaimKindReference
+	SubmittedAt     time.Time
+	Screen          EligibilityScreen
+	ScreenBasis     string
+	Conclusion      LiabilityConclusion
+	ConcludedAt     time.Time
+	ReviewBy        time.Time
+	PriorConclusion LiabilityConclusion
+	Withdrawn       bool
+	WithdrawnAt     time.Time
+}
+
+// Snapshot 折出索赔项的全量状态供持久化。
+func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
+	return ClaimItemSnapshot{
+		ID:              claim.id,
+		Batch:           claim.batch,
+		Customer:        claim.customer,
+		Contract:        claim.contract,
+		Target:          claim.target,
+		Kind:            claim.kind,
+		SubmittedAt:     claim.submittedAt,
+		Screen:          claim.screen,
+		ScreenBasis:     claim.screenBasis,
+		Conclusion:      claim.conclusion,
+		ConcludedAt:     claim.concludedAt,
+		ReviewBy:        claim.reviewBy,
+		PriorConclusion: claim.priorConclusion,
+		Withdrawn:       claim.withdrawn,
+		WithdrawnAt:     claim.withdrawnAt,
+	}
+}
+
+// RehydrateClaimItem 从快照重建索赔项并重验三判形状：审过必有依据、结论必经过审
+// （资格通过）且带复核期限、前版只随复核出现且不等于现结论、撤回与结论互斥——
+// 一次坏写入不得变成一个看起来合法的判断历史。
+func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
+	if !snapshot.ID.valid() ||
+		!snapshot.Batch.valid() ||
+		!snapshot.Customer.valid() ||
+		!snapshot.Contract.valid() ||
+		!snapshot.Target.valid() ||
+		!snapshot.Kind.valid() ||
+		snapshot.SubmittedAt.IsZero() {
+		return nil, ErrInvalidClaim
+	}
+	if snapshot.Screen.valid() != (snapshot.ScreenBasis != "") {
+		return nil, ErrInvalidClaim
+	}
+	if snapshot.Conclusion.valid() {
+		if snapshot.Screen != ClaimEligible ||
+			snapshot.ConcludedAt.IsZero() || snapshot.ReviewBy.IsZero() ||
+			snapshot.ConcludedAt.After(snapshot.ReviewBy) ||
+			snapshot.Withdrawn {
+			return nil, ErrInvalidClaim
+		}
+	} else if !snapshot.ConcludedAt.IsZero() || !snapshot.ReviewBy.IsZero() ||
+		snapshot.PriorConclusion.valid() {
+		return nil, ErrInvalidClaim
+	}
+	if snapshot.PriorConclusion.valid() && snapshot.PriorConclusion == snapshot.Conclusion {
+		return nil, ErrInvalidClaim
+	}
+	if snapshot.Withdrawn != !snapshot.WithdrawnAt.IsZero() {
+		return nil, ErrInvalidClaim
+	}
+	return &ClaimItem{
+		id:              snapshot.ID,
+		batch:           snapshot.Batch,
+		customer:        snapshot.Customer,
+		contract:        snapshot.Contract,
+		target:          snapshot.Target,
+		kind:            snapshot.Kind,
+		submittedAt:     snapshot.SubmittedAt.UTC(),
+		screen:          snapshot.Screen,
+		screenBasis:     snapshot.ScreenBasis,
+		conclusion:      snapshot.Conclusion,
+		concludedAt:     snapshot.ConcludedAt.UTC(),
+		reviewBy:        snapshot.ReviewBy.UTC(),
+		priorConclusion: snapshot.PriorConclusion,
+		withdrawn:       snapshot.Withdrawn,
+		withdrawnAt:     snapshot.WithdrawnAt.UTC(),
+	}, nil
+}
+
 // ScreenEligibility 记录资格审核：按申请人授权、客户账户、合同版本、索赔时限、目标
 // 范围、重复关系和最低材料要求判断（依据必带）；不通过不等于责任不成立——那是另一个
 // 判断的事。已撤回或已审过的索赔不再审。

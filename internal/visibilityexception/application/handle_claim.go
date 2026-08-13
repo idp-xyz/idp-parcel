@@ -96,8 +96,10 @@ func (reason HandleClaimUndecidedReason) String() string {
 }
 
 // ReceiveClaimCommand 携带一项索赔的原始提交。项标识由客户提交侧建立并随批次唯一，
-// 编排不签发——重复到达要靠它认得出自己。
+// 编排不签发——重复到达要靠它认得出自己。租户显式随命令到达（ADR-0003）：批次引用
+// 只在租户内唯一，编排不替提交侧补租户。
 type ReceiveClaimCommand struct {
+	TenantID    domain.TenantID
 	Batch       domain.ClaimBatchReference
 	Item        domain.ClaimItemID
 	Customer    domain.CustomerAccountReference
@@ -110,13 +112,15 @@ type ReceiveClaimCommand struct {
 // ScreenClaimCommand 请求对一项已受理索赔执行资格审核。结果由资格目录给出，命令不带
 // ——带了就是让调用方替规则作判断。
 type ScreenClaimCommand struct {
-	Batch domain.ClaimBatchReference
-	Item  domain.ClaimItemID
+	TenantID domain.TenantID
+	Batch    domain.ClaimBatchReference
+	Item     domain.ClaimItemID
 }
 
 // ConcludeClaimCommand 携带授权审核方依据证据形成的责任结论与复核截止。结论与期限
 // 来自适用合同与证据判断，编排只入账不改写。
 type ConcludeClaimCommand struct {
+	TenantID   domain.TenantID
 	Batch      domain.ClaimBatchReference
 	Item       domain.ClaimItemID
 	Conclusion domain.LiabilityConclusion
@@ -125,6 +129,7 @@ type ConcludeClaimCommand struct {
 
 // ReviewClaimCommand 携带复核形成的新结论。复核期限由领域按原结论固定的截止判断。
 type ReviewClaimCommand struct {
+	TenantID   domain.TenantID
 	Batch      domain.ClaimBatchReference
 	Item       domain.ClaimItemID
 	Conclusion domain.LiabilityConclusion
@@ -133,6 +138,7 @@ type ReviewClaimCommand struct {
 // OpenRecoveryCommand 携带一项追偿事项的全部要件。这里没有任何索赔字段——追偿在
 // 通知或主张条件成立时独立发起，不等客户索赔、责任结论或赔付（CONTEXT）。
 type OpenRecoveryCommand struct {
+	TenantID     domain.TenantID
 	Case         domain.CaseID
 	Counterparty domain.CounterpartyReference
 	Basis        domain.LiabilityBasisReference
@@ -145,6 +151,7 @@ type OpenRecoveryCommand struct {
 // RecordRecoveryCommand 追记一次追偿动作节点。时间取动作实际发生时刻（对外动作的
 // 业务时间），不取本方时钟。
 type RecordRecoveryCommand struct {
+	TenantID   domain.TenantID
 	Matter     domain.RecoveryMatterID
 	Kind       domain.RecoveryActionKind
 	ContentRef string
@@ -215,7 +222,8 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 	ctx context.Context,
 	command ReceiveClaimCommand,
 ) (HandleClaimResult, error) {
-	if command.Batch.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Batch.String() == "" ||
 		command.Item.String() == "" ||
 		command.Customer.String() == "" ||
 		command.Contract.String() == "" ||
@@ -225,7 +233,7 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Claims.FindByBatchItem(ctx, command.Batch, command.Item)
+	existing, found, err := handler.deps.Claims.FindByBatchItem(ctx, command.TenantID, command.Batch, command.Item)
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
@@ -245,7 +253,7 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("receive claim item: %w", err)
 	}
-	if err := handler.deps.Claims.Save(ctx, claim); err != nil {
+	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	return HandleClaimResult{outcome: ClaimReceived, claim: claim}, nil
@@ -257,7 +265,7 @@ func (handler *HandleClaimHandler) ScreenClaim(
 	ctx context.Context,
 	command ScreenClaimCommand,
 ) (HandleClaimResult, error) {
-	claim, result, ok := handler.loadClaim(ctx, command.Batch, command.Item)
+	claim, result, ok := handler.loadClaim(ctx, command.TenantID, command.Batch, command.Item)
 	if !ok {
 		return result, nil
 	}
@@ -287,7 +295,7 @@ func (handler *HandleClaimHandler) ScreenClaim(
 			return HandleClaimResult{}, fmt.Errorf("screen eligibility: %w", err)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, claim); err != nil {
+	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	return HandleClaimResult{outcome: ClaimScreened, claim: claim}, nil
@@ -299,7 +307,7 @@ func (handler *HandleClaimHandler) ConcludeClaim(
 	ctx context.Context,
 	command ConcludeClaimCommand,
 ) (HandleClaimResult, error) {
-	claim, result, ok := handler.loadClaim(ctx, command.Batch, command.Item)
+	claim, result, ok := handler.loadClaim(ctx, command.TenantID, command.Batch, command.Item)
 	if !ok {
 		return result, nil
 	}
@@ -318,7 +326,7 @@ func (handler *HandleClaimHandler) ConcludeClaim(
 			return HandleClaimResult{}, fmt.Errorf("conclude liability: %w", err)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, claim); err != nil {
+	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	return HandleClaimResult{
@@ -334,7 +342,7 @@ func (handler *HandleClaimHandler) ReviewClaim(
 	ctx context.Context,
 	command ReviewClaimCommand,
 ) (HandleClaimResult, error) {
-	claim, result, ok := handler.loadClaim(ctx, command.Batch, command.Item)
+	claim, result, ok := handler.loadClaim(ctx, command.TenantID, command.Batch, command.Item)
 	if !ok {
 		return result, nil
 	}
@@ -353,7 +361,7 @@ func (handler *HandleClaimHandler) ReviewClaim(
 			return HandleClaimResult{}, fmt.Errorf("review conclusion: %w", err)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, claim); err != nil {
+	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
 	return HandleClaimResult{
@@ -369,7 +377,8 @@ func (handler *HandleClaimHandler) OpenRecovery(
 	ctx context.Context,
 	command OpenRecoveryCommand,
 ) (HandleClaimResult, error) {
-	if command.Case.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Case.String() == "" ||
 		command.Counterparty.String() == "" ||
 		command.Basis.String() == "" ||
 		command.LegalEntity.String() == "" ||
@@ -379,7 +388,8 @@ func (handler *HandleClaimHandler) OpenRecovery(
 		return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Recoveries.FindCurrent(ctx, command.Case, command.Counterparty, command.Scope)
+	existing, found, err := handler.deps.Recoveries.FindCurrent(
+		ctx, command.TenantID, command.Case, command.Counterparty, command.Scope)
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
@@ -405,7 +415,7 @@ func (handler *HandleClaimHandler) OpenRecovery(
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("open recovery matter: %w", err)
 	}
-	if err := handler.deps.Recoveries.Save(ctx, matter); err != nil {
+	if err := handler.deps.Recoveries.Save(ctx, command.TenantID, matter); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
 	return HandleClaimResult{outcome: RecoveryOpened, matter: matter, hasMatter: true}, nil
@@ -418,7 +428,8 @@ func (handler *HandleClaimHandler) RecordRecovery(
 	ctx context.Context,
 	command RecordRecoveryCommand,
 ) (HandleClaimResult, error) {
-	if command.Matter.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Matter.String() == "" ||
 		command.Kind.String() == "" ||
 		command.ContentRef == "" ||
 		command.Milestone.String() == "" ||
@@ -426,7 +437,7 @@ func (handler *HandleClaimHandler) RecordRecovery(
 		return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
 	}
 
-	matter, found, err := handler.deps.Recoveries.FindByID(ctx, command.Matter)
+	matter, found, err := handler.deps.Recoveries.FindByID(ctx, command.TenantID, command.Matter)
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
@@ -434,7 +445,7 @@ func (handler *HandleClaimHandler) RecordRecovery(
 		return HandleClaimResult{outcome: HandleClaimNotAccepted}, nil
 	}
 
-	attempts, err := handler.deps.Recoveries.CountActions(ctx, command.Matter, command.Kind)
+	attempts, err := handler.deps.Recoveries.CountActions(ctx, command.TenantID, command.Matter, command.Kind)
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
@@ -450,23 +461,24 @@ func (handler *HandleClaimHandler) RecordRecovery(
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("record recovery action: %w", err)
 	}
-	if err := handler.deps.Recoveries.AppendAction(ctx, action); err != nil {
+	if err := handler.deps.Recoveries.AppendAction(ctx, command.TenantID, action); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
 	return HandleClaimResult{outcome: RecoveryActionRecorded, matter: matter, hasMatter: true, action: action, hasAction: true}, nil
 }
 
-// loadClaim 取回（批次+项）指名的索赔。第三个返回值为 false 时第二个返回值即应答——
-// 三个判断入口共用同一段取回与未受理分流，各写一遍迟早分叉。
+// loadClaim 取回（租户+批次+项）指名的索赔。第三个返回值为 false 时第二个返回值即
+// 应答——三个判断入口共用同一段取回与未受理分流，各写一遍迟早分叉。
 func (handler *HandleClaimHandler) loadClaim(
 	ctx context.Context,
+	tenant domain.TenantID,
 	batch domain.ClaimBatchReference,
 	item domain.ClaimItemID,
 ) (*domain.ClaimItem, HandleClaimResult, bool) {
-	if batch.String() == "" || item.String() == "" {
+	if tenant.String() == "" || batch.String() == "" || item.String() == "" {
 		return nil, HandleClaimResult{outcome: HandleClaimNotAccepted}, false
 	}
-	claim, found, err := handler.deps.Claims.FindByBatchItem(ctx, batch, item)
+	claim, found, err := handler.deps.Claims.FindByBatchItem(ctx, tenant, batch, item)
 	if err != nil {
 		return nil, HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, false
 	}
