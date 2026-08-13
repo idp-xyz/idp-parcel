@@ -130,6 +130,20 @@ func (result ExternalResult) Layer() ResultLayer {
 	return result.layer
 }
 
+// SourceID、Rule 与 Attempt 是持久化重建的必需读口——八件里这三件没有出口，登记册
+// 适配器连原样写回都做不到。
+func (result ExternalResult) SourceID() string {
+	return result.sourceID
+}
+
+func (result ExternalResult) Rule() InterpretationRuleReference {
+	return result.rule
+}
+
+func (result ExternalResult) Attempt() int {
+	return result.attempt
+}
+
 func (result ExternalResult) Role() SourceAuthorityRole {
 	return result.role
 }
