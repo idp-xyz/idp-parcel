@@ -323,6 +323,28 @@ func (decision StageReviewDecision) DecidedAt() time.Time {
 	return decision.decidedAt
 }
 
+// Objective、Scope、EvidencePack、DecidedBy 与 EffectiveAt 是持久化重建的必需读口
+// ——评审决定十一件里这五件没有出口，记录库连原样写回都做不到。
+func (decision StageReviewDecision) Objective() string {
+	return decision.objective
+}
+
+func (decision StageReviewDecision) Scope() ScopeVersionReference {
+	return decision.scope
+}
+
+func (decision StageReviewDecision) EvidencePack() string {
+	return decision.evidencePack
+}
+
+func (decision StageReviewDecision) DecidedBy() string {
+	return decision.decidedBy
+}
+
+func (decision StageReviewDecision) EffectiveAt() time.Time {
+	return decision.effectiveAt
+}
+
 // AuthorityInterval 是生产权威区间：对象范围 × 能力 × 事实类型在生效区间内的唯一
 // 写入方。To 为零值表示开放区间（尚未关闭）。
 type AuthorityInterval struct {

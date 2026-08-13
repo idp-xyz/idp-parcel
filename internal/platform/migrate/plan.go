@@ -29,6 +29,8 @@ const (
 	SchemaCustomsCompliance = "customs_compliance"
 	// SchemaTransportFulfillment 归 transport-fulfillment 的业务表所有。
 	SchemaTransportFulfillment = "transport_fulfillment"
+	// SchemaPilotGovernance 归 pilot-governance 的治理记录表所有。
+	SchemaPilotGovernance = "pilot_governance"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -102,6 +104,10 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	governance, err := businessSteps(migrations.PilotGovernance, SchemaPilotGovernance)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
 	steps = append(steps, nodes...)
@@ -109,6 +115,7 @@ func Plan() ([]Step, error) {
 	steps = append(steps, settlement...)
 	steps = append(steps, customs...)
 	steps = append(steps, transport...)
+	steps = append(steps, governance...)
 	return steps, nil
 }
 
@@ -119,6 +126,7 @@ func Schemas() []string {
 		SchemaHistory, SchemaBento,
 		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
 		SchemaSettlementAccounting, SchemaCustomsCompliance, SchemaTransportFulfillment,
+		SchemaPilotGovernance,
 	}
 }
 

@@ -21,7 +21,7 @@ import (
 // 检出编译不过（`no matching files found`）——本行已两度因跨会话卷带断过远端构建，
 // 新模块的目录、本行与模块函数必须同一笔提交一起落。
 //
-//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment
+//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment all:pilot_governance
 var assets embed.FS
 
 // Asset 是一份业务迁移。SQL 只读，校验和对文件原始内容计算——一份已施加的迁移
@@ -67,6 +67,11 @@ func CustomsCompliance() ([]Asset, error) {
 // TransportFulfillment 返回 transport-fulfillment 的业务迁移，按文件名序排列。
 func TransportFulfillment() ([]Asset, error) {
 	return assetsForModule("transport_fulfillment")
+}
+
+// PilotGovernance 返回 pilot-governance 的业务迁移，按文件名序排列。
+func PilotGovernance() ([]Asset, error) {
+	return assetsForModule("pilot_governance")
 }
 
 func assetsForModule(module string) ([]Asset, error) {
