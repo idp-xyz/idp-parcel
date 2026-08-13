@@ -211,3 +211,96 @@ type TransportHandoverRegistrationIntent struct {
 type TransportHandoverRegistrationHandoff interface {
 	HandOffTransportHandover(ctx context.Context, intent TransportHandoverRegistrationIntent) error
 }
+
+// TransportCommissionKey 是运输委托的幂等键：同一委托标识只提交一次，重放返回原委托。
+type TransportCommissionKey struct {
+	TenantID   domain.TenantID
+	Commission domain.TransportCommissionReference
+}
+
+// TransportCommissionRecord 是一次委托提交越过提交边界留下的东西。取消与开始改变
+// 状态时以 Replace 换值——历史动作都在本体上（Cancelled/TransportStarted）。
+type TransportCommissionRecord struct {
+	Key           TransportCommissionKey
+	ContentDigest string
+	Commission    domain.TransportCommission
+	RecordedAt    time.Time
+}
+
+type CommissionSaveOutcome uint8
+
+const (
+	CommissionSaveOutcomeInvalid CommissionSaveOutcome = iota
+	CommissionSaved
+	CommissionAlreadyRegistered
+)
+
+// TransportCommissionStore 按幂等键找回并保存运输委托（写入代数同 ADR-0031）。
+// Replace 只在已有登记上落状态转换（取消/开始）：found=false 表示没有可转换的委托。
+type TransportCommissionStore interface {
+	FindByKey(ctx context.Context, key TransportCommissionKey) (TransportCommissionRecord, bool, error)
+	Save(ctx context.Context, record TransportCommissionRecord) (CommissionSaveOutcome, error)
+	Replace(ctx context.Context, record TransportCommissionRecord) (bool, error)
+}
+
+// BookingKey 是订舱申请的幂等键。
+type BookingKey struct {
+	TenantID domain.TenantID
+	Booking  domain.BookingReference
+}
+
+// BookingRecord 是一次订舱申请越过提交边界留下的东西。
+type BookingRecord struct {
+	Key           BookingKey
+	ContentDigest string
+	Booking       domain.BookingRequest
+	RecordedAt    time.Time
+}
+
+type BookingSaveOutcome uint8
+
+const (
+	BookingSaveOutcomeInvalid BookingSaveOutcome = iota
+	BookingSaved
+	BookingAlreadyRegistered
+)
+
+// BookingStore 按幂等键找回并保存订舱申请（写入代数同 ADR-0031）。
+type BookingStore interface {
+	FindByKey(ctx context.Context, key BookingKey) (BookingRecord, bool, error)
+	Save(ctx context.Context, record BookingRecord) (BookingSaveOutcome, error)
+}
+
+// BookingAnswerRecord 是承运方对订舱的应答。一次订舱一个应答：应答不可覆盖——已接受
+// 的订舱不能再被拒绝，改约走撤回与新订舱。
+type BookingAnswerRecord struct {
+	Key           BookingKey
+	ContentDigest string
+	Acceptance    domain.CarrierAcceptance
+	RecordedAt    time.Time
+}
+
+type BookingAnswerSaveOutcome uint8
+
+const (
+	BookingAnswerSaveOutcomeInvalid BookingAnswerSaveOutcome = iota
+	BookingAnswerSaved
+	BookingAlreadyAnswered
+)
+
+// BookingAnswerStore 按订舱键找回并保存承运应答（写入代数同 ADR-0031）。
+type BookingAnswerStore interface {
+	FindByKey(ctx context.Context, key BookingKey) (BookingAnswerRecord, bool, error)
+	Save(ctx context.Context, record BookingAnswerRecord) (BookingAnswerSaveOutcome, error)
+}
+
+// TransportCommissionIntent 把委托（含协议/条件/角色/责任快照）交给 settlement-
+// accounting 作供应商成本预期的上游来源。意图由幂等键认领，重放重发同一份。
+type TransportCommissionIntent struct {
+	Record TransportCommissionRecord
+}
+
+// TransportCommissionHandoff 今天没有实现，唯一实现是测试替身。
+type TransportCommissionHandoff interface {
+	HandOffTransportCommission(ctx context.Context, intent TransportCommissionIntent) error
+}
