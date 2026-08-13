@@ -352,3 +352,76 @@ type DispositionExecutionHandoff interface {
 type ExceptionJourneyHandoff interface {
 	HandOffExceptionJourney(ctx context.Context, intent AlternateJourneyIntent) error
 }
+
+// ScheduleKey 是班次的幂等键：同一班次标识只建一次。
+type ScheduleKey struct {
+	TenantID domain.TenantID
+	Schedule domain.ScheduleReference
+}
+
+// ScheduleRecord 是一次班次建立越过提交边界留下的东西。
+type ScheduleRecord struct {
+	Key           ScheduleKey
+	ContentDigest string
+	Schedule      domain.TransportSchedule
+	RecordedAt    time.Time
+}
+
+type ScheduleSaveOutcome uint8
+
+const (
+	ScheduleSaveOutcomeInvalid ScheduleSaveOutcome = iota
+	ScheduleSaved
+	ScheduleAlreadyEstablished
+)
+
+// TransportScheduleStore 按幂等键找回并保存班次（写入代数同 ADR-0031）。
+type TransportScheduleStore interface {
+	FindByKey(ctx context.Context, key ScheduleKey) (ScheduleRecord, bool, error)
+	Save(ctx context.Context, record ScheduleRecord) (ScheduleSaveOutcome, error)
+}
+
+// CapacityPoolKey 是容量池的幂等键。
+type CapacityPoolKey struct {
+	TenantID domain.TenantID
+	Pool     domain.CapacityPoolReference
+}
+
+// CapacityPoolRecord 是容量池及其全部预占的当前值。预占/释放/消耗以 Replace 换值
+// ——三量守恒在 CapacityPool 本体上。
+type CapacityPoolRecord struct {
+	Key           CapacityPoolKey
+	ContentDigest string
+	Pool          domain.CapacityPool
+	RecordedAt    time.Time
+}
+
+type PoolSaveOutcome uint8
+
+const (
+	PoolSaveOutcomeInvalid PoolSaveOutcome = iota
+	PoolSaved
+	PoolAlreadyEstablished
+)
+
+// CapacityPoolStore 按幂等键找回并保存容量池（写入代数同 ADR-0031）。Replace 只在
+// 已有池上落转换：found=false 表示没有可转换的池。
+type CapacityPoolStore interface {
+	FindByKey(ctx context.Context, key CapacityPoolKey) (CapacityPoolRecord, bool, error)
+	Save(ctx context.Context, record CapacityPoolRecord) (PoolSaveOutcome, error)
+	Replace(ctx context.Context, record CapacityPoolRecord) (bool, error)
+}
+
+// CapacityConsumptionIntent 把容量消耗交给装载分配链——消耗以装载分配确认为依据，
+// LoadAssignment 侧引用同一 LoadAssignmentReference。重放重发同一份（ADR-0043）。
+type CapacityConsumptionIntent struct {
+	Pool        CapacityPoolRecord
+	Reservation domain.CapacityReservationReference
+	Assignment  domain.LoadAssignmentReference
+	Quantity    int64
+}
+
+// CapacityConsumptionHandoff 今天没有实现，唯一实现是测试替身。
+type CapacityConsumptionHandoff interface {
+	HandOffCapacityConsumption(ctx context.Context, intent CapacityConsumptionIntent) error
+}
