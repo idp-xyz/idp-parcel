@@ -142,3 +142,73 @@ type CustomerViewHandoffIntent struct {
 type CustomerViewHandoff interface {
 	HandOffCustomerView(ctx context.Context, intent CustomerViewHandoffIntent) error
 }
+
+// TriageQuery 是分诊规则的输入：命中事实自带的对象、类型、信号规则版本与可信度。
+// 全部取自命中事实，编排不自造——「每个信号必须保存对象、类型、规则版本、判断时间、
+// 事实依据、可信度」（CONTEXT）里的哪一样都不该由本上下文补默认值。
+type TriageQuery struct {
+	Kind       domain.ExceptionSignalKindReference
+	Parcel     domain.TrackedParcelReference
+	Rule       domain.SignalRuleVersionReference
+	Confidence domain.ConfidenceReference
+}
+
+// TriageAnswer 是版本化分诊规则的答复：四走向之一与所命中的分诊规则版本。
+type TriageAnswer struct {
+	Outcome domain.TriageOutcome
+	Rule    domain.SignalRuleVersionReference
+}
+
+// TriageRuleView 回答「这个信号按版本化分诊规则该走哪一格」。「高可信、高影响且命中
+// 版本化分诊规则的信号可以自动建立或关联案件」（CONTEXT）——自动建案只能来自这里的
+// 规则命中。
+//
+// 第二个返回值为 false 即「分诊规则未配置」——真实分诊规则属待登记实例参数。那不是
+// 未决而是如实的空白：信号进人工复核格，不自动建案也不装作没有信号。依赖调不通作为
+// 错误返回，由应用层形成未决。
+type TriageRuleView interface {
+	TriageSignal(ctx context.Context, query TriageQuery) (TriageAnswer, bool, error)
+}
+
+// RaisedSignalRecord 是开启或重开发作期越过提交边界的最小单元：发作期与它的分诊结论
+// 同一提交。只落发作期不落结论，重试会走进「已有活跃发作期」那一支去记命中，结论就
+// 永远补不上了。对象与类型随记录携带——发作期聚合不导出它们，没有这两维适配器连
+// 存储键都立不起来（与 TriageHandoffIntent 同理）。
+type RaisedSignalRecord struct {
+	Parcel     domain.TrackedParcelReference
+	Kind       domain.ExceptionSignalKindReference
+	Episode    *domain.SignalEpisode
+	Conclusion domain.TriageConclusion
+}
+
+// SignalEpisodeStore 按对象+类型找回最近一次发作期并保存。最近一次含已结束的——
+// 「已结束+再命中」要据它建立关联的新发作期，只查活跃会把重开误判成首启。
+type SignalEpisodeStore interface {
+	FindLatest(
+		ctx context.Context,
+		parcel domain.TrackedParcelReference,
+		kind domain.ExceptionSignalKindReference,
+	) (*domain.SignalEpisode, bool, error)
+	SaveRaised(ctx context.Context, record RaisedSignalRecord) error
+	SaveHit(ctx context.Context, episode *domain.SignalEpisode) error
+}
+
+// SignalEpisodeIdentityFactory 签发发作期标识。与视图、投影身份工厂分开，理由相同：
+// 不同用例触发，合并会让一个编排依赖它根本不签发的身份。
+type SignalEpisodeIdentityFactory interface {
+	NextEpisodeID(ctx context.Context) (domain.EpisodeID, error)
+}
+
+// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由发作期
+// 标识认领（结论内含），重放重发同一份（ADR-0043）。
+type TriageHandoffIntent struct {
+	Parcel     domain.TrackedParcelReference
+	Kind       domain.ExceptionSignalKindReference
+	Conclusion domain.TriageConclusion
+}
+
+// TriageHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type TriageHandoff interface {
+	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
+}
