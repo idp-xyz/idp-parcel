@@ -592,3 +592,139 @@ type OperatingIntent struct {
 type OperatingHandoff interface {
 	HandOffOperating(ctx context.Context, intent OperatingIntent) error
 }
+
+// ClaimAmountRuleView 取责任结论适用的限额/比例/免赔金额规则版本。found=false 表示
+// 金额规则目录未配置——没有规则版本不形成金额（实例半边，AT-SA-147）。
+type ClaimAmountRuleView interface {
+	LoadClaimAmountRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		responsibility domain.ResponsibilityConclusionReference,
+	) (domain.AmountRuleVersionReference, bool, error)
+}
+
+// ClaimAmountKey 是客户方向索赔金额的幂等键。
+type ClaimAmountKey struct {
+	TenantID domain.TenantID
+	Amount   domain.CustomerClaimAmountID
+}
+
+// ClaimAmountRecord 是一笔赔付/退款金额越过提交边界留下的东西。
+type ClaimAmountRecord struct {
+	Key           ClaimAmountKey
+	ContentDigest string
+	Amount        domain.CustomerClaimAmount
+	RecordedAt    time.Time
+}
+
+type ClaimAmountSaveOutcome uint8
+
+const (
+	ClaimAmountSaveOutcomeInvalid ClaimAmountSaveOutcome = iota
+	ClaimAmountSaved
+	ClaimAmountAlreadyFormed
+)
+
+// CustomerClaimAmountStore 按幂等键找回并保存索赔金额（写入代数同 ADR-0031）。
+type CustomerClaimAmountStore interface {
+	FindByKey(ctx context.Context, key ClaimAmountKey) (ClaimAmountRecord, bool, error)
+	Save(ctx context.Context, record ClaimAmountRecord) (ClaimAmountSaveOutcome, error)
+}
+
+// ReceivableKey 是应追偿金额的幂等键。
+type ReceivableKey struct {
+	TenantID   domain.TenantID
+	Receivable domain.RecoveryReceivableID
+}
+
+// ReceivableRecord 是一笔应追偿越过提交边界留下的东西。
+type ReceivableRecord struct {
+	Key           ReceivableKey
+	ContentDigest string
+	Receivable    domain.RecoveryReceivable
+	RecordedAt    time.Time
+}
+
+type ReceivableSaveOutcome uint8
+
+const (
+	ReceivableSaveOutcomeInvalid ReceivableSaveOutcome = iota
+	ReceivableSaved
+	ReceivableAlreadyFormed
+)
+
+// RecoveryReceivableStore 按幂等键找回并保存应追偿（写入代数同 ADR-0031）。
+type RecoveryReceivableStore interface {
+	FindByKey(ctx context.Context, key ReceivableKey) (ReceivableRecord, bool, error)
+	Save(ctx context.Context, record ReceivableRecord) (ReceivableSaveOutcome, error)
+}
+
+// AcknowledgementKey 是追偿认可的幂等键。
+type AcknowledgementKey struct {
+	TenantID        domain.TenantID
+	Acknowledgement domain.AcknowledgementID
+}
+
+// AcknowledgementRecord 是一次认可越过提交边界留下的东西。
+type AcknowledgementRecord struct {
+	Key             AcknowledgementKey
+	ContentDigest   string
+	Acknowledgement domain.RecoveryAcknowledgement
+	RecordedAt      time.Time
+}
+
+type AcknowledgementSaveOutcome uint8
+
+const (
+	AcknowledgementSaveOutcomeInvalid AcknowledgementSaveOutcome = iota
+	AcknowledgementSaved
+	AcknowledgementAlreadyRecorded
+)
+
+// RecoveryAcknowledgementStore 按幂等键找回并保存认可（写入代数同 ADR-0031）。
+type RecoveryAcknowledgementStore interface {
+	FindByKey(ctx context.Context, key AcknowledgementKey) (AcknowledgementRecord, bool, error)
+	Save(ctx context.Context, record AcknowledgementRecord) (AcknowledgementSaveOutcome, error)
+}
+
+// ClaimAdjustmentKey 是索赔金额调整的幂等键。
+type ClaimAdjustmentKey struct {
+	TenantID   domain.TenantID
+	Adjustment domain.ClaimAmountAdjustmentID
+}
+
+// ClaimAdjustmentRecord 是一次调整越过提交边界留下的东西。
+type ClaimAdjustmentRecord struct {
+	Key           ClaimAdjustmentKey
+	ContentDigest string
+	Adjustment    domain.ClaimAmountAdjustment
+	RecordedAt    time.Time
+}
+
+type ClaimAdjustmentSaveOutcome uint8
+
+const (
+	ClaimAdjustmentSaveOutcomeInvalid ClaimAdjustmentSaveOutcome = iota
+	ClaimAdjustmentSaved
+	ClaimAdjustmentAlreadyFormed
+)
+
+// ClaimAmountAdjustmentStore 按幂等键找回并保存调整（写入代数同 ADR-0031）。
+type ClaimAmountAdjustmentStore interface {
+	FindByKey(ctx context.Context, key ClaimAdjustmentKey) (ClaimAdjustmentRecord, bool, error)
+	Save(ctx context.Context, record ClaimAdjustmentRecord) (ClaimAdjustmentSaveOutcome, error)
+}
+
+// ClaimSettlementIntent 把赔付金额与调整交给对账单纳入、把应追偿与认可交给追偿链。
+// 各携其记录，消费方自分；重放重发同一份（ADR-0043）。
+type ClaimSettlementIntent struct {
+	ClaimAmount     ClaimAmountRecord
+	Receivable      ReceivableRecord
+	Acknowledgement AcknowledgementRecord
+	Adjustment      ClaimAdjustmentRecord
+}
+
+// ClaimSettlementHandoff 今天没有实现，唯一实现是测试替身。
+type ClaimSettlementHandoff interface {
+	HandOffClaimSettlement(ctx context.Context, intent ClaimSettlementIntent) error
+}
