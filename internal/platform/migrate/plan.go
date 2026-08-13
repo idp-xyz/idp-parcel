@@ -17,6 +17,8 @@ const (
 	SchemaBento = "bento"
 	// SchemaParcelShipment 归 parcel-shipment 的业务表所有。
 	SchemaParcelShipment = "parcel_shipment"
+	// SchemaNetworkRouting 归 network-routing 的业务表所有。
+	SchemaNetworkRouting = "network_routing"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -58,21 +60,25 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	business, err := parcelShipmentSteps()
+	shipment, err := businessSteps(migrations.ParcelShipment, SchemaParcelShipment)
 	if err != nil {
 		return nil, err
 	}
-	return append(steps, business...), nil
+	routing, err := businessSteps(migrations.NetworkRouting, SchemaNetworkRouting)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(steps, shipment...), routing...), nil
 }
 
 // Schemas 返回迁移作业在施加计划前创建的 schema。生产 API 与 Outbox 账号不持有
 // 创建它们的权限。
 func Schemas() []string {
-	return []string{SchemaHistory, SchemaBento, SchemaParcelShipment}
+	return []string{SchemaHistory, SchemaBento, SchemaParcelShipment, SchemaNetworkRouting}
 }
 
-func parcelShipmentSteps() ([]Step, error) {
-	assets, err := migrations.ParcelShipment()
+func businessSteps(load func() ([]migrations.Asset, error), schema string) ([]Step, error) {
+	assets, err := load()
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +88,7 @@ func parcelShipmentSteps() ([]Step, error) {
 		steps = append(steps, Step{
 			ID:     asset.Module + "/" + asset.Name,
 			Origin: OriginParcel,
-			Schema: SchemaParcelShipment,
+			Schema: schema,
 			// 业务迁移的校验和由 Parcel 自己对文件内容计算；框架那半取框架清单里
 			// 的值。两者不混：模板归框架认定，自有 SQL 归自己认定。
 			Checksum: asset.Checksum,
