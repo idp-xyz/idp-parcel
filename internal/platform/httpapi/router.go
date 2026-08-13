@@ -14,10 +14,12 @@ import (
 
 // BusinessEndpoint 是一个待挂载的业务端点。处理器由各上下文的 adapters/http 构造
 // （含各自的 Intake 与应用编排），这里只收成品——路由层不参与任何业务翻译。
+//
+// 刻意没有 Method 字段：方法约束由各处理器自守——七个处理器都带自己的 405 分支
+// （JSON problem 体加 Allow 头）并有单测钉住。路由层再按方法设卡，chi 会用自己的
+// 纯文本 405 先答，处理器那一支永远不触发，单测钉住的形状与装配后的运行时形状
+// 就分了家。
 type BusinessEndpoint struct {
-	// Method 与 Pattern 是挂载位置。方法约束由各处理器自守（405 是处理器的答案，
-	// 不在路由层重复设卡），Pattern 只定路径。
-	Method  string
 	Pattern string
 	Handler http.Handler
 }
@@ -43,7 +45,7 @@ func NewWithEndpoints(info buildinfo.Info, endpoints []BusinessEndpoint) http.Ha
 	})
 
 	for _, endpoint := range endpoints {
-		router.Method(endpoint.Method, endpoint.Pattern, endpoint.Handler)
+		router.Handle(endpoint.Pattern, endpoint.Handler)
 	}
 
 	return router
