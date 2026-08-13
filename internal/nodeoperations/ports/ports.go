@@ -108,3 +108,85 @@ type NodeIntakeHandoffIntent struct {
 type NodeIntakeHandoff interface {
 	HandOffNodeIntake(ctx context.Context, intent NodeIntakeHandoffIntent) error
 }
+
+// CollaborationAcceptanceKey 是承接决定的幂等键：同一协作事项只决定一次，重放返回
+// 原决定；同事项异决定形成冲突，不按最后到达顶替。
+type CollaborationAcceptanceKey struct {
+	TenantID domain.TenantID
+	Item     domain.CollaborationItemReference
+}
+
+// CollaborationAcceptanceRecord 是一次承接决定越过提交边界留下的东西。
+type CollaborationAcceptanceRecord struct {
+	Key           CollaborationAcceptanceKey
+	ContentDigest string
+	Acceptance    domain.CollaborationAcceptance
+	RecordedAt    time.Time
+}
+
+type AcceptanceSaveOutcome uint8
+
+const (
+	AcceptanceSaveOutcomeInvalid AcceptanceSaveOutcome = iota
+	AcceptanceSaved
+	AcceptanceAlreadyDecided
+)
+
+// CollaborationAcceptanceStore 按幂等键找回并保存承接决定（写入代数同 ADR-0031）。
+type CollaborationAcceptanceStore interface {
+	FindByKey(ctx context.Context, key CollaborationAcceptanceKey) (CollaborationAcceptanceRecord, bool, error)
+	Save(ctx context.Context, record CollaborationAcceptanceRecord) (AcceptanceSaveOutcome, error)
+}
+
+// CollaborationAcceptanceHandoffIntent 把承接决定交回 customs-compliance——承接结果
+// 是协作链的回执信号。意图由幂等键认领，重放重发同一份（ADR-0043 同款纪律）。
+type CollaborationAcceptanceHandoffIntent struct {
+	Record CollaborationAcceptanceRecord
+}
+
+// CollaborationAcceptanceHandoff 今天没有实现，唯一实现是测试替身。
+type CollaborationAcceptanceHandoff interface {
+	HandOffCollaborationAcceptance(ctx context.Context, intent CollaborationAcceptanceHandoffIntent) error
+}
+
+// ExecutionFactKey 是执行事实登记的幂等键：同一（事项+实物+动作）只登一次，重放返回
+// 原事实；同键异证据形成冲突。
+type ExecutionFactKey struct {
+	TenantID domain.TenantID
+	Item     domain.CollaborationItemReference
+	Unit     domain.HandlingUnitID
+	Action   domain.CollaborationActionKind
+}
+
+// ExecutionFactRecord 是一次执行事实登记越过提交边界留下的东西。
+type ExecutionFactRecord struct {
+	Key           ExecutionFactKey
+	ContentDigest string
+	Fact          domain.NodeExecutionFact
+	RecordedAt    time.Time
+}
+
+type ExecutionFactSaveOutcome uint8
+
+const (
+	ExecutionFactSaveOutcomeInvalid ExecutionFactSaveOutcome = iota
+	ExecutionFactSaved
+	ExecutionFactAlreadyRecorded
+)
+
+// ExecutionFactStore 按幂等键找回并保存执行事实（写入代数同 ADR-0031）。
+type ExecutionFactStore interface {
+	FindByKey(ctx context.Context, key ExecutionFactKey) (ExecutionFactRecord, bool, error)
+	Save(ctx context.Context, record ExecutionFactRecord) (ExecutionFactSaveOutcome, error)
+}
+
+// ExecutionFactHandoffIntent 把执行事实交给 customs-compliance 的处置执行核对消费
+// （CC 侧 ExecutionFactView 的上游源）。重放重发同一份。
+type ExecutionFactHandoffIntent struct {
+	Record ExecutionFactRecord
+}
+
+// ExecutionFactHandoff 今天没有实现，唯一实现是测试替身。
+type ExecutionFactHandoff interface {
+	HandOffExecutionFact(ctx context.Context, intent ExecutionFactHandoffIntent) error
+}
