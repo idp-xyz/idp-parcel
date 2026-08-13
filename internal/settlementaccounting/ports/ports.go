@@ -313,3 +313,103 @@ type AdvanceRecoveryIntent struct {
 type AdvanceRecoveryHandoff interface {
 	HandOffAdvanceRecovery(ctx context.Context, intent AdvanceRecoveryIntent) error
 }
+
+// StatementKey 是已发布对账单的幂等键：同一单号只发布一次；作废以 Replace 换值，
+// 替代单用新单号。
+type StatementKey struct {
+	TenantID domain.TenantID
+	Number   domain.StatementNumber
+}
+
+// StatementRecord 是一次对账单发布越过提交边界留下的东西。
+type StatementRecord struct {
+	Key           StatementKey
+	ContentDigest string
+	Statement     domain.PublishedStatement
+	RecordedAt    time.Time
+}
+
+type StatementSaveOutcome uint8
+
+const (
+	StatementSaveOutcomeInvalid StatementSaveOutcome = iota
+	StatementSaved
+	StatementAlreadyPublished
+)
+
+// PublishedStatementStore 按幂等键找回并保存已发布对账单（写入代数同 ADR-0031）。
+type PublishedStatementStore interface {
+	FindByKey(ctx context.Context, key StatementKey) (StatementRecord, bool, error)
+	Save(ctx context.Context, record StatementRecord) (StatementSaveOutcome, error)
+	Replace(ctx context.Context, record StatementRecord) (bool, error)
+}
+
+// InclusionKey 是后续账期纳入的幂等键。
+type InclusionKey struct {
+	TenantID  domain.TenantID
+	Inclusion domain.InclusionReference
+}
+
+// InclusionRecord 是一次后续账期纳入越过提交边界留下的东西。
+type InclusionRecord struct {
+	Key           InclusionKey
+	ContentDigest string
+	Inclusion     domain.SubsequentInclusion
+	RecordedAt    time.Time
+}
+
+type InclusionSaveOutcome uint8
+
+const (
+	InclusionSaveOutcomeInvalid InclusionSaveOutcome = iota
+	InclusionSaved
+	InclusionAlreadyRecorded
+)
+
+// SubsequentInclusionStore 按幂等键找回并保存后续账期纳入（写入代数同 ADR-0031）。
+type SubsequentInclusionStore interface {
+	FindByKey(ctx context.Context, key InclusionKey) (InclusionRecord, bool, error)
+	Save(ctx context.Context, record InclusionRecord) (InclusionSaveOutcome, error)
+}
+
+// DisputeKey 是客户异议的幂等键。
+type DisputeKey struct {
+	TenantID domain.TenantID
+	Dispute  domain.DisputeID
+}
+
+// DisputeRecord 是一次异议越过提交边界留下的东西。裁定以 Replace 换值——异议是独立
+// 对象，不改写对账单。
+type DisputeRecord struct {
+	Key           DisputeKey
+	ContentDigest string
+	Dispute       domain.StatementDispute
+	RecordedAt    time.Time
+}
+
+type DisputeSaveOutcome uint8
+
+const (
+	DisputeSaveOutcomeInvalid DisputeSaveOutcome = iota
+	DisputeSaved
+	DisputeAlreadyOpened
+)
+
+// StatementDisputeStore 按幂等键找回并保存异议（写入代数同 ADR-0031）。
+type StatementDisputeStore interface {
+	FindByKey(ctx context.Context, key DisputeKey) (DisputeRecord, bool, error)
+	Save(ctx context.Context, record DisputeRecord) (DisputeSaveOutcome, error)
+	Replace(ctx context.Context, record DisputeRecord) (bool, error)
+}
+
+// StatementIntent 把对账单事件交给下游（客户通知、外部资金核销的目标索引）。发布、
+// 作废与后续纳入各携其记录，消费方自分；重放重发同一份（ADR-0043）。
+type StatementIntent struct {
+	Statement StatementRecord
+	Inclusion InclusionRecord
+}
+
+// StatementHandoff 今天没有实现，唯一实现是测试替身。
+type StatementHandoff interface {
+	HandOffStatement(ctx context.Context, intent StatementIntent) error
+}
