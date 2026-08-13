@@ -979,6 +979,46 @@ type SourceDataVersionHandoffIntent struct {
 	Adoption domain.SourceDataAdoptionJudgment
 }
 
+// SourceDataVersionAppendOutcome 是一次版本追加在本上下文的落点。`已记录`不译成
+// error，理由与建单的`已存在`相同（ADR-0031）：写入这条路走通了，只是同一个版本号
+// 已经在库里——版本只形成一次，重复追加是重放不是故障。
+type SourceDataVersionAppendOutcome uint8
+
+const (
+	SourceDataVersionAppendOutcomeInvalid SourceDataVersionAppendOutcome = iota
+	SourceDataVersionAppended
+	SourceDataVersionAlreadyRecorded
+)
+
+func (outcome SourceDataVersionAppendOutcome) String() string {
+	switch outcome {
+	case SourceDataVersionAppended:
+		return "APPENDED"
+	case SourceDataVersionAlreadyRecorded:
+		return "ALREADY_RECORDED"
+	default:
+		return ""
+	}
+}
+
+// SourceDataVersionRecords 以委托的来源身份加版本标识为键登记客户原始资料版本。
+//
+// 它与聚合仓储分立：版本不可覆盖、只追加，而聚合重建门今天只开到`已提交`（ADR-0030），
+// 资料版本却只在`已接受`之后形成——把版本塞进聚合快照，重建门一开就得整层重排。独立
+// 登记册按版本链平铺（基准/前版引用可查），聚合侧持有的仍是同一批版本的运行时视图。
+type SourceDataVersionRecords interface {
+	FindVersion(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		versionID domain.SourceDataVersionID,
+	) (domain.CustomerSourceDataVersion, bool, error)
+	Append(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		version domain.CustomerSourceDataVersion,
+	) (SourceDataVersionAppendOutcome, error)
+}
+
 // SourceDataVersionHandoff 把一份已形成的客户原始资料版本引用交给适用下游。
 //
 // 一份版本发一份意图，而不是逐下游各设一个端口：哪些下游该重新判断，取决于范围、阶段与各自的
