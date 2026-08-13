@@ -1,6 +1,6 @@
 # AT 覆盖度盘点（机制半边索引）
 
-盘点基线：main `136f79b`（2026-08-13）。产出方式与口径见下；本文件是 PN-08 候选包索引的机制半边，不是证据登记册。
+盘点基线：main `0cddbba`（2026-08-13 重盘；首盘 `136f79b` 同日）。产出方式与口径见下；本文件是 PN-08 候选包索引的机制半边，不是证据登记册。变化摘要见文末[重盘变化摘要](#重盘变化摘要0cddbba)。
 
 ## 方法与口径
 
@@ -10,6 +10,7 @@
 - ④ **机制未落地**：未被测试引用且属于起步期上下文（CC/VE 为主）——不是②「已有机制缺注释」，也未必是③实例半边；等后续切片。
 - ②③④ 为启发式分桶，抽样复核过 CC/SA/TF 各十余条；单条归类若与领票时的判断冲突，以领票时对照 UC 原文为准。
 - **VE/CC 的①列为零是引用口径所致**：两包既有测试的 Covers 注释引 CONTEXT 硬句原文而非 AT 号（实测 `internal/visibilityexception`、`internal/customscompliance` 全部 `*_test.go` 无一处 `AT-*` 字样），不代表两包无测试或无覆盖；它们的④行里有一部分实际已被硬句测试钉住，逐条领票时按 UC 原文比对。
+- **`0cddbba` 重盘补充：硬句引用口径已扩展到首盘之后新落的全部编排批**——VE 五个编排（投影派生、客户视图、信号分诊、客户通知、处置请求）、CC 四个编排（申报提交、外部结果接收、处置核验、案件关闭）、PG 阶段评审、PP 计价评价编排、SA 费用确认、TF 交付生效、NO 关务协作领域件的新测试同引硬句不点 AT 号（增量 48 个测试文件仅 2 处新增 `AT-*` 点名，且都点在已在册行上）。①因此低估的范围从 VE/CC 扩大到上述新编排面；对应 ②④ 行的高估同步扩大，逐条领票时仍按 UC 原文比对，不据本表宣称未覆盖。
 
 ## 总览
 
@@ -65,17 +66,17 @@
 | `AT-NR-021` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestSameCorrelationWithADifferentScopeIsAConflictAndDoesNotOverwrite |
 | `AT-NR-023` | internal/networkrouting/domain/reachability_test.go::TestAllCandidatesEliminatedIsUnreachable；internal/networkrouting/domain/service_area_test.go::TestServiceAreaEvaluationFoldsTheMatrixRows |
 | `AT-NR-024` | internal/networkrouting/domain/reachability_test.go::TestPartiallyEliminatedWithUnknownRemainderIsInsufficient |
-| `AT-NR-025` | internal/networkrouting/domain/reachability_test.go::TestCandidateScopedGapsElsewhereDoNotBlockReachable；internal/networkrouting/domain/service_area_test.go::TestServiceAreaEvaluationFoldsTheMatrixRows |
+| `AT-NR-025` | internal/networkrouting/domain/reachability_test.go::TestCandidateScopedGapsElsewhereDoNotBlockReachable；internal/networkrouting/domain/service_area_test.go::TestServiceAreaEvaluationDrivesTheThreeValuedConclusion |
 | `AT-NR-026` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestACommittedRequirementFlowsThroughTheAssessment；internal/networkrouting/domain/route_requirement_test.go::TestAPlainPreferenceEliminatesNothing |
-| `AT-NR-028` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestAConcurrentWinnerIsReadBackRatherThanOverwritten |
-| `AT-NR-030` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation |
+| `AT-NR-028` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestAConcurrentWinnerIsReadBackRatherThanOverwritten；internal/networkrouting/application/assess_parcel_reachability_test.go::TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf |
+| `AT-NR-030` | internal/networkrouting/application/assess_parcel_reachability_test.go::TestAFormedJudgmentHandsOffOneIntentClaimedByItsCorrelation；internal/networkrouting/application/assess_parcel_reachability_test.go::TestFormedJudgmentTakesItsJudgmentTimeFromTheClockNotTheAsOf |
 | `AT-NR-031` | internal/networkrouting/domain/hard_constraint_test.go::TestACustomsRestrictionEliminatesOnlyItsCandidate |
 | `AT-PC-001` | internal/partycommercial/domain/party_relationship_test.go::TestLegalEntityReferenceAndCustomerPartyAreFormedSeparately |
 | `AT-PC-002` | internal/partycommercial/domain/commercial_registry_test.go::TestRegisteringTheSameContentTwiceIsAReplay |
 | `AT-PC-003` | internal/partycommercial/domain/commercial_registry_test.go::TestSameVersionWithChangedContentConflicts |
 | `AT-PC-004` | internal/partycommercial/domain/commercial_registry_test.go::TestNewVersionCoexistsWithTheOneItReplaces；internal/partycommercial/domain/commercial_version_lifecycle_test.go::TestPublishedVersionTakesEffectOnlyAtItsBoundary |
 | `AT-PC-005` | internal/partycommercial/domain/commercial_version_test.go::TestPublicationWaitsWhenNamedReferenceIsUnpublished |
-| `AT-PC-006` | internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
+| `AT-PC-006` | internal/partycommercial/domain/commercial_resolution_test.go::TestMissingAnchorPolicyIsPendingRatherThanDefaultingToNow；internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
 | `AT-PC-007` | internal/partycommercial/domain/commercial_resolution_test.go::TestSupersedingContractKeepsHistoryAndSelectsSuccessorUniquely；internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
 | `AT-PC-008` | internal/partycommercial/domain/commercial_resolution_test.go::TestEndedVersionsLeaveTheCandidateSet |
 | `AT-PC-009` | internal/partycommercial/domain/channel_account_use_authorization_test.go::TestTechnicallyAvailableAccountDoesNotPublishWithoutBusinessAuthorization |
@@ -90,17 +91,17 @@
 | `AT-PC-019` | internal/partycommercial/domain/commercial_resolution_test.go::TestALapsedContractIsNotRevivedByAnEarlierBusinessTime |
 | `AT-PC-020` | internal/parcelshipment/adapters/partycommercial/commercial_basis_test.go::TestEveryFirstPhaseAnswerLandsOnItsOwnApplicability；internal/parcelshipment/application/form_acceptance_decision_test.go::TestNoApplicableCommercialBasisRejectsRatherThanStalling；internal/parcelshipment/domain/acceptance_decision_test.go::TestARejectionStandsWithoutACommercialBasis；internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
 | `AT-PC-021` | internal/parcelshipment/adapters/partycommercial/commercial_basis_test.go::TestEveryFirstPhaseAnswerLandsOnItsOwnApplicability；internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
-| `AT-PC-022` | internal/partycommercial/domain/commercial_version_test.go::TestPublicationWaitsWhenNamedReferenceIsUnpublished；internal/partycommercial/domain/reference_closure_test.go::TestAClosureAdoptsTheRulePackageTheContractNames；internal/partycommercial/domain/reference_closure_test.go::TestAClosureRefusesARulePackageTheContractDoesNotName |
+| `AT-PC-022` | internal/partycommercial/domain/commercial_registry_test.go::TestSameVersionReboundToAnotherReferenceConflicts；internal/partycommercial/domain/commercial_version_test.go::TestPublicationWaitsWhenNamedReferenceIsUnpublished；internal/partycommercial/domain/reference_closure_test.go::TestAClosureAdoptsTheRulePackageTheContractNames；internal/partycommercial/domain/reference_closure_test.go::TestAClosureRefusesARulePackageTheContractDoesNotName |
 | `AT-PC-023` | internal/partycommercial/application/form_judgment_as_of_test.go::TestEachJudgmentFormsItsOwnAsOfRatherThanSharingOneGlobalTime；internal/partycommercial/domain/as_of_policy_test.go::TestRulePackageDeclaresIndependentAsOfPerJudgment |
 | `AT-PC-024` | internal/parcelshipment/adapters/partycommercial/commercial_basis_test.go::TestARevalidationConfirmsTheStandingResolution；internal/partycommercial/application/validate_commercial_basis_test.go::TestAnUnchangedViewLetsThePriorResolutionStandWithItsOriginalIdentity；internal/partycommercial/domain/commercial_resolution_staleness_test.go::TestUnchangedAuthorityViewKeepsThePriorResolutionUsable；internal/partycommercial/domain/commercial_resolution_test.go::TestRepeatedResolutionIsStableUntilTheViewRevisionChanges |
-| `AT-PC-025` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnAcceptedDecisionSurvivesRetiredBasisOnReplay；internal/partycommercial/application/validate_commercial_basis_test.go::TestAnUnchangedViewLetsThePriorResolutionStandWithItsOriginalIdentity；internal/partycommercial/domain/commercial_resolution_test.go::TestEndedVersionsLeaveTheCandidateSet |
+| `AT-PC-025` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestADecisionStopsWhenAReachabilityJudgmentWasSuperseded；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnAcceptedDecisionSurvivesRetiredBasisOnReplay；internal/partycommercial/application/validate_commercial_basis_test.go::TestAnUnchangedViewLetsThePriorResolutionStandWithItsOriginalIdentity；internal/partycommercial/domain/commercial_resolution_test.go::TestEndedVersionsLeaveTheCandidateSet |
 | `AT-PC-026` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestADecisionRevalidatesTheBasisItsJudgmentsWereFormedUnder；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnAcceptedDecisionSurvivesRetiredBasisOnReplay；internal/parcelshipment/application/form_acceptance_decision_test.go::TestARejectionOnLostBasisStillReleasesAnExistingFreeze；internal/parcelshipment/application/form_acceptance_decision_test.go::TestASupersededBasisIsResolvedAgainInsteadOfRetried；internal/partycommercial/application/validate_commercial_basis_test.go::TestARevalidationSeesANewCandidateAndReportsTheResolutionStale；internal/partycommercial/domain/commercial_resolution_staleness_test.go::TestReResolutionAfterAChangeYieldsANewResolutionIdentity；internal/partycommercial/domain/commercial_resolution_test.go::TestEndedVersionsLeaveTheCandidateSet |
 | `AT-PC-027` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnUndeterminedCommercialResolutionStaysUndecided；internal/partycommercial/application/validate_commercial_basis_test.go::TestAnUnreadableAuthorityLeavesTheRevalidationPendingRatherThanStale；internal/partycommercial/domain/commercial_resolution_test.go::TestZeroMultipleAndUnavailableAreDistinctOutcomes |
 | `AT-PC-028` | internal/partycommercial/application/form_judgment_as_of_test.go::TestAResolutionNamedByAnotherCustomerIsNotAccepted；internal/partycommercial/application/form_judgment_as_of_test.go::TestASecondPhaseProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer；internal/partycommercial/application/validate_commercial_basis_test.go::TestAProbeCannotTellAMissingResolutionFromOneOwnedByAnotherCustomer；internal/partycommercial/application/validate_commercial_basis_test.go::TestARevalidationNamedByAnotherCustomerIsNotAccepted；internal/partycommercial/application/validate_commercial_basis_test.go::TestARevalidationNamedByAnotherTenantIsNotAccepted；internal/partycommercial/domain/party_relationship_test.go::TestCustomerAccountRejectsCrossTenantPartyBinding |
 | `AT-PC-029` | internal/partycommercial/domain/commercial_resolution_test.go::TestAResolutionResultHasNowhereToPutAnAcceptanceVerdict |
 | `AT-PC-030` | internal/partycommercial/domain/service_product_test.go::TestNoServiceProductCanTakeAnIndependentWaybillChannelForm |
 | `AT-PC-031` | internal/partycommercial/domain/settlement_basis_resolution_test.go::TestSettlementBasisCarriesMethodAndScopeAndKeepsDisjointChargeScopesApart；internal/partycommercial/domain/settlement_policy_test.go::TestPrepaidAndTermsCoexistAcrossNonOverlappingScopes |
-| `AT-PC-032` | internal/partycommercial/domain/reference_closure_test.go::TestOneConflictingBasisMakesTheWholeClosureConflict；internal/partycommercial/domain/settlement_basis_resolution_test.go::TestSettlementBasisConflictsWhenOneChargeScopeIsHitByBothMethods；internal/partycommercial/domain/settlement_policy_test.go::TestSameScopeHitByBothMethodsIsAConflict |
+| `AT-PC-032` | internal/partycommercial/domain/reference_closure_test.go::TestConflictOutranksAMissingBasis；internal/partycommercial/domain/settlement_basis_resolution_test.go::TestSettlementBasisConflictsWhenOneChargeScopeIsHitByBothMethods；internal/partycommercial/domain/settlement_policy_test.go::TestSameScopeHitByBothMethodsIsAConflict |
 | `AT-PC-033` | internal/partycommercial/domain/price_policy_test.go::TestSellPolicyCannotBindBuyPlanWithoutDeclaredConversion |
 | `AT-PC-034` | internal/partycommercial/domain/price_policy_test.go::TestApprovedBindingKeepsPolicyWhileUnpublishedPlanStaysPending |
 | `AT-PC-035` | internal/partycommercial/domain/price_policy_test.go::TestEachDirectionResolvesItsOwnPolicy；internal/partycommercial/domain/reference_closure_test.go::TestClosureAdoptsIndependentPricePoliciesPerDirection |
@@ -115,14 +116,14 @@
 | `AT-PS-008` | internal/parcelshipment/application/advance_acceptance_judgment_test.go::TestAnUnavailableAuthorityBecomesPendingAndNeverAJudgement；internal/parcelshipment/application/advance_acceptance_judgment_test.go::TestAnUnavailableCommercialResolverIsPendingUnderItsOwnReason |
 | `AT-PS-010` | internal/parcelshipment/application/submit_shipment_request_test.go::TestSubmitFormsNoRequestWhenThisProductLacksAuthority |
 | `AT-PS-012` | internal/parcelshipment/adapters/http/submit_shipment_request_test.go::TestSubmitLetsTheApplicationFormInputNotAcceptedRatherThanRejectingItAtTheEdge |
-| `AT-PS-013` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestAFormedDecisionHandsOffOneIntentClaimedByTheDecision；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnUndeliveredDecisionHandoffKeepsTheAcceptanceWithAResumableIntent；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAReplayResendsTheSameDecisionIntentWithoutDecidingAgain |
+| `AT-PS-013` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestADecisionStopsWhenAReachabilityJudgmentWasSuperseded；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAFormedDecisionHandsOffOneIntentClaimedByTheDecision；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnUndeliveredDecisionHandoffKeepsTheAcceptanceWithAResumableIntent；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAReplayResendsTheSameDecisionIntentWithoutDecidingAgain |
 | `AT-PS-014` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAuthorizedAmendmentFormsAVersionAndDerivesItsAdoption |
 | `AT-PS-015` | internal/parcelshipment/domain/customer_source_data_test.go::TestCustomerSourceDataVersionsAppendWithoutOverwritingBaselineOrPriorVersions |
 | `AT-PS-016` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestARepeatedAmendmentReturnsTheOriginalVersionWithoutFormingASecond |
 | `AT-PS-017` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentSourceConflictNeitherOverwritesNorFormsASecondVersion |
-| `AT-PS-020` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnExplicitClearReachesTheRuleMatrixAsItsOwnAction；internal/parcelshipment/domain/customer_source_data_test.go::TestAmendmentIntentMustCohereWithItsBasis |
-| `AT-PS-023` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentNamingAParcelOutsideTheAcceptanceBaselineIsRejectedRatherThanErroring；internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentToARequestThatIsNotYetAcceptedIsNotReportedAsOutsideTheBaseline；internal/parcelshipment/domain/customer_source_data_test.go::TestACustomerSourceDataVersionCannotReachAParcelOutsideTheAcceptanceBaseline |
-| `AT-PS-031` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentLostToAConcurrentWriterIsUndecidedNotRecorded；internal/parcelshipment/application/amend_customer_source_data_test.go::TestARetryAfterAFailedHandoffResendsTheSameIntentWithoutFormingASecondVersion |
+| `AT-PS-020` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnExplicitClearReachesTheRuleMatrixAsItsOwnAction；internal/parcelshipment/application/amend_customer_source_data_test.go::TestUnconfiguredAmendmentRulesStallRatherThanRefuseTheCustomer；internal/parcelshipment/domain/customer_source_data_test.go::TestAmendmentIntentMustCohereWithItsBasis |
+| `AT-PS-023` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentNamingAParcelOutsideTheAcceptanceBaselineIsRejectedRatherThanErroring；internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentToARequestThatIsNotYetAcceptedIsNotReportedAsOutsideTheBaseline；internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnExplicitClearReachesTheRuleMatrixAsItsOwnAction；internal/parcelshipment/domain/customer_source_data_test.go::TestACustomerSourceDataVersionCannotReachAParcelOutsideTheAcceptanceBaseline |
+| `AT-PS-031` | internal/parcelshipment/application/amend_customer_source_data_test.go::TestAnAmendmentLostToAConcurrentWriterIsUndecidedNotRecorded；internal/parcelshipment/application/amend_customer_source_data_test.go::TestARetryAfterAFailedHandoffResendsTheSameIntentWithoutFormingASecondVersion；internal/parcelshipment/application/amend_customer_source_data_test.go::TestUnconfiguredAmendmentRulesStallRatherThanRefuseTheCustomer |
 | `AT-PS-033` | internal/parcelshipment/application/form_acceptance_decision_test.go::TestAllAdoptedJudgmentsPassingFormsAnAcceptance |
 | `AT-PS-034` | internal/parcelshipment/application/reject_shipment_request_test.go::TestAnAuthorizedOperatorFormsAnActiveRejection；internal/parcelshipment/domain/acceptance_task_test.go::TestAManualReviewCompletionWithoutAuthorityOrEvidenceCannotBeBuilt |
 | `AT-PS-035` | internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control_test.go::TestARestrictedFreezeCarriesItsLimitBasisAndAnIdentity；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAFailedReleaseKeepsTheRejectionAndLeavesCompensationPending；internal/parcelshipment/application/form_acceptance_decision_test.go::TestAnAcceptanceDoesNotReleaseTheFreeze；internal/parcelshipment/application/form_acceptance_decision_test.go::TestARejectionOnLostBasisStillReleasesAnExistingFreeze；internal/parcelshipment/application/form_acceptance_decision_test.go::TestARejectionReleasesTheFreezeByItsOriginalAssociation；internal/parcelshipment/application/reject_shipment_request_test.go::TestAFailedReleaseKeepsTheActiveRejectionAndLeavesCompensationPending；internal/parcelshipment/application/reject_shipment_request_test.go::TestAnActiveRejectionReleasesTheFreeze；internal/parcelshipment/application/reject_shipment_request_test.go::TestAnActiveRejectionWithUnreadableJudgmentsSendsNoRelease |
@@ -135,7 +136,7 @@
 | `AT-PS-042` | internal/parcelshipment/application/adopt_network_intake_test.go::TestAReplayReturnsTheOriginalAndAConflictOverwritesNothing |
 | `AT-PS-043` | internal/parcelshipment/domain/network_intake_test.go::TestAnIntakeSourceRefusesHintsAndHalfShapes |
 | `AT-PS-044` | internal/parcelshipment/application/adopt_network_intake_test.go::TestTheCancellationBoundaryJudgesByBusinessTime |
-| `AT-PS-047` | internal/parcelshipment/application/adopt_network_intake_test.go::TestEligibilityGapsStallWithoutDefaultingToACommitment |
+| `AT-PS-047` | internal/parcelshipment/adapters/partycommercial/service_stage_rules_test.go::TestIntakeEligibilityTranslatesTheDeclaration；internal/parcelshipment/application/adopt_network_intake_test.go::TestEligibilityGapsStallWithoutDefaultingToACommitment |
 | `AT-PS-048` | internal/parcelshipment/domain/network_intake_test.go::TestACommitmentAdjustsOnlyByAReasonedNewVersion |
 | `AT-PS-049` | internal/parcelshipment/application/adopt_network_intake_test.go::TestASecondSourceKindDoesNotStartASecondResponsibility |
 | `AT-PS-050` | internal/parcelshipment/domain/network_intake_test.go::TestACommitmentAdjustsOnlyByAReasonedNewVersion |
@@ -156,7 +157,7 @@
 | `AT-PS-068` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestARepeatedWithdrawalReturnsTheOriginalWithdrawalAndItsCompensation；internal/parcelshipment/application/withdraw_shipment_request_test.go::TestARepeatedWithdrawalSourceReturnsTheOriginalHandling |
 | `AT-PS-069` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestAWithdrawalSourceConflictNeitherOverwritesNorWithdrawsAgain |
 | `AT-PS-070` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestAWithdrawalReleasesTheFreezeByItsOriginalAssociation；internal/parcelshipment/domain/withdrawal_test.go::TestADecisionCannotFormAfterAWithdrawalWon |
-| `AT-PS-071` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestALateWithdrawalAfterAnAcceptanceKeepsItsLawfulFreeze；internal/parcelshipment/domain/withdrawal_test.go::TestAWithdrawalCannotOverwriteADecisionThatAlreadyCrossedTheBoundary |
+| `AT-PS-071` | internal/parcelshipment/application/reject_shipment_request_test.go::TestUnconfiguredRejectionRulesStallRatherThanRefuseTheOperator；internal/parcelshipment/application/withdraw_shipment_request_test.go::TestALateWithdrawalAfterAnAcceptanceKeepsItsLawfulFreeze；internal/parcelshipment/domain/withdrawal_test.go::TestAWithdrawalCannotOverwriteADecisionThatAlreadyCrossedTheBoundary |
 | `AT-PS-072` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestALateWithdrawalReadsTheDecisionThatAlreadyWon；internal/parcelshipment/domain/withdrawal_test.go::TestAWithdrawalCannotOverwriteADecisionThatAlreadyCrossedTheBoundary |
 | `AT-PS-073` | internal/parcelshipment/application/withdraw_shipment_request_test.go::TestAFailedReleaseKeepsTheWithdrawalAndLeavesCompensationPending |
 | `AT-PS-074` | internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control_test.go::TestAReleaseByTheRecordedResultIdentityFreesTheOriginalFreeze；internal/parcelshipment/application/withdraw_shipment_request_test.go::TestAWithdrawalWithoutAnyFreezeSendsNoReleaseAndLeavesNoCompensation；internal/settlementaccounting/application/release_pre_acceptance_control_test.go::TestAReleaseForARequestThatNeverFrozeIsNothingToRelease |
@@ -231,7 +232,7 @@
 | `AT-SA-152` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
 | `AT-SA-153` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestClaimAmountsFormOnlyFromResponsibilityConclusions |
 | `AT-SA-155` | internal/settlementaccounting/domain/claim_recovery_amount_test.go::TestAdjustmentsAppendWithoutRewritingAmounts |
-| `AT-SA-167` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
+| `AT-SA-167` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation；internal/settlementaccounting/domain/external_funds_test.go::TestReversalAppendsWithoutDeletingTheOriginal |
 | `AT-SA-168` | internal/settlementaccounting/domain/external_funds_test.go::TestApplicationConservesAmountsPerAllocation |
 | `AT-SA-170` | internal/settlementaccounting/domain/external_funds_test.go::TestMappingNeedsExplicitBasisBeyondCoincidence |
 | `AT-SA-176` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACrossCurrencyCostAdoptsTheEvaluationsConversion |
@@ -254,8 +255,8 @@
 | `AT-TF-065` | internal/transportfulfillment/domain/effective_delivery_test.go::TestARefusalEndsOnlyItsOwnObject；internal/transportfulfillment/domain/effective_delivery_test.go::TestFailedDeliveryOutcomesCannotBecomeAnEffectiveDelivery |
 | `AT-TF-066` | internal/transportfulfillment/domain/effective_delivery_test.go::TestASecondAttemptDeliversAfterAFirstFailure |
 | `AT-TF-067` | internal/transportfulfillment/domain/effective_delivery_test.go::TestADeliveredObjectFormsAnEffectiveDeliveryWithItsPOD |
-| `AT-TF-072` | internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
-| `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
+| `AT-TF-072` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
+| `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
 | `AT-TF-080` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-094` | internal/transportfulfillment/domain/transport_charge_occurrence_test.go::TestFailedAttemptOccurrenceTakesItsFactFromTheResult |
@@ -1134,3 +1135,39 @@
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-169` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-170` | 内部 ETA 已形成，但适用合同、门槛或客户服务规则缺失或冲突 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
+
+## 重盘变化摘要（0cddbba）
+
+重盘方法与首盘逐字相同（全仓 `*_test.go` 扫 `AT-[A-Z]{2}-\d{3}` 引用、归属到所在测试函数，对 `docs/application` 的 AT 全集）；诚实约束照旧——机制在但无测试钉不计①，硬句测试不点 AT 号也不计①。
+
+### 四桶数字：零变动
+
+| 桶 | 首盘 `136f79b` | 重盘 `0cddbba` | 变化 |
+|---|---|---|---|
+| ① 已钉住 | 223 | 223 | ±0（集合逐条相等，无增无减无迁移） |
+| ② 机制候选 | 241 | 241 | ±0 |
+| ③ 实例/闸门 | 148 | 148 | ±0 |
+| ④ 机制未落地 | 471 | 471 | ±0 |
+| 合计 | 1083 | 1083 | ±0（`docs/application` 自首盘未改，AT 全集不变） |
+
+四桶不动的原因不是没进展，而是引用口径：两盘之间落了 48 个测试文件、约 1.16 万行（十余个编排 handler 横跨 CC/VE/PP/PG/SA/TF/NO/PC/PS 适配器），其 Covers 注释全部引 CONTEXT/UC 硬句原文；仅 2 处新增 `AT-*` 点名（`AT-PS-047` 适配器面、`AT-TF-072` 编排面），且都点在已在册的①行上。机制与测试双双前进，但按本表口径①不动——④/② 的高估随之扩大，方向见方法节的重盘补充条。
+
+### ①归属更新：16 行
+
+集合不变，测试归属变了 16 行，已同步进①表：
+
+- **补测增引 13 行**——`AT-NR-028`/`AT-NR-030`（+判断时间取时钟不取 asOf 测）、`AT-PC-006`（+锚点策略缺失未决测）、`AT-PC-022`（+同版本改绑引用冲突测）、`AT-PC-025`/`AT-PS-013`（+可达性判断被推翻停判测）、`AT-PS-020`/`AT-PS-031`（+修订规则未配置停等测）、`AT-PS-023`（+显式清除自成动作测）、`AT-PS-047`（+服务阶段规则适配器测）、`AT-PS-071`（+拒绝规则未配置停等测）、`AT-SA-167`（+冲正追加不删原始测）、`AT-TF-072`（+交付生效编排更正链测）。
+- **函数改名/引用改动 3 行**——`AT-NR-025`（`TestServiceAreaEvaluationFoldsTheMatrixRows` → `TestServiceAreaEvaluationDrivesTheThreeValuedConclusion`）、`AT-PC-032`（→ `TestConflictOutranksAMissingBasis`）、`AT-TF-078`（→ `TestRegulatoryReturnIsMarkedByItsBasisKind`）。
+
+### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
+
+| 面 | 新测试文件 | 对应 UC 区域 |
+|---|---|---|
+| CC 编排×4 | submit_declaration / receive_external_result / verify_disposition / close_customs_case | UC-CC 申报提交、外部结果、处置核验、案件关闭 |
+| CC/NO 领域 | duty_collaboration、customs_collaboration | 税费协作、节点关务协作 |
+| VE 编排×5 | derive_projection / derive_customer_view / raise_signal / notify_customer / send_disposition_request | UC-VE 投影、客户视图、信号分诊、客户通知、处置请求 |
+| PP | evaluate_pricing 编排、feature_category 领域 | UC-PP 计价评价 |
+| PG | record_stage_review 编排 | 治理阶段评审 |
+| SA | confirm_charge 编排 | UC-SA 费用确认 |
+| TF | register_effective_delivery 编排、dispatch_task 领域 | UC-TF 交付生效、派送任务 |
+| PS/PC | service_stage_rules 适配器、service_stage_content 领域 | 服务阶段规则声明（第十适配器） |
