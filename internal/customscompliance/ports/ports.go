@@ -172,6 +172,37 @@ type CaseClosureHandoff interface {
 	HandOffClosure(ctx context.Context, intent CaseClosureHandoffIntent) error
 }
 
+type RestrictionSaveOutcome uint8
+
+const (
+	RestrictionSaveOutcomeInvalid RestrictionSaveOutcome = iota
+	RestrictionSaved
+	RestrictionAlreadyRecorded
+)
+
+// RestrictionStore 保存监管限制并按范围盘出参与准入判断的限制。Save 的写入代数只
+// 管建立（同 ID 重复建立交回 AlreadyRecorded）；解除是同一限制的状态推进，走 Update
+// ——限制身份不变，谁先解除成功谁算，重复解除由领域的不再有效拦。
+type RestrictionStore interface {
+	FindByID(ctx context.Context, tenant domain.TenantID, id domain.RestrictionID) (domain.RegulatoryRestriction, bool, error)
+	ListByScope(ctx context.Context, tenant domain.TenantID, scope domain.DecisionScopeReference) ([]domain.RegulatoryRestriction, error)
+	Save(ctx context.Context, tenant domain.TenantID, restriction domain.RegulatoryRestriction) (RestrictionSaveOutcome, error)
+	Update(ctx context.Context, tenant domain.TenantID, restriction domain.RegulatoryRestriction) error
+}
+
+// RestrictionHandoffIntent 把限制的建立与解除交给适用下游（TF/NO 的门禁执行方消费
+// ——它们只执行不豁免）。
+type RestrictionHandoffIntent struct {
+	TenantID    domain.TenantID
+	Restriction domain.RegulatoryRestriction
+}
+
+// RestrictionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type RestrictionHandoff interface {
+	HandOffRestriction(ctx context.Context, intent RestrictionHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
