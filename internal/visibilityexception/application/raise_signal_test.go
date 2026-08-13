@@ -155,7 +155,9 @@ func raiseCommand(t *testing.T, hitAt time.Time) application.RaiseSignalCommand 
 
 // Covers: CONTEXT 生命周期「规则或事实首次满足条件 → 建立信号发作期，保存规则版本、
 // 范围、依据和可信度」与「每个信号必须保存对象、类型、规则版本、判断时间、事实依据、
-// 可信度」——首启建发作期、分诊结论与发作期同一提交、意图由发作期标识认领。
+// 可信度」——首启建发作期、分诊结论与发作期同一提交、意图由发作期标识认领。点名
+// `AT-VE-062` 的分诊半边「高可信高影响命中自动规则→建案」——命中版本化规则形成
+// 自动建案走向，案件本体由结论的消费方建立。
 func TestAFirstHitOpensAnEpisodeAndConcludesTriage(t *testing.T) {
 	fixture := newRaiseFixture(t)
 
@@ -192,7 +194,8 @@ func TestAFirstHitOpensAnEpisodeAndConcludesTriage(t *testing.T) {
 
 // Covers: CONTEXT「同一对象、类型、因果条件和连续影响期内的重复命中更新同一信号发作期」
 // 与生命周期「重复命中 → 更新判断历史……不建立重复发作期」——命中不签新身份、不重新
-// 分诊、不产生第二份结论。
+// 分诊、不产生第二份结论。点名 `AT-VE-064`「同一连续期重复命中→更新同一发作期，
+// 不重复建案或重置时钟」。
 func TestARepeatHitOnAnActiveEpisodeUpdatesItWithoutASecondEpisodeOrTriage(t *testing.T) {
 	fixture := newRaiseFixture(t)
 	ctx := context.Background()
@@ -238,7 +241,8 @@ func TestARepeatHitOnAnActiveEpisodeUpdatesItWithoutASecondEpisodeOrTriage(t *te
 
 // Covers: CONTEXT「条件明确解除后，该发作期结束；再次发生时建立关联的新发作期」与生命
 // 周期「恢复后再次满足条件 → 建立关联的新发作期；是否建立或重开案件重新经过分诊规则」
-// ——重开新期指回前期、重新分诊、旧期保持已结束。
+// ——重开新期指回前期、重新分诊、旧期保持已结束。点名 `AT-VE-065`「恢复后再次发生→
+// 建立关联新发作期，重新分诊」。
 func TestAHitAfterRecoveryReopensALinkedEpisodeAndRetriages(t *testing.T) {
 	fixture := newRaiseFixture(t)
 	ctx := context.Background()

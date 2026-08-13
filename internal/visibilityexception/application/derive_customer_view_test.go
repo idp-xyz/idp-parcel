@@ -190,7 +190,9 @@ func viewCommand(t *testing.T, projectionVersion string) application.DeriveCusto
 
 // Covers: CONTEXT 客户全程追踪视图生命周期「当前投影……首次满足展示条件 → 形成货主
 // 客户账户隔离的客户视图版本」与「客户全程追踪视图只基于当前有效的全程追踪投影……
-// 形成」——首版视图锚定投影版本、账户是字段、意图由视图版本认领恰发一份。
+// 形成」——首版视图锚定投影版本、账户是字段、意图由视图版本认领恰发一份。点名
+// `AT-VE-156`「当前投影包含已批准公开里程碑→展示标准语义……不复制内部来源状态」
+// ——展示维只携带策略批准的内容引用。
 func TestFirstQualifyingProjectionPublishesAnAccountIsolatedView(t *testing.T) {
 	fixture := newViewFixture(t)
 
@@ -273,7 +275,8 @@ func TestAnUnconfiguredDisclosurePolicyPendsEveryDimensionInsteadOfInventingVisi
 
 // Covers: CONTEXT「某一维信息待确认或不可披露 → 只对该维返回待确认、暂不可用或不展示」
 // 与「只展示适用服务与授权允许的公开里程碑、地点粒度、ETA、终局和说明」——一维不可
-// 披露只压那一维，其余维照常展示。
+// 披露只压那一维，其余维照常展示。点名 `AT-VE-157`「投影含内部控制位置、非公开节点
+// 和供应商商业信息→按规则过滤，不进入客户视图」的逐维不展示格。
 func TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers(t *testing.T) {
 	fixture := newViewFixture(t)
 	fixture.policy.answer.ETA = ports.DimensionDisclosure{State: domain.DimensionNotDisclosed}
@@ -339,7 +342,8 @@ func TestTheSameProjectionVersionDoesNotRepublishButResendsTheSameIntent(t *test
 
 // Covers: CONTEXT「来源更正、事实有效性变化、身份谱系变化、ETA 新版本或终局更正必须
 // 重新派生客户视图并形成追加更正或明确替代关系。原已发布版本保留」——投影换版本时
-// 新视图指回前版并锚定新投影。
+// 新视图指回前版并锚定新投影。点名 `AT-VE-161`「来源更正使原里程碑或终局失效→形成
+// 追加更正/替代视图，原版本保留且不再作为当前结果」。
 func TestANewerProjectionSupersedesTheCurrentViewKeepingHistory(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()

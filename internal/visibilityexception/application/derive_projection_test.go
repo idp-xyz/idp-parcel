@@ -167,7 +167,9 @@ func deriveCommand(t *testing.T, factRef, version string) application.DeriveProj
 
 // Covers: VE CONTEXT 生命周期「源上下文接受事实或有效性变化→按标准追踪里程碑映射
 // ……形成新的投影版本」与「有效事实可以可靠排序或替代→重新派生……原投影版本继续
-// 保留」——首事实派生首版，第二事实重派生指回前版；投影意图随提交交付。
+// 保留」——首事实派生首版，第二事实重派生指回前版；投影意图随提交交付。点名
+// `AT-VE-038`「已接受节点收寄事实首次进入投影→形成来源引用和节点里程碑」与
+// `AT-VE-044` 的版本追加半边「追加投影版本，原版本保留」。
 func TestFactsDeriveAndRederiveTheProjection(t *testing.T) {
 	fixture := newDeriveFixture(t)
 
@@ -202,7 +204,9 @@ func TestFactsDeriveAndRederiveTheProjection(t *testing.T) {
 
 // Covers: 幂等与冲突纪律——同键同内容重放按当前投影作答不重复派生；同键异内容是
 // 来源冲突保留原事实（不按最后到达覆盖）；映射目录未配置即如实未归类、投影照常派生
-// （无法可靠映射不强行映射也不阻断——那不是未决）。
+// （无法可靠映射不强行映射也不阻断——那不是未决）。点名 `AT-VE-039`「同一来源版本
+// 重复到达→返回原投影」、`AT-VE-040`「来源身份携带不同对象范围→形成冲突并待确认」
+// 与 `AT-VE-042`「已接受事实没有可靠映射→形成未归类，不写成运输中」。
 func TestReplayConflictAndUnconfiguredMappingStayHonest(t *testing.T) {
 	fixture := newDeriveFixture(t)
 	if _, err := fixture.handler.Handle(context.Background(), deriveCommand(t, "NODE-INTAKE/a", "v1")); err != nil {

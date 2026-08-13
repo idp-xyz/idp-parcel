@@ -230,7 +230,8 @@ func TestADiscloseDecisionGeneratesSubmitsAndRecordsTheNotification(t *testing.T
 
 // Covers: 派工受理约束「只有 DiscloseToCustomer 结论能生成通知——领域已钉，编排不绕」
 // 与 CONTEXT「披露条件不成立或授权不足时分别形成暂不披露或待授权结果」——两个非披露格
-// 都构不成通知请求，门口即答未受理，不读任何依赖。
+// 都构不成通知请求，门口即答未受理，不读任何依赖。点名 `AT-VE-099` 的不发消息半边
+// 「暂不披露，不自动发消息」与 `AT-VE-100` 的不提交渠道半边「待授权，不提交渠道」。
 func TestANonDiscloseConclusionCannotGenerateANotification(t *testing.T) {
 	fixture := newNotifyFixture(t)
 
@@ -330,6 +331,7 @@ func TestTheSameDisclosureDoesNotRenotifyButResendsTheSameIntent(t *testing.T) {
 
 // Covers: CONTEXT「已提交消息渠道、渠道已接受、已送达、失败和客户确认必须分别记录」
 // 的失败半边——提交失败记`失败`节点，通知保持已成立可重试，不是未决也不改写已生成。
+// 点名 `AT-VE-106`「投递失败→保留失败尝试，按策略重试或升级」的记录半边。
 func TestAFailedChannelSubmissionIsRecordedAndKeptForRetry(t *testing.T) {
 	fixture := newNotifyFixture(t)
 	fixture.channel.err = errors.New("channel unavailable")
@@ -356,6 +358,7 @@ func TestAFailedChannelSubmissionIsRecordedAndKeptForRetry(t *testing.T) {
 
 // Covers: 派工约束「失败后重试产新节点前节点保留——领域已钉」与 CONTEXT「失败按策略
 // 重试或升级」——重试沿用同一通知（不签新身份），新节点接在失败后面，历史一个不丢。
+// 点名 `AT-VE-106`「投递失败→保留失败尝试，按策略重试或升级」的重试半边。
 func TestARetryAfterFailureAppendsANewMilestoneKeepingTheFailedOne(t *testing.T) {
 	fixture := newNotifyFixture(t)
 	ctx := context.Background()

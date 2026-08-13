@@ -168,7 +168,8 @@ func dispositionCommand(t *testing.T) application.SendDispositionRequestCommand 
 
 // Covers: CONTEXT「处置请求必须明确目标对象、请求动作、原因、证据、请求方、接收上下文
 // 和期望时限」与生命周期「案件形成请求 → 待源上下文处理：固定目标、动作、范围、原因、
-// 证据和时限」——活案件下七件齐即发送，意图由请求标识认领。
+// 证据和时限」——活案件下七件齐即发送，意图由请求标识认领。点名 `AT-VE-079`「处置
+// 请求发送→只形成发送结果，不声称目标动作完成」。
 func TestAnActiveCaseSendsARequestWithItsEssentials(t *testing.T) {
 	fixture := newDispositionFixture(t)
 
@@ -375,7 +376,8 @@ func TestASourceJudgmentIsRecordedOnce(t *testing.T) {
 }
 
 // Covers: 生命周期「待处理且到达受理有效期 → 已到期：该范围不得再被新接受」——届满后
-// 的接受不入账是业务答案不是故障；拒绝不受该门限制，照常入账。
+// 的接受不入账是业务答案不是故障；拒绝不受该门限制，照常入账。点名 `AT-VE-092`
+// 「待接受请求超过明确受理有效期→形成已到期；目标方不得再按旧请求新接受」。
 func TestAnExpiredWindowRefusesALateAcceptanceButStillRecordsARefusal(t *testing.T) {
 	fixture := newDispositionFixture(t)
 	ctx := context.Background()

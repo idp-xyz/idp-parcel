@@ -188,6 +188,9 @@ func executeCommand(t *testing.T) application.RecordExecutionCommand {
 }
 
 // 同一事项只决定一次：首决交意图，重放返原决定重发同一份，异决定同事项冲突不顶替。
+// 点名 `AT-NO-008`「相同事项版本、对象、动作和请求重复到达→返回已有承接」与
+// `AT-NO-009`「同一请求身份携带不同对象、动作或范围→形成节点协作冲突……不按最后
+// 到达覆盖」。
 func TestOneDecisionPerCollaborationItem(t *testing.T) {
 	fixture := newCollabFixture(t)
 	command := acceptCommand(t)
@@ -261,7 +264,9 @@ func TestOneDecisionPerCollaborationItem(t *testing.T) {
 }
 
 // 执行事实登记：承接为界（拒接/越权各归业务负向格，领域把门编排分格），幂等按
-// （事项+实物+动作），意图交 CC 处置执行核对。
+// （事项+实物+动作），意图交 CC 处置执行核对。点名 `AT-NO-008` 的不重复累计半边
+// （同键重放不重存）与 `AT-NO-012` 的冲突半边「多个合格来源相互冲突→保留原事实……
+// 不按最后到达覆盖」（同键异证据成冲突格）。
 func TestExecutionFactsAreRecordedWithinTheDecision(t *testing.T) {
 	fixture := newCollabFixture(t)
 	if _, err := fixture.handler.Accept(context.Background(), acceptCommand(t)); err != nil {

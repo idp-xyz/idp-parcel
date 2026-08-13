@@ -1,6 +1,6 @@
 # AT 覆盖度盘点（机制半边索引）
 
-盘点基线：main `0cddbba`（2026-08-13 重盘；首盘 `136f79b` 同日）。产出方式与口径见下；本文件是 PN-08 候选包索引的机制半边，不是证据登记册。变化摘要见文末[重盘变化摘要](#重盘变化摘要0cddbba)。
+盘点基线：本文件所在提交（2026-08-13，点名票后第二次重盘；前两盘 `136f79b`、`0cddbba` 同日）。产出方式与口径见下；本文件是 PN-08 候选包索引的机制半边，不是证据登记册。变化摘要见文末[重盘变化摘要](#重盘变化摘要0cddbba)。
 
 ## 方法与口径
 
@@ -11,32 +11,36 @@
 - ②③④ 为启发式分桶，抽样复核过 CC/SA/TF 各十余条；单条归类若与领票时的判断冲突，以领票时对照 UC 原文为准。
 - **VE/CC 的①列为零是引用口径所致**：两包既有测试的 Covers 注释引 CONTEXT 硬句原文而非 AT 号（实测 `internal/visibilityexception`、`internal/customscompliance` 全部 `*_test.go` 无一处 `AT-*` 字样），不代表两包无测试或无覆盖；它们的④行里有一部分实际已被硬句测试钉住，逐条领票时按 UC 原文比对。
 - **`0cddbba` 重盘补充：硬句引用口径已扩展到首盘之后新落的全部编排批**——VE 五个编排（投影派生、客户视图、信号分诊、客户通知、处置请求）、CC 四个编排（申报提交、外部结果接收、处置核验、案件关闭）、PG 阶段评审、PP 计价评价编排、SA 费用确认、TF 交付生效、NO 关务协作领域件的新测试同引硬句不点 AT 号（增量 48 个测试文件仅 2 处新增 `AT-*` 点名，且都点在已在册行上）。①因此低估的范围从 VE/CC 扩大到上述新编排面；对应 ②④ 行的高估同步扩大，逐条领票时仍按 UC 原文比对，不据本表宣称未覆盖。
+- **点名票后修正（第二次重盘）**：VE 五编排与 NO 关务协作的测试已逐条对 UC 验收表补 AT 点名（宁缺勿滥——语义整条对上才点，半边覆盖在点名处注明「××半边」；点不上的继续引硬句），VE ①由 0 升至 16、NO ①由 10 升至 13。**SA 费用确认与 CC 放行门禁两组测试对表后零点名**：其所钉语义（确认条件定格、五值折叠、条件指纹换版、目录未登记未决）落在各自 UC 的结果契约与 CONTEXT 硬句上，验收表无一一对应行——不硬点。VE/CC 其余包的硬句低估口径仍然成立。
 
 ## 总览
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 223 |
-| ② 机制候选 | 241 |
+| ① 已钉住 | 242 |
+| ② 机制候选 | 238 |
 | ③ 实例/闸门 | 148 |
-| ④ 机制未落地 | 471 |
+| ④ 机制未落地 | 455 |
 | 合计 | 1083 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 410 | 0 | 0 | 90 | 320 |
-| NO | 46 | 10 | 29 | 7 | 0 |
+| NO | 46 | 13 | 26 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 66 | 90 | 22 | 0 |
 | TF | 97 | 22 | 68 | 7 | 0 |
-| VE | 170 | 0 | 0 | 19 | 151 |
+| VE | 170 | 16 | 0 | 19 | 135 |
 
 ## ① 已钉住（AT → 测试）
 
 | AT | 测试（文件::函数） |
 |---|---|
+| `AT-NO-008` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision；internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
+| `AT-NO-009` | internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
+| `AT-NO-012` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision |
 | `AT-NO-015` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAnExplicitReceptionFormsIntakeAndControl |
 | `AT-NO-016` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-017` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
@@ -260,6 +264,22 @@
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
 | `AT-TF-080` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-094` | internal/transportfulfillment/domain/transport_charge_occurrence_test.go::TestFailedAttemptOccurrenceTakesItsFactFromTheResult |
+| `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
+| `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
+| `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
+| `AT-VE-042` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
+| `AT-VE-044` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
+| `AT-VE-062` | internal/visibilityexception/application/raise_signal_test.go::TestAFirstHitOpensAnEpisodeAndConcludesTriage |
+| `AT-VE-064` | internal/visibilityexception/application/raise_signal_test.go::TestARepeatHitOnAnActiveEpisodeUpdatesItWithoutASecondEpisodeOrTriage |
+| `AT-VE-065` | internal/visibilityexception/application/raise_signal_test.go::TestAHitAfterRecoveryReopensALinkedEpisodeAndRetriages |
+| `AT-VE-079` | internal/visibilityexception/application/send_disposition_request_test.go::TestAnActiveCaseSendsARequestWithItsEssentials |
+| `AT-VE-092` | internal/visibilityexception/application/send_disposition_request_test.go::TestAnExpiredWindowRefusesALateAcceptanceButStillRecordsARefusal |
+| `AT-VE-099` | internal/visibilityexception/application/notify_customer_test.go::TestANonDiscloseConclusionCannotGenerateANotification |
+| `AT-VE-100` | internal/visibilityexception/application/notify_customer_test.go::TestANonDiscloseConclusionCannotGenerateANotification |
+| `AT-VE-106` | internal/visibilityexception/application/notify_customer_test.go::TestAFailedChannelSubmissionIsRecordedAndKeptForRetry；internal/visibilityexception/application/notify_customer_test.go::TestARetryAfterFailureAppendsANewMilestoneKeepingTheFailedOne |
+| `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
+| `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
+| `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -270,11 +290,8 @@
 | `AT-NO-003` | 请求缺少明确对象、动作、节点或必要授权依据 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-006` | 处置要求销毁 100 件，现场只确认并实际销毁 80 件 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-007` | 节点完成退运装载和节点侧交出扫描 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-008` | 相同事项版本、对象、动作和请求重复到达 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-009` | 同一请求身份携带不同对象、动作或范围 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-010` | 协作事项在执行前取消或替代 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-011` | 协作事项在部分不可逆执行后取消或缩小范围 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-012` | 现场事实迟到、更正或多个合格来源相互冲突 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-013` | 跨客户合报事项只允许节点处理 C2/P2 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-014` | 事实已保存，但任务派生或发布发生技术失败 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-021` | 已终局包裹仍实际到站 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
@@ -1017,13 +1034,8 @@
 | `AT-VE-035` | 关务案件关闭/重开与异常案件关闭/重开交错发生 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-036` | 分诊、建案、披露或发布在结果提交前技术失败 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
 | `AT-VE-037` | 分诊发现两个开放异常案件实际属于同一因果链和共同处置范围，且确认其中一个为重复案件 | UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md |
-| `AT-VE-038` | 已接受节点收寄事实首次进入投影 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
-| `AT-VE-039` | 同一来源版本重复到达 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
-| `AT-VE-040` | 来源身份携带不同对象范围 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-041` | 外部状态码尚未被业务接受 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
-| `AT-VE-042` | 已接受事实没有可靠映射 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-043` | 两个有效事实无法裁决 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
-| `AT-VE-044` | 迟到/更正事实到达 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-047` | 外部段无内部节点明细 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-048` | 保存结果不确定 | UC-VE-002-BUILD-TRACKING-PROJECTION.md |
 | `AT-VE-049` | 有足够事实形成内部 ETA | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
@@ -1039,10 +1051,7 @@
 | `AT-VE-059` | 保存结果不确定 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
 | `AT-VE-060` | 接受事实形成计划偏离信号 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
 | `AT-VE-061` | 缺口未命中异常规则 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
-| `AT-VE-062` | 高可信高影响命中自动规则 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
 | `AT-VE-063` | 资料不足或可能重复 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
-| `AT-VE-064` | 同一连续期重复命中 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
-| `AT-VE-065` | 恢复后再次发生 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
 | `AT-VE-066` | 一个来源中断影响多个客户 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
 | `AT-VE-068` | 同因果链已有案件 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
 | `AT-VE-069` | 独立货损与运输中断并存 | UC-VE-004-TRIAGE-SIGNALS-AND-OPEN-CASES.md |
@@ -1055,7 +1064,6 @@
 | `AT-VE-076` | 新案件分派给责任团队 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-077` | 团队转派但接收方未接受 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-078` | 首次响应和下一行动完成 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
-| `AT-VE-079` | 处置请求发送 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-080` | 目标上下文拒绝请求 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-081` | 目标上下文部分接受 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-082` | 目标动作实际完成 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
@@ -1067,21 +1075,17 @@
 | `AT-VE-088` | 响应目标调整或延期获批 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-090` | 请求或关闭提交技术失败 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-091` | 处置请求被接受但无执行结果 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
-| `AT-VE-092` | 待接受请求超过明确受理有效期 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-093` | 已接受请求超过期望完成时限 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-094` | 案件范围缩小且旧请求尚未接受 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-095` | 旧请求已部分执行后被替代 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-096` | 目标方表示动作已经开始、无法取消 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-097` | 案件归并但存在未完成请求 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
 | `AT-VE-098` | 案件满足其他关闭条件但请求取消仍待目标确认 | UC-VE-005-MANAGE-CASES-AND-COORDINATE-ACTIONS.md |
-| `AT-VE-099` | 案件存在但合同不要求披露 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
-| `AT-VE-100` | 客户影响明确但需要授权 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-101` | 内容包含其他客户或未确认责任 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-102` | 批准范围允许自动发布 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-103` | 消息渠道接受 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-104` | 渠道返回送达 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-105` | 合同要求客户确认但只有送达 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
-| `AT-VE-106` | 投递失败 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-107` | 内容因新事实需要更正 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-109` | 客户确认或提出异议 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-110` | 通知提交结果保存失败 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
@@ -1125,12 +1129,9 @@
 | `AT-VE-152` | 同一外部标识存在多个有效候选 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-154` | 集团用户只获委派 C1、C3 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-155` | C1/C2 包裹处于同一集运单元、班次或共同案件 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-156` | 当前投影包含已批准公开里程碑 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-157` | 投影含内部控制位置、非公开节点和供应商商业信息 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-158` | 只有内部 ETA 或质量未达对客门槛 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-159` | `parcel-shipment` 已形成当前有效客户服务终局 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-160` | 只有有效交付扫描但终局尚未形成 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
-| `AT-VE-161` | 来源更正使原里程碑或终局失效 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-163` | 一个维度存在无法裁决的事实冲突 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-164` | `UC-VE-006` 已批准当前客户可见异常 | UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md |
 | `AT-VE-169` | 内部 ETA 已形成，且适用质量、合同和客户服务规则条件明确满足 | UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md |
@@ -1158,6 +1159,20 @@
 
 - **补测增引 13 行**——`AT-NR-028`/`AT-NR-030`（+判断时间取时钟不取 asOf 测）、`AT-PC-006`（+锚点策略缺失未决测）、`AT-PC-022`（+同版本改绑引用冲突测）、`AT-PC-025`/`AT-PS-013`（+可达性判断被推翻停判测）、`AT-PS-020`/`AT-PS-031`（+修订规则未配置停等测）、`AT-PS-023`（+显式清除自成动作测）、`AT-PS-047`（+服务阶段规则适配器测）、`AT-PS-071`（+拒绝规则未配置停等测）、`AT-SA-167`（+冲正追加不删原始测）、`AT-TF-072`（+交付生效编排更正链测）。
 - **函数改名/引用改动 3 行**——`AT-NR-025`（`TestServiceAreaEvaluationFoldsTheMatrixRows` → `TestServiceAreaEvaluationDrivesTheThreeValuedConclusion`）、`AT-PC-032`（→ `TestConflictOutranksAMissingBasis`）、`AT-TF-078`（→ `TestRegulatoryReturnIsMarkedByItsBasisKind`）。
+
+### 点名票后第二次重盘（同日追记）
+
+对 VE 五编排、NO 关务协作、SA 费用确认、CC 放行门禁的测试逐条对 UC 验收表补 AT 点名后重扫：
+
+| 桶 | 重盘 `0cddbba` | 点名后 | 变化 |
+|---|---|---|---|
+| ① 已钉住 | 223 | 242 | +19（VE +16：038/039/040/042/044/062半边/064/065/079/092/099半边/100半边/106/156/157/161；NO +13−10=+3：008/009半边/012半边） |
+| ② 机制候选 | 241 | 238 | −3（NO 三条迁①） |
+| ③ 实例/闸门 | 148 | 148 | ±0 |
+| ④ 机制未落地 | 471 | 455 | −16（VE 十六条迁①） |
+| 合计 | 1083 | 1083 | ±0 |
+
+SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**——所钉语义在结果契约与 CONTEXT 硬句上，验收表无对应行，按宁缺勿滥不硬点；两组继续按硬句口径计。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
