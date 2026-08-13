@@ -126,3 +126,45 @@ type EffectiveDeliveryHandoffIntent struct {
 type EffectiveDeliveryHandoff interface {
 	HandOffEffectiveDelivery(ctx context.Context, intent EffectiveDeliveryHandoffIntent) error
 }
+
+// OffsitePickupKey 是揽收登记的幂等键：同一（租户+对象+尝试）的揽收只登一次，重放
+// 返回原版本；来源更正走新版本，不在首登处顶替。
+type OffsitePickupKey struct {
+	TenantID domain.TenantID
+	Object   domain.CarriedObjectReference
+	Attempt  domain.AttemptReference
+}
+
+// OffsitePickupRecord 是一次揽收登记越过提交边界留下的东西。
+type OffsitePickupRecord struct {
+	Key           OffsitePickupKey
+	ContentDigest string
+	Pickup        domain.OffsitePickup
+	RecordedAt    time.Time
+}
+
+type OffsitePickupSaveOutcome uint8
+
+const (
+	OffsitePickupSaveOutcomeInvalid OffsitePickupSaveOutcome = iota
+	OffsitePickupSaved
+	OffsitePickupAlreadyRegistered
+)
+
+// OffsitePickupRegistry 按幂等键找回并保存对象级揽收（写入代数同 ADR-0031）。
+type OffsitePickupRegistry interface {
+	FindByKey(ctx context.Context, key OffsitePickupKey) (OffsitePickupRecord, bool, error)
+	Save(ctx context.Context, record OffsitePickupRecord) (OffsitePickupSaveOutcome, error)
+}
+
+// OffsitePickupRegistrationIntent 把对象级揽收交给 parcel-shipment 采认（既有
+// OffsitePickupAdapter 的上游，UC-PS-003 揽收源链）。意图由幂等键认领，重放重发
+// 同一份（ADR-0043）。
+type OffsitePickupRegistrationIntent struct {
+	Record OffsitePickupRecord
+}
+
+// OffsitePickupRegistrationHandoff 今天没有实现，唯一实现是测试替身。
+type OffsitePickupRegistrationHandoff interface {
+	HandOffOffsitePickupRegistration(ctx context.Context, intent OffsitePickupRegistrationIntent) error
+}
