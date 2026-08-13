@@ -206,3 +206,110 @@ type ChargeConfirmationHandoffIntent struct {
 type ChargeConfirmationHandoff interface {
 	HandOffChargeConfirmation(ctx context.Context, intent ChargeConfirmationHandoffIntent) error
 }
+
+// AdvanceAssessmentKey 是实际代垫评估的幂等键：同一评估标识只登一次。
+type AdvanceAssessmentKey struct {
+	TenantID   domain.TenantID
+	Assessment domain.AdvanceAssessmentID
+}
+
+// AdvanceAssessmentRecord 是一次代垫评估越过提交边界留下的东西。
+type AdvanceAssessmentRecord struct {
+	Key           AdvanceAssessmentKey
+	ContentDigest string
+	Assessment    domain.ActualAdvanceAssessment
+	RecordedAt    time.Time
+}
+
+type AdvanceAssessmentSaveOutcome uint8
+
+const (
+	AdvanceAssessmentSaveOutcomeInvalid AdvanceAssessmentSaveOutcome = iota
+	AdvanceAssessmentSaved
+	AdvanceAssessmentAlreadyRecorded
+)
+
+// AdvanceAssessmentStore 按幂等键找回并保存代垫评估（写入代数同 ADR-0031）。
+type AdvanceAssessmentStore interface {
+	FindByKey(ctx context.Context, key AdvanceAssessmentKey) (AdvanceAssessmentRecord, bool, error)
+	Save(ctx context.Context, record AdvanceAssessmentRecord) (AdvanceAssessmentSaveOutcome, error)
+}
+
+// AdvanceRecoveryKey 是客户代垫回收的幂等键。
+type AdvanceRecoveryKey struct {
+	TenantID domain.TenantID
+	Recovery domain.AdvanceRecoveryID
+}
+
+// AdvanceRecoveryRecord 是一次回收形成越过提交边界留下的东西。
+type AdvanceRecoveryRecord struct {
+	Key           AdvanceRecoveryKey
+	ContentDigest string
+	Recovery      domain.CustomerAdvanceRecovery
+	RecordedAt    time.Time
+}
+
+type AdvanceRecoverySaveOutcome uint8
+
+const (
+	AdvanceRecoverySaveOutcomeInvalid AdvanceRecoverySaveOutcome = iota
+	AdvanceRecoverySaved
+	AdvanceRecoveryAlreadyFormed
+)
+
+// AdvanceRecoveryStore 按幂等键找回并保存客户代垫回收（写入代数同 ADR-0031）。
+type AdvanceRecoveryStore interface {
+	FindByKey(ctx context.Context, key AdvanceRecoveryKey) (AdvanceRecoveryRecord, bool, error)
+	Save(ctx context.Context, record AdvanceRecoveryRecord) (AdvanceRecoverySaveOutcome, error)
+}
+
+// RecoveryAdjustmentKey 是回收调整的幂等键。
+type RecoveryAdjustmentKey struct {
+	TenantID   domain.TenantID
+	Adjustment domain.RecoveryAdjustmentID
+}
+
+// RecoveryAdjustmentRecord 是一次回收调整越过提交边界留下的东西。
+type RecoveryAdjustmentRecord struct {
+	Key           RecoveryAdjustmentKey
+	ContentDigest string
+	Adjustment    domain.RecoveryAdjustment
+	RecordedAt    time.Time
+}
+
+type RecoveryAdjustmentSaveOutcome uint8
+
+const (
+	RecoveryAdjustmentSaveOutcomeInvalid RecoveryAdjustmentSaveOutcome = iota
+	RecoveryAdjustmentSaved
+	RecoveryAdjustmentAlreadyFormed
+)
+
+// RecoveryAdjustmentStore 按幂等键找回并保存回收调整（写入代数同 ADR-0031）。
+type RecoveryAdjustmentStore interface {
+	FindByKey(ctx context.Context, key RecoveryAdjustmentKey) (RecoveryAdjustmentRecord, bool, error)
+	Save(ctx context.Context, record RecoveryAdjustmentRecord) (RecoveryAdjustmentSaveOutcome, error)
+}
+
+// ContractResponsibilityView 取客户对该税费义务的合同责任依据。found=false 表示合同
+// 责任目录未配置——回收需要合同依据（实例半边），未配置停在未决，不默认可回收。
+type ContractResponsibilityView interface {
+	LoadContractResponsibility(
+		ctx context.Context,
+		tenant domain.TenantID,
+		customer domain.RecoveryCustomerReference,
+		obligation domain.TaxObligationReference,
+	) (domain.ContractResponsibilityReference, bool, error)
+}
+
+// AdvanceRecoveryIntent 把已形成的回收/调整交给对账单纳入消费（UC-SA-003 上游）。
+// 意图由幂等键认领，重放重发同一份（ADR-0043）。
+type AdvanceRecoveryIntent struct {
+	Recovery   AdvanceRecoveryRecord
+	Adjustment RecoveryAdjustmentRecord
+}
+
+// AdvanceRecoveryHandoff 今天没有实现，唯一实现是测试替身。
+type AdvanceRecoveryHandoff interface {
+	HandOffAdvanceRecovery(ctx context.Context, intent AdvanceRecoveryIntent) error
+}
