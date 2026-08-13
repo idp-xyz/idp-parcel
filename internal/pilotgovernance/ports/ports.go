@@ -47,3 +47,44 @@ type AuthorityIntervalStore interface {
 	ListCurrent(ctx context.Context) ([]domain.AuthorityInterval, error)
 	Append(ctx context.Context, interval domain.AuthorityInterval) error
 }
+
+type GovernanceSaveOutcome uint8
+
+const (
+	GovernanceSaveOutcomeInvalid GovernanceSaveOutcome = iota
+	GovernanceSaved
+	GovernanceAlreadyRecorded
+)
+
+// SuspensionStore 按暂停标识找回并保存暂停决定（不可覆盖）。
+type SuspensionStore interface {
+	FindByID(ctx context.Context, id domain.SuspensionID) (domain.SuspensionDecision, bool, error)
+	Save(ctx context.Context, decision domain.SuspensionDecision) (GovernanceSaveOutcome, error)
+}
+
+// ResumptionStore 按被恢复的暂停标识找回并保存恢复决定——一个暂停至多一次恢复；
+// 再暂停是新的暂停决定，不是同一条的往返。
+type ResumptionStore interface {
+	FindBySuspension(ctx context.Context, id domain.SuspensionID) (domain.ResumptionDecision, bool, error)
+	Save(ctx context.Context, decision domain.ResumptionDecision) (GovernanceSaveOutcome, error)
+}
+
+// TakeoverStore 按对象范围（区间四维身份）找回并保存接管记录。
+type TakeoverStore interface {
+	FindByInterval(ctx context.Context, interval domain.AuthorityInterval) (domain.TakeoverRecord, bool, error)
+	Save(ctx context.Context, record domain.TakeoverRecord) (GovernanceSaveOutcome, error)
+}
+
+// GovernanceHandoffIntent 把治理决定交给受影响上下文的准入闸消费（暂停生效、恢复
+// 生效、权威切换）。
+type GovernanceHandoffIntent struct {
+	Suspension *domain.SuspensionDecision
+	Resumption *domain.ResumptionDecision
+	Takeover   *domain.TakeoverRecord
+}
+
+// GovernanceHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type GovernanceHandoff interface {
+	HandOffGovernance(ctx context.Context, intent GovernanceHandoffIntent) error
+}
