@@ -100,22 +100,36 @@ func (double *readinessViewDouble) LoadReadiness(
 
 type authorityViewDouble struct {
 	granted bool
+	revoked bool
 	err     error
 }
 
 func (double *authorityViewDouble) LoadSubmissionAuthority(
 	_ context.Context,
 	_ domain.TenantID,
-	_ domain.DeclarationUnitID,
-) (domain.SubmissionAuthorityReference, bool, error) {
+	unit domain.DeclarationUnitID,
+) (domain.SubmissionAuthorization, bool, error) {
 	if double.err != nil {
-		return domain.SubmissionAuthorityReference{}, false, double.err
+		return domain.SubmissionAuthorization{}, false, double.err
 	}
 	if !double.granted {
-		return domain.SubmissionAuthorityReference{}, false, nil
+		return domain.SubmissionAuthorization{}, false, nil
 	}
 	authority, err := domain.NewSubmissionAuthorityReference("submission-authority-1")
-	return authority, true, err
+	if err != nil {
+		return domain.SubmissionAuthorization{}, false, err
+	}
+	authorization, err := domain.GrantSubmissionAuthority(unit, authority, declarationJudgedAt)
+	if err != nil {
+		return domain.SubmissionAuthorization{}, false, err
+	}
+	if double.revoked {
+		authorization, err = authorization.Revoke("mandate-withdrawn", declarationJudgedAt.Add(time.Minute))
+		if err != nil {
+			return domain.SubmissionAuthorization{}, false, err
+		}
+	}
+	return authorization, true, nil
 }
 
 type versionFactoryDouble struct {
@@ -327,6 +341,24 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 		}
 		if fixture.versions.minted != 0 {
 			t.Fatal("授权缺席还签了版本")
+		}
+	})
+
+	t.Run("a revoked authorization is a business negative, not unconfigured", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		fixture.authority.revoked = true
+		result, err := fixture.handler.Handle(context.Background(), declarationCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationNotAuthorized {
+			t.Fatalf("outcome = %q, want NOT_AUTHORIZED（失效不是未配置——恢复动作是重新取得授权，不是等实例参数）", result.Outcome())
+		}
+		if result.UndecidedReason() != application.DeclarationUndecidedReasonNone {
+			t.Fatalf("reason = %q；业务负向不指名依赖", result.UndecidedReason())
+		}
+		if fixture.versions.minted != 0 || len(fixture.store.records) != 0 {
+			t.Fatal("失效授权还签版或落库")
 		}
 	})
 

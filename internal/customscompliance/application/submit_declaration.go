@@ -28,6 +28,7 @@ const (
 	DeclarationExistingVersion
 	DeclarationSourceConflict
 	DeclarationNotReady
+	DeclarationNotAuthorized
 	DeclarationNotAccepted
 	DeclarationUndecided
 )
@@ -42,6 +43,8 @@ func (outcome DeclarationOutcome) String() string {
 		return "SOURCE_CONFLICT"
 	case DeclarationNotReady:
 		return "NOT_READY"
+	case DeclarationNotAuthorized:
+		return "NOT_AUTHORIZED"
 	case DeclarationNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
 	case DeclarationUndecided:
@@ -207,7 +210,7 @@ func (handler *SubmitDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotReady}, nil
 	}
 
-	authority, granted, err := handler.deps.Authority.LoadSubmissionAuthority(ctx, command.TenantID, unit.ID())
+	authorization, granted, err := handler.deps.Authority.LoadSubmissionAuthority(ctx, command.TenantID, unit.ID())
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: AuthorityUnavailable,
 			continuation: declarationContinuation("AUTHORITY_UNAVAILABLE", command.UnitID)}, nil
@@ -217,6 +220,11 @@ func (handler *SubmitDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: AuthorityUnconfigured,
 			continuation: declarationContinuation("AUTHORITY_UNCONFIGURED", command.UnitID)}, nil
 	}
+	if !authorization.Effective() {
+		// 授权已失效：原授予保留但不得继续支持实际提交——业务负向，重新取得授权再来
+		//（与不再就绪平行的另一条轨，恢复动作提示不再错成「等实例参数」）。
+		return SubmitDeclarationResult{outcome: DeclarationNotAuthorized}, nil
+	}
 
 	versionID, err := handler.deps.Versions.NextSubmissionVersion(ctx)
 	if err != nil {
@@ -224,13 +232,13 @@ func (handler *SubmitDeclarationHandler) Handle(
 			continuation: declarationContinuation("VERSION_IDENTITY_UNAVAILABLE", command.UnitID)}, nil
 	}
 	version, err := domain.FixSubmissionVersion(domain.CustomsSubmissionVersionSpec{
-		ID:        versionID,
-		Unit:      unit,
-		Dossier:   dossier,
-		Roles:     roles,
-		Readiness: readiness,
-		Authority: authority,
-		FixedAt:   handler.deps.Clock.Now(),
+		ID:            versionID,
+		Unit:          unit,
+		Dossier:       dossier,
+		Roles:         roles,
+		Readiness:     readiness,
+		Authorization: authorization,
+		FixedAt:       handler.deps.Clock.Now(),
 	})
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil

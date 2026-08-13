@@ -6,12 +6,14 @@ import (
 )
 
 var (
-	ErrInvalidDeclarationUnit   = errors.New("customs compliance: invalid declaration unit")
-	ErrInvalidReadiness         = errors.New("customs compliance: invalid readiness judgment")
-	ErrReadinessAlreadyRevoked  = errors.New("customs compliance: the readiness is already revoked")
-	ErrInvalidSubmissionVersion = errors.New("customs compliance: invalid submission version")
-	ErrInvalidSubmissionAttempt = errors.New("customs compliance: invalid submission attempt")
-	ErrUnsafeResend             = errors.New("customs compliance: no safe-resend judgment for this version")
+	ErrInvalidDeclarationUnit      = errors.New("customs compliance: invalid declaration unit")
+	ErrInvalidReadiness            = errors.New("customs compliance: invalid readiness judgment")
+	ErrReadinessAlreadyRevoked     = errors.New("customs compliance: the readiness is already revoked")
+	ErrInvalidAuthorization        = errors.New("customs compliance: invalid submission authorization")
+	ErrAuthorizationAlreadyRevoked = errors.New("customs compliance: the authorization is already revoked")
+	ErrInvalidSubmissionVersion    = errors.New("customs compliance: invalid submission version")
+	ErrInvalidSubmissionAttempt    = errors.New("customs compliance: invalid submission attempt")
+	ErrUnsafeResend                = errors.New("customs compliance: no safe-resend judgment for this version")
 )
 
 // DeclarationUnitID 是申报单元的独立身份——包裹、客户委托、集运单元、总单、运输
@@ -176,15 +178,71 @@ func NewSubmissionAuthorityReference(value string) (SubmissionAuthorityReference
 	return SubmissionAuthorityReference{required}, err
 }
 
-// CustomsSubmissionVersionSpec 是固定一个提交版本所需的全部输入。
+// SubmissionAuthorization 是提交授权判断——与 ReadinessJudgment 同形的另一条轨
+// （CONTEXT 244：「提交授权与就绪判断分别形成和失效」）。授权失效不是删除：原依据
+// 与授予时间保留，但不得继续支持实际提交；没有这半边，失效授权在读口上只能被误读成
+// 「未配置」或「仍有效」。
+type SubmissionAuthorization struct {
+	unit      DeclarationUnitID
+	authority SubmissionAuthorityReference
+	grantedAt time.Time
+	revokedBy string
+	revokedAt time.Time
+}
+
+func GrantSubmissionAuthority(
+	unit DeclarationUnitID,
+	authority SubmissionAuthorityReference,
+	grantedAt time.Time,
+) (SubmissionAuthorization, error) {
+	if !unit.valid() || !authority.valid() || grantedAt.IsZero() {
+		return SubmissionAuthorization{}, ErrInvalidAuthorization
+	}
+	return SubmissionAuthorization{unit: unit, authority: authority, grantedAt: grantedAt.UTC()}, nil
+}
+
+func (authorization SubmissionAuthorization) Unit() DeclarationUnitID {
+	return authorization.unit
+}
+
+func (authorization SubmissionAuthorization) Authority() SubmissionAuthorityReference {
+	return authorization.authority
+}
+
+func (authorization SubmissionAuthorization) GrantedAt() time.Time {
+	return authorization.grantedAt
+}
+
+// Effective 报告授权是否仍然有效。
+func (authorization SubmissionAuthorization) Effective() bool {
+	return authorization.revokedAt.IsZero()
+}
+
+// Revoke 记录授权失效：委托关系、资质或授权范围发生适用变化。原授予（依据与时间）
+// 原样保留——这不是删除，是失效。
+func (authorization SubmissionAuthorization) Revoke(cause string, at time.Time) (SubmissionAuthorization, error) {
+	if !authorization.Effective() {
+		return SubmissionAuthorization{}, ErrAuthorizationAlreadyRevoked
+	}
+	if cause == "" || at.IsZero() || at.Before(authorization.grantedAt) {
+		return SubmissionAuthorization{}, ErrInvalidAuthorization
+	}
+	revoked := authorization
+	revoked.revokedBy = cause
+	revoked.revokedAt = at.UTC()
+	return revoked, nil
+}
+
+// CustomsSubmissionVersionSpec 是固定一个提交版本所需的全部输入。就绪与授权都以
+// 判断对象进入——两条轨各自的有效性在成版处同权重把门。
 type CustomsSubmissionVersionSpec struct {
-	ID        SubmissionVersionID
-	Unit      DeclarationUnit
-	Dossier   DossierSnapshotReference
-	Roles     RoleSnapshotReference
-	Readiness ReadinessJudgment
-	Authority SubmissionAuthorityReference
-	FixedAt   time.Time
+	ID            SubmissionVersionID
+	Unit          DeclarationUnit
+	Dossier       DossierSnapshotReference
+	Roles         RoleSnapshotReference
+	Readiness     ReadinessJudgment
+	Authorization SubmissionAuthorization
+	FixedAt       time.Time
 }
 
 // CustomsSubmissionVersion 是逻辑申报目标首次实际对外发送前固定的不可覆盖快照
@@ -208,12 +266,17 @@ func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionV
 		!spec.Unit.id.valid() ||
 		!spec.Dossier.valid() ||
 		!spec.Roles.valid() ||
-		!spec.Authority.valid() ||
+		!spec.Authorization.authority.valid() ||
 		spec.FixedAt.IsZero() {
 		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
 	}
 	if !spec.Readiness.Effective() || spec.Readiness.unit != spec.Unit.id {
 		// 不再就绪的判断不得继续支持实际提交；别的单元的就绪也支持不了这个单元。
+		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
+	}
+	if !spec.Authorization.Effective() || spec.Authorization.unit != spec.Unit.id {
+		// 授权与就绪同权重：失效授权固定不出版本，别的单元的授权也支持不了这个单元
+		// （CONTEXT 244 双有效才成版）。
 		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
 	}
 	return CustomsSubmissionVersion{
@@ -223,7 +286,7 @@ func FixSubmissionVersion(spec CustomsSubmissionVersionSpec) (CustomsSubmissionV
 		dossier:   spec.Dossier,
 		roles:     spec.Roles,
 		basis:     spec.Readiness.basis,
-		authority: spec.Authority,
+		authority: spec.Authorization.authority,
 		fixedAt:   spec.FixedAt.UTC(),
 	}, nil
 }

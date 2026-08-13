@@ -40,16 +40,29 @@ func readiness(t *testing.T) domain.ReadinessJudgment {
 	return judgment
 }
 
+func authorization(t *testing.T) domain.SubmissionAuthorization {
+	t.Helper()
+	granted, err := domain.GrantSubmissionAuthority(
+		mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-1"),
+		mustValue(t, domain.NewSubmissionAuthorityReference, "submit-authority/v1"),
+		declaredAt,
+	)
+	if err != nil {
+		t.Fatalf("grant authority: %v", err)
+	}
+	return granted
+}
+
 func versionSpec(t *testing.T) domain.CustomsSubmissionVersionSpec {
 	t.Helper()
 	return domain.CustomsSubmissionVersionSpec{
-		ID:        mustValue(t, domain.NewSubmissionVersionID, "submission-1/v1"),
-		Unit:      declarationUnit(t, "parcel-1", "parcel-2"),
-		Dossier:   mustValue(t, domain.NewDossierSnapshotReference, "dossier/v1"),
-		Roles:     mustValue(t, domain.NewRoleSnapshotReference, "roles/v1"),
-		Readiness: readiness(t),
-		Authority: mustValue(t, domain.NewSubmissionAuthorityReference, "submit-authority/v1"),
-		FixedAt:   declaredAt.Add(time.Hour),
+		ID:            mustValue(t, domain.NewSubmissionVersionID, "submission-1/v1"),
+		Unit:          declarationUnit(t, "parcel-1", "parcel-2"),
+		Dossier:       mustValue(t, domain.NewDossierSnapshotReference, "dossier/v1"),
+		Roles:         mustValue(t, domain.NewRoleSnapshotReference, "roles/v1"),
+		Readiness:     readiness(t),
+		Authorization: authorization(t),
+		FixedAt:       declaredAt.Add(time.Hour),
 	}
 }
 
@@ -118,6 +131,46 @@ func TestRevokedReadinessCannotSupportASubmission(t *testing.T) {
 	spec.Readiness = foreign
 	if _, err := domain.FixSubmissionVersion(spec); !errors.Is(err, domain.ErrInvalidSubmissionVersion) {
 		t.Fatalf("err = %v; 别的单元的就绪支持了这个单元", err)
+	}
+}
+
+// Covers: CC CONTEXT 244「提交授权与就绪判断分别形成和失效。只有两者……均有效才形成
+// 新的提交版本」的授权半边——失效授权固定不出版本（就绪在场也不行）；失效保留原授予；
+// 重复失效拒；别的单元的授权支持不了这个单元。
+func TestRevokedAuthorizationCannotSupportASubmission(t *testing.T) {
+	granted := authorization(t)
+	revoked, err := granted.Revoke("MANDATE_WITHDRAWN", declaredAt.Add(30*time.Minute))
+	if err != nil {
+		t.Fatalf("revoke authorization: %v", err)
+	}
+	if revoked.Effective() {
+		t.Fatal("失效后的授权还有效")
+	}
+	if revoked.Authority().String() != "submit-authority/v1" || !revoked.GrantedAt().Equal(declaredAt) {
+		t.Fatal("失效改写了原授予——失效不是删除")
+	}
+	if _, err := revoked.Revoke("AGAIN", declaredAt.Add(time.Hour)); !errors.Is(err, domain.ErrAuthorizationAlreadyRevoked) {
+		t.Fatalf("err = %v; 失效失了两次", err)
+	}
+
+	spec := versionSpec(t)
+	spec.Authorization = revoked
+	if _, err := domain.FixSubmissionVersion(spec); !errors.Is(err, domain.ErrInvalidSubmissionVersion) {
+		t.Fatalf("err = %v; 失效授权支持了实际提交——就绪单轨顶替了双轨", err)
+	}
+
+	foreign, err := domain.GrantSubmissionAuthority(
+		mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-9"),
+		mustValue(t, domain.NewSubmissionAuthorityReference, "submit-authority/v9"),
+		declaredAt,
+	)
+	if err != nil {
+		t.Fatalf("grant foreign authority: %v", err)
+	}
+	spec = versionSpec(t)
+	spec.Authorization = foreign
+	if _, err := domain.FixSubmissionVersion(spec); !errors.Is(err, domain.ErrInvalidSubmissionVersion) {
+		t.Fatalf("err = %v; 别的单元的授权支持了这个单元", err)
 	}
 }
 

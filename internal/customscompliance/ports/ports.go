@@ -75,6 +75,56 @@ type InterpretationRuleView interface {
 	) (domain.InterpretationRuleReference, bool, error)
 }
 
+// ExecutionFactView 按监管决定的范围读回执行方已形成的物理执行事实（NO/TF 拥有，
+// 这里只读引用参与核对）。空清单是如实答案——决定推导不出执行，没有事实就是证据
+// 不足；依赖调不通作为错误返回。
+type ExecutionFactView interface {
+	LoadExecutionFacts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		decision domain.RegulatoryDecisionID,
+	) ([]domain.ExecutionFact, error)
+}
+
+// VerificationKey 是处置执行核对的幂等键：同一决定加同一事实集指纹只出一版核对——
+// 事实集变化（新执行事实到达）自然换指纹换版。
+type VerificationKey struct {
+	TenantID domain.TenantID
+	Decision domain.RegulatoryDecisionID
+	Digest   string
+}
+
+type VerificationSaveOutcome uint8
+
+const (
+	VerificationSaveOutcomeInvalid VerificationSaveOutcome = iota
+	VerificationSaved
+	VerificationAlreadyRecorded
+)
+
+// DispositionVerificationStore 按幂等键找回并保存核对判断（写入代数同 ADR-0031）。
+type DispositionVerificationStore interface {
+	FindByKey(ctx context.Context, key VerificationKey) (domain.DispositionVerification, bool, error)
+	Save(
+		ctx context.Context,
+		key VerificationKey,
+		verification domain.DispositionVerification,
+	) (VerificationSaveOutcome, error)
+}
+
+// VerificationHandoffIntent 把核对结论交给适用下游（案件关闭核对与 VE 的处置协调
+// 消费它）。意图由核对键认领，重放重发同一份（ADR-0043）。
+type VerificationHandoffIntent struct {
+	Key          VerificationKey
+	Verification domain.DispositionVerification
+}
+
+// VerificationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
+// 的 Bento/Outbox 闸门。
+type VerificationHandoff interface {
+	HandOffVerification(ctx context.Context, intent VerificationHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
@@ -131,14 +181,15 @@ type ReadinessView interface {
 	) (domain.ReadinessJudgment, bool, error)
 }
 
-// SubmissionAuthorityView 取申报单元的提交授权。与就绪判断是两条轨：双有效才成版，
-// 任一缺席都不得以另一个顶替（CONTEXT 244）。found=false 表示授权未配置。
+// SubmissionAuthorityView 取申报单元的提交授权判断。与就绪读口同形三态：found=false
+// 表示授权未配置（实例半边）；found=true 而判断已失效即`授权已失效`——分别形成和
+// 失效的那半边在形状上有格可表，适配器不必把失效谎报成未配置或仍有效（CONTEXT 244）。
 type SubmissionAuthorityView interface {
 	LoadSubmissionAuthority(
 		ctx context.Context,
 		tenant domain.TenantID,
 		unit domain.DeclarationUnitID,
-	) (domain.SubmissionAuthorityReference, bool, error)
+	) (domain.SubmissionAuthorization, bool, error)
 }
 
 // DeclarationVersionFactory 签发提交版本标识。
