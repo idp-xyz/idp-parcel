@@ -33,6 +33,8 @@ const (
 	SchemaPilotGovernance = "pilot_governance"
 	// SchemaPartyCommercial 归 party-commercial 的业务表所有。
 	SchemaPartyCommercial = "party_commercial"
+	// SchemaParcelPricing 归 parcel-pricing 的业务表所有。
+	SchemaParcelPricing = "parcel_pricing"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -114,6 +116,10 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	pricing, err := businessSteps(migrations.ParcelPricing, SchemaParcelPricing)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
 	steps = append(steps, nodes...)
@@ -123,6 +129,7 @@ func Plan() ([]Step, error) {
 	steps = append(steps, transport...)
 	steps = append(steps, governance...)
 	steps = append(steps, commercial...)
+	steps = append(steps, pricing...)
 	return steps, nil
 }
 
@@ -133,7 +140,7 @@ func Schemas() []string {
 		SchemaHistory, SchemaBento,
 		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
 		SchemaSettlementAccounting, SchemaCustomsCompliance, SchemaTransportFulfillment,
-		SchemaPilotGovernance, SchemaPartyCommercial,
+		SchemaPilotGovernance, SchemaPartyCommercial, SchemaParcelPricing,
 	}
 }
 
