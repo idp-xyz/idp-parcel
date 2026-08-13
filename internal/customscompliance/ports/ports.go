@@ -4,6 +4,11 @@ package ports
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -201,6 +206,72 @@ type RestrictionHandoffIntent struct {
 // 的 Bento/Outbox 闸门。
 type RestrictionHandoff interface {
 	HandOffRestriction(ctx context.Context, intent RestrictionHandoffIntent) error
+}
+
+// GateConditionView 按（范围+动作+边界）盘出参与门禁核对的前置条件逐项判断。前置
+// 条件目录与逐项判断来自监管程序与案内事实（实例半边）；configured=false 即目录未
+// 登记——未决，没有清单的门禁判断无从复核；空清单是「此动作在此边界不受门禁」的
+// 如实答案，与未登记分开。
+type GateConditionView interface {
+	LoadPreconditionFindings(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+	) ([]domain.PreconditionFinding, bool, error)
+}
+
+// GateVerificationKey 是门禁核对的幂等键：判断身份三维（范围+动作+边界）加逐项判断
+// 指纹——条件状态变化自然换指纹换版，同一状态重复核对不出第二版。
+type GateVerificationKey struct {
+	TenantID domain.TenantID
+	Scope    domain.DecisionScopeReference
+	Action   domain.GuardedAction
+	Boundary domain.CustomsProcedureReference
+	Digest   string
+}
+
+// FindingsDigest 是逐项判断的稳定指纹：按前置条件引用排序后连状态拼接。
+func FindingsDigest(findings []domain.PreconditionFinding) string {
+	lines := make([]string, 0, len(findings))
+	for _, finding := range findings {
+		lines = append(lines, finding.Precondition.String()+"="+strconv.Itoa(int(finding.State)))
+	}
+	sort.Strings(lines)
+	digest := sha256.Sum256([]byte(strings.Join(lines, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+type GateVerificationSaveOutcome uint8
+
+const (
+	GateVerificationSaveOutcomeInvalid GateVerificationSaveOutcome = iota
+	GateVerificationSaved
+	GateVerificationAlreadyRecorded
+)
+
+// GateVerificationStore 按幂等键找回并保存门禁核对（写入代数同 ADR-0031）。
+type GateVerificationStore interface {
+	FindByKey(ctx context.Context, key GateVerificationKey) (domain.ReleaseGateVerification, bool, error)
+	Save(
+		ctx context.Context,
+		key GateVerificationKey,
+		gate domain.ReleaseGateVerification,
+	) (GateVerificationSaveOutcome, error)
+}
+
+// GateVerificationHandoffIntent 把门禁核对交给适用下游（TF/NO 的动作执行方消费——
+// 门禁满足不生成放行，放行结果仍由外部事实接收）。
+type GateVerificationHandoffIntent struct {
+	Key  GateVerificationKey
+	Gate domain.ReleaseGateVerification
+}
+
+// GateVerificationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于
+// ADR-0017 的 Bento/Outbox 闸门。
+type GateVerificationHandoff interface {
+	HandOffGate(ctx context.Context, intent GateVerificationHandoffIntent) error
 }
 
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键

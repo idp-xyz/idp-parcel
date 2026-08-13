@@ -301,6 +301,59 @@ func NewPreconditionReference(value string) (PreconditionReference, error) {
 	return PreconditionReference{required}, err
 }
 
+// PreconditionState 是单项前置条件的判断三值：满足、未满足、事实冲突。没有「未知」
+// 格——判断不出来的前置条件根本不该进折叠，那是证据装配问题不是门禁语义。
+type PreconditionState uint8
+
+const (
+	PreconditionStateInvalid PreconditionState = iota
+	PreconditionMet
+	PreconditionUnmet
+	PreconditionConflicting
+)
+
+func (state PreconditionState) valid() bool {
+	return state >= PreconditionMet && state <= PreconditionConflicting
+}
+
+// PreconditionFinding 是一项前置条件及其判断。
+type PreconditionFinding struct {
+	Precondition PreconditionReference
+	State        PreconditionState
+}
+
+// FoldGateConclusion 把逐项前置条件判断折成门禁五值结论：任一冲突即整体冲突（冲突
+// 压过满足与未满足——事实打架时说「部分满足」是把矛盾说成进度）；无冲突时全满足为
+// 满足、全未满足为未满足、混合为部分满足；空清单即不适用（此动作在此边界本就不受
+// 门禁）。逐项判断必须完整——判断不出的项不该送进来。
+func FoldGateConclusion(findings []PreconditionFinding) (GateConclusion, error) {
+	if len(findings) == 0 {
+		return GateNotApplicable, nil
+	}
+	met, unmet := 0, 0
+	for _, finding := range findings {
+		if !finding.Precondition.valid() || !finding.State.valid() {
+			return GateConclusionInvalid, ErrInvalidGateVerification
+		}
+		switch finding.State {
+		case PreconditionConflicting:
+			return GateConflicting, nil
+		case PreconditionMet:
+			met++
+		case PreconditionUnmet:
+			unmet++
+		}
+	}
+	switch {
+	case unmet == 0:
+		return GateMet, nil
+	case met == 0:
+		return GateUnmet, nil
+	default:
+		return GatePartiallyMet, nil
+	}
+}
+
 // ReleaseGateVerification 是针对明确申报范围、拟执行动作和适用监管边界的放行前置
 // 条件版本化判断。动作绑定构造期固定——门禁判断不能复用于其他动作或监管边界
 // （CONTEXT 硬句 216）；类型上没有放行字段——门禁满足不生成放行，放行结果仍由外部
