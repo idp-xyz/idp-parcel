@@ -17,6 +17,10 @@ import (
 // 了一个来源，在途意图会与新名分家。
 const eventSource = "idp-parcel/parcel-shipment"
 
+// bentoSchemaOutboxTable 是意图查重读的框架技术表。表名耦合是先查后插的代价，由
+// 真库测试守着（表名变化时查询与测试一起红，不会静默漂移）。
+const bentoSchemaOutboxTable = migrate.SchemaBento + ".outbox"
+
 // sourceDataVersionEventType 是资料版本意图的事件类型。类型携带语义版本位（信封
 // Version 字段），载荷形状变化时升版本位而不是换类型名。
 const sourceDataVersionEventType = "parcel-shipment.source-data-version.formed"
@@ -141,7 +145,7 @@ func (handoff *OutboxSourceDataHandoff) alreadyEnqueued(
 	}
 	var exists bool
 	err = executor.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM `+migrate.SchemaBento+`.outbox WHERE source = $1 AND event_id = $2)`,
+		`SELECT EXISTS(SELECT 1 FROM `+bentoSchemaOutboxTable+` WHERE source = $1 AND event_id = $2)`,
 		eventSource, eventID,
 	).Scan(&exists)
 	if err != nil {
