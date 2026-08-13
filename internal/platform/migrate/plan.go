@@ -23,6 +23,10 @@ const (
 	SchemaNodeOperations = "node_operations"
 	// SchemaVisibilityException 归 visibility-exception 的业务表所有。
 	SchemaVisibilityException = "visibility_exception"
+	// SchemaCustomsCompliance 归 customs-compliance 的业务表所有。
+	SchemaCustomsCompliance = "customs_compliance"
+	// SchemaSettlementAccounting 归 settlement-accounting 的业务表所有。
+	SchemaSettlementAccounting = "settlement_accounting"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -80,10 +84,20 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	customs, err := businessSteps(migrations.CustomsCompliance, SchemaCustomsCompliance)
+	if err != nil {
+		return nil, err
+	}
+	settlement, err := businessSteps(migrations.SettlementAccounting, SchemaSettlementAccounting)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
 	steps = append(steps, nodes...)
 	steps = append(steps, visibility...)
+	steps = append(steps, customs...)
+	steps = append(steps, settlement...)
 	return steps, nil
 }
 
@@ -93,6 +107,7 @@ func Schemas() []string {
 	return []string{
 		SchemaHistory, SchemaBento,
 		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
+		SchemaCustomsCompliance, SchemaSettlementAccounting,
 	}
 }
 
