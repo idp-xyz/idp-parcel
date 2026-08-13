@@ -147,6 +147,76 @@ func (episode *SignalEpisode) ReopenAsLinked(
 	return linked, nil
 }
 
+// SignalEpisodeSnapshot 是持久化层重建发作期所需的全量状态。命中数与判断历史是已
+// 发生的事实——重建不重演 RecordHit（重演会把历史命中时间压成最后一次），前期指回
+// 与结束依据同理随快照携带。
+type SignalEpisodeSnapshot struct {
+	ID           EpisodeID
+	Kind         ExceptionSignalKindReference
+	Parcel       TrackedParcelReference
+	Rule         SignalRuleVersionReference
+	Confidence   ConfidenceReference
+	Hits         int
+	StartedAt    time.Time
+	LastHitAt    time.Time
+	ReleaseBasis string
+	EndedAt      time.Time
+	PriorEpisode EpisodeID
+}
+
+// Snapshot 折出发作期的全量状态供持久化。
+func (episode *SignalEpisode) Snapshot() SignalEpisodeSnapshot {
+	return SignalEpisodeSnapshot{
+		ID:           episode.id,
+		Kind:         episode.kind,
+		Parcel:       episode.parcel,
+		Rule:         episode.rule,
+		Confidence:   episode.confidence,
+		Hits:         episode.hits,
+		StartedAt:    episode.startedAt,
+		LastHitAt:    episode.lastHitAt,
+		ReleaseBasis: episode.releaseBasis,
+		EndedAt:      episode.endedAt,
+		PriorEpisode: episode.priorEpisode,
+	}
+}
+
+// RehydrateSignalEpisode 从快照重建发作期。读回的东西同样要过一遍不变量——生命周期
+// 形状（命中序、结束依据与结束时间同在场、指回不指自己）在这里重验，一次坏写入不得
+// 变成一个看起来合法的发作期。
+func RehydrateSignalEpisode(snapshot SignalEpisodeSnapshot) (*SignalEpisode, error) {
+	if !snapshot.ID.valid() || !snapshot.Kind.valid() || !snapshot.Parcel.valid() ||
+		!snapshot.Rule.valid() || !snapshot.Confidence.valid() ||
+		snapshot.Hits < 1 ||
+		snapshot.StartedAt.IsZero() || snapshot.LastHitAt.IsZero() ||
+		snapshot.LastHitAt.Before(snapshot.StartedAt) {
+		return nil, ErrInvalidEpisode
+	}
+	ended := !snapshot.EndedAt.IsZero()
+	if ended != (snapshot.ReleaseBasis != "") {
+		return nil, ErrInvalidEpisode
+	}
+	if ended && snapshot.EndedAt.Before(snapshot.LastHitAt) {
+		return nil, ErrInvalidEpisode
+	}
+	if snapshot.PriorEpisode.valid() && snapshot.PriorEpisode == snapshot.ID {
+		return nil, ErrInvalidEpisode
+	}
+	return &SignalEpisode{
+		id:           snapshot.ID,
+		kind:         snapshot.Kind,
+		parcel:       snapshot.Parcel,
+		rule:         snapshot.Rule,
+		confidence:   snapshot.Confidence,
+		hits:         snapshot.Hits,
+		startedAt:    snapshot.StartedAt.UTC(),
+		lastHitAt:    snapshot.LastHitAt.UTC(),
+		releaseBasis: snapshot.ReleaseBasis,
+		endedAt:      snapshot.EndedAt.UTC(),
+		priorEpisode: snapshot.PriorEpisode,
+	}, nil
+}
+
 // TriageOutcome 是异常分诊的封闭四走向（CONTEXT 语言：关联既有案件、自动建立案件、
 // 进入人工复核或不建案）。
 type TriageOutcome uint8
@@ -215,6 +285,10 @@ func (conclusion TriageConclusion) Outcome() TriageOutcome {
 
 func (conclusion TriageConclusion) Rule() SignalRuleVersionReference {
 	return conclusion.rule
+}
+
+func (conclusion TriageConclusion) TriagedAt() time.Time {
+	return conclusion.triagedAt
 }
 
 // CaseID 是异常案件的标识。
