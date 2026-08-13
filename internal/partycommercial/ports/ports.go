@@ -93,6 +93,49 @@ type CommercialResolutionStore interface {
 	) (domain.CommercialClosure, bool, error)
 }
 
+// PublicationSaveOutcome 是一次版本登记在持久化面的落点封闭代数（ADR-0031 同款）：
+// `已登记`是重放（同键同内容），`内容冲突`是同版本号携带不同内容——需要商业责任方
+// 修正，绝不静默覆盖；两者都不是 error，事务保持可用。
+type PublicationSaveOutcome uint8
+
+const (
+	PublicationSaveOutcomeInvalid PublicationSaveOutcome = iota
+	PublicationSaved
+	PublicationAlreadyRegistered
+	PublicationContentConflict
+)
+
+func (outcome PublicationSaveOutcome) String() string {
+	switch outcome {
+	case PublicationSaved:
+		return "SAVED"
+	case PublicationAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case PublicationContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
+// 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
+// 查带不出「同范围有哪些并存版本」。
+//
+// 本口先只承载版本册；有效性更正册（ADR-0038）与价格/结算政策册（ADR-0034/0044）
+// 的持久化面另票补，端口届时扩展而不是在这里预开空方法。
+type PublicationRegistry interface {
+	LoadForScope(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.CommercialScopeReference,
+	) (*domain.CommercialRegistry, error)
+	SaveVersion(
+		ctx context.Context,
+		version domain.CommercialVersion,
+	) (PublicationSaveOutcome, error)
+}
+
 type Clock interface {
 	Now() time.Time
 }
