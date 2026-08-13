@@ -510,3 +510,85 @@ type SettlementApplicationIntent struct {
 type SettlementApplicationHandoff interface {
 	HandOffSettlementApplication(ctx context.Context, intent SettlementApplicationIntent) error
 }
+
+// AllocationRuleView 取来源费用适用的分摊规则版本。found=false 表示分摊规则目录未
+// 配置——无规则不分摊、不默认均摊（实例半边，AT-SA-123）。
+type AllocationRuleView interface {
+	LoadAllocationRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		source domain.AllocationSourceReference,
+	) (domain.AllocationRuleVersionReference, bool, error)
+}
+
+// AllocationKey 是成本分摊的幂等键。重分摊以 Replace 换值，版本链在本体上回指。
+type AllocationKey struct {
+	TenantID   domain.TenantID
+	Allocation domain.AllocationID
+}
+
+// AllocationRecord 是一次分摊越过提交边界留下的东西。
+type AllocationRecord struct {
+	Key           AllocationKey
+	ContentDigest string
+	Allocation    domain.CostAllocation
+	RecordedAt    time.Time
+}
+
+type AllocationSaveOutcome uint8
+
+const (
+	AllocationSaveOutcomeInvalid AllocationSaveOutcome = iota
+	AllocationSaved
+	AllocationAlreadyFormed
+)
+
+// CostAllocationStore 按幂等键找回并保存成本分摊（写入代数同 ADR-0031）。
+type CostAllocationStore interface {
+	FindByKey(ctx context.Context, key AllocationKey) (AllocationRecord, bool, error)
+	Save(ctx context.Context, record AllocationRecord) (AllocationSaveOutcome, error)
+	Replace(ctx context.Context, record AllocationRecord) (bool, error)
+}
+
+// OperatingResultKey 是经营结果快照的幂等键：同一（口径+账期+基准）一版一登，重派生
+// 以 Replace 换值、新版本关联原截点（AT-SA-137）。
+type OperatingResultKey struct {
+	TenantID domain.TenantID
+	Scope    domain.OperatingScopeReference
+	Period   domain.BillingPeriodReference
+	Basis    domain.OperatingBasis
+}
+
+// OperatingResultRecord 是一次指标派生越过提交边界留下的东西。
+type OperatingResultRecord struct {
+	Key           OperatingResultKey
+	ContentDigest string
+	Result        domain.OperatingResult
+	RecordedAt    time.Time
+}
+
+type OperatingResultSaveOutcome uint8
+
+const (
+	OperatingResultSaveOutcomeInvalid OperatingResultSaveOutcome = iota
+	OperatingResultSaved
+	OperatingResultAlreadyDerived
+)
+
+// OperatingResultStore 按幂等键找回并保存经营结果（写入代数同 ADR-0031）。
+type OperatingResultStore interface {
+	FindByKey(ctx context.Context, key OperatingResultKey) (OperatingResultRecord, bool, error)
+	Save(ctx context.Context, record OperatingResultRecord) (OperatingResultSaveOutcome, error)
+	Replace(ctx context.Context, record OperatingResultRecord) (bool, error)
+}
+
+// OperatingIntent 把分摊与指标交给分析消费。重放重发同一份（ADR-0043）。
+type OperatingIntent struct {
+	Allocation AllocationRecord
+	Result     OperatingResultRecord
+}
+
+// OperatingHandoff 今天没有实现，唯一实现是测试替身。
+type OperatingHandoff interface {
+	HandOffOperating(ctx context.Context, intent OperatingIntent) error
+}
