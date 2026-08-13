@@ -386,3 +386,26 @@ func TestGovernanceRollbackLeavesNothingBehind(t *testing.T) {
 		t.Errorf("回滚后区间仍在：%+v", listed)
 	}
 }
+
+// TestNoGoWithoutDispositionIsRejectedByCheck 证 No-Go 必带处理方式在库内立得住：
+// 0001 的 CHECK 在 disposition 为 NULL 时按 SQL 三值逻辑放行（`FALSE OR NULL` 不是
+// FALSE），0002 补 IS NOT NULL 后这条裸写探针才拦得下——适配器在类型上到不了这一步，
+// 绕过适配器的坏行同样进不来。
+func TestNoGoWithoutDispositionIsRejectedByCheck(t *testing.T) {
+	pool := pgtest.Pool(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO pilot_governance.candidate_version_set (set_id, scope, parameters, rules, formed_at)
+		 VALUES ('set-check', 'scope-1', 'parameters/v1', 'rules/v1', now())`); err != nil {
+		t.Fatalf("落候选组行：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO pilot_governance.stage_review
+			(objective, candidate_set_id, stage, scope, evidence_pack, verdict,
+			 disposition, deviations, decided_by, decided_at, effective_at)
+		 VALUES ('objective-1', 'set-check', 'SHADOW_RUN', 'scope-1', 'evidence/v1', 'NO_GO',
+		         NULL, '[]'::jsonb, 'reviewer-1', now(), now())`); err == nil {
+		t.Fatalf("不带处理方式的 No-Go 被库接受了")
+	}
+}
