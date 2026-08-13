@@ -304,3 +304,51 @@ type TransportCommissionIntent struct {
 type TransportCommissionHandoff interface {
 	HandOffTransportCommission(ctx context.Context, intent TransportCommissionIntent) error
 }
+
+// AlternateJourneyKey 是替代/退运旅程的幂等键：同一（原旅程+目的+处置依据）只开一条
+// 新旅程——同一处置决定不开两条替代旅程。
+type AlternateJourneyKey struct {
+	TenantID domain.TenantID
+	Original domain.JourneyReference
+	Purpose  domain.JourneyPurpose
+	Basis    domain.DispositionBasisReference
+}
+
+// AlternateJourneyRecord 是一次旅程启动越过提交边界留下的东西。
+type AlternateJourneyRecord struct {
+	Key           AlternateJourneyKey
+	ContentDigest string
+	Journey       domain.AlternateJourney
+	RecordedAt    time.Time
+}
+
+type AlternateJourneySaveOutcome uint8
+
+const (
+	AlternateJourneySaveOutcomeInvalid AlternateJourneySaveOutcome = iota
+	AlternateJourneySaved
+	AlternateJourneyAlreadyStarted
+)
+
+// AlternateJourneyStore 按幂等键找回并保存替代/退运旅程（写入代数同 ADR-0031）。
+type AlternateJourneyStore interface {
+	FindByKey(ctx context.Context, key AlternateJourneyKey) (AlternateJourneyRecord, bool, error)
+	Save(ctx context.Context, record AlternateJourneyRecord) (AlternateJourneySaveOutcome, error)
+}
+
+// AlternateJourneyIntent 是旅程启动的发布意图。重放重发同一份（ADR-0043）。
+type AlternateJourneyIntent struct {
+	Record AlternateJourneyRecord
+}
+
+// DispositionExecutionHandoff 把监管来路的旅程交给 customs-compliance 作处置执行
+// 事实源（CC 处置执行核对的上游）。只有 RegulatoryOrigin 的旅程走这条链。
+type DispositionExecutionHandoff interface {
+	HandOffDispositionExecution(ctx context.Context, intent AlternateJourneyIntent) error
+}
+
+// ExceptionJourneyHandoff 把旅程启动交给 visibility-exception 异常链——监管与非监管
+// 来路都要让异常侧看见。
+type ExceptionJourneyHandoff interface {
+	HandOffExceptionJourney(ctx context.Context, intent AlternateJourneyIntent) error
+}
