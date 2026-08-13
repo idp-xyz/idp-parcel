@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 279 |
-| ② 机制候选 | 232 |
+| ① 已钉住 | 284 |
+| ② 机制候选 | 227 |
 | ③ 实例/闸门 | 147 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1083 |
@@ -32,7 +32,7 @@
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 66 | 90 | 22 | 0 |
-| TF | 97 | 25 | 65 | 7 | 0 |
+| TF | 97 | 30 | 60 | 7 | 0 |
 | VE | 170 | 27 | 0 | 19 | 124 |
 
 ## ① 已钉住（AT → 测试）
@@ -200,7 +200,7 @@
 | `AT-PS-090` | internal/parcelshipment/application/cancel_parcel_test.go::TestForeignProbesAndFailedIntentsStayDisciplined |
 | `AT-PS-091` | internal/parcelshipment/domain/final_outcome_test.go::TestAResponsibilityOutcomeDemandsBothDecisionAndExecution |
 | `AT-PS-092` | internal/customscompliance/domain/disposition_verification_test.go::TestVerificationDemandsFactsAndComparesProvidedQuantities |
-| `AT-SA-002` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
+| `AT-SA-002` | internal/settlementaccounting/application/assess_advance_recovery_test.go::TestAnAssessmentRegistersOncePerIdentity；internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-003` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-004` | internal/settlementaccounting/domain/advance_recovery_test.go::TestAdvanceAssessmentJudgesWithoutRecomputingOrFabricating |
 | `AT-SA-005` | internal/settlementaccounting/domain/advance_recovery_test.go::TestRecoveryNeedsAnEstablishedAdvanceAndContract |
@@ -266,6 +266,11 @@
 | `AT-SA-176` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACrossCurrencyCostAdoptsTheEvaluationsConversion |
 | `AT-SA-177` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestAMissingConversionStepStopsTheCost |
 | `AT-SA-178` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACorrectionAppendsWithoutRewritingTheOriginal |
+| `AT-TF-002` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestANodeOnlyCollaborationBuildsNoTransportObject |
+| `AT-TF-003` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
+| `AT-TF-004` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestDetentionWithoutMovementAuthorityIsSupplementRequired |
+| `AT-TF-006` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestAPartialAcceptanceKeepsBothSides |
+| `AT-TF-010` | internal/transportfulfillment/application/accept_regulatory_disposition_test.go::TestOneDecisionPerDispositionItem |
 | `AT-TF-013` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
 | `AT-TF-015` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
 | `AT-TF-016` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAnAllFailedAttemptBuildsNoSegmentAndHandsOffNothing；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAFailedVisitHasNothingToRegister |
@@ -491,15 +496,10 @@
 | `AT-SA-174` | SELL 评价完成但价格费用代码没有唯一费用项目映射 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-SA-175` | 节点实测重量超出价卡明确排除范围，`parcel-pricing` 返回不可计价 | UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md |
 | `AT-TF-001` | 当前有效监管退运决定、明确对象及新路由均有效 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
-| `AT-TF-002` | 协作只要求原地查验、原地扣留或节点销毁 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
-| `AT-TF-003` | 扣留范围没有明确移动授权 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
-| `AT-TF-004` | 对象、起止地点、移动授权、责任或路由缺失 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-005` | 运输协作已承接且完成订舱/承运接受，但尚未交接 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
-| `AT-TF-006` | 一批对象只有 P1 完成交接并移动，P2 被拒收 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-007` | 节点已装载并扫描交出，但双方证据尚不足 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-008` | 退运旅程出发或到达 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-009` | 协作在出发前取消，或在部分对象出发后缩小范围 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
-| `AT-TF-010` | 请求、交接或移动事实重复、冲突、迟到或更正 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-011` | 运输已到达监管指定地点 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-012` | 事实已保存但派生或发布技术失败 | UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md |
 | `AT-TF-014` | 外包伙伴提供符合当前规则的对象级接收证据 | UC-TF-002-PERFORM-OFFSITE-PICKUP.md |
@@ -1180,6 +1180,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 同日追记三：VE 收官票（索赔与追偿编排 `HandleClaimHandler`）随编排落地点名 `AT-VE-114`（逐项独立半边）、`AT-VE-127`、`AT-VE-129`、`AT-VE-131`、`AT-VE-133`（分序半边）、`AT-VE-136`——①247→253、④450→444，合计 1083 不变；另 `AT-TF-080` 归属随 TF 侧新落的替代旅程编排测试增引（同步入①表）。
 
 同日追记四（第二轮点名票）：CC 六编排点名 20 处（建案 008/009/010、舱单 380/381/387/389、后续动作 201/202/208、处置核对 233 半边/237/250、案件关闭 307/308、内部限制 345/346/347/348/370），TF 三处新入①（061/069 半边/073）加五处增引（016/019/020/024/062 编排面），NO 合箱三处（035/036/040）——①253→279（CC 0→20、NO 13→16、TF 22→25）、②238→232、③148→147、④444→425，合计 1083 守恒。PP/PG 无 AT 清单（PG 两编排的 GOV-03/04/06/07 机制半边已在测试注释点名，不入本表）；PC 声明与 SA 费用确认维持零点。另同步 `AT-TF-027`/`AT-TF-031` 归属漂移（机会准备编排测试增引）。
+
+同日追记五（UC-TF-001 真空缺票）：监管处置承接编排 `AcceptRegulatoryDispositionHandler` 落地（新领域件 `regulatory_disposition.go` 三格决定+移动授权门、TF ports 尾部四件、编排+测试）并点名 `AT-TF-002`、`AT-TF-003`、`AT-TF-004`（授权缺口半边）、`AT-TF-006`（承接半边）、`AT-TF-010`（承接请求半边）——①279→284（TF 25→30）、②232→227，合计 1083 守恒；另同步 `AT-SA-002` 归属漂移（SA 批并行落测）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 

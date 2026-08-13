@@ -425,3 +425,44 @@ type CapacityConsumptionIntent struct {
 type CapacityConsumptionHandoff interface {
 	HandOffCapacityConsumption(ctx context.Context, intent CapacityConsumptionIntent) error
 }
+
+// DispositionAcceptanceKey 是承接决定的幂等键：租户+协作事项——一事项一决定，改
+// 决定走事项方的更正/替代，不经承接入口顶替。
+type DispositionAcceptanceKey struct {
+	Tenant domain.TenantID
+	Item   domain.CollaborationItemReference
+}
+
+// DispositionAcceptanceRecord 是一份已保存的承接决定及其内容指纹（同键异内容是冒名
+// 冲突不是重放）。
+type DispositionAcceptanceRecord struct {
+	Key           DispositionAcceptanceKey
+	ContentDigest string
+	Decision      domain.RegulatoryTransportDisposition
+}
+
+type DispositionAcceptanceSaveOutcome uint8
+
+const (
+	DispositionAcceptanceSaveOutcomeInvalid DispositionAcceptanceSaveOutcome = iota
+	DispositionAcceptanceSaved
+	DispositionAcceptanceAlreadyRecorded
+)
+
+// DispositionAcceptanceStore 按幂等键找回并保存承接决定（写入代数同 ADR-0031）。
+type DispositionAcceptanceStore interface {
+	FindByKey(ctx context.Context, key DispositionAcceptanceKey) (DispositionAcceptanceRecord, bool, error)
+	Save(ctx context.Context, record DispositionAcceptanceRecord) (DispositionAcceptanceSaveOutcome, error)
+}
+
+// RegulatoryAcceptanceHandoffIntent 把承接决定回执给关务协作链（`UC-CC-008` 据以更新
+// 事项交接结果）。意图由幂等键认领，重放重发同一份（ADR-0043）。
+type RegulatoryAcceptanceHandoffIntent struct {
+	Record DispositionAcceptanceRecord
+}
+
+// RegulatoryAcceptanceHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于
+// ADR-0017 的 Bento/Outbox 闸门。
+type RegulatoryAcceptanceHandoff interface {
+	HandOffRegulatoryAcceptance(ctx context.Context, intent RegulatoryAcceptanceHandoffIntent) error
+}
