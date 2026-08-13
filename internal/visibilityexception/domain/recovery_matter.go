@@ -117,6 +117,11 @@ func (matter RecoveryMatter) Deadline() time.Time {
 	return matter.deadline
 }
 
+// Scope 是（案件+相对方+范围）幂等键的第三维——不导出，存储连键都立不起来。
+func (matter RecoveryMatter) Scope() RequestScopeReference {
+	return matter.scope
+}
+
 // RecoveryActionKind 是追偿动作的封闭二值：预先通知与正式主张不能合并为一个模糊的
 // 「已追偿」（CONTEXT 硬句 184 末句）。
 type RecoveryActionKind uint8

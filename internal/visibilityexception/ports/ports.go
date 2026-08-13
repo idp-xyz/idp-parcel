@@ -362,3 +362,77 @@ type VisibilityGapHandoffIntent struct {
 type VisibilityGapHandoff interface {
 	HandOffVisibilityGap(ctx context.Context, intent VisibilityGapHandoffIntent) error
 }
+
+// ClaimStore 按（批次+项）找回并保存索赔项。键含批次：项标识由客户提交侧建立，
+// 批次内唯一是它的口径，跨批次撞号不该互相干扰。
+type ClaimStore interface {
+	FindByBatchItem(
+		ctx context.Context,
+		batch domain.ClaimBatchReference,
+		item domain.ClaimItemID,
+	) (*domain.ClaimItem, bool, error)
+	Save(ctx context.Context, claim *domain.ClaimItem) error
+}
+
+// EligibilityQuery 是资格审核规则的输入：申请人授权、客户账户、合同版本、索赔时限、
+// 目标范围、重复关系和最低材料要求都由规则侧核对，本上下文只带引用。
+type EligibilityQuery struct {
+	Batch    domain.ClaimBatchReference
+	Item     domain.ClaimItemID
+	Customer domain.CustomerAccountReference
+	Contract domain.ContractScopeReference
+	Target   domain.RequestScopeReference
+	Kind     domain.ClaimKindReference
+}
+
+// EligibilityAnswer 是资格目录的答复：通过或不通过，带判断依据。
+type EligibilityAnswer struct {
+	Screen domain.EligibilityScreen
+	Basis  string
+}
+
+// EligibilityRuleView 回答「这项索赔按版本化资格规则过不过审」。第二个返回值为 false
+// 即「资格目录未配置」——真实索赔时限、材料要求与授权目录属待登记实例参数。没有目录
+// 的资格审核无从作出：默认受理与默认拒赔都是虚构，由编排形成未决等租户登记。依赖调
+// 不通作为错误返回。
+type EligibilityRuleView interface {
+	ScreenClaim(ctx context.Context, query EligibilityQuery) (EligibilityAnswer, bool, error)
+}
+
+// LiabilityHandoffIntent 把责任结论交给结算侧（`UC-SA-007` 赔付金额链的上游源——
+// 金额由结算形成，这里只交结论）。意图由索赔项认领，复核换出的新结论版本随重发到达；
+// 重放重发同一份（ADR-0043）。
+type LiabilityHandoffIntent struct {
+	Claim *domain.ClaimItem
+}
+
+// LiabilityHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type LiabilityHandoff interface {
+	HandOffLiability(ctx context.Context, intent LiabilityHandoffIntent) error
+}
+
+// RecoveryStore 保存追偿事项与动作记录。FindCurrent 按（案件+相对方+范围）承担事项
+// 幂等；动作是只增记录，CountActions 按（事项+动作种类）计数供 attempt 递增——预先
+// 通知与正式主张各有各的尝试序列，合并计数会让一类动作吃掉另一类的次序。
+type RecoveryStore interface {
+	FindByID(ctx context.Context, id domain.RecoveryMatterID) (domain.RecoveryMatter, bool, error)
+	FindCurrent(
+		ctx context.Context,
+		caseID domain.CaseID,
+		counterparty domain.CounterpartyReference,
+		scope domain.RequestScopeReference,
+	) (domain.RecoveryMatter, bool, error)
+	Save(ctx context.Context, matter domain.RecoveryMatter) error
+	CountActions(
+		ctx context.Context,
+		matter domain.RecoveryMatterID,
+		kind domain.RecoveryActionKind,
+	) (int, error)
+	AppendAction(ctx context.Context, action domain.RecoveryAction) error
+}
+
+// RecoveryIdentityFactory 签发追偿事项标识。与其余身份工厂分开，理由相同。
+type RecoveryIdentityFactory interface {
+	NextRecoveryMatterID(ctx context.Context) (domain.RecoveryMatterID, error)
+}

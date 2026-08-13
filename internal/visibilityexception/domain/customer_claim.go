@@ -154,6 +154,24 @@ func (claim *ClaimItem) Customer() CustomerAccountReference {
 	return claim.customer
 }
 
+// Batch、Contract、Target 与 Kind 是（批次+项）存储键与资格审核查询的输入维——不
+// 导出，适配器立不起键，资格规则也拿不到要核对的合同版本、目标范围与索赔类型。
+func (claim *ClaimItem) Batch() ClaimBatchReference {
+	return claim.batch
+}
+
+func (claim *ClaimItem) Contract() ContractScopeReference {
+	return claim.contract
+}
+
+func (claim *ClaimItem) Target() RequestScopeReference {
+	return claim.target
+}
+
+func (claim *ClaimItem) Kind() ClaimKindReference {
+	return claim.kind
+}
+
 // Screen 报告资格审核结果及是否已审。
 func (claim *ClaimItem) Screen() (EligibilityScreen, bool) {
 	return claim.screen, claim.screen.valid()

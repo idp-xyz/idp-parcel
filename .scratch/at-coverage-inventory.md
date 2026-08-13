@@ -17,10 +17,10 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 247 |
+| ① 已钉住 | 253 |
 | ② 机制候选 | 238 |
 | ③ 实例/闸门 | 148 |
-| ④ 机制未落地 | 450 |
+| ④ 机制未落地 | 444 |
 | 合计 | 1083 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
@@ -32,7 +32,7 @@
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 66 | 90 | 22 | 0 |
 | TF | 97 | 22 | 68 | 7 | 0 |
-| VE | 170 | 21 | 0 | 19 | 130 |
+| VE | 170 | 27 | 0 | 19 | 124 |
 
 ## ① 已钉住（AT → 测试）
 
@@ -262,7 +262,7 @@
 | `AT-TF-072` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
 | `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
-| `AT-TF-080` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
+| `AT-TF-080` | internal/transportfulfillment/application/start_alternate_journey_test.go::TestARegulatoryJourneyFeedsBothChains；internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-094` | internal/transportfulfillment/domain/transport_charge_occurrence_test.go::TestFailedAttemptOccurrenceTakesItsFactFromTheResult |
 | `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
 | `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
@@ -282,6 +282,12 @@
 | `AT-VE-099` | internal/visibilityexception/application/notify_customer_test.go::TestANonDiscloseConclusionCannotGenerateANotification |
 | `AT-VE-100` | internal/visibilityexception/application/notify_customer_test.go::TestANonDiscloseConclusionCannotGenerateANotification |
 | `AT-VE-106` | internal/visibilityexception/application/notify_customer_test.go::TestAFailedChannelSubmissionIsRecordedAndKeptForRetry；internal/visibilityexception/application/notify_customer_test.go::TestARetryAfterFailureAppendsANewMilestoneKeepingTheFailedOne |
+| `AT-VE-114` | internal/visibilityexception/application/handle_claim_test.go::TestClaimsInOneBatchAreReceivedItemByItem |
+| `AT-VE-127` | internal/visibilityexception/application/handle_claim_test.go::TestAReviewWithinTheWindowFormsANewConclusionVersionKeepingThePrior |
+| `AT-VE-129` | internal/visibilityexception/application/handle_claim_test.go::TestAReviewAfterTheWindowIsRefusedKeepingTheOriginalConclusion |
+| `AT-VE-131` | internal/visibilityexception/application/handle_claim_test.go::TestARecoveryMatterOpensIndependentlyOfAnyClaim |
+| `AT-VE-133` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
+| `AT-VE-136` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
 | `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
 | `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
@@ -1092,7 +1098,6 @@
 | `AT-VE-111` | 关务专项披露 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-112` | 自动发布规则停用 | UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md |
 | `AT-VE-113` | 证据材料收到但尚未核实 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-114` | 一个提交批次包含多个索赔项 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-115` | 索赔资料不足 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-116` | 客户在期限内提交材料但仍不完整 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-117` | 有权角色按允许规则批准补充延期 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
@@ -1104,16 +1109,11 @@
 | `AT-VE-123` | 客户撤回后重新提交同一范围 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-124` | 首次索赔超过合同期限 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-126` | 责任只覆盖部分对象 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-127` | 同一范围在复核期限内出现有效异议或关键新证据 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-128` | 合同以结论送达起算复核期，但送达事实待确认 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-129` | 复核请求超过期限且无有效延期或恢复依据 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-130` | 复核请求新增包裹、索赔类型或责任范围 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-131` | 供应商责任通知条件先成立 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-132` | 通知内容和证据已准备但尚未对外提交 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-133` | 协议同时要求预先通知和后续正式主张 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-134` | 主张已提交且渠道接受，但协议要求实际送达 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-135` | 主张已送达，但条款要求对方确认 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
-| `AT-VE-136` | 提交或送达失败后在期限内重试 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-137` | 对方明确拒绝责任 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-138` | 合同允许且有权相对方确认延期 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
 | `AT-VE-139` | 只有内部延期批准或已发送延期请求 | UC-VE-007-MANAGE-EVIDENCE-CLAIMS-AND-RECOVERY.md |
@@ -1175,6 +1175,8 @@
 SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**——所钉语义在结果契约与 CONTEXT 硬句上，验收表无对应行，按宁缺勿滥不硬点；两组继续按硬句口径计。
 
 同日追记二：VE 批收尾票（ETA 与可见性缺口编排 `FormETAHandler`）随编排落地点名 `AT-VE-049`、`AT-VE-050`（七件缺一半边）、`AT-VE-053`、`AT-VE-054`、`AT-VE-057`——①242→247、④455→450，其余桶与合计 1083 不变。
+
+同日追记三：VE 收官票（索赔与追偿编排 `HandleClaimHandler`）随编排落地点名 `AT-VE-114`（逐项独立半边）、`AT-VE-127`、`AT-VE-129`、`AT-VE-131`、`AT-VE-133`（分序半边）、`AT-VE-136`——①247→253、④450→444，合计 1083 不变；另 `AT-TF-080` 归属随 TF 侧新落的替代旅程编排测试增引（同步入①表）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
