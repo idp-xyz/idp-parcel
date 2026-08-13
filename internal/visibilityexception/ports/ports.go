@@ -212,3 +212,59 @@ type TriageHandoffIntent struct {
 type TriageHandoff interface {
 	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
 }
+
+// NotificationDirective 是通知策略对一份披露决定的答复：适用渠道、要求时限与义务判据。
+// 「客户异常通知必须保存……要求时限和适用渠道」（CONTEXT）——三样都来自版本化通知
+// 策略，编排不补默认值。
+type NotificationDirective struct {
+	Channel    domain.NotificationChannelReference
+	Deadline   time.Time
+	Obligation domain.DisclosurePolicyReference
+}
+
+// NotificationPolicyView 回答「这份披露按客户合同与通知策略该走什么渠道、限时多少」。
+// 门户展示能否满足通知义务同样由它背后的合同判断，本上下文不自行推导。
+//
+// 第二个返回值为 false 即「通知策略未配置」——渠道与时限目录属待登记实例参数。没有
+// 渠道的通知不存在一个如实的空白格：造一个占位渠道是虚构，所以未配置由编排形成未决，
+// 与依赖调不通分开（一个等租户登记，一个重试依赖）。
+type NotificationPolicyView interface {
+	DirectNotification(
+		ctx context.Context,
+		disclosure domain.DisclosureDecision,
+	) (NotificationDirective, bool, error)
+}
+
+// CustomerNotificationStore 按披露决定找回并保存通知。披露决定没有自有标识，按其身份
+// 三维（客户、发作期、决定时间）定位——同一披露不重发通知的幂等界线就立在这里。
+type CustomerNotificationStore interface {
+	FindByDisclosure(
+		ctx context.Context,
+		disclosure domain.DisclosureDecision,
+	) (*domain.CustomerNotification, bool, error)
+	Save(ctx context.Context, notification *domain.CustomerNotification) error
+}
+
+// NotificationIdentityFactory 签发通知标识。与其余身份工厂分开，理由相同。
+type NotificationIdentityFactory interface {
+	NextNotificationID(ctx context.Context) (domain.NotificationID, error)
+}
+
+// NotificationChannelGateway 把通知提交给适用消息渠道。真实渠道与其凭证属实例参数，
+// 今天没有实现，唯一实现是测试替身。提交失败作为错误返回，由编排记为`失败`节点——
+// 那是要分别记录的过程结果（CONTEXT），不是未决。
+type NotificationChannelGateway interface {
+	SubmitToChannel(ctx context.Context, notification *domain.CustomerNotification) error
+}
+
+// NotificationHandoffIntent 把通知决定交给适用下游（义务台账、升级判断的输入）。意图
+// 由通知标识认领，重放重发同一份（ADR-0043）。
+type NotificationHandoffIntent struct {
+	Notification *domain.CustomerNotification
+}
+
+// NotificationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type NotificationHandoff interface {
+	HandOffNotification(ctx context.Context, intent NotificationHandoffIntent) error
+}
