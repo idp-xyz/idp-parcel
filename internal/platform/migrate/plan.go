@@ -64,9 +64,9 @@ type Step struct {
 // 框架在前不是习惯问题：业务表可以引用框架已建立的东西，反过来不成立——框架的
 // 迁移模板不知道任何业务上下文的存在。
 //
-// **只接线 SQL 已随提交落库的模块。** customs-compliance 的常量已留位，其
-// businessSteps 接线随该模块首个 SQL 同一笔提交加入——提前接线会让 Plan 在
-// 干净检出上读一个不存在的嵌入目录（本文件已两度因跨会话卷带断过远端构建）。
+// **只接线 SQL 已随提交落库的模块**：新模块的目录、嵌入行、模块函数与本处接线必须
+// 同一笔提交一起落——半截接线会让干净检出编译不过或 Plan 读不到嵌入目录（本文件
+// 已多次因跨会话卷带断过远端构建）。
 func Plan() ([]Step, error) {
 	steps, err := frameworkSteps()
 	if err != nil {
@@ -92,16 +92,21 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	customs, err := businessSteps(migrations.CustomsCompliance, SchemaCustomsCompliance)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
 	steps = append(steps, nodes...)
 	steps = append(steps, visibility...)
 	steps = append(steps, settlement...)
+	steps = append(steps, customs...)
 	return steps, nil
 }
 
 // Schemas 返回迁移作业在施加计划前创建的 schema。生产 API 与 Outbox 账号不持有
-// 创建它们的权限。customs_compliance 先建空 schema 不害事，且免去其首票再碰本函数。
+// 创建它们的权限。
 func Schemas() []string {
 	return []string{
 		SchemaHistory, SchemaBento,

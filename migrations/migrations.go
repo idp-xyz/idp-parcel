@@ -59,8 +59,7 @@ func SettlementAccounting() ([]Asset, error) {
 	return assetsForModule("settlement_accounting")
 }
 
-// CustomsCompliance 返回 customs-compliance 的业务迁移，按文件名序排列。其 SQL 目录
-// 落库前它保持可编译但不可调用（embed 清单尚未列入该目录），接线随 SQL 同一笔提交。
+// CustomsCompliance 返回 customs-compliance 的业务迁移，按文件名序排列。
 func CustomsCompliance() ([]Asset, error) {
 	return assetsForModule("customs_compliance")
 }
