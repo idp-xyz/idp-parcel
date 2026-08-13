@@ -69,10 +69,10 @@ func postWithdrawal(
 // 的否定结果不区分不存在与别的租户）、非 POST 405、未命名结果是编程错误 5xx 不带
 // outcome 上线。
 //
-// `outcome` 的 201/200 映射与 submit 端点同构（writeOutcome 三行同款），其逐格断言
-// 在 submit 端点测试；本文件不为构造带业务结果的 WithdrawShipmentRequestResult 重建
-// 全套聚合替身——结果字段未导出是刻意的（传输层不该能捏造业务结果），代价是这半边
-// 的逐格映射由接线后的端到端补钉。
+// `outcome` 的 201/200 映射与 submit 端点同构（writeOutcome 三行同款）：同构逻辑的
+// 201 钉在 submit 端点自己的测试里，本端点自身的逐格钉由接线后端到端补——不在本文件
+// 为构造带业务结果的 WithdrawShipmentRequestResult 重建全套聚合替身，因为结果字段
+// 未导出是刻意的（传输层不该能捏造业务结果），这条设计约束比逐格断言更值钱。
 func TestWithdrawalTransportFailuresSplitByRetryAction(t *testing.T) {
 	malformed := postWithdrawal(t,
 		&withdrawalIntakeDouble{err: fmt.Errorf("%w: bad envelope", shipmenthttp.ErrMalformedRequest)},
