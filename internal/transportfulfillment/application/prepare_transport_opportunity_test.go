@@ -179,7 +179,9 @@ func reserveCommand(t *testing.T, quantity int64) application.ReserveCapacityCom
 	}
 }
 
-// 班次是执行体：建立幂等分重放/冲突（班次存在≠容量可用——池是另一入口单独建立）。
+// Covers: CONTEXT「具体班次」句（班次是执行体，班次存在≠容量可用≠已订舱）的编排面
+// （AT-TF-027 的身份半边）——建立幂等分重放/冲突；容量池是另一入口单独建立，班次
+// 记录上不带容量。
 func TestAScheduleEstablishesOnce(t *testing.T) {
 	fixture := newOpportunityFixture(t)
 	command := application.EstablishScheduleCommand{
@@ -272,8 +274,10 @@ func TestOverReservationIsRefusedWithTheRemainder(t *testing.T) {
 	})
 }
 
-// 释放/消耗/过期分格：消耗成功交装载分配链意图；过期与守恒撞线各归业务负向一格
-// （领域哨兵透出）；无装载分配依据的消耗未受理。
+// Covers: CONTEXT 生命周期「有效预占 → 部分释放、全部释放、到期或实际消耗：各维度
+// 分别转换数量，任何时点都不得重复扣减同一范围」的编排面——消耗成功交装载分配链
+// 意图；过期（RESERVATION_EXPIRED）与守恒撞线（RESERVATION_OVERDRAWN）领域哨兵透出
+// 各归业务负向一格；无装载分配依据的消耗未受理（消耗必须有装载分配确认）。
 func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	fixture := newOpportunityFixture(t)
 	establishedPool(t, fixture)
@@ -385,7 +389,8 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	})
 }
 
-// 恢复纪律：库故障各归未决；消耗投递失败不翻结果；原因集封闭。
+// Covers: ADR-0029（依赖故障归未决且指名等谁）、ADR-0031（写入代数封闭）与 ADR-0043
+// （投递失败不翻结果、重放重发同一份）在本编排的恢复面；未决原因集封闭。
 func TestOpportunityRecoveryDiscipline(t *testing.T) {
 	t.Run("store failures are undecided with their reasons", func(t *testing.T) {
 		fixture := newOpportunityFixture(t)
