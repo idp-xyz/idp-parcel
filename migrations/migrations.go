@@ -17,7 +17,11 @@ import (
 	"strings"
 )
 
-//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance
+// 嵌入清单只列**已随提交落库的** SQL 目录：引用一个尚未提交 SQL 的目录会让干净
+// 检出编译不过（`no matching files found`）——本行已两度因跨会话卷带断过远端构建，
+// 新模块的目录、本行与模块函数必须同一笔提交一起落。
+//
+//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting
 var assets embed.FS
 
 // Asset 是一份业务迁移。SQL 只读，校验和对文件原始内容计算——一份已施加的迁移
@@ -50,7 +54,13 @@ func VisibilityException() ([]Asset, error) {
 	return assetsForModule("visibility_exception")
 }
 
-// CustomsCompliance 返回 customs-compliance 的业务迁移，按文件名序排列。
+// SettlementAccounting 返回 settlement-accounting 的业务迁移，按文件名序排列。
+func SettlementAccounting() ([]Asset, error) {
+	return assetsForModule("settlement_accounting")
+}
+
+// CustomsCompliance 返回 customs-compliance 的业务迁移，按文件名序排列。其 SQL 目录
+// 落库前它保持可编译但不可调用（embed 清单尚未列入该目录），接线随 SQL 同一笔提交。
 func CustomsCompliance() ([]Asset, error) {
 	return assetsForModule("customs_compliance")
 }
