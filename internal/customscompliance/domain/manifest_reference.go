@@ -125,6 +125,10 @@ func (reference ExternalManifestReference) Carrier() CarrierResponsibilityRefere
 	return reference.carrier
 }
 
+func (reference ExternalManifestReference) Procedure() CustomsProcedureReference {
+	return reference.procedure
+}
+
 func (reference ExternalManifestReference) Direction() ManifestDirection {
 	return reference.direction
 }

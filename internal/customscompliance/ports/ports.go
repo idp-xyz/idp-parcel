@@ -315,6 +315,58 @@ type FollowUpHandoff interface {
 	HandOffFollowUp(ctx context.Context, intent FollowUpHandoffIntent) error
 }
 
+// ManifestCandidateView 按监管程序、方向与范围盘出可供关联的申报单元候选。空清单
+// 是「没有能匹配的」如实答案（引用保持待关联），读不回是依赖故障。
+type ManifestCandidateView interface {
+	LoadAssociationCandidates(
+		ctx context.Context,
+		tenant domain.TenantID,
+		procedure domain.CustomsProcedureReference,
+		direction domain.ManifestDirection,
+	) ([]domain.AssociationCandidate, error)
+}
+
+type ManifestSaveOutcome uint8
+
+const (
+	ManifestSaveOutcomeInvalid ManifestSaveOutcome = iota
+	ManifestSaved
+	ManifestAlreadyRecorded
+)
+
+// ManifestStore 按外部舱单身份保存受控引用——一舱单一当前引用；来源版本推进走
+// Update（原引用与历史关联由领域在新引用内保留）。
+type ManifestStore interface {
+	FindByManifest(
+		ctx context.Context,
+		tenant domain.TenantID,
+		manifest domain.ExternalManifestID,
+	) (domain.ExternalManifestReference, bool, error)
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		reference domain.ExternalManifestReference,
+	) (ManifestSaveOutcome, error)
+	Update(
+		ctx context.Context,
+		tenant domain.TenantID,
+		reference domain.ExternalManifestReference,
+	) error
+}
+
+// ManifestHandoffIntent 把舱单引用的接受、关联与版本推进交给适用下游（案件视图与
+// 申报链消费）。
+type ManifestHandoffIntent struct {
+	TenantID  domain.TenantID
+	Reference domain.ExternalManifestReference
+}
+
+// ManifestHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
+// Bento/Outbox 闸门。
+type ManifestHandoff interface {
+	HandOffManifest(ctx context.Context, intent ManifestHandoffIntent) error
+}
+
 // ExternalResultHandoffIntent 把已提交的接收记录交给判断与核对消费。意图由幂等键
 // 认领，重放重发同一份（ADR-0043 同款纪律）；归属不上的留存记录没有可供判断消费的
 // 监管事实，不产生意图。
