@@ -16,6 +16,7 @@ var (
 	ErrInvalidDimensions                  = errors.New("parcel pricing: invalid dimensions")
 	ErrMissingDimensions                  = errors.New("parcel pricing: dimensions required")
 	ErrInvalidFeatureCondition            = errors.New("parcel pricing: invalid feature condition")
+	ErrFeatureUnavailable                 = errors.New("parcel pricing: the feature is unavailable for this evaluation")
 	ErrInvalidWeightUnit                  = errors.New("parcel pricing: invalid weight unit")
 	ErrWeightUnitMismatch                 = errors.New("parcel pricing: weight unit mismatch")
 	ErrInvalidIdentifier                  = errors.New("parcel pricing: invalid identifier")

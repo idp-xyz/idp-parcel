@@ -173,7 +173,7 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 #### 三条判据各自的现状
 
-**骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 全仓搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`，没有用空实现顶住的假完成。这使定级可信：六个「未开始」就是未开始，不是被 stub 掩盖的部分完成。已有部分仍有具名缺口，例如 `parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明的闭合集合有十项，分区、地址类型与服务选项三项分类特征需要相等而非比较，尚无执行器；代码已就地声明该延后与理由（`internal/parcelpricing/domain/feature_condition.go`），按「枚举取值与产生它的规则同时出现」处理，不单独计为缺陷。
+**骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 生产代码搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`（测试脚手架的替身与门禁合成源码字符串不在此列），没有用空实现顶住的假完成。这使定级可信：各「部分」列出的剩余就是剩余，不是被 stub 掩盖的部分完成。此前点名的具名缺口——`parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明十项——已经闭合：三项类别特征（分区、地址类型、服务选项）按取值相等判定且与次序运算的配对在构造期互拦，体积重与计价重量作为评价器填入的派生量可被条件读取、缺席时判定报特征不可用而不是悄悄未命中。
 
 **受控案例可复算——三条里最接近满足的一条。** `parcel-pricing` 有 26 份测试，覆盖规范化摘要回放、合成契约与逐案例断言；`parcel-shipment` 有 28 份，含 `SYN-CHAIN` 联检、`UC-PS-001` 编排的逐结果断言，以及该用例接入面处理器的逐状态码断言；`party-commercial` 有 24 份，其中两份是契约测试（数它时当心 `customer_contract_test.go`：那是客户合同这个领域概念的测试，不是契约测试，按文件名数会多出一份）；`settlement-accounting` 有 5 份、`network-routing` 有 4 份。CI（`.github/workflows/ci.yml`）在每次 push 与 PR 上跑 `gofmt`、`go vet`、`go test -race` 与 `go build`，因此可复算有持续保证，不是一次性事实。
 
