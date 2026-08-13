@@ -38,11 +38,12 @@ func (double *factStoreDouble) FindByKey(_ context.Context, key ports.FactKey) (
 
 func (double *factStoreDouble) FindByParcel(
 	_ context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 ) ([]ports.FactRecord, error) {
 	records := make([]ports.FactRecord, 0)
 	for _, record := range double.byKey {
-		if record.Fact.Parcel() == parcel {
+		if record.Key.Tenant == tenant && record.Fact.Parcel() == parcel {
 			records = append(records, record)
 		}
 	}
@@ -154,15 +155,37 @@ func newDeriveFixture(t *testing.T) *deriveFixture {
 
 func deriveCommand(t *testing.T, factRef, version string) application.DeriveProjectionCommand {
 	t.Helper()
-	return application.DeriveProjectionCommand{Fact: domain.AcceptedSourceFactSpec{
-		Source:      domain.SourceNodeOperations,
-		Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
-		Fact:        mustValue(t, domain.NewSourceFactReference, factRef),
-		Version:     mustValue(t, domain.NewSourceFactVersion, version),
-		OccurredAt:  factOccurredAt,
-		EffectiveAt: factOccurredAt,
-		ReceivedAt:  factOccurredAt.Add(time.Hour),
-	}}
+	return application.DeriveProjectionCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
+		Fact: domain.AcceptedSourceFactSpec{
+			Source:      domain.SourceNodeOperations,
+			Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+			Fact:        mustValue(t, domain.NewSourceFactReference, factRef),
+			Version:     mustValue(t, domain.NewSourceFactVersion, version),
+			OccurredAt:  factOccurredAt,
+			EffectiveAt: factOccurredAt,
+			ReceivedAt:  factOccurredAt.Add(time.Hour),
+		},
+	}
+}
+
+// Covers: ADR-0003 隔离半边——租户不随命令到达即未受理，编排不替来源补租户，也不读
+// 任何依赖。
+func TestACommandWithoutATenantIsNotAccepted(t *testing.T) {
+	fixture := newDeriveFixture(t)
+
+	command := deriveCommand(t, "NODE-INTAKE/a", "v1")
+	command.TenantID = domain.TenantID{}
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.FactNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED", result.Outcome())
+	}
+	if fixture.facts.saved != 0 {
+		t.Fatal("缺租户的命令仍然写了事实库")
+	}
 }
 
 // Covers: VE CONTEXT 生命周期「源上下文接受事实或有效性变化→按标准追踪里程碑映射

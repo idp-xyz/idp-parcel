@@ -27,12 +27,13 @@ func NewSignalEpisodes(db *bentopg.DB) (*SignalEpisodes, error) {
 	return &SignalEpisodes{db: db}, nil
 }
 
-// FindLatest 按对象+类型取回最近一次发作期，含已结束的——「已结束+再命中」要据它
-// 建立关联的新发作期，只查活跃会把重开误判成首启。重开的首命中允许与前期结束同刻，
-// started_at 并列时由到达序（seq）裁决。读回经 RehydrateSignalEpisode 重验生命周期
-// 形状。
+// FindLatest 按租户+对象+类型取回最近一次发作期，含已结束的——「已结束+再命中」
+// 要据它建立关联的新发作期，只查活跃会把重开误判成首启。重开的首命中允许与前期结束
+// 同刻，started_at 并列时由到达序（seq）裁决。读回经 RehydrateSignalEpisode 重验
+// 生命周期形状。
 func (repository *SignalEpisodes) FindLatest(
 	ctx context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	kind domain.ExceptionSignalKindReference,
 ) (*domain.SignalEpisode, bool, error) {
@@ -52,10 +53,10 @@ func (repository *SignalEpisodes) FindLatest(
 		`SELECT episode_id, rule_ref, confidence_ref, hits, started_at, last_hit_at,
 		        release_basis, ended_at, prior_episode
 		   FROM visibility_exception.signal_episode
-		  WHERE parcel_ref = $1 AND kind_ref = $2
+		  WHERE tenant_id = $1 AND parcel_ref = $2 AND kind_ref = $3
 		  ORDER BY started_at DESC, seq DESC
 		  LIMIT 1`,
-		parcel.String(), kind.String(),
+		tenant.String(), parcel.String(), kind.String(),
 	).Scan(&episodeID, &ruleRef, &confidenceRef, &hits, &startedAt, &lastHitAt,
 		&releaseBasis, &endedAt, &priorEpisode)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -126,9 +127,10 @@ func (repository *SignalEpisodes) SaveRaised(
 
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.signal_episode
-			(episode_id, parcel_ref, kind_ref, rule_ref, confidence_ref,
+			(tenant_id, episode_id, parcel_ref, kind_ref, rule_ref, confidence_ref,
 			 hits, started_at, last_hit_at, release_basis, ended_at, prior_episode)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		record.Tenant.String(),
 		snapshot.ID.String(),
 		snapshot.Parcel.String(),
 		snapshot.Kind.String(),
@@ -146,8 +148,9 @@ func (repository *SignalEpisodes) SaveRaised(
 
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.triage_conclusion
-			(episode_id, outcome, rule_ref, triaged_at)
-		 VALUES ($1, $2, $3, $4)`,
+			(tenant_id, episode_id, outcome, rule_ref, triaged_at)
+		 VALUES ($1, $2, $3, $4, $5)`,
+		record.Tenant.String(),
 		record.Conclusion.Episode().String(),
 		record.Conclusion.Outcome().String(),
 		record.Conclusion.Rule().String(),
@@ -159,9 +162,11 @@ func (repository *SignalEpisodes) SaveRaised(
 }
 
 // SaveHit 落同一发作期内的判断历史推进（命中数、末次命中，或结束时的解除依据）。
-// 行不存在如实报错——命中只可能落在 FindLatest 刚交回的发作期上。
+// 行不存在如实报错——命中只可能落在 FindLatest 刚交回的发作期上；租户条件进语句
+// （ADR-0003），另一个租户拿着同名发作期标识也改不动这一行。
 func (repository *SignalEpisodes) SaveHit(
 	ctx context.Context,
+	tenant domain.TenantID,
 	episode *domain.SignalEpisode,
 ) error {
 	executor, err := repository.db.RequireExecutor(ctx)
@@ -175,8 +180,9 @@ func (repository *SignalEpisodes) SaveHit(
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE visibility_exception.signal_episode
-		    SET hits = $2, last_hit_at = $3, release_basis = $4, ended_at = $5
-		  WHERE episode_id = $1`,
+		    SET hits = $3, last_hit_at = $4, release_basis = $5, ended_at = $6
+		  WHERE tenant_id = $1 AND episode_id = $2`,
+		tenant.String(),
 		snapshot.ID.String(),
 		snapshot.Hits,
 		snapshot.LastHitAt,

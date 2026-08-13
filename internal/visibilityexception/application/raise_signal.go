@@ -73,8 +73,10 @@ func (reason RaiseSignalUndecidedReason) String() string {
 
 // RaiseSignalCommand 携带一次信号命中。规则版本与可信度必备且来自命中事实——「每个
 // 信号必须保存对象、类型、规则版本、判断时间、事实依据、可信度」（CONTEXT），编排不
-// 替命中补任何一样。
+// 替命中补任何一样。租户显式随命令到达（ADR-0003）：发作期按租户内的对象+类型定位，
+// 编排不替命中补租户。
 type RaiseSignalCommand struct {
+	TenantID   domain.TenantID
 	Kind       domain.ExceptionSignalKindReference
 	Parcel     domain.TrackedParcelReference
 	Rule       domain.SignalRuleVersionReference
@@ -142,7 +144,8 @@ func (handler *RaiseSignalHandler) Handle(
 ) (RaiseSignalResult, error) {
 	// 先判命中事实再读依赖：规则版本或可信度立不起来的输入构不成信号，而一次已经发出
 	// 的查询收不回来。
-	if command.Kind.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Kind.String() == "" ||
 		command.Parcel.String() == "" ||
 		command.Rule.String() == "" ||
 		command.Confidence.String() == "" ||
@@ -150,7 +153,7 @@ func (handler *RaiseSignalHandler) Handle(
 		return RaiseSignalResult{outcome: RaiseSignalNotAccepted}, nil
 	}
 
-	latest, found, err := handler.deps.Episodes.FindLatest(ctx, command.Parcel, command.Kind)
+	latest, found, err := handler.deps.Episodes.FindLatest(ctx, command.TenantID, command.Parcel, command.Kind)
 	if err != nil {
 		return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 	}
@@ -161,7 +164,7 @@ func (handler *RaiseSignalHandler) Handle(
 		if err := latest.RecordHit(command.HitAt); err != nil {
 			return RaiseSignalResult{}, fmt.Errorf("record signal hit: %w", err)
 		}
-		if err := handler.deps.Episodes.SaveHit(ctx, latest); err != nil {
+		if err := handler.deps.Episodes.SaveHit(ctx, command.TenantID, latest); err != nil {
 			return RaiseSignalResult{outcome: RaiseSignalUndecided, reason: SignalEpisodeStoreUnavailable}, nil
 		}
 		return RaiseSignalResult{outcome: SignalHitRecorded, episode: latest}, nil
@@ -211,6 +214,7 @@ func (handler *RaiseSignalHandler) Handle(
 	}
 
 	if err := handler.deps.Episodes.SaveRaised(ctx, ports.RaisedSignalRecord{
+		Tenant:     command.TenantID,
 		Parcel:     command.Parcel,
 		Kind:       command.Kind,
 		Episode:    episode,

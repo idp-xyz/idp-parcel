@@ -14,6 +14,7 @@ import (
 var signalHitAt = time.Date(2026, 8, 10, 9, 0, 0, 0, time.UTC)
 
 type episodeKey struct {
+	tenant domain.TenantID
 	parcel domain.TrackedParcelReference
 	kind   domain.ExceptionSignalKindReference
 }
@@ -34,13 +35,14 @@ func newEpisodeStore() *episodeStoreDouble {
 
 func (double *episodeStoreDouble) FindLatest(
 	_ context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	kind domain.ExceptionSignalKindReference,
 ) (*domain.SignalEpisode, bool, error) {
 	if double.findErr != nil {
 		return nil, false, double.findErr
 	}
-	episode, found := double.latest[episodeKey{parcel: parcel, kind: kind}]
+	episode, found := double.latest[episodeKey{tenant: tenant, parcel: parcel, kind: kind}]
 	return episode, found, nil
 }
 
@@ -48,14 +50,14 @@ func (double *episodeStoreDouble) SaveRaised(_ context.Context, record ports.Rai
 	if double.raiseErr != nil {
 		return double.raiseErr
 	}
-	key := episodeKey{parcel: record.Parcel, kind: record.Kind}
+	key := episodeKey{tenant: record.Tenant, parcel: record.Parcel, kind: record.Kind}
 	double.latest[key] = record.Episode
 	double.conclusions = append(double.conclusions, record.Conclusion)
 	double.raisedSaves++
 	return nil
 }
 
-func (double *episodeStoreDouble) SaveHit(_ context.Context, episode *domain.SignalEpisode) error {
+func (double *episodeStoreDouble) SaveHit(_ context.Context, _ domain.TenantID, episode *domain.SignalEpisode) error {
 	if double.hitErr != nil {
 		return double.hitErr
 	}
@@ -145,6 +147,7 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 func raiseCommand(t *testing.T, hitAt time.Time) application.RaiseSignalCommand {
 	t.Helper()
 	return application.RaiseSignalCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Kind:       mustValue(t, domain.NewExceptionSignalKindReference, "ETA_BREACH_RISK"),
 		Parcel:     mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Rule:       mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
@@ -400,6 +403,16 @@ func TestACommandWithoutItsSignalFactsIsNotAccepted(t *testing.T) {
 	}
 	if noTime.Outcome() != application.RaiseSignalNotAccepted {
 		t.Fatalf("outcome = %q, want NOT_ACCEPTED", noTime.Outcome())
+	}
+
+	missingTenant := raiseCommand(t, signalHitAt)
+	missingTenant.TenantID = domain.TenantID{}
+	noTenant, err := fixture.handler.Handle(context.Background(), missingTenant)
+	if err != nil {
+		t.Fatalf("handle without tenant: %v", err)
+	}
+	if noTenant.Outcome() != application.RaiseSignalNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED；租户是隔离边界不是可补的默认值", noTenant.Outcome())
 	}
 	if fixture.triage.calls != 0 || fixture.episodes.raisedSaves != 0 {
 		t.Fatal("an unaccepted command still reached a dependency")

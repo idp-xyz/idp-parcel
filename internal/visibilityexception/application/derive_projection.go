@@ -74,9 +74,11 @@ func (reason DeriveUndecidedReason) String() string {
 }
 
 // DeriveProjectionCommand 携带一份已被源上下文接受的事实。投影只消费已接受事实——
-// 命令的形状就是 AcceptedSourceFactSpec，原始消息与外部状态码构造不出它。
+// 命令的形状就是 AcceptedSourceFactSpec，原始消息与外部状态码构造不出它。租户显式
+// 随命令到达（ADR-0003）：事实引用只在租户内唯一，编排不替来源补租户。
 type DeriveProjectionCommand struct {
-	Fact domain.AcceptedSourceFactSpec
+	TenantID domain.TenantID
+	Fact     domain.AcceptedSourceFactSpec
 }
 
 type DeriveProjectionResult struct {
@@ -131,11 +133,16 @@ func (handler *DeriveProjectionHandler) Handle(
 	command DeriveProjectionCommand,
 ) (DeriveProjectionResult, error) {
 	fact, err := domain.NewAcceptedSourceFact(command.Fact)
-	if err != nil {
+	if err != nil || command.TenantID.String() == "" {
 		return DeriveProjectionResult{outcome: FactNotAccepted}, nil
 	}
 
-	key := ports.FactKey{Source: fact.Source(), Fact: fact.Fact(), Version: fact.Version()}
+	key := ports.FactKey{
+		Tenant:  command.TenantID,
+		Source:  fact.Source(),
+		Fact:    fact.Fact(),
+		Version: fact.Version(),
+	}
 	digest := factContentDigest(fact)
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, key)
 	if err != nil {
@@ -170,7 +177,7 @@ func (handler *DeriveProjectionHandler) Handle(
 		return DeriveProjectionResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFactSave, saved)
 	}
 
-	records, err := handler.deps.Facts.FindByParcel(ctx, fact.Parcel())
+	records, err := handler.deps.Facts.FindByParcel(ctx, command.TenantID, fact.Parcel())
 	if err != nil {
 		return DeriveProjectionResult{outcome: DeriveUndecided, reason: FactStoreUnavailable}, nil
 	}

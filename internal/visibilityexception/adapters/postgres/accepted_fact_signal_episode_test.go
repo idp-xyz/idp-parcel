@@ -66,7 +66,7 @@ func factValue[T any](t *testing.T, construct func(string) (T, error), raw strin
 
 // factRecord 造一份三时间刻意错开的事实：发生、生效与接收各差一小时，往返断言据此
 // 证「三时间分存」不是三列存同一个值。
-func factRecord(t *testing.T, source domain.SourceContext, parcel, factRef, version string) ports.FactRecord {
+func factRecord(t *testing.T, tenant string, source domain.SourceContext, parcel, factRef, version string) ports.FactRecord {
 	t.Helper()
 	fact, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
 		Source:      source,
@@ -82,6 +82,7 @@ func factRecord(t *testing.T, source domain.SourceContext, parcel, factRef, vers
 	}
 	return ports.FactRecord{
 		Key: ports.FactKey{
+			Tenant:  factValue(t, domain.NewTenantID, tenant),
 			Source:  source,
 			Fact:    fact.Fact(),
 			Version: fact.Version(),
@@ -97,9 +98,9 @@ func TestFactsAreReadBackWithThreeTimesApart(t *testing.T) {
 	fixture := newFactFixture(t)
 	ctx := t.Context()
 
-	shipment := factRecord(t, domain.SourceParcelShipment, "parcel-1", "fact-a", "v1")
-	customs := factRecord(t, domain.SourceCustomsCompliance, "parcel-1", "fact-b", "v1")
-	elsewhere := factRecord(t, domain.SourceNodeOperations, "parcel-2", "fact-c", "v1")
+	shipment := factRecord(t, "tenant-a", domain.SourceParcelShipment, "parcel-1", "fact-a", "v1")
+	customs := factRecord(t, "tenant-a", domain.SourceCustomsCompliance, "parcel-1", "fact-b", "v1")
+	elsewhere := factRecord(t, "tenant-a", domain.SourceNodeOperations, "parcel-2", "fact-c", "v1")
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		for _, record := range []ports.FactRecord{shipment, customs, elsewhere} {
 			if _, err := fixture.facts.Save(txCtx, record); err != nil {
@@ -125,12 +126,55 @@ func TestFactsAreReadBackWithThreeTimesApart(t *testing.T) {
 		t.Fatalf("事实没原样读回：%+v", found)
 	}
 
-	all, err := fixture.facts.FindByParcel(ctx, factValue(t, domain.NewTrackedParcelReference, "parcel-1"))
+	all, err := fixture.facts.FindByParcel(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
+		factValue(t, domain.NewTrackedParcelReference, "parcel-1"))
 	if err != nil {
 		t.Fatalf("按包裹读回：%v", err)
 	}
 	if len(all) != 2 {
 		t.Fatalf("按包裹读回 %d 份，想要 2（parcel-2 的事实不该混进来）", len(all))
+	}
+}
+
+// TestFactsOfAnotherTenantAreInvisible 证租户隔离由 SQL 条件承担：同名键与同名包裹
+// 在另一个租户下一律不可见，SaveHit 之外的读面不靠约定靠字段（ADR-0003）。
+func TestFactsOfAnotherTenantAreInvisible(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+
+	record := factRecord(t, "tenant-a", domain.SourceParcelShipment, "parcel-1", "fact-a", "v1")
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		_, err := fixture.facts.Save(txCtx, record)
+		return err
+	})
+
+	probeKey := record.Key
+	probeKey.Tenant = factValue(t, domain.NewTenantID, "tenant-b")
+	if _, exists, err := fixture.facts.FindByKey(ctx, probeKey); err != nil || exists {
+		t.Fatalf("跨租户按键可见：err=%v exists=%v", err, exists)
+	}
+
+	foreign, err := fixture.facts.FindByParcel(ctx,
+		factValue(t, domain.NewTenantID, "tenant-b"),
+		factValue(t, domain.NewTrackedParcelReference, "parcel-1"))
+	if err != nil {
+		t.Fatalf("跨租户按包裹读：%v", err)
+	}
+	if len(foreign) != 0 {
+		t.Fatalf("跨租户按包裹读回 %d 份", len(foreign))
+	}
+
+	// 另一租户写同名键是新行不是重放——键含租户维。
+	var outcome ports.FactSaveOutcome
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		saved, err := fixture.facts.Save(txCtx,
+			factRecord(t, "tenant-b", domain.SourceParcelShipment, "parcel-1", "fact-a", "v1"))
+		outcome = saved
+		return err
+	})
+	if outcome != ports.FactSaved {
+		t.Fatalf("另一租户同名键 outcome = %d, 想要 FactSaved", outcome)
 	}
 }
 
@@ -140,7 +184,7 @@ func TestSecondFactWriterGetsAlreadyRecorded(t *testing.T) {
 	fixture := newFactFixture(t)
 	ctx := t.Context()
 
-	original := factRecord(t, domain.SourceNetworkRouting, "parcel-1", "fact-a", "v1")
+	original := factRecord(t, "tenant-a", domain.SourceNetworkRouting, "parcel-1", "fact-a", "v1")
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		_, err := fixture.facts.Save(txCtx, original)
 		return err
@@ -173,7 +217,7 @@ func TestSecondFactWriterGetsAlreadyRecorded(t *testing.T) {
 	var corrected ports.FactSaveOutcome
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		saved, err := fixture.facts.Save(txCtx,
-			factRecord(t, domain.SourceNetworkRouting, "parcel-1", "fact-a", "v2"))
+			factRecord(t, "tenant-a", domain.SourceNetworkRouting, "parcel-1", "fact-a", "v2"))
 		corrected = saved
 		return err
 	})
@@ -190,9 +234,9 @@ func TestSourceContextOutsideClosedSetIsRejectedByCheck(t *testing.T) {
 
 	_, err := fixture.pool.Exec(ctx,
 		`INSERT INTO visibility_exception.accepted_fact
-			(source_context, fact_ref, fact_version, parcel_ref, content_digest,
+			(tenant_id, source_context, fact_ref, fact_version, parcel_ref, content_digest,
 			 occurred_at, effective_at, received_at)
-		 VALUES ('RAW_SCAN', 'fact-x', 'v1', 'parcel-1', 'digest-x', now(), now(), now())`)
+		 VALUES ('tenant-a', 'RAW_SCAN', 'fact-x', 'v1', 'parcel-1', 'digest-x', now(), now(), now())`)
 	if err == nil {
 		t.Fatalf("集合外源上下文被库接受了")
 	}
@@ -204,7 +248,7 @@ func TestFactWritesRequireTransactionAndRollBack(t *testing.T) {
 	fixture := newFactFixture(t)
 	ctx := t.Context()
 
-	record := factRecord(t, domain.SourceTransportFulfillment, "parcel-1", "fact-a", "v1")
+	record := factRecord(t, "tenant-a", domain.SourceTransportFulfillment, "parcel-1", "fact-a", "v1")
 	if _, err := fixture.facts.Save(ctx, record); err == nil {
 		t.Fatalf("无事务写入被接受了")
 	}
@@ -223,7 +267,7 @@ func TestFactWritesRequireTransactionAndRollBack(t *testing.T) {
 	}
 }
 
-func raisedRecord(t *testing.T, episode *domain.SignalEpisode, parcel, kind string, outcome domain.TriageOutcome) ports.RaisedSignalRecord {
+func raisedRecord(t *testing.T, episode *domain.SignalEpisode, tenant, parcel, kind string, outcome domain.TriageOutcome) ports.RaisedSignalRecord {
 	t.Helper()
 	conclusion, err := domain.ConcludeTriage(
 		episode.ID(),
@@ -235,6 +279,7 @@ func raisedRecord(t *testing.T, episode *domain.SignalEpisode, parcel, kind stri
 		t.Fatalf("构造分诊结论：%v", err)
 	}
 	return ports.RaisedSignalRecord{
+		Tenant:     factValue(t, domain.NewTenantID, tenant),
 		Parcel:     factValue(t, domain.NewTrackedParcelReference, parcel),
 		Kind:       factValue(t, domain.NewExceptionSignalKindReference, kind),
 		Episode:    episode,
@@ -280,13 +325,14 @@ func TestRaisedEpisodeRoundTripsAndAbsorbsHits(t *testing.T) {
 	opened := openedEpisode(t, "ep-1", "parcel-1", "STALLED", factBaseAt)
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.episodes.SaveRaised(txCtx,
-			raisedRecord(t, opened, "parcel-1", "STALLED", domain.AutoEstablishCase))
+			raisedRecord(t, opened, "tenant-a", "parcel-1", "STALLED", domain.AutoEstablishCase))
 	})
 	if fixture.conclusionCount(t, ctx, "ep-1") != 1 {
 		t.Fatalf("分诊结论没随发作期落库")
 	}
 
 	found, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		factValue(t, domain.NewExceptionSignalKindReference, "STALLED"))
 	if err != nil || !exists {
@@ -301,10 +347,11 @@ func TestRaisedEpisodeRoundTripsAndAbsorbsHits(t *testing.T) {
 		t.Fatalf("重建后记命中：%v", err)
 	}
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.episodes.SaveHit(txCtx, found)
+		return fixture.episodes.SaveHit(txCtx, factValue(t, domain.NewTenantID, "tenant-a"), found)
 	})
 
 	again, _, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		factValue(t, domain.NewExceptionSignalKindReference, "STALLED"))
 	if err != nil {
@@ -312,6 +359,14 @@ func TestRaisedEpisodeRoundTripsAndAbsorbsHits(t *testing.T) {
 	}
 	if again.Hits() != 2 {
 		t.Fatalf("命中推进没落库：hits=%d", again.Hits())
+	}
+
+	// 另一租户拿着同名发作期在手也改不动这一行——SaveHit 的租户条件不是摆设。
+	foreignHit := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.episodes.SaveHit(txCtx, factValue(t, domain.NewTenantID, "tenant-b"), found)
+	})
+	if foreignHit == nil {
+		t.Fatalf("跨租户 SaveHit 被接受了")
 	}
 }
 
@@ -324,7 +379,7 @@ func TestRaisedPairCrossesCommitBoundaryTogether(t *testing.T) {
 	opened := openedEpisode(t, "ep-half", "parcel-1", "STALLED", factBaseAt)
 	rollback := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := fixture.episodes.SaveRaised(txCtx,
-			raisedRecord(t, opened, "parcel-1", "STALLED", domain.ManualReviewRequired)); err != nil {
+			raisedRecord(t, opened, "tenant-a", "parcel-1", "STALLED", domain.ManualReviewRequired)); err != nil {
 			return err
 		}
 		return context.Canceled
@@ -334,6 +389,7 @@ func TestRaisedPairCrossesCommitBoundaryTogether(t *testing.T) {
 	}
 
 	if _, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		factValue(t, domain.NewExceptionSignalKindReference, "STALLED")); err != nil || exists {
 		t.Fatalf("回滚后发作期仍在：err=%v exists=%v", err, exists)
@@ -343,7 +399,7 @@ func TestRaisedPairCrossesCommitBoundaryTogether(t *testing.T) {
 	}
 
 	if err := fixture.episodes.SaveRaised(ctx,
-		raisedRecord(t, opened, "parcel-1", "STALLED", domain.ManualReviewRequired)); err == nil {
+		raisedRecord(t, opened, "tenant-a", "parcel-1", "STALLED", domain.ManualReviewRequired)); err == nil {
 		t.Fatalf("无事务 SaveRaised 被接受了")
 	}
 }
@@ -358,7 +414,7 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 	first := openedEpisode(t, "ep-first", "parcel-1", "STALLED", factBaseAt)
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.episodes.SaveRaised(txCtx,
-			raisedRecord(t, first, "parcel-1", "STALLED", domain.NoCaseNeeded))
+			raisedRecord(t, first, "tenant-a", "parcel-1", "STALLED", domain.NoCaseNeeded))
 	})
 
 	// 同刻结束再同刻重开：End 允许与末次命中同刻，重开允许与结束同刻——两期的
@@ -367,7 +423,7 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 		t.Fatalf("结束前期：%v", err)
 	}
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.episodes.SaveHit(txCtx, first)
+		return fixture.episodes.SaveHit(txCtx, factValue(t, domain.NewTenantID, "tenant-a"), first)
 	})
 
 	reopened, err := first.ReopenAsLinked(factValue(t, domain.NewEpisodeID, "ep-second"), factBaseAt)
@@ -376,10 +432,11 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 	}
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.episodes.SaveRaised(txCtx,
-			raisedRecord(t, reopened, "parcel-1", "STALLED", domain.AttachToExistingCase))
+			raisedRecord(t, reopened, "tenant-a", "parcel-1", "STALLED", domain.AttachToExistingCase))
 	})
 
 	latest, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		factValue(t, domain.NewExceptionSignalKindReference, "STALLED"))
 	if err != nil || !exists {
@@ -393,13 +450,21 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 		t.Fatalf("重开没指回前期：prior=%s has=%v", prior, has)
 	}
 
-	// 另一对象与另一类型都不可见——键的两维各自隔离。
+	// 另一租户、另一对象与另一类型都不可见——键的三维各自隔离。
 	if _, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-b"),
+		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
+		factValue(t, domain.NewExceptionSignalKindReference, "STALLED")); err != nil || exists {
+		t.Fatalf("跨租户可见：err=%v exists=%v", err, exists)
+	}
+	if _, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-2"),
 		factValue(t, domain.NewExceptionSignalKindReference, "STALLED")); err != nil || exists {
 		t.Fatalf("跨对象可见：err=%v exists=%v", err, exists)
 	}
 	if _, exists, err := fixture.episodes.FindLatest(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
 		factValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		factValue(t, domain.NewExceptionSignalKindReference, "DELAYED")); err != nil || exists {
 		t.Fatalf("跨类型可见：err=%v exists=%v", err, exists)
@@ -413,7 +478,7 @@ func TestSaveHitOnMissingEpisodeFails(t *testing.T) {
 
 	ghost := openedEpisode(t, "ep-ghost", "parcel-1", "STALLED", factBaseAt)
 	err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return fixture.episodes.SaveHit(txCtx, ghost)
+		return fixture.episodes.SaveHit(txCtx, factValue(t, domain.NewTenantID, "tenant-a"), ghost)
 	})
 	if err == nil {
 		t.Fatalf("不存在的发作期被 SaveHit 接受了")

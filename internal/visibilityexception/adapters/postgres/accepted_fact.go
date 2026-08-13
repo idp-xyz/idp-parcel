@@ -44,8 +44,8 @@ func (repository *AcceptedFacts) FindByKey(
 	err = querier.QueryRow(ctx,
 		`SELECT parcel_ref, content_digest, occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
-		  WHERE source_context = $1 AND fact_ref = $2 AND fact_version = $3`,
-		key.Source.String(), key.Fact.String(), key.Version.String(),
+		  WHERE tenant_id = $1 AND source_context = $2 AND fact_ref = $3 AND fact_version = $4`,
+		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
 	).Scan(&parcel, &digest, &occurredAt, &effectiveAt, &receivedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FactRecord{}, false, nil
@@ -55,7 +55,7 @@ func (repository *AcceptedFacts) FindByKey(
 	}
 
 	record, err := factRecordFromRow(
-		key.Source.String(), key.Fact.String(), key.Version.String(),
+		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
 		parcel, digest, occurredAt, effectiveAt, receivedAt)
 	if err != nil {
 		return ports.FactRecord{}, false, err
@@ -63,10 +63,12 @@ func (repository *AcceptedFacts) FindByKey(
 	return record, true, nil
 }
 
-// FindByParcel 交回该包裹全部已接受事实——投影派生的输入。接收序为主排序：投影
-// 消费的是「知道了什么」，同刻到达再按键序保证读回次序确定。
+// FindByParcel 交回该租户下该包裹全部已接受事实——投影派生的输入，租户条件由 SQL
+// 承担（ADR-0003）。接收序为主排序：投影消费的是「知道了什么」，同刻到达再按键序
+// 保证读回次序确定。
 func (repository *AcceptedFacts) FindByParcel(
 	ctx context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 ) ([]ports.FactRecord, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
@@ -78,9 +80,9 @@ func (repository *AcceptedFacts) FindByParcel(
 		`SELECT source_context, fact_ref, fact_version, parcel_ref, content_digest,
 		        occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
-		  WHERE parcel_ref = $1
+		  WHERE tenant_id = $1 AND parcel_ref = $2
 		  ORDER BY received_at, source_context, fact_ref, fact_version`,
-		parcel.String(),
+		tenant.String(), parcel.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find facts by parcel: %w", err)
@@ -98,7 +100,8 @@ func (repository *AcceptedFacts) FindByParcel(
 			return nil, fmt.Errorf("find facts by parcel: %w", err)
 		}
 		record, err := factRecordFromRow(
-			source, factRef, factVersion, parcelRef, digest, occurredAt, effectiveAt, receivedAt)
+			tenant.String(), source, factRef, factVersion, parcelRef, digest,
+			occurredAt, effectiveAt, receivedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -131,10 +134,11 @@ func (repository *AcceptedFacts) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.accepted_fact
-			(source_context, fact_ref, fact_version, parcel_ref, content_digest,
+			(tenant_id, source_context, fact_ref, fact_version, parcel_ref, content_digest,
 			 occurred_at, effective_at, received_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT DO NOTHING`,
+		record.Key.Tenant.String(),
 		fact.Source().String(),
 		fact.Fact().String(),
 		fact.Version().String(),
@@ -175,9 +179,13 @@ func sourceContextFrom(value string) (domain.SourceContext, error) {
 
 // factRecordFromRow 把一行译回端口记录，事实本体经领域构造函数重建重验。
 func factRecordFromRow(
-	source, factRef, factVersion, parcelRef, digest string,
+	tenantID, source, factRef, factVersion, parcelRef, digest string,
 	occurredAt, effectiveAt, receivedAt time.Time,
 ) (ports.FactRecord, error) {
+	tenant, err := domain.NewTenantID(tenantID)
+	if err != nil {
+		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
+	}
 	sourceContext, err := sourceContextFrom(source)
 	if err != nil {
 		return ports.FactRecord{}, err
@@ -207,7 +215,7 @@ func factRecordFromRow(
 		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
 	}
 	return ports.FactRecord{
-		Key:           ports.FactKey{Source: sourceContext, Fact: fact, Version: version},
+		Key:           ports.FactKey{Tenant: tenant, Source: sourceContext, Fact: fact, Version: version},
 		ContentDigest: digest,
 		Fact:          rebuilt,
 	}, nil

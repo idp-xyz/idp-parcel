@@ -13,8 +13,11 @@ type Clock interface {
 	Now() time.Time
 }
 
-// FactKey 是已接受源事实的幂等键：来源上下文+事实引用+来源版本。
+// FactKey 是已接受源事实的幂等键：租户+来源上下文+事实引用+来源版本。租户是最高
+// 数据隔离边界（ADR-0003）——VE 消费多个源上下文的事实，事实引用只在各自租户的源
+// 上下文内唯一，缺租户维两个租户的同名引用就会共用一份事实。
 type FactKey struct {
+	Tenant  domain.TenantID
 	Source  domain.SourceContext
 	Fact    domain.SourceFactReference
 	Version domain.SourceFactVersion
@@ -35,11 +38,16 @@ const (
 	FactAlreadyRecorded
 )
 
-// AcceptedFactStore 按幂等键找回并保存事实；FindByParcel 交回该包裹全部已接受事实
-// ——投影派生的输入。事实只增不删（来源更正是新版本新键）。
+// AcceptedFactStore 按幂等键找回并保存事实；FindByParcel 交回该租户下该包裹全部已
+// 接受事实——投影派生的输入，跨租户的同名包裹引用互不可见。事实只增不删（来源更正
+// 是新版本新键）。
 type AcceptedFactStore interface {
 	FindByKey(ctx context.Context, key FactKey) (FactRecord, bool, error)
-	FindByParcel(ctx context.Context, parcel domain.TrackedParcelReference) ([]FactRecord, error)
+	FindByParcel(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+	) ([]FactRecord, error)
 	Save(ctx context.Context, record FactRecord) (FactSaveOutcome, error)
 }
 
@@ -173,25 +181,28 @@ type TriageRuleView interface {
 
 // RaisedSignalRecord 是开启或重开发作期越过提交边界的最小单元：发作期与它的分诊结论
 // 同一提交。只落发作期不落结论，重试会走进「已有活跃发作期」那一支去记命中，结论就
-// 永远补不上了。对象与类型随记录携带——发作期聚合不导出它们，没有这两维适配器连
-// 存储键都立不起来（与 TriageHandoffIntent 同理）。
+// 永远补不上了。租户、对象与类型随记录携带——发作期聚合不导出它们，没有这几维
+// 适配器连存储键都立不起来（与 TriageHandoffIntent 同理）。
 type RaisedSignalRecord struct {
+	Tenant     domain.TenantID
 	Parcel     domain.TrackedParcelReference
 	Kind       domain.ExceptionSignalKindReference
 	Episode    *domain.SignalEpisode
 	Conclusion domain.TriageConclusion
 }
 
-// SignalEpisodeStore 按对象+类型找回最近一次发作期并保存。最近一次含已结束的——
-// 「已结束+再命中」要据它建立关联的新发作期，只查活跃会把重开误判成首启。
+// SignalEpisodeStore 按租户+对象+类型找回最近一次发作期并保存。租户是最高数据隔离
+// 边界（ADR-0003），跨越它必须在签名上看得见。最近一次含已结束的——「已结束+再命中」
+// 要据它建立关联的新发作期，只查活跃会把重开误判成首启。
 type SignalEpisodeStore interface {
 	FindLatest(
 		ctx context.Context,
+		tenant domain.TenantID,
 		parcel domain.TrackedParcelReference,
 		kind domain.ExceptionSignalKindReference,
 	) (*domain.SignalEpisode, bool, error)
 	SaveRaised(ctx context.Context, record RaisedSignalRecord) error
-	SaveHit(ctx context.Context, episode *domain.SignalEpisode) error
+	SaveHit(ctx context.Context, tenant domain.TenantID, episode *domain.SignalEpisode) error
 }
 
 // SignalEpisodeIdentityFactory 签发发作期标识。与视图、投影身份工厂分开，理由相同：
