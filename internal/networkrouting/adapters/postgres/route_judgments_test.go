@@ -324,8 +324,10 @@ func TestReassessmentScopesAreInvisibleToEachOther(t *testing.T) {
 	}
 }
 
-// TestConclusionShapeIsPinnedInTheDatabase 证在场件矩阵的库面：绕过适配器直插一行
-// 「仍适用却带失效依据」被 CHECK 拒。
+// TestConclusionShapeIsPinnedInTheDatabase 证在场件矩阵的库面：绕过适配器直插的坏行
+// 被 CHECK 拒。后三支探针钉的是 SQL 三值逻辑的缝——可空列上的等号 / IN /
+// jsonb_array_length 在 NULL 上给 NULL，没有显式 IS NOT NULL（或 IS NOT DISTINCT
+// FROM）时整条约束会按 NULL 放行。
 func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 	_, _, _, pool := newRouteStores(t)
 	ctx := t.Context()
@@ -339,6 +341,43 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
 		         'STILL_APPLICABLE', 'RPV-0001', 'closure-7', now())`); err == nil {
 		t.Fatal("一行「仍适用却带失效依据」进了复核库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state, reassessed_at)
+		 VALUES ('tenant-1', 'trigger-10', 'customer-a', 'request-1',
+		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', NULL, now())`); err == nil {
+		t.Fatal("一行「已失效却没有候选评估状态」按 NULL 溜进了复核库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state,
+			 reroute_state, new_plan, decision, reassessed_at)
+		 VALUES ('tenant-1', 'trigger-11', 'customer-a', 'request-1',
+		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
+		         'REROUTED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
+		         NULL, '{}', '{}', now())`); err == nil {
+		t.Fatal("一行「已改路却没有改路判定」按 NULL 溜进了复核库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state,
+			 reroute_state, reroute_blockers, suggestion, reassessed_at)
+		 VALUES ('tenant-1', 'trigger-12', 'customer-a', 'request-1',
+		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
+		         'SUGGESTION_ONLY', NULL, '{}', now())`); err == nil {
+		t.Fatal("一行「仅建议却没有阻塞清单」按 NULL 溜进了复核库")
 	}
 }
 

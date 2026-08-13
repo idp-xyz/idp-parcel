@@ -96,11 +96,14 @@ CREATE TABLE network_routing.route_reassessment (
         CHECK (conclusion IN
             ('STILL_APPLICABLE', 'PLAN_LAPSED', 'FIRST_PLAN_FORMED', 'REROUTED')),
 
-    -- 候选评估状态封闭三值；NULL 表示本走向不评估（仅`仍适用`）。
+    -- 候选评估状态封闭三值；NULL 表示本走向不评估（仅`仍适用`）。IS NOT NULL 先行
+    -- 再 IN：SQL 三值逻辑下 NULL IN (...) 是 NULL，整条 CHECK 会按 NULL 放行。
     CONSTRAINT route_reassessment_candidate_state_closed
         CHECK (
             (conclusion = 'STILL_APPLICABLE' AND candidate_state IS NULL)
-            OR (conclusion <> 'STILL_APPLICABLE' AND candidate_state IN
+            OR (conclusion <> 'STILL_APPLICABLE'
+                AND candidate_state IS NOT NULL
+                AND candidate_state IN
                 ('CANDIDATES_AVAILABLE', 'NO_QUALIFIED_CANDIDATES', 'CANDIDATE_REVIEW_UNDECIDED'))
         ),
 
@@ -114,16 +117,20 @@ CREATE TABLE network_routing.route_reassessment (
         CHECK (reroute_state IS NULL OR reviewed_plan IS NOT NULL),
 
     -- 判定与其携带物互证：建议是「没自动成」的产物、阻塞清单说得出为什么没自动，
-    -- `已允许`则两者都不该有（自动成了是决定、没成是决定缺席）。
+    -- `已允许`则两者都不该有（自动成了是决定、没成是决定缺席）。可空列先验
+    -- IS NOT NULL 再取长度：jsonb_array_length(NULL) 是 NULL，会让整条按 NULL 放行。
     CONSTRAINT route_reassessment_reroute_coupling
         CHECK (
             (reroute_state IS NULL AND reroute_blockers IS NULL AND suggestion IS NULL)
             OR (reroute_state = 'AUTOMATIC_ALLOWED'
                 AND reroute_blockers IS NULL AND suggestion IS NULL)
             OR (reroute_state = 'SUGGESTION_ONLY'
+                AND reroute_blockers IS NOT NULL
                 AND jsonb_array_length(reroute_blockers) > 0)
             OR (reroute_state = 'BARRED'
-                AND jsonb_array_length(reroute_blockers) > 0 AND suggestion IS NULL)
+                AND reroute_blockers IS NOT NULL
+                AND jsonb_array_length(reroute_blockers) > 0
+                AND suggestion IS NULL)
         ),
 
     -- 逐结论在场件矩阵（reassess_route.go 四条提交路的库面）。
@@ -137,11 +144,13 @@ CREATE TABLE network_routing.route_reassessment (
             new_plan IS NOT NULL
             AND reviewed_plan IS NULL AND lapse_basis IS NULL
             AND suggestion IS NULL AND decision IS NULL AND reroute_state IS NULL)),
+    -- reroute_state 可空，等号在 NULL 上给 NULL；IS NOT DISTINCT FROM 给确定的假。
     CONSTRAINT route_reassessment_rerouted_shape
         CHECK (conclusion <> 'REROUTED' OR (
             reviewed_plan IS NOT NULL AND lapse_basis IS NOT NULL
             AND new_plan IS NOT NULL AND decision IS NOT NULL
-            AND suggestion IS NULL AND reroute_state = 'AUTOMATIC_ALLOWED')),
+            AND suggestion IS NULL
+            AND reroute_state IS NOT DISTINCT FROM 'AUTOMATIC_ALLOWED')),
     -- `已失效`分两路：原有计划失效（被复核计划与失效依据同在）；原本就无路由的
     -- 复核未成计划（两者同缺，也不该有改路痕迹——没有失效的计划就没有改路评估）。
     CONSTRAINT route_reassessment_lapsed_shape
