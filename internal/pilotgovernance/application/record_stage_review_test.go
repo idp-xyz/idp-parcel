@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -66,6 +67,7 @@ func (double *reviewStoreDouble) Save(
 
 type intervalStoreDouble struct {
 	intervals []domain.AuthorityInterval
+	appendErr error
 }
 
 func (double *intervalStoreDouble) ListCurrent(_ context.Context) ([]domain.AuthorityInterval, error) {
@@ -73,6 +75,9 @@ func (double *intervalStoreDouble) ListCurrent(_ context.Context) ([]domain.Auth
 }
 
 func (double *intervalStoreDouble) Append(_ context.Context, interval domain.AuthorityInterval) error {
+	if double.appendErr != nil {
+		return double.appendErr
+	}
 	double.intervals = append(double.intervals, interval)
 	return nil
 }
@@ -215,5 +220,60 @@ func TestAGrantedIntervalIsBlockedByOverlapBeforeAnythingLands(t *testing.T) {
 	}
 	if len(fixture.intervals.intervals) != 2 {
 		t.Fatalf("intervals = %d; 新权威区间没有追加", len(fixture.intervals.intervals))
+	}
+}
+
+// Covers: 评审发现②的修法——区间追加失败不翻已落库的决定，但必须交回续办引用（决定
+// 在册而区间缺失且无处可知，正是权威不明的双帐分岔）；重放路凭同一命令补追加同一份
+// 区间，补上后续办引用清空；已在册的区间不重复追加。
+func TestAFailedIntervalAppendLeavesAContinuationAndReplayHeals(t *testing.T) {
+	fixture := newReviewFixture(t)
+	fixture.intervals.appendErr = errors.New("interval store unreachable")
+
+	command := reviewCommand(t, "ENTER_LIMITED_PRODUCTION")
+	command.Review.Stage = domain.ShadowRun
+	command.GrantedInterval = &domain.AuthorityInterval{
+		ObjectScope: "pilot-scope/v1",
+		Capability:  "SHIPMENT_ACCEPTANCE",
+		FactKind:    "ACCEPTANCE_DECISION",
+		Authority:   "idp-parcel",
+		From:        reviewAt,
+	}
+
+	first, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	if first.Outcome() != application.ReviewRecorded {
+		t.Fatalf("outcome = %q; 追加失败不得翻决定", first.Outcome())
+	}
+	if first.IntervalContinuation() == "" {
+		t.Fatal("追加失败没有留续办引用——决定与区间分岔无处可知")
+	}
+	if fixture.reviews.saved != 1 {
+		t.Fatalf("saved = %d", fixture.reviews.saved)
+	}
+
+	fixture.intervals.appendErr = nil
+	replay, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("replay handle: %v", err)
+	}
+	if replay.Outcome() != application.ReviewExistingDecision {
+		t.Fatalf("replay = %q", replay.Outcome())
+	}
+	if replay.IntervalContinuation() != "" {
+		t.Fatal("补追加成功后续办引用还挂着")
+	}
+	if len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("intervals = %d; 重放没有补上区间", len(fixture.intervals.intervals))
+	}
+
+	again, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("second replay handle: %v", err)
+	}
+	if again.IntervalContinuation() != "" || len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("intervals = %d; 已在册的区间被重复追加", len(fixture.intervals.intervals))
 	}
 }

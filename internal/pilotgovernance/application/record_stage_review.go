@@ -51,10 +51,11 @@ type RecordStageReviewCommand struct {
 }
 
 type RecordStageReviewResult struct {
-	outcome   StageReviewOutcome
-	decision  domain.StageReviewDecision
-	hasRecord bool
-	conflicts []domain.AuthorityConflict
+	outcome         StageReviewOutcome
+	decision        domain.StageReviewDecision
+	hasRecord       bool
+	conflicts       []domain.AuthorityConflict
+	intervalPending string
 }
 
 func (result RecordStageReviewResult) Outcome() StageReviewOutcome {
@@ -68,6 +69,13 @@ func (result RecordStageReviewResult) Decision() (domain.StageReviewDecision, bo
 // Conflicts 只在权威冲突阻断时给出——处置者要知道撞上了哪些区间，一对都不能少。
 func (result RecordStageReviewResult) Conflicts() []domain.AuthorityConflict {
 	return append([]domain.AuthorityConflict(nil), result.conflicts...)
+}
+
+// IntervalContinuation 非空说明决定已落库但授予的权威区间还没追加成功：决定与区间
+// 分岔正是本模块点名要防的双帐，续办引用让重放路把区间补上（同意图纪律——决定不翻，
+// 只重试同一份追加）。
+func (result RecordStageReviewResult) IntervalContinuation() string {
+	return result.intervalPending
 }
 
 type RecordStageReviewDeps struct {
@@ -107,11 +115,17 @@ func (handler *RecordStageReviewHandler) Handle(
 		return RecordStageReviewResult{outcome: ReviewUndecided}, nil
 	}
 	if found {
-		return RecordStageReviewResult{
+		result := RecordStageReviewResult{
 			outcome:   ReviewExistingDecision,
 			decision:  existing,
 			hasRecord: true,
-		}, nil
+		}
+		// 重放路补追加：上次区间追加失败留下的分岔在这里收口——决定不翻，只重试
+		// 同一份追加（同 handOff 纪律的 existingResult 重发）。
+		if command.GrantedInterval != nil {
+			result.intervalPending = handler.appendInterval(ctx, *command.GrantedInterval)
+		}
+		return result, nil
 	}
 
 	if command.GrantedInterval != nil {
@@ -156,14 +170,34 @@ func (handler *RecordStageReviewHandler) Handle(
 		return RecordStageReviewResult{}, fmt.Errorf("%w: %d", ErrUnexpectedReviewSave, saved)
 	}
 
-	if command.GrantedInterval != nil {
-		// 区间追加失败不翻已落库的决定——决定与区间的原子性同样等事务闸门，此处
-		// 与其余上下文的意图纪律一致：结果已成立，续办只补区间。
-		_ = handler.deps.Intervals.Append(ctx, *command.GrantedInterval)
-	}
-	return RecordStageReviewResult{
+	result := RecordStageReviewResult{
 		outcome:   ReviewRecorded,
 		decision:  decision,
 		hasRecord: true,
-	}, nil
+	}
+	if command.GrantedInterval != nil {
+		result.intervalPending = handler.appendInterval(ctx, *command.GrantedInterval)
+	}
+	return result, nil
+}
+
+// appendInterval 追加权威区间。失败不翻已落库的决定（原子性同等事务闸门），但必须
+// 交回续办引用——决定在册而区间缺失且无处可知，正是权威不明的双帐分岔；重放路凭
+// 同一命令重试同一份追加。已在册的区间（重放补追加撞上已成功的上次）不是失败。
+func (handler *RecordStageReviewHandler) appendInterval(
+	ctx context.Context,
+	interval domain.AuthorityInterval,
+) string {
+	current, err := handler.deps.Intervals.ListCurrent(ctx)
+	if err == nil {
+		for _, existing := range current {
+			if existing == interval {
+				return ""
+			}
+		}
+	}
+	if err := handler.deps.Intervals.Append(ctx, interval); err != nil {
+		return "CONT-INTERVAL/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind
+	}
+	return ""
 }
