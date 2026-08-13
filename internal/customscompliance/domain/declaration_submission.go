@@ -320,6 +320,71 @@ func (version CustomsSubmissionVersion) Authority() SubmissionAuthorityReference
 	return version.authority
 }
 
+func (version CustomsSubmissionVersion) FixedAt() time.Time {
+	return version.fixedAt
+}
+
+// CustomsSubmissionVersionSnapshot 是持久化层重建提交版本所需的全量状态。就绪判断
+// 与授权在成版那一刻已把过门，快照只带核对结果的引用——重建不重演 FixSubmissionVersion
+// （重演需要判断对象在手，而库里只有版本固定时留下的依据引用）。
+type CustomsSubmissionVersionSnapshot struct {
+	ID        SubmissionVersionID
+	Unit      DeclarationUnitID
+	Members   []DeclaredParcelReference
+	Dossier   DossierSnapshotReference
+	Roles     RoleSnapshotReference
+	Basis     ReadinessBasisReference
+	Authority SubmissionAuthorityReference
+	FixedAt   time.Time
+}
+
+// Snapshot 折出提交版本的全量状态供持久化。
+func (version CustomsSubmissionVersion) Snapshot() CustomsSubmissionVersionSnapshot {
+	return CustomsSubmissionVersionSnapshot{
+		ID:        version.id,
+		Unit:      version.unit,
+		Members:   version.Members(),
+		Dossier:   version.dossier,
+		Roles:     version.roles,
+		Basis:     version.basis,
+		Authority: version.authority,
+		FixedAt:   version.fixedAt,
+	}
+}
+
+// RehydrateSubmissionVersion 从快照重建提交版本。读回的东西同样要过一遍不变量——
+// 组成快照非空不重复、八件引用齐全在这里重验，一次坏写入不得变成一个看起来合法的
+// 提交版本。
+func RehydrateSubmissionVersion(snapshot CustomsSubmissionVersionSnapshot) (CustomsSubmissionVersion, error) {
+	if !snapshot.ID.valid() ||
+		!snapshot.Unit.valid() ||
+		!snapshot.Dossier.valid() ||
+		!snapshot.Roles.valid() ||
+		!snapshot.Basis.valid() ||
+		!snapshot.Authority.valid() ||
+		snapshot.FixedAt.IsZero() ||
+		len(snapshot.Members) == 0 {
+		return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
+	}
+	seen := make(map[DeclaredParcelReference]bool, len(snapshot.Members))
+	for _, member := range snapshot.Members {
+		if !member.valid() || seen[member] {
+			return CustomsSubmissionVersion{}, ErrInvalidSubmissionVersion
+		}
+		seen[member] = true
+	}
+	return CustomsSubmissionVersion{
+		id:        snapshot.ID,
+		unit:      snapshot.Unit,
+		members:   append([]DeclaredParcelReference(nil), snapshot.Members...),
+		dossier:   snapshot.Dossier,
+		roles:     snapshot.Roles,
+		basis:     snapshot.Basis,
+		authority: snapshot.Authority,
+		fixedAt:   snapshot.FixedAt.UTC(),
+	}, nil
+}
+
 // AttemptResult 是提交尝试的已知结果封闭三值。结果未知保持待确认——超时不得直接
 // 解释为失败（CONTEXT「提交尝试」）。
 type AttemptResult uint8
@@ -427,6 +492,55 @@ func (attempt SubmissionAttempt) SafeResend() (SafeResendReference, bool) {
 	return attempt.safeResend, attempt.safeResend.valid()
 }
 
+func (attempt SubmissionAttempt) Target() string {
+	return attempt.target
+}
+
 func (attempt SubmissionAttempt) SentAt() time.Time {
 	return attempt.sentAt
+}
+
+// SubmissionAttemptSnapshot 是持久化层重建发送尝试所需的全量状态。
+type SubmissionAttemptSnapshot struct {
+	Version    SubmissionVersionID
+	Sequence   int
+	Target     string
+	Result     AttemptResult
+	SafeResend SafeResendReference
+	SentAt     time.Time
+}
+
+// Snapshot 折出发送尝试的全量状态供持久化。
+func (attempt SubmissionAttempt) Snapshot() SubmissionAttemptSnapshot {
+	return SubmissionAttemptSnapshot{
+		Version:    attempt.version,
+		Sequence:   attempt.sequence,
+		Target:     attempt.target,
+		Result:     attempt.result,
+		SafeResend: attempt.safeResend,
+		SentAt:     attempt.sentAt,
+	}
+}
+
+// RehydrateSubmissionAttempt 从快照重建发送尝试并重验形状：首次尝试没有安全再次
+// 发送判断、受控重发必须携带（硬句 170 的构造期与读回期是同一道门）。
+func RehydrateSubmissionAttempt(snapshot SubmissionAttemptSnapshot) (SubmissionAttempt, error) {
+	if !snapshot.Version.valid() ||
+		snapshot.Sequence < 1 ||
+		snapshot.Target == "" ||
+		!snapshot.Result.valid() ||
+		snapshot.SentAt.IsZero() {
+		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
+	}
+	if (snapshot.Sequence == 1) == snapshot.SafeResend.valid() {
+		return SubmissionAttempt{}, ErrInvalidSubmissionAttempt
+	}
+	return SubmissionAttempt{
+		version:    snapshot.Version,
+		sequence:   snapshot.Sequence,
+		target:     snapshot.Target,
+		result:     snapshot.Result,
+		safeResend: snapshot.SafeResend,
+		sentAt:     snapshot.SentAt.UTC(),
+	}, nil
 }
