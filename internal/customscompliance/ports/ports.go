@@ -86,3 +86,73 @@ type ExternalResultHandoffIntent struct {
 type ExternalResultHandoff interface {
 	HandOffExternalResult(ctx context.Context, intent ExternalResultHandoffIntent) error
 }
+
+// DeclarationSubmissionKey 是提交申报的幂等键：同一逻辑申报目标（租户+申报单元+监管
+// 程序）重复提交返回原版本，不重复形成（CONTEXT 硬句 168：首次实际发送前形成不可
+// 覆盖版本）。
+type DeclarationSubmissionKey struct {
+	TenantID  domain.TenantID
+	Unit      domain.DeclarationUnitID
+	Procedure domain.CustomsProcedureReference
+}
+
+// DeclarationSubmissionRecord 是一次提交申报越过提交边界留下的东西：不可覆盖的提交
+// 版本与首次发送尝试。
+type DeclarationSubmissionRecord struct {
+	Key           DeclarationSubmissionKey
+	ContentDigest string
+	Version       domain.CustomsSubmissionVersion
+	Attempt       domain.SubmissionAttempt
+	RecordedAt    time.Time
+}
+
+type DeclarationSubmissionSaveOutcome uint8
+
+const (
+	DeclarationSubmissionSaveOutcomeInvalid DeclarationSubmissionSaveOutcome = iota
+	DeclarationSubmissionSaved
+	DeclarationSubmissionAlreadyRecorded
+)
+
+// DeclarationSubmissionStore 按幂等键找回并保存提交申报（写入代数同 ADR-0031）。
+type DeclarationSubmissionStore interface {
+	FindByKey(ctx context.Context, key DeclarationSubmissionKey) (DeclarationSubmissionRecord, bool, error)
+	Save(ctx context.Context, record DeclarationSubmissionRecord) (DeclarationSubmissionSaveOutcome, error)
+}
+
+// ReadinessView 取申报单元的就绪判断。found=false 表示资格目录/就绪规则未配置——
+// 实例半边未提供时停在未决；found=true 而判断已失效即`不再就绪`，由调用方按业务
+// 结果分格（就绪与授权分别形成和失效，CONTEXT 244）。
+type ReadinessView interface {
+	LoadReadiness(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.DeclarationUnitID,
+	) (domain.ReadinessJudgment, bool, error)
+}
+
+// SubmissionAuthorityView 取申报单元的提交授权。与就绪判断是两条轨：双有效才成版，
+// 任一缺席都不得以另一个顶替（CONTEXT 244）。found=false 表示授权未配置。
+type SubmissionAuthorityView interface {
+	LoadSubmissionAuthority(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.DeclarationUnitID,
+	) (domain.SubmissionAuthorityReference, bool, error)
+}
+
+// DeclarationVersionFactory 签发提交版本标识。
+type DeclarationVersionFactory interface {
+	NextSubmissionVersion(ctx context.Context) (domain.SubmissionVersionID, error)
+}
+
+// DeclarationSubmissionHandoffIntent 把已固定的提交版本交给发送通道与外部结果核对
+// 消费。意图由幂等键认领，重放重发同一份（ADR-0043 同款纪律）。
+type DeclarationSubmissionHandoffIntent struct {
+	Record DeclarationSubmissionRecord
+}
+
+// DeclarationSubmissionHandoff 今天没有实现，唯一实现是测试替身。
+type DeclarationSubmissionHandoff interface {
+	HandOffDeclarationSubmission(ctx context.Context, intent DeclarationSubmissionHandoffIntent) error
+}
