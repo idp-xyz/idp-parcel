@@ -288,21 +288,31 @@ type ActiveCaseView interface {
 	CaseActive(ctx context.Context, caseID domain.CaseID) (active bool, found bool, err error)
 }
 
-// DispositionRequestStore 按稳定身份与幂等键找回并保存处置请求。
+// DispositionRequestStore 按稳定身份与幂等键找回并保存处置请求。租户是最高数据隔离
+// 边界（ADR-0003），跨越它必须在签名上看得见。
 //
 // FindCurrent 按（案件+动作+范围）交回当前那份——未被替代的请求；同键重复到达据它
 // 短路，不重发。SaveSupersession 把被替代者与后继同一提交：只落一半，替代关系与新
 // 意图会各说各话。
 type DispositionRequestStore interface {
-	FindByID(ctx context.Context, id domain.DispositionRequestID) (*domain.DispositionRequest, bool, error)
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		id domain.DispositionRequestID,
+	) (*domain.DispositionRequest, bool, error)
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		caseID domain.CaseID,
 		action domain.RequestedActionReference,
 		scope domain.RequestScopeReference,
 	) (*domain.DispositionRequest, bool, error)
-	Save(ctx context.Context, request *domain.DispositionRequest) error
-	SaveSupersession(ctx context.Context, prior, successor *domain.DispositionRequest) error
+	Save(ctx context.Context, tenant domain.TenantID, request *domain.DispositionRequest) error
+	SaveSupersession(
+		ctx context.Context,
+		tenant domain.TenantID,
+		prior, successor *domain.DispositionRequest,
+	) error
 }
 
 // DispositionRequestIdentityFactory 签发处置请求标识。与其余身份工厂分开，理由相同。

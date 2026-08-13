@@ -45,6 +45,7 @@ func newDispositionStore() *dispositionStoreDouble {
 
 func (double *dispositionStoreDouble) FindByID(
 	_ context.Context,
+	_ domain.TenantID,
 	id domain.DispositionRequestID,
 ) (*domain.DispositionRequest, bool, error) {
 	if double.findErr != nil {
@@ -56,6 +57,7 @@ func (double *dispositionStoreDouble) FindByID(
 
 func (double *dispositionStoreDouble) FindCurrent(
 	_ context.Context,
+	_ domain.TenantID,
 	caseID domain.CaseID,
 	action domain.RequestedActionReference,
 	scope domain.RequestScopeReference,
@@ -76,6 +78,7 @@ func (double *dispositionStoreDouble) FindCurrent(
 
 func (double *dispositionStoreDouble) Save(
 	_ context.Context,
+	_ domain.TenantID,
 	request *domain.DispositionRequest,
 ) error {
 	if double.saveErr != nil {
@@ -88,6 +91,7 @@ func (double *dispositionStoreDouble) Save(
 
 func (double *dispositionStoreDouble) SaveSupersession(
 	_ context.Context,
+	_ domain.TenantID,
 	prior, successor *domain.DispositionRequest,
 ) error {
 	if double.saveErr != nil {
@@ -157,6 +161,7 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 func dispositionCommand(t *testing.T) application.SendDispositionRequestCommand {
 	t.Helper()
 	return application.SendDispositionRequestCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Case:     mustValue(t, domain.NewCaseID, "case-1"),
 		Target:   domain.SourceNetworkRouting,
 		Action:   mustValue(t, domain.NewRequestedActionReference, "REROUTE_REMAINING_JOURNEY"),
@@ -347,6 +352,7 @@ func TestASourceJudgmentIsRecordedOnce(t *testing.T) {
 	request, _ := sent.Request()
 
 	recorded, err := fixture.handler.RecordSourceJudgment(ctx, application.RecordSourceJudgmentCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:  request.ID(),
 		Judgment: domain.RequestAccepted,
 		JudgedAt: dispositionSentAt.Add(time.Hour),
@@ -359,6 +365,7 @@ func TestASourceJudgmentIsRecordedOnce(t *testing.T) {
 	}
 
 	again, err := fixture.handler.RecordSourceJudgment(ctx, application.RecordSourceJudgmentCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:  request.ID(),
 		Judgment: domain.RequestRefused,
 		JudgedAt: dispositionSentAt.Add(2 * time.Hour),
@@ -392,6 +399,7 @@ func TestAnExpiredWindowRefusesALateAcceptanceButStillRecordsARefusal(t *testing
 	late := dispositionSentAt.Add(2 * time.Hour)
 
 	expired, err := fixture.handler.RecordSourceJudgment(ctx, application.RecordSourceJudgmentCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:  request.ID(),
 		Judgment: domain.RequestAccepted,
 		JudgedAt: late,
@@ -404,6 +412,7 @@ func TestAnExpiredWindowRefusesALateAcceptanceButStillRecordsARefusal(t *testing
 	}
 
 	refused, err := fixture.handler.RecordSourceJudgment(ctx, application.RecordSourceJudgmentCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:  request.ID(),
 		Judgment: domain.RequestRefused,
 		JudgedAt: late,
@@ -430,6 +439,7 @@ func TestACancellationAnswerNeedsAJudgmentFirstAndIsRecordedOnce(t *testing.T) {
 	answerAt := dispositionSentAt.Add(3 * time.Hour)
 
 	premature, err := fixture.handler.RecordCancellationAnswer(ctx, application.RecordCancellationAnswerCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:    request.ID(),
 		Answer:     domain.CancellationAcceptedByTarget,
 		AnsweredAt: answerAt,
@@ -442,6 +452,7 @@ func TestACancellationAnswerNeedsAJudgmentFirstAndIsRecordedOnce(t *testing.T) {
 	}
 
 	if _, err := fixture.handler.RecordSourceJudgment(ctx, application.RecordSourceJudgmentCommand{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:  request.ID(),
 		Judgment: domain.RequestAccepted,
 		JudgedAt: dispositionSentAt.Add(time.Hour),
@@ -450,6 +461,7 @@ func TestACancellationAnswerNeedsAJudgmentFirstAndIsRecordedOnce(t *testing.T) {
 	}
 
 	recorded, err := fixture.handler.RecordCancellationAnswer(ctx, application.RecordCancellationAnswerCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:    request.ID(),
 		Answer:     domain.PartiallyCancelled,
 		AnsweredAt: answerAt,
@@ -462,6 +474,7 @@ func TestACancellationAnswerNeedsAJudgmentFirstAndIsRecordedOnce(t *testing.T) {
 	}
 
 	again, err := fixture.handler.RecordCancellationAnswer(ctx, application.RecordCancellationAnswerCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Request:    request.ID(),
 		Answer:     domain.CancellationRefusedByTarget,
 		AnsweredAt: answerAt.Add(time.Hour),

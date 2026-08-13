@@ -81,8 +81,9 @@ func (reason DispositionUndecidedReason) String() string {
 
 // SendDispositionRequestCommand 携带一份拟发送的处置请求。七件里除受理有效期外缺一
 // 即未受理（领域构造器已钉，编排在门口先答）。Supersedes 可缺席：给出时表示以本请求
-// 替代那份既有请求的未来意图——已发出的不召回。
+// 替代那份既有请求的未来意图——已发出的不召回。租户显式随命令到达（ADR-0003）。
 type SendDispositionRequestCommand struct {
+	TenantID         domain.TenantID
 	Case             domain.CaseID
 	Target           domain.SourceContext
 	Action           domain.RequestedActionReference
@@ -96,6 +97,7 @@ type SendDispositionRequestCommand struct {
 // RecordSourceJudgmentCommand 回填源上下文对请求的判断。时间取对方业务答复的时间，
 // 不取本方时钟——答复何时作出是对方的事实。
 type RecordSourceJudgmentCommand struct {
+	TenantID domain.TenantID
 	Request  domain.DispositionRequestID
 	Judgment domain.SourceJudgment
 	JudgedAt time.Time
@@ -103,6 +105,7 @@ type RecordSourceJudgmentCommand struct {
 
 // RecordCancellationAnswerCommand 回填目标上下文对取消/替代意图的答复。
 type RecordCancellationAnswerCommand struct {
+	TenantID   domain.TenantID
 	Request    domain.DispositionRequestID
 	Answer     domain.CancellationAnswer
 	AnsweredAt time.Time
@@ -156,7 +159,8 @@ func (handler *SendDispositionRequestHandler) Handle(
 	ctx context.Context,
 	command SendDispositionRequestCommand,
 ) (DispositionResult, error) {
-	if command.Case.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Case.String() == "" ||
 		command.Target.String() == "" ||
 		command.Action.String() == "" ||
 		command.Scope.String() == "" ||
@@ -179,7 +183,8 @@ func (handler *SendDispositionRequestHandler) Handle(
 		return handler.supersede(ctx, command)
 	}
 
-	existing, found, err := handler.deps.Requests.FindCurrent(ctx, command.Case, command.Action, command.Scope)
+	existing, found, err := handler.deps.Requests.FindCurrent(
+		ctx, command.TenantID, command.Case, command.Action, command.Scope)
 	if err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
@@ -201,7 +206,7 @@ func (handler *SendDispositionRequestHandler) Handle(
 	if request == nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionIdentityUnavailable}, nil
 	}
-	if err := handler.deps.Requests.Save(ctx, request); err != nil {
+	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{
@@ -217,7 +222,7 @@ func (handler *SendDispositionRequestHandler) supersede(
 	ctx context.Context,
 	command SendDispositionRequestCommand,
 ) (DispositionResult, error) {
-	prior, found, err := handler.deps.Requests.FindByID(ctx, command.Supersedes)
+	prior, found, err := handler.deps.Requests.FindByID(ctx, command.TenantID, command.Supersedes)
 	if err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
@@ -227,7 +232,7 @@ func (handler *SendDispositionRequestHandler) supersede(
 	}
 	if successorID, superseded := prior.SupersededBy(); superseded {
 		// 已被替代：读回赢家再交一次它的意图，不叠第二层替代。
-		successor, found, err := handler.deps.Requests.FindByID(ctx, successorID)
+		successor, found, err := handler.deps.Requests.FindByID(ctx, command.TenantID, successorID)
 		if err != nil || !found {
 			// 记录说被替代、后继却读不到，是竞争窗口里的暂态：停在未决，重试自然读到。
 			return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
@@ -249,7 +254,7 @@ func (handler *SendDispositionRequestHandler) supersede(
 	if err := prior.SupersedeWith(successor); err != nil {
 		return DispositionResult{}, fmt.Errorf("supersede disposition request: %w", err)
 	}
-	if err := handler.deps.Requests.SaveSupersession(ctx, prior, successor); err != nil {
+	if err := handler.deps.Requests.SaveSupersession(ctx, command.TenantID, prior, successor); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{
@@ -296,10 +301,10 @@ func (handler *SendDispositionRequestHandler) RecordSourceJudgment(
 	ctx context.Context,
 	command RecordSourceJudgmentCommand,
 ) (DispositionResult, error) {
-	if command.Request.String() == "" || command.JudgedAt.IsZero() {
+	if command.TenantID.String() == "" || command.Request.String() == "" || command.JudgedAt.IsZero() {
 		return DispositionResult{outcome: DispositionNotAccepted}, nil
 	}
-	request, found, err := handler.deps.Requests.FindByID(ctx, command.Request)
+	request, found, err := handler.deps.Requests.FindByID(ctx, command.TenantID, command.Request)
 	if err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
@@ -317,7 +322,7 @@ func (handler *SendDispositionRequestHandler) RecordSourceJudgment(
 			return DispositionResult{}, fmt.Errorf("record source judgment: %w", err)
 		}
 	}
-	if err := handler.deps.Requests.Save(ctx, request); err != nil {
+	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{outcome: SourceJudgmentRecorded, request: request}, nil
@@ -330,10 +335,10 @@ func (handler *SendDispositionRequestHandler) RecordCancellationAnswer(
 	ctx context.Context,
 	command RecordCancellationAnswerCommand,
 ) (DispositionResult, error) {
-	if command.Request.String() == "" || command.AnsweredAt.IsZero() {
+	if command.TenantID.String() == "" || command.Request.String() == "" || command.AnsweredAt.IsZero() {
 		return DispositionResult{outcome: DispositionNotAccepted}, nil
 	}
-	request, found, err := handler.deps.Requests.FindByID(ctx, command.Request)
+	request, found, err := handler.deps.Requests.FindByID(ctx, command.TenantID, command.Request)
 	if err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
@@ -351,7 +356,7 @@ func (handler *SendDispositionRequestHandler) RecordCancellationAnswer(
 			return DispositionResult{}, fmt.Errorf("record cancellation answer: %w", err)
 		}
 	}
-	if err := handler.deps.Requests.Save(ctx, request); err != nil {
+	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{outcome: CancellationAnswerRecorded, request: request}, nil

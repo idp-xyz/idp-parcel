@@ -214,6 +214,83 @@ func (request *DispositionRequest) SupersededBy() (DispositionRequestID, bool) {
 	return request.supersededBy, request.supersededBy.valid()
 }
 
+// DispositionRequestSnapshot 是持久化层重建处置请求所需的全量状态。判断、取消答复
+// 与替代指向都是已发生的交互历史——重建不重演（重演需要按原次序原时间走一遍，而库里
+// 只有结果）。
+type DispositionRequestSnapshot struct {
+	ID               DispositionRequestID
+	Case             CaseID
+	Target           SourceContext
+	Action           RequestedActionReference
+	Scope            RequestScopeReference
+	Reason           string
+	Evidence         RequestEvidenceReference
+	IntentVersion    int
+	SentAt           time.Time
+	AcceptanceWindow time.Time
+	Judgment         SourceJudgment
+	JudgedAt         time.Time
+	Cancellation     CancellationAnswer
+	SupersededBy     DispositionRequestID
+}
+
+// Snapshot 折出处置请求的全量状态供持久化。
+func (request *DispositionRequest) Snapshot() DispositionRequestSnapshot {
+	return DispositionRequestSnapshot{
+		ID:               request.id,
+		Case:             request.caseID,
+		Target:           request.target,
+		Action:           request.action,
+		Scope:            request.scope,
+		Reason:           request.reason,
+		Evidence:         request.evidence,
+		IntentVersion:    request.intentVersion,
+		SentAt:           request.sentAt,
+		AcceptanceWindow: request.window,
+		Judgment:         request.judgment,
+		JudgedAt:         request.judgedAt,
+		Cancellation:     request.cancellation,
+		SupersededBy:     request.supersededBy,
+	}
+}
+
+// RehydrateDispositionRequest 从快照重建处置请求并重验交互历史形状：判断与判断时间
+// 同在场、答复必在判断之后、替代不指自己——一次坏写入不得变成一段看起来合法的交互。
+func RehydrateDispositionRequest(snapshot DispositionRequestSnapshot) (*DispositionRequest, error) {
+	request, err := SendDispositionRequest(DispositionRequestSpec{
+		ID:               snapshot.ID,
+		Case:             snapshot.Case,
+		Target:           snapshot.Target,
+		Action:           snapshot.Action,
+		Scope:            snapshot.Scope,
+		Reason:           snapshot.Reason,
+		Evidence:         snapshot.Evidence,
+		IntentVersion:    snapshot.IntentVersion,
+		SentAt:           snapshot.SentAt,
+		AcceptanceWindow: snapshot.AcceptanceWindow,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if snapshot.Judgment.valid() != !snapshot.JudgedAt.IsZero() {
+		return nil, ErrInvalidDispositionRequest
+	}
+	if snapshot.Judgment.valid() && snapshot.JudgedAt.Before(snapshot.SentAt) {
+		return nil, ErrInvalidDispositionRequest
+	}
+	if snapshot.Cancellation.valid() && !snapshot.Judgment.valid() {
+		return nil, ErrInvalidDispositionRequest
+	}
+	if snapshot.SupersededBy.valid() && snapshot.SupersededBy == snapshot.ID {
+		return nil, ErrInvalidDispositionRequest
+	}
+	request.judgment = snapshot.Judgment
+	request.judgedAt = snapshot.JudgedAt.UTC()
+	request.cancellation = snapshot.Cancellation
+	request.supersededBy = snapshot.SupersededBy
+	return request, nil
+}
+
 // RecordSourceJudgment 记录源上下文的判断。受理有效期届满后，尚未被接受的范围不得
 // 再按旧请求启动（CONTEXT 硬句 150）——过期请求不再吸收接受；已判断的请求不判第二次。
 func (request *DispositionRequest) RecordSourceJudgment(judgment SourceJudgment, at time.Time) error {
