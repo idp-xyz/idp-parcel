@@ -12,32 +12,53 @@
 - **VE/CC 的①列为零是引用口径所致**：两包既有测试的 Covers 注释引 CONTEXT 硬句原文而非 AT 号（实测 `internal/visibilityexception`、`internal/customscompliance` 全部 `*_test.go` 无一处 `AT-*` 字样），不代表两包无测试或无覆盖；它们的④行里有一部分实际已被硬句测试钉住，逐条领票时按 UC 原文比对。
 - **`0cddbba` 重盘补充：硬句引用口径已扩展到首盘之后新落的全部编排批**——VE 五个编排（投影派生、客户视图、信号分诊、客户通知、处置请求）、CC 四个编排（申报提交、外部结果接收、处置核验、案件关闭）、PG 阶段评审、PP 计价评价编排、SA 费用确认、TF 交付生效、NO 关务协作领域件的新测试同引硬句不点 AT 号（增量 48 个测试文件仅 2 处新增 `AT-*` 点名，且都点在已在册行上）。①因此低估的范围从 VE/CC 扩大到上述新编排面；对应 ②④ 行的高估同步扩大，逐条领票时仍按 UC 原文比对，不据本表宣称未覆盖。
 - **点名票后修正（第二次重盘）**：VE 五编排与 NO 关务协作的测试已逐条对 UC 验收表补 AT 点名（宁缺勿滥——语义整条对上才点，半边覆盖在点名处注明「××半边」；点不上的继续引硬句），VE ①由 0 升至 16、NO ①由 10 升至 13。**SA 费用确认与 CC 放行门禁两组测试对表后零点名**：其所钉语义（确认条件定格、五值折叠、条件指纹换版、目录未登记未决）落在各自 UC 的结果契约与 CONTEXT 硬句上，验收表无一一对应行——不硬点。VE/CC 其余包的硬句低估口径仍然成立。
+- **第二轮点名票后修正**：CC 六编排（建案/舱单/后续动作/处置核对/案件关闭/内部限制）、TF 三登记编排、NO 合箱也已对表点名，**CC 的①列不再为零**（0→20）；PP 与 PG 在 `docs/application` 无 AT 清单（PP 无 UC 文档、PG 走 PN-08 验收矩阵 GOV-*，两处 GOV 机制半边已在 PG 测试注释点名但不入本表）；PC 声明两测试与 SA 费用确认维持零点（无对应行）。硬句低估口径对其余未点名面继续成立。
 
 ## 总览
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 253 |
-| ② 机制候选 | 238 |
-| ③ 实例/闸门 | 148 |
-| ④ 机制未落地 | 444 |
+| ① 已钉住 | 279 |
+| ② 机制候选 | 232 |
+| ③ 实例/闸门 | 147 |
+| ④ 机制未落地 | 425 |
 | 合计 | 1083 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
-| CC | 410 | 0 | 0 | 90 | 320 |
-| NO | 46 | 13 | 26 | 7 | 0 |
+| CC | 410 | 20 | 0 | 89 | 301 |
+| NO | 46 | 16 | 23 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
 | SA | 178 | 66 | 90 | 22 | 0 |
-| TF | 97 | 22 | 68 | 7 | 0 |
+| TF | 97 | 25 | 65 | 7 | 0 |
 | VE | 170 | 27 | 0 | 19 | 124 |
 
 ## ① 已钉住（AT → 测试）
 
 | AT | 测试（文件::函数） |
 |---|---|
+| `AT-CC-008` | internal/customscompliance/application/establish_customs_case_test.go::TestCaseRequirementGapsAndRefusalsStayDistinct |
+| `AT-CC-009` | internal/customscompliance/application/establish_customs_case_test.go::TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth |
+| `AT-CC-010` | internal/customscompliance/application/establish_customs_case_test.go::TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth |
+| `AT-CC-201` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
+| `AT-CC-202` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
+| `AT-CC-208` | internal/customscompliance/application/manage_follow_up_test.go::TestFollowUpTargetsProposalsAndEffectsStayDisciplined |
+| `AT-CC-233` | internal/customscompliance/application/verify_disposition_test.go::TestVerificationIsIdempotentPerFactSetAndVersionsAccrue |
+| `AT-CC-237` | internal/customscompliance/application/verify_disposition_test.go::TestVerificationIsIdempotentPerFactSetAndVersionsAccrue |
+| `AT-CC-250` | internal/customscompliance/application/verify_disposition_test.go::TestFactFailuresStallAndIntentsRetry |
+| `AT-CC-307` | internal/customscompliance/application/close_customs_case_test.go::TestClosureIsBlockedItemByItemAndClosesOnceWhole |
+| `AT-CC-308` | internal/customscompliance/application/close_customs_case_test.go::TestClosureIsBlockedItemByItemAndClosesOnceWhole |
+| `AT-CC-345` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
+| `AT-CC-346` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
+| `AT-CC-347` | internal/customscompliance/application/manage_restriction_test.go::TestActionJudgmentListsEveryBlockerUntilAllRelease |
+| `AT-CC-348` | internal/customscompliance/application/manage_restriction_test.go::TestActionJudgmentListsEveryBlockerUntilAllRelease |
+| `AT-CC-370` | internal/customscompliance/application/manage_restriction_test.go::TestRestrictionsEstablishOnceAndReleaseIdempotently |
+| `AT-CC-380` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
+| `AT-CC-381` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
+| `AT-CC-387` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
+| `AT-CC-389` | internal/customscompliance/application/receive_manifest_test.go::TestRevisionsAdvanceVersionsAndRematchAssociations |
 | `AT-NO-008` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision；internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-009` | internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-012` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision |
@@ -51,6 +72,9 @@
 | `AT-NO-024` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
 | `AT-NO-025` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestABatchKeepsPerUnitResultsIndependent |
 | `AT-NO-027` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
+| `AT-NO-035` | internal/nodeoperations/application/consolidate_parcels_test.go::TestOneDirectParentIsEnforcedAcrossUnits |
+| `AT-NO-036` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
+| `AT-NO-040` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -244,22 +268,25 @@
 | `AT-SA-178` | internal/settlementaccounting/domain/supplier_expected_cost_test.go::TestACorrectionAppendsWithoutRewritingTheOriginal |
 | `AT-TF-013` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
 | `AT-TF-015` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAMixedAttemptRecordsPerObjectResults |
-| `AT-TF-016` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAnAllFailedAttemptBuildsNoSegmentAndHandsOffNothing |
-| `AT-TF-019` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAReplayReturnsTheOriginalAndResendsTheSameIntent |
-| `AT-TF-020` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAConflictingSourceKeepsTheOriginal |
+| `AT-TF-016` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAnAllFailedAttemptBuildsNoSegmentAndHandsOffNothing；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAFailedVisitHasNothingToRegister |
+| `AT-TF-019` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAReplayReturnsTheOriginalAndResendsTheSameIntent；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAPickupRegistrationIsIdempotentPerObjectAttempt |
+| `AT-TF-020` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAConflictingSourceKeepsTheOriginal；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestAPickupRegistrationIsIdempotentPerObjectAttempt |
 | `AT-TF-021` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestARescheduledSecondAttemptSucceedsWithoutTouchingTheFirst |
-| `AT-TF-024` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAReplayReturnsTheOriginalAndResendsTheSameIntent |
-| `AT-TF-027` | internal/transportfulfillment/domain/transport_schedule_capacity_test.go::TestAScheduleCarriesNoCapacityOrBooking |
-| `AT-TF-031` | internal/transportfulfillment/domain/transport_schedule_capacity_test.go::TestReservationsDrawDownFinitePoolCapacity |
+| `AT-TF-024` | internal/transportfulfillment/application/perform_offsite_pickup_test.go::TestAReplayReturnsTheOriginalAndResendsTheSameIntent；internal/transportfulfillment/application/register_offsite_pickup_test.go::TestPickupRegistrationRecoveryDiscipline |
+| `AT-TF-027` | internal/transportfulfillment/application/prepare_transport_opportunity_test.go::TestAScheduleEstablishesOnce；internal/transportfulfillment/domain/transport_schedule_capacity_test.go::TestAScheduleCarriesNoCapacityOrBooking |
+| `AT-TF-031` | internal/transportfulfillment/application/prepare_transport_opportunity_test.go::TestOverReservationIsRefusedWithTheRemainder；internal/transportfulfillment/domain/transport_schedule_capacity_test.go::TestReservationsDrawDownFinitePoolCapacity |
 | `AT-TF-051` | internal/transportfulfillment/domain/transport_handover_test.go::TestAHandedOverObjectCarriesBothEvidencesAndTransfersControl |
 | `AT-TF-052` | internal/transportfulfillment/domain/transport_handover_test.go::TestBatchConclusionsDeriveOnlyFromObjectResults |
 | `AT-TF-053` | internal/transportfulfillment/domain/transport_handover_test.go::TestRefusedAndUnconfirmedDoNotTransferControlOut |
-| `AT-TF-062` | internal/transportfulfillment/domain/transport_handover_test.go::TestAHandoverCorrectionFormsANewVersionWithoutOverwriting |
+| `AT-TF-061` | internal/transportfulfillment/application/register_transport_handover_test.go::TestAHandoverVersionRegistersOnce |
+| `AT-TF-062` | internal/transportfulfillment/application/register_transport_handover_test.go::TestAHandoverCorrectionRegistersTheNewVersion；internal/transportfulfillment/domain/transport_handover_test.go::TestAHandoverCorrectionFormsANewVersionWithoutOverwriting |
 | `AT-TF-064` | internal/transportfulfillment/domain/effective_delivery_test.go::TestARefusalEndsOnlyItsOwnObject |
 | `AT-TF-065` | internal/transportfulfillment/domain/effective_delivery_test.go::TestARefusalEndsOnlyItsOwnObject；internal/transportfulfillment/domain/effective_delivery_test.go::TestFailedDeliveryOutcomesCannotBecomeAnEffectiveDelivery |
 | `AT-TF-066` | internal/transportfulfillment/domain/effective_delivery_test.go::TestASecondAttemptDeliversAfterAFirstFailure |
 | `AT-TF-067` | internal/transportfulfillment/domain/effective_delivery_test.go::TestADeliveredObjectFormsAnEffectiveDeliveryWithItsPOD |
+| `AT-TF-069` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
 | `AT-TF-072` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestACorrectionSupersedesWithTheVersionChain；internal/transportfulfillment/domain/effective_delivery_test.go::TestAPODCorrectionFormsANewVersionWithoutOverwriting |
+| `AT-TF-073` | internal/transportfulfillment/application/register_effective_delivery_test.go::TestDeliveryRecoveryDiscipline |
 | `AT-TF-078` | internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
 | `AT-TF-079` | internal/transportfulfillment/domain/alternate_journey_test.go::TestAnAlternateJourneyIsLinkedButIndependent |
 | `AT-TF-080` | internal/transportfulfillment/application/start_alternate_journey_test.go::TestARegulatoryJourneyFeedsBothChains；internal/transportfulfillment/domain/alternate_journey_test.go::TestRegulatoryReturnIsMarkedByItsBasisKind |
@@ -312,11 +339,8 @@
 | `AT-NO-032` | 新路由指令生效 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-033` | 三个包裹中两个兼容、一个不兼容 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-034` | 作业批次包含多个包裹 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-035` | 同一包裹并发移入两个集运单元 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-036` | 封装后需要移出一个成员 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-038` | 封签连续且相符的封闭单元被有效控制 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-039` | 集运单元嵌套形成循环 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-040` | 已关闭集运单元或同一载具再次使用 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-041` | 客户资料值与节点实测不同 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-042` | 已取消或终局包裹仍在节点 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
@@ -511,12 +535,9 @@
 | `AT-TF-058` | 班次出发后资源故障 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-059` | 运输中断但没有控制终止证据 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-060` | 目的节点接收证据充分 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
-| `AT-TF-061` | 交接事实重复到达 | UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md |
 | `AT-TF-068` | 执行方上传照片但方式未获允许 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
-| `AT-TF-069` | 外部状态码为 `DELIVERED`，无可验证 POD | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-070` | 本人签收和地址来源冲突 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-071` | 多包裹部分交付后启动退运决定 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
-| `AT-TF-073` | 交付结果保存成功但发布失败 | UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md |
 | `AT-TF-075` | 主伙伴不可继续，系统有备用候选 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-076` | 授权角色确认备用伙伴 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
 | `AT-TF-077` | 原实际段已经出发 | UC-TF-007-START-ALTERNATE-OR-RETURN-JOURNEY.md |
@@ -584,7 +605,6 @@
 | `AT-CC-190` | 来源称“改单”，但真实程序尚未确认是否保留原外部申报身份 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-194` | 真实程序明确必须取得某项撤销外部结果后才允许发送重报 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-200` | 替代目标和新单元已经建立，但尚未取得程序要求的外部结果 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
-| `AT-CC-201` | `UC-CC-006` 已接受真实程序规定的撤销和重报结果，全部替代生效条件满足 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-203` | 替代关系生效后查询原申报历史 | 查询/权限/审计面（接入与持久化闸门后） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-204` | 监管更正只覆盖跨客户申报单元中客户 C2 的 P2 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-206` | 两项监管要求可由一个更正动作共同满足，且真实规则明确证明范围兼容 | 实例参数/证据层级（真实合同、税率、时区、账期、模拟隔离等待 PAR-* 提供） | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
@@ -698,9 +718,6 @@
 | `AT-CC-004` | 同一固定范围内关联多个同一客户包裹 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-006` | 多个包裹已同袋、同总单、同舱单或同班次 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-007` | 建案请求缺少监管辖区、方向、程序或法定义务范围之一 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
-| `AT-CC-008` | 当前服务只提供外部面单渠道，运营企业不承担该关务范围 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
-| `AT-CC-009` | 相同请求身份和相同业务内容重复到达 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
-| `AT-CC-010` | 相同请求身份携带不同包裹或监管范围 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-012` | 报关服务商存在，但申报人、法定义务人或账号使用授权无法解释 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-013` | 渠道服务方是底层监管渠道的代理商 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
 | `AT-CC-014` | 固定监管范围完整，但路由尚未选定最终口岸或申报渠道 | UC-CC-001-ESTABLISH-CUSTOMS-CASE.md |
@@ -847,10 +864,8 @@
 | `AT-CC-197` | 重报目标内容与原提交完全相同 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-198` | 原申报单元不能继续使用，但案件辖区、方向、程序和法定义务范围保持不变 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-199` | 重报需要改变监管辖区、方向、程序或形成独立法定义务 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
-| `AT-CC-202` | 只取得撤销请求技术成功、监管接收或程序未指定为生效依据的结果 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-205` | 一项监管要求必须拆成一个撤销目标和两个替代范围，且规则明确允许 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-207` | A：多个已接受且各自当前有效的要求对同一原申报交集范围明确要求互斥动作；B：多个要求或范围是否可以合并、拆分尚无权威规则 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
-| `AT-CC-208` | 相同请求、触发版本、原申报、范围、规则和输入再次到达 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-209` | 相同请求身份携带不同触发版本、范围、动作意图或原提交 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-210` | 两个执行者并发处理同一触发和范围 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
 | `AT-CC-211` | 决定提交前触发依据、规则、原结果或范围发生变化 | UC-CC-007-MANAGE-POST-SUBMISSION-ACTIONS-AND-REPLACEMENT.md |
@@ -869,10 +884,8 @@
 | `AT-CC-228` | 查验只覆盖合报范围中的 P2，P1 无查验决定 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-231` | 监管决定销毁 100 件，执行方只提供 80 件合格执行事实 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-232` | 执行事实对象、数量、条件或证据与处置决定不一致 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
-| `AT-CC-233` | 执行方明确失败，或者超时后无法证明是否执行 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-234` | 监管退运决定需要新的路由和运输履约 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-235` | 执行方返回“已完成”但只提供批次级页面状态，缺少适用证据规则要求的范围依据 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
-| `AT-CC-237` | 执行事实迟到，且事项期间已有部分核对结果 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-238` | 当前监管决定将未执行范围由 P1+P2 更正为 P2 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-239` | 当前监管决定取消或替代尚未执行的处置事项 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-240` | 监管期限届满，但没有明确届满后果规则 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
@@ -883,7 +896,6 @@
 | `AT-CC-245` | 同一执行事实通过回调、文件和人工录入重复到达 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-246` | 两个合格执行方分别对同一协作事项中不可并行的对象、动作和交集范围形成接受，且没有已确认的责任分配、合法顺序或共同执行规则 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-249` | 内部合规限制被解除，但外部扣留仍有效，或反之 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
-| `AT-CC-250` | 协作事项或核对已提交，但事件首次投递失败 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-251` | 检查本用例直接形成或修改的业务对象 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-255` | 节点只接受事项中的 P1、拒绝 P2 并要求补充 P3 的执行依据 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
 | `AT-CC-256` | 执行上下文更正原接受结果或实际执行主体/资源安排 | UC-CC-008-COORDINATE-INSPECTION-DETENTION-AND-RECONCILE-DISPOSITION.md |
@@ -925,8 +937,6 @@
 | `AT-CC-302` | 税费已核定但付款义务或放行前置关系仍未决 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
 | `AT-CC-303` | 监管已经放行，但仍有独立内部限制或后续资料义务 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
 | `AT-CC-306` | 接收方拒绝、未响应、只接受部分范围或缺少续办引用 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
-| `AT-CC-307` | 所有依据项均已终结或有效移交，且决定方当前授权有效 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
-| `AT-CC-308` | 相同关闭请求和相同内容再次到达 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
 | `AT-CC-309` | 同一关闭请求身份携带不同义务范围或决定内容 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
 | `AT-CC-310` | 关闭核对完成后、关闭决定提交前到达新的有效限制或监管事实 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
 | `AT-CC-311` | 案件已关闭后检查原申报、限制、处置、税费、付款、结算和物流事实 | UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md |
@@ -958,10 +968,6 @@
 | `AT-CC-341` | 必须参与判断的来源均有当前、无冲突且可追溯的无适用限制结论 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-342` | 必须参与判断的来源、规则、动作、范围或依据尚不确定 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-343` | 限制仅覆盖 P1/R1/A1，P2、R2 或 A2 不在适用规则明确范围内 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
-| `AT-CC-345` | 相同限制形成请求和相同来源、范围、动作、依据再次到达 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
-| `AT-CC-346` | 相同限制请求身份携带不同来源、范围、动作或依据 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
-| `AT-CC-347` | 两个独立来源均限制 P1/R1/A1 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
-| `AT-CC-348` | 来源 S1 解除自身限制，但来源 S2 对同一 P1/R1/A1 的限制仍有效 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-349` | `UC-CC-006` 接收监管扣留或放行，但没有已登记规则要求形成内部限制 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-350` | 已登记规则允许将明确外部监管结果作为解除条件证据 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-351` | 商业批准、异常案件关闭、节点任务完成、运输交接、付款完成或管理员备注声称解除限制 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
@@ -980,7 +986,6 @@
 | `AT-CC-366` | 解除核对完成后、解除决定提交前出现新限制覆盖、来源更正、解除条件失效或授权变化 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-367` | 同一来源的限制形成、解除和更正并发到达 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-368` | 同一来源消息含 R1 与 R2，R1 可确定受限而 R2 依据待确认 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
-| `AT-CC-370` | 相同解除请求和相同内容重复到达 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-371` | 相同解除请求身份携带不同限制、范围、动作、条件或证据 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-372` | 限制或解除的读取、判断、持久化或并发控制技术失败 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
 | `AT-CC-373` | 限制或解除已提交但首次发布失败 | UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md |
@@ -989,15 +994,11 @@
 | `AT-CC-377` | 首发进口程序收到同类合格来源 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-378` | 运输舱单和外部监管舱单使用相同外部文本标识 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-379` | 来源只提供一个外部编号，但程序、方向或范围不足 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
-| `AT-CC-380` | 外部引用可唯一关联一个关务案件、申报单元和运输范围 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
-| `AT-CC-381` | 同一外部引用可能关联两个客户或两个班次且无明确范围 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-382` | 外部监管舱单列入 P1，但尚无实际装载或交接事实 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-383` | 承运商报告外部监管舱单已形成 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-384` | 承运商报告已向监管渠道提交 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-385` | 承运商同时传递来源可验证的监管接收结果 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
-| `AT-CC-387` | 同一来源身份、版本和内容重复到达 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-388` | 同一来源身份和版本携带不同内容 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
-| `AT-CC-389` | 承运商明确提供 V2 更正 V1 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-390` | V2 只更正 P2 范围 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-391` | 承运商明确撤销 V1 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
 | `AT-CC-392` | V2 明确替代 V1，但 V1 的监管结果迟到 | UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md |
@@ -1177,6 +1178,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 同日追记二：VE 批收尾票（ETA 与可见性缺口编排 `FormETAHandler`）随编排落地点名 `AT-VE-049`、`AT-VE-050`（七件缺一半边）、`AT-VE-053`、`AT-VE-054`、`AT-VE-057`——①242→247、④455→450，其余桶与合计 1083 不变。
 
 同日追记三：VE 收官票（索赔与追偿编排 `HandleClaimHandler`）随编排落地点名 `AT-VE-114`（逐项独立半边）、`AT-VE-127`、`AT-VE-129`、`AT-VE-131`、`AT-VE-133`（分序半边）、`AT-VE-136`——①247→253、④450→444，合计 1083 不变；另 `AT-TF-080` 归属随 TF 侧新落的替代旅程编排测试增引（同步入①表）。
+
+同日追记四（第二轮点名票）：CC 六编排点名 20 处（建案 008/009/010、舱单 380/381/387/389、后续动作 201/202/208、处置核对 233 半边/237/250、案件关闭 307/308、内部限制 345/346/347/348/370），TF 三处新入①（061/069 半边/073）加五处增引（016/019/020/024/062 编排面），NO 合箱三处（035/036/040）——①253→279（CC 0→20、NO 13→16、TF 22→25）、②238→232、③148→147、④444→425，合计 1083 守恒。PP/PG 无 AT 清单（PG 两编排的 GOV-03/04/06/07 机制半边已在测试注释点名，不入本表）；PC 声明与 SA 费用确认维持零点。另同步 `AT-TF-027`/`AT-TF-031` 归属漂移（机会准备编排测试增引）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 

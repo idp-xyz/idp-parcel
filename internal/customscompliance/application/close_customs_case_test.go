@@ -119,6 +119,8 @@ func concludedItem(obligation string) domain.ClosureObligationItem {
 // Covers: CC CONTEXT 硬句 218「任一义务未终结或未有效承接都阻止案件关闭；单个案件
 // 不存在部分关闭」的编排面——未解决项阻止关闭带清单（业务负向，恢复动作是逐项处置
 // 不是重试）；全部终结或有效承接后整案一次关闭；已关案件重放返原关闭不出第二份。
+// 点名 `AT-CC-307`「所有依据项均已终结或有效移交……→形成不可覆盖关闭决定」与
+// `AT-CC-308`「相同关闭请求和相同内容再次到达→返回已有关闭结果，不形成第二决定」。
 func TestClosureIsBlockedItemByItemAndClosesOnceWhole(t *testing.T) {
 	fixture := newCloseCaseFixture(t)
 	fixture.inventory.items = []domain.ClosureObligationItem{

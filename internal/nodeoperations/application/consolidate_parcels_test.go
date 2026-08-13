@@ -153,7 +153,8 @@ func openUnit(t *testing.T, fixture *consolidateFixture, id string) {
 
 // Covers: NO CONTEXT「同一时点最多一个直接物理父级」的编排面（领域注释点名跨单元
 // 唯一性需要仓储视野、由收纳编排在加入前核对）——实物已在别的未关闭单元里即业务
-// 负向带对方标识（恢复动作是先从那里移出）；已在本单元是幂等重放；从原单元移出后
+// 负向带对方标识（恢复动作是先从那里移出；`AT-NO-035`「同一包裹并发移入两个集运
+// 单元→只允许一个当前直接父级，另一操作冲突」）；已在本单元是幂等重放；从原单元移出后
 // 方可加入新单元。
 func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 	fixture := newConsolidateFixture(t)
@@ -200,7 +201,9 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 
 // Covers: NO CONTEXT「封装成员快照」与显式终局——封装冻结快照并随意图交装载交接
 // （投递失败封装不翻留续办）；封装态改成员被领域拦（编排透出未受理）；开封回开放态
-// 历史快照保留；关闭后单元不再参与包含核对（载具复用是新实例的事）。
+// 历史快照保留（`AT-NO-036`「封装后需要移出一个成员→先授权开封，再移出并重新封装；
+// 两版快照和封签均保留」）；关闭后单元不再参与包含核对（载具复用是新实例的事，
+// `AT-NO-040`「已关闭集运单元或同一载具再次使用→原实例不重开；新使用创建新实例」）。
 func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 	fixture := newConsolidateFixture(t)
 	tenant := consolidationTenant(t)

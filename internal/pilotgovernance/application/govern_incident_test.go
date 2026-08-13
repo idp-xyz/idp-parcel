@@ -156,7 +156,8 @@ func inventory(t *testing.T) domain.InTransitInventory {
 
 // Covers: PN-08 治理记录经编排入册——暂停重放返原不可覆盖；恢复的身份挂在它要解除
 // 的暂停上（引用不存在的暂停未受理级答复）、一个暂停至多一次恢复（重复恢复按已恢复
-// 作答，再暂停是新决定不是往返）。
+// 作答，再暂停是新决定不是往返）。点名验收矩阵 GOV-06「紧急暂停与恢复……恢复由试点
+// 业务责任角色明确决定」的机制半边（恢复必须显式挂在暂停上，不自动恢复）。
 func TestSuspensionsRecordOnceAndResumptionsBindTheirSuspension(t *testing.T) {
 	fixture := newIncidentFixture(t)
 
@@ -212,7 +213,8 @@ func TestSuspensionsRecordOnceAndResumptionsBindTheirSuspension(t *testing.T) {
 	}
 }
 
-// Covers: PN-08 失败场景「原权威确实无法继续时的对象级接管」经编排——新权威区间撞上
+// Covers: PN-08 失败场景「原权威确实无法继续时的对象级接管」经编排，即验收矩阵
+// GOV-07「回退与对象级接管……原权威写入先停止，不双写」的机制半边——新权威区间撞上
 // 仍开着的既有区间即阻断带全部冲突对（先关原区间再接管——权威重叠正是本模块点名要防
 // 的双写）；原区间关闭后接管入册且新区间追加；同区间身份重放返原。
 func TestTakeoversAreBlockedByOpenIntervalsAndRecordOnce(t *testing.T) {

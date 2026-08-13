@@ -138,7 +138,8 @@ func reviewCommand(t *testing.T, objective string) application.RecordStageReview
 
 // Covers: PN-08 交接「每次阶段评审必须固定一个不可扩张的候选版本组」的编排面——
 // 引用不存在的候选组未受理（范围身份悬空，改请求不是重试）；同目标同候选组只决定
-// 一次（重复按已有决定作答，不重复形成）。
+// 一次（重复按已有决定作答，不重复形成）。点名验收矩阵 GOV-03「阶段 Go/No-Go」的
+// 机制半边（决定固定评审目标、候选组与依据；`P` 级证据属实例半边不在此宣称）。
 func TestAReviewAnchorsItsCandidateSetAndDecidesOnce(t *testing.T) {
 	fixture := newReviewFixture(t)
 
@@ -173,8 +174,9 @@ func TestAReviewAnchorsItsCandidateSetAndDecidesOnce(t *testing.T) {
 }
 
 // Covers: PN-08 失败场景「生产权威区间重叠——立即阻断受影响范围的新准入并保留冲突
-// 证据」的编排面——Go 进限量生产携带的新区间先过冲突预检：撞上既有区间即阻断带全部
-// 冲突对且决定不落库（先于任何落库，双写后人工对账是被点名的错误结果）；无冲突时
+// 证据」的编排面，即验收矩阵 GOV-04「唯一生产权威方：同一范围和生效区间只有一个权威
+// 写入方」的机制半边——Go 进限量生产携带的新区间先过冲突预检：撞上既有区间即阻断带
+// 全部冲突对且决定不落库（先于任何落库，双写后人工对账是被点名的错误结果）；无冲突时
 // 决定与区间都落。
 func TestAGrantedIntervalIsBlockedByOverlapBeforeAnythingLands(t *testing.T) {
 	fixture := newReviewFixture(t)

@@ -122,9 +122,12 @@ func followUpKey(t *testing.T, kind domain.FollowUpActionKind) ports.FollowUpTar
 	}
 }
 
-// Covers: UC-CC-007 的编排面——同触发依据同版本同类动作只立一个目标（重放返原）；
-// 重报目标至多一份拟替代（同替代单元重放返原、异替代单元冲突不顶替——换单元先处置
-// 原拟替代）；生效只凭外部结果且已生效重放按已生效作答（CONTEXT 267：内部决定、
+// Covers: UC-CC-007 的编排面——同触发依据同版本同类动作只立一个目标（重放返原，
+// `AT-CC-208`「相同请求、触发版本、原申报、范围、规则和输入再次到达→返回已有决定、
+// 目标和关系」）；重报目标至多一份拟替代（同替代单元重放返原、异替代单元冲突不顶替
+// ——换单元先处置原拟替代）；生效只凭外部结果（`AT-CC-201` 的生效半边「全部替代生效
+// 条件满足→形成范围明确的有效替代关系」与 `AT-CC-202` 的拒生效半边「只取得技术成功、
+// 监管接收……→不形成有效替代」）且已生效重放按已生效作答（CONTEXT 267：内部决定、
 // 请求发出或技术成功都不等于替代成立）。
 func TestFollowUpTargetsProposalsAndEffectsStayDisciplined(t *testing.T) {
 	fixture := newFollowUpFixture(t)

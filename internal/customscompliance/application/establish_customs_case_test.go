@@ -127,7 +127,9 @@ func caseCommand(t *testing.T, parcels ...string) application.EstablishCaseComma
 
 // Covers: UC-CC-001「同一委托、同袋、同总单、同舱单、同班次或同一路由都不能自动证明
 // 应建立同一个关务案件」与四维身份——同键同包裹集重放返原案件不重立（一案一次），
-// 同键异包裹集是范围冲突不顶替（扩大范围走案件自己的变更，不经建案入口吸收）；换
+// 同键异包裹集是范围冲突不顶替（扩大范围走案件自己的变更，不经建案入口吸收）。点名
+// `AT-CC-009`「相同请求身份和相同业务内容重复到达→返回已有案件」与 `AT-CC-010`
+// 「相同请求身份携带不同包裹或监管范围→返回请求冲突并保留原请求与案件」；换
 // 监管程序自然换键立独立案件（一包裹可关联多个彼此独立的案件）。
 func TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth(t *testing.T) {
 	fixture := newCaseFixture(t)
@@ -176,6 +178,8 @@ func TestOneCasePerRegulatoryScopeAndNoSilentScopeGrowth(t *testing.T) {
 
 // Covers: UC-CC-001 裁决分格——建案规则未登记未决（不是「不要求」）；明确不要求是
 // 不适用格带判断依据（服务责任不含此范围的关务履责）；空包裹集未受理（领域把门）。
+// 点名 `AT-CC-008`「运营企业不承担该关务范围→返回不适用并保存产品、合同和责任依据；
+// 不虚构关务案件」的不适用半边。
 func TestCaseRequirementGapsAndRefusalsStayDistinct(t *testing.T) {
 	fixture := newCaseFixture(t)
 	fixture.requirement.configured = false

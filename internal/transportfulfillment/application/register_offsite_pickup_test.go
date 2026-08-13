@@ -138,8 +138,10 @@ func pickupRegistrationCommand(t *testing.T) application.RegisterOffsitePickupCo
 }
 
 // Covers: CONTEXT「场外揽收只有在明确载运对象……由运输方取得控制时才建立履约参与
-// 关系」的编排面——控制证据等七件由领域把门首登成功；重放返原版不重签；异内容同键
-// 冲突不顶替（来源更正走新版本）。
+// 关系」的编排面——控制证据等七件由领域把门首登成功；重放返原版不重签（`AT-TF-019`
+// 「同一尝试和内容重复回传→返回原结果，不重复建立控制或履约参与」的编排面）；异内容
+// 同键冲突不顶替（`AT-TF-020`「同一来源身份回传相反结果→形成冲突……不使用最后消息
+// 覆盖」的编排面；来源更正走新版本）。
 func TestAPickupRegistrationIsIdempotentPerObjectAttempt(t *testing.T) {
 	fixture := newPickupRegFixture(t)
 	command := pickupRegistrationCommand(t)
@@ -194,7 +196,8 @@ func TestAPickupRegistrationIsIdempotentPerObjectAttempt(t *testing.T) {
 
 // Covers: CONTEXT「客户不在、货物未备好、包装不合格或其他失败结果不制造实际履约段」
 // 的编排面——失败到访没有控制证据可供，缺控制（及任一必备件）在受理处即未受理，编排
-// 不绕领域构造器。
+// 不绕领域构造器。点名 `AT-TF-016`「客户不在或货物未备好→形成失败尝试，不建立控制、
+// 实际履约段或终局」的不建立半边（失败尝试本体由揽收执行用例保留）。
 func TestAFailedVisitHasNothingToRegister(t *testing.T) {
 	broken := map[string]func(*application.RegisterOffsitePickupCommand){
 		"no control":  func(command *application.RegisterOffsitePickupCommand) { command.Control = " " },
@@ -225,6 +228,9 @@ func TestAFailedVisitHasNothingToRegister(t *testing.T) {
 
 // 恢复纪律：库/版本厂故障各归未决一格；投递失败不翻结果重放重发；并发落败读回赢家；
 // 写入代数外是编程错误。
+// Covers: 恢复纪律——依赖故障各归其因；意图投递失败登记不翻、重放重发同一份
+// （`AT-TF-024`「成功提交后发布失败→不回退揽收或重复控制，只重试原发布意图」的
+// 编排面）。
 func TestPickupRegistrationRecoveryDiscipline(t *testing.T) {
 	t.Run("dependency failures are undecided with their reasons", func(t *testing.T) {
 		registry := newPickupRegFixture(t)

@@ -370,6 +370,9 @@ func TestACorrectionSupersedesWithTheVersionChain(t *testing.T) {
 
 // 未受理与恢复纪律：缺 POD/方式/接收方、结果查无 → 未受理；视图/库/版本厂故障各归
 // 未决一格；投递失败不翻结果；写入代数外是编程错误。
+// Covers: 恢复纪律——缺 POD 等必备件未受理（`AT-TF-069`「外部状态码为 DELIVERED、
+// 无可验证 POD→不形成有效交付」的不形成半边）；意图投递失败登记不翻、重放重发同一份
+// （`AT-TF-073`「交付结果保存成功但发布失败→不重复派送，只重试原发布意图」的编排面）。
 func TestDeliveryRecoveryDiscipline(t *testing.T) {
 	broken := map[string]func(*application.RegisterEffectiveDeliveryCommand){
 		"no proof":     func(command *application.RegisterEffectiveDeliveryCommand) { command.Proof = " " },

@@ -125,6 +125,8 @@ func registerHandoverCommand(t *testing.T) application.RegisterTransportHandover
 
 // 同一判断版本只登一次：首登交意图（一份，NO/NR 自分），重放返原重发，异裁决同键
 // 冲突不顶替（改判走更正入口换新版）。
+// Covers: 交接判断按版本一次入册——重放返原版不重签；同版本异判定/异内容是冲突不
+// 顶替。点名 `AT-TF-061`「交接事实重复到达→返回原结果，不重复转移控制」的编排面。
 func TestAHandoverVersionRegistersOnce(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	command := registerHandoverCommand(t)
@@ -233,6 +235,8 @@ func TestAHandoverVersionRegistersOnce(t *testing.T) {
 
 // 更正走领域版本链：新版回指前版并以新键登记、意图重新交付；没有可更正的判断更正不出
 // 交接；同版本覆盖被领域拒。
+// Covers: 更正走新版本指回前版、原判断保留——`AT-TF-062`「迟到更正使原交接证据失效
+// ……保留原判断及全部后续事实」的编排面（控制来源链重算在领域与下游，不在这里）。
 func TestAHandoverCorrectionRegistersTheNewVersion(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	if _, err := fixture.handler.Register(context.Background(), registerHandoverCommand(t)); err != nil {
