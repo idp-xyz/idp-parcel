@@ -413,3 +413,100 @@ type StatementIntent struct {
 type StatementHandoff interface {
 	HandOffStatement(ctx context.Context, intent StatementIntent) error
 }
+
+// FundsFactKey 是外部资金事实采用的幂等键：事实归银行/支付系统拥有，同一事实引用只
+// 采用一次。
+type FundsFactKey struct {
+	TenantID domain.TenantID
+	Fact     domain.FundsFactReference
+}
+
+// FundsFactRecord 是一次资金事实采用越过提交边界留下的东西。
+type FundsFactRecord struct {
+	Key           FundsFactKey
+	ContentDigest string
+	Fact          domain.ExternalFundsFact
+	RecordedAt    time.Time
+}
+
+type FundsFactSaveOutcome uint8
+
+const (
+	FundsFactSaveOutcomeInvalid FundsFactSaveOutcome = iota
+	FundsFactSaved
+	FundsFactAlreadyAdopted
+)
+
+// ExternalFundsFactStore 按幂等键找回并保存资金事实引用（写入代数同 ADR-0031）。
+type ExternalFundsFactStore interface {
+	FindByKey(ctx context.Context, key FundsFactKey) (FundsFactRecord, bool, error)
+	Save(ctx context.Context, record FundsFactRecord) (FundsFactSaveOutcome, error)
+}
+
+// FundsMappingKey 是资金映射的幂等键。
+type FundsMappingKey struct {
+	TenantID domain.TenantID
+	Mapping  domain.MappingReference
+}
+
+// FundsMappingRecord 是一次映射越过提交边界留下的东西。
+type FundsMappingRecord struct {
+	Key           FundsMappingKey
+	ContentDigest string
+	Mapping       domain.FundsMapping
+	RecordedAt    time.Time
+}
+
+type FundsMappingSaveOutcome uint8
+
+const (
+	FundsMappingSaveOutcomeInvalid FundsMappingSaveOutcome = iota
+	FundsMappingSaved
+	FundsMappingAlreadyRecorded
+)
+
+// FundsMappingStore 按幂等键找回并保存资金映射（写入代数同 ADR-0031）。
+type FundsMappingStore interface {
+	FindByKey(ctx context.Context, key FundsMappingKey) (FundsMappingRecord, bool, error)
+	Save(ctx context.Context, record FundsMappingRecord) (FundsMappingSaveOutcome, error)
+}
+
+// SettlementApplicationKey 是核销的幂等键。撤销以 Replace 换值，撤销关系在本体上。
+type SettlementApplicationKey struct {
+	TenantID    domain.TenantID
+	Application domain.ApplicationReference
+}
+
+// SettlementApplicationRecord 是一次核销越过提交边界留下的东西。
+type SettlementApplicationRecord struct {
+	Key           SettlementApplicationKey
+	ContentDigest string
+	Application   domain.SettlementApplication
+	RecordedAt    time.Time
+}
+
+type SettlementApplicationSaveOutcome uint8
+
+const (
+	SettlementApplicationSaveOutcomeInvalid SettlementApplicationSaveOutcome = iota
+	SettlementApplicationSaved
+	SettlementApplicationAlreadyApplied
+)
+
+// SettlementApplicationStore 按幂等键找回并保存核销（写入代数同 ADR-0031）。
+type SettlementApplicationStore interface {
+	FindByKey(ctx context.Context, key SettlementApplicationKey) (SettlementApplicationRecord, bool, error)
+	Save(ctx context.Context, record SettlementApplicationRecord) (SettlementApplicationSaveOutcome, error)
+	Replace(ctx context.Context, record SettlementApplicationRecord) (bool, error)
+}
+
+// SettlementApplicationIntent 把核销/撤销交给下游（对账单与应付的已结视图）。重放
+// 重发同一份（ADR-0043）。
+type SettlementApplicationIntent struct {
+	Record SettlementApplicationRecord
+}
+
+// SettlementApplicationHandoff 今天没有实现，唯一实现是测试替身。
+type SettlementApplicationHandoff interface {
+	HandOffSettlementApplication(ctx context.Context, intent SettlementApplicationIntent) error
+}
