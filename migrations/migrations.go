@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-//go:embed all:parcel_shipment all:network_routing
+//go:embed all:parcel_shipment all:network_routing all:node_operations
 var assets embed.FS
 
 // Asset 是一份业务迁移。SQL 只读，校验和对文件原始内容计算——一份已施加的迁移
@@ -38,6 +38,11 @@ func ParcelShipment() ([]Asset, error) {
 // NetworkRouting 返回 network-routing 的业务迁移，按文件名序排列。
 func NetworkRouting() ([]Asset, error) {
 	return assetsForModule("network_routing")
+}
+
+// NodeOperations 返回 node-operations 的业务迁移，按文件名序排列。
+func NodeOperations() ([]Asset, error) {
+	return assetsForModule("node_operations")
 }
 
 func assetsForModule(module string) ([]Asset, error) {
