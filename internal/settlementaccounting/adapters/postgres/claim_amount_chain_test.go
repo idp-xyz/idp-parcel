@@ -27,16 +27,15 @@ func TestAClaimAmountRoundTripsAndSecondSaveKeepsTheWinner(t *testing.T) {
 	ctx := t.Context()
 
 	record := formedClaimAmountRecord(t, "tenant-a", "claim-amount-1", domain.CustomerCompensationPayable)
+	var savedOutcome ports.ClaimAmountSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := amounts.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ClaimAmountSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedOutcome, err = amounts.Save(txCtx, record)
+		return err
 	})
+	if savedOutcome != ports.ClaimAmountSaved {
+		t.Fatalf("save outcome = %d", savedOutcome)
+	}
 
 	found, exists, err := amounts.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -56,20 +55,21 @@ func TestAClaimAmountRoundTripsAndSecondSaveKeepsTheWinner(t *testing.T) {
 	second := record
 	second.ContentDigest = "digest-other"
 	var outcome ports.ClaimAmountSaveOutcome
+	var winner ports.ClaimAmountRecord
+	var winnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := amounts.Save(txCtx, second)
-		if err != nil {
+		var err error
+		if outcome, err = amounts.Save(txCtx, second); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := amounts.FindByKey(txCtx, record.Key)
-		if err != nil || !found || winner.ContentDigest != "digest-claim-amount-1" {
-			t.Fatalf("同事务读回赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		winner, winnerFound, err = amounts.FindByKey(txCtx, record.Key)
+		return err
 	})
 	if outcome != ports.ClaimAmountAlreadyFormed {
 		t.Fatalf("第二份写入结果 = %d", outcome)
+	}
+	if !winnerFound || winner.ContentDigest != "digest-claim-amount-1" {
+		t.Fatalf("同事务读回赢家失败：found=%v digest=%q", winnerFound, winner.ContentDigest)
 	}
 }
 
@@ -78,16 +78,15 @@ func TestAClaimChargeRefundRoundTripsWithItsOriginalCharge(t *testing.T) {
 	ctx := t.Context()
 
 	record := formedClaimAmountRecord(t, "tenant-a", "claim-refund-1", domain.ClaimChargeRefund)
+	var refundOutcome ports.ClaimAmountSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := amounts.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ClaimAmountSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		refundOutcome, err = amounts.Save(txCtx, record)
+		return err
 	})
+	if refundOutcome != ports.ClaimAmountSaved {
+		t.Fatalf("save outcome = %d", refundOutcome)
+	}
 
 	found, exists, err := amounts.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -104,16 +103,15 @@ func TestAReceivableAndAcknowledgementRoundTrip(t *testing.T) {
 	ctx := t.Context()
 
 	receivable := formedReceivableRecord(t, "tenant-a", "receivable-1")
+	var savedReceivable ports.ReceivableSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := receivables.Save(txCtx, receivable)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ReceivableSaved {
-			t.Fatalf("save receivable outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedReceivable, err = receivables.Save(txCtx, receivable)
+		return err
 	})
+	if savedReceivable != ports.ReceivableSaved {
+		t.Fatalf("save receivable outcome = %d", savedReceivable)
+	}
 
 	foundReceivable, exists, err := receivables.FindByKey(ctx, receivable.Key)
 	if err != nil || !exists {
@@ -124,16 +122,15 @@ func TestAReceivableAndAcknowledgementRoundTrip(t *testing.T) {
 	}
 
 	acknowledgement := formedAcknowledgementRecord(t, "tenant-a", "acknowledgement-1", foundReceivable.Receivable)
+	var savedAcknowledgement ports.AcknowledgementSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := acknowledgements.Save(txCtx, acknowledgement)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.AcknowledgementSaved {
-			t.Fatalf("save acknowledgement outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedAcknowledgement, err = acknowledgements.Save(txCtx, acknowledgement)
+		return err
 	})
+	if savedAcknowledgement != ports.AcknowledgementSaved {
+		t.Fatalf("save acknowledgement outcome = %d", savedAcknowledgement)
+	}
 
 	foundAck, exists, err := acknowledgements.FindByKey(ctx, acknowledgement.Key)
 	if err != nil || !exists {
@@ -147,18 +144,19 @@ func TestAReceivableAndAcknowledgementRoundTrip(t *testing.T) {
 	second := acknowledgement
 	second.ContentDigest = "digest-other"
 	var outcome ports.AcknowledgementSaveOutcome
+	var ackWinner ports.AcknowledgementRecord
+	var ackWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := acknowledgements.Save(txCtx, second)
-		if err != nil {
+		var err error
+		if outcome, err = acknowledgements.Save(txCtx, second); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := acknowledgements.FindByKey(txCtx, acknowledgement.Key)
-		if err != nil || !found || winner.ContentDigest != "digest-acknowledgement-1" {
-			t.Fatalf("同事务读回赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		ackWinner, ackWinnerFound, err = acknowledgements.FindByKey(txCtx, acknowledgement.Key)
+		return err
 	})
+	if !ackWinnerFound || ackWinner.ContentDigest != "digest-acknowledgement-1" {
+		t.Fatalf("同事务读回赢家失败：found=%v digest=%q", ackWinnerFound, ackWinner.ContentDigest)
+	}
 	if outcome != ports.AcknowledgementAlreadyRecorded {
 		t.Fatalf("第二份写入结果 = %d", outcome)
 	}

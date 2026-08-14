@@ -29,16 +29,15 @@ func TestASubsequentInclusionRoundTripsAndSecondSaveKeepsTheWinner(t *testing.T)
 	ctx := t.Context()
 
 	record := formedInclusionRecord(t, "tenant-a", "inclusion-1", domain.IncludedAdjustment)
+	var firstOutcome ports.InclusionSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := inclusions.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.InclusionSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		firstOutcome, err = inclusions.Save(txCtx, record)
+		return err
 	})
+	if firstOutcome != ports.InclusionSaved {
+		t.Fatalf("save outcome = %d", firstOutcome)
+	}
 
 	found, exists, err := inclusions.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -50,16 +49,15 @@ func TestASubsequentInclusionRoundTripsAndSecondSaveKeepsTheWinner(t *testing.T)
 	}
 
 	late := formedInclusionRecord(t, "tenant-a", "inclusion-late", domain.IncludedLateCharge)
+	var lateOutcome ports.InclusionSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := inclusions.Save(txCtx, late)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.InclusionSaved {
-			t.Fatalf("late save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		lateOutcome, err = inclusions.Save(txCtx, late)
+		return err
 	})
+	if lateOutcome != ports.InclusionSaved {
+		t.Fatalf("late save outcome = %d", lateOutcome)
+	}
 	foundLate, _, err := inclusions.FindByKey(ctx, late.Key)
 	if err != nil {
 		t.Fatalf("迟到费用读回：%v", err)
@@ -71,20 +69,21 @@ func TestASubsequentInclusionRoundTripsAndSecondSaveKeepsTheWinner(t *testing.T)
 	second := record
 	second.ContentDigest = "digest-other"
 	var outcome ports.InclusionSaveOutcome
+	var winner ports.InclusionRecord
+	var winnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := inclusions.Save(txCtx, second)
-		if err != nil {
+		var err error
+		if outcome, err = inclusions.Save(txCtx, second); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := inclusions.FindByKey(txCtx, record.Key)
-		if err != nil || !found || winner.ContentDigest != "digest-inclusion-1" {
-			t.Fatalf("同事务读回赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		winner, winnerFound, err = inclusions.FindByKey(txCtx, record.Key)
+		return err
 	})
 	if outcome != ports.InclusionAlreadyRecorded {
 		t.Fatalf("第二份写入结果 = %d", outcome)
+	}
+	if !winnerFound || winner.ContentDigest != "digest-inclusion-1" {
+		t.Fatalf("同事务读回赢家失败：found=%v digest=%q", winnerFound, winner.ContentDigest)
 	}
 }
 
@@ -93,16 +92,15 @@ func TestAStatementDisputeReplaceWritesResolutionNotTheStatement(t *testing.T) {
 	ctx := t.Context()
 
 	opened := formedDisputeRecord(t, "tenant-a", "dispute-1", false)
+	var openOutcome ports.DisputeSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := disputes.Save(txCtx, opened)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.DisputeSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		openOutcome, err = disputes.Save(txCtx, opened)
+		return err
 	})
+	if openOutcome != ports.DisputeSaved {
+		t.Fatalf("save outcome = %d", openOutcome)
+	}
 
 	found, exists, err := disputes.FindByKey(ctx, opened.Key)
 	if err != nil || !exists {
@@ -115,16 +113,15 @@ func TestAStatementDisputeReplaceWritesResolutionNotTheStatement(t *testing.T) {
 	ruled := formedDisputeRecord(t, "tenant-a", "dispute-1", true)
 	ruled.ContentDigest = "digest-ruled"
 	ruled.RecordedAt = disputeRuled
+	var ruledReplaced bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := disputes.Replace(txCtx, ruled)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			t.Fatal("Replace 答 false")
-		}
-		return nil
+		var err error
+		ruledReplaced, err = disputes.Replace(txCtx, ruled)
+		return err
 	})
+	if !ruledReplaced {
+		t.Fatal("Replace 答 false")
+	}
 
 	after, _, err := disputes.FindByKey(ctx, opened.Key)
 	if err != nil {
@@ -141,16 +138,15 @@ func TestAStatementDisputeReplaceWritesResolutionNotTheStatement(t *testing.T) {
 
 	again := ruled
 	again.ContentDigest = "digest-again"
+	var againReplaced bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := disputes.Replace(txCtx, again)
-		if err != nil {
-			return err
-		}
-		if ok {
-			t.Fatal("终局裁定被第二次 Replace 改写")
-		}
-		return nil
+		var err error
+		againReplaced, err = disputes.Replace(txCtx, again)
+		return err
 	})
+	if againReplaced {
+		t.Fatal("终局裁定被第二次 Replace 改写")
+	}
 }
 
 func TestRecoveryAndClaimAdjustmentsRoundTrip(t *testing.T) {
@@ -159,15 +155,22 @@ func TestRecoveryAndClaimAdjustmentsRoundTrip(t *testing.T) {
 
 	recovery := formedRecoveryAdjustmentRecord(t, "tenant-a", "recovery-adj-1")
 	claim := formedClaimAdjustmentRecord(t, "tenant-a", "claim-adj-1")
+	var savedRecovery ports.RecoveryAdjustmentSaveOutcome
+	var savedClaim ports.ClaimAdjustmentSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		if outcome, err := recoveries.Save(txCtx, recovery); err != nil || outcome != ports.RecoveryAdjustmentSaved {
-			t.Fatalf("save recovery adj：outcome=%d err=%v", outcome, err)
+		var err error
+		if savedRecovery, err = recoveries.Save(txCtx, recovery); err != nil {
+			return err
 		}
-		if outcome, err := claims.Save(txCtx, claim); err != nil || outcome != ports.ClaimAdjustmentSaved {
-			t.Fatalf("save claim adj：outcome=%d err=%v", outcome, err)
-		}
-		return nil
+		savedClaim, err = claims.Save(txCtx, claim)
+		return err
 	})
+	if savedRecovery != ports.RecoveryAdjustmentSaved {
+		t.Fatalf("save recovery adj：outcome=%d", savedRecovery)
+	}
+	if savedClaim != ports.ClaimAdjustmentSaved {
+		t.Fatalf("save claim adj：outcome=%d", savedClaim)
+	}
 
 	foundRecovery, exists, err := recoveries.FindByKey(ctx, recovery.Key)
 	if err != nil || !exists || foundRecovery.Adjustment.Reason() != domain.TaxAssessmentCorrected {

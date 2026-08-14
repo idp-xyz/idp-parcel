@@ -87,24 +87,27 @@ func TestReceivingTheSameClaimTwiceKeepsTheFirstReception(t *testing.T) {
 	first := billRecord(t, "tenant-1", "claim-1", "v1", "digest-1")
 	mustSaveBill(t, transactor, ctx, bills, first)
 
+	var forgedOutcome ports.BillSaveOutcome
+	var billWinner ports.BillReceptionRecord
+	var billWinnerPresent bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
 		forged := billRecord(t, "tenant-1", "claim-1", "v1", "digest-forged")
-		outcome, err := bills.Save(txCtx, forged)
-		if err != nil {
+		var err error
+		if forgedOutcome, err = bills.Save(txCtx, forged); err != nil {
 			return err
 		}
-		if outcome != ports.BillAlreadyRecorded {
-			t.Fatalf("replay outcome = %d, want ALREADY_RECORDED", outcome)
-		}
-		winner, present, err := bills.FindByKey(txCtx, first.Key)
-		if err != nil || !present {
-			t.Fatalf("撞键后同事务读回失败：present=%v err=%v", present, err)
-		}
-		if winner.ContentDigest != "digest-1" {
-			t.Fatal("迟到的版本覆盖了先到的接收")
-		}
-		return nil
+		billWinner, billWinnerPresent, err = bills.FindByKey(txCtx, first.Key)
+		return err
 	})
+	if forgedOutcome != ports.BillAlreadyRecorded {
+		t.Fatalf("replay outcome = %d, want ALREADY_RECORDED", forgedOutcome)
+	}
+	if !billWinnerPresent {
+		t.Fatal("撞键后同事务读回失败")
+	}
+	if billWinner.ContentDigest != "digest-1" {
+		t.Fatal("迟到的版本覆盖了先到的接收")
+	}
 }
 
 func TestBillScopesAreInvisibleToEachOther(t *testing.T) {
@@ -162,26 +165,31 @@ func TestPublishingTheSameNumberTwiceKeepsTheFirst(t *testing.T) {
 
 	mustSaveStatement(t, transactor, ctx, statements, statementRecord(t, "tenant-1", "STMT-2026-09", "digest-1"))
 
+	var forgedOutcome ports.StatementSaveOutcome
+	var statementWinner ports.StatementRecord
+	var statementWinnerPresent bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := statements.Save(txCtx, statementRecord(t, "tenant-1", "STMT-2026-09", "digest-forged"))
+		var err error
+		forgedOutcome, err = statements.Save(
+			txCtx, statementRecord(t, "tenant-1", "STMT-2026-09", "digest-forged"))
 		if err != nil {
 			return err
 		}
-		if outcome != ports.StatementAlreadyPublished {
-			t.Fatalf("replay outcome = %d, want ALREADY_PUBLISHED", outcome)
-		}
-		winner, present, err := statements.FindByKey(txCtx, ports.StatementKey{
+		statementWinner, statementWinnerPresent, err = statements.FindByKey(txCtx, ports.StatementKey{
 			TenantID: saTenant(t, "tenant-1"),
 			Number:   saValue(t, domain.NewStatementNumber, "STMT-2026-09"),
 		})
-		if err != nil || !present {
-			t.Fatalf("撞键后同事务读回失败：present=%v err=%v", present, err)
-		}
-		if winner.ContentDigest != "digest-1" {
-			t.Fatal("迟到的发布覆盖了先到的快照")
-		}
-		return nil
+		return err
 	})
+	if forgedOutcome != ports.StatementAlreadyPublished {
+		t.Fatalf("replay outcome = %d, want ALREADY_PUBLISHED", forgedOutcome)
+	}
+	if !statementWinnerPresent {
+		t.Fatal("撞键后同事务读回失败")
+	}
+	if statementWinner.ContentDigest != "digest-1" {
+		t.Fatal("迟到的发布覆盖了先到的快照")
+	}
 }
 
 // TestVoidLeavesATraceWithoutErasingContent 证作废留痕的三面：Replace 后依据与时刻
@@ -194,12 +202,14 @@ func TestVoidLeavesATraceWithoutErasingContent(t *testing.T) {
 	record := statementRecord(t, "tenant-1", "STMT-2026-09", "digest-1")
 	mustSaveStatement(t, transactor, ctx, statements, record)
 
+	var unvoidedReplaceErr error
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		if _, err := statements.Replace(txCtx, record); err == nil {
-			t.Fatal("未作废的快照被 Replace 接受了")
-		}
+		_, unvoidedReplaceErr = statements.Replace(txCtx, record)
 		return nil
 	})
+	if unvoidedReplaceErr == nil {
+		t.Fatal("未作废的快照被 Replace 接受了")
+	}
 
 	voided, err := record.Statement.Void(
 		saValue(t, domain.NewStatementVoidBasisReference, "billing-error-42"), statementVoidAt)
@@ -209,16 +219,15 @@ func TestVoidLeavesATraceWithoutErasingContent(t *testing.T) {
 	record.Statement = voided
 	record.RecordedAt = statementVoidAt
 
+	var firstVoid bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := statements.Replace(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			t.Fatal("首次作废应换值成功")
-		}
-		return nil
+		var err error
+		firstVoid, err = statements.Replace(txCtx, record)
+		return err
 	})
+	if !firstVoid {
+		t.Fatal("首次作废应换值成功")
+	}
 
 	found, present, err := statements.FindByKey(ctx, record.Key)
 	if err != nil || !present {
@@ -232,16 +241,15 @@ func TestVoidLeavesATraceWithoutErasingContent(t *testing.T) {
 		t.Fatal("作废把内容也废了——留痕不是删内容")
 	}
 
+	var secondVoid bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := statements.Replace(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if ok {
-			t.Fatal("已作废的行被第二次作废改写了")
-		}
-		return nil
+		var err error
+		secondVoid, err = statements.Replace(txCtx, record)
+		return err
 	})
+	if secondVoid {
+		t.Fatal("已作废的行被第二次作废改写了")
+	}
 }
 
 // TestVoidTraceIsPinnedInTheDatabase 证留痕一致性的库面：绕过适配器直插「有时刻无
@@ -361,16 +369,15 @@ func mustSaveBill(
 	record ports.BillReceptionRecord,
 ) {
 	t.Helper()
+	var outcome ports.BillSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := bills.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.BillSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = bills.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.BillSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 func mustSaveStatement(
@@ -381,16 +388,15 @@ func mustSaveStatement(
 	record ports.StatementRecord,
 ) {
 	t.Helper()
+	var outcome ports.StatementSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := statements.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.StatementSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = statements.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.StatementSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 // billRecord 造一份三格齐备的接收：已匹配、价差（带依据与 +200 差额）、无匹配发生项

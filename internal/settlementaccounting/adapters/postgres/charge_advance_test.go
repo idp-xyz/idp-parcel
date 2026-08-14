@@ -30,16 +30,15 @@ func TestAConfirmedChargeRoundTripsAndSecondConfirmationKeepsTheWinner(t *testin
 	tenant := saTenant(t, "tenant-a")
 
 	confirmed := confirmedCharge(t, "charge-1", "DELIVERY_FINALIZED/final-1")
+	var savedCharge ports.ChargeSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := charges.SaveConfirmed(txCtx, tenant, confirmed)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ChargeSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedCharge, err = charges.SaveConfirmed(txCtx, tenant, confirmed)
+		return err
 	})
+	if savedCharge != ports.ChargeSaved {
+		t.Fatalf("save outcome = %d", savedCharge)
+	}
 
 	found, exists, err := charges.FindByID(ctx, tenant, confirmed.ID())
 	if err != nil || !exists {
@@ -56,22 +55,22 @@ func TestAConfirmedChargeRoundTripsAndSecondConfirmationKeepsTheWinner(t *testin
 
 	other := confirmedCharge(t, "charge-1", "DELIVERY_FINALIZED/other")
 	var outcome ports.ChargeSaveOutcome
+	var chargeWinner domain.CustomerCharge
+	var chargeWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := charges.SaveConfirmed(txCtx, tenant, other)
-		if err != nil {
+		var err error
+		if outcome, err = charges.SaveConfirmed(txCtx, tenant, other); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := charges.FindByID(txCtx, tenant, confirmed.ID())
-		if err != nil || !found {
-			t.Fatalf("同事务读回赢家失败：found=%v err=%v", found, err)
-		}
-		basis, ok := winner.Confirmation()
-		if !ok || basis.String() != "DELIVERY_FINALIZED/final-1" {
-			t.Fatal("二确覆盖了先到者的依据")
-		}
-		return nil
+		chargeWinner, chargeWinnerFound, err = charges.FindByID(txCtx, tenant, confirmed.ID())
+		return err
 	})
+	if !chargeWinnerFound {
+		t.Fatal("同事务读回赢家失败")
+	}
+	if basis, ok := chargeWinner.Confirmation(); !ok || basis.String() != "DELIVERY_FINALIZED/final-1" {
+		t.Fatal("二确覆盖了先到者的依据")
+	}
 	if outcome != ports.ChargeAlreadyConfirmed {
 		t.Fatalf("第二份写入结果 = %d", outcome)
 	}
@@ -92,16 +91,15 @@ func TestSaveConfirmedPromotesAnEstimatedRowWithoutRewritingAmount(t *testing.T)
 	}
 
 	confirmed := confirmedCharge(t, "charge-est-1", "DELIVERY_FINALIZED/final-1")
+	var promoted ports.ChargeSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := charges.SaveConfirmed(txCtx, tenant, confirmed)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ChargeSaved {
-			t.Fatalf("promote outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		promoted, err = charges.SaveConfirmed(txCtx, tenant, confirmed)
+		return err
 	})
+	if promoted != ports.ChargeSaved {
+		t.Fatalf("promote outcome = %d", promoted)
+	}
 
 	found, exists, err := charges.FindByID(ctx, tenant, confirmed.ID())
 	if err != nil || !exists || found.Stage() != domain.ChargeConfirmed {
@@ -118,16 +116,15 @@ func TestAnAdvanceAssessmentAndRecoveryRoundTrip(t *testing.T) {
 	ctx := t.Context()
 
 	established := establishedAssessmentRecord(t, "tenant-a", "assessment-1")
+	var savedAssessment ports.AdvanceAssessmentSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := assessments.Save(txCtx, established)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.AdvanceAssessmentSaved {
-			t.Fatalf("assessment save = %d", outcome)
-		}
-		return nil
+		var err error
+		savedAssessment, err = assessments.Save(txCtx, established)
+		return err
 	})
+	if savedAssessment != ports.AdvanceAssessmentSaved {
+		t.Fatalf("assessment save = %d", savedAssessment)
+	}
 
 	foundAssessment, exists, err := assessments.FindByKey(ctx, established.Key)
 	if err != nil || !exists || foundAssessment.Assessment.Verdict() != domain.AdvanceEstablished {
@@ -138,16 +135,15 @@ func TestAnAdvanceAssessmentAndRecoveryRoundTrip(t *testing.T) {
 	}
 
 	notEstablished := notEstablishedAssessmentRecord(t, "tenant-a", "assessment-2")
+	var savedNotEstablished ports.AdvanceAssessmentSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := assessments.Save(txCtx, notEstablished)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.AdvanceAssessmentSaved {
-			t.Fatalf("not-established save = %d", outcome)
-		}
-		return nil
+		var err error
+		savedNotEstablished, err = assessments.Save(txCtx, notEstablished)
+		return err
 	})
+	if savedNotEstablished != ports.AdvanceAssessmentSaved {
+		t.Fatalf("not-established save = %d", savedNotEstablished)
+	}
 	foundNegative, exists, err := assessments.FindByKey(ctx, notEstablished.Key)
 	if err != nil || !exists || foundNegative.Assessment.Verdict() != domain.AdvanceNotEstablishedVerdict {
 		t.Fatalf("不成立评估往返失败：exists=%v err=%v", exists, err)
@@ -157,16 +153,15 @@ func TestAnAdvanceAssessmentAndRecoveryRoundTrip(t *testing.T) {
 	}
 
 	recovery := formedRecoveryRecord(t, "tenant-a", "recovery-1", foundAssessment.Assessment)
+	var savedRecovery ports.AdvanceRecoverySaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := recoveries.Save(txCtx, recovery)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.AdvanceRecoverySaved {
-			t.Fatalf("recovery save = %d", outcome)
-		}
-		return nil
+		var err error
+		savedRecovery, err = recoveries.Save(txCtx, recovery)
+		return err
 	})
+	if savedRecovery != ports.AdvanceRecoverySaved {
+		t.Fatalf("recovery save = %d", savedRecovery)
+	}
 	foundRecovery, exists, err := recoveries.FindByKey(ctx, recovery.Key)
 	if err != nil || !exists {
 		t.Fatalf("回收往返失败：exists=%v err=%v", exists, err)
@@ -179,18 +174,20 @@ func TestAnAdvanceAssessmentAndRecoveryRoundTrip(t *testing.T) {
 	secondAssessment := established
 	secondAssessment.ContentDigest = "digest-other"
 	var assessmentOutcome ports.AdvanceAssessmentSaveOutcome
+	var assessmentWinner ports.AdvanceAssessmentRecord
+	var assessmentWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := assessments.Save(txCtx, secondAssessment)
-		if err != nil {
+		var err error
+		if assessmentOutcome, err = assessments.Save(txCtx, secondAssessment); err != nil {
 			return err
 		}
-		assessmentOutcome = saved
-		winner, found, err := assessments.FindByKey(txCtx, established.Key)
-		if err != nil || !found || winner.ContentDigest != established.ContentDigest {
-			t.Fatalf("同事务读回评估赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		assessmentWinner, assessmentWinnerFound, err = assessments.FindByKey(txCtx, established.Key)
+		return err
 	})
+	if !assessmentWinnerFound || assessmentWinner.ContentDigest != established.ContentDigest {
+		t.Fatalf("同事务读回评估赢家失败：found=%v digest=%q",
+			assessmentWinnerFound, assessmentWinner.ContentDigest)
+	}
 	if assessmentOutcome != ports.AdvanceAssessmentAlreadyRecorded {
 		t.Fatalf("第二份评估结果 = %d", assessmentOutcome)
 	}
@@ -198,18 +195,20 @@ func TestAnAdvanceAssessmentAndRecoveryRoundTrip(t *testing.T) {
 	secondRecovery := recovery
 	secondRecovery.ContentDigest = "digest-other"
 	var recoveryOutcome ports.AdvanceRecoverySaveOutcome
+	var recoveryWinner ports.AdvanceRecoveryRecord
+	var recoveryWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := recoveries.Save(txCtx, secondRecovery)
-		if err != nil {
+		var err error
+		if recoveryOutcome, err = recoveries.Save(txCtx, secondRecovery); err != nil {
 			return err
 		}
-		recoveryOutcome = saved
-		winner, found, err := recoveries.FindByKey(txCtx, recovery.Key)
-		if err != nil || !found || winner.ContentDigest != recovery.ContentDigest {
-			t.Fatalf("同事务读回回收赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		recoveryWinner, recoveryWinnerFound, err = recoveries.FindByKey(txCtx, recovery.Key)
+		return err
 	})
+	if !recoveryWinnerFound || recoveryWinner.ContentDigest != recovery.ContentDigest {
+		t.Fatalf("同事务读回回收赢家失败：found=%v digest=%q",
+			recoveryWinnerFound, recoveryWinner.ContentDigest)
+	}
 	if recoveryOutcome != ports.AdvanceRecoveryAlreadyFormed {
 		t.Fatalf("第二份回收结果 = %d", recoveryOutcome)
 	}

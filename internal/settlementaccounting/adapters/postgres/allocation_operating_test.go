@@ -27,16 +27,15 @@ func TestACostAllocationRoundTripsAndReplaceRewritesVersionNotSource(t *testing.
 	ctx := t.Context()
 
 	record := formedAllocationRecord(t, "tenant-a", "allocation-1")
+	var savedAllocation ports.AllocationSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := allocations.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.AllocationSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedAllocation, err = allocations.Save(txCtx, record)
+		return err
 	})
+	if savedAllocation != ports.AllocationSaved {
+		t.Fatalf("save outcome = %d", savedAllocation)
+	}
 
 	found, exists, err := allocations.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -62,16 +61,15 @@ func TestACostAllocationRoundTripsAndReplaceRewritesVersionNotSource(t *testing.
 	replaced.Allocation = reallocated
 	replaced.ContentDigest = "digest-reallocated"
 	replaced.RecordedAt = allocatedAt.Add(time.Hour)
+	var allocationReplaced bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := allocations.Replace(txCtx, replaced)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			t.Fatal("Replace 答 false")
-		}
-		return nil
+		var err error
+		allocationReplaced, err = allocations.Replace(txCtx, replaced)
+		return err
 	})
+	if !allocationReplaced {
+		t.Fatal("Replace 答 false")
+	}
 
 	after, _, err := allocations.FindByKey(ctx, record.Key)
 	if err != nil {
@@ -89,18 +87,20 @@ func TestACostAllocationRoundTripsAndReplaceRewritesVersionNotSource(t *testing.
 	second := record
 	second.ContentDigest = "digest-other"
 	var outcome ports.AllocationSaveOutcome
+	var allocationWinner ports.AllocationRecord
+	var allocationWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := allocations.Save(txCtx, second)
-		if err != nil {
+		var err error
+		if outcome, err = allocations.Save(txCtx, second); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := allocations.FindByKey(txCtx, record.Key)
-		if err != nil || !found || winner.ContentDigest != "digest-reallocated" {
-			t.Fatalf("同事务读回赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		allocationWinner, allocationWinnerFound, err = allocations.FindByKey(txCtx, record.Key)
+		return err
 	})
+	if !allocationWinnerFound || allocationWinner.ContentDigest != "digest-reallocated" {
+		t.Fatalf("同事务读回赢家失败：found=%v digest=%q",
+			allocationWinnerFound, allocationWinner.ContentDigest)
+	}
 	if outcome != ports.AllocationAlreadyFormed {
 		t.Fatalf("第二份写入结果 = %d", outcome)
 	}
@@ -111,16 +111,15 @@ func TestAnOperatingResultRoundTripsAndReplaceRewritesVersionNotScope(t *testing
 	ctx := t.Context()
 
 	record := derivedResultRecord(t, "tenant-a", domain.ConfirmedBasis)
+	var savedResult ports.OperatingResultSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := results.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.OperatingResultSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedResult, err = results.Save(txCtx, record)
+		return err
 	})
+	if savedResult != ports.OperatingResultSaved {
+		t.Fatalf("save outcome = %d", savedResult)
+	}
 
 	found, exists, err := results.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -146,16 +145,15 @@ func TestAnOperatingResultRoundTripsAndReplaceRewritesVersionNotScope(t *testing
 	replaced.Result = rederived
 	replaced.ContentDigest = "digest-rederived"
 	replaced.RecordedAt = derivedAsOf.Add(24 * time.Hour)
+	var resultReplaced bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := results.Replace(txCtx, replaced)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			t.Fatal("Replace 答 false")
-		}
-		return nil
+		var err error
+		resultReplaced, err = results.Replace(txCtx, replaced)
+		return err
 	})
+	if !resultReplaced {
+		t.Fatal("Replace 答 false")
+	}
 
 	after, _, err := results.FindByKey(ctx, record.Key)
 	if err != nil {
@@ -170,13 +168,15 @@ func TestAnOperatingResultRoundTripsAndReplaceRewritesVersionNotScope(t *testing
 	}
 
 	missing := derivedResultRecord(t, "tenant-a", domain.EstimatedBasis)
+	var missingReplaced bool
+	var missingErr error
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := results.Replace(txCtx, missing)
-		if err == nil && ok {
-			t.Fatal("没有可转换的快照却答 true")
-		}
+		missingReplaced, missingErr = results.Replace(txCtx, missing)
 		return nil
 	})
+	if missingErr == nil && missingReplaced {
+		t.Fatal("没有可转换的快照却答 true")
+	}
 }
 
 func TestOperatingRecordsAreInvisibleAcrossTenants(t *testing.T) {

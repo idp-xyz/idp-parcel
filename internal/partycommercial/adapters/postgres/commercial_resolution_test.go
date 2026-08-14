@@ -48,16 +48,15 @@ func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 	original := uniqueClosure(t)
 	mustSaveResolution(t, transactor, ctx, repository, original)
 
+	var replayOutcome ports.ResolutionSaveOutcome
 	mustWithinResolutionTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, original)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ResolutionAlreadyRecorded {
-			t.Fatalf("replay outcome = %s, want ALREADY_RECORDED", outcome)
-		}
-		return nil
+		var err error
+		replayOutcome, err = repository.Save(txCtx, original)
+		return err
 	})
+	if replayOutcome != ports.ResolutionAlreadyRecorded {
+		t.Fatalf("replay outcome = %s, want ALREADY_RECORDED", replayOutcome)
+	}
 
 	if _, err := pool.Exec(ctx,
 		`UPDATE party_commercial.commercial_resolution
@@ -69,16 +68,15 @@ func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 		t.Fatalf("伪造摘要：%v", err)
 	}
 
+	var conflictOutcome ports.ResolutionSaveOutcome
 	mustWithinResolutionTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, original)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ResolutionContentConflict {
-			t.Fatalf("conflict outcome = %s, want CONTENT_CONFLICT", outcome)
-		}
-		return nil
+		var err error
+		conflictOutcome, err = repository.Save(txCtx, original)
+		return err
 	})
+	if conflictOutcome != ports.ResolutionContentConflict {
+		t.Fatalf("conflict outcome = %s, want CONTENT_CONFLICT", conflictOutcome)
+	}
 }
 
 func TestResolutionTenantsAreInvisibleToEachOther(t *testing.T) {
@@ -188,16 +186,15 @@ func mustSaveResolution(
 	closure domain.CommercialClosure,
 ) {
 	t.Helper()
+	var savedOutcome ports.ResolutionSaveOutcome
 	mustWithinResolutionTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, closure)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ResolutionSaved {
-			t.Fatalf("save outcome = %s", outcome)
-		}
-		return nil
+		var err error
+		savedOutcome, err = repository.Save(txCtx, closure)
+		return err
 	})
+	if savedOutcome != ports.ResolutionSaved {
+		t.Fatalf("save outcome = %s", savedOutcome)
+	}
 }
 
 func uniqueClosure(t *testing.T) domain.CommercialClosure {

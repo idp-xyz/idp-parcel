@@ -29,16 +29,15 @@ func TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner(t *testing.T)
 	ctx := t.Context()
 
 	record := adoptedFactRecord(t, "tenant-a", "bank-fact-1", domain.FundsReceiptConfirmed, 8000)
+	var savedFact ports.FundsFactSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := facts.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.FundsFactSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		savedFact, err = facts.Save(txCtx, record)
+		return err
 	})
+	if savedFact != ports.FundsFactSaved {
+		t.Fatalf("save outcome = %d", savedFact)
+	}
 
 	found, exists, err := facts.FindByKey(ctx, record.Key)
 	if err != nil || !exists {
@@ -68,16 +67,15 @@ func TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner(t *testing.T)
 		Fact:          corrected,
 		RecordedAt:    fundsOccurredAt.Add(time.Hour),
 	}
+	var savedCorrected ports.FundsFactSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := facts.Save(txCtx, correctedRecord)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.FundsFactSaved {
-			t.Fatalf("corrected save = %d", outcome)
-		}
-		return nil
+		var err error
+		savedCorrected, err = facts.Save(txCtx, correctedRecord)
+		return err
 	})
+	if savedCorrected != ports.FundsFactSaved {
+		t.Fatalf("corrected save = %d", savedCorrected)
+	}
 	foundCorrected, exists, err := facts.FindByKey(ctx, correctedRecord.Key)
 	if err != nil || !exists {
 		t.Fatalf("更正读回失败：exists=%v err=%v", exists, err)
@@ -90,18 +88,19 @@ func TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner(t *testing.T)
 	second := record
 	second.ContentDigest = "digest-other"
 	var outcome ports.FundsFactSaveOutcome
+	var factWinner ports.FundsFactRecord
+	var factWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := facts.Save(txCtx, second)
-		if err != nil {
+		var err error
+		if outcome, err = facts.Save(txCtx, second); err != nil {
 			return err
 		}
-		outcome = saved
-		winner, found, err := facts.FindByKey(txCtx, record.Key)
-		if err != nil || !found || winner.ContentDigest != record.ContentDigest {
-			t.Fatalf("同事务读回赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		factWinner, factWinnerFound, err = facts.FindByKey(txCtx, record.Key)
+		return err
 	})
+	if !factWinnerFound || factWinner.ContentDigest != record.ContentDigest {
+		t.Fatalf("同事务读回赢家失败：found=%v digest=%q", factWinnerFound, factWinner.ContentDigest)
+	}
 	if outcome != ports.FundsFactAlreadyAdopted {
 		t.Fatalf("第二份写入结果 = %d", outcome)
 	}
@@ -115,6 +114,7 @@ func TestAMappingAndApplicationRoundTripAndReplaceOnlyWritesReversal(t *testing.
 	payable := mappingRecord(t, "tenant-a", "mapping-1", fact.Fact, domain.TargetPayable, "payable-1")
 	credit := mappingRecord(t, "tenant-a", "mapping-2", fact.Fact, domain.TargetCreditNote, "credit-note-1")
 	application := applicationRecord(t, "tenant-a", "application-1", fact.Fact, payable.Mapping, credit.Mapping)
+	var savedApplication ports.SettlementApplicationSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
 		if _, err := facts.Save(txCtx, fact); err != nil {
 			return err
@@ -125,15 +125,13 @@ func TestAMappingAndApplicationRoundTripAndReplaceOnlyWritesReversal(t *testing.
 		if _, err := mappings.Save(txCtx, credit); err != nil {
 			return err
 		}
-		outcome, err := applications.Save(txCtx, application)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.SettlementApplicationSaved {
-			t.Fatalf("application save = %d", outcome)
-		}
-		return nil
+		var err error
+		savedApplication, err = applications.Save(txCtx, application)
+		return err
 	})
+	if savedApplication != ports.SettlementApplicationSaved {
+		t.Fatalf("application save = %d", savedApplication)
+	}
 
 	foundMapping, exists, err := mappings.FindByKey(ctx, payable.Key)
 	if err != nil || !exists || foundMapping.Mapping.TargetKind() != domain.TargetPayable {
@@ -158,16 +156,15 @@ func TestAMappingAndApplicationRoundTripAndReplaceOnlyWritesReversal(t *testing.
 	replaced := found
 	replaced.Application = reversed
 	replaced.RecordedAt = fundsReversedAt
+	var reversalApplied bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := applications.Replace(txCtx, replaced)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			t.Fatal("撤销 Replace 答 false")
-		}
-		return nil
+		var err error
+		reversalApplied, err = applications.Replace(txCtx, replaced)
+		return err
 	})
+	if !reversalApplied {
+		t.Fatal("撤销 Replace 答 false")
+	}
 
 	after, _, err := applications.FindByKey(ctx, application.Key)
 	if err != nil {
@@ -180,32 +177,33 @@ func TestAMappingAndApplicationRoundTripAndReplaceOnlyWritesReversal(t *testing.
 		t.Fatal("Replace 改写了分配")
 	}
 
+	var secondReversalApplied bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		ok, err := applications.Replace(txCtx, replaced)
-		if err != nil {
-			return err
-		}
-		if ok {
-			t.Fatal("已撤销的核销又被撤了一次")
-		}
-		return nil
+		var err error
+		secondReversalApplied, err = applications.Replace(txCtx, replaced)
+		return err
 	})
+	if secondReversalApplied {
+		t.Fatal("已撤销的核销又被撤了一次")
+	}
 
 	secondMapping := payable
 	secondMapping.ContentDigest = "digest-other"
 	var mappingOutcome ports.FundsMappingSaveOutcome
+	var mappingWinner ports.FundsMappingRecord
+	var mappingWinnerFound bool
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := mappings.Save(txCtx, secondMapping)
-		if err != nil {
+		var err error
+		if mappingOutcome, err = mappings.Save(txCtx, secondMapping); err != nil {
 			return err
 		}
-		mappingOutcome = saved
-		winner, found, err := mappings.FindByKey(txCtx, payable.Key)
-		if err != nil || !found || winner.ContentDigest != payable.ContentDigest {
-			t.Fatalf("同事务读回映射赢家失败：found=%v digest=%q err=%v", found, winner.ContentDigest, err)
-		}
-		return nil
+		mappingWinner, mappingWinnerFound, err = mappings.FindByKey(txCtx, payable.Key)
+		return err
 	})
+	if !mappingWinnerFound || mappingWinner.ContentDigest != payable.ContentDigest {
+		t.Fatalf("同事务读回映射赢家失败：found=%v digest=%q",
+			mappingWinnerFound, mappingWinner.ContentDigest)
+	}
 	if mappingOutcome != ports.FundsMappingAlreadyRecorded {
 		t.Fatalf("第二份映射结果 = %d", mappingOutcome)
 	}
