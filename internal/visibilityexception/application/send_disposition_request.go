@@ -195,7 +195,7 @@ func (handler *SendDispositionRequestHandler) Handle(
 		return DispositionResult{
 			outcome:    DispositionExistingResult,
 			request:    existing,
-			handoffRef: handler.handOffRequest(ctx, existing),
+			handoffRef: handler.handOffRequest(ctx, command.TenantID, existing),
 		}, nil
 	}
 
@@ -212,7 +212,7 @@ func (handler *SendDispositionRequestHandler) Handle(
 	return DispositionResult{
 		outcome:    DispositionRequestSent,
 		request:    request,
-		handoffRef: handler.handOffRequest(ctx, request),
+		handoffRef: handler.handOffRequest(ctx, command.TenantID, request),
 	}, nil
 }
 
@@ -240,7 +240,7 @@ func (handler *SendDispositionRequestHandler) supersede(
 		return DispositionResult{
 			outcome:    DispositionExistingResult,
 			request:    successor,
-			handoffRef: handler.handOffRequest(ctx, successor),
+			handoffRef: handler.handOffRequest(ctx, command.TenantID, successor),
 		}, nil
 	}
 
@@ -260,7 +260,7 @@ func (handler *SendDispositionRequestHandler) supersede(
 	return DispositionResult{
 		outcome:    DispositionRequestSuperseded,
 		request:    successor,
-		handoffRef: handler.handOffRequest(ctx, successor),
+		handoffRef: handler.handOffRequest(ctx, command.TenantID, successor),
 	}, nil
 }
 
@@ -366,10 +366,12 @@ func (handler *SendDispositionRequestHandler) RecordCancellationAnswer(
 // 请求，也不算进未决——请求已经成立，要续办的是发送（ADR-0043）。
 func (handler *SendDispositionRequestHandler) handOffRequest(
 	ctx context.Context,
+	tenant domain.TenantID,
 	request *domain.DispositionRequest,
 ) string {
 	if err := handler.deps.Downstream.HandOffDispositionRequest(ctx, ports.DispositionHandoffIntent{
-		Request: request,
+		TenantID: tenant,
+		Request:  request,
 	}); err != nil {
 		return "CONT-" + shortDigest("DISPOSITION_HANDOFF", request.ID().String())
 	}

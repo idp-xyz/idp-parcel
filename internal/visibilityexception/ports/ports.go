@@ -330,9 +330,11 @@ type DispositionRequestIdentityFactory interface {
 }
 
 // DispositionHandoffIntent 把已成立的处置请求交给发送侧下游。真实目标上下文的受理在
-// 对方——这里只是发送意图，由请求标识认领，重放重发同一份（ADR-0043）。
+// 对方——这里只是发送意图，由请求标识认领，重放重发同一份（ADR-0043）。租户随意图到达
+// （ADR-0003）：请求对象本身没有租户维，下游按（租户+请求标识）查库。
 type DispositionHandoffIntent struct {
-	Request *domain.DispositionRequest
+	TenantID domain.TenantID
+	Request  *domain.DispositionRequest
 }
 
 // DispositionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
