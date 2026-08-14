@@ -154,6 +154,13 @@ func (fact ExternalFundsFact) Corrects() (FundsFactVersion, bool) {
 	return fact.corrects, true
 }
 
+func (fact ExternalFundsFact) CorrectedAt() (time.Time, bool) {
+	if fact.correctedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return fact.correctedAt, true
+}
+
 // CorrectAmount 依据外部更正形成新版本引用：保留原版本（值语义），新版本回指前身；
 // 差额与核销的重算随新有效版本另行进行（AT-SA-114）。
 func (fact ExternalFundsFact) CorrectAmount(
@@ -309,6 +316,17 @@ const (
 
 func (direction AllocationDirection) valid() bool {
 	return direction == AllocationDebit || direction == AllocationCredit
+}
+
+func (direction AllocationDirection) String() string {
+	switch direction {
+	case AllocationDebit:
+		return "DEBIT"
+	case AllocationCredit:
+		return "CREDIT"
+	default:
+		return ""
+	}
 }
 
 // SettlementAllocation 是核销内一条带方向的金额分配。每条分配必须指名它沿用的映射
