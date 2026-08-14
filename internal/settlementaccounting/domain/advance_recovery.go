@@ -485,3 +485,31 @@ func (adjustment RecoveryAdjustment) Period() BillingPeriodReference {
 func (adjustment RecoveryAdjustment) FormedAt() time.Time {
 	return adjustment.formedAt
 }
+
+// RehydrateRecoveryAdjustmentSpec 是回收调整行在库里的样子。原回收是否仍在场是写入
+// 时已经判过的，读回只复验行自身形状（封闭三因、新依据、正差额）。
+type RehydrateRecoveryAdjustmentSpec struct {
+	ID          RecoveryAdjustmentID
+	Recovery    AdvanceRecoveryID
+	Reason      RecoveryAdjustmentReason
+	NewBasis    AssessmentBasisReference
+	Direction   AdjustmentDirection
+	Currency    CurrencyCode
+	AmountMinor int64
+	Period      BillingPeriodReference
+	FormedAt    time.Time
+}
+
+func RehydrateRecoveryAdjustment(spec RehydrateRecoveryAdjustmentSpec) (RecoveryAdjustment, error) {
+	return FormRecoveryAdjustment(RecoveryAdjustmentSpec{
+		ID:          spec.ID,
+		Recovery:    spec.Recovery,
+		Reason:      spec.Reason,
+		NewBasis:    spec.NewBasis,
+		Direction:   spec.Direction,
+		Currency:    spec.Currency,
+		AmountMinor: spec.AmountMinor,
+		Period:      spec.Period,
+		FormedAt:    spec.FormedAt,
+	})
+}

@@ -204,6 +204,17 @@ func (direction AdjustmentDirection) valid() bool {
 	return direction == AdjustmentDebit || direction == AdjustmentCredit
 }
 
+func (direction AdjustmentDirection) String() string {
+	switch direction {
+	case AdjustmentDebit:
+		return "DEBIT"
+	case AdjustmentCredit:
+		return "CREDIT"
+	default:
+		return ""
+	}
+}
+
 // AdjustmentAuthorityReference 指名调整的证据或授权（纠错的证据、让利的有效商业
 // 授权）。
 type AdjustmentAuthorityReference struct{ requiredValue }

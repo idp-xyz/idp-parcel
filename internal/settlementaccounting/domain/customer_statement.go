@@ -343,6 +343,10 @@ const (
 	IncludedLateCharge
 )
 
+func (kind InclusionKind) valid() bool {
+	return kind == IncludedAdjustment || kind == IncludedLateCharge
+}
+
 func (kind InclusionKind) String() string {
 	switch kind {
 	case IncludedAdjustment:

@@ -102,3 +102,33 @@ func RehydrateRecoveryAcknowledgement(spec RehydrateRecoveryAcknowledgementSpec)
 		acknowledgedAt:    spec.AcknowledgedAt.UTC(),
 	}, nil
 }
+
+// RehydrateClaimAmountAdjustmentSpec 是索赔金额调整行在库里的样子。形成门要的目标
+// 金额是否仍在场是写入时已经判过的，读回只复验行自身形状。
+type RehydrateClaimAmountAdjustmentSpec struct {
+	ID          ClaimAmountAdjustmentID
+	TargetKind  AdjustedAmountKind
+	Target      AdjustedAmountReference
+	Reason      ClaimAdjustmentReason
+	Basis       ResponsibilityConclusionReference
+	Direction   AdjustmentDirection
+	Currency    CurrencyCode
+	AmountMinor int64
+	Period      BillingPeriodReference
+	FormedAt    time.Time
+}
+
+func RehydrateClaimAmountAdjustment(spec RehydrateClaimAmountAdjustmentSpec) (ClaimAmountAdjustment, error) {
+	return FormClaimAmountAdjustment(ClaimAmountAdjustmentSpec{
+		ID:          spec.ID,
+		TargetKind:  spec.TargetKind,
+		Target:      spec.Target,
+		Reason:      spec.Reason,
+		Basis:       spec.Basis,
+		Direction:   spec.Direction,
+		Currency:    spec.Currency,
+		AmountMinor: spec.AmountMinor,
+		Period:      spec.Period,
+		FormedAt:    spec.FormedAt,
+	})
+}

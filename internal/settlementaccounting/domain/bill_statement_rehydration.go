@@ -168,3 +168,95 @@ func RehydratePublishedStatement(spec RehydratePublishedStatementSpec) (Publishe
 	}
 	return statement, nil
 }
+
+// RehydrateSubsequentInclusionSpec 是纳入行在库里的样子。Include* 要一份已发布对账单
+// 和费用/调整本体才能拒回填与未确认，而行里只有纳入关系本身——那些门是写入时已经
+// 判过的。
+type RehydrateSubsequentInclusionSpec struct {
+	Inclusion        InclusionReference
+	Kind             InclusionKind
+	Statement        StatementNumber
+	OriginalPeriod   BillingPeriodReference
+	SubsequentPeriod BillingPeriodReference
+	Charge           CustomerChargeID
+	Adjustment       ChargeAdjustmentID
+	IncludedAt       time.Time
+}
+
+func RehydrateSubsequentInclusion(spec RehydrateSubsequentInclusionSpec) (SubsequentInclusion, error) {
+	if !spec.Inclusion.valid() ||
+		!spec.Kind.valid() ||
+		!spec.Statement.valid() ||
+		!spec.OriginalPeriod.valid() ||
+		!spec.SubsequentPeriod.valid() ||
+		!spec.Charge.valid() ||
+		spec.IncludedAt.IsZero() {
+		return SubsequentInclusion{}, ErrInvalidInclusion
+	}
+	if spec.SubsequentPeriod == spec.OriginalPeriod {
+		return SubsequentInclusion{}, ErrInclusionBackfillsPeriod
+	}
+	hasAdjustment := spec.Adjustment.valid()
+	if spec.Kind == IncludedAdjustment && !hasAdjustment {
+		return SubsequentInclusion{}, ErrInvalidInclusion
+	}
+	if spec.Kind == IncludedLateCharge && hasAdjustment {
+		return SubsequentInclusion{}, ErrInvalidInclusion
+	}
+	return SubsequentInclusion{
+		inclusion:        spec.Inclusion,
+		kind:             spec.Kind,
+		statement:        spec.Statement,
+		originalPeriod:   spec.OriginalPeriod,
+		subsequentPeriod: spec.SubsequentPeriod,
+		charge:           spec.Charge,
+		adjustment:       spec.Adjustment,
+		includedAt:       spec.IncludedAt.UTC(),
+	}, nil
+}
+
+// RehydrateStatementDisputeSpec 是异议行在库里的样子。Open 要一份对账单才能限费用
+// 范围，Resolve 是转换门——读回不重放开立也不重放裁定。
+type RehydrateStatementDisputeSpec struct {
+	Dispute       DisputeID
+	Statement     StatementNumber
+	Charge        CustomerChargeID
+	DisputedMinor int64
+	Reason        DisputeBasisReference
+	OpenedAt      time.Time
+	Resolution    DisputeResolutionKind
+	ResolutionRef DisputeBasisReference
+	ResolvedAt    time.Time
+}
+
+func RehydrateStatementDispute(spec RehydrateStatementDisputeSpec) (StatementDispute, error) {
+	if !spec.Dispute.valid() ||
+		!spec.Statement.valid() ||
+		!spec.Charge.valid() ||
+		!spec.Reason.valid() ||
+		spec.OpenedAt.IsZero() ||
+		spec.DisputedMinor <= 0 {
+		return StatementDispute{}, ErrInvalidDispute
+	}
+	resolved := !spec.ResolvedAt.IsZero()
+	if resolved != spec.Resolution.valid() || resolved != spec.ResolutionRef.valid() {
+		return StatementDispute{}, ErrInvalidDispute
+	}
+	if resolved && spec.ResolvedAt.Before(spec.OpenedAt) {
+		return StatementDispute{}, ErrInvalidDispute
+	}
+	dispute := StatementDispute{
+		dispute:       spec.Dispute,
+		statement:     spec.Statement,
+		charge:        spec.Charge,
+		disputedMinor: spec.DisputedMinor,
+		reason:        spec.Reason,
+		openedAt:      spec.OpenedAt.UTC(),
+	}
+	if resolved {
+		dispute.resolution = spec.Resolution
+		dispute.resolutionRef = spec.ResolutionRef
+		dispute.resolvedAt = spec.ResolvedAt.UTC()
+	}
+	return dispute, nil
+}

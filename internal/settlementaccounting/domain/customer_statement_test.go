@@ -413,3 +413,57 @@ func TestADisputeIsIndependentAndScoped(t *testing.T) {
 		}
 	})
 }
+
+func TestRehydrateDisputeDoesNotNeedTheStatement(t *testing.T) {
+	opened := publishedStatement(t)
+	formed, err := domain.OpenStatementDispute(
+		opened,
+		settlementValue(t, domain.NewCustomerChargeID, "charge-1"),
+		4000,
+		settlementValue(t, domain.NewDisputeBasisReference, "weight-mismatch"),
+		settlementValue(t, domain.NewDisputeID, "dispute-1"),
+		statementPublishedAt.Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	resolved, err := formed.Resolve(
+		domain.DisputeAccepted,
+		settlementValue(t, domain.NewDisputeBasisReference, "review-request-1"),
+		statementPublishedAt.Add(48*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+
+	restored, err := domain.RehydrateStatementDispute(domain.RehydrateStatementDisputeSpec{
+		Dispute:       resolved.Dispute(),
+		Statement:     resolved.Statement(),
+		Charge:        resolved.Charge(),
+		DisputedMinor: resolved.DisputedMinor(),
+		Reason:        resolved.Reason(),
+		OpenedAt:      resolved.OpenedAt(),
+		Resolution:    domain.DisputeAccepted,
+		ResolutionRef: settlementValue(t, domain.NewDisputeBasisReference, "review-request-1"),
+		ResolvedAt:    statementPublishedAt.Add(48 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	kind, _, _, ok := restored.Resolution()
+	if !ok || kind != domain.DisputeAccepted {
+		t.Fatal("裁定没有随重建回来")
+	}
+
+	if _, err := domain.RehydrateSubsequentInclusion(domain.RehydrateSubsequentInclusionSpec{
+		Inclusion:        settlementValue(t, domain.NewInclusionReference, "inclusion-1"),
+		Kind:             domain.IncludedLateCharge,
+		Statement:        opened.Number(),
+		OriginalPeriod:   opened.Period(),
+		SubsequentPeriod: opened.Period(),
+		Charge:           settlementValue(t, domain.NewCustomerChargeID, "charge-1"),
+		IncludedAt:       statementPublishedAt.Add(24 * time.Hour),
+	}); !errors.Is(err, domain.ErrInclusionBackfillsPeriod) {
+		t.Fatalf("error = %v; 回填原周期从重建门溜过", err)
+	}
+}
