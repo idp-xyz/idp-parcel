@@ -67,6 +67,10 @@ const decisionPartitionKeyRollout = "等地盘主人按已定口径修：第一�
 // 清单只许变短由 TestNoEnvelopeTakesItsIDAndPartitionKeyFromTheSameExpression 的后半段守着：
 // 一处修好了却留在清单里，同样报错。写这份清单时我凭记忆填了两个不违规的文件，就是被那一段
 // 当场抓出来的。
+//
+// **删例外行要与修复同笔提交，别分两笔。**这份清单归门禁作者所有，但删自己那一行的是修复的
+// 人——分两笔的话，两笔之间的 HEAD 是红的，而这一批有四个人在同一棵树上并行改，那段窗口里
+// 谁验全仓都会红。已经发生过一次：对账单那处修复与删行分了两笔，中间 HEAD 红了一轮。
 var allowedSameExpression = map[string]string{
 	"internal/customscompliance/adapters/postgres/case_closure_handoff.go":           decisionPartitionKeyRollout,
 	"internal/customscompliance/adapters/postgres/customs_case_handoff.go":           decisionPartitionKeyRollout,
