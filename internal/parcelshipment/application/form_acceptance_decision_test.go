@@ -841,12 +841,16 @@ type recordedJudgmentsDouble struct {
 	// noAdoptedResolution 表示还没有任何一轮采用过商业依据。默认相反，因为多数用例是在
 	// 判断推进过之后才形成决定的。
 	noAdoptedResolution bool
+	// loadedTenants 收下每次读取时编排给出的租户，供断言「租户确实传下去了」。
+	loadedTenants []domain.TenantID
 }
 
 func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 	_ context.Context,
+	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
 ) (ports.RecordedJudgments, error) {
+	double.loadedTenants = append(double.loadedTenants, tenant)
 	double.t.Helper()
 	if double.err != nil {
 		return ports.RecordedJudgments{}, double.err

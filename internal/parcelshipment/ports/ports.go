@@ -137,8 +137,17 @@ type RecordedJudgments struct {
 }
 
 // RecordedJudgmentReader 取回接受判断任务上已记录的判断，供形成决定那一步装配校验结果。
+//
+// 租户与委托标识两样都收，不是冗余：委托标识的唯一性本身就按租户圈定——`shipment_request`
+// 上的 `shipment_request_id_unique` 是（租户 + 委托标识）而不是单列唯一，所以两个租户各有
+// 一份同号委托不违反任何约束。只凭委托标识定不到一份委托，跨租户同号的两份就会读到彼此的
+// 判断。按 ADR-0003 租户是最高数据隔离边界，跨越它必须在签名上看得见。
 type RecordedJudgmentReader interface {
-	LoadRecordedJudgments(ctx context.Context, requestID domain.ShipmentRequestID) (RecordedJudgments, error)
+	LoadRecordedJudgments(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+	) (RecordedJudgments, error)
 }
 
 type Clock interface {
@@ -1067,14 +1076,38 @@ type AcceptanceDecisionHandoff interface {
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
 // 都留：只留成功的判断，一份卡了十轮的委托看起来会和刚建单的一模一样。
+// 四个方法都收租户，理由与 RecordedJudgmentReader 同一条：委托标识的唯一性按租户圈定。
 type AcceptanceJudgmentRecorder interface {
-	RecordReachabilityJudgment(ctx context.Context, requestID domain.ShipmentRequestID, judgment domain.ReachabilityJudgment) error
-	RecordFinancialControlResult(ctx context.Context, requestID domain.ShipmentRequestID, result domain.FinancialControlResult) error
-	RecordProcessingAttempt(ctx context.Context, requestID domain.ShipmentRequestID, attempt domain.ProcessingAttempt) error
+	RecordReachabilityJudgment(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+		judgment domain.ReachabilityJudgment,
+	) error
+	RecordFinancialControlResult(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+		result domain.FinancialControlResult,
+	) error
+	RecordProcessingAttempt(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+		attempt domain.ProcessingAttempt,
+	) error
 	// RecordAdoptedCommercialResolution 记下本轮采用的那次商业解析，供提交决定前按它重解。
 	//
 	// 它与三个判断记录方法分开：解析在任何一项判断之前就被采用，两类判断也共用同一次解析，
 	// 挂到某一个判断的记录上会让另一类判断的轮次看起来没有采用过依据。重复记录同一标识是
 	// 幂等的——一份委托的多轮判断本就该采用同一次解析。
-	RecordAdoptedCommercialResolution(ctx context.Context, requestID domain.ShipmentRequestID, resolution domain.CommercialResolutionID) error
+	//
+	// 记入不同标识时以后写的为准。决定期的提交前重解会采用新的一次解析并再记一次，若不覆盖，
+	// 下一轮读回的就是已被取代的那次，重校会对着陈旧依据做。
+	RecordAdoptedCommercialResolution(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+		resolution domain.CommercialResolutionID,
+	) error
 }

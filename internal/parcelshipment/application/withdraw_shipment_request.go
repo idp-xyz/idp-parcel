@@ -325,7 +325,8 @@ func (handler *WithdrawShipmentRequestHandler) releaseFreeze(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 ) domain.OwnershipContinuationReference {
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
+	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID)
 	if err != nil {
 		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
 	}
@@ -382,7 +383,8 @@ func (handler *WithdrawShipmentRequestHandler) undecided(
 		command.ShipmentRequestID.String(),
 		command.SubmissionVersion.String(),
 	)
-	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock, command.ShipmentRequestID, reason, continuation)
+	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock,
+		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 
 	return WithdrawShipmentRequestResult{
 		outcome:      WithdrawalUndecided,

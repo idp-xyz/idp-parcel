@@ -144,7 +144,8 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 判断先读回来，因为它带着这些判断所采用的那次解析——提交决定前该走重解还是首次解析，
 	// 由它决定。依据不再适用时也要读：先前可能已经形成过冻结（`AT-PC-026` 的提交前失效），
 	// 而拒绝要按原关联把它解除。资金不会因为解析结论变了就自己回来。
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
+	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID)
 	if err != nil {
 		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable, request.State()), nil
 	}
@@ -339,6 +340,7 @@ func (handler *FormAcceptanceDecisionHandler) resolveAdoptedAgain(
 	}
 	if err := handler.deps.Recorder.RecordAdoptedCommercialResolution(
 		ctx,
+		command.Identity.TenantID(),
 		command.ShipmentRequestID,
 		resolution.Snapshot.ResolutionID(),
 	); err != nil {
@@ -558,7 +560,8 @@ func (handler *FormAcceptanceDecisionHandler) undecided(
 		command.ShipmentRequestID.String(),
 		command.SubmissionVersion.String(),
 	)
-	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock, command.ShipmentRequestID, reason, continuation)
+	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock,
+		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 
 	return FormAcceptanceDecisionResult{
 		outcome:      AcceptanceUndecided,

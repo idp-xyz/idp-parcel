@@ -418,6 +418,7 @@ func formAdoptedBasis(
 	// 标识，提交决定前就无从按它重解，而判断正是在它的时点策略下形成的。
 	if err := recorder.RecordAdoptedCommercialResolution(
 		ctx,
+		scope.Identity.TenantID(),
 		scope.ShipmentRequestID,
 		snapshot.ResolutionID(),
 	); err != nil {
@@ -465,6 +466,7 @@ func recordAttempt(
 	ctx context.Context,
 	recorder ports.AcceptanceJudgmentRecorder,
 	clock ports.Clock,
+	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
 	reason JudgmentPendingReason,
 	continuation domain.OwnershipContinuationReference,
@@ -485,7 +487,7 @@ func recordAttempt(
 	if err != nil {
 		return
 	}
-	_ = recorder.RecordProcessingAttempt(ctx, requestID, attempt)
+	_ = recorder.RecordProcessingAttempt(ctx, tenant, requestID, attempt)
 }
 
 // judgmentContinuation 由未决原因与判断范围共同派生，因此同一范围因同一原因停滞时拿到的

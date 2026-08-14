@@ -165,7 +165,8 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 	judgment := assessment.Judgment
 	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
 	// 的依据。
-	if err := handler.recorder.RecordReachabilityJudgment(ctx, command.ShipmentRequestID, judgment); err != nil {
+	if err := handler.recorder.RecordReachabilityJudgment(
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID, judgment); err != nil {
 		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
 	}
 
@@ -194,7 +195,8 @@ func (handler *AdvanceAcceptanceJudgmentHandler) undecided(
 			command.DeclaredParcelID.String(),
 		}, scope...)...,
 	)
-	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
+	recordAttempt(ctx, handler.recorder, handler.clock,
+		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 
 	return AdvanceAcceptanceJudgmentResult{
 		outcome:      AcceptanceJudgmentUndecided,

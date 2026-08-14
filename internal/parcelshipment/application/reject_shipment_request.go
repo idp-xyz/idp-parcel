@@ -207,7 +207,8 @@ func (handler *RejectShipmentRequestHandler) releaseFreeze(
 	ctx context.Context,
 	command RejectShipmentRequestCommand,
 ) domain.OwnershipContinuationReference {
-	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(ctx, command.ShipmentRequestID)
+	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID)
 	if err != nil {
 		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
 	}
@@ -267,7 +268,8 @@ func (handler *RejectShipmentRequestHandler) undecided(
 		command.ShipmentRequestID.String(),
 		command.SubmissionVersion.String(),
 	)
-	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock, command.ShipmentRequestID, reason, continuation)
+	recordAttempt(ctx, handler.deps.Recorder, handler.deps.Clock,
+		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 
 	return RejectShipmentRequestResult{
 		outcome:      ActiveRejectionUndecided,

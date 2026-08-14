@@ -145,7 +145,8 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	control := assessment.Result
 	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
 	// 回来的资金占用。
-	if err := handler.recorder.RecordFinancialControlResult(ctx, command.ShipmentRequestID, control); err != nil {
+	if err := handler.recorder.RecordFinancialControlResult(
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID, control); err != nil {
 		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
 	}
 
@@ -172,7 +173,8 @@ func (handler *AdvanceFinancialControlJudgmentHandler) undecided(
 			command.SubmissionVersion.String(),
 		}, scope...)...,
 	)
-	recordAttempt(ctx, handler.recorder, handler.clock, command.ShipmentRequestID, reason, continuation)
+	recordAttempt(ctx, handler.recorder, handler.clock,
+		command.Identity.TenantID(), command.ShipmentRequestID, reason, continuation)
 
 	return AdvanceFinancialControlJudgmentResult{
 		outcome:      AcceptanceJudgmentUndecided,

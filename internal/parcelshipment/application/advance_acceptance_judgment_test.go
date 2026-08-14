@@ -663,15 +663,20 @@ type judgmentRequestStore struct {
 	recordedControl   []domain.FinancialControlResult
 	recordedAttempts  []domain.ProcessingAttempt
 	adoptedResolution []domain.CommercialResolutionID
+	// recordedTenants 收下每次记录时编排给出的租户。它存在是为了让「编排确实把租户传下去了」
+	// 可被断言——租户漏传在替身上不会报错，只会在真库里变成一次跨租户读写。
+	recordedTenants []domain.TenantID
 }
 
 // RecordAdoptedCommercialResolution 用自己的错误开关，不共用 err：记不下所采用的解析与
 // 记不下判断停在不同步骤，共用一个开关就分不出编排到底卡在哪一处。
 func (store *judgmentRequestStore) RecordAdoptedCommercialResolution(
 	_ context.Context,
+	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
 	resolution domain.CommercialResolutionID,
 ) error {
+	store.recordedTenants = append(store.recordedTenants, tenant)
 	if store.basisErr != nil {
 		return store.basisErr
 	}
@@ -681,17 +686,21 @@ func (store *judgmentRequestStore) RecordAdoptedCommercialResolution(
 
 func (store *judgmentRequestStore) RecordReachabilityJudgment(
 	_ context.Context,
+	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
 	_ domain.ReachabilityJudgment,
 ) error {
+	store.recordedTenants = append(store.recordedTenants, tenant)
 	return store.err
 }
 
 func (store *judgmentRequestStore) RecordFinancialControlResult(
 	_ context.Context,
+	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
 	result domain.FinancialControlResult,
 ) error {
+	store.recordedTenants = append(store.recordedTenants, tenant)
 	if store.err != nil {
 		return store.err
 	}
@@ -703,9 +712,11 @@ func (store *judgmentRequestStore) RecordFinancialControlResult(
 // 分开处理，前者失败不改写本轮的未决原因，测试要能看到这一点。
 func (store *judgmentRequestStore) RecordProcessingAttempt(
 	_ context.Context,
+	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
 	attempt domain.ProcessingAttempt,
 ) error {
+	store.recordedTenants = append(store.recordedTenants, tenant)
 	store.recordedAttempts = append(store.recordedAttempts, attempt)
 	return nil
 }
