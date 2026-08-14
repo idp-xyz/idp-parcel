@@ -189,7 +189,9 @@ type ExecutionFactHandoffIntent struct {
 	Record ExecutionFactRecord
 }
 
-// ExecutionFactHandoff 今天没有实现，唯一实现是测试替身。
+// ExecutionFactHandoff 把执行事实写入 Outbox（`OutboxExecutionFactHandoff`）。信封 ID
+// 由执行事实幂等键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type ExecutionFactHandoff interface {
 	HandOffExecutionFact(ctx context.Context, intent ExecutionFactHandoffIntent) error
 }

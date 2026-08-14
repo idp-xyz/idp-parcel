@@ -52,12 +52,13 @@ type triagePayload struct {
 	EpisodeID string `json:"episodeId"`
 }
 
-func triageEventID(parcel, kind string) string {
-	return parcel + "/" + kind
+func triageEventID(tenant, parcel, kind string) string {
+	return tenant + "/" + parcel + "/" + kind
 }
 
-// HandOffTriage 把一份意图入队。信封 ID 取对象加类型——意图由这两维认领（ADR-0043）。
-// 租户、对象、类型或结论缺席是装配缺陷，响亮报错不入队。
+// HandOffTriage 把一份意图入队。信封 ID 取租户加对象加类型——与 FindLatest 键一致
+// （ADR-0003 / ADR-0043）。缺租户维时两租户同包裹+类型会合成一份。租户、对象、类型
+// 或结论缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTriageHandoff) HandOffTriage(
 	ctx context.Context,
 	intent ports.TriageHandoffIntent,
@@ -80,7 +81,7 @@ func (handoff *OutboxTriageHandoff) HandOffTriage(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := triageEventID(intent.Parcel.String(), intent.Kind.String())
+	eventID := triageEventID(intent.TenantID.String(), intent.Parcel.String(), intent.Kind.String())
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),

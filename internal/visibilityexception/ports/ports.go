@@ -221,9 +221,10 @@ type SignalEpisodeIdentityFactory interface {
 	NextEpisodeID(ctx context.Context) (domain.EpisodeID, error)
 }
 
-// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由对象加
-// 类型认领（发作期按租户内这两维定位），重放重发同一份（ADR-0043）。租户随意图到达
-// （ADR-0003）：下游按（租户+包裹+类型）查库。
+// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由租户加
+// 对象加类型认领（与 FindLatest 键一致），重放重发同一份（ADR-0043）。租户随意图到达
+// （ADR-0003）：下游按（租户+包裹+类型）查库；信封 ID 缺租户维时两租户同包裹+类型
+// 会合成一份。
 type TriageHandoffIntent struct {
 	TenantID   domain.TenantID
 	Parcel     domain.TrackedParcelReference
@@ -231,8 +232,8 @@ type TriageHandoffIntent struct {
 	Conclusion domain.TriageConclusion
 }
 
-// TriageHandoff 把分诊结论写入 Outbox（`OutboxTriageHandoff`）。信封 ID 由对象加类型
-// 认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
+// TriageHandoff 把分诊结论写入 Outbox（`OutboxTriageHandoff`）。信封 ID 由租户加对象
+// 加类型认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type TriageHandoff interface {
 	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
 }

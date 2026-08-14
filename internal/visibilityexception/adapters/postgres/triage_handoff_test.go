@@ -19,7 +19,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证分诊结论意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺对象类型响亮报错。信封 ID 由对象加类型认领。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺对象类型响亮报错。信封 ID 由租户加对象加类型认领。入队走 EnqueueOnce。
 
 type triageHandoffClock struct{ at time.Time }
 
@@ -75,15 +75,15 @@ func triageIntent(t *testing.T, tenant, parcel, kind string) (ports.TriageHandof
 	}, record
 }
 
-func triageHandoffEventID(parcel, kind string) string {
-	return parcel + "/" + kind
+func triageHandoffEventID(tenant, parcel, kind string) string {
+	return tenant + "/" + parcel + "/" + kind
 }
 
 func TestTriageIntentCommitsAtomicallyWithTheEpisode(t *testing.T) {
 	fixture := newTriageHandoffFixture(t)
 	ctx := t.Context()
 	intent, record := triageIntent(t, "tenant-a", "parcel-1", "STALLED")
-	eventID := triageHandoffEventID("parcel-1", "STALLED")
+	eventID := triageHandoffEventID("tenant-a", "parcel-1", "STALLED")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		if err := fixture.episodes.SaveRaised(txCtx, record); err != nil {
@@ -107,7 +107,7 @@ func TestTriageIntentRollbackDropsBoth(t *testing.T) {
 	fixture := newTriageHandoffFixture(t)
 	ctx := t.Context()
 	intent, record := triageIntent(t, "tenant-a", "parcel-1", "STALLED")
-	eventID := triageHandoffEventID("parcel-1", "STALLED")
+	eventID := triageHandoffEventID("tenant-a", "parcel-1", "STALLED")
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -144,7 +144,7 @@ func TestResendingTheSameTriageIntentIsIdempotent(t *testing.T) {
 	fixture := newTriageHandoffFixture(t)
 	ctx := t.Context()
 	intent, _ := triageIntent(t, "tenant-a", "parcel-1", "STALLED")
-	eventID := triageHandoffEventID("parcel-1", "STALLED")
+	eventID := triageHandoffEventID("tenant-a", "parcel-1", "STALLED")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffTriage(txCtx, intent)
@@ -160,7 +160,7 @@ func TestResendingTheSameTriageIntentIsIdempotent(t *testing.T) {
 func TestTriageIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newTriageHandoffFixture(t)
 	intent, _ := triageIntent(t, "tenant-a", "parcel-1", "STALLED")
-	eventID := triageHandoffEventID("parcel-1", "STALLED")
+	eventID := triageHandoffEventID("tenant-a", "parcel-1", "STALLED")
 	if err := fixture.handoff.HandOffTriage(t.Context(), intent); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}
@@ -180,8 +180,31 @@ func TestAForeignTriageIntentIsLoud(t *testing.T) {
 	}); err == nil {
 		t.Fatal("缺对象类型的意图必须响亮报错")
 	}
-	if count := countTriageIntents(t, fixture.pool, "parcel-1/STALLED"); count != 0 {
+	if count := countTriageIntents(t, fixture.pool, "tenant-a/parcel-1/STALLED"); count != 0 {
 		t.Fatalf("异类意图入队了：%d 行", count)
+	}
+}
+
+// TestCrossTenantTriageIntentsDoNotShareAnEnvelope 证信封 ID 含租户维：两租户同包裹
+// 同类型各入一队。EnqueueOnce 按 (source, event_id) 去重，缺租户维会合成一份。
+func TestCrossTenantTriageIntentsDoNotShareAnEnvelope(t *testing.T) {
+	fixture := newTriageHandoffFixture(t)
+	ctx := t.Context()
+	first, _ := triageIntent(t, "tenant-a", "parcel-1", "STALLED")
+	second, _ := triageIntent(t, "tenant-b", "parcel-1", "STALLED")
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffTriage(txCtx, first)
+	})
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffTriage(txCtx, second)
+	})
+
+	if count := countTriageIntents(t, fixture.pool, triageHandoffEventID("tenant-a", "parcel-1", "STALLED")); count != 1 {
+		t.Fatalf("租户 A outbox 行数 = %d，want 1", count)
+	}
+	if count := countTriageIntents(t, fixture.pool, triageHandoffEventID("tenant-b", "parcel-1", "STALLED")); count != 1 {
+		t.Fatalf("租户 B outbox 行数 = %d，want 1", count)
 	}
 }
 

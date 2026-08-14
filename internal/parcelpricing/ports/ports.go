@@ -34,8 +34,8 @@ type EvaluationHandoffIntent struct {
 	Evaluation domain.PricingEvaluation
 }
 
-// EvaluationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// EvaluationHandoff 把评价结果写入 Outbox（`OutboxEvaluationHandoff`）。信封 ID 由
+// 评价标识认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type EvaluationHandoff interface {
 	HandOffEvaluation(ctx context.Context, intent EvaluationHandoffIntent) error
 }
