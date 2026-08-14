@@ -174,23 +174,27 @@ func TestASecondHandoverRegistrationKeepsTheFirst(t *testing.T) {
 
 	late := handedOverRecord(t, "HRV-000000000001")
 	late.ContentDigest = "digest-late"
+	var outcome ports.HandoverSaveOutcome
+	var winner ports.TransportHandoverRecord
+	var exists bool
 	mustWithinHandoverTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, late)
-		if err != nil {
+		var err error
+		if outcome, err = repository.Save(txCtx, late); err != nil {
 			return err
 		}
-		if outcome != ports.HandoverAlreadyRegistered {
-			t.Fatalf("outcome = %d, want ALREADY_REGISTERED", outcome)
-		}
-		found, exists, err := repository.FindByKey(txCtx, handoverKeyFixture(t, "tenant-1", "HRV-000000000001"))
-		if err != nil || !exists {
-			t.Fatalf("撞键后同事务读回失败：%v exists=%v", err, exists)
-		}
-		if found.ContentDigest != "digest-handed-over" {
-			t.Fatal("后到者覆盖了先到者的登记")
-		}
-		return nil
+		winner, exists, err = repository.FindByKey(txCtx, handoverKeyFixture(t, "tenant-1", "HRV-000000000001"))
+		return err
 	})
+
+	if outcome != ports.HandoverAlreadyRegistered {
+		t.Fatalf("outcome = %d, want ALREADY_REGISTERED", outcome)
+	}
+	if !exists {
+		t.Fatal("撞键后同事务读不回赢家")
+	}
+	if winner.ContentDigest != "digest-handed-over" {
+		t.Fatal("后到者覆盖了先到者的登记")
+	}
 }
 
 func TestHandoverScopesAreInvisibleToEachOther(t *testing.T) {
@@ -254,16 +258,15 @@ func mustSaveHandover(
 	record ports.TransportHandoverRecord,
 ) {
 	t.Helper()
+	var outcome ports.HandoverSaveOutcome
 	mustWithinHandoverTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.HandoverSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = repository.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.HandoverSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 func handoverValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {

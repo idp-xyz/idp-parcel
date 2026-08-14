@@ -22,18 +22,20 @@ func TestPickupResultVersionsNeverRepeat(t *testing.T) {
 
 	seen := make(map[string]struct{}, 8)
 	for range 8 {
+		var raw string
 		mustWithinVersionTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 			version, err := factory.NextPickupResultVersion(txCtx)
 			if err != nil {
 				return err
 			}
-			raw := version.String()
-			if _, duplicated := seen[raw]; duplicated {
-				t.Fatalf("揽收版本号重复：%q", raw)
-			}
-			seen[raw] = struct{}{}
+			raw = version.String()
 			return nil
 		})
+		// 断言留在闭包外，理由同 NR 侧：闭包里 t.Fatalf 会从事务回调中 Goexit。
+		if _, duplicated := seen[raw]; duplicated {
+			t.Fatalf("揽收版本号重复：%q", raw)
+		}
+		seen[raw] = struct{}{}
 	}
 	if len(seen) != 8 {
 		t.Fatalf("签出 %d 个不同的号，want 8", len(seen))

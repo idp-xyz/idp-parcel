@@ -23,18 +23,21 @@ func TestRoutePlanVersionsNeverRepeat(t *testing.T) {
 
 	seen := make(map[string]struct{}, 8)
 	for range 8 {
+		var raw string
 		mustWithinIdentityTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 			version, err := factory.NextRoutePlanVersionID(txCtx)
 			if err != nil {
 				return err
 			}
-			raw := version.String()
-			if _, duplicated := seen[raw]; duplicated {
-				t.Fatalf("计划版本号重复：%q", raw)
-			}
-			seen[raw] = struct{}{}
+			raw = version.String()
 			return nil
 		})
+		// 断言留在闭包外：闭包里 t.Fatalf 会从事务回调中 runtime.Goexit，而
+		// WithinTransaction 并不预期它的回调不返回。
+		if _, duplicated := seen[raw]; duplicated {
+			t.Fatalf("计划版本号重复：%q", raw)
+		}
+		seen[raw] = struct{}{}
 	}
 	if len(seen) != 8 {
 		t.Fatalf("签出 %d 个不同的号，want 8", len(seen))

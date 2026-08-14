@@ -56,23 +56,28 @@ func TestASecondPickupRegistrationKeepsTheFirst(t *testing.T) {
 	mustSavePickup(t, transactor, ctx, repository, pickupRecord(t, "control-1", "PRV-000000000001"))
 
 	late := pickupRecord(t, "control-late", "PRV-000000000009")
+	var outcome ports.OffsitePickupSaveOutcome
+	var winner ports.OffsitePickupRecord
+	var exists bool
 	mustWithinPickupTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, late)
-		if err != nil {
+		var err error
+		if outcome, err = repository.Save(txCtx, late); err != nil {
 			return err
 		}
-		if outcome != ports.OffsitePickupAlreadyRegistered {
-			t.Fatalf("outcome = %d, want ALREADY_REGISTERED", outcome)
-		}
-		found, exists, err := repository.FindByKey(txCtx, pickupKeyFixture(t, "tenant-1"))
-		if err != nil || !exists {
-			t.Fatalf("撞键后同事务读回失败：%v exists=%v", err, exists)
-		}
-		if found.Pickup.Control().String() != "control-1" {
-			t.Fatal("后到者覆盖了先到者的登记")
-		}
-		return nil
+		// 撞键后在同一事务里读回，正是这条代数的另一半：事务必须仍然可用。
+		winner, exists, err = repository.FindByKey(txCtx, pickupKeyFixture(t, "tenant-1"))
+		return err
 	})
+
+	if outcome != ports.OffsitePickupAlreadyRegistered {
+		t.Fatalf("outcome = %d, want ALREADY_REGISTERED", outcome)
+	}
+	if !exists {
+		t.Fatal("撞键后同事务读不回赢家")
+	}
+	if winner.Pickup.Control().String() != "control-1" {
+		t.Fatal("后到者覆盖了先到者的登记")
+	}
 }
 
 // TestControlEvidenceIsRequiredInTheDatabase 证控制依据必备入库内 CHECK：绕过领域
@@ -195,16 +200,15 @@ func mustSavePickup(
 	record ports.OffsitePickupRecord,
 ) {
 	t.Helper()
+	var outcome ports.OffsitePickupSaveOutcome
 	mustWithinPickupTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.OffsitePickupSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = repository.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.OffsitePickupSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 func pickupValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
