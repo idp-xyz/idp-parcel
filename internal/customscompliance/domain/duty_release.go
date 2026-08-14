@@ -419,6 +419,10 @@ func (gate ReleaseGateVerification) Conclusion() GateConclusion {
 	return gate.conclusion
 }
 
+func (gate ReleaseGateVerification) VerifiedAt() time.Time {
+	return gate.verifiedAt
+}
+
 // AppliesTo 报告本门禁判断是否适用于给定动作与边界——判断不能复用于其他动作或
 // 监管边界，消费方用这个读口核对而不是拿着结论到处贴。
 func (gate ReleaseGateVerification) AppliesTo(action GuardedAction, boundary CustomsProcedureReference) bool {
