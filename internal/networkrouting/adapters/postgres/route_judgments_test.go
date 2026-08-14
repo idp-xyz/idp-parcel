@@ -379,6 +379,19 @@ func TestConclusionShapeIsPinnedInTheDatabase(t *testing.T) {
 		         'SUGGESTION_ONLY', NULL, '{}', now())`); err == nil {
 		t.Fatal("一行「仅建议却没有阻塞清单」按 NULL 溜进了复核库")
 	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO network_routing.route_reassessment
+			(tenant_id, correlation_id, customer_account_id, shipment_request_id,
+			 acceptance_baseline, declared_parcel_id, service_purpose,
+			 conclusion, reviewed_plan, lapse_basis, candidate_state,
+			 reroute_state, reroute_blockers, suggestion, reassessed_at)
+		 VALUES ('tenant-1', 'trigger-13', 'customer-a', 'request-1',
+		         'baseline-v1', 'parcel-1', 'LAST_MILE_DELIVERY',
+		         'PLAN_LAPSED', 'RPV-0001', 'closure-7', 'CANDIDATES_AVAILABLE',
+		         'SUGGESTION_ONLY', '{}', '{}', now())`); err == nil {
+		t.Fatal("一行「阻塞清单是对象不是数组」按 jsonb 类型缝溜进了复核库")
+	}
 }
 
 func TestRouteWritesRefuseToRunOutsideATransaction(t *testing.T) {

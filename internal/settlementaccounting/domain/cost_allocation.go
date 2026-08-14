@@ -247,6 +247,17 @@ func (effect ComponentEffect) valid() bool {
 	return effect == IncreasesResult || effect == DecreasesResult
 }
 
+func (effect ComponentEffect) String() string {
+	switch effect {
+	case IncreasesResult:
+		return "INCREASES"
+	case DecreasesResult:
+		return "DECREASES"
+	default:
+		return ""
+	}
+}
+
 // ComponentSourceReference 指名组成项的来源金额身份（客户费用、审核应付、贷项、
 // 赔付、追偿认可、汇兑、分摊……）。
 type ComponentSourceReference struct{ requiredValue }
