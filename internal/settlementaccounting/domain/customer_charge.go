@@ -131,9 +131,18 @@ func (charge CustomerCharge) Stage() ChargeStage {
 	return charge.stage
 }
 
+func (charge CustomerCharge) FormedAt() time.Time {
+	return charge.formedAt
+}
+
 // Confirmation 只在已确认费用上给出。
 func (charge CustomerCharge) Confirmation() (ConfirmationBasisReference, bool) {
 	return charge.confirmation, charge.stage == ChargeConfirmed
+}
+
+// ConfirmedAt 只在已确认费用上给出。
+func (charge CustomerCharge) ConfirmedAt() (time.Time, bool) {
+	return charge.confirmedAt, charge.stage == ChargeConfirmed
 }
 
 // Confirm 在确认条件满足时定格费用（UC-SA-002 结果契约「费用已确认」）。确认依据

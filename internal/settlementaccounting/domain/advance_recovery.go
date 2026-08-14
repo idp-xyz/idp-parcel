@@ -188,6 +188,21 @@ func (assessment ActualAdvanceAssessment) FundsFact() (FundsFactReference, bool)
 	return assessment.fundsFact, true
 }
 
+// Party 交回付款方引用。方法名避开「pay」——结构防线把带 pay 的方法当成制造付款的入口。
+func (assessment ActualAdvanceAssessment) Party() (AdvancePayerReference, bool) {
+	if !assessment.payer.valid() {
+		return AdvancePayerReference{}, false
+	}
+	return assessment.payer, true
+}
+
+func (assessment ActualAdvanceAssessment) Responsibility() (AdvanceResponsibilityReference, bool) {
+	if !assessment.responsibility.valid() {
+		return AdvanceResponsibilityReference{}, false
+	}
+	return assessment.responsibility, true
+}
+
 // Basis 在不成立/待判断/冲突时交回依据；成立没有它。
 func (assessment ActualAdvanceAssessment) Basis() (AssessmentBasisReference, bool) {
 	if !assessment.basis.valid() {
@@ -310,6 +325,44 @@ func (recovery CustomerAdvanceRecovery) Amount() (CurrencyCode, int64) {
 
 func (recovery CustomerAdvanceRecovery) FormedAt() time.Time {
 	return recovery.formedAt
+}
+
+// RehydrateCustomerAdvanceRecoverySpec 是回收行在库里的样子。FormCustomerAdvanceRecovery
+// 要一份已成立评估才能限量，而行里只有回收本身——评估裁决与金额上限是写入时已经判过的。
+type RehydrateCustomerAdvanceRecoverySpec struct {
+	ID            AdvanceRecoveryID
+	Assessment    AdvanceAssessmentID
+	Customer      RecoveryCustomerReference
+	ContractBasis ContractResponsibilityReference
+	Account       SettlementAccountID
+	Currency      CurrencyCode
+	AmountMinor   int64
+	FormedAt      time.Time
+}
+
+// RehydrateCustomerAdvanceRecovery 验身份、合同依据、正金额与形成时刻。不重审评估
+// 是否成立、也不重审金额是否超出代垫——那是形成门的事。
+func RehydrateCustomerAdvanceRecovery(spec RehydrateCustomerAdvanceRecoverySpec) (CustomerAdvanceRecovery, error) {
+	if !spec.ID.valid() ||
+		!spec.Assessment.valid() ||
+		!spec.Customer.valid() ||
+		!spec.ContractBasis.valid() ||
+		!spec.Account.valid() ||
+		!spec.Currency.valid() ||
+		spec.AmountMinor <= 0 ||
+		spec.FormedAt.IsZero() {
+		return CustomerAdvanceRecovery{}, ErrInvalidAdvanceRecovery
+	}
+	return CustomerAdvanceRecovery{
+		id:            spec.ID,
+		assessment:    spec.Assessment,
+		customer:      spec.Customer,
+		contractBasis: spec.ContractBasis,
+		account:       spec.Account,
+		currency:      spec.Currency,
+		amountMinor:   spec.AmountMinor,
+		formedAt:      spec.FormedAt.UTC(),
+	}, nil
 }
 
 // RecoveryAdjustmentReason 是回收调整的封闭三因：税费更正、资金事实更正/撤销、客户
