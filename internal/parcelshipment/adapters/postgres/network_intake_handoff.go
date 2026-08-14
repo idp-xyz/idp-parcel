@@ -85,14 +85,16 @@ func (handoff *OutboxNetworkIntakeHandoff) HandOffNetworkIntake(
 	now := handoff.clock.Now().UTC()
 	eventID := networkIntakeEventID(key)
 	envelope := eventing.Envelope{
-		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
-		Source:       eventSource,
-		Type:         networkIntakeEventType,
-		Version:      1,
-		Scope:        key.TenantID.String(),
-		Subject:      key.Parcel.String(),
-		PartitionKey: eventID,
+		SpecVersion: eventing.SpecVersion,
+		ID:          eventing.EventID(eventID),
+		Source:      eventSource,
+		Type:        networkIntakeEventType,
+		Version:     1,
+		Scope:       key.TenantID.String(),
+		Subject:     key.Parcel.String(),
+		// 分区按租户加包裹排队，理由同终局那一口：ID 含来源结果版本因而更正不丢，而同一
+		// 包裹的先后采认必须在一条队里。
+		PartitionKey: key.TenantID.String() + "/" + key.Parcel.String(),
 		OccurredAt:   intent.Record.AdoptedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

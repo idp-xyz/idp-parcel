@@ -78,14 +78,17 @@ func (handoff *OutboxParcelCancellationHandoff) HandOffParcelCancellation(
 	now := handoff.clock.Now().UTC()
 	eventID := parcelCancellationEventID(key)
 	envelope := eventing.Envelope{
-		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
-		Source:       eventSource,
-		Type:         parcelCancellationEventType,
-		Version:      1,
-		Scope:        key.TenantID.String(),
-		Subject:      key.Parcel.String(),
-		PartitionKey: eventID,
+		SpecVersion: eventing.SpecVersion,
+		ID:          eventing.EventID(eventID),
+		Source:      eventSource,
+		Type:        parcelCancellationEventType,
+		Version:     1,
+		Scope:       key.TenantID.String(),
+		Subject:     key.Parcel.String(),
+		// 分区按租户加包裹排队。本口今天没有更正入口（同请求身份返回原结果），所以跟着
+		// ID 走眼下无害；改它是因为无害只是当下的事实——同一包裹的第二次取消请求一旦出现，
+		// 两条就会各自成区而失去先后。
+		PartitionKey: key.TenantID.String() + "/" + key.Parcel.String(),
 		OccurredAt:   intent.Record.DecidedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

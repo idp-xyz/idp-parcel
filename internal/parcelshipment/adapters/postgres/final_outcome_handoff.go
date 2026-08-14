@@ -79,14 +79,17 @@ func (handoff *OutboxFinalOutcomeHandoff) HandOffFinalOutcome(
 	now := handoff.clock.Now().UTC()
 	eventID := finalOutcomeEventID(key)
 	envelope := eventing.Envelope{
-		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
-		Source:       eventSource,
-		Type:         finalOutcomeEventType,
-		Version:      1,
-		Scope:        key.TenantID.String(),
-		Subject:      key.Parcel.String(),
-		PartitionKey: eventID,
+		SpecVersion: eventing.SpecVersion,
+		ID:          eventing.EventID(eventID),
+		Source:      eventSource,
+		Type:        finalOutcomeEventType,
+		Version:     1,
+		Scope:       key.TenantID.String(),
+		Subject:     key.Parcel.String(),
+		// 分区按租户加包裹排队，不跟着信封 ID 走：ID 含版本（重派生翻旧插新各占一个 ID，
+		// 因而不丢），而顺序要的是同一包裹的先后拍在一条队里——两者跟同一个字符串时，
+		// 重派生会落进另一个分区，先于原终局送达时下游最后应用的是已被取代的那一份。
+		PartitionKey: key.TenantID.String() + "/" + key.Parcel.String(),
 		OccurredAt:   intent.Record.AdoptedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
