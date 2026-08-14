@@ -287,3 +287,48 @@ func TestAdjustmentsAppendWithoutRewritingAmounts(t *testing.T) {
 		}
 	})
 }
+
+func TestRehydrateAcknowledgementDoesNotNeedTheReceivable(t *testing.T) {
+	receivable := formedReceivable(t, 10000)
+	formed, err := domain.AcknowledgeRecovery(
+		receivable,
+		settlementValue(t, domain.NewAcknowledgementID, "acknowledgement-1"),
+		settlementValue(t, domain.NewCounterpartyResponseReference, "response/v1"),
+		domain.ResponsePartiallyAccepted,
+		6000,
+		claimFormedAt.Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("acknowledge: %v", err)
+	}
+
+	restored, err := domain.RehydrateRecoveryAcknowledgement(domain.RehydrateRecoveryAcknowledgementSpec{
+		ID:                formed.ID(),
+		Receivable:        formed.Receivable(),
+		Response:          formed.Response(),
+		Standing:          formed.Standing(),
+		Currency:          settlementValue(t, domain.NewCurrencyCode, "USD"),
+		AcknowledgedMinor: 6000,
+		ReceivableMinor:   10000,
+		AcknowledgedAt:    formed.AcknowledgedAt(),
+	})
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	if restored.UnacknowledgedMinor() != 4000 {
+		t.Fatalf("unacknowledged = %d", restored.UnacknowledgedMinor())
+	}
+
+	if _, err := domain.RehydrateRecoveryAcknowledgement(domain.RehydrateRecoveryAcknowledgementSpec{
+		ID:                formed.ID(),
+		Receivable:        formed.Receivable(),
+		Response:          formed.Response(),
+		Standing:          domain.ResponseAccepted,
+		Currency:          settlementValue(t, domain.NewCurrencyCode, "USD"),
+		AcknowledgedMinor: 6000,
+		ReceivableMinor:   10000,
+		AcknowledgedAt:    formed.AcknowledgedAt(),
+	}); !errors.Is(err, domain.ErrInvalidAcknowledgement) {
+		t.Fatalf("error = %v; 全部接受却不等额从重建门溜过", err)
+	}
+}

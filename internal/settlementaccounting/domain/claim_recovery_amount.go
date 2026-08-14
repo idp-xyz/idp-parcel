@@ -279,6 +279,14 @@ func (receivable RecoveryReceivable) Counterparty() RecoveryCounterpartyReferenc
 	return receivable.counterparty
 }
 
+func (receivable RecoveryReceivable) RuleVersion() AmountRuleVersionReference {
+	return receivable.ruleVersion
+}
+
+func (receivable RecoveryReceivable) LegalEntity() LegalEntityReference {
+	return receivable.legalEntity
+}
+
 func (receivable RecoveryReceivable) Amount() (CurrencyCode, int64) {
 	return receivable.currency, receivable.amountMinor
 }
