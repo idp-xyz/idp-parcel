@@ -92,6 +92,22 @@ func TestChargeConfirmationFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 }
 
+// partitionKeyOf 取一份已入队信封的分区键。它与 countSAIntents 分开：一个问「发出去
+// 了几份」，一个问「它们排在哪条队里」，而本仓那一类缺陷恰恰是两者只对了一样。
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey)
+	if err != nil {
+		t.Fatalf("取分区键：%v", err)
+	}
+	return partitionKey
+}
+
 func countSAIntents(t *testing.T, pool *pgxpool.Pool, eventID string) int {
 	t.Helper()
 
