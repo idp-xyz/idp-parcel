@@ -16,11 +16,13 @@ const parcelShipmentDomain = modulePath + "/internal/parcelshipment/domain"
 // rehydrationEntryIdentifiers 是 [ADR-0028](../../docs/adr/0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)
 // 所定重建面上**受限**的那一半：它是本包唯一一处「相信输入」的地方，只对持久化适配器开放。
 var rehydrationEntryIdentifiers = map[string]bool{
-	"RehydrateShipmentRequest":       true,
-	"RehydrateShipmentRequestSpec":   true,
-	"RehydrateSubmissionVersionSpec": true,
-	"RehydrateAcceptanceTaskSpec":    true,
-	"RehydratePriorRequestLinkSpec":  true,
+	"RehydrateShipmentRequest":        true,
+	"RehydrateShipmentRequestSpec":    true,
+	"RehydrateSubmissionVersionSpec":  true,
+	"RehydrateAcceptanceTaskSpec":     true,
+	"RehydratePriorRequestLinkSpec":   true,
+	"RehydrateParcelFinalOutcome":     true,
+	"RehydrateParcelFinalOutcomeSpec": true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。
