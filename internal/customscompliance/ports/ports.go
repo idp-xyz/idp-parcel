@@ -418,14 +418,15 @@ type CaseIdentityFactory interface {
 	MintCaseID(ctx context.Context) (domain.CustomsCaseID, error)
 }
 
-// CustomsCaseHandoffIntent 把案件建立交给适用下游（申报链与 VE 案件视图消费）。
+// CustomsCaseHandoffIntent 把案件建立交给适用下游（申报链与 VE 案件视图消费）。意图
+// 由案件键认领，重放重发同一份（ADR-0043）。
 type CustomsCaseHandoffIntent struct {
 	Key  CustomsCaseKey
 	Case domain.CustomsCase
 }
 
-// CustomsCaseHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// CustomsCaseHandoff 把案件建立写入 Outbox（`OutboxCustomsCaseHandoff`）。信封 ID 由
+// 案件键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type CustomsCaseHandoff interface {
 	HandOffCase(ctx context.Context, intent CustomsCaseHandoffIntent) error
 }

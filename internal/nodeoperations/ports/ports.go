@@ -103,8 +103,9 @@ type NodeIntakeHandoffIntent struct {
 	Record ReceptionRecord
 }
 
-// NodeIntakeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// NodeIntakeHandoff 把已提交的收寄判断写入 Outbox（`OutboxNodeIntakeHandoff`）。信封
+// ID 由收寄幂等键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type NodeIntakeHandoff interface {
 	HandOffNodeIntake(ctx context.Context, intent NodeIntakeHandoffIntent) error
 }
