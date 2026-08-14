@@ -80,13 +80,13 @@ func (double *dispositionStoreDouble) Save(
 	_ context.Context,
 	_ domain.TenantID,
 	request *domain.DispositionRequest,
-) error {
+) (ports.DispositionSaveOutcome, error) {
 	if double.saveErr != nil {
-		return double.saveErr
+		return ports.DispositionSaveOutcomeInvalid, double.saveErr
 	}
 	double.byID[request.ID()] = request
 	double.saves++
-	return nil
+	return ports.DispositionSaved, nil
 }
 
 func (double *dispositionStoreDouble) SaveSupersession(

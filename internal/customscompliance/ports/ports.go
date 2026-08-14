@@ -171,8 +171,9 @@ type CaseClosureHandoffIntent struct {
 	Closure  *domain.CustomsCaseClosure
 }
 
-// CaseClosureHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// CaseClosureHandoff 把关闭决定写入 Outbox（`OutboxCaseClosureHandoff`）。信封 ID
+// 由租户加案件引用认领（案件引用跨租户不唯一），入队由 outboxintent.EnqueueOnce
+// 承担；重放重发同一份（ADR-0043）。
 type CaseClosureHandoff interface {
 	HandOffClosure(ctx context.Context, intent CaseClosureHandoffIntent) error
 }

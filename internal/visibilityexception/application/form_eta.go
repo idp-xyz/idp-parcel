@@ -178,7 +178,7 @@ func (handler *FormETAHandler) FormETA(
 			outcome:    ETAExistingResult,
 			eta:        current,
 			hasETA:     true,
-			handoffRef: handler.handOffETA(ctx, current),
+			handoffRef: handler.handOffETA(ctx, command.TenantID, current),
 		}, nil
 	}
 
@@ -218,7 +218,7 @@ func (handler *FormETAHandler) FormETA(
 		outcome:    outcome,
 		eta:        prediction,
 		hasETA:     true,
-		handoffRef: handler.handOffETA(ctx, prediction),
+		handoffRef: handler.handOffETA(ctx, command.TenantID, prediction),
 	}, nil
 }
 
@@ -277,8 +277,11 @@ func (handler *FormETAHandler) FormVisibilityGap(
 }
 
 // handOffETA 把新预测版本交给客户视图链，交不出去时交回发布续办引用（ADR-0043）。
-func (handler *FormETAHandler) handOffETA(ctx context.Context, eta domain.ETAPrediction) string {
-	if err := handler.deps.ViewChain.HandOffETA(ctx, ports.ETAHandoffIntent{Prediction: eta}); err != nil {
+func (handler *FormETAHandler) handOffETA(ctx context.Context, tenant domain.TenantID, eta domain.ETAPrediction) string {
+	if err := handler.deps.ViewChain.HandOffETA(ctx, ports.ETAHandoffIntent{
+		TenantID:   tenant,
+		Prediction: eta,
+	}); err != nil {
 		return "CONT-" + shortDigest("ETA_HANDOFF", eta.Version().String())
 	}
 	return ""

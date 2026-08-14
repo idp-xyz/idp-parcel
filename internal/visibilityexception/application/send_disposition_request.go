@@ -206,14 +206,31 @@ func (handler *SendDispositionRequestHandler) Handle(
 	if request == nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionIdentityUnavailable}, nil
 	}
-	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
+	saved, err := handler.deps.Requests.Save(ctx, command.TenantID, request)
+	if err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
-	return DispositionResult{
-		outcome:    DispositionRequestSent,
-		request:    request,
-		handoffRef: handler.handOffRequest(ctx, command.TenantID, request),
-	}, nil
+	switch saved {
+	case ports.DispositionSaved:
+		return DispositionResult{
+			outcome:    DispositionRequestSent,
+			request:    request,
+			handoffRef: handler.handOffRequest(ctx, command.TenantID, request),
+		}, nil
+	case ports.DispositionAlreadyRecorded:
+		existing, found, err := handler.deps.Requests.FindCurrent(
+			ctx, command.TenantID, command.Case, command.Action, command.Scope)
+		if err != nil || !found {
+			return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
+		}
+		return DispositionResult{
+			outcome:    DispositionExistingResult,
+			request:    existing,
+			handoffRef: handler.handOffRequest(ctx, command.TenantID, existing),
+		}, nil
+	default:
+		return DispositionResult{}, fmt.Errorf("send disposition request: unexpected save outcome %d", saved)
+	}
 }
 
 // supersede 以新请求替代既有请求的未来意图。被替代者已有判断原样保留——替代不是删除，
@@ -322,7 +339,7 @@ func (handler *SendDispositionRequestHandler) RecordSourceJudgment(
 			return DispositionResult{}, fmt.Errorf("record source judgment: %w", err)
 		}
 	}
-	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
+	if _, err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{outcome: SourceJudgmentRecorded, request: request}, nil
@@ -356,7 +373,7 @@ func (handler *SendDispositionRequestHandler) RecordCancellationAnswer(
 			return DispositionResult{}, fmt.Errorf("record cancellation answer: %w", err)
 		}
 	}
-	if err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
+	if _, err := handler.deps.Requests.Save(ctx, command.TenantID, request); err != nil {
 		return DispositionResult{outcome: DispositionUndecided, reason: DispositionStoreUnavailable}, nil
 	}
 	return DispositionResult{outcome: CancellationAnswerRecorded, request: request}, nil

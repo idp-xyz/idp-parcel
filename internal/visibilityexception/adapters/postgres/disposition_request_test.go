@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证处置请求库的行为：交互历史（判断/答复/替代指向）
@@ -82,7 +83,8 @@ func sentRequest(t *testing.T, id string, intentVersion int) *domain.Disposition
 func (fixture *dispositionFixture) save(t *testing.T, ctx context.Context, tenant string, request *domain.DispositionRequest) {
 	t.Helper()
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.requests.Save(txCtx, dispositionValue(t, domain.NewTenantID, tenant), request)
+		_, err := fixture.requests.Save(txCtx, dispositionValue(t, domain.NewTenantID, tenant), request)
+		return err
 	})
 }
 
@@ -244,13 +246,47 @@ func TestRequestsOfAnotherTenantAreInvisible(t *testing.T) {
 	fixture.save(t, ctx, "tenant-b", sentRequest(t, "request-1", 1))
 }
 
+// TestSecondCurrentSaveInTheSameTransactionKeepsTheTxUsable 证并发两份不同
+// request_id、同一（案件+动作+范围）当前行：第二份 ON CONFLICT DO NOTHING 译已有记录，
+// 事务仍可用来读回赢家——不能捕 23505 把事务打进中止态。
+func TestSecondCurrentSaveInTheSameTransactionKeepsTheTxUsable(t *testing.T) {
+	fixture := newDispositionRequests(t)
+	ctx := t.Context()
+	tenant := dispositionValue(t, domain.NewTenantID, "tenant-a")
+	first := sentRequest(t, "request-1", 1)
+	second := sentRequest(t, "request-2", 1)
+
+	var secondOutcome ports.DispositionSaveOutcome
+	var winner *domain.DispositionRequest
+	var found bool
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if _, err := fixture.requests.Save(txCtx, tenant, first); err != nil {
+			return err
+		}
+		saved, err := fixture.requests.Save(txCtx, tenant, second)
+		if err != nil {
+			return err
+		}
+		secondOutcome = saved
+		winner, found, err = fixture.requests.FindCurrent(txCtx, tenant, first.Case(), first.Action(), first.Scope())
+		return err
+	})
+
+	if secondOutcome != ports.DispositionAlreadyRecorded {
+		t.Fatalf("第二份当前行 outcome = %d，应为 ALREADY_RECORDED", secondOutcome)
+	}
+	if !found || winner.ID() != first.ID() {
+		t.Fatalf("同事务读回赢家失败：found=%v id=%s", found, winner.ID())
+	}
+}
+
 // TestDispositionWritesRequireTransaction 证事务纪律：无事务写一律拒。
 func TestDispositionWritesRequireTransaction(t *testing.T) {
 	fixture := newDispositionRequests(t)
 	ctx := t.Context()
 
 	tenant := dispositionValue(t, domain.NewTenantID, "tenant-a")
-	if err := fixture.requests.Save(ctx, tenant, sentRequest(t, "request-1", 1)); err == nil {
+	if _, err := fixture.requests.Save(ctx, tenant, sentRequest(t, "request-1", 1)); err == nil {
 		t.Fatalf("无事务 Save 被接受了")
 	}
 	prior := sentRequest(t, "request-1", 1)

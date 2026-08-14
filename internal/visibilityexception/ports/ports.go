@@ -299,12 +299,22 @@ type ActiveCaseView interface {
 	CaseActive(ctx context.Context, caseID domain.CaseID) (active bool, found bool, err error)
 }
 
+type DispositionSaveOutcome uint8
+
+const (
+	DispositionSaveOutcomeInvalid DispositionSaveOutcome = iota
+	DispositionSaved
+	DispositionAlreadyRecorded
+)
+
 // DispositionRequestStore 按稳定身份与幂等键找回并保存处置请求。租户是最高数据隔离
 // 边界（ADR-0003），跨越它必须在签名上看得见。
 //
 // FindCurrent 按（案件+动作+范围）交回当前那份——未被替代的请求；同键重复到达据它
-// 短路，不重发。SaveSupersession 把被替代者与后继同一提交：只落一半，替代关系与新
-// 意图会各说各话。
+// 短路，不重发。Save 的写入代数同 ADR-0031：首发撞部分唯一索引交回 AlreadyRecorded
+// （事务保持可用，编排读回赢家）；判断/取消回填走主键 UPSERT，两条冲突路径不压成
+// 一个 ON CONFLICT。SaveSupersession 把被替代者与后继同一提交：只落一半，替代关系
+// 与新意图会各说各话。
 type DispositionRequestStore interface {
 	FindByID(
 		ctx context.Context,
@@ -318,7 +328,7 @@ type DispositionRequestStore interface {
 		action domain.RequestedActionReference,
 		scope domain.RequestScopeReference,
 	) (*domain.DispositionRequest, bool, error)
-	Save(ctx context.Context, tenant domain.TenantID, request *domain.DispositionRequest) error
+	Save(ctx context.Context, tenant domain.TenantID, request *domain.DispositionRequest) (DispositionSaveOutcome, error)
 	SaveSupersession(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -364,13 +374,15 @@ type ETAIdentityFactory interface {
 }
 
 // ETAHandoffIntent 把新预测版本交给适用下游（客户视图链的重派生输入——「ETA 新版本
-// ……必须重新派生客户视图」）。意图由预测版本认领，重放重发同一份（ADR-0043）。
+// ……必须重新派生客户视图」）。意图由预测版本认领，重放重发同一份（ADR-0043）。租户
+// 随意图到达（ADR-0003）：预测对象没有租户维，下游按（租户+包裹+里程碑）查库。
 type ETAHandoffIntent struct {
+	TenantID   domain.TenantID
 	Prediction domain.ETAPrediction
 }
 
-// ETAHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// ETAHandoff 把预测版本写入 Outbox（`OutboxETAHandoff`）。信封 ID 由预测版本认领，
+// 入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type ETAHandoff interface {
 	HandOffETA(ctx context.Context, intent ETAHandoffIntent) error
 }

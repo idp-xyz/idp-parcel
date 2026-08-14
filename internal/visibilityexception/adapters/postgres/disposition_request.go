@@ -10,6 +10,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // DispositionRequests 实现 ports.DispositionRequestStore。「（案件+动作+范围）当前
@@ -137,21 +138,41 @@ func (repository *DispositionRequests) findWhere(
 	return request, true, nil
 }
 
-// Save 落请求的当前交互历史（首发、判断回填与取消答复都经同一入口）。同键整行
-// UPSERT——交互形状由迁移 CHECK 与领域重建口两头把门。
+// Save 落请求的当前交互历史。首发走部分唯一索引的 ON CONFLICT DO NOTHING：并发第二
+// 份不同 request_id、同一（案件+动作+范围）当前行交回 AlreadyRecorded，事务保持可用。
+// 判断/取消回填按主键 UPSERT——两条冲突路径不压成一个 ON CONFLICT。
 func (repository *DispositionRequests) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
 	request *domain.DispositionRequest,
-) error {
+) (ports.DispositionSaveOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("save disposition request: %w", err)
+		return ports.DispositionSaveOutcomeInvalid, fmt.Errorf("save disposition request: %w", err)
 	}
 	if request == nil {
-		return fmt.Errorf("save disposition request: request is nil")
+		return ports.DispositionSaveOutcomeInvalid, fmt.Errorf("save disposition request: request is nil")
 	}
-	return repository.upsert(ctx, executor, tenant, request)
+
+	_, found, err := repository.FindByID(ctx, tenant, request.ID())
+	if err != nil {
+		return ports.DispositionSaveOutcomeInvalid, err
+	}
+	if found {
+		if err := repository.upsertByPrimaryKey(ctx, executor, tenant, request); err != nil {
+			return ports.DispositionSaveOutcomeInvalid, err
+		}
+		return ports.DispositionSaved, nil
+	}
+
+	tag, err := repository.insertCurrent(ctx, executor, tenant, request)
+	if err != nil {
+		return ports.DispositionSaveOutcomeInvalid, err
+	}
+	if tag == 0 {
+		return ports.DispositionAlreadyRecorded, nil
+	}
+	return ports.DispositionSaved, nil
 }
 
 // SaveSupersession 把被替代者与后继同一事务写入。先更旧行：被替代者让出部分唯一
@@ -173,21 +194,61 @@ func (repository *DispositionRequests) SaveSupersession(
 		return fmt.Errorf("save disposition supersession: the prior does not point at the successor")
 	}
 
-	if err := repository.upsert(ctx, executor, tenant, prior); err != nil {
+	if err := repository.upsertByPrimaryKey(ctx, executor, tenant, prior); err != nil {
 		return fmt.Errorf("save disposition supersession: prior: %w", err)
 	}
-	if err := repository.upsert(ctx, executor, tenant, successor); err != nil {
+	if _, err := repository.insertCurrent(ctx, executor, tenant, successor); err != nil {
 		return fmt.Errorf("save disposition supersession: successor: %w", err)
 	}
 	return nil
 }
 
-func (repository *DispositionRequests) upsert(
+func (repository *DispositionRequests) upsertByPrimaryKey(
 	ctx context.Context,
 	executor bentopg.Executor,
 	tenant domain.TenantID,
 	request *domain.DispositionRequest,
 ) error {
+	_, err := executor.Exec(ctx,
+		dispositionInsertSQL+`
+		 ON CONFLICT (tenant_id, request_id) DO UPDATE SET
+			judgment = EXCLUDED.judgment,
+			judged_at = EXCLUDED.judged_at,
+			cancellation = EXCLUDED.cancellation,
+			superseded_by = EXCLUDED.superseded_by`,
+		dispositionArgs(tenant, request)...,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert disposition request: %w", err)
+	}
+	return nil
+}
+
+func (repository *DispositionRequests) insertCurrent(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant domain.TenantID,
+	request *domain.DispositionRequest,
+) (int64, error) {
+	tag, err := executor.Exec(ctx,
+		dispositionInsertSQL+`
+		 ON CONFLICT (tenant_id, case_id, action_ref, scope_ref)
+		 WHERE superseded_by IS NULL DO NOTHING`,
+		dispositionArgs(tenant, request)...,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert disposition request: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+const dispositionInsertSQL = `INSERT INTO visibility_exception.disposition_request
+			(tenant_id, request_id, case_id, target_context, action_ref, scope_ref,
+			 reason, evidence_ref, intent_version, sent_at, acceptance_window,
+			 judgment, judged_at, cancellation, superseded_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`
+
+func dispositionArgs(tenant domain.TenantID, request *domain.DispositionRequest) []any {
 	snapshot := request.Snapshot()
 
 	var judgment, cancellation, supersededBy *string
@@ -201,18 +262,7 @@ func (repository *DispositionRequests) upsert(
 		value := snapshot.SupersededBy.String()
 		supersededBy = &value
 	}
-
-	_, err := executor.Exec(ctx,
-		`INSERT INTO visibility_exception.disposition_request
-			(tenant_id, request_id, case_id, target_context, action_ref, scope_ref,
-			 reason, evidence_ref, intent_version, sent_at, acceptance_window,
-			 judgment, judged_at, cancellation, superseded_by)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-		 ON CONFLICT (tenant_id, request_id) DO UPDATE SET
-			judgment = EXCLUDED.judgment,
-			judged_at = EXCLUDED.judged_at,
-			cancellation = EXCLUDED.cancellation,
-			superseded_by = EXCLUDED.superseded_by`,
+	return []any{
 		tenant.String(),
 		snapshot.ID.String(),
 		snapshot.Case.String(),
@@ -228,11 +278,7 @@ func (repository *DispositionRequests) upsert(
 		nullIfZeroTime(snapshot.JudgedAt),
 		cancellation,
 		supersededBy,
-	)
-	if err != nil {
-		return fmt.Errorf("upsert disposition request: %w", err)
 	}
-	return nil
 }
 
 func sourceJudgmentFrom(value string) (domain.SourceJudgment, error) {

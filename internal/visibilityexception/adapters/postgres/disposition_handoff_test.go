@@ -84,7 +84,7 @@ func TestDispositionIntentCommitsAtomicallyWithTheRequest(t *testing.T) {
 	intent := dispositionIntent(t, "tenant-a", "request-1")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
+		if _, err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffDispositionRequest(txCtx, intent)
@@ -109,7 +109,7 @@ func TestDispositionIntentRollbackDropsBoth(t *testing.T) {
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		if err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
+		if _, err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
 			return err
 		}
 		if err := fixture.handoff.HandOffDispositionRequest(txCtx, intent); err != nil {
@@ -128,7 +128,7 @@ func TestDispositionIntentRollbackDropsBoth(t *testing.T) {
 	}
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
+		if _, err := fixture.requests.Save(txCtx, tenant, intent.Request); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffDispositionRequest(txCtx, intent)
