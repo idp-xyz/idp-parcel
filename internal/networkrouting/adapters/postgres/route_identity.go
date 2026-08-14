@@ -12,7 +12,8 @@ import (
 
 // routePlanVersionPrefix 让签发出来的标识一眼看得出是什么东西的版本号。它只是前缀，
 // 不承载语义——版本号不得可解析出租户、包裹或时点，那些维度已经在判断键上。
-const routePlanVersionPrefix = "RPV-"
+// 分隔符归拼接处所有，因此这里不带横线（与四家 adapters/identity 同一条裁定）。
+const routePlanVersionPrefix = "RPV"
 
 // RouteIdentities 实现 ports.RouteIdentityFactory：用 network_routing 自己的序列签发
 // 计划版本标识。序列而不是取自调用方，正是端口那句「交接关联不得变成计划版本号」的
@@ -53,5 +54,5 @@ func (factory *RouteIdentities) NextRoutePlanVersionID(
 	}
 
 	// 零填充到 12 位只为可读与可排序；序列超过 12 位时 %012d 自然变长，不截断。
-	return domain.NewRoutePlanVersionID(fmt.Sprintf("%s%012d", routePlanVersionPrefix, sequence))
+	return domain.NewRoutePlanVersionID(fmt.Sprintf("%s-%012d", routePlanVersionPrefix, sequence))
 }

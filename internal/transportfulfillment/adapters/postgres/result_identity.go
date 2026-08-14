@@ -11,10 +11,11 @@ import (
 )
 
 // 版本号的前缀只为可读，不承载语义：版本不得可解析出租户、对象或尝试——那些维度已经
-// 在登记键上，写进号里就成了第二处定义。
+// 在登记键上，写进号里就成了第二处定义。分隔符归拼接处所有，因此这里不带横线（与四家
+// adapters/identity 同一条裁定）。
 const (
-	pickupResultVersionPrefix   = "PRV-"
-	deliveryResultVersionPrefix = "DRV-"
+	pickupResultVersionPrefix   = "PRV"
+	deliveryResultVersionPrefix = "DRV"
 )
 
 // ResultVersions 实现 ports.PickupIdentityFactory 与 ports.DeliveryIdentityFactory：
@@ -47,7 +48,7 @@ func (factory *ResultVersions) NextPickupResultVersion(
 	if err != nil {
 		return domain.PickupResultVersion{}, fmt.Errorf("next pickup result version: %w", err)
 	}
-	return domain.NewPickupResultVersion(fmt.Sprintf("%s%012d", pickupResultVersionPrefix, sequence))
+	return domain.NewPickupResultVersion(fmt.Sprintf("%s-%012d", pickupResultVersionPrefix, sequence))
 }
 
 // NextDeliveryResultVersion 为首登与 POD 更正各签一个新版本。更正版回指前版、原版本
@@ -59,7 +60,7 @@ func (factory *ResultVersions) NextDeliveryResultVersion(
 	if err != nil {
 		return domain.DeliveryResultVersion{}, fmt.Errorf("next delivery result version: %w", err)
 	}
-	return domain.NewDeliveryResultVersion(fmt.Sprintf("%s%012d", deliveryResultVersionPrefix, sequence))
+	return domain.NewDeliveryResultVersion(fmt.Sprintf("%s-%012d", deliveryResultVersionPrefix, sequence))
 }
 
 // next 推进一条序列。序列名是包内常量拼进 SQL 而不是参数：nextval 的参数是 regclass，
