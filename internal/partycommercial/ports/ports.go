@@ -91,6 +91,34 @@ type CommercialResolutionStore interface {
 		tenant domain.TenantID,
 		resolution domain.ResolutionID,
 	) (domain.CommercialClosure, bool, error)
+	// Save 固定一次解析（ADR-0027 / UC-PC-002 步骤 5）。同标识同内容是重放，同标识
+	// 异内容是冲突——两者都不是 error，且绝不覆盖（ADR-0031）。
+	Save(ctx context.Context, closure domain.CommercialClosure) (ResolutionSaveOutcome, error)
+}
+
+// ResolutionSaveOutcome 是一次解析固定在持久化面的落点封闭代数（ADR-0031）：
+// `已记录`是重放（同标识同内容），`内容冲突`是同标识携带不同闭包——需要查库，
+// 绝不静默覆盖；两者都不是 error，事务保持可用。
+type ResolutionSaveOutcome uint8
+
+const (
+	ResolutionSaveOutcomeInvalid ResolutionSaveOutcome = iota
+	ResolutionSaved
+	ResolutionAlreadyRecorded
+	ResolutionContentConflict
+)
+
+func (outcome ResolutionSaveOutcome) String() string {
+	switch outcome {
+	case ResolutionSaved:
+		return "SAVED"
+	case ResolutionAlreadyRecorded:
+		return "ALREADY_RECORDED"
+	case ResolutionContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
 }
 
 // PublicationSaveOutcome 是一次版本登记在持久化面的落点封闭代数（ADR-0031 同款）：

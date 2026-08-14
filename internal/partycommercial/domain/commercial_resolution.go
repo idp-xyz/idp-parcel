@@ -52,9 +52,19 @@ func NewResolutionID(value string) (ResolutionID, error) {
 // 变了」。
 type AuthorityViewRevision struct{ requiredValue }
 
+func NewAuthorityViewRevision(value string) (AuthorityViewRevision, error) {
+	required, err := newRequiredValue("authority view revision", value)
+	return AuthorityViewRevision{required}, err
+}
+
 // ContinuationReference 让调用方把停下的决定重新接上。`已失效`与`解析未决`都必须保持
 // 可续办，因为两者都不是调用方可以据以行动的业务拒绝。
 type ContinuationReference struct{ requiredValue }
+
+func NewContinuationReference(value string) (ContinuationReference, error) {
+	required, err := newRequiredValue("continuation reference", value)
+	return ContinuationReference{required}, err
+}
 
 // SelectionAnchor 是第一阶段据以选择的业务时点。没有产生它的版本化策略就构造不出来
 // ——这正是拦住来源发生时间、客户请求时间、系统当前时间或待选规则包悄悄变成锚点的

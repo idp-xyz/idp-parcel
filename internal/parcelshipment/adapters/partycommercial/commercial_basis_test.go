@@ -129,7 +129,7 @@ func newBasisFixture(t *testing.T, withContract bool) *basisFixture {
 		values: &valueSourceDouble{at: formedValueAt, formed: true},
 	}
 	fixture.adapter = adapter.NewCommercialBasisAdapter(adapter.CommercialBasisAdapterDeps{
-		Resolve:      pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixedClock{at: judgedAt}),
+		Resolve:      pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixture.store, fixedClock{at: judgedAt}),
 		Revalidate:   pcapplication.NewValidateCommercialBasisHandler(fixture.store, fixture.authority, fixedClock{at: judgedAt}),
 		Judgments:    pcapplication.NewFormJudgmentAsOfHandler(fixture.store, fixture.policies),
 		AsOfPolicies: fixture.policies,
@@ -166,7 +166,7 @@ func (fixture *basisFixture) resolveQuery(t *testing.T) psports.CommercialBasisQ
 // fixResolution 走真实第一阶段并把闭包放进取回端口，交回它供重校验回指。
 func (fixture *basisFixture) fixResolution(t *testing.T) pcdomain.CommercialClosure {
 	t.Helper()
-	resolved, err := pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixedClock{at: judgedAt}).
+	resolved, err := pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixture.store, fixedClock{at: judgedAt}).
 		Handle(context.Background(), pcapplication.ResolveCommercialBasisCommand{Key: fixture.keys.key})
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -330,7 +330,7 @@ func TestAnUnconfiguredKeySourceStopsUndeterminedWithoutResolving(t *testing.T) 
 	cases := map[string]func(*testing.T, *basisFixture) *adapter.CommercialBasisAdapter{
 		"no key source at all": func(t *testing.T, fixture *basisFixture) *adapter.CommercialBasisAdapter {
 			return adapter.NewCommercialBasisAdapter(adapter.CommercialBasisAdapterDeps{
-				Resolve:      pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixedClock{at: judgedAt}),
+				Resolve:      pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixture.store, fixedClock{at: judgedAt}),
 				AsOfPolicies: fixture.policies,
 				Contents:     fixture.contents,
 			})

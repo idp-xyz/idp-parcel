@@ -126,7 +126,7 @@ func TestUniqueResolutionCarriesAJudgmentTimeTakenFromTheClock(t *testing.T) {
 	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:r1", "scope-a")
 
 	authority := &authorityDouble{registry: registry}
-	handler := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt})
+	handler := application.NewResolveCommercialBasisHandler(authority, &resolutionStoreDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), application.ResolveCommercialBasisCommand{
 		Key: closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject),
@@ -153,7 +153,7 @@ func TestUniqueResolutionCarriesAJudgmentTimeTakenFromTheClock(t *testing.T) {
 // 或修订无法确认只能形成解析未决」。合并二者会让一次读取失败被下游读成客户没有合同。
 func TestUnreadableAuthorityIsPendingRatherThanNoApplicableBasis(t *testing.T) {
 	authority := &authorityDouble{err: errors.New("authority view unavailable")}
-	handler := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt})
+	handler := application.NewResolveCommercialBasisHandler(authority, &resolutionStoreDouble{}, fixedClock{at: judgedAt})
 
 	result, err := handler.Handle(context.Background(), application.ResolveCommercialBasisCommand{
 		Key: closureKey(t, "scope-a", domain.CustomerContractObject),
@@ -188,7 +188,7 @@ func TestAuthorityViewIsAskedForTheTenantAndScopeOnTheKey(t *testing.T) {
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 
 	authority := &authorityDouble{registry: registry}
-	handler := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt})
+	handler := application.NewResolveCommercialBasisHandler(authority, &resolutionStoreDouble{}, fixedClock{at: judgedAt})
 	key := closureKey(t, "scope-a", domain.CustomerContractObject)
 
 	if _, err := handler.Handle(context.Background(), application.ResolveCommercialBasisCommand{Key: key}); err != nil {
@@ -209,7 +209,7 @@ func TestAuthorityViewIsAskedForTheTenantAndScopeOnTheKey(t *testing.T) {
 // Covers: UC-PC-002 步骤 2「不泄露其他客户/租户候选」——最小身份不成立时不得去问权威。
 func TestIncompleteKeyIsRefusedWithoutReadingTheAuthority(t *testing.T) {
 	authority := &authorityDouble{registry: domain.NewCommercialRegistry()}
-	handler := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt})
+	handler := application.NewResolveCommercialBasisHandler(authority, &resolutionStoreDouble{}, fixedClock{at: judgedAt})
 
 	key := closureKey(t, "scope-a", domain.CustomerContractObject)
 	key.CustomerAccountID = domain.CustomerAccountID{}

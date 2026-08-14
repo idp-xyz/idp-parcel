@@ -17,7 +17,7 @@ var revalidatedAt = time.Date(2026, 6, 3, 14, 0, 0, 0, time.UTC)
 // resolvedClosure 先走完第一阶段，交回它的结果与所用的权威视图，供提交前重校验接着用。
 func resolvedClosure(t *testing.T, authority *authorityDouble, scope string) domain.CommercialClosure {
 	t.Helper()
-	resolved, err := application.NewResolveCommercialBasisHandler(authority, fixedClock{at: judgedAt}).
+	resolved, err := application.NewResolveCommercialBasisHandler(authority, &resolutionStoreDouble{}, fixedClock{at: judgedAt}).
 		Handle(context.Background(), application.ResolveCommercialBasisCommand{
 			Key: closureKey(t, scope, domain.CustomerContractObject),
 		})

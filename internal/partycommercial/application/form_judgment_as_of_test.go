@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 // 两个时点刻意取不同的值。取成同一个，「没有压成全局时间」这条就无从断言——两项判断共用一个
@@ -62,7 +63,7 @@ func resolvedWithRulePackage(t *testing.T) domain.CommercialClosure {
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:r1", "scope-a")
 
-	resolved, err := application.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, fixedClock{at: judgedAt}).
+	resolved, err := application.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, &resolutionStoreDouble{}, fixedClock{at: judgedAt}).
 		Handle(context.Background(), application.ResolveCommercialBasisCommand{
 			Key: closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject),
 		})
@@ -96,6 +97,29 @@ func (double *resolutionStoreDouble) LoadResolution(
 	return double.closure, double.found, nil
 }
 
+func (double *resolutionStoreDouble) Save(
+	_ context.Context,
+	closure domain.CommercialClosure,
+) (ports.ResolutionSaveOutcome, error) {
+	if double.err != nil {
+		return ports.ResolutionSaveOutcomeInvalid, double.err
+	}
+	if closure.ResolutionID().String() == "" {
+		return ports.ResolutionSaveOutcomeInvalid, errors.New("save resolution: resolution ID is required")
+	}
+	if double.found && double.closure.ResolutionID() == closure.ResolutionID() {
+		if double.closure.Outcome() == closure.Outcome() {
+			return ports.ResolutionAlreadyRecorded, nil
+		}
+		return ports.ResolutionContentConflict, nil
+	}
+	double.closure = closure
+	double.found = true
+	return ports.ResolutionSaved, nil
+}
+
+var _ ports.CommercialResolutionStore = (*resolutionStoreDouble)(nil)
+
 // storedResolution 把一份第一阶段结果放进取回端口，并交回指名它所需的调用方身份与标识。
 // 身份取自解析键本身——调用方必须是这份解析的主人，否则取回那一步会判`输入未受理`。
 func storedResolution(
@@ -107,6 +131,49 @@ func storedResolution(
 	return &resolutionStoreDouble{closure: prior, found: true},
 		application.CallerScope{TenantID: key.TenantID, CustomerAccountID: key.CustomerAccountID},
 		prior.ResolutionID()
+}
+
+// Covers: UC-PC-002 步骤 5「固定解析标识」与 ADR-0027——第一阶段写入后，第二阶段按标识
+// Load 必须取回同一份闭包，而不是 found=false。
+func TestAResolutionFixedInPhaseOneIsLoadedInPhaseTwo(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:r1", "scope-a")
+
+	store := &resolutionStoreDouble{}
+	resolved, err := application.NewResolveCommercialBasisHandler(
+		&authorityDouble{registry: registry}, store, fixedClock{at: judgedAt},
+	).Handle(context.Background(), application.ResolveCommercialBasisCommand{
+		Key: closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject),
+	})
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Closure().Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", resolved.Closure().Outcome())
+	}
+
+	policies := &asOfPolicyDouble{policies: []domain.AsOfPolicy{
+		asOfPolicy(t, domain.NetworkReachabilityJudgment, "SEMANTICS-ROUTE-EVALUATED-AT", "asof-policy-v1"),
+	}}
+	key := resolved.Closure().ResolutionKey()
+	result, err := application.NewFormJudgmentAsOfHandler(store, policies).
+		Handle(context.Background(), application.FormJudgmentAsOfCommand{
+			Caller:     application.CallerScope{TenantID: key.TenantID, CustomerAccountID: key.CustomerAccountID},
+			Resolution: resolved.Closure().ResolutionID(),
+			Judgments: []application.JudgmentAsOfRequest{
+				{Judgment: domain.NetworkReachabilityJudgment, At: reachabilityAsOfAt},
+			},
+		})
+	if err != nil {
+		t.Fatalf("form as-of: %v", err)
+	}
+	if result.Outcome() == application.JudgmentAsOfBasisNotResolved {
+		t.Fatal("第一阶段写入后第二阶段仍 found=false")
+	}
+	if result.Outcome() != application.JudgmentAsOfFormed {
+		t.Fatalf("outcome = %q, want FORMED", result.Outcome())
+	}
 }
 
 // Covers: UC-PC-002 `AT-PC-023`「规则包选出后为网络与财务声明不同 `asOf` → 分别形成并校验，不压
@@ -301,7 +368,7 @@ func TestASecondPhaseOnAnUnknownResolutionRefusesWithoutAskingForPolicies(t *tes
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
 	effectiveIn(t, registry, domain.CustomerContractObject, "contract-2", "v1", "sha256:c2", "scope-a")
 
-	conflicted, err := application.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, fixedClock{at: judgedAt}).
+	conflicted, err := application.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, &resolutionStoreDouble{}, fixedClock{at: judgedAt}).
 		Handle(context.Background(), application.ResolveCommercialBasisCommand{
 			Key: closureKey(t, "scope-a", domain.CustomerContractObject),
 		})

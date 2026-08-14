@@ -4,6 +4,7 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -35,15 +36,17 @@ func (result ResolveCommercialBasisResult) JudgedAt() time.Time {
 }
 
 type ResolveCommercialBasisHandler struct {
-	authority ports.CommercialAuthorityView
-	clock     ports.Clock
+	authority   ports.CommercialAuthorityView
+	resolutions ports.CommercialResolutionStore
+	clock       ports.Clock
 }
 
 func NewResolveCommercialBasisHandler(
 	authority ports.CommercialAuthorityView,
+	resolutions ports.CommercialResolutionStore,
 	clock ports.Clock,
 ) *ResolveCommercialBasisHandler {
-	return &ResolveCommercialBasisHandler{authority: authority, clock: clock}
+	return &ResolveCommercialBasisHandler{authority: authority, resolutions: resolutions, clock: clock}
 }
 
 // Handle 执行第一阶段：在同一个权威视图下解析整个引用闭包。它不形成接受、计价、冻结或
@@ -66,10 +69,34 @@ func (handler *ResolveCommercialBasisHandler) Handle(
 		return handler.resultOf(domain.ResolveCommercialClosure(nil, command.Key, nil)), nil
 	}
 
-	return handler.resultOf(domain.ResolveCommercialClosure(view, command.Key, nil)), nil
+	return handler.fix(ctx, domain.ResolveCommercialClosure(view, command.Key, nil))
 }
 
-// resultOf 在结论形成之后才读时钟，因此判断时间落在权威读取之后而非之前。
+// fix 在结论形成之后才读时钟，因此判断时间落在权威读取之后而非之前。有解析标识的
+// 唯一结果必须写入本上下文的解析库（ADR-0027）：第二阶段只回指标识，写漏了就会
+// found=false。没有标识的结局（未受理、未决、冲突、无依据）不落库——它们不是可回指的固定解析。
+func (handler *ResolveCommercialBasisHandler) fix(
+	ctx context.Context,
+	closure domain.CommercialClosure,
+) (ResolveCommercialBasisResult, error) {
+	result := handler.resultOf(closure)
+	if closure.ResolutionID().String() == "" {
+		return result, nil
+	}
+	outcome, err := handler.resolutions.Save(ctx, closure)
+	if err != nil {
+		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: %w", err)
+	}
+	switch outcome {
+	case ports.ResolutionSaved, ports.ResolutionAlreadyRecorded:
+		return result, nil
+	case ports.ResolutionContentConflict:
+		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: content conflict")
+	default:
+		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: unexpected save outcome %q", outcome)
+	}
+}
+
 func (handler *ResolveCommercialBasisHandler) resultOf(closure domain.CommercialClosure) ResolveCommercialBasisResult {
 	return ResolveCommercialBasisResult{closure: closure, judgedAt: handler.clock.Now()}
 }

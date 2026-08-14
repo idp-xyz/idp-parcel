@@ -2,6 +2,7 @@ package partycommercial_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -115,7 +116,7 @@ func resolvedClosure(t *testing.T) pcdomain.CommercialClosure {
 	if err != nil {
 		t.Fatalf("new selection anchor: %v", err)
 	}
-	resolved, err := pcapplication.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, fixedClock{at: judgedAt}).
+	resolved, err := pcapplication.NewResolveCommercialBasisHandler(&authorityDouble{registry: registry}, &resolutionStoreDouble{}, fixedClock{at: judgedAt}).
 		Handle(context.Background(), pcapplication.ResolveCommercialBasisCommand{
 			Key: pcdomain.ClosureResolutionKey{
 				TenantID:             value(t, pcdomain.NewTenantID, "tenant-1"),
@@ -153,6 +154,27 @@ func (double *resolutionStoreDouble) LoadResolution(
 		return pcdomain.CommercialClosure{}, false, double.err
 	}
 	return double.closure, double.found, nil
+}
+
+func (double *resolutionStoreDouble) Save(
+	_ context.Context,
+	closure pcdomain.CommercialClosure,
+) (pcports.ResolutionSaveOutcome, error) {
+	if double.err != nil {
+		return pcports.ResolutionSaveOutcomeInvalid, double.err
+	}
+	if closure.ResolutionID().String() == "" {
+		return pcports.ResolutionSaveOutcomeInvalid, errors.New("save resolution: resolution ID is required")
+	}
+	if double.found && double.closure.ResolutionID() == closure.ResolutionID() {
+		if double.closure.Outcome() == closure.Outcome() {
+			return pcports.ResolutionAlreadyRecorded, nil
+		}
+		return pcports.ResolutionContentConflict, nil
+	}
+	double.closure = closure
+	double.found = true
+	return pcports.ResolutionSaved, nil
 }
 
 type asOfPolicyDouble struct {
