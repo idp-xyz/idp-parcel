@@ -252,3 +252,52 @@ func TestConsumptionAndReleaseAreIrreversibleAndConserved(t *testing.T) {
 		}
 	})
 }
+
+// Covers: 读回已有预占不能重放 Reserve——转换门要调用期的有效期与装载分配，行上只有
+// 三量。重建门验守恒与引用不重，不按时点重算可用量。
+func TestRehydrateCapacityPoolRestoresReservationsWithoutReplayingConversions(t *testing.T) {
+	spec := domain.CapacityPoolSpec{
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
+		Pool:     mustValue(t, domain.NewCapacityPoolReference, "pool-weight-1"),
+		Schedule: mustValue(t, domain.NewScheduleReference, "schedule-1"),
+		Unit:     mustValue(t, domain.NewQuantityUnitReference, "kg"),
+		Capacity: 100,
+	}
+	snapshots := []domain.CapacityReservationSnapshot{{
+		Reference:  reservationRef(t, "reservation-1"),
+		Quantity:   60,
+		Released:   20,
+		Consumed:   30,
+		ValidUntil: reservedUntil,
+	}}
+	pool, err := domain.RehydrateCapacityPool(spec, snapshots)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	reservation, found := pool.ReservationFor(reservationRef(t, "reservation-1"))
+	if !found {
+		t.Fatal("重建后预占丢失")
+	}
+	reserved, released, consumed := reservation.Quantities()
+	if reserved != 60 || released != 20 || consumed != 30 {
+		t.Fatalf("quantities = %d/%d/%d, want 60/20/30", reserved, released, consumed)
+	}
+	if available := pool.AvailableAt(reservedUntil.Add(time.Hour)); available != 70 {
+		t.Fatalf("available after expiry = %d, want 70", available)
+	}
+
+	t.Run("an overdrawn snapshot is refused", func(t *testing.T) {
+		bad := snapshots[0]
+		bad.Released = 40
+		if _, err := domain.RehydrateCapacityPool(spec, []domain.CapacityReservationSnapshot{bad}); !errors.Is(err, domain.ErrReservationOverdrawn) {
+			t.Fatalf("error = %v, want ErrReservationOverdrawn", err)
+		}
+	})
+
+	t.Run("a duplicate reservation reference is refused", func(t *testing.T) {
+		dup := []domain.CapacityReservationSnapshot{snapshots[0], snapshots[0]}
+		if _, err := domain.RehydrateCapacityPool(spec, dup); !errors.Is(err, domain.ErrDuplicateReservation) {
+			t.Fatalf("error = %v, want ErrDuplicateReservation", err)
+		}
+	})
+}

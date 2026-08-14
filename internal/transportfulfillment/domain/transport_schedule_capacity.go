@@ -199,6 +199,67 @@ func (pool CapacityPool) ReservationFor(reference CapacityReservationReference) 
 	return CapacityReservation{}, false
 }
 
+// CapacityReservationSnapshot 是一次预占在库里的样子：三量加有效期。装载分配引用
+// 不在预占对象上——Consume 只把它当调用期依据，读回不必、也不能重放那次确认。
+type CapacityReservationSnapshot struct {
+	Reference  CapacityReservationReference
+	Quantity   int64
+	Released   int64
+	Consumed   int64
+	ValidUntil time.Time
+}
+
+// ReservationSnapshots 交出当前全部预占，供适配器按行落库。顺序与内部切片一致。
+func (pool CapacityPool) ReservationSnapshots() []CapacityReservationSnapshot {
+	snapshots := make([]CapacityReservationSnapshot, 0, len(pool.reservations))
+	for _, reservation := range pool.reservations {
+		snapshots = append(snapshots, CapacityReservationSnapshot{
+			Reference:  reservation.reference,
+			Quantity:   reservation.quantity,
+			Released:   reservation.released,
+			Consumed:   reservation.consumed,
+			ValidUntil: reservation.validUntil,
+		})
+	}
+	return snapshots
+}
+
+// RehydrateCapacityPool 从身份加预占快照重建池。EstablishCapacityPool 只建空池，
+// 读回已有预占不能重放 Reserve/Release/Consume：那三条是转换门，有效期与装载分配
+// 是调用期依据，不是行上的事实。
+func RehydrateCapacityPool(spec CapacityPoolSpec, snapshots []CapacityReservationSnapshot) (CapacityPool, error) {
+	pool, err := EstablishCapacityPool(spec)
+	if err != nil {
+		return CapacityPool{}, err
+	}
+	if len(snapshots) == 0 {
+		return pool, nil
+	}
+	seen := make(map[string]struct{}, len(snapshots))
+	reservations := make([]CapacityReservation, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		if !snapshot.Reference.valid() || snapshot.Quantity <= 0 || snapshot.ValidUntil.IsZero() {
+			return CapacityPool{}, ErrInvalidCapacityPool
+		}
+		if snapshot.Released < 0 || snapshot.Consumed < 0 || snapshot.Released+snapshot.Consumed > snapshot.Quantity {
+			return CapacityPool{}, ErrReservationOverdrawn
+		}
+		if _, exists := seen[snapshot.Reference.String()]; exists {
+			return CapacityPool{}, ErrDuplicateReservation
+		}
+		seen[snapshot.Reference.String()] = struct{}{}
+		reservations = append(reservations, CapacityReservation{
+			reference:  snapshot.Reference,
+			quantity:   snapshot.Quantity,
+			validUntil: snapshot.ValidUntil.UTC(),
+			released:   snapshot.Released,
+			consumed:   snapshot.Consumed,
+		})
+	}
+	pool.reservations = reservations
+	return pool, nil
+}
+
 // AvailableAt 报告某时点仍可预占的量：容量减去全部预占在该时点的占用。
 func (pool CapacityPool) AvailableAt(at time.Time) int64 {
 	available := pool.capacity
