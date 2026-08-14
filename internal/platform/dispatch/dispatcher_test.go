@@ -200,6 +200,8 @@ func TestAFailureIsRecordedUnderTheCodeThatTellsOpsWhatToDo(t *testing.T) {
 		{"没有订阅者", dispatch.ErrNoSubscriber, "dispatch.no_subscriber"},
 		// 真实发布通道会带上下文包一层，分格必须穿过包装认出来。
 		{"包装后的没有订阅者", fmt.Errorf("route %q: %w", "dispatch.test.event", dispatch.ErrNoSubscriber), "dispatch.no_subscriber"},
+		// 消费者收到了、也处理了，只是停在自己的未决上：运维要查的是它等的那个依赖。
+		{"消费方未决", fmt.Errorf("route: %w", dispatch.ErrConsumerUndecided), "dispatch.consumer_undecided"},
 		{"结果不确定", fmt.Errorf("ack lost: %w", eventing.ErrPublishUncertain), "dispatch.publish_uncertain"},
 		{"下游失败", errors.New("broker unreachable"), "dispatch.publish_failed"},
 	}

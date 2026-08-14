@@ -25,12 +25,20 @@ type Clock interface {
 // 事件好——后者要等到有人发现下游少了数据才暴露。
 var ErrNoSubscriber = errors.New("dispatch: no subscriber for envelope type")
 
+// ErrConsumerUndecided 表示消费者收到并处理了这份投递，但停在自己的未决上因而整份回滚。
+//
+// 它与「没送到」分开记码，因为运维要看的地方相反：未决要去查消费方等的那个依赖，没送到
+// 要去查传输。包装的责任在路由表那一层——只有它知道每个消费者的未决哨兵长什么样，派发器
+// 只认这一个。
+var ErrConsumerUndecided = errors.New("dispatch: consumer stalled on its own dependency")
+
 // 失败码按运维要做的动作取值，不按错误来自哪一层取值。取值形状受框架 CHECK 约束：
 // 小写起首、只含 [a-z0-9._-]、不超过 128 字节。
 const (
-	failureNoSubscriber     eventing.FailureCode = "dispatch.no_subscriber"
-	failurePublishUncertain eventing.FailureCode = "dispatch.publish_uncertain"
-	failurePublishFailed    eventing.FailureCode = "dispatch.publish_failed"
+	failureNoSubscriber      eventing.FailureCode = "dispatch.no_subscriber"
+	failureConsumerUndecided eventing.FailureCode = "dispatch.consumer_undecided"
+	failurePublishUncertain  eventing.FailureCode = "dispatch.publish_uncertain"
+	failurePublishFailed     eventing.FailureCode = "dispatch.publish_failed"
 )
 
 // failureCodeFor 把发布失败分格。合成一个码，运维读不出该改装配、该救下游，还是该去
@@ -42,6 +50,8 @@ func failureCodeFor(err error) eventing.FailureCode {
 	switch {
 	case errors.Is(err, ErrNoSubscriber):
 		return failureNoSubscriber
+	case errors.Is(err, ErrConsumerUndecided):
+		return failureConsumerUndecided
 	case errors.Is(err, eventing.ErrPublishUncertain):
 		return failurePublishUncertain
 	default:
