@@ -1,5 +1,5 @@
-// Package ports 声明 party-commercial 自有的语义边界。这些只是接口：它们的 PostgreSQL
-// 适配器仍阻断在 Bento 持久化闸门之后（ADR-0017），今天唯一的实现是测试用替身。
+// Package ports 声明 party-commercial 自有的语义边界。PostgreSQL 适配器在
+// adapters/postgres：发布登记册与已固定解析库。
 package ports
 
 import (

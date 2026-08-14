@@ -79,10 +79,11 @@ func resolvedWithRulePackage(t *testing.T) domain.CommercialClosure {
 // resolutionStoreDouble 冒充「按解析标识取回已固定解析」那份责任（ADR-0027）。后续阶段只回指
 // 标识，闭包由本上下文取回，因此夹具也得从这里给。
 type resolutionStoreDouble struct {
-	closure domain.CommercialClosure
-	found   bool
-	err     error
-	asked   []domain.ResolutionID
+	closure     domain.CommercialClosure
+	found       bool
+	err         error
+	asked       []domain.ResolutionID
+	saveOutcome ports.ResolutionSaveOutcome
 }
 
 func (double *resolutionStoreDouble) LoadResolution(
@@ -103,6 +104,9 @@ func (double *resolutionStoreDouble) Save(
 ) (ports.ResolutionSaveOutcome, error) {
 	if double.err != nil {
 		return ports.ResolutionSaveOutcomeInvalid, double.err
+	}
+	if double.saveOutcome != ports.ResolutionSaveOutcomeInvalid {
+		return double.saveOutcome, nil
 	}
 	if closure.ResolutionID().String() == "" {
 		return ports.ResolutionSaveOutcomeInvalid, errors.New("save resolution: resolution ID is required")

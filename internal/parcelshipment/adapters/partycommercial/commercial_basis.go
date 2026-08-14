@@ -14,11 +14,12 @@ import (
 // 本适配器自有的停摆原因引用。前两类带 PC- 前缀，因为它们译的是提供方答复里的状态；
 // 键那条没有前缀——形不成解析键是消费方自己的实例参数缺席，冠 PC 会把账记错方向。
 const (
-	reasonKeyNotConfigured         = "COMMERCIAL_RESOLUTION_KEY_NOT_CONFIGURED"
-	reasonContentNotConfigured     = "PC-ACCEPTANCE_CONTENT_NOT_CONFIGURED"
-	reasonContentUnreadable        = "PC-ACCEPTANCE_CONTENT_UNREADABLE"
-	reasonAsOfPoliciesUnreadable   = "PC-ASOF_POLICIES_UNREADABLE"
-	reasonPendingRoutingUnreadable = "PC-PENDING_ROUTING_UNREADABLE"
+	reasonKeyNotConfigured          = "COMMERCIAL_RESOLUTION_KEY_NOT_CONFIGURED"
+	reasonContentNotConfigured      = "PC-ACCEPTANCE_CONTENT_NOT_CONFIGURED"
+	reasonContentUnreadable         = "PC-ACCEPTANCE_CONTENT_UNREADABLE"
+	reasonAsOfPoliciesUnreadable    = "PC-ASOF_POLICIES_UNREADABLE"
+	reasonPendingRoutingUnreadable  = "PC-PENDING_ROUTING_UNREADABLE"
+	reasonResolutionContentConflict = "PC-RESOLUTION_CONTENT_CONFLICT"
 )
 
 // ResolutionKeySource 把一次消费方查询折成提供方的闭包解析键。
@@ -95,7 +96,33 @@ func (adapter *CommercialBasisAdapter) ResolveCommercialBasis(
 	if err != nil {
 		return psports.CommercialBasisResolution{}, fmt.Errorf("resolve commercial basis: %w", err)
 	}
-	return adapter.resolutionOf(ctx, answer.Closure())
+	return adapter.answeredResolution(ctx, answer)
+}
+
+// answeredResolution 在翻译闭包之前先看解析固定在提供方持久化面的落点。顺序不能反：
+// 固定不下来的闭包不是一份可回指的解析，第二阶段照 ADR-0027 只带标识回来，交出快照
+// 等于让调用方拿一个指不回任何东西的标识继续走。
+//
+// 逐格分派不留兜底（ADR-0031）：认不出的取值上抛哨兵，否则提供方日后新增的一格会静默
+// 落进成功路径，而这里没有任何东西会变红。
+func (adapter *CommercialBasisAdapter) answeredResolution(
+	ctx context.Context,
+	answer pcapplication.ResolveCommercialBasisResult,
+) (psports.CommercialBasisResolution, error) {
+	switch fixed := answer.Fixed(); fixed {
+	case pcports.ResolutionSaveOutcomeInvalid, pcports.ResolutionSaved, pcports.ResolutionAlreadyRecorded:
+		// 零值是「闭包没有解析标识、提供方根本没去写库」，非唯一结局全走这里，由
+		// resolutionOf 按闭包结果作答；`已记录`是重放，与首次固定同义。
+		return adapter.resolutionOf(ctx, answer.Closure())
+	case pcports.ResolutionContentConflict:
+		// 同标识异内容：库里那份与本次解出的不是一回事，而 ADR-0031 禁止静默覆盖，因此
+		// 谁也说不准该用哪份。落`无法判定`而不是`无适用依据`——后者是权威说了这个范围
+		// 没有适用对象，与「有依据但固定不下来」是两件事，压成一格会让消费方据以拒单。
+		return undeterminedResolution(reasonResolutionContentConflict)
+	default:
+		return psports.CommercialBasisResolution{}, fmt.Errorf("%w: resolution save outcome %d",
+			ErrUntranslatableAnswer, fixed)
+	}
 }
 
 // RevalidateCommercialBasis 执行第三阶段：按原解析标识请提供方重解一次，把重校验特有的

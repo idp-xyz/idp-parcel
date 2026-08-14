@@ -431,6 +431,68 @@ func TestEveryFirstPhaseAnswerLandsOnItsOwnApplicability(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0031「同标识异内容……两者都不是 error，且绝不覆盖」在消费侧的落点。冲突
+// 不是`无适用依据`：那一格是权威说了这个范围没有适用对象，可以拿去拒单；固定不下来的
+// 解析只能阻断新决定。认不出的取值上抛哨兵，提供方新增一格时这里必须变红。
+func TestEveryResolutionFixingOutcomeLandsOnItsOwnAnswer(t *testing.T) {
+	cases := map[string]struct {
+		outcome           pcports.ResolutionSaveOutcome
+		wantApplicability psdomain.CommercialApplicability
+		wantReason        string
+		wantRefused       bool
+	}{
+		"a newly fixed resolution carries its snapshot": {
+			outcome:           pcports.ResolutionSaved,
+			wantApplicability: psdomain.CommerciallyApplicable,
+		},
+		"a replay is as good as the first fixing": {
+			outcome:           pcports.ResolutionAlreadyRecorded,
+			wantApplicability: psdomain.CommerciallyApplicable,
+		},
+		"a content conflict blocks without rejecting": {
+			outcome:           pcports.ResolutionContentConflict,
+			wantApplicability: psdomain.CommercialApplicabilityUndetermined,
+			wantReason:        "PC-RESOLUTION_CONTENT_CONFLICT",
+		},
+		// 今天先拦下它的是提供方编排自己的 default 支，适配器的哨兵还轮不到。断言因此
+		// 钉整条路径的性质而不是哪一层报的：代数外的取值不得落成任何一个业务答案。两道
+		// 守卫都要留着——ADR-0025 把翻译的全函数责任判给消费侧，它不能假定提供方先挡。
+		"an outcome outside the algebra is a programming error": {
+			outcome:     pcports.ResolutionSaveOutcome(99),
+			wantRefused: true,
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newBasisFixture(t, true)
+			fixture.store.saveOutcome = testCase.outcome
+
+			resolution, err := fixture.adapter.ResolveCommercialBasis(context.Background(), fixture.resolveQuery(t))
+			if testCase.wantRefused {
+				if err == nil {
+					t.Fatalf("applicability = %q——认不出的取值被吸收进了某一格", resolution.Applicability)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("resolve commercial basis: %v", err)
+			}
+
+			if resolution.Applicability != testCase.wantApplicability {
+				t.Fatalf("applicability = %q, want %q", resolution.Applicability, testCase.wantApplicability)
+			}
+			if resolution.Reason.String() != testCase.wantReason {
+				t.Fatalf("reason = %q, want %q", resolution.Reason, testCase.wantReason)
+			}
+			if testCase.wantApplicability != psdomain.CommerciallyApplicable &&
+				resolution.Snapshot.ResolutionID().String() != "" {
+				t.Fatal("固定不下来的解析仍交出了快照")
+			}
+		})
+	}
+}
+
 // Covers: ADR-0042「found=false 即实例未配置……消费方据以停在未决，不是放行」，以及
 // adoptedResolution 的注释——空适用组等于无条件接受，适配器不得在翻译里造出一份缺声明
 // 的快照。读不回与没配置都停；唯一不停的是「产品答过了：不许待路由」。

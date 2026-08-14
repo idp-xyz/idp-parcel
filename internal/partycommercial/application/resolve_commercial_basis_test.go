@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 var (
@@ -146,6 +147,35 @@ func TestUniqueResolutionCarriesAJudgmentTimeTakenFromTheClock(t *testing.T) {
 	}
 	if len(result.Closure().Adopted()) != 2 {
 		t.Fatalf("adopted %d bases, want both required ones", len(result.Closure().Adopted()))
+	}
+	if result.Fixed() != ports.ResolutionSaved {
+		t.Fatalf("fixed = %q, want SAVED", result.Fixed())
+	}
+}
+
+// Covers: ADR-0031——同标识异内容是业务答案，不是 error。译成 error 之后调用方会当写入
+// 失败重试，仍撞同一格。
+func TestAContentConflictIsABusinessAnswerNotAnError(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	effectiveIn(t, registry, domain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-a")
+	effectiveIn(t, registry, domain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:r1", "scope-a")
+
+	handler := application.NewResolveCommercialBasisHandler(
+		&authorityDouble{registry: registry},
+		&resolutionStoreDouble{saveOutcome: ports.ResolutionContentConflict},
+		fixedClock{at: judgedAt},
+	)
+	result, err := handler.Handle(context.Background(), application.ResolveCommercialBasisCommand{
+		Key: closureKey(t, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject),
+	})
+	if err != nil {
+		t.Fatalf("冲突被当成写入失败抛出：%v", err)
+	}
+	if result.Fixed() != ports.ResolutionContentConflict {
+		t.Fatalf("fixed = %q, want CONTENT_CONFLICT", result.Fixed())
+	}
+	if result.Closure().Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want the attempted unique closure still visible", result.Closure().Outcome())
 	}
 }
 

@@ -25,6 +25,7 @@ type ResolveCommercialBasisCommand struct {
 type ResolveCommercialBasisResult struct {
 	closure  domain.CommercialClosure
 	judgedAt time.Time
+	fixed    ports.ResolutionSaveOutcome
 }
 
 func (result ResolveCommercialBasisResult) Closure() domain.CommercialClosure {
@@ -33,6 +34,12 @@ func (result ResolveCommercialBasisResult) Closure() domain.CommercialClosure {
 
 func (result ResolveCommercialBasisResult) JudgedAt() time.Time {
 	return result.judgedAt
+}
+
+// Fixed 交回解析库写入的三格代数。没有解析标识因而未落库时是零值；`已记录`与`内容冲突`
+// 都不是 error（ADR-0031）。
+func (result ResolveCommercialBasisResult) Fixed() ports.ResolutionSaveOutcome {
+	return result.fixed
 }
 
 type ResolveCommercialBasisHandler struct {
@@ -88,10 +95,9 @@ func (handler *ResolveCommercialBasisHandler) fix(
 		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: %w", err)
 	}
 	switch outcome {
-	case ports.ResolutionSaved, ports.ResolutionAlreadyRecorded:
+	case ports.ResolutionSaved, ports.ResolutionAlreadyRecorded, ports.ResolutionContentConflict:
+		result.fixed = outcome
 		return result, nil
-	case ports.ResolutionContentConflict:
-		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: content conflict")
 	default:
 		return ResolveCommercialBasisResult{}, fmt.Errorf("fix commercial resolution: unexpected save outcome %q", outcome)
 	}

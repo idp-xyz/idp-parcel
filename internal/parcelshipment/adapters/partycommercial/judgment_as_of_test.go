@@ -142,6 +142,10 @@ type resolutionStoreDouble struct {
 	found   bool
 	err     error
 	asked   []pcdomain.ResolutionID
+	// saveOutcome 直接指定写入落点。冲突那一格靠夹具摆不出来——要一份解析标识相同而
+	// 闭包不同的既存记录，而标识由闭包本身派生；替身按取值作答，测的也正是适配器怎么
+	// 分派提供方交回的取值。
+	saveOutcome pcports.ResolutionSaveOutcome
 }
 
 func (double *resolutionStoreDouble) LoadResolution(
@@ -162,6 +166,9 @@ func (double *resolutionStoreDouble) Save(
 ) (pcports.ResolutionSaveOutcome, error) {
 	if double.err != nil {
 		return pcports.ResolutionSaveOutcomeInvalid, double.err
+	}
+	if double.saveOutcome != pcports.ResolutionSaveOutcomeInvalid {
+		return double.saveOutcome, nil
 	}
 	if closure.ResolutionID().String() == "" {
 		return pcports.ResolutionSaveOutcomeInvalid, errors.New("save resolution: resolution ID is required")
