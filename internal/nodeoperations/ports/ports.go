@@ -230,7 +230,9 @@ type SealedSnapshotHandoffIntent struct {
 	Snapshot domain.SealedSnapshot
 }
 
-// SealedSnapshotHandoff 今天没有实现，唯一实现是测试替身。
+// SealedSnapshotHandoff 把封装快照写入 Outbox（`OutboxSealedSnapshotHandoff`）。信封
+// ID 由租户加单元加封签认领（单元+快照认领键补租户维），入队由
+// outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type SealedSnapshotHandoff interface {
 	HandOffSnapshot(ctx context.Context, intent SealedSnapshotHandoffIntent) error
 }
