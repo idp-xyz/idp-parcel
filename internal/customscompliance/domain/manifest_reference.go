@@ -137,6 +137,37 @@ func (reference ExternalManifestReference) Scope() DecisionScopeReference {
 	return reference.scope
 }
 
+func (reference ExternalManifestReference) SourceFact() string {
+	return reference.sourceFact
+}
+
+func (reference ExternalManifestReference) AcceptedAt() time.Time {
+	return reference.acceptedAt
+}
+
+// RehydrateManifestReference 从当前行重建引用。库只管当前来源版本，历史由
+// priorVersion 指回；关联是当前版上的受控匹配，不随版本自动搬移。
+func RehydrateManifestReference(
+	spec ExternalManifestReferenceSpec,
+	prior ManifestSourceVersion,
+	association DeclarationUnitID,
+) (ExternalManifestReference, error) {
+	reference, err := AcceptManifestReference(spec)
+	if err != nil {
+		return ExternalManifestReference{}, err
+	}
+	if prior.valid() {
+		if prior == spec.Version {
+			return ExternalManifestReference{}, ErrInvalidManifestReference
+		}
+		reference.priorVersion = prior
+	}
+	if association.valid() {
+		reference.association = association
+	}
+	return reference, nil
+}
+
 // PriorVersion 只在更正/替代后的新引用上给出。
 func (reference ExternalManifestReference) PriorVersion() (ManifestSourceVersion, bool) {
 	return reference.priorVersion, reference.priorVersion.valid()

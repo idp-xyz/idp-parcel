@@ -100,6 +100,18 @@ func (verification ClosureVerification) Items() []ClosureObligationItem {
 	return append([]ClosureObligationItem(nil), verification.items...)
 }
 
+func (verification ClosureVerification) CaseRef() string {
+	return verification.caseRef
+}
+
+func (verification ClosureVerification) CutoffAt() time.Time {
+	return verification.cutoffAt
+}
+
+func (verification ClosureVerification) VerifiedAt() time.Time {
+	return verification.verifiedAt
+}
+
 // UnresolvedItems 给出全部未解决项——关闭被谁挡着一目了然。
 func (verification ClosureVerification) UnresolvedItems() []ClosureObligationItem {
 	unresolved := make([]ClosureObligationItem, 0)
@@ -164,6 +176,10 @@ func (closure *CustomsCaseClosure) CaseRef() string {
 
 func (closure *CustomsCaseClosure) ClosedAt() time.Time {
 	return closure.closedAt
+}
+
+func (closure *CustomsCaseClosure) DecidedBy() string {
+	return closure.decidedBy
 }
 
 func (closure *CustomsCaseClosure) Verification() ClosureVerification {

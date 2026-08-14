@@ -114,6 +114,18 @@ func (target FollowUpTarget) Version() SubmissionVersionID {
 	return target.version
 }
 
+func (target FollowUpTarget) CaseRef() string {
+	return target.caseRef
+}
+
+func (target FollowUpTarget) Scope() DecisionScopeReference {
+	return target.scope
+}
+
+func (target FollowUpTarget) FormedAt() time.Time {
+	return target.formedAt
+}
+
 // ReplacementRelation 是重报替代的新旧对象关系。建立时只能是拟替代（CONTEXT「申报
 // 替代关系」语言）；只有真实程序要求的提交及外部结果已经成立，才可形成有效替代——
 // 原对象及其全部历史永久保留，拟替代目标不得把原申报改成已撤销、已作废或已被有效
@@ -146,6 +158,14 @@ func ProposeReplacement(
 
 func (relation ReplacementRelation) ReplacementUnit() DeclarationUnitID {
 	return relation.replacementUnit
+}
+
+func (relation ReplacementRelation) Target() FollowUpTarget {
+	return relation.target
+}
+
+func (relation ReplacementRelation) EffectiveAt() (time.Time, bool) {
+	return relation.effectiveAt, relation.effective
 }
 
 // Effective 报告替代是否已生效。拟替代不是有效替代。
