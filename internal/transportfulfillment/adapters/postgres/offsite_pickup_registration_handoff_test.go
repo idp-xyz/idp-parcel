@@ -136,8 +136,11 @@ func TestOffsitePickupRegistrationDoesNotCollideWithEffectiveDelivery(t *testing
 		t.Fatalf("构造交付生效适配器：%v", err)
 	}
 
+	// 夹具第二参是 POD 证明，不是尝试。尝试维必须与登记相同，否则 UNIQUE(source, event_id)
+	// 根本碰不到同对象同尝试的碰撞面，类型段有没有都绿。
 	deliveryIntent := deliveryHandoffIntentFor(t, "parcel-1", "pod-1")
 	deliveryIntent.Record.Key.TenantID = deliveryValue(t, domain.NewTenantID, "tenant-a")
+	deliveryIntent.Record.Key.Attempt = deliveryValue(t, domain.NewAttemptReference, "attempt-1")
 
 	ctx := t.Context()
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
