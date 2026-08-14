@@ -67,8 +67,10 @@ func (reason NotifyCustomerUndecidedReason) String() string {
 }
 
 // NotifyCustomerCommand 携带一份已批准披露的决定。通知的对象、内容与目标客户全部
-// 取自它——编排不自造披露内容，也不通知任何没有披露决定的东西。
+// 取自它——编排不自造披露内容，也不通知任何没有披露决定的东西。租户显式随命令到达
+// （ADR-0003）：客户账户引用只在租户内唯一。
 type NotifyCustomerCommand struct {
+	TenantID   domain.TenantID
 	Disclosure domain.DisclosureDecision
 }
 
@@ -125,11 +127,12 @@ func (handler *NotifyCustomerHandler) Handle(
 ) (NotifyCustomerResult, error) {
 	// 非披露结论构不成通知：暂不披露与待授权都没有可通知的内容。这是门口的业务答案，
 	// 不是等 GenerateNotification 报错——撞出来的错分不清是路由错了还是内容缺了。
-	if command.Disclosure.Conclusion() != domain.DiscloseToCustomer {
+	if command.Disclosure.Conclusion() != domain.DiscloseToCustomer ||
+		command.TenantID.String() == "" {
 		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.Disclosure)
+	existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, command.Disclosure)
 	if err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 	}
@@ -145,7 +148,7 @@ func (handler *NotifyCustomerHandler) Handle(
 			}, nil
 		}
 		// 上次提交失败：按策略重试。新节点接在后面，前面的失败保留——重试不是改写。
-		return handler.submit(ctx, existing)
+		return handler.submit(ctx, command.TenantID, existing)
 	}
 
 	directive, configured, err := handler.deps.Policy.DirectNotification(ctx, command.Disclosure)
@@ -178,11 +181,11 @@ func (handler *NotifyCustomerHandler) Handle(
 	}
 	// 先落`已生成`再提交渠道：渠道那一次一旦发出就收不回来，通知记录必须先于它存在，
 	// 否则一次落库失败会让「客户可能已收到」查无出处。
-	if err := handler.deps.Notifications.Save(ctx, notification); err != nil {
+	if err := handler.deps.Notifications.Save(ctx, command.TenantID, notification); err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 	}
 
-	return handler.submit(ctx, notification)
+	return handler.submit(ctx, command.TenantID, notification)
 }
 
 // submit 执行一次渠道提交尝试并分别记录结果节点：成功记`已提交消息渠道`，失败记
@@ -190,6 +193,7 @@ func (handler *NotifyCustomerHandler) Handle(
 // 那一次已经发生），落库失败停在未决，重试会再提交一次；渠道侧去重属实例半边。
 func (handler *NotifyCustomerHandler) submit(
 	ctx context.Context,
+	tenant domain.TenantID,
 	notification *domain.CustomerNotification,
 ) (NotifyCustomerResult, error) {
 	milestone := domain.NotificationSubmittedToChannel
@@ -201,7 +205,7 @@ func (handler *NotifyCustomerHandler) submit(
 	if err := notification.RecordMilestone(milestone, handler.deps.Clock.Now()); err != nil {
 		return NotifyCustomerResult{}, fmt.Errorf("record notification milestone: %w", err)
 	}
-	if err := handler.deps.Notifications.Save(ctx, notification); err != nil {
+	if err := handler.deps.Notifications.Save(ctx, tenant, notification); err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 	}
 	return NotifyCustomerResult{

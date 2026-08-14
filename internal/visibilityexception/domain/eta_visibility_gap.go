@@ -162,6 +162,22 @@ func (eta ETAPrediction) PriorVersion() (ETAVersionID, bool) {
 	return eta.priorVersion, eta.priorVersion.valid()
 }
 
+// RehydrateETAPrediction 从持久化列重建预测。首版走 FormETAPrediction；带指回的
+// 当前版把 prior 填回——库只管当前行，历史版本由指回关系承担，不是第二行。
+func RehydrateETAPrediction(spec ETAPredictionSpec, prior ETAVersionID) (ETAPrediction, error) {
+	eta, err := FormETAPrediction(spec)
+	if err != nil {
+		return ETAPrediction{}, err
+	}
+	if prior.valid() {
+		if prior == spec.Version {
+			return ETAPrediction{}, ErrInvalidETA
+		}
+		eta.priorVersion = prior
+	}
+	return eta, nil
+}
+
 // Refresh 形成新的预测版本：换版本、换输入与区间、指回原版；历史预测不覆盖（CONTEXT
 // 硬句 103），也不修改客户承诺、路由计划或实际事实——这里根本没有它们。
 func (eta ETAPrediction) Refresh(spec ETAPredictionSpec) (ETAPrediction, error) {

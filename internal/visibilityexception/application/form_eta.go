@@ -73,8 +73,9 @@ func (reason FormETAUndecidedReason) String() string {
 
 // FormETACommand 携带一次预测的全部业务事实（版本标识由编排签发，预测时间取时钟）。
 // 七件缺一在门口即未受理——只有计划时间凑不齐输入与模型，领域构造器与这道门共同保证
-// 「不用计划填充」。
+// 「不用计划填充」。租户显式随命令到达（ADR-0003）：包裹引用只在租户内唯一。
 type FormETACommand struct {
+	TenantID   domain.TenantID
 	Parcel     domain.TrackedParcelReference
 	Milestone  domain.MilestoneReference
 	Source     domain.ETASourceKind
@@ -86,8 +87,10 @@ type FormETACommand struct {
 }
 
 // FormVisibilityGapCommand 携带一次缺口判断请求：明确预期的观察、版本化窗口规则与
-// 窗口截止。届满与否由编排按时钟判断——请求方说了不算。
+// 窗口截止。届满与否由编排按时钟判断——请求方说了不算。租户显式随命令到达
+// （ADR-0003）。
 type FormVisibilityGapCommand struct {
+	TenantID    domain.TenantID
 	Parcel      domain.TrackedParcelReference
 	Expectation domain.ExpectedObservationReference
 	WindowRule  domain.ObservationWindowReference
@@ -153,7 +156,8 @@ func (handler *FormETAHandler) FormETA(
 	ctx context.Context,
 	command FormETACommand,
 ) (FormETAResult, error) {
-	if command.Parcel.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Parcel.String() == "" ||
 		command.Milestone.String() == "" ||
 		command.Source.String() == "" ||
 		command.Inputs.String() == "" ||
@@ -164,7 +168,7 @@ func (handler *FormETAHandler) FormETA(
 		return FormETAResult{outcome: FormETANotAccepted}, nil
 	}
 
-	current, found, err := handler.deps.Predictions.FindCurrent(ctx, command.Parcel, command.Milestone)
+	current, found, err := handler.deps.Predictions.FindCurrent(ctx, command.TenantID, command.Parcel, command.Milestone)
 	if err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
 	}
@@ -207,7 +211,7 @@ func (handler *FormETAHandler) FormETA(
 	if err != nil {
 		return FormETAResult{}, fmt.Errorf("form eta prediction: %w", err)
 	}
-	if err := handler.deps.Predictions.Save(ctx, prediction); err != nil {
+	if err := handler.deps.Predictions.Save(ctx, command.TenantID, prediction); err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: ETAStoreUnavailable}, nil
 	}
 	return FormETAResult{
@@ -225,14 +229,15 @@ func (handler *FormETAHandler) FormVisibilityGap(
 	ctx context.Context,
 	command FormVisibilityGapCommand,
 ) (FormETAResult, error) {
-	if command.Parcel.String() == "" ||
+	if command.TenantID.String() == "" ||
+		command.Parcel.String() == "" ||
 		command.Expectation.String() == "" ||
 		command.WindowRule.String() == "" ||
 		command.WindowEnd.IsZero() {
 		return FormETAResult{outcome: FormETANotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Gaps.FindCurrent(ctx, command.Parcel, command.Expectation, command.WindowRule)
+	existing, found, err := handler.deps.Gaps.FindCurrent(ctx, command.TenantID, command.Parcel, command.Expectation, command.WindowRule)
 	if err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: VisibilityGapStoreUnavailable}, nil
 	}
@@ -260,7 +265,7 @@ func (handler *FormETAHandler) FormVisibilityGap(
 	if err != nil {
 		return FormETAResult{}, fmt.Errorf("form visibility gap: %w", err)
 	}
-	if err := handler.deps.Gaps.Save(ctx, gap); err != nil {
+	if err := handler.deps.Gaps.Save(ctx, command.TenantID, gap); err != nil {
 		return FormETAResult{outcome: FormETAUndecided, reason: VisibilityGapStoreUnavailable}, nil
 	}
 	return FormETAResult{

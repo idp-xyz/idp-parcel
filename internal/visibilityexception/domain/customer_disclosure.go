@@ -119,6 +119,10 @@ func (decision DisclosureDecision) Content() (DisclosureContentReference, bool) 
 	return decision.content, decision.conclusion == DiscloseToCustomer
 }
 
+func (decision DisclosureDecision) DecidedAt() time.Time {
+	return decision.decidedAt
+}
+
 // NotificationID 是客户异常通知决定的标识。
 type NotificationID struct{ requiredValue }
 
@@ -239,9 +243,24 @@ func (notification *CustomerNotification) Obligation() DisclosurePolicyReference
 	return notification.obligation
 }
 
+func (notification *CustomerNotification) Channel() NotificationChannelReference {
+	return notification.channel
+}
+
+// Disclosure 是本通知所依据的那份披露决定——按（客户+发作期+决定时间）定位通知
+// 的身份三维就取自它。
+func (notification *CustomerNotification) Disclosure() DisclosureDecision {
+	return notification.disclosure
+}
+
 // Milestones 给出全部已记录节点（副本，按记录顺序）。
 func (notification *CustomerNotification) Milestones() []NotificationMilestone {
 	return append([]NotificationMilestone(nil), notification.milestones...)
+}
+
+// RecordedAt 给出与节点一一对应的记录时间（副本）。
+func (notification *CustomerNotification) RecordedAt() []time.Time {
+	return append([]time.Time(nil), notification.recordedAt...)
 }
 
 // RecordMilestone 追加一个过程节点：分别记录不覆盖（历史节点全保留——失败后重试产生

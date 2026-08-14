@@ -14,6 +14,7 @@ import (
 var etaClockAt = time.Date(2026, 8, 13, 8, 0, 0, 0, time.UTC)
 
 type etaKey struct {
+	tenant    domain.TenantID
 	parcel    domain.TrackedParcelReference
 	milestone domain.MilestoneReference
 }
@@ -31,26 +32,28 @@ func newETAStore() *etaStoreDouble {
 
 func (double *etaStoreDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	milestone domain.MilestoneReference,
 ) (domain.ETAPrediction, bool, error) {
 	if double.findErr != nil {
 		return domain.ETAPrediction{}, false, double.findErr
 	}
-	eta, found := double.current[etaKey{parcel: parcel, milestone: milestone}]
+	eta, found := double.current[etaKey{tenant: tenant, parcel: parcel, milestone: milestone}]
 	return eta, found, nil
 }
 
-func (double *etaStoreDouble) Save(_ context.Context, eta domain.ETAPrediction) error {
+func (double *etaStoreDouble) Save(_ context.Context, tenant domain.TenantID, eta domain.ETAPrediction) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	double.current[etaKey{parcel: eta.Parcel(), milestone: eta.Milestone()}] = eta
+	double.current[etaKey{tenant: tenant, parcel: eta.Parcel(), milestone: eta.Milestone()}] = eta
 	double.saves++
 	return nil
 }
 
 type gapKey struct {
+	tenant      domain.TenantID
 	parcel      domain.TrackedParcelReference
 	expectation domain.ExpectedObservationReference
 	windowRule  domain.ObservationWindowReference
@@ -69,6 +72,7 @@ func newGapStore() *gapStoreDouble {
 
 func (double *gapStoreDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 	expectation domain.ExpectedObservationReference,
 	windowRule domain.ObservationWindowReference,
@@ -76,15 +80,15 @@ func (double *gapStoreDouble) FindCurrent(
 	if double.findErr != nil {
 		return domain.VisibilityGap{}, false, double.findErr
 	}
-	gap, found := double.current[gapKey{parcel: parcel, expectation: expectation, windowRule: windowRule}]
+	gap, found := double.current[gapKey{tenant: tenant, parcel: parcel, expectation: expectation, windowRule: windowRule}]
 	return gap, found, nil
 }
 
-func (double *gapStoreDouble) Save(_ context.Context, gap domain.VisibilityGap) error {
+func (double *gapStoreDouble) Save(_ context.Context, tenant domain.TenantID, gap domain.VisibilityGap) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	double.current[gapKey{parcel: gap.Parcel(), expectation: gap.Expectation(), windowRule: gap.WindowRule()}] = gap
+	double.current[gapKey{tenant: tenant, parcel: gap.Parcel(), expectation: gap.Expectation(), windowRule: gap.WindowRule()}] = gap
 	double.saves++
 	return nil
 }
@@ -163,6 +167,7 @@ func newETAFixture(t *testing.T) *etaFixture {
 func etaCommand(t *testing.T, inputs string) application.FormETACommand {
 	t.Helper()
 	return application.FormETACommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Parcel:     mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Milestone:  mustValue(t, domain.NewMilestoneReference, "DELIVERED"),
 		Source:     domain.OperatorDerivedETA,
@@ -177,6 +182,7 @@ func etaCommand(t *testing.T, inputs string) application.FormETACommand {
 func gapCommand(t *testing.T, windowRule string, windowEnd time.Time) application.FormVisibilityGapCommand {
 	t.Helper()
 	return application.FormVisibilityGapCommand{
+		TenantID:    mustValue(t, domain.NewTenantID, "tenant-1"),
 		Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Expectation: mustValue(t, domain.NewExpectedObservationReference, "LINEHAUL_ARRIVAL_SCAN"),
 		WindowRule:  mustValue(t, domain.NewObservationWindowReference, windowRule),

@@ -249,12 +249,15 @@ type NotificationPolicyView interface {
 
 // CustomerNotificationStore 按披露决定找回并保存通知。披露决定没有自有标识，按其身份
 // 三维（客户、发作期、决定时间）定位——同一披露不重发通知的幂等界线就立在这里。
+// 租户是最高数据隔离边界（ADR-0003），跨越它必须在签名上看得见：客户账户引用只在
+// 租户内唯一，缺租户维两个租户的同名客户就会共用一份通知。
 type CustomerNotificationStore interface {
 	FindByDisclosure(
 		ctx context.Context,
+		tenant domain.TenantID,
 		disclosure domain.DisclosureDecision,
 	) (*domain.CustomerNotification, bool, error)
-	Save(ctx context.Context, notification *domain.CustomerNotification) error
+	Save(ctx context.Context, tenant domain.TenantID, notification *domain.CustomerNotification) error
 }
 
 // NotificationIdentityFactory 签发通知标识。与其余身份工厂分开，理由相同。
@@ -332,15 +335,17 @@ type DispositionHandoff interface {
 	HandOffDispositionRequest(ctx context.Context, intent DispositionHandoffIntent) error
 }
 
-// ETAStore 按（包裹+里程碑）保存当前预测版本。历史版本由 Refresh 的指回关系承担，
-// 库只管当前。
+// ETAStore 按（租户+包裹+里程碑）保存当前预测版本。历史版本由 Refresh 的指回关系
+// 承担，库只管当前。租户是最高数据隔离边界（ADR-0003）：TrackedParcelReference 只
+// 是字符串引用，缺租户维两个租户的同名包裹就会共用一份预测。
 type ETAStore interface {
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		parcel domain.TrackedParcelReference,
 		milestone domain.MilestoneReference,
 	) (domain.ETAPrediction, bool, error)
-	Save(ctx context.Context, eta domain.ETAPrediction) error
+	Save(ctx context.Context, tenant domain.TenantID, eta domain.ETAPrediction) error
 }
 
 // ETAIdentityFactory 签发预测版本标识。与其余身份工厂分开，理由相同。
@@ -360,17 +365,19 @@ type ETAHandoff interface {
 	HandOffETA(ctx context.Context, intent ETAHandoffIntent) error
 }
 
-// VisibilityGapStore 按（包裹+预期观察+窗口规则版本）保存缺口。键含窗口规则版本：
-// 「新窗口版本生效→后续采用新版本，原判断保留」——同一预期在新旧规则下是两次独立
-// 判断，压成一个键会让新版本覆盖原判断。
+// VisibilityGapStore 按（租户+包裹+预期观察+窗口规则版本）保存缺口。键含窗口规则
+// 版本：「新窗口版本生效→后续采用新版本，原判断保留」——同一预期在新旧规则下是两
+// 次独立判断，压成一个键会让新版本覆盖原判断。租户是最高数据隔离边界（ADR-0003），
+// 跨越它必须在签名上看得见。
 type VisibilityGapStore interface {
 	FindCurrent(
 		ctx context.Context,
+		tenant domain.TenantID,
 		parcel domain.TrackedParcelReference,
 		expectation domain.ExpectedObservationReference,
 		windowRule domain.ObservationWindowReference,
 	) (domain.VisibilityGap, bool, error)
-	Save(ctx context.Context, gap domain.VisibilityGap) error
+	Save(ctx context.Context, tenant domain.TenantID, gap domain.VisibilityGap) error
 }
 
 // VisibilityGapHandoffIntent 把已成立的缺口交给信号链（缺口是否命中异常规则由分诊

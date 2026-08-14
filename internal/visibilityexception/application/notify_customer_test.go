@@ -14,6 +14,7 @@ import (
 var disclosureDecidedAt = time.Date(2026, 8, 11, 10, 0, 0, 0, time.UTC)
 
 type disclosureKey struct {
+	tenant   domain.TenantID
 	customer string
 	episode  string
 	at       time.Time
@@ -30,38 +31,36 @@ func newNotificationStore() *notificationStoreDouble {
 	return &notificationStoreDouble{byDisclosure: map[disclosureKey]*domain.CustomerNotification{}}
 }
 
-func keyOf(disclosure domain.DisclosureDecision) disclosureKey {
+func keyOf(tenant domain.TenantID, disclosure domain.DisclosureDecision) disclosureKey {
 	return disclosureKey{
+		tenant:   tenant,
 		customer: disclosure.Customer().String(),
 		episode:  disclosure.Episode().String(),
-		at:       disclosureDecidedAt,
+		at:       disclosure.DecidedAt(),
 	}
 }
 
 func (double *notificationStoreDouble) FindByDisclosure(
 	_ context.Context,
+	tenant domain.TenantID,
 	disclosure domain.DisclosureDecision,
 ) (*domain.CustomerNotification, bool, error) {
 	if double.findErr != nil {
 		return nil, false, double.findErr
 	}
-	notification, found := double.byDisclosure[keyOf(disclosure)]
+	notification, found := double.byDisclosure[keyOf(tenant, disclosure)]
 	return notification, found, nil
 }
 
 func (double *notificationStoreDouble) Save(
 	_ context.Context,
+	tenant domain.TenantID,
 	notification *domain.CustomerNotification,
 ) error {
 	if double.saveErr != nil {
 		return double.saveErr
 	}
-	// 双儿按披露身份三维定位；测试里全部通知共用同一份披露，直接以其键存放。
-	double.byDisclosure[disclosureKey{
-		customer: notification.Customer().String(),
-		episode:  "episode-1",
-		at:       disclosureDecidedAt,
-	}] = notification
+	double.byDisclosure[keyOf(tenant, notification.Disclosure())] = notification
 	double.saved++
 	return nil
 }
@@ -185,7 +184,10 @@ func discloseDecision(t *testing.T, conclusion domain.DisclosureConclusion) doma
 
 func notifyCommand(t *testing.T) application.NotifyCustomerCommand {
 	t.Helper()
-	return application.NotifyCustomerCommand{Disclosure: discloseDecision(t, domain.DiscloseToCustomer)}
+	return application.NotifyCustomerCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
+		Disclosure: discloseDecision(t, domain.DiscloseToCustomer),
+	}
 }
 
 // Covers: CONTEXT「客户异常通知必须保存通知对象、内容快照、披露依据、目标客户、要求
