@@ -6,13 +6,15 @@ import (
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
+	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
-// 本文件证签发面的三条：签出来的值互不相同且能过领域构造、随机段不含易混字符、
-// 熵源出问题时报错而不是交回一个可预测的值。
+// 本文件证本上下文这一侧的三条：签出来的值互不相同且过得了领域构造、带得上本上下文的
+// 前缀、熵源出问题时如实报错而不是交回一个可预测的值。编码字母表与随机段长度是内核的
+// 事，钉在 internal/platform/identity 那边，这里不重复。
 
 func TestEachIssuedIntakeResultVersionIsNew(t *testing.T) {
-	factory := identity.NewIntakeResultVersions()
+	factory := newFactory(t)
 	ctx := t.Context()
 
 	issued := make(map[string]struct{}, 512)
@@ -31,10 +33,10 @@ func TestEachIssuedIntakeResultVersionIsNew(t *testing.T) {
 	}
 }
 
-// TestIssuedVersionCarriesItsOrigin 钉住前缀：库行与日志里认得出这个版本是谁签的。
+// TestIssuedVersionCarriesItsOrigin 钉住前缀：日志与工单里认得出这是个收寄结果版本。
 // 唯一性不靠它，所以这条只看前缀在，不看后面那段长什么样。
 func TestIssuedVersionCarriesItsOrigin(t *testing.T) {
-	version, err := identity.NewIntakeResultVersions().NextIntakeResultVersion(t.Context())
+	version, err := newFactory(t).NextIntakeResultVersion(t.Context())
 	if err != nil {
 		t.Fatalf("签发：%v", err)
 	}
@@ -43,31 +45,11 @@ func TestIssuedVersionCarriesItsOrigin(t *testing.T) {
 	}
 }
 
-// TestTheRandomSegmentAvoidsConfusableCharacters 钉住 base32 那条裁定的实际收益：
-// 随机段里不出现 0、1、8、9，因此 0 与 O、1 与 I 不可能在照着工单念的时候混掉。
-// 十六进制过不了这一条。
-func TestTheRandomSegmentAvoidsConfusableCharacters(t *testing.T) {
-	factory := identity.NewIntakeResultVersions()
-
-	for range 256 {
-		version, err := factory.NextIntakeResultVersion(t.Context())
-		if err != nil {
-			t.Fatalf("签发：%v", err)
-		}
-		segment := strings.TrimPrefix(version.String(), "INTAKEV-")
-		if strings.ContainsAny(segment, "0189") {
-			t.Fatalf("随机段 %q 含易混字符", segment)
-		}
-		if strings.ToUpper(segment) != segment {
-			t.Fatalf("随机段 %q 不是全大写", segment)
-		}
-	}
-}
-
 // TestAStarvedEntropySourceRefusesToIssue 证熵源读不满时报错，而不是用读到的半截凑出
 // 一个可预测的版本——收寄结果版本要跨上下文当幂等键，可预测等于可撞。
 func TestAStarvedEntropySourceRefusesToIssue(t *testing.T) {
-	starved, err := identity.NewIntakeResultVersionsFrom(bytes.NewReader([]byte{1, 2, 3}))
+	starved, err := identity.NewIntakeResultVersions(
+		platformidentity.WithEntropy(bytes.NewReader([]byte{1, 2, 3})))
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -78,7 +60,16 @@ func TestAStarvedEntropySourceRefusesToIssue(t *testing.T) {
 }
 
 func TestANilEntropySourceIsRefusedAtConstruction(t *testing.T) {
-	if _, err := identity.NewIntakeResultVersionsFrom(nil); err == nil {
+	if _, err := identity.NewIntakeResultVersions(platformidentity.WithEntropy(nil)); err == nil {
 		t.Fatal("空熵源构造成功了")
 	}
+}
+
+func newFactory(t *testing.T) *identity.IntakeResultVersions {
+	t.Helper()
+	factory, err := identity.NewIntakeResultVersions()
+	if err != nil {
+		t.Fatalf("构造签发器：%v", err)
+	}
+	return factory
 }
