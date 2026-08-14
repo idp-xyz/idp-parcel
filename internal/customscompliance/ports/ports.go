@@ -196,14 +196,14 @@ type RestrictionStore interface {
 }
 
 // RestrictionHandoffIntent 把限制的建立与解除交给适用下游（TF/NO 的门禁执行方消费
-// ——它们只执行不豁免）。
+// ——它们只执行不豁免）。意图由限制标识认领，重放重发同一份（ADR-0043）。
 type RestrictionHandoffIntent struct {
 	TenantID    domain.TenantID
 	Restriction domain.RegulatoryRestriction
 }
 
-// RestrictionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// RestrictionHandoff 把限制写入 Outbox（`OutboxRestrictionHandoff`）。信封 ID 由限制
+// 标识认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type RestrictionHandoff interface {
 	HandOffRestriction(ctx context.Context, intent RestrictionHandoffIntent) error
 }

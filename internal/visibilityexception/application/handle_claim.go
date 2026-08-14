@@ -318,7 +318,7 @@ func (handler *HandleClaimHandler) ConcludeClaim(
 			return HandleClaimResult{
 				outcome:    ClaimConclusionAlreadyRecorded,
 				claim:      claim,
-				handoffRef: handler.handOffLiability(ctx, claim),
+				handoffRef: handler.handOffLiability(ctx, command.TenantID, claim),
 			}, nil
 		case errors.Is(err, domain.ErrClaimNotScreened), errors.Is(err, domain.ErrClaimWithdrawn):
 			return HandleClaimResult{outcome: HandleClaimNotAccepted, claim: claim}, nil
@@ -332,7 +332,7 @@ func (handler *HandleClaimHandler) ConcludeClaim(
 	return HandleClaimResult{
 		outcome:    ClaimConcluded,
 		claim:      claim,
-		handoffRef: handler.handOffLiability(ctx, claim),
+		handoffRef: handler.handOffLiability(ctx, command.TenantID, claim),
 	}, nil
 }
 
@@ -367,7 +367,7 @@ func (handler *HandleClaimHandler) ReviewClaim(
 	return HandleClaimResult{
 		outcome:    ClaimReviewed,
 		claim:      claim,
-		handoffRef: handler.handOffLiability(ctx, claim),
+		handoffRef: handler.handOffLiability(ctx, command.TenantID, claim),
 	}, nil
 }
 
@@ -490,8 +490,11 @@ func (handler *HandleClaimHandler) loadClaim(
 
 // handOffLiability 把当前责任结论交给结算侧，交不出去时交回发布续办引用（ADR-0043）。
 // 复核换出的新结论走同一条缝：意图仍由索赔项认领，重发携带的是当前版本。
-func (handler *HandleClaimHandler) handOffLiability(ctx context.Context, claim *domain.ClaimItem) string {
-	if err := handler.deps.Settlement.HandOffLiability(ctx, ports.LiabilityHandoffIntent{Claim: claim}); err != nil {
+func (handler *HandleClaimHandler) handOffLiability(ctx context.Context, tenant domain.TenantID, claim *domain.ClaimItem) string {
+	if err := handler.deps.Settlement.HandOffLiability(ctx, ports.LiabilityHandoffIntent{
+		TenantID: tenant,
+		Claim:    claim,
+	}); err != nil {
 		return "CONT-" + shortDigest("LIABILITY_HANDOFF", claim.ID().String())
 	}
 	return ""

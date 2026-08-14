@@ -442,13 +442,15 @@ type EligibilityRuleView interface {
 
 // LiabilityHandoffIntent 把责任结论交给结算侧（`UC-SA-007` 赔付金额链的上游源——
 // 金额由结算形成，这里只交结论）。意图由索赔项认领，复核换出的新结论版本随重发到达；
-// 重放重发同一份（ADR-0043）。
+// 重放重发同一份（ADR-0043）。租户随意图到达（ADR-0003）：索赔对象没有租户维，下游
+// 按（租户+批次+项）查库。
 type LiabilityHandoffIntent struct {
-	Claim *domain.ClaimItem
+	TenantID domain.TenantID
+	Claim    *domain.ClaimItem
 }
 
-// LiabilityHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// LiabilityHandoff 把责任结论写入 Outbox（`OutboxLiabilityHandoff`）。信封 ID 由索赔
+// 项标识认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type LiabilityHandoff interface {
 	HandOffLiability(ctx context.Context, intent LiabilityHandoffIntent) error
 }
