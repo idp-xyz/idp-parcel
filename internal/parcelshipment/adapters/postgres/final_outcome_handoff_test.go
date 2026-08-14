@@ -91,6 +91,70 @@ func TestFinalOutcomeFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 }
 
+// partitionKeyOf 读回一份意图落在哪条分区队列上。
+//
+// 它与 countOutboxEventsIn 分开问：一个问「发出去了几份」，一个问「它们排在哪条队里」——
+// 本仓这一类缺陷恰恰是两者只对了一样（ID 带区分维所以不丢，分区键却跟着 ID 走所以乱序）。
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey)
+	if err != nil {
+		t.Fatalf("读回分区键：%v", err)
+	}
+	return partitionKey
+}
+
+// TestARederivedFinalOutcomeQueuesBehindTheOneItSupersedes 钉住两个字段的分工。
+//
+// 终局是重派生翻旧插新，所以同一包裹会先后出现两个版本。两件都要成立：**都入队**（ID 含
+// 版本，重派生不被 EnqueueOnce 当成重放吞掉）**且同分区**（分区键只到包裹，后派生的排在
+// 先派生的后面）。少了后一半，重派生先送达时下游最后应用的是已被取代的那一份。
+//
+// 门禁只守「ID 与 PartitionKey 不得同源」，守不住「主体取得对不对」——把分区键取成
+// 租户/包裹/种类/版本 同样能过门禁，而那与逐事件分区一模一样。这条断言补的就是那一格：
+// 它经变异验证，把 PartitionKey 改回 eventID 时本用例变红。
+func TestARederivedFinalOutcomeQueuesBehindTheOneItSupersedes(t *testing.T) {
+	handoff, db, pool := newFinalOutcomeHandoffFixture(t)
+	ctx := t.Context()
+
+	for _, version := range []string{"outcome-v1", "outcome-v2"} {
+		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			return handoff.HandOffFinalOutcome(txCtx, finalOutcomeHandoffIntent(t, "parcel-1", version))
+		}); err != nil {
+			t.Fatalf("入队 %s：%v", version, err)
+		}
+	}
+
+	first := finalOutcomeEventID("parcel-1", "outcome-v1")
+	second := finalOutcomeEventID("parcel-1", "outcome-v2")
+	for _, eventID := range []string{first, second} {
+		if count := countOutboxEventsIn(t, pool, eventID); count != 1 {
+			t.Fatalf("%s 行数 = %d, want 1——重派生必须自成一份，不能被当成重放吞掉", eventID, count)
+		}
+	}
+
+	firstPartition := partitionKeyOf(t, pool, first)
+	if secondPartition := partitionKeyOf(t, pool, second); firstPartition != secondPartition {
+		t.Fatalf("同一包裹的两版落在不同分区：%q 与 %q——重派生会与原终局失去先后",
+			firstPartition, secondPartition)
+	}
+
+	// 不同包裹必须各自成区，否则一个包裹的失败会拖住另一个。
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		return handoff.HandOffFinalOutcome(txCtx, finalOutcomeHandoffIntent(t, "parcel-2", "outcome-v1"))
+	}); err != nil {
+		t.Fatalf("入队 parcel-2：%v", err)
+	}
+	if other := partitionKeyOf(t, pool, finalOutcomeEventID("parcel-2", "outcome-v1")); other == firstPartition {
+		t.Fatalf("两个包裹共用分区 %q——一个的失败会拖住另一个", other)
+	}
+}
+
 func TestFinalOutcomeRefusesABlankKey(t *testing.T) {
 	handoff, db, _ := newFinalOutcomeHandoffFixture(t)
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
