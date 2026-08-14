@@ -53,6 +53,19 @@ func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) string
 	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Scope.String() + "/" + key.Version.String()
 }
 
+// transportHandoverPartitionKey 取（租户+载运对象），不取整个判断键。
+//
+// 分区键与信封 ID 管的不是一回事：ID 管幂等（每个判断版本一份意图，更正因而不丢），
+// 分区键管顺序（同一对象的先后拍排队）。把 ID 直接当分区键会让每份信封自成一个分区，
+// 框架的顺序保证于是落空——更正版本可以先于它更正的那一版送达。
+//
+// 主体取到对象而不取到（对象+范围）：控制转移对一个载运对象是一条链，先从节点交出、
+// 再由承运方接收，两次交接分属不同范围却必须保序。取到范围就把这条链切成了互不排队的
+// 两段，而 node-operations 的控制转移正是按这条链推进的。
+func transportHandoverPartitionKey(key ports.TransportHandoverKey) string {
+	return key.TenantID.String() + "/" + key.Object.String()
+}
+
 // HandOffTransportHandover 把一份意图入队。信封 ID 取交接判断键——意图由
 // （租户+对象+范围+版本）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTransportHandoverRegistrationHandoff) HandOffTransportHandover(
@@ -87,7 +100,7 @@ func (handoff *OutboxTransportHandoverRegistrationHandoff) HandOffTransportHando
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Object.String() + "/" + key.Scope.String() + "/" + key.Version.String(),
-		PartitionKey: eventID,
+		PartitionKey: transportHandoverPartitionKey(key),
 		OccurredAt:   intent.Record.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

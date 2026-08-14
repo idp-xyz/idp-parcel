@@ -114,6 +114,62 @@ func TestTransportHandoverRegistrationFollowsTheTransactionalTemplate(t *testing
 	}
 }
 
+// TestHandoverVersionsOfOneObjectShareAPartition 钉住分区键与信封 ID 的分工：ID 带
+// 版本所以两代都入队（更正不丢），分区键只取（租户+对象）所以两代排同一个队（更正不会
+// 先于它更正的那一版送达）。
+//
+// 没有这条断言，把 PartitionKey 改回 eventID 不会让任何东西变红——每份信封自成一个
+// 分区，框架的顺序保证落空，而乱序投递不报任何错、只是结果错。
+func TestHandoverVersionsOfOneObjectShareAPartition(t *testing.T) {
+	handoff, db, pool := newHandoverRegistrationHandoffFixture(t)
+	ctx := t.Context()
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := handoff.HandOffTransportHandover(txCtx, handoverRegistrationHandoffIntent(t, "parcel-1", "hv-1")); err != nil {
+			return err
+		}
+		// 更正换出的新版本：同一对象、同一范围，另一个版本号。
+		if err := handoff.HandOffTransportHandover(txCtx, handoverRegistrationHandoffIntent(t, "parcel-1", "hv-2")); err != nil {
+			return err
+		}
+		return handoff.HandOffTransportHandover(txCtx, handoverRegistrationHandoffIntent(t, "parcel-2", "hv-1"))
+	}); err != nil {
+		t.Fatalf("入队三份意图：%v", err)
+	}
+
+	// 两代都在：ID 带版本，所以更正不会被 EnqueueOnce 当成重复吞掉。
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); count != 1 {
+		t.Fatalf("首版行数 = %d, want 1", count)
+	}
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); count != 1 {
+		t.Fatalf("更正版行数 = %d, want 1——ID 不带版本时它会被当成重复静默丢掉", count)
+	}
+
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); got != "tenant-a/parcel-1" {
+		t.Fatalf("首版分区键 = %q, want tenant-a/parcel-1", got)
+	}
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); got != "tenant-a/parcel-1" {
+		t.Fatalf("更正版分区键 = %q；两代不同分区就没有先后可言", got)
+	}
+	// 不同对象不共享分区：一个对象卡住不该拖住另一个。
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-2/scope-1/hv-1"); got != "tenant-a/parcel-2" {
+		t.Fatalf("他对象分区键 = %q, want tenant-a/parcel-2", got)
+	}
+}
+
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey); err != nil {
+		t.Fatalf("读取分区键：%v", err)
+	}
+	return partitionKey
+}
+
 func TestTransportHandoverRegistrationRefusesABlankKey(t *testing.T) {
 	handoff, db, _ := newHandoverRegistrationHandoffFixture(t)
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
