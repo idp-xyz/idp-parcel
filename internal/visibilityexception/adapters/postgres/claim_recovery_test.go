@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证索赔与追偿库的行为：三判分步的判断历史原样往返、
@@ -263,7 +264,8 @@ func TestRecoveryMatterRoundTripsAndStaysIdempotent(t *testing.T) {
 
 	matter := openedMatter(t, "recovery-1", "case-1", "supplier-1", "parcel-1/loss")
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.recoveries.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), matter)
+		_, err := fixture.recoveries.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), matter)
+		return err
 	})
 
 	byID, exists, err := fixture.recoveries.FindByID(ctx,
@@ -308,13 +310,16 @@ func TestSecondRecoverySaveInTheSameTransactionKeepsTheTxUsable(t *testing.T) {
 
 	var foundAfter bool
 	var winnerID domain.RecoveryMatterID
+	var secondOutcome ports.RecoverySaveOutcome
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.recoveries.Save(txCtx, tenant, first); err != nil {
+		if _, err := fixture.recoveries.Save(txCtx, tenant, first); err != nil {
 			return err
 		}
-		if err := fixture.recoveries.Save(txCtx, tenant, impostor); err != nil {
+		saved, err := fixture.recoveries.Save(txCtx, tenant, impostor)
+		if err != nil {
 			return err
 		}
+		secondOutcome = saved
 		current, exists, err := fixture.recoveries.FindCurrent(txCtx, tenant,
 			claimValue(t, domain.NewCaseID, "case-1"),
 			claimValue(t, domain.NewCounterpartyReference, "supplier-1"),
@@ -326,6 +331,9 @@ func TestSecondRecoverySaveInTheSameTransactionKeepsTheTxUsable(t *testing.T) {
 		winnerID = current.ID()
 		return nil
 	})
+	if secondOutcome != ports.RecoveryAlreadyRecorded {
+		t.Fatalf("第二份写入 outcome = %d，应为 ALREADY_RECORDED", secondOutcome)
+	}
 	if !foundAfter || winnerID.String() != "recovery-1" {
 		t.Fatalf("冲突后读回 found=%v id=%s，事务应仍可用且赢家是第一份", foundAfter, winnerID)
 	}
@@ -340,7 +348,8 @@ func TestRecoveryActionsKeepSeparateAttemptSequences(t *testing.T) {
 
 	matter := openedMatter(t, "recovery-1", "case-1", "supplier-1", "parcel-1/loss")
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.recoveries.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), matter)
+		_, err := fixture.recoveries.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), matter)
+		return err
 	})
 
 	matterID := claimValue(t, domain.NewRecoveryMatterID, "recovery-1")
@@ -390,7 +399,7 @@ func TestClaimRecoveryWritesRequireTransactionAndRollBack(t *testing.T) {
 		if err := fixture.claims.Save(txCtx, tenant, receivedClaim(t, "batch-1", "item-1")); err != nil {
 			return err
 		}
-		if err := fixture.recoveries.Save(txCtx, tenant, matter); err != nil {
+		if _, err := fixture.recoveries.Save(txCtx, tenant, matter); err != nil {
 			return err
 		}
 		return context.Canceled

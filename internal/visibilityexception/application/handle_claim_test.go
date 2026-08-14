@@ -118,13 +118,17 @@ func (double *recoveryStoreDouble) FindCurrent(
 	return matter, found, nil
 }
 
-func (double *recoveryStoreDouble) Save(_ context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) error {
+func (double *recoveryStoreDouble) Save(_ context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) (ports.RecoverySaveOutcome, error) {
 	if double.saveErr != nil {
-		return double.saveErr
+		return ports.RecoverySaveOutcomeInvalid, double.saveErr
+	}
+	key := recoveryKey{tenant: tenant, caseID: matter.Case(), counterparty: matter.Counterparty(), scope: matter.Scope()}
+	if _, exists := double.current[key]; exists {
+		return ports.RecoveryAlreadyRecorded, nil
 	}
 	double.byID[matter.ID()] = matter
-	double.current[recoveryKey{tenant: tenant, caseID: matter.Case(), counterparty: matter.Counterparty(), scope: matter.Scope()}] = matter
-	return nil
+	double.current[key] = matter
+	return ports.RecoverySaved, nil
 }
 
 func (double *recoveryStoreDouble) CountActions(

@@ -83,7 +83,7 @@ func TestNotificationIntentCommitsAtomicallyWithTheRecord(t *testing.T) {
 	intent := notificationIntent(t, "tenant-a", "notification-1")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
+		if _, err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffNotification(txCtx, intent)
@@ -108,7 +108,7 @@ func TestNotificationIntentRollbackDropsBoth(t *testing.T) {
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		if err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
+		if _, err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
 			return err
 		}
 		if err := fixture.handoff.HandOffNotification(txCtx, intent); err != nil {
@@ -127,7 +127,7 @@ func TestNotificationIntentRollbackDropsBoth(t *testing.T) {
 	}
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
+		if _, err := fixture.notifications.Save(txCtx, tenant, intent.Notification); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffNotification(txCtx, intent)

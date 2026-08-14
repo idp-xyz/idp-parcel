@@ -145,7 +145,9 @@ type CollaborationAcceptanceHandoffIntent struct {
 	Record CollaborationAcceptanceRecord
 }
 
-// CollaborationAcceptanceHandoff 今天没有实现，唯一实现是测试替身。
+// CollaborationAcceptanceHandoff 把承接决定写入 Outbox（`OutboxCollaborationAcceptanceHandoff`）。
+// 信封 ID 由承接幂等键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type CollaborationAcceptanceHandoff interface {
 	HandOffCollaborationAcceptance(ctx context.Context, intent CollaborationAcceptanceHandoffIntent) error
 }

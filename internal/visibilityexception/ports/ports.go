@@ -259,17 +259,29 @@ type NotificationPolicyView interface {
 	) (NotificationDirective, bool, error)
 }
 
+type NotificationSaveOutcome uint8
+
+const (
+	NotificationSaveOutcomeInvalid NotificationSaveOutcome = iota
+	NotificationSaved
+	NotificationAlreadyRecorded
+)
+
 // CustomerNotificationStore 按披露决定找回并保存通知。披露决定没有自有标识，按其身份
 // 三维（客户、发作期、决定时间）定位——同一披露不重发通知的幂等界线就立在这里。
 // 租户是最高数据隔离边界（ADR-0003），跨越它必须在签名上看得见：客户账户引用只在
 // 租户内唯一，缺租户维两个租户的同名客户就会共用一份通知。
+//
+// Save 的写入代数同 ADR-0031：过程节点回填走主键 UPSERT；首发撞披露身份三维唯一
+// 约束交回 AlreadyRecorded（事务保持可用，编排读回赢家）。两条冲突路径不压成一个
+// ON CONFLICT。
 type CustomerNotificationStore interface {
 	FindByDisclosure(
 		ctx context.Context,
 		tenant domain.TenantID,
 		disclosure domain.DisclosureDecision,
 	) (*domain.CustomerNotification, bool, error)
-	Save(ctx context.Context, tenant domain.TenantID, notification *domain.CustomerNotification) error
+	Save(ctx context.Context, tenant domain.TenantID, notification *domain.CustomerNotification) (NotificationSaveOutcome, error)
 }
 
 // NotificationIdentityFactory 签发通知标识。与其余身份工厂分开，理由相同。
@@ -476,10 +488,21 @@ type LiabilityHandoff interface {
 	HandOffLiability(ctx context.Context, intent LiabilityHandoffIntent) error
 }
 
+type RecoverySaveOutcome uint8
+
+const (
+	RecoverySaveOutcomeInvalid RecoverySaveOutcome = iota
+	RecoverySaved
+	RecoveryAlreadyRecorded
+)
+
 // RecoveryStore 保存追偿事项与动作记录。租户是最高数据隔离边界（ADR-0003），跨越它
 // 必须在签名上看得见。FindCurrent 按（案件+相对方+范围）承担事项幂等；动作是只增
 // 记录，CountActions 按（事项+动作种类）计数供 attempt 递增——预先通知与正式主张
 // 各有各的尝试序列，合并计数会让一类动作吃掉另一类的次序。
+//
+// Save 的写入代数同 ADR-0031：首发撞（案件+相对方+范围）唯一约束交回 AlreadyRecorded
+// （事务保持可用，编排读回赢家）；零行命中即已有，不是错误。
 type RecoveryStore interface {
 	FindByID(
 		ctx context.Context,
@@ -493,7 +516,7 @@ type RecoveryStore interface {
 		counterparty domain.CounterpartyReference,
 		scope domain.RequestScopeReference,
 	) (domain.RecoveryMatter, bool, error)
-	Save(ctx context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) error
+	Save(ctx context.Context, tenant domain.TenantID, matter domain.RecoveryMatter) (RecoverySaveOutcome, error)
 	CountActions(
 		ctx context.Context,
 		tenant domain.TenantID,

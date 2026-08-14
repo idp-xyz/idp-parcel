@@ -93,8 +93,8 @@ func (inertRecoveries) FindCurrent(
 	return domain.RecoveryMatter{}, false, nil
 }
 
-func (inertRecoveries) Save(_ context.Context, _ domain.TenantID, _ domain.RecoveryMatter) error {
-	return nil
+func (inertRecoveries) Save(_ context.Context, _ domain.TenantID, _ domain.RecoveryMatter) (ports.RecoverySaveOutcome, error) {
+	return ports.RecoverySaved, nil
 }
 
 func (inertRecoveries) CountActions(

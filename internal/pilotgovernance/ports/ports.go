@@ -83,8 +83,9 @@ type GovernanceHandoffIntent struct {
 	Takeover   *domain.TakeoverRecord
 }
 
-// GovernanceHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// GovernanceHandoff 把治理决定写入 Outbox（`OutboxGovernanceHandoff`）。信封 ID 由
+// 暂停标识 / 被恢复的暂停标识 / 接管区间四维认领，入队由 outboxintent.EnqueueOnce
+// 承担；重放重发同一份（ADR-0043）。
 type GovernanceHandoff interface {
 	HandOffGovernance(ctx context.Context, intent GovernanceHandoffIntent) error
 }

@@ -10,6 +10,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // Claims 实现 ports.ClaimStore。索赔是判断历史推进的聚合（受理→过审→结论→复核/
@@ -261,19 +262,19 @@ func (repository *Recoveries) findWhere(
 
 // Save 写下一项追偿事项。事项不可回写，语句只插入。同（案件+相对方+范围）已有事项
 // 时 ON CONFLICT DO NOTHING——业务答案是已有，不是错误（ADR-0031）。捕 23505 会
-// 把本事务后续语句一并废掉，先查也拦不住并发赢家。rows=0 视为已有，调用方同事务
-// 还能继续读。
+// 把本事务后续语句一并废掉，先查也拦不住并发赢家。零行命中交回 AlreadyRecorded，
+// 调用方同事务还能继续读赢家。
 func (repository *Recoveries) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
 	matter domain.RecoveryMatter,
-) error {
+) (ports.RecoverySaveOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("save recovery matter: %w", err)
+		return ports.RecoverySaveOutcomeInvalid, fmt.Errorf("save recovery matter: %w", err)
 	}
 
-	_, err = executor.Exec(ctx,
+	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.recovery_matter
 			(tenant_id, matter_id, case_id, counterparty_ref, scope_ref,
 			 basis_ref, legal_entity_ref, evidence_ref, deadline, opened_at)
@@ -291,9 +292,12 @@ func (repository *Recoveries) Save(
 		matter.OpenedAt(),
 	)
 	if err != nil {
-		return fmt.Errorf("save recovery matter: %w", err)
+		return ports.RecoverySaveOutcomeInvalid, fmt.Errorf("save recovery matter: %w", err)
 	}
-	return nil
+	if tag.RowsAffected() == 0 {
+		return ports.RecoveryAlreadyRecorded, nil
+	}
+	return ports.RecoverySaved, nil
 }
 
 // CountActions 交回该（事项+种类）已用到的最大尝试号——预先通知与正式主张各有各的

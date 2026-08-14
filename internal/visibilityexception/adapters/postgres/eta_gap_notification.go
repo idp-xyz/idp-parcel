@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // ETAs 实现 ports.ETAStore。键是（租户+包裹+里程碑）；Save 整行 UPSERT——库只管
@@ -295,38 +296,124 @@ func (repository *CustomerNotifications) FindByDisclosure(
 	return notification, true, nil
 }
 
-// Save 落通知的当前过程历史。同披露身份三维 UPSERT——节点只增，失败后重试的新节点
-// 接在后面。
+// Save 落通知的当前过程历史。过程节点回填按主键 UPSERT；首发走披露身份三维唯一
+// 约束的 ON CONFLICT DO NOTHING：并发第二份不同 notification_id、同一披露三维交回
+// AlreadyRecorded，事务保持可用。两条冲突路径不压成一个 ON CONFLICT。
 func (repository *CustomerNotifications) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
 	notification *domain.CustomerNotification,
-) error {
+) (ports.NotificationSaveOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("save customer notification: %w", err)
+		return ports.NotificationSaveOutcomeInvalid, fmt.Errorf("save customer notification: %w", err)
 	}
 	if notification == nil {
-		return fmt.Errorf("save customer notification: notification is nil")
+		return ports.NotificationSaveOutcomeInvalid, fmt.Errorf("save customer notification: notification is nil")
 	}
 
-	disclosure := notification.Disclosure()
-	milestonesRaw, err := marshalNotificationMilestones(notification)
+	found, err := repository.notificationExists(ctx, tenant, notification.ID())
 	if err != nil {
-		return fmt.Errorf("save customer notification: %w", err)
+		return ports.NotificationSaveOutcomeInvalid, err
+	}
+	if found {
+		if err := repository.upsertByPrimaryKey(ctx, executor, tenant, notification); err != nil {
+			return ports.NotificationSaveOutcomeInvalid, err
+		}
+		return ports.NotificationSaved, nil
 	}
 
+	tag, err := repository.insertByDisclosure(ctx, executor, tenant, notification)
+	if err != nil {
+		return ports.NotificationSaveOutcomeInvalid, err
+	}
+	if tag == 0 {
+		return ports.NotificationAlreadyRecorded, nil
+	}
+	return ports.NotificationSaved, nil
+}
+
+func (repository *CustomerNotifications) notificationExists(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.NotificationID,
+) (bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("find customer notification: %w", err)
+	}
+	var exists bool
+	err = querier.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM visibility_exception.customer_notification
+			 WHERE tenant_id = $1 AND notification_id = $2)`,
+		tenant.String(), id.String(),
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("find customer notification: %w", err)
+	}
+	return exists, nil
+}
+
+func (repository *CustomerNotifications) upsertByPrimaryKey(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant domain.TenantID,
+	notification *domain.CustomerNotification,
+) error {
+	args, err := notificationArgs(tenant, notification)
+	if err != nil {
+		return fmt.Errorf("upsert customer notification: %w", err)
+	}
 	_, err = executor.Exec(ctx,
-		`INSERT INTO visibility_exception.customer_notification
-			(tenant_id, notification_id, customer_ref, episode_id, decided_at,
-			 disclosure_policy_ref, disclosure_conclusion, content_ref, deadline,
-			 channel_ref, obligation_ref, milestones)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		notificationInsertSQL+`
 		 ON CONFLICT (tenant_id, notification_id) DO UPDATE SET
 			milestones = EXCLUDED.milestones,
 			deadline = EXCLUDED.deadline,
 			channel_ref = EXCLUDED.channel_ref,
 			obligation_ref = EXCLUDED.obligation_ref`,
+		args...,
+	)
+	if err != nil {
+		return fmt.Errorf("upsert customer notification: %w", err)
+	}
+	return nil
+}
+
+func (repository *CustomerNotifications) insertByDisclosure(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant domain.TenantID,
+	notification *domain.CustomerNotification,
+) (int64, error) {
+	args, err := notificationArgs(tenant, notification)
+	if err != nil {
+		return 0, fmt.Errorf("insert customer notification: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		notificationInsertSQL+`
+		 ON CONFLICT (tenant_id, customer_ref, episode_id, decided_at) DO NOTHING`,
+		args...,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("insert customer notification: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+const notificationInsertSQL = `INSERT INTO visibility_exception.customer_notification
+			(tenant_id, notification_id, customer_ref, episode_id, decided_at,
+			 disclosure_policy_ref, disclosure_conclusion, content_ref, deadline,
+			 channel_ref, obligation_ref, milestones)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+
+func notificationArgs(tenant domain.TenantID, notification *domain.CustomerNotification) ([]any, error) {
+	milestonesRaw, err := marshalNotificationMilestones(notification)
+	if err != nil {
+		return nil, err
+	}
+	disclosure := notification.Disclosure()
+	return []any{
 		tenant.String(),
 		notification.ID().String(),
 		disclosure.Customer().String(),
@@ -339,11 +426,7 @@ func (repository *CustomerNotifications) Save(
 		notification.Channel().String(),
 		notification.Obligation().String(),
 		milestonesRaw,
-	)
-	if err != nil {
-		return fmt.Errorf("save customer notification: %w", err)
-	}
-	return nil
+	}, nil
 }
 
 func marshalNotificationMilestones(notification *domain.CustomerNotification) ([]byte, error) {

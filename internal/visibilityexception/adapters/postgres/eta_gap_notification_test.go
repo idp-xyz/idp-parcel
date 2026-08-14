@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证 ETA / 缺口 / 客户通知三库：当前版 UPSERT、缺口
@@ -184,7 +186,8 @@ func (fixture *etaGapNotificationFixture) loadGap(t *testing.T, ctx context.Cont
 func (fixture *etaGapNotificationFixture) saveNotification(t *testing.T, ctx context.Context, tenant string, notification *domain.CustomerNotification) {
 	t.Helper()
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.notifications.Save(txCtx, etaGapValue(t, domain.NewTenantID, tenant), notification)
+		_, err := fixture.notifications.Save(txCtx, etaGapValue(t, domain.NewTenantID, tenant), notification)
+		return err
 	})
 }
 
@@ -331,6 +334,45 @@ func TestNotificationRoundTripsMilestonesByDisclosureIdentity(t *testing.T) {
 	}
 }
 
+// TestSecondNotificationSaveOnDisclosureIdentityGetsAlreadyRecorded 证披露身份三维
+// UNIQUE 进 ON CONFLICT：同披露不同 notification_id 的第二份交回 AlreadyRecorded，
+// 事务仍可用来读回赢家——不能捕 23505 把事务打进中止态。
+func TestSecondNotificationSaveOnDisclosureIdentityGetsAlreadyRecorded(t *testing.T) {
+	fixture := newETAGapNotificationFixture(t)
+	ctx := t.Context()
+	tenant := etaGapValue(t, domain.NewTenantID, "tenant-a")
+	first := generatedNotification(t, "notify-1")
+	impostor := generatedNotification(t, "notify-2")
+
+	var secondOutcome ports.NotificationSaveOutcome
+	var winnerID string
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if _, err := fixture.notifications.Save(txCtx, tenant, first); err != nil {
+			return err
+		}
+		saved, err := fixture.notifications.Save(txCtx, tenant, impostor)
+		if err != nil {
+			return err
+		}
+		secondOutcome = saved
+		winner, found, err := fixture.notifications.FindByDisclosure(txCtx, tenant, first.Disclosure())
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.New("读回赢家失败")
+		}
+		winnerID = winner.ID().String()
+		return nil
+	})
+	if secondOutcome != ports.NotificationAlreadyRecorded {
+		t.Fatalf("第二份写入 outcome = %d，应为 ALREADY_RECORDED", secondOutcome)
+	}
+	if winnerID != "notify-1" {
+		t.Fatalf("赢家 id = %s，应为 notify-1", winnerID)
+	}
+}
+
 // TestETAGapNotificationChecksRejectBadShapes 证迁移 CHECK：倒置区间、未届满缺口、
 // 非披露结论、缺 GENERATED 节点都拦下。
 func TestETAGapNotificationChecksRejectBadShapes(t *testing.T) {
@@ -413,7 +455,7 @@ func TestETAGapNotificationWritesRequireTransaction(t *testing.T) {
 	if err := fixture.gaps.Save(ctx, tenant, formedGap(t, "window-rule/v1")); err == nil {
 		t.Fatal("无事务 Save 缺口被接受了")
 	}
-	if err := fixture.notifications.Save(ctx, tenant, generatedNotification(t, "notify-1")); err == nil {
+	if _, err := fixture.notifications.Save(ctx, tenant, generatedNotification(t, "notify-1")); err == nil {
 		t.Fatal("无事务 Save 通知被接受了")
 	}
 }

@@ -181,11 +181,29 @@ func (handler *NotifyCustomerHandler) Handle(
 	}
 	// 先落`已生成`再提交渠道：渠道那一次一旦发出就收不回来，通知记录必须先于它存在，
 	// 否则一次落库失败会让「客户可能已收到」查无出处。
-	if err := handler.deps.Notifications.Save(ctx, command.TenantID, notification); err != nil {
+	saved, err := handler.deps.Notifications.Save(ctx, command.TenantID, notification)
+	if err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 	}
-
-	return handler.submit(ctx, command.TenantID, notification)
+	switch saved {
+	case ports.NotificationSaved:
+		return handler.submit(ctx, command.TenantID, notification)
+	case ports.NotificationAlreadyRecorded:
+		existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, command.Disclosure)
+		if err != nil || !found {
+			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
+		}
+		if existing.ObligationMetBy(domain.NotificationSubmittedToChannel) {
+			return NotifyCustomerResult{
+				outcome:      NotificationExistingResult,
+				notification: existing,
+				handoffRef:   handler.handOffNotification(ctx, command.TenantID, existing),
+			}, nil
+		}
+		return handler.submit(ctx, command.TenantID, existing)
+	default:
+		return NotifyCustomerResult{}, fmt.Errorf("notify customer: unexpected save outcome %d", saved)
+	}
 }
 
 // submit 执行一次渠道提交尝试并分别记录结果节点：成功记`已提交消息渠道`，失败记
@@ -205,8 +223,12 @@ func (handler *NotifyCustomerHandler) submit(
 	if err := notification.RecordMilestone(milestone, handler.deps.Clock.Now()); err != nil {
 		return NotifyCustomerResult{}, fmt.Errorf("record notification milestone: %w", err)
 	}
-	if err := handler.deps.Notifications.Save(ctx, tenant, notification); err != nil {
+	saved, err := handler.deps.Notifications.Save(ctx, tenant, notification)
+	if err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
+	}
+	if saved != ports.NotificationSaved {
+		return NotifyCustomerResult{}, fmt.Errorf("notify customer: unexpected save outcome %d", saved)
 	}
 	return NotifyCustomerResult{
 		outcome:      outcome,

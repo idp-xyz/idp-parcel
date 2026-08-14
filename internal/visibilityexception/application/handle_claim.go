@@ -415,10 +415,23 @@ func (handler *HandleClaimHandler) OpenRecovery(
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("open recovery matter: %w", err)
 	}
-	if err := handler.deps.Recoveries.Save(ctx, command.TenantID, matter); err != nil {
+	saved, err := handler.deps.Recoveries.Save(ctx, command.TenantID, matter)
+	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
 	}
-	return HandleClaimResult{outcome: RecoveryOpened, matter: matter, hasMatter: true}, nil
+	switch saved {
+	case ports.RecoverySaved:
+		return HandleClaimResult{outcome: RecoveryOpened, matter: matter, hasMatter: true}, nil
+	case ports.RecoveryAlreadyRecorded:
+		existing, found, err := handler.deps.Recoveries.FindCurrent(
+			ctx, command.TenantID, command.Case, command.Counterparty, command.Scope)
+		if err != nil || !found {
+			return HandleClaimResult{outcome: HandleClaimUndecided, reason: RecoveryStoreUnavailable}, nil
+		}
+		return HandleClaimResult{outcome: RecoveryExistingResult, matter: existing, hasMatter: true}, nil
+	default:
+		return HandleClaimResult{}, fmt.Errorf("open recovery: unexpected save outcome %d", saved)
+	}
 }
 
 // RecordRecovery 追记一次追偿动作节点：预先通知与正式主张各有各的尝试序列（attempt

@@ -56,13 +56,17 @@ func (double *notificationStoreDouble) Save(
 	_ context.Context,
 	tenant domain.TenantID,
 	notification *domain.CustomerNotification,
-) error {
+) (ports.NotificationSaveOutcome, error) {
 	if double.saveErr != nil {
-		return double.saveErr
+		return ports.NotificationSaveOutcomeInvalid, double.saveErr
 	}
-	double.byDisclosure[keyOf(tenant, notification.Disclosure())] = notification
+	key := keyOf(tenant, notification.Disclosure())
+	if existing, found := double.byDisclosure[key]; found && existing.ID() != notification.ID() {
+		return ports.NotificationAlreadyRecorded, nil
+	}
+	double.byDisclosure[key] = notification
 	double.saved++
-	return nil
+	return ports.NotificationSaved, nil
 }
 
 type notificationPolicyDouble struct {
