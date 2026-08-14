@@ -57,15 +57,27 @@ Status: needs-triage
 采用 A 的判据就是这一条：**一个延迟、一个丢失。** A 撞的是 `AT-NR-012` 的字面，B 撞的是
 它要防的东西。
 
-## 阻塞是有界的
+## 阻塞是有界的，而且到界会自己解开
 
-按 `internal/platform/dispatch/dispatcher.go`：失败走 `RecordFailure`（带 `MaxFailures =
-Config.MaxAttempts`），预算耗尽的条目由 `Claim` 的 `MaxAttempts` 拦在认领之外，留在库里
-可查。派发器**刻意不自动 `Abandon`**——弃单是运维看过原因后的显式决定。
+失败走 `RecordFailure`（带 `MaxFailures = dispatch.Config.MaxAttempts`）。框架侧
+（`idp-bento-go/postgres/outbox/finalize.go` 的 `RecordFailure`）按返回的 status 分两路：
+`PENDING` 走 `setPartitionClaimable`（按 RetryAt 重投），**`ABANDONED` 走 `advancePartition`**
+——在同一事务里推进分区，也就是解冻。所以预算耗尽后分区不会永远卡住，条目以 ABANDONED
+留在库里可查。
 
-所以 A 的残留风险是「有界阻塞 + 可查残留」，不是无界重投。但 `MaxAttempts` 是装配参数，
-代码里没有默认值（`validate` 只要求 > 0），实际取值由 `cmd/parcel-dispatch` 给。**阻塞窗口
-有多长取决于那个值**。
+这里有个容易混的地方，值得写下来：`internal/platform/dispatch/dispatcher.go` 的注释说
+「发布失败记 RecordFailure 不 Abandon」，那句成立，但它说的是**派发器自己不主动调
+`Store.Abandon`**，不等于没有任何东西会弃单——`RecordFailure` 内部的状态迁移就会。
+另外 `Claim` 的 `MaxAttempts` 是**另一个**计数器，防的是发布方在租约到期前崩掉、从不
+调 `RecordFailure` 的情形。两个机制并存，别当成一个。
+
+`MaxAttempts` 是装配参数，代码里没有默认值（`validate` 只要求 > 0），实际取值由
+`cmd/parcel-dispatch` 给。**阻塞窗口有多长取决于那个值。**
+
+对本票的取舍有一处影响：A 的终局不是「永远卡住」，而是「有界重试 → 弃单 → 分区继续」。
+弃单意味着那个包裹的路由义务最终仍会落空，但落空时留下一条 ABANDONED 记录，而 B 是
+当场无痕丢掉。「一个延迟、一个丢失」因此要更准确地说成**「有界重试后可见地弃单」对
+「立即静默丢弃」**——结论不变，理由要说准。
 
 ## 两个持久解法
 
