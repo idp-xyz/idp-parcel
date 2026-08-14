@@ -5,7 +5,7 @@ package identity
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base32"
 	"fmt"
 	"io"
 
@@ -13,15 +13,20 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// intakeResultVersionPrefix 让一个收寄结果版本在日志与库行里一眼认得出来源，形状与
-// customs-compliance 的签发面对齐（`CC-CASE-` / `CC-SUBV-`）。它不参与唯一性，唯一性
-// 全在随机那一段。
-const intakeResultVersionPrefix = "NO-INTAKEV-"
+// intakeResultVersionPrefix 让一个收寄结果版本在日志与库行里一眼认得出来源。它不参与
+// 唯一性，唯一性全在随机那一段；横线加在拼接处而不写进常量，取值由本上下文自定但形状
+// 全仓统一（MCP-1 的签发面裁定第四条）。
+const intakeResultVersionPrefix = "INTAKEV"
 
 // intakeResultVersionBytes 是随机段的字节数。128 位使重复在实际签发量下不可达，而
 // 收寄结果版本要跨上下文当幂等键用（parcel-shipment 的采用判断按它幂等）——重号一次
 // 就会让两次收寄在下游被当成同一次。
 const intakeResultVersionBytes = 16
+
+// versionEncoding 是不带填充的大写 base32。选它不选十六进制，是因为 RFC 4648 的字母表
+// 是 A-Z 与 2-7：不含 0、1、8、9，于是 0 与 O、1 与 I 不可能混——照着工单念一个标识时
+// 怕的正是这个，而十六进制的 0/O 恰好撞上。26 字符也比十六进制的 32 短。
+var versionEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
 // IntakeResultVersions 实现 ports.IntakeIdentityFactory。
 //
@@ -38,7 +43,8 @@ func NewIntakeResultVersions() *IntakeResultVersions {
 }
 
 // NewIntakeResultVersionsFrom 用指定熵源构造。它存在只为让门禁用例喂一个必然失败的
-// 读者——熵源读不出来时签发必须报错，绝不能退化成一个可预测的值。
+// 读者——熵源读不出来时签发必须报错，绝不能退化成一个可预测的值，而那一支拿真熵源
+// 逼不出来。
 func NewIntakeResultVersionsFrom(entropy io.Reader) (*IntakeResultVersions, error) {
 	if entropy == nil {
 		return nil, fmt.Errorf("node operations identity: entropy reader is nil")
@@ -50,18 +56,17 @@ var _ ports.IntakeIdentityFactory = (*IntakeResultVersions)(nil)
 
 // NextIntakeResultVersion 签发一个新的收寄结果版本。
 //
-// 先看 ctx：调用方已经放弃时不该再签发一个没人会用的标识——它会出现在日志里，看起来
-// 像一次发生过的收寄。熵源读不满同样报错而不是用读到的半截凑——半截随机是可预测的。
+// 不看 ctx：本实现只读本机熵源，没有一处可取消的等待，查一次 ctx 只会让读的人以为
+// 这里会阻塞。端口签名上留着 ctx 是给库序列那一类实现的（MCP-1 的签发面裁定第二条）。
+//
+// 熵源读不满报错而不是用读到的半截凑——半截随机是可预测的。
 func (factory *IntakeResultVersions) NextIntakeResultVersion(
-	ctx context.Context,
+	_ context.Context,
 ) (domain.IntakeResultVersion, error) {
-	if err := ctx.Err(); err != nil {
-		return domain.IntakeResultVersion{}, fmt.Errorf("next intake result version: %w", err)
-	}
-
 	raw := make([]byte, intakeResultVersionBytes)
 	if _, err := io.ReadFull(factory.entropy, raw); err != nil {
 		return domain.IntakeResultVersion{}, fmt.Errorf("next intake result version: %w", err)
 	}
-	return domain.NewIntakeResultVersion(intakeResultVersionPrefix + hex.EncodeToString(raw))
+	return domain.NewIntakeResultVersion(
+		intakeResultVersionPrefix + "-" + versionEncoding.EncodeToString(raw))
 }

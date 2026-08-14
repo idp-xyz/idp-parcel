@@ -2,15 +2,13 @@ package identity_test
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
 )
 
-// 本文件证签发面的三条：签出来的值互不相同且能过领域构造、调用方已放弃时不签发、
+// 本文件证签发面的三条：签出来的值互不相同且能过领域构造、随机段不含易混字符、
 // 熵源出问题时报错而不是交回一个可预测的值。
 
 func TestEachIssuedIntakeResultVersionIsNew(t *testing.T) {
@@ -40,19 +38,29 @@ func TestIssuedVersionCarriesItsOrigin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("签发：%v", err)
 	}
-	if !strings.HasPrefix(version.String(), "NO-INTAKEV-") {
+	if !strings.HasPrefix(version.String(), "INTAKEV-") {
 		t.Fatalf("版本 %q 没带来源前缀", version.String())
 	}
 }
 
-// TestAnAbandonedCallIssuesNothing 证调用方放弃后不再签发：一个没人会用的标识出现在
-// 日志里，看起来像一次发生过的收寄。
-func TestAnAbandonedCallIssuesNothing(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
+// TestTheRandomSegmentAvoidsConfusableCharacters 钉住 base32 那条裁定的实际收益：
+// 随机段里不出现 0、1、8、9，因此 0 与 O、1 与 I 不可能在照着工单念的时候混掉。
+// 十六进制过不了这一条。
+func TestTheRandomSegmentAvoidsConfusableCharacters(t *testing.T) {
+	factory := identity.NewIntakeResultVersions()
 
-	if _, err := identity.NewIntakeResultVersions().NextIntakeResultVersion(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("err = %v, want context.Canceled", err)
+	for range 256 {
+		version, err := factory.NextIntakeResultVersion(t.Context())
+		if err != nil {
+			t.Fatalf("签发：%v", err)
+		}
+		segment := strings.TrimPrefix(version.String(), "INTAKEV-")
+		if strings.ContainsAny(segment, "0189") {
+			t.Fatalf("随机段 %q 含易混字符", segment)
+		}
+		if strings.ToUpper(segment) != segment {
+			t.Fatalf("随机段 %q 不是全大写", segment)
+		}
 	}
 }
 
