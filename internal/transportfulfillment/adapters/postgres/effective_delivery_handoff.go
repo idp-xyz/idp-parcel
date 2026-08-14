@@ -49,10 +49,11 @@ type effectiveDeliveryPayload struct {
 }
 
 func effectiveDeliveryEventID(key ports.EffectiveDeliveryKey) string {
-	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Attempt.String()
+	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Attempt.String() +
+		"/effective-delivery"
 }
 
-// HandOffEffectiveDelivery 把一份意图入队。信封 ID 取交付生效键——意图由
+// HandOffEffectiveDelivery 把一份意图入队。信封 ID 取交付生效键再加类型段——意图由
 // （租户+对象+尝试）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxEffectiveDeliveryHandoff) HandOffEffectiveDelivery(
 	ctx context.Context,

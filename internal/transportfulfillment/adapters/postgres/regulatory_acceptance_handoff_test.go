@@ -54,7 +54,7 @@ func TestRegulatoryAcceptanceFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/item-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/item-1/regulatory-acceptance"); count != 1 {
 		t.Fatalf("item-1 行数 = %d, want 1", count)
 	}
 
@@ -67,7 +67,7 @@ func TestRegulatoryAcceptanceFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/item-2"); count != 0 {
+	if count := countTFIntents(t, pool, "tenant-a/item-2/regulatory-acceptance"); count != 0 {
 		t.Fatalf("回滚后 item-2 行数 = %d, want 0", count)
 	}
 
@@ -76,7 +76,7 @@ func TestRegulatoryAcceptanceFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/item-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/item-1/regulatory-acceptance"); count != 1 {
 		t.Fatalf("重发后 item-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

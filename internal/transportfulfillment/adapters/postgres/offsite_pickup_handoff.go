@@ -51,11 +51,11 @@ type offsitePickupPayload struct {
 }
 
 func offsitePickupEventID(key ports.PickupAttemptKey) string {
-	return key.TenantID.String() + "/" + key.SourceID
+	return key.TenantID.String() + "/" + key.SourceID + "/offsite-pickup"
 }
 
-// HandOffOffsitePickup 把一份意图入队。信封 ID 取揽收尝试幂等键——意图由（租户+来源）
-// 认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffOffsitePickup 把一份意图入队。信封 ID 取揽收尝试幂等键再加类型段——意图由
+// （租户+来源）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxOffsitePickupHandoff) HandOffOffsitePickup(
 	ctx context.Context,
 	intent ports.OffsitePickupHandoffIntent,

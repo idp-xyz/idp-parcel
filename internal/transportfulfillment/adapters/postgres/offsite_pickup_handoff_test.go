@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
@@ -58,7 +59,7 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/source-1/offsite-pickup"); count != 1 {
 		t.Fatalf("source-1 行数 = %d, want 1", count)
 	}
 
@@ -71,7 +72,7 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-2"); count != 0 {
+	if count := countTFIntents(t, pool, "tenant-a/source-2/offsite-pickup"); count != 0 {
 		t.Fatalf("回滚后 source-2 行数 = %d, want 0", count)
 	}
 
@@ -80,7 +81,7 @@ func TestOffsitePickupFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/source-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/source-1/offsite-pickup"); count != 1 {
 		t.Fatalf("重发后 source-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -96,6 +97,41 @@ func TestOffsitePickupRefusesABlankKey(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("缺幂等键的揽收意图入了队")
+	}
+}
+
+// TestOffsitePickupDoesNotCollideWithEffectiveDelivery 证揽收尝试来源身份写成与交付键
+// 相同的「对象/尝试」串时，两口仍各入一队——类型段把它们错开。
+func TestOffsitePickupDoesNotCollideWithEffectiveDelivery(t *testing.T) {
+	pickup, db, pool := newPickupHandoffFixture(t)
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	delivery, err := adapter.NewOutboxEffectiveDeliveryHandoff(db, store, tfHandoffClock{
+		at: time.Date(2026, 8, 14, 16, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("构造交付生效适配器：%v", err)
+	}
+
+	deliveryIntent := deliveryHandoffIntentFor(t, "parcel-1", "pod-1")
+	deliveryIntent.Record.Key.TenantID = deliveryValue(t, domain.NewTenantID, "tenant-a")
+
+	ctx := t.Context()
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := pickup.HandOffOffsitePickup(txCtx, pickupHandoffIntent(t, "parcel-1/attempt-1")); err != nil {
+			return err
+		}
+		return delivery.HandOffEffectiveDelivery(txCtx, deliveryIntent)
+	}); err != nil {
+		t.Fatalf("同事务两口：%v", err)
+	}
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup"); count != 1 {
+		t.Fatalf("揽收尝试行数 = %d, want 1", count)
+	}
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/effective-delivery"); count != 1 {
+		t.Fatalf("交付生效行数 = %d, want 1——应是第二份而不是被揽收尝试吞掉", count)
 	}
 }
 

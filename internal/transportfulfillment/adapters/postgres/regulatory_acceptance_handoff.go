@@ -48,11 +48,11 @@ type regulatoryAcceptancePayload struct {
 }
 
 func regulatoryAcceptanceEventID(key ports.DispositionAcceptanceKey) string {
-	return key.Tenant.String() + "/" + key.Item.String()
+	return key.Tenant.String() + "/" + key.Item.String() + "/regulatory-acceptance"
 }
 
-// HandOffRegulatoryAcceptance 把一份意图入队。信封 ID 取承接幂等键——意图由
-// （租户+协作事项）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffRegulatoryAcceptance 把一份意图入队。信封 ID 取承接幂等键再加类型段——意图
+// 由（租户+协作事项）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxRegulatoryAcceptanceHandoff) HandOffRegulatoryAcceptance(
 	ctx context.Context,
 	intent ports.RegulatoryAcceptanceHandoffIntent,

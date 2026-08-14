@@ -54,7 +54,7 @@ func TestTransportCommissionFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/commission-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/commission-1/transport-commission"); count != 1 {
 		t.Fatalf("commission-1 行数 = %d, want 1", count)
 	}
 
@@ -67,7 +67,7 @@ func TestTransportCommissionFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/commission-2"); count != 0 {
+	if count := countTFIntents(t, pool, "tenant-a/commission-2/transport-commission"); count != 0 {
 		t.Fatalf("回滚后 commission-2 行数 = %d, want 0", count)
 	}
 
@@ -76,7 +76,7 @@ func TestTransportCommissionFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/commission-1"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/commission-1/transport-commission"); count != 1 {
 		t.Fatalf("重发后 commission-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

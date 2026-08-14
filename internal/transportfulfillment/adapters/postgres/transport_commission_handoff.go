@@ -48,10 +48,10 @@ type transportCommissionPayload struct {
 }
 
 func transportCommissionEventID(key ports.TransportCommissionKey) string {
-	return key.TenantID.String() + "/" + key.Commission.String()
+	return key.TenantID.String() + "/" + key.Commission.String() + "/transport-commission"
 }
 
-// HandOffTransportCommission 把一份意图入队。信封 ID 取委托幂等键——意图由
+// HandOffTransportCommission 把一份意图入队。信封 ID 取委托幂等键再加类型段——意图由
 // （租户+委托）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTransportCommissionHandoff) HandOffTransportCommission(
 	ctx context.Context,
