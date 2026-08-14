@@ -85,6 +85,26 @@ func (suspension SuspensionDecision) Evidence() string {
 	return suspension.evidence
 }
 
+func (suspension SuspensionDecision) TriggerSource() string {
+	return suspension.triggerSource
+}
+
+func (suspension SuspensionDecision) Basis() string {
+	return suspension.basis
+}
+
+func (suspension SuspensionDecision) ExecutedBy() string {
+	return suspension.executedBy
+}
+
+func (suspension SuspensionDecision) OccurredAt() time.Time {
+	return suspension.occurredAt
+}
+
+func (suspension SuspensionDecision) InTransitNote() string {
+	return suspension.inTransitNote
+}
+
 func (suspension SuspensionDecision) EffectiveAt() time.Time {
 	return suspension.effectiveAt
 }
@@ -195,6 +215,26 @@ func (resumption ResumptionDecision) Inventory() InTransitInventory {
 	return resumption.inventory
 }
 
+func (resumption ResumptionDecision) ReleaseEvidence() string {
+	return resumption.releaseEvidence
+}
+
+func (resumption ResumptionDecision) ConsistencyCheck() string {
+	return resumption.consistencyCheck
+}
+
+func (resumption ResumptionDecision) DecidedBy() string {
+	return resumption.decidedBy
+}
+
+func (resumption ResumptionDecision) DecidedAt() time.Time {
+	return resumption.decidedAt
+}
+
+func (resumption ResumptionDecision) EffectiveAt() time.Time {
+	return resumption.effectiveAt
+}
+
 // TakeoverRecordSpec 是一次对象级受控接管所需的全部输入。
 type TakeoverRecordSpec struct {
 	StopEvidence     string
@@ -258,6 +298,26 @@ func (takeover TakeoverRecord) Interval() AuthorityInterval {
 
 func (takeover TakeoverRecord) Inventory() InTransitInventory {
 	return takeover.inventory
+}
+
+func (takeover TakeoverRecord) AcceptedFacts() string {
+	return takeover.acceptedFacts
+}
+
+func (takeover TakeoverRecord) PendingExternals() string {
+	return takeover.pendingExternals
+}
+
+func (takeover TakeoverRecord) ActualControl() string {
+	return takeover.actualControl
+}
+
+func (takeover TakeoverRecord) Responsibilities() string {
+	return takeover.responsibilities
+}
+
+func (takeover TakeoverRecord) NextAction() string {
+	return takeover.nextAction
 }
 
 func (takeover TakeoverRecord) EffectiveAt() time.Time {
