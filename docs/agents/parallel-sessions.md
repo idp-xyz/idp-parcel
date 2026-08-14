@@ -93,9 +93,23 @@ $env:IDP_PARCEL_POSTGRES_DSN = "postgres://parcel:parcel@127.0.0.1:55432/postgre
 go test ./internal/settlementaccounting/adapters/postgres/ -run TestFreezeScopesAreInvisibleToEachOther -count=1 -v
 ```
 
-**别拿耗时当判据。** 那条路当天试过并被自己的数据推翻，过程值得留下——它是「看着像证据的东西未必是证据」的一个现成例子。一个会话在同一个提交（改动只有一个 `.md`）上实测：带 DSN 加 `-count=1` 是 25.5 秒，带 DSN 允许缓存 42.6 秒，不带 DSN 3.5 秒；据此写下「只要 DSN 设着全仓跑就快不了」。另一个会话随即在**同一个 SHA、同一台机器、同样带 DSN** 上跑出 5.4 秒与 28.9 秒两次。
+**别拿耗时当判据。** 这条绕了三轮才落定，过程比结论有用。
 
-两组数据直接冲突，谁对不重要——**结论是耗时会误报，而会误报的警报很快就会被人忽略。** 那一格改用开关守：`-count=1` 关掉缓存，`-v` 下的 `PASS`/`SKIP` 分辨真库跑没跑。这与 DSN 那件是同一条教训的两个实例：**能用开关守的就不要留给人去看。**
+先是有人实测：同一个提交（改动只有一个 `.md`）带 DSN 加 `-count=1` 是 25.5 秒，带 DSN 允许缓存 42.6 秒，不带 DSN 3.5 秒，据此写下「真库用例开 TCP 连接、Go 不缓存，所以只要 DSN 设着全仓跑就快不了」，并进一步推出「跑进 20 秒以内就说明真库门禁没跑」。另一个会话随即在同一 SHA、同一台机器、同样带 DSN 上跑出 5.4 秒——于是前一个人反过来怀疑他其实没设 DSN。
+
+**两边都不必怀疑对方，那个机制根本不成立。** 一条命令就能看到：
+
+```powershell
+$env:IDP_PARCEL_POSTGRES_DSN = "postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable"
+go test ./internal/settlementaccounting/adapters/postgres/   # 13.9s
+go test ./internal/settlementaccounting/adapters/postgres/   # (cached)
+```
+
+**真库用例的结果照样进缓存**，`(cached)` 就印在那里。所以带着 DSN 的全仓跑完全可以只花几秒，5.4 秒那一跑是一次正当的缓存命中，没有任何人报错了自己的环境。
+
+那三组数据错在哪：**`-count=1` 不写缓存**，因此「先 `-count=1` 再允许缓存」这个顺序下第二跑无缓存可命中，慢得理所当然——它测的根本不是缓存有没有生效。测缓存要连跑两次不带 `-count=1`。**一个错的机制加一组自洽的数字，比没有数据更能骗人**：数字全是真的，实验设计错了。
+
+结论因此是耗时**什么也守不住**：带 DSN 可以很快（缓存命中），不带 DSN 也可以很快（跳过），两种快在秒表上一模一样。两格各自用开关守——`-count=1` 守缓存，`-v` 下的 `PASS`/`SKIP` 守 DSN。这与 DSN 那件是同一条教训的两个实例：**能用开关守的就不要留给人去看。**
 
 三条合起来的教训只有一句：**报「绿」的时候要说清是哪一种绿。** 「绿（含真库）」与「绿（未设 DSN，PG 用例跳过）」是两个强度不同的断言，而它们在屏幕上都只是 `ok`。
 
