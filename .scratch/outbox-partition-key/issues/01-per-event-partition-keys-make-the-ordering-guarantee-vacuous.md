@@ -10,49 +10,56 @@ MCP-2 已把它列为派发接线的**并列前置**：订阅者补齐不会顺�
 [缺订阅者会响亮地报 `ErrNoSubscriber`，乱序投递不报任何错、只是结果错](../../handoff-consumer-inventory/report.md)
 ——两类缺陷的发现成本差一个量级。
 
+**本票已由四个上下文各自核过自己那一格**（TF、SA、PS、CC），结果合并在下面。原先「待各
+地盘主人回答」那一节已被实际答案取代；仍未答的只剩两处，列在末尾。
+
 ## 结论句
 
 **全仓 46 个 handoff 里有 34 个把 `PartitionKey` 设成逐事件唯一值，于是这 34 类信封的
 排序保证是空的。** 框架的顺序保证就是靠分区序列（`finalize.go` 的 `advancePartition` 与
 `setPartitionClaimable` 都带 `sequence`），而分区里只有一条时，那个保证没有任何内容。
 
-## 两套约定并存
-
-### 逐事件唯一值（34 个）
-
-`PartitionKey: eventID`、`shape.eventID`，或 `tenant + "/" + eventID`：
-
-- parcel-shipment：`network_intake`、`final_outcome`、`parcel_cancellation`
-- network-routing：`initial_route`
-- settlement-accounting：`supplier_bill`、`charge_confirmation`、`settlement_application`、
-  `operating`、`claim_settlement`、`advance_recovery`、`statement`
-- node-operations：`node_intake`、`execution_fact`、`sealed_snapshot`、`collaboration_acceptance`
-- transport-fulfillment：`offsite_pickup`、`offsite_pickup_registration`、`effective_delivery`、
-  `transport_handover_registration`、`transport_commission`、`capacity_consumption`、
-  `exception_journey`、`disposition_execution`、`regulatory_acceptance`
-- parcel-pricing：`evaluation`
-- pilot-governance：`governance`
-- customs-compliance：`customs_case`、`declaration_submission`、`gate_verification`、
-  `verification`、`manifest`、`follow_up`、`case_closure`、`external_result`
-
-### 业务主体键（12 个）
-
-- visibility-exception 八个全部如此：`tenant/包裹`（`projection`、`eta`、`visibility_gap`、
-  `triage`）、`tenant/客户`（`customer_view`、`notification`）、`tenant/批次`（`liability`）、
-  `tenant/案件`（`disposition`）
-- customs-compliance：`restriction` 用 `tenant/范围`
-- parcel-shipment：`acceptance_decision` 用 `tenant/委托`、`source_data` 用 `tenant/来源请求键`
-- network-routing：`reachability` 用 `tenant/请求关联`
-
 ## 「保证为空」不等于「有害」——判据在这里
 
 多数逐事件分区无害：那些 `eventID` 本身就派生自业务幂等键，一个业务对象一辈子只发一条
-信封，分区是单条属于事实而不是缺陷。例如 network-routing 的 `initial_route`，信封 ID 由
-判断键加类型段认领，而复核路径（`reassess_route.go`）根本不发布意图（它的 deps 里没有
-Downstream），所以同一判断键确实只会有一条。
+信封，分区是单条属于事实而不是缺陷。
 
 **有害的判据只有一条：两条或更多信封是否描述同一个业务对象的先后状态。** 是则乱序会
-改变结果，否则分区单条无所谓。
+改变结果，否则分区单条无所谓。实践中这等价于问：**这个口有没有更正／重派生／撤销入口。**
+
+## 两个后果，不是二选一
+
+早先的说法是「把状态塞进信封 ID 能治丢失，代价是拆掉分区、丢掉顺序」。前半句对，**但那个
+「代价」是假的**——MCP-2 在 parcel-shipment 找到的两个正例直接反证：
+
+| 正例 | 信封 ID | 分区键 |
+|---|---|---|
+| `acceptance_decision_handoff` | 决定标识 | `租户/委托标识` |
+| `source_data_handoff` | 资料版本标识 | `租户/来源请求键` |
+| `restriction_handoff`（CC） | 限制标识 | `租户/限制范围` |
+
+`source_data_handoff` 的注释把理由写死了：「分区按租户加来源请求排队：**同一份委托的意图
+保持发生序，不同委托互不阻塞**。」
+
+**所以正确形状是：ID 取版本／结果身份（每版一个，不丢），分区键取业务主体（同一对象排队，
+不乱）。两个目标同时满足。** 那些只做对一半的口不是「选了另一面」，是**修了一半**。
+
+根因因此可以一句话说清：**`ID` 与 `PartitionKey` 管的不是一回事**（ID 管幂等，分区键管
+顺序），而出问题的口把两者赋成了同一个字符串。
+
+## 四个上下文的实际计数
+
+| 上下文 | 静默丢失 | 乱序 | 无害／做对 |
+|---|---|---|---|
+| transport-fulfillment | 1（POD 更正，见 [02](./02-pod-correction-is-silently-swallowed-by-enqueue-once.md)） | 1（交接登记） | 余 7 |
+| settlement-accounting | 3（重分摊、重派生、核销撤销） | 1（对账单作废） | — |
+| parcel-shipment | **0** | 2（终局重派生、网络收寄采用） | 3（含 2 个正例） |
+| customs-compliance | — | — | `restriction` 做对 |
+
+**一条规律**：十个有更正入口的口里，**没有一个同时做对两件**；而三个做对的全部是「没有
+更正入口」或「当时就想过分区」。这不是巧合——`PartitionKey: eventID` 是写起来完全自然的
+默认（两个字段都要一个字符串，手边恰好有一个），而**它在没有更正入口时完全无害**。错误
+只在第二条信封出现时才显形，而那可能是半年后另一个人加的更正入口。
 
 ## 首例：恢复赶在暂停前送到
 
@@ -66,41 +73,58 @@ Downstream），所以同一判断键确实只会有一条。
 这一例值得放在最前，因为它的故障现象是「某个上下文的准入闸莫名一直关着」，而**没有人会
 想到去查派发日志**——那里什么错都没报。
 
-同一形状的另外几处（各自是否真有因果先后要问地盘主人，见下节）：
-`StatementHandoff` 发 published / voided / included 三种，`ClaimSettlementHandoff` 发四种，
-`AdvanceRecoveryHandoff` 与 `OperatingHandoff` 各发两种，全部共用逐事件分区。
+## 修复分三类，而类别按口分不按上下文分
 
-## 有一处做对了，而且它就是现成的修法
+MCP-5 在 settlement-accounting 一个上下文内就凑齐了三类，所以按上下文分批改会分错：
 
-`OutboxRestrictionHandoff` 用的是 `tenant + "/" + 限制范围`。于是同一范围的「建立」与
-「解除」落在同一分区、保序——而这正是最不能乱的一对：解除先于建立到达，等于一条从未
-生效过的限制被解除，执行方从此不再阻断。
+| 类 | 特征 | 要改什么 | 变不变意图契约 |
+|---|---|---|---|
+| 甲 | 区分维已在 ID 里 | **只改分区键一行** | **不变** |
+| 乙 | 对象有版本 | ID 加版本 + 分区键 | 变 |
+| 丙 | 对象无版本，但有状态判别子 | ID 加**状态后缀** + 分区键 | 变 |
 
-**这一条的意义超出它自己**：它证明两套约定不是随机差异，而是有人想过、有人没想过。
-所以修法不必从头发明——照 `restriction_handoff.go` 那一行的做法（把分区键定在业务对象上
-而不是事件上）即可。
+**丙类不需要发明新写法**：SA 的对账单作废已经在用 `/voided` 后缀，是仓里跑着的实例。
+没有这一条，核销撤销那类会被逼着去加一个假版本字段——那才是真的污染领域。
 
-## 需要各地盘主人回答的问题
+已知落点：甲＝PS×2、SA 对账单作废；乙＝SA 重分摊／重派生、TF POD 更正、PS 终局与网络
+收寄；丙＝SA 核销撤销。
 
-本票不定方案。要修必须先由拥有该 handoff 的人回答「这些信封之间有没有因果先后」，那是
-业务判断，不是能从代码读出来的。
+## 建议分两步走
+
+**第一步只改分区键，不动 ID。** 甲类全部属此，**因而不变更意图契约，下游拿到的 ID 形状
+不变**，风险最低。它能立刻盖住 PS×2 + SA×1。
+
+**第二步改 ID 语义**（乙、丙两类），等口径定完再动。
+
+两步拆开还有一个好处：第一步落地时就能把门禁先立起来。
+
+## 一条构造期能拦的规则
+
+既然 `PartitionKey: eventID` 写的那一刻无害、半年后才显形，它就不该是一条建议，而该是
+一道开关。MCP-2 已验过技术可行（与 `b46400e` 的前缀门禁同一套：`internal/architecture`
+扫源码，零依赖边）：**找 `eventing.Envelope` 的复合字面量，比 `ID` 与 `PartitionKey`
+两个字段的表达式是不是同一个。**
+
+MCP-2 提出门禁应与第一批修复**同笔**落地并带一份具名例外清单（尚未修的那几处），每修
+一处删一行。理由：这一条涉及 34 处、跨四个地盘、分三类修法，不可能一笔改完；而「先全部
+改完再补门禁」意味着中间那段时间新开的 handoff 会接着踩。**这与前缀门禁那次选「先改完
+再落」不矛盾**——那次清单只有三项且有人正在改，这次不给清单就只能不给门禁，而那意味着
+改的同时就在漏新的。
+
+## 仍未答的两处
 
 | 归属 | 要回答的 |
 |---|---|
 | pilot-governance（当前无主） | 暂停/恢复/接管三种是否同一治理对象的先后拍。若是，分区键应取什么业务维（被暂停的范围？租户？） |
-| settlement-accounting（MCP-5） | `statement` 三种（发布/作废/后续纳入）有无先后；`claim_settlement` 四种、`advance_recovery` 两种、`operating` 两种同问 |
 | customs-compliance（当前无主） | 同一案件的建立 → 申报提交 → 核对 → 关闭是否需要保序。注意它们分属**不同 handoff**，即便各自改用业务键，也要用**同一个键公式**才会落进同一分区 |
-| node-operations（MCP-5） | 同一集运单元的封装快照与执行事实有无先后 |
-| transport-fulfillment（本通道） | 同一对象的揽收登记与交接登记、同一容量池的多次消耗有无先后。我会在拿到判据后自查并回报 |
-| parcel-shipment（MCP-2） | `final_outcome` 与 `parcel_cancellation` 对同一包裹有无先后；`acceptance_decision` 与 `source_data` 已用业务键，确认键公式是否需要对齐 |
 
 **跨 handoff 那一条最容易漏**：分区由键值决定，不由 handoff 决定。两个 handoff 只要算出
 同一个键字符串，它们的信封就进同一分区并因此保序；算不出同一个键，改成业务键也白改。
 
 ## 本票不做的事
 
-- 不定任何 handoff 的分区键取值。
-- 不改代码。发现虽出自本通道，但改动跨三块地盘。
+- 不替任何地盘拍板它那一格取什么键——上面的分类是各地盘主人自己核出来的，不是我指派的。
+- 不改代码。发现虽出自本通道，但改动跨四块地盘。
 - 不判断「是否该先接派发线」——那是 MCP-2 已经作出的决定（不接），本票只是它列出的并列
   前置之一。
 
