@@ -151,7 +151,7 @@ func TestOffsitePickupRegistrationDoesNotCollideWithEffectiveDelivery(t *testing
 	}); err != nil {
 		t.Fatalf("同事务两口：%v", err)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
 		t.Fatalf("交付生效行数 = %d, want 1", count)
 	}
 	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"); count != 1 {

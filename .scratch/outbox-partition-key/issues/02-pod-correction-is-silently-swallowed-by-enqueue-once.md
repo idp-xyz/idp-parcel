@@ -1,7 +1,7 @@
 # 交付生效的 POD 更正会被 EnqueueOnce 静默吞掉，永远到不了下游
 
 Category: bug
-Status: needs-triage
+Status: resolved
 
 自查 [01](./01-per-event-partition-keys-make-the-ordering-guarantee-vacuous.md) 时在自己
 地盘里查出来的。它与 01 相邻但不是同一件事：01 是**顺序**问题（信封都发出去了，只是可能
@@ -87,7 +87,25 @@ B 看起来更完整，但它改的是意图契约（下游拿到的信封 ID �
 - `offsite_pickup`、`capacity_consumption`、`exception_journey`、`disposition_execution`、
   `regulatory_acceptance`：一个业务对象一份意图，无后续状态变化。
 
-## 建议的处置顺序
+## 结果
+
+按 **B** 修的（意图身份取版本、分区键取业务主体），因为人类已定「分区键现在改」，而 B
+一次解掉本票与 01 在这一格上的两个问题。
+
+- `effectiveDeliveryEventID` 加入 `DeliveryResultVersion`，更正因而自成一份信封。
+- `PartitionKey` 改取 `租户/载运对象`，两代排同一个队。理由与交接登记那一格相同：一个
+  对象的交付结果是一条链，下游据它形成终局判断，更正先于首登送达会让终局落在已被取代
+  的那一版上。
+- 载荷**未动**，仍只带键。指针式意图是有意的：版本进 ID 是为了让两份都入队，载荷要的是
+  「去重读」而不是「这是第几版」。
+- 版本缺席从此响亮报错而不是悄悄退化成旧行为。
+- 已从 `internal/architecture/envelope_partition_gate_test.go` 的例外清单里删去本行——
+  那份清单只许变短，修好却留着同样会红。
+
+回归用例：`TestAPODCorrectionEnqueuesItsOwnEnvelopeInTheSamePartition`（两份都入队、且
+同分区）。另有三处既有断言随 ID 形状更新。
+
+## 建议的处置顺序（已按此执行）
 
 1. 先定 01 里那张「按什么维分区」的表（要各地盘主人回答因果先后）。
 2. 再定意图身份与分区键该不该拆开（本票的 B）。两件事定完，改动是同一笔。

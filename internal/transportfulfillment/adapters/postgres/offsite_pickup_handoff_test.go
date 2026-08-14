@@ -130,7 +130,7 @@ func TestOffsitePickupDoesNotCollideWithEffectiveDelivery(t *testing.T) {
 	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/offsite-pickup"); count != 1 {
 		t.Fatalf("揽收尝试行数 = %d, want 1", count)
 	}
-	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/effective-delivery"); count != 1 {
+	if count := countTFIntents(t, pool, "tenant-a/parcel-1/attempt-1/delivery/v1/effective-delivery"); count != 1 {
 		t.Fatalf("交付生效行数 = %d, want 1——应是第二份而不是被揽收尝试吞掉", count)
 	}
 }
