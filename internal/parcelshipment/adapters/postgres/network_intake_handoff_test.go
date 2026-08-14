@@ -156,6 +156,56 @@ func TestResendingTheSameNetworkIntakeIntentIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestACorrectedIntakeResultQueuesBehindTheOneItSupersedes 钉住两个字段的分工。
+//
+// 理由与终局那一口同形：ID 含来源结果版本，所以更正版本自成一份、不被 EnqueueOnce 当成重放
+// 吞掉；分区键只到包裹，所以同一包裹的先后采认排在一条队里。少了后一半，更正先送达时下游
+// 最后采用的是已被取代的那一版。
+//
+// 经变异验证：把 PartitionKey 改回 eventID 时本用例变红。门禁守「ID 与 PartitionKey 不得
+// 同源」，守不住「主体取得对不对」——分区键取成 租户/包裹/种类/版本 照样过门禁，而那与逐
+// 事件分区一模一样。
+func TestACorrectedIntakeResultQueuesBehindTheOneItSupersedes(t *testing.T) {
+	fixture := newNetworkIntakeHandoffFixture(t)
+	ctx := t.Context()
+
+	for _, version := range []string{"SRV-1", "SRV-2"} {
+		intent := ports.NetworkIntakeHandoffIntent{
+			Record: adoptedRecord(t, "tenant-a", "parcel-1", version, "digest-"+version),
+		}
+		fixture.within(t, ctx, func(txCtx context.Context) error {
+			return fixture.handoff.HandOffNetworkIntake(txCtx, intent)
+		})
+	}
+
+	first := networkIntakeEventID("tenant-a", "parcel-1", "NODE_INTAKE", "SRV-1")
+	second := networkIntakeEventID("tenant-a", "parcel-1", "NODE_INTAKE", "SRV-2")
+	for _, eventID := range []string{first, second} {
+		if count := countNetworkIntakeIntents(t, fixture.pool, eventID); count != 1 {
+			t.Fatalf("%s 行数 = %d，want 1——更正版本必须自成一份", eventID, count)
+		}
+	}
+
+	firstPartition := partitionKeyOf(t, fixture.pool, first)
+	if secondPartition := partitionKeyOf(t, fixture.pool, second); firstPartition != secondPartition {
+		t.Fatalf("同一包裹的两版落在不同分区：%q 与 %q——更正会与原采认失去先后",
+			firstPartition, secondPartition)
+	}
+
+	// 不同包裹必须各自成区，否则一个包裹的失败会拖住另一个。
+	other := ports.NetworkIntakeHandoffIntent{
+		Record: adoptedRecord(t, "tenant-a", "parcel-2", "SRV-1", "digest-parcel-2"),
+	}
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffNetworkIntake(txCtx, other)
+	})
+	otherPartition := partitionKeyOf(t, fixture.pool,
+		networkIntakeEventID("tenant-a", "parcel-2", "NODE_INTAKE", "SRV-1"))
+	if otherPartition == firstPartition {
+		t.Fatalf("两个包裹共用分区 %q——一个的失败会拖住另一个", otherPartition)
+	}
+}
+
 func TestNetworkIntakeIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newNetworkIntakeHandoffFixture(t)
 	intent := networkIntakeIntent(t)
