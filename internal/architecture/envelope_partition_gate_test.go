@@ -29,6 +29,17 @@ import (
 // 为此在领域里加假版本字段**），`PartitionKey` 装业务主体 `租户/<主体>`。例：
 // parcel-shipment 的 `source_data_handoff`（租户/来源请求键）、customs-compliance 的
 // restriction（租户/范围）。
+//
+// **这道门禁守不住的那一格，写在这里而不是假装守住了：主体取多粗是判断，不是套公式。**
+// 把 `eventID` 展开成它的各个维再拼起来（`租户/对象/种类/版本`），表达式不再同源因而本门禁
+// 放行，**而它与逐事件分区一模一样**——每个信封仍然自成一区。主体要取「其先后状态必须保序
+// 的那个对象」，不是取键的全部维：transport-fulfillment 的交接登记取到（租户+对象）而不是
+// （租户+对象+范围），因为控制转移对一个载运对象是一条链（先从节点交出、再由承运方接收），
+// 取到范围就把这条链切成互不排队的两段。
+//
+// 补这一格的是**每处修复自带一条断言**：同一对象的两个版本都入队（ID 带区分维所以不丢）
+// 且落在同一分区（分区键只到对象所以保序）。门禁守「不得同源」，断言守「主体取得对不对」，
+// 两者缺一不可。
 
 // envelopeType 是被查的复合字面量类型。只认这一种：本门禁守的是这份合同的两个字段。
 const envelopeType = "eventing.Envelope"
@@ -85,7 +96,6 @@ var allowedSameExpression = map[string]string{
 
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":        decisionPartitionKeyRollout,
 	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":       decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":          decisionPartitionKeyRollout,
 	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":           decisionPartitionKeyRollout,
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":              decisionPartitionKeyRollout,
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": decisionPartitionKeyRollout,
