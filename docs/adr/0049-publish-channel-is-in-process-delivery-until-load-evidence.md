@@ -1,6 +1,6 @@
 # ADR-0049: 集成事件的发布通道首发采用进程内直投，消息中间件等负载证据
 
-Status: Proposed  
+Status: Accepted  
 Date: 2026-08-14
 
 ## Context

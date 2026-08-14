@@ -3,6 +3,7 @@ package dispatch_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -186,6 +187,56 @@ func TestOnePartitionFailureDoesNotBlockAnother(t *testing.T) {
 	if len(selective.published) != 2 {
 		t.Fatalf("delivered = %d, want 2", len(selective.published))
 	}
+}
+
+// TestAFailureIsRecordedUnderTheCodeThatTellsOpsWhatToDo 证发布失败按处置动作分格记码。
+// 合成一个码时，运维读不出该改装配、该救下游，还是该去下游核对重复投递。
+func TestAFailureIsRecordedUnderTheCodeThatTellsOpsWhatToDo(t *testing.T) {
+	tests := []struct {
+		name       string
+		publishErr error
+		wantCode   string
+	}{
+		{"没有订阅者", dispatch.ErrNoSubscriber, "dispatch.no_subscriber"},
+		// 真实发布通道会带上下文包一层，分格必须穿过包装认出来。
+		{"包装后的没有订阅者", fmt.Errorf("route %q: %w", "dispatch.test.event", dispatch.ErrNoSubscriber), "dispatch.no_subscriber"},
+		{"结果不确定", fmt.Errorf("ack lost: %w", eventing.ErrPublishUncertain), "dispatch.publish_uncertain"},
+		{"下游失败", errors.New("broker unreachable"), "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dispatcher, store, publisher, clock, db := newDispatchFixture(t)
+			enqueueEnvelope(t, db, store, "event-1", clock.at)
+			publisher.err = test.publishErr
+
+			published, err := dispatcher.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("失败拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("published = %d，want 0", published)
+			}
+			if got := recordedFailureCode(t, db, "event-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q，want %q", got, test.wantCode)
+			}
+		})
+	}
+}
+
+func recordedFailureCode(t *testing.T, db *bentopg.DB, eventID string) string {
+	t.Helper()
+
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var code string
+	query := `SELECT failure_code FROM ` + migrate.SchemaBento + `.outbox WHERE event_id = $1`
+	if err := querier.QueryRow(t.Context(), query, eventID).Scan(&code); err != nil {
+		t.Fatalf("读回失败码：%v", err)
+	}
+	return code
 }
 
 type selectivePublisher struct {

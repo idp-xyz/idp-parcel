@@ -54,6 +54,7 @@
 - [ADR-0046：候选评估规则归 network-routing 领域，证据端口退为取数](./0046-route-candidate-evaluation-lives-in-the-domain.md)
 - [ADR-0047：账期方式的接受前控制形成信用暴露，不冒充资金冻结](./0047-terms-control-forms-credit-exposure-not-a-freeze.md)
 - [ADR-0048：声明测量是成员级保真画像，不换算不推导](./0048-declared-measurements-are-verbatim-member-profiles.md)
+- [ADR-0049：集成事件的发布通道首发采用进程内直投，消息中间件等负载证据](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)
 
 ## 已被取代决策
 

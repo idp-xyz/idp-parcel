@@ -18,6 +18,37 @@ type Clock interface {
 	Now() time.Time
 }
 
+// ErrNoSubscriber 由发布通道交回，表示这一类信封在本进程的路由表里没有订阅者。
+//
+// 按 ADR-0049 无订阅者显式失败并入账，因而会阻塞该分区直到失败预算耗尽。那是有意的：
+// 直投下「没有订阅者」只可能是漏装配，让它在第一份事件上就响亮地卡住，比静默吞掉一整类
+// 事件好——后者要等到有人发现下游少了数据才暴露。
+var ErrNoSubscriber = errors.New("dispatch: no subscriber for envelope type")
+
+// 失败码按运维要做的动作取值，不按错误来自哪一层取值。取值形状受框架 CHECK 约束：
+// 小写起首、只含 [a-z0-9._-]、不超过 128 字节。
+const (
+	failureNoSubscriber     eventing.FailureCode = "dispatch.no_subscriber"
+	failurePublishUncertain eventing.FailureCode = "dispatch.publish_uncertain"
+	failurePublishFailed    eventing.FailureCode = "dispatch.publish_failed"
+)
+
+// failureCodeFor 把发布失败分格。合成一个码，运维读不出该改装配、该救下游，还是该去
+// 下游核对重复投递——这三件的动作互不相同。
+//
+// 结果不确定单独一格：它与普通失败一样消耗失败预算并重投（框架合同如此），但重投可能
+// 真的造成重复投递，处置要落在下游而不是这边。
+func failureCodeFor(err error) eventing.FailureCode {
+	switch {
+	case errors.Is(err, ErrNoSubscriber):
+		return failureNoSubscriber
+	case errors.Is(err, eventing.ErrPublishUncertain):
+		return failurePublishUncertain
+	default:
+		return failurePublishFailed
+	}
+}
+
 // Config 是一拍的节奏参数。零值不可用——批量上限与租约时长没有合理默认，装配方
 // 必须显式给出（这不是业务阈值：它约束的是进程资源与重试节奏，属部署形态）。
 type Config struct {
@@ -97,7 +128,7 @@ func (dispatcher *Dispatcher) DispatchOnce(ctx context.Context) (int, error) {
 			if recordErr := dispatcher.finalizer.RecordFailure(ctx, delivery.Ref, eventing.DeliveryFailure{
 				FailedAt:    failedAt,
 				RetryAt:     failedAt.Add(dispatcher.config.RetryAfter),
-				Code:        "dispatch.publish_failed",
+				Code:        failureCodeFor(err),
 				MaxFailures: dispatcher.config.MaxAttempts,
 			}); recordErr != nil {
 				// 失败没记上：租约还在，条目会在租约过期后被重新认领——比静默
