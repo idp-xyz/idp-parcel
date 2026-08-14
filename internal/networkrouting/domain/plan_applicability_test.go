@@ -103,3 +103,27 @@ func TestApplicabilityTransitionsDemandBasisAndOrderedTime(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestRehydrateApplicabilityDoesNotReplayLeaveCurrent(t *testing.T) {
+	lapsed, err := domain.RehydratePlanApplicability(domain.RehydratePlanApplicabilitySpec{
+		Plan:           mustValue(t, domain.NewRoutePlanVersionID, "plan-1/v1"),
+		State:          domain.PlanLapsed,
+		TransitionedAt: planEffectiveAt.Add(time.Hour),
+		Basis:          mustValue(t, domain.NewApplicabilityBasisReference, "LINE-CLOSED/NET-ADJ-7"),
+	})
+	if err != nil {
+		t.Fatalf("rehydrate lapsed: %v", err)
+	}
+	if lapsed.State() != domain.PlanLapsed {
+		t.Fatalf("state = %q", lapsed.State())
+	}
+
+	if _, err := domain.RehydratePlanApplicability(domain.RehydratePlanApplicabilitySpec{
+		Plan:           mustValue(t, domain.NewRoutePlanVersionID, "plan-1/v1"),
+		State:          domain.PlanCurrentlyEffective,
+		TransitionedAt: planEffectiveAt,
+		Basis:          mustValue(t, domain.NewApplicabilityBasisReference, "should-not-be-here"),
+	}); !errors.Is(err, domain.ErrInvalidPlanApplicability) {
+		t.Fatalf("error = %v; 当前有效带着离场依据从重建门溜过", err)
+	}
+}

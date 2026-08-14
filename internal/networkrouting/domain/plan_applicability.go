@@ -34,6 +34,10 @@ const (
 	PlanConcluded
 )
 
+func (state PlanApplicabilityState) valid() bool {
+	return state >= PlanCurrentlyEffective && state <= PlanConcluded
+}
+
 func (state PlanApplicabilityState) String() string {
 	switch state {
 	case PlanCurrentlyEffective:
@@ -157,4 +161,43 @@ func (applicability PlanApplicability) leaveCurrent(
 		return ErrInvalidPlanApplicability
 	}
 	return nil
+}
+
+// RehydratePlanApplicabilitySpec 是适用性行在库里的样子。Establish 造不出离场态——
+// 离场是转换门，读回不重放 Supersede/Lapse/Conclude。
+type RehydratePlanApplicabilitySpec struct {
+	Plan           RoutePlanVersionID
+	State          PlanApplicabilityState
+	TransitionedAt time.Time
+	Basis          ApplicabilityBasisReference
+	Successor      RoutePlanVersionID
+}
+
+func RehydratePlanApplicability(spec RehydratePlanApplicabilitySpec) (PlanApplicability, error) {
+	if !spec.Plan.valid() || !spec.State.valid() || spec.TransitionedAt.IsZero() {
+		return PlanApplicability{}, ErrInvalidPlanApplicability
+	}
+	hasBasis := spec.Basis.valid()
+	hasSuccessor := spec.Successor.valid()
+	switch spec.State {
+	case PlanCurrentlyEffective:
+		if hasBasis || hasSuccessor {
+			return PlanApplicability{}, ErrInvalidPlanApplicability
+		}
+	case PlanSuperseded:
+		if !hasBasis || !hasSuccessor || spec.Successor == spec.Plan {
+			return PlanApplicability{}, ErrInvalidPlanApplicability
+		}
+	case PlanLapsed, PlanConcluded:
+		if !hasBasis || hasSuccessor {
+			return PlanApplicability{}, ErrInvalidPlanApplicability
+		}
+	}
+	return PlanApplicability{
+		plan:           spec.Plan,
+		state:          spec.State,
+		transitionedAt: spec.TransitionedAt.UTC(),
+		basis:          spec.Basis,
+		successor:      spec.Successor,
+	}, nil
 }
