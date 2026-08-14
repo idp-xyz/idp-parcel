@@ -427,8 +427,9 @@ type NetworkIntakeHandoffIntent struct {
 	Record IntakeAdoptionRecord
 }
 
-// NetworkIntakeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门，在那之前重放一律重发同一意图。
+// NetworkIntakeHandoff 把已提交的采用结果写入 Outbox（`OutboxNetworkIntakeHandoff`）。
+// 信封 ID 由采用键（含租户）再加类型段认领，入队由 outboxintent.EnqueueOnce 承担；
+// 重放重发同一份（ADR-0043）。
 type NetworkIntakeHandoff interface {
 	HandOffNetworkIntake(ctx context.Context, intent NetworkIntakeHandoffIntent) error
 }
