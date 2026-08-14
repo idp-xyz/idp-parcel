@@ -221,8 +221,9 @@ type InitialRouteHandoffIntent struct {
 	Record      InitialRouteRecord
 }
 
-// InitialRouteHandoff 今天没有实现，唯一的实现是测试用的确定性替身；事务发布仍阻断于
-// ADR-0017 的 Bento/Outbox 闸门，在那之前重放一律重发同一意图。
+// InitialRouteHandoff 把已提交的包裹级初始路由判断写入 Outbox
+// （`OutboxInitialRouteHandoff`）。信封 ID 由判断键（含租户）再加类型段认领，入队由
+// outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type InitialRouteHandoff interface {
 	HandOffInitialRoute(ctx context.Context, intent InitialRouteHandoffIntent) error
 }

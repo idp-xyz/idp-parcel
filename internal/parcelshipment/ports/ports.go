@@ -415,8 +415,9 @@ type FinalOutcomeHandoffIntent struct {
 	Record FinalOutcomeRecord
 }
 
-// FinalOutcomeHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// FinalOutcomeHandoff 把已提交的终局判断写入 Outbox（`OutboxFinalOutcomeHandoff`）。
+// 信封 ID 由采用键（含租户）再加类型段认领，入队由 outboxintent.EnqueueOnce 承担；
+// 重放重发同一份（ADR-0043）。
 type FinalOutcomeHandoff interface {
 	HandOffFinalOutcome(ctx context.Context, intent FinalOutcomeHandoffIntent) error
 }
