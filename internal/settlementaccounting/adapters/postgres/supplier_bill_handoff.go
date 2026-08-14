@@ -49,7 +49,20 @@ type supplierBillPayload struct {
 }
 
 func supplierBillEventID(key ports.BillReceptionKey) string {
-	return key.TenantID.String() + "/bill/" + key.Claim.String() + "/" + key.Version.String()
+	return supplierBillPartitionKey(key) + "/" + key.Version.String()
+}
+
+// supplierBillPartitionKey 取「其先后状态必须保序的那个对象」——账单主张，不含版本。
+//
+// 版本留在信封 ID 里（同一主张的每个版本各自入队，一个都不丢），但不进分区键：同一
+// 主张的 v2 重述 v1 说过的事，审核与对账消费方必须按顺序看到它们。把版本也拼进分区键
+// 会让两版落进互不排队的两条队，于是 v1 可能在 v2 之后被处理，审的是已被取代的那一版。
+//
+// 这一处此前被判为无害，判据是「BillReceptionStore 没有 Replace」——**那个判据不充分**。
+// 更正入口只是第一步筛查；真正要问的是「后一条会不会改写前一条说过的事」，而版本进键
+// 本身就意味着同一主张会有多条信封。
+func supplierBillPartitionKey(key ports.BillReceptionKey) string {
+	return key.TenantID.String() + "/bill/" + key.Claim.String()
 }
 
 // HandOffSupplierBill 把一份意图入队。信封 ID 取（租户+主张+版本）并加 /bill/ 段——
@@ -82,7 +95,7 @@ func (handoff *OutboxSupplierBillHandoff) HandOffSupplierBill(
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Claim.String() + "/" + key.Version.String(),
-		PartitionKey: eventID,
+		PartitionKey: supplierBillPartitionKey(key),
 		OccurredAt:   intent.Record.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

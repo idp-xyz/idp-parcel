@@ -1,4 +1,4 @@
-package architecture
+﻿package architecture
 
 import (
 	"go/ast"
@@ -51,8 +51,23 @@ const envelopeType = "eventing.Envelope"
 // （不变短只说明决定还没落），而一张杂项清单不变短可以是任何原因，因此不信号任何东西。
 //
 // 新增例外要先回答「你为什么也在等这个决定」。答不上来的，就不是例外，是没改。
-const decisionPartitionKeyRollout = "等地盘主人按已定口径修：第一步只改分区键（不动 ID，" +
-	"因而不变更意图契约），第二步改需要区分维的那些 ID 语义"
+// 标注取值。标的是**可复核的判据**，不是「无害」那种复核不了的结论——判据看一眼那个方法
+// 还在不在、那两个状态是不是同一对象的就能核，结论只能重新把领域读一遍。
+//
+// 三类取其一，判据是「**后一条会不会改写或取代前一条说过的事**」：
+//
+//	更正入口：<Type>.<Method>   有显式更正 / 重派生 / 撤销入口
+//	状态序列：<A> → <B>        无更正方法，但先后两条描述同一对象的相继状态
+//	无：各条互不相干            后一条不改写前一条
+//
+// **剩余真风险 = 前两类的行数**，清单总长 = 剩余工量。
+//
+// 为什么不能只问「有没有更正入口」：`governance_handoff.go` 是反例——暂停与恢复没有任何
+// 更正方法，恢复却必须排在暂停之后。只按更正入口标，它会被标成无害。
+const (
+	annotationPendingOwner = "待地盘主人标注"
+	annotationNoRewrite    = "无：各条互不相干"
+)
 
 // allowedSameExpression 是本门禁落地那一刻已经存在的位置，全部挂在同一个决定上。**每修一处
 // 删一行。**
@@ -72,38 +87,37 @@ const decisionPartitionKeyRollout = "等地盘主人按已定口径修：第一�
 // 人——分两笔的话，两笔之间的 HEAD 是红的，而这一批有四个人在同一棵树上并行改，那段窗口里
 // 谁验全仓都会红。已经发生过一次：对账单那处修复与删行分了两笔，中间 HEAD 红了一轮。
 var allowedSameExpression = map[string]string{
-	"internal/customscompliance/adapters/postgres/case_closure_handoff.go":           decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/customs_case_handoff.go":           decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/external_result_handoff.go":        decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/follow_up_handoff.go":              decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/gate_verification_handoff.go":      decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/manifest_handoff.go":               decisionPartitionKeyRollout,
-	"internal/customscompliance/adapters/postgres/verification_handoff.go":           decisionPartitionKeyRollout,
+	"internal/customscompliance/adapters/postgres/case_closure_handoff.go":           annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/customs_case_handoff.go":           annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/external_result_handoff.go":        annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/follow_up_handoff.go":              annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/gate_verification_handoff.go":      annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/manifest_handoff.go":               annotationPendingOwner,
+	"internal/customscompliance/adapters/postgres/verification_handoff.go":           annotationPendingOwner,
 
-	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": decisionPartitionKeyRollout,
+	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationPendingOwner,
 
-	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": decisionPartitionKeyRollout,
-	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go":           decisionPartitionKeyRollout,
-	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              decisionPartitionKeyRollout,
-	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          decisionPartitionKeyRollout,
+	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": annotationPendingOwner,
+	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go":           annotationPendingOwner,
+	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              annotationPendingOwner,
+	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          annotationPendingOwner,
 
-	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": decisionPartitionKeyRollout,
+	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": annotationPendingOwner,
 
-	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":       decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go":    decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/supplier_bill_handoff.go":          decisionPartitionKeyRollout,
+	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":       annotationPendingOwner,
+	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go":    annotationPendingOwner,
+	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       annotationPendingOwner,
+	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              annotationPendingOwner,
+	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": annotationPendingOwner,
 
-	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":        decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":       decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":           decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":              decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":       decisionPartitionKeyRollout,
-	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":        decisionPartitionKeyRollout,
+	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":        annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":       annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":           annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":              annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":       annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":        annotationPendingOwner,
 }
 
 // sameExpressionViolation 是一处两字段同源。
