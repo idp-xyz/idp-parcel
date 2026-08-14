@@ -10,6 +10,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
 // acceptanceDecisionEventType 是接受决定意图的事件类型。
@@ -58,18 +59,11 @@ type acceptanceDecisionPayload struct {
 }
 
 // HandOffAcceptanceDecision 把一份意图入队。信封 ID 取决定标识——意图由结果标识
-// 认领（ADR-0043），重发同一份先查后插按成功收场。
+// 认领（ADR-0043），重发同一份由 outboxintent.EnqueueOnce 的先查后插承担。
 func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 	ctx context.Context,
 	intent ports.AcceptanceDecisionHandoffIntent,
 ) error {
-	enqueued, err := handoff.alreadyEnqueued(ctx, intent.DecisionID.String())
-	if err != nil {
-		return fmt.Errorf("hand off acceptance decision: %w", err)
-	}
-	if enqueued {
-		return nil
-	}
 
 	payload, err := json.Marshal(acceptanceDecisionPayload{
 		TenantID:          intent.Identity.TenantID().String(),
@@ -101,29 +95,8 @@ func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 		Payload:      payload,
 	}
 
-	if err := handoff.store.Enqueue(ctx, envelope); err != nil {
+	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
 		return fmt.Errorf("hand off acceptance decision: %w", err)
 	}
 	return nil
-}
-
-// alreadyEnqueued 同 OutboxSourceDataHandoff 的取舍：查框架技术表，表名耦合由真库
-// 测试守。两个适配器不共享这段小查询——第三个出现时再看它是不是同一个形状。
-func (handoff *OutboxAcceptanceDecisionHandoff) alreadyEnqueued(
-	ctx context.Context,
-	eventID string,
-) (bool, error) {
-	executor, err := handoff.db.RequireExecutor(ctx)
-	if err != nil {
-		return false, err
-	}
-	var exists bool
-	err = executor.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM `+bentoSchemaOutboxTable+` WHERE source = $1 AND event_id = $2)`,
-		eventSource, eventID,
-	).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
 }

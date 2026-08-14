@@ -10,16 +10,12 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
-	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
 // eventSource 是本上下文在信封 Source 位上的稳定名。消费方按它认来源，改名等于换
 // 了一个来源，在途意图会与新名分家。
 const eventSource = "idp-parcel/parcel-shipment"
-
-// bentoSchemaOutboxTable 是意图查重读的框架技术表。表名耦合是先查后插的代价，由
-// 真库测试守着（表名变化时查询与测试一起红，不会静默漂移）。
-const bentoSchemaOutboxTable = migrate.SchemaBento + ".outbox"
 
 // sourceDataVersionEventType 是资料版本意图的事件类型。类型携带语义版本位（信封
 // Version 字段），载荷形状变化时升版本位而不是换类型名。
@@ -70,23 +66,13 @@ type sourceDataVersionPayload struct {
 
 // HandOffSourceDataVersion 把一份意图入队。
 //
-// 信封 ID 取版本标识——意图由结果标识认领（ADR-0043）。重发同一份（重放路径）先按
-// 标识查已入队：查到即成功返回——AT-PS-031 要的「仅重试同一发布意图」正是这一格。
-// 先查后插而不是撞唯一约束翻译：同一事务里撞 23505 会把事务打进中止态，随后的提交
-// 一律失败，调用方在同事务里的业务写入会被连带回滚（真库实跑抓出，与聚合库 Insert
-// 用 ON CONFLICT 是同一个病的两种解法）。并发首发的竞态窗口仍由唯一约束兜底——
-// 那一格撞上时本次事务确实该重试，语义无损。
+// 信封 ID 取版本标识——意图由结果标识认领（ADR-0043），AT-PS-031 要的「仅重试同一
+// 发布意图」由 outboxintent.EnqueueOnce 的先查后插承担（三个适配器同形后提炼的
+// 平台件，取舍见其包注释）。
 func (handoff *OutboxSourceDataHandoff) HandOffSourceDataVersion(
 	ctx context.Context,
 	intent ports.SourceDataVersionHandoffIntent,
 ) error {
-	enqueued, err := handoff.alreadyEnqueued(ctx, intent.Version.String())
-	if err != nil {
-		return fmt.Errorf("hand off source data version: %w", err)
-	}
-	if enqueued {
-		return nil
-	}
 	body := sourceDataVersionPayload{
 		TenantID:          intent.Identity.TenantID().String(),
 		CustomerAccountID: intent.Identity.CustomerAccountID().String(),
@@ -125,31 +111,8 @@ func (handoff *OutboxSourceDataHandoff) HandOffSourceDataVersion(
 		Payload:      payload,
 	}
 
-	if err := handoff.store.Enqueue(ctx, envelope); err != nil {
+	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
 		return fmt.Errorf("hand off source data version: %w", err)
 	}
 	return nil
-}
-
-// alreadyEnqueued 在同一事务里按（来源+事件标识）查该意图是否已入队。
-//
-// 它读的是框架技术表——表名耦合是本方法的代价，由真库测试守着（表名变化时这里
-// 与测试一起红，不会静默漂移）；框架 Store 今天没有查询口，开了再换。
-func (handoff *OutboxSourceDataHandoff) alreadyEnqueued(
-	ctx context.Context,
-	eventID string,
-) (bool, error) {
-	executor, err := handoff.db.RequireExecutor(ctx)
-	if err != nil {
-		return false, err
-	}
-	var exists bool
-	err = executor.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM `+bentoSchemaOutboxTable+` WHERE source = $1 AND event_id = $2)`,
-		eventSource, eventID,
-	).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-	return exists, nil
 }
