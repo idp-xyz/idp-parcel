@@ -1,43 +1,50 @@
 // Package identity 为 customs-compliance 的标识签发端口提供生产实现。
 //
-// 标识取自 crypto/rand 的 128 位随机量，不用库序列，也不编码任何业务维度。两条理由：
+// 签发内核共用 internal/platform/identity；本包只决定两件属本上下文的事：两个标识空间
+// 各取什么前缀，以及签出的字符串交给哪个领域构造函数。
 //
-//   - 递增序列会跨租户泄漏业务量——案件号相邻即可推知另一租户在这段时间建了几个案，
-//     而按 ADR-0003 运营集团租户是最高数据隔离边界。给每个租户各开一条序列可以绕开
-//     这一点，但那要求签发时先读租户，而端口签名里根本没有租户，那是刻意的：标识
-//     不承载归属，归属由存储键表达。
-//   - 签发不落在事务里。库序列的 nextval 不随事务回滚（这一点本来正合适），但走库
-//     就意味着一次网络往返可以让「建案」在拿不到号这一步停住，而随机量不会失败。
-//
-// 前缀只为让两个标识空间在日志与数据里一眼分得开，不参与任何判断。
+// 内核里已经写下的取舍不在这里复述（为什么取随机不取库序列、为什么用 base32、为什么
+// 不收 ctx、为什么熵源必须可注入）。要改那些去改内核，改在这里只会让本上下文与其余
+// 三个上下文重新分叉。
 package identity
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
+// 前缀只为让两个标识空间在日志与工单里一眼分得开，不参与任何判断。它们不含分隔符，
+// 也不含上下文名——领域侧各标识已是互不相通的 Go 类型，张冠李戴编译期就拦得住。
+//
+// 提交版本这一格取 `DECLV` 而不是自然缩写 `SUBV`：后者已被 parcel-shipment 的提交
+// 版本占用。前缀去掉上下文名之后，两个上下文的同名概念就会在同一个命名空间里撞上，
+// 而前缀的全部用处正是让人在日志里分辨它们。
 const (
-	casePrefix    = "CC-CASE-"
-	versionPrefix = "CC-SUBV-"
+	casePrefix    = "CASE"
+	versionPrefix = "DECLV"
 )
 
 // CaseIdentities 实现 ports.CaseIdentityFactory。
-type CaseIdentities struct{}
+type CaseIdentities struct {
+	minter platformidentity.Minter
+}
 
-func NewCaseIdentities() *CaseIdentities {
-	return &CaseIdentities{}
+func NewCaseIdentities(options ...platformidentity.Option) (*CaseIdentities, error) {
+	minter, err := platformidentity.NewMinter(casePrefix, options...)
+	if err != nil {
+		return nil, fmt.Errorf("customs compliance identity: %w", err)
+	}
+	return &CaseIdentities{minter: minter}, nil
 }
 
 var _ ports.CaseIdentityFactory = (*CaseIdentities)(nil)
 
 func (factory *CaseIdentities) MintCaseID(_ context.Context) (domain.CustomsCaseID, error) {
-	minted, err := mint(casePrefix)
+	minted, err := factory.minter.Next()
 	if err != nil {
 		return domain.CustomsCaseID{}, fmt.Errorf("mint case ID: %w", err)
 	}
@@ -47,28 +54,28 @@ func (factory *CaseIdentities) MintCaseID(_ context.Context) (domain.CustomsCase
 // DeclarationVersions 实现 ports.DeclarationVersionFactory。它与案件工厂分开，不是
 // 同一个类型挂两个方法：两者由不同编排触发，合并会让建案的编排依赖它根本不签发的
 // 提交版本号。
-type DeclarationVersions struct{}
+type DeclarationVersions struct {
+	minter platformidentity.Minter
+}
 
-func NewDeclarationVersions() *DeclarationVersions {
-	return &DeclarationVersions{}
+func NewDeclarationVersions(options ...platformidentity.Option) (*DeclarationVersions, error) {
+	minter, err := platformidentity.NewMinter(versionPrefix, options...)
+	if err != nil {
+		return nil, fmt.Errorf("customs compliance identity: %w", err)
+	}
+	return &DeclarationVersions{minter: minter}, nil
 }
 
 var _ ports.DeclarationVersionFactory = (*DeclarationVersions)(nil)
 
-func (factory *DeclarationVersions) NextSubmissionVersion(_ context.Context) (domain.SubmissionVersionID, error) {
-	minted, err := mint(versionPrefix)
+// NextSubmissionVersion 签发一个新的提交版本号。签不出来时如实上抛：提交版本不可覆盖，
+// 拿一个可预测的替代值顶上会撞号。
+func (factory *DeclarationVersions) NextSubmissionVersion(
+	_ context.Context,
+) (domain.SubmissionVersionID, error) {
+	minted, err := factory.minter.Next()
 	if err != nil {
 		return domain.SubmissionVersionID{}, fmt.Errorf("mint submission version ID: %w", err)
 	}
 	return domain.NewSubmissionVersionID(minted)
-}
-
-// mint 造一个带前缀的 128 位随机标识。随机源失败照原样上抛：签不出号时编排停在未决
-// （两个用例都为此留了格），拿一个可预测的替代值顶上会让不可覆盖的提交版本撞号。
-func mint(prefix string) (string, error) {
-	raw := make([]byte, 16)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	return prefix + hex.EncodeToString(raw), nil
 }
