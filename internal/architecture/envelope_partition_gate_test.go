@@ -91,7 +91,6 @@ var allowedSameExpression = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       decisionPartitionKeyRollout,
 	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              decisionPartitionKeyRollout,
 	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": decisionPartitionKeyRollout,
-	"internal/settlementaccounting/adapters/postgres/statement_handoff.go":              decisionPartitionKeyRollout,
 	"internal/settlementaccounting/adapters/postgres/supplier_bill_handoff.go":          decisionPartitionKeyRollout,
 
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":        decisionPartitionKeyRollout,
