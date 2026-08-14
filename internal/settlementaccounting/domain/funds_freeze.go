@@ -364,6 +364,21 @@ func (ledger *FreezeLedger) HeldCount() int {
 	return ledger.countWith(FreezeHeld)
 }
 
+// HeldMinor 是本册当前占用的资金总额，也就是运营结算余额里那一项`冻结金额`。
+//
+// 它属账本而不属读余额的适配器：可用余额要减掉的正是这个数，让 SQL 再定义一次
+// SUM，两处就会在「释放了的还算不算占用」这种问题上分头演化，而其中一头算错的
+// 后果是同一笔钱被冻两次。
+func (ledger *FreezeLedger) HeldMinor() int64 {
+	total := int64(0)
+	for _, freeze := range ledger.byFreeze {
+		if freeze.status == FreezeHeld {
+			total += freeze.amountMinor
+		}
+	}
+	return total
+}
+
 func (ledger *FreezeLedger) ReleaseCount() int {
 	return ledger.countWith(FreezeReleased)
 }

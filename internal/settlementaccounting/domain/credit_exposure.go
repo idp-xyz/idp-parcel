@@ -252,6 +252,20 @@ func (ledger *CreditExposureLedger) Release(exposureID ExposureID, releasedAt ti
 	return exposure, nil
 }
 
+// ExposedMinor 是本册当前占用的额度总额，也就是信用状况里那一项`已占用暴露`。
+//
+// 理由与 FreezeLedger.HeldMinor 同一条，但实现分立在两本账上：它们互不借用
+// （ADR-0047），抽一个共用求和出来正是 SET-03 要拦的合流。
+func (ledger *CreditExposureLedger) ExposedMinor() int64 {
+	total := int64(0)
+	for _, exposure := range ledger.byExposure {
+		if exposure.status == ExposureRecorded {
+			total += exposure.amountMinor
+		}
+	}
+	return total
+}
+
 // FindByRequest 按原控制请求身份找回暴露，释放按原业务关联认领时用（与冻结账本同款）。
 func (ledger *CreditExposureLedger) FindByRequest(requestID ControlRequestID) (CreditExposure, bool) {
 	exposureID, found := ledger.byRequest[requestID]
