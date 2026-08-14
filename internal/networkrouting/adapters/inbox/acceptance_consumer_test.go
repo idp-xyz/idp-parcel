@@ -62,6 +62,8 @@ func decisionEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	payload, err := json.Marshal(map[string]string{
 		"tenantId":          "tenant-a",
 		"customerAccountId": "customer-a",
+		"source":            "portal",
+		"sourceRequestKey":  "source-key-1",
 		"shipmentRequestId": "request-1",
 		"submissionVersion": "submission-v1",
 		"decisionId":        eventID,
@@ -106,6 +108,28 @@ func TestADeliveryIsProcessedExactlyOnce(t *testing.T) {
 	}
 	if handler.calls[0].DecisionID != "decision-1" || handler.calls[0].TenantID != "tenant-a" {
 		t.Fatalf("译码结果 = %+v", handler.calls[0])
+	}
+	// 来源身份要一路带到处理方：没有它就取不回接受基线，而路由的业务输入是基线本体。
+	if handler.calls[0].Source != "portal" || handler.calls[0].SourceRequestKey != "source-key-1" {
+		t.Fatalf("来源身份没有译到处理方：%+v", handler.calls[0])
+	}
+}
+
+// TestAnEnvelopeMissingItsSourceIdentityIsPoison 证缺来源身份即毒丸：处理方按它取
+// 接受基线，取不着就永远路由不出东西——重投同样内容不会长出字段来。
+func TestAnEnvelopeMissingItsSourceIdentityIsPoison(t *testing.T) {
+	consumer, handler := newConsumerFixture(t)
+	ctx := t.Context()
+
+	poison := decisionEnvelope(t, "decision-no-source")
+	poison.Payload = json.RawMessage(`{"tenantId":"tenant-a","customerAccountId":"customer-a",` +
+		`"shipmentRequestId":"request-1","decisionId":"decision-no-source","state":"ACCEPTED"}`)
+
+	if err := consumer.Consume(ctx, poison); err != nil {
+		t.Fatalf("毒丸首投应拒收入账而不是报错：%v", err)
+	}
+	if len(handler.calls) != 0 {
+		t.Fatalf("处理次数 = %d, want 0——取不回基线的信封不该到达处理方", len(handler.calls))
 	}
 }
 

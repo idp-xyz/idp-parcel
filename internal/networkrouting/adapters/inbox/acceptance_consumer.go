@@ -29,9 +29,16 @@ var ErrPoisonEnvelope = errors.New("network routing inbox: poison envelope")
 
 // AcceptedDecision 是译码后的接受决定引用——只有引用，路由创建要读的基线与包裹
 // 清单由编排按引用重新取（跨上下文只传引用）。
+//
+// Source 与 SourceRequestKey 带上是因为「按引用重新取」得取得到：PS 的委托聚合按
+// 完整来源身份（租户+客户+来源+来源请求键）取回，少这两维就查不着那份基线，而
+// UC-NR-001 启动条件明写只有状态字符串而没有基线引用时不得继续。两者本来就在 PS
+// 发的载荷里，此前只是被这个译码器丢掉了。
 type AcceptedDecision struct {
 	TenantID          string
 	CustomerAccountID string
+	Source            string
+	SourceRequestKey  string
 	ShipmentRequestID string
 	SubmissionVersion string
 	DecisionID        string
@@ -121,6 +128,8 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 	var body struct {
 		TenantID          string `json:"tenantId"`
 		CustomerAccountID string `json:"customerAccountId"`
+		Source            string `json:"source"`
+		SourceRequestKey  string `json:"sourceRequestKey"`
 		ShipmentRequestID string `json:"shipmentRequestId"`
 		SubmissionVersion string `json:"submissionVersion"`
 		DecisionID        string `json:"decisionId"`
@@ -129,12 +138,18 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return AcceptedDecision{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
 	}
-	if body.TenantID == "" || body.ShipmentRequestID == "" || body.DecisionID == "" {
+	// 来源身份四维与决定标识一并必备：缺其中任何一个，处理方都取不回基线，因而
+	// 这份投递重投多少次都路由不出东西——那正是毒丸的定义，不是可重试的失败。
+	if body.TenantID == "" || body.CustomerAccountID == "" ||
+		body.Source == "" || body.SourceRequestKey == "" ||
+		body.ShipmentRequestID == "" || body.DecisionID == "" {
 		return AcceptedDecision{}, fmt.Errorf("%w: missing identity fields", ErrPoisonEnvelope)
 	}
 	return AcceptedDecision{
 		TenantID:          body.TenantID,
 		CustomerAccountID: body.CustomerAccountID,
+		Source:            body.Source,
+		SourceRequestKey:  body.SourceRequestKey,
 		ShipmentRequestID: body.ShipmentRequestID,
 		SubmissionVersion: body.SubmissionVersion,
 		DecisionID:        body.DecisionID,
