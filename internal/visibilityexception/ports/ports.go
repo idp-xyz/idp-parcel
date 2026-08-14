@@ -83,13 +83,15 @@ type ProjectionIdentityFactory interface {
 }
 
 // ProjectionHandoffIntent 把新派生的投影交给适用下游（客户视图派生正是消费者）。
-// 意图由投影版本认领，重放重发同一份（ADR-0043）。
+// 意图由投影版本认领，重放重发同一份（ADR-0043）。租户随意图到达（ADR-0003）：投影
+// 对象没有租户维，下游按（租户+包裹）查库。
 type ProjectionHandoffIntent struct {
+	TenantID   domain.TenantID
 	Projection domain.TrackingProjection
 }
 
-// ProjectionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// ProjectionHandoff 把投影版本写入 Outbox（`OutboxProjectionHandoff`）。信封 ID 由
+// 投影版本认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type ProjectionHandoff interface {
 	HandOffProjection(ctx context.Context, intent ProjectionHandoffIntent) error
 }

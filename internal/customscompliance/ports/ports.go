@@ -305,15 +305,16 @@ type FollowUpStore interface {
 }
 
 // FollowUpHandoffIntent 把目标形成与替代生效交给适用下游（申报执行方消费目标，VE
-// 与案件视图消费生效）。
+// 与案件视图消费生效）。意图由后续动作目标键认领，重放重发同一份（ADR-0043）。
 type FollowUpHandoffIntent struct {
 	Key      FollowUpTargetKey
 	Target   domain.FollowUpTarget
 	Relation *domain.ReplacementRelation
 }
 
-// FollowUpHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// FollowUpHandoff 把后续动作目标写入 Outbox（`OutboxFollowUpHandoff`）。信封 ID 由
+// 后续动作目标键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type FollowUpHandoff interface {
 	HandOffFollowUp(ctx context.Context, intent FollowUpHandoffIntent) error
 }

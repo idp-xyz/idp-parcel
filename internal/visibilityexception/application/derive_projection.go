@@ -216,7 +216,10 @@ func (handler *DeriveProjectionHandler) Handle(
 		projection:    projection,
 		hasProjection: true,
 	}
-	if err := handler.deps.Downstream.HandOffProjection(ctx, ports.ProjectionHandoffIntent{Projection: projection}); err != nil {
+	if err := handler.deps.Downstream.HandOffProjection(ctx, ports.ProjectionHandoffIntent{
+		TenantID:   command.TenantID,
+		Projection: projection,
+	}); err != nil {
 		result.handoffRef = "CONT-" + shortDigest("PROJECTION_HANDOFF", projection.Version().String())
 	}
 	return result, nil
