@@ -231,6 +231,7 @@ func (handler *RaiseSignalHandler) Handle(
 		hasConclusion: true,
 	}
 	if err := handler.deps.Downstream.HandOffTriage(ctx, ports.TriageHandoffIntent{
+		TenantID:   command.TenantID,
 		Parcel:     command.Parcel,
 		Kind:       command.Kind,
 		Conclusion: conclusion,

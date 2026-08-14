@@ -221,16 +221,18 @@ type SignalEpisodeIdentityFactory interface {
 	NextEpisodeID(ctx context.Context) (domain.EpisodeID, error)
 }
 
-// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由发作期
-// 标识认领（结论内含），重放重发同一份（ADR-0043）。
+// TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由对象加
+// 类型认领（发作期按租户内这两维定位），重放重发同一份（ADR-0043）。租户随意图到达
+// （ADR-0003）：下游按（租户+包裹+类型）查库。
 type TriageHandoffIntent struct {
+	TenantID   domain.TenantID
 	Parcel     domain.TrackedParcelReference
 	Kind       domain.ExceptionSignalKindReference
 	Conclusion domain.TriageConclusion
 }
 
-// TriageHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// TriageHandoff 把分诊结论写入 Outbox（`OutboxTriageHandoff`）。信封 ID 由对象加类型
+// 认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type TriageHandoff interface {
 	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
 }
