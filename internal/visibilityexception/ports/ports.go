@@ -403,13 +403,16 @@ type VisibilityGapStore interface {
 }
 
 // VisibilityGapHandoffIntent 把已成立的缺口交给信号链（缺口是否命中异常规则由分诊
-// 判断，本编排不替它判）。意图由缺口身份三维认领，重放重发同一份（ADR-0043）。
+// 判断，本编排不替它判）。意图由缺口身份三维认领，重放重发同一份（ADR-0043）。租户
+// 随意图到达（ADR-0003）：缺口对象没有租户维，下游按（租户+包裹+预期+窗口规则）查库。
 type VisibilityGapHandoffIntent struct {
-	Gap domain.VisibilityGap
+	TenantID domain.TenantID
+	Gap      domain.VisibilityGap
 }
 
-// VisibilityGapHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// VisibilityGapHandoff 把已成立的缺口写入 Outbox（`OutboxVisibilityGapHandoff`）。
+// 信封 ID 由缺口身份三维认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type VisibilityGapHandoff interface {
 	HandOffVisibilityGap(ctx context.Context, intent VisibilityGapHandoffIntent) error
 }

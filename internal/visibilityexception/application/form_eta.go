@@ -246,7 +246,7 @@ func (handler *FormETAHandler) FormVisibilityGap(
 			outcome:    GapExistingResult,
 			gap:        existing,
 			hasGap:     true,
-			handoffRef: handler.handOffGap(ctx, existing),
+			handoffRef: handler.handOffGap(ctx, command.TenantID, existing),
 		}, nil
 	}
 
@@ -272,7 +272,7 @@ func (handler *FormETAHandler) FormVisibilityGap(
 		outcome:    GapFormed,
 		gap:        gap,
 		hasGap:     true,
-		handoffRef: handler.handOffGap(ctx, gap),
+		handoffRef: handler.handOffGap(ctx, command.TenantID, gap),
 	}, nil
 }
 
@@ -289,8 +289,11 @@ func (handler *FormETAHandler) handOffETA(ctx context.Context, tenant domain.Ten
 
 // handOffGap 把已成立的缺口交给信号链，交不出去时交回发布续办引用（ADR-0043）。
 // 缺口是否命中异常规则由分诊判断，这里不替它判。
-func (handler *FormETAHandler) handOffGap(ctx context.Context, gap domain.VisibilityGap) string {
-	if err := handler.deps.SignalChain.HandOffVisibilityGap(ctx, ports.VisibilityGapHandoffIntent{Gap: gap}); err != nil {
+func (handler *FormETAHandler) handOffGap(ctx context.Context, tenant domain.TenantID, gap domain.VisibilityGap) string {
+	if err := handler.deps.SignalChain.HandOffVisibilityGap(ctx, ports.VisibilityGapHandoffIntent{
+		TenantID: tenant,
+		Gap:      gap,
+	}); err != nil {
 		return "CONT-" + shortDigest(
 			"VISIBILITY_GAP_HANDOFF",
 			gap.Parcel().String(),

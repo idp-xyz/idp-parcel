@@ -263,14 +263,16 @@ type GateVerificationStore interface {
 }
 
 // GateVerificationHandoffIntent 把门禁核对交给适用下游（TF/NO 的动作执行方消费——
-// 门禁满足不生成放行，放行结果仍由外部事实接收）。
+// 门禁满足不生成放行，放行结果仍由外部事实接收）。意图由门禁幂等键认领，重放重发
+// 同一份（ADR-0043）。
 type GateVerificationHandoffIntent struct {
 	Key  GateVerificationKey
 	Gate domain.ReleaseGateVerification
 }
 
-// GateVerificationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于
-// ADR-0017 的 Bento/Outbox 闸门。
+// GateVerificationHandoff 把门禁核对写入 Outbox（`OutboxGateVerificationHandoff`）。
+// 信封 ID 由门禁幂等键认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份
+// （ADR-0043）。
 type GateVerificationHandoff interface {
 	HandOffGate(ctx context.Context, intent GateVerificationHandoffIntent) error
 }
