@@ -156,6 +156,50 @@ func TestResendingTheSameParcelCancellationIntentIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestTwoCancellationRequestsForOneParcelShareAPartition 钉住一件今天还看不出后果的事。
+//
+// 本口与另两口不同：它**今天没有更正入口**（同一请求身份返回原结果），所以按分区键那套判据
+// 它属「无先后」，改不改分区键眼下都无害。改了、并且钉在这里，是因为**无害只是当下的事实**：
+// 同一包裹的第二次取消请求一旦出现（另一个请求身份、另一个信封 ID），两条若各自成区就再也
+// 说不清哪次在先，而取消的先后正是判定边界要用的。
+//
+// 所以这条断言防的不是回归，是**将来某天这口从「无先后」变成「有先后」时不会悄悄失序**。
+// 经变异验证：把 PartitionKey 改回 eventID 时本用例变红。
+func TestTwoCancellationRequestsForOneParcelShareAPartition(t *testing.T) {
+	fixture := newCancellationHandoffFixture(t)
+	ctx := t.Context()
+
+	for _, requestKey := range []string{"req-1", "req-2"} {
+		intent := cancellationIntent(t, "tenant-a", requestKey, "parcel-1")
+		fixture.within(t, ctx, func(txCtx context.Context) error {
+			return fixture.handoff.HandOffParcelCancellation(txCtx, intent)
+		})
+	}
+
+	first := cancellationEventID("tenant-a", "req-1", "parcel-1")
+	second := cancellationEventID("tenant-a", "req-2", "parcel-1")
+	for _, eventID := range []string{first, second} {
+		if count := countCancellationIntents(t, fixture.pool, eventID); count != 1 {
+			t.Fatalf("%s 行数 = %d，want 1——两次请求是两份意图", eventID, count)
+		}
+	}
+
+	firstPartition := partitionKeyOf(t, fixture.pool, first)
+	if secondPartition := partitionKeyOf(t, fixture.pool, second); firstPartition != secondPartition {
+		t.Fatalf("同一包裹的两次取消请求落在不同分区：%q 与 %q——先后就此说不清",
+			firstPartition, secondPartition)
+	}
+
+	other := cancellationIntent(t, "tenant-a", "req-1", "parcel-2")
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffParcelCancellation(txCtx, other)
+	})
+	otherPartition := partitionKeyOf(t, fixture.pool, cancellationEventID("tenant-a", "req-1", "parcel-2"))
+	if otherPartition == firstPartition {
+		t.Fatalf("两个包裹共用分区 %q——一个的失败会拖住另一个", otherPartition)
+	}
+}
+
 func TestParcelCancellationIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newCancellationHandoffFixture(t)
 	intent := cancellationIntent(t, "tenant-a", "req-1", "parcel-1")
