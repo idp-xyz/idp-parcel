@@ -149,13 +149,15 @@ type CustomerViewIdentityFactory interface {
 }
 
 // CustomerViewHandoffIntent 把新发布的客户视图交给适用下游（门户展示、通知判断的
-// 输入）。意图由视图版本认领，重放重发同一份（ADR-0043）。
+// 输入）。意图由视图版本认领，重放重发同一份（ADR-0043）。租户随意图到达（ADR-0003）：
+// 视图对象没有租户维，下游按（租户+客户+包裹）查库。
 type CustomerViewHandoffIntent struct {
-	View domain.CustomerTrackingView
+	TenantID domain.TenantID
+	View     domain.CustomerTrackingView
 }
 
-// CustomerViewHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// CustomerViewHandoff 把客户视图写入 Outbox（`OutboxCustomerViewHandoff`）。信封 ID
+// 由视图版本认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type CustomerViewHandoff interface {
 	HandOffCustomerView(ctx context.Context, intent CustomerViewHandoffIntent) error
 }

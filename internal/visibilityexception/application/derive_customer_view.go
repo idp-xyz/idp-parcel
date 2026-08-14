@@ -143,7 +143,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 			outcome:    CustomerViewExistingResult,
 			view:       current,
 			hasView:    true,
-			handoffRef: handler.handOff(ctx, current),
+			handoffRef: handler.handOff(ctx, command.TenantID, current),
 		}, nil
 	}
 
@@ -192,7 +192,7 @@ func (handler *DeriveCustomerViewHandler) Handle(
 		outcome:    CustomerViewPublished,
 		view:       view,
 		hasView:    true,
-		handoffRef: handler.handOff(ctx, view),
+		handoffRef: handler.handOff(ctx, command.TenantID, view),
 	}, nil
 }
 
@@ -200,9 +200,13 @@ func (handler *DeriveCustomerViewHandler) Handle(
 // 也不算进未决——视图已经发布，要续办的是发布（ADR-0043）。
 func (handler *DeriveCustomerViewHandler) handOff(
 	ctx context.Context,
+	tenant domain.TenantID,
 	view domain.CustomerTrackingView,
 ) string {
-	if err := handler.deps.Downstream.HandOffCustomerView(ctx, ports.CustomerViewHandoffIntent{View: view}); err != nil {
+	if err := handler.deps.Downstream.HandOffCustomerView(ctx, ports.CustomerViewHandoffIntent{
+		TenantID: tenant,
+		View:     view,
+	}); err != nil {
 		return "CONT-" + shortDigest("CUSTOMER_VIEW_HANDOFF", view.Version().String())
 	}
 	return ""

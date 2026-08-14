@@ -359,14 +359,14 @@ type ManifestStore interface {
 }
 
 // ManifestHandoffIntent 把舱单引用的接受、关联与版本推进交给适用下游（案件视图与
-// 申报链消费）。
+// 申报链消费）。意图由舱单身份认领，重放重发同一份（ADR-0043）。
 type ManifestHandoffIntent struct {
 	TenantID  domain.TenantID
 	Reference domain.ExternalManifestReference
 }
 
-// ManifestHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// ManifestHandoff 把舱单引用写入 Outbox（`OutboxManifestHandoff`）。信封 ID 由舱单
+// 身份认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type ManifestHandoff interface {
 	HandOffManifest(ctx context.Context, intent ManifestHandoffIntent) error
 }
