@@ -154,7 +154,7 @@ func (handler *DeriveProjectionHandler) Handle(
 			return DeriveProjectionResult{outcome: FactSourceConflict}, nil
 		}
 		// 重放：按当前投影作答，不重复派生。
-		current, hasCurrent, err := handler.deps.Projections.FindCurrent(ctx, fact.Parcel())
+		current, hasCurrent, err := handler.deps.Projections.FindCurrent(ctx, command.TenantID, fact.Parcel())
 		if err != nil || !hasCurrent {
 			return DeriveProjectionResult{outcome: FactExistingResult}, nil
 		}
@@ -194,7 +194,7 @@ func (handler *DeriveProjectionHandler) Handle(
 	if err != nil {
 		return DeriveProjectionResult{outcome: DeriveUndecided, reason: ProjectionIdentityUnavailable}, nil
 	}
-	current, hasCurrent, err := handler.deps.Projections.FindCurrent(ctx, fact.Parcel())
+	current, hasCurrent, err := handler.deps.Projections.FindCurrent(ctx, command.TenantID, fact.Parcel())
 	if err != nil {
 		return DeriveProjectionResult{outcome: DeriveUndecided, reason: ProjectionStoreUnavailable}, nil
 	}
@@ -207,7 +207,7 @@ func (handler *DeriveProjectionHandler) Handle(
 	if err != nil {
 		return DeriveProjectionResult{}, fmt.Errorf("derive tracking projection: %w", err)
 	}
-	if err := handler.deps.Projections.Save(ctx, projection); err != nil {
+	if err := handler.deps.Projections.Save(ctx, command.TenantID, projection); err != nil {
 		return DeriveProjectionResult{outcome: DeriveUndecided, reason: ProjectionStoreUnavailable}, nil
 	}
 

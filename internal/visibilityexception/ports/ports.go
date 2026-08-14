@@ -66,9 +66,15 @@ type MilestoneMappingView interface {
 }
 
 // ProjectionStore 保存当前投影版本。原版本由重派生的指回关系承担历史，库只管当前。
+// 租户是最高数据隔离边界（ADR-0003）：TrackedParcelReference 只是字符串引用，缺
+// 租户维两个租户的同名包裹就会共用一份投影。
 type ProjectionStore interface {
-	FindCurrent(ctx context.Context, parcel domain.TrackedParcelReference) (domain.TrackingProjection, bool, error)
-	Save(ctx context.Context, projection domain.TrackingProjection) error
+	FindCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+	) (domain.TrackingProjection, bool, error)
+	Save(ctx context.Context, tenant domain.TenantID, projection domain.TrackingProjection) error
 }
 
 // ProjectionIdentityFactory 签发投影版本标识。

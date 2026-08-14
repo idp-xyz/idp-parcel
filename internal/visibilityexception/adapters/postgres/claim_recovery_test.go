@@ -256,7 +256,7 @@ func (fixture *claimRecoveryFixture) appendAction(t *testing.T, ctx context.Cont
 
 // TestRecoveryMatterRoundTripsAndStaysIdempotent 证事项往返与幂等：FindByID 与
 // FindCurrent 读回同一事项（重建重走 OpenRecoveryMatter 全部不变量）；同（案件+
-// 相对方+范围）第二份撞唯一约束如实报错。
+// 相对方+范围）第二份 ON CONFLICT DO NOTHING，事务仍可用。
 func TestRecoveryMatterRoundTripsAndStaysIdempotent(t *testing.T) {
 	fixture := newClaimRecoveryFixture(t)
 	ctx := t.Context()
@@ -286,15 +286,6 @@ func TestRecoveryMatterRoundTripsAndStaysIdempotent(t *testing.T) {
 		t.Fatalf("按幂等键读回：%v exists=%v id=%v", err, exists, current.ID())
 	}
 
-	// 同键第二份是并发另一方输了的形态——唯一约束如实报错，不静默顶替。
-	duplicate := openedMatter(t, "recovery-2", "case-1", "supplier-1", "parcel-1/loss")
-	err = fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		return fixture.recoveries.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), duplicate)
-	})
-	if err == nil {
-		t.Fatalf("同幂等键第二份事项被接受了")
-	}
-
 	// 另一租户不可见，同键另建互不干扰。
 	if _, exists, err := fixture.recoveries.FindCurrent(ctx,
 		claimValue(t, domain.NewTenantID, "tenant-b"),
@@ -302,6 +293,41 @@ func TestRecoveryMatterRoundTripsAndStaysIdempotent(t *testing.T) {
 		claimValue(t, domain.NewCounterpartyReference, "supplier-1"),
 		claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss")); err != nil || exists {
 		t.Fatalf("跨租户可见：err=%v exists=%v", err, exists)
+	}
+}
+
+// TestSecondRecoverySaveInTheSameTransactionKeepsTheTxUsable 证 ADR-0031：同幂等
+// 键二次 Save 不得走 23505（那会中止事务）；冲突后本事务还能继续语句，赢家原行仍在。
+func TestSecondRecoverySaveInTheSameTransactionKeepsTheTxUsable(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	tenant := claimValue(t, domain.NewTenantID, "tenant-a")
+
+	first := openedMatter(t, "recovery-1", "case-1", "supplier-1", "parcel-1/loss")
+	impostor := openedMatter(t, "recovery-2", "case-1", "supplier-1", "parcel-1/loss")
+
+	var foundAfter bool
+	var winnerID domain.RecoveryMatterID
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.recoveries.Save(txCtx, tenant, first); err != nil {
+			return err
+		}
+		if err := fixture.recoveries.Save(txCtx, tenant, impostor); err != nil {
+			return err
+		}
+		current, exists, err := fixture.recoveries.FindCurrent(txCtx, tenant,
+			claimValue(t, domain.NewCaseID, "case-1"),
+			claimValue(t, domain.NewCounterpartyReference, "supplier-1"),
+			claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss"))
+		if err != nil {
+			return err
+		}
+		foundAfter = exists
+		winnerID = current.ID()
+		return nil
+	})
+	if !foundAfter || winnerID.String() != "recovery-1" {
+		t.Fatalf("冲突后读回 found=%v id=%s，事务应仍可用且赢家是第一份", foundAfter, winnerID)
 	}
 }
 

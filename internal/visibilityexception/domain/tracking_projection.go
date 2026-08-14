@@ -335,3 +335,24 @@ func (projection TrackingProjection) Rederive(
 	rederived.priorVersion = projection.version
 	return rederived, nil
 }
+
+// RehydrateTrackingProjection 从当前行重建投影。库只管当前版，历史由 prior 指回。
+func RehydrateTrackingProjection(
+	version ProjectionVersionID,
+	parcel TrackedParcelReference,
+	entries []MilestoneClassification,
+	derivedAt time.Time,
+	prior ProjectionVersionID,
+) (TrackingProjection, error) {
+	projection, err := DeriveTrackingProjection(version, parcel, entries, derivedAt)
+	if err != nil {
+		return TrackingProjection{}, err
+	}
+	if prior.valid() {
+		if prior == version {
+			return TrackingProjection{}, ErrInvalidTrackingProjection
+		}
+		projection.priorVersion = prior
+	}
+	return projection, nil
+}

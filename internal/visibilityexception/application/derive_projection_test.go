@@ -76,19 +76,25 @@ func (double *mappingViewDouble) ClassifyFact(
 }
 
 type projectionStoreDouble struct {
-	byParcel map[domain.TrackedParcelReference]domain.TrackingProjection
+	byKey map[projectionKey]domain.TrackingProjection
+}
+
+type projectionKey struct {
+	tenant domain.TenantID
+	parcel domain.TrackedParcelReference
 }
 
 func (double *projectionStoreDouble) FindCurrent(
 	_ context.Context,
+	tenant domain.TenantID,
 	parcel domain.TrackedParcelReference,
 ) (domain.TrackingProjection, bool, error) {
-	projection, found := double.byParcel[parcel]
+	projection, found := double.byKey[projectionKey{tenant: tenant, parcel: parcel}]
 	return projection, found, nil
 }
 
-func (double *projectionStoreDouble) Save(_ context.Context, projection domain.TrackingProjection) error {
-	double.byParcel[projection.Parcel()] = projection
+func (double *projectionStoreDouble) Save(_ context.Context, tenant domain.TenantID, projection domain.TrackingProjection) error {
+	double.byKey[projectionKey{tenant: tenant, parcel: projection.Parcel()}] = projection
 	return nil
 }
 
@@ -139,7 +145,7 @@ func newDeriveFixture(t *testing.T) *deriveFixture {
 			},
 			configured: true,
 		},
-		projections: &projectionStoreDouble{byParcel: map[domain.TrackedParcelReference]domain.TrackingProjection{}},
+		projections: &projectionStoreDouble{byKey: map[projectionKey]domain.TrackingProjection{}},
 		downstream:  &projectionDownstreamDouble{},
 	}
 	fixture.handler = application.NewDeriveProjectionHandler(application.DeriveProjectionDeps{

@@ -259,8 +259,10 @@ func (repository *Recoveries) findWhere(
 	return matter, true, nil
 }
 
-// Save 写下一项追偿事项。事项不可回写，语句只插入；（案件+相对方+范围）撞唯一约束
-// 如实报错——编排先 FindCurrent 短路，撞上说明并发另一方刚赢，重试会读到它。
+// Save 写下一项追偿事项。事项不可回写，语句只插入。同（案件+相对方+范围）已有事项
+// 时 ON CONFLICT DO NOTHING——业务答案是已有，不是错误（ADR-0031）。捕 23505 会
+// 把本事务后续语句一并废掉，先查也拦不住并发赢家。rows=0 视为已有，调用方同事务
+// 还能继续读。
 func (repository *Recoveries) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -275,7 +277,8 @@ func (repository *Recoveries) Save(
 		`INSERT INTO visibility_exception.recovery_matter
 			(tenant_id, matter_id, case_id, counterparty_ref, scope_ref,
 			 basis_ref, legal_entity_ref, evidence_ref, deadline, opened_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 ON CONFLICT (tenant_id, case_id, counterparty_ref, scope_ref) DO NOTHING`,
 		tenant.String(),
 		matter.ID().String(),
 		matter.Case().String(),
@@ -320,7 +323,8 @@ func (repository *Recoveries) CountActions(
 }
 
 // AppendAction 追记一条动作节点。只增：没有 UPDATE 与 DELETE，所有尝试与内容版本
-// 保留（硬句 185）。
+// 保留（硬句 185）。行无业务唯一约束（同一尝试的多个过程节点各占一行，主键是
+// identity seq）——没有 23505 可撞，无需 ON CONFLICT。
 func (repository *Recoveries) AppendAction(
 	ctx context.Context,
 	tenant domain.TenantID,
