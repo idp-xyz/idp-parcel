@@ -1,5 +1,7 @@
-// Package ports 声明 network-routing 自有的语义边界。这些只是接口：它们的 PostgreSQL
-// 适配器仍阻断在 Bento 持久化闸门之后（ADR-0017），今天唯一的实现是测试用替身。
+// Package ports 声明 network-routing 自有的语义边界。判断库、计划适用性、交接登记册、
+// 计划版本签发与两个发布意图都已有 PostgreSQL 适配器；仍只有测试替身的是五个证据与
+// 适用性视图——它们要产出的逐候选事实，其生成、过滤与排序规则属 PAR-NET-14，登记册
+// 状态待提供，因而不得先写一份默认实现。
 package ports
 
 import (
@@ -115,9 +117,9 @@ type ReachabilityJudgmentHandoffIntent struct {
 // ReachabilityJudgmentHandoff 把一份已提交的三值判断交给适用下游——`AT-NR-030` 的意图
 // 半边，发布意图这条缝的第三个样本（ADR-0043）。
 //
-// 本上下文不记意图完没完成：那份状态要与判断同一事务落库才算数，而事务与 outbox 仍阻断于
-// ADR-0017 的 Bento 闸门。在那之前重放一律重发同一意图，由下游按请求关联认领。它今天没有
-// 实现，唯一的实现是测试用的确定性替身。
+// 本上下文不记意图完没完成：那份状态要与判断同一事务落库才算数。入队这一步已由
+// OutboxReachabilityHandoff 承担（意图与判断同一事务），但「完没完成」仍然不记——重放
+// 一律重发同一意图，由下游按请求关联认领。
 type ReachabilityJudgmentHandoff interface {
 	HandOffReachabilityJudgment(ctx context.Context, intent ReachabilityJudgmentHandoffIntent) error
 }

@@ -60,8 +60,7 @@ type OffsitePickupHandoffIntent struct {
 	Record PickupAttemptRecord
 }
 
-// OffsitePickupHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// OffsitePickupHandoff 由 OutboxOffsitePickupHandoff 实现：意图与尝试提交同一事务入队。
 type OffsitePickupHandoff interface {
 	HandOffOffsitePickup(ctx context.Context, intent OffsitePickupHandoffIntent) error
 }
@@ -122,7 +121,8 @@ type EffectiveDeliveryHandoffIntent struct {
 	Record EffectiveDeliveryRecord
 }
 
-// EffectiveDeliveryHandoff 今天没有实现，唯一实现是测试替身。
+// EffectiveDeliveryHandoff 由 OutboxEffectiveDeliveryHandoff 实现：意图与交付登记同一
+// 事务入队。
 type EffectiveDeliveryHandoff interface {
 	HandOffEffectiveDelivery(ctx context.Context, intent EffectiveDeliveryHandoffIntent) error
 }
@@ -164,7 +164,8 @@ type OffsitePickupRegistrationIntent struct {
 	Record OffsitePickupRecord
 }
 
-// OffsitePickupRegistrationHandoff 今天没有实现，唯一实现是测试替身。
+// OffsitePickupRegistrationHandoff 由 OutboxOffsitePickupRegistrationHandoff 实现：意图
+// 与揽收登记同一事务入队。
 type OffsitePickupRegistrationHandoff interface {
 	HandOffOffsitePickupRegistration(ctx context.Context, intent OffsitePickupRegistrationIntent) error
 }
@@ -207,7 +208,8 @@ type TransportHandoverRegistrationIntent struct {
 	Record TransportHandoverRecord
 }
 
-// TransportHandoverRegistrationHandoff 今天没有实现，唯一实现是测试替身。
+// TransportHandoverRegistrationHandoff 由 OutboxTransportHandoverRegistrationHandoff
+// 实现：意图与交接登记同一事务入队。
 type TransportHandoverRegistrationHandoff interface {
 	HandOffTransportHandover(ctx context.Context, intent TransportHandoverRegistrationIntent) error
 }
@@ -300,7 +302,8 @@ type TransportCommissionIntent struct {
 	Record TransportCommissionRecord
 }
 
-// TransportCommissionHandoff 今天没有实现，唯一实现是测试替身。
+// TransportCommissionHandoff 由 OutboxTransportCommissionHandoff 实现：意图与委托提交
+// 同一事务入队。
 type TransportCommissionHandoff interface {
 	HandOffTransportCommission(ctx context.Context, intent TransportCommissionIntent) error
 }
@@ -421,7 +424,8 @@ type CapacityConsumptionIntent struct {
 	Quantity    int64
 }
 
-// CapacityConsumptionHandoff 今天没有实现，唯一实现是测试替身。
+// CapacityConsumptionHandoff 由 OutboxCapacityConsumptionHandoff 实现：意图与容量消耗
+// 同一事务入队。
 type CapacityConsumptionHandoff interface {
 	HandOffCapacityConsumption(ctx context.Context, intent CapacityConsumptionIntent) error
 }
@@ -461,8 +465,8 @@ type RegulatoryAcceptanceHandoffIntent struct {
 	Record DispositionAcceptanceRecord
 }
 
-// RegulatoryAcceptanceHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于
-// ADR-0017 的 Bento/Outbox 闸门。
+// RegulatoryAcceptanceHandoff 由 OutboxRegulatoryAcceptanceHandoff 实现：意图与承接
+// 决定同一事务入队。
 type RegulatoryAcceptanceHandoff interface {
 	HandOffRegulatoryAcceptance(ctx context.Context, intent RegulatoryAcceptanceHandoffIntent) error
 }
