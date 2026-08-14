@@ -144,7 +144,7 @@ func (handler *NotifyCustomerHandler) Handle(
 			return NotifyCustomerResult{
 				outcome:      NotificationExistingResult,
 				notification: existing,
-				handoffRef:   handler.handOffNotification(ctx, existing),
+				handoffRef:   handler.handOffNotification(ctx, command.TenantID, existing),
 			}, nil
 		}
 		// 上次提交失败：按策略重试。新节点接在后面，前面的失败保留——重试不是改写。
@@ -211,7 +211,7 @@ func (handler *NotifyCustomerHandler) submit(
 	return NotifyCustomerResult{
 		outcome:      outcome,
 		notification: notification,
-		handoffRef:   handler.handOffNotification(ctx, notification),
+		handoffRef:   handler.handOffNotification(ctx, tenant, notification),
 	}, nil
 }
 
@@ -219,9 +219,11 @@ func (handler *NotifyCustomerHandler) submit(
 // 通知，也不算进未决——通知已经成立，要续办的是发布（ADR-0043）。
 func (handler *NotifyCustomerHandler) handOffNotification(
 	ctx context.Context,
+	tenant domain.TenantID,
 	notification *domain.CustomerNotification,
 ) string {
 	if err := handler.deps.Downstream.HandOffNotification(ctx, ports.NotificationHandoffIntent{
+		TenantID:     tenant,
 		Notification: notification,
 	}); err != nil {
 		return "CONT-" + shortDigest("NOTIFICATION_HANDOFF", notification.ID().String())

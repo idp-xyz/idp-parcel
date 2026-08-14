@@ -279,13 +279,15 @@ type NotificationChannelGateway interface {
 }
 
 // NotificationHandoffIntent 把通知决定交给适用下游（义务台账、升级判断的输入）。意图
-// 由通知标识认领，重放重发同一份（ADR-0043）。
+// 由通知标识认领，重放重发同一份（ADR-0043）。租户随意图到达（ADR-0003）：通知对象
+// 没有租户维，下游按（租户+披露身份）查库。
 type NotificationHandoffIntent struct {
+	TenantID     domain.TenantID
 	Notification *domain.CustomerNotification
 }
 
-// NotificationHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// NotificationHandoff 把通知决定写入 Outbox（`OutboxNotificationHandoff`）。信封 ID
+// 由通知标识认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type NotificationHandoff interface {
 	HandOffNotification(ctx context.Context, intent NotificationHandoffIntent) error
 }
@@ -337,8 +339,8 @@ type DispositionHandoffIntent struct {
 	Request  *domain.DispositionRequest
 }
 
-// DispositionHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017 的
-// Bento/Outbox 闸门。
+// DispositionHandoff 把发送意图写入 Outbox（`OutboxDispositionHandoff`）。信封 ID
+// 由请求标识认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。
 type DispositionHandoff interface {
 	HandOffDispositionRequest(ctx context.Context, intent DispositionHandoffIntent) error
 }

@@ -504,7 +504,8 @@ type DeclarationSubmissionHandoffIntent struct {
 	Record DeclarationSubmissionRecord
 }
 
-// DeclarationSubmissionHandoff 今天没有实现，唯一实现是测试替身。
+// DeclarationSubmissionHandoff 把提交版本写入 Outbox（`OutboxDeclarationSubmissionHandoff`）。
+// 信封 ID 由幂等键（租户+申报单元+监管程序）认领，入队由 outboxintent.EnqueueOnce 承担。
 type DeclarationSubmissionHandoff interface {
 	HandOffDeclarationSubmission(ctx context.Context, intent DeclarationSubmissionHandoffIntent) error
 }
