@@ -105,16 +105,15 @@ func TestHistoryAndAttemptsSurviveTheRoundTrip(t *testing.T) {
 		t.Fatalf("形成新提交版本：%v", err)
 	}
 
+	var saved ports.ShipmentRequestSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := repository.Save(txCtx, requestIdentity(t, "req-key-1"), superseded)
-		if err != nil {
-			return err
-		}
-		if saved != ports.ShipmentRequestSaved {
-			t.Fatalf("save outcome = %s, want SAVED", saved)
-		}
-		return nil
+		var err error
+		saved, err = repository.Save(txCtx, requestIdentity(t, "req-key-1"), superseded)
+		return err
 	})
+	if saved != ports.ShipmentRequestSaved {
+		t.Fatalf("save outcome = %s, want SAVED", saved)
+	}
 
 	found, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-1"))
 	if err != nil {
@@ -168,16 +167,15 @@ func TestInsertingTwiceReportsAlreadyExists(t *testing.T) {
 	mustInsert(t, transactor, ctx, repository, first)
 
 	second := submittedShipmentRequest(t, "req-key-1", "request-2")
+	var outcome ports.ShipmentRequestInsertOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Insert(txCtx, requestIdentity(t, "req-key-1"), second)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ShipmentRequestAlreadyExists {
-			t.Fatalf("outcome = %s, want ALREADY_EXISTS", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = repository.Insert(txCtx, requestIdentity(t, "req-key-1"), second)
+		return err
 	})
+	if outcome != ports.ShipmentRequestAlreadyExists {
+		t.Fatalf("outcome = %s, want ALREADY_EXISTS", outcome)
+	}
 
 	found, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-1"))
 	if err != nil {
@@ -201,28 +199,26 @@ func TestSaveDetectsTheRevisionConflict(t *testing.T) {
 	}
 
 	// 赢家先保存一次（revision 1→2）。
+	var winner ports.ShipmentRequestSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := repository.Save(txCtx, requestIdentity(t, "req-key-1"), stale)
-		if err != nil {
-			return err
-		}
-		if saved != ports.ShipmentRequestSaved {
-			t.Fatalf("winner outcome = %s", saved)
-		}
-		return nil
+		var err error
+		winner, err = repository.Save(txCtx, requestIdentity(t, "req-key-1"), stale)
+		return err
 	})
+	if winner != ports.ShipmentRequestSaved {
+		t.Fatalf("winner outcome = %s", winner)
+	}
 
 	// 落败方拿着同一份 revision 1 的聚合再保存：零行命中。
+	var loser ports.ShipmentRequestSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		saved, err := repository.Save(txCtx, requestIdentity(t, "req-key-1"), stale)
-		if err != nil {
-			return err
-		}
-		if saved != ports.ShipmentRequestRevisionConflict {
-			t.Fatalf("loser outcome = %s, want REVISION_CONFLICT", saved)
-		}
-		return nil
+		var err error
+		loser, err = repository.Save(txCtx, requestIdentity(t, "req-key-1"), stale)
+		return err
 	})
+	if loser != ports.ShipmentRequestRevisionConflict {
+		t.Fatalf("loser outcome = %s, want REVISION_CONFLICT", loser)
+	}
 }
 
 // TestRequestWritesRefuseToRunOutsideATransaction 证写入不会在缺少事务时改用连接池
@@ -287,16 +283,16 @@ func mustInsert(
 	request domain.ShipmentRequest,
 ) {
 	t.Helper()
+	var outcome ports.ShipmentRequestInsertOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Insert(txCtx, request.CurrentSubmissionVersion().SourceSubmission().Identity(), request)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.ShipmentRequestInserted {
-			t.Fatalf("insert outcome = %s", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = repository.Insert(txCtx,
+			request.CurrentSubmissionVersion().SourceSubmission().Identity(), request)
+		return err
 	})
+	if outcome != ports.ShipmentRequestInserted {
+		t.Fatalf("insert outcome = %s", outcome)
+	}
 }
 
 func mustBuild[T any](t *testing.T, construct func(string) (T, error), raw string) T {

@@ -80,16 +80,15 @@ func TestOneParcelCannotStartResponsibilityTwice(t *testing.T) {
 	second := adoptedRecord(t, "tenant-1", "parcel-1", "SRV-2", "digest-2")
 	second.Key.Kind = domain.OffsitePickupSource
 	second = reshapeAdoptedSource(t, second)
+	var secondOutcome ports.IntakeAdoptionSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := adoptions.Save(txCtx, second)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.IntakeAdoptionAlreadyRecorded {
-			t.Fatalf("second adoption outcome = %d, want ALREADY_RECORDED", outcome)
-		}
-		return nil
+		var err error
+		secondOutcome, err = adoptions.Save(txCtx, second)
+		return err
 	})
+	if secondOutcome != ports.IntakeAdoptionAlreadyRecorded {
+		t.Fatalf("second adoption outcome = %d, want ALREADY_RECORDED", secondOutcome)
+	}
 
 	refusal := refusedAdoption(t, "tenant-1", "parcel-1", "SRV-3", "digest-3")
 	mustSaveAdoption(t, transactor, ctx, adoptions, refusal)
@@ -184,6 +183,11 @@ func TestCancellationReplayKeepsTheFirstDecision(t *testing.T) {
 	first := cancelledRecord(t, "tenant-1", "req-1", "parcel-1", "digest-1")
 	mustSaveCancellation(t, transactor, ctx, cancellations, first)
 
+	var (
+		replayOutcome ports.CancellationSaveOutcome
+		winner        ports.CancellationRecord
+		present       bool
+	)
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		forged := ports.CancellationRecord{
 			Key:           first.Key,
@@ -192,22 +196,24 @@ func TestCancellationReplayKeepsTheFirstDecision(t *testing.T) {
 			RefusalBasis:  mustBuild(t, domain.NewCheckReason, "AUTHORITY_DENIED/rule-7"),
 			DecidedAt:     adoptionRecordAt,
 		}
-		outcome, err := cancellations.Save(txCtx, forged)
+		var err error
+		replayOutcome, err = cancellations.Save(txCtx, forged)
 		if err != nil {
 			return err
 		}
-		if outcome != ports.CancellationAlreadyRecorded {
-			t.Fatalf("replay outcome = %d, want ALREADY_RECORDED", outcome)
-		}
-		winner, present, err := cancellations.FindByKey(txCtx, first.Key)
-		if err != nil || !present {
-			t.Fatalf("撞键后同事务读回失败：present=%v err=%v", present, err)
-		}
-		if winner.Kind != ports.RecordParcelCancelled {
-			t.Fatal("迟到的拒绝覆盖了先到的取消")
-		}
-		return nil
+		winner, present, err = cancellations.FindByKey(txCtx, first.Key)
+		return err
 	})
+
+	if replayOutcome != ports.CancellationAlreadyRecorded {
+		t.Fatalf("replay outcome = %d, want ALREADY_RECORDED", replayOutcome)
+	}
+	if !present {
+		t.Fatal("撞键后同事务读不回先到者")
+	}
+	if winner.Kind != ports.RecordParcelCancelled {
+		t.Fatal("迟到的拒绝覆盖了先到的取消")
+	}
 }
 
 func TestAFinalOutcomeRoundTripsAndRederivesInPlace(t *testing.T) {
@@ -256,17 +262,15 @@ func TestAFinalOutcomeRoundTripsAndRederivesInPlace(t *testing.T) {
 	}
 
 	// 从已失效锚重放重派生：翻旧零行答`已有记录`，不再动链。
+	var staleOutcome ports.FinalOutcomeSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		stale := rederivedFinalRecord(t, current, "ORV-3", "digest-3")
-		outcome, err := finals.Save(txCtx, stale)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.FinalOutcomeAlreadyRecorded {
-			t.Fatalf("stale rederive outcome = %d, want ALREADY_RECORDED", outcome)
-		}
-		return nil
+		var err error
+		staleOutcome, err = finals.Save(txCtx, rederivedFinalRecord(t, current, "ORV-3", "digest-3"))
+		return err
 	})
+	if staleOutcome != ports.FinalOutcomeAlreadyRecorded {
+		t.Fatalf("stale rederive outcome = %d, want ALREADY_RECORDED", staleOutcome)
+	}
 }
 
 // TestARefusedFinalNeverTakesTheCurrentSlot 证不采用记录整行往返且从不占当前位。
@@ -451,16 +455,15 @@ func mustSaveAdoption(
 	record ports.IntakeAdoptionRecord,
 ) {
 	t.Helper()
+	var outcome ports.IntakeAdoptionSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := adoptions.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.IntakeAdoptionSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = adoptions.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.IntakeAdoptionSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 func mustSaveCancellation(
@@ -471,16 +474,15 @@ func mustSaveCancellation(
 	record ports.CancellationRecord,
 ) {
 	t.Helper()
+	var outcome ports.CancellationSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := cancellations.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.CancellationSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = cancellations.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.CancellationSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 func mustSaveFinal(
@@ -491,16 +493,15 @@ func mustSaveFinal(
 	record ports.FinalOutcomeRecord,
 ) {
 	t.Helper()
+	var outcome ports.FinalOutcomeSaveOutcome
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := finals.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.FinalOutcomeSaved {
-			t.Fatalf("save outcome = %d", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = finals.Save(txCtx, record)
+		return err
 	})
+	if outcome != ports.FinalOutcomeSaved {
+		t.Fatalf("save outcome = %d", outcome)
+	}
 }
 
 // adoptedRecord 造一份节点收寄的采用记录：来源五件+基线锚+首版承诺。收寄与承诺经

@@ -113,25 +113,35 @@ func TestAppendingTwiceKeepsTheFirstVersion(t *testing.T) {
 
 	// 同版本号另一份内容：重复追加必须让先到者原样活着，绝不覆盖。
 	second := correctionVersionWithReason(t, "version-2", "reason-late-writer")
+
+	// 闭包只做 IO 并把结果带出来，断言一律搬到闭包外：t.Fatal 系走 runtime.Goexit，
+	// 回调因而永不返回，WithinTransaction 的提交与回滚两条分支都会被跳过。
+	var (
+		outcome ports.SourceDataVersionAppendOutcome
+		found   domain.CustomerSourceDataVersion
+		exists  bool
+	)
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Append(txCtx, shipmentIdentity(t, "tenant-1", "customer-1"), second)
+		var err error
+		outcome, err = repository.Append(txCtx, shipmentIdentity(t, "tenant-1", "customer-1"), second)
 		if err != nil {
 			return err
 		}
-		if outcome != ports.SourceDataVersionAlreadyRecorded {
-			t.Fatalf("outcome = %s, want ALREADY_RECORDED", outcome)
-		}
 		// 撞键后事务仍可用：同一个事务里立刻读回先到者。
-		found, exists, err := repository.FindVersion(txCtx, shipmentIdentity(t, "tenant-1", "customer-1"),
+		found, exists, err = repository.FindVersion(txCtx, shipmentIdentity(t, "tenant-1", "customer-1"),
 			mustBuild(t, domain.NewSourceDataVersionID, "version-2"))
-		if err != nil || !exists {
-			t.Fatalf("撞键后同事务读回失败：%v exists=%v", err, exists)
-		}
-		if found.Reason() != first.Reason() {
-			t.Fatal("后到者覆盖了先到者的留痕清单")
-		}
-		return nil
+		return err
 	})
+
+	if outcome != ports.SourceDataVersionAlreadyRecorded {
+		t.Fatalf("outcome = %s, want ALREADY_RECORDED", outcome)
+	}
+	if !exists {
+		t.Fatal("撞键后同事务读不回先到者")
+	}
+	if found.Reason() != first.Reason() {
+		t.Fatal("后到者覆盖了先到者的留痕清单")
+	}
 }
 
 // TestVersionWritesRefuseToRunOutsideATransaction 证写入不会在缺少事务时改用连接池。
@@ -197,17 +207,17 @@ func mustAppend(
 	version domain.CustomerSourceDataVersion,
 ) {
 	t.Helper()
+
+	var outcome ports.SourceDataVersionAppendOutcome
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		outcome, err := repository.Append(txCtx, identity, version)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.SourceDataVersionAppended {
-			t.Fatalf("append outcome = %s", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = repository.Append(txCtx, identity, version)
+		return err
 	}); err != nil {
 		t.Fatalf("事务内追加失败：%v", err)
+	}
+	if outcome != ports.SourceDataVersionAppended {
+		t.Fatalf("append outcome = %s", outcome)
 	}
 }
 
