@@ -146,12 +146,43 @@ func (outcome PublicationSaveOutcome) String() string {
 	}
 }
 
+// ServiceProductSaveOutcome 是一次服务产品形态登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放（同一产品版本同一形态），`内容冲突`是同一产品版本被登记成另一种形态
+// ——同一次发布不可能既是这种形态又是那种，需要商业责任方修正，绝不覆盖；两者都不是
+// error，事务保持可用。
+type ServiceProductSaveOutcome uint8
+
+const (
+	ServiceProductSaveOutcomeInvalid ServiceProductSaveOutcome = iota
+	ServiceProductSaved
+	ServiceProductAlreadyRegistered
+	ServiceProductContentConflict
+)
+
+func (outcome ServiceProductSaveOutcome) String() string {
+	switch outcome {
+	case ServiceProductSaved:
+		return "SAVED"
+	case ServiceProductAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case ServiceProductContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
 // 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
 // 查带不出「同范围有哪些并存版本」。
 //
-// 本口先只承载版本册；有效性更正册（ADR-0038）与价格/结算政策册（ADR-0034/0044）
-// 的持久化面另票补，端口届时扩展而不是在这里预开空方法。
+// 本口今天承载版本册与服务产品形态册（ADR-0050）。有效性更正册（ADR-0038）与价格/
+// 结算政策册（ADR-0034/0044）的持久化面尚未落，端口届时继续扩展而不是在这里预开
+// 空方法。
+//
+// LoadForScope 一次交回该范围**已落库的全部通道**，而不是逐通道各取一次：ViewRevision
+// 由各通道的内容共同派生，两次取回之间视图一变，派生出的修订就不再对应任何一个真实时刻。
+// 通道增多时扩的是那一次取回的内容，不是取回的次数。
 type PublicationRegistry interface {
 	LoadForScope(
 		ctx context.Context,
@@ -162,6 +193,12 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		version domain.CommercialVersion,
 	) (PublicationSaveOutcome, error)
+	// SaveServiceProduct 登记一份服务产品版本的服务形态。它不代替 SaveVersion：
+	// 产品对象本身仍须按版本通道入册，这里只登记「它是哪种形态」（ADR-0050）。
+	SaveServiceProduct(
+		ctx context.Context,
+		product domain.ServiceProduct,
+	) (ServiceProductSaveOutcome, error)
 }
 
 type Clock interface {

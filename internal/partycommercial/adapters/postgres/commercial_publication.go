@@ -34,8 +34,14 @@ func NewCommercialPublications(db *bentopg.DB) (*CommercialPublications, error) 
 	return &CommercialPublications{db: db}, nil
 }
 
-// LoadForScope 按（租户+范围）读回整册版本。读回的每一行先过领域重建门，再经
-// Register 进登记册——两道门互补：前者拦一行坏数据，后者拦拼出来的重复键。
+// LoadForScope 按（租户+范围）读回整册。读回的每一行先过领域重建门，再经 Register 进
+// 登记册——两道门互补：前者拦一行坏数据，后者拦拼出来的重复键。
+//
+// 版本册与服务产品形态册（ADR-0050）由**一条语句**左连接取回，不是各查一次。两个理由：
+// 一是登记册的 ViewRevision 由各通道内容共同派生，分两次读之间若有写入落地，派生出的修订
+// 会对应一个从未存在过的中间状态；ReadExecutor 不保证两条语句同处一个快照，而一条语句保证。
+// 二是形态行以版本四元组为主键、与版本一一对应，连接后仍是每个版本一行，不会放大结果集。
+// 其余三册（更正/价格/结算）落库后同样按四元组一一对应，按同一条左连接续接即可。
 func (repository *CommercialPublications) LoadForScope(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -47,11 +53,16 @@ func (repository *CommercialPublications) LoadForScope(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT snapshot
-		   FROM party_commercial.commercial_version
-		  WHERE tenant_id = $1
-		    AND scope_ref = $2
-		  ORDER BY object_kind, object_id, version_label`,
+		`SELECT version.snapshot, product.form
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.service_product_form AS product
+		          ON product.tenant_id     = version.tenant_id
+		         AND product.object_kind   = version.object_kind
+		         AND product.object_id     = version.object_id
+		         AND product.version_label = version.version_label
+		  WHERE version.tenant_id = $1
+		    AND version.scope_ref = $2
+		  ORDER BY version.object_kind, version.object_id, version.version_label`,
 		tenant.String(),
 		scope.String(),
 	)
@@ -63,7 +74,10 @@ func (repository *CommercialPublications) LoadForScope(
 	registry := domain.NewCommercialRegistry()
 	for rows.Next() {
 		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
+		// 形态列可空：左连接下 NULL 就是「这个版本没登记形态」。它不是缺陷也不是未决
+		// ——ADR-0050 明写产品缺席不使解析退化，缺席由查无此行表达。
+		var rawForm *string
+		if err := rows.Scan(&raw, &rawForm); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 		var document versionDocument
@@ -76,6 +90,11 @@ func (repository *CommercialPublications) LoadForScope(
 		}
 		if _, err := registry.Register(version); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		if rawForm != nil {
+			if err := registerServiceProduct(registry, version, *rawForm); err != nil {
+				return nil, fmt.Errorf("load publication registry: %w", err)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {
