@@ -265,3 +265,65 @@ func TestCrossTenantSameObjectVersionNeitherReplaysNorLeaks(t *testing.T) {
 		t.Fatal("两租户同 scope 却共用同一 ViewRevision")
 	}
 }
+
+// Covers: 同上一条的租户轴（ADR-0040 / ADR-0003），但走**价格政策**那一支。
+//
+// 三支分别独立过滤：版本、结算政策与服务产品都判租户，价格政策一支曾只判范围，因此同范围
+// 的他租政策会被算进本租户的修订。落在这里的后果不是泄露正文，而是本租户在自己一字未动时
+// 收到`已失效`——提交前失效检测据修订判断，而修订被别人推动了。
+func TestAnotherTenantsPricePolicyDoesNotMoveThisTenantsViewRevision(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	tenantA := commercialValue(t, domain.NewTenantID, "tenant-a")
+	shared := commercialValue(t, domain.NewCommercialScopeReference, "scope-shared")
+
+	registry.RegisterPricePolicy(tenantPricePolicy(t, "tenant-a", "policy-a", "scope-shared", "plan-a"))
+	viewOnlyA := registry.ViewRevision(tenantA, shared)
+
+	registry.RegisterPricePolicy(tenantPricePolicy(t, "tenant-b", "policy-b", "scope-shared", "plan-b"))
+
+	if registry.ViewRevision(tenantA, shared) != viewOnlyA {
+		t.Fatal("他租价格政策推动了本租户 ViewRevision")
+	}
+}
+
+// tenantPricePolicy 造一份指定租户与范围下`已生效`的价格政策。范围要能指定，因为本用例
+// 的整个问题就在「两租户共用同一个范围」。
+func tenantPricePolicy(t *testing.T, tenant, objectID, scope, plan string) domain.CommercialPricePolicy {
+	t.Helper()
+
+	spec := commercialSpec(t, domain.PriceRuleObject, objectID, "v1", "sha256:"+objectID)
+	spec.TenantID = commercialValue(t, domain.NewTenantID, tenant)
+	spec.Scope = commercialValue(t, domain.NewCommercialScopeReference, scope)
+
+	draft, err := domain.NewCommercialDraft(spec)
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	published, err := draft.Publish(
+		approval(t, "approval-"+tenant+"-"+objectID),
+		domain.ApprovalRoleConfirmed,
+		time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	live, err := published.TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+
+	policy, err := domain.NewCommercialPricePolicy(
+		live,
+		domain.SellDirection,
+		commercialValue(t, domain.NewPricingPlanReference, plan),
+		domain.SellDirection,
+		domain.PlanBindingConversionNone,
+		commercialValue(t, domain.NewCommercialScopeReference, scope),
+		mustInterval(t),
+	)
+	if err != nil {
+		t.Fatalf("new price policy: %v", err)
+	}
+	return policy
+}

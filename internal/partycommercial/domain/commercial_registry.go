@@ -292,7 +292,10 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 		}, "\x1f"))
 	}
 	for _, policy := range registry.policies {
-		if policy.scope != scope {
+		// 租户与范围两轴都要判。范围取政策自己的 scope（与 covers 选用同一轴），租户取
+		// 承载它的版本——政策值上没有租户轴，而少了这一判，同范围的他租政策会推动本租户
+		// 的修订，把一次与本租户无关的写入读成「你的视图变了」（ADR-0040 / ADR-0003）。
+		if policy.version.tenant != tenant || policy.scope != scope {
 			continue
 		}
 		// 政策参与视图修订：只改绑定、不动版本正文时，解析身份仍须跟着变。
