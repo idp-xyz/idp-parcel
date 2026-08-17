@@ -1,6 +1,6 @@
 # ADR-0022: HTTP 状态码只回答「有没有形成答案」，业务判别一律进响应体
 
-Status: Accepted  
+Status: Accepted（**部分停用**：Decision 中「两项未决期间，业务端点可以存在并由测试替身驱动，但不进 `cmd/parcel-api` 的装配」的末段「但不进 `cmd/parcel-api` 的装配」已由 [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 停用——端点改为带「未配置即拒」Intake 进装配；该句要防的「默认实现铸造信封」由未配置格保留并加强，同段「禁止在它们决定前落地任何默认实现」原文有效，其余各条不变）  
 Date: 2026-08-11
 
 ## Context
@@ -59,6 +59,7 @@ Date: 2026-08-11
 
 ## Links
 
+- [ADR-0055：业务端点 Intake 增设「未配置」格，端点装配属机制半边](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)：停用本记录「但不进 `cmd/parcel-api` 的装配」一句，端点改为带未配置格进装配
 - [ADR-0021：一线作业客户端属于产品，范围限于本产品拥有的节点作业](./0021-frontline-operations-client-is-part-of-the-product.md)：离线与弱网容忍反向约束端点形状，本记录据以现在决定
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：HTTP 业务端点「在应用层成型后自然解除」，本记录是解除后的第一项设计决定；Bento 持久化闸门不受影响
 - [ADR-0003：采用集团租户、法人责任与货主客户账户三级边界](./0003-group-tenant-legal-entity-customer-account.md)：租户即最高数据隔离边界，本记录据以要求`统一不可见结果`与外置接入认证
