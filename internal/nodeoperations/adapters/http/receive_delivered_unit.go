@@ -64,6 +64,10 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 
 		command, err := intake.IntakeReception(request.Context(), request)
 		if err != nil {
+			if errors.Is(err, ErrAccessChannelNotConfigured) {
+				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+				return
+			}
 			if errors.Is(err, ErrMalformedRequest) {
 				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 				return

@@ -45,6 +45,10 @@ func NewReceiveClaimEndpoint(intake ClaimIntake, receiver ClaimReceiver) http.Ha
 
 		command, err := intake.IntakeClaim(request.Context(), request)
 		if err != nil {
+			if errors.Is(err, ErrAccessChannelNotConfigured) {
+				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+				return
+			}
 			if errors.Is(err, ErrMalformedClaim) {
 				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 				return

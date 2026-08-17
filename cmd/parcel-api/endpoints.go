@@ -1,21 +1,47 @@
 package main
 
 import (
+	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
+	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
 
-// assembleBusinessEndpoints 是业务端点的装配点（组合根）。七个处理器已在各上下文的
-// adapters/http 成型（PS 提交/撤回、NO 收寄登记、TF 交付登记双端点、VE 视图查询与
-// 索赔受理、CC 外部结果接收），它们的构造函数都以 Intake 接口为第一参——来源信封
-// 只能来自认证结果，而真实接入渠道的认证方式属 `PAR-INT-01` 待提供。
+// assembleBusinessEndpoints 是业务端点的装配点（组合根）。五个上下文的 adapters/http
+// 里的接入面处理器全部挂在这里：PS 提交与撤回、NO 收寄登记、TF 交付登记与 POD 更正、
+// VE 视图查询与索赔受理、CC 外部结果接收。
 //
-// 按 ADR-0055，本函数不再以空清单等 `PAR-INT-01`：七个端点各以「未配置即拒」的 Intake
-// 进装配——不读业务内容、不铸来源信封、不出命令，对每个请求如实答「接入渠道未配置」
-// （403 + ACCESS_CHANNEL_NOT_CONFIGURED）。当前的空清单是该批装配落地前的过渡态，落地
-// 随评审 081701 排序的「最小业务 API」一步进行；真渠道 Intake 就位时在此逐端点替换，
-// 不再动路由层或处理器。红线同各 Intake 注释：不得出现任何「开发用」的采信头部实现；
-// 未配置即拒不是那种默认实现——分界同 ADR-0052：「读一个空登记册并如实答未配置不是
-// 默认实现，恰恰是它想保护的东西」。
+// 按 ADR-0055，本函数不再以空清单等 `PAR-INT-01`：每个端点各以「未配置即拒」的 Intake
+// 起步——不读业务内容、不采信自报身份、不构造命令，对每个请求如实答「接入渠道未配置」
+// （403 + ACCESS_CHANNEL_NOT_CONFIGURED）。空清单折叠了两件事：进程外看「产品没有这个
+// 能力」与「租户还没配置接入渠道」同答 404，而前者无事可做、后者要去提供渠道参数。
+//
+// 红线不因此松动：这里不得出现任何「开发用」的采信头部实现。未配置即拒不是那种默认
+// 实现——分界同 ADR-0052：「读一个空登记册并如实答未配置不是默认实现，恰恰是它想保护
+// 的东西」，而这里的空登记册就是本函数自己：真渠道就位前它没有任何一行真 Intake。
+//
+// 真渠道 Intake 就位时在本函数逐端点替换，路由层与处理器不动；载荷规范化摘要与准入
+// 范围装配（`PAR-GOV-03..07`）仍拦着真渠道 Intake，未配置即拒绕开它们只因它走不到那
+// 一步（ADR-0055 第五条）。
+//
+// 路径取各包传输层测试已在用的那一个，不另立一套坐标；TF 的 POD 更正此前没有自己的
+// 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
+// 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
+//
+// 清单是八项。ADR-0055 与开发主线把它称作「七个」，但两处自己的逐项枚举都是八项
+// （PS 二、NO 一、TF 二、VE 二、CC 一）；此处按逐项枚举装配，少装一个就是把一个端点
+// 折回 404，那正是该记录要治的病。
 func assembleBusinessEndpoints() []httpapi.BusinessEndpoint {
-	return nil
+	return []httpapi.BusinessEndpoint{
+		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, unwiredSubmission{})},
+		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, unwiredWithdrawal{})},
+		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, unwiredReception{})},
+		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
+		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
+		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredTrackingViews{})},
+		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredClaims{})},
+		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, unwiredResults{})},
+	}
 }

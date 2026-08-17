@@ -97,6 +97,10 @@ func endpoint(
 		result, err, intakeDone := invoke(request)
 		if err != nil {
 			if !intakeDone {
+				if errors.Is(err, ErrAccessChannelNotConfigured) {
+					writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+					return
+				}
 				if errors.Is(err, ErrMalformedRequest) {
 					writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 					return

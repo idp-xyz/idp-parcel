@@ -41,6 +41,10 @@ func NewWithdrawShipmentRequestEndpoint(intake WithdrawalIntake, handler Withdra
 
 		command, err := intake.IntakeWithdrawal(request.Context(), request)
 		if err != nil {
+			if errors.Is(err, ErrAccessChannelNotConfigured) {
+				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+				return
+			}
 			if errors.Is(err, ErrMalformedRequest) {
 				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 				return
