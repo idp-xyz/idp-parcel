@@ -57,6 +57,7 @@ type NotFormedReason uint8
 const (
 	NotFormedReasonNone NotFormedReason = iota
 	ControlPolicyUnavailable
+	ControlPolicyNotConfigured
 	BalanceUnavailable
 	FreezeLedgerUnavailable
 	CreditStandingUnavailable
@@ -67,6 +68,8 @@ func (reason NotFormedReason) String() string {
 	switch reason {
 	case ControlPolicyUnavailable:
 		return "CONTROL_POLICY_UNAVAILABLE"
+	case ControlPolicyNotConfigured:
+		return "CONTROL_POLICY_NOT_CONFIGURED"
 	case BalanceUnavailable:
 		return "BALANCE_UNAVAILABLE"
 	case FreezeLedgerUnavailable:
@@ -216,11 +219,16 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 
 	// 控制策略先于余额与登记册。合同规定本范围无财务控制时，连读余额都不该发生——那次
 	// 读取既是白做的，也已经取了这个客户的资金状况。
-	policy, err := handler.policy.LoadControlPolicy(ctx, command.TenantID, command.Scope)
+	policy, configured, err := handler.policy.LoadControlPolicy(ctx, command.TenantID, command.Scope)
 	if err != nil {
 		// 商业侧调不通形成待判断，不读成「不要求控制」。后者正是 CONTEXT 禁止的默认信用
 		// 通过：一次商业故障会因此变成一个看起来通过了的接受前控制。
 		return handler.notFormed(command, ControlPolicyUnavailable), nil
+	}
+	if !configured {
+		// 未登记同样不是`无控制`（ADR-0054）。两者的恢复动作相反：这一格等商业侧登记
+		// PAR-COM-15，而`无控制`是合同已经说过的话，据它可以放行接受判断。
+		return handler.notFormed(command, ControlPolicyNotConfigured), nil
 	}
 	if !policy.ControlRequired() {
 		return ApplyPreAcceptanceControlResult{

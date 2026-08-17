@@ -21,22 +21,63 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+// unconfigured 取反向默认：既有用例给的都是已登记的策略，零值应当继续表示「登记了」。
+// 正向的 configured 会让每个既有构造点都要补一句 true，而漏补的那个会静默变成未配置。
 type policyDouble struct {
-	policy domain.PreAcceptanceControlPolicy
-	err    error
-	asked  int
+	policy       domain.PreAcceptanceControlPolicy
+	unconfigured bool
+	err          error
+	asked        int
 }
 
 func (double *policyDouble) LoadControlPolicy(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.SettlementScope,
-) (domain.PreAcceptanceControlPolicy, error) {
+) (domain.PreAcceptanceControlPolicy, bool, error) {
 	double.asked++
 	if double.err != nil {
-		return domain.PreAcceptanceControlPolicy{}, double.err
+		return domain.PreAcceptanceControlPolicy{}, false, double.err
 	}
-	return double.policy, nil
+	if double.unconfigured {
+		return domain.PreAcceptanceControlPolicy{}, false, nil
+	}
+	return double.policy, true, nil
+}
+
+// Covers: ADR-0054 — 控制策略未登记不得落成`无控制`。两者的恢复动作相反：未配置等
+// 商业侧登记 PAR-COM-15，`无控制`是合同已经说过的终局答案，可以据以放行接受判断。
+// 混成一格，一个没人登记过的范围会拿到一份「合同说不用控制」的结论，而那正是 CONTEXT
+// 禁止的默认信用通过。
+func TestAnUnconfiguredControlPolicyIsNotFormedNotNoControl(t *testing.T) {
+	balance := &balanceDouble{}
+	handler := newHandler(&policyDouble{unconfigured: true}, balance, &ledgerDouble{})
+
+	result, err := handler.Handle(context.Background(), command(t, 1_000))
+	if err != nil {
+		t.Fatalf("控制：%v", err)
+	}
+	if result.Outcome() != application.ControlNotFormed ||
+		result.NotFormedReason() != application.ControlPolicyNotConfigured {
+		t.Fatalf("result = %q/%q, want NOT_FORMED/CONTROL_POLICY_NOT_CONFIGURED",
+			result.Outcome(), result.NotFormedReason())
+	}
+	if result.ControlBasis().String() != "" {
+		t.Fatal("未配置却带出了一份商业不适用依据")
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("未配置没有留下可续办引用——它要等的是登记，不是重试到死")
+	}
+	if balance.loaded != 0 {
+		t.Fatal("策略未配置却已经去读了这个客户的余额")
+	}
+}
+
+// Covers: 未配置与调不通分成两格。恢复动作不同：一个去催登记，一个去重试依赖。
+func TestAnUnconfiguredPolicyAndAnUnavailableOneDoNotShareAReason(t *testing.T) {
+	if application.ControlPolicyNotConfigured == application.ControlPolicyUnavailable {
+		t.Fatal("未配置与调不通共用一个原因，运维读不出该催登记还是该重试")
+	}
 }
 
 type balanceDouble struct {

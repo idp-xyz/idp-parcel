@@ -28,22 +28,27 @@ func value[T any](t *testing.T, construct func(string) (T, error), raw string) T
 	return built
 }
 
+// unconfigured 取反向默认，理由同 SA 应用层那个替身：既有用例给的都是已登记的策略。
 type policyDouble struct {
-	policy sadomain.PreAcceptanceControlPolicy
-	err    error
-	asked  int
+	policy       sadomain.PreAcceptanceControlPolicy
+	unconfigured bool
+	err          error
+	asked        int
 }
 
 func (double *policyDouble) LoadControlPolicy(
 	_ context.Context,
 	_ sadomain.TenantID,
 	_ sadomain.SettlementScope,
-) (sadomain.PreAcceptanceControlPolicy, error) {
+) (sadomain.PreAcceptanceControlPolicy, bool, error) {
 	double.asked++
 	if double.err != nil {
-		return sadomain.PreAcceptanceControlPolicy{}, double.err
+		return sadomain.PreAcceptanceControlPolicy{}, false, double.err
 	}
-	return double.policy, nil
+	if double.unconfigured {
+		return sadomain.PreAcceptanceControlPolicy{}, false, nil
+	}
+	return double.policy, true, nil
 }
 
 type balanceDouble struct {

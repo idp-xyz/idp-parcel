@@ -16,12 +16,24 @@ import (
 //
 // 依赖调不通要作为错误返回。把它读成「不要求控制」正是 CONTEXT 禁止的「默认信用通过」，
 // 一次商业侧故障会因此变成一个看起来通过了的接受前控制。
+//
+// 三格（ADR-0054）：
+//
+//   - found=true + policy：商业侧登记过本范围的控制策略，答案在 policy 里（要求带方式与
+//     采用政策，不要求带商业不适用依据）。
+//   - found=false：**未登记**。`PAR-COM-15` 是待提供的实例参数，首发没有租户时这是唯一
+//     走得到的真实分支。消费方据以停在自己的未决格，不得当成`无控制`——后者是合同已经
+//     说过的终局答案，据它可以放行接受判断，而没人说过话时放行就是默认信用通过。
+//   - error：调不通，等重试。
+//
+// 第三格不是可有可无的形状之争：少了它，适配器交回零值加 nil 就会在编排里落成一个带空
+// 依据的`无控制`，而两格代数里没有任何地方能把那一格拦下来。
 type PreAcceptanceControlPolicyView interface {
 	LoadControlPolicy(
 		ctx context.Context,
 		tenant domain.TenantID,
 		scope domain.SettlementScope,
-	) (domain.PreAcceptanceControlPolicy, error)
+	) (domain.PreAcceptanceControlPolicy, bool, error)
 }
 
 // OperationalBalanceView 取一个结算作用域当前的运营结算余额。按作用域取而不按账户取，
