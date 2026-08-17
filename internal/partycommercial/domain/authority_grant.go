@@ -113,8 +113,16 @@ func (grant AuthorityGrant) Level() AuthorityLevel {
 	return grant.level
 }
 
+func (grant AuthorityGrant) LegalEntity() LegalEntityReference {
+	return grant.legalEntity
+}
+
 func (grant AuthorityGrant) Scope() CommercialScopeReference {
 	return grant.scope
+}
+
+func (grant AuthorityGrant) Effective() EffectiveInterval {
+	return grant.effective
 }
 
 func (grant AuthorityGrant) permits(request AuthorizationRequest) bool {
@@ -161,6 +169,34 @@ func NewAuthorizationRequest(
 		evidence:    evidence,
 		at:          at.UTC(),
 	}, nil
+}
+
+func (request AuthorizationRequest) Action() AuthorizedAction {
+	return request.action
+}
+
+func (request AuthorizationRequest) LegalEntity() LegalEntityReference {
+	return request.legalEntity
+}
+
+func (request AuthorizationRequest) Level() AuthorityLevel {
+	return request.level
+}
+
+func (request AuthorizationRequest) Scope() CommercialScopeReference {
+	return request.scope
+}
+
+func (request AuthorizationRequest) Reason() StructuredReason {
+	return request.reason
+}
+
+func (request AuthorizationRequest) Evidence() EvidenceReference {
+	return request.evidence
+}
+
+func (request AuthorizationRequest) At() time.Time {
+	return request.at
 }
 
 // Authorization 记录某条具体授权允许了某个具体请求，连同请求方给出的原因和证据。

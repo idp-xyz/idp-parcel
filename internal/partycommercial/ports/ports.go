@@ -1,5 +1,5 @@
 // Package ports 声明 party-commercial 自有的语义边界。PostgreSQL 适配器在
-// adapters/postgres：发布登记册与已固定解析库。
+// adapters/postgres：发布登记册、已固定解析库与授权治理册。
 package ports
 
 import (
@@ -166,4 +166,45 @@ type PublicationRegistry interface {
 
 type Clock interface {
 	Now() time.Time
+}
+
+// GrantSaveOutcome 是一次授权规则登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同版本号携带不同授权内容——绝不覆盖。
+type GrantSaveOutcome uint8
+
+const (
+	GrantSaveOutcomeInvalid GrantSaveOutcome = iota
+	GrantSaved
+	GrantAlreadyRegistered
+	GrantContentConflict
+)
+
+func (outcome GrantSaveOutcome) String() string {
+	switch outcome {
+	case GrantSaved:
+		return "SAVED"
+	case GrantAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case GrantContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// AuthorityGrantStore 是授权治理册的持久化面，也是裁定编排的内部协作者。
+//
+// LoadEffectiveGrants 按（租户+范围+业务时点）装载当时管得着的授权。空切片交给
+// domain.Authorize 译`未配置`，本口不把空折成不允许。读取失败上抛，不得折成空切片。
+//
+// 公开裁定口是应用层的 AdjudicateCommercialAuthorization，不在本接口上——消费方
+// 不得绕过 Authorize 四格直接拿切片自己判。
+type AuthorityGrantStore interface {
+	LoadEffectiveGrants(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.CommercialScopeReference,
+		at time.Time,
+	) ([]domain.AuthorityGrant, error)
+	SaveGrant(ctx context.Context, grant domain.AuthorityGrant) (GrantSaveOutcome, error)
 }
