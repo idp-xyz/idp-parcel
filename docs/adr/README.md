@@ -57,7 +57,8 @@
 - [ADR-0049：集成事件的发布通道首发采用进程内直投，消息中间件等负载证据](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)
 - [ADR-0050：服务产品形态随解析闭包可观察](./0050-service-product-form-observable-through-the-resolution-closure.md)
 - [ADR-0051：资格审核答复含等待补充；一次性只约束终局格](./0051-eligibility-screen-awaits-supplement.md)
-- [ADR-0052：网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)
+- [ADR-0052：网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)｜**部分停用**：其 Decision 四中「它要能承载 `NetworkEvidence` 与 `InitialRouteEvidence` 两个结构今天已声明的全部事实族」一句已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族以每次判断生成的 `CandidateID` 为轴、且判断键里没有目的地维，它们是推导结果不是可登记的目录行。其余各条（三格端口、专格未决原因、修订由登记册派生、空册与空集合可分辨）不变。
+- [ADR-0053：网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置](./0053-network-fact-families-are-derived-not-registrable.md)
 
 ## 已被取代决策
 

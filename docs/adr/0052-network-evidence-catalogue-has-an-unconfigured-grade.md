@@ -1,6 +1,6 @@
 # ADR-0052: 网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边
 
-Status: Accepted  
+Status: Accepted（**部分停用**：Decision 四的第一句「它要能承载……全部事实族」已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族是每次判断的推导结果，不可登记；其余各条不变）  
 Date: 2026-08-17
 
 ## Context
@@ -53,6 +53,7 @@ Date: 2026-08-17
 
 ## Links
 
+- [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md)：停用本记录 Decision 四第一句，并裁定登记册只登「定义是否存在」
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：直投必须与首批消费者同批落地，本记录解的是那批消费者的前置锁
 - [ADR-0046](./0046-route-candidate-evaluation-lives-in-the-domain.md)：评估归领域、证据端口退为取数，本记录不动这条线
 - [UC-NR-001](../application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)：`无当前有效路由`、`未决`与`已形成`三者不得合并
