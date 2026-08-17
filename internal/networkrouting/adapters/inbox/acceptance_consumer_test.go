@@ -133,6 +133,35 @@ func TestAnEnvelopeMissingItsSourceIdentityIsPoison(t *testing.T) {
 	}
 }
 
+// TestAnEnvelopeMissingItsDecisionFactsIsPoison 证 state 与 submissionVersion 同属
+// 必备：处理方按 state 分接受与拒绝两条走向，按 submissionVersion 认这份信封是不是
+// 换代前那一版的。缺任一项都不是「按缺省往下走」——那会让一份说不清自己是什么的信封
+// 被当成拒绝静默入账，或让一次陈旧的接受决定挂到新基线上。
+func TestAnEnvelopeMissingItsDecisionFactsIsPoison(t *testing.T) {
+	for name, payload := range map[string]string{
+		"缺 state": `{"tenantId":"tenant-a","customerAccountId":"customer-a","source":"portal",` +
+			`"sourceRequestKey":"source-key-1","shipmentRequestId":"request-1",` +
+			`"submissionVersion":"submission-v1","decisionId":"decision-x"}`,
+		"缺 submissionVersion": `{"tenantId":"tenant-a","customerAccountId":"customer-a","source":"portal",` +
+			`"sourceRequestKey":"source-key-1","shipmentRequestId":"request-1",` +
+			`"decisionId":"decision-x","state":"ACCEPTED"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			consumer, handler := newConsumerFixture(t)
+
+			poison := decisionEnvelope(t, "decision-x")
+			poison.Payload = json.RawMessage(payload)
+
+			if err := consumer.Consume(t.Context(), poison); err != nil {
+				t.Fatalf("毒丸首投应拒收入账而不是报错：%v", err)
+			}
+			if len(handler.calls) != 0 {
+				t.Fatalf("处理次数 = %d, want 0——判不出走向的信封不该到达处理方", len(handler.calls))
+			}
+		})
+	}
+}
+
 // TestAFailedHandlerRollsBackAndTheRedeliveryRetries 证处理失败整体回滚：inbox
 // 无痕，重投可以再试并成功——失败不吃掉投递。
 func TestAFailedHandlerRollsBackAndTheRedeliveryRetries(t *testing.T) {

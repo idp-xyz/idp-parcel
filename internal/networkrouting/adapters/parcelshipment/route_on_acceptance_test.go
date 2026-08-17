@@ -82,6 +82,31 @@ func TestARejectedDecisionIsAccountedWithoutRouting(t *testing.T) {
 	}
 }
 
+// Covers: 本事件类型只承载接受与拒绝两格——此外的状态字（含空值）说不出该不该路由，
+// 报错让投递卡住看得见，不与「拒绝」同格静默入账。静默入账会把一份该路由的委托永久
+// 丢掉，而路由义务没有别的东西会来补（与 ADR-0049「不静默丢弃」同一条）。
+func TestAStateOutsideTheDecisionVocabularyIsNotAccountedSilently(t *testing.T) {
+	for name, state := range map[string]string{
+		"空状态字":  "",
+		"未知状态字": "SUBMITTED",
+	} {
+		t.Run(name, func(t *testing.T) {
+			subject, routes := newRouteOnAcceptance(t, excludedEvidence(t), nil)
+
+			envelope := acceptedEnvelope()
+			envelope.State = state
+
+			err := subject.HandleAcceptedDecision(context.Background(), envelope)
+			if !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+				t.Fatalf("err = %v, want ErrUntranslatableAnswer", err)
+			}
+			if len(routes.saved) != 0 {
+				t.Fatal("说不清走向却路由了")
+			}
+		})
+	}
+}
+
 // Covers: 消费门第三条「处理失败整体回滚可重投」在真实编排上的落点——包裹停在未决时
 // 上抛，让投递回滚重投；就此入账会把这个包裹的路由义务永久丢掉，而本仓没有重驱动器
 // 会回来捡它。

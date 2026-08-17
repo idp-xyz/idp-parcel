@@ -79,10 +79,20 @@ func (adapter *RouteOnAcceptanceAdapter) HandleAcceptedDecision(
 	if !adapter.purpose.Valid() {
 		return fmt.Errorf("%w: service purpose is not configured", ErrUntranslatableAnswer)
 	}
-	// 同一个事件类型同时承载接受与拒绝决定（PS 侧 acceptance-decision.formed）。
+	// 同一个事件类型同时承载接受与拒绝决定（PS 侧 acceptance-decision.formed），
+	// 因此这里按封闭集合逐格分派，不用「非接受即拒绝」一刀切。
+	//
 	// 拒绝没有基线也没有可路由的东西，是终局答案不是失败：入账收工，不重投。
-	if decision.State != psdomain.ShipmentRequestAccepted.String() {
+	// 此外的状态字（本类型不该承载的 SUBMITTED/WITHDRAWN、或译码器放行不了的空值）
+	// 说不出该不该路由，一律报错让投递卡住看得见——与「拒绝」同格静默入账会把一份
+	// 该路由的委托永久丢掉，而路由义务没有别的东西会来补。
+	switch decision.State {
+	case psdomain.ShipmentRequestAccepted.String():
+	case psdomain.ShipmentRequestRejected.String():
 		return nil
+	default:
+		return fmt.Errorf("%w: decision state %q is not carried by this event type",
+			ErrUntranslatableAnswer, decision.State)
 	}
 
 	identity, err := sourceIdentityOf(decision)
@@ -140,8 +150,10 @@ func routableBaseline(
 	}
 	// 基线指着另一个提交版本，说明这份信封是换代前那一版的：按当前基线路由会把一次
 	// 陈旧的接受决定挂到新基线上，而判断键正是以基线认身份的。
-	if decision.SubmissionVersion != "" &&
-		baseline.SubmissionVersionID().String() != decision.SubmissionVersion {
+	//
+	// 这里不再为空提交版本留口子：消费门的译码器已把它列为必备字段，空值到不了这里；
+	// 留着「空就跳过核对」等于给这道守卫留一条只要少个字段就能绕开的路。
+	if baseline.SubmissionVersionID().String() != decision.SubmissionVersion {
 		return none, fmt.Errorf("%w: envelope carries submission version %q, baseline is fixed on %q",
 			ErrEnvelopeContradictsAuthority, decision.SubmissionVersion, baseline.SubmissionVersionID())
 	}

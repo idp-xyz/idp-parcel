@@ -145,6 +145,14 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 		body.ShipmentRequestID == "" || body.DecisionID == "" {
 		return AcceptedDecision{}, fmt.Errorf("%w: missing identity fields", ErrPoisonEnvelope)
 	}
+	// 状态字与提交版本同属必备，理由与上一组一样但落点不同：处理方按状态字分接受与
+	// 拒绝两条走向，按提交版本认这份信封是不是换代前那一版的。两者缺席时没有安全的
+	// 缺省——按「非接受即拒绝」往下走，会让一份说不清自己是什么的信封被静默入账；
+	// 少了提交版本，一次陈旧的接受决定就能挂到新基线上。本消费者不认这两个字段的取值
+	// （那是 PS 的话语，由 adapters/parcelshipment 逐格翻译），只要求它们在场。
+	if body.State == "" || body.SubmissionVersion == "" {
+		return AcceptedDecision{}, fmt.Errorf("%w: missing decision facts", ErrPoisonEnvelope)
+	}
 	return AcceptedDecision{
 		TenantID:          body.TenantID,
 		CustomerAccountID: body.CustomerAccountID,
