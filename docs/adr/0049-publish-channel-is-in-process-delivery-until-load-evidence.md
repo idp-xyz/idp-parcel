@@ -73,4 +73,4 @@ Date: 2026-08-14
 - [ADR-0043：发布意图由结果标识认领，重放重发同一份](./0043-publish-intent-claimed-by-result-identity.md)：本记录不改变它，只补上它落地后缺的那一段传输
 - [ADR-0025：跨上下文调用的适配器落在消费侧](./0025-cross-context-adapters-live-on-the-consumer-side.md)：`nrinbox.AcceptanceConsumer` 所在位置的出处
 - [Parcel Go 首个消费者切片实施决策简报](../design/parcel-go-first-consumer-slice-decision-brief.md)：`P-10`、`P-11`、`P-13` 的出处
-- [开发主线：派发未装配](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：本记录被接受并接线后，该行随之更新
+- [开发主线：横切缺口节](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：本记录已被接受并接线，该处已按承诺更新——「派发未装配」不再是机制缺口，组合根按本记录实现了进程内直投、显式路由表与哨兵翻译；机制半边只剩「端口没接满」一处
