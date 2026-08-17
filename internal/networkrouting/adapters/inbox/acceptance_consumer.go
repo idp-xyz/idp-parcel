@@ -18,10 +18,14 @@ import (
 // 与新名分家，全部在途事件会被重新处理一遍。
 const consumerName = "network-routing/initial-route-on-acceptance"
 
-// acceptedDecisionEventType 是本消费者认的事件类型（PS 侧 outbox 适配器的常量在
+// AcceptedDecisionEventType 是本消费者认的事件类型（PS 侧 outbox 适配器的常量在
 // 它自己包里——两边各写各的名字，消费者不导入生产方的适配器包，跨包共享这个字符
 // 串反而把两个部署单元钉在一次发布里）。
-const acceptedDecisionEventType = "parcel-shipment.acceptance-decision.formed"
+//
+// 导出是给组合根登记路由用的：直投的路由表按 `Envelope.Type` 分派，而「本消费者
+// 认哪一类」只有本包说得准。让组合根自己再抄一遍字符串，两处迟早分家，且分家那天
+// 表现为无订阅者卡分区，不是编译错误。
+const AcceptedDecisionEventType eventing.EventType = "parcel-shipment.acceptance-decision.formed"
 
 // ErrPoisonEnvelope 表示信封解不出命令且重投同样内容不会改变结果——拒收而不是
 // 无限重试。
@@ -80,7 +84,7 @@ func NewAcceptanceConsumer(
 // 处理方不会被调第二次；解不出命令的毒丸在自己的事务里显式拒收——拒收也是账，
 // 不落账的拒收会让同一份毒丸永远重投。
 func (consumer *AcceptanceConsumer) Consume(ctx context.Context, envelope eventing.Envelope) error {
-	if envelope.Type != acceptedDecisionEventType {
+	if envelope.Type != AcceptedDecisionEventType {
 		// 认不得的类型不是毒丸——订阅面配置宽了是装配问题，拒收会把别人的事件
 		// 记进自己的账。响亮报错让装配方修订阅。
 		return fmt.Errorf("network routing inbox: unexpected event type %q", envelope.Type)

@@ -60,18 +60,40 @@ func TestLoopSurvivesAFailedBeat(t *testing.T) {
 	}
 }
 
-func TestAssembleDispatcherIsNotWired(t *testing.T) {
-	beat, err := assembleDispatcher()
-	if !errors.Is(err, errDispatcherNotWired) || beat != nil {
-		t.Fatalf("组合根未完成时应交回 errDispatcherNotWired，实得 beat=%v err=%v", beat, err)
+// Covers: ADR-0049 第四条与 dispatch.Config 的「零值不可用」——部署形态参数一个默认
+// 都不给。缺一项就点名它停下：一个没人调过的节奏在生产上表现为「事件好像卡住了」，
+// 而现场看不出那个数是谁定的。
+func TestEveryDeploymentSettingIsRequiredByName(t *testing.T) {
+	complete := map[string]string{
+		"IDP_PARCEL_POSTGRES_DSN":              "postgres://parcel@127.0.0.1:5432/parcel",
+		"IDP_PARCEL_ROUTE_SERVICE_PURPOSE":     "NETWORK_SERVICE",
+		"IDP_PARCEL_DISPATCH_DELIVERY_TIMEOUT": "5s",
+		"IDP_PARCEL_DISPATCH_LEASE":            "1m",
+		"IDP_PARCEL_DISPATCH_RETRY_AFTER":      "30s",
+		"IDP_PARCEL_DISPATCH_LIMIT":            "10",
+		"IDP_PARCEL_DISPATCH_MAX_ATTEMPTS":     "5",
 	}
-	// 缺口位置也钉住：发布通道已由 ADR-0049 裁定并实现（dispatch.DirectPublisher），
-	// 现在缺的是消费者。错误串若退回「发布通道未定」，就是有人把已实现的那一段又
-	// 说成待决——而那正是评审在 d40b03a 上抓到的过期判断。
-	if strings.Contains(err.Error(), "publish channel") {
-		t.Fatalf("组合根仍把发布通道说成缺口：%v", err)
+	if _, err := settingsFromEnv(lookupIn(complete)); err != nil {
+		t.Fatalf("齐全的配置反被拒：%v", err)
 	}
-	if !strings.Contains(err.Error(), "consumer") {
-		t.Fatalf("组合根没有点名缺的是消费者：%v", err)
+
+	for missing := range complete {
+		partial := map[string]string{}
+		for name, value := range complete {
+			if name != missing {
+				partial[name] = value
+			}
+		}
+		_, err := settingsFromEnv(lookupIn(partial))
+		if err == nil {
+			t.Fatalf("缺 %s 仍然装配出了配置——某处补了默认值", missing)
+		}
+		if !strings.Contains(err.Error(), missing) {
+			t.Fatalf("缺 %s 时错误没有点名它：%v", missing, err)
+		}
 	}
+}
+
+func lookupIn(values map[string]string) func(string) string {
+	return func(name string) string { return values[name] }
 }

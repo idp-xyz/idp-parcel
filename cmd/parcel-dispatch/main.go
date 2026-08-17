@@ -21,16 +21,18 @@ func run(logger *slog.Logger, getenv func(string) string) error {
 	if err != nil {
 		return err
 	}
-	beat, err := assembleDispatcher()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	beat, cleanup, err := assembleDispatcher(ctx, getenv)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
+
 	loop, err := NewLoop(beat, interval, logger)
 	if err != nil {
 		return err
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	return loop.Run(ctx)
 }
