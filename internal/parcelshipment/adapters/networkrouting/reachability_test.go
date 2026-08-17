@@ -48,17 +48,21 @@ func (double *eligibilityDouble) AssessNetworkEligibility(
 }
 
 type evidenceDouble struct {
-	areas    []nrdomain.ServiceAreaResolution
-	revision string
-	err      error
+	areas         []nrdomain.ServiceAreaResolution
+	revision      string
+	err           error
+	notConfigured bool
 }
 
 func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
-) (nrports.NetworkEvidence, error) {
+) (nrports.NetworkEvidence, bool, error) {
 	if double.err != nil {
-		return nrports.NetworkEvidence{}, double.err
+		return nrports.NetworkEvidence{}, false, double.err
+	}
+	if double.notConfigured {
+		return nrports.NetworkEvidence{}, false, nil
 	}
 	revision := double.revision
 	if revision == "" {
@@ -67,7 +71,7 @@ func (double *evidenceDouble) LoadNetworkEvidence(
 	return nrports.NetworkEvidence{
 		ServiceAreas: double.areas,
 		ViewRevision: mustRevision(revision),
-	}, nil
+	}, true, nil
 }
 
 func mustRevision(raw string) nrdomain.NetworkViewRevision {

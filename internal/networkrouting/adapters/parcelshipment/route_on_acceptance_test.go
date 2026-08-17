@@ -232,11 +232,11 @@ type acceptanceEvidenceDouble struct {
 
 func (double acceptanceEvidenceDouble) LoadInitialRouteEvidence(
 	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
-) (nrports.InitialRouteEvidence, error) {
+) (nrports.InitialRouteEvidence, bool, error) {
 	if double.err != nil {
-		return nrports.InitialRouteEvidence{}, double.err
+		return nrports.InitialRouteEvidence{}, false, double.err
 	}
-	return double.evidence, nil
+	return double.evidence, true, nil
 }
 
 type routingApplicabilityDouble struct{}

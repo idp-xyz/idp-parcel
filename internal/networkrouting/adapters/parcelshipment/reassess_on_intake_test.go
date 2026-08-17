@@ -104,8 +104,8 @@ type evidenceDouble struct{ evidence nrports.InitialRouteEvidence }
 
 func (double evidenceDouble) LoadInitialRouteEvidence(
 	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
-) (nrports.InitialRouteEvidence, error) {
-	return double.evidence, nil
+) (nrports.InitialRouteEvidence, bool, error) {
+	return double.evidence, true, nil
 }
 
 type applicabilityStoreDouble struct {

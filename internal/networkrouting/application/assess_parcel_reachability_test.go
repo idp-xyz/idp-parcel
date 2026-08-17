@@ -29,6 +29,7 @@ type evidenceDouble struct {
 	executability []domain.PathExecutability
 	constraints   []domain.HardConstraintFinding
 	err           error
+	notConfigured bool
 	noRevision    bool
 	assembled     int
 	assembleKey   domain.ReachabilityJudgmentKey
@@ -37,11 +38,14 @@ type evidenceDouble struct {
 func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	key domain.ReachabilityJudgmentKey,
-) (ports.NetworkEvidence, error) {
+) (ports.NetworkEvidence, bool, error) {
 	double.assembled++
 	double.assembleKey = key
 	if double.err != nil {
-		return ports.NetworkEvidence{}, double.err
+		return ports.NetworkEvidence{}, false, double.err
+	}
+	if double.notConfigured {
+		return ports.NetworkEvidence{}, false, nil
 	}
 	evidence := ports.NetworkEvidence{
 		ServiceAreas:      double.areas,
@@ -52,11 +56,11 @@ func (double *evidenceDouble) LoadNetworkEvidence(
 	if !double.noRevision {
 		revision, err := domain.NewNetworkViewRevision("net-view-rev-1")
 		if err != nil {
-			return ports.NetworkEvidence{}, err
+			return ports.NetworkEvidence{}, false, err
 		}
 		evidence.ViewRevision = revision
 	}
-	return evidence, nil
+	return evidence, true, nil
 }
 
 // coveringAreas 造覆盖目的地的区域解析事实——经领域评估折成合格候选，替代旧夹具直接
@@ -271,6 +275,37 @@ func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *
 	}
 	if len(store.saved) != 0 {
 		t.Fatal("尚未形成完整判断就越过了提交边界")
+	}
+}
+
+// Covers: ADR-0052 的「未配置」格——网络定义登记册对这个范围未配置时如实答未形成判断并
+// 占**自己**的原因格，不与依赖不可用共用，更不评成`不可达`。首发无租户时这是唯一走得到
+// 的真实分支：折成空证据会让领域照常评估、得出一个业务结论，而实际情况是还没人说过网络
+// 长什么样。两格的恢复动作相反——这一格等租户去登记，那一格等运维去救依赖。
+func TestAnUnconfiguredNetworkCatalogueIsItsOwnNotFormedReason(t *testing.T) {
+	evidence := &evidenceDouble{notConfigured: true}
+	store := &storeDouble{}
+	handler := application.NewAssessParcelReachabilityHandler(
+		requiredEligibility(t), evidence, store, &handoffDouble{}, fixedClock{at: judgedAt})
+
+	result, err := handler.Handle(context.Background(), command(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("未配置被当成技术错误抛出：%v", err)
+	}
+	if result.Outcome() != application.JudgmentNotFormed {
+		t.Fatalf("outcome = %q, want JUDGMENT_NOT_FORMED", result.Outcome())
+	}
+	if _, present := result.Finding(); present {
+		t.Fatal("未配置却给出了三值领域结果——那是从缺配置里编出的业务结论")
+	}
+	if result.NotFormedReason() != application.NetworkEvidenceNotConfigured {
+		t.Fatalf("reason = %q, want NETWORK_EVIDENCE_NOT_CONFIGURED", result.NotFormedReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("未配置无法安全续办")
+	}
+	if len(store.saved) != 0 {
+		t.Fatal("未配置越过了提交边界")
 	}
 }
 

@@ -115,26 +115,32 @@ type routeEvidenceDouble struct {
 	// 取回答出不同的修订。
 	sequence map[string][]ports.InitialRouteEvidence
 	errs     map[string]error
-	loaded   int
+	// unconfigured 按包裹标明「网络定义登记册未配置」，与 errs 分开：那一格是依赖
+	// 不可用，这一格是还没人登记过网络（ADR-0052）。
+	unconfigured map[string]bool
+	loaded       int
 }
 
 func (double *routeEvidenceDouble) LoadInitialRouteEvidence(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
-) (ports.InitialRouteEvidence, error) {
+) (ports.InitialRouteEvidence, bool, error) {
 	double.loaded++
 	parcel := key.DeclaredParcelID.String()
 	if err, present := double.errs[parcel]; present {
-		return ports.InitialRouteEvidence{}, err
+		return ports.InitialRouteEvidence{}, false, err
+	}
+	if double.unconfigured[parcel] {
+		return ports.InitialRouteEvidence{}, false, nil
 	}
 	if queued, present := double.sequence[parcel]; present && len(queued) > 0 {
 		next := queued[0]
 		if len(queued) > 1 {
 			double.sequence[parcel] = queued[1:]
 		}
-		return next, nil
+		return next, true, nil
 	}
-	return double.byParcel[parcel], nil
+	return double.byParcel[parcel], true, nil
 }
 
 type routeStoreDouble struct {
@@ -241,10 +247,14 @@ func newRouteFixture(t *testing.T) *routeFixture {
 	}
 	fixture := &routeFixture{
 		applicability: &applicabilityDouble{eligibility: eligibility},
-		evidence:      &routeEvidenceDouble{byParcel: map[string]ports.InitialRouteEvidence{}, errs: map[string]error{}},
-		store:         newRouteStore(),
-		log:           newHandoffLog(),
-		downstream:    &routeDownstreamDouble{},
+		evidence: &routeEvidenceDouble{
+			byParcel:     map[string]ports.InitialRouteEvidence{},
+			errs:         map[string]error{},
+			unconfigured: map[string]bool{},
+		},
+		store:      newRouteStore(),
+		log:        newHandoffLog(),
+		downstream: &routeDownstreamDouble{},
 	}
 	fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
 		Applicability: fixture.applicability,
@@ -312,6 +322,43 @@ func TestThreeParcelsKeepThreeIndependentResults(t *testing.T) {
 	}
 	if len(fixture.downstream.intents) != 2 {
 		t.Fatalf("intents = %d, want 2——计划与无路由各交一份意图", len(fixture.downstream.intents))
+	}
+}
+
+// Covers: ADR-0052 的「未配置」格在初始路由这一侧——登记册未配置的包裹停在带专格原因的
+// 未决，既不落库也不交意图，且**不与同一委托里其他包裹的结果互相掩盖**（`AT-NR-012`）。
+// 专格的意义在恢复动作：`ROUTE_EVIDENCE_NOT_CONFIGURED` 要租户去登记网络定义，而
+// `ROUTE_EVIDENCE_UNAVAILABLE` 要运维去救依赖；混成一格会把这两拨人都指错方向。
+func TestAnUnconfiguredCatalogueStallsOnlyItsOwnParcel(t *testing.T) {
+	fixture := newRouteFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	fixture.evidence.unconfigured["parcel-2"] = true
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1", "parcel-2"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	parcels := result.Parcels()
+	if len(parcels) != 2 {
+		t.Fatalf("parcels = %d, want 2", len(parcels))
+	}
+	if parcels[0].Outcome() != application.ParcelRouteFormed {
+		t.Fatalf("parcel-1 = %q; 另一个包裹的未配置掩盖了它", parcels[0].Outcome())
+	}
+	if parcels[1].Outcome() != application.ParcelRouteUndecided ||
+		parcels[1].UndecidedReason() != application.RouteEvidenceNotConfigured {
+		t.Fatalf("parcel-2 = %q/%q, want UNDECIDED/ROUTE_EVIDENCE_NOT_CONFIGURED",
+			parcels[1].Outcome(), parcels[1].UndecidedReason())
+	}
+	if _, present := parcels[1].NoCurrentRoute(); present {
+		t.Fatal("未配置被判成了`无当前有效路由`——那是领域从全部候选确定性淘汰得出的判断")
+	}
+	if parcels[1].ContinuationReference().String() == "" {
+		t.Fatal("未配置无法安全续办")
+	}
+	if fixture.store.saved != 1 {
+		t.Fatalf("saved = %d, want 1——未配置不落库", fixture.store.saved)
 	}
 }
 

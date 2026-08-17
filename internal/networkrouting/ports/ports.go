@@ -2,6 +2,9 @@
 // 计划版本签发与两个发布意图都已有 PostgreSQL 适配器；仍只有测试替身的是五个证据与
 // 适用性视图——它们要产出的逐候选事实，其生成、过滤与排序规则属 PAR-NET-14，登记册
 // 状态待提供，因而不得先写一份默认实现。
+//
+// 这条禁令按 ADR-0052 有一条分界：它禁的是**替租户拟一份网络定义**。读一个空登记册并
+// 如实答`未配置`不是默认实现，恰恰是它想保护的东西——三个证据视图为此都带`未配置`格。
 package ports
 
 import (
@@ -26,13 +29,18 @@ type NetworkEvidence struct {
 
 // NetworkEvidenceView 为一次判断取回版本化网络事实。
 //
-// 它只回业务事实。调不通、超时、配置读不到都要作为错误返回，由应用层形成`未形成判断`——
-// 把技术故障装扮成一个证据缺口，会让它进入`资料不足`统计，而用例明写这两者不能混。
+// 三格，缺一不可（ADR-0052）：事实在场即证据；第二个返回值为 false 即**网络定义登记册
+// 对这个判断范围未配置**；error 只表示依赖调不通、超时这类技术故障。
+//
+// 三格分开是因为恢复动作两两不同：未配置要租户去登记网络定义，依赖不可用要运维去救那个
+// 依赖，而事实齐备才轮到领域评估。**空册绝不折成空证据**——领域会照常评估并得出`无当前
+// 有效路由`，那是从缺配置里编出一个业务结论，用例明写它与`未决`不能合并。反向同样禁：
+// 把技术故障装扮成一个证据缺口，会让它进入`资料不足`统计。
 type NetworkEvidenceView interface {
 	LoadNetworkEvidence(
 		ctx context.Context,
 		key domain.ReachabilityJudgmentKey,
-	) (NetworkEvidence, error)
+	) (NetworkEvidence, bool, error)
 }
 
 // CommercialEligibilityView 取商业侧对「这个服务要不要判断网络可达性」的回答，覆盖用例
@@ -152,13 +160,14 @@ type InitialRouteEvidence struct {
 	ViewRevision      domain.NetworkViewRevision
 }
 
-// InitialRouteEvidenceView 为一次初始路由判断取回版本化事实。调不通作为错误返回，由
-// 应用层形成`路由判断未决`。
+// InitialRouteEvidenceView 为一次初始路由判断取回版本化事实。三格语义同
+// NetworkEvidenceView（ADR-0052）：事实、`未配置`、依赖不可用，各自对应不同的恢复动作，
+// 应用层为前两者分设未决原因。空册走第二格，绝不折成一份空证据。
 type InitialRouteEvidenceView interface {
 	LoadInitialRouteEvidence(
 		ctx context.Context,
 		key domain.InitialRouteJudgmentKey,
-	) (InitialRouteEvidence, error)
+	) (InitialRouteEvidence, bool, error)
 }
 
 // RoutingApplicabilityView 取商业侧对「这个服务要不要形成网络路由」的回答（UC-NR-001

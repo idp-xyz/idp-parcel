@@ -63,6 +63,9 @@ const (
 	RoutingHistoryUnavailable
 	NoRoutingHistory
 	ReassessEvidenceUnavailable
+	// ReassessEvidenceNotConfigured 与 ReassessEvidenceUnavailable 分格，理由同
+	// RouteEvidenceNotConfigured（ADR-0052）：未配置等租户登记，不可用等依赖恢复。
+	ReassessEvidenceNotConfigured
 	PlanReviewInconclusive
 	ApplicabilityStoreUnavailable
 	ReassessStoreUnavailable
@@ -79,6 +82,8 @@ func (reason ReassessUndecidedReason) String() string {
 		return "NO_ROUTING_HISTORY"
 	case ReassessEvidenceUnavailable:
 		return "REASSESS_EVIDENCE_UNAVAILABLE"
+	case ReassessEvidenceNotConfigured:
+		return "REASSESS_EVIDENCE_NOT_CONFIGURED"
 	case PlanReviewInconclusive:
 		return "PLAN_REVIEW_INCONCLUSIVE"
 	case ApplicabilityStoreUnavailable:
@@ -187,9 +192,12 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, NoRoutingHistory), nil
 	}
 
-	evidence, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
 	if err != nil {
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
+	}
+	if !configured {
+		return handler.undecided(key, ReassessEvidenceNotConfigured), nil
 	}
 	if !evidence.ViewRevision.Valid() || !evidence.Strategy.Valid() {
 		return ReassessRouteResult{}, ErrIncompleteRouteEvidence

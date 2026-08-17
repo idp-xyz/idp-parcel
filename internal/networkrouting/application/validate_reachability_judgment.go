@@ -121,7 +121,12 @@ func (handler *ValidateReachabilityJudgmentHandler) Handle(
 		return handler.notFormed(command, JudgmentStoreUnavailable), nil
 	}
 
-	evidence, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	if !configured && err == nil {
+		// 登记册未配置时同样既不能确认也不能断言换代：没有当前修订可比，原判断的
+		// 有效性无从判断（ADR-0052）。
+		return handler.notFormed(command, NetworkEvidenceNotConfigured), nil
+	}
 	if err != nil {
 		// 权威读不到时原判断既不能被确认也不能被断言换代，保持可续办的未决——判成
 		// 换代会让调用方去重判一份其实还好好的判断，判成仍然当前则是免检放行。

@@ -69,6 +69,10 @@ const (
 	JudgmentStoreUnavailable
 	CommercialEligibilityUnavailable
 	NetworkEvidenceUnavailable
+	// NetworkEvidenceNotConfigured 是网络定义登记册对这个范围未配置（ADR-0052）。
+	// 与依赖不可用分格：那一格等运维，这一格等租户登记网络定义。两者都不是`资料不足`
+	// ——`资料不足`说的是这个包裹的地址等信息不全，是向客户要东西的理由。
+	NetworkEvidenceNotConfigured
 	CandidateSpaceNotEstablished
 )
 
@@ -80,6 +84,8 @@ func (reason NotFormedReason) String() string {
 		return "COMMERCIAL_ELIGIBILITY_UNAVAILABLE"
 	case NetworkEvidenceUnavailable:
 		return "NETWORK_EVIDENCE_UNAVAILABLE"
+	case NetworkEvidenceNotConfigured:
+		return "NETWORK_EVIDENCE_NOT_CONFIGURED"
 	case CandidateSpaceNotEstablished:
 		return "CANDIDATE_SPACE_NOT_ESTABLISHED"
 	default:
@@ -211,7 +217,12 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		}, nil
 	}
 
-	evidence, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	if !configured && err == nil {
+		// 首发唯一走得到的真实分支：没有租户就没有网络定义，如实答未配置。折成空证据
+		// 会让领域评出`不可达`，那是从缺配置里编出一个业务结论。
+		return handler.notFormed(command, NetworkEvidenceNotConfigured), nil
+	}
 	if err != nil {
 		// 依赖调不通形成`未形成判断`，不向上抛技术错误也不记成证据缺口。用例明写依赖
 		// 失败不得伪装为`资料不足`：混起来会让一次网络故障被下游读成这个包裹的证据不全，

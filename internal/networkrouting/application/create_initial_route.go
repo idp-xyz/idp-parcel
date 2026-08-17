@@ -84,6 +84,11 @@ const (
 	RouteUndecidedReasonNone RouteUndecidedReason = iota
 	RouteStoreUnavailable
 	RouteEvidenceUnavailable
+	// RouteEvidenceNotConfigured 是网络定义登记册对这个范围未配置（ADR-0052）。它与
+	// RouteEvidenceUnavailable 分格，因为恢复动作相反：未配置要租户去登记网络定义，
+	// 不可用要运维去救依赖。也绝不译成`无当前有效路由`——那是领域从「全部候选确定性
+	// 淘汰」得出的判断，而这里是还没人说过网络长什么样。
+	RouteEvidenceNotConfigured
 	RouteCandidateSpaceNotEstablished
 	RouteCandidateEvidenceIncomplete
 	RouteIdentityUnavailable
@@ -98,6 +103,8 @@ func (reason RouteUndecidedReason) String() string {
 		return "ROUTE_STORE_UNAVAILABLE"
 	case RouteEvidenceUnavailable:
 		return "ROUTE_EVIDENCE_UNAVAILABLE"
+	case RouteEvidenceNotConfigured:
+		return "ROUTE_EVIDENCE_NOT_CONFIGURED"
 	case RouteCandidateSpaceNotEstablished:
 		return "CANDIDATE_SPACE_NOT_ESTABLISHED"
 	case RouteCandidateEvidenceIncomplete:
@@ -281,9 +288,12 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 		return handler.existingResult(ctx, correlation, key, existing), nil
 	}
 
-	evidence, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
 	if err != nil {
 		return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
+	}
+	if !configured {
+		return handler.undecidedParcel(key, RouteEvidenceNotConfigured), nil
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
@@ -295,9 +305,14 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 			return *undecided, nil
 		}
 
-		fresh, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+		fresh, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
 		if err != nil {
 			return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
+		}
+		if !configured {
+			// 判断中途登记册被撤下：重校对不出修订，提交这一版等于拿一份已经没有出处
+			// 的证据定案。
+			return handler.undecidedParcel(key, RouteEvidenceNotConfigured), nil
 		}
 		if fresh.ViewRevision == evidence.ViewRevision {
 			return handler.commit(ctx, correlation, key, record)
