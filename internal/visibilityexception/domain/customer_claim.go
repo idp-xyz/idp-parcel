@@ -47,17 +47,99 @@ func NewContractScopeReference(value string) (ContractScopeReference, error) {
 	return ContractScopeReference{required}, err
 }
 
-// EligibilityScreen 是资格审核的封闭二值答复（通过/不通过带依据）。
+// EligibilityScreen 是资格审核的封闭三态（ADR-0051）：通过、不予受理、等待补充。
 type EligibilityScreen uint8
 
 const (
 	EligibilityScreenInvalid EligibilityScreen = iota
 	ClaimEligible
 	ClaimIneligible
+	ClaimAwaitingSupplement
 )
 
 func (screen EligibilityScreen) valid() bool {
+	return screen == ClaimEligible || screen == ClaimIneligible || screen == ClaimAwaitingSupplement
+}
+
+// terminal 是终局格：通过或不予受理。等待补充可重入，终局才触发 ErrClaimAlreadyScreened。
+func (screen EligibilityScreen) terminal() bool {
 	return screen == ClaimEligible || screen == ClaimIneligible
+}
+
+func (screen EligibilityScreen) String() string {
+	switch screen {
+	case ClaimEligible:
+		return "ELIGIBLE"
+	case ClaimIneligible:
+		return "INELIGIBLE"
+	case ClaimAwaitingSupplement:
+		return "AWAITING_SUPPLEMENT"
+	default:
+		return ""
+	}
+}
+
+// MissingMaterialsReference 指名等待补充时固定的缺少材料。
+type MissingMaterialsReference struct{ requiredValue }
+
+func NewMissingMaterialsReference(value string) (MissingMaterialsReference, error) {
+	required, err := newRequiredValue("missing materials reference", value)
+	return MissingMaterialsReference{required}, err
+}
+
+// SupplementScopeReference 指名补充范围。
+type SupplementScopeReference struct{ requiredValue }
+
+func NewSupplementScopeReference(value string) (SupplementScopeReference, error) {
+	required, err := newRequiredValue("supplement scope reference", value)
+	return SupplementScopeReference{required}, err
+}
+
+// SupplementNoticeReference 指名补充通知依据。
+type SupplementNoticeReference struct{ requiredValue }
+
+func NewSupplementNoticeReference(value string) (SupplementNoticeReference, error) {
+	required, err := newRequiredValue("supplement notice reference", value)
+	return SupplementNoticeReference{required}, err
+}
+
+// SupplementRequirement 是等待补充的四件落点（CONTEXT：缺少材料、补充范围、通知
+// 依据和当前截止时间）。缺一不可——没有这四件的「等待补充」与尚未审核分不开。
+type SupplementRequirement struct {
+	MissingMaterials MissingMaterialsReference
+	Scope            SupplementScopeReference
+	Notice           SupplementNoticeReference
+	Deadline         time.Time
+}
+
+func NewSupplementRequirement(
+	missing MissingMaterialsReference,
+	scope SupplementScopeReference,
+	notice SupplementNoticeReference,
+	deadline time.Time,
+) (SupplementRequirement, error) {
+	if !missing.valid() || !scope.valid() || !notice.valid() || deadline.IsZero() {
+		return SupplementRequirement{}, ErrInvalidClaim
+	}
+	return SupplementRequirement{
+		MissingMaterials: missing,
+		Scope:            scope,
+		Notice:           notice,
+		Deadline:         deadline.UTC(),
+	}, nil
+}
+
+func (requirement SupplementRequirement) valid() bool {
+	return requirement.MissingMaterials.valid() &&
+		requirement.Scope.valid() &&
+		requirement.Notice.valid() &&
+		!requirement.Deadline.IsZero()
+}
+
+// SupplementDeadlineVersion 是一版补充期限。获批延期追加新版本，原期限保留。
+type SupplementDeadlineVersion struct {
+	Deadline      time.Time
+	EstablishedAt time.Time
 }
 
 // LiabilityConclusion 是责任审核的封闭四值（CONTEXT 生命周期 252：「全部成立、部分
@@ -116,6 +198,8 @@ type ClaimItem struct {
 	submittedAt     time.Time
 	screen          EligibilityScreen
 	screenBasis     string
+	supplement      SupplementRequirement
+	deadlineHistory []SupplementDeadlineVersion
 	conclusion      LiabilityConclusion
 	concludedAt     time.Time
 	reviewBy        time.Time
@@ -177,9 +261,21 @@ func (claim *ClaimItem) SubmittedAt() time.Time {
 	return claim.submittedAt
 }
 
-// Screen 报告资格审核结果及是否已审。
+// Screen 报告资格审核结果及是否已有结果。等待补充算已有结果，但不是终局——终局
+// 才触发 ErrClaimAlreadyScreened（ADR-0051）。
 func (claim *ClaimItem) Screen() (EligibilityScreen, bool) {
 	return claim.screen, claim.screen.valid()
+}
+
+// Supplement 只在等待补充时给出四件落点。
+func (claim *ClaimItem) Supplement() (SupplementRequirement, bool) {
+	return claim.supplement, claim.screen == ClaimAwaitingSupplement
+}
+
+// SupplementDeadlineHistory 交回已确立的补充期限版本，含当前截止。获批延期追加，
+// 原期限保留。
+func (claim *ClaimItem) SupplementDeadlineHistory() []SupplementDeadlineVersion {
+	return append([]SupplementDeadlineVersion(nil), claim.deadlineHistory...)
 }
 
 // Conclusion 报告责任结论及是否已作出。
@@ -209,6 +305,8 @@ type ClaimItemSnapshot struct {
 	SubmittedAt     time.Time
 	Screen          EligibilityScreen
 	ScreenBasis     string
+	Supplement      SupplementRequirement
+	DeadlineHistory []SupplementDeadlineVersion
 	Conclusion      LiabilityConclusion
 	ConcludedAt     time.Time
 	ReviewBy        time.Time
@@ -229,6 +327,8 @@ func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
 		SubmittedAt:     claim.submittedAt,
 		Screen:          claim.screen,
 		ScreenBasis:     claim.screenBasis,
+		Supplement:      claim.supplement,
+		DeadlineHistory: append([]SupplementDeadlineVersion(nil), claim.deadlineHistory...),
 		Conclusion:      claim.conclusion,
 		ConcludedAt:     claim.concludedAt,
 		ReviewBy:        claim.reviewBy,
@@ -271,6 +371,30 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 	if snapshot.Withdrawn != !snapshot.WithdrawnAt.IsZero() {
 		return nil, ErrInvalidClaim
 	}
+	awaiting := snapshot.Screen == ClaimAwaitingSupplement
+	if awaiting != snapshot.Supplement.valid() {
+		return nil, ErrInvalidClaim
+	}
+	if awaiting {
+		if len(snapshot.DeadlineHistory) == 0 {
+			return nil, ErrInvalidClaim
+		}
+		last := snapshot.DeadlineHistory[len(snapshot.DeadlineHistory)-1]
+		if !last.Deadline.Equal(snapshot.Supplement.Deadline.UTC()) || last.EstablishedAt.IsZero() {
+			return nil, ErrInvalidClaim
+		}
+	} else if !snapshot.Screen.valid() && len(snapshot.DeadlineHistory) > 0 {
+		return nil, ErrInvalidClaim
+	}
+	history := append([]SupplementDeadlineVersion(nil), snapshot.DeadlineHistory...)
+	for i := range history {
+		history[i].Deadline = history[i].Deadline.UTC()
+		history[i].EstablishedAt = history[i].EstablishedAt.UTC()
+	}
+	supplement := snapshot.Supplement
+	if supplement.valid() {
+		supplement.Deadline = supplement.Deadline.UTC()
+	}
 	return &ClaimItem{
 		id:              snapshot.ID,
 		batch:           snapshot.Batch,
@@ -281,6 +405,8 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 		submittedAt:     snapshot.SubmittedAt.UTC(),
 		screen:          snapshot.Screen,
 		screenBasis:     snapshot.ScreenBasis,
+		supplement:      supplement,
+		deadlineHistory: history,
 		conclusion:      snapshot.Conclusion,
 		concludedAt:     snapshot.ConcludedAt.UTC(),
 		reviewBy:        snapshot.ReviewBy.UTC(),
@@ -290,21 +416,74 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 	}, nil
 }
 
-// ScreenEligibility 记录资格审核：按申请人授权、客户账户、合同版本、索赔时限、目标
-// 范围、重复关系和最低材料要求判断（依据必带）；不通过不等于责任不成立——那是另一个
-// 判断的事。已撤回或已审过的索赔不再审。
+// ScreenEligibility 记录终局资格审核（通过或不予受理）。等待补充走 AwaitSupplement。
+// 已撤回或已落终局的索赔不再审；处于等待补充时允许重判到终局（ADR-0051）。
 func (claim *ClaimItem) ScreenEligibility(screen EligibilityScreen, basis string, at time.Time) error {
 	if claim.withdrawn {
 		return ErrClaimWithdrawn
 	}
-	if _, screened := claim.Screen(); screened {
+	if claim.screen.terminal() {
 		return ErrClaimAlreadyScreened
 	}
-	if !screen.valid() || basis == "" || at.IsZero() || at.Before(claim.submittedAt) {
+	if !screen.terminal() || basis == "" || at.IsZero() || at.Before(claim.submittedAt) {
 		return ErrInvalidClaim
 	}
 	claim.screen = screen
 	claim.screenBasis = basis
+	claim.supplement = SupplementRequirement{}
+	return nil
+}
+
+// AwaitSupplement 进入或续写等待补充。四件落点必备。已落终局的索赔不可改走补充
+// （合同不覆盖、超首次期限等永久格不得经补充翻案）。同一截止下更新缺少材料是
+// 重新判断；换截止走 ExtendSupplementDeadline。
+func (claim *ClaimItem) AwaitSupplement(basis string, requirement SupplementRequirement, at time.Time) error {
+	if claim.withdrawn {
+		return ErrClaimWithdrawn
+	}
+	if claim.screen.terminal() {
+		return ErrClaimAlreadyScreened
+	}
+	if !requirement.valid() || basis == "" || at.IsZero() || at.Before(claim.submittedAt) {
+		return ErrInvalidClaim
+	}
+	if !requirement.Deadline.After(at) {
+		return ErrInvalidClaim
+	}
+	if claim.screen == ClaimAwaitingSupplement {
+		if !requirement.Deadline.Equal(claim.supplement.Deadline) {
+			return ErrInvalidClaim
+		}
+		claim.screenBasis = basis
+		claim.supplement = requirement
+		return nil
+	}
+	claim.screen = ClaimAwaitingSupplement
+	claim.screenBasis = basis
+	claim.supplement = requirement
+	claim.deadlineHistory = []SupplementDeadlineVersion{{
+		Deadline:      requirement.Deadline,
+		EstablishedAt: at.UTC(),
+	}}
+	return nil
+}
+
+// ExtendSupplementDeadline 获批延期：新期限版本入列，原期限保留。必须已在等待补充。
+func (claim *ClaimItem) ExtendSupplementDeadline(deadline time.Time, at time.Time) error {
+	if claim.withdrawn {
+		return ErrClaimWithdrawn
+	}
+	if claim.screen != ClaimAwaitingSupplement {
+		return ErrInvalidClaim
+	}
+	if at.IsZero() || at.Before(claim.submittedAt) || !deadline.After(claim.supplement.Deadline) {
+		return ErrInvalidClaim
+	}
+	claim.deadlineHistory = append(claim.deadlineHistory, SupplementDeadlineVersion{
+		Deadline:      deadline.UTC(),
+		EstablishedAt: at.UTC(),
+	})
+	claim.supplement.Deadline = deadline.UTC()
 	return nil
 }
 

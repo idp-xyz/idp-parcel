@@ -75,7 +75,7 @@ func eligibilityQuery(t *testing.T, contract, kind string) ports.EligibilityQuer
 }
 
 // 声明不在场时缺一个类型是「没人声明过」，不是「声明说不保」。凭一张空表拒赔就是
-// 虚构，而 ScreenEligibility 一次性——那一拒永远翻不了案。
+// 虚构，而合同不覆盖是终局格（ADR-0051）——那一拒不得经补充翻案。
 func TestAbsentClaimDeclarationIsNotConfiguredNotIneligible(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE")

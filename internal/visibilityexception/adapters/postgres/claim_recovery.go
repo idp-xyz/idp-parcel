@@ -41,22 +41,27 @@ func (repository *Claims) FindByBatchItem(
 	}
 
 	var (
-		customer, contract, target, kind                 string
-		submittedAt                                      time.Time
-		screen, screenBasis, conclusion, priorConclusion *string
-		concludedAt, reviewBy, withdrawnAt               *time.Time
-		withdrawn                                        bool
+		customer, contract, target, kind                    string
+		submittedAt                                         time.Time
+		screen, screenBasis, conclusion, priorConclusion    *string
+		concludedAt, reviewBy, withdrawnAt                  *time.Time
+		withdrawn                                           bool
+		missingMaterials, supplementScope, supplementNotice *string
+		supplementDeadline                                  *time.Time
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT customer_ref, contract_ref, target_ref, kind_ref, submitted_at,
 		        screen, screen_basis, conclusion, concluded_at, review_by,
-		        prior_conclusion, withdrawn, withdrawn_at
+		        prior_conclusion, withdrawn, withdrawn_at,
+		        missing_materials_ref, supplement_scope_ref, supplement_notice_ref,
+		        supplement_deadline
 		   FROM visibility_exception.claim_item
 		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
 		tenant.String(), batch.String(), item.String(),
 	).Scan(&customer, &contract, &target, &kind, &submittedAt,
 		&screen, &screenBasis, &conclusion, &concludedAt, &reviewBy,
-		&priorConclusion, &withdrawn, &withdrawnAt)
+		&priorConclusion, &withdrawn, &withdrawnAt,
+		&missingMaterials, &supplementScope, &supplementNotice, &supplementDeadline)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -109,6 +114,31 @@ func (repository *Claims) FindByBatchItem(
 	if withdrawnAt != nil {
 		snapshot.WithdrawnAt = *withdrawnAt
 	}
+	if snapshot.Screen == domain.ClaimAwaitingSupplement {
+		if missingMaterials == nil || supplementScope == nil || supplementNotice == nil || supplementDeadline == nil {
+			return nil, false, fmt.Errorf("rebuild claim item: awaiting supplement missing required fields")
+		}
+		missing, err := domain.NewMissingMaterialsReference(*missingMaterials)
+		if err != nil {
+			return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+		}
+		scope, err := domain.NewSupplementScopeReference(*supplementScope)
+		if err != nil {
+			return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+		}
+		notice, err := domain.NewSupplementNoticeReference(*supplementNotice)
+		if err != nil {
+			return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+		}
+		if snapshot.Supplement, err = domain.NewSupplementRequirement(missing, scope, notice, *supplementDeadline); err != nil {
+			return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+		}
+	}
+	history, err := loadSupplementDeadlines(ctx, querier, tenant, batch, item)
+	if err != nil {
+		return nil, false, err
+	}
+	snapshot.DeadlineHistory = history
 
 	claim, err := domain.RehydrateClaimItem(snapshot)
 	if err != nil {
@@ -135,10 +165,8 @@ func (repository *Claims) Save(
 	snapshot := claim.Snapshot()
 
 	var screen, screenBasis, conclusion, prior *string
-	if snapshot.Screen == domain.ClaimEligible {
-		screen = stringPointer("ELIGIBLE")
-	} else if snapshot.Screen == domain.ClaimIneligible {
-		screen = stringPointer("INELIGIBLE")
+	if value := snapshot.Screen.String(); value != "" {
+		screen = stringPointer(value)
 	}
 	if snapshot.ScreenBasis != "" {
 		screenBasis = &snapshot.ScreenBasis
@@ -150,12 +178,23 @@ func (repository *Claims) Save(
 		prior = &value
 	}
 
+	var missingMaterials, supplementScope, supplementNotice *string
+	var supplementDeadline *time.Time
+	if snapshot.Screen == domain.ClaimAwaitingSupplement {
+		missingMaterials = stringPointer(snapshot.Supplement.MissingMaterials.String())
+		supplementScope = stringPointer(snapshot.Supplement.Scope.String())
+		supplementNotice = stringPointer(snapshot.Supplement.Notice.String())
+		deadline := snapshot.Supplement.Deadline
+		supplementDeadline = &deadline
+	}
+
 	_, err = executor.Exec(ctx,
 		`INSERT INTO visibility_exception.claim_item
 			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
 			 submitted_at, screen, screen_basis, conclusion, concluded_at, review_by,
-			 prior_conclusion, withdrawn, withdrawn_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			 prior_conclusion, withdrawn, withdrawn_at,
+			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 ON CONFLICT (tenant_id, batch_ref, item_id) DO UPDATE SET
 			screen = EXCLUDED.screen,
 			screen_basis = EXCLUDED.screen_basis,
@@ -164,7 +203,11 @@ func (repository *Claims) Save(
 			review_by = EXCLUDED.review_by,
 			prior_conclusion = EXCLUDED.prior_conclusion,
 			withdrawn = EXCLUDED.withdrawn,
-			withdrawn_at = EXCLUDED.withdrawn_at`,
+			withdrawn_at = EXCLUDED.withdrawn_at,
+			missing_materials_ref = EXCLUDED.missing_materials_ref,
+			supplement_scope_ref = EXCLUDED.supplement_scope_ref,
+			supplement_notice_ref = EXCLUDED.supplement_notice_ref,
+			supplement_deadline = EXCLUDED.supplement_deadline`,
 		tenant.String(),
 		snapshot.Batch.String(),
 		snapshot.ID.String(),
@@ -181,9 +224,16 @@ func (repository *Claims) Save(
 		prior,
 		snapshot.Withdrawn,
 		nullIfZeroTime(snapshot.WithdrawnAt),
+		missingMaterials,
+		supplementScope,
+		supplementNotice,
+		supplementDeadline,
 	)
 	if err != nil {
 		return fmt.Errorf("save claim item: %w", err)
+	}
+	if err := replaceSupplementDeadlines(ctx, executor, tenant, snapshot); err != nil {
+		return err
 	}
 	return nil
 }
@@ -393,12 +443,71 @@ func rebuildRecoveryMatter(
 	return matter, nil
 }
 
+func loadSupplementDeadlines(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	batch domain.ClaimBatchReference,
+	item domain.ClaimItemID,
+) ([]domain.SupplementDeadlineVersion, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT deadline, established_at
+		   FROM visibility_exception.claim_supplement_deadline
+		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3
+		  ORDER BY version_seq`,
+		tenant.String(), batch.String(), item.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load supplement deadlines: %w", err)
+	}
+	defer rows.Close()
+	var history []domain.SupplementDeadlineVersion
+	for rows.Next() {
+		var version domain.SupplementDeadlineVersion
+		if err := rows.Scan(&version.Deadline, &version.EstablishedAt); err != nil {
+			return nil, fmt.Errorf("load supplement deadlines: %w", err)
+		}
+		history = append(history, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load supplement deadlines: %w", err)
+	}
+	return history, nil
+}
+
+func replaceSupplementDeadlines(
+	ctx context.Context,
+	executor bentopg.Executor,
+	tenant domain.TenantID,
+	snapshot domain.ClaimItemSnapshot,
+) error {
+	if _, err := executor.Exec(ctx,
+		`DELETE FROM visibility_exception.claim_supplement_deadline
+		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
+		tenant.String(), snapshot.Batch.String(), snapshot.ID.String()); err != nil {
+		return fmt.Errorf("replace supplement deadlines: %w", err)
+	}
+	for seq, version := range snapshot.DeadlineHistory {
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO visibility_exception.claim_supplement_deadline
+				(tenant_id, batch_ref, item_id, version_seq, deadline, established_at)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			tenant.String(), snapshot.Batch.String(), snapshot.ID.String(),
+			seq+1, version.Deadline, version.EstablishedAt); err != nil {
+			return fmt.Errorf("replace supplement deadlines: %w", err)
+		}
+	}
+	return nil
+}
+
 func eligibilityScreenFrom(value string) (domain.EligibilityScreen, error) {
 	switch value {
 	case "ELIGIBLE":
 		return domain.ClaimEligible, nil
 	case "INELIGIBLE":
 		return domain.ClaimIneligible, nil
+	case "AWAITING_SUPPLEMENT":
+		return domain.ClaimAwaitingSupplement, nil
 	default:
 		return domain.EligibilityScreenInvalid,
 			fmt.Errorf("visibility exception postgres: unknown eligibility screen %q", value)

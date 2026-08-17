@@ -196,6 +196,68 @@ func TestClaimShapeIsPinnedByChecks(t *testing.T) {
 		 VALUES ('tenant-a', 'batch-x', 'item-x', 'c', 'c', 't', 'k', now(), 'ELIGIBLE')`); err == nil {
 		t.Fatalf("没有依据的审核被库接受了")
 	}
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.claim_item
+			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
+			 submitted_at, screen, screen_basis)
+		 VALUES ('tenant-a', 'batch-x', 'item-y', 'c', 'c', 't', 'k', now(),
+		         'AWAITING_SUPPLEMENT', 'materials incomplete')`); err == nil {
+		t.Fatalf("等待补充缺少四件落点被库接受了")
+	}
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.claim_item
+			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
+			 submitted_at, screen, screen_basis,
+			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline)
+		 VALUES ('tenant-a', 'batch-x', 'item-z', 'c', 'c', 't', 'k', now(),
+		         'ELIGIBLE', 'ok', 'photos', 'scope', 'notice', now() + interval '7 days')`); err == nil {
+		t.Fatalf("终局格带着四件落点被库接受了")
+	}
+}
+
+func claimSupplement(t *testing.T, deadline time.Time) domain.SupplementRequirement {
+	t.Helper()
+	requirement, err := domain.NewSupplementRequirement(
+		claimValue(t, domain.NewMissingMaterialsReference, "photos/damage"),
+		claimValue(t, domain.NewSupplementScopeReference, "parcel-1/DAMAGE"),
+		claimValue(t, domain.NewSupplementNoticeReference, "notify-policy/v1"),
+		deadline,
+	)
+	if err != nil {
+		t.Fatalf("补充要求：%v", err)
+	}
+	return requirement
+}
+
+// TestAwaitingSupplementRoundTripsWithDeadlineHistory 证等待补充四件落点与期限版本
+// 往返：延期后原截止仍在历史上，当前截止是新版。
+func TestAwaitingSupplementRoundTripsWithDeadlineHistory(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	claim := receivedClaim(t, "batch-1", "item-1")
+	first := claimBaseAt.Add(7 * 24 * time.Hour)
+	second := claimBaseAt.Add(14 * 24 * time.Hour)
+	if err := claim.AwaitSupplement("materials incomplete", claimSupplement(t, first), claimBaseAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	if err := claim.ExtendSupplementDeadline(second, claimBaseAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", claim)
+
+	loaded := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	screen, ok := loaded.Screen()
+	if !ok || screen != domain.ClaimAwaitingSupplement {
+		t.Fatalf("screen = %q ok = %v", screen, ok)
+	}
+	requirement, present := loaded.Supplement()
+	if !present || !requirement.Deadline.Equal(second.UTC()) || requirement.MissingMaterials.String() != "photos/damage" {
+		t.Fatalf("四件落点没读回：present=%v deadline=%s", present, requirement.Deadline)
+	}
+	history := loaded.SupplementDeadlineHistory()
+	if len(history) != 2 || !history[0].Deadline.Equal(first.UTC()) || !history[1].Deadline.Equal(second.UTC()) {
+		t.Fatalf("期限历史 = %#v", history)
+	}
 }
 
 // TestClaimsOfAnotherTenantAreInvisible 证租户隔离：同名（批次+项）在另一租户不可见，

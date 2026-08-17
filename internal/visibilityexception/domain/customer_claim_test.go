@@ -131,3 +131,83 @@ func TestReviewIsControlledByItsWindow(t *testing.T) {
 		t.Fatalf("err = %v; 同值复核分不出新旧", err)
 	}
 }
+
+func supplementRequirement(t *testing.T, deadline time.Time) domain.SupplementRequirement {
+	t.Helper()
+	requirement, err := domain.NewSupplementRequirement(
+		mustValue(t, domain.NewMissingMaterialsReference, "photos/damage"),
+		mustValue(t, domain.NewSupplementScopeReference, "parcel-1/DAMAGE"),
+		mustValue(t, domain.NewSupplementNoticeReference, "notify-policy/v1"),
+		deadline,
+	)
+	if err != nil {
+		t.Fatalf("supplement requirement: %v", err)
+	}
+	return requirement
+}
+
+// Covers: CONTEXT 生命周期「资格审核 → 等待补充、不予受理或进入责任审核」与硬句
+// 「资料不足时，索赔项进入限期补充，并固定缺少材料、补充范围、通知依据和当前截止
+// 时间」——等待补充可重判到终局；终局格不可再走补充（ADR-0051）。
+func TestAwaitingSupplementCanBeRejudgedUntilATerminalScreen(t *testing.T) {
+	claim := receivedClaim(t)
+	deadline := claimSubmittedAt.Add(7 * 24 * time.Hour)
+	if err := claim.AwaitSupplement("materials incomplete", supplementRequirement(t, deadline), claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await supplement: %v", err)
+	}
+	screen, ok := claim.Screen()
+	if !ok || screen != domain.ClaimAwaitingSupplement {
+		t.Fatalf("screen = %q ok = %v", screen, ok)
+	}
+	requirement, present := claim.Supplement()
+	if !present || requirement.MissingMaterials.String() != "photos/damage" || !requirement.Deadline.Equal(deadline.UTC()) {
+		t.Fatalf("四件落点没固定：present=%v deadline=%s", present, requirement.Deadline)
+	}
+	if err := claim.ConcludeLiability(domain.LiabilityFullyEstablished,
+		claimSubmittedAt.Add(30*24*time.Hour), claimSubmittedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClaimNotScreened) {
+		t.Fatalf("err = %v; 等待补充形成了责任结论", err)
+	}
+
+	if err := claim.ScreenEligibility(domain.ClaimEligible, "materials now complete", claimSubmittedAt.Add(3*time.Hour)); err != nil {
+		t.Fatalf("rejudge to eligible: %v", err)
+	}
+	if _, stillAwaiting := claim.Supplement(); stillAwaiting {
+		t.Fatal("终局后还带着等待补充的四件落点")
+	}
+	if err := claim.AwaitSupplement("again", supplementRequirement(t, deadline), claimSubmittedAt.Add(4*time.Hour)); !errors.Is(err, domain.ErrClaimAlreadyScreened) {
+		t.Fatalf("err = %v; 通过后经补充翻案", err)
+	}
+
+	ineligible := receivedClaim(t)
+	if err := ineligible.ScreenEligibility(domain.ClaimIneligible, "kind not in contract", claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("screen ineligible: %v", err)
+	}
+	if err := ineligible.AwaitSupplement("try supplement", supplementRequirement(t, deadline), claimSubmittedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrClaimAlreadyScreened) {
+		t.Fatalf("err = %v; 永久不予受理经补充翻案", err)
+	}
+}
+
+// Covers: CONTEXT「获批延期形成新补充期限版本，原期限保留」——新截止入列，旧截止
+// 仍在历史上。
+func TestApprovedExtensionKeepsTheOriginalSupplementDeadline(t *testing.T) {
+	claim := receivedClaim(t)
+	first := claimSubmittedAt.Add(7 * 24 * time.Hour)
+	second := claimSubmittedAt.Add(14 * 24 * time.Hour)
+	if err := claim.AwaitSupplement("materials incomplete", supplementRequirement(t, first), claimSubmittedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	if err := claim.ExtendSupplementDeadline(second, claimSubmittedAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+	history := claim.SupplementDeadlineHistory()
+	if len(history) != 2 || !history[0].Deadline.Equal(first.UTC()) || !history[1].Deadline.Equal(second.UTC()) {
+		t.Fatalf("期限历史 = %#v", history)
+	}
+	requirement, _ := claim.Supplement()
+	if !requirement.Deadline.Equal(second.UTC()) {
+		t.Fatalf("当前截止 = %s", requirement.Deadline)
+	}
+	if err := claim.AwaitSupplement("still incomplete", supplementRequirement(t, first), claimSubmittedAt.Add(3*time.Hour)); !errors.Is(err, domain.ErrInvalidClaim) {
+		t.Fatalf("err = %v; 换截止应走延期而不是重新判断", err)
+	}
+}
