@@ -108,6 +108,57 @@ func TestReplayAndConflictSplitByContent(t *testing.T) {
 	}
 }
 
+// TestTheLastTwoObjectKindsReachTheRegistry 证信用政策与授权规则这两类能进登记册。
+//
+// 它盯的是**领域封闭集与库内 CHECK 的对齐**，不是这两类今天真有发布方：0001 写下
+// `BETWEEN 1 AND 7` 时领域只有七类，此后加到九类，两个新值因此被库拒在门外。这一格
+// 谁也踩不到——授权规则的生效授予走 authorization_grant、信用政策还没有存储口——所以
+// 它只会在有人第一次发布这两类的那天炸，而那时炸的是一次事务内的 CHECK 违反。
+func TestTheLastTwoObjectKindsReachTheRegistry(t *testing.T) {
+	repository, transactor, _ := newPublications(t)
+	ctx := t.Context()
+
+	for name, kind := range map[string]domain.CommercialObjectKind{
+		"信用政策": domain.CreditPolicyObject,
+		"授权规则": domain.AuthorizationRuleObject,
+	} {
+		t.Run(name, func(t *testing.T) {
+			objectID := "object-" + kind.String()
+			mustSaveVersion(t, transactor, ctx, repository,
+				effectiveVersionOfKind(t, kind, objectID, "v1", "digest-"+objectID))
+
+			registry, err := repository.LoadForScope(ctx, pcTenant(t, "tenant-1"), pcScope(t))
+			if err != nil {
+				t.Fatalf("整册读回：%v", err)
+			}
+			if _, exists := registry.Lookup(
+				pcTenant(t, "tenant-1"), kind,
+				pcValue(t, domain.NewCommercialObjectID, objectID),
+				pcValue(t, domain.NewCommercialVersionLabel, "v1"),
+			); !exists {
+				t.Fatalf("%s 登记后读不回来——库内 CHECK 与领域封闭集又对不上了", kind)
+			}
+		})
+	}
+}
+
+// TestAnObjectKindOutsideTheClosedSetIsRefused 是上一条的另一半：放宽不等于放开。
+// 绕过领域直插一个封闭集之外的类别仍须被库拒——否则上一条的「对齐」会退化成「取消约束」。
+func TestAnObjectKindOutsideTheClosedSetIsRefused(t *testing.T) {
+	_, _, pool := newPublications(t)
+
+	_, err := pool.Exec(t.Context(),
+		`INSERT INTO party_commercial.commercial_version
+			(tenant_id, object_kind, object_id, version_label, scope_ref,
+			 content_digest, effective_starts_at, effective_ends_at, status,
+			 snapshot, published_at)
+		 VALUES ('tenant-1', 10, 'object-x', 'v1', 'scope-1',
+		         'digest-x', now(), NULL, 3, '{}', now())`)
+	if err == nil {
+		t.Fatal("封闭集之外的对象类别进了发布登记册")
+	}
+}
+
 // TestTenantsAreInvisibleToEachOther 证跨租户合法同号（ADR-0040）互不可见：他租户
 // 读回空册，与「从未发布过」长得完全一样。
 func TestTenantsAreInvisibleToEachOther(t *testing.T) {
@@ -251,6 +302,15 @@ func pcScope(t *testing.T) domain.CommercialScopeReference {
 // 门的校验正是「什么算合法」的单一权威。
 func effectiveContract(t *testing.T, objectID, label, digest string) domain.CommercialVersion {
 	t.Helper()
+	return effectiveVersionOfKind(t, domain.CustomerContractObject, objectID, label, digest)
+}
+
+func effectiveVersionOfKind(
+	t *testing.T,
+	kind domain.CommercialObjectKind,
+	objectID, label, digest string,
+) domain.CommercialVersion {
+	t.Helper()
 
 	interval, err := domain.NewEffectiveInterval(
 		effectiveAtRow, effectiveAtRow.Add(90*24*time.Hour))
@@ -267,7 +327,7 @@ func effectiveContract(t *testing.T, objectID, label, digest string) domain.Comm
 	}
 	version, err := domain.RehydrateCommercialVersion(domain.RehydrateCommercialVersionSpec{
 		TenantID:      pcTenant(t, "tenant-1"),
-		Kind:          domain.CustomerContractObject,
+		Kind:          kind,
 		ObjectID:      pcValue(t, domain.NewCommercialObjectID, objectID),
 		Version:       pcValue(t, domain.NewCommercialVersionLabel, label),
 		Scope:         pcScope(t),
@@ -282,7 +342,7 @@ func effectiveContract(t *testing.T, objectID, label, digest string) domain.Comm
 		},
 	})
 	if err != nil {
-		t.Fatalf("重建合同版本：%v", err)
+		t.Fatalf("重建 %s 版本：%v", kind, err)
 	}
 	return version
 }
