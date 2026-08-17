@@ -136,6 +136,13 @@ func (requirement SupplementRequirement) valid() bool {
 		!requirement.Deadline.IsZero()
 }
 
+// Complete 让编排在调 AwaitSupplement 之前就分得出「目录答复残缺」与「这项索赔真的
+// 该等补充」。少了它，两者都从 AwaitSupplement 撞出同一个 ErrInvalidClaim，而前者要
+// 找目录补登记、后者是正常业务路径。
+func (requirement SupplementRequirement) Complete() bool {
+	return requirement.valid()
+}
+
 // SupplementDeadlineVersion 是一版补充期限。获批延期追加新版本，原期限保留。
 type SupplementDeadlineVersion struct {
 	Deadline      time.Time

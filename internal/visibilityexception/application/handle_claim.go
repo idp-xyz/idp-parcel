@@ -20,6 +20,7 @@ const (
 	ClaimReceived
 	ClaimExistingResult
 	ClaimScreened
+	ClaimAwaitingSupplement
 	ClaimScreenAlreadyRecorded
 	ClaimConcluded
 	ClaimConclusionAlreadyRecorded
@@ -40,6 +41,8 @@ func (outcome HandleClaimOutcome) String() string {
 		return "CLAIM_EXISTING_RESULT"
 	case ClaimScreened:
 		return "CLAIM_SCREENED"
+	case ClaimAwaitingSupplement:
+		return "CLAIM_AWAITING_SUPPLEMENT"
 	case ClaimScreenAlreadyRecorded:
 		return "SCREEN_ALREADY_RECORDED"
 	case ClaimConcluded:
@@ -74,6 +77,7 @@ const (
 	ClaimStoreUnavailable
 	EligibilityRulesUnavailable
 	EligibilityCatalogueNotConfigured
+	EligibilitySupplementIncomplete
 	RecoveryStoreUnavailable
 	RecoveryIdentityUnavailable
 )
@@ -86,6 +90,8 @@ func (reason HandleClaimUndecidedReason) String() string {
 		return "ELIGIBILITY_RULES_UNAVAILABLE"
 	case EligibilityCatalogueNotConfigured:
 		return "ELIGIBILITY_CATALOGUE_NOT_CONFIGURED"
+	case EligibilitySupplementIncomplete:
+		return "ELIGIBILITY_SUPPLEMENT_INCOMPLETE"
 	case RecoveryStoreUnavailable:
 		return "RECOVERY_STORE_UNAVAILABLE"
 	case RecoveryIdentityUnavailable:
@@ -261,6 +267,9 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 
 // ScreenClaim 执行资格审核：目录未配置即未决——没有目录的资格审核无从作出，默认受理
 // 与默认拒赔都是虚构；已审过的不再审（依据由目录给出，编排不自造）。
+//
+// 「已审过」只指终局格。停在`等待补充`的索赔可以再审——材料补齐后重判正是它存在的
+// 理由（ADR-0051）。
 func (handler *HandleClaimHandler) ScreenClaim(
 	ctx context.Context,
 	command ScreenClaimCommand,
@@ -285,20 +294,34 @@ func (handler *HandleClaimHandler) ScreenClaim(
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilityCatalogueNotConfigured}, nil
 	}
 
-	if err := claim.ScreenEligibility(answer.Screen, answer.Basis, handler.deps.Clock.Now()); err != nil {
+	// 第三态与终局两条路分开走，因为领域入口就不是同一个：`等待补充`要带四件落点
+	// （ADR-0051），而 ScreenEligibility 只收终局格。混成一条会让目录一答第三态就撞
+	// ErrInvalidClaim，把一个业务取值报成技术故障。
+	outcome := ClaimScreened
+	var screenErr error
+	if answer.Screen == domain.ClaimAwaitingSupplement {
+		if !answer.Supplement.Complete() {
+			return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilitySupplementIncomplete}, nil
+		}
+		outcome = ClaimAwaitingSupplement
+		screenErr = claim.AwaitSupplement(answer.Basis, answer.Supplement, handler.deps.Clock.Now())
+	} else {
+		screenErr = claim.ScreenEligibility(answer.Screen, answer.Basis, handler.deps.Clock.Now())
+	}
+	if screenErr != nil {
 		switch {
-		case errors.Is(err, domain.ErrClaimAlreadyScreened):
+		case errors.Is(screenErr, domain.ErrClaimAlreadyScreened):
 			return HandleClaimResult{outcome: ClaimScreenAlreadyRecorded, claim: claim}, nil
-		case errors.Is(err, domain.ErrClaimWithdrawn):
+		case errors.Is(screenErr, domain.ErrClaimWithdrawn):
 			return HandleClaimResult{outcome: HandleClaimNotAccepted, claim: claim}, nil
 		default:
-			return HandleClaimResult{}, fmt.Errorf("screen eligibility: %w", err)
+			return HandleClaimResult{}, fmt.Errorf("screen eligibility: %w", screenErr)
 		}
 	}
 	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
-	return HandleClaimResult{outcome: ClaimScreened, claim: claim}, nil
+	return HandleClaimResult{outcome: outcome, claim: claim}, nil
 }
 
 // ConcludeClaim 入账责任结论并把它交给结算：资格未审或未通过形不成结论（领域把门，

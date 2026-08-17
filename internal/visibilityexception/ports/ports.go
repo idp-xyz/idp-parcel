@@ -460,10 +460,16 @@ type EligibilityQuery struct {
 	Kind     domain.ClaimKindReference
 }
 
-// EligibilityAnswer 是资格目录的答复：通过或不通过，带判断依据。
+// EligibilityAnswer 是资格目录的答复：通过、不通过或等待补充，带判断依据。
+//
+// Supplement 只在 Screen 为`等待补充`时有意义，且那时必填：第三态要缺少材料、补充
+// 范围、通知依据与截止四件同在才立得起来（ADR-0051），少一件客户就不知道该补什么。
+// 答`等待补充`却不给四件，编排停在未决而不是记一个残缺的第三态——补齐的是目录，
+// 不是编排替它拟一份材料清单。
 type EligibilityAnswer struct {
-	Screen domain.EligibilityScreen
-	Basis  string
+	Screen     domain.EligibilityScreen
+	Basis      string
+	Supplement domain.SupplementRequirement
 }
 
 // EligibilityRuleView 回答「这项索赔按版本化资格规则过不过审」。第二个返回值为 false

@@ -334,6 +334,99 @@ func TestEligibilityIsScreenedOnceWithItsBasis(t *testing.T) {
 	}
 }
 
+func supplementRequirement(t *testing.T, deadline time.Time) domain.SupplementRequirement {
+	t.Helper()
+	requirement, err := domain.NewSupplementRequirement(
+		mustValue(t, domain.NewMissingMaterialsReference, "photos/damage"),
+		mustValue(t, domain.NewSupplementScopeReference, "parcel-1/loss"),
+		mustValue(t, domain.NewSupplementNoticeReference, "notify-policy/v1"),
+		deadline,
+	)
+	if err != nil {
+		t.Fatalf("补充要求：%v", err)
+	}
+	return requirement
+}
+
+// Covers: ADR-0051 第三态经编排落地——目录答`等待补充`时索赔进入可续办的第三态，四件
+// 落点与首版期限入账；它不是`已过审`，也不是技术错误。点名 `AT-VE-114` 的「部分待补」
+// 半边：逐项审核允许一项停在待补而不牵动同批其他项。
+func TestAnAwaitingSupplementAnswerEntersTheThirdStateInsteadOfFailing(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	deadline := claimSubmittedAt.Add(14 * 24 * time.Hour)
+	fixture.eligibility.answer = ports.EligibilityAnswer{
+		Screen:     domain.ClaimAwaitingSupplement,
+		Basis:      "claim-rules/v1/materials",
+		Supplement: supplementRequirement(t, deadline),
+	}
+
+	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if result.Outcome() != application.ClaimAwaitingSupplement {
+		t.Fatalf("outcome = %q, want CLAIM_AWAITING_SUPPLEMENT", result.Outcome())
+	}
+	claim, _ := result.Claim()
+	screen, screened := claim.Screen()
+	if !screened || screen != domain.ClaimAwaitingSupplement {
+		t.Fatalf("screen = %q screened = %v", screen, screened)
+	}
+	requirement, present := claim.Supplement()
+	if !present || !requirement.Deadline.Equal(deadline.UTC()) {
+		t.Fatalf("四件落点没入账：present=%v deadline=%s", present, requirement.Deadline)
+	}
+	if history := claim.SupplementDeadlineHistory(); len(history) != 1 {
+		t.Fatalf("期限历史 = %d 版，want 1", len(history))
+	}
+
+	// 等待补充可续办：重新审核不撞`已审过`，材料重判后仍可走向终局。
+	fixture.eligibility.answer = ports.EligibilityAnswer{Screen: domain.ClaimEligible, Basis: "claim-rules/v1"}
+	rejudged, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("re-screen: %v", err)
+	}
+	if rejudged.Outcome() != application.ClaimScreened {
+		t.Fatalf("outcome = %q, want CLAIM_SCREENED after supplement was judged", rejudged.Outcome())
+	}
+}
+
+// Covers: 目录答`等待补充`却没给全四件落点时停在未决——那份答复本身不完整，既不能
+// 记成第三态（领域会拒），也不能借 `ErrInvalidClaim` 上抛成技术故障：客户其实在等
+// 材料清单，而一次技术错误会让这项索赔从待办里消失。
+func TestAnIncompleteSupplementAnswerIsUndecidedNotATechnicalError(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	fixture.eligibility.answer = ports.EligibilityAnswer{
+		Screen: domain.ClaimAwaitingSupplement,
+		Basis:  "claim-rules/v1/materials",
+	}
+
+	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if result.Outcome() != application.HandleClaimUndecided ||
+		result.UndecidedReason() != application.EligibilitySupplementIncomplete {
+		t.Fatalf("result = %q/%q, want UNDECIDED/ELIGIBILITY_SUPPLEMENT_INCOMPLETE",
+			result.Outcome(), result.UndecidedReason())
+	}
+	claim, _, _ := fixture.claims.FindByBatchItem(ctx,
+		mustValue(t, domain.NewTenantID, "tenant-1"),
+		mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		mustValue(t, domain.NewClaimItemID, "item-1"))
+	if _, screened := claim.Screen(); screened {
+		t.Fatal("一份残缺的目录答复仍在索赔上记下了资格结果")
+	}
+}
+
 // Covers: 实例半边红线——资格目录（索赔时限、材料要求、授权）是待登记实例参数，未
 // 配置时未决等租户登记：默认受理与默认拒赔都是虚构；与目录调不通分开（恢复动作不同）。
 func TestUnconfiguredEligibilityCatalogueIsUndecidedNotDefaulted(t *testing.T) {
