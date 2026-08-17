@@ -1,7 +1,7 @@
 # ADR-0050: 服务产品形态随解析闭包可观察
 
-Status: Proposed  
-Date: 2026-08-14
+Status: Accepted  
+Date: 2026-08-14（起草）；2026-08-17（接受）
 
 ## Context
 
