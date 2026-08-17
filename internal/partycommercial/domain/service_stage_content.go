@@ -8,8 +8,12 @@ var (
 	ErrIntakeContentNotConfigured = errors.New("party commercial: intake qualification content is not configured")
 	// ErrFinalContentNotConfigured 是终局规则声明缺件。恢复动作同上（PAR-COM-17）。
 	ErrFinalContentNotConfigured = errors.New("party commercial: final rule content is not configured")
-	ErrConflictingIntakeSource   = errors.New("party commercial: conflicting intake source declaration")
-	ErrConflictingFinalization   = errors.New("party commercial: conflicting finalization declaration")
+	// ErrCancellationAuthorityNotConfigured 是取消授权目录缺件。恢复动作同上
+	// （PAR-COM-17 实例半边），不是本上下文代拟「客户可取消」。
+	ErrCancellationAuthorityNotConfigured = errors.New("party commercial: cancellation authority content is not configured")
+	ErrConflictingIntakeSource            = errors.New("party commercial: conflicting intake source declaration")
+	ErrConflictingFinalization            = errors.New("party commercial: conflicting finalization declaration")
+	ErrConflictingCancellationAuthority   = errors.New("party commercial: conflicting cancellation authority declaration")
 )
 
 // DeclaredIntakeSource 是规则可声明的收寄来源封闭二值，与 parcel-shipment 来源联合
@@ -159,4 +163,71 @@ func NewFinalRuleContent(declarations []FinalizationDeclaration) (FinalRuleConte
 func (content FinalRuleContent) FinalKindFor(outcome DeclaredResponsibilityOutcome) (RuleReference, bool) {
 	kind, declared := content.declarations[outcome]
 	return kind, declared
+}
+
+// DeclaredCancellationParty 是规则可声明的取消请求方封闭二值，对应 CONTEXT
+// 「客户或授权运营角色」。零值不合法。将来若出现第三格，扩本封闭集，不开活口。
+type DeclaredCancellationParty uint8
+
+const (
+	DeclaredCancellationPartyInvalid DeclaredCancellationParty = iota
+	DeclaredCustomerCancellation
+	DeclaredOperationsCancellation
+)
+
+func (party DeclaredCancellationParty) valid() bool {
+	return party == DeclaredCustomerCancellation || party == DeclaredOperationsCancellation
+}
+
+func (party DeclaredCancellationParty) String() string {
+	switch party {
+	case DeclaredCustomerCancellation:
+		return "CUSTOMER"
+	case DeclaredOperationsCancellation:
+		return "OPERATIONS"
+	default:
+		return ""
+	}
+}
+
+// CancellationAuthorityDeclaration 是一行取消授权：哪种请求方格被允许，依据哪条规则。
+type CancellationAuthorityDeclaration struct {
+	Party DeclaredCancellationParty
+	Rule  RuleReference
+}
+
+// CancellationAuthorityContent 是一个已生效产品或合同的取消授权目录（PAR-COM-17
+// 提供方半边）。目录按请求方格说话：有行即允许并带规则引用；缺行是真话（此产品下
+// 这种请求方不许取消），不是配置缺件。零行才是缺件——没声明不等于「谁都不许」，
+// 更不等于默认放行。
+type CancellationAuthorityContent struct {
+	declarations map[DeclaredCancellationParty]RuleReference
+}
+
+// NewCancellationAuthorityContent 组装目录。至少一行（一行都没有是没声明，不是
+// 「永不允许」）；同一请求方格两行是冲突。
+func NewCancellationAuthorityContent(
+	declarations []CancellationAuthorityDeclaration,
+) (CancellationAuthorityContent, error) {
+	if len(declarations) == 0 {
+		return CancellationAuthorityContent{}, ErrCancellationAuthorityNotConfigured
+	}
+	byParty := make(map[DeclaredCancellationParty]RuleReference, len(declarations))
+	for _, declaration := range declarations {
+		if !declaration.Party.valid() || !declaration.Rule.valid() {
+			return CancellationAuthorityContent{}, ErrCancellationAuthorityNotConfigured
+		}
+		if _, exists := byParty[declaration.Party]; exists {
+			return CancellationAuthorityContent{}, ErrConflictingCancellationAuthority
+		}
+		byParty[declaration.Party] = declaration.Rule
+	}
+	return CancellationAuthorityContent{declarations: byParty}, nil
+}
+
+// RuleFor 报告该请求方格是否被允许取消及依据哪条规则。第二个返回值为 false 即
+// 「此产品下这种请求方不许取消」——那是声明的真话，消费方据以拒绝带依据，不是配置缺件。
+func (content CancellationAuthorityContent) RuleFor(party DeclaredCancellationParty) (RuleReference, bool) {
+	rule, declared := content.declarations[party]
+	return rule, declared
 }

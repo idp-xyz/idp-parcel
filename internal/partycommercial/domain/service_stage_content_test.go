@@ -86,3 +86,41 @@ func TestFinalRuleContentSpeaksByDeclaredRowsOnly(t *testing.T) {
 		t.Fatalf("err = %v; 同一结果两行声明分不出真假", err)
 	}
 }
+
+// Covers: PAR-COM-17 取消授权目录的机制半边——有行即允许带规则引用；缺行是真话
+// （此产品下这种请求方不许取消），不是配置缺件；同一请求方格两行是冲突；零行是缺件
+// （没声明不等于永不允许，更不等于默认客户可取消）。
+func TestCancellationAuthorityContentSpeaksByDeclaredRowsOnly(t *testing.T) {
+	content, err := domain.NewCancellationAuthorityContent([]domain.CancellationAuthorityDeclaration{
+		{
+			Party: domain.DeclaredCustomerCancellation,
+			Rule:  commercialValue(t, domain.NewRuleReference, "CANCEL-RULE/CUSTOMER"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("new cancellation authority content: %v", err)
+	}
+
+	rule, declared := content.RuleFor(domain.DeclaredCustomerCancellation)
+	if !declared || rule.String() != "CANCEL-RULE/CUSTOMER" {
+		t.Fatalf("rule = %v declared = %v", rule, declared)
+	}
+	if _, declared := content.RuleFor(domain.DeclaredOperationsCancellation); declared {
+		t.Fatal("没声明的请求方格答成了允许——缺行是真话")
+	}
+
+	if _, err := domain.NewCancellationAuthorityContent(nil); !errors.Is(err, domain.ErrCancellationAuthorityNotConfigured) {
+		t.Fatalf("err = %v; 零行声明被收下了", err)
+	}
+	if _, err := domain.NewCancellationAuthorityContent([]domain.CancellationAuthorityDeclaration{
+		{Party: domain.DeclaredCustomerCancellation, Rule: commercialValue(t, domain.NewRuleReference, "A")},
+		{Party: domain.DeclaredCustomerCancellation, Rule: commercialValue(t, domain.NewRuleReference, "B")},
+	}); !errors.Is(err, domain.ErrConflictingCancellationAuthority) {
+		t.Fatalf("err = %v; 同一请求方格两行声明分不出真假", err)
+	}
+	if _, err := domain.NewCancellationAuthorityContent([]domain.CancellationAuthorityDeclaration{
+		{Party: domain.DeclaredCancellationPartyInvalid, Rule: commercialValue(t, domain.NewRuleReference, "A")},
+	}); !errors.Is(err, domain.ErrCancellationAuthorityNotConfigured) {
+		t.Fatalf("err = %v; 零值请求方格被收下了", err)
+	}
+}

@@ -27,23 +27,56 @@ type FinalContentSource interface {
 	) (pcdomain.FinalRuleContent, bool, error)
 }
 
-// ServiceStageRulesAdapter 把 party-commercial 的收寄资格与终局规则声明译成
-// parcel-shipment 的两个规则视图端口（ADR-0025 消费方侧）。声明是提供方的话语，
-// 判断口径（成立/未决/不适用、满足/不满足）是消费方的话语——翻译在这里，不在两边。
+// CancellationContentSource 取回取消授权目录（PAR-COM-17）。found=false 即未配置。
+//
+// 本切片不给它单独落表：按 ADR-0042，阶段内容属拥有对象（产品/合同版本）的正文，
+// 存储问题属于整个阶段内容声明族（Intake/Final/Cancellation 三口一盘棋）。单独给
+// 取消开表会预先拍掉族设计且碎化；日后存储成片时三口同切。
+type CancellationContentSource interface {
+	CancellationContentFor(
+		ctx context.Context,
+		identity psdomain.SourceIdentity,
+	) (pcdomain.CancellationAuthorityContent, bool, error)
+}
+
+// CancellationRequesterClassSource 把消费方的请求方引用折成提供方的请求方格。
+// 映射属实例半边：没有租户时谁也说不出 OPERATOR-1 是客户还是运营。
+// 未配置时适配器不调用本口——首发路径必须停在「目录未配置」，不能滑成 error。
+type CancellationRequesterClassSource interface {
+	FormCancellationParty(
+		ctx context.Context,
+		identity psdomain.SourceIdentity,
+		requester psdomain.CancellationRequesterReference,
+	) (pcdomain.DeclaredCancellationParty, bool, error)
+}
+
+// ServiceStageRulesAdapter 把 party-commercial 的收寄资格、终局规则与取消授权目录
+// 译成 parcel-shipment 的三个规则视图端口（ADR-0025 消费方侧）。声明是提供方的话语，
+// 判断口径（成立/未决/不适用、满足/不满足、允许/不允许）是消费方的话语——翻译在这里，不在两边。
 type ServiceStageRulesAdapter struct {
-	intake IntakeContentSource
-	final  FinalContentSource
+	intake       IntakeContentSource
+	final        FinalContentSource
+	cancellation CancellationContentSource
+	requesters   CancellationRequesterClassSource
 }
 
 func NewServiceStageRulesAdapter(
 	intake IntakeContentSource,
 	final FinalContentSource,
+	cancellation CancellationContentSource,
+	requesters CancellationRequesterClassSource,
 ) *ServiceStageRulesAdapter {
-	return &ServiceStageRulesAdapter{intake: intake, final: final}
+	return &ServiceStageRulesAdapter{
+		intake:       intake,
+		final:        final,
+		cancellation: cancellation,
+		requesters:   requesters,
+	}
 }
 
 var _ psports.IntakeEligibilityView = (*ServiceStageRulesAdapter)(nil)
 var _ psports.FinalRuleView = (*ServiceStageRulesAdapter)(nil)
+var _ psports.CancellationAuthorityView = (*ServiceStageRulesAdapter)(nil)
 
 // JudgeIntakeEligibility 按声明判收寄资格：来源不在允许集合即不适用（带来源依据——
 // 服务形态不承担这种收寄，不是资格没过）；声明的硬资格清单非空时，逐项核对属实例
@@ -136,6 +169,66 @@ func (adapter *ServiceStageRulesAdapter) JudgeFinalOutcome(
 		Kind:        finalKind,
 		RuleVersion: ruleVersion,
 	}, true, nil
+}
+
+// JudgeCancellationAuthority 按目录判取消授权。目录按接受时产品/合同说话，不按
+// 包裹发明不同授权（parcel 入参只为满足消费方端口）。
+//
+// 未配置短接在翻译之前：没有目录就不问这个 requester 是客户还是运营。已配置才折
+// 请求方格；格不在词汇表内不吸收（ADR-0025）。命中带规则引用；缺行带依据拒绝。
+func (adapter *ServiceStageRulesAdapter) JudgeCancellationAuthority(
+	ctx context.Context,
+	identity psdomain.SourceIdentity,
+	requester psdomain.CancellationRequesterReference,
+	_ psdomain.DeclaredParcelID,
+) (psports.CancellationAuthorityJudgment, bool, error) {
+	if adapter.cancellation == nil {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf(
+			"cancellation content source is not configured")
+	}
+	content, configured, err := adapter.cancellation.CancellationContentFor(ctx, identity)
+	if err != nil {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf("cancellation content: %w", err)
+	}
+	if !configured {
+		return psports.CancellationAuthorityJudgment{}, false, nil
+	}
+
+	if adapter.requesters == nil {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf(
+			"cancellation requester mapping is not configured")
+	}
+	party, formed, err := adapter.requesters.FormCancellationParty(ctx, identity, requester)
+	if err != nil {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf("cancellation requester: %w", err)
+	}
+	if !formed {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf(
+			"cancellation requester class is not formed")
+	}
+	if !cancellationPartyKnown(party) {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf(
+			"%w: cancellation party %d", ErrUntranslatableAnswer, party)
+	}
+
+	rule, granted := content.RuleFor(party)
+	if !granted {
+		basis, err := psdomain.NewCheckReason("PARTY_NOT_AUTHORIZED_TO_CANCEL/" + party.String())
+		if err != nil {
+			return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf("refusal basis: %w", err)
+		}
+		return psports.CancellationAuthorityJudgment{Granted: false, Basis: basis}, true, nil
+	}
+	basis, err := psdomain.NewCheckReason(rule.String())
+	if err != nil {
+		return psports.CancellationAuthorityJudgment{}, false, fmt.Errorf("%w: authority basis: %v", ErrUntranslatableAnswer, err)
+	}
+	return psports.CancellationAuthorityJudgment{Granted: true, Basis: basis}, true, nil
+}
+
+func cancellationPartyKnown(party pcdomain.DeclaredCancellationParty) bool {
+	return party == pcdomain.DeclaredCustomerCancellation ||
+		party == pcdomain.DeclaredOperationsCancellation
 }
 
 // declaredSourceFor 逐格翻译两边的封闭集合，default 报错不吸收（ADR-0025）。
