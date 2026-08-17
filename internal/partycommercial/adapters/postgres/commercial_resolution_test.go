@@ -42,6 +42,35 @@ func TestAFixedResolutionRoundTripsByID(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0050 — 解析闭包库存产品快照。形态随已采用项落在既有 snapshot JSON
+// 上，不另开查询键；缺席的既有行读回仍不可观察。
+func TestResolutionRoundTripsTheAdoptedServiceProduct(t *testing.T) {
+	repository, transactor, _ := newResolutions(t)
+	ctx := t.Context()
+	closure := uniqueClosureWithServiceProduct(t)
+
+	mustSaveResolution(t, transactor, ctx, repository, closure)
+
+	found, ok, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+	if err != nil {
+		t.Fatalf("按标识取回：%v", err)
+	}
+	if !ok {
+		t.Fatal("写入后 found=false")
+	}
+	adopted, present := found.AdoptedFor(domain.ServiceProductObject)
+	if !present {
+		t.Fatal("读回的闭包丢了服务产品依据")
+	}
+	product, observable := adopted.ServiceProduct()
+	if !observable {
+		t.Fatal("产品快照没有随闭包读回——形态又不可观察了")
+	}
+	if product.Form() != domain.NetworkServiceForm {
+		t.Fatalf("form = %q, want NETWORK_SERVICE", product.Form())
+	}
+}
+
 func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 	repository, transactor, pool := newResolutions(t)
 	ctx := t.Context()
@@ -231,6 +260,91 @@ func uniqueClosure(t *testing.T) domain.CommercialClosure {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", closure.Outcome())
 	}
 	return closure
+}
+
+func uniqueClosureWithServiceProduct(t *testing.T) domain.CommercialClosure {
+	t.Helper()
+
+	registry := domain.NewCommercialRegistry()
+	contract := effectiveContract(t, "contract-1", "v1", "digest-1")
+	rules := effectiveRules(t, "rules-1", "v1", "digest-r1")
+	productVersion := effectiveServiceProductVersion(t, "product-1", "v1", "digest-p1")
+	if _, err := registry.Register(contract); err != nil {
+		t.Fatalf("登记合同：%v", err)
+	}
+	if _, err := registry.Register(rules); err != nil {
+		t.Fatalf("登记规则包：%v", err)
+	}
+	if _, err := registry.Register(productVersion); err != nil {
+		t.Fatalf("登记产品版本：%v", err)
+	}
+	product, err := domain.NewServiceProduct(productVersion, domain.NetworkServiceForm)
+	if err != nil {
+		t.Fatalf("构造服务产品：%v", err)
+	}
+	registry.RegisterServiceProduct(product)
+
+	anchor, err := domain.NewSelectionAnchor(effectiveAtRow.Add(24*time.Hour),
+		pcValue(t, domain.NewAnchorPolicyVersion, "anchor-policy-v1"))
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	closure := domain.ResolveCommercialClosure(registry, domain.ClosureResolutionKey{
+		TenantID:             pcTenant(t, "tenant-1"),
+		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:                pcScope(t),
+		Purpose:              domain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		RequiredBases: []domain.CommercialObjectKind{
+			domain.CustomerContractObject,
+			domain.AcceptanceRulePackageObject,
+			domain.ServiceProductObject,
+		},
+	}, nil)
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", closure.Outcome())
+	}
+	if adopted, ok := closure.AdoptedFor(domain.ServiceProductObject); !ok {
+		t.Fatal("闭包没采用服务产品")
+	} else if _, present := adopted.ServiceProduct(); !present {
+		t.Fatal("登记了产品的闭包 ServiceProduct() 仍缺席")
+	}
+	return closure
+}
+
+func effectiveServiceProductVersion(t *testing.T, objectID, label, digest string) domain.CommercialVersion {
+	t.Helper()
+
+	interval, err := domain.NewEffectiveInterval(effectiveAtRow, effectiveAtRow.Add(90*24*time.Hour))
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	approval, err := domain.NewApprovalBasis(
+		pcValue(t, domain.NewApprovalReference, "approval-product"),
+		pcValue(t, domain.NewCommercialSourceReference, "source-product"),
+		approvedAtFixture,
+	)
+	if err != nil {
+		t.Fatalf("批准依据：%v", err)
+	}
+	version, err := domain.RehydrateCommercialVersion(domain.RehydrateCommercialVersionSpec{
+		TenantID:      pcTenant(t, "tenant-1"),
+		Kind:          domain.ServiceProductObject,
+		ObjectID:      pcValue(t, domain.NewCommercialObjectID, objectID),
+		Version:       pcValue(t, domain.NewCommercialVersionLabel, label),
+		Scope:         pcScope(t),
+		ContentDigest: pcValue(t, domain.NewCommercialContentDigest, digest),
+		Effective:     interval,
+		Status:        domain.CommercialVersionEffective,
+		Approval:      approval,
+		PublishedAt:   publishedAtRow,
+		EffectiveAt:   effectiveAtRow,
+	})
+	if err != nil {
+		t.Fatalf("重建服务产品版本：%v", err)
+	}
+	return version
 }
 
 func effectiveRules(t *testing.T, objectID, label, digest string) domain.CommercialVersion {

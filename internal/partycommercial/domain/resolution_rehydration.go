@@ -10,11 +10,13 @@ import (
 // 不可能是本上下文写出来的」（ADR-0028）。
 var ErrInvalidRehydratedResolution = errors.New("party commercial: invalid rehydrated commercial resolution")
 
-// RehydrateAdoptedBasisSpec 是闭包里一项已采用依据在库里的样子。本票只固定版本身份，
-// 不重放价格/结算政策嵌套——那些随闭包另票。
+// RehydrateAdoptedBasisSpec 是闭包里一项已采用依据在库里的样子。版本身份始终固定；
+// 服务产品快照在场时一并重建（ADR-0050），价格/结算政策嵌套仍随闭包另票。
 type RehydrateAdoptedBasisSpec struct {
-	Kind    CommercialObjectKind
-	Version CommercialVersion
+	Kind              CommercialObjectKind
+	Version           CommercialVersion
+	ServiceProduct    ServiceProduct
+	HasServiceProduct bool
 }
 
 // RehydrateCommercialClosureSpec 是一次已固定解析在库里的样子。字段一律当数据收下，
@@ -53,7 +55,18 @@ func RehydrateCommercialClosure(spec RehydrateCommercialClosureSpec) (Commercial
 			item.Version.status == CommercialVersionDraft {
 			return CommercialClosure{}, rehydratedResolutionRefusal("采用依据缺席或仍是草稿")
 		}
-		adopted = append(adopted, AdoptedBasis{kind: item.Kind, version: item.Version})
+		basis := AdoptedBasis{kind: item.Kind, version: item.Version}
+		if item.HasServiceProduct {
+			if item.Kind != ServiceProductObject ||
+				item.ServiceProduct.version.objectID != item.Version.objectID ||
+				item.ServiceProduct.version.version != item.Version.version ||
+				!item.ServiceProduct.form.valid() {
+				return CommercialClosure{}, rehydratedResolutionRefusal("服务产品快照与采用版本对不上")
+			}
+			basis.serviceProduct = item.ServiceProduct
+			basis.hasServiceProduct = true
+		}
+		adopted = append(adopted, basis)
 	}
 
 	return CommercialClosure{

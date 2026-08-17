@@ -50,7 +50,8 @@ type commercialVersionKey struct {
 // 而不是替换它们，已登记版本的内容也绝不被改写。
 //
 // 商业价格政策与版本分开登记：版本回答「有没有这份价格规则对象」，政策回答「哪个方向
-// 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。
+// 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。结算政策、服务产品同一分工
+// （ADR-0044 / ADR-0050）。
 //
 // 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。
 type CommercialRegistry struct {
@@ -58,6 +59,7 @@ type CommercialRegistry struct {
 	corrections        map[commercialVersionKey]ValidityCorrection
 	policies           []CommercialPricePolicy
 	settlementPolicies []SettlementPolicy
+	products           []ServiceProduct
 }
 
 func NewCommercialRegistry() *CommercialRegistry {
@@ -115,6 +117,36 @@ func (registry *CommercialRegistry) RegisterSettlementPolicy(policy SettlementPo
 // SettlementPolicies 交回当前已登记的结算政策切片副本，供解析与测试观察。
 func (registry *CommercialRegistry) SettlementPolicies() []SettlementPolicy {
 	return append([]SettlementPolicy(nil), registry.settlementPolicies...)
+}
+
+// RegisterServiceProduct 接纳一份已构造的服务产品（ADR-0050）。与价格/结算政策同一
+// 分工：版本回答「有没有这份产品对象」，产品回答「它是哪种服务形态」。解析采用要的
+// 是后者；光有版本产不出形态，但缺席不使解析退化（ADR-0050 第四条）。
+func (registry *CommercialRegistry) RegisterServiceProduct(product ServiceProduct) {
+	registry.products = append(registry.products, product)
+}
+
+// ServiceProducts 交回当前已登记的服务产品切片副本，供解析与测试观察。
+func (registry *CommercialRegistry) ServiceProducts() []ServiceProduct {
+	return append([]ServiceProduct(nil), registry.products...)
+}
+
+// serviceProductOf 按已采用版本的身份取回登记的产品。比对象标识，不比重放整份版本
+// 值：生命周期位置不算身份，生效后的同一份发布仍应对上同一形态。
+func (registry *CommercialRegistry) serviceProductOf(version CommercialVersion) (ServiceProduct, bool) {
+	if registry == nil {
+		return ServiceProduct{}, false
+	}
+	for _, product := range registry.products {
+		registered := product.version
+		if registered.tenant == version.tenant &&
+			registered.kind == version.kind &&
+			registered.objectID == version.objectID &&
+			registered.version == version.version {
+			return product, true
+		}
+	}
+	return ServiceProduct{}, false
 }
 
 // sameReleasedContent 比较一次发布固定了什么。生命周期位置刻意不算在内：一个后来生效
@@ -226,7 +258,7 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 // 没变；只检查该对象，就会让一次新的重叠溜过去，而解析其实已经不再唯一。租户轴保证
 // 另一租户的写入推不动本租户的修订（ADR-0040）。
 func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope CommercialScopeReference) AuthorityViewRevision {
-	parts := make([]string, 0, len(registry.versions)+len(registry.policies)+len(registry.corrections))
+	parts := make([]string, 0, len(registry.versions)+len(registry.policies)+len(registry.corrections)+len(registry.products))
 	for key, version := range registry.versions {
 		if key.tenant != tenant || version.scope != scope {
 			continue
@@ -294,6 +326,19 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			policy.applicability.currency.String(),
 			policy.applicability.effective.StartsAt().UTC().Format(time.RFC3339Nano),
 			endPart,
+		}, "\x1f"))
+	}
+	for _, product := range registry.products {
+		if product.version.tenant != tenant || product.version.scope != scope {
+			continue
+		}
+		// 与结算政策同理（ADR-0050）：只改形态、不动版本正文时，解析身份仍须变，否则
+		// 形态从缺席变成在场时 AT-PC-024 会把带产品的重解认成原解析。
+		parts = append(parts, strings.Join([]string{
+			"SERVICE_PRODUCT",
+			product.version.objectID.String(),
+			product.version.version.String(),
+			product.form.String(),
 		}, "\x1f"))
 	}
 	sort.Strings(parts)

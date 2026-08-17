@@ -154,6 +154,9 @@ type closureDocument struct {
 type adoptedDocument struct {
 	Kind    uint8           `json:"kind"`
 	Version versionDocument `json:"version"`
+	// Form 只在采用了服务产品时出现（ADR-0050）。omitempty：既有不含形态的快照
+	// 读回仍是缺席，不发明 NETWORK_SERVICE。
+	Form string `json:"form,omitempty"`
 }
 
 func documentOfClosure(closure domain.CommercialClosure) closureDocument {
@@ -174,10 +177,14 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		document.ViewRevision = revision.String()
 	}
 	for _, adopted := range closure.Adopted() {
-		document.Adopted = append(document.Adopted, adoptedDocument{
+		item := adoptedDocument{
 			Kind:    uint8(adopted.Kind()),
 			Version: documentOfVersion(adopted.Version()),
-		})
+		}
+		if product, ok := adopted.ServiceProduct(); ok {
+			item.Form = product.Form().String()
+		}
+		document.Adopted = append(document.Adopted, item)
 	}
 	return document
 }
@@ -226,7 +233,16 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			return domain.CommercialClosure{}, err
 		}
 		kind := domain.CommercialObjectKind(item.Kind)
-		adopted = append(adopted, domain.RehydrateAdoptedBasisSpec{Kind: kind, Version: version})
+		spec := domain.RehydrateAdoptedBasisSpec{Kind: kind, Version: version}
+		if item.Form != "" {
+			product, err := rehydrateServiceProduct(version, item.Form)
+			if err != nil {
+				return domain.CommercialClosure{}, err
+			}
+			spec.ServiceProduct = product
+			spec.HasServiceProduct = true
+		}
+		adopted = append(adopted, spec)
 		bases = append(bases, kind)
 	}
 	key.RequiredBases = bases
@@ -239,4 +255,21 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 		ViewRevision: viewRevision,
 		Adopted:      adopted,
 	})
+}
+
+// rehydrateServiceProduct 把快照里的形态字符串译回产品。未知取值响亮失败，不吸收成
+// NETWORK_SERVICE——那正是 ADR-0050 要堵的默认值。
+func rehydrateServiceProduct(version domain.CommercialVersion, form string) (domain.ServiceProduct, error) {
+	var parsed domain.ServiceProductForm
+	switch form {
+	case domain.NetworkServiceForm.String():
+		parsed = domain.NetworkServiceForm
+	default:
+		return domain.ServiceProduct{}, fmt.Errorf("load commercial resolution: 无法翻译的服务形态 %q", form)
+	}
+	product, err := domain.NewServiceProduct(version, parsed)
+	if err != nil {
+		return domain.ServiceProduct{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	return product, nil
 }

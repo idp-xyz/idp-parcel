@@ -115,7 +115,8 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 // 改造闭包的形状。
 //
 // 计价目的下采用的价格规则还会带上商业价格政策，这样方向与定价方案绑定可被观察
-// （ADR-0034），而不是只剩一份 `CommercialVersion`。
+// （ADR-0034），而不是只剩一份 `CommercialVersion`。服务产品同理（ADR-0050）：形态
+// 随整个 `ServiceProduct` 可观察，而不是只剩一份版本身份。
 type AdoptedBasis struct {
 	kind                CommercialObjectKind
 	version             CommercialVersion
@@ -123,6 +124,8 @@ type AdoptedBasis struct {
 	hasPricePolicy      bool
 	settlementPolicy    SettlementPolicy
 	hasSettlementPolicy bool
+	serviceProduct      ServiceProduct
+	hasServiceProduct   bool
 }
 
 func (adopted AdoptedBasis) Kind() CommercialObjectKind {
@@ -142,6 +145,12 @@ func (adopted AdoptedBasis) PricePolicy() (CommercialPricePolicy, bool) {
 // （ADR-0044）；其他依据缺席。
 func (adopted AdoptedBasis) SettlementPolicy() (SettlementPolicy, bool) {
 	return adopted.settlementPolicy, adopted.hasSettlementPolicy
+}
+
+// ServiceProduct 在采用了服务产品时交回整个产品（ADR-0050），形态因此可观察；其他
+// 依据缺席。只登了版本而没登产品时交回 false——缺席是不可观察，不是某种默认形态。
+func (adopted AdoptedBasis) ServiceProduct() (ServiceProduct, bool) {
+	return adopted.serviceProduct, adopted.hasServiceProduct
 }
 
 // CommercialClosure 是解析引用闭包的全有或全无结果。只要不是唯一解析成功，它就
@@ -272,6 +281,10 @@ func ResolveCommercialClosure(
 			if policy, ok := result.AdoptedSettlementPolicy(); ok {
 				basis.settlementPolicy = policy
 				basis.hasSettlementPolicy = true
+			}
+			if product, ok := registry.serviceProductOf(version); ok {
+				basis.serviceProduct = product
+				basis.hasServiceProduct = true
 			}
 			adopted = append(adopted, basis)
 		case ApplicabilityConflict:
