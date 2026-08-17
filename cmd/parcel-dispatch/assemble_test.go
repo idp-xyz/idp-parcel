@@ -121,6 +121,26 @@ func TestAnAcceptanceEnvelopeReachesTheConsumerThroughTheRouteTable(t *testing.T
 	}
 }
 
+// Covers: 路由表第二条——PS 有效网络收寄采用结果投给复核消费者（UC-PS-003 步骤 8 →
+// UC-NR-003）。手法同上一条：毒丸载荷让消费门显式拒收并交回 nil，因此这一条会被定稿；
+// 挂错人或漏挂的话这里撞的是无订阅者，一条也发不出去。
+//
+// 两条并存本身也被这一对用例钉住：两个消费者的 inbox 账本按消费者名分家，路由表两条
+// 各投各的，不会互相顶掉。
+func TestAnAdoptedNetworkIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "adoption-1", nrinbox.AdoptedNetworkIntakeEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把采用结果投给复核消费者",
+			published, recordedFailureCode(t, db, "adoption-1"))
+	}
+}
+
 func recordedFailureCode(t *testing.T, db *bentopg.DB, eventID string) string {
 	t.Helper()
 

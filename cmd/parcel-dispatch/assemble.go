@@ -155,9 +155,11 @@ func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, 
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天只有一条。这不是省事：`AcceptanceConsumer` 是本仓唯一的消费者，而按
-// ADR-0049 第三条，登记一个本进程接不住的类型比不登记更糟——它会让无订阅者的失败
-// 变成「订阅了但处理不了」。
+// 路由表今天有两条，都投向 network-routing：PS 接受决定 → 初始路由（UC-NR-001），
+// PS 有效网络收寄采用结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）。登记的仍然只有
+// 本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记更糟，它会让
+// 无订阅者的失败变成「订阅了但处理不了」。其余已发布但无消费者的类型照旧撞
+// `dispatch.no_subscriber`，那是记录里认下的代价。
 func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	if db == nil {
 		return nil, errors.New("parcel-dispatch: framework db is required")
@@ -185,8 +187,22 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: undecided translation: %w", err)
 	}
 
+	intakes, err := networkIntakeConsumer(db, inboxStore, settings, clock)
+	if err != nil {
+		return nil, err
+	}
+	// 两条链各带各的未决哨兵：合用一个失败码，运维就分不出该去查初始路由那条还是
+	// 复核这条等的依赖。
+	routedIntakes, err := dispatch.WithUndecidedSentinels(intakes, nrparcelshipment.ErrReassessmentUndecided)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reassessment undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
-		map[eventing.EventType]dispatch.Consumer{nrinbox.AcceptedDecisionEventType: routed},
+		map[eventing.EventType]dispatch.Consumer{
+			nrinbox.AcceptedDecisionEventType:     routed,
+			nrinbox.AdoptedNetworkIntakeEventType: routedIntakes,
+		},
 		settings.deliveryTimeout,
 		settings.config,
 	)
@@ -265,6 +281,74 @@ func acceptanceConsumer(
 	consumer, err := nrinbox.NewAcceptanceConsumer(db.Transactor(), inboxStore, decisions)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: acceptance consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// networkIntakeConsumer 接 UC-NR-003 那条线：PS 有效网络收寄采用结果信封 → 消费门 →
+// 按采用键取回记录 → 复核编排。它是纵向闭环里收寄那一段回到路由的一拍。
+//
+// 与接受决定那条线各建各的仓储包装：它们都是 db 上的无状态包装，共享一份反而让两条
+// 链的依赖图看不出各自要什么。真正共享的只有 db、inbox 与时钟。
+func networkIntakeConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	settings dispatchSettings,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	routeStore, err := nrpostgres.NewInitialRoutes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: initial route store: %w", err)
+	}
+	definitions, err := nrpostgres.NewNetworkDefinitions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network definitions: %w", err)
+	}
+	applicabilities, err := nrpostgres.NewPlanApplicabilities(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan applicabilities: %w", err)
+	}
+	reassessments, err := nrpostgres.NewRouteReassessments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: route reassessments: %w", err)
+	}
+	handoffLog, err := nrpostgres.NewRouteHandoffLogs(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: route handoff log: %w", err)
+	}
+	identities, err := nrpostgres.NewRouteIdentities(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: route identities: %w", err)
+	}
+
+	reassessHandler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
+		Routes:        routeStore,
+		Evidence:      definitions,
+		Applicability: applicabilities,
+		Store:         reassessments,
+		Log:           handoffLog,
+		Identities:    identities,
+		Clock:         clock,
+		// 自动改路四条件的事实目录没有生产实现。nil 是「显式未配置」的诚实表达，
+		// 与端口注释同义：失效照常落库，改路评估整段不做——连建议都不形成，因为
+		// 说不出「为什么没自动」。
+		AutoReroute: nil,
+	})
+
+	adoptions, err := pspostgres.NewIntakeAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: intake adoptions: %w", err)
+	}
+	intakes, err := nrparcelshipment.NewReassessOnNetworkIntakeAdapter(
+		adoptions,
+		nrparcelshipment.NewReassessOnIntakeAdapter(reassessHandler, settings.purpose),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reassess on network intake: %w", err)
+	}
+	consumer, err := nrinbox.NewNetworkIntakeConsumer(db.Transactor(), inboxStore, intakes)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network intake consumer: %w", err)
 	}
 	return consumer, nil
 }
