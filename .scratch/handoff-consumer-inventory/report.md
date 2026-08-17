@@ -1,7 +1,18 @@
 # 46 个 Outbox handoff 的下游消费方向清点
 
 Category: enhancement
-Status: needs-triage
+Status: superseded
+
+> **已被取代**（MCP-1 记，2026-08-17）：现行权威是
+> [`../outbox-handoff-consumption-map/report.md`](../outbox-handoff-consumption-map/report.md)
+> （task-8a0c476f，取证于 HEAD `4d57ecd`）。两份底层类型集合一致（55 类、46 适配器），
+> 新表判据全部落到 UC 引文，并把本文「判不准，要人定」8 条解决了大半（manifest 归 CC
+> 内部、ClaimSettlement 四类按 MAP 单向约束不得开 VE 消费者、statement 三类定为混合）。
+> 本文仍然成立且新表未重复的两点：「三条先看的结论」的第一条（按 46 配会漏 9 类）与
+> 「适配器注释不是意图的出处，端口接口注释才是」。
+>
+> 台账勘误：本文即 task-818b6e81 的实际产出（转手后于 2026-08-14 以 cab9d1b 落档，
+> 未回报台账）；该票 2026-08-17 被 MCP-1 误以「无任何产出」结为 failed，结论以本头注为准。
 
 只读清点，无代码改动。承自 task-818b6e81（MCP-4 转来）。供派发路由表装配使用。
 
