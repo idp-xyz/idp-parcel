@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -63,5 +64,14 @@ func TestAssembleDispatcherIsNotWired(t *testing.T) {
 	beat, err := assembleDispatcher()
 	if !errors.Is(err, errDispatcherNotWired) || beat != nil {
 		t.Fatalf("组合根未完成时应交回 errDispatcherNotWired，实得 beat=%v err=%v", beat, err)
+	}
+	// 缺口位置也钉住：发布通道已由 ADR-0049 裁定并实现（dispatch.DirectPublisher），
+	// 现在缺的是消费者。错误串若退回「发布通道未定」，就是有人把已实现的那一段又
+	// 说成待决——而那正是评审在 d40b03a 上抓到的过期判断。
+	if strings.Contains(err.Error(), "publish channel") {
+		t.Fatalf("组合根仍把发布通道说成缺口：%v", err)
+	}
+	if !strings.Contains(err.Error(), "consumer") {
+		t.Fatalf("组合根没有点名缺的是消费者：%v", err)
 	}
 }
