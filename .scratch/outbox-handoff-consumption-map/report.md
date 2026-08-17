@@ -9,7 +9,7 @@
 - **范围**：`internal/*/adapters/postgres/*handoff*.go` 中实现 `ports.*Handoff` 的 Outbox 发布适配器。共 **46 个适配器、55 个信封类型、9 个发布上下文**（PS5+NR2+NO4+TF9+CC9+SA14+VE8+PP1+PG3）。`network-routing/adapters/postgres/route_handoff_log.go` 不在内——它是 UC-NR-001 步骤 2 的重放指纹册（`ports.RouteHandoffLog`），不发布任何信封。
 - **第 3 栏判据**只取三类权威文档：[CONTEXT-MAP](../../docs/domain/CONTEXT-MAP.md) 的边与关系约束、各 `CONTEXT.md` 所有权声明、`UC-*` 正文。端口注释只用作找 UC 的索引；凡判据只剩端口注释而查无文档处，如实标注。
 - **第 4 栏四态**：`已有消费者（注明）` / `应有但未开` / `本就不应该有跨上下文消费者（审计/对外也是结论）` / `说不清（写明缺哪份文档）`。
-- 现状底帐：组合根（`cmd/parcel-dispatch/assemble.go`，64bae12）路由表**唯一条目**为 `parcel-shipment.acceptance-decision.formed` → `network-routing/initial-route-on-acceptance`（AcceptanceConsumer，外包未决哨兵翻译）。未映射类型经 `dispatch.DirectPublisher` 撞 `ErrNoSubscriber`，失败码 `dispatch.no_subscriber`，阻塞该分区（ADR-0049 第三条，有意设计）。
+- 现状底帐（`60ea63c`）：组合根（`cmd/parcel-dispatch/assemble.go`）路由表**两条**，都投向 network-routing——`parcel-shipment.acceptance-decision.formed` → `network-routing/initial-route-on-acceptance`（AcceptanceConsumer，64bae12），`parcel-shipment.network-intake.recorded` → `network-routing/reassess-on-network-intake`（NetworkIntakeConsumer，60ea63c）。两条各带各的未决哨兵翻译（`ErrRouteHandoffUndecided` / `ErrReassessmentUndecided`）。未映射类型经 `dispatch.DirectPublisher` 撞 `ErrNoSubscriber`，失败码 `dispatch.no_subscriber`，阻塞该分区（ADR-0049 第三条，有意设计）。
 
 ## 总览
 
@@ -17,8 +17,8 @@
 |---|---|
 | Outbox 发布适配器 | 46 |
 | 信封类型 | 55 |
-| 已有消费者的类型 | 1（`parcel-shipment.acceptance-decision.formed`） |
-| 应有但未开（跨上下文消费） | 29 类（PS4+NR2+NO4+TF9+CC7+VE2+PP1） |
+| 已有消费者的类型 | 2（`parcel-shipment.acceptance-decision.formed`、`parcel-shipment.network-intake.recorded`） |
+| 应有但未开（跨上下文消费） | 28 类（PS3+NR2+NO4+TF9+CC7+VE2+PP1） |
 | 应有但未开（**同上下文**下一段编排消费） | 15 类（CC2+SA9+VE4） |
 | 混合（内部消费者未开＋对外段） | 5 类（statement×3、customer-view、customer-notification） |
 | 本就不应该有跨上下文消费者 | 2 类（cost-allocation、operating-result → 分析/报表，对外） |
@@ -36,7 +36,7 @@
 |---|---|---|---|---|
 | 1 | `SourceDataVersionHandoff` | `parcel-shipment.source-data-version.formed` | CC（UC-CC-002/003/007）、NR、NO、SA——UC-PS-002 步骤 9 明写「将版本引用交给适用下游：UC-CC-002、UC-CC-003、UC-CC-007、路由、节点或结算分别重新判断」，另有「下游交接边界」整节；CONTEXT-MAP 边 PS→CC「版本化客户原始资料」 | 应有但未开 |
 | 2 | `AcceptanceDecisionHandoff` | `parcel-shipment.acceptance-decision.formed` | NR——CONTEXT-MAP 边 PS→NR「接受后……提供接受基线，网络与路由……形成初始路由」；UC-NR-001 | **已有消费者：NR `AcceptanceConsumer`（路由表唯一条目）**。注：MAP 另有 PS→NO/CC/VE 提供接受基线的边，但以事件还是查询口交付无 UC 明文，未计入缺口 |
-| 3 | `NetworkIntakeHandoff` | `parcel-shipment.network-intake.recorded` | NR 复核——CONTEXT-MAP 关系约束「网络与路由据已知实际接货位置及当时有效证据复核」（NO/TF→NR 节） | 应有但未开；消费侧编排 `ReassessRouteHandler` 与适配器 `reassess_on_intake.go` 已成型，未接入路由表 |
+| 3 | `NetworkIntakeHandoff` | `parcel-shipment.network-intake.recorded` | NR 复核——CONTEXT-MAP 关系约束「网络与路由据已知实际接货位置及当时有效证据复核」（NO/TF→NR 节）；UC-PS-003 步骤 8 明写经 UC-NR-003 重新校验路由 | **已有消费者：NR `NetworkIntakeConsumer`（路由表第二条，`60ea63c`）**。消费门四条同 AcceptanceConsumer，消费者名 `network-routing/reassess-on-network-intake` 与之分账；`reassess_on_network_intake.go` 按采用键四维取回记录后交 `ReassessOnIntakeAdapter` 翻译 |
 | 4 | `ParcelCancellationHandoff` | `parcel-shipment.parcel-cancellation.recorded` | NR、NO、TF、CC、SA——UC-PS-006 步骤 5「向路由、节点、运输、关务、面单或结算责任方提出范围化请求，每个下游独立承接」 | 应有但未开。注：SA 的控制释放另有同步直调链（PS 适配器→`ReleasePreAcceptanceControlHandler`），事件消费与直调的分工 UC 未明文，接消费者时需先裁 |
 | 5 | `FinalOutcomeHandoff` | `parcel-shipment.final-outcome.formed` | VE——CONTEXT-MAP 边 PS→VE「包裹身份谱系、客户承诺与终局结果」；SA——边 PS→SA「计费来源」 | 应有但未开 |
 
@@ -125,11 +125,12 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
 |---|---|---|---|---|
 | 46 | `GovernanceHandoff` | `pilot-governance.suspension.recorded`、`resumption.recorded`、`takeover.recorded` | **说不清**——pilot-governance 不在 CONTEXT-MAP（十个上下文里没有它）、无 `docs/domain/pilot-governance/CONTEXT.md`、无 UC-PG-*。端口注释称「受影响上下文的准入闸消费」，但那不是本表许可的判据 | 说不清（缺 pilot-governance 的 CONTEXT.md 或 CONTEXT-MAP 条目；全库仅产品基线提及该词） |
 
-## 路由表核对（64bae12，MCP-2 地盘，只读）
+## 路由表核对（`60ea63c`）
 
-- 唯一条目 `acceptance-decision.formed → AcceptanceConsumer` 与 CONTEXT-MAP 边 PS→NR、UC-NR-001 一致，**无冲突**。
-- 未决哨兵翻译（`WithUndecidedSentinels` 只包 `nrparcelshipment.ErrRouteHandoffUndecided`）与该唯一条目自洽。
-- 其余 54 类未登记本身不是冲突：ADR-0049 第三条明写登记接不住的类型比不登记更糟。缺口在消费者侧（本表第 4 栏），不在路由表侧。
+- 第一条 `acceptance-decision.formed → AcceptanceConsumer` 与 CONTEXT-MAP 边 PS→NR、UC-NR-001 一致，**无冲突**。
+- 第二条 `network-intake.recorded → NetworkIntakeConsumer` 与 UC-PS-003 步骤 8、UC-NR-003 一致，**无冲突**。
+- 未决哨兵翻译逐条对应（第一条包 `ErrRouteHandoffUndecided`，第二条包 `ErrReassessmentUndecided`）：分设而不合用，运维据失败码分得出两条链各等哪个依赖。
+- 其余 53 类未登记本身不是冲突：ADR-0049 第三条明写登记接不住的类型比不登记更糟。缺口在消费者侧（本表第 4 栏），不在路由表侧。
 - 唯一的时间性风险是总览所述在途链：已接线的 NR 生产方成功即产出无订阅者类型。
 
 ## 矛盾与陈旧口径（只记不修）
@@ -146,13 +147,13 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
 
 **全量扫描口径**：58 个应用层处理器（`internal/*/application` 的 `New*Handler`），查非测试代码中 application 包之外的引用。三档：
 
-- **被组合根实际构造：1 个**——`CreateInitialRouteHandler`（`cmd/parcel-dispatch/assemble.go`）。
-- **被跨上下文适配器按具体类型引用（适配器自身未接入 cmd）：11 个**——`AdjudicateCommercialAuthorization`、`AdoptNetworkIntake`、`ApplyPreAcceptanceControl`、`AssessParcelReachability`、`FormJudgmentAsOf`、`FormParcelFinal`、`ReassessRoute`、`ReleasePreAcceptanceControl`、`ResolveCommercialBasis`、`ValidateCommercialBasis`、`ValidateReachabilityJudgment`。
+- **被组合根实际构造：2 个**（`60ea63c`）——`CreateInitialRouteHandler` 与 `ReassessRouteHandler`（同在 `cmd/parcel-dispatch/assemble.go`）。后者只写不发：它没有 handoff 端口，因此进组合根不改变「生产方」那一侧的计数。
+- **被跨上下文适配器按具体类型引用（适配器自身未接入 cmd）：10 个**——`AdjudicateCommercialAuthorization`、`AdoptNetworkIntake`、`ApplyPreAcceptanceControl`、`AssessParcelReachability`、`FormJudgmentAsOf`、`FormParcelFinal`、`ReleasePreAcceptanceControl`、`ResolveCommercialBasis`、`ValidateCommercialBasis`、`ValidateReachabilityJudgment`。
 - **零非测试引用：46 个**，其中再分两档：
   - **有 `adapters/http` 端点按自声明接口引用、等 `PAR-INT-01` Intake（endpoints.go 固化的装配缝，非缺口）：6 个**——`SubmitShipmentRequest`、`WithdrawShipmentRequest`（PS）、`ReceiveDeliveredUnit`（NO）、`RegisterEffectiveDelivery`（TF）、`HandleClaim`（VE receive_claim）、`ReceiveExternalResult`（CC）。（VE 的 `query_customer_tracking_view.go` 是查询端点，不构造派生处理器。）
   - **连消费面都没有：40 个**，按上下文——PS：`AdvanceAcceptanceJudgment`、`AdvanceFinancialControlJudgment`、`AmendCustomerSourceData`、`CancelParcel`、`FormAcceptanceDecision`、`FormNewSubmissionVersion`、`RejectShipmentRequest`；NO：`AcceptCollaboration`、`ConsolidateParcels`；TF：`AcceptRegulatoryDisposition`、`CommissionTransport`、`PerformOffsitePickup`、`PrepareTransportOpportunity`、`RegisterOffsitePickup`、`RegisterTransportHandover`、`StartAlternateJourney`；CC：`CloseCustomsCase`、`EstablishCase`、`ManageFollowUp`、`ManageRestriction`、`ReceiveManifest`、`SubmitDeclaration`、`VerifyDisposition`、`VerifyReleaseGate`；SA：`AllocateCosts`、`AssessAdvanceRecovery`、`ConfirmCharge`、`CutOffPublishStatement`、`MapExternalFunds`、`ReceiveSupplierBill`、`SettleClaimAmounts`；VE：`DeriveCustomerView`、`DeriveProjection`、`FormETA`、`NotifyCustomer`、`RaiseSignal`、`SendDispositionRequest`；PP：`EvaluatePricing`；PG：`GovernIncident`、`RecordStageReview`。
 
-**两端关系（原票的猜测成立）**：55 类事件里 54 类无消费者，58 个处理器里 57 个无生产构造——同一条「装配纵深缺失」的两个测量面。多数「应有但未开」的消费者，其对应处理器就在上面 40 个零面清单里（如 initial-route 的消费者要做的事对应 NO/TF 的接收编排，final-outcome 的消费者对应 VE 投影链的 `DeriveProjection`）；填路由表格子与给处理器接生产调用，多数格子是同一笔工作。
+**两端关系（原票的猜测成立）**：55 类事件里 53 类无消费者，58 个处理器里 56 个无生产构造（`60ea63c`；清点时为 54 与 57）——同一条「装配纵深缺失」的两个测量面。多数「应有但未开」的消费者，其对应处理器就在上面 40 个零面清单里（如 initial-route 的消费者要做的事对应 NO/TF 的接收编排，final-outcome 的消费者对应 VE 投影链的 `DeriveProjection`）；填路由表格子与给处理器接生产调用，多数格子是同一笔工作。
 
 ## 附带 b：party_commercial 迁移号现状（HEAD `4d57ecd` + 工作树）
 
@@ -170,4 +171,6 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
 
 ## 保质期声明
 
-本文所有「现状」断言取证于 HEAD `4d57ecd` 的提交内容＋当时工作树；共享树上此类断言有保质期，消费本表前若 HEAD 已前进，第 4 栏「已有消费者」「零引用」两类结论应按新 HEAD 重取证（判据栏引用的文档边不受影响）。
+本文「现状」断言的取证点分两批：主表判据栏与首轮清点取证于 HEAD `4d57ecd` 的提交内容＋当时工作树；**第 4 栏「已有消费者」、总览计数、路由表核对与附带 a 的三档构造清单已按 `60ea63c` 重取证**（第 3 行由「应有但未开」改为已有消费者，随之改动的计数在各处标了 `60ea63c`）。
+
+共享树上此类断言有保质期。消费本表前若 HEAD 已前进，上述两类结论应按新 HEAD 再取一次证；判据栏引用的文档边（CONTEXT-MAP、各 `CONTEXT.md`、`UC-*`）不随代码变化，不受影响。
