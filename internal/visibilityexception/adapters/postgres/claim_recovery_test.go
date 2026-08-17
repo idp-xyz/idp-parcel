@@ -304,6 +304,80 @@ func TestAStaleClaimSnapshotCannotEraseAnApprovedExtension(t *testing.T) {
 	}
 }
 
+// TestCompetingClaimWritersSerializeOnTheClaimRow 证并发保护的另一半。上一条治的是
+// 先后到达的落后快照；本条治两个写入方**同时在场**：赢家事务未提交时输家必须停在
+// 索赔行锁上（appendSupplementDeadlines 的注释所倚仗的就是这次排队——没有它，两个
+// append 会各自读到同一份历史再交错追加），赢家提交后输家按已提交的历史被判落后，
+// 已批延期完好。评审 081701 #5 点名的正是这一幕。
+func TestCompetingClaimWritersSerializeOnTheClaimRow(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	first := claimBaseAt.Add(7 * 24 * time.Hour)
+	extended := claimBaseAt.Add(14 * 24 * time.Hour)
+
+	claim := receivedClaim(t, "batch-1", "item-1")
+	if err := claim.AwaitSupplement("materials incomplete", claimSupplement(t, first), claimBaseAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", claim)
+
+	stale := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	extender := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	if err := extender.ExtendSupplementDeadline(extended, claimBaseAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+
+	tenant := claimValue(t, domain.NewTenantID, "tenant-a")
+	winnerHoldsLock := make(chan struct{})
+	releaseWinner := make(chan struct{})
+	winnerDone := make(chan error, 1)
+	loserDone := make(chan error, 1)
+
+	go func() {
+		winnerDone <- fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			if err := fixture.claims.Save(txCtx, tenant, extender); err != nil {
+				return err
+			}
+			close(winnerHoldsLock) // UPSERT 已执行，行锁在手，事务保持敞开
+			<-releaseWinner        // 等输家撞上锁再提交
+			return nil
+		})
+	}()
+
+	<-winnerHoldsLock
+	go func() {
+		loserDone <- fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return fixture.claims.Save(txCtx, tenant, stale)
+		})
+	}()
+
+	// 输家此刻必须停在行锁上。它若在赢家提交前就返回，说明两笔写入根本没有排队——
+	// 那正是删光重插时代静默丢历史的前提。等待窗只用来给输家跑到 UPSERT：锁在场时
+	// 慢机器只会让它更晚返回，不会误报。
+	select {
+	case err := <-loserDone:
+		t.Fatalf("输家在赢家提交前就返回了（err=%v）——并发写入没有在行锁上排队", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(releaseWinner)
+
+	if err := <-winnerDone; err != nil {
+		t.Fatalf("赢家提交失败：%v", err)
+	}
+	if err := <-loserDone; !errors.Is(err, adapter.ErrClaimHistoryStale) {
+		t.Fatalf("输家 err = %v，应为 ErrClaimHistoryStale", err)
+	}
+
+	loaded := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	history := loaded.SupplementDeadlineHistory()
+	if len(history) != 2 || !history[1].Deadline.Equal(extended.UTC()) {
+		t.Fatalf("并发竞争下已批延期没有保住：%#v", history)
+	}
+	if requirement, present := loaded.Supplement(); !present || !requirement.Deadline.Equal(extended.UTC()) {
+		t.Fatalf("当前截止不是延期后的版本：present=%v deadline=%s", present, requirement.Deadline)
+	}
+}
+
 // TestResavingTheSameClaimKeepsOneHistoryPerVersion 证上一条的拒绝没有把重放一并拒掉：
 // 同一份快照再落一次是重放，历史不重复也不报错。
 func TestResavingTheSameClaimKeepsOneHistoryPerVersion(t *testing.T) {
