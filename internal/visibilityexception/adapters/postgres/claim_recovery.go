@@ -13,9 +13,16 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
+// ErrClaimHistoryStale 说明本次要落的补充期限历史落后于库里已记的那份，或与它分叉。
+// 它不是「库坏了」：另一个写入方已经把历史推进了，调用方要读回赢家再重放（同 ADR-0031
+// 分开「答不出」与「有人先到」的理由）。
+var ErrClaimHistoryStale = errors.New("visibility exception postgres: claim supplement deadline history is stale")
+
 // Claims 实现 ports.ClaimStore。索赔是判断历史推进的聚合（受理→过审→结论→复核/
 // 撤回），Save 走 UPSERT 按键整行更新——三判形状由迁移 CHECK 与领域重建口两头把门，
 // 复核换版走前版列（原结论保留，CONTEXT 253），不翻旧插新。
+//
+// 补充期限历史是另一回事：它是只增序列，Save 只追加不重写（见 appendSupplementDeadlines）。
 type Claims struct {
 	db *bentopg.DB
 }
@@ -232,7 +239,7 @@ func (repository *Claims) Save(
 	if err != nil {
 		return fmt.Errorf("save claim item: %w", err)
 	}
-	if err := replaceSupplementDeadlines(ctx, executor, tenant, snapshot); err != nil {
+	if err := appendSupplementDeadlines(ctx, executor, tenant, snapshot); err != nil {
 		return err
 	}
 	return nil
@@ -475,26 +482,46 @@ func loadSupplementDeadlines(
 	return history, nil
 }
 
-func replaceSupplementDeadlines(
+// appendSupplementDeadlines 只追加期限版本，一行都不删。
+//
+// 删光重插会丢东西：两个写入方各持一份旧快照时，后提交的那个按自己的历史重写整段，
+// 另一方刚批的延期就此消失。它不是可以按到达顺序覆盖的中间态——期限是对客户作过的
+// 承诺，`AT-VE-119` 之后的每一次判定都按它算。
+//
+// 落后（库里版本更多）与分叉（同一版内容不同）都停下报 ErrClaimHistoryStale，由调用方
+// 读回赢家再重放。静默截断与静默改写都会让一次并发写入变成一份没人发现的历史。
+//
+// 本函数跑在 Save 的事务里、且在索赔行 UPSERT 之后：那次 UPSERT 已经把该行锁住，
+// 同键的并发 Save 因此排成序，这里读到的库内历史不会在读与写之间被第三方推进。
+func appendSupplementDeadlines(
 	ctx context.Context,
 	executor bentopg.Executor,
 	tenant domain.TenantID,
 	snapshot domain.ClaimItemSnapshot,
 ) error {
-	if _, err := executor.Exec(ctx,
-		`DELETE FROM visibility_exception.claim_supplement_deadline
-		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
-		tenant.String(), snapshot.Batch.String(), snapshot.ID.String()); err != nil {
-		return fmt.Errorf("replace supplement deadlines: %w", err)
+	stored, err := loadSupplementDeadlines(ctx, executor, tenant, snapshot.Batch, snapshot.ID)
+	if err != nil {
+		return err
+	}
+	if len(stored) > len(snapshot.DeadlineHistory) {
+		return fmt.Errorf("%w：库中 %d 版，本次快照只有 %d 版",
+			ErrClaimHistoryStale, len(stored), len(snapshot.DeadlineHistory))
 	}
 	for seq, version := range snapshot.DeadlineHistory {
+		if seq < len(stored) {
+			if !stored[seq].Deadline.Equal(version.Deadline) ||
+				!stored[seq].EstablishedAt.Equal(version.EstablishedAt) {
+				return fmt.Errorf("%w：第 %d 版与库中已记的那一版不是同一个", ErrClaimHistoryStale, seq+1)
+			}
+			continue
+		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO visibility_exception.claim_supplement_deadline
 				(tenant_id, batch_ref, item_id, version_seq, deadline, established_at)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
 			tenant.String(), snapshot.Batch.String(), snapshot.ID.String(),
 			seq+1, version.Deadline, version.EstablishedAt); err != nil {
-			return fmt.Errorf("replace supplement deadlines: %w", err)
+			return fmt.Errorf("append supplement deadlines: %w", err)
 		}
 	}
 	return nil

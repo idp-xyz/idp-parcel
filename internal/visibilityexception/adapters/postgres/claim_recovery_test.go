@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -257,6 +258,67 @@ func TestAwaitingSupplementRoundTripsWithDeadlineHistory(t *testing.T) {
 	history := loaded.SupplementDeadlineHistory()
 	if len(history) != 2 || !history[0].Deadline.Equal(first.UTC()) || !history[1].Deadline.Equal(second.UTC()) {
 		t.Fatalf("期限历史 = %#v", history)
+	}
+}
+
+// TestAStaleClaimSnapshotCannotEraseAnApprovedExtension 证期限历史只增不覆盖。
+//
+// 两个写入方各自持有同一索赔的旧快照：一个批了延期先落库，另一个手里的历史还停在
+// 原期限。后者若照自己的快照重写整段历史，那次已批延期就没了——而它是对客户作过的
+// 承诺，不是可以按到达顺序覆盖的中间态（CONTEXT「所有尝试和内容版本保留」同一条）。
+// 落后的写入必须被拒，由调用方读回赢家重放，不是静默截断。
+func TestAStaleClaimSnapshotCannotEraseAnApprovedExtension(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	first := claimBaseAt.Add(7 * 24 * time.Hour)
+	extended := claimBaseAt.Add(14 * 24 * time.Hour)
+
+	claim := receivedClaim(t, "batch-1", "item-1")
+	if err := claim.AwaitSupplement("materials incomplete", claimSupplement(t, first), claimBaseAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", claim)
+
+	stale := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	extender := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	if err := extender.ExtendSupplementDeadline(extended, claimBaseAt.Add(2*time.Hour)); err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", extender)
+
+	err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.claims.Save(txCtx, claimValue(t, domain.NewTenantID, "tenant-a"), stale)
+	})
+	if !errors.Is(err, adapter.ErrClaimHistoryStale) {
+		t.Fatalf("落后快照的写入 err = %v，应为 ErrClaimHistoryStale", err)
+	}
+
+	loaded := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1")
+	history := loaded.SupplementDeadlineHistory()
+	if len(history) != 2 || !history[1].Deadline.Equal(extended.UTC()) {
+		t.Fatalf("已批延期被落后快照擦掉了：%#v", history)
+	}
+	requirement, present := loaded.Supplement()
+	if !present || !requirement.Deadline.Equal(extended.UTC()) {
+		t.Fatalf("当前截止回退到了旧版：present=%v deadline=%s", present, requirement.Deadline)
+	}
+}
+
+// TestResavingTheSameClaimKeepsOneHistoryPerVersion 证上一条的拒绝没有把重放一并拒掉：
+// 同一份快照再落一次是重放，历史不重复也不报错。
+func TestResavingTheSameClaimKeepsOneHistoryPerVersion(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	claim := receivedClaim(t, "batch-1", "item-1")
+	if err := claim.AwaitSupplement("materials incomplete",
+		claimSupplement(t, claimBaseAt.Add(7*24*time.Hour)), claimBaseAt.Add(time.Hour)); err != nil {
+		t.Fatalf("await: %v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", claim)
+	fixture.saveClaim(t, ctx, "tenant-a", claim)
+
+	if history := fixture.loadClaim(t, ctx, "tenant-a", "batch-1", "item-1").SupplementDeadlineHistory(); len(history) != 1 {
+		t.Fatalf("重放把同一版期限记了 %d 次", len(history))
 	}
 }
 
