@@ -269,6 +269,7 @@ func TestCrossContextAdapterExemptionCoversOnlyTheDesignatedPosition(t *testing.
 		// ADR-0025 指定的那个位置，及其子包。
 		"/internal/parcelshipment/adapters/partycommercial":      true,
 		"/internal/parcelshipment/adapters/partycommercial/asof": true,
+		"/internal/networkrouting/adapters/partycommercial":      true,
 		// 与它并列但翻译的不是上下文，不得拿到跨上下文豁免。
 		"/internal/parcelshipment/adapters/http":     false,
 		"/internal/parcelshipment/adapters/postgres": false,
