@@ -6,7 +6,7 @@
 
 ## 方法与判据
 
-- **范围**：`internal/*/adapters/postgres/*handoff*.go` 中实现 `ports.*Handoff` 的 Outbox 发布适配器。共 **46 个适配器、54 个信封类型、9 个发布上下文**。`network-routing/adapters/postgres/route_handoff_log.go` 不在内——它是 UC-NR-001 步骤 2 的重放指纹册（`ports.RouteHandoffLog`），不发布任何信封。
+- **范围**：`internal/*/adapters/postgres/*handoff*.go` 中实现 `ports.*Handoff` 的 Outbox 发布适配器。共 **46 个适配器、55 个信封类型、9 个发布上下文**（PS5+NR2+NO4+TF9+CC9+SA14+VE8+PP1+PG3）。`network-routing/adapters/postgres/route_handoff_log.go` 不在内——它是 UC-NR-001 步骤 2 的重放指纹册（`ports.RouteHandoffLog`），不发布任何信封。
 - **第 3 栏判据**只取三类权威文档：[CONTEXT-MAP](../../docs/domain/CONTEXT-MAP.md) 的边与关系约束、各 `CONTEXT.md` 所有权声明、`UC-*` 正文。端口注释只用作找 UC 的索引；凡判据只剩端口注释而查无文档处，如实标注。
 - **第 4 栏四态**：`已有消费者（注明）` / `应有但未开` / `本就不应该有跨上下文消费者（审计/对外也是结论）` / `说不清（写明缺哪份文档）`。
 - 现状底帐：组合根（`cmd/parcel-dispatch/assemble.go`，64bae12）路由表**唯一条目**为 `parcel-shipment.acceptance-decision.formed` → `network-routing/initial-route-on-acceptance`（AcceptanceConsumer，外包未决哨兵翻译）。未映射类型经 `dispatch.DirectPublisher` 撞 `ErrNoSubscriber`，失败码 `dispatch.no_subscriber`，阻塞该分区（ADR-0049 第三条，有意设计）。
@@ -16,10 +16,10 @@
 | 计数 | 值 |
 |---|---|
 | Outbox 发布适配器 | 46 |
-| 信封类型 | 54 |
+| 信封类型 | 55 |
 | 已有消费者的类型 | 1（`parcel-shipment.acceptance-decision.formed`） |
-| 应有但未开（跨上下文消费） | 26 类 |
-| 应有但未开（**同上下文**下一段编排消费） | 19 类 |
+| 应有但未开（跨上下文消费） | 29 类（PS4+NR2+NO4+TF9+CC7+VE2+PP1） |
+| 应有但未开（**同上下文**下一段编排消费） | 15 类（CC2+SA9+VE4） |
 | 混合（内部消费者未开＋对外段） | 5 类（statement×3、customer-view、customer-notification） |
 | 本就不应该有跨上下文消费者 | 2 类（cost-allocation、operating-result → 分析/报表，对外） |
 | 说不清 | 3 类（pilot-governance 全部） |
@@ -84,7 +84,7 @@
 | 28 | `VerificationHandoff` | `customs-compliance.disposition-verification.recorded` | CC 案件关闭核对（同上下文）；VE 处置协调（边 CC→VE，UC-VE-001） | 应有但未开 |
 | 29 | `CaseClosureHandoff` | `customs-compliance.case-closure.recorded` | VE 案件视图（边 CC→VE）；「治理审计」段无文档判据（见矛盾清单第 5 条） | 应有但未开 |
 
-### settlement-accounting（7 适配器 / 13 类型）
+### settlement-accounting（7 适配器 / 14 类型）
 
 SA 的事件大半供**自己上下文的下一段编排**（UC-SA-003 对账单纳入、UC-SA-004 审核、UC-SA-005 核销）消费——UC-SA-003 明写费用明细来自 UC-SA-002、金额调整来自 UC-SA-001/002/004/007「等金额创建用例」，只纳入已达确认条件者。
 
@@ -129,7 +129,7 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
 
 - 唯一条目 `acceptance-decision.formed → AcceptanceConsumer` 与 CONTEXT-MAP 边 PS→NR、UC-NR-001 一致，**无冲突**。
 - 未决哨兵翻译（`WithUndecidedSentinels` 只包 `nrparcelshipment.ErrRouteHandoffUndecided`）与该唯一条目自洽。
-- 其余 53 类未登记本身不是冲突：ADR-0049 第三条明写登记接不住的类型比不登记更糟。缺口在消费者侧（本表第 4 栏），不在路由表侧。
+- 其余 54 类未登记本身不是冲突：ADR-0049 第三条明写登记接不住的类型比不登记更糟。缺口在消费者侧（本表第 4 栏），不在路由表侧。
 - 唯一的时间性风险是总览所述在途链：已接线的 NR 生产方成功即产出无订阅者类型。
 
 ## 矛盾与陈旧口径（只记不修）
@@ -152,7 +152,7 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
   - **有 `adapters/http` 端点按自声明接口引用、等 `PAR-INT-01` Intake（endpoints.go 固化的装配缝，非缺口）：6 个**——`SubmitShipmentRequest`、`WithdrawShipmentRequest`（PS）、`ReceiveDeliveredUnit`（NO）、`RegisterEffectiveDelivery`（TF）、`HandleClaim`（VE receive_claim）、`ReceiveExternalResult`（CC）。（VE 的 `query_customer_tracking_view.go` 是查询端点，不构造派生处理器。）
   - **连消费面都没有：40 个**，按上下文——PS：`AdvanceAcceptanceJudgment`、`AdvanceFinancialControlJudgment`、`AmendCustomerSourceData`、`CancelParcel`、`FormAcceptanceDecision`、`FormNewSubmissionVersion`、`RejectShipmentRequest`；NO：`AcceptCollaboration`、`ConsolidateParcels`；TF：`AcceptRegulatoryDisposition`、`CommissionTransport`、`PerformOffsitePickup`、`PrepareTransportOpportunity`、`RegisterOffsitePickup`、`RegisterTransportHandover`、`StartAlternateJourney`；CC：`CloseCustomsCase`、`EstablishCase`、`ManageFollowUp`、`ManageRestriction`、`ReceiveManifest`、`SubmitDeclaration`、`VerifyDisposition`、`VerifyReleaseGate`；SA：`AllocateCosts`、`AssessAdvanceRecovery`、`ConfirmCharge`、`CutOffPublishStatement`、`MapExternalFunds`、`ReceiveSupplierBill`、`SettleClaimAmounts`；VE：`DeriveCustomerView`、`DeriveProjection`、`FormETA`、`NotifyCustomer`、`RaiseSignal`、`SendDispositionRequest`；PP：`EvaluatePricing`；PG：`GovernIncident`、`RecordStageReview`。
 
-**两端关系（原票的猜测成立）**：54 类事件里 53 类无消费者，58 个处理器里 57 个无生产构造——同一条「装配纵深缺失」的两个测量面。多数「应有但未开」的消费者，其对应处理器就在上面 40 个零面清单里（如 initial-route 的消费者要做的事对应 NO/TF 的接收编排，final-outcome 的消费者对应 VE 投影链的 `DeriveProjection`）；填路由表格子与给处理器接生产调用，多数格子是同一笔工作。
+**两端关系（原票的猜测成立）**：55 类事件里 54 类无消费者，58 个处理器里 57 个无生产构造——同一条「装配纵深缺失」的两个测量面。多数「应有但未开」的消费者，其对应处理器就在上面 40 个零面清单里（如 initial-route 的消费者要做的事对应 NO/TF 的接收编排，final-outcome 的消费者对应 VE 投影链的 `DeriveProjection`）；填路由表格子与给处理器接生产调用，多数格子是同一笔工作。
 
 ## 附带 b：party_commercial 迁移号现状（HEAD `4d57ecd` + 工作树）
 
