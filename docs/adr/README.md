@@ -57,6 +57,7 @@
 - [ADR-0049：集成事件的发布通道首发采用进程内直投，消息中间件等负载证据](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)
 - [ADR-0050：服务产品形态随解析闭包可观察](./0050-service-product-form-observable-through-the-resolution-closure.md)
 - [ADR-0051：资格审核答复含等待补充；一次性只约束终局格](./0051-eligibility-screen-awaits-supplement.md)
+- [ADR-0052：网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)
 
 ## 已被取代决策
 
