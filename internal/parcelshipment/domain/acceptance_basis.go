@@ -544,6 +544,37 @@ func (snapshot CommercialBasisSnapshot) valid() bool {
 	return snapshot.resolutionID.valid() && snapshot.rulePackage.valid() && snapshot.viewRevision.valid()
 }
 
+// sameAs 是商业依据快照的完整值等价。Decide 把同一份 Basis 赋给决定与预计承诺，因此重建
+// 不能只比解析标识与视图修订——规则包、时点声明、适用组、复核策略、待路由许可与结算回显
+// 分叉后仍是两份不同的采用事实。切片按构造顺序逐项比：本路径原样赋同一值，顺序也是身份。
+func (snapshot CommercialBasisSnapshot) sameAs(other CommercialBasisSnapshot) bool {
+	if snapshot.resolutionID != other.resolutionID ||
+		snapshot.rulePackage != other.rulePackage ||
+		snapshot.viewRevision != other.viewRevision ||
+		snapshot.manualReview != other.manualReview ||
+		snapshot.pendingRouting != other.pendingRouting ||
+		snapshot.settlementTerms != other.settlementTerms {
+		return false
+	}
+	if len(snapshot.declaredAsOf) != len(other.declaredAsOf) {
+		return false
+	}
+	for index := range snapshot.declaredAsOf {
+		if snapshot.declaredAsOf[index] != other.declaredAsOf[index] {
+			return false
+		}
+	}
+	if len(snapshot.applicable.groups) != len(other.applicable.groups) {
+		return false
+	}
+	for index := range snapshot.applicable.groups {
+		if snapshot.applicable.groups[index] != other.applicable.groups[index] {
+			return false
+		}
+	}
+	return true
+}
+
 // ReachabilityBasisReference 指名「本服务不要求运营企业形成可达性判断」所依据的商业事实。
 // 依据属 party-commercial，由 network-routing 判定后随`不适用`交回，这里只记引用。
 type ReachabilityBasisReference struct{ requiredValue }

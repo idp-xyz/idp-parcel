@@ -419,6 +419,54 @@ func TestRehydrationRefusesAnAcceptedRequestMissingItsProducts(t *testing.T) {
 				t.Fatalf("other basis: %v", err)
 			}
 		},
+		"空校验": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Checks = nil
+		},
+		"含失败校验": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Checks = append(
+				snapshot.Decision.Checks,
+				versionCheck(t, domain.CustomerRelationshipCheck, domain.CheckFailed, "NO_CONTRACT"),
+			)
+		},
+		"含未决校验": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Checks = append(
+				snapshot.Decision.Checks,
+				undeterminedCheck(t, domain.RequiredDocumentCheck, "DOCUMENT_PENDING", domain.ResumeByCustomerSupplement),
+			)
+		},
+		"漏适用校验组": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			kept := make([]domain.AcceptanceCheck, 0, len(snapshot.Decision.Checks))
+			for _, check := range snapshot.Decision.Checks {
+				if check.Group() != domain.CustomerRelationshipCheck {
+					kept = append(kept, check)
+				}
+			}
+			snapshot.Decision.Checks = kept
+		},
+		"漏成员判断": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			checks := everyGroupPassingFor(t)
+			checks = append(checks, versionCheck(t, domain.NetworkReachabilityCheck, domain.CheckPassed, ""))
+			snapshot.Decision.Checks = checks
+		},
+		"依据规则包分叉": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			applicable, err := domain.NewApplicableCheckGroups(allApplicableGroups...)
+			if err != nil {
+				t.Fatalf("applicable: %v", err)
+			}
+			snapshot.Commitment.Basis, err = domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+				ResolutionID: snapshot.Decision.Basis.ResolutionID(),
+				RulePackage:  mustValue(t, domain.NewRulePackageReference, "rules-other/v1"),
+				ViewRevision: snapshot.Decision.Basis.ViewRevision(),
+				Applicable:   applicable,
+				ManualReview: domain.ManualReviewNotRequiredByRules,
+			})
+			if err != nil {
+				t.Fatalf("forked rule package: %v", err)
+			}
+		},
+		"依据复核策略分叉": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Commitment.Basis = basisRequiringReview(t, allApplicableGroups...)
+		},
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -432,6 +480,54 @@ func TestRehydrationRefusesAnAcceptedRequestMissingItsProducts(t *testing.T) {
 				t.Fatalf("error = %v；半截已接受快照折成了未开门", err)
 			}
 		})
+	}
+}
+
+func TestRehydrationRefusesAcceptedManualReviewThatDecideWouldNotForm(t *testing.T) {
+	cases := map[string]func(*domain.RehydrateShipmentRequestSpec){
+		"越界复核取值": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.ManualReview = 99
+		},
+		"规则要求复核却无完成却写成已完成": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Basis = basisRequiringReview(t, allApplicableGroups...)
+			snapshot.Commitment.Basis = snapshot.Decision.Basis
+			snapshot.Decision.ManualReview = domain.ManualReviewCompleted
+		},
+		"规则要求复核却无完成却写成已要求": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Basis = basisRequiringReview(t, allApplicableGroups...)
+			snapshot.Commitment.Basis = snapshot.Decision.Basis
+			snapshot.Decision.ManualReview = domain.ManualReviewRequired
+		},
+		"规则不要求复核却写成已完成": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.ManualReview = domain.ManualReviewCompleted
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			snapshot := acceptedSnapshot(t)
+			mutate(&snapshot)
+			_, err := domain.RehydrateShipmentRequest(snapshot)
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+		})
+	}
+}
+
+func TestRehydratingAcceptedCompletedReviewKeepsTheSynthesizedState(t *testing.T) {
+	snapshot := acceptedSnapshot(t)
+	snapshot.AcceptanceTask.ReviewCompletion = reviewCompletion(t)
+	snapshot.Decision.Basis = basisRequiringReview(t, allApplicableGroups...)
+	snapshot.Commitment.Basis = snapshot.Decision.Basis
+	snapshot.Decision.ManualReview = domain.ManualReviewCompleted
+
+	request, err := domain.RehydrateShipmentRequest(snapshot)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	decision, present := request.AcceptanceDecision()
+	if !present || decision.ManualReview() != domain.ManualReviewCompleted {
+		t.Fatalf("manual review = %#v present = %v, want COMPLETED", decision.ManualReview(), present)
 	}
 }
 

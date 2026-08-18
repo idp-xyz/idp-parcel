@@ -1,6 +1,6 @@
 # ADR-0061: 已接受委托的重建门按快照表达能力开门
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-08-18
 
 ## Context

@@ -304,29 +304,9 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	}
 	manualReview := request.manualReviewState(spec.Basis.manualReview)
 
-	failed, undetermined := 0, 0
-	awaitingSupplement := false
-	judged := make(map[DeclaredParcelID]struct{}, len(request.currentVersion.declaredParcelIDs))
-	judgedGroups := make(map[AcceptanceCheckGroup]struct{}, len(spec.Checks))
-	for _, check := range spec.Checks {
-		if !check.group.valid() || !check.outcome.valid() {
-			return ShipmentRequest{}, ErrInvalidAcceptanceCheck
-		}
-		switch check.outcome {
-		case CheckFailed:
-			failed++
-		case CheckUndetermined:
-			undetermined++
-			if check.resumePath == ResumeByCustomerSupplement {
-				awaitingSupplement = true
-			}
-		}
-		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的
-		// 是「这一组判过没有」。
-		judgedGroups[check.group] = struct{}{}
-		if check.parcelID.valid() && check.outcome == CheckPassed {
-			judged[check.parcelID] = struct{}{}
-		}
+	classified, err := classifyAcceptanceChecks(spec.Checks)
+	if err != nil {
+		return ShipmentRequest{}, err
 	}
 
 	decision := AcceptanceDecision{
@@ -337,7 +317,7 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 		decidedAt:    spec.DecidedAt.UTC(),
 	}
 
-	if failed > 0 {
+	if classified.failed > 0 {
 		request.state = ShipmentRequestRejected
 		request.decision = decision
 		request.decisionFormed = true
@@ -349,11 +329,11 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	// 权威结果没到齐之前不谈复核：对一份还缺判断的委托做人工复核没有意义，复核是最后一道门。
 	// 缺口同时存在客户侧与系统侧时报客户侧——只有那一条要通知外部并受补充期限约束，把它压在
 	// 内部重试后面等于让客户白等一轮。
-	if undetermined > 0 ||
-		!everyApplicableGroupJudged(spec.Basis.applicable, judgedGroups) ||
-		!request.everyMemberJudged(judged) {
+	if classified.undetermined > 0 ||
+		!everyApplicableGroupJudged(spec.Basis.applicable, classified.judgedGroups) ||
+		!request.everyMemberJudged(classified.judgedMembers) {
 		request.acceptanceTask.waitingOn = ResumeByInternalRetry
-		if awaitingSupplement {
+		if classified.awaitingSupplement {
 			request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
 		}
 		return request, nil
@@ -376,6 +356,44 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	}
 	request.commitment = ExpectedCommitment{basis: spec.Basis, formedAt: spec.DecidedAt}
 	return request, nil
+}
+
+// classifyAcceptanceChecks 把一轮校验按 Decide 的封闭规则摊开。重建入口与 Decide 共用它，
+// 避免「接受产物是否可能由 Decide 形成」另写一套口径。
+type acceptanceCheckClassification struct {
+	failed             int
+	undetermined       int
+	awaitingSupplement bool
+	judgedGroups       map[AcceptanceCheckGroup]struct{}
+	judgedMembers      map[DeclaredParcelID]struct{}
+}
+
+func classifyAcceptanceChecks(checks []AcceptanceCheck) (acceptanceCheckClassification, error) {
+	classified := acceptanceCheckClassification{
+		judgedGroups:  make(map[AcceptanceCheckGroup]struct{}, len(checks)),
+		judgedMembers: make(map[DeclaredParcelID]struct{}),
+	}
+	for _, check := range checks {
+		if !check.group.valid() || !check.outcome.valid() {
+			return acceptanceCheckClassification{}, ErrInvalidAcceptanceCheck
+		}
+		switch check.outcome {
+		case CheckFailed:
+			classified.failed++
+		case CheckUndetermined:
+			classified.undetermined++
+			if check.resumePath == ResumeByCustomerSupplement {
+				classified.awaitingSupplement = true
+			}
+		}
+		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的
+		// 是「这一组判过没有」。
+		classified.judgedGroups[check.group] = struct{}{}
+		if check.parcelID.valid() && check.outcome == CheckPassed {
+			classified.judgedMembers[check.parcelID] = struct{}{}
+		}
+	}
+	return classified, nil
 }
 
 // everyApplicableGroupJudged 挡住「某个适用校验组从未出现过却接受了整份版本」。它与

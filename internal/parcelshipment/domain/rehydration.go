@@ -345,9 +345,11 @@ func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 	if !request.decision.basis.valid() {
 		return rehydrationRefusal("接受决定没有可用的商业依据")
 	}
-	if request.commitment.basis.resolutionID != request.decision.basis.resolutionID ||
-		request.commitment.basis.viewRevision != request.decision.basis.viewRevision {
+	if !request.commitment.basis.sameAs(request.decision.basis) {
 		return rehydrationRefusal("预计承诺的商业依据与接受决定不一致")
+	}
+	if err := request.acceptedDecisionHolds(); err != nil {
+		return err
 	}
 	if !request.commitment.formedAt.Equal(request.decision.decidedAt) ||
 		!request.baseline.fixedAt.Equal(request.decision.decidedAt) {
@@ -366,6 +368,34 @@ func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 		if parcelID, named := version.scope.DeclaredParcelID(); named && !request.baseline.covers(parcelID) {
 			return rehydrationRefusal("客户资料版本指名了接受基线外的成员")
 		}
+	}
+	return nil
+}
+
+// acceptedDecisionHolds 校验已接受决定是否可能由 Decide 形成：校验组无失败/未决且适用组与
+// 成员都到场，复核状态等于规则包声明与任务完成事实的合成，且合成结果是接受允许的两格之一。
+// 它不重算 state、baseline、commitment。
+func (request ShipmentRequest) acceptedDecisionHolds() error {
+	classified, err := classifyAcceptanceChecks(request.decision.checks)
+	if err != nil {
+		return rehydrationRefusal("接受决定含非法校验")
+	}
+	if classified.failed > 0 || classified.undetermined > 0 {
+		return rehydrationRefusal("已接受委托的校验含失败或未决")
+	}
+	if !everyApplicableGroupJudged(request.decision.basis.applicable, classified.judgedGroups) {
+		return rehydrationRefusal("已接受委托漏了适用校验组")
+	}
+	if !request.everyMemberJudged(classified.judgedMembers) {
+		return rehydrationRefusal("已接受委托漏了成员判断")
+	}
+
+	synthesized := request.manualReviewState(request.decision.basis.manualReview)
+	if request.decision.manualReview != synthesized {
+		return rehydrationRefusal("接受决定的复核状态与规则包声明和任务完成事实对不上")
+	}
+	if synthesized != ManualReviewNotRequired && synthesized != ManualReviewCompleted {
+		return rehydrationRefusal("已接受委托的复核不是不要求或已完成")
 	}
 	return nil
 }
