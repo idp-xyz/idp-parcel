@@ -61,6 +61,7 @@
 - [ADR-0053：网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置](./0053-network-fact-families-are-derived-not-registrable.md)
 - [ADR-0054：接受前财务控制策略视图增设「未配置」格](./0054-pre-acceptance-control-policy-view-has-an-unconfigured-grade.md)
 - [ADR-0055：业务端点 Intake 增设「未配置」格，端点装配属机制半边](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)
+- [ADR-0056：区间更正只增多条，同版本写入以版本行锁串行化](./0056-validity-correction-append-only-serialized-by-version-row.md)
 
 ## 已被取代决策
 

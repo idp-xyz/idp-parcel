@@ -36,3 +36,4 @@ Date: 2026-08-12
 
 - [UC-PC-001](../application/party-commercial/UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md)：`AT-PC-013`
 - [ADR-0037](./0037-publication-batch-is-per-item-not-all-or-nothing.md)：同属维护/发布机制半边，互不替代
+- [ADR-0056](./0056-validity-correction-append-only-serialized-by-version-row.md)：补充多条只增与同版本写串行化；本记录各条不变

@@ -23,6 +23,10 @@ type correctionDocument struct {
 
 // SaveValidityCorrection 登记一条区间更正。只增不覆盖：同内容撞唯一键是重放，不同内容
 // 是该版本的下一条更正。没有「内容冲突」格——异更正合法。
+//
+// 同版本写入先锁 commercial_version 对应行，再分配 registration_id（ADR-0056）。
+// 锁与 INSERT 在同一条语句里，调用方已有的事务把它保持到提交——于是成功接纳的顺序
+// 与串行化顺序一致，不会出现「先取到较小 id 的事务后提交、却永远当不成最后一条」。
 func (repository *CommercialPublications) SaveValidityCorrection(
 	ctx context.Context,
 	correction domain.ValidityCorrection,
@@ -46,12 +50,28 @@ func (repository *CommercialPublications) SaveValidityCorrection(
 		endsAt = &utc
 	}
 
-	tag, err := executor.Exec(ctx,
-		`INSERT INTO party_commercial.commercial_validity_correction
-			(tenant_id, object_kind, object_id, version_label,
-			 corrected_starts_at, corrected_ends_at, correction_ref, corrected_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		 ON CONFLICT ON CONSTRAINT commercial_validity_correction_same_content DO NOTHING`,
+	var versionFound, inserted bool
+	err = executor.QueryRow(ctx,
+		`WITH locked AS MATERIALIZED (
+			SELECT tenant_id, object_kind, object_id, version_label
+			  FROM party_commercial.commercial_version
+			 WHERE tenant_id     = $1
+			   AND object_kind   = $2
+			   AND object_id     = $3
+			   AND version_label = $4
+			 FOR UPDATE
+		),
+		inserted AS (
+			INSERT INTO party_commercial.commercial_validity_correction
+				(tenant_id, object_kind, object_id, version_label,
+				 corrected_starts_at, corrected_ends_at, correction_ref, corrected_at)
+			SELECT locked.tenant_id, locked.object_kind, locked.object_id, locked.version_label,
+			       $5, $6, $7, $8
+			  FROM locked
+			ON CONFLICT ON CONSTRAINT commercial_validity_correction_same_content DO NOTHING
+			RETURNING registration_id
+		)
+		SELECT EXISTS (SELECT 1 FROM locked), EXISTS (SELECT 1 FROM inserted)`,
 		correction.Tenant().String(),
 		uint8(correction.Kind()),
 		correction.ObjectID().String(),
@@ -60,11 +80,15 @@ func (repository *CommercialPublications) SaveValidityCorrection(
 		endsAt,
 		reference,
 		correction.CorrectedAt().UTC(),
-	)
+	).Scan(&versionFound, &inserted)
 	if err != nil {
 		return ports.ValidityCorrectionSaveOutcomeInvalid, fmt.Errorf("save validity correction: %w", err)
 	}
-	if tag.RowsAffected() > 0 {
+	if !versionFound {
+		return ports.ValidityCorrectionSaveOutcomeInvalid,
+			fmt.Errorf("save validity correction: %w", domain.ErrCommercialVersionNotPublished)
+	}
+	if inserted {
 		return ports.ValidityCorrectionSaved, nil
 	}
 	return ports.ValidityCorrectionAlreadyRegistered, nil
