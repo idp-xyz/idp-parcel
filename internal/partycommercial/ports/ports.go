@@ -74,6 +74,27 @@ type AcceptanceContentDeclaration interface {
 	) (domain.PendingRoutingPermission, bool, error)
 }
 
+// PreAcceptanceControlDeclarationView 取客户合同版本对「这个范围要不要接受前财务控制」
+// 的声明（`PAR-COM-15`，列在合同版本下）。
+//
+// found=false = 实例未配置。CONTEXT 明写「合同明确无接受前财务控制时必须保存商业不适用
+// 依据，不能用缺失结果或默认通过代替」——所以缺声明既不是`要求控制`也不是`不适用`，
+// 消费方停在未决等租户把合同正文补齐。读取失败（error）是另一格，等依赖恢复。
+//
+// **它只答「要不要」。** 控制用什么方式、实际采用哪一版政策由结算政策的解析回答
+// （ADR-0044），本口一概不碰。两层压成一层就会从结算方式倒推控制要不要，而
+// `pn-02-w03` 明写账期不能推导无需信用校验——那条推导会让一个约定了账期的客户
+// 静默跳过信用校验。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。
+type PreAcceptanceControlDeclarationView interface {
+	LoadPreAcceptanceControl(
+		ctx context.Context,
+		tenant domain.TenantID,
+		contract domain.CommercialVersion,
+	) (domain.PreAcceptanceControlDeclaration, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回一次已固定的解析。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回
