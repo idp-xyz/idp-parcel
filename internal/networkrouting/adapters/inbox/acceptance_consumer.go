@@ -1,6 +1,6 @@
 // Package nrinbox 是 network-routing 的入站事件消费适配器（ADR-0025：适配器在
-// 消费方侧）。它守的是消费门的事务语义：同一份投递恰好处理一次、处理失败回滚后
-// 可重投、毒丸显式拒收不无限重试。
+// 消费方侧）。事务舞步交给 platform/inboxconsume；本包只声明消费者名、事件类型与
+// 译码，以及转交给处理方的引用形状。
 package nrinbox
 
 import (
@@ -12,6 +12,8 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	"go.idp.xyz/idp-bento-go/eventing"
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
+
+	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
 // consumerName 是本消费者在 inbox 键上的稳定名。改名等于换消费者——已处理账本
@@ -57,9 +59,7 @@ type DecisionHandler interface {
 
 // AcceptanceConsumer 把 PS 接受决定信封推进消费门。
 type AcceptanceConsumer struct {
-	transactor bentoapp.Transactor
-	store      *inbox.Store
-	handler    DecisionHandler
+	gate *inboxconsume.Gate[AcceptedDecision]
 }
 
 func NewAcceptanceConsumer(
@@ -76,55 +76,26 @@ func NewAcceptanceConsumer(
 	if handler == nil {
 		return nil, fmt.Errorf("network routing inbox: handler is nil")
 	}
-	return &AcceptanceConsumer{transactor: transactor, store: store, handler: handler}, nil
+	gate, err := inboxconsume.New(inboxconsume.Spec[AcceptedDecision]{
+		Transactor:     transactor,
+		Store:          store,
+		Name:           consumerName,
+		EventType:      AcceptedDecisionEventType,
+		Decode:         decodeAcceptedDecision,
+		Handle:         handler.HandleAcceptedDecision,
+		UnexpectedType: "network routing inbox",
+		HandleVerb:     "handle accepted decision",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &AcceptanceConsumer{gate: gate}, nil
 }
 
-// Consume 处理一份投递。消费入账（Start/MarkProcessed）与处理方的业务写入同一
-// 事务：处理失败整体回滚，inbox 无痕，重投可以再试；已处理的重复投递幂等跳过，
-// 处理方不会被调第二次；解不出命令的毒丸在自己的事务里显式拒收——拒收也是账，
-// 不落账的拒收会让同一份毒丸永远重投。
+// Consume 处理一份投递。舞步在 inboxconsume：消费入账与处理方同一事务、重复跳过、
+// 失败回滚、毒丸拒收。
 func (consumer *AcceptanceConsumer) Consume(ctx context.Context, envelope eventing.Envelope) error {
-	if envelope.Type != AcceptedDecisionEventType {
-		// 认不得的类型不是毒丸——订阅面配置宽了是装配问题，拒收会把别人的事件
-		// 记进自己的账。响亮报错让装配方修订阅。
-		return fmt.Errorf("network routing inbox: unexpected event type %q", envelope.Type)
-	}
-
-	decision, decodeErr := decodeAcceptedDecision(envelope.Payload)
-
-	return consumer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		started, err := consumer.store.Start(txCtx, eventing.InboxKey{
-			Consumer: consumerName,
-			Source:   envelope.Source,
-			EventID:  envelope.ID,
-		}, envelope.RecordedAt)
-		if err != nil {
-			return fmt.Errorf("start inbox entry: %w", err)
-		}
-		if !started.Acquired {
-			// 已处理或已拒收：同一份投递的重复，处理方不看第二眼。
-			return nil
-		}
-
-		if decodeErr != nil {
-			// 失败码按框架格式（小写点分，先例 envelope.invalid_on_publish）。
-			if err := consumer.store.MarkRejected(
-				txCtx, started.Receipt, envelope.RecordedAt, "inbox.poison_envelope"); err != nil {
-				return fmt.Errorf("mark rejected: %w", err)
-			}
-			return nil
-		}
-
-		if err := consumer.handler.HandleAcceptedDecision(txCtx, decision); err != nil {
-			// 处理失败让整个事务回滚：inbox 无痕，重投可以再试。这里不区分暂时
-			// 与永久失败——那是处理方内部按 ADR-0029 分格的事，消费门只管账。
-			return fmt.Errorf("handle accepted decision: %w", err)
-		}
-		if err := consumer.store.MarkProcessed(txCtx, started.Receipt, envelope.RecordedAt); err != nil {
-			return fmt.Errorf("mark processed: %w", err)
-		}
-		return nil
-	})
+	return consumer.gate.Consume(ctx, envelope)
 }
 
 // decodeAcceptedDecision 译载荷。缺字段即毒丸——重投同样内容不会长出字段来。

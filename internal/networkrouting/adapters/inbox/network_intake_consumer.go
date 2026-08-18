@@ -8,6 +8,8 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	"go.idp.xyz/idp-bento-go/eventing"
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
+
+	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
 // networkIntakeConsumerName 是本消费者在 inbox 键上的稳定名。它与接受决定那条线的
@@ -42,9 +44,7 @@ type NetworkIntakeHandler interface {
 // NetworkIntakeConsumer 把 PS 有效网络收寄采用结果的信封推进消费门（UC-PS-003 步骤 8
 // → UC-NR-003）。
 type NetworkIntakeConsumer struct {
-	transactor bentoapp.Transactor
-	store      *inbox.Store
-	handler    NetworkIntakeHandler
+	gate *inboxconsume.Gate[AdoptedNetworkIntake]
 }
 
 func NewNetworkIntakeConsumer(
@@ -61,56 +61,26 @@ func NewNetworkIntakeConsumer(
 	if handler == nil {
 		return nil, fmt.Errorf("network routing inbox: handler is nil")
 	}
-	return &NetworkIntakeConsumer{transactor: transactor, store: store, handler: handler}, nil
+	gate, err := inboxconsume.New(inboxconsume.Spec[AdoptedNetworkIntake]{
+		Transactor:     transactor,
+		Store:          store,
+		Name:           networkIntakeConsumerName,
+		EventType:      AdoptedNetworkIntakeEventType,
+		Decode:         decodeAdoptedNetworkIntake,
+		Handle:         handler.HandleAdoptedNetworkIntake,
+		UnexpectedType: "network routing inbox",
+		HandleVerb:     "handle adopted network intake",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &NetworkIntakeConsumer{gate: gate}, nil
 }
 
-// Consume 处理一份投递。四条与 AcceptanceConsumer 逐字相同：消费入账与处理方的业务
-// 写入同一事务、重复投递幂等跳过、处理失败整体回滚可重投、毒丸显式拒收入账。
-//
-// 这段事务舞步与 AcceptanceConsumer 重复是有意的：本仓提炼平台件的门槛是三例同形
-// （`outboxintent.EnqueueOnce` 就是那么来的），两例先各写各的。第三个消费者出现时，
-// 该抽的是「消费门」而不是某一类事件。
+// Consume 处理一份投递。舞步在 inboxconsume，与 AcceptanceConsumer、PS 的节点收寄
+// 消费者共用同一扇门。
 func (consumer *NetworkIntakeConsumer) Consume(ctx context.Context, envelope eventing.Envelope) error {
-	if envelope.Type != AdoptedNetworkIntakeEventType {
-		// 认不得的类型不是毒丸——订阅面配置宽了是装配问题，拒收会把别人的事件记进
-		// 自己的账。响亮报错让装配方修订阅。
-		return fmt.Errorf("network routing inbox: unexpected event type %q", envelope.Type)
-	}
-
-	intake, decodeErr := decodeAdoptedNetworkIntake(envelope.Payload)
-
-	return consumer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		started, err := consumer.store.Start(txCtx, eventing.InboxKey{
-			Consumer: networkIntakeConsumerName,
-			Source:   envelope.Source,
-			EventID:  envelope.ID,
-		}, envelope.RecordedAt)
-		if err != nil {
-			return fmt.Errorf("start inbox entry: %w", err)
-		}
-		if !started.Acquired {
-			// 已处理或已拒收：同一份投递的重复，处理方不看第二眼。
-			return nil
-		}
-
-		if decodeErr != nil {
-			if err := consumer.store.MarkRejected(
-				txCtx, started.Receipt, envelope.RecordedAt, "inbox.poison_envelope"); err != nil {
-				return fmt.Errorf("mark rejected: %w", err)
-			}
-			return nil
-		}
-
-		if err := consumer.handler.HandleAdoptedNetworkIntake(txCtx, intake); err != nil {
-			// 处理失败让整个事务回滚：inbox 无痕，重投可以再试。复核的`未决`走的正是
-			// 这一格——它等的是依赖恢复，重投会改变结果。
-			return fmt.Errorf("handle adopted network intake: %w", err)
-		}
-		if err := consumer.store.MarkProcessed(txCtx, started.Receipt, envelope.RecordedAt); err != nil {
-			return fmt.Errorf("mark processed: %w", err)
-		}
-		return nil
-	})
+	return consumer.gate.Consume(ctx, envelope)
 }
 
 // decodeAdoptedNetworkIntake 译载荷。四维缺一即毒丸——处理方按整键取回采用记录，缺任

@@ -29,12 +29,21 @@ type TargetShipment struct {
 	SubmissionVersion psdomain.SubmissionVersionID
 }
 
-// NodeIntakeAdapter 把节点收寄结果交给 parcel-shipment 的采用编排。
-type NodeIntakeAdapter struct {
-	adopt *psapplication.AdoptNetworkIntakeHandler
+// NetworkIntakeCommandHandler 是采用编排在本适配器侧的窄口。真实装配交给
+// *application.AdoptNetworkIntakeHandler；测试用替身只记命令，不把应用层接口扩宽。
+type NetworkIntakeCommandHandler interface {
+	Handle(
+		ctx context.Context,
+		command psapplication.AdoptNetworkIntakeCommand,
+	) (psapplication.AdoptNetworkIntakeResult, error)
 }
 
-func NewNodeIntakeAdapter(adopt *psapplication.AdoptNetworkIntakeHandler) *NodeIntakeAdapter {
+// NodeIntakeAdapter 把节点收寄结果交给 parcel-shipment 的采用编排。
+type NodeIntakeAdapter struct {
+	adopt NetworkIntakeCommandHandler
+}
+
+func NewNodeIntakeAdapter(adopt NetworkIntakeCommandHandler) *NodeIntakeAdapter {
 	return &NodeIntakeAdapter{adopt: adopt}
 }
 
