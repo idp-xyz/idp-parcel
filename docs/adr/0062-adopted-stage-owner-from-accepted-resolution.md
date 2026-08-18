@@ -1,6 +1,6 @@
 # ADR-0062: 采用规则版本从已接受解析标识回指提供方持有的闭包
 
-Status: Accepted  
+Status: Accepted
 Date: 2026-08-18
 
 ## Context

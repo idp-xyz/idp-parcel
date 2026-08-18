@@ -1,6 +1,6 @@
 # ADR-0058: 阶段内容声明按拥有规则对象归属，产品与合同只采用
 
-Status: Accepted（Decision 第三条正文不改写：禁止从 `SourceIdentity` 发明采用版本仍有效；从已接受商业依据快照回指提供方闭包的路径由 [ADR-0062](./0062-adopted-stage-owner-from-accepted-resolution.md) 补上，那不是从身份发明，是按 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 回指标识）  
+Status: Accepted
 Date: 2026-08-18
 
 ## Context
