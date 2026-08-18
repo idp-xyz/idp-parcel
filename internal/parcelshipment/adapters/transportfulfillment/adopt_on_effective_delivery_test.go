@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,16 @@ func (unconfiguredFinalRules) JudgeFinalOutcome(
 	context.Context, psdomain.SourceIdentity, psdomain.ResponsibilityOutcome,
 ) (psports.FinalRuleJudgment, bool, error) {
 	return psports.FinalRuleJudgment{}, false, nil
+}
+
+type unsatisfiedFinalRules struct {
+	basis psdomain.CheckReason
+}
+
+func (double unsatisfiedFinalRules) JudgeFinalOutcome(
+	context.Context, psdomain.SourceIdentity, psdomain.ResponsibilityOutcome,
+) (psports.FinalRuleJudgment, bool, error) {
+	return psports.FinalRuleJudgment{Satisfied: false, Basis: double.basis}, true, nil
 }
 
 type finalHandlerConfig struct {
@@ -461,6 +472,23 @@ func TestFinalOutcomesMapToConsumptionSlots(t *testing.T) {
 		if err := subject.HandleRegisteredEffectiveDelivery(
 			t.Context(), registeredDeliveryRef()); !errors.Is(err, adapter.ErrFinalUndecided) {
 			t.Fatalf("err = %v, want ErrFinalUndecided", err)
+		}
+	})
+
+	// Covers: 规则已配置但声明缺这一行——保持未决等其他责任结果，不得折成
+	// SOURCE_NOT_ADOPTED 入账。
+	t.Run("FINAL_RULE_NOT_SATISFIED 回滚", func(t *testing.T) {
+		subject := deliveryThrough(t, deliveryFinalHandler(t, finalHandlerConfig{
+			rules: unsatisfiedFinalRules{
+				basis: value(t, psdomain.NewCheckReason, "OUTCOME_NOT_FINAL_FOR_PRODUCT/EFFECTIVE_DELIVERY"),
+			},
+		}))
+		err := subject.HandleRegisteredEffectiveDelivery(t.Context(), registeredDeliveryRef())
+		if !errors.Is(err, adapter.ErrFinalUndecided) {
+			t.Fatalf("err = %v, want ErrFinalUndecided——声明缺行不得入账或折成不采用", err)
+		}
+		if !strings.Contains(err.Error(), "FINAL_RULE_NOT_SATISFIED") {
+			t.Fatalf("未决原因 = %v, want FINAL_RULE_NOT_SATISFIED", err)
 		}
 	})
 

@@ -96,6 +96,7 @@ func (adapter *AdoptOnEffectiveDeliveryAdapter) HandleRegisteredEffectiveDeliver
 	if err != nil {
 		return err
 	}
+	// 只按键取当前版。结果版本在事件 ID 里区分两代入队，不从 ID 回解析去查旧行。
 	record, found, err := adapter.deliveries.FindByKey(ctx, key)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDeliveryNotVisible, err)

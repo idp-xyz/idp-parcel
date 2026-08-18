@@ -35,9 +35,12 @@ var (
 //
 // FINAL_FORMED / FINAL_REDERIVED / EXISTING_RESULT / SOURCE_NOT_ADOPTED /
 // SOURCE_CONFLICT / REQUEST_NOT_ACCEPTED 是业务终局（含负向），重试不会让另一份规则
-// 或另一份委托长出来，入账收工。FINAL_UNDECIDED 是依赖缺口。应用层可能带着未交出去
-// 的 FinalHandoffReference——那是技术续办，必须先拦住，否则消费门一 MarkProcessed，
-// 终局行在、下游 outbox 永久缺。
+// 或另一份委托长出来，入账收工。
+//
+// FINAL_UNDECIDED 含规则未配置与规则未满足（FINAL_RULE_NOT_SATISFIED）。后者是「此
+// 产品声明缺这一行」，编排保持未决等其他责任结果，禁止折成 SOURCE_NOT_ADOPTED。
+// 应用层可能带着未交出去的 FinalHandoffReference——那是技术续办，必须先拦住，否则
+// 消费门一 MarkProcessed，终局行在、下游 outbox 永久缺。
 func Consumption(result psapplication.FormParcelFinalResult) error {
 	if result.FinalHandoffReference().String() != "" {
 		return fmt.Errorf("%w: %s", ErrFinalHandoffPending, result.FinalHandoffReference())
