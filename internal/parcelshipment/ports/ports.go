@@ -104,6 +104,22 @@ type ShipmentRequestRepository interface {
 	) (ShipmentRequestSaveOutcome, error)
 }
 
+// CurrentAcceptedParcelTargetView 按（租户+声明包裹）反查**当前已接受**委托目标。
+//
+// 它与 ShipmentRequestRepository 分开：建单与推进的调用方不该持有反查；收寄/交付
+// 下一票只依赖本口，不必打开整份聚合仓储。查询只认当前投影列上的已接受行
+// （ADR-0060），不扫 snapshot 里的 priorVersions。
+//
+// 零行 = found=false；恰一行 = 交回来源身份、委托号与当前提交版本号；多于一行 =
+// ErrAmbiguousParcelTarget，不按时间或行序任选。
+type CurrentAcceptedParcelTargetView interface {
+	FindCurrentAcceptedByParcel(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (domain.CurrentAcceptedParcelTarget, bool, error)
+}
+
 // ProductionOwnershipAuthority 是试点准入控制，回答完整拟受理范围当前由谁承接。
 // parcel-shipment 只消费该决定，绝不自行推导一个。
 type ProductionOwnershipAuthority interface {

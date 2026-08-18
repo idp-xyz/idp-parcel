@@ -14,8 +14,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// ShipmentRequests 实现 ports.ShipmentRequestRepository：以来源身份为键的全聚合快照
-// 持久化。
+// ShipmentRequests 实现 ports.ShipmentRequestRepository 与
+// ports.CurrentAcceptedParcelTargetView：以来源身份为键的全聚合快照持久化，
+// 并以同行投影列支持按包裹反查当前已接受委托（ADR-0060）。
 //
 // 快照文档的形状照 RehydrateShipmentRequestSpec 设计，读回时逐字段过领域构造函数再进
 // RehydrateShipmentRequest——库里一行坏数据在这两道门上暴露，不会变成一个看起来合法的
@@ -99,6 +100,7 @@ func (repository *ShipmentRequests) Insert(
 	if err != nil {
 		return ports.ShipmentRequestInsertOutcomeInvalid, fmt.Errorf("insert shipment request: %w", err)
 	}
+	versionID, parcels := currentParcelProjection(request)
 	// `已存在`用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会把整个
 	// 事务打进中止态，后续读写全部失败——而`已存在`是业务答案（ADR-0031），编排拿到它
 	// 还要在同一个事务里继续读原委托作答。零行命中即冲突；委托身份唯一键（同租户同号
@@ -107,8 +109,9 @@ func (repository *ShipmentRequests) Insert(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.shipment_request
 			(tenant_id, customer_account_id, source, source_request_key,
-			 shipment_request_id, revision, state, snapshot, submitted_at)
-		 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8)
+			 shipment_request_id, revision, state, snapshot, submitted_at,
+			 current_submission_version_id, declared_parcel_ids)
+		 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
@@ -118,6 +121,8 @@ func (repository *ShipmentRequests) Insert(
 		uint8(request.State()),
 		raw,
 		request.SubmittedAt().UTC(),
+		versionID,
+		parcels,
 	)
 	if err != nil {
 		return ports.ShipmentRequestInsertOutcomeInvalid, fmt.Errorf("insert shipment request: %w", err)
@@ -145,12 +150,15 @@ func (repository *ShipmentRequests) Save(
 	if err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
 	}
+	versionID, parcels := currentParcelProjection(request)
 	tag, err := executor.Exec(ctx,
 		`UPDATE parcel_shipment.shipment_request
 		    SET revision = $5 + 1,
 		        state = $6,
 		        snapshot = $7,
-		        saved_at = now()
+		        saved_at = now(),
+		        current_submission_version_id = $8,
+		        declared_parcel_ids = $9
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
 		    AND source = $3
@@ -163,6 +171,8 @@ func (repository *ShipmentRequests) Save(
 		request.Revision(),
 		uint8(request.State()),
 		raw,
+		versionID,
+		parcels,
 	)
 	if err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
@@ -171,6 +181,16 @@ func (repository *ShipmentRequests) Save(
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
 	return ports.ShipmentRequestSaved, nil
+}
+
+func currentParcelProjection(request domain.ShipmentRequest) (string, []string) {
+	current := request.CurrentSubmissionVersion()
+	members := current.DeclaredParcelIDs()
+	parcels := make([]string, len(members))
+	for index, parcel := range members {
+		parcels[index] = parcel.String()
+	}
+	return current.VersionID().String(), parcels
 }
 
 // requestDocument 是快照列里的文档形状——RehydrateShipmentRequestSpec 的 JSON 表达。
