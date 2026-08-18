@@ -15,10 +15,16 @@ import (
 )
 
 var (
-	// ErrPickupNotVisible 表示按信封引用还读不回对象级揽收登记，或读到的登记与幂等键
-	// 各说各话。可见性滞后是续办，重投会改变结果；不当毒丸拒收。
+	// ErrPickupNotVisible 表示按信封引用还读不回对象级揽收登记。可见性滞后是续办，重投
+	// 会改变结果；不当毒丸拒收。
 	ErrPickupNotVisible = errors.New(
 		"parcel shipment transportfulfillment adapter: offsite pickup registration is not yet visible")
+	// ErrPickupRecordInconsistent 表示按键取回的登记指着另一个键或另一个对象——仓储或
+	// 数据不变量已破（ADR-0029），不是等谁。它与 ErrPickupNotVisible 分开正是为了别把
+	// 永久损坏登记成可续办：混进未决名单，投递会一路重试到上限，而现场要查的是那一行
+	// 为什么长成这样。
+	ErrPickupRecordInconsistent = errors.New(
+		"parcel shipment transportfulfillment adapter: offsite pickup registration disagrees with its key")
 	// ErrParcelTargetNotFound 表示这个租户下当前没有可采认的已接受委托声明了该包裹。
 	// 委托可能还没落到已接受，重投会改变结果。载运对象是集运单元时也落这一格，见
 	// AdoptOnOffsitePickupAdapter 的说明。
@@ -105,7 +111,8 @@ func (adapter *AdoptOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	// 键与本体不符时不采认：取回的揽收若指着另一个对象，采用会挂到另一件包裹上。
 	if record.Key != key || record.Pickup.Object() != key.Object ||
 		record.Pickup.Attempt() != key.Attempt || record.Pickup.TenantID() != key.TenantID {
-		return fmt.Errorf("%w: registration disagrees with its key", ErrPickupNotVisible)
+		return fmt.Errorf("%w: object %q attempt %q",
+			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
 	}
 
 	psTenant, err := psdomain.NewTenantID(registered.TenantID)

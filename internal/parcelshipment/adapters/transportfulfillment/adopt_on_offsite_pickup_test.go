@@ -264,26 +264,46 @@ func TestAnUnreadablePickupRegistryIsContinuableUndecided(t *testing.T) {
 	}
 }
 
-// Covers: 登记本体与幂等键各说各话时不采认——信封指名的对象与取回的揽收对象必须是同
-// 一个，否则采用会挂到另一件包裹上。
-func TestAPickupRecordThatDisagreesWithItsKeyIsNotAdoptable(t *testing.T) {
-	record := registeredPickup(t, "parcel-1")
-	record.Key.Object = value(t, tfdomain.NewCarriedObjectReference, "parcel-other")
-	adopter := &pickupAdopterDouble{}
-	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
-		&pickupRegistryDouble{record: record, found: true},
-		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
-		adopter,
-	)
-	if err != nil {
-		t.Fatalf("构造：%v", err)
-	}
-	if err := subject.HandleRegisteredOffsitePickup(
-		t.Context(), registeredRef()); !errors.Is(err, adapter.ErrPickupNotVisible) {
-		t.Fatalf("err = %v, want ErrPickupNotVisible", err)
-	}
-	if adopter.calls != 0 {
-		t.Fatal("键与本体不符不该走到采用")
+// Covers: 登记本体与幂等键各说各话时不采认，且与「还看不见」分开报。按键去查却拿回
+// 另一个键或另一个对象是仓储/数据不变量破坏（ADR-0029），重投同一内容不会自愈——混进
+// 可续办那一格会让永久损坏被当成等依赖，一直重试到投递上限。
+func TestAPickupRecordThatDisagreesWithItsKeyIsInconsistentNotInvisible(t *testing.T) {
+	for name, damage := range map[string]func(*testing.T, *tfports.OffsitePickupRecord){
+		"键的对象与信封不符": func(t *testing.T, record *tfports.OffsitePickupRecord) {
+			record.Key.Object = value(t, tfdomain.NewCarriedObjectReference, "parcel-other")
+		},
+		"本体与键不符": func(t *testing.T, record *tfports.OffsitePickupRecord) {
+			record.Pickup = registeredPickup(t, "parcel-other").Pickup
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			record := registeredPickup(t, "parcel-1")
+			damage(t, &record)
+			adopter := &pickupAdopterDouble{}
+			subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
+				&pickupRegistryDouble{record: record, found: true},
+				&pickupTargetViewDouble{target: pickupTarget(t), found: true},
+				adopter,
+			)
+			if err != nil {
+				t.Fatalf("构造：%v", err)
+			}
+
+			first := subject.HandleRegisteredOffsitePickup(t.Context(), registeredRef())
+			if !errors.Is(first, adapter.ErrPickupRecordInconsistent) {
+				t.Fatalf("err = %v, want ErrPickupRecordInconsistent", first)
+			}
+			if errors.Is(first, adapter.ErrPickupNotVisible) {
+				t.Fatal("不变量破坏不得混进可续办的「还看不见」")
+			}
+			if second := subject.HandleRegisteredOffsitePickup(
+				t.Context(), registeredRef()); !errors.Is(second, adapter.ErrPickupRecordInconsistent) {
+				t.Fatalf("重投 err = %v——同一内容重投不自愈", second)
+			}
+			if adopter.calls != 0 {
+				t.Fatal("键与本体不符不该走到采用")
+			}
+		})
 	}
 }
 

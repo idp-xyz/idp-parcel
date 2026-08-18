@@ -41,8 +41,12 @@ func NewOffsitePickupAdapter(adopt NetworkIntakeCommandHandler) *OffsitePickupAd
 	return &OffsitePickupAdapter{adopt: adopt}
 }
 
-// AdoptFromOffsitePickup 翻译并转交一份场外揽收。载运对象引用即包裹身份——TF 的揽收
-// 结果本就按对象逐一成立，这里不虚构节点到站，收寄地点是实际接货位置。
+// AdoptFromOffsitePickup 翻译并转交一份场外揽收。TF 的揽收结果本就按对象逐一成立，
+// 这里不虚构节点到站，收寄地点是实际接货位置。
+//
+// 前置条件：载运对象已被调用方确认为包裹身份。TF 的载运对象引用可能指集运单元，本层
+// 无从分辨，因此调用方（AdoptOnOffsitePickupAdapter）先用包裹投影唯一命中，命不中的
+// 对象停在它那一格；这里不再猜集运单元的成员。
 func (adapter *OffsitePickupAdapter) AdoptFromOffsitePickup(
 	ctx context.Context,
 	pickup tfdomain.OffsitePickup,
@@ -60,8 +64,8 @@ func (adapter *OffsitePickupAdapter) AdoptFromOffsitePickup(
 	})
 }
 
-// pickupSourceFor 逐维翻译：载运对象→包裹与来源对象、实际接货位置→收寄地点、运输
-// 控制依据→控制依据、结果版本与实际接货时间原样带过。
+// pickupSourceFor 逐维翻译：载运对象→包裹与来源对象（前置条件见 AdoptFromOffsitePickup）、
+// 实际接货位置→收寄地点、运输控制依据→控制依据、结果版本与实际接货时间原样带过。
 func pickupSourceFor(pickup tfdomain.OffsitePickup) (psdomain.IntakeSourceSpec, error) {
 	parcel, err := psdomain.NewDeclaredParcelID(pickup.Object().String())
 	if err != nil {
