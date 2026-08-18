@@ -35,7 +35,10 @@ const (
 //
 // 停点必须是 dispatch.consumer_undecided：声明列出硬资格，取证缝属实例半边，
 // JudgeIntakeEligibility 答 NOT_ESTABLISHED。只种 NODE_INTAKE 会让本链走 NOT_APPLICABLE
-// 并入账，所以种子必须两种来源都允许。空清单会 ESTABLISHED 并形成承诺。
+// 并入账，所以种子必须两种来源都允许。空清单会 ESTABLISHED 并形成承诺。同一拍会投
+// 接受信封：种子已嵌 NetworkServiceForm，那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，
+// 不得形成路由计划；published==0 与 assertNoPickupAdoptionTrace 的 initial_route
+// 计数一起挡住。
 func TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -139,6 +142,7 @@ func assertNoPickupAdoptionTrace(t *testing.T, fixture *synVerticalFixture, even
 	if n := fixture.countOutboxOfType(t, networkIntakeRecordedType); n != 0 {
 		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, networkIntakeRecordedType)
 	}
+	fixture.assertNoInitialRoute(t)
 }
 
 // recordRegisteredOffsitePickup 落一份对象级揽收登记并在同一事务交出发布意图，交回信封 ID。

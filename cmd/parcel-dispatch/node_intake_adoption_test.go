@@ -40,7 +40,9 @@ const (
 // 停点必须是 dispatch.consumer_undecided：声明列出硬资格，取证缝属实例半边，
 // JudgeIntakeEligibility 答 NOT_ESTABLISHED（INTAKE_QUALIFICATION_UNPROVEN/第一项）。
 // 空清单会直接 ESTABLISHED 并形成承诺；只靠失败码分不出 UNCONFIGURED 与本格，拍前用
-// 真读口与生产资格适配器另证。
+// 真读口与生产资格适配器另证。同一拍会投接受信封：种子已嵌 NetworkServiceForm，
+// 那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 挡住误入账，
+// assertNoAdoptionTrace 另数 initial_route 与 formed 信封。
 //
 // 未决不得留痕：inbox 无账、采用无行、下游意图不入队。重拍不得翻倍。
 func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
@@ -139,6 +141,7 @@ func assertNoAdoptionTrace(t *testing.T, fixture *synVerticalFixture, eventID st
 	if n := fixture.countOutboxOfType(t, networkIntakeRecordedType); n != 0 {
 		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, networkIntakeRecordedType)
 	}
+	fixture.assertNoInitialRoute(t)
 }
 
 // recordFormedNodeIntake 落一份形成格收寄判断并在同一事务交出发布意图，交回信封 ID。

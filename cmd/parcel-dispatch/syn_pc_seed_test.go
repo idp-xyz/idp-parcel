@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
+	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -13,21 +16,25 @@ import (
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// 本文件是 SYN-PC-SEED：隔离 S 夹具，给已接受委托的 ResolutionID=`SYN-RES-01` 配上一份
-// 真实 PC 闭包与收寄资格声明。生产路径与 synSCommercialBasis 都不动——后者继续给
-// formDecision 发明快照；种子只补持久化面，让 ResolvedAdoptedStageOwner 回取得了。
+// 本文件是 SYN-PC-SEED / SYN-PC-PRODUCT：隔离 S 夹具，给已接受委托的
+// ResolutionID=`SYN-RES-01` 配上一份真实 PC 闭包——同一次首次 Save 同时采用接单规则包
+// 与可观察的 NetworkServiceForm 服务产品。生产路径与 synSCommercialBasis 都不动：
+// formDecision 继续发明快照；种子只补持久化面。禁止第二次 Save 同标识，禁止
+// INSERT network_definition，禁止 SaveServiceProduct。
 //
 // 空资格清单会让 JudgeIntakeEligibility 直接 ESTABLISHED 并形成承诺；只种一种来源会
 // 让另一条链走 NOT_APPLICABLE 并入账。两件都禁止。
 
 const (
-	synPCResolutionID  = "SYN-RES-01"
-	synPCRuleObject    = "SYN-RULES-01"
-	synPCRuleVersion   = "v1"
-	synPCQualification = "INTAKE-QUAL/customs-precheck"
-	synPCUnprovenBasis = "INTAKE_QUALIFICATION_UNPROVEN/" + synPCQualification
-	synPCViewRevision  = "SYN-VIEW-01"
-	acceptanceRuleKind = 4 // pcdomain.AcceptanceRulePackageObject
+	synPCResolutionID   = "SYN-RES-01"
+	synPCRuleObject     = "SYN-RULES-01"
+	synPCRuleVersion    = "v1"
+	synPCProductObject  = "SYN-PRODUCT-01"
+	synPCProductVersion = "v1"
+	synPCQualification  = "INTAKE-QUAL/customs-precheck"
+	synPCUnprovenBasis  = "INTAKE_QUALIFICATION_UNPROVEN/" + synPCQualification
+	synPCViewRevision   = "SYN-VIEW-01"
+	acceptanceRuleKind  = 4 // pcdomain.AcceptanceRulePackageObject
 )
 
 // seedSYNPCEligibility 一次种完闭包与收寄资格。必须用 fixture 同一份 pool：另开
@@ -39,8 +46,9 @@ func seedSYNPCEligibility(t *testing.T, fixture *synVerticalFixture) {
 	}
 
 	live := synPCEffectiveRulePackage(t, fixture)
+	product := synPCEffectiveServiceProduct(t, fixture)
 	seedIntakeQualification(t, fixture)
-	seedResolvedClosure(t, fixture, live)
+	seedResolvedClosure(t, fixture, live, product)
 }
 
 func synPCEffectiveRulePackage(t *testing.T, fixture *synVerticalFixture) pcdomain.CommercialVersion {
@@ -77,6 +85,44 @@ func synPCEffectiveRulePackage(t *testing.T, fixture *synVerticalFixture) pcdoma
 	return live
 }
 
+func synPCEffectiveServiceProduct(t *testing.T, fixture *synVerticalFixture) pcdomain.ServiceProduct {
+	t.Helper()
+	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("产品有效区间：%v", err)
+	}
+	approval, err := pcdomain.NewApprovalBasis(
+		mustPC(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-PRODUCT-01"),
+		mustPC(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-PRODUCT-01"),
+		approvedAt,
+	)
+	if err != nil {
+		t.Fatalf("产品批准依据：%v", err)
+	}
+	live, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
+		TenantID:      mustPC(t, pcdomain.NewTenantID, fixture.identity.TenantID().String()),
+		Kind:          pcdomain.ServiceProductObject,
+		ObjectID:      mustPC(t, pcdomain.NewCommercialObjectID, synPCProductObject),
+		Version:       mustPC(t, pcdomain.NewCommercialVersionLabel, synPCProductVersion),
+		Scope:         mustPC(t, pcdomain.NewCommercialScopeReference, "SYN-PC-SCOPE-01"),
+		ContentDigest: mustPC(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-PRODUCT-01"),
+		Effective:     interval,
+		Status:        pcdomain.CommercialVersionEffective,
+		Approval:      approval,
+		PublishedAt:   approvedAt,
+		EffectiveAt:   approvedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("重建已生效服务产品版本：%v", err)
+	}
+	product, err := pcdomain.NewServiceProduct(live, pcdomain.NetworkServiceForm)
+	if err != nil {
+		t.Fatalf("构造 NetworkServiceForm 服务产品：%v", err)
+	}
+	return product
+}
+
 func seedIntakeQualification(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
 	tenant := fixture.identity.TenantID().String()
@@ -105,7 +151,12 @@ func seedIntakeQualification(t *testing.T, fixture *synVerticalFixture) {
 	}
 }
 
-func seedResolvedClosure(t *testing.T, fixture *synVerticalFixture, live pcdomain.CommercialVersion) {
+func seedResolvedClosure(
+	t *testing.T,
+	fixture *synVerticalFixture,
+	rules pcdomain.CommercialVersion,
+	product pcdomain.ServiceProduct,
+) {
 	t.Helper()
 	anchorAt := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	anchor, err := pcdomain.NewSelectionAnchor(anchorAt, mustPC(t, pcdomain.NewAnchorPolicyVersion, "SYN-ANCHOR-POLICY-1"))
@@ -119,7 +170,10 @@ func seedResolvedClosure(t *testing.T, fixture *synVerticalFixture, live pcdomai
 		Scope:                mustPC(t, pcdomain.NewCommercialScopeReference, "SYN-PC-SCOPE-01"),
 		Purpose:              pcdomain.AcceptanceControlPurpose,
 		Anchor:               anchor,
-		RequiredBases:        []pcdomain.CommercialObjectKind{pcdomain.AcceptanceRulePackageObject},
+		RequiredBases: []pcdomain.CommercialObjectKind{
+			pcdomain.AcceptanceRulePackageObject,
+			pcdomain.ServiceProductObject,
+		},
 	}
 	closure, err := pcdomain.RehydrateCommercialClosure(pcdomain.RehydrateCommercialClosureSpec{
 		Outcome:      pcdomain.UniquelyResolved,
@@ -127,10 +181,15 @@ func seedResolvedClosure(t *testing.T, fixture *synVerticalFixture, live pcdomai
 		Key:          key,
 		Anchor:       anchor,
 		ViewRevision: mustPC(t, pcdomain.NewAuthorityViewRevision, synPCViewRevision),
-		Adopted: []pcdomain.RehydrateAdoptedBasisSpec{{
-			Kind:    pcdomain.AcceptanceRulePackageObject,
-			Version: live,
-		}},
+		Adopted: []pcdomain.RehydrateAdoptedBasisSpec{
+			{Kind: pcdomain.AcceptanceRulePackageObject, Version: rules},
+			{
+				Kind:              pcdomain.ServiceProductObject,
+				Version:           product.Version(),
+				ServiceProduct:    product,
+				HasServiceProduct: true,
+			},
+		},
 	})
 	if err != nil {
 		t.Fatalf("重建唯一已解析闭包：%v", err)
@@ -151,8 +210,9 @@ func seedResolvedClosure(t *testing.T, fixture *synVerticalFixture, live pcdomai
 	}
 }
 
-// assertSYNPCEligibilitySeeded 用真读口钉死种子：闭包在、规则包对、两种来源都允许、
-// 硬资格非空。缺任一件，拍后的 consumer_undecided 仍可能是 UNCONFIGURED。
+// assertSYNPCEligibilitySeeded 用真读口钉死种子：闭包在、规则包对、产品形态可观察、
+// 两种来源都允许、硬资格非空。缺产品会让接受链停在适用性未决而不是证据未配置；
+// 缺硬资格会让收寄链 ESTABLISHED。
 func assertSYNPCEligibilitySeeded(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
 	tenant := mustPC(t, pcdomain.NewTenantID, fixture.identity.TenantID().String())
@@ -168,6 +228,14 @@ func assertSYNPCEligibilitySeeded(t *testing.T, fixture *synVerticalFixture) {
 	adopted, ok := closure.AdoptedFor(pcdomain.AcceptanceRulePackageObject)
 	if !ok || adopted.Version().ObjectID().String() != synPCRuleObject {
 		t.Fatalf("闭包采用的规则包 object = %q ok = %v, want %s", adopted.Version().ObjectID(), ok, synPCRuleObject)
+	}
+	productBasis, ok := closure.AdoptedFor(pcdomain.ServiceProductObject)
+	if !ok {
+		t.Fatal("闭包没采用服务产品——ADR-0064 回指后适用性仍会停在产品不可观察")
+	}
+	product, ok := productBasis.ServiceProduct()
+	if !ok || product.Form() != pcdomain.NetworkServiceForm {
+		t.Fatalf("服务产品形态不可观察或不是 NETWORK_SERVICE：ok=%v form=%q", ok, product.Form())
 	}
 
 	declarations, err := pcpostgres.NewStageContentDeclarations(fixture.db)
@@ -223,6 +291,68 @@ func assertIntakeEligibilityUnproven(t *testing.T, fixture *synVerticalFixture, 
 	if judged.Basis.String() != synPCUnprovenBasis {
 		t.Fatalf("basis = %q, want %s", judged.Basis, synPCUnprovenBasis)
 	}
+}
+
+// assertRoutingApplicabilityRequired 用生产适用性视图钉死：闭包回指后形态译成要求判断。
+// 失败码分不出适用性未决与证据未配置，拍前必须另证这一格已经越过。
+func assertRoutingApplicabilityRequired(t *testing.T, fixture *synVerticalFixture) {
+	t.Helper()
+	closures, err := pcpostgres.NewCommercialResolutions(fixture.db)
+	if err != nil {
+		t.Fatalf("构造解析库：%v", err)
+	}
+	view, err := nrpartycommercial.NewRoutingApplicability(closures)
+	if err != nil {
+		t.Fatalf("构造适用性视图：%v", err)
+	}
+	resolution, err := nrdomain.NewCommercialResolutionReference(synPCResolutionID)
+	if err != nil {
+		t.Fatalf("解析引用：%v", err)
+	}
+	eligibility, err := view.AssessRoutingApplicability(t.Context(), synInitialRouteKey(t, fixture), resolution)
+	if err != nil {
+		t.Fatalf("AssessRoutingApplicability：%v——种子没让形态可观察", err)
+	}
+	if !eligibility.JudgmentRequired() {
+		t.Fatal("NETWORK_SERVICE 被译成了不要求——那是把唯一合法形态做成了不适用默认值")
+	}
+}
+
+// assertRouteEvidenceUnconfigured 用生产登记册钉死下一诚实停点：这个范围没有网络定义。
+func assertRouteEvidenceUnconfigured(t *testing.T, fixture *synVerticalFixture) {
+	t.Helper()
+	definitions, err := nrpostgres.NewNetworkDefinitions(fixture.db)
+	if err != nil {
+		t.Fatalf("构造网络定义登记册：%v", err)
+	}
+	_, configured, err := definitions.LoadInitialRouteEvidence(t.Context(), synInitialRouteKey(t, fixture))
+	if err != nil {
+		t.Fatalf("LoadInitialRouteEvidence：%v", err)
+	}
+	if configured {
+		t.Fatal("网络定义已配置——种子不得 INSERT network_definition")
+	}
+}
+
+func synInitialRouteKey(t *testing.T, fixture *synVerticalFixture) nrdomain.InitialRouteJudgmentKey {
+	t.Helper()
+	return nrdomain.InitialRouteJudgmentKey{
+		TenantID:           mustNR(t, nrdomain.NewTenantID, fixture.identity.TenantID().String()),
+		CustomerAccountID:  mustNR(t, nrdomain.NewCustomerAccountID, fixture.identity.CustomerAccountID().String()),
+		ShipmentRequestID:  mustNR(t, nrdomain.NewShipmentRequestID, fixture.requestID.String()),
+		AcceptanceBaseline: mustNR(t, nrdomain.NewAcceptanceBaselineReference, "SYN-VER-01"),
+		DeclaredParcelID:   mustNR(t, nrdomain.NewDeclaredParcelID, "SYN-PARCEL-01"),
+		ServicePurpose:     mustNR(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"),
+	}
+}
+
+func mustNR[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+	t.Helper()
+	value, err := construct(raw)
+	if err != nil {
+		t.Fatalf("construct %q: %v", raw, err)
+	}
+	return value
 }
 
 func synPCIntakeSource(t *testing.T, kind psdomain.IntakeSourceKind) psdomain.IntakeSource {

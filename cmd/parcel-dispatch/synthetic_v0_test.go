@@ -24,7 +24,8 @@ import (
 // 本文件是 SYN-V0：从 PS 应用编排穿过真仓储与 Outbox，再经生产 wireDispatcher 投到
 // NR 接受决定消费者，停在生产装配里那个诚实未决格。它不是全链闭环。
 //
-// S 替身只出现在本测试文件，名字带 synS；生产 assemble.go 不种服务产品、不默认适用性。
+// S 替身只出现在本测试文件，名字带 synS；生产 assemble.go 不种服务产品、不默认适用性、
+// 不 INSERT 网络定义。已决定路径调 SYN-PC-PRODUCT 种子越过适用性，停在证据未配置。
 
 const (
 	synV0AcceptanceConsumer = "network-routing/initial-route-on-acceptance"
@@ -61,11 +62,11 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 
 // Covers: SYN-V0 已决定路径——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher
 // 把信封投到 NR 消费者；已接受重建门已开（ADR-0061），消费者按引用读回委托并进入
-// CreateInitialRoute。生产装配按已接受解析回指闭包（ADR-0064）；SYN-V0 不调
-// seedSYNPCEligibility，LoadResolution(SYN-RES-01) found=false 仍是真话，整份交接停在
-// ROUTING_APPLICABILITY_UNAVAILABLE / dispatch.consumer_undecided。不得写可执行路由，
-// 也不得把未决当成已处理入账。
-func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T) {
+// CreateInitialRoute。生产装配按已接受解析回指闭包（ADR-0064）；本用例调同一份
+// SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可观察的 NetworkServiceForm，适用性译成要求
+// 判断。网络定义登记册空册，整份交接停在 ROUTE_EVIDENCE_NOT_CONFIGURED /
+// dispatch.consumer_undecided。不得写可执行路由，也不得把未决当成已处理入账。
+func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 
@@ -100,27 +101,27 @@ func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T)
 		t.Fatal("读回已接受委托却没有接受基线")
 	}
 
+	seedSYNPCEligibility(t, fixture)
+	assertSYNPCEligibilitySeeded(t, fixture)
+	assertRoutingApplicabilityRequired(t, fixture)
+	assertRouteEvidenceUnconfigured(t, fixture)
+
 	published, err := fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
 	if published != 0 {
-		t.Fatalf("适用性未决却定稿了 %d 条；失败码 = %q",
+		t.Fatalf("证据未配置却定稿了 %d 条；失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, synV0DecisionID))
 	}
 	if got := recordedFailureCode(t, fixture.db, synV0DecisionID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（闭包未写入，不是重建门）", got)
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（空册未配置，不是适用性也不是重建门）", got)
 	}
 
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
 		t.Fatalf("inbox 行数 = %d, want 0——未决必须回滚，不能冒充已处理", n)
 	}
-	if n := fixture.countOutboxOfType(t, synV0InitialRouteType); n != 0 {
-		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, synV0InitialRouteType)
-	}
-	if n := fixture.countInitialRoutes(t); n != 0 {
-		t.Fatalf("initial_route 行数 = %d, want 0——未决不得写可执行路由", n)
-	}
+	fixture.assertNoInitialRoute(t)
 	if n := fixture.countRouteHandoffLogs(t); n != 0 {
 		t.Fatalf("route_handoff_log 行数 = %d, want 0——未决事务回滚后登记册应无痕", n)
 	}
@@ -136,12 +137,7 @@ func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T)
 	if n := fixture.countOutboxOfType(t, string(nrinbox.AcceptedDecisionEventType)); n != 1 {
 		t.Fatalf("接受信封变成 %d 封——重投不得再入队一份", n)
 	}
-	if n := fixture.countOutboxOfType(t, synV0InitialRouteType); n != 0 {
-		t.Fatalf("重拍发出了 %d 封 %s", n, synV0InitialRouteType)
-	}
-	if n := fixture.countInitialRoutes(t); n != 0 {
-		t.Fatalf("重拍写入了 %d 条初始路由", n)
-	}
+	fixture.assertNoInitialRoute(t)
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
 		t.Fatalf("重拍后 inbox 行数 = %d, want 仍为 0", n)
 	}
@@ -409,6 +405,16 @@ func (fixture *synVerticalFixture) countInbox(t *testing.T, consumer, eventID st
 func (fixture *synVerticalFixture) countInitialRoutes(t *testing.T) int {
 	t.Helper()
 	return fixture.countSQL(t, `SELECT count(*) FROM network_routing.initial_route`)
+}
+
+func (fixture *synVerticalFixture) assertNoInitialRoute(t *testing.T) {
+	t.Helper()
+	if n := fixture.countInitialRoutes(t); n != 0 {
+		t.Fatalf("initial_route 行数 = %d, want 0——未决不得写可执行路由", n)
+	}
+	if n := fixture.countOutboxOfType(t, synV0InitialRouteType); n != 0 {
+		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, synV0InitialRouteType)
+	}
 }
 
 func (fixture *synVerticalFixture) countRouteHandoffLogs(t *testing.T) int {
