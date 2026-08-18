@@ -18,8 +18,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证委托聚合仓储的行为：全聚合快照往返不丢字段、作用域
-// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门只开到
-// `已提交`（ADR-0030）由读回侧如实透出。
+// 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门开到
+// `已提交`与`已接受`（ADR-0061）由读回侧如实透出。
 
 func TestASubmittedRequestRoundTripsWholly(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
@@ -236,23 +236,152 @@ func TestRequestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-// TestUnsupportedStatesSurfaceOnRead 证重建门只开到`已提交`这一边界在读回侧如实透出
-// （ADR-0030 的登记缺口）：状态列被推进到门外取值时，Find 报错而不是拼一份缺判断产物
-// 的聚合——一份空的接受基线看起来与真的一样，那正是要防的事。
+// TestUnsupportedStatesSurfaceOnRead 证重建门开到`已接受`之后，门外状态与坏快照分格
+// （ADR-0061）：只把状态列推到`已接受`、快照仍是已提交形状，读回是坏数据而不是「本期
+// 不支持」——门已经开了，缺产物就是这一行立不起来。`已拒绝`/`已撤回`仍走不支持哨兵。
 func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()
 
-	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-accepted", "request-accepted"))
 	if _, err := pool.Exec(ctx,
 		`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
-		uint8(domain.ShipmentRequestAccepted), "req-key-1"); err != nil {
-		t.Fatalf("推进状态列：%v", err)
+		uint8(domain.ShipmentRequestAccepted), "req-key-accepted"); err != nil {
+		t.Fatalf("推进状态列到已接受：%v", err)
+	}
+	_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-accepted"))
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("已接受缺产物：err = %v, want ErrInvalidRehydratedShipmentRequest", err)
 	}
 
-	_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-1"))
-	if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-		t.Fatalf("err = %v, want ErrRehydrationStateNotSupported（边界透出而不是悄悄拼聚合）", err)
+	unsupported := map[string]domain.ShipmentRequestState{
+		"req-key-rejected":  domain.ShipmentRequestRejected,
+		"req-key-withdrawn": domain.ShipmentRequestWithdrawn,
+	}
+	for key, state := range unsupported {
+		mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, key, "request-"+key))
+		if _, err := pool.Exec(ctx,
+			`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
+			uint8(state), key); err != nil {
+			t.Fatalf("推进状态列到 %s：%v", state, err)
+		}
+		_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
+		if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+			t.Fatalf("%s：err = %v, want ErrRehydrationStateNotSupported", state, err)
+		}
+	}
+}
+
+// TestAnAcceptedRequestRoundTripsWholly 证 Insert→Decide→Save→Find 把已接受产物整份带回：
+// 决定、基线、承诺都在，且不重算 Decide。丢基线会让后续资料更正全部落到基线外。
+func TestAnAcceptedRequestRoundTripsWholly(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	ctx := t.Context()
+
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+	loaded := mustFind(t, repository, ctx, "req-key-1")
+	accepted, err := loaded.Decide(acceptanceDecisionSpec(t))
+	if err != nil {
+		t.Fatalf("形成接受：%v", err)
+	}
+	if accepted.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED", accepted.State())
+	}
+	mustSave(t, transactor, ctx, repository, requestIdentity(t, "req-key-1"), accepted)
+
+	found := mustFind(t, repository, ctx, "req-key-1")
+	if found.Revision() != 2 {
+		t.Fatalf("revision = %d, want 2", found.Revision())
+	}
+	if found.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED", found.State())
+	}
+	decision, present := found.AcceptanceDecision()
+	if !present || !decision.Accepted() || decision.DecisionID().String() != "accept-1" {
+		t.Fatalf("decision = %#v present = %v", decision, present)
+	}
+	if decision.ManualReview() != domain.ManualReviewNotRequired {
+		t.Fatalf("manual review = %d, want NOT_REQUIRED", decision.ManualReview())
+	}
+	if len(decision.Checks()) != 8 {
+		t.Fatalf("checks = %d, want 8", len(decision.Checks()))
+	}
+	baseline, present := found.AcceptanceBaseline()
+	if !present || baseline.SubmissionVersionID().String() != "version-1" {
+		t.Fatalf("baseline = %#v present = %v", baseline, present)
+	}
+	if len(baseline.DeclaredParcelIDs()) != 2 {
+		t.Fatalf("baseline members = %d, want 2", len(baseline.DeclaredParcelIDs()))
+	}
+	commitment, present := found.ExpectedCommitment()
+	if !present || commitment.Basis().ResolutionID().String() != "RES-1" {
+		t.Fatalf("commitment = %#v present = %v", commitment, present)
+	}
+	if commitment.Basis().ViewRevision() != decision.Basis().ViewRevision() {
+		t.Fatal("承诺依据与决定依据往返后对不上")
+	}
+	if !commitment.FormedAt().Equal(decision.DecidedAt()) || !baseline.FixedAt().Equal(decision.DecidedAt()) {
+		t.Fatal("基线或承诺时刻与决定时刻往返后对不上")
+	}
+	if len(found.CustomerSourceDataVersions()) != 0 {
+		t.Fatal("未修订的已接受委托凭空长出了客户资料版本")
+	}
+}
+
+// TestAcceptedSourceDataVersionsSurviveSaveAndFind 证资料版本随已接受聚合往返：登记册
+// 另有一份只追加表，但聚合快照仍是重建入口的权威；丢了它，一份已经补过资料的委托读回来
+// 像从未补过。
+func TestAcceptedSourceDataVersionsSurviveSaveAndFind(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	ctx := t.Context()
+
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+	loaded := mustFind(t, repository, ctx, "req-key-1")
+	accepted, err := loaded.Decide(acceptanceDecisionSpec(t))
+	if err != nil {
+		t.Fatalf("形成接受：%v", err)
+	}
+	mustSave(t, transactor, ctx, repository, requestIdentity(t, "req-key-1"), accepted)
+
+	accepted = mustFind(t, repository, ctx, "req-key-1")
+	scope, err := domain.NewShipmentScopedSourceData(
+		accepted.ShipmentRequestID(),
+		mustBuild(t, domain.NewSourceDataGroupReference, "SHIPPER_NAME"),
+	)
+	if err != nil {
+		t.Fatalf("资料范围：%v", err)
+	}
+	version, err := domain.FormCustomerSourceDataVersion(domain.CustomerSourceDataVersionSpec{
+		VersionID: mustBuild(t, domain.NewSourceDataVersionID, "src-ver-1"),
+		Scope:     scope,
+		Basis:     domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:    domain.SupplementIntent,
+		Request:   requestFingerprint(t, "req-key-1-amend", "digest-amend"),
+		Reason:    mustBuild(t, domain.NewAmendmentReasonReference, "MISSING_SHIPPER"),
+		Requester: mustBuild(t, domain.NewRequesterReference, "CUSTOMER-1"),
+		Decider:   mustBuild(t, domain.NewDeciderReference, "OPERATOR-1"),
+		Authority: mustBuild(t, domain.NewAmendmentAuthoritySnapshot, "AUTH-SNAP-1"),
+		FormedAt:  submittedAtFixture.Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("形成资料版本：%v", err)
+	}
+	amended, err := accepted.AmendCustomerSourceData(version)
+	if err != nil {
+		t.Fatalf("追加资料版本：%v", err)
+	}
+	mustSave(t, transactor, ctx, repository, requestIdentity(t, "req-key-1"), amended)
+
+	found := mustFind(t, repository, ctx, "req-key-1")
+	kept := found.CustomerSourceDataVersions()
+	if len(kept) != 1 || kept[0].VersionID().String() != "src-ver-1" {
+		t.Fatalf("versions = %#v", kept)
+	}
+	if found.SourceDataScopeOutsideAcceptanceBaseline(kept[0].Scope()) {
+		t.Fatal("往返后资料范围被当成基线外")
+	}
+	if kept[0].Intent() != domain.SupplementIntent || !kept[0].Basis().OnAcceptanceBaseline() {
+		t.Fatalf("资料版本意图或基准往返变形：%#v", kept[0])
 	}
 }
 
@@ -293,6 +422,143 @@ func mustInsert(
 	if outcome != ports.ShipmentRequestInserted {
 		t.Fatalf("insert outcome = %s", outcome)
 	}
+}
+
+func mustSave(
+	t *testing.T,
+	transactor bentoapp.Transactor,
+	ctx context.Context,
+	repository *adapter.ShipmentRequests,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) {
+	t.Helper()
+	var outcome ports.ShipmentRequestSaveOutcome
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = repository.Save(txCtx, identity, request)
+		return err
+	})
+	if outcome != ports.ShipmentRequestSaved {
+		t.Fatalf("save outcome = %s", outcome)
+	}
+}
+
+func mustFind(
+	t *testing.T,
+	repository *adapter.ShipmentRequests,
+	ctx context.Context,
+	key string,
+) domain.ShipmentRequest {
+	t.Helper()
+	found, exists, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
+	if err != nil {
+		t.Fatalf("取回委托：%v", err)
+	}
+	if !exists {
+		t.Fatal("委托读不回来")
+	}
+	return found
+}
+
+func acceptanceDecisionSpec(t *testing.T) domain.AcceptanceDecisionSpec {
+	t.Helper()
+	return domain.AcceptanceDecisionSpec{
+		DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "accept-1"),
+		Checks:     allGroupsPassing(t),
+		Basis:      acceptanceBasis(t),
+		DecidedAt:  submittedAtFixture.Add(time.Hour),
+	}
+}
+
+func allGroupsPassing(t *testing.T) []domain.AcceptanceCheck {
+	t.Helper()
+	groups := []domain.AcceptanceCheckGroup{
+		domain.CustomerRelationshipCheck,
+		domain.LegalEntityAndContractCheck,
+		domain.ProductAndServiceCheck,
+		domain.MemberBaselineCheck,
+		domain.RequiredDocumentCheck,
+		domain.PreAcceptanceFinancialControlCheck,
+	}
+	checks := make([]domain.AcceptanceCheck, 0, len(groups)+2)
+	for _, group := range groups {
+		checks = append(checks, versionCheck(t, group, domain.CheckPassed, ""))
+	}
+	for _, parcel := range []string{"parcel-1", "parcel-2"} {
+		checks = append(checks, parcelCheck(t, domain.NetworkReachabilityCheck, parcel, domain.CheckPassed, ""))
+	}
+	return checks
+}
+
+func versionCheck(t *testing.T, group domain.AcceptanceCheckGroup, outcome domain.CheckOutcome, reason string) domain.AcceptanceCheck {
+	t.Helper()
+	check, err := domain.NewAcceptanceCheck(group, domain.DeclaredParcelID{}, outcome, checkReason(t, reason))
+	if err != nil {
+		t.Fatalf("version check: %v", err)
+	}
+	return check
+}
+
+func parcelCheck(t *testing.T, group domain.AcceptanceCheckGroup, parcel string, outcome domain.CheckOutcome, reason string) domain.AcceptanceCheck {
+	t.Helper()
+	check, err := domain.NewAcceptanceCheck(group, mustBuild(t, domain.NewDeclaredParcelID, parcel), outcome, checkReason(t, reason))
+	if err != nil {
+		t.Fatalf("parcel check: %v", err)
+	}
+	return check
+}
+
+func checkReason(t *testing.T, reason string) domain.CheckReason {
+	t.Helper()
+	if reason == "" {
+		return domain.CheckReason{}
+	}
+	return mustBuild(t, domain.NewCheckReason, reason)
+}
+
+func acceptanceBasis(t *testing.T) domain.CommercialBasisSnapshot {
+	t.Helper()
+	applicable, err := domain.NewApplicableCheckGroups(
+		domain.CustomerRelationshipCheck,
+		domain.LegalEntityAndContractCheck,
+		domain.ProductAndServiceCheck,
+		domain.MemberBaselineCheck,
+		domain.RequiredDocumentCheck,
+		domain.PreAcceptanceFinancialControlCheck,
+		domain.NetworkReachabilityCheck,
+	)
+	if err != nil {
+		t.Fatalf("适用校验组：%v", err)
+	}
+	reachability, err := domain.NewDeclaredAsOf(
+		domain.ReachabilityJudgmentKind,
+		mustBuild(t, domain.NewAsOfSemanticsReference, "ACCEPTANCE"),
+		mustBuild(t, domain.NewAsOfPolicyVersion, "asof-1"),
+	)
+	if err != nil {
+		t.Fatalf("可达性时点：%v", err)
+	}
+	control, err := domain.NewDeclaredAsOf(
+		domain.FinancialControlJudgmentKind,
+		mustBuild(t, domain.NewAsOfSemanticsReference, "ACCEPTANCE"),
+		mustBuild(t, domain.NewAsOfPolicyVersion, "asof-1"),
+	)
+	if err != nil {
+		t.Fatalf("财务控制时点：%v", err)
+	}
+	snapshot, err := domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+		ResolutionID: mustBuild(t, domain.NewCommercialResolutionID, "RES-1"),
+		RulePackage:  mustBuild(t, domain.NewRulePackageReference, "rules-1/v1"),
+		ViewRevision: mustBuild(t, domain.NewCommercialViewRevision, "VIEW-1"),
+		DeclaredAsOf: []domain.DeclaredAsOf{reachability, control},
+		Applicable:   applicable,
+		ManualReview: domain.ManualReviewNotRequiredByRules,
+	})
+	if err != nil {
+		t.Fatalf("商业依据：%v", err)
+	}
+	return snapshot
 }
 
 func mustBuild[T any](t *testing.T, construct func(string) (T, error), raw string) T {

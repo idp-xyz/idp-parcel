@@ -20,9 +20,9 @@ import (
 //
 // 快照文档的形状照 RehydrateShipmentRequestSpec 设计，读回时逐字段过领域构造函数再进
 // RehydrateShipmentRequest——库里一行坏数据在这两道门上暴露，不会变成一个看起来合法的
-// 聚合（ADR-0028）。重建那扇门今天只开到`已提交`（ADR-0030 的登记缺口）：写入不设状态
-// 门（决定/撤回落库不能拦），读回一份别的状态会得到 ErrRehydrationStateNotSupported
-// ——边界如实透出，而不是在适配器里悄悄拼一份缺决定的聚合。
+// 聚合（ADR-0028）。重建门今天开到`已提交`与`已接受`（ADR-0061）：写入不设状态门，读回
+// `已拒绝`/`已撤回`仍得到 ErrRehydrationStateNotSupported；已接受缺产物则是坏快照，走
+// ErrInvalidRehydratedShipmentRequest。
 type ShipmentRequests struct {
 	db *bentopg.DB
 }
@@ -197,14 +197,72 @@ func currentParcelProjection(request domain.ShipmentRequest) (string, []string) 
 // Revision 与 State 刻意不进文档：两者都是列（版本给乐观锁用、状态给读回与巡检用），
 // 文档里再存一份就是第二个来源，改列不改文档的一次写入会让两处从此各说各话。
 type requestDocument struct {
-	ShipmentRequestID string             `json:"shipmentRequestId"`
-	BatchID           string             `json:"batchId"`
-	SubmittedAt       time.Time          `json:"submittedAt"`
-	CurrentVersion    versionDocument    `json:"currentVersion"`
-	AcceptanceTask    taskDocument       `json:"acceptanceTask"`
-	PriorVersions     []versionDocument  `json:"priorVersions,omitempty"`
-	PriorTasks        []taskDocument     `json:"priorTasks,omitempty"`
-	PriorLink         *priorLinkDocument `json:"priorLink,omitempty"`
+	ShipmentRequestID  string                      `json:"shipmentRequestId"`
+	BatchID            string                      `json:"batchId"`
+	SubmittedAt        time.Time                   `json:"submittedAt"`
+	CurrentVersion     versionDocument             `json:"currentVersion"`
+	AcceptanceTask     taskDocument                `json:"acceptanceTask"`
+	PriorVersions      []versionDocument           `json:"priorVersions,omitempty"`
+	PriorTasks         []taskDocument              `json:"priorTasks,omitempty"`
+	PriorLink          *priorLinkDocument          `json:"priorLink,omitempty"`
+	Decision           *acceptanceDecisionDocument `json:"decision,omitempty"`
+	DecisionFormed     bool                        `json:"decisionFormed,omitempty"`
+	Baseline           *acceptanceBaselineDocument `json:"baseline,omitempty"`
+	Commitment         *expectedCommitmentDocument `json:"commitment,omitempty"`
+	SourceDataVersions []sourceDataVersionDocument `json:"sourceDataVersions,omitempty"`
+}
+
+type acceptanceDecisionDocument struct {
+	DecisionID   string                    `json:"decisionId"`
+	Accepted     bool                      `json:"accepted"`
+	Checks       []acceptanceCheckDocument `json:"checks,omitempty"`
+	Basis        commercialBasisDocument   `json:"basis"`
+	ManualReview uint8                     `json:"manualReview"`
+	DecidedAt    time.Time                 `json:"decidedAt"`
+}
+
+type acceptanceCheckDocument struct {
+	Group      uint8  `json:"group"`
+	ParcelID   string `json:"parcelId,omitempty"`
+	Outcome    uint8  `json:"outcome"`
+	Reason     string `json:"reason,omitempty"`
+	ResumePath uint8  `json:"resumePath,omitempty"`
+}
+
+type acceptanceBaselineDocument struct {
+	DeclaredParcelIDs []string  `json:"declaredParcelIds"`
+	SubmissionVersion string    `json:"submissionVersion"`
+	FixedAt           time.Time `json:"fixedAt"`
+}
+
+type expectedCommitmentDocument struct {
+	Basis    commercialBasisDocument `json:"basis"`
+	FormedAt time.Time               `json:"formedAt"`
+}
+
+type commercialBasisDocument struct {
+	ResolutionID   string                   `json:"resolutionId"`
+	RulePackage    string                   `json:"rulePackage"`
+	ViewRevision   string                   `json:"viewRevision"`
+	DeclaredAsOf   []declaredAsOfDocument   `json:"declaredAsOf,omitempty"`
+	Applicable     []uint8                  `json:"applicable,omitempty"`
+	ManualReview   uint8                    `json:"manualReview"`
+	PendingRouting string                   `json:"pendingRouting,omitempty"`
+	Settlement     *settlementTermsDocument `json:"settlementTerms,omitempty"`
+}
+
+type declaredAsOfDocument struct {
+	Kind          uint8  `json:"kind"`
+	Semantics     string `json:"semantics"`
+	PolicyVersion string `json:"policyVersion"`
+}
+
+type settlementTermsDocument struct {
+	Policy       string `json:"policy"`
+	Method       string `json:"method"`
+	LegalEntity  string `json:"legalEntity"`
+	Counterparty string `json:"counterparty"`
+	Currency     string `json:"currency"`
 }
 
 type priorLinkDocument struct {
@@ -293,6 +351,19 @@ func documentOf(request domain.ShipmentRequest) requestDocument {
 			PriorRequestID: link.PriorRequestID().String(),
 			Kind:           uint8(link.Kind()),
 		}
+	}
+	if decision, present := request.AcceptanceDecision(); present {
+		document.Decision = decisionDocumentOf(decision)
+		document.DecisionFormed = true
+	}
+	if baseline, present := request.AcceptanceBaseline(); present {
+		document.Baseline = baselineDocumentOf(baseline)
+	}
+	if commitment, present := request.ExpectedCommitment(); present {
+		document.Commitment = commitmentDocumentOf(commitment)
+	}
+	for _, version := range request.CustomerSourceDataVersions() {
+		document.SourceDataVersions = append(document.SourceDataVersions, sourceDataVersionDocumentOf(version))
 	}
 	return document
 }
@@ -434,6 +505,35 @@ func (document requestDocument) rehydrationSpec(
 			PriorRequestID: priorID,
 			Kind:           domain.RequestLinkKind(document.PriorLink.Kind),
 		}
+	}
+	if document.Decision != nil {
+		decision, err := document.Decision.spec()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, err
+		}
+		spec.Decision = decision
+	}
+	spec.DecisionFormed = document.DecisionFormed
+	if document.Baseline != nil {
+		baseline, err := document.Baseline.spec()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, err
+		}
+		spec.Baseline = baseline
+	}
+	if document.Commitment != nil {
+		commitment, err := document.Commitment.spec()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, err
+		}
+		spec.Commitment = commitment
+	}
+	for _, raw := range document.SourceDataVersions {
+		version, err := raw.version()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, err
+		}
+		spec.SourceDataVersions = append(spec.SourceDataVersions, version)
 	}
 	return spec, nil
 }
@@ -604,4 +704,267 @@ func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) 
 		spec.ReviewCompletion = completion
 	}
 	return spec, nil
+}
+
+func decisionDocumentOf(decision domain.AcceptanceDecision) *acceptanceDecisionDocument {
+	document := &acceptanceDecisionDocument{
+		DecisionID:   decision.DecisionID().String(),
+		Accepted:     decision.Accepted(),
+		Basis:        commercialBasisDocumentOf(decision.Basis()),
+		ManualReview: uint8(decision.ManualReview()),
+		DecidedAt:    decision.DecidedAt().UTC(),
+	}
+	for _, check := range decision.Checks() {
+		document.Checks = append(document.Checks, acceptanceCheckDocumentOf(check))
+	}
+	return document
+}
+
+func acceptanceCheckDocumentOf(check domain.AcceptanceCheck) acceptanceCheckDocument {
+	document := acceptanceCheckDocument{
+		Group:   uint8(check.Group()),
+		Outcome: uint8(check.Outcome()),
+	}
+	if parcel := check.DeclaredParcelID(); parcel.String() != "" {
+		document.ParcelID = parcel.String()
+	}
+	if reason := check.Reason(); reason.String() != "" {
+		document.Reason = reason.String()
+	}
+	if path := check.ResumePath(); path != domain.ResumePathInvalid {
+		document.ResumePath = uint8(path)
+	}
+	return document
+}
+
+func baselineDocumentOf(baseline domain.AcceptanceBaseline) *acceptanceBaselineDocument {
+	document := &acceptanceBaselineDocument{
+		SubmissionVersion: baseline.SubmissionVersionID().String(),
+		FixedAt:           baseline.FixedAt().UTC(),
+	}
+	for _, parcel := range baseline.DeclaredParcelIDs() {
+		document.DeclaredParcelIDs = append(document.DeclaredParcelIDs, parcel.String())
+	}
+	return document
+}
+
+func commitmentDocumentOf(commitment domain.ExpectedCommitment) *expectedCommitmentDocument {
+	return &expectedCommitmentDocument{
+		Basis:    commercialBasisDocumentOf(commitment.Basis()),
+		FormedAt: commitment.FormedAt().UTC(),
+	}
+}
+
+func commercialBasisDocumentOf(snapshot domain.CommercialBasisSnapshot) commercialBasisDocument {
+	document := commercialBasisDocument{
+		ResolutionID: snapshot.ResolutionID().String(),
+		RulePackage:  snapshot.RulePackage().String(),
+		ViewRevision: snapshot.ViewRevision().String(),
+		ManualReview: uint8(snapshot.ManualReviewPolicy()),
+	}
+	for _, declared := range snapshot.DeclaredAsOf() {
+		document.DeclaredAsOf = append(document.DeclaredAsOf, declaredAsOfDocument{
+			Kind:          uint8(declared.Kind()),
+			Semantics:     declared.Semantics().String(),
+			PolicyVersion: declared.PolicyVersion().String(),
+		})
+	}
+	for _, group := range snapshot.Applicable().Groups() {
+		document.Applicable = append(document.Applicable, uint8(group))
+	}
+	if allowance := snapshot.PendingRoutingAllowance(); allowance.Allowed() {
+		document.PendingRouting = allowance.Basis().String()
+	}
+	if terms, present := snapshot.SettlementTerms(); present {
+		document.Settlement = &settlementTermsDocument{
+			Policy:       terms.Policy().String(),
+			Method:       terms.Method().String(),
+			LegalEntity:  terms.LegalEntity().String(),
+			Counterparty: terms.Counterparty().String(),
+			Currency:     terms.Currency().String(),
+		}
+	}
+	return document
+}
+
+func (document acceptanceDecisionDocument) spec() (domain.RehydrateAcceptanceDecisionSpec, error) {
+	decisionID, err := domain.NewAcceptanceDecisionID(document.DecisionID)
+	if err != nil {
+		return domain.RehydrateAcceptanceDecisionSpec{}, err
+	}
+	basis, err := document.Basis.snapshot()
+	if err != nil {
+		return domain.RehydrateAcceptanceDecisionSpec{}, err
+	}
+	spec := domain.RehydrateAcceptanceDecisionSpec{
+		DecisionID:   decisionID,
+		Accepted:     document.Accepted,
+		Basis:        basis,
+		ManualReview: domain.ManualReviewState(document.ManualReview),
+		DecidedAt:    document.DecidedAt,
+	}
+	for _, raw := range document.Checks {
+		check, err := raw.check()
+		if err != nil {
+			return domain.RehydrateAcceptanceDecisionSpec{}, err
+		}
+		spec.Checks = append(spec.Checks, check)
+	}
+	return spec, nil
+}
+
+func (document acceptanceCheckDocument) check() (domain.AcceptanceCheck, error) {
+	var parcel domain.DeclaredParcelID
+	if document.ParcelID != "" {
+		built, err := domain.NewDeclaredParcelID(document.ParcelID)
+		if err != nil {
+			return domain.AcceptanceCheck{}, err
+		}
+		parcel = built
+	}
+	var reason domain.CheckReason
+	if document.Reason != "" {
+		built, err := domain.NewCheckReason(document.Reason)
+		if err != nil {
+			return domain.AcceptanceCheck{}, err
+		}
+		reason = built
+	}
+	outcome := domain.CheckOutcome(document.Outcome)
+	if outcome == domain.CheckUndetermined {
+		return domain.NewUndeterminedAcceptanceCheck(
+			domain.AcceptanceCheckGroup(document.Group),
+			parcel,
+			reason,
+			domain.ResumePath(document.ResumePath),
+		)
+	}
+	return domain.NewAcceptanceCheck(
+		domain.AcceptanceCheckGroup(document.Group),
+		parcel,
+		outcome,
+		reason,
+	)
+}
+
+func (document acceptanceBaselineDocument) spec() (domain.RehydrateAcceptanceBaselineSpec, error) {
+	version, err := domain.NewSubmissionVersionID(document.SubmissionVersion)
+	if err != nil {
+		return domain.RehydrateAcceptanceBaselineSpec{}, err
+	}
+	spec := domain.RehydrateAcceptanceBaselineSpec{
+		SubmissionVersion: version,
+		FixedAt:           document.FixedAt,
+	}
+	for _, raw := range document.DeclaredParcelIDs {
+		parcel, err := domain.NewDeclaredParcelID(raw)
+		if err != nil {
+			return domain.RehydrateAcceptanceBaselineSpec{}, err
+		}
+		spec.DeclaredParcelIDs = append(spec.DeclaredParcelIDs, parcel)
+	}
+	return spec, nil
+}
+
+func (document expectedCommitmentDocument) spec() (domain.RehydrateExpectedCommitmentSpec, error) {
+	basis, err := document.Basis.snapshot()
+	if err != nil {
+		return domain.RehydrateExpectedCommitmentSpec{}, err
+	}
+	return domain.RehydrateExpectedCommitmentSpec{
+		Basis:    basis,
+		FormedAt: document.FormedAt,
+	}, nil
+}
+
+func (document commercialBasisDocument) snapshot() (domain.CommercialBasisSnapshot, error) {
+	resolutionID, err := domain.NewCommercialResolutionID(document.ResolutionID)
+	if err != nil {
+		return domain.CommercialBasisSnapshot{}, err
+	}
+	rulePackage, err := domain.NewRulePackageReference(document.RulePackage)
+	if err != nil {
+		return domain.CommercialBasisSnapshot{}, err
+	}
+	viewRevision, err := domain.NewCommercialViewRevision(document.ViewRevision)
+	if err != nil {
+		return domain.CommercialBasisSnapshot{}, err
+	}
+	spec := domain.CommercialBasisSnapshotSpec{
+		ResolutionID: resolutionID,
+		RulePackage:  rulePackage,
+		ViewRevision: viewRevision,
+		ManualReview: domain.ManualReviewPolicy(document.ManualReview),
+	}
+	for _, raw := range document.DeclaredAsOf {
+		semantics, err := domain.NewAsOfSemanticsReference(raw.Semantics)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		policy, err := domain.NewAsOfPolicyVersion(raw.PolicyVersion)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		declared, err := domain.NewDeclaredAsOf(domain.JudgmentKind(raw.Kind), semantics, policy)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		spec.DeclaredAsOf = append(spec.DeclaredAsOf, declared)
+	}
+	if len(document.Applicable) != 0 {
+		groups := make([]domain.AcceptanceCheckGroup, 0, len(document.Applicable))
+		for _, raw := range document.Applicable {
+			groups = append(groups, domain.AcceptanceCheckGroup(raw))
+		}
+		applicable, err := domain.NewApplicableCheckGroups(groups...)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		spec.Applicable = applicable
+	}
+	if document.PendingRouting != "" {
+		basis, err := domain.NewPendingRoutingBasis(document.PendingRouting)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		allowance, err := domain.NewPendingRoutingAllowance(basis)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		spec.PendingRouting = allowance
+	}
+	if document.Settlement != nil {
+		policy, err := domain.NewSettlementPolicyEcho(document.Settlement.Policy)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		method, err := domain.NewSettlementMethodEcho(document.Settlement.Method)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		legalEntity, err := domain.NewSettlementLegalEntityEcho(document.Settlement.LegalEntity)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		counterparty, err := domain.NewSettlementCounterpartyEcho(document.Settlement.Counterparty)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		currency, err := domain.NewSettlementCurrencyEcho(document.Settlement.Currency)
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		terms, err := domain.NewAdoptedSettlementTerms(domain.AdoptedSettlementTermsSpec{
+			Policy:       policy,
+			Method:       method,
+			LegalEntity:  legalEntity,
+			Counterparty: counterparty,
+			Currency:     currency,
+		})
+		if err != nil {
+			return domain.CommercialBasisSnapshot{}, err
+		}
+		spec.SettlementTerms = terms
+	}
+	return domain.NewCommercialBasisSnapshot(spec)
 }

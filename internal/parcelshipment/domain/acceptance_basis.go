@@ -80,6 +80,11 @@ func (applicable ApplicableCheckGroups) Declared() bool {
 	return len(applicable.groups) > 0
 }
 
+// Groups 交回声明的适用校验组。重建与快照往返按公开访问器保全，不能读未导出切片。
+func (applicable ApplicableCheckGroups) Groups() []AcceptanceCheckGroup {
+	return append([]AcceptanceCheckGroup(nil), applicable.groups...)
+}
+
 // ManualReviewPolicy 是所采用接单规则包对「这份委托要不要人工复核」的声明。
 //
 // 它刻意没有`已完成`：复核做没做完是运营发生的事，属本上下文接受判断任务的状态，规则包
@@ -511,6 +516,14 @@ func (snapshot CommercialBasisSnapshot) RulePackage() RulePackageReference {
 
 func (snapshot CommercialBasisSnapshot) ViewRevision() CommercialViewRevision {
 	return snapshot.viewRevision
+}
+
+func (snapshot CommercialBasisSnapshot) Applicable() ApplicableCheckGroups {
+	return snapshot.applicable
+}
+
+func (snapshot CommercialBasisSnapshot) DeclaredAsOf() []DeclaredAsOf {
+	return append([]DeclaredAsOf(nil), snapshot.declaredAsOf...)
 }
 
 // DeclaredAsOfFor 返回规则包为某一类判断声明的时点锚。没有声明时报告缺席而不是给默认值——

@@ -66,6 +66,7 @@
 - [ADR-0058：阶段内容声明按拥有规则对象归属，产品与合同只采用](./0058-stage-content-owned-by-rule-objects.md)
 - [ADR-0059：规则包五维适用性照存但不参与选择](./0059-rule-package-applicability-stored-not-selected.md)
 - [ADR-0060：包裹反查走当前快照投影列，不另表、不扫 JSONB](./0060-parcel-lookup-uses-current-snapshot-projection.md)
+- [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)
 
 ## 已被取代决策
 

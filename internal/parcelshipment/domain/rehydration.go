@@ -19,14 +19,13 @@ var ErrInvalidRehydratedShipmentRequest = errors.New("parcel shipment: invalid r
 // 运维会照着一份完好的数据去找一处不存在的损坏。
 var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration does not yet cover this shipment request state")
 
-// RehydrateShipmentRequestSpec 携带重建一份`已提交`委托所需的全部字段。
+// RehydrateShipmentRequestSpec 携带重建一份委托所需的全部字段。
 //
 // 它是本包唯一一处「相信输入」的地方（ADR-0028）：字段一律当**数据**收下，绝不从中重新
 // 推导 accepted、state、baseline 或任何派生字段。要重算的那扇门是 Decide，不是这里。
 //
-// 它对`已提交`是**全的**，而这正是这扇门今天只开到这一个状态的判据（ADR-0030）：判断产物
-// （决定、接受基线、预计承诺、撤回）与已接受之后的客户资料版本在`已提交`下必然缺席，所以
-// 这里没有对应字段不构成缺口。另外三个状态少的是真字段，由 RehydrateShipmentRequest 挡住。
+// ADR-0030 的准入判据是快照表达能力。今天开`已提交`与`已接受`：后者可达的决定、基线、承诺
+// 与客户资料版本都有字段可填；`已拒绝`/`已撤回`仍少撤回或主动拒绝的完整表达，由入口挡住。
 type RehydrateShipmentRequestSpec struct {
 	// Revision 是这一行在库里的版本。重建的聚合必然已持久化，所以它必须从 1 起。
 	Revision          int64
@@ -45,6 +44,48 @@ type RehydrateShipmentRequestSpec struct {
 	// 有出处而不带回，一份关联新委托重建后看起来像首次委托——「保留原版本或原决定」的
 	// 那条线索就断在重建这一步。
 	PriorLink RehydratePriorRequestLinkSpec
+	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空。
+	Decision           RehydrateAcceptanceDecisionSpec
+	DecisionFormed     bool
+	Baseline           RehydrateAcceptanceBaselineSpec
+	Commitment         RehydrateExpectedCommitmentSpec
+	SourceDataVersions []CustomerSourceDataVersion
+}
+
+// RehydrateAcceptanceDecisionSpec 是接受决定在库里的样子。决定是产物，没有公开构造器，
+// 因此另立重建面（ADR-0030）。Checks 与 Basis 收成品类型：两者都有公开构造器且字段未导出。
+type RehydrateAcceptanceDecisionSpec struct {
+	DecisionID   AcceptanceDecisionID
+	Accepted     bool
+	Checks       []AcceptanceCheck
+	Basis        CommercialBasisSnapshot
+	ManualReview ManualReviewState
+	DecidedAt    time.Time
+}
+
+func (spec RehydrateAcceptanceDecisionSpec) present() bool {
+	return spec.DecisionID.valid()
+}
+
+// RehydrateAcceptanceBaselineSpec 是接受基线在库里的样子。基线没有公开构造器。
+type RehydrateAcceptanceBaselineSpec struct {
+	DeclaredParcelIDs []DeclaredParcelID
+	SubmissionVersion SubmissionVersionID
+	FixedAt           time.Time
+}
+
+func (spec RehydrateAcceptanceBaselineSpec) present() bool {
+	return spec.SubmissionVersion.valid() || !spec.FixedAt.IsZero() || len(spec.DeclaredParcelIDs) != 0
+}
+
+// RehydrateExpectedCommitmentSpec 是预计承诺在库里的样子。承诺没有公开构造器；Basis 收成品。
+type RehydrateExpectedCommitmentSpec struct {
+	Basis    CommercialBasisSnapshot
+	FormedAt time.Time
+}
+
+func (spec RehydrateExpectedCommitmentSpec) present() bool {
+	return !spec.FormedAt.IsZero() || spec.Basis.valid()
 }
 
 // RehydratePriorRequestLinkSpec 是关联出处的快照表达：要么两个字段都缺席（首次委托），
@@ -145,6 +186,25 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			prior: snapshot.PriorLink.PriorRequestID,
 			kind:  snapshot.PriorLink.Kind,
 		},
+		decision: AcceptanceDecision{
+			decisionID:   snapshot.Decision.DecisionID,
+			accepted:     snapshot.Decision.Accepted,
+			checks:       append([]AcceptanceCheck(nil), snapshot.Decision.Checks...),
+			basis:        snapshot.Decision.Basis,
+			manualReview: snapshot.Decision.ManualReview,
+			decidedAt:    snapshot.Decision.DecidedAt,
+		},
+		decisionFormed: snapshot.DecisionFormed,
+		baseline: AcceptanceBaseline{
+			declaredParcelIDs: append([]DeclaredParcelID(nil), snapshot.Baseline.DeclaredParcelIDs...),
+			submissionVersion: snapshot.Baseline.SubmissionVersion,
+			fixedAt:           snapshot.Baseline.FixedAt,
+		},
+		commitment: ExpectedCommitment{
+			basis:    snapshot.Commitment.Basis,
+			formedAt: snapshot.Commitment.FormedAt,
+		},
+		sourceDataVersions: append([]CustomerSourceDataVersion(nil), snapshot.SourceDataVersions...),
 	}
 	if err := request.validForRehydration(); err != nil {
 		return ShipmentRequest{}, err
@@ -154,25 +214,16 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 
 // admitRehydratedState 判这扇门今天开到哪个状态。
 //
-// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来，而今天满足这条的只有
-// `已提交`。另外三个状态的判断产物在 RehydrateShipmentRequestSpec 里根本没有字段可填，放进来
-// 重建出的聚合会缺决定、基线、承诺或撤回，而它此后看起来与真的一样——一份空的接受基线尤其坏，
-// 它会把全部指名成员的资料更正当作「不在基线内」拒掉。
-//
-// `未设`在这里判而不留给 validForRehydration：状态是本函数分派的依据，零值必须在分派处就被
-// 认出来，否则 default 分支会把一行坏数据报成「本期不支持」。
-//
-// **三个已知但未开门的状态逐个列出，default 留给「根本不是本上下文的取值」。** 两者合在
-// default 里的话，库里一个越界值（那一列存了 99）会被报成「本期不支持这个状态」——方向与
-// ADR-0030 要分开的那两个哨兵相反而病相同：运维会去等一扇永远不会为它而开的门，而不是去查
-// 那一行。报文也说不出是哪个值，`ShipmentRequestState(99).String()` 交回空串。
+// 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。今天满足这条的是
+// `已提交`与`已接受`。`已拒绝`/`已撤回`的判断产物在规格里仍没有完整字段可填，放进来重建出
+// 的聚合会缺撤回或主动拒绝留痕，而它此后看起来与真的一样。
 func admitRehydratedState(state ShipmentRequestState) error {
 	switch state {
-	case ShipmentRequestSubmitted:
+	case ShipmentRequestSubmitted, ShipmentRequestAccepted:
 		return nil
 	case ShipmentRequestStateInvalid:
 		return rehydrationRefusal("委托状态未设")
-	case ShipmentRequestAccepted, ShipmentRequestRejected, ShipmentRequestWithdrawn:
+	case ShipmentRequestRejected, ShipmentRequestWithdrawn:
 		return fmt.Errorf("%w：%s", ErrRehydrationStateNotSupported, state)
 	default:
 		// 越界值印数字而不是名字：`String()` 对它交回空串，而一个说不出是哪个值的拒绝，
@@ -214,10 +265,126 @@ func (request ShipmentRequest) validForRehydration() error {
 	if request.state == ShipmentRequestSubmitted && !request.acceptanceTask.running() {
 		return rehydrationRefusal("委托仍为已提交，接受判断任务却已收工")
 	}
+	if err := request.acceptedProductsValidForRehydration(); err != nil {
+		return err
+	}
 	if err := request.linkValidForRehydration(); err != nil {
 		return err
 	}
 	return request.historyValidForRehydration()
+}
+
+// acceptedProductsValidForRehydration 把`已提交`与`已接受`各自该不该带判断产物写下来。
+//
+// 决定、基线、承诺、资料版本在`已提交`下必然缺席；`已接受`必须带齐决定、完成任务、基线与
+// 承诺，且版本、成员、依据与决定时刻互相一致。半截快照是坏数据，不得折成「本期不支持」。
+func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
+	hasDecision := request.decision.decisionID.valid()
+	hasBaseline := len(request.baseline.declaredParcelIDs) != 0 ||
+		request.baseline.submissionVersion.valid() || !request.baseline.fixedAt.IsZero()
+	hasCommitment := !request.commitment.formedAt.IsZero() || request.commitment.basis.valid()
+	hasSourceData := len(request.sourceDataVersions) != 0
+	hasWithdrawal := request.withdrawal.formed()
+
+	if request.state == ShipmentRequestSubmitted {
+		if request.decisionFormed || hasDecision {
+			return rehydrationRefusal("已提交委托携带了接受决定")
+		}
+		if hasBaseline {
+			return rehydrationRefusal("已提交委托携带了接受基线")
+		}
+		if hasCommitment {
+			return rehydrationRefusal("已提交委托携带了预计承诺")
+		}
+		if hasSourceData {
+			return rehydrationRefusal("已提交委托携带了客户资料版本")
+		}
+		if hasWithdrawal {
+			return rehydrationRefusal("已提交委托携带了撤回")
+		}
+		return nil
+	}
+
+	if request.state != ShipmentRequestAccepted {
+		return nil
+	}
+
+	if hasWithdrawal {
+		return rehydrationRefusal("已接受委托携带了撤回")
+	}
+	if !request.decisionFormed {
+		return rehydrationRefusal("已接受委托没有越过决定边界")
+	}
+	if !hasDecision {
+		return rehydrationRefusal("已接受委托没有接受决定")
+	}
+	if !request.decision.accepted {
+		return rehydrationRefusal("已接受委托的决定不是接受")
+	}
+	if !request.acceptanceTask.IsComplete() {
+		return rehydrationRefusal("已接受委托的判断任务尚未完成")
+	}
+	if _, waiting := request.acceptanceTask.WaitingOn(); waiting {
+		return rehydrationRefusal("已接受委托的判断任务仍在等待")
+	}
+	if !hasBaseline {
+		return rehydrationRefusal("已接受委托没有接受基线")
+	}
+	if !hasCommitment {
+		return rehydrationRefusal("已接受委托没有预计承诺")
+	}
+	if request.baseline.submissionVersion != request.currentVersion.versionID {
+		return rehydrationRefusal("接受基线固定在另一个提交版本上")
+	}
+	if request.baseline.fixedAt.IsZero() {
+		return rehydrationRefusal("接受基线没有固定时刻")
+	}
+	if !sameDeclaredParcels(request.baseline.declaredParcelIDs, request.currentVersion.declaredParcelIDs) {
+		return rehydrationRefusal("接受基线成员与当前提交版本不一致")
+	}
+	if !request.decision.basis.valid() {
+		return rehydrationRefusal("接受决定没有可用的商业依据")
+	}
+	if request.commitment.basis.resolutionID != request.decision.basis.resolutionID ||
+		request.commitment.basis.viewRevision != request.decision.basis.viewRevision {
+		return rehydrationRefusal("预计承诺的商业依据与接受决定不一致")
+	}
+	if !request.commitment.formedAt.Equal(request.decision.decidedAt) ||
+		!request.baseline.fixedAt.Equal(request.decision.decidedAt) {
+		return rehydrationRefusal("接受基线或预计承诺的时刻与决定时刻不一致")
+	}
+	if request.decision.decidedAt.IsZero() {
+		return rehydrationRefusal("接受决定没有决定时刻")
+	}
+	for _, version := range request.sourceDataVersions {
+		if !version.valid() {
+			return rehydrationRefusal("客户资料版本立不起来")
+		}
+		if version.scope.shipmentRequestID != request.shipmentRequestID {
+			return rehydrationRefusal("客户资料版本指着另一份委托")
+		}
+		if parcelID, named := version.scope.DeclaredParcelID(); named && !request.baseline.covers(parcelID) {
+			return rehydrationRefusal("客户资料版本指名了接受基线外的成员")
+		}
+	}
+	return nil
+}
+
+func sameDeclaredParcels(left, right []DeclaredParcelID) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	counts := make(map[DeclaredParcelID]int, len(left))
+	for _, parcel := range left {
+		counts[parcel]++
+	}
+	for _, parcel := range right {
+		counts[parcel]--
+		if counts[parcel] < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // linkValidForRehydration 校验关联出处：要么整个缺席，要么方向与指向都成立且不指自己。

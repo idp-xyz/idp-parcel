@@ -279,15 +279,190 @@ func TestAttemptsRecordedAfterRehydrationAppendToTheRehydratedOnes(t *testing.T)
 	}
 }
 
+func acceptedSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
+	t.Helper()
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestAccepted
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+	basis := acceptanceBasis(t)
+	snapshot.DecisionFormed = true
+	snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{
+		DecisionID:   mustValue(t, domain.NewAcceptanceDecisionID, "decision-1"),
+		Accepted:     true,
+		Checks:       everyGroupPassingFor(t, "parcel-1"),
+		Basis:        basis,
+		ManualReview: domain.ManualReviewNotRequired,
+		DecidedAt:    decidedAt,
+	}
+	snapshot.Baseline = domain.RehydrateAcceptanceBaselineSpec{
+		DeclaredParcelIDs: []domain.DeclaredParcelID{
+			mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		},
+		SubmissionVersion: snapshot.CurrentVersion.VersionID,
+		FixedAt:           decidedAt,
+	}
+	snapshot.Commitment = domain.RehydrateExpectedCommitmentSpec{
+		Basis:    basis,
+		FormedAt: decidedAt,
+	}
+	return snapshot
+}
+
+func TestRehydratingAnAcceptedRequestKeepsDecisionBaselineAndCommitment(t *testing.T) {
+	request, err := domain.RehydrateShipmentRequest(acceptedSnapshot(t))
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	if request.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED", request.State())
+	}
+	decision, present := request.AcceptanceDecision()
+	if !present || !decision.Accepted() || decision.DecisionID().String() != "decision-1" {
+		t.Fatalf("decision = %#v present = %v", decision, present)
+	}
+	baseline, present := request.AcceptanceBaseline()
+	if !present || baseline.SubmissionVersionID().String() != "version-1" {
+		t.Fatalf("baseline = %#v present = %v", baseline, present)
+	}
+	commitment, present := request.ExpectedCommitment()
+	if !present || commitment.Basis().ResolutionID().String() != "RES-1" {
+		t.Fatalf("commitment = %#v present = %v", commitment, present)
+	}
+	if len(request.CustomerSourceDataVersions()) != 0 {
+		t.Fatal("最小已接受快照凭空长出了客户资料版本")
+	}
+}
+
+func TestRehydratingAcceptedSourceDataVersionsRoundTrips(t *testing.T) {
+	scope, err := domain.NewShipmentScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewSourceDataGroupReference, "SHIPPER_NAME"),
+	)
+	if err != nil {
+		t.Fatalf("source data scope: %v", err)
+	}
+	version, err := domain.FormCustomerSourceDataVersion(domain.CustomerSourceDataVersionSpec{
+		VersionID: mustValue(t, domain.NewSourceDataVersionID, "src-ver-1"),
+		Scope:     scope,
+		Basis:     domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:    domain.SupplementIntent,
+		Request:   sourceFingerprint(t, "tenant-1", "customer-1", "SOURCE-1", "key-1", "sha256:amend"),
+		Reason:    mustValue(t, domain.NewAmendmentReasonReference, "MISSING_SHIPPER"),
+		Requester: mustValue(t, domain.NewRequesterReference, "CUSTOMER-1"),
+		Decider:   mustValue(t, domain.NewDeciderReference, "OPERATOR-1"),
+		Authority: mustValue(t, domain.NewAmendmentAuthoritySnapshot, "AUTH-SNAP-1"),
+		FormedAt:  decidedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("form source data version: %v", err)
+	}
+	snapshot := acceptedSnapshot(t)
+	snapshot.SourceDataVersions = []domain.CustomerSourceDataVersion{version}
+
+	request, err := domain.RehydrateShipmentRequest(snapshot)
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	kept := request.CustomerSourceDataVersions()
+	if len(kept) != 1 || kept[0].VersionID().String() != "src-ver-1" {
+		t.Fatalf("versions = %#v", kept)
+	}
+	if request.SourceDataScopeOutsideAcceptanceBaseline(kept[0].Scope()) {
+		t.Fatal("往返后资料范围被当成基线外")
+	}
+}
+
+func TestRehydrationRefusesAnAcceptedRequestMissingItsProducts(t *testing.T) {
+	cases := map[string]func(*domain.RehydrateShipmentRequestSpec){
+		"没有越过决定边界": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.DecisionFormed = false
+		},
+		"没有决定": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{}
+		},
+		"决定不是接受": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Decision.Accepted = false
+		},
+		"任务未完成": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.AcceptanceTask.State = domain.AcceptanceTaskRunning
+		},
+		"任务仍在等待": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.AcceptanceTask.WaitingOn = domain.ResumeByManualReview
+		},
+		"没有基线": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Baseline = domain.RehydrateAcceptanceBaselineSpec{}
+		},
+		"没有承诺": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Commitment = domain.RehydrateExpectedCommitmentSpec{}
+		},
+		"基线版本错配": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Baseline.SubmissionVersion = mustValue(t, domain.NewSubmissionVersionID, "version-9")
+		},
+		"基线成员错配": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			snapshot.Baseline.DeclaredParcelIDs = []domain.DeclaredParcelID{
+				mustValue(t, domain.NewDeclaredParcelID, "parcel-9"),
+			}
+		},
+		"依据错配": func(snapshot *domain.RehydrateShipmentRequestSpec) {
+			applicable, err := domain.NewApplicableCheckGroups(allApplicableGroups...)
+			if err != nil {
+				t.Fatalf("applicable: %v", err)
+			}
+			snapshot.Commitment.Basis, err = domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+				ResolutionID: mustValue(t, domain.NewCommercialResolutionID, "RES-OTHER"),
+				RulePackage:  mustValue(t, domain.NewRulePackageReference, "rules-1/v1"),
+				ViewRevision: mustValue(t, domain.NewCommercialViewRevision, "VIEW-1"),
+				Applicable:   applicable,
+				ManualReview: domain.ManualReviewNotRequiredByRules,
+			})
+			if err != nil {
+				t.Fatalf("other basis: %v", err)
+			}
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			snapshot := acceptedSnapshot(t)
+			mutate(&snapshot)
+			_, err := domain.RehydrateShipmentRequest(snapshot)
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+			if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("error = %v；半截已接受快照折成了未开门", err)
+			}
+		})
+	}
+}
+
+func TestRehydrationRefusesSubmittedCarryingAcceptedProducts(t *testing.T) {
+	snapshot := submittedSnapshot(t)
+	snapshot.DecisionFormed = true
+	snapshot.Decision = acceptedSnapshot(t).Decision
+	_, err := domain.RehydrateShipmentRequest(snapshot)
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+	}
+}
+
+func TestAnAcceptedSnapshotWithoutProductsIsInvalidNotUnsupported(t *testing.T) {
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestAccepted
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+	_, err := domain.RehydrateShipmentRequest(snapshot)
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest；缺产物是坏快照不是缺门", err)
+	}
+	if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+		t.Fatal("半截已接受快照折成了未开门")
+	}
+}
+
 // Covers: ADR-0030「没开的状态由入口显式拒绝，且用一个与『这行数据不可能』不同的哨兵」。
 //
-// 另外三个状态在快照里少的是真字段——已接受少接受基线与预计承诺，已拒绝少决定，已撤回少
-// 撤回记录。放它们进来重建出的聚合看起来与真的一样，而`已接受`那一份的空基线会把全部指名
-// 成员的资料更正拒掉。两个哨兵必须互相分得开：一行`已接受`的数据本身没有任何毛病，报成
-// 「这行不可能」会让人去查一处不存在的损坏。
+// `已拒绝`/`已撤回`仍少撤回或主动拒绝的完整表达。两个哨兵必须互相分得开。
 func TestRehydrationRefusesAStateThisDoorDoesNotYetCover(t *testing.T) {
 	unsupported := map[string]domain.ShipmentRequestState{
-		"已接受": domain.ShipmentRequestAccepted,
 		"已拒绝": domain.ShipmentRequestRejected,
 		"已撤回": domain.ShipmentRequestWithdrawn,
 	}

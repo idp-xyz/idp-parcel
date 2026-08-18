@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -60,13 +59,11 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 }
 
 // Covers: SYN-V0 已决定路径——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher
-// 把信封投到 NR 消费者；消费者按引用读回委托时撞上 ADR-0030 重建门（只开到已提交）。
-//
-// 设计稿把第一跳的停点写成 ROUTING_APPLICABILITY_UNAVAILABLE。那一格在生产装配里确实
-// 是 nil 映射，但今天到不了：FindBySourceIdentity 读不出已接受聚合，消费在适用性评估
-// 之前就失败。本测试钉住这个更早的具名缺口，不把重建门为 SYN 打开（ADR-0030：先补齐
-// 快照表达再放行状态）。
-func TestSYNAcceptedDecisionStopsAtRehydrationGateBeforeRoutingApplicability(t *testing.T) {
+// 把信封投到 NR 消费者；已接受重建门已开（ADR-0061），消费者按引用读回委托并进入
+// CreateInitialRoute。生产装配的适用性映射仍是 nil，整份交接停在
+// ROUTING_APPLICABILITY_UNAVAILABLE / dispatch.consumer_undecided。不得写可执行路由，
+// 也不得把未决当成已处理入账。
+func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 
@@ -93,11 +90,12 @@ func TestSYNAcceptedDecisionStopsAtRehydrationGateBeforeRoutingApplicability(t *
 		t.Fatalf("接受信封 = %v, want 恰好一封且 ID = 决定标识 %s（ADR-0043）", ids, synV0DecisionID)
 	}
 
-	// ADR-0030：重建门只开到已提交。Save 不拦已接受，读回却必须显式拒绝——否则 NR
-	// 会拿到一份缺基线的聚合，比读不到更糟。这一格在适用性 nil 之前。
-	_, _, findErr := fixture.requests.FindBySourceIdentity(ctx, fixture.identity)
-	if !errors.Is(findErr, psdomain.ErrRehydrationStateNotSupported) {
-		t.Fatalf("读回已接受委托：err = %v, want ErrRehydrationStateNotSupported", findErr)
+	stored := fixture.mustLoadRequest(t, ctx)
+	if stored.State() != psdomain.ShipmentRequestAccepted {
+		t.Fatalf("读回状态 = %q, want ACCEPTED（重建门已开到已接受）", stored.State())
+	}
+	if _, present := stored.AcceptanceBaseline(); !present {
+		t.Fatal("读回已接受委托却没有接受基线")
 	}
 
 	published, err := fixture.beat.DispatchOnce(ctx)
@@ -105,11 +103,11 @@ func TestSYNAcceptedDecisionStopsAtRehydrationGateBeforeRoutingApplicability(t *
 		t.Fatalf("第一拍：%v", err)
 	}
 	if published != 0 {
-		t.Fatalf("重建门未开却定稿了 %d 条；失败码 = %q",
+		t.Fatalf("适用性未决却定稿了 %d 条；失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, synV0DecisionID))
 	}
-	if got := recordedFailureCode(t, fixture.db, synV0DecisionID); got != "dispatch.publish_failed" {
-		t.Fatalf("failure_code = %q, want dispatch.publish_failed（消费者撞重建门，还不是未决哨兵）", got)
+	if got := recordedFailureCode(t, fixture.db, synV0DecisionID); got != "dispatch.consumer_undecided" {
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（nil 映射，不是重建门）", got)
 	}
 
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {

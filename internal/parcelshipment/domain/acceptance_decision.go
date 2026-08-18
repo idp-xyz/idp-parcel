@@ -160,6 +160,10 @@ func (check AcceptanceCheck) Reason() CheckReason {
 	return check.reason
 }
 
+func (check AcceptanceCheck) ResumePath() ResumePath {
+	return check.resumePath
+}
+
 // ManualReviewState 记录所采用的接单规则包是否要求人工复核。复核是接受的一道门，但
 // 绝不替代硬规则：已完成的复核不能把一个确定性失败变成接受。
 type ManualReviewState uint8
@@ -261,6 +265,10 @@ func (decision AcceptanceDecision) Basis() CommercialBasisSnapshot {
 
 func (decision AcceptanceDecision) DecidedAt() time.Time {
 	return decision.decidedAt
+}
+
+func (decision AcceptanceDecision) ManualReview() ManualReviewState {
+	return decision.manualReview
 }
 
 // AcceptanceDecisionSpec 刻意不含人工复核状态：要不要复核由所采用规则包声明（随 Basis 到

@@ -371,16 +371,16 @@ func TestEveryShipmentRequestFieldIsClassifiedForRehydration(t *testing.T) {
 		"priorTasks":    true,
 		// 关联出处是出生属性，`已提交`下就有值（首次委托为零值缺席），必须随快照往返。
 		"priorLink": true,
-	}
-	// absentInSubmitted 是`已提交`下必然缺席的判断产物。这扇门开到别的状态那天，它们要从
-	// 这一份挪到上一份并各自补上快照表达，而不是继续留零——ADR-0030 的入口条件说的就是它。
-	absentInSubmitted := map[string]bool{
-		"withdrawal":         true,
+		// 已接受产物：门开到 ACCEPTED 后必须随快照往返，已提交下由 validForRehydration 拒绝携带。
 		"decision":           true,
 		"decisionFormed":     true,
 		"baseline":           true,
 		"commitment":         true,
 		"sourceDataVersions": true,
+	}
+	// absentInSubmitted 是`已提交`下必然缺席、且本期仍未开门的判断产物。
+	absentInSubmitted := map[string]bool{
+		"withdrawal": true,
 	}
 
 	aggregate := reflect.TypeOf(domain.ShipmentRequest{})

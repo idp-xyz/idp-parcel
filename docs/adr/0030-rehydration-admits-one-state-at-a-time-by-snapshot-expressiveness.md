@@ -60,3 +60,4 @@ Date: 2026-08-11
 - [ADR-0029：按标识取回原状态失败时，结果代数按消费方的恢复动作分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：本记录据其分格规则把「本期不支持这个状态」与「这行数据不可能」分成两个哨兵
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：同一手法——被合在一起判的两件事分开判，这里分的是聚合的四个状态
 - [UC-PS-001：提交委托请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：`已提交`可达字段与三处业务结果改变的不变式出处
+- [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)：本记录「今天只开`已提交`」那一格被推进到`已接受`；Status 与其余各条不变
