@@ -90,6 +90,7 @@ func deliveryOutcome(t *testing.T) psdomain.ResponsibilityOutcome {
 // 声明即成立；未配置即 found=false。
 func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	nodeOnly, err := pcdomain.NewIntakeQualificationContent(
+		stageRulePackage(t),
 		[]pcdomain.DeclaredIntakeSource{pcdomain.DeclaredNodeIntake},
 		[]pcdomain.RuleReference{},
 	)
@@ -116,6 +117,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	}
 
 	withQualifications, err := pcdomain.NewIntakeQualificationContent(
+		stageRulePackage(t),
 		[]pcdomain.DeclaredIntakeSource{pcdomain.DeclaredNodeIntake},
 		[]pcdomain.RuleReference{commercialRule(t, "INTAKE-QUAL/customs-precheck")},
 	)
@@ -142,6 +144,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	}
 
 	offsiteOnly, err := pcdomain.NewIntakeQualificationContent(
+		stageRulePackage(t),
 		[]pcdomain.DeclaredIntakeSource{pcdomain.DeclaredOffsitePickup},
 		[]pcdomain.RuleReference{},
 	)
@@ -184,7 +187,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 // 版本；缺行即不满足带依据（此产品下这种结果不形成终局是声明的真话——「有效交付
 // 不在所有产品中自动等于终局」的提供方半边）；未配置即 found=false。
 func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
-	content, err := pcdomain.NewFinalRuleContent([]pcdomain.FinalizationDeclaration{{
+	content, err := pcdomain.NewFinalRuleContent(stageRulePackage(t), []pcdomain.FinalizationDeclaration{{
 		Outcome:   pcdomain.DeclaredReturnCompleted,
 		FinalKind: commercialRule(t, "NETWORK_SERVICE_RETURNED"),
 	}})
@@ -210,7 +213,7 @@ func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
 		t.Fatalf("basis = %q", judgment.Basis)
 	}
 
-	withDelivery, err := pcdomain.NewFinalRuleContent([]pcdomain.FinalizationDeclaration{{
+	withDelivery, err := pcdomain.NewFinalRuleContent(stageRulePackage(t), []pcdomain.FinalizationDeclaration{{
 		Outcome:   pcdomain.DeclaredEffectiveDelivery,
 		FinalKind: commercialRule(t, "NETWORK_SERVICE_DELIVERED"),
 	}})
@@ -290,7 +293,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 		}
 	})
 
-	operationsOnly, err := pcdomain.NewCancellationAuthorityContent([]pcdomain.CancellationAuthorityDeclaration{{
+	operationsOnly, err := pcdomain.NewCancellationAuthorityContent(stageAuthorizationRule(t), []pcdomain.CancellationAuthorityDeclaration{{
 		Party: pcdomain.DeclaredOperationsCancellation,
 		Rule:  commercialRule(t, "CANCEL-RULE/OPERATIONS"),
 	}})
@@ -316,7 +319,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 	})
 
 	t.Run("customer row missing refuses operations", func(t *testing.T) {
-		customerOnly, err := pcdomain.NewCancellationAuthorityContent([]pcdomain.CancellationAuthorityDeclaration{{
+		customerOnly, err := pcdomain.NewCancellationAuthorityContent(stageAuthorizationRule(t), []pcdomain.CancellationAuthorityDeclaration{{
 			Party: pcdomain.DeclaredCustomerCancellation,
 			Rule:  commercialRule(t, "CANCEL-RULE/CUSTOMER"),
 		}})
@@ -386,4 +389,56 @@ func commercialRule(t *testing.T, raw string) pcdomain.RuleReference {
 		t.Fatalf("new rule reference %q: %v", raw, err)
 	}
 	return rule
+}
+
+func stageRulePackage(t *testing.T) pcdomain.CommercialVersion {
+	t.Helper()
+	return liveStageVersion(t, pcdomain.AcceptanceRulePackageObject, "rules-stage", "v1", "sha256:rules-stage")
+}
+
+func stageAuthorizationRule(t *testing.T) pcdomain.CommercialVersion {
+	t.Helper()
+	return liveStageVersion(t, pcdomain.AuthorizationRuleObject, "auth-stage", "v1", "sha256:auth-stage")
+}
+
+func liveStageVersion(
+	t *testing.T,
+	kind pcdomain.CommercialObjectKind,
+	objectID, version, digest string,
+) pcdomain.CommercialVersion {
+	t.Helper()
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("new effective interval: %v", err)
+	}
+	draft, err := pcdomain.NewCommercialDraft(pcdomain.CommercialVersionSpec{
+		TenantID:      value(t, pcdomain.NewTenantID, "tenant-1"),
+		Kind:          kind,
+		ObjectID:      value(t, pcdomain.NewCommercialObjectID, objectID),
+		Version:       value(t, pcdomain.NewCommercialVersionLabel, version),
+		Scope:         value(t, pcdomain.NewCommercialScopeReference, "scope-"+objectID),
+		ContentDigest: value(t, pcdomain.NewCommercialContentDigest, digest),
+		Effective:     interval,
+	})
+	if err != nil {
+		t.Fatalf("new draft: %v", err)
+	}
+	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	basis, err := pcdomain.NewApprovalBasis(
+		value(t, pcdomain.NewApprovalReference, "approval-"+objectID),
+		value(t, pcdomain.NewCommercialSourceReference, "source-"+objectID),
+		approvedAt,
+	)
+	if err != nil {
+		t.Fatalf("new approval basis: %v", err)
+	}
+	published, err := draft.Publish(basis, pcdomain.ApprovalRoleConfirmed, approvedAt, nil)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	live, err := published.TakeEffect(approvedAt)
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	return live
 }

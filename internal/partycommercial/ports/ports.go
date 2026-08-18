@@ -117,6 +117,50 @@ type CustomerContractContentView interface {
 	) (domain.CustomerContract, bool, error)
 }
 
+// IntakeQualificationView 取已唯一选出的接单规则包版本的收寄资格声明（PAR-COM-16）。
+//
+// 它与 CommercialAuthorityView 分开：前者回答「这个范围有几个适用候选」，本口回答已
+// 选出规则包的阶段正文。塞进 ViewRevision，一次与选择无关的声明改动会把该范围全部
+// 在途解析判成已失效（open-decisions D-4 的同一条纪律）。
+//
+// found=false = 声明未登记（无父行）。父行在场而子行空/坏走 error，不得折成
+// found=false——领域要求至少一行允许来源，把损坏的正文伪装成从未登记会让消费方去催
+// 一份其实已经写坏的配置。读取失败同样走 error。本上下文不提供默认内容。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有规则版本同一身份。
+type IntakeQualificationView interface {
+	LoadIntakeQualification(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) (domain.IntakeQualificationContent, bool, error)
+}
+
+// FinalRuleContentView 取已唯一选出的接单规则包版本的终局规则声明（PAR-COM-17）。
+//
+// 分界、三格含义与 IntakeQualificationView 相同：无父行 = 未配置；父行在场而零子行
+// 是坏声明（NewFinalRuleContent 拒零行），走 error。产品与合同是采用方，不作为本口
+// 的键（ADR-0058）。
+type FinalRuleContentView interface {
+	LoadFinalRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) (domain.FinalRuleContent, bool, error)
+}
+
+// CancellationAuthorityContentView 取已唯一选出的授权规则版本的取消授权目录
+// （PAR-COM-17）。拥有对象是授权规则，不是产品或合同（ADR-0058）。
+//
+// 三格含义同上：无父行 = 未配置；父行在场而零子行走 error。本上下文不默认「客户可取消」。
+type CancellationAuthorityContentView interface {
+	LoadCancellationAuthority(
+		ctx context.Context,
+		tenant domain.TenantID,
+		authorizationRule domain.CommercialVersion,
+	) (domain.CancellationAuthorityContent, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回一次已固定的解析。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回

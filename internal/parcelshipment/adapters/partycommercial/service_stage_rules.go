@@ -29,9 +29,9 @@ type FinalContentSource interface {
 
 // CancellationContentSource 取回取消授权目录（PAR-COM-17）。found=false 即未配置。
 //
-// 本切片不给它单独落表：按 ADR-0042，阶段内容属拥有对象（产品/合同版本）的正文，
-// 存储问题属于整个阶段内容声明族（Intake/Final/Cancellation 三口一盘棋）。单独给
-// 取消开表会预先拍掉族设计且碎化；日后存储成片时三口同切。
+// 目录的拥有对象是授权规则版本，不是产品或合同——后两者是采用方（ADR-0058）。
+// 从哪个授权规则版本读、怎么缓存属装配；SourceIdentity 不含该版本时，生产装配停在
+// 诚实未配置，不造默认目录。
 type CancellationContentSource interface {
 	CancellationContentFor(
 		ctx context.Context,
@@ -128,7 +128,7 @@ func (adapter *ServiceStageRulesAdapter) JudgeIntakeEligibility(
 }
 
 // JudgeFinalOutcome 按声明判终局：责任结果有声明行即满足并带声明的终局类型；缺行
-// 即不满足带依据（此产品下这种结果不形成终局——那是声明的真话，编排保持未决等其他
+// 即不满足带依据（此规则包下这种结果不形成终局——那是声明的真话，编排保持未决等其他
 // 责任结果）；声明未配置即 found=false。
 func (adapter *ServiceStageRulesAdapter) JudgeFinalOutcome(
 	ctx context.Context,
@@ -171,8 +171,8 @@ func (adapter *ServiceStageRulesAdapter) JudgeFinalOutcome(
 	}, true, nil
 }
 
-// JudgeCancellationAuthority 按目录判取消授权。目录按接受时产品/合同说话，不按
-// 包裹发明不同授权（parcel 入参只为满足消费方端口）。
+// JudgeCancellationAuthority 按目录判取消授权。目录按接受时采用的授权规则说话，
+// 不按包裹发明不同授权（parcel 入参只为满足消费方端口）。
 //
 // 未配置短接在翻译之前：没有目录就不问这个 requester 是客户还是运营。已配置才折
 // 请求方格；格不在词汇表内不吸收（ADR-0025）。命中带规则引用；缺行带依据拒绝。

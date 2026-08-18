@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"sort"
+)
 
 var (
 	// ErrIntakeContentNotConfigured 是收寄资格声明缺件：允许来源为空或资格项非法。
@@ -14,6 +17,9 @@ var (
 	ErrConflictingIntakeSource            = errors.New("party commercial: conflicting intake source declaration")
 	ErrConflictingFinalization            = errors.New("party commercial: conflicting finalization declaration")
 	ErrConflictingCancellationAuthority   = errors.New("party commercial: conflicting cancellation authority declaration")
+	// ErrUnusableAuthorizationRule：非已生效授权规则承载不了取消授权目录。与
+	// ErrUnusableRulePackage 同判据同恢复动作（换当前可用的版本），只是拥有对象不同。
+	ErrUnusableAuthorizationRule = errors.New("party commercial: authorization rule cannot carry declarations")
 )
 
 // DeclaredIntakeSource 是规则可声明的收寄来源封闭二值，与 parcel-shipment 来源联合
@@ -42,22 +48,28 @@ func (source DeclaredIntakeSource) String() string {
 	}
 }
 
-// IntakeQualificationContent 是一个已生效规则包的收寄阶段资格声明（UC-PS-003 资格
-// 核对第 5 条的提供方半边）：允许哪些收寄来源、要过哪些硬资格。资格项是开放引用——
-// 目录属实例参数；声明为空集不是「没有资格要求」而是没声明（缺件错误），真没有要求
-// 也要显式声明空清单带来源允许。
+// IntakeQualificationContent 是一个已生效接单规则包的收寄阶段资格声明（UC-PS-003
+// 资格核对第 5 条的提供方半边）：允许哪些收寄来源、要过哪些硬资格。产品与合同是采用
+// 方，不拥有这份正文（ADR-0058）。资格项是开放引用——目录属实例参数；声明为空集不是
+// 「没有资格要求」而是没声明（缺件错误），真没有要求也要显式声明空清单带来源允许。
 type IntakeQualificationContent struct {
+	owner          CommercialVersion
 	allowedSources map[DeclaredIntakeSource]bool
 	qualifications []RuleReference
 }
 
-// NewIntakeQualificationContent 组装声明。允许来源至少一格且不重（一个收寄模式都
-// 不允许的产品谈不上收寄资格）；资格项可为空清单（显式声明无硬资格），但引用必须
-// 逐项合法。
+// NewIntakeQualificationContent 组装声明。拥有对象必须是当前可用的接单规则包；允许
+// 来源至少一格且不重（一个收寄模式都不允许的产品谈不上收寄资格）；资格项可为空清单
+// （显式声明无硬资格），但引用必须逐项合法。
 func NewIntakeQualificationContent(
+	owner CommercialVersion,
 	sources []DeclaredIntakeSource,
 	qualifications []RuleReference,
 ) (IntakeQualificationContent, error) {
+	if owner.kind != AcceptanceRulePackageObject ||
+		owner.status != CommercialVersionEffective {
+		return IntakeQualificationContent{}, ErrUnusableRulePackage
+	}
 	if len(sources) == 0 {
 		return IntakeQualificationContent{}, ErrIntakeContentNotConfigured
 	}
@@ -77,14 +89,31 @@ func NewIntakeQualificationContent(
 		}
 	}
 	return IntakeQualificationContent{
+		owner:          owner,
 		allowedSources: allowed,
 		qualifications: append([]RuleReference(nil), qualifications...),
 	}, nil
 }
 
+func (content IntakeQualificationContent) Owner() CommercialVersion {
+	return content.owner
+}
+
 // Allows 报告声明是否允许该来源。
 func (content IntakeQualificationContent) Allows(source DeclaredIntakeSource) bool {
 	return content.allowedSources[source]
+}
+
+// AllowedSources 给出声明允许的来源（按名称排序的副本）。
+func (content IntakeQualificationContent) AllowedSources() []DeclaredIntakeSource {
+	sources := make([]DeclaredIntakeSource, 0, len(content.allowedSources))
+	for source := range content.allowedSources {
+		sources = append(sources, source)
+	}
+	sort.Slice(sources, func(i, j int) bool {
+		return sources[i].String() < sources[j].String()
+	})
+	return sources
 }
 
 // Qualifications 给出声明的硬资格清单（副本）。
@@ -123,24 +152,34 @@ func (outcome DeclaredResponsibilityOutcome) String() string {
 	}
 }
 
-// FinalizationDeclaration 是一行终局声明：某种责任结果在此产品下形成哪种终局类型。
+// FinalizationDeclaration 是一行终局声明：某种责任结果在此规则包下形成哪种终局类型。
 // 终局类型是开放引用——网络服务不统一规定跨产品终局集合（UC-PS-004），类型话语由
-// 声明给出。
+// 声明给出。产品与合同采用这份规则包之后，缺行在采用层读成「此产品下不形成终局」。
 type FinalizationDeclaration struct {
 	Outcome   DeclaredResponsibilityOutcome
 	FinalKind RuleReference
 }
 
-// FinalRuleContent 是一个已生效规则包的终局规则声明（UC-PS-004 终局形成规则的提供方
-// 半边）：哪些责任结果在此产品下形成终局、形成哪种。没有声明行的责任结果不形成终局
-// ——「有效交付不在所有产品中自动等于终局」正是靠缺行表达，缺行是真话不是缺件。
+// FinalRuleContent 是一个已生效接单规则包的终局规则声明（UC-PS-004 终局形成规则的
+// 提供方半边）：哪些责任结果在此规则包下形成终局、形成哪种。产品与合同是采用方，不
+// 拥有这份正文（ADR-0058）。没有声明行的责任结果不形成终局——「有效交付不在所有产品
+// 中自动等于终局」正是靠缺行表达，缺行是真话不是缺件。
 type FinalRuleContent struct {
+	owner        CommercialVersion
 	declarations map[DeclaredResponsibilityOutcome]RuleReference
 }
 
-// NewFinalRuleContent 组装声明。至少一行（一行都没有的产品谈不上网络服务终局——
-// 那是没声明不是「永不终局」）；同一责任结果声明两行是冲突。
-func NewFinalRuleContent(declarations []FinalizationDeclaration) (FinalRuleContent, error) {
+// NewFinalRuleContent 组装声明。拥有对象必须是当前可用的接单规则包；至少一行（一行
+// 都没有的规则包谈不上网络服务终局——那是没声明不是「永不终局」）；同一责任结果声明
+// 两行是冲突。
+func NewFinalRuleContent(
+	owner CommercialVersion,
+	declarations []FinalizationDeclaration,
+) (FinalRuleContent, error) {
+	if owner.kind != AcceptanceRulePackageObject ||
+		owner.status != CommercialVersionEffective {
+		return FinalRuleContent{}, ErrUnusableRulePackage
+	}
 	if len(declarations) == 0 {
 		return FinalRuleContent{}, ErrFinalContentNotConfigured
 	}
@@ -154,11 +193,15 @@ func NewFinalRuleContent(declarations []FinalizationDeclaration) (FinalRuleConte
 		}
 		byOutcome[declaration.Outcome] = declaration.FinalKind
 	}
-	return FinalRuleContent{declarations: byOutcome}, nil
+	return FinalRuleContent{owner: owner, declarations: byOutcome}, nil
+}
+
+func (content FinalRuleContent) Owner() CommercialVersion {
+	return content.owner
 }
 
 // FinalKindFor 报告该责任结果是否形成终局及形成哪种类型。第二个返回值为 false 即
-// 「此产品下这种结果不形成终局」——那是声明的真话，消费方据以保持未决等其他责任
+// 「此规则包下这种结果不形成终局」——那是声明的真话，消费方据以保持未决等其他责任
 // 结果，不是配置缺件。
 func (content FinalRuleContent) FinalKindFor(outcome DeclaredResponsibilityOutcome) (RuleReference, bool) {
 	kind, declared := content.declarations[outcome]
@@ -196,19 +239,25 @@ type CancellationAuthorityDeclaration struct {
 	Rule  RuleReference
 }
 
-// CancellationAuthorityContent 是一个已生效产品或合同的取消授权目录（PAR-COM-17
-// 提供方半边）。目录按请求方格说话：有行即允许并带规则引用；缺行是真话（此产品下
-// 这种请求方不许取消），不是配置缺件。零行才是缺件——没声明不等于「谁都不许」，
-// 更不等于默认放行。
+// CancellationAuthorityContent 是一个已生效授权规则的取消授权目录（PAR-COM-17
+// 提供方半边）。产品与合同是采用方，不拥有这份正文（ADR-0058）。目录按请求方格说话：
+// 有行即允许并带规则引用；缺行是真话（此授权规则下这种请求方不许取消），不是配置缺件。
+// 零行才是缺件——没声明不等于「谁都不许」，更不等于默认放行。
 type CancellationAuthorityContent struct {
+	owner        CommercialVersion
 	declarations map[DeclaredCancellationParty]RuleReference
 }
 
-// NewCancellationAuthorityContent 组装目录。至少一行（一行都没有是没声明，不是
-// 「永不允许」）；同一请求方格两行是冲突。
+// NewCancellationAuthorityContent 组装目录。拥有对象必须是当前可用的授权规则；至少
+// 一行（一行都没有是没声明，不是「永不允许」）；同一请求方格两行是冲突。
 func NewCancellationAuthorityContent(
+	owner CommercialVersion,
 	declarations []CancellationAuthorityDeclaration,
 ) (CancellationAuthorityContent, error) {
+	if owner.kind != AuthorizationRuleObject ||
+		owner.status != CommercialVersionEffective {
+		return CancellationAuthorityContent{}, ErrUnusableAuthorizationRule
+	}
 	if len(declarations) == 0 {
 		return CancellationAuthorityContent{}, ErrCancellationAuthorityNotConfigured
 	}
@@ -222,11 +271,15 @@ func NewCancellationAuthorityContent(
 		}
 		byParty[declaration.Party] = declaration.Rule
 	}
-	return CancellationAuthorityContent{declarations: byParty}, nil
+	return CancellationAuthorityContent{owner: owner, declarations: byParty}, nil
+}
+
+func (content CancellationAuthorityContent) Owner() CommercialVersion {
+	return content.owner
 }
 
 // RuleFor 报告该请求方格是否被允许取消及依据哪条规则。第二个返回值为 false 即
-// 「此产品下这种请求方不许取消」——那是声明的真话，消费方据以拒绝带依据，不是配置缺件。
+// 「此授权规则下这种请求方不许取消」——那是声明的真话，消费方据以拒绝带依据，不是配置缺件。
 func (content CancellationAuthorityContent) RuleFor(party DeclaredCancellationParty) (RuleReference, bool) {
 	rule, declared := content.declarations[party]
 	return rule, declared
