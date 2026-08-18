@@ -2,15 +2,25 @@ package nodeoperations_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 )
 
 type receptionDouble struct {
@@ -259,5 +269,287 @@ func TestAnAmbiguousParcelTargetStaysIdentifiable(t *testing.T) {
 	}
 	if adopter.calls != 0 {
 		t.Fatal("歧义不得按 latest 采认")
+	}
+}
+
+type controllableDownstream struct {
+	err   error
+	calls int
+}
+
+func (double *controllableDownstream) HandOffNetworkIntake(
+	context.Context, psports.NetworkIntakeHandoffIntent,
+) error {
+	double.calls++
+	return double.err
+}
+
+type eligibilityStub struct {
+	eligibility psports.IntakeEligibility
+	configured  bool
+	err         error
+}
+
+func (stub eligibilityStub) JudgeIntakeEligibility(
+	context.Context, psdomain.SourceIdentity, psdomain.ShipmentRequestID, psdomain.IntakeSource,
+) (psports.IntakeEligibility, bool, error) {
+	if stub.err != nil {
+		return psports.IntakeEligibility{}, false, stub.err
+	}
+	return stub.eligibility, stub.configured, nil
+}
+
+func processingThrough(t *testing.T, handler *psapplication.AdoptNetworkIntakeHandler) *adapter.AdoptOnNodeIntakeAdapter {
+	t.Helper()
+	subject, err := adapter.NewAdoptOnNodeIntakeAdapter(
+		&receptionDouble{record: formedReception(t), found: true},
+		&targetViewDouble{target: uniqueTarget(t), found: true},
+		adapter.NewNodeIntakeAdapter(handler),
+	)
+	if err != nil {
+		t.Fatalf("构造处理适配器：%v", err)
+	}
+	return subject
+}
+
+func TestAPendingHandoffRollsBackUntilDownstreamSucceeds(t *testing.T) {
+	downstream := &controllableDownstream{err: errors.New("outbox unavailable")}
+	handler := newAdoptHandler(t, adoptHandlerConfig{downstream: downstream})
+	subject := processingThrough(t, handler)
+
+	if err := subject.HandleFormedNodeIntake(t.Context(), formedRef()); !errors.Is(err, adapter.ErrAdoptionHandoffPending) {
+		t.Fatalf("err = %v, want ErrAdoptionHandoffPending", err)
+	}
+	if downstream.calls != 1 {
+		t.Fatalf("handoff 调用 = %d, want 1", downstream.calls)
+	}
+
+	downstream.err = nil
+	if err := subject.HandleFormedNodeIntake(t.Context(), formedRef()); err != nil {
+		t.Fatalf("handoff 恢复后重投：%v", err)
+	}
+	if downstream.calls != 2 {
+		t.Fatalf("已有结果路径应再交一次意图，调用 = %d", downstream.calls)
+	}
+}
+
+func TestAdoptionOutcomesMapToConsumptionSlots(t *testing.T) {
+	type setup func(*testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error)
+	cases := []struct {
+		outcome string
+		want    error
+		new     setup
+	}{
+		{
+			outcome: "COMMITMENT_FORMED",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				return processingThrough(t, adoptHandler(t)), nil
+			},
+		},
+		{
+			outcome: "EXISTING_RESULT",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				subject := processingThrough(t, adoptHandler(t))
+				if err := subject.HandleFormedNodeIntake(t.Context(), formedRef()); err != nil {
+					return nil, err
+				}
+				return subject, nil
+			},
+		},
+		{
+			outcome: "SOURCE_NOT_ADOPTED",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				store := &adoptionStoreDouble{byKey: map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord{}}
+				prior := psports.IntakeAdoptionRecord{
+					Key: psports.IntakeAdoptionKey{
+						TenantID: identity(t).TenantID(),
+						Parcel:   value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+						Kind:     psdomain.NodeIntakeSource,
+						Version:  value(t, psdomain.NewSourceResultVersion, "intake-result/prior"),
+					},
+					Adopted: true,
+				}
+				store.byKey[prior.Key] = prior
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{adoptions: store})), nil
+			},
+		},
+		{
+			outcome: "SOURCE_CONFLICT",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				store := &adoptionStoreDouble{byKey: map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord{}}
+				key := psports.IntakeAdoptionKey{
+					TenantID: identity(t).TenantID(),
+					Parcel:   value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+					Kind:     psdomain.NodeIntakeSource,
+					Version:  value(t, psdomain.NewSourceResultVersion, "intake-result/v1"),
+				}
+				store.byKey[key] = psports.IntakeAdoptionRecord{Key: key, ContentDigest: "other-digest"}
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{adoptions: store})), nil
+			},
+		},
+		{
+			outcome: "NOT_APPLICABLE",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{
+					eligibility: eligibilityStub{
+						configured: true,
+						eligibility: psports.IntakeEligibility{
+							Outcome: psports.IntakeServiceNotApplicable,
+							Basis:   value(t, psdomain.NewCheckReason, "PRODUCT-WAYBILL-ONLY"),
+						},
+					},
+				})), nil
+			},
+		},
+		{
+			outcome: "REQUEST_NOT_ACCEPTED",
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				wrong, err := psdomain.NewCurrentAcceptedParcelTarget(
+					identity(t),
+					value(t, psdomain.NewShipmentRequestID, "request-other"),
+					value(t, psdomain.NewSubmissionVersionID, "version-1"),
+				)
+				if err != nil {
+					return nil, err
+				}
+				subject, err := adapter.NewAdoptOnNodeIntakeAdapter(
+					&receptionDouble{record: formedReception(t), found: true},
+					&targetViewDouble{target: wrong, found: true},
+					adapter.NewNodeIntakeAdapter(adoptHandler(t)),
+				)
+				return subject, err
+			},
+		},
+		{
+			outcome: "ELIGIBILITY_UNDECIDED",
+			want:    adapter.ErrAdoptionUndecided,
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{
+					eligibility: eligibilityStub{err: errors.New("catalogue down")},
+				})), nil
+			},
+		},
+		{
+			outcome: "COMMITMENT_FORMED handoff pending",
+			want:    adapter.ErrAdoptionHandoffPending,
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{
+					downstream: &controllableDownstream{err: errors.New("outbox unavailable")},
+				})), nil
+			},
+		},
+		{
+			outcome: "SOURCE_NOT_ADOPTED handoff pending",
+			want:    adapter.ErrAdoptionHandoffPending,
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				store := &adoptionStoreDouble{byKey: map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord{}}
+				prior := psports.IntakeAdoptionRecord{
+					Key: psports.IntakeAdoptionKey{
+						TenantID: identity(t).TenantID(),
+						Parcel:   value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+						Kind:     psdomain.NodeIntakeSource,
+						Version:  value(t, psdomain.NewSourceResultVersion, "intake-result/prior"),
+					},
+					Adopted: true,
+				}
+				store.byKey[prior.Key] = prior
+				return processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{
+					adoptions:  store,
+					downstream: &controllableDownstream{err: errors.New("outbox unavailable")},
+				})), nil
+			},
+		},
+		{
+			outcome: "EXISTING_RESULT handoff pending",
+			want:    adapter.ErrAdoptionHandoffPending,
+			new: func(t *testing.T) (*adapter.AdoptOnNodeIntakeAdapter, error) {
+				downstream := &controllableDownstream{}
+				subject := processingThrough(t, newAdoptHandler(t, adoptHandlerConfig{downstream: downstream}))
+				if err := subject.HandleFormedNodeIntake(t.Context(), formedRef()); err != nil {
+					return nil, err
+				}
+				downstream.err = errors.New("outbox unavailable")
+				return subject, nil
+			},
+		},
+	}
+
+	for _, item := range cases {
+		t.Run(item.outcome, func(t *testing.T) {
+			subject, err := item.new(t)
+			if err != nil {
+				t.Fatalf("准备：%v", err)
+			}
+			got := subject.HandleFormedNodeIntake(t.Context(), formedRef())
+			if item.want == nil {
+				if got != nil {
+					t.Fatalf("err = %v, want nil——消费完成不等于形成采用", got)
+				}
+				return
+			}
+			if !errors.Is(got, item.want) {
+				t.Fatalf("err = %v, want %v", got, item.want)
+			}
+		})
+	}
+}
+
+func TestAPendingHandoffDoesNotMarkTheInboxProcessed(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := inbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Inbox Store：%v", err)
+	}
+	downstream := &controllableDownstream{err: errors.New("outbox unavailable")}
+	handler := newAdoptHandler(t, adoptHandlerConfig{downstream: downstream})
+	processing := processingThrough(t, handler)
+	consumer, err := psinbox.NewNodeIntakeConsumer(db.Transactor(), store, processing)
+	if err != nil {
+		t.Fatalf("构造消费者：%v", err)
+	}
+
+	payload, err := json.Marshal(map[string]string{"tenantId": "tenant-1", "sourceId": "source-1"})
+	if err != nil {
+		t.Fatalf("载荷：%v", err)
+	}
+	now := time.Date(2026, 8, 18, 14, 0, 0, 0, time.UTC)
+	envelope := eventing.Envelope{
+		SpecVersion:  eventing.SpecVersion,
+		ID:           eventing.EventID("tenant-1/source-1"),
+		Source:       "idp-parcel/node-operations",
+		Type:         psinbox.NodeIntakeFormedEventType,
+		Version:      1,
+		Scope:        "tenant-1",
+		Subject:      "source-1",
+		PartitionKey: "tenant-1/source-1",
+		OccurredAt:   now,
+		RecordedAt:   now,
+		ContentType:  eventing.JSONContentType,
+		Payload:      payload,
+	}
+
+	if err := consumer.Consume(t.Context(), envelope); !errors.Is(err, adapter.ErrAdoptionHandoffPending) {
+		t.Fatalf("err = %v, want ErrAdoptionHandoffPending", err)
+	}
+	if err := consumer.Consume(t.Context(), envelope); !errors.Is(err, adapter.ErrAdoptionHandoffPending) {
+		t.Fatalf("未入账的重投应再处理：%v", err)
+	}
+	if downstream.calls != 2 {
+		t.Fatalf("inbox 若已 processed，第二次不会再交意图；调用 = %d", downstream.calls)
+	}
+
+	downstream.err = nil
+	if err := consumer.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("handoff 恢复后重投：%v", err)
+	}
+	if err := consumer.Consume(t.Context(), envelope); err != nil {
+		t.Fatalf("已处理后的重复投递：%v", err)
+	}
+	if downstream.calls != 3 {
+		t.Fatalf("成功入账后重复投递不应再交意图；调用 = %d", downstream.calls)
 	}
 }

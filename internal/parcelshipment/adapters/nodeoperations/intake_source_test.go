@@ -216,15 +216,47 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 
 func adoptHandler(t *testing.T) *psapplication.AdoptNetworkIntakeHandler {
 	t.Helper()
-	requests := &requestStoreDouble{records: map[psdomain.SourceIdentity]psdomain.ShipmentRequest{
-		identity(t): acceptedRequest(t),
-	}}
+	return newAdoptHandler(t, adoptHandlerConfig{})
+}
+
+type adoptHandlerConfig struct {
+	downstream  psports.NetworkIntakeHandoff
+	eligibility psports.IntakeEligibilityView
+	adoptions   *adoptionStoreDouble
+	identity    psdomain.SourceIdentity
+	request     psdomain.ShipmentRequest
+}
+
+func newAdoptHandler(t *testing.T, config adoptHandlerConfig) *psapplication.AdoptNetworkIntakeHandler {
+	t.Helper()
+	downstream := config.downstream
+	if downstream == nil {
+		downstream = downstreamDouble{}
+	}
+	eligibility := config.eligibility
+	if eligibility == nil {
+		eligibility = eligibilityDouble{}
+	}
+	adoptions := config.adoptions
+	if adoptions == nil {
+		adoptions = &adoptionStoreDouble{byKey: map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord{}}
+	}
+	id := config.identity
+	if id == (psdomain.SourceIdentity{}) {
+		id = identity(t)
+	}
+	request := config.request
+	if request.ShipmentRequestID().String() == "" {
+		request = acceptedRequest(t)
+	}
 	return psapplication.NewAdoptNetworkIntakeHandler(psapplication.AdoptNetworkIntakeDeps{
-		Requests:    requests,
-		Eligibility: eligibilityDouble{},
-		Adoptions:   &adoptionStoreDouble{byKey: map[psports.IntakeAdoptionKey]psports.IntakeAdoptionRecord{}},
+		Requests: &requestStoreDouble{records: map[psdomain.SourceIdentity]psdomain.ShipmentRequest{
+			id: request,
+		}},
+		Eligibility: eligibility,
+		Adoptions:   adoptions,
 		Identities:  &commitmentIdentityDouble{},
-		Downstream:  downstreamDouble{},
+		Downstream:  downstream,
 		Clock:       fixedClock{at: receivedAt.Add(time.Minute)},
 	})
 }
