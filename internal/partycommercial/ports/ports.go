@@ -183,11 +183,27 @@ type AcceptanceRulePackageContentView interface {
 	) (domain.AcceptanceRulePackage, bool, error)
 }
 
-// CommercialResolutionStore 按解析标识取回一次已固定的解析。
+// CommercialResolutionView 是解析固定的只读半边：按（租户+解析标识）取回一次已固定的闭包。
+//
+// 它是 CommercialResolutionStore 的读口。消费方只要回指标识（ADR-0027 / ADR-0062），不该
+// 持有 Save——写口与读口分开的理由与 CommercialPublicationView 同形（F-2）：解析与采用
+// 回指只要候选闭包，把 Save 交给它们等于让消费侧适配器拿到覆盖一次解析的能力。
+type CommercialResolutionView interface {
+	LoadResolution(
+		ctx context.Context,
+		tenant domain.TenantID,
+		resolution domain.ResolutionID,
+	) (domain.CommercialClosure, bool, error)
+}
+
+// CommercialResolutionStore 按解析标识取回并固定一次已解析的闭包。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回
 // 不可覆盖解析结果」，`AT-PC-024` 又要求相同输入与修订「返回原解析语义」——两处都要求本上下文
 // 对一次解析负有超出单次调用的责任。本端口就是那份责任的接口（[ADR-0027](../../../docs/adr/0027-multi-step-cross-context-protocol-state-held-by-the-provider.md)）。
+//
+// 本口内嵌 CommercialResolutionView，再叠加 Save。写侧调用方依赖本口；只需读的消费方
+// 依赖内嵌的只读口，不持有 Save。
 //
 // 它的存在是为了让后续阶段只回指标识：调用方带着整个闭包回来，键就可以被替换，一次「校验」
 // 便能拿另一个范围的视图去证明这份解析仍然成立。
@@ -195,15 +211,14 @@ type AcceptanceRulePackageContentView interface {
 // 租户是显式入参，与本包另外两个端口同理：按 ADR-0003 跨越租户必须在签名上看得见。取回后
 // 调用方身份仍要与解析键比对——解析标识不是一张能力凭证。
 type CommercialResolutionStore interface {
-	LoadResolution(
-		ctx context.Context,
-		tenant domain.TenantID,
-		resolution domain.ResolutionID,
-	) (domain.CommercialClosure, bool, error)
+	CommercialResolutionView
 	// Save 固定一次解析（ADR-0027 / UC-PC-002 步骤 5）。同标识同内容是重放，同标识
 	// 异内容是冲突——两者都不是 error，且绝不覆盖（ADR-0031）。
 	Save(ctx context.Context, closure domain.CommercialClosure) (ResolutionSaveOutcome, error)
 }
+
+// 只读口必须是写口的真子集：写口当只读口接线时，消费方看不到 Save。
+var _ CommercialResolutionView = CommercialResolutionStore(nil)
 
 // ResolutionSaveOutcome 是一次解析固定在持久化面的落点封闭代数（ADR-0031）：
 // `已记录`是重放（同标识同内容），`内容冲突`是同标识携带不同闭包——需要查库，

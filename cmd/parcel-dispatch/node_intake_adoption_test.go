@@ -36,10 +36,10 @@ const (
 // Covers: CONS-INTAKE-B 的诚实停点——节点收寄形成信封经生产路由表投到 PS 采用消费者，
 // 收寄读得回、目标委托反查得到、重建门开到已接受，整链一直走到商业资格那一步才停。
 //
-// 停点必须是 dispatch.consumer_undecided：装配里的 AdoptedStageOwner 是
-// UnconfiguredAdoptedStageOwner，SourceIdentity 上取不到接受时固定的规则包（ADR-0058），
-// 资格视图答未配置，编排保持`资格判断未决`。这也顺带排掉了另一种「看起来一样」的停法：
-// 重建门与翻译失败都不在哨兵名单里，会落 dispatch.publish_failed。
+// 停点必须是 dispatch.consumer_undecided：装配从已接受快照回指闭包（ADR-0062），但夹具
+// ResolutionID=`SYN-RES-01` 并未写入 PC 解析库，LoadResolution found=false，资格视图答
+// 未配置，编排保持`资格判断未决`。不要为了让本用例变绿去种规则包。重建门与翻译失败都
+// 不在哨兵名单里，会落 dispatch.publish_failed。
 //
 // 未决不得留痕：inbox 无账、采用无行、下游意图不入队。默认一份规则包就能让这三样都
 // 长出来，而那等于替租户宣布这批收寄按哪套资格判断。

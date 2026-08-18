@@ -494,10 +494,11 @@ func adoptOffsitePickupConsumer(
 // networkIntakeAdoption 是两条采用消费链共用的编排与委托仓储。
 //
 // 与 acceptanceConsumer / networkIntakeConsumer 各建各的仓储不同，这一份刻意共用：里面
-// 每个 nil 与「未配置」都是判断，而两条链必须给出同一个答案。阶段内容采用规则版本属实例
-// 半边（ADR-0058，SourceIdentity 上取不到），因此装 UnconfiguredAdoptedStageOwner，资格
-// 视图答未配置，编排停在`资格判断未决`；默认一个规则包等于替租户宣布这批收寄按哪套资格
-// 判断。各写一份的坏处很具体：日后有人只给一条链换上真实规则包，另一条会静默停在未决，
+// 每个 nil 与「未配置」都是判断，而两条链必须给出同一个答案。采用规则版本从已接受委托
+// 的解析标识回指提供方闭包（ADR-0062），因此装 ResolvedAdoptedStageOwner：身份上仍取不
+// 到规则对象（ADR-0058 第三条），但已接受快照上的 ResolutionID 可以回指。PC 解析库没有
+// 那一行时 found=false，资格视图答未配置——不要默认一个规则包，也不要为纵向变绿去种。
+// 各写一份的坏处很具体：日后有人只给一条链换上真实规则包，另一条会静默停在未决，
 // 而两条本该同时越过同一道闸。
 type networkIntakeAdoptionGraph struct {
 	// requests 同时满足聚合仓储与包裹反查两个口：反查读的是 ADR-0060 的当前投影列，与
@@ -539,9 +540,16 @@ func networkIntakeAdoption(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: stage content declarations: %w", err)
 	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: commercial resolutions: %w", err)
+	}
+	owners, err := pspartycommercial.NewResolvedAdoptedStageOwner(requests, resolutions)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: adopted stage owner: %w", err)
+	}
 	declared := pspartycommercial.NewDeclaredStageContent(
-		stageContent, stageContent, stageContent,
-		pspartycommercial.UnconfiguredAdoptedStageOwner{},
+		stageContent, stageContent, stageContent, owners,
 	)
 	// 第四个入参是取消请求方的格映射，取消编排才用得到；采用这条路径只走 intake 一口。
 	// 给它一个能答的替身会假装映射已配置，而没有租户时谁也说不出某个引用是客户还是运营。

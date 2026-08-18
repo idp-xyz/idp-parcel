@@ -1,6 +1,6 @@
 # ADR-0058: 阶段内容声明按拥有规则对象归属，产品与合同只采用
 
-Status: Accepted  
+Status: Accepted（Decision 第三条正文不改写：禁止从 `SourceIdentity` 发明采用版本仍有效；从已接受商业依据快照回指提供方闭包的路径由 [ADR-0062](./0062-adopted-stage-owner-from-accepted-resolution.md) 补上，那不是从身份发明，是按 [ADR-0027](./0027-multi-step-cross-context-protocol-state-held-by-the-provider.md) 回指标识）  
 Date: 2026-08-18
 
 ## Context
@@ -45,3 +45,4 @@ Date: 2026-08-18
 - [ADR-0003：集团租户边界](./0003-group-tenant-legal-entity-customer-account.md)
 - [ADR-0040：商业版本身份键携带 TenantID](./0040-commercial-version-key-carries-tenant-id.md)
 - [ADR-0025：跨上下文适配器落在消费方](./0025-cross-context-adapters-live-on-the-consumer-side.md)
+- [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)：补第三条没写的回指路径；禁止从身份发明仍有效

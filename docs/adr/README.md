@@ -63,10 +63,11 @@
 - [ADR-0055：业务端点 Intake 增设「未配置」格，端点装配属机制半边](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)
 - [ADR-0056：区间更正只增多条，同版本写入以版本行锁串行化](./0056-validity-correction-append-only-serialized-by-version-row.md)
 - [ADR-0057：价格政策册保全发布期邻接答复，不重查也不绕过绑定校验](./0057-price-policy-preserves-publish-time-adjacent-replies.md)
-- [ADR-0058：阶段内容声明按拥有规则对象归属，产品与合同只采用](./0058-stage-content-owned-by-rule-objects.md)
+- [ADR-0058：阶段内容声明按拥有规则对象归属，产品与合同只采用](./0058-stage-content-owned-by-rule-objects.md)｜第三条「不得从 `SourceIdentity` 发明采用版本」不变；从已接受快照回指闭包的路径由 [ADR-0062](./0062-adopted-stage-owner-from-accepted-resolution.md) 补上
 - [ADR-0059：规则包五维适用性照存但不参与选择](./0059-rule-package-applicability-stored-not-selected.md)
 - [ADR-0060：包裹反查走当前快照投影列，不另表、不扫 JSONB](./0060-parcel-lookup-uses-current-snapshot-projection.md)
 - [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)
+- [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)
 
 ## 已被取代决策
 
