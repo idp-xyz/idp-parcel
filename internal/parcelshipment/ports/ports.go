@@ -214,6 +214,40 @@ type IntakeEligibilityView interface {
 	) (IntakeEligibility, bool, error)
 }
 
+// IntakeQualificationProof 是硬资格取证窄口的封闭两值（ADR-0063）。依赖不可用走
+// error，不并进未证明，也不折成资格目录未配置——恢复动作不同（ADR-0029）。
+type IntakeQualificationProof uint8
+
+const (
+	IntakeQualificationProofInvalid IntakeQualificationProof = iota
+	IntakeQualificationProven
+	IntakeQualificationUnproven
+)
+
+func (proof IntakeQualificationProof) String() string {
+	switch proof {
+	case IntakeQualificationProven:
+		return "PROVEN"
+	case IntakeQualificationUnproven:
+		return "UNPROVEN"
+	default:
+		return ""
+	}
+}
+
+// IntakeQualificationEvidenceView 问一条已声明的硬资格在收寄业务时点是否已证明。
+// 端口是消费方的话语：身份、来源（含包裹）、引用、时点。未知前缀必须答未证明，
+// 不得已证明。正式关务判断不在本口形成。
+type IntakeQualificationEvidenceView interface {
+	ProveIntakeQualification(
+		ctx context.Context,
+		identity domain.SourceIdentity,
+		source domain.IntakeSource,
+		rule domain.QualificationRuleReference,
+		asOf time.Time,
+	) (IntakeQualificationProof, error)
+}
+
 // IntakeAdoptionKey 是采用结果的幂等键：「同一包裹、同一来源类型和同一来源结果版本
 // 只能形成一个有效网络收寄采用结果」——三维加租户隔离，全在键上。
 type IntakeAdoptionKey struct {

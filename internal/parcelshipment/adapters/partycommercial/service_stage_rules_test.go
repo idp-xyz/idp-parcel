@@ -12,6 +12,18 @@ import (
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
+func newStageRules(
+	intake adapter.IntakeContentSource,
+	final adapter.FinalContentSource,
+	cancellation adapter.CancellationContentSource,
+	requesters adapter.CancellationRequesterClassSource,
+) *adapter.ServiceStageRulesAdapter {
+	return adapter.NewServiceStageRulesAdapter(
+		intake, final, cancellation, requesters,
+		adapter.UnconfiguredIntakeQualificationEvidence{},
+	)
+}
+
 type intakeContentDouble struct {
 	content    pcdomain.IntakeQualificationContent
 	configured bool
@@ -85,9 +97,8 @@ func deliveryOutcome(t *testing.T) psdomain.ResponsibilityOutcome {
 }
 
 // Covers: PAR-COM-16 声明经适配器译成 PS 资格三值——允许集合外的来源是`不适用`带
-// 来源依据（服务形态不承担，不是资格没过）；声明硬资格而证据缝属实例时如实答未成立
-// 点名头一项缺口（AT-PS-047 的续办路——首发无租户这是唯一走得到的真实分支）；空清单
-// 声明即成立；未配置即 found=false。
+// 来源依据（服务形态不承担，不是资格没过）；声明硬资格而证据口未配置时如实答未成立
+// 点名头一项缺口（ADR-0063 / AT-PS-047）；空清单声明即成立；未配置即 found=false。
 func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	nodeOnly, err := pcdomain.NewIntakeQualificationContent(
 		stageRulePackage(t),
@@ -97,7 +108,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new content: %v", err)
 	}
-	subject := adapter.NewServiceStageRulesAdapter(
+	subject := newStageRules(
 		intakeContentDouble{content: nodeOnly, configured: true},
 		finalContentDouble{},
 		nil,
@@ -124,7 +135,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new content with qualifications: %v", err)
 	}
-	unproven := adapter.NewServiceStageRulesAdapter(
+	unproven := newStageRules(
 		intakeContentDouble{content: withQualifications, configured: true},
 		finalContentDouble{},
 		nil,
@@ -151,7 +162,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new offsite-only content: %v", err)
 	}
-	notApplicable := adapter.NewServiceStageRulesAdapter(
+	notApplicable := newStageRules(
 		intakeContentDouble{content: offsiteOnly, configured: true},
 		finalContentDouble{},
 		nil,
@@ -169,7 +180,7 @@ func TestIntakeEligibilityTranslatesTheDeclaration(t *testing.T) {
 		t.Fatalf("outcome = %q; 允许集合外的来源是不适用", answer.Outcome)
 	}
 
-	if _, configured, err := adapter.NewServiceStageRulesAdapter(
+	if _, configured, err := newStageRules(
 		intakeContentDouble{configured: false},
 		finalContentDouble{},
 		nil,
@@ -194,7 +205,7 @@ func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new final content: %v", err)
 	}
-	subject := adapter.NewServiceStageRulesAdapter(
+	subject := newStageRules(
 		intakeContentDouble{},
 		finalContentDouble{content: content, configured: true},
 		nil,
@@ -220,7 +231,7 @@ func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new delivery content: %v", err)
 	}
-	satisfied, _, err := adapter.NewServiceStageRulesAdapter(
+	satisfied, _, err := newStageRules(
 		intakeContentDouble{},
 		finalContentDouble{content: withDelivery, configured: true},
 		nil,
@@ -280,7 +291,7 @@ func (double requesterClassMustNotBeCalled) FormCancellationParty(
 // 映射；目录含本格即允许带规则引用；缺行即不允许带依据；源失败上抛；未知格不吸收。
 func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 	t.Run("unconfigured does not ask the requester mapping", func(t *testing.T) {
-		subject := adapter.NewServiceStageRulesAdapter(
+		subject := newStageRules(
 			intakeContentDouble{},
 			finalContentDouble{},
 			cancellationContentDouble{configured: false},
@@ -302,7 +313,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 	}
 
 	t.Run("matching operations row is granted", func(t *testing.T) {
-		subject := adapter.NewServiceStageRulesAdapter(
+		subject := newStageRules(
 			intakeContentDouble{},
 			finalContentDouble{},
 			cancellationContentDouble{content: operationsOnly, configured: true},
@@ -326,7 +337,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new customer catalog: %v", err)
 		}
-		subject := adapter.NewServiceStageRulesAdapter(
+		subject := newStageRules(
 			intakeContentDouble{},
 			finalContentDouble{},
 			cancellationContentDouble{content: customerOnly, configured: true},
@@ -344,7 +355,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 
 	t.Run("source failure surfaces", func(t *testing.T) {
 		unavailable := errors.New("目录不可读")
-		subject := adapter.NewServiceStageRulesAdapter(
+		subject := newStageRules(
 			intakeContentDouble{},
 			finalContentDouble{},
 			cancellationContentDouble{err: unavailable},
@@ -358,7 +369,7 @@ func TestCancellationAuthorityTranslatesTheCatalog(t *testing.T) {
 	})
 
 	t.Run("unknown party is untranslatable", func(t *testing.T) {
-		subject := adapter.NewServiceStageRulesAdapter(
+		subject := newStageRules(
 			intakeContentDouble{},
 			finalContentDouble{},
 			cancellationContentDouble{content: operationsOnly, configured: true},

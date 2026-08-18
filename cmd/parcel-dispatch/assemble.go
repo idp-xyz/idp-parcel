@@ -553,7 +553,12 @@ func networkIntakeAdoption(
 	)
 	// 第四个入参是取消请求方的格映射，取消编排才用得到；采用这条路径只走 intake 一口。
 	// 给它一个能答的替身会假装映射已配置，而没有租户时谁也说不出某个引用是客户还是运营。
-	eligibility := pspartycommercial.NewServiceStageRulesAdapter(declared, declared, declared, nil)
+	// 第五个入参是硬资格证据口（ADR-0063）：显式未配置答未证明，nil 会在非空清单上变成
+	// 依赖错误，两者都不得默认 ESTABLISHED。
+	eligibility := pspartycommercial.NewServiceStageRulesAdapter(
+		declared, declared, declared, nil,
+		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
+	)
 
 	return networkIntakeAdoptionGraph{
 		requests: requests,

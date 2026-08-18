@@ -46,3 +46,4 @@ Date: 2026-08-18
 - [ADR-0040：商业版本身份键携带 TenantID](./0040-commercial-version-key-carries-tenant-id.md)
 - [ADR-0025：跨上下文适配器落在消费方](./0025-cross-context-adapters-live-on-the-consumer-side.md)
 - [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)：补第三条没写的回指路径；禁止从身份发明仍有效
+- [ADR-0063：收寄硬资格证明由消费侧窄口取证](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)：声明列出之后如何取证；本记录只管声明归属

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -278,4 +279,25 @@ func (commitment FormalCommitment) Adjust(
 	adjusted.priorVersion = commitment.version
 	adjusted.reason = reason
 	return adjusted, nil
+}
+
+// QualificationRuleReference 是消费方对收寄硬资格引用的转写（ADR-0063）。它对应
+// party-commercial 声明里的开放 RuleReference，但不把提供方类型带进本上下文端口。
+// 正文、阈值与取值仍在执行该规则的权威方；本类型只携带引用字符串。
+type QualificationRuleReference struct{ requiredValue }
+
+func NewQualificationRuleReference(value string) (QualificationRuleReference, error) {
+	required, err := newRequiredValue("qualification rule reference", value)
+	return QualificationRuleReference{required}, err
+}
+
+// QualificationRulePrefix 取引用的权威前缀（第一个 `/` 之前）。没有 `/` 时整串即前缀。
+// 未知前缀不得被证明为已成立——前缀只用于找权威方，不得把后缀拆成关务案件或申报单元
+// 身份（ADR-0063）。
+func QualificationRulePrefix(ref QualificationRuleReference) string {
+	value := ref.String()
+	if i := strings.IndexByte(value, '/'); i > 0 {
+		return value[:i]
+	}
+	return value
 }

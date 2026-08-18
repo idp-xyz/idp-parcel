@@ -58,6 +58,7 @@ type ServiceStageRulesAdapter struct {
 	final        FinalContentSource
 	cancellation CancellationContentSource
 	requesters   CancellationRequesterClassSource
+	evidence     psports.IntakeQualificationEvidenceView
 }
 
 func NewServiceStageRulesAdapter(
@@ -65,12 +66,14 @@ func NewServiceStageRulesAdapter(
 	final FinalContentSource,
 	cancellation CancellationContentSource,
 	requesters CancellationRequesterClassSource,
+	evidence psports.IntakeQualificationEvidenceView,
 ) *ServiceStageRulesAdapter {
 	return &ServiceStageRulesAdapter{
 		intake:       intake,
 		final:        final,
 		cancellation: cancellation,
 		requesters:   requesters,
+		evidence:     evidence,
 	}
 }
 
@@ -79,9 +82,9 @@ var _ psports.FinalRuleView = (*ServiceStageRulesAdapter)(nil)
 var _ psports.CancellationAuthorityView = (*ServiceStageRulesAdapter)(nil)
 
 // JudgeIntakeEligibility 按声明判收寄资格：来源不在允许集合即不适用（带来源依据——
-// 服务形态不承担这种收寄，不是资格没过）；声明的硬资格清单非空时，逐项核对属实例
-// 取证缝，机制上如实答「未成立」带清单——首发无租户时资格项证据不可能取得，这一格
-// 是唯一走得到的真实分支；声明未配置即 found=false。
+// 服务形态不承担这种收寄，不是资格没过）；空清单是显式无硬资格即成立；清单非空则
+// 逐项问证据口（ADR-0063）——未证明点名该项，依赖失败上抛，不折成目录未配置；声明
+// 未配置即 found=false。
 func (adapter *ServiceStageRulesAdapter) JudgeIntakeEligibility(
 	ctx context.Context,
 	identity psdomain.SourceIdentity,
@@ -115,16 +118,42 @@ func (adapter *ServiceStageRulesAdapter) JudgeIntakeEligibility(
 	if len(qualifications) == 0 {
 		return psports.IntakeEligibility{Outcome: psports.IntakeEligibilityEstablished}, true, nil
 	}
-	// 声明列出了硬资格，而资格证据的取证缝是实例半边——机制上如实答未成立并点名
-	// 头一项缺口，编排据以保持未决（AT-PS-047 的续办路），不默认通过。
-	basis, err := psdomain.NewCheckReason("INTAKE_QUALIFICATION_UNPROVEN/" + qualifications[0].String())
-	if err != nil {
-		return psports.IntakeEligibility{}, false, fmt.Errorf("unproven basis: %w", err)
+	// 声明列出了硬资格。证明走消费侧窄口（ADR-0063），不在这里默认成立，也不把
+	// nil 证据口读成已证明。未证明保持既有依据形状，点名第一项缺口（AT-PS-047）。
+	if adapter.evidence == nil {
+		return psports.IntakeEligibility{}, false, fmt.Errorf(
+			"parcel shipment partycommercial adapter: intake qualification evidence view is nil")
 	}
-	return psports.IntakeEligibility{
-		Outcome: psports.IntakeEligibilityNotEstablished,
-		Basis:   basis,
-	}, true, nil
+	for _, qualification := range qualifications {
+		rule, err := psdomain.NewQualificationRuleReference(qualification.String())
+		if err != nil {
+			return psports.IntakeEligibility{}, false, fmt.Errorf("%w: qualification reference: %v",
+				ErrUntranslatableAnswer, err)
+		}
+		proof, err := adapter.evidence.ProveIntakeQualification(
+			ctx, identity, source, rule, source.OccurredAt(),
+		)
+		if err != nil {
+			return psports.IntakeEligibility{}, false, fmt.Errorf("intake qualification evidence: %w", err)
+		}
+		switch proof {
+		case psports.IntakeQualificationProven:
+			continue
+		case psports.IntakeQualificationUnproven:
+			basis, err := psdomain.NewCheckReason("INTAKE_QUALIFICATION_UNPROVEN/" + qualification.String())
+			if err != nil {
+				return psports.IntakeEligibility{}, false, fmt.Errorf("unproven basis: %w", err)
+			}
+			return psports.IntakeEligibility{
+				Outcome: psports.IntakeEligibilityNotEstablished,
+				Basis:   basis,
+			}, true, nil
+		default:
+			return psports.IntakeEligibility{}, false, fmt.Errorf(
+				"%w: intake qualification proof %d", ErrUntranslatableAnswer, proof)
+		}
+	}
+	return psports.IntakeEligibility{Outcome: psports.IntakeEligibilityEstablished}, true, nil
 }
 
 // JudgeFinalOutcome 按声明判终局：责任结果有声明行即满足并带声明的终局类型；缺行

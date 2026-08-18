@@ -68,6 +68,7 @@
 - [ADR-0060：包裹反查走当前快照投影列，不另表、不扫 JSONB](./0060-parcel-lookup-uses-current-snapshot-projection.md)
 - [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)
 - [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)
+- [ADR-0063：收寄硬资格证明由消费侧窄口取证，商业上下文只声明开放引用](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)
 
 ## 已被取代决策
 

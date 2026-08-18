@@ -72,7 +72,7 @@ func (owner boundStageOwner) AuthorizationRuleFor(
 // 代拟默认内容。三族同切：收寄、终局、取消都停在 found=false。
 func TestUnconfiguredAdoptedOwnerLeavesAllStageFamiliesUnconfigured(t *testing.T) {
 	source := adapter.NewDeclaredStageContent(nil, nil, nil, adapter.UnconfiguredAdoptedStageOwner{})
-	subject := adapter.NewServiceStageRulesAdapter(
+	subject := newStageRules(
 		source, source, source, requesterClassMustNotBeCalled{t: t},
 	)
 
@@ -131,7 +131,7 @@ func TestDeclaredStageContentTranslatesAllThreeFamilies(t *testing.T) {
 		cancellationViewDouble{content: catalog, found: true},
 		owners,
 	)
-	subject := adapter.NewServiceStageRulesAdapter(
+	subject := newStageRules(
 		source, source, source,
 		requesterClassDouble{party: pcdomain.DeclaredOperationsCancellation, formed: true},
 	)

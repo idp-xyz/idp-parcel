@@ -203,7 +203,10 @@ func assertIntakeEligibilityUnproven(t *testing.T, fixture *synVerticalFixture, 
 		t.Fatalf("构造阶段内容读口：%v", err)
 	}
 	declared := pspartycommercial.NewDeclaredStageContent(stageContent, stageContent, stageContent, owners)
-	eligibility := pspartycommercial.NewServiceStageRulesAdapter(declared, declared, declared, nil)
+	eligibility := pspartycommercial.NewServiceStageRulesAdapter(
+		declared, declared, declared, nil,
+		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
+	)
 
 	judged, configured, err := eligibility.JudgeIntakeEligibility(
 		t.Context(), fixture.identity, fixture.requestID, synPCIntakeSource(t, kind),
