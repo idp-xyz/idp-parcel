@@ -7,6 +7,7 @@ import (
 
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/adoptconsume"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -22,15 +23,11 @@ var (
 	// 委托可能还没落到已接受，重投会改变结果。
 	ErrParcelTargetNotFound = errors.New(
 		"parcel shipment nodeoperations adapter: current accepted parcel target not found")
-	// ErrAdoptionUndecided 表示采用编排停在自己的未决上。CONS-INTAKE-B 把它登记进
-	// WithUndecidedSentinels；本票只保证它可识别地上抛，消费门因此整笔回滚。
-	ErrAdoptionUndecided = errors.New(
-		"parcel shipment nodeoperations adapter: node intake adoption is undecided")
-	// ErrAdoptionHandoffPending 表示采用记录已提交但发布意图还没交出去。它不是资格
-	// 未决：重投走已有结果路径会再交同一份意图。不要进 WithUndecidedSentinels——运维
-	// 要查的是 outbox 下游，不是商业资格目录。
-	ErrAdoptionHandoffPending = errors.New(
-		"parcel shipment nodeoperations adapter: network intake handoff is still pending")
+	// ErrAdoptionUndecided 与 ErrAdoptionHandoffPending 是 adoptconsume 同名哨兵的别名。
+	// 两条采用消费链共用同一个错误值，生产名单与既有测试因此都指得住同一格；此处只保留
+	// 本包的暴露口，语义与判断都在 adoptconsume。
+	ErrAdoptionUndecided      = adoptconsume.ErrAdoptionUndecided
+	ErrAdoptionHandoffPending = adoptconsume.ErrAdoptionHandoffPending
 )
 
 // ReceptionFinder 按收寄幂等键取回判断记录。由 NO 的 ReceptionStore 满足。
@@ -128,30 +125,5 @@ func (adapter *AdoptOnNodeIntakeAdapter) HandleFormedNodeIntake(
 	if err != nil {
 		return err
 	}
-	return adoptionToConsumption(result)
-}
-
-// adoptionToConsumption 把采用编排的封闭结果译成消费门的两格：nil 入账、error 回滚。
-//
-// 消费完成不等于形成采用。REQUEST_NOT_ACCEPTED / SOURCE_CONFLICT / NOT_APPLICABLE
-// 是业务负向终局，重试不会让另一份委托或另一份资格长出来，入账收工。COMMITMENT_FORMED、
-// SOURCE_NOT_ADOPTED、EXISTING_RESULT 在应用层可能带着未交出去的 handoff 引用——那是
-// 技术续办，必须先拦住，否则 Gate 一 MarkProcessed，adoption 行在、下游 outbox 永久缺。
-func adoptionToConsumption(result psapplication.AdoptNetworkIntakeResult) error {
-	if result.IntakeHandoffReference().String() != "" {
-		return fmt.Errorf("%w: %s", ErrAdoptionHandoffPending, result.IntakeHandoffReference())
-	}
-	switch result.Outcome() {
-	case psapplication.IntakeCommitmentFormed,
-		psapplication.IntakeExistingResult,
-		psapplication.IntakeSourceNotAdopted,
-		psapplication.IntakeSourceConflict,
-		psapplication.IntakeNotApplicable,
-		psapplication.IntakeRequestNotAccepted:
-		return nil
-	case psapplication.IntakeEligibilityUndecided:
-		return fmt.Errorf("%w: %s", ErrAdoptionUndecided, result.UndecidedReason())
-	default:
-		return fmt.Errorf("%w: unexpected adoption outcome %q", ErrUntranslatableAnswer, result.Outcome())
-	}
+	return adoptconsume.Consumption(result)
 }

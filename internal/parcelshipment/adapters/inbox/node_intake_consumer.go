@@ -16,8 +16,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
-// consumerName 是本消费者在 inbox 键上的稳定名。改名等于换消费者。
-const consumerName = "parcel-shipment/adopt-node-intake"
+// nodeIntakeConsumerName 是本消费者在 inbox 键上的稳定名。每消费者一个名：Inbox 键
+// 只由（消费者名 + 来源 + 事件 ID）认领，同包第二个消费者若沿用同一个名，两路会互相
+// 把对方的投递当重复跳过。改名等于换消费者。
+const nodeIntakeConsumerName = "parcel-shipment/adopt-node-intake"
 
 // NodeIntakeFormedEventType 是本消费者认的事件类型。消费方自己写出这个字符串，
 // 不导入提供方 outbox 适配器的未导出常量——两边各写各的名字。
@@ -60,7 +62,7 @@ func NewNodeIntakeConsumer(
 	gate, err := inboxconsume.New(inboxconsume.Spec[FormedNodeIntake]{
 		Transactor:     transactor,
 		Store:          store,
-		Name:           consumerName,
+		Name:           nodeIntakeConsumerName,
 		EventType:      NodeIntakeFormedEventType,
 		Decode:         decodeFormedNodeIntake,
 		Handle:         handler.HandleFormedNodeIntake,
