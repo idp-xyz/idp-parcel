@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -35,7 +36,8 @@ var _ ports.CustomerContractContentView = (*CustomerContractContents)(nil)
 //
 // found=false = **正文未登记**（无父行）。父行在场即走 NewCustomerContract 重建，
 // 零子行是合法的空约定。版本壳与正文件规则包引用都在场且不等 → error，不折成
-// found=false（open-decisions F-3）。
+// found=false（open-decisions F-3）。显式租户与合同对象必须同一身份，否则 error
+// 且不交内容。父行与绑定由一条左连接取回，不拆成两次查询。
 func (repository *CustomerContractContents) LoadCustomerContract(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -46,21 +48,50 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		contract.ObjectID().String() == "" || contract.Version().String() == "" {
 		return none, false, fmt.Errorf("load customer contract: tenant and contract identity are required")
 	}
+	// 显式租户与合同对象必须是同一个身份：按租户查库、按合同重建，两处各写各的就会
+	// 把 A 的行装进 B 的合同（ADR-0003/0040，租户是身份不是过滤器）。
+	if tenant != contract.Tenant() {
+		return none, false, fmt.Errorf("load customer contract: tenant does not own this contract")
+	}
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 
+	// 父 LEFT JOIN 子一次取回：ReadExecutor 不保证两条语句同一快照，分两次会拼出从未
+	// 同时存在的父子状态。无父行 = 零行（found=false）；有父零子 = 一行空 json 数组。
 	var rulePackageID string
+	var bindingsJSON []byte
 	err = querier.QueryRow(ctx,
-		`SELECT rule_package_id
-		   FROM party_commercial.customer_contract_content
-		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
+		`SELECT parent.rule_package_id,
+		        COALESCE(
+		            json_agg(
+		                json_build_object(
+		                    'scope',  child.charge_scope_ref,
+		                    'policy', child.policy_id,
+		                    'basis',  child.inapplicability_basis
+		                )
+		                ORDER BY child.charge_scope_ref
+		            ) FILTER (WHERE child.charge_scope_ref IS NOT NULL),
+		            '[]'::json
+		        )
+		   FROM party_commercial.customer_contract_content AS parent
+		   LEFT JOIN party_commercial.customer_contract_control_binding AS child
+		          ON child.tenant_id     = parent.tenant_id
+		         AND child.object_kind   = parent.object_kind
+		         AND child.object_id     = parent.object_id
+		         AND child.version_label = parent.version_label
+		  WHERE parent.tenant_id     = $1
+		    AND parent.object_kind   = $2
+		    AND parent.object_id     = $3
+		    AND parent.version_label = $4
+		  GROUP BY parent.tenant_id, parent.object_kind, parent.object_id,
+		           parent.version_label, parent.rule_package_id`,
 		tenant.String(),
 		uint8(domain.CustomerContractObject),
 		contract.ObjectID().String(),
 		contract.Version().String(),
-	).Scan(&rulePackageID)
+	).Scan(&rulePackageID, &bindingsJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -76,35 +107,8 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 
-	rows, err := querier.Query(ctx,
-		`SELECT charge_scope_ref, policy_id, inapplicability_basis
-		   FROM party_commercial.customer_contract_control_binding
-		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4
-		  ORDER BY charge_scope_ref`,
-		tenant.String(),
-		uint8(domain.CustomerContractObject),
-		contract.ObjectID().String(),
-		contract.Version().String(),
-	)
+	bindings, err := financialControlBindingsFromJSON(bindingsJSON)
 	if err != nil {
-		return none, false, fmt.Errorf("load customer contract: %w", err)
-	}
-	defer rows.Close()
-
-	var bindings []domain.FinancialControlBinding
-	for rows.Next() {
-		var scopeRef string
-		var policyID, basis *string
-		if err := rows.Scan(&scopeRef, &policyID, &basis); err != nil {
-			return none, false, fmt.Errorf("load customer contract: %w", err)
-		}
-		binding, err := financialControlBindingFrom(scopeRef, policyID, basis)
-		if err != nil {
-			return none, false, fmt.Errorf("load customer contract: %w", err)
-		}
-		bindings = append(bindings, binding)
-	}
-	if err := rows.Err(); err != nil {
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 
@@ -113,6 +117,31 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 	return content, true, nil
+}
+
+type contractBindingDocument struct {
+	Scope  string  `json:"scope"`
+	Policy *string `json:"policy"`
+	Basis  *string `json:"basis"`
+}
+
+func financialControlBindingsFromJSON(raw []byte) ([]domain.FinancialControlBinding, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []contractBindingDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("bindings are not this adapter's shape: %w", err)
+	}
+	bindings := make([]domain.FinancialControlBinding, 0, len(documents))
+	for _, document := range documents {
+		binding, err := financialControlBindingFrom(document.Scope, document.Policy, document.Basis)
+		if err != nil {
+			return nil, err
+		}
+		bindings = append(bindings, binding)
+	}
+	return bindings, nil
 }
 
 // financialControlBindingFrom 把子表一行折回领域构造门。CHECK 保证恰一列在场，

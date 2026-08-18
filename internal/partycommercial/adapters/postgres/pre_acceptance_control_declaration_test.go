@@ -79,7 +79,7 @@ func TestPreAcceptanceControlDeclarationsAreScopedByTenantAndVersion(t *testing.
 	declarePreAcceptanceControl(t, pool, "tenant-1", "contract-1", "v1", "REQUIRED", nil)
 
 	if _, found, err := declarations.LoadPreAcceptanceControl(
-		t.Context(), pcTenant(t, "tenant-b"), effectiveContract(t, "contract-1", "v1", "digest-1"),
+		t.Context(), pcTenant(t, "tenant-b"), contractVersionInTenant(t, "tenant-b", "contract-1", "v1", "digest-1"),
 	); err != nil || found {
 		t.Fatalf("他租户读到了本租户的声明：found = %v err = %v", found, err)
 	}
@@ -87,6 +87,28 @@ func TestPreAcceptanceControlDeclarationsAreScopedByTenantAndVersion(t *testing.
 		t.Context(), pcTenant(t, "tenant-1"), effectiveContract(t, "contract-1", "v2", "digest-2"),
 	); err != nil || found {
 		t.Fatalf("换版本读到了上一版的声明：found = %v err = %v", found, err)
+	}
+}
+
+// TestMismatchedTenantDoesNotReturnEitherTenantsControlDeclaration 证租户身份闭包：
+// 两租户合法同号，用 A 的租户参数配 B 的合同对象不得读回任一方声明。按 A 查库再用 B
+// 重建，会把 A 的「要不要」装进 B 的合同。
+func TestMismatchedTenantDoesNotReturnEitherTenantsControlDeclaration(t *testing.T) {
+	declarations, pool := newPreAcceptanceControlDeclarations(t)
+	declarePreAcceptanceControl(t, pool, "tenant-a", "contract-1", "v1", "REQUIRED", nil)
+	basis := "CONTRACT-CLAUSE/TENANT-B"
+	declarePreAcceptanceControl(t, pool, "tenant-b", "contract-1", "v1", "NOT_APPLICABLE", &basis)
+
+	theirs := contractVersionInTenant(t, "tenant-b", "contract-1", "v1", "digest-b")
+	got, found, err := declarations.LoadPreAcceptanceControl(t.Context(), pcTenant(t, "tenant-a"), theirs)
+	if err == nil || found {
+		t.Fatalf("租户不一致被收下：found = %v err = %v", found, err)
+	}
+	if got.Requirement().Declared() {
+		t.Fatalf("交回了声明 %q——不得返回任一方内容", got.Requirement())
+	}
+	if _, notApplicable := got.NotApplicableBasis(); notApplicable {
+		t.Fatal("交回了 B 的不适用依据")
 	}
 }
 

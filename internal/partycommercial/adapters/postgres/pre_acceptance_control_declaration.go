@@ -46,6 +46,11 @@ func (repository *PreAcceptanceControlDeclarations) LoadPreAcceptanceControl(
 		contract.ObjectID().String() == "" || contract.Version().String() == "" {
 		return none, false, fmt.Errorf("load pre-acceptance control: tenant and contract identity are required")
 	}
+	// 显式租户与合同对象必须是同一个身份：按租户查库、按合同重建，两处各写各的就会
+	// 把 A 的行装进 B 的合同（ADR-0003/0040，租户是身份不是过滤器）。
+	if tenant != contract.Tenant() {
+		return none, false, fmt.Errorf("load pre-acceptance control: tenant does not own this contract")
+	}
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return none, false, fmt.Errorf("load pre-acceptance control: %w", err)
