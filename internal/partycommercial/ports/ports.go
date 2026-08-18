@@ -95,6 +95,28 @@ type PreAcceptanceControlDeclarationView interface {
 	) (domain.PreAcceptanceControlDeclaration, bool, error)
 }
 
+// CustomerContractContentView 取已唯一选出的客户合同版本的正文：它引用哪个接单规则包，
+// 以及按费用范围对财务控制作了什么约定。
+//
+// 它与 CommercialAuthorityView 分开，也与 PreAcceptanceControlDeclarationView 分开：
+// 前者回答「这个范围有几个适用候选」，后者回答合同版本级「要不要」接受前控制；本口
+// 回答范围级「适用哪份策略 / 显式不适用」。塞进 ViewRevision，一次与选择无关的绑定
+// 改动会把该范围全部在途解析判成已失效（open-decisions D-4 的同一条纪律）。
+//
+// found=false = 正文未登记（无父行）。父行在场而零子行是另一件事：租户明确登记了
+// 一份没有费用范围约定的合同，FinancialControlFor 对任何范围答「不存在」而不是
+// 「不适用」。读取失败与坏数据（含版本壳与正文件规则包引用分歧）走 error，不得折成
+// found=false——那会把一份损坏的正文伪装成从未登记。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。本口不提供默认内容。
+type CustomerContractContentView interface {
+	LoadCustomerContract(
+		ctx context.Context,
+		tenant domain.TenantID,
+		contract domain.CommercialVersion,
+	) (domain.CustomerContract, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回一次已固定的解析。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回

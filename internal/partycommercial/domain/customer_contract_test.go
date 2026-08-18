@@ -143,6 +143,42 @@ func TestContractWithoutARulePackageCannotBeBuilt(t *testing.T) {
 	}
 }
 
+// Covers: 空绑定集合是一份登记过的空约定，不是未配置——未绑定的范围仍答「不存在」
+// 而不是「不适用」。持久化面靠父子表区分「无父行」与「有父行零子行」，领域这一格
+// 必须先站得住。
+func TestAContractMayDeclareNoChargeScopeBindings(t *testing.T) {
+	contract := contractContent(t)
+	if _, present := contract.FinancialControlFor(commercialValue(t, domain.NewChargeScopeReference, "charge-express")); present {
+		t.Fatal("一份零绑定合同对未约定范围给出了约定")
+	}
+}
+
+// Covers: 正文件与版本壳的规则包引用两处都在场时必须相等；壳上没指名则不比对。
+func TestContentRulePackageMustAgreeWithTheVersionShellWhenBothArePresent(t *testing.T) {
+	content := commercialValue(t, domain.NewCommercialObjectID, "rules-1")
+
+	unnamed := contractVersion(t, "contract-unnamed")
+	if err := domain.ConsistentAcceptanceRulePackage(unnamed, content); err != nil {
+		t.Fatalf("壳上没指名却拒了：%v", err)
+	}
+
+	live, err := publishedNaming(t, "contract-named", "v1", "sha256:named", map[domain.CommercialObjectKind]string{
+		domain.AcceptanceRulePackageObject: "rules-1",
+	}).TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("take effect: %v", err)
+	}
+	if err := domain.ConsistentAcceptanceRulePackage(live, content); err != nil {
+		t.Fatalf("两处相等却拒了：%v", err)
+	}
+
+	if err := domain.ConsistentAcceptanceRulePackage(
+		live, commercialValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
+	); !errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
+		t.Fatalf("error = %v, want ErrRulePackageReferenceMismatch", err)
+	}
+}
+
 // Covers: CONTEXT 商业版本共同不变量 — 合同内容挂在一个当前可用的客户合同版本上。
 func TestContractContentNeedsAUsableContractVersion(t *testing.T) {
 	bindings := []domain.FinancialControlBinding{appliedControl(t, "charge-express")}

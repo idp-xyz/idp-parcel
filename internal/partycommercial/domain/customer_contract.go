@@ -6,6 +6,12 @@ var (
 	ErrInvalidCustomerContract            = errors.New("party commercial: invalid customer contract")
 	ErrInvalidFinancialControlBinding     = errors.New("party commercial: invalid financial control binding")
 	ErrConflictingFinancialControlBinding = errors.New("party commercial: one charge scope is both applied and inapplicable")
+	// ErrRulePackageReferenceMismatch 是装载核对：正文件的规则包引用与版本壳
+	// ReferenceTo(AcceptanceRulePackageObject) **都在场时必须相等**。两处不是一处派生
+	// 另一处（declaredReferences 不强制合同指名规则包），但两处都写了还悄悄分歧，
+	// 消费方就会各读各的。缺席的那一处不参与比对——正文件列仍是 NewCustomerContract
+	// 要的入参。
+	ErrRulePackageReferenceMismatch = errors.New("party commercial: contract content rule package disagrees with the version shell")
 )
 
 // InapplicabilityBasis 是某个费用范围不带接受前财务控制的原因。本上下文要求显式
@@ -115,4 +121,17 @@ func (contract CustomerContract) AcceptanceRulePackage() CommercialObjectID {
 func (contract CustomerContract) FinancialControlFor(scope ChargeScopeReference) (FinancialControlBinding, bool) {
 	binding, found := contract.bindings[scope]
 	return binding, found
+}
+
+// ConsistentAcceptanceRulePackage 核版本壳与正文件的规则包引用。壳上没指名时放行
+// （正文件列仍须在场，由 NewCustomerContract 守）；两处都在场且不等则拒，不静默选一处。
+func ConsistentAcceptanceRulePackage(version CommercialVersion, content CommercialObjectID) error {
+	named, present := version.ReferenceTo(AcceptanceRulePackageObject)
+	if !present {
+		return nil
+	}
+	if named != content {
+		return ErrRulePackageReferenceMismatch
+	}
+	return nil
 }
