@@ -13,6 +13,7 @@ import (
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
+	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -163,6 +164,42 @@ func TestAFormedNodeIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	}
 }
 
+// Covers: 路由表第四条——TF 对象级揽收登记投给 PS 采用消费者（UC-PS-003 的另一个合格
+// 物理来源）。手法同前三条：毒丸载荷（缺 tenantId/object/attempt）让消费门显式拒收并
+// 交回 nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+func TestARegisteredOffsitePickupReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "pickup-1", psinbox.OffsitePickupRegisteredEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把揽收登记投给采用消费者",
+			published, recordedFailureCode(t, db, "pickup-1"))
+	}
+}
+
+// Covers: 尝试级 `offsite-pickup.formed` 不得进采用路由。一封信带一批成功对象，而采用
+// 判断逐对象成立；挂上这条会让同一份揽收结果被采用两次。未登记的类型必须撞
+// dispatch.no_subscriber，而不是被第四路误吃。
+func TestAnOffsitePickupFormedEnvelopeIsNotRouted(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "pickup-formed-1", "transport-fulfillment.offsite-pickup.formed", `{"ok":true}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 0 {
+		t.Fatalf("尝试级揽收信封被当成发布成功定稿了：published = %d", published)
+	}
+	if got := recordedFailureCode(t, db, "pickup-formed-1"); got != "dispatch.no_subscriber" {
+		t.Fatalf("failure_code = %q, want dispatch.no_subscriber", got)
+	}
+}
+
 // stallingConsumer 是只会交回某个既定错误的直投接收方，用来验路由条目那层的失败分格。
 type stallingConsumer struct{ err error }
 
@@ -240,6 +277,80 @@ func TestNodeIntakeFailuresLandInTheRightPartition(t *testing.T) {
 				t.Fatalf("失败的投递被定稿了 %d 条", published)
 			}
 			if got := recordedFailureCode(t, db, "node-intake-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+			}
+		})
+	}
+}
+
+// beatWithOffsitePickupConsumer 用生产的揽收哨兵名单包一个替身，接成一拍。
+//
+// 名单取 offsitePickupUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试
+// 里绿、在生产里塌成 dispatch.publish_failed。
+func beatWithOffsitePickupConsumer(t *testing.T, inner dispatch.Consumer) (Beat, *bentopg.DB, *outbox.Store) {
+	t.Helper()
+
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	routed, err := dispatch.WithUndecidedSentinels(inner, offsitePickupUndecidedSentinels...)
+	if err != nil {
+		t.Fatalf("包装未决哨兵：%v", err)
+	}
+	config := dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second}
+	publisher, err := dispatch.NewDirectPublisher(
+		map[eventing.EventType]dispatch.Consumer{psinbox.OffsitePickupRegisteredEventType: routed},
+		5*time.Second,
+		config,
+	)
+	if err != nil {
+		t.Fatalf("直投发布器：%v", err)
+	}
+	beat, err := dispatch.NewDispatcher(store, store, publisher, systemClock{}, config)
+	if err != nil {
+		t.Fatalf("派发器：%v", err)
+	}
+	return beat, db, store
+}
+
+// Covers: 揽收这条链的失败分格——三个可续办哨兵落 dispatch.consumer_undecided，另外三
+// 格保持 dispatch.publish_failed。后三格要运维做的事不是「等依赖」：
+//   - 键/本体不符是仓储不变量已破，重投不自愈；
+//   - 交接待发要查 outbox 下游；
+//   - 反查歧义要人去看为什么两份已接受委托声明了同一个包裹。
+func TestOffsitePickupFailuresLandInTheRightPartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode string
+	}{
+		{"资格未决", pstf.ErrAdoptionUndecided, "dispatch.consumer_undecided"},
+		{"揽收还看不见", pstf.ErrPickupNotVisible, "dispatch.consumer_undecided"},
+		{"目标委托还没有", pstf.ErrParcelTargetNotFound, "dispatch.consumer_undecided"},
+		{"键与本体不符", pstf.ErrPickupRecordInconsistent, "dispatch.publish_failed"},
+		{"交接待发", pstf.ErrAdoptionHandoffPending, "dispatch.publish_failed"},
+		{"反查歧义", psdomain.ErrAmbiguousParcelTarget, "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beat, db, store := beatWithOffsitePickupConsumer(t, &stallingConsumer{err: test.err})
+			enqueueForBeat(t, db, store, "pickup-1", psinbox.OffsitePickupRegisteredEventType, `{}`)
+
+			published, err := beat.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("一拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("失败的投递被定稿了 %d 条", published)
+			}
+			if got := recordedFailureCode(t, db, "pickup-1"); got != test.wantCode {
 				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
 			}
 		})
