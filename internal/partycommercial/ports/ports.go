@@ -237,13 +237,62 @@ func (outcome ValidityCorrectionSaveOutcome) String() string {
 	}
 }
 
+// PricePolicySaveOutcome 是一次商业价格政策登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份政策正文——含发布期
+// 保全的方案方向与转换（ADR-0057）。两者都不是 error，绝不覆盖。
+type PricePolicySaveOutcome uint8
+
+const (
+	PricePolicySaveOutcomeInvalid PricePolicySaveOutcome = iota
+	PricePolicySaved
+	PricePolicyAlreadyRegistered
+	PricePolicyContentConflict
+)
+
+func (outcome PricePolicySaveOutcome) String() string {
+	switch outcome {
+	case PricePolicySaved:
+		return "SAVED"
+	case PricePolicyAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case PricePolicyContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// SettlementPolicySaveOutcome 是一次结算政策登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同一结算政策版本被登记成另一种方式或另一份六维适用范围。
+// 两者都不是 error，绝不覆盖。
+type SettlementPolicySaveOutcome uint8
+
+const (
+	SettlementPolicySaveOutcomeInvalid SettlementPolicySaveOutcome = iota
+	SettlementPolicySaved
+	SettlementPolicyAlreadyRegistered
+	SettlementPolicyContentConflict
+)
+
+func (outcome SettlementPolicySaveOutcome) String() string {
+	switch outcome {
+	case SettlementPolicySaved:
+		return "SAVED"
+	case SettlementPolicyAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case SettlementPolicyContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
 // 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
 // 查带不出「同范围有哪些并存版本」。
 //
-// 本口今天承载版本册、服务产品形态册（ADR-0050）与有效性更正册（ADR-0038）。价格/
-// 结算政策册（ADR-0034/0044）的持久化面尚未落，端口届时继续扩展而不是在这里预开
-// 空方法。
+// 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）以及
+// 价格与结算政策册（ADR-0034/0044/0057）。端口按具名 Save 扩展，不开通用口。
 //
 // LoadForScope 一次交回该范围**已落库的全部通道**，而不是逐通道各取一次：ViewRevision
 // 由各通道的内容共同派生，两次取回之间视图一变，派生出的修订就不再对应任何一个真实时刻。
@@ -270,6 +319,20 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		correction domain.ValidityCorrection,
 	) (ValidityCorrectionSaveOutcome, error)
+	// SavePricePolicy 登记一份价格规则版本的计价正文。它不代替 SaveVersion。
+	// planDirection 与 conversion 是发布当时 parcel-pricing 的答复与当时声明的转换，
+	// 必须显式交出（ADR-0057）；结构体上没有这两项。
+	SavePricePolicy(
+		ctx context.Context,
+		policy domain.CommercialPricePolicy,
+		planDirection domain.PriceDirection,
+		conversion domain.PlanBindingConversion,
+	) (PricePolicySaveOutcome, error)
+	// SaveSettlementPolicy 登记一份结算政策版本的方式与六维适用范围。它不代替 SaveVersion。
+	SaveSettlementPolicy(
+		ctx context.Context,
+		policy domain.SettlementPolicy,
+	) (SettlementPolicySaveOutcome, error)
 }
 
 type Clock interface {

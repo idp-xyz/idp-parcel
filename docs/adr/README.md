@@ -62,6 +62,7 @@
 - [ADR-0054：接受前财务控制策略视图增设「未配置」格](./0054-pre-acceptance-control-policy-view-has-an-unconfigured-grade.md)
 - [ADR-0055：业务端点 Intake 增设「未配置」格，端点装配属机制半边](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)
 - [ADR-0056：区间更正只增多条，同版本写入以版本行锁串行化](./0056-validity-correction-append-only-serialized-by-version-row.md)
+- [ADR-0057：价格政策册保全发布期邻接答复，不重查也不绕过绑定校验](./0057-price-policy-preserves-publish-time-adjacent-replies.md)
 
 ## 已被取代决策
 

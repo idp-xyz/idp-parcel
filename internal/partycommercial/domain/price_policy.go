@@ -167,6 +167,10 @@ func (policy CommercialPricePolicy) Scope() CommercialScopeReference {
 	return policy.scope
 }
 
+func (policy CommercialPricePolicy) Effective() EffectiveInterval {
+	return policy.effective
+}
+
 func (policy CommercialPricePolicy) covers(query PricePolicyQuery) bool {
 	return policy.direction == query.direction &&
 		policy.scope == query.scope &&

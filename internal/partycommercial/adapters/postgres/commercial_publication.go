@@ -41,9 +41,9 @@ func NewCommercialPublications(db *bentopg.DB) (*CommercialPublications, error) 
 // 共同派生，分两次读之间若有写入落地，派生出的修订会对应一个从未存在过的中间状态；
 // ReadExecutor 不保证两条语句同处一个快照，而一条语句保证。
 //
-// 形态行以版本四元组为主键、与版本一一对应，左连接后仍是每个版本一行。区间更正按 D-5
-// 只增多条，一个版本可有若干行，直接左连接会放大结果集、把形态登记重复进册。因此更正
-// 以 LATERAL 聚成 JSON 数组挂在版本行上，登记顺序随 registration_id 保留。
+// 形态行与价格/结算政策行都以版本四元组为主键、与版本一一对应，左连接后仍是每个版本
+// 一行。区间更正按 D-5 只增多条，直接左连接会放大结果集、把其余正文件登记重复进册。
+// 因此更正以 LATERAL 聚成 JSON 数组挂在版本行上，登记顺序随 registration_id 保留。
 func (repository *CommercialPublications) LoadForScope(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -55,13 +55,28 @@ func (repository *CommercialPublications) LoadForScope(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT version.snapshot, product.form, correction.items
+		`SELECT version.snapshot, product.form, correction.items,
+		        price.direction, price.plan_ref, price.plan_direction, price.binding_conversion,
+		        price.policy_scope_ref, price.effective_starts_at, price.effective_ends_at,
+		        settlement.method, settlement.legal_entity_ref, settlement.counterparty_ref,
+		        settlement.contract_label, settlement.charge_scope_ref, settlement.currency_code,
+		        settlement.effective_starts_at, settlement.effective_ends_at
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
 		          ON product.tenant_id     = version.tenant_id
 		         AND product.object_kind   = version.object_kind
 		         AND product.object_id     = version.object_id
 		         AND product.version_label = version.version_label
+		   LEFT JOIN party_commercial.commercial_price_policy AS price
+		          ON price.tenant_id     = version.tenant_id
+		         AND price.object_kind   = version.object_kind
+		         AND price.object_id     = version.object_id
+		         AND price.version_label = version.version_label
+		   LEFT JOIN party_commercial.commercial_settlement_policy AS settlement
+		          ON settlement.tenant_id     = version.tenant_id
+		         AND settlement.object_kind   = version.object_kind
+		         AND settlement.object_id     = version.object_id
+		         AND settlement.version_label = version.version_label
 		   LEFT JOIN LATERAL (
 		        SELECT COALESCE(
 		                   json_agg(
@@ -95,11 +110,18 @@ func (repository *CommercialPublications) LoadForScope(
 	registry := domain.NewCommercialRegistry()
 	for rows.Next() {
 		var raw []byte
-		// 形态列可空：左连接下 NULL 就是「这个版本没登记形态」。它不是缺陷也不是未决
-		// ——ADR-0050 明写产品缺席不使解析退化，缺席由查无此行表达。
 		var rawForm *string
 		var rawCorrections []byte
-		if err := rows.Scan(&raw, &rawForm, &rawCorrections); err != nil {
+		var price scannedPricePolicy
+		var settlement scannedSettlementPolicy
+		if err := rows.Scan(
+			&raw, &rawForm, &rawCorrections,
+			&price.direction, &price.planRef, &price.planDirection, &price.conversion,
+			&price.scope, &price.startsAt, &price.endsAt,
+			&settlement.method, &settlement.legalEntity, &settlement.counterparty,
+			&settlement.contract, &settlement.chargeScope, &settlement.currency,
+			&settlement.startsAt, &settlement.endsAt,
+		); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 		var document versionDocument
@@ -119,6 +141,12 @@ func (repository *CommercialPublications) LoadForScope(
 			}
 		}
 		if err := registerValidityCorrections(registry, version, rawCorrections); err != nil {
+			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		if err := registerPricePolicy(registry, version, price); err != nil {
+			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		if err := registerSettlementPolicy(registry, version, settlement); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 	}
