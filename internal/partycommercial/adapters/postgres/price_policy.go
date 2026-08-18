@@ -48,15 +48,26 @@ func (repository *CommercialPublications) SavePricePolicy(
 	}
 
 	version := policy.Version()
-	direction := policy.Direction().String()
-	planRef := policy.PricingPlan().String()
+	reconstructed, err := domain.NewCommercialPricePolicy(
+		version,
+		policy.Direction(),
+		policy.PricingPlan(),
+		planDirection,
+		conversion,
+		policy.Scope(),
+		policy.Effective(),
+	)
+	if err != nil {
+		// 政策正文与传入的发布期答复对不上（含 SELL+BUY 却未声明转换）。拦在 INSERT 前，
+		// 否则库里会多一行装载时过不了 NewCommercialPricePolicy 的记录。
+		return ports.PricePolicySaveOutcomeInvalid, fmt.Errorf("save price policy: %w", err)
+	}
+
+	direction := reconstructed.Direction().String()
+	planRef := reconstructed.PricingPlan().String()
 	planDir := planDirection.String()
 	conv := conversion.String()
-	scope := policy.Scope().String()
-	if direction == "" || planRef == "" || planDir == "" || conv == "" || scope == "" {
-		return ports.PricePolicySaveOutcomeInvalid,
-			fmt.Errorf("save price policy: 政策正文或发布期答复缺失，未经 NewCommercialPricePolicy 构造的政策不入册")
-	}
+	scope := reconstructed.Scope().String()
 
 	var endsAt *time.Time
 	if end, bounded := policy.Effective().EndsAt(); bounded {

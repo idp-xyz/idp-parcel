@@ -58,6 +58,20 @@ CREATE TABLE party_commercial.commercial_price_policy (
     CONSTRAINT commercial_price_policy_conversion_closed
         CHECK (binding_conversion IN ('NONE', 'FROZEN_BUY_EVALUATION')),
 
+    -- 镜像 domain.checkPlanBinding：同向必须未声明转换；唯一合法的跨向是 SELL 政策
+    -- 显式引用一次已冻结的 BUY 评价。独立枚举 CHECK 仍挡住集外取值，本约束挡住集内
+    -- 非法组合——否则 SELL+BUY+NONE 能入册，要等到下次装载过 NewCommercialPricePolicy
+    -- 才炸（ADR-0057）。
+    CONSTRAINT commercial_price_policy_binding
+        CHECK (
+            (direction = plan_direction AND binding_conversion = 'NONE')
+            OR (
+                direction = 'SELL'
+                AND plan_direction = 'BUY'
+                AND binding_conversion = 'FROZEN_BUY_EVALUATION'
+            )
+        ),
+
     CONSTRAINT commercial_price_policy_interval_coherent
         CHECK (effective_ends_at IS NULL OR effective_ends_at > effective_starts_at)
 );

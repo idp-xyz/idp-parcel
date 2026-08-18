@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -233,6 +234,64 @@ func TestAPlanBindingConversionOutsideTheClosedSetIsRefused(t *testing.T) {
 		         'SELL', 'plan-1', 'BUY', 'IMPLICIT', 'scope-1', now())`)
 	if err == nil {
 		t.Fatal("封闭集之外的绑定转换进了价格政策册")
+	}
+}
+
+// Covers: ADR-0057——库内 CHECK 镜像 checkPlanBinding。枚举都合法但组合不合法的行
+// 仍须被拒，不能等装载时才炸。
+func TestAnInvalidPlanBindingMatrixIsRefusedByTheDatabase(t *testing.T) {
+	repository, transactor, pool := newPublications(t)
+	ctx := t.Context()
+	version := effectiveVersionOfKind(t, domain.PriceRuleObject, "policy-1", "v1", "digest-price-1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+
+	for _, trial := range []struct {
+		name, direction, planDirection, conversion string
+	}{
+		{"跨向未声明转换", "SELL", "BUY", "NONE"},
+		{"同向却声明转换", "SELL", "SELL", "FROZEN_BUY_EVALUATION"},
+		{"转换方向反了", "BUY", "SELL", "FROZEN_BUY_EVALUATION"},
+	} {
+		t.Run(trial.name, func(t *testing.T) {
+			_, err := pool.Exec(ctx,
+				`INSERT INTO party_commercial.commercial_price_policy
+					(tenant_id, object_kind, object_id, version_label,
+					 direction, plan_ref, plan_direction, binding_conversion,
+					 policy_scope_ref, effective_starts_at)
+				 VALUES ('tenant-1', 6, 'policy-1', 'v1',
+				         $1, 'plan-1', $2, $3, 'scope-1', now())`,
+				trial.direction, trial.planDirection, trial.conversion)
+			if err == nil {
+				t.Fatalf("%s / %s / %s 进了价格政策册", trial.direction, trial.planDirection, trial.conversion)
+			}
+		})
+	}
+}
+
+// Covers: SavePricePolicy 写入前重跑 NewCommercialPricePolicy。构造出来的政策是合法
+// 同向绑定，但传入的发布期答复是 SELL+BUY 未声明转换——必须拒绝且不留行。
+func TestSavePricePolicyRejectsAnIncompatiblePublishTimeReply(t *testing.T) {
+	repository, transactor, _ := newPublications(t)
+	ctx := t.Context()
+
+	version := effectiveVersionOfKind(t, domain.PriceRuleObject, "policy-1", "v1", "digest-price-1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	policy := pricePolicyOn(t, version, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone, "plan-sell")
+
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err := repository.SavePricePolicy(txCtx, policy, domain.BuyDirection, domain.PlanBindingConversionNone)
+		return err
+	})
+	if !errors.Is(err, domain.ErrPriceDirectionBindingConflict) {
+		t.Fatalf("不相容的发布期答复应被拒绝，实得：%v", err)
+	}
+
+	registry, err := repository.LoadForScope(ctx, pcTenant(t, "tenant-1"), pcScope(t))
+	if err != nil {
+		t.Fatalf("整册读回：%v", err)
+	}
+	if policies := registry.PricePolicies(); len(policies) != 0 {
+		t.Fatalf("被拒绝的绑定仍留下了 %d 份政策", len(policies))
 	}
 }
 

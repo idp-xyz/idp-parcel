@@ -25,7 +25,7 @@ Date: 2026-08-18
 
 ## Consequences
 
-- `SavePricePolicy` 在签名上显式收 `planDirection` 与 `conversion`：调用方必须交出发布当时的答复，忘了就编不过。
+- `SavePricePolicy` 在签名上显式收 `planDirection` 与 `conversion`：调用方必须交出发布当时的答复，忘了就编不过。写入前用这两项与政策正文重跑 `NewCommercialPricePolicy`；库内 CHECK 再镜像同一份绑定矩阵，已知无法重建的行写不进去。
 - 封闭集 CHECK 与 `PriceDirection` / `PlanBindingConversion` 同步扩展；集外取值整次装载上抛。
 - [ADR-0034](./0034-pricing-closure-adopts-via-price-policy.md) 的选用与缺席语义不变；本记录只定登记册存什么。
 
