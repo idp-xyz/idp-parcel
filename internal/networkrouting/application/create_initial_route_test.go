@@ -34,8 +34,9 @@ func handoffSpec(t *testing.T, parcels ...string) domain.RouteHandoffSpec {
 func routeCommand(t *testing.T, parcels ...string) application.CreateInitialRouteCommand {
 	t.Helper()
 	return application.CreateInitialRouteCommand{
-		Handoff: handoffSpec(t, parcels...),
-		Purpose: value(t, domain.NewServicePurpose, "NETWORK_SERVICE"),
+		Handoff:    handoffSpec(t, parcels...),
+		Purpose:    value(t, domain.NewServicePurpose, "NETWORK_SERVICE"),
+		Resolution: value(t, domain.NewCommercialResolutionReference, "RES-test-1"),
 	}
 }
 
@@ -101,6 +102,7 @@ type applicabilityDouble struct {
 func (double *applicabilityDouble) AssessRoutingApplicability(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
+	_ domain.CommercialResolutionReference,
 ) (domain.NetworkEligibility, error) {
 	double.asked++
 	if double.err != nil {
@@ -694,5 +696,23 @@ func TestAWaybillOnlyServiceIsNotApplicableWithItsBasis(t *testing.T) {
 	if undecided.Outcome() != application.RouteHandoffUndecided ||
 		undecided.UndecidedReason() != application.RoutingApplicabilityUnavailable {
 		t.Fatalf("outcome = %q/%q; 读不回不得读成不适用", undecided.Outcome(), undecided.UndecidedReason())
+	}
+}
+
+func TestMissingAcceptedResolutionStopsAtApplicabilityUnavailable(t *testing.T) {
+	fixture := newRouteFixture(t)
+	command := routeCommand(t, "parcel-1")
+	command.Resolution = domain.CommercialResolutionReference{}
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.RouteHandoffUndecided ||
+		result.UndecidedReason() != application.RoutingApplicabilityUnavailable {
+		t.Fatalf("outcome = %q/%q; 命令缺解析标识不得静默跳过", result.Outcome(), result.UndecidedReason())
+	}
+	if fixture.applicability.asked != 0 {
+		t.Fatal("缺解析标识仍问了适用性视图")
 	}
 }

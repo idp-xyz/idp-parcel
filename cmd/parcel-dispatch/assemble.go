@@ -319,9 +319,10 @@ func acceptanceConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: commercial resolutions: %w", err)
 	}
-	// 第二个入参是把判断键折成解析标识的实例半边映射，今天没有任何租户登记过它。
-	// nil 是「显式未配置」的诚实表达：视图据此答依赖不可用，编排停在未决。
-	applicability, err := nrpartycommercial.NewRoutingApplicability(closures, nil)
+	// 适用性闭包标识从已接受解析回指（ADR-0064），不再要一份判断键到 RES 的实例映射。
+	// 解析库没有 SYN-RES-01 那一行时 found=false，视图答依赖不可用——不要默认适用，
+	// 也不要为纵向变绿去种服务产品。
+	applicability, err := nrpartycommercial.NewRoutingApplicability(closures)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: routing applicability: %w", err)
 	}

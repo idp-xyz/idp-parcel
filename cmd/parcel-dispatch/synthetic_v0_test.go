@@ -24,7 +24,7 @@ import (
 // 本文件是 SYN-V0：从 PS 应用编排穿过真仓储与 Outbox，再经生产 wireDispatcher 投到
 // NR 接受决定消费者，停在生产装配里那个诚实未决格。它不是全链闭环。
 //
-// S 替身只出现在本测试文件，名字带 synS；生产 assemble.go 的 nil 适用性映射不动。
+// S 替身只出现在本测试文件，名字带 synS；生产 assemble.go 不种服务产品、不默认适用性。
 
 const (
 	synV0AcceptanceConsumer = "network-routing/initial-route-on-acceptance"
@@ -61,7 +61,8 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 
 // Covers: SYN-V0 已决定路径——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher
 // 把信封投到 NR 消费者；已接受重建门已开（ADR-0061），消费者按引用读回委托并进入
-// CreateInitialRoute。生产装配的适用性映射仍是 nil，整份交接停在
+// CreateInitialRoute。生产装配按已接受解析回指闭包（ADR-0064）；SYN-V0 不调
+// seedSYNPCEligibility，LoadResolution(SYN-RES-01) found=false 仍是真话，整份交接停在
 // ROUTING_APPLICABILITY_UNAVAILABLE / dispatch.consumer_undecided。不得写可执行路由，
 // 也不得把未决当成已处理入账。
 func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T) {
@@ -108,7 +109,7 @@ func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T)
 			published, recordedFailureCode(t, fixture.db, synV0DecisionID))
 	}
 	if got := recordedFailureCode(t, fixture.db, synV0DecisionID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（nil 映射，不是重建门）", got)
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（闭包未写入，不是重建门）", got)
 	}
 
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {

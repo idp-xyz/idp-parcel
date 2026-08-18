@@ -56,3 +56,4 @@ Date: 2026-08-18
 - [ADR-0061：已接受委托重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)：取回委托能拿到决定
 - [ADR-0003：集团租户边界](./0003-group-tenant-legal-entity-customer-account.md)：取回后租户必须一致
 - [ADR-0025：跨上下文适配器落在消费方](./0025-cross-context-adapters-live-on-the-consumer-side.md)
+- [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)：同一份标识，适用性走闭包里的服务产品，不改本记录的采用版本路径

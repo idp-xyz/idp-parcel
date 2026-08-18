@@ -172,10 +172,12 @@ type InitialRouteEvidenceView interface {
 
 // RoutingApplicabilityView 取商业侧对「这个服务要不要形成网络路由」的回答（UC-NR-001
 // 步骤 3）。复用 NetworkEligibility 语义：要求/不要求加依据，读不回是错误不是`不适用`。
+// 解析标识与判断键并列传入（ADR-0064）：它不是判断维，不得并进 key。
 type RoutingApplicabilityView interface {
 	AssessRoutingApplicability(
 		ctx context.Context,
 		key domain.InitialRouteJudgmentKey,
+		resolution domain.CommercialResolutionReference,
 	) (domain.NetworkEligibility, error)
 }
 

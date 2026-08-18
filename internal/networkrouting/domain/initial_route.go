@@ -26,6 +26,19 @@ func NewAcceptanceBaselineReference(value string) (AcceptanceBaselineReference, 
 	return AcceptanceBaselineReference{required}, err
 }
 
+// CommercialResolutionReference 是消费方对一次已固定商业解析的引用（ADR-0064）。
+// 权威在提供方按标识持有的闭包；它是命令附加字段，不是初始路由判断维。
+type CommercialResolutionReference struct{ requiredValue }
+
+func NewCommercialResolutionReference(value string) (CommercialResolutionReference, error) {
+	required, err := newRequiredValue("commercial resolution reference", value)
+	return CommercialResolutionReference{required}, err
+}
+
+func (ref CommercialResolutionReference) Valid() bool {
+	return ref.valid()
+}
+
 // RouteHandoffSpec 是一次委托接受交接所需的全部输入。
 type RouteHandoffSpec struct {
 	Correlation        RequestCorrelationID

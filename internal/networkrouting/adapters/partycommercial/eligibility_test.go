@@ -77,7 +77,8 @@ func TestRoutingApplicabilityUsesTheSameFormTranslation(t *testing.T) {
 	closure := closureWithProduct(t, true)
 	view := newRouting(t, closure)
 
-	eligibility, err := view.AssessRoutingApplicability(t.Context(), routingKey(t))
+	eligibility, err := view.AssessRoutingApplicability(
+		t.Context(), routingKey(t), routingResolution(t, closure))
 	if err != nil {
 		t.Fatalf("assess routing: %v", err)
 	}
@@ -85,9 +86,41 @@ func TestRoutingApplicabilityUsesTheSameFormTranslation(t *testing.T) {
 		t.Fatal("初始路由适用性把 NETWORK_SERVICE 译成了不要求")
 	}
 
-	absent := newRouting(t, closureWithProduct(t, false))
-	if _, err := absent.AssessRoutingApplicability(t.Context(), routingKey(t)); !errors.Is(err, adapter.ErrServiceProductUnavailable) {
+	absentClosure := closureWithProduct(t, false)
+	absent := newRouting(t, absentClosure)
+	if _, err := absent.AssessRoutingApplicability(
+		t.Context(), routingKey(t), routingResolution(t, absentClosure),
+	); !errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatalf("absent product err = %v, want ErrServiceProductUnavailable", err)
+	}
+}
+
+func TestRoutingApplicabilityMissingClosureIsDependencyUnavailable(t *testing.T) {
+	closure := closureWithProduct(t, true)
+	view := newRouting(t, closure)
+
+	_, err := view.AssessRoutingApplicability(
+		t.Context(), routingKey(t),
+		mustNR(t, nrdomain.NewCommercialResolutionReference, "RES-missing"),
+	)
+	if !errors.Is(err, adapter.ErrServiceProductUnavailable) {
+		t.Fatalf("err = %v, want ErrServiceProductUnavailable", err)
+	}
+}
+
+func TestRoutingApplicabilityTenantMismatchIsNotUnconfigured(t *testing.T) {
+	closure := closureWithProduct(t, true)
+	view := newRouting(t, closure)
+	foreign := routingKey(t)
+	foreign.TenantID = mustNR(t, nrdomain.NewTenantID, "tenant-other")
+
+	_, err := view.AssessRoutingApplicability(
+		t.Context(), foreign, routingResolution(t, closure))
+	if !errors.Is(err, adapter.ErrRoutingClosureTenantMismatch) {
+		t.Fatalf("err = %v, want ErrRoutingClosureTenantMismatch", err)
+	}
+	if errors.Is(err, adapter.ErrServiceProductUnavailable) {
+		t.Fatal("租户不一致被折成了服务产品不可用")
 	}
 }
 
@@ -112,14 +145,16 @@ func newEligibility(t *testing.T, closure pcdomain.CommercialClosure) *adapter.C
 
 func newRouting(t *testing.T, closure pcdomain.CommercialClosure) *adapter.RoutingApplicability {
 	t.Helper()
-	view, err := adapter.NewRoutingApplicability(
-		newClosureStore(closure),
-		fixedRoutingIdentity{id: closure.ResolutionID()},
-	)
+	view, err := adapter.NewRoutingApplicability(newClosureStore(closure))
 	if err != nil {
 		t.Fatalf("new routing: %v", err)
 	}
 	return view
+}
+
+func routingResolution(t *testing.T, closure pcdomain.CommercialClosure) nrdomain.CommercialResolutionReference {
+	t.Helper()
+	return mustNR(t, nrdomain.NewCommercialResolutionReference, closure.ResolutionID().String())
 }
 
 type closureStoreDouble struct {
@@ -152,17 +187,6 @@ type fixedReachabilityIdentity struct {
 func (identity fixedReachabilityIdentity) ResolutionID(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
-) (pcdomain.ResolutionID, bool, error) {
-	return identity.id, true, nil
-}
-
-type fixedRoutingIdentity struct {
-	id pcdomain.ResolutionID
-}
-
-func (identity fixedRoutingIdentity) ResolutionID(
-	_ context.Context,
-	_ nrdomain.InitialRouteJudgmentKey,
 ) (pcdomain.ResolutionID, bool, error) {
 	return identity.id, true, nil
 }

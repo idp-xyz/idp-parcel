@@ -122,11 +122,13 @@ func (reason RouteUndecidedReason) String() string {
 	}
 }
 
-// CreateInitialRouteCommand 携带路由交接的原料与服务目的。目的是消费侧装配参数（与
-// 可达性适配器的 Purpose 同款）：属服务产品的话语，未配置时交接未受理。
+// CreateInitialRouteCommand 携带路由交接的原料、服务目的和已接受解析标识。
+// 目的是消费侧装配参数（与可达性适配器的 Purpose 同款）：属服务产品的话语，未配置时
+// 交接未受理。解析标识是命令附加字段，不是判断维（ADR-0064）。
 type CreateInitialRouteCommand struct {
-	Handoff domain.RouteHandoffSpec
-	Purpose domain.ServicePurpose
+	Handoff    domain.RouteHandoffSpec
+	Purpose    domain.ServicePurpose
+	Resolution domain.CommercialResolutionReference
 }
 
 // ParcelRouteResult 是一个包裹的独立结果。计划与无路由各按在场标志给出，未决带原因与
@@ -247,8 +249,12 @@ func (handler *CreateInitialRouteHandler) Handle(
 	}
 
 	// 适用性是服务级判断（步骤 3）：产品不要求网络路由时整份交接不适用，不虚构任何
-	// 包裹级路由。读不回形成未决，不读成`不适用`。
-	eligibility, err := handler.deps.Applicability.AssessRoutingApplicability(ctx, keys[0])
+	// 包裹级路由。读不回形成未决，不读成`不适用`。解析标识从命令来，不从判断键发明。
+	if !command.Resolution.Valid() {
+		return handler.undecidedHandoff(keys, RoutingApplicabilityUnavailable), nil
+	}
+	eligibility, err := handler.deps.Applicability.AssessRoutingApplicability(
+		ctx, keys[0], command.Resolution)
 	if err != nil {
 		return handler.undecidedHandoff(keys, RoutingApplicabilityUnavailable), nil
 	}

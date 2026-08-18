@@ -114,14 +114,19 @@ func (adapter *RouteOnAcceptanceAdapter) HandleAcceptedDecision(
 	if err != nil {
 		return err
 	}
+	resolution, err := acceptedResolutionOf(request)
+	if err != nil {
+		return err
+	}
 	spec, err := adapter.handoffSpecFor(decision, baseline)
 	if err != nil {
 		return err
 	}
 
 	result, err := adapter.route.Handle(ctx, nrapplication.CreateInitialRouteCommand{
-		Handoff: spec,
-		Purpose: adapter.purpose,
+		Handoff:    spec,
+		Purpose:    adapter.purpose,
+		Resolution: resolution,
 	})
 	if err != nil {
 		return fmt.Errorf("create initial route: %w", err)
@@ -158,6 +163,22 @@ func routableBaseline(
 			ErrEnvelopeContradictsAuthority, decision.SubmissionVersion, baseline.SubmissionVersionID())
 	}
 	return baseline, nil
+}
+
+// acceptedResolutionOf 取出已接受决定上的解析标识，译成 NR 引用（ADR-0064）。
+// 没有决定或快照是依赖不可用：静默跳过会把这次路由义务入账丢掉。
+func acceptedResolutionOf(request psdomain.ShipmentRequest) (nrdomain.CommercialResolutionReference, error) {
+	none := nrdomain.CommercialResolutionReference{}
+	decision, present := request.AcceptanceDecision()
+	if !present {
+		return none, fmt.Errorf("%w: an accepted request carries no acceptance decision",
+			ErrRouteHandoffUndecided)
+	}
+	resolution, err := nrdomain.NewCommercialResolutionReference(decision.Basis().ResolutionID().String())
+	if err != nil {
+		return none, fmt.Errorf("%w: commercial resolution: %v", ErrRouteHandoffUndecided, err)
+	}
+	return resolution, nil
 }
 
 func sourceIdentityOf(decision nrinbox.AcceptedDecision) (psdomain.SourceIdentity, error) {

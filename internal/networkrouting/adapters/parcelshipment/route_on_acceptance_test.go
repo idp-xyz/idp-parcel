@@ -242,7 +242,9 @@ func (double acceptanceEvidenceDouble) LoadInitialRouteEvidence(
 type routingApplicabilityDouble struct{}
 
 func (routingApplicabilityDouble) AssessRoutingApplicability(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
+	_ context.Context,
+	_ nrdomain.InitialRouteJudgmentKey,
+	_ nrdomain.CommercialResolutionReference,
 ) (nrdomain.NetworkEligibility, error) {
 	return nrdomain.NewNetworkEligibility(nrdomain.NetworkJudgmentRequired, nrdomain.EligibilityBasisReference{})
 }
