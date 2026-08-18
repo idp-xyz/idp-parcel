@@ -159,7 +159,7 @@ func TestMismatchedTenantDoesNotReturnEitherTenantsRulePackage(t *testing.T) {
 	})
 	declareAssembledRule(t, pool, "tenant-b", "rules-1", "v1", domain.ShipmentInvariantRules.String(), "rule-b")
 
-	theirs := rulePackageInTenant(t, "tenant-b", "rules-1", "v1")
+	theirs := acceptanceRulePackageInTenant(t, "tenant-b", "rules-1", "v1")
 	got, found, err := contents.LoadAcceptanceRulePackage(t.Context(), pcTenant(t, "tenant-a"), theirs)
 	if err == nil || found {
 		t.Fatalf("租户不一致被收下：found = %v err = %v", found, err)
@@ -179,7 +179,7 @@ func TestRulePackageContentsAreScopedByTenantAndVersion(t *testing.T) {
 	declareAssembledRule(t, pool, "tenant-1", "rules-1", "v1", domain.ShipmentInvariantRules.String(), "rule-1")
 
 	if _, found, err := contents.LoadAcceptanceRulePackage(
-		t.Context(), pcTenant(t, "tenant-b"), rulePackageInTenant(t, "tenant-b", "rules-1", "v1"),
+		t.Context(), pcTenant(t, "tenant-b"), acceptanceRulePackageInTenant(t, "tenant-b", "rules-1", "v1"),
 	); err != nil || found {
 		t.Fatalf("他租户读到了本租户的正文：found = %v err = %v", found, err)
 	}
@@ -287,7 +287,7 @@ func declareAssembledRule(t *testing.T, pool *pgxpool.Pool, tenant, objectID, la
 	}
 }
 
-func rulePackageInTenant(t *testing.T, tenant, objectID, label string) domain.CommercialVersion {
+func acceptanceRulePackageInTenant(t *testing.T, tenant, objectID, label string) domain.CommercialVersion {
 	t.Helper()
 	interval, err := domain.NewEffectiveInterval(effectiveAtRow, effectiveAtRow.Add(90*24*time.Hour))
 	if err != nil {
