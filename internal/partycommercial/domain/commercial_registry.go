@@ -53,10 +53,11 @@ type commercialVersionKey struct {
 // 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。结算政策、服务产品同一分工
 // （ADR-0044 / ADR-0050）。
 //
-// 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。
+// 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。同一版本可有多条
+// 更正，按登记顺序只增；选用区间取最后一条。覆盖那一次是缺陷，已随这条纪律修掉。
 type CommercialRegistry struct {
 	versions           map[commercialVersionKey]CommercialVersion
-	corrections        map[commercialVersionKey]ValidityCorrection
+	corrections        map[commercialVersionKey][]ValidityCorrection
 	policies           []CommercialPricePolicy
 	settlementPolicies []SettlementPolicy
 	products           []ServiceProduct
@@ -65,7 +66,7 @@ type CommercialRegistry struct {
 func NewCommercialRegistry() *CommercialRegistry {
 	return &CommercialRegistry{
 		versions:    make(map[commercialVersionKey]CommercialVersion),
-		corrections: make(map[commercialVersionKey]ValidityCorrection),
+		corrections: make(map[commercialVersionKey][]ValidityCorrection),
 	}
 }
 
@@ -196,7 +197,8 @@ func (registry *CommercialRegistry) Count() int {
 }
 
 // RegisterValidityCorrection 接纳一条区间更正。原版本必须已在册；原键下正文与原区间
-// 不被改写。同更正重放不推进视图；新更正写入后 ViewRevision 必变（ADR-0038）。
+// 不被改写。同更正重放不推进视图；不同内容的新更正追加到该版本的更正序列末尾，
+// ViewRevision 必变（ADR-0038）。「更正一条更正」合法，覆盖是缺陷。
 func (registry *CommercialRegistry) RegisterValidityCorrection(
 	correction ValidityCorrection,
 ) (AuthorityViewRevision, error) {
@@ -213,14 +215,16 @@ func (registry *CommercialRegistry) RegisterValidityCorrection(
 	if !found {
 		return AuthorityViewRevision{}, ErrCommercialVersionNotPublished
 	}
-	if prior, ok := registry.corrections[key]; ok && sameValidityCorrection(prior, correction) {
-		return registry.ViewRevision(existing.tenant, existing.scope), nil
+	for _, prior := range registry.corrections[key] {
+		if sameValidityCorrection(prior, correction) {
+			return registry.ViewRevision(existing.tenant, existing.scope), nil
+		}
 	}
-	registry.corrections[key] = correction
+	registry.corrections[key] = append(registry.corrections[key], correction)
 	return registry.ViewRevision(existing.tenant, existing.scope), nil
 }
 
-// ValidityCorrectionOf 取回指向某对象版本的区间更正（若有）。
+// ValidityCorrectionOf 取回指向某对象版本的选用更正（若有）：登记顺序上的最后一条。
 func (registry *CommercialRegistry) ValidityCorrectionOf(
 	tenant TenantID,
 	kind CommercialObjectKind,
@@ -230,13 +234,17 @@ func (registry *CommercialRegistry) ValidityCorrectionOf(
 	if registry == nil {
 		return ValidityCorrection{}, false
 	}
-	found, ok := registry.corrections[commercialVersionKey{
+	found := registry.corrections[commercialVersionKey{
 		tenant: tenant, kind: kind, objectID: objectID, version: version,
 	}]
-	return found, ok
+	if len(found) == 0 {
+		return ValidityCorrection{}, false
+	}
+	return found[len(found)-1], true
 }
 
-// selectionInterval 是解析选用时看到的有效区间：有更正则用更正后的，否则用版本原区间。
+// selectionInterval 是解析选用时看到的有效区间：有更正则用登记顺序上最后一条的
+// 更正后区间，否则用版本原区间。
 func (registry *CommercialRegistry) selectionInterval(version CommercialVersion) EffectiveInterval {
 	if registry == nil {
 		return version.effective
@@ -244,8 +252,8 @@ func (registry *CommercialRegistry) selectionInterval(version CommercialVersion)
 	key := commercialVersionKey{
 		tenant: version.tenant, kind: version.kind, objectID: version.objectID, version: version.version,
 	}
-	if correction, ok := registry.corrections[key]; ok {
-		return correction.corrected
+	if list := registry.corrections[key]; len(list) > 0 {
+		return list[len(list)-1].corrected
 	}
 	return version.effective
 }
@@ -271,25 +279,28 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			version.status.String(),
 		}, "\x1f"))
 	}
-	for key, correction := range registry.corrections {
+	for key, list := range registry.corrections {
 		version, ok := registry.versions[key]
 		if !ok || key.tenant != tenant || version.scope != scope {
 			continue
 		}
-		end, bounded := correction.corrected.EndsAt()
-		endPart := ""
-		if bounded {
-			endPart = end.UTC().Format(time.RFC3339Nano)
+		for _, correction := range list {
+			end, bounded := correction.corrected.EndsAt()
+			endPart := ""
+			if bounded {
+				endPart = end.UTC().Format(time.RFC3339Nano)
+			}
+			parts = append(parts, strings.Join([]string{
+				"VALIDITY_CORRECTION",
+				key.kind.String(),
+				key.objectID.String(),
+				key.version.String(),
+				correction.reference.String(),
+				correction.corrected.StartsAt().UTC().Format(time.RFC3339Nano),
+				endPart,
+				correction.at.UTC().Format(time.RFC3339Nano),
+			}, "\x1f"))
 		}
-		parts = append(parts, strings.Join([]string{
-			"VALIDITY_CORRECTION",
-			key.kind.String(),
-			key.objectID.String(),
-			key.version.String(),
-			correction.reference.String(),
-			correction.corrected.StartsAt().UTC().Format(time.RFC3339Nano),
-			endPart,
-		}, "\x1f"))
 	}
 	for _, policy := range registry.policies {
 		// 租户与范围两轴都要判。范围取政策自己的 scope（与 covers 选用同一轴），租户取

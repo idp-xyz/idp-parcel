@@ -193,11 +193,33 @@ func (outcome ServiceProductSaveOutcome) String() string {
 	}
 }
 
+// ValidityCorrectionSaveOutcome 是一次区间更正登记在持久化面的落点。
+// 更正只增（D-5）：同一版本可有多条，同内容重放答`已登记`；不同内容是一条新更正，
+// 答`已保存`。这里没有「内容冲突」格——异更正不是冲突，是合法的下一条。
+type ValidityCorrectionSaveOutcome uint8
+
+const (
+	ValidityCorrectionSaveOutcomeInvalid ValidityCorrectionSaveOutcome = iota
+	ValidityCorrectionSaved
+	ValidityCorrectionAlreadyRegistered
+)
+
+func (outcome ValidityCorrectionSaveOutcome) String() string {
+	switch outcome {
+	case ValidityCorrectionSaved:
+		return "SAVED"
+	case ValidityCorrectionAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	default:
+		return ""
+	}
+}
+
 // PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
 // 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
 // 查带不出「同范围有哪些并存版本」。
 //
-// 本口今天承载版本册与服务产品形态册（ADR-0050）。有效性更正册（ADR-0038）与价格/
+// 本口今天承载版本册、服务产品形态册（ADR-0050）与有效性更正册（ADR-0038）。价格/
 // 结算政策册（ADR-0034/0044）的持久化面尚未落，端口届时继续扩展而不是在这里预开
 // 空方法。
 //
@@ -220,6 +242,12 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		product domain.ServiceProduct,
 	) (ServiceProductSaveOutcome, error)
+	// SaveValidityCorrection 登记一条区间更正。它不代替 SaveVersion，也不改写原版本
+	// 键下的正文、批准与原区间（ADR-0038）。同一版本已有更正时，不同内容追加为新行。
+	SaveValidityCorrection(
+		ctx context.Context,
+		correction domain.ValidityCorrection,
+	) (ValidityCorrectionSaveOutcome, error)
 }
 
 type Clock interface {

@@ -19,10 +19,10 @@ import (
 // 两个端口仍分开，不是同一个类型挂两个方法：写侧（登记已发布版本）与读侧（解析取权威
 // 视图）由不同调用方依赖，合并会让只需读的解析持有 SaveVersion。
 //
-// **已知的收窄**：登记册的完整形状还含区间更正（ADR-0038）与价格/结算政策
-// （ADR-0034/0044），而这三册今天都还没有持久化面——本仓也没有任何生产代码调用
-// RegisterValidityCorrection / RegisterPricePolicy / RegisterSettlementPolicy。因此
-// 本口现在交回的就是全部已落库的权威事实，不是「省略了几册」。这些册子拿到持久化面
+// **已知的收窄**：登记册的完整形状还含价格/结算政策（ADR-0034/0044），这两册今天
+// 还没有持久化面——本仓也没有任何生产代码调用 RegisterPricePolicy /
+// RegisterSettlementPolicy。区间更正册（ADR-0038）已随本口的 LoadForScope 装入。
+// 本口现在交回的就是全部已落库的权威事实，不是「省略了几册」。其余册子拿到持久化面
 // 时，装配点在这里而不在解析侧：把它们漏在外面会让 ViewRevision 按不完整的内容派生，
 // 从而在视图其实已经变了的时候答「还是同一个视图」。
 type CommercialAuthority struct {
