@@ -191,13 +191,35 @@ var offsitePickupUndecidedSentinels = []error{
 	pstf.ErrAdoptionUndecided,
 }
 
+// effectiveDeliveryUndecidedSentinels 是终局这条链登记的未决哨兵。与揽收那份分开列：
+// 未决面是交付可见性、目标委托与终局规则三样，合用揽收名单会把资格未决也宣布成「等
+// 依赖」。
+//
+// 不在名单里的几格，恢复动作各不相同：
+//   - ErrDeliveryRecordInconsistent——按键取回的登记指着另一个键或另一个对象，是仓储
+//     不变量已破（ADR-0029）。重投同一内容不自愈，登记成未决只会一路重试到失败预算
+//     耗尽，而现场要查的是那一行为什么长成这样。保持 dispatch.publish_failed 让它响亮。
+//   - ErrFinalHandoffPending——终局行已提交、意图还没交出去。要查的是 outbox 下游收
+//     不下那份意图的原因，不是终局规则目录。
+//   - ErrAmbiguousParcelTarget——两份当前已接受委托声明了同一个包裹。要人去看为什么，
+//     不是等某个依赖到位；机制上也不允许按 latest 挑一份。
+//   - ErrUntranslatableAnswer——词汇表外，编程错误。
+//   - ErrUnexpectedFinalOutcome——封闭集合外，静默入账等于替编排作判断。
+var effectiveDeliveryUndecidedSentinels = []error{
+	pstf.ErrDeliveryNotVisible,
+	pstf.ErrParcelTargetNotFound,
+	pstf.ErrFinalUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有四条：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用结果 →
+// 路由表今天有五条：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用结果 →
 // 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → PS 来源采用、TF 对象级
-// 场外揽收登记 → PS 来源采用（后两条同属 UC-PS-003 的两个合格物理来源）。前两条投向
-// network-routing，后两条投回 parcel-shipment 自己。
+// 场外揽收登记 → PS 来源采用（后两条同属 UC-PS-003 的两个合格物理来源）、TF 有效交付
+// 登记 → PS 终局采用（UC-PS-004）。前两条投向 network-routing，后三条投回
+// parcel-shipment 自己。第五条只接 `effective-delivery.registered`，不接
+// `transport-handover.registered` 或 `offsite-pickup.formed`。
 // 登记的仍然只有
 // 本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记更糟，它会让
 // 无订阅者的失败变成「订阅了但处理不了」。其余已发布但无消费者的类型照旧撞
@@ -262,12 +284,24 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: offsite pickup undecided translation: %w", err)
 	}
 
+	finals, err := adoptEffectiveDeliveryConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	// 终局这条链的未决面是交付可见性、目标委托与终局规则三样——都是「等一个依赖」
+	// 而不是发布失败。键/本体不符、交接待发、反查歧义不在这份名单里。
+	routedFinals, err := dispatch.WithUndecidedSentinels(finals, effectiveDeliveryUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: effective delivery undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
-			nrinbox.AcceptedDecisionEventType:        routed,
-			nrinbox.AdoptedNetworkIntakeEventType:    routedIntakes,
-			psinbox.NodeIntakeFormedEventType:        routedAdoptions,
-			psinbox.OffsitePickupRegisteredEventType: routedPickups,
+			nrinbox.AcceptedDecisionEventType:            routed,
+			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
+			psinbox.NodeIntakeFormedEventType:            routedAdoptions,
+			psinbox.OffsitePickupRegisteredEventType:     routedPickups,
+			psinbox.EffectiveDeliveryRegisteredEventType: routedFinals,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -488,6 +522,91 @@ func adoptOffsitePickupConsumer(
 	consumer, err := psinbox.NewOffsitePickupConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: offsite pickup consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// adoptEffectiveDeliveryConsumer 接 UC-PS-004 那条线：TF 有效交付登记信封 → 消费门 →
+// 按（租户+对象+尝试）重读当前版 → 按包裹反查当前已接受委托（ADR-0060）→ 终局编排。
+//
+// 只接 `effective-delivery.registered`。信封只带键，交付本体由处理适配器按键重取当前
+// 版——版本进事件 ID 是为了两代入队，不从 ID 回解析去查已翻旧的行。
+//
+// 终局规则从已接受委托的解析标识回指提供方闭包，与收寄采用同一条 ADR-0062 纪律，但
+// 编排与仓储刻意自建：不要从 networkIntakeAdoption 掏 Eligibility，两条链的停点（收寄
+// 资格 vs 终局规则）必须各自诚实，合用一份 handler 会把终局未配置讲成资格未成立。
+func adoptEffectiveDeliveryConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	deliveries, err := tfpostgres.NewEffectiveDeliveries(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: effective deliveries: %w", err)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment requests: %w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcomes: %w", err)
+	}
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel cancellations: %w", err)
+	}
+	identities, err := psidentity.NewFinalOutcomeVersions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcome versions: %w", err)
+	}
+	downstream, err := pspostgres.NewOutboxFinalOutcomeHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcome handoff: %w", err)
+	}
+
+	stageContent, err := pcpostgres.NewStageContentDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: stage content declarations: %w", err)
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commercial resolutions: %w", err)
+	}
+	owners, err := pspartycommercial.NewResolvedAdoptedStageOwner(requests, resolutions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted stage owner: %w", err)
+	}
+	declared := pspartycommercial.NewDeclaredStageContent(
+		stageContent, stageContent, stageContent, owners,
+	)
+	// 第四个入参是取消请求方的格映射，取消编排才用得到；终局这条路径只走 final 一口。
+	// 第五个入参是硬资格证据口：终局判断不走它，但仍要显式未配置——nil 会在非空清单上
+	// 变成依赖错误。不得为变绿去种 PAR-COM-17 终局声明行。
+	rules := pspartycommercial.NewServiceStageRulesAdapter(
+		declared, declared, declared, nil,
+		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
+	)
+
+	handler := psapplication.NewFormParcelFinalHandler(psapplication.FormParcelFinalDeps{
+		Requests:      requests,
+		Rules:         rules,
+		Finals:        finals,
+		Cancellations: cancellations,
+		Identities:    identities,
+		Downstream:    downstream,
+		Clock:         clock,
+	})
+
+	processing, err := pstf.NewAdoptOnEffectiveDeliveryAdapter(
+		deliveries, requests, pstf.NewDeliveryOutcomeAdapter(handler))
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopt on effective delivery: %w", err)
+	}
+	consumer, err := psinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: effective delivery consumer: %w", err)
 	}
 	return consumer, nil
 }

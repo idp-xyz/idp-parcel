@@ -11,6 +11,7 @@ import (
 
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
@@ -200,6 +201,42 @@ func TestAnOffsitePickupFormedEnvelopeIsNotRouted(t *testing.T) {
 	}
 }
 
+// Covers: 路由表第五条——TF 有效交付登记投给 PS 终局消费者（UC-PS-004）。手法同前四
+// 条：毒丸载荷（缺 tenantId/object/attempt）让消费门显式拒收并交回 nil，因此这一条会
+// 被定稿。漏挂或挂错的话这里撞的是无订阅者。
+func TestARegisteredEffectiveDeliveryReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "delivery-1", psinbox.EffectiveDeliveryRegisteredEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把有效交付投给终局消费者",
+			published, recordedFailureCode(t, db, "delivery-1"))
+	}
+}
+
+// Covers: 控制转出交接不得进终局路由。那一封属 node-operations 的控制转移，不是
+// UC-PS-004 的 TF-DELIVERY 来源行；挂上会把控制事实当成有效交付。未登记必须撞
+// dispatch.no_subscriber，而不是被第五路误吃。
+func TestATransportHandoverRegisteredEnvelopeIsNotRouted(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "handover-1", "transport-fulfillment.transport-handover.registered", `{"ok":true}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 0 {
+		t.Fatalf("交接登记信封被当成发布成功定稿了：published = %d", published)
+	}
+	if got := recordedFailureCode(t, db, "handover-1"); got != "dispatch.no_subscriber" {
+		t.Fatalf("failure_code = %q, want dispatch.no_subscriber", got)
+	}
+}
+
 // stallingConsumer 是只会交回某个既定错误的直投接收方，用来验路由条目那层的失败分格。
 type stallingConsumer struct{ err error }
 
@@ -351,6 +388,83 @@ func TestOffsitePickupFailuresLandInTheRightPartition(t *testing.T) {
 				t.Fatalf("失败的投递被定稿了 %d 条", published)
 			}
 			if got := recordedFailureCode(t, db, "pickup-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+			}
+		})
+	}
+}
+
+// beatWithEffectiveDeliveryConsumer 用生产的终局哨兵名单包一个替身，接成一拍。
+//
+// 名单取 effectiveDeliveryUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在
+// 测试里绿、在生产里塌成 dispatch.publish_failed。
+func beatWithEffectiveDeliveryConsumer(t *testing.T, inner dispatch.Consumer) (Beat, *bentopg.DB, *outbox.Store) {
+	t.Helper()
+
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	routed, err := dispatch.WithUndecidedSentinels(inner, effectiveDeliveryUndecidedSentinels...)
+	if err != nil {
+		t.Fatalf("包装未决哨兵：%v", err)
+	}
+	config := dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second}
+	publisher, err := dispatch.NewDirectPublisher(
+		map[eventing.EventType]dispatch.Consumer{psinbox.EffectiveDeliveryRegisteredEventType: routed},
+		5*time.Second,
+		config,
+	)
+	if err != nil {
+		t.Fatalf("直投发布器：%v", err)
+	}
+	beat, err := dispatch.NewDispatcher(store, store, publisher, systemClock{}, config)
+	if err != nil {
+		t.Fatalf("派发器：%v", err)
+	}
+	return beat, db, store
+}
+
+// Covers: 终局这条链的失败分格——三个可续办哨兵落 dispatch.consumer_undecided，另外
+// 几格保持 dispatch.publish_failed。后几格要运维做的事不是「等依赖」：
+//   - 键/本体不符是仓储不变量已破，重投不自愈；
+//   - 交接待发要查 outbox 下游；
+//   - 反查歧义要人去看为什么两份已接受委托声明了同一个包裹；
+//   - 词汇表外与封闭集合外都是编程错误，响亮而不是等。
+func TestEffectiveDeliveryFailuresLandInTheRightPartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode string
+	}{
+		{"终局未决", pstf.ErrFinalUndecided, "dispatch.consumer_undecided"},
+		{"交付还看不见", pstf.ErrDeliveryNotVisible, "dispatch.consumer_undecided"},
+		{"目标委托还没有", pstf.ErrParcelTargetNotFound, "dispatch.consumer_undecided"},
+		{"键与本体不符", pstf.ErrDeliveryRecordInconsistent, "dispatch.publish_failed"},
+		{"交接待发", pstf.ErrFinalHandoffPending, "dispatch.publish_failed"},
+		{"反查歧义", psdomain.ErrAmbiguousParcelTarget, "dispatch.publish_failed"},
+		{"词汇表外", pstf.ErrUntranslatableAnswer, "dispatch.publish_failed"},
+		{"封闭集合外", finalconsume.ErrUnexpectedFinalOutcome, "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beat, db, store := beatWithEffectiveDeliveryConsumer(t, &stallingConsumer{err: test.err})
+			enqueueForBeat(t, db, store, "delivery-1", psinbox.EffectiveDeliveryRegisteredEventType, `{}`)
+
+			published, err := beat.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("一拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("失败的投递被定稿了 %d 条", published)
+			}
+			if got := recordedFailureCode(t, db, "delivery-1"); got != test.wantCode {
 				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
 			}
 		})
