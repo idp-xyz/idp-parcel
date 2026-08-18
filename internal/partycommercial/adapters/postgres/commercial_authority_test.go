@@ -1,10 +1,12 @@
 package postgres_test
 
 import (
+	"context"
 	"testing"
 
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证权威视图读口：已发布版本经本口取回、租户与范围隔离、
@@ -113,5 +115,33 @@ func TestTheAuthorityViewIsIsolatedByTenantAndScope(t *testing.T) {
 func TestAnUnwiredAuthorityViewRefusesToBeBuilt(t *testing.T) {
 	if _, err := adapter.NewCommercialAuthority(nil); err == nil {
 		t.Fatal("没有登记册也构造出了权威视图")
+	}
+}
+
+// readOnlyPublicationView 只实现 LoadForScope，没有 Save。能交给 NewCommercialAuthority
+// 就证明权威视图不再要求写侧方法——类型形状本身是证据，不靠反射。
+type readOnlyPublicationView struct{}
+
+func (readOnlyPublicationView) LoadForScope(
+	context.Context,
+	domain.TenantID,
+	domain.CommercialScopeReference,
+) (*domain.CommercialRegistry, error) {
+	return domain.NewCommercialRegistry(), nil
+}
+
+var _ ports.CommercialPublicationView = readOnlyPublicationView{}
+
+func TestAReadOnlyPublicationViewCanWireTheAuthority(t *testing.T) {
+	authority, err := adapter.NewCommercialAuthority(readOnlyPublicationView{})
+	if err != nil {
+		t.Fatalf("只读替身应当能构造权威视图：%v", err)
+	}
+	registry, err := authority.LoadScope(t.Context(), pcTenant(t, "tenant-1"), pcScope(t))
+	if err != nil {
+		t.Fatalf("只读替身读范围：%v", err)
+	}
+	if registry == nil || registry.Count() != 0 {
+		t.Fatalf("只读替身应交回空册：%+v", registry)
 	}
 }

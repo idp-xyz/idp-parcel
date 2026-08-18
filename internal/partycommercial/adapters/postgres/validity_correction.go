@@ -11,7 +11,7 @@ import (
 )
 
 // 区间更正册的持久化面（ADR-0038 / D-5）。装载不在这里而在 CommercialPublications.LoadForScope
-// ——更正随整册一次取回，理由见 ports.PublicationRegistry 的注释。这里只有写侧与把库里
+// ——更正随整册一次取回，理由见 ports.CommercialPublicationView 的注释。这里只有写侧与把库里
 // 聚好的更正数组折回领域对象那一步。
 
 type correctionDocument struct {

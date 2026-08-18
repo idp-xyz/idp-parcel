@@ -12,7 +12,7 @@ import (
 )
 
 // 服务产品形态册的持久化面（ADR-0050）。装载不在这里而在 CommercialPublications.LoadForScope
-// ——形态随整册一次取回，理由见 ports.PublicationRegistry 的注释。这里只有写侧与把库里
+// ——形态随整册一次取回，理由见 ports.CommercialPublicationView 的注释。这里只有写侧与把库里
 // 的形态字符串折回领域封闭集那一步。
 
 // SaveServiceProduct 登记一份服务产品版本的服务形态。撞键不覆盖：同形态是重放，异形态是

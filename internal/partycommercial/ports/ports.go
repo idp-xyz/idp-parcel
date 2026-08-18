@@ -287,22 +287,34 @@ func (outcome SettlementPolicySaveOutcome) String() string {
 	}
 }
 
-// PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
-// 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
-// 查带不出「同范围有哪些并存版本」。
+// CommercialPublicationView 按（租户+范围）取回该范围已发布的整册。
 //
-// 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）以及
-// 价格与结算政策册（ADR-0034/0044/0057）。端口按具名 Save 扩展，不开通用口。
+// 它是 PublicationRegistry 的只读半边。解析与权威视图只要候选集合，不该持有
+// SaveVersion 及各通道的具名 Save——两端口分开的理由写在 PublicationRegistry
+// 的注释里；CommercialAuthority 依赖本口，兑现那条理由（F-2）。
 //
 // LoadForScope 一次交回该范围**已落库的全部通道**，而不是逐通道各取一次：ViewRevision
 // 由各通道的内容共同派生，两次取回之间视图一变，派生出的修订就不再对应任何一个真实时刻。
 // 通道增多时扩的是那一次取回的内容，不是取回的次数。
-type PublicationRegistry interface {
+type CommercialPublicationView interface {
 	LoadForScope(
 		ctx context.Context,
 		tenant domain.TenantID,
 		scope domain.CommercialScopeReference,
 	) (*domain.CommercialRegistry, error)
+}
+
+// PublicationRegistry 是发布登记册的持久化面：已发布版本不可覆盖，键=租户+对象+
+// 版本号。整册按（租户+范围）取回供解析选用——解析要的是候选集合与选用区间，逐条
+// 查带不出「同范围有哪些并存版本」。
+//
+// 本口内嵌 CommercialPublicationView，再叠加各通道的具名 Save。写侧调用方依赖本口；
+// 只需读的解析与权威视图依赖内嵌的只读口，不持有任何 Save。
+//
+// 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）以及
+// 价格与结算政策册（ADR-0034/0044/0057）。端口按具名 Save 扩展，不开通用口。
+type PublicationRegistry interface {
+	CommercialPublicationView
 	SaveVersion(
 		ctx context.Context,
 		version domain.CommercialVersion,

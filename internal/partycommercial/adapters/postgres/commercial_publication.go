@@ -18,7 +18,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// CommercialPublications 实现 ports.PublicationRegistry：已发布版本的只增登记。
+// CommercialPublications 实现 ports.PublicationRegistry（因而也实现其内嵌的
+// CommercialPublicationView）：已发布版本的只增登记。
 //
 // SaveVersion 撞键不覆盖：ON CONFLICT DO NOTHING 保事务可用，零行命中后读回既有行
 // 比内容——同内容是重放（已登记），异内容是需要商业责任方修正的冲突（登记册在内存
@@ -33,6 +34,9 @@ func NewCommercialPublications(db *bentopg.DB) (*CommercialPublications, error) 
 	}
 	return &CommercialPublications{db: db}, nil
 }
+
+var _ ports.PublicationRegistry = (*CommercialPublications)(nil)
+var _ ports.CommercialPublicationView = (*CommercialPublications)(nil)
 
 // LoadForScope 按（租户+范围）读回整册。读回的每一行先过领域重建门，再经 Register 进
 // 登记册——两道门互补：前者拦一行坏数据，后者拦拼出来的重复键。
