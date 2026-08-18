@@ -19,7 +19,13 @@ import (
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
+	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
+	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -152,11 +158,27 @@ func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, 
 	return beat, pool.Close, nil
 }
 
+// nodeIntakeUndecidedSentinels 是采用那条链登记的未决哨兵。做成包级量是为了让测试
+// 用生产的同一份名单：名单在测试里重抄一遍，抄漏的那个哨兵会在测试里绿、在生产里
+// 塌成 dispatch.publish_failed。
+//
+// ErrAdoptionHandoffPending 不在名单里，它要运维查的是 outbox 下游而非商业资格目录；
+// ErrAmbiguousParcelTarget 同样不在——反查歧义要人去看为什么两份已接受委托声明了同一
+// 个包裹，不是等某个依赖到位。
+var nodeIntakeUndecidedSentinels = []error{
+	psnodeops.ErrReceptionNotVisible,
+	psnodeops.ErrParcelTargetNotFound,
+	psnodeops.ErrAdoptionUndecided,
+	psnodeops.ErrUnidentifiedHandlingUnit,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有两条，都投向 network-routing：PS 接受决定 → 初始路由（UC-NR-001），
-// PS 有效网络收寄采用结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）。登记的仍然只有
+// 路由表今天有三条：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用结果 →
+// 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → PS 来源采用
+// （UC-PS-003）。前两条投向 network-routing，第三条投回 parcel-shipment 自己。
+// 登记的仍然只有
 // 本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记更糟，它会让
 // 无订阅者的失败变成「订阅了但处理不了」。其余已发布但无消费者的类型照旧撞
 // `dispatch.no_subscriber`，那是记录里认下的代价。
@@ -198,10 +220,22 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: reassessment undecided translation: %w", err)
 	}
 
+	adoptions, err := adoptNodeIntakeConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	// 采用这条链的未决面比前两条宽：收寄可见性滞后、目标委托还没落到已接受、资格
+	// 目录未配置、实物还没识别，四种都是「等一个依赖」而不是发布失败。
+	routedAdoptions, err := dispatch.WithUndecidedSentinels(adoptions, nodeIntakeUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: node intake undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:     routed,
 			nrinbox.AdoptedNetworkIntakeEventType: routedIntakes,
+			psinbox.NodeIntakeFormedEventType:     routedAdoptions,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -349,6 +383,85 @@ func networkIntakeConsumer(
 	consumer, err := nrinbox.NewNetworkIntakeConsumer(db.Transactor(), inboxStore, intakes)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: network intake consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// adoptNodeIntakeConsumer 接 UC-PS-003 那条线：NO 节点收寄形成信封 → 消费门 → 按收寄
+// 幂等键重读记录 → 按版本化包裹关联反查当前已接受委托（ADR-0060）→ 来源采用编排。
+//
+// 与前两条的方向相反：信封由 node-operations 发出，消费者在 parcel-shipment 侧
+// （ADR-0025 适配器在消费方）。信封只带收寄键，收寄本体由处理方按键重取——载荷里带
+// 一份收寄快照会让「权威事实在 NO」这条变成两处定义。
+//
+// 阶段内容的采用规则版本属实例半边：SourceIdentity 上取不到接受时固定的规则包
+// （ADR-0058），因此这里装 UnconfiguredAdoptedStageOwner，资格视图答未配置，编排停在
+// `资格判断未决`。默认一个规则包等于替租户宣布这批收寄按哪套资格判断。
+func adoptNodeIntakeConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	receptions, err := nopostgres.NewReceptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: receptions: %w", err)
+	}
+	// 同一个仓储对象同时满足聚合仓储与包裹反查两个口：反查读的是 ADR-0060 的当前投影
+	// 列，与聚合写在同一张表上，拆两个对象等于让两处各自决定读哪些列。
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: shipment requests: %w", err)
+	}
+	adoptionStore, err := pspostgres.NewIntakeAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: intake adoptions: %w", err)
+	}
+	// 取消决定库是真实的：取消边界核验按业务时间裁决（AT-PS-044/080/081），装 nil 会
+	// 让「收寄前已取消」的包裹被照常采用，而那条判断的机制半边已经做完了。
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel cancellations: %w", err)
+	}
+	identities, err := psidentity.NewCommitmentVersions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commitment versions: %w", err)
+	}
+	downstream, err := pspostgres.NewOutboxNetworkIntakeHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network intake handoff: %w", err)
+	}
+
+	stageContent, err := pcpostgres.NewStageContentDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: stage content declarations: %w", err)
+	}
+	declared := pspartycommercial.NewDeclaredStageContent(
+		stageContent, stageContent, stageContent,
+		pspartycommercial.UnconfiguredAdoptedStageOwner{},
+	)
+	// 第四个入参是取消请求方的格映射，取消编排才用得到；采用这条路径只走 intake 一口。
+	// 给它一个能答的替身会假装映射已配置，而没有租户时谁也说不出某个引用是客户还是运营。
+	eligibility := pspartycommercial.NewServiceStageRulesAdapter(declared, declared, declared, nil)
+
+	handler := psapplication.NewAdoptNetworkIntakeHandler(psapplication.AdoptNetworkIntakeDeps{
+		Requests:      requests,
+		Eligibility:   eligibility,
+		Adoptions:     adoptionStore,
+		Identities:    identities,
+		Downstream:    downstream,
+		Clock:         clock,
+		Cancellations: cancellations,
+	})
+
+	processing, err := psnodeops.NewAdoptOnNodeIntakeAdapter(
+		receptions, requests, psnodeops.NewNodeIntakeAdapter(handler))
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopt on node intake: %w", err)
+	}
+	consumer, err := psinbox.NewNodeIntakeConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: node intake consumer: %w", err)
 	}
 	return consumer, nil
 }

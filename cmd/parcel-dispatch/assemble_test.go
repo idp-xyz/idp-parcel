@@ -11,6 +11,9 @@ import (
 
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -138,6 +141,108 @@ func TestAnAdoptedNetworkIntakeReachesTheConsumerThroughTheRouteTable(t *testing
 	if published != 1 {
 		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把采用结果投给复核消费者",
 			published, recordedFailureCode(t, db, "adoption-1"))
+	}
+}
+
+// Covers: 路由表第三条——NO 节点收寄形成投给 PS 采用消费者（UC-PS-003）。手法同前两条：
+// 毒丸载荷（缺 tenantId/sourceId）让消费门显式拒收并交回 nil，因此这一条会被定稿。
+//
+// 它证的是路由挂对了人，不是采用判断本身：漏挂或挂错的话这里撞的是无订阅者。方向与
+// 前两条相反——信封由 node-operations 发出，消费者在 parcel-shipment 侧。
+func TestAFormedNodeIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "node-intake-1", psinbox.NodeIntakeFormedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把节点收寄投给采用消费者",
+			published, recordedFailureCode(t, db, "node-intake-1"))
+	}
+}
+
+// stallingConsumer 是只会交回某个既定错误的直投接收方，用来验路由条目那层的失败分格。
+type stallingConsumer struct{ err error }
+
+func (consumer *stallingConsumer) Consume(context.Context, eventing.Envelope) error {
+	return consumer.err
+}
+
+// beatWithNodeIntakeConsumer 用生产的哨兵名单包一个替身，接成一拍。
+//
+// 名单取 nodeIntakeUndecidedSentinels 本身而不是在测试里重列一遍：重列的那份漏掉某个
+// 哨兵时测试照样绿，而生产会把它塌成 dispatch.publish_failed。
+func beatWithNodeIntakeConsumer(t *testing.T, inner dispatch.Consumer) (Beat, *bentopg.DB, *outbox.Store) {
+	t.Helper()
+
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	routed, err := dispatch.WithUndecidedSentinels(inner, nodeIntakeUndecidedSentinels...)
+	if err != nil {
+		t.Fatalf("包装未决哨兵：%v", err)
+	}
+	config := dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second}
+	publisher, err := dispatch.NewDirectPublisher(
+		map[eventing.EventType]dispatch.Consumer{psinbox.NodeIntakeFormedEventType: routed},
+		5*time.Second,
+		config,
+	)
+	if err != nil {
+		t.Fatalf("直投发布器：%v", err)
+	}
+	beat, err := dispatch.NewDispatcher(store, store, publisher, systemClock{}, config)
+	if err != nil {
+		t.Fatalf("派发器：%v", err)
+	}
+	return beat, db, store
+}
+
+// Covers: 采用这条链的失败分格——只有登记过的四个哨兵落 dispatch.consumer_undecided，
+// 交接待发不落。两者要运维做的事相反：前者去看消费方等的那个依赖（收寄可见性、目标
+// 委托、资格目录、实物识别），后者去看 outbox 下游为什么没收下那份意图。
+//
+// 采用记录已提交而意图没交出去时，运维照着「消费方在等」去查商业资格目录会白查一整轮
+// ——那一格里资格早就过了。
+func TestNodeIntakeFailuresLandInTheRightPartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode string
+	}{
+		{"资格未决", psnodeops.ErrAdoptionUndecided, "dispatch.consumer_undecided"},
+		{"收寄还看不见", psnodeops.ErrReceptionNotVisible, "dispatch.consumer_undecided"},
+		{"目标委托还没有", psnodeops.ErrParcelTargetNotFound, "dispatch.consumer_undecided"},
+		{"实物还没识别", psnodeops.ErrUnidentifiedHandlingUnit, "dispatch.consumer_undecided"},
+		{"交接待发", psnodeops.ErrAdoptionHandoffPending, "dispatch.publish_failed"},
+		// 反查歧义要人去看为什么两份已接受委托声明了同一个包裹，不是等依赖到位。
+		{"反查歧义", psdomain.ErrAmbiguousParcelTarget, "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beat, db, store := beatWithNodeIntakeConsumer(t, &stallingConsumer{err: test.err})
+			enqueueForBeat(t, db, store, "node-intake-1", psinbox.NodeIntakeFormedEventType, `{}`)
+
+			published, err := beat.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("一拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("失败的投递被定稿了 %d 条", published)
+			}
+			if got := recordedFailureCode(t, db, "node-intake-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+			}
+		})
 	}
 }
 
