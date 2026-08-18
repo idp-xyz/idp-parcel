@@ -161,6 +161,28 @@ type CancellationAuthorityContentView interface {
 	) (domain.CancellationAuthorityContent, bool, error)
 }
 
+// AcceptanceRulePackageContentView 取已唯一选出的接单规则包版本的正文：五维适用性
+// 与按分类归档的规则引用。
+//
+// 它与 CommercialAuthorityView 分开：前者回答「这个范围有几个适用候选」，本口回答
+// 已选出规则包的正文。五维适用性照存，但不参与选择、不进 CommercialRegistry /
+// ViewRevision（open-decisions D-3）。塞进视图，一次与选择无关的正文改动会把该范围
+// 全部在途解析判成已失效。
+//
+// found=false = 正文未登记（无父行）。父行在场而零子行是坏数据：领域要求至少一条
+// 规则，空包等于无条件接受（NewAcceptanceRulePackage 拒空）。读取失败与坏数据走
+// error，不得折成 found=false——那会把一份损坏的正文伪装成从未登记。本口不提供
+// 默认正文，也不提供 Save。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有规则版本同一身份。
+type AcceptanceRulePackageContentView interface {
+	LoadAcceptanceRulePackage(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) (domain.AcceptanceRulePackage, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回一次已固定的解析。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回

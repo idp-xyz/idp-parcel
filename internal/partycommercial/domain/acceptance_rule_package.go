@@ -112,6 +112,10 @@ func (applicability RulePackageApplicability) Contract() CommercialObjectID {
 	return applicability.contract
 }
 
+func (applicability RulePackageApplicability) LegalEntity() LegalEntityReference {
+	return applicability.legalEntity
+}
+
 func (applicability RulePackageApplicability) Scope() CommercialScopeReference {
 	return applicability.scope
 }
