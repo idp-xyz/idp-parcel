@@ -15,7 +15,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证揽收采用那条链的诚实停点：真的已接受委托、真的对象级
-// 揽收登记、生产 wireDispatcher 一拍，停在`资格判断未决`（ELIGIBILITY_UNCONFIGURED）。
+// 揽收登记、生产 wireDispatcher 一拍，停在`资格判断未决`（ELIGIBILITY_NOT_ESTABLISHED）。
 //
 // 已接受委托只能由 PS 应用编排形成，因此夹具复用 SYN-V0。手搓一份 ACCEPTED 快照塞库
 // 会绕开 ADR-0061 的互证。对象级登记走 TF 的 registry + registration handoff，不走
@@ -29,18 +29,14 @@ const (
 	offsitePickupAttempt           = "SYN-ATTEMPT-01"
 )
 
-// Covers: CONS-PICKUP-B 的诚实停点——对象级揽收登记信封经生产路由表投到 PS 采用消费
-// 者，登记读得回、目标委托反查唯一命中、重建门开到已接受，整链一直走到商业资格那一
-// 步才停。
+// Covers: SYN-PC-SEED 的诚实停点——对象级揽收登记信封经生产路由表投到 PS 采用消费
+// 者，登记读得回、目标委托反查唯一命中、重建门开到已接受、闭包回指规则包、资格声明
+// 已配置且允许 OFFSITE_PICKUP，整链一直走到硬资格未证明才停。
 //
-// 停点必须是 dispatch.consumer_undecided：装配从已接受快照回指闭包（ADR-0062），但夹具
-// ResolutionID=`SYN-RES-01` 并未写入 PC 解析库，LoadResolution found=false，资格视图答
-// 未配置，编排保持`资格判断未决`。不要为了让本用例变绿去种规则包。重建门与翻译失败都
-// 不在哨兵名单里，会落 dispatch.publish_failed。
-//
-// 未决不得留痕：inbox 无账、采用无行、下游意图不入队。默认一份规则包就能让这三样都
-// 长出来，而那等于替租户宣布这批收寄按哪套资格判断。重拍不得翻倍。
-func TestARegisteredOffsitePickupStopsAtUnconfiguredIntakeEligibility(t *testing.T) {
+// 停点必须是 dispatch.consumer_undecided：声明列出硬资格，取证缝属实例半边，
+// JudgeIntakeEligibility 答 NOT_ESTABLISHED。只种 NODE_INTAKE 会让本链走 NOT_APPLICABLE
+// 并入账，所以种子必须两种来源都允许。空清单会 ESTABLISHED 并形成承诺。
+func TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 
@@ -50,19 +46,22 @@ func TestARegisteredOffsitePickupStopsAtUnconfiguredIntakeEligibility(t *testing
 		t.Fatalf("state = %q, want ACCEPTED；pending = %q", result.State(), result.PendingReason())
 	}
 
+	seedSYNPCEligibility(t, fixture)
 	eventID := recordRegisteredOffsitePickup(t, fixture)
 	assertPickupAdoptionPreconditions(t, fixture)
+	assertSYNPCEligibilitySeeded(t, fixture)
+	assertIntakeEligibilityUnproven(t, fixture, psdomain.OffsitePickupSource)
 
 	published, err := fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
 	if published != 0 {
-		t.Fatalf("资格未配置却定稿了 %d 条；揽收信封失败码 = %q",
+		t.Fatalf("资格未成立却定稿了 %d 条；揽收信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}
 	if got := recordedFailureCode(t, fixture.db, eventID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（资格未配置，不是重建门也不是翻译）", got)
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（资格未证明，不是重建门也不是翻译）", got)
 	}
 	assertNoPickupAdoptionTrace(t, fixture, eventID)
 
@@ -85,8 +84,9 @@ func TestARegisteredOffsitePickupStopsAtUnconfiguredIntakeEligibility(t *testing
 // assertPickupAdoptionPreconditions 把「停点不在前两步」钉住。
 //
 // 三个未决哨兵合用 dispatch.consumer_undecided 一个失败码，库里读不出是哪一个——单看
-// 失败码，一份读不回来的登记或一次落空的反查会与资格未配置长得一模一样。这里用真实
-// 读口分别证掉登记可见、反查恰命中这份委托，剩下能到达的未决就只有资格那一格。
+// 失败码，一份读不回来的登记或一次落空的反查会与资格未成立长得一模一样。这里用真实
+// 读口分别证掉登记可见、反查恰命中这份委托；资格那一格由
+// assertSYNPCEligibilitySeeded / assertIntakeEligibilityUnproven 另证。
 func assertPickupAdoptionPreconditions(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
 
@@ -134,7 +134,7 @@ func assertNoPickupAdoptionTrace(t *testing.T, fixture *synVerticalFixture, even
 		t.Fatalf("inbox 行数 = %d, want 0——未决必须回滚，不能冒充已处理", n)
 	}
 	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.intake_adoption`); n != 0 {
-		t.Fatalf("intake_adoption 行数 = %d, want 0——资格未配置不得形成承诺或不采用", n)
+		t.Fatalf("intake_adoption 行数 = %d, want 0——资格未成立不得形成承诺或不采用", n)
 	}
 	if n := fixture.countOutboxOfType(t, networkIntakeRecordedType); n != 0 {
 		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, networkIntakeRecordedType)

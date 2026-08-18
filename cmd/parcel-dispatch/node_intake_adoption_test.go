@@ -15,7 +15,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证采用那条链的诚实停点：真的已接受委托、真的节点收寄
-// 记录、生产 wireDispatcher 一拍，停在`资格判断未决`（ELIGIBILITY_UNCONFIGURED）。
+// 记录、生产 wireDispatcher 一拍，停在`资格判断未决`（ELIGIBILITY_NOT_ESTABLISHED）。
 //
 // 已接受委托只能由 PS 应用编排形成（提交 → 判断齐 → 形成决定），因此夹具复用 SYN-V0
 // 那一套：本包里没有第二条能造出真已接受行的路。手搓一份 ACCEPTED 快照塞库会绕开
@@ -33,17 +33,17 @@ const (
 	nodeIntakeAssociation = "SYN-PARCEL-01"
 )
 
-// Covers: CONS-INTAKE-B 的诚实停点——节点收寄形成信封经生产路由表投到 PS 采用消费者，
-// 收寄读得回、目标委托反查得到、重建门开到已接受，整链一直走到商业资格那一步才停。
+// Covers: SYN-PC-SEED 的诚实停点——节点收寄形成信封经生产路由表投到 PS 采用消费者，
+// 收寄读得回、目标委托反查得到、重建门开到已接受、闭包回指规则包、资格声明已配置，
+// 整链一直走到硬资格未证明才停。
 //
-// 停点必须是 dispatch.consumer_undecided：装配从已接受快照回指闭包（ADR-0062），但夹具
-// ResolutionID=`SYN-RES-01` 并未写入 PC 解析库，LoadResolution found=false，资格视图答
-// 未配置，编排保持`资格判断未决`。不要为了让本用例变绿去种规则包。重建门与翻译失败都
-// 不在哨兵名单里，会落 dispatch.publish_failed。
+// 停点必须是 dispatch.consumer_undecided：声明列出硬资格，取证缝属实例半边，
+// JudgeIntakeEligibility 答 NOT_ESTABLISHED（INTAKE_QUALIFICATION_UNPROVEN/第一项）。
+// 空清单会直接 ESTABLISHED 并形成承诺；只靠失败码分不出 UNCONFIGURED 与本格，拍前用
+// 真读口与生产资格适配器另证。
 //
-// 未决不得留痕：inbox 无账、采用无行、下游意图不入队。默认一份规则包就能让这三样都
-// 长出来，而那等于替租户宣布这批收寄按哪套资格判断。
-func TestAFormedNodeIntakeStopsAtUnconfiguredIntakeEligibility(t *testing.T) {
+// 未决不得留痕：inbox 无账、采用无行、下游意图不入队。重拍不得翻倍。
+func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 
@@ -53,19 +53,22 @@ func TestAFormedNodeIntakeStopsAtUnconfiguredIntakeEligibility(t *testing.T) {
 		t.Fatalf("state = %q, want ACCEPTED；pending = %q", result.State(), result.PendingReason())
 	}
 
+	seedSYNPCEligibility(t, fixture)
 	eventID := recordFormedNodeIntake(t, fixture)
 	assertAdoptionPreconditions(t, fixture)
+	assertSYNPCEligibilitySeeded(t, fixture)
+	assertIntakeEligibilityUnproven(t, fixture, psdomain.NodeIntakeSource)
 
 	published, err := fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("第一拍：%v", err)
 	}
 	if published != 0 {
-		t.Fatalf("资格未配置却定稿了 %d 条；收寄信封失败码 = %q",
+		t.Fatalf("资格未成立却定稿了 %d 条；收寄信封失败码 = %q",
 			published, recordedFailureCode(t, fixture.db, eventID))
 	}
 	if got := recordedFailureCode(t, fixture.db, eventID); got != "dispatch.consumer_undecided" {
-		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（资格未配置，不是重建门也不是翻译）", got)
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided（资格未证明，不是重建门也不是翻译）", got)
 	}
 	assertNoAdoptionTrace(t, fixture, eventID)
 
@@ -86,10 +89,9 @@ func TestAFormedNodeIntakeStopsAtUnconfiguredIntakeEligibility(t *testing.T) {
 // assertAdoptionPreconditions 把「停点不在前三步」钉住。
 //
 // 四个未决哨兵合用 dispatch.consumer_undecided 一个失败码，库里读不出是哪一个——单看
-// 失败码，一份读不回来的收寄或一次落空的反查会与资格未配置长得一模一样。这里用真实
-// 读口分别证掉收寄可见、关联已识别、反查恰命中这份委托，剩下能到达的未决就只有资格
-// 那一格：库健康时依赖不可用不成立，取消表是空的，而未配置的 AdoptedStageOwner 让
-// 资格视图不可能答出`已成立`或`未成立`。
+// 失败码，一份读不回来的收寄或一次落空的反查会与资格未成立长得一模一样。这里用真实
+// 读口分别证掉收寄可见、关联已识别、反查恰命中这份委托；资格那一格由
+// assertSYNPCEligibilitySeeded / assertIntakeEligibilityUnproven 另证。
 func assertAdoptionPreconditions(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
 
@@ -132,7 +134,7 @@ func assertNoAdoptionTrace(t *testing.T, fixture *synVerticalFixture, eventID st
 		t.Fatalf("inbox 行数 = %d, want 0——未决必须回滚，不能冒充已处理", n)
 	}
 	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.intake_adoption`); n != 0 {
-		t.Fatalf("intake_adoption 行数 = %d, want 0——资格未配置不得形成承诺或不采用", n)
+		t.Fatalf("intake_adoption 行数 = %d, want 0——资格未成立不得形成承诺或不采用", n)
 	}
 	if n := fixture.countOutboxOfType(t, networkIntakeRecordedType); n != 0 {
 		t.Fatalf("发出了 %d 封 %s，会堵无订阅者分区", n, networkIntakeRecordedType)

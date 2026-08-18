@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
@@ -146,6 +147,7 @@ func TestSYNAcceptedDecisionStopsAtRoutingApplicabilityUnavailable(t *testing.T)
 }
 
 type synVerticalFixture struct {
+	pool          *pgxpool.Pool
 	db            *bentopg.DB
 	transactor    bentoapp.Transactor
 	beat          Beat
@@ -207,6 +209,7 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 
 	identity := synSourceIdentity(t)
 	fixture := &synVerticalFixture{
+		pool:       pool,
 		db:         db,
 		transactor: db.Transactor(),
 		beat:       beat,
