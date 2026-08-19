@@ -44,10 +44,10 @@ const (
 // 那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 挡住误入账，
 // assertNoAdoptionTrace 另数 initial_route 与 formed 信封。
 //
-// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并可能入队
-// tracking-projection.derived。那一封无订阅者。本用例不停投影、不断言 VE 账本；PS
-// 未决仍让整封 Publish 失败，published 必须是 0。若 Limit 把派生信封也认领了，它必须
-// 撞 dispatch.no_subscriber，不得把资格未证明测宽成「投影也算成功定稿」。
+// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并入队
+// tracking-projection.derived。那一封由客户视图链接住（WIRE-CUSTOMER-VIEW），在重拍
+// 时各自定稿——第一拍 published 仍必须是 0（收寄信封被 PS 未决整封挡下），重拍恰好
+// 定稿派生信封一条，不得把资格未证明测宽成「收寄也算成功定稿」。
 //
 // 未决不得留痕：PS inbox 无账、采用无行、下游采用意图不入队。重拍不得翻倍。
 func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
@@ -79,13 +79,14 @@ func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	}
 	assertNoAdoptionTrace(t, fixture, eventID)
 
-	// 同一份收寄信封再拍一次：inbox 无账，派发会再投；三样痕迹仍不得长出来，也不得翻倍。
+	// 同一份收寄信封再拍一次：inbox 无账，派发会再投；三样痕迹仍不得长出来，也不得
+	// 翻倍。定稿的那一条是第一拍入队的派生信封（客户视图链），不是收寄。
 	published, err = fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("重拍：%v", err)
 	}
-	if published != 0 {
-		t.Fatalf("重拍定稿了 %d 条", published)
+	if published != 1 {
+		t.Fatalf("重拍定稿 %d 条, want 1（仅派生信封经视图链定稿）", published)
 	}
 	if n := fixture.countOutboxOfType(t, nodeIntakeFormedType); n != 1 {
 		t.Fatalf("收寄信封变成 %d 封——重投不得再入队一份", n)

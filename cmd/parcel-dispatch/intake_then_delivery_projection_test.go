@@ -50,9 +50,9 @@ func TestNodeIntakeThenEffectiveDeliveryAppendsASecondUnclassifiedFact(t *testin
 	assertEffectiveDeliveryFinalPreconditions(t, fixture)
 	assertFinalRuleUnconfigured(t, fixture)
 
-	// 派生交接与有效交付共用（租户+包裹）分区。未登记 tracking-projection.derived
-	// 会占住分区头并记 no_subscriber（ADR-0049），交付要等那封失败预算耗尽才被认领。
-	// 连拍直到交付信封有失败码；不得为了让交付先走去登记派生消费者。
+	// 派生交接与有效交付共用（租户+包裹）分区。收寄那版派生信封由客户视图链接住
+	//（WIRE-CUSTOMER-VIEW）并定稿放行分区头，交付信封随后被认领、停在终局规则未配置。
+	// 连拍直到交付信封有失败码。
 	published = 0
 	for i := 0; i < 8; i++ {
 		n, err := fixture.beat.DispatchOnce(ctx)
@@ -64,8 +64,8 @@ func TestNodeIntakeThenEffectiveDeliveryAppendsASecondUnclassifiedFact(t *testin
 			break
 		}
 	}
-	if published != 0 {
-		t.Fatalf("交付后定稿了 %d 条——终局未配置不得把交付信封定稿", published)
+	if published != 1 {
+		t.Fatalf("交付后定稿 %d 条, want 1（仅收寄版派生信封经视图链定稿）——终局未配置不得把交付信封定稿", published)
 	}
 	if got := recordedFailureCode(t, fixture.db, deliveryEventID); got != "dispatch.consumer_undecided" {
 		t.Fatalf("交付失败码 = %q, want dispatch.consumer_undecided（FINAL_RULE_UNCONFIGURED）", got)

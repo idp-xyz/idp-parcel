@@ -55,17 +55,19 @@ func TestAFormedNodeIntakeDerivesAnUnclassifiedProjectionAndStopsAdoption(t *tes
 	assertNoAdoptionTrace(t, fixture, eventID)
 
 	if n := fixture.countOutboxOfType(t, trackingProjectionDerivedType); n != 1 {
-		t.Fatalf("投影交接信封 = %d, want 1——派生成功必须入队，且不得为测试去登记消费者", n)
+		t.Fatalf("投影交接信封 = %d, want 1——派生成功必须入队", n)
 	}
 
 	versionAfterFirst := currentProjectionVersion(t, fixture)
 
+	// 重拍：收寄信封仍未决（0），第一拍入队的派生信封被客户视图链接住并定稿（1，
+	// WIRE-CUSTOMER-VIEW）。视图定稿不得把收寄采用的未决测宽成已处理。
 	published, err = fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("重拍：%v", err)
 	}
-	if published != 0 {
-		t.Fatalf("重拍定稿了 %d 条", published)
+	if published != 1 {
+		t.Fatalf("重拍定稿 %d 条, want 1（仅派生信封经视图链定稿）", published)
 	}
 	if n := fixture.countInbox(t, deriveProjectionConsumerName, eventID); n != 1 {
 		t.Fatalf("重拍后 VE inbox = %d, want 1——不得翻倍", n)
@@ -80,9 +82,11 @@ func TestAFormedNodeIntakeDerivesAnUnclassifiedProjectionAndStopsAdoption(t *tes
 	if currentProjectionVersion(t, fixture) != versionAfterFirst {
 		t.Fatal("重投又长了一版投影——已有结果路径必须复用当前版")
 	}
+	// 派生信封已有消费者（WIRE-CUSTOMER-VIEW）：定稿后失败码必须干净，不得残留
+	// no_subscriber 之类的旧格。
 	for _, id := range fixture.outboxIDsOfType(t, trackingProjectionDerivedType) {
-		if got := recordedFailureCode(t, fixture.db, id); got != "" && got != "dispatch.no_subscriber" {
-			t.Fatalf("投影交接 %s 失败码 = %q, want 空或 dispatch.no_subscriber", id, got)
+		if got := recordedFailureCode(t, fixture.db, id); got != "" {
+			t.Fatalf("投影交接 %s 失败码 = %q, want 空", id, got)
 		}
 	}
 }

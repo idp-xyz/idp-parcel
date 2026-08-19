@@ -1,6 +1,7 @@
-// Package veconsume 拥有「投影派生结果 → inbox 消费两格」这一份判断。它放在
-// visibility-exception 的适配器层而不是 platform：它认得 DeriveProjectionResult
-// 的封闭集合，平台层对上下文类型一无所知这条不能破。
+// Package veconsume 拥有「派生编排结果 → inbox 消费两格」这一份判断——投影派生
+// （DeriveProjectionResult）与客户视图派生（DeriveCustomerViewResult）两条链都在
+// 这里译。它放在 visibility-exception 的适配器层而不是 platform：它认得两个结果
+// 类型的封闭集合，平台层对上下文类型一无所知这条不能破。
 package veconsume
 
 import (

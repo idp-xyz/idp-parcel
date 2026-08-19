@@ -40,6 +40,7 @@ import (
 	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vetf "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
@@ -277,6 +278,21 @@ var veCustomsCaseUndecidedSentinels = []error{
 	vecc.ErrProjectionUndecided,
 }
 
+// veCustomerViewUndecidedSentinels 只给「投影派生 → 客户视图」这一路。
+//
+// 歧义账户也在名单里：同包裹被多份已接受委托同时声明是机制拒绝自动采认（ADR-0060、
+// AT-VE-152），运维要去 PS 侧解开歧义，解开前这封信如实卡着——不任选，也不折成
+// 「无视图」。不在名单里：ErrDerivedProjectionUntranslatable 与
+// ErrDerivedProjectionInconsistent（引用坏了 / 仓储不变量已破，编程错误）、
+// ErrCustomerAccountUntranslatable（同前）、veconsume.ErrCustomerViewHandoffPending
+// （要查 outbox 下游）、veconsume.ErrUnexpectedCustomerViewOutcome。
+var veCustomerViewUndecidedSentinels = []error{
+	veps.ErrDerivedProjectionUnreadable,
+	veps.ErrCustomerAccountUnavailable,
+	veps.ErrAmbiguousCustomerAccount,
+	veconsume.ErrCustomerViewUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -317,7 +333,7 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有十类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有十一类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
 // PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
@@ -327,13 +343,15 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
 // 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
 // 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
-// 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）。
+// 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、VE 投影派生 → 客户视图
+// （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）。
 // 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
 // `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
 // `transport-handover.registered`，不接 PS。
-// 不登记 `visibility-exception.tracking-projection.derived`（UC-VE-008）：派生交接会
-// 入队，未登记是 ADR-0049 认下的 no_subscriber，不是漏接。
+// `visibility-exception.tracking-projection.derived` 已登记（UC-VE-008）：早先不登记
+// 的理由是 Customer 那一维填不上；ADR-0060 的按包裹反查把账户随来源身份一并交回之后
+// 本进程真接得住它了——接得住才登记，正是 ADR-0049 第三条的判据。
 // 登记的仍然只有本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记
 // 更糟。其余已发布但无消费者的类型照旧撞 `dispatch.no_subscriber`。
 func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
@@ -497,6 +515,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: customs case projection undecided translation: %w", err)
 	}
 
+	veCustomerView, err := deriveCustomerViewConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	veCustomerViewRouted, err := dispatch.WithUndecidedSentinels(
+		veCustomerView, veCustomerViewUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer view undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
@@ -509,6 +537,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			veinbox.InitialRouteFormedEventType:          veInitialRouteRouted,
 			veinbox.ExceptionJourneyRecordedEventType:    veExceptionJourneyRouted,
 			veinbox.CustomsCaseEstablishedEventType:      veCustomsCaseRouted,
+			veinbox.TrackingProjectionDerivedEventType:   veCustomerViewRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -887,6 +916,95 @@ func deriveCustomsCaseConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: derive customs case consumer: %w", err)
 	}
 	return consumer, nil
+}
+
+// deriveCustomerViewConsumer 接 VE 投影派生 → 客户视图（UC-VE-008 的内部半边）。
+// 账户维经 veps.ParcelCustomerAccountLookup 从 PS 的按包裹反查取回（ADR-0060 零/一/
+// 多三格：零行入账不派生、恰一行取账户、多行落未决不任选）；披露策略在租户现绑包装
+// 里按命令租户构造，空册即四维全部待确认——实例半边如实说等，不虚构可见性。
+func deriveCustomerViewConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	projections, err := vepostgres.NewProjections(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer view projections: %w", err)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer view parcel targets: %w", err)
+	}
+	accounts, err := veps.NewParcelCustomerAccountLookup(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer account lookup: %w", err)
+	}
+	views, err := vepostgres.NewCustomerViews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer views: %w", err)
+	}
+	identities, err := veidentity.NewCustomerViewVersions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer view versions: %w", err)
+	}
+	downstream, err := vepostgres.NewOutboxCustomerViewHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer view handoff: %w", err)
+	}
+	processing, err := veps.NewDeriveCustomerViewOnProjectionAdapter(
+		projections,
+		accounts,
+		&tenantBoundCustomerViewDerive{
+			db:         db,
+			views:      views,
+			identities: identities,
+			downstream: downstream,
+			clock:      clock,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive customer view on projection: %w", err)
+	}
+	consumer, err := veinbox.NewTrackingProjectionConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive customer view consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// tenantBoundCustomerViewDerive 在每次 Handle 用命令上的租户构造披露策略视图。
+// DisclosurePolicies 在构造期绑租户，AssessDisclosure 签名没有租户；派发进程是多租户。
+// 禁止 NewDisclosurePolicies(db, 空租户)——看起来接了库、永远读不到行。该租户策略
+// 空册 → configured=false → 编排四维全部待确认（实例半边如实说等）。
+type tenantBoundCustomerViewDerive struct {
+	db         *bentopg.DB
+	views      *vepostgres.CustomerViews
+	identities *veidentity.CustomerViewVersions
+	downstream *vepostgres.OutboxCustomerViewHandoff
+	clock      systemClock
+}
+
+var _ veps.CustomerViewDeriveHandler = (*tenantBoundCustomerViewDerive)(nil)
+
+func (derive *tenantBoundCustomerViewDerive) Handle(
+	ctx context.Context,
+	command veapplication.DeriveCustomerViewCommand,
+) (veapplication.DeriveCustomerViewResult, error) {
+	if command.TenantID.String() == "" {
+		return veapplication.DeriveCustomerViewResult{}, errors.New("parcel-dispatch: customer view tenant is empty")
+	}
+	policy, err := vepostgres.NewDisclosurePolicies(derive.db, command.TenantID)
+	if err != nil {
+		return veapplication.DeriveCustomerViewResult{}, err
+	}
+	return veapplication.NewDeriveCustomerViewHandler(veapplication.DeriveCustomerViewDeps{
+		Policy:     policy,
+		Views:      derive.views,
+		Identities: derive.identities,
+		Downstream: derive.downstream,
+		Clock:      derive.clock,
+	}).Handle(ctx, command)
 }
 
 // newTenantBoundProjectionDerive 八路投影共用一份事实/投影/交接仓储。映射仍按每次
