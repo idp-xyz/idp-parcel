@@ -65,7 +65,10 @@ type MilestoneMappingView interface {
 	ClassifyFact(ctx context.Context, fact domain.AcceptedSourceFact) (MilestoneAnswer, bool, error)
 }
 
-// ProjectionStore 保存当前投影版本。原版本由重派生的指回关系承担历史，库只管当前。
+// ProjectionStore 保存追踪投影版本。版本只增不改写（ADR-0065）：Save 追加新版本行
+// 并把当前标记指向它，原版本连同条目、所用映射版本与派生时间一并留存；FindCurrent
+// 读当前标记指名的那一版，不退化为对历史的扫描；FindByVersion 按版本读回留存的任
+// 一版——审计问「当时形成过什么」由它作答，重放只能答「今天会派生出什么」。
 // 租户是最高数据隔离边界（ADR-0003）：TrackedParcelReference 只是字符串引用，缺
 // 租户维两个租户的同名包裹就会共用一份投影。
 type ProjectionStore interface {
@@ -73,6 +76,11 @@ type ProjectionStore interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		parcel domain.TrackedParcelReference,
+	) (domain.TrackingProjection, bool, error)
+	FindByVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.ProjectionVersionID,
 	) (domain.TrackingProjection, bool, error)
 	Save(ctx context.Context, tenant domain.TenantID, projection domain.TrackingProjection) error
 }

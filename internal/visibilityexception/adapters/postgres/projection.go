@@ -14,8 +14,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// Projections 实现 ports.ProjectionStore。键是（租户+包裹）；Save 整行 UPSERT——
-// 库只管当前版，重派生改同一行，历史由 prior_version 指回。
+// Projections 实现 ports.ProjectionStore。版本行只增不改写（ADR-0065）：Save 追加
+// 版本行并把 tracking_projection_current 的显式标记指向它，原版本连同条目、映射
+// 版本与派生时间留存，按版本读得回；读当前版走标记直取，不扫描历史。
 type Projections struct {
 	db *bentopg.DB
 }
@@ -55,9 +56,13 @@ func (repository *Projections) FindCurrent(
 	var priorVersion *string
 	var entriesRaw []byte
 	err = querier.QueryRow(ctx,
-		`SELECT version_id, derived_at, prior_version, entries
-		   FROM visibility_exception.tracking_projection
-		  WHERE tenant_id = $1 AND parcel_ref = $2`,
+		`SELECT v.version_id, v.derived_at, v.prior_version, v.entries
+		   FROM visibility_exception.tracking_projection_current AS c
+		   JOIN visibility_exception.tracking_projection_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.parcel_ref = c.parcel_ref
+		    AND v.version_id = c.version_id
+		  WHERE c.tenant_id = $1 AND c.parcel_ref = $2`,
 		tenant.String(), parcel.String(),
 	).Scan(&versionID, &derivedAt, &priorVersion, &entriesRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -68,6 +73,45 @@ func (repository *Projections) FindCurrent(
 	}
 
 	projection, err := rebuildProjection(versionID, parcel, derivedAt, priorVersion, entriesRaw)
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("rebuild projection: %w", err)
+	}
+	return projection, true, nil
+}
+
+// FindByVersion 按版本读回留存的任一版——当前版或已被更新的历史版皆可（ADR-0065）。
+func (repository *Projections) FindByVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	version domain.ProjectionVersionID,
+) (domain.TrackingProjection, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("find projection by version: %w", err)
+	}
+
+	var parcelRef string
+	var derivedAt time.Time
+	var priorVersion *string
+	var entriesRaw []byte
+	err = querier.QueryRow(ctx,
+		`SELECT parcel_ref, derived_at, prior_version, entries
+		   FROM visibility_exception.tracking_projection_version
+		  WHERE tenant_id = $1 AND version_id = $2`,
+		tenant.String(), version.String(),
+	).Scan(&parcelRef, &derivedAt, &priorVersion, &entriesRaw)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.TrackingProjection{}, false, nil
+	}
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("find projection by version: %w", err)
+	}
+
+	parcel, err := domain.NewTrackedParcelReference(parcelRef)
+	if err != nil {
+		return domain.TrackingProjection{}, false, fmt.Errorf("rebuild projection: %w", err)
+	}
+	projection, err := rebuildProjection(version.String(), parcel, derivedAt, priorVersion, entriesRaw)
 	if err != nil {
 		return domain.TrackingProjection{}, false, fmt.Errorf("rebuild projection: %w", err)
 	}
@@ -93,15 +137,12 @@ func (repository *Projections) Save(
 		prior = stringPointer(version.String())
 	}
 
+	// 版本只增：不带 ON CONFLICT，同版本号重写以主键冲突报错暴露，不静默覆盖
+	// （ADR-0065「不得覆盖」）。
 	_, err = executor.Exec(ctx,
-		`INSERT INTO visibility_exception.tracking_projection
+		`INSERT INTO visibility_exception.tracking_projection_version
 			(tenant_id, parcel_ref, version_id, derived_at, prior_version, entries)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 ON CONFLICT (tenant_id, parcel_ref) DO UPDATE SET
-			version_id = EXCLUDED.version_id,
-			derived_at = EXCLUDED.derived_at,
-			prior_version = EXCLUDED.prior_version,
-			entries = EXCLUDED.entries`,
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
 		tenant.String(),
 		projection.Parcel().String(),
 		projection.Version().String(),
@@ -110,7 +151,23 @@ func (repository *Projections) Save(
 		entriesRaw,
 	)
 	if err != nil {
-		return fmt.Errorf("save projection: %w", err)
+		return fmt.Errorf("save projection version: %w", err)
+	}
+
+	// 标记是唯一的可变处：当前版由它指名。并发重派生时后写者赢标记（与旧整行
+	// UPSERT 同一竞态语义），但两个版本行都留存，输掉标记的那一版仍按版本读得回。
+	_, err = executor.Exec(ctx,
+		`INSERT INTO visibility_exception.tracking_projection_current
+			(tenant_id, parcel_ref, version_id)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (tenant_id, parcel_ref) DO UPDATE SET
+			version_id = EXCLUDED.version_id`,
+		tenant.String(),
+		projection.Parcel().String(),
+		projection.Version().String(),
+	)
+	if err != nil {
+		return fmt.Errorf("save projection current marker: %w", err)
 	}
 	return nil
 }

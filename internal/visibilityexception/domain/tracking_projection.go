@@ -371,7 +371,8 @@ func (projection TrackingProjection) Rederive(
 	return rederived, nil
 }
 
-// RehydrateTrackingProjection 从当前行重建投影。库只管当前版，历史由 prior 指回。
+// RehydrateTrackingProjection 从已存版本行重建投影——当前版或留存的历史版皆可
+// （ADR-0065：版本只增不改写，历史可按版本读回）；前身关系由 prior 指名。
 func RehydrateTrackingProjection(
 	version ProjectionVersionID,
 	parcel TrackedParcelReference,

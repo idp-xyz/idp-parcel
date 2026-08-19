@@ -98,6 +98,15 @@ func (double *projectionStoreDouble) Save(_ context.Context, tenant domain.Tenan
 	return nil
 }
 
+// 派生编排不消费按版本读回的口（那是审计与读侧的入口）；替身只存当前版，如实答未找到。
+func (double *projectionStoreDouble) FindByVersion(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.ProjectionVersionID,
+) (domain.TrackingProjection, bool, error) {
+	return domain.TrackingProjection{}, false, nil
+}
+
 type projectionIdentityDouble struct{ next int }
 
 func (double *projectionIdentityDouble) NextProjectionVersionID(_ context.Context) (domain.ProjectionVersionID, error) {

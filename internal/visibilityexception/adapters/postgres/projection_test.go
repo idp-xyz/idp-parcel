@@ -98,7 +98,10 @@ func derivedProjection(t *testing.T, version string, entries []domain.MilestoneC
 	return projection
 }
 
-func TestProjectionRoundTripsAndRederiveReplacesTheRow(t *testing.T) {
+// TestProjectionRederiveAppendsVersionAndKeepsPrior 验 AT-VE-044 的追加与留存两半
+// （ADR-0065）：重派生换当前版，原版本连同条目、所用映射版本与派生时间一并留存，
+// 并可按版本读回；当前版由显式标记指名。
+func TestProjectionRederiveAppendsVersionAndKeepsPrior(t *testing.T) {
 	fixture := newProjectionFixture(t)
 	ctx := t.Context()
 	tenant := projectionValue(t, domain.NewTenantID, "tenant-a")
@@ -146,14 +149,66 @@ func TestProjectionRoundTripsAndRederiveReplacesTheRow(t *testing.T) {
 		t.Fatalf("指回 = %s present=%v", prior, present)
 	}
 
-	var rows int
-	if err := fixture.pool.QueryRow(ctx,
-		`SELECT count(*) FROM visibility_exception.tracking_projection
-		  WHERE tenant_id = 'tenant-a'`).Scan(&rows); err != nil {
-		t.Fatalf("数行：%v", err)
+	// 留存的原版本按版本读回：条目、映射版本与派生时间是当时形成的那一份，
+	// 不是用今天的输入重算出来的。
+	original, found, err := fixture.projections.FindByVersion(ctx, tenant, prior)
+	if err != nil || !found {
+		t.Fatalf("原版本读回：err=%v found=%v", err, found)
 	}
-	if rows != 1 {
-		t.Fatalf("投影行数 = %d，库应只管当前版", rows)
+	if original.Version().String() != "projection-1" ||
+		original.Parcel() != first.Parcel() ||
+		!original.DerivedAt().Equal(first.DerivedAt()) {
+		t.Fatalf("原版本身份走样：version=%s parcel=%s derivedAt=%v",
+			original.Version(), original.Parcel(), original.DerivedAt())
+	}
+	if len(original.Entries()) != 2 {
+		t.Fatalf("原版本条目数 = %d", len(original.Entries()))
+	}
+	if _, hasPrior := original.PriorVersion(); hasPrior {
+		t.Fatal("留存的首版长出了指回")
+	}
+	if mapping := original.Entries()[1].MappingVersion().String(); mapping != "milestone-map/v1" {
+		t.Fatalf("留存条目的映射版本 = %s", mapping)
+	}
+
+	successor, found, err := fixture.projections.FindByVersion(ctx, tenant, current.Version())
+	if err != nil || !found {
+		t.Fatalf("当前版按版本读回：err=%v found=%v", err, found)
+	}
+	if prior, present := successor.PriorVersion(); !present || prior.String() != "projection-1" {
+		t.Fatalf("按版本读回的当前版指回 = %s present=%v", prior, present)
+	}
+}
+
+// TestProjectionSaveRefusesToOverwriteAStoredVersion 钉 ADR-0065 锁定的「不得覆盖」：
+// 同版本号重写以错误暴露而不是静默生效，已存版本原样。
+func TestProjectionSaveRefusesToOverwriteAStoredVersion(t *testing.T) {
+	fixture := newProjectionFixture(t)
+	ctx := t.Context()
+	tenant := projectionValue(t, domain.NewTenantID, "tenant-a")
+
+	stored := derivedProjection(t, "projection-1", []domain.MilestoneClassification{
+		classifiedEntry(t, "scan/origin", "PICKED_UP"),
+		classifiedEntry(t, "scan/unknown", ""),
+	})
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.projections.Save(txCtx, tenant, stored)
+	})
+
+	overwrite := derivedProjection(t, "projection-1", []domain.MilestoneClassification{
+		classifiedEntry(t, "scan/other", "DELIVERED"),
+	})
+	err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.projections.Save(txCtx, tenant, overwrite)
+	})
+	if err == nil {
+		t.Fatal("同版本号的重写被接受了")
+	}
+
+	kept, found, err := fixture.projections.FindByVersion(ctx, tenant,
+		projectionValue(t, domain.NewProjectionVersionID, "projection-1"))
+	if err != nil || !found || len(kept.Entries()) != 2 {
+		t.Fatalf("已存版本走样：err=%v found=%v entries=%d", err, found, len(kept.Entries()))
 	}
 }
 
@@ -164,15 +219,35 @@ func TestProjectionsOfAnotherTenantAreInvisible(t *testing.T) {
 		classifiedEntry(t, "scan/origin", "PICKED_UP"),
 	})
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.projections.Save(txCtx, projectionValue(t, domain.NewTenantID, "tenant-a"), projection)
+		return fixture.projections.Save(txCtx, projectionTenant(t, "tenant-a"), projection)
 	})
 	if _, found, err := fixture.projections.FindCurrent(ctx,
-		projectionValue(t, domain.NewTenantID, "tenant-b"), projection.Parcel()); err != nil || found {
+		projectionTenant(t, "tenant-b"), projection.Parcel()); err != nil || found {
 		t.Fatalf("跨租户可见：err=%v found=%v", err, found)
 	}
+	if _, found, err := fixture.projections.FindByVersion(ctx,
+		projectionTenant(t, "tenant-b"), projection.Version()); err != nil || found {
+		t.Fatalf("跨租户按版本可见：err=%v found=%v", err, found)
+	}
+	// 版本行的键含租户维：另一租户可以留存同名版本，互不相扰。
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		return fixture.projections.Save(txCtx, projectionValue(t, domain.NewTenantID, "tenant-b"), projection)
+		return fixture.projections.Save(txCtx, projectionTenant(t, "tenant-b"), projection)
 	})
+}
+
+func projectionTenant(t *testing.T, raw string) domain.TenantID {
+	t.Helper()
+	return projectionValue(t, domain.NewTenantID, raw)
+}
+
+// TestProjectionUnknownVersionIsNotFound：未留存过的版本答未找到，不是错误。
+func TestProjectionUnknownVersionIsNotFound(t *testing.T) {
+	fixture := newProjectionFixture(t)
+	if _, found, err := fixture.projections.FindByVersion(t.Context(),
+		projectionTenant(t, "tenant-a"),
+		projectionValue(t, domain.NewProjectionVersionID, "projection-none")); err != nil || found {
+		t.Fatalf("未存版本：err=%v found=%v", err, found)
+	}
 }
 
 func TestProjectionWritesRequireTransaction(t *testing.T) {
@@ -181,7 +256,7 @@ func TestProjectionWritesRequireTransaction(t *testing.T) {
 		classifiedEntry(t, "scan/origin", "PICKED_UP"),
 	})
 	if err := fixture.projections.Save(t.Context(),
-		projectionValue(t, domain.NewTenantID, "tenant-a"), projection); err == nil {
+		projectionTenant(t, "tenant-a"), projection); err == nil {
 		t.Fatal("无事务 Save 被接受了")
 	}
 }
@@ -189,10 +264,22 @@ func TestProjectionWritesRequireTransaction(t *testing.T) {
 func TestProjectionChecksRejectEmptyEntries(t *testing.T) {
 	fixture := newProjectionFixture(t)
 	if _, err := fixture.pool.Exec(t.Context(),
-		`INSERT INTO visibility_exception.tracking_projection
+		`INSERT INTO visibility_exception.tracking_projection_version
 			(tenant_id, parcel_ref, version_id, derived_at, entries)
 		 VALUES ('t', 'p', 'v', now(), '[]')`); err == nil {
-		t.Fatal("空条目的投影被库接受了")
+		t.Fatal("空条目的投影版本被库接受了")
+	}
+}
+
+// TestProjectionCurrentMarkerRequiresStoredVersion：当前标记只能指名已留存的版本行；
+// 外键带包裹维，指到别的包裹名下的版本同样立不住。
+func TestProjectionCurrentMarkerRequiresStoredVersion(t *testing.T) {
+	fixture := newProjectionFixture(t)
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.tracking_projection_current
+			(tenant_id, parcel_ref, version_id)
+		 VALUES ('tenant-a', 'parcel-1', 'projection-none')`); err == nil {
+		t.Fatal("指向未留存版本的当前标记被库接受了")
 	}
 }
 
@@ -200,7 +287,7 @@ func TestProjectionRebuildRejectsMissingKind(t *testing.T) {
 	fixture := newProjectionFixture(t)
 	ctx := t.Context()
 	if _, err := fixture.pool.Exec(ctx,
-		`INSERT INTO visibility_exception.tracking_projection
+		`INSERT INTO visibility_exception.tracking_projection_version
 			(tenant_id, parcel_ref, version_id, derived_at, entries)
 		 VALUES ('tenant-a', 'parcel-1', 'projection-1', $1, $2)`,
 		projectionBaseAt.Add(3*time.Hour),
@@ -210,9 +297,15 @@ func TestProjectionRebuildRejectsMissingKind(t *testing.T) {
 	); err != nil {
 		t.Fatalf("写入缺类型条目：%v", err)
 	}
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.tracking_projection_current
+			(tenant_id, parcel_ref, version_id)
+		 VALUES ('tenant-a', 'parcel-1', 'projection-1')`); err != nil {
+		t.Fatalf("写入当前标记：%v", err)
+	}
 	parcel := projectionValue(t, domain.NewTrackedParcelReference, "parcel-1")
 	_, _, err := fixture.projections.FindCurrent(ctx,
-		projectionValue(t, domain.NewTenantID, "tenant-a"), parcel)
+		projectionTenant(t, "tenant-a"), parcel)
 	if err == nil {
 		t.Fatal("缺事实类型的投影条目被默契补上了")
 	}

@@ -121,6 +121,15 @@ func (double *handoverProjectionStoreDouble) Save(
 	return nil
 }
 
+// 派生编排不消费按版本读回的口（那是审计与读侧的入口）；替身只存当前版，如实答未找到。
+func (double *handoverProjectionStoreDouble) FindByVersion(
+	_ context.Context,
+	_ vedomain.TenantID,
+	_ vedomain.ProjectionVersionID,
+) (vedomain.TrackingProjection, bool, error) {
+	return vedomain.TrackingProjection{}, false, nil
+}
+
 // handoverProjectionIdentityDouble 摹写真实签发器「每次一个不重的新标识」的性质：
 // 重派生必须换版本（Rederive 拒绝同号），固定返回值会让第二次派生撞领域门。
 type handoverProjectionIdentityDouble struct{ n int }
