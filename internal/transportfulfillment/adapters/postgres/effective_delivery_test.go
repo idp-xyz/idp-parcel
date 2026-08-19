@@ -18,8 +18,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证交付登记库的行为：当前版往返、首登幂等由部分唯一
-// 索引拦住且事务保持可用、更正翻旧插新历史行只增不删、POD 必备入库内 CHECK、
-// 作用域隔离、无事务拒、回滚无痕。
+// 索引拦住且事务保持可用、更正翻旧插新历史行只增不删、按版本读回被顶替的历史代、
+// POD 必备入库内 CHECK、作用域隔离、无事务拒、回滚无痕。
 
 var deliveredAtFixture = time.Date(2026, 9, 9, 10, 0, 0, 0, time.UTC)
 
@@ -144,6 +144,70 @@ func TestACorrectionAppendsANewRowPointingBack(t *testing.T) {
 			return nil
 		})
 	})
+}
+
+// TestFindByKeyAndVersionReadsBackASupersededGeneration 证按版本读不问 is_current：
+// 更正翻旧插新之后，v1 照样按版本读得回、内容不变形，v2 亦然；没登记过的版本答不存
+// 在。消费方每份信封代表一代，这条读口是「先到信封不被后到更正吞掉」在库层的那一半。
+func TestFindByKeyAndVersionReadsBackASupersededGeneration(t *testing.T) {
+	repository, transactor, _ := newEffectiveDeliveries(t)
+	ctx := t.Context()
+
+	first := deliveryRecord(t, "pod-1", "delivery/v1")
+	mustSaveDelivery(t, transactor, ctx, repository, first)
+	corrected, err := first.Delivery.CorrectProof(
+		deliveryValue(t, domain.NewDeliveryProofReference, "pod-2"),
+		deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v2"),
+		deliveredAtFixture.Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("更正：%v", err)
+	}
+	record := first
+	record.Delivery = corrected
+	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		superseded, err := repository.Supersede(txCtx, record)
+		if err != nil {
+			return err
+		}
+		if !superseded {
+			t.Fatal("有登记却顶替失败")
+		}
+		return nil
+	})
+
+	key := deliveryKeyFixture(t, "tenant-1")
+	old, exists, err := repository.FindByKeyAndVersion(
+		ctx, key, deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v1"))
+	if err != nil || !exists {
+		t.Fatalf("按版本读回被顶替的 v1：%v exists=%v", err, exists)
+	}
+	if old.Delivery.Proof().String() != "pod-1" || old.Delivery.Version().String() != "delivery/v1" {
+		t.Fatalf("v1 读回变形：%+v", old.Delivery)
+	}
+	if _, corrects := old.Delivery.Corrects(); corrects {
+		t.Fatal("v1 是首登，读回却带前版引用")
+	}
+
+	current, exists, err := repository.FindByKeyAndVersion(
+		ctx, key, deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v2"))
+	if err != nil || !exists {
+		t.Fatalf("按版本读回 v2：%v exists=%v", err, exists)
+	}
+	if current.Delivery.Proof().String() != "pod-2" {
+		t.Fatalf("v2 proof = %q", current.Delivery.Proof())
+	}
+
+	if _, exists, err = repository.FindByKeyAndVersion(
+		ctx, key, deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v9")); err != nil || exists {
+		t.Fatalf("没登记过的版本：err=%v exists=%v, want 不存在", err, exists)
+	}
+
+	if _, exists, err = repository.FindByKeyAndVersion(
+		ctx, deliveryKeyFixture(t, "tenant-b"),
+		deliveryValue(t, domain.NewDeliveryResultVersion, "delivery/v1")); err != nil || exists {
+		t.Fatalf("他租户按版本读：err=%v exists=%v, want 不可见", err, exists)
+	}
 }
 
 // TestDeliveryScopesAreInvisibleToEachOther 证否定结果不泄露其他租户是否存在该交付。

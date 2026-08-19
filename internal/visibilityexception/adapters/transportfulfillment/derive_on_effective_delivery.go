@@ -34,12 +34,13 @@ var (
 	ErrProjectionHandoffPending = veconsume.ErrProjectionHandoffPending
 )
 
-// EffectiveDeliveryFinder 按有效交付幂等键取回登记。由 TF 的 EffectiveDeliveryStore
-// 满足。只取一法：本适配器不写 TF 的库。
+// EffectiveDeliveryFinder 按（有效交付幂等键 + 结果版本）取回那一代登记。由 TF 的
+// EffectiveDeliveryStore 满足。只取一法：本适配器不写 TF 的库。
 type EffectiveDeliveryFinder interface {
-	FindByKey(
+	FindByKeyAndVersion(
 		ctx context.Context,
 		key tfports.EffectiveDeliveryKey,
+		version tfdomain.DeliveryResultVersion,
 	) (tfports.EffectiveDeliveryRecord, bool, error)
 }
 
@@ -83,8 +84,10 @@ var _ veinbox.RegisteredEffectiveDeliveryHandler = (*DeriveOnEffectiveDeliveryAd
 // HandleRegisteredEffectiveDelivery 按信封引用取回有效交付并派生投影。
 //
 // 信封只做唤醒指针：业务发生时间取 Delivery.OccurredAt，有效时间同发生时间，接收
-// 时间取记录 RecordedAt，禁止用信封 OccurredAt/RecordedAt 顶业务时间。只按键取当前
-// 版——结果版本在事件 ID 里区分两代入队，不从 ID 回解析去查旧行。
+// 时间取记录 RecordedAt，禁止用信封 OccurredAt/RecordedAt 顶业务时间。取回必须带结果
+// 版本——每份信封代表一代，按（租户+对象+尝试）读「当前版」会让更正之前入队的那一份
+// 也读成更正后那一代，先到的那一代于是撞幂等键答`已有记录`，再也不进投影。这与交接
+// 适配器「FindByKey 必须带版本」是同一条道理。
 func (adapter *DeriveOnEffectiveDeliveryAdapter) HandleRegisteredEffectiveDelivery(
 	ctx context.Context,
 	registered veinbox.RegisteredEffectiveDelivery,
@@ -93,22 +96,27 @@ func (adapter *DeriveOnEffectiveDeliveryAdapter) HandleRegisteredEffectiveDelive
 	if err != nil {
 		return err
 	}
-	record, found, err := adapter.deliveries.FindByKey(ctx, key)
+	version, err := tfdomain.NewDeliveryResultVersion(registered.Version)
+	if err != nil {
+		return fmt.Errorf("%w: delivery result version: %v", ErrUntranslatableAnswer, err)
+	}
+	record, found, err := adapter.deliveries.FindByKeyAndVersion(ctx, key, version)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDeliveryNotVisible, err)
 	}
 	if !found {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrDeliveryNotVisible, registered.Object, registered.Attempt)
+		return fmt.Errorf("%w: object %q attempt %q version %q",
+			ErrDeliveryNotVisible, registered.Object, registered.Attempt, registered.Version)
 	}
 	if record.Key != key || record.Delivery.Object() != key.Object ||
-		record.Delivery.Attempt() != key.Attempt || record.Delivery.TenantID() != key.TenantID {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrDeliveryRecordInconsistent, registered.Object, registered.Attempt)
+		record.Delivery.Attempt() != key.Attempt || record.Delivery.TenantID() != key.TenantID ||
+		record.Delivery.Version() != version {
+		return fmt.Errorf("%w: object %q attempt %q version %q",
+			ErrDeliveryRecordInconsistent, registered.Object, registered.Attempt, registered.Version)
 	}
 	if record.Delivery.OccurredAt().IsZero() || record.RecordedAt.IsZero() {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrDeliveryRecordInconsistent, registered.Object, registered.Attempt)
+		return fmt.Errorf("%w: object %q attempt %q version %q",
+			ErrDeliveryRecordInconsistent, registered.Object, registered.Attempt, registered.Version)
 	}
 
 	command, err := projectionCommand(record)

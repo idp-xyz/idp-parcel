@@ -3,6 +3,7 @@ package transportfulfillment_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -27,16 +28,18 @@ func deliveryValue[T interface{ String() string }](t *testing.T, construct func(
 }
 
 type deliveryFinderDouble struct {
-	record tfports.EffectiveDeliveryRecord
-	found  bool
-	err    error
-	last   tfports.EffectiveDeliveryKey
+	record      tfports.EffectiveDeliveryRecord
+	found       bool
+	err         error
+	last        tfports.EffectiveDeliveryKey
+	lastVersion tfdomain.DeliveryResultVersion
 }
 
-func (double *deliveryFinderDouble) FindByKey(
-	_ context.Context, key tfports.EffectiveDeliveryKey,
+func (double *deliveryFinderDouble) FindByKeyAndVersion(
+	_ context.Context, key tfports.EffectiveDeliveryKey, version tfdomain.DeliveryResultVersion,
 ) (tfports.EffectiveDeliveryRecord, bool, error) {
 	double.last = key
+	double.lastVersion = version
 	if double.err != nil {
 		return tfports.EffectiveDeliveryRecord{}, false, double.err
 	}
@@ -120,10 +123,11 @@ func (double *deliveryProjectionStoreDouble) Save(
 	return nil
 }
 
-type deliveryProjectionIdentityDouble struct{}
+type deliveryProjectionIdentityDouble struct{ n int }
 
-func (deliveryProjectionIdentityDouble) NextProjectionVersionID(_ context.Context) (vedomain.ProjectionVersionID, error) {
-	return vedomain.NewProjectionVersionID("projection-1")
+func (double *deliveryProjectionIdentityDouble) NextProjectionVersionID(_ context.Context) (vedomain.ProjectionVersionID, error) {
+	double.n++
+	return vedomain.NewProjectionVersionID(fmt.Sprintf("projection-%d", double.n))
 }
 
 type deliveryProjectionDownstreamDouble struct {
@@ -141,6 +145,13 @@ type deliveryFixedClock struct{ at time.Time }
 func (clock deliveryFixedClock) Now() time.Time { return clock.at }
 
 func registeredDelivery(t *testing.T, object string) tfports.EffectiveDeliveryRecord {
+	t.Helper()
+	return registeredDeliveryAt(t, object, "delivery-result/v1")
+}
+
+// registeredDeliveryAt 造一份指名结果版本的交付登记。版本参数化是为了让两代能同时在
+// 场：库里一行一版本，POD 更正落新行、旧行只翻 is_current，两代并存。
+func registeredDeliveryAt(t *testing.T, object, version string) tfports.EffectiveDeliveryRecord {
 	t.Helper()
 
 	attempt, err := tfdomain.FormFulfillmentAttempt(tfdomain.FulfillmentAttemptSpec{
@@ -172,7 +183,7 @@ func registeredDelivery(t *testing.T, object string) tfports.EffectiveDeliveryRe
 		Method:    deliveryValue(t, tfdomain.NewDeliveryMethodReference, "HAND_TO_RECIPIENT"),
 		Recipient: deliveryValue(t, tfdomain.NewReceivingPartyReference, "recipient-1"),
 		Proof:     deliveryValue(t, tfdomain.NewDeliveryProofReference, "POD-3"),
-		Version:   deliveryValue(t, tfdomain.NewDeliveryResultVersion, "delivery-result/v1"),
+		Version:   deliveryValue(t, tfdomain.NewDeliveryResultVersion, version),
 	})
 	if err != nil {
 		t.Fatalf("构造有效交付：%v", err)
@@ -190,10 +201,57 @@ func registeredDelivery(t *testing.T, object string) tfports.EffectiveDeliveryRe
 }
 
 func registeredDeliveryRef() veinbox.RegisteredEffectiveDelivery {
+	return registeredDeliveryRefFor("delivery-result/v1")
+}
+
+// registeredDeliveryRefFor 造一份指名结果版本的信封引用。TF 每一代交付结果各入队一份
+// 信封，消费方据此各读各的那一代。
+func registeredDeliveryRefFor(version string) veinbox.RegisteredEffectiveDelivery {
 	return veinbox.RegisteredEffectiveDelivery{
 		TenantID: "tenant-1",
 		Object:   "parcel-1",
 		Attempt:  "attempt-1",
+		Version:  version,
+	}
+}
+
+// supersededDeliveryFinderDouble 摹写 EffectiveDeliveries 的真实形状：一行一版本，
+// 被更正的旧行只翻 is_current 标记不删除，因此按版本读得回两代。读口不问「谁是当前
+// 版」，替身也就不建这一维。
+type supersededDeliveryFinderDouble struct {
+	byVersion map[string]tfports.EffectiveDeliveryRecord
+}
+
+func (double *supersededDeliveryFinderDouble) FindByKeyAndVersion(
+	_ context.Context,
+	_ tfports.EffectiveDeliveryKey,
+	version tfdomain.DeliveryResultVersion,
+) (tfports.EffectiveDeliveryRecord, bool, error) {
+	record, found := double.byVersion[version.String()]
+	return record, found, nil
+}
+
+// supersededDeliveryFinder 摆好两代：v1 首登，v2 是 POD 更正版本并回指 v1。
+func supersededDeliveryFinder(t *testing.T, object string) *supersededDeliveryFinderDouble {
+	t.Helper()
+	first := registeredDeliveryAt(t, object, "delivery-result/v1")
+	corrected, err := first.Delivery.CorrectProof(
+		deliveryValue(t, tfdomain.NewDeliveryProofReference, "POD-4"),
+		deliveryValue(t, tfdomain.NewDeliveryResultVersion, "delivery-result/v2"),
+		deliveredAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("构造 POD 更正版本：%v", err)
+	}
+	second := first
+	second.Delivery = corrected
+	second.ContentDigest = "digest-2"
+	second.RecordedAt = deliveredAt.Add(time.Hour + time.Second)
+	return &supersededDeliveryFinderDouble{
+		byVersion: map[string]tfports.EffectiveDeliveryRecord{
+			"delivery-result/v1": first,
+			"delivery-result/v2": second,
+		},
 	}
 }
 
@@ -209,7 +267,7 @@ func deliveryDeriveHandler(t *testing.T, mapping deliveryMappingViewDouble, down
 		Facts:       facts,
 		Mapping:     &mapping,
 		Projections: projections,
-		Identities:  deliveryProjectionIdentityDouble{},
+		Identities:  &deliveryProjectionIdentityDouble{},
 		Downstream:  &downstream,
 		Clock:       deliveryFixedClock{at: deliveredAt.Add(2 * time.Hour)},
 	})
@@ -287,9 +345,10 @@ func TestAnUntranslatableDeliveryReferenceKeepsItsSentinel(t *testing.T) {
 		t.Fatalf("构造：%v", err)
 	}
 	for name, reference := range map[string]veinbox.RegisteredEffectiveDelivery{
-		"空租户": {Object: "parcel-1", Attempt: "attempt-1"},
-		"空对象": {TenantID: "tenant-1", Attempt: "attempt-1"},
-		"空尝试": {TenantID: "tenant-1", Object: "parcel-1"},
+		"空租户": {Object: "parcel-1", Attempt: "attempt-1", Version: "delivery-result/v1"},
+		"空对象": {TenantID: "tenant-1", Attempt: "attempt-1", Version: "delivery-result/v1"},
+		"空尝试": {TenantID: "tenant-1", Object: "parcel-1", Version: "delivery-result/v1"},
+		"空版本": {TenantID: "tenant-1", Object: "parcel-1", Attempt: "attempt-1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := subject.HandleRegisteredEffectiveDelivery(
@@ -303,7 +362,7 @@ func TestAnUntranslatableDeliveryReferenceKeepsItsSentinel(t *testing.T) {
 	}
 }
 
-func TestFindByKeyRereadsTheCurrentVersionByKey(t *testing.T) {
+func TestTheRereadNamesTheGenerationTheEnvelopeCarries(t *testing.T) {
 	finder := &deliveryFinderDouble{record: registeredDelivery(t, "parcel-1"), found: true}
 	handler, _, _ := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
@@ -316,7 +375,65 @@ func TestFindByKeyRereadsTheCurrentVersionByKey(t *testing.T) {
 	if finder.last.TenantID.String() != "tenant-1" ||
 		finder.last.Object.String() != "parcel-1" ||
 		finder.last.Attempt.String() != "attempt-1" {
-		t.Fatalf("FindByKey 键 = %+v；必须只按三维键读当前版", finder.last)
+		t.Fatalf("读回键 = %+v", finder.last)
+	}
+	if finder.lastVersion.String() != "delivery-result/v1" {
+		t.Fatalf("读回版本 = %q；必须取信封指名的那一代，不能读当前版",
+			finder.lastVersion)
+	}
+}
+
+// Covers: `AT-VE-044`「迟到/更正事实到达 → 追加投影版本」的到达半边——TF 每一代交付
+// 结果各入队一份信封，两代因而各自成为一份已接受事实。
+//
+// 吞版本的窗口不需要信封乱序：POD 更正只要发生在首登信封被消费之前，按（租户+对象+
+// 尝试）读「当前版」就会让两次消费都读到更正后那一代，第二次撞幂等键答`已有记录`，
+// v1 从此不进投影。权威交接那一路没有这个窗口，因为它的版本在读回键里。
+func TestEachDeliveryResultVersionEntersTheProjection(t *testing.T) {
+	finder := supersededDeliveryFinder(t, "parcel-1")
+	handler, facts, _ := deliveryDeriveHandler(
+		t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+
+	// Step 1: 先喂 v1，再核对事实库里是否确实落了 v1。
+	if err := subject.HandleRegisteredEffectiveDelivery(
+		t.Context(), registeredDeliveryRefFor("delivery-result/v1"),
+	); err != nil {
+		t.Fatalf("处理有效交付 delivery-result/v1：%v", err)
+	}
+	if len(facts.byKey) == 0 {
+		t.Fatalf("v1 处理后事实库为空：facts.byKey 期望至少有一条")
+	}
+
+	// Step 2: 再喂 v2；如果失败，把当前事实库状态一并返回。
+	if err := subject.HandleRegisteredEffectiveDelivery(
+		t.Context(), registeredDeliveryRefFor("delivery-result/v2"),
+	); err != nil {
+		versions := make(map[string]int)
+		tenant := ""
+		parcel := ""
+		for _, record := range facts.byKey {
+			versions[record.Fact.Version().String()]++
+			tenant = record.Key.Tenant.String()
+			parcel = record.Fact.Parcel().String()
+		}
+		t.Fatalf("处理有效交付 delivery-result/v2：%v；facts.byKey=versions=%v tenant=%q parcel=%q",
+			err, versions, tenant, parcel)
+	}
+
+	// Step 3: v1/v2 都应该各自进投影（至少进事实库并参与派生）。
+	recorded := make(map[string]bool, len(facts.byKey))
+	for _, record := range facts.byKey {
+		recorded[record.Fact.Version().String()] = true
+	}
+	for _, want := range []string{"delivery-result/v1", "delivery-result/v2"} {
+		if !recorded[want] {
+			t.Fatalf("交付结果版本 %q 没有进投影；已记 %v。每份信封代表一代，应该按信封指名版本读回"+
+				"那一代（避免 v1 被更正后的当前版吞掉）", want, recorded)
+		}
 	}
 }
 

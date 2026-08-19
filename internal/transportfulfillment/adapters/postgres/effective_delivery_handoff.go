@@ -43,10 +43,15 @@ func NewOutboxEffectiveDeliveryHandoff(
 
 var _ ports.EffectiveDeliveryHandoff = (*OutboxEffectiveDeliveryHandoff)(nil)
 
+// effectiveDeliveryPayload 带键再带结果版本。版本是引用维不是装饰：一次交付生效在库
+// 里是一行一版本，键只指到「这次尝试的交付」，指不到「哪一代」。下游按键读当前版时，
+// 更正只要发生在首登信封被消费之前，两份信封就都读成更正后那一代，先到的那一代从此
+// 不进下游。权威交接那一路没有这个窗口，因为它的版本本来就在读回键里。
 type effectiveDeliveryPayload struct {
 	TenantID string `json:"tenantId"`
 	Object   string `json:"object"`
 	Attempt  string `json:"attempt"`
+	Version  string `json:"version"`
 }
 
 // effectiveDeliveryEventID 取交付生效键**再加结果版本**。
@@ -68,9 +73,10 @@ func effectiveDeliveryPartitionKey(key ports.EffectiveDeliveryKey) string {
 	return key.TenantID.String() + "/" + key.Object.String()
 }
 
-// HandOffEffectiveDelivery 把一份意图入队。载荷仍只带键：下游按键读当前版本，这是有意的
-// 指针式意图。版本进 ID 而不进载荷——ID 要区分两代好让两份都入队，载荷要的是「去重读」
-// 而不是「这是第几版」。键缺席是装配缺陷，响亮报错不入队。
+// HandOffEffectiveDelivery 把一份意图入队。载荷仍是指针式的——只带引用，交付本体由下游
+// 按引用重新读，不塞快照。版本同时进 ID 与载荷，两处管的事不同：ID 管幂等，让两代各自
+// 入队；载荷管指名，让下游读得回自己那一代。少了载荷这一半，两份信封在引用层无从分辨。
+// 键或版本缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxEffectiveDeliveryHandoff) HandOffEffectiveDelivery(
 	ctx context.Context,
 	intent ports.EffectiveDeliveryHandoffIntent,
@@ -81,7 +87,8 @@ func (handoff *OutboxEffectiveDeliveryHandoff) HandOffEffectiveDelivery(
 	}
 	version := intent.Record.Delivery.Version()
 	if version.String() == "" {
-		// 没有版本就分不出首登与更正，两代会算出同一个 ID 而第二份被静默吞掉。
+		// 没有版本就分不出首登与更正：ID 上两代算出同一个字符串、第二份被静默吞掉，
+		// 载荷上下游也指不出该读哪一代。
 		return fmt.Errorf("hand off effective delivery: delivery result version is required")
 	}
 
@@ -89,6 +96,7 @@ func (handoff *OutboxEffectiveDeliveryHandoff) HandOffEffectiveDelivery(
 		TenantID: key.TenantID.String(),
 		Object:   key.Object.String(),
 		Attempt:  key.Attempt.String(),
+		Version:  version.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off effective delivery: %w", err)

@@ -24,13 +24,14 @@ const effectiveDeliveryConsumerName = "visibility-exception/derive-projection-fr
 // `offsite-pickup.formed` / `.registered`（揽收投影另账）——那些都不是有效交付事实。
 const EffectiveDeliveryRegisteredEventType eventing.EventType = "transport-fulfillment.effective-delivery.registered"
 
-// RegisteredEffectiveDelivery 是译码后的有效交付幂等键引用——只有引用，交付本体由
-// 处理方按引用重新取（权威事实留在 transport-fulfillment）。结果版本不在这里：提供方
-// 把版本放进事件 ID 以区分两代入队，载荷只带键，处理方 FindByKey 读当前版本。
+// RegisteredEffectiveDelivery 是译码后的有效交付引用——只有引用，交付本体由处理方按
+// 引用重新取（权威事实留在 transport-fulfillment）。结果版本是引用的一维：库里一行一
+// 版本，键只指到「这次尝试的交付」，要指到「哪一代」就得带上版本。
 type RegisteredEffectiveDelivery struct {
 	TenantID string
 	Object   string
 	Attempt  string
+	Version  string
 }
 
 // RegisteredEffectiveDeliveryHandler 是本消费者转交的处理方。真实装配接
@@ -79,24 +80,27 @@ func (consumer *EffectiveDeliveryConsumer) Consume(ctx context.Context, envelope
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// decodeRegisteredEffectiveDelivery 译载荷。三维缺一即毒丸——处理方按（租户+对象+尝试）
-// 取回登记，缺了永远取不着，而重投同样内容不会长出字段来。多余的 version 字段故意不读：
-// 那是事件 ID 的事，不是引用维。毒丸哨兵复用本包已有的 ErrPoisonEnvelope。
+// decodeRegisteredEffectiveDelivery 译载荷。四维缺一即毒丸——处理方按（租户+对象+尝试+
+// 结果版本）取回那一代登记，缺了永远取不着，而重投同样内容不会长出字段来。版本与前三维
+// 同为必备：少了它，更正与首登两份信封在引用层一模一样，先到的那一份会被读成更正后那
+// 一代。毒丸哨兵复用本包已有的 ErrPoisonEnvelope。
 func decodeRegisteredEffectiveDelivery(payload []byte) (RegisteredEffectiveDelivery, error) {
 	var body struct {
 		TenantID string `json:"tenantId"`
 		Object   string `json:"object"`
 		Attempt  string `json:"attempt"`
+		Version  string `json:"version"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return RegisteredEffectiveDelivery{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
 	}
-	if body.TenantID == "" || body.Object == "" || body.Attempt == "" {
-		return RegisteredEffectiveDelivery{}, fmt.Errorf("%w: missing delivery key fields", ErrPoisonEnvelope)
+	if body.TenantID == "" || body.Object == "" || body.Attempt == "" || body.Version == "" {
+		return RegisteredEffectiveDelivery{}, fmt.Errorf("%w: missing delivery reference fields", ErrPoisonEnvelope)
 	}
 	return RegisteredEffectiveDelivery{
 		TenantID: body.TenantID,
 		Object:   body.Object,
 		Attempt:  body.Attempt,
+		Version:  body.Version,
 	}, nil
 }

@@ -22,6 +22,9 @@ import (
 // 「当前版」由 is_current 部分唯一索引承担：FindByKey 只读当前行；Save 插首登行，
 // 撞当前唯一即译已登记（ON CONFLICT 代数，事务保持可用）；Supersede 在同一事务里
 // 翻旧行再插新行——更正是新键新行指回前版，历史行只增不删。
+//
+// 历史行只增不删这一条正是 FindByKeyAndVersion 成立的前提：要哪一代给哪一代，问「谁
+// 是当前版」与问「v1 长什么样」是两个问题，读口因而分两个。
 type EffectiveDeliveries struct {
 	db *bentopg.DB
 }
@@ -71,6 +74,56 @@ func (repository *EffectiveDeliveries) FindByKey(
 	delivery, err := rehydrateDelivery(key, version, place, method, recipient, proof, corrects, correctedAt, occurredAt)
 	if err != nil {
 		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery: %w", err)
+	}
+	return ports.EffectiveDeliveryRecord{
+		Key:           key,
+		ContentDigest: digest,
+		Delivery:      delivery,
+		RecordedAt:    recordedAt,
+	}, true, nil
+}
+
+// FindByKeyAndVersion 按（租户+对象+尝试+结果版本）取回指名的那一代。它与 FindByKey
+// 的差别只在最后一维：这里不问 is_current，因此被更正翻成历史的旧行照样读得回。
+func (repository *EffectiveDeliveries) FindByKeyAndVersion(
+	ctx context.Context,
+	key ports.EffectiveDeliveryKey,
+	version domain.DeliveryResultVersion,
+) (ports.EffectiveDeliveryRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery version: %w", err)
+	}
+
+	var place, method, recipient, proof, digest string
+	var corrects *string
+	var correctedAt *time.Time
+	var occurredAt, recordedAt time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT place_ref, method_ref, recipient_ref, proof_ref,
+		        corrects_version, corrected_at, occurred_at, content_digest, recorded_at
+		   FROM transport_fulfillment.effective_delivery
+		  WHERE tenant_id = $1
+		    AND object_ref = $2
+		    AND attempt_ref = $3
+		    AND delivery_version = $4`,
+		key.TenantID.String(),
+		key.Object.String(),
+		key.Attempt.String(),
+		version.String(),
+	).Scan(&place, &method, &recipient, &proof,
+		&corrects, &correctedAt, &occurredAt, &digest, &recordedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.EffectiveDeliveryRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery version: %w", err)
+	}
+
+	delivery, err := rehydrateDelivery(
+		key, version.String(), place, method, recipient, proof, corrects, correctedAt, occurredAt)
+	if err != nil {
+		return ports.EffectiveDeliveryRecord{}, false, fmt.Errorf("find effective delivery version: %w", err)
 	}
 	return ports.EffectiveDeliveryRecord{
 		Key:           key,

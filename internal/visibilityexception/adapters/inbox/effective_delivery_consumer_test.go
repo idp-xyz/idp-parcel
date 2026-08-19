@@ -19,7 +19,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 证 VE 有效交付消费门：译码、恰一次、毒丸、与 PS 终局账本分家。
-// 结果版本不进译码；不认控制转出与揽收形成信封。
+// 结果版本是译码必备的引用维——每份信封代表一代；不认控制转出与揽收形成信封。
 
 type veRegisteredDeliveryHandlerDouble struct {
 	calls []veinbox.RegisteredEffectiveDelivery
@@ -63,6 +63,7 @@ func veEffectiveDeliveryEnvelope(t *testing.T, eventID string) eventing.Envelope
 		"tenantId": "tenant-a",
 		"object":   "parcel-1",
 		"attempt":  "attempt-1",
+		"version":  "delivery-result/v1",
 	})
 	if err != nil {
 		t.Fatalf("载荷：%v", err)
@@ -98,36 +99,40 @@ func TestARegisteredEffectiveDeliveryIsProcessedExactlyOnce(t *testing.T) {
 		t.Fatalf("处理次数 = %d, want 1", len(handler.calls))
 	}
 	got := handler.calls[0]
-	if got.TenantID != "tenant-a" || got.Object != "parcel-1" || got.Attempt != "attempt-1" {
+	if got.TenantID != "tenant-a" || got.Object != "parcel-1" || got.Attempt != "attempt-1" ||
+		got.Version != "delivery-result/v1" {
 		t.Fatalf("译码结果 = %+v", got)
 	}
 }
 
-// Covers: 提供方把结果版本放进事件 ID 以区分两代入队，载荷只带键。译码不得把 version
-// 采成引用维——处理方按键读当前版本，对准同源重派生。
-func TestAnEffectiveDeliveryPayloadDoesNotDecodeResultVersion(t *testing.T) {
+// Covers: 结果版本随载荷进引用——TF 每一代交付结果各入队一份信封，处理方按（键+版本）
+// 读回信封指名的那一代。「版本只进 ID 不进载荷」的旧口径已废：按键读当前版会让更正
+// 之前入队的首登信封也读成更正后那一代，先到的那一代从此不进投影。
+func TestTheDecodedReferenceNamesTheResultVersion(t *testing.T) {
 	consumer, handler := newVEEffectiveDeliveryFixture(t)
 	envelope := veEffectiveDeliveryEnvelope(t, "tenant-a/parcel-1/attempt-1/delivery-result/v2/effective-delivery")
 	envelope.Payload = json.RawMessage(
 		`{"tenantId":"tenant-a","object":"parcel-1","attempt":"attempt-1","version":"delivery-result/v2"}`)
 
 	if err := consumer.Consume(t.Context(), envelope); err != nil {
-		t.Fatalf("带多余 version 字段的载荷仍应只按三维键处理：%v", err)
+		t.Fatalf("消费：%v", err)
 	}
 	if len(handler.calls) != 1 {
 		t.Fatalf("处理次数 = %d, want 1", len(handler.calls))
 	}
 	got := handler.calls[0]
-	if got.TenantID != "tenant-a" || got.Object != "parcel-1" || got.Attempt != "attempt-1" {
-		t.Fatalf("译码结果 = %+v", got)
+	if got.Version != "delivery-result/v2" {
+		t.Fatalf("译码版本 = %q, want delivery-result/v2——版本是引用维，处理方按它指名读回那一代",
+			got.Version)
 	}
 }
 
-func TestAnEffectiveDeliveryEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
+func TestAnEffectiveDeliveryEnvelopeMissingAnyReferenceDimensionIsPoison(t *testing.T) {
 	for name, payload := range map[string]string{
-		"缺 tenantId": `{"object":"parcel-1","attempt":"attempt-1"}`,
-		"缺 object":   `{"tenantId":"tenant-a","attempt":"attempt-1"}`,
-		"缺 attempt":  `{"tenantId":"tenant-a","object":"parcel-1"}`,
+		"缺 tenantId": `{"object":"parcel-1","attempt":"attempt-1","version":"delivery-result/v1"}`,
+		"缺 object":   `{"tenantId":"tenant-a","attempt":"attempt-1","version":"delivery-result/v1"}`,
+		"缺 attempt":  `{"tenantId":"tenant-a","object":"parcel-1","version":"delivery-result/v1"}`,
+		"缺 version":  `{"tenantId":"tenant-a","object":"parcel-1","attempt":"attempt-1"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			consumer, handler := newVEEffectiveDeliveryFixture(t)

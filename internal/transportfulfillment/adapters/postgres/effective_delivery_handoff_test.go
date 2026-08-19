@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -88,6 +89,45 @@ func TestAPODCorrectionEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
 	if got := partitionKeyOf(t, pool, correctedID); got != "tenant-1/parcel-1" {
 		t.Fatalf("更正分区键 = %q；两代不同分区就没有先后可言", got)
 	}
+
+	// 载荷各自指名自己那一代：ID 管幂等让两代都入队，载荷管指名让下游读回自己那一代。
+	// 两份只在 ID 上可分而载荷同形时，消费侧按键读当前版，先到那一代照样被吞。
+	first4 := deliveryPayloadOf(t, pool, firstID)
+	if first4.TenantID != "tenant-1" || first4.Object != "parcel-1" ||
+		first4.Attempt != "attempt-1" || first4.Version != "delivery/v1" {
+		t.Fatalf("首登载荷 = %+v, want 四维引用指到 delivery/v1", first4)
+	}
+	corrected4 := deliveryPayloadOf(t, pool, correctedID)
+	if corrected4.Version != "delivery/v2" {
+		t.Fatalf("更正载荷版本 = %q, want delivery/v2——载荷不带版本时两代在引用层无从分辨",
+			corrected4.Version)
+	}
+}
+
+// deliveryEnvelopePayload 摹写交付信封载荷的四个引用维。字段名就是跨上下文契约：VE
+// 消费侧按同名字段译码；这里不导入消费方类型，两边各自持有、靠各自的真库测试互钉。
+type deliveryEnvelopePayload struct {
+	TenantID string `json:"tenantId"`
+	Object   string `json:"object"`
+	Attempt  string `json:"attempt"`
+	Version  string `json:"version"`
+}
+
+func deliveryPayloadOf(t *testing.T, pool *pgxpool.Pool, eventID string) deliveryEnvelopePayload {
+	t.Helper()
+
+	var raw []byte
+	if err := pool.QueryRow(t.Context(),
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&raw); err != nil {
+		t.Fatalf("读取载荷：%v", err)
+	}
+	var payload deliveryEnvelopePayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("译载荷：%v", err)
+	}
+	return payload
 }
 
 // TestEffectiveDeliveryFollowsTheTransactionalTemplate 证交付生效意图复现样板四条：

@@ -105,6 +105,14 @@ const (
 // Supersede 只在已有登记上落更正版本：found=false 表示没有可更正的登记。
 type EffectiveDeliveryStore interface {
 	FindByKey(ctx context.Context, key EffectiveDeliveryKey) (EffectiveDeliveryRecord, bool, error)
+	// FindByKeyAndVersion 取回指名的那一代，不问它是不是当前版。POD 更正只把旧行翻成
+	// 历史、不删除，因此按版本读得回；消费方每份信封代表一代，按当前版读会让更正之前
+	// 入队的那一份也读成更正后那一代。
+	FindByKeyAndVersion(
+		ctx context.Context,
+		key EffectiveDeliveryKey,
+		version domain.DeliveryResultVersion,
+	) (EffectiveDeliveryRecord, bool, error)
 	Save(ctx context.Context, record EffectiveDeliveryRecord) (DeliverySaveOutcome, error)
 	Supersede(ctx context.Context, record EffectiveDeliveryRecord) (bool, error)
 }

@@ -106,6 +106,17 @@ func (double *deliveryStoreDouble) FindByKey(
 	return record, found, nil
 }
 
+func (double *deliveryStoreDouble) FindByKeyAndVersion(
+	ctx context.Context,
+	key ports.EffectiveDeliveryKey,
+	_ domain.DeliveryResultVersion,
+) (ports.EffectiveDeliveryRecord, bool, error) {
+	// 登记编排只用 FindByKey 判幂等，不按版本读；这个方法只为满足
+	// ports.EffectiveDeliveryStore。按版本回读的语义由生产适配器与
+	// visibility-exception 的对应测试覆盖，此处不引入第二套。
+	return double.FindByKey(ctx, key)
+}
+
 func (double *deliveryStoreDouble) Save(
 	_ context.Context,
 	record ports.EffectiveDeliveryRecord,
