@@ -1,7 +1,7 @@
 # 里程碑映射目录按事实引用建键，实际上填不满
 
 Category: bug
-Status: needs-triage
+Status: resolved
 
 发现于 `c45d0d7`（VE 三个视图端口换真）。适配器与迁移已按当下端口形状提交并通过真库
 门禁——本票记的不是那份实现有错，而是端口交出的维与 `PAR-VIS-01` 要的维不是同一维，
@@ -61,3 +61,15 @@ Status: needs-triage
   带版本号——CONTEXT 允许的分支，不虚构里程碑。
 - 另两份目录（分诊 `PAR-VIS-05`、通知策略 `PAR-VIS-07`）不受影响：它们的键是类型与
   策略引用，不是实例引用。
+
+## Completion
+
+- SHA: `1709872e0ecb4c6c6b83cd1a903928206a733cc8`
+- 领域侧落地：`AcceptedSourceFact` 必带源上下文拥有的 `SourceFactKind`；幂等键仍是
+  （租户 + 源上下文 + 事实引用 + 版本）；类型进内容指纹与映射键
+  （租户 + 映射版本 + 源上下文 + 事实类型）。`0014` 未改写 `0009`，禁止填 `UNTYPED`。
+- 三路字面量：`node-intake` / `offsite-pickup` / `effective-delivery`。空目录仍未归类
+  + `MAPPING_NOT_CONFIGURED`。SYN 仅测试内 INSERT，不进 `assemble.go`。
+- Verification: `gofmt`；`go build ./...`；`go vet ./internal/visibilityexception/... ./cmd/parcel-dispatch/`；
+  `IDP_PARCEL_POSTGRES_DSN=postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`
+  `go test -p 1 -count=1 ./internal/visibilityexception/... ./cmd/parcel-dispatch/` 全部 ok。
