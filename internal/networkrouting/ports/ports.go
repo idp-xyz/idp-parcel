@@ -183,12 +183,16 @@ type RoutingApplicabilityView interface {
 
 // InitialRouteRecord 是一次包裹级初始路由判断越过提交边界后留下的东西：计划或无路由
 // 二居其一。两个都带或都缺的记录是坏数据——那正是「无路由不得用空计划表达」的存储面。
+//
+// RecordedAt 是判断落库的时刻，只由读回填充（Save 由库面 DEFAULT 承担）。消费方要用
+// 它当接收时间——业务发生时间、有效时间与接收时间分别保存，禁止拿信封时间顶替。
 type InitialRouteRecord struct {
 	Key        domain.InitialRouteJudgmentKey
 	Plan       domain.InitialRoutePlan
 	HasPlan    bool
 	NoRoute    domain.NoCurrentRouteJudgment
 	HasNoRoute bool
+	RecordedAt time.Time
 }
 
 // InitialRouteSaveOutcome 与可达性判断库同一套写入代数（ADR-0031）：`已有记录`是业务

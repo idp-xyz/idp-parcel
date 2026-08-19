@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -95,6 +96,47 @@ func TestInitialRouteFollowsTheTransactionalTemplate(t *testing.T) {
 
 	if err := handoff.HandOffInitialRoute(ctx, initialRouteHandoffIntent(t, "parcel-ntx", "corr-3")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// TestInitialRoutePayloadCarriesTheCompleteJudgmentKey 证载荷带齐判断键全部六维——
+// 尤其 customerAccountId：FindByKey 的主键含 customer_account_id，载荷缺它，任何
+// 消费方都拼不出能命中的完整键。
+func TestInitialRoutePayloadCarriesTheCompleteJudgmentKey(t *testing.T) {
+	handoff, db, pool := newInitialRouteHandoffFixture(t)
+	ctx := t.Context()
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		return handoff.HandOffInitialRoute(txCtx, initialRouteHandoffIntent(t, "parcel-key", "corr-key"))
+	}); err != nil {
+		t.Fatalf("入队：%v", err)
+	}
+
+	var raw []byte
+	if err := pool.QueryRow(ctx,
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		initialRouteEventID("parcel-key"),
+	).Scan(&raw); err != nil {
+		t.Fatalf("读回载荷：%v", err)
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("译载荷：%v", err)
+	}
+	want := map[string]string{
+		"tenantId":          "tenant-a",
+		"customerAccountId": "customer-a",
+		"shipment":          "request-1",
+		"parcel":            "parcel-key",
+		"baseline":          "baseline-v1",
+		"purpose":           "LAST_MILE_DELIVERY",
+		"correlation":       "corr-key",
+	}
+	for field, value := range want {
+		if payload[field] != value {
+			t.Errorf("payload[%q] = %q, want %q", field, payload[field], value)
+		}
 	}
 }
 

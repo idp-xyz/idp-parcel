@@ -71,6 +71,9 @@ func TestAFormedPlanRoundTripsWholly(t *testing.T) {
 	if len(nodes) != 3 || nodes[0].String() != "hub-a" || nodes[2].String() != "zone-c" {
 		t.Fatalf("节点序列 = %v", nodes)
 	}
+	if found.RecordedAt.IsZero() {
+		t.Fatal("读回缺 RecordedAt——消费方要拿它当接收时间，不得用信封时间顶替")
+	}
 }
 
 func TestANoRouteJudgmentRoundTripsWholly(t *testing.T) {

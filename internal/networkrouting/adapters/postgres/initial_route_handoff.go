@@ -43,13 +43,17 @@ func NewOutboxInitialRouteHandoff(
 
 var _ ports.InitialRouteHandoff = (*OutboxInitialRouteHandoff)(nil)
 
+// initialRoutePayload 带齐 InitialRouteJudgmentKey 全部六维加交接关联。客户维不可省：
+// InitialRouteStore.FindByKey 按含 customer_account_id 的完整主键取回本体，载荷缺任何
+// 一维，消费方就永远拼不出能命中的键（信封只带键、本体按键重取的前提）。
 type initialRoutePayload struct {
-	TenantID    string `json:"tenantId"`
-	Shipment    string `json:"shipment"`
-	Parcel      string `json:"parcel"`
-	Baseline    string `json:"baseline"`
-	Purpose     string `json:"purpose"`
-	Correlation string `json:"correlation"`
+	TenantID          string `json:"tenantId"`
+	CustomerAccountID string `json:"customerAccountId"`
+	Shipment          string `json:"shipment"`
+	Parcel            string `json:"parcel"`
+	Baseline          string `json:"baseline"`
+	Purpose           string `json:"purpose"`
+	Correlation       string `json:"correlation"`
 }
 
 func initialRouteEventID(key domain.InitialRouteJudgmentKey) string {
@@ -70,12 +74,13 @@ func (handoff *OutboxInitialRouteHandoff) HandOffInitialRoute(
 	}
 
 	payload, err := json.Marshal(initialRoutePayload{
-		TenantID:    key.TenantID.String(),
-		Shipment:    key.ShipmentRequestID.String(),
-		Parcel:      key.DeclaredParcelID.String(),
-		Baseline:    key.AcceptanceBaseline.String(),
-		Purpose:     key.ServicePurpose.String(),
-		Correlation: intent.Correlation.String(),
+		TenantID:          key.TenantID.String(),
+		CustomerAccountID: key.CustomerAccountID.String(),
+		Shipment:          key.ShipmentRequestID.String(),
+		Parcel:            key.DeclaredParcelID.String(),
+		Baseline:          key.AcceptanceBaseline.String(),
+		Purpose:           key.ServicePurpose.String(),
+		Correlation:       intent.Correlation.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off initial route: %w", err)

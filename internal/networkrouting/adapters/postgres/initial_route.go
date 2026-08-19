@@ -81,9 +81,10 @@ func (repository *InitialRoutes) FindByKey(
 	var (
 		conclusion            string
 		planJSON, noRouteJSON []byte
+		recordedAt            time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT conclusion, plan, no_route
+		`SELECT conclusion, plan, no_route, recorded_at
 		   FROM network_routing.initial_route
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
@@ -97,7 +98,7 @@ func (repository *InitialRoutes) FindByKey(
 		key.AcceptanceBaseline.String(),
 		key.DeclaredParcelID.String(),
 		key.ServicePurpose.String(),
-	).Scan(&conclusion, &planJSON, &noRouteJSON)
+	).Scan(&conclusion, &planJSON, &noRouteJSON, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.InitialRouteRecord{}, false, nil
 	}
@@ -111,13 +112,17 @@ func (repository *InitialRoutes) FindByKey(
 		if err != nil {
 			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w", err)
 		}
-		return ports.InitialRouteRecord{Key: key, Plan: plan, HasPlan: true}, true, nil
+		return ports.InitialRouteRecord{
+			Key: key, Plan: plan, HasPlan: true, RecordedAt: recordedAt.UTC(),
+		}, true, nil
 	case conclusionNoCurrentRoute:
 		judgment, err := rebuildNoRoute(key, noRouteJSON)
 		if err != nil {
 			return ports.InitialRouteRecord{}, false, fmt.Errorf("find initial route: %w", err)
 		}
-		return ports.InitialRouteRecord{Key: key, NoRoute: judgment, HasNoRoute: true}, true, nil
+		return ports.InitialRouteRecord{
+			Key: key, NoRoute: judgment, HasNoRoute: true, RecordedAt: recordedAt.UTC(),
+		}, true, nil
 	default:
 		return ports.InitialRouteRecord{}, false, fmt.Errorf(
 			"find initial route: unknown conclusion %q", conclusion)
