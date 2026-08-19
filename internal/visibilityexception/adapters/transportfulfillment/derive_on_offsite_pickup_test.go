@@ -241,7 +241,7 @@ func TestAPickupRecordThatDisagreesWithItsKeyIsInconsistentNotUndecided(t *testi
 	}
 }
 
-func TestAZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
+func TestAPickupWithZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 	record := registeredPickup(t, "parcel-1")
 	record.RecordedAt = time.Time{}
 	derive := &pickupCountingHandler{}
@@ -258,7 +258,7 @@ func TestAZeroRecordedAtIsInconsistentNotUndecided(t *testing.T) {
 	}
 }
 
-func TestUnconfiguredMappingDerivesAnUnclassifiedProjection(t *testing.T) {
+func TestUnconfiguredMappingDerivesAnUnclassifiedPickupProjection(t *testing.T) {
 	handler, facts, projections := pickupDeriveHandler(t, pickupMappingViewDouble{configured: false}, pickupProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, handler)
@@ -329,7 +329,7 @@ func TestAConsolidationUnitLikeObjectIsUsedAsParcelReference(t *testing.T) {
 	}
 }
 
-func TestAFailedProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
+func TestAFailedPickupProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 	handler, _, _ := pickupDeriveHandler(t, pickupMappingViewDouble{configured: false}, pickupProjectionDownstreamDouble{
 		err: errors.New("outbox down"),
 	})
@@ -343,7 +343,7 @@ func TestAFailedProjectionHandoffKeepsThePendingSentinel(t *testing.T) {
 	}
 }
 
-func TestMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
+func TestPickupMappingViewFailureDoesNotLookLikeUnconfigured(t *testing.T) {
 	handler, _, _ := pickupDeriveHandler(t, pickupMappingViewDouble{err: errors.New("mapping unreachable")}, pickupProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnOffsitePickupAdapter(
 		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true}, handler)
