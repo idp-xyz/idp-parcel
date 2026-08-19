@@ -241,3 +241,44 @@ func TestShipmentCancelledDerivesOnlyFromAllCancelledMembers(t *testing.T) {
 		t.Fatalf("summary = %s cancelled = %v; 未全终局不派生已取消", partial.State(), partial.DerivesShipmentCancelled())
 	}
 }
+
+// 反解析与 String() 必须互为逆：跨上下文消费方按信封里的字符串重建采用键，形式在
+// 本包定义，反解析就得在本包给出——散一份拷贝到消费方，日后加一个责任结果种类时
+// 编译器一处都不会提醒。
+func TestResponsibilityOutcomeKindRoundTripsThroughItsString(t *testing.T) {
+	for _, kind := range []domain.ResponsibilityOutcomeKind{
+		domain.EffectiveDeliveryOutcome,
+		domain.ReturnCompletedOutcome,
+		domain.ServiceTerminatedOutcome,
+		domain.RegulatoryDispositionExecuted,
+	} {
+		t.Run(kind.String(), func(t *testing.T) {
+			got, err := domain.NewResponsibilityOutcomeKind(kind.String())
+			if err != nil {
+				t.Fatalf("反解析 %q：%v", kind.String(), err)
+			}
+			if got != kind {
+				t.Fatalf("反解析 %q = %v, want %v", kind.String(), got, kind)
+			}
+		})
+	}
+}
+
+func TestAnUnknownResponsibilityOutcomeKindIsRefused(t *testing.T) {
+	for name, raw := range map[string]string{
+		"空串":         "",
+		"零值的 String": domain.ResponsibilityOutcomeKindInvalid.String(),
+		"取消不是责任结果":   "PARCEL_CANCELLED",
+		"大小写不宽容":     "effective_delivery",
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := domain.NewResponsibilityOutcomeKind(raw)
+			if err == nil {
+				t.Fatalf("认不得的种类必须报错，却交回 %v", got)
+			}
+			if got != domain.ResponsibilityOutcomeKindInvalid {
+				t.Fatalf("失败时必须交回零值，却是 %v", got)
+			}
+		})
+	}
+}

@@ -359,17 +359,5 @@ func rebuildFinal(
 }
 
 func responsibilityKindFrom(raw string) (domain.ResponsibilityOutcomeKind, error) {
-	switch raw {
-	case domain.EffectiveDeliveryOutcome.String():
-		return domain.EffectiveDeliveryOutcome, nil
-	case domain.ReturnCompletedOutcome.String():
-		return domain.ReturnCompletedOutcome, nil
-	case domain.ServiceTerminatedOutcome.String():
-		return domain.ServiceTerminatedOutcome, nil
-	case domain.RegulatoryDispositionExecuted.String():
-		return domain.RegulatoryDispositionExecuted, nil
-	default:
-		return domain.ResponsibilityOutcomeKindInvalid, fmt.Errorf(
-			"unknown responsibility outcome kind %q", raw)
-	}
+	return domain.NewResponsibilityOutcomeKind(raw)
 }

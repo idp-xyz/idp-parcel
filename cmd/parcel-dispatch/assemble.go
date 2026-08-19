@@ -34,6 +34,7 @@ import (
 	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	venodeops "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/nodeoperations"
+	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vetf "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
@@ -225,6 +226,18 @@ var veHandoverUndecidedSentinels = []error{
 	vetf.ErrHandoverProjectionUndecided,
 }
 
+// veFinalOutcomeUndecidedSentinels 只给 VE 终局投影这一路。与上面四份分开列：本路
+// 的未决面只有终局登记可见性与派生未决两样，合用别路名单会把不存在的格子也宣布成
+// 「等依赖」。
+//
+// 不在名单里：ErrFinalRecordInconsistent（仓储不变量已破，含采认时刻为零）、
+// ErrFinalUntranslatableAnswer（词汇表外，编程错误）、ErrFinalProjectionHandoffPending
+// （要查 outbox 下游）、veconsume.ErrUnexpectedProjectionOutcome。
+var veFinalOutcomeUndecidedSentinels = []error{
+	veps.ErrFinalNotVisible,
+	veps.ErrFinalProjectionUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -265,11 +278,13 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有六类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有七类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
 // PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
-// TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）。
+// TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
+// PS 包裹服务终局形成 → 只投 VE 投影（不 FanOut：终局是 PS 自家事实，让它经调度器
+// 消费自己等于把一份事实记两遍）。
 // 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
 // `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
@@ -401,6 +416,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: handover projection undecided translation: %w", err)
 	}
 
+	veFinalOutcome, err := deriveFinalOutcomeConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veFinalOutcomeRouted, err := dispatch.WithUndecidedSentinels(veFinalOutcome, veFinalOutcomeUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcome projection undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
@@ -409,6 +433,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			psinbox.OffsitePickupRegisteredEventType:     pickupFan,
 			psinbox.EffectiveDeliveryRegisteredEventType: deliveryFan,
 			veinbox.TransportHandoverRegisteredEventType: veHandoverRouted,
+			veinbox.FinalOutcomeFormedEventType:          veFinalOutcomeRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -684,8 +709,33 @@ func deriveHandoverConsumer(
 	return consumer, nil
 }
 
-// newTenantBoundProjectionDerive 四路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付、交接再复制三份包装。
+// deriveFinalOutcomeConsumer 接 PS 包裹服务终局 → VE 投影。本路不接 PS：终局就是 PS
+// 自己形成的事实，让 PS 经调度器消费自己等于把一份事实记两遍。
+//
+// 与交付投影分 inbox 名也分事实引用前缀：有效交付是终局的**上游来源**，同一包裹上两者
+// 都会到，共用会让追踪把「交付发生」与「服务终局成立」叠成一条。
+func deriveFinalOutcomeConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection final outcomes: %w", err)
+	}
+	processing, err := veps.NewDeriveOnFinalOutcomeAdapter(finals, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on final outcome: %w", err)
+	}
+	consumer, err := veinbox.NewFinalOutcomeConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive final outcome consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// newTenantBoundProjectionDerive 五路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付、交接、终局再复制四份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -735,6 +785,7 @@ var (
 	_ vetf.PickupProjectionHandler   = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.ProjectionHandler         = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.HandoverProjectionHandler = (*tenantBoundProjectionDerive)(nil)
+	_ veps.FinalProjectionHandler    = (*tenantBoundProjectionDerive)(nil)
 )
 
 func (derive *tenantBoundProjectionDerive) Handle(

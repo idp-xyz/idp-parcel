@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -48,6 +49,28 @@ func (kind ResponsibilityOutcomeKind) String() string {
 	default:
 		return ""
 	}
+}
+
+// NewResponsibilityOutcomeKind 把 String() 的输出译回封闭枚举，与 String() 同处是
+// 故意的：字符串形式在哪定义，反解析就在哪给出。终局采用键会随发布意图跨上下文出去
+// （信封载荷里 Kind 就是这个字符串），消费方要重建键必须译得回来；各消费方自备一份
+// switch 等于把同一个封闭集合抄成几份，日后加一行责任结果种类时编译器一处都不提醒。
+//
+// 认不得就交回零值加错误，不猜也不兜底：一个译不出的种类意味着信封与本枚举已经分家，
+// 静默落到某个默认格会让另一种责任结果的终局被当成这一种。
+func NewResponsibilityOutcomeKind(raw string) (ResponsibilityOutcomeKind, error) {
+	for _, kind := range []ResponsibilityOutcomeKind{
+		EffectiveDeliveryOutcome,
+		ReturnCompletedOutcome,
+		ServiceTerminatedOutcome,
+		RegulatoryDispositionExecuted,
+	} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return ResponsibilityOutcomeKindInvalid, fmt.Errorf(
+		"%w: unknown responsibility outcome kind %q", ErrInvalidResponsibilityOutcome, raw)
 }
 
 // ResponsibilityDecisionReference 指名责任结果背后的权威决定（交付判断、退运/终止
