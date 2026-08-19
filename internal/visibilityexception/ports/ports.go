@@ -96,6 +96,24 @@ type ProjectionHandoff interface {
 	HandOffProjection(ctx context.Context, intent ProjectionHandoffIntent) error
 }
 
+// ParcelCustomerAccountView 回答「这件追踪对象当前属于哪个货主客户账户」——客户
+// 视图派生缺的账户维（DeriveCustomerViewCommand.Customer）唯一的自动来处。关系本体
+// 不归本上下文：parcel-shipment 拥有包裹与委托的成员关系，party-commercial 拥有账户
+// 身份（CONTEXT-MAP），这里只消费答复，绝不自行推导或缓存第二份映射。
+//
+// 答案三格与 ADR-0060 的零/一/多对齐。第二个返回值为 false 即「当前没有已接受委托
+// 声明这件对象」——不派生视图、不发明账户，投影照旧存在。false 不分成因：追踪包裹
+// 引用可能装着集运单元号（TF 侧不替对象猜身份种类），反查零行不是缺陷；成因区分留给
+// 接线票。多于一个候选是未决/待确认，不是「无视图」（UC-VE-008 AT-VE-152）——适配器
+// 以具名错误交回，绝不按时间或行序任选。依赖调不通作为错误返回。
+type ParcelCustomerAccountView interface {
+	FindCustomerAccount(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+	) (domain.CustomerAccountReference, bool, error)
+}
+
 // DimensionDisclosure 是披露策略对客户视图一维的答复：获准展示时带内容来处，
 // 内容尚未到位时待确认，授权或披露规则不允许时不展示。State 取领域的封闭三态，
 // 翻译成维度由编排经领域构造器完成——展示无内容在那里立不起来。
