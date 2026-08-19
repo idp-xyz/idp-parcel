@@ -164,9 +164,9 @@ func TestAFormedNodeIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	}
 }
 
-// Covers: 路由表第四条——TF 对象级揽收登记投给 PS 采用消费者（UC-PS-003 的另一个合格
-// 物理来源）。手法同前三条：毒丸载荷（缺 tenantId/object/attempt）让消费门显式拒收并
-// 交回 nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+// Covers: 路由表第四条——TF 对象级揽收登记投给 FanOut（先 VE 投影，后 PS 采用）。手法
+// 同前三条：毒丸载荷（缺 tenantId/object/attempt）让两边消费门都显式拒收入账并交回
+// nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
 func TestARegisteredOffsitePickupReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "pickup-1", psinbox.OffsitePickupRegisteredEventType, `{}`)
@@ -176,7 +176,7 @@ func TestARegisteredOffsitePickupReachesTheConsumerThroughTheRouteTable(t *testi
 		t.Fatalf("一拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把揽收登记投给采用消费者",
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把揽收登记投给 FanOut",
 			published, recordedFailureCode(t, db, "pickup-1"))
 	}
 }
@@ -200,9 +200,9 @@ func TestAnOffsitePickupFormedEnvelopeIsNotRouted(t *testing.T) {
 	}
 }
 
-// Covers: 路由表第五条——TF 有效交付登记投给 PS 终局消费者（UC-PS-004）。手法同前四
-// 条：毒丸载荷（缺 tenantId/object/attempt）让消费门显式拒收并交回 nil，因此这一条会
-// 被定稿。漏挂或挂错的话这里撞的是无订阅者。
+// Covers: 路由表第五条——TF 有效交付登记投给 FanOut（先 VE 投影，后 PS 终局）。手法
+// 同前四条：毒丸载荷（缺 tenantId/object/attempt）让两边消费门都显式拒收入账并交回
+// nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
 func TestARegisteredEffectiveDeliveryReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "delivery-1", psinbox.EffectiveDeliveryRegisteredEventType, `{}`)
@@ -212,7 +212,7 @@ func TestARegisteredEffectiveDeliveryReachesTheConsumerThroughTheRouteTable(t *t
 		t.Fatalf("一拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把有效交付投给终局消费者",
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把有效交付投给 FanOut",
 			published, recordedFailureCode(t, db, "delivery-1"))
 	}
 }

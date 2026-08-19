@@ -41,6 +41,9 @@ const (
 // 那是实例半边，本用例禁止。同一拍会投接受信封：种子已嵌 NetworkServiceForm，那封
 // 停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 与
 // assertNoInitialRoute 一起挡住。
+//
+// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账。本用例不停投影；PS 终局未
+// 配置仍让整封 Publish 失败，published 必须是 0。
 func TestARegisteredEffectiveDeliveryStopsAtUnconfiguredFinalRule(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()

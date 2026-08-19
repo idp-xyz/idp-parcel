@@ -35,6 +35,7 @@ import (
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	venodeops "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/nodeoperations"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	vetf "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment"
 	veapplication "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
@@ -195,6 +196,25 @@ var veProjectionUndecidedSentinels = []error{
 	venodeops.ErrProjectionUndecided,
 }
 
+// vePickupUndecidedSentinels 只给 VE 揽收投影这一路。与 PS 采用那份分开列，也不与
+// 节点收寄投影合用——揽收没有「实物还没识别」，多出来的 inconsistent 不得宣布成等依赖。
+//
+// 不在名单里：ErrPickupRecordInconsistent、ErrPickupUntranslatableAnswer、
+// ErrPickupProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
+var vePickupUndecidedSentinels = []error{
+	vetf.ErrPickupNotVisible,
+	vetf.ErrPickupProjectionUndecided,
+}
+
+// veDeliveryUndecidedSentinels 只给 VE 交付投影这一路。与 PS 终局那份分开列。
+//
+// 不在名单里：ErrDeliveryRecordInconsistent、ErrUntranslatableAnswer、
+// ErrProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
+var veDeliveryUndecidedSentinels = []error{
+	vetf.ErrDeliveryNotVisible,
+	vetf.ErrProjectionUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -237,11 +257,12 @@ var effectiveDeliveryUndecidedSentinels = []error{
 //
 // 路由表今天有五类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
-// 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → PS 来源采用（与节点收寄
-// 同属 UC-PS-003 的两个合格物理来源）、TF 有效交付登记 → PS 终局采用（UC-PS-004）。
-// 前两条投向 network-routing；节点收寄这一类同一 EventType 投给两个独立消费者，顺序
-// 先 VE 后 PS，避免把投影堵在资格墙上。第五条只接 `effective-delivery.registered`，
-// 不接 `transport-handover.registered` 或 `offsite-pickup.formed`。
+// 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
+// PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）。
+// 前两条投向 network-routing；后三类同一 EventType 各投两个独立消费者，顺序一律先
+// VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
+// `effective-delivery.registered`，不接 `transport-handover.registered` 或
+// `offsite-pickup.formed`。
 // 不登记 `visibility-exception.tracking-projection.derived`（UC-VE-008）：派生交接会
 // 入队，未登记是 ADR-0049 认下的 no_subscriber，不是漏接。
 // 登记的仍然只有本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记
@@ -295,7 +316,12 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: node intake undecided translation: %w", err)
 	}
 
-	veConsumer, err := deriveProjectionConsumer(db, outboxStore, inboxStore, clock)
+	projectionDerive, err := newTenantBoundProjectionDerive(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+
+	veConsumer, err := deriveProjectionConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
 	}
@@ -319,6 +345,18 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: offsite pickup undecided translation: %w", err)
 	}
+	vePickup, err := derivePickupConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	vePickupRouted, err := dispatch.WithUndecidedSentinels(vePickup, vePickupUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pickup projection undecided translation: %w", err)
+	}
+	pickupFan, err := dispatch.FanOut(vePickupRouted, routedPickups)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: offsite pickup fan-out: %w", err)
+	}
 
 	finals, err := adoptEffectiveDeliveryConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
@@ -330,14 +368,26 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery undecided translation: %w", err)
 	}
+	veDelivery, err := deriveDeliveryConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veDeliveryRouted, err := dispatch.WithUndecidedSentinels(veDelivery, veDeliveryUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: delivery projection undecided translation: %w", err)
+	}
+	deliveryFan, err := dispatch.FanOut(veDeliveryRouted, routedFinals)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: effective delivery fan-out: %w", err)
+	}
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
 			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
 			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
-			psinbox.OffsitePickupRegisteredEventType:     routedPickups,
-			psinbox.EffectiveDeliveryRegisteredEventType: routedFinals,
+			psinbox.OffsitePickupRegisteredEventType:     pickupFan,
+			psinbox.EffectiveDeliveryRegisteredEventType: deliveryFan,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -532,14 +582,73 @@ func adoptNodeIntakeConsumer(
 // 事件 ID）认领，塞进采用那路会让投影把采用的投递当重复跳过。
 func deriveProjectionConsumer(
 	db *bentopg.DB,
-	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
-	clock systemClock,
+	derive *tenantBoundProjectionDerive,
 ) (dispatch.Consumer, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: projection receptions: %w", err)
 	}
+	processing, err := venodeops.NewDeriveOnNodeIntakeAdapter(receptions, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on node intake: %w", err)
+	}
+	consumer, err := veinbox.NewNodeIntakeConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive projection consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// derivePickupConsumer 接对象级揽收登记 → VE 投影。与 PS 采用分 inbox 名。
+func derivePickupConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	registrations, err := tfpostgres.NewOffsitePickupRegistrations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection pickup registrations: %w", err)
+	}
+	processing, err := vetf.NewDeriveOnOffsitePickupAdapter(registrations, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on offsite pickup: %w", err)
+	}
+	consumer, err := veinbox.NewOffsitePickupConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive pickup consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// deriveDeliveryConsumer 接有效交付登记 → VE 投影。与 PS 终局分 inbox 名。
+func deriveDeliveryConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	deliveries, err := tfpostgres.NewEffectiveDeliveries(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection deliveries: %w", err)
+	}
+	processing, err := vetf.NewDeriveOnEffectiveDeliveryAdapter(deliveries, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on effective delivery: %w", err)
+	}
+	consumer, err := veinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive delivery consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// newTenantBoundProjectionDerive 三路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付再复制两份包装。
+func newTenantBoundProjectionDerive(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+) (*tenantBoundProjectionDerive, error) {
 	facts, err := vepostgres.NewAcceptedFacts(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: accepted facts: %w", err)
@@ -556,23 +665,14 @@ func deriveProjectionConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: projection handoff: %w", err)
 	}
-
-	processing, err := venodeops.NewDeriveOnNodeIntakeAdapter(receptions, &tenantBoundProjectionDerive{
+	return &tenantBoundProjectionDerive{
 		db:          db,
 		facts:       facts,
 		projections: projections,
 		identities:  identities,
 		downstream:  downstream,
 		clock:       clock,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive on node intake: %w", err)
-	}
-	consumer, err := veinbox.NewNodeIntakeConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: derive projection consumer: %w", err)
-	}
-	return consumer, nil
+	}, nil
 }
 
 // tenantBoundProjectionDerive 在每次 Handle 用命令上的租户构造映射视图。
@@ -588,7 +688,11 @@ type tenantBoundProjectionDerive struct {
 	clock       systemClock
 }
 
-var _ venodeops.ProjectionHandler = (*tenantBoundProjectionDerive)(nil)
+var (
+	_ venodeops.ProjectionHandler  = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.PickupProjectionHandler = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.ProjectionHandler       = (*tenantBoundProjectionDerive)(nil)
+)
 
 func (derive *tenantBoundProjectionDerive) Handle(
 	ctx context.Context,

@@ -39,6 +39,9 @@ const (
 // 接受信封：种子已嵌 NetworkServiceForm，那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，
 // 不得形成路由计划；published==0 与 assertNoPickupAdoptionTrace 的 initial_route
 // 计数一起挡住。
+//
+// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账。本用例不停投影；PS 未决仍
+// 让整封 Publish 失败，published 必须是 0。
 func TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
