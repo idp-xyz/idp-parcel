@@ -146,11 +146,10 @@ func TestAnAdoptedNetworkIntakeReachesTheConsumerThroughTheRouteTable(t *testing
 	}
 }
 
-// Covers: 路由表第三条——NO 节点收寄形成投给 PS 采用消费者（UC-PS-003）。手法同前两条：
-// 毒丸载荷（缺 tenantId/sourceId）让消费门显式拒收并交回 nil，因此这一条会被定稿。
-//
-// 它证的是路由挂对了人，不是采用判断本身：漏挂或挂错的话这里撞的是无订阅者。方向与
-// 前两条相反——信封由 node-operations 发出，消费者在 parcel-shipment 侧。
+// Covers: 路由表第三条——NO 节点收寄形成投给 FanOut（先 VE 投影，后 PS 采用）。手法
+// 同前两条：毒丸载荷（缺 tenantId/sourceId）让两边消费门都显式拒收入账并交回 nil，
+// 因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。方向与前两条相反——信封由
+// node-operations 发出，同一 EventType 两个独立 inbox。
 func TestAFormedNodeIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "node-intake-1", psinbox.NodeIntakeFormedEventType, `{}`)
@@ -160,7 +159,7 @@ func TestAFormedNodeIntakeReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 		t.Fatalf("一拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把节点收寄投给采用消费者",
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把节点收寄投给 FanOut",
 			published, recordedFailureCode(t, db, "node-intake-1"))
 	}
 }

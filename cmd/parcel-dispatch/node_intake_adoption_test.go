@@ -44,7 +44,12 @@ const (
 // 那封停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 挡住误入账，
 // assertNoAdoptionTrace 另数 initial_route 与 formed 信封。
 //
-// 未决不得留痕：inbox 无账、采用无行、下游意图不入队。重拍不得翻倍。
+// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并可能入队
+// tracking-projection.derived。那一封无订阅者。本用例不停投影、不断言 VE 账本；PS
+// 未决仍让整封 Publish 失败，published 必须是 0。若 Limit 把派生信封也认领了，它必须
+// 撞 dispatch.no_subscriber，不得把资格未证明测宽成「投影也算成功定稿」。
+//
+// 未决不得留痕：PS inbox 无账、采用无行、下游采用意图不入队。重拍不得翻倍。
 func TestAFormedNodeIntakeStopsAtUnprovenIntakeEligibility(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
