@@ -250,6 +250,19 @@ var veInitialRouteUndecidedSentinels = []error{
 	venr.ErrInitialRouteProjectionUndecided,
 }
 
+// veExceptionJourneyUndecidedSentinels 只给 VE 异常旅程投影这一路。本路不 FanOut：
+// 旅程启动是 TF 自家过程事实，PS 侧今天没有它的消费者——登记接不住的比不登记更糟
+// （ADR-0049 第三条），照交接路先例只投 VE。
+//
+// 不在名单里：ErrExceptionJourneyRecordInconsistent（仓储不变量已破，含成员为空）、
+// ErrExceptionJourneyUntranslatableAnswer（词汇表外，编程错误）、
+// ErrJourneyProjectionHandoffPending（要查 outbox 下游）、
+// veconsume.ErrUnexpectedProjectionOutcome。
+var veExceptionJourneyUndecidedSentinels = []error{
+	vetf.ErrExceptionJourneyNotVisible,
+	vetf.ErrJourneyProjectionUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -290,7 +303,7 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有八类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有九类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
 // PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
@@ -298,7 +311,8 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // PS 包裹服务终局形成 → 只投 VE 投影（不 FanOut：终局是 PS 自家事实，让它经调度器
 // 消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
 // 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
-// 登记更糟）。
+// 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
+// 消费侧按成员循环拆分派生，ADR-0066）。
 // 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
 // `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
@@ -448,6 +462,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: initial route projection undecided translation: %w", err)
 	}
 
+	veExceptionJourney, err := deriveExceptionJourneyConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veExceptionJourneyRouted, err := dispatch.WithUndecidedSentinels(
+		veExceptionJourney, veExceptionJourneyUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: exception journey projection undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
@@ -458,6 +482,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			veinbox.TransportHandoverRegisteredEventType: veHandoverRouted,
 			veinbox.FinalOutcomeFormedEventType:          veFinalOutcomeRouted,
 			veinbox.InitialRouteFormedEventType:          veInitialRouteRouted,
+			veinbox.ExceptionJourneyRecordedEventType:    veExceptionJourneyRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -784,8 +809,35 @@ func deriveInitialRouteConsumer(
 	return consumer, nil
 }
 
-// newTenantBoundProjectionDerive 六路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由再复制五份包装。
+// deriveExceptionJourneyConsumer 接 TF 替代/退运旅程启动 → VE 投影。本路只投 VE 不
+// FanOut：旅程启动是 TF 自家过程事实，PS 侧今天没有它的消费者——登记接不住的比不
+// 登记更糟（ADR-0049 第三条），照交接路先例办。
+//
+// 信封只带旅程幂等键四维，本体（含成员清单）由处理适配器按键重取——权威事实留在
+// transport-fulfillment。一个信封型对两个事实类型（目的分格 alternate/return 进
+// 类型，ADR-0066），登记仍按信封型一行，分岔在适配器里译。
+func deriveExceptionJourneyConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	journeys, err := tfpostgres.NewAlternateJourneys(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection alternate journeys: %w", err)
+	}
+	processing, err := vetf.NewDeriveOnExceptionJourneyAdapter(journeys, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on exception journey: %w", err)
+	}
+	consumer, err := veinbox.NewExceptionJourneyConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive exception journey consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// newTenantBoundProjectionDerive 七路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程再复制六份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -835,6 +887,7 @@ var (
 	_ vetf.PickupProjectionHandler       = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.ProjectionHandler             = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.HandoverProjectionHandler     = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.JourneyProjectionHandler      = (*tenantBoundProjectionDerive)(nil)
 	_ veps.FinalProjectionHandler        = (*tenantBoundProjectionDerive)(nil)
 	_ venr.InitialRouteProjectionHandler = (*tenantBoundProjectionDerive)(nil)
 )
