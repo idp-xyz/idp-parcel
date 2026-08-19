@@ -235,6 +235,24 @@ func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *t
 	}
 }
 
+// Covers: 路由表第八条——NR 包裹级初始路由判断只投 VE 投影，不 FanOut（应消费方还有
+// NO/TF，但两侧消费者今天不存在，登记接不住的比不登记更糟）。手法同前几条：毒丸载荷
+// （缺六维之一）让消费门显式拒收入账并交回 nil，因此这一条会被定稿。漏挂或挂错的话
+// 这里撞的是无订阅者。
+func TestAFormedInitialRouteReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "initial-route-1", veinbox.InitialRouteFormedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把初始路由判断投给 VE",
+			published, recordedFailureCode(t, db, "initial-route-1"))
+	}
+}
+
 // stallingConsumer 是只会交回某个既定错误的直投接收方，用来验路由条目那层的失败分格。
 type stallingConsumer struct{ err error }
 
