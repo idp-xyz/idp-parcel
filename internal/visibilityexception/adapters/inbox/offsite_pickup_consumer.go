@@ -20,8 +20,9 @@ const offsitePickupConsumerName = "visibility-exception/derive-projection-from-o
 // OffsitePickupRegisteredEventType 是本消费者认的事件类型：TF 的**对象级**揽收登记。
 // 消费方自己写出这个字符串，不导入提供方 outbox 适配器的未导出常量。
 //
-// 不认尝试级的 `offsite-pickup.formed`——那一封信带一批成功对象，而投影锚在包裹引用
-// 上逐对象成立；两条都登记会让同一份揽收被派生两次。
+// 不认尝试级的 `offsite-pickup.formed`——那一封信带一批成功对象，对象级 `.registered`
+// 已覆盖同批事实，两条都登记会让同一份揽收被派生两次。这是「有对象级替代品就用它」
+// 的去重理由；没有替代品的多成员事实不受此句约束，按 ADR-0066 在消费侧循环拆分。
 const OffsitePickupRegisteredEventType eventing.EventType = "transport-fulfillment.offsite-pickup.registered"
 
 // RegisteredOffsitePickup 是译码后的揽收登记幂等键引用——只有引用，揽收本体由处理方

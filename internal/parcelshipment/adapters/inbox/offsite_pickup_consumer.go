@@ -19,7 +19,8 @@ const offsitePickupConsumerName = "parcel-shipment/adopt-offsite-pickup"
 
 // OffsitePickupRegisteredEventType 是本消费者认的事件类型：TF 的**对象级**揽收登记。
 // 不认尝试级的 `offsite-pickup.formed`——那一封信带一批成功对象，而采用判断逐对象
-// 成立，一封信一对象才与消费门的入账/回滚两格对得上。
+// 成立，一封信一对象才与消费门的入账/回滚两格对得上。这条纪律只在存在对象级替代品
+// 时起选择作用；没有替代品的多成员事实按 ADR-0066 在消费侧循环拆分，不受此句约束。
 const OffsitePickupRegisteredEventType eventing.EventType = "transport-fulfillment.offsite-pickup.registered"
 
 // RegisteredOffsitePickup 是译码后的揽收登记幂等键引用——只有引用，揽收本体由处理方
