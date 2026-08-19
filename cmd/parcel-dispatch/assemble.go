@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrparcelshipment "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment"
 	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
@@ -31,6 +32,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
+	vecc "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/customscompliance"
 	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	venr "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/networkrouting"
@@ -263,6 +265,18 @@ var veExceptionJourneyUndecidedSentinels = []error{
 	vetf.ErrJourneyProjectionUndecided,
 }
 
+// veCustomsCaseUndecidedSentinels 只给 VE 关务案件投影这一路。本路不 FanOut：案件
+// 建立是 CC 自家责任容器事实，PS 侧今天没有它的消费者——登记接不住的比不登记更糟
+// （ADR-0049 第三条），照旅程路先例只投 VE。
+//
+// 不在名单里：ErrCustomsCaseRecordInconsistent（仓储不变量已破，含成员关联为空）、
+// ErrCustomsCaseUntranslatableAnswer（词汇表外，编程错误）、
+// ErrProjectionHandoffPending（要查 outbox 下游）、veconsume.ErrUnexpectedProjectionOutcome。
+var veCustomsCaseUndecidedSentinels = []error{
+	vecc.ErrCustomsCaseNotVisible,
+	vecc.ErrProjectionUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -303,7 +317,7 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有九类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有十类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
 // PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
@@ -312,7 +326,8 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
 // 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
 // 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
-// 消费侧按成员循环拆分派生，ADR-0066）。
+// 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
+// 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）。
 // 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
 // `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
@@ -472,6 +487,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: exception journey projection undecided translation: %w", err)
 	}
 
+	veCustomsCase, err := deriveCustomsCaseConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veCustomsCaseRouted, err := dispatch.WithUndecidedSentinels(
+		veCustomsCase, veCustomsCaseUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customs case projection undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
@@ -483,6 +508,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			veinbox.FinalOutcomeFormedEventType:          veFinalOutcomeRouted,
 			veinbox.InitialRouteFormedEventType:          veInitialRouteRouted,
 			veinbox.ExceptionJourneyRecordedEventType:    veExceptionJourneyRouted,
+			veinbox.CustomsCaseEstablishedEventType:      veCustomsCaseRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -836,8 +862,36 @@ func deriveExceptionJourneyConsumer(
 	return consumer, nil
 }
 
-// newTenantBoundProjectionDerive 七路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程再复制六份包装。
+// deriveCustomsCaseConsumer 接 CC 关务案件建立 → VE 投影。本路只投 VE 不 FanOut：
+// 案件建立是 CC 自家责任容器事实，PS 侧今天没有它的消费者——登记接不住的比不登记
+// 更糟（ADR-0049 第三条），照旅程路先例办。
+//
+// 信封只带案件身份键五维，本体（含成员关联与客户归属）由处理适配器按键重取——权威
+// 事实留在 customs-compliance。成员维与案件维一并进事实引用（ADR-0066）；建立是一件
+// 事、无语义分支，单一事实类型，不存在旅程路那种目的分岔。
+func deriveCustomsCaseConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	cases, err := ccpostgres.NewCustomsCases(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection customs cases: %w", err)
+	}
+	processing, err := vecc.NewDeriveOnCustomsCaseAdapter(cases, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on customs case: %w", err)
+	}
+	consumer, err := veinbox.NewCustomsCaseConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive customs case consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// newTenantBoundProjectionDerive 八路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程、关务案件再
+// 复制七份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -888,6 +942,7 @@ var (
 	_ vetf.ProjectionHandler             = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.HandoverProjectionHandler     = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.JourneyProjectionHandler      = (*tenantBoundProjectionDerive)(nil)
+	_ vecc.CaseProjectionHandler         = (*tenantBoundProjectionDerive)(nil)
 	_ veps.FinalProjectionHandler        = (*tenantBoundProjectionDerive)(nil)
 	_ venr.InitialRouteProjectionHandler = (*tenantBoundProjectionDerive)(nil)
 )
