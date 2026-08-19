@@ -39,14 +39,16 @@ func (repository *AcceptedFacts) FindByKey(
 
 	var (
 		parcel, kind, digest                string
+		supersedes                          *string
 		occurredAt, effectiveAt, receivedAt time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT parcel_ref, source_fact_kind, content_digest, occurred_at, effective_at, received_at
+		`SELECT parcel_ref, source_fact_kind, content_digest, supersedes_version,
+		        occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
 		  WHERE tenant_id = $1 AND source_context = $2 AND fact_ref = $3 AND fact_version = $4`,
 		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
-	).Scan(&parcel, &kind, &digest, &occurredAt, &effectiveAt, &receivedAt)
+	).Scan(&parcel, &kind, &digest, &supersedes, &occurredAt, &effectiveAt, &receivedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FactRecord{}, false, nil
 	}
@@ -56,7 +58,7 @@ func (repository *AcceptedFacts) FindByKey(
 
 	record, err := factRecordFromRow(
 		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
-		kind, parcel, digest, occurredAt, effectiveAt, receivedAt)
+		kind, parcel, digest, supersedes, occurredAt, effectiveAt, receivedAt)
 	if err != nil {
 		return ports.FactRecord{}, false, err
 	}
@@ -78,7 +80,7 @@ func (repository *AcceptedFacts) FindByParcel(
 
 	rows, err := querier.Query(ctx,
 		`SELECT source_context, fact_ref, fact_version, source_fact_kind, parcel_ref, content_digest,
-		        occurred_at, effective_at, received_at
+		        supersedes_version, occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
 		  WHERE tenant_id = $1 AND parcel_ref = $2
 		  ORDER BY received_at, source_context, fact_ref, fact_version`,
@@ -93,15 +95,16 @@ func (repository *AcceptedFacts) FindByParcel(
 	for rows.Next() {
 		var (
 			source, factRef, factVersion, kind, parcelRef, digest string
+			supersedes                                            *string
 			occurredAt, effectiveAt, receivedAt                   time.Time
 		)
 		if err := rows.Scan(&source, &factRef, &factVersion, &kind, &parcelRef, &digest,
-			&occurredAt, &effectiveAt, &receivedAt); err != nil {
+			&supersedes, &occurredAt, &effectiveAt, &receivedAt); err != nil {
 			return nil, fmt.Errorf("find facts by parcel: %w", err)
 		}
 		record, err := factRecordFromRow(
 			tenant.String(), source, factRef, factVersion, kind, parcelRef, digest,
-			occurredAt, effectiveAt, receivedAt)
+			supersedes, occurredAt, effectiveAt, receivedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -132,11 +135,17 @@ func (repository *AcceptedFacts) Save(
 			fmt.Errorf("save accepted fact: key disagrees with the fact it claims to index")
 	}
 
+	// 前身引用随行登记：来源事实替代关系由源上下文给出，这里只存不判；无前身落 NULL，
+	// 不造占位值。
+	var supersedes *string
+	if predecessor, given := fact.Supersedes(); given {
+		supersedes = stringPointer(predecessor.String())
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.accepted_fact
 			(tenant_id, source_context, fact_ref, fact_version, source_fact_kind, parcel_ref, content_digest,
-			 occurred_at, effective_at, received_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 supersedes_version, occurred_at, effective_at, received_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.Tenant.String(),
 		fact.Source().String(),
@@ -145,6 +154,7 @@ func (repository *AcceptedFacts) Save(
 		fact.Kind().String(),
 		fact.Parcel().String(),
 		record.ContentDigest,
+		supersedes,
 		fact.OccurredAt(),
 		fact.EffectiveAt(),
 		fact.ReceivedAt(),
@@ -181,6 +191,7 @@ func sourceContextFrom(value string) (domain.SourceContext, error) {
 // factRecordFromRow 把一行译回端口记录，事实本体经领域构造函数重建重验。
 func factRecordFromRow(
 	tenantID, source, factRef, factVersion, kind, parcelRef, digest string,
+	supersedes *string,
 	occurredAt, effectiveAt, receivedAt time.Time,
 ) (ports.FactRecord, error) {
 	tenant, err := domain.NewTenantID(tenantID)
@@ -207,12 +218,20 @@ func factRecordFromRow(
 	if err != nil {
 		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
 	}
+	var supersededVersion domain.SourceFactVersion
+	if supersedes != nil {
+		supersededVersion, err = domain.NewSourceFactVersion(*supersedes)
+		if err != nil {
+			return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
+		}
+	}
 	rebuilt, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
 		Source:      sourceContext,
 		Parcel:      parcel,
 		Fact:        fact,
 		Kind:        factKind,
 		Version:     version,
+		Supersedes:  supersededVersion,
 		OccurredAt:  occurredAt,
 		EffectiveAt: effectiveAt,
 		ReceivedAt:  receivedAt,

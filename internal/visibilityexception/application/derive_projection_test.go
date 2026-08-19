@@ -232,6 +232,119 @@ func TestFactsDeriveAndRederiveTheProjection(t *testing.T) {
 	}
 }
 
+// deriveCommandSuperseding 造一份带来源事实替代关系的命令：源上下文随更正给出前身
+// 版本，编排只登记不裁决。
+func deriveCommandSuperseding(t *testing.T, factRef, version, supersedes string) application.DeriveProjectionCommand {
+	t.Helper()
+	command := deriveCommand(t, factRef, version)
+	command.Fact.Supersedes = mustValue(t, domain.NewSourceFactVersion, supersedes)
+	return command
+}
+
+func entryVersions(projection domain.TrackingProjection) map[string]bool {
+	versions := map[string]bool{}
+	for _, entry := range projection.Entries() {
+		versions[entry.Fact().Version().String()] = true
+	}
+	return versions
+}
+
+// Covers: VE CONTEXT「被替代的条目……标准追踪里程碑、各追踪维度和追踪摘要只由当前
+// 有效即未被替代的条目派生」与 `AT-VE-044` 的替代半边「更正按源上下文给出的替代关系
+// 登记，被替代条目保留且不参与派生」——前身留档在事实库（只增不删），条目里只剩
+// 更正后那一代，不同时呈现两个互斥结果。
+func TestASupersededFactStaysArchivedButLeavesTheEntries(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommand(t, "TRANSPORT-HANDOVER/a", "handover/v1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+
+	corrected, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2", "handover/v1"))
+	if err != nil {
+		t.Fatalf("corrected handle: %v", err)
+	}
+	if corrected.Outcome() != application.ProjectionDerived {
+		t.Fatalf("outcome = %q", corrected.Outcome())
+	}
+	projection, _ := corrected.Projection()
+	versions := entryVersions(projection)
+	if versions["handover/v1"] {
+		t.Fatal("被替代的 v1 仍进了条目——两个互斥结果被同时呈现")
+	}
+	if !versions["handover/v2"] {
+		t.Fatalf("entries = %v; 更正后那一代必须在条目里", versions)
+	}
+	if len(fixture.facts.byKey) != 2 {
+		t.Fatalf("事实库 = %d 份, want 2；被替代事实必须留档不删", len(fixture.facts.byKey))
+	}
+}
+
+// Covers: `AT-VE-043`「含同一前身被两份事实同时指名的替代链分叉→保留双方和冲突关系，
+// 不择一」——编排不替源上下文挑后继：两个后继都进条目，前身按已被替代出条目但留档；
+// 投影据此把各方摆在场、按信息待确认表达。适用异常信号走冲突机制，不在本编排（接
+// RaiseConflictSignal 是另一张票）。
+func TestAForkedSupersessionKeepsBothSuccessorsInTheProjection(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommand(t, "TRANSPORT-HANDOVER/a", "handover/v1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2a", "handover/v1")); err != nil {
+		t.Fatalf("left successor handle: %v", err)
+	}
+
+	forked, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2b", "handover/v1"))
+	if err != nil {
+		t.Fatalf("right successor handle: %v", err)
+	}
+	if forked.Outcome() != application.ProjectionDerived {
+		t.Fatalf("outcome = %q", forked.Outcome())
+	}
+	projection, _ := forked.Projection()
+	versions := entryVersions(projection)
+	if !versions["handover/v2a"] || !versions["handover/v2b"] {
+		t.Fatalf("entries = %v; 分叉两方必须都保留，不择一", versions)
+	}
+	if versions["handover/v1"] {
+		t.Fatal("被两方指名的前身仍进了条目")
+	}
+	if len(fixture.facts.byKey) != 3 {
+		t.Fatalf("事实库 = %d 份, want 3；各方与关系必须都留档", len(fixture.facts.byKey))
+	}
+}
+
+// Covers: 前身维是内容维（与事实类型进指纹同理）——同一来源版本重投带不同前身，
+// 说的已是另一份替代关系，形成来源冲突保留原事实，不当重放静默入账。
+func TestARedeliveryWithADifferentPredecessorIsAConflict(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2", "handover/v1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+
+	conflicting, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2", "handover/v0"))
+	if err != nil {
+		t.Fatalf("conflicting handle: %v", err)
+	}
+	if conflicting.Outcome() != application.FactSourceConflict {
+		t.Fatalf("outcome = %q, want SOURCE_CONFLICT；换前身不是重放", conflicting.Outcome())
+	}
+
+	dropped, err := fixture.handler.Handle(context.Background(),
+		deriveCommand(t, "TRANSPORT-HANDOVER/a", "handover/v2"))
+	if err != nil {
+		t.Fatalf("dropped-predecessor handle: %v", err)
+	}
+	if dropped.Outcome() != application.FactSourceConflict {
+		t.Fatalf("outcome = %q, want SOURCE_CONFLICT；丢前身重投同样不是重放", dropped.Outcome())
+	}
+}
+
 // Covers: 幂等与冲突纪律——同键同内容重放按当前投影作答不重复派生；同键异内容是
 // 来源冲突保留原事实（不按最后到达覆盖）；映射目录未配置即如实未归类、投影照常派生
 // （无法可靠映射不强行映射也不阻断——那不是未决）。点名 `AT-VE-039`「同一来源版本

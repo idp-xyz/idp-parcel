@@ -155,6 +155,17 @@ func projectionCommand(record tfports.EffectiveDeliveryRecord) (veapplication.De
 	if err != nil {
 		return none, fmt.Errorf("%w: source fact kind: %v", ErrUntranslatableAnswer, err)
 	}
+	// 来源事实替代关系由源上下文给出，VE 只登记不裁决：POD 更正在 TF 侧以 Corrects()
+	// 回指前版，这里原样译进 Supersedes——事实引用不含版本，前身天然落在同一源上下文、
+	// 同一事实引用的版本之间（CONTEXT 硬句）。首登无前身，留零值。第三个源接上来时依
+	// 同一条不变量把它的前身引用译进这一维，不各写一份替代语义。
+	var supersedes vedomain.SourceFactVersion
+	if predecessor, corrected := record.Delivery.Corrects(); corrected {
+		supersedes, err = vedomain.NewSourceFactVersion(predecessor.String())
+		if err != nil {
+			return none, fmt.Errorf("%w: superseded delivery version: %v", ErrUntranslatableAnswer, err)
+		}
+	}
 	occurred := record.Delivery.OccurredAt()
 	return veapplication.DeriveProjectionCommand{
 		TenantID: tenant,
@@ -164,6 +175,7 @@ func projectionCommand(record tfports.EffectiveDeliveryRecord) (veapplication.De
 			Fact:        fact,
 			Kind:        kind,
 			Version:     version,
+			Supersedes:  supersedes,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,
 			ReceivedAt:  record.RecordedAt,

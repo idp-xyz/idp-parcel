@@ -3,6 +3,7 @@ package transportfulfillment_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -120,10 +121,13 @@ func (double *handoverProjectionStoreDouble) Save(
 	return nil
 }
 
-type handoverProjectionIdentityDouble struct{}
+// handoverProjectionIdentityDouble 摹写真实签发器「每次一个不重的新标识」的性质：
+// 重派生必须换版本（Rederive 拒绝同号），固定返回值会让第二次派生撞领域门。
+type handoverProjectionIdentityDouble struct{ n int }
 
-func (handoverProjectionIdentityDouble) NextProjectionVersionID(_ context.Context) (vedomain.ProjectionVersionID, error) {
-	return vedomain.NewProjectionVersionID("projection-handover-1")
+func (double *handoverProjectionIdentityDouble) NextProjectionVersionID(_ context.Context) (vedomain.ProjectionVersionID, error) {
+	double.n++
+	return vedomain.NewProjectionVersionID(fmt.Sprintf("projection-handover-%d", double.n))
 }
 
 type handoverProjectionDownstreamDouble struct {
@@ -197,7 +201,7 @@ func handoverDeriveHandler(t *testing.T, mapping handoverMappingViewDouble, down
 		Facts:       facts,
 		Mapping:     &mapping,
 		Projections: projections,
-		Identities:  handoverProjectionIdentityDouble{},
+		Identities:  &handoverProjectionIdentityDouble{},
 		Downstream:  &downstream,
 		Clock:       handoverClock{at: handoverJudgedAt.Add(2 * time.Hour)},
 	})
@@ -307,6 +311,58 @@ func TestFindByKeyLooksUpAllFourHandoverDimensionsIncludingVersion(t *testing.T)
 		finder.last.Scope.String() != "scope-1" ||
 		finder.last.Version.String() != "handover-result/v1" {
 		t.Fatalf("FindByKey 键 = %+v；必须含 version", finder.last)
+	}
+}
+
+// Covers: VE CONTEXT「来源事实替代关系」——关系由源上下文随更正给出，消费适配器把
+// 领域记录的 Corrects() 译进已接受事实的前身维，VE 只登记不裁决；首登无前身。更正
+// 刻意沿用原判断的 JudgedAt，两代业务时间恒等，能分开两代的正是这一维。
+func TestACorrectedHandoverCarriesItsSupersessionIntoTheFact(t *testing.T) {
+	original := registeredHandover(t, tfdomain.ObjectHandedOver)
+	finder := &handoverFinderDouble{record: original, found: true}
+	handler, facts, _ := handoverDeriveHandler(t, handoverMappingViewDouble{configured: false}, handoverProjectionDownstreamDouble{})
+	subject, err := adapter.NewDeriveOnTransportHandoverAdapter(finder, handler)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+
+	if err := subject.HandleRegisteredTransportHandover(t.Context(), registeredHandoverRef()); err != nil {
+		t.Fatalf("处理首登交接：%v", err)
+	}
+
+	corrected, err := original.Handover.Correct(tfdomain.HandoverCorrection{
+		Verdict:     tfdomain.HandoverRefused,
+		Basis:       handoverValue(t, tfdomain.NewHandoverBasisReference, "gap-corrected"),
+		Version:     handoverValue(t, tfdomain.NewHandoverResultVersion, "handover-result/v2"),
+		CorrectedAt: handoverJudgedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("构造更正版本：%v", err)
+	}
+	finder.record.Handover = corrected
+	finder.record.Key.Version = handoverValue(t, tfdomain.NewHandoverResultVersion, "handover-result/v2")
+	finder.record.ContentDigest = "digest-handover-2"
+	reference := registeredHandoverRef()
+	reference.Version = "handover-result/v2"
+	if err := subject.HandleRegisteredTransportHandover(t.Context(), reference); err != nil {
+		t.Fatalf("处理更正交接：%v", err)
+	}
+
+	supersessions := map[string]string{}
+	for _, record := range facts.byKey {
+		predecessor, given := record.Fact.Supersedes()
+		if given {
+			supersessions[record.Fact.Version().String()] = predecessor.String()
+		} else {
+			supersessions[record.Fact.Version().String()] = ""
+		}
+	}
+	if supersessions["handover-result/v1"] != "" {
+		t.Fatalf("首登 v1 前身 = %q; 首登事实不得凭空长出前身", supersessions["handover-result/v1"])
+	}
+	if supersessions["handover-result/v2"] != "handover-result/v1" {
+		t.Fatalf("更正 v2 前身 = %q, want handover-result/v1——Corrects() 必须译进前身维",
+			supersessions["handover-result/v2"])
 	}
 }
 

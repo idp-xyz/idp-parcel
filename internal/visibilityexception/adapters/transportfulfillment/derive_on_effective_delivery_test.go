@@ -437,6 +437,43 @@ func TestEachDeliveryResultVersionEntersTheProjection(t *testing.T) {
 	}
 }
 
+// Covers: VE CONTEXT「来源事实替代关系」——关系由源上下文随更正给出，消费适配器把
+// 领域记录的 Corrects() 译进已接受事实的前身维，VE 只登记不裁决；首登无前身。与交接
+// 适配器同一条不变量，两路各自验是防哪一路的翻译静默丢维。
+func TestACorrectedDeliveryCarriesItsSupersessionIntoTheFact(t *testing.T) {
+	finder := supersededDeliveryFinder(t, "parcel-1")
+	handler, facts, _ := deliveryDeriveHandler(
+		t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
+	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(finder, handler)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+
+	for _, version := range []string{"delivery-result/v1", "delivery-result/v2"} {
+		if err := subject.HandleRegisteredEffectiveDelivery(
+			t.Context(), registeredDeliveryRefFor(version),
+		); err != nil {
+			t.Fatalf("处理有效交付 %s：%v", version, err)
+		}
+	}
+
+	supersessions := map[string]string{}
+	for _, record := range facts.byKey {
+		if predecessor, given := record.Fact.Supersedes(); given {
+			supersessions[record.Fact.Version().String()] = predecessor.String()
+		} else {
+			supersessions[record.Fact.Version().String()] = ""
+		}
+	}
+	if supersessions["delivery-result/v1"] != "" {
+		t.Fatalf("首登 v1 前身 = %q; 首登事实不得凭空长出前身", supersessions["delivery-result/v1"])
+	}
+	if supersessions["delivery-result/v2"] != "delivery-result/v1" {
+		t.Fatalf("更正 v2 前身 = %q, want delivery-result/v1——Corrects() 必须译进前身维",
+			supersessions["delivery-result/v2"])
+	}
+}
+
 func TestUnconfiguredMappingDerivesAnUnclassifiedProjection(t *testing.T) {
 	handler, facts, projections := deliveryDeriveHandler(t, deliveryMappingViewDouble{configured: false}, deliveryProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnEffectiveDeliveryAdapter(

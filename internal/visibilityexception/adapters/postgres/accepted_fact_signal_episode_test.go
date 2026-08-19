@@ -139,6 +139,104 @@ func TestFactsAreReadBackWithThreeTimesApart(t *testing.T) {
 	}
 }
 
+// supersedingFactRecord 造一份带来源事实替代关系的事实：源上下文随更正给出前身版本。
+func supersedingFactRecord(t *testing.T, tenant string, source domain.SourceContext, parcel, factRef, version, supersedes string) ports.FactRecord {
+	t.Helper()
+	record := factRecord(t, tenant, source, parcel, factRef, version)
+	fact, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
+		Source:      record.Fact.Source(),
+		Parcel:      record.Fact.Parcel(),
+		Fact:        record.Fact.Fact(),
+		Kind:        record.Fact.Kind(),
+		Version:     record.Fact.Version(),
+		Supersedes:  factValue(t, domain.NewSourceFactVersion, supersedes),
+		OccurredAt:  record.Fact.OccurredAt(),
+		EffectiveAt: record.Fact.EffectiveAt(),
+		ReceivedAt:  record.Fact.ReceivedAt(),
+	})
+	if err != nil {
+		t.Fatalf("构造带前身的事实：%v", err)
+	}
+	record.Fact = fact
+	return record
+}
+
+// TestSupersessionRoundTripsWithTheFact 证来源事实替代关系随行往返：带前身的事实读
+// 回前身、首登事实读回无前身（NULL 不折成占位值），按键与按包裹两条读面一致。
+func TestSupersessionRoundTripsWithTheFact(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+
+	first := factRecord(t, "tenant-a", domain.SourceTransportFulfillment, "parcel-1", "fact-a", "v1")
+	corrected := supersedingFactRecord(t, "tenant-a", domain.SourceTransportFulfillment, "parcel-1", "fact-a", "v2", "v1")
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.FactRecord{first, corrected} {
+			if _, err := fixture.facts.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	foundCorrected, exists, err := fixture.facts.FindByKey(ctx, corrected.Key)
+	if err != nil || !exists {
+		t.Fatalf("读回更正事实：%v exists=%v", err, exists)
+	}
+	predecessor, given := foundCorrected.Fact.Supersedes()
+	if !given || predecessor.String() != "v1" {
+		t.Fatalf("supersedes = %q given = %v; 源上下文给出的前身引用必须随行读回", predecessor, given)
+	}
+
+	foundFirst, exists, err := fixture.facts.FindByKey(ctx, first.Key)
+	if err != nil || !exists {
+		t.Fatalf("读回首登事实：%v exists=%v", err, exists)
+	}
+	if _, given := foundFirst.Fact.Supersedes(); given {
+		t.Fatal("首登事实读回凭空长出了前身")
+	}
+
+	all, err := fixture.facts.FindByParcel(ctx,
+		factValue(t, domain.NewTenantID, "tenant-a"),
+		factValue(t, domain.NewTrackedParcelReference, "parcel-1"))
+	if err != nil || len(all) != 2 {
+		t.Fatalf("按包裹读回：err=%v n=%d", err, len(all))
+	}
+	byVersion := map[string]ports.FactRecord{}
+	for _, record := range all {
+		byVersion[record.Fact.Version().String()] = record
+	}
+	if predecessor, given := byVersion["v2"].Fact.Supersedes(); !given || predecessor.String() != "v1" {
+		t.Fatalf("按包裹读回的 v2 前身 = %q given = %v", predecessor, given)
+	}
+	if _, given := byVersion["v1"].Fact.Supersedes(); given {
+		t.Fatal("按包裹读回的 v1 凭空长出了前身")
+	}
+}
+
+// TestSupersessionShapeIsPinnedInTheDatabase 证替代关系形状入库内 CHECK：指名自己
+// 为前身与空串前身都进不来（领域构造期是第一道，两道互补不互替）。
+func TestSupersessionShapeIsPinnedInTheDatabase(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+
+	for name, supersedes := range map[string]string{
+		"指自己": "v1",
+		"空串":  "   ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := fixture.pool.Exec(ctx,
+				`INSERT INTO visibility_exception.accepted_fact
+					(tenant_id, source_context, fact_ref, fact_version, source_fact_kind, parcel_ref,
+					 content_digest, supersedes_version, occurred_at, effective_at, received_at)
+				 VALUES ('tenant-a', 'TRANSPORT_FULFILLMENT', 'fact-x', 'v1', 'test-kind', 'parcel-1',
+				         'digest-x', $1, now(), now(), now())`, supersedes)
+			if err == nil {
+				t.Fatalf("坏形状的替代关系（%s）被库接受了", name)
+			}
+		})
+	}
+}
+
 // TestFactsOfAnotherTenantAreInvisible 证租户隔离由 SQL 条件承担：同名键与同名包裹
 // 在另一个租户下一律不可见，SaveHit 之外的读面不靠约定靠字段（ADR-0003）。
 func TestFactsOfAnotherTenantAreInvisible(t *testing.T) {

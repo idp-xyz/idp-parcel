@@ -181,9 +181,18 @@ func (handler *DeriveProjectionHandler) Handle(
 	if err != nil {
 		return DeriveProjectionResult{outcome: DeriveUndecided, reason: FactStoreUnavailable}, nil
 	}
-	entries := make([]domain.MilestoneClassification, 0, len(records))
+	// 被替代条目留档不参与派生（CONTEXT 硬句）：标准里程碑只由当前有效即未被替代的
+	// 条目派生——留在事实库是为可追溯，不进条目是为不同时呈现两个互斥结果。过滤在
+	// 编排内做，事实库仍交回全量；替代链分叉时 CurrentlyEffective 把各后继都留在场，
+	// 投影据此按信息待确认表达，不择一。
+	facts := make([]domain.AcceptedSourceFact, 0, len(records))
 	for _, record := range records {
-		classification, err := handler.classify(ctx, record.Fact)
+		facts = append(facts, record.Fact)
+	}
+	effective := domain.CurrentlyEffective(facts)
+	entries := make([]domain.MilestoneClassification, 0, len(effective))
+	for _, candidate := range effective {
+		classification, err := handler.classify(ctx, candidate)
 		if err != nil {
 			return DeriveProjectionResult{outcome: DeriveUndecided, reason: MappingViewUnavailable}, nil
 		}
@@ -248,10 +257,15 @@ func (handler *DeriveProjectionHandler) classify(
 	return domain.ClassifyMilestone(fact, answer.Milestone, answer.Mapping)
 }
 
+// factContentDigest 取事实的内容指纹，幂等与冲突的分界线。前身引用与类型同为内容维：
+// 同一事实重投带不同前身，说的已是另一份替代关系，该当成冲突而不是重放；首登无前身
+// 以空串入指纹，与任何前身都分得开。接收时间刻意不进指纹——同内容迟到重投是重放。
 func factContentDigest(fact domain.AcceptedSourceFact) string {
+	supersedes, _ := fact.Supersedes()
 	return shortDigest(
 		fact.Parcel().String(),
 		fact.Kind().String(),
+		supersedes.String(),
 		fact.OccurredAt().UTC().Format(time.RFC3339Nano),
 		fact.EffectiveAt().UTC().Format(time.RFC3339Nano),
 	)

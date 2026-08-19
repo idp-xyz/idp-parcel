@@ -120,11 +120,16 @@ func NewSourceFactKind(value string) (SourceFactKind, error) {
 
 // AcceptedSourceFactSpec 是一份已接受源事实引用所需的全部输入。
 type AcceptedSourceFactSpec struct {
-	Source      SourceContext
-	Parcel      TrackedParcelReference
-	Fact        SourceFactReference
-	Kind        SourceFactKind
-	Version     SourceFactVersion
+	Source  SourceContext
+	Parcel  TrackedParcelReference
+	Fact    SourceFactReference
+	Kind    SourceFactKind
+	Version SourceFactVersion
+	// Supersedes 承载来源事实替代关系（CONTEXT 词条）：由源上下文随更正一并给出，
+	// 指名本份取代的那一版。关系只在同一源上下文、同一事实引用的版本之间成立——
+	// 事实引用不含版本，前身因而天然同引用；本上下文只登记不裁决，不从业务时间、
+	// 到达先后或任何其他线索推断谁更正了谁。无前身是常态（首登事实留零值）。
+	Supersedes  SourceFactVersion
 	OccurredAt  time.Time
 	EffectiveAt time.Time
 	ReceivedAt  time.Time
@@ -133,13 +138,14 @@ type AcceptedSourceFactSpec struct {
 // AcceptedSourceFact 是对源上下文已接受事实的只读引用。业务发生时间、有效时间与
 // 接收时间分别保存（CONTEXT 硬句）——三者合并成一个时间字段，迟到事实与更正就再也
 // 分不出「什么时候发生」与「什么时候才知道」。已接受事实必须携带源上下文拥有的事实
-// 类型；幂等键仍是引用与版本，类型进内容指纹、进里程碑映射键。
+// 类型；幂等键仍是引用与版本，类型与前身引用进内容指纹、类型进里程碑映射键。
 type AcceptedSourceFact struct {
 	source      SourceContext
 	parcel      TrackedParcelReference
 	fact        SourceFactReference
 	kind        SourceFactKind
 	version     SourceFactVersion
+	supersedes  SourceFactVersion
 	occurredAt  time.Time
 	effectiveAt time.Time
 	receivedAt  time.Time
@@ -156,12 +162,18 @@ func NewAcceptedSourceFact(spec AcceptedSourceFactSpec) (AcceptedSourceFact, err
 		spec.ReceivedAt.IsZero() {
 		return AcceptedSourceFact{}, ErrInvalidSourceFact
 	}
+	// 指名自己为前身的「替代」是坏引用：沿用原版本号就是覆盖，不是更正
+	// （与 TF 侧 TransportHandover.Correct 拒绝沿用原版本号同一条道理）。
+	if spec.Supersedes.valid() && spec.Supersedes == spec.Version {
+		return AcceptedSourceFact{}, ErrInvalidSourceFact
+	}
 	return AcceptedSourceFact{
 		source:      spec.Source,
 		parcel:      spec.Parcel,
 		fact:        spec.Fact,
 		kind:        spec.Kind,
 		version:     spec.Version,
+		supersedes:  spec.Supersedes,
 		occurredAt:  spec.OccurredAt.UTC(),
 		effectiveAt: spec.EffectiveAt.UTC(),
 		receivedAt:  spec.ReceivedAt.UTC(),
@@ -186,6 +198,11 @@ func (fact AcceptedSourceFact) Kind() SourceFactKind {
 
 func (fact AcceptedSourceFact) Version() SourceFactVersion {
 	return fact.version
+}
+
+// Supersedes 给出源上下文指名的前身版本；首登事实第二个返回值为 false。
+func (fact AcceptedSourceFact) Supersedes() (SourceFactVersion, bool) {
+	return fact.supersedes, fact.supersedes.valid()
 }
 
 func (fact AcceptedSourceFact) OccurredAt() time.Time {
