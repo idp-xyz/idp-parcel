@@ -19,6 +19,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 )
 
 // 本文件对真实 PostgreSQL 16 证组合根本身：整张依赖图接得起来、一拍跑得通、路由表
@@ -217,22 +218,20 @@ func TestARegisteredEffectiveDeliveryReachesTheConsumerThroughTheRouteTable(t *t
 	}
 }
 
-// Covers: 控制转出交接不得进终局路由。那一封属 node-operations 的控制转移，不是
-// UC-PS-004 的 TF-DELIVERY 来源行；挂上会把控制事实当成有效交付。未登记必须撞
-// dispatch.no_subscriber，而不是被第五路误吃。
-func TestATransportHandoverRegisteredEnvelopeIsNotRouted(t *testing.T) {
+// Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：
+// 毒丸载荷（缺 tenantId/object/scope/version 四维之一）让消费门显式拒收入账并交回
+// nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
-	enqueueForBeat(t, db, store, "handover-1", "transport-fulfillment.transport-handover.registered", `{"ok":true}`)
+	enqueueForBeat(t, db, store, "handover-1", veinbox.TransportHandoverRegisteredEventType, `{}`)
 
 	published, err := beat.DispatchOnce(t.Context())
 	if err != nil {
 		t.Fatalf("一拍：%v", err)
 	}
-	if published != 0 {
-		t.Fatalf("交接登记信封被当成发布成功定稿了：published = %d", published)
-	}
-	if got := recordedFailureCode(t, db, "handover-1"); got != "dispatch.no_subscriber" {
-		t.Fatalf("failure_code = %q, want dispatch.no_subscriber", got)
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把交接登记投给 VE",
+			published, recordedFailureCode(t, db, "handover-1"))
 	}
 }
 

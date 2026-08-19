@@ -215,6 +215,16 @@ var veDeliveryUndecidedSentinels = []error{
 	vetf.ErrProjectionUndecided,
 }
 
+// veHandoverUndecidedSentinels 只给 VE 交接投影这一路。本路不 FanOut 给 PS：终局只认
+// 有效交付；NO/NR 控制转移不在本票。
+//
+// 不在名单里：ErrHandoverRecordInconsistent、ErrHandoverUntranslatableAnswer、
+// ErrHandoverProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
+var veHandoverUndecidedSentinels = []error{
+	vetf.ErrHandoverNotVisible,
+	vetf.ErrHandoverProjectionUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -255,14 +265,15 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有五类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有六类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
-// PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）。
-// 前两条投向 network-routing；后三类同一 EventType 各投两个独立消费者，顺序一律先
+// PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
+// TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）。
+// 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
-// `effective-delivery.registered`，不接 `transport-handover.registered` 或
-// `offsite-pickup.formed`。
+// `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
+// `transport-handover.registered`，不接 PS。
 // 不登记 `visibility-exception.tracking-projection.derived`（UC-VE-008）：派生交接会
 // 入队，未登记是 ADR-0049 认下的 no_subscriber，不是漏接。
 // 登记的仍然只有本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记
@@ -381,6 +392,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery fan-out: %w", err)
 	}
 
+	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veHandoverRouted, err := dispatch.WithUndecidedSentinels(veHandover, veHandoverUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: handover projection undecided translation: %w", err)
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			nrinbox.AcceptedDecisionEventType:            routed,
@@ -388,6 +408,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
 			psinbox.OffsitePickupRegisteredEventType:     pickupFan,
 			psinbox.EffectiveDeliveryRegisteredEventType: deliveryFan,
+			veinbox.TransportHandoverRegisteredEventType: veHandoverRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -642,8 +663,29 @@ func deriveDeliveryConsumer(
 	return consumer, nil
 }
 
-// newTenantBoundProjectionDerive 三路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付再复制两份包装。
+// deriveHandoverConsumer 接 TF 权威交接登记 → VE 投影。本路不接 PS：终局只认有效交付。
+func deriveHandoverConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection transport handovers: %w", err)
+	}
+	processing, err := vetf.NewDeriveOnTransportHandoverAdapter(handovers, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on transport handover: %w", err)
+	}
+	consumer, err := veinbox.NewTransportHandoverConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive handover consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// newTenantBoundProjectionDerive 四路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付、交接再复制三份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -689,9 +731,10 @@ type tenantBoundProjectionDerive struct {
 }
 
 var (
-	_ venodeops.ProjectionHandler  = (*tenantBoundProjectionDerive)(nil)
-	_ vetf.PickupProjectionHandler = (*tenantBoundProjectionDerive)(nil)
-	_ vetf.ProjectionHandler       = (*tenantBoundProjectionDerive)(nil)
+	_ venodeops.ProjectionHandler    = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.PickupProjectionHandler   = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.ProjectionHandler         = (*tenantBoundProjectionDerive)(nil)
+	_ vetf.HandoverProjectionHandler = (*tenantBoundProjectionDerive)(nil)
 )
 
 func (derive *tenantBoundProjectionDerive) Handle(
