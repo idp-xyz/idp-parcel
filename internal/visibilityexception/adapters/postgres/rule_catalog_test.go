@@ -70,23 +70,24 @@ func (fixture *catalogFixture) publishMapping(t *testing.T, tenant, version stri
 	}
 }
 
-func (fixture *catalogFixture) addMappingEntry(t *testing.T, tenant, version, factRef, milestone string) {
+func (fixture *catalogFixture) addMappingEntry(t *testing.T, tenant, version, kind, milestone string) {
 	t.Helper()
 	if _, err := fixture.pool.Exec(t.Context(),
 		`INSERT INTO visibility_exception.milestone_mapping_entry
-			(tenant_id, mapping_version, source_context, source_fact_ref, milestone_ref)
+			(tenant_id, mapping_version, source_context, source_fact_kind, milestone_ref)
 		 VALUES ($1, $2, 'NODE_OPERATIONS', $3, $4)`,
-		tenant, version, factRef, milestone); err != nil {
-		t.Fatalf("写入映射条目 %s：%v", factRef, err)
+		tenant, version, kind, milestone); err != nil {
+		t.Fatalf("写入映射条目 %s：%v", kind, err)
 	}
 }
 
-func catalogFact(t *testing.T, factRef string, occurredAt time.Time) domain.AcceptedSourceFact {
+func catalogFact(t *testing.T, factRef, kind string, occurredAt time.Time) domain.AcceptedSourceFact {
 	t.Helper()
 	fact, err := domain.NewAcceptedSourceFact(domain.AcceptedSourceFactSpec{
 		Source:      domain.SourceNodeOperations,
 		Parcel:      projectionValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Fact:        projectionValue(t, domain.NewSourceFactReference, factRef),
+		Kind:        projectionValue(t, domain.NewSourceFactKind, kind),
 		Version:     projectionValue(t, domain.NewSourceFactVersion, "v1"),
 		OccurredAt:  occurredAt,
 		EffectiveAt: occurredAt.Add(time.Hour),
@@ -102,7 +103,7 @@ func catalogFact(t *testing.T, factRef string, occurredAt time.Time) domain.Acce
 // 「目录已配但这条没映射」分得开——前者等登记，后者是一次已作出的未归类判断。
 func TestMissingMappingCatalogIsNotConfiguredRatherThanUnclassified(t *testing.T) {
 	fixture := newCatalogFixture(t)
-	fact := catalogFact(t, "scan/origin", catalogBaseAt)
+	fact := catalogFact(t, "scan/origin", "node-intake", catalogBaseAt)
 
 	for _, tenant := range []string{"tenant-a", ""} {
 		answer, configured, err := fixture.mappingsFor(t, tenant).ClassifyFact(t.Context(), fact)
@@ -118,10 +119,10 @@ func TestMissingMappingCatalogIsNotConfiguredRatherThanUnclassified(t *testing.T
 func TestMappingCatalogClassifiesHitAndLeavesMissUnclassified(t *testing.T) {
 	fixture := newCatalogFixture(t)
 	fixture.publishMapping(t, "tenant-a", "map/v1", catalogBaseAt.Add(-24*time.Hour), nil)
-	fixture.addMappingEntry(t, "tenant-a", "map/v1", "scan/origin", "PICKED_UP")
+	fixture.addMappingEntry(t, "tenant-a", "map/v1", "node-intake", "PICKED_UP")
 	view := fixture.mappingsFor(t, "tenant-a")
 
-	answer, configured, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", catalogBaseAt))
+	answer, configured, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "node-intake", catalogBaseAt))
 	if err != nil || !configured || !answer.Classified {
 		t.Fatalf("命中：err=%v configured=%v classified=%v", err, configured, answer.Classified)
 	}
@@ -129,9 +130,16 @@ func TestMappingCatalogClassifiesHitAndLeavesMissUnclassified(t *testing.T) {
 		t.Fatalf("命中答复 = %s / %s", answer.Milestone, answer.Mapping)
 	}
 
-	// 目录在场但这条没有可靠映射：如实未归类，且必须带上所依据的版本号——投影要能
+	// 一行覆盖同类型全部事实：不同事实引用、同一类型，必须命中同一里程碑。
+	sameKind, configured, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/other", "node-intake", catalogBaseAt))
+	if err != nil || !configured || !sameKind.Classified || sameKind.Milestone.String() != "PICKED_UP" {
+		t.Fatalf("同类型另一引用：err=%v configured=%v classified=%v milestone=%s",
+			err, configured, sameKind.Classified, sameKind.Milestone)
+	}
+
+	// 目录在场但这条类型没有可靠映射：如实未归类，且必须带上所依据的版本号——投影要能
 	// 追溯「按哪版判的未归类」，而不是被强行映射成一个宽泛结果。
-	answer, configured, err = view.ClassifyFact(t.Context(), catalogFact(t, "scan/unknown", catalogBaseAt))
+	answer, configured, err = view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "unknown-kind", catalogBaseAt))
 	if err != nil || !configured {
 		t.Fatalf("未命中：err=%v configured=%v", err, configured)
 	}
@@ -149,15 +157,15 @@ func TestMappingVersionIsChosenByBusinessOccurrenceTime(t *testing.T) {
 	switchover := catalogBaseAt
 	fixture.publishMapping(t, "tenant-a", "map/v1", switchover.Add(-30*24*time.Hour), &switchover)
 	fixture.publishMapping(t, "tenant-a", "map/v2", switchover, nil)
-	fixture.addMappingEntry(t, "tenant-a", "map/v1", "scan/origin", "PICKED_UP")
-	fixture.addMappingEntry(t, "tenant-a", "map/v2", "scan/origin", "COLLECTED")
+	fixture.addMappingEntry(t, "tenant-a", "map/v1", "node-intake", "PICKED_UP")
+	fixture.addMappingEntry(t, "tenant-a", "map/v2", "node-intake", "COLLECTED")
 	view := fixture.mappingsFor(t, "tenant-a")
 
-	old, _, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", switchover.Add(-time.Hour)))
+	old, _, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "node-intake", switchover.Add(-time.Hour)))
 	if err != nil || old.Mapping.String() != "map/v1" || old.Milestone.String() != "PICKED_UP" {
 		t.Fatalf("旧版事实按 %s 判成 %s（err=%v）", old.Mapping, old.Milestone, err)
 	}
-	fresh, _, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", switchover.Add(time.Hour)))
+	fresh, _, err := view.ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "node-intake", switchover.Add(time.Hour)))
 	if err != nil || fresh.Mapping.String() != "map/v2" || fresh.Milestone.String() != "COLLECTED" {
 		t.Fatalf("新版事实按 %s 判成 %s（err=%v）", fresh.Mapping, fresh.Milestone, err)
 	}
@@ -172,7 +180,7 @@ func TestOverlappingMappingVersionsAreRefusedNotRanked(t *testing.T) {
 	fixture.publishMapping(t, "tenant-a", "map/v2", catalogBaseAt.Add(-10*24*time.Hour), &closed)
 
 	_, configured, err := fixture.mappingsFor(t, "tenant-a").
-		ClassifyFact(t.Context(), catalogFact(t, "scan/origin", catalogBaseAt))
+		ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "node-intake", catalogBaseAt))
 	if !errors.Is(err, adapter.ErrAmbiguousCatalog) {
 		t.Fatalf("重叠版本没有报冲突：err=%v configured=%v", err, configured)
 	}
@@ -195,10 +203,10 @@ func TestSecondOpenMappingVersionIsRejectedByTheIndex(t *testing.T) {
 func TestMappingsOfAnotherTenantAreInvisible(t *testing.T) {
 	fixture := newCatalogFixture(t)
 	fixture.publishMapping(t, "tenant-a", "map/v1", catalogBaseAt.Add(-time.Hour), nil)
-	fixture.addMappingEntry(t, "tenant-a", "map/v1", "scan/origin", "PICKED_UP")
+	fixture.addMappingEntry(t, "tenant-a", "map/v1", "node-intake", "PICKED_UP")
 
 	if _, configured, err := fixture.mappingsFor(t, "tenant-b").
-		ClassifyFact(t.Context(), catalogFact(t, "scan/origin", catalogBaseAt)); err != nil || configured {
+		ClassifyFact(t.Context(), catalogFact(t, "scan/origin", "node-intake", catalogBaseAt)); err != nil || configured {
 		t.Fatalf("跨租户目录可见：err=%v configured=%v", err, configured)
 	}
 }

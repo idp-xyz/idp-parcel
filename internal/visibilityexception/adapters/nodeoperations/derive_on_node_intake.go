@@ -156,6 +156,10 @@ func projectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: intake version: %v", ErrUntranslatableAnswer, err)
 	}
+	kind, err := vedomain.NewSourceFactKind("node-intake")
+	if err != nil {
+		return none, fmt.Errorf("%w: source fact kind: %v", ErrUntranslatableAnswer, err)
+	}
 	occurred := record.Intake.ReceivedAt()
 	return veapplication.DeriveProjectionCommand{
 		TenantID: tenant,
@@ -163,6 +167,7 @@ func projectionCommand(
 			Source:      vedomain.SourceNodeOperations,
 			Parcel:      parcel,
 			Fact:        fact,
+			Kind:        kind,
 			Version:     version,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,

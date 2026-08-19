@@ -118,6 +118,7 @@ func deriveCommand(t *testing.T) application.DeriveProjectionCommand {
 			Source:      domain.SourceNodeOperations,
 			Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 			Fact:        mustValue(t, domain.NewSourceFactReference, "source-1"),
+			Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
 			Version:     mustValue(t, domain.NewSourceFactVersion, "intake-result/v1"),
 			OccurredAt:  factOccurredAt,
 			EffectiveAt: factOccurredAt,

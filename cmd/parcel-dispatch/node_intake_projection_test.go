@@ -113,9 +113,10 @@ func assertUnclassifiedNodeIntakeProjection(t *testing.T, fixture *synVerticalFi
 	}
 	if record.Fact.Source() != vedomain.SourceNodeOperations ||
 		record.Fact.Parcel().String() != nodeIntakeAssociation ||
-		record.Fact.Fact().String() != nodeIntakeSourceID {
-		t.Fatalf("事实维 source=%s parcel=%s fact=%s",
-			record.Fact.Source(), record.Fact.Parcel(), record.Fact.Fact())
+		record.Fact.Fact().String() != nodeIntakeSourceID ||
+		record.Fact.Kind().String() != "node-intake" {
+		t.Fatalf("事实维 source=%s parcel=%s fact=%s kind=%s",
+			record.Fact.Source(), record.Fact.Parcel(), record.Fact.Fact(), record.Fact.Kind())
 	}
 
 	projections, err := vepostgres.NewProjections(fixture.db)

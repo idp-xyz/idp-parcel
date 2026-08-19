@@ -14,6 +14,7 @@ func factAt(t *testing.T, parcel, reference string, occurredAt time.Time) domain
 		Source:      domain.SourceNodeOperations,
 		Parcel:      mustValue(t, domain.NewTrackedParcelReference, parcel),
 		Fact:        mustValue(t, domain.NewSourceFactReference, reference),
+		Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
 		Version:     mustValue(t, domain.NewSourceFactVersion, reference+"/v1"),
 		OccurredAt:  occurredAt,
 		EffectiveAt: occurredAt,

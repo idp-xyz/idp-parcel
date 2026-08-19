@@ -42,8 +42,9 @@ var _ ports.MilestoneMappingView = (*MilestoneMappings)(nil)
 // ClassifyFact 归类一份已接受事实。
 //
 // 两级查找对应消费方要分开的两件事：目录整个没配（found=false，等租户登记）与目录
-// 配了但这条事实没有可靠映射（found=true 且 Classified=false，带所依据的版本号）。
+// 配了但这个事实类型没有可靠映射（found=true 且 Classified=false，带所依据的版本号）。
 // 后者是一次已经作出的判断，必须带着版本进投影——投影要能追溯「按哪版判的未归类」。
+// 条目按源上下文与事实类型建键，一行覆盖此后同类型事实，不按单条事实引用查目录。
 //
 // 适用版本按事实的**业务发生时间**选，不按当前时间：一条迟到三天才到达的事实属于
 // 它发生那天的映射版本，「新版本默认只作用于生效后的事件」说的是事件不是消息。
@@ -97,8 +98,8 @@ func (view *MilestoneMappings) ClassifyFact(
 		  WHERE tenant_id = $1
 		    AND mapping_version = $2
 		    AND source_context = $3
-		    AND source_fact_ref = $4`,
-		view.tenant.String(), versions[0], fact.Source().String(), fact.Fact().String(),
+		    AND source_fact_kind = $4`,
+		view.tenant.String(), versions[0], fact.Source().String(), fact.Kind().String(),
 	).Scan(&milestoneRef)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.MilestoneAnswer{Classified: false, Mapping: mapping}, true, nil

@@ -280,6 +280,7 @@ func TestUnconfiguredMappingDerivesAnUnclassifiedPickupProjection(t *testing.T) 
 	if fact.Source() != vedomain.SourceTransportFulfillment ||
 		fact.Parcel().String() != "parcel-1" ||
 		fact.Fact().String() != "offsite-pickup/parcel-1/attempt-1" ||
+		fact.Kind().String() != "offsite-pickup" ||
 		fact.Version().String() != "pickup-result/v1" ||
 		!fact.OccurredAt().Equal(pickedUpAt) ||
 		!fact.EffectiveAt().Equal(pickedUpAt) ||

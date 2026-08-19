@@ -154,6 +154,7 @@ func trackedProjection(t *testing.T, version string) domain.TrackingProjection {
 		Source:      domain.SourceNodeOperations,
 		Parcel:      parcel,
 		Fact:        mustValue(t, domain.NewSourceFactReference, "fact-1"),
+		Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
 		Version:     mustValue(t, domain.NewSourceFactVersion, "fact-1/v1"),
 		OccurredAt:  factOccurredAt,
 		EffectiveAt: factOccurredAt,

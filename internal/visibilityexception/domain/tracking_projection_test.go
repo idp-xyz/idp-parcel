@@ -29,6 +29,7 @@ func factSpec(t *testing.T) domain.AcceptedSourceFactSpec {
 		Source:      domain.SourceNodeOperations,
 		Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Fact:        mustValue(t, domain.NewSourceFactReference, "NODE-INTAKE/intake-result"),
+		Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
 		Version:     mustValue(t, domain.NewSourceFactVersion, "intake-result/v1"),
 		OccurredAt:  factOccurredAt,
 		EffectiveAt: factEffectiveAt,
@@ -69,6 +70,9 @@ func TestAnAcceptedFactKeepsItsThreeTimesApart(t *testing.T) {
 		t.Fatalf("times = %s/%s/%s; 三时间必须分别保存",
 			fact.OccurredAt(), fact.EffectiveAt(), fact.ReceivedAt())
 	}
+	if fact.Kind().String() != "node-intake" {
+		t.Fatalf("kind = %q; 已接受事实必须携带源上下文拥有的事实类型", fact.Kind())
+	}
 
 	invalid := factSpec(t)
 	invalid.Source = domain.SourceContextInvalid
@@ -79,6 +83,11 @@ func TestAnAcceptedFactKeepsItsThreeTimesApart(t *testing.T) {
 	missingReceived.ReceivedAt = time.Time{}
 	if _, err := domain.NewAcceptedSourceFact(missingReceived); !errors.Is(err, domain.ErrInvalidSourceFact) {
 		t.Fatalf("err = %v; 缺接收时间的事实被收下了", err)
+	}
+	missingKind := factSpec(t)
+	missingKind.Kind = domain.SourceFactKind{}
+	if _, err := domain.NewAcceptedSourceFact(missingKind); !errors.Is(err, domain.ErrInvalidSourceFact) {
+		t.Fatalf("err = %v; 缺事实类型的事实被收下了", err)
 	}
 }
 

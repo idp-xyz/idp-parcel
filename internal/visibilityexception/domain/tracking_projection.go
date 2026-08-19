@@ -109,11 +109,21 @@ func NewSourceFactVersion(value string) (SourceFactVersion, error) {
 	return SourceFactVersion{required}, err
 }
 
+// SourceFactKind 是源上下文拥有的事实类型，不封闭枚举。标准里程碑映射按源上下文与
+// 事实类型版本化登记，一行覆盖此后同类型事实，不得按单条事实引用建目录。
+type SourceFactKind struct{ requiredValue }
+
+func NewSourceFactKind(value string) (SourceFactKind, error) {
+	required, err := newRequiredValue("source fact kind", value)
+	return SourceFactKind{required}, err
+}
+
 // AcceptedSourceFactSpec 是一份已接受源事实引用所需的全部输入。
 type AcceptedSourceFactSpec struct {
 	Source      SourceContext
 	Parcel      TrackedParcelReference
 	Fact        SourceFactReference
+	Kind        SourceFactKind
 	Version     SourceFactVersion
 	OccurredAt  time.Time
 	EffectiveAt time.Time
@@ -122,11 +132,13 @@ type AcceptedSourceFactSpec struct {
 
 // AcceptedSourceFact 是对源上下文已接受事实的只读引用。业务发生时间、有效时间与
 // 接收时间分别保存（CONTEXT 硬句）——三者合并成一个时间字段，迟到事实与更正就再也
-// 分不出「什么时候发生」与「什么时候才知道」。
+// 分不出「什么时候发生」与「什么时候才知道」。已接受事实必须携带源上下文拥有的事实
+// 类型；幂等键仍是引用与版本，类型进内容指纹、进里程碑映射键。
 type AcceptedSourceFact struct {
 	source      SourceContext
 	parcel      TrackedParcelReference
 	fact        SourceFactReference
+	kind        SourceFactKind
 	version     SourceFactVersion
 	occurredAt  time.Time
 	effectiveAt time.Time
@@ -137,6 +149,7 @@ func NewAcceptedSourceFact(spec AcceptedSourceFactSpec) (AcceptedSourceFact, err
 	if !spec.Source.valid() ||
 		!spec.Parcel.valid() ||
 		!spec.Fact.valid() ||
+		!spec.Kind.valid() ||
 		!spec.Version.valid() ||
 		spec.OccurredAt.IsZero() ||
 		spec.EffectiveAt.IsZero() ||
@@ -147,6 +160,7 @@ func NewAcceptedSourceFact(spec AcceptedSourceFactSpec) (AcceptedSourceFact, err
 		source:      spec.Source,
 		parcel:      spec.Parcel,
 		fact:        spec.Fact,
+		kind:        spec.Kind,
 		version:     spec.Version,
 		occurredAt:  spec.OccurredAt.UTC(),
 		effectiveAt: spec.EffectiveAt.UTC(),
@@ -164,6 +178,10 @@ func (fact AcceptedSourceFact) Parcel() TrackedParcelReference {
 
 func (fact AcceptedSourceFact) Fact() SourceFactReference {
 	return fact.fact
+}
+
+func (fact AcceptedSourceFact) Kind() SourceFactKind {
+	return fact.kind
 }
 
 func (fact AcceptedSourceFact) Version() SourceFactVersion {

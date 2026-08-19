@@ -72,6 +72,7 @@ func factRecord(t *testing.T, tenant string, source domain.SourceContext, parcel
 		Source:      source,
 		Parcel:      factValue(t, domain.NewTrackedParcelReference, parcel),
 		Fact:        factValue(t, domain.NewSourceFactReference, factRef),
+		Kind:        factValue(t, domain.NewSourceFactKind, "test-kind"),
 		Version:     factValue(t, domain.NewSourceFactVersion, version),
 		OccurredAt:  factBaseAt,
 		EffectiveAt: factBaseAt.Add(time.Hour),
@@ -122,7 +123,8 @@ func TestFactsAreReadBackWithThreeTimesApart(t *testing.T) {
 	}
 	if found.ContentDigest != shipment.ContentDigest ||
 		found.Fact.Source() != domain.SourceParcelShipment ||
-		found.Fact.Parcel().String() != "parcel-1" {
+		found.Fact.Parcel().String() != "parcel-1" ||
+		found.Fact.Kind().String() != "test-kind" {
 		t.Fatalf("事实没原样读回：%+v", found)
 	}
 
@@ -234,9 +236,9 @@ func TestSourceContextOutsideClosedSetIsRejectedByCheck(t *testing.T) {
 
 	_, err := fixture.pool.Exec(ctx,
 		`INSERT INTO visibility_exception.accepted_fact
-			(tenant_id, source_context, fact_ref, fact_version, parcel_ref, content_digest,
+			(tenant_id, source_context, fact_ref, fact_version, source_fact_kind, parcel_ref, content_digest,
 			 occurred_at, effective_at, received_at)
-		 VALUES ('tenant-a', 'RAW_SCAN', 'fact-x', 'v1', 'parcel-1', 'digest-x', now(), now(), now())`)
+		 VALUES ('tenant-a', 'RAW_SCAN', 'fact-x', 'v1', 'test-kind', 'parcel-1', 'digest-x', now(), now(), now())`)
 	if err == nil {
 		t.Fatalf("集合外源上下文被库接受了")
 	}

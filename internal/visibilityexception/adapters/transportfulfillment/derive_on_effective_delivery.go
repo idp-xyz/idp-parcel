@@ -143,6 +143,10 @@ func projectionCommand(record tfports.EffectiveDeliveryRecord) (veapplication.De
 	if err != nil {
 		return none, fmt.Errorf("%w: delivery version: %v", ErrUntranslatableAnswer, err)
 	}
+	kind, err := vedomain.NewSourceFactKind("effective-delivery")
+	if err != nil {
+		return none, fmt.Errorf("%w: source fact kind: %v", ErrUntranslatableAnswer, err)
+	}
 	occurred := record.Delivery.OccurredAt()
 	return veapplication.DeriveProjectionCommand{
 		TenantID: tenant,
@@ -150,6 +154,7 @@ func projectionCommand(record tfports.EffectiveDeliveryRecord) (veapplication.De
 			Source:      vedomain.SourceTransportFulfillment,
 			Parcel:      parcel,
 			Fact:        fact,
+			Kind:        kind,
 			Version:     version,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,

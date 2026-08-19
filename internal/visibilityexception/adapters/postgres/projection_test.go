@@ -59,6 +59,7 @@ func classifiedEntry(t *testing.T, factRef, milestone string) domain.MilestoneCl
 		Source:      domain.SourceNodeOperations,
 		Parcel:      projectionValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 		Fact:        projectionValue(t, domain.NewSourceFactReference, factRef),
+		Kind:        projectionValue(t, domain.NewSourceFactKind, "node-intake"),
 		Version:     projectionValue(t, domain.NewSourceFactVersion, "v1"),
 		OccurredAt:  projectionBaseAt,
 		EffectiveAt: projectionBaseAt.Add(time.Hour),
@@ -192,5 +193,27 @@ func TestProjectionChecksRejectEmptyEntries(t *testing.T) {
 			(tenant_id, parcel_ref, version_id, derived_at, entries)
 		 VALUES ('t', 'p', 'v', now(), '[]')`); err == nil {
 		t.Fatal("空条目的投影被库接受了")
+	}
+}
+
+func TestProjectionRebuildRejectsMissingKind(t *testing.T) {
+	fixture := newProjectionFixture(t)
+	ctx := t.Context()
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.tracking_projection
+			(tenant_id, parcel_ref, version_id, derived_at, entries)
+		 VALUES ('tenant-a', 'parcel-1', 'projection-1', $1, $2)`,
+		projectionBaseAt.Add(3*time.Hour),
+		`[{"source":"NODE_OPERATIONS","parcel":"parcel-1","fact":"scan/origin","version":"v1",`+
+			`"occurredAt":"2026-08-14T16:00:00Z","effectiveAt":"2026-08-14T17:00:00Z",`+
+			`"receivedAt":"2026-08-14T18:00:00Z","mapping":"milestone-map/v1","milestone":"PICKED_UP"}]`,
+	); err != nil {
+		t.Fatalf("写入缺类型条目：%v", err)
+	}
+	parcel := projectionValue(t, domain.NewTrackedParcelReference, "parcel-1")
+	_, _, err := fixture.projections.FindCurrent(ctx,
+		projectionValue(t, domain.NewTenantID, "tenant-a"), parcel)
+	if err == nil {
+		t.Fatal("缺事实类型的投影条目被默契补上了")
 	}
 }

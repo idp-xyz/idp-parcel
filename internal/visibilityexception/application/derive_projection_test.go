@@ -167,6 +167,7 @@ func deriveCommand(t *testing.T, factRef, version string) application.DeriveProj
 			Source:      domain.SourceNodeOperations,
 			Parcel:      mustValue(t, domain.NewTrackedParcelReference, "parcel-1"),
 			Fact:        mustValue(t, domain.NewSourceFactReference, factRef),
+			Kind:        mustValue(t, domain.NewSourceFactKind, "node-intake"),
 			Version:     mustValue(t, domain.NewSourceFactVersion, version),
 			OccurredAt:  factOccurredAt,
 			EffectiveAt: factOccurredAt,

@@ -38,15 +38,15 @@ func (repository *AcceptedFacts) FindByKey(
 	}
 
 	var (
-		parcel, digest                      string
+		parcel, kind, digest                string
 		occurredAt, effectiveAt, receivedAt time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT parcel_ref, content_digest, occurred_at, effective_at, received_at
+		`SELECT parcel_ref, source_fact_kind, content_digest, occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
 		  WHERE tenant_id = $1 AND source_context = $2 AND fact_ref = $3 AND fact_version = $4`,
 		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
-	).Scan(&parcel, &digest, &occurredAt, &effectiveAt, &receivedAt)
+	).Scan(&parcel, &kind, &digest, &occurredAt, &effectiveAt, &receivedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FactRecord{}, false, nil
 	}
@@ -56,7 +56,7 @@ func (repository *AcceptedFacts) FindByKey(
 
 	record, err := factRecordFromRow(
 		key.Tenant.String(), key.Source.String(), key.Fact.String(), key.Version.String(),
-		parcel, digest, occurredAt, effectiveAt, receivedAt)
+		kind, parcel, digest, occurredAt, effectiveAt, receivedAt)
 	if err != nil {
 		return ports.FactRecord{}, false, err
 	}
@@ -77,7 +77,7 @@ func (repository *AcceptedFacts) FindByParcel(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT source_context, fact_ref, fact_version, parcel_ref, content_digest,
+		`SELECT source_context, fact_ref, fact_version, source_fact_kind, parcel_ref, content_digest,
 		        occurred_at, effective_at, received_at
 		   FROM visibility_exception.accepted_fact
 		  WHERE tenant_id = $1 AND parcel_ref = $2
@@ -92,15 +92,15 @@ func (repository *AcceptedFacts) FindByParcel(
 	var records []ports.FactRecord
 	for rows.Next() {
 		var (
-			source, factRef, factVersion, parcelRef, digest string
-			occurredAt, effectiveAt, receivedAt             time.Time
+			source, factRef, factVersion, kind, parcelRef, digest string
+			occurredAt, effectiveAt, receivedAt                   time.Time
 		)
-		if err := rows.Scan(&source, &factRef, &factVersion, &parcelRef, &digest,
+		if err := rows.Scan(&source, &factRef, &factVersion, &kind, &parcelRef, &digest,
 			&occurredAt, &effectiveAt, &receivedAt); err != nil {
 			return nil, fmt.Errorf("find facts by parcel: %w", err)
 		}
 		record, err := factRecordFromRow(
-			tenant.String(), source, factRef, factVersion, parcelRef, digest,
+			tenant.String(), source, factRef, factVersion, kind, parcelRef, digest,
 			occurredAt, effectiveAt, receivedAt)
 		if err != nil {
 			return nil, err
@@ -134,14 +134,15 @@ func (repository *AcceptedFacts) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.accepted_fact
-			(tenant_id, source_context, fact_ref, fact_version, parcel_ref, content_digest,
+			(tenant_id, source_context, fact_ref, fact_version, source_fact_kind, parcel_ref, content_digest,
 			 occurred_at, effective_at, received_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.Tenant.String(),
 		fact.Source().String(),
 		fact.Fact().String(),
 		fact.Version().String(),
+		fact.Kind().String(),
 		fact.Parcel().String(),
 		record.ContentDigest,
 		fact.OccurredAt(),
@@ -179,7 +180,7 @@ func sourceContextFrom(value string) (domain.SourceContext, error) {
 
 // factRecordFromRow 把一行译回端口记录，事实本体经领域构造函数重建重验。
 func factRecordFromRow(
-	tenantID, source, factRef, factVersion, parcelRef, digest string,
+	tenantID, source, factRef, factVersion, kind, parcelRef, digest string,
 	occurredAt, effectiveAt, receivedAt time.Time,
 ) (ports.FactRecord, error) {
 	tenant, err := domain.NewTenantID(tenantID)
@@ -198,6 +199,10 @@ func factRecordFromRow(
 	if err != nil {
 		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
 	}
+	factKind, err := domain.NewSourceFactKind(kind)
+	if err != nil {
+		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
+	}
 	parcel, err := domain.NewTrackedParcelReference(parcelRef)
 	if err != nil {
 		return ports.FactRecord{}, fmt.Errorf("rebuild accepted fact: %w", err)
@@ -206,6 +211,7 @@ func factRecordFromRow(
 		Source:      sourceContext,
 		Parcel:      parcel,
 		Fact:        fact,
+		Kind:        factKind,
 		Version:     version,
 		OccurredAt:  occurredAt,
 		EffectiveAt: effectiveAt,

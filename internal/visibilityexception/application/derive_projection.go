@@ -251,6 +251,7 @@ func (handler *DeriveProjectionHandler) classify(
 func factContentDigest(fact domain.AcceptedSourceFact) string {
 	return shortDigest(
 		fact.Parcel().String(),
+		fact.Kind().String(),
 		fact.OccurredAt().UTC().Format(time.RFC3339Nano),
 		fact.EffectiveAt().UTC().Format(time.RFC3339Nano),
 	)

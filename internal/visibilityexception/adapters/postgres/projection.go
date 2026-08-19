@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -30,6 +31,7 @@ type projectionEntryRow struct {
 	Source      string    `json:"source"`
 	Parcel      string    `json:"parcel"`
 	Fact        string    `json:"fact"`
+	Kind        string    `json:"kind"`
 	Version     string    `json:"version"`
 	OccurredAt  time.Time `json:"occurredAt"`
 	EffectiveAt time.Time `json:"effectiveAt"`
@@ -121,6 +123,7 @@ func marshalProjectionEntries(entries []domain.MilestoneClassification) ([]byte,
 			Source:      fact.Source().String(),
 			Parcel:      fact.Parcel().String(),
 			Fact:        fact.Fact().String(),
+			Kind:        fact.Kind().String(),
 			Version:     fact.Version().String(),
 			OccurredAt:  fact.OccurredAt(),
 			EffectiveAt: fact.EffectiveAt(),
@@ -164,6 +167,13 @@ func rebuildProjection(
 		if err != nil {
 			return domain.TrackingProjection{}, err
 		}
+		if strings.TrimSpace(row.Kind) == "" {
+			return domain.TrackingProjection{}, fmt.Errorf("projection entry missing source fact kind")
+		}
+		factKind, err := domain.NewSourceFactKind(row.Kind)
+		if err != nil {
+			return domain.TrackingProjection{}, err
+		}
 		factVersion, err := domain.NewSourceFactVersion(row.Version)
 		if err != nil {
 			return domain.TrackingProjection{}, err
@@ -172,6 +182,7 @@ func rebuildProjection(
 			Source:      source,
 			Parcel:      factParcel,
 			Fact:        factRef,
+			Kind:        factKind,
 			Version:     factVersion,
 			OccurredAt:  row.OccurredAt,
 			EffectiveAt: row.EffectiveAt,

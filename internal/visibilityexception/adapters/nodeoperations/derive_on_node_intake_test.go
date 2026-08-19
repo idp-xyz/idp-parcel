@@ -342,6 +342,7 @@ func TestUnconfiguredMappingDerivesAnUnclassifiedProjection(t *testing.T) {
 	if fact.Source() != vedomain.SourceNodeOperations ||
 		fact.Parcel().String() != "parcel-1" ||
 		fact.Fact().String() != "source-1" ||
+		fact.Kind().String() != "node-intake" ||
 		fact.Version().String() != "intake-result/v1" ||
 		!fact.OccurredAt().Equal(receivedAt) ||
 		!fact.EffectiveAt().Equal(receivedAt) ||

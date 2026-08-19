@@ -163,6 +163,10 @@ func pickupProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: pickup version: %v", ErrPickupUntranslatableAnswer, err)
 	}
+	kind, err := vedomain.NewSourceFactKind("offsite-pickup")
+	if err != nil {
+		return none, fmt.Errorf("%w: source fact kind: %v", ErrPickupUntranslatableAnswer, err)
+	}
 	occurred := record.Pickup.OccurredAt()
 	return veapplication.DeriveProjectionCommand{
 		TenantID: tenant,
@@ -170,6 +174,7 @@ func pickupProjectionCommand(
 			Source:      vedomain.SourceTransportFulfillment,
 			Parcel:      parcel,
 			Fact:        fact,
+			Kind:        kind,
 			Version:     version,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,

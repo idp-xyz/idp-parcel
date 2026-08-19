@@ -342,6 +342,7 @@ func TestUnconfiguredMappingDerivesAnUnclassifiedProjection(t *testing.T) {
 	if fact.Source() != vedomain.SourceTransportFulfillment ||
 		fact.Parcel().String() != "parcel-1" ||
 		fact.Fact().String() != "effective-delivery/parcel-1/attempt-1" ||
+		fact.Kind().String() != "effective-delivery" ||
 		fact.Version().String() != "delivery-result/v1" ||
 		!fact.OccurredAt().Equal(deliveredAt) ||
 		!fact.EffectiveAt().Equal(deliveredAt) ||
