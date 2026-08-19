@@ -1,0 +1,115 @@
+package main
+
+import (
+	"testing"
+	"time"
+
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+)
+
+// 本文件证 MAP-KIND-SYN-TF 交付路：测试内登记一份 effective-delivery 映射后，有效交付
+// 投影按类型命中 SYN 里程碑。隔离 S，不进 assemble.go，不种 PAR-VIS-01。
+
+const (
+	synDeliveryMappingVersion = "SYN-MAP-DELIVERY/v1"
+	synDeliveryMilestone      = "SYN-MILESTONE-EFFECTIVE-DELIVERY"
+)
+
+// Covers: TRANSPORT_FULFILLMENT + effective-delivery 一行覆盖此后同类型事实；PS 终局
+// 墙仍让整封 Publish 失败。派生交接与交付同分区，未登记 derived 会占头——连拍到交付
+// 失败码，不得为测试去登记 tracking-projection.derived。
+func TestAMappedEffectiveDeliveryKindClassifiesTheProjectionWhileFinalStaysUnconfigured(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+
+	fixture.submit(t, ctx)
+	fixture.recordPassingJudgments(t, ctx)
+	if result := fixture.formDecision(t, ctx); result.State() != psdomain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED；pending = %q", result.State(), result.PendingReason())
+	}
+
+	seedSYNPCEligibility(t, fixture)
+	seedSYNEffectiveDeliveryKindMapping(t, fixture)
+	eventID := recordRegisteredEffectiveDelivery(t, fixture)
+	assertEffectiveDeliveryFinalPreconditions(t, fixture)
+	assertFinalRuleUnconfigured(t, fixture)
+
+	published := 0
+	for i := 0; i < 8; i++ {
+		n, err := fixture.beat.DispatchOnce(ctx)
+		if err != nil {
+			t.Fatalf("第 %d 拍：%v", i+1, err)
+		}
+		published += n
+		if recordedFailureCode(t, fixture.db, eventID) != "" {
+			break
+		}
+	}
+	if published != 0 {
+		t.Fatalf("终局未配置却定稿了 %d 条；交付信封失败码 = %q",
+			published, recordedFailureCode(t, fixture.db, eventID))
+	}
+	if got := recordedFailureCode(t, fixture.db, eventID); got != "dispatch.consumer_undecided" {
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+
+	assertClassifiedDeliveryProjection(t, fixture)
+	if n := fixture.countInbox(t, deriveDeliveryConsumerName, eventID); n != 1 {
+		t.Fatalf("VE inbox 行数 = %d, want 1", n)
+	}
+	assertNoFinalOutcomeTrace(t, fixture, eventID)
+}
+
+func seedSYNEffectiveDeliveryKindMapping(t *testing.T, fixture *synVerticalFixture) {
+	t.Helper()
+	tenant := fixture.identity.TenantID().String()
+	from := time.Now().UTC().Add(-24 * time.Hour)
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.milestone_mapping_version
+			(tenant_id, mapping_version, effective_from, effective_to, approved_by)
+		 VALUES ($1, $2, $3, NULL, 'SYN-MAP-KIND-TF')`,
+		tenant, synDeliveryMappingVersion, from); err != nil {
+		t.Fatalf("登记 SYN 交付映射版本：%v", err)
+	}
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.milestone_mapping_entry
+			(tenant_id, mapping_version, source_context, source_fact_kind, milestone_ref)
+		 VALUES ($1, $2, 'TRANSPORT_FULFILLMENT', 'effective-delivery', $3)`,
+		tenant, synDeliveryMappingVersion, synDeliveryMilestone); err != nil {
+		t.Fatalf("登记 SYN 交付映射条目：%v", err)
+	}
+}
+
+func assertClassifiedDeliveryProjection(t *testing.T, fixture *synVerticalFixture) {
+	t.Helper()
+	tenant := mustVE(t, vedomain.NewTenantID, fixture.identity.TenantID().String())
+	parcel := mustVE(t, vedomain.NewTrackedParcelReference, effectiveDeliveryObject)
+
+	projections, err := vepostgres.NewProjections(fixture.db)
+	if err != nil {
+		t.Fatalf("构造投影读口：%v", err)
+	}
+	projection, found, err := projections.FindCurrent(t.Context(), tenant, parcel)
+	if err != nil {
+		t.Fatalf("读当前投影：%v", err)
+	}
+	if !found {
+		t.Fatal("没有当前投影")
+	}
+	if len(projection.Entries()) != 1 {
+		t.Fatalf("entries = %d, want 1", len(projection.Entries()))
+	}
+	entry := projection.Entries()[0]
+	milestone, classified := entry.Milestone()
+	if !classified || milestone.String() != synDeliveryMilestone {
+		t.Fatalf("milestone classified=%v value=%q, want %s", classified, milestone, synDeliveryMilestone)
+	}
+	if entry.MappingVersion().String() != synDeliveryMappingVersion {
+		t.Fatalf("mapping = %q, want %s", entry.MappingVersion(), synDeliveryMappingVersion)
+	}
+	if entry.Fact().Kind().String() != "effective-delivery" {
+		t.Fatalf("kind = %q, want effective-delivery", entry.Fact().Kind())
+	}
+}
