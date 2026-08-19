@@ -17,6 +17,8 @@
 
 四条都不需要往信封里塞快照——包裹引用要么已在载荷键里，要么在按键重读回的本体上。
 
+> **勘误（INITIAL-ROUTE-ENVELOPE-KEY-A）**：上列第 2 条「载荷带全套 `InitialRouteJudgmentKey`」在勘察基准 `7d7e138` 上不成立——`initialRoutePayload` 当时缺 `customerAccountId`，而 `InitialRouteStore.FindByKey` 的完整主键含 `customer_account_id`，缺这一维拼不出能命中的键。该票已在 NR 侧补齐载荷（`initialRoutePayload.CustomerAccountID`，附载荷读回测试），补齐后本条结论照旧成立；上文「也不需要动载荷」对 initial-route 一条字面不再准确（改动只加键维，不塞快照）。`### network-routing` 表中 `initial-route.formed` 行的载荷清单同此勘误。
+
 ## 复核 MCP-1 的三个样本
 
 **正例 `node-operations.node-intake.formed`：属实。** `ReceptionStore.FindByKey` 在 `noports`，`nopostgres.NewReceptions` 是真实现；`record.Intake.Association()` 交回 `(ParcelAssociationReference, bool)`，`venodeops` 的 `projectionCommand` 正是拿 `association.String()` 喂 `vedomain.NewTrackedParcelReference`。两条都勾。
