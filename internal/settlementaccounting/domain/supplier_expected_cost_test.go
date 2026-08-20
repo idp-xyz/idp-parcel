@@ -114,6 +114,9 @@ func TestACorrectionAppendsWithoutRewritingTheOriginal(t *testing.T) {
 
 	corrected, err := cost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       cost.Occurrence(),
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    12600,
@@ -145,6 +148,9 @@ func TestACorrectionAppendsWithoutRewritingTheOriginal(t *testing.T) {
 
 	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          cost.Version(),
+		Occurrence:       cost.Occurrence(),
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    12600,
@@ -156,6 +162,9 @@ func TestACorrectionAppendsWithoutRewritingTheOriginal(t *testing.T) {
 	}
 	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
+		Occurrence:       cost.Occurrence(),
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    12600,
@@ -181,6 +190,9 @@ func TestASameCurrencyCorrectionRestatesBothAmounts(t *testing.T) {
 
 	corrected, err := cost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       cost.Occurrence(),
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    11800,
@@ -216,6 +228,9 @@ func TestASameCurrencyCorrectionRestatesBothAmounts(t *testing.T) {
 
 	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
+		Occurrence:       cost.Occurrence(),
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    11800,
@@ -223,6 +238,78 @@ func TestASameCurrencyCorrectionRestatesBothAmounts(t *testing.T) {
 		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
 	}); !errors.Is(err, domain.ErrInvalidSupplierCost) {
 		t.Fatalf("err = %v; 同币种两额不等被收下了", err)
+	}
+}
+
+// Covers: ADR-0067 决定二/三与 `AT-SA-164`——纠错换评价，采购规则版本、协议引用与
+// 发生项版本、业务时点随评价整组重述（`OccurrenceVersion` 自注「发生项有效性更正换
+// 版本，预期成本据以追加计价纠错」正是这条路径）；发生项 ID 是身份，与被纠正版本
+// 不一致时拒——换 ID 就是另一份成本，只能另行形成。
+func TestACorrectionRestatesTheEvaluationsReferenceGroup(t *testing.T) {
+	cost, err := domain.FormSupplierExpectedCost(crossCurrencySpec(t))
+	if err != nil {
+		t.Fatalf("form supplier expected cost: %v", err)
+	}
+
+	revisedOccurrence, err := domain.NewTransportChargeOccurrence(
+		mustValue(t, domain.NewChargeOccurrenceID, "charge-1"),
+		mustValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_FULFILLMENT"),
+		mustValue(t, domain.NewOccurrenceVersion, "charge-1/v2"),
+		chargeOccurredAt.Add(2*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("new transport charge occurrence: %v", err)
+	}
+	corrected, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       revisedOccurrence,
+		RuleVersion:      mustValue(t, domain.NewPurchaseRuleVersionReference, "purchase-rules/v2"),
+		Agreement:        mustValue(t, domain.NewSupplierAgreementReference, "agreement-1/v4"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    12600,
+		SettlementMinor:  90110,
+		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/2026-32-corrected/step-1"),
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "OCCURRENCE_CORRECTED"),
+	})
+	if err != nil {
+		t.Fatalf("append correction: %v", err)
+	}
+	if corrected.RuleVersion().String() != "purchase-rules/v2" ||
+		corrected.Agreement().String() != "agreement-1/v4" {
+		t.Fatalf("rule = %s agreement = %s; 规则版本与协议必须随评价重述",
+			corrected.RuleVersion(), corrected.Agreement())
+	}
+	occurrence := corrected.Occurrence()
+	if occurrence.ID().String() != "charge-1" ||
+		occurrence.Version().String() != "charge-1/v2" ||
+		!occurrence.OccurredAt().Equal(chargeOccurredAt.Add(2*time.Hour).UTC()) {
+		t.Fatalf("occurrence = %s/%s @ %s; 版本与业务时点随评价走，ID 不动",
+			occurrence.ID(), occurrence.Version(), occurrence.OccurredAt())
+	}
+
+	alien, err := domain.NewTransportChargeOccurrence(
+		mustValue(t, domain.NewChargeOccurrenceID, "charge-9"),
+		mustValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_FULFILLMENT"),
+		mustValue(t, domain.NewOccurrenceVersion, "charge-9/v1"),
+		chargeOccurredAt,
+	)
+	if err != nil {
+		t.Fatalf("new transport charge occurrence: %v", err)
+	}
+	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
+		Occurrence:       alien,
+		RuleVersion:      cost.RuleVersion(),
+		Agreement:        cost.Agreement(),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    12600,
+		SettlementMinor:  90110,
+		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/2026-32-corrected/step-1"),
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "OCCURRENCE_CORRECTED"),
+	}); !errors.Is(err, domain.ErrInvalidSupplierCost) {
+		t.Fatalf("err = %v; 换了发生项 ID 的纠错被收下了", err)
 	}
 }
 
@@ -236,6 +323,9 @@ func TestConversionNecessityFollowsTheCorrectionsOwnCurrencyPair(t *testing.T) {
 	}
 	toSame, err := cross.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       cross.Occurrence(),
+		RuleVersion:      cross.RuleVersion(),
+		Agreement:        cross.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
 		OriginalMinor:    90110,
@@ -259,6 +349,9 @@ func TestConversionNecessityFollowsTheCorrectionsOwnCurrencyPair(t *testing.T) {
 	}
 	if _, err := sameCost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       sameCost.Occurrence(),
+		RuleVersion:      sameCost.RuleVersion(),
+		Agreement:        sameCost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "EUR"),
 		OriginalMinor:    9800,
@@ -269,6 +362,9 @@ func TestConversionNecessityFollowsTheCorrectionsOwnCurrencyPair(t *testing.T) {
 	}
 	crossed, err := sameCost.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Occurrence:       sameCost.Occurrence(),
+		RuleVersion:      sameCost.RuleVersion(),
+		Agreement:        sameCost.Agreement(),
 		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
 		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "EUR"),
 		OriginalMinor:    9800,

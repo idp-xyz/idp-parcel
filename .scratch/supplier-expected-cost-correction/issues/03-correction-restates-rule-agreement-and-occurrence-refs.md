@@ -1,7 +1,7 @@
 # 纠错版本重述采购规则版本、协议引用与发生项版本
 
 Category: bug
-Status: in-progress
+Status: resolved
 Blocked by: 01
 
 按 [ADR-0067](../../../docs/adr/0067-cost-correction-restates-the-whole-evaluation-result.md) 决定二落地
@@ -83,5 +83,14 @@ Blocked by: 01
   前提成立。
 
   取证到此；动代码仍停在 MCP-1 与用户点头之前。
+- 2026-08-20 · MCP-3：用户点头后实现，随本票状态变更同笔提交（前一笔 e722e79 是票 02 的金额组）。
+  落点与票面一致：`CostCorrectionSpec` 长出发生项引用、采购规则版本与协议引用，`AppendCorrection`
+  整组重述并在发生项 `ID` 与被纠正版本不一致时拒（身份四件，ADR-0067 决定三）；幂等三维未改。
+  验证：领域用例新增引用组重述 + ID 守卫一条；真库新增
+  `TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex`——纠错版本携新规则版本、新发生项
+  版本落库读回且不撞 `supplier_expected_cost_first_version_unique`（票面「要有测试守住」那条）。
+  SA 领域与真库包全绿（PASS 非 SKIP）；全仓一遍中 `networkrouting/adapters/postgres` 的
+  `TestASecondAppendDoesNotOverwriteTheFirst` 偶发一红，单包复跑即绿、该目录无在途改动，与本票
+  无关；提交态另在临时 worktree 全仓复验。
 - 2026-08-20 · MCP-1：**取证部分派 MCP-3**（只读：两问结论核到用例文档与代码后写回本票
   Comments）。「要改的」代码部分与 `02` 同受一道用户点头约束，取证结论落回前后都不得开工。

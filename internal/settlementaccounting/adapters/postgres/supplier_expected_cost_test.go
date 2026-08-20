@@ -68,6 +68,9 @@ func TestACorrectionVersionKeepsItsBackReference(t *testing.T) {
 	first := formedExpectedCost(t, "cost-v1", "occurrence-1")
 	corrected, err := first.AppendCorrection(domain.CostCorrectionSpec{
 		Version:          saValue(t, domain.NewSupplierCostVersionID, "cost-v2"),
+		Occurrence:       first.Occurrence(),
+		RuleVersion:      first.RuleVersion(),
+		Agreement:        first.Agreement(),
 		Evaluation:       saValue(t, domain.NewBuyEvaluationReference, "buy-eval-2"),
 		OriginalCurrency: saValue(t, domain.NewCurrencyCode, "USD"),
 		OriginalMinor:    3900,
@@ -166,6 +169,58 @@ func TestAnUnknownExpectedCostVersionIsNotFound(t *testing.T) {
 		ctx, saTenant(t, "tenant-2"), cost.Version(),
 	); err != nil || found {
 		t.Fatalf("跨租户读到了：found=%v err=%v", found, err)
+	}
+}
+
+// TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex 证两件事在库里同时
+// 成立：纠错版本整组重述引用（规则版本、协议、发生项版本随新评价，ADR-0067 决定二）
+// 后照常落库读回；且它携带的新规则版本不撞幂等三维的部分唯一索引——`WHERE
+// prior_version IS NULL` 已把纠错版本放在三维之外。这条要有测试守住，否则下次有人
+// 看到「纠错版本的规则版本和首版不同」会以为是 bug 再改回去。
+func TestACorrectionCarryingNewReferencesEscapesTheFirstVersionIndex(t *testing.T) {
+	repository, transactor := newExpectedCosts(t)
+	ctx := t.Context()
+	tenant := saTenant(t, "tenant-1")
+
+	first := formedExpectedCost(t, "cost-v1", "occurrence-1")
+	revisedOccurrence, err := domain.NewTransportChargeOccurrence(
+		saValue(t, domain.NewChargeOccurrenceID, "occurrence-1"),
+		saValue(t, domain.NewOccurrenceReasonReference, "ACTUAL_LEG"),
+		saValue(t, domain.NewOccurrenceVersion, "occurrence-version-2"),
+		expectedCostOccurredAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("运输收费发生项：%v", err)
+	}
+	corrected, err := first.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          saValue(t, domain.NewSupplierCostVersionID, "cost-v2"),
+		Occurrence:       revisedOccurrence,
+		RuleVersion:      saValue(t, domain.NewPurchaseRuleVersionReference, "purchase-rule-2"),
+		Agreement:        saValue(t, domain.NewSupplierAgreementReference, "agreement-2"),
+		Evaluation:       saValue(t, domain.NewBuyEvaluationReference, "buy-eval-2"),
+		OriginalCurrency: saValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    3900,
+		SettlementMinor:  3900,
+		Reason:           saValue(t, domain.NewCostCorrectionReason, "OCCURRENCE_CORRECTED"),
+	})
+	if err != nil {
+		t.Fatalf("追加纠错：%v", err)
+	}
+	mustSaveExpectedCost(t, transactor, repository, tenant, first)
+	mustSaveExpectedCost(t, transactor, repository, tenant, corrected)
+
+	loaded, found, err := repository.LoadExpectedCost(ctx, tenant, corrected.Version())
+	if err != nil || !found {
+		t.Fatalf("读回纠错版本：found=%v err=%v", found, err)
+	}
+	if loaded.RuleVersion().String() != "purchase-rule-2" ||
+		loaded.Agreement().String() != "agreement-2" ||
+		loaded.Occurrence().Version().String() != "occurrence-version-2" {
+		t.Fatalf("引用组没有整组重述：rule=%s agreement=%s occurrence=%s",
+			loaded.RuleVersion(), loaded.Agreement(), loaded.Occurrence().Version())
+	}
+	if loaded.Occurrence().ID().String() != "occurrence-1" {
+		t.Fatalf("发生项 ID 变了：%s", loaded.Occurrence().ID())
 	}
 }
 

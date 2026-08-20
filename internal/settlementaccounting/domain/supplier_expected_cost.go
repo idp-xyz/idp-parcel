@@ -257,11 +257,15 @@ func (cost SupplierExpectedCost) CorrectionReason() (CostCorrectionReason, bool)
 	return cost.correctionReason, cost.correctionReason.valid()
 }
 
-// CostCorrectionSpec 是追加一次计价纠错所需的全部输入：金额、币种与换算步骤整组
-// 取自新评价（ADR-0067），不从被纠正版本继承。合同结算币不在此列——它是合同交给
-// 评价的输入而不是评价的产物，计价纠错不改合同。
+// CostCorrectionSpec 是追加一次计价纠错所需的全部输入：评价引用、采购规则版本、
+// 协议引用、发生项版本与业务时点、金额币种与换算步骤整组取自新评价（ADR-0067
+// 决定二），不从被纠正版本继承。合同结算币不在此列——它是合同交给评价的输入而
+// 不是评价的产物，计价纠错不改合同。
 type CostCorrectionSpec struct {
 	Version          SupplierCostVersionID
+	Occurrence       TransportChargeOccurrence
+	RuleVersion      PurchaseRuleVersionReference
+	Agreement        SupplierAgreementReference
 	Evaluation       BuyEvaluationReference
 	OriginalCurrency CurrencyCode
 	OriginalMinor    int64
@@ -271,17 +275,25 @@ type CostCorrectionSpec struct {
 }
 
 // AppendCorrection 依据新评价（规则更正、汇率序列更正或发生项有效性更正）追加计价
-// 纠错版本（AT-SA-054/178）：换版本、带原因、指回原版，金额与换算步骤整组取自新
-// 评价；原版本一字不动，也不形成供应商账单贷项（那归 UC-SA-004）。
+// 纠错版本（AT-SA-054/164/178）：换版本、带原因、指回原版，计价结果整组取自新评价；
+// 原版本一字不动，也不形成供应商账单贷项（那归 UC-SA-004）。
 //
-// 换算步骤必备按本版自己的币种对判断（ADR-0067 决定五）：原币币种随评价重述，首版
-// 跨币种而纠错版本同币种、或反过来，都是合法形状。同币种两额必须相等对纠错版本
-// 同样成立（决定四），理由与形成门那条一字不差：没有换算却造出了第二个数。
+// 纠错不动的只有身份（ADR-0067 决定三）：发生项 ID 与被纠正版本不一致时拒——换 ID
+// 就是另一份成本，只能另行形成；发生项版本与业务时点随评价走。换算步骤必备按本版
+// 自己的币种对判断（决定五）：原币币种随评价重述，首版跨币种而纠错版本同币种、或
+// 反过来，都是合法形状。同币种两额必须相等对纠错版本同样成立（决定四），理由与
+// 形成门那条一字不差：没有换算却造出了第二个数。
 func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (SupplierExpectedCost, error) {
 	if !spec.Version.valid() || spec.Version == cost.version ||
+		!spec.Occurrence.id.valid() ||
+		!spec.RuleVersion.valid() ||
+		!spec.Agreement.valid() ||
 		!spec.Evaluation.valid() ||
 		!spec.OriginalCurrency.valid() || spec.OriginalMinor <= 0 ||
 		spec.SettlementMinor <= 0 || !spec.Reason.valid() {
+		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
+	if spec.Occurrence.id != cost.occurrence.id {
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
 	}
 	if spec.OriginalCurrency != cost.settlementCurrency && !spec.Conversion.valid() {
@@ -293,6 +305,9 @@ func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (Supp
 	}
 	corrected := cost
 	corrected.version = spec.Version
+	corrected.occurrence = spec.Occurrence
+	corrected.ruleVersion = spec.RuleVersion
+	corrected.agreement = spec.Agreement
 	corrected.evaluation = spec.Evaluation
 	corrected.originalCurrency = spec.OriginalCurrency
 	corrected.originalMinor = spec.OriginalMinor
