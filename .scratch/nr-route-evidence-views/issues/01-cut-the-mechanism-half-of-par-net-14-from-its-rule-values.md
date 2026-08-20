@@ -1,7 +1,7 @@
 # 三个路由证据视图卡在 PAR-NET-14，机制半边需要单独切出来
 
 Category: enhancement
-Status: needs-triage
+Status: in-progress
 
 发现于 `a5095ae`（NR/TF 端口换真）。那一笔带走了七口，`NetworkEvidenceView`、
 `InitialRouteEvidenceView`、`AutoRerouteFactsView` 三口没带走。本票记的是**为什么没带走**，
@@ -123,3 +123,15 @@ Status: needs-triage
 - 编排侧的三条出口都已按端口注释接好：证据读不回形成`未形成判断`/`路由判断未决`，
   答复缺修订标识响亮上抛，事实本身不成立响亮上抛。本票解决前，这三口在生产装配里
   没有实现可注入。
+
+## Comments
+
+- 2026-08-20 MCP-1（用户批复「按建议办」）：**「还需要一个决定」那问的答案是建。** 机制四件
+  （目录 schema、按 `asOf` 选版、显式未配置报错、修订标识原子性）现在开工，派 MCP-4，票名
+  NR-CATALOG-MECH。依据即 AGENTS.md 红线原话「机制现在就做，实例留空并拒绝默认值」——本票
+  已论证四件只依赖 CONTEXT 硬句。护栏三条：**schema 只用 CONTEXT 点名的名词建表，不预埋折叠
+  语义列**（折叠规则归 `PAR-NET-14`，形态未定不入库）；**迁移只建结构，不种任何默认行**；
+  **三口取数侧不接**，继续报「配置读不到 → 未形成判断」。做完后阻断收敛为一层（`PAR-NET-14`
+  规则正文），参数登记册任何一行状态不变。`NetworkEvidenceView` 缺的 PS 地址提供路径属跨上下文
+  边界决策，划出为本目录 `02` 号票，不混入本票。另：`syn-wall-door-audit` 审计票 05（自动改道
+  事实目录未实装）与本票同域，采纳时已互链。

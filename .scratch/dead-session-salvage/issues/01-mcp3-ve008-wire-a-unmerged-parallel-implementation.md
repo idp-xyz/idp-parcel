@@ -1,7 +1,7 @@
 # `mcp3-ve008-wire`（`dca024a`）是未合入的 VE-008 平行实现，主人已死
 
 Category: enhancement
-Status: needs-triage
+Status: resolved
 
 用户 2026-08-20 裁定：**停放**（不动分支、不删、不打捞），先立此票留档。
 
@@ -70,3 +70,10 @@ a 路线的补派生由**账户绑定**触发，手里没有「信封宣告的�
 
 - 2026-08-20 MCP-1：MCP-3 死讯后清点残局时发现。已告知 MCP-4（正在办外部评审 03 票，
   同属客户视图链）：可 `git show` 只读作旁证，**不得 checkout / cherry-pick / 当基线**。
+- 2026-08-20 MCP-1（用户批复「按建议办」）：**不重开设计分歧，本票了结。** 理由：main 的
+  `FindCurrent`+版本相等守卫与 UC-VE-008 明文（客户视图只基于当前投影形成）一致；`dca024a`
+  担心的「先到信封吃掉后到更正」被守卫挡住——旧版信封被跳过，不会覆盖新版；「没有下一封时
+  怎么办」的短路已由外评 03 号票单独追；且路线 a 的补派生由账户绑定触发、手里没有信封版本，
+  只能在 `FindCurrent` 形状下落——重开等于翻已定的选路。唯一无文档回答的一问转独立票
+  [`ve-customer-view-per-projection-version/issues/01`](../../ve-customer-view-per-projection-version/issues/01-does-customer-view-keep-a-generation-per-projection-version.md)
+  存档，不同期开工。分支 `mcp3-ve008-wire` 维持用户原裁定：停放，不动、不删、不打捞。
