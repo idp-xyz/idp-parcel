@@ -7,6 +7,8 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
 
 2026-08-20 晚间复核（协调岗，对 `main=8663948`）：轨道、串行约束与里程碑不变；T0 三行、T2 第 1 步、T3 队列已按当日进展就地更新，明细见文末「复核记录」。
 
+2026-08-20 深夜复核（协调岗，对 `origin/main=d6453a7`）：轨道与约束仍不变；T0 行 2/3 收口、T1 票 04 转 needs-triage、十票开工前重核已全部完成、T2 反查尾巴清账；明细见「复核记录」末条。
+
 ## 一、切分方式评估：能按 BC 切吗
 
 **结论：BC 不宜作计划主轴，宜作所有权与并行边界。** 三个理由，都取自本仓已发生的事实：
@@ -24,10 +26,10 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
 | 票 | 主责 | 状态 |
 |---|---|---|
 | [outbox 分区键·第二步范围（八口+接管格）](./outbox-partition-key/issues/03-step-two-scope-eight-ports-and-four-undecided.md) | platform | 八口+接管格已入 main（`a1463ae`）；四处待裁取证已出（[evidence-four-undecided.md](./outbox-partition-key/evidence-four-undecided.md)），拍板另行成轮；票 01 已 resolved（`c3227b9`） |
-| [供应商成本更正·规则协议与发生项引用](./supplier-expected-cost-correction/issues/03-correction-restates-rule-agreement-and-occurrence-refs.md) | SA | [02](./supplier-expected-cost-correction/issues/02-correction-restates-amounts-and-currency.md)/03 实现已开工（MCP-3，占 SA 迁移 0012；裁断组入库 `c8f9b99`、03 取证入库 `b9f6cba`）；同族 [04 客户费用同币种](./supplier-expected-cost-correction/issues/04-customer-charge-single-currency-contradicts-context.md)仍 needs-triage 未进本轮，收口时补裁，口径同出 ADR-0067 |
-| [索赔资格查询七维缺四维](./ve-claim-eligibility-dimensions/issues/01-eligibility-query-cannot-carry-four-of-seven-dimensions.md) | VE | 切块 (b) `cacf78d`、(c) `0db1acf` 均已入 main；七维查询与通过路接通，票可关 |
+| [供应商成本更正·规则协议与发生项引用](./supplier-expected-cost-correction/issues/03-correction-restates-rule-agreement-and-occurrence-refs.md) | SA | 02/03 已收口 resolved（`747ba74`/`3324ecb`，ADR-0067）；同族 [04 客户费用同币种](./supplier-expected-cost-correction/issues/04-customer-charge-single-currency-contradicts-context.md)的「收口时补裁」**到期**，needs-triage 待排 |
+| [索赔资格查询七维缺四维](./ve-claim-eligibility-dimensions/issues/01-eligibility-query-cannot-carry-four-of-seven-dimensions.md) | VE | 票已关 resolved（切块 (b) `cacf78d`、(c) `0db1acf`） |
 | [PAR-NET-14 机制半边切割](./nr-route-evidence-views/issues/01-cut-the-mechanism-half-of-par-net-14-from-its-rule-values.md) | NR | in-progress（四件悬决裁断放行） |
-| [脏 worktree 残局](./dead-session-salvage/issues/02-dirty-orphan-worktrees-hold-uncommitted-work.md) | 工程 | in-progress，按票内裁定逐棵处置 |
+| [脏 worktree 残局](./dead-session-salvage/issues/02-dirty-orphan-worktrees-hold-uncommitted-work.md) | 工程 | in-progress，按票内裁定逐棵处置；深夜新增一处现场：分支 `mcp1-pc-publication` 的 worktree 留有票 03 约七成实现（722 行未提交，含发布用例+六写口；唯一破损是一个死在编辑半途的测试文件），交接方式等用户裁定 |
 
 ### T1 门族：写入方与登记口（墙/门审计十票，本计划最大块）
 
@@ -36,7 +38,7 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
 | 组 | 票 | 主责 | 解锁 |
 |---|---|---|---|
 | 关键路径 | [03 PC 声明无发布写入方](./syn-wall-door-audit/issues/03-pc-declarations-have-no-publication-writer.md) | PC | 一件解七墙（W04–W08/W11/W12），PS/SA 消费全排它后面 |
-| 可并行 | [04 网络定义登记册无写入方无解析层](./syn-wall-door-audit/issues/04-network-definition-register-no-writer-no-resolver.md)、[05 自动改路事实目录](./syn-wall-door-audit/issues/05-auto-reroute-facts-catalog-unimplemented.md) | NR | W09/W10；05 碰 `assemble.go` 装配点，占号 |
+| 可并行 | [04 网络定义登记册无写入方无解析层](./syn-wall-door-audit/issues/04-network-definition-register-no-writer-no-resolver.md)、[05 自动改路事实目录](./syn-wall-door-audit/issues/05-auto-reroute-facts-catalog-unimplemented.md) | NR | W09/W10；04 已转 needs-triage——NR-CATALOG-MECH（`3b9f212`，ADR-0068）推翻票面「无写入方也无解析层」前提，先改写票面再放行；05 碰 `assemble.go` 装配点，占号 |
 | 可并行 | [06 CC 案件配置登记册无写入方](./syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md) | CC | W13 |
 | 可并行 | [07 价卡无版本仓储](./syn-wall-door-audit/issues/07-pricing-plan-and-rate-table-no-version-repository.md)、[08 参考序列登记册缺失](./syn-wall-door-audit/issues/08-pricing-reference-series-register-missing.md) | PP | W14/W15，PP 是唯一仓储本体都缺的上下文 |
 | 可并行 | [09 VE 规则与政策登记册无写入方](./syn-wall-door-audit/issues/09-ve-rule-and-policy-registries-have-no-writer.md) | VE | W16/W17/W18 |
@@ -44,11 +46,11 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
 | 桥/缝 | [10 收寄资格证据源未实现](./syn-wall-door-audit/issues/10-intake-qualification-evidence-source-unimplemented.md) | PS←NO | W11 证据口（ADR-0063） |
 | 平台 | [01 接入渠道登记册与首个真实 Intake](./syn-wall-door-audit/issues/01-access-channel-registry-and-first-real-intake.md) | platform/HTTP | W01/W02；含 ADR-0055 第五条两前置（载荷规范化摘要、准入范围装配），碰 `endpoints.go` 装配点，占号 |
 
-**每票开工前按采纳注记对当时 main tip 重核四件**（仓储/装载口/写入方/登记口）——十票取证于 `49a2ab0`，死会话票面可能冻在过时时刻。
+**每票开工前按采纳注记对当时 main tip 重核四件**（仓储/装载口/写入方/登记口）——十票已全部重核完毕（`ee58c1a` 核 01/02/07/08/10，`d6453a7` 核 03/04/05/06/09，结论录各票 Comments），后续开工只需对新 tip 做连续性确认，不必重做全量。
 
 ### T2 消费装配铺满（缝工作，天然跨 BC）
 
-1. 消费方向清点**已完成，不再排期**：[outbox-handoff-consumption-map/report.md](./outbox-handoff-consumption-map/report.md)（46 适配器×4 栏，逐行带 CONTEXT-MAP/UC 判据，取证于 `4d57ecd`）——已有消费者 1 类、应有未开·跨上下文 26、应有未开·同上下文 19、混合 5、本就不应该有 2、说不清 3（pilot-governance 缺领域文档是最大判据缺档）。两条尾巴：消费本表前按新 HEAD 重取证（表内自注保质期）；补一步 UC 正向反查「UC 要求但连 handoff 都没有」（报告已点名 collection-remittance 一例）。终点仍不是 46 类全接（ADR-0049「接不住的类型登记比不登记更糟」）。
+1. 消费方向清点**已完成，不再排期**：[outbox-handoff-consumption-map/report.md](./outbox-handoff-consumption-map/report.md)（46 适配器×4 栏，逐行带 CONTEXT-MAP/UC 判据，取证于 `4d57ecd`）——已有消费者 1 类、应有未开·跨上下文 26、应有未开·同上下文 19、混合 5、本就不应该有 2、说不清 3（pilot-governance 缺领域文档是最大判据缺档）。尾巴剩一条：消费本表前按新 HEAD 重取证（表内自注保质期）；UC 正向反查已完成并入库（[uc-reverse-gaps.md](./outbox-handoff-consumption-map/uc-reverse-gaps.md)，`b3004d0`）。终点仍不是 46 类全接（ADR-0049「接不住的类型登记比不登记更糟」）。
 2. 首个 A/B 票对候选已被表点名：`initial-route.formed`——今天唯一被组合根构造的生产方（CreateInitialRouteHandler）发的就是它，入队即撞 `no_subscriber` 阻塞分区，应然消费者（NO/TF/VE 侧）一个未开。
 3. 按缝排 **A/B 票对**（A：消费方 inbox+adapter；B：`assemble.go` 接线）——沿用 CONS-PROJ 票族已验证的模式。B 票全局串行；A 票可与不同 adapter 的 A 票并行。
 4. 与 T1 的 05、01 两票共享装配点占号约束。
@@ -96,3 +98,9 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
   - T3 入队两组：四处待裁（CC 案件链保序 + TF offsite_pickup 二次登记）、Bento 蒸馏后续（行动 1-3 开票与封存分支去留，等用户）。
   - M1 进度：五票之一 resolved，两条在途分支（`outbox-pk-annotate`、`claim-elig-b`）均已了结。
   - 轨道划分、装配点串行约束、T1/T4 前提、里程碑判据：核对无变化，不动。
+- 2026-08-20 深夜，协调岗对 `origin/main=d6453a7`（较上基准 `8663948` 后 18 笔：分区键八口+接管格九笔与格式收尾 `a1463ae`、NR 目录机制四件 `3b9f212`、索赔资格切块 (c) `0db1acf` 与 0018 授权目录迁移、SA 纠错 02/03 `747ba74`/`3324ecb`、T1 十票重核 `ee58c1a`/`d6453a7`、文档若干）逐轨核对：
+  - T0 收口两行：SA 02/03 resolved（同族 04 补裁到期，转入待排）；索赔资格票 resolved。行 1（四处待裁取证已出等拍板）与行 4 照旧；行 5 新增 `mcp1-pc-publication` 死会话现场（票 03 七成实现未提交）。
+  - T1 在办与转态：03 派 MCP-3（含既有现场交接待裁）、07/08 派 MCP-2 重启；04 转 needs-triage 先改写票面；09 放行前两处票面事实待更新（MAP-KIND 已完 `1709872`；0018 授权目录两表入登记口范围）。
+  - T2：UC 正向反查入库清账，重取证一条尾巴保留。
+  - 盘点两笔待裁：未合分支 `nr-applicability-from-resolution`（`ce92bdd`，ADR-0064）无人认领；本地 main 领先两笔经 patch-id 证为上游孪生，可安全对齐 origin——但主树未跟踪的 `.scratch/pg-takeover-replay-handoff/` 是唯一未入库产物，**抢救先于任何清理**。
+  - 轨道、装配点串行、里程碑判据：不动。
