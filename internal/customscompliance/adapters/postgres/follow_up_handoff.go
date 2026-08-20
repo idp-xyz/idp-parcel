@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -13,8 +14,14 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
-// followUpEventType 是后续申报动作意图的事件类型。
-const followUpEventType = "customs-compliance.follow-up.recorded"
+// 后续动作目标在同一个目标键上有三拍都交意图（立目标 → 拟替代 → 替代生效），三拍
+// 各认领各的信封、各有各的事件类型。状态段照 statement_handoff 的 /voided 现成形状：
+// 首拍裸键，后两拍各带后缀。
+const (
+	followUpEventType          = "customs-compliance.follow-up.recorded"
+	followUpProposedEventType  = "customs-compliance.follow-up.replacement-proposed"
+	followUpEffectiveEventType = "customs-compliance.follow-up.replacement-effective"
+)
 
 // OutboxFollowUpHandoff 把后续动作目标写入 Outbox，实现 ports.FollowUpHandoff。
 // 入队一步由 outboxintent.EnqueueOnce 承担。
@@ -52,13 +59,56 @@ type followUpPayload struct {
 	Kind      string `json:"kind"`
 }
 
-func followUpEventID(key ports.FollowUpTargetKey) string {
+// followUpPartitionKey 取整个目标键，不取状态段。
+//
+// ID 管幂等、分区键管顺序，两者不是一回事。同一目标的三拍是一条链（立目标 → 拟替代 →
+// 替代生效），状态段进分区键每拍就自成一区，生效可能先于拟替代送达——下游读到的替代
+// 关系从此没有先后可言。目标键四维之内则一维不能少：少了哪一维都会把不同目标压进一队。
+func followUpPartitionKey(key ports.FollowUpTargetKey) string {
 	return key.TenantID.String() + "/" + key.Trigger.String() + "/" +
 		key.Version.String() + "/" + key.Kind.String()
 }
 
-// HandOffFollowUp 把一份意图入队。信封 ID 取后续动作目标键——意图由目标键认领
-// （ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// followUpHandoffShape 是一拍的信封身份：哪一份（ID）、哪一类（类型）、何时发生。
+type followUpHandoffShape struct {
+	eventID    string
+	eventType  eventing.EventType
+	occurredAt time.Time
+}
+
+// followUpHandoffIdentity 按意图携带的状态选拍。ADR-0043 说意图由结果标识认领，而
+// 这一口的结果是「目标处在哪一拍」：ID 少了状态段，三拍就算出同一个字符串，而
+// outboxintent.EnqueueOnce 先查后插——后两拍静默不入队，编排却收到「交接成功」。
+func followUpHandoffIdentity(intent ports.FollowUpHandoffIntent) followUpHandoffShape {
+	base := followUpPartitionKey(intent.Key)
+	switch {
+	case intent.Relation == nil:
+		return followUpHandoffShape{
+			eventID:    base,
+			eventType:  followUpEventType,
+			occurredAt: intent.Target.FormedAt().UTC(),
+		}
+	case !intent.Relation.Effective():
+		// 拟替代在领域上没有自己的时刻（ProposeReplacement 不收时间），取目标形成
+		// 时刻——顺序由分区序列守，不靠这个时间戳。
+		return followUpHandoffShape{
+			eventID:    base + "/replacement-proposed",
+			eventType:  followUpProposedEventType,
+			occurredAt: intent.Target.FormedAt().UTC(),
+		}
+	default:
+		at, _ := intent.Relation.EffectiveAt()
+		return followUpHandoffShape{
+			eventID:    base + "/replacement-effective",
+			eventType:  followUpEffectiveEventType,
+			occurredAt: at.UTC(),
+		}
+	}
+}
+
+// HandOffFollowUp 把一份意图入队。信封 ID 取目标键加状态段——意图由「目标的这一拍」
+// 认领（ADR-0043）。载荷仍是指针式的（只带目标键四维，下游按键重读当前状态）。键缺席
+// 是装配缺陷，响亮报错不入队。
 func (handoff *OutboxFollowUpHandoff) HandOffFollowUp(
 	ctx context.Context,
 	intent ports.FollowUpHandoffIntent,
@@ -82,17 +132,17 @@ func (handoff *OutboxFollowUpHandoff) HandOffFollowUp(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := followUpEventID(key)
+	shape := followUpHandoffIdentity(intent)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventing.EventID(shape.eventID),
 		Source:       ccEventSource,
-		Type:         followUpEventType,
+		Type:         shape.eventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Version.String() + "/" + key.Kind.String(),
-		PartitionKey: eventID,
-		OccurredAt:   intent.Target.FormedAt().UTC(),
+		PartitionKey: followUpPartitionKey(key),
+		OccurredAt:   shape.occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
 		Payload:      payload,

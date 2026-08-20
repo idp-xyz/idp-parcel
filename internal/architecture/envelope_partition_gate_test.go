@@ -141,8 +141,6 @@ var allowedSameExpression = map[string]string{
 		"案件链是否需保序；ID 缺版本维一事已另有票（.scratch/declaration-envelope-version-dedup/issues/01），今天无触发路径",
 	"internal/customscompliance/adapters/postgres/external_result_handoff.go": annotationNoOrdering +
 		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
-	"internal/customscompliance/adapters/postgres/follow_up_handoff.go": annotationStateSequence +
-		"ManageFollowUpHandler.FormTarget → .RecordEffect，同一目标键先后两拍撞同一 ID",
 
 	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationNoOrdering +
 		"判断键含接受基线，重判走新基线即新键；同键由 CreateInitialRouteHandler.Handle 判重放返原",

@@ -81,6 +81,63 @@ func followUpHandoffEventID(key ports.FollowUpTargetKey) string {
 		key.Version.String() + "/" + key.Kind.String()
 }
 
+// TestEachFollowUpBeatEnqueuesItsOwnEnvelopeInTheSamePartition 钉住两个字段的分工。
+//
+// 同一目标键上有三拍都交意图（ManageFollowUpHandler.FormTarget → .Propose → .RecordEffect），
+// 两件都要成立：**各自入队**（ID 带状态段，后两拍不被 EnqueueOnce 当成重放吞掉——否则
+// 拟替代与生效替代永远到不了下游）**且同分区**（分区键只到目标键，三拍排一条队）。
+// 状态段照 statement_handoff 的 /voided 现成形状：首拍裸键，后两拍各带后缀、各换类型。
+func TestEachFollowUpBeatEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
+	fixture := newFollowUpHandoffFixture(t)
+	ctx := t.Context()
+
+	key := followUpKey(t, "tenant-a")
+	target := formedTarget(t)
+	formed := ports.FollowUpHandoffIntent{Key: key, Target: target}
+
+	proposed, err := domain.ProposeReplacement(target,
+		fmcValue(t, domain.NewDeclarationUnitID, "declaration-unit-2"))
+	if err != nil {
+		t.Fatalf("拟替代：%v", err)
+	}
+	proposal := ports.FollowUpHandoffIntent{Key: key, Target: target, Relation: &proposed}
+
+	effective, err := proposed.TakeEffect("external-result/approved", fmcBaseAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("替代生效：%v", err)
+	}
+	took := ports.FollowUpHandoffIntent{Key: key, Target: target, Relation: &effective}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffFollowUp(txCtx, formed); err != nil {
+			return err
+		}
+		if err := fixture.handoff.HandOffFollowUp(txCtx, proposal); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffFollowUp(txCtx, took)
+	})
+
+	base := followUpHandoffEventID(key)
+	proposedID := base + "/replacement-proposed"
+	effectiveID := base + "/replacement-effective"
+
+	for _, row := range []struct {
+		id, eventType string
+	}{
+		{base, "customs-compliance.follow-up.recorded"},
+		{proposedID, "customs-compliance.follow-up.replacement-proposed"},
+		{effectiveID, "customs-compliance.follow-up.replacement-effective"},
+	} {
+		if got := followUpIntentType(t, fixture.pool, row.id); got != row.eventType {
+			t.Fatalf("%s 的事件类型 = %q, want %q——后两拍不入队或类型没换都算失败", row.id, got, row.eventType)
+		}
+		if got := partitionKeyOf(t, fixture.pool, row.id); got != base {
+			t.Fatalf("%s 的分区键 = %q, want %q；三拍不同分区就没有先后可言", row.id, got, base)
+		}
+	}
+}
+
 func TestFollowUpIntentCommitsAtomicallyWithTheTarget(t *testing.T) {
 	fixture := newFollowUpHandoffFixture(t)
 	ctx := t.Context()
