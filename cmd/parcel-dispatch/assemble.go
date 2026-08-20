@@ -145,10 +145,22 @@ func positiveIntFromEnv(getenv func(string) string, name string) (int, error) {
 	return value, nil
 }
 
-// assembleDispatcher 是派发一拍的装配点：读部署形态、开连接池、接完整依赖图。
+// assembleDispatcher 是派发一拍的装配点：读部署形态、开连接池、验启动就绪、接完整
+// 依赖图。
 //
 // 交回的第二个值是收尾函数，进程停机时调。装配中途失败时连接池就地关掉——半开的池
 // 会在下一次装配尝试时耗掉连接数，而那种耗尽看起来像数据库出了问题。
+//
+// 就绪检查放在这里而不是交给 Loop，是因为两类失败要运维做的事相反。`Loop.Run` 对
+// 一拍失败只记不停是对的，运行中的依赖抖动不该拖死进程；但错的 DSN、库不可达、缺
+// 框架 schema 都是部署本身坏了，让它经同一条路径表现，就与抖动在日志里长成同一种
+// 东西——进程照常常驻，每拍报一次错，没人看得出该去改部署还是去等上游。装配点失败
+// 让进程带着原因退出，这两格才分得开。
+//
+// 业务迁移是否施加齐全没有第三道检查：`migrate` 今天只导出施加计划的 `Run`，它要一
+// 条独占连接、会建表，而那个包明写自己从不在应用启动时运行；没有可用的只读状态读口。
+// 因此业务表缺失这一格仍会起得来并按每拍报错表现——要补得先给 `migrate` 定出只读
+// 状态口，那是另一件事。
 func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, func(), error) {
 	settings, err := settingsFromEnv(getenv)
 	if err != nil {
@@ -158,10 +170,27 @@ func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("parcel-dispatch: connect: %w", err)
 	}
+	// 建池是惰性的：`pgxpool.New` 只解析连接串，不实际连库，因此错的 DSN 到这里
+	// 一声不响。库可达性由这一次 Ping 认定。
+	//
+	// 不在这里加拨号超时常量：那是部署形态，写死一个数就是替租户定了启动等多久。
+	// 要限时的部署把 `connect_timeout` 写进 DSN，pgx 认它；ctx 则由停机信号驱动，
+	// 启动途中收到 SIGTERM 就当场停下。
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("parcel-dispatch: ping: %w", err)
+	}
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		pool.Close()
 		return nil, nil, fmt.Errorf("parcel-dispatch: framework db: %w", err)
+	}
+	// `CheckSchema` 是 bento 自带的只读形状检查，排在 Ping 之后：库连不上时它一样
+	// 会失败，但失败发生在它自己开只读事务那一步，成因被记在「schema check」名下，
+	// 运维会去查迁移而不是查连通。
+	if err := db.CheckSchema(ctx); err != nil {
+		pool.Close()
+		return nil, nil, fmt.Errorf("parcel-dispatch: schema check: %w", err)
 	}
 	beat, err := wireDispatcher(db, settings)
 	if err != nil {
