@@ -1,7 +1,7 @@
 # Glob 不下降进技能 junction，列目录判断「技能装没装」会得到假阴性
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 ## 现象
 
@@ -58,3 +58,4 @@ Glob 走的目录遍历不下降进 reparse point，因此看不见 junction 里
   ——父目录是普通目录，`Get-ChildItem -Force` 列得出全部 37 个。真正成立的只有「Glob 不下降进
   子目录那一层 junction 且报空不报错」。它另一条「看不见不等于没装」属实，但 `workflow.md`
   早已写过，不必再写。按复核后的事实立票。
+- 2026-08-20 MCP-1：MCP-2 按票面写入 `workflow.md`（`b3c3fc3`），票 resolved。

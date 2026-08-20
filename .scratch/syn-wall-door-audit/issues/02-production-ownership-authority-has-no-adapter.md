@@ -1,7 +1,7 @@
 # 生产归属权威端口无生产适配器,治理登记册配好也接不进提交链
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W03。
 

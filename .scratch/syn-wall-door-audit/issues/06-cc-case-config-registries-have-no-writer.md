@@ -1,7 +1,7 @@
 # 关务案件配置面五类登记册只读,无写入方无登记口
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W13。
 
@@ -27,3 +27,15 @@ Status: needs-triage
 ## 参照
 
 PAR-CUS-01..07(尤其 PAR-CUS-04);`docs/design/customs-slice-0-business-development-handoff.md`。
+
+## Comments
+
+- 2026-08-20 · MCP-3：对 3324ecb 重核四件（只读）。**票面与代码零漂移，完全成立。**
+  仓储表：在——0006（readiness_judgment、submission_authority）、0007（interpretation_rule、
+  case_requirement_rule）、0008（closure_obligation_catalog/item、gate_condition_catalog/
+  finding），三份迁移与五个只读视图最后触碰均为 32cc780（2026-08-14），此后无人动过。
+  装载口：五视图在。写入方：仍零——上述配置表的 INSERT 只出现在六个 `*_view_test.go`，
+  非测试代码零写入。进程级登记口：仍零——`application/` 无登记用例（现有用例都是案件
+  链判断侧）。建议：ready-for-agent，票面原样可开工；PAR-CUS-01..07 实例值待提供是
+  常态，机制半边不被阻断。
+- 2026-08-20 MCP-1：采纳重核，Status → ready-for-agent。实现另派。

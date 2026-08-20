@@ -30,3 +30,22 @@ Status: needs-triage
 ## 参照
 
 ADR-0052、ADR-0053;PAR-NET-14;`docs/domain/network-routing/CONTEXT.md`。
+
+## Comments
+
+- 2026-08-20 · MCP-3：对 3324ecb 重核四件（只读）。**票面大幅过时——「缺的最小机制件」
+  第 1 件的模式设计半边已由 NR-CATALOG-MECH 落地（3b9f212，2026-08-20，ADR-0068）。**
+  仓储表：**已有**——`migrations/network_routing/0008_network_catalog.sql` 七表骨架（节点/
+  连接/线路/服务区域/服务日历/路由策略六类稳定定义 + 临时可用性调整 + 目录修订锚）；
+  服务区域与日历的**内容列刻意未定**（0008 头注：属 PAR-NET-14，形态定了再以新迁移扩列）。
+  装载口：**已有**——`NetworkCatalog.LoadDefinitionsAt`（单语句单快照、未配置与空目录
+  分格、两版同时适用报 `ErrAmbiguousNetworkCatalog`）。写入方：**适配器级已有**——七个
+  `Register*` 方法带修订锚同事务推进，但调用方只有测试；**应用层登记用例与进程级登记口
+  仍零**（`NewNetworkCatalog` 未接 cmd）。0007 的 `network_definition` 登记表本身仍无写入
+  方（读口注释原话未变，0f266be），三个证据视图仍只读 0007 恒答未配置——「解析层存在前
+  三口取数侧不接」的护栏在 0008 头注与 `network_catalog.go` 注释两处钉着。解析层：仍零
+  （设计上后置：候选生成/过滤/排序属 PAR-NET-14）。
+  建议：票面按上述改写后 ready-for-agent，范围收敛为「登记**用例** + 进程级登记口
+  （含 0007 登记行随目录登记如何形成——两表合流口径属解析层设计，先只登目录）」；
+  解析层与内容列被 PAR-NET-14 阻断，另票另裁，勿并入。
+- 2026-08-20 MCP-1：重核属实，票面先改写再 ready；本轮不派实现。解析层/内容列另票。

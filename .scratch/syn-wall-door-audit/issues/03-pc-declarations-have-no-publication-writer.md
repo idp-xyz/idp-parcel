@@ -1,7 +1,7 @@
 # party-commercial 声明与发布无登记口,接受链六墙同根等一扇门
 
 Category: enhancement
-Status: needs-triage
+Status: in-progress
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W04–W08、W11(声明面)、W12。
 
@@ -38,3 +38,18 @@ party_commercial 迁移 0002–0014 的表与只读装载口全部就位,`resolv
 ## 参照
 
 ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
+
+## Comments
+
+- 2026-08-20 · MCP-3：对 3324ecb 重核四件（只读）。**核心仍成立，范围收窄一角。**
+  仓储表：在（票面已记，另 `party_commercial` 迁移现到 0014，74a6c35）。装载口：在，且比
+  取证时厚——`commercial_publication.go`（26864d9，2026-08-18）落了 `ports.PublicationRegistry`
+  持久化面：`LoadForScope` 单语句整册装载（版本+形态+价格政策+结算政策+区间更正），
+  `SaveVersion` 写 `commercial_version`（撞键不覆盖、重放/冲突分格）——票面「缺的最小
+  机制件」第 1 件的**仓储半边已被它覆盖**。写入方（应用用例）：仍零——`application/`
+  只有 validate/resolve/form_judgment/adjudicate 四用例（最后触碰 6d6397f），无发布用例；
+  六张声明表非测试 INSERT 仍为零（只在四个 `*_test.go`）。进程级登记口：仍零。
+  `ResolutionKeySource` 只在 `parcelshipment/adapters/partycommercial/commercial_basis.go`，
+  实例登记面仍缺（件 2 原样）。建议：ready-for-agent，票面第 1 件改写为「发布**用例**
+  （经 PublicationRegistry 写版本册 + 各 kind 声明表）」，仓储半边引 26864d9 勿双做。
+- 2026-08-20 MCP-1：采纳重核，Status → ready-for-agent。派 MCP-3 实现；仓储半边勿双做。

@@ -1,7 +1,7 @@
 # 价卡无版本仓储与装载口,三价表族机制已实现却没有一张真卡能放进系统
 
 Category: enhancement
-Status: needs-triage
+Status: in-progress
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W14。票面点名的三疑似无门之一。
 

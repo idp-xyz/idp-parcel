@@ -1,7 +1,7 @@
 # 接入渠道登记册与首个真渠道 Intake 缺失,渠道墙想配也没处配
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W01/W02。
 

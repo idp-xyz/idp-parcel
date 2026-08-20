@@ -1,7 +1,7 @@
 # 收寄硬资格证据口无生产实现,资格证据无处可登
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W11 证据面。
 

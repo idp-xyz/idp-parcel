@@ -1,7 +1,7 @@
 # 计价参考序列登记册缺失,燃油与汇率序列无处登记
 
 Category: enhancement
-Status: needs-triage
+Status: in-progress
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W15。
 

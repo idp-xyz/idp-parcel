@@ -1,7 +1,7 @@
 # VE 五类规则/策略目录只读,里程碑映射键修好了仍没有往里填的口
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W16/W17/W18。
 
@@ -29,3 +29,17 @@ VE 目录登记口:版本化登记用例 + 写入方,覆盖五类目录,各按�
 ## 参照
 
 PAR-VIS-01/05/07/08/09;`.scratch/ve-milestone-mapping-key/issues/01`(键结构,在修);外部评审 03 票(账户迟绑无重派生,独立在途)。
+
+## Comments
+
+- 2026-08-20 · MCP-3：对 3324ecb 重核四件（只读）。**核心成立，两处票面事实要更新。**
+  ① 「键结构在修」已完：MAP-KIND 的迁移 0014 已入 main（1709872，2026-08-19，
+  `rule_catalog.go` 同笔），票面「在修」句过时。② 目录面积扩大：0018（0db1acf，
+  2026-08-20，CLAIM-ELIG-C）为 PAR-VIS-08 的授权角新增 `claim_authorization_catalogue`
+  + `claim_authorized_applicant` 两表并接进 `claim_eligibility.go` 装载口——第六、七张
+  目录表，同样只有测试内 INSERT。复核四件：五类（现七张表）目录 + 只读装载口在；
+  全部目录表非测试 INSERT 为零（写入方零）；`application/` 无登记用例、进程级登记口零。
+  建议：ready-for-agent，登记口范围把 0018 的授权目录一并覆盖（PAR-VIS-08 现在跨
+  claim_contract_scope/covered_kind 与授权两组表）；写入侧防重叠（`ErrAmbiguousCatalog`
+  同款）红线原样。
+- 2026-08-20 MCP-1：采纳重核，Status → ready-for-agent。登记口含 0018 授权目录。实现另派。
