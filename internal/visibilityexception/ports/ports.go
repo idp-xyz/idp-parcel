@@ -509,15 +509,18 @@ type ClaimStore interface {
 }
 
 // EligibilityQuery 是资格规则的查找键：按客户账户、合同版本、目标范围与索赔类型
-// 找出适用的那一版规则。它不带事实——事实由编排另取（见 ClaimStore 与
-// ClaimEvidenceView），目录只答规则是什么。
+// 找出适用的那一版规则。Applicant 也是查找键——授权名单可按它收窄到相关行；存量
+// 索赔未带申请人时为零值，实现照常答目录登记情况，缺席那一维由编排如实停下。除此
+// 之外查询不带事实——事实由编排另取（见 ClaimStore 与 ClaimEvidenceView），目录只答
+// 规则是什么。
 type EligibilityQuery struct {
-	Batch    domain.ClaimBatchReference
-	Item     domain.ClaimItemID
-	Customer domain.CustomerAccountReference
-	Contract domain.ContractScopeReference
-	Target   domain.RequestScopeReference
-	Kind     domain.ClaimKindReference
+	Batch     domain.ClaimBatchReference
+	Item      domain.ClaimItemID
+	Customer  domain.CustomerAccountReference
+	Contract  domain.ContractScopeReference
+	Target    domain.RequestScopeReference
+	Kind      domain.ClaimKindReference
+	Applicant domain.ApplicantReference
 }
 
 // FilingDeadlineRule 是首次索赔期限规则。CONTEXT 要求每个期限保存适用规则版本、
@@ -547,14 +550,17 @@ type MinimumMaterialsRule struct {
 	SupplementDeadline time.Time
 }
 
-// AuthorizationCatalogue 是申请人授权目录的登记情况。
+// AuthorizationCatalogue 是申请人授权目录：登记情况、版本与授权名单。
 //
-// 这里只有「登记了没有」与版本，没有成员名单：核对授权要拿申请人来比，而
-// EligibilityQuery 今天不带申请人。先在这里拟一份名单形状，等于替补上那一维的切片
-// 决定申请人长什么样（见 .scratch/ve-claim-eligibility-dimensions 切块 (c)）。
+// 名单语义只有一条：在列即该申请人获此客户账户的索赔提交授权（`AT-VE-125` 把申请人
+// 授权与客户账户并列——两者不是一回事，账户对不对是另一维）。实现可以按查询里的
+// 申请人把名单收窄到相关那一行，收窄不改语义，编排仍按「在不在列」核对。Registered
+// 为假时名单不看：目录未登记是 `PAR-VIS-08` 待提供的实例参数，空名单在那时不是
+// 「无人获授权」而是「还没登记」，两者的恢复动作不同。
 type AuthorizationCatalogue struct {
-	Registered  bool
-	RuleVersion string
+	Registered           bool
+	RuleVersion          string
+	AuthorizedApplicants []domain.ApplicantReference
 }
 
 // EligibilityRules 是资格目录交出的规则本体。它答「规则是什么」，不答「这项索赔过

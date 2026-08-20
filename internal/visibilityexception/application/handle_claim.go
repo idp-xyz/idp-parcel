@@ -135,12 +135,14 @@ func (reason HandleClaimUndecidedReason) String() string {
 
 // ReceiveClaimCommand 携带一项索赔的原始提交。项标识由客户提交侧建立并随批次唯一，
 // 编排不签发——重复到达要靠它认得出自己。租户显式随命令到达（ADR-0003）：批次引用
-// 只在租户内唯一，编排不替提交侧补租户。
+// 只在租户内唯一，编排不替提交侧补租户。申请人随提交事实到达且必备（CONTEXT 硬句
+// 186 的授权维核的就是它）——由提交侧的认证/翻译面给出，不从客户账户推。
 type ReceiveClaimCommand struct {
 	TenantID    domain.TenantID
 	Batch       domain.ClaimBatchReference
 	Item        domain.ClaimItemID
 	Customer    domain.CustomerAccountReference
+	Applicant   domain.ApplicantReference
 	Contract    domain.ContractScopeReference
 	Target      domain.RequestScopeReference
 	Kind        domain.ClaimKindReference
@@ -265,6 +267,7 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		command.Batch.String() == "" ||
 		command.Item.String() == "" ||
 		command.Customer.String() == "" ||
+		command.Applicant.String() == "" ||
 		command.Contract.String() == "" ||
 		command.Target.String() == "" ||
 		command.Kind.String() == "" ||
@@ -284,6 +287,7 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 		ID:          command.Item,
 		Batch:       command.Batch,
 		Customer:    command.Customer,
+		Applicant:   command.Applicant,
 		Contract:    command.Contract,
 		Target:      command.Target,
 		Kind:        command.Kind,
@@ -350,6 +354,8 @@ const (
 	basisFilingDeadlineAbsent   = "FILING_DEADLINE_RULE_NOT_REGISTERED"
 	basisAuthorizationAbsent    = "AUTHORIZATION_CATALOGUE_NOT_REGISTERED"
 	basisApplicantNotCarried    = "AUTHORIZATION_APPLICANT_NOT_CARRIED"
+	basisApplicantAuthorized    = "APPLICANT_AUTHORIZED"
+	basisApplicantNotAuthorized = "APPLICANT_NOT_AUTHORIZED"
 	basisDuplicateNone          = "DUPLICATE_NONE"
 	basisDuplicateFound         = "DUPLICATE_FOUND"
 	basisDuplicateUnavailable   = "DUPLICATE_LOOKUP_UNAVAILABLE"
@@ -371,6 +377,12 @@ const (
 	dimensionDenied
 	dimensionShortOfMaterials
 	dimensionUncheckable
+	// dimensionRefused 只由申请人授权维给出：目录已登记、申请人在场、核对结果是不在
+	// 名单里。`AT-VE-125` 对这一幕的答案是「不受理」——用词与 `AT-VE-124` 的「不予
+	// 受理」刻意分开：它不是 ADR-0051 的永久格（名单换版或换对申请人后照常再审），也
+	// 不是等待补充（不缺材料，缺的是提交资格），更不折进「核不了」（核对已经作出了
+	// 答案）。请求从这位申请人手里立不住，索赔项一字不动。
+	dimensionRefused
 )
 
 // dimensionVerdict 是一维的核对结果。basis 恒有；missing 只在差材料时有；reason 只
@@ -407,13 +419,17 @@ func (handler *HandleClaimHandler) ScreenClaim(
 		return result, nil
 	}
 
+	// 申请人零值即存量索赔未带：目录照常答登记情况，缺席那一维由 judgeApplicantAuthorization
+	// 如实停下，不在这里拦。
+	applicant, _ := claim.Applicant()
 	rules, declared, err := handler.deps.Eligibility.RulesForClaim(ctx, ports.EligibilityQuery{
-		Batch:    command.Batch,
-		Item:     command.Item,
-		Customer: claim.Customer(),
-		Contract: claim.Contract(),
-		Target:   claim.Target(),
-		Kind:     claim.Kind(),
+		Batch:     command.Batch,
+		Item:      command.Item,
+		Customer:  claim.Customer(),
+		Contract:  claim.Contract(),
+		Target:    claim.Target(),
+		Kind:      claim.Kind(),
+		Applicant: applicant,
 	})
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilityRulesUnavailable}, nil
@@ -425,22 +441,28 @@ func (handler *HandleClaimHandler) ScreenClaim(
 	// 五维一律核完再定局，不在中途短路：CONTEXT 要求资格结果保存合同、首次索赔期限、
 	// 授权、重复关系和材料依据五样依据，短路会让先出结果的那一维把其余四样从记录里
 	// 抹掉，而事后没人能从一句`不予受理`里读出当时另外四维是什么情形。
-	// 维序只影响一件事：多维同时核不了时未决报哪一个。**申请人授权排在最后**，因为
-	// 它今天核不了不是这项索赔缺了什么，而是查询还不带申请人（切块 (c)）——那一维对
-	// 每项索赔一律核不了，排在前面就会把「这个租户还没登记材料清单」「这项索赔的证据
-	// 查不到」这些真正修得动的缺口全盖住，读到未决的人只会反复看到同一句话。
+	// 维序只影响一件事：多维同时核不了时未决报哪一个。申请人授权维接通（切块 (c)）
+	// 之前恒核不了、必须垫底；接通后它只在目录未登记或存量索赔未带申请人时核不了，
+	// 与其余维平权。仍保持在最后，是让时限、材料这类租户一次登记就修得动的缺口先被
+	// 报出——存量索赔缺申请人没有登记可补，出路只有按正确申请人重提。
 	verdicts := []dimensionVerdict{
 		judgeContractScope(rules),
 		judgeFilingDeadline(rules, claim),
 		handler.judgeDuplicateRelation(ctx, command.TenantID, claim),
 		handler.judgeMinimumMaterials(ctx, command.TenantID, command.Batch, command.Item, rules),
-		judgeApplicantAuthorization(rules),
+		judgeApplicantAuthorization(rules, claim),
 	}
 	basis := composeScreenBasis(rules, verdicts)
 
 	outcome, reason, screenErr := handler.applyScreen(claim, verdicts, basis, rules)
 	if outcome == HandleClaimOutcomeInvalid {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: reason}, nil
+	}
+	if outcome == HandleClaimNotAccepted {
+		// 授权核对答了「不匹配」：不受理（AT-VE-125），索赔项一字未动，没有东西要保存。
+		// 依据串也不随答案交出——那里记着合同覆盖与期限判断，交到未获授权的申请人手里
+		// 就是泄露（同一条验收的后半句「不泄露其他客户资料」）。
+		return HandleClaimResult{outcome: HandleClaimNotAccepted, claim: claim}, nil
 	}
 	if screenErr != nil {
 		switch {
@@ -471,6 +493,14 @@ func (handler *HandleClaimHandler) applyScreen(
 ) (HandleClaimOutcome, HandleClaimUndecidedReason, error) {
 	now := handler.deps.Clock.Now()
 
+	// 不受理排在一切定局之前：未获授权的申请人不该从答案里读出这个账户的合同覆盖、
+	// 期限或材料判断（AT-VE-125），连`不予受理`都轮不到答给它。
+	for _, verdict := range verdicts {
+		if verdict.outcome == dimensionRefused {
+			return HandleClaimNotAccepted, HandleClaimUndecidedReasonNone, nil
+		}
+	}
+
 	for _, verdict := range verdicts {
 		if verdict.outcome == dimensionDenied {
 			return ClaimScreened, HandleClaimUndecidedReasonNone,
@@ -498,9 +528,9 @@ func (handler *HandleClaimHandler) applyScreen(
 			return HandleClaimOutcomeInvalid, verdict.reason, nil
 		}
 	}
-	// 这一格今天到不了：申请人授权那一维恒答核不了，上面那圈必然先返回。补上申请人
-	// 维的切块 (c) 会把它接通，**那时它才第一次可测**——在此之前不要照着它推断`通过`
-	// 已经验过，它写下的是不可逆的终局格。
+	// 五维全部肯定通过才走到这里（切块 (c) 把申请人授权接通后，这一格第一次可达）。
+	// 它写下的是不可逆的终局格——等待补充可以重判到这里（ADR-0051），终局一经写下
+	// 不再审。
 	return ClaimScreened, HandleClaimUndecidedReasonNone,
 		claim.ScreenEligibility(domain.ClaimEligible, basis, now)
 }
@@ -540,10 +570,13 @@ func judgeFilingDeadline(rules ports.EligibilityRules, claim *domain.ClaimItem) 
 	}
 }
 
-// judgeApplicantAuthorization 核申请人授权。这一维今天结构上核不了：EligibilityQuery
-// 里只有客户账户，而申请人与账户不是一回事（`AT-VE-125` 把两者并列）。补上那一维是
-// 切块 (c) 的事；在它到来之前如实答核不了——答通过就是把一次没核过的授权记成已核。
-func judgeApplicantAuthorization(rules ports.EligibilityRules) dimensionVerdict {
+// judgeApplicantAuthorization 核申请人授权：目录给名单，索赔给申请人，在列即过。
+//
+// 三种落法分开，因为恢复动作各不相同：目录未登记等租户登记（PAR-VIS-08 实例半边）；
+// 存量索赔未带申请人是提交事实缺一格、没有登记可补，出路只有按正确申请人重提；在场
+// 且不在列是核对作出的「不匹配」，落 dimensionRefused——`AT-VE-125` 的「不受理」，
+// 不占 ADR-0051 的永久格，也不折进「核不了」。
+func judgeApplicantAuthorization(rules ports.EligibilityRules, claim *domain.ClaimItem) dimensionVerdict {
 	if !rules.Authorization.Registered {
 		return dimensionVerdict{
 			outcome: dimensionUncheckable,
@@ -551,10 +584,25 @@ func judgeApplicantAuthorization(rules ports.EligibilityRules) dimensionVerdict 
 			reason:  EligibilityAuthorizationNotRegistered,
 		}
 	}
+	applicant, carried := claim.Applicant()
+	if !carried {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisApplicantNotCarried + "/" + rules.Authorization.RuleVersion,
+			reason:  EligibilityApplicantNotCarried,
+		}
+	}
+	for _, authorized := range rules.Authorization.AuthorizedApplicants {
+		if authorized == applicant {
+			return dimensionVerdict{
+				outcome: dimensionPassed,
+				basis:   basisApplicantAuthorized + "/" + rules.Authorization.RuleVersion,
+			}
+		}
+	}
 	return dimensionVerdict{
-		outcome: dimensionUncheckable,
-		basis:   basisApplicantNotCarried + "/" + rules.Authorization.RuleVersion,
-		reason:  EligibilityApplicantNotCarried,
+		outcome: dimensionRefused,
+		basis:   basisApplicantNotAuthorized + "/" + rules.Authorization.RuleVersion,
 	}
 }
 

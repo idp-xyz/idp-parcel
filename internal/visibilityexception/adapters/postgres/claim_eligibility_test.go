@@ -123,9 +123,10 @@ func TestKindOutsideContractScopeIsReportedUncoveredWithItsRuleVersion(t *testin
 	}
 }
 
-// 类型在保时目录如实报在保，但**另外三维一律未登记**：索赔时限要起算事件与业务日历、
-// 最低材料要一份清单、授权要一份申请人目录，三样都属 `PAR-VIS-08` 待登记实例参数，
-// 本上下文还没有那个登记面。凑一份就是发明实例参数，编排据此停在指名到维的未决。
+// 类型在保时目录如实报在保，但**时限与材料两维仍未登记**：起算事件与业务日历、材料
+// 清单都属 `PAR-VIS-08` 待登记实例参数且还没有登记面，凑一份就是发明实例参数。授权
+// 目录自 0018 起有登记面，但没有目录行时同样如实答未登记——空名单在那时不是「无人
+// 获授权」而是「还没登记」。编排据此停在指名到维的未决。
 func TestCoveredKindStillLeavesTheOtherThreeRulesUnregistered(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE")
@@ -149,6 +150,84 @@ func TestCoveredKindStillLeavesTheOtherThreeRulesUnregistered(t *testing.T) {
 	}
 }
 
+func (fixture *eligibilityFixture) registerAuthorization(t *testing.T, tenant, customer, ruleVersion string, applicants ...string) {
+	t.Helper()
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.claim_authorization_catalogue
+			(tenant_id, customer_ref, rule_version, approved_by)
+		 VALUES ($1, $2, $3, 'customer-service')`,
+		tenant, customer, ruleVersion); err != nil {
+		t.Fatalf("登记授权目录 %s：%v", customer, err)
+	}
+	for _, applicant := range applicants {
+		if _, err := fixture.pool.Exec(t.Context(),
+			`INSERT INTO visibility_exception.claim_authorized_applicant
+				(tenant_id, customer_ref, applicant_ref)
+			 VALUES ($1, $2, $3)`,
+			tenant, customer, applicant); err != nil {
+			t.Fatalf("登记授权申请人 %s：%v", applicant, err)
+		}
+	}
+}
+
+// 授权目录登记后按查询里的申请人收窄名单：在列交回含该申请人的名单，不在列交回空
+// 名单（目录仍报已登记——「不匹配」由编排按 AT-VE-125 落不受理）；查询没带申请人
+// （存量索赔）只答登记情况；跨租户探不到别人的目录。
+func TestAuthorizationCatalogueAnswersTheQueriedApplicant(t *testing.T) {
+	fixture := newEligibilityFixture(t)
+	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE")
+	fixture.registerAuthorization(t, "tenant-a", "customer-1", "claim-authorization/v1", "applicant-1")
+
+	withApplicant := func(applicant string) ports.EligibilityQuery {
+		query := eligibilityQuery(t, "contract/v1", "DAMAGE")
+		if applicant != "" {
+			query.Applicant = projectionValue(t, domain.NewApplicantReference, applicant)
+		}
+		return query
+	}
+
+	listed, declared, err := fixture.viewFor(t, "tenant-a").
+		RulesForClaim(t.Context(), withApplicant("applicant-1"))
+	if err != nil || !declared {
+		t.Fatalf("在列申请人：err=%v declared=%v", err, declared)
+	}
+	if !listed.Authorization.Registered || listed.Authorization.RuleVersion != "claim-authorization/v1" {
+		t.Fatalf("授权目录没报已登记：%+v", listed.Authorization)
+	}
+	if len(listed.Authorization.AuthorizedApplicants) != 1 ||
+		listed.Authorization.AuthorizedApplicants[0].String() != "applicant-1" {
+		t.Fatalf("名单没按查询收窄到在列那一行：%+v", listed.Authorization.AuthorizedApplicants)
+	}
+
+	unlisted, _, err := fixture.viewFor(t, "tenant-a").
+		RulesForClaim(t.Context(), withApplicant("applicant-9"))
+	if err != nil {
+		t.Fatalf("不在列申请人：%v", err)
+	}
+	if !unlisted.Authorization.Registered || len(unlisted.Authorization.AuthorizedApplicants) != 0 {
+		t.Fatalf("不在列时名单应为空且目录仍报已登记：%+v", unlisted.Authorization)
+	}
+
+	absent, _, err := fixture.viewFor(t, "tenant-a").
+		RulesForClaim(t.Context(), withApplicant(""))
+	if err != nil {
+		t.Fatalf("查询不带申请人：%v", err)
+	}
+	if !absent.Authorization.Registered || len(absent.Authorization.AuthorizedApplicants) != 0 {
+		t.Fatalf("不带申请人时只答登记情况：%+v", absent.Authorization)
+	}
+
+	fixture.declare(t, "tenant-b", "contract/v1", "claim-rules/v1", "DAMAGE")
+	crossTenant, _, err := fixture.viewFor(t, "tenant-b").
+		RulesForClaim(t.Context(), withApplicant("applicant-1"))
+	if err != nil {
+		t.Fatalf("跨租户：%v", err)
+	}
+	if crossTenant.Authorization.Registered {
+		t.Fatalf("跨租户探到了别人的授权目录：%+v", crossTenant.Authorization)
+	}
+}
+
 func TestClaimEligibilityChecksRejectUnusableRows(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1")
@@ -167,5 +246,13 @@ func TestClaimEligibilityChecksRejectUnusableRows(t *testing.T) {
 			(tenant_id, contract_scope_ref, rule_version, approved_by)
 		 VALUES ('tenant-a', 'contract/v2', '   ', 'customer-service')`); err == nil {
 		t.Fatal("库接受了没有规则版本的索赔声明")
+	}
+	// 名单行挂在未登记的目录下：孤立行会让「目录在场」失真，而「不匹配 → 不受理」
+	// 完全建立在它之上（0018 与 0011 同款外键）。
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.claim_authorized_applicant
+			(tenant_id, customer_ref, applicant_ref)
+		 VALUES ('tenant-a', 'customer-9', 'applicant-1')`); err == nil {
+		t.Fatal("库接受了挂在未登记目录下的授权申请人")
 	}
 }

@@ -285,6 +285,9 @@ func registeredRules(t *testing.T) ports.EligibilityRules {
 		Authorization: ports.AuthorizationCatalogue{
 			Registered:  true,
 			RuleVersion: "claim-authorization/v1",
+			AuthorizedApplicants: []domain.ApplicantReference{
+				mustValue(t, domain.NewApplicantReference, "applicant-1"),
+			},
 		},
 	}
 }
@@ -314,11 +317,33 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	return fixture
 }
 
+// seedUnscreenedLegacyClaim 摆出一项申请人维接通（切块 (c)）之前受理的存量索赔：
+// 没有申请人、未审。它只能从重建口来——受理口如今必带申请人。
+func seedUnscreenedLegacyClaim(t *testing.T, fixture *claimFixture, item string) {
+	t.Helper()
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	batch := mustValue(t, domain.NewClaimBatchReference, "claim-batch-1")
+	id := mustValue(t, domain.NewClaimItemID, item)
+	claim, err := domain.RehydrateClaimItem(domain.ClaimItemSnapshot{
+		Revision:    1,
+		ID:          id,
+		Batch:       batch,
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
+		SubmittedAt: claimSubmittedAt,
+	})
+	if err != nil {
+		t.Fatalf("摆出存量索赔：%v", err)
+	}
+	fixture.claims.claims[claimKey{tenant: tenant, batch: batch, item: id}] = claim
+}
+
 // seedEligibleClaim 直接把一项已过审的索赔放进库，供责任结论与复核那几个用例作前置。
 //
-// 不经 ScreenClaim 走过来，是因为**过审在编排上今天到不了**：申请人授权那一维要查询
-// 带申请人才核得动，而查询还不带（切块 (c)）；少核一维就答通过，正是本切片要防的事。
-// 那几个用例证的是结论与复核，不是资格审核，前置用重建口摆出来更直白。
+// 过审如今经 ScreenClaim 也到得了（切块 (c) 接通了申请人授权维），但那几个用例证的
+// 是结论与复核，不是资格审核——前置用重建口摆出来，读用例的人不必先追一遍五维核对。
 func seedEligibleClaim(t *testing.T, fixture *claimFixture, item string) {
 	t.Helper()
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
@@ -349,6 +374,7 @@ func receiveCommand(t *testing.T, item string) application.ReceiveClaimCommand {
 		Batch:       mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Item:        mustValue(t, domain.NewClaimItemID, item),
 		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
 		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
 		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
@@ -454,7 +480,7 @@ func TestAScreenRecordsEveryDimensionsBasisAndTerminalIsScreenedOnce(t *testing.
 	for _, dimension := range []string{
 		"CLAIM_KIND_NOT_IN_CONTRACT_SCOPE",
 		"FILING_DEADLINE_MET",
-		"AUTHORIZATION_APPLICANT_NOT_CARRIED",
+		"APPLICANT_AUTHORIZED",
 		"DUPLICATE_NONE",
 		"MATERIALS_COMPLETE",
 	} {
@@ -529,14 +555,19 @@ func TestMaterialsShortOfTheMinimumNeverLandsOnIneligible(t *testing.T) {
 	}
 
 	// 可重入：材料到齐后重判不撞`已审过`——那正是第三态存在的理由（ADR-0051 第二条）。
+	// 其余四维本就全过，重判因此直达终局`通过`：等待补充 → 通过这条路自此可走。
 	fixture.evidence.received = append(fixture.evidence.received,
 		mustValue(t, domain.NewMaterialRequirementReference, "photos/damage"))
 	rejudged, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
 	if err != nil {
 		t.Fatalf("re-screen: %v", err)
 	}
-	if rejudged.Outcome() == application.ClaimScreenAlreadyRecorded {
-		t.Fatal("停在等待补充的索赔被当成已审过——材料补齐后就再也判不了了")
+	if rejudged.Outcome() != application.ClaimScreened {
+		t.Fatalf("outcome = %q, want CLAIM_SCREENED", rejudged.Outcome())
+	}
+	rescreened, _ := rejudged.Claim()
+	if screen, _ := rescreened.Screen(); screen != domain.ClaimEligible {
+		t.Fatalf("screen = %q, want ELIGIBLE；材料补齐且其余维全过", screen)
 	}
 }
 
@@ -565,9 +596,13 @@ func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
 			want: application.EligibilityAuthorizationNotRegistered,
 		},
 		{
-			name:    "授权目录已登记但查询不带申请人",
-			arrange: func(fixture *claimFixture) {},
-			want:    application.EligibilityApplicantNotCarried,
+			name: "授权目录已登记但存量索赔未带申请人",
+			arrange: func(fixture *claimFixture) {
+				// 覆写成接通前受理的存量行：申请人缺席没有登记可补，这一维只能如实
+				// 停下——按正确申请人重提才是出路。
+				seedUnscreenedLegacyClaim(t, fixture, "item-1")
+			},
+			want: application.EligibilityApplicantNotCarried,
 		},
 		{
 			name: "最低材料清单未登记",
@@ -614,11 +649,10 @@ func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
 	}
 }
 
-// Covers: 少核一维不得答通过。申请人授权那一维今天结构上核不了（查询不带申请人，
-// 见切块 (c)），因此`通过`在编排上到不了——把其余维未核的索赔永久标成已过审，与
-// 默认拒赔是同一个错的两面（票面第三节）。本用例钉住这条：其余四维全部肯定通过、
-// 材料齐备、无重复，结果仍然只能是未决。
-func TestAScreenNeverPassesWhileADimensionRemainsUnchecked(t *testing.T) {
+// Covers: 五维全部肯定通过才答`通过`，且这一格自切块 (c) 接通申请人授权维后第一次
+// 可达（此前恒有一维核不了，票面第三节把「少核一维就答通过」与默认拒赔并列为同一个
+// 错的两面）。终局一次性：通过之后再审答`已审过`（ADR-0051 只让等待补充重入）。
+func TestAFullyCheckedClaimScreensEligible(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
 	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
@@ -629,15 +663,78 @@ func TestAScreenNeverPassesWhileADimensionRemainsUnchecked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("screen: %v", err)
 	}
-	if result.Outcome() != application.HandleClaimUndecided {
-		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	if result.Outcome() != application.ClaimScreened {
+		t.Fatalf("outcome = %q, want CLAIM_SCREENED", result.Outcome())
+	}
+	claim, _ := result.Claim()
+	if screen, ok := claim.Screen(); !ok || screen != domain.ClaimEligible {
+		t.Fatalf("screen = %q ok = %v, want ELIGIBLE；五维全过", screen, ok)
+	}
+	basis := claim.Snapshot().ScreenBasis
+	for _, dimension := range []string{
+		"CONTRACT_SCOPE_COVERS_KIND",
+		"FILING_DEADLINE_MET",
+		"APPLICANT_AUTHORIZED/claim-authorization/v1",
+		"DUPLICATE_NONE",
+		"MATERIALS_COMPLETE",
+	} {
+		if !strings.Contains(basis, dimension) {
+			t.Fatalf("通过的依据里没有 %s 那一维：%q", dimension, basis)
+		}
+	}
+
+	again, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("repeat screen: %v", err)
+	}
+	if again.Outcome() != application.ClaimScreenAlreadyRecorded {
+		t.Fatalf("outcome = %q, want SCREEN_ALREADY_RECORDED；通过是终局格", again.Outcome())
+	}
+}
+
+// Covers: `AT-VE-125`「客户账户或申请人授权不匹配 → 不受理且不泄露其他客户资料」。
+// 「不受理」与 `AT-VE-124` 的「不予受理」是两个词：核出不匹配不落 ADR-0051 的永久格
+// （名单换版或换对申请人后照常再审），不折进「核不了」（核对已经作出了答案），也不写
+// 任何东西——索赔项一字不动，账户的合同覆盖与期限判断都不交到未获授权的申请人手里。
+func TestAnUnauthorizedApplicantIsRefusedWithoutAScreen(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	savesAfterReceipt := fixture.claims.saves
+	fixture.eligibility.rules.Authorization.AuthorizedApplicants = []domain.ApplicantReference{
+		mustValue(t, domain.NewApplicantReference, "applicant-9"),
+	}
+
+	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if result.Outcome() != application.HandleClaimNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED", result.Outcome())
+	}
+	if fixture.claims.saves != savesAfterReceipt {
+		t.Fatalf("不受理却写了库：saves %d → %d", savesAfterReceipt, fixture.claims.saves)
 	}
 	claim, _, _ := fixture.claims.FindByBatchItem(ctx,
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		mustValue(t, domain.NewClaimItemID, "item-1"))
 	if screen, screened := claim.Screen(); screened {
-		t.Fatalf("授权维没核过却把索赔记成了 %q", screen)
+		t.Fatalf("不受理却把索赔记成了 %q——授权不匹配不是资格结论", screen)
+	}
+
+	// 名单换版补上申请人后，同一项索赔照常再审并可达通过——不受理不烧掉这项索赔。
+	fixture.eligibility.rules.Authorization.AuthorizedApplicants = append(
+		fixture.eligibility.rules.Authorization.AuthorizedApplicants,
+		mustValue(t, domain.NewApplicantReference, "applicant-1"))
+	rejudged, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("re-screen: %v", err)
+	}
+	if rejudged.Outcome() != application.ClaimScreened {
+		t.Fatalf("outcome = %q, want CLAIM_SCREENED", rejudged.Outcome())
 	}
 }
 
@@ -1155,6 +1252,7 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 		ID:          mustValue(t, domain.NewClaimItemID, "item-1"),
 		Batch:       mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
 		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-9/loss"),
 		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),

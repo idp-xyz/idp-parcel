@@ -180,6 +180,7 @@ func claimCommandOf(t *testing.T) application.ReceiveClaimCommand {
 		Batch:       value(t, domain.NewClaimBatchReference, "claim-batch-9"),
 		Item:        value(t, domain.NewClaimItemID, "item-9"),
 		Customer:    value(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:   value(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    value(t, domain.NewContractScopeReference, "contract-scope/v1"),
 		Target:      value(t, domain.NewRequestScopeReference, "parcel-1/loss"),
 		Kind:        value(t, domain.NewClaimKindReference, "LOSS"),

@@ -47,6 +47,17 @@ func NewContractScopeReference(value string) (ContractScopeReference, error) {
 	return ContractScopeReference{required}, err
 }
 
+// ApplicantReference 指名这一次提交索赔的申请人。申请人与客户账户不是一回事
+// （`AT-VE-125` 把两者并列）：账户是索赔归属的货主客户，申请人是操作提交的那一方，
+// 授权维核的是申请人在不在该账户的授权名单里——拿账户顶替申请人就是把那一维记成
+// 恒过。
+type ApplicantReference struct{ requiredValue }
+
+func NewApplicantReference(value string) (ApplicantReference, error) {
+	required, err := newRequiredValue("applicant reference", value)
+	return ApplicantReference{required}, err
+}
+
 // EligibilityScreen 是资格审核的封闭三态（ADR-0051）：通过、不予受理、等待补充。
 type EligibilityScreen uint8
 
@@ -191,11 +202,13 @@ func (conclusion LiabilityConclusion) String() string {
 }
 
 // ClaimItemSpec 是受理一项索赔所需的全部输入：一个货主客户账户、合同责任范围、目标
-// 范围与索赔类型逐项固定（CONTEXT 硬句 172）。
+// 范围与索赔类型逐项固定（CONTEXT 硬句 172）；申请人随提交事实到达——资格审核的
+// 授权维（硬句 186）核的就是它，受理时缺席的话那一维永远无从核起。
 type ClaimItemSpec struct {
 	ID          ClaimItemID
 	Batch       ClaimBatchReference
 	Customer    CustomerAccountReference
+	Applicant   ApplicantReference
 	Contract    ContractScopeReference
 	Target      RequestScopeReference
 	Kind        ClaimKindReference
@@ -213,6 +226,7 @@ type ClaimItem struct {
 	id              ClaimItemID
 	batch           ClaimBatchReference
 	customer        CustomerAccountReference
+	applicant       ApplicantReference
 	contract        ContractScopeReference
 	target          RequestScopeReference
 	kind            ClaimKindReference
@@ -230,10 +244,13 @@ type ClaimItem struct {
 }
 
 // ReceiveClaimItem 受理一项索赔：先保留原始提交事实，资格判断是下一步（不在这里）。
+// 申请人必备——它是提交事实的一格，事后补不上；缺席受理会造出一项授权维永远核不了
+// 的索赔，出路只能是按正确申请人重提。
 func ReceiveClaimItem(spec ClaimItemSpec) (*ClaimItem, error) {
 	if !spec.ID.valid() ||
 		!spec.Batch.valid() ||
 		!spec.Customer.valid() ||
+		!spec.Applicant.valid() ||
 		!spec.Contract.valid() ||
 		!spec.Target.valid() ||
 		!spec.Kind.valid() ||
@@ -244,6 +261,7 @@ func ReceiveClaimItem(spec ClaimItemSpec) (*ClaimItem, error) {
 		id:          spec.ID,
 		batch:       spec.Batch,
 		customer:    spec.Customer,
+		applicant:   spec.Applicant,
 		contract:    spec.Contract,
 		target:      spec.Target,
 		kind:        spec.Kind,
@@ -264,6 +282,12 @@ func (claim *ClaimItem) Revision() int64 {
 
 func (claim *ClaimItem) Customer() CustomerAccountReference {
 	return claim.customer
+}
+
+// Applicant 交回提交申请人；第二个返回值为 false 只出现在本格落地前受理的存量索赔上
+// ——那些行的授权维核不了（如实答缺席），按正确申请人重提才是出路。
+func (claim *ClaimItem) Applicant() (ApplicantReference, bool) {
+	return claim.applicant, claim.applicant.valid()
 }
 
 // Batch、Contract、Target 与 Kind 是（批次+项）存储键与资格审核查询的输入维——不
@@ -326,10 +350,13 @@ func (claim *ClaimItem) PriorConclusion() (LiabilityConclusion, bool) {
 type ClaimItemSnapshot struct {
 	// Revision 随快照往返：重建门只接受 ≥ 1（重建的来源只有已落库的行），Snapshot
 	// 原样折出，供仓储拿它作条件更新的期望值。
-	Revision        int64
-	ID              ClaimItemID
-	Batch           ClaimBatchReference
-	Customer        CustomerAccountReference
+	Revision int64
+	ID       ClaimItemID
+	Batch    ClaimBatchReference
+	Customer CustomerAccountReference
+	// Applicant 允许缺席：本格落地前受理的存量行没有它，重建不因此拒——拒了那些行
+	// 连读都读不回来。新受理一律带，由 ReceiveClaimItem 把门。
+	Applicant       ApplicantReference
 	Contract        ContractScopeReference
 	Target          RequestScopeReference
 	Kind            ClaimKindReference
@@ -353,6 +380,7 @@ func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
 		ID:              claim.id,
 		Batch:           claim.batch,
 		Customer:        claim.customer,
+		Applicant:       claim.applicant,
 		Contract:        claim.contract,
 		Target:          claim.target,
 		Kind:            claim.kind,
@@ -438,6 +466,7 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 		id:              snapshot.ID,
 		batch:           snapshot.Batch,
 		customer:        snapshot.Customer,
+		applicant:       snapshot.Applicant,
 		contract:        snapshot.Contract,
 		target:          snapshot.Target,
 		kind:            snapshot.Kind,

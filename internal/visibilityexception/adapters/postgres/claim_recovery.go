@@ -50,6 +50,7 @@ func (repository *Claims) FindByBatchItem(
 	var (
 		revision                                            int64
 		customer, contract, target, kind                    string
+		applicant                                           *string
 		submittedAt                                         time.Time
 		screen, screenBasis, conclusion, priorConclusion    *string
 		concludedAt, reviewBy, withdrawnAt                  *time.Time
@@ -58,7 +59,7 @@ func (repository *Claims) FindByBatchItem(
 		supplementDeadline                                  *time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT revision, customer_ref, contract_ref, target_ref, kind_ref, submitted_at,
+		`SELECT revision, customer_ref, applicant_ref, contract_ref, target_ref, kind_ref, submitted_at,
 		        screen, screen_basis, conclusion, concluded_at, review_by,
 		        prior_conclusion, withdrawn, withdrawn_at,
 		        missing_materials_ref, supplement_scope_ref, supplement_notice_ref,
@@ -66,7 +67,7 @@ func (repository *Claims) FindByBatchItem(
 		   FROM visibility_exception.claim_item
 		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
 		tenant.String(), batch.String(), item.String(),
-	).Scan(&revision, &customer, &contract, &target, &kind, &submittedAt,
+	).Scan(&revision, &customer, &applicant, &contract, &target, &kind, &submittedAt,
 		&screen, &screenBasis, &conclusion, &concludedAt, &reviewBy,
 		&priorConclusion, &withdrawn, &withdrawnAt,
 		&missingMaterials, &supplementScope, &supplementNotice, &supplementDeadline)
@@ -86,6 +87,12 @@ func (repository *Claims) FindByBatchItem(
 	}
 	if snapshot.Customer, err = domain.NewCustomerAccountReference(customer); err != nil {
 		return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+	}
+	// NULL 即申请人维接通前受理的存量行：快照留零值，重建门容缺，授权维如实答核不了。
+	if applicant != nil {
+		if snapshot.Applicant, err = domain.NewApplicantReference(*applicant); err != nil {
+			return nil, false, fmt.Errorf("rebuild claim item: %w", err)
+		}
 	}
 	if snapshot.Contract, err = domain.NewContractScopeReference(contract); err != nil {
 		return nil, false, fmt.Errorf("rebuild claim item: %w", err)
@@ -247,15 +254,22 @@ func (repository *Claims) Save(
 		supplementDeadline = &deadline
 	}
 
+	// 申请人是提交事实：随首插落库，与其余事实列一样不进更新集——存量行（NULL）在
+	// 后续判断更新时保持 NULL，不被零值快照抹成空串。
+	var applicantRef *string
+	if value, carried := claim.Applicant(); carried {
+		applicantRef = stringPointer(value.String())
+	}
+
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.claim_item
 			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
 			 submitted_at, screen, screen_basis, conclusion, concluded_at, review_by,
 			 prior_conclusion, withdrawn, withdrawn_at,
 			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline,
-			 revision)
+			 revision, applicant_ref)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-			 $21 + 1)
+			 $21 + 1, $22)
 		 ON CONFLICT (tenant_id, batch_ref, item_id) DO UPDATE SET
 			screen = EXCLUDED.screen,
 			screen_basis = EXCLUDED.screen_basis,
@@ -292,6 +306,7 @@ func (repository *Claims) Save(
 		supplementNotice,
 		supplementDeadline,
 		snapshot.Revision,
+		applicantRef,
 	)
 	if err != nil {
 		return ports.ClaimSaveOutcomeInvalid, fmt.Errorf("save claim item: %w", err)

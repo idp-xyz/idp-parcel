@@ -16,6 +16,7 @@ func receivedClaim(t *testing.T) *domain.ClaimItem {
 		ID:          mustValue(t, domain.NewClaimItemID, "claim-1"),
 		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
 		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:   mustValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
 		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1"),
 		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
@@ -25,6 +26,58 @@ func receivedClaim(t *testing.T) *domain.ClaimItem {
 		t.Fatalf("receive claim item: %v", err)
 	}
 	return claim
+}
+
+// Covers: CONTEXT 硬句 186「按申请人授权、客户账户……判断资格」与 `AT-VE-125`（申请
+// 人授权与客户账户并列，两者不是一回事）——申请人是原始提交事实的一格，受理必带；
+// 存量行没有这一格：重建门容缺，Applicant() 如实报缺席，授权维据此答核不了而不是
+// 拿客户账户顶替。
+func TestAClaimCarriesItsApplicantAndLegacyRowsRebuildWithoutOne(t *testing.T) {
+	claim := receivedClaim(t)
+	applicant, carried := claim.Applicant()
+	if !carried || applicant.String() != "applicant-1" {
+		t.Fatalf("applicant = %s carried = %v", applicant, carried)
+	}
+
+	missing := domain.ClaimItemSpec{
+		ID:          mustValue(t, domain.NewClaimItemID, "claim-2"),
+		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-2"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
+		SubmittedAt: claimSubmittedAt,
+	}
+	if _, err := domain.ReceiveClaimItem(missing); !errors.Is(err, domain.ErrInvalidClaim) {
+		t.Fatalf("err = %v; 不带申请人的提交被受理了", err)
+	}
+
+	legacy := domain.ClaimItemSnapshot{
+		Revision:    1,
+		ID:          mustValue(t, domain.NewClaimItemID, "claim-legacy"),
+		Batch:       mustValue(t, domain.NewClaimBatchReference, "batch-1"),
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-1/liability"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-3"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "DAMAGE"),
+		SubmittedAt: claimSubmittedAt,
+	}
+	rebuilt, err := domain.RehydrateClaimItem(legacy)
+	if err != nil {
+		t.Fatalf("重建存量行：%v", err)
+	}
+	if _, carried := rebuilt.Applicant(); carried {
+		t.Fatal("存量行凭空长出了申请人")
+	}
+
+	legacy.Applicant = mustValue(t, domain.NewApplicantReference, "applicant-9")
+	withApplicant, err := domain.RehydrateClaimItem(legacy)
+	if err != nil {
+		t.Fatalf("重建带申请人的行：%v", err)
+	}
+	if got, carried := withApplicant.Applicant(); !carried || got.String() != "applicant-9" {
+		t.Fatalf("applicant = %s carried = %v; 快照往返丢了申请人", got, carried)
+	}
 }
 
 // Covers: VE CONTEXT 硬句 173「收到客户索赔、通过资格审核和确认赔偿责任是不同判断。

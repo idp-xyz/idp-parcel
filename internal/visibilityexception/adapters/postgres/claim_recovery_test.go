@@ -71,6 +71,7 @@ func receivedClaim(t *testing.T, batch, item string) *domain.ClaimItem {
 		ID:          claimValue(t, domain.NewClaimItemID, item),
 		Batch:       claimValue(t, domain.NewClaimBatchReference, batch),
 		Customer:    claimValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Applicant:   claimValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
 		Target:      claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
 		Kind:        claimValue(t, domain.NewClaimKindReference, "LOSS"),
@@ -135,6 +136,9 @@ func TestClaimJudgmentHistoryRoundTripsStepByStep(t *testing.T) {
 	}
 	if bare.SubmittedAt() != claimBaseAt || bare.Customer().String() != "customer-1" {
 		t.Fatalf("提交事实没原样读回")
+	}
+	if applicant, carried := bare.Applicant(); !carried || applicant.String() != "applicant-1" {
+		t.Fatalf("申请人没原样读回：%s carried=%v", applicant, carried)
 	}
 
 	if err := bare.ScreenEligibility(domain.ClaimEligible, "eligibility-rules/v1", claimBaseAt.Add(time.Hour)); err != nil {
@@ -541,6 +545,38 @@ func TestClaimsOfAnotherTenantAreInvisible(t *testing.T) {
 	}
 }
 
+// TestALegacyClaimRowWithoutApplicantStillLoads 证存量行（0018 之前受理、无申请人）
+// 照常读回：重建门容缺，Applicant() 如实报缺席——授权维据此停在「申请人缺席」，而
+// 不是整行读不回来。行用裸 SQL 摆出：受理口如今必带申请人，造不出这种行。
+func TestALegacyClaimRowWithoutApplicantStillLoads(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.claim_item
+			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
+			 submitted_at, withdrawn, revision)
+		 VALUES ('tenant-a', 'batch-legacy', 'item-legacy', 'customer-1', 'contract-scope/v1',
+			 'parcel-1/loss', 'LOSS', $1, false, 1)`, claimBaseAt); err != nil {
+		t.Fatalf("摆出存量行：%v", err)
+	}
+
+	loaded := fixture.loadClaim(t, ctx, "tenant-a", "batch-legacy", "item-legacy")
+	if _, carried := loaded.Applicant(); carried {
+		t.Fatal("存量行凭空长出了申请人")
+	}
+
+	// 库面守「带了就不许是空串」：空串申请人不是存量行的形状，是坏写入。
+	if _, err := fixture.pool.Exec(ctx,
+		`INSERT INTO visibility_exception.claim_item
+			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
+			 submitted_at, withdrawn, revision, applicant_ref)
+		 VALUES ('tenant-a', 'batch-legacy', 'item-blank', 'customer-1', 'contract-scope/v1',
+			 'parcel-1/loss', 'LOSS', $1, false, 1, '   ')`, claimBaseAt); err == nil {
+		t.Fatal("库接受了空串申请人")
+	}
+}
+
 // scopedClaim 受理一项指定（客户账户+目标范围+索赔类型）的索赔，供重复关系那一维
 // 逐样错开来证——receivedClaim 把这三样钉死了，用它证不出「差一样就不算重复」。
 func scopedClaim(t *testing.T, batch, item, customer, target, kind string) *domain.ClaimItem {
@@ -549,6 +585,7 @@ func scopedClaim(t *testing.T, batch, item, customer, target, kind string) *doma
 		ID:          claimValue(t, domain.NewClaimItemID, item),
 		Batch:       claimValue(t, domain.NewClaimBatchReference, batch),
 		Customer:    claimValue(t, domain.NewCustomerAccountReference, customer),
+		Applicant:   claimValue(t, domain.NewApplicantReference, "applicant-1"),
 		Contract:    claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
 		Target:      claimValue(t, domain.NewRequestScopeReference, target),
 		Kind:        claimValue(t, domain.NewClaimKindReference, kind),

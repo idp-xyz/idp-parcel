@@ -20,10 +20,11 @@ import (
 // 去读它们会把「规则是什么」和「事实是什么」揉成一个既是目录又能读业务数据的东西。
 // 编排拿走规则，自己去 ClaimStore 与证据侧逐维核对。
 //
-// 本适配器今天只登记得出七维里的一维——合同责任范围承不承担这个索赔类型。索赔时限
-// 要起算事件与业务日历、最低材料要一份材料清单、授权要一份申请人目录，三样都属
-// `PAR-VIS-08` 待登记实例参数，本上下文还没有那个登记面。**凑一份就是发明实例参数**，
-// 所以三维一律如实答未登记，由编排停在指名到维的未决。
+// 登记面今天有两角：合同责任范围承不承担这个索赔类型（0011），申请人授权目录
+// （0018，切块 (c)）。索赔时限要起算事件与业务日历、最低材料要一份清单，两样仍属
+// `PAR-VIS-08` 待登记实例参数且没有登记面。**凑一份就是发明实例参数**，所以那两维
+// 一律如实答未登记，由编排停在指名到维的未决；授权目录同理——没有目录行就答未登记，
+// 不拿空名单冒充「无人获授权」。
 //
 // 特别提防一处同形陷阱：parcel-shipment 的收寄资格视图在证据取不到时如实答「未成立」
 // 并点名首项缺口。那一格在 PS 可续办；若把「证不了」写成这里的 `ClaimIneligible`，
@@ -52,10 +53,9 @@ var _ ports.EligibilityRuleView = (*ClaimEligibilityRules)(nil)
 // 拒赔就是虚构。声明在场则一律交回规则，某一维尚未登记由那一维自己的 Registered 交代：
 // 「整份声明还没登记」与「只差材料清单」的补法不是一件事，折成同一格会让人去补错东西。
 //
-// 三个 Registered 恒为 false 不是占位：`claim_contract_scope` / `claim_covered_kind`
-// 是本上下文今天仅有的两张资格目录表，时限、材料与授权连登记面都还没有。给它们建空表
-// 也点不亮任何路径——四件落点里的当前截止靠资料补充期限，那同样是待登记的实例参数，
-// 所以先如实答未登记，等 `PAR-VIS-08` 连同登记面一起落地。
+// 时限与材料两维的 Registered 恒为 false 不是占位：两样连登记面都还没有，给它们建
+// 空表也点不亮任何路径——四件落点里的当前截止靠资料补充期限，那同样是待登记的实例
+// 参数，所以先如实答未登记，等 `PAR-VIS-08` 连同登记面一起落地。
 func (view *ClaimEligibilityRules) RulesForClaim(
 	ctx context.Context,
 	query ports.EligibilityQuery,
@@ -91,11 +91,61 @@ func (view *ClaimEligibilityRules) RulesForClaim(
 		return ports.EligibilityRules{}, false, fmt.Errorf("rules for claim: %w", err)
 	}
 
+	authorization, err := view.authorizationFor(ctx, querier, query)
+	if err != nil {
+		return ports.EligibilityRules{}, false, err
+	}
+
 	return ports.EligibilityRules{
 		RuleVersion:    ruleVersion,
 		KindCovered:    covered,
 		FilingDeadline: ports.FilingDeadlineRule{},
 		Materials:      ports.MinimumMaterialsRule{},
-		Authorization:  ports.AuthorizationCatalogue{},
+		Authorization:  authorization,
 	}, true, nil
+}
+
+// authorizationFor 取申请人授权目录。没有目录行即未登记（实例半边，编排停在未决）。
+// 名单按查询里的申请人收窄到相关那一行——端口注释允许收窄且语义不变：在列即获授权。
+// 查询没带申请人（存量索赔）时只答登记情况，整份名单没有读者：编排在核对之前就会
+// 停在「申请人缺席」那一维。
+func (view *ClaimEligibilityRules) authorizationFor(
+	ctx context.Context,
+	querier bentopg.Querier,
+	query ports.EligibilityQuery,
+) (ports.AuthorizationCatalogue, error) {
+	var ruleVersion string
+	err := querier.QueryRow(ctx,
+		`SELECT rule_version
+		   FROM visibility_exception.claim_authorization_catalogue
+		  WHERE tenant_id = $1 AND customer_ref = $2`,
+		view.tenant.String(), query.Customer.String(),
+	).Scan(&ruleVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.AuthorizationCatalogue{}, nil
+	}
+	if err != nil {
+		return ports.AuthorizationCatalogue{}, fmt.Errorf("authorization catalogue: %w", err)
+	}
+
+	catalogue := ports.AuthorizationCatalogue{Registered: true, RuleVersion: ruleVersion}
+	if query.Applicant.String() == "" {
+		return catalogue, nil
+	}
+	var listed bool
+	err = querier.QueryRow(ctx,
+		`SELECT EXISTS (
+		            SELECT 1
+		              FROM visibility_exception.claim_authorized_applicant
+		             WHERE tenant_id = $1 AND customer_ref = $2 AND applicant_ref = $3
+		        )`,
+		view.tenant.String(), query.Customer.String(), query.Applicant.String(),
+	).Scan(&listed)
+	if err != nil {
+		return ports.AuthorizationCatalogue{}, fmt.Errorf("authorization catalogue: %w", err)
+	}
+	if listed {
+		catalogue.AuthorizedApplicants = []domain.ApplicantReference{query.Applicant}
+	}
+	return catalogue, nil
 }
