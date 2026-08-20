@@ -335,6 +335,27 @@ var veCustomerViewUndecidedSentinels = []error{
 	veconsume.ErrCustomerViewUndecided,
 }
 
+// veAcceptanceRederiveUndecidedSentinels 只给「接受决定 → 客户归属确立补派生」这一路
+// （UC-VE-008 AT-VE-169）。与投影派生那路分开列：本路多一格「声明清单读口调不通」；
+// 歧义、投影库、反查口与派生编排四格与那路同义——歧义仍是机制拒绝自动采认（ADR-0060、
+// AT-VE-152），运维去 PS 侧解开歧义，解开前这封信如实卡着，不任选也不折成「无视图」。
+//
+// 不在名单里的几格，恢复动作各不相同，保持 publish_failed：
+//   - veps.ErrAcceptanceDecisionUntranslatable——集合外状态字或引用坏了，编程错误。
+//   - veps.ErrAcceptanceRecordInconsistent——信封在而委托行不在 / 成员在清单里而反查
+//     零行，两次读自相矛盾，仓储不变量已破，重投不自愈。
+//   - veps.ErrCustomerAccountMismatch——信封账户与权威反查不符。基线上结构不可达
+//     （已接受撤不了换不了代、修订不动成员不动账户），到达即绕过领域直写库，硬失败。
+//   - veconsume.ErrCustomerViewHandoffPending——要查 outbox 下游。
+//   - veconsume.ErrUnexpectedCustomerViewOutcome——封闭集合外。
+var veAcceptanceRederiveUndecidedSentinels = []error{
+	veps.ErrDeclaredParcelsUnavailable,
+	veps.ErrDerivedProjectionUnreadable,
+	veps.ErrCustomerAccountUnavailable,
+	veps.ErrAmbiguousCustomerAccount,
+	veconsume.ErrCustomerViewUndecided,
+}
+
 // offsitePickupUndecidedSentinels 是揽收采用那条链登记的未决哨兵。与上面那份分开列：
 // 两条链的未决面不同，合用一份会把某条链接不住的格子也宣布成「等依赖」。
 //
@@ -375,10 +396,11 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有十二类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
-// 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
-// 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
-// PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
+// 路由表今天有十二类事件：PS 接受决定 → FanOut（先 VE 客户归属确立补派生 UC-VE-008
+// AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → 路由复核
+// （UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
+// 再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）、
+// TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
 // TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
 // PS 包裹服务终局形成 → 只投 VE 投影（不 FanOut：终局是 PS 自家事实，让它经调度器
 // 消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
@@ -389,10 +411,10 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
 // ADR-0066）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）。
-// 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
-// VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
-// `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条只接
-// `transport-handover.registered`，不接 PS。
+// 第二条投向 network-routing；四类 FanOut 同一 EventType 各投两个独立消费者，顺序
+// 一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局规则墙或路由证据墙上。
+// 第五条只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条
+// 只接 `transport-handover.registered`，不接 PS。
 // `visibility-exception.tracking-projection.derived` 已登记（UC-VE-008）：早先不登记
 // 的理由是 Customer 那一维填不上；ADR-0060 的按包裹反查把账户随来源身份一并交回之后
 // 本进程真接得住它了——接得住才登记，正是 ADR-0049 第三条的判据。
@@ -423,6 +445,23 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	routed, err := dispatch.WithUndecidedSentinels(consumer, nrparcelshipment.ErrRouteHandoffUndecided)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: undecided translation: %w", err)
+	}
+
+	veAcceptance, err := deriveCustomerViewOnAcceptanceConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	veAcceptanceRouted, err := dispatch.WithUndecidedSentinels(
+		veAcceptance, veAcceptanceRederiveUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive undecided translation: %w", err)
+	}
+	// 先 VE 后 NR：NR 腿今天必撞路由证据实例墙（ROUTE_EVIDENCE_NOT_CONFIGURED），
+	// 反序会把补派生一直堵在墙外。VE 腿空转或成功不改变 NR 腿的未决记账；VE 腿硬失败
+	// 把整格升成 publish_failed，那是 failureCodeFor 分格的正确行为，不在这里遮。
+	acceptanceFan, err := dispatch.FanOut(veAcceptanceRouted, routed)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance fan-out: %w", err)
 	}
 
 	intakes, err := networkIntakeConsumer(db, inboxStore, settings, clock)
@@ -581,7 +620,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
-			nrinbox.AcceptedDecisionEventType:            routed,
+			nrinbox.AcceptedDecisionEventType:            acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
 			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
 			psinbox.OffsitePickupRegisteredEventType:     pickupFan,
@@ -1052,6 +1091,67 @@ func deriveCustomerViewConsumer(
 	consumer, err := veinbox.NewTrackingProjectionConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: derive customer view consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// deriveCustomerViewOnAcceptanceConsumer 接 PS 接受决定 → VE 客户归属确立补派生
+// （UC-VE-008 AT-VE-169：归属迟于包裹源事实时，视图在归属确立时按当前投影形成，
+// 不等下一份源事实）。与初始路由消费者收同一封信、各记各的 inbox 账（FanOut 前提）。
+//
+// 声明清单读口与账户反查口装同一个 ShipmentRequests：两口读的本就是同一投影列的两个
+// 方向（ADR-0060），拆两个对象等于让两处各自决定读哪些列。账户维必走反查口，信封的
+// CustomerAccountID 只作一致性校验——绕开反查就丢了多行歧义闸（AT-VE-152），跨账户
+// 泄露正是从那里进来。视图/标识/交接与投影派生那路各建各的包装（无状态，共享只会让
+// 依赖图看不出各自要什么）；披露策略仍按命令租户现绑。
+func deriveCustomerViewOnAcceptanceConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive parcel views: %w", err)
+	}
+	projections, err := vepostgres.NewProjections(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive projections: %w", err)
+	}
+	accounts, err := veps.NewParcelCustomerAccountLookup(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive account lookup: %w", err)
+	}
+	views, err := vepostgres.NewCustomerViews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive customer views: %w", err)
+	}
+	identities, err := veidentity.NewCustomerViewVersions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive view versions: %w", err)
+	}
+	downstream, err := vepostgres.NewOutboxCustomerViewHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive view handoff: %w", err)
+	}
+	processing, err := veps.NewDeriveCustomerViewOnAcceptanceAdapter(
+		requests,
+		projections,
+		accounts,
+		&tenantBoundCustomerViewDerive{
+			db:         db,
+			views:      views,
+			identities: identities,
+			downstream: downstream,
+			clock:      clock,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive customer view on acceptance: %w", err)
+	}
+	consumer, err := veinbox.NewAcceptanceDecisionConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance rederive consumer: %w", err)
 	}
 	return consumer, nil
 }

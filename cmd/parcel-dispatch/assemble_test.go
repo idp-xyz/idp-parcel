@@ -20,6 +20,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
+	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
 )
 
 // 本文件对真实 PostgreSQL 16 证组合根本身：整张依赖图接得起来、一拍跑得通、路由表
@@ -105,11 +107,12 @@ func TestTheComposedDispatcherRunsABeatAgainstARealDatabase(t *testing.T) {
 	}
 }
 
-// Covers: 路由表认得出接受决定这一类，且投递真的走完了消费门。
+// Covers: 路由表认得出接受决定这一类，且投递走完了 FanOut 两路消费门（先 VE 客户
+// 归属确立补派生，后 NR 初始路由）。
 //
-// 用毒丸载荷：消费者解不出命令时在自己的事务里显式拒收并交回 nil——那就是 ADR-0049
-// 第二条要的「消费门事务已提交」，因此这一条会被定稿。它同时证明了路由表挂对了人：
-// 挂错的话这里撞的是无订阅者，一条也发不出去。
+// 用毒丸载荷：两边消费者解不出命令时各自在自己的事务里显式拒收并交回 nil——那就是
+// ADR-0049 第二条要的「消费门事务已提交」，因此这一条会被定稿。它同时证明了路由表
+// 挂对了人：挂错或漏挂的话这里撞的是无订阅者，一条也发不出去。
 //
 // 载荷是结构合法但要件皆空的对象：框架在入队处就要求载荷是 JSON 对象，所以毒丸不能
 // 用一段坏字节来造，得让它坏在本上下文的要件上。
@@ -481,6 +484,89 @@ func TestEffectiveDeliveryFailuresLandInTheRightPartition(t *testing.T) {
 				t.Fatalf("失败的投递被定稿了 %d 条", published)
 			}
 			if got := recordedFailureCode(t, db, "delivery-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+			}
+		})
+	}
+}
+
+// beatWithAcceptanceRederiveConsumer 用生产的补派生哨兵名单包一个替身，接成一拍。
+//
+// 名单取 veAcceptanceRederiveUndecidedSentinels 本身：测试里重列一份会让漏登记的
+// 哨兵在测试里绿、在生产里塌成 dispatch.publish_failed。
+func beatWithAcceptanceRederiveConsumer(t *testing.T, inner dispatch.Consumer) (Beat, *bentopg.DB, *outbox.Store) {
+	t.Helper()
+
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	routed, err := dispatch.WithUndecidedSentinels(inner, veAcceptanceRederiveUndecidedSentinels...)
+	if err != nil {
+		t.Fatalf("包装未决哨兵：%v", err)
+	}
+	config := dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second}
+	publisher, err := dispatch.NewDirectPublisher(
+		map[eventing.EventType]dispatch.Consumer{veinbox.AcceptanceDecisionFormedEventType: routed},
+		5*time.Second,
+		config,
+	)
+	if err != nil {
+		t.Fatalf("直投发布器：%v", err)
+	}
+	beat, err := dispatch.NewDispatcher(store, store, publisher, systemClock{}, config)
+	if err != nil {
+		t.Fatalf("派发器：%v", err)
+	}
+	return beat, db, store
+}
+
+// Covers: 补派生这条链的失败分格——五个可续办哨兵落 dispatch.consumer_undecided，
+// 其余保持 dispatch.publish_failed。注意歧义在本路是未决（AT-VE-152 机制拒绝自动
+// 采认，运维去 PS 解开歧义，解开前信封如实卡着），与 PS 采用三路的 publish_failed
+// 相反——那三路的歧义卡的是采用判断本身，这里卡的是账户维，恢复动作同是「人去看」，
+// 但本路解开后重投即自愈，不需要人动信封。其余硬失败格：
+//   - 信封与委托行/反查零行自相矛盾是仓储不变量已破，重投不自愈；
+//   - 信封账户与权威反查不符是本票立的硬闸（基线上结构不可达，到达即不变量已破）；
+//   - 集合外状态字是编程错误；
+//   - 交接待发要查 outbox 下游；
+//   - 封闭集合外不留兜底。
+func TestAcceptanceRederiveFailuresLandInTheRightPartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode string
+	}{
+		{"清单读口调不通", veps.ErrDeclaredParcelsUnavailable, "dispatch.consumer_undecided"},
+		{"投影库调不通", veps.ErrDerivedProjectionUnreadable, "dispatch.consumer_undecided"},
+		{"反查读口调不通", veps.ErrCustomerAccountUnavailable, "dispatch.consumer_undecided"},
+		{"反查歧义", veps.ErrAmbiguousCustomerAccount, "dispatch.consumer_undecided"},
+		{"派生编排未决", veconsume.ErrCustomerViewUndecided, "dispatch.consumer_undecided"},
+		{"信封与委托记录不符", veps.ErrAcceptanceRecordInconsistent, "dispatch.publish_failed"},
+		{"账户不匹配", veps.ErrCustomerAccountMismatch, "dispatch.publish_failed"},
+		{"集合外状态字", veps.ErrAcceptanceDecisionUntranslatable, "dispatch.publish_failed"},
+		{"交接待发", veconsume.ErrCustomerViewHandoffPending, "dispatch.publish_failed"},
+		{"封闭集合外", veconsume.ErrUnexpectedCustomerViewOutcome, "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beat, db, store := beatWithAcceptanceRederiveConsumer(t, &stallingConsumer{err: test.err})
+			enqueueForBeat(t, db, store, "accepted-1", veinbox.AcceptanceDecisionFormedEventType, `{}`)
+
+			published, err := beat.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("一拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("失败的投递被定稿了 %d 条", published)
+			}
+			if got := recordedFailureCode(t, db, "accepted-1"); got != test.wantCode {
 				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
 			}
 		})

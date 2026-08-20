@@ -29,6 +29,7 @@ import (
 
 const (
 	synV0AcceptanceConsumer = "network-routing/initial-route-on-acceptance"
+	synV0VERederiveConsumer = "visibility-exception/derive-customer-view-from-acceptance"
 	synV0InitialRouteType   = "network-routing.initial-route.formed"
 	synV0DecisionID         = "SYN-DEC-01"
 )
@@ -61,11 +62,14 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 }
 
 // Covers: SYN-V0 已决定路径——PS 应用 handler 形成接受并入队真实 Outbox，Dispatcher
-// 把信封投到 NR 消费者；已接受重建门已开（ADR-0061），消费者按引用读回委托并进入
-// CreateInitialRoute。生产装配按已接受解析回指闭包（ADR-0064）；本用例调同一份
-// SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可观察的 NetworkServiceForm，适用性译成要求
-// 判断。网络定义登记册空册，整份交接停在 ROUTE_EVIDENCE_NOT_CONFIGURED /
-// dispatch.consumer_undecided。不得写可执行路由，也不得把未决当成已处理入账。
+// 把信封投进 FanOut（先 VE 客户归属确立补派生，后 NR 初始路由）；已接受重建门已开
+// （ADR-0061），NR 消费者按引用读回委托并进入 CreateInitialRoute。生产装配按已接受
+// 解析回指闭包（ADR-0064）；本用例调同一份 SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可
+// 观察的 NetworkServiceForm，适用性译成要求判断。网络定义登记册空册，NR 腿停在
+// ROUTE_EVIDENCE_NOT_CONFIGURED；VE 腿常态空转（包裹还没流转、无当前投影）成功入账
+// ——两本 inbox 互不隶属，VE 成功不改变 NR 腿的未决记账，整封失败码仍是
+// dispatch.consumer_undecided（仅全路未决才记未决，外部评审票 01 的分格）。不得写可
+// 执行路由，也不得把未决当成已处理入账，更不得因空转发明客户视图。
 func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -121,6 +125,14 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
 		t.Fatalf("inbox 行数 = %d, want 0——未决必须回滚，不能冒充已处理", n)
 	}
+	// VE 腿与 NR 腿两本账互不隶属：包裹还没流转、无当前投影，VE 腿空转并在自己的
+	// 事务里入账；NR 腿的未决不把它的入账也卡住（FanOut 每路都调到）。
+	if n := fixture.countInbox(t, synV0VERederiveConsumer, synV0DecisionID); n != 1 {
+		t.Fatalf("VE 补派生 inbox 行数 = %d, want 1——空转也要入账，重投由账本跳过", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM visibility_exception.customer_view`); n != 0 {
+		t.Fatalf("customer_view 行数 = %d, want 0——无投影不得发明视图", n)
+	}
 	fixture.assertNoInitialRoute(t)
 	if n := fixture.countRouteHandoffLogs(t); n != 0 {
 		t.Fatalf("route_handoff_log 行数 = %d, want 0——未决事务回滚后登记册应无痕", n)
@@ -140,6 +152,9 @@ func TestSYNAcceptedDecisionStopsAtUnconfiguredRouteEvidence(t *testing.T) {
 	fixture.assertNoInitialRoute(t)
 	if n := fixture.countInbox(t, synV0AcceptanceConsumer, synV0DecisionID); n != 0 {
 		t.Fatalf("重拍后 inbox 行数 = %d, want 仍为 0", n)
+	}
+	if n := fixture.countInbox(t, synV0VERederiveConsumer, synV0DecisionID); n != 1 {
+		t.Fatalf("重拍后 VE 补派生 inbox 行数 = %d, want 仍为 1——重投由账本跳过，不重跑", n)
 	}
 }
 
