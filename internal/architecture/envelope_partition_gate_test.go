@@ -158,8 +158,6 @@ var allowedSameExpression = map[string]string{
 		"一笔费用只确认一次，本上下文没有费用的更正、撤销或重确认入口",
 	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go": annotationDependsOnPrior +
 		"claim-adjustment 引用 claim-amount / receivable / acknowledgement——Adjust 核对目标在场，且不改写原金额（AT-SA-152）",
-	"internal/settlementaccounting/adapters/postgres/operating_handoff.go": annotationCorrectionEntry +
-		"AllocateCostsHandler.Reallocate 与 .Rederive——一个文件两个缺陷，共用同一个 shape.eventID",
 
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go": annotationNoRewrite +
 		"（一个池有多个预占，各条是互不相干的消耗事实，累加可交换）",

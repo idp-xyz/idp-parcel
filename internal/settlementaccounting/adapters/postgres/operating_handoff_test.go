@@ -1,4 +1,4 @@
-package postgres_test
+﻿package postgres_test
 
 import (
 	"context"
@@ -43,6 +43,76 @@ func operatingAllocationIntent(t *testing.T, id string) ports.OperatingIntent {
 	return ports.OperatingIntent{Allocation: formedAllocationRecord(t, "tenant-a", id)}
 }
 
+// TestReallocationAndRederivationEachEnqueueInTheSamePartition 钉住两个字段的分工——
+// 一个文件两个缺陷一起钉（重分摊与重派生共用同一个 shape.eventID，改一半门禁依旧红）。
+//
+// 重分摊走同一个分摊标识（AllocateCostsHandler.Reallocate），重派生走同一个（口径+账期+
+// 基准）键（.Rederive）。各自两件都要成立：**都入队**（ID 含版本，新版不被 EnqueueOnce
+// 当成重放吞掉——否则重分摊/重派生永远到不了下游）**且同分区**（分区键只到业务主体，
+// 新版排在旧版后面）。
+func TestReallocationAndRederivationEachEnqueueInTheSamePartition(t *testing.T) {
+	handoff, db, pool := newOperatingHandoffFixture(t)
+	ctx := t.Context()
+
+	first := operatingAllocationIntent(t, "alloc-9")
+	reallocated, err := first.Allocation.Allocation.Reallocate(
+		saValue(t, domain.NewAllocationRuleVersionReference, "allocation-rule/v2"),
+		[]domain.AllocationPortion{
+			{Target: saValue(t, domain.NewAllocationTargetReference, "parcel-1"), AmountMinor: 5000},
+			{Target: saValue(t, domain.NewAllocationTargetReference, "parcel-2"), AmountMinor: 4999},
+		},
+		saValue(t, domain.NewAllocationVersion, "allocation/v2"),
+		allocatedAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("重分摊：%v", err)
+	}
+	second := first
+	second.Allocation.Allocation = reallocated
+
+	resultFirst := ports.OperatingIntent{Result: derivedResultRecord(t, "tenant-a", domain.ConfirmedBasis)}
+	rederived, err := resultFirst.Result.Result.Rederive(
+		[]domain.ResultComponent{
+			{Source: saValue(t, domain.NewComponentSourceReference, "charge-1"), Effect: domain.IncreasesResult, AmountMinor: 10000},
+			{Source: saValue(t, domain.NewComponentSourceReference, "payable-1"), Effect: domain.DecreasesResult, AmountMinor: 4000},
+		},
+		saValue(t, domain.NewOperatingResultVersion, "result/v2"),
+		derivedAsOf.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("重派生：%v", err)
+	}
+	resultSecond := resultFirst
+	resultSecond.Result.Result = rederived
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		for _, intent := range []ports.OperatingIntent{first, second, resultFirst, resultSecond} {
+			if err := handoff.HandOffOperating(txCtx, intent); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("四份意图入队：%v", err)
+	}
+
+	allocationBase := "tenant-a/allocation/alloc-9"
+	resultBase := "tenant-a/operating-result/customer-1/period-2026-08/CONFIRMED"
+	for _, row := range []struct{ id, partition string }{
+		{allocationBase + "/allocation/v1", allocationBase},
+		{allocationBase + "/allocation/v2", allocationBase},
+		{resultBase + "/result/v1", resultBase},
+		{resultBase + "/result/v2", resultBase},
+	} {
+		if count := countSAIntents(t, pool, row.id); count != 1 {
+			t.Fatalf("%s 行数 = %d, want 1——ID 不带版本时新版会被 EnqueueOnce 静默吞掉", row.id, count)
+		}
+		if got := partitionKeyOf(t, pool, row.id); got != row.partition {
+			t.Fatalf("%s 分区键 = %q, want %q；两版不同分区就没有先后可言", row.id, got, row.partition)
+		}
+	}
+}
+
 // TestOperatingFollowsTheTransactionalTemplate 证分摊意图复现样板四条：首发一行、回滚
 // 无痕、重发同一份、无事务拒。信封 ID 由分摊幂等键认领。
 func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
@@ -55,7 +125,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1"); count != 1 {
+	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1/allocation/v1"); count != 1 {
 		t.Fatalf("alloc-1 行数 = %d, want 1", count)
 	}
 
@@ -68,7 +138,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-2"); count != 0 {
+	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-2/allocation/v1"); count != 0 {
 		t.Fatalf("回滚后 alloc-2 行数 = %d, want 0", count)
 	}
 
@@ -77,7 +147,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1"); count != 1 {
+	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1/allocation/v1"); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -104,7 +174,7 @@ func TestOperatingResultUsesItsOwnEnvelope(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("指标入队：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/operating-result/customer-1/period-2026-08/CONFIRMED"); count != 1 {
+	if count := countSAIntents(t, pool, "tenant-a/operating-result/customer-1/period-2026-08/CONFIRMED/result/v1"); count != 1 {
 		t.Fatalf("经营结果行数 = %d, want 1", count)
 	}
 }

@@ -54,15 +54,23 @@ type operatingPayload struct {
 	Basis      string `json:"basis,omitempty"`
 }
 
+// operatingShape 把信封 ID 与分区键分开持有。两者管的不是一回事：ID 管幂等（每版一份，
+// 重分摊/重派生不被 EnqueueOnce 当成重放吞掉），分区键管顺序（同一主体的版本链排一条队，
+// 版本进分区键每版就自成一区，新版可能先于旧版送达）。
 type operatingShape struct {
-	eventID    string
-	eventType  eventing.EventType
-	tenant     string
-	subject    string
-	occurredAt time.Time
-	payload    operatingPayload
+	eventID      string
+	partitionKey string
+	eventType    eventing.EventType
+	tenant       string
+	subject      string
+	occurredAt   time.Time
+	payload      operatingPayload
 }
 
+// operatingIdentity 算两支的信封身份。ADR-0043 说意图由结果标识认领，而分摊与指标的
+// 结果标识都是版本不是键：Reallocate 换分摊版本走同一个分摊标识，Rederive 换结果版本
+// 走同一个（口径+账期+基准），ID 少了版本两版就算出同一个字符串。版本缺席是装配缺陷，
+// 响亮报错不入队。
 func operatingIdentity(intent ports.OperatingIntent) (operatingShape, error) {
 	if intent.Allocation.Key.Allocation.String() != "" {
 		tenant := intent.Allocation.Key.TenantID.String()
@@ -70,12 +78,18 @@ func operatingIdentity(intent ports.OperatingIntent) (operatingShape, error) {
 		if tenant == "" {
 			return operatingShape{}, fmt.Errorf("hand off operating: allocation tenant is required")
 		}
+		version := intent.Allocation.Allocation.Version().String()
+		if version == "" {
+			return operatingShape{}, fmt.Errorf("hand off operating: allocation version is required")
+		}
+		partitionKey := tenant + "/allocation/" + allocation
 		return operatingShape{
-			eventID:    tenant + "/allocation/" + allocation,
-			eventType:  costAllocationEventType,
-			tenant:     tenant,
-			subject:    allocation,
-			occurredAt: intent.Allocation.RecordedAt.UTC(),
+			eventID:      partitionKey + "/" + version,
+			partitionKey: partitionKey,
+			eventType:    costAllocationEventType,
+			tenant:       tenant,
+			subject:      allocation,
+			occurredAt:   intent.Allocation.RecordedAt.UTC(),
 			payload: operatingPayload{
 				TenantID:   tenant,
 				Allocation: allocation,
@@ -86,12 +100,18 @@ func operatingIdentity(intent ports.OperatingIntent) (operatingShape, error) {
 	if key.TenantID.String() == "" || key.Scope.String() == "" || key.Period.String() == "" || key.Basis.String() == "" {
 		return operatingShape{}, fmt.Errorf("hand off operating: allocation or operating result is required")
 	}
+	version := intent.Result.Result.Version().String()
+	if version == "" {
+		return operatingShape{}, fmt.Errorf("hand off operating: operating result version is required")
+	}
+	partitionKey := key.TenantID.String() + "/operating-result/" + key.Scope.String() + "/" + key.Period.String() + "/" + key.Basis.String()
 	return operatingShape{
-		eventID:    key.TenantID.String() + "/operating-result/" + key.Scope.String() + "/" + key.Period.String() + "/" + key.Basis.String(),
-		eventType:  operatingResultEventType,
-		tenant:     key.TenantID.String(),
-		subject:    key.Scope.String() + "/" + key.Period.String() + "/" + key.Basis.String(),
-		occurredAt: intent.Result.RecordedAt.UTC(),
+		eventID:      partitionKey + "/" + version,
+		partitionKey: partitionKey,
+		eventType:    operatingResultEventType,
+		tenant:       key.TenantID.String(),
+		subject:      key.Scope.String() + "/" + key.Period.String() + "/" + key.Basis.String(),
+		occurredAt:   intent.Result.RecordedAt.UTC(),
 		payload: operatingPayload{
 			TenantID: key.TenantID.String(),
 			Scope:    key.Scope.String(),
@@ -126,7 +146,7 @@ func (handoff *OutboxOperatingHandoff) HandOffOperating(
 		Version:      1,
 		Scope:        shape.tenant,
 		Subject:      shape.subject,
-		PartitionKey: shape.eventID,
+		PartitionKey: shape.partitionKey,
 		OccurredAt:   shape.occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
