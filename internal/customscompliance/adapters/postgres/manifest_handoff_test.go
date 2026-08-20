@@ -19,7 +19,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证舱单引用意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺舱单标识响亮报错。信封 ID 由舱单身份认领。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺舱单标识响亮报错。信封 ID 由舱单身份加来源版本认领，分区键只到
+// 舱单身份。入队走 EnqueueOnce。
 
 type manifestHandoffClock struct{ at time.Time }
 
@@ -76,15 +77,61 @@ func manifestIntent(t *testing.T, tenant string) ports.ManifestHandoffIntent {
 	}
 }
 
-func manifestHandoffEventID(tenant, manifest string) string {
-	return tenant + "/" + manifest
+func manifestHandoffEventID(tenant string, intent ports.ManifestHandoffIntent) string {
+	return tenant + "/" + intent.Reference.Manifest().String() +
+		"/" + intent.Reference.Version().String()
+}
+
+// TestARevisedManifestEnqueuesItsOwnEnvelopeInTheSamePartition 钉住两个字段的分工。
+//
+// 承运商更正推进来源版本走的是同一个舱单身份（ReceiveManifestHandler.Revise），两件都要
+// 成立：**都入队**（ID 含来源版本，修订版不被 EnqueueOnce 当成重放吞掉——否则修订后的
+// 舱单永远到不了下游）**且同分区**（分区键只到租户+舱单，修订版排在首版后面）。
+func TestARevisedManifestEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
+	fixture := newManifestHandoffFixture(t)
+	ctx := t.Context()
+
+	first := manifestIntent(t, "tenant-a")
+	revised, err := first.Reference.Revise(
+		fmcValue(t, domain.NewManifestSourceVersion, "manifest/v2"),
+		fmcValue(t, domain.NewDecisionScopeReference, "manifest-scope-2"),
+		"carrier-report/corrected",
+		fmcBaseAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("修订舱单：%v", err)
+	}
+	second := ports.ManifestHandoffIntent{TenantID: first.TenantID, Reference: revised}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffManifest(txCtx, first); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffManifest(txCtx, second)
+	})
+
+	firstID := "tenant-a/carrier-manifest/MAWB-123/manifest/v1"
+	revisedID := "tenant-a/carrier-manifest/MAWB-123/manifest/v2"
+	if count := countManifestIntents(t, fixture.pool, firstID); count != 1 {
+		t.Fatalf("首版行数 = %d, want 1", count)
+	}
+	if count := countManifestIntents(t, fixture.pool, revisedID); count != 1 {
+		t.Fatalf("修订版行数 = %d, want 1——ID 不带版本时它会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	if got := partitionKeyOf(t, fixture.pool, firstID); got != "tenant-a/carrier-manifest/MAWB-123" {
+		t.Fatalf("首版分区键 = %q, want tenant-a/carrier-manifest/MAWB-123", got)
+	}
+	if got := partitionKeyOf(t, fixture.pool, revisedID); got != "tenant-a/carrier-manifest/MAWB-123" {
+		t.Fatalf("修订版分区键 = %q；两版不同分区就没有先后可言", got)
+	}
 }
 
 func TestManifestIntentCommitsAtomicallyWithTheReference(t *testing.T) {
 	fixture := newManifestHandoffFixture(t)
 	ctx := t.Context()
 	intent := manifestIntent(t, "tenant-a")
-	eventID := manifestHandoffEventID("tenant-a", intent.Reference.Manifest().String())
+	eventID := manifestHandoffEventID("tenant-a", intent)
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		if _, err := fixture.manifests.Save(txCtx, intent.TenantID, intent.Reference); err != nil {
@@ -108,7 +155,7 @@ func TestManifestIntentRollbackDropsBoth(t *testing.T) {
 	fixture := newManifestHandoffFixture(t)
 	ctx := t.Context()
 	intent := manifestIntent(t, "tenant-a")
-	eventID := manifestHandoffEventID("tenant-a", intent.Reference.Manifest().String())
+	eventID := manifestHandoffEventID("tenant-a", intent)
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -145,7 +192,7 @@ func TestResendingTheSameManifestIntentIsIdempotent(t *testing.T) {
 	fixture := newManifestHandoffFixture(t)
 	ctx := t.Context()
 	intent := manifestIntent(t, "tenant-a")
-	eventID := manifestHandoffEventID("tenant-a", intent.Reference.Manifest().String())
+	eventID := manifestHandoffEventID("tenant-a", intent)
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffManifest(txCtx, intent)
@@ -161,7 +208,7 @@ func TestResendingTheSameManifestIntentIsIdempotent(t *testing.T) {
 func TestManifestIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newManifestHandoffFixture(t)
 	intent := manifestIntent(t, "tenant-a")
-	eventID := manifestHandoffEventID("tenant-a", intent.Reference.Manifest().String())
+	eventID := manifestHandoffEventID("tenant-a", intent)
 	if err := fixture.handoff.HandOffManifest(t.Context(), intent); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}

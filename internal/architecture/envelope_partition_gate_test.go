@@ -143,8 +143,6 @@ var allowedSameExpression = map[string]string{
 		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
 	"internal/customscompliance/adapters/postgres/follow_up_handoff.go": annotationStateSequence +
 		"ManageFollowUpHandler.FormTarget → .RecordEffect，同一目标键先后两拍撞同一 ID",
-	"internal/customscompliance/adapters/postgres/manifest_handoff.go": annotationCorrectionEntry +
-		"ReceiveManifestHandler.Revise",
 
 	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationNoOrdering +
 		"判断键含接受基线，重判走新基线即新键；同键由 CreateInitialRouteHandler.Handle 判重放返原",

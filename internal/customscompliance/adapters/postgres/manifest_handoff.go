@@ -50,18 +50,39 @@ type manifestPayload struct {
 	ManifestID string `json:"manifestId"`
 }
 
-func manifestEventID(tenant, manifest string) string {
+// manifestEventID 取舱单身份**再加来源版本**。
+//
+// 版本必须在里面。ADR-0043 说意图由结果标识认领，而一份舱单引用的结果标识是它的来源
+// 版本不是舱单身份：承运商更正推进版本走的是同一个舱单（Revise 换版本、指回前身），
+// ID 少了版本两版就算出同一个字符串，而 outboxintent.EnqueueOnce 先查后插——修订版
+// 于是静默不入队，编排却收到「交接成功」。
+func manifestEventID(tenant, manifest, version string) string {
+	return tenant + "/" + manifest + "/" + version
+}
+
+// manifestPartitionKey 取（租户+舱单），不取版本。
+//
+// ID 管幂等、分区键管顺序，两者不是一回事。同一份舱单的来源版本是一条链（首版，此后
+// 每次承运商更正一版），版本进分区键每版就自成一区，修订版可能先于首版送达——下游
+// 读到的引用从此没有先后可言。
+func manifestPartitionKey(tenant, manifest string) string {
 	return tenant + "/" + manifest
 }
 
-// HandOffManifest 把一份意图入队。信封 ID 取舱单身份（租户加舱单标识）——意图由舱
-// 单身份认领（ADR-0043）。租户或舱单标识空白是装配缺陷，响亮报错不入队。
+// HandOffManifest 把一份意图入队。信封 ID 取舱单身份加来源版本——意图由来源版本认领
+// （ADR-0043）。载荷仍是指针式的（只带舱单身份，库只管当前来源版本，下游按身份重读，
+// 版本进载荷也指不到单独的一行）。租户、舱单标识或来源版本空白是装配缺陷，响亮报错
+// 不入队。
 func (handoff *OutboxManifestHandoff) HandOffManifest(
 	ctx context.Context,
 	intent ports.ManifestHandoffIntent,
 ) error {
 	if intent.TenantID.String() == "" || intent.Reference.Manifest().String() == "" {
 		return fmt.Errorf("hand off manifest: tenant and manifest id are required")
+	}
+	if intent.Reference.Version().String() == "" {
+		// 没有版本就分不出首版与修订：两版在 ID 上算出同一个字符串，第二份被静默吞掉。
+		return fmt.Errorf("hand off manifest: manifest source version is required")
 	}
 
 	payload, err := json.Marshal(manifestPayload{
@@ -73,7 +94,11 @@ func (handoff *OutboxManifestHandoff) HandOffManifest(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := manifestEventID(intent.TenantID.String(), intent.Reference.Manifest().String())
+	eventID := manifestEventID(
+		intent.TenantID.String(),
+		intent.Reference.Manifest().String(),
+		intent.Reference.Version().String(),
+	)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),
@@ -82,7 +107,7 @@ func (handoff *OutboxManifestHandoff) HandOffManifest(
 		Version:      1,
 		Scope:        intent.TenantID.String(),
 		Subject:      intent.Reference.Manifest().String(),
-		PartitionKey: eventID,
+		PartitionKey: manifestPartitionKey(intent.TenantID.String(), intent.Reference.Manifest().String()),
 		OccurredAt:   intent.Reference.AcceptedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
