@@ -34,3 +34,15 @@ Status: needs-triage
 ## 参照
 
 PAR-SET-02、PAR-SET-03;ADR-0014;`docs/domain/parcel-pricing/CONTEXT.md`。
+
+## Comments
+
+- 2026-08-20 MCP-2：对 `3324ecb` 重核四件，**结论不变：无门，四件全缺**。仓储——
+  `migrations/parcel_pricing` 仍只有 `0001_evaluation.sql`（评价是运行时事实，不是配置）；
+  装载口——`parcelpricing/ports/ports.go` 仍只有 `Clock`/`EvaluationStore`/`EvaluationHandoff`
+  三口，无价卡目录端口；写入方——`adapters/postgres` 仍只有 `evaluation.go` 与
+  `evaluation_handoff.go`；登记口——`cmd` 全树无 `parcelpricing` 引用，`evaluate_pricing`
+  仍未接任何进程。三价表族机制原样在（`domain/rate_families.go`）。基线 `49a2ab0` 以来
+  parcel-pricing 零提交。**特核**：PP 仍是全库唯一「配置仓储本体都缺」的上下文——同期
+  NR 已长出版本化网络目录七表骨架（`3b9f212`，`0008_network_catalog.sql`，ADR-0068），
+  其余上下文配置表俱在（缺的是写入方/登记口层），仅 PP 的价卡与参考序列两族连表都没有。

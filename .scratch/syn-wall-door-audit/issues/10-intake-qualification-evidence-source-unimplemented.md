@@ -27,3 +27,16 @@ Status: needs-triage
 ## 参照
 
 ADR-0063;PAR-COM-16;`parcelshipment/adapters/partycommercial` 的 `ServiceStageRulesAdapter` 装配注释。
+
+## Comments
+
+- 2026-08-20 MCP-2：对 `3324ecb` 重核四件，**结论不变：证据的仓储/装载口/写入方/登记口
+  全缺**。两处装配点仍显式未配置——`cmd/parcel-dispatch/assemble.go` 的终局图与
+  `networkIntakeAdoption` 图都传 `UnconfiguredIntakeQualificationEvidence{}`（注释原话
+  「nil 会在非空清单上变成依赖错误，两者都不得默认 ESTABLISHED」原样）；
+  `seedIntakeQualification` 仍只在测试（`cmd/parcel-dispatch/syn_pc_seed_test.go`）。
+  **票面一处漏记照实更正**：`KnownPrefixIntakeQualificationEvidence`（按引用前缀把证明
+  路由到已登记权威口）在审计基线之前就已存在（`7cb39b6`，08-18，ADR-0063 同笔），
+  票面「端口与『诚实无门』实现在」少数了这件——**组合缝已有**，今天缺的是缝后面的
+  证据来源四件与把组合口装进两处装配点那一步；「缺的最小机制件」范围不因此变小，
+  但落点应从「另起证据口」改读为「给 KnownPrefix 缝后面接真源」。

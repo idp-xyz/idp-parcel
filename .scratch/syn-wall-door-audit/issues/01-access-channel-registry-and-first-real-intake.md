@@ -27,3 +27,12 @@ Status: needs-triage
 ## 参照
 
 ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-INT-01。
+
+## Comments
+
+- 2026-08-20 MCP-2：对 `3324ecb` 重核四件，**结论不变：无门，四件全缺**。仓储——全库
+  78 份迁移无任何渠道登记册表（`channel` 只命中 VE 索赔/通知三表，无关）；装载口、写入
+  方——无；登记口——八个业务端点仍全部装 `UnconfiguredIntake{}` + `unwired*`
+  （`cmd/parcel-api/endpoints.go` 的 `assembleBusinessEndpoints`，八行原样），路由层仍只有
+  RequestID/Recoverer 两个中间件（`internal/platform/httpapi/router.go` 的
+  `NewWithEndpoints`）。基线 `49a2ab0` 以来 `cmd/parcel-api` 零提交，票面与代码无矛盾。

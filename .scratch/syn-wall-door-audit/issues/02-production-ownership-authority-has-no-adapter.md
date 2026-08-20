@@ -28,3 +28,16 @@ Status: needs-triage
 ## 参照
 
 `docs/product/PILOT-PARAMETER-REGISTER.md` PAR-GOV-03..07;UC-PS-001;ADR-0017。
+
+## Comments
+
+- 2026-08-20 MCP-2：对 `3324ecb` 重核四件，**结论不变：半座桥原样**。PS 侧——
+  `ProductionOwnershipAuthority` 仍只有接口定义（`internal/parcelshipment/ports/ports.go`），
+  实现仍全是测试替身（`submit_shipment_request_test.go`、`adapters/http/submit_shipment_request_test.go`、
+  `cmd/parcel-dispatch/synthetic_v0_test.go` 三处 `ownershipAuthorityDouble`/`synSProductionOwnership`）；
+  `internal/parcelshipment` 下无任何 `pilotgovernance` 引用——桥接适配器仍缺。治理侧——
+  仓储在（`migrations/pilot_governance/0001_governance_records.sql` 含 `authority_interval`），
+  写入方在（`governance_records.go`、`incident_records.go`），用例在（`record_stage_review.go`、
+  `govern_incident.go`）。登记口——`cmd` 全树无 `pilotgovernance` 引用，治理用例仍未接任何
+  进程入口。基线以来 pilot-governance 仅两笔（`81b50f2`/`3b37b5a`）改 handoff 信封分区与
+  ID（OUTBOX-PK-STEP2），不动本票四件。票面与代码无矛盾。
