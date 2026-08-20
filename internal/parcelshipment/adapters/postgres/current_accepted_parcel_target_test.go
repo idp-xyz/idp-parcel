@@ -13,8 +13,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件对真实 PostgreSQL 16 证包裹→当前已接受委托反查（ADR-0060）：投影与快照同写、
-// 只认已接受、零/一/多三格、历史成员与他租户不命中。
+// 本文件对真实 PostgreSQL 16 证 `declared_parcel_ids` 投影列（ADR-0060）上的两个方向。
+//
+// 包裹→当前已接受委托反查：投影与快照同写、只认已接受、零/一/多三格、历史成员与他租户
+// 不命中。委托→当前声明包裹清单：按（租户 + 委托）取单行、他租户与查无此委托都答未找到、
+// 读的是当前投影而非快照成员、缺租户或缺委托不查库。
 
 func TestInsertWritesCurrentParcelProjectionFromTheSnapshot(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
@@ -247,6 +250,111 @@ func TestAcceptedParcelIndexIsAPartialGinOnDeclaredParcels(t *testing.T) {
 		!strings.Contains(definition, "state") {
 		t.Fatalf("索引不是按已接受成员建的部分 GIN：%s", definition)
 	}
+}
+
+func TestCurrentDeclaredParcelsAreFoundByTenantAndRequest(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	mustInsert(t, transactor, t.Context(), repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+
+	parcels, found, err := repository.FindCurrentDeclaredParcels(
+		t.Context(),
+		mustBuild(t, domain.NewTenantID, "tenant-1"),
+		mustBuild(t, domain.NewShipmentRequestID, "request-1"),
+	)
+	if err != nil || !found {
+		t.Fatalf("found = %v err = %v", found, err)
+	}
+	if joinDeclaredParcels(parcels) != "parcel-1,parcel-2" {
+		t.Fatalf("声明包裹清单 = %v", parcels)
+	}
+}
+
+func TestCurrentDeclaredParcelsAreIsolatedByTenant(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	mustInsert(t, transactor, t.Context(), repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+
+	parcels, found, err := repository.FindCurrentDeclaredParcels(
+		t.Context(),
+		mustBuild(t, domain.NewTenantID, "tenant-b"),
+		mustBuild(t, domain.NewShipmentRequestID, "request-1"),
+	)
+	if err != nil || found {
+		t.Fatalf("他租户读到了本租户的声明包裹清单：found = %v err = %v", found, err)
+	}
+	if len(parcels) != 0 {
+		t.Fatalf("未命中却交回了清单 %v", parcels)
+	}
+}
+
+// 查无此委托答未找到，不答「找到了但没有成员」：按成员逐件办事的消费方拿到一份空清单
+// 会静默什么都不做，而那与「这份委托根本不在本租户」要采取的动作相反。
+func TestUnknownShipmentRequestHasNoDeclaredParcels(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	mustInsert(t, transactor, t.Context(), repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+
+	parcels, found, err := repository.FindCurrentDeclaredParcels(
+		t.Context(),
+		mustBuild(t, domain.NewTenantID, "tenant-1"),
+		mustBuild(t, domain.NewShipmentRequestID, "request-nobody"),
+	)
+	if err != nil || found {
+		t.Fatalf("查无此委托应答未找到：found = %v err = %v", found, err)
+	}
+	if len(parcels) != 0 {
+		t.Fatalf("查无此委托却交回了清单 %v", parcels)
+	}
+}
+
+func TestDeclaredParcelsAreReadFromTheCurrentProjectionNotTheSnapshot(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	mustInsert(t, transactor, t.Context(), repository, submittedShipmentRequest(t, "req-key-1", "request-1"))
+	if _, err := pool.Exec(t.Context(),
+		`UPDATE parcel_shipment.shipment_request
+		    SET declared_parcel_ids = ARRAY['parcel-1']
+		  WHERE source_request_key = 'req-key-1'`); err != nil {
+		t.Fatalf("收窄投影：%v", err)
+	}
+
+	parcels, found, err := repository.FindCurrentDeclaredParcels(
+		t.Context(),
+		mustBuild(t, domain.NewTenantID, "tenant-1"),
+		mustBuild(t, domain.NewShipmentRequestID, "request-1"),
+	)
+	if err != nil || !found {
+		t.Fatalf("found = %v err = %v", found, err)
+	}
+	if joinDeclaredParcels(parcels) != "parcel-1" {
+		t.Fatalf("交回的不是当前投影成员：%v", parcels)
+	}
+}
+
+func TestDeclaredParcelsLookupRequiresBothTenantAndRequest(t *testing.T) {
+	repository, _, _ := newShipmentRequests(t)
+	cases := []struct {
+		name      string
+		tenant    domain.TenantID
+		requestID domain.ShipmentRequestID
+	}{
+		{"缺租户", domain.TenantID{}, mustBuild(t, domain.NewShipmentRequestID, "request-1")},
+		{"缺委托", mustBuild(t, domain.NewTenantID, "tenant-1"), domain.ShipmentRequestID{}},
+	}
+	for _, item := range cases {
+		parcels, found, err := repository.FindCurrentDeclaredParcels(t.Context(), item.tenant, item.requestID)
+		if err == nil {
+			t.Fatalf("%s 没有上抛，而是拿残缺的键去查了：found = %v parcels = %v", item.name, found, parcels)
+		}
+		if found || len(parcels) != 0 {
+			t.Fatalf("%s 上抛的同时还交回了 found = %v parcels = %v", item.name, found, parcels)
+		}
+	}
+}
+
+func joinDeclaredParcels(parcels []domain.DeclaredParcelID) string {
+	raw := make([]string, len(parcels))
+	for index, parcel := range parcels {
+		raw[index] = parcel.String()
+	}
+	return strings.Join(raw, ",")
 }
 
 func markRequestState(t *testing.T, pool *pgxpool.Pool, key string, state domain.ShipmentRequestState) {

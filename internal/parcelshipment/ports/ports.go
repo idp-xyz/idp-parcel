@@ -120,6 +120,30 @@ type CurrentAcceptedParcelTargetView interface {
 	) (domain.CurrentAcceptedParcelTarget, bool, error)
 }
 
+// CurrentDeclaredParcelsView 按（租户+委托）取回该委托当前提交版本的声明包裹清单。
+//
+// 它与 CurrentAcceptedParcelTargetView 读的是同一投影列（ADR-0060），方向相反：那口
+// 按包裹反查委托，本口按委托取成员。两者分立而不合成一个：按包裹反查的调用方手上
+// 没有委托标识，按委托取成员的调用方也不需要反查——合成会让各自的适配器实现一个它
+// 根本答不了的方法。
+//
+// 委托标识与租户两样都收，理由同 RecordedJudgmentReader：`shipment_request_id_unique`
+// 是（租户 + 委托标识）而不是单列唯一，只凭委托标识定不到一份委托。
+//
+// 本口刻意不设状态门。反查那口只认`已接受`是因为多份委托可能声明同一包裹，得靠状态
+// 消歧义；而（租户 + 委托标识）本身唯一，再加一道状态门只会让一份确实存在的委托读起来
+// 像不存在，那条规则没有任何用例要求过。
+//
+// 零行 = found=false。清单不造默认也不发明成员；读得到的那一行必有至少一件成员，库上
+// `shipment_request_declared_parcels_present` 镜像的正是领域那条门。
+type CurrentDeclaredParcelsView interface {
+	FindCurrentDeclaredParcels(
+		ctx context.Context,
+		tenant domain.TenantID,
+		requestID domain.ShipmentRequestID,
+	) ([]domain.DeclaredParcelID, bool, error)
+}
+
 // ProductionOwnershipAuthority 是试点准入控制，回答完整拟受理范围当前由谁承接。
 // parcel-shipment 只消费该决定，绝不自行推导一个。
 type ProductionOwnershipAuthority interface {

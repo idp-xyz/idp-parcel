@@ -2,13 +2,18 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 var _ ports.CurrentAcceptedParcelTargetView = (*ShipmentRequests)(nil)
+
+var _ ports.CurrentDeclaredParcelsView = (*ShipmentRequests)(nil)
 
 // FindCurrentAcceptedByParcel 按租户+声明包裹反查当前已接受委托。
 //
@@ -76,6 +81,54 @@ func (repository *ShipmentRequests) FindCurrentAcceptedByParcel(
 		return none, false, fmt.Errorf("find current accepted parcel target: %w", err)
 	}
 	return target, true, nil
+}
+
+// FindCurrentDeclaredParcels 按租户+委托取回当前提交版本的声明包裹清单。
+//
+// 与 FindCurrentAcceptedByParcel 同一投影列、相反方向：那口用部分 GIN 按成员反查，
+// 本口走（租户 + 委托标识）唯一键取单行，因此不需要 LIMIT 2 那样的歧义判别。同样只读
+// 投影列、不打开 snapshot——重建门的理由在那一口上写过，此处不复述。
+//
+// 成员逐个过领域构造函数：库里一行坏数据在这道门上暴露，不会变成一份看起来合法的清单
+// （与聚合读回同一条纪律）。
+func (repository *ShipmentRequests) FindCurrentDeclaredParcels(
+	ctx context.Context,
+	tenant domain.TenantID,
+	requestID domain.ShipmentRequestID,
+) ([]domain.DeclaredParcelID, bool, error) {
+	if tenant.String() == "" || requestID.String() == "" {
+		return nil, false, fmt.Errorf("find current declared parcels: tenant and shipment request identity are required")
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("find current declared parcels: %w", err)
+	}
+
+	var members []string
+	err = querier.QueryRow(ctx,
+		`SELECT declared_parcel_ids
+		   FROM parcel_shipment.shipment_request
+		  WHERE tenant_id = $1
+		    AND shipment_request_id = $2`,
+		tenant.String(),
+		requestID.String(),
+	).Scan(&members)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("find current declared parcels: %w", err)
+	}
+
+	parcels := make([]domain.DeclaredParcelID, 0, len(members))
+	for _, member := range members {
+		parcel, err := domain.NewDeclaredParcelID(member)
+		if err != nil {
+			return nil, false, fmt.Errorf("find current declared parcels: %w", err)
+		}
+		parcels = append(parcels, parcel)
+	}
+	return parcels, true, nil
 }
 
 func currentAcceptedTargetFrom(
