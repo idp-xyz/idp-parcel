@@ -58,6 +58,16 @@ func gateVerificationEventID(key ports.GateVerificationKey) string {
 		key.Action.String() + "/" + key.Boundary.String() + "/" + key.Digest
 }
 
+// gateVerificationPartitionKey 取（租户+范围+动作+边界），不取整个幂等键。
+//
+// ID 管幂等、分区键管顺序，两者不是一回事。同一道门禁的核对随条件状态变化换指纹换版
+// （受阻 → 放行），指纹进分区键每版就自成一区，后一版可能先于前一版送达，下游读到的
+// 放行结论从此没有先后可言。
+func gateVerificationPartitionKey(key ports.GateVerificationKey) string {
+	return key.TenantID.String() + "/" + key.Scope.String() + "/" +
+		key.Action.String() + "/" + key.Boundary.String()
+}
+
 // HandOffGate 把一份意图入队。信封 ID 取门禁幂等键——意图由幂等键认领（ADR-0043）。
 // 键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxGateVerificationHandoff) HandOffGate(
@@ -94,7 +104,7 @@ func (handoff *OutboxGateVerificationHandoff) HandOffGate(
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Scope.String() + "/" + key.Action.String(),
-		PartitionKey: eventID,
+		PartitionKey: gateVerificationPartitionKey(key),
 		OccurredAt:   intent.Gate.VerifiedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

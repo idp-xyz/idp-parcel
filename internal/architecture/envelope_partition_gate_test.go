@@ -143,8 +143,6 @@ var allowedSameExpression = map[string]string{
 		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
 	"internal/customscompliance/adapters/postgres/follow_up_handoff.go": annotationStateSequence +
 		"ManageFollowUpHandler.FormTarget → .RecordEffect，同一目标键先后两拍撞同一 ID",
-	"internal/customscompliance/adapters/postgres/gate_verification_handoff.go": annotationVersionInKey +
-		"逐项判断指纹 FindingsDigest——条件状态变化换指纹换版",
 	"internal/customscompliance/adapters/postgres/manifest_handoff.go": annotationCorrectionEntry +
 		"ReceiveManifestHandler.Revise",
 

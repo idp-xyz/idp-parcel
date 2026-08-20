@@ -77,6 +77,52 @@ func gateEventID(key ports.GateVerificationKey) string {
 		key.Action.String() + "/" + key.Boundary.String() + "/" + key.Digest
 }
 
+// TestTwoGateVerificationsOfTheSameGateShareOnePartition 钉住两个字段的分工。
+//
+// 同一道门禁（租户+范围+动作+边界）的核对随条件状态变化换指纹换版（受阻 → 放行），
+// 两件都要成立：**都入队**（ID 含逐项判断指纹，第二版不被 EnqueueOnce 当成重放吞掉）
+// **且同分区**（分区键只到门禁四维，后一版排在前一版后面）。指纹进分区键每版自成
+// 一区，下游读到的放行结论就没有先后可言。
+func TestTwoGateVerificationsOfTheSameGateShareOnePartition(t *testing.T) {
+	fixture := newGateHandoffFixture(t)
+	ctx := t.Context()
+
+	blocked := []domain.PreconditionFinding{
+		{Precondition: crgValue(t, domain.NewPreconditionReference, "duty-paid"), State: domain.PreconditionMet},
+		{Precondition: crgValue(t, domain.NewPreconditionReference, "restriction-clear"), State: domain.PreconditionUnmet},
+	}
+	blockedGate, blockedKey := verifiedGate(t, blocked)
+	cleared := []domain.PreconditionFinding{
+		blocked[0],
+		{Precondition: blocked[1].Precondition, State: domain.PreconditionMet},
+	}
+	clearedGate, clearedKey := verifiedGate(t, cleared)
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffGate(txCtx, ports.GateVerificationHandoffIntent{Key: blockedKey, Gate: blockedGate}); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffGate(txCtx, ports.GateVerificationHandoffIntent{Key: clearedKey, Gate: clearedGate})
+	})
+
+	blockedID := gateEventID(blockedKey)
+	clearedID := gateEventID(clearedKey)
+	if count := countGateIntents(t, fixture.pool, blockedID); count != 1 {
+		t.Fatalf("受阻版行数 = %d, want 1", count)
+	}
+	if count := countGateIntents(t, fixture.pool, clearedID); count != 1 {
+		t.Fatalf("放行版行数 = %d, want 1——ID 不带指纹时第二版会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	wantPartition := "tenant-a/scope/parcel-1/OUTBOUND_RELEASE/IMPORT_STANDARD"
+	if got := partitionKeyOf(t, fixture.pool, blockedID); got != wantPartition {
+		t.Fatalf("受阻版分区键 = %q, want %q", got, wantPartition)
+	}
+	if got := partitionKeyOf(t, fixture.pool, clearedID); got != wantPartition {
+		t.Fatalf("放行版分区键 = %q；两版不同分区就没有先后可言", got)
+	}
+}
+
 func TestGateVerificationIntentCommitsAtomicallyWithTheRecord(t *testing.T) {
 	fixture := newGateHandoffFixture(t)
 	ctx := t.Context()
