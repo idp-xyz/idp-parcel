@@ -55,6 +55,15 @@ func verificationEventID(key ports.VerificationKey) string {
 	return key.TenantID.String() + "/" + key.Decision.String() + "/" + key.Digest
 }
 
+// verificationPartitionKey 取（租户+决定），不取整个核对键。
+//
+// ID 管幂等、分区键管顺序，两者不是一回事。同一决定的核对随执行事实到达换指纹换版
+// （部分覆盖 → 全覆盖），指纹进分区键每版就自成一区，后一版可能先于前一版送达，
+// 下游读到的覆盖结论从此没有先后可言。
+func verificationPartitionKey(key ports.VerificationKey) string {
+	return key.TenantID.String() + "/" + key.Decision.String()
+}
+
 // HandOffVerification 把一份意图入队。信封 ID 取核对幂等键——意图由核对键认领
 // （ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxVerificationHandoff) HandOffVerification(
@@ -85,7 +94,7 @@ func (handoff *OutboxVerificationHandoff) HandOffVerification(
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Decision.String(),
-		PartitionKey: eventID,
+		PartitionKey: verificationPartitionKey(key),
 		OccurredAt:   intent.Verification.VerifiedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

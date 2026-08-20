@@ -190,6 +190,69 @@ func TestAForeignVerificationIntentIsLoud(t *testing.T) {
 	}
 }
 
+// TestTwoVerificationsOfTheSameDecisionShareOnePartition 钉住两个字段的分工。
+//
+// 同一决定的核对随执行事实到达换指纹换版（部分覆盖 → 全覆盖），两件都要成立：**都入队**
+// （ID 含事实集指纹，第二版不被 EnqueueOnce 当成重放吞掉）**且同分区**（分区键只到
+// 租户+决定，后一版排在前一版后面）。分区键取整个核对键时每版自成一区，下游读到的
+// 覆盖结论就没有先后可言。
+func TestTwoVerificationsOfTheSameDecisionShareOnePartition(t *testing.T) {
+	fixture := newVerificationHandoffFixture(t)
+	ctx := t.Context()
+
+	partialFacts := []domain.ExecutionFact{verificationFact(t, "DESTRUCTION-EXEC/1", 1)}
+	partial, err := domain.VerifyDispositionExecution(verificationDecision(t), partialFacts, verificationBaseAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("部分覆盖核对：%v", err)
+	}
+	fullFacts := []domain.ExecutionFact{
+		verificationFact(t, "DESTRUCTION-EXEC/1", 1),
+		verificationFact(t, "DESTRUCTION-EXEC/2", 1),
+	}
+	full, err := domain.VerifyDispositionExecution(verificationDecision(t), fullFacts, verificationBaseAt.Add(3*time.Hour))
+	if err != nil {
+		t.Fatalf("全覆盖核对：%v", err)
+	}
+	partialIntent := ports.VerificationHandoffIntent{Key: verificationKey(t, "tenant-a", partialFacts), Verification: partial}
+	fullIntent := ports.VerificationHandoffIntent{Key: verificationKey(t, "tenant-a", fullFacts), Verification: full}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffVerification(txCtx, partialIntent); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffVerification(txCtx, fullIntent)
+	})
+
+	partialID := verificationHandoffEventID(partialIntent.Key)
+	fullID := verificationHandoffEventID(fullIntent.Key)
+	if count := countVerificationIntents(t, fixture.pool, partialID); count != 1 {
+		t.Fatalf("部分覆盖行数 = %d, want 1", count)
+	}
+	if count := countVerificationIntents(t, fixture.pool, fullID); count != 1 {
+		t.Fatalf("全覆盖行数 = %d, want 1——ID 不带指纹时第二版会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	if got := partitionKeyOf(t, fixture.pool, partialID); got != "tenant-a/decision-1" {
+		t.Fatalf("部分覆盖分区键 = %q, want tenant-a/decision-1", got)
+	}
+	if got := partitionKeyOf(t, fixture.pool, fullID); got != "tenant-a/decision-1" {
+		t.Fatalf("全覆盖分区键 = %q；两版不同分区就没有先后可言", got)
+	}
+}
+
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey); err != nil {
+		t.Fatalf("读取分区键：%v", err)
+	}
+	return partitionKey
+}
+
 func countVerificationIntents(t *testing.T, pool *pgxpool.Pool, eventID string) int {
 	t.Helper()
 	var count int

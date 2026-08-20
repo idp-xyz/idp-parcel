@@ -147,8 +147,6 @@ var allowedSameExpression = map[string]string{
 		"逐项判断指纹 FindingsDigest——条件状态变化换指纹换版",
 	"internal/customscompliance/adapters/postgres/manifest_handoff.go": annotationCorrectionEntry +
 		"ReceiveManifestHandler.Revise",
-	"internal/customscompliance/adapters/postgres/verification_handoff.go": annotationVersionInKey +
-		"事实集指纹 factSetDigest——新执行事实到达换指纹换版",
 
 	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationNoOrdering +
 		"判断键含接受基线，重判走新基线即新键；同键由 CreateInitialRouteHandler.Handle 判重放返原",
