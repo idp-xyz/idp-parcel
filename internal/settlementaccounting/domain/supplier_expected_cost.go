@@ -257,29 +257,48 @@ func (cost SupplierExpectedCost) CorrectionReason() (CostCorrectionReason, bool)
 	return cost.correctionReason, cost.correctionReason.valid()
 }
 
+// CostCorrectionSpec 是追加一次计价纠错所需的全部输入：金额、币种与换算步骤整组
+// 取自新评价（ADR-0067），不从被纠正版本继承。合同结算币不在此列——它是合同交给
+// 评价的输入而不是评价的产物，计价纠错不改合同。
+type CostCorrectionSpec struct {
+	Version          SupplierCostVersionID
+	Evaluation       BuyEvaluationReference
+	OriginalCurrency CurrencyCode
+	OriginalMinor    int64
+	SettlementMinor  int64
+	Conversion       ConversionStepReference
+	Reason           CostCorrectionReason
+}
+
 // AppendCorrection 依据新评价（规则更正、汇率序列更正或发生项有效性更正）追加计价
-// 纠错版本（AT-SA-054/178）：换版本、带原因、换新评价与金额、指回原版；原费用与原
-// 换算依据保留——不改写原版本，也不形成供应商账单贷项（那归 UC-SA-004）。
-func (cost SupplierExpectedCost) AppendCorrection(
-	version SupplierCostVersionID,
-	evaluation BuyEvaluationReference,
-	settlementMinor int64,
-	conversion ConversionStepReference,
-	reason CostCorrectionReason,
-) (SupplierExpectedCost, error) {
-	if !version.valid() || version == cost.version ||
-		!evaluation.valid() || settlementMinor <= 0 || !reason.valid() {
+// 纠错版本（AT-SA-054/178）：换版本、带原因、指回原版，金额与换算步骤整组取自新
+// 评价；原版本一字不动，也不形成供应商账单贷项（那归 UC-SA-004）。
+//
+// 换算步骤必备按本版自己的币种对判断（ADR-0067 决定五）：原币币种随评价重述，首版
+// 跨币种而纠错版本同币种、或反过来，都是合法形状。同币种两额必须相等对纠错版本
+// 同样成立（决定四），理由与形成门那条一字不差：没有换算却造出了第二个数。
+func (cost SupplierExpectedCost) AppendCorrection(spec CostCorrectionSpec) (SupplierExpectedCost, error) {
+	if !spec.Version.valid() || spec.Version == cost.version ||
+		!spec.Evaluation.valid() ||
+		!spec.OriginalCurrency.valid() || spec.OriginalMinor <= 0 ||
+		spec.SettlementMinor <= 0 || !spec.Reason.valid() {
 		return SupplierExpectedCost{}, ErrInvalidSupplierCost
 	}
-	if cost.originalCurrency != cost.settlementCurrency && !conversion.valid() {
+	if spec.OriginalCurrency != cost.settlementCurrency && !spec.Conversion.valid() {
 		return SupplierExpectedCost{}, ErrConversionStepMissing
 	}
+	if spec.OriginalCurrency == cost.settlementCurrency &&
+		spec.OriginalMinor != spec.SettlementMinor {
+		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
 	corrected := cost
-	corrected.version = version
-	corrected.evaluation = evaluation
-	corrected.settlementMinor = settlementMinor
-	corrected.conversion = conversion
+	corrected.version = spec.Version
+	corrected.evaluation = spec.Evaluation
+	corrected.originalCurrency = spec.OriginalCurrency
+	corrected.originalMinor = spec.OriginalMinor
+	corrected.settlementMinor = spec.SettlementMinor
+	corrected.conversion = spec.Conversion
 	corrected.priorVersion = cost.version
-	corrected.correctionReason = reason
+	corrected.correctionReason = spec.Reason
 	return corrected, nil
 }

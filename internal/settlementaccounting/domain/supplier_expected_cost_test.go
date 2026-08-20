@@ -103,21 +103,24 @@ func TestAMissingConversionStepStopsTheCost(t *testing.T) {
 
 // Covers: `AT-SA-054`「供应商计费规则更正但客户规则未变——只追加供应商预期成本计价
 // 纠错，不形成供应商账单贷项」与 `AT-SA-178`「汇率序列期次事后被更正——据新评价追加
-// 计价纠错；原费用与原换算依据保留」——纠错换版本带原因换新评价指回原版，原成本
-// 不可变；重号纠错拒；跨币种纠错仍要换算步骤。
+// 计价纠错；原费用与原换算依据保留」——纠错换版本带原因换新评价指回原版，金额与
+// 换算步骤整组取自新评价（ADR-0067），原成本不可变；重号纠错拒；跨币种纠错仍要
+// 换算步骤。
 func TestACorrectionAppendsWithoutRewritingTheOriginal(t *testing.T) {
 	cost, err := domain.FormSupplierExpectedCost(crossCurrencySpec(t))
 	if err != nil {
 		t.Fatalf("form supplier expected cost: %v", err)
 	}
 
-	corrected, err := cost.AppendCorrection(
-		mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
-		mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
-		90110,
-		mustValue(t, domain.NewConversionStepReference, "fx-series/2026-32-corrected/step-1"),
-		mustValue(t, domain.NewCostCorrectionReason, "FX_SERIES_CORRECTED/2026-32"),
-	)
+	corrected, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    12600,
+		SettlementMinor:  90110,
+		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/2026-32-corrected/step-1"),
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "FX_SERIES_CORRECTED/2026-32"),
+	})
 	if err != nil {
 		t.Fatalf("append correction: %v", err)
 	}
@@ -132,27 +135,151 @@ func TestACorrectionAppendsWithoutRewritingTheOriginal(t *testing.T) {
 	if conversion, _ := cost.Conversion(); conversion.String() != "fx-series/2026-32/step-1" {
 		t.Fatal("原换算依据被改写了")
 	}
+	if currency, minor := corrected.OriginalAmount(); currency.String() != "USD" || minor != 12600 {
+		t.Fatalf("corrected original = %s %d; 原币金额必须随新评价重述", currency, minor)
+	}
 	_, correctedSettlement := corrected.SettlementAmount()
 	if correctedSettlement != 90110 {
 		t.Fatalf("corrected settlement = %d", correctedSettlement)
 	}
 
-	if _, err := cost.AppendCorrection(
-		cost.Version(),
-		mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
-		90110,
-		mustValue(t, domain.NewConversionStepReference, "fx-series/step-2"),
-		mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
-	); !errors.Is(err, domain.ErrInvalidSupplierCost) {
+	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          cost.Version(),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    12600,
+		SettlementMinor:  90110,
+		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/step-2"),
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	}); !errors.Is(err, domain.ErrInvalidSupplierCost) {
 		t.Fatalf("err = %v; 重号的纠错分不出两版", err)
 	}
-	if _, err := cost.AppendCorrection(
-		mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
-		mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
-		90110,
-		domain.ConversionStepReference{},
-		mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
-	); !errors.Is(err, domain.ErrConversionStepMissing) {
+	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    12600,
+		SettlementMinor:  90110,
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	}); !errors.Is(err, domain.ErrConversionStepMissing) {
 		t.Fatalf("err = %v; 跨币种纠错缺换算步骤被收下了", err)
+	}
+}
+
+// Covers: ADR-0067 决定四与 `AT-SA-054`——同币种计价纠错的原币金额是新评价给出的
+// 原币金额，与新结算金额相等，产物能原样喂回形成门（两扇门同一口径）；两额不等是
+// 矛盾输入，与形成门同一理由：没有换算却造出了第二个数。
+func TestASameCurrencyCorrectionRestatesBothAmounts(t *testing.T) {
+	same := crossCurrencySpec(t)
+	same.SettlementCurrency = same.OriginalCurrency
+	same.SettlementMinor = same.OriginalMinor
+	same.Conversion = domain.ConversionStepReference{}
+	cost, err := domain.FormSupplierExpectedCost(same)
+	if err != nil {
+		t.Fatalf("form same-currency cost: %v", err)
+	}
+
+	corrected, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    11800,
+		SettlementMinor:  11800,
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	})
+	if err != nil {
+		t.Fatalf("append correction: %v", err)
+	}
+	originalCurrency, originalMinor := corrected.OriginalAmount()
+	settlementCurrency, settlementMinor := corrected.SettlementAmount()
+	if originalCurrency.String() != "USD" || originalMinor != 11800 || settlementMinor != 11800 {
+		t.Fatalf("corrected = %s %d / %d; 同币种纠错必须整组重述且两额相等",
+			originalCurrency, originalMinor, settlementMinor)
+	}
+
+	conversion, _ := corrected.Conversion()
+	if _, err := domain.FormSupplierExpectedCost(domain.SupplierExpectedCostSpec{
+		Version:            corrected.Version(),
+		Occurrence:         corrected.Occurrence(),
+		FeeItem:            corrected.FeeItem(),
+		RuleVersion:        corrected.RuleVersion(),
+		Agreement:          corrected.Agreement(),
+		Evaluation:         corrected.Evaluation(),
+		OriginalCurrency:   originalCurrency,
+		OriginalMinor:      originalMinor,
+		SettlementCurrency: settlementCurrency,
+		SettlementMinor:    settlementMinor,
+		Conversion:         conversion,
+	}); err != nil {
+		t.Fatalf("纠错产物原样喂回形成门被拒：%v", err)
+	}
+
+	if _, err := cost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v3"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-3"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    11800,
+		SettlementMinor:  11900,
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	}); !errors.Is(err, domain.ErrInvalidSupplierCost) {
+		t.Fatalf("err = %v; 同币种两额不等被收下了", err)
+	}
+}
+
+// Covers: ADR-0067 决定五——换算步骤必备按该版本自己的币种对判断，不按被它纠正的
+// 那一版：原币币种随评价重述，跨币种首版纠错成同币种、同币种首版纠错成跨币种都是
+// 合法形状。
+func TestConversionNecessityFollowsTheCorrectionsOwnCurrencyPair(t *testing.T) {
+	cross, err := domain.FormSupplierExpectedCost(crossCurrencySpec(t))
+	if err != nil {
+		t.Fatalf("form cross-currency cost: %v", err)
+	}
+	toSame, err := cross.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:    90110,
+		SettlementMinor:  90110,
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "OCCURRENCE_CORRECTED"),
+	})
+	if err != nil {
+		t.Fatalf("跨币种首版纠错成同币种：%v", err)
+	}
+	if conversion, present := toSame.Conversion(); present {
+		t.Fatalf("同币种纠错版本带着换算步骤：%s", conversion)
+	}
+
+	same := crossCurrencySpec(t)
+	same.SettlementCurrency = same.OriginalCurrency
+	same.SettlementMinor = same.OriginalMinor
+	same.Conversion = domain.ConversionStepReference{}
+	sameCost, err := domain.FormSupplierExpectedCost(same)
+	if err != nil {
+		t.Fatalf("form same-currency cost: %v", err)
+	}
+	if _, err := sameCost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "EUR"),
+		OriginalMinor:    9800,
+		SettlementMinor:  11800,
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	}); !errors.Is(err, domain.ErrConversionStepMissing) {
+		t.Fatalf("err = %v; 同币种首版纠错成跨币种缺换算步骤被收下了", err)
+	}
+	crossed, err := sameCost.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          mustValue(t, domain.NewSupplierCostVersionID, "cost-1/v2"),
+		Evaluation:       mustValue(t, domain.NewBuyEvaluationReference, "evaluation-buy-2"),
+		OriginalCurrency: mustValue(t, domain.NewCurrencyCode, "EUR"),
+		OriginalMinor:    9800,
+		SettlementMinor:  11800,
+		Conversion:       mustValue(t, domain.NewConversionStepReference, "fx-series/2026-33/step-1"),
+		Reason:           mustValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	})
+	if err != nil {
+		t.Fatalf("同币种首版纠错成跨币种：%v", err)
+	}
+	if currency, minor := crossed.OriginalAmount(); currency.String() != "EUR" || minor != 9800 {
+		t.Fatalf("crossed original = %s %d", currency, minor)
 	}
 }

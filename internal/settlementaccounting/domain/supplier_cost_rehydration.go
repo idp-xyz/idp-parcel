@@ -22,13 +22,10 @@ type RehydrateSupplierExpectedCostSpec struct {
 // RehydrateSupplierExpectedCost 读回一份预期成本：复验行自身形状，不重算金额
 // （ADR-0028 的重建门）。
 //
-// 它不走 FormSupplierExpectedCost，因为形成门的「同币种两额必须相等」只对首版成立。
-// AppendCorrection 重述的是结算金额、原币金额原样留着，于是一份同币种的纠错版本
-// 两额本就可以不等——拿形成门去验它，读回的会是一份写得好好的成本被判为不成立。
-// 反过来，首版仍要过那一条：没有换算却出现第二个数，只可能是自行取汇率补算出来的。
-//
-// 纠错版本另要求回指与原因成对且不自指：只带一件的行说不清它纠正的是哪一版，而
-// AppendCorrection 从不产生那种形状。
+// 它不走 FormSupplierExpectedCost，因为回指与原因这两个字段形成门根本不接：纠错
+// 版本要求两件成对且不自指，只带一件的行说不清它纠正的是哪一版，而 AppendCorrection
+// 从不产生那种形状。金额一侧两扇门自 ADR-0067 起同一口径：同币种两额必须相等对
+// 所有版本成立，纠错版本不再例外。
 func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (SupplierExpectedCost, error) {
 	if !spec.Version.valid() ||
 		!spec.Occurrence.id.valid() ||
@@ -45,16 +42,16 @@ func RehydrateSupplierExpectedCost(spec RehydrateSupplierExpectedCostSpec) (Supp
 	if spec.OriginalCurrency != spec.SettlementCurrency && !spec.Conversion.valid() {
 		return SupplierExpectedCost{}, ErrConversionStepMissing
 	}
+	if spec.OriginalCurrency == spec.SettlementCurrency &&
+		spec.OriginalMinor != spec.SettlementMinor {
+		return SupplierExpectedCost{}, ErrInvalidSupplierCost
+	}
 
-	isCorrection := spec.PriorVersion.valid() || spec.CorrectionReason.valid()
-	if isCorrection {
+	if spec.PriorVersion.valid() || spec.CorrectionReason.valid() {
 		if !spec.PriorVersion.valid() || !spec.CorrectionReason.valid() ||
 			spec.PriorVersion == spec.Version {
 			return SupplierExpectedCost{}, ErrInvalidSupplierCost
 		}
-	} else if spec.OriginalCurrency == spec.SettlementCurrency &&
-		spec.OriginalMinor != spec.SettlementMinor {
-		return SupplierExpectedCost{}, ErrInvalidSupplierCost
 	}
 
 	return SupplierExpectedCost{

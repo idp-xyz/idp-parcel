@@ -66,13 +66,14 @@ func TestACorrectionVersionKeepsItsBackReference(t *testing.T) {
 	tenant := saTenant(t, "tenant-1")
 
 	first := formedExpectedCost(t, "cost-v1", "occurrence-1")
-	corrected, err := first.AppendCorrection(
-		saValue(t, domain.NewSupplierCostVersionID, "cost-v2"),
-		saValue(t, domain.NewBuyEvaluationReference, "buy-eval-2"),
-		3900,
-		domain.ConversionStepReference{},
-		saValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
-	)
+	corrected, err := first.AppendCorrection(domain.CostCorrectionSpec{
+		Version:          saValue(t, domain.NewSupplierCostVersionID, "cost-v2"),
+		Evaluation:       saValue(t, domain.NewBuyEvaluationReference, "buy-eval-2"),
+		OriginalCurrency: saValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:    3900,
+		SettlementMinor:  3900,
+		Reason:           saValue(t, domain.NewCostCorrectionReason, "RULE_CORRECTED"),
+	})
 	if err != nil {
 		t.Fatalf("追加纠错：%v", err)
 	}
@@ -93,6 +94,9 @@ func TestACorrectionVersionKeepsItsBackReference(t *testing.T) {
 	}
 	if _, minor := loaded.SettlementAmount(); minor != 3900 {
 		t.Fatalf("纠错后结算金额 = %d, want 3900", minor)
+	}
+	if currency, minor := loaded.OriginalAmount(); currency.String() != "USD" || minor != 3900 {
+		t.Fatalf("纠错后原币金额 = %s %d；同币种两额必须整组重述（ADR-0067）", currency, minor)
 	}
 
 	original, found, err := repository.LoadExpectedCost(ctx, tenant, first.Version())

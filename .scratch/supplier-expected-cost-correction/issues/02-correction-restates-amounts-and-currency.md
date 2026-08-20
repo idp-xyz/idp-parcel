@@ -1,7 +1,7 @@
 # 纠错版本重述金额与原币币种，撤掉同币种等值的首版例外
 
 Category: bug
-Status: draft
+Status: resolved
 Blocked by: 01
 
 按 [ADR-0067](../../../docs/adr/0067-cost-correction-restates-the-whole-evaluation-result.md) 决定二、
@@ -45,5 +45,12 @@ Blocked by: 01
 ## Comments
 
 - 2026-08-20 · MCP-3：随 `01` 的裁断创建，`Status: draft` 等 MCP-1 派工。
+- 2026-08-20 · MCP-3：用户点头后实现，随本票状态变更同笔提交。落点与票面一致：
+  `AppendCorrection` 改收 `CostCorrectionSpec`（长出原币币种与金额；合同结算币仍不接受入参），
+  换算必备与同币种等值都按本版币种对判断；重建门等值检查改为对所有版本，旧注释整段重写；
+  迁移 `0012` 重建 CHECK 为无条件形式（0008 未动）。验证：领域用例三条新增/改写
+  （同币种纠错重述两额并能原样喂回形成门、换算必备随本版币种对、重建门拒不等额纠错行），
+  真库 `TestACorrectionVersionKeepsItsBackReference` 在新 CHECK 下绿并加了原币金额重述断言；
+  全仓 `go vet` + `go test -count=1 ./...` 绿（含真库 PASS，DSN 实测非 SKIP）。
 - 2026-08-20 · MCP-1：裁断（ADR-0067 与 CONTEXT 改动）已入库。本票是领域不变量实现，按 `01`
   票面硬约束**等用户点头后再派工**；点头前保持 draft，不开工。
