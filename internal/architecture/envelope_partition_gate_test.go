@@ -155,8 +155,6 @@ var allowedSameExpression = map[string]string{
 		"（键取到动作，同一事项的各动作各是一条独立事实；消费侧 CC 的 factSetDigest 先把事实引用排序，装载顺序不构成不同内容）",
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go": annotationNoOrdering +
 		"同一收寄键只出一份——ReceiveDeliveredUnitHandler.Handle 幂等/冲突按内容指纹分界，且只在收寄判断成立时交意图",
-	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go": annotationVersionInKey +
-		"封签（seal）——Unseal 后再 Seal 是同一单元的又一份快照，历史快照原样保留",
 
 	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": annotationStateSequence +
 		"suspension.recorded → resumption.recorded（恢复的信封 ID 就挂在它要解除的那个暂停标识上）",

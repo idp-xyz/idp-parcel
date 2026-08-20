@@ -105,6 +105,74 @@ func sealOpenedUnit(t *testing.T, unit *domain.ConsolidationUnit, seal string) {
 	}
 }
 
+// TestTwoSnapshotsOfTheSameUnitShareOnePartition 钉住两个字段的分工。
+//
+// Unseal 后再 Seal 是同一单元的又一份快照（历史快照原样保留），两件都要成立：**都入队**
+// （ID 含封签，第二份不被 EnqueueOnce 当成重放吞掉）**且同分区**（分区键只到租户+单元，
+// 后一份排在前一份后面）。封签进分区键每份就自成一区，下游读到的成员清单就没有先后可言。
+func TestTwoSnapshotsOfTheSameUnitShareOnePartition(t *testing.T) {
+	fixture := newSnapshotHandoffFixture(t)
+	ctx := t.Context()
+
+	unit := openConsolidation(t, "bag-1", "asset-7")
+	sealOpenedUnit(t, unit, "seal-1")
+	if err := unit.Unseal(ref(t, domain.NewWorkBasisReference, "UNPACK/1"), consolidationAt.Add(time.Hour)); err != nil {
+		t.Fatalf("开封：%v", err)
+	}
+	if err := unit.Seal(
+		ref(t, domain.NewSealReference, "seal-2"),
+		ref(t, domain.NewWorkBasisReference, "PACK/2"),
+		consolidationAt.Add(2*time.Hour),
+	); err != nil {
+		t.Fatalf("再封：%v", err)
+	}
+	snapshots := unit.Snapshots()
+	if len(snapshots) != 2 {
+		t.Fatalf("快照数 = %d, want 2", len(snapshots))
+	}
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffSnapshot(txCtx, ports.SealedSnapshotHandoffIntent{
+			TenantID: tenant, Unit: unit.ID(), Snapshot: snapshots[0],
+		}); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffSnapshot(txCtx, ports.SealedSnapshotHandoffIntent{
+			TenantID: tenant, Unit: unit.ID(), Snapshot: snapshots[1],
+		})
+	})
+
+	firstID := snapshotEventID("tenant-a", "bag-1", "seal-1")
+	secondID := snapshotEventID("tenant-a", "bag-1", "seal-2")
+	if count := countSnapshotIntents(t, fixture.pool, firstID); count != 1 {
+		t.Fatalf("首封行数 = %d, want 1", count)
+	}
+	if count := countSnapshotIntents(t, fixture.pool, secondID); count != 1 {
+		t.Fatalf("再封行数 = %d, want 1——ID 不带封签时第二份会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	if got := partitionKeyOf(t, fixture.pool, firstID); got != "tenant-a/bag-1" {
+		t.Fatalf("首封分区键 = %q, want tenant-a/bag-1", got)
+	}
+	if got := partitionKeyOf(t, fixture.pool, secondID); got != "tenant-a/bag-1" {
+		t.Fatalf("再封分区键 = %q；两份不同分区就没有先后可言", got)
+	}
+}
+
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey); err != nil {
+		t.Fatalf("读取分区键：%v", err)
+	}
+	return partitionKey
+}
+
 func TestSealedSnapshotIntentCommitsAtomicallyWithTheUnit(t *testing.T) {
 	fixture := newSnapshotHandoffFixture(t)
 	ctx := t.Context()
