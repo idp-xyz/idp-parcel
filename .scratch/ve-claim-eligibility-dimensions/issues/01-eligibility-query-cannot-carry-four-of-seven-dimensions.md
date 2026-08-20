@@ -89,3 +89,13 @@ CONTEXT 生命周期明写：「资格审核 → **等待补充**、不予受理
 MCP-1 于 2026-08-17 裁定走第三条先行，口径以 ADR-0051 为准，不在本票复制第二套。
 
 切块：(a) ADR + 域第三态 + 四件落点 + 迁移；(b) 目录只答规则、编排逐维核；(c) 查询加申请人维。CONTEXT.md 一字不改。
+
+## Comments
+
+- 2026-08-20 MCP-1：清点死会话残局时复核，**切块 (a) 早已落地**，Status 的 in-progress 指的是它、
+  已过期：`ADR-0051`（`docs/adr/0051-eligibility-screen-awaits-supplement.md`）、域第三态
+  `ClaimAwaitingSupplement`（`domain/customer_claim.go`，`terminal()` 明确把它排除在终局之外）、
+  迁移 `0013_eligibility_awaiting_supplement.sql`，均在 `origin/main` = `11057dc`。
+- 2026-08-20 MCP-1：**切块 (b) 派 MCP-5**，票名 CLAIM-ELIG-B。切块 (c) 与 (b) 同碰
+  `ports.EligibilityQuery`，不并行，等 (b) 合入后另派。基线 `11057dc`；
+  `cmd/parcel-dispatch/assemble.go` 被 VE-008 票 03（`a771bc3`）占用，本票不得碰。

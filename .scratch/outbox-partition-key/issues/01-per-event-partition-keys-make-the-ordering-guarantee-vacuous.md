@@ -1,7 +1,13 @@
 # 逐事件分区键让框架的排序保证落空，而乱序投递不报任何错
 
 Category: bug
-Status: needs-triage
+Status: in-progress
+
+- 2026-08-20 MCP-1：triage 完成，**只放行「建议分两步走」的第一步**，票名 OUTBOX-PARTITION-KEY-A，
+  派 MCP-2（本票由该通道勘察，作者视角最熟）。范围＝甲类只改 `PartitionKey` 一行 + `internal/architecture`
+  门禁 + 具名例外清单；乙/丙两类改 ID 语义不在本轮。`pilot-governance` 与 `customs-compliance`
+  两处未答不替它们拍板，留在例外清单里。基线 `11057dc`；`cmd/parcel-dispatch/assemble.go` 被
+  VE-008 票 03（`a771bc3`）占用，本票不得碰。
 
 发现于清点 46 个 handoff 时（`cab9d1b`）。**只写票，不动代码**——涉及的 handoff 分属
 MCP-2、MCP-5 与本通道三块地盘，逐个该用什么分区键是各自主人的判断。

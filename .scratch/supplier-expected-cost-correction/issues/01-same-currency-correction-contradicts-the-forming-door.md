@@ -1,7 +1,7 @@
 # 同币种计价纠错造出了形成门明禁的形状
 
 Category: bug
-Status: needs-triage
+Status: in-progress
 
 `SupplierExpectedCost` 的两扇门对「同币种两额可不可以不等」给出相反答案。本票只记录
 两边的实际行为与它是怎么暴露的，**不提方案**——判哪一扇门对，属领域 owner。
@@ -66,3 +66,9 @@ ERROR: new row for relation "supplier_expected_cost" violates check constraint
 
 - 2026-08-14 · MCP-5：本票由 MCP-1 在 SA 九口视图那一票的回执里指派创建，要求「写清两个
   门的实际行为差异、不提方案、把真库 CHECK 打红那件写进去当例证」。三条已照办。
+- 2026-08-20 MCP-1：triage 完成，派 MCP-3，票名 SUPPLIER-COST-RULING。**本票按裁断票派，不是
+  实现票**：走 `/grill-with-docs` → `/ubiquitous-language` → `/domain-modeling`，先回答「需要 owner
+  定的」那一问（同币种纠错后原币金额应当是什么），把结论写进 SA 的 `CONTEXT.md` 或另立 ADR，
+  并写明 `91af99c` 那处收紧要不要跟改。**改 `supplier_expected_cost.go`、迁移 `0008` 的 CHECK
+  与重建门之前停下报 MCP-1 等用户点头**——那是领域不变量，属难逆转取舍。
+  现在动代价最低的取证仍成立（两个函数都无应用层调用方，无已落库生产数据）。基线 `11057dc`。
