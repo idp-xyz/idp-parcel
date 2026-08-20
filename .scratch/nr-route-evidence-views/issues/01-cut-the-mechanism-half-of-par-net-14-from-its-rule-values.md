@@ -135,3 +135,11 @@ Status: in-progress
   规则正文），参数登记册任何一行状态不变。`NetworkEvidenceView` 缺的 PS 地址提供路径属跨上下文
   边界决策，划出为本目录 `02` 号票，不混入本票。另：`syn-wall-door-audit` 审计票 05（自动改道
   事实目录未实装）与本票同域，采纳时已互链。
+- 2026-08-20 MCP-4（NR-CATALOG-MECH 完工）：机制四件已落——迁移
+  `migrations/network_routing/0008_network_catalog.sql`（七表+目录修订锚，只建结构不种行）、
+  适配器 `internal/networkrouting/adapters/postgres/network_catalog.go`（七类登记口 + 单语句
+  快照读口，三格答复；两版同时适用交回 `ErrAmbiguousNetworkCatalog`；调整族按历史链选当前
+  陈述；每笔写入同事务推进修订）。决定记录 [ADR-0068](../../../docs/adr/0068-versioned-network-catalog-structure-precedes-rule-content.md)
+  （部分停用 ADR-0053「现在不建表」半句）。三口取数侧未接（0007 登记册照旧作答），登记册
+  `PAR-NET-*` 行状态未动；PS 地址缝未碰（归 02 号票）。本票剩余问题照「还需要一个决定」节
+  预告收敛为一层：`PAR-NET-14` 规则正文（解析层 + 内容列扩展）。提交 SHA 见 MCP-1 集成记录。

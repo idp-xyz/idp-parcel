@@ -58,7 +58,7 @@
 - [ADR-0050：服务产品形态随解析闭包可观察](./0050-service-product-form-observable-through-the-resolution-closure.md)
 - [ADR-0051：资格审核答复含等待补充；一次性只约束终局格](./0051-eligibility-screen-awaits-supplement.md)
 - [ADR-0052：网络证据端口增设「未配置」格，网络定义登记册的模式属机制半边](./0052-network-evidence-catalogue-has-an-unconfigured-grade.md)｜**部分停用**：其 Decision 四中「它要能承载 `NetworkEvidence` 与 `InitialRouteEvidence` 两个结构今天已声明的全部事实族」一句已由 [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) 停用——九族以每次判断生成的 `CandidateID` 为轴、且判断键里没有目的地维，它们是推导结果不是可登记的目录行。其余各条（三格端口、专格未决原因、修订由登记册派生、空册与空集合可分辨）不变。
-- [ADR-0053：网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置](./0053-network-fact-families-are-derived-not-registrable.md)
+- [ADR-0053：网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置](./0053-network-fact-families-are-derived-not-registrable.md)｜**部分停用**：其 Decision 三中「现在不建表」半句已由 [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 停用——目录**结构**由 CONTEXT 硬句定死不依赖取值，先行落表；「不从事实族倒推」「内容形态不替租户拟」与其余各条不变。
 - [ADR-0054：接受前财务控制策略视图增设「未配置」格](./0054-pre-acceptance-control-policy-view-has-an-unconfigured-grade.md)
 - [ADR-0055：业务端点 Intake 增设「未配置」格，端点装配属机制半边](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)
 - [ADR-0056：区间更正只增多条，同版本写入以版本行锁串行化](./0056-validity-correction-append-only-serialized-by-version-row.md)
@@ -73,6 +73,7 @@
 - [ADR-0065：追踪投影版本只增不改写；替代关系由源上下文给出，不进冲突裁决](./0065-projection-versions-are-append-only-and-supersession-is-source-given.md)
 - [ADR-0066：多载运对象信封在消费侧按成员循环拆分；成员维进事实引用，不进事实类型](./0066-multi-object-envelope-unrolls-per-member-on-the-consumer-side.md)
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果，同币种两额相等对所有版本成立](./0067-cost-correction-restates-the-whole-evaluation-result.md)
+- [ADR-0068：版本化网络目录结构先行——七表由 CONTEXT 硬句推导，内容列与折叠规则等 PAR-NET-14](./0068-versioned-network-catalog-structure-precedes-rule-content.md)
 
 ## 已被取代决策
 

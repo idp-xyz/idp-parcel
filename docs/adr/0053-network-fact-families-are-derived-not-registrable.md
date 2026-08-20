@@ -1,6 +1,6 @@
 # ADR-0053: 网络事实族是推导结果不可登记；登记册只登定义存在，无解析层时一律答未配置
 
-Status: Accepted  
+Status: Accepted（**部分停用**：Decision 三的「现在不建表」半句已由 [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 停用——目录结构由 CONTEXT 硬句定死、不依赖 `PAR-NET-*` 取值，先行落表；「不从事实族倒推」「内容形态不替租户拟」与其余各条不变）  
 Date: 2026-08-17
 
 ## Context
