@@ -48,15 +48,20 @@ const envelopeType = "eventing.Envelope"
 // 那个方法还在不在、键里有没有版本维、两个状态是不是同一对象的就能核；结论只能重新把领域读
 // 一遍，而复核不了的结论会把误判一直藏下去。
 //
-// 判据是一句话：**后一条会不会改写或取代前一条说过的事。** 四取其一：
+// 判据是一句话：**后一条会不会改写或取代前一条说过的事。** 五取其一，答不出再取第六格：
 //
 //	更正入口：<Type>.<Method>    有先后（真风险）——显式更正 / 重派生 / 撤销入口
 //	版本进键：<键里的版本维>      有先后（真风险）——无更正方法，但同主体多版
 //	状态序列：<A> → <B>         有先后（真风险）——无更正方法，先后两条是同一对象的相继状态
 //	依赖前序：<B> 引用 <A>       有先后但可自愈——见下
 //	无先后：<为何可交换>          后一条不改写前一条
+//	待裁：<答不出的那一句>        判不准，等人裁——既不算真风险也不算无害
 //
-// **剩余真风险 = 前三类的行数**；清单总长 = 剩余工量。
+// **剩余真风险 = 前三类的行数**；清单总长 = 剩余工量。**待裁那几行是未知，不是零**——把它们
+// 记进无害会让工量看起来已经收敛，而它们恰恰是最可能藏着缺陷的几行。
+//
+// 六个前缀由 TestEveryExceptionCarriesACheckableVerdict 强制。没有这道检查，「待地盘主人标注」
+// 那种既非判据也非结论的占位就能在清单里坐满一整轮——它正是这么发生的。
 //
 // 「依赖前序」单列而不计入真风险，是因为它的失效方式不同：前三类是**重述乱序**，两条都被成功
 // 处理、只是顺序反了，消费方无从得知，最终状态静默错；而依赖乱序会让消费方找不到被引用的对象
@@ -75,12 +80,34 @@ const envelopeType = "eventing.Envelope"
 //     更正方法，恢复却必须排在暂停之后。
 //   - 而把「多条但互不相干」误记成「一对象一意图」虽不改变结论，却会让下一个人照错理由推断。
 //
-// **标注由该行的地盘主人填，不由建清单的人代填。** 建清单的人扫得出「同一表达式」，扫不出
-// 「同主体会不会出多条」——后者要读领域。代填出来的是一个看起来很硬、实则凭印象的数字。
+// 标注原先规定「由该行的地盘主人填，不由建清单的人代填」，理由是建清单的人扫得出「同一表达
+// 式」却扫不出「同主体会不会出多条」，代填出来的是一个看起来很硬、实则凭印象的数字。
+//
+// **这条规定作废，因为它假定地盘主人会一直在。** 二十六行「待地盘主人标注」在清单里坐了整整
+// 一轮没人动过——会话是易朽的，没有任何人会回来填。改成的口径是：**填的人自己按判据逐行读
+// 领域，读得出就填判据，读不出就填「待裁」并写清卡在哪一句。** 原先那条担心的「凭印象的数
+// 字」由两件事挡住：判据本身可复核（那个方法还在不在、键里有没有版本维，看一眼就知道），以及
+// 待裁这一格给了「我不知道」一个正当出口——没有它，不知道的行只能被填成一个好看的值。
 const (
-	annotationPendingOwner = "待地盘主人标注"
-	annotationNoRewrite    = "无先后：各条互不相干"
+	annotationCorrectionEntry = "更正入口："
+	annotationVersionInKey    = "版本进键："
+	annotationStateSequence   = "状态序列："
+	annotationDependsOnPrior  = "依赖前序："
+	annotationNoOrdering      = "无先后："
+	annotationPendingRuling   = "待裁："
+
+	annotationNoRewrite = annotationNoOrdering + "各条互不相干"
 )
+
+// annotationPrefixes 是标注允许的开头。顺序即上面判据表的顺序，前三个是真风险。
+var annotationPrefixes = []string{
+	annotationCorrectionEntry,
+	annotationVersionInKey,
+	annotationStateSequence,
+	annotationDependsOnPrior,
+	annotationNoOrdering,
+	annotationPendingRuling,
+}
 
 // allowedSameExpression 是本门禁落地那一刻已经存在的位置，值是上面四类之一的标注。
 // **每修一处删一行；删行要与修复同笔提交。**
@@ -103,37 +130,66 @@ const (
 // 人——分两笔的话，两笔之间的 HEAD 是红的，而这一批有四个人在同一棵树上并行改，那段窗口里
 // 谁验全仓都会红。已经发生过一次：对账单那处修复与删行分了两笔，中间 HEAD 红了一轮。
 var allowedSameExpression = map[string]string{
-	"internal/customscompliance/adapters/postgres/case_closure_handoff.go":           annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/customs_case_handoff.go":           annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/external_result_handoff.go":        annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/follow_up_handoff.go":              annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/gate_verification_handoff.go":      annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/manifest_handoff.go":               annotationPendingOwner,
-	"internal/customscompliance/adapters/postgres/verification_handoff.go":           annotationPendingOwner,
+	// 关务案件链是四个 handoff 各出一封（建立 → 申报提交 → 核对 → 关闭），而分区由键值定、
+	// 不由 handoff 定：四口不改成同一个键公式就落不进同一分区，各自改成业务键也白改。这一句
+	// 本上下文当前无主，三行因此待裁。verification 与 gate 另有各自独立成立的真风险，不等这一裁。
+	"internal/customscompliance/adapters/postgres/case_closure_handoff.go": annotationPendingRuling +
+		"案件链是否需保序；且 CloseCustomsCaseHandler.Handle 写明「重开走 Reopen」，重开后再关会撞同一 ID",
+	"internal/customscompliance/adapters/postgres/customs_case_handoff.go": annotationPendingRuling +
+		"案件链是否需保序——本口是链首，它取什么键公式决定了另外三口得跟着取什么",
+	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationPendingRuling +
+		"案件链是否需保序；ID 缺版本维一事已另有票（.scratch/declaration-envelope-version-dedup/issues/01），今天无触发路径",
+	"internal/customscompliance/adapters/postgres/external_result_handoff.go": annotationNoOrdering +
+		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
+	"internal/customscompliance/adapters/postgres/follow_up_handoff.go": annotationStateSequence +
+		"ManageFollowUpHandler.FormTarget → .RecordEffect，同一目标键先后两拍撞同一 ID",
+	"internal/customscompliance/adapters/postgres/gate_verification_handoff.go": annotationVersionInKey +
+		"逐项判断指纹 FindingsDigest——条件状态变化换指纹换版",
+	"internal/customscompliance/adapters/postgres/manifest_handoff.go": annotationCorrectionEntry +
+		"ReceiveManifestHandler.Revise",
+	"internal/customscompliance/adapters/postgres/verification_handoff.go": annotationVersionInKey +
+		"事实集指纹 factSetDigest——新执行事实到达换指纹换版",
 
-	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationPendingOwner,
+	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": annotationNoOrdering +
+		"判断键含接受基线，重判走新基线即新键；同键由 CreateInitialRouteHandler.Handle 判重放返原",
 
-	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": annotationPendingOwner,
-	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go":           annotationPendingOwner,
-	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              annotationPendingOwner,
-	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          annotationPendingOwner,
+	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": annotationNoOrdering +
+		"同一事项只决定一次——AcceptCollaborationHandler.Accept 幂等按（租户+事项），异内容答冲突不顶替",
+	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go": annotationNoRewrite +
+		"（键取到动作，同一事项的各动作各是一条独立事实；消费侧 CC 的 factSetDigest 先把事实引用排序，装载顺序不构成不同内容）",
+	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go": annotationNoOrdering +
+		"同一收寄键只出一份——ReceiveDeliveredUnitHandler.Handle 幂等/冲突按内容指纹分界，且只在收寄判断成立时交意图",
+	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go": annotationVersionInKey +
+		"封签（seal）——Unseal 后再 Seal 是同一单元的又一份快照，历史快照原样保留",
 
-	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": annotationPendingOwner,
+	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": annotationStateSequence +
+		"suspension.recorded → resumption.recorded（恢复的信封 ID 就挂在它要解除的那个暂停标识上）",
 
-	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":       annotationPendingOwner,
-	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go":    annotationPendingOwner,
-	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       annotationPendingOwner,
-	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              annotationPendingOwner,
-	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": annotationPendingOwner,
+	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go": annotationDependsOnPrior +
+		"recovery-adjustment 引用 advance-recovery——Adjust 先核对回收在场，且不改写原回收",
+	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go": annotationNoOrdering +
+		"一笔费用只确认一次，本上下文没有费用的更正、撤销或重确认入口",
+	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go": annotationDependsOnPrior +
+		"claim-adjustment 引用 claim-amount / receivable / acknowledgement——Adjust 核对目标在场，且不改写原金额（AT-SA-152）",
+	"internal/settlementaccounting/adapters/postgres/operating_handoff.go": annotationCorrectionEntry +
+		"AllocateCostsHandler.Reallocate 与 .Rederive——一个文件两个缺陷，共用同一个 shape.eventID",
+	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": annotationCorrectionEntry +
+		"MapExternalFundsHandler.Reverse",
 
-	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":        annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":       annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":           annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":              annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":       annotationPendingOwner,
-	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":        annotationPendingOwner,
+	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go": annotationNoRewrite +
+		"（一个池有多个预占，各条是互不相干的消耗事实，累加可交换）",
+	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go": annotationNoOrdering +
+		"同一处置不开两条旅程——StartAlternateJourneyHandler.Handle 幂等按（租户+原旅程+目的+处置依据）",
+	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go": annotationNoOrdering +
+		"与 disposition_execution 同键、同一拍入队，两口靠类型段错开；幂等口径同上",
+	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go": annotationNoOrdering +
+		"同一揽收尝试键只出一份——PerformOffsitePickupHandler.Handle 幂等/冲突按内容指纹分界",
+	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": annotationPendingRuling +
+		"同一载运对象能否出现第二次成功的对象级揽收登记——能则两次是同一条控制链的先后拍，而交接登记那口已按「一个对象一条链」把主体取到对象",
+	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go": annotationNoOrdering +
+		"同一协作事项只承接一次——AcceptRegulatoryDispositionHandler.Handle 对同键异内容判冒名冲突，不顶替",
+	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go": annotationNoOrdering +
+		"同一委托只发提交一拍——CommissionTransportHandler.CancelCommission 只 Replace 存储，取消不经本口交意图",
 }
 
 // sameExpressionViolation 是一处两字段同源。
@@ -291,14 +347,32 @@ func TestTheEnvelopePartitionGateCanActuallyCatchAViolation(t *testing.T) {
 	}
 }
 
-// TestTheExceptionListNamesTheDecisionItWaitsOn 守清单的分组方式本身。
+// TestEveryExceptionCarriesACheckableVerdict 守清单的标注本身。
 //
-// 例外可以有，但必须挂在一个具名的待决决定上。一条写不出「在等什么」的例外，与「先放着」
-// 没有区别，而「先放着」是没有完结条件的。
-func TestTheExceptionListNamesTheDecisionItWaitsOn(t *testing.T) {
-	for path, reason := range allowedSameExpression {
-		if strings.TrimSpace(reason) == "" {
-			t.Errorf("%s 的例外没有写明在等哪一个决定", path)
+// 例外可以有，但每一行都要带一句**能复核的判据**：六个前缀之一，后面跟具体内容。
+//
+// 前身只查「非空」，于是二十六行「待地盘主人标注」全部合格地坐了一整轮——它既不是判据也不是
+// 结论，只是一句「还没人看」，而没有任何东西会因此变红。查前缀补的就是那一格：想说不知道就得
+// 写「待裁：」并把答不出的那一句写出来，而那一句是可以拿去问人的。
+func TestEveryExceptionCarriesACheckableVerdict(t *testing.T) {
+	for path, verdict := range allowedSameExpression {
+		prefix, ok := matchedAnnotationPrefix(verdict)
+		if !ok {
+			t.Errorf("%s 的标注没有用判据前缀开头（六选一：%s）：%q",
+				path, strings.Join(annotationPrefixes, " / "), verdict)
+			continue
+		}
+		if strings.TrimSpace(strings.TrimPrefix(verdict, prefix)) == "" {
+			t.Errorf("%s 的标注只有前缀 %q，没写具体是哪一处", path, prefix)
 		}
 	}
+}
+
+func matchedAnnotationPrefix(verdict string) (string, bool) {
+	for _, prefix := range annotationPrefixes {
+		if strings.HasPrefix(verdict, prefix) {
+			return prefix, true
+		}
+	}
+	return "", false
 }
