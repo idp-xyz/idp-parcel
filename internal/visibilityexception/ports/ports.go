@@ -462,9 +462,26 @@ type VisibilityGapHandoff interface {
 	HandOffVisibilityGap(ctx context.Context, intent VisibilityGapHandoffIntent) error
 }
 
+type ClaimSaveOutcome uint8
+
+const (
+	ClaimSaveOutcomeInvalid ClaimSaveOutcome = iota
+	ClaimSaved
+	// ClaimRevisionConflict 说明另一方已经把这项索赔推进过了：本次写入这条路走通了，
+	// 只是手里的快照不再是当前那一版。它是业务答案而不是 error（ADR-0031）——调用方
+	// 要重读再重放，而 error 那一格的恢复动作是重试同一份，两者不同。
+	ClaimRevisionConflict
+)
+
 // ClaimStore 按（租户+批次+项）找回并保存索赔项。键含租户：租户是最高数据隔离边界
 // （ADR-0003），批次引用只在租户内唯一。键含批次：项标识由客户提交侧建立，批次内
 // 唯一是它的口径，跨批次撞号不该互相干扰。
+//
+// Save 的写入代数同 ADR-0031：预期修订由索赔项自己携带（`ClaimItem.Revision()` 是它
+// 被读出时的那一版，三判转移一律不动它），不符即交回 ClaimRevisionConflict，事务保持
+// 可用，编排读回赢家再作答。三判分步意味着同一项索赔的每一步都经这一个入口落库，
+// 于是资格审核与撤回、复核与延期这些并发对能各自从旧快照出发——没有这一格，后写者的
+// 整行重写会把前一个转换悄悄抹掉，两边都以为自己成功。
 type ClaimStore interface {
 	FindByBatchItem(
 		ctx context.Context,
@@ -472,7 +489,7 @@ type ClaimStore interface {
 		batch domain.ClaimBatchReference,
 		item domain.ClaimItemID,
 	) (*domain.ClaimItem, bool, error)
-	Save(ctx context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error
+	Save(ctx context.Context, tenant domain.TenantID, claim *domain.ClaimItem) (ClaimSaveOutcome, error)
 }
 
 // EligibilityQuery 是资格审核规则的输入：申请人授权、客户账户、合同版本、索赔时限、

@@ -83,7 +83,7 @@ func TestLiabilityIntentCommitsAtomicallyWithTheClaim(t *testing.T) {
 	intent := liabilityIntent(t, "tenant-a", "batch-1", "item-1")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
+		if _, err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffLiability(txCtx, intent)
@@ -108,7 +108,7 @@ func TestLiabilityIntentRollbackDropsBoth(t *testing.T) {
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		if err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
+		if _, err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
 			return err
 		}
 		if err := fixture.handoff.HandOffLiability(txCtx, intent); err != nil {
@@ -127,7 +127,7 @@ func TestLiabilityIntentRollbackDropsBoth(t *testing.T) {
 	}
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
-		if err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
+		if _, err := fixture.claims.Save(txCtx, tenant, intent.Claim); err != nil {
 			return err
 		}
 		return fixture.handoff.HandOffLiability(txCtx, intent)

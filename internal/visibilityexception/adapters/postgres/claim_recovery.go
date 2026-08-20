@@ -48,6 +48,7 @@ func (repository *Claims) FindByBatchItem(
 	}
 
 	var (
+		revision                                            int64
 		customer, contract, target, kind                    string
 		submittedAt                                         time.Time
 		screen, screenBasis, conclusion, priorConclusion    *string
@@ -57,7 +58,7 @@ func (repository *Claims) FindByBatchItem(
 		supplementDeadline                                  *time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT customer_ref, contract_ref, target_ref, kind_ref, submitted_at,
+		`SELECT revision, customer_ref, contract_ref, target_ref, kind_ref, submitted_at,
 		        screen, screen_basis, conclusion, concluded_at, review_by,
 		        prior_conclusion, withdrawn, withdrawn_at,
 		        missing_materials_ref, supplement_scope_ref, supplement_notice_ref,
@@ -65,7 +66,7 @@ func (repository *Claims) FindByBatchItem(
 		   FROM visibility_exception.claim_item
 		  WHERE tenant_id = $1 AND batch_ref = $2 AND item_id = $3`,
 		tenant.String(), batch.String(), item.String(),
-	).Scan(&customer, &contract, &target, &kind, &submittedAt,
+	).Scan(&revision, &customer, &contract, &target, &kind, &submittedAt,
 		&screen, &screenBasis, &conclusion, &concludedAt, &reviewBy,
 		&priorConclusion, &withdrawn, &withdrawnAt,
 		&missingMaterials, &supplementScope, &supplementNotice, &supplementDeadline)
@@ -77,6 +78,7 @@ func (repository *Claims) FindByBatchItem(
 	}
 
 	snapshot := domain.ClaimItemSnapshot{
+		Revision:    revision,
 		ID:          item,
 		Batch:       batch,
 		SubmittedAt: submittedAt,
@@ -157,17 +159,26 @@ func (repository *Claims) FindByBatchItem(
 // Save 落索赔的当前判断历史。同键整行更新（受理后每一步判断都经同一入口落库）；
 // 键列与提交事实列在更新时同样重写——它们不可变，重写等值是无害的，靠 CHECK 与
 // 领域门拦形状而不是在这里分列。
+//
+// 整行重写要求并发保护：期望修订由索赔项携带，写在 DO UPDATE 自己的 WHERE 上，检查、
+// 递增与回报由这一条语句一起完成。不先读后写——先 SELECT 再判等会在读与写之间留一道
+// 缝，两个写入方都能读到同一版再双双通过。命中零行即`版本冲突`：另一方已经推进过这项
+// 索赔，本方手里的快照不再是当前那一版。
+//
+// 新版本号取`期望修订 + 1` 而不是常量 1，这样索赔行不存在时那一支（受理首落，期望为
+// 零）与更新支共用同一条口径，且修订永不回退——万一有行在别处消失，重建出来的那份也
+// 排在旧持有者的期望之后，旧持有者随后照样撞冲突而不是把行盖回去。
 func (repository *Claims) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
 	claim *domain.ClaimItem,
-) error {
+) (ports.ClaimSaveOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return fmt.Errorf("save claim item: %w", err)
+		return ports.ClaimSaveOutcomeInvalid, fmt.Errorf("save claim item: %w", err)
 	}
 	if claim == nil {
-		return fmt.Errorf("save claim item: claim is nil")
+		return ports.ClaimSaveOutcomeInvalid, fmt.Errorf("save claim item: claim is nil")
 	}
 	snapshot := claim.Snapshot()
 
@@ -195,13 +206,15 @@ func (repository *Claims) Save(
 		supplementDeadline = &deadline
 	}
 
-	_, err = executor.Exec(ctx,
+	tag, err := executor.Exec(ctx,
 		`INSERT INTO visibility_exception.claim_item
 			(tenant_id, batch_ref, item_id, customer_ref, contract_ref, target_ref, kind_ref,
 			 submitted_at, screen, screen_basis, conclusion, concluded_at, review_by,
 			 prior_conclusion, withdrawn, withdrawn_at,
-			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+			 missing_materials_ref, supplement_scope_ref, supplement_notice_ref, supplement_deadline,
+			 revision)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+			 $21 + 1)
 		 ON CONFLICT (tenant_id, batch_ref, item_id) DO UPDATE SET
 			screen = EXCLUDED.screen,
 			screen_basis = EXCLUDED.screen_basis,
@@ -214,7 +227,9 @@ func (repository *Claims) Save(
 			missing_materials_ref = EXCLUDED.missing_materials_ref,
 			supplement_scope_ref = EXCLUDED.supplement_scope_ref,
 			supplement_notice_ref = EXCLUDED.supplement_notice_ref,
-			supplement_deadline = EXCLUDED.supplement_deadline`,
+			supplement_deadline = EXCLUDED.supplement_deadline,
+			revision = claim_item.revision + 1
+		  WHERE claim_item.revision = $21`,
 		tenant.String(),
 		snapshot.Batch.String(),
 		snapshot.ID.String(),
@@ -235,14 +250,18 @@ func (repository *Claims) Save(
 		supplementScope,
 		supplementNotice,
 		supplementDeadline,
+		snapshot.Revision,
 	)
 	if err != nil {
-		return fmt.Errorf("save claim item: %w", err)
+		return ports.ClaimSaveOutcomeInvalid, fmt.Errorf("save claim item: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ClaimRevisionConflict, nil
 	}
 	if err := appendSupplementDeadlines(ctx, executor, tenant, snapshot); err != nil {
-		return err
+		return ports.ClaimSaveOutcomeInvalid, err
 	}
-	return nil
+	return ports.ClaimSaved, nil
 }
 
 // Recoveries 实现 ports.RecoveryStore。事项要件成立即固定（硬句 184）——插入即
@@ -491,8 +510,12 @@ func loadSupplementDeadlines(
 // 落后（库里版本更多）与分叉（同一版内容不同）都停下报 ErrClaimHistoryStale，由调用方
 // 读回赢家再重放。静默截断与静默改写都会让一次并发写入变成一份没人发现的历史。
 //
-// 本函数跑在 Save 的事务里、且在索赔行 UPSERT 之后：那次 UPSERT 已经把该行锁住，
+// 本函数跑在 Save 的事务里、且在索赔行条件更新命中之后：那次写入已经把该行锁住，
 // 同键的并发 Save 因此排成序，这里读到的库内历史不会在读与写之间被第三方推进。
+//
+// 并发那一路由修订守卫先答——落后的写入撞的是`版本冲突`，走不到这里。本函数因此守的
+// 是另一格：修订对得上、历史却对不上的快照（手工拼出的重建规格是唯一进得来的路）。
+// 两道都留着，因为它们拦的不是同一件事，而这一段护的是对客户作过的承诺。
 func appendSupplementDeadlines(
 	ctx context.Context,
 	executor bentopg.Executor,

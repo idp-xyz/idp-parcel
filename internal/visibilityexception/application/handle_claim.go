@@ -13,6 +13,9 @@ import (
 // HandleClaimOutcome 是索赔与追偿编排各入口共用的应用处理结果。收到、过审、结论、
 // 复核与追偿各占其格——「收到客户索赔、通过资格审核和确认赔偿责任是不同判断」
 // （CONTEXT），压成一格就再也分不出客户此刻等在哪一步。
+//
+// `并发改动`同理自占一格，不并进未决：未决是「等依赖」，那条路的恢复动作是等它回来
+// 再重试同一份；并发冲突要的是重读当前那一版再重判，两者压成一格会让恢复动作指错。
 type HandleClaimOutcome uint8
 
 const (
@@ -26,6 +29,7 @@ const (
 	ClaimConclusionAlreadyRecorded
 	ClaimReviewed
 	ClaimReviewWindowClosed
+	ClaimConcurrentlyChanged
 	RecoveryOpened
 	RecoveryExistingResult
 	RecoveryActionRecorded
@@ -53,6 +57,8 @@ func (outcome HandleClaimOutcome) String() string {
 		return "CLAIM_REVIEWED"
 	case ClaimReviewWindowClosed:
 		return "REVIEW_WINDOW_CLOSED"
+	case ClaimConcurrentlyChanged:
+		return "CLAIM_CONCURRENTLY_CHANGED"
 	case RecoveryOpened:
 		return "RECOVERY_OPENED"
 	case RecoveryExistingResult:
@@ -259,10 +265,51 @@ func (handler *HandleClaimHandler) ReceiveClaim(
 	if err != nil {
 		return HandleClaimResult{}, fmt.Errorf("receive claim item: %w", err)
 	}
-	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
+	saved, err := handler.deps.Claims.Save(ctx, command.TenantID, claim)
+	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
 	}
-	return HandleClaimResult{outcome: ClaimReceived, claim: claim}, nil
+	switch saved {
+	case ports.ClaimSaved:
+		return HandleClaimResult{outcome: ClaimReceived, claim: claim}, nil
+	case ports.ClaimRevisionConflict:
+		// 受理这一步的冲突只有一个来源：上面那次取回之后、本次写入之前，另一方把同一
+		// （批次+项）建了出来。幂等按（批次+项），因此答案与「取回时就已存在」同格
+		// ——读回赢家如实交出，不新开一格让调用方以为发生了别的事。
+		existing, found, err := handler.deps.Claims.FindByBatchItem(
+			ctx, command.TenantID, command.Batch, command.Item)
+		if err != nil || !found {
+			return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+		}
+		return HandleClaimResult{outcome: ClaimExistingResult, claim: existing}, nil
+	default:
+		return HandleClaimResult{}, fmt.Errorf("receive claim: unexpected save outcome %d", saved)
+	}
+}
+
+// recordClaim 落一步判断转移并把仓储的写入代数译成应答。三个判断入口共用这一段：
+// 各写一遍迟早分叉，而分叉的方向恰好是把冲突悄悄并回未决。
+//
+// 第二个返回值为 false 时调用方原样交出第一、第三个返回值。冲突落`并发改动`：另一方
+// 已经推进过这项索赔，本方手里的判断是在一份过期快照上作出的，交出去就是让客户看到
+// 一个已经不成立的结论。它带上本轮那份索赔，调用方据以知道自己判的是哪一版。
+func (handler *HandleClaimHandler) recordClaim(
+	ctx context.Context,
+	tenant domain.TenantID,
+	claim *domain.ClaimItem,
+) (HandleClaimResult, bool, error) {
+	saved, err := handler.deps.Claims.Save(ctx, tenant, claim)
+	if err != nil {
+		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, false, nil
+	}
+	switch saved {
+	case ports.ClaimSaved:
+		return HandleClaimResult{}, true, nil
+	case ports.ClaimRevisionConflict:
+		return HandleClaimResult{outcome: ClaimConcurrentlyChanged, claim: claim}, false, nil
+	default:
+		return HandleClaimResult{}, false, fmt.Errorf("record claim: unexpected save outcome %d", saved)
+	}
 }
 
 // ScreenClaim 执行资格审核：目录未配置即未决——没有目录的资格审核无从作出，默认受理
@@ -318,8 +365,8 @@ func (handler *HandleClaimHandler) ScreenClaim(
 			return HandleClaimResult{}, fmt.Errorf("screen eligibility: %w", screenErr)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
-		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+	if answer, ok, err := handler.recordClaim(ctx, command.TenantID, claim); !ok {
+		return answer, err
 	}
 	return HandleClaimResult{outcome: outcome, claim: claim}, nil
 }
@@ -349,8 +396,9 @@ func (handler *HandleClaimHandler) ConcludeClaim(
 			return HandleClaimResult{}, fmt.Errorf("conclude liability: %w", err)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
-		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+	// 冲突时不交结算意图：结论没落库，交出去就是让下游按一份不存在的结论算钱。
+	if answer, ok, err := handler.recordClaim(ctx, command.TenantID, claim); !ok {
+		return answer, err
 	}
 	return HandleClaimResult{
 		outcome:    ClaimConcluded,
@@ -384,8 +432,10 @@ func (handler *HandleClaimHandler) ReviewClaim(
 			return HandleClaimResult{}, fmt.Errorf("review conclusion: %w", err)
 		}
 	}
-	if err := handler.deps.Claims.Save(ctx, command.TenantID, claim); err != nil {
-		return HandleClaimResult{outcome: HandleClaimUndecided, reason: ClaimStoreUnavailable}, nil
+	// 冲突时不交结算意图：换出的新结论版本没落库，交出去就是让结算按一份不存在的
+	// 复核改口径，而原结论在库里仍然有效。
+	if answer, ok, err := handler.recordClaim(ctx, command.TenantID, claim); !ok {
+		return answer, err
 	}
 	return HandleClaimResult{
 		outcome:    ClaimReviewed,

@@ -63,9 +63,13 @@ func (store *httpClaimStore) FindByBatchItem(
 	return claim, found, nil
 }
 
-func (store *httpClaimStore) Save(_ context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error {
+func (store *httpClaimStore) Save(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim *domain.ClaimItem,
+) (ports.ClaimSaveOutcome, error) {
 	store.claims[httpClaimStoreKey{tenant: tenant, batch: claim.Batch(), item: claim.ID()}] = claim
-	return nil
+	return ports.ClaimSaved, nil
 }
 
 type inertEligibility struct{}

@@ -196,6 +196,10 @@ type ClaimItemSpec struct {
 // 硬句 173）——受理只保留原始提交事实，资格与责任各是显式一步；类型上没有赔付金额
 // 字段，金额结算独立处理。
 type ClaimItem struct {
+	// revision 是这份索赔被读出时的持久化修订，不是判断历史的一部分——三判各步推进
+	// 的是上面那些列，这一格只回答「我是从哪一版读出来的」，供仓储作条件更新。受理
+	// 出来的索赔还没落过库，它是零。
+	revision        int64
 	id              ClaimItemID
 	batch           ClaimBatchReference
 	customer        CustomerAccountReference
@@ -239,6 +243,13 @@ func ReceiveClaimItem(spec ClaimItemSpec) (*ClaimItem, error) {
 
 func (claim *ClaimItem) ID() ClaimItemID {
 	return claim.id
+}
+
+// Revision 交回本索赔被读出时的持久化修订，零即尚未落过库。它是 Save 的预期修订
+// ——一个事实一处表达，不另作参数传（ADR-0031）：三判转移一律不动它，因此聚合带的
+// 这一格与调用方本该递的那个值恒等，再开一个入参只会造出第二个来源。
+func (claim *ClaimItem) Revision() int64 {
+	return claim.revision
 }
 
 func (claim *ClaimItem) Customer() CustomerAccountReference {
@@ -303,6 +314,9 @@ func (claim *ClaimItem) PriorConclusion() (LiabilityConclusion, bool) {
 // 复核前版、撤回时间都是已发生的判断历史——重建不重演三判方法（重演需要按原次序
 // 原时间走一遍，而库里只有结果）。
 type ClaimItemSnapshot struct {
+	// Revision 随快照往返：重建门只接受 ≥ 1（重建的来源只有已落库的行），Snapshot
+	// 原样折出，供仓储拿它作条件更新的期望值。
+	Revision        int64
 	ID              ClaimItemID
 	Batch           ClaimBatchReference
 	Customer        CustomerAccountReference
@@ -325,6 +339,7 @@ type ClaimItemSnapshot struct {
 // Snapshot 折出索赔项的全量状态供持久化。
 func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
 	return ClaimItemSnapshot{
+		Revision:        claim.revision,
 		ID:              claim.id,
 		Batch:           claim.batch,
 		Customer:        claim.customer,
@@ -349,6 +364,12 @@ func (claim *ClaimItem) Snapshot() ClaimItemSnapshot {
 // （资格通过）且带复核期限、前版只随复核出现且不等于现结论、撤回与结论互斥——
 // 一次坏写入不得变成一个看起来合法的判断历史。
 func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
+	// 重建的来源只有已落库的行，而落库的行必有首版修订。零在这里进来说明快照不是从
+	// 库里折出来的，放它过去会让一份凭空造的索赔冒充「读出来的那一版」，随后带着零去
+	// 作条件更新——那正是丢更新回来的路。
+	if snapshot.Revision < 1 {
+		return nil, ErrInvalidClaim
+	}
 	if !snapshot.ID.valid() ||
 		!snapshot.Batch.valid() ||
 		!snapshot.Customer.valid() ||
@@ -403,6 +424,7 @@ func RehydrateClaimItem(snapshot ClaimItemSnapshot) (*ClaimItem, error) {
 		supplement.Deadline = supplement.Deadline.UTC()
 	}
 	return &ClaimItem{
+		revision:        snapshot.Revision,
 		id:              snapshot.ID,
 		batch:           snapshot.Batch,
 		customer:        snapshot.Customer,

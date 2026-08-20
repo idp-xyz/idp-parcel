@@ -20,10 +20,16 @@ type claimKey struct {
 }
 
 type claimStoreDouble struct {
-	claims  map[claimKey]*domain.ClaimItem
-	findErr error
-	saveErr error
-	saves   int
+	claims map[claimKey]*domain.ClaimItem
+	// saveConflicts 是接下来几次写入答修订冲突：真库里的冲突要两个写入方交错才造得
+	// 出来，双替身按次数摆出同一格答案，让编排侧的译法单独可证。
+	saveConflicts int
+	// conflictWinner 在冲突那一刻落进库，模拟抢先的另一方——受理侧撞冲突后要读回赢家，
+	// 没有它那次读回只会扑空，走的就不是本该证的那条路。
+	conflictWinner *domain.ClaimItem
+	findErr        error
+	saveErr        error
+	saves          int
 }
 
 func newClaimStore() *claimStoreDouble {
@@ -43,13 +49,25 @@ func (double *claimStoreDouble) FindByBatchItem(
 	return claim, found, nil
 }
 
-func (double *claimStoreDouble) Save(_ context.Context, tenant domain.TenantID, claim *domain.ClaimItem) error {
+func (double *claimStoreDouble) Save(
+	_ context.Context,
+	tenant domain.TenantID,
+	claim *domain.ClaimItem,
+) (ports.ClaimSaveOutcome, error) {
 	if double.saveErr != nil {
-		return double.saveErr
+		return ports.ClaimSaveOutcomeInvalid, double.saveErr
+	}
+	if double.saveConflicts > 0 {
+		double.saveConflicts--
+		if double.conflictWinner != nil {
+			winner := double.conflictWinner
+			double.claims[claimKey{tenant: tenant, batch: winner.Batch(), item: winner.ID()}] = winner
+		}
+		return ports.ClaimRevisionConflict, nil
 	}
 	double.claims[claimKey{tenant: tenant, batch: claim.Batch(), item: claim.ID()}] = claim
 	double.saves++
-	return nil
+	return ports.ClaimSaved, nil
 }
 
 type eligibilityRuleDouble struct {
@@ -713,6 +731,113 @@ func TestUnavailableClaimDependenciesAreUndecidedUnderTheirOwnReasons(t *testing
 	}
 	if result.UndecidedReason() != application.RecoveryStoreUnavailable {
 		t.Fatalf("reason = %q, want RECOVERY_STORE_UNAVAILABLE", result.UndecidedReason())
+	}
+}
+
+// Covers: 三判各步撞上修订冲突时交`并发改动`，不折成未决。未决是「等依赖」，恢复动作
+// 是原样重试同一份；冲突要的是重读当前那一版再重判——压成一格，调用方的恢复动作就指
+// 错了，而它手里那份判断是在一份已经过期的快照上作出的。
+//
+// 结论与复核还多一条：写入没落库就不得交结算意图，否则下游会按一份不存在的结论算钱。
+func TestAConcurrentChangeIsItsOwnAnswerNotUndecided(t *testing.T) {
+	ctx := context.Background()
+
+	screen := newClaimFixture(t)
+	if _, err := screen.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	screen.claims.saveConflicts = 1
+	screened, err := screen.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if screened.Outcome() != application.ClaimConcurrentlyChanged {
+		t.Fatalf("资格审核撞冲突后 outcome = %q，want CLAIM_CONCURRENTLY_CHANGED", screened.Outcome())
+	}
+
+	conclude := newClaimFixture(t)
+	if _, err := conclude.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	if _, err := conclude.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	conclude.claims.saveConflicts = 1
+	concluded, err := conclude.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("conclude: %v", err)
+	}
+	if concluded.Outcome() != application.ClaimConcurrentlyChanged {
+		t.Fatalf("责任结论撞冲突后 outcome = %q，want CLAIM_CONCURRENTLY_CHANGED", concluded.Outcome())
+	}
+	if len(conclude.settlement.intents) != 0 {
+		t.Fatalf("结论没落库却交了 %d 份结算意图", len(conclude.settlement.intents))
+	}
+
+	review := newClaimFixture(t)
+	if _, err := review.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	if _, err := review.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if _, err := review.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1")); err != nil {
+		t.Fatalf("conclude: %v", err)
+	}
+	concludedHandoffs := len(review.settlement.intents)
+	review.claims.saveConflicts = 1
+	reviewed, err := review.handler.ReviewClaim(ctx, application.ReviewClaimCommand{
+		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
+		Batch:      mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		Item:       mustValue(t, domain.NewClaimItemID, "item-1"),
+		Conclusion: domain.LiabilityFullyEstablished,
+	})
+	if err != nil {
+		t.Fatalf("review: %v", err)
+	}
+	if reviewed.Outcome() != application.ClaimConcurrentlyChanged {
+		t.Fatalf("复核撞冲突后 outcome = %q，want CLAIM_CONCURRENTLY_CHANGED", reviewed.Outcome())
+	}
+	if len(review.settlement.intents) != concludedHandoffs {
+		t.Fatalf("复核没落库却又交了结算意图：%d → %d", concludedHandoffs, len(review.settlement.intents))
+	}
+}
+
+// Covers: 受理这一步的冲突只有一个来源——取回之后、写入之前另一方把同（批次+项）建了
+// 出来。幂等按（批次+项），因此答案与「取回时就已存在」同格：读回赢家如实交出，不新
+// 开一格让调用方以为发生了别的事。
+func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+
+	winner, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
+		ID:          mustValue(t, domain.NewClaimItemID, "item-1"),
+		Batch:       mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-9/loss"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
+		SubmittedAt: claimSubmittedAt,
+	})
+	if err != nil {
+		t.Fatalf("构造赢家索赔：%v", err)
+	}
+	fixture.claims.saveConflicts = 1
+	fixture.claims.conflictWinner = winner
+
+	result, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	if result.Outcome() != application.ClaimExistingResult {
+		t.Fatalf("受理输掉建行竞争后 outcome = %q，want CLAIM_EXISTING_RESULT", result.Outcome())
+	}
+	claim, ok := result.Claim()
+	if !ok {
+		t.Fatal("受理输掉建行竞争后没有交出任何索赔")
+	}
+	if claim.Target().String() != "parcel-9/loss" {
+		t.Fatalf("交出的是本方那份而不是赢家：target = %q", claim.Target().String())
 	}
 }
 

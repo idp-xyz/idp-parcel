@@ -211,3 +211,25 @@ func TestApprovedExtensionKeepsTheOriginalSupplementDeadline(t *testing.T) {
 		t.Fatalf("err = %v; 换截止应走延期而不是重新判断", err)
 	}
 }
+
+// Covers: 重建的来源只有已落库的行，而落库的行必有首版修订。零修订的快照不是从库里
+// 折出来的——放它过去，那份索赔会带着零去作条件更新，而零谁都对不上，于是整行重写
+// 又一次谁都拦不住：丢更新正是从这里回来的。
+func TestRehydrationRefusesASnapshotThatWasNeverPersisted(t *testing.T) {
+	snapshot := receivedClaim(t).Snapshot()
+	if snapshot.Revision != 0 {
+		t.Fatalf("受理出来的索赔修订 = %d，应为零（尚未落库）", snapshot.Revision)
+	}
+	if _, err := domain.RehydrateClaimItem(snapshot); !errors.Is(err, domain.ErrInvalidClaim) {
+		t.Fatalf("err = %v；零修订的快照不该重建得出来", err)
+	}
+
+	snapshot.Revision = 1
+	rehydrated, err := domain.RehydrateClaimItem(snapshot)
+	if err != nil {
+		t.Fatalf("首版修订的快照重建失败：%v", err)
+	}
+	if rehydrated.Revision() != 1 {
+		t.Fatalf("修订没随快照往返：%d", rehydrated.Revision())
+	}
+}
