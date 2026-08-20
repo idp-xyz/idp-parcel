@@ -160,8 +160,6 @@ var allowedSameExpression = map[string]string{
 		"claim-adjustment 引用 claim-amount / receivable / acknowledgement——Adjust 核对目标在场，且不改写原金额（AT-SA-152）",
 	"internal/settlementaccounting/adapters/postgres/operating_handoff.go": annotationCorrectionEntry +
 		"AllocateCostsHandler.Reallocate 与 .Rederive——一个文件两个缺陷，共用同一个 shape.eventID",
-	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": annotationCorrectionEntry +
-		"MapExternalFundsHandler.Reverse",
 
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go": annotationNoRewrite +
 		"（一个池有多个预占，各条是互不相干的消耗事实，累加可交换）",

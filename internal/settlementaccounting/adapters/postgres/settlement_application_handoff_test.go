@@ -47,6 +47,68 @@ func settlementApplicationHandoffIntent(t *testing.T, id string) ports.Settlemen
 	}
 }
 
+// TestAReversedApplicationEnqueuesItsOwnEnvelopeInTheSamePartition 钉住两个字段的分工。
+//
+// 核销撤销走的是同一个核销键（MapExternalFundsHandler.Reverse），两件都要成立：**都入队**
+// （ID 带 /reversed 状态段，撤销不被 EnqueueOnce 当成重放吞掉——否则下游永远不知道这笔
+// 核销已失效）**且同分区**（分区键只到核销键，撤销排在它撤销的那笔后面）。状态段照
+// statement_handoff 的 /voided 现成形状：首拍裸键，撤销拍带后缀、换类型。
+func TestAReversedApplicationEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
+	handoff, db, pool := newSettlementApplicationHandoffFixture(t)
+	ctx := t.Context()
+
+	applied := settlementApplicationHandoffIntent(t, "application-9")
+	reversedApplication, err := applied.Record.Application.Reverse(
+		saValue(t, domain.NewApplicationBasisReference, "funds-returned-1"),
+		fundsAppliedAt.Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("撤销核销：%v", err)
+	}
+	reversed := applied
+	reversed.Record.Application = reversedApplication
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := handoff.HandOffSettlementApplication(txCtx, applied); err != nil {
+			return err
+		}
+		return handoff.HandOffSettlementApplication(txCtx, reversed)
+	}); err != nil {
+		t.Fatalf("核销与撤销入队：%v", err)
+	}
+
+	appliedID := "tenant-a/application/application-9"
+	reversedID := appliedID + "/reversed"
+	if count := countSAIntents(t, pool, appliedID); count != 1 {
+		t.Fatalf("核销行数 = %d, want 1", count)
+	}
+	if count := countSAIntents(t, pool, reversedID); count != 1 {
+		t.Fatalf("撤销行数 = %d, want 1——ID 不带状态段时它会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	if got := settlementApplicationIntentType(t, pool, reversedID); got != "settlement-accounting.settlement-application.reversed" {
+		t.Fatalf("撤销事件类型 = %q, want settlement-accounting.settlement-application.reversed", got)
+	}
+	if got := partitionKeyOf(t, pool, appliedID); got != appliedID {
+		t.Fatalf("核销分区键 = %q, want %q", got, appliedID)
+	}
+	if got := partitionKeyOf(t, pool, reversedID); got != appliedID {
+		t.Fatalf("撤销分区键 = %q；两拍不同分区就没有先后可言", got)
+	}
+}
+
+func settlementApplicationIntentType(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+	var eventType string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT event_type FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&eventType); err != nil {
+		t.Fatalf("读事件类型：%v", err)
+	}
+	return eventType
+}
+
 // TestSettlementApplicationFollowsTheTransactionalTemplate 证核销意图复现样板四条：
 // 首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 由核销幂等键认领。
 func TestSettlementApplicationFollowsTheTransactionalTemplate(t *testing.T) {
