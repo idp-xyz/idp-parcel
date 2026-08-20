@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -84,13 +85,27 @@ func suspensionPartitionKey(id domain.SuspensionID) string {
 	return "suspension/" + id.String()
 }
 
+// takeoverEventID 取区间四维身份加生效起点——意图由结果标识认领（ADR-0043），而接管行
+// 的身份是「区间四维身份加生效区间」（见 Takeovers 库注）。同一范围先后两次接管（原权威
+// 区间关闭后另立新权威）是两行两份意图：ID 只取范围三维时两份算出同一个字符串，第二份
+// 被 EnqueueOnce 静默吞掉，受影响上下文永远不知道权威已再次易手。
 func takeoverEventID(interval domain.AuthorityInterval) string {
+	return "takeover/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind +
+		"/" + interval.Authority + "/" + interval.From.UTC().Format(time.RFC3339)
+}
+
+// takeoverPartitionKey 取范围三维，不取权威方与生效起点。
+//
+// ID 管幂等、分区键管顺序：同一范围的权威更替是一条链，后立的权威区间排在先立的后面；
+// 权威方进分区键每次接管就自成一区，链就断了。
+func takeoverPartitionKey(interval domain.AuthorityInterval) string {
 	return "takeover/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind
 }
 
 // HandOffGovernance 把一份意图入队。三种治理决定各认领各的信封：暂停按暂停标识、
-// 恢复按被恢复的暂停标识、接管按区间四维（对象范围×能力×事实类型）。缺席、混装
-// 或认领键空白是装配缺陷，响亮报错不入队。
+// 恢复按被恢复的暂停标识、接管按区间四维身份加生效起点。缺席、混装或认领键空白是
+// 装配缺陷，响亮报错不入队。分区键另取：暂停与恢复共队（被解除的暂停标识），接管
+// 按范围三维排权威更替链。
 func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 	ctx context.Context,
 	intent ports.GovernanceHandoffIntent,
@@ -149,11 +164,14 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 	default:
 		record := intent.Takeover
 		interval := record.Interval()
-		if interval.ObjectScope == "" || interval.Capability == "" || interval.FactKind == "" {
+		// 认领键即区间身份：权威方或生效起点缺席时两次接管会算出同一个 ID，
+		// 静默吞掉比响亮报错贵得多。
+		if interval.ObjectScope == "" || interval.Capability == "" || interval.FactKind == "" ||
+			interval.Authority == "" || interval.From.IsZero() {
 			return fmt.Errorf("hand off governance: takeover interval identity is required")
 		}
 		eventID = takeoverEventID(interval)
-		partitionKey = takeoverEventID(interval)
+		partitionKey = takeoverPartitionKey(interval)
 		eventType = takeoverEventType
 		scope = interval.ObjectScope
 		subject = interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind

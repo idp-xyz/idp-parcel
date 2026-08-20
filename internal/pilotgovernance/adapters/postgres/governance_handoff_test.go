@@ -160,7 +160,7 @@ func TestResendingTheSameGovernanceIntentIsIdempotent(t *testing.T) {
 		{
 			name:     "takeover",
 			intent:   ports.GovernanceHandoffIntent{Takeover: &takeover},
-			eventID:  "takeover/lane-1-parcels/shipment-intake/acceptance-decision",
+			eventID:  "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-takeover/2026-08-14T10:00:00Z",
 			eventTyp: "pilot-governance.takeover.recorded",
 		},
 	}
@@ -210,6 +210,51 @@ func TestAResumptionSharesThePartitionOfTheSuspensionItLifts(t *testing.T) {
 	}
 	if got := partitionKeyOf(t, fixture.pool, "resumption/suspension-1"); got != "suspension/suspension-1" {
 		t.Fatalf("恢复分区键 = %q；两拍不同分区，恢复就可能赶在暂停之前送到", got)
+	}
+}
+
+// TestASecondTakeoverOfTheSameScopeEnqueuesInTheSamePartition 钉住两个字段的分工。
+//
+// 同一范围（对象范围×能力×事实类型）先后两次接管——原权威区间关闭后另立新权威——是
+// 两行两份意图（接管行的身份是「区间四维加生效区间」，见 Takeovers 库注）。两件都要
+// 成立：**都入队**（ID 含权威方与生效起点，第二次接管不被 EnqueueOnce 当成重放吞掉，
+// 受影响上下文才知道权威再次易手）**且同分区**（分区键只到范围三维，后立的权威区间
+// 排在先立的后面）。
+func TestASecondTakeoverOfTheSameScopeEnqueuesInTheSamePartition(t *testing.T) {
+	fixture := newGovernanceHandoffFixture(t)
+	ctx := t.Context()
+
+	first := incidentTakeover(t, incidentInterval(false))
+	second := incidentTakeover(t, domain.AuthorityInterval{
+		ObjectScope: "lane-1-parcels",
+		Capability:  "shipment-intake",
+		FactKind:    "acceptance-decision",
+		Authority:   "ops-relief",
+		From:        incidentAt.Add(48 * time.Hour),
+	})
+
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Takeover: &first}); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Takeover: &second})
+	})
+
+	firstID := "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-takeover/2026-08-14T10:00:00Z"
+	secondID := "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-relief/2026-08-16T10:00:00Z"
+	if count := countGovernanceIntents(t, fixture.pool, firstID, "pilot-governance.takeover.recorded"); count != 1 {
+		t.Fatalf("首次接管行数 = %d, want 1", count)
+	}
+	if count := countGovernanceIntents(t, fixture.pool, secondID, "pilot-governance.takeover.recorded"); count != 1 {
+		t.Fatalf("二次接管行数 = %d, want 1——ID 不带权威方与生效起点时第二份会被 EnqueueOnce 静默吞掉", count)
+	}
+
+	wantPartition := "takeover/lane-1-parcels/shipment-intake/acceptance-decision"
+	if got := partitionKeyOf(t, fixture.pool, firstID); got != wantPartition {
+		t.Fatalf("首次接管分区键 = %q, want %q", got, wantPartition)
+	}
+	if got := partitionKeyOf(t, fixture.pool, secondID); got != wantPartition {
+		t.Fatalf("二次接管分区键 = %q；权威更替链不同分区就没有先后可言", got)
 	}
 }
 
