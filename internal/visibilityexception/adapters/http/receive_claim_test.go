@@ -63,6 +63,17 @@ func (store *httpClaimStore) FindByBatchItem(
 	return claim, found, nil
 }
 
+func (store *httpClaimStore) CountLiveScopeClaims(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.CustomerAccountReference,
+	_ domain.RequestScopeReference,
+	_ domain.ClaimKindReference,
+	_ domain.ClaimItemID,
+) (int, error) {
+	return 0, store.findErr
+}
+
 func (store *httpClaimStore) Save(
 	_ context.Context,
 	tenant domain.TenantID,
@@ -74,11 +85,22 @@ func (store *httpClaimStore) Save(
 
 type inertEligibility struct{}
 
-func (inertEligibility) ScreenClaim(
+func (inertEligibility) RulesForClaim(
 	_ context.Context,
 	_ ports.EligibilityQuery,
-) (ports.EligibilityAnswer, bool, error) {
-	return ports.EligibilityAnswer{}, false, nil
+) (ports.EligibilityRules, bool, error) {
+	return ports.EligibilityRules{}, false, nil
+}
+
+type inertEvidence struct{}
+
+func (inertEvidence) ReceivedMaterials(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.ClaimBatchReference,
+	_ domain.ClaimItemID,
+) ([]domain.MaterialRequirementReference, bool, error) {
+	return nil, false, nil
 }
 
 type inertRecoveries struct{}
@@ -143,6 +165,7 @@ func newClaimReceiver(store *httpClaimStore) *application.HandleClaimHandler {
 	return application.NewHandleClaimHandler(application.HandleClaimDeps{
 		Claims:      store,
 		Eligibility: inertEligibility{},
+		Evidence:    inertEvidence{},
 		Recoveries:  inertRecoveries{},
 		Identities:  inertRecoveryIdentities{},
 		Settlement:  inertSettlement{},

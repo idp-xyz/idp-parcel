@@ -156,6 +156,47 @@ func (repository *Claims) FindByBatchItem(
 	return claim, true, nil
 }
 
+// CountLiveScopeClaims 数同租户下与本项同（客户账户+目标范围+索赔类型）的其他在办
+// 索赔，供资格审核的重复关系那一维取事实。
+//
+// 不带批次：重复是跨批次的事——同一客户把同一包裹的同一类型索赔分两批提交，正是这一
+// 维要认出来的情形，按批次收窄就永远数不到。已撤回的不数（`AT-VE-123`：撤回后重新
+// 提交同一范围要建立新索赔项并重新检查重复关系，把撤回那项算进来同一范围就再也提不了
+// 第二次）；本项自己按项标识排除——重判一项在办索赔不该把它数成自己的重复。
+//
+// 只回计数不回索赔：这一维要的是「有没有、有几个」，交出整份别的索赔会让调用方顺手
+// 读到与本次审核无关的内容。
+func (repository *Claims) CountLiveScopeClaims(
+	ctx context.Context,
+	tenant domain.TenantID,
+	customer domain.CustomerAccountReference,
+	target domain.RequestScopeReference,
+	kind domain.ClaimKindReference,
+	excluding domain.ClaimItemID,
+) (int, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count live scope claims: %w", err)
+	}
+
+	var count int
+	err = querier.QueryRow(ctx,
+		`SELECT count(*)
+		   FROM visibility_exception.claim_item
+		  WHERE tenant_id = $1
+		    AND customer_ref = $2
+		    AND target_ref = $3
+		    AND kind_ref = $4
+		    AND item_id <> $5
+		    AND NOT withdrawn`,
+		tenant.String(), customer.String(), target.String(), kind.String(), excluding.String(),
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count live scope claims: %w", err)
+	}
+	return count, nil
+}
+
 // Save 落索赔的当前判断历史。同键整行更新（受理后每一步判断都经同一入口落库）；
 // 键列与提交事实列在更新时同样重写——它们不可变，重写等值是无害的，靠 CHECK 与
 // 领域门拦形状而不是在这里分列。

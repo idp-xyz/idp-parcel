@@ -541,6 +541,78 @@ func TestClaimsOfAnotherTenantAreInvisible(t *testing.T) {
 	}
 }
 
+// scopedClaim 受理一项指定（客户账户+目标范围+索赔类型）的索赔，供重复关系那一维
+// 逐样错开来证——receivedClaim 把这三样钉死了，用它证不出「差一样就不算重复」。
+func scopedClaim(t *testing.T, batch, item, customer, target, kind string) *domain.ClaimItem {
+	t.Helper()
+	claim, err := domain.ReceiveClaimItem(domain.ClaimItemSpec{
+		ID:          claimValue(t, domain.NewClaimItemID, item),
+		Batch:       claimValue(t, domain.NewClaimBatchReference, batch),
+		Customer:    claimValue(t, domain.NewCustomerAccountReference, customer),
+		Contract:    claimValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:      claimValue(t, domain.NewRequestScopeReference, target),
+		Kind:        claimValue(t, domain.NewClaimKindReference, kind),
+		SubmittedAt: claimBaseAt,
+	})
+	if err != nil {
+		t.Fatalf("受理索赔：%v", err)
+	}
+	return claim
+}
+
+// TestCountLiveScopeClaimsCountsOnlyTheSameLiveScope 证重复关系那一维取到的事实：
+// 跨批次数得到（同一客户把同一范围分两批提交正是要认出来的情形）、本项自己不算自己、
+// 已撤回不算（`AT-VE-123`：撤回后重新提交同一范围要重新检查重复关系，把撤回那项算
+// 进来同一范围就再也提不了第二次）、跨租户不算（ADR-0003），客户/范围/类型差一样
+// 就不是同一重复。
+func TestCountLiveScopeClaimsCountsOnlyTheSameLiveScope(t *testing.T) {
+	fixture := newClaimRecoveryFixture(t)
+	ctx := t.Context()
+	count := func(item string) int {
+		t.Helper()
+		got, err := fixture.claims.CountLiveScopeClaims(ctx,
+			claimValue(t, domain.NewTenantID, "tenant-a"),
+			claimValue(t, domain.NewCustomerAccountReference, "customer-1"),
+			claimValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+			claimValue(t, domain.NewClaimKindReference, "LOSS"),
+			claimValue(t, domain.NewClaimItemID, item))
+		if err != nil {
+			t.Fatalf("数重复：%v", err)
+		}
+		return got
+	}
+
+	fixture.saveClaim(t, ctx, "tenant-a", receivedClaim(t, "batch-1", "item-1"))
+	if got := count("item-1"); got != 0 {
+		t.Fatalf("只有本项时 count = %d，本项不该数成自己的重复", got)
+	}
+
+	// 同范围、另一批次：重复是跨批次的事，按批次收窄就永远数不到。
+	fixture.saveClaim(t, ctx, "tenant-a", receivedClaim(t, "batch-2", "item-2"))
+	if got := count("item-1"); got != 1 {
+		t.Fatalf("跨批次同范围 count = %d，want 1", got)
+	}
+
+	// 客户、目标范围、索赔类型各差一样：都不是同一重复。
+	fixture.saveClaim(t, ctx, "tenant-a", scopedClaim(t, "batch-3", "item-3", "customer-2", "parcel-1/loss", "LOSS"))
+	fixture.saveClaim(t, ctx, "tenant-a", scopedClaim(t, "batch-3", "item-4", "customer-1", "parcel-9/loss", "LOSS"))
+	fixture.saveClaim(t, ctx, "tenant-a", scopedClaim(t, "batch-3", "item-5", "customer-1", "parcel-1/loss", "DAMAGE"))
+	// 另一租户的同范围索赔：租户是最高数据隔离边界。
+	fixture.saveClaim(t, ctx, "tenant-b", receivedClaim(t, "batch-1", "item-6"))
+	if got := count("item-1"); got != 1 {
+		t.Fatalf("差一样或跨租户被数成了重复：count = %d，want 1", got)
+	}
+
+	withdrawn := fixture.loadClaim(t, ctx, "tenant-a", "batch-2", "item-2")
+	if err := withdrawn.Withdraw(claimBaseAt.Add(time.Hour)); err != nil {
+		t.Fatalf("撤回：%v", err)
+	}
+	fixture.saveClaim(t, ctx, "tenant-a", withdrawn)
+	if got := count("item-1"); got != 0 {
+		t.Fatalf("撤回那项仍被数成重复：count = %d", got)
+	}
+}
+
 func openedMatter(t *testing.T, id, caseID, counterparty, scope string) domain.RecoveryMatter {
 	t.Helper()
 	matter, err := domain.OpenRecoveryMatter(domain.RecoveryMatterSpec{

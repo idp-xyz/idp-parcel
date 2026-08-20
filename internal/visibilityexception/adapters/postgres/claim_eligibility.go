@@ -12,31 +12,25 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 合同范围不承担该索赔类型时交回的依据前缀。它与 party-commercial 消费侧那个
-// `SOURCE_NOT_IN_SERVICE_SHAPE` 同一路数：点名是哪一条判据不成立，而不是笼统说不过。
-const reasonKindNotInContractScope = "CLAIM_KIND_NOT_IN_CONTRACT_SCOPE"
-
-// ClaimEligibilityRules 实现 ports.EligibilityRuleView。
+// ClaimEligibilityRules 实现 ports.EligibilityRuleView：交出适用于一项索赔的资格
+// **规则**，不作资格判断。
 //
-// 它**只答得了资格审核七维里的一维**，这不是偷工。CONTEXT 要求按申请人授权、客户
-// 账户、合同版本、索赔时限、目标范围、重复关系和最低材料要求判断资格，而
-// `EligibilityQuery` 连一个时间戳都没带：索赔时限算不了，申请人不在查询里，材料在
-// 证据聚合里，重复关系在 ClaimStore 里——后两样都不是目录能答的东西，视图去读仓储
-// 会把「规则是什么」和「事实是什么」揉成一个既是目录又能读业务数据的东西。
+// 判断已经不在这里了（见 .scratch/ve-claim-eligibility-dimensions 切块 (b)）：重复
+// 关系要查同租户已有的索赔项，最低材料要看已收到的证据，两样都不是目录行；让本视图
+// 去读它们会把「规则是什么」和「事实是什么」揉成一个既是目录又能读业务数据的东西。
+// 编排拿走规则，自己去 ClaimStore 与证据侧逐维核对。
 //
-// 答不了的一律交回 found=false，让编排停在可续办的未决。材料不足不能由本目录答
-// `不通过`：那一维不是目录行，且 `ClaimIneligible` 是终局格（ADR-0051），一经
-// `ScreenEligibility` 写下就不可经补充翻案。合同不覆盖该类型除外——那一格永久成立，
-// 本适配器只答它。
+// 本适配器今天只登记得出七维里的一维——合同责任范围承不承担这个索赔类型。索赔时限
+// 要起算事件与业务日历、最低材料要一份材料清单、授权要一份申请人目录，三样都属
+// `PAR-VIS-08` 待登记实例参数，本上下文还没有那个登记面。**凑一份就是发明实例参数**，
+// 所以三维一律如实答未登记，由编排停在指名到维的未决。
 //
 // 特别提防一处同形陷阱：parcel-shipment 的收寄资格视图在证据取不到时如实答「未成立」
 // 并点名首项缺口。那一格在 PS 可续办；若把「证不了」写成这里的 `ClaimIneligible`，
-// 就会变成不可逆的默认拒赔。等待补充是索赔项上的第三态，编排已经能写：目录在
-// `EligibilityAnswer` 里给出`等待补充`与四件落点即可。**本目录仍然不答它**——四件
-// 落点要一份已登记的材料规则，而本上下文今天没有那个登记面，凑一份清单就是发明
-// 实例参数。改本文件的人若照着那份把材料缺口答成不通过，编译与测试都不会拦。
+// 就会变成不可逆的默认拒赔（ADR-0051：终局格一经写下不可经补充翻案），而编译与测试
+// 都不会拦。本视图连 `EligibilityScreen` 都不再交出，那条路在类型上已经走不通。
 //
-// 租户在装配期固定，理由同本包另外几个视图：ScreenClaim 的签名里没有租户。
+// 租户在装配期固定，理由同本包另外几个视图：RulesForClaim 的签名里没有租户。
 type ClaimEligibilityRules struct {
 	db     *bentopg.DB
 	tenant domain.TenantID
@@ -51,28 +45,28 @@ func NewClaimEligibilityRules(db *bentopg.DB, tenant domain.TenantID) (*ClaimEli
 
 var _ ports.EligibilityRuleView = (*ClaimEligibilityRules)(nil)
 
-// ScreenClaim 审一项索赔的资格。
+// RulesForClaim 取适用于一项索赔的资格规则。
 //
-// 三支：
-//   - 合同的索赔声明不在场 → 未配置。缺一个类型此时是「没人声明过」，不是「声明说
-//     不保」，凭一张空表拒赔就是虚构。
-//   - 声明在场且该类型不在覆盖集合内 → `不通过`带依据。这一判定完整且永久成立：
-//     承担与否不随材料补充而变，变了就是换了合同范围，而换范围按 CONTEXT 是另一个
-//     索赔项。
-//   - 声明在场且该类型在保 → 仍未配置。剩下四维还证不了，而端口把 found=false 定义
-//     为「资格目录未配置」并点名它含索赔时限、材料要求与授权目录——那三样确属
-//     `PAR-VIS-08` 待提供，所以这一格是如实的，不是搪塞。
-func (view *ClaimEligibilityRules) ScreenClaim(
+// 第二个返回值为 false 只有一个意思：**合同的索赔资格声明不在场**。那时连「这个类型
+// 在不在保」都无从谈起——缺一个类型是「没人声明过」，不是「声明说不保」，凭一张空表
+// 拒赔就是虚构。声明在场则一律交回规则，某一维尚未登记由那一维自己的 Registered 交代：
+// 「整份声明还没登记」与「只差材料清单」的补法不是一件事，折成同一格会让人去补错东西。
+//
+// 三个 Registered 恒为 false 不是占位：`claim_contract_scope` / `claim_covered_kind`
+// 是本上下文今天仅有的两张资格目录表，时限、材料与授权连登记面都还没有。给它们建空表
+// 也点不亮任何路径——四件落点里的当前截止靠资料补充期限，那同样是待登记的实例参数，
+// 所以先如实答未登记，等 `PAR-VIS-08` 连同登记面一起落地。
+func (view *ClaimEligibilityRules) RulesForClaim(
 	ctx context.Context,
 	query ports.EligibilityQuery,
-) (ports.EligibilityAnswer, bool, error) {
+) (ports.EligibilityRules, bool, error) {
 	if view.tenant.String() == "" || query.Contract.String() == "" || query.Kind.String() == "" {
-		return ports.EligibilityAnswer{}, false, nil
+		return ports.EligibilityRules{}, false, nil
 	}
 
 	querier, err := view.db.ReadExecutor(ctx)
 	if err != nil {
-		return ports.EligibilityAnswer{}, false, fmt.Errorf("screen claim: %w", err)
+		return ports.EligibilityRules{}, false, fmt.Errorf("rules for claim: %w", err)
 	}
 
 	var ruleVersion string
@@ -91,17 +85,17 @@ func (view *ClaimEligibilityRules) ScreenClaim(
 		view.tenant.String(), query.Contract.String(), query.Kind.String(),
 	).Scan(&ruleVersion, &covered)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.EligibilityAnswer{}, false, nil
+		return ports.EligibilityRules{}, false, nil
 	}
 	if err != nil {
-		return ports.EligibilityAnswer{}, false, fmt.Errorf("screen claim: %w", err)
+		return ports.EligibilityRules{}, false, fmt.Errorf("rules for claim: %w", err)
 	}
 
-	if covered {
-		return ports.EligibilityAnswer{}, false, nil
-	}
-	return ports.EligibilityAnswer{
-		Screen: domain.ClaimIneligible,
-		Basis:  reasonKindNotInContractScope + "/" + query.Kind.String() + "/" + ruleVersion,
+	return ports.EligibilityRules{
+		RuleVersion:    ruleVersion,
+		KindCovered:    covered,
+		FilingDeadline: ports.FilingDeadlineRule{},
+		Materials:      ports.MinimumMaterialsRule{},
+		Authorization:  ports.AuthorizationCatalogue{},
 	}, true, nil
 }

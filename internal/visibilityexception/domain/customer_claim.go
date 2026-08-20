@@ -79,6 +79,16 @@ func (screen EligibilityScreen) String() string {
 	}
 }
 
+// MaterialRequirementReference 指名最低材料要求里的一项材料。它由资格目录签发：
+// 「必须交哪些材料」是规则，编排只拿它与已收到的相减，不自造材料名——造得出材料名
+// 的编排等于替租户拟了一份清单，而客户会照着那份清单去补。
+type MaterialRequirementReference struct{ requiredValue }
+
+func NewMaterialRequirementReference(value string) (MaterialRequirementReference, error) {
+	required, err := newRequiredValue("material requirement reference", value)
+	return MaterialRequirementReference{required}, err
+}
+
 // MissingMaterialsReference 指名等待补充时固定的缺少材料。
 type MissingMaterialsReference struct{ requiredValue }
 

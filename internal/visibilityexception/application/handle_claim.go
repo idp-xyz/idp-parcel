@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -74,8 +77,10 @@ func (outcome HandleClaimOutcome) String() string {
 	}
 }
 
-// HandleClaimUndecidedReason 指名本轮停在哪一步。`资格目录未配置`与`资格规则答不出`
-// 分开：一个等租户登记索赔时限与材料目录，一个重试依赖。
+// HandleClaimUndecidedReason 指名本轮停在哪一步。资格审核那一段按**维**分格，不合成
+// 一个笼统的「资格未配置」：各维的恢复动作各不相同——时限维等租户登记起算事件与业务
+// 日历，授权维等查询补上申请人，重复关系维等一次领域裁断，材料维等证据归集接上。压
+// 成一格，看到未决的人就不知道该去做哪一件事。
 type HandleClaimUndecidedReason uint8
 
 const (
@@ -83,7 +88,14 @@ const (
 	ClaimStoreUnavailable
 	EligibilityRulesUnavailable
 	EligibilityCatalogueNotConfigured
+	EligibilityFilingDeadlineNotRegistered
+	EligibilityAuthorizationNotRegistered
+	EligibilityApplicantNotCarried
+	EligibilityDuplicateUnresolved
+	EligibilityMaterialsNotRegistered
+	EligibilityEvidenceUnavailable
 	EligibilitySupplementIncomplete
+	EligibilitySupplementWindowClosed
 	RecoveryStoreUnavailable
 	RecoveryIdentityUnavailable
 )
@@ -96,8 +108,22 @@ func (reason HandleClaimUndecidedReason) String() string {
 		return "ELIGIBILITY_RULES_UNAVAILABLE"
 	case EligibilityCatalogueNotConfigured:
 		return "ELIGIBILITY_CATALOGUE_NOT_CONFIGURED"
+	case EligibilityFilingDeadlineNotRegistered:
+		return "ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED"
+	case EligibilityAuthorizationNotRegistered:
+		return "ELIGIBILITY_AUTHORIZATION_NOT_REGISTERED"
+	case EligibilityApplicantNotCarried:
+		return "ELIGIBILITY_APPLICANT_NOT_CARRIED"
+	case EligibilityDuplicateUnresolved:
+		return "ELIGIBILITY_DUPLICATE_UNRESOLVED"
+	case EligibilityMaterialsNotRegistered:
+		return "ELIGIBILITY_MATERIALS_NOT_REGISTERED"
+	case EligibilityEvidenceUnavailable:
+		return "ELIGIBILITY_EVIDENCE_UNAVAILABLE"
 	case EligibilitySupplementIncomplete:
 		return "ELIGIBILITY_SUPPLEMENT_INCOMPLETE"
+	case EligibilitySupplementWindowClosed:
+		return "ELIGIBILITY_SUPPLEMENT_WINDOW_CLOSED"
 	case RecoveryStoreUnavailable:
 		return "RECOVERY_STORE_UNAVAILABLE"
 	case RecoveryIdentityUnavailable:
@@ -213,6 +239,7 @@ func (result HandleClaimResult) HandoffReference() string {
 type HandleClaimDeps struct {
 	Claims      ports.ClaimStore
 	Eligibility ports.EligibilityRuleView
+	Evidence    ports.ClaimEvidenceView
 	Recoveries  ports.RecoveryStore
 	Identities  ports.RecoveryIdentityFactory
 	Settlement  ports.LiabilityHandoff
@@ -312,8 +339,62 @@ func (handler *HandleClaimHandler) recordClaim(
 	}
 }
 
-// ScreenClaim 执行资格审核：目录未配置即未决——没有目录的资格审核无从作出，默认受理
-// 与默认拒赔都是虚构；已审过的不再审（依据由目录给出，编排不自造）。
+// 逐维核对的依据词。每一维核出什么都留一串，随资格结果一并入账——CONTEXT 要求
+// 「结果保存合同、首次索赔期限、授权、重复关系和材料依据」，五样都在依据里点名，
+// 事后才追得回这次审核核过什么、哪一维当时核不了。
+const (
+	basisKindCovered            = "CONTRACT_SCOPE_COVERS_KIND"
+	basisKindNotCovered         = "CLAIM_KIND_NOT_IN_CONTRACT_SCOPE"
+	basisFilingDeadlineMet      = "FILING_DEADLINE_MET"
+	basisFilingDeadlineExceeded = "FILING_DEADLINE_EXCEEDED"
+	basisFilingDeadlineAbsent   = "FILING_DEADLINE_RULE_NOT_REGISTERED"
+	basisAuthorizationAbsent    = "AUTHORIZATION_CATALOGUE_NOT_REGISTERED"
+	basisApplicantNotCarried    = "AUTHORIZATION_APPLICANT_NOT_CARRIED"
+	basisDuplicateNone          = "DUPLICATE_NONE"
+	basisDuplicateFound         = "DUPLICATE_FOUND"
+	basisDuplicateUnavailable   = "DUPLICATE_LOOKUP_UNAVAILABLE"
+	basisMaterialsComplete      = "MATERIALS_COMPLETE"
+	basisMaterialsShort         = "MATERIALS_SHORT"
+	basisMaterialsAbsent        = "MATERIALS_RULE_NOT_REGISTERED"
+	basisEvidenceUnknown        = "MATERIALS_RECEIPT_UNKNOWN"
+)
+
+// dimensionOutcome 是一维核对的落法。四格不合并：`核不了`与`这一维不通过`天差地别
+// ——前者等一件外部的事，后者是已经作出的判断。
+type dimensionOutcome uint8
+
+const (
+	dimensionPassed dimensionOutcome = iota
+	// dimensionDenied 只许由 ADR-0051 认可的两个永久格给出：合同责任范围不承担该
+	// 索赔类型、超过首次索赔期限。别的维核出问题一律不落这一格——落进来就是一次
+	// 不可经补充翻案的拒赔。
+	dimensionDenied
+	dimensionShortOfMaterials
+	dimensionUncheckable
+)
+
+// dimensionVerdict 是一维的核对结果。basis 恒有；missing 只在差材料时有；reason 只
+// 在核不了时有。
+type dimensionVerdict struct {
+	outcome dimensionOutcome
+	basis   string
+	missing []domain.MaterialRequirementReference
+	reason  HandleClaimUndecidedReason
+}
+
+// ScreenClaim 执行资格审核：目录交出规则，编排拿着规则逐维核对事实。
+//
+// 拆开的理由见 .scratch/ve-claim-eligibility-dimensions 切块 (b)：重复关系要查同租户
+// 已有的索赔项，最低材料要看已收到的证据，两样都不是目录行；让目录去读它们会造出
+// 一个既是目录又能读业务数据的东西。目录只答「规则是什么」，仓储与证据答「事实是
+// 什么」，本函数把两边合起来。
+//
+// 定局按不可逆程度排：**永久不予受理 > 等待补充 > 未决 > 通过**。
+//   - 不予受理排最前且只收 ADR-0051 的两个永久格——它是唯一写下去就再也审不了的答案。
+//   - 等待补充胜过未决：它可重入，且正是 CONTEXT 对「资料不足」规定的动作；换成未决
+//     就什么也不记，客户永远不知道该补什么。
+//   - 通过排最后且要求每一维都肯定通过。少核一维就答通过，等于把没审完的索赔永久
+//     标成已过审——那与默认拒赔是同一个错的两面。
 //
 // 「已审过」只指终局格。停在`等待补充`的索赔可以再审——材料补齐后重判正是它存在的
 // 理由（ADR-0051）。
@@ -326,7 +407,7 @@ func (handler *HandleClaimHandler) ScreenClaim(
 		return result, nil
 	}
 
-	answer, configured, err := handler.deps.Eligibility.ScreenClaim(ctx, ports.EligibilityQuery{
+	rules, declared, err := handler.deps.Eligibility.RulesForClaim(ctx, ports.EligibilityQuery{
 		Batch:    command.Batch,
 		Item:     command.Item,
 		Customer: claim.Customer(),
@@ -337,23 +418,29 @@ func (handler *HandleClaimHandler) ScreenClaim(
 	if err != nil {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilityRulesUnavailable}, nil
 	}
-	if !configured {
+	if !declared {
 		return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilityCatalogueNotConfigured}, nil
 	}
 
-	// 第三态与终局两条路分开走，因为领域入口就不是同一个：`等待补充`要带四件落点
-	// （ADR-0051），而 ScreenEligibility 只收终局格。混成一条会让目录一答第三态就撞
-	// ErrInvalidClaim，把一个业务取值报成技术故障。
-	outcome := ClaimScreened
-	var screenErr error
-	if answer.Screen == domain.ClaimAwaitingSupplement {
-		if !answer.Supplement.Complete() {
-			return HandleClaimResult{outcome: HandleClaimUndecided, reason: EligibilitySupplementIncomplete}, nil
-		}
-		outcome = ClaimAwaitingSupplement
-		screenErr = claim.AwaitSupplement(answer.Basis, answer.Supplement, handler.deps.Clock.Now())
-	} else {
-		screenErr = claim.ScreenEligibility(answer.Screen, answer.Basis, handler.deps.Clock.Now())
+	// 五维一律核完再定局，不在中途短路：CONTEXT 要求资格结果保存合同、首次索赔期限、
+	// 授权、重复关系和材料依据五样依据，短路会让先出结果的那一维把其余四样从记录里
+	// 抹掉，而事后没人能从一句`不予受理`里读出当时另外四维是什么情形。
+	// 维序只影响一件事：多维同时核不了时未决报哪一个。**申请人授权排在最后**，因为
+	// 它今天核不了不是这项索赔缺了什么，而是查询还不带申请人（切块 (c)）——那一维对
+	// 每项索赔一律核不了，排在前面就会把「这个租户还没登记材料清单」「这项索赔的证据
+	// 查不到」这些真正修得动的缺口全盖住，读到未决的人只会反复看到同一句话。
+	verdicts := []dimensionVerdict{
+		judgeContractScope(rules),
+		judgeFilingDeadline(rules, claim),
+		handler.judgeDuplicateRelation(ctx, command.TenantID, claim),
+		handler.judgeMinimumMaterials(ctx, command.TenantID, command.Batch, command.Item, rules),
+		judgeApplicantAuthorization(rules),
+	}
+	basis := composeScreenBasis(rules, verdicts)
+
+	outcome, reason, screenErr := handler.applyScreen(claim, verdicts, basis, rules)
+	if outcome == HandleClaimOutcomeInvalid {
+		return HandleClaimResult{outcome: HandleClaimUndecided, reason: reason}, nil
 	}
 	if screenErr != nil {
 		switch {
@@ -369,6 +456,249 @@ func (handler *HandleClaimHandler) ScreenClaim(
 		return answer, err
 	}
 	return HandleClaimResult{outcome: outcome, claim: claim}, nil
+}
+
+// applyScreen 按定局顺序把逐维结果落到索赔项上。第一个返回值为 HandleClaimOutcomeInvalid
+// 即本轮停在未决，第二个返回值指名停在哪一件事上——那时索赔项一字未动。
+//
+// 第三态与终局两条路分开走，因为领域入口就不是同一个：`等待补充`要带四件落点
+// （ADR-0051），而 ScreenEligibility 只收终局格。
+func (handler *HandleClaimHandler) applyScreen(
+	claim *domain.ClaimItem,
+	verdicts []dimensionVerdict,
+	basis string,
+	rules ports.EligibilityRules,
+) (HandleClaimOutcome, HandleClaimUndecidedReason, error) {
+	now := handler.deps.Clock.Now()
+
+	for _, verdict := range verdicts {
+		if verdict.outcome == dimensionDenied {
+			return ClaimScreened, HandleClaimUndecidedReasonNone,
+				claim.ScreenEligibility(domain.ClaimIneligible, basis, now)
+		}
+	}
+
+	if missing := collectMissingMaterials(verdicts); len(missing) > 0 {
+		// 补充期限已经不在未来：CONTEXT 说补充期限届满只触发资格复核，规则未定或延期
+		// 待确认时保持待决定并升级，**不能默认拒赔**。所以这里停在未决等人来看，既不
+		// 拿一个过去的截止去立第三态，也不把它读成逾期未补。
+		if !rules.Materials.SupplementDeadline.After(now) {
+			return HandleClaimOutcomeInvalid, EligibilitySupplementWindowClosed, nil
+		}
+		requirement, ok := supplementRequirementFor(claim, rules, missing)
+		if !ok {
+			return HandleClaimOutcomeInvalid, EligibilitySupplementIncomplete, nil
+		}
+		return ClaimAwaitingSupplement, HandleClaimUndecidedReasonNone,
+			claim.AwaitSupplement(basis, requirement, now)
+	}
+
+	for _, verdict := range verdicts {
+		if verdict.outcome == dimensionUncheckable {
+			return HandleClaimOutcomeInvalid, verdict.reason, nil
+		}
+	}
+	// 这一格今天到不了：申请人授权那一维恒答核不了，上面那圈必然先返回。补上申请人
+	// 维的切块 (c) 会把它接通，**那时它才第一次可测**——在此之前不要照着它推断`通过`
+	// 已经验过，它写下的是不可逆的终局格。
+	return ClaimScreened, HandleClaimUndecidedReasonNone,
+		claim.ScreenEligibility(domain.ClaimEligible, basis, now)
+}
+
+// judgeContractScope 核合同责任范围承不承担这个索赔类型。这是目录独力判完的一维，
+// 也是它唯一能得出永久`不予受理`的一维：承担与否不随材料补充而变，变了就是换了合同
+// 范围，而换范围按 CONTEXT 是另一个索赔项。
+func judgeContractScope(rules ports.EligibilityRules) dimensionVerdict {
+	if !rules.KindCovered {
+		return dimensionVerdict{outcome: dimensionDenied, basis: basisKindNotCovered}
+	}
+	return dimensionVerdict{outcome: dimensionPassed, basis: basisKindCovered}
+}
+
+// judgeFilingDeadline 核首次索赔期限。规则未登记时如实答核不了——起算事件与业务日历
+// 是租户登记的实例参数（`PAR-VIS-08`），拿本方时钟凑一个默认时限，就把「还没登记」
+// 变成了一次有依据的超期拒赔，而那一格按 ADR-0051 永久成立、补不回来。
+func judgeFilingDeadline(rules ports.EligibilityRules, claim *domain.ClaimItem) dimensionVerdict {
+	rule := rules.FilingDeadline
+	if !rule.Registered || rule.Deadline.IsZero() || rule.RuleVersion == "" ||
+		rule.StartEvent == "" || rule.Calendar == "" {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisFilingDeadlineAbsent,
+			reason:  EligibilityFilingDeadlineNotRegistered,
+		}
+	}
+	if claim.SubmittedAt().After(rule.Deadline) {
+		return dimensionVerdict{
+			outcome: dimensionDenied,
+			basis:   basisFilingDeadlineExceeded + "/" + rule.RuleVersion + "/" + rule.StartEvent,
+		}
+	}
+	return dimensionVerdict{
+		outcome: dimensionPassed,
+		basis:   basisFilingDeadlineMet + "/" + rule.RuleVersion + "/" + rule.StartEvent,
+	}
+}
+
+// judgeApplicantAuthorization 核申请人授权。这一维今天结构上核不了：EligibilityQuery
+// 里只有客户账户，而申请人与账户不是一回事（`AT-VE-125` 把两者并列）。补上那一维是
+// 切块 (c) 的事；在它到来之前如实答核不了——答通过就是把一次没核过的授权记成已核。
+func judgeApplicantAuthorization(rules ports.EligibilityRules) dimensionVerdict {
+	if !rules.Authorization.Registered {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisAuthorizationAbsent,
+			reason:  EligibilityAuthorizationNotRegistered,
+		}
+	}
+	return dimensionVerdict{
+		outcome: dimensionUncheckable,
+		basis:   basisApplicantNotCarried + "/" + rules.Authorization.RuleVersion,
+		reason:  EligibilityApplicantNotCarried,
+	}
+}
+
+// judgeDuplicateRelation 核重复关系：同租户下同（客户账户+目标范围+索赔类型）还有没有
+// 别的在办索赔。
+//
+// 数出来有重复时落`核不了`而不是`不予受理`：重复成立意味着什么是一次尚未作出的领域
+// 裁断——ADR-0051 只认可两个永久格，重复不在其中。在这里替它拍板，就是拿一个计数造出
+// 第三个永久拒赔格。没有重复则这一维肯定通过，那是事实本身给的答案，不需要规则。
+func (handler *HandleClaimHandler) judgeDuplicateRelation(
+	ctx context.Context,
+	tenant domain.TenantID,
+	claim *domain.ClaimItem,
+) dimensionVerdict {
+	count, err := handler.deps.Claims.CountLiveScopeClaims(
+		ctx, tenant, claim.Customer(), claim.Target(), claim.Kind(), claim.ID())
+	if err != nil {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisDuplicateUnavailable,
+			reason:  ClaimStoreUnavailable,
+		}
+	}
+	if count > 0 {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisDuplicateFound + "/" + strconv.Itoa(count),
+			reason:  EligibilityDuplicateUnresolved,
+		}
+	}
+	return dimensionVerdict{outcome: dimensionPassed, basis: basisDuplicateNone}
+}
+
+// judgeMinimumMaterials 核最低材料要求：目录给必须齐备的清单，证据侧给已经收到的，
+// 相减即缺口。
+//
+// 缺口非空落`差材料`而不是`不予受理`——这是本切片最要紧的一格。`parcel-shipment` 的
+// 收寄资格视图在证据取不到时如实答「未成立」并点名首项缺口，那一格在 PS 可续办；把
+// 那份写法搬到这里会变成不可逆的默认拒赔，而编译与测试都不会拦。
+func (handler *HandleClaimHandler) judgeMinimumMaterials(
+	ctx context.Context,
+	tenant domain.TenantID,
+	batch domain.ClaimBatchReference,
+	item domain.ClaimItemID,
+	rules ports.EligibilityRules,
+) dimensionVerdict {
+	if !rules.Materials.Registered {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisMaterialsAbsent,
+			reason:  EligibilityMaterialsNotRegistered,
+		}
+	}
+	received, known, err := handler.deps.Evidence.ReceivedMaterials(ctx, tenant, batch, item)
+	if err != nil || !known {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisEvidenceUnknown,
+			reason:  EligibilityEvidenceUnavailable,
+		}
+	}
+
+	present := make(map[string]struct{}, len(received))
+	for _, material := range received {
+		present[material.String()] = struct{}{}
+	}
+	var missing []domain.MaterialRequirementReference
+	for _, required := range rules.Materials.Required {
+		if _, ok := present[required.String()]; !ok {
+			missing = append(missing, required)
+		}
+	}
+	if len(missing) > 0 {
+		return dimensionVerdict{
+			outcome: dimensionShortOfMaterials,
+			basis:   basisMaterialsShort + "/" + rules.Materials.RuleVersion + "/" + joinMaterials(missing),
+			missing: missing,
+		}
+	}
+	return dimensionVerdict{
+		outcome: dimensionPassed,
+		basis:   basisMaterialsComplete + "/" + rules.Materials.RuleVersion,
+	}
+}
+
+// supplementRequirementFor 凑齐等待补充的四件落点。缺少材料由差集得出、补充范围取
+// 索赔自己固定的目标范围（CONTEXT 硬句：每个索赔项固定一个目标包裹或明确服务范围，
+// 要补的材料只能落在那个范围里）、通知依据与当前截止由规则给。
+//
+// 凑不齐即答不成立，调用方停在未决而不是记一个残缺的第三态：没有这四件的`等待补充`
+// 与`资格尚未审核`分不开（ADR-0051）。这里没有一处编排自造的词——材料名全来自目录
+// 签发的引用，编排只作差集与排序。
+func supplementRequirementFor(
+	claim *domain.ClaimItem,
+	rules ports.EligibilityRules,
+	missing []domain.MaterialRequirementReference,
+) (domain.SupplementRequirement, bool) {
+	materials, err := domain.NewMissingMaterialsReference(joinMaterials(missing))
+	if err != nil {
+		return domain.SupplementRequirement{}, false
+	}
+	scope, err := domain.NewSupplementScopeReference(claim.Target().String())
+	if err != nil {
+		return domain.SupplementRequirement{}, false
+	}
+	requirement, err := domain.NewSupplementRequirement(
+		materials, scope, rules.Materials.Notice, rules.Materials.SupplementDeadline)
+	if err != nil {
+		return domain.SupplementRequirement{}, false
+	}
+	return requirement, true
+}
+
+// joinMaterials 把材料引用排序后连成一串。排序是为了同一组缺口每次得出同一串——
+// 缺少材料要随索赔项永久留底，顺序一变，两次实为同一缺口的记录就看着像变过。
+func joinMaterials(materials []domain.MaterialRequirementReference) string {
+	values := make([]string, 0, len(materials))
+	for _, material := range materials {
+		values = append(values, material.String())
+	}
+	sort.Strings(values)
+	return strings.Join(values, "+")
+}
+
+func collectMissingMaterials(verdicts []dimensionVerdict) []domain.MaterialRequirementReference {
+	var missing []domain.MaterialRequirementReference
+	for _, verdict := range verdicts {
+		if verdict.outcome == dimensionShortOfMaterials {
+			missing = append(missing, verdict.missing...)
+		}
+	}
+	return missing
+}
+
+// composeScreenBasis 把五维依据连成随资格结果入账的那一串，前缀规则版本。CONTEXT
+// 要求结果保存合同、首次索赔期限、授权、重复关系和材料依据——五样各占一段，缺哪一段
+// 都说明有一维没核过。
+func composeScreenBasis(rules ports.EligibilityRules, verdicts []dimensionVerdict) string {
+	parts := make([]string, 0, len(verdicts)+1)
+	parts = append(parts, "eligibility-rules/"+rules.RuleVersion)
+	for _, verdict := range verdicts {
+		parts = append(parts, verdict.basis)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // ConcludeClaim 入账责任结论并把它交给结算：资格未审或未通过形不成结论（领域把门，

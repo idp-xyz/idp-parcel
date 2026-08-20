@@ -76,7 +76,7 @@ func eligibilityQuery(t *testing.T, contract, kind string) ports.EligibilityQuer
 
 // 声明不在场时缺一个类型是「没人声明过」，不是「声明说不保」。凭一张空表拒赔就是
 // 虚构，而合同不覆盖是终局格（ADR-0051）——那一拒不得经补充翻案。
-func TestAbsentClaimDeclarationIsNotConfiguredNotIneligible(t *testing.T) {
+func TestAbsentClaimDeclarationIsNotDeclaredAtAll(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE")
 
@@ -89,53 +89,63 @@ func TestAbsentClaimDeclarationIsNotConfiguredNotIneligible(t *testing.T) {
 		{"租户未登记", "", "contract/v1"},
 		{"跨租户", "tenant-b", "contract/v1"},
 	} {
-		answer, configured, err := fixture.viewFor(t, testCase.tenant).
-			ScreenClaim(t.Context(), eligibilityQuery(t, testCase.contract, "LOSS"))
-		if err != nil || configured {
-			t.Fatalf("%s：err=%v configured=%v", testCase.name, err, configured)
+		rules, declared, err := fixture.viewFor(t, testCase.tenant).
+			RulesForClaim(t.Context(), eligibilityQuery(t, testCase.contract, "LOSS"))
+		if err != nil || declared {
+			t.Fatalf("%s：err=%v declared=%v", testCase.name, err, declared)
 		}
-		if answer.Screen == domain.ClaimIneligible {
-			t.Fatalf("%s：空声明下拒了赔", testCase.name)
+		// 声明不在场时连规则版本都交不出来——编排据此停在未决，而不是拿一份空规则
+		// 去逐维核对，那会让每一维都「核不了」而看着像登记漏了很多样。
+		if rules.RuleVersion != "" || rules.KindCovered {
+			t.Fatalf("%s：空声明下仍交出了规则 %+v", testCase.name, rules)
 		}
 	}
 }
 
 // 声明在场而该类型不在覆盖集合内：这一维完整且永久成立——承担与否不随材料补充
-// 而变，变了就是换了合同范围，而换范围按 CONTEXT 是另一个索赔项。
-func TestKindOutsideContractScopeIsIneligibleWithTraceableBasis(t *testing.T) {
+// 而变，变了就是换了合同范围，而换范围按 CONTEXT 是另一个索赔项。目录只把这个事实
+// 与它的版本交出去，「所以不予受理」由编排定（切块 (b)）。
+func TestKindOutsideContractScopeIsReportedUncoveredWithItsRuleVersion(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE", "DELAY")
 
-	answer, configured, err := fixture.viewFor(t, "tenant-a").
-		ScreenClaim(t.Context(), eligibilityQuery(t, "contract/v1", "LOSS"))
-	if err != nil || !configured {
-		t.Fatalf("不在保：err=%v configured=%v", err, configured)
+	rules, declared, err := fixture.viewFor(t, "tenant-a").
+		RulesForClaim(t.Context(), eligibilityQuery(t, "contract/v1", "LOSS"))
+	if err != nil || !declared {
+		t.Fatalf("不在保：err=%v declared=%v", err, declared)
 	}
-	if answer.Screen != domain.ClaimIneligible {
-		t.Fatalf("不在保却没判不通过：screen=%d", answer.Screen)
+	if rules.KindCovered {
+		t.Fatal("不在覆盖集合内却报成了在保")
 	}
-	// 依据是唯一会被永久记进索赔项的东西，必须点得出是哪条判据、哪个类型、哪一版声明。
-	for _, fragment := range []string{"CLAIM_KIND_NOT_IN_CONTRACT_SCOPE", "LOSS", "claim-rules/v1"} {
-		if !strings.Contains(answer.Basis, fragment) {
-			t.Fatalf("依据 %q 里没有 %q", answer.Basis, fragment)
-		}
+	// 版本随规则交出：由它得出的不予受理是永久的，事后必须追得回依据的是哪一版声明。
+	if !strings.Contains(rules.RuleVersion, "claim-rules/v1") {
+		t.Fatalf("规则版本 = %q，追不回是哪一版声明", rules.RuleVersion)
 	}
 }
 
-// 类型在保并不等于资格通过：索赔时限、申请人授权、最低材料与重复关系四维都还证不了，
-// 而 Screen 是封闭二值、一次性。此时必须停在未配置，绝不能凑一个`通过`出来——那会
-// 把四维未核的索赔永久标成已过审。
-func TestCoveredKindStillStopsAtNotConfigured(t *testing.T) {
+// 类型在保时目录如实报在保，但**另外三维一律未登记**：索赔时限要起算事件与业务日历、
+// 最低材料要一份清单、授权要一份申请人目录，三样都属 `PAR-VIS-08` 待登记实例参数，
+// 本上下文还没有那个登记面。凑一份就是发明实例参数，编排据此停在指名到维的未决。
+func TestCoveredKindStillLeavesTheOtherThreeRulesUnregistered(t *testing.T) {
 	fixture := newEligibilityFixture(t)
 	fixture.declare(t, "tenant-a", "contract/v1", "claim-rules/v1", "DAMAGE")
 
-	answer, configured, err := fixture.viewFor(t, "tenant-a").
-		ScreenClaim(t.Context(), eligibilityQuery(t, "contract/v1", "DAMAGE"))
-	if err != nil || configured {
-		t.Fatalf("在保：err=%v configured=%v", err, configured)
+	rules, declared, err := fixture.viewFor(t, "tenant-a").
+		RulesForClaim(t.Context(), eligibilityQuery(t, "contract/v1", "DAMAGE"))
+	if err != nil || !declared {
+		t.Fatalf("在保：err=%v declared=%v", err, declared)
 	}
-	if answer.Screen == domain.ClaimEligible {
-		t.Fatal("四维未核却凑出了一个通过")
+	if !rules.KindCovered {
+		t.Fatal("在覆盖集合内却报成了不在保")
+	}
+	if rules.FilingDeadline.Registered {
+		t.Fatalf("凭空登记了首次索赔期限：%+v", rules.FilingDeadline)
+	}
+	if rules.Materials.Registered {
+		t.Fatalf("凭空登记了最低材料清单：%+v", rules.Materials)
+	}
+	if rules.Authorization.Registered {
+		t.Fatalf("凭空登记了授权目录：%+v", rules.Authorization)
 	}
 }
 

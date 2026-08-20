@@ -482,6 +482,14 @@ const (
 // 可用，编排读回赢家再作答。三判分步意味着同一项索赔的每一步都经这一个入口落库，
 // 于是资格审核与撤回、复核与延期这些并发对能各自从旧快照出发——没有这一格，后写者的
 // 整行重写会把前一个转换悄悄抹掉，两边都以为自己成功。
+// CountLiveScopeClaims 数同租户下与本项同（客户账户+目标范围+索赔类型）的其他索赔
+// 项，供资格审核的重复关系那一维取事实。它只数事实，不判后果——重复成立意味着什么
+// 由规则说了算。
+//
+// 「其他」按项标识排除本项自己：重判一项已在办的索赔不该把它数成自己的重复。已撤回
+// 的不数：`AT-VE-123`「客户撤回后重新提交同一范围」明写要建立新索赔项并重新检查重复
+// 关系，把撤回那项算进来，同一范围就再也提不了第二次。其余状态一律数进来——已不予
+// 受理的算不算重复是一次尚未作出的领域裁断，在这里先替它拍板会把裁断藏进一个计数。
 type ClaimStore interface {
 	FindByBatchItem(
 		ctx context.Context,
@@ -489,11 +497,20 @@ type ClaimStore interface {
 		batch domain.ClaimBatchReference,
 		item domain.ClaimItemID,
 	) (*domain.ClaimItem, bool, error)
+	CountLiveScopeClaims(
+		ctx context.Context,
+		tenant domain.TenantID,
+		customer domain.CustomerAccountReference,
+		target domain.RequestScopeReference,
+		kind domain.ClaimKindReference,
+		excluding domain.ClaimItemID,
+	) (int, error)
 	Save(ctx context.Context, tenant domain.TenantID, claim *domain.ClaimItem) (ClaimSaveOutcome, error)
 }
 
-// EligibilityQuery 是资格审核规则的输入：申请人授权、客户账户、合同版本、索赔时限、
-// 目标范围、重复关系和最低材料要求都由规则侧核对，本上下文只带引用。
+// EligibilityQuery 是资格规则的查找键：按客户账户、合同版本、目标范围与索赔类型
+// 找出适用的那一版规则。它不带事实——事实由编排另取（见 ClaimStore 与
+// ClaimEvidenceView），目录只答规则是什么。
 type EligibilityQuery struct {
 	Batch    domain.ClaimBatchReference
 	Item     domain.ClaimItemID
@@ -503,24 +520,81 @@ type EligibilityQuery struct {
 	Kind     domain.ClaimKindReference
 }
 
-// EligibilityAnswer 是资格目录的答复：通过、不通过或等待补充，带判断依据。
-//
-// Supplement 只在 Screen 为`等待补充`时有意义，且那时必填：第三态要缺少材料、补充
-// 范围、通知依据与截止四件同在才立得起来（ADR-0051），少一件客户就不知道该补什么。
-// 答`等待补充`却不给四件，编排停在未决而不是记一个残缺的第三态——补齐的是目录，
-// 不是编排替它拟一份材料清单。
-type EligibilityAnswer struct {
-	Screen     domain.EligibilityScreen
-	Basis      string
-	Supplement domain.SupplementRequirement
+// FilingDeadlineRule 是首次索赔期限规则。CONTEXT 要求每个期限保存适用规则版本、
+// 起算事件、业务时区或日历、截止时间和适用范围——五样是一体的，缺一这条期限就算
+// 不出来。Registered 为假时其余字段一律不看：编排据此如实答未登记，不拿本方时钟
+// 凑一个默认时限，那会把「租户还没登记」变成一次有依据的超期拒赔。
+type FilingDeadlineRule struct {
+	Registered  bool
+	RuleVersion string
+	StartEvent  string
+	Calendar    string
+	Scope       string
+	Deadline    time.Time
 }
 
-// EligibilityRuleView 回答「这项索赔按版本化资格规则过不过审」。第二个返回值为 false
-// 即「资格目录未配置」——真实索赔时限、材料要求与授权目录属待登记实例参数。没有目录
-// 的资格审核无从作出：默认受理与默认拒赔都是虚构，由编排形成未决等租户登记。依赖调
-// 不通作为错误返回。
+// MinimumMaterialsRule 是最低材料要求：这一索赔类型在这一版规则下必须齐备的材料。
+//
+// Required 里每一项都是目录签发的材料引用，编排只拿它与已收到的作差集——差出来的
+// 缺口因此全由目录的词构成。Notice 与 SupplementDeadline 是资料不足时四件落点里由
+// 规则决定的那两件（通知依据、当前截止）；缺少材料由差集得出，补充范围取索赔自己
+// 固定的目标范围。四件凑不齐就停在未决，不记一个残缺的第三态。
+type MinimumMaterialsRule struct {
+	Registered         bool
+	RuleVersion        string
+	Required           []domain.MaterialRequirementReference
+	Notice             domain.SupplementNoticeReference
+	SupplementDeadline time.Time
+}
+
+// AuthorizationCatalogue 是申请人授权目录的登记情况。
+//
+// 这里只有「登记了没有」与版本，没有成员名单：核对授权要拿申请人来比，而
+// EligibilityQuery 今天不带申请人。先在这里拟一份名单形状，等于替补上那一维的切片
+// 决定申请人长什么样（见 .scratch/ve-claim-eligibility-dimensions 切块 (c)）。
+type AuthorizationCatalogue struct {
+	Registered  bool
+	RuleVersion string
+}
+
+// EligibilityRules 是资格目录交出的规则本体。它答「规则是什么」，不答「这项索赔过
+// 不过审」——后者要拿规则去核对事实，而重复关系在 ClaimStore、已收材料在证据侧，
+// 两样都不是目录行。让目录去读它们会造出一个既是目录又能读业务数据的东西。
+//
+// KindCovered 是唯一由目录独力判完的一维：合同责任范围承不承担这个索赔类型。它
+// 不随材料补充而变（变了就是换了合同范围，而换范围按 CONTEXT 是另一个索赔项），
+// 所以由它得出的`不予受理`是 ADR-0051 认可的两个永久格之一。
+type EligibilityRules struct {
+	RuleVersion    string
+	KindCovered    bool
+	FilingDeadline FilingDeadlineRule
+	Materials      MinimumMaterialsRule
+	Authorization  AuthorizationCatalogue
+}
+
+// EligibilityRuleView 交出适用于一项索赔的资格规则。第二个返回值为 false 即「合同
+// 的索赔资格声明不在场」——那时连「这个类型在不在保」都无从谈起，缺一个类型是「没人
+// 声明过」而不是「声明说不保」，凭一张空表拒赔就是虚构。声明在场但某一维规则尚未
+// 登记，由各维自己的 Registered 如实交代，不折成整体未配置：两者的恢复动作不同，
+// 一个要登记整份声明，一个只差那一维。依赖调不通作为错误返回。
 type EligibilityRuleView interface {
-	ScreenClaim(ctx context.Context, query EligibilityQuery) (EligibilityAnswer, bool, error)
+	RulesForClaim(ctx context.Context, query EligibilityQuery) (EligibilityRules, bool, error)
+}
+
+// ClaimEvidenceView 交出一项索赔已经收到的材料。它答「事实是什么」，与目录答的
+// 「规则是什么」分列两个端口——最低材料要求这一维正是靠两边相减才核得出来。
+//
+// 第二个返回值为 false 即「这项索赔的材料归集无从查起」，与「一件都还没收到」分开：
+// 后者是有效事实（差集等于整份清单，索赔该进限期补充），前者核不了，只能停在未决。
+// 材料已提交只表示收到，不表示达到最低材料要求（CONTEXT）——本端口只交到齐的材料
+// 引用，采信与否是证据评价那一步的事。
+type ClaimEvidenceView interface {
+	ReceivedMaterials(
+		ctx context.Context,
+		tenant domain.TenantID,
+		batch domain.ClaimBatchReference,
+		item domain.ClaimItemID,
+	) ([]domain.MaterialRequirementReference, bool, error)
 }
 
 // LiabilityHandoffIntent 把责任结论交给结算侧（`UC-SA-007` 赔付金额链的上游源——

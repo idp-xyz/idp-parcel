@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +50,31 @@ func (double *claimStoreDouble) FindByBatchItem(
 	return claim, found, nil
 }
 
+// CountLiveScopeClaims 按（客户账户+目标范围+索赔类型）数同租户下未撤回的其他索赔，
+// 与真库那条 SQL 同口径——重复关系那一维的事实由它给。
+func (double *claimStoreDouble) CountLiveScopeClaims(
+	_ context.Context,
+	tenant domain.TenantID,
+	customer domain.CustomerAccountReference,
+	target domain.RequestScopeReference,
+	kind domain.ClaimKindReference,
+	excluding domain.ClaimItemID,
+) (int, error) {
+	if double.findErr != nil {
+		return 0, double.findErr
+	}
+	count := 0
+	for key, claim := range double.claims {
+		if key.tenant != tenant || claim.ID() == excluding || claim.Withdrawn() {
+			continue
+		}
+		if claim.Customer() == customer && claim.Target() == target && claim.Kind() == kind {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (double *claimStoreDouble) Save(
 	_ context.Context,
 	tenant domain.TenantID,
@@ -71,21 +97,41 @@ func (double *claimStoreDouble) Save(
 }
 
 type eligibilityRuleDouble struct {
-	answer     ports.EligibilityAnswer
-	configured bool
-	err        error
-	calls      int
+	rules    ports.EligibilityRules
+	declared bool
+	err      error
+	calls    int
 }
 
-func (double *eligibilityRuleDouble) ScreenClaim(
+func (double *eligibilityRuleDouble) RulesForClaim(
 	_ context.Context,
 	_ ports.EligibilityQuery,
-) (ports.EligibilityAnswer, bool, error) {
+) (ports.EligibilityRules, bool, error) {
 	double.calls++
 	if double.err != nil {
-		return ports.EligibilityAnswer{}, false, double.err
+		return ports.EligibilityRules{}, false, double.err
 	}
-	return double.answer, double.configured, nil
+	return double.rules, double.declared, nil
+}
+
+// evidenceViewDouble 摆出「这项索赔已收到哪些材料」。known 为假即归集无从查起，与
+// 「一件都还没收到」（received 为空且 known 为真）是两回事——后者是有效事实。
+type evidenceViewDouble struct {
+	received []domain.MaterialRequirementReference
+	known    bool
+	err      error
+}
+
+func (double *evidenceViewDouble) ReceivedMaterials(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.ClaimBatchReference,
+	_ domain.ClaimItemID,
+) ([]domain.MaterialRequirementReference, bool, error) {
+	if double.err != nil {
+		return nil, false, double.err
+	}
+	return double.received, double.known, nil
 }
 
 type recoveryKey struct {
@@ -208,9 +254,39 @@ type claimFixture struct {
 	handler     *application.HandleClaimHandler
 	claims      *claimStoreDouble
 	eligibility *eligibilityRuleDouble
+	evidence    *evidenceViewDouble
 	recoveries  *recoveryStoreDouble
 	identities  *recoveryIdentityDouble
 	settlement  *liabilityDownstreamDouble
+}
+
+// registeredRules 是每一维都登记齐备、且事实都对得上的那份规则：合同覆盖该类型、
+// 首次索赔期限在提交之后、最低材料清单为空（因而恒齐备）、授权目录已登记。各测试
+// 只改自己要证的那一维，改动才读得出是在证什么。
+func registeredRules(t *testing.T) ports.EligibilityRules {
+	t.Helper()
+	return ports.EligibilityRules{
+		RuleVersion: "claim-eligibility/v1",
+		KindCovered: true,
+		FilingDeadline: ports.FilingDeadlineRule{
+			Registered:  true,
+			RuleVersion: "filing-deadline/v1",
+			StartEvent:  "DELIVERY_EXCEPTION_CONFIRMED",
+			Calendar:    "Asia/Shanghai",
+			Scope:       "parcel-1/loss",
+			Deadline:    claimSubmittedAt.Add(24 * time.Hour),
+		},
+		Materials: ports.MinimumMaterialsRule{
+			Registered:         true,
+			RuleVersion:        "minimum-materials/v1",
+			Notice:             mustValue(t, domain.NewSupplementNoticeReference, "notify-policy/v1"),
+			SupplementDeadline: claimSubmittedAt.Add(14 * 24 * time.Hour),
+		},
+		Authorization: ports.AuthorizationCatalogue{
+			Registered:  true,
+			RuleVersion: "claim-authorization/v1",
+		},
+	}
 }
 
 func newClaimFixture(t *testing.T) *claimFixture {
@@ -218,9 +294,10 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	fixture := &claimFixture{
 		claims: newClaimStore(),
 		eligibility: &eligibilityRuleDouble{
-			answer:     ports.EligibilityAnswer{Screen: domain.ClaimEligible, Basis: "eligibility-rules/v1"},
-			configured: true,
+			rules:    registeredRules(t),
+			declared: true,
 		},
+		evidence:   &evidenceViewDouble{known: true},
 		recoveries: newRecoveryStore(),
 		identities: &recoveryIdentityDouble{},
 		settlement: &liabilityDownstreamDouble{},
@@ -228,12 +305,41 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	fixture.handler = application.NewHandleClaimHandler(application.HandleClaimDeps{
 		Claims:      fixture.claims,
 		Eligibility: fixture.eligibility,
+		Evidence:    fixture.evidence,
 		Recoveries:  fixture.recoveries,
 		Identities:  fixture.identities,
 		Settlement:  fixture.settlement,
 		Clock:       fixedClock{at: claimSubmittedAt.Add(time.Hour)},
 	})
 	return fixture
+}
+
+// seedEligibleClaim 直接把一项已过审的索赔放进库，供责任结论与复核那几个用例作前置。
+//
+// 不经 ScreenClaim 走过来，是因为**过审在编排上今天到不了**：申请人授权那一维要查询
+// 带申请人才核得动，而查询还不带（切块 (c)）；少核一维就答通过，正是本切片要防的事。
+// 那几个用例证的是结论与复核，不是资格审核，前置用重建口摆出来更直白。
+func seedEligibleClaim(t *testing.T, fixture *claimFixture, item string) {
+	t.Helper()
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	batch := mustValue(t, domain.NewClaimBatchReference, "claim-batch-1")
+	id := mustValue(t, domain.NewClaimItemID, item)
+	claim, err := domain.RehydrateClaimItem(domain.ClaimItemSnapshot{
+		Revision:    1,
+		ID:          id,
+		Batch:       batch,
+		Customer:    mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		Contract:    mustValue(t, domain.NewContractScopeReference, "contract-scope/v1"),
+		Target:      mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+		Kind:        mustValue(t, domain.NewClaimKindReference, "LOSS"),
+		SubmittedAt: claimSubmittedAt,
+		Screen:      domain.ClaimEligible,
+		ScreenBasis: "claim-eligibility/v1; CONTRACT_SCOPE_COVERS_KIND",
+	})
+	if err != nil {
+		t.Fatalf("摆出已过审索赔：%v", err)
+	}
+	fixture.claims.claims[claimKey{tenant: tenant, batch: batch, item: id}] = claim
 }
 
 func receiveCommand(t *testing.T, item string) application.ReceiveClaimCommand {
@@ -320,16 +426,16 @@ func TestClaimsInOneBatchAreReceivedItemByItem(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「系统必须先保留原始提交事实，再按申请人授权、客户账户、合同版本、
-// 索赔时限、目标范围、重复关系和最低材料要求判断资格」——资格由版本化目录判，依据
-// 入账；已审过的不再审。
-func TestEligibilityIsScreenedOnceWithItsBasis(t *testing.T) {
+// Covers: CONTEXT「资格审核 → 等待补充、不予受理或进入责任审核：**结果保存合同、
+// 首次索赔期限、授权、重复关系和材料依据**」——五维依据各占一段随结果入账；已落终局
+// 的不再审。合同不承担该索赔类型是 ADR-0051 认可的永久格，走它取终局。
+func TestAScreenRecordsEveryDimensionsBasisAndTerminalIsScreenedOnce(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
-
 	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
 		t.Fatalf("receive: %v", err)
 	}
+	fixture.eligibility.rules.KindCovered = false
 
 	screened, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
 	if err != nil {
@@ -339,8 +445,22 @@ func TestEligibilityIsScreenedOnceWithItsBasis(t *testing.T) {
 		t.Fatalf("outcome = %q, want CLAIM_SCREENED", screened.Outcome())
 	}
 	claim, _ := screened.Claim()
-	if screen, ok := claim.Screen(); !ok || screen != domain.ClaimEligible {
-		t.Fatal("the screen result was not recorded on the claim")
+	if screen, ok := claim.Screen(); !ok || screen != domain.ClaimIneligible {
+		t.Fatalf("screen = %q ok = %v，want 合同不承担该类型落 INELIGIBLE", screen, ok)
+	}
+
+	// 五维缺一段，就说明有一维没核过而结果照样写下了。
+	basis := claim.Snapshot().ScreenBasis
+	for _, dimension := range []string{
+		"CLAIM_KIND_NOT_IN_CONTRACT_SCOPE",
+		"FILING_DEADLINE_MET",
+		"AUTHORIZATION_APPLICANT_NOT_CARRIED",
+		"DUPLICATE_NONE",
+		"MATERIALS_COMPLETE",
+	} {
+		if !strings.Contains(basis, dimension) {
+			t.Fatalf("依据里没有 %s 那一维：%q", dimension, basis)
+		}
 	}
 
 	again, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
@@ -352,34 +472,22 @@ func TestEligibilityIsScreenedOnceWithItsBasis(t *testing.T) {
 	}
 }
 
-func supplementRequirement(t *testing.T, deadline time.Time) domain.SupplementRequirement {
-	t.Helper()
-	requirement, err := domain.NewSupplementRequirement(
-		mustValue(t, domain.NewMissingMaterialsReference, "photos/damage"),
-		mustValue(t, domain.NewSupplementScopeReference, "parcel-1/loss"),
-		mustValue(t, domain.NewSupplementNoticeReference, "notify-policy/v1"),
-		deadline,
-	)
-	if err != nil {
-		t.Fatalf("补充要求：%v", err)
-	}
-	return requirement
-}
-
-// Covers: ADR-0051 第三态经编排落地——目录答`等待补充`时索赔进入可续办的第三态，四件
-// 落点与首版期限入账；它不是`已过审`，也不是技术错误。点名 `AT-VE-114` 的「部分待补」
-// 半边：逐项审核允许一项停在待补而不牵动同批其他项。
-func TestAnAwaitingSupplementAnswerEntersTheThirdStateInsteadOfFailing(t *testing.T) {
+// Covers: 票面第三节要害与 ADR-0051 第五条——**资料不足不得答不予受理**。这一格写下去
+// 就永久拒赔且再也审不了，而 CONTEXT 恰恰要求这种情形进限期补充。把 parcel-shipment
+// 的 IntakeEligibilityView 写法照搬过来正好落进这里，且编译与测试都不会拦，所以单证
+// 一次：材料缺口在场时结果只能是第三态。
+func TestMaterialsShortOfTheMinimumNeverLandsOnIneligible(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
 	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
 		t.Fatalf("receive: %v", err)
 	}
-	deadline := claimSubmittedAt.Add(14 * 24 * time.Hour)
-	fixture.eligibility.answer = ports.EligibilityAnswer{
-		Screen:     domain.ClaimAwaitingSupplement,
-		Basis:      "claim-rules/v1/materials",
-		Supplement: supplementRequirement(t, deadline),
+	fixture.eligibility.rules.Materials.Required = []domain.MaterialRequirementReference{
+		mustValue(t, domain.NewMaterialRequirementReference, "photos/damage"),
+		mustValue(t, domain.NewMaterialRequirementReference, "invoice/purchase"),
+	}
+	fixture.evidence.received = []domain.MaterialRequirementReference{
+		mustValue(t, domain.NewMaterialRequirementReference, "invoice/purchase"),
 	}
 
 	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
@@ -390,41 +498,189 @@ func TestAnAwaitingSupplementAnswerEntersTheThirdStateInsteadOfFailing(t *testin
 		t.Fatalf("outcome = %q, want CLAIM_AWAITING_SUPPLEMENT", result.Outcome())
 	}
 	claim, _ := result.Claim()
-	screen, screened := claim.Screen()
-	if !screened || screen != domain.ClaimAwaitingSupplement {
-		t.Fatalf("screen = %q screened = %v", screen, screened)
+	screen, _ := claim.Screen()
+	if screen == domain.ClaimIneligible {
+		t.Fatal("资料不足被答成不予受理——那是不可逆的默认拒赔")
 	}
-	requirement, present := claim.Supplement()
-	if !present || !requirement.Deadline.Equal(deadline.UTC()) {
-		t.Fatalf("四件落点没入账：present=%v deadline=%s", present, requirement.Deadline)
-	}
-	if history := claim.SupplementDeadlineHistory(); len(history) != 1 {
-		t.Fatalf("期限历史 = %d 版，want 1", len(history))
+	if screen != domain.ClaimAwaitingSupplement {
+		t.Fatalf("screen = %q, want AWAITING_SUPPLEMENT", screen)
 	}
 
-	// 等待补充可续办：重新审核不撞`已审过`，材料重判后仍可走向终局。
-	fixture.eligibility.answer = ports.EligibilityAnswer{Screen: domain.ClaimEligible, Basis: "claim-rules/v1"}
+	// 四件落点：缺少材料只列真正缺的那一件，已收到的不再要一遍；补充范围取索赔自己
+	// 固定的目标范围；通知依据与截止由规则给。
+	requirement, present := claim.Supplement()
+	if !present {
+		t.Fatal("第三态没有带四件落点")
+	}
+	if requirement.MissingMaterials.String() != "photos/damage" {
+		t.Fatalf("缺少材料 = %q，want 只差 photos/damage", requirement.MissingMaterials.String())
+	}
+	if requirement.Scope.String() != "parcel-1/loss" {
+		t.Fatalf("补充范围 = %q，want 索赔的目标范围", requirement.Scope.String())
+	}
+	if requirement.Notice.String() != "notify-policy/v1" {
+		t.Fatalf("通知依据 = %q", requirement.Notice.String())
+	}
+	if !requirement.Deadline.Equal(fixture.eligibility.rules.Materials.SupplementDeadline.UTC()) {
+		t.Fatalf("当前截止 = %s，want 规则给的补充期限", requirement.Deadline)
+	}
+	if history := claim.SupplementDeadlineHistory(); len(history) != 1 {
+		t.Fatalf("期限历史 = %d 版，want 首版入账", len(history))
+	}
+
+	// 可重入：材料到齐后重判不撞`已审过`——那正是第三态存在的理由（ADR-0051 第二条）。
+	fixture.evidence.received = append(fixture.evidence.received,
+		mustValue(t, domain.NewMaterialRequirementReference, "photos/damage"))
 	rejudged, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
 	if err != nil {
 		t.Fatalf("re-screen: %v", err)
 	}
-	if rejudged.Outcome() != application.ClaimScreened {
-		t.Fatalf("outcome = %q, want CLAIM_SCREENED after supplement was judged", rejudged.Outcome())
+	if rejudged.Outcome() == application.ClaimScreenAlreadyRecorded {
+		t.Fatal("停在等待补充的索赔被当成已审过——材料补齐后就再也判不了了")
 	}
 }
 
-// Covers: 目录答`等待补充`却没给全四件落点时停在未决——那份答复本身不完整，既不能
-// 记成第三态（领域会拒），也不能借 `ErrInvalidClaim` 上抛成技术故障：客户其实在等
-// 材料清单，而一次技术错误会让这项索赔从待办里消失。
-func TestAnIncompleteSupplementAnswerIsUndecidedNotATechnicalError(t *testing.T) {
+// Covers: 逐维核对里每一维「核不了」各停在自己的原因上（CONTEXT 要求资格结果保存
+// 五样依据，缺哪一样就该指名去补哪一样）。压成一个笼统的「资格未配置」，看到未决的
+// 人就不知道该去登记时限、去补申请人、去裁重复关系还是去接证据归集。
+func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		name    string
+		arrange func(fixture *claimFixture)
+		want    application.HandleClaimUndecidedReason
+	}{
+		{
+			name: "首次索赔期限规则未登记",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.FilingDeadline = ports.FilingDeadlineRule{}
+			},
+			want: application.EligibilityFilingDeadlineNotRegistered,
+		},
+		{
+			name: "授权目录未登记",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.Authorization = ports.AuthorizationCatalogue{}
+			},
+			want: application.EligibilityAuthorizationNotRegistered,
+		},
+		{
+			name:    "授权目录已登记但查询不带申请人",
+			arrange: func(fixture *claimFixture) {},
+			want:    application.EligibilityApplicantNotCarried,
+		},
+		{
+			name: "最低材料清单未登记",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.Materials = ports.MinimumMaterialsRule{}
+			},
+			want: application.EligibilityMaterialsNotRegistered,
+		},
+		{
+			name: "证据归集查不到",
+			arrange: func(fixture *claimFixture) {
+				fixture.evidence.known = false
+			},
+			want: application.EligibilityEvidenceUnavailable,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newClaimFixture(t)
+			if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+				t.Fatalf("receive: %v", err)
+			}
+			testCase.arrange(fixture)
+
+			result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+			if err != nil {
+				t.Fatalf("screen: %v", err)
+			}
+			if result.Outcome() != application.HandleClaimUndecided {
+				t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+			}
+			if result.UndecidedReason() != testCase.want {
+				t.Fatalf("reason = %q, want %q", result.UndecidedReason(), testCase.want)
+			}
+			claim, _, _ := fixture.claims.FindByBatchItem(ctx,
+				mustValue(t, domain.NewTenantID, "tenant-1"),
+				mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+				mustValue(t, domain.NewClaimItemID, "item-1"))
+			if _, screened := claim.Screen(); screened {
+				t.Fatal("一维核不了却仍在索赔上记下了资格结果")
+			}
+		})
+	}
+}
+
+// Covers: 少核一维不得答通过。申请人授权那一维今天结构上核不了（查询不带申请人，
+// 见切块 (c)），因此`通过`在编排上到不了——把其余维未核的索赔永久标成已过审，与
+// 默认拒赔是同一个错的两面（票面第三节）。本用例钉住这条：其余四维全部肯定通过、
+// 材料齐备、无重复，结果仍然只能是未决。
+func TestAScreenNeverPassesWhileADimensionRemainsUnchecked(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
 	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
 		t.Fatalf("receive: %v", err)
 	}
-	fixture.eligibility.answer = ports.EligibilityAnswer{
-		Screen: domain.ClaimAwaitingSupplement,
-		Basis:  "claim-rules/v1/materials",
+
+	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	if result.Outcome() != application.HandleClaimUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	claim, _, _ := fixture.claims.FindByBatchItem(ctx,
+		mustValue(t, domain.NewTenantID, "tenant-1"),
+		mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+		mustValue(t, domain.NewClaimItemID, "item-1"))
+	if screen, screened := claim.Screen(); screened {
+		t.Fatalf("授权维没核过却把索赔记成了 %q", screen)
+	}
+}
+
+// Covers: `AT-VE-124`「首次索赔超过合同期限 → 形成有依据的不予受理，不借补充或复核
+// 期限绕过」。它与合同不覆盖并列为 ADR-0051 认可的两个永久格，且**胜过材料缺口**：
+// 已经超期的索赔不该再被叫去补材料。
+func TestAClaimFiledAfterTheDeadlineIsRefusedRatherThanAskedForMaterials(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	fixture.eligibility.rules.FilingDeadline.Deadline = claimSubmittedAt.Add(-time.Hour)
+	fixture.eligibility.rules.Materials.Required = []domain.MaterialRequirementReference{
+		mustValue(t, domain.NewMaterialRequirementReference, "photos/damage"),
+	}
+
+	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("screen: %v", err)
+	}
+	claim, _ := result.Claim()
+	screen, _ := claim.Screen()
+	if screen != domain.ClaimIneligible {
+		t.Fatalf("screen = %q, want INELIGIBLE；超首次期限是永久格", screen)
+	}
+	if !strings.Contains(claim.Snapshot().ScreenBasis, "FILING_DEADLINE_EXCEEDED") {
+		t.Fatalf("不予受理没点名超期依据：%q", claim.Snapshot().ScreenBasis)
+	}
+}
+
+// Covers: 重复关系成立时停在未决而不是不予受理。ADR-0051 只认可两个永久格，重复不在
+// 其中——重复成立意味着什么是一次尚未作出的领域裁断，拿一个计数替它拍板就是造出第三个
+// 永久拒赔格。没有重复则这一维由事实本身通过。
+func TestADuplicateRelationEscalatesInsteadOfDenying(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	// 同客户、同目标范围、同索赔类型的另一项：receiveCommand 的这三样逐项相同。
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-2")); err != nil {
+		t.Fatalf("receive duplicate: %v", err)
 	}
 
 	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
@@ -432,28 +688,132 @@ func TestAnIncompleteSupplementAnswerIsUndecidedNotATechnicalError(t *testing.T)
 		t.Fatalf("screen: %v", err)
 	}
 	if result.Outcome() != application.HandleClaimUndecided ||
-		result.UndecidedReason() != application.EligibilitySupplementIncomplete {
-		t.Fatalf("result = %q/%q, want UNDECIDED/ELIGIBILITY_SUPPLEMENT_INCOMPLETE",
+		result.UndecidedReason() != application.EligibilityDuplicateUnresolved {
+		t.Fatalf("result = %q/%q, want UNDECIDED/ELIGIBILITY_DUPLICATE_UNRESOLVED",
 			result.Outcome(), result.UndecidedReason())
 	}
 	claim, _, _ := fixture.claims.FindByBatchItem(ctx,
 		mustValue(t, domain.NewTenantID, "tenant-1"),
 		mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
 		mustValue(t, domain.NewClaimItemID, "item-1"))
-	if _, screened := claim.Screen(); screened {
-		t.Fatal("一份残缺的目录答复仍在索赔上记下了资格结果")
+	if screen, screened := claim.Screen(); screened {
+		t.Fatalf("重复关系把索赔判成了 %q——那一格没有任何裁断支撑", screen)
 	}
 }
 
-// Covers: 实例半边红线——资格目录（索赔时限、材料要求、授权）是待登记实例参数，未
-// 配置时未决等租户登记：默认受理与默认拒赔都是虚构；与目录调不通分开（恢复动作不同）。
-func TestUnconfiguredEligibilityCatalogueIsUndecidedNotDefaulted(t *testing.T) {
+// Covers: `AT-VE-123`「客户撤回后重新提交同一范围 → 建立新索赔项并重新检查……重复
+// 关系」——撤回那项不算重复，否则同一范围再也提不了第二次。
+func TestAWithdrawnClaimDoesNotCountAsADuplicate(t *testing.T) {
+	fixture := newClaimFixture(t)
+	ctx := context.Background()
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	batch := mustValue(t, domain.NewClaimBatchReference, "claim-batch-1")
+
+	withdrawn, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1"))
+	if err != nil {
+		t.Fatalf("receive: %v", err)
+	}
+	earlier, _ := withdrawn.Claim()
+	if err := earlier.Withdraw(claimSubmittedAt.Add(30 * time.Minute)); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-2")); err != nil {
+		t.Fatalf("receive resubmission: %v", err)
+	}
+
+	count, err := fixture.claims.CountLiveScopeClaims(ctx, tenant,
+		mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
+		mustValue(t, domain.NewRequestScopeReference, "parcel-1/loss"),
+		mustValue(t, domain.NewClaimKindReference, "LOSS"),
+		mustValue(t, domain.NewClaimItemID, "item-2"))
+	if err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("撤回那项被数成了重复：count = %d", count)
+	}
+
+	result, err := fixture.handler.ScreenClaim(ctx, application.ScreenClaimCommand{
+		TenantID: tenant, Batch: batch, Item: mustValue(t, domain.NewClaimItemID, "item-2"),
+	})
+	if err != nil {
+		t.Fatalf("screen resubmission: %v", err)
+	}
+	if result.UndecidedReason() == application.EligibilityDuplicateUnresolved {
+		t.Fatal("撤回后重新提交同一范围被重复关系挡住了")
+	}
+}
+
+// Covers: 差材料但四件落点凑不齐时停在未决——那时`等待补充`与`资格尚未审核`分不开
+// （ADR-0051 第三条），既不能记一个残缺的第三态，也不能借 `ErrInvalidClaim` 上抛成
+// 技术故障：客户其实在等一份材料清单，而一次技术错误会让这项索赔从待办里消失。
+//
+// 缺的两件各有出处：通知依据由规则给，规则没给就补规则；当前截止已经不在未来时按
+// CONTEXT「补充期限届满只触发资格复核……不能默认拒赔」保持待决定并升级。
+func TestMaterialsShortWithoutTheFourLandingPointsStaysUndecided(t *testing.T) {
+	ctx := context.Background()
+	short := []domain.MaterialRequirementReference{
+		mustValue(t, domain.NewMaterialRequirementReference, "photos/damage"),
+	}
+	cases := []struct {
+		name    string
+		arrange func(fixture *claimFixture)
+		want    application.HandleClaimUndecidedReason
+	}{
+		{
+			name: "规则没给通知依据",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.Materials.Notice = domain.SupplementNoticeReference{}
+			},
+			want: application.EligibilitySupplementIncomplete,
+		},
+		{
+			name: "补充期限已经不在未来",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.Materials.SupplementDeadline = claimSubmittedAt
+			},
+			want: application.EligibilitySupplementWindowClosed,
+		},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newClaimFixture(t)
+			if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
+				t.Fatalf("receive: %v", err)
+			}
+			fixture.eligibility.rules.Materials.Required = short
+			testCase.arrange(fixture)
+
+			result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
+			if err != nil {
+				t.Fatalf("screen: %v", err)
+			}
+			if result.Outcome() != application.HandleClaimUndecided ||
+				result.UndecidedReason() != testCase.want {
+				t.Fatalf("result = %q/%q, want UNDECIDED/%q",
+					result.Outcome(), result.UndecidedReason(), testCase.want)
+			}
+			claim, _, _ := fixture.claims.FindByBatchItem(ctx,
+				mustValue(t, domain.NewTenantID, "tenant-1"),
+				mustValue(t, domain.NewClaimBatchReference, "claim-batch-1"),
+				mustValue(t, domain.NewClaimItemID, "item-1"))
+			if screen, screened := claim.Screen(); screened {
+				t.Fatalf("四件落点凑不齐却把索赔记成了 %q", screen)
+			}
+		})
+	}
+}
+
+// Covers: 实例半边红线——合同的索赔资格声明不在场时未决等租户登记：默认受理与默认
+// 拒赔都是虚构；与目录调不通分开（恢复动作不同）。
+func TestAnUndeclaredEligibilityCatalogueIsUndecidedNotDefaulted(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
 	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
 		t.Fatalf("receive: %v", err)
 	}
-	fixture.eligibility.configured = false
+	fixture.eligibility.declared = false
 
 	result, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
 	if err != nil {
@@ -494,9 +854,7 @@ func TestLiabilityConcludesOnlyAfterEligibilityAndHandsOffToSettlement(t *testin
 		t.Fatalf("outcome = %q, want NOT_ACCEPTED before eligibility", premature.Outcome())
 	}
 
-	if _, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, fixture, "item-1")
 	concluded, err := fixture.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1"))
 	if err != nil {
 		t.Fatalf("conclude: %v", err)
@@ -527,12 +885,7 @@ func TestLiabilityConcludesOnlyAfterEligibilityAndHandsOffToSettlement(t *testin
 func TestAReviewWithinTheWindowFormsANewConclusionVersionKeepingThePrior(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
-	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
-		t.Fatalf("receive: %v", err)
-	}
-	if _, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, fixture, "item-1")
 	if _, err := fixture.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1")); err != nil {
 		t.Fatalf("conclude: %v", err)
 	}
@@ -571,12 +924,7 @@ func TestAReviewWithinTheWindowFormsANewConclusionVersionKeepingThePrior(t *test
 func TestAReviewAfterTheWindowIsRefusedKeepingTheOriginalConclusion(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
-	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
-		t.Fatalf("receive: %v", err)
-	}
-	if _, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, fixture, "item-1")
 	command := concludeCommand(t, "item-1")
 	command.ReviewBy = claimSubmittedAt.Add(90 * time.Minute) // 时钟在 +1h，复核截止 +1.5h
 	if _, err := fixture.handler.ConcludeClaim(ctx, command); err != nil {
@@ -589,6 +937,7 @@ func TestAReviewAfterTheWindowIsRefusedKeepingTheOriginalConclusion(t *testing.T
 	late.handler = application.NewHandleClaimHandler(application.HandleClaimDeps{
 		Claims:      fixture.claims,
 		Eligibility: fixture.eligibility,
+		Evidence:    fixture.evidence,
 		Recoveries:  fixture.recoveries,
 		Identities:  fixture.identities,
 		Settlement:  fixture.settlement,
@@ -746,6 +1095,8 @@ func TestAConcurrentChangeIsItsOwnAnswerNotUndecided(t *testing.T) {
 	if _, err := screen.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
 		t.Fatalf("receive: %v", err)
 	}
+	// 合同不承担该类型这一维走得到终局，资格审核才有东西要落库。
+	screen.eligibility.rules.KindCovered = false
 	screen.claims.saveConflicts = 1
 	screened, err := screen.handler.ScreenClaim(ctx, screenCommand(t, "item-1"))
 	if err != nil {
@@ -756,12 +1107,7 @@ func TestAConcurrentChangeIsItsOwnAnswerNotUndecided(t *testing.T) {
 	}
 
 	conclude := newClaimFixture(t)
-	if _, err := conclude.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
-		t.Fatalf("receive: %v", err)
-	}
-	if _, err := conclude.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, conclude, "item-1")
 	conclude.claims.saveConflicts = 1
 	concluded, err := conclude.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1"))
 	if err != nil {
@@ -775,12 +1121,7 @@ func TestAConcurrentChangeIsItsOwnAnswerNotUndecided(t *testing.T) {
 	}
 
 	review := newClaimFixture(t)
-	if _, err := review.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
-		t.Fatalf("receive: %v", err)
-	}
-	if _, err := review.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, review, "item-1")
 	if _, err := review.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1")); err != nil {
 		t.Fatalf("conclude: %v", err)
 	}
@@ -846,12 +1187,7 @@ func TestAReceiptLosingTheCreateRaceAnswersWithTheWinner(t *testing.T) {
 func TestAFailedSettlementHandoffKeepsTheConclusionWithAResumableReference(t *testing.T) {
 	fixture := newClaimFixture(t)
 	ctx := context.Background()
-	if _, err := fixture.handler.ReceiveClaim(ctx, receiveCommand(t, "item-1")); err != nil {
-		t.Fatalf("receive: %v", err)
-	}
-	if _, err := fixture.handler.ScreenClaim(ctx, screenCommand(t, "item-1")); err != nil {
-		t.Fatalf("screen: %v", err)
-	}
+	seedEligibleClaim(t, fixture, "item-1")
 	fixture.settlement.err = errors.New("settlement seam unavailable")
 
 	result, err := fixture.handler.ConcludeClaim(ctx, concludeCommand(t, "item-1"))
