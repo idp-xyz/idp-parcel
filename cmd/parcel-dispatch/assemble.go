@@ -278,6 +278,19 @@ var veCustomsCaseUndecidedSentinels = []error{
 	vecc.ErrProjectionUndecided,
 }
 
+// veDeclarationSubmissionUndecidedSentinels 只给 VE 申报提交投影这一路。本路不
+// FanOut：提交版本是 CC 自家申报链事实，PS 侧今天没有它的消费者——登记接不住的比
+// 不登记更糟（ADR-0049 第三条），照案件路先例只投 VE。
+//
+// 不在名单里：ErrDeclarationSubmissionRecordInconsistent（仓储不变量已破，含版本
+// 身份与载荷宣告不符、成员快照为空）、ErrDeclarationSubmissionUntranslatableAnswer
+// （词汇表外，编程错误）、ErrProjectionHandoffPending（要查 outbox 下游）、
+// veconsume.ErrUnexpectedProjectionOutcome。
+var veDeclarationSubmissionUndecidedSentinels = []error{
+	vecc.ErrDeclarationSubmissionNotVisible,
+	vecc.ErrProjectionUndecided,
+}
+
 // veCustomerViewUndecidedSentinels 只给「投影派生 → 客户视图」这一路。
 //
 // 歧义账户也在名单里：同包裹被多份已接受委托同时声明是机制拒绝自动采认（ADR-0060、
@@ -333,7 +346,7 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有十一类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
+// 路由表今天有十二类事件：PS 接受决定 → 初始路由（UC-NR-001）、PS 有效网络收寄采用
 // 结果 → 路由复核（UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE
 // 投影 UC-VE-002，再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再
 // PS 来源采用）、TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
@@ -343,7 +356,9 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
 // 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
 // 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
-// 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、VE 投影派生 → 客户视图
+// 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、CC 申报提交版本形成 →
+// 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
+// ADR-0066）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）。
 // 前两条投向 network-routing；中间三类同一 EventType 各投两个独立消费者，顺序一律先
 // VE 后 PS，避免把投影堵在资格墙或终局规则墙上。第五条只接
@@ -515,6 +530,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: customs case projection undecided translation: %w", err)
 	}
 
+	veDeclarationSubmission, err := deriveDeclarationSubmissionConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veDeclarationSubmissionRouted, err := dispatch.WithUndecidedSentinels(
+		veDeclarationSubmission, veDeclarationSubmissionUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: declaration submission projection undecided translation: %w", err)
+	}
+
 	veCustomerView, err := deriveCustomerViewConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
 		return nil, err
@@ -537,6 +562,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 			veinbox.InitialRouteFormedEventType:          veInitialRouteRouted,
 			veinbox.ExceptionJourneyRecordedEventType:    veExceptionJourneyRouted,
 			veinbox.CustomsCaseEstablishedEventType:      veCustomsCaseRouted,
+			veinbox.DeclarationSubmissionFormedEventType: veDeclarationSubmissionRouted,
 			veinbox.TrackingProjectionDerivedEventType:   veCustomerViewRouted,
 		},
 		settings.deliveryTimeout,
@@ -918,6 +944,34 @@ func deriveCustomsCaseConsumer(
 	return consumer, nil
 }
 
+// deriveDeclarationSubmissionConsumer 接 CC 申报提交版本形成 → VE 投影。本路只投
+// VE 不 FanOut：提交版本是 CC 自家申报链事实，PS 侧今天没有它的消费者——登记接不
+// 住的比不登记更糟（ADR-0049 第三条），照案件路先例办。
+//
+// 信封只带提交幂等键三维加提交版本维，本体（含成员快照）由处理适配器按键重取——
+// 权威事实留在 customs-compliance。成员维进事实引用、提交版本进版本维（ADR-0066；
+// 同一逻辑申报目标的引用跨版本稳定，版本演进走版本维不走引用）；形成是一件事、
+// 无语义分支，单一事实类型，不存在旅程路那种目的分岔。
+func deriveDeclarationSubmissionConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	submissions, err := ccpostgres.NewDeclarationSubmissions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection declaration submissions: %w", err)
+	}
+	processing, err := vecc.NewDeriveOnDeclarationSubmissionAdapter(submissions, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on declaration submission: %w", err)
+	}
+	consumer, err := veinbox.NewDeclarationSubmissionConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive declaration submission consumer: %w", err)
+	}
+	return consumer, nil
+}
+
 // deriveCustomerViewConsumer 接 VE 投影派生 → 客户视图（UC-VE-008 的内部半边）。
 // 账户维经 veps.ParcelCustomerAccountLookup 从 PS 的按包裹反查取回（ADR-0060 零/一/
 // 多三格：零行入账不派生、恰一行取账户、多行落未决不任选）；披露策略在租户现绑包装
@@ -1007,9 +1061,9 @@ func (derive *tenantBoundCustomerViewDerive) Handle(
 	}).Handle(ctx, command)
 }
 
-// newTenantBoundProjectionDerive 八路投影共用一份事实/投影/交接仓储。映射仍按每次
-// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程、关务案件再
-// 复制七份包装。
+// newTenantBoundProjectionDerive 九路投影共用一份事实/投影/交接仓储。映射仍按每次
+// Handle 的租户现绑，不要为揽收、交付、交接、终局、初始路由、异常旅程、关务案件、
+// 申报提交再复制八份包装。
 func newTenantBoundProjectionDerive(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -1061,6 +1115,7 @@ var (
 	_ vetf.HandoverProjectionHandler     = (*tenantBoundProjectionDerive)(nil)
 	_ vetf.JourneyProjectionHandler      = (*tenantBoundProjectionDerive)(nil)
 	_ vecc.CaseProjectionHandler         = (*tenantBoundProjectionDerive)(nil)
+	_ vecc.SubmissionProjectionHandler   = (*tenantBoundProjectionDerive)(nil)
 	_ veps.FinalProjectionHandler        = (*tenantBoundProjectionDerive)(nil)
 	_ venr.InitialRouteProjectionHandler = (*tenantBoundProjectionDerive)(nil)
 )
