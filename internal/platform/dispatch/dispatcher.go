@@ -44,19 +44,96 @@ const (
 // failureCodeFor 把发布失败分格。合成一个码，运维读不出该改装配、该救下游，还是该去
 // 下游核对重复投递——这三件的动作互不相同。
 //
+// FanOut 用 errors.Join 合并各路失败，合并错误可能同时带着未决与别的失败。分格取
+// 最响的动作格：no_subscriber > publish_failed > publish_uncertain > consumer_undecided。
+// 仅当全部失败路都未决才记 consumer_undecided——未决是「等消费方的那个依赖」，会随
+// 依赖到位自愈；任何一路需要人动手或下游核对时，码面必须指向那件事，否则硬失败以
+// 未决之名耗尽失败预算，事后排查从错的入口进（外部评审票 01）。
+//
+// publish_failed 排在 publish_uncertain 之前：硬失败重投不自愈，是几格里唯一必须
+// 人动手的；不确定的那一路要么其实已提交（重投被消费门跳过而消失），要么重投得出
+// 定论。码面钉在不自愈的那格，失败预算烧尽时它指向确实需要人的分支。
+//
 // 结果不确定单独一格：它与普通失败一样消耗失败预算并重投（框架合同如此），但重投可能
 // 真的造成重复投递，处置要落在下游而不是这边。
 func failureCodeFor(err error) eventing.FailureCode {
-	switch {
-	case errors.Is(err, ErrNoSubscriber):
+	// 无订阅者是装配错误，保持最响：哪怕只有一路撞上，先修装配。
+	if errors.Is(err, ErrNoSubscriber) {
 		return failureNoSubscriber
-	case errors.Is(err, ErrConsumerUndecided):
+	}
+	switch loudestLaneKind(err) {
+	case laneUndecided:
 		return failureConsumerUndecided
-	case errors.Is(err, eventing.ErrPublishUncertain):
+	case laneUncertain:
 		return failurePublishUncertain
 	default:
 		return failurePublishFailed
 	}
+}
+
+// laneKind 是一路失败的动作格。数值定序：越大越响，合并时取最大。
+type laneKind int
+
+const (
+	laneUndecided laneKind = iota
+	laneUncertain
+	laneHard
+)
+
+// loudestLaneKind 走合并错误的展开树，取各失败路里最响的动作格。
+//
+// 树里有两种多路节点，形状相同、语义相反，靠「直接子节点是不是 ErrConsumerUndecided
+// 本体」区分：
+//
+//   - WithUndecidedSentinels 的包装（哨兵与原错误都用 %w）：第一路是哨兵本体，第二路
+//     是消费方的原错误。整棵是翻译过的**一路**未决，不再往下拆——拆开会把原错误错当
+//     成另一路硬失败，而它只是「停在哪个依赖」的说明。
+//   - fanOut.Consume 的 errors.Join：各路互不隶属，逐路归格取最响。
+//
+// 这个区分是稳的：消费方按方向约束不 import 平台哨兵（见 WithUndecidedSentinels 的
+// 注释），join 的直接子节点因此不可能是哨兵本体，只有翻译层会把本体放进子节点。
+// 判不出形状时一律落最响的 laneHard——宁可把未决记成失败让人来看，不可反向盖码。
+func loudestLaneKind(err error) laneKind {
+	for err != nil {
+		if err == ErrConsumerUndecided {
+			return laneUndecided
+		}
+		if err == eventing.ErrPublishUncertain {
+			return laneUncertain
+		}
+		switch node := err.(type) {
+		case interface{ Unwrap() []error }:
+			children := node.Unwrap()
+			if len(children) == 0 {
+				return laneHard
+			}
+			for _, child := range children {
+				if child == ErrConsumerUndecided {
+					return laneUndecided
+				}
+			}
+			loudest := laneUndecided
+			for _, child := range children {
+				if kind := loudestLaneKind(child); kind > loudest {
+					loudest = kind
+				}
+			}
+			return loudest
+		case interface{ Unwrap() error }:
+			err = node.Unwrap()
+		default:
+			// 叶子：identity 之外还留 errors.Is 兜自定义 Is 的实现。
+			switch {
+			case errors.Is(err, ErrConsumerUndecided):
+				return laneUndecided
+			case errors.Is(err, eventing.ErrPublishUncertain):
+				return laneUncertain
+			default:
+				return laneHard
+			}
+		}
+	}
+	return laneHard
 }
 
 // Config 是一拍的节奏参数。零值不可用——批量上限与租约时长没有合理默认，装配方

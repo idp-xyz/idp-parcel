@@ -53,6 +53,9 @@ func (translator *undecidedTranslator) Consume(ctx context.Context, envelope eve
 		if errors.Is(err, sentinel) {
 			// 两个都用 %w：失败码看 ErrConsumerUndecided，排查看原错误。只包前者
 			// 会把「消费方停在哪个依赖上」这句话丢掉。
+			//
+			// 哨兵本体留在直接子节点还是分格的结构锚点——loudestLaneKind 靠它把
+			// 「翻译过的一路未决」与 FanOut 的合并区分开。改包装形状前先看那边。
 			return fmt.Errorf("%w: %w", ErrConsumerUndecided, err)
 		}
 	}
