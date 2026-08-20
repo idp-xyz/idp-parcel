@@ -1,7 +1,7 @@
 # 账户关系迟于事件建立时，客户视图没有重派生触发器
 
 Category: enhancement
-Status: needs-triage
+Status: resolved
 
 来自外部评估（基线 `49a2ab0`），协调岗已核实。
 
@@ -40,3 +40,9 @@ Status: needs-triage
 ## Comments
 
 - 2026-08-20 MCP-1：外部评估四项可操作发现之一（其第 5 条后半），核实属实后立票。
+- 2026-08-20 MCP-1：**清账置 resolved**——「未定问题」已由用户拍板走方向 a（见本目录
+  [03 号决定文档](./03-rederive-route-decision.md)，已 resolved），实现落 ve-008 票族并合入
+  main：`004e338`（客户归属确立进客户视图触发，进 CONTEXT 与 UC）+ `a771bc3`（接受决定经
+  FanOut 补派生，UC-VE-008/AT-VE-169）。方向 b 的运维重放口另立
+  [`ve-008-late-account-rederive/issues/04`](../../ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md)
+  阻于 PAR-INT-01。本票状态此前停在死会话冻结时刻，由完成度评估快照（2026-08-20）点名后核实清账。
