@@ -174,3 +174,24 @@ VE 链内事件（37–41）按 CONTEXT.md「拥有：……投影、ETA、缺�
 本文「现状」断言的取证点分两批：主表判据栏与首轮清点取证于 HEAD `4d57ecd` 的提交内容＋当时工作树；**第 4 栏「已有消费者」、总览计数、路由表核对与附带 a 的三档构造清单已按 `60ea63c` 重取证**（第 3 行由「应有但未开」改为已有消费者，随之改动的计数在各处标了 `60ea63c`）。
 
 共享树上此类断言有保质期。消费本表前若 HEAD 已前进，上述两类结论应按新 HEAD 再取一次证；判据栏引用的文档边（CONTEXT-MAP、各 `CONTEXT.md`、`UC-*`）不随代码变化，不受影响。
+
+## 刷新记录 as-of `3b9f212`（2026-08-20，MCP-4，只补差异不重写整表）
+
+证据锚：`cmd/parcel-dispatch/assemble.go` 的 `wireDispatcher` 注释与 `NewDirectPublisher` 路由表（detached 树检出 origin/main `3b9f212` 逐条比对）。**路由表从两条长到十二类**；只列现状栏变化了的行，判据栏一律未动。
+
+| 行 | 信封类型 | 旧状态 → 新状态 | 证据 |
+|---|---|---|---|
+| 2 | `parcel-shipment.acceptance-decision.formed` | 已有消费者（不变），**消费者集扩大** | FanOut：先 VE 客户归属确立补派生（UC-VE-008 `AT-VE-169`，`derive_customer_view_on_acceptance`），再 NR `AcceptanceConsumer` |
+| 5 | `parcel-shipment.final-outcome.formed` | 应有但未开 → **已有消费者（部分）** | VE 投影 `veFinalOutcomeRouted`（只投 VE 不 FanOut——装配注释：终局是 PS 自家事实）；判据栏的 SA 仍未开 |
+| 7 | `network-routing.initial-route.formed` | 应有但未开 → **已有消费者（部分）** | VE 投影 `veInitialRouteRouted`；NO/TF 仍未开（装配注释：「两侧消费者今天不存在，登记接不住的比不登记更糟」）。**总览「在途链」警示随之失效**：该类型已有订阅者，首个纵向切片不再必撞 `dispatch.no_subscriber` |
+| 8 | `node-operations.node-intake.formed` | 应有但未开 → **已有消费者** | FanOut：先 VE 投影（UC-VE-002），再 PS 来源采用（`AdoptNetworkIntakeHandler` 经 ADR-0060 按包裹反查接通） |
+| 16 | `transport-fulfillment.effective-delivery.registered` | 应有但未开 → **已有消费者** | FanOut：先 VE 投影，再 PS 终局（UC-PS-004，`FormParcelFinalHandler` 接通） |
+| 17 | `transport-fulfillment.exception-journey.recorded` | 应有但未开 → **已有消费者** | VE 投影 `veExceptionJourneyRouted`（一封信带全体成员，ADR-0066 消费侧循环拆分） |
+| 18 | `transport-fulfillment.offsite-pickup.formed` | 无消费者（不变），**判据出入新增** | 装配注释明写有意不接：「只接对象级的 `offsite-pickup.registered`，不接尝试级的 `offsite-pickup.formed`：后者一封信带一批成功对象，而采用判断逐对象成立，两条都登记会让同一份揽收结果被采用两次」——与本表判据栏「应有但未开（PS，UC-TF-002 步骤 6A）」存在口径出入，留 T2 裁 |
+| 19 | `transport-fulfillment.offsite-pickup.registered` | 应有但未开 → **已有消费者** | FanOut：先 VE 揽收投影，再 PS 来源采用（UC-PS-003 揽收源链） |
+| 20 | `transport-fulfillment.transport-handover.registered` | 应有但未开 → **已有消费者（部分）** | VE 投影 `veHandoverRouted`（装配注释：不 FanOut 给 PS，终局只认有效交付）；判据栏的 NO/NR 仍未开 |
+| 21 | `customs-compliance.customs-case.established` | 应有但未开 → **已有消费者（部分）** | VE 投影 `visibility-exception/derive-projection-from-customs-case`（ADR-0066）；同上下文申报链仍未开 |
+| 22 | `customs-compliance.declaration-submission.formed` | 应有但未开 → **已有消费者（部分）** | VE 投影 `derive-projection-from-declaration-submission`；对外发送段与同上下文核对仍未开 |
+| 37 | `visibility-exception.tracking-projection.derived` | 应有但未开（同上下文） → **已有消费者** | `veCustomerViewRouted` → 客户视图派生；账户维经 PS 按包裹反查填上（ADR-0060 三格，装配注释明写「早先不登记的理由是 Customer 那一维填不上」已解除） |
+
+随差异同步的总览计数：**已有消费者的类型 2 → 12**（上表 5/7/8/16/17/19/20/21/22/37 十类新增，加原有 2/3 两类）。其余各行逐类型对照路由表无变化；「附带 a」的处理器构造三档清单未在本次重核范围内，引用它之前需另行重取证。

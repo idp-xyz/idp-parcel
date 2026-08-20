@@ -91,3 +91,23 @@
 
 第三消费者若要复现第二个那种「一票做完、真库绿」的体量，**得先花一票把反查读口做出来**。
 直接排 8/16/18/19 或 37 会在写到一半时撞上迁移与 owner 裁定，那时再拆票比现在拆贵。
+
+## 失效注记 as-of `3b9f212`（2026-08-20，MCP-4）
+
+本勘察取证于 `e1b985a`，以下按新 tip 逐挡核对结论存亡。
+
+**②′ 挡四条全部被后续工作推翻（按本勘察自己的建议路径推翻的）**：
+
+- 「按包裹/载运对象反查当事人」那层读口已建成——[ADR-0060](../../docs/adr/0060-parcel-lookup-uses-current-snapshot-projection.md)（包裹反查走当前快照投影列）、迁移 `migrations/parcel_shipment/0006_current_accepted_parcel_projection.sql`、适配器 `parcelshipment/adapters/postgres/current_accepted_parcel_target.go`。**第 8/16 两条的 `TargetShipment` 完整来源身份反查缺口不缺了**：`adopt_on_node_intake.go` / `adopt_on_effective_delivery.go` / `adopt_on_offsite_pickup.go` 三个消费适配器都经它取回完整目标，反查不着有专格哨兵 `ErrParcelTargetNotFound`（登记为可重试未决）。
+- 第 8/16/19 三条消费者已接线（路由表 FanOut：先 VE 投影再 PS 采用/终局），第 37 条已接线（`tracking-projection.derived` → 客户视图派生，账户维经 PS 反查填上——正是本勘察说的「反查不成环」被 WIRE-CUSTOMER-VIEW 解开）。
+- 第 18 条（尝试级 `offsite-pickup.formed`）**有意不接**：装配注释「两条都登记会让同一份揽收结果被采用两次」。它从「差反查口」变成「口径上不该接」，与清点表判据栏的出入已记入 report.md 刷新记录第 18 行。
+
+**② 挡三条仍成立（逐条重验于 `3b9f212`）**：
+
+- 第 7 条（`initial-route.formed` → NO）：NO 全包对 `initial-route`/`路由指令`/`计划节点` 仍零命中，`docs/application/node-operations/` 仍只有 UC-NO-001/002/003，无「节点接收版本化路由指令」用例。**开发计划把它点名为首个 A/B 候选的前置判断维持：不能直接开工，先立 UC/CONTEXT 能力。** 注意信封本身已有 VE 投影消费者（report.md 刷新记录第 7 行），但那不是本条说的 NO 消费。
+- 第 20 条（`transport-handover.registered` → NO 控制转出）：`ControlTransferAdapter.TransferOut` 仍是纯领域函数（`nodeoperations/adapters/transportfulfillment/`），NO 侧仍无「按权威交接结果推进实物控制」的应用编排。VE 投影腿已接，不改变本条。
+- 第 6 条（`reachability-judgment.formed` → PS 续办）：`AdvanceAcceptanceJudgmentHandler` 仍零生产构造（仅 application+测试命中），该类型仍未登记路由；事件半边与同步半边的分工仍无 UC 明文。
+
+**③ 挡两条仍成立**：第 46 条 pilot-governance 仍无 `docs/domain/pilot-governance/`（glob 零文件）、无 UC-PG-*；第 14 条容量消耗的口径出入无新 ADR 裁决（`docs/adr/README.md` 对「容量」零命中）。
+
+**「①挡空、一条都不剩」的结论已部分反转**：当时压在②′的四条今天全部落地，说明高杠杆判断正确且已被执行。①挡（只差消费门与接线）现在是否非空，需按判据②对剩余方向（CC 21–29 余量、SA 30–36、VE 38–44、PP 45）重勘——本注记只核对旧结论存亡，不重做勘察。

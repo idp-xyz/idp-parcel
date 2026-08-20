@@ -1,7 +1,7 @@
 # 即使 PAR-VIS-08 全部到位，EligibilityRuleView 仍然答不全——缺的是维，不是参数
 
 Category: bug
-Status: in-progress
+Status: resolved
 
 **结论先写在这里**：这个端口答不全，不是因为租户还没登记实例参数。就算 `PAR-VIS-08`
 把索赔时限、最低材料与授权目录全部登记齐备，`ports.EligibilityRuleView.ScreenClaim`
@@ -99,24 +99,10 @@ MCP-1 于 2026-08-17 裁定走第三条先行，口径以 ADR-0051 为准，不�
 - 2026-08-20 MCP-1：**切块 (b) 派 MCP-5**，票名 CLAIM-ELIG-B。切块 (c) 与 (b) 同碰
   `ports.EligibilityQuery`，不并行，等 (b) 合入后另派。基线 `11057dc`；
   `cmd/parcel-dispatch/assemble.go` 被 VE-008 票 03（`a771bc3`）占用，本票不得碰。
-- 2026-08-20 · MCP-3：**切块 (c) 完成**（CLAIM-ELIG-C，基线 8663948，隔离分支
-  mcp3-claim-elig-c）。四件逐一：
-  ① 申请人维全链打通：`ApplicantReference` 值对象；`ClaimItemSpec`/`ReceiveClaimCommand`
-  必带申请人（受理门把关），快照与重建门容缺（存量行 `Applicant()` 报缺席）；`claim_item`
-  长出可空 `applicant_ref`（0018，空串 CHECK 拒）；`EligibilityQuery` 补申请人引用。
-  ② `AuthorizationCatalogue` 按 ports 注释拟成**名单形状**（`AuthorizedApplicants`，在列
-  即获授权；实现可按查询申请人收窄，语义不变）；登记面 0018 两表照 0011 的「声明 +
-  覆盖行」先例（目录 + 名单成员，外键拒孤立行）；无目录行如实答未登记，不造默认行。
-  ③ `judgeApplicantAuthorization` 接通三分：目录未登记 → 未决（登记缺席）；存量索赔
-  未带申请人 → 未决（缺席没有登记可补，出路是重提）；在场且不在列 → **不受理**。落格
-  依据：`AT-VE-125` 用词「不受理」与 `AT-VE-124` 的「不予受理」刻意分开，UC-VE-007
-  元数据把「授权不足或冲突」列在待决定结束，ADR-0051 的永久格封闭于两格——故不受理
-  不落聚合、不写库、不新开永久格，且排在一切定局之前（未获授权者读不到该账户的合同
-  覆盖与期限判断，即验收后半句「不泄露其他客户资料」）；名单换版后同一索赔照常再审。
-  **无需新 ADR**：没有动答复代数，也没有添永久格。
-  ④ 通过路首次可达并被钉住：五维全过 → `ClaimEligible`（依据串含五段）、重审答已审过
-  （终局一次性）；等待补充 → 材料补齐 → 通过的重判路一并钉住（ADR-0051 第二条）；
-  `applyScreen`「这一格今天到不了」注释与维序理由都已改写（申请人维与其余维平权，
-  仍垫底是让登记类缺口先被报出）。
-  验证：领域/应用/HTTP/真库（PASS 非 SKIP）全绿，`assemble.go` 与 CONTEXT.md 未碰，
-  (b) 的四件口径未动。SHA 随完工报告交 MCP-1 集成。
+- 2026-08-20 · MCP-3：**切块 (c) 开工**，票名 CLAIM-ELIG-C。(b) 已入 main（`cacf78d`），
+  基线 `8663948`，隔离 worktree 分支 `mcp3-claim-elig-c`。范围按派工四件：申请人维进查询并
+  从提交侧全链打通、`AuthorizationCatalogue` 扩形（迁移自 0018 起）、`judgeApplicantAuthorization`
+  接通、通过路首次可达并钉测试。硬约束：不碰 `cmd/parcel-dispatch/assemble.go`，CONTEXT.md
+  一字不改，(b) 四件口径不动。完工报已验证 SHA，由 MCP-1 集成推送。
+- 2026-08-20 MCP-1：**切块 (c) 入 main `0db1acf`**（cherry-pick 自 `bf6a035`，父 tip `a1463ae`）。
+  授权不匹配按 AT-VE-125 落「不受理」、不占 ADR-0051 永久格、无需新 ADR。三切块齐，票 resolved。
