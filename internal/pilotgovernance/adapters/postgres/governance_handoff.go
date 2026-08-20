@@ -74,6 +74,16 @@ func resumptionEventID(id domain.SuspensionID) string {
 	return "resumption/" + id.String()
 }
 
+// suspensionPartitionKey 是暂停与恢复共用的分区键——取被解除的那个暂停标识。
+//
+// ID 管幂等、分区键管顺序，两者不是一回事。暂停与恢复是同一个治理对象的先后两拍：
+// 两种类型的信封 ID 前缀天然错开（都入队、不丢），但逐事件分区让恢复可能先于暂停
+// 送达，受影响上下文会先被恢复到一个从未进入过的状态、再被暂停关死，而派发日志里
+// 什么错都没有。
+func suspensionPartitionKey(id domain.SuspensionID) string {
+	return "suspension/" + id.String()
+}
+
 func takeoverEventID(interval domain.AuthorityInterval) string {
 	return "takeover/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind
 }
@@ -100,11 +110,11 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 	}
 
 	var (
-		eventID, scope, subject string
-		eventType               eventing.EventType
-		occurredAt              = handoff.clock.Now().UTC()
-		payload                 []byte
-		err                     error
+		eventID, partitionKey, scope, subject string
+		eventType                             eventing.EventType
+		occurredAt                            = handoff.clock.Now().UTC()
+		payload                               []byte
+		err                                   error
 	)
 	switch {
 	case intent.Suspension != nil:
@@ -113,6 +123,7 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 			return fmt.Errorf("hand off governance: suspension id and scope are required")
 		}
 		eventID = suspensionEventID(decision.ID())
+		partitionKey = suspensionPartitionKey(decision.ID())
 		eventType = suspensionEventType
 		scope = decision.Scope().String()
 		subject = decision.ID().String()
@@ -127,6 +138,7 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 			return fmt.Errorf("hand off governance: resumption suspension id is required")
 		}
 		eventID = resumptionEventID(decision.Suspension())
+		partitionKey = suspensionPartitionKey(decision.Suspension())
 		eventType = resumptionEventType
 		scope = decision.Suspension().String()
 		subject = decision.Suspension().String()
@@ -141,6 +153,7 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 			return fmt.Errorf("hand off governance: takeover interval identity is required")
 		}
 		eventID = takeoverEventID(interval)
+		partitionKey = takeoverEventID(interval)
 		eventType = takeoverEventType
 		scope = interval.ObjectScope
 		subject = interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind
@@ -165,7 +178,7 @@ func (handoff *OutboxGovernanceHandoff) HandOffGovernance(
 		Version:      1,
 		Scope:        scope,
 		Subject:      subject,
-		PartitionKey: eventID,
+		PartitionKey: partitionKey,
 		OccurredAt:   occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

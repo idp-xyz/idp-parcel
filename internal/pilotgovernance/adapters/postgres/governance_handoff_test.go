@@ -179,6 +179,53 @@ func TestResendingTheSameGovernanceIntentIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestAResumptionSharesThePartitionOfTheSuspensionItLifts 钉住两个字段的分工。
+//
+// 暂停与恢复是同一个治理对象的先后两拍。两种类型的信封 ID 前缀天然错开（都入队、不丢），
+// 但逐事件分区让恢复可能先于暂停送达——受影响上下文先被恢复到一个从未进入过的状态、再被
+// 暂停关死，而派发日志里什么错都没有。分区键取被解除的那个暂停标识，两拍排一条队。
+func TestAResumptionSharesThePartitionOfTheSuspensionItLifts(t *testing.T) {
+	fixture := newGovernanceHandoffFixture(t)
+	ctx := t.Context()
+
+	suspension := incidentSuspension(t, "suspension-1")
+	resumption := incidentResumption(t, "suspension-1")
+
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		if err := fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Suspension: &suspension}); err != nil {
+			return err
+		}
+		return fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Resumption: &resumption})
+	})
+
+	if count := countGovernanceIntents(t, fixture.pool, "suspension/suspension-1", "pilot-governance.suspension.recorded"); count != 1 {
+		t.Fatalf("暂停行数 = %d, want 1", count)
+	}
+	if count := countGovernanceIntents(t, fixture.pool, "resumption/suspension-1", "pilot-governance.resumption.recorded"); count != 1 {
+		t.Fatalf("恢复行数 = %d, want 1", count)
+	}
+
+	if got := partitionKeyOf(t, fixture.pool, "suspension/suspension-1"); got != "suspension/suspension-1" {
+		t.Fatalf("暂停分区键 = %q, want suspension/suspension-1", got)
+	}
+	if got := partitionKeyOf(t, fixture.pool, "resumption/suspension-1"); got != "suspension/suspension-1" {
+		t.Fatalf("恢复分区键 = %q；两拍不同分区，恢复就可能赶在暂停之前送到", got)
+	}
+}
+
+func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
+	t.Helper()
+
+	var partitionKey string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT partition_key FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&partitionKey); err != nil {
+		t.Fatalf("读取分区键：%v", err)
+	}
+	return partitionKey
+}
+
 func TestGovernanceIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newGovernanceHandoffFixture(t)
 	decision := incidentSuspension(t, "suspension-1")

@@ -156,9 +156,6 @@ var allowedSameExpression = map[string]string{
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go": annotationNoOrdering +
 		"同一收寄键只出一份——ReceiveDeliveredUnitHandler.Handle 幂等/冲突按内容指纹分界，且只在收寄判断成立时交意图",
 
-	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": annotationStateSequence +
-		"suspension.recorded → resumption.recorded（恢复的信封 ID 就挂在它要解除的那个暂停标识上）",
-
 	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go": annotationDependsOnPrior +
 		"recovery-adjustment 引用 advance-recovery——Adjust 先核对回收在场，且不改写原回收",
 	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go": annotationNoOrdering +
