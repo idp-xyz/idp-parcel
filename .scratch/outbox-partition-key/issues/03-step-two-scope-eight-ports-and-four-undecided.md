@@ -1,7 +1,7 @@
 # 第二步的确切范围：八口要改、四口待裁，剩下十四口不用动
 
 Category: bug
-Status: in-progress
+Status: resolved
 
 [01](./01-per-event-partition-keys-make-the-ordering-guarantee-vacuous.md) 说第二步「等口径
 定完再动」，但没说第二步有多大。本票把它从估算变成清单：`a771bc3` 上逐行读完门禁例外清单的
@@ -120,3 +120,61 @@ settlement-accounting 眼下一个消费者都没有。**这条约束属于「�
   判不动原样报回不猜。**四处待裁不随手裁**：关务案件链保序（含重开再关撞 ID 子问题）与场外
   揽收二次登记都是真领域问题，PG/CC 无主，须先取证再裁断，另行成轮；在此之前这四口一行
   例外清单都不许删。依赖前序两口的消费者约束照票面归「建 SA 消费者」那票，本轮不动。
+- 2026-08-21 MCP-1（裁断落地）：**四处待裁清零，票转 resolved。** 授权出处——owner 经 IDP
+  队列先批「按此起草」（草案 [ruling-draft-four-undecided.md](../ruling-draft-four-undecided.md)），
+  再于本轮批「你现在是主控制方，你来决定，当前没有任何工人工作了」，据此由本会话直接落地。
+  取证是只读轮的 [evidence-four-undecided.md](../evidence-four-undecided.md)（取于 `3b9f212`），
+  落地前按 `f47f698` 重核，两处代码公式与取证逐字相符。
+
+  **裁断一（案件链三口）**：全文见 [ADR-0069](../../../docs/adr/0069-customs-case-chain-ordering-absorbed-by-reread-and-retry.md)。
+  四口不建立跨口同分区保序，乱序由指针载荷、按键重读与「不可见即可重试」消化；关闭信封 ID
+  加关闭周期序数、分区键收窄到 `租户/案件`；信封上的案件维统一用铸造 `CustomsCaseID`；申报口
+  的案件维是建模欠账，另票。
+
+  **裁断二（场外揽收登记口）**：同一载运对象允许第二次成功的对象级登记，两次是同一条控制链
+  的先后两段；权威落点是 TF CONTEXT 的跨段接续句与 UC-TF-002 的补句加 `AT-TF-098`，不另立 ADR。
+  分区主体取到对象。与既有去重句的分工：**UC-TF-002**「一致性、幂等与并发」一节的「同一实际
+  控制范围不能因伙伴重投、任务重建或批量重试重复建立履约参与」管**同段去重**，新增的 CONTEXT
+  句管**跨段接续**——那句去重语在 UC 不在 CONTEXT，两句分属两层文档，引用时勿混。
+
+  **落地时对草案的三处修正**（草案措辞未经修正不可直接照抄）：
+  1. 关闭周期序数改为从 `CustomsCaseClosure.Reopenings()` 条数加一**派生**，不由意图注入。
+     `CaseClosureHandoffIntent` 只有租户与关闭记录两个字段，注入要加宽契约，而今天没有调用方
+     给得出 1 以外的值——那只是把常量挪进编排，正是 ADR 自己否决「等实现时再改」的那种分离。
+     派生的成立条件写进 ADR 决定一的**第四条成立前提**：多周期若改成一案多条关闭记录、新记录
+     从零条重开起算，序数退回 1、撞 ID 复活，届时须同时给出新序数来源，否则重裁。
+     顺带更正取证 A4 的一句：`ports.CaseClosureStore` 接口虽只有 `FindByCase`/`Save`，但重开
+     **是**持久化的——`CaseClosures.Save` 对已有关闭走一条只写 `reopenings` 列的 UPDATE，
+     `rebuildCaseClosure` 逐条重建，`TestCaseClosureRoundTripsAndReopeningAppendsInPlace` 守着
+     这条往返。「店无 Update」只在方法名上成立，能力上不成立，派生因此跨库往返不丢。
+  2. 草案 ADR 正文把 ADR-0049 链成 `0049-dispatch-routing-table-is-an-explicit-list.md`，
+     该文件不存在；实际是 `0049-publish-channel-is-in-process-delivery-until-load-evidence.md`。
+  3. 草案落地表 PS 采用侧那行「两封信封分属两个分区、到达先后不定」修完即为假：分区键收窄到
+     `租户/对象` 后，同对象两尝试同分区且保序，**顺序那一半正是本次修复解决的**，剩下的只有
+     采用语义（后段成功是否顶替前段采用）。那一半仍属采用语义，不在本裁断内，记此防丢。
+
+  **揽收登记的分区键最终取（租户+对象+类型段），不是光秃秃的（租户+对象）。** 评审时我一度
+  主张并进后者，理由是 TF 已有 `transportHandoverPartitionKey` 与 `effectiveDeliveryPartitionKey`
+  两口在那里、揽收 → 交接 → 交付可以端到端保序。落地实测把这条推翻了：并进去之后
+  `TestARegisteredOffsitePickupStopsAtUnprovenIntakeEligibility` 红在重拍那句（派生投影定稿 0 条，
+  want 1）；换成（租户+对象+探针后缀）——仍是一对象一键，只避开 VE 的键空间——立刻转绿。
+  起因确切：VE 的投影/triage/gap/eta 四口按 `租户/包裹` 分区，而载运对象引用与申报包裹标识是
+  同一个字符串，并进去就与 VE 共分区，一封未决的揽收会把同一包裹**已经由 VE 受理并派生**的
+  追踪投影堵在分区头，直到预算耗尽进 `ABANDONED`。而「硬资格未证明」是今天的常态。
+
+  取舍据此重定：裁断二真正要的顺序只有「同一对象两次成功揽收之间的先后」，类型段保得住；
+  跨口链到 VE 那一段既非需求、也换不来新保证——投影的取代关系由来源给出（ADR-0065），本就
+  不靠到达先后。用已经成立的客户可见性去换一个用不上的顺序不划算。
+
+  由此分出的更大问题——TF 的（租户+对象）与 VE 的（租户+包裹）是不是同一个排队主体、
+  handover 与 delivery 两口今天已经共链要不要跟着改、这一类要不要门禁——见
+  [partition-key-space-collision/01](../../partition-key-space-collision/issues/01-tf-object-partitions-collide-with-ve-parcel-partitions.md)，
+  实测证据已带过去。它是票 03 末尾那句盲区的另一半：那里说的是键拼得太细，这里是拼得太粗。
+
+  **门禁例外清单四行已清**：关闭行与揽收登记行随各自修复删除（ID 与分区键不再同源），建立行与
+  申报行由「待裁」改写为「无先后」并引 ADR-0069。`allowedSameExpression` 中已无「待裁」条目。
+
+  **新开票**：CC 申报单元 → 案件关联在域模型里缺席，见
+  [customs-declaration-case-link/01](../../customs-declaration-case-link/issues/01-declaration-unit-has-no-case-association.md)。
+
+  票面「一条门禁守不住、清单也不收的」那一段继续成立：清单清空 ≠ 这一类缺陷清完。

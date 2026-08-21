@@ -130,15 +130,13 @@ var annotationPrefixes = []string{
 // 人——分两笔的话，两笔之间的 HEAD 是红的，而这一批有四个人在同一棵树上并行改，那段窗口里
 // 谁验全仓都会红。已经发生过一次：对账单那处修复与删行分了两笔，中间 HEAD 红了一轮。
 var allowedSameExpression = map[string]string{
-	// 关务案件链是四个 handoff 各出一封（建立 → 申报提交 → 核对 → 关闭），而分区由键值定、
-	// 不由 handoff 定：四口不改成同一个键公式就落不进同一分区，各自改成业务键也白改。这一句
-	// 本上下文当前无主，三行因此待裁。verification 与 gate 另有各自独立成立的真风险，不等这一裁。
-	"internal/customscompliance/adapters/postgres/case_closure_handoff.go": annotationPendingRuling +
-		"案件链是否需保序；且 CloseCustomsCaseHandler.Handle 写明「重开走 Reopen」，重开后再关会撞同一 ID",
-	"internal/customscompliance/adapters/postgres/customs_case_handoff.go": annotationPendingRuling +
-		"案件链是否需保序——本口是链首，它取什么键公式决定了另外三口得跟着取什么",
-	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationPendingRuling +
-		"案件链是否需保序；ID 缺版本维一事已另有票（.scratch/declaration-envelope-version-dedup/issues/01），今天无触发路径",
+	// 关务案件链四口（建立 → 申报提交 → 核对 → 关闭）已由 ADR-0069 裁定：不建立跨口同分区
+	// 保序，乱序由指针载荷、按键重读与「不可见即可重试」消化。下面两行因此从「待裁」改为
+	// 「无先后」；关闭口那行随分区键收窄一并删除（ID 与分区键不再同源）。
+	"internal/customscompliance/adapters/postgres/customs_case_handoff.go": annotationNoOrdering +
+		"案件链不建立跨口保序（ADR-0069）；本口 eventID 维持五维范围键，职责是建案幂等——「同一法律行为一案」",
+	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationNoOrdering +
+		"案件链不建立跨口保序（ADR-0069）；ID 缺版本维一事已另有票（.scratch/declaration-envelope-version-dedup/issues/01），今天无触发路径",
 	"internal/customscompliance/adapters/postgres/external_result_handoff.go": annotationNoOrdering +
 		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
 
@@ -167,8 +165,6 @@ var allowedSameExpression = map[string]string{
 		"与 disposition_execution 同键、同一拍入队，两口靠类型段错开；幂等口径同上",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go": annotationNoOrdering +
 		"同一揽收尝试键只出一份——PerformOffsitePickupHandler.Handle 幂等/冲突按内容指纹分界",
-	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go": annotationPendingRuling +
-		"同一载运对象能否出现第二次成功的对象级揽收登记——能则两次是同一条控制链的先后拍，而交接登记那口已按「一个对象一条链」把主体取到对象",
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go": annotationNoOrdering +
 		"同一协作事项只承接一次——AcceptRegulatoryDispositionHandler.Handle 对同键异内容判冒名冲突，不顶替",
 	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go": annotationNoOrdering +
