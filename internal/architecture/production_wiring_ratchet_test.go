@@ -26,7 +26,7 @@ import (
 // 有意的，方向与「用前缀圈定范围」相反——**漏一个 `New*` 只多一行噪声让人看见，而漏一个
 // 工厂就永远没人看见**。判一道护栏好不好不看它用什么写，看它漏的时候倒向哪一边。
 //
-// 守不住的三格，如实写在这里：
+// 守不住的几格，如实写在这里（不写数目：这份清单只会变长，而写死的数会在变长那天悄悄变错）：
 //   - 引用按标识符名认，两侧都会误判，方向都是少报——也就是门禁变安静。同包内一个同名局部
 //     变量会被当成引用；包外虽已要求该文件真的导入了这个 domain 包，但那个文件里若另有一个
 //     同名的方法或字段，照样算数。**跨包那一半是本仓真撞过的那一种**（`NewDispositionRequests`
@@ -99,16 +99,13 @@ func countProductionReferences(sources []wiringSource, entry wiringEntry) int {
 		ast.Inspect(source.syntax, func(node ast.Node) bool {
 			switch typed := node.(type) {
 			case *ast.FuncDecl:
-				// 声明自己不算引用；函数体仍要走下去，工厂之间会互相调用。
+				// 走到这一支说明这就是条目自己的声明，整棵子树跳过。
+				//
+				// 初版在这里还去数了一遍函数体，注释写的是「工厂之间会互相调用」——**那个理由
+				// 对别的函数成立，对它自己不成立**：本条目的名字出现在本条目体内只可能是递归
+				// 自调，而递归自调不是生产接线。工厂互调发生在别的 FuncDecl 里，外层 Inspect
+				// 本来就会走到。多数出来的那一次会让条目掉出名单，方向照旧是门禁变安静。
 				if samePackage && typed.Recv == nil && typed.Name != nil && typed.Name.Name == entry.name {
-					if typed.Body != nil {
-						ast.Inspect(typed.Body, func(inner ast.Node) bool {
-							if ident, ok := inner.(*ast.Ident); ok && ident.Name == entry.name {
-								count++
-							}
-							return true
-						})
-					}
 					return false
 				}
 			case *ast.SelectorExpr:
@@ -399,6 +396,16 @@ func TestTheProductionWiringRatchetCanActuallyCatchAViolation(t *testing.T) {
 	}
 	if got := countProductionReferences([]wiringSource{declaration, testOnly}, entry); got != 0 {
 		t.Fatalf("只被测试引用时引用数 = %d，want 0——那正是本门禁要抓的形状", got)
+	}
+
+	// 递归自调不是生产接线。初版在同包分支里数了函数体，而那里只可能数到这一种，多数出来的
+	// 一次会让条目掉出名单——同样是门禁变安静那一侧。
+	recursive := wiringSource{
+		pkgDir: "internal/x/domain",
+		syntax: parse(t, "package domain\n\nfunc FormThing() error { return FormThing() }\n"),
+	}
+	if got := countProductionReferences([]wiringSource{recursive}, entry); got != 0 {
+		t.Fatalf("递归自调算成了 %d 次引用，want 0", got)
 	}
 
 	// 键必须是包加名：两个不同包的同名函数不能互相抵消。

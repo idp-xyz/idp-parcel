@@ -9,6 +9,10 @@
 # 初版这 33 条实测于 2026-08-21，两套独立方法各数一遍同得 33 且名单逐条相同：一套是 git 侧
 # 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。
 #
+# 下面那些理由行的取证强度不齐，先说清免得被当统一口径引用：**逐条读过签名与调用点的是
+# parcel-pricing 与 party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost
+# 两条**；其余按组写，组内共性（返回带校验的领域对象、包外零引用）核过，个体差异没有逐个看。
+#
 # 一件初版就该说清的事：这 33 条里 25 个**连 domain 包都没出过**——不只是没有生产调用点，
 # 而是没有应用层用例、没有适配器、没有端口，包外零引用。按本仓机制先行实例后到的顺序，切片
 # 还没开工的能力本来就该是这样。**所以这份名单不是一张缺陷清单，是一条基准线**；它里面有多
@@ -65,8 +69,7 @@ internal/partycommercial/domain PublishChannelAccountUseAuthorization
 internal/partycommercial/domain ResolveCreditPolicy
 # 下面两条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词，
 # ValidateBeforeDecision 返回同型 Resolution 是变换不是构造。**留着不排除是有意的**——
-# 排除要靠一条规则，而任何按形状写的规则都会漏掉下一个不长这样的工厂；留在名单里的代价
-# 只是两行，漏掉一个工厂的代价是它永远隐形。
+# 留在名单里的代价只是两行，漏掉一个工厂的代价是它永远隐形。两边代价不对称，够了。
 internal/partycommercial/domain ManualReviewRequirementFor
 internal/partycommercial/domain ValidateBeforeDecision
 
