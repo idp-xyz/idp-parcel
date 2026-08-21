@@ -92,6 +92,17 @@ AGENTS.md「当前默认切片」里仍在阻断的一项，这份重估可能�
     **未加 `--force`**，退出码 0。
   - **分支指针 `ps-intake-qual-evidence` 故意保留**，与本票对 `b72d96e` 等的既有口径一致：
     删一个不解决那一整类的判定成本，记明反而让下一个人省一次论证。
-  - 同轮另拆两棵（同样先查后拆、未加 `--force`、均零行）：`idp-parcel-t110b`（票 10-B 交付树，
-    内容已入 main）与 `idp-parcel-mcp4-baseline`（detached `0ec62ea`，已是 `origin/main` 祖先，
-    零独有内容）。现已无任何 MCP-4 名下的 worktree。
+- 2026-08-21 MCP-4：同轮另核销两棵，连同上一条共三棵，**现已无任何 MCP-4 名下的 worktree**。
+  三棵拆前均查过工作区（`git status --short` 与 `--untracked-files=all` 双双零行）、
+  `git worktree remove` 均**未加 `--force`**。
+  - **`t1-10b-intake-qual-wire`**（树 `idp-parcel-t110b`，HEAD `381c344`）：票 10-B 交付。
+    内容已落在 `d5e5d20` 上的两笔——`eafb2b1`（接线本体，原 `fe64bb4`）与 `0280d51`
+    （终局装配点注释，原 `381c344`）。**分支指针故意保留**，理由同上一条。
+  - **`idp-parcel-mcp4-baseline`**（detached `0ec62ea`，无分支指针）：早前 T1-02 的基线树。
+    `0ec62ea` 已是 `origin/main` 祖先，零独有内容。
+  - **拆树前比内容、不只看 SHA 在不在日志里**，MCP-1 已定为本仓标准动作：拆前
+    `git diff <已验过的 tip> origin/main -- <本票所有文件>` 必须为空。理由是 cherry-pick
+    可能掉 hunk 而日志照样好看，而这个失效模式恰好发生在「拆掉唯一副本」的前一秒。
+    本轮三棵均按此比过。
+  - **一次性清这一整类分支指针是另一件事**，要做就整类一起做、单独开票；逐个删只会让
+    下一个清点的人对剩下的重新论证一遍。
