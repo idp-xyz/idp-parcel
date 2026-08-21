@@ -18,7 +18,9 @@ Status: in-progress
 
 party_commercial 迁移 0002–0014 的表与只读装载口全部就位,`resolve_commercial_basis` 解析用例真实可用;但**发布侧没有用例**:
 
-- 六张声明表零 INSERT(非测试代码):`as_of_policy_declaration`、`acceptance_content_declaration`、`pre_acceptance_control_declaration`、`customer_contract_content`、`stage_content_declaration`、`acceptance_rule_package`。
+- 六族声明表零 INSERT(非测试代码):`as_of_policy_declaration`、接受内容族、`pre_acceptance_control_declaration`、`customer_contract_content`、阶段内容族、`acceptance_rule_package`。
+
+  > **2026-08-21 更正**：原文把两族写成了 `acceptance_content_declaration` 与 `stage_content_declaration` 两个表名，`migrations/party_commercial` 里**查无此表**——那是审计当时的族名简写。现行 schema 里接受内容族是 `acceptance_rule_content` / `acceptance_rule_check_group` / `pending_routing_permission`，阶段内容族是 `intake_qualification_content` / `intake_allowed_source` / `intake_qualification_ref` / `final_rule_content` / `final_rule_declaration` / `cancellation_authority_content` / `cancellation_authority_declaration`。判据背后的性质不变，核的时候按真表名核。
 - `commercial_version` / `commercial_resolution` / `authorization_grant` / `service_product_form` / `price_policy` / `settlement_policy` 有仓储级写入方,但无发布用例、无进程入口。
 - 当前唯一填充路径是测试内隔离种子(`cmd/parcel-dispatch/syn_pc_seed_test.go`,SYN-RES-01,S 级)。
 
@@ -88,4 +90,8 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
   - 件 3（进程级登记口）：`cmd/parcel-commercial`，两个子命令 `publish` 与 `register-resolution-key`。
   - 票面另六个对象（`commercial_version` / `commercial_resolution` / `authorization_grant` / `service_product_form` / price_policy / settlement_policy）原本就有仓储级写入方、缺的是发布用例与进程入口，两者现由 `publish_commercial_authority.go` 与上述 CLI 补齐。
 
-  **七、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突。分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**：三件都有实现且判据可核，但第四条那半格（对真库跑 `runPublish` 的事务边界用例）尚缺，票面表名更正也还没回写到票面正文——两件了结后再转 resolved 并推已验 SHA。
+  **七、`runPublish` 真库用例已补（`TestPublishBatchKeepsEarlierItemWhenALaterItemConflicts`），但只补到该补的地方，边界照实交代。** 端到端跑进程口：先发一份 `rules-conflict`，再发一批两项（全新 `rules-fresh` 在前、同对象异正文在后），断言退出码是 `exitAttention`、两个对象各恰一行版本。这条不可能空过——后一项撞得出 `CONTENT_CONFLICT`，前提就是前一次的行**真的已提交**到库里。它同时是件 3 进程口的首份真库证据。
+
+  **它仍守不住事务边界，这一格确认无守门人。** 原以为它能钉住「逐项各起事务」，实测推翻：**冲突不是错误**——把 `runPublish` 的循环整个包进一个事务，第二项照样判冲突、事务照样提交，该用例依旧绿。真要钉住那个结构，得让后一项以技术失败收场再看前一项还在不在，而技术失败今天只来自基础设施故障，从批文里造不出来。注释里已写明，不留一条名不副实的守门人。
+
+  **八、当前状态。** 票面正文那两个不存在的表名已就地更正（加更正框，不改写原句）。分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突；分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。三件均有实现、判据均可核、吸收扫描已毕并已吸收。**可转 resolved 并推已验 SHA，等一句放行。**
