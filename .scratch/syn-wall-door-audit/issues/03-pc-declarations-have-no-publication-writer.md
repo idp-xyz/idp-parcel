@@ -53,3 +53,11 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
   实例登记面仍缺（件 2 原样）。建议：ready-for-agent，票面第 1 件改写为「发布**用例**
   （经 PublicationRegistry 写版本册 + 各 kind 声明表）」，仓储半边引 26864d9 勿双做。
 - 2026-08-20 MCP-1：采纳重核，Status → ready-for-agent。派 MCP-3 实现；仓储半边勿双做。
+- 2026-08-21 · MCP-4（用户经队列明确授权代裁）：**两现场取舍裁定——以 MCP-3 现场为集成候选（结构裁定）。**
+  取证（均只读）：两现场同基底 `d6453a7`（含 26864d9）；死会话现场已封存为 `db81745`（dead-session-salvage 票 02，提交信息自注「非集成候选」，含一个死在编辑半途的测试文件）；重叠面为真冲突——`domain/as_of_policy.go`、`domain/customer_contract.go`、`domain/service_stage_content.go`、`ports/ports.go` 两边各写一版，互差 79/79 行；MCP-3 版用例全程走 `ports.PublicationRegistry`（≥10 处引用），死会话版用例仅 1 处提及且另建六个独立写 adapter（写于「勿双做」收窄之前）；覆盖面上 MCP-3 版三件全有雏形（发布用例＋解析键实例登记面含迁移 0007＋`cmd/parcel-commercial`），死会话版仅第 1 件约七成＋第 2 件雏形。
+  裁定四条：
+  1. `wt-mcp3-pc-publication` 现场为集成候选，按本票面继续；domain/ports 的形状归它。
+  2. `mcp1-pc-publication`（`db81745`）维持封存，降为参照采石场——不整体合并、不 cherry-pick。
+  3. 收口前 MCP-3 须对照封存件做一次吸收扫描（六写口的判定＋`publish_commercial.go` 318 行＋275 行测试断言），B 版漏的按需以自己的写法吸收，扫描结果记回本票（无可吸收也记一句）。
+  4. 封存分支去留不在本裁定内，随 dead-session-salvage 票 02 在关票时处置。
+  能力边界：本裁定基于两现场文件清单与 diffstat、端口用法 grep、票面重核记录与封存提交自注，未逐行读两版用例的不变式与测试断言——因此只裁结构（谁当集成基座），不裁具体不变式；后者随实现归 MCP-3。
