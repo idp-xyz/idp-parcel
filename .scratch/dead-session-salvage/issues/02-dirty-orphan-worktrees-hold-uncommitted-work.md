@@ -106,3 +106,23 @@ AGENTS.md「当前默认切片」里仍在阻断的一项，这份重估可能�
     本轮三棵均按此比过。
   - **一次性清这一整类分支指针是另一件事**，要做就整类一起做、单独开票；逐个删只会让
     下一个清点的人对剩下的重新论证一遍。
+
+- 2026-08-21 MCP-1：其余会话相继离线后全量重扫一遍所有 worktree，**得四棵工作区不干净**。
+  按上面「先比内容、不只看 SHA」的标准动作逐棵比过，**其中两棵可就此核销**。
+  扫法：逐棵 `git -C <树> status --short --untracked-files=all`，非空者再在该树内跑
+  `git diff --numstat origin/main -- <它列出的那些文件>`（方向为 origin/main → 工作区）。
+  - **`idp-parcel-dispatch-fanout`**（HEAD `d5e6b94`，非 `origin/main` 祖先）：两个已改文件
+    （`internal/platform/dispatch/fanout.go` 及其 `_test.go`）对 `origin/main` 的 numstat
+    **为空**——内容逐字节相同，`M` 只是 CRLF/LF 行尾差异。**零独有内容，可拆。**
+  - **`wt-mcp3-pc-publication`**（HEAD `0ec62ea`，**是** `origin/main` 祖先）：七个已改文件
+    （`cmd/parcel-commercial/` 三个、`partycommercial` 三个、迁移 `0007_commercial_resolution_key.sql`）
+    numstat 同样**为空**，亦为行尾差异。**零独有内容，可拆。**
+  - **`idp-parcel-cons-proj-delivery`**（HEAD `c66c97a`，非祖先）：四个 VE 文件对 `origin/main`
+    有**真实内容差**（numstat 依次 13/18、44/79、50/75、68/273）。**未判，保留。**
+  - **`idp-parcel-cons-proj-delivery-a`**（HEAD `64d8ca3`，非祖先）：**同样那四个文件**，
+    差异较小（8/12、12/17、13/38、16/180）。**未判，保留。**
+  - 后两棵均属上面「其余口径」里那类 `cons-*`：CONS-PROJ-DELIVERY-A 的集成件已在 main
+    （`f388c50`）。两棵的行数都比 main 少，**看着像被取代的旧稿而非续做——但这是推测不是取证**，
+    判它需要读那四份 diff，本轮未读。判之前不拆。
+  - 一条给下次扫的人：**`git status` 对「行尾差异」与「真有改动」给的是同一个 `M`**，
+    两者只能靠内容 diff 分开。本轮四棵里有两棵是前者——若只看 `status` 就会当成四棵都有货。
