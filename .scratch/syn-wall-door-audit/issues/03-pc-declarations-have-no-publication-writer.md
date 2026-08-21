@@ -61,3 +61,21 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
   3. 收口前 MCP-3 须对照封存件做一次吸收扫描（六写口的判定＋`publish_commercial.go` 318 行＋275 行测试断言），B 版漏的按需以自己的写法吸收，扫描结果记回本票（无可吸收也记一句）。
   4. 封存分支去留不在本裁定内，随 dead-session-salvage 票 02 在关票时处置。
   能力边界：本裁定基于两现场文件清单与 diffstat、端口用法 grep、票面重核记录与封存提交自注，未逐行读两版用例的不变式与测试断言——因此只裁结构（谁当集成基座），不裁具体不变式；后者随实现归 MCP-3。
+- 2026-08-21 · MCP-1（接手实现，用户经队列授权「你现在是主控制方」「开工」）：**集成候选已封存、已跑绿、已合入当前 main**，并按上条裁定第 3 条做了吸收扫描。
+
+  **一、现场先抢救。** 裁定作出时 MCP-3 现场还是未提交状态躺在 `D:/tops/wt-mcp3-pc-publication`（14 个路径、4274 行，分支相对 main 0 ahead），一次 `git worktree remove --force` 即全部无声消失。按 dead-session-salvage 票 02 的「先封存再拆」口径原样提交为 `c8abe94`，不做取舍不改一行。
+
+  **二、跑绿暴露三处门禁违规，逐条修（`364606f`）。** 封存提交自注「不验证、不保证可编译」，实测编译得过但门禁三红：
+  1. `commercial_resolution_keys_test.go` 四处在事务回调里调 `t.Fatal`/`t.Fatalf`（`TestNoTransactionClosureCarriesAGoexitAssertion`）——`runtime.Goexit` 让回调永不返回，提交与回滚两条分支都被跳过。闭包改成只做 IO 回 error。
+  2. `commercial_resolution_keys.go` 落在 `adapters/postgres` 却 import `partycommercial/domain`（`TestBusinessModulesDoNotReachIntoEachOther`）。
+  3. 整个文件搬去 `adapters/partycommercial` 之后立刻撞第二条：`pgx` 只许在持久化适配器里碰（`TestBusinessPackagesDoNotTouchTheDriverDirectly`）。
+
+  **2 与 3 互相夹住**：一个既拼 SQL 又造 `ClosureResolutionKey` 的类型在本仓架构下两头违规，立不住。只能拆两半，中间过一个只有基本类型的行——`adapters/postgres/commercial_resolution_key_store.go` 搬运字符串行，`adapters/partycommercial/commercial_resolution_keys.go` 做校验与 `pcdomain` 翻译。
+
+  **三、吸收扫描结果（裁定第 3 条要求记回）。**
+  - **位置：封存件是对的，已吸收。** `db81745` 把解析键登记面放在 `adapters/partycommercial`（137 行、无 SQL、无迁移），本分支放在 `adapters/postgres`（272 行、含 SQL 与迁移 0007）。两份各对一半：封存件位置对、本分支持久化对。上面那一拆同时吸收了封存件的位置判断。
+  - **六写口的形状：不吸收，记差异。** 封存件把 `Save*` 挂在既有读仓储同一个类型上（如 `AcceptanceContentDeclarations` 同时有 `LoadAcceptanceRuleContent` 与 `SaveAcceptanceRuleContent`），六种声明各自读写同处；本分支把六种的写集中在一个 `declaration_publication.go`。集中式的代价是每种声明的读写列映射分居两文件、有漂移余地；但裁定已把结构归本分支，且集中式那份 790 行加 639 行测试已成体系，重排收益不抵风险。**记此备查，不改。**
+  - **测试断言：找到一条真缺口，尚未补。** 封存件的 `TestPublicationBatchKeepsSavedProductWhenContractConflicts` 断言发布批**逐项独立成败**（AT-PC-011）：同批两项，产品落库、合同撞内容冲突，断言 `len(registry.saved)` 仍为 1——「合同冲突把已合法产品从写入面撤走了（全量回滚）」。本分支在 `cmd/parcel-commercial/main.go` 两处与 `publish_commercial_authority.go` 一处引用 AT-PC-011，**但测试里没有任何批内部分落点的断言**（十三个测试逐个看过，最近的是 AT-PC-010 的未决格）。**声称有、没测过**——收口前须以本分支的写法补一条同义断言。
+  - 其余：本分支十三个测试覆盖面显著大于封存件四个（重放/冲突分格、计划态与生效态、未确认角色未决、声明随属主版本发布、错属主种类拒收、合同内容与壳引用一致、登记册读不回即阻断，外加适配器层往返/重放冲突/无事务拒三条），无其他可吸收项。
+
+  **四、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`）为 `8821e28`，合并无冲突。该 SHA 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**——票面三件里件 3（进程级登记口）随 `cmd/parcel-commercial` 已有雏形，件 1/2 待逐条对票面收口，AT-PC-011 那条断言待补，收口前不推。
