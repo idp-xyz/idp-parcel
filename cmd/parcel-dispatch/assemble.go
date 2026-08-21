@@ -28,6 +28,7 @@ import (
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -1365,6 +1366,11 @@ func adoptEffectiveDeliveryConsumer(
 	// 第四个入参是取消请求方的格映射，取消编排才用得到；终局这条路径只走 final 一口。
 	// 第五个入参是硬资格证据口：终局判断不走它，但仍要显式未配置——nil 会在非空清单上
 	// 变成依赖错误。不得为变绿去种 PAR-COM-17 终局声明行。
+	//
+	// 这一处刻意不走 intakeQualificationEvidence 那道实例配置缝：JudgeIntakeEligibility
+	// 在本链上静态不可达（FormParcelFinalDeps.Rules 的类型是 FinalRuleView），给它配上
+	// 权威段与节点执行事实，等于替终局链写下一条它并不需要的依赖，日后读的人会以为终局
+	// 也在判收寄资格。租户出现那天这一格照旧留白。
 	rules := pspartycommercial.NewServiceStageRulesAdapter(
 		declared, declared, declared, nil,
 		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
@@ -1390,6 +1396,61 @@ func adoptEffectiveDeliveryConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery consumer: %w", err)
 	}
 	return consumer, nil
+}
+
+// nodeQualificationAuthority 是「本部署把哪一段收寄硬资格交给 node-operations 作证」的
+// 实例配置：认领的权威段前缀，加上该段下每条引用由哪一件节点执行事实来证。
+//
+// 两个字段同属实例半边——段怎么起名、哪条引用算数，都由租户的资格声明决定，没有租户就
+// 一个也说不出，因此生产装配交进来的是零值。零值读作「本部署没认领任何段」，不是「忘了
+// 填」：后者要有人去补，前者是今天的真话。
+type nodeQualificationAuthority struct {
+	prefix     string
+	qualifying map[string]psnodeops.QualifyingNodeExecution
+}
+
+// intakeQualificationEvidence 按实例配置交回收寄硬资格证据口（ADR-0063）。
+//
+// 未认领时交回诚实未配置口，恒答未证明——这是首发唯一走得到的分支。这里不替它猜一个
+// 前缀：认领哪一段取决于租户声明怎么起名，猜错的表现是真段永远路由不到，而那与「证据
+// 还没到」在判断结果上完全一样，现场分不出该去补配置还是该去等证据。
+//
+// 认领了才建节点口，登记键取 view.AuthorityPrefix() 而不在这里另写一份——两处各写一份
+// 就会有写岔的那一天，写岔同样只表现为恒答未证明。
+//
+// 选这个形状而不是干脆留着 UnconfiguredIntakeQualificationEvidence{}，图的是恢复动作看
+// 得见：两种取值行为完全相同（都恒答未证明），但租户出现那天，要补的东西就在参数表
+// 上——一个前缀与一张表，而不必先读一遍适配器包才认出「原来还有个节点权威口可以接」。
+//
+// 还剩一道机制拦不住的事：prefix 若声明成 node-operations 说不了的那种段（正式关务判断
+// 归 customs-compliance，ADR-0063 决定五），再把该段的引用登进 qualifying，构造期两道
+// 校验都会放行——它们只比两者是否同段，不知道那一段该归谁。那正是 ADR-0063 Consequences
+// 点名的「为了变绿拆出一个假关务身份」，填这个值的人自己守住。
+func intakeQualificationEvidence(
+	db *bentopg.DB,
+	authority nodeQualificationAuthority,
+) (psports.IntakeQualificationEvidenceView, error) {
+	if authority.prefix == "" {
+		// 填了表却没认领段：两个字段要一起才立得住。放过去就是一张永远问不到的表，
+		// 判断结果与真的没配置一模一样，而要人做的事相反。
+		if len(authority.qualifying) > 0 {
+			return nil, fmt.Errorf(
+				"parcel-dispatch: intake qualification registry has %d entries but claims no authority prefix",
+				len(authority.qualifying))
+		}
+		return pspartycommercial.UnconfiguredIntakeQualificationEvidence{}, nil
+	}
+	facts, err := nopostgres.NewExecutionFacts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: node execution facts: %w", err)
+	}
+	view, err := psnodeops.NewNodeExecutionQualificationEvidence(facts, authority.prefix, authority.qualifying)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: node intake qualification evidence: %w", err)
+	}
+	return pspartycommercial.NewKnownPrefixIntakeQualificationEvidence(
+		map[string]psports.IntakeQualificationEvidenceView{view.AuthorityPrefix(): view},
+	), nil
 }
 
 // networkIntakeAdoption 是两条采用消费链共用的编排与委托仓储。
@@ -1454,11 +1515,14 @@ func networkIntakeAdoption(
 	)
 	// 第四个入参是取消请求方的格映射，取消编排才用得到；采用这条路径只走 intake 一口。
 	// 给它一个能答的替身会假装映射已配置，而没有租户时谁也说不出某个引用是客户还是运营。
-	// 第五个入参是硬资格证据口（ADR-0063）：显式未配置答未证明，nil 会在非空清单上变成
-	// 依赖错误，两者都不得默认 ESTABLISHED。
+	// 第五个入参是硬资格证据口（ADR-0063）：交零值即本部署未认领任何权威段，答未证明；
+	// nil 会在非空清单上变成依赖错误，两者都不得默认 ESTABLISHED。
+	evidence, err := intakeQualificationEvidence(db, nodeQualificationAuthority{})
+	if err != nil {
+		return none, err
+	}
 	eligibility := pspartycommercial.NewServiceStageRulesAdapter(
-		declared, declared, declared, nil,
-		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
+		declared, declared, declared, nil, evidence,
 	)
 
 	return networkIntakeAdoptionGraph{

@@ -93,3 +93,27 @@ ADR-0063;PAR-COM-16;`parcelshipment/adapters/partycommercial` 的 `ServiceStageR
     不接节点口、继续显式未配置」，还是「接一个空表节点口」——两者行为等价（都恒答未
     证明），但恢复动作的可读性不同，B 定并在装配注释里说清。
   - 前缀与登记表本身是实例配置，无租户前不得写死默认值。
+
+- 2026-08-21 MCP-4（B 半边：接线完工）：装配点已走证据口这道缝，机制半边到此闭合，
+  实例半边（认领哪一段、哪条引用由哪件事实证）照旧留白。
+  - **（a）/（b）取 (a)，但把恢复动作摆到台面上**。(b) 立不住：构造器拒空前缀，接空表
+    节点口就得先在生产代码里写下一个前缀字面量，撞红线「生产代码里一个前缀字面量都不
+    该有」。所以未认领时仍交 `UnconfiguredIntakeQualificationEvidence{}`；差别在于它现在
+    由 `intakeQualificationEvidence(db, nodeQualificationAuthority{})` 交回，而
+    `nodeQualificationAuthority` 的两个字段就是租户出现那天要填的全部东西——一个前缀与
+    一张表。原方案那句「继续显式未配置」的问题不在行为而在可读性：读的人得先翻一遍
+    适配器包才认得出还有个节点权威口可以接。
+  - **零值读作「本部署没认领任何段」，不是「忘了填」**；两者判断结果相同而要人做的事
+    相反，所以另加一道装配期校验：填了登记表却没认领前缀直接拒绝启动（那是一张永远
+    问不到的表）。
+  - **`adoptEffectiveDeliveryConsumer` 那处刻意不接，与 MCP-5 上一条不同**，理由是类型
+    层的：`FormParcelFinalDeps.Rules` 的类型是 `psports.FinalRuleView`，该接口只有
+    `JudgeFinalOutcome`；`JudgeIntakeEligibility` 属 `IntakeEligibilityView`。终局链静态
+    走不到硬资格那一格，在那里接上权威段等于替它写下一条并不存在的依赖。该处保留显式
+    未配置并在注释里写明为何留白。
+  - **ADR-0063 决定五那道残余仍在**：前缀声明成 customs-compliance 才说得了的段、又把该
+    段引用登进去，构造期两道校验只比两者是否同段，拦不住。注释已点名，由填值的人守。
+  - 装配级用例四条（`cmd/parcel-dispatch/intake_qualification_evidence_wiring_test.go`）：
+    生产零值恒答未证明且不碰库、认领段后答案跟着真库执行事实走（先未证明后已证明）、
+    段外引用不被兑成已证明、半份配置被拒。走真库而非替身——替身换掉 `ExecutionFacts`
+    就绕开了本文件唯一要证的那一段。
