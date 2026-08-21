@@ -30,9 +30,25 @@ Status: ready-for-agent
 | 实例 | 族 | 断在哪一跳 |
 |---|---|---|
 | `NewOutboxTransportHandoverRegistrationHandoff` / `NewOutboxEffectiveDeliveryHandoff` | 交接口 | 无 outbox 装配 |
-| PS←PG 桥读口 | 端口实现 | 读口未实现，`nil` 折成「显式未配置」 |
+| ~~PS←PG 桥读口~~ → `NewProductionOwnershipAdapter` | **三族之外**（ports 适配器） | **已改判，见下** |
 | `SubmitDeclarationHandler` / `EstablishCaseHandler` | 应用层处理器 | 无进程入口 |
 | `FormChargeAdjustment` | 领域工厂 | 连应用层调用方都没有 |
+
+> **第二行已改判（2026-08-21 晚，取证于 `f6ed413`）。** 原写「读口未实现，`nil` 折成显式未配置」
+> ——那一读法在 syn-wall-door-audit 票 02 收口前成立，**现已不成立**：MCP-5 把桥补上了
+> （`57e0b1f` 接上 PS 生产归属桥、`c0ea050` 准入暂停查询改三态），
+> `internal/parcelshipment/adapters/pilotgovernance/production_ownership.go` 里
+> `ProductionOwnershipAdapter` 已实现 `psports.ProductionOwnershipAuthority`。原读法保留标过时。
+>
+> **但它没有离开本票——它换了一类，而且换到了一个更值得注意的位置。** 实测：
+> `NewProductionOwnershipAdapter` 在全仓非测试代码里**唯一一次出现就是它自己的声明**，
+> 且 `cmd/` 下对 `pilotgovernance` **零引用**。所以它现在是一个标准的形状甲实例——**端口已实现、
+> 零生产装配**。
+>
+> **要紧的是它落在三族之外。** 它既不是 `NewOutbox*Handoff`、也不是应用层 `New*Handler`、更不是
+> 领域工厂，而是一个 **ports 适配器构造函数**——本票「边界」一节把这一族列为「再往外扩是后续」。
+> **现在有了一个具体实例证明那一族不是可选的**：一张刚刚收口为 `resolved` 的墙票，产出的东西按
+> 本票现有三族扫不到。**扩不扩这一族，请在实现前先定**；不扩就要在「守不住什么」里点名它。
 
 **只有第一行落在 `NewOutbox*Handoff` 里**——本票初稿的范围会漏掉其余五分之四。判据据此放宽为
 三族，见下节。
