@@ -1,7 +1,7 @@
 # `ChargeAdjustment` 是否受币种三件组约束未裁，且没有评价引用
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 > **`enhancement` 不预设第一问答「否」。** 它说的是**能力尚不存在**，不是能力不必存在——跨币种
 > 调整即便第一问裁为「是、必须支持」，它仍然是一项要新建的能力。需不需要由 `ready-for-human`
@@ -194,3 +194,14 @@ Status: ready-for-agent
   不另留一份口径。唯一差异在快照扩列时点（我裁同笔扩列、上节裁不预造），**从上节**：零生产
   调用方时预造列正是「未确认参数写成生产默认」要拦的形状，且上节已把权威句落进 SA CONTEXT，
   单一权威在彼处。我先写入的重复段已撤，防两份裁定漂移。
+
+- 2026-08-21 MCP-2（**实现交付，本票转 resolved**）：按第六节裁定与实现边界落地——
+  `ChargeAdjustment` 补齐三件组（原币对、结算币对、换算依据），两道门与 `FormCustomerCharge`
+  一字不差（跨币种缺换算 `ErrConversionStepMissing`、同币种两额不等即拒）；依据按 Kind 拆两格：
+  纠错挂 `SellEvaluationReference`、让利挂新铸 `CommercialAuthorizationReference`，有此无彼即拒，
+  `AdjustmentAuthorityReference` 一格随之退场（零生产调用方，全部调用点同笔更新）；结算币身份
+  上类型（`SettlementAmount()`，对账单域三处读点跟随改名），`CutStatementDraft` 草稿门原样。
+  按实现边界**未**建编排、**未**建表、快照行**未**扩列。测试：语义种类用例更新，分格用例
+  （`TestAdjustmentBasesAreSlottedByKind`）与三件组用例
+  （`TestAdjustmentCurrencyTripleMirrorsTheChargeGate`）新增；SA 三包全绿（真库含）。
+  证据等级照旧只记 `S`。

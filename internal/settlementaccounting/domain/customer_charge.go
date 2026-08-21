@@ -249,13 +249,15 @@ func (direction AdjustmentDirection) String() string {
 	}
 }
 
-// AdjustmentAuthorityReference 指名调整的证据或授权（纠错的证据、让利的有效商业
-// 授权）。
-type AdjustmentAuthorityReference struct{ requiredValue }
+// CommercialAuthorizationReference 指名让利所依据的有效商业授权。纠错与让利的依据
+// 分两格而不共用一格：两者语义不同（一个指评价、一个指授权），Kind 之外得有第二个
+// 维分辨那个字符串指的是什么——与 CustomerCharge 把 evaluation 与 confirmation 分开
+// 建同一条理由（票 supplier-expected-cost-correction/05 第三问裁定）。
+type CommercialAuthorizationReference struct{ requiredValue }
 
-func NewAdjustmentAuthorityReference(value string) (AdjustmentAuthorityReference, error) {
-	required, err := newRequiredValue("adjustment authority reference", value)
-	return AdjustmentAuthorityReference{required}, err
+func NewCommercialAuthorizationReference(value string) (CommercialAuthorizationReference, error) {
+	required, err := newRequiredValue("commercial authorization reference", value)
+	return CommercialAuthorizationReference{required}, err
 }
 
 // ChargeAdjustmentID 是调整的标识。
@@ -266,53 +268,91 @@ func NewChargeAdjustmentID(value string) (ChargeAdjustmentID, error) {
 	return ChargeAdjustmentID{required}, err
 }
 
-// ChargeAdjustmentSpec 是形成一笔费用调整所需的全部输入。
+// ChargeAdjustmentSpec 是形成一笔费用调整所需的全部输入。原币金额、结算币金额与
+// 换算依据是同源一组（SA CONTEXT：费用调整同受三件组约束）：计价纠错类整组出自它
+// 引用的那一个新 SELL 评价；商业让利类的金额与币种出自有效商业授权，授权以非结算币
+// 表达让利时换算依据必须随授权内容一并给出——两类都不自行取汇率补算。
 type ChargeAdjustmentSpec struct {
-	ID          ChargeAdjustmentID
-	Charge      CustomerChargeID
-	Kind        AdjustmentKind
-	Direction   AdjustmentDirection
-	Authority   AdjustmentAuthorityReference
-	Currency    CurrencyCode
-	AmountMinor int64
-	FormedAt    time.Time
+	ID                 ChargeAdjustmentID
+	Charge             CustomerChargeID
+	Kind               AdjustmentKind
+	Direction          AdjustmentDirection
+	Evaluation         SellEvaluationReference
+	Authorization      CommercialAuthorizationReference
+	OriginalCurrency   CurrencyCode
+	OriginalMinor      int64
+	SettlementCurrency CurrencyCode
+	SettlementMinor    int64
+	Conversion         ConversionStepReference
+	FormedAt           time.Time
 }
 
 // ChargeAdjustment 是对既有普通客户费用的追加调整：原费用不改写、已发布对账单不
-// 改写——调整是新对象带方向，纳入后续账期由 UC-SA-003 处理（AT-SA-055）。
+// 改写——调整是新对象带方向，纳入后续账期由 UC-SA-003 处理（AT-SA-055）。金额与
+// 费用本体同构地带三件组：同一条链上费用能表达的跨币种，它的调整必须也能表达，
+// 否则纠错这一步自己破坏审计链（票 supplier-expected-cost-correction/05 第一问裁定）。
 type ChargeAdjustment struct {
-	id          ChargeAdjustmentID
-	charge      CustomerChargeID
-	kind        AdjustmentKind
-	direction   AdjustmentDirection
-	authority   AdjustmentAuthorityReference
-	currency    CurrencyCode
-	amountMinor int64
-	formedAt    time.Time
+	id                 ChargeAdjustmentID
+	charge             CustomerChargeID
+	kind               AdjustmentKind
+	direction          AdjustmentDirection
+	evaluation         SellEvaluationReference
+	authorization      CommercialAuthorizationReference
+	originalCurrency   CurrencyCode
+	originalMinor      int64
+	settlementCurrency CurrencyCode
+	settlementMinor    int64
+	conversion         ConversionStepReference
+	formedAt           time.Time
 }
 
-// FormChargeAdjustment 形成一笔调整。种类封闭二值、证据/授权必备、方向必备——
-// 「人工提交『冲销』但未说明语义」在种类这一格就被拒（AT-SA-056）。
+// FormChargeAdjustment 形成一笔调整。种类封闭二值、方向必备——「人工提交『冲销』
+// 但未说明语义」在种类这一格就被拒（AT-SA-056）。依据按种类各占一格且有此无彼：
+// 纠错必挂新评价、让利必挂商业授权，填错格与两格齐填同样拒收。跨币种必备换算依据、
+// 同币种两额必须相等，两道门与 FormCustomerCharge 一字不差。
 func FormChargeAdjustment(spec ChargeAdjustmentSpec) (ChargeAdjustment, error) {
 	if !spec.ID.valid() ||
 		!spec.Charge.valid() ||
 		!spec.Kind.valid() ||
 		!spec.Direction.valid() ||
-		!spec.Authority.valid() ||
-		!spec.Currency.valid() ||
-		spec.AmountMinor <= 0 ||
+		!spec.OriginalCurrency.valid() ||
+		spec.OriginalMinor <= 0 ||
+		!spec.SettlementCurrency.valid() ||
+		spec.SettlementMinor <= 0 ||
 		spec.FormedAt.IsZero() {
 		return ChargeAdjustment{}, ErrInvalidAdjustment
 	}
+	switch spec.Kind {
+	case PricingCorrection:
+		if !spec.Evaluation.valid() || spec.Authorization.valid() {
+			return ChargeAdjustment{}, ErrInvalidAdjustment
+		}
+	case CommercialConcession:
+		if !spec.Authorization.valid() || spec.Evaluation.valid() {
+			return ChargeAdjustment{}, ErrInvalidAdjustment
+		}
+	}
+	if spec.OriginalCurrency != spec.SettlementCurrency && !spec.Conversion.valid() {
+		return ChargeAdjustment{}, ErrConversionStepMissing
+	}
+	if spec.OriginalCurrency == spec.SettlementCurrency &&
+		spec.OriginalMinor != spec.SettlementMinor {
+		// 同币种两个金额不一致：没有换算却造出了第二个数。
+		return ChargeAdjustment{}, ErrInvalidAdjustment
+	}
 	return ChargeAdjustment{
-		id:          spec.ID,
-		charge:      spec.Charge,
-		kind:        spec.Kind,
-		direction:   spec.Direction,
-		authority:   spec.Authority,
-		currency:    spec.Currency,
-		amountMinor: spec.AmountMinor,
-		formedAt:    spec.FormedAt.UTC(),
+		id:                 spec.ID,
+		charge:             spec.Charge,
+		kind:               spec.Kind,
+		direction:          spec.Direction,
+		evaluation:         spec.Evaluation,
+		authorization:      spec.Authorization,
+		originalCurrency:   spec.OriginalCurrency,
+		originalMinor:      spec.OriginalMinor,
+		settlementCurrency: spec.SettlementCurrency,
+		settlementMinor:    spec.SettlementMinor,
+		conversion:         spec.Conversion,
+		formedAt:           spec.FormedAt.UTC(),
 	}, nil
 }
 
@@ -332,10 +372,28 @@ func (adjustment ChargeAdjustment) Direction() AdjustmentDirection {
 	return adjustment.direction
 }
 
-func (adjustment ChargeAdjustment) Authority() AdjustmentAuthorityReference {
-	return adjustment.authority
+// Evaluation 只在计价纠错类上给出：三件组从这一个评价采用。
+func (adjustment ChargeAdjustment) Evaluation() (SellEvaluationReference, bool) {
+	return adjustment.evaluation, adjustment.kind == PricingCorrection
 }
 
-func (adjustment ChargeAdjustment) Amount() (CurrencyCode, int64) {
-	return adjustment.currency, adjustment.amountMinor
+// Authorization 只在商业让利类上给出。
+func (adjustment ChargeAdjustment) Authorization() (CommercialAuthorizationReference, bool) {
+	return adjustment.authorization, adjustment.kind == CommercialConcession
+}
+
+func (adjustment ChargeAdjustment) OriginalAmount() (CurrencyCode, int64) {
+	return adjustment.originalCurrency, adjustment.originalMinor
+}
+
+// SettlementAmount 是合同结算币的一对：对账单立单币核对与快照行用的是它。这个身份
+// 原先只活在 CutStatementDraft 的比对里，现在类型自己说得出（票 05 第四问裁定）。
+func (adjustment ChargeAdjustment) SettlementAmount() (CurrencyCode, int64) {
+	return adjustment.settlementCurrency, adjustment.settlementMinor
+}
+
+// Conversion 只在跨币种时给出：纠错的换算在评价内完成、让利的随授权内容给出，本
+// 上下文不重算也不改用其他汇率。
+func (adjustment ChargeAdjustment) Conversion() (ConversionStepReference, bool) {
+	return adjustment.conversion, adjustment.conversion.valid()
 }

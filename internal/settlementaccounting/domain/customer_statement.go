@@ -109,7 +109,7 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		if _, covered := chargeIDs[adjustment.Charge()]; !covered {
 			return StatementDraft{}, ErrInvalidStatementDraft
 		}
-		currency, _ := adjustment.Amount()
+		currency, _ := adjustment.SettlementAmount()
 		if currency != spec.Currency {
 			return StatementDraft{}, ErrInvalidStatementDraft
 		}
@@ -157,7 +157,7 @@ func (draft StatementDraft) NetTotalMinor() int64 {
 		total += amount
 	}
 	for _, adjustment := range draft.adjustments {
-		_, amount := adjustment.Amount()
+		_, amount := adjustment.SettlementAmount()
 		if adjustment.Direction() == AdjustmentDebit {
 			total += amount
 		} else {
@@ -246,7 +246,7 @@ func PublishStatement(
 		statement.lines = append(statement.lines, StatementLine{Charge: charge.ID(), AmountMinor: amount})
 	}
 	for _, adjustment := range draft.adjustments {
-		_, amount := adjustment.Amount()
+		_, amount := adjustment.SettlementAmount()
 		statement.adjustments = append(statement.adjustments, StatementAdjustmentLine{
 			Adjustment:  adjustment.ID(),
 			Charge:      adjustment.Charge(),

@@ -63,14 +63,16 @@ func estimatedStatementCharge(t *testing.T, id string) domain.CustomerCharge {
 func creditAdjustment(t *testing.T, id, chargeID string, amountMinor int64) domain.ChargeAdjustment {
 	t.Helper()
 	adjustment, err := domain.FormChargeAdjustment(domain.ChargeAdjustmentSpec{
-		ID:          settlementValue(t, domain.NewChargeAdjustmentID, id),
-		Charge:      settlementValue(t, domain.NewCustomerChargeID, chargeID),
-		Kind:        domain.PricingCorrection,
-		Direction:   domain.AdjustmentCredit,
-		Authority:   settlementValue(t, domain.NewAdjustmentAuthorityReference, "correction-evidence-1"),
-		Currency:    settlementValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: amountMinor,
-		FormedAt:    statementCutOffAt.Add(-24 * time.Hour),
+		ID:                 settlementValue(t, domain.NewChargeAdjustmentID, id),
+		Charge:             settlementValue(t, domain.NewCustomerChargeID, chargeID),
+		Kind:               domain.PricingCorrection,
+		Direction:          domain.AdjustmentCredit,
+		Evaluation:         settlementValue(t, domain.NewSellEvaluationReference, "correction-evaluation-1"),
+		OriginalCurrency:   settlementValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      amountMinor,
+		SettlementCurrency: settlementValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    amountMinor,
+		FormedAt:           statementCutOffAt.Add(-24 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("form adjustment: %v", err)
