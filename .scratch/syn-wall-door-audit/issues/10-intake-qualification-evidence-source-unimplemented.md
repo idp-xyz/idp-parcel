@@ -110,7 +110,13 @@ ADR-0063;PAR-COM-16;`parcelshipment/adapters/partycommercial` 的 `ServiceStageR
     层的：`FormParcelFinalDeps.Rules` 的类型是 `psports.FinalRuleView`，该接口只有
     `JudgeFinalOutcome`；`JudgeIntakeEligibility` 属 `IntakeEligibilityView`。终局链静态
     走不到硬资格那一格，在那里接上权威段等于替它写下一条并不存在的依赖。该处保留显式
-    未配置并在注释里写明为何留白。
+    未配置并在注释里写明为何留白。两道实例墙本就分开登：收寄停在
+    `INTAKE_QUALIFICATION_UNPROVEN`（PAR-COM-16），终局停在 `FINAL_RULE_UNCONFIGURED`
+    （PAR-COM-17），接进来就是拿前者顶后者的停点。
+  - **「反正行为一样」不是留白的理由，这一句是 MCP-1 复核时纠正的**：一样只在
+    `FinalRuleView` 单方法这个静态事实成立时成立。哪天它不成立——接口长出第二个方法，
+    或有人在终局链上把该适配器当 `IntakeEligibilityView` 用——显式未配置答未证明是安全
+    的那一边，真适配器则会默默给出一个没人要的判断。所以这是 fail-safe 的选择而非中性。
   - **ADR-0063 决定五那道残余仍在**：前缀声明成 customs-compliance 才说得了的段、又把该
     段引用登进去，构造期两道校验只比两者是否同段，拦不住。注释已点名，由填值的人守。
   - 装配级用例四条（`cmd/parcel-dispatch/intake_qualification_evidence_wiring_test.go`）：

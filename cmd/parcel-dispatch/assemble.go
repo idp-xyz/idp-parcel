@@ -1367,10 +1367,20 @@ func adoptEffectiveDeliveryConsumer(
 	// 第五个入参是硬资格证据口：终局判断不走它，但仍要显式未配置——nil 会在非空清单上
 	// 变成依赖错误。不得为变绿去种 PAR-COM-17 终局声明行。
 	//
-	// 这一处刻意不走 intakeQualificationEvidence 那道实例配置缝：JudgeIntakeEligibility
-	// 在本链上静态不可达（FormParcelFinalDeps.Rules 的类型是 FinalRuleView），给它配上
-	// 权威段与节点执行事实，等于替终局链写下一条它并不需要的依赖，日后读的人会以为终局
-	// 也在判收寄资格。租户出现那天这一格照旧留白。
+	// 这一格与采用链那一格不一样，且必须不一样，不是漏改。终局链把这个适配器当
+	// FinalRuleView 用，该接口只有 JudgeFinalOutcome；读证据口的是 JudgeIntakeEligibility，
+	// 属 IntakeEligibilityView。终局链在类型上就到不了这一格——所以即使采用链那边已经接上
+	// 真的节点权威口，这里仍然留白。在这里配上权威段与节点执行事实，等于替终局链写下一条
+	// 它并不需要的依赖，读的人会以为终局也在判收寄资格。
+	//
+	// 两道实例墙分开登也是这个道理：收寄停在 INTAKE_QUALIFICATION_UNPROVEN（PAR-COM-16），
+	// 终局停在 FINAL_RULE_UNCONFIGURED（PAR-COM-17）。接进来就是拿前者去顶后者的停点，
+	// 两条链的停点不再各自诚实。
+	//
+	// 「反正行为一样」不构成留白的理由：一样只在 FinalRuleView 单方法这个静态事实成立时
+	// 成立。哪天它不成立——接口长出第二个方法，或有人在本链上把这个适配器当
+	// IntakeEligibilityView 用——显式未配置答未证明是安全的那一边，真适配器会默默给出一个
+	// 没人要的判断。
 	rules := pspartycommercial.NewServiceStageRulesAdapter(
 		declared, declared, declared, nil,
 		pspartycommercial.UnconfiguredIntakeQualificationEvidence{},
