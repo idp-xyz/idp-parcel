@@ -368,6 +368,31 @@ func (outcome SettlementPolicySaveOutcome) String() string {
 	}
 }
 
+// DeclarationSaveOutcome 是一份版本化声明正文在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放（同拥有版本同正文），`内容冲突`是同拥有版本携带不同正文——声明随
+// 发布固定，改声明必须发新版本，绝不覆盖也绝不并写；两者都不是 error，事务保持可用。
+type DeclarationSaveOutcome uint8
+
+const (
+	DeclarationSaveOutcomeInvalid DeclarationSaveOutcome = iota
+	DeclarationSaved
+	DeclarationAlreadyRegistered
+	DeclarationContentConflict
+)
+
+func (outcome DeclarationSaveOutcome) String() string {
+	switch outcome {
+	case DeclarationSaved:
+		return "SAVED"
+	case DeclarationAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case DeclarationContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // CommercialPublicationView 按（租户+范围）取回该范围已发布的整册。
 //
 // 它是 PublicationRegistry 的只读半边。解析与权威视图只要候选集合，不该持有
@@ -426,6 +451,48 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		policy domain.SettlementPolicy,
 	) (SettlementPolicySaveOutcome, error)
+
+	// 以下是六族声明表的具名 Save（syn-wall-door-audit 票 03 的写入半边）。声明正文
+	// 随其拥有版本的发布一并登记，键=拥有版本完整身份；按拥有对象挂、不合并
+	// （ADR-0042/0058 的归属纪律）。它们都不代替 SaveVersion：拥有版本自身仍须按版本
+	// 通道入册。声明的**读**口仍在各自的只读端口上（族 B 点读，不进 ViewRevision），
+	// 消费方不经本口取声明——写与读分开的理由与 CommercialPublicationView 同源（F-2）。
+	SaveAsOfPolicies(
+		ctx context.Context,
+		declaration domain.AsOfDeclaration,
+	) (DeclarationSaveOutcome, error)
+	SaveAcceptanceRuleContent(
+		ctx context.Context,
+		content domain.AcceptanceRuleContent,
+	) (DeclarationSaveOutcome, error)
+	SavePendingRoutingPermission(
+		ctx context.Context,
+		permission domain.PendingRoutingPermission,
+	) (DeclarationSaveOutcome, error)
+	SavePreAcceptanceControl(
+		ctx context.Context,
+		declaration domain.PreAcceptanceControlDeclaration,
+	) (DeclarationSaveOutcome, error)
+	SaveCustomerContractContent(
+		ctx context.Context,
+		contract domain.CustomerContract,
+	) (DeclarationSaveOutcome, error)
+	SaveIntakeQualification(
+		ctx context.Context,
+		content domain.IntakeQualificationContent,
+	) (DeclarationSaveOutcome, error)
+	SaveFinalRule(
+		ctx context.Context,
+		content domain.FinalRuleContent,
+	) (DeclarationSaveOutcome, error)
+	SaveCancellationAuthority(
+		ctx context.Context,
+		content domain.CancellationAuthorityContent,
+	) (DeclarationSaveOutcome, error)
+	SaveAcceptanceRulePackage(
+		ctx context.Context,
+		pack domain.AcceptanceRulePackage,
+	) (DeclarationSaveOutcome, error)
 }
 
 type Clock interface {

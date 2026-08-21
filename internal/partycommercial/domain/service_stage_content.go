@@ -208,6 +208,19 @@ func (content FinalRuleContent) FinalKindFor(outcome DeclaredResponsibilityOutco
 	return kind, declared
 }
 
+// Declarations 按责任结果的稳定顺序交回全部终局声明（副本）。发布写入面按整份声明
+// 登记，需要枚举；逐结果取用仍走 FinalKindFor。
+func (content FinalRuleContent) Declarations() []FinalizationDeclaration {
+	declarations := make([]FinalizationDeclaration, 0, len(content.declarations))
+	for outcome, kind := range content.declarations {
+		declarations = append(declarations, FinalizationDeclaration{Outcome: outcome, FinalKind: kind})
+	}
+	sort.Slice(declarations, func(left, right int) bool {
+		return declarations[left].Outcome < declarations[right].Outcome
+	})
+	return declarations
+}
+
 // DeclaredCancellationParty 是规则可声明的取消请求方封闭二值，对应 CONTEXT
 // 「客户或授权运营角色」。零值不合法。将来若出现第三格，扩本封闭集，不开活口。
 type DeclaredCancellationParty uint8
@@ -283,4 +296,17 @@ func (content CancellationAuthorityContent) Owner() CommercialVersion {
 func (content CancellationAuthorityContent) RuleFor(party DeclaredCancellationParty) (RuleReference, bool) {
 	rule, declared := content.declarations[party]
 	return rule, declared
+}
+
+// Declarations 按请求方的稳定顺序交回整份目录（副本）。发布写入面按整份目录登记，
+// 需要枚举；逐请求方取用仍走 RuleFor。
+func (content CancellationAuthorityContent) Declarations() []CancellationAuthorityDeclaration {
+	declarations := make([]CancellationAuthorityDeclaration, 0, len(content.declarations))
+	for party, rule := range content.declarations {
+		declarations = append(declarations, CancellationAuthorityDeclaration{Party: party, Rule: rule})
+	}
+	sort.Slice(declarations, func(left, right int) bool {
+		return declarations[left].Party < declarations[right].Party
+	})
+	return declarations
 }

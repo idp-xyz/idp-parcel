@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"sort"
 	"time"
 )
 
@@ -127,6 +128,19 @@ func (declaration AsOfDeclaration) RulePackage() CommercialVersion {
 func (declaration AsOfDeclaration) PolicyFor(judgment JudgmentType) (AsOfPolicy, bool) {
 	policy, found := declaration.policies[judgment]
 	return policy, found
+}
+
+// Policies 按判断类型的稳定顺序交回整份声明（副本）。发布写入面按整份声明登记，
+// 需要枚举；逐判断取用仍走 PolicyFor。
+func (declaration AsOfDeclaration) Policies() []AsOfPolicy {
+	policies := make([]AsOfPolicy, 0, len(declaration.policies))
+	for _, policy := range declaration.policies {
+		policies = append(policies, policy)
+	}
+	sort.Slice(policies, func(left, right int) bool {
+		return policies[left].judgment < policies[right].judgment
+	})
+	return policies
 }
 
 // JudgmentAsOf 是一个已形成的时点锚：消费方选定的时点，连同授权这次选择的政策，

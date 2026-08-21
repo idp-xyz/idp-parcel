@@ -1,6 +1,9 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"sort"
+)
 
 var (
 	ErrInvalidCustomerContract            = errors.New("party commercial: invalid customer contract")
@@ -121,6 +124,19 @@ func (contract CustomerContract) AcceptanceRulePackage() CommercialObjectID {
 func (contract CustomerContract) FinancialControlFor(scope ChargeScopeReference) (FinancialControlBinding, bool) {
 	binding, found := contract.bindings[scope]
 	return binding, found
+}
+
+// Bindings 按费用范围的稳定顺序交回全部约定（副本）。范围是开放引用、没有可枚举的
+// 封闭集，发布写入面只能由本访问器交出集合；逐范围取用仍走 FinancialControlFor。
+func (contract CustomerContract) Bindings() []FinancialControlBinding {
+	bindings := make([]FinancialControlBinding, 0, len(contract.bindings))
+	for _, binding := range contract.bindings {
+		bindings = append(bindings, binding)
+	}
+	sort.Slice(bindings, func(left, right int) bool {
+		return bindings[left].scope.String() < bindings[right].scope.String()
+	})
+	return bindings
 }
 
 // ConsistentAcceptanceRulePackage 核版本壳与正文件的规则包引用。壳上没指名时放行
