@@ -15,11 +15,20 @@ Status: ready-for-agent
 
 ## 现状:有装载无写入
 
-七张表(迁移 0009/0010/0011/0012+0014,加 0018 的授权两张)与按租户现绑的只读装载口全部就位:`NewMilestoneMappings`、`NewTriageRules`(同在 `rule_catalog.go`)、`NewNotificationPolicies`、`NewClaimEligibilityRules`、`NewDisclosurePolicies`。写入方零,登记口零。里程碑映射的键结构问题已按 2026-08-19 裁定改到类型维(迁移 0014,`.scratch/ve-milestone-mapping-key` 01 票),MAP-KIND 已完于 1709872——目录填得满了,但仍没有填的口。
+五张表(迁移 0009/0010/0011/0012+0014)与按租户现绑的只读装载口全部就位:`NewMilestoneMappings`、`NewTriageRules`(同在 `rule_catalog.go`)、`NewNotificationPolicies`、`NewClaimEligibilityRules`、`NewDisclosurePolicies`。写入方零,登记口零。里程碑映射的键结构问题已按 2026-08-19 裁定改到类型维(迁移 0014,`.scratch/ve-milestone-mapping-key` 01 票,MAP-KIND in-progress)——目录填得满了,但仍没有填的口。
+
+> **上段两句已过时**(2026-08-21 对 `9e5c5c0` 取证,MCP-3)。原文保留,好让后人看得出审计当时据什么写的;新读法:
+>
+> - 「五张表」现为**七张**——0018 为 PAR-VIS-08 的授权角新增 `claim_authorization_catalogue` 与 `claim_authorized_applicant` 两表,同样接进 `claim_eligibility.go` 的装载口。
+> - 「MAP-KIND in-progress」现为**已完**——迁移 `0014_mapping_keyed_on_fact_kind.sql` 与 `rule_catalog.go` 同笔入 main(`1709872`,2026-08-19)。
+>
+> 「写入方零,登记口零」那半句在 `9e5c5c0` 上**仍然成立**,不受这两处更正影响。
 
 ## 缺的最小机制件
 
-VE 目录登记口:版本化登记用例 + 写入方,覆盖五类目录(现七张表——PAR-VIS-08 跨索赔资格与申请人授权两组表,故登记方法六个),各按其参数登记册行的版本/适用范围/发布批准责任建模(映射 PAR-VIS-01、分诊 PAR-VIS-05、通知 PAR-VIS-07、索赔资格 PAR-VIS-08、披露 PAR-VIS-09);进程级入口。
+VE 目录登记口:版本化登记用例 + 写入方,覆盖五类目录,各按其参数登记册行的版本/适用范围/发布批准责任建模(映射 PAR-VIS-01、分诊 PAR-VIS-05、通知 PAR-VIS-07、索赔资格 PAR-VIS-08、披露 PAR-VIS-09);进程级入口。
+
+> **「覆盖五类目录」的落法已细化**(2026-08-21,MCP-3),原句保留:五类仍是五类,但落到表是七张——PAR-VIS-08 跨索赔资格与申请人授权两组表,故**登记方法六个而非五个**。
 
 ## 红线
 
@@ -48,8 +57,9 @@ PAR-VIS-01/05/07/08/09;`.scratch/ve-milestone-mapping-key/issues/01`(键结构,�
   `NewTriageRules`、`NewNotificationPolicies`、`NewClaimEligibilityRules`、
   `NewDisclosurePolicies`）；② 七张目录表的 `INSERT` 全部只出现在 `_test.go`，非测试
   写入为零；③ `application/` 无登记用例；④ 进程级登记口为零。
-  两处票面事实已按取证更正：MAP-KIND 完于 `1709872`（同笔含迁移 0014 与
-  `rule_catalog.go`），「in-progress」句作废；目录面积由五张改记七张，并注明
-  PAR-VIS-08 跨两组表故登记方法六个。
+  两处票面事实已按取证**标过时并给新读法，原句一律保留**（MCP-1 2026-08-21 定的规矩：
+  后人要看得出审计当时据什么写的）：MAP-KIND 完于 `1709872`（同笔含迁移
+  `0014_mapping_keyed_on_fact_kind.sql` 与 `rule_catalog.go`）；目录面积五张之外另有
+  0018 的授权两张，共七张，PAR-VIS-08 跨两组表故登记方法六个。
   本票按 A/B 拆分推进：**A 半边**（登记用例 + 写入方 + 迁移）在此票交付；装配接线
   （`tenantBoundCustomerViewDerive` 所在的 `assemble.go`）属 B 票，本轮不动。
