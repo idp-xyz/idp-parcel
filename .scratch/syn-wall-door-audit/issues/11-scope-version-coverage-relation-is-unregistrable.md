@@ -1,7 +1,7 @@
 # 范围版本之间的覆盖关系无处登记，准入查询因此恒走保守暂停
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源：票 02 交付过程中由 MCP-1 裁定分出（见
 `.scratch/syn-wall-door-audit/issues/02-production-ownership-authority-has-no-adapter.md`
@@ -73,3 +73,39 @@ Status: ready-for-agent
   解除暂停仍只走 `RecordResumption` 四件齐备，任何实现不得让关系登记变成静默恢复的旁路。
   主责上下文 pilot-governance；写口随治理登记册（阶段评审记录）走，读口给
   `FindUnresumedSuspension` 消费。
+
+- 2026-08-21 MCP-6（受 MCP-2 派工执行，票 12 收口后顺延，同树另起一笔，票转 resolved）：
+  按 MCP-3 三问裁定落地。
+  - 库面：新表 `pilot_governance.scope_version_relation`（0005 迁移）——范围版本引用对
+    （主键，有序）、边种类 CHECK 封闭二值、所属决定引用外键指回 `stage_review`（无
+    Go/No-Go 决定就无关系登记，结构性成立）、登记时点；不含任何实例值（ADR-0068 结构
+    先行，形状由第 3 问语义背书）。迁移不种默认行——没有租户就没有这份登记，红线第一
+    条原样成立。
+  - 域：`ScopeVersionRelation`（承继有向 / 互不相干对称，自指边拒绝）+
+    `CompareScopeVersionRelations` 三格相容性判定（冗余/相悖/独立——互不相干与任一方向
+    的承继相悖）；准入格新增 `AdmissionSuspendedByInheritedScope`，`Blocks()` 语义不变，
+    PS 桥只问 Blocks() 不辨格，消费方零改动。
+  - 写口：`RecordStageReviewCommand.Coverage` 随决定一并登记（后继一律取评审范围、决定
+    引用取目标+候选组、时点取决定时点），不设独立登记路。相悖预检先于任何落库
+    （`CoverageConflictBlocked` 带全部相悖对）；命令内自相矛盾未受理；边登记失败不翻
+    决定、留 `CoverageContinuation` 续办引用，重放补登；「同一事实已在册」跳过不重登。
+  - 读口：`FindUnresumedSuspension` 连关系表——登了承继按承继格拦（命中仍优先）、登了
+    互不相干（任一方向，对称）那条暂停不及于所问版本、什么关系都没登第三态保守照旧。
+    红线第三条落实：互不相干只隔开别的版本，暂停对写明的范围照旧拦着（真库用例点名证）；
+    第二条落实：谱系零推断，SQL 只按登记行连接。
+  - 参数登记册未动：无租户即无实例登记项，脱敏索引与证据指针待真实 Go/No-Go 时按 AGENTS
+    「改试点实例状态」入册。
+  - 验证：隔离树 gofmt 清、build/vet 0；治理侧含 PG 全绿（真库证承继/互不相干/保守/命中
+    优先/逐条语义、FK 与 CHECK、无事务拒）；全仓 `go test -p 1 -count=1 ./...` 含 PG 结果
+    与已验 SHA 见通道广播。
+
+- 2026-08-24 MCP-3（死现场抢救合入，受用户裁定执行）：上条评论所属提交（`03a17f6`）
+  从未落 main——它躺在 `t12-governance-register` 孤儿分支上（工作树 mtime 停在
+  2026-08-21 23:47，其后未再响应），其下垫着该分支自己的票 12 实现（`4b5432a`），后者
+  已被 main 上另一份票 12 实现（`6c5940c`，通道身份留痕表名与迁移 0004 均不同）顶替，
+  不在抢救范围。本笔按票 13 先例「逐行复核＋验证由本笔完成」办：单摘 `03a17f6` 到
+  main（cherry-pick 干净落地，`ports.go` 自动合并经人工复核；0005 序号在 main 上恰空）；
+  逐行复核对照本票面 8-21 裁决三问与红线三条，逐格成立——读口三格定序命中>承继>保守、
+  互不相干仅隔开所问版本而暂停本体照拦、写口后继强制取评审自身范围版本、相悖预检先于
+  落库、消费方（PS 生产归属桥）只问 `Blocks()` 实测零改动。上条「见通道广播」的验证
+  断言随死会话作废，不予采信；验证由本笔在隔离树重做，结果记于本笔提交信。

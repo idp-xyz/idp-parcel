@@ -111,14 +111,16 @@ func (suspension SuspensionDecision) EffectiveAt() time.Time {
 
 // AdmissionSuspensionGround 说明「某个范围版本此刻还拦不拦新准入」这一答复凭什么成立。
 //
-// 三格而不是布尔，因为「拦」有两种来源，而两者的运维动作不同：命中那格该去走恢复决定，
-// 保守那格该去把范围版本之间的覆盖关系登进登记册。折成同一格就把这个差别丢了，跟把
-// 依赖故障读成「没暂停」是同一类错。
+// 分格而不是布尔，因为「拦」有三种来源，而各自的运维动作不同：命中那格该去走恢复
+// 决定，承继那格该去解除前代那条暂停，保守那格该去把范围版本之间的覆盖关系登进
+// 登记册。折成同一格就把这个差别丢了，跟把依赖故障读成「没暂停」是同一类错。
 type AdmissionSuspensionGround uint8
 
 const (
 	AdmissionSuspensionGroundInvalid AdmissionSuspensionGround = iota
-	// AdmissionNotSuspended：该时点没有任何已生效且尚未被恢复的暂停。
+	// AdmissionNotSuspended：该时点没有任何已生效且尚未被恢复的暂停拦住所问那一版
+	// ——包括「立着的暂停全部经登记册确认与所问那一版互不相干」的情形：那不是静默
+	// 恢复，前代的暂停对前代照旧拦着，只是被登记的事实把它与所问版本隔开了。
 	AdmissionNotSuspended
 	// AdmissionSuspendedByNamedScope：有一条已生效未恢复的暂停，且它写明的范围版本
 	// 正是所问那一版。
@@ -131,6 +133,10 @@ const (
 	// 动作：「如果共享依赖、共同原因或证据不足导致影响范围无法可靠隔离，必须保守暂停
 	// 整个试点的新准入，不能仅拒绝当前报错的单个委托后继续放量。」
 	AdmissionSuspendedByUnreadableScopeRelation
+	// AdmissionSuspendedByInheritedScope：有一条已生效未恢复的暂停，它写明的不是所问
+	// 那一版，但登记册登有「所问版本承继该版本的暂停」的覆盖关系边（ScopeVersionRelation，
+	// 随范围版本升版那次 Go/No-Go 决定登记）。
+	AdmissionSuspendedByInheritedScope
 )
 
 // Blocks 说这一格要不要拦住新准入。只有 AdmissionNotSuspended 放行，判断不出来的一律
@@ -147,6 +153,8 @@ func (ground AdmissionSuspensionGround) String() string {
 		return "SUSPENDED_BY_NAMED_SCOPE"
 	case AdmissionSuspendedByUnreadableScopeRelation:
 		return "SUSPENDED_BY_UNREADABLE_SCOPE_RELATION"
+	case AdmissionSuspendedByInheritedScope:
+		return "SUSPENDED_BY_INHERITED_SCOPE"
 	default:
 		return ""
 	}

@@ -56,6 +56,14 @@ const (
 	GovernanceAlreadyRecorded
 )
 
+// ScopeVersionRelationStore 保存范围版本覆盖关系边（不可覆盖：同一有序对至多一条边，
+// 第二份由主键拦住译成已有记录）。读侧不在此：准入查询在暂停库的 SQL 里连关系表，
+// 端口面不另开按对查询的读路。
+type ScopeVersionRelationStore interface {
+	FindByPair(ctx context.Context, successor, predecessor domain.ScopeVersionReference) (domain.ScopeVersionRelation, bool, error)
+	Save(ctx context.Context, relation domain.ScopeVersionRelation) (GovernanceSaveOutcome, error)
+}
+
 // SuspensionStore 按暂停标识找回并保存暂停决定（不可覆盖）。
 type SuspensionStore interface {
 	FindByID(ctx context.Context, id domain.SuspensionID) (domain.SuspensionDecision, bool, error)

@@ -24,6 +24,7 @@ const (
 	AuthorityConflictBlocked
 	ReviewNotAccepted
 	ReviewUndecided
+	CoverageConflictBlocked
 )
 
 func (outcome StageReviewOutcome) String() string {
@@ -38,24 +39,31 @@ func (outcome StageReviewOutcome) String() string {
 		return "NOT_ACCEPTED"
 	case ReviewUndecided:
 		return "UNDECIDED"
+	case CoverageConflictBlocked:
+		return "COVERAGE_CONFLICT"
 	default:
 		return ""
 	}
 }
 
 // RecordStageReviewCommand 携带一次阶段评审的全部输入。GrantedInterval 只在 Go 进
-// 限量生产时在场——那一刻要对精确范围建立唯一权威区间。
+// 限量生产时在场——那一刻要对精确范围建立唯一权威区间。Coverage 是随本次决定一并
+// 登记的覆盖关系声明：后继一律是本次评审的范围版本，关系不设独立登记路——无
+// Go/No-Go 决定就无关系登记。
 type RecordStageReviewCommand struct {
 	Review          domain.StageReviewDecisionSpec
 	GrantedInterval *domain.AuthorityInterval
+	Coverage        []domain.ScopeCoverageDeclaration
 }
 
 type RecordStageReviewResult struct {
-	outcome         StageReviewOutcome
-	decision        domain.StageReviewDecision
-	hasRecord       bool
-	conflicts       []domain.AuthorityConflict
-	intervalPending string
+	outcome           StageReviewOutcome
+	decision          domain.StageReviewDecision
+	hasRecord         bool
+	conflicts         []domain.AuthorityConflict
+	coverageConflicts []domain.ScopeVersionRelationConflict
+	intervalPending   string
+	coveragePending   string
 }
 
 func (result RecordStageReviewResult) Outcome() StageReviewOutcome {
@@ -78,11 +86,24 @@ func (result RecordStageReviewResult) IntervalContinuation() string {
 	return result.intervalPending
 }
 
+// CoverageConflicts 只在覆盖关系相悖阻断时给出——处置者要知道声明撞上了在册的哪条边。
+func (result RecordStageReviewResult) CoverageConflicts() []domain.ScopeVersionRelationConflict {
+	return append([]domain.ScopeVersionRelationConflict(nil), result.coverageConflicts...)
+}
+
+// CoverageContinuation 非空说明决定已落库但覆盖关系边还没全部登上。分岔期间第三态
+// 照旧保守作答（关系读不出来即拦着，不是放行），续办引用让重放路把边补上。
+func (result RecordStageReviewResult) CoverageContinuation() string {
+	return result.coveragePending
+}
+
 type RecordStageReviewDeps struct {
 	Candidates ports.CandidateSetStore
 	Reviews    ports.ReviewDecisionStore
 	Intervals  ports.AuthorityIntervalStore
-	Clock      ports.Clock
+	// Relations 只在命令带覆盖关系声明时被触碰；不带声明的评审照旧不依赖它。
+	Relations ports.ScopeVersionRelationStore
+	Clock     ports.Clock
 }
 
 type RecordStageReviewHandler struct {
@@ -93,9 +114,10 @@ func NewRecordStageReviewHandler(deps RecordStageReviewDeps) *RecordStageReviewH
 	return &RecordStageReviewHandler{deps: deps}
 }
 
-// Handle 记录一次不可覆盖的阶段评审：候选组引用完整性 → 幂等（同目标同候选组只
-// 决定一次）→ 权威区间冲突预检（重叠即阻断带全部冲突对，先于任何落库——「双写后
-// 人工对账」是被点名的错误结果）→ 领域构造（Go/No-Go 形状约束在域）→ 提交。
+// Handle 记录一次不可覆盖的阶段评审：候选组引用完整性 → 覆盖关系声明构造门 → 幂等
+// （同目标同候选组只决定一次）→ 权威区间冲突预检 → 覆盖关系相悖预检（两道预检都
+// 先于任何落库——「双写后人工对账」是被点名的错误结果，相悖边静默收下则是绕过恢复
+// 决定的旁路）→ 领域构造（Go/No-Go 形状约束在域）→ 提交 → 追加区间与关系边。
 func (handler *RecordStageReviewHandler) Handle(
 	ctx context.Context,
 	command RecordStageReviewCommand,
@@ -106,6 +128,11 @@ func (handler *RecordStageReviewHandler) Handle(
 	}
 	if !found {
 		// 引用不存在的候选组：决定的范围身份悬空，改请求而不是重试。
+		return RecordStageReviewResult{outcome: ReviewNotAccepted}, nil
+	}
+
+	relations, err := coverageRelations(command)
+	if err != nil {
 		return RecordStageReviewResult{outcome: ReviewNotAccepted}, nil
 	}
 
@@ -120,11 +147,12 @@ func (handler *RecordStageReviewHandler) Handle(
 			decision:  existing,
 			hasRecord: true,
 		}
-		// 重放路补追加：上次区间追加失败留下的分岔在这里收口——决定不翻，只重试
-		// 同一份追加（同 handOff 纪律的 existingResult 重发）。
+		// 重放路补追加：上次区间追加或关系边登记失败留下的分岔在这里收口——决定
+		// 不翻，只重试同一份追加（同 handOff 纪律的 existingResult 重发）。
 		if command.GrantedInterval != nil {
 			result.intervalPending = handler.appendInterval(ctx, *command.GrantedInterval)
 		}
+		result.coveragePending = handler.saveCoverage(ctx, relations)
 		return result, nil
 	}
 
@@ -141,6 +169,19 @@ func (handler *RecordStageReviewHandler) Handle(
 			return RecordStageReviewResult{
 				outcome:   AuthorityConflictBlocked,
 				conflicts: conflicts,
+			}, nil
+		}
+	}
+
+	if len(relations) > 0 {
+		conflicts, err := handler.findCoverageConflicts(ctx, relations)
+		if err != nil {
+			return RecordStageReviewResult{outcome: ReviewUndecided}, nil
+		}
+		if len(conflicts) > 0 {
+			return RecordStageReviewResult{
+				outcome:           CoverageConflictBlocked,
+				coverageConflicts: conflicts,
 			}, nil
 		}
 	}
@@ -178,6 +219,7 @@ func (handler *RecordStageReviewHandler) Handle(
 	if command.GrantedInterval != nil {
 		result.intervalPending = handler.appendInterval(ctx, *command.GrantedInterval)
 	}
+	result.coveragePending = handler.saveCoverage(ctx, relations)
 	return result, nil
 }
 
@@ -198,6 +240,104 @@ func (handler *RecordStageReviewHandler) appendInterval(
 	}
 	if err := handler.deps.Intervals.Append(ctx, interval); err != nil {
 		return "CONT-INTERVAL/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind
+	}
+	return ""
+}
+
+// coverageRelations 把命令里的覆盖关系声明构造成边：后继一律是本次评审的范围版本，
+// 所属决定引用取本次评审的（目标 + 候选组），登记时点取决定时点。声明装不成边、或
+// 同一命令内两条声明彼此不独立（同前代重复或相悖）都未受理——一次决定对同一对版本
+// 只能说一句话。
+func coverageRelations(command RecordStageReviewCommand) ([]domain.ScopeVersionRelation, error) {
+	relations := make([]domain.ScopeVersionRelation, 0, len(command.Coverage))
+	for _, declaration := range command.Coverage {
+		relation, err := domain.RegisterScopeVersionRelation(domain.ScopeVersionRelationSpec{
+			Successor:    command.Review.Scope,
+			Predecessor:  declaration.Predecessor,
+			Kind:         declaration.Kind,
+			Objective:    command.Review.Objective,
+			Candidates:   command.Review.Candidates,
+			RegisteredAt: command.Review.DecidedAt,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, earlier := range relations {
+			if domain.CompareScopeVersionRelations(earlier, relation) != domain.RelationComparisonInvalid {
+				return nil, domain.ErrInvalidScopeRelation
+			}
+		}
+		relations = append(relations, relation)
+	}
+	return relations, nil
+}
+
+// findCoverageConflicts 对每条声明查同对与反向对的在册边，交回全部相悖对。相悖必须
+// 在决定落库前被拦下：后到的决定改写不了先到的登记，静默收下等于让关系登记变成绕过
+// 恢复决定的旁路。
+func (handler *RecordStageReviewHandler) findCoverageConflicts(
+	ctx context.Context,
+	relations []domain.ScopeVersionRelation,
+) ([]domain.ScopeVersionRelationConflict, error) {
+	conflicts := make([]domain.ScopeVersionRelationConflict, 0)
+	for _, declared := range relations {
+		for _, pair := range [][2]domain.ScopeVersionReference{
+			{declared.Successor(), declared.Predecessor()},
+			{declared.Predecessor(), declared.Successor()},
+		} {
+			existing, found, err := handler.deps.Relations.FindByPair(ctx, pair[0], pair[1])
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				continue
+			}
+			if domain.CompareScopeVersionRelations(existing, declared) == domain.RelationsContradictory {
+				conflicts = append(conflicts, domain.ScopeVersionRelationConflict{
+					Declared: declared,
+					Existing: existing,
+				})
+			}
+		}
+	}
+	return conflicts, nil
+}
+
+// saveCoverage 把覆盖关系边落册。失败不翻已落库的决定，但必须交回续办引用——决定在
+// 册而边缺失期间，第三态照旧保守作答（拦着，不是放行），重放路凭同一命令补登同一份。
+// 「同一事实已在册」（重放撞上已成功的上次，或对称的互不相干已从另一方向登过）不是
+// 失败；重放时撞上相悖边（决定已落，拦不回去了）同样走续办引用留给人工。
+func (handler *RecordStageReviewHandler) saveCoverage(
+	ctx context.Context,
+	relations []domain.ScopeVersionRelation,
+) string {
+	for _, relation := range relations {
+		pending := "CONT-COVERAGE/" + relation.Successor().String() + "/" + relation.Predecessor().String()
+		redundant := false
+		for _, pair := range [][2]domain.ScopeVersionReference{
+			{relation.Successor(), relation.Predecessor()},
+			{relation.Predecessor(), relation.Successor()},
+		} {
+			existing, found, err := handler.deps.Relations.FindByPair(ctx, pair[0], pair[1])
+			if err != nil {
+				return pending
+			}
+			if !found {
+				continue
+			}
+			switch domain.CompareScopeVersionRelations(existing, relation) {
+			case domain.RelationRedundant:
+				redundant = true
+			case domain.RelationsContradictory:
+				return pending
+			}
+		}
+		if redundant {
+			continue
+		}
+		if _, err := handler.deps.Relations.Save(ctx, relation); err != nil {
+			return pending
+		}
 	}
 	return ""
 }

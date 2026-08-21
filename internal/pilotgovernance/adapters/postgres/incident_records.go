@@ -145,20 +145,25 @@ func (repository *Suspensions) FindByID(
 // 「尚未恢复」是治理侧自己的说法：恢复必须由试点业务责任角色依据证据明确决定，指标回落
 // 或规则不再命中都不解除暂停，所以没有恢复记录就仍然拦着。
 //
-// 三处边界各有出处，都不是本方法自选的：
+// 边界各有出处，都不是本方法自选的：
 //
 //   - **答不出覆盖关系时保守答暂停**，见 domain.AdmissionSuspendedByUnreadableScopeRelation。
 //     曾经这里按范围版本字面相等匹配，答不上的一律当成没暂停；那是把一条仍立着的判断
 //     静默覆盖掉，而范围版本从一版升到下一版是一次限量范围扩大的 `Go/No-Go`，不是恢复
 //     决定——让它顺带解除一条暂停，正是「规则不再命中即自动恢复」，明文禁止。
+//   - **覆盖关系按登记读，不推不猜**（scope_version_relation，随 Go/No-Go 决定登记）：
+//     登有「所问版本承继该暂停范围」的边即按承继拦（domain.AdmissionSuspendedByInheritedScope）；
+//     登有互不相干的边（对称事实，任一方向）该暂停即不及于所问版本——那不是静默恢复，
+//     暂停对它写明的范围照旧拦着，解除它仍只走恢复决定四件齐备。什么关系都没登，第三态
+//     保守作答照旧。
 //   - **生效时点算已生效**（`effective_at <= at`），与本仓权威区间 `[From, To)` 的半开
 //     约定同向：生效时间那一刻起就已生效。恢复同此，故暂停与恢复同刻时以恢复为准。
 //   - **同一范围多条暂停各自独立解除**。恢复记录逐条引用一个暂停标识，所以只要还有一条
 //     已生效且未恢复，范围就仍在暂停中；交回哪一条按生效时间与标识定序，保证同一登记册
 //     每次问都得到同一条（调用方会把它的标识写进自己的答复）。
 //
-// 命中那格优先于保守那格交回：两者都拦，但写明本版的那条才是调用方该引的证据，而保守
-// 那格的暂停引用只是指向「读不出关系的那一条」本身。
+// 命中那格优先于承继，承继优先于保守：三格都拦，但写明本版的那条才是调用方该引的最强
+// 证据；保守那格的暂停引用只是指向「读不出关系的那一条」本身。
 func (repository *Suspensions) FindUnresumedSuspension(
 	ctx context.Context,
 	scope domain.ScopeVersionReference,
@@ -172,25 +177,36 @@ func (repository *Suspensions) FindUnresumedSuspension(
 
 	var id, trigger, basis, evidence, scopeValue, executedBy, inTransit string
 	var occurredAt, effectiveAt time.Time
-	var namesAskedScope bool
+	var namesAskedScope, inheritedByAskedScope bool
 	err = querier.QueryRow(ctx,
 		`SELECT suspension.suspension_id, suspension.trigger_source, suspension.basis,
 		        suspension.evidence, suspension.scope, suspension.executed_by,
 		        suspension.occurred_at, suspension.effective_at, suspension.in_transit_note,
-		        suspension.scope = $1 AS names_asked_scope
+		        suspension.scope = $1 AS names_asked_scope,
+		        inherits.successor_scope IS NOT NULL AS inherited_by_asked_scope
 		   FROM pilot_governance.suspension_decision AS suspension
 		   LEFT JOIN pilot_governance.resumption_decision AS resumption
 		          ON resumption.suspension_id = suspension.suspension_id
 		         AND resumption.effective_at <= $2
+		   LEFT JOIN pilot_governance.scope_version_relation AS inherits
+		          ON inherits.relation_kind = 'INHERITS_SUSPENSIONS'
+		         AND inherits.successor_scope = $1
+		         AND inherits.predecessor_scope = suspension.scope
+		   LEFT JOIN pilot_governance.scope_version_relation AS unrelated
+		          ON unrelated.relation_kind = 'UNRELATED'
+		         AND ((unrelated.successor_scope = $1 AND unrelated.predecessor_scope = suspension.scope)
+		           OR (unrelated.successor_scope = suspension.scope AND unrelated.predecessor_scope = $1))
 		  WHERE suspension.effective_at <= $2
 		    AND resumption.suspension_id IS NULL
+		    AND unrelated.successor_scope IS NULL
 		  ORDER BY (suspension.scope = $1) DESC,
+		           (inherits.successor_scope IS NOT NULL) DESC,
 		           suspension.effective_at, suspension.suspension_id
 		  LIMIT 1`,
 		scope.String(),
 		at.UTC(),
 	).Scan(&id, &trigger, &basis, &evidence, &scopeValue, &executedBy,
-		&occurredAt, &effectiveAt, &inTransit, &namesAskedScope)
+		&occurredAt, &effectiveAt, &inTransit, &namesAskedScope, &inheritedByAskedScope)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SuspensionDecision{}, domain.AdmissionNotSuspended, nil
 	}
@@ -200,8 +216,11 @@ func (repository *Suspensions) FindUnresumedSuspension(
 	}
 
 	ground := domain.AdmissionSuspendedByUnreadableScopeRelation
-	if namesAskedScope {
+	switch {
+	case namesAskedScope:
 		ground = domain.AdmissionSuspendedByNamedScope
+	case inheritedByAskedScope:
+		ground = domain.AdmissionSuspendedByInheritedScope
 	}
 
 	suspensionID, err := domain.NewSuspensionID(id)
