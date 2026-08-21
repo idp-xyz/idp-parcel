@@ -55,6 +55,9 @@ func NewSourceRequestKey(value string) (SourceRequestKey, error) {
 	return SourceRequestKey{required}, err
 }
 
+// PayloadDigest 由 CanonicalizeSubmissionPayload 按版本化规范化形状产出，摘要串自带
+// 版本前缀（ADR-0014）。类型本身不锁定版本：历史摘要按各自的前缀解读，跨版本的比较
+// 纪律属引入下一个规范化版本的那笔工作。
 type PayloadDigest struct{ requiredValue }
 
 func NewPayloadDigest(value string) (PayloadDigest, error) {

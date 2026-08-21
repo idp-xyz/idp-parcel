@@ -7,8 +7,9 @@
 # 后来读的人不知道。
 #
 # 初版这 33 条实测于 2026-08-21，两套独立方法各数一遍同得 33 且名单逐条相同：一套是 git 侧
-# 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。**当日随后删掉两条死代码，现为 31**
-# ——这句写成「初版 33、现 31」而不是只写一个数，是因为下一次增减时只改一处会让另一处变错。
+# 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。**当日随后删掉两条死代码为 31；
+# 同日晚随审计票 14 新增两条（PS 载荷规范化摘要一对），现为 33**——这句逐次记增减而不是
+# 只写一个数，是因为下一次增减时只改一处会让另一处变错。
 #
 # 下面那些理由行的取证强度不齐，先说清免得被当统一口径引用：**逐条读过签名与调用点的是
 # parcel-pricing 与 party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost
@@ -23,6 +24,13 @@
 # —— parcel-shipment ——
 # 产出带校验的安全交接评估，测试里调 9 次，包外零引用。
 internal/parcelshipment/domain AssessSafeHandoff
+# 审计票 14 的规范化摘要机制件：按 ADR-0014 版本化形状（PSC-1）产出 PayloadDigest，供测试
+# 与未来真渠道 Intake 共用。生产接线点在真渠道 Intake 那笔工作（PAR-INT-01 证据到位、审计
+# 票 01 重启之后）；ADR-0055 未配置即拒期间，adapters/http 侧不得出现调用它的「开发用」
+# 实现，所以此刻无生产调用点是设计而非遗漏。下面两条是同一条路径的两端：摘要函数与它的
+# 版本报出口，接上那天一起出名单。
+internal/parcelshipment/domain CanonicalizeSubmissionPayload
+internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 
 
 # —— visibility-exception ——
