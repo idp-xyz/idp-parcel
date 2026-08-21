@@ -166,3 +166,25 @@ func TestATakeoverDemandsStopEvidenceIntervalAndInventory(t *testing.T) {
 		t.Fatalf("err = %v; 没有停止写入证据的接管被收下了——先停原权威是硬顺序", err)
 	}
 }
+
+// 只有「确实没有未恢复暂停」那一格放行，其余一律拦住，零值同此。反过来写（零值即开放）
+// 会让任何一处漏填都变成一次默认放行，而默认放行正是准入闸最不该有的失效方向。
+func TestOnlyAnAbsentSuspensionOpensAdmission(t *testing.T) {
+	for ground, wantBlocks := range map[domain.AdmissionSuspensionGround]bool{
+		domain.AdmissionSuspensionGroundInvalid:            true,
+		domain.AdmissionNotSuspended:                       false,
+		domain.AdmissionSuspendedByNamedScope:              true,
+		domain.AdmissionSuspendedByUnreadableScopeRelation: true,
+	} {
+		if ground.Blocks() != wantBlocks {
+			t.Fatalf("%s: Blocks() = %v, want %v", ground, ground.Blocks(), wantBlocks)
+		}
+	}
+
+	// 命中与保守必须分得开：两者都拦，但运维动作不同——一个去走恢复决定，一个去把范围
+	// 版本关系登进登记册。名字撞上就等于在报表里把这个差别抹平了。
+	if domain.AdmissionSuspendedByNamedScope.String() ==
+		domain.AdmissionSuspendedByUnreadableScopeRelation.String() {
+		t.Fatal("命中与保守两格的名字相同，治理侧分不出该做哪件事")
+	}
+}

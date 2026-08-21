@@ -38,14 +38,16 @@ type AuthorityIntervalSource interface {
 // 的规则是治理侧的，本适配器去适配它。「尚未恢复」与「准入暂停」在这里是同一件事的两
 // 头——前者是登记册的事实，后者是本上下文据此形成的控制。
 //
-// 第二个返回值为 false 即「该时点没有仍在拦的暂停」。依赖调不通作为错误返回——把它
-// 读成「没暂停」是一次默认放行，一次故障会因此看起来像准入开放。
+// 第二个返回值是治理侧的 AdmissionSuspensionGround，本包只问它 Blocks() 而不去分辨是
+// 哪一格：命中与保守的差别决定的是治理侧的运维动作（走恢复决定，还是把范围版本关系登
+// 进登记册），本上下文两格给出的都是同一个`暂停`。依赖调不通仍作为错误返回——把它读成
+// 「没暂停」是一次默认放行，一次故障会因此看起来像准入开放。
 type AdmissionSuspensionSource interface {
 	FindUnresumedSuspension(
 		ctx context.Context,
 		scope pgdomain.ScopeVersionReference,
 		at time.Time,
-	) (pgdomain.SuspensionDecision, bool, error)
+	) (pgdomain.SuspensionDecision, pgdomain.AdmissionSuspensionGround, error)
 }
 
 // OwnershipHandoffSource 按权威区间找回对象级接管记录，即原权威停止写入的那份证据。
@@ -246,11 +248,11 @@ func (adapter *ProductionOwnershipAdapter) admissionControl(
 	governance GovernanceScope,
 	asOf time.Time,
 ) (psdomain.AdmissionControl, psdomain.OwnershipSuspensionReference, error) {
-	suspension, paused, err := adapter.deps.Suspensions.FindUnresumedSuspension(ctx, governance.PilotScope, asOf)
+	suspension, ground, err := adapter.deps.Suspensions.FindUnresumedSuspension(ctx, governance.PilotScope, asOf)
 	if err != nil {
 		return 0, psdomain.OwnershipSuspensionReference{}, fmt.Errorf("find effective suspension: %w", err)
 	}
-	if !paused {
+	if !ground.Blocks() {
 		return psdomain.AdmissionControlOpen, psdomain.OwnershipSuspensionReference{}, nil
 	}
 	reference, err := psdomain.NewOwnershipSuspensionReference(suspension.ID().String())

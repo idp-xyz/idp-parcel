@@ -426,19 +426,19 @@ func TestAnUnresumedSuspensionBlocksFromItsEffectiveMomentUntilTheResumptionTake
 
 	for name, probe := range map[string]struct {
 		at    time.Time
-		wants bool
+		wants domain.AdmissionSuspensionGround
 	}{
-		"生效前一刻":  {at: suspendedAt.Add(-time.Second), wants: false},
-		"恰在生效时刻": {at: suspendedAt, wants: true},
-		"生效之后":   {at: suspendedAt.Add(time.Hour), wants: true},
+		"生效前一刻":  {at: suspendedAt.Add(-time.Second), wants: domain.AdmissionNotSuspended},
+		"恰在生效时刻": {at: suspendedAt, wants: domain.AdmissionSuspendedByNamedScope},
+		"生效之后":   {at: suspendedAt.Add(time.Hour), wants: domain.AdmissionSuspendedByNamedScope},
 	} {
 		t.Run("未恢复·"+name, func(t *testing.T) {
-			_, found, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, probe.at)
+			_, ground, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, probe.at)
 			if err != nil {
 				t.Fatalf("取尚未恢复的暂停：%v", err)
 			}
-			if found != probe.wants {
-				t.Fatalf("found = %v, want %v", found, probe.wants)
+			if ground != probe.wants {
+				t.Fatalf("ground = %s, want %s", ground, probe.wants)
 			}
 		})
 	}
@@ -450,28 +450,30 @@ func TestAnUnresumedSuspensionBlocksFromItsEffectiveMomentUntilTheResumptionTake
 
 	for name, probe := range map[string]struct {
 		at    time.Time
-		wants bool
+		wants domain.AdmissionSuspensionGround
 	}{
-		"恢复前一刻":  {at: resumedAt.Add(-time.Second), wants: true},
-		"恰在恢复时刻": {at: resumedAt, wants: false},
-		"恢复之后":   {at: resumedAt.Add(time.Hour), wants: false},
+		"恢复前一刻":  {at: resumedAt.Add(-time.Second), wants: domain.AdmissionSuspendedByNamedScope},
+		"恰在恢复时刻": {at: resumedAt, wants: domain.AdmissionNotSuspended},
+		"恢复之后":   {at: resumedAt.Add(time.Hour), wants: domain.AdmissionNotSuspended},
 	} {
 		t.Run("已恢复·"+name, func(t *testing.T) {
-			_, found, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, probe.at)
+			_, ground, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, probe.at)
 			if err != nil {
 				t.Fatalf("取尚未恢复的暂停：%v", err)
 			}
-			if found != probe.wants {
-				t.Fatalf("found = %v, want %v；恢复只在其生效时刻之后解除", found, probe.wants)
+			if ground != probe.wants {
+				t.Fatalf("ground = %s, want %s；恢复只在其生效时刻之后解除", ground, probe.wants)
 			}
 		})
 	}
 }
 
-// Covers: 范围版本按字面相等匹配。暂停范围变动时形成的是带新依据与生效时间的**新版本**，
-// 此前判断不被覆盖，因此一条暂停只为它写明的那一版说话；版本之间的先后关系在
-// ScopeVersionReference 这个不透明串上读不出来，也就无从写出跨版本匹配。
-func TestASuspensionAnswersOnlyForTheScopeVersionItNames(t *testing.T) {
+// Covers: 覆盖关系读不出来时保守答暂停，不答开放。一条立在 v1 上的暂停，被问 v2 时
+// 既没有被恢复决定解除、又不再拦任何东西，那就是把它静默覆盖掉；而范围版本从一版升到
+// 下一版是一次限量范围扩大的 `Go/No-Go`，不是恢复决定。谱系又不能从不透明串上猜——前缀、
+// 子串、版本号解析与时间序一律禁止，所以这里走的是「证据不足导致影响范围无法可靠隔离，
+// 必须保守暂停整个试点的新准入」。
+func TestAnUnreadableScopeRelationSuspendsConservativelyInsteadOfOpening(t *testing.T) {
 	fixture := newIncidentFixture(t)
 	ctx := t.Context()
 	suspendedAt := incidentAt.Add(time.Hour)
@@ -481,20 +483,69 @@ func TestASuspensionAnswersOnlyForTheScopeVersionItNames(t *testing.T) {
 		return err
 	})
 
-	found, exists, err := fixture.suspensions.FindUnresumedSuspension(
+	found, ground, err := fixture.suspensions.FindUnresumedSuspension(
 		ctx, govRef(t, domain.NewScopeVersionReference, "pilot-scope/v1"), suspendedAt)
-	if err != nil || !exists {
-		t.Fatalf("同版本应取到：%v exists=%v", err, exists)
+	if err != nil || ground != domain.AdmissionSuspendedByNamedScope {
+		t.Fatalf("问写明的那一版：err=%v ground=%s, want %s", err, ground, domain.AdmissionSuspendedByNamedScope)
 	}
 	if found.Scope().String() != "pilot-scope/v1" {
 		t.Fatalf("取回范围 = %q", found.Scope().String())
 	}
 
-	if _, exists, err = fixture.suspensions.FindUnresumedSuspension(
-		ctx, govRef(t, domain.NewScopeVersionReference, "pilot-scope/v2"), suspendedAt); err != nil {
+	found, ground, err = fixture.suspensions.FindUnresumedSuspension(
+		ctx, govRef(t, domain.NewScopeVersionReference, "pilot-scope/v2"), suspendedAt)
+	if err != nil {
 		t.Fatalf("取尚未恢复的暂停：%v", err)
-	} else if exists {
-		t.Fatal("v1 的暂停被当成了 v2 的")
+	}
+	if ground != domain.AdmissionSuspendedByUnreadableScopeRelation {
+		t.Fatalf("ground = %s, want %s；v1 那条仍立着，问 v2 不得答开放",
+			ground, domain.AdmissionSuspendedByUnreadableScopeRelation)
+	}
+	// 暂停引用指向读不出关系的那一条本身，运维才知道该去把哪一对版本关系登进登记册。
+	if found.ID().String() != "suspend-v1" {
+		t.Fatalf("交回 = %q, want suspend-v1", found.ID().String())
+	}
+}
+
+// Covers: 命中优先于保守。两格都拦，但写明所问那一版的那条才是调用方该引的证据；解除它
+// 也不回到开放——另一版上那条未恢复的暂停仍立着，关系依旧读不出来。
+func TestANamedScopeSuspensionOutranksAConservativeOne(t *testing.T) {
+	fixture := newIncidentFixture(t)
+	ctx := t.Context()
+	askedScope := govRef(t, domain.NewScopeVersionReference, "pilot-scope/v2")
+	earlier := incidentAt.Add(time.Hour)
+	later := incidentAt.Add(2 * time.Hour)
+	askedAt := incidentAt.Add(6 * time.Hour)
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		if _, err := fixture.suspensions.Save(txCtx, scopedSuspension(t, "suspend-v1", "pilot-scope/v1", earlier)); err != nil {
+			return err
+		}
+		_, err := fixture.suspensions.Save(txCtx, scopedSuspension(t, "suspend-v2", "pilot-scope/v2", later))
+		return err
+	})
+
+	// v1 那条生效更早，但定序把命中那格排在前面，交回的仍是写明 v2 的那条。
+	found, ground, err := fixture.suspensions.FindUnresumedSuspension(ctx, askedScope, askedAt)
+	if err != nil || ground != domain.AdmissionSuspendedByNamedScope {
+		t.Fatalf("两条并存：err=%v ground=%s, want %s", err, ground, domain.AdmissionSuspendedByNamedScope)
+	}
+	if found.ID().String() != "suspend-v2" {
+		t.Fatalf("交回 = %q, want suspend-v2", found.ID().String())
+	}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		_, err := fixture.resumptions.Save(txCtx, liftingResumption(t, "suspend-v2", incidentAt.Add(3*time.Hour)))
+		return err
+	})
+
+	found, ground, err = fixture.suspensions.FindUnresumedSuspension(ctx, askedScope, askedAt)
+	if err != nil || ground != domain.AdmissionSuspendedByUnreadableScopeRelation {
+		t.Fatalf("解除本版那条之后：err=%v ground=%s, want %s；v1 那条没被任何恢复决定解除",
+			err, ground, domain.AdmissionSuspendedByUnreadableScopeRelation)
+	}
+	if found.ID().String() != "suspend-v1" {
+		t.Fatalf("交回 = %q, want suspend-v1", found.ID().String())
 	}
 }
 
@@ -517,9 +568,9 @@ func TestAScopeStaysSuspendedWhileAnyUnresumedSuspensionRemains(t *testing.T) {
 	})
 
 	// 定序取最早那条：同一份登记册每次问都得到同一条，调用方才不会每问一次就换一个引用。
-	found, exists, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, askedAt)
-	if err != nil || !exists {
-		t.Fatalf("两条未恢复时应取到：%v exists=%v", err, exists)
+	found, ground, err := fixture.suspensions.FindUnresumedSuspension(ctx, scope, askedAt)
+	if err != nil || ground != domain.AdmissionSuspendedByNamedScope {
+		t.Fatalf("两条未恢复时：err=%v ground=%s, want %s", err, ground, domain.AdmissionSuspendedByNamedScope)
 	}
 	if found.ID().String() != "suspend-early" {
 		t.Fatalf("交回 = %q, want suspend-early", found.ID().String())
@@ -530,9 +581,9 @@ func TestAScopeStaysSuspendedWhileAnyUnresumedSuspensionRemains(t *testing.T) {
 		return err
 	})
 
-	found, exists, err = fixture.suspensions.FindUnresumedSuspension(ctx, scope, askedAt)
-	if err != nil || !exists {
-		t.Fatalf("还剩一条未恢复时仍应取到：%v exists=%v", err, exists)
+	found, ground, err = fixture.suspensions.FindUnresumedSuspension(ctx, scope, askedAt)
+	if err != nil || ground != domain.AdmissionSuspendedByNamedScope {
+		t.Fatalf("还剩一条未恢复时：err=%v ground=%s, want %s", err, ground, domain.AdmissionSuspendedByNamedScope)
 	}
 	if found.ID().String() != "suspend-late" {
 		t.Fatalf("交回 = %q, want suspend-late；解除一条不等于范围已恢复", found.ID().String())

@@ -115,6 +115,69 @@ Status: ready-for-agent
   入参来路。**不因为参数拿不到就给默认值**——本适配器对拿不到坐标的范围一律答
   `AUTHORITY_UNRESOLVED`（`GovernanceScopeDirectory` 交回 false 即停，不代拟坐标）。
 
+- 2026-08-21 MCP-1 裁定 / MCP-5 执行（**上面「范围版本按字面相等匹配」那条出处引错了，
+  更正如下；原文保留不改写**）：错在引了 `docs/product/PILOT-SCOPE.md` 硬风险暂停那段的
+  **第三句**「后续证据支持扩大或缩小暂停范围时，应形成带新依据和生效时间的范围版本，不覆盖
+  此前判断和实际阻断历史」，并把它读成「每条暂停只为它写明的那一版说话」。**「不覆盖此前
+  判断」说的是此前判断仍然立着，不是它从此不适用**——按字面相等的写法，v1 那条判断在被问 v2
+  时既没被恢复决定解除、也不再拦任何东西，那恰恰就是被覆盖，只不过是静默覆盖。这句话是反对
+  字面相等的。真正管这件事的是同段**中间**那句：「如果共享依赖、共同原因或证据不足导致影响
+  范围无法可靠隔离，必须保守暂停整个试点的新准入，不能仅拒绝当前报错的单个委托后继续放量。」
+  「v1 的暂停覆不覆盖 v2」在不透明串上读不出来，正是「证据不足导致影响范围无法可靠隔离」。
+  第二道依据是同文件那句「恢复准入必须在风险原因已经解除、必要一致性核对已经完成后，由试点
+  业务责任角色依据证据明确决定；指标恢复或规则不再命中均不得自动恢复」：范围版本从 v1 升到
+  v2 是一次**限量范围扩大的 `Go/No-Go`，不是恢复决定**（`RecordResumption` 要的解除证据、
+  一致性核对、在途盘点一件都没有），字面相等让一次范围扩大顺带解除一条暂停，正是明文禁止的
+  「规则不再命中即自动恢复」。**结论：这是缺陷不是待定参数**，因此上面那条「残余风险，需领域
+  裁定」已裁完销账，不再挂待裁。
+
+- 2026-08-21 MCP-5（按裁定改成三态；**拒绝前缀匹配这一点裁定确认是对的，未改**）：
+  从不透明串里解析谱系是从脱敏引用组合发明实例事实，撞红线；按时间「最新版本胜出」同理。
+  前缀、子串、版本号解析、时间序推断一律禁止。正确语义是保守回答而不是猜谱系，落为
+  `pgdomain.AdmissionSuspensionGround` 三格，`FindUnresumedSuspension` 的第二个返回值由
+  `bool` 换成它：①无已生效未恢复暂停 → `NOT_SUSPENDED`；②有且范围版本字面相等 →
+  `SUSPENDED_BY_NAMED_SCOPE`；③有但覆盖关系不可判 → `SUSPENDED_BY_UNREADABLE_SCOPE_RELATION`。
+  ②③都拦，但**在治理侧分得开**（运维动作不同：②去走恢复决定，③去把范围版本关系登进登记册），
+  这一条按 ADR-0017「先分辨阻断理由的性质再决定它约束什么」办。命中优先于保守交回，暂停引用
+  在③指向读不出关系的那条暂停本身。判断留在治理侧：PS 侧 `admissionControl` 只问
+  `ground.Blocks()`，不分辨是哪一格，两格给出的都是同一个`暂停`——本包仍然只翻译。
+  `Blocks()` 的失效方向朝拦：只有 `NOT_SUSPENDED` 放行，零值跟着拦，漏填一处不能变成默认放行。
+
+- 2026-08-21 MCP-5（**实例半边照旧留空，不回填**）：「v2 是否承继 v1 的暂停」是登记册事实
+  不是查询技巧，没有租户就没有这份登记，因此**现在恒走第三态、恒答暂停**——这是诚实阻断不是
+  缺陷。它不会把系统钉死：登记册里一条已生效未恢复的暂停都没有时第一态成立，照常开放；只有
+  确实存在拦着的暂停时才保守。「范围版本之间的覆盖关系」需要登记册新增一项，按 AGENTS.md
+  「改试点实例状态 → 参数登记册」另立票（`.scratch/syn-wall-door-audit/issues/11-...`，
+  `needs-triage`），不并进本票。领域文档不动——规则已在 PILOT-SCOPE，不新开 ADR。
+
+- 2026-08-21 MCP-5（**假绿反证：定性只能看 `-v` 下的 `--- PASS`/`--- SKIP`，秒表只配起疑**）：
+  「报测试状态必须写明含不含 PG」此前只是一句要求，没人做过反证，这里补上两组实测数字。
+  同一批用例、同一命令，只差 `IDP_PARCEL_POSTGRES_DSN`（`pgtest.DSNVariable`，值
+  `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`）设没设：
+  - **未设**：`internal/pilotgovernance/adapters/postgres` 27 条全部 `--- SKIP`，包级仍是
+    `ok ... 0.015s`。
+  - **设上**：同包 `ok ... 4.477s`，三包合计 83 `--- PASS` / 0 `--- SKIP` / 0 `--- FAIL`；
+    本轮两条新 PG 用例各实耗 0.19s、0.20s。
+  两次的包级行都是 `ok`，**全跳过与全通过在默认输出里长得一模一样**，唯一差别是秒数，而秒数
+  只够用来起疑不够定性。报绿前先做一次反证——拿掉 DSN 重跑同批用例，必须转 `SKIP`，转了才能
+  证明刚才那份绿真的走了库。
+
+- 2026-08-21 MCP-5（本轮交付与验证）：改动六个文件——
+  `internal/pilotgovernance/domain/suspension_takeover.go`（新增 `AdmissionSuspensionGround`
+  三格 + `Blocks()` + `String()`）、同包 `suspension_takeover_test.go`（钉「只有确实没有未恢复
+  暂停那一格放行」与「命中/保守两格名字不得相同」）、
+  `internal/pilotgovernance/adapters/postgres/incident_records.go`（三态 SQL：去掉
+  `WHERE suspension.scope = $1`，改为 `ORDER BY (suspension.scope = $1) DESC` 让命中优先，
+  并把该布尔作为 `names_asked_scope` 取回定格）、同包 `incident_records_test.go`（原三条改判
+  `ground`；新增 `TestAnUnreadableScopeRelationSuspendsConservativelyInsteadOfOpening` 证
+  v1 未恢复时问 v2 答暂停而非开放，与 `TestANamedScopeSuspensionOutranksAConservativeOne` 证
+  命中优先且解除本版那条后退回保守而不是开放）、
+  `internal/parcelshipment/adapters/pilotgovernance/production_ownership.go` 与其测试
+  （窄口第二返回值跟治理侧换型；新增三条子用例钉「凡拦即`暂停`」含零值）。
+  验证：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 零信号；三包真库 83 PASS / 0 SKIP
+  / 0 FAIL（数字与反证见上一条）。**未跑全仓套件**——MCP-6 正改 `pgtest` 需要无人跑门禁的窗口，
+  集成全量按派单由 MCP-1 在 detached verify 树上跑。
+
 - 2026-08-21 MCP-5（第二件仍不做）：沿用 MCP-4 的理由，不推翻。另加一条今天才成立的：
   票面第二件里**端点那条路已被堵死**——八个业务端点今天全装 `UnconfiguredIntake{}`，
   无接入渠道即无可认证入口，而接入渠道登记册（票 01）已撞上 ADR-0055 明文否决的替代方案

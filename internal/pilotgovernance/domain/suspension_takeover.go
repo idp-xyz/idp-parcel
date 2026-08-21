@@ -109,6 +109,49 @@ func (suspension SuspensionDecision) EffectiveAt() time.Time {
 	return suspension.effectiveAt
 }
 
+// AdmissionSuspensionGround 说明「某个范围版本此刻还拦不拦新准入」这一答复凭什么成立。
+//
+// 三格而不是布尔，因为「拦」有两种来源，而两者的运维动作不同：命中那格该去走恢复决定，
+// 保守那格该去把范围版本之间的覆盖关系登进登记册。折成同一格就把这个差别丢了，跟把
+// 依赖故障读成「没暂停」是同一类错。
+type AdmissionSuspensionGround uint8
+
+const (
+	AdmissionSuspensionGroundInvalid AdmissionSuspensionGround = iota
+	// AdmissionNotSuspended：该时点没有任何已生效且尚未被恢复的暂停。
+	AdmissionNotSuspended
+	// AdmissionSuspendedByNamedScope：有一条已生效未恢复的暂停，且它写明的范围版本
+	// 正是所问那一版。
+	AdmissionSuspendedByNamedScope
+	// AdmissionSuspendedByUnreadableScopeRelation：有已生效未恢复的暂停，但它写明的
+	// 范围版本与所问那一版之间的覆盖关系在登记册里读不出来。
+	//
+	// ScopeVersionReference 是脱敏引用组合，前缀、子串、版本号解析或时间序都推不出谁
+	// 覆盖谁——从不透明串里解析谱系等于发明实例事实。试点范围规则对这个处境已经给了
+	// 动作：「如果共享依赖、共同原因或证据不足导致影响范围无法可靠隔离，必须保守暂停
+	// 整个试点的新准入，不能仅拒绝当前报错的单个委托后继续放量。」
+	AdmissionSuspendedByUnreadableScopeRelation
+)
+
+// Blocks 说这一格要不要拦住新准入。只有 AdmissionNotSuspended 放行，判断不出来的一律
+// 算拦着，零值同此：漏填一处不能表现为一次默认放行。
+func (ground AdmissionSuspensionGround) Blocks() bool {
+	return ground != AdmissionNotSuspended
+}
+
+func (ground AdmissionSuspensionGround) String() string {
+	switch ground {
+	case AdmissionNotSuspended:
+		return "NOT_SUSPENDED"
+	case AdmissionSuspendedByNamedScope:
+		return "SUSPENDED_BY_NAMED_SCOPE"
+	case AdmissionSuspendedByUnreadableScopeRelation:
+		return "SUSPENDED_BY_UNREADABLE_SCOPE_RELATION"
+	default:
+		return ""
+	}
+}
+
 // InventoryEntry 是在途盘点的一条审计快照：逐项稳定身份、当前有效事实、当前权威方、
 // 责任方、下一行动和预计复核时间（PAR-GOV-08 完成队列口径——未终局委托不要求被强行
 // 关闭，但每项六件必须齐全）。

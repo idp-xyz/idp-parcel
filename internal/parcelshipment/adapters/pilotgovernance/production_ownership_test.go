@@ -264,7 +264,7 @@ func TestAdmissionControlIsIndependentOfAuthority(t *testing.T) {
 
 	t.Run("暂停生效时与`本产品承接`并存", func(t *testing.T) {
 		deps := completeDeps(t)
-		deps.Suspensions = &suspensionSourceDouble{suspension: suspension, paused: true}
+		deps.Suspensions = &suspensionSourceDouble{suspension: suspension, ground: pgdomain.AdmissionSuspendedByNamedScope}
 
 		decision := decide(t, deps)
 
@@ -283,7 +283,7 @@ func TestAdmissionControlIsIndependentOfAuthority(t *testing.T) {
 	t.Run("暂停生效时与`权威未确定`并存", func(t *testing.T) {
 		deps := completeDeps(t)
 		deps.Intervals = &intervalSourceDouble{}
-		deps.Suspensions = &suspensionSourceDouble{suspension: suspension, paused: true}
+		deps.Suspensions = &suspensionSourceDouble{suspension: suspension, ground: pgdomain.AdmissionSuspendedByNamedScope}
 
 		decision := decide(t, deps)
 
@@ -305,6 +305,30 @@ func TestAdmissionControlIsIndependentOfAuthority(t *testing.T) {
 			t.Fatal("未暂停却带了暂停引用")
 		}
 	})
+
+	// 治理侧凡答「拦」，本包给出的都是同一个`暂停`加同一条暂停引用：命中与保守的差别
+	// 决定的是治理侧的运维动作，不是本上下文的答复。零值一并钉住——它必须跟着拦，漏填
+	// 一处不能在这里表现为一次默认放行。
+	for name, ground := range map[string]pgdomain.AdmissionSuspensionGround{
+		"命中所问范围版本": pgdomain.AdmissionSuspendedByNamedScope,
+		"覆盖关系读不出":  pgdomain.AdmissionSuspendedByUnreadableScopeRelation,
+		"零值":       pgdomain.AdmissionSuspensionGroundInvalid,
+	} {
+		t.Run("凡拦即`暂停`·"+name, func(t *testing.T) {
+			deps := completeDeps(t)
+			deps.Suspensions = &suspensionSourceDouble{suspension: suspension, ground: ground}
+
+			decision := decide(t, deps)
+
+			if decision.AdmissionControl() != psdomain.AdmissionControlPaused {
+				t.Fatalf("control = %s, want PAUSED", decision.AdmissionControl())
+			}
+			reference, ok := decision.SuspensionReference()
+			if !ok || reference.String() != "SUSP-1" {
+				t.Fatalf("suspension reference = %q, %t；引用指向作数的那条暂停本身", reference, ok)
+			}
+		})
+	}
 }
 
 // ── 依赖调不通一律上抛，绝不折成某一格答复（ADR-0029） ────────────────────
@@ -416,7 +440,7 @@ func TestRevisionMovesWithEveryRegisteredChange(t *testing.T) {
 
 	t.Run("准入被暂停", func(t *testing.T) {
 		deps := completeDeps(t)
-		deps.Suspensions = &suspensionSourceDouble{suspension: suspensionDecision(t, "SUSP-9"), paused: true}
+		deps.Suspensions = &suspensionSourceDouble{suspension: suspensionDecision(t, "SUSP-9"), ground: pgdomain.AdmissionSuspendedByNamedScope}
 
 		if decide(t, deps).Revision() == baseline {
 			t.Fatal("准入暂停了修订没动")
@@ -477,7 +501,7 @@ func TestSelfAuthorityWithOpenAdmissionPassesTheFutureSubmissionGate(t *testing.
 
 func TestPausedAdmissionBlocksEvenWhenOwnershipIsOurs(t *testing.T) {
 	deps := completeDeps(t)
-	deps.Suspensions = &suspensionSourceDouble{suspension: suspensionDecision(t, "SUSP-2"), paused: true}
+	deps.Suspensions = &suspensionSourceDouble{suspension: suspensionDecision(t, "SUSP-2"), ground: pgdomain.AdmissionSuspendedByNamedScope}
 	decision := decide(t, deps)
 
 	gate, err := psdomain.EvaluateFutureSubmissionGate(
@@ -508,17 +532,17 @@ func (source *intervalSourceDouble) ListCurrent(context.Context) ([]pgdomain.Aut
 
 type suspensionSourceDouble struct {
 	suspension pgdomain.SuspensionDecision
-	paused     bool
+	ground     pgdomain.AdmissionSuspensionGround
 	err        error
 }
 
 func (source *suspensionSourceDouble) FindUnresumedSuspension(
 	context.Context, pgdomain.ScopeVersionReference, time.Time,
-) (pgdomain.SuspensionDecision, bool, error) {
+) (pgdomain.SuspensionDecision, pgdomain.AdmissionSuspensionGround, error) {
 	if source.err != nil {
-		return pgdomain.SuspensionDecision{}, false, source.err
+		return pgdomain.SuspensionDecision{}, pgdomain.AdmissionSuspensionGroundInvalid, source.err
 	}
-	return source.suspension, source.paused, nil
+	return source.suspension, source.ground, nil
 }
 
 type handoffSourceDouble struct {
@@ -561,7 +585,7 @@ func completeDeps(t *testing.T) adapter.ProductionOwnershipAdapterDeps {
 	t.Helper()
 	return adapter.ProductionOwnershipAdapterDeps{
 		Intervals:      &intervalSourceDouble{intervals: []pgdomain.AuthorityInterval{selfInterval()}},
-		Suspensions:    &suspensionSourceDouble{},
+		Suspensions:    &suspensionSourceDouble{ground: pgdomain.AdmissionNotSuspended},
 		Handoffs:       &handoffSourceDouble{},
 		Directory:      &directoryDouble{scope: governanceScope(t), found: true},
 		SelfAuthority:  selfAuthority,
