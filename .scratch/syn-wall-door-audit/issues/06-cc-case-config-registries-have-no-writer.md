@@ -98,3 +98,20 @@ PAR-CUS-01..07(尤其 PAR-CUS-04);`docs/design/customs-slice-0-business-developm
     [cc-interpretation-rule-version-dimension/01](../../cc-interpretation-rule-version-dimension/issues/01-interpretation-rule-has-no-version-dimension.md)
   * 第六本册子 →
     [cc-case-requirement-rule-registry/01](../../cc-case-requirement-rule-registry/issues/01-case-requirement-rule-has-no-writer.md)
+- 2026-08-21 · MCP-2：**A 半边交付完毕**，分支 `t1-06-cc-case-config`，已 rebase 到
+  `82aa1d3`，头 `2cc7146`。**本票不转 resolved**——B 半边（进程级入口）未做。
+  * `171e08b`：五本册子的写入方（`adapters/postgres/case_config_registry.go`）与 23 个
+    真库往返用例；`ports` 加五个 `*Registry` 接口与结果代数；domain 加两个
+    `Revocation()` 出口。三条纪律各有用例钉住：不可覆盖、撤销走状态推进不走删除、
+    目录与明细分开写。
+  * `2cc7146`：五类的登记用例（`application/register_case_configuration.go`）与 18 个
+    用例。冲突判定落在编排——写口交回`已登记`后读回既有登记逐字段比，同则`已存在`
+    异则`内容冲突`。这是不做 UPSERT 的全部收益所在。
+  * 交付时发现并顺带钉住的一格：写口走 `RequireExecutor`，**无环境事务即拒绝**，
+    回滚不留行。事务由进程级入口给出，属 B 票。
+  * 验证：另开 detached worktree 按 `2cc7146` 检出，`gofmt`／`git diff --check`／
+    `go build ./...`／`go vet ./...` 四项零信号，`go test -count=1 ./...` 全绿且
+    **含真库**（单跑真库用例 `-v` 为 PASS 非 SKIP）。
+  * 票面「缺的最小机制件」里「按法定生效区间与适用时点版本化」一句只对关闭义务成立
+    （它本就有区间列）；解释规则那一类的版本维建不出来，已收窄为不可覆盖的单版登记，
+    另票见上条。
