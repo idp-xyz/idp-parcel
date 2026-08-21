@@ -1,7 +1,7 @@
 # 价卡无版本仓储与装载口,三价表族机制已实现却没有一张真卡能放进系统
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W14。票面点名的三疑似无门之一。
 
@@ -46,3 +46,23 @@ PAR-SET-02、PAR-SET-03;ADR-0014;`docs/domain/parcel-pricing/CONTEXT.md`。
   parcel-pricing 零提交。**特核**：PP 仍是全库唯一「配置仓储本体都缺」的上下文——同期
   NR 已长出版本化网络目录七表骨架（`3b9f212`，`0008_network_catalog.sql`，ADR-0068），
   其余上下文配置表俱在（缺的是写入方/登记口层），仅 PP 的价卡与参考序列两族连表都没有。
+- 2026-08-21 · MCP-2：四件落地随本提交置 resolved（task-11e8da0c，分支 `mcp2-pp-catalog`，
+  与票 08 同批——两族共用同一套 PP 持久化骨架）。
+  1. **仓储**：迁移 `0002_price_card_catalog.sql`——`parcel_pricing.price_card_version`，
+     键（租户+方案+方案版本），行只增不改；方向/目的封闭、SHA-256 形状、适用期有序等
+     CHECK 把领域不变量在库内再守一遍。权威内容在领域折装的登记快照（方案全图 + 源文件
+     身份 + 方向授权引用 + 发布批准责任方），列面只做比对与检索。
+  2. **装载口**：`ports.PriceCardCatalog.LoadApplicable`（方向 + 适用范围 + 计价基准时点），
+     读回经领域整图重验（含按规范化版本重算内容摘要自校）；同一方案两版同时适用交回
+     `ErrAmbiguousPriceCard`（先例：NR 目录），多候选全返回不择优。
+  3. **写入方**：`adapters/postgres/price_card_catalog.go`，结果代数四分——已登记/幂等
+     重放/版本内容冲突/规范化版本不同（摘要只在同一规范化版本内可比，ADR-0014），原行
+     永不被顶替。
+  4. **登记口**：应用 `RegisterPriceCardHandler` + 受控 CLI `cmd/parcel-pricing-register`
+     （`-kind price-card`，输入为领域登记快照 JSON，重建门在入库前拒；独立进程，未碰
+     `parcel-api`/`parcel-dispatch`；退出码 0 登记或幂等重放 / 1 输入拒 / 2 治理答案 /
+     3 未决）。
+  红线守住：零生产默认行，验证夹具全为 SYN-PRC 合成价卡（S 级只记 S）；源文件身份只登
+  名称与 SHA-256（真文件外置）。验证：worktree 全仓 `go build`/`go vet`/`go test -count=1`
+  绿，真库用例 `-v` 实跑 PASS 非 SKIP。评价用例接装载口（消费面）不在本票，见票面
+  「连带」：控制金额缝那条等它。
