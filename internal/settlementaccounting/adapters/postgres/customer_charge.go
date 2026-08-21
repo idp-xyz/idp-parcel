@@ -38,20 +38,23 @@ func (repository *CustomerCharges) FindByID(
 		return domain.CustomerCharge{}, false, fmt.Errorf("find customer charge: %w", err)
 	}
 
-	var feeItem, evaluation, currency, stageName string
-	var amount int64
+	var feeItem, evaluation, originalCurrency, settlementCurrency, stageName string
+	var originalMinor, settlementMinor int64
+	var conversion *string
 	var formedAt, recordedAt time.Time
 	var confirmation *string
 	var confirmedAt *time.Time
 	err = querier.QueryRow(ctx,
-		`SELECT fee_item, evaluation_ref, currency, amount_minor, stage,
+		`SELECT fee_item, evaluation_ref, original_currency, original_minor,
+		        settlement_currency, settlement_minor, conversion_ref, stage,
 		        confirmation_basis, formed_at, confirmed_at, recorded_at
 		   FROM settlement_accounting.customer_charge
 		  WHERE tenant_id = $1
 		    AND charge_id = $2`,
 		tenant.String(),
 		id.String(),
-	).Scan(&feeItem, &evaluation, &currency, &amount, &stageName,
+	).Scan(&feeItem, &evaluation, &originalCurrency, &originalMinor,
+		&settlementCurrency, &settlementMinor, &conversion, &stageName,
 		&confirmation, &formedAt, &confirmedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CustomerCharge{}, false, nil
@@ -60,7 +63,20 @@ func (repository *CustomerCharges) FindByID(
 		return domain.CustomerCharge{}, false, fmt.Errorf("find customer charge: %w", err)
 	}
 
-	charge, err := rebuildCustomerCharge(id, feeItem, evaluation, currency, amount, stageName, confirmation, formedAt, confirmedAt)
+	charge, err := rebuildCustomerCharge(chargeRow{
+		id:                 id,
+		feeItem:            feeItem,
+		evaluation:         evaluation,
+		originalCurrency:   originalCurrency,
+		originalMinor:      originalMinor,
+		settlementCurrency: settlementCurrency,
+		settlementMinor:    settlementMinor,
+		conversion:         conversion,
+		stageName:          stageName,
+		confirmation:       confirmation,
+		formedAt:           formedAt,
+		confirmedAt:        confirmedAt,
+	})
 	if err != nil {
 		return domain.CustomerCharge{}, false, fmt.Errorf("find customer charge: %w", err)
 	}
@@ -88,13 +104,20 @@ func (repository *CustomerCharges) SaveConfirmed(
 	if !ok {
 		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save confirmed charge: confirmed at missing")
 	}
-	currency, amount := charge.Amount()
+	originalCurrency, originalMinor := charge.OriginalAmount()
+	settlementCurrency, settlementMinor := charge.SettlementAmount()
+	var conversion *string
+	if reference, present := charge.Conversion(); present {
+		value := reference.String()
+		conversion = &value
+	}
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.customer_charge
-			(tenant_id, charge_id, fee_item, evaluation_ref, currency, amount_minor,
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor, conversion_ref,
 			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, 'CONFIRMED', $7, $8, $9, $9)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CONFIRMED', $10, $11, $12, $12)
 		 ON CONFLICT (tenant_id, charge_id) DO UPDATE
 		    SET stage = 'CONFIRMED',
 		        confirmation_basis = EXCLUDED.confirmation_basis,
@@ -105,8 +128,11 @@ func (repository *CustomerCharges) SaveConfirmed(
 		charge.ID().String(),
 		charge.FeeItem().String(),
 		charge.Evaluation().String(),
-		currency.String(),
-		amount,
+		originalCurrency.String(),
+		originalMinor,
+		settlementCurrency.String(),
+		settlementMinor,
+		conversion,
 		basis.String(),
 		charge.FormedAt().UTC(),
 		confirmedAt.UTC(),
@@ -120,28 +146,47 @@ func (repository *CustomerCharges) SaveConfirmed(
 	return ports.ChargeSaved, nil
 }
 
-func rebuildCustomerCharge(
-	id domain.CustomerChargeID,
-	feeItem, evaluation, currency string,
-	amount int64,
-	stageName string,
-	confirmation *string,
-	formedAt time.Time,
-	confirmedAt *time.Time,
-) (domain.CustomerCharge, error) {
-	feeRef, err := domain.NewFeeItemReference(feeItem)
+// chargeRow 是 customer_charge 一行的原始列值，交给重建走形成门。
+type chargeRow struct {
+	id                 domain.CustomerChargeID
+	feeItem            string
+	evaluation         string
+	originalCurrency   string
+	originalMinor      int64
+	settlementCurrency string
+	settlementMinor    int64
+	conversion         *string
+	stageName          string
+	confirmation       *string
+	formedAt           time.Time
+	confirmedAt        *time.Time
+}
+
+func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
+	feeRef, err := domain.NewFeeItemReference(row.feeItem)
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	evalRef, err := domain.NewSellEvaluationReference(evaluation)
+	evalRef, err := domain.NewSellEvaluationReference(row.evaluation)
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	currencyCode, err := domain.NewCurrencyCode(currency)
+	originalCurrency, err := domain.NewCurrencyCode(row.originalCurrency)
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	stage, err := chargeStageFrom(stageName)
+	settlementCurrency, err := domain.NewCurrencyCode(row.settlementCurrency)
+	if err != nil {
+		return domain.CustomerCharge{}, err
+	}
+	var conversion domain.ConversionStepReference
+	if row.conversion != nil {
+		conversion, err = domain.NewConversionStepReference(*row.conversion)
+		if err != nil {
+			return domain.CustomerCharge{}, err
+		}
+	}
+	stage, err := chargeStageFrom(row.stageName)
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
@@ -150,13 +195,16 @@ func rebuildCustomerCharge(
 		formStage = domain.ChargeEstimated
 	}
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          id,
-		FeeItem:     feeRef,
-		Evaluation:  evalRef,
-		Currency:    currencyCode,
-		AmountMinor: amount,
-		Stage:       formStage,
-		FormedAt:    formedAt,
+		ID:                 row.id,
+		FeeItem:            feeRef,
+		Evaluation:         evalRef,
+		OriginalCurrency:   originalCurrency,
+		OriginalMinor:      row.originalMinor,
+		SettlementCurrency: settlementCurrency,
+		SettlementMinor:    row.settlementMinor,
+		Conversion:         conversion,
+		Stage:              formStage,
+		FormedAt:           row.formedAt,
 	})
 	if err != nil {
 		return domain.CustomerCharge{}, err
@@ -164,14 +212,14 @@ func rebuildCustomerCharge(
 	if stage != domain.ChargeConfirmed {
 		return charge, nil
 	}
-	if confirmation == nil || confirmedAt == nil {
+	if row.confirmation == nil || row.confirmedAt == nil {
 		return domain.CustomerCharge{}, fmt.Errorf("confirmed charge missing confirmation columns")
 	}
-	basis, err := domain.NewConfirmationBasisReference(*confirmation)
+	basis, err := domain.NewConfirmationBasisReference(*row.confirmation)
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	return charge.Confirm(basis, *confirmedAt)
+	return charge.Confirm(basis, *row.confirmedAt)
 }
 
 func chargeStageFrom(raw string) (domain.ChargeStage, error) {

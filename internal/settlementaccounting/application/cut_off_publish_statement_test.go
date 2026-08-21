@@ -200,13 +200,15 @@ func newStatementFixture(t *testing.T) *statementFixture {
 func confirmedStatementCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          billValue(t, domain.NewCustomerChargeID, id),
-		FeeItem:     billValue(t, domain.NewFeeItemReference, "fee-freight"),
-		Evaluation:  billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
-		Currency:    billValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: amount,
-		Stage:       domain.ChargeProvisional,
-		FormedAt:    statementCutOffAt.Add(-72 * time.Hour),
+		ID:                 billValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            billValue(t, domain.NewFeeItemReference, "fee-freight"),
+		Evaluation:         billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
+		OriginalCurrency:   billValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      amount,
+		SettlementCurrency: billValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    amount,
+		Stage:              domain.ChargeProvisional,
+		FormedAt:           statementCutOffAt.Add(-72 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("form charge: %v", err)
@@ -223,13 +225,15 @@ func confirmedStatementCharge(t *testing.T, id string, amount int64) domain.Cust
 func estimatedOnlyCharge(t *testing.T, id string, amount int64) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          billValue(t, domain.NewCustomerChargeID, id),
-		FeeItem:     billValue(t, domain.NewFeeItemReference, "fee-freight"),
-		Evaluation:  billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
-		Currency:    billValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: amount,
-		Stage:       domain.ChargeEstimated,
-		FormedAt:    statementCutOffAt.Add(-72 * time.Hour),
+		ID:                 billValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            billValue(t, domain.NewFeeItemReference, "fee-freight"),
+		Evaluation:         billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
+		OriginalCurrency:   billValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      amount,
+		SettlementCurrency: billValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    amount,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           statementCutOffAt.Add(-72 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("form estimated charge: %v", err)

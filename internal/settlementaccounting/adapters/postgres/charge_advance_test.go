@@ -48,7 +48,7 @@ func TestAConfirmedChargeRoundTripsAndSecondConfirmationKeepsTheWinner(t *testin
 	if !ok || basis.String() != "DELIVERY_FINALIZED/final-1" || found.Stage() != domain.ChargeConfirmed {
 		t.Fatal("确认往返变形")
 	}
-	_, amount := found.Amount()
+	_, amount := found.SettlementAmount()
 	if amount != 45600 {
 		t.Fatalf("amount = %d", amount)
 	}
@@ -83,10 +83,11 @@ func TestSaveConfirmedPromotesAnEstimatedRowWithoutRewritingAmount(t *testing.T)
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO settlement_accounting.customer_charge
-			(tenant_id, charge_id, fee_item, evaluation_ref, currency, amount_minor,
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
 			 stage, formed_at, recorded_at)
-		 VALUES ('tenant-a', 'charge-est-1', 'BASE_FREIGHT', 'evaluation-sell-1', 'CNY', 45600,
-		         'ESTIMATED', $1, $1)`, chargeFormedAt); err != nil {
+		 VALUES ('tenant-a', 'charge-est-1', 'BASE_FREIGHT', 'evaluation-sell-1', 'CNY',
+		         45600, 'CNY', 45600, 'ESTIMATED', $1, $1)`, chargeFormedAt); err != nil {
 		t.Fatalf("预插预估行：%v", err)
 	}
 
@@ -105,9 +106,13 @@ func TestSaveConfirmedPromotesAnEstimatedRowWithoutRewritingAmount(t *testing.T)
 	if err != nil || !exists || found.Stage() != domain.ChargeConfirmed {
 		t.Fatalf("晋升后读回失败：exists=%v err=%v", exists, err)
 	}
-	_, amount := found.Amount()
-	if amount != 45600 {
+	originalCurrency, originalMinor := found.OriginalAmount()
+	settlementCurrency, settlementMinor := found.SettlementAmount()
+	if settlementMinor != 45600 {
 		t.Fatal("确认改写了金额")
+	}
+	if originalCurrency != settlementCurrency || originalMinor != 45600 {
+		t.Fatal("晋升丢了原币一对——三件组读回变形")
 	}
 }
 
@@ -302,20 +307,42 @@ func TestChargeAdvanceCheckConstraintsRejectImpossibleRows(t *testing.T) {
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO settlement_accounting.customer_charge
-			(tenant_id, charge_id, fee_item, evaluation_ref, currency, amount_minor,
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
 			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at)
-		 VALUES ('tenant-a', 'c-bad-1', 'BASE_FREIGHT', 'eval-1', 'CNY', 100,
+		 VALUES ('tenant-a', 'c-bad-1', 'BASE_FREIGHT', 'eval-1', 'CNY', 100, 'CNY', 100,
 		         'CONFIRMED', NULL, now(), now(), now())`); err == nil {
 		t.Fatal("一行「已确认却没有依据」溜进了费用库")
 	}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO settlement_accounting.customer_charge
-			(tenant_id, charge_id, fee_item, evaluation_ref, currency, amount_minor,
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
 			 stage, formed_at, recorded_at)
-		 VALUES ('tenant-a', 'c-bad-2', 'BASE_FREIGHT', 'eval-1', 'CNY', 0,
+		 VALUES ('tenant-a', 'c-bad-2', 'BASE_FREIGHT', 'eval-1', 'CNY', 0, 'CNY', 0,
 		         'ESTIMATED', now(), now())`); err == nil {
 		t.Fatal("一行「金额为零」溜进了费用库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
+			 stage, formed_at, recorded_at)
+		 VALUES ('tenant-a', 'c-bad-3', 'BASE_FREIGHT', 'eval-1', 'CNY', 100, 'CNY', 90,
+		         'ESTIMATED', now(), now())`); err == nil {
+		t.Fatal("一行「同币种两额不等」溜进了费用库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
+			 stage, formed_at, recorded_at)
+		 VALUES ('tenant-a', 'c-bad-4', 'BASE_FREIGHT', 'eval-1', 'USD', 100, 'CNY', 700,
+		         'ESTIMATED', now(), now())`); err == nil {
+		t.Fatal("一行「跨币种却没有换算依据」溜进了费用库")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -379,13 +406,15 @@ func newChargeAdvanceStores(t *testing.T) (
 func confirmedCharge(t *testing.T, id, basis string) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          saValue(t, domain.NewCustomerChargeID, id),
-		FeeItem:     saValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
-		Evaluation:  saValue(t, domain.NewSellEvaluationReference, "evaluation-sell-1"),
-		Currency:    saValue(t, domain.NewCurrencyCode, "CNY"),
-		AmountMinor: 45600,
-		Stage:       domain.ChargeEstimated,
-		FormedAt:    chargeFormedAt,
+		ID:                 saValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            saValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         saValue(t, domain.NewSellEvaluationReference, "evaluation-sell-1"),
+		OriginalCurrency:   saValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      45600,
+		SettlementCurrency: saValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    45600,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
 	})
 	if err != nil {
 		t.Fatalf("构造预估费用：%v", err)

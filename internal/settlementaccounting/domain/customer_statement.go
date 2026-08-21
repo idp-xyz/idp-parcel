@@ -92,7 +92,8 @@ func CutStatementDraft(spec StatementDraftSpec) (StatementDraft, error) {
 		if charge.Stage() != ChargeConfirmed {
 			return StatementDraft{}, ErrChargeNotConfirmed
 		}
-		currency, _ := charge.Amount()
+		// 对账单以合同结算币立单，入单比对的是费用的结算币一对。
+		currency, _ := charge.SettlementAmount()
 		if currency != spec.Currency {
 			return StatementDraft{}, ErrInvalidStatementDraft
 		}
@@ -152,7 +153,7 @@ func (draft StatementDraft) Adjustments() []ChargeAdjustment {
 func (draft StatementDraft) NetTotalMinor() int64 {
 	total := int64(0)
 	for _, charge := range draft.charges {
-		_, amount := charge.Amount()
+		_, amount := charge.SettlementAmount()
 		total += amount
 	}
 	for _, adjustment := range draft.adjustments {
@@ -241,7 +242,7 @@ func PublishStatement(
 		publishedAt: publishedAt.UTC(),
 	}
 	for _, charge := range draft.charges {
-		_, amount := charge.Amount()
+		_, amount := charge.SettlementAmount()
 		statement.lines = append(statement.lines, StatementLine{Charge: charge.ID(), AmountMinor: amount})
 	}
 	for _, adjustment := range draft.adjustments {

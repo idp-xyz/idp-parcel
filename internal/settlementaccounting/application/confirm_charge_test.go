@@ -137,13 +137,15 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 func provisionalCharge(t *testing.T) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          billValue(t, domain.NewCustomerChargeID, "charge-1"),
-		FeeItem:     billValue(t, domain.NewFeeItemReference, "fee-freight"),
-		Evaluation:  billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
-		Currency:    billValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: 12000,
-		Stage:       domain.ChargeProvisional,
-		FormedAt:    chargeFormedAt,
+		ID:                 billValue(t, domain.NewCustomerChargeID, "charge-1"),
+		FeeItem:            billValue(t, domain.NewFeeItemReference, "fee-freight"),
+		Evaluation:         billValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
+		OriginalCurrency:   billValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      12000,
+		SettlementCurrency: billValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    12000,
+		Stage:              domain.ChargeProvisional,
+		FormedAt:           chargeFormedAt,
 	})
 	if err != nil {
 		t.Fatalf("form charge: %v", err)
@@ -184,7 +186,7 @@ func TestAMetConditionConfirmsWithoutTouchingTheAmount(t *testing.T) {
 		t.Fatalf("stage = %q", charge.Stage())
 	}
 	// 金额锚定本夹具：确认前后都是 12000（USD）——确认不改金额。
-	if _, amount := charge.Amount(); amount != 12000 {
+	if _, amount := charge.SettlementAmount(); amount != 12000 {
 		t.Fatalf("amount = %d, want 12000", amount)
 	}
 	basis, confirmed := charge.Confirmation()
