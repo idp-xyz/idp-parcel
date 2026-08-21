@@ -18,13 +18,15 @@ var (
 func confirmedCharge(t *testing.T, id string, amountMinor int64) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          settlementValue(t, domain.NewCustomerChargeID, id),
-		FeeItem:     settlementValue(t, domain.NewFeeItemReference, "fee-freight"),
-		Evaluation:  settlementValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
-		Currency:    settlementValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: amountMinor,
-		Stage:       domain.ChargeProvisional,
-		FormedAt:    statementCutOffAt.Add(-72 * time.Hour),
+		ID:                 settlementValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            settlementValue(t, domain.NewFeeItemReference, "fee-freight"),
+		Evaluation:         settlementValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
+		OriginalCurrency:   settlementValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      amountMinor,
+		SettlementCurrency: settlementValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    amountMinor,
+		Stage:              domain.ChargeProvisional,
+		FormedAt:           statementCutOffAt.Add(-72 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("form charge: %v", err)
@@ -42,13 +44,15 @@ func confirmedCharge(t *testing.T, id string, amountMinor int64) domain.Customer
 func estimatedStatementCharge(t *testing.T, id string) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          settlementValue(t, domain.NewCustomerChargeID, id),
-		FeeItem:     settlementValue(t, domain.NewFeeItemReference, "fee-freight"),
-		Evaluation:  settlementValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
-		Currency:    settlementValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: 5000,
-		Stage:       domain.ChargeEstimated,
-		FormedAt:    statementCutOffAt.Add(-72 * time.Hour),
+		ID:                 settlementValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            settlementValue(t, domain.NewFeeItemReference, "fee-freight"),
+		Evaluation:         settlementValue(t, domain.NewSellEvaluationReference, "sell-evaluation-1"),
+		OriginalCurrency:   settlementValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      5000,
+		SettlementCurrency: settlementValue(t, domain.NewCurrencyCode, "USD"),
+		SettlementMinor:    5000,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           statementCutOffAt.Add(-72 * time.Hour),
 	})
 	if err != nil {
 		t.Fatalf("form estimated charge: %v", err)

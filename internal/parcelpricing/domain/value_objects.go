@@ -392,7 +392,10 @@ const (
 	ArtifactReferenceSeries ArtifactKind = "reference-series"
 	// 汇率的口径依据由商业价格政策版本声明。计价引用它，所有权在 party-commercial。
 	ArtifactCommercialPolicy ArtifactKind = "commercial-policy"
-	ArtifactNumericProfile   ArtifactKind = "numeric-profile"
+	// 价格方向授权由 party-commercial 签发。价卡登记引用它作为 BUY/SELL 方向的
+	// 授权依据，这里只登引用不解析其内容——解析属授权工件的所有者。
+	ArtifactCommercialAuthorization ArtifactKind = "commercial-authorization"
+	ArtifactNumericProfile          ArtifactKind = "numeric-profile"
 )
 
 func NumericProfileV1Reference() VersionReference {

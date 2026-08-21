@@ -13,13 +13,15 @@ var chargeFormedAt = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
 func estimatedCharge(t *testing.T) domain.CustomerCharge {
 	t.Helper()
 	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
-		ID:          mustValue(t, domain.NewCustomerChargeID, "charge-1"),
-		FeeItem:     mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
-		Evaluation:  mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-1"),
-		Currency:    mustValue(t, domain.NewCurrencyCode, "CNY"),
-		AmountMinor: 45600,
-		Stage:       domain.ChargeEstimated,
-		FormedAt:    chargeFormedAt,
+		ID:                 mustValue(t, domain.NewCustomerChargeID, "charge-1"),
+		FeeItem:            mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-1"),
+		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      45600,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    45600,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
 	})
 	if err != nil {
 		t.Fatalf("form customer charge: %v", err)
@@ -53,7 +55,7 @@ func TestAChargeWalksFromEstimateToConfirmation(t *testing.T) {
 	if !present || basis.String() != "DELIVERY_FINALIZED/final-1" {
 		t.Fatalf("confirmation = %v present = %v", basis, present)
 	}
-	_, amount := confirmed.Amount()
+	_, amount := confirmed.SettlementAmount()
 	if amount != 45600 {
 		t.Fatal("确认改了金额——金额变化只能走调整")
 	}
@@ -69,16 +71,84 @@ func TestAChargeWalksFromEstimateToConfirmation(t *testing.T) {
 	}
 
 	direct := domain.CustomerChargeSpec{
-		ID:          mustValue(t, domain.NewCustomerChargeID, "charge-2"),
-		FeeItem:     mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
-		Evaluation:  mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-2"),
-		Currency:    mustValue(t, domain.NewCurrencyCode, "CNY"),
-		AmountMinor: 100,
-		Stage:       domain.ChargeConfirmed,
-		FormedAt:    chargeFormedAt,
+		ID:                 mustValue(t, domain.NewCustomerChargeID, "charge-2"),
+		FeeItem:            mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-2"),
+		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      100,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    100,
+		Stage:              domain.ChargeConfirmed,
+		FormedAt:           chargeFormedAt,
 	}
 	if _, err := domain.FormCustomerCharge(direct); !errors.Is(err, domain.ErrInvalidCustomerCharge) {
 		t.Fatalf("err = %v; 直接以已确认起步被收下了", err)
+	}
+}
+
+// Covers: SA CONTEXT「赔付、追偿、税费、币种与法人」——「每条费用分别保存原币金额、
+// 合同结算币金额及换算依据」「原币金额、合同结算币金额和换算依据是一条费用从同一个
+// 评价采用来的一组」「原币与合同结算币相同时两个金额必须相等」。客户费用受三件组
+// 约束由票 supplier-expected-cost-correction/04 裁定，此处是它的构造面。
+func TestAChargeCarriesTheCurrencyTripleFromItsEvaluation(t *testing.T) {
+	cross, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
+		ID:                 mustValue(t, domain.NewCustomerChargeID, "charge-cross"),
+		FeeItem:            mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-3"),
+		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      4200,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    30240,
+		Conversion:         mustValue(t, domain.NewConversionStepReference, "conversion-step-1"),
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
+	})
+	if err != nil {
+		t.Fatalf("form cross-currency charge: %v", err)
+	}
+	originalCurrency, originalMinor := cross.OriginalAmount()
+	settlementCurrency, settlementMinor := cross.SettlementAmount()
+	if originalCurrency.String() != "USD" || originalMinor != 4200 ||
+		settlementCurrency.String() != "CNY" || settlementMinor != 30240 {
+		t.Fatalf("三件组读回变形：%s %d / %s %d",
+			originalCurrency, originalMinor, settlementCurrency, settlementMinor)
+	}
+	if conversion, present := cross.Conversion(); !present || conversion.String() != "conversion-step-1" {
+		t.Fatal("跨币种费用丢了换算依据")
+	}
+
+	missingConversion := domain.CustomerChargeSpec{
+		ID:                 mustValue(t, domain.NewCustomerChargeID, "charge-cross-2"),
+		FeeItem:            mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-3"),
+		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "USD"),
+		OriginalMinor:      4200,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    30240,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
+	}
+	if _, err := domain.FormCustomerCharge(missingConversion); !errors.Is(err, domain.ErrConversionStepMissing) {
+		t.Fatalf("err = %v; 没有换算步骤的跨币种费用被收下了", err)
+	}
+
+	unequalSameCurrency := domain.CustomerChargeSpec{
+		ID:                 mustValue(t, domain.NewCustomerChargeID, "charge-same-2"),
+		FeeItem:            mustValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         mustValue(t, domain.NewSellEvaluationReference, "evaluation-sell-4"),
+		OriginalCurrency:   mustValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      45600,
+		SettlementCurrency: mustValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    45700,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
+	}
+	if _, err := domain.FormCustomerCharge(unequalSameCurrency); !errors.Is(err, domain.ErrInvalidCustomerCharge) {
+		t.Fatalf("err = %v; 同币种两额不等被收下了", err)
+	}
+
+	if _, present := estimatedCharge(t).Conversion(); present {
+		t.Fatal("同币种费用凭空带了换算依据")
 	}
 }
 

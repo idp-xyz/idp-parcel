@@ -60,54 +60,77 @@ func NewConfirmationBasisReference(value string) (ConfirmationBasisReference, er
 	return ConfirmationBasisReference{required}, err
 }
 
-// CustomerChargeSpec 是形成一笔客户费用所需的全部输入。
+// CustomerChargeSpec 是形成一笔客户费用所需的全部输入。原币金额、合同结算币金额与
+// 换算依据是从它引用的那一个 SELL 评价采用来的一组（CONTEXT：每条费用分别保存原币
+// 金额、合同结算币金额及换算依据），不是可各自另取的三件。
 type CustomerChargeSpec struct {
-	ID          CustomerChargeID
-	FeeItem     FeeItemReference
-	Evaluation  SellEvaluationReference
-	Currency    CurrencyCode
-	AmountMinor int64
-	Stage       ChargeStage
-	FormedAt    time.Time
+	ID                 CustomerChargeID
+	FeeItem            FeeItemReference
+	Evaluation         SellEvaluationReference
+	OriginalCurrency   CurrencyCode
+	OriginalMinor      int64
+	SettlementCurrency CurrencyCode
+	SettlementMinor    int64
+	Conversion         ConversionStepReference
+	Stage              ChargeStage
+	FormedAt           time.Time
 }
 
 // CustomerCharge 是普通客户费用：预估或暂估起步，确认条件满足后定格。费用只进不退
 // ——确认后的金额变化由计价纠错或商业让利这两种调整表达（AT-SA-056：只接受这两种，
 // 其他类型转交唯一创建用例），不改写费用本体。
 type CustomerCharge struct {
-	id           CustomerChargeID
-	feeItem      FeeItemReference
-	evaluation   SellEvaluationReference
-	currency     CurrencyCode
-	amountMinor  int64
-	stage        ChargeStage
-	confirmation ConfirmationBasisReference
-	formedAt     time.Time
-	confirmedAt  time.Time
+	id                 CustomerChargeID
+	feeItem            FeeItemReference
+	evaluation         SellEvaluationReference
+	originalCurrency   CurrencyCode
+	originalMinor      int64
+	settlementCurrency CurrencyCode
+	settlementMinor    int64
+	conversion         ConversionStepReference
+	stage              ChargeStage
+	confirmation       ConfirmationBasisReference
+	formedAt           time.Time
+	confirmedAt        time.Time
 }
 
 // FormCustomerCharge 形成一笔预估或暂估费用。直接以`已确认`起步不允许——确认条件
-// 的满足是一次显式判断，不是初值。
+// 的满足是一次显式判断，不是初值。跨币种必备评价内换算步骤、同币种两额必须相等，
+// 理由与供应商侧形成门一字不差：没有换算却造出第二个数，只可能是自行取汇率补算出来
+// 的。客户费用受三件组约束由票 supplier-expected-cost-correction/04 裁定。
 func FormCustomerCharge(spec CustomerChargeSpec) (CustomerCharge, error) {
 	if !spec.ID.valid() ||
 		!spec.FeeItem.valid() ||
 		!spec.Evaluation.valid() ||
-		!spec.Currency.valid() ||
-		spec.AmountMinor <= 0 ||
+		!spec.OriginalCurrency.valid() ||
+		spec.OriginalMinor <= 0 ||
+		!spec.SettlementCurrency.valid() ||
+		spec.SettlementMinor <= 0 ||
 		spec.FormedAt.IsZero() {
 		return CustomerCharge{}, ErrInvalidCustomerCharge
 	}
 	if spec.Stage != ChargeEstimated && spec.Stage != ChargeProvisional {
 		return CustomerCharge{}, ErrInvalidCustomerCharge
 	}
+	if spec.OriginalCurrency != spec.SettlementCurrency && !spec.Conversion.valid() {
+		return CustomerCharge{}, ErrConversionStepMissing
+	}
+	if spec.OriginalCurrency == spec.SettlementCurrency &&
+		spec.OriginalMinor != spec.SettlementMinor {
+		// 同币种两个金额不一致：没有换算却造出了第二个数。
+		return CustomerCharge{}, ErrInvalidCustomerCharge
+	}
 	return CustomerCharge{
-		id:          spec.ID,
-		feeItem:     spec.FeeItem,
-		evaluation:  spec.Evaluation,
-		currency:    spec.Currency,
-		amountMinor: spec.AmountMinor,
-		stage:       spec.Stage,
-		formedAt:    spec.FormedAt.UTC(),
+		id:                 spec.ID,
+		feeItem:            spec.FeeItem,
+		evaluation:         spec.Evaluation,
+		originalCurrency:   spec.OriginalCurrency,
+		originalMinor:      spec.OriginalMinor,
+		settlementCurrency: spec.SettlementCurrency,
+		settlementMinor:    spec.SettlementMinor,
+		conversion:         spec.Conversion,
+		stage:              spec.Stage,
+		formedAt:           spec.FormedAt.UTC(),
 	}, nil
 }
 
@@ -123,8 +146,19 @@ func (charge CustomerCharge) Evaluation() SellEvaluationReference {
 	return charge.evaluation
 }
 
-func (charge CustomerCharge) Amount() (CurrencyCode, int64) {
-	return charge.currency, charge.amountMinor
+func (charge CustomerCharge) OriginalAmount() (CurrencyCode, int64) {
+	return charge.originalCurrency, charge.originalMinor
+}
+
+// SettlementAmount 是合同结算币的一对：对账单与应收派生用的是它。
+func (charge CustomerCharge) SettlementAmount() (CurrencyCode, int64) {
+	return charge.settlementCurrency, charge.settlementMinor
+}
+
+// Conversion 只在跨币种时给出：换算已由 parcel-pricing 在评价内完成，这里保存的是
+// 换算依据，本上下文不重算也不改用其他汇率。
+func (charge CustomerCharge) Conversion() (ConversionStepReference, bool) {
+	return charge.conversion, charge.conversion.valid()
 }
 
 func (charge CustomerCharge) Stage() ChargeStage {

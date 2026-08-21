@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,7 +20,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证案件关闭意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺关闭响亮报错。信封 ID 由租户加案件引用认领。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺关闭响亮报错。信封 ID 由租户、案件引用加关闭周期序数认领，分区键
+// 只到案件（ADR-0069）。入队走 EnqueueOnce。
 
 type closureHandoffClock struct{ at time.Time }
 
@@ -76,7 +78,11 @@ func closureIntent(t *testing.T, tenant string) ports.CaseClosureHandoffIntent {
 	}
 }
 
-func closureEventID(tenant, caseRef string) string {
+func closureEventID(tenant, caseRef string, closureCycle int) string {
+	return tenant + "/" + caseRef + "/" + strconv.Itoa(closureCycle)
+}
+
+func closurePartitionKey(tenant, caseRef string) string {
 	return tenant + "/" + caseRef
 }
 
@@ -85,7 +91,7 @@ func TestCaseClosureIntentCommitsAtomicallyWithTheRecord(t *testing.T) {
 	ctx := t.Context()
 	tenant := fmcValue(t, domain.NewTenantID, "tenant-a")
 	intent := closureIntent(t, "tenant-a")
-	eventID := closureEventID("tenant-a", intent.Closure.CaseRef())
+	eventID := closureEventID("tenant-a", intent.Closure.CaseRef(), 1)
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		if _, err := fixture.closures.Save(txCtx, tenant, intent.Closure); err != nil {
@@ -110,7 +116,7 @@ func TestCaseClosureIntentRollbackDropsBoth(t *testing.T) {
 	ctx := t.Context()
 	tenant := fmcValue(t, domain.NewTenantID, "tenant-a")
 	intent := closureIntent(t, "tenant-a")
-	eventID := closureEventID("tenant-a", intent.Closure.CaseRef())
+	eventID := closureEventID("tenant-a", intent.Closure.CaseRef(), 1)
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -147,7 +153,7 @@ func TestResendingTheSameCaseClosureIntentIsIdempotent(t *testing.T) {
 	fixture := newClosureHandoffFixture(t)
 	ctx := t.Context()
 	intent := closureIntent(t, "tenant-a")
-	eventID := closureEventID("tenant-a", intent.Closure.CaseRef())
+	eventID := closureEventID("tenant-a", intent.Closure.CaseRef(), 1)
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffClosure(txCtx, intent)
@@ -160,10 +166,56 @@ func TestResendingTheSameCaseClosureIntentIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestTwoClosureCyclesAreTwoEnvelopesInOnePartition 证 UC-CC-010 的多关闭周期：重开后
+// 再次关闭形成 C2，两个周期各自入队一份（ID 带周期序数，C2 不被 EnqueueOnce 当成 C1 的
+// 重放静默吞掉），且两份落同一分区（分区键只到案件，同案各周期先后保序）。
+//
+// 今天应用层没有重开入口，这条走域对象的 Reopen 直接把关闭记录推到第二个周期——引信与
+// 拆弹不分离正是 ADR-0069 否决「等多周期实现时再改」的理由。
+func TestTwoClosureCyclesAreTwoEnvelopesInOnePartition(t *testing.T) {
+	fixture := newClosureHandoffFixture(t)
+	ctx := t.Context()
+	intent := closureIntent(t, "tenant-a")
+	caseRef := intent.Closure.CaseRef()
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffClosure(txCtx, intent)
+	})
+
+	if err := intent.Closure.Reopen(domain.ControlledReopening{
+		LateFact:      "late-regulatory-correction/9",
+		AffectedItems: []string{"declaration-submitted"},
+		Authority:     "customs-owner",
+		ReopenedAt:    fmcBaseAt.Add(3 * time.Hour),
+	}); err != nil {
+		t.Fatalf("重开：%v", err)
+	}
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffClosure(txCtx, intent)
+	})
+
+	first := closureEventID("tenant-a", caseRef, 1)
+	second := closureEventID("tenant-a", caseRef, 2)
+	if count := countClosureIntents(t, fixture.pool, first); count != 1 {
+		t.Fatalf("C1 行数 = %d，want 1", count)
+	}
+	if count := countClosureIntents(t, fixture.pool, second); count != 1 {
+		t.Fatalf("C2 行数 = %d，want 1——第二个关闭周期被当成 C1 的重放吞掉了", count)
+	}
+
+	want := closurePartitionKey("tenant-a", caseRef)
+	if got := partitionKeyOf(t, fixture.pool, first); got != want {
+		t.Fatalf("C1 分区键 = %q，want %q", got, want)
+	}
+	if got := partitionKeyOf(t, fixture.pool, second); got != want {
+		t.Fatalf("C2 分区键 = %q，want %q——两个周期不同分区就没有先后可言", got, want)
+	}
+}
+
 func TestCaseClosureIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newClosureHandoffFixture(t)
 	intent := closureIntent(t, "tenant-a")
-	eventID := closureEventID("tenant-a", intent.Closure.CaseRef())
+	eventID := closureEventID("tenant-a", intent.Closure.CaseRef(), 1)
 	if err := fixture.handoff.HandOffClosure(t.Context(), intent); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}

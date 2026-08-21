@@ -111,6 +111,47 @@ func TestOffsitePickupRegistrationFollowsTheTransactionalTemplate(t *testing.T) 
 	}
 }
 
+// TestTwoSuccessfulPickupsOnOneObjectShareAPartition 证同一载运对象跨尝试的第二次成功
+// 登记：两次是同一条对象控制链的先后两段（TF CONTEXT 的跨段接续句、`AT-TF-098`），
+// ID 各带尝试维所以两份都入队，分区键去掉尝试维所以两份排同一条队。
+//
+// 分区键若跟着 ID 走，第二段的登记可以先于第一段送达，而下游 parcel-shipment 的来源采用
+// 是逐对象判断的——先后一乱，采用就落在已经结束的那一段上。
+//
+// 分区键保留类型段：并进（租户+对象）会与 VE 的（租户+包裹）投影分区合流，一封未决的揽收
+// 就堵住同一包裹已经派生的追踪投影。断言里的类型段是这条边界，删了它用例照绿，
+// cmd/parcel-dispatch 的揽收采用用例才会红。
+func TestTwoSuccessfulPickupsOnOneObjectShareAPartition(t *testing.T) {
+	handoff, db, pool := newPickupRegistrationHandoffFixture(t)
+	ctx := t.Context()
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := handoff.HandOffOffsitePickupRegistration(txCtx, pickupRegistrationHandoffIntent(t, "parcel-1", "attempt-1")); err != nil {
+			return err
+		}
+		return handoff.HandOffOffsitePickupRegistration(txCtx, pickupRegistrationHandoffIntent(t, "parcel-1", "attempt-2"))
+	}); err != nil {
+		t.Fatalf("同对象两尝试：%v", err)
+	}
+
+	first := "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"
+	second := "tenant-a/parcel-1/attempt-2/offsite-pickup-registration"
+	if count := countTFIntents(t, pool, first); count != 1 {
+		t.Fatalf("首段行数 = %d, want 1", count)
+	}
+	if count := countTFIntents(t, pool, second); count != 1 {
+		t.Fatalf("后段行数 = %d, want 1——第二次成功被当成首段的重放吞掉了", count)
+	}
+
+	const want = "tenant-a/parcel-1/offsite-pickup-registration"
+	if got := partitionKeyOf(t, pool, first); got != want {
+		t.Fatalf("首段分区键 = %q, want %q", got, want)
+	}
+	if got := partitionKeyOf(t, pool, second); got != want {
+		t.Fatalf("后段分区键 = %q, want %q——两段不同分区就没有先后可言", got, want)
+	}
+}
+
 func TestOffsitePickupRegistrationRefusesABlankKey(t *testing.T) {
 	handoff, db, _ := newPickupRegistrationHandoffFixture(t)
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
