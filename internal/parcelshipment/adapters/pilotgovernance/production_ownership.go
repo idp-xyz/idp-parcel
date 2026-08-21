@@ -34,10 +34,14 @@ type AuthorityIntervalSource interface {
 
 // AdmissionSuspensionSource 回答某个治理范围在某个业务时点是否处在暂停新准入之中。
 //
-// 第二个返回值为 false 即「该时点没有生效中的暂停」。依赖调不通作为错误返回——把它
+// 方法名跟治理侧走（`FindUnresumedSuspension`）而不是本上下文的说法：判断「还拦不拦」
+// 的规则是治理侧的，本适配器去适配它。「尚未恢复」与「准入暂停」在这里是同一件事的两
+// 头——前者是登记册的事实，后者是本上下文据此形成的控制。
+//
+// 第二个返回值为 false 即「该时点没有仍在拦的暂停」。依赖调不通作为错误返回——把它
 // 读成「没暂停」是一次默认放行，一次故障会因此看起来像准入开放。
 type AdmissionSuspensionSource interface {
-	FindEffectiveSuspension(
+	FindUnresumedSuspension(
 		ctx context.Context,
 		scope pgdomain.ScopeVersionReference,
 		at time.Time,
@@ -242,7 +246,7 @@ func (adapter *ProductionOwnershipAdapter) admissionControl(
 	governance GovernanceScope,
 	asOf time.Time,
 ) (psdomain.AdmissionControl, psdomain.OwnershipSuspensionReference, error) {
-	suspension, paused, err := adapter.deps.Suspensions.FindEffectiveSuspension(ctx, governance.PilotScope, asOf)
+	suspension, paused, err := adapter.deps.Suspensions.FindUnresumedSuspension(ctx, governance.PilotScope, asOf)
 	if err != nil {
 		return 0, psdomain.OwnershipSuspensionReference{}, fmt.Errorf("find effective suspension: %w", err)
 	}

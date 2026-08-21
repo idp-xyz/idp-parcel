@@ -8,7 +8,16 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
+)
+
+// 生产装配要往三个窄口里插的就是这三个治理侧仓储。编译期钉住，形状不合当场编不过——
+// 靠装配时才发现，表现出来是一个看不出原因的`权威未确定`。
+var (
+	_ adapter.AuthorityIntervalSource   = (*pgpostgres.AuthorityIntervals)(nil)
+	_ adapter.OwnershipHandoffSource    = (*pgpostgres.Takeovers)(nil)
+	_ adapter.AdmissionSuspensionSource = (*pgpostgres.Suspensions)(nil)
 )
 
 const (
@@ -503,7 +512,7 @@ type suspensionSourceDouble struct {
 	err        error
 }
 
-func (source *suspensionSourceDouble) FindEffectiveSuspension(
+func (source *suspensionSourceDouble) FindUnresumedSuspension(
 	context.Context, pgdomain.ScopeVersionReference, time.Time,
 ) (pgdomain.SuspensionDecision, bool, error) {
 	if source.err != nil {

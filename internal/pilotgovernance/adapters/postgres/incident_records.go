@@ -141,6 +141,82 @@ func (repository *Suspensions) FindByID(
 	return decision, true, nil
 }
 
+// FindUnresumedSuspension 找回该范围版本上、在时点 at 已生效且尚未被恢复的那条暂停。
+// 「尚未恢复」是治理侧自己的说法：恢复必须由试点业务责任角色依据证据明确决定，指标回落
+// 或规则不再命中都不解除暂停，所以没有恢复记录就仍然拦着。
+//
+// 三处边界各有出处，都不是本方法自选的：
+//
+//   - **范围版本按字面相等匹配**。暂停范围扩大或缩小时形成的是「带新依据和生效时间的
+//     范围版本」，此前判断不被覆盖——每条暂停因此只为它写明的那一版说话。
+//     ScopeVersionReference 是不透明串，版本之间的先后与继承关系类型上读不出来，
+//     所以也无从写出「v1 的暂停覆盖 v2」这种匹配。
+//   - **生效时点算已生效**（`effective_at <= at`），与本仓权威区间 `[From, To)` 的半开
+//     约定同向：生效时间那一刻起就已生效。恢复同此，故暂停与恢复同刻时以恢复为准。
+//   - **同一范围多条暂停各自独立解除**。恢复记录逐条引用一个暂停标识，所以只要还有一条
+//     已生效且未恢复，范围就仍在暂停中；交回哪一条按生效时间与标识定序，保证同一登记册
+//     每次问都得到同一条（调用方会把它的标识写进自己的答复）。
+func (repository *Suspensions) FindUnresumedSuspension(
+	ctx context.Context,
+	scope domain.ScopeVersionReference,
+	at time.Time,
+) (domain.SuspensionDecision, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.SuspensionDecision{}, false, fmt.Errorf("find unresumed suspension: %w", err)
+	}
+
+	var id, trigger, basis, evidence, scopeValue, executedBy, inTransit string
+	var occurredAt, effectiveAt time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT suspension.suspension_id, suspension.trigger_source, suspension.basis,
+		        suspension.evidence, suspension.scope, suspension.executed_by,
+		        suspension.occurred_at, suspension.effective_at, suspension.in_transit_note
+		   FROM pilot_governance.suspension_decision AS suspension
+		   LEFT JOIN pilot_governance.resumption_decision AS resumption
+		          ON resumption.suspension_id = suspension.suspension_id
+		         AND resumption.effective_at <= $2
+		  WHERE suspension.scope = $1
+		    AND suspension.effective_at <= $2
+		    AND resumption.suspension_id IS NULL
+		  ORDER BY suspension.effective_at, suspension.suspension_id
+		  LIMIT 1`,
+		scope.String(),
+		at.UTC(),
+	).Scan(&id, &trigger, &basis, &evidence, &scopeValue, &executedBy,
+		&occurredAt, &effectiveAt, &inTransit)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SuspensionDecision{}, false, nil
+	}
+	if err != nil {
+		return domain.SuspensionDecision{}, false, fmt.Errorf("find unresumed suspension: %w", err)
+	}
+
+	suspensionID, err := domain.NewSuspensionID(id)
+	if err != nil {
+		return domain.SuspensionDecision{}, false, fmt.Errorf("rebuild suspension: %w", err)
+	}
+	scopeRef, err := domain.NewScopeVersionReference(scopeValue)
+	if err != nil {
+		return domain.SuspensionDecision{}, false, fmt.Errorf("rebuild suspension: %w", err)
+	}
+	decision, err := domain.RecordSuspension(domain.SuspensionDecisionSpec{
+		ID:            suspensionID,
+		TriggerSource: trigger,
+		Basis:         basis,
+		Evidence:      evidence,
+		Scope:         scopeRef,
+		ExecutedBy:    executedBy,
+		OccurredAt:    occurredAt,
+		EffectiveAt:   effectiveAt,
+		InTransitNote: inTransit,
+	})
+	if err != nil {
+		return domain.SuspensionDecision{}, false, fmt.Errorf("rebuild suspension: %w", err)
+	}
+	return decision, true, nil
+}
+
 func (repository *Suspensions) Save(
 	ctx context.Context,
 	decision domain.SuspensionDecision,
