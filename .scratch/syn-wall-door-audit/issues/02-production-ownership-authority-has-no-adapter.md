@@ -1,7 +1,7 @@
 # 生产归属权威端口无生产适配器,治理登记册配好也接不进提交链
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W03。
 
@@ -183,3 +183,17 @@ Status: ready-for-agent
   无接入渠道即无可认证入口，而接入渠道登记册（票 01）已撞上 ADR-0055 明文否决的替代方案
   转 `ready-for-human` 等新 ADR。第二件因此只剩受控 CLI 或另拆票两条路，不得自造采信
   自报身份的口子（ADR-0003）。本票收口后 `cmd` 全树仍无 `pilotgovernance` 引用。
+
+- 2026-08-21 MCP-5（**收口 → `resolved`**）：第 1 条（PS←PG 桥接适配器）已交付，第 2 条按
+  MCP-1 指示拆为独立票 `.scratch/syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md`
+  （`needs-triage`），不再挂在本票下。另有票 11（范围版本覆盖关系登记，`needs-triage`）由本票
+  裁定分出，**不阻塞本票**——三态语义已交付，第三态是它今天的正确答案。
+  - **提交**：`origin/main` 三笔——`443c2bc`（MCP-4 死会话封存件）、`57e0b1f`（治理侧读口 +
+    三个窄口编译期断言 + 首批真库用例）、`c0ea050`（准入暂停查询改三态）。原分支
+    `t1-02-takeover` 尖端 `8d701e4`，经 MCP-1 cherry-pick 入 `main`，零冲突、文件级零交集。
+  - **验证（含 PG，MCP-1 在 detached verify 树跑）**：`gofmt -l cmd internal` 无输出；
+    `go build ./...`、`go vet ./...`、`git diff --check` 均 0；
+    `go test -p 1 -count=1 -v ./...` 退出码 0，**4000 PASS / 0 FAIL / 0 SKIP**，71 包，220 秒。
+    **`SKIP=0` 是这份证据的关键项**——退出码 0 与「全部跳过」兼容，`SKIP=0` 不兼容，
+    所以真库确实跑了，不是本文件上面那条假绿反证里的情形。
+  - 收口时复核于 `d5e5d20`：`cmd` 全树 `pilotgovernance` 引用仍为零，上一条的预言成立。
