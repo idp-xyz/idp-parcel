@@ -75,3 +75,23 @@ AGENTS.md「当前默认切片」里仍在阻断的一项，这份重估可能�
     互链。
   - **`2399ecd`（bento-gate-reeval）＝先蒸馏后定。** 派 MCP-4 只读分支产出结论票（Bento 闸门
     维持/可解除/差什么），证据以分支 SHA 作索引，大输出不进 main；蒸馏完分支去留再定。
+
+- 2026-08-21 MCP-4：**`ps-intake-qual-evidence` 已核销一条**，属上面「其余口径」里那类
+  「按 SHA 判 UNMERGED、内容却可能已在 main」的 `ps-*` 树。下一个做清点的人可直接跳过它，
+  不必重新论证。
+  - 树：`C:/Users/topsx/AppData/Local/Temp/idp-parcel-ps-intake-qual-evidence`，HEAD `aac1747`。
+  - **与 main 的关系已判定**：`aac1747`「收寄硬资格走消费侧证据窄口（ADR-0063）」与已入 main 的
+    `7cb39b6` 是同一笔——提交标题一字不差，父提交 `6d4f5b3` 本身就是 `origin/main` 的祖先。
+    逐文件核内容：`known_prefix_intake_qualification_evidence.go`、
+    `unconfigured_intake_qualification_evidence.go`、`parcelshipment/domain/network_intake.go`、
+    `docs/adr/0063-*.md` 对 main **diff 为空**；`ports.go` 唯一差别是 main 比它多 24 行后续演进，
+    即 main 是严格超集。**不含任何 main 没有的东西。**
+  - **拆树前先查了工作区**，没有把「提交冗余」当成「工作树空」——这两件是本票存在的理由。
+    `git status --short` 与 `git status --short --untracked-files=all` **均为零行**（后者是必要的：
+    普通 `status --short` 对被忽略目录只显一行，光看它会漏）。确认干净后 `git worktree remove`
+    **未加 `--force`**，退出码 0。
+  - **分支指针 `ps-intake-qual-evidence` 故意保留**，与本票对 `b72d96e` 等的既有口径一致：
+    删一个不解决那一整类的判定成本，记明反而让下一个人省一次论证。
+  - 同轮另拆两棵（同样先查后拆、未加 `--force`、均零行）：`idp-parcel-t110b`（票 10-B 交付树，
+    内容已入 main）与 `idp-parcel-mcp4-baseline`（detached `0ec62ea`，已是 `origin/main` 祖先，
+    零独有内容）。现已无任何 MCP-4 名下的 worktree。
