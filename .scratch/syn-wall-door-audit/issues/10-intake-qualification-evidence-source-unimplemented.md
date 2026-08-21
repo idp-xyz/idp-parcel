@@ -1,7 +1,7 @@
 # 收寄硬资格证据口无生产实现,资格证据无处可登
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W11 证据面。
 
@@ -13,11 +13,25 @@ Status: ready-for-agent
 
 - 端口与「诚实无门」实现在;证据的存储、装载口、写入方、登记口全缺。
 - 合成种子(`syn_pc_seed_test.go` 的 `seedIntakeQualification`)只在测试里给证据,生产路径没有任何来源可登。
+
+> **「全缺」已不成立（机制半边落地于 `origin/main` `fa8d5f4`，见 Comments 2026-08-20 MCP-2
+> 与 2026-08-21 MCP-4 两条）。** 原句保留——它记的是审计基线 `49a2ab0` 当时的实况。今天四件
+> 各有着落：存储与写入方是 node-operations 已有的执行事实表与 `RecordExecutionFact`（不另起
+> 第二本册子），装载口是 `NodeExecutionQualificationEvidence`，登记口是装配点的
+> `nodeQualificationAuthority`。**生产路径今天仍答未证明，但那是没租户、不是没来源**：缺的
+> 已收敛为实例半边——认领哪一段权威、哪条引用由哪件执行事实证。
 - 注意与票 03 的分界:资格**要求**由 PC 声明表携带(票 03 的发布面);本票管资格**证据**——某对象已满足要求的事实从哪来、登在哪。
 
 ## 缺的最小机制件
 
 资格证据来源:证据登记存储 + 装载口 + 写入方(按 ADR-0063 的证据语义:逐对象/逐要求、带来源与有效性;证据可能来自 CC 预检结果等源上下文,归属先对照 CONTEXT 再定)。
+
+> **落点已更正为「给 `KnownPrefix` 缝后面接真源」，不是另起证据口（见 Comments 2026-08-20
+> MCP-2 那条）。** 原句保留，但「另起」这个读法不要再照着做：组合缝
+> `KnownPrefixIntakeQualificationEvidence` 在审计基线之前就已存在（`7cb39b6`，ADR-0063 同笔），
+> 票面当时漏记了它。归属那一问也已裁定，且答案不是原句设想的那个：证据来自 **node-operations
+> 的执行事实**，不是 CC 预检结果——节点说得了做过什么，说不了监管认定了什么，正式关务判断归
+> customs-compliance（ADR-0063 决定五）。逐项理由见 Comments 2026-08-21 MCP-5 那条。
 
 ## 红线
 
@@ -128,3 +142,10 @@ ADR-0063;PAR-COM-16;`parcelshipment/adapters/partycommercial` 的 `ServiceStageR
     SKIP 0 是关键项——退出码 0 与「全部跳过」兼容，SKIP 0 不兼容。
   - **本票只闭合机制半边**：实例半边（认领哪一段权威、哪条引用由哪件执行事实证）等租户，
     Status 是否转终态留给 triage，我不自行改。
+
+- 2026-08-21 MCP-1 裁定 / MCP-4 执行：**转 `resolved`**。判据是「缺的最小机制件」列的三件
+  今天都有着落（存储与写入方＝NO 的执行事实表与 `RecordExecutionFact`，装载口＝A 半边，
+  接线＝B 半边），**实例半边留空不阻终态**，与票 02 同一标准。转态前已按票 09 的做法把
+  「现状」与「缺的最小机制件」两处过时前提就地标注、原句保留——不标的话，下一个人读到
+  「全缺」与「另起证据口」会把已结的票重开。ADR-0063 决定五那道机制拦不住的残余不另开票：
+  它写在装配注释里，而会踩到它的人正在改那段装配代码，那就是它该在的地方。
