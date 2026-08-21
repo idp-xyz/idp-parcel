@@ -50,7 +50,7 @@
 `internal/*/domain/` 下的 `Form*` / `Establish*` / `Fix*` / `Judge*` / `Grant*` / `Cut*` /
 `Publish*` / `Accept*` / `Propose*` / `Verify*` / `Open*` / `Record*`，共 **72** 个构造函数。
 
-> **初版这里写 89，错了，已更正为 72（见文末「一次已发生的口径错误」）。** 零调用点那一半
+> **初版这里写 89，错了，已更正为 72（见文末「第一次已发生的口径错误」）。** 零调用点那一半
 > 未受影响，仍是 13，且名单一字未变。
 
 **13 个零非测试调用点**：`EstablishCase`、`EstablishSegmentWithHandover`、
@@ -67,21 +67,26 @@
 接口」这件事在本仓恰好有一个句法标记**。
 
 符合的适配器文件 **97** 个，其中构造函数（扣除 `NewOutbox*`）共 **66** 个，
-**43 个零非测试调用点**：
+**46 个零非测试调用点**：
+
+> **初版这里写 43，漏了三个，已更正为 46（见文末「第二次已发生的口径错误」）。** 漏因不在本族的
+> 识别口径——97 与 66 两个数一字未动，错的是四族共用的**调用点排除法**。
 
 `NewAcceptanceContentDeclarations`、`NewAcceptanceDecisions`、`NewAcceptanceRulePackages`、
 `NewActiveRejectionAdapter`、`NewAllocationRuleApplicability`、`NewAsOfPolicyDeclarations`、
 `NewAuthorityGrants`、`NewCaseIdentities`、`NewCaseRequirementView`、
 `NewChargeConfirmationConditions`、`NewClaimEligibilityRules`、`NewCommercialAuthority`、
 `NewCommercialBasisAdapter`、`NewCommercialEligibility`、`NewCreditStandings`、
-`NewCustomerContractContents`、`NewDeclarationVersions`、`NewDeliveryAttempts`、`NewETAVersions`、
-`NewExceptionCases`、`NewExecutionFactView`、`NewGateConditionRegistrations`、
+`NewCustomerContractContents`、`NewDeclarationVersions`、`NewDeliveryAttempts`、
+**`NewDispositionRequests`**、`NewETAVersions`、`NewExceptionCases`、`NewExecutionFactView`、
+`NewGateConditionRegistrations`、
 `NewGateConditionView`、`NewIntakeResultVersions`、`NewInterpretationRuleRegistrations`、
 `NewInterpretationRuleView`、`NewManifestCandidateView`、`NewNotificationPolicies`、
 `NewNotifications`、`NewObligationInventoryRegistrations`、`NewObligationInventoryView`、
 `NewOperationalBalances`、`NewPreAcceptanceControlDeclarations`、**`NewProductionOwnershipAdapter`**、
-`NewReadinessRegistrations`、`NewReadinessView`、`NewRecoveryMatters`、
-`NewSubmissionAuthorityRegistrations`、`NewSubmissionAuthorityView`、`NewSubmissionIdentities`、
+`NewReadinessRegistrations`、`NewReadinessView`、`NewRecoveryMatters`、**`NewSignalEpisodes`**、
+**`NewSourceDataVersions`**、`NewSubmissionAuthorityRegistrations`、`NewSubmissionAuthorityView`、
+`NewSubmissionIdentities`、
 `NewSubmissionIndex`、`NewSupplierExpectedCosts`、`NewTriageRules`。
 
 > `NewProductionOwnershipAdapter` 就是逼出这一族的那个实例（见票 01「形状」一节取证表第二行，
@@ -103,7 +108,7 @@ internal/*/adapters/**   非测试文件           223
 
 **那 110 是盲区的上界，不是盲区本身**——其中大多数应是同包内断言写在别的文件、或本就不是端口
 实现的辅助构造（行编解码、端点装配等）。**但「大多数」是推测，不是取证**：本族计数因此只能读作
-「写了接口断言的适配器里，有 43 个零调用点」，**不能读作「适配器里只有 43 个零调用点」**。
+「写了接口断言的适配器里，有 46 个零调用点」，**不能读作「适配器里只有 46 个零调用点」**。
 
 要把下界收成实数，得换识别方式（例如用 `go/types` 逐个判类型是否满足某个 `ports` 接口）——那已
 超出纯句法，成本与本票「不需要类型信息」的前提冲突。**留作已知缺口，不在本票内解决。**
@@ -120,22 +125,22 @@ internal/*/adapters/**   非测试文件           223
 | outbox 交接口 `NewOutbox*Handoff` | 46 | 41 |
 | 应用层命令处理器 `New*Handler` | 62 | 53 |
 | 领域工厂 `Form*` 等 | 72 | 13 |
-| ports 适配器 `New*`（按接口断言认） | 66 | 43 |
-| 合计 | 246 | 150 |
+| ports 适配器 `New*`（按接口断言认） | 66 | 46 |
+| 合计 | 246 | 153 |
 
-**那个 246/150 被当成 KPI 就完了**，它没有业务含义。四族并排看，不相加。
+**那个 246/153 被当成 KPI 就完了**，它没有业务含义。四族并排看，不相加。
 
 四族数字均以 **git 侧匹配、大小写敏感**在 `d5e5d20` 上得出（`git grep <pattern> d5e5d20`）；
 前三族另在当时 HEAD 上重跑过一遍，与基线一致——**期间无漂移**。
 
-## 这 107 个不是 107 个缺陷
+## 这 153 个不是 153 个缺陷
 
 绝大多数是 SYN-WALL-DOOR-AUDIT 十八墙里还没建门的口，属**缺席**（门还没建）而非**在场且错**。
 这条界线要写进门禁注释，否则下一个人会把清单长度当成待修工量。
 
 ## 三族的数字为什么不能横向比——判据是逐跳的，不是传递的
 
-领域工厂只有 13/89 落网，看起来这一族「基本都接上了」。**不是。** 领域工厂的调用方是应用层命令
+领域工厂只有 13/72 落网，看起来这一族「基本都接上了」。**不是。** 领域工厂的调用方是应用层命令
 处理器，而那一族有 53/62 自己没有进程入口。**一个被未接线处理器调用的领域工厂，在本判据下算
 「已接线」**——它确实有非测试调用点，只是那个调用点自己到不了任何进程。
 
@@ -149,12 +154,20 @@ internal/*/adapters/**   非测试文件           223
 - 构造函数声明：一至三族按 `^func <前缀>[A-Za-z0-9_]*\(` 在 `internal/` 上取，各自前缀集见上；
   **四族不按前缀取**——它按编译期接口断言认文件，再取那些文件里的 `New*`，口径见四族那一节。
 - 调用点：在 `internal/` 与 `cmd/` 上找 `\b<名字>\(`，用
-  `:(exclude)internal/**/*_test.go` 与 `:(exclude)cmd/**/*_test.go` 排掉测试；命中数 ≤ 1 即零调用点
-  （那一次命中是声明本身）。
+  `:(exclude)internal/**/*_test.go` 与 `:(exclude)cmd/**/*_test.go` 排掉测试；**扣除该名字的全部
+  `^func <名字>(` 声明行之后仍为空**，才算零调用点。
+  **不要用「命中数 ≤ 1」判。** 那条写法假定一个名字全仓只有一处声明，而**名字跨包可重**：第二处
+  声明会被读成一次调用，于是真正的零调用点被判成已接线。初版即因此漏计三个（见文末第二节）。
+  **一个构造函数要「包 + 名」两者才定得住，名字不是唯一键**——这一条同样是门禁实现的约束，不只是
+  取证的约束。
 - 三族的前缀集是**判断**不是穷举：领域工厂那一族的十二个前缀取自本仓现有命名，新前缀出现时要补。
-  **口径差异优先怀疑这里**，其次怀疑大小写，最后才怀疑数数。
+- **口径差异的排查顺序**：初版在这里写过「优先怀疑前缀集，其次大小写，最后才怀疑数数」，
+  **那个顺序已被两次真实差异证伪，勿再照用**。两次的成因分别是**声明侧的工具默认**（大小写，89→72）
+  与**调用点排除法**（跨包重名，43→46），**前缀集至今一次都没错过**——把它排在第一位是初版的直觉，
+  不是取证得来的。按已发生的事排：先查调用点排除法，再查工具的大小写默认，再查本族识别口径
+  （前三族看前缀集、四族看断言模式），最后才疑数数。
 
-## 一次已发生的口径错误：初版领域工厂总数 89 是错的，实为 72
+## 第一次已发生的口径错误：初版领域工厂总数 89 是错的，实为 72
 
 **成因：PowerShell 的 `Select-String` 默认大小写不敏感。** 初版这一族用它扫，于是
 `^func (Form|Establish|…|Accept|…)` 把 **17 个未导出函数**一并算了进来——`Accept` 命中
@@ -172,3 +185,43 @@ internal/*/adapters/**   非测试文件           223
 双盲重跑的价值恰恰在于抓出这一类，而这次是我自己先抓到——把成因写明，重跑者对不上账时才知道
 该往哪儿看。它同时是一个现成的反面样本：**默认值不出声，而「默认大小写不敏感」这件事没有任何
 东西会提醒你。**
+
+## 第二次已发生的口径错误：第四族零调用点初版写 43，实为 46
+
+由 MCP-1 的重导抓出（记在票 01 Comments）。漏掉的三个是 `NewDispositionRequests`、
+`NewSignalEpisodes`、`NewSourceDataVersions`；MCP-1 的集合是初版那 43 的严格超集。
+
+**成因是调用点排除法，不是本族识别口径。** 这三个名字**在两个包里各声明一次**（一处在
+`internal/<ctx>/adapters/identity/identity.go`，一处在 `internal/<ctx>/adapters/postgres/` 的对应
+文件），真调用 0 处。初版按「命中数 ≤ 1」判零，于是第二处**声明**被当成一次调用，三个零调用点被
+误判为已接线。识别口径那一半一字未错——97 个断言文件、66 个构造函数两个数重跑后完全一致。
+
+**这一条与门禁实现直接相关**：门禁必须按包+名定位并扣除该名的**全部**声明。若门禁沿用初版那条
+规则，它算出的仍是 43，与基线 43 相等因而**永远绿**——这三个会被结构性地永久隐形，正是本票所治
+之病；若门禁算得对（46）而基线停在 43，它又会立刻**假红**三条，把人调去改三个本来就该是那样的
+东西。两种坏法都由同一处错误产生，所以基线与门禁必须同时改。
+
+### 另三族已实测免疫，不是推定
+
+MCP-1 未重跑三族（领域工厂），理由正当：自拟前缀集会让差异分不清是口径还是数错。但
+**这一族是否会犯同一个错，可以不重导计数就答**——问的不是「有几个」，而是「本族名字里有没有
+跨包重名」，用的仍是本文件自己那套前缀集，因此不引入第二套口径。
+
+同基线实测：把全仓非测试 `.go` 的 `^func <名字>(` 建成索引（1864 条顶层声明），四族名单逐一对查——
+
+```
+一族 outbox 交接口   46 个名字   多处声明的: 0
+二族 应用层处理器     62 个名字   多处声明的: 0
+三族 领域工厂         72 个名字   多处声明的: 0
+四族 ports 适配器     66 个名字   多处声明的: 3   ← 即上述三个
+```
+
+所以 **41 / 53 / 13 三个数不受本次错误影响，且这是量出来的，不是「因为对上了所以没事」**；四族的
+**至多只有那三个**会翻，MCP-1 那 46 是完整的，不存在第四个待发现。
+
+### 顺带记一次自己重犯
+
+查这件事时我第一版探针**只在本族那 97 个文件里找重名，得「无」**——而那三个的第二处声明恰恰在
+族外文件里。**这跟原错误是同一个形状：把「排除范围」缩到手边那一小片。** 我没看出来，是先跑
+MCP-1 点名的那三个当阳性对照、发现对照与我的「无」直接矛盾才回头改的。
+**阳性对照的用处不止于「报零命中之前」，也在「报无异常之前」。**
