@@ -12,6 +12,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -43,7 +44,7 @@ func TestCatalogDistinguishesConfiguredEmptyFromUnconfigured(t *testing.T) {
 	tenant := scalar(t, domain.NewTenantID, "tenant-1")
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		return catalog.RegisterNodeVersion(txCtx, tenant, adapter.NodeDefinitionVersion{
+		return catalog.RegisterNodeVersion(txCtx, tenant, ports.NodeDefinitionVersion{
 			Code:             "node-hub",
 			Version:          1,
 			BusinessTimezone: "Asia/Shanghai",
@@ -74,13 +75,13 @@ func TestCatalogSelectsTheVersionEffectiveAtAsOf(t *testing.T) {
 	tenant := scalar(t, domain.NewTenantID, "tenant-1")
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		return catalog.RegisterNodeVersion(txCtx, tenant, adapter.NodeDefinitionVersion{
+		return catalog.RegisterNodeVersion(txCtx, tenant, ports.NodeDefinitionVersion{
 			Code: "node-hub", Version: 1, BusinessTimezone: "Asia/Shanghai",
 			EffectiveFrom: catalogAsOf.Add(-48 * time.Hour),
 		})
 	})
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		return catalog.RegisterNodeVersion(txCtx, tenant, adapter.NodeDefinitionVersion{
+		return catalog.RegisterNodeVersion(txCtx, tenant, ports.NodeDefinitionVersion{
 			Code: "node-hub", Version: 2, BusinessTimezone: "Europe/Berlin",
 			EffectiveFrom: catalogAsOf,
 		})
@@ -152,10 +153,10 @@ func TestCatalogAdjustmentLiftAppendsHistoryAndStopsApplying(t *testing.T) {
 	tenant := scalar(t, domain.NewTenantID, "tenant-1")
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, adapter.AvailabilityAdjustmentStatement{
+		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, ports.AvailabilityAdjustmentStatement{
 			Code: "adj-line-eu-1", Version: 1,
-			TargetKind: adapter.TargetLine, TargetCode: "line-eu",
-			Kind: adapter.AdjustmentSuspension, Source: "NET-OPS/EVT-7",
+			TargetKind: ports.TargetLine, TargetCode: "line-eu",
+			Kind: ports.AdjustmentSuspension, Source: "NET-OPS/EVT-7",
 			EffectiveAt: catalogAsOf.Add(-time.Hour),
 		})
 	})
@@ -164,16 +165,16 @@ func TestCatalogAdjustmentLiftAppendsHistoryAndStopsApplying(t *testing.T) {
 	if err != nil {
 		t.Fatalf("读生效中的调整：%v", err)
 	}
-	if len(during.Adjustments) != 1 || during.Adjustments[0].Kind != adapter.AdjustmentSuspension ||
+	if len(during.Adjustments) != 1 || during.Adjustments[0].Kind != ports.AdjustmentSuspension ||
 		during.Adjustments[0].HasLiftedAt {
 		t.Fatalf("未解除的停运应在生效中，实得 %+v", during.Adjustments)
 	}
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, adapter.AvailabilityAdjustmentStatement{
+		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, ports.AvailabilityAdjustmentStatement{
 			Code: "adj-line-eu-1", Version: 2,
-			TargetKind: adapter.TargetLine, TargetCode: "line-eu",
-			Kind: adapter.AdjustmentSuspension, Source: "NET-OPS/EVT-7",
+			TargetKind: ports.TargetLine, TargetCode: "line-eu",
+			Kind: ports.AdjustmentSuspension, Source: "NET-OPS/EVT-7",
 			EffectiveAt: catalogAsOf.Add(-time.Hour),
 			LiftedAt:    catalogAsOf.Add(time.Hour), HasLiftedAt: true,
 		})
@@ -219,31 +220,31 @@ func TestCatalogRevisionAdvancesWithEveryRegistrationKind(t *testing.T) {
 	effective := catalogAsOf.Add(-time.Hour)
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := catalog.RegisterConnectionVersion(txCtx, tenant, adapter.ConnectionDefinitionVersion{
+		if err := catalog.RegisterConnectionVersion(txCtx, tenant, ports.ConnectionDefinitionVersion{
 			Code: "conn-a-b", Version: 1, FromNode: "node-a", ToNode: "node-b",
 			BusinessTimezone: "Asia/Shanghai", EffectiveFrom: effective,
 		}); err != nil {
 			return err
 		}
-		if err := catalog.RegisterLineVersion(txCtx, tenant, adapter.LineDefinitionVersion{
+		if err := catalog.RegisterLineVersion(txCtx, tenant, ports.LineDefinitionVersion{
 			Code: "line-eu", Version: 1, Segments: []string{"conn-a-b"},
 			BusinessTimezone: "Asia/Shanghai", ApplicableScope: "scope-declared",
 			EffectiveFrom: effective,
 		}); err != nil {
 			return err
 		}
-		if err := catalog.RegisterServiceAreaVersion(txCtx, tenant, adapter.ServiceAreaDefinitionVersion{
+		if err := catalog.RegisterServiceAreaVersion(txCtx, tenant, ports.ServiceAreaDefinitionVersion{
 			Code: "area-de", Version: 1, EffectiveFrom: effective,
 		}); err != nil {
 			return err
 		}
-		if err := catalog.RegisterServiceCalendarVersion(txCtx, tenant, adapter.ServiceCalendarDefinitionVersion{
-			TargetKind: adapter.TargetNode, TargetCode: "node-a", Version: 1,
+		if err := catalog.RegisterServiceCalendarVersion(txCtx, tenant, ports.ServiceCalendarDefinitionVersion{
+			TargetKind: ports.TargetNode, TargetCode: "node-a", Version: 1,
 			EffectiveFrom: effective,
 		}); err != nil {
 			return err
 		}
-		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, adapter.RouteStrategyDefinitionVersion{
+		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
 			Code: "strategy-1", Version: 1, ApplicableScope: "scope-declared",
 			EffectiveFrom: effective,
 		})
@@ -273,15 +274,15 @@ func TestCatalogRevisionAdvancesWithEveryRegistrationKind(t *testing.T) {
 	}
 
 	within(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := catalog.RegisterNodeVersion(txCtx, tenant, adapter.NodeDefinitionVersion{
+		if err := catalog.RegisterNodeVersion(txCtx, tenant, ports.NodeDefinitionVersion{
 			Code: "node-a", Version: 1, BusinessTimezone: "Asia/Shanghai",
 			EffectiveFrom: effective,
 		}); err != nil {
 			return err
 		}
-		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, adapter.AvailabilityAdjustmentStatement{
-			Code: "adj-1", Version: 1, TargetKind: adapter.TargetNode, TargetCode: "node-a",
-			Kind: adapter.AdjustmentClosure, Source: "NET-OPS/EVT-9",
+		return catalog.RegisterAvailabilityAdjustment(txCtx, tenant, ports.AvailabilityAdjustmentStatement{
+			Code: "adj-1", Version: 1, TargetKind: ports.TargetNode, TargetCode: "node-a",
+			Kind: ports.AdjustmentClosure, Source: "NET-OPS/EVT-9",
 			EffectiveAt: effective,
 		})
 	})

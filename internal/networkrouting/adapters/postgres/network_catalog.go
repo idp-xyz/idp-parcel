@@ -11,6 +11,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
 
 // ErrAmbiguousNetworkCatalog 说明目录在同一时点对同一身份有两个适用版本。
@@ -35,146 +36,21 @@ func NewNetworkCatalog(db *bentopg.DB) (*NetworkCatalog, error) {
 	return &NetworkCatalog{db: db}, nil
 }
 
-// CatalogTargetKind 是日历与可用性调整的适用对象类别，封闭三类（CONTEXT：针对节点、
-// 网络连接或线路）。
-type CatalogTargetKind uint8
-
-const (
-	CatalogTargetKindInvalid CatalogTargetKind = iota
-	TargetNode
-	TargetConnection
-	TargetLine
-)
-
-func (kind CatalogTargetKind) String() string {
-	switch kind {
-	case TargetNode:
-		return "NODE"
-	case TargetConnection:
-		return "CONNECTION"
-	case TargetLine:
-		return "LINE"
-	default:
-		return ""
-	}
-}
-
-// AvailabilityAdjustmentKind 是调整种类，封闭四格（CONTEXT：临时停运、关闭、恢复或
-// 适用范围调整）。
-type AvailabilityAdjustmentKind uint8
-
-const (
-	AvailabilityAdjustmentKindInvalid AvailabilityAdjustmentKind = iota
-	AdjustmentSuspension
-	AdjustmentClosure
-	AdjustmentResumption
-	AdjustmentScopeAdjustment
-)
-
-func (kind AvailabilityAdjustmentKind) String() string {
-	switch kind {
-	case AdjustmentSuspension:
-		return "SUSPENSION"
-	case AdjustmentClosure:
-		return "CLOSURE"
-	case AdjustmentResumption:
-		return "RESUMPTION"
-	case AdjustmentScopeAdjustment:
-		return "SCOPE_ADJUSTMENT"
-	default:
-		return ""
-	}
-}
-
-// NodeDefinitionVersion 是一个物流节点在某时点的适用版本行。
-type NodeDefinitionVersion struct {
-	Code             string
-	Version          int32
-	BusinessTimezone string
-	EffectiveFrom    time.Time
-	EffectiveTo      time.Time
-	HasEffectiveTo   bool
-}
-
-// ConnectionDefinitionVersion 是一条有向网络连接的适用版本行。
-type ConnectionDefinitionVersion struct {
-	Code             string
-	Version          int32
-	FromNode         string
-	ToNode           string
-	BusinessTimezone string
-	EffectiveFrom    time.Time
-	EffectiveTo      time.Time
-	HasEffectiveTo   bool
-}
-
-// LineDefinitionVersion 是一条线路的适用版本行；Segments 是连接身份的有序数组。
-type LineDefinitionVersion struct {
-	Code             string
-	Version          int32
-	Segments         []string
-	BusinessTimezone string
-	ApplicableScope  string
-	EffectiveFrom    time.Time
-	EffectiveTo      time.Time
-	HasEffectiveTo   bool
-}
-
-// ServiceAreaDefinitionVersion 是一个服务区域的适用版本行。覆盖内容列未定
-// （开放集，等 PAR-NET-14 的形态），版本机制先行。
-type ServiceAreaDefinitionVersion struct {
-	Code           string
-	Version        int32
-	EffectiveFrom  time.Time
-	EffectiveTo    time.Time
-	HasEffectiveTo bool
-}
-
-// ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。
-type ServiceCalendarDefinitionVersion struct {
-	TargetKind     CatalogTargetKind
-	TargetCode     string
-	Version        int32
-	EffectiveFrom  time.Time
-	EffectiveTo    time.Time
-	HasEffectiveTo bool
-}
-
-// AvailabilityAdjustmentStatement 是一个临时调整在某时点生效中的当前陈述（该调整
-// 历史链上的最大版本，且其生效窗口覆盖 asOf）。
-type AvailabilityAdjustmentStatement struct {
-	Code        string
-	Version     int32
-	TargetKind  CatalogTargetKind
-	TargetCode  string
-	Kind        AvailabilityAdjustmentKind
-	Source      string
-	EffectiveAt time.Time
-	LiftedAt    time.Time
-	HasLiftedAt bool
-}
-
-// RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。规则正文属 PAR-NET-14，
-// 这里只有版本、范围与有效区间。
-type RouteStrategyDefinitionVersion struct {
-	Code            string
-	Version         int32
-	ApplicableScope string
-	EffectiveFrom   time.Time
-	EffectiveTo     time.Time
-	HasEffectiveTo  bool
-}
+// 登记口的端口契约用编译期钉住——接口漂移在构建时暴露（先例：parcel-pricing-register
+// 对两个登记用例的钉法）。行类型与封闭枚举的定义在 ports 侧（登记用例要拿它们表达
+// 受理门，而应用层不得依赖适配器），本文件只留读侧快照与七个写方法的实现。
+var _ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
 
 // NetworkCatalogSnapshot 是一次取回：七类定义在 asOf 的适用行与它们共同来自的修订。
 // 事实与修订同版由单条语句担保（单语句单快照），不靠调用方两次取回再对号。
 type NetworkCatalogSnapshot struct {
-	Nodes        []NodeDefinitionVersion
-	Connections  []ConnectionDefinitionVersion
-	Lines        []LineDefinitionVersion
-	ServiceAreas []ServiceAreaDefinitionVersion
-	Calendars    []ServiceCalendarDefinitionVersion
-	Adjustments  []AvailabilityAdjustmentStatement
-	Strategies   []RouteStrategyDefinitionVersion
+	Nodes        []ports.NodeDefinitionVersion
+	Connections  []ports.ConnectionDefinitionVersion
+	Lines        []ports.LineDefinitionVersion
+	ServiceAreas []ports.ServiceAreaDefinitionVersion
+	Calendars    []ports.ServiceCalendarDefinitionVersion
+	Adjustments  []ports.AvailabilityAdjustmentStatement
+	Strategies   []ports.RouteStrategyDefinitionVersion
 	Revision     domain.NetworkViewRevision
 }
 
@@ -308,7 +184,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range nodes {
-		snapshot.Nodes = append(snapshot.Nodes, NodeDefinitionVersion{
+		snapshot.Nodes = append(snapshot.Nodes, ports.NodeDefinitionVersion{
 			Code: row.Code, Version: row.Version, BusinessTimezone: row.Timezone,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
@@ -325,7 +201,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range connections {
-		snapshot.Connections = append(snapshot.Connections, ConnectionDefinitionVersion{
+		snapshot.Connections = append(snapshot.Connections, ports.ConnectionDefinitionVersion{
 			Code: row.Code, Version: row.Version, FromNode: row.FromNode, ToNode: row.ToNode,
 			BusinessTimezone: row.Timezone,
 			EffectiveFrom:    row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
@@ -343,7 +219,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range lines {
-		snapshot.Lines = append(snapshot.Lines, LineDefinitionVersion{
+		snapshot.Lines = append(snapshot.Lines, ports.LineDefinitionVersion{
 			Code: row.Code, Version: row.Version, Segments: row.Segments,
 			BusinessTimezone: row.Timezone, ApplicableScope: row.Scope,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
@@ -361,7 +237,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range areas {
-		snapshot.ServiceAreas = append(snapshot.ServiceAreas, ServiceAreaDefinitionVersion{
+		snapshot.ServiceAreas = append(snapshot.ServiceAreas, ports.ServiceAreaDefinitionVersion{
 			Code: row.Code, Version: row.Version,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
@@ -378,11 +254,11 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range calendars {
-		kind, err := catalogTargetKindFrom(row.TargetKind)
+		kind, err := ports.CatalogTargetKindFrom(row.TargetKind)
 		if err != nil {
 			return none, err
 		}
-		snapshot.Calendars = append(snapshot.Calendars, ServiceCalendarDefinitionVersion{
+		snapshot.Calendars = append(snapshot.Calendars, ports.ServiceCalendarDefinitionVersion{
 			TargetKind: kind, TargetCode: row.TargetCode, Version: row.Version,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
@@ -394,15 +270,15 @@ func rebuildCatalogSnapshot(
 		return none, fmt.Errorf("译回可用性调整族：%w", err)
 	}
 	for _, row := range adjustments {
-		kind, err := catalogTargetKindFrom(row.TargetKind)
+		kind, err := ports.CatalogTargetKindFrom(row.TargetKind)
 		if err != nil {
 			return none, err
 		}
-		adjustmentKind, err := availabilityAdjustmentKindFrom(row.Kind)
+		adjustmentKind, err := ports.AvailabilityAdjustmentKindFrom(row.Kind)
 		if err != nil {
 			return none, err
 		}
-		snapshot.Adjustments = append(snapshot.Adjustments, AvailabilityAdjustmentStatement{
+		snapshot.Adjustments = append(snapshot.Adjustments, ports.AvailabilityAdjustmentStatement{
 			Code: row.Code, Version: row.Version, TargetKind: kind, TargetCode: row.TargetCode,
 			Kind: adjustmentKind, Source: row.Source,
 			EffectiveAt: row.EffectiveAt, LiftedAt: timeOf(row.LiftedAt),
@@ -420,7 +296,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range strategies {
-		snapshot.Strategies = append(snapshot.Strategies, RouteStrategyDefinitionVersion{
+		snapshot.Strategies = append(snapshot.Strategies, ports.RouteStrategyDefinitionVersion{
 			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
@@ -512,36 +388,6 @@ func timeOf(value *time.Time) time.Time {
 	return *value
 }
 
-// catalogTargetKindFrom 逐格译回封闭三类。库上 CHECK 守着集合，default 兜的是
-// 「CHECK 被后续迁移放宽而 Go 侧没跟上」——那时报错，不吸收成某一格。
-func catalogTargetKindFrom(raw string) (CatalogTargetKind, error) {
-	switch raw {
-	case "NODE":
-		return TargetNode, nil
-	case "CONNECTION":
-		return TargetConnection, nil
-	case "LINE":
-		return TargetLine, nil
-	default:
-		return CatalogTargetKindInvalid, fmt.Errorf("未知适用对象类别 %q", raw)
-	}
-}
-
-func availabilityAdjustmentKindFrom(raw string) (AvailabilityAdjustmentKind, error) {
-	switch raw {
-	case "SUSPENSION":
-		return AdjustmentSuspension, nil
-	case "CLOSURE":
-		return AdjustmentClosure, nil
-	case "RESUMPTION":
-		return AdjustmentResumption, nil
-	case "SCOPE_ADJUSTMENT":
-		return AdjustmentScopeAdjustment, nil
-	default:
-		return AvailabilityAdjustmentKindInvalid, fmt.Errorf("未知调整种类 %q", raw)
-	}
-}
-
 // RegisterNodeVersion 追加一个物流节点版本。「永久变化形成新版本，不覆盖原版本」——
 // 只 INSERT 不 UPDATE 内容；登记未闭区间的新版本时，同一身份此前的未闭版本按新版本的
 // 生效时间**接续闭合**（补上 effective_to，不动其余任何列）：那不是改写历史，是「新
@@ -550,7 +396,7 @@ func availabilityAdjustmentKindFrom(raw string) (AvailabilityAdjustmentKind, err
 func (catalog *NetworkCatalog) RegisterNodeVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row NodeDefinitionVersion,
+	row ports.NodeDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -584,7 +430,7 @@ func (catalog *NetworkCatalog) RegisterNodeVersion(
 func (catalog *NetworkCatalog) RegisterConnectionVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row ConnectionDefinitionVersion,
+	row ports.ConnectionDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -621,7 +467,7 @@ func (catalog *NetworkCatalog) RegisterConnectionVersion(
 func (catalog *NetworkCatalog) RegisterLineVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row LineDefinitionVersion,
+	row ports.LineDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -661,7 +507,7 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row ServiceAreaDefinitionVersion,
+	row ports.ServiceAreaDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -697,7 +543,7 @@ func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row ServiceCalendarDefinitionVersion,
+	row ports.ServiceCalendarDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -735,7 +581,7 @@ func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row RouteStrategyDefinitionVersion,
+	row ports.RouteStrategyDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {
@@ -772,7 +618,7 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 func (catalog *NetworkCatalog) RegisterAvailabilityAdjustment(
 	ctx context.Context,
 	tenant domain.TenantID,
-	row AvailabilityAdjustmentStatement,
+	row ports.AvailabilityAdjustmentStatement,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
 	if err != nil {

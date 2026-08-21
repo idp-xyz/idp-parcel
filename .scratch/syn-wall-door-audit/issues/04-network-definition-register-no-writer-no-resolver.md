@@ -1,7 +1,7 @@
 # 网络目录缺登记用例与进程级登记口——目录机制已在，三口仍恒答未配置
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W09。票面于 2026-08-21 按基线 `9e5c5c0` 改写:原题「无写入方也无解析层」的前一半已被 NR-CATALOG-MECH(`3b9f212`,ADR-0068)部分推翻,范围随之收敛。文件名保留原 slug 作稳定票号,不随题改名。
 
@@ -112,3 +112,48 @@ ADR-0068、ADR-0053、ADR-0052;`PAR-NET-14`;`docs/domain/network-routing/CONTEXT
   明确排除出范围。未发现难逆转取舍，故不报 ADR。
 
   本笔只动 `.md`，故无构建信号可报。
+
+- 2026-08-21 · MCP-5：两件交付落地（基 `82eb4e1`，隔离树 `nr04-catalog-registration`），
+  开工前连续性已核：`9e5c5c0..82eb4e1` 对 `internal/networkrouting` 与
+  `migrations/network_routing` 零触碰，上文重核结论原样成立。
+
+  **件一（目录登记用例）**：`internal/networkrouting/application/register_network_catalog.go`。
+  七族各一方法、独立成败；受理门与 0008 的 CHECK 逐条同格（租户/身份码/版本号、节点连接
+  线路的业务时区、连接端点在场且相异、段链非空且无空环、线路与策略的适用范围、生效时间
+  非零、区间正序含空区间、封闭枚举两集、调整来源与解除窗口），拒绝以 `CatalogRefusalReason`
+  逐格指名；事务不由本层开（与 `register_case_configuration.go`、`RegisterPriceCardHandler`、
+  `RegisterReferenceSeriesHandler` 同一条纪律）。写入口错误上抛不折格——NR 目录写入没有
+  出格答案（重复版本号由主键挡，ADR-0068 Consequences 接受），不照搬 VE 写入口的三格。
+
+  **件二（进程级登记口）**：`cmd/parcel-network-register`。两先例中取 `parcel-pricing-register`
+  的形状落**独立进程**——网络定义登记是治理动作不是在线请求面，不进 parcel-api 端点表；
+  `-kind` 封闭七族 + `-file` 登记行 JSON（未知字段拒、封闭枚举逐格译、可选终点用指针表达
+  不在场），环境事务 `WithinTransaction` 包用例，退出码 0/1/3（无治理格 2：版本冲突落
+  未决错误文本，由人按约束名续办）。
+
+  **支撑改动**：七类登记行类型与两个封闭枚举自 postgres 适配器上移 `ports`
+  （`catalog_registration.go`）——登记用例要以它们表达受理门，而应用层不得依赖适配器
+  （边界门禁）；读侧快照与选版留在适配器**不设端口**，理由写在 ports 文件头（Decision 六
+  护栏：不给三口发邀请）。适配器加编译期钉 `ports.NetworkCatalogRegistry`。
+
+  **红线核验**：0007 `network_definition` 零触碰；三口取数侧零触碰；迁移零改动、无默认行、
+  无实例值；测试值全 `SYN-` 合成（S 级只记 S）。
+
+  **验证**（隔离树，含真库）：gofmt / `go build ./...` / `go vet ./...` 零信号；
+  `go test -p 1 -count=1 ./...` 全绿，其中单跑
+  `TestCatalogRevisionAdvancesWithEveryRegistrationKind -v` 为 **PASS 非 SKIP**（DSN 生效）；
+  `internal/architecture` 门禁全过（接线棘轮基线无 networkrouting 条目，本票不触）。
+
+  **W09 墙面状态**照上文「本票不降墙」预告推进：「无门（写入方+解析层双缺）」→
+  「无门（解析层缺）——目录半边已可从进程外登记」。三堵墙一堵未降，属 ADR-0068
+  Consequences 明文接受期，拆墙等解析层票（`PAR-NET-14` 之后）。
+
+- 2026-08-24 MCP-3（死现场抢救合入，受用户裁定执行）：上条评论所属提交（`6cf6c89`）
+  从未落 main——它躺在 `nr04-catalog-registration` 孤儿分支上（工作树 mtime 停在
+  2026-08-21 23:17，其后未再响应）。本笔按票 13/票 11 先例「逐行复核＋验证由本笔完成」
+  办：单摘该笔到 main（cherry-pick 干净落地，零冲突）；连续性由其基线 `82eb4e1` 顺延核
+  到今日 main（其间 2b68c89/6c5940c/c26b50f 三笔均不触 networkrouting 与
+  migrations/network_routing）；逐行复核对照本票面两件交付与红线三条逐格成立——受理门
+  与 0008 CHECK 同格拒零值、事务归进程口、读侧快照刻意不设端口（Decision 六护栏）、
+  0007 与三口取数侧零触碰、迁移零改动。上条验证断言随死会话作废，验证由本笔在隔离树
+  重做，结果记于本笔提交信。
