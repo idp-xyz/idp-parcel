@@ -95,7 +95,35 @@
 > 领域入口的一批**——并叠上一次中文行经 PowerShell 合并。**20 作数。**
 >
 > 本文这一跑要求名字后紧跟 `(`，因此不吃那种注释；但同基线 `internal/*/domain/` 下另有 7 行
-> 注释里带 `名字(` 的写法，**所以 20 自己也是下界**。二十个里只逐个读过五个，其余未读。
+> 注释里带 `名字(` 的写法，**所以 20 自己也是下界**。
+
+### 二十个已逐个读完：三族零调用点应为 **≥ 26**，正好翻倍
+
+由 MCP-3 逐个读、按返回形态三分，本文复核其中四例的签名与全部十三例的上下文归属：
+
+**甲、构造领域对象并带不变式校验（`(领域类型, error)`）——13 个，确属本族：**
+`AssessSafeHandoff`、`ReplayPricingEvaluation`、`ResolveCreditPolicy`、`DecideDisclosure`、
+`ResolveByBusinessTime`、`ReceiveReleaseOutcome`、`SummarizeHandovers`、
+`IncludeAdjustmentInSubsequentPeriod`、`PrepareDisclosure`、`ChargeOccurrenceForFailedAttempt`、
+`RaiseConflictSignal`、`RegisterCredential`、`SubmitEvidence`。
+**横跨七个上下文**（`customscompliance`、`parcelpricing`、`parcelshipment`、`partycommercial`、
+`settlementaccounting`、`transportfulfillment`、`visibilityexception`）——**不是某一处的局部异常。**
+
+**乙、不属本族——4 个**：`ManualReviewRequirementFor`（返回 `bool`，谓词）、
+`MarshalPricingPlanSnapshot`（序列化）、`ValidateBeforeDecision`（同型变换，不构造新对象）、
+`DecimalFromInt64`（值助手）。
+
+**丙、需票主定族界——3 个**：`RehydratePricingPlanSnapshot`（**`Rehydrate*` 算不算工厂，那一族
+43 个**）、`ParseCanonical`（解析助手，造的是值对象）、`Evaluate`（见下）。
+
+**所以本族零调用点 = 13 + 甲类 13 = 26，仍是下界**（丙类未定，7 行注释写法未排，只扫了导出顶层
+函数）。
+
+> **`Evaluate` 是另一类东西，判据把它和「只被测试接线」混在了一起。** 它是一行转发壳
+> （`internal/parcelpricing/domain/evaluation.go`，`return EvaluatePricing(request)`），
+> **非测试 0、测试也 0——全仓一个调用点都没有**。按本文的操作规则它照样落进零调用点，于是
+> **门禁会把它报成「未接线的生产端口」，而它其实是死代码**：该做的是删掉，不是接线。
+> **两者要人做的事相反，而在判据下长着同一张脸。**
 
 **这一格对门禁实现直接有话说**：让门禁自己当场算初始清单、不从本文抄，**拦不住这一类**——
 门禁算的时候用的还是这十二个前缀。**前缀集是写进门禁里的假设，不是它每次重算的输入**，得单独
