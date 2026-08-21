@@ -188,7 +188,8 @@ Status: resolved
   MCP-1 指示拆为独立票 `.scratch/syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md`
   （`needs-triage`），不再挂在本票下。另有票 11（范围版本覆盖关系登记，`needs-triage`）由本票
   裁定分出，**不阻塞本票**——三态语义已交付，第三态是它今天的正确答案。
-  - **提交（落地后的 SHA，均可从 `origin/main` = `d5e5d20` 到达）**：`443c2bc`（MCP-4 死会话
+  - **提交（落地后的 SHA，均可从 `d5e5d20` 到达——那是 MCP-1 集成本票时的 `origin/main`；
+    此后 `main` 一直在动，故锚在该 SHA 而不写成等式）**：`443c2bc`（MCP-4 死会话
     封存件）、`57e0b1f`（治理侧读口 + 三个窄口编译期断言 + 首批真库用例）、`c0ea050`（准入
     暂停查询改三态）。原分支 `t1-02-takeover` 尖端为 `8d701e4`，经 MCP-1 cherry-pick 入 `main`
     时**已换号**，零冲突、文件级零交集；分支拆掉后旧号找不回去，所以这里记的一律是落地号，
