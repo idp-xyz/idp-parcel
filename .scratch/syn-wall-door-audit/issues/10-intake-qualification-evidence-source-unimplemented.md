@@ -13,14 +13,14 @@ Status: resolved
 
 - 端口与「诚实无门」实现在;证据的存储、装载口、写入方、登记口全缺。
 - 合成种子(`syn_pc_seed_test.go` 的 `seedIntakeQualification`)只在测试里给证据,生产路径没有任何来源可登。
-
-> **「全缺」已不成立（机制半边落地于 `origin/main` `fa8d5f4`，见 Comments 2026-08-20 MCP-2
-> 与 2026-08-21 MCP-4 两条）。** 原句保留——它记的是审计基线 `49a2ab0` 当时的实况。今天四件
-> 各有着落：存储与写入方是 node-operations 已有的执行事实表与 `RecordExecutionFact`（不另起
-> 第二本册子），装载口是 `NodeExecutionQualificationEvidence`，登记口是装配点的
-> `nodeQualificationAuthority`。**生产路径今天仍答未证明，但那是没租户、不是没来源**：缺的
-> 已收敛为实例半边——认领哪一段权威、哪条引用由哪件执行事实证。
 - 注意与票 03 的分界:资格**要求**由 PC 声明表携带(票 03 的发布面);本票管资格**证据**——某对象已满足要求的事实从哪来、登在哪。
+
+> **上面第一条的「全缺」已不成立（机制半边落地于 `origin/main` `fa8d5f4`，见 Comments
+> 2026-08-20 MCP-2 与 2026-08-21 MCP-4 两条）。** 原句保留——它记的是审计基线 `49a2ab0`
+> 当时的实况。今天四件各有着落：存储与写入方是 node-operations 已有的执行事实表与
+> `RecordExecutionFact`（不另起第二本册子），装载口是 `NodeExecutionQualificationEvidence`，
+> 登记口是装配点的 `nodeQualificationAuthority`。**生产路径今天仍答未证明，但那是没租户、
+> 不是没来源**：缺的已收敛为实例半边——认领哪一段权威、哪条引用由哪件执行事实证。
 
 ## 缺的最小机制件
 
