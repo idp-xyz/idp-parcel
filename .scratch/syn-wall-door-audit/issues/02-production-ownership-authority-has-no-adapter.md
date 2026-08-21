@@ -41,3 +41,24 @@ Status: ready-for-agent
   `govern_incident.go`）。登记口——`cmd` 全树无 `pilotgovernance` 引用，治理用例仍未接任何
   进程入口。基线以来 pilot-governance 仅两笔（`81b50f2`/`3b37b5a`）改 handoff 信封分区与
   ID（OUTBOX-PK-STEP2），不动本票四件。票面与代码无矛盾。
+
+- 2026-08-21 MCP-4：对 `0ec62ea` 连续性重核四件，**结论不变：半座桥原样**，票面与代码无矛盾，按原票开工。
+  ①PS 侧——`ProductionOwnershipAuthority` 仍只有接口定义（`internal/parcelshipment/ports/ports.go`），
+  生产实现仍为零，三处测试替身（`internal/parcelshipment/application/submit_shipment_request_test.go`、
+  `internal/parcelshipment/adapters/http/submit_shipment_request_test.go`、
+  `cmd/parcel-dispatch/synthetic_v0_test.go`）原样。②治理侧——`authority_interval` 在
+  `migrations/pilot_governance/0001_governance_records.sql`；**暂停、恢复、接管三表在
+  `migrations/pilot_governance/0003_suspension_resumption_takeover.sql`**，票面只点了 0001，
+  实际比票面更全，确认不建新表。写入方与两份登记用例原样在。③登记口——`cmd` 全树仍无
+  `pilotgovernance` 引用。④基线连续性——`git log 3324ecb..0ec62ea -- internal/pilotgovernance
+  migrations/pilot_governance` 为空，上次重核以来治理侧零改动。
+
+- 2026-08-21 MCP-4：碰撞判定（开工前报 MCP-1）——本票**不改** `internal/parcelshipment/ports/ports.go`。
+  `ProductionOwnershipAuthority` 签名已完整，适配器直接实现即可；PS 读 PG 所需的三个依赖口按 ADR-0025
+  「适配器为此需要的实例半边协作者，其接口定义在适配器包内，不进消费方 `ports`」写在适配器包内。
+  与 MCP-5 票 10（`internal/parcelshipment/adapters/nodeoperations/`）文件级无交集。
+
+- 2026-08-21 MCP-4：**本票只交「缺的最小机制件」第 1 条（桥接适配器），第 2 条（治理登记的进程级入口）不做。**
+  理由是地盘：派单把地盘限在 `internal/parcelshipment/adapters/pilotgovernance/**`，并明令不碰
+  `cmd/parcel-dispatch/assemble.go` 与 `cmd/parcel-api/endpoints.go`，而第 2 条按定义要落 `cmd`。
+  第 2 条因此仍缺，另立票或由派单方指派——本票收口后 `cmd` 全树仍无 `pilotgovernance` 引用这一条不变。
