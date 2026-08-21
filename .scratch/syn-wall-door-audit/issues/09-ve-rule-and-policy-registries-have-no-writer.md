@@ -1,7 +1,7 @@
 # VE 五类规则/策略目录只读,里程碑映射键修好了仍没有往里填的口
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W16/W17/W18。
 
@@ -63,3 +63,12 @@ PAR-VIS-01/05/07/08/09;`.scratch/ve-milestone-mapping-key/issues/01`(键结构,�
   0018 的授权两张，共七张，PAR-VIS-08 跨两组表故登记方法六个。
   本票按 A/B 拆分推进：**A 半边**（登记用例 + 写入方 + 迁移）在此票交付；装配接线
   （`tenantBoundCustomerViewDerive` 所在的 `assemble.go`）属 B 票，本轮不动。
+- 2026-08-21 MCP-2：**A 半边已入 main，本票按上条拆分转 resolved。** t1-09a-takeover
+  （接手稿，tip `12065d3`，原封存 `6cb78e0` 之续做）经合并提交 `b394adf` 落地：
+  `catalog_registration.go` 写入方、`register_catalog.go` 登记用例（六个登记方法覆盖五类
+  七表）、ports 登记口、迁移 0019 通知策略核准；notification_policy_test 改走登记入口，
+  不再直写行。隔离树验证：build/vet 零信号、真库探针 9 个目录登记册用例真 PASS 非 SKIP、
+  全仓 `go test -count=1 ./...` 全 ok。推送待 MCP-1 按确切 SHA 办。
+  **B 半边（`assemble.go` 装配接线）未动，且至今无 B 票文件**——本轮全 `.scratch` 检索
+  只见各票把「进程级入口」推给 B 票（本票、06 票、10 票同款），没有一张 B 票真开出来；
+  要接线先开票并占号（`assemble.go` 属共享接线文件）。
