@@ -441,6 +441,64 @@ func TestRepublishingDifferentContentIsAConflict(t *testing.T) {
 	}
 }
 
+// Covers: AT-PC-011「发布批逐项独立成败」——后一项冲突不得把同批前一项已落库的发布
+// 撤走。本处理器一次只发一个对象、批由调用方逐项各起事务推进（Handle 注释），因此
+// 这条性质靠的是「项与项之间没有共同命运」这个结构，而不是任何回滚编排。
+//
+// 本条守的是处理器这一半：冲突项不入册、也不动前项已交给持久化面的东西，且两次调用
+// 之间处理器不留共同状态。其余用例都只发一个对象，这些都照不出来。
+//
+// **事务边界那一半本条守不住**：这里用的是登记册替身，没有事务，所以「有人把
+// cmd/parcel-commercial 那个逐项各起事务的循环整个包进一个事务」这类回归照不出来。
+// 那要一条对真库跑 runPublish 的用例，今天没有（记于 syn-wall-door-audit 票 03）。
+//
+// 断言取自封存现场 db81745 的同名判定（dead-session-salvage 票 02 裁定第 3 条的吸收
+// 扫描），以本处理器的单对象形状重写。
+func TestAConflictingItemDoesNotRetractAnEarlierSavedItem(t *testing.T) {
+	loaded := domain.NewCommercialRegistry()
+	contractSpec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
+	registeredEffective(t, loaded, contractSpec, publishApproval(t, "contract-1"))
+	registry := &publicationRegistryDouble{loaded: loaded}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+
+	// 第一项：全新对象，正常落库。
+	productSpec := publishSpec(t, domain.ServiceProductObject, "product-1", "v1")
+	first, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         productSpec,
+		Approval:     publishApproval(t, "product-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+	})
+	if err != nil {
+		t.Fatalf("第一项 Handle：%v", err)
+	}
+	if first.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("第一项 outcome = %q, want PUBLISHED_EFFECTIVE", first.Outcome())
+	}
+
+	// 第二项：同批的另一个对象，正文与册上不符，撞冲突。
+	changed := contractSpec
+	changed.ContentDigest = pcValue(t, domain.NewCommercialContentDigest, "sha256:contract-another-body")
+	second, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         changed,
+		Approval:     publishApproval(t, "contract-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+	})
+	if err != nil {
+		t.Fatalf("第二项 Handle：%v", err)
+	}
+	if second.Outcome() != application.CommercialPublicationConflicted {
+		t.Fatalf("第二项 outcome = %q, want CONTENT_CONFLICT", second.Outcome())
+	}
+
+	if len(registry.savedVersions) != 1 {
+		t.Fatalf("saved = %d, want 1——两项各自成败，冲突项不入册也不带走别人", len(registry.savedVersions))
+	}
+	if registry.savedVersions[0].ObjectID() != productSpec.ObjectID {
+		t.Fatalf("册上留下的是 %q，不是第一项——后项冲突把已合法的前项撤走了",
+			registry.savedVersions[0].ObjectID())
+	}
+}
+
 // Covers: 票 03 缺件 1「按批发布版本化声明……写 commercial_version + 各 kind 声明表」：
 // 声明随其拥有版本同一次发布登记，拥有对象是取效后的版本（声明构造门要求已生效），
 // 每个通道的落点逐项入报告。

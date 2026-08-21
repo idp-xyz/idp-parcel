@@ -78,4 +78,8 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
   - **测试断言：找到一条真缺口，尚未补。** 封存件的 `TestPublicationBatchKeepsSavedProductWhenContractConflicts` 断言发布批**逐项独立成败**（AT-PC-011）：同批两项，产品落库、合同撞内容冲突，断言 `len(registry.saved)` 仍为 1——「合同冲突把已合法产品从写入面撤走了（全量回滚）」。本分支在 `cmd/parcel-commercial/main.go` 两处与 `publish_commercial_authority.go` 一处引用 AT-PC-011，**但测试里没有任何批内部分落点的断言**（十三个测试逐个看过，最近的是 AT-PC-010 的未决格）。**声称有、没测过**——收口前须以本分支的写法补一条同义断言。
   - 其余：本分支十三个测试覆盖面显著大于封存件四个（重放/冲突分格、计划态与生效态、未确认角色未决、声明随属主版本发布、错属主种类拒收、合同内容与壳引用一致、登记册读不回即阻断，外加适配器层往返/重放冲突/无事务拒三条），无其他可吸收项。
 
-  **四、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`）为 `8821e28`，合并无冲突。该 SHA 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**——票面三件里件 3（进程级登记口）随 `cmd/parcel-commercial` 已有雏形，件 1/2 待逐条对票面收口，AT-PC-011 那条断言待补，收口前不推。
+  **四、AT-PC-011 那条已补（`TestAConflictingItemDoesNotRetractAnEarlierSavedItem`）。** 以本分支的单对象形状重写：同批第一项全新对象落库、第二项撞册上正文冲突，断言 `savedVersions` 仍恰为第一项。**但只补上了一半，另一半照实记**——该用例走登记册替身、没有事务，守得住「冲突项不入册也不动前项、两次调用间处理器不留共同状态」，**守不住事务边界**：哪天有人把 `cmd/parcel-commercial` 那个逐项各起事务的循环整个包进一个事务，前项就会被后项带走，而现有用例一条都不会红。要堵这一格得有一条对真库跑 `runPublish` 的用例，今天没有——`cmd/parcel-commercial` 只有 `translate_test.go` 的纯翻译测试。**列为收口前的待办。**
+
+  **五、另记一处未被门禁抓到的同形隐患。** `internal/partycommercial/adapters/postgres/declaration_publication_test.go` 的 `mustSaveDeclaration` 也在事务回调里调 `t.Fatalf`（outcome 不符那一格），与本轮第 1 条修的是同一个缺陷形状，但 `TestNoTransactionClosureCarriesAGoexitAssertion` 没有报它——门禁能顺着 `mustWithinTransaction` 那个助手追进去，却没追 `mustWithinPublicationTransaction`。只在断言失败时才发作，因此绿着看不见。**本轮不改**（不在票 03 范围，且改法与门禁能力边界要一起看），记此备查。
+
+  **六、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突。分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**——票面三件里件 3（进程级登记口）随 `cmd/parcel-commercial` 已有雏形，件 1/2 待逐条对票面收口，加上第四条那半格待办，收口前不推。
