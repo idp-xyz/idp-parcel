@@ -479,10 +479,6 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	return evaluation
 }
 
-func Evaluate(request EvaluationRequest) PricingEvaluation {
-	return EvaluatePricing(request)
-}
-
 func ReplayPricingEvaluation(
 	newID EvaluationID,
 	original PricingEvaluation,

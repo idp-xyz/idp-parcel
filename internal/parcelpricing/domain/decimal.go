@@ -93,10 +93,6 @@ func NewDecimalFromInt64(value int64) Decimal {
 	return Decimal{coefficient: big.NewInt(value).String()}
 }
 
-func DecimalFromInt64(value int64) Decimal {
-	return NewDecimalFromInt64(value)
-}
-
 func (value Decimal) valid() bool {
 	if value.scale > DecimalMaxScale || value.coefficient == "" {
 		return false

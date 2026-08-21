@@ -7,7 +7,8 @@
 # 后来读的人不知道。
 #
 # 初版这 33 条实测于 2026-08-21，两套独立方法各数一遍同得 33 且名单逐条相同：一套是 git 侧
-# 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。
+# 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。**当日随后删掉两条死代码，现为 31**
+# ——这句写成「初版 33、现 31」而不是只写一个数，是因为下一次增减时只改一处会让另一处变错。
 #
 # 下面那些理由行的取证强度不齐，先说清免得被当统一口径引用：**逐条读过签名与调用点的是
 # parcel-pricing 与 party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost
@@ -82,9 +83,9 @@ internal/parcelpricing/domain MarshalPricingPlanSnapshot
 internal/parcelpricing/domain RehydratePricingPlanSnapshot
 # 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
 internal/parcelpricing/domain ParseCanonical
-# ❗ 下面两条与其余三十一条不同类：它们**全仓无人调用**，测试里也是零——不是「只被测试接线」，
-# 是死代码。Evaluate 函数体只有一行 return EvaluatePricing(request)，像个弃用别名。
-# 本门禁不管这一类，而且按新判据它们本就不在族内，所以**建成之后不会有任何机制再提醒**。
-# 要不要删是另一个决定，归票主与人类；写在这里是因为只活在没人会看的地方的发现等于没发现。
-internal/parcelpricing/domain DecimalFromInt64
-internal/parcelpricing/domain Evaluate
+# 初版这里还有两条与其余不同类的：DecimalFromInt64 与 Evaluate 全仓无人调用、测试里也是零，
+# 不是「只被测试接线」而是死代码，各自都是一行转发给同文件里的正主（NewDecimalFromInt64 与
+# EvaluatePricing，两个正主分别有 11 与 25 处引用）。**已删**，见本文件的 git 历史。
+#
+# 留这段是因为：本门禁按判据本就不管这一类，删掉之后**不会再有任何机制提醒下一个人这里曾有
+# 过一对影子函数**。而它俩当初能长出来，正是因为同文件里已有正主却没有东西拦住第二个写法。
