@@ -67,3 +67,6 @@ Consequences 划出：「`CustomerCharge` 只带单一币种与金额，没有�
   - 验证：`go build ./...`、`go vet ./...`、`go test -count=1 ./...` 全绿，真库带 DSN 实跑
     （单跑费用库用例 `-v` 确认 PASS 非 SKIP）。
   - `ChargeAdjustment` 未动，归本目录 `05`（needs-triage）。
+- 2026-08-21 · MCP-2：登记提交坐标。代码、迁移 `0013` 与票 05 落 `f538fa7`；本票的 resolved
+  置位与上面两条实现/验证记录先一步被 `cccf5f3`（MCP-1 的取证与拍板记录提交）卷带入库——
+  提交竞态的良性一例，内容两边一致，无覆盖。
