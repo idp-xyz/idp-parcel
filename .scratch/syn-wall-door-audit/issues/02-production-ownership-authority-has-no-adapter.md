@@ -188,9 +188,11 @@ Status: resolved
   MCP-1 指示拆为独立票 `.scratch/syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md`
   （`needs-triage`），不再挂在本票下。另有票 11（范围版本覆盖关系登记，`needs-triage`）由本票
   裁定分出，**不阻塞本票**——三态语义已交付，第三态是它今天的正确答案。
-  - **提交**：`origin/main` 三笔——`443c2bc`（MCP-4 死会话封存件）、`57e0b1f`（治理侧读口 +
-    三个窄口编译期断言 + 首批真库用例）、`c0ea050`（准入暂停查询改三态）。原分支
-    `t1-02-takeover` 尖端 `8d701e4`，经 MCP-1 cherry-pick 入 `main`，零冲突、文件级零交集。
+  - **提交（落地后的 SHA，均可从 `origin/main` = `d5e5d20` 到达）**：`443c2bc`（MCP-4 死会话
+    封存件）、`57e0b1f`（治理侧读口 + 三个窄口编译期断言 + 首批真库用例）、`c0ea050`（准入
+    暂停查询改三态）。原分支 `t1-02-takeover` 尖端为 `8d701e4`，经 MCP-1 cherry-pick 入 `main`
+    时**已换号**，零冲突、文件级零交集；分支拆掉后旧号找不回去，所以这里记的一律是落地号，
+    `8d701e4` 只作来路备注。
   - **验证（含 PG，MCP-1 在 detached verify 树跑）**：`gofmt -l cmd internal` 无输出；
     `go build ./...`、`go vet ./...`、`git diff --check` 均 0；
     `go test -p 1 -count=1 -v ./...` 退出码 0，**4000 PASS / 0 FAIL / 0 SKIP**，71 包，220 秒。
