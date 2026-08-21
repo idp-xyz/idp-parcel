@@ -145,15 +145,17 @@ func TestHandoverVersionsOfOneObjectShareAPartition(t *testing.T) {
 		t.Fatalf("更正版行数 = %d, want 1——ID 不带版本时它会被当成重复静默丢掉", count)
 	}
 
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); got != "tenant-a/parcel-1" {
-		t.Fatalf("首版分区键 = %q, want tenant-a/parcel-1", got)
+	const wantPartition = "tenant-a/parcel-1/transport-handover-registration"
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-1"); got != wantPartition {
+		t.Fatalf("首版分区键 = %q, want %q", got, wantPartition)
 	}
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); got != "tenant-a/parcel-1" {
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-1/scope-1/hv-2"); got != wantPartition {
 		t.Fatalf("更正版分区键 = %q；两代不同分区就没有先后可言", got)
 	}
 	// 不同对象不共享分区：一个对象卡住不该拖住另一个。
-	if got := partitionKeyOf(t, pool, "tenant-a/parcel-2/scope-1/hv-1"); got != "tenant-a/parcel-2" {
-		t.Fatalf("他对象分区键 = %q, want tenant-a/parcel-2", got)
+	const wantOtherPartition = "tenant-a/parcel-2/transport-handover-registration"
+	if got := partitionKeyOf(t, pool, "tenant-a/parcel-2/scope-1/hv-1"); got != wantOtherPartition {
+		t.Fatalf("他对象分区键 = %q, want %q", got, wantOtherPartition)
 	}
 }
 

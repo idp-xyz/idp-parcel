@@ -64,13 +64,17 @@ func effectiveDeliveryEventID(key ports.EffectiveDeliveryKey, version domain.Del
 		"/" + version.String() + "/effective-delivery"
 }
 
-// effectiveDeliveryPartitionKey 取（租户+载运对象），不取整个键。
+// effectiveDeliveryPartitionKey 取（租户+载运对象+类型段），不取整个键。
 //
 // 与交接登记同一条理由：ID 管幂等、分区键管顺序，两者不是一回事。一个对象的交付结果
 // 是一条链（首登，此后每次 POD 更正一版），下游 parcel-shipment 据它形成终局判断——
 // 更正先于首登送达，终局就会落在已被取代的那一版上。
+//
+// 类型段按 ADR-0074，理由同 transportHandoverPartitionKey：TF 的排队主体是载运对象，
+// 与 visibility-exception 的（租户+包裹）分区不共队。口内对象链保序，跨口不保——
+// 下游按引用重读当前版，跨口到达序买不到东西。
 func effectiveDeliveryPartitionKey(key ports.EffectiveDeliveryKey) string {
-	return key.TenantID.String() + "/" + key.Object.String()
+	return key.TenantID.String() + "/" + key.Object.String() + "/effective-delivery"
 }
 
 // HandOffEffectiveDelivery 把一份意图入队。载荷仍是指针式的——只带引用，交付本体由下游

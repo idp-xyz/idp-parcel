@@ -83,10 +83,11 @@ func TestAPODCorrectionEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) {
 	}
 
 	// 两份必须同分区：更正先于首登送达，下游终局会落在已被取代的那一版上。
-	if got := partitionKeyOf(t, pool, firstID); got != "tenant-1/parcel-1" {
-		t.Fatalf("首登分区键 = %q, want tenant-1/parcel-1", got)
+	const wantPartition = "tenant-1/parcel-1/effective-delivery"
+	if got := partitionKeyOf(t, pool, firstID); got != wantPartition {
+		t.Fatalf("首登分区键 = %q, want %q", got, wantPartition)
 	}
-	if got := partitionKeyOf(t, pool, correctedID); got != "tenant-1/parcel-1" {
+	if got := partitionKeyOf(t, pool, correctedID); got != wantPartition {
 		t.Fatalf("更正分区键 = %q；两代不同分区就没有先后可言", got)
 	}
 

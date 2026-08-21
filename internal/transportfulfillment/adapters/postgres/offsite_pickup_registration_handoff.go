@@ -65,12 +65,11 @@ func offsitePickupRegistrationEventID(key ports.OffsitePickupKey) string {
 // 对象控制链的先后两段。取到尝试就把链切成互不排队的两段，而下游 parcel-shipment 的来源采用
 // 正是逐对象判断的。
 //
-// 类型段留着，不与 transportHandoverPartitionKey、effectiveDeliveryPartitionKey 合流。那两口
-// 取的是光秃秃的（租户+对象），而 visibility-exception 的投影、triage、gap、eta 四口取的是
-// （租户+包裹）——载运对象引用与申报包裹标识是同一个字符串，两边因此落进同一分区。揽收登记
-// 一旦并进去，一封未决的揽收就把同一包裹的追踪投影堵在分区头，而那份投影 VE 已经受理并派生，
-// 堵它只是把已经成立的可见性扣到失败预算烧完。跨口保序也换不来别的：投影的取代关系由来源给出
-// （ADR-0065），本就不靠到达先后。TF 对象分区与 VE 包裹分区共键那一类另有票，不在本口就地解决。
+// 类型段自 ADR-0074 起是 TF 对象链三口的统一形状（交接登记、交付生效同款），不再是本口
+// 独有的避让：TF 的排队主体是载运对象，与 visibility-exception 的（租户+包裹）分区不共队。
+// 载运对象引用与申报包裹标识是同一个字符串，不加类型段，一封未决的揽收就把同一包裹已受理
+// 派生的追踪投影堵在分区头，把已经成立的可见性扣到失败预算烧完。跨口保序也换不来别的：
+// 投影的取代关系由来源给出（ADR-0065），本就不靠到达先后。
 func offsitePickupRegistrationPartitionKey(key ports.OffsitePickupKey) string {
 	return key.TenantID.String() + "/" + key.Object.String() + "/offsite-pickup-registration"
 }

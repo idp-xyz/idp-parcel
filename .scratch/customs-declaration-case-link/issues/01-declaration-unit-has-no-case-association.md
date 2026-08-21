@@ -1,7 +1,7 @@
 # 申报单元 → 关务案件的关联在域模型里缺席，只活在文档
 
 Category: bug
-Status: ready-for-human
+Status: ready-for-agent
 
 CC CONTEXT 的「关务案件」词条写着「**一个案件可以关联多个申报单元和多次提交**」，而代码里
 没有这条关联：`DeclarationSubmissionKey` 三维（租户+申报单元+程序）不含案件维，申报提交口的
@@ -240,3 +240,14 @@ CONTEXT 硬句 143 本来就要求的（「申报单元必须具有独立身份�
 
 `Category` 保留 `bug`：CONTEXT 已确认的一条关系在代码里取不出来，且已实现的案件关闭核对因此
 无法按结构盘点申报义务，不是新能力缺失。
+
+- 2026-08-21 MCP-2（**三问已裁，本票转 ready-for-agent**。用户当日授权代裁，裁决全文与能力
+  边界见 [ADR-0073](../../../docs/adr/0073-declaration-unit-is-a-persisted-aggregate-holding-its-case.md)）：
+  ① 申报单元要有持久化本体——CONTEXT「独立身份和可追溯组成」本就要求，jsonb 快照承载不了
+  替代关系与追溯；② 关联建在申报单元上，多对一、成立即定、换案件即替代单元；反向查询按
+  单元表案件列，不建第二份存储；`DeclarationSubmissionKey` 三维不动，幂等口径不变；提交链
+  带案件维必填、写入前按标识反查核存在（补 `CustomsCaseStore` 反查读口，库侧唯一约束现成）；
+  ③ 案件引用统一走铸造 `CustomsCaseID`，新增处一律铸造，存量收敛开
+  [02 票](./02-bare-case-refs-converge-to-minted-customs-case-id.md)显式跟踪。红线（不得经
+  包裹推导）与时序门（案件维必填先于提交口接生产装配）均进 ADR 正文。实现方开工前按票面
+  取证核对当时代码状态；新增聚合与表属实现票范围，走常规验证流程。

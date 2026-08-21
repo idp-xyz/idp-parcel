@@ -1,7 +1,7 @@
 # TF 的（租户+对象）分区与 VE 的（租户+包裹）分区是同一个键，跨上下文共链无人察觉
 
 Category: bug
-Status: ready-for-human
+Status: resolved
 
 分区由**键值字符串**决定，不由上下文、事件类型或 handoff 决定（[票 01](../../outbox-partition-key/issues/01-per-event-partition-keys-make-the-ordering-guarantee-vacuous.md)
 的判据原句）。两个上下文各自算出同一个字符串，它们的信封就进同一分区并因此互相排队——包括
@@ -360,3 +360,13 @@ MCP-5 已在票 10 的 Comments 里把这件写成留给 B 的决策，并自判
   **不阻于第一问**——表存在本身就是为了让人能拍第一问，互相等会死锁）。后者票面已明写它
   **守不住「两个主体名其实是同一个字符串」**，并注「实现时不许删这一节」，否则下一个人会把它
   当成已经守住了本票。「求值取交集做不出来」的两层论证已按裁定搬进票面第三问，拦下一个人。
+
+- 2026-08-21 MCP-2（**第一、二问已裁，本票转 resolved**。用户当日授权代裁，裁决全文与能力
+  边界见 [ADR-0074](../../../docs/adr/0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)）：
+  **判为不同主体**——排队主体由「哪些先后拍必须排一条队」定义，身份相同不等于排队主体相同；
+  且共队在 ADR-0065 下只有成本没有收益，「那条队买到了什么」答不出来。第二问随之：
+  `transportHandoverPartitionKey` 与 `effectiveDeliveryPartitionKey` 与揽收登记口取齐，
+  三口统一（租户+对象+口名段），同笔落地（两口一测三处改动，真库包全绿）。两口零生产调用
+  点、无在途信封，免迁移。第三问维持前裁不动：登记表票是主体名的落地处，ADR-0074 决定五
+  指定其主体名权威。`offsite_pickup_registration_handoff.go` 注释里「那两口取的是光秃秃的
+  （租户+对象）」一段随裁决收窄——它描述的状态已不存在。

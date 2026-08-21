@@ -58,3 +58,11 @@ Status: ready-for-agent
 
 票 01 的「要答的」第三问与 Comments 第三节；
 `internal/architecture/envelope_partition_gate_test.go`；ADR-0065、ADR-0069。
+
+## Comments
+
+- 2026-08-21 MCP-2：票 01 第一问已裁（用户授权代裁），主体名的权威落
+  [ADR-0074](../../../docs/adr/0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)
+  决定五：TF 对象链三口登记为「租户/载运对象/口名」，VE 四口登记为「租户/包裹」。实现本票时
+  这几行**不再是「待裁」**，直接引 ADR-0074；其余口照旧如实登记、判不准的写待裁。TF 两口的
+  键表达已随裁决改带口名段，登记表以当时代码为准重扫，勿抄本票写下时的形状。

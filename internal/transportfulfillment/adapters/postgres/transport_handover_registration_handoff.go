@@ -53,7 +53,7 @@ func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) string
 	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Scope.String() + "/" + key.Version.String()
 }
 
-// transportHandoverPartitionKey 取（租户+载运对象），不取整个判断键。
+// transportHandoverPartitionKey 取（租户+载运对象+类型段），不取整个判断键。
 //
 // 分区键与信封 ID 管的不是一回事：ID 管幂等（每个判断版本一份意图，更正因而不丢），
 // 分区键管顺序（同一对象的先后拍排队）。把 ID 直接当分区键会让每份信封自成一个分区，
@@ -62,8 +62,13 @@ func transportHandoverRegistrationEventID(key ports.TransportHandoverKey) string
 // 主体取到对象而不取到（对象+范围）：控制转移对一个载运对象是一条链，先从节点交出、
 // 再由承运方接收，两次交接分属不同范围却必须保序。取到范围就把这条链切成了互不排队的
 // 两段，而 node-operations 的控制转移正是按这条链推进的。
+//
+// 类型段按 ADR-0074：TF 的排队主体是载运对象，不是包裹。载运对象按定义引用来源身份，
+// 与 visibility-exception 的（租户+包裹）分区会算出同一个字符串，但身份相同不等于排队
+// 主体相同——不加类型段，一封停在消费未决的交接信封就把同一包裹已派生的追踪投影堵在
+// 分区头，而跨口保序买不到东西（投影的取代关系由来源给出，ADR-0065）。
 func transportHandoverPartitionKey(key ports.TransportHandoverKey) string {
-	return key.TenantID.String() + "/" + key.Object.String()
+	return key.TenantID.String() + "/" + key.Object.String() + "/transport-handover-registration"
 }
 
 // HandOffTransportHandover 把一份意图入队。信封 ID 取交接判断键——意图由
