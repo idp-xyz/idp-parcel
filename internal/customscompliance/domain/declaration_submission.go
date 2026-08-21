@@ -131,6 +131,13 @@ func (readiness ReadinessJudgment) Effective() bool {
 	return readiness.revokedAt.IsZero()
 }
 
+// Revocation 只在已失效的判断上给出原因与时间。没有这个出口，登记册适配器写得进
+// 原判断却写不进失效那两列，`不再就绪`在库里就只能靠删行或改写原依据表达——两者
+// 都与「撤销不是删除」相悖（同 ExternalResult 三件出口的理由）。
+func (readiness ReadinessJudgment) Revocation() (string, time.Time, bool) {
+	return readiness.revokedBy, readiness.revokedAt, !readiness.Effective()
+}
+
 // Revoke 记录`不再就绪`：资料、资格、规则、凭证、口岸、渠道或限制发生适用变化。
 // 原判断（依据与时间）原样保留——这不是删除，是失效。
 func (readiness ReadinessJudgment) Revoke(cause string, at time.Time) (ReadinessJudgment, error) {
@@ -216,6 +223,12 @@ func (authorization SubmissionAuthorization) GrantedAt() time.Time {
 // Effective 报告授权是否仍然有效。
 func (authorization SubmissionAuthorization) Effective() bool {
 	return authorization.revokedAt.IsZero()
+}
+
+// Revocation 只在已失效的授权上给出原因与时间。与就绪同一条理由：没有出口就写不出
+// `授权已失效`那一格。
+func (authorization SubmissionAuthorization) Revocation() (string, time.Time, bool) {
+	return authorization.revokedBy, authorization.revokedAt, !authorization.Effective()
 }
 
 // Revoke 记录授权失效：委托关系、资质或授权范围发生适用变化。原授予（依据与时间）

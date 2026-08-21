@@ -498,6 +498,124 @@ type SubmissionAuthorityView interface {
 	) (domain.SubmissionAuthorization, bool, error)
 }
 
+// CaseConfigurationSaveOutcome 是案件配置登记册的写入代数。只有两格，与本上下文其余
+// 写口一致（ADR-0031）：`已登记`是业务答案不是错误。**没有覆盖格是有意的**——登记册
+// 的写入方一律不做 UPSERT，同键已在册就交回`已登记`，内容是否一致由编排读回既有登记
+// 自己比（同 SubmitDeclarationHandler 先 FindByKey 再比指纹那条路）。把比对放在编排
+// 而不是 SQL 里，是为了让「重放同一份」与「换了内容」这两件事在用例结果上分得开。
+type CaseConfigurationSaveOutcome uint8
+
+const (
+	CaseConfigurationSaveOutcomeInvalid CaseConfigurationSaveOutcome = iota
+	CaseConfigurationRegistered
+	CaseConfigurationAlreadyRegistered
+)
+
+// ReadinessRegistry 是 ReadinessView 的写口半边。就绪判断的内容属实例半边，但**放进
+// 库里的那条受控路径属机制半边**——没有它，租户上线时这本册子今天没处配（W13）。
+//
+// 登记与撤销分成两个方法，不合成一个 Save：撤销是同一判断的状态推进而不是另一次登记
+// （撤销不是删除，原依据与形成时间原样留在行内），合成一个写口就会让「重新登记」有机会
+// 顶掉已撤销那一行的原依据。
+type ReadinessRegistry interface {
+	RegisterReadiness(
+		ctx context.Context,
+		tenant domain.TenantID,
+		judgment domain.ReadinessJudgment,
+	) (CaseConfigurationSaveOutcome, error)
+	RevokeReadiness(
+		ctx context.Context,
+		tenant domain.TenantID,
+		judgment domain.ReadinessJudgment,
+	) error
+}
+
+// SubmissionAuthorityRegistry 是 SubmissionAuthorityView 的写口半边。与就绪分表分口
+// ——两条轨分别形成和失效（CONTEXT 244），一个写口写两张表就等于让它们同生同灭。
+//
+// 同 SubmissionAuthorityView 的告诫：**这本册子不是接入认证**。这里登记的是「这个申报
+// 单元有没有有效的提交授权依据」，不是「这个请求来自哪个租户」——租户是入参。
+type SubmissionAuthorityRegistry interface {
+	GrantSubmissionAuthority(
+		ctx context.Context,
+		tenant domain.TenantID,
+		authorization domain.SubmissionAuthorization,
+	) (CaseConfigurationSaveOutcome, error)
+	RevokeSubmissionAuthority(
+		ctx context.Context,
+		tenant domain.TenantID,
+		authorization domain.SubmissionAuthorization,
+	) error
+}
+
+// InterpretationRuleRegistry 是 InterpretationRuleView 的写口半边。
+//
+// **今天只登记得出一层一版。** 表的主键是（租户，结果层），装不下按法定生效区间与
+// 适用时点排开的多个规则版本；本接口因此没有改写入口——同层再登记别的规则只会交回
+// `已登记`，由编排比出冲突并拒绝，绝不顶替。这不是版本化，是在版本维缺席时**拒绝
+// 假装**：迟到的外部结果该按哪一版解释，需要「法定适用时点」这个入参，而它在外部
+// 结果那条链上还没有来源（CONTEXT 硬句 191 明禁用消息到达时间或系统当前时间顶替）。
+type InterpretationRuleRegistry interface {
+	RegisterInterpretationRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		layer domain.ResultLayer,
+		rule domain.InterpretationRuleReference,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// ObligationRegistration 是一项关闭义务的登记内容：义务项加它的适用区间。区间必须
+// 随项给出——盘点按业务截点进行（LoadObligationItems 走半开区间），没有区间的义务项
+// 任何一次截点都盘不进来，等于登记了却永远不参与关闭判断。AppliesUntil 零值表示尚无
+// 终点，不是「已失效」。
+type ObligationRegistration struct {
+	Item         domain.ClosureObligationItem
+	AppliesFrom  time.Time
+	AppliesUntil time.Time
+}
+
+// ObligationInventoryRegistry 是 ObligationInventoryView 的写口半边。
+//
+// 目录与明细分两个方法，和读口分两张表同一个理由：目录在场与明细行数是两个独立信号。
+// 只登明细不登目录，读口答`未配置`；只登目录不登明细，读口答「已登记且本截点空清单」
+// ——后者是「此案在此截点无适用义务」的如实答案，登记方必须能单独表达它。
+type ObligationInventoryRegistry interface {
+	RegisterObligationCatalog(
+		ctx context.Context,
+		tenant domain.TenantID,
+		caseRef string,
+		registeredAt time.Time,
+	) (CaseConfigurationSaveOutcome, error)
+	RegisterObligationItem(
+		ctx context.Context,
+		tenant domain.TenantID,
+		caseRef string,
+		registration ObligationRegistration,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// GateConditionRegistry 是 GateConditionView 的写口半边。目录与逐项判断分两个方法，
+// 同义务盘点的理由；这里那一格尤其要紧——目录登记了却空清单是「此动作在此边界本就
+// 不受门禁」，而目录未登记是未决，登记方必须分得开，否则就是用「查不到」冒充「不受管」。
+type GateConditionRegistry interface {
+	RegisterGateCatalog(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+		registeredAt time.Time,
+	) (CaseConfigurationSaveOutcome, error)
+	RegisterGateFinding(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+		finding domain.PreconditionFinding,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
 // DeclarationVersionFactory 签发提交版本标识。
 type DeclarationVersionFactory interface {
 	NextSubmissionVersion(ctx context.Context) (domain.SubmissionVersionID, error)
