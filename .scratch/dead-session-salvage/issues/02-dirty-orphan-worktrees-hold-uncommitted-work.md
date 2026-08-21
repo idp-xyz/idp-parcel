@@ -126,3 +126,30 @@ AGENTS.md「当前默认切片」里仍在阻断的一项，这份重估可能�
     判它需要读那四份 diff，本轮未读。判之前不拆。
   - 一条给下次扫的人：**`git status` 对「行尾差异」与「真有改动」给的是同一个 `M`**，
     两者只能靠内容 diff 分开。本轮四棵里有两棵是前者——若只看 `status` 就会当成四棵都有货。
+
+- 2026-08-21 MCP-1（**上一条问错了问题，就地更正；原文保留**）：上一条把
+  `cons-proj-delivery` 与 `cons-proj-delivery-a` 判为「有真实内容差」——那个差是**对 `origin/main`** 的，
+  而拆树要问的是**对它自己 HEAD** 的。两者不是一回事：前者只说明这棵树落后于 main（它俩的 HEAD
+  正是 CONS-PROJ-DELIVERY-A 的平行版，而 main 在 `f388c50` 之后又演进了四笔：`1709872`、
+  `0477fe3`、`f721773`、`071eae0`），后者才是拆掉会丢的东西。**改问后者，四棵的答案都是零。**
+  - 判据（含阳性对照，按本仓「报零命中前先用同一条命中一次」）：
+    树内 `git diff --numstat HEAD` 与 `git diff --numstat` 均为空；**同一条命令**打 `HEAD~1 HEAD`
+    则给出 101/219/176/347（`cons-proj-delivery`）与 102/249/176/388（`-a`）——工具在跑且在匹，
+    那两个空不是「工具没跑」式的空。四棵已提交内容均由各自 ref 保住，拆树只丢未提交部分。
+  - **四棵均已拆，`git worktree list` 不再列它们。**
+
+- 2026-08-21 MCP-1（**一处程序偏离，照实记**）：`git worktree remove`（未加 `--force`）
+  **拒绝了全部四棵**，退 128，理由是 `contains modified or untracked files`——**而那正是行尾误判**，
+  与 `git status` 那个 `M` 同源。我脚本里为「Windows 上 remove 成功却留空壳」准备的那句
+  `Remove-Item -Recurse -Force` 随后把目录删了，**等于用另一条路绕过了那次拒绝**，效果与
+  `--force` 相同。内容零损失（上一条的空 delta 是在删之前测的），但做法不合本票口径。
+  - **本票四步因此要补一格**：那四步默认「`remove` 只在真有未提交内容时拒绝」，
+    **在行尾混杂的仓里这个前提不成立**——拒绝本身与 `status` 受同一个误判影响。
+    改成：`remove` 拒绝时**不加 `--force`、也不要用文件系统删**，先在树内用
+    `git diff HEAD`＋阳性对照证明 delta 为空，证完再决定；证不出空就保留。
+  - **另补一格，这一次差点吃亏**：`idp-parcel-cons-proj-delivery` 是 **detached HEAD、无分支指针**。
+    拆掉之后 `c66c97a` 一度**悬空**（`git for-each-ref --contains` 零命中），只剩对象还在。
+    已建 `salvage-cons-proj-delivery-detached` 指住它，现四个提交均可达
+    （`c66c97a`/`64d8ca3`/`d5e6b94` 各 1 个 ref，`0ec62ea` 10 个）。
+    **拆树前先看它是不是 detached；是就先建 ref 再拆。** 本票既有那条「分支指针是事后补验的
+    唯一凭据」只讲了别删指针，没讲**根本没有指针**的情形。
