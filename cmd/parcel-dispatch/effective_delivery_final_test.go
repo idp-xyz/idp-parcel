@@ -42,8 +42,10 @@ const (
 // 停在 ROUTE_EVIDENCE_NOT_CONFIGURED，不得形成路由计划；published==0 与
 // assertNoInitialRoute 一起挡住。
 //
-// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账。本用例不停投影；PS 终局未
-// 配置仍让整封 Publish 失败，published 必须是 0。
+// FanOut 先把同一封投给 VE：映射未配置时投影未归类入账，并入队
+// tracking-projection.derived（由客户视图链接住，重拍时定稿）。本用例不停投影；PS 终局
+// 未配置仍让整封 Publish 失败，第一拍 published 必须是 0。重拍得 1 而不是 0：交付信封
+// 与派生信封自 ADR-0074 起不同分区，未决的交付不再把已派生的可见性堵在队头。
 func TestARegisteredEffectiveDeliveryStopsAtUnconfiguredFinalRule(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -73,12 +75,13 @@ func TestARegisteredEffectiveDeliveryStopsAtUnconfiguredFinalRule(t *testing.T) 
 	}
 	assertNoFinalOutcomeTrace(t, fixture, eventID)
 
+	// 重拍：交付信封仍未决，第一拍入队的派生信封被客户视图链接住并定稿（1）。
 	published, err = fixture.beat.DispatchOnce(ctx)
 	if err != nil {
 		t.Fatalf("重拍：%v", err)
 	}
-	if published != 0 {
-		t.Fatalf("重拍定稿了 %d 条", published)
+	if published != 1 {
+		t.Fatalf("重拍定稿 %d 条, want 1（仅派生信封经视图链定稿）", published)
 	}
 	if n := fixture.countOutboxOfType(t, effectiveDeliveryRegisteredType); n != 1 {
 		t.Fatalf("交付登记信封变成 %d 封——重投不得再入队一份", n)
