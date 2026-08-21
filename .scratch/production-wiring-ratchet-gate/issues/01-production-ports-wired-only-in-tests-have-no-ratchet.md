@@ -25,12 +25,22 @@ Status: ready-for-agent
 - **`FormChargeAdjustment`**（supplier-expected-cost-correction 票 05）：两个调用点都是领域测试，
   且 SA 应用层根本没有形成费用调整的编排。
 
-**后三个实例都不是 outbox 交接口**——两个是应用层命令处理器，一个是领域构造函数。判据因此不能只
-盯 `NewOutbox*Handoff`（本票初稿的范围），见下节。
+**五个实例按族归位，这张表本身就是判据的取证**——三个上下文、三个族、同一形状：
 
-## 现状：普查数字（对 `d5e5d20`，判据已放宽）
+| 实例 | 族 | 断在哪一跳 |
+|---|---|---|
+| `NewOutboxTransportHandoverRegistrationHandoff` / `NewOutboxEffectiveDeliveryHandoff` | 交接口 | 无 outbox 装配 |
+| PS←PG 桥读口 | 端口实现 | 读口未实现，`nil` 折成「显式未配置」 |
+| `SubmitDeclarationHandler` / `EstablishCaseHandler` | 应用层处理器 | 无进程入口 |
+| `FormChargeAdjustment` | 领域工厂 | 连应用层调用方都没有 |
 
-判据：**某个生产端口或命令处理器的构造函数，其全部调用点是否都在 `_test.go` 里。** 两族分开数。
+**只有第一行落在 `NewOutbox*Handoff` 里**——本票初稿的范围会漏掉其余五分之四。判据据此放宽为
+三族，见下节。
+
+## 现状：普查数字（对 `d5e5d20`，判据已放宽为三族）
+
+判据：**某个生产端口、命令处理器或领域工厂的构造函数，其全部调用点是否都在 `_test.go` 里。**
+三族分开数——它们的「接线」含义不同，混成一个数字会让下一个人按错的含义去核。
 
 **一族：outbox 交接口 `NewOutbox*Handoff`。** `internal/` 下共 **46** 个构造函数；
 `cmd/parcel-dispatch/assemble.go` 是全仓唯一装配处（`cmd` 下非测试代码里 `Handoff` 只出现在这一
@@ -47,10 +57,37 @@ Status: ready-for-agent
 `cmd/parcel-dispatch/assemble.go` 六个（初始路由、改路重评、客户视图派生、投影派生、终局形成、
 收寄采用）。**53 个零生产调用点。**
 
-**合计：108 个构造函数，94 个零生产调用点；生产装配共 14 个不同构造函数、15 个调用点。**
+**三族：领域工厂**（`internal/*/domain/` 下的
+`Form*` / `Establish*` / `Fix*` / `Judge*` / `Grant*` / `Cut*` / `Publish*` / `Accept*` /
+`Propose*` / `Verify*` / `Open*` / `Record*`）。共 **89** 个构造函数，**13 个零非测试调用点**：
+`EstablishCase`、`EstablishSegmentWithHandover`、`EstablishSegmentWithPickup`、`FormAuditedPayable`、
+`FormChargeAdjustment`、`FormDutyCollaboration`、`FormLoadAssignment`、`FormSupplierCreditNote`、
+`FormSupplierExpectedCost`、`OpenDispatchTask`、`PublishChannelAccountUseAuthorization`、
+`RecordMovementFact`、`VerifyDutyPayment`。
 
-**这 94 个不是 94 个缺陷。** 绝大多数是 SYN-WALL-DOOR-AUDIT 十八墙里还没建门的口，属**缺席**
+| 族 | 构造函数 | 零非测试调用点 |
+|---|---|---|
+| outbox 交接口 `NewOutbox*Handoff` | 46 | 41 |
+| 应用层命令处理器 `New*Handler` | 62 | 53 |
+| 领域工厂 `Form*` 等 | 89 | 13 |
+| **合计** | **197** | **107** |
+
+**这 107 个不是 107 个缺陷。** 绝大多数是 SYN-WALL-DOOR-AUDIT 十八墙里还没建门的口，属**缺席**
 （门还没建）而非**在场且错**。这条界线要写进门禁注释，否则下一个人会把清单长度当成待修工量。
+
+### 三族的数字为什么不能横向比——判据是逐跳的，不是传递的
+
+领域工厂只有 13/89 落网，看起来这一族「基本都接上了」。**不是。** 领域工厂的调用方是应用层命令
+处理器，而那一族有 53/62 自己没有进程入口。**一个被未接线处理器调用的领域工厂，在本判据下算
+「已接线」**——它确实有非测试调用点，只是那个调用点自己到不了任何进程。
+
+`FormChargeAdjustment` 之所以落网，是因为它连应用层调用方都没有（SA 应用层根本没有形成费用调整
+的编排），断在更靠前的一跳。
+
+**这一格必须写进门禁注释，不许略过**：本门禁答的是「**这一跳**有没有非测试调用点」，不是「这个
+东西从某个进程可达」。后者要做可达性分析，不在本门禁范围内，也不必——三族分层扫，每一跳各自
+有清单，把三张清单读在一起就看得出断在哪一跳。**但只读其中一张会得出错的结论**，所以三族的数字
+并排放，不做加总解读。
 
 **普查中撞到一个正面样本，值得写进清单口径**：`cmd/parcel-api` 的提交端点并非「忘了接」——
 它有一个名为 `unwired_orchestration.go` 的文件，`endpoints.go` 显式装
@@ -86,14 +123,14 @@ Status: ready-for-agent
 
 ## 为什么它不是一张「先放着」清单——救它的是「只许变短」
 
-第一天 94 行例外，看起来正是 `envelope_partition_gate_test.go` 点名否掉的那种清单。**换个叫法
+第一天 107 行例外，看起来正是 `envelope_partition_gate_test.go` 点名否掉的那种清单。**换个叫法
 救不了它**：叫「进度盘点」而它仍然永远不会红，那就是同一份文件里那句「一个从来不会失败的门禁
 比没有门禁更坑人，因为它还会取信」。
 
-真正救它的是**只许变短**这一条，加上之后 94 行不是清单，是一把**棘轮**。三种真红，且今天一种
+真正救它的是**只许变短**这一条，加上之后 107 行不是清单，是一把**棘轮**。三种真红，且今天一种
 都没人守：
 
-1. **新增第 95 个零生产调用点的口** → 不在清单里 → 红。新来者拿不到例外，与
+1. **新增第 108 个零非测试调用点的口** → 不在清单里 → 红。新来者拿不到例外，与
    `allowedSameExpression` 同一口径。
 2. **某口从已接线退回未接线**（装配点被删或改掉） → 红。这一种今天完全无人守：`assemble.go`
    删掉一行接线，全仓依旧全绿。
@@ -108,12 +145,14 @@ Status: ready-for-agent
 - 清单每行按 `allowedSameExpression` 的口径带一句**可复核的判据**（这一口在等哪张票 / 哪堵墙），
   不写「无害」这类复核不了的结论。
 - 不改 `cmd/parcel-dispatch/assemble.go`。
-- **扫描范围两族：outbox 交接口（`NewOutbox*Handoff`）与应用层命令处理器
-  （`internal/*/application/` 下的 `New*Handler`）。** 初稿只写了前者，本轮五个实例里有三个落在
-  后者，范围据此放宽。**再往外扩（全部 ports 适配器构造函数）是后续**——一次放太大会让第一版
-  清单失去可读性，而两族已经覆盖了全部已知实例。
-- 清单按族分段，两族各自计数。**不要把两族混成一个数字**：它们的「接线」含义不同（交接口接的是
-  outbox 装配，处理器接的是进程入口），下一个人按错的含义去核会得出错的结论。
+- **扫描范围三族**：outbox 交接口（`NewOutbox*Handoff`）、应用层命令处理器
+  （`internal/*/application/` 的 `New*Handler`）、领域工厂（`internal/*/domain/` 的 `Form*` 等）。
+  初稿只写了第一族，而五个已知实例里有四个落在另外两族——**限在一族会漏掉五分之四**。
+  **可读性不构成限范围的理由**：清单长不是问题，清单遗漏才是。一条只盖五分之一的棘轮会让人以为
+  其余已经守住，那正是 `envelope_partition_gate_test.go` 那句话的同一个失效模式。
+- 清单按族分段，三族各自计数。**不要把三族混成一个数字**：它们的「接线」含义不同（交接口接的是
+  outbox 装配，处理器接的是进程入口，工厂接的是处理器），且判据逐跳不传递（见上节）。混起来读
+  会得出错的结论。
 
 ## 参照
 

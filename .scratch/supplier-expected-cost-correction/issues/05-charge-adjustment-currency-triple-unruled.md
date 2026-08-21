@@ -1,7 +1,11 @@
 # `ChargeAdjustment` 是否受币种三件组约束未裁，且没有评价引用
 
-Category: bug
+Category: enhancement
 Status: ready-for-human
+
+> **`enhancement` 不预设第一问答「否」。** 它说的是**能力尚不存在**，不是能力不必存在——跨币种
+> 调整即便第一问裁为「是、必须支持」，它仍然是一项要新建的能力。需不需要由 `ready-for-human`
+> 加票面承载，不由 Category 承载。判据见 Comments 第五节。
 
 由 [`04`](./04-customer-charge-single-currency-contradicts-context.md) 的裁断划出：owner
 2026-08-21 裁定客户**费用**受三件组约束（[SA CONTEXT](../../../docs/domain/settlement-accounting/CONTEXT.md)
@@ -138,8 +142,23 @@ Status: ready-for-human
 `needs-triage` → `ready-for-human`，已改到票面。四个未裁问题全属领域裁断，无可由 agent 直接开工
 的机制件；且 `FormChargeAdjustment` 零生产调用方，也不存在「先改了再说」的紧迫性。
 
-**`Category` 未动，但我认为它值得复议，理由写在这里由 owner 或协调岗定**：按「缺席 vs 在场且错」
-那条界线，本票两边都不完全落座——`ChargeAdjustment` 在场，它与相邻的 `CustomerCharge` 对同一个
-问题（币种表达）给出不一致的建模，但**那算不算错取决于第 1 问怎么裁**，而第 1 问正是本票要问的。
-把它记成 `bug` 等于预设了第 1 问答「是」。我没有单方面改，因为改成 `enhancement` 同样是预设
-（预设答「否」）。**若要一个不预设的标签，这张票的实际形状是「待裁」。**
+**`Category`：`bug` → `enhancement`（协调岗 2026-08-21 裁定，已改到票面）。**
+
+我原先的两难是「记 `bug` 等于预设第 1 问答是，改 `enhancement` 等于预设答否」。**后半句错了**：
+`enhancement` 的定义是 new capability or improvement，它说的是**能力尚不存在**，不是能力不必存在。
+跨币种调整即便第 1 问裁为「是、必须支持」，它仍然是一项要新建的能力，而不是一处要修的坏行为。
+需不需要由 `ready-for-human` 加票面承载，不由 Category 承载。
+
+**实质判据出自本节上面第一节自己查到的那一条：草稿门先核调整币种必须等于立单币，不等即
+`ErrInvalidStatementDraft`——我写了「这一步是对的」。那就是判据：今天没有任何东西给出错的答案，
+门是拒绝，不是静默记错。**
+
+与分区键碰撞票对照，两张票落在同一条线的两侧：
+
+| 票 | 形状 | Category |
+|---|---|---|
+| partition-key-space-collision/01 | **能力在场且错**——两个分区键表达已逐字写在仓里，会静默共分区 | `bug` |
+| 本票 | **能力不在场，在场的那部分行为正确** | `enhancement` |
+
+我原先说「两边都不完全落座」——落座点是存在的，只是不在我找的那一维上：不是「这个缺口算不算
+错」，而是**「今天跑着的代码给出错答案了吗」**。后者答否。
