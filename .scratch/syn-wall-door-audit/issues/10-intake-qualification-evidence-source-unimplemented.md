@@ -15,8 +15,8 @@ Status: resolved
 - 合成种子(`syn_pc_seed_test.go` 的 `seedIntakeQualification`)只在测试里给证据,生产路径没有任何来源可登。
 - 注意与票 03 的分界:资格**要求**由 PC 声明表携带(票 03 的发布面);本票管资格**证据**——某对象已满足要求的事实从哪来、登在哪。
 
-> **上面第一条的「全缺」已不成立（机制半边落地于 `origin/main` `fa8d5f4`，见 Comments
-> 2026-08-20 MCP-2 与 2026-08-21 MCP-4 两条）。** 原句保留——它记的是审计基线 `49a2ab0`
+> **上面第一条的「全缺」已不成立（机制半边已落地，见 Comments 2026-08-20 MCP-2 与
+> 2026-08-21 MCP-4 两条）。** 原句保留——它记的是审计基线 `49a2ab0`
 > 当时的实况。今天四件各有着落：存储与写入方是 node-operations 已有的执行事实表与
 > `RecordExecutionFact`（不另起第二本册子），装载口是 `NodeExecutionQualificationEvidence`，
 > 登记口是装配点的 `nodeQualificationAuthority`。**生产路径今天仍答未证明，但那是没租户、
@@ -137,9 +137,10 @@ ADR-0063;PAR-COM-16;`parcelshipment/adapters/partycommercial` 的 `ServiceStageR
     生产零值恒答未证明且不碰库、认领段后答案跟着真库执行事实走（先未证明后已证明）、
     段外引用不被兑成已证明、半份配置被拒。走真库而非替身——替身换掉 `ExecutionFacts`
     就绕开了本文件唯一要证的那一段。
-  - **落地**：`origin/main` `d5e5d20`（接线本体与注释分别为 `eafb2b1`、`0280d51`）。
-    集成树上重跑全量真库套件：退出码 0、FAIL 0、**SKIP 0**、71 包、`-p 1` 串行。
-    SKIP 0 是关键项——退出码 0 与「全部跳过」兼容，SKIP 0 不兼容。
+  - **落地**：接线本体 `eafb2b1` 与终局装配点注释 `0280d51`，两笔**均可从 `main` 到达**
+    （集成当时 `origin/main` 为 `d5e5d20`，此后 main 一直在动——锚点写成等式会过期，
+    写成可达性不会）。集成树上重跑全量真库套件：退出码 0、FAIL 0、**SKIP 0**、71 包、
+    `-p 1` 串行。SKIP 0 是关键项——退出码 0 与「全部跳过」兼容，SKIP 0 不兼容。
   - **本票只闭合机制半边**：实例半边（认领哪一段权威、哪条引用由哪件执行事实证）等租户，
     Status 是否转终态留给 triage，我不自行改。
 
