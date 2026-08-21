@@ -1,0 +1,87 @@
+# 生产接线棘轮基线。每行「包 名」，`#` 起注释。
+#
+# 这里躺着的是**此刻容忍的**未接线领域工厂，不是「应当如此」的清单。冻结它是为了让门禁能判
+# 方向：名单变长要有人写一行理由，名单里的条目失效要有人剪掉。
+#
+# 加一条时把理由写在它上面——你在加的当下知道它归哪个 PN 切片、为什么现在还不接，而三个月
+# 后来读的人不知道。
+#
+# 初版这 33 条实测于 2026-08-21，两套独立方法各数一遍同得 33 且名单逐条相同：一套是 git 侧
+# 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。
+#
+# 一件初版就该说清的事：这 33 条里 25 个**连 domain 包都没出过**——不只是没有生产调用点，
+# 而是没有应用层用例、没有适配器、没有端口，包外零引用。按本仓机制先行实例后到的顺序，切片
+# 还没开工的能力本来就该是这样。**所以这份名单不是一张缺陷清单，是一条基准线**；它里面有多
+# 少是「接过线后来烂了」、多少是「切片还没到」，本门禁分不出，也不打算分。
+
+
+# —— parcel-shipment ——
+# 产出带校验的安全交接评估，测试里调 9 次，包外零引用。
+internal/parcelshipment/domain AssessSafeHandoff
+
+
+# —— visibility-exception ——
+# 五条均产出带不变式校验的领域对象或领域决定，包外零引用。
+internal/visibilityexception/domain DecideDisclosure
+internal/visibilityexception/domain EstablishCase
+internal/visibilityexception/domain PrepareDisclosure
+internal/visibilityexception/domain RaiseConflictSignal
+internal/visibilityexception/domain ResolveByBusinessTime
+internal/visibilityexception/domain SubmitEvidence
+
+
+# —— transport-fulfillment ——
+# 六条均产出带不变式校验的领域对象，包外零引用。
+internal/transportfulfillment/domain ChargeOccurrenceForFailedAttempt
+internal/transportfulfillment/domain EstablishSegmentWithHandover
+internal/transportfulfillment/domain EstablishSegmentWithPickup
+internal/transportfulfillment/domain FormLoadAssignment
+internal/transportfulfillment/domain OpenDispatchTask
+internal/transportfulfillment/domain RecordMovementFact
+internal/transportfulfillment/domain SummarizeHandovers
+
+
+# —— settlement-accounting ——
+# 五条均产出带不变式校验的领域对象，包外零引用。
+internal/settlementaccounting/domain FormAuditedPayable
+internal/settlementaccounting/domain FormChargeAdjustment
+internal/settlementaccounting/domain FormSupplierCreditNote
+internal/settlementaccounting/domain IncludeAdjustmentInSubsequentPeriod
+# 这一条与 DecideDisclosure 是全部 33 条里仅有的两个**已经走出 domain 层**的：适配器与应用层
+# 都在、两边都有测试，唯独没有生产调用路径。真烂会先烂在这两条上，别的都还没开始。
+internal/settlementaccounting/domain FormSupplierExpectedCost
+
+
+# —— customs-compliance ——
+# 四条均产出带不变式校验的领域对象，包外零引用。
+internal/customscompliance/domain FormDutyCollaboration
+internal/customscompliance/domain ReceiveReleaseOutcome
+internal/customscompliance/domain RegisterCredential
+internal/customscompliance/domain VerifyDutyPayment
+
+
+# —— party-commercial ——
+internal/partycommercial/domain PublishChannelAccountUseAuthorization
+internal/partycommercial/domain ResolveCreditPolicy
+# 下面两条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词，
+# ValidateBeforeDecision 返回同型 Resolution 是变换不是构造。**留着不排除是有意的**——
+# 排除要靠一条规则，而任何按形状写的规则都会漏掉下一个不长这样的工厂；留在名单里的代价
+# 只是两行，漏掉一个工厂的代价是它永远隐形。
+internal/partycommercial/domain ManualReviewRequirementFor
+internal/partycommercial/domain ValidateBeforeDecision
+
+
+# —— parcel-pricing ——
+internal/parcelpricing/domain ReplayPricingEvaluation
+# 快照序列化与重建是**同一条未接线路径的两端**：适配器 price_card_catalog.go 正文没用它们，
+# 只有它的测试用了。修的是那段路径，不是这两个函数——一次修好会同时去掉两行。
+internal/parcelpricing/domain MarshalPricingPlanSnapshot
+internal/parcelpricing/domain RehydratePricingPlanSnapshot
+# 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
+internal/parcelpricing/domain ParseCanonical
+# ❗ 下面两条与其余三十一条不同类：它们**全仓无人调用**，测试里也是零——不是「只被测试接线」，
+# 是死代码。Evaluate 函数体只有一行 return EvaluatePricing(request)，像个弃用别名。
+# 本门禁不管这一类，而且按新判据它们本就不在族内，所以**建成之后不会有任何机制再提醒**。
+# 要不要删是另一个决定，归票主与人类；写在这里是因为只活在没人会看的地方的发现等于没发现。
+internal/parcelpricing/domain DecimalFromInt64
+internal/parcelpricing/domain Evaluate
