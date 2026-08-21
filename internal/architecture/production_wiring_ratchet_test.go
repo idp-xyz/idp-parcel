@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -26,8 +27,10 @@ import (
 // 工厂就永远没人看见**。判一道护栏好不好不看它用什么写，看它漏的时候倒向哪一边。
 //
 // 守不住的三格，如实写在这里：
-//   - 引用按标识符名认。同包内一个同名局部变量会被当成引用，于是那个工厂看起来「已接线」。
-//     方向是少报，也就是门禁变安静——这一格没有便宜的堵法，只能写明。
+//   - 引用按标识符名认，两侧都会误判，方向都是少报——也就是门禁变安静。同包内一个同名局部
+//     变量会被当成引用；包外虽已要求该文件真的导入了这个 domain 包，但那个文件里若另有一个
+//     同名的方法或字段，照样算数。**跨包那一半是本仓真撞过的那一种**（`NewDispositionRequests`
+//     等三个各在两个包里声明过），别只当同包问题看。要堵得做类型解析，本票不做。
 //   - 只看 `internal/<上下文>/domain` 下的导出顶层函数。方法、未导出者、以及 domain 之外
 //     的构造都不在网内。
 //   - 反射与代码生成绕得过去。实测于 2026-08-21：生产领域代码零 `reflect` 使用、`internal`
@@ -44,9 +47,10 @@ type wiringEntry struct {
 func (entry wiringEntry) String() string { return entry.pkg + " " + entry.name }
 
 type wiringSource struct {
-	pkgDir string
-	isTest bool
-	syntax *ast.File
+	pkgDir  string
+	isTest  bool
+	imports map[string]bool
+	syntax  *ast.File
 }
 
 // collectDomainFactories 取一份语法树里的候选工厂声明。
@@ -72,16 +76,25 @@ func collectDomainFactories(syntax *ast.File, pkgDir string) []wiringEntry {
 
 // countProductionReferences 数一个候选在非测试代码里被引用了几次，不含它自己的声明。
 //
-// 跨包调用在 Go 里一定写成 `包名.函数名`，所以包外只认选择器；包内认裸标识符。分开认是为了
-// 少踩同名：一个别处的 `Evaluate` 方法不会被当成本包这个 `Evaluate` 的调用。
+// 跨包调用在 Go 里一定写成 `包名.函数名`，所以包外只认选择器；包内认裸标识符。
+//
+// 包外那一半**还要求该文件真的导入了声明所在的包**。只按 `Sel.Name` 认会把任何一个同名的
+// 方法或字段算成引用——那正是 43→46 那个错搬到引用侧：名字不是唯一键。实测过一次：在
+// `internal/platform/buildinfo` 造一个毫不相干的同名方法，`AssessSafeHandoff` 就被判成
+// 已接线。加上导入这一道之后，误判只剩「该文件确实导入了这个 domain 包，且另有一个同名的
+// 方法或字段」这一窄格；要把它也堵掉得做类型解析，那是另一个量级，本票不做。
 func countProductionReferences(sources []wiringSource, entry wiringEntry) int {
 	count := 0
+	declaringImportPath := modulePath + "/" + entry.pkg
 
 	for _, source := range sources {
 		if source.isTest {
 			continue
 		}
 		samePackage := source.pkgDir == entry.pkg
+		if !samePackage && !source.imports[declaringImportPath] {
+			continue
+		}
 
 		ast.Inspect(source.syntax, func(node ast.Node) bool {
 			switch typed := node.(type) {
@@ -149,10 +162,22 @@ func loadWiringSources(t *testing.T) []wiringSource {
 		if relErr != nil {
 			return relErr
 		}
+		imported := make(map[string]bool, len(syntax.Imports))
+		for _, spec := range syntax.Imports {
+			if spec.Path == nil {
+				continue
+			}
+			unquoted, unquoteErr := strconv.Unquote(spec.Path.Value)
+			if unquoteErr != nil {
+				continue
+			}
+			imported[unquoted] = true
+		}
 		sources = append(sources, wiringSource{
-			pkgDir: filepath.ToSlash(relative),
-			isTest: strings.HasSuffix(path, "_test.go"),
-			syntax: syntax,
+			pkgDir:  filepath.ToSlash(relative),
+			isTest:  strings.HasSuffix(path, "_test.go"),
+			imports: imported,
+			syntax:  syntax,
 		})
 		return nil
 	})
@@ -266,9 +291,14 @@ func TestWiringBaselineHasNoStaleEntry(t *testing.T) {
 	sort.Slice(stale, func(i, j int) bool { return stale[i].String() < stale[j].String() })
 
 	for _, entry := range stale {
-		t.Errorf("%s 在基线里，但它此刻要么已不存在、要么已经有生产调用点了。"+
-			"把这一行从 %s 剪掉——留着它，下一次真有东西退回未接线时名单长度不变，门禁不会红。",
-			entry, wiringBaselineFile)
+		t.Errorf("%s 在基线里，但它此刻不在名单上。三种成因，**先分清再动手**：\n"+
+			"\t一、它已经被删或改名搬包了——剪掉这一行。\n"+
+			"\t二、它真的接上生产调用路径了——剪掉这一行，这是好消息。\n"+
+			"\t三、**别处新出现了一个同名的方法或字段，把它误判成了已接线**。本门禁按名字认引用，"+
+			"这一格守不住（见头部披露）。**这一种下剪掉它，就等于把一个仍未接线的工厂永久藏起来**"+
+			"——它不在基线里，也不算新增，此后再不会被报出来。\n"+
+			"\t分不清时先搜一遍这个名字在别处有没有同名声明，再谈剪。",
+			entry)
 	}
 }
 
@@ -343,11 +373,23 @@ func TestTheProductionWiringRatchetCanActuallyCatchAViolation(t *testing.T) {
 	}
 
 	caller := wiringSource{
-		pkgDir: "internal/x/application",
-		syntax: parse(t, "package application\n\nimport \"x/domain\"\n\nfunc Do() error { return domain.FormThing() }\n"),
+		pkgDir:  "internal/x/application",
+		imports: map[string]bool{modulePath + "/internal/x/domain": true},
+		syntax:  parse(t, "package application\n\nfunc Do() error { return domain.FormThing() }\n"),
 	}
 	if got := countProductionReferences([]wiringSource{declaration, caller}, entry); got != 1 {
 		t.Fatalf("包外选择器调用时引用数 = %d，want 1", got)
+	}
+
+	// 不导入该 domain 包的文件里出现同名选择器不算——这是复核方用变异测试打出来的那一格：
+	// 在 internal/platform/buildinfo 造一个毫不相干的同名方法，曾让整条被判成已接线。
+	unrelated := wiringSource{
+		pkgDir:  "internal/platform/buildinfo",
+		imports: map[string]bool{},
+		syntax:  parse(t, "package buildinfo\n\nfunc Do(p probe) { p.FormThing() }\n\ntype probe struct{}\n"),
+	}
+	if got := countProductionReferences([]wiringSource{declaration, unrelated}, entry); got != 0 {
+		t.Fatalf("无关包的同名选择器算成了 %d 次引用，want 0——名字不是唯一键", got)
 	}
 
 	testOnly := wiringSource{
