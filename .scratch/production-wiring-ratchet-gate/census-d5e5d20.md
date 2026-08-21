@@ -58,6 +58,36 @@
 `FormLoadAssignment`、`FormSupplierCreditNote`、`FormSupplierExpectedCost`、`OpenDispatchTask`、
 `PublishChannelAccountUseAuthorization`、`RecordMovementFact`、`VerifyDutyPayment`。
 
+## 四族：ports 适配器构造函数
+
+**识别口径（这一族靠断言认，不靠命名认）**：`internal/*/adapters/**` 下**含编译期接口断言**
+`^var _ <pkg>ports.<Iface> = ` 的文件里的 `^func New*(` 构造函数，**扣除已计入一族的
+`NewOutbox*`**。用断言而不是名字，是因为适配器的命名没有统一前缀（`NewReadinessView`、
+`NewCaseIdentities`、`NewProductionOwnershipAdapter` 毫无共同词根），**而「它实现了某个 ports
+接口」这件事在本仓恰好有一个句法标记**。
+
+符合的适配器文件 **97** 个，其中构造函数（扣除 `NewOutbox*`）共 **66** 个，
+**43 个零非测试调用点**：
+
+`NewAcceptanceContentDeclarations`、`NewAcceptanceDecisions`、`NewAcceptanceRulePackages`、
+`NewActiveRejectionAdapter`、`NewAllocationRuleApplicability`、`NewAsOfPolicyDeclarations`、
+`NewAuthorityGrants`、`NewCaseIdentities`、`NewCaseRequirementView`、
+`NewChargeConfirmationConditions`、`NewClaimEligibilityRules`、`NewCommercialAuthority`、
+`NewCommercialBasisAdapter`、`NewCommercialEligibility`、`NewCreditStandings`、
+`NewCustomerContractContents`、`NewDeclarationVersions`、`NewDeliveryAttempts`、`NewETAVersions`、
+`NewExceptionCases`、`NewExecutionFactView`、`NewGateConditionRegistrations`、
+`NewGateConditionView`、`NewIntakeResultVersions`、`NewInterpretationRuleRegistrations`、
+`NewInterpretationRuleView`、`NewManifestCandidateView`、`NewNotificationPolicies`、
+`NewNotifications`、`NewObligationInventoryRegistrations`、`NewObligationInventoryView`、
+`NewOperationalBalances`、`NewPreAcceptanceControlDeclarations`、**`NewProductionOwnershipAdapter`**、
+`NewReadinessRegistrations`、`NewReadinessView`、`NewRecoveryMatters`、
+`NewSubmissionAuthorityRegistrations`、`NewSubmissionAuthorityView`、`NewSubmissionIdentities`、
+`NewSubmissionIndex`、`NewSupplierExpectedCosts`、`NewTriageRules`。
+
+> `NewProductionOwnershipAdapter` 就是逼出这一族的那个实例（见票 01「形状」一节取证表第二行，
+> 及 [syn-wall-door-audit 票 13](../syn-wall-door-audit/issues/13-production-ownership-bridge-has-no-assembly-point.md)）。
+> **它在这份基线上就已经是零调用点**——不是后来才变成的。
+
 ## 汇总（只是表尾，不是结论）
 
 | 族 | 构造函数 | 零非测试调用点 |
@@ -65,12 +95,13 @@
 | outbox 交接口 `NewOutbox*Handoff` | 46 | 41 |
 | 应用层命令处理器 `New*Handler` | 62 | 53 |
 | 领域工厂 `Form*` 等 | 72 | 13 |
-| 合计 | 180 | 107 |
+| ports 适配器 `New*`（按接口断言认） | 66 | 43 |
+| 合计 | 246 | 150 |
 
-**那个 180/107 被当成 KPI 就完了**，它没有业务含义。三族并排看，不相加。
+**那个 246/150 被当成 KPI 就完了**，它没有业务含义。四族并排看，不相加。
 
-三族数字均已用 **git 侧匹配、大小写敏感**在 `d5e5d20` 上复验过一遍（`git grep <pattern> d5e5d20`），
-与当前 HEAD 上重跑一致——**期间无漂移**。
+四族数字均以 **git 侧匹配、大小写敏感**在 `d5e5d20` 上得出（`git grep <pattern> d5e5d20`）；
+前三族另在当时 HEAD 上重跑过一遍，与基线一致——**期间无漂移**。
 
 ## 这 107 个不是 107 个缺陷
 
@@ -90,7 +121,8 @@
 
 - **让 git 自己匹配、自己数**：`git grep -h -o -E '<pattern>' <基线SHA> -- <pathspec>`。不要把源文件
   交给 PowerShell 去读——理由见下节，那是一次真实的翻车。
-- 构造函数声明：`^func <前缀>[A-Za-z0-9_]*\(`，在 `internal/` 上取；三族各自的前缀集见上。
+- 构造函数声明：一至三族按 `^func <前缀>[A-Za-z0-9_]*\(` 在 `internal/` 上取，各自前缀集见上；
+  **四族不按前缀取**——它按编译期接口断言认文件，再取那些文件里的 `New*`，口径见四族那一节。
 - 调用点：在 `internal/` 与 `cmd/` 上找 `\b<名字>\(`，用
   `:(exclude)internal/**/*_test.go` 与 `:(exclude)cmd/**/*_test.go` 排掉测试；命中数 ≤ 1 即零调用点
   （那一次命中是声明本身）。
