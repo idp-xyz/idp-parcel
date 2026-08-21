@@ -1,7 +1,7 @@
 # PS←PG 生产归属桥已实现却零装配，且接它之前有一件机制半边的裁决没做
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 由[票 02](./02-production-ownership-authority-has-no-adapter.md) 收口后分出。票 02 的「缺的最小
 机制件」第 1 项（桥接适配器）已由 `57e0b1f` / `c0ea050` 交付并转 `resolved`——**本票不重开它**，
@@ -95,3 +95,24 @@ Status: needs-triage
 票 02；ADR-0017（按阻断理由的性质分别裁决）；ADR-0063（显式未配置）；
 `cmd/parcel-api/unwired_orchestration.go` 的文件注释；
 [棘轮门禁票](../../production-wiring-ratchet-gate/issues/01-production-ports-wired-only-in-tests-have-no-ratchet.md)第四族。
+
+## Comments
+
+- 2026-08-21 MCP-3（受用户委托裁断，`AnswerValidity` 出裁，转 `ready-for-agent`）：
+  1. **`AnswerValidity` 的语义裁为「单次提交判断的处理视界」，答复不跨提交复用。**
+     今天每次 `Handle` 都实时问桥是实现事实，本裁定把它定成规则：归属答复的信任窗只服务
+     本次提交内「形成到使用」的间隙，不承担跨请求缓存。据此**装配值裁 1 分钟**——上界要求：
+     短到任何治理变更（暂停、接管）在下一次提交判断时必然生效，不存在一份仍在窗内的旧答复
+     替新提交作数；下界要求：长过单次 `Handle` 内的处理间隙，答复不在使用中途过期。60 秒
+     满足两端；且适配器的 `validity` 本就取「声明视界」与「登记终点」中更早者，登记册有终点时
+     窗口只会更紧。若未来出现合法的跨请求复用需求，那是新决定，按 AGENTS 走 ADR；接线落地时
+     装配点注释引本票为出处。
+  2. **接线放行**，落地约束三条：①（票面已钉）接编排那一笔**同笔改掉**
+     `unwired_orchestration.go` 里「与替换 Intake 同一处、同一行」那句注释，不留「编排已接、
+     注释仍说同一笔」的中间态；②开工首步按棘轮普查
+     （[census-d5e5d20](../../production-wiring-ratchet-gate/census-d5e5d20.md)）核
+     `SubmitShipmentRequestHandler` 全部端口的生产适配器在位性——不在位者按 ADR-0063 以
+     显式命名的未配置来源接上，不造默认值、不静默跳过；③`SelfAuthority` 与
+     `GovernanceScopeDirectory` 照旧留空/缺席即答`权威未确定`，本票不填任何实例值。
+  3. 本票碰 `cmd/parcel-api/endpoints.go` 装配点——**占号**，与 T1-01（若重启）互斥，
+     派工时按计划的装配点串行约束排。

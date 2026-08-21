@@ -1,7 +1,7 @@
 # 接入渠道登记册与首个真渠道 Intake 缺失,渠道墙想配也没处配
 
 Category: enhancement
-Status: ready-for-human
+Status: needs-info
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W01/W02。
 
@@ -91,3 +91,13 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
   机制有据且不碰 `PAR-INT-01`，但要按 ADR-0014 带规范化版本号。
 
   证据等级 S（静态审计：读符号、迁移与装配点；未运行进程，未建 worktree，未改任何代码）。
+
+- 2026-08-21 MCP-3（受用户委托裁断）：MCP-6 所等的那张新 ADR 已立——
+  [ADR-0072](../../../docs/adr/0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)。
+  三裁：①所有权归共享接入身份技术能力，落点 `internal/accessidentity/`，五个业务上下文只消费
+  已铸造的来源信封与已授权作用域；②ADR-0055 对运行时渠道登记表的否决**维持**，登记册形状等
+  `PAR-INT-01` 最低证据（该租户渠道的现行流程），届时按实际渠道形状立册；③载荷规范化摘要按
+  MCP-6 建议拆出独立成票（[票 14](./14-ps-payload-canonicalization-digest.md)，ready-for-agent）。
+  本票转 `needs-info`，**重启条件 = `PAR-INT-01` 最低证据到位**；W01/W02 自此记「按票裁定
+  显式留待」——这是 M2 判据允许的收口形态，不是停滞。重启时本票范围改写为「在
+  `internal/accessidentity/` 按渠道证据立册与铸造信封」，不再含摘要半边。

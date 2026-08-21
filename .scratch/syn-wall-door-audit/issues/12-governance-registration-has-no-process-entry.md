@@ -1,7 +1,7 @@
 # 治理登记没有进程级入口，PAR-GOV-03..07 的实例登记无路可走
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 来源：票 02「缺的最小机制件」第 2 条，按 MCP-1 指示自票 02 拆出独立成票
 （`.scratch/syn-wall-door-audit/issues/02-production-ownership-authority-has-no-adapter.md`）。
@@ -83,3 +83,25 @@ ADR-0017 的方法是**先分辨阻断理由属机制半边、实例半边还是
   结论变了：入口的形状属机制半边、现在就放行，票 01 那张未作的决定只挡端点路，**受控 CLI
   路今天并不被票 01 阻塞**。初稿那句正是 ADR-0017 在 Consequences 里点名的失误之一——
   「把机制半边误判为实例半边而继续停滞」。分辨表已补进正文，`Blocked by` 因此不写票 01。
+
+- 2026-08-21 MCP-3（受用户委托裁断，「要裁的」三问出裁，转 `ready-for-agent`）：
+  1. **治理登记不属「业务端点面」。** ADR-0055 治的是客户委托与外部结果的接入——主体是
+     租户的客户与外部通道，信任边界是商业渠道；治理登记的主体是租户运营方自己，信任边界是
+     运维边界。裁：治理登记走**受控 CLI 入口**（与 `cmd/parcel-pricing-register`、
+     `cmd/parcel-commercial` 同形），不受 ADR-0055 业务端点章程管，不等票 01 /
+     [ADR-0072](../../../docs/adr/0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)
+     的渠道半边。将来若要开治理登记的 HTTP 面，那是新决定另裁。
+  2. **执行者身份来源形状，裁双轨。** ①通道技术身份由入口自取（OS 进程属主 + 主机名），
+     不可由参数传入或覆盖——它是「经受控通道执行」的事实留痕；②决定人/执行人标识
+     （`ExecutedBy`/`DecidedBy`）是登记**内容**，由登记者显式必填提供，册面语义是
+     「登记者声明了谁」。两轨分开保存，不许以②冒充①。这与 ADR-0022→ADR-0003 那条链不冲突：
+     链禁的是把自报值当**授权依据**（隔离边界的钥匙）；这里授权依据是「能运行受控 CLI」这道
+     运维边界本身加①的留痕，②只是被记录的声明。真实角色名与「谁被允许运行 CLI」的授权方案
+     属实例半边，留待租户运营方案，不预设岗位名称（票面红线原样成立）。
+  3. **首批开三类：权威区间、暂停、恢复**（恢复必带四件）。理由：暂停/恢复对是 PILOT-SCOPE
+     保守暂停机制的活口；权威区间是[票 13](./13-production-ownership-bridge-has-no-assembly-point.md)
+     接桥后「登记一条权威区间」那个恢复动作的落点，不开它 W03 链在 S 级走不通。阶段评审与
+     接管第二批，以首批形状为准绳，不在本票内。
+  落地约束：新 `cmd/parcel-governance-register`（名字可按既有 CLI 命名惯例调整），不碰
+  `assemble.go` / `endpoints.go`，不占号；只追加不改写、不提供简化恢复路径（票面红线照单）；
+  与票 11 的关系一格（若届时已裁定落库形状）互不阻塞、各自成笔。

@@ -1,7 +1,7 @@
 # 重估结论:Bento 持久化闸门维持阻断——缺的仍是「适用 `PBC-*` 消费者证明」,缺口首次有了精确形状
 
 Category: enhancement
-Status: needs-triage
+Status: resolved
 
 本票是死会话分支 `bento-gate-reeval` 取证现场的蒸馏产物。该现场由 `.scratch/dead-session-salvage/issues/02` 封存(提交 `2399ecd`,父提交 `49a2ab0` 已在 main 祖先),用户 2026-08-20 批复「先蒸馏后定」。封存提交自注「内容未逐行读」;本票是第一次逐行读的结论。五个原件(两个取证脚本、三份输出,合计约 147KB)**不进 main**,一律以分支 SHA `2399ecd` 为索引调取,如 `git show 2399ecd:.scratch/bento-gate-reeval/audit-pbc08-output.txt`。
 
@@ -67,3 +67,14 @@ Status: needs-triage
 ## Comments
 
 - 2026-08-20 MCP-4:按 MCP-1 派单(BENTO-GATE-DISTILL)只读蒸馏,未 checkout / cherry-pick 该分支,大输出未进 main;基线链核验:`2399ecd` 父即 `49a2ab0` 且为 main 祖先;`49a2ab0..b9f6cba` 间 internal 测试变动九个文件,均不新增 `ErrTransactionRequired` 覆盖,审计结论在当前树依然成立。
+
+- 2026-08-21 MCP-3(受用户委托裁断,两件未决出裁,本票转 resolved):
+  1. **行动 1–3 开票**:行动 1+2 同证据基、同交付物,并为一票——
+     [02 PBC-08 行为面收口](./02-pbc08-behavior-face-closure.md)(ready-for-agent);
+     行动 3 独立成票——[03 六项零证据 PBC 取证推进](./03-zero-evidence-pbc-evidence-run.md)
+     (ready-for-agent,第一步是 PBC-02/03 建模阻塞现状复核,纯取证)。
+  2. **分支 `bento-gate-reeval` 指针保留**,并入「指针整类清理」(与 `b72d96e` 口径一致,
+     该类清理随 dead-session-salvage 票 02 收口时单独开票);原件继续以 `2399ecd` 为索引调取。
+  3. 闸门结论不动:**维持阻断**。解除只能来自九项 PBC 对同一候选全过 + 按完成门禁登记 `B-06`,
+     本裁定不改 ADR-0017/0026 的任何一格。本票的判定(重估结论)已由正文承载,行动已开票,
+     无剩余未决,转 resolved。

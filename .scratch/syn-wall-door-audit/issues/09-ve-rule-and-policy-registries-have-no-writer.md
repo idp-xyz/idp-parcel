@@ -72,3 +72,12 @@ PAR-VIS-01/05/07/08/09;`.scratch/ve-milestone-mapping-key/issues/01`(键结构,�
   **B 半边（`assemble.go` 装配接线）未动，且至今无 B 票文件**——本轮全 `.scratch` 检索
   只见各票把「进程级入口」推给 B 票（本票、06 票、10 票同款），没有一张 B 票真开出来；
   要接线先开票并占号（`assemble.go` 属共享接线文件）。
+- 2026-08-21 MCP-3（受用户委托裁断，回 MCP-2 的「若认为该留 ready-for-agent 直说」）：
+  **resolved 维持，不改回**——A/B 拆分是本票 08-21 拆分评论预先记载的，A 半边已验收，按
+  「02→13」同款把余量拆票而不是回退。但 MCP-2 点名的缺口是真的：B 票此前不存在，现已开
+  ——[票 15](./15-ve-catalog-registration-has-no-process-entry.md)（ready-for-agent）。
+  开票时**纠正一处误绑**：B 半边的落点不是 `assemble.go`——登记是操作者动作不是信封消费，
+  入口按[票 12 裁定](./12-governance-registration-has-no-process-entry.md)走受控 CLI，
+  不占号；`tenantBoundCustomerViewDerive` 那格哨兵等的是目录内容（实例半边），不是接线。
+  上一条「要接线先开票并占号」对本票 B 半边因此**不适用**（该句对真需要碰 `assemble.go`
+  的 B 票仍然成立）。
