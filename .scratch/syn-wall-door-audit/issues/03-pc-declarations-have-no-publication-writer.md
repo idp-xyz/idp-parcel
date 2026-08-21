@@ -82,4 +82,10 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
 
   **五、另记一处未被门禁抓到的同形隐患。** `internal/partycommercial/adapters/postgres/declaration_publication_test.go` 的 `mustSaveDeclaration` 也在事务回调里调 `t.Fatalf`（outcome 不符那一格），与本轮第 1 条修的是同一个缺陷形状，但 `TestNoTransactionClosureCarriesAGoexitAssertion` 没有报它——门禁能顺着 `mustWithinTransaction` 那个助手追进去，却没追 `mustWithinPublicationTransaction`。只在断言失败时才发作，因此绿着看不见。**本轮不改**（不在票 03 范围，且改法与门禁能力边界要一起看），记此备查。
 
-  **六、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突。分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**——票面三件里件 3（进程级登记口）随 `cmd/parcel-commercial` 已有雏形，件 1/2 待逐条对票面收口，加上第四条那半格待办，收口前不推。
+  **六、对票面判据逐条核（附一处票面自身的表名更正）。**
+  - 票面「六张声明表零 INSERT（非测试代码）」这条判据的表名有两个不存在：`acceptance_content_declaration` 与 `stage_content_declaration` 在 `migrations/party_commercial` 里**查无此表**，是审计当时的族名简写。现行 schema 把这两族拆得更细——接受内容族是 `acceptance_rule_content` / `acceptance_rule_check_group` / `pending_routing_permission`，阶段内容族是 `intake_qualification_content` / `intake_allowed_source` / `intake_qualification_ref` / `final_rule_content` / `final_rule_declaration` / `cancellation_authority_content` / `cancellation_authority_declaration`。**判据背后的性质仍成立且现已满足**：`declaration_publication.go` 非测试写入覆盖十六张表，六族全有生产写入方，零 INSERT 的现状已不成立。
+  - 件 2（`ResolutionKeySource` 实例登记面）：生产实现在 `internal/parcelshipment/adapters/partycommercial/commercial_resolution_keys.go`（唯一非测试 `ResolutionKeySource` 实现），持久化半边在 `adapters/postgres/commercial_resolution_key_store.go`，表由 `migrations/parcel_shipment/0007_commercial_resolution_key.sql` 建（主线 0001–0006，0007 空号不撞）。
+  - 件 3（进程级登记口）：`cmd/parcel-commercial`，两个子命令 `publish` 与 `register-resolution-key`。
+  - 票面另六个对象（`commercial_version` / `commercial_resolution` / `authorization_grant` / `service_product_form` / price_policy / settlement_policy）原本就有仓储级写入方、缺的是发布用例与进程入口，两者现由 `publish_commercial_authority.go` 与上述 CLI 补齐。
+
+  **七、当前状态。** 分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突。分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。**未推送**：三件都有实现且判据可核，但第四条那半格（对真库跑 `runPublish` 的事务边界用例）尚缺，票面表名更正也还没回写到票面正文——两件了结后再转 resolved 并推已验 SHA。
