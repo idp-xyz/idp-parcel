@@ -1,7 +1,9 @@
 # 解释规则登记册没有版本维，迟到的外部结果只能拿到达时点当法定适用时点
 
 Category: bug
-Status: needs-triage
+Status: ready-for-human
+
+[ADR-0070](../../../docs/adr/0070-customs-rule-registries-split-recording-from-selection.md)（草案）已裁本票下方那条反向立场：它是**记录侧**的真话，答的不是硬句 191 问的选择侧问题，因此不构成本册子的许可，本票据以成立。转 `ready-for-human` 而非 `ready-for-agent`：缺的两个入参该从哪来是模型决定，不是可交给 agent 的规格。
 
 从 [SYN-WALL-DOOR-AUDIT 票 06](../../syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md)（清单 W13）执行中分出。该票「缺的最小机制件」要的是**按法定生效区间与适用时点版本化**的登记口；逐类核表后其余四类都做得出，只有解释规则这一类的版本维今天建不出来——不是写口活没干，是缺两个入参，而它们该从哪来是建模问题。W13 因此收窄为不可覆盖的**单版**登记，版本维留给本票。
 

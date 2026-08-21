@@ -1,13 +1,13 @@
 # `case_requirement_rule` 有读口无写口，挡的是建案那一侧的墙
 
 Category: enhancement
-Status: needs-triage
+Status: ready-for-agent
 
 从 [SYN-WALL-DOOR-AUDIT 票 06](../../syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md)（清单 W13）执行中分出。W13 点名五本册子，`case_requirement_rule` 是同一批迁移里的**第六本**，形状与那五本完全同类——有表、有只读视图、非测试代码零 `INSERT`、无登记用例——但它挡的墙不在 W13 的两堵之内，因此 W13 不扩，照实另立本票。
 
 ## 墙在哪：`EstablishCaseUndecided`，不是 W13 的那两堵
 
-W13 的两堵墙是 `submit_declaration.go` 的 `DECLARATION_UNDECIDED` 与 `receive_external_result.go` 的 `RESULT_UNDECIDED`。这一本挡的是第三处，在 `application/establish_customs_case.go` 的 `EstablishCustomsCaseHandler.Handle` 里：
+W13 的两堵墙是 `submit_declaration.go` 的 `DECLARATION_UNDECIDED` 与 `receive_external_result.go` 的 `RESULT_UNDECIDED`。这一本挡的是第三处，在 `application/establish_customs_case.go` 的 `EstablishCaseHandler.Handle` 里：
 
 ```go
 judgment, configured, err := handler.deps.Requirement.JudgeCaseRequirement(
@@ -34,11 +34,14 @@ if err != nil || !configured {
 - 登记不可覆盖，沿用 W13 的写口纪律：`INSERT ... ON CONFLICT DO NOTHING`，同键已在册交回`已登记`，内容比对交给编排读回既有登记自己做。
 - 规则正文属实例半边（PAR-CUS-01..07 实例值待提供是常态），登记册本身属机制半边；验证用脱敏合成配置，S 级只记 S。
 
-## 待 triage 的一格
+## 那一格已裁：版本维移出本票范围
 
-`case_requirement_rule` 同样没有版本维（无法定生效区间、无适用时点列），而它也是一条**关务规则**。CONTEXT 硬句 191 适不适用于它，与
-[解释规则版本维那票](../../cc-interpretation-rule-version-dimension/issues/01-interpretation-rule-has-no-version-dimension.md)
-是同一个模型问题的两个实例，两票一并裁比分开裁省事。本票不预判。
+[ADR-0070](../../../docs/adr/0070-customs-rule-registries-split-recording-from-selection.md)（草案）裁了原列在此处的待 triage 一格。结论分两半：
+
+- **版本维悬置。** `case_requirement_rule` 缺法定生效区间与适用时点两列，是否发作取决于建案会不会为过去的法律行为迟到发生——与[解释规则版本维那票](../../cc-interpretation-rule-version-dimension/issues/01-interpretation-rule-has-no-version-dimension.md)缺的是同一个模型决定，随那票一并悬置，**显式移出本票范围**。
+- **写口不受它阻塞。** 写口属机制半边，上节那条 `found=false` 分界与不可覆盖纪律一条也不依赖版本维的裁决，因此本票转 `ready-for-agent` 先做。
+
+另记一条 ADR-0070 顺带核出的事实，免得后来人当成本票的漏项：`domain.CustomsCase` 不存所采用的要求规则，`Basis()` 也只在「不适用」格给出。CONTEXT 对建案**没有**下过记录规则依据的义务（「案件身份与申报范围」一节只要求固定四维监管范围），所以这不是违规，也不在本票内补。
 
 ## 本票不做的事
 
