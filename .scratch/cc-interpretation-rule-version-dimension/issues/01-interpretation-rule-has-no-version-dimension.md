@@ -50,10 +50,10 @@ CREATE TABLE customs_compliance.interpretation_rule (
 
 | 缺的入参 | 今天为什么取不到 |
 |---|---|
-| 规则的**法定适用时点** | `ReceiveExternalResultCommand` 只有 `OccurredAt` 与 `ReceivedAt`；把任一个直接当法定适用时点，又是同一句硬句禁的替代 |
-| 多辖区租户下的**适用辖区** | 该命令只有 `Scope`（`DecisionScopeReference`）；辖区在 `ports.CustomsCaseKey` 的 `Jurisdiction` 上，不在外部结果这条链上 |
+| 解析用的**评估时点** | ~~`ReceiveExternalResultCommand` 只有 `OccurredAt` 与 `ReceivedAt`；把任一个直接当法定适用时点，又是同一句硬句禁的替代~~ **ADR-0070 更正：本行过宽。** 硬句点名的是案件创建时间、消息到达时间与系统当前时间三者——`ReceivedAt` 在其内，`OccurredAt` 不在，且同节另有一句正面支持按业务发生/适用时间接受外部事实。这一半有据可循，候选与推荐见 ADR-0070「问二」 |
+| 多辖区租户下的**适用辖区** | 该命令只有 `Scope`（`DecisionScopeReference`）；辖区在 `ports.CustomsCaseKey` 的 `Jurisdiction` 上，不在外部结果这条链上。回指案件那条路断在[申报单元 → 案件关联那票](../../customs-declaration-case-link/issues/01-declaration-unit-has-no-case-association.md)上，见 ADR-0070「问三」 |
 
-**这一格是模型决定，不是写口活**：外部结果凭什么定出规则的法定适用时点与适用辖区。未确认参数保持显式未决，因此不猜。
+**真正无来源的是辖区那一半，属模型决定，不是写口活**；评估时点经 ADR-0070 重核后有据可循。未确认参数仍保持显式未决，不猜。
 
 ## 什么时候发作
 
