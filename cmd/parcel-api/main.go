@@ -33,15 +33,29 @@ func run(logger *slog.Logger) error {
 		address = defaultAddress
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// 开池在起服务之前：部署坏了（DSN 缺失、库不可达、缺框架 schema）要让进程带原因
+	// 退出，而不是先挂上监听端口再让每个请求各报一次错。ctx 由停机信号驱动，启动途中
+	// 收到 SIGTERM 就当场停下。
+	db, closeDB, err := openDatabase(ctx, os.Getenv)
+	if err != nil {
+		return err
+	}
+	defer closeDB()
+
+	submission, err := buildSubmissionOrchestration(db)
+	if err != nil {
+		return err
+	}
+
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints()),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	serveResult := make(chan error, 1)
 	go func() {

@@ -22,8 +22,13 @@ import (
 //
 // 它们也不是红线所禁的「开发用」实现：那条禁的是替租户拟一种认证方式、从请求内容铸造
 // 来源信封（穿透 ADR-0003）。这几个类型不读请求、不构造任何东西、不作任何业务判断，
-// 连一个零值结果都不交回。真渠道 Intake 就位那笔工作在装配点把它们换成真编排，与替换
-// Intake 同一处、同一行。
+// 连一个零值结果都不交回。
+//
+// 换编排与换 Intake 是两笔可独立发生的工作：运行期未配置 Intake 拒在编排之前，装配期
+// 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，由装配点
+// 入参交入，不再从本文件取——unwiredSubmission 自此只被装配测试用来钉「未配置面」的
+// 形状；其余各格仍以本文件的类型占位，各自的接线各自成笔。真渠道 Intake 就位那笔工作
+// 只替换 Intake 本身。
 var errOrchestrationNotWired = errors.New("parcel-api: business orchestration is not wired; the unconfigured intake should have refused first")
 
 type unwiredSubmission struct{}

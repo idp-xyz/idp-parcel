@@ -30,12 +30,16 @@ import (
 // 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
+// 各端点的第二参（应用编排）与 Intake 是两笔独立的接线：提交编排已按审计票 13 接真
+// （经真库与治理桥，由 main 构造后入参交入），其余各格仍以 unwired* 占位，各自的接线
+// 各自成笔。占位与接真的分辨见 unwired_orchestration.go 的文件注释。
+//
 // 清单是八项。ADR-0055 与开发主线把它称作「七个」，但两处自己的逐项枚举都是八项
 // （PS 二、NO 一、TF 二、VE 二、CC 一）；此处按逐项枚举装配，少装一个就是把一个端点
 // 折回 404，那正是该记录要治的病。
-func assembleBusinessEndpoints() []httpapi.BusinessEndpoint {
+func assembleBusinessEndpoints(submission shipmenthttp.SubmissionHandler) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
-		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, unwiredSubmission{})},
+		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, unwiredWithdrawal{})},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, unwiredReception{})},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},

@@ -1,7 +1,7 @@
 # PS←PG 生产归属桥已实现却零装配，且接它之前有一件机制半边的裁决没做
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 由[票 02](./02-production-ownership-authority-has-no-adapter.md) 收口后分出。票 02 的「缺的最小
 机制件」第 1 项（桥接适配器）已由 `57e0b1f` / `c0ea050` 交付并转 `resolved`——**本票不重开它**，
@@ -116,3 +116,23 @@ Status: ready-for-agent
      `GovernanceScopeDirectory` 照旧留空/缺席即答`权威未确定`，本票不填任何实例值。
   3. 本票碰 `cmd/parcel-api/endpoints.go` 装配点——**占号**，与 T1-01（若重启）互斥，
      派工时按计划的装配点串行约束排。
+
+- 2026-08-21 MCP-3（实现收口，转 resolved）：
+  1. **接线随本笔提交入 main**（承本通道前一会话 22:38 中断的未提交现场，逐行复核后原样
+     采用，验证由本笔完成；最终 SHA 报频道并可由本文件 git 历史取证）。落点：
+     `cmd/parcel-api/assemble_submission.go` 开池（DSN 缺席进程带原因退出，步骤同
+     parcel-dispatch）并装配真编排；`/shipment-requests` 第二参改收 main 构造的
+     `transactionalSubmission`（事务边界归装配点，业务拒绝照样提交——被拦下的提交也已
+     保全来源，重放答`已有结果`靠的正是这笔提交）；`AnswerValidity` 按上条裁定装
+     `time.Minute`，装配点注释引本票为出处。
+  2. **落地约束逐条清账**：①`unwired_orchestration.go`「与替换 Intake 同一处、同一行」
+     那句已同笔改掉，`unwiredSubmission` 转装配测试专用（钉未配置面 403 的形状）；
+     ②五口普查（对基 `7ef7ace`）：sources/requests → `pspostgres`（dispatch 生产装配已在用）、
+     ownership → 本票接 `pilotgovernance` 桥、identities → `adapters/identity`、clock →
+     systemClock 同 dispatch；治理桥三读口接 `pgpostgres` 真店。机制半边无一口缺位，
+     无需新造 ADR-0063 未配置类型；③`Directory`/`SelfAuthority` 留空，缺席即适配器
+     文档所载「显式未配置」格，归属如实答`权威未确定`，未填任何实例值。
+  3. **验证（含 PG）**：隔离树 `t1-13-ownership-wire`，gofmt/build/vet 零信号；真库两用例
+     `-v` 真 PASS 非 SKIP（目录未配置提交停 `OWNERSHIP_UNRESOLVED` 且带归属决定、重放答
+     `已有结果`、被拒提交保全来源）；全仓 `go test -p 1 -count=1 ./...` 设 DSN 零 FAIL。
+     棘轮门禁不受本笔影响：它网 domain 非 `New*` 工厂，本笔接的是 `New*` 构造与 cmd 装配。
