@@ -660,3 +660,197 @@ type RecoveryStore interface {
 type RecoveryIdentityFactory interface {
 	NextRecoveryMatterID(ctx context.Context) (domain.RecoveryMatterID, error)
 }
+
+// CatalogRegistrationOutcome 是一次目录登记的写入结果。三格照 ADR-0031 的写入代数：
+// 撞既有行是业务答案不是错误，交回`已登记`让编排如实答复，不捕 23505——那会把整个
+// 事务打进中止态，而登记口常与同一批别的目录写入共事务。
+//
+// `同一时点已有另一适用版本`独立成格而不并进`已登记`：前者是登记方给错了有效区间
+// （改区间重登），后者是这个版本号已经登记过（不可覆盖，要换版本号），两条恢复动作
+// 不同。它也不是读侧那条 ErrAmbiguousCatalog——那一条兜的是库里已经坏了的数据，本格
+// 是在坏数据形成之前就把它挡在门外。
+type CatalogRegistrationOutcome uint8
+
+const (
+	CatalogRegistrationOutcomeInvalid CatalogRegistrationOutcome = iota
+	CatalogVersionRegistered
+	CatalogVersionAlreadyRegistered
+	CatalogVersionOverlapsExisting
+)
+
+func (outcome CatalogRegistrationOutcome) String() string {
+	switch outcome {
+	case CatalogVersionRegistered:
+		return "REGISTERED"
+	case CatalogVersionAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case CatalogVersionOverlapsExisting:
+		return "OVERLAPS_EXISTING"
+	default:
+		return ""
+	}
+}
+
+// CatalogVersionHeader 是一份带有效区间的目录版本的登记抬头：版本号、发布批准责任与
+// `[EffectiveFrom, EffectiveTo)`。三份区间型目录（里程碑映射 `PAR-VIS-01`、分诊规则
+// `PAR-VIS-05`、披露策略 `PAR-VIS-09`）共用它——三张版本表的列本来就同形，各写一份
+// 抬头只会让「版本/适用范围/发布批准责任」这条要求在三处各表达一次。
+//
+// 适用范围不设独立列：区间型目录的适用范围由**条目维**表达（映射按源上下文与事实
+// 类型、分诊按信号类型与可信度、披露按货主客户账户），更细的伙伴/产品/线路范围是
+// `PAR-VIS-01`/`05` 尚未定形的开放集。替租户拟一个范围列，与 ADR-0068 拒绝预拟内容列
+// 是同一件错事——形态定了以新迁移扩列。
+//
+// HasEffectiveTo 为假即未闭区间（当前版本）。用显式布尔而不是零值判断，理由同 NR
+// 目录：零时刻是一个合法的绝对时刻，拿它兼作「没有终点」会让补历史的区间登不进来。
+type CatalogVersionHeader struct {
+	Version        string
+	ApprovedBy     string
+	EffectiveFrom  time.Time
+	EffectiveTo    time.Time
+	HasEffectiveTo bool
+}
+
+// CatalogApprovalHeader 是不带区间那两份目录（索赔资格声明与申请人授权目录，同属
+// `PAR-VIS-08`）的登记抬头。两张表以（租户+合同范围）与（租户+客户账户）为键、版本
+// 存在列上，结构上一个身份只容一行——所以它们没有区间可登，换版本要换身份或另立
+// 迁移，登记口不替它们发明一个区间。
+type CatalogApprovalHeader struct {
+	Version    string
+	ApprovedBy string
+}
+
+// MilestoneMappingEntry 是一条映射条目：某源上下文的某类事实归到哪个标准里程碑。
+// 键取（源上下文+事实类型）——「标准里程碑映射按源上下文与事实类型版本化登记，一行
+// 覆盖此后同类型事实，不得按单条事实引用建目录」（CONTEXT 硬句）。
+type MilestoneMappingEntry struct {
+	Source    domain.SourceContext
+	Kind      domain.SourceFactKind
+	Milestone domain.MilestoneReference
+}
+
+// MilestoneMappingRegistration 登记一版里程碑映射：抬头加整版条目。条目随版本一次
+// 写全，不支持事后追加——「不可覆盖版本」意味着一版的内容在发布那一刻就定了，事后
+// 往已发布版本里塞条目会让「按 vN 判的未归类」这个已作出的判断在事后变成已归类。
+type MilestoneMappingRegistration struct {
+	Header  CatalogVersionHeader
+	Entries []MilestoneMappingEntry
+}
+
+// TriageRuleEntry 是一条分诊条目：某信号类型在某可信度依据下走哪一格。键含可信度，
+// 因为四走向的分界正立在它上面（「高可信、高影响且命中版本化分诊规则的信号可以自动
+// 建立或关联案件」）。
+type TriageRuleEntry struct {
+	Kind       domain.ExceptionSignalKindReference
+	Confidence domain.ConfidenceReference
+	Outcome    domain.TriageOutcome
+}
+
+// TriageRuleRegistration 登记一版分诊规则。条目纪律同映射登记。
+type TriageRuleRegistration struct {
+	Header  CatalogVersionHeader
+	Entries []TriageRuleEntry
+}
+
+// NotificationPolicyRegistration 登记一条通知策略：某份披露策略走什么渠道、限时多久、
+// 按哪条判据算满足通知义务，加发布批准责任。
+//
+// 它没有 CatalogVersionHeader：这份目录以（租户+披露策略引用）为键，版本化由引用值
+// 本身承担（0010），换版即换引用、新旧两行并存，因此既无版本列也无区间可登。
+//
+// DeadlineAfter 是**相对量**：合同写的是「披露后 N 小时内」，而披露决定时间逐份不同。
+// 存绝对时间等于给整个目录钉死一个截止点。
+type NotificationPolicyRegistration struct {
+	Policy        domain.DisclosurePolicyReference
+	Channel       domain.NotificationChannelReference
+	DeadlineAfter time.Duration
+	Obligation    domain.DisclosurePolicyReference
+	ApprovedBy    string
+}
+
+// ClaimEligibilityRegistration 登记一份合同责任范围的索赔资格声明与它承担的索赔类型。
+//
+// 声明与覆盖类型一次写全：只有声明在场，「不在集合内」才说得通（0011）。分两步登记会
+// 出现一段「声明已在、覆盖类型还没写」的窗口，那期间任一索赔都会被判成`不予受理`——
+// 而那是 ADR-0051 的永久格，审过不再审，没有第二次机会。
+type ClaimEligibilityRegistration struct {
+	Header       CatalogApprovalHeader
+	Contract     domain.ContractScopeReference
+	CoveredKinds []domain.ClaimKindReference
+}
+
+// ClaimAuthorizationRegistration 登记一个货主客户账户的申请人授权名单。名单语义只有
+// 一条：在列即该申请人获此账户的索赔提交授权（`AT-VE-125`）。
+//
+// 允许空名单：目录在场而名单为空是「这个账户目前不授权任何人代提」，与「还没登记」
+// 不是一回事——后者由整张目录行不在场表达（视图答未登记，编排停在未决）。两者的恢复
+// 动作不同，压成一格会让人去补错东西。
+type ClaimAuthorizationRegistration struct {
+	Header     CatalogApprovalHeader
+	Customer   domain.CustomerAccountReference
+	Applicants []domain.ApplicantReference
+}
+
+// DisclosurePolicyEntry 是一条披露条目：对某货主客户账户，客户视图四维各自获准展示
+// 什么。四维用 domain.ViewDimension 而不是（状态+内容）两个裸字段——展示必带内容来处、
+// 待确认与不展示必不带，两个方向的虚构在构造期就被拦下，库上的四条 shape 约束是第二
+// 道网而不是唯一一道。
+type DisclosurePolicyEntry struct {
+	Customer   domain.CustomerAccountReference
+	Milestones domain.ViewDimension
+	ETA        domain.ViewDimension
+	Final      domain.ViewDimension
+	Note       domain.ViewDimension
+}
+
+// DisclosurePolicyRegistration 登记一版披露策略。条目纪律同映射登记。
+type DisclosurePolicyRegistration struct {
+	Header  CatalogVersionHeader
+	Entries []DisclosurePolicyEntry
+}
+
+// CatalogRegistry 是 VE 五类规则与策略目录的写入口（`PAR-VIS-01`/`05`/`07`/`08`/`09`；
+// `PAR-VIS-08` 跨索赔资格与申请人授权两组表，故六个方法）。与五个只读装载口成对：
+// 那五口至今只能答`未配置`，是因为除测试外没有任何东西写得进这些表。
+//
+// 目录**内容**属实例半边、待租户提供，本端口只建门：它不带任何默认条目，也不在缺件
+// 时替登记方补值——那会把「还没人登记」变成一次有依据的判断。
+//
+// 写入侧防重叠是本端口的硬要求：同一时点两个适用版本在读侧是错误（ErrAmbiguousCatalog），
+// 而登记口的职责是让那种数据根本进不来，不是让读口去兜。实现须在自己的写入事务内完成
+// 判定，调用方不必先查后写。
+//
+// 所有方法都在调用方的事务内执行（RequireExecutor 语义）：一版抬头与它的整版条目必须
+// 同一提交，半版目录比没有目录更坏——读口会把它当成一次已作出的判断。
+type CatalogRegistry interface {
+	RegisterMilestoneMapping(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration MilestoneMappingRegistration,
+	) (CatalogRegistrationOutcome, error)
+	RegisterTriageRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration TriageRuleRegistration,
+	) (CatalogRegistrationOutcome, error)
+	RegisterNotificationPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration NotificationPolicyRegistration,
+	) (CatalogRegistrationOutcome, error)
+	RegisterClaimEligibility(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration ClaimEligibilityRegistration,
+	) (CatalogRegistrationOutcome, error)
+	RegisterClaimAuthorization(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration ClaimAuthorizationRegistration,
+	) (CatalogRegistrationOutcome, error)
+	RegisterDisclosurePolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration DisclosurePolicyRegistration,
+	) (CatalogRegistrationOutcome, error)
+}

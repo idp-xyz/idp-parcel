@@ -43,13 +43,15 @@ func (fixture *policyFixture) viewFor(t *testing.T, tenant string) *adapter.Noti
 	return view
 }
 
-// 目录内容属实例半边，尚无登记入口，用例直接写行。
+// 本组用例证的是**视图读得对**，因此直接写行绕开登记口——批准责任是登记口的入参，
+// 与读侧答什么无关。登记口本身的用例在 catalog_registration_test.go。
 func (fixture *policyFixture) register(t *testing.T, tenant, policyRef, channel, after, obligation string) {
 	t.Helper()
 	if _, err := fixture.pool.Exec(t.Context(),
 		`INSERT INTO visibility_exception.notification_policy
-			(tenant_id, disclosure_policy_ref, channel_ref, deadline_after, obligation_ref)
-		 VALUES ($1, $2, $3, $4::interval, $5)`,
+			(tenant_id, disclosure_policy_ref, channel_ref, deadline_after,
+			 obligation_ref, approved_by)
+		 VALUES ($1, $2, $3, $4::interval, $5, 'customer-service')`,
 		tenant, policyRef, channel, after, obligation); err != nil {
 		t.Fatalf("登记通知策略 %s：%v", policyRef, err)
 	}
@@ -160,14 +162,18 @@ func TestNotificationPolicyChecksRejectUnusableRows(t *testing.T) {
 		name   string
 		values string
 	}{
-		{"零时限（通知一生成就已逾期）", `'t', 'd1', 'SMS', interval '0', 'DELIVERED'`},
-		{"负时限（截止时间早于披露决定）", `'t', 'd2', 'SMS', interval '-1 hour', 'DELIVERED'`},
-		{"空渠道", `'t', 'd3', '  ', interval '1 hour', 'DELIVERED'`},
-		{"空义务判据", `'t', 'd4', 'SMS', interval '1 hour', ''`},
+		{"零时限（通知一生成就已逾期）", `'t', 'd1', 'SMS', interval '0', 'DELIVERED', 'cs'`},
+		{"负时限（截止时间早于披露决定）", `'t', 'd2', 'SMS', interval '-1 hour', 'DELIVERED', 'cs'`},
+		{"空渠道", `'t', 'd3', '  ', interval '1 hour', 'DELIVERED', 'cs'`},
+		{"空义务判据", `'t', 'd4', 'SMS', interval '1 hour', '', 'cs'`},
+		// 空批准责任（0019）：没有批准人的自动发布渠道追溯不回是谁批的，而
+		// `PAR-VIS-07` 明写「默认草稿经授权确认，严格范围才可自动发布」。
+		{"空发布批准责任", `'t', 'd5', 'SMS', interval '1 hour', 'DELIVERED', '   '`},
 	} {
 		if _, err := fixture.pool.Exec(t.Context(),
 			`INSERT INTO visibility_exception.notification_policy
-				(tenant_id, disclosure_policy_ref, channel_ref, deadline_after, obligation_ref)
+				(tenant_id, disclosure_policy_ref, channel_ref, deadline_after,
+				 obligation_ref, approved_by)
 			 VALUES (`+testCase.values+`)`); err == nil {
 			t.Fatalf("库接受了「%s」的策略行", testCase.name)
 		}
