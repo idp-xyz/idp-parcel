@@ -58,6 +58,44 @@
 `FormLoadAssignment`、`FormSupplierCreditNote`、`FormSupplierExpectedCost`、`OpenDispatchTask`、
 `PublishChannelAccountUseAuthorization`、`RecordMovementFact`、`VerifyDutyPayment`。
 
+### ⚠ 这个 13 是下界：前缀集实测不完备，而盲区里有货
+
+**本族的 72 已由 MCP-3 用同一前缀集机械重数、逐位一致**（抓得住转写错与工具错，抓不住口径
+错）。但前缀集本身是判断不是穷举，而它挡在外面的东西实测如下（同基线，`internal/*/domain/`
+非测试，去重导出顶层函数）：
+
+```
+导出顶层函数        732
+十二个前缀盖到       72
+未盖到              660
+  其中 New*         528   （值对象/ID 构造，多半不属本族）
+  非 New*           132   ← 关切面
+```
+
+**那 132 个按动词分组后与已收前缀分不出道理**：`Judge*` 在册而 `Decide*` / `Conclude*` /
+`Assess*` 不在；`Accept*` 在册而 `Adopt*` / `Receive*` 不在；`Record*` 在册而 `Declare*` 不在；
+`Form*` / `Establish*` 在册而 `Derive*` / `Rehydrate*` 不在——**光 `Rehydrate*` 就 43 个，而
+整族才 72。**
+
+**盲区里确有本票要棘的那一种。** 用本文更正后的调用点判法打在那 132 个上，**20 个零非测试
+调用点**，其中 18 个在测试里有调用——也就是「只被测试调用的生产领域函数」。已逐个复核四例：
+
+| 名字 | 位置 | 非测试真调用 | 测试中 |
+|---|---|---|---|
+| `AssessSafeHandoff` | `parcelshipment/domain/production_handoff.go` | 0 | 9 |
+| `DecideDisclosure` | `visibilityexception/domain/customer_disclosure.go` | 0 | 6 |
+| `RehydratePricingPlanSnapshot` | `parcelpricing/domain/plan_snapshot.go` | 0 | 3 |
+| `SubmitEvidence` | `visibilityexception/domain/evidence.go` | 0 | 1 |
+
+> **哪些算领域工厂是口径判断，本文不替票主与人类定。** `DecimalFromInt64`、`ParseCanonical`、
+> `MarshalPricingPlanSnapshot` 看着像值/解析助手；`Rehydrate*` 算不算工厂是个真问题。
+> **所以 20 是候选数不是缺陷数，13 是下界不是结论。** 由 MCP-3 跑出盲区形状（它报 11），
+> 本文这一跑得 20；两次都非空，差异未查清，**取大的那个当下界更安全**。
+
+**这一格对门禁实现直接有话说**：让门禁自己当场算初始清单、不从本文抄，**拦不住这一类**——
+门禁算的时候用的还是这十二个前缀。**前缀集是写进门禁里的假设，不是它每次重算的输入**，得单独
+守（例如把「本族前缀集之外的导出领域函数」也纳入门禁视野，或至少让新增前缀触发一次复核）。
+
 ## 四族：ports 适配器构造函数
 
 **识别口径（这一族靠断言认，不靠命名认）**：`internal/*/adapters/**` 下**含编译期接口断言**
