@@ -1,7 +1,7 @@
 # party-commercial 声明与发布无登记口,接受链六墙同根等一扇门
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W04–W08、W11(声明面)、W12。
 
@@ -94,4 +94,8 @@ ADR-0027、ADR-0044、ADR-0058、ADR-0062;PAR-COM-14/15/16/17。
 
   **它仍守不住事务边界，这一格确认无守门人。** 原以为它能钉住「逐项各起事务」，实测推翻：**冲突不是错误**——把 `runPublish` 的循环整个包进一个事务，第二项照样判冲突、事务照样提交，该用例依旧绿。真要钉住那个结构，得让后一项以技术失败收场再看前一项还在不在，而技术失败今天只来自基础设施故障，从批文里造不出来。注释里已写明，不留一条名不副实的守门人。
 
-  **八、当前状态。** 票面正文那两个不存在的表名已就地更正（加更正框，不改写原句）。分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突；分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。三件均有实现、判据均可核、吸收扫描已毕并已吸收。**可转 resolved 并推已验 SHA，等一句放行。**
+  **八、当前状态。** 票面正文那两个不存在的表名已就地更正（加更正框，不改写原句）。分支 `mcp3-pc-publication` 已合入 `main`（`ac04366`），合并无冲突；分支 HEAD 上 `gofmt` 干净、`go build`/`go vet` 全过、`go test -count=1 ./...` 全绿，且是含真库的绿。三件均有实现、判据均可核、吸收扫描已毕并已吸收。**票转 resolved。**
+
+  分支七笔：`c8abe94` 原样封存死会话现场 → `364606f` 修三处门禁违规并按门禁交集拆解析键登记面 → `8821e28` 合入 main（无冲突）→ `834c8aa` 记吸收扫描 → `119a0b0` 补 AT-PC-011 处理器半边断言 → `443457c` 逐条核判据 → `acd74d5` 补 `runPublish` 真库用例并更正票面表名。
+
+  **留给后续的三条**（都不阻塞本票收口，各自已记在上文）：`runPublish` 的事务边界无守门人（技术失败从批文造不出来）；`declaration_publication_test.go` 的 `mustSaveDeclaration` 有同形 Goexit 隐患而门禁没追进 `mustWithinPublicationTransaction`；六写口集中式与分散式的形状差异记差异不改。封存分支 `mcp1-pc-publication`（`db81745`）去留随 dead-session-salvage 票 02 处置，本票不动。
