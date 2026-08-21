@@ -21,6 +21,39 @@ CC CONTEXT 的「关务案件」词条写着「**一个案件可以关联多个�
 都取不出，想把它归进案件分区就无从谈起**。裁断因此绕开了它——四口不建立跨口保序，乱序由重读
 与重试消化——但绕开的是保序需求，不是这条关联本身。
 
+## 这条边缺席的最硬后果：案件关闭核对今天靠登记内容兜底，不是靠结构
+
+拍板时真正要称重的是这一条，不是「关务案件」词条那句本身。
+
+CONTEXT 要求案件关闭前「在明确业务截点盘点**全部适用申报**、限制、监管处置、税费及其他应履行
+义务，并逐义务、逐范围形成关闭依据项」，并规定「任一未解决或冲突项都阻止关闭，**单个案件不存在
+部分关闭**」。**而关闭核对是已经实现的编排**（`close_customs_case.go` 的 `CloseCustomsCaseHandler`）。
+
+今天它只能盘点 `ObligationInventoryView.LoadObligationItems` 按 `caseRef` 交回的义务项清单。
+**申报那一类义务是否齐备，代码里没有任何路径能自行核出来**——因为从案件走不到它的申报单元集。
+
+于是：**「单个案件不存在部分关闭」这条不变量今天由登记内容承担，而不是由结构承担。** 有人把申报
+义务作为一条人工登记项写进登记册，它就被盘到；没人写，关闭核对照样通过，且不会有任何东西变红。
+这不是「缺一条边」的轻量级问题，它是一条已确认不变量的承载方式问题。
+
+## 时序约束：这一条比两条候选路径本身更急
+
+**若把案件维加进申报提交载荷并设为必填，必须赶在提交口接上生产装配之前做。**
+
+依据（取证于 `9e5c5c0`，见 Comments 第二节）：上游 `SubmitDeclarationHandler` 今天零生产调用点，
+生产上一封在途信封都没有；而**下游 VE 消费方已经接线**（`cmd/parcel-dispatch/assemble.go` 的
+`deriveDeclarationSubmissionConsumer`），且 `decodeFormedDeclarationSubmission` 把**任一键维缺席
+判为毒丸**（`TestADeclarationSubmissionEnvelopeMissingAnyKeyDimensionIsPoison` 逐维钉过四格）。
+
+**今天迁移窗口是免费的；接线之后旧信封集体变毒丸，就要多一套兼容期。**
+
+这一条与第一、三两问的性质不同，排期上要分开看：**后两问是领域裁断，拖一周没有代价；这一条拖过
+接线那一刻就永久多一笔预算。** 它也不取决于第三问怎么裁——无论关联建在单元上还是案件上，只要
+案件维进载荷，这条时序都成立。
+
+> 同一形状的清单已开票承接：[棘轮门禁](../../production-wiring-ratchet-gate/issues/01-production-ports-wired-only-in-tests-have-no-ratchet.md)
+> 扫出的「零生产调用点」同时就是「载荷还能免费改」的窗口清单。
+
 ## 卡在哪
 
 要把案件维放进申报侧的任何位置（载荷、Subject、将来的分区维），先得有其中之一：
@@ -39,6 +72,21 @@ CC CONTEXT 的「关务案件」词条写着「**一个案件可以关联多个�
 - 申报信封 ID 缺版本维是**另一件事**，归
   [declaration-envelope-version-dedup/01](../../declaration-envelope-version-dedup/issues/01-envelope-id-lacks-version-dimension.md)，
   两票互不吸收。
+
+## 红线（取证于 `9e5c5c0` 新增，见 Comments 第三节）
+
+- **不得经包裹推导这条关联。** 两端今天各自都持有包裹集（`CustomsCase.parcels` 与
+  `DeclarationUnit.members`），所以求交在技术上做得出来——**而它给出的是看上去有值、实则未定义
+  的答案**，两条 CONTEXT 各堵一头：「一个包裹可以先后关联多个关务案件」使交集是多对多而非唯一
+  关联；受控跨客户合报允许「把不同货主客户账户的包裹纳入同一申报单元」，同一单元的成员可以散在
+  不同案件里。**这条路最危险的地方是它能跑绿。**
+- **若只把新加那一处做成铸造 `CustomsCaseID`，就会留下两种案件引用表达并存，而今天没有任何东西
+  拦着。** CC 现有的案件引用（`FollowUpTarget.caseRef`、`ClosureVerification.caseRef`、
+  `CustomsCaseClosure.caseRef`、`CloseCustomsCaseCommand.CaseRef`、
+  `ObligationInventoryView.LoadObligationItems` 的形参、`CaseClosureStore.FindByCase`、案件配置
+  登记册五本）全是裸 `string`。**这与分区键碰撞票是同一形状**：两处各自合规，撞在一起才错——
+  一个铸造标识与一个裸串指同一个案件时，类型上分辨不出、编译器不会拦、用例各自全绿。统一与否
+  属本票范围内要一并回答的问题，此处只钉住「不许无声地留成两种」。
 
 ## 本票不做的事
 
@@ -99,11 +147,11 @@ CONTEXT 里依赖这条关联的句子（按依赖强度排，全部为原文摘
 | 「已接受引用能够与**关务案件、申报单元和运输对象**逐范围唯一匹配 → 形成业务关联」 | 三者可同时定位 | 部分。`ExternalManifestReference.Association()` 只关联到申报单元，案件那一维缺席 |
 | Boundaries：「`customs-compliance` 拥有关务案件、**申报单元及其组成**、替代和后续案件关系……」 | 所有权语句本身预设了这条边 | 否 |
 
-**第二行是最硬的一条**：案件关闭核对是已实现的编排（`close_customs_case.go`），而 CONTEXT 要求它
-盘点「全部适用申报」。今天它只能盘点 `ObligationInventoryView` 按 `caseRef` 交回的义务项清单，
-**申报那一类义务是否齐备，代码里没有任何路径能自行核出来**——只能靠登记册把它当成一条人工登记的
-义务项写进去。这不是缺一条边那么轻：它意味着「单个案件不存在部分关闭」这条不变量今天由登记内容
-承担，而不是由结构承担。
+**第二行是最硬的一条，已按协调岗裁定提到票面正文单列一节**（「这条边缺席的最硬后果」）：案件
+关闭核对是已实现的编排（`close_customs_case.go`），而 CONTEXT 要求它盘点「全部适用申报」；今天它
+只能盘点 `ObligationInventoryView` 按 `caseRef` 交回的义务项清单，申报那一类义务是否齐备代码里
+没有任何路径能自行核出来。**这不是缺一条边那么轻——「单个案件不存在部分关闭」这条不变量今天由
+登记内容承担而非由结构承担，而拍板时要称重的正是这一条，不是词条句本身。**
 
 ### 二、两条候选路径的代价与影响面
 
