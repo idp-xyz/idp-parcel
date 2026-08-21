@@ -1,0 +1,128 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
+	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
+)
+
+// CommercialResolutionKeyStore 是解析键登记面的持久化半边（syn-wall-door-audit 票 03
+// 件 2），实现 pspartycommercial.ResolutionKeyStore。
+//
+// 它只搬运字符串行，不认识 party-commercial 的任何领域类型：词汇翻译在
+// adapters/partycommercial 那半边。两半分开是两条架构门禁的交集——翻译不许待在通用
+// postgres 包里，驱动不许出现在持久化适配器之外。
+type CommercialResolutionKeyStore struct {
+	db *bentopg.DB
+}
+
+func NewCommercialResolutionKeyStore(db *bentopg.DB) (*CommercialResolutionKeyStore, error) {
+	if db == nil {
+		return nil, fmt.Errorf("parcel shipment postgres: db is nil")
+	}
+	return &CommercialResolutionKeyStore{db: db}, nil
+}
+
+var _ pspartycommercial.ResolutionKeyStore = (*CommercialResolutionKeyStore)(nil)
+
+// RegisterResolutionKey 落一行登记。先读回既有再决定写不写，冲突路径一行不动——判读
+// 纪律与声明写入面相同（见 partycommercial/adapters/postgres 的声明写入注释）。
+func (repository *CommercialResolutionKeyStore) RegisterResolutionKey(
+	ctx context.Context,
+	row pspartycommercial.ResolutionKeyRow,
+) (pspartycommercial.ResolutionKeySaveOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return pspartycommercial.ResolutionKeySaveOutcomeInvalid, fmt.Errorf("register resolution key: %w", err)
+	}
+
+	var existingScope, existingLegal, existingPolicy string
+	var existingAnchorAt time.Time
+	var existingBases []string
+	err = executor.QueryRow(ctx,
+		`SELECT scope_ref, legal_entity_ref, anchor_policy_version, anchor_at, required_bases
+		   FROM parcel_shipment.commercial_resolution_key_registration
+		  WHERE tenant_id = $1 AND customer_account_id = $2`,
+		row.TenantID, row.CustomerAccountID,
+	).Scan(&existingScope, &existingLegal, &existingPolicy, &existingAnchorAt, &existingBases)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO parcel_shipment.commercial_resolution_key_registration
+				(tenant_id, customer_account_id, scope_ref, legal_entity_ref,
+				 anchor_policy_version, anchor_at, required_bases)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			row.TenantID,
+			row.CustomerAccountID,
+			row.Scope,
+			row.LegalEntity,
+			row.AnchorPolicy,
+			row.AnchorAt.UTC(),
+			row.RequiredBases,
+		); err != nil {
+			return pspartycommercial.ResolutionKeySaveOutcomeInvalid, fmt.Errorf("register resolution key: %w", err)
+		}
+		return pspartycommercial.ResolutionKeySaved, nil
+	case err != nil:
+		return pspartycommercial.ResolutionKeySaveOutcomeInvalid, fmt.Errorf("register resolution key: %w", err)
+	}
+
+	if existingScope != row.Scope ||
+		existingLegal != row.LegalEntity ||
+		existingPolicy != row.AnchorPolicy ||
+		!existingAnchorAt.Equal(row.AnchorAt.UTC()) ||
+		!sameResolutionBases(existingBases, row.RequiredBases) {
+		return pspartycommercial.ResolutionKeyContentConflict, nil
+	}
+	return pspartycommercial.ResolutionKeyAlreadyRegistered, nil
+}
+
+// FindResolutionKey 读回一行登记。查无行是 (zero, false, nil)：显式未配置等租户来登记，
+// 读取失败等依赖恢复，压成一格调用方就不知道该催人还是该重试。
+func (repository *CommercialResolutionKeyStore) FindResolutionKey(
+	ctx context.Context,
+	tenant, customer string,
+) (pspartycommercial.ResolutionKeyRow, bool, error) {
+	none := pspartycommercial.ResolutionKeyRow{}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return none, false, fmt.Errorf("find resolution key: %w", err)
+	}
+
+	row := pspartycommercial.ResolutionKeyRow{TenantID: tenant, CustomerAccountID: customer}
+	err = querier.QueryRow(ctx,
+		`SELECT scope_ref, legal_entity_ref, anchor_policy_version, anchor_at, required_bases
+		   FROM parcel_shipment.commercial_resolution_key_registration
+		  WHERE tenant_id = $1 AND customer_account_id = $2`,
+		tenant, customer,
+	).Scan(&row.Scope, &row.LegalEntity, &row.AnchorPolicy, &row.AnchorAt, &row.RequiredBases)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, false, nil
+	}
+	if err != nil {
+		return none, false, fmt.Errorf("find resolution key: %w", err)
+	}
+	return row, true, nil
+}
+
+func sameResolutionBases(existing, incoming []string) bool {
+	if len(existing) != len(incoming) {
+		return false
+	}
+	set := make(map[string]bool, len(existing))
+	for _, base := range existing {
+		set[base] = true
+	}
+	for _, base := range incoming {
+		if !set[base] {
+			return false
+		}
+	}
+	return true
+}

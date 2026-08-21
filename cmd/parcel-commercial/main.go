@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
@@ -183,12 +184,17 @@ func runRegisterResolutionKey(ctx context.Context, args []string, getenv func(st
 	}
 	defer cleanup()
 
-	keys, err := pspostgres.NewCommercialResolutionKeys(db)
+	store, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造解析键持久化面：%v\n", err)
+		return exitTechnical
+	}
+	keys, err := pspartycommercial.NewCommercialResolutionKeys(store)
 	if err != nil {
 		fmt.Fprintf(errOut, "构造解析键登记面：%v\n", err)
 		return exitTechnical
 	}
-	var outcome pspostgres.ResolutionKeySaveOutcome
+	var outcome pspartycommercial.ResolutionKeySaveOutcome
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
 		var registerErr error
 		outcome, registerErr = keys.Register(txCtx, registration)
@@ -199,7 +205,7 @@ func runRegisterResolutionKey(ctx context.Context, args []string, getenv func(st
 	}
 	fmt.Fprintf(out, "解析键登记 %s/%s：%s\n",
 		registration.TenantID, registration.CustomerAccountID, outcome)
-	if outcome == pspostgres.ResolutionKeyContentConflict {
+	if outcome == pspartycommercial.ResolutionKeyContentConflict {
 		return exitAttention
 	}
 	return exitLanded

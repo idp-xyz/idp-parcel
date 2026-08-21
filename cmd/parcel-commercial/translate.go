@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -21,18 +21,18 @@ type publicationBatchDocument struct {
 }
 
 type publicationItemDocument struct {
-	TenantID          string                    `json:"tenantId"`
-	Kind              string                    `json:"kind"`
-	ObjectID          string                    `json:"objectId"`
-	Version           string                    `json:"version"`
-	Scope             string                    `json:"scope"`
-	ContentDigest     string                    `json:"contentDigest"`
-	EffectiveStartsAt time.Time                 `json:"effectiveStartsAt"`
-	EffectiveEndsAt   *time.Time                `json:"effectiveEndsAt,omitempty"`
-	References        map[string]string         `json:"references,omitempty"`
-	Approval          approvalDocument          `json:"approval"`
-	RoleStanding      string                    `json:"approvalRoleStanding"`
-	Declarations      *declarationsDocument     `json:"declarations,omitempty"`
+	TenantID          string                `json:"tenantId"`
+	Kind              string                `json:"kind"`
+	ObjectID          string                `json:"objectId"`
+	Version           string                `json:"version"`
+	Scope             string                `json:"scope"`
+	ContentDigest     string                `json:"contentDigest"`
+	EffectiveStartsAt time.Time             `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time            `json:"effectiveEndsAt,omitempty"`
+	References        map[string]string     `json:"references,omitempty"`
+	Approval          approvalDocument      `json:"approval"`
+	RoleStanding      string                `json:"approvalRoleStanding"`
+	Declarations      *declarationsDocument `json:"declarations,omitempty"`
 }
 
 type approvalDocument struct {
@@ -70,7 +70,7 @@ type preAcceptanceControlDocument struct {
 }
 
 type contractContentDocument struct {
-	RulePackage string                  `json:"rulePackage"`
+	RulePackage string                   `json:"rulePackage"`
 	Bindings    []controlBindingDocument `json:"bindings,omitempty"`
 }
 
@@ -416,8 +416,8 @@ type resolutionKeyDocument struct {
 	RequiredBases     []string  `json:"requiredBases"`
 }
 
-func keyRegistrationFromJSON(raw []byte) (pspostgres.ResolutionKeyRegistration, error) {
-	none := pspostgres.ResolutionKeyRegistration{}
+func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistration, error) {
+	none := pspartycommercial.ResolutionKeyRegistration{}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var document resolutionKeyDocument
@@ -425,7 +425,7 @@ func keyRegistrationFromJSON(raw []byte) (pspostgres.ResolutionKeyRegistration, 
 		return none, fmt.Errorf("解析键登记不是本入口的形状：%w", err)
 	}
 
-	registration := pspostgres.ResolutionKeyRegistration{AnchorAt: document.AnchorAt}
+	registration := pspartycommercial.ResolutionKeyRegistration{AnchorAt: document.AnchorAt}
 	var err error
 	if registration.TenantID, err = psdomain.NewTenantID(document.TenantID); err != nil {
 		return none, err

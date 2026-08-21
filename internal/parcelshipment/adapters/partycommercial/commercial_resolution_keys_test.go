@@ -1,4 +1,4 @@
-package postgres_test
+package partycommercial_test
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
-	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -30,21 +31,54 @@ func newResolutionKeys(t *testing.T) (*adapter.CommercialResolutionKeys, bentoap
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	keys, err := adapter.NewCommercialResolutionKeys(db)
+	store, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		t.Fatalf("构造解析键持久化面：%v", err)
+	}
+	keys, err := adapter.NewCommercialResolutionKeys(store)
 	if err != nil {
 		t.Fatalf("构造解析键登记面：%v", err)
 	}
 	return keys, db.Transactor()
 }
 
+// mustWithinKeyTransaction 只把闭包的 error 交给事务判提交还是回滚。断言一律留在闭包外：
+// t.Fatal 走 runtime.Goexit，闭包永不返回，提交与回滚两条分支都会被跳过（架构门禁
+// TestNoTransactionClosureCarriesAGoexitAssertion）。
+func mustWithinKeyTransaction(
+	t *testing.T,
+	transactor bentoapp.Transactor,
+	ctx context.Context,
+	fn func(context.Context) error,
+) {
+	t.Helper()
+	if err := transactor.WithinTransaction(ctx, fn); err != nil {
+		t.Fatalf("事务内写入失败：%v", err)
+	}
+}
+
+func resolutionKeyIdentity(t *testing.T, tenant, customer string) psdomain.SourceIdentity {
+	t.Helper()
+	identity, err := psdomain.NewSourceIdentity(
+		value(t, psdomain.NewTenantID, tenant),
+		value(t, psdomain.NewCustomerAccountID, customer),
+		value(t, psdomain.NewSource, "portal"),
+		value(t, psdomain.NewSourceRequestKey, "req-1"),
+	)
+	if err != nil {
+		t.Fatalf("new source identity: %v", err)
+	}
+	return identity
+}
+
 func keyRegistration(t *testing.T, tenant, customer, scope string) adapter.ResolutionKeyRegistration {
 	t.Helper()
 	return adapter.ResolutionKeyRegistration{
-		TenantID:          psValue(t, psdomain.NewTenantID, tenant),
-		CustomerAccountID: psValue(t, psdomain.NewCustomerAccountID, customer),
-		Scope:             psValue(t, pcdomain.NewCommercialScopeReference, scope),
-		LegalEntity:       psValue(t, pcdomain.NewLegalEntityReference, "legal-1"),
-		AnchorPolicy:      psValue(t, pcdomain.NewAnchorPolicyVersion, "anchor-policy/v1"),
+		TenantID:          value(t, psdomain.NewTenantID, tenant),
+		CustomerAccountID: value(t, psdomain.NewCustomerAccountID, customer),
+		Scope:             value(t, pcdomain.NewCommercialScopeReference, scope),
+		LegalEntity:       value(t, pcdomain.NewLegalEntityReference, "legal-1"),
+		AnchorPolicy:      value(t, pcdomain.NewAnchorPolicyVersion, "anchor-policy/v1"),
 		AnchorAt:          resolutionKeyAnchorAt,
 		RequiredBases: []pcdomain.CommercialObjectKind{
 			pcdomain.CustomerContractObject,
@@ -57,9 +91,9 @@ func keyRegistration(t *testing.T, tenant, customer, scope string) adapter.Resol
 func basisQuery(t *testing.T, tenant, customer string) psports.CommercialBasisQuery {
 	t.Helper()
 	return psports.CommercialBasisQuery{
-		Identity:          identity(t, tenant, customer, "portal", "req-1"),
-		ShipmentRequestID: psValue(t, psdomain.NewShipmentRequestID, "SHIP-1"),
-		SubmissionVersion: psValue(t, psdomain.NewSubmissionVersionID, "SUB-1"),
+		Identity:          resolutionKeyIdentity(t, tenant, customer),
+		ShipmentRequestID: value(t, psdomain.NewShipmentRequestID, "SHIP-1"),
+		SubmissionVersion: value(t, psdomain.NewSubmissionVersionID, "SUB-1"),
 	}
 }
 
@@ -71,16 +105,15 @@ func mustRegisterKey(
 	want adapter.ResolutionKeySaveOutcome,
 ) {
 	t.Helper()
-	mustWithinTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
-		outcome, err := keys.Register(txCtx, registration)
-		if err != nil {
-			return err
-		}
-		if outcome != want {
-			t.Fatalf("register outcome = %s, want %s", outcome, want)
-		}
-		return nil
+	var outcome adapter.ResolutionKeySaveOutcome
+	mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+		var err error
+		outcome, err = keys.Register(txCtx, registration)
+		return err
 	})
+	if outcome != want {
+		t.Fatalf("register outcome = %s, want %s", outcome, want)
+	}
 }
 
 // Covers: 票 03 件 2——登记面四项（范围/法人候选/锚点策略/必需依据种类）落库后，
@@ -165,34 +198,40 @@ func TestKeyRegistrationRefusesDefaultsAndBareCalls(t *testing.T) {
 	t.Run("锚点零值", func(t *testing.T) {
 		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
 		broken.AnchorAt = time.Time{}
-		mustWithinTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
-			if _, err := keys.Register(txCtx, broken); err == nil {
-				t.Fatal("零值锚点被登记了——那就是等人来补默认")
-			}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
 			return nil
 		})
+		if registerErr == nil {
+			t.Fatal("零值锚点被登记了——那就是等人来补默认")
+		}
 	})
 
 	t.Run("空依据集合", func(t *testing.T) {
 		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
 		broken.RequiredBases = nil
-		mustWithinTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
-			if _, err := keys.Register(txCtx, broken); err == nil {
-				t.Fatal("零必需依据的键被登记了")
-			}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
 			return nil
 		})
+		if registerErr == nil {
+			t.Fatal("零必需依据的键被登记了")
+		}
 	})
 
 	t.Run("结算政策要选择器", func(t *testing.T) {
 		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
 		broken.RequiredBases = append(broken.RequiredBases, pcdomain.SettlementPolicyObject)
-		mustWithinTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
-			if _, err := keys.Register(txCtx, broken); err == nil {
-				t.Fatal("结算政策进了不带选择器的登记面——那个键永远立不起来")
-			}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
 			return nil
 		})
+		if registerErr == nil {
+			t.Fatal("结算政策进了不带选择器的登记面——那个键永远立不起来")
+		}
 	})
 
 	t.Run("无事务拒", func(t *testing.T) {
@@ -200,13 +239,4 @@ func TestKeyRegistrationRefusesDefaultsAndBareCalls(t *testing.T) {
 			t.Errorf("无事务登记应返回 ErrTransactionRequired，实得：%v", err)
 		}
 	})
-}
-
-func psValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
-	t.Helper()
-	value, err := construct(raw)
-	if err != nil {
-		t.Fatalf("construct %q: %v", raw, err)
-	}
-	return value
 }
