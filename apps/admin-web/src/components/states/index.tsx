@@ -80,17 +80,43 @@ export function ErrorState({ title, code, description, onRetry }: ErrorStateProp
   );
 }
 
+/**
+ * 未配置态的结构化事实。三个字段都是「读的人拿去行动」的信息，不是装饰：
+ * 主责上下文说明找谁、场景出处说明依据哪份文档（写文档名，不写行号）、
+ * 放行条件说明什么动作会解除本态。全部可选——只给 description 字符串的
+ * 既有调用方不受影响。
+ */
+export interface UnconfiguredFacts {
+  /** 主责上下文（领域语言名 + 目录名），取 navigation 的 moduleInfoById.owner 原文。 */
+  owner?: string;
+  /** 场景出处：权威文档名与小节说法。 */
+  source?: string;
+  /** 放行条件：哪个闸门或登记动作会解除本态。 */
+  unlock?: string;
+}
+
 export interface UnconfiguredStateProps {
   title?: string;
   description?: string;
+  facts?: UnconfiguredFacts;
 }
+
+const unconfiguredFactLabels: ReadonlyArray<[keyof UnconfiguredFacts, string]> = [
+  ['owner', '主责上下文'],
+  ['source', '场景出处'],
+  ['unlock', '放行条件'],
+];
 
 /**
  * 未配置态：403 + ACCESS_CHANNEL_NOT_CONFIGURED 的专属呈现。
  * 这不是故障——接入渠道未配置属实例半边未就绪（等待登记册里的渠道参数），
  * 改请求或重试都不会改变结果，出路是去完成渠道配置。
  */
-export function UnconfiguredState({ title, description }: UnconfiguredStateProps) {
+export function UnconfiguredState({ title, description, facts }: UnconfiguredStateProps) {
+  const factRows = unconfiguredFactLabels
+    .map(([key, label]) => [label, facts?.[key]] as const)
+    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
+
   return (
     <div className="text-center max-w-[460px] px-6">
       <PlugZap className="h-8 w-8 mx-auto mb-3 text-idpxyz-textMuted" aria-hidden />
@@ -99,6 +125,18 @@ export function UnconfiguredState({ title, description }: UnconfiguredStateProps
         {description ??
           '该能力的接入渠道尚未配置（实例参数未就绪），这不是故障：重试不会改变结果，需要先在参数登记册完成渠道配置。'}
       </p>
+      {factRows.length > 0 ? (
+        <dl className="mt-3 border-t border-idpxyz-border pt-2.5 text-left space-y-1.5">
+          {factRows.map(([label, value]) => (
+            <div key={label} className="flex gap-2">
+              <dt className="shrink-0 w-[64px] text-[11px] leading-4 text-idpxyz-textMuted">
+                {label}
+              </dt>
+              <dd className="text-[11px] leading-4 text-idpxyz-text">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
       <p className="mt-2 text-[11px] font-mono text-idpxyz-textMuted">
         ACCESS_CHANNEL_NOT_CONFIGURED
       </p>

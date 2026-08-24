@@ -9,7 +9,7 @@ Status: ready-for-agent
 
 - operations（2）：node-operations-review → docs/domain/node-operations/CONTEXT.md；transport-fulfillment-review → docs/domain/transport-fulfillment/CONTEXT.md
 - customs（2）：customs-cases、customs-restrictions → docs/domain/customs-compliance/CONTEXT.md
-- visibility（3）：tracking-projection、exception-cases、claims-recovery → docs/domain/visibility-exception/CONTEXT.md
+- visibility（此轮 2 页）：exception-cases、claims-recovery → docs/domain/visibility-exception/CONTEXT.md（tracking-projection 整页跳过，理由见第三节）
 - settlement（2）：charges-billing、operating-metrics → docs/domain/settlement-accounting/CONTEXT.md
 - collection（1）：cod-ledger → docs/domain/CONTEXT-MAP.md 的 collection-remittance 一节
 
@@ -20,12 +20,11 @@ Status: ready-for-agent
 
 列定义从出处小节取词；用 ListPageTemplate 现有 props；未配置态如实；主责与出处从 moduleInfoById 只读导入（两个 id 已登记在 navigation.ts）。经 customs/index.ts 导出后**把导出名 send_to_session 7**——page-registry.tsx 登记由 7 号落，不在你地盘。
 
-## 三、追踪视图接真（选做，放最后，带闸）
+## 三、追踪视图接真（本轮作废，改续办）
 
-前提取证：按**已提交状态**读端点（`git show HEAD:cmd/parcel-api/endpoints.go` 等），确认 VE 追踪视图查询端点的路径/参数/授权形状（该端点随 463646b 落库；工作树上 cmd/parcel-api 有 MCP-4 未提交编辑，一律以提交状态为准，不读树上版本）。
+**TrackingProjectionPage.tsx 此轮整页跳过（检查单也不做）**：MCP-3 于 2026-08-24 17:00 前后广播，该文件上留有其未提交活现场（hash 路由轮的文案订正），且其通道无提交授权、现场落库时点未定。现场落库前任何人改这页都会与之纠缠（parallel-sessions.md「未提交现场」）。
 
-- 形状清楚 → visibility/ 内建 api 客户端，TrackingProjectionPage 接真（loading/error/empty/成功四态；错误如实呈现，403 未配置语义按 ADR-0022 不吞）；liveIds 登记把 id 送 7 号落。
-- 形状存疑或授权未定 → 只把取证结论写进本票 Comments，不硬接。
+续办条件：MCP-3 广播该文件已落库后，按下述原案另行续办（届时先按**已提交状态**读 `git show HEAD:cmd/parcel-api/endpoints.go` 取证 VE 追踪视图查询端点形状；形状清楚才接真，四态完整、403 语义按 ADR-0022 不吞；liveIds 登记送 7 号；存疑则只写取证结论进 Comments）。
 
 ## 完成
 

@@ -24,5 +24,10 @@ export {
   type ReviewDecisionOption,
 } from './ReviewFlowTemplate';
 
-export { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
+export {
+  StateSlot,
+  type TemplateViewState,
+  type StateSlotProps,
+  type UnconfiguredFacts,
+} from './state-slot';
 export type { DetailField, AuditEntry } from './types';

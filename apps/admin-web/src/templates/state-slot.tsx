@@ -4,6 +4,7 @@ import {
   EmptyState,
   ErrorState,
   UnconfiguredState,
+  type UnconfiguredFacts,
 } from '../components/states';
 
 // 页面四态的判别联合：模板只认 kind，不自己猜「没数据算不算空」——
@@ -13,7 +14,9 @@ export type TemplateViewState =
   | { kind: 'loading' }
   | { kind: 'empty'; title?: string; description?: string }
   | { kind: 'error'; title?: string; description?: string; onRetry?: () => void }
-  | { kind: 'unconfigured'; title?: string; description?: string };
+  | { kind: 'unconfigured'; title?: string; description?: string; facts?: UnconfiguredFacts };
+
+export type { UnconfiguredFacts } from '../components/states';
 
 export interface StateSlotProps {
   state: Exclude<TemplateViewState, { kind: 'ready' }>;
@@ -57,7 +60,11 @@ export function StateSlot({ state, override }: StateSlotProps) {
           {override?.unconfigured ? (
             override.unconfigured()
           ) : (
-            <UnconfiguredState title={state.title} description={state.description} />
+            <UnconfiguredState
+              title={state.title}
+              description={state.description}
+              facts={state.facts}
+            />
           )}
         </>
       );
