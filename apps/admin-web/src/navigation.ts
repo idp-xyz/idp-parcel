@@ -1,6 +1,7 @@
 import type { ElementType } from 'react';
 import {
   AlertTriangle,
+  Anchor,
   BadgeDollarSign,
   Banknote,
   Boxes,
@@ -18,6 +19,7 @@ import {
   LineChart,
   Megaphone,
   Network,
+  PackageOpen,
   PackageSearch,
   PackageX,
   Radar,
@@ -72,6 +74,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'party-contracts', label: '客户与合同', icon: 'party-contracts' },
       { id: 'service-products', label: '服务产品与渠道', icon: 'service-products' },
+      { id: 'channel-product-catalog', label: '渠道产品目录', icon: 'channel-product-catalog' },
       { id: 'supplier-agreements', label: '供应商协议', icon: 'supplier-agreements' },
       { id: 'commercial-policies', label: '商业规则与策略', icon: 'commercial-policies' },
     ],
@@ -104,6 +107,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'customs-cases', label: '关务案件与申报', icon: 'customs-cases' },
       { id: 'compliance-rules', label: '合规规则库', icon: 'compliance-rules' },
+      { id: 'customs-ports-paths', label: '口岸与申报路径', icon: 'customs-ports-paths' },
       { id: 'customs-restrictions', label: '合规限制与监管税费', icon: 'customs-restrictions' },
     ],
   },
@@ -154,6 +158,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'cancel-parcel': PackageX,
   'party-contracts': Handshake,
   'service-products': Boxes,
+  'channel-product-catalog': PackageOpen,
   'supplier-agreements': FileText,
   'commercial-policies': SlidersHorizontal,
   'price-card-catalog': BadgeDollarSign,
@@ -166,6 +171,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'transport-fulfillment-review': Truck,
   'customs-cases': Stamp,
   'compliance-rules': Library,
+  'customs-ports-paths': Anchor,
   'customs-restrictions': ShieldAlert,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
@@ -231,6 +237,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '服务产品与渠道',
     owner: '参与方与商业（party-commercial）',
     source: 'docs/domain/party-commercial/CONTEXT.md 服务产品版本、产品—渠道映射与渠道账号业务使用授权',
+  },
+  'channel-product-catalog': {
+    title: '渠道产品目录',
+    owner: '参与方与商业（party-commercial）',
+    source: 'docs/domain/party-commercial/CONTEXT.md 外部渠道产品目录身份与商业适用性、产品—渠道映射、可复用渠道约束及各自的适用有效期',
   },
   'supplier-agreements': {
     title: '供应商协议',
@@ -299,6 +310,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '合规规则库',
     owner: '关务与贸易合规（customs-compliance）',
     source: 'docs/domain/customs-compliance/CONTEXT.md 禁限运、归类、原产地、申报价值、监管凭证适用性等规则化合规判断及其规则版本、依据和决定方式',
+  },
+  'customs-ports-paths': {
+    title: '口岸与申报路径',
+    owner: '关务与贸易合规（customs-compliance）',
+    source: 'docs/domain/CONTEXT-MAP.md customs-compliance ↔ network-routing：关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由只在合格候选中选择',
   },
   'customs-restrictions': {
     title: '合规限制与监管税费',
