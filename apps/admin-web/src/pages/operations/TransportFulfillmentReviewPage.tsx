@@ -121,6 +121,20 @@ const sections: ReviewSection[] = [
       col('proofComposition', '证据构成'),
     ],
   },
+  {
+    id: 'transport-documents',
+    word: '承运总单与运输舱单',
+    // 本上下文拥有承运总单、运输舱单及外部承运凭证的身份和版本(CONTEXT-MAP)。
+    // 与监管舱单分界:首发出口/进口监管舱单由承运商在外部形成并提交,关务经
+    // UC-CC-012 只接受引用——监管舱单不在本区,本区是运输侧单证。
+    columns: [
+      col('documentKind', '单证类别'),
+      col('documentId', '单证标识', { mono: true }),
+      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
+      col('relatedScope', '关联班次 / 实际履约段', { mono: true }),
+      col('businessTime', '业务时间', { mono: true }),
+    ],
+  },
 ];
 
 const chipClass = (active: boolean) =>

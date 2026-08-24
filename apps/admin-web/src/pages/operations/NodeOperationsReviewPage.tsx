@@ -102,6 +102,22 @@ const sections: ReviewSection[] = [
       col('authoritativeResultRef', '权威交接结果（引用）', { mono: true }),
     ],
   },
+  {
+    id: 'unidentified-items',
+    word: '待识别实物',
+    // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。本区无任何
+    // 「确认身份/选一个为准」动作——现场人员不得以覆盖、合并或「最后一次扫描
+    // 为准」决定正式包裹身份;身份确认由 parcel-shipment 以版本化关联形成,
+    // 本区末列只放该关联的引用。识别成功不删除原实物记录,行是永久作业记录。
+    columns: [
+      col('internalLabel', '内部作业标签', { mono: true }),
+      col('foundLocation', '发现位置', { mono: true }),
+      col('conditionObservation', '状况观察'),
+      col('identityCandidates', '身份候选与冲突'),
+      col('registeredAt', '登记时间', { mono: true }),
+      col('formalIdentityRef', '正式包裹关联（引用）', { mono: true }),
+    ],
+  },
 ];
 
 const chipClass = (active: boolean) =>
@@ -141,7 +157,11 @@ export function NodeOperationsReviewPage() {
       }
       columns={section.columns}
       rows={[]}
-      rowKey={(row) => `${row.operationalItem ?? row.instanceId}#${row.occurredAt ?? row.formedAt}`}
+      rowKey={(row) =>
+        `${row.operationalItem ?? row.instanceId ?? row.internalLabel}#${
+          row.occurredAt ?? row.formedAt ?? row.registeredAt
+        }`
+      }
       viewState={{
         kind: 'unconfigured',
         title: '节点作业查询端点尚未建立',
