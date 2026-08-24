@@ -22,6 +22,19 @@ import {
   ReferenceSeriesPage,
   PricingEvaluationsPage,
 } from './pages/pricing';
+import { NetworkCatalogPage, RoutePlansPage } from './pages/network';
+import {
+  NodeOperationsReviewPage,
+  TransportFulfillmentReviewPage,
+} from './pages/operations';
+import { ChargesBillingPage, OperatingMetricsPage } from './pages/settlement';
+import { CodLedgerPage } from './pages/collection';
+import {
+  TrackingProjectionPage,
+  ExceptionCasesPage,
+  ClaimsRecoveryPage,
+} from './pages/visibility';
+import { CustomsCasesPage, CustomsRestrictionsPage } from './pages/customs';
 
 // 导航 id → 页面组件。没登记的 id 落到 UnwiredModule 的诚实占位——
 // 导航条目先于页面出现时，缺的是页面不是路由。
@@ -39,6 +52,18 @@ const pageById: Record<string, ComponentType> = {
   'price-card-catalog': PriceCardCatalogPage,
   'reference-series': ReferenceSeriesPage,
   'pricing-evaluation': PricingEvaluationsPage,
+  'network-catalog': NetworkCatalogPage,
+  'route-plans': RoutePlansPage,
+  'node-operations-review': NodeOperationsReviewPage,
+  'transport-fulfillment-review': TransportFulfillmentReviewPage,
+  'charges-billing': ChargesBillingPage,
+  'operating-metrics': OperatingMetricsPage,
+  'cod-ledger': CodLedgerPage,
+  'tracking-projection': TrackingProjectionPage,
+  'exception-cases': ExceptionCasesPage,
+  'claims-recovery': ClaimsRecoveryPage,
+  'customs-cases': CustomsCasesPage,
+  'customs-restrictions': CustomsRestrictionsPage,
 };
 
 // 传统控制台外壳：品牌头 + 左侧导航 + 单页区，参考 idp-ui
