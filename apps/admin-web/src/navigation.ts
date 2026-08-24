@@ -4,6 +4,7 @@ import {
   BadgeDollarSign,
   Banknote,
   Boxes,
+  Building2,
   Calculator,
   ClipboardCheck,
   Coins,
@@ -28,6 +29,7 @@ import {
   Stamp,
   TrendingUp,
   Truck,
+  UsersRound,
   Warehouse,
 } from 'lucide-react';
 import type { NavigationSection } from '@idpxyz/ui-workspace';
@@ -43,6 +45,16 @@ export const navigationSections: NavigationSection[] = [
   {
     title: '总览',
     items: [{ id: 'workbench', label: '工作台', icon: 'workbench' }],
+  },
+  {
+    // 主数据只收「身份与关系」类对象；带版本生命周期的商业协议（合同/产品/政策）
+    // 留在商业配置区。节点主数据在网络目录、汇率燃油在计价参考序列——各归其
+    // 所属上下文的条目，不为分区完整而挪所有权。
+    title: '主数据',
+    items: [
+      { id: 'group-legal-entities', label: '集团与法人', icon: 'group-legal-entities' },
+      { id: 'business-parties', label: '业务参与方', icon: 'business-parties' },
+    ],
   },
   {
     title: '委托受理',
@@ -130,6 +142,8 @@ export const navigationSections: NavigationSection[] = [
 
 export const sidebarIconMap: Record<string, ElementType> = {
   workbench: LayoutDashboard,
+  'group-legal-entities': Building2,
+  'business-parties': UsersRound,
   'shipment-request': Send,
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
@@ -170,6 +184,19 @@ export interface ModuleInfo {
 }
 
 export const moduleInfoById: Record<string, ModuleInfo> = {
+  // —— 主数据（party-commercial 的身份与关系类所有权）——
+  'group-legal-entities': {
+    title: '集团与法人',
+    owner: '参与方与商业（party-commercial）',
+    source: 'docs/domain/party-commercial/CONTEXT.md 运营企业集团及其法人、经营组织和业务身份',
+  },
+  'business-parties': {
+    title: '业务参与方',
+    owner: '参与方与商业（party-commercial）',
+    source:
+      'docs/domain/party-commercial/CONTEXT.md 角色中立的业务参与方身份，以及承运商、承运商代理商、转售商、聚合平台等参与方关系与渠道账号的持有人、有效范围、商业归属',
+  },
+
   // —— 委托受理（parcel-shipment）——
   'shipment-request-inquiry': {
     title: '委托查阅',
