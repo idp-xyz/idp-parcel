@@ -1,7 +1,11 @@
 # parcel-api 剩余端点编排接线
 
 Category: enhancement
-Status: in-progress
+Status: resolved
+
+(2026-08-24 收口:五张子票全部 resolved——01 随 `eac94e0`、02 随 `ed7002c`、03 随
+`463646b` 带入并经票面勘误归因、04 随 `20cdc5d`、05 随 `cd84409`。九格编排自此全真,
+unwired* 只余装配测试消费。执行归属:01-03 MCP-4,04-05 MCP-9 依用户通道指令承接。)
 
 ## 决策
 
