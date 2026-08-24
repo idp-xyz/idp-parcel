@@ -1,7 +1,7 @@
 # 分区主体没有登记处，跨上下文撞不撞只能靠人重读代码
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源：本目录[票 01](./01-tf-object-partitions-collide-with-ve-parcel-partitions.md) 第三问取证的
 副产物，基线 `9e5c5c0`。**排在**[棘轮门禁](../../production-wiring-ratchet-gate/issues/01-production-ports-wired-only-in-tests-have-no-ratchet.md)**之后做**。
@@ -66,3 +66,29 @@ Status: ready-for-agent
   决定五：TF 对象链三口登记为「租户/载运对象/口名」，VE 四口登记为「租户/包裹」。实现本票时
   这几行**不再是「待裁」**，直接引 ADR-0074；其余口照旧如实登记、判不准的写待裁。TF 两口的
   键表达已随裁决改带口名段，登记表以当时代码为准重扫，勿抄本票写下时的形状。
+
+- 2026-08-24 MCP-6（**本票落地**，登记转录锚 `7ac2f30`）：门禁与首版登记表落
+  `internal/architecture/partition_subject_registry_test.go`，首版四十六行按当时全部键表达式
+  重扫如实转录（未抄本票写下时的形状）。边界照守：零 `PartitionKey` 表达式改动、
+  `envelope_partition_gate_test.go` 未动（只读复用其 `envelopeType` 与 `envelopeField`）、
+  `cmd/parcel-dispatch/assemble.go` 未碰。
+
+  **登记行形状**：三前缀（`主体：`／`逐信封：`／`待裁：`），主体行的裁定引用挂在
+  `｜裁：` 段。门禁两查照票面：覆盖双向机械核（新口不登记红、烂行红）；跨上下文同名的
+  每一行必须带非空裁段——内容是裁定引用或**显式待裁句**，挡的是静默共用，不是挡未决。
+
+  **如实登记浮出的最要紧一行，留给人拍**：PS 采用链三口（final_outcome / network_intake /
+  parcel_cancellation）与 VE 四口同名同值「租户/包裹」——FanOut 之下两链信封落同一分区
+  （票 01 Comments 二实测过），而 ADR-0074 只裁了 TF×VE，PS×VE 共队是否有意**无裁定记录**。
+  三行按第二查口径带显式待裁裁段，问题原句在行内。
+
+  其余登记决定：TF 三口与 VE 四口引 ADR-0074 决定五（不再待裁）；ID 与分区键同表达式的口
+  一律登记为逐信封，并与 `allowedSameExpression` 只读互核（同表达式必为逐信封，用例机械查）；
+  PG 治理口两形（暂停/接管）皆无租户段，如实转录并注明归 PG 地盘；CC 关务案件与 VE 异常案件
+  按各自 CONTEXT 原词取名——不同主体不同名，不触发裁段，若有人认为它们是同一排队主体，
+  表已让两行同屏可审。
+
+  「它守不住什么」一节照票面要求原样进了文件头，未删未软化。突变实测三向都红（缺行、烂行、
+  静默共名），合成自测另覆盖提取器与分组逻辑；`gofmt`/`go vet`/整包 `-count=1` 全绿。落地时
+  树上含 MCP-1 的 CC 在途改动，其对 `case_closure_handoff.go` 的改动是 `CaseRef()` 返回值
+  类型强化，分区键语义不变，登记行不受影响。票转 resolved。
