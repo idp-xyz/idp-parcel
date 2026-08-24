@@ -31,6 +31,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Stamp,
+  Ticket,
   TrendingUp,
   Truck,
   UsersRound,
@@ -79,6 +80,7 @@ export const navigationSections: NavigationSection[] = [
       { id: 'shipment-request', label: '提交与撤回', icon: 'shipment-request' },
       { id: 'shipment-request-inquiry', label: '委托查阅', icon: 'shipment-request-inquiry' },
       { id: 'acceptance-review', label: '接受前人工复核', icon: 'acceptance-review' },
+      { id: 'label-transactions', label: '面单交易', icon: 'label-transactions' },
       { id: 'cancel-parcel', label: '取消与收寄后处置', icon: 'cancel-parcel' },
     ],
   },
@@ -152,6 +154,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'shipment-request': Send,
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
+  'label-transactions': Ticket,
   'cancel-parcel': PackageX,
   'party-contracts': Handshake,
   'service-products': Boxes,
@@ -216,6 +219,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '接受前人工复核',
     owner: '小包托运（parcel-shipment）',
     source: 'docs/domain/parcel-shipment/CONTEXT.md「适用规则显式要求人工业务判断」',
+  },
+  'label-transactions': {
+    title: '面单交易',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/domain/parcel-shipment/CONTEXT.md 面单交易、交易级与包裹级渠道业务结果、面单交易定案、包裹级关闭或重开请求与决定、渠道角色与责任依据快照',
   },
   'cancel-parcel': {
     title: '取消与收寄后处置',
