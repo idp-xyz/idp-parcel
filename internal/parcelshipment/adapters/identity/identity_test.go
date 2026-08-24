@@ -9,7 +9,7 @@ import (
 	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
-// mintFunc 把六个返回类型各异的签发方法收成同一形状，好让下面两条对全部六个都跑一遍。
+// mintFunc 把七个返回类型各异的签发方法收成同一形状，好让下面两条对全部七个都跑一遍。
 // 各 ID 类型的 String() 由领域侧的 requiredValue 提升而来。
 type mintFunc func(context.Context) (string, error)
 
@@ -35,6 +35,10 @@ func allMinters(t *testing.T, options ...platformidentity.Option) map[string]min
 	sourceData, err := adapter.NewSourceDataVersions(options...)
 	if err != nil {
 		t.Fatalf("构造资料版本签发器：%v", err)
+	}
+	cancellations, err := adapter.NewParcelCancellations(options...)
+	if err != nil {
+		t.Fatalf("构造取消签发器：%v", err)
 	}
 
 	return map[string]mintFunc{
@@ -62,10 +66,14 @@ func allMinters(t *testing.T, options ...platformidentity.Option) map[string]min
 			minted, err := sourceData.NextSourceDataVersionID(ctx)
 			return minted.String(), err
 		},
+		"PCXL": func(ctx context.Context) (string, error) {
+			minted, err := cancellations.NextParcelCancellationID(ctx)
+			return minted.String(), err
+		},
 	}
 }
 
-// TestEachIdentityCarriesItsOwnPrefix 钉住六个前缀互不相同。
+// TestEachIdentityCarriesItsOwnPrefix 钉住七个前缀互不相同。
 //
 // 它防的是一类抄改错误：SubmissionIdentities 内部有两个签发器，复用同一个就会让提交版本
 // 与判断任务共用一个前缀。那样编译得过、测得过身份不重，却让日志里两类标识分不开——而
@@ -109,8 +117,8 @@ func TestTwoMintsOfTheSameIdentityDiffer(t *testing.T) {
 	}
 }
 
-// TestAFailedMintIsReportedNotSubstituted 证熵源出问题时六个端口一律如实报错，不交回
-// 一个凑出来的标识。可注入熵源的全部意义就在这一支——真实熵源逼不出它。
+// TestAFailedMintIsReportedNotSubstituted 证熵源出问题时七个签发方法一律如实报错，
+// 不交回一个凑出来的标识。可注入熵源的全部意义就在这一支——真实熵源逼不出它。
 func TestAFailedMintIsReportedNotSubstituted(t *testing.T) {
 	// 只给 4 字节，签发要读满 16。
 	starved := platformidentity.WithEntropy(strings.NewReader("abcd"))

@@ -34,6 +34,9 @@ func unconfiguredEndpoints(t *testing.T) map[string]unconfiguredEndpoint {
 		"withdraw": {http.MethodPost, shipmenthttp.NewWithdrawShipmentRequestEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableWithdrawalHandler{t: t},
 		)},
+		"cancel": {http.MethodPost, shipmenthttp.NewCancelParcelEndpoint(
+			shipmenthttp.UnconfiguredIntake{}, unreachableCancellationHandler{t: t},
+		)},
 		"views": {http.MethodGet, shipmenthttp.NewQueryShipmentRequestViewsEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableViewsReader{t: t},
 		)},
@@ -148,6 +151,16 @@ func (handler unreachableWithdrawalHandler) Handle(
 ) (application.WithdrawShipmentRequestResult, error) {
 	handler.t.Fatal("a request passed the unconfigured intake and reached the orchestration")
 	return application.WithdrawShipmentRequestResult{}, nil
+}
+
+type unreachableCancellationHandler struct{ t *testing.T }
+
+func (handler unreachableCancellationHandler) Handle(
+	context.Context,
+	application.CancelParcelCommand,
+) (application.CancelParcelResult, error) {
+	handler.t.Fatal("a request passed the unconfigured intake and reached the orchestration")
+	return application.CancelParcelResult{}, nil
 }
 
 type unreachableViewsReader struct{ t *testing.T }

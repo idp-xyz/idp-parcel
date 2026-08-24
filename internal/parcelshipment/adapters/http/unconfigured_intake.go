@@ -34,6 +34,7 @@ var (
 	_ SubmissionIntake           = UnconfiguredIntake{}
 	_ WithdrawalIntake           = UnconfiguredIntake{}
 	_ ShipmentRequestViewsIntake = UnconfiguredIntake{}
+	_ CancellationIntake         = UnconfiguredIntake{}
 )
 
 // IntakeSubmission 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -44,6 +45,11 @@ func (UnconfiguredIntake) IntakeSubmission(context.Context, *http.Request) (appl
 // IntakeWithdrawal 同 IntakeSubmission：不读请求，只答未配置。
 func (UnconfiguredIntake) IntakeWithdrawal(context.Context, *http.Request) (application.WithdrawShipmentRequestCommand, error) {
 	return application.WithdrawShipmentRequestCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeCancellation 同上。
+func (UnconfiguredIntake) IntakeCancellation(context.Context, *http.Request) (application.CancelParcelCommand, error) {
+	return application.CancelParcelCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeListQuery 同上：查阅的作用域整组来自认证与授权结果，渠道未配置就无从铸造。
