@@ -185,9 +185,12 @@ func (registry *SubmissionAuthorityRegistrations) RevokeSubmissionAuthority(
 	return nil
 }
 
-// InterpretationRuleRegistrations 实现 ports.InterpretationRuleRegistry。类型上没有
-// 任何 UPDATE 语句——同层换规则改不动已登记那一行，只能交回`已登记`让编排判冲突。
-// 版本维（辖区/法定生效区间/适用时点）不在这张表上，见 ports 接口注释。
+// InterpretationRuleRegistrations 实现 ports.InterpretationRuleRegistry。登记面按
+// （租户，结果层，适用辖区，法定生效区间起）立键，区间不重叠由迁移的排他约束守着。
+//
+// 唯一的 UPDATE 是换版给开放前版落终点——与就绪/授权撤销同款的状态推进：rule_ref 与
+// applies_from 没有任何改写路径，终点只从 NULL 走到后继起点、只走一次。撞键或撞重叠
+// 都折成`已登记`交回，内容是否同一份由编排读回自己比（同其余五本册子）。
 type InterpretationRuleRegistrations struct {
 	db *bentopg.DB
 }
@@ -205,14 +208,21 @@ func (registry *InterpretationRuleRegistrations) RegisterInterpretationRule(
 	ctx context.Context,
 	tenant domain.TenantID,
 	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
 	rule domain.InterpretationRuleReference,
+	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	// 封闭六层之外的取值登记不进去，也不该悄悄写成一行：那是调用方的编程错误，与
-	// 「实例还没登记」是两回事（同读口那一句）。
+	// 「实例还没登记」是两回事（同读口那一句）。零起点同理——法定生效起点在键上，
+	// timestamptz 装得下 0001 年，缺格会静默变成一个错的版本边界。
 	layerText := layer.String()
 	if layerText == "" {
 		return ports.CaseConfigurationSaveOutcomeInvalid,
 			fmt.Errorf("register interpretation rule: unknown result layer %d", layer)
+	}
+	if appliesFrom.IsZero() {
+		return ports.CaseConfigurationSaveOutcomeInvalid,
+			fmt.Errorf("register interpretation rule: the applicable interval has no start")
 	}
 
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -220,12 +230,30 @@ func (registry *InterpretationRuleRegistrations) RegisterInterpretationRule(
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register interpretation rule: %w", err)
 	}
 
+	// 换版：给同支（租户，层，辖区）下起点更早的开放版落终点。先跑它才插得进后继——
+	// 开放区间与任何更晚起点的登记在排他约束上相斥。行锁顺带串行化同支并发换版：后到
+	// 者在锁上等到先到者提交后重评 WHERE，落不了第二次终点，其 INSERT 再被排他约束
+	// 折成`已登记`。若本次登记随后撞键落不进去，这条 UPDATE 必然没匹配过行（撞键处
+	// 已有同起点行，等于同支已有覆盖该起点的区间，开放前版与之重叠、按不重叠不变量
+	// 不可能在册），不会白改。
+	if _, err := executor.Exec(ctx,
+		`UPDATE customs_compliance.interpretation_rule
+		    SET applies_until = $4
+		  WHERE tenant_id = $1 AND result_layer = $2 AND jurisdiction_ref = $3
+		    AND applies_until IS NULL AND applies_from < $4`,
+		tenant.String(), layerText, jurisdiction.String(), appliesFrom.UTC(),
+	); err != nil {
+		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register interpretation rule: %w", err)
+	}
+
+	// 无 conflict target 的 DO NOTHING 同时吃主键撞键与排他约束撞重叠：两者都折成
+	// `已登记`，是重放还是冲突由编排读回比对。
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.interpretation_rule
-			(tenant_id, result_layer, rule_ref)
-		 VALUES ($1, $2, $3)
-		 ON CONFLICT (tenant_id, result_layer) DO NOTHING`,
-		tenant.String(), layerText, rule.String(),
+			(tenant_id, result_layer, jurisdiction_ref, applies_from, rule_ref)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT DO NOTHING`,
+		tenant.String(), layerText, jurisdiction.String(), appliesFrom.UTC(), rule.String(),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register interpretation rule: %w", err)

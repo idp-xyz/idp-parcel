@@ -241,28 +241,35 @@ func (handler *RegisterCaseConfigurationHandler) RevokeSubmissionAuthority(
 	return ConfigurationRevoked, nil
 }
 
-// RegisterInterpretationRuleCommand 携带一次解释规则登记。
+// RegisterInterpretationRuleCommand 携带一次解释规则版本登记：辖区与法定生效起点
+// 在键上（ADR-0070 问一甲），终点不是输入——它在后继版本登记时落定（换版）。
 type RegisterInterpretationRuleCommand struct {
-	TenantID domain.TenantID
-	Layer    domain.ResultLayer
-	Rule     domain.InterpretationRuleReference
+	TenantID     domain.TenantID
+	Layer        domain.ResultLayer
+	Jurisdiction domain.RegulatoryJurisdictionReference
+	Rule         domain.InterpretationRuleReference
+	AppliesFrom  time.Time
 }
 
-// RegisterInterpretationRule 登记该结果层的解释规则。
+// RegisterInterpretationRule 登记该结果层某辖区自某法定起点生效的解释规则版本。
 //
-// **同层换规则一律交回`内容冲突`，不是换版。** 册子今天一层一行，装不下按法定适用
-// 时点排开的多个版本；此处若把新规则顶上去，既有 ExternalResult 上「实际采用的规则」
-// 就会指向一份当时并未采用的规则。版本维要怎么建是另一件事，见 .scratch 里
-// cc-interpretation-rule-version-dimension 那票。
+// 写口把撞键与撞重叠都折成`已登记`，这里按**请求的生效起点**读回在册版本比对（同义务
+// 项按区间起点盘点的理由）：同规则是重放；异规则是冲突——既有 ExternalResult 上
+// 「实际采用的规则」不接受被顶替，换版走登记一个更晚起点的新版本，不走覆盖。写口说
+// 已在册、按起点却读不回版本，只可能是撞上了起点不同的既有区间（错序或追改历史），
+// 区间也是登记内容的一部分，仍是冲突不是重放。
 func (handler *RegisterCaseConfigurationHandler) RegisterInterpretationRule(
 	ctx context.Context,
 	command RegisterInterpretationRuleCommand,
 ) (CaseConfigurationOutcome, error) {
-	if blankTenant(command.TenantID) || command.Layer.String() == "" || command.Rule.String() == "" {
+	if blankTenant(command.TenantID) || command.Layer.String() == "" ||
+		strings.TrimSpace(command.Jurisdiction.String()) == "" ||
+		command.Rule.String() == "" || command.AppliesFrom.IsZero() {
 		return ConfigurationNotAccepted, nil
 	}
 
-	saved, err := handler.deps.Rules.RegisterInterpretationRule(ctx, command.TenantID, command.Layer, command.Rule)
+	saved, err := handler.deps.Rules.RegisterInterpretationRule(
+		ctx, command.TenantID, command.Layer, command.Jurisdiction, command.Rule, command.AppliesFrom)
 	if err != nil {
 		return ConfigurationUndecided, nil
 	}
@@ -270,11 +277,12 @@ func (handler *RegisterCaseConfigurationHandler) RegisterInterpretationRule(
 		return ConfigurationRegistered, nil
 	}
 
-	existing, found, err := handler.deps.RuleView.LoadInterpretationRule(ctx, command.TenantID, command.Layer)
-	if err != nil || !found {
+	existing, found, err := handler.deps.RuleView.LoadInterpretationRule(
+		ctx, command.TenantID, command.Layer, command.Jurisdiction, command.AppliesFrom)
+	if err != nil {
 		return ConfigurationUndecided, nil
 	}
-	if existing != command.Rule {
+	if !found || existing != command.Rule {
 		return ConfigurationContentConflict, nil
 	}
 	return ConfigurationExisting, nil

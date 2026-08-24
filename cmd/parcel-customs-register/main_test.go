@@ -113,17 +113,32 @@ func (book *fakeAuthorityBook) LoadSubmissionAuthority(
 	return authorization, found, nil
 }
 
+// fakeRuleBook 按版本键（租户/层/辖区/生效起点）存行。区间语义（半开解析、换版、
+// 不重叠）在应用层替身与真库用例各证过一遍，本口只证译装出的键原样到册，读口按
+// 请求起点取回即可。
 type fakeRuleBook struct {
 	byKey map[string]domain.InterpretationRuleReference
+}
+
+func ruleVersionKey(
+	tenant domain.TenantID,
+	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	instant time.Time,
+) string {
+	return tenant.String() + "/" + layer.String() + "/" + jurisdiction.String() +
+		"/" + instant.UTC().Format(time.RFC3339Nano)
 }
 
 func (book *fakeRuleBook) RegisterInterpretationRule(
 	_ context.Context,
 	tenant domain.TenantID,
 	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
 	rule domain.InterpretationRuleReference,
+	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
-	key := tenant.String() + "/" + layer.String()
+	key := ruleVersionKey(tenant, layer, jurisdiction, appliesFrom)
 	if _, exists := book.byKey[key]; exists {
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
@@ -135,8 +150,10 @@ func (book *fakeRuleBook) LoadInterpretationRule(
 	_ context.Context,
 	tenant domain.TenantID,
 	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	evaluatedAt time.Time,
 ) (domain.InterpretationRuleReference, bool, error) {
-	rule, found := book.byKey[tenant.String()+"/"+layer.String()]
+	rule, found := book.byKey[ruleVersionKey(tenant, layer, jurisdiction, evaluatedAt)]
 	return rule, found, nil
 }
 

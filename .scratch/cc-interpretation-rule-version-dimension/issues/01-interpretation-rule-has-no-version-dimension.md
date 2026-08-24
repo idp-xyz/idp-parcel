@@ -1,7 +1,7 @@
 # 解释规则登记册没有版本维，迟到的外部结果只能拿到达时点当法定适用时点
 
 Category: bug
-Status: ready-for-agent
+Status: resolved
 
 [ADR-0070](../../../docs/adr/0070-customs-rule-registries-split-recording-from-selection.md)（草案）已裁本票下方那条反向立场：它是**记录侧**的真话，答的不是硬句 191 问的选择侧问题，因此不构成本册子的许可，本票据以成立。转 `ready-for-human` 而非 `ready-for-agent`：缺的两个入参该从哪来是模型决定，不是可交给 agent 的规格。
 
@@ -83,3 +83,32 @@ CREATE TABLE customs_compliance.interpretation_rule (
   迁移加辖区与法定生效区间维并扩主键；`LoadInterpretationRule` 加评估时点与辖区两个入参；
   `receive_external_result.go` 编排按 1/2 取值并落未决格；W13 的不可覆盖登记语义在多版本
   形状下保持（同全键幂等、同键异 `rule_ref` 冲突）。
+
+- 2026-08-24 MCP-5（实现落地，转 resolved）：四个面同笔交付，全按上条实现范围。
+
+  1. **登记面**（迁移 `0011_interpretation_rule_version_dimension.sql`）：主键扩为
+     （租户，结果层，适用辖区，法定生效区间起）；`applies_until` 可空为「尚无终点」；
+     同支不重叠由 `EXCLUDE USING gist`（btree_gist，受信扩展）交付——首条登记没有可锁
+     的既有行，ADR-0056 的行锁形状在这一格接不住，故取问一甲给的另一条路。既有单版旧
+     行**拒迁不代填**：辖区与区间无从回填，迁移遇行即 RAISE 并指引经登记 CLI 重登。
+  2. **写口**：终点不是登记输入——每版以开放区间进册，登记更晚起点的新版时前版终点
+     随之落定（与就绪/授权撤销同款状态推进，`rule_ref`/`applies_from` 无改写路径）。
+     换版由此可走，正是 ADR-0070 支点第 3 步「今天做不成」的那一步。撞键与撞重叠都折
+     `已登记`，读回比对在编排：同规则重放`已存在`、异规则或按请求起点读不回（错序/
+     追改历史）`内容冲突`。登记按生效起点升序进行。
+  3. **选择面**：`LoadInterpretationRule(ctx, tenant, layer, jurisdiction, evaluatedAt)`
+     按半开区间解析（与 `LoadObligationItems` 同口径）；空辖区/零时点/词表外层一律
+     响亮报错不折「未配置」。
+  4. **接收编排**：评估时点 = `OccurredAt`，不变式落为「零值或晚于 `ReceivedAt` 即
+     `EVALUATION_INSTANT_UNTRUSTED` 未决格」（后半是因果判据：业务发生不可能晚于接收，
+     问二甲「不可信值」的最小可操作定义）；适用辖区走范围→单元（`DeclarationUnitStore.
+     FindByID`）→案件（`CustomsCaseStore.FindByID`）→ `Jurisdiction()`，链上依赖故障落
+     `CASE_CHAIN_UNAVAILABLE`、走不通落 `JURISDICTION_UNRESOLVED`，未决原因封闭集合
+     4→7。`ReceiveExternalResultDeps` 新增 `Units`/`Cases` 两依赖（装配方注意）。
+     登记 CLI `interpretation-rule` 命令加 `jurisdictionRef`/`appliesFrom` 必填格。
+
+  **验证**（2026-08-24，本机门禁容器健康）：换版真库用例单跑 `-v` PASS（非 SKIP）；
+  `go test ./internal/customscompliance/... ./cmd/parcel-customs-register/... -count=1`
+  全绿（postgres 套件 35.8s，真库实跑）；全仓 `go test ./... -count=1` 全绿——树上当时
+  混有 MCP-3 未提交的 parcelshipment 改动，提交态另在临时 worktree 复验。发作场景
+  （规则换版撞迟到响应）已由真库用例正面钉住：旧区间时点解析回旧版。

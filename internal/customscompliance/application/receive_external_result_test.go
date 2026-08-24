@@ -92,15 +92,21 @@ func (double *submissionIndexDouble) FindSubmission(
 }
 
 type ruleViewDouble struct {
-	configured bool
-	err        error
+	configured       bool
+	err              error
+	seenJurisdiction domain.RegulatoryJurisdictionReference
+	seenEvaluatedAt  time.Time
 }
 
 func (double *ruleViewDouble) LoadInterpretationRule(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	evaluatedAt time.Time,
 ) (domain.InterpretationRuleReference, bool, error) {
+	double.seenJurisdiction = jurisdiction
+	double.seenEvaluatedAt = evaluatedAt
 	if double.err != nil {
 		return domain.InterpretationRuleReference{}, false, double.err
 	}
@@ -109,6 +115,40 @@ func (double *ruleViewDouble) LoadInterpretationRule(
 	}
 	rule, err := domain.NewInterpretationRuleReference("interpretation-rule/v1")
 	return rule, true, err
+}
+
+// caseStoreDouble 与提交链共用的 unitStoreDouble（见 submit_declaration_test.go）
+// 一起支起辖区回指链：范围→单元→案件→辖区。
+type caseStoreDouble struct {
+	cases   map[string]domain.CustomsCase
+	findErr error
+}
+
+func (double *caseStoreDouble) FindByKey(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+) (domain.CustomsCase, bool, error) {
+	return domain.CustomsCase{}, false, nil
+}
+
+func (double *caseStoreDouble) FindByID(
+	_ context.Context,
+	_ domain.TenantID,
+	id domain.CustomsCaseID,
+) (domain.CustomsCase, bool, error) {
+	if double.findErr != nil {
+		return domain.CustomsCase{}, false, double.findErr
+	}
+	found, ok := double.cases[id.String()]
+	return found, ok, nil
+}
+
+func (double *caseStoreDouble) Save(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+	_ domain.CustomsCase,
+) (ports.CustomsCaseSaveOutcome, error) {
+	return ports.CustomsCaseSaved, nil
 }
 
 type resultHandoffDouble struct {
@@ -135,26 +175,71 @@ type resultFixture struct {
 	store       *resultStoreDouble
 	submissions *submissionIndexDouble
 	rules       *ruleViewDouble
+	units       *unitStoreDouble
+	cases       *caseStoreDouble
 	handoff     *resultHandoffDouble
 	handler     *application.ReceiveExternalResultHandler
 }
 
+// newResultFixture 支好整条辖区回指链：命令的范围 scope-unit-1 指名在册单元，单元
+// 属案件 case-1，案件辖区 jurisdiction-1。
 func newResultFixture(t *testing.T) *resultFixture {
 	t.Helper()
 	fixture := &resultFixture{
 		store:       newResultStore(),
 		submissions: &submissionIndexDouble{found: true},
 		rules:       &ruleViewDouble{configured: true},
-		handoff:     &resultHandoffDouble{},
+		units: &unitStoreDouble{units: map[string]domain.DeclarationUnit{
+			"tenant-1|scope-unit-1": scopedUnit(t, "scope-unit-1", "case-1"),
+		}},
+		cases: &caseStoreDouble{cases: map[string]domain.CustomsCase{
+			"case-1": jurisdictionCase(t, "case-1", "jurisdiction-1"),
+		}},
+		handoff: &resultHandoffDouble{},
 	}
 	fixture.handler = application.NewReceiveExternalResultHandler(application.ReceiveExternalResultDeps{
 		Results:     fixture.store,
 		Submissions: fixture.submissions,
 		Rules:       fixture.rules,
+		Units:       fixture.units,
+		Cases:       fixture.cases,
 		Downstream:  fixture.handoff,
 		Clock:       resultClock{at: resultRecordedAt},
 	})
 	return fixture
+}
+
+func scopedUnit(t *testing.T, unitID, caseID string) domain.DeclarationUnit {
+	t.Helper()
+	unit, err := domain.FormDeclarationUnit(
+		mustValue(t, domain.NewDeclarationUnitID, unitID),
+		mustValue(t, domain.NewCustomsCaseID, caseID),
+		mustValue(t, domain.NewCustomsProcedureReference, "procedure-1"),
+		[]domain.DeclaredParcelReference{mustValue(t, domain.NewDeclaredParcelReference, "parcel-1")},
+	)
+	if err != nil {
+		t.Fatalf("form declaration unit: %v", err)
+	}
+	return unit
+}
+
+func jurisdictionCase(t *testing.T, caseID, jurisdiction string) domain.CustomsCase {
+	t.Helper()
+	customsCase, err := domain.EstablishCustomsCase(domain.CustomsCaseSpec{
+		ID:           mustValue(t, domain.NewCustomsCaseID, caseID),
+		Jurisdiction: mustValue(t, domain.NewRegulatoryJurisdictionReference, jurisdiction),
+		Direction:    domain.ImportManifest,
+		Procedure:    mustValue(t, domain.NewCustomsProcedureReference, "procedure-1"),
+		Obligation:   mustValue(t, domain.NewObligationScopeReference, "obligation-1"),
+		Parcels: []domain.CaseParcelAssociation{{
+			Parcel: "parcel-1", Customer: "customer-1", SourceRef: "source-ref-1",
+		}},
+		EstablishedAt: resultOccurredAt.Add(-24 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("establish customs case: %v", err)
+	}
+	return customsCase
 }
 
 func mustTenant(t *testing.T) domain.TenantID {
@@ -338,6 +423,8 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 		for _, reason := range []application.ExternalResultUndecidedReason{
 			application.ResultStoreUnavailable, application.SubmissionIndexUnavailable,
 			application.InterpretationRuleUnconfigured, application.LayerFactsUnavailable,
+			application.EvaluationInstantUntrusted, application.CaseChainUnavailable,
+			application.JurisdictionUnresolved,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -345,11 +432,107 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 7 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ExternalResultUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第五个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第八个未决原因带了标签——封闭集合被悄悄放开")
+		}
+	})
+}
+
+// 规则选择侧的输入按 ADR-0070 取值：评估时点 = 业务发生或适用时间（问二甲），适用
+// 辖区 = 范围→单元→案件回指（问三甲）。任何一样取不出都显式停在未决——绝不拿消息
+// 到达时间当适用时点（硬句 191 点名禁止），也不留「当前唯一辖区」的兜底缝。
+func TestRuleSelectionInputsAreResolvedOrUndecided(t *testing.T) {
+	t.Run("the rule is resolved with the case jurisdiction at the occurrence instant", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		if _, err := fixture.handler.Handle(context.Background(), resultCommand(t, "source-1")); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if fixture.rules.seenJurisdiction.String() != "jurisdiction-1" {
+			t.Fatalf("辖区没走案件回指链: %q", fixture.rules.seenJurisdiction)
+		}
+		if !fixture.rules.seenEvaluatedAt.Equal(resultOccurredAt) {
+			t.Fatalf("评估时点 = %v, want 业务发生时间 %v", fixture.rules.seenEvaluatedAt, resultOccurredAt)
+		}
+	})
+
+	t.Run("a missing occurrence instant is undecided, never defaulted", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		command := resultCommand(t, "source-1")
+		command.OccurredAt = time.Time{}
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ResultUndecided ||
+			result.UndecidedReason() != application.EvaluationInstantUntrusted {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+		if !fixture.rules.seenEvaluatedAt.IsZero() {
+			t.Fatal("评估时点缺席时仍去选了版——兜底缝没堵住")
+		}
+	})
+
+	t.Run("an occurrence instant later than the receipt is untrusted", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		command := resultCommand(t, "source-1")
+		command.OccurredAt = command.ReceivedAt.Add(time.Minute)
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.EvaluationInstantUntrusted {
+			t.Fatalf("reason = %q", result.UndecidedReason())
+		}
+	})
+
+	t.Run("a scope naming no persisted unit leaves the jurisdiction unresolved", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		command := resultCommand(t, "source-1")
+		command.Scope = "scope-unknown"
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ResultUndecided ||
+			result.UndecidedReason() != application.JurisdictionUnresolved {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("a unit whose case is not persisted leaves the jurisdiction unresolved", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		delete(fixture.cases.cases, "case-1")
+		result, err := fixture.handler.Handle(context.Background(), resultCommand(t, "source-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.JurisdictionUnresolved {
+			t.Fatalf("reason = %q", result.UndecidedReason())
+		}
+	})
+
+	t.Run("a chain store failure is undecided with its own reason", func(t *testing.T) {
+		fixture := newResultFixture(t)
+		fixture.units.findErr = errors.New("unit store down")
+		result, err := fixture.handler.Handle(context.Background(), resultCommand(t, "source-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.CaseChainUnavailable {
+			t.Fatalf("reason = %q", result.UndecidedReason())
+		}
+
+		fixture = newResultFixture(t)
+		fixture.cases.findErr = errors.New("case store down")
+		result, err = fixture.handler.Handle(context.Background(), resultCommand(t, "source-1"))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.UndecidedReason() != application.CaseChainUnavailable {
+			t.Fatalf("reason = %q", result.UndecidedReason())
 		}
 	})
 }

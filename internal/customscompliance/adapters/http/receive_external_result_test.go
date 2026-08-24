@@ -83,12 +83,102 @@ func (double *interpretationRuleDouble) LoadInterpretationRule(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.ResultLayer,
+	_ domain.RegulatoryJurisdictionReference,
+	_ time.Time,
 ) (domain.InterpretationRuleReference, bool, error) {
 	if !double.configured {
 		return domain.InterpretationRuleReference{}, false, nil
 	}
 	rule, err := domain.NewInterpretationRuleReference("INTERPRET/US-IMPORT/receipt-v1")
 	return rule, true, err
+}
+
+// unitStoreDouble 与 caseStoreDouble 支起辖区回指链（范围→单元→案件），命令的范围
+// declaration-unit-1 由此解析到带辖区的案件。
+type unitStoreDouble struct{}
+
+func (unitStoreDouble) Save(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.DeclarationUnit,
+	_ time.Time,
+) (ports.DeclarationUnitSaveOutcome, error) {
+	return ports.DeclarationUnitSaved, nil
+}
+
+func (unitStoreDouble) FindByID(
+	_ context.Context,
+	_ domain.TenantID,
+	unitID domain.DeclarationUnitID,
+) (domain.DeclarationUnit, bool, error) {
+	caseID, err := domain.NewCustomsCaseID("case-1")
+	if err != nil {
+		return domain.DeclarationUnit{}, false, err
+	}
+	procedure, err := domain.NewCustomsProcedureReference("procedure-1")
+	if err != nil {
+		return domain.DeclarationUnit{}, false, err
+	}
+	parcel, err := domain.NewDeclaredParcelReference("parcel-1")
+	if err != nil {
+		return domain.DeclarationUnit{}, false, err
+	}
+	unit, err := domain.FormDeclarationUnit(unitID, caseID, procedure, []domain.DeclaredParcelReference{parcel})
+	if err != nil {
+		return domain.DeclarationUnit{}, false, err
+	}
+	return unit, true, nil
+}
+
+type caseStoreDouble struct{}
+
+func (caseStoreDouble) FindByKey(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+) (domain.CustomsCase, bool, error) {
+	return domain.CustomsCase{}, false, nil
+}
+
+func (caseStoreDouble) FindByID(
+	_ context.Context,
+	_ domain.TenantID,
+	caseID domain.CustomsCaseID,
+) (domain.CustomsCase, bool, error) {
+	jurisdiction, err := domain.NewRegulatoryJurisdictionReference("jurisdiction-1")
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	procedure, err := domain.NewCustomsProcedureReference("procedure-1")
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	obligation, err := domain.NewObligationScopeReference("obligation-1")
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	customsCase, err := domain.EstablishCustomsCase(domain.CustomsCaseSpec{
+		ID:           caseID,
+		Jurisdiction: jurisdiction,
+		Direction:    domain.ImportManifest,
+		Procedure:    procedure,
+		Obligation:   obligation,
+		Parcels: []domain.CaseParcelAssociation{{
+			Parcel: "parcel-1", Customer: "customer-1", SourceRef: "source-ref-1",
+		}},
+		EstablishedAt: endpointAt.Add(-24 * time.Hour),
+	})
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	return customsCase, true, nil
+}
+
+func (caseStoreDouble) Save(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+	_ domain.CustomsCase,
+) (ports.CustomsCaseSaveOutcome, error) {
+	return ports.CustomsCaseSaved, nil
 }
 
 type resultDownstreamDouble struct{}
@@ -110,6 +200,8 @@ func realResultHandler(t *testing.T, configured bool) *application.ReceiveExtern
 		Results:     &resultStoreDouble{byKey: map[ports.ExternalResultKey]ports.ExternalResultRecord{}},
 		Submissions: &submissionIndexDouble{found: true},
 		Rules:       &interpretationRuleDouble{configured: configured},
+		Units:       unitStoreDouble{},
+		Cases:       caseStoreDouble{},
 		Downstream:  &resultDownstreamDouble{},
 		Clock:       endpointClock{},
 	})

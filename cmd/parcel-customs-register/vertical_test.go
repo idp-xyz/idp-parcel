@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -11,6 +12,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
+
+func mustInstant(t *testing.T, value string) time.Time {
+	t.Helper()
+	instant, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatalf("解析时刻 %q：%v", value, err)
+	}
+	return instant
+}
 
 // 本文件对真实 PostgreSQL 16 证 buildRegistrar 装配的整条登记链（隔离合成 S）：六本
 // 册子各自贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，撤销走状态推进
@@ -93,15 +103,32 @@ func TestCustomsRegisterVerticalOnRealPostgres(t *testing.T) {
 	}`
 	mustExecute(commandAuthorityRevoke, authorityRevoke, exitRegistered, "REVOKED")
 
-	// 解释规则：单版登记，同层换规则是冲突不是换版。
-	rule := func(ref string) string {
+	// 解释规则：按（辖区，法定生效起点）登记版本；同键重放是已存在、换规则是冲突；
+	// 换版是登记更晚起点的新版，旧区间的评估时点仍解析回旧版（ADR-0070 支点场景）。
+	rule := func(ref, appliesFrom string) string {
 		return `{
-			"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT", "ruleRef": "` + ref + `"
+			"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT",
+			"jurisdictionRef": "SYN-JURIS-DE",
+			"ruleRef": "` + ref + `", "appliesFrom": "` + appliesFrom + `"
 		}`
 	}
-	mustExecute(commandInterpretationRule, rule("SYN-RULE-1"), exitRegistered, "REGISTERED")
-	mustExecute(commandInterpretationRule, rule("SYN-RULE-1"), exitRegistered, "EXISTING")
-	mustExecute(commandInterpretationRule, rule("SYN-RULE-2"), exitConflict, "CONTENT_CONFLICT")
+	mustExecute(commandInterpretationRule, rule("SYN-RULE-1", "2026-08-01T00:00:00Z"), exitRegistered, "REGISTERED")
+	mustExecute(commandInterpretationRule, rule("SYN-RULE-1", "2026-08-01T00:00:00Z"), exitRegistered, "EXISTING")
+	mustExecute(commandInterpretationRule, rule("SYN-RULE-2", "2026-08-01T00:00:00Z"), exitConflict, "CONTENT_CONFLICT")
+	mustExecute(commandInterpretationRule, rule("SYN-RULE-2", "2026-08-20T00:00:00Z"), exitRegistered, "REGISTERED")
+	ruleView, err := adapter.NewInterpretationRuleView(db)
+	if err != nil {
+		t.Fatalf("构造解释规则读口：%v", err)
+	}
+	jurisdiction, err := domain.NewRegulatoryJurisdictionReference("SYN-JURIS-DE")
+	if err != nil {
+		t.Fatalf("构造辖区引用：%v", err)
+	}
+	earlyRule, foundEarly, err := ruleView.LoadInterpretationRule(ctx, tenant,
+		domain.ReleaseResultLayer, jurisdiction, mustInstant(t, "2026-08-10T00:00:00Z"))
+	if err != nil || !foundEarly || earlyRule.String() != "SYN-RULE-1" {
+		t.Fatalf("换版后旧区间时点没解析回旧版：err=%v found=%v rule=%s", err, foundEarly, earlyRule)
+	}
 
 	// 义务：目录先行，明细带区间；同项换区间是冲突；无目录的明细撞外键防线答未决。
 	catalog := `{

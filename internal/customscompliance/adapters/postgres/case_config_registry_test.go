@@ -356,60 +356,157 @@ func newInterpretationRuleRegistry(t *testing.T) (*adapter.InterpretationRuleReg
 	return registry, view, fixture
 }
 
-// 解释规则的写口没有任何 UPDATE：同层换规则交回`已登记`，库里仍是原规则。版本维缺席
-// 时这是唯一诚实的做法——顶替会让既有 ExternalResult 上「实际采用的规则」失去依据。
-func TestRegisteringAnotherRuleForTheSameLayerNeverReplacesTheFirst(t *testing.T) {
-	registry, view, fixture := newInterpretationRuleRegistry(t)
-	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
+// registerRule 是解释规则登记的短手：同支四键常量在每个用例里重复太吵。
+func registerRule(
+	t *testing.T,
+	fixture *viewFixture,
+	registry *adapter.InterpretationRuleRegistrations,
+	rule string,
+	appliesFrom time.Time,
+) (ports.CaseConfigurationSaveOutcome, error) {
+	t.Helper()
+	return register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return registry.RegisterInterpretationRule(ctx,
+			viewValue(t, domain.NewTenantID, "tenant-a"), domain.ReleaseResultLayer,
+			viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/DE"),
+			viewValue(t, domain.NewInterpretationRuleReference, rule), appliesFrom)
+	})
+}
 
-	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterInterpretationRule(ctx, tenant, domain.ReleaseResultLayer,
-			viewValue(t, domain.NewInterpretationRuleReference, "interpret/release/v1"))
-	}); err != nil {
+func loadRuleAt(
+	t *testing.T,
+	view *adapter.InterpretationRuleView,
+	evaluatedAt time.Time,
+) (domain.InterpretationRuleReference, bool, error) {
+	t.Helper()
+	return view.LoadInterpretationRule(t.Context(),
+		viewValue(t, domain.NewTenantID, "tenant-a"), domain.ReleaseResultLayer,
+		viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/DE"), evaluatedAt)
+}
+
+// 同键（同支同起点）换规则交回`已登记`，库里仍是原规则——顶替会让既有 ExternalResult
+// 上「实际采用的规则」失去依据。多版本形状下 W13 的不可覆盖语义原样保持。
+func TestRegisteringAnotherRuleAtTheSameStartNeverReplacesTheFirst(t *testing.T) {
+	registry, view, fixture := newInterpretationRuleRegistry(t)
+
+	if _, err := registerRule(t, fixture, registry, "interpret/release/v1", registryBaseAt); err != nil {
 		t.Fatalf("首次登记：%v", err)
 	}
-	outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterInterpretationRule(ctx, tenant, domain.ReleaseResultLayer,
-			viewValue(t, domain.NewInterpretationRuleReference, "interpret/release/v2"))
-	})
+	outcome, err := registerRule(t, fixture, registry, "interpret/release/v2", registryBaseAt)
 	if err != nil {
 		t.Fatalf("二次登记：%v", err)
 	}
 	if outcome != ports.CaseConfigurationAlreadyRegistered {
-		t.Fatalf("同层换规则该交回`已登记`由编排判冲突，得到 %v", outcome)
+		t.Fatalf("同键换规则该交回`已登记`由编排判冲突，得到 %v", outcome)
 	}
 
-	rule, found, err := view.LoadInterpretationRule(t.Context(), tenant, domain.ReleaseResultLayer)
+	rule, found, err := loadRuleAt(t, view, registryBaseAt)
 	if err != nil || !found || rule.String() != "interpret/release/v1" {
 		t.Fatalf("原规则被顶替：err=%v found=%v rule=%s", err, found, rule)
 	}
 }
 
-// 分层保存在写口这一侧的样子：登了放行层不等于登了处置层。
-func TestRegisteringOneLayerLeavesAnotherUnconfigured(t *testing.T) {
+// 换版（ADR-0070 支点场景的登记半边）：登记更晚起点的新版给开放前版落终点。前版的
+// 规则与起点原样留在行内，只有终点从 NULL 走到后继起点——按业务发生时间落在旧区间的
+// 迟到响应仍解析回旧版，绝不是到达时刻的当前指针。
+func TestSupersedingClosesThePredecessorAndOldInstantsResolveTheOldRule(t *testing.T) {
 	registry, view, fixture := newInterpretationRuleRegistry(t)
-	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
+	successionAt := registryBaseAt.Add(48 * time.Hour)
 
-	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterInterpretationRule(ctx, tenant, domain.ReleaseResultLayer,
-			viewValue(t, domain.NewInterpretationRuleReference, "interpret/release/v1"))
-	}); err != nil {
-		t.Fatalf("登记：%v", err)
+	if _, err := registerRule(t, fixture, registry, "interpret/release/v1", registryBaseAt); err != nil {
+		t.Fatalf("登记 v1：%v", err)
 	}
-	if _, found, err := view.LoadInterpretationRule(t.Context(), tenant, domain.DispositionDecisionLayer); err != nil || found {
-		t.Fatalf("处置层被放行层的登记顺带配上了：err=%v found=%v", err, found)
+	outcome, err := registerRule(t, fixture, registry, "interpret/release/v2", successionAt)
+	if err != nil || outcome != ports.CaseConfigurationRegistered {
+		t.Fatalf("换版该是新登记：err=%v outcome=%v", err, outcome)
+	}
+
+	early, foundEarly, err := loadRuleAt(t, view, registryBaseAt.Add(time.Hour))
+	if err != nil || !foundEarly || early.String() != "interpret/release/v1" {
+		t.Fatalf("旧区间时点没解析回 v1：err=%v found=%v rule=%s", err, foundEarly, early)
+	}
+	late, foundLate, err := loadRuleAt(t, view, successionAt)
+	if err != nil || !foundLate || late.String() != "interpret/release/v2" {
+		t.Fatalf("换版起点没解析到 v2：err=%v found=%v rule=%s", err, foundLate, late)
+	}
+
+	// 前版行上只有终点动了：规则与起点原样，终点恰为后继起点（状态推进，不是覆盖）。
+	var storedRule string
+	var appliesUntil time.Time
+	if err := fixture.pool.QueryRow(t.Context(),
+		`SELECT rule_ref, applies_until FROM customs_compliance.interpretation_rule
+		  WHERE tenant_id = 'tenant-a' AND result_layer = 'RELEASE_RESULT'
+		    AND jurisdiction_ref = 'JURIS/DE' AND applies_from = $1`,
+		registryBaseAt).Scan(&storedRule, &appliesUntil); err != nil {
+		t.Fatalf("读前版行：%v", err)
+	}
+	if storedRule != "interpret/release/v1" || !appliesUntil.Equal(successionAt) {
+		t.Fatalf("前版行走样：rule=%s until=%s", storedRule, appliesUntil)
 	}
 }
 
-// 封闭六层之外的层不静默写成一行：那是调用方的编程错误，与「实例还没登记」两回事。
-func TestRegisteringAnUnknownResultLayerIsLoud(t *testing.T) {
+// 起点早于既有版本覆盖面的开放登记撞上排他约束：交回`已登记`且一行未写——历史区间
+// 是已记录的选择依据，不接受被一次错序登记追改。
+func TestABackdatedOpenRegistrationIsHeldByTheOverlapGuard(t *testing.T) {
+	registry, view, fixture := newInterpretationRuleRegistry(t)
+
+	if _, err := registerRule(t, fixture, registry, "interpret/release/v2", registryBaseAt); err != nil {
+		t.Fatalf("登记 v2：%v", err)
+	}
+	outcome, err := registerRule(t, fixture, registry, "interpret/release/v1",
+		registryBaseAt.Add(-48*time.Hour))
+	if err != nil {
+		t.Fatalf("错序登记：%v", err)
+	}
+	if outcome != ports.CaseConfigurationAlreadyRegistered {
+		t.Fatalf("错序登记该被重叠约束折成`已登记`，得到 %v", outcome)
+	}
+	// 按请求起点读不回任何版本——编排据此判冲突，而不是把错序静默读成重放。
+	if _, found, err := loadRuleAt(t, view, registryBaseAt.Add(-48*time.Hour)); err != nil || found {
+		t.Fatalf("错序登记竟然可解析：err=%v found=%v", err, found)
+	}
+}
+
+// 分层保存在写口这一侧的样子：登了放行层不等于登了处置层；辖区维同理——JURIS/DE 的
+// 版本不替 JURIS/US 作答（多辖区租户正是版本维要接住的那半发作面）。
+func TestRegistrationsDoNotAnswerAcrossLayersOrJurisdictions(t *testing.T) {
+	registry, view, fixture := newInterpretationRuleRegistry(t)
+	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
+
+	if _, err := registerRule(t, fixture, registry, "interpret/release/v1", registryBaseAt); err != nil {
+		t.Fatalf("登记：%v", err)
+	}
+	if _, found, err := view.LoadInterpretationRule(t.Context(), tenant, domain.DispositionDecisionLayer,
+		viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/DE"),
+		registryBaseAt.Add(time.Hour)); err != nil || found {
+		t.Fatalf("处置层被放行层的登记顺带配上了：err=%v found=%v", err, found)
+	}
+	if _, found, err := view.LoadInterpretationRule(t.Context(), tenant, domain.ReleaseResultLayer,
+		viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/US"),
+		registryBaseAt.Add(time.Hour)); err != nil || found {
+		t.Fatalf("另一辖区被顺带配上了：err=%v found=%v", err, found)
+	}
+}
+
+// 封闭六层之外的层与零值生效起点都不静默写成一行：那是调用方的编程错误，与「实例还
+// 没登记」两回事。
+func TestRegisteringAnUnknownLayerOrZeroStartIsLoud(t *testing.T) {
 	registry, _, fixture := newInterpretationRuleRegistry(t)
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 		return registry.RegisterInterpretationRule(ctx,
 			viewValue(t, domain.NewTenantID, "tenant-a"), domain.ResultLayerInvalid,
-			viewValue(t, domain.NewInterpretationRuleReference, "interpret/x"))
+			viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/DE"),
+			viewValue(t, domain.NewInterpretationRuleReference, "interpret/x"), registryBaseAt)
 	}); err == nil {
 		t.Fatal("非法结果层被静默登记")
+	}
+	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return registry.RegisterInterpretationRule(ctx,
+			viewValue(t, domain.NewTenantID, "tenant-a"), domain.ReleaseResultLayer,
+			viewValue(t, domain.NewRegulatoryJurisdictionReference, "JURIS/DE"),
+			viewValue(t, domain.NewInterpretationRuleReference, "interpret/x"), time.Time{})
+	}); err == nil {
+		t.Fatal("零值生效起点被静默登记")
 	}
 }
 

@@ -258,44 +258,87 @@ func TestARevocationBeforeTheJudgmentIsNotAccepted(t *testing.T) {
 	}
 }
 
+// ruleVersionRow 是替身里的一版解释规则：终点零值即「尚无终点」。
+type ruleVersionRow struct {
+	rule  domain.InterpretationRuleReference
+	from  time.Time
+	until time.Time
+}
+
+// ruleStoreDouble 按真写口的版本化语义行事：同支同起点撞键与撞重叠都折成`已登记`；
+// 后继登记给开放前版落终点（换版）。读口按半开区间解析。
 type ruleStoreDouble struct {
-	rows map[string]domain.InterpretationRuleReference
+	rows map[string][]ruleVersionRow
 }
 
 func newRuleStore() *ruleStoreDouble {
-	return &ruleStoreDouble{rows: map[string]domain.InterpretationRuleReference{}}
+	return &ruleStoreDouble{rows: map[string][]ruleVersionRow{}}
+}
+
+func ruleLineage(tenant domain.TenantID, layer domain.ResultLayer, jurisdiction domain.RegulatoryJurisdictionReference) string {
+	return tenant.String() + "|" + layer.String() + "|" + jurisdiction.String()
 }
 
 func (double *ruleStoreDouble) RegisterInterpretationRule(
-	_ context.Context, tenant domain.TenantID, layer domain.ResultLayer, rule domain.InterpretationRuleReference,
+	_ context.Context,
+	tenant domain.TenantID,
+	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	rule domain.InterpretationRuleReference,
+	appliesFrom time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
-	key := tenant.String() + "|" + layer.String()
-	if _, exists := double.rows[key]; exists {
-		return ports.CaseConfigurationAlreadyRegistered, nil
+	lineage := ruleLineage(tenant, layer, jurisdiction)
+	rows := double.rows[lineage]
+	predecessor := -1
+	for index, row := range rows {
+		if row.from.Equal(appliesFrom) {
+			return ports.CaseConfigurationAlreadyRegistered, nil
+		}
+		if row.until.IsZero() && row.from.Before(appliesFrom) {
+			predecessor = index
+			continue
+		}
+		// 候选以开放区间进册：与任何终点晚于其起点的既有行重叠。
+		if row.until.IsZero() || row.until.After(appliesFrom) {
+			return ports.CaseConfigurationAlreadyRegistered, nil
+		}
 	}
-	double.rows[key] = rule
+	if predecessor >= 0 {
+		rows[predecessor].until = appliesFrom
+	}
+	double.rows[lineage] = append(rows, ruleVersionRow{rule: rule, from: appliesFrom})
 	return ports.CaseConfigurationRegistered, nil
 }
 
 func (double *ruleStoreDouble) LoadInterpretationRule(
-	_ context.Context, tenant domain.TenantID, layer domain.ResultLayer,
+	_ context.Context,
+	tenant domain.TenantID,
+	layer domain.ResultLayer,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	evaluatedAt time.Time,
 ) (domain.InterpretationRuleReference, bool, error) {
-	rule, found := double.rows[tenant.String()+"|"+layer.String()]
-	return rule, found, nil
+	for _, row := range double.rows[ruleLineage(tenant, layer, jurisdiction)] {
+		if !row.from.After(evaluatedAt) && (row.until.IsZero() || row.until.After(evaluatedAt)) {
+			return row.rule, true, nil
+		}
+	}
+	return domain.InterpretationRuleReference{}, false, nil
 }
 
 func ruleCommand(t *testing.T, layer domain.ResultLayer, rule string) application.RegisterInterpretationRuleCommand {
 	t.Helper()
 	return application.RegisterInterpretationRuleCommand{
-		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		Layer:    layer,
-		Rule:     configValue(t, domain.NewInterpretationRuleReference, rule),
+		TenantID:     configValue(t, domain.NewTenantID, "tenant-a"),
+		Layer:        layer,
+		Jurisdiction: configValue(t, domain.NewRegulatoryJurisdictionReference, "jurisdiction-1"),
+		Rule:         configValue(t, domain.NewInterpretationRuleReference, rule),
+		AppliesFrom:  configBaseAt,
 	}
 }
 
-// 同层换规则是冲突，**不是换版**。册子一层一行装不下按适用时点排开的多版；顶替会让
-// 既有 ExternalResult 上「实际采用的规则」指向一份当时并未采用的规则。
-func TestRegisteringAnotherRuleForTheSameLayerIsAConflictNotASupersede(t *testing.T) {
+// 同键（同支同起点）换规则是冲突，不是覆盖：既有 ExternalResult 上「实际采用的规则」
+// 不接受被顶替。换版走登记更晚起点的新版本，见下一个用例。
+func TestRegisteringAnotherRuleAtTheSameStartIsAConflictNotAnOverwrite(t *testing.T) {
 	store := newRuleStore()
 	handler := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
 		Rules: store, RuleView: store,
@@ -308,11 +351,12 @@ func TestRegisteringAnotherRuleForTheSameLayerIsAConflictNotASupersede(t *testin
 	outcome, err := handler.RegisterInterpretationRule(t.Context(),
 		ruleCommand(t, domain.ReleaseResultLayer, "interpret/release/v2"))
 	if err != nil || outcome != application.ConfigurationContentConflict {
-		t.Fatalf("同层换规则该是`内容冲突`：err=%v outcome=%v", err, outcome)
+		t.Fatalf("同键换规则该是`内容冲突`：err=%v outcome=%v", err, outcome)
 	}
 
 	stored, _, err := store.LoadInterpretationRule(t.Context(),
-		configValue(t, domain.NewTenantID, "tenant-a"), domain.ReleaseResultLayer)
+		configValue(t, domain.NewTenantID, "tenant-a"), domain.ReleaseResultLayer,
+		configValue(t, domain.NewRegulatoryJurisdictionReference, "jurisdiction-1"), configBaseAt)
 	if err != nil {
 		t.Fatalf("读回：%v", err)
 	}
@@ -334,6 +378,59 @@ func TestRegisteringTheSameRuleAgainIsExisting(t *testing.T) {
 	outcome, err := handler.RegisterInterpretationRule(t.Context(), command)
 	if err != nil || outcome != application.ConfigurationExisting {
 		t.Fatalf("重放该是`已存在`：err=%v outcome=%v", err, outcome)
+	}
+}
+
+// ADR-0070 支点场景的登记半边：换版是登记一个更晚起点的新版本，前版终点随之落定。
+// 之后按业务发生时间解析，落在旧区间的迟到响应取回旧版——不是到达时刻的当前指针。
+func TestSupersedingRegistersANewVersionAndOldInstantsStillResolveTheOldRule(t *testing.T) {
+	store := newRuleStore()
+	handler := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
+		Rules: store, RuleView: store,
+	})
+	tenant := configValue(t, domain.NewTenantID, "tenant-a")
+	jurisdiction := configValue(t, domain.NewRegulatoryJurisdictionReference, "jurisdiction-1")
+
+	if _, err := handler.RegisterInterpretationRule(t.Context(),
+		ruleCommand(t, domain.ReleaseResultLayer, "interpret/release/v1")); err != nil {
+		t.Fatalf("登记 v1：%v", err)
+	}
+	succession := ruleCommand(t, domain.ReleaseResultLayer, "interpret/release/v2")
+	succession.AppliesFrom = configBaseAt.Add(48 * time.Hour)
+	outcome, err := handler.RegisterInterpretationRule(t.Context(), succession)
+	if err != nil || outcome != application.ConfigurationRegistered {
+		t.Fatalf("换版该是新登记：err=%v outcome=%v", err, outcome)
+	}
+
+	early, foundEarly, err := store.LoadInterpretationRule(t.Context(),
+		tenant, domain.ReleaseResultLayer, jurisdiction, configBaseAt.Add(time.Hour))
+	if err != nil || !foundEarly || early.String() != "interpret/release/v1" {
+		t.Fatalf("旧区间的时点没解析回 v1：err=%v found=%v rule=%s", err, foundEarly, early)
+	}
+	late, foundLate, err := store.LoadInterpretationRule(t.Context(),
+		tenant, domain.ReleaseResultLayer, jurisdiction, configBaseAt.Add(72*time.Hour))
+	if err != nil || !foundLate || late.String() != "interpret/release/v2" {
+		t.Fatalf("新区间的时点没解析到 v2：err=%v found=%v rule=%s", err, foundLate, late)
+	}
+}
+
+// 起点早于既有开放版的登记是对历史区间的追改：写口折成`已登记`、按请求起点读不回
+// 版本，编排判冲突——登记按生效起点升序进行，错序不静默落成任何一版。
+func TestABackdatedOpenRegistrationIsAConflictNotAQuietBackfill(t *testing.T) {
+	store := newRuleStore()
+	handler := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
+		Rules: store, RuleView: store,
+	})
+
+	if _, err := handler.RegisterInterpretationRule(t.Context(),
+		ruleCommand(t, domain.ReleaseResultLayer, "interpret/release/v2")); err != nil {
+		t.Fatalf("登记 v2：%v", err)
+	}
+	backdated := ruleCommand(t, domain.ReleaseResultLayer, "interpret/release/v1")
+	backdated.AppliesFrom = configBaseAt.Add(-48 * time.Hour)
+	outcome, err := handler.RegisterInterpretationRule(t.Context(), backdated)
+	if err != nil || outcome != application.ConfigurationContentConflict {
+		t.Fatalf("错序登记该是`内容冲突`：err=%v outcome=%v", err, outcome)
 	}
 }
 

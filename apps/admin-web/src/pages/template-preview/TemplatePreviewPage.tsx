@@ -135,7 +135,17 @@ export function TemplatePreviewPage() {
           onRetry: () => setStateKind('ready'),
         };
       case 'unconfigured':
-        return { kind: 'unconfigured', description: '演示未配置态：接入渠道尚未配置。' };
+        // facts 三段式的演示值：让验收者看到结构化事实区的长相；
+        // 真实页面的三段取 moduleInfoById 与各自闸门，不抄这里的演示文案。
+        return {
+          kind: 'unconfigured',
+          description: '演示未配置态：接入渠道尚未配置。',
+          facts: {
+            owner: '演示上下文（synthetic-demo）',
+            source: '本页为模板验收页，无业务出处',
+            unlock: '真实页面的放行条件由各自准入闸门决定',
+          },
+        };
     }
   }, [stateKind]);
 

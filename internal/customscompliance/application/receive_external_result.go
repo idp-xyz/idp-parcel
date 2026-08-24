@@ -55,7 +55,8 @@ func (outcome ExternalResultOutcome) String() string {
 }
 
 // ExternalResultUndecidedReason 指名提交停在哪一步等谁。解释规则未配置是实例半边的
-// 一格——不用默认口径猜监管语义。
+// 一格——不用默认口径猜监管语义。评估时点不可信与辖区解析不出是规则选择侧的两格
+// （ADR-0070）：选不出该用哪版规则时停在未决，绝不拿当前指针兜底。
 type ExternalResultUndecidedReason uint8
 
 const (
@@ -64,6 +65,9 @@ const (
 	SubmissionIndexUnavailable
 	InterpretationRuleUnconfigured
 	LayerFactsUnavailable
+	EvaluationInstantUntrusted
+	CaseChainUnavailable
+	JurisdictionUnresolved
 )
 
 func (reason ExternalResultUndecidedReason) String() string {
@@ -76,6 +80,12 @@ func (reason ExternalResultUndecidedReason) String() string {
 		return "INTERPRETATION_RULE_UNCONFIGURED"
 	case LayerFactsUnavailable:
 		return "LAYER_FACTS_UNAVAILABLE"
+	case EvaluationInstantUntrusted:
+		return "EVALUATION_INSTANT_UNTRUSTED"
+	case CaseChainUnavailable:
+		return "CASE_CHAIN_UNAVAILABLE"
+	case JurisdictionUnresolved:
+		return "JURISDICTION_UNRESOLVED"
 	default:
 		return ""
 	}
@@ -126,10 +136,14 @@ func (result ReceiveExternalResultResult) ResultHandoffReference() string {
 	return result.handoff
 }
 
+// ReceiveExternalResultDeps 的 Units 与 Cases 只为辖区回指链服务（范围→单元→案件）：
+// 规则选择要的适用辖区在案件本体上，不在外部结果这条链的任何自报字段里。
 type ReceiveExternalResultDeps struct {
 	Results     ports.ExternalResultStore
 	Submissions ports.SubmissionIndex
 	Rules       ports.InterpretationRuleView
+	Units       ports.DeclarationUnitStore
+	Cases       ports.CustomsCaseStore
 	Downstream  ports.ExternalResultHandoff
 	Clock       ports.Clock
 }
@@ -143,8 +157,9 @@ func NewReceiveExternalResultHandler(deps ReceiveExternalResultDeps) *ReceiveExt
 }
 
 // Handle 把一条外部监管响应推进到分层事实：幂等/冲突按内容指纹分界 → 关联原提交
-// （找不到→留存不猜）→ 解释规则未配置→未决 → 领域解释与同层一致性（冲突留存双方）
-// → 原子提交 → 发布意图。意图投递失败不翻结果，重放重发同一份。
+// （找不到→留存不猜）→ 评估时点与适用辖区（取不出→未决）→ 按时点与辖区解析解释
+// 规则版本（未配置→未决）→ 领域解释与同层一致性（冲突留存双方）→ 原子提交 →
+// 发布意图。意图投递失败不翻结果，重放重发同一份。
 func (handler *ReceiveExternalResultHandler) Handle(
 	ctx context.Context,
 	command ReceiveExternalResultCommand,
@@ -193,12 +208,50 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		return handler.commit(ctx, record, ResultUnattributable)
 	}
 
-	rule, configured, err := handler.deps.Rules.LoadInterpretationRule(ctx, command.TenantID, command.Layer)
+	// 评估时点 = 业务发生或适用时间（ADR-0070 问二甲）。来源未给出（零值）或给出因果
+	// 上立不住的值（业务发生晚于接收）即显式未决——绝不改拿消息到达或系统当前时间
+	// 顶替，那正是硬句 191 点名禁止的替代，当前指针册子的缺陷不能原样藏进版本化册子。
+	if command.OccurredAt.IsZero() ||
+		(!command.ReceivedAt.IsZero() && command.OccurredAt.After(command.ReceivedAt)) {
+		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: EvaluationInstantUntrusted,
+			continuation: resultContinuation("EVALUATION_INSTANT_UNTRUSTED", command.SourceID)}, nil
+	}
+
+	// 适用辖区从外部结果回指案件取（ADR-0070 问三甲）：结果范围指名申报单元，单元持有
+	// 其案件（ADR-0073），辖区在案件本体上。链上读不回是依赖故障，走不通（范围不指名
+	// 在册单元、单元的案件不在册）是解析不出——两格续办动作不同，分开。单辖区租户下
+	// 辖区也必须来自这条链，不留「当前唯一辖区」的兜底缝（问三丙的错法）。
+	unitID, err := domain.NewDeclarationUnitID(command.Scope)
+	if err != nil {
+		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+	}
+	unit, unitFound, err := handler.deps.Units.FindByID(ctx, command.TenantID, unitID)
+	if err != nil {
+		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: CaseChainUnavailable,
+			continuation: resultContinuation("CASE_CHAIN_UNAVAILABLE", command.SourceID)}, nil
+	}
+	if !unitFound {
+		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: JurisdictionUnresolved,
+			continuation: resultContinuation("JURISDICTION_UNRESOLVED", command.SourceID)}, nil
+	}
+	customsCase, caseFound, err := handler.deps.Cases.FindByID(ctx, command.TenantID, unit.Case())
+	if err != nil {
+		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: CaseChainUnavailable,
+			continuation: resultContinuation("CASE_CHAIN_UNAVAILABLE", command.SourceID)}, nil
+	}
+	if !caseFound {
+		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: JurisdictionUnresolved,
+			continuation: resultContinuation("JURISDICTION_UNRESOLVED", command.SourceID)}, nil
+	}
+
+	rule, configured, err := handler.deps.Rules.LoadInterpretationRule(
+		ctx, command.TenantID, command.Layer, customsCase.Jurisdiction(), command.OccurredAt)
 	if err != nil {
 		return resultStoreUndecided(command.SourceID), nil
 	}
 	if !configured {
-		// 解释规则是实例半边：未配置时解释停在未决，不用默认口径猜监管语义。
+		// 解释规则是实例半边：该辖区该层在该评估时点无已登记版本即停在未决，不用默认
+		// 口径猜监管语义。
 		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: InterpretationRuleUnconfigured,
 			continuation: resultContinuation("INTERPRETATION_RULE_UNCONFIGURED", command.SourceID)}, nil
 	}

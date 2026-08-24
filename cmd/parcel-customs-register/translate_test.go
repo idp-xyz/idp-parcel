@@ -45,7 +45,9 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 			"authorityRef": "authority-1", "grantedAt": "2026-08-24T01:00:00Z"
 		}`,
 		commandInterpretationRule: `{
-			"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT", "ruleRef": " "
+			"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT",
+			"jurisdictionRef": "SYN-JURIS-DE", "ruleRef": " ",
+			"appliesFrom": "2026-08-24T01:00:00Z"
 		}`,
 		commandGateFinding: `{
 			"tenantId": "SYN-T1", "scopeRef": "scope-1", "action": "FINAL_DELIVERY",
@@ -139,6 +141,23 @@ func TestCommandForRejectsAbsentRegistrationInstant(t *testing.T) {
 		if !strings.Contains(err.Error(), "registeredAt") {
 			t.Fatalf("%s 的拒绝没指名 registeredAt：%v", command, err)
 		}
+	}
+}
+
+// TestCommandForRejectsAbsentAppliesFrom 证解释规则的法定生效起点必填：它在键上且
+// 领域与库都没有零值门（timestamptz 装得下 0001 年），缺格只能在译装处拦——静默落成
+// 0001 年的版本边界正是「缺格变成错事实」。
+func TestCommandForRejectsAbsentAppliesFrom(t *testing.T) {
+	absent := `{
+		"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT",
+		"jurisdictionRef": "SYN-JURIS-DE", "ruleRef": "SYN-RULE-1"
+	}`
+	_, err := commandFor(commandInterpretationRule, []byte(absent))
+	if err == nil {
+		t.Fatalf("缺席的 appliesFrom 要拒——法定生效起点没有默认值")
+	}
+	if !strings.Contains(err.Error(), "appliesFrom") {
+		t.Fatalf("拒绝没指名 appliesFrom：%v", err)
 	}
 }
 

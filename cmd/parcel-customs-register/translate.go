@@ -25,9 +25,9 @@ import (
 //     缺格该在入库前指名拒绝。
 
 // 封闭十命令：前九个对齐案件配置登记用例的九个方法——就绪与授权各带撤销半边（撤销
-// 是状态推进不是删除）、解释规则只有单版登记（版本维另票）、义务与门禁各分目录与
-// 明细；第十个是第六本册子（case-requirement，建案要求规则），随
-// cc-case-requirement-rule-registry 01 并入本口。
+// 是状态推进不是删除）、解释规则按（辖区，法定生效起点）登记版本（换版即登记更晚
+// 起点的新版，前版终点随之落定）、义务与门禁各分目录与明细；第十个是第六本册子
+// （case-requirement，建案要求规则），随 cc-case-requirement-rule-registry 01 并入本口。
 const (
 	commandReadinessRegister  = "readiness-register"
 	commandReadinessRevoke    = "readiness-revoke"
@@ -225,9 +225,11 @@ func authorityRevokeFromJSON(raw []byte) (dispatchFunc, error) {
 }
 
 type interpretationRuleDocument struct {
-	TenantID    string `json:"tenantId"`
-	ResultLayer string `json:"resultLayer"`
-	RuleRef     string `json:"ruleRef"`
+	TenantID        string    `json:"tenantId"`
+	ResultLayer     string    `json:"resultLayer"`
+	JurisdictionRef string    `json:"jurisdictionRef"`
+	RuleRef         string    `json:"ruleRef"`
+	AppliesFrom     time.Time `json:"appliesFrom"`
 }
 
 func interpretationRuleFromJSON(raw []byte) (dispatchFunc, error) {
@@ -243,14 +245,25 @@ func interpretationRuleFromJSON(raw []byte) (dispatchFunc, error) {
 	if err != nil {
 		return nil, err
 	}
+	jurisdiction, err := domain.NewRegulatoryJurisdictionReference(document.JurisdictionRef)
+	if err != nil {
+		return nil, err
+	}
 	rule, err := domain.NewInterpretationRuleReference(document.RuleRef)
 	if err != nil {
 		return nil, err
 	}
+	// 法定生效起点在键上且无默认可言（timestamptz 装得下 0001 年，缺格会静默变成
+	// 一个错的版本边界）；终点不是输入——后继版本登记时自动给前版落终点（换版）。
+	if document.AppliesFrom.IsZero() {
+		return nil, fmt.Errorf("解释规则登记缺 appliesFrom——法定生效起点没有默认值")
+	}
 	command := application.RegisterInterpretationRuleCommand{
-		TenantID: tenant,
-		Layer:    layer,
-		Rule:     rule,
+		TenantID:     tenant,
+		Layer:        layer,
+		Jurisdiction: jurisdiction,
+		Rule:         rule,
+		AppliesFrom:  document.AppliesFrom,
 	}
 	return func(
 		ctx context.Context,

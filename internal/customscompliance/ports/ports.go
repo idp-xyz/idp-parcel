@@ -70,13 +70,18 @@ type SubmissionIndex interface {
 	) (bool, error)
 }
 
-// InterpretationRuleView 取该层外部响应的解释规则配置。found=false 表示解释规则未
-// 配置——实例半边未提供时解释停在未决，不用默认口径猜测监管语义。
+// InterpretationRuleView 按（租户，结果层，适用辖区）在评估时点上解析该层外部响应
+// 适用的解释规则版本（选择侧，ADR-0070 决定一/二）。登记册按法定生效区间半开解析：
+// evaluatedAt 取业务发生或适用时间，绝不取消息到达或系统当前时间（CONTEXT 硬句 191）。
+// found=false 表示该辖区该层在该时点没有已登记的规则版本——实例半边未提供时解释停在
+// 未决，不用默认口径猜测监管语义，也不拿当前指针兜底。
 type InterpretationRuleView interface {
 	LoadInterpretationRule(
 		ctx context.Context,
 		tenant domain.TenantID,
 		layer domain.ResultLayer,
+		jurisdiction domain.RegulatoryJurisdictionReference,
+		evaluatedAt time.Time,
 	) (domain.InterpretationRuleReference, bool, error)
 }
 
@@ -594,19 +599,23 @@ type SubmissionAuthorityRegistry interface {
 	) error
 }
 
-// InterpretationRuleRegistry 是 InterpretationRuleView 的写口半边。
+// InterpretationRuleRegistry 是 InterpretationRuleView 的写口半边。登记面按
+// （租户，结果层，适用辖区，法定生效区间起）立键（ADR-0070 问一甲）。
 //
-// **今天只登记得出一层一版。** 表的主键是（租户，结果层），装不下按法定生效区间与
-// 适用时点排开的多个规则版本；本接口因此没有改写入口——同层再登记别的规则只会交回
-// `已登记`，由编排比出冲突并拒绝，绝不顶替。这不是版本化，是在版本维缺席时**拒绝
-// 假装**：迟到的外部结果该按哪一版解释，需要「法定适用时点」这个入参，而它在外部
-// 结果那条链上还没有来源（CONTEXT 硬句 191 明禁用消息到达时间或系统当前时间顶替）。
+// 终点不是登记输入：每个版本以开放区间进册，**后继版本登记时前版终点落定为后继起点**
+// ——那是换版的唯一路径，与就绪/授权的撤销同款（状态推进，原规则与起点原样留在行内），
+// 不是覆盖。W13 的不可覆盖语义在多版本形状下保持：同全键重放交回`已登记`由编排比对，
+// 同键异 rule_ref 是冲突；起点早于既有开放版或撞进已闭合区间的登记同样只会交回
+// `已登记`，读回比不上即冲突——历史区间是已记录的选择依据，不接受追改。登记因此
+// 按生效起点升序进行。
 type InterpretationRuleRegistry interface {
 	RegisterInterpretationRule(
 		ctx context.Context,
 		tenant domain.TenantID,
 		layer domain.ResultLayer,
+		jurisdiction domain.RegulatoryJurisdictionReference,
 		rule domain.InterpretationRuleReference,
+		appliesFrom time.Time,
 	) (CaseConfigurationSaveOutcome, error)
 }
 
