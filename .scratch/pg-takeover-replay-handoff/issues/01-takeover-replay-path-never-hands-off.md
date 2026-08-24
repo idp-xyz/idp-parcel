@@ -1,7 +1,7 @@
 # 接管重放路只补区间追加不补 handOff——接管信封可能永不入队
 
 Category: bug
-Status: in-progress
+Status: resolved
 
 发现于 OUTBOX-PK-STEP2（接管格修复 `b0e928e`，票面 [outbox-partition-key/03](../../outbox-partition-key/issues/03-step-two-scope-eight-ports-and-four-undecided.md)）实现过程，
 MCP-2 报回未动代码；本票只记现象与边界，不带方案。
@@ -49,3 +49,18 @@ pilot-governance 当前无主（同四处待裁的 PG 格局）。修复须先�
 
   影响面照票面「影响与时效」节：治理接管口今天无消费者，无生产事故；修在消费者接上之前，
   窗口免费。
+
+- 2026-08-24 MCP-2（实现收口，`8f2b2ff`）：修法照裁断落地——「追加成功 → handOff」抽成
+  `completeTakeover` 首次与重放共用，任一步失败留该步续办引用、不越过断点（追加失败不发信封：
+  信封宣告权威已切换而区间册无此区间，先发即两帐分岔）；重放凭同一命令从断点续齐，handOff
+  重发同一份由 `EnqueueOnce` 按信封身份幂等收敛。**顺带核一格的结论：同型，已同修**——
+  Suspend 的 `GovernanceAlreadyRecorded`、Resume 的早查已恢复与 `GovernanceAlreadyRecorded`
+  三处重放分支同样只答已在册不补 handOff（handler 不留交发布成败的持久痕迹，重放不补发则
+  首次 handOff 失败的信封无人再发），均补为重发在册那份。
+  验证（`govern_incident_test.go` 三个新用例 + 既有用例）：①首次调用在区间追加处失败 →
+  重放 → 接管信封入队恰一次，且断点修复前不越过断点发信封；②首次全程成功 → 重放 → 重发
+  同一份同身份（EnqueueOnce 答已入队，适配器侧幂等由既有
+  `TestResendingTheSameGovernanceIntentIsIdempotent` 证）、区间不重追；③既有两条重放用例
+  保持全绿。提交态在临时 worktree 检出 `8f2b2ff` 单独验证：`go vet ./...` 干净、
+  `go test -p 1 -count=1 ./...` 全仓绿（DSN 已设，真库 PG 实跑，pilotgovernance postgres
+  33 用例逐个 PASS）。
