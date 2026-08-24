@@ -1,7 +1,7 @@
 # 治理登记没有进程级入口，PAR-GOV-03..07 的实例登记无路可走
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源：票 02「缺的最小机制件」第 2 条，按 MCP-1 指示自票 02 拆出独立成票
 （`.scratch/syn-wall-door-audit/issues/02-production-ownership-authority-has-no-adapter.md`）。
@@ -105,3 +105,28 @@ ADR-0017 的方法是**先分辨阻断理由属机制半边、实例半边还是
   落地约束：新 `cmd/parcel-governance-register`（名字可按既有 CLI 命名惯例调整），不碰
   `assemble.go` / `endpoints.go`，不占号；只追加不改写、不提供简化恢复路径（票面红线照单）；
   与票 11 的关系一格（若届时已裁定落库形状）互不阻塞、各自成笔。
+
+- 2026-08-24 MCP-3（实现收口，转 resolved；MCP-1 的开工现场由本通道受用户委托接手，
+  四步照单走完）：
+  1. **入口落地**：新 `cmd/parcel-governance-register`，子命令 `authority-interval` /
+     `suspend` / `resume` 各收 `-input` JSON——首批三类照裁定，集合外命令（含接管）点名
+     拒绝。翻译严格零默认：未知字段拒收、标识构造门在翻译处拒、内容判据留在领域门
+     （暂停九件、恢复四件、盘点六件；无「只填标识就恢复」的简化路径）。未碰
+     `assemble.go` / `endpoints.go`，未占号；迁移模块按目录动态装配，共享接线文件零改动。
+  2. **权威区间补了独立登记编排**：`application.RegisterAuthorityIntervalHandler`——
+     形状门（判据在域）→ 全等重放答已在册（先于冲突预检，全等区间与自己必然重叠，
+     重放不是冲突）→ 冲突预检（重叠即阻断带全部冲突对）→ 追加。评审 Go 与接管的
+     附带追加原样不动，三处同一套纪律。
+  3. **身份双轨照裁定落地**：①通道技术身份（OS 进程属主 + 主机名）由入口自取，结构上
+     不存在参数写入路径；与登记同笔事务落新表 `pilot_governance.channel_execution`
+     （迁移 0004——只追加、无 UPDATE、不设幂等，同一登记被执行过几次本身是要留的事实），
+     留痕失败整笔翻成未决，登记不在无痕状态下落地；②`executedBy`/`decidedBy` 照旧走
+     记录表自己的列。测试钉死②不得冒充①。落册/已在册才留痕，拒绝、悬空引用与未决不留
+     ——痕不声称一笔没到册的登记。
+  4. **退出码**：0 已登记/幂等重放；1 用法或输入不合法（含领域拒绝与
+     `SUSPENSION_NOT_FOUND`——改请求而不是重试）；2 治理答案（权威冲突带全部冲突对、
+     已入册但下游意图待续办）；3 未决（重跑同一命令续办）。
+  5. **验证（含 PG，实测于本笔提交前的工作树）**：gofmt 判输出干净、`go build` /
+     `go vet` 零信号；全仓 `go test -p 1 -count=1 ./...` 设 DSN 零 FAIL（72 包 ok）；
+     真库留痕四用例与三命令垂直一发 `-v` 下真 PASS 非 SKIP。实例半边未填一字：进程无
+     内置默认，PAR-GOV-03..07 照旧待提供，真实角色名与 CLI 运行授权方案留待租户运营方案。
