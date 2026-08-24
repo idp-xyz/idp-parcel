@@ -1,7 +1,7 @@
 # 运维重放口：手工触发某（租户 + 包裹）重走派生
 
 Category: enhancement
-Status: needs-triage
+Status: needs-info
 Blocked by: PAR-INT-01（实例半边未提供授权依据）
 
 用户 2026-08-20 拍板 Q3：**保留为独立后续票，不与 01/02/03 同期。**
@@ -29,3 +29,7 @@ Blocked by: PAR-INT-01（实例半边未提供授权依据）
 ## Comments
 
 - 2026-08-20 MCP-1：由 03 号票路线取证第二节 b 段析出。
+- 2026-08-24 MCP-6（状态簿记，无代码改动）：本票的分诊问题已由 2026-08-20 用户拍板回答
+  （保留为独立后续票，不与 01/02/03 同期），阻断项 PAR-INT-01 票面已载且与
+  syn-wall-door-audit 票 01 的裁定同源（ADR-0072）。needs-triage 改 needs-info；
+  重启条件照「解除阻塞的条件」节：PAR-INT-01 由租户证据填上后重估。

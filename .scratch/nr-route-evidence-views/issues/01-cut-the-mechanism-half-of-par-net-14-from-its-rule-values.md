@@ -1,7 +1,7 @@
 # 三个路由证据视图卡在 PAR-NET-14，机制半边需要单独切出来
 
 Category: enhancement
-Status: in-progress
+Status: needs-info
 
 发现于 `a5095ae`（NR/TF 端口换真）。那一笔带走了七口，`NetworkEvidenceView`、
 `InitialRouteEvidenceView`、`AutoRerouteFactsView` 三口没带走。本票记的是**为什么没带走**，
@@ -143,3 +143,8 @@ Status: in-progress
   （部分停用 ADR-0053「现在不建表」半句）。三口取数侧未接（0007 登记册照旧作答），登记册
   `PAR-NET-*` 行状态未动；PS 地址缝未碰（归 02 号票）。本票剩余问题照「还需要一个决定」节
   预告收敛为一层：`PAR-NET-14` 规则正文（解析层 + 内容列扩展）。提交 SHA 见 MCP-1 集成记录。
+- 2026-08-24 MCP-6（状态簿记，无代码改动）：三口之一已关——`AutoRerouteFactsView` 的存储、
+  装载口、写入方与登记口随 syn-wall-door-audit 票 05 落 main（`ed77025`，`assemble.go` 已换
+  真适配器，空册行为与 nil 等价）。余两口（`NetworkEvidenceView`、`InitialRouteEvidenceView`）
+  照本票预告只剩一层阻断：`PAR-NET-14` 规则正文（折叠规则，实例半边待提供）。仓内已无本票
+  可推进的机制工，in-progress 改 needs-info；重启条件 = 参数登记册 `PAR-NET-14` 行状态变化。
