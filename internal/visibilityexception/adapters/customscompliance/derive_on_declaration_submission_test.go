@@ -44,7 +44,8 @@ func fixedSubmissionRecord(t *testing.T, members ...string) ccports.DeclarationS
 	for _, member := range members {
 		declared = append(declared, caseValue(t, ccdomain.NewDeclaredParcelReference, member))
 	}
-	unit, err := ccdomain.FormDeclarationUnit(unitID, procedure, declared)
+	unit, err := ccdomain.FormDeclarationUnit(unitID,
+		caseValue(t, ccdomain.NewCustomsCaseID, "case-1"), procedure, declared)
 	if err != nil {
 		t.Fatalf("构造申报单元：%v", err)
 	}

@@ -44,18 +44,24 @@ func NewCustomsProcedureReference(value string) (CustomsProcedureReference, erro
 // DeclarationUnit 是一次申报、审查、查验、放行或撤销重报的对象集合：独立身份加可
 // 追溯组成。组成在这里可变——它在逻辑提交版本形成时才被快照固定（CONTEXT 生命周期
 // 「申报单元的组成在逻辑提交版本形成时固定」），已提交版本保持不变。
+//
+// 案件维随形成即定且不可变更（ADR-0073 决定二）：「一个案件可以关联多个申报单元」
+// 是多个单元各自指向同一案件；单元换案件即建立替代单元，不改这一个。类型上没有
+// 改案件的方法，持久化层也没有更新路径。
 type DeclarationUnit struct {
-	id        DeclarationUnitID
-	procedure CustomsProcedureReference
-	members   []DeclaredParcelReference
+	id          DeclarationUnitID
+	customsCase CustomsCaseID
+	procedure   CustomsProcedureReference
+	members     []DeclaredParcelReference
 }
 
 func FormDeclarationUnit(
 	id DeclarationUnitID,
+	customsCase CustomsCaseID,
 	procedure CustomsProcedureReference,
 	members []DeclaredParcelReference,
 ) (DeclarationUnit, error) {
-	if !id.valid() || !procedure.valid() || len(members) == 0 {
+	if !id.valid() || !customsCase.valid() || !procedure.valid() || len(members) == 0 {
 		return DeclarationUnit{}, ErrInvalidDeclarationUnit
 	}
 	seen := make(map[DeclaredParcelReference]bool, len(members))
@@ -66,14 +72,20 @@ func FormDeclarationUnit(
 		seen[member] = true
 	}
 	return DeclarationUnit{
-		id:        id,
-		procedure: procedure,
-		members:   append([]DeclaredParcelReference(nil), members...),
+		id:          id,
+		customsCase: customsCase,
+		procedure:   procedure,
+		members:     append([]DeclaredParcelReference(nil), members...),
 	}, nil
 }
 
 func (unit DeclarationUnit) ID() DeclarationUnitID {
 	return unit.id
+}
+
+// Case 是本单元所属的关务案件（多对一，成立即定）。
+func (unit DeclarationUnit) Case() CustomsCaseID {
+	return unit.customsCase
 }
 
 func (unit DeclarationUnit) Procedure() CustomsProcedureReference {

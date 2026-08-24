@@ -66,6 +66,7 @@ func submissionRecord(t *testing.T, tenant, unit, procedure, version string) por
 	unitID := declarationValue(t, domain.NewDeclarationUnitID, unit)
 	formed, err := domain.FormDeclarationUnit(
 		unitID,
+		declarationValue(t, domain.NewCustomsCaseID, "case-1"),
 		declarationValue(t, domain.NewCustomsProcedureReference, procedure),
 		[]domain.DeclaredParcelReference{
 			declarationValue(t, domain.NewDeclaredParcelReference, "parcel-1"),

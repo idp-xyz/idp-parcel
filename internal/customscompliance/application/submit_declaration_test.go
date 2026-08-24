@@ -64,6 +64,85 @@ func (double *submissionStoreDouble) Save(
 	return ports.DeclarationSubmissionSaved, nil
 }
 
+// submissionCaseAuthorityDouble 是提交链案件反查的替身：只按标识答在册与否——用例
+// 只消费 found 位（ADR-0073 决定五核存在），案件内容不进提交判断。
+type submissionCaseAuthorityDouble struct {
+	ids map[string]bool
+	err error
+}
+
+func (double *submissionCaseAuthorityDouble) FindByID(
+	_ context.Context,
+	_ domain.TenantID,
+	id domain.CustomsCaseID,
+) (domain.CustomsCase, bool, error) {
+	if double.err != nil {
+		return domain.CustomsCase{}, false, double.err
+	}
+	return domain.CustomsCase{}, double.ids[id.String()], nil
+}
+
+func (double *submissionCaseAuthorityDouble) FindByKey(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+) (domain.CustomsCase, bool, error) {
+	return domain.CustomsCase{}, false, nil
+}
+
+func (double *submissionCaseAuthorityDouble) Save(
+	_ context.Context,
+	_ ports.CustomsCaseKey,
+	_ domain.CustomsCase,
+) (ports.CustomsCaseSaveOutcome, error) {
+	return ports.CustomsCaseSaved, nil
+}
+
+// unitStoreDouble 照真库代数：同键只答`已有记录`绝不顶替，比对归编排。
+type unitStoreDouble struct {
+	units   map[string]domain.DeclarationUnit
+	saveErr error
+	findErr error
+	saves   int
+}
+
+func newUnitStore() *unitStoreDouble {
+	return &unitStoreDouble{units: map[string]domain.DeclarationUnit{}}
+}
+
+func unitKey(tenant domain.TenantID, unit domain.DeclarationUnitID) string {
+	return tenant.String() + "|" + unit.String()
+}
+
+func (double *unitStoreDouble) Save(
+	_ context.Context,
+	tenant domain.TenantID,
+	unit domain.DeclarationUnit,
+	_ time.Time,
+) (ports.DeclarationUnitSaveOutcome, error) {
+	if double.saveErr != nil {
+		return ports.DeclarationUnitSaveOutcomeInvalid, double.saveErr
+	}
+	double.saves++
+	key := unitKey(tenant, unit.ID())
+	if _, exists := double.units[key]; exists {
+		return ports.DeclarationUnitAlreadyRecorded, nil
+	}
+	double.units[key] = unit
+	return ports.DeclarationUnitSaved, nil
+}
+
+func (double *unitStoreDouble) FindByID(
+	_ context.Context,
+	tenant domain.TenantID,
+	unit domain.DeclarationUnitID,
+) (domain.DeclarationUnit, bool, error) {
+	if double.findErr != nil {
+		return domain.DeclarationUnit{}, false, double.findErr
+	}
+	stored, found := double.units[unitKey(tenant, unit)]
+	return stored, found, nil
+}
+
 type readinessViewDouble struct {
 	configured bool
 	revoked    bool
@@ -167,6 +246,8 @@ func (clock declarationClock) Now() time.Time { return clock.at }
 
 type declarationFixture struct {
 	store     *submissionStoreDouble
+	cases     *submissionCaseAuthorityDouble
+	units     *unitStoreDouble
 	readiness *readinessViewDouble
 	authority *authorityViewDouble
 	versions  *versionFactoryDouble
@@ -178,6 +259,8 @@ func newDeclarationFixture(t *testing.T) *declarationFixture {
 	t.Helper()
 	fixture := &declarationFixture{
 		store:     newSubmissionStore(),
+		cases:     &submissionCaseAuthorityDouble{ids: map[string]bool{"case-1": true}},
+		units:     newUnitStore(),
 		readiness: &readinessViewDouble{configured: true},
 		authority: &authorityViewDouble{granted: true},
 		versions:  &versionFactoryDouble{},
@@ -185,6 +268,8 @@ func newDeclarationFixture(t *testing.T) *declarationFixture {
 	}
 	fixture.handler = application.NewSubmitDeclarationHandler(application.SubmitDeclarationDeps{
 		Submissions: fixture.store,
+		Cases:       fixture.cases,
+		Units:       fixture.units,
 		Readiness:   fixture.readiness,
 		Authority:   fixture.authority,
 		Versions:    fixture.versions,
@@ -203,6 +288,7 @@ func declarationCommand(t *testing.T) application.SubmitDeclarationCommand {
 	return application.SubmitDeclarationCommand{
 		TenantID:      tenant,
 		UnitID:        "declaration-unit-1",
+		CaseID:        "case-1",
 		Procedure:     "US-IMPORT-T86",
 		Members:       []string{"parcel-1", "parcel-2"},
 		Dossier:       "dossier-snapshot-1",
@@ -216,7 +302,8 @@ func declarationCommand(t *testing.T) application.SubmitDeclarationCommand {
 // 双有效（就绪+授权）才成版：版本固定组成快照、首次尝试序号 1、意图交出一份。
 func TestAReadyAuthorizedUnitFixesAVersionWithItsFirstAttempt(t *testing.T) {
 	fixture := newDeclarationFixture(t)
-	result, err := fixture.handler.Handle(context.Background(), declarationCommand(t))
+	command := declarationCommand(t)
+	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -239,6 +326,19 @@ func TestAReadyAuthorizedUnitFixesAVersionWithItsFirstAttempt(t *testing.T) {
 	}
 	if len(fixture.handoff.intents) != 1 {
 		t.Fatalf("intents = %d, want 1", len(fixture.handoff.intents))
+	}
+	// 意图带案件维（ADR-0073 决定五）：载荷从这里取，缺了适配器会响亮拒。
+	if fixture.handoff.intents[0].Case.String() != "case-1" {
+		t.Fatalf("intent case = %q, want case-1", fixture.handoff.intents[0].Case)
+	}
+	// 单元本体随提交落册（决定一）：身份、案件与组成一字不差。
+	storedUnit, unitFound, err := fixture.units.FindByID(
+		context.Background(), command.TenantID, record.Key.Unit)
+	if err != nil || !unitFound {
+		t.Fatalf("单元没落册：err=%v found=%v", err, unitFound)
+	}
+	if storedUnit.Case().String() != "case-1" {
+		t.Fatalf("册上单元的案件维 = %q", storedUnit.Case())
 	}
 }
 
@@ -368,6 +468,7 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 			application.SubmissionStoreUnavailable, application.ReadinessUnavailable,
 			application.ReadinessUnconfigured, application.AuthorityUnavailable,
 			application.AuthorityUnconfigured, application.VersionIdentityUnavailable,
+			application.CaseAuthorityUnavailable, application.UnitStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -375,11 +476,98 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 6 {
+		if len(labels) != 8 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.DeclarationUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第七个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
+		}
+	})
+}
+
+// Covers: ADR-0073 决定一/二/五——案件先于申报存在（悬空引用拒、反查故障未决）；单元
+// 本体成立即定（同单元换案件/换程序是身份冲突，重放与新提交两条路都拦）；单元库故障
+// 未决。
+func TestTheUnitCaseDimensionIsFixedAtFormation(t *testing.T) {
+	t.Run("an unknown case is refused before anything lands", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		command := declarationCommand(t)
+		command.CaseID = "case-never-established"
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationCaseUnknown {
+			t.Fatalf("outcome = %q, want CASE_UNKNOWN（案件先于申报存在，建案后重来）", result.Outcome())
+		}
+		if len(fixture.store.records) != 0 || len(fixture.units.units) != 0 || fixture.versions.minted != 0 {
+			t.Fatal("悬空案件引用还落了库")
+		}
+	})
+
+	t.Run("a case lookup failure is undecided", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		fixture.cases.err = errors.New("case authority down")
+		result, err := fixture.handler.Handle(context.Background(), declarationCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationUndecided ||
+			result.UndecidedReason() != application.CaseAuthorityUnavailable {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("a unit store failure is undecided", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		fixture.units.saveErr = errors.New("unit store down")
+		result, err := fixture.handler.Handle(context.Background(), declarationCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationUndecided ||
+			result.UndecidedReason() != application.UnitStoreUnavailable {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+	})
+
+	t.Run("replaying with a different case is a unit conflict, not a replay", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		fixture.cases.ids["case-2"] = true
+		if _, err := fixture.handler.Handle(context.Background(), declarationCommand(t)); err != nil {
+			t.Fatalf("first handle: %v", err)
+		}
+		flipped := declarationCommand(t)
+		flipped.CaseID = "case-2"
+		result, err := fixture.handler.Handle(context.Background(), flipped)
+		if err != nil {
+			t.Fatalf("replay handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationUnitConflict {
+			t.Fatalf("outcome = %q, want UNIT_CONFLICT（换案件即替代单元，不是重放）", result.Outcome())
+		}
+		if stored := fixture.units.units["tenant-1|declaration-unit-1"]; stored.Case().String() != "case-1" {
+			t.Fatalf("册上单元的案件维被顶成 %q", stored.Case())
+		}
+	})
+
+	t.Run("a fresh submission against a unit bound to another shape is a unit conflict", func(t *testing.T) {
+		fixture := newDeclarationFixture(t)
+		if _, err := fixture.handler.Handle(context.Background(), declarationCommand(t)); err != nil {
+			t.Fatalf("first handle: %v", err)
+		}
+		// 换程序换出新的提交键（不走重放路），单元身份却还是同一个——身份上程序已定。
+		changed := declarationCommand(t)
+		changed.Procedure = "US-EXPORT-STANDARD"
+		result, err := fixture.handler.Handle(context.Background(), changed)
+		if err != nil {
+			t.Fatalf("changed handle: %v", err)
+		}
+		if result.Outcome() != application.DeclarationUnitConflict {
+			t.Fatalf("outcome = %q, want UNIT_CONFLICT（单元身份成立即定）", result.Outcome())
+		}
+		if fixture.versions.minted != 1 {
+			t.Fatalf("versions minted = %d, want 1（输给身份的请求不签版本）", fixture.versions.minted)
 		}
 	})
 }
@@ -392,6 +580,7 @@ func TestMalformedInputsAndRecoveryDiscipline(t *testing.T) {
 		"duplicate member": func(command *application.SubmitDeclarationCommand) {
 			command.Members = []string{"parcel-1", "parcel-1"}
 		},
+		"no case":    func(command *application.SubmitDeclarationCommand) { command.CaseID = " " },
 		"no dossier": func(command *application.SubmitDeclarationCommand) { command.Dossier = " " },
 		"no roles":   func(command *application.SubmitDeclarationCommand) { command.Roles = " " },
 		"no target":  func(command *application.SubmitDeclarationCommand) { command.Target = " " },

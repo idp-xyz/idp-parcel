@@ -31,6 +31,8 @@ const (
 	DeclarationNotAuthorized
 	DeclarationNotAccepted
 	DeclarationUndecided
+	DeclarationCaseUnknown
+	DeclarationUnitConflict
 )
 
 func (outcome DeclarationOutcome) String() string {
@@ -49,6 +51,10 @@ func (outcome DeclarationOutcome) String() string {
 		return "SOURCE_NOT_ACCEPTED"
 	case DeclarationUndecided:
 		return "DECLARATION_UNDECIDED"
+	case DeclarationCaseUnknown:
+		return "CASE_UNKNOWN"
+	case DeclarationUnitConflict:
+		return "UNIT_CONFLICT"
 	default:
 		return ""
 	}
@@ -66,6 +72,8 @@ const (
 	AuthorityUnavailable
 	AuthorityUnconfigured
 	VersionIdentityUnavailable
+	CaseAuthorityUnavailable
+	UnitStoreUnavailable
 )
 
 func (reason DeclarationUndecidedReason) String() string {
@@ -82,16 +90,22 @@ func (reason DeclarationUndecidedReason) String() string {
 		return "AUTHORITY_UNCONFIGURED"
 	case VersionIdentityUnavailable:
 		return "VERSION_IDENTITY_UNAVAILABLE"
+	case CaseAuthorityUnavailable:
+		return "CASE_LOOKUP_UNAVAILABLE"
+	case UnitStoreUnavailable:
+		return "UNIT_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
 }
 
-// SubmitDeclarationCommand 携带一次提交申报的全部输入：单元与组成、资料/角色快照
-// 引用、发送目标与首次尝试的已知结果。
+// SubmitDeclarationCommand 携带一次提交申报的全部输入：单元与组成、所属案件、资料/
+// 角色快照引用、发送目标与首次尝试的已知结果。案件维必填（ADR-0073 决定五）：案件
+// 先于申报存在，提交前按标识反查核存在——不核等于让调用方随手填一个字符串。
 type SubmitDeclarationCommand struct {
 	TenantID      domain.TenantID
 	UnitID        string
+	CaseID        string
 	Procedure     string
 	Members       []string
 	Dossier       string
@@ -134,6 +148,8 @@ func (result SubmitDeclarationResult) SubmissionHandoffReference() string {
 
 type SubmitDeclarationDeps struct {
 	Submissions ports.DeclarationSubmissionStore
+	Cases       ports.CustomsCaseStore
+	Units       ports.DeclarationUnitStore
 	Readiness   ports.ReadinessView
 	Authority   ports.SubmissionAuthorityView
 	Versions    ports.DeclarationVersionFactory
@@ -149,10 +165,12 @@ func NewSubmitDeclarationHandler(deps SubmitDeclarationDeps) *SubmitDeclarationH
 	return &SubmitDeclarationHandler{deps: deps}
 }
 
-// Handle 把一个申报单元推进到不可覆盖的提交版本：受理（单元+资料/角色快照）→ 幂等/
-// 冲突按内容指纹分界（重放返原版本不重形成，硬句 168）→ 就绪读口（未配置→未决；
-// 不再就绪→业务负向）→ 提交授权（与就绪分开，双有效才成版，CONTEXT 244）→
-// FixSubmissionVersion+InitialAttempt → 原子提交 → 发布意图。
+// Handle 把一个申报单元推进到不可覆盖的提交版本：受理（单元+案件+资料/角色快照）→
+// 幂等/冲突按内容指纹分界（重放返原版本不重形成，硬句 168；重放的案件一致性对单元
+// 本体核）→ 案件反查核存在（悬空引用拒绝，ADR-0073 决定五）→ 就绪读口（未配置→
+// 未决；不再就绪→业务负向）→ 提交授权（与就绪分开，双有效才成版，CONTEXT 244）→
+// 单元本体落册（同键异身份→冲突，ADR-0073 决定一/二）→ FixSubmissionVersion+
+// InitialAttempt → 原子提交 → 发布意图（载荷带案件维）。
 func (handler *SubmitDeclarationHandler) Handle(
 	ctx context.Context,
 	command SubmitDeclarationCommand,
@@ -191,8 +209,30 @@ func (handler *SubmitDeclarationHandler) Handle(
 			// 重报，不在这里顶替。
 			return SubmitDeclarationResult{outcome: DeclarationSourceConflict}, nil
 		}
-		// 重复提交：返回原版本，不重复形成（硬句 168）。
-		return handler.existingResult(ctx, existing), nil
+		// 重复提交：返回原版本，不重复形成（硬句 168）。内容指纹不含案件维（案件属
+		// 单元身份不属提交内容），重放的案件一致性对单元本体核——同单元换案件不是
+		// 重放，是撞上「案件维成立即定」（ADR-0073 决定二）。
+		stored, unitFound, err := handler.deps.Units.FindByID(ctx, command.TenantID, unit.ID())
+		if err != nil {
+			return unitStoreUndecided(command.UnitID), nil
+		}
+		if !unitFound {
+			// 提交在册而单元本体缺行是坏状态：Save 把单元钉在提交之前，缺行不该可见。
+			return unitStoreUndecided(command.UnitID), nil
+		}
+		if !sameUnitIdentity(stored, unit) {
+			return SubmitDeclarationResult{outcome: DeclarationUnitConflict}, nil
+		}
+		return handler.existingResult(ctx, existing, stored.Case()), nil
+	}
+
+	// 案件先于申报存在（ADR-0073 决定五）：按铸造标识反查核在册，悬空引用在入库前
+	// 拒绝——建案后重来，不是重试能消化的未决。
+	if _, caseFound, err := handler.deps.Cases.FindByID(ctx, command.TenantID, unit.Case()); err != nil {
+		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: CaseAuthorityUnavailable,
+			continuation: declarationContinuation("CASE_LOOKUP_UNAVAILABLE", command.UnitID)}, nil
+	} else if !caseFound {
+		return SubmitDeclarationResult{outcome: DeclarationCaseUnknown}, nil
 	}
 
 	readiness, configured, err := handler.deps.Readiness.LoadReadiness(ctx, command.TenantID, unit.ID())
@@ -226,6 +266,24 @@ func (handler *SubmitDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotAuthorized}, nil
 	}
 
+	// 单元本体先于版本落册（ADR-0073 决定一/二）：同键已在册就读回比对——同一单元
+	// 换案件、换程序或换组成都是身份冲突，绝不顶替；输给身份竞争的请求不再消耗版本
+	// 标识。单元行落了而后续步骤失败只留下一个已形成的单元（CONTEXT：进行中可以形成
+	// 一个或多个申报单元），重试自然续上。
+	saved, err := handler.deps.Units.Save(ctx, command.TenantID, unit, handler.deps.Clock.Now())
+	if err != nil {
+		return unitStoreUndecided(command.UnitID), nil
+	}
+	if saved == ports.DeclarationUnitAlreadyRecorded {
+		stored, unitFound, err := handler.deps.Units.FindByID(ctx, command.TenantID, unit.ID())
+		if err != nil || !unitFound {
+			return unitStoreUndecided(command.UnitID), nil
+		}
+		if !sameUnitIdentity(stored, unit) {
+			return SubmitDeclarationResult{outcome: DeclarationUnitConflict}, nil
+		}
+	}
+
 	versionID, err := handler.deps.Versions.NextSubmissionVersion(ctx)
 	if err != nil {
 		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: VersionIdentityUnavailable,
@@ -254,11 +312,15 @@ func (handler *SubmitDeclarationHandler) Handle(
 		Version:       version,
 		Attempt:       attempt,
 		RecordedAt:    handler.deps.Clock.Now(),
-	})
+	}, unit.Case())
 }
 
 func formUnit(command SubmitDeclarationCommand) (domain.DeclarationUnit, error) {
 	unitID, err := domain.NewDeclarationUnitID(command.UnitID)
+	if err != nil {
+		return domain.DeclarationUnit{}, err
+	}
+	customsCase, err := domain.NewCustomsCaseID(command.CaseID)
 	if err != nil {
 		return domain.DeclarationUnit{}, err
 	}
@@ -274,7 +336,35 @@ func formUnit(command SubmitDeclarationCommand) (domain.DeclarationUnit, error) 
 		}
 		members = append(members, member)
 	}
-	return domain.FormDeclarationUnit(unitID, procedure, members)
+	return domain.FormDeclarationUnit(unitID, customsCase, procedure, members)
+}
+
+// sameUnitIdentity 比较单元身份内容：案件、程序与组成集合。组成按排序比——形成顺序
+// 不构成不同的组成（与提交内容指纹同一口径）；形成时刻是记录事实不是身份内容，不比。
+func sameUnitIdentity(stored, formed domain.DeclarationUnit) bool {
+	if stored.Case() != formed.Case() || stored.Procedure() != formed.Procedure() {
+		return false
+	}
+	storedMembers := memberStrings(stored)
+	formedMembers := memberStrings(formed)
+	if len(storedMembers) != len(formedMembers) {
+		return false
+	}
+	for index := range storedMembers {
+		if storedMembers[index] != formedMembers[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func memberStrings(unit domain.DeclarationUnit) []string {
+	members := make([]string, 0, len(unit.Members()))
+	for _, member := range unit.Members() {
+		members = append(members, member.String())
+	}
+	sort.Strings(members)
+	return members
 }
 
 func submissionStoreUndecided(unitID string) SubmitDeclarationResult {
@@ -285,10 +375,20 @@ func submissionStoreUndecided(unitID string) SubmitDeclarationResult {
 	}
 }
 
-// commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。
+func unitStoreUndecided(unitID string) SubmitDeclarationResult {
+	return SubmitDeclarationResult{
+		outcome:      DeclarationUndecided,
+		reason:       UnitStoreUnavailable,
+		continuation: declarationContinuation("UNIT_STORE_UNAVAILABLE", unitID),
+	}
+}
+
+// commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。赢家与本请求同键即
+// 同单元，单元的案件维已在前一步核过一致，意图照用它。
 func (handler *SubmitDeclarationHandler) commit(
 	ctx context.Context,
 	record ports.DeclarationSubmissionRecord,
+	customsCase domain.CustomsCaseID,
 ) (SubmitDeclarationResult, error) {
 	saved, err := handler.deps.Submissions.Save(ctx, record)
 	if err != nil {
@@ -297,14 +397,14 @@ func (handler *SubmitDeclarationHandler) commit(
 	switch saved {
 	case ports.DeclarationSubmissionSaved:
 		result := SubmitDeclarationResult{outcome: DeclarationSubmitted, record: record, hasRecord: true}
-		result.handoff = handler.handOff(ctx, record)
+		result.handoff = handler.handOff(ctx, record, customsCase)
 		return result, nil
 	case ports.DeclarationSubmissionAlreadyRecorded:
 		winner, found, err := handler.deps.Submissions.FindByKey(ctx, record.Key)
 		if err != nil || !found {
 			return submissionStoreUndecided(record.Key.Unit.String()), nil
 		}
-		return handler.existingResult(ctx, winner), nil
+		return handler.existingResult(ctx, winner, customsCase), nil
 	default:
 		return SubmitDeclarationResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSubmissionSave, saved)
 	}
@@ -314,12 +414,13 @@ func (handler *SubmitDeclarationHandler) commit(
 func (handler *SubmitDeclarationHandler) existingResult(
 	ctx context.Context,
 	record ports.DeclarationSubmissionRecord,
+	customsCase domain.CustomsCaseID,
 ) SubmitDeclarationResult {
 	return SubmitDeclarationResult{
 		outcome:   DeclarationExistingVersion,
 		record:    record,
 		hasRecord: true,
-		handoff:   handler.handOff(ctx, record),
+		handoff:   handler.handOff(ctx, record, customsCase),
 	}
 }
 
@@ -327,8 +428,10 @@ func (handler *SubmitDeclarationHandler) existingResult(
 func (handler *SubmitDeclarationHandler) handOff(
 	ctx context.Context,
 	record ports.DeclarationSubmissionRecord,
+	customsCase domain.CustomsCaseID,
 ) string {
-	if err := handler.deps.Downstream.HandOffDeclarationSubmission(ctx, ports.DeclarationSubmissionHandoffIntent{Record: record}); err == nil {
+	intent := ports.DeclarationSubmissionHandoffIntent{Record: record, Case: customsCase}
+	if err := handler.deps.Downstream.HandOffDeclarationSubmission(ctx, intent); err == nil {
 		return ""
 	}
 	return declarationContinuation("DECLARATION_SUBMISSION_HANDOFF", record.Key.TenantID.String(), record.Key.Unit.String())

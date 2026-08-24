@@ -18,6 +18,7 @@ func declarationUnit(t *testing.T, members ...string) domain.DeclarationUnit {
 	}
 	unit, err := domain.FormDeclarationUnit(
 		mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-1"),
+		mustValue(t, domain.NewCustomsCaseID, "case-1"),
 		mustValue(t, domain.NewCustomsProcedureReference, "US-IMPORT/TYPE-86"),
 		references,
 	)
@@ -83,6 +84,7 @@ func TestAVersionFreezesTheUnitCompositionAtFixTime(t *testing.T) {
 
 	if _, err := domain.FormDeclarationUnit(
 		mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-2"),
+		mustValue(t, domain.NewCustomsCaseID, "case-1"),
 		mustValue(t, domain.NewCustomsProcedureReference, "US-IMPORT/TYPE-86"),
 		[]domain.DeclaredParcelReference{
 			mustValue(t, domain.NewDeclaredParcelReference, "parcel-1"),
@@ -90,6 +92,18 @@ func TestAVersionFreezesTheUnitCompositionAtFixTime(t *testing.T) {
 		},
 	); !errors.Is(err, domain.ErrInvalidDeclarationUnit) {
 		t.Fatalf("err = %v; 重复成员被收下了", err)
+	}
+
+	// 案件维随形成即定（ADR-0073 决定二）：缺案件的单元成不了形。
+	if _, err := domain.FormDeclarationUnit(
+		mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-3"),
+		domain.CustomsCaseID{},
+		mustValue(t, domain.NewCustomsProcedureReference, "US-IMPORT/TYPE-86"),
+		[]domain.DeclaredParcelReference{
+			mustValue(t, domain.NewDeclaredParcelReference, "parcel-1"),
+		},
+	); !errors.Is(err, domain.ErrInvalidDeclarationUnit) {
+		t.Fatalf("err = %v; 缺案件维的单元被收下了", err)
 	}
 }
 

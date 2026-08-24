@@ -1,7 +1,7 @@
 # 申报单元 → 关务案件的关联在域模型里缺席，只活在文档
 
 Category: bug
-Status: ready-for-agent
+Status: resolved
 
 CC CONTEXT 的「关务案件」词条写着「**一个案件可以关联多个申报单元和多次提交**」，而代码里
 没有这条关联：`DeclarationSubmissionKey` 三维（租户+申报单元+程序）不含案件维，申报提交口的
@@ -251,3 +251,30 @@ CONTEXT 硬句 143 本来就要求的（「申报单元必须具有独立身份�
   [02 票](./02-bare-case-refs-converge-to-minted-customs-case-id.md)显式跟踪。红线（不得经
   包裹推导）与时序门（案件维必填先于提交口接生产装配）均进 ADR 正文。实现方开工前按票面
   取证核对当时代码状态；新增聚合与表属实现票范围，走常规验证流程。
+- 2026-08-24 · MCP-1：**按 ADR-0073 八决定交付，本票转 resolved。** 开工前对 `d826ee3`
+  重核票面取证四件：两 handler 仍零生产调用点（迁移窗口仍免费）、下游毒丸判据仍在、
+  `declaration_unit` 三名仍零命中、反查读口仍缺——票面无漂移。
+  * 决定一/二：`DeclarationUnit` 加案件维（`Form` 门里案件必填，类型无改案方法）；
+    迁移 0010 建 `declaration_unit`（PK 租户+单元、FK 钉 `customs_case_id_unique`、
+    members 非空 CHECK、replaces_unit_id 首版可空、案件列带反向索引）；
+    `adapters/postgres/declaration_unit_store.go` 只建立无 UPDATE，成员按字典序落库
+    （形成顺序不构成不同组成，与内容指纹同口径）。
+  * 决定三：反向查询只此一份存储——索引已建；读口方法今天没有消费方（关闭核对的
+    改造 ADR 自判「随实现票，不预设细节」而票面未列），端口不预设，留给关闭核对
+    改造票随消费方一起立。
+  * 决定四：`DeclarationSubmissionKey` 三维零改动。
+  * 决定五：`SubmitDeclarationCommand.CaseID` 必填；`CustomsCaseStore.FindByID`
+    反查读口（适配器共享重建函数）；悬空引用答新格 `CASE_UNKNOWN`（建案后重来，
+    不是重试能消化的未决）；意图与载荷带 `caseId` 不进分区键，缺席在交接口响亮拒。
+  * 决定二的编排半边：单元本体先于版本落册；同单元换案件/换程序/换组成答新格
+    `UNIT_CONFLICT`（重放路与新键路都拦，输给身份的请求不签版本）；未决新增两因
+    `CASE_LOOKUP_UNAVAILABLE`/`UNIT_STORE_UNAVAILABLE`。内容指纹刻意不含案件维——
+    案件属单元身份不属提交内容，一致性对单元本体核。
+  * 决定七（时序门）：赶在提交口接生产装配前落地——重核确认零在途信封，迁移零兼容期。
+  * 决定八（红线）：未经包裹推导，两端包裹集零触碰。
+  * Consequences 跟进：VE 译码器第五格 `caseId` 缺席判毒丸（毒丸判据随载荷同笔更新，
+    逐格用例补第五格）；`FormedDeclarationSubmission.CaseID` 只携带不消费。
+  * 验证：领域/用例/适配器/VE 译码四层新增与追随用例全绿；共享树全量 gofmt/build/vet
+    零信号、`go test -p 1 -count=1 ./...` 75 包 ok、0 FAIL（2026-08-24 13:22，真库
+    实跑）；隔离树按提交 SHA 的全量验证随提交完成并记于提交信。02 票（存量裸 string
+    收敛）未动，两种案件引用表达并存仍是该票声明的过渡态。

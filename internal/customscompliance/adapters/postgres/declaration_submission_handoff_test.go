@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -71,6 +73,8 @@ func declarationIntent(t *testing.T, tenant, unit, procedure, version string) po
 	t.Helper()
 	return ports.DeclarationSubmissionHandoffIntent{
 		Record: submissionRecord(t, tenant, unit, procedure, version),
+		// 与 submissionRecord 里单元所属的案件同值：意图的案件维就是单元身份上那一个。
+		Case: declarationValue(t, domain.NewCustomsCaseID, "case-1"),
 	}
 }
 
@@ -99,6 +103,22 @@ func TestDeclarationSubmissionIntentCommitsAtomicallyWithTheRecord(t *testing.T)
 	}
 	if got := declarationIntentType(t, fixture.pool, eventID); got != "customs-compliance.declaration-submission.formed" {
 		t.Fatalf("事件类型 = %q，不是本口的类型", got)
+	}
+	// 载荷带案件维（ADR-0073 决定五）：下游译码把它缺席判毒丸，这里钉住它真的在场。
+	var payload []byte
+	if err := fixture.pool.QueryRow(ctx,
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`, eventID,
+	).Scan(&payload); err != nil {
+		t.Fatalf("读意图载荷：%v", err)
+	}
+	var body struct {
+		CaseID string `json:"caseId"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("解意图载荷：%v", err)
+	}
+	if body.CaseID != "case-1" {
+		t.Fatalf("载荷案件维 = %q：%s", body.CaseID, payload)
 	}
 }
 
@@ -176,6 +196,16 @@ func TestAForeignDeclarationSubmissionIntentIsLoud(t *testing.T) {
 		return fixture.handoff.HandOffDeclarationSubmission(txCtx, ports.DeclarationSubmissionHandoffIntent{})
 	}); err == nil {
 		t.Fatal("缺幂等键的意图必须响亮报错")
+	}
+
+	// 缺案件维同样响亮（ADR-0073 决定五必填）：静默发出去会在下游译码处变毒丸。
+	missingCase := ports.DeclarationSubmissionHandoffIntent{
+		Record: submissionRecord(t, "tenant-a", "unit-9", "export-procedure/v1", "version-9"),
+	}
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffDeclarationSubmission(txCtx, missingCase)
+	}); err == nil {
+		t.Fatal("缺案件维的意图必须响亮报错")
 	}
 }
 

@@ -26,12 +26,14 @@ const declarationSubmissionConsumerName = "visibility-exception/derive-projectio
 const DeclarationSubmissionFormedEventType eventing.EventType = "customs-compliance.declaration-submission.formed"
 
 // FormedDeclarationSubmission 是译码后的提交版本引用——只有引用，提交本体（含成员
-// 快照与卷宗）由处理方按引用重新取（权威事实留在 customs-compliance）。
+// 快照与卷宗）由处理方按引用重新取（权威事实留在 customs-compliance）。CaseID 是
+// 单元所属关务案件（ADR-0073 决定五起载荷必带），本消费者今天只携带不消费。
 type FormedDeclarationSubmission struct {
 	TenantID  string
 	UnitID    string
 	Procedure string
 	VersionID string
+	CaseID    string
 }
 
 // FormedDeclarationSubmissionHandler 是本消费者转交的处理方。真实装配接
@@ -80,20 +82,21 @@ func (consumer *DeclarationSubmissionConsumer) Consume(ctx context.Context, enve
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// decodeFormedDeclarationSubmission 译载荷。三维键加版本维缺一即毒丸——处理方按
-// （租户+单元+程序）取回提交并按 versionId 核对版本身份，缺了永远取不着也核不了，
-// 而重投同样内容不会长出字段来。
+// decodeFormedDeclarationSubmission 译载荷。三维键、版本维与案件维缺一即毒丸——
+// 键与版本缺了处理方永远取不着也核不了；案件维自 ADR-0073 决定五起是载荷契约的必带
+// 格（毒丸判据随载荷演进同笔更新），而重投同样内容不会长出字段来。
 func decodeFormedDeclarationSubmission(payload []byte) (FormedDeclarationSubmission, error) {
 	var body struct {
 		TenantID  string `json:"tenantId"`
 		UnitID    string `json:"unitId"`
 		Procedure string `json:"procedure"`
 		VersionID string `json:"versionId"`
+		CaseID    string `json:"caseId"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return FormedDeclarationSubmission{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
 	}
-	if body.TenantID == "" || body.UnitID == "" || body.Procedure == "" || body.VersionID == "" {
+	if body.TenantID == "" || body.UnitID == "" || body.Procedure == "" || body.VersionID == "" || body.CaseID == "" {
 		return FormedDeclarationSubmission{}, fmt.Errorf("%w: missing declaration submission key fields", ErrPoisonEnvelope)
 	}
 	return FormedDeclarationSubmission{
@@ -101,5 +104,6 @@ func decodeFormedDeclarationSubmission(payload []byte) (FormedDeclarationSubmiss
 		UnitID:    body.UnitID,
 		Procedure: body.Procedure,
 		VersionID: body.VersionID,
+		CaseID:    body.CaseID,
 	}, nil
 }

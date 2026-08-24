@@ -64,6 +64,7 @@ func veDeclarationSubmissionEnvelope(t *testing.T, eventID string) eventing.Enve
 		"unitId":    "unit-1",
 		"procedure": "US-IMPORT/TYPE-86",
 		"versionId": "version-1",
+		"caseId":    "case-1",
 	})
 	if err != nil {
 		t.Fatalf("载荷：%v", err)
@@ -100,17 +101,21 @@ func TestAFormedDeclarationSubmissionIsProcessedExactlyOnce(t *testing.T) {
 	}
 	got := handler.calls[0]
 	if got.TenantID != "tenant-a" || got.UnitID != "unit-1" ||
-		got.Procedure != "US-IMPORT/TYPE-86" || got.VersionID != "version-1" {
-		t.Fatalf("译码结果 = %+v；三维键与版本维须原样到达处理方", got)
+		got.Procedure != "US-IMPORT/TYPE-86" || got.VersionID != "version-1" ||
+		got.CaseID != "case-1" {
+		t.Fatalf("译码结果 = %+v；三维键、版本维与案件维须原样到达处理方", got)
 	}
 }
 
+// 案件维自 ADR-0073 决定五起是载荷契约的必带格：毒丸判据随载荷演进同笔更新（该 ADR
+// Consequences 原句），第五格与键四格同权重。
 func TestADeclarationSubmissionEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
 	for name, payload := range map[string]string{
-		"缺 tenantId":  `{"unitId":"unit-1","procedure":"US-IMPORT/TYPE-86","versionId":"version-1"}`,
-		"缺 unitId":    `{"tenantId":"tenant-a","procedure":"US-IMPORT/TYPE-86","versionId":"version-1"}`,
-		"缺 procedure": `{"tenantId":"tenant-a","unitId":"unit-1","versionId":"version-1"}`,
-		"缺 versionId": `{"tenantId":"tenant-a","unitId":"unit-1","procedure":"US-IMPORT/TYPE-86"}`,
+		"缺 tenantId":  `{"unitId":"unit-1","procedure":"US-IMPORT/TYPE-86","versionId":"version-1","caseId":"case-1"}`,
+		"缺 unitId":    `{"tenantId":"tenant-a","procedure":"US-IMPORT/TYPE-86","versionId":"version-1","caseId":"case-1"}`,
+		"缺 procedure": `{"tenantId":"tenant-a","unitId":"unit-1","versionId":"version-1","caseId":"case-1"}`,
+		"缺 versionId": `{"tenantId":"tenant-a","unitId":"unit-1","procedure":"US-IMPORT/TYPE-86","caseId":"case-1"}`,
+		"缺 caseId":    `{"tenantId":"tenant-a","unitId":"unit-1","procedure":"US-IMPORT/TYPE-86","versionId":"version-1"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			consumer, handler := newVEDeclarationSubmissionFixture(t)

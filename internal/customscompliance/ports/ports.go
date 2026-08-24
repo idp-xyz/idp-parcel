@@ -422,9 +422,12 @@ const (
 	CustomsCaseAlreadyRecorded
 )
 
-// CustomsCaseStore 按身份键找回并保存案件（写入代数同 ADR-0031）。
+// CustomsCaseStore 按身份键找回并保存案件（写入代数同 ADR-0031）。FindByID 是按铸造
+// 标识的反查读口（ADR-0073 决定五）：提交链写入前核案件存在靠它——库侧
+// customs_case_id_unique 唯一约束现成，范围键的职责收敛为建案幂等（ADR-0069 决定三）。
 type CustomsCaseStore interface {
 	FindByKey(ctx context.Context, key CustomsCaseKey) (domain.CustomsCase, bool, error)
+	FindByID(ctx context.Context, tenant domain.TenantID, id domain.CustomsCaseID) (domain.CustomsCase, bool, error)
 	Save(ctx context.Context, key CustomsCaseKey, customsCase domain.CustomsCase) (CustomsCaseSaveOutcome, error)
 }
 
@@ -456,6 +459,34 @@ type ExternalResultHandoffIntent struct {
 // ExternalResultHandoff 今天没有实现，唯一实现是测试替身。
 type ExternalResultHandoff interface {
 	HandOffExternalResult(ctx context.Context, intent ExternalResultHandoffIntent) error
+}
+
+type DeclarationUnitSaveOutcome uint8
+
+const (
+	DeclarationUnitSaveOutcomeInvalid DeclarationUnitSaveOutcome = iota
+	DeclarationUnitSaved
+	DeclarationUnitAlreadyRecorded
+)
+
+// DeclarationUnitStore 是申报单元的持久化本体（ADR-0073 决定一：CONTEXT 要求「独立
+// 身份和可追溯组成」，jsonb 快照给不出独立身份）。Save 只建立、无更新路径——「同一
+// 单元的案件维不得变更」由此在结构上承载（决定二）：同键已在册答`已有记录`，内容是否
+// 一致由编排读回自己比，换案件即换（替代）单元。FindByID 供提交链取回单元身份与案件
+// 维（重放一致性核对与意图载荷取数）；「案件→单元集」的反向查询按表上案件列带索引
+// 查询即得（决定三），今天没有消费方，端口不预设方法。
+type DeclarationUnitStore interface {
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.DeclarationUnit,
+		formedAt time.Time,
+	) (DeclarationUnitSaveOutcome, error)
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.DeclarationUnitID,
+	) (domain.DeclarationUnit, bool, error)
 }
 
 // DeclarationSubmissionKey 是提交申报的幂等键：同一逻辑申报目标（租户+申报单元+监管
@@ -637,9 +668,12 @@ type DeclarationVersionFactory interface {
 }
 
 // DeclarationSubmissionHandoffIntent 把已固定的提交版本交给发送通道与外部结果核对
-// 消费。意图由幂等键认领，重放重发同一份（ADR-0043 同款纪律）。
+// 消费。意图由幂等键认领，重放重发同一份（ADR-0043 同款纪律）。Case 是单元所属案件
+// （载荷补案件引用、不进分区键，ADR-0069 决定四/ADR-0073 决定五）；提交行不存案件列
+// ——单元表那一列是这条边唯一的存储（决定三），意图从编排在手的单元身份取。
 type DeclarationSubmissionHandoffIntent struct {
 	Record DeclarationSubmissionRecord
+	Case   domain.CustomsCaseID
 }
 
 // DeclarationSubmissionHandoff 把提交版本写入 Outbox（`OutboxDeclarationSubmissionHandoff`）。

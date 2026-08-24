@@ -40,6 +40,20 @@ func (double *customsCaseStoreDouble) FindByKey(
 	return customsCase, found, nil
 }
 
+// FindByID 照真库反查读口的口径：按铸造标识在全册里找（ADR-0073 决定五）。
+func (double *customsCaseStoreDouble) FindByID(
+	_ context.Context,
+	_ domain.TenantID,
+	id domain.CustomsCaseID,
+) (domain.CustomsCase, bool, error) {
+	for _, customsCase := range double.byKey {
+		if customsCase.ID() == id {
+			return customsCase, true, nil
+		}
+	}
+	return domain.CustomsCase{}, false, nil
+}
+
 func (double *customsCaseStoreDouble) Save(
 	_ context.Context,
 	key ports.CustomsCaseKey,

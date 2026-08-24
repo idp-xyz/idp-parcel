@@ -43,13 +43,15 @@ func NewOutboxDeclarationSubmissionHandoff(
 
 var _ ports.DeclarationSubmissionHandoff = (*OutboxDeclarationSubmissionHandoff)(nil)
 
-// declarationSubmissionPayload 是意图载荷的传输形状：只有下游 FindByKey 所需的幂等
-// 键三维，不带组成快照或发送尝试明细。
+// declarationSubmissionPayload 是意图载荷的传输形状：下游 FindByKey 所需的幂等键
+// 三维加版本维，再加单元所属案件（ADR-0069 决定四/ADR-0073 决定五：案件引用进载荷
+// 不进分区键），不带组成快照或发送尝试明细。
 type declarationSubmissionPayload struct {
 	TenantID  string `json:"tenantId"`
 	UnitID    string `json:"unitId"`
 	Procedure string `json:"procedure"`
 	VersionID string `json:"versionId"`
+	CaseID    string `json:"caseId"`
 }
 
 func declarationSubmissionEventID(key ports.DeclarationSubmissionKey) string {
@@ -66,12 +68,18 @@ func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 	if key.TenantID.String() == "" || key.Unit.String() == "" || key.Procedure.String() == "" {
 		return fmt.Errorf("hand off declaration submission: receive key is required")
 	}
+	// 案件维必填（ADR-0073 决定五）：缺席是装配缺陷，响亮报错不入队——静默发出去
+	// 会在下游译码处变毒丸。
+	if intent.Case.String() == "" {
+		return fmt.Errorf("hand off declaration submission: the customs case is required")
+	}
 
 	payload, err := json.Marshal(declarationSubmissionPayload{
 		TenantID:  key.TenantID.String(),
 		UnitID:    key.Unit.String(),
 		Procedure: key.Procedure.String(),
 		VersionID: intent.Record.Version.ID().String(),
+		CaseID:    intent.Case.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off declaration submission: %w", err)

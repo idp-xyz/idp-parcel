@@ -75,19 +75,97 @@ func (repository *CustomsCases) FindByKey(
 		return domain.CustomsCase{}, false, fmt.Errorf("find customs case: %w", err)
 	}
 
-	spec := domain.CustomsCaseSpec{
-		Jurisdiction:  key.Jurisdiction,
-		Direction:     key.Direction,
-		Procedure:     key.Procedure,
-		Obligation:    key.Obligation,
-		EstablishedAt: establishedAt,
-	}
-	if spec.ID, err = domain.NewCustomsCaseID(caseID); err != nil {
+	id, err := domain.NewCustomsCaseID(caseID)
+	if err != nil {
 		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+	}
+	customsCase, err := rebuildCustomsCase(
+		id, key.Jurisdiction, key.Direction, key.Procedure, key.Obligation,
+		parcelsRaw, rolesRaw, establishedAt)
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	return customsCase, true, nil
+}
+
+// FindByID 按铸造标识取回案件（ADR-0073 决定五的反查读口）：提交链写入前核案件存在
+// 靠它。库侧 customs_case_id_unique 保同租户一标识至多一行。
+func (repository *CustomsCases) FindByID(
+	ctx context.Context,
+	tenant domain.TenantID,
+	id domain.CustomsCaseID,
+) (domain.CustomsCase, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("find customs case by id: %w", err)
+	}
+
+	var (
+		jurisdiction, direction, procedure, obligation string
+		parcelsRaw, rolesRaw                           []byte
+		establishedAt                                  time.Time
+	)
+	err = querier.QueryRow(ctx,
+		`SELECT jurisdiction_ref, direction, procedure_ref, obligation_ref,
+		        parcels, roles, established_at
+		   FROM customs_compliance.customs_case
+		  WHERE tenant_id = $1 AND case_id = $2`,
+		tenant.String(), id.String(),
+	).Scan(&jurisdiction, &direction, &procedure, &obligation, &parcelsRaw, &rolesRaw, &establishedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.CustomsCase{}, false, nil
+	}
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("find customs case by id: %w", err)
+	}
+
+	jurisdictionRef, err := domain.NewRegulatoryJurisdictionReference(jurisdiction)
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+	}
+	directionValue, err := manifestDirectionFrom(direction)
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+	}
+	procedureRef, err := domain.NewCustomsProcedureReference(procedure)
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+	}
+	obligationRef, err := domain.NewObligationScopeReference(obligation)
+	if err != nil {
+		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+	}
+	customsCase, err := rebuildCustomsCase(
+		id, jurisdictionRef, directionValue, procedureRef, obligationRef,
+		parcelsRaw, rolesRaw, establishedAt)
+	if err != nil {
+		return domain.CustomsCase{}, false, err
+	}
+	return customsCase, true, nil
+}
+
+// rebuildCustomsCase 把行状态折回案件聚合，两个读口共用：读回经 EstablishCustomsCase
+// 整门重验，坏行在这里炸成错误不进编排。
+func rebuildCustomsCase(
+	id domain.CustomsCaseID,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	direction domain.ManifestDirection,
+	procedure domain.CustomsProcedureReference,
+	obligation domain.ObligationScopeReference,
+	parcelsRaw, rolesRaw []byte,
+	establishedAt time.Time,
+) (domain.CustomsCase, error) {
+	spec := domain.CustomsCaseSpec{
+		ID:            id,
+		Jurisdiction:  jurisdiction,
+		Direction:     direction,
+		Procedure:     procedure,
+		Obligation:    obligation,
+		EstablishedAt: establishedAt,
 	}
 	var parcels []caseParcelRow
 	if err := json.Unmarshal(parcelsRaw, &parcels); err != nil {
-		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: parcels: %w", err)
+		return domain.CustomsCase{}, fmt.Errorf("rebuild customs case: parcels: %w", err)
 	}
 	for _, row := range parcels {
 		spec.Parcels = append(spec.Parcels, domain.CaseParcelAssociation{
@@ -98,7 +176,7 @@ func (repository *CustomsCases) FindByKey(
 	}
 	var roles []caseRoleRow
 	if err := json.Unmarshal(rolesRaw, &roles); err != nil {
-		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: roles: %w", err)
+		return domain.CustomsCase{}, fmt.Errorf("rebuild customs case: roles: %w", err)
 	}
 	for _, row := range roles {
 		spec.Roles = append(spec.Roles, domain.CaseRoleSnapshot{
@@ -110,9 +188,9 @@ func (repository *CustomsCases) FindByKey(
 
 	customsCase, err := domain.EstablishCustomsCase(spec)
 	if err != nil {
-		return domain.CustomsCase{}, false, fmt.Errorf("rebuild customs case: %w", err)
+		return domain.CustomsCase{}, fmt.Errorf("rebuild customs case: %w", err)
 	}
-	return customsCase, true, nil
+	return customsCase, nil
 }
 
 // Save 写下一个案件。同一法律行为已有案件时答`已有记录`——业务答案不是错误

@@ -78,8 +78,10 @@ func recordFormedDeclarationSubmission(t *testing.T, fixture *synVerticalFixture
 	unitID := mustCC(t, ccdomain.NewDeclarationUnitID, declarationSubmissionUnit)
 	fixedAt := time.Now().UTC().Add(-2 * time.Minute)
 
+	customsCase := mustCC(t, ccdomain.NewCustomsCaseID, "SYN-CASE-01")
 	formed, err := ccdomain.FormDeclarationUnit(
 		unitID,
+		customsCase,
 		procedure,
 		[]ccdomain.DeclaredParcelReference{
 			mustCC(t, ccdomain.NewDeclaredParcelReference, declarationSubmissionMemberOne),
@@ -141,7 +143,7 @@ func recordFormedDeclarationSubmission(t *testing.T, fixture *synVerticalFixture
 			return saveErr
 		}
 		return handoff.HandOffDeclarationSubmission(txCtx,
-			ccports.DeclarationSubmissionHandoffIntent{Record: record})
+			ccports.DeclarationSubmissionHandoffIntent{Record: record, Case: customsCase})
 	})
 	if outcome != ccports.DeclarationSubmissionSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
