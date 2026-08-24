@@ -75,6 +75,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 运营追踪查阅读的就是投影库本身（ADR-0076）：同一适配器同时是派生编排的
+	// ProjectionStore 与查阅端点的读面，不造第二份数据。
+	projectionViews, err := vepostgres.NewProjections(db)
+	if err != nil {
+		return err
+	}
 	claims, err := buildClaimsOrchestration(db)
 	if err != nil {
 		return err
@@ -86,7 +92,7 @@ func run(logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, cancellation, reception, delivery, trackingViews, claims, results)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, cancellation, reception, delivery, trackingViews, projectionViews, claims, results)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

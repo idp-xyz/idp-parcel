@@ -13,10 +13,10 @@ import (
 //
 // 与 ErrMalformedRequest、ErrMalformedClaim 各分一格的判据同 ADR-0029——恢复动作不同：
 // 这一格要接入方去提供并配置渠道参数，改请求或重试都不会好。哨兵只此一个而不随端点分
-// 设：未配置是渠道这一层的状态，两个端点等的是同一件事，分两个哨兵会让装配点看起来
-// 能只配一半。本包据以回 403 + ACCESS_CHANNEL_NOT_CONFIGURED；折进 404 会与「产品没有
-// 这个能力」不可分辨，折进 INTAKE_FAILED（5xx）会让客户端把一件人不来配就永远不会好
-// 的事留队重发。
+// 设：未配置是渠道这一层的状态，本包各端点等的是同一件事，按端点分设哨兵会让装配点
+// 看起来能只配一半。本包据以回 403 + ACCESS_CHANNEL_NOT_CONFIGURED；折进 404 会与
+// 「产品没有这个能力」不可分辨，折进 INTAKE_FAILED（5xx）会让客户端把一件人不来配就
+// 永远不会好的事留队重发。
 var ErrAccessChannelNotConfigured = errors.New("visibility exception http: access channel is not configured")
 
 // codeAccessChannelNotConfigured 命名状态，不命名参数（ADR-0055）：这里等的是哪个
@@ -37,8 +37,9 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var (
-	_ QueryIntake = UnconfiguredIntake{}
-	_ ClaimIntake = UnconfiguredIntake{}
+	_ QueryIntake              = UnconfiguredIntake{}
+	_ ClaimIntake              = UnconfiguredIntake{}
+	_ OperationsTrackingIntake = UnconfiguredIntake{}
 )
 
 // IntakeQuery 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -49,4 +50,10 @@ func (UnconfiguredIntake) IntakeQuery(context.Context, *http.Request) (TrackingV
 // IntakeClaim 同 IntakeQuery：不读请求，只答未配置。
 func (UnconfiguredIntake) IntakeClaim(context.Context, *http.Request) (application.ReceiveClaimCommand, error) {
 	return application.ReceiveClaimCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeOperationsQuery 同 IntakeQuery：不读请求，只答未配置。运营接入面的认证方式
+// 同属接入渠道实例半边（ADR-0076 第三条），未登记前不铸造任何作用域。
+func (UnconfiguredIntake) IntakeOperationsQuery(context.Context, *http.Request) (OperationsTrackingQuery, error) {
+	return OperationsTrackingQuery{}, ErrAccessChannelNotConfigured
 }

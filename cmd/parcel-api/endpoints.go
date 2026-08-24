@@ -37,15 +37,16 @@ import (
 // 读适配器。九格至此全部接真；unwired* 类型只余装配测试在用，分辨见
 // unwired_orchestration.go 的文件注释。
 //
-// 清单是十项（PS 四、NO 一、TF 二、VE 二、CC 一）。ADR-0055 与开发主线曾把它称作
+// 清单是十一项（PS 四、NO 一、TF 二、VE 三、CC 一）。ADR-0055 与开发主线曾把它称作
 // 「七个」，那是把 TF 双端点计作一项的算术口径错，后按逐项枚举定为八项；第九项是
 // 委托查阅（GET /shipment-request-views，UI 阶段 B 的读切片）；第十项是接受后取消
-// （POST /shipment-requests/parcel-cancellations，UC-PS-006）。此处按逐项枚举装配，
-// 少装一个就是把一个端点折回 404，那正是该记录要治的病。
+// （POST /shipment-requests/parcel-cancellations，UC-PS-006）；第十一项是运营追踪查阅
+// （GET /tracking-projections，ADR-0076——读投影库，与客户视图端点各答各的对象）。
+// 此处按逐项枚举装配，少装一个就是把一个端点折回 404，那正是该记录要治的病。
 //
-// requestViews 与 trackingViews 是两个查阅端点的读口：读面不是编排（查阅不触发判断、
-// 派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，接入
-// 渠道就位前一次也不会被调到。
+// requestViews、trackingViews 与 projectionViews 是查阅端点的读口：读面不是编排（查阅
+// 不触发判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们
+// 之前，接入渠道就位前一次也不会被调到。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
@@ -54,6 +55,7 @@ func assembleBusinessEndpoints(
 	reception nodeopshttp.ReceptionHandler,
 	delivery tfhttp.DeliveryHandler,
 	trackingViews visibilityhttp.TrackingViewReader,
+	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
 	results customshttp.ResultHandler,
 ) []httpapi.BusinessEndpoint {
@@ -66,6 +68,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
+		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(visibilityhttp.UnconfiguredIntake{}, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, results)},
 	}

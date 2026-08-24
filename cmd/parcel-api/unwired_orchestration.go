@@ -30,9 +30,10 @@ import (
 // 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，撤回编排随
 // UI 阶段 B 后端序列接真，NO 收寄、TF 交付、VE 索赔与 CC 外部结果四格编排按
 // `.scratch/parcel-api-remaining-endpoint-wiring` 的接线票（01、02、04、05）接真，取消
-// 编排随第十端点挂载接真（传输层随 UC-PS-006 切片先行落库），均由装配点入参交入，不再
-// 从本文件取。十格至此全部接真：本文件全部类型只被装配测试用来钉「未配置面」的形状，
-// 生产装配没有任何一格再从这里取。真渠道 Intake 就位那笔工作只替换 Intake 本身。
+// 编排随第十端点挂载接真（传输层随 UC-PS-006 切片先行落库），运营追踪查阅读口随
+// ADR-0076 端点挂载接真库投影库，均由装配点入参交入，不再从本文件取。各格至此全部
+// 接真：本文件全部类型只被装配测试用来钉「未配置面」的形状，生产装配没有任何一格再
+// 从这里取。真渠道 Intake 就位那笔工作只替换 Intake 本身。
 var errOrchestrationNotWired = errors.New("parcel-api: business orchestration is not wired; the unconfigured intake should have refused first")
 
 type unwiredSubmission struct{}
@@ -113,6 +114,35 @@ func (unwiredRequestViews) FindVisibleByID(
 	shipmentdomain.ShipmentRequestID,
 ) (shipmentports.ShipmentRequestDetailRecord, bool, error) {
 	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
+}
+
+// unwiredProjectionViews 只被装配测试使用：生产装配（main）把真库投影读适配器交进
+// 装配点。填法同 unwiredTrackingViews——读不回按 ADR-0022 是「没形成答案」的 5xx，
+// 绝不顶成空列表或「投影未形成」。
+type unwiredProjectionViews struct{}
+
+func (unwiredProjectionViews) ListCurrent(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilitydomain.TrackingProjection, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredProjectionViews) FindCurrent(
+	context.Context,
+	visibilitydomain.TenantID,
+	visibilitydomain.TrackedParcelReference,
+) (visibilitydomain.TrackingProjection, bool, error) {
+	return visibilitydomain.TrackingProjection{}, false, errOrchestrationNotWired
+}
+
+func (unwiredProjectionViews) FindByVersion(
+	context.Context,
+	visibilitydomain.TenantID,
+	visibilitydomain.ProjectionVersionID,
+) (visibilitydomain.TrackingProjection, bool, error) {
+	return visibilitydomain.TrackingProjection{}, false, errOrchestrationNotWired
 }
 
 type unwiredCancellation struct{}

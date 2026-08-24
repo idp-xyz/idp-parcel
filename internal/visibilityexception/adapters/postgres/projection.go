@@ -12,14 +12,20 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // Projections 实现 ports.ProjectionStore。版本行只增不改写（ADR-0065）：Save 追加
 // 版本行并把 tracking_projection_current 的显式标记指向它，原版本连同条目、映射
 // 版本与派生时间留存，按版本读得回；读当前版走标记直取，不扫描历史。
+//
+// 同一适配器一并实现 ports.OperationsProjectionRead（ADR-0076）：运营查阅读的就是
+// 这份投影库,不是第二份数据;ListCurrent 是查阅面独有的列表读法。
 type Projections struct {
 	db *bentopg.DB
 }
+
+var _ ports.OperationsProjectionRead = (*Projections)(nil)
 
 func NewProjections(db *bentopg.DB) (*Projections, error) {
 	if db == nil {
@@ -77,6 +83,65 @@ func (repository *Projections) FindCurrent(
 		return domain.TrackingProjection{}, false, fmt.Errorf("rebuild projection: %w", err)
 	}
 	return projection, true, nil
+}
+
+// ListCurrent 按租户列出各包裹的当前投影版本（运营追踪查阅的列表读面,ADR-0076）。
+// 新派生的在前,同刻并列按包裹引用倒序,保证分页可重复;limit 非正是调用方编程错误
+// ——静默答一页会把「忘了传」变成一个没人决定过的页大小（判据与委托查阅读口同款）。
+// 只走当前标记,不扫描历史版本;留存的历史版仍由 FindByVersion 按版本读回。
+func (repository *Projections) ListCurrent(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]domain.TrackingProjection, error) {
+	if limit < 1 {
+		return nil, fmt.Errorf("list current projections: limit must be positive, got %d", limit)
+	}
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list current projections: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT v.version_id, v.parcel_ref, v.derived_at, v.prior_version, v.entries
+		   FROM visibility_exception.tracking_projection_current AS c
+		   JOIN visibility_exception.tracking_projection_version AS v
+		     ON v.tenant_id = c.tenant_id
+		    AND v.parcel_ref = c.parcel_ref
+		    AND v.version_id = c.version_id
+		  WHERE c.tenant_id = $1
+		  ORDER BY v.derived_at DESC, v.parcel_ref DESC
+		  LIMIT $2`,
+		tenant.String(), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list current projections: %w", err)
+	}
+	defer rows.Close()
+
+	projections := make([]domain.TrackingProjection, 0, limit)
+	for rows.Next() {
+		var versionID, parcelRef string
+		var derivedAt time.Time
+		var priorVersion *string
+		var entriesRaw []byte
+		if err := rows.Scan(&versionID, &parcelRef, &derivedAt, &priorVersion, &entriesRaw); err != nil {
+			return nil, fmt.Errorf("list current projections: %w", err)
+		}
+		parcel, err := domain.NewTrackedParcelReference(parcelRef)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild projection: %w", err)
+		}
+		projection, err := rebuildProjection(versionID, parcel, derivedAt, priorVersion, entriesRaw)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild projection: %w", err)
+		}
+		projections = append(projections, projection)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list current projections: %w", err)
+	}
+	return projections, nil
 }
 
 // FindByVersion 按版本读回留存的任一版——当前版或已被更新的历史版皆可（ADR-0065）。

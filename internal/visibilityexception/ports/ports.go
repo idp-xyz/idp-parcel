@@ -85,6 +85,36 @@ type ProjectionStore interface {
 	Save(ctx context.Context, tenant domain.TenantID, projection domain.TrackingProjection) error
 }
 
+// OperationsProjectionRead 是运营追踪查阅的读面(ADR-0076、CONTEXT「运营追踪查阅」):
+// 当前投影列表、单件当前版与按版本读回留存版本(ADR-0065 的审计口)。查阅只读——
+// 不形成新投影版本,也不产生披露决定、通知或任何业务事实(CONTEXT 生命周期句),
+// 所以它是存储读面,不是编排的门。
+//
+// 键只含租户维,无客户维:投影是租户内部对象,运营查阅的授权边界只有租户;租户在
+// 签名上看得见,与 ProjectionStore 现有方法同派。FindCurrent 与 FindByVersion 和
+// ProjectionStore 同签名,由同一存储适配器一并作答;ListCurrent 是查阅面独有的列表
+// 读法,派生编排用不到它,故不并进写侧接口——扩写侧接口会让每个写侧替身都被迫
+// 长出一个列表方法。
+//
+// Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
+type OperationsProjectionRead interface {
+	ListCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]domain.TrackingProjection, error)
+	FindCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.TrackedParcelReference,
+	) (domain.TrackingProjection, bool, error)
+	FindByVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.ProjectionVersionID,
+	) (domain.TrackingProjection, bool, error)
+}
+
 // ProjectionIdentityFactory 签发投影版本标识。
 type ProjectionIdentityFactory interface {
 	NextProjectionVersionID(ctx context.Context) (domain.ProjectionVersionID, error)
