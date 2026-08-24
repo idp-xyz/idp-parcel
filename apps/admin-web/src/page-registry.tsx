@@ -89,7 +89,10 @@ export const pageById: Record<string, ComponentType> = {
  * 这是接线事实的登记处：某页从骨架转接线时在此登记，工作台总览随之变档，
  * 不在页面里另写第二份状态。
  */
-export const liveIds: ReadonlySet<string> = new Set(['shipment-request']);
+export const liveIds: ReadonlySet<string> = new Set([
+  'shipment-request',
+  'shipment-request-inquiry',
+]);
 
 /**
  * 演示模块：功能完整但数据为隔离合成 S，不承载业务语义。

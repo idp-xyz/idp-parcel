@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -49,10 +50,18 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	withdrawal, err := buildWithdrawalOrchestration(db)
+	if err != nil {
+		return err
+	}
+	requestViews, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

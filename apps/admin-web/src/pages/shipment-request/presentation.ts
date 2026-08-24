@@ -101,6 +101,17 @@ export const decisionKindLabels: Record<string, string> = {
   REJECTED: '已拒绝',
 };
 
+/**
+ * 接受判断任务状态(domain.AcceptanceTaskState 的字符串)。「已完成」只在接受或拒绝
+ * 决定形成时到达;撤回成立到达的是「已停止」——判完了与没人再判了是两个事实,词表
+ * 不合并(词取领域注释原词)。
+ */
+export const acceptanceTaskStateLabels: Record<string, string> = {
+  RUNNING: '运行中',
+  COMPLETE: '已完成',
+  STOPPED: '已停止',
+};
+
 // 传输层错误码说明。它们不是业务原因目录:出现即表示应用层没答过,响应体也
 // 刻意不带自由文本(防泄露),所以措辞只指下一步动作。
 export const problemCodeNotes: Record<string, string> = {

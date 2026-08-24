@@ -7,6 +7,8 @@ import (
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	shipmentdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -25,10 +27,10 @@ import (
 // 连一个零值结果都不交回。
 //
 // 换编排与换 Intake 是两笔可独立发生的工作：运行期未配置 Intake 拒在编排之前，装配期
-// 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，由装配点
-// 入参交入，不再从本文件取——unwiredSubmission 自此只被装配测试用来钉「未配置面」的
-// 形状；其余各格仍以本文件的类型占位，各自的接线各自成笔。真渠道 Intake 就位那笔工作
-// 只替换 Intake 本身。
+// 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，撤回编排随
+// UI 阶段 B 后端序列接真，均由装配点入参交入，不再从本文件取——unwiredSubmission 与
+// unwiredWithdrawal 自此只被装配测试用来钉「未配置面」的形状；其余各格仍以本文件的类型
+// 占位，各自的接线各自成笔。真渠道 Intake 就位那笔工作只替换 Intake 本身。
 var errOrchestrationNotWired = errors.New("parcel-api: business orchestration is not wired; the unconfigured intake should have refused first")
 
 type unwiredSubmission struct{}
@@ -87,6 +89,27 @@ func (unwiredTrackingViews) FindCurrent(
 	visibilitydomain.TrackedParcelReference,
 ) (visibilitydomain.CustomerTrackingView, bool, error) {
 	return visibilitydomain.CustomerTrackingView{}, false, errOrchestrationNotWired
+}
+
+// unwiredRequestViews 只被装配测试使用：生产装配（main）把真库读适配器交进装配点，
+// 这里的占位让「未配置面」测试不必开库。填法同 unwiredTrackingViews——读不回是
+// 「没形成答案」的 5xx，绝不顶成一个空列表或统一不可见。
+type unwiredRequestViews struct{}
+
+func (unwiredRequestViews) ListVisible(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	int,
+) ([]shipmentports.ShipmentRequestSummaryRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredRequestViews) FindVisibleByID(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentRequestID,
+) (shipmentports.ShipmentRequestDetailRecord, bool, error) {
+	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
 }
 
 type unwiredClaims struct{}

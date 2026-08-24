@@ -153,6 +153,20 @@ const (
 	AcceptanceTaskStopped
 )
 
+// String 的词汇归领域：查阅读面与传输层原样透出，不各自另造一套任务阶段词。
+func (state AcceptanceTaskState) String() string {
+	switch state {
+	case AcceptanceTaskRunning:
+		return "RUNNING"
+	case AcceptanceTaskComplete:
+		return "COMPLETE"
+	case AcceptanceTaskStopped:
+		return "STOPPED"
+	default:
+		return ""
+	}
+}
+
 func (task AcceptanceDecisionTask) TaskID() AcceptanceDecisionTaskID {
 	return task.taskID
 }

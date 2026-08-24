@@ -31,8 +31,9 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var (
-	_ SubmissionIntake = UnconfiguredIntake{}
-	_ WithdrawalIntake = UnconfiguredIntake{}
+	_ SubmissionIntake           = UnconfiguredIntake{}
+	_ WithdrawalIntake           = UnconfiguredIntake{}
+	_ ShipmentRequestViewsIntake = UnconfiguredIntake{}
 )
 
 // IntakeSubmission 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -43,4 +44,14 @@ func (UnconfiguredIntake) IntakeSubmission(context.Context, *http.Request) (appl
 // IntakeWithdrawal 同 IntakeSubmission：不读请求，只答未配置。
 func (UnconfiguredIntake) IntakeWithdrawal(context.Context, *http.Request) (application.WithdrawShipmentRequestCommand, error) {
 	return application.WithdrawShipmentRequestCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeListQuery 同上：查阅的作用域整组来自认证与授权结果，渠道未配置就无从铸造。
+func (UnconfiguredIntake) IntakeListQuery(context.Context, *http.Request) (ShipmentRequestViewsQuery, error) {
+	return ShipmentRequestViewsQuery{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeDetailQuery 同上。
+func (UnconfiguredIntake) IntakeDetailQuery(context.Context, *http.Request) (ShipmentRequestViewQuery, error) {
+	return ShipmentRequestViewQuery{}, ErrAccessChannelNotConfigured
 }

@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import {
   DetailPageTemplate,
   type DetailField,
   type DetailSection,
+  type TemplateViewState,
 } from '../../templates';
 import {
   Table,
@@ -12,205 +14,129 @@ import {
   TableCell,
 } from '@idpxyz/ui-primitives';
 import { StatusBadgeFor, type DomainStatus } from '../../domain/status';
-import { requestStateLabels, withCode } from './presentation';
+import {
+  requestStateLabels,
+  acceptanceTaskStateLabels,
+  decisionKindLabels,
+  problemNote,
+  withCode,
+} from './presentation';
+import {
+  findShipmentRequestView,
+  REQUEST_NOT_VISIBLE_CODE,
+  type ApiResult,
+  type ShipmentRequestDetail,
+  type ViewDetailResponseBody,
+} from './api';
 
-// 委托详情骨架。字段与区块取 parcel-shipment CONTEXT.md 与 UC-PS-001 的原词;
-// 查询端点未建,view 现阶段恒缺席,内容区如实呈现「未配置」态。builder 按 view
-// 组装是接线路径:查询契约落地后调用方喂入 view 即转 ready,骨架不用重搭。
+// 委托详情，对 GET /shipment-request-views?shipmentRequestId=… 真实端点取数。
 //
-// 「统一不可见结果」(CONTEXT.md)约束接线后的取数:不存在、越权与其他租户对象
-// 同一语义,本页不得按取数失败原因分辨呈现「不存在」与「无权查看」。
+// 字段与区块跟已落地的查询契约走（api.ts 的 ShipmentRequestDetail 镜像），读模型
+// 没有的东西（客户委托参考、寄收件关系、接受基线快照）不虚构；那些查阅面扩进读
+// 模型时，先扩 ports 的记录与端点响应，再回来加区块。
+//
+// 「统一不可见结果」（CONTEXT.md）：单份查阅的 404 SHIPMENT_REQUEST_NOT_VISIBLE
+// 是终局业务答案，不存在、越权与其他租户对象同一语义——本页对它只说「不可见」，
+// 不按取数失败原因分辨呈现「不存在」与「无权查看」，也不提供重试。
 
-/** 声明包裹一行(UC-PS-001 声明包裹组:客户侧引用、声明测量、货物和服务资料)。 */
-export interface DeclaredParcelView {
-  customerParcelReference: string;
-  /** 声明毛重:值与单位是客户引用原样保全,不规范化(与 api.ts 草案同一态度)。 */
-  declaredWeightValue: string;
-  declaredWeightUnit: string;
-  goodsDescription?: string;
-}
-
-/** 当前提交版本(CONTEXT「委托提交版本」:原版本、成员、原因、提交主体必须保留)。 */
-export interface SubmissionVersionView {
-  versionId: string;
-  submittedBy: string;
-  /** 形成原因:首次提交,或同一委托边界内的纠错/补充。 */
-  reason: string;
-}
-
-/** 接受判断任务(CONTEXT 原词:判断阶段、尚缺的权威结果、采用版本、最近处理结果、续办关系)。 */
-export interface AcceptanceTaskView {
-  stage: string;
-  missingAuthorities: string[];
-  adoptedVersion: string;
-  lastResult: string;
-  continuation: string;
-}
-
-/** 委托接受基线(CONTEXT:接受时形成的不可覆盖快照)与预计承诺(接受时形成)。 */
-export interface AcceptanceBaselineView {
-  acceptedAt: string;
-  /** 客户声明的包裹成员(基线固定的成员引用)。 */
-  memberReferences: string[];
-  /** 客户与责任法人。 */
-  responsibleLegalEntity: string;
-  /** 合同与服务产品依据。 */
-  contractAndProduct: string;
-  /** 服务要求快照引用。 */
-  serviceRequirements: string;
-  /** 适用商业依据引用。 */
-  commercialBasis: string;
-  /** 预计承诺(CONTEXT 客户承诺:委托接受 → 预计承诺形成)。 */
-  estimatedCommitment: string;
-}
-
-/**
- * 详情视图形状。查询契约未建,这是页面侧暂定;真契约落地时以它为准重谈,
- * 不得反过来把这里当已发布的查询 Schema。
- */
-export interface ShipmentRequestDetailView {
-  shipmentRequestId: string;
-  /** 提交批次(CONTEXT:客户一次提交或导入多份委托的处理归组,不取得服务责任)。 */
-  batchId: string;
-  state: string;
-  customerShipmentReference: string;
-  requestedServiceProduct: string;
-  destinationServiceScope: string;
-  senderRelation: string;
-  recipientRelation: string;
-  /**
-   * 客户请求生效时间 requestEffectiveAt:值与缺失/显式存在状态都进入内容摘要
-   * (CONTEXT),因此缺席时要呈现「未声明」这一事实本身,不能默认补齐。
-   */
-  requestEffectiveAt?: string;
-  /** 来源发生时间 occurredAt(来源信封元数据,不进入内容摘要)。 */
-  occurredAt: string;
-  /** 系统接收时间 receivedAt(来源信封元数据,不进入内容摘要)。 */
-  receivedAt: string;
-  parcels: DeclaredParcelView[];
-  currentVersion?: SubmissionVersionView;
-  /** 委托仍为「已提交」时在场:任务未完成时委托保持已提交(CONTEXT 接受判断任务)。 */
-  acceptanceTask?: AcceptanceTaskView;
-  /** 委托「已接受」后在场:后续变化不得静默覆盖(CONTEXT 委托接受基线)。 */
-  acceptanceBaseline?: AcceptanceBaselineView;
-}
-
-function buildBasicFields(view: ShipmentRequestDetailView): DetailField[] {
+function buildBasicFields(view: ShipmentRequestDetail): DetailField[] {
   return [
     { label: '委托标识', value: <span className="font-mono">{view.shipmentRequestId}</span> },
-    { label: '提交批次', value: <span className="font-mono">{view.batchId}</span> },
+    { label: '客户账户', value: <span className="font-mono">{view.customerAccountId}</span> },
     {
       label: '委托状态',
       value: withCode(requestStateLabels[view.state], view.state),
     },
-    { label: '客户委托参考', value: <span className="font-mono">{view.customerShipmentReference}</span> },
-    { label: '请求的服务产品', value: view.requestedServiceProduct },
-    { label: '目的服务范围', value: view.destinationServiceScope },
-    { label: '寄件关系', value: view.senderRelation },
-    { label: '收件关系', value: view.recipientRelation },
-    {
-      label: '客户请求生效时间',
-      // 缺失与显式存在是两种要分别呈现的事实,不是空串。
-      value: view.requestEffectiveAt ?? '未声明',
-    },
+    { label: '提交批次', value: <span className="font-mono">{view.batchId}</span> },
+    { label: '来源', value: <span className="font-mono">{view.source}</span> },
+    { label: '来源请求键', value: <span className="font-mono">{view.sourceRequestKey}</span> },
+    { label: '当前提交版本', value: <span className="font-mono">{view.submissionVersionId}</span> },
+    // 此前版本数是「同一委托边界内纠错/补充」的痕迹计数，0 表示首版即当前版。
+    { label: '此前版本数', value: String(view.priorVersionCount) },
+    { label: '提交时间', value: <span className="font-mono">{view.submittedAt}</span> },
     { label: '来源发生时间', value: <span className="font-mono">{view.occurredAt}</span> },
     { label: '系统接收时间', value: <span className="font-mono">{view.receivedAt}</span> },
   ];
 }
 
-function buildSections(view: ShipmentRequestDetailView): DetailSection[] {
+function buildSections(view: ShipmentRequestDetail): DetailSection[] {
   const sections: DetailSection[] = [
     {
       id: 'declared-parcels',
       title: '声明包裹',
       description:
-        '客户声明成员及各自客户侧引用、声明测量与货物资料;接受后成员基线冻结,增删走取消或关联新委托。',
+        '客户声明成员（读模型粒度：内部包裹标识与声明测量，值原样保全不规范化）；' +
+        '接受后成员基线冻结，增删走取消或关联新委托。',
       content: (
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>客户侧包裹引用</TableHead>
+              <TableHead>包裹标识</TableHead>
               <TableHead>声明毛重</TableHead>
-              <TableHead>品名</TableHead>
+              <TableHead>声明外廓</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {view.parcels.map((parcel) => (
-              <TableRow key={parcel.customerParcelReference}>
+            {view.declaredParcels.map((parcel) => (
+              <TableRow key={parcel.parcelId}>
                 <TableCell>
-                  <span className="font-mono text-[12px]">{parcel.customerParcelReference}</span>
+                  <span className="font-mono text-[12px]">{parcel.parcelId}</span>
                 </TableCell>
                 <TableCell>
-                  {parcel.declaredWeightValue} {parcel.declaredWeightUnit}
+                  {parcel.declaredWeightValue
+                    ? `${parcel.declaredWeightValue} ${parcel.declaredWeightUnit ?? ''}`
+                    : '未声明'}
                 </TableCell>
-                <TableCell>{parcel.goodsDescription ?? '—'}</TableCell>
+                <TableCell>
+                  {parcel.dimensions
+                    ? `${parcel.dimensions.length} × ${parcel.dimensions.width} × ${parcel.dimensions.height} ${parcel.dimensions.unit}`
+                    : '未声明'}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       ),
     },
-  ];
-
-  if (view.currentVersion) {
-    sections.push({
-      id: 'current-submission-version',
-      title: '当前提交版本',
-      description:
-        '同一委托同一时刻只有一个待判断的当前提交版本;纠错或补充形成新版本,原版本与判断历史保留。',
-      content: (
-        <dl className="space-y-1">
-          <FieldRow label="版本标识" value={view.currentVersion.versionId} mono />
-          <FieldRow label="提交主体" value={view.currentVersion.submittedBy} />
-          <FieldRow label="形成原因" value={view.currentVersion.reason} />
-        </dl>
-      ),
-    });
-  }
-
-  if (view.acceptanceTask) {
-    sections.push({
+    {
       id: 'acceptance-task',
       title: '接受判断任务',
-      description: '任务未完成时委托仍为「已提交」;它可续办,但不是委托的新领域状态。',
+      description:
+        '任务阶段与最近一次没能推进的处理记录都保留——只留成功判断的话，' +
+        '一份卡了十轮的委托看起来会和刚建单的一模一样。',
       content: (
         <dl className="space-y-1">
-          <FieldRow label="判断阶段" value={view.acceptanceTask.stage} />
           <FieldRow
-            label="尚缺的权威结果"
-            value={
-              view.acceptanceTask.missingAuthorities.length > 0
-                ? view.acceptanceTask.missingAuthorities.join('、')
-                : '无'
-            }
+            label="任务状态"
+            value={withCode(acceptanceTaskStateLabels[view.acceptanceTask.state], view.acceptanceTask.state)}
           />
-          <FieldRow label="采用版本" value={view.acceptanceTask.adoptedVersion} mono />
-          <FieldRow label="最近处理结果" value={view.acceptanceTask.lastResult} />
-          <FieldRow label="续办关系" value={view.acceptanceTask.continuation} mono />
+          {view.acceptanceTask.lastAttemptReason !== undefined && (
+            <FieldRow label="最近处理结果" value={view.acceptanceTask.lastAttemptReason} />
+          )}
+          {view.acceptanceTask.lastAttemptContinuation !== undefined && (
+            <FieldRow label="续办引用" value={view.acceptanceTask.lastAttemptContinuation} mono />
+          )}
+          {view.acceptanceTask.lastAttemptedAt !== undefined && (
+            <FieldRow label="最近处理时间" value={view.acceptanceTask.lastAttemptedAt} mono />
+          )}
         </dl>
       ),
-    });
-  }
+    },
+  ];
 
-  if (view.acceptanceBaseline) {
+  if (view.decision) {
     sections.push({
-      id: 'acceptance-baseline',
-      title: '委托接受基线',
-      description:
-        '接受时形成的不可覆盖快照;后续取消、更正或物理身份演化不能改写该基线。',
+      id: 'decision',
+      title: '接受/拒绝决定',
+      description: '已形成的决定不可覆盖；决定后的撤回不再可用，后续走对应的决定后入口。',
       content: (
         <dl className="space-y-1">
-          <FieldRow label="接受时间" value={view.acceptanceBaseline.acceptedAt} mono />
+          <FieldRow label="决定标识" value={view.decision.decisionId} mono />
           <FieldRow
-            label="客户声明的包裹成员"
-            value={view.acceptanceBaseline.memberReferences.join('、')}
-            mono
+            label="决定种类"
+            value={withCode(decisionKindLabels[view.decision.kind], view.decision.kind)}
           />
-          <FieldRow label="客户与责任法人" value={view.acceptanceBaseline.responsibleLegalEntity} />
-          <FieldRow label="合同与服务产品" value={view.acceptanceBaseline.contractAndProduct} />
-          <FieldRow label="服务要求" value={view.acceptanceBaseline.serviceRequirements} />
-          <FieldRow label="适用商业依据" value={view.acceptanceBaseline.commercialBasis} mono />
-          <FieldRow label="预计承诺" value={view.acceptanceBaseline.estimatedCommitment} />
+          <FieldRow label="决定时间" value={view.decision.decidedAt} mono />
         </dl>
       ),
     });
@@ -219,7 +145,7 @@ function buildSections(view: ShipmentRequestDetailView): DetailSection[] {
   return sections;
 }
 
-/** 区块内的键值行,排版对齐 DetailPageTemplate 基本信息区。 */
+/** 区块内的键值行，排版对齐 DetailPageTemplate 基本信息区。 */
 function FieldRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex gap-3 text-[12px] leading-5">
@@ -231,17 +157,78 @@ function FieldRow({ label, value, mono }: { label: string; value: string; mono?:
   );
 }
 
+// 取数答案 → 模板四态。不可见走空态（终局答案、无重试）；其余错误格与列表页同款。
+function viewStateOf(
+  answer: ApiResult<ViewDetailResponseBody> | null,
+  retry: () => void,
+): TemplateViewState {
+  if (answer === null) return { kind: 'loading' };
+  switch (answer.kind) {
+    case 'outcome':
+      return { kind: 'ready' };
+    case 'unconfigured':
+      return {
+        kind: 'unconfigured',
+        title: '接入渠道未配置',
+        description:
+          '查询端点已建立，但接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。' +
+          '恢复动作是提供渠道参数（PAR-INT-01），改请求或重试不会改变结果。',
+      };
+    case 'callerProblem':
+      if (answer.code === REQUEST_NOT_VISIBLE_CODE) {
+        return {
+          kind: 'empty',
+          title: '委托不可见',
+          description:
+            '在当前授权查询作用域内查不到该委托。统一不可见结果：不存在、越权与' +
+            '其他租户对象同一语义，本页不作区分。',
+        };
+      }
+      return {
+        kind: 'error',
+        title: `调用方式问题（HTTP ${answer.status}）`,
+        description: problemNote(answer.code),
+      };
+    case 'noAnswer':
+      return {
+        kind: 'error',
+        title: `服务端未形成答案（HTTP ${answer.status}）`,
+        description: problemNote(answer.code),
+        onRetry: retry,
+      };
+    case 'transport':
+      return {
+        kind: 'error',
+        title: '请求未到达 parcel-api',
+        description: `${answer.message}；请确认代理与服务端在运行（约定走 /api 经代理转发）。`,
+        onRetry: retry,
+      };
+  }
+}
+
 export function ShipmentRequestDetailPage({
   shipmentRequestId,
-  view,
   onBack,
 }: {
-  /** 从列表钻取时携带的委托标识;查询未接线时仅用于页头示名。 */
-  shipmentRequestId?: string;
-  /** 查询接线后由调用方喂入;当前恒缺席。 */
-  view?: ShipmentRequestDetailView;
+  /** 要查阅的委托标识；本页自取数，标识只定位对象，不单独证明查询权限。 */
+  shipmentRequestId: string;
   onBack?: () => void;
 }) {
+  const [answer, setAnswer] = useState<ApiResult<ViewDetailResponseBody> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void findShipmentRequestView(shipmentRequestId).then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [shipmentRequestId, reloadToken]);
+
+  const view = answer?.kind === 'outcome' ? answer.body.request : undefined;
   const stateWord = view ? requestStateLabels[view.state] : undefined;
 
   return (
@@ -249,7 +236,7 @@ export function ShipmentRequestDetailPage({
       title="委托详情"
       identifier={view?.shipmentRequestId ?? shipmentRequestId}
       status={stateWord ? <StatusBadgeFor status={stateWord as DomainStatus} /> : undefined}
-      description="委托的服务身份、承诺与商业生命周期;全程运营主状态归 visibility-exception,本页不呈现。"
+      description="委托的服务身份、承诺与商业生命周期；全程运营主状态归 visibility-exception，本页不呈现。"
       headerActions={
         onBack ? (
           <button
@@ -263,17 +250,7 @@ export function ShipmentRequestDetailPage({
       }
       basicFields={view ? buildBasicFields(view) : []}
       sections={view ? buildSections(view) : undefined}
-      viewState={
-        view
-          ? { kind: 'ready' }
-          : {
-              kind: 'unconfigured',
-              title: '委托查询端点尚未建立',
-              description:
-                '详情数据待查询契约建立后接线;区块骨架(声明包裹、当前提交版本、接受判断任务、' +
-                '委托接受基线)已按 parcel-shipment CONTEXT 原词搭好。本页不发请求、不含合成数据。',
-            }
-      }
+      viewState={viewStateOf(answer, () => setReloadToken((token) => token + 1))}
     />
   );
 }

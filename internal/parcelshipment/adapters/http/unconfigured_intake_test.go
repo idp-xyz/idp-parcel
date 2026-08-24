@@ -11,20 +11,32 @@ import (
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
+
+// unconfiguredEndpoint 带上各自的合法方法：未配置格答在方法检查之后，拿错方法测出来
+// 的 405 会盖过 403，断言就什么也没守住（cmd/parcel-api 的装配测试同一条理由）。
+type unconfiguredEndpoint struct {
+	method  string
+	handler http.Handler
+}
 
 // unconfiguredEndpoints 遍历本包装着 UnconfiguredIntake 的全部端点。编排一律是「被调
 // 即失败」的替身：未配置 Intake 的合同就是不构造命令，编排若被触到，说明有请求穿过了
 // 未配置格——装配点因此才允许在真渠道就位前不装配任何应用编排。
-func unconfiguredEndpoints(t *testing.T) map[string]http.Handler {
+func unconfiguredEndpoints(t *testing.T) map[string]unconfiguredEndpoint {
 	t.Helper()
-	return map[string]http.Handler{
-		"submit": shipmenthttp.NewSubmitShipmentRequestEndpoint(
+	return map[string]unconfiguredEndpoint{
+		"submit": {http.MethodPost, shipmenthttp.NewSubmitShipmentRequestEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableSubmissionHandler{t: t},
-		),
-		"withdraw": shipmenthttp.NewWithdrawShipmentRequestEndpoint(
+		)},
+		"withdraw": {http.MethodPost, shipmenthttp.NewWithdrawShipmentRequestEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableWithdrawalHandler{t: t},
-		),
+		)},
+		"views": {http.MethodGet, shipmenthttp.NewQueryShipmentRequestViewsEndpoint(
+			shipmenthttp.UnconfiguredIntake{}, unreachableViewsReader{t: t},
+		)},
 	}
 }
 
@@ -35,10 +47,10 @@ func TestUnconfiguredIntakeRefusesWithoutReadingTheBody(t *testing.T) {
 	for name, endpoint := range unconfiguredEndpoints(t) {
 		t.Run(name, func(t *testing.T) {
 			probe := &readProbe{}
-			request := httptest.NewRequest(http.MethodPost, "/", probe)
+			request := httptest.NewRequest(endpoint.method, "/", probe)
 			response := httptest.NewRecorder()
 
-			endpoint.ServeHTTP(response, request)
+			endpoint.handler.ServeHTTP(response, request)
 
 			if response.Code != http.StatusForbidden {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusForbidden)
@@ -58,35 +70,35 @@ func TestUnconfiguredIntakeRefusesWithoutReadingTheBody(t *testing.T) {
 // 身份的第一个征兆就是答复随它变化；这里钉住不同载荷、自报租户头与查询串得到逐字节
 // 相同的答复。
 func TestUnconfiguredIntakeAnswersEveryRequestIdentically(t *testing.T) {
-	variants := map[string]func() *http.Request{
-		"empty body": func() *http.Request {
-			return httptest.NewRequest(http.MethodPost, "/", nil)
+	variants := map[string]func(method string) *http.Request{
+		"empty body": func(method string) *http.Request {
+			return httptest.NewRequest(method, "/", nil)
 		},
-		"json body": func() *http.Request {
-			return httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"tenantId":"TENANT-9"}`))
+		"json body": func(method string) *http.Request {
+			return httptest.NewRequest(method, "/", strings.NewReader(`{"tenantId":"TENANT-9"}`))
 		},
-		"garbage body": func() *http.Request {
-			return httptest.NewRequest(http.MethodPost, "/", strings.NewReader("!!not-json!!"))
+		"garbage body": func(method string) *http.Request {
+			return httptest.NewRequest(method, "/", strings.NewReader("!!not-json!!"))
 		},
-		"self-reported identity headers": func() *http.Request {
-			request := httptest.NewRequest(http.MethodPost, "/", nil)
+		"self-reported identity headers": func(method string) *http.Request {
+			request := httptest.NewRequest(method, "/", nil)
 			request.Header.Set("X-Reported-Tenant", "TENANT-9")
 			request.Header.Set("X-Reported-Customer-Account", "CUST-9")
 			return request
 		},
-		"query string": func() *http.Request {
-			return httptest.NewRequest(http.MethodPost, "/?tenant=TENANT-9", nil)
+		"query string": func(method string) *http.Request {
+			return httptest.NewRequest(method, "/?tenant=TENANT-9", nil)
 		},
 	}
 
 	for name, endpoint := range unconfiguredEndpoints(t) {
 		t.Run(name, func(t *testing.T) {
 			baseline := httptest.NewRecorder()
-			endpoint.ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, "/", nil))
+			endpoint.handler.ServeHTTP(baseline, httptest.NewRequest(endpoint.method, "/", nil))
 
 			for variantName, newRequest := range variants {
 				response := httptest.NewRecorder()
-				endpoint.ServeHTTP(response, newRequest())
+				endpoint.handler.ServeHTTP(response, newRequest(endpoint.method))
 				if response.Code != baseline.Code || response.Body.String() != baseline.Body.String() {
 					t.Fatalf("%s: answer differs from baseline: %d %s vs %d %s",
 						variantName, response.Code, response.Body.String(), baseline.Code, baseline.Body.String())
@@ -136,4 +148,24 @@ func (handler unreachableWithdrawalHandler) Handle(
 ) (application.WithdrawShipmentRequestResult, error) {
 	handler.t.Fatal("a request passed the unconfigured intake and reached the orchestration")
 	return application.WithdrawShipmentRequestResult{}, nil
+}
+
+type unreachableViewsReader struct{ t *testing.T }
+
+func (reader unreachableViewsReader) ListVisible(
+	context.Context,
+	domain.AuthorizedQueryScope,
+	int,
+) ([]ports.ShipmentRequestSummaryRecord, error) {
+	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
+	return nil, nil
+}
+
+func (reader unreachableViewsReader) FindVisibleByID(
+	context.Context,
+	domain.AuthorizedQueryScope,
+	domain.ShipmentRequestID,
+) (ports.ShipmentRequestDetailRecord, bool, error) {
+	reader.t.Fatal("a request passed the unconfigured intake and reached the read side")
+	return ports.ShipmentRequestDetailRecord{}, false, nil
 }

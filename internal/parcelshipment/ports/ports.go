@@ -1146,6 +1146,85 @@ type AcceptanceDecisionHandoff interface {
 	HandOffAcceptanceDecision(ctx context.Context, intent AcceptanceDecisionHandoffIntent) error
 }
 
+// ShipmentRequestSummaryRecord 是委托查阅列表的一行。它是读模型而不是聚合：查阅要跨
+// 生命周期覆盖`已拒绝`/`已撤回`，而聚合重建门只开到`已提交`与`已接受`（ADR-0061），
+// 走聚合仓储的查阅会让恰恰最需要交代的两种终局读不出来。
+type ShipmentRequestSummaryRecord struct {
+	CustomerAccountID   domain.CustomerAccountID
+	Source              domain.Source
+	SourceRequestKey    domain.SourceRequestKey
+	ShipmentRequestID   domain.ShipmentRequestID
+	State               domain.ShipmentRequestState
+	SubmissionVersionID domain.SubmissionVersionID
+	DeclaredParcelCount int
+	SubmittedAt         time.Time
+}
+
+// DeclaredParcelViewRecord 是详情里的一件声明包裹。测量值保持客户引用原样的字符串
+// （"2.50" 不规范化），与快照存的形状一致；缺画像时测量字段为空——画像本就可缺。
+type DeclaredParcelViewRecord struct {
+	Parcel         domain.DeclaredParcelID
+	WeightValue    string
+	WeightUnit     string
+	HasDimensions  bool
+	Length         string
+	Width          string
+	Height         string
+	DimensionsUnit string
+}
+
+// AcceptanceDecisionViewRecord 是详情里已形成的接受决定摘要。只带查阅要用的三样，
+// 校验明细与商业依据不进读面——那是复核与争议入口的事。
+type AcceptanceDecisionViewRecord struct {
+	DecisionID domain.AcceptanceDecisionID
+	Accepted   bool
+	DecidedAt  time.Time
+}
+
+// AcceptanceTaskViewRecord 是详情里当前接受判断任务的查阅面：任务阶段与最近一次没能
+// 推进的处理记录。两样都留是用例对任务的要求——只留成功判断，一份卡了十轮的委托看
+// 起来会和刚建单的一模一样。
+type AcceptanceTaskViewRecord struct {
+	State                   domain.AcceptanceTaskState
+	HasAttempt              bool
+	LastAttemptReason       string
+	LastAttemptContinuation string
+	LastAttemptedAt         time.Time
+}
+
+// ShipmentRequestDetailRecord 是单份委托的查阅详情。
+type ShipmentRequestDetailRecord struct {
+	ShipmentRequestSummaryRecord
+	BatchID           domain.SubmissionBatchID
+	OccurredAt        time.Time
+	ReceivedAt        time.Time
+	DeclaredParcels   []DeclaredParcelViewRecord
+	PriorVersionCount int
+	Task              AcceptanceTaskViewRecord
+	HasDecision       bool
+	Decision          AcceptanceDecisionViewRecord
+}
+
+// ShipmentRequestViews 是委托查阅的读口（CONTEXT「授权查询作用域」）。
+//
+// 两个方法都以完整作用域为键：过滤在键上而不在结果后处理上，读口因此答不出作用域外
+// 的行。FindVisibleByID 的否定结果不区分「不存在」「属其他租户或客户账户」——那正是
+// CONTEXT`统一不可见结果`在读口上的形状，拆开就是造跨作用域存在性预言机（ADR-0029）。
+//
+// Limit 必须为正；每页多大由接入面按渠道契约裁决，读口只拒绝无意义的取值。
+type ShipmentRequestViews interface {
+	ListVisible(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		limit int,
+	) ([]ShipmentRequestSummaryRecord, error)
+	FindVisibleByID(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		requestID domain.ShipmentRequestID,
+	) (ShipmentRequestDetailRecord, bool, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样

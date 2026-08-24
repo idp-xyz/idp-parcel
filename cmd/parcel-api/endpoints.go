@@ -10,8 +10,8 @@ import (
 )
 
 // assembleBusinessEndpoints 是业务端点的装配点（组合根）。五个上下文的 adapters/http
-// 里的接入面处理器全部挂在这里：PS 提交与撤回、NO 收寄登记、TF 交付登记与 POD 更正、
-// VE 视图查询与索赔受理、CC 外部结果接收。
+// 里的接入面处理器全部挂在这里：PS 提交、撤回与委托查阅、NO 收寄登记、TF 交付登记与
+// POD 更正、VE 视图查询与索赔受理、CC 外部结果接收。
 //
 // 按 ADR-0055，本函数不再以空清单等 `PAR-INT-01`：每个端点各以「未配置即拒」的 Intake
 // 起步——不读业务内容、不采信自报身份、不构造命令，对每个请求如实答「接入渠道未配置」
@@ -30,17 +30,27 @@ import (
 // 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
-// 各端点的第二参（应用编排）与 Intake 是两笔独立的接线：提交编排已按审计票 13 接真
-// （经真库与治理桥，由 main 构造后入参交入），其余各格仍以 unwired* 占位，各自的接线
-// 各自成笔。占位与接真的分辨见 unwired_orchestration.go 的文件注释。
+// 各端点的第二参（应用编排）与 Intake 是两笔独立的接线：提交编排已按审计票 13 接真，
+// 撤回编排随 UI 阶段 B 后端序列接真（均经真库，由 main 构造后入参交入），其余各格仍以
+// unwired* 占位，各自的接线各自成笔。占位与接真的分辨见 unwired_orchestration.go 的
+// 文件注释。
 //
-// 清单是八项。ADR-0055 与开发主线把它称作「七个」，但两处自己的逐项枚举都是八项
-// （PS 二、NO 一、TF 二、VE 二、CC 一）；此处按逐项枚举装配，少装一个就是把一个端点
-// 折回 404，那正是该记录要治的病。
-func assembleBusinessEndpoints(submission shipmenthttp.SubmissionHandler) []httpapi.BusinessEndpoint {
+// 清单是九项（PS 三、NO 一、TF 二、VE 二、CC 一）。ADR-0055 与开发主线曾把它称作
+// 「七个」，那是把 TF 双端点计作一项的算术口径错，后按逐项枚举定为八项；第九项是
+// 委托查阅（GET /shipment-request-views，UI 阶段 B 的读切片）。此处按逐项枚举装配，
+// 少装一个就是把一个端点折回 404，那正是该记录要治的病。
+//
+// requestViews 是查阅端点的读口：它是读面不是编排（查阅不触发判断或披露），生产装配
+// 交入真库读适配器；未配置 Intake 仍拒在它之前，接入渠道就位前它一次也不会被调到。
+func assembleBusinessEndpoints(
+	submission shipmenthttp.SubmissionHandler,
+	withdrawal shipmenthttp.WithdrawalHandler,
+	requestViews shipmenthttp.ShipmentRequestViewsReader,
+) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
-		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, unwiredWithdrawal{})},
+		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
+		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmenthttp.UnconfiguredIntake{}, requestViews)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, unwiredReception{})},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
