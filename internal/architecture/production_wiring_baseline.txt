@@ -11,9 +11,11 @@
 # 同日晚随审计票 14 新增两条（PS 载荷规范化摘要一对），现为 33**——这句逐次记增减而不是
 # 只写一个数，是因为下一次增减时只改一处会让另一处变错。
 #
-# 下面那些理由行的取证强度不齐，先说清免得被当统一口径引用：**逐条读过签名与调用点的是
-# parcel-pricing 与 party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost
-# 两条**；其余按组写，组内共性（返回带校验的领域对象、包外零引用）核过，个体差异没有逐个看。
+# 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
+# party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
+# 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
+# Comments 末条）：组注释的语义断言逐条成立；唯一例外（DecideDisclosure 的包外测试引用）与
+# 几处组注释计数失配已就地改在各组注释里。
 #
 # 一件初版就该说清的事：这 33 条里 25 个**连 domain 包都没出过**——不只是没有生产调用点，
 # 而是没有应用层用例、没有适配器、没有端口，包外零引用。按本仓机制先行实例后到的顺序，切片
@@ -34,7 +36,9 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 
 
 # —— visibility-exception ——
-# 五条均产出带不变式校验的领域对象或领域决定，包外零引用。
+# 以下各条均产出带不变式校验的领域对象或领域决定；除 DecideDisclosure 外包外零引用——
+# 它的包外引用全在测试里（三个 postgres 适配器测试与一个应用层测试），与
+# FormSupplierExpectedCost 同属仅有的两个走出 domain 层的，另一半注在 SA 组那条上。
 internal/visibilityexception/domain DecideDisclosure
 internal/visibilityexception/domain EstablishCase
 internal/visibilityexception/domain PrepareDisclosure
@@ -44,7 +48,7 @@ internal/visibilityexception/domain SubmitEvidence
 
 
 # —— transport-fulfillment ——
-# 六条均产出带不变式校验的领域对象，包外零引用。
+# 以下各条均产出带不变式校验的领域对象，包外零引用。
 internal/transportfulfillment/domain ChargeOccurrenceForFailedAttempt
 internal/transportfulfillment/domain EstablishSegmentWithHandover
 internal/transportfulfillment/domain EstablishSegmentWithPickup
@@ -55,7 +59,7 @@ internal/transportfulfillment/domain SummarizeHandovers
 
 
 # —— settlement-accounting ——
-# 五条均产出带不变式校验的领域对象，包外零引用。
+# 以下各条均产出带不变式校验的领域对象；除 FormSupplierExpectedCost（见其自注）外包外零引用。
 internal/settlementaccounting/domain FormAuditedPayable
 internal/settlementaccounting/domain FormChargeAdjustment
 internal/settlementaccounting/domain FormSupplierCreditNote
@@ -66,7 +70,7 @@ internal/settlementaccounting/domain FormSupplierExpectedCost
 
 
 # —— customs-compliance ——
-# 四条均产出带不变式校验的领域对象，包外零引用。
+# 以下各条均产出带不变式校验的领域对象，包外零引用。
 internal/customscompliance/domain FormDutyCollaboration
 internal/customscompliance/domain ReceiveReleaseOutcome
 internal/customscompliance/domain RegisterCredential
