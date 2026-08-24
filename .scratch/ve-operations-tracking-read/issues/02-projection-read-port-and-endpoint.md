@@ -1,7 +1,17 @@
 # 02 投影读口与端点施工(MCP-3,blocked on 01)
 
 Category: enhancement
-Status: open
+Status: resolved
+
+## 决议
+
+- 落库 SHA:267cb4438132357429707f4ae30efcee05d6af1c(12 文件:ports 运营读面 OperationsProjectionRead、domain 运营作用域 operations_query_scope、postgres ListCurrent 读适配与真库测试、http 查询端点 query_tracking_projections 三读法与传输层测试、UnconfiguredIntake 补 IntakeOperationsQuery、cmd/parcel-api 装配四文件挂第十一端点 /tracking-projections)。
+- 施工与代码笔由前一会话完成,crash 于提交态复验中途(复验树 verify-mcp3 已建未跑);本收口由 1 号补完复验并记账,内容一字未改。
+- 验证(提交态,临时 worktree 检出 267cb44,2026-08-24 20:41–20:44):gofmt -l 零输出;go build / go vet 零输出;全仓 go test -count=1 全 ok,DSN 已设真库实跑(postgres 各包 14–55s);新真库用例单跑 -v 为 PASS 非 SKIP(TestListCurrentReturnsPerParcelCurrentVersions、TestListCurrentRejectsNonPositiveLimit)。此为「含真库的绿」。复验树查零残留后已按纪律拆除(无 --force)。
+- 装配四文件占号随本收口广播释号(原 MCP-4 失效占号由本票接手过,见 ../spec.md 纪律节)。
+- 票 03(MCP-5)以 267cb44 解锁,收口时已 send_to_session 5 通知。
+
+## 活(原票面)
 
 地盘、阻塞边与纪律见 ../spec.md;端点形状与作用域模型以票 01 落库的 ADR 为准。开工条件:票 01 报出 SHA。等待期允许只读预研,不落笔不占号。
 
