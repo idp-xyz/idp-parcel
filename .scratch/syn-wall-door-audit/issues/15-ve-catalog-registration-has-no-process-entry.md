@@ -1,7 +1,7 @@
 # VE 目录登记无进程级入口，六个登记方法只有测试调用
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源：[票 09](./09-ve-rule-and-policy-registries-have-no-writer.md) 的 B 半边。09 按 A/B 拆分
 交付：A 半边（`catalog_registration.go` 写入方、`register_catalog.go` 登记用例六方法、ports
@@ -42,3 +42,10 @@ Status: ready-for-agent
 - 2026-08-21 MCP-3（受用户委托裁断）：随 09 收口开票，纠正 B 半边落点（CLI 而非
   `assemble.go`）。CC 侧同形缺口不入本票——[票 06](./06-cc-case-config-registries-have-no-writer.md)
   仍开着，其进程入口属 06 自己的余量，由 06 票面承载。
+- 2026-08-24 MCP-3：随 `3f54a5e` 落 main，转 resolved。`cmd/parcel-ve-register` 六命令
+  覆盖五类七表；执行者身份双轨落地——通道技术身份入口自取、与登记同笔事务落
+  `visibility_exception.channel_execution`（迁移 0020，`all:` 整目录嵌入无需动共享
+  接线文件），`approvedBy` 输入显式必填；目录内容零内置默认，实例半边照旧留空。
+  验证于 2026-08-24 14:52：`go test -p 1 -count=1` CLI 包与 VE 全部包绿，含真库
+  （adapters/postgres 28.1s、inbox 24.8s 实跑非跳过），gofmt 零输出。落地约束四条
+  逐条对上：CLI 命名循例、双轨身份、防重叠红线原样只追加、真库验测含 PG。
