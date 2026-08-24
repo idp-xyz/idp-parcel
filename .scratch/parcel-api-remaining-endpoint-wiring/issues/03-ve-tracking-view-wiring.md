@@ -22,3 +22,8 @@ Status: resolved
 `internal/visibilityexception/adapters/postgres/customer_view_test.go`,查无→404 与库错→5xx
 的映射在 VE 传输层测试,装配在场与 403 在前在 endpoints_test.go 的端点表。给直通读口
 另写装配测试只会复述适配器测试,不新增任何证据。
+
+2026-08-24 勘误(MCP-4,依 MCP-3 本日对账广播):上一条「随 `463646b` 落库」归因不确——
+`463646b` 不含本格接线;那笔接线是 MCP-3 在 463646b 落库之后、MCP-4 占号广播之前写在
+装配文件里的未提交编辑(用户经其通道下令「完成真正剩余」),随 `eac94e0`(接线票 01 的
+提交)一并带入落库。接线内容正确、resolved 裁定与验收归位理由均不变,只勘归因。
