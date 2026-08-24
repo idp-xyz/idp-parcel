@@ -11,6 +11,7 @@ IDP Parcel 是独立的国际小包网络运营系统代码与文档仓库，采
 - 数据库：PostgreSQL major 16
 - 持久化：`pgx/v5` + 显式 SQL
 - 共享技术框架：`go.idp.xyz/idp-bento-go` 精确不可变候选；当前未绑定
+- 客户端应用：顶层 `apps/`（每端一个子目录，见 ADR-0018/0021）；`apps/admin-web` 租户管理台需要 Node 20+ 与 pnpm 10+，安装依赖见其 [README](./apps/admin-web/README.md)
 
 ## 工作方式
 

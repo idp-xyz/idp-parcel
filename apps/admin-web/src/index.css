@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 外壳主题变量沿用 idp-ui loms-web 的取值：@idpxyz/ui-workspace 的组件按
+   --idpxyz-* 这套 CSS 变量取色，这里是它们在本应用的唯一定义处。 */
+
+/* 暗色主题（默认） */
+:root,
+.dark {
+  color-scheme: dark;
+  --idpxyz-native-color-scheme: dark;
+  --idpxyz-bg: #1a1b1e;
+  --idpxyz-sidebar: #25262b;
+  --idpxyz-activityBar: #1e1f24;
+  --idpxyz-editor: #1a1b1e;
+  --idpxyz-tab: #2a2b31;
+  --idpxyz-tabActive: #1a1b1e;
+  --idpxyz-tabBorder: #2a2b31;
+  --idpxyz-statusBar: #2563eb;
+  --idpxyz-titleBar: #2c2d32;
+  --idpxyz-border: #3f4048;
+  --idpxyz-text: #cccccc;
+  --idpxyz-textMuted: #858585;
+  --idpxyz-textBright: #ffffff;
+  --idpxyz-accent: #007acc;
+  --idpxyz-lineNumber: #858585;
+  --idpxyz-lineNumberActive: #c6c6c6;
+  --idpxyz-selection: #264f78;
+  --idpxyz-keyword: #569cd6;
+  --idpxyz-string: #ce9178;
+  --idpxyz-number: #b5cea8;
+  --idpxyz-comment: #6a9955;
+  --idpxyz-function: #dcdcaa;
+  --idpxyz-variable: #9cdcfe;
+  --idpxyz-type: #4ec9b0;
+  --idpxyz-operator: #d4d4d4;
+  --idpxyz-tag: #569cd6;
+  --idpxyz-attribute: #9cdcfe;
+  --idpxyz-punctuation: #d4d4d4;
+  --idpxyz-minimap: #1e1e1e;
+  --idpxyz-scrollbar: #424242;
+  --idpxyz-panelBg: #1e1e1e;
+  --idpxyz-panelBorder: #3c3c3c;
+  --idpxyz-breadcrumb: #a9a9a9;
+  --idpxyz-findMatch: #515c6a;
+  --idpxyz-hover: #32333a;
+  --idpxyz-activeItem: #3d3e47;
+  --idpxyz-inputBg: #3c3c3c;
+  --idpxyz-statusHover: #1f8ad2;
+  --idpxyz-activeLine: #282828;
+}
+
+/* 亮色主题 */
+.light {
+  color-scheme: light;
+  --idpxyz-native-color-scheme: light;
+  --idpxyz-bg: #ffffff;
+  --idpxyz-sidebar: #f3f3f3;
+  --idpxyz-activityBar: #2c2c2c;
+  --idpxyz-editor: #ffffff;
+  --idpxyz-tab: #ececec;
+  --idpxyz-tabActive: #ffffff;
+  --idpxyz-tabBorder: #f3f3f3;
+  --idpxyz-statusBar: #007acc;
+  --idpxyz-titleBar: #dddddd;
+  --idpxyz-border: #e5e5e5;
+  --idpxyz-text: #333333;
+  --idpxyz-textMuted: #6e7681;
+  --idpxyz-textBright: #000000;
+  --idpxyz-accent: #007acc;
+  --idpxyz-lineNumber: #6e7681;
+  --idpxyz-lineNumberActive: #333333;
+  --idpxyz-selection: #add6ff;
+  --idpxyz-keyword: #0000ff;
+  --idpxyz-string: #a31515;
+  --idpxyz-number: #098658;
+  --idpxyz-comment: #008000;
+  --idpxyz-function: #795e26;
+  --idpxyz-variable: #001080;
+  --idpxyz-type: #267f99;
+  --idpxyz-operator: #333333;
+  --idpxyz-tag: #800000;
+  --idpxyz-attribute: #ff0000;
+  --idpxyz-punctuation: #333333;
+  --idpxyz-minimap: #f8f8f8;
+  --idpxyz-scrollbar: #c1c1c1;
+  --idpxyz-panelBg: #ffffff;
+  --idpxyz-panelBorder: #e5e5e5;
+  --idpxyz-breadcrumb: #6e7681;
+  --idpxyz-findMatch: #e8e8e8;
+  --idpxyz-hover: #e8e8e8;
+  --idpxyz-activeItem: #e0e0e0;
+  --idpxyz-inputBg: #ffffff;
+  --idpxyz-statusHover: #1f8ad2;
+  --idpxyz-activeLine: #f5f5f5;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei',
+    Roboto, 'Helvetica Neue', sans-serif;
+  background-color: var(--idpxyz-bg);
+  color: var(--idpxyz-text);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--idpxyz-scrollbar) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--idpxyz-scrollbar);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  min-height: 28px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--idpxyz-scrollbar);
+  border-width: 1px;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 标签栏横向滚动时隐藏滚动条 */
+.tab-scroll-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.tab-scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+/* 拖拽分隔条：1px 常显边线，伪元素扩出可命中的悬停区 */
+.resize-handle-h {
+  width: 1px;
+  cursor: col-resize;
+  background: var(--idpxyz-border);
+  transition: background 0.15s;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+.resize-handle-h::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -3px;
+  width: 7px;
+  height: 100%;
+}
+.resize-handle-h:hover,
+.resize-handle-h:active {
+  background: var(--idpxyz-accent);
+}
+
+.resize-handle-v {
+  height: 1px;
+  cursor: row-resize;
+  background: var(--idpxyz-border);
+  transition: background 0.15s;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+.resize-handle-v::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: -3px;
+  height: 7px;
+  width: 100%;
+}
+.resize-handle-v:hover,
+.resize-handle-v:active {
+  background: var(--idpxyz-accent);
+}
