@@ -159,13 +159,15 @@ Repository 写入必须在 `Transactor.WithinTransaction` 派生的 context 中�
 | 字段 | 基线 |
 |---|---|
 | 业务语义 | 委托已提交 |
-| `Type` | `idp.parcel.shipment-request.submitted` |
+| `Type` | `parcel-shipment.shipment-request.submitted` |
 | `Version` | `1` |
-| `Source` | `go.idp.xyz/idp-parcel/parcel-shipment` |
+| `Source` | `idp-parcel/parcel-shipment` |
 | `Scope` | 显式租户与货主客户账户复合标识 |
 | `Subject` | 明确委托标识 |
 | `PartitionKey` | 同一租户、客户账户和委托的稳定复合键 |
 | Payload | 委托、提交批次、提交版本、声明包裹标识和必要关联；不含地址、联系人、货物或申报明文 |
+
+`Type` 与 `Source` 的字面已随实现定版：类型取本上下文事件家族的既有拍法 `parcel-shipment.<主体>.<语义>`，`Source` 由适配器的 `eventSource` 单点承载——一个上下文只有一套类型命名，本表早先草拟的 `idp.parcel.*` 与 module path 形 `Source` 不再是任何代码的口径。
 
 EventID 在首次命令处理中生成并与业务结果一起保存。重复请求复用原 EventID，不创建语义相同的新事件。Envelope 的记录时间与领域发生时间分别填写，不能用当前时间覆盖来源发生时间。
 
@@ -234,7 +236,7 @@ Parcel 不提供一个可以操作任意聚合的通用业务 Repository。首�
 | 闸门 | 评审 `asOf` 与 Parcel 代码基线 | 权威证据引用及版本 | 当前结论 | 精确解锁范围 | 仍禁止范围 | 失效或复评触发 | 决定记录引用 |
 |---|---|---|---|---|---|---|---|
 | `PN02-W01/W02` 业务语义 | 当前本地未提交基线；首次评审须固定提交 ID 和评审时间 | 参数登记册、W01/W02 完成结论及其受控证据版本、ADR-0016、ADR-0017 | 机制半边放行；实例半边保持阻断：W01 仅有待核验候选，W02 直接参数仍待提供 | 已解锁 `parcel-shipment` 应用编排与命令处理、Parcel 自有语义端口接口、`已提交`聚合的领域形态及其确定性测试替身 | 真实客户、合同、线路、金额、阈值、角色或时限取值进入代码；任何租户流量进入生产接单；端口的 PostgreSQL 适配器（属下一道闸门） | 范围、版本、`asOf`、权威身份、交接语义或证据状态变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md) |
-| Bento 持久化技术 | 首次评审 `asOf` 2026-08-11，Parcel 代码基线 `0111dd9`；候选 checksum 见下节，已记入公共透明日志 | ADR-0009、ADR-0026、候选附注 tag `v0.1.0-rc.2`（剥离后指向提交 `56322dc`，`git ls-remote` 匿名只读核验）；候选 checksum 由 `sum.golang.org` 公共透明日志认定；空缓存下载已于同日以独立 `GOMODCACHE` 取证；`PBC-01`、`PBC-06` 已通过，`PBC-08` 部分通过，其余六项未取证 | 保持阻断：四项通过条件中 ADR-0009、不可变候选与空缓存下载已满足，适用 `PBC-*` 消费者证明仍缺。按 ADR-0026，为产出 `PBC-01` 至 `PBC-09` 而写的持久化实现即刻放行，闸门本身未通过 | 针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务、Outbox 实现及其合同测试，用途限于产出消费者证明 | 本地框架替身、`replace`、`go.work`、浮动分支、框架源码副本、伪事务；以及 `PBC-01` 至 `PBC-09` 全部通过前登记 `B-06` 候选基线、宣称闸门已通过或据此改写开发主线的横切缺口状态 | RC、checksum、消费者合同、迁移、Parcel 依赖基线或 Bento 远端可见性变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) |
+| Bento 持久化技术 | 首次评审 `asOf` 2026-08-11，Parcel 代码基线 `0111dd9`；候选 checksum 见下节，已记入公共透明日志 | ADR-0009、ADR-0026、候选附注 tag `v0.1.0-rc.2`（剥离后指向提交 `56322dc`，`git ls-remote` 匿名只读核验）；候选 checksum 由 `sum.golang.org` 公共透明日志认定；空缓存下载已于同日以独立 `GOMODCACHE` 取证；`PBC-01`、`PBC-02`、`PBC-03`、`PBC-04`、`PBC-05`、`PBC-06`、`PBC-07`、`PBC-09` 已通过（取证记录见下方各段），`PBC-08` 部分通过、行为面收口已开票待领（bento-gate-reeval 票 02） | 保持阻断：四项通过条件中 ADR-0009、不可变候选与空缓存下载已满足，消费者证明尚余 `PBC-08` 行为面收口；九项齐备后登记 `B-06` 是另一步闸门动作，不随取证自动发生。按 ADR-0026，为产出 `PBC-01` 至 `PBC-09` 而写的持久化实现即刻放行，闸门本身未通过 | 针对精确 SemVer 候选编写 PostgreSQL Repository、迁移、事务、Outbox 实现及其合同测试，用途限于产出消费者证明 | 本地框架替身、`replace`、`go.work`、浮动分支、框架源码副本、伪事务；以及 `PBC-01` 至 `PBC-09` 全部通过前登记 `B-06` 候选基线、宣称闸门已通过或据此改写开发主线的横切缺口状态 | RC、checksum、消费者合同、迁移、Parcel 依赖基线或 Bento 远端可见性变化 | [ADR-0017](../adr/0017-admission-gates-judged-by-blocking-cause.md)、[ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) |
 
 两道闸门相互独立，按 [ADR-0026](../adr/0026-persistence-written-for-consumer-proof-precedes-gate-passage.md) 不得联判。业务语义的机制半边放行不解锁任何持久化技术；Bento 技术候选存在也不解锁 W01/W02 的实例半边；业务语义闸门的实例半边阻断同样不延缓 Bento 侧的任何一项通过条件。Parcel 自有端口的确定性内存替身替的是 Parcel 的端口而非 Bento 的框架合同，不属「本地框架替身」。
 
@@ -263,11 +265,13 @@ go.idp.xyz/idp-bento-go v0.1.0-rc.2/go.mod h1:RFR6ylLNIIA7e4PPGVCzojYiH6DB8eHd2s
 
 `PBC-08` 的行为面亦已在唯一存在的持久化适配器上取证：来源保全的写入在无事务 context 上返回框架的 `ErrTransactionRequired` 而非改用连接池，被拒的写入不落库。该性质随适配器逐个成立，没有静态门禁能替它把关，因此**每新增一个持久化适配器都要自带这条证明**。
 
-`PBC-02` 与 `PBC-03` 目前阻在一个建模决定上，不是阻在实现工作量上。写第一个聚合适配器时撞出三处相扣的缺口：`domain.ShipmentRequest` 字段全未导出而唯一产出入口 `SubmitShipmentRequest` 固定产出`已提交`且无决定，外部包重建不出任意合法状态；聚合无版本字段且 `ports.ShipmentRequestRepository.Save` 不收预期版本，而 `RunRepositoryContract` 要跑乐观版本冲突——这一口在端口签名上；归档谱系的聚合另带 `EventBuffer` 而当前不带。三者须一并裁决，预计走一份新 ADR。
+`PBC-02` 与 `PBC-03` 已在真实 PostgreSQL 16.14 上取证。早先记在这里的建模阻塞（字段全未导出、聚合无版本字段、`EventBuffer` 之疑）已消——重建门（ADR-0028/0030）与聚合自带 `revision` 就是当年缺的两件，第三件经 ADR-0031 逐符号实测证明框架合同本就不要求；逐项判定录 bento 取证票 Comments。证据本身：委托聚合仓储（四维来源身份强类型复合键）经框架 `RunRepositoryContract` 通过插入、加载、乐观版本冲突与作用域隔离三组子用例，绑定只做「端口封闭代数 → 框架哨兵错误」的薄壳转译，`Save` 不改名不改签名，场景聚合一律经重建门构造且显式钉住「合同预期版本 = 聚合携带版本」；同事务证据以真实委托仓储与真实 Outbox Store 共用同一 `Transactor` 取得——回滚半边两写皆成后人为退出、两侧俱不可见，提交半边同一事务两写、两侧同时可见。**`PBC-02`、`PBC-03` 记为通过。**
+
+`PBC-04`、`PBC-05`、`PBC-07` 共用一条真实提交管线取证：真实 `SubmitShipmentRequestHandler` 编排接真实 PostgreSQL 适配器，事务边界按上文「事务边界」两段拍——来源保全逐笔独立提交，建单与「委托已提交」信封同事务原子（该信封的意图端口与 Outbox 适配器随本轮取证新增，原子提交、回滚双消、重发幂等、无事务拒收、缺身份响亮五条随适配器自带，践行 `PBC-08` 段「每新增一个持久化适配器都要自带这条证明」）。`PBC-04`：同键同摘要重放返原——`occurredAt`/`receivedAt` 连同客户自报编号全换仍判重放且交回原委托；同键异摘要接入冲突，不建第二份、不出第二个 EventID、不追加观察；八协程同命令并发，`已提交`恰好一次，撞保全竞态者按可重试口径重试后全部收敛到原结果，库里自始至终一行委托一份意图。`PBC-05`：真实信封原样过框架 `Validate`，载荷恰好八个标识键无多无缺（不含地址、联系人、货物、申报明文），同一委托分区键稳定、不同委托各自成区互不阻塞，租约过期重投拿回同一份、载荷逐字节不变、尝试数递增，重放不产出新信封。`PBC-07`：以「真提交落地后谎报连接断」的事务器注入不确定错误，错误可经 `errors.Is` 认出且不附带任何业务答案，整个处理恰好开一次提交事务（不自动重放），按四维来源身份走生产读口查回原结果，合法恢复即带原命令重提交——判为重放返原，全程不再开提交事务。**`PBC-04`、`PBC-05`、`PBC-07` 记为通过。** 以上用例未设 `IDP_PARCEL_POSTGRES_DSN` 时本地跳过而包仍 `ok`，报告口径同 `PBC-06` 段所引 workflow.md，不再复述。
 
 一条已定的连带结论可以先用：**行模型存已判定的结果本身，不存来源事实再重放。** `Decide` 是重算而非恢复——`accepted`、`manualReview`、`state`、`waitingOn`、`baseline`、`commitment` 全由它从入参算出，spec 一个都不收——所以重放得到的是「今天的规则会判成什么」，接单规则一改，已落库的历史就被静默改写。
 
-`PBC-09` 另有一条形状约束：框架的 `consumerproof` 与 `proofcheck` 都在 Bento 的 `internal/` 下，**Parcel 导入不了**（已实测，非推断）。因此 Parcel 只负责按格式**产出**证明 JSON，校验由 Bento 仓的协调作业执行；在 Parcel 侧镜像一份校验规则等于给同一口径立第二处定义，不做。产出器的字段集必须跟着所锁候选走——rc.2 的读取开了 `DisallowUnknownFields`，多写一个「未来字段」会当场被拒。
+`PBC-09` 另有一条形状约束：框架的 `consumerproof` 与 `proofcheck` 都在 Bento 的 `internal/` 下，**Parcel 导入不了**（已实测，非推断）。因此 Parcel 只负责按格式**产出**证明 JSON，校验由 Bento 仓的协调作业执行；在 Parcel 侧镜像一份校验规则等于给同一口径立第二处定义，不做。产出器的字段集必须跟着所锁候选走——rc.2 的读取开了 `DisallowUnknownFields`，多写一个「未来字段」会当场被拒。产出半边已取证：`tests/bentocontract` 的产出器只收被证明提交与完成时刻两个入参、其余七格全部钉死在所锁候选上、只产 `PASS`（证明在套件通过后才产出，参数化 result 只会多一条「没跑就写 PASS」的路）；产出物有格式证据看着——恰好九字段、无未知字段、无尾随 JSON 值、`completed_at` 按 RFC3339Nano 可解析。真实提交号在 `B-06` 协调时传入，那一步是闸门动作，不属取证。**`PBC-09` 记为通过。**
 
 该门禁当前对扫到的每个非测试文件一视同仁，未给「专用合同命令」留豁免。这是有意的：例外先按上表的合同口径记在此处，等那个命令真的建立时，再按它的精确包路径开豁免并同时补上验证豁免范围的用例。**不得为了让门禁变绿而放宽规则本身**——那与「注释不声称代码做不到的事」是同一条要求的反面。
 

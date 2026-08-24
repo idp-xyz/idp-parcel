@@ -113,7 +113,11 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/parcelshipment/adapters/postgres/final_outcome_handoff.go":       partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "待裁——PS 采用链与 VE 四口共用包裹分区是否有意，无裁定记录（ADR-0074 只裁 TF×VE）",
 	"internal/parcelshipment/adapters/postgres/network_intake_handoff.go":      partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "待裁——PS 采用链与 VE 四口共用包裹分区是否有意，无裁定记录（ADR-0074 只裁 TF×VE）",
 	"internal/parcelshipment/adapters/postgres/parcel_cancellation_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "待裁——PS 采用链与 VE 四口共用包裹分区是否有意，无裁定记录（ADR-0074 只裁 TF×VE）",
-	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":         partitionSubjectPrefix + "租户/来源请求键",
+	// 「委托已提交」口按（租户/客户账户/委托）排队——同一委托的提交侧事件一条队，不同
+	// 委托互不阻塞。与上面接受决定口的「租户/委托请求」是同一聚合的两个口、两个分区
+	// 字符串：本表的可扫性正是为让这类取舍摆在明面（要不要并队归裁定，不归本行）。
+	"internal/parcelshipment/adapters/postgres/shipment_request_submitted_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
+	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":                partitionSubjectPrefix + "租户/来源请求键",
 
 	// —— pilot-governance ——
 	// 治理两形的键今天都不带租户段，如实转录；要不要补租户维归 PG 地盘，不在本表定。

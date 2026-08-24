@@ -2,26 +2,33 @@ package bentocontract
 
 import (
 	"encoding/json"
-	"fmt"
-	"regexp"
+	"errors"
 	"time"
 )
 
-// 本文件是 `PBC-09` 的产出器：按所锁候选 `v0.1.0-rc.2` 的严格格式产出消费者证明 JSON。
+// 本文件承载 `PBC-09` 的产出半边：按所锁候选 `v0.1.0-rc.2` 的严格格式产出证明 JSON。
+// 校验归 Bento 仓的协调作业——框架的 `consumerproof` 与 `proofcheck` 都在其 `internal/`
+// 下，Parcel 导入不了（简报「实现准入检查」已实测）；在 Parcel 侧镜像一份校验规则等于给
+// 同一口径立第二处定义，不做。
 //
-// 格式权威在框架侧（候选内的 consumerproof 读取开 DisallowUnknownFields、拒绝尾随值与
-// 缺失必填字段），校验由 Bento 仓的协调作业执行；Parcel 只产出，不镜像一份校验规则——
-// 在这边重建校验等于给同一口径立第二处定义（简报「PBC-09 形状约束」）。因此本文件只
-// 校验**注入项**（消费者提交与完成时刻），候选身份字段一律取本包常量，不接受调用方
-// 另给一份。
-//
-// rc.2 的证明恰九个字段。治理模式（GovernanceMode）按 candidate.go 的说明进不了这份
-// JSON：候选只认九个字段并拒收未知字段，带 `acknowledged_governance_mode` 的候选出现
-// 时本文件与该说明同时复评。
+// 放本包而不放生产包：证明只为框架合同取证与 B-06 协调而存在，与候选身份常量同源同命；
+// 将来若立「专用合同命令」，按简报既定安排走其精确包路径的豁免，届时再谈导入。
 
-// ConsumerProof 是 Parcel 提交给框架协调作业的合同证明文档。字段名与候选内
-// consumerproof.Proof 的 JSON 标签逐字一致。
-type ConsumerProof struct {
+// rc.2 证明格式的三个字面值。它们与 candidate.go 的候选身份常量同族——是所锁候选的
+// 格式事实（抄录自候选源码 `internal/consumerproof` 的格式常量），不是 Parcel 自立的
+// 校验口径。候选换版时随 candidate.go 一并复评；Bento 一旦切出带
+// `acknowledged_governance_mode` 的候选，本文件与简报「发布与治理边界」的治理状态条
+// 同时复评。
+const (
+	proofFormatVersion = 1
+	proofConsumer      = "PARCEL"
+	proofResultPass    = "PASS"
+)
+
+// consumerProofDocument 是 rc.2 证明 JSON 的九字段形状，一个不多一个不少：rc.2 的读取
+// 开着 DisallowUnknownFields，多写一个「未来字段」当场被拒；少一个必填字段协调作业同样
+// 拒收。字段声明顺序即产出顺序。
+type consumerProofDocument struct {
 	FormatVersion        int    `json:"format_version"`
 	Consumer             string `json:"consumer"`
 	ConsumerCommit       string `json:"consumer_commit"`
@@ -33,43 +40,28 @@ type ConsumerProof struct {
 	CompletedAt          string `json:"completed_at"`
 }
 
-// ProofFormatVersion 是 rc.2 证明格式的版本号。
-const ProofFormatVersion = 1
-
-// ProofConsumer 是本仓在框架治理里的消费者名。
-const ProofConsumer = "PARCEL"
-
-// fullGitObjectID 校验注入的消费者提交是完整小写 Git 对象 ID（SHA-1 四十位或
-// SHA-256 六十四位）。这是对自己输入的把关，不是替框架校验证明。
-var fullGitObjectID = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
-
-// NewPassingConsumerProof 为一次全部通过的合同运行产出证明。
+// ProduceConsumerProof 产出一份 PASS 证明。入参只有每次取证真正会变的两件——被证明的
+// Parcel 提交与完成时刻；其余七格全部由所锁候选与本包常量钉死。
 //
-// result 恒为 PASS 且不作参数：证明只该在九项 PBC 对同一候选全部通过后产出，一份
-// FAIL 证明没有提交对象——失败的运行修到过为止，不登记。产出本身不宣称闸门状态；
-// 把它交给协调作业是 `B-06` 登记那一步的事，仍在完成门禁之后。
-func NewPassingConsumerProof(consumerCommit string, completedAt time.Time) (ConsumerProof, error) {
-	if !fullGitObjectID.MatchString(consumerCommit) {
-		return ConsumerProof{}, fmt.Errorf(
-			"bentocontract: 消费者提交 %q 不是完整小写 Git 对象 ID", consumerCommit)
+// 只产出 PASS：证明在合同套件通过之后才产出，失败的跑动不产出证明而是修到通过——把
+// result 参数化只会多一条「没跑就写 PASS」的路。入参缺席是装配缺陷，响亮报错；提交号
+// 的形状（40/64 位十六进制对象号）与时间戳的合法性校验归协调作业，这里不复制。
+func ProduceConsumerProof(consumerCommit string, completedAt time.Time) ([]byte, error) {
+	if consumerCommit == "" {
+		return nil, errors.New("produce consumer proof: consumer commit is required")
 	}
 	if completedAt.IsZero() {
-		return ConsumerProof{}, fmt.Errorf("bentocontract: 完成时刻不得为零值")
+		return nil, errors.New("produce consumer proof: completed at is required")
 	}
-	return ConsumerProof{
-		FormatVersion:        ProofFormatVersion,
-		Consumer:             ProofConsumer,
+	return json.Marshal(consumerProofDocument{
+		FormatVersion:        proofFormatVersion,
+		Consumer:             proofConsumer,
 		ConsumerCommit:       consumerCommit,
 		CandidateVersion:     Version,
 		ModulePath:           ModulePath,
 		ModuleChecksum:       ModuleSum,
 		ContractSuiteVersion: ContractSuiteVersion,
-		Result:               "PASS",
+		Result:               proofResultPass,
 		CompletedAt:          completedAt.UTC().Format(time.RFC3339Nano),
-	}, nil
-}
-
-// JSON 产出证明文件的字节形态：单个 JSON 值，无尾随内容。
-func (proof ConsumerProof) JSON() ([]byte, error) {
-	return json.Marshal(proof)
+	})
 }

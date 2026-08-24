@@ -104,6 +104,22 @@ type ShipmentRequestRepository interface {
 	) (ShipmentRequestSaveOutcome, error)
 }
 
+// ShipmentRequestSubmittedHandoffIntent 把一份刚进入`已提交`的委托交给适用下游。
+// 意图由来源身份认领：同一来源身份至多建立一份委托（同键同摘要重放返原、不同摘要
+// 冲突拒绝），因此同一身份无论交几次都是同一份（ADR-0043）。
+type ShipmentRequestSubmittedHandoffIntent struct {
+	Identity domain.SourceIdentity
+	Request  domain.ShipmentRequest
+}
+
+// ShipmentRequestSubmittedHandoff 把「委托已提交」写入 Outbox
+// （`OutboxShipmentRequestSubmittedHandoff`）。信封 ID 由来源身份（含租户）再加类型段
+// 认领，入队由 outboxintent.EnqueueOnce 承担；重放重发同一份（ADR-0043）。它必须与
+// 建单写入同一事务交出（简报「事务边界」的委托提交事务），任一步失败全部回滚。
+type ShipmentRequestSubmittedHandoff interface {
+	HandOffShipmentRequestSubmitted(ctx context.Context, intent ShipmentRequestSubmittedHandoffIntent) error
+}
+
 // CurrentAcceptedParcelTargetView 按（租户+声明包裹）反查**当前已接受**委托目标。
 //
 // 它与 ShipmentRequestRepository 分开：建单与推进的调用方不该持有反查；收寄/交付
