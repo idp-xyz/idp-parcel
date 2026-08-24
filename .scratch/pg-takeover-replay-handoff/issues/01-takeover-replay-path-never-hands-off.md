@@ -1,7 +1,7 @@
 # 接管重放路只补区间追加不补 handOff——接管信封可能永不入队
 
 Category: bug
-Status: needs-triage
+Status: in-progress
 
 发现于 OUTBOX-PK-STEP2（接管格修复 `b0e928e`，票面 [outbox-partition-key/03](../../outbox-partition-key/issues/03-step-two-scope-eight-ports-and-four-undecided.md)）实现过程，
 MCP-2 报回未动代码；本票只记现象与边界，不带方案。
@@ -28,3 +28,24 @@ MCP-2 报回未动代码；本票只记现象与边界，不带方案。
 ## 归属
 
 pilot-governance 当前无主（同四处待裁的 PG 格局）。修复须先派 PG 归属或进裁断轮。
+
+## Comments
+
+- 2026-08-24 MCP-1（**受用户委托进裁断轮，放行修复，转 ready-for-agent**。基准 `88215a3`）：
+  归属问题不阻这笔修复——它是既有编排的重放完备性缺陷，修的是已写下的代码自己许诺的性质
+  （「重放路补追加」的续办纪律本来就该把 handOff 一并补齐），不新增能力面，不裁 PG 上下文
+  的长期所有权（那一格照旧悬置）。
+
+  **修法方向**（细节以开工时代码为准）：重放路（`govern_incident.go` 的两处 `TakeoverExisting`
+  分支）在补区间追加成功后**必须补尝试 handOff**——handOff 走 `EnqueueOnce` 按（来源＋事件
+  ID）幂等，先前已入队者答已入队，从未入队者此刻入队，两种历史在重放后收敛到同一终态。首次
+  路径「区间追加失败即提前返回、handOff 永不被尝试」的形状同笔收敛：「追加成功 → handOff」
+  这一段两条路径应共用，任一步失败留续办引用，重放从断点续齐。
+
+  **验证要求**：①首次调用在区间追加处失败 → 重放 → 接管信封入队**恰一次**；②首次调用全程
+  成功后重放 → 信封不重复入队（幂等答已入队）；③既有两条重放用例（区间不重追、续办引用
+  清空）保持全绿。**顺带核一格**：Suspension/Resumption 的 `GovernanceAlreadyRecorded` 分支
+  是否同型漏 handOff——同型同修，不同型不扩，结论记回本票。
+
+  影响面照票面「影响与时效」节：治理接管口今天无消费者，无生产事故；修在消费者接上之前，
+  窗口免费。

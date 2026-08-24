@@ -1,7 +1,8 @@
 # 后续开发计划（基于完成度评估，2026-08-20）
 
 Category: chore
-Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票放行仍等用户/协调岗点头**，本文不替裁。
+Status: in-progress——轨道与依赖是本文的主张；逐票放行原等用户/协调岗点头，该等待已由两轮受托
+裁断消化（2026-08-21 MCP-3、2026-08-24 MCP-1，见「复核记录」），当前无「等人」格；轨道照旧。
 
 依据：[完成度评估快照](./completion-assessment-2026-08-20.md)（入库于 `24c6b4a`）+ 票面现状（盘于 `b9f6cba`，含墙/门审计十票入主线与四件悬决裁断之后）。计划只覆盖**机制半边**；实例半边按基线定义等租户，不进本计划。
 
@@ -32,9 +33,9 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
 | [outbox 分区键·第二步范围（八口+接管格）](./outbox-partition-key/issues/03-step-two-scope-eight-ports-and-four-undecided.md) | platform | 全族收口：八口+接管格入 main（`a1463ae`），四处待裁已裁断（`ac04366`：案件链不设跨口保序、关闭信封携周期维、同对象二次揽收成立且分区取到对象），票 01/02/03 全 resolved |
 | [供应商成本更正·规则协议与发生项引用](./supplier-expected-cost-correction/issues/03-correction-restates-rule-agreement-and-occurrence-refs.md) | SA | 02/03 resolved（`747ba74`/`3324ecb`，ADR-0067）；同族 [04 客户费用同币种](./supplier-expected-cost-correction/issues/04-customer-charge-single-currency-contradicts-context.md)已实现收口 resolved（`f538fa7`，币种三件组按 CONTEXT 字面执行）；衍生 [05 费用调整币种三件组](./supplier-expected-cost-correction/issues/05-charge-adjustment-currency-triple-unruled.md) ready-for-human，入 T3 |
 | [索赔资格查询七维缺四维](./ve-claim-eligibility-dimensions/issues/01-eligibility-query-cannot-carry-four-of-seven-dimensions.md) | VE | 票已关 resolved（切块 (b) `cacf78d`、(c) `0db1acf`） |
-| [PAR-NET-14 机制半边切割](./nr-route-evidence-views/issues/01-cut-the-mechanism-half-of-par-net-14-from-its-rule-values.md) | NR | in-progress（四件悬决裁断放行） |
+| [PAR-NET-14 机制半边切割](./nr-route-evidence-views/issues/01-cut-the-mechanism-half-of-par-net-14-from-its-rule-values.md) | NR | needs-info（机制四件已落 ADR-0068，`AutoRerouteFactsView` 已随审计票 05 关口；余两口只剩 `PAR-NET-14` 规则正文一层，属实例半边等租户——08-24 MCP-6 簿记） |
 | [脏 worktree 残局](./dead-session-salvage/issues/02-dirty-orphan-worktrees-hold-uncommitted-work.md) | 工程 | **resolved**（08-21 用户批复后执行）：[并回清册](./dead-session-salvage/branch-merge-census-2026-08-21.md)判定 61 支、两路同裁弃三支后，33 棵非主树全拆、55 支指针删除（51 已吸收逐支重验 + 4 弃定）、6 支按册保留（`bento-gate-reeval` 证据仍被 bento 票 02 引用，收口时归档再删）；执行记录在[清理票 03](./dead-session-salvage/issues/03-obsolete-branch-pointer-cleanup.md) |
-| [生产接线棘轮门禁](./production-wiring-ratchet-gate/issues/01-production-ports-wired-only-in-tests-have-no-ratchet.md) | 工程 | in-progress：门禁已落地（`82f6b74` 判方向不判状态、基线冻结今日 33 条；`cb570dd`/`129b3e0` 两笔修正），余步以票面为准；普查基线 [census-d5e5d20](./production-wiring-ratchet-gate/census-d5e5d20.md) 顺手给 T2 一把量尺 |
+| [生产接线棘轮门禁](./production-wiring-ratchet-gate/issues/01-production-ports-wired-only-in-tests-have-no-ratchet.md) | 工程 | **resolved**（08-24 受托整票复核通过：三格结构与双向红逐项核毕、组条目补核 `b44dd51` 在前，见票面 Comments 末条）；普查基线 [census-d5e5d20](./production-wiring-ratchet-gate/census-d5e5d20.md) 顺手给 T2 一把量尺 |
 
 ### T1 门族：写入方与登记口（墙/门审计十票，本计划最大块）
 
@@ -130,3 +131,26 @@ Status: draft——轨道与依赖是本文的主张；**派工顺序与逐票�
   - 裁断轮补一件（MCP-2 问询）：票 09 按其票面预记的 A/B 拆分转 resolved **维持不改回**——A 半边已验收合入，余量按「02→13」同款拆票承载，[票 15](./syn-wall-door-audit/issues/15-ve-catalog-registration-has-no-process-entry.md) 已开（VE 目录登记受控 CLI 入口）；开票时纠正 09 拆分评论把 B 半边误绑 `assemble.go` 一事——登记是操作者动作不是信封消费，按票 12 裁定走 CLI，不占号。
   - 裁断轮合流记（main 至 `3756eeb`）：用户同晚**分别**委托 MCP-3 与 MCP-4/MCP-2 裁同一批件，两处撞车均「独立裁断、结论逐条一致」后合流——①清册三弃候选（MCP-4 合稿入 `3756eeb`，两份证据分工在册：场景对映答「丢不丢行为」、main 对应答「有无接替」）；②SA-05 四问（MCP-2 撤重复段留同裁注记，快照扩列时点从本轮裁定「不预造」）。ADR 号协调：0072 归接入身份（本轮），MCP-2 取 **0073**（申报单元持久化聚合持案件维，随之[申报单元案件关联票](./customs-declaration-case-link/issues/01-declaration-unit-has-no-case-association.md)转 ready-for-agent、衍生裸 caseRef 收敛 02 票）与 **0074**（TF 对象链分区键带口名段，随之[分区键碰撞票](./partition-key-space-collision/issues/01-tf-object-partitions-collide-with-ve-parcel-partitions.md)转 resolved，TF 实现随 `ca03b76`/`409bcf4` 入 main）。
   - 执行轮（用户批复「请你直接干吧」，MCP-3 执行）：①裁断轮全部落档成笔 `327a517`（ADR-0072、索引三行、SA CONTEXT、九票、两新票、计划）；②**推送积压清零**——`git push` 后远端实测 = `327a517`（原停 `a1f283c`），含 `b394adf` 及全部裁决落地提交，推送分工就此由授权执行替代等待 MCP-1；③**脏树票（T0 行 5）收口 resolved**——33 棵非主树全拆、55 支指针按[清理票 03](./dead-session-salvage/issues/03-obsolete-branch-pointer-cleanup.md)配方删除（51 支删前逐支重验 cherry 全 `-`，4 支按两路同裁弃定），6 支按册保留，`bento-gate-reeval` 因证据仍被 bento 票 02 引用改为「随其收口归档后删」；执行记录一支一行回写票 03，票 02/03 双双 resolved。M1 余 PAR-NET-14 与棘轮两行。
+- 2026-08-24 裁断轮（MCP-1 **受用户委托**——用户指示「作为技术和业务专家代表我直接决策」，对
+  工作树、基准 `main=88215a3`）：把 08-24 清余票触审后仍挂着的全部「等人」格清一遍，六件出裁：
+  - **棘轮门禁票**：整票复核通过收口 resolved（复核方法与逐格结论见票面 Comments 末条；一条
+    如实记的边界：范围随棘轮转向收敛为领域工厂一族，`New*` 三族按门禁自述列为后续、个体由
+    墙票逐张跟踪）。**M1 就此只余 PAR-NET-14 一行，且属实例半边等租户，不是机制欠账。**
+  - **ADR-0070 接受**（原 Proposed）：三问均采推荐甲——评估时点 `OccurredAt`（缺失/不可信显式
+    落未决格）、辖区回指案件（闸门经 ADR-0073 已开）、登记面主键扩三维半开区间解析。
+    `ComplianceRuleVersionReference` 注释随接受同笔收窄为记录侧陈述；[CC 解释规则版本维票](./cc-interpretation-rule-version-dimension/issues/01-interpretation-rule-has-no-version-dimension.md)
+    转 ready-for-agent（实现范围录票面 Comments）。
+  - **ADR-0075 立**：PS→NR 客户地址提供路径三问全裁——请求期携带地理投影、NR 不建读 PS 端口、
+    依据以引用＋服务区域版本＋版本化摘要留痕；CONTEXT-MAP 该边同笔补半句，[NR 票 02](./nr-route-evidence-views/issues/02-ps-address-provision-path-is-an-unmade-boundary-decision.md)
+    resolved。
+  - **[PG 接管重放缺 handOff](./pg-takeover-replay-handoff/issues/01-takeover-replay-path-never-hands-off.md)**：
+    进裁断轮放行修复，转 ready-for-agent——归属问题不阻重放完备性修复（PG 所有权照旧悬置）；
+    修法方向与验证要求录票面 Comments（重放路补幂等 handOff、「追加成功→handOff」两路共用）。
+  - **08-18 两份 triage 文档**（决议 v2 与其复核报告）：三项待确认按其后六天事实逐项追认成立，
+    双双收口 resolved，追认记录在各自文首。
+  - **frontline-client-shape 简报**：裁定**提案存档、不预采纳**——作业端未排进主线、§3.2 试证
+    未跑，缺证据时铸 ADR 是在没有事实的地方立规则；采纳触发写进其 Status 行。
+  - 裁断轮之后全库「等人」格再次归零：needs-triage 归零、ready-for-human 归零、draft 归零
+    （余下 needs-info 全部等实例证据或真实序输入，非等裁决）。**可派池**：Bento 02/03（原有）、
+    CC 版本维实现、PG 重放修复——四张互不撞文件可并行，无一占 `assemble.go`/`endpoints.go` 号。
+    轨道、串行约束与里程碑判据不动。本轮落档在工作树，提交与推送按分工另行。

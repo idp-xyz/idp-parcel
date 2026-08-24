@@ -1,7 +1,15 @@
 # 2026-08-18 needs-triage 分诊决议（草稿 v2，待确认）
 
 Category: chore
-Status: draft
+Status: resolved
+
+> 2026-08-24 MCP-1（受用户委托追认，本文收口）：三项待确认按其后六天的事实**逐项追认成立**——
+> ①三处修正全部按 v2 执行且无返工：r25 报告随基线换代记 superseded、`outbox-partition-key/01`
+> 按修正后清单实现并 resolved（八口＋接管格 `a1463ae`，四处待裁 `ac04366`）、NR 机制半边按
+> 收窄范围落地（NR-CATALOG-MECH，ADR-0068）；②两张「wontfix（暂缓）」定性成立，后按
+> 2026-08-24 清余票口径改记 needs-info 带重启条件（语义同「暂缓＋复评条件」，见各票 Comments）；
+> ③`outbox-partition-key/01` 第一步已放行、已完成。表内其余去向（SA/VE 两张 ready-for-human）
+> 也均已裁毕 resolved。本文使命完成；各票现状以票面为准，本文不再更新。
 
 八张 `needs-triage` 票的去向决议。只定**去向与动作**，不替领域 owner 拍口径；
 每张票需要谁裁什么、裁完做什么，按下表执行。族分析以

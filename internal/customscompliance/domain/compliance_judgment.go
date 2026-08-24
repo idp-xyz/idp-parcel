@@ -20,8 +20,10 @@ func NewComplianceTopicReference(value string) (ComplianceTopicReference, error)
 	return ComplianceTopicReference{required}, err
 }
 
-// ComplianceRuleVersionReference 指名适用规则版本。规则版本必须记录适用辖区、法定
-// 生效区间与适用时点（191）——那些在规则本体上，这里引用。
+// ComplianceRuleVersionReference 指名本次判断实际采用的规则版本。这是记录侧陈述：判断
+// 历史存下引用，事后追得回「用了哪一版」。它不回答选择侧问题——在某个法定适用时点该用
+// 哪一版由登记册的形状决定（硬句 191），本引用不构成任何登记册在选择侧的许可；两侧的
+// 分界由 ADR-0070 裁定。
 type ComplianceRuleVersionReference struct{ requiredValue }
 
 func NewComplianceRuleVersionReference(value string) (ComplianceRuleVersionReference, error) {

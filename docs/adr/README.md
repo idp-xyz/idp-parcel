@@ -75,11 +75,12 @@
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果，同币种两额相等对所有版本成立](./0067-cost-correction-restates-the-whole-evaluation-result.md)
 - [ADR-0068：版本化网络目录结构先行——七表由 CONTEXT 硬句推导，内容列与折叠规则等 PAR-NET-14](./0068-versioned-network-catalog-structure-precedes-rule-content.md)
 - [ADR-0069：关务案件链乱序由重读与重试消化，不由分区保证；关闭信封携关闭周期维](./0069-customs-case-chain-ordering-absorbed-by-reread-and-retry.md)
-- [ADR-0070：关务规则登记册分记录侧与选择侧；解释规则的选择侧违反硬句 191，案件要求规则的版本维随同一模型决定裁](./0070-customs-rule-registries-split-recording-from-selection.md)｜**草案**：Status 为 Proposed，尚非依据
+- [ADR-0070：关务规则登记册分记录侧与选择侧；解释规则的选择侧违反硬句 191，案件要求规则的版本维随同一模型决定裁](./0070-customs-rule-registries-split-recording-from-selection.md)
 - [ADR-0071：visibility-exception 的目录与策略视图把租户放进方法签名，不在构造期绑定](./0071-catalogue-views-carry-tenant-in-the-method-signature.md)｜**草案**：Status 为 Proposed，尚非依据
 - [ADR-0072：接入渠道与凭据验证归共享接入身份能力，登记册形状等真渠道证据](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)
 - [ADR-0073：申报单元是持久化聚合，案件关联落在单元上且成立即定](./0073-declaration-unit-is-a-persisted-aggregate-holding-its-case.md)
 - [ADR-0074：TF 载运对象与 VE 包裹是两个排队主体，TF 对象链分区键带口名段](./0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)
+- [ADR-0075：客户地址随判断请求在请求期携带过界，network-routing 不建读取端口](./0075-customer-address-is-carried-with-the-routing-request.md)
 
 ## 已被取代决策
 

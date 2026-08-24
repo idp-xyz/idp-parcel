@@ -1,7 +1,7 @@
 # 解释规则登记册没有版本维，迟到的外部结果只能拿到达时点当法定适用时点
 
 Category: bug
-Status: ready-for-human
+Status: ready-for-agent
 
 [ADR-0070](../../../docs/adr/0070-customs-rule-registries-split-recording-from-selection.md)（草案）已裁本票下方那条反向立场：它是**记录侧**的真话，答的不是硬句 191 问的选择侧问题，因此不构成本册子的许可，本票据以成立。转 `ready-for-human` 而非 `ready-for-agent`：缺的两个入参该从哪来是模型决定，不是可交给 agent 的规格。
 
@@ -64,3 +64,22 @@ CREATE TABLE customs_compliance.interpretation_rule (
 - 不重开 W13 的收窄。解释规则的不可覆盖单版登记（同 `rule_ref` 幂等、异 `rule_ref` 交回`冲突`而非覆盖）随 W13 交付，本票只加版本维。
 - 不碰其余四类。关闭义务已带 `applies_from`/`applies_until`，`LoadObligationItems` 已按 `cutoffAt` 半开区间解析，本就是版本化的；就绪判断、提交授权是逐单元的判断与授权（以形成时点加撤销两列表达，撤销不是删除），门禁条件是案内事实——硬句 191 对这三类不适用。
 - 不替 `customs-compliance` 定所有权。难逆转的取舍按 [AGENTS.md](../../../AGENTS.md) 走 ADR。
+
+## Comments
+
+- 2026-08-24 MCP-1（**受用户委托裁断，转 ready-for-agent**。基准 `88215a3`）：缺的模型决定
+  已由 ADR-0070 的接受补齐——用户 2026-08-24 授权代为拍板，三问均采该记录推荐甲，接受记录
+  在其文首。对本票意味着：
+  1. **评估时点** = `OccurredAt`（业务发生或适用时间），并带不变式：来源未给出或给出不可信
+     值时**显式落未决格**，不得用当前指针兜底——否则本票记的缺陷原样藏进新册子。
+  2. **适用辖区** = 从外部结果回指案件取 `CustomsCaseKey.Jurisdiction`。拍板时闸门已开：
+     ADR-0073 已落申报单元持久化本体（带案件维）与 `CustomsCaseStore.FindByID` 反查读口；
+     外部结果 `Scope` → 单元 → 案件这条链的连通细节，实现开工时按当时代码取证。
+  3. **登记面**：主键扩为（租户，结果层，适用辖区，法定生效区间起），按半开区间解析；同
+     （租户，层，辖区）下区间不重叠，排他约束或写口串行化照 ADR-0056 形状。
+  4. `ComplianceRuleVersionReference` 注释已随 ADR-0070 接受同笔收窄为记录侧陈述。
+
+  **实现范围**（按本票正文与上列四条，余者照「本票不做的事」不动）：`interpretation_rule`
+  迁移加辖区与法定生效区间维并扩主键；`LoadInterpretationRule` 加评估时点与辖区两个入参；
+  `receive_external_result.go` 编排按 1/2 取值并落未决格；W13 的不可覆盖登记语义在多版本
+  形状下保持（同全键幂等、同键异 `rule_ref` 冲突）。

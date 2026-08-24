@@ -1,7 +1,16 @@
 # ADR-0070: 关务规则登记册分记录侧与选择侧；解释规则的选择侧违反硬句 191，案件要求规则的版本维随同一模型决定裁
 
-Status: Proposed  
-Date: 2026-08-21
+Status: Accepted  
+Date: 2026-08-21（Proposed）／2026-08-24（Accepted）
+
+> 接受记录：用户 2026-08-24 授权本会话（MCP-1）代为拍板（用户指示：作为技术与业务专家代表
+> 其直接决策）。三问均采正文推荐：**问一甲**（主键扩为租户＋结果层＋适用辖区＋法定生效区间起，
+> 半开区间解析，重叠约束照 ADR-0056 形状）、**问二甲**（评估时点取 `OccurredAt`，附带不变式：
+> 来源未给出或给出不可信值时显式落未决格，不得用当前指针兜底）、**问三甲**（适用辖区从外部
+> 结果回指案件取）。问三的落地闸门在拍板时**已开**——[ADR-0073](./0073-declaration-unit-is-a-persisted-aggregate-holding-its-case.md)
+> 已落申报单元持久化本体（带案件维）与 `CustomsCaseStore.FindByID` 反查读口（2026-08-24 入
+> main），链路连通细节由实现票开工时按当时代码取证。Consequences 点名「接受之日须收窄
+> `ComplianceRuleVersionReference` 注释为记录侧陈述」——已随本次接受同笔执行。
 
 ## Context
 

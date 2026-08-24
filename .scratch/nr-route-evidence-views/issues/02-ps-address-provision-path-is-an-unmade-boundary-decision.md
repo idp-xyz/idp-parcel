@@ -1,7 +1,7 @@
 # `NetworkEvidenceView` 要的客户地址，PS→NR 的提供路径是一条没做过的边界决策
 
 Category: enhancement
-Status: needs-triage
+Status: resolved
 
 从本目录 `01` 号票「二、`NetworkEvidenceView` 还缺一条真缝」划出。`01` 的机制四件
 （NR-CATALOG-MECH）不含此缝，做完也不解此缝。
@@ -35,3 +35,11 @@ CONTEXT-MAP 该条、PS CONTEXT 的地址所有权句、`ServiceAreaResolutionSp
 ## Comments
 
 - 2026-08-20 MCP-1：随 `01` 号票开工（机制四件）同步划出，防止这条缝被塞进实现票里顺手裁掉。
+- 2026-08-24 MCP-1（**受用户委托裁断，三问全裁，本票 resolved**。基准 `88215a3`）：裁决落
+  [ADR-0075](../../../docs/adr/0075-customer-address-is-carried-with-the-routing-request.md)，
+  CONTEXT-MAP 该边已同笔补提供路径半句。三问答案：①**形态**——请求期携带地理解析投影
+  （地理维过界、个人身份维不过界），与 `asOf` 同款走请求输入；②**谁调谁**——发起方随证据
+  请求传入，NR 不建读 PS 地址的端口（判据是同版性：判断对象是委托当前提交版本，随请求携带
+  使输入与对象天然同笔，回读则有版本漂移窗口）；③**留痕**——当次解析依据 = 判断对象引用 +
+  所用服务区域版本 + 所携投影的版本化内容摘要（ADR-0014 形状），地址本体不落 NR。取数侧
+  实现仍阻于 `PAR-NET-14`（01 号票收敛结论不变），届时按 ADR-0075 收地址入参。
