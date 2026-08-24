@@ -40,8 +40,9 @@ Status: in-progress
 
 ## 子票
 
-- 01 共享层增量与治理区（7 号，in-progress；7 号 crash 后余量待派——facts 结构、
-  治理五页、预览页已随 a5fa176/acf59cf/0202a3d 落库，工作台就绪度总览与收口 build 职责遗留）
+- 01 共享层增量与治理区（7 号，resolved——facts 结构、治理五页、工作台分区接线小结
+  （Workbench 的 liveCount 自条目档位派生）、预览页已随 a5fa176/acf59cf/0202a3d 落库；
+  登记代办核实零遗留，收口 build 于 0ceef20 提交态 worktree 绿）
 - 02 主数据/计价/网络 13 页（原派 8 号未开工，改派 3 号；3 号 crash 后 5 号接力，resolved）
 - 03 作业/关务/追踪/结算/代收 10+2 页与追踪接真（原派 9 号被转接线队，改派 3 号；
   3 号在本票零写入，5 号接力，resolved——追踪接真按裁决闸另行续办）
