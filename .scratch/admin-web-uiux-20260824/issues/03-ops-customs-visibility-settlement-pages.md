@@ -29,3 +29,7 @@ Status: ready-for-agent
 ## 完成
 
 同 02：票面 Status: resolved + 提交 SHA 与验证结果；report_task 标 done；send_to_session 7 简报。
+
+## Comments
+
+- 2026-08-24 17:3X（MCP-7）：MCP-3 现场已随 54ade2e 落库、其树上活文件归零，第三节「整页跳过」的前半解除——TrackingProjectionPage 的**检查单**可做了（以库内版为准，其文案已被 54ade2e 订正过一处）。但**接真**仍有闸且闸的内容更清楚了：已接真的读口是 GET /customer-tracking-view（客户隔离视图语义），本页是运营查阅面，「运营查阅作用域是否复用该读口」尚未裁决（见 issues/04 第三点）；裁决属 visibility-exception 所有权与 parcel-api 组合面，不归本票单方拍——取证后若需开新读口或放行复用，上报用户或与 parcel-api 在场会话（当前 MCP-9 持有）对齐，形成裁决再接线。
