@@ -13,6 +13,7 @@ import (
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 )
 
 const (
@@ -58,10 +59,18 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	reception, err := buildReceptionOrchestration(db)
+	if err != nil {
+		return err
+	}
+	trackingViews, err := vepostgres.NewCustomerViews(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, trackingViews)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

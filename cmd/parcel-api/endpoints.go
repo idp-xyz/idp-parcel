@@ -30,8 +30,10 @@ import (
 // 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
-// 各端点的第二参（应用编排）与 Intake 是两笔独立的接线：提交编排已按审计票 13 接真，
-// 撤回编排随 UI 阶段 B 后端序列接真（均经真库，由 main 构造后入参交入），其余各格仍以
+// 各端点的第二参（应用编排或读口）与 Intake 是两笔独立的接线：提交编排已按审计票 13
+// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄编排按接线票
+// `.scratch/parcel-api-remaining-endpoint-wiring/issues/01` 接真（均经真库，由 main
+// 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库读适配器；其余各格仍以
 // unwired* 占位，各自的接线各自成笔。占位与接真的分辨见 unwired_orchestration.go 的
 // 文件注释。
 //
@@ -40,21 +42,24 @@ import (
 // 委托查阅（GET /shipment-request-views，UI 阶段 B 的读切片）。此处按逐项枚举装配，
 // 少装一个就是把一个端点折回 404，那正是该记录要治的病。
 //
-// requestViews 是查阅端点的读口：它是读面不是编排（查阅不触发判断或披露），生产装配
-// 交入真库读适配器；未配置 Intake 仍拒在它之前，接入渠道就位前它一次也不会被调到。
+// requestViews 与 trackingViews 是两个查阅端点的读口：读面不是编排（查阅不触发判断、
+// 派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，接入
+// 渠道就位前一次也不会被调到。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
+	reception nodeopshttp.ReceptionHandler,
+	trackingViews visibilityhttp.TrackingViewReader,
 ) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmenthttp.UnconfiguredIntake{}, requestViews)},
-		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, unwiredReception{})},
+		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
-		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredTrackingViews{})},
+		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredClaims{})},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, unwiredResults{})},
 	}

@@ -28,9 +28,10 @@ import (
 //
 // 换编排与换 Intake 是两笔可独立发生的工作：运行期未配置 Intake 拒在编排之前，装配期
 // 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，撤回编排随
-// UI 阶段 B 后端序列接真，均由装配点入参交入，不再从本文件取——unwiredSubmission 与
-// unwiredWithdrawal 自此只被装配测试用来钉「未配置面」的形状；其余各格仍以本文件的类型
-// 占位，各自的接线各自成笔。真渠道 Intake 就位那笔工作只替换 Intake 本身。
+// UI 阶段 B 后端序列接真，NO 收寄编排按 `.scratch/parcel-api-remaining-endpoint-wiring`
+// 的接线票接真，均由装配点入参交入，不再从本文件取——unwiredSubmission、unwiredWithdrawal
+// 与 unwiredReception 自此只被装配测试用来钉「未配置面」的形状；其余各格仍以本文件的
+// 类型占位，各自的接线各自成笔。真渠道 Intake 就位那笔工作只替换 Intake 本身。
 var errOrchestrationNotWired = errors.New("parcel-api: business orchestration is not wired; the unconfigured intake should have refused first")
 
 type unwiredSubmission struct{}
@@ -77,7 +78,8 @@ func (unwiredDelivery) Correct(
 	return tfapp.RegisterEffectiveDeliveryResult{}, errOrchestrationNotWired
 }
 
-// unwiredTrackingViews 顶的是读口不是编排，但填法同理：读不回按 ADR-0022 是「没形成
+// unwiredTrackingViews 只被装配测试使用：生产装配（main）把 VE 真库读适配器交进装配
+// 点，这里的占位让「未配置面」测试不必开库。填法照旧：读不回按 ADR-0022 是「没形成
 // 答案」的 5xx，绝不能顶成 VIEW_NOT_FOUND——那会把一次进程故障伪装成「查无此件」的
 // 终局答案。
 type unwiredTrackingViews struct{}

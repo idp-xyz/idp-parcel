@@ -32,9 +32,8 @@ var businessEndpointMethods = map[string]string{
 // 装不装配它们都绿。这里走的是 cmd/parcel-api 真正交给 http.Server 的那个路由。
 func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 	// 传 unwired* 占位而非真编排与真读口：本测试钉的是未配置面（403 在编排之前），
-	// 真编排的装配与行为由 assemble_submission_test.go / assemble_withdrawal_test.go
-	// 对真库另证。
-	endpoints := assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{})
+	// 真编排的装配与行为由各 assemble_*_test.go 对真库另证。
+	endpoints := assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredReception{}, unwiredTrackingViews{})
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, endpoints)
 
 	mounted := make(map[string]bool, len(endpoints))
@@ -70,7 +69,7 @@ func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 // Covers: ADR-0055 「未配置格住在 Intake 缝里，不在路由层另设闸」 — 未配置不改变方法
 // 约束：方法不对仍由处理器自己答 405，403 不越过它抢答。两处各有权威就会各改一次。
 func TestUnconfiguredDoesNotSwallowTheMethodGate(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredReception{}, unwiredTrackingViews{}))
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/shipment-requests", nil))
@@ -86,7 +85,7 @@ func TestUnconfiguredDoesNotSwallowTheMethodGate(t *testing.T) {
 // Covers: ADR-0055 「答复对一切请求内容与自报身份一致」 — 在装配后的路由上再钉一次：
 // 各包的替身证的是自己那个处理器，这里证的是进程真正对外的那一个。
 func TestAssembledEndpointsIgnoreSelfReportedIdentity(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredReception{}, unwiredTrackingViews{}))
 
 	baseline := httptest.NewRecorder()
 	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, "/shipment-requests", nil))
