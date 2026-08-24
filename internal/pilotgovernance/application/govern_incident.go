@@ -127,7 +127,11 @@ func (handler *GovernIncidentHandler) Suspend(
 		if err != nil || !found {
 			return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 		}
-		return GovernIncidentResult{outcome: SuspensionExisting, suspension: existing}, nil
+		// 重放补尝试 handOff：上次交发布失败留下的分岔在这里收口——handler 不留
+		// 交发布成败的持久痕迹，只能靠重发同一份收敛（EnqueueOnce 幂等答已入队）。
+		result := GovernIncidentResult{outcome: SuspensionExisting, suspension: existing}
+		result.handoffRef = handler.handOff(ctx, ports.GovernanceHandoffIntent{Suspension: &existing})
+		return result, nil
 	default:
 		return GovernIncidentResult{}, fmt.Errorf("%w: %d", ErrUnexpectedGovernanceSave, saved)
 	}
@@ -150,7 +154,10 @@ func (handler *GovernIncidentHandler) Resume(
 	if existing, found, err := handler.deps.Resumptions.FindBySuspension(ctx, spec.Suspension); err != nil {
 		return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 	} else if found {
-		return GovernIncidentResult{outcome: ResumptionExisting, resumption: existing}, nil
+		// 已恢复作答的重放路同样补尝试 handOff——发的是在册那份（重放重发同一份）。
+		result := GovernIncidentResult{outcome: ResumptionExisting, resumption: existing}
+		result.handoffRef = handler.handOff(ctx, ports.GovernanceHandoffIntent{Resumption: &existing})
+		return result, nil
 	}
 
 	decision, err := domain.RecordResumption(spec)
@@ -171,7 +178,9 @@ func (handler *GovernIncidentHandler) Resume(
 		if err != nil || !found {
 			return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 		}
-		return GovernIncidentResult{outcome: ResumptionExisting, resumption: winner}, nil
+		result := GovernIncidentResult{outcome: ResumptionExisting, resumption: winner}
+		result.handoffRef = handler.handOff(ctx, ports.GovernanceHandoffIntent{Resumption: &winner})
+		return result, nil
 	default:
 		return GovernIncidentResult{}, fmt.Errorf("%w: %d", ErrUnexpectedGovernanceSave, saved)
 	}
@@ -179,7 +188,7 @@ func (handler *GovernIncidentHandler) Resume(
 
 // TakeOver 记录对象级接管：新权威区间先过冲突预检——撞上仍开着的既有区间即阻断带
 // 全部冲突对（先关原区间再接管，原权威停下的证据由领域把门）；同区间身份重放返原；
-// 入册后追加区间沿用评审 handler 的续办纪律。
+// 入册后的续办段（区间追加 → handOff）首次与重放共用，见 completeTakeover。
 func (handler *GovernIncidentHandler) TakeOver(
 	ctx context.Context,
 	spec domain.TakeoverRecordSpec,
@@ -192,10 +201,10 @@ func (handler *GovernIncidentHandler) TakeOver(
 	if existing, found, err := handler.deps.Takeovers.FindByInterval(ctx, spec.Interval); err != nil {
 		return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 	} else if found {
-		// 重放路补追加：上次区间追加失败留下的分岔在这里收口——接管不翻，只重试
-		// 同一份追加（镜像阶段评审 handler 的续办纪律，已在册不重追）。
+		// 重放路补续办段：上次在追加或 handOff 处中断留下的分岔在这里收口——接管
+		// 不翻，从断点续齐同一份（已在册不重追，信封重发由 EnqueueOnce 幂等收敛）。
 		result := GovernIncidentResult{outcome: TakeoverExisting, takeover: existing}
-		result.handoffRef = handler.appendTakeoverInterval(ctx, spec.Interval)
+		result.handoffRef = handler.completeTakeover(ctx, existing)
 		return result, nil
 	}
 
@@ -218,11 +227,7 @@ func (handler *GovernIncidentHandler) TakeOver(
 	switch saved {
 	case ports.GovernanceSaved:
 		result := GovernIncidentResult{outcome: TakeoverRecorded, takeover: record}
-		if ref := handler.appendTakeoverInterval(ctx, spec.Interval); ref != "" {
-			result.handoffRef = ref
-			return result, nil
-		}
-		result.handoffRef = handler.handOff(ctx, ports.GovernanceHandoffIntent{Takeover: &record})
+		result.handoffRef = handler.completeTakeover(ctx, record)
 		return result, nil
 	case ports.GovernanceAlreadyRecorded:
 		winner, found, err := handler.deps.Takeovers.FindByInterval(ctx, spec.Interval)
@@ -230,11 +235,25 @@ func (handler *GovernIncidentHandler) TakeOver(
 			return GovernIncidentResult{outcome: GovernIncidentUndecided}, nil
 		}
 		result := GovernIncidentResult{outcome: TakeoverExisting, takeover: winner}
-		result.handoffRef = handler.appendTakeoverInterval(ctx, spec.Interval)
+		result.handoffRef = handler.completeTakeover(ctx, winner)
 		return result, nil
 	default:
 		return GovernIncidentResult{}, fmt.Errorf("%w: %d", ErrUnexpectedGovernanceSave, saved)
 	}
+}
+
+// completeTakeover 是接管入册后的续办段（区间追加 → handOff），首次与重放共用：任一
+// 步失败留该步的续办引用、不越过断点，重放凭同一命令从断点续齐。追加失败时不发信封
+// ——信封宣告权威已切换，而区间册还没这道区间，先发即两帐分岔；handOff 重发同一份，
+// 由 EnqueueOnce 按信封身份幂等收敛（先入队者答已入队，从未入队者此刻入队）。
+func (handler *GovernIncidentHandler) completeTakeover(
+	ctx context.Context,
+	record domain.TakeoverRecord,
+) string {
+	if ref := handler.appendTakeoverInterval(ctx, record.Interval()); ref != "" {
+		return ref
+	}
+	return handler.handOff(ctx, ports.GovernanceHandoffIntent{Takeover: &record})
 }
 
 // appendTakeoverInterval 追加接管授予的权威区间。失败不翻接管但交回续办引用（接管

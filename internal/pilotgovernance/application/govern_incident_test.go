@@ -85,6 +85,7 @@ func (double *takeoverStoreDouble) Save(
 }
 
 type governanceDownstreamDouble struct {
+	err     error
 	intents []ports.GovernanceHandoffIntent
 }
 
@@ -92,8 +93,23 @@ func (double *governanceDownstreamDouble) HandOffGovernance(
 	_ context.Context,
 	intent ports.GovernanceHandoffIntent,
 ) error {
+	if double.err != nil {
+		return double.err
+	}
 	double.intents = append(double.intents, intent)
 	return nil
+}
+
+func (double *governanceDownstreamDouble) count(
+	pick func(ports.GovernanceHandoffIntent) bool,
+) int {
+	total := 0
+	for _, intent := range double.intents {
+		if pick(intent) {
+			total++
+		}
+	}
+	return total
 }
 
 type incidentFixture struct {
@@ -102,6 +118,7 @@ type incidentFixture struct {
 	resumptions *resumptionStoreDouble
 	takeovers   *takeoverStoreDouble
 	intervals   *intervalStoreDouble
+	downstream  *governanceDownstreamDouble
 }
 
 func newIncidentFixture(t *testing.T) *incidentFixture {
@@ -111,13 +128,14 @@ func newIncidentFixture(t *testing.T) *incidentFixture {
 		resumptions: &resumptionStoreDouble{bySuspension: map[domain.SuspensionID]domain.ResumptionDecision{}},
 		takeovers:   &takeoverStoreDouble{byInterval: map[domain.AuthorityInterval]domain.TakeoverRecord{}},
 		intervals:   &intervalStoreDouble{},
+		downstream:  &governanceDownstreamDouble{},
 	}
 	fixture.handler = application.NewGovernIncidentHandler(application.GovernIncidentDeps{
 		Suspensions: fixture.suspensions,
 		Resumptions: fixture.resumptions,
 		Takeovers:   fixture.takeovers,
 		Intervals:   fixture.intervals,
-		Downstream:  &governanceDownstreamDouble{},
+		Downstream:  fixture.downstream,
 		Clock:       fixedClock{at: incidentAt},
 	})
 	return fixture
@@ -333,5 +351,161 @@ func TestAFailedTakeoverIntervalAppendLeavesAContinuationAndReplayHeals(t *testi
 	}
 	if again.HandoffReference() != "" || len(fixture.intervals.intervals) != 1 {
 		t.Fatalf("intervals = %d; 已在册的区间被重复追加", len(fixture.intervals.intervals))
+	}
+}
+
+func takeoverSpec(t *testing.T) domain.TakeoverRecordSpec {
+	t.Helper()
+	return domain.TakeoverRecordSpec{
+		StopEvidence: "evidence-pack/authority-stopped",
+		Interval: domain.AuthorityInterval{
+			ObjectScope: "pilot-scope/v1",
+			Capability:  "SHIPMENT_ACCEPTANCE",
+			FactKind:    "ACCEPTANCE_DECISION",
+			Authority:   "legacy-system",
+			From:        incidentAt,
+		},
+		AcceptedFacts:    "facts accepted as-is from prior authority",
+		PendingExternals: "two customs declarations awaiting external results",
+		ActualControl:    "objects physically at node-origin",
+		Responsibilities: "legacy operations team",
+		NextAction:       "resume manual processing",
+		Inventory:        inventory(t),
+		EffectiveAt:      incidentAt,
+	}
+}
+
+// Covers: 票 pg-takeover-replay-handoff/01——首次接管在区间追加处中断时 handOff 从未
+// 被尝试；重放走 TakeoverExisting 分支必须在补追加成功后补尝试 handOff，否则这次接管
+// 的信封永不入队。断点纪律不变：追加未修好前不越过断点发信封。「入队恰一次」的幂等
+// 半边由端口的 EnqueueOnce 承担（ports.GovernanceHandoff 注），本测试在端口缝上断言
+// 发出的份数与身份。
+func TestTakeoverReplayAfterAppendFailureHandsOffTheEnvelope(t *testing.T) {
+	fixture := newIncidentFixture(t)
+	fixture.intervals.appendErr = errors.New("interval store unreachable")
+
+	first, err := fixture.handler.TakeOver(context.Background(), takeoverSpec(t))
+	if err != nil {
+		t.Fatalf("first takeover: %v", err)
+	}
+	if first.Outcome() != application.TakeoverRecorded || first.HandoffReference() == "" {
+		t.Fatalf("outcome = %q ref = %q", first.Outcome(), first.HandoffReference())
+	}
+	if got := len(fixture.downstream.intents); got != 0 {
+		t.Fatalf("handoffs = %d; 区间追加失败即断点，不得越过断点发信封", got)
+	}
+
+	fixture.intervals.appendErr = nil
+	replay, err := fixture.handler.TakeOver(context.Background(), takeoverSpec(t))
+	if err != nil {
+		t.Fatalf("replay takeover: %v", err)
+	}
+	if replay.Outcome() != application.TakeoverExisting || replay.HandoffReference() != "" {
+		t.Fatalf("replay = %q ref = %q", replay.Outcome(), replay.HandoffReference())
+	}
+	if got := len(fixture.downstream.intents); got != 1 {
+		t.Fatalf("handoffs = %d; 重放补追加成功后必须补尝试 handOff——否则接管信封永不入队", got)
+	}
+	intent := fixture.downstream.intents[0]
+	if intent.Takeover == nil || intent.Takeover.Interval() != takeoverSpec(t).Interval {
+		t.Fatal("补发的不是这次接管的信封")
+	}
+}
+
+// Covers: 首次全程成功后的重放重发同一份信封——同区间身份认领同一个信封 ID，
+// EnqueueOnce 答已入队、不重复入队（ADR-0043「重放重发同一份」）。重发与首发身份
+// 相同是收敛成立的前提，身份漂移会让幂等失认、重复入队。
+func TestTakeoverReplayAfterFullSuccessResendsTheSameEnvelope(t *testing.T) {
+	fixture := newIncidentFixture(t)
+
+	first, err := fixture.handler.TakeOver(context.Background(), takeoverSpec(t))
+	if err != nil {
+		t.Fatalf("first takeover: %v", err)
+	}
+	if first.Outcome() != application.TakeoverRecorded || first.HandoffReference() != "" {
+		t.Fatalf("outcome = %q ref = %q", first.Outcome(), first.HandoffReference())
+	}
+
+	replay, err := fixture.handler.TakeOver(context.Background(), takeoverSpec(t))
+	if err != nil {
+		t.Fatalf("replay takeover: %v", err)
+	}
+	if replay.Outcome() != application.TakeoverExisting || replay.HandoffReference() != "" {
+		t.Fatalf("replay = %q ref = %q", replay.Outcome(), replay.HandoffReference())
+	}
+	if got := len(fixture.downstream.intents); got != 2 {
+		t.Fatalf("handoffs = %d; 重放要重发同一份，幂等由 EnqueueOnce 答已入队", got)
+	}
+	sent, resent := fixture.downstream.intents[0], fixture.downstream.intents[1]
+	if sent.Takeover == nil || resent.Takeover == nil ||
+		sent.Takeover.Interval() != resent.Takeover.Interval() {
+		t.Fatal("重发的信封身份与首发不同——EnqueueOnce 认不出同一份")
+	}
+	if len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("intervals = %d; 重放又追加了区间", len(fixture.intervals.intervals))
+	}
+}
+
+// Covers: 票 01 顺带核一格的结论——Suspension/Resumption 的重放分支与接管同型漏
+// handOff，同型同修：首次 handOff 失败留续办引用后，重放答已在册时必须补尝试
+// handOff（EnqueueOnce 幂等，已入队者答已入队），否则信封无人再发。
+func TestSuspensionAndResumptionReplaysRetryTheHandoff(t *testing.T) {
+	fixture := newIncidentFixture(t)
+	fixture.downstream.err = errors.New("outbox unreachable")
+
+	first, err := fixture.handler.Suspend(context.Background(), suspensionSpec(t))
+	if err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+	if first.Outcome() != application.SuspensionRecorded || first.HandoffReference() != "CONT-GOV-SUSPENSION" {
+		t.Fatalf("outcome = %q ref = %q", first.Outcome(), first.HandoffReference())
+	}
+
+	fixture.downstream.err = nil
+	replay, err := fixture.handler.Suspend(context.Background(), suspensionSpec(t))
+	if err != nil {
+		t.Fatalf("suspend replay: %v", err)
+	}
+	if replay.Outcome() != application.SuspensionExisting || replay.HandoffReference() != "" {
+		t.Fatalf("replay = %q ref = %q", replay.Outcome(), replay.HandoffReference())
+	}
+	suspensions := fixture.downstream.count(func(intent ports.GovernanceHandoffIntent) bool {
+		return intent.Suspension != nil
+	})
+	if suspensions != 1 {
+		t.Fatalf("suspension handoffs = %d; 重放没有补发暂停信封", suspensions)
+	}
+
+	resume := domain.ResumptionDecisionSpec{
+		Suspension:       mustValue(t, domain.NewSuspensionID, "suspension-1"),
+		ReleaseEvidence:  "evidence-pack/fixed",
+		ConsistencyCheck: "consistency-check/pass",
+		Inventory:        inventory(t),
+		DecidedBy:        "pilot-business-owner",
+		DecidedAt:        incidentAt,
+		EffectiveAt:      incidentAt.Add(time.Hour),
+	}
+	fixture.downstream.err = errors.New("outbox unreachable")
+	firstResume, err := fixture.handler.Resume(context.Background(), resume)
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if firstResume.Outcome() != application.ResumptionRecorded || firstResume.HandoffReference() != "CONT-GOV-RESUMPTION" {
+		t.Fatalf("outcome = %q ref = %q", firstResume.Outcome(), firstResume.HandoffReference())
+	}
+
+	fixture.downstream.err = nil
+	resumeReplay, err := fixture.handler.Resume(context.Background(), resume)
+	if err != nil {
+		t.Fatalf("resume replay: %v", err)
+	}
+	if resumeReplay.Outcome() != application.ResumptionExisting || resumeReplay.HandoffReference() != "" {
+		t.Fatalf("replay = %q ref = %q", resumeReplay.Outcome(), resumeReplay.HandoffReference())
+	}
+	resumptions := fixture.downstream.count(func(intent ports.GovernanceHandoffIntent) bool {
+		return intent.Resumption != nil
+	})
+	if resumptions != 1 {
+		t.Fatalf("resumption handoffs = %d; 重放没有补发恢复信封", resumptions)
 	}
 }
