@@ -1,7 +1,7 @@
 # 关务案件配置面五类登记册只读,无写入方无登记口
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W13。
 
@@ -115,3 +115,30 @@ PAR-CUS-01..07(尤其 PAR-CUS-04);`docs/design/customs-slice-0-business-developm
   * 票面「缺的最小机制件」里「按法定生效区间与适用时点版本化」一句只对关闭义务成立
     （它本就有区间列）；解释规则那一类的版本维建不出来，已收窄为不可覆盖的单版登记，
     另票见上条。
+- 2026-08-24 · MCP-1：**B 半边（进程级入口）交付，本票转 resolved。**
+  * `cmd/parcel-customs-register`：受控 CLI 照 parcel-governance-register /
+    parcel-network-register 先例，封闭九命令对齐登记用例九方法
+    （readiness-register/-revoke、authority-grant/-revoke、interpretation-rule、
+    obligation-catalog/-item、gate-catalog/-finding）；`-input` JSON 未知字段拒收，
+    封闭词表（层六值/动作四值/义务态三值/前置态三值）在译装处指名拒。两处译装自己
+    把门，因为它们身后没有别的门：两本目录的 registeredAt（领域与库都无零值门，缺格
+    会静默落成 0001 年）、义务项内容格与承接配对（库 CHECK 拦得住但答案会滑到未决 3，
+    缺格是用法错误该答 1）。
+  * 环境事务由本入口给出（WithinTransaction 包住用例调用），写口 RequireExecutor
+    等的正是这一半；一次调用一命令一笔事务，冲突判定读回与登记看同一份快照。
+  * 退出码 0/1/2/3：登记/重放/撤销落地/已撤销归 0（撤销的意图是使失效，已失效即
+    达成——册面原因归首撤者，未决重跑落这一格不再劳人工）；受理拒与撤销无对象归 1
+    （改请求不是重试，先例 SUSPENSION_NOT_FOUND）；内容冲突归 2（治理格，人工核对
+    既有登记再续办）；未决归 3。
+  * 不留 channel_execution 痕：那是票 12 对治理登记面的裁决，且该册属
+    pilot-governance 所有权；本口登记内容不含执行人轨，授权依据就是「能运行本 CLI」
+    这道运维边界。
+  * 照 2026-08-21 收窄口径件 4：不动 `assemble.go` 与 `endpoints.go`。
+  * 垂直用例顺带钉住 A 半边一格语义：义务项换**更早**区间起点是冲突（按新起点盘不出
+    在册项）；**更晚**起点落在在册区间内且内容全同则是重放——与应用层
+    `TestReRegisteringAnObligationItemWithADifferentIntervalConflicts` 同口径。
+  * 验证：译装/编排两层 12 用例；真库垂直一发五族贯通（重放与冲突在真库分得开、撤销
+    走状态推进且原判断留行、义务明细撞外键防线答未决、CLI 与写口两份私有词表钉在
+    迁移 CHECK 同一词表上），单跑 `-v` 真 PASS 非 SKIP；共享树全量 gofmt/build/vet
+    零信号、`go test -p 1 -count=1 ./...` 全绿（74 包 ok、0 FAIL，2026-08-24 12:24）。
+    隔离树按提交 SHA 的全量验证随提交完成并记于提交信。
