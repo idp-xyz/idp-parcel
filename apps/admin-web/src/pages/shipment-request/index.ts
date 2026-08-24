@@ -1,8 +1,20 @@
-// 本目录的对外出口,供装配侧接导航用。ShipmentRequestPage 是单导航位的组合入口;
-// 两个分页组件也单独导出,想拆成两个导航位时不必进目录内部找。
+// 本目录的对外出口,供装配侧接导航用。ShipmentRequestPage 是提交/撤回单导航位的
+// 组合入口;各页面组件也单独导出,导航位怎么拆由装配侧定,不必进目录内部找。
 export { ShipmentRequestPage } from './ShipmentRequestPage';
 export { SubmitShipmentRequestPage } from './SubmitShipmentRequestPage';
 export { WithdrawShipmentRequestPage } from './WithdrawShipmentRequestPage';
+// 委托查阅面:列表页内含钻取到详情的组合,可独立作一个导航位;详情页也单独导出。
+export { ShipmentRequestListPage, type ShipmentRequestListRow } from './ShipmentRequestListPage';
+export {
+  ShipmentRequestDetailPage,
+  type ShipmentRequestDetailView,
+  type DeclaredParcelView,
+  type SubmissionVersionView,
+  type AcceptanceTaskView,
+  type AcceptanceBaselineView,
+} from './ShipmentRequestDetailPage';
+// UC-PS-006 接受后取消入口(未配置骨架,端点形状落地前不受理请求)。
+export { CancelParcelPage } from './CancelParcelPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,

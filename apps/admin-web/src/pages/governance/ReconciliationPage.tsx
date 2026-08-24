@@ -43,8 +43,10 @@ const columns: ListColumn<StatementRow>[] = [
 ];
 
 /**
- * 对账与核销。首块骨架先立对账单列表；核销（收付款分配到未结项）的呈现
- * 待接线时按 UC-SA-005 的口径另立区块或页面，不在此页预设交互。
+ * 对账与核销。本页承载对账单（UC-SA-003）视角的列表骨架；核销（收付款分配到
+ * 未结项）已按 UC-SA-005 口径独立成页，见同目录 SettlementApplicationPage——
+ * 收付款事实与核销关系同对账单分别管理，收付款不改变对账单内容，
+ * 故不在本页另立区块。
  */
 export function ReconciliationPage() {
   const [search, setSearch] = useState('');

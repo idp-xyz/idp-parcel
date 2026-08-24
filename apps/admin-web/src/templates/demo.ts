@@ -197,3 +197,58 @@ export const demoReviewAuditTrail: AuditEntry[] = [
     variant: 'default',
   },
 ];
+
+/* ── ReviewFlowTemplate 可配置决定集（分诊）演示数据 ── */
+
+/** 演示分诊信号队列项：字段名对齐异常信号的领域语言；statusKind 档位由演示页映射。 */
+export interface DemoTriageSignalEntry {
+  id: string;
+  title: string;
+  subtitle: string;
+  statusLabel: string;
+  statusKind: 'warning' | 'pending';
+  meta: string;
+}
+
+/** 隔离合成 S：进入分诊的异常信号演示队列。 */
+export const demoTriageSignalQueue: DemoTriageSignalEntry[] = [
+  {
+    id: 'SYN-VE-SIG-240821-0001',
+    title: 'SYN-VE-SIG-240821-0001',
+    subtitle: '可见性缺口 · 包裹 SYN-PARCEL-88021',
+    statusLabel: '待分诊',
+    statusKind: 'warning',
+    meta: '信号生成 2024-08-21 07:40',
+  },
+  {
+    id: 'SYN-VE-SIG-240821-0002',
+    title: 'SYN-VE-SIG-240821-0002',
+    subtitle: '疑似重复信号 · 包裹 SYN-PARCEL-88034',
+    statusLabel: '待分诊',
+    statusKind: 'warning',
+    meta: '信号生成 2024-08-21 09:12',
+  },
+  {
+    id: 'SYN-VE-SIG-240822-0003',
+    title: 'SYN-VE-SIG-240822-0003',
+    subtitle: '关务异常信号 · 包裹 SYN-PARCEL-88102',
+    statusLabel: '资料补充中',
+    statusKind: 'pending',
+    meta: '信号生成 2024-08-22 15:03',
+  },
+];
+
+/**
+ * 隔离合成 S：分诊详情区演示字段（对应队列首项）。
+ * 字段清单对齐 visibility-exception CONTEXT.md 信号必存项：
+ * 对象、类型、规则版本、判断时间、事实依据、可信度、当前发作期。
+ */
+export const demoTriageDetailFields: DetailField[] = [
+  { label: '信号对象', value: 'SYN-PARCEL-88021（包裹）' },
+  { label: '信号类型', value: '可见性缺口' },
+  { label: '规则版本', value: 'SYN-RULE-VISGAP-03' },
+  { label: '判断时间', value: '2024-08-21 07:40' },
+  { label: '事实依据', value: '观察窗口届满仍无预期扫描（合成演示）' },
+  { label: '可信度', value: '低（演示档位）' },
+  { label: '当前发作期', value: 'SYN-EPISODE-88021-01（进行中）' },
+];

@@ -4,12 +4,17 @@ import { Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
-import { ShipmentRequestPage } from './pages/shipment-request';
+import {
+  ShipmentRequestPage,
+  ShipmentRequestListPage,
+  CancelParcelPage,
+} from './pages/shipment-request';
 import { TemplatePreviewPage } from './pages/template-preview';
 import {
   AcceptanceReviewPage,
   ExceptionTriagePage,
   ReconciliationPage,
+  SettlementApplicationPage,
   StageAdmissionPage,
 } from './pages/governance';
 import {
@@ -23,10 +28,13 @@ import {
 const pageById: Record<string, ComponentType> = {
   workbench: Workbench,
   'shipment-request': ShipmentRequestPage,
+  'shipment-request-inquiry': ShipmentRequestListPage,
+  'cancel-parcel': CancelParcelPage,
   'template-preview': TemplatePreviewPage,
   'acceptance-review': AcceptanceReviewPage,
   'exception-triage': ExceptionTriagePage,
   reconciliation: ReconciliationPage,
+  'settlement-application': SettlementApplicationPage,
   'stage-admission': StageAdmissionPage,
   'price-card-catalog': PriceCardCatalogPage,
   'reference-series': ReferenceSeriesPage,

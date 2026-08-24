@@ -3,7 +3,10 @@ import {
   LayoutDashboard,
   ClipboardCheck,
   AlertTriangle,
+  Banknote,
   FlaskConical,
+  PackageSearch,
+  PackageX,
   Scale,
   Send,
   ShieldCheck,
@@ -24,14 +27,20 @@ export const navigationSections: NavigationSection[] = [
   },
   {
     title: '委托',
-    items: [{ id: 'shipment-request', label: '提交与撤回', icon: 'shipment-request' }],
+    items: [
+      { id: 'shipment-request', label: '提交与撤回', icon: 'shipment-request' },
+      { id: 'shipment-request-inquiry', label: '委托查阅', icon: 'shipment-request-inquiry' },
+      { id: 'cancel-parcel', label: '取消与收寄后处置', icon: 'cancel-parcel' },
+    ],
   },
   {
     title: '治理与复核',
     items: [
       { id: 'acceptance-review', label: '接受前人工复核', icon: 'acceptance-review' },
       { id: 'exception-triage', label: '异常分诊与处置协调', icon: 'exception-triage' },
-      { id: 'reconciliation', label: '对账与核销', icon: 'reconciliation' },
+      // 核销独立成页后本条目只承载对账单视角，改名免得与 settlement-application 语义重叠。
+      { id: 'reconciliation', label: '对账单', icon: 'reconciliation' },
+      { id: 'settlement-application', label: '收付款核销', icon: 'settlement-application' },
       { id: 'stage-admission', label: '阶段决定与暂停恢复', icon: 'stage-admission' },
     ],
   },
@@ -55,9 +64,12 @@ export const navigationSections: NavigationSection[] = [
 export const sidebarIconMap: Record<string, ElementType> = {
   workbench: LayoutDashboard,
   'shipment-request': Send,
+  'shipment-request-inquiry': PackageSearch,
+  'cancel-parcel': PackageX,
   'acceptance-review': ClipboardCheck,
   'exception-triage': AlertTriangle,
   reconciliation: Scale,
+  'settlement-application': Banknote,
   'stage-admission': ShieldCheck,
   'template-preview': FlaskConical,
   'price-card-catalog': BadgeDollarSign,
@@ -75,6 +87,17 @@ export interface ModuleInfo {
 }
 
 export const moduleInfoById: Record<string, ModuleInfo> = {
+  'shipment-request-inquiry': {
+    title: '委托查阅',
+    owner: '小包托运（parcel-shipment）',
+    source: 'docs/domain/parcel-shipment/CONTEXT.md 委托生命周期与「授权查询作用域」「统一不可见结果」',
+  },
+  'cancel-parcel': {
+    title: '取消与收寄后处置',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/application/parcel-shipment/UC-PS-006-CANCEL-PARCEL-OR-COORDINATE-POST-INTAKE-DISPOSITION.md 与 CONTEXT.md「包裹取消决定」「收寄后服务处置决定」',
+  },
   'acceptance-review': {
     title: '接受前人工复核',
     owner: '小包托运（parcel-shipment）',
@@ -86,9 +109,15 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     source: 'docs/domain/visibility-exception/CONTEXT.md 异常案件「进入人工复核」与处置协调',
   },
   reconciliation: {
-    title: '对账与核销',
+    title: '对账单',
     owner: '结算与经营核算（settlement-accounting）',
-    source: 'docs/domain/settlement-accounting/CONTEXT.md 对账与金额核销',
+    source: 'docs/domain/settlement-accounting/CONTEXT.md「结算账户、对账与争议」对账单管理',
+  },
+  'settlement-application': {
+    title: '收付款核销',
+    owner: '结算与经营核算（settlement-accounting）',
+    source:
+      'docs/application/settlement-accounting/UC-SA-005-MAP-EXTERNAL-FUNDS-AND-APPLY-SETTLEMENT.md 与 CONTEXT.md「核销」「真实收付映射」',
   },
   'stage-admission': {
     title: '阶段决定与暂停恢复',

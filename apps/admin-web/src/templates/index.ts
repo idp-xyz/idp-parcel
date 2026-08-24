@@ -21,6 +21,7 @@ export {
   type ReviewQueueItem,
   type ReviewDecision,
   type ReviewDecisionKind,
+  type ReviewDecisionOption,
 } from './ReviewFlowTemplate';
 
 export { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
