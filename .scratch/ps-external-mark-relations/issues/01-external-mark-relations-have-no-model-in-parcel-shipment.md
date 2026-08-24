@@ -1,7 +1,7 @@
 # 外部标识关系在 parcel-shipment 无任何模型，NO 的 ParcelIdentityView 因此无实现
 
 Category: enhancement
-Status: needs-triage
+Status: needs-info
 
 发现于接 `node-operations` 的 `ports.ParcelIdentityView` 时。该端口按外部标识核对正式包裹
 身份，注释写明是「PS 侧只读引用」，`node-operations` 不得自建。核对结果：**PS 确实拥有这个
@@ -66,3 +66,11 @@ TrackingNumber / 运单」，生产代码只一处命中，而且是条否定：
 
 `ParcelIdentityView` 保持无生产实现。这是诚实状态而不是遗漏——它缺的是 PS 侧一片尚未建模的
 子域，不是缺租户数据，也不是缺一个适配器。
+
+## Comments
+
+- 2026-08-24 MCP-1（清余票触审）：转 `needs-info`。本票自陈「只记事实与约束，不定方案」，
+  缺的输入是排期决定——外部标识连着面单交易一整片（票面「依赖点名」节），开工等于新起一个
+  PN 级建模切片，非本票可自行 spec 化。重启条件：用户把面单交易与外部标识子域排进开发主线；
+  届时按 `/ubiquitous-language` → `/domain-modeling` 起步，本票三条 schema 级约束与三分支
+  论证直接作裁断输入。

@@ -1,7 +1,7 @@
 # declaration-submission 出账信封 ID 补版本维（或改由版本认领）
 
 Category: bug
-Status: draft
+Status: needs-info
 Blocked by: 「原案内更正/补充」编排落地票（尚未立案——那张票动存储键与 `SOURCE_CONFLICT` 分支时，本票随之动工；见下）
 
 ## 问题
@@ -19,3 +19,10 @@ Blocked by: 「原案内更正/补充」编排落地票（尚未立案——那�
 - 载荷不动（versionId 已在）；
 - `submit_declaration.go` 里「修订走撤销重报」的注释口径与 CONTEXT「原案内更正」的偏差，随更正编排票一并修（核证报告 (c) 已点名）；
 - 消费侧 inbox 立账维度不在本票：按 [ADR-0066](../../../docs/adr/0066-multi-object-envelope-unrolls-per-member-on-the-consumer-side.md) 的 declaration-submission 接入票走，按载荷版本维立账。
+
+## Comments
+
+- 2026-08-24 MCP-1（清余票触审）：`draft` 转 `needs-info`，统一余票口径——按 triage-labels，
+  `draft` 只用于两阶段发布过程，本票实为「阻塞者尚未立案」的停放。机制半边坐实、今天无触发
+  路径的核证结论不变（票面引 report.md，基准 `5073851`）。重启条件即 Blocked by 那张
+  「原案内更正/补充」编排票立案并动存储键与 `SOURCE_CONFLICT` 分支，届时本票随之动工。
