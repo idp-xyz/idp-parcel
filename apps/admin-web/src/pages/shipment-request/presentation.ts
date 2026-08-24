@@ -1,7 +1,7 @@
-import type { SubmitOutcome, WithdrawalOutcome } from './api';
+import type { CancellationOutcome, SubmitOutcome, WithdrawalOutcome } from './api';
 
-// outcome 与领域状态的中文标签。标签取 UC-PS-001 / UC-PS-005 结果语义的原词,
-// 不自造译法;note 讲操作员的下一步,措辞守住各结果的「禁止行为」——尤其是
+// outcome 与领域状态的中文标签。标签取 UC-PS-001 / UC-PS-005 / UC-PS-006 结果语义
+// 的原词,不自造译法;note 讲操作员的下一步,措辞守住各结果的「禁止行为」——尤其是
 // 准入暂停不是业务拒绝、未决不是拒绝、不可见结果不区分不存在与无权查看。
 
 export interface OutcomeView {
@@ -72,6 +72,81 @@ export const withdrawalOutcomeViews: Record<WithdrawalOutcome, OutcomeView> = {
   SOURCE_CONFLICT: {
     label: '来源冲突',
     note: '相同撤回请求身份携带了不一致的内容,原撤回请求不被覆盖。',
+  },
+};
+
+// UC-PS-006 接受后取消的结果词表。三种已提交走向(取消成立、待处置、拒绝)全是
+// 同等有效的业务答案:待处置与拒绝不是故障,不得画成错误;未决不是拒绝。
+export const cancellationOutcomeViews: Record<CancellationOutcome, OutcomeView> = {
+  PARCEL_CANCELLED: {
+    label: '包裹已取消',
+    affirmative: true,
+    note: '包裹在适用取消边界前形成取消终局。身份、接受基线、请求、授权与既有交易或作业历史全部保留;已有面单交易时,取消不能代替渠道作废或渠道退款结果。',
+  },
+  DISPOSITION_PENDING: {
+    label: '待处置',
+    note: '有效网络收寄已先行成立,明确不能回退取消。没有授权处置决定时保持待处置:处置决定由后续独立请求形成,越过的收寄版本已随记录保全。',
+  },
+  CANCELLATION_REFUSED: {
+    label: '取消被拒绝',
+    note: '当前有效规则明确不允许所请求的取消,规则依据随结果返回。这是业务答案,不是故障;包裹当前状态不变。',
+  },
+  CANCELLATION_UNDECIDED: {
+    label: '未决',
+    note: '当前事实、规则、授权或可执行性不足,本次未形成取消或处置决定,不会被写成拒绝。缺口与续办引用已保存,可安全续办。',
+  },
+  EXISTING_RESULT: {
+    label: '已有结果',
+    note: '本次请求被识别为同一请求身份的重复或重试,返回原逐包裹结果,不形成第二份决定。',
+  },
+  REQUEST_CONFLICT: {
+    label: '请求冲突',
+    note: '同一请求身份携带了与原取消请求不一致的内容,原请求不被覆盖。请核对后以新的请求身份重新提出。',
+  },
+  REQUEST_NOT_ACCEPTED: {
+    label: '请求未受理',
+    note: '必要内容缺失,或指名的委托与包裹在当前客户范围内查不到。统一不可见结果,不区分「不存在」与「无权查看」,也不提示差在哪一段指名。',
+  },
+};
+
+export interface PendingReasonView {
+  label: string;
+  note: string;
+  /**
+   * 标为 true 的原因是实例参数未登记的「未配置态」:恢复动作是登记参数,重试、
+   * 改请求或修依赖都不会改变答案。它不是错误,也不是业务否定。
+   */
+  unconfigured?: boolean;
+}
+
+// 取消未决原因(CancelUndecidedReason 的字符串)。词表区分两类恢复动作:
+// AUTHORITY_UNCONFIGURED 是唯一的未配置态;其余 *_UNAVAILABLE 是依赖本次没答上,
+// 可稍后按续办引用续办。
+export const cancellationPendingReasonViews: Record<string, PendingReasonView> = {
+  REQUEST_UNAVAILABLE: {
+    label: '委托读取暂不可用',
+    note: '本次没能读到目标委托,判断没有开始。可稍后按续办引用续办。',
+  },
+  AUTHORITY_UNAVAILABLE: {
+    label: '授权判断暂不可用',
+    note: '授权服务本次没有给出答案,判断停在授权步。可稍后按续办引用续办;这不是拒绝。',
+  },
+  AUTHORITY_UNCONFIGURED: {
+    label: '授权规则未登记',
+    unconfigured: true,
+    note: '租户尚未登记取消授权规则(PAR-COM-17 实例半边),判断停在指名未决。系统不默认任何角色可取消或不可取消(UC-PS-006 明禁双向默认),恢复动作是租户登记授权规则——重试或改请求都不会改变答案。',
+  },
+  ADOPTION_STORE_UNAVAILABLE: {
+    label: '收寄事实读取暂不可用',
+    note: '本次没能读到当前有效收寄,取消边界无法核验。可稍后按续办引用续办。',
+  },
+  CANCELLATION_STORE_UNAVAILABLE: {
+    label: '取消决定库暂不可用',
+    note: '判断结果本次没能提交。可稍后按续办引用续办,重放不会形成第二份决定。',
+  },
+  CANCELLATION_IDENTITY_UNAVAILABLE: {
+    label: '取消标识签发暂不可用',
+    note: '取消决定标识本次没能签发,决定未形成。可稍后按续办引用续办。',
   },
 };
 

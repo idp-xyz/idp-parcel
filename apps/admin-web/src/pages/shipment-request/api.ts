@@ -1,5 +1,6 @@
-// 本目录唯一的 fetch 出口:UC-PS-001 提交、UC-PS-005 决定前撤回,以及委托查阅
-// (GET /shipment-request-views,列表与单份共用一个端点、按 shipmentRequestId 分派)。
+// 本目录唯一的 fetch 出口:UC-PS-001 提交、UC-PS-005 决定前撤回、UC-PS-006 接受后
+// 取消,以及委托查阅(GET /shipment-request-views,列表与单份共用一个端点、按
+// shipmentRequestId 分派)。
 //
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
 // 响应体的 `outcome`,取应用结果枚举的原字符串,传输层不合并、不改名。因此这里把
@@ -77,6 +78,34 @@ export interface WithdrawalResponseBody {
   compensationReference?: string;
 }
 
+// UC-PS-006 接受后取消(POST /shipment-requests/parcel-cancellations)。词取
+// application.CancelParcelOutcome 的原字符串:三种已提交走向(取消成立、待处置、
+// 拒绝)加未决、重复、冲突、不受理。REQUEST_NOT_ACCEPTED 兼收「委托或包裹在当前
+// 客户范围内查不到」——统一不可见在编排内作答(AT-PS-090),不走 4xx,是终局业务答案。
+export type CancellationOutcome =
+  | 'PARCEL_CANCELLED'
+  | 'DISPOSITION_PENDING'
+  | 'CANCELLATION_REFUSED'
+  | 'CANCELLATION_UNDECIDED'
+  | 'EXISTING_RESULT'
+  | 'REQUEST_CONFLICT'
+  | 'REQUEST_NOT_ACCEPTED';
+
+// 与 adapters/http 的 cancellationResponse 一一对应:三种已提交走向各带自己的凭据
+// ——取消成立带取消决定标识、待处置带越过的收寄版本(调用方要知道输给了哪次收寄)、
+// 拒绝带规则依据;未决带原因与续办引用;取消成立而发布意图未交出时带重发引用
+// (重放同一请求会重发同一份意图,决定本身不受影响)。
+export interface CancellationResponseBody {
+  outcome: CancellationOutcome;
+  cancellationId?: string;
+  intakeVersion?: string;
+  refusalBasis?: string;
+  decidedAt?: string;
+  pendingReason?: string;
+  continuationReference?: string;
+  handoffReference?: string;
+}
+
 // ---- 委托查阅响应形状(与 internal/parcelshipment/adapters/http 的封闭响应一一对应) ----
 //
 // 这是已落地的查询契约的镜像,不再是页面侧草案:字段跟着服务端读模型走,读模型没有
@@ -150,8 +179,8 @@ export interface ViewDetailResponseBody {
 
 // ---- 请求草案形状 ----
 //
-// 真实线格式不是本目录能定的:提交与撤回两个动作端点当前挂「未配置即拒」Intake,不读请求体;
-// 渠道字段格式、枚举与必填条件属 PAR-INT-01 待登记。下面的草案只承载 UC-PS-001
+// 真实线格式不是本目录能定的:动作端点当前一律挂「未配置即拒」Intake,不读请求体;
+// 渠道字段格式、枚举与必填条件属 PAR-INT-01 待登记。下面的草案只承载各用例
 // 输入语义契约里「客户可声明」的各组,键名是页面侧暂定,真渠道接线时以渠道契约
 // 为准重谈,不得反过来把这里当成已发布的渠道 Schema。
 
@@ -208,6 +237,23 @@ export interface WithdrawalDraft {
   reasonReference: string;
 }
 
+// 取消草案一次只指名一件包裹:端点一次受理一件的取消请求,批量只归组、不拥有共同
+// 状态(UC-PS-006 步骤 1),逐件分发归页面,部分成功由逐件请求自然表达。与撤回不同,
+// 取消没有自己的请求信封:编排以原提交的来源身份定位委托,同一来源身份加包裹就是
+// 取消请求的幂等键,故这里不设「取消请求标识」字段。
+export interface CancellationDraft {
+  /** 原提交的来源请求标识。委托按来源身份加编号双重指名,缺一即统一不可见。 */
+  originalRequestKey: string;
+  /** 委托标识(提交成立时返回的 shipmentRequestId)。 */
+  shipmentRequestId: string;
+  /** 目标包裹标识(委托当前提交版本的成员,出界同答统一不可见)。 */
+  parcelId: string;
+  /** 请求方引用。取消授权的真实规则属 PAR-COM-17,页面只收引用不判授权。 */
+  requesterReference: string;
+  /** 取消原因引用。原因目录属待登记参数,按引用填写。 */
+  reasonReference: string;
+}
+
 // ---- 调用结果 ----
 
 export type ApiResult<Body> =
@@ -227,6 +273,12 @@ export function withdrawShipmentRequest(
   draft: WithdrawalDraft,
 ): Promise<ApiResult<WithdrawalResponseBody>> {
   return post<WithdrawalResponseBody>('/shipment-requests/withdrawals', draft);
+}
+
+export function cancelParcel(
+  draft: CancellationDraft,
+): Promise<ApiResult<CancellationResponseBody>> {
+  return post<CancellationResponseBody>('/shipment-requests/parcel-cancellations', draft);
 }
 
 export function listShipmentRequestViews(): Promise<ApiResult<ViewsListResponseBody>> {

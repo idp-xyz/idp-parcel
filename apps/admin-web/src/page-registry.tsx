@@ -99,6 +99,7 @@ export const pageById: Record<string, ComponentType> = {
 export const liveIds: ReadonlySet<string> = new Set([
   'shipment-request',
   'shipment-request-inquiry',
+  'cancel-parcel',
 ]);
 
 /**
