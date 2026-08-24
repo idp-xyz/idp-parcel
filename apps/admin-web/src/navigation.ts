@@ -11,8 +11,10 @@ import {
   FileText,
   FlaskConical,
   FolderOpen,
+  Globe,
   Handshake,
   LayoutDashboard,
+  Library,
   LineChart,
   Megaphone,
   Network,
@@ -86,6 +88,7 @@ export const navigationSections: NavigationSection[] = [
     title: '网络与路由',
     items: [
       { id: 'network-catalog', label: '网络目录', icon: 'network-catalog' },
+      { id: 'service-areas', label: '服务区域与覆盖', icon: 'service-areas' },
       { id: 'route-plans', label: '路由计划与改路', icon: 'route-plans' },
     ],
   },
@@ -100,6 +103,7 @@ export const navigationSections: NavigationSection[] = [
     title: '关务合规',
     items: [
       { id: 'customs-cases', label: '关务案件与申报', icon: 'customs-cases' },
+      { id: 'compliance-rules', label: '合规规则库', icon: 'compliance-rules' },
       { id: 'customs-restrictions', label: '合规限制与监管税费', icon: 'customs-restrictions' },
     ],
   },
@@ -156,10 +160,12 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'reference-series': TrendingUp,
   'pricing-evaluation': Calculator,
   'network-catalog': Network,
+  'service-areas': Globe,
   'route-plans': Route,
   'node-operations-review': Warehouse,
   'transport-fulfillment-review': Truck,
   'customs-cases': Stamp,
+  'compliance-rules': Library,
   'customs-restrictions': ShieldAlert,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
@@ -260,6 +266,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '网络与路由（network-routing）',
     source: 'docs/domain/network-routing/CONTEXT.md 节点网络身份、有向连接、线路与服务日历；登记走受控 CLI（cmd/parcel-network-register）',
   },
+  'service-areas': {
+    title: '服务区域与覆盖',
+    owner: '网络与路由（network-routing）',
+    source: 'docs/domain/network-routing/CONTEXT.md 物流节点的版本化服务区域和节点覆盖关系',
+  },
   'route-plans': {
     title: '路由计划与改路',
     owner: '网络与路由（network-routing）',
@@ -283,6 +294,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '关务案件与申报',
     owner: '关务与贸易合规（customs-compliance）',
     source: 'docs/domain/customs-compliance/CONTEXT.md 稳定关务案件、申报单元、正式申报资料快照与不可覆盖提交版本',
+  },
+  'compliance-rules': {
+    title: '合规规则库',
+    owner: '关务与贸易合规（customs-compliance）',
+    source: 'docs/domain/customs-compliance/CONTEXT.md 禁限运、归类、原产地、申报价值、监管凭证适用性等规则化合规判断及其规则版本、依据和决定方式',
   },
   'customs-restrictions': {
     title: '合规限制与监管税费',
