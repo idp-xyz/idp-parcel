@@ -102,6 +102,9 @@ export function RoutePlansPage() {
     <ListPageTemplate<RoutePlanRow>
       title={info.title}
       description={`${info.owner} · 计划表达意图，不维护已装载、运输中等执行状态。`}
+      // 筛选维度（接线时实装进 filters 槽）：计划适用性（当前有效/已被替代/已失效/
+      // 已结束——CONTEXT 生命周期原词，封闭词）、服务目的、路由策略版本。包裹标识经
+      // 搜索；「无当前有效路由」与改路建议是明确判断结果，接线时单列呈现不进筛选。
       search={{
         value: keyword,
         onChange: setKeyword,
@@ -112,8 +115,13 @@ export function RoutePlansPage() {
       rowKey={(row) => `${row.parcelId}#${row.planVersion}`}
       viewState={{
         kind: 'unconfigured',
-        title: '路由计划查询端点尚未建立',
-        description: `查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+        title: '网络与路由模块尚未接线',
+        description: '路由计划的查询契约待建；本页不发请求、不含合成数据。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '路由计划查询契约建成并经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

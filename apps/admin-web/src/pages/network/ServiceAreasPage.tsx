@@ -113,8 +113,13 @@ export function ServiceAreasPage() {
       rowKey={(row) => `${row.code ?? row.areaCode}#${row.version ?? row.areaVersion}#${row.nodeCode ?? ''}`}
       viewState={{
         kind: 'unconfigured',
-        title: '服务区域查询端点尚未建立',
-        description: `覆盖定义内容属 PAR-NET-14 待登记实例，查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+        title: '网络与路由模块尚未接线',
+        description: '覆盖定义内容属 PAR-NET-14 待登记实例，查询契约待建；本页不发请求、不含合成数据。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '服务区域查询契约建成并经 ADR-0017 准入闸门放行后接线；覆盖定义内容仍等 PAR-NET-14 实例登记',
+        },
       }}
     />
   );

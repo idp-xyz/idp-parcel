@@ -57,6 +57,8 @@ export function ReferenceSeriesPage() {
     <ListPageTemplate<ReferenceSeriesVersionRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：种类（燃油费率/汇率——CONTEXT 点名的两个
+      // 实例，封闭词）、证据等级、生效区间窗口。序列来源标识经搜索，不出筛选。
       search={{
         value: search,
         onChange: setSearch,
@@ -75,8 +77,13 @@ export function ReferenceSeriesPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '查询端点尚未接线',
-        description: `序列登记走受控登记口，不经在线端点；本页是查阅面，其查询端点尚未建，不发请求、不含合成数据与未确认参数的默认值。场景出处：${info.source}`,
+        title: '计价模块尚未接线',
+        description: '序列登记走受控登记口（parcel-pricing-register），不经在线端点；本页是查阅面，其查询端点尚未建，不发请求、不含合成数据与未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '查阅用查询端点建成并经 ADR-0017 准入闸门放行后接线；序列数值仍由外部来源产生、经登记口登记（ADR-0013）',
+        },
       }}
     />
   );

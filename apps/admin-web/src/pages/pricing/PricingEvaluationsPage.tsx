@@ -57,6 +57,9 @@ export function PricingEvaluationsPage() {
     <ListPageTemplate<PricingEvaluationRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：价格方向（BUY/SELL/INTERNAL 封闭三向，
+      // 方向隔离）、计算目的、结果（已完成/待判断/冲突/不可计价/未形成——封闭五格，
+      // 四种非完成结果不得互相冒充）、计价基准时点窗口。评价引用与对象经搜索。
       search={{
         value: search,
         onChange: setSearch,
@@ -75,8 +78,13 @@ export function PricingEvaluationsPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '评价面尚未接线',
-        description: `评价由计价用例按版本清单在进程内形成；该用例与本页的查询端点当前都未接入进程，本页不发请求、不含合成数据与未确认参数的默认值。场景出处：${info.source}`,
+        title: '计价模块尚未接线',
+        description: '评价由计价用例按版本清单在进程内形成；该用例与本页的查询端点当前都未接入进程，本页不发请求、不含合成数据与未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '计价用例（evaluate_pricing）与查询端点接入进程并经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

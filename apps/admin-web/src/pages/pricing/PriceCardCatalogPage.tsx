@@ -60,6 +60,9 @@ export function PriceCardCatalogPage() {
     <ListPageTemplate<PriceCardVersionRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：价格方向（BUY/SELL/INTERNAL 封闭三向，
+      // 不因同名产品或渠道自动合并）、计算目的（与方向一一配对）、适用期窗口。
+      // 方案标识与源文件身份经搜索，不出筛选。
       search={{
         value: search,
         onChange: setSearch,
@@ -78,8 +81,13 @@ export function PriceCardCatalogPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '查询端点尚未接线',
-        description: `价卡登记走受控登记口，不经在线端点；本页是查阅面，其查询端点尚未建，不发请求、不含合成数据与未确认参数的默认值。场景出处：${info.source}`,
+        title: '计价模块尚未接线',
+        description: '价卡登记走受控登记口（parcel-pricing-register），不经在线端点；本页是查阅面，其查询端点尚未建，不发请求、不含合成数据与未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '查阅用查询端点建成并经 ADR-0017 准入闸门放行后接线；登记动作留在受控登记口，不回在线面',
+        },
       }}
     />
   );

@@ -183,9 +183,14 @@ export function NetworkCatalogPage() {
       rowKey={(row) => `${row.code ?? row.targetCode}#${row.version}`}
       viewState={{
         kind: 'unconfigured',
-        title: '网络目录查询端点尚未建立',
+        title: '网络与路由模块尚未接线',
         description:
-          `登记口已可写入七族版本骨架，但查阅面的查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+          '登记口已可写入七族版本骨架，但查阅面的查询契约待建；本页不发请求、不含合成数据。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '网络目录查询契约建成并经 ADR-0017 准入闸门放行后接线；登记动作留在受控 CLI（cmd/parcel-network-register）',
+        },
       }}
     />
   );
