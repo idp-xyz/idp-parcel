@@ -271,13 +271,55 @@ func (book *fakeGateBook) LoadPreconditionFindings(
 	return findings, true, nil
 }
 
+// fakeRequirementBook 第六本册子的替身，同样一身两半。
+type fakeRequirementBook struct {
+	byKey map[string]ports.CaseRequirementJudgment
+}
+
+func requirementBookKey(
+	tenant domain.TenantID,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	direction domain.ManifestDirection,
+	procedure domain.CustomsProcedureReference,
+) string {
+	return tenant.String() + "/" + jurisdiction.String() + "/" + direction.String() + "/" + procedure.String()
+}
+
+func (book *fakeRequirementBook) RegisterCaseRequirementRule(
+	_ context.Context,
+	tenant domain.TenantID,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	direction domain.ManifestDirection,
+	procedure domain.CustomsProcedureReference,
+	judgment ports.CaseRequirementJudgment,
+) (ports.CaseConfigurationSaveOutcome, error) {
+	key := requirementBookKey(tenant, jurisdiction, direction, procedure)
+	if _, exists := book.byKey[key]; exists {
+		return ports.CaseConfigurationAlreadyRegistered, nil
+	}
+	book.byKey[key] = judgment
+	return ports.CaseConfigurationRegistered, nil
+}
+
+func (book *fakeRequirementBook) JudgeCaseRequirement(
+	_ context.Context,
+	tenant domain.TenantID,
+	jurisdiction domain.RegulatoryJurisdictionReference,
+	direction domain.ManifestDirection,
+	procedure domain.CustomsProcedureReference,
+) (ports.CaseRequirementJudgment, bool, error) {
+	judgment, found := book.byKey[requirementBookKey(tenant, jurisdiction, direction, procedure)]
+	return judgment, found, nil
+}
+
 type executeFixture struct {
-	registrar   registrar
-	readiness   *fakeReadinessBook
-	authorities *fakeAuthorityBook
-	rules       *fakeRuleBook
-	obligations *fakeObligationBook
-	gates       *fakeGateBook
+	registrar    registrar
+	readiness    *fakeReadinessBook
+	authorities  *fakeAuthorityBook
+	rules        *fakeRuleBook
+	obligations  *fakeObligationBook
+	gates        *fakeGateBook
+	requirements *fakeRequirementBook
 }
 
 func newExecuteFixture() *executeFixture {
@@ -292,7 +334,8 @@ func newExecuteFixture() *executeFixture {
 		catalogs: map[string]bool{},
 		findings: map[string]domain.PreconditionFinding{},
 	}
-	handler := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
+	requirements := &fakeRequirementBook{byKey: map[string]ports.CaseRequirementJudgment{}}
+	configurations := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
 		ReadinessView:  readiness,
 		Authorities:    authorities,
@@ -304,13 +347,20 @@ func newExecuteFixture() *executeFixture {
 		Gates:          gates,
 		GateView:       gates,
 	})
+	requirementHandler := application.NewRegisterCaseRequirementRuleHandler(
+		application.RegisterCaseRequirementRuleDeps{Rules: requirements, View: requirements})
 	return &executeFixture{
-		registrar:   registrar{handler: handler, transactor: passthroughTransactor{}},
-		readiness:   readiness,
-		authorities: authorities,
-		rules:       rules,
-		obligations: obligations,
-		gates:       gates,
+		registrar: registrar{
+			configurations: configurations,
+			requirements:   requirementHandler,
+			transactor:     passthroughTransactor{},
+		},
+		readiness:    readiness,
+		authorities:  authorities,
+		rules:        rules,
+		obligations:  obligations,
+		gates:        gates,
+		requirements: requirements,
 	}
 }
 
@@ -466,6 +516,46 @@ func TestExecuteGateFindingConflictIsAGovernanceAnswer(t *testing.T) {
 	message, code = execute(ctx, commandGateFinding, finding("UNMET"), fixture.registrar)
 	if code != exitConflict || !strings.Contains(message, "CONTENT_CONFLICT") {
 		t.Fatalf("换判断 = %d（%s），要 %d 且含 CONTENT_CONFLICT", code, message, exitConflict)
+	}
+}
+
+// TestExecuteCaseRequirementFidelityAndConflict 证第十命令接对了：required=false 原样
+// 到册（「不要求」带依据是合法且必须登得出的一格），翻面答内容冲突且册面不动。
+func TestExecuteCaseRequirementFidelityAndConflict(t *testing.T) {
+	fixture := newExecuteFixture()
+	ctx := context.Background()
+
+	requirement := func(required string) []byte {
+		return []byte(`{
+			"tenantId": "SYN-T1", "jurisdictionRef": "SYN-JURIS-DE", "direction": "EXPORT",
+			"procedureRef": "SYN-PROC-EXPORT", "required": ` + required + `,
+			"basis": "SYN-CONTRACT-NO-CASE-V1"
+		}`)
+	}
+	message, code := execute(ctx, commandCaseRequirement, requirement("false"), fixture.registrar)
+	if code != exitRegistered || !strings.Contains(message, "REGISTERED") {
+		t.Fatalf("登记 = %d（%s）", code, message)
+	}
+	if len(fixture.requirements.byKey) != 1 {
+		t.Fatalf("册上行数 = %d", len(fixture.requirements.byKey))
+	}
+	for _, judgment := range fixture.requirements.byKey {
+		if judgment.Required || judgment.Basis != "SYN-CONTRACT-NO-CASE-V1" {
+			t.Fatalf("落册内容失真：%+v", judgment)
+		}
+	}
+	message, code = execute(ctx, commandCaseRequirement, requirement("false"), fixture.registrar)
+	if code != exitRegistered || !strings.Contains(message, "EXISTING") {
+		t.Fatalf("重放 = %d（%s）", code, message)
+	}
+	message, code = execute(ctx, commandCaseRequirement, requirement("true"), fixture.registrar)
+	if code != exitConflict || !strings.Contains(message, "CONTENT_CONFLICT") {
+		t.Fatalf("翻面 = %d（%s），要 %d", code, message, exitConflict)
+	}
+	for _, judgment := range fixture.requirements.byKey {
+		if judgment.Required {
+			t.Fatalf("冲突顶掉了册面")
+		}
 	}
 }
 

@@ -389,6 +389,21 @@ type CaseRequirementView interface {
 	) (CaseRequirementJudgment, bool, error)
 }
 
+// CaseRequirementRegistry 是 CaseRequirementView 的写口半边（第六本册子，挡的是
+// establish_customs_case 那堵 EstablishCaseUndecided 墙，不在 W13 的两堵之内）。
+// 判断内容对两个取值都必须带依据——「答否」与「没答」的续办动作完全不同，写口不得
+// 引入任何把未登记折成「不要求」的路径。写入代数与其余五本同（ADR-0031，不 UPSERT）。
+type CaseRequirementRegistry interface {
+	RegisterCaseRequirementRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		jurisdiction domain.RegulatoryJurisdictionReference,
+		direction domain.ManifestDirection,
+		procedure domain.CustomsProcedureReference,
+		judgment CaseRequirementJudgment,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
 // CustomsCaseKey 是关务案件的身份键：固定监管范围四维——同一法律行为一案；同一
 // 包裹进入另一独立监管程序自然换键（一包裹可关联多个彼此独立的案件）。
 type CustomsCaseKey struct {

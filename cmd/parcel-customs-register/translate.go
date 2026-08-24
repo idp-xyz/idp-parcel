@@ -24,8 +24,10 @@ import (
 //   - 义务项的承接配对与内容格——库的 CHECK 拦得住，但那属「依赖故障」的退出码，
 //     缺格该在入库前指名拒绝。
 
-// 封闭九命令，与登记用例的九个方法一一对应。就绪与授权各带撤销半边（撤销是状态
-// 推进不是删除）；解释规则只有单版登记（版本维另票）；义务与门禁各分目录与明细。
+// 封闭十命令：前九个对齐案件配置登记用例的九个方法——就绪与授权各带撤销半边（撤销
+// 是状态推进不是删除）、解释规则只有单版登记（版本维另票）、义务与门禁各分目录与
+// 明细；第十个是第六本册子（case-requirement，建案要求规则），随
+// cc-case-requirement-rule-registry 01 并入本口。
 const (
 	commandReadinessRegister  = "readiness-register"
 	commandReadinessRevoke    = "readiness-revoke"
@@ -36,6 +38,7 @@ const (
 	commandObligationItem     = "obligation-item"
 	commandGateCatalog        = "gate-catalog"
 	commandGateFinding        = "gate-finding"
+	commandCaseRequirement    = "case-requirement"
 )
 
 var allCommands = []string{
@@ -44,16 +47,15 @@ var allCommands = []string{
 	commandInterpretationRule,
 	commandObligationCatalog, commandObligationItem,
 	commandGateCatalog, commandGateFinding,
+	commandCaseRequirement,
 }
 
 type dispatchFunc func(
 	ctx context.Context,
-	handler *application.RegisterCaseConfigurationHandler,
+	registrar registrar,
 ) (application.CaseConfigurationOutcome, error)
 
-// commandFor 按命令译装输入，交回一个在事务内执行的调用。命令在这里定死为封闭九个，
-// 与登记用例的九个方法一一对应；第六本册子（case_requirement_rule）不在本口，见
-// .scratch 里 cc-case-requirement-rule-registry 那票。
+// commandFor 按命令译装输入，交回一个在事务内执行的调用。命令在这里定死为封闭十个。
 func commandFor(command string, raw []byte) (dispatchFunc, error) {
 	switch command {
 	case commandReadinessRegister:
@@ -74,6 +76,8 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		return gateCatalogFromJSON(raw)
 	case commandGateFinding:
 		return gateFindingFromJSON(raw)
+	case commandCaseRequirement:
+		return caseRequirementFromJSON(raw)
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
@@ -111,9 +115,9 @@ func readinessRegisterFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterReadiness(ctx, command)
+		return registrar.configurations.RegisterReadiness(ctx, command)
 	}, nil
 }
 
@@ -157,9 +161,9 @@ func readinessRevokeFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RevokeReadiness(ctx, command)
+		return registrar.configurations.RevokeReadiness(ctx, command)
 	}, nil
 }
 
@@ -195,9 +199,9 @@ func authorityGrantFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.GrantSubmissionAuthority(ctx, command)
+		return registrar.configurations.GrantSubmissionAuthority(ctx, command)
 	}, nil
 }
 
@@ -214,9 +218,9 @@ func authorityRevokeFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RevokeSubmissionAuthority(ctx, command)
+		return registrar.configurations.RevokeSubmissionAuthority(ctx, command)
 	}, nil
 }
 
@@ -250,9 +254,9 @@ func interpretationRuleFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterInterpretationRule(ctx, command)
+		return registrar.configurations.RegisterInterpretationRule(ctx, command)
 	}, nil
 }
 
@@ -281,9 +285,9 @@ func obligationCatalogFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterObligationCatalog(ctx, command)
+		return registrar.configurations.RegisterObligationCatalog(ctx, command)
 	}, nil
 }
 
@@ -348,9 +352,9 @@ func obligationItemFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterObligationItem(ctx, command)
+		return registrar.configurations.RegisterObligationItem(ctx, command)
 	}, nil
 }
 
@@ -384,9 +388,9 @@ func gateCatalogFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterGateCatalog(ctx, command)
+		return registrar.configurations.RegisterGateCatalog(ctx, command)
 	}, nil
 }
 
@@ -429,9 +433,60 @@ func gateFindingFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	return func(
 		ctx context.Context,
-		handler *application.RegisterCaseConfigurationHandler,
+		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
-		return handler.RegisterGateFinding(ctx, command)
+		return registrar.configurations.RegisterGateFinding(ctx, command)
+	}, nil
+}
+
+type caseRequirementDocument struct {
+	TenantID        string `json:"tenantId"`
+	JurisdictionRef string `json:"jurisdictionRef"`
+	Direction       string `json:"direction"`
+	ProcedureRef    string `json:"procedureRef"`
+	Required        *bool  `json:"required"`
+	Basis           string `json:"basis"`
+}
+
+func caseRequirementFromJSON(raw []byte) (dispatchFunc, error) {
+	var document caseRequirementDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return nil, fmt.Errorf("建案要求规则登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	jurisdiction, err := domain.NewRegulatoryJurisdictionReference(document.JurisdictionRef)
+	if err != nil {
+		return nil, err
+	}
+	direction, err := manifestDirectionFrom(document.Direction)
+	if err != nil {
+		return nil, err
+	}
+	procedure, err := domain.NewCustomsProcedureReference(document.ProcedureRef)
+	if err != nil {
+		return nil, err
+	}
+	// 判断格必须显式给：required 缺席时 Go 的零值是 false，静默落成「不要求建案」
+	// 正是「缺格变成错事实」——指针分辨「没给」与「给了 false」，拒前者。
+	if document.Required == nil {
+		return nil, fmt.Errorf("建案要求规则登记缺 required——「要求」与「不要求」都要显式说")
+	}
+	command := application.RegisterCaseRequirementRuleCommand{
+		TenantID:     tenant,
+		Jurisdiction: jurisdiction,
+		Direction:    direction,
+		Procedure:    procedure,
+		Required:     *document.Required,
+		Basis:        document.Basis,
+	}
+	return func(
+		ctx context.Context,
+		registrar registrar,
+	) (application.CaseConfigurationOutcome, error) {
+		return registrar.requirements.Handle(ctx, command)
 	}, nil
 }
 
@@ -520,6 +575,18 @@ func obligationItemStateFrom(raw string) (domain.ObligationItemState, error) {
 	default:
 		return domain.ObligationItemStateInvalid, fmt.Errorf(
 			"state=%q 不在封闭三值（CONCLUDED / HANDED_OVER / UNRESOLVED）", raw)
+	}
+}
+
+func manifestDirectionFrom(raw string) (domain.ManifestDirection, error) {
+	switch raw {
+	case "IMPORT":
+		return domain.ImportManifest, nil
+	case "EXPORT":
+		return domain.ExportManifest, nil
+	default:
+		return domain.ManifestDirectionInvalid, fmt.Errorf(
+			"direction=%q 不在封闭二向（IMPORT / EXPORT）", raw)
 	}
 }
 

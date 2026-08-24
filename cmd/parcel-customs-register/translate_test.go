@@ -8,10 +8,10 @@ import (
 // 本文件证译装的拒绝面：形状坏、词表外、必填缺——一律在入库前拒并指名差哪格，
 // 用例一步不走。绿路径的字段保真在 main_test 经 execute 对替身册断言。
 
-// TestCommandForRejectsUnknownCommand 证命令集封闭：集合外的命令拒收并列出全部九个。
+// TestCommandForRejectsUnknownCommand 证命令集封闭：集合外的命令拒收并列出全部十个。
 func TestCommandForRejectsUnknownCommand(t *testing.T) {
-	if _, err := commandFor("case-requirement", []byte(`{}`)); err == nil {
-		t.Fatalf("集合外命令要拒（第六本册子不在本票，见 cc-case-requirement-rule-registry）")
+	if _, err := commandFor("case-closure", []byte(`{}`)); err == nil {
+		t.Fatalf("集合外命令要拒（案件关闭是判断链动作，不是配置登记）")
 	}
 }
 
@@ -24,6 +24,7 @@ func TestCommandForRejectsUnknownFields(t *testing.T) {
 		commandInterpretationRule,
 		commandObligationCatalog, commandObligationItem,
 		commandGateCatalog, commandGateFinding,
+		commandCaseRequirement,
 	} {
 		if _, err := commandFor(command, []byte(`{"typo": 1}`)); err == nil {
 			t.Fatalf("%s 未拒未知字段", command)
@@ -82,6 +83,10 @@ func TestCommandForRejectsVocabularyOutsideTheClosedSets(t *testing.T) {
 			"tenantId": "SYN-T1", "scopeRef": "scope-1", "action": "FINAL_DELIVERY",
 			"boundaryRef": "boundary-1", "preconditionRef": "pre-1", "state": "UNKNOWN"
 		}`, "state"},
+		{commandCaseRequirement, `{
+			"tenantId": "SYN-T1", "jurisdictionRef": "JURIS/DE", "direction": "TRANSIT",
+			"procedureRef": "PROC/EXPORT-STANDARD", "required": true, "basis": "basis-1"
+		}`, "direction"},
 	}
 	for _, spec := range cases {
 		_, err := commandFor(spec.command, []byte(spec.raw))
@@ -148,5 +153,22 @@ func TestCommandForRejectsBlankObligationContent(t *testing.T) {
 	}`
 	if _, err := commandFor(commandObligationItem, []byte(blankScope)); err == nil {
 		t.Fatalf("空白 scope 要在译装处拒")
+	}
+}
+
+// TestCommandForRejectsAbsentRequiredFlag 证建案要求的判断格必须显式给：required 缺席
+// 时 Go 的零值是 false，静默落成「不要求建案」正是「缺格变成错事实」那类洞，译装以
+// 指针分辨「没给」与「给了 false」并拒前者。
+func TestCommandForRejectsAbsentRequiredFlag(t *testing.T) {
+	absent := `{
+		"tenantId": "SYN-T1", "jurisdictionRef": "JURIS/DE", "direction": "EXPORT",
+		"procedureRef": "PROC/EXPORT-STANDARD", "basis": "CONTRACT/NO-CASE-V1"
+	}`
+	_, err := commandFor(commandCaseRequirement, []byte(absent))
+	if err == nil {
+		t.Fatalf("缺席的 required 要拒，不得静默变成「不要求」")
+	}
+	if !strings.Contains(err.Error(), "required") {
+		t.Fatalf("拒绝没指名 required：%v", err)
 	}
 }

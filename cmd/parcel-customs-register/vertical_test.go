@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装配的整条登记链（隔离合成 S）：五本
+// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装配的整条登记链（隔离合成 S）：六本
 // 册子各自贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，撤销走状态推进
 // 且原判断留在行内，义务明细撞上库的外键防线时答未决。本口与写口适配器各持一份私有
 // 词表映射，本用例同时把两份钉在迁移 CHECK 的同一词表上。
@@ -146,4 +146,16 @@ func TestCustomsRegisterVerticalOnRealPostgres(t *testing.T) {
 	mustExecute(commandGateFinding, gateFinding("MET"), exitRegistered, "REGISTERED")
 	mustExecute(commandGateFinding, gateFinding("MET"), exitRegistered, "EXISTING")
 	mustExecute(commandGateFinding, gateFinding("CONFLICTING"), exitConflict, "CONTENT_CONFLICT")
+
+	// 建案要求规则（第六本）：「不要求」带依据落册、重放、翻面冲突。
+	requirement := func(required string) string {
+		return `{
+			"tenantId": "SYN-T1", "jurisdictionRef": "SYN-JURIS-DE", "direction": "EXPORT",
+			"procedureRef": "SYN-PROC-EXPORT", "required": ` + required + `,
+			"basis": "SYN-CONTRACT-NO-CASE-V1"
+		}`
+	}
+	mustExecute(commandCaseRequirement, requirement("false"), exitRegistered, "REGISTERED")
+	mustExecute(commandCaseRequirement, requirement("false"), exitRegistered, "EXISTING")
+	mustExecute(commandCaseRequirement, requirement("true"), exitConflict, "CONTENT_CONFLICT")
 }

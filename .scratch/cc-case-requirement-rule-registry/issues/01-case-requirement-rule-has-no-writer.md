@@ -1,7 +1,7 @@
 # `case_requirement_rule` 有读口无写口，挡的是建案那一侧的墙
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 从 [SYN-WALL-DOOR-AUDIT 票 06](../../syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md)（清单 W13）执行中分出。W13 点名五本册子，`case_requirement_rule` 是同一批迁移里的**第六本**，形状与那五本完全同类——有表、有只读视图、非测试代码零 `INSERT`、无登记用例——但它挡的墙不在 W13 的两堵之内，因此 W13 不扩，照实另立本票。
 
@@ -47,3 +47,25 @@ if err != nil || !configured {
 
 - 不扩 W13。那票已按「只做写口与仓储半边、五类配置」收窄执行中。
 - 不替 `customs-compliance` 定所有权。
+
+## Comments
+
+- 2026-08-24 · MCP-1：**三件交付，本票转 resolved。**
+  * 写入方：`adapters/postgres/case_requirement_registry.go`——`ON CONFLICT DO NOTHING`
+    不可覆盖、`RequireExecutor` 无环境事务即拒、集合外方向是错误不是未配置；真库用例
+    四发（穿读口往返、不可覆盖、无事务拒、坏方向拒），「答否」也带依据落册那一格由
+    往返用例钉住。
+  * 登记用例：`application/register_case_requirement_rule.go`——受理门逐格拒（租户/
+    辖区/方向/程序/依据，「不要求」也必须带依据）；冲突分界在编排：写口答`已登记`后
+    读回逐字段比，同则`已存在`、异则`内容冲突`（required 翻面与换依据都算），绝不
+    顶替；依赖故障折未决。独立 handler，不并入 W13 那五本的 handler（那票已按五类
+    收窄结案）。
+  * 进程级入口：并入 `cmd/parcel-customs-register` 为第十命令 `case-requirement`
+    （票 06 B 半边刚落的同一口，四件就此齐全）。译装用 `*bool` 分辨「没给」与
+    「给了 false」——required 缺席即拒，缺格不得静默落成「不要求建案」；方向封闭
+    二向指名拒。
+  * `found=false` 分界零触碰：读口原样，未登记仍是未决；写口没有任何把未登记折成
+    「不要求」的路径。版本维照 ADR-0070 悬置，本票未动 0007 表结构。
+  * 验证：写口/用例/CLI 三层新增 15 用例全绿；共享树全量 gofmt/build/vet 零信号、
+    `go test -p 1 -count=1 ./...` 75 包 ok、0 FAIL（2026-08-24 12:53，真库 33.5s 实跑）；
+    隔离树按提交 SHA 的全量验证随提交完成并记于提交信。
