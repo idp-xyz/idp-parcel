@@ -71,10 +71,14 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	claims, err := buildClaimsOrchestration(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, delivery, trackingViews)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, delivery, trackingViews, claims)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

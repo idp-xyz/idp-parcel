@@ -31,10 +31,10 @@ import (
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
 // 各端点的第二参（应用编排或读口）与 Intake 是两笔独立的接线：提交编排已按审计票 13
-// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄编排与 TF 交付双端点按接线票
-// `.scratch/parcel-api-remaining-endpoint-wiring` 的票 01、02 接真（均经真库，由 main
-// 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库读适配器；其余各格（VE
-// 索赔与 CC 外部结果）仍以 unwired* 占位，各自的接线各自成笔。占位与接真的分辨见
+// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄编排、TF 交付双端点与 VE 索赔受理
+// 按接线票 `.scratch/parcel-api-remaining-endpoint-wiring` 的票 01、02、04 接真（均经
+// 真库，由 main 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库读适配器；
+// 余下一格（CC 外部结果）仍以 unwired* 占位，它的接线自成一笔。占位与接真的分辨见
 // unwired_orchestration.go 的文件注释。
 //
 // 清单是九项（PS 三、NO 一、TF 二、VE 二、CC 一）。ADR-0055 与开发主线曾把它称作
@@ -52,6 +52,7 @@ func assembleBusinessEndpoints(
 	reception nodeopshttp.ReceptionHandler,
 	delivery tfhttp.DeliveryHandler,
 	trackingViews visibilityhttp.TrackingViewReader,
+	claims visibilityhttp.ClaimReceiver,
 ) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
@@ -61,7 +62,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
-		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredClaims{})},
+		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, unwiredResults{})},
 	}
 }

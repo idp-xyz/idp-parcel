@@ -28,11 +28,12 @@ import (
 //
 // 换编排与换 Intake 是两笔可独立发生的工作：运行期未配置 Intake 拒在编排之前，装配期
 // 把哪一格换成真编排不动 Intake。提交编排已按审计票 13 经真库与治理桥接真，撤回编排随
-// UI 阶段 B 后端序列接真，NO 收寄编排与 TF 交付编排按 `.scratch/parcel-api-remaining-endpoint-wiring`
-// 的接线票（01、02）接真，均由装配点入参交入，不再从本文件取——unwiredSubmission、
-// unwiredWithdrawal、unwiredReception 与 unwiredDelivery 自此只被装配测试用来钉「未配置
-// 面」的形状；其余各格（VE 索赔与 CC 外部结果）仍以本文件的类型占位，各自的接线各自
-// 成笔。真渠道 Intake 就位那笔工作只替换 Intake 本身。
+// UI 阶段 B 后端序列接真，NO 收寄编排、TF 交付编排与 VE 索赔编排按
+// `.scratch/parcel-api-remaining-endpoint-wiring` 的接线票（01、02、04）接真，均由装配
+// 点入参交入，不再从本文件取——unwiredSubmission、unwiredWithdrawal、unwiredReception、
+// unwiredDelivery 与 unwiredClaims 自此只被装配测试用来钉「未配置面」的形状；余下一格
+// （CC 外部结果）仍以本文件的类型占位，它的接线自成一笔。真渠道 Intake 就位那笔工作
+// 只替换 Intake 本身。
 var errOrchestrationNotWired = errors.New("parcel-api: business orchestration is not wired; the unconfigured intake should have refused first")
 
 type unwiredSubmission struct{}
