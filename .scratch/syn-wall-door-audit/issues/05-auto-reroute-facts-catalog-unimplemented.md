@@ -1,7 +1,7 @@
 # 自动改路四条件事实目录无生产实现,改路评估整段显式未配置
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W10。
 
@@ -41,3 +41,46 @@ PAR-NET-14;`networkrouting/application/reassess_route.go` 端口注释。
   建议：ready-for-agent，四件全由本票做；阈值与条件取值属 PAR-NET-14 待提供（机制
   半边不被阻断）。可参照 0008 的版本化先例（未闭区间部分唯一索引、修订锚）。
 - 2026-08-20 MCP-1：采纳重核，Status → ready-for-agent。实现另派（占 assemble.go 时单独占号）。
+- 2026-08-24 10:58 · MCP-6：认领本票（Status → in-progress），基线 `b51de75`（与远端
+  main 一致，`ls-remote` 于 10:57 取证）。范围照票面四件全做；动
+  `cmd/parcel-dispatch/assemble.go` 前将按票面纪律在频道单独占号。
+- 2026-08-24 · MCP-6：四件交付完毕，随本笔提交，票转 resolved。
+
+  **件一（存储）**：迁移 `network_routing/0009_auto_reroute_facts.sql`。判断键六维 +
+  version 历史链（同键版本行只增不改，当前陈述取最大版本，照 `availability_adjustment`
+  先例——四条件是「当下陈述」不是「计划生效」，区间制没有对应语义，故不搬 0008 的
+  区间与修订锚）；三个折算结论布尔列 + 两份引用清单 jsonb（CHECK 限 array，空数组是
+  「无未解限制」的有效陈述）+ `strategy_basis` 折算依据列（事实要说得出按什么折的）。
+  「未配置」由零行表达，无中间态。`migrations.go` 是目录级嵌入（`all:network_routing`），
+  零触碰。
+
+  **件二（装载口）**：`adapters/postgres/auto_reroute_facts.go` 的
+  `AutoRerouteFactsCatalog.LoadAutoRerouteFacts` 实现 `ports.AutoRerouteFactsView` 三格：
+  最大版行→五件事实；零行→未配置；错误只留依赖故障与坏行。键不完整的读是错误不是
+  未配置（身份不成立不读权威），空白清单元素在读回时经领域构造器炸成「数据坏了」。
+
+  **件三（写入方）**：同文件 `RegisterAutoRerouteFacts` + `FindAutoRerouteFacts`，实现
+  新端口 `ports.AutoRerouteFactsRegistry`（编译期钉住）。`已登记`用 ON CONFLICT DO
+  NOTHING 加零行判定翻译，不捕 23505（撞键会把事务打进中止态，编排还要同事务读回
+  比对——先例 `ReachabilityJudgments`，真库用例钉住「重复登记后同事务读回赢家」）；
+  写口走 `RequireExecutor`，无环境事务即拒（票 06 钉住的同一格，真库用例在）。
+
+  **件四（登记口）**：`application/register_auto_reroute_facts.go`。受理门逐格拒
+  （键不完整/版本缺/依据缺/清单元素空白，`AutoRerouteFactsRefusalReason` 指名），
+  一个默认值都不补；幂等与冲突分界在编排——写口答`已登记`后读回既有版逐字段比，
+  同则`已存在`、异则`内容冲突`，绝不覆盖（先例：CC 案件配置登记册）；事务由进程级
+  入口给出。登记时刻由 Clock 给，不由登记方带入。
+
+  **评估路径打通**：`cmd/parcel-dispatch/assemble.go` 的 `networkIntakeConsumer` 把
+  `AutoReroute: nil` 换成真适配器（占号后单独改这一处）。空册行为与先前 nil 等价
+  （零行答未配置→失效照常落库、评估整段不做），登记过的键才走 7B/7C——应用层
+  `rerouteAfterLapse` 的三态分派（自动改路/建议/禁行）此前已实现且有测试，本票不改它。
+
+  **红线核验**：阈值与条件取值属 PAR-NET-14，一个未写死（表存折算结论与出处，不存
+  阈值）；无默认行、无实例值；测试值全 SYN- 风格合成（S 级只记 S）；未配置时保持
+  现状由真库用例与装配注释双钉。进程级入口（CLI）票面未列，未做——如需照
+  `parcel-network-register` 先例另立票。
+
+  **验证**（共享树包级，全量隔离树验证随推送前完成并记于提交信）：gofmt /
+  `go build ./...` / `go vet` 零信号；`go test -count=1 ./internal/networkrouting/...`
+  全绿含真库，单跑 `-run AutoReroute -v` 七用例真 PASS 非 SKIP（DSN 生效）。

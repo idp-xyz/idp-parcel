@@ -753,6 +753,10 @@ func networkIntakeConsumer(
 		return nil, fmt.Errorf("parcel-dispatch: route identities: %w", err)
 	}
 
+	rerouteFacts, err := nrpostgres.NewAutoRerouteFactsCatalog(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: auto reroute facts: %w", err)
+	}
 	reassessHandler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        routeStore,
 		Evidence:      definitions,
@@ -761,10 +765,12 @@ func networkIntakeConsumer(
 		Log:           handoffLog,
 		Identities:    identities,
 		Clock:         clock,
-		// 自动改路四条件的事实目录没有生产实现。nil 是「显式未配置」的诚实表达，
-		// 与端口注释同义：失效照常落库，改路评估整段不做——连建议都不形成，因为
-		// 说不出「为什么没自动」。
-		AutoReroute: nil,
+		// 自动改路四条件的事实目录已就位（审计票 05）：按判断键取当前陈述，从未
+		// 登记的键照端口第二格答未配置——失效照常落库、改路评估整段不做，与先前
+		// 显式 nil 在空册上的行为等价；登记过的键才走 7B/7C。改善阈值、改路条件
+		// 与权限、冻结边界的取值属 PAR-NET-14 实例半边，目录只存登记方折算完的
+		// 陈述与出处，不种任何默认行。
+		AutoReroute: rerouteFacts,
 	})
 
 	adoptions, err := pspostgres.NewIntakeAdoptions(db)

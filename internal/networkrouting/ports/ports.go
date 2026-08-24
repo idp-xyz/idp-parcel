@@ -323,6 +323,56 @@ type AutoRerouteFactsView interface {
 	) (domain.AutoRerouteFacts, bool, error)
 }
 
+// AutoRerouteFactsRecord 是事实目录里的一版陈述：判断键 + 版本号 + 五件事实 + 折算
+// 依据。StrategyBasis 指名这份陈述按哪个策略版本折出来——阈值与冻结边界的取值属
+// PAR-NET-14 实例半边，目录只存折算完的结论与出处，不存阈值本身。
+type AutoRerouteFactsRecord struct {
+	Key           domain.InitialRouteJudgmentKey
+	Version       int
+	Facts         domain.AutoRerouteFacts
+	StrategyBasis string
+	RegisteredAt  time.Time
+}
+
+// AutoRerouteFactsSaveOutcome 是事实目录的写入代数。只有两格（ADR-0031 同款）：
+// `已登记`是业务答案不是错误，**没有覆盖格是有意的**——同键同版本已在册就交回
+// `已登记`，内容是否一致由编排读回既有版本自己比（先例：CC 案件配置登记册），
+// 「重放同一份」与「换了内容」这两件事在用例结果上必须分得开。
+type AutoRerouteFactsSaveOutcome uint8
+
+const (
+	AutoRerouteFactsSaveOutcomeInvalid AutoRerouteFactsSaveOutcome = iota
+	AutoRerouteFactsRegistered
+	AutoRerouteFactsAlreadyRegistered
+)
+
+func (outcome AutoRerouteFactsSaveOutcome) String() string {
+	switch outcome {
+	case AutoRerouteFactsRegistered:
+		return "REGISTERED"
+	case AutoRerouteFactsAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	default:
+		return ""
+	}
+}
+
+// AutoRerouteFactsRegistry 是 AutoRerouteFactsView 的写口半边。事实的取值随包裹移动
+// 与限制解除而变化，新陈述登记为同键的下一版本，历史版本原样保留——读口取最大版本，
+// 「谁在什么时候按什么依据陈述过什么」审计要答得出。FindAutoRerouteFacts 按（键+版本）
+// 精确取一版，供登记编排在`已登记`后读回比对幂等与冲突。
+type AutoRerouteFactsRegistry interface {
+	RegisterAutoRerouteFacts(
+		ctx context.Context,
+		record AutoRerouteFactsRecord,
+	) (AutoRerouteFactsSaveOutcome, error)
+	FindAutoRerouteFacts(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+		version int,
+	) (AutoRerouteFactsRecord, bool, error)
+}
+
 // ReassessmentRecord 是一次复核越过提交边界后留下的东西。`已失效`的记录同时携带失效
 // 依据与候选评估状态（三件并存的硬句）；「无当前有效路由」由「已失效且无新计划」这个
 // 记录状态表达，不复用初始判断的全淘汰对象——复核失效时候选可以仍在评估。
