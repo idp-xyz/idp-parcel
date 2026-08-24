@@ -1,7 +1,17 @@
 # 01 CONTEXT 运营查阅语言 + ADR(MCP-5)
 
 Category: enhancement
-Status: open
+Status: resolved
+
+## 决议
+
+- 落库 SHA:c6c7914afa2afd98b4f816970af5a4d6223f2fd6(路径限定:CONTEXT.md + ADR-0076 + adr/README.md 索引行)。
+- ADR 编号:**ADR-0076**(0076-operations-tracking-read-is-a-separate-endpoint-on-the-projection-store.md);Status 写 **Accepted**,授权来源取 ../spec.md 的用户放行句(2026-08-24 放行方向 B);若应降为 Proposed 由 1 号转用户裁,降级只改 Status 行与索引行。
+- CONTEXT.md 三处:Language 词条「运营追踪查阅」、「追踪投影与里程碑」规则三条、投影生命周期一行;客户面语言与 UC-VE-008 原样未动(核对过「运营查阅」在 docs/ 无既有 UC 引用,无需连改)。
+- 验证:纯文档笔,无构建目标;引文与符号引用逐条对照过源文件(ParcelCustomerAccountView/TrackingViewQuery/ProjectionStore/AuthorizedQueryScope 注释、CONTEXT 硬句、AT-VE-151/155/157)。
+- 遗留:取证简报 tracking-scope-decision-brief.md 在工作树仍未跟踪,而本票 ADR 与 ../spec.md 都链接它——归 admin-web-uiux-20260824 地盘,已报 1 号裁归属,不代提交。
+
+## 活
 
 地盘、阻塞边与纪律见 ../spec.md;取证依据见 `.scratch/admin-web-uiux-20260824/tracking-scope-decision-brief.md`(下称简报),两处不复述。
 
