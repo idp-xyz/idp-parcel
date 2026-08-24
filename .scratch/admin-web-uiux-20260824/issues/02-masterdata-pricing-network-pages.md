@@ -1,7 +1,10 @@
-# 02 主数据/计价/网络区 13 页对齐（MCP-8）
+# 02 主数据/计价/网络区 13 页对齐（MCP-8 → MCP-3 接手）
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
+
+2026-08-24 17:2x MCP-3 领票：用户改派「UI/UX 余量由 3 号亲手全部完成」；8 号未开工
+（其地盘页面自 16:01 后零写入），占号广播已发。
 
 地盘：`apps/admin-web/src/pages/party/**`、`pages/pricing/**`、`pages/network/**`（共 13 页，各含 index.ts）。通用检查单与协作纪律见 ../spec.md，逐页执行。
 

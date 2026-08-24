@@ -47,6 +47,8 @@ export function GroupLegalEntitiesPage() {
     <ListPageTemplate<GroupLegalEntityRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：对象类型（责任法人/经营组织，
+      // CONTEXT 封闭词）、运营集团租户。值域是实例数据的维度只出下拉不出预设值。
       search={{
         value: search,
         onChange: setSearch,
@@ -66,7 +68,12 @@ export function GroupLegalEntitiesPage() {
       viewState={{
         kind: 'unconfigured',
         title: '参与方与商业模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

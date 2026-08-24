@@ -57,6 +57,8 @@ export function SupplierAgreementsPage() {
     <ListPageTemplate<SupplierAgreementRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：责任法人、供应商、状态（商业版本
+      // 生命周期封闭词：草稿/已发布/已生效/已到期/已终止/已替代）。
       search={{
         value: search,
         onChange: setSearch,
@@ -76,7 +78,12 @@ export function SupplierAgreementsPage() {
       viewState={{
         kind: 'unconfigured',
         title: '参与方与商业模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

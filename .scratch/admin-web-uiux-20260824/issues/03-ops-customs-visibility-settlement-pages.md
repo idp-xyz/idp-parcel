@@ -1,7 +1,10 @@
-# 03 作业/关务/追踪/结算/代收区 10+2 页与追踪接真（MCP-9）
+# 03 作业/关务/追踪/结算/代收区 10+2 页与追踪接真（MCP-9 → MCP-3 接手）
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
+
+2026-08-24 17:2x MCP-3 领票：用户改派「UI/UX 余量由 3 号亲手全部完成」；9 号已转
+接线票队列（其广播自述），本票 UI 半边归 3 号，占号广播已发。
 
 地盘：`apps/admin-web/src/pages/operations/**`、`pages/customs/**`、`pages/visibility/**`、`pages/settlement/**`、`pages/collection/**`。通用检查单与协作纪律见 ../spec.md。
 

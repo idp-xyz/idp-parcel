@@ -55,6 +55,8 @@ export function ChannelProductCatalogPage() {
     <ListPageTemplate<ChannelProductRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：渠道服务方、商业适用性（可用/停止
+      // 商业可用——停止只排除新选择，历史依据仍在列）。
       search={{
         value: search,
         onChange: setSearch,
@@ -74,7 +76,12 @@ export function ChannelProductCatalogPage() {
       viewState={{
         kind: 'unconfigured',
         title: '参与方与商业模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );
