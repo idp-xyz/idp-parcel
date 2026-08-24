@@ -34,7 +34,12 @@ import {
   ExceptionCasesPage,
   ClaimsRecoveryPage,
 } from './pages/visibility';
-import { CustomsCasesPage, CustomsRestrictionsPage } from './pages/customs';
+import {
+  CustomsCasesPage,
+  CustomsRestrictionsPage,
+  CustomsPortsPathsPage,
+  ComplianceRulesPage,
+} from './pages/customs';
 import {
   GroupLegalEntitiesPage,
   BusinessPartiesPage,
@@ -75,6 +80,8 @@ export const pageById: Record<string, ComponentType> = {
   'claims-recovery': ClaimsRecoveryPage,
   'customs-cases': CustomsCasesPage,
   'customs-restrictions': CustomsRestrictionsPage,
+  'customs-ports-paths': CustomsPortsPathsPage,
+  'compliance-rules': ComplianceRulesPage,
   'group-legal-entities': GroupLegalEntitiesPage,
   'business-parties': BusinessPartiesPage,
   'party-contracts': PartyContractsPage,

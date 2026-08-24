@@ -2,3 +2,5 @@
 // 栏目按 customs-compliance CONTEXT 语义搭好，数据区如实答未接线，不含合成数据。
 export { CustomsCasesPage } from './CustomsCasesPage';
 export { CustomsRestrictionsPage } from './CustomsRestrictionsPage';
+export { CustomsPortsPathsPage } from './CustomsPortsPathsPage';
+export { ComplianceRulesPage } from './ComplianceRulesPage';

@@ -71,6 +71,8 @@ export function CodLedgerPage() {
       title={info.title}
       // 页头说明直接携带硬约束，与在途/应付两栏的命名互为呼应。
       description={`${info.owner}——未实际收到的代收款不得进入可付客户余额`}
+      // 筛选维度（接线时实装进 filters 槽）：分户四维即筛选四维——货主客户、责任
+      // 法人、币种、代收渠道（四维之间隔离与对账，不得合并，筛选也按维分立）。
       search={{
         value: search,
         onChange: setSearch,
@@ -89,8 +91,13 @@ export function CodLedgerPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '代收模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        title: '代收与清分模块尚未接线',
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '代收分户账查询端点建成并经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

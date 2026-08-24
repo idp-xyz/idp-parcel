@@ -80,6 +80,8 @@ export function OperatingMetricsPage() {
     <ListPageTemplate<OperatingMetricRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：口径（预估/已确认/已结算，封闭三格；
+      // 索赔调整后口径声明依附基础口径，不混合）、币种、截至时点窗口。范围与版本经搜索。
       search={{
         value: search,
         onChange: setSearch,
@@ -98,8 +100,13 @@ export function OperatingMetricsPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '结算模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        title: '结算与核算模块尚未接线',
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '经营指标查询端点建成并经 ADR-0017 准入闸门放行后接线；指标只能派生，接线不带来任何编辑动作',
+        },
       }}
     />
   );

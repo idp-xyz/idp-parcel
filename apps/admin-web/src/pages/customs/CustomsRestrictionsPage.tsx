@@ -134,7 +134,12 @@ const gateColumns: ListColumn<ReleaseGateRow>[] = [
 const unconfigured = {
   kind: 'unconfigured' as const,
   title: '关务合规模块尚未接线',
-  description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+  description: '查阅读口尚未建立（已接线的关务端点是接收面：外部结果接收等），本页不发请求、不含未确认参数的默认值。',
+  facts: {
+    owner: info.owner,
+    source: info.source,
+    unlock: '限制/税费/门禁核对的查询端点建成并经 ADR-0017 准入闸门放行后接线',
+  },
 };
 
 function ComplianceRestrictionsTable() {
@@ -147,6 +152,8 @@ function ComplianceRestrictionsTable() {
       title="内部合规限制"
       // 页头携带两类解除独立生命周期的硬句原词。
       description={`${info.owner}——外部放行不自动解除内部限制，内部限制解除也不证明监管机构已经放行`}
+      // 筛选维度（接线时实装进 filters 槽）：限制责任来源、限制适用性判断（有效限制/
+      // 无内部限制/待确认/冲突，封闭四格）、受限动作。限制标识经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索限制标识 / 责任来源' }}
       columns={restrictionColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
@@ -167,6 +174,8 @@ function RegulatoryDutiesTable() {
     <ListPageTemplate<RegulatoryDutyRow>
       title="监管核定税费"
       description={`${info.owner}——监管核定与实际付款、资金退回、代垫回收分别存在；代垫回收归 settlement-accounting`}
+      // 筛选维度（接线时实装进 filters 槽）：核对三轴各自的状态（覆盖/差额/有效性，
+      // 互斥总状态是 CONTEXT 明禁形状，筛选也按轴分立）、法定义务人。标识与范围经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索税费结果标识 / 申报范围' }}
       columns={dutyColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
@@ -188,6 +197,9 @@ function ReleaseGatesTable() {
       title="放行门禁核对"
       // 页头携带安全作业不受阻断的硬句：未放行阻断的只是方向性动作。
       description={`${info.owner}——尚未放行只阻断出库、装载出发、跨关务区域移动或交付，不阻止接收、隔离、测量、查验协作或已授权处置执行`}
+      // 筛选维度（接线时实装进 filters 槽）：拟执行动作（出库/装载出发/跨关务区域
+      // 移动/交付，封闭四动作）、门禁判断（待满足/部分满足/满足/冲突/不适用，封闭
+      // 五格）、适用监管边界。核对标识与申报范围经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索核对标识 / 申报范围 / 拟执行动作' }}
       columns={gateColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。

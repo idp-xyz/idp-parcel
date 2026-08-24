@@ -164,8 +164,13 @@ export function NodeOperationsReviewPage() {
       }
       viewState={{
         kind: 'unconfigured',
-        title: '节点作业查询端点尚未建立',
-        description: `查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+        title: '作业与履约模块尚未接线',
+        description: '节点作业的查询契约待建；本页不发请求、不含合成数据。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '节点作业查阅的查询契约建成并经 ADR-0017 准入闸门放行后接线；一线作业端另行其道（ADR-0021），不经本页',
+        },
       }}
     />
   );

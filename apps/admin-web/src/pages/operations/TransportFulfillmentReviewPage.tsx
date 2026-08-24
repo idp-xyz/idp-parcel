@@ -179,8 +179,13 @@ export function TransportFulfillmentReviewPage() {
       }
       viewState={{
         kind: 'unconfigured',
-        title: '运输履约查询端点尚未建立',
-        description: `查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+        title: '作业与履约模块尚未接线',
+        description: '运输履约的查询契约待建；本页不发请求、不含合成数据。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '运输履约查阅的查询契约建成并经 ADR-0017 准入闸门放行后接线；交付双端点已随接线批次落地，查阅面另行其道',
+        },
       }}
     />
   );

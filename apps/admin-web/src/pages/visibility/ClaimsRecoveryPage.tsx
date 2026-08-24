@@ -138,7 +138,12 @@ const recoveryColumns: ListColumn<RecoveryMatterRow>[] = [
 const unconfigured = {
   kind: 'unconfigured' as const,
   title: '追踪与异常模块尚未接线',
-  description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+  description: '查阅读口尚未建立——索赔的受理与审核端点已接线（/claims），但那是提交面；本页是查阅面，其查询端点未建，不发请求、不含未确认参数的默认值。',
+  facts: {
+    owner: info.owner,
+    source: info.source,
+    unlock: '通知/索赔项/追偿事项的查询端点建成并经 ADR-0017 准入闸门放行后接线',
+  },
 };
 
 function CustomerNoticesTable() {
@@ -150,6 +155,8 @@ function CustomerNoticesTable() {
     <ListPageTemplate<CustomerNoticeRow>
       title="客户异常通知"
       description={`${info.owner}——通知决定、渠道接受、送达与客户确认分别记录；赔付与追偿金额归 settlement-accounting`}
+      // 筛选维度（接线时实装进 filters 槽）：适用渠道、渠道接受/送达/客户确认三格
+      // 各自的态（分别记录，不合并成一个「已通知」）、要求时限窗口。标识与客户经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索通知标识 / 目标客户' }}
       columns={noticeColumns}
       // 接线前无实例：行数据与总数届时由 visibility-exception 应用端口供给。
@@ -170,6 +177,9 @@ function CustomerClaimsTable() {
     <ListPageTemplate<CustomerClaimRow>
       title="客户索赔项"
       description={`${info.owner}——最终赔付金额由 settlement-accounting 管理，本表无金额列是边界不是遗漏`}
+      // 筛选维度（接线时实装进 filters 槽）：索赔类型、资格审核结果、责任结论
+      //（全部成立/部分成立/不成立/当前无法认定，封闭四格；复核出新版本不覆盖）。
+      // 索赔项标识与货主客户账户经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索索赔项标识 / 货主客户账户' }}
       columns={claimColumns}
       // 接线前无实例：行数据与总数届时由 visibility-exception 应用端口供给。
@@ -190,6 +200,9 @@ function RecoveryMattersTable() {
     <ListPageTemplate<RecoveryMatterRow>
       title="追偿事项"
       description={`${info.owner}——追偿金额由 settlement-accounting 形成；预先通知与正式主张不合并为「已追偿」`}
+      // 筛选维度（接线时实装进 filters 槽）：责任相对方、对方响应（已接收/要求补充/
+      // 审核中/全部接受/部分接受/拒绝/无响应，封闭七格；无响应不自动等于拒绝）、
+      // 适用期限窗口。追偿事项标识经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索追偿事项标识 / 责任相对方' }}
       columns={recoveryColumns}
       // 接线前无实例：行数据与总数届时由 visibility-exception 应用端口供给。

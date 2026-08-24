@@ -72,6 +72,9 @@ export function ExceptionCasesPage() {
       title={info.title}
       // 页头携带归并与重开的共同底线：两者都以追加表达，不删除历史。
       description={`${info.owner}——受控归并以「已归并」关闭并关联主案件，受控重开形成新响应周期，均不删除历史`}
+      // 筛选维度（接线时实装进 filters 槽）：主状态（待响应/处理中/已关闭，精简主
+      // 生命周期封闭三格）、当前工作条件（与主状态分立，不升格）、严重度、处置
+      // 优先级、责任团队。案件标识与根对象经搜索。
       search={{
         value: search,
         onChange: setSearch,
@@ -91,7 +94,12 @@ export function ExceptionCasesPage() {
       viewState={{
         kind: 'unconfigured',
         title: '追踪与异常模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        description: '异常案件的查阅读口尚未建立（已接线的 VE 端点是受理与视图面：索赔受理、客户追踪视图），本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '异常案件查询端点建成并经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

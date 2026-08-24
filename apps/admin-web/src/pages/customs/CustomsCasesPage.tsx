@@ -162,7 +162,12 @@ const submissionColumns: ListColumn<SubmissionVersionRow>[] = [
 const unconfigured = {
   kind: 'unconfigured' as const,
   title: '关务合规模块尚未接线',
-  description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+  description: '查阅读口尚未建立（已接线的关务端点是接收面：外部结果接收等），本页不发请求、不含未确认参数的默认值。',
+  facts: {
+    owner: info.owner,
+    source: info.source,
+    unlock: '案件/单元/快照/提交版本的查询端点建成并经 ADR-0017 准入闸门放行后接线',
+  },
 };
 
 function CustomsCasesTable() {
@@ -174,6 +179,8 @@ function CustomsCasesTable() {
     <ListPageTemplate<CustomsCaseRow>
       title="关务案件"
       description={`${info.owner}——出口、进口及其他独立监管程序分别建立案件`}
+      // 筛选维度（接线时实装进 filters 槽）：监管辖区、进出口方向（出口/进口，封闭
+      // 二向）、监管程序。案件标识经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索案件标识 / 监管辖区' }}
       columns={caseColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
@@ -194,6 +201,8 @@ function DeclarationUnitsTable() {
     <ListPageTemplate<DeclarationUnitRow>
       title="申报单元"
       description={`${info.owner}——申报单元不是客户委托、集运单元、总单、舱单或运输班次`}
+      // 筛选维度（接线时实装进 filters 槽）：申报就绪判断、受控跨客户合报在场与否、
+      // 替代关系（拟替代/有效替代分别成立）。单元标识与所属案件经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索申报单元标识 / 所属案件' }}
       columns={unitColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
@@ -214,6 +223,8 @@ function DeclarationSnapshotsTable() {
     <ListPageTemplate<DeclarationSnapshotRow>
       title="正式申报资料快照"
       description={`${info.owner}——快照保留客户声明、节点实测与关务判断的区别，不覆盖任何来源值`}
+      // 筛选维度（接线时实装进 filters 槽）：来源区分（客户原始声明/节点实测或观察/
+      // 关务判断，封闭三源）。快照版本与所属单元经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索快照版本 / 所属申报单元' }}
       columns={snapshotColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
@@ -234,6 +245,8 @@ function SubmissionVersionsTable() {
     <ListPageTemplate<SubmissionVersionRow>
       title="提交版本"
       description={`${info.owner}——提交版本是不可覆盖快照，其存在不证明技术传输、监管接收、业务受理或放行成功`}
+      // 筛选维度（接线时实装进 filters 槽）：技术回执/监管接收/业务受理三层结果态
+      //（分层保存，任一层不推导下一层）、原结果待确认。版本与申报目标经搜索。
       search={{ value: search, onChange: setSearch, placeholder: '搜索提交版本 / 逻辑申报目标' }}
       columns={submissionColumns}
       // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。

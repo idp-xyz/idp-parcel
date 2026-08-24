@@ -80,6 +80,8 @@ export function ChargesBillingPage() {
     <ListPageTemplate<ChargeDetailRow>
       title={info.title}
       description={info.owner}
+      // 筛选维度（接线时实装进 filters 槽）：阶段（预估/暂估/确认/调整，追加式生命
+      // 周期封闭四格）、收付方向、责任法人、结算相对方、费用项目。标识与范围经搜索。
       search={{
         value: search,
         onChange: setSearch,
@@ -98,8 +100,13 @@ export function ChargesBillingPage() {
       }}
       viewState={{
         kind: 'unconfigured',
-        title: '结算模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        title: '结算与核算模块尚未接线',
+        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '费用明细查询端点建成并经 ADR-0017 准入闸门放行后接线',
+        },
       }}
     />
   );

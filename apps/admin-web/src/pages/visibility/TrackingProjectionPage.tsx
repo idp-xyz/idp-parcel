@@ -67,6 +67,9 @@ export function TrackingProjectionPage() {
       title={info.title}
       // 页头携带 GLOSSARY「追踪摘要」的硬句原词，与并行维度分列的表形互为呼应。
       description={`${info.owner}——追踪摘要用于阅读和查询，不是一条覆盖各源状态的统一状态机`}
+      // 筛选维度（接线时实装进 filters 槽）：最新标准里程碑（无法可靠映射的保持
+      // 未归类，未归类本身是可筛的一格）、异常影响在场、可见性缺口在场、ETA 可信
+      // 程度。包裹标识与外部标识经搜索。
       search={{
         value: search,
         onChange: setSearch,
@@ -90,7 +93,12 @@ export function TrackingProjectionPage() {
         // 客户追踪视图读口（GET /customer-tracking-view）已在 parcel-api 建立，但那是
         // 客户隔离作用域的视图；本页的运营查阅作用域是否复用该读口尚未裁决，裁决前
         // 不接线——接错作用域比不接更糟（把客户隔离视图当运营全景会漏报）。
-        description: `客户隔离的追踪视图读口已建立，但本页的运营查阅作用域是否复用它尚未裁决；裁决前本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        description: '客户隔离的追踪视图读口已建立，但本页的运营查阅作用域是否复用它尚未裁决；裁决前本页不发请求、不含未确认参数的默认值。',
+        facts: {
+          owner: info.owner,
+          source: info.source,
+          unlock: '「运营查阅作用域是否复用客户隔离读口」经 visibility-exception 所有权裁决后按裁决接线（裁决问题记录在 admin-web-uiux-20260824 票 03/04）',
+        },
       }}
     />
   );
