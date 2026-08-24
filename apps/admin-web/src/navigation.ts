@@ -51,13 +51,26 @@ export const navigationSections: NavigationSection[] = [
     items: [{ id: 'workbench', label: '工作台', icon: 'workbench' }],
   },
   {
-    // 主数据只收「身份与关系」类对象；带版本生命周期的商业协议（合同/产品/政策）
-    // 留在商业配置区。节点主数据在网络目录、汇率燃油在计价参考序列——各归其
-    // 所属上下文的条目，不为分区完整而挪所有权。
+    // 主数据区集中全部「身份、目录与登记式对象」的查阅入口——操作员按
+    // 「数据去哪找」的心智一处找齐。分区是呈现分组：各条目的主责上下文与
+    // 出处仍由 moduleInfoById 逐条表达，跨上下文集中不改变所有权，也不改变
+    // 写入纪律（登记一律走各自受控入口，本区页面只查阅）。排序按
+    // 组织 → 参与方 → 合同协议 → 产品渠道 → 策略 → 价格 → 网络 → 关务。
     title: '主数据',
     items: [
       { id: 'group-legal-entities', label: '集团与法人', icon: 'group-legal-entities' },
       { id: 'business-parties', label: '业务参与方', icon: 'business-parties' },
+      { id: 'party-contracts', label: '客户与合同', icon: 'party-contracts' },
+      { id: 'supplier-agreements', label: '供应商协议', icon: 'supplier-agreements' },
+      { id: 'service-products', label: '服务产品与渠道', icon: 'service-products' },
+      { id: 'channel-product-catalog', label: '渠道产品目录', icon: 'channel-product-catalog' },
+      { id: 'commercial-policies', label: '商业规则与策略', icon: 'commercial-policies' },
+      { id: 'price-card-catalog', label: '价卡目录', icon: 'price-card-catalog' },
+      { id: 'reference-series', label: '计价参考序列', icon: 'reference-series' },
+      { id: 'network-catalog', label: '网络目录', icon: 'network-catalog' },
+      { id: 'service-areas', label: '服务区域与覆盖', icon: 'service-areas' },
+      { id: 'customs-ports-paths', label: '口岸与申报路径', icon: 'customs-ports-paths' },
+      { id: 'compliance-rules', label: '合规规则库', icon: 'compliance-rules' },
     ],
   },
   {
@@ -70,28 +83,14 @@ export const navigationSections: NavigationSection[] = [
     ],
   },
   {
-    title: '商业配置',
-    items: [
-      { id: 'party-contracts', label: '客户与合同', icon: 'party-contracts' },
-      { id: 'service-products', label: '服务产品与渠道', icon: 'service-products' },
-      { id: 'channel-product-catalog', label: '渠道产品目录', icon: 'channel-product-catalog' },
-      { id: 'supplier-agreements', label: '供应商协议', icon: 'supplier-agreements' },
-      { id: 'commercial-policies', label: '商业规则与策略', icon: 'commercial-policies' },
-    ],
-  },
-  {
     title: '计价',
     items: [
-      { id: 'price-card-catalog', label: '价卡目录', icon: 'price-card-catalog' },
-      { id: 'reference-series', label: '计价参考序列', icon: 'reference-series' },
       { id: 'pricing-evaluation', label: '价格评价', icon: 'pricing-evaluation' },
     ],
   },
   {
     title: '网络与路由',
     items: [
-      { id: 'network-catalog', label: '网络目录', icon: 'network-catalog' },
-      { id: 'service-areas', label: '服务区域与覆盖', icon: 'service-areas' },
       { id: 'route-plans', label: '路由计划与改路', icon: 'route-plans' },
     ],
   },
@@ -106,8 +105,6 @@ export const navigationSections: NavigationSection[] = [
     title: '关务合规',
     items: [
       { id: 'customs-cases', label: '关务案件与申报', icon: 'customs-cases' },
-      { id: 'compliance-rules', label: '合规规则库', icon: 'compliance-rules' },
-      { id: 'customs-ports-paths', label: '口岸与申报路径', icon: 'customs-ports-paths' },
       { id: 'customs-restrictions', label: '合规限制与监管税费', icon: 'customs-restrictions' },
     ],
   },
