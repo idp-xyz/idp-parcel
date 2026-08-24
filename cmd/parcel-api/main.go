@@ -59,6 +59,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	cancellation, err := buildCancellationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	reception, err := buildReceptionOrchestration(db)
 	if err != nil {
 		return err
@@ -82,7 +86,7 @@ func run(logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, delivery, trackingViews, claims, results)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, cancellation, reception, delivery, trackingViews, claims, results)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
