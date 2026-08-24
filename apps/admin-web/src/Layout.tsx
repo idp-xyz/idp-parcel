@@ -8,6 +8,7 @@ import {
   ShipmentRequestPage,
   ShipmentRequestListPage,
   CancelParcelPage,
+  LabelTransactionsPage,
 } from './pages/shipment-request';
 import { TemplatePreviewPage } from './pages/template-preview';
 import {
@@ -22,7 +23,11 @@ import {
   ReferenceSeriesPage,
   PricingEvaluationsPage,
 } from './pages/pricing';
-import { NetworkCatalogPage, RoutePlansPage } from './pages/network';
+import {
+  NetworkCatalogPage,
+  ServiceAreasPage,
+  RoutePlansPage,
+} from './pages/network';
 import {
   NodeOperationsReviewPage,
   TransportFulfillmentReviewPage,
@@ -42,6 +47,7 @@ const pageById: Record<string, ComponentType> = {
   workbench: Workbench,
   'shipment-request': ShipmentRequestPage,
   'shipment-request-inquiry': ShipmentRequestListPage,
+  'label-transactions': LabelTransactionsPage,
   'cancel-parcel': CancelParcelPage,
   'template-preview': TemplatePreviewPage,
   'acceptance-review': AcceptanceReviewPage,
@@ -53,6 +59,7 @@ const pageById: Record<string, ComponentType> = {
   'reference-series': ReferenceSeriesPage,
   'pricing-evaluation': PricingEvaluationsPage,
   'network-catalog': NetworkCatalogPage,
+  'service-areas': ServiceAreasPage,
   'route-plans': RoutePlansPage,
   'node-operations-review': NodeOperationsReviewPage,
   'transport-fulfillment-review': TransportFulfillmentReviewPage,

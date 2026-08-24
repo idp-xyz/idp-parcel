@@ -15,6 +15,8 @@ export {
 } from './ShipmentRequestDetailPage';
 // UC-PS-006 接受后取消入口(未配置骨架,端点形状落地前不受理请求)。
 export { CancelParcelPage } from './CancelParcelPage';
+// 面单交易查阅面(行粒度交易×包裹,查询端点未建为未配置骨架)。
+export { LabelTransactionsPage, type LabelTransactionRow } from './LabelTransactionsPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,
