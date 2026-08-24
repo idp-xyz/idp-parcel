@@ -73,12 +73,13 @@ export function Layout() {
           iconMap={sidebarIconMap}
         />
         <div className="resize-handle-h" onMouseDown={sidebarResize.handleMouseDown} />
-        <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+        {/* main 地标：读屏用户跳过导航直达页面内容的锚点。 */}
+        <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
           {(() => {
             const ActivePage = pageById[active];
             return ActivePage ? <ActivePage /> : <UnwiredModule moduleId={active} />;
           })()}
-        </div>
+        </main>
       </div>
     </div>
   );

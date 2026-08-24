@@ -56,3 +56,4 @@ pnpm build      # tsc 类型检查 + vite 构建
 
 - CI：按 ADR-0018 的后果，第一个端落地后 CI 需新增非 Go 的独立 job；该 job 需要能读 GitHub Packages 的凭据（org secret 或包访问授权），尚未接。
 - 产品色：`ui-tokens` 的 `productAccent` 尚未登记 parcel，`App.tsx` 暂用默认色；登记属上游 idp-ui 仓的改动。
+- 产物体积：vendor 块约 1.17MB（gzip 约 239KB），构成是 framer-motion/radix/d3/highlight 等 `@idpxyz` 传递依赖——本应用只用到部分组件，但上游桶导出与缺 `sideEffects` 声明让未用的重依赖摇不掉。已按变更频率拆 `react-vendor`/`ui-kit`/`vendor` 三块保缓存（业务改动只失效 app 块）；根治（`sideEffects: false` 与子路径导出）属上游 idp-ui 仓。
