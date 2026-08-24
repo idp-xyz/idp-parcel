@@ -283,14 +283,14 @@ func (handler *RegisterCaseConfigurationHandler) RegisterInterpretationRule(
 // RegisterObligationCatalogCommand 携带一次关闭义务目录登记。
 type RegisterObligationCatalogCommand struct {
 	TenantID     domain.TenantID
-	CaseRef      string
+	CaseRef      domain.CustomsCaseID
 	RegisteredAt time.Time
 }
 
 // RegisterObligationItemCommand 携带一项关闭义务及其适用区间。
 type RegisterObligationItemCommand struct {
 	TenantID     domain.TenantID
-	CaseRef      string
+	CaseRef      domain.CustomsCaseID
 	Registration ports.ObligationRegistration
 }
 
@@ -300,7 +300,7 @@ func (handler *RegisterCaseConfigurationHandler) RegisterObligationCatalog(
 	ctx context.Context,
 	command RegisterObligationCatalogCommand,
 ) (CaseConfigurationOutcome, error) {
-	if blankTenant(command.TenantID) || strings.TrimSpace(command.CaseRef) == "" {
+	if blankTenant(command.TenantID) || strings.TrimSpace(command.CaseRef.String()) == "" {
 		return ConfigurationNotAccepted, nil
 	}
 
@@ -322,7 +322,7 @@ func (handler *RegisterCaseConfigurationHandler) RegisterObligationItem(
 	command RegisterObligationItemCommand,
 ) (CaseConfigurationOutcome, error) {
 	registration := command.Registration
-	if blankTenant(command.TenantID) || strings.TrimSpace(command.CaseRef) == "" ||
+	if blankTenant(command.TenantID) || strings.TrimSpace(command.CaseRef.String()) == "" ||
 		registration.AppliesFrom.IsZero() || registration.Item.Obligation == "" {
 		return ConfigurationNotAccepted, nil
 	}

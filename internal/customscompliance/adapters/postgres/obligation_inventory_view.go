@@ -38,7 +38,7 @@ var _ ports.ObligationInventoryView = (*ObligationInventoryView)(nil)
 func (view *ObligationInventoryView) LoadObligationItems(
 	ctx context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	cutoffAt time.Time,
 ) ([]domain.ClosureObligationItem, bool, error) {
 	querier, err := view.db.ReadExecutor(ctx)
@@ -51,7 +51,7 @@ func (view *ObligationInventoryView) LoadObligationItems(
 		`SELECT true
 		   FROM customs_compliance.closure_obligation_catalog
 		  WHERE tenant_id = $1 AND case_ref = $2`,
-		tenant.String(), caseRef,
+		tenant.String(), caseRef.String(),
 	).Scan(&registered)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -68,7 +68,7 @@ func (view *ObligationInventoryView) LoadObligationItems(
 		    AND applies_from <= $3
 		    AND (applies_until IS NULL OR applies_until > $3)
 		  ORDER BY obligation`,
-		tenant.String(), caseRef, cutoffAt.UTC(),
+		tenant.String(), caseRef.String(), cutoffAt.UTC(),
 	)
 	if err != nil {
 		return nil, false, fmt.Errorf("load obligation items: %w", err)

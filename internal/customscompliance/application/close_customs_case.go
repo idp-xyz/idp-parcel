@@ -69,7 +69,7 @@ func (reason CloseCaseReason) String() string {
 // CloseCustomsCaseCommand 携带一次关闭请求：案件、业务截点与作出决定的责任角色。
 type CloseCustomsCaseCommand struct {
 	TenantID  domain.TenantID
-	CaseRef   string
+	CaseRef   domain.CustomsCaseID
 	CutoffAt  time.Time
 	DecidedBy string
 }
@@ -129,7 +129,7 @@ func (handler *CloseCustomsCaseHandler) Handle(
 	command CloseCustomsCaseCommand,
 ) (CloseCustomsCaseResult, error) {
 	if strings.TrimSpace(command.TenantID.String()) == "" ||
-		strings.TrimSpace(command.CaseRef) == "" ||
+		strings.TrimSpace(command.CaseRef.String()) == "" ||
 		command.CutoffAt.IsZero() ||
 		strings.TrimSpace(command.DecidedBy) == "" {
 		return CloseCustomsCaseResult{outcome: CloseCaseNotAccepted}, nil
@@ -212,5 +212,5 @@ func (handler *CloseCustomsCaseHandler) handOffClosure(
 	}); err == nil {
 		return ""
 	}
-	return "CONT-CLOSURE/" + closure.CaseRef()
+	return "CONT-CLOSURE/" + closure.CaseRef().String()
 }

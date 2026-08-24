@@ -78,12 +78,12 @@ func closureIntent(t *testing.T, tenant string) ports.CaseClosureHandoffIntent {
 	}
 }
 
-func closureEventID(tenant, caseRef string, closureCycle int) string {
-	return tenant + "/" + caseRef + "/" + strconv.Itoa(closureCycle)
+func closureEventID(tenant string, caseRef domain.CustomsCaseID, closureCycle int) string {
+	return tenant + "/" + caseRef.String() + "/" + strconv.Itoa(closureCycle)
 }
 
-func closurePartitionKey(tenant, caseRef string) string {
-	return tenant + "/" + caseRef
+func closurePartitionKey(tenant string, caseRef domain.CustomsCaseID) string {
+	return tenant + "/" + caseRef.String()
 }
 
 func TestCaseClosureIntentCommitsAtomicallyWithTheRecord(t *testing.T) {

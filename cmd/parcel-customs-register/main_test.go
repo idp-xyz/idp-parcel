@@ -145,14 +145,14 @@ type fakeObligationBook struct {
 	items    map[string]ports.ObligationRegistration
 }
 
-func obligationCaseKey(tenant domain.TenantID, caseRef string) string {
-	return tenant.String() + "/" + caseRef
+func obligationCaseKey(tenant domain.TenantID, caseRef domain.CustomsCaseID) string {
+	return tenant.String() + "/" + caseRef.String()
 }
 
 func (book *fakeObligationBook) RegisterObligationCatalog(
 	_ context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	_ time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	key := obligationCaseKey(tenant, caseRef)
@@ -166,7 +166,7 @@ func (book *fakeObligationBook) RegisterObligationCatalog(
 func (book *fakeObligationBook) RegisterObligationItem(
 	_ context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	registration ports.ObligationRegistration,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	key := obligationCaseKey(tenant, caseRef) + "/" + registration.Item.Obligation
@@ -182,7 +182,7 @@ func (book *fakeObligationBook) RegisterObligationItem(
 func (book *fakeObligationBook) LoadObligationItems(
 	_ context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	cutoffAt time.Time,
 ) ([]domain.ClosureObligationItem, bool, error) {
 	if !book.catalogs[obligationCaseKey(tenant, caseRef)] {

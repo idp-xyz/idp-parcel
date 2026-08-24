@@ -104,7 +104,7 @@ func followUpSpec(t *testing.T, kind domain.FollowUpActionKind) domain.FollowUpT
 	return domain.FollowUpTargetSpec{
 		Kind:     kind,
 		Trigger:  mustValue(t, domain.NewFollowUpTriggerReference, "REGULATORY-REQUIREMENT/refile"),
-		CaseRef:  "customs-case-1",
+		CaseRef:  mustValue(t, domain.NewCustomsCaseID, "customs-case-1"),
 		Unit:     mustValue(t, domain.NewDeclarationUnitID, "unit-1"),
 		Version:  mustValue(t, domain.NewSubmissionVersionID, "submission-v1"),
 		Scope:    mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),

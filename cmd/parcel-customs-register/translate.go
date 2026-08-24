@@ -275,12 +275,16 @@ func obligationCatalogFromJSON(raw []byte) (dispatchFunc, error) {
 	if err != nil {
 		return nil, err
 	}
+	caseRef, err := domain.NewCustomsCaseID(document.CaseRef)
+	if err != nil {
+		return nil, err
+	}
 	if document.RegisteredAt.IsZero() {
 		return nil, fmt.Errorf("义务目录登记缺 registeredAt——登记时刻没有默认值")
 	}
 	command := application.RegisterObligationCatalogCommand{
 		TenantID:     tenant,
-		CaseRef:      document.CaseRef,
+		CaseRef:      caseRef,
 		RegisteredAt: document.RegisteredAt,
 	}
 	return func(
@@ -312,6 +316,10 @@ func obligationItemFromJSON(raw []byte) (dispatchFunc, error) {
 	if err != nil {
 		return nil, err
 	}
+	caseRef, err := domain.NewCustomsCaseID(document.CaseRef)
+	if err != nil {
+		return nil, err
+	}
 	state, err := obligationItemStateFrom(document.State)
 	if err != nil {
 		return nil, err
@@ -337,7 +345,7 @@ func obligationItemFromJSON(raw []byte) (dispatchFunc, error) {
 	}
 	command := application.RegisterObligationItemCommand{
 		TenantID: tenant,
-		CaseRef:  document.CaseRef,
+		CaseRef:  caseRef,
 		Registration: ports.ObligationRegistration{
 			Item: domain.ClosureObligationItem{
 				Obligation: document.Obligation,

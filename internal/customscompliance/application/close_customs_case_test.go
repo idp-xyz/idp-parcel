@@ -22,7 +22,7 @@ type inventoryViewDouble struct {
 func (double *inventoryViewDouble) LoadObligationItems(
 	_ context.Context,
 	_ domain.TenantID,
-	_ string,
+	_ domain.CustomsCaseID,
 	_ time.Time,
 ) ([]domain.ClosureObligationItem, bool, error) {
 	if double.err != nil {
@@ -39,9 +39,9 @@ type caseClosureStoreDouble struct {
 func (double *caseClosureStoreDouble) FindByCase(
 	_ context.Context,
 	_ domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 ) (*domain.CustomsCaseClosure, bool, error) {
-	closure, found := double.byCase[caseRef]
+	closure, found := double.byCase[caseRef.String()]
 	return closure, found, nil
 }
 
@@ -50,10 +50,10 @@ func (double *caseClosureStoreDouble) Save(
 	_ domain.TenantID,
 	closure *domain.CustomsCaseClosure,
 ) (ports.CaseClosureSaveOutcome, error) {
-	if _, exists := double.byCase[closure.CaseRef()]; exists {
+	if _, exists := double.byCase[closure.CaseRef().String()]; exists {
 		return ports.CaseClosureAlreadyRecorded, nil
 	}
-	double.byCase[closure.CaseRef()] = closure
+	double.byCase[closure.CaseRef().String()] = closure
 	double.saved++
 	return ports.CaseClosureSaved, nil
 }
@@ -101,7 +101,7 @@ func closeCommand(t *testing.T) application.CloseCustomsCaseCommand {
 	t.Helper()
 	return application.CloseCustomsCaseCommand{
 		TenantID:  mustValue(t, domain.NewTenantID, "tenant-1"),
-		CaseRef:   "customs-case-1",
+		CaseRef:   mustValue(t, domain.NewCustomsCaseID, "customs-case-1"),
 		CutoffAt:  closureAt.Add(-time.Hour),
 		DecidedBy: "customs-case-owner",
 	}

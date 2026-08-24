@@ -15,7 +15,7 @@ func followUpTarget(t *testing.T, kind domain.FollowUpActionKind) domain.FollowU
 	target, err := domain.FormFollowUpTarget(domain.FollowUpTargetSpec{
 		Kind:     kind,
 		Trigger:  mustValue(t, domain.NewFollowUpTriggerReference, "regulatory-request/RR-9"),
-		CaseRef:  "case-1",
+		CaseRef:  mustValue(t, domain.NewCustomsCaseID, "case-1"),
 		Unit:     mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-1"),
 		Version:  mustValue(t, domain.NewSubmissionVersionID, "submission-1/v1"),
 		Scope:    mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
@@ -46,7 +46,7 @@ func TestAFollowUpTargetDemandsItsSixAnchors(t *testing.T) {
 
 	missingTrigger := domain.FollowUpTargetSpec{
 		Kind:     domain.InCaseCorrection,
-		CaseRef:  "case-1",
+		CaseRef:  mustValue(t, domain.NewCustomsCaseID, "case-1"),
 		Unit:     mustValue(t, domain.NewDeclarationUnitID, "declaration-unit-1"),
 		Version:  mustValue(t, domain.NewSubmissionVersionID, "submission-1/v1"),
 		Scope:    mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),

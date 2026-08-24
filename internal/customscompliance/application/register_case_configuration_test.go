@@ -363,9 +363,9 @@ func newObligationStore() *obligationStoreDouble {
 }
 
 func (double *obligationStoreDouble) RegisterObligationCatalog(
-	_ context.Context, tenant domain.TenantID, caseRef string, _ time.Time,
+	_ context.Context, tenant domain.TenantID, caseRef domain.CustomsCaseID, _ time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
-	key := tenant.String() + "|" + caseRef
+	key := tenant.String() + "|" + caseRef.String()
 	if double.catalogs[key] {
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
@@ -374,9 +374,9 @@ func (double *obligationStoreDouble) RegisterObligationCatalog(
 }
 
 func (double *obligationStoreDouble) RegisterObligationItem(
-	_ context.Context, tenant domain.TenantID, caseRef string, registration ports.ObligationRegistration,
+	_ context.Context, tenant domain.TenantID, caseRef domain.CustomsCaseID, registration ports.ObligationRegistration,
 ) (ports.CaseConfigurationSaveOutcome, error) {
-	key := tenant.String() + "|" + caseRef
+	key := tenant.String() + "|" + caseRef.String()
 	for _, existing := range double.items[key] {
 		if existing.Item.Obligation == registration.Item.Obligation {
 			return ports.CaseConfigurationAlreadyRegistered, nil
@@ -388,9 +388,9 @@ func (double *obligationStoreDouble) RegisterObligationItem(
 
 // LoadObligationItems 照真库读口的半开区间过滤，否则「换了区间」那一格测不出来。
 func (double *obligationStoreDouble) LoadObligationItems(
-	_ context.Context, tenant domain.TenantID, caseRef string, cutoffAt time.Time,
+	_ context.Context, tenant domain.TenantID, caseRef domain.CustomsCaseID, cutoffAt time.Time,
 ) ([]domain.ClosureObligationItem, bool, error) {
-	key := tenant.String() + "|" + caseRef
+	key := tenant.String() + "|" + caseRef.String()
 	if !double.catalogs[key] {
 		return nil, false, nil
 	}
@@ -411,7 +411,7 @@ func obligationItemCommand(t *testing.T, state domain.ObligationItemState, from 
 	t.Helper()
 	return application.RegisterObligationItemCommand{
 		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		CaseRef:  "case-1",
+		CaseRef:  configValue(t, domain.NewCustomsCaseID, "case-1"),
 		Registration: ports.ObligationRegistration{
 			Item: domain.ClosureObligationItem{
 				Obligation: "DUTY/PAYMENT",
@@ -432,7 +432,7 @@ func TestReRegisteringAnObligationCatalogIsAlwaysExisting(t *testing.T) {
 	})
 	command := application.RegisterObligationCatalogCommand{
 		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		CaseRef:  "case-1", RegisteredAt: configBaseAt,
+		CaseRef:  configValue(t, domain.NewCustomsCaseID, "case-1"), RegisteredAt: configBaseAt,
 	}
 
 	if _, err := handler.RegisterObligationCatalog(t.Context(), command); err != nil {
@@ -453,7 +453,7 @@ func TestReRegisteringAnObligationItemWithADifferentStateConflicts(t *testing.T)
 	})
 	if _, err := handler.RegisterObligationCatalog(t.Context(), application.RegisterObligationCatalogCommand{
 		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		CaseRef:  "case-1", RegisteredAt: configBaseAt,
+		CaseRef:  configValue(t, domain.NewCustomsCaseID, "case-1"), RegisteredAt: configBaseAt,
 	}); err != nil {
 		t.Fatalf("登记目录：%v", err)
 	}
@@ -484,7 +484,7 @@ func TestReRegisteringAnObligationItemWithADifferentIntervalConflicts(t *testing
 	})
 	if _, err := handler.RegisterObligationCatalog(t.Context(), application.RegisterObligationCatalogCommand{
 		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		CaseRef:  "case-1", RegisteredAt: configBaseAt,
+		CaseRef:  configValue(t, domain.NewCustomsCaseID, "case-1"), RegisteredAt: configBaseAt,
 	}); err != nil {
 		t.Fatalf("登记目录：%v", err)
 	}

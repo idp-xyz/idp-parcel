@@ -255,7 +255,7 @@ var _ ports.ObligationInventoryRegistry = (*ObligationInventoryRegistrations)(ni
 func (registry *ObligationInventoryRegistrations) RegisterObligationCatalog(
 	ctx context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	registeredAt time.Time,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -268,7 +268,7 @@ func (registry *ObligationInventoryRegistrations) RegisterObligationCatalog(
 			(tenant_id, case_ref, registered_at)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (tenant_id, case_ref) DO NOTHING`,
-		tenant.String(), caseRef, registeredAt.UTC(),
+		tenant.String(), caseRef.String(), registeredAt.UTC(),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register obligation catalog: %w", err)
@@ -284,7 +284,7 @@ func (registry *ObligationInventoryRegistrations) RegisterObligationCatalog(
 func (registry *ObligationInventoryRegistrations) RegisterObligationItem(
 	ctx context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	registration ports.ObligationRegistration,
 ) (ports.CaseConfigurationSaveOutcome, error) {
 	executor, err := registry.db.RequireExecutor(ctx)
@@ -308,7 +308,7 @@ func (registry *ObligationInventoryRegistrations) RegisterObligationItem(
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (tenant_id, case_ref, obligation) DO NOTHING`,
 		tenant.String(),
-		caseRef,
+		caseRef.String(),
 		registration.Item.Obligation,
 		registration.Item.Scope,
 		state,

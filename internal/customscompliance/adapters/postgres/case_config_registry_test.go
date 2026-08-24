@@ -430,7 +430,8 @@ func newObligationRegistry(t *testing.T) (*adapter.ObligationInventoryRegistrati
 func registerObligationCatalog(t *testing.T, registry *adapter.ObligationInventoryRegistrations, fixture *viewFixture, tenant domain.TenantID, caseRef string) {
 	t.Helper()
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterObligationCatalog(ctx, tenant, caseRef, registryBaseAt)
+		return registry.RegisterObligationCatalog(ctx, tenant,
+			viewValue(t, domain.NewCustomsCaseID, caseRef), registryBaseAt)
 	}); err != nil {
 		t.Fatalf("登记义务目录：%v", err)
 	}
@@ -444,7 +445,8 @@ func TestRegisteringOnlyTheCatalogYieldsAnEmptyInventoryRatherThanUnconfigured(t
 	tenant := viewValue(t, domain.NewTenantID, "tenant-a")
 	registerObligationCatalog(t, registry, fixture, tenant, "case-1")
 
-	items, configured, err := view.LoadObligationItems(t.Context(), tenant, "case-1", registryBaseAt.Add(time.Hour))
+	items, configured, err := view.LoadObligationItems(t.Context(), tenant,
+		viewValue(t, domain.NewCustomsCaseID, "case-1"), registryBaseAt.Add(time.Hour))
 	if err != nil || !configured {
 		t.Fatalf("登了目录却答未配置：err=%v configured=%v", err, configured)
 	}
@@ -471,17 +473,20 @@ func TestObligationItemsEnterTheInventoryOnlyWithinTheirInterval(t *testing.T) {
 		AppliesUntil: registryBaseAt.Add(4 * time.Hour),
 	}
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterObligationItem(ctx, tenant, "case-1", expiring)
+		return registry.RegisterObligationItem(ctx, tenant,
+			viewValue(t, domain.NewCustomsCaseID, "case-1"), expiring)
 	}); err != nil {
 		t.Fatalf("登记限期义务：%v", err)
 	}
 
-	items, _, err := view.LoadObligationItems(t.Context(), tenant, "case-1", registryBaseAt.Add(time.Hour))
+	items, _, err := view.LoadObligationItems(t.Context(), tenant,
+		viewValue(t, domain.NewCustomsCaseID, "case-1"), registryBaseAt.Add(time.Hour))
 	if err != nil || len(items) != 1 {
 		t.Fatalf("区间内没盘出来：err=%v items=%d", err, len(items))
 	}
 	// 半开区间：终点当刻已不再适用。
-	items, configured, err := view.LoadObligationItems(t.Context(), tenant, "case-1", registryBaseAt.Add(4*time.Hour))
+	items, configured, err := view.LoadObligationItems(t.Context(), tenant,
+		viewValue(t, domain.NewCustomsCaseID, "case-1"), registryBaseAt.Add(4*time.Hour))
 	if err != nil || !configured {
 		t.Fatalf("盘点：err=%v configured=%v", err, configured)
 	}
@@ -507,12 +512,14 @@ func TestAnObligationWithNoEndRemainsApplicableFarInTheFuture(t *testing.T) {
 		AppliesFrom: registryBaseAt,
 	}
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterObligationItem(ctx, tenant, "case-1", openEnded)
+		return registry.RegisterObligationItem(ctx, tenant,
+			viewValue(t, domain.NewCustomsCaseID, "case-1"), openEnded)
 	}); err != nil {
 		t.Fatalf("登记无终点义务：%v", err)
 	}
 
-	items, _, err := view.LoadObligationItems(t.Context(), tenant, "case-1", registryBaseAt.AddDate(5, 0, 0))
+	items, _, err := view.LoadObligationItems(t.Context(), tenant,
+		viewValue(t, domain.NewCustomsCaseID, "case-1"), registryBaseAt.AddDate(5, 0, 0))
 	if err != nil || len(items) != 1 {
 		t.Fatalf("无终点的义务在五年后盘不出来了：err=%v items=%d", err, len(items))
 	}
@@ -547,13 +554,15 @@ func TestAHandedOverObligationCarriesItsRecipientBackThroughTheView(t *testing.T
 		},
 	} {
 		if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-			return registry.RegisterObligationItem(ctx, tenant, "case-1", registration)
+			return registry.RegisterObligationItem(ctx, tenant,
+				viewValue(t, domain.NewCustomsCaseID, "case-1"), registration)
 		}); err != nil {
 			t.Fatalf("登记义务 %s：%v", registration.Item.Obligation, err)
 		}
 	}
 
-	items, _, err := view.LoadObligationItems(t.Context(), tenant, "case-1", registryBaseAt.Add(time.Hour))
+	items, _, err := view.LoadObligationItems(t.Context(), tenant,
+		viewValue(t, domain.NewCustomsCaseID, "case-1"), registryBaseAt.Add(time.Hour))
 	if err != nil || len(items) != 2 {
 		t.Fatalf("盘点：err=%v items=%d", err, len(items))
 	}
@@ -580,7 +589,8 @@ func TestAnObligationItemWithoutItsCatalogIsRejected(t *testing.T) {
 	}
 	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 		return registry.RegisterObligationItem(ctx,
-			viewValue(t, domain.NewTenantID, "tenant-a"), "case-1", registration)
+			viewValue(t, domain.NewTenantID, "tenant-a"),
+			viewValue(t, domain.NewCustomsCaseID, "case-1"), registration)
 	}); err == nil {
 		t.Fatal("目录不在时明细仍被写了进去")
 	}
@@ -602,7 +612,8 @@ func TestAnObligationWithoutAnIntervalStartIsRejected(t *testing.T) {
 		},
 	}
 	outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-		return registry.RegisterObligationItem(ctx, tenant, "case-1", registration)
+		return registry.RegisterObligationItem(ctx, tenant,
+			viewValue(t, domain.NewCustomsCaseID, "case-1"), registration)
 	})
 	if err == nil {
 		t.Fatal("没有区间起点的义务项被收下了")

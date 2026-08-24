@@ -83,7 +83,7 @@ func (repository *FollowUps) SaveTarget(
 		key.Trigger.String(),
 		key.Version.String(),
 		key.Kind.String(),
-		target.CaseRef(),
+		target.CaseRef().String(),
 		target.Unit().String(),
 		target.Scope().String(),
 		target.FormedAt(),
@@ -236,6 +236,10 @@ func rebuildFollowUpTarget(
 	caseRef, unitID, scopeRef string,
 	formedAt time.Time,
 ) (domain.FollowUpTarget, error) {
+	caseID, err := domain.NewCustomsCaseID(caseRef)
+	if err != nil {
+		return domain.FollowUpTarget{}, err
+	}
 	unit, err := domain.NewDeclarationUnitID(unitID)
 	if err != nil {
 		return domain.FollowUpTarget{}, err
@@ -247,7 +251,7 @@ func rebuildFollowUpTarget(
 	return domain.FormFollowUpTarget(domain.FollowUpTargetSpec{
 		Kind:     key.Kind,
 		Trigger:  key.Trigger,
-		CaseRef:  caseRef,
+		CaseRef:  caseID,
 		Unit:     unit,
 		Version:  key.Version,
 		Scope:    scope,
@@ -491,7 +495,7 @@ type reopeningRow struct {
 func (repository *CaseClosures) FindByCase(
 	ctx context.Context,
 	tenant domain.TenantID,
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 ) (*domain.CustomsCaseClosure, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
@@ -507,7 +511,7 @@ func (repository *CaseClosures) FindByCase(
 		`SELECT cutoff_at, verified_at, decided_by, closed_at, items, reopenings
 		   FROM customs_compliance.case_closure
 		  WHERE tenant_id = $1 AND case_ref = $2`,
-		tenant.String(), caseRef,
+		tenant.String(), caseRef.String(),
 	).Scan(&cutoffAt, &verifiedAt, &decidedBy, &closedAt, &itemsRaw, &reopeningsRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -551,7 +555,7 @@ func (repository *CaseClosures) Save(
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT (tenant_id, case_ref) DO NOTHING`,
 		tenant.String(),
-		closure.CaseRef(),
+		closure.CaseRef().String(),
 		closure.Verification().CutoffAt(),
 		closure.Verification().VerifiedAt(),
 		closure.DecidedBy(),
@@ -574,7 +578,7 @@ func (repository *CaseClosures) Save(
 		`UPDATE customs_compliance.case_closure
 		    SET reopenings = $3
 		  WHERE tenant_id = $1 AND case_ref = $2`,
-		tenant.String(), closure.CaseRef(), reopeningsRaw,
+		tenant.String(), closure.CaseRef().String(), reopeningsRaw,
 	)
 	if err != nil {
 		return ports.CaseClosureSaveOutcomeInvalid, fmt.Errorf("save case closure reopenings: %w", err)
@@ -613,7 +617,7 @@ func marshalReopenings(reopenings []domain.ControlledReopening) ([]byte, error) 
 }
 
 func rebuildCaseClosure(
-	caseRef string,
+	caseRef domain.CustomsCaseID,
 	cutoffAt, verifiedAt time.Time,
 	decidedBy string,
 	closedAt time.Time,

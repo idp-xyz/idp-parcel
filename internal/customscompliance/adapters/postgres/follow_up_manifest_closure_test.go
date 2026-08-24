@@ -87,7 +87,7 @@ func formedTarget(t *testing.T) domain.FollowUpTarget {
 	target, err := domain.FormFollowUpTarget(domain.FollowUpTargetSpec{
 		Kind:     domain.ResubmissionReplacement,
 		Trigger:  fmcValue(t, domain.NewFollowUpTriggerReference, "regulatory-request/RR-9"),
-		CaseRef:  "case-1",
+		CaseRef:  fmcValue(t, domain.NewCustomsCaseID, "case-1"),
 		Unit:     fmcValue(t, domain.NewDeclarationUnitID, "declaration-unit-1"),
 		Version:  fmcValue(t, domain.NewSubmissionVersionID, "submission-1/v1"),
 		Scope:    fmcValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
@@ -119,21 +119,22 @@ func acceptedManifest(t *testing.T) domain.ExternalManifestReference {
 
 func closedCase(t *testing.T) *domain.CustomsCaseClosure {
 	t.Helper()
-	verification, err := domain.VerifyClosure("case-1", fmcBaseAt, []domain.ClosureObligationItem{
-		{
-			Obligation: "declaration-submitted",
-			Scope:      "declaration-unit-1",
-			State:      domain.ObligationConcluded,
-			Basis:      "basis/declaration-submitted",
-		},
-		{
-			Obligation: "duty-settled",
-			Scope:      "declaration-unit-1",
-			State:      domain.ObligationHandedOver,
-			Basis:      "basis/duty-settled",
-			HandedTo:   "successor-team",
-		},
-	}, fmcBaseAt.Add(time.Hour))
+	verification, err := domain.VerifyClosure(fmcValue(t, domain.NewCustomsCaseID, "case-1"),
+		fmcBaseAt, []domain.ClosureObligationItem{
+			{
+				Obligation: "declaration-submitted",
+				Scope:      "declaration-unit-1",
+				State:      domain.ObligationConcluded,
+				Basis:      "basis/declaration-submitted",
+			},
+			{
+				Obligation: "duty-settled",
+				Scope:      "declaration-unit-1",
+				State:      domain.ObligationHandedOver,
+				Basis:      "basis/duty-settled",
+				HandedTo:   "successor-team",
+			},
+		}, fmcBaseAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("关闭核对：%v", err)
 	}
@@ -187,7 +188,7 @@ func TestFollowUpTargetRoundTripsAndSecondWriterIsAlreadyRecorded(t *testing.T) 
 	}
 
 	loaded, found, err := fixture.followUps.FindTarget(ctx, followUpKey(t, "tenant-a"))
-	if err != nil || !found || loaded.CaseRef() != "case-1" || loaded.Kind() != domain.ResubmissionReplacement {
+	if err != nil || !found || loaded.CaseRef().String() != "case-1" || loaded.Kind() != domain.ResubmissionReplacement {
 		t.Fatalf("往返失败：err=%v found=%v case=%s", err, found, loaded.CaseRef())
 	}
 
@@ -331,7 +332,8 @@ func TestCaseClosureRoundTripsAndReopeningAppendsInPlace(t *testing.T) {
 		t.Fatalf("重关 outcome = %d", outcome)
 	}
 
-	loaded, found, err := fixture.closures.FindByCase(ctx, tenant, "case-1")
+	loaded, found, err := fixture.closures.FindByCase(ctx, tenant,
+		fmcValue(t, domain.NewCustomsCaseID, "case-1"))
 	if err != nil || !found || loaded.DecidedBy() != "customs-owner" {
 		t.Fatalf("关闭往返：err=%v found=%v", err, found)
 	}
@@ -348,7 +350,8 @@ func TestCaseClosureRoundTripsAndReopeningAppendsInPlace(t *testing.T) {
 		t.Fatalf("重开落库 outcome = %d", outcome)
 	}
 
-	reopened, found, err := fixture.closures.FindByCase(ctx, tenant, "case-1")
+	reopened, found, err := fixture.closures.FindByCase(ctx, tenant,
+		fmcValue(t, domain.NewCustomsCaseID, "case-1"))
 	if err != nil || !found {
 		t.Fatalf("重开后读取：err=%v found=%v", err, found)
 	}
@@ -417,7 +420,8 @@ func TestFollowUpManifestClosuresOfAnotherTenantAreInvisible(t *testing.T) {
 		t.Fatalf("跨租户舱单可见：err=%v found=%v", err, found)
 	}
 	if _, found, err := fixture.closures.FindByCase(ctx,
-		fmcValue(t, domain.NewTenantID, "tenant-b"), "case-1"); err != nil || found {
+		fmcValue(t, domain.NewTenantID, "tenant-b"),
+		fmcValue(t, domain.NewCustomsCaseID, "case-1")); err != nil || found {
 		t.Fatalf("跨租户关闭可见：err=%v found=%v", err, found)
 	}
 

@@ -88,13 +88,13 @@ func (handoff *OutboxCaseClosureHandoff) HandOffClosure(
 	ctx context.Context,
 	intent ports.CaseClosureHandoffIntent,
 ) error {
-	if intent.Closure == nil || intent.TenantID.String() == "" || intent.Closure.CaseRef() == "" {
+	if intent.Closure == nil || intent.TenantID.String() == "" || intent.Closure.CaseRef().String() == "" {
 		return fmt.Errorf("hand off case closure: tenant and case ref are required")
 	}
 
 	payload, err := json.Marshal(caseClosurePayload{
 		TenantID: intent.TenantID.String(),
-		CaseRef:  intent.Closure.CaseRef(),
+		CaseRef:  intent.Closure.CaseRef().String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off case closure: %w", err)
@@ -103,7 +103,7 @@ func (handoff *OutboxCaseClosureHandoff) HandOffClosure(
 	now := handoff.clock.Now().UTC()
 	eventID := caseClosureEventID(
 		intent.TenantID.String(),
-		intent.Closure.CaseRef(),
+		intent.Closure.CaseRef().String(),
 		caseClosureCycle(intent.Closure),
 	)
 	envelope := eventing.Envelope{
@@ -113,8 +113,8 @@ func (handoff *OutboxCaseClosureHandoff) HandOffClosure(
 		Type:         caseClosureEventType,
 		Version:      1,
 		Scope:        intent.TenantID.String(),
-		Subject:      intent.Closure.CaseRef(),
-		PartitionKey: caseClosurePartitionKey(intent.TenantID.String(), intent.Closure.CaseRef()),
+		Subject:      intent.Closure.CaseRef().String(),
+		PartitionKey: caseClosurePartitionKey(intent.TenantID.String(), intent.Closure.CaseRef().String()),
 		OccurredAt:   intent.Closure.ClosedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

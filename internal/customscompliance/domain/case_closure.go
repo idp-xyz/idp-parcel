@@ -66,7 +66,7 @@ func (item ClosureObligationItem) complete() bool {
 // 评估（CONTEXT「关务案件关闭核对」）。它可以证明案件可关闭或指出未决项，但不等于
 // 已经形成关闭决定——决定是另一步。
 type ClosureVerification struct {
-	caseRef    string
+	caseRef    CustomsCaseID
 	cutoffAt   time.Time
 	items      []ClosureObligationItem
 	verifiedAt time.Time
@@ -75,12 +75,12 @@ type ClosureVerification struct {
 // VerifyClosure 形成关闭核对。义务清单非空且逐项完整；截点必备——没有业务截点的
 // 盘点说不清「截至什么时候」。
 func VerifyClosure(
-	caseRef string,
+	caseRef CustomsCaseID,
 	cutoffAt time.Time,
 	items []ClosureObligationItem,
 	verifiedAt time.Time,
 ) (ClosureVerification, error) {
-	if caseRef == "" || cutoffAt.IsZero() || len(items) == 0 || verifiedAt.IsZero() {
+	if !caseRef.valid() || cutoffAt.IsZero() || len(items) == 0 || verifiedAt.IsZero() {
 		return ClosureVerification{}, ErrInvalidClosure
 	}
 	for _, item := range items {
@@ -100,7 +100,7 @@ func (verification ClosureVerification) Items() []ClosureObligationItem {
 	return append([]ClosureObligationItem(nil), verification.items...)
 }
 
-func (verification ClosureVerification) CaseRef() string {
+func (verification ClosureVerification) CaseRef() CustomsCaseID {
 	return verification.caseRef
 }
 
@@ -131,7 +131,7 @@ func (verification ClosureVerification) Closable() bool {
 // CustomsCaseClosure 是关务案件的关闭决定与受控重开记录。单个案件不存在部分关闭
 // （218）——关闭是整案一次决定；重开保留原关闭记录（233）。
 type CustomsCaseClosure struct {
-	caseRef      string
+	caseRef      CustomsCaseID
 	verification ClosureVerification
 	decidedBy    string
 	closedAt     time.Time
@@ -155,7 +155,7 @@ func CloseCase(
 	decidedBy string,
 	closedAt time.Time,
 ) (*CustomsCaseClosure, error) {
-	if verification.caseRef == "" || decidedBy == "" || closedAt.IsZero() ||
+	if !verification.caseRef.valid() || decidedBy == "" || closedAt.IsZero() ||
 		closedAt.Before(verification.verifiedAt) {
 		return nil, ErrInvalidClosure
 	}
@@ -170,7 +170,7 @@ func CloseCase(
 	}, nil
 }
 
-func (closure *CustomsCaseClosure) CaseRef() string {
+func (closure *CustomsCaseClosure) CaseRef() CustomsCaseID {
 	return closure.caseRef
 }
 

@@ -137,7 +137,7 @@ type ObligationInventoryView interface {
 	LoadObligationItems(
 		ctx context.Context,
 		tenant domain.TenantID,
-		caseRef string,
+		caseRef domain.CustomsCaseID,
 		cutoffAt time.Time,
 	) ([]domain.ClosureObligationItem, bool, error)
 }
@@ -156,7 +156,7 @@ type CaseClosureStore interface {
 	FindByCase(
 		ctx context.Context,
 		tenant domain.TenantID,
-		caseRef string,
+		caseRef domain.CustomsCaseID,
 	) (*domain.CustomsCaseClosure, bool, error)
 	Save(
 		ctx context.Context,
@@ -629,13 +629,13 @@ type ObligationInventoryRegistry interface {
 	RegisterObligationCatalog(
 		ctx context.Context,
 		tenant domain.TenantID,
-		caseRef string,
+		caseRef domain.CustomsCaseID,
 		registeredAt time.Time,
 	) (CaseConfigurationSaveOutcome, error)
 	RegisterObligationItem(
 		ctx context.Context,
 		tenant domain.TenantID,
-		caseRef string,
+		caseRef domain.CustomsCaseID,
 		registration ObligationRegistration,
 	) (CaseConfigurationSaveOutcome, error)
 }

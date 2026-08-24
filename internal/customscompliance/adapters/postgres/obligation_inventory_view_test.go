@@ -26,7 +26,7 @@ func loadObligations(
 ) ([]domain.ClosureObligationItem, bool) {
 	t.Helper()
 	items, configured, err := view.LoadObligationItems(t.Context(),
-		viewValue(t, domain.NewTenantID, tenant), caseRef, cutoff)
+		viewValue(t, domain.NewTenantID, tenant), viewValue(t, domain.NewCustomsCaseID, caseRef), cutoff)
 	if err != nil {
 		t.Fatalf("盘义务：%v", err)
 	}
@@ -88,7 +88,8 @@ func TestObligationItemsAreReadBackWithStateAndHandover(t *testing.T) {
 	}
 
 	// 逐项完整即可进领域盘点；未解决项在场时关闭被挡住，这条链在这里连通。
-	verification, err := domain.VerifyClosure("case-1", viewBaseAt.Add(time.Hour), items, viewBaseAt.Add(2*time.Hour))
+	verification, err := domain.VerifyClosure(viewValue(t, domain.NewCustomsCaseID, "case-1"),
+		viewBaseAt.Add(time.Hour), items, viewBaseAt.Add(2*time.Hour))
 	if err != nil {
 		t.Fatalf("读回的清单进不了领域盘点：%v", err)
 	}

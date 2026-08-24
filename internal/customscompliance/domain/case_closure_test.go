@@ -28,7 +28,7 @@ func obligation(name string, state domain.ObligationItemState) domain.ClosureObl
 // 案件才可关闭；任一未解决或冲突项都阻止关闭」——未决清单列全、关闭被独立哨兵挡；
 // 承接项必须指名接收方（发送交接不证明移交，219）。
 func TestClosureIsBlockedByAnyUnresolvedItem(t *testing.T) {
-	blocked, err := domain.VerifyClosure("case-1", closureCutoffAt, []domain.ClosureObligationItem{
+	blocked, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt, []domain.ClosureObligationItem{
 		obligation("declaration-submitted", domain.ObligationConcluded),
 		obligation("duty-settled", domain.ObligationUnresolved),
 		obligation("disposition-executed", domain.ObligationHandedOver),
@@ -52,7 +52,7 @@ func TestClosureIsBlockedByAnyUnresolvedItem(t *testing.T) {
 		State:      domain.ObligationHandedOver,
 		Basis:      "basis/duty-settled",
 	}
-	if _, err := domain.VerifyClosure("case-1", closureCutoffAt,
+	if _, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt,
 		[]domain.ClosureObligationItem{handedWithoutReceiver}, closureCutoffAt.Add(time.Hour)); !errors.Is(err, domain.ErrInvalidClosure) {
 		t.Fatalf("err = %v; 不指名接收方的承接被收下了", err)
 	}
@@ -64,7 +64,7 @@ func TestClosureIsBlockedByAnyUnresolvedItem(t *testing.T) {
 // ——可关闭的核对加决定人成立关闭；重开三件必备且受影响项必须指向真实义务；重开是
 // 追加，原关闭记录不动。
 func TestReopeningIsControlledAndAppendsOnly(t *testing.T) {
-	verification, err := domain.VerifyClosure("case-1", closureCutoffAt, []domain.ClosureObligationItem{
+	verification, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt, []domain.ClosureObligationItem{
 		obligation("declaration-submitted", domain.ObligationConcluded),
 		obligation("duty-settled", domain.ObligationConcluded),
 	}, closureCutoffAt.Add(time.Hour))

@@ -56,7 +56,7 @@ func NewFollowUpTriggerReference(value string) (FollowUpTriggerReference, error)
 type FollowUpTargetSpec struct {
 	Kind     FollowUpActionKind
 	Trigger  FollowUpTriggerReference
-	CaseRef  string
+	CaseRef  CustomsCaseID
 	Unit     DeclarationUnitID
 	Version  SubmissionVersionID
 	Scope    DecisionScopeReference
@@ -70,7 +70,7 @@ type FollowUpTargetSpec struct {
 type FollowUpTarget struct {
 	kind     FollowUpActionKind
 	trigger  FollowUpTriggerReference
-	caseRef  string
+	caseRef  CustomsCaseID
 	unit     DeclarationUnitID
 	version  SubmissionVersionID
 	scope    DecisionScopeReference
@@ -80,7 +80,7 @@ type FollowUpTarget struct {
 func FormFollowUpTarget(spec FollowUpTargetSpec) (FollowUpTarget, error) {
 	if !spec.Kind.valid() ||
 		!spec.Trigger.valid() ||
-		spec.CaseRef == "" ||
+		!spec.CaseRef.valid() ||
 		!spec.Unit.valid() ||
 		!spec.Version.valid() ||
 		!spec.Scope.valid() ||
@@ -114,7 +114,7 @@ func (target FollowUpTarget) Version() SubmissionVersionID {
 	return target.version
 }
 
-func (target FollowUpTarget) CaseRef() string {
+func (target FollowUpTarget) CaseRef() CustomsCaseID {
 	return target.caseRef
 }
 
