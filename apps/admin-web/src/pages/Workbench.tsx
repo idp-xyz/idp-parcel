@@ -45,19 +45,25 @@ interface ModuleEntry {
 interface SectionOverview {
   title: string;
   items: ModuleEntry[];
+  /** 分区内已接线数，与条目档位同源派生，不是手工维护的第二份状态。 */
+  liveCount: number;
 }
 
 // 总览跳过「总览」自身；其余分区按导航原序呈现，不另造第二套分组。
 const sections: SectionOverview[] = navigationSections
   .filter((section) => section.title !== '总览')
-  .map((section) => ({
-    title: section.title,
-    items: section.items.map((item) => ({
+  .map((section) => {
+    const items = section.items.map((item) => ({
       id: item.id,
       label: item.label,
       readiness: readinessOf(item.id),
-    })),
-  }));
+    }));
+    return {
+      title: section.title,
+      items,
+      liveCount: items.filter((item) => item.readiness === 'live').length,
+    };
+  });
 
 const totals = sections
   .flatMap((section) => section.items)
@@ -104,8 +110,11 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {sections.map((section) => (
             <section key={section.title} className="rounded border border-idpxyz-border p-4">
-              <h2 className="text-[13px] font-bold text-idpxyz-textBright mb-2.5">
-                {section.title}
+              <h2 className="flex items-baseline gap-2 text-[13px] font-bold text-idpxyz-textBright mb-2.5">
+                <span>{section.title}</span>
+                <span className="ml-auto text-[11px] font-normal text-idpxyz-textMuted">
+                  已接线 {section.liveCount}/{section.items.length}
+                </span>
               </h2>
               <ul className="space-y-1">
                 {section.items.map((item) => {
