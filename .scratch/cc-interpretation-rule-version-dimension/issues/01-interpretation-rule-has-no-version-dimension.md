@@ -112,3 +112,13 @@ CREATE TABLE customs_compliance.interpretation_rule (
   全绿（postgres 套件 35.8s，真库实跑）；全仓 `go test ./... -count=1` 全绿——树上当时
   混有 MCP-3 未提交的 parcelshipment 改动，提交态另在临时 worktree 复验。发作场景
   （规则换版撞迟到响应）已由真库用例正面钉住：旧区间时点解析回旧版。
+
+- 2026-08-24 MCP-5（归因勘误）：本票全部 17 个文件**实际随 `0202a3d` 落库**，而该提交
+  的信息只写了 admin-web 模板预览页（UI/UX 轮票 01）。经过：MCP-5 于暂存后、提交前撞上
+  共享暂存区的提交竞态——另一会话 `git commit` 时把 MCP-5 已暂存的快照一并带走，MCP-5
+  随后的 `git commit -F` 报「no changes added」。内容零丢失零改写（`git show --stat
+  0202a3d` 核过：本票 17 文件 + 对方 1 文件，共 18）。本票内容的验证不受影响且已按提交
+  态补做：`0202a3d` 检出到临时 worktree，`go build`/`go vet`/`go test ./... -count=1`
+  全仓绿（真库实跑，customscompliance postgres 套件 55s）。教训与并行会话文档「提交
+  竞态」一节同款，差别只在方向：暂存区与树同为共享资源，暂存到提交之间的窗口同样只有
+  占号防得住——本次占号占了文件没占「提交动作」，两会话各自合规仍撞上。
