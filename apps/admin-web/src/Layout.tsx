@@ -40,6 +40,15 @@ import {
   ClaimsRecoveryPage,
 } from './pages/visibility';
 import { CustomsCasesPage, CustomsRestrictionsPage } from './pages/customs';
+import {
+  GroupLegalEntitiesPage,
+  BusinessPartiesPage,
+  PartyContractsPage,
+  SupplierAgreementsPage,
+  ServiceProductsPage,
+  ChannelProductCatalogPage,
+  CommercialPoliciesPage,
+} from './pages/party';
 
 // 导航 id → 页面组件。没登记的 id 落到 UnwiredModule 的诚实占位——
 // 导航条目先于页面出现时，缺的是页面不是路由。
@@ -71,6 +80,13 @@ const pageById: Record<string, ComponentType> = {
   'claims-recovery': ClaimsRecoveryPage,
   'customs-cases': CustomsCasesPage,
   'customs-restrictions': CustomsRestrictionsPage,
+  'group-legal-entities': GroupLegalEntitiesPage,
+  'business-parties': BusinessPartiesPage,
+  'party-contracts': PartyContractsPage,
+  'supplier-agreements': SupplierAgreementsPage,
+  'service-products': ServiceProductsPage,
+  'channel-product-catalog': ChannelProductCatalogPage,
+  'commercial-policies': CommercialPoliciesPage,
 };
 
 // 传统控制台外壳：品牌头 + 左侧导航 + 单页区，参考 idp-ui
