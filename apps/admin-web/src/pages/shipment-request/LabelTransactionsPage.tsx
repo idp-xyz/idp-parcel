@@ -132,7 +132,8 @@ export function LabelTransactionsPage() {
       viewState={{
         kind: 'unconfigured',
         title: '面单交易查询端点尚未建立',
-        description: `后端现仅提供提交与决定前撤回两个动作端点，面单交易的查询契约待建；本页不发请求、不含合成数据。场景出处：${info.source}`,
+        // 不数后端现有几个端点——那个数每接一格就变一次，此处只说本页依赖的那一件。
+        description: `面单交易的查询契约尚未建立；本页不发请求、不含合成数据。场景出处：${info.source}`,
       }}
     />
   );

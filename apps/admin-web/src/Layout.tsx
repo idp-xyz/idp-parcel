@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Package } from 'lucide-react';
 import { Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
@@ -12,8 +12,32 @@ import { UnwiredModule } from './pages/UnwiredModule';
 // 页面映射在 page-registry：没登记的 id 落 UnwiredModule 诚实占位——
 // 导航条目先于页面出现时，缺的是页面不是路由。工作台是外壳首页，
 // 不入登记，由这里直接渲染并注入跳转能力。
+//
+// 导航位置的唯一权威是地址栏 hash（#/<模块id>[/<页内子路径>]）：刷新回到原页、
+// 浏览器前进后退可用、模块页可收藏转发。外壳只认第一段并校验其在导航词表内；
+// 后段归各页面自取（如委托查阅用第二段承载详情钻取），外壳不代管页内状态。
+// 点击导航写 hash，状态经 hashchange 事件回流——单一来源，不双写。
+
+function moduleIdFromHash(): string {
+  const first = window.location.hash.replace(/^#\/?/, '').split('/')[0];
+  if (!first) return 'workbench';
+  const id = decodeURIComponent(first);
+  // 未知 id（手改地址、旧链接）落回工作台，不给 UnwiredModule 一个查无出处的 id。
+  return pageTitleById[id] !== undefined ? id : 'workbench';
+}
+
 export function Layout() {
-  const [active, setActive] = useState<string>('workbench');
+  const [active, setActiveState] = useState<string>(moduleIdFromHash);
+
+  useEffect(() => {
+    const onHashChange = () => setActiveState(moduleIdFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const setActive = (id: string) => {
+    window.location.hash = `#/${id}`;
+  };
   const sidebarResize = useResize({
     direction: 'horizontal',
     initialSize: 240,

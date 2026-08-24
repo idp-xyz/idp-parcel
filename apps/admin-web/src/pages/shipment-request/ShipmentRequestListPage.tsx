@@ -4,6 +4,16 @@ import {
   type ListColumn,
   type TemplateViewState,
 } from '../../templates';
+
+// 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<委托标识>），与外壳
+// 的模块级 hash 路由同一约定：刷新回到同一份详情、后退自然收回列表、详情可收藏
+// 转发。外壳只认第一段，本段归本页所有。
+function selectedIdFromHash(): string | null {
+  const segments = window.location.hash.replace(/^#\/?/, '').split('/');
+  return segments[0] === 'shipment-request-inquiry' && segments[1]
+    ? decodeURIComponent(segments[1])
+    : null;
+}
 import { StatusBadgeFor, type DomainStatus } from '../../domain/status';
 import { moduleInfoById } from '../../navigation';
 import { requestStateLabels, problemNote } from './presentation';
@@ -138,11 +148,18 @@ function viewStateOf(
 
 export function ShipmentRequestListPage() {
   const [keyword, setKeyword] = useState('');
-  // 钻取选中：列表与详情共用一个导航位，选中后整区切详情，返回键回列表。
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 钻取选中：列表与详情共用一个导航位，选中后整区切详情。选中态的唯一来源是
+  // hash，点行写 hash、状态经 hashchange 回流，与外壳同一纪律，不双写。
+  const [selectedId, setSelectedId] = useState<string | null>(selectedIdFromHash);
   // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
   const [answer, setAnswer] = useState<ApiResult<ViewsListResponseBody> | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const onHashChange = () => setSelectedId(selectedIdFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -159,7 +176,9 @@ export function ShipmentRequestListPage() {
     return (
       <ShipmentRequestDetailPage
         shipmentRequestId={selectedId}
-        onBack={() => setSelectedId(null)}
+        onBack={() => {
+          window.location.hash = '#/shipment-request-inquiry';
+        }}
       />
     );
   }
@@ -190,7 +209,9 @@ export function ShipmentRequestListPage() {
       columns={columns}
       rows={visibleRows}
       rowKey={(row) => row.shipmentRequestId}
-      onRowClick={(row) => setSelectedId(row.shipmentRequestId)}
+      onRowClick={(row) => {
+        window.location.hash = `#/shipment-request-inquiry/${encodeURIComponent(row.shipmentRequestId)}`;
+      }}
       viewState={viewStateOf(answer, rows.length, retry)}
     />
   );

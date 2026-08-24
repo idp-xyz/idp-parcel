@@ -87,7 +87,10 @@ export function TrackingProjectionPage() {
       viewState={{
         kind: 'unconfigured',
         title: '追踪与异常模块尚未接线',
-        description: `业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
+        // 客户追踪视图读口（GET /customer-tracking-view）已在 parcel-api 建立，但那是
+        // 客户隔离作用域的视图；本页的运营查阅作用域是否复用该读口尚未裁决，裁决前
+        // 不接线——接错作用域比不接更糟（把客户隔离视图当运营全景会漏报）。
+        description: `客户隔离的追踪视图读口已建立，但本页的运营查阅作用域是否复用它尚未裁决；裁决前本页不发请求、不含未确认参数的默认值。场景出处：${info.source}`,
       }}
     />
   );
