@@ -1,9 +1,10 @@
 # VE 索赔受理接线
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 阻塞条件(非票号):工作树里 MCP-3 未提交批次先落提交,见父规格「排序约束」。
+(2026-08-24 认领时核:该批次已随 `463646b` 落库,阻塞已消。)
 
 ## 要做什么
 
@@ -23,3 +24,25 @@ Status: ready-for-agent
 ## 验收
 
 同票 01;另加:未配置缝的答案要在装配测试里钉住(资格未配置那格必须是携带续办的未决,不是 5xx 也不是业务否定)。
+
+## Comments
+
+2026-08-24 随 `20cdc5d` 落库。归属:MCP-4 认领并标 in-progress 后停机(足迹止于票面
+标记,mtime 17:01,cmd/parcel-api 零未提交改动),MCP-9 依用户在通道 9 的指令接手完成;
+票面认领标记系 MCP-4 未提交编辑,随本笔簿记一并带入。
+
+七条缝逐条裁决:Claims、Recoveries、Identities(veidentity.NewRecoveryMatters)、
+Settlement(OutboxLiabilityHandoff 经真 Outbox)与 Clock 五条接真。Eligibility 显式
+未配置,但成因与立票时的预设不同——登记面本身已存在(claim_contract_scope/授权目录,
+经 parcel-ve-register 可登),真适配器 ClaimEligibilityRules 也在;接不上是因为它把
+租户钉在装配期(为受控登记口而设),而 parcel-api 是多租户入口、今天没有租户可钉:
+钉空租户会以「声明不在场」的业务答案顶「没接」,且租户真登记后答案也不变——接错看
+着像接对。缺口是这条缝带租户维的读法,属机制半边,不是等登记。按端口合同「依赖调
+不通作为错误返回」如实报错,审核入口停在指名到缝的未决(装配测试对真库钉住:不是
+error、不是业务否定)。Evidence 显式未配置——归集面机制未建,按端口自设 known=false
+格答「归集无从查起」,不造空清单替客户立补充义务。受理入口不碰两条未配置缝(受理只
+保全提交事实),/claims 客户提交面只见 ClaimReceiver。
+
+装配测试 assemble_claims_test.go 对真库实跑 PASS:受理真实落库、重放走已有项证首笔
+事务提交、资格未决指名到缝、证据缝形状直钉。全仓验证按 20cdc5d 在临时 worktree 检出:
+gofmt 清、build/vet 退 0、go test -count=1 ./... 全 ok(DSN 已设,PG 包实跑非跳过)。
