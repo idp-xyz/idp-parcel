@@ -31,11 +31,11 @@ import (
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
 // 各端点的第二参（应用编排或读口）与 Intake 是两笔独立的接线：提交编排已按审计票 13
-// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄编排按接线票
-// `.scratch/parcel-api-remaining-endpoint-wiring/issues/01` 接真（均经真库，由 main
-// 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库读适配器；其余各格仍以
-// unwired* 占位，各自的接线各自成笔。占位与接真的分辨见 unwired_orchestration.go 的
-// 文件注释。
+// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄编排与 TF 交付双端点按接线票
+// `.scratch/parcel-api-remaining-endpoint-wiring` 的票 01、02 接真（均经真库，由 main
+// 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库读适配器；其余各格（VE
+// 索赔与 CC 外部结果）仍以 unwired* 占位，各自的接线各自成笔。占位与接真的分辨见
+// unwired_orchestration.go 的文件注释。
 //
 // 清单是九项（PS 三、NO 一、TF 二、VE 二、CC 一）。ADR-0055 与开发主线曾把它称作
 // 「七个」，那是把 TF 双端点计作一项的算术口径错，后按逐项枚举定为八项；第九项是
@@ -50,6 +50,7 @@ func assembleBusinessEndpoints(
 	withdrawal shipmenthttp.WithdrawalHandler,
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
 	reception nodeopshttp.ReceptionHandler,
+	delivery tfhttp.DeliveryHandler,
 	trackingViews visibilityhttp.TrackingViewReader,
 ) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
@@ -57,8 +58,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmenthttp.UnconfiguredIntake{}, requestViews)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
-		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
-		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, unwiredDelivery{})},
+		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, unwiredClaims{})},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, unwiredResults{})},

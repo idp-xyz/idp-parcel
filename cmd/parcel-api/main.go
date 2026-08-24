@@ -63,6 +63,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	delivery, err := buildDeliveryOrchestration(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -70,7 +74,7 @@ func run(logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, trackingViews)),
+		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, reception, delivery, trackingViews)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
