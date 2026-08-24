@@ -1,7 +1,7 @@
 # 六项零证据 PBC 的取证推进：先复核 PBC-02/03 建模阻塞，再按简报取证序走
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 
 来源：[票 01](./01-reeval-verdict-bento-gate-stays-blocked.md)「差什么」第 3 条，
 2026-08-21 MCP-3 受用户委托裁断开票。
