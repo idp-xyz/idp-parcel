@@ -186,3 +186,12 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
     （防 ticket-families 族一的键形状错误），needs-info 照旧——裁定后的停放，非悬置。
   - 裁断轮之后余票口径：needs-info 8（全部等租户实例证据或运营真实序，均有裁定记录在案），
     in-progress 为本计划与 MCP-2/5/6 在途 master-data-wiring 批，无「等人裁」格。
+  - **追加（用户批复「继续」，第一档三张按倾向裁关）**：ve-customer-view-per-projection-version/01
+    裁「不留代」（视图版本由披露更正/替代关系驱动，不与投影版本一一对应）、ve-008/05 裁
+    「转手＝原账户终止版本+新账户自转手起算不继承」（实现显式留待上游转手事实机制）、
+    ve-008/06 裁「确立后失效＝终止版本收尾」——三句裁定均已落 VE CONTEXT（规则一句+生命
+    周期两箭头），三票 resolved。**机制队列两行**：①VE 拒绝/撤回态消费扩展（06 的实现半边，
+    上游事实已在，含 UC-VE-008 验收行）；②CC「原案内更正/补充」编排（多版本存储+同笔修
+    declaration-submission 信封 ID 版本段，declaration-envelope-version-dedup/01 随之动工）。
+    余票就此收敛为 needs-info 5：三张等租户证据（PAR-INT-01 ×2、PAR-NET-14）、一张等
+    子域排期（外部标识+面单交易）、一张等②立案（裁定后的停放）。
