@@ -1,8 +1,8 @@
 # 03 network-routing 读面:网络目录 + 服务区域
 
 Category: feature
-Status: ready-for-agent
-Owner: 派 MCP-4
+Status: in-progress
+Owner: MCP-4
 Blocked by: 01(已 resolved 即不阻)
 
 给管理台两页供数:network-catalog(网络目录)、service-areas(服务区域与覆盖)。
