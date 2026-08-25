@@ -31,7 +31,7 @@ AI 功能、SaaS 计费。这些记为方向,等能力范围判据点名真实�
 
 ## 子票
 
-- 01 产品故事文档 —— MCP-3
-- 02 渠道适配缝设计备忘 —— MCP-3
-- 03 PRD 入档与索引 —— MCP-3
+- 01 产品故事文档 —— MCP-3,resolved(8cf351d)
+- 02 渠道适配缝设计备忘 —— MCP-3,resolved(3244e5a)
+- 03 PRD 入档与索引 —— MCP-3,resolved(3f2e606)
 - 04 演示动线(合成 S 端到端) —— 待派,Blocked by: master-data-wiring/06,07,08
