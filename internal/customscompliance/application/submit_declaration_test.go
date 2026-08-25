@@ -19,12 +19,15 @@ var (
 )
 
 type submissionStoreDouble struct {
-	records     map[string]ports.DeclarationSubmissionRecord
-	findErr     error
-	saveErr     error
-	saveResult  ports.DeclarationSubmissionSaveOutcome
-	forceResult bool
-	saves       int
+	records map[string]ports.DeclarationSubmissionRecord
+	findErr error
+	saveErr error
+	// forceResult/saveResult 强制 Save 的答案；forceCorrection 强制 SaveCorrection 答
+	// `当前版已被换`（模拟并发更正赢家先落，见 correct_declaration_test.go）。
+	saveResult      ports.DeclarationSubmissionSaveOutcome
+	forceResult     bool
+	forceCorrection bool
+	saves           int
 }
 
 func newSubmissionStore() *submissionStoreDouble {
@@ -469,6 +472,7 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 			application.ReadinessUnconfigured, application.AuthorityUnavailable,
 			application.AuthorityUnconfigured, application.VersionIdentityUnavailable,
 			application.CaseAuthorityUnavailable, application.UnitStoreUnavailable,
+			application.FollowUpStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -476,11 +480,11 @@ func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 8 {
+		if len(labels) != 9 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.DeclarationUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第十个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

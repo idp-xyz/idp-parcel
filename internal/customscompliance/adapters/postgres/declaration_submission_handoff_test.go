@@ -78,15 +78,17 @@ func declarationIntent(t *testing.T, tenant, unit, procedure, version string) po
 	}
 }
 
-func declarationEventID(tenant, unit, procedure string) string {
-	return tenant + "/" + unit + "/" + procedure
+// declarationEventID 与被测拼法同构：目标三维加版本维——原案内更正在同一目标下换版
+// 出第二封，ID 不带版本维时第二封会被 EnqueueOnce 静默吞掉。
+func declarationEventID(tenant, unit, procedure, version string) string {
+	return tenant + "/" + unit + "/" + procedure + "/" + version
 }
 
 func TestDeclarationSubmissionIntentCommitsAtomicallyWithTheRecord(t *testing.T) {
 	fixture := newDeclarationHandoffFixture(t)
 	ctx := t.Context()
 	intent := declarationIntent(t, "tenant-a", "unit-1", "export-procedure/v1", "version-1")
-	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1")
+	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1", "version-1")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		if _, err := fixture.submissions.Save(txCtx, intent.Record); err != nil {
@@ -126,7 +128,7 @@ func TestDeclarationSubmissionIntentRollbackDropsBoth(t *testing.T) {
 	fixture := newDeclarationHandoffFixture(t)
 	ctx := t.Context()
 	intent := declarationIntent(t, "tenant-a", "unit-1", "export-procedure/v1", "version-1")
-	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1")
+	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1", "version-1")
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -163,7 +165,7 @@ func TestResendingTheSameDeclarationSubmissionIntentIsIdempotent(t *testing.T) {
 	fixture := newDeclarationHandoffFixture(t)
 	ctx := t.Context()
 	intent := declarationIntent(t, "tenant-a", "unit-1", "export-procedure/v1", "version-1")
-	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1")
+	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1", "version-1")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffDeclarationSubmission(txCtx, intent)
@@ -179,7 +181,7 @@ func TestResendingTheSameDeclarationSubmissionIntentIsIdempotent(t *testing.T) {
 func TestDeclarationSubmissionIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newDeclarationHandoffFixture(t)
 	intent := declarationIntent(t, "tenant-a", "unit-1", "export-procedure/v1", "version-1")
-	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1")
+	eventID := declarationEventID("tenant-a", "unit-1", "export-procedure/v1", "version-1")
 	if err := fixture.handoff.HandOffDeclarationSubmission(t.Context(), intent); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}

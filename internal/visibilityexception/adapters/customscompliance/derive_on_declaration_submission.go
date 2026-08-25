@@ -29,12 +29,15 @@ var (
 		"visibility exception customscompliance adapter: untranslatable declaration submission answer")
 )
 
-// DeclarationSubmissionFinder 按提交申报幂等键取回提交记录。由 CC 的
-// DeclarationSubmissionStore 满足。只取一法：本适配器不写 CC 的库。
+// DeclarationSubmissionFinder 按信封宣告的提交版本取回留存版本。由 CC 的
+// DeclarationSubmissionStore 满足。只取一法：本适配器不写 CC 的库。按版本而不按
+// 目标键读——原案内更正落地后同一目标容纳多版本（CC 迁移 0012），按键只答当前版，
+// 迟到重放旧版信封会读到新版内容撞出假冲突；按版本读回的所指不随当前版推进漂移。
 type DeclarationSubmissionFinder interface {
-	FindByKey(
+	FindByVersion(
 		ctx context.Context,
-		key ccports.DeclarationSubmissionKey,
+		tenant ccdomain.TenantID,
+		version ccdomain.SubmissionVersionID,
 	) (ccports.DeclarationSubmissionRecord, bool, error)
 }
 
@@ -48,8 +51,10 @@ type SubmissionProjectionHandler interface {
 }
 
 // DeriveOnDeclarationSubmissionAdapter 是 veinbox.DeclarationSubmissionConsumer 的
-// 真实处理方：按三维键重读 CC 提交版本、按载荷版本维核对版本身份，对成员快照逐包裹
-// 译成已接受源事实命令，交给派生编排（ADR-0066 消费侧循环拆分）。
+// 真实处理方：按载荷版本维重读 CC 留存的那一版、以三维目标键交叉核对，对成员快照
+// 逐包裹译成已接受源事实命令，交给派生编排（ADR-0066 消费侧循环拆分）。原案内更正
+// 版携带的前身（CorrectedFrom）译成来源事实替代关系——由源上下文随更正一并给出
+// （VE CONTEXT 词条），本适配器只登记不推断。
 //
 // 成员快照携带的卷宗、角色与授权引用不译进事实——投影按包裹立键，只引用源事实，
 // 不复制申报本体。
@@ -73,7 +78,7 @@ func NewDeriveOnDeclarationSubmissionAdapter(
 
 var _ veinbox.FormedDeclarationSubmissionHandler = (*DeriveOnDeclarationSubmissionAdapter)(nil)
 
-// HandleFormedDeclarationSubmission 按信封三维取回提交版本，对成员快照逐包裹派生投影。
+// HandleFormedDeclarationSubmission 按载荷版本取回留存版本，对成员快照逐包裹派生投影。
 //
 // 一封信一笔事务：任一成员未决或意图未交即整封报错回滚、重投从头再跑（头端阻塞是
 // ADR-0066 认下的代价，换整封原子）；单成员业务终局（冲突、不接受）入账继续。业务
@@ -87,7 +92,7 @@ func (adapter *DeriveOnDeclarationSubmissionAdapter) HandleFormedDeclarationSubm
 	if err != nil {
 		return err
 	}
-	record, found, err := adapter.submissions.FindByKey(ctx, key)
+	record, found, err := adapter.submissions.FindByVersion(ctx, key.TenantID, declared)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDeclarationSubmissionNotVisible, err)
 	}
@@ -96,16 +101,11 @@ func (adapter *DeriveOnDeclarationSubmissionAdapter) HandleFormedDeclarationSubm
 			ErrDeclarationSubmissionNotVisible, formed.UnitID, formed.Procedure, formed.VersionID)
 	}
 	version := record.Version
-	if record.Key != key || version.Unit() != key.Unit {
+	// 三维目标键交叉核对：按版本取回的行必须就是信封宣告的那个逻辑申报目标——
+	// 不符即仓储不变量已破（版本标识按租户唯一，指到别的单元说明键被写串了）。
+	if record.Key != key || version.Unit() != key.Unit || version.ID() != declared {
 		return fmt.Errorf("%w: unit %q procedure %q version %q",
 			ErrDeclarationSubmissionRecordInconsistent, formed.UnitID, formed.Procedure, formed.VersionID)
-	}
-	// 版本维核对：载荷宣告的版本必须就是库里留存的那一版——今天一键一行一版本，
-	// 不符即仓储不变量已破。「原案内更正」编排落地把存储改成多版本时，这里随该票
-	// 换成按版本读回，不靠信封 ID（它今天不含版本维，已立案挂账）。
-	if version.ID() != declared {
-		return fmt.Errorf("%w: unit %q stored version %q envelope version %q",
-			ErrDeclarationSubmissionRecordInconsistent, formed.UnitID, version.ID(), formed.VersionID)
 	}
 	if version.FixedAt().IsZero() || record.RecordedAt.IsZero() {
 		return fmt.Errorf("%w: unit %q procedure %q version %q",
@@ -183,12 +183,19 @@ func declarationSubmissionProjectionCommand(
 	if err != nil {
 		return none, fmt.Errorf("%w: source fact: %v", ErrDeclarationSubmissionUntranslatableAnswer, err)
 	}
-	// 版本取提交版本标识：这是本消费面第一个真版本维——「原案内更正」保留申报单元
-	// 身份、同键形成新提交版本时，同一引用换版本，两代按 ADR-0065 各自留存不相互
-	// 覆盖；替代关系等源上下文随更正给出，本适配器不推断。
+	// 版本取提交版本标识：「原案内更正」保留申报单元身份、同键形成新提交版本时，
+	// 同一引用换版本，两代按 ADR-0065 各自留存不相互覆盖。
 	factVersion, err := vedomain.NewSourceFactVersion(record.Version.ID().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: submission version: %v", ErrDeclarationSubmissionUntranslatableAnswer, err)
+	}
+	// 替代关系由源上下文随更正一并给出（VE CONTEXT「来源事实替代关系」）：更正版
+	// 记录携带被更正的前身版本，这里只转写不推断；首版无前身即首登事实。
+	var supersedes vedomain.SourceFactVersion
+	if record.CorrectedFrom.String() != "" {
+		if supersedes, err = vedomain.NewSourceFactVersion(record.CorrectedFrom.String()); err != nil {
+			return none, fmt.Errorf("%w: corrected from: %v", ErrDeclarationSubmissionUntranslatableAnswer, err)
+		}
 	}
 	// 形成是一件事、无语义分支，单一类型字面量；映不映成里程碑由版本化映射目录决定，
 	// 未配置即如实未归类。
@@ -205,6 +212,7 @@ func declarationSubmissionProjectionCommand(
 			Fact:        fact,
 			Kind:        kind,
 			Version:     factVersion,
+			Supersedes:  supersedes,
 			OccurredAt:  occurred,
 			EffectiveAt: occurred,
 			ReceivedAt:  record.RecordedAt,

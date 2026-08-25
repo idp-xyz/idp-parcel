@@ -15,12 +15,18 @@ var followUpAt = time.Date(2026, 8, 13, 19, 0, 0, 0, time.UTC)
 type followUpStoreDouble struct {
 	targets   map[ports.FollowUpTargetKey]domain.FollowUpTarget
 	relations map[ports.FollowUpTargetKey]domain.ReplacementRelation
+	// findErr 注入目标读口故障（更正编排的 FOLLOW_UP_STORE_UNAVAILABLE 格用它，
+	// 见 correct_declaration_test.go）。
+	findErr error
 }
 
 func (double *followUpStoreDouble) FindTarget(
 	_ context.Context,
 	key ports.FollowUpTargetKey,
 ) (domain.FollowUpTarget, bool, error) {
+	if double.findErr != nil {
+		return domain.FollowUpTarget{}, false, double.findErr
+	}
 	target, found := double.targets[key]
 	return target, found, nil
 }

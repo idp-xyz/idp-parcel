@@ -33,6 +33,9 @@ const (
 	DeclarationUndecided
 	DeclarationCaseUnknown
 	DeclarationUnitConflict
+	DeclarationCorrected
+	DeclarationPriorMissing
+	DeclarationCorrectionUnbased
 )
 
 func (outcome DeclarationOutcome) String() string {
@@ -55,6 +58,12 @@ func (outcome DeclarationOutcome) String() string {
 		return "CASE_UNKNOWN"
 	case DeclarationUnitConflict:
 		return "UNIT_CONFLICT"
+	case DeclarationCorrected:
+		return "DECLARATION_CORRECTED"
+	case DeclarationPriorMissing:
+		return "PRIOR_SUBMISSION_NOT_FOUND"
+	case DeclarationCorrectionUnbased:
+		return "CORRECTION_TARGET_NOT_CURRENT"
 	default:
 		return ""
 	}
@@ -74,6 +83,7 @@ const (
 	VersionIdentityUnavailable
 	CaseAuthorityUnavailable
 	UnitStoreUnavailable
+	FollowUpStoreUnavailable
 )
 
 func (reason DeclarationUndecidedReason) String() string {
@@ -94,6 +104,8 @@ func (reason DeclarationUndecidedReason) String() string {
 		return "CASE_LOOKUP_UNAVAILABLE"
 	case UnitStoreUnavailable:
 		return "UNIT_STORE_UNAVAILABLE"
+	case FollowUpStoreUnavailable:
+		return "FOLLOW_UP_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -205,8 +217,9 @@ func (handler *SubmitDeclarationHandler) Handle(
 	}
 	if found {
 		if existing.ContentDigest != digest {
-			// 同一逻辑申报目标携带不同组成或快照：已固定版本不可覆盖，修订走撤销
-			// 重报，不在这里顶替。
+			// 同一逻辑申报目标携带不同组成或快照：已固定版本不可覆盖，不在这里顶替。
+			// 保留单元身份的修订走原案内更正/补充（CorrectDeclarationHandler，要先有
+			// 已形成的后续动作目标）；不保留身份的走撤销重报（新逻辑申报目标）。
 			return SubmitDeclarationResult{outcome: DeclarationSourceConflict}, nil
 		}
 		// 重复提交：返回原版本，不重复形成（硬句 168）。内容指纹不含案件维（案件属

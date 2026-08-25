@@ -54,12 +54,25 @@ type declarationSubmissionPayload struct {
 	CaseID    string `json:"caseId"`
 }
 
-func declarationSubmissionEventID(key ports.DeclarationSubmissionKey) string {
+// declarationSubmissionEventID 按（逻辑申报目标+提交版本）四维认领信封。版本维必须
+// 在 ID 上：原案内更正在同一逻辑申报目标下形成第二版（CONTEXT 硬句 169），EnqueueOnce
+// 按（来源+事件 ID）先查后插、查到即静默成功——ID 不带版本维，第二版意图必然被首版
+// 信封吞掉且无任何一环报错（declaration-envelope-version-dedup/01 坐实的机制坑）。
+// 重放同一版本仍重发同一份，ADR-0043 的幂等语义不变。
+func declarationSubmissionEventID(key ports.DeclarationSubmissionKey, version string) string {
+	return declarationSubmissionPartitionKey(key) + "/" + version
+}
+
+// declarationSubmissionPartitionKey 是同一逻辑申报目标的分区锚：版本演进必须保序
+// （V2 的替代关系指着 V1，乱序消费让下游先见后继再见前身），所以分区键取三维目标键
+// 不含版本——同一目标的各版本进同一分区，不同目标互不阻塞。
+func declarationSubmissionPartitionKey(key ports.DeclarationSubmissionKey) string {
 	return key.TenantID.String() + "/" + key.Unit.String() + "/" + key.Procedure.String()
 }
 
-// HandOffDeclarationSubmission 把一份意图入队。信封 ID 取幂等键——意图由幂等键认领
-// （ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// HandOffDeclarationSubmission 把一份意图入队。信封 ID 由目标键加版本认领（ADR-0043：
+// 意图由结果标识认领——提交版本就是这次结果的标识）。键或版本缺席是装配缺陷，响亮
+// 报错不入队。
 func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 	ctx context.Context,
 	intent ports.DeclarationSubmissionHandoffIntent,
@@ -67,6 +80,9 @@ func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 	key := intent.Record.Key
 	if key.TenantID.String() == "" || key.Unit.String() == "" || key.Procedure.String() == "" {
 		return fmt.Errorf("hand off declaration submission: receive key is required")
+	}
+	if intent.Record.Version.ID().String() == "" {
+		return fmt.Errorf("hand off declaration submission: the submission version is required")
 	}
 	// 案件维必填（ADR-0073 决定五）：缺席是装配缺陷，响亮报错不入队——静默发出去
 	// 会在下游译码处变毒丸。
@@ -86,7 +102,7 @@ func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := declarationSubmissionEventID(key)
+	eventID := declarationSubmissionEventID(key, intent.Record.Version.ID().String())
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),
@@ -95,7 +111,7 @@ func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      intent.Record.Version.ID().String(),
-		PartitionKey: eventID,
+		PartitionKey: declarationSubmissionPartitionKey(key),
 		OccurredAt:   intent.Record.Version.FixedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

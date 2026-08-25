@@ -18,16 +18,17 @@ func newSubmissionIndex(t *testing.T) (*adapter.SubmissionIndex, *viewFixture) {
 }
 
 // seedSubmission 直接写提交行：本索引读的是申报链自己的表，因此夹具也从那张表播种。
+// is_current 显式给 true——迁移 0012 撤掉了列默认，播种方与写入方同责。
 func seedSubmission(t *testing.T, fixture *viewFixture, tenant, unit, version string) {
 	t.Helper()
 	fixture.seed(t,
 		`INSERT INTO customs_compliance.declaration_submission
 			(tenant_id, unit_id, procedure_ref, version_id, content_digest,
 			 members, dossier_ref, roles_ref, readiness_basis, authority_ref,
-			 fixed_at, recorded_at)
+			 is_current, fixed_at, recorded_at)
 		 VALUES ($1, $2, 'EXPORT/GENERAL', $3, 'digest-1',
 			 '["parcel-1"]', 'dossier/v1', 'roles/v1', 'readiness/v1', 'authority/v1',
-			 $4, $4)`,
+			 true, $4, $4)`,
 		tenant, unit, version, viewBaseAt)
 }
 

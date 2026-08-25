@@ -511,6 +511,10 @@ type DeclarationSubmissionRecord struct {
 	Version       domain.CustomsSubmissionVersion
 	Attempt       domain.SubmissionAttempt
 	RecordedAt    time.Time
+	// CorrectedFrom 指名被本版本更正的前一版（原案内更正/补充，CONTEXT 硬句 169）；
+	// 零值即首版。替代关系由源上下文随更正一并给出（VE CONTEXT「来源事实替代关系」
+	// 的所有权句），这一格就是它的来处——下游消费按它登记替代，不自行推断谁更正了谁。
+	CorrectedFrom domain.SubmissionVersionID
 }
 
 type DeclarationSubmissionSaveOutcome uint8
@@ -521,10 +525,31 @@ const (
 	DeclarationSubmissionAlreadyRecorded
 )
 
+// DeclarationCorrectionSaveOutcome 是原案内更正写入的封闭两格。`当前版已被换`不是
+// 错误——并发更正先落或迟到重放都会撞上它，调用方读回当前版再按内容分格作答；没有
+// 覆盖格是有意的：更正只允许接在当前版之后，接旧版等于把版本链改写成树。
+type DeclarationCorrectionSaveOutcome uint8
+
+const (
+	DeclarationCorrectionSaveOutcomeInvalid DeclarationCorrectionSaveOutcome = iota
+	DeclarationCorrectionSaved
+	DeclarationCorrectionCurrentMoved
+)
+
 // DeclarationSubmissionStore 按幂等键找回并保存提交申报（写入代数同 ADR-0031）。
+// FindByKey 交回当前版；FindByVersion 按版本读回留存版本（原案内更正后原版本永久
+// 保留，CONTEXT 硬句 169——下游按信封宣告的版本取数，不受当前版推进影响）。
+// SaveCorrection 在同一事务里把 CorrectedFrom 指名的当前版转为非当前并落新版本行，
+// 前版内容一列不改。
 type DeclarationSubmissionStore interface {
 	FindByKey(ctx context.Context, key DeclarationSubmissionKey) (DeclarationSubmissionRecord, bool, error)
+	FindByVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.SubmissionVersionID,
+	) (DeclarationSubmissionRecord, bool, error)
 	Save(ctx context.Context, record DeclarationSubmissionRecord) (DeclarationSubmissionSaveOutcome, error)
+	SaveCorrection(ctx context.Context, record DeclarationSubmissionRecord) (DeclarationCorrectionSaveOutcome, error)
 }
 
 // ReadinessView 取申报单元的就绪判断。found=false 表示资格目录/就绪规则未配置——

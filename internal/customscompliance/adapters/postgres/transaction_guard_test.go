@@ -139,6 +139,9 @@ func TestCaseAggregateWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := submissions.Save(ctx, ports.DeclarationSubmissionRecord{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存申报提交应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := submissions.SaveCorrection(ctx, ports.DeclarationSubmissionRecord{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务保存原案内更正应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	dispositions, err := adapter.NewDispositionVerifications(db)
 	if err != nil {

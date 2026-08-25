@@ -17,16 +17,18 @@ import (
 var submissionFixedAt = time.Date(2026, 8, 19, 8, 0, 0, 0, time.UTC)
 
 type submissionFinderDouble struct {
-	record ccports.DeclarationSubmissionRecord
-	found  bool
-	err    error
-	last   ccports.DeclarationSubmissionKey
+	record      ccports.DeclarationSubmissionRecord
+	found       bool
+	err         error
+	lastTenant  ccdomain.TenantID
+	lastVersion ccdomain.SubmissionVersionID
 }
 
-func (double *submissionFinderDouble) FindByKey(
-	_ context.Context, key ccports.DeclarationSubmissionKey,
+func (double *submissionFinderDouble) FindByVersion(
+	_ context.Context, tenant ccdomain.TenantID, version ccdomain.SubmissionVersionID,
 ) (ccports.DeclarationSubmissionRecord, bool, error) {
-	double.last = key
+	double.lastTenant = tenant
+	double.lastVersion = version
 	if double.err != nil {
 		return ccports.DeclarationSubmissionRecord{}, false, double.err
 	}
@@ -161,8 +163,8 @@ func TestAMismatchedDeclarationSubmissionKeyIsInconsistentNotUndecided(t *testin
 	}
 }
 
-// Covers: 版本维核对——今天一键一行一版本，库里留存的版本与载荷宣告不符即仓储不变
-// 量已破，响亮报错，不静默派生另一代。
+// Covers: 版本维核对——按版本取回的行必须就是所请求的那一版，读口答非所问即仓储
+// 不变量已破，响亮报错，不静默派生另一代。
 func TestAStoredVersionDifferentFromTheEnvelopeIsInconsistent(t *testing.T) {
 	record := fixedSubmissionRecord(t, "parcel-1")
 	derive := &caseCountingHandler{}
@@ -223,7 +225,9 @@ func TestAnUntranslatableDeclarationSubmissionReferenceKeepsItsSentinel(t *testi
 	}
 }
 
-func TestDeclarationSubmissionFindByKeyCarriesAllThreeDimensions(t *testing.T) {
+// Covers: 取数走版本维——租户是隔离边界必须在签名上，版本是信封宣告的那一版；目标
+// 三维键只作交叉核对，不再是取数键（多版本后按键只答当前版，迟到重放旧版会读串）。
+func TestDeclarationSubmissionLookupCarriesTenantAndVersion(t *testing.T) {
 	finder := &submissionFinderDouble{record: fixedSubmissionRecord(t, "parcel-1"), found: true}
 	handler, _, _ := caseDeriveHandler(t, caseMappingViewDouble{configured: false}, caseProjectionDownstreamDouble{})
 	subject, err := adapter.NewDeriveOnDeclarationSubmissionAdapter(finder, handler)
@@ -233,10 +237,35 @@ func TestDeclarationSubmissionFindByKeyCarriesAllThreeDimensions(t *testing.T) {
 	if err := subject.HandleFormedDeclarationSubmission(t.Context(), formedSubmissionRef()); err != nil {
 		t.Fatalf("处理提交：%v", err)
 	}
-	if finder.last.TenantID.String() != "tenant-1" ||
-		finder.last.Unit.String() != "unit-1" ||
-		finder.last.Procedure.String() != "US-IMPORT/TYPE-86" {
-		t.Fatalf("FindByKey 键 = %+v；三维缺一不可", finder.last)
+	if finder.lastTenant.String() != "tenant-1" || finder.lastVersion.String() != "version-1" {
+		t.Fatalf("FindByVersion 键 = %s/%s；租户与版本缺一不可",
+			finder.lastTenant, finder.lastVersion)
+	}
+}
+
+// Covers: 来源事实替代关系由源上下文随更正一并给出（VE CONTEXT 词条）——更正版记录
+// 携带 CorrectedFrom，逐成员事实登记 Supersedes 指向前身版本；本适配器只转写不推断。
+func TestACorrectedSubmissionCarriesItsSupersededVersion(t *testing.T) {
+	record := fixedSubmissionRecord(t, "parcel-1")
+	record.CorrectedFrom = caseValue(t, ccdomain.NewSubmissionVersionID, "version-0")
+	finder := &submissionFinderDouble{record: record, found: true}
+	handler, facts, _ := caseDeriveHandler(t,
+		caseMappingViewDouble{configured: false}, caseProjectionDownstreamDouble{})
+	subject, err := adapter.NewDeriveOnDeclarationSubmissionAdapter(finder, handler)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+	if err := subject.HandleFormedDeclarationSubmission(t.Context(), formedSubmissionRef()); err != nil {
+		t.Fatalf("处理更正版：%v", err)
+	}
+	stored, found := facts.byKey[submissionFactKey(t, "parcel-1")]
+	if !found {
+		t.Fatal("更正版成员事实没落库")
+	}
+	supersedes, superseding := stored.Fact.Supersedes()
+	if !superseding || supersedes.String() != "version-0" {
+		t.Fatalf("替代关系 = %q（在场 %v），want version-0；由源上下文给出的前身必须逐字登记",
+			supersedes, superseding)
 	}
 }
 
