@@ -31,3 +31,6 @@ endpoints_test.go 装配测试跟上、unwired_orchestration.go 若需桩位按 
   `go build ./...`、`go vet ./...` 零告警,设置本机 DSN 后
   `go test -count=1 ./...` 全绿;`go test -count=1 -v ./cmd/parcel-api` 中真库
   装配用例与全部端点未配置用例均 `PASS`,无 `SKIP`。
+- 2026-08-25 MCP-4:审查预告后补验于 `3b6c03d`:商业策略端点对封闭集内全部合法
+  `kind` 均交回字节一致的 403,且未触发读口;网络七族与关务两册已有同款断言。
+  补验后再次执行全仓 build/vet 与带 DSN 的 `go test -count=1 ./...`,结果全绿。
