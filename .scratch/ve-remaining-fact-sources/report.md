@@ -1,5 +1,20 @@
 # 事实源可填性勘察（FACT-SOURCE-FILLABILITY-SCAN）
 
+Status: resolved
+
+## 收口(2026-08-25,MCP-1,核于 a0c2c87)
+
+勘察结论已被后续实现大量消费,使命完成。对账(以 cmd/parcel-dispatch/assemble.go 现行
+装配为准):
+- 四条「可接」中:`final-outcome.formed`(deriveFinalOutcomeConsumer)与
+  `initial-route.formed`(deriveInitialRouteConsumer,含本文勘误所记的载荷补维)已接;
+  `parcel-cancellation.recorded` 仍未接(可接未接,留作后续接线线索);
+  `reachability-judgment.formed` 未接(其「是否算已接受源事实」语义裁定未见落 ADR,仍开)。
+- 「需裁定」三条已裁已接:exception-journey、customs-case、declaration-submission 各有
+  derive 消费者在装配内(一封信 N 对象的裁定见 envelope-n-object-ruling)。
+- 「不可接」各条与未扫范围(SA/PP/PG/VE 自发布)口径未变,后续开票再扫,本报告沉默
+  不当「已确认不可接」。
+
 取证基准：`7d7e138`（detached worktree，非共享树）。切片 PN-06。只读勘察，未改任何 `.go` / `.sql`。
 
 ## 结论先说

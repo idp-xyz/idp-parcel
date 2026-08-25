@@ -1,7 +1,7 @@
 # admin-web 页面 UI/UX 全面开发（2026-08-24 三通道并行轮）
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 
 ## 目标与现状
 
@@ -53,3 +53,10 @@ Status: in-progress
 不再走「登记一律经 7 号」；收口的全量 pnpm build 仍归 7 号统跑。
 （2026-08-24 18:xx 补：3 号 crash 后两新页登记行由接力的 5 号自落，同一纪律；7 号 crash
 后本轮收口 vite build 由 5 号代跑并已绿，7 号复活后可按其票面复跑。）
+
+## 收口（2026-08-25，MCP-1）
+
+五子票 Status 逐一核过均 resolved，按 tracker「父随子清」收口。目标句里唯一延到轮外的
+「追踪视图页在端点形状确认后接真」也已完成：裁决落 ADR-0076，接线经
+ve-operations-tracking-read 四票（前端 ef6e154），提交态 build 绿（2689 模块），已接线
+模块 4。本轮之后的接线工作（2 号主数据区 7 页批等）属新地盘声明，不挂本规格。

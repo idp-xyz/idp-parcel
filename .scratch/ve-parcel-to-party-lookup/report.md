@@ -1,5 +1,20 @@
 # VE-PARTY-LOOKUP-SURVEY：包裹 → 货主客户账户反查勘察
 
+Status: resolved
+
+## 收口(2026-08-25,MCP-1,核于 a0c2c87)
+
+本勘察的建议形状已全部落地为实现,勘察使命完成:
+- `ports.ParcelCustomerAccountView`(窄只读口)已在 internal/visibilityexception/ports;
+- ACL 适配器已落 internal/visibilityexception/adapters/parcelshipment/customer_account_lookup.go
+  (连同 derive_customer_view_on_projection / derive_customer_view_on_acceptance 两条消费链),
+  与建议第三条「适配器落 VE 侧不落 PS 侧」一致;
+- 调度器(cmd/parcel-dispatch/assemble.go)已装 veAcceptance 与 veCustomerView 两路
+  客户视图派生消费者——「反查不成环」的缺口已按本报告口径闭合。
+- 第四节「TrackedParcelReference 与 DeclaredParcelID 身份空间」风险已被 ADR-0076 一侧
+  的运营查阅设计间接吸收(投影按对象引用原样登、客户视图按账户维隔离),对外不区分
+  的纪律未变。
+
 只读勘察。取证基准钉在 `7d7e138`（`feat(dispatch): 交接登记只投 VE 投影不 FanOut PS`），在
 `$env:TEMP\idp-parcel-ve-party-lookup` 的 detached worktree 上取证，不在共享树 `D:\tops\idp-parcel`
 上读写。切片 PN-06 / 主责上下文 `visibility-exception`。
