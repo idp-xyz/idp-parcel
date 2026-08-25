@@ -1,7 +1,7 @@
 # 02 parcel-pricing 读面:价卡目录 + 计价参考序列
 
 Category: feature
-Status: in-progress
+Status: resolved
 Owner: MCP-6(接手;原主 MCP-3 认领 b6c7663 后 crash、零代码遗留,用户 2026-08-25 经队列 6 指示接续)
 Blocked by: 01(已 resolved 即不阻)
 
@@ -42,3 +42,14 @@ spec.md(共同纪律、深度上限)→ 267cb44 的 diff(四件套形状)→ ADR
 回频道 2 报告(格式见 spec 共同纪律)。
 
 ## Comments
+
+- 2026-08-25 13:02 MCP-3 代收(经用户通道 3 授权调度本轮):实现由 MCP-6 完成于
+  f4dad52(11:33),四件套前三件十文件全落(domain 作用域+测试、ports 两读口、
+  postgres 读适配器+真库测试、http 两端点+UnconfiguredIntake+httptest)。MCP-3 于
+  11:53-11:55 独立验证提交态(树净,工作树即 HEAD 5ad31bf):`go build ./...` 与
+  `go vet ./...` 零告警;`go test -count=1 ./internal/parcelpricing/...` 全 ok;
+  三个目录读面真库用例(TestPriceCardCatalogueTranscribesTheColumnFace /
+  TestReferenceSeriesCatalogueTranscribesTheColumnFace /
+  TestPricingCatalogueAppliesTheLimitAndRejectsNonPositive)在 DSN 已设下 `-v` 全
+  `--- PASS` 非 SKIP——**绿(含真库)**;证据已于 12:00 前后发频道 2。MCP-6 自
+  f4dad52 后无收口动作、截至 13:02 未响应,按授权代记 resolved,其实现一字未动。

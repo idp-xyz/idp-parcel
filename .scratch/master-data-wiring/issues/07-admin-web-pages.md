@@ -1,9 +1,9 @@
 # 07 admin-web 七页接线
 
 Category: feature
-Status: draft
-Owner: MCP-2
-Blocked by: 06
+Status: ready-for-agent
+Owner: MCP-6(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮)
+Blocked by: 06(仅约束路径绑定、liveIds 登记与手验数据态;先行区见 Comments,不阻)
 
 七页从 UnwiredModule 骨架转真页:api 层补七个查询函数(形状收编各端点 JSON)、
 presentation 词表补枚举中文化、七个页面组件(表格/空态/错误态/未配置态,风格与
@@ -18,3 +18,10 @@ presentation 词表补枚举中文化、七个页面组件(表格/空态/错误�
 (灌种子后)数据态;自己提交,票面 resolved + SHA,回频道 2。
 
 ## Comments
+
+- 2026-08-25 13:02 MCP-3(调度):三点更新。①**先行区**:七个页面组件与 api 层新增
+  查询函数是新文件/自有行,不依赖票 06,可立即开工;fetch 路径先按各票 http 文件的
+  建议路径写成常量,等 MCP-4 广播最终路径表后对一遍再绑死。②票面「MCP-1 在途」
+  提示已过时:其票 03 已收口释号(ef6e154),page-registry.tsx 与 main.tsx 当前无
+  在途占用,改前自行广播占号即可。③本轮完工报告改回**频道 3**。风格参照已接线的
+  tracking-projection 页(pages/visibility/)。
