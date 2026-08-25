@@ -336,20 +336,42 @@ func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
 	}
 }
 
-func TestPoliciesEndpointAnswersUnconfiguredIntakeWith403(t *testing.T) {
+// Covers: 未配置 Intake 对封闭集内全部 kind 同答——分派参数不能让调用方观察出
+// 任何不同响应，且读口一次也不到达。
+func TestPoliciesEndpointAnswersUnconfiguredIntakeIdenticallyForEveryKind(t *testing.T) {
+	reader := &policyReaderDouble{}
 	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(
 		commercialhttp.UnconfiguredIntake{},
-		&policyReaderDouble{},
+		reader,
 	)
-	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder,
-		httptest.NewRequest(http.MethodGet, "/commercial-policies?kind=PRICE_POLICY", nil))
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatalf("status = %d", recorder.Code)
+	var baseline string
+	for _, kind := range []string{
+		"ACCEPTANCE_RULE_PACKAGE",
+		"PRE_ACCEPTANCE_CONTROL",
+		"PRICE_POLICY",
+		"SETTLEMENT_POLICY",
+		"AS_OF_POLICY",
+	} {
+		recorder := httptest.NewRecorder()
+		target := "/commercial-policies?kind=" + kind
+		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
+
+		if recorder.Code != http.StatusForbidden {
+			t.Fatalf("%s status = %d", kind, recorder.Code)
+		}
+		if code := errorCode(t, recorder); code != "ACCESS_CHANNEL_NOT_CONFIGURED" {
+			t.Fatalf("%s code = %q", kind, code)
+		}
+		if baseline == "" {
+			baseline = recorder.Body.String()
+		} else if recorder.Body.String() != baseline {
+			t.Fatalf("%s 未配置答复与其他策略种类不一致:%s vs %s",
+				kind, recorder.Body.String(), baseline)
+		}
 	}
-	if code := errorCode(t, recorder); code != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-		t.Fatalf("code = %q", code)
+	if len(reader.calls) != 0 {
+		t.Fatalf("未配置 Intake 之后仍触发了读口:%v", reader.calls)
 	}
 }
 
