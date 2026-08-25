@@ -1,8 +1,8 @@
 # 05 party-commercial 读面:服务产品 + 商业规则与策略
 
 Category: feature
-Status: ready-for-agent
-Owner: 派 MCP-6
+Status: in-progress
+Owner: MCP-6(已认领)
 Blocked by: 01(已 resolved 即不阻)
 
 给管理台两页供数:service-products(服务产品与渠道)、commercial-policies
