@@ -1,7 +1,7 @@
 # 06 cmd/parcel-api 装配:七端点登记
 
 Category: feature
-Status: in-progress
+Status: resolved
 Owner: MCP-4(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮)
 Blocked by: 02, 03, 04, 05(四票均已 resolved,不阻)
 
@@ -25,3 +25,9 @@ endpoints_test.go 装配测试跟上、unwired_orchestration.go 若需桩位按 
   (网络二合一端点,以实际构造器为准)、2d5c8ff(关务)、ecf268e(商业二)。
 - 2026-08-25 MCP-4:已认领并开工;先核对四票实际 HTTP 构造器与既有
   `cmd/parcel-api` 装配先例,路径表确认后立即广播。
+- 2026-08-25 MCP-4:完成于 `820c5a4`。七个页面按实际构造器落为六个 GET 入口
+  (网络目录与服务区域共用 `/network-catalog?family=`);`main` 构造四个上下文的
+  真库读适配器,端点统一装配 `UnconfiguredIntake`。验证为**绿(含真库)**:
+  `go build ./...`、`go vet ./...` 零告警,设置本机 DSN 后
+  `go test -count=1 ./...` 全绿;`go test -count=1 -v ./cmd/parcel-api` 中真库
+  装配用例与全部端点未配置用例均 `PASS`,无 `SKIP`。
