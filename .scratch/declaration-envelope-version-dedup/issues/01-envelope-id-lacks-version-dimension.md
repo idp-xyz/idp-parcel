@@ -1,8 +1,8 @@
 # declaration-submission 出账信封 ID 补版本维（或改由版本认领）
 
 Category: bug
-Status: needs-info
-Blocked by: 「原案内更正/补充」编排落地票（尚未立案——那张票动存储键与 `SOURCE_CONFLICT` 分支时，本票随之动工；见下）
+Status: resolved
+Blocked by: 「原案内更正/补充」编排落地票（尚未立案——那张票动存储键与 `SOURCE_CONFLICT` 分支时，本票随之动工；见下）——该编排已于 2026-08-25 随用户授权直接落地（未另立票），本票同笔关坑
 
 ## 问题
 
@@ -32,3 +32,15 @@ Blocked by: 「原案内更正/补充」编排落地票（尚未立案——那�
   提供方发布单位）要防的错误温床；②「原案内更正/补充」是 CC 的一片新机制切片，排期归
   开发主线的优先级序，不由一张今天无触发路径的停放票倒逼。本票状态照旧 needs-info，
   重启条件不变——这是裁定后的停放（裁的是「不提前」），不是无人裁的悬置。
+- 2026-08-25 MCP-1（同日晚些，用户批复「继续」把更正编排排入第二档并授权施工，票转
+  resolved）：**编排与修复同笔落地，与上一条「同笔定形」的裁定一致**——`5a14afb`
+  （CorrectDeclarationHandler + 迁移 0012 多版本存储 + `declarationSubmissionEventID`
+  补版本段/分区键保持三维 + `FindByVersion`/`SaveCorrection` + VE 消费侧按版本读回并把
+  `CorrectedFrom` 登记为来源事实替代关系）、`efdbfa7`（dispatch 期望 ID、分区键门禁例外
+  表摘行、parcel-api 播种补 is_current 三处涟漪）。本票修复面四项逐一落实：eventID 拼法
+  加版本段✓、handoff 测试断言（idempotent/atomic/rollback/foreign 及版本维专项）✓、载荷
+  未动（versionId 原在）✓、消费侧按载荷版本维立账并按版本读回✓；submit_declaration.go
+  「修订走撤销重报」注释口径已随编排修正（保留身份的修订指向更正编排）。验证：提交态
+  worktree 全仓 go test -p 1 -count=1 零 FAIL（79 包 ok，含真库；更正往返用例 -v PASS
+  非 SKIP 出示）。原「重启条件」由用户直接授权兑现，未另立编排票——工作在本票与提交信
+  中记账。
