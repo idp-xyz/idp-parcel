@@ -38,3 +38,7 @@ Layout.tsx 属 7 号地盘、两处文案属 9 号地盘（见 ../spec.md 地盘
 
 - `tsc -b && vite build` 绿（2026-08-24 17:00，2685 模块）；编辑文件零 lint。
 - 提交 SHA：`54ade2e`（同轮另有取消切片传输层 `391f30a`，属 MCP-3 预留地盘，非本票范围）。
+
+## Comments
+
+- 2026-08-25（MCP-1）：第三节第二处文案所记裁决闸已解——裁决落 ADR-0076，追踪页经 ve-operations-tracking-read 票 03 接真（对 GET /tracking-projections 取数），「裁决前不接线」文案随接线一并撤下。
