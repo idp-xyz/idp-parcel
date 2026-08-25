@@ -1,7 +1,7 @@
 # VE 运营追踪读口(追踪页接真裁决落地,方向 B)
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 
 ## 背景与依据
 
@@ -37,3 +37,10 @@ Status: in-progress
 - 02 投影读口与端点施工(3 号,blocked on 01)
 - 03 追踪页前端接线(5 号,blocked on 02)
 - 04 集成收口(7 号,blocked on 03)
+
+## 收口(2026-08-25)
+
+四票全 resolved:01(c6c7914,ADR-0076)、02(267cb44,由 1 号代 crash 会话记账)、
+03(ef6e154,原派 5 号未接手,1 号按用户队列指示接手)、04(提交态 build 绿 +
+引用票 02 含真库绿,1 号接手)。SHA 链与验证种别见票 04 决议。深度上限如规格所记
+未变:PAR-INT-01 登记前,追踪页到「发请求、如实渲染 403 未配置态」一档。
