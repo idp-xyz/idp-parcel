@@ -1,7 +1,7 @@
 # 01 产品故事文档
 
 Category: feature
-Status: in-progress
+Status: resolved
 Owner: MCP-3
 
 写 `docs/product/PRODUCT-STORY.md`:面向商务洽谈的叙事层——卖给谁、解决什么痛、
@@ -25,3 +25,8 @@ Owner: MCP-3
 resolved + SHA。
 
 ## Comments
+
+- 2026-08-25 MCP-3:文档落 `docs/product/PRODUCT-STORY.md`,README 权威职责段加一行
+  (邻行未动,改后复读确认)。六条痛点各指真实机制;差异化四条以真实强项为限;含
+  AI/EER 立场段与商业形态兼容声明(启发⑤⑥);现状段以 page-registry 接线登记处为准,
+  演示数据如实标 S。纯文档零代码。SHA 见提交。
