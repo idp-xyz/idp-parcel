@@ -51,8 +51,12 @@ presentation 词表补枚举中文化、七个页面组件(表格/空态/错误�
   curl 直连与经 vite 代理原路各打六端点(含 family/registry/kind 参数变体)全部 403
   ACCESS_CHANNEL_NOT_CONFIGURED;Edge 无头(--virtual-time-budget=8000)逐页 dump-dom
   验七页:未配置态标题/端点坐标/错误码/解锁条件在场,守卫后「0 个版本/0 条」不再出现。
-  PAR-INT-01 未登记时 403 是诚实答案,不是缺陷。④**数据态留集成轮**:票 08 种子未就绪
-  (其票面 17:44 记录:主库 postgres 业务表零张、迁移 schema 不存在,一键脚本尚在做)。
+  PAR-INT-01 未登记时 403 是诚实答案,不是缺陷。④**数据态留集成轮**,受阻原因两层:
+  种子未就绪只是浅层(票 08 票面 17:44 记录:主库业务表零张、迁移 schema 不存在);更深
+  一层按频道 7 勘察(journey-draft.md,5703b4d):七查阅端点现装配位于 UnconfiguredIntake
+  之后,放行 Intake 只存在于测试替身(grantedCatalogueIntake),vite 代理无旁路——种子
+  先到数据态也取不到数。数据态验证等「隔离环境读面准入」裁决(不归本票),留集成验证轮;
+  本票不自造旁路、不 mock、不绕 Intake(频道 1 于 18:4X 指示,验证完成线即③所列)。
   ⑤环境注记,后人复现要紧:(a)本机 @idpxyz 六包**从来不是**从 npm.pkg.github.com 装的
   ——store 索引名显示源为本地 tarball(原在 C:\Users\topsx\AppData\Local\Temp\idp-ui-tgz,
   已复制到 WSL ~/idp-ui-tgz 防 Temp 清理);WSL 侧重装 node_modules 需临时在 package.json
