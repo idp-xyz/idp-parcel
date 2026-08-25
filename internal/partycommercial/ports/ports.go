@@ -539,3 +539,162 @@ type AuthorityGrantStore interface {
 	) ([]domain.AuthorityGrant, error)
 	SaveGrant(ctx context.Context, grant domain.AuthorityGrant) (GrantSaveOutcome, error)
 }
+
+// ServiceProductCatalogueRow 是服务产品目录上列的一行:一份已入册的服务产品版本,
+// 连同它登记过的服务形态。
+//
+// 上列对象是**版本壳**而不是形态行(ADR-0077 通例下本上下文的对照结论):CONTEXT 把
+// 目录对象定义为「服务产品版本——具有独立身份和适用范围的商业定义版本」,身份、范围、
+// 区间与状态都在版本壳上;形态册只答「它是哪种服务形态」,且缺席是合法的(ADR-0050:
+// 产品缺席不使解析退化)。只列形态行会让未登形态的已发布产品从目录上消失——目录以
+// 缺席说谎。装载方向与 LoadForScope 同派:版本侧驱动,形态左连接。
+//
+// HasEffectiveEnd 为假即开放结束。用显式布尔而不是零值判断:零时刻是一个合法的
+// 绝对时刻,拿它兼作「没有终点」会让补历史的区间读不出来。HasForm 同理:形态未登记
+// 与登记了空形态必须可分辨,后者在库上进不来,前者是本行的常态。
+type ServiceProductCatalogueRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+	Form              string
+	HasForm           bool
+}
+
+// ServiceProductCatalogueRead 是服务产品目录的伴生列表读端口(ADR-0077):管理台
+// service-products 页的供数面。它不拓宽 PublicationRegistry——扩写侧接口会拆全部
+// 写侧测试替身,伴生读端口另立(与 OperationsProjectionRead 不并进 ProjectionStore
+// 同一条理由)。
+//
+// 租户在方法签名上(ADR-0077 Decision 五):目录是租户内部对象,运营查阅的授权边界
+// 只有租户。Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
+// 空目录如实交回空列表(ADR-0077 Decision 四):空表本身就是内容,上列不形成判断。
+type ServiceProductCatalogueRead interface {
+	ListServiceProducts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ServiceProductCatalogueRow, error)
+}
+
+// AssembledRuleRow 是规则包正文里一条按分类归档的规则引用的上列转写。
+type AssembledRuleRow struct {
+	Category  string
+	Reference string
+}
+
+// AcceptanceRulePackageRow 是接单规则包正文册(0014 父子两表)上列的一行:五维适用
+// 性与按分类归档的规则引用。正文照上列,不参与选择——选包仍走版本壳(ADR-0059,
+// 五维不进 ViewRevision),目录读它不改变这一点。
+type AcceptanceRulePackageRow struct {
+	ObjectID          string
+	VersionLabel      string
+	ServiceProduct    string
+	Contract          string
+	LegalEntity       string
+	Scope             string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	DeclaredAt        time.Time
+	Rules             []AssembledRuleRow
+}
+
+// PreAcceptanceControlRow 是接受前财务控制声明册上列的一行。拥有对象是**客户合同
+// 版本**而不是第 5 类策略对象(`PAR-COM-15` 列在合同版本下,库上 object_kind CHECK
+// 钉在 2)——ContractObjectID/ContractVersion 因此指名合同。NotApplicableBasis 只在
+// `不适用`时携带,库上 CHECK 与 requirement 绑定,这里如实转写不补。
+type PreAcceptanceControlRow struct {
+	ContractObjectID   string
+	ContractVersion    string
+	Requirement        string
+	NotApplicableBasis string
+	DeclaredAt         time.Time
+}
+
+// PricePolicyRow 是商业价格政策册上列的一行:方向、方案绑定与政策自己的适用范围。
+// PlanDirection 与 BindingConversion 是发布当时保全的答复与声明(ADR-0057),照列
+// 转写。
+type PricePolicyRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Direction         string
+	PlanRef           string
+	PlanDirection     string
+	BindingConversion string
+	PolicyScope       string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	RegisteredAt      time.Time
+}
+
+// SettlementPolicyRow 是结算政策册上列的一行:方式与六维适用范围平铺(ADR-0044)。
+type SettlementPolicyRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Method            string
+	LegalEntity       string
+	Counterparty      string
+	ContractLabel     string
+	ChargeScope       string
+	Currency          string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	RegisteredAt      time.Time
+}
+
+// AsOfPolicyRow 是时点锚声明册上列的一行:某接单规则包版本为某类下游判断声明的
+// 时点语义与政策版本。它不存时点值本身——取值由消费方逐项形成,目录照实转写。
+type AsOfPolicyRow struct {
+	RulePackageObjectID string
+	RulePackageVersion  string
+	JudgmentType        string
+	SemanticsRef        string
+	PolicyVersion       string
+	DeclaredAt          time.Time
+}
+
+// CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
+// commercial-policies 页的供数面,策略种类是封闭集,每种一个方法。
+//
+// 五种册子:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
+// 结算政策(0011)、时点锚声明(0005)。CONTEXT 词条里的**信用政策**没有独立正文表
+// (版本壳可入册,正文册未建),如实不列——预留一个空方法就是替租户拟一种它还没有
+// 的册子;正文表落库时按封闭集扩方法,不开通用口。
+//
+// 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
+// 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
+// 每个方法只读自己那张册子。
+type CommercialPolicyCatalogueRead interface {
+	ListAcceptanceRulePackages(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]AcceptanceRulePackageRow, error)
+	ListPreAcceptanceControls(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]PreAcceptanceControlRow, error)
+	ListPricePolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]PricePolicyRow, error)
+	ListSettlementPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]SettlementPolicyRow, error)
+	ListAsOfPolicyDeclarations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]AsOfPolicyRow, error)
+}
