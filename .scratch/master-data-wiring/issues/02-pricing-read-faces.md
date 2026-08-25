@@ -1,8 +1,8 @@
 # 02 parcel-pricing 读面:价卡目录 + 计价参考序列
 
 Category: feature
-Status: ready-for-agent
-Owner: 派 MCP-3
+Status: in-progress
+Owner: MCP-3(2026-08-25 10:55 认领)
 Blocked by: 01(已 resolved 即不阻)
 
 给管理台两页供数:price-card-catalog(价卡目录)、reference-series(计价参考序列)。
