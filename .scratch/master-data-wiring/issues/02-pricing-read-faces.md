@@ -2,7 +2,7 @@
 
 Category: feature
 Status: in-progress
-Owner: MCP-3(2026-08-25 10:55 认领)
+Owner: MCP-6(接手;原主 MCP-3 认领 b6c7663 后 crash、零代码遗留,用户 2026-08-25 经队列 6 指示接续)
 Blocked by: 01(已 resolved 即不阻)
 
 给管理台两页供数:price-card-catalog(价卡目录)、reference-series(计价参考序列)。
