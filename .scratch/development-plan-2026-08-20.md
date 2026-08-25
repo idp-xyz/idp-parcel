@@ -154,3 +154,24 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
     （余下 needs-info 全部等实例证据或真实序输入，非等裁决）。**可派池**：Bento 02/03（原有）、
     CC 版本维实现、PG 重放修复——四张互不撞文件可并行，无一占 `assemble.go`/`endpoints.go` 号。
     轨道、串行约束与里程碑判据不动。本轮落档在工作树，提交与推送按分工另行。
+- 2026-08-25 清账轮（MCP-1 受用户「全部 resolved」指令，对 `main=44eeaa6` 起步）：
+  - **UI 接线线收口**：ve-operations-tracking-read 四票全 resolved（ADR-0076 → 端点 267cb44 →
+    前端 ef6e154 → 提交态 build 绿），追踪页成第 4 个已接线模块；admin-web-uiux-20260824 spec
+    父随子清收口；31 骨架页可接线前沿（next-wiring-frontier）三断点复核回填后收口——
+    channel-product-catalog 与 customs-ports-paths 改判阻断（建模先行），service-areas 分半
+    （0008 目录版本 B / 0007 登记册等 ADR-0068 Decision 六）。MCP-2 同日经用户放行开工
+    主数据区 7 页接线批（其地盘声明为准，不挂本计划排期）。
+  - **勘察报告三份收口**：ve-parcel-to-party-lookup（建议已全部落地成实现）、
+    ve-remaining-fact-sources（对账：final-outcome/initial-route 已接，parcel-cancellation
+    可接未接，reachability 语义仍未裁）、envelope-n-object-ruling（裁定已落 ADR-0066）。
+  - **needs-info 十票复核**：route-handoff-delivery-granularity 重启条件①已被 ADR-0066 触发
+    （补注记，等用户点名重裁）；其余九票停放依据逐票核过均仍成立（等 PAR-INT-01/PAR-NET-14
+    实例证据或运营真实序），清单与所缺输入已汇总呈用户。
+  - **协调文档**：mcp1-coordinator-handoff-2026-08-19 转 superseded（内容已被后续轮次消化）；
+    ticket-families 自声明非票无 Status，不动；本计划照旧 in-progress——M4 终点未到，
+    resolved 会是假话。
+  - **Bento 票 02 收口**（可派池清空）：PBC-08 行为面全数取证（`ccbf79e`，十包 68 写口
+    补负向证据 + internal/architecture 常驻门禁，含真库绿），九项 PBC 证据就此齐备；
+    闸门照票 01 裁定保持阻断，B-06 登记另行报批——那是本计划 T4 之外唯一悬着的闸门动作。
+    可派池四张（Bento 02/03、CC 版本维、PG 重放）中 Bento 两张已清；CC 版本维与 PG 重放
+    经本轮盘点票面仍 resolved 记载在案（08-24 轮后已由各会话收口）。

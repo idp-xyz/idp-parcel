@@ -1,5 +1,12 @@
 # 交接：MCP-1 协调会话（PN-06 物理源投影管线）
 
+Status: superseded
+
+> 2026-08-25 MCP-1 注:本档是 2026-08-19 的接棒快照,其待办与禁令已被后续轮次消化
+> (物理源管线闭合、VE-008 解禁并接线、MAP-KIND 落地、死树清册执行完毕、UC-VE-008
+> 客户视图链与 ADR-0076 运营读口先后落地),存活工人名单等断言亦已过期(MCP-2 现役)。
+> 现行轨道以 development-plan-2026-08-20.md 及其复核记录为准;本档仅追溯,不再更新。
+
 工作区副本（下一任 Cursor 会话应 @ 此文件）：`.scratch/mcp1-coordinator-handoff-2026-08-19.md`  
 TEMP 副本（技能默认落点，新会话不会扫）：`C:\Users\topsx\AppData\Local\Temp\idp-parcel-mcp1-handoff-2026-08-19.md`
 

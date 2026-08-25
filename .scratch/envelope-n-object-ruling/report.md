@@ -1,5 +1,16 @@
 # 「一封信 N 个载运对象」裁定备料（ENVELOPE-N-OBJECT-RULING-PREP）
 
+Status: resolved
+
+## 收口(2026-08-25,MCP-1,核于 44eeaa6)
+
+本报告等的裁定已落:[ADR-0066](../../docs/adr/0066-multi-object-envelope-unrolls-per-member-on-the-consumer-side.md)
+(多对象信封在消费侧逐成员展开)。对账现行装配(cmd/parcel-dispatch/assemble.go):
+exception-journey、customs-case、declaration-submission 三路 derive 消费者已装;
+declaration-submission 信封 ID 缺版本维的附带观察已析出为
+declaration-envelope-version-dedup/01(needs-info,机制半边坐实、今天无触发路径)。
+备料使命完成,后续按 ADR-0066 与各接入票走,本报告不再更新。
+
 取证基准：`73cd97d`（detached worktree，非共享树）。只读勘察，未改任何 `.go` / `.sql`，不裁决——本报告列证据与选项，裁决留给 TF/CC/VE owner 的裁定票。
 
 背景：事实源勘察（`.scratch/ve-remaining-fact-sources/report.md`）把 TF 四条（`exception-journey.recorded`、`disposition-execution.recorded`、`regulatory-acceptance.recorded`、`transport-commission.submitted`）与 CC 两条（`declaration-submission.formed`、`customs-case.established`）判为「需裁定」，全卡在同一件事：按信封键重读回的本体带成员清单（`[]CarriedObjectReference` 或 `[]DeclaredParcelReference`），而现行 VE 投影链是一封信派生一个包裹的投影。这六条没有对象级替代品，不裁就永远到不了 VE。
