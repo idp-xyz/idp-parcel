@@ -76,7 +76,8 @@ PAR-INT-01 接入认证未登记,一切新端点装配 UnconfiguredIntake,生产
 - 04 customs-compliance 读面(合规规则库) —— resolved(2d5c8ff)
 - 05 party-commercial 读面(服务产品+商业策略) —— resolved(ecf268e)
 - 06 cmd/parcel-api 装配(七端点登记) —— resolved(820c5a4,补验 3b6c03d)
-- 07 admin-web 七页接线 —— 2026-08-25 18:02 改派 WSL 队列频道 3,证据见票面 Comments
+- 07 admin-web 七页接线 —— resolved(253b449;封存 8cb43e4,票面 06ccf9e;tsc --noEmit 零输出
+  + vite build 绿,七页未配置态经 curl 与无头浏览器验收,数据态留集成轮候种子与读面准入)
 - 08 合成 S 主数据种子包 —— 2026-08-25 18:02 改派 WSL 队列频道 5,证据见票面 Comments
 
 ## 调度轮注记
