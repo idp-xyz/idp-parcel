@@ -1,7 +1,7 @@
 # 03 PRD 入档与索引
 
 Category: feature
-Status: ready-for-agent
+Status: resolved
 Owner: MCP-3
 
 `docs/prd/idp-prd-v0.1.0.md` 目前是未跟踪文件、无索引。按用户定性(参考文档)入档:
@@ -20,3 +20,6 @@ Owner: MCP-3
 PRD 带头注入库,README 索引行加上,自己提交,票面记 resolved + SHA。
 
 ## Comments
+
+- 2026-08-25 MCP-3:PRD 加参考地位头注(除头注外正文一字未改),README 历史材料段
+  加一条(邻行未动,改后复读确认),`docs/prd/` 首次入库。SHA 见提交。

@@ -79,6 +79,7 @@
 - [领域发现问答工作副本](./archive/DOMAIN-DISCOVERY-QA-WORKING-COPY.md)：保留后续访谈期间产生的重复或未完成记录，仅供追溯，不是当前领域规则的权威来源。
 - [参考设计的源价卡抽取](./archive/reference-design-rate-card-extraction-v1.0.1.json)：外部参考设计对源价卡所作抽取的原样保存，含一张 `WEIGHT_ZONE` 价表与 25 项附加费金额；本仓从未核实过它，无任何案例引用它，仅供回查当初怎么抽，**不得作为价卡数据、计价夹具或验收证据使用**。
 - [参考设计（外部交付）](./reference/reference-design/)：外部提供的《国际小包计费与结算平台》整套交付物原件，28 份，含三版最终解决方案、领域模型、Rating Runtime 语义与技术设计、Rating API 契约、治理案例集与 MVP 实施设计；定性见 [ADR-0012](./adr/0012-parcel-pricing-context-within-idp-parcel.md)，**非权威、非规格、非验收依据**，任何规则若只能靠它读懂即属缺陷。原路径为根目录 `foo/`。落点与吸收结论查[吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)。
+- [IDP Parcel 聚合平台 PRD（参考）](./prd/idp-prd-v0.1.0.md)：外部愿景与市场叙事的参考输入，**非权威、非首发范围、非验收依据**；冲突处以产品基线与首发开发主线为准，启发吸收结论见[产品故事](./product/PRODUCT-STORY.md)与[渠道适配缝设计备忘](./design/channel-adapter-seams-design-note.md)。
 
 ## 产品主线阅读顺序
 
