@@ -11,8 +11,10 @@ import (
 // 本文件是版本化网络目录（ADR-0068）的登记边界：七类定义原语的登记行形状与写入口。
 // 行类型自持久化适配器上移到端口层，是因为登记用例（应用层）要以它们表达受理门，
 // 而应用层不得依赖适配器；读侧的快照与选版**刻意不设端口**——解析层存在之前三个
-// 证据视图不读本目录（ADR-0068 Decision 六），把读口抬成端口等于向三口发出邀请，
-// 正是护栏要挡的方向。
+// 证据视图不读本目录（ADR-0068 Decision 六），把选版读口抬成端口等于向三口发出
+// 邀请，正是护栏要挡的方向。catalog_read.go 的运营查阅上列端口（ADR-0077）不属
+// 这一类：它按族列版本行原文，不选版不折叠，形不成判断依据，对三口没有可消费的
+// 形状。
 
 // CatalogTargetKind 是日历与可用性调整的适用对象类别，封闭三类（CONTEXT：针对节点、
 // 网络连接或线路）。
@@ -154,8 +156,9 @@ type ServiceCalendarDefinitionVersion struct {
 	HasEffectiveTo bool
 }
 
-// AvailabilityAdjustmentStatement 是一个临时调整在某时点生效中的当前陈述（该调整
-// 历史链上的最大版本，且其生效窗口覆盖 asOf）。
+// AvailabilityAdjustmentStatement 是一条临时调整陈述——历史链上的一个版本行
+// （形成、变化或解除各成一行）。LoadDefinitionsAt 交回其中的**当前陈述**（历史链
+// 最大版本且生效窗口覆盖 asOf）；登记口与运营查阅上列经手的是任意版本行。
 type AvailabilityAdjustmentStatement struct {
 	Code        string
 	Version     int32
