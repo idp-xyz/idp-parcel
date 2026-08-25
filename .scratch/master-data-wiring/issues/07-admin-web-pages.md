@@ -1,8 +1,8 @@
 # 07 admin-web 七页接线
 
 Category: feature
-Status: in-progress
-Owner: MCP-6(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮)
+Status: resolved(253b449;封存 8cb43e4;验证种类见 Comments 末条)
+Owner: WSL 队列频道 3(2026-08-25 18:02 改派;沿革见 Comments)
 Blocked by: 06(仅约束路径绑定、liveIds 登记与手验数据态;先行区见 Comments,不阻)
 
 七页从 UnwiredModule 骨架转真页:api 层补七个查询函数(形状收编各端点 JSON)、
@@ -39,3 +39,28 @@ presentation 词表补枚举中文化、七个页面组件(表格/空态/错误�
   新主第一步按 parallel-sessions.md 把现行未提交增量原样封存(一字不改、另起一笔、提交
   信写 mtime 证据),再在其上续工。完工报告改报 WSL 队列频道 1(上一轮「改报频道 3」口径
   随该轮结束作废)。
+- 2026-08-25 18:40 WSL 队列频道 3(收口):封存与余量两笔,验证四种,数据态留集成轮。
+  ①**封存** 8cb43e4:原主 13 份未提交增量原样入库(mtime 15:08:41–15:15:02 实测)。核对
+  发现该增量已把 ebe9b04 时的 54 个 tsc 错清零:七页组件、四上下文 api/presentation、
+  liveIds 七行与 main.tsx 前缀配置全部就位,六 GET 路径与 endpoints.go 装配表逐一相符,
+  前端类型与四上下文传输层 json 字段名/outcome 串逐字段核对一致,七项裁决逐条对照落实。
+  ②**余量** 253b449:五页(网络目录/服务区域/合规规则/服务产品/商业策略)过滤条计数摘要
+  加 outcome 守卫——未配置态原样显示「0 个版本/0 条」,与状态区「这不是目录为空」矛盾;
+  pricing 两页与全程追踪页本就有该守卫,补齐同款。③**验证**(WSL,node 20.18.2/pnpm
+  10.32.1/go 1.26.5):tsc --noEmit 零输出;vite build 成功(chunk 体积告警为既有 advisory);
+  curl 直连与经 vite 代理原路各打六端点(含 family/registry/kind 参数变体)全部 403
+  ACCESS_CHANNEL_NOT_CONFIGURED;Edge 无头(--virtual-time-budget=8000)逐页 dump-dom
+  验七页:未配置态标题/端点坐标/错误码/解锁条件在场,守卫后「0 个版本/0 条」不再出现。
+  PAR-INT-01 未登记时 403 是诚实答案,不是缺陷。④**数据态留集成轮**:票 08 种子未就绪
+  (其票面 17:44 记录:主库 postgres 业务表零张、迁移 schema 不存在,一键脚本尚在做)。
+  ⑤环境注记,后人复现要紧:(a)本机 @idpxyz 六包**从来不是**从 npm.pkg.github.com 装的
+  ——store 索引名显示源为本地 tarball(原在 C:\Users\topsx\AppData\Local\Temp\idp-ui-tgz,
+  已复制到 WSL ~/idp-ui-tgz 防 Temp 清理);WSL 侧重装 node_modules 需临时在 package.json
+  加 pnpm.overrides 指向 tarball,装完还原(本轮即如此,package.json 未入库改动)。由此新生
+  的 apps/admin-web/pnpm-lock.yaml 含 file:/home/tops 机器路径,留作未跟踪产物不入库。
+  (b)本机 8080 被 Windows svchost(PID 3516,镜像网络)占用,手验用 IDP_PARCEL_HTTP_ADDR
+  =:18080 起 parcel-api、PARCEL_API_TARGET 指给 vite 代理。(c)手验库用遗留测试库
+  parcel_test_52868_3_08c9f7dcd532(含全 schema,CheckSchema 可过;未配置 Intake 拒在读面
+  之前,库内容不参与),未动频道 5 作业中的 postgres 主库;手验完 api/dev 进程均已停,防
+  「api 绑错库」在集成轮被当成已接好。⑥共享文件本轮未改:page-registry.tsx/main.tsx
+  接线在封存增量内已完整,无需新占号。.go/.sql 零改动。
