@@ -1,7 +1,7 @@
 # 01 ADR-0077:主数据登记目录查阅沿运营读口通例
 
 Category: docs
-Status: in-progress
+Status: resolved
 Owner: MCP-2
 
 前沿调研的裁决债:「每票都要过『运营查阅作用域』的同类裁决,建议各上下文一篇小 ADR
@@ -25,3 +25,6 @@ ADR 文件 + README 索引行落库,提交信引本票。
 
 - 2026-08-25 MCP-2:三断点复核证据(渠道产品目录无 kind 格、口岸路径不在五登记册、
   service-area 族有写入方)记入 spec.md,ADR 引 spec 不复述。
+- 2026-08-25 MCP-2:落库于 `9abcd9b`(ADR-0077 + README 索引行 + 本 feature 全部票面,
+  纯 .md,无 .go/.sql 变动)。README 暂存前 `git diff --cached` 逐块核过只含 0077 一行。
+  票 02-05 解除阻塞。
