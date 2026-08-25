@@ -1,0 +1,7 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "target_kind": "LINE",
+  "target_code": "SYN-LINE-CN-SG-01",
+  "version": 1,
+  "effective_from": "2026-01-01T00:00:00Z"
+}

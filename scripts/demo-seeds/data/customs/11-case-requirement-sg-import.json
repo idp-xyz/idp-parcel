@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "jurisdictionRef": "SYN-JUR-SG",
+  "direction": "IMPORT",
+  "procedureRef": "SYN-PROC-SG-IMPORT",
+  "required": false,
+  "basis": "SYN-BASIS-CASE-REQ-02"
+}

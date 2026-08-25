@@ -1,0 +1,9 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "code": "SYN-LINE-CN-SG-01",
+  "version": 1,
+  "segments": ["SYN-CONN-SHA-SZX", "SYN-CONN-SZX-SIN", "SYN-CONN-SIN-LM"],
+  "business_timezone": "Asia/Shanghai",
+  "applicable_scope": "SYN-SCOPE-01",
+  "effective_from": "2026-01-01T00:00:00Z"
+}

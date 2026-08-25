@@ -1,0 +1,208 @@
+{
+  "items": [
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "SERVICE_PRODUCT",
+      "objectId": "SYN-PROD-CN-SG-EXPRESS",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-PROD-CN-SG-EXPRESS-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-001",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "pendingRoutingBasis": "SYN-BASIS-PENDING-ROUTING-01"
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY",
+      "objectId": "SYN-FIN-CONTROL-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-FIN-CONTROL-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-002",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "ACCEPTANCE_RULE_PACKAGE",
+      "objectId": "SYN-RULEPKG-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-RULEPKG-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-003",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "rulePackageBody": {
+          "serviceProduct": "SYN-PROD-CN-SG-EXPRESS",
+          "contract": "SYN-CONTRACT-01",
+          "legalEntity": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z",
+          "rules": [
+            { "category": "MINIMUM_INGRESS_IDENTITY", "reference": "SYN-RULE-INGRESS-IDENTITY-01" },
+            { "category": "SHIPMENT_INVARIANT", "reference": "SYN-RULE-SHIPMENT-BASIC-01" },
+            { "category": "PRODUCT_AND_CONTRACT_DOCUMENT", "reference": "SYN-RULE-PRODUCT-DOC-01" },
+            { "category": "REGULATORY_SOURCE_DOCUMENT", "reference": "SYN-RULE-CUSTOMS-DOC-01" },
+            { "category": "CROSS_FIELD_CONDITION", "reference": "SYN-RULE-CROSS-FIELD-01" }
+          ]
+        },
+        "acceptanceContent": {
+          "applicableGroups": [
+            "CUSTOMER_RELATIONSHIP",
+            "LEGAL_ENTITY_AND_CONTRACT",
+            "PRODUCT_AND_SERVICE",
+            "REQUIRED_DOCUMENT",
+            "NETWORK_REACHABILITY"
+          ],
+          "manualReview": "NOT_REQUIRED"
+        },
+        "intakeQualification": {
+          "sources": ["NODE_INTAKE", "OFFSITE_PICKUP"],
+          "qualifications": ["SYN-QUAL-REALNAME-01"]
+        },
+        "asOfPolicies": [
+          {
+            "judgment": "NETWORK_REACHABILITY",
+            "semantics": "SYN-ASOF-SUBMIT-TIME",
+            "policyVersion": "SYN-ASOF-POLICY-01"
+          },
+          {
+            "judgment": "PRE_ACCEPTANCE_FINANCIAL_CONTROL",
+            "semantics": "SYN-ASOF-ACCEPT-TIME",
+            "policyVersion": "SYN-ASOF-POLICY-01"
+          }
+        ],
+        "finalRules": [
+          { "outcome": "EFFECTIVE_DELIVERY", "finalKind": "SYN-FINAL-DELIVERY-01" },
+          { "outcome": "RETURN_COMPLETED", "finalKind": "SYN-FINAL-RETURN-01" },
+          { "outcome": "SERVICE_TERMINATED", "finalKind": "SYN-FINAL-TERMINATED-01" },
+          { "outcome": "REGULATORY_DISPOSITION", "finalKind": "SYN-FINAL-REGULATORY-01" }
+        ]
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CUSTOMER_CONTRACT",
+      "objectId": "SYN-CONTRACT-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-CONTRACT-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-004",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "contractContent": {
+          "rulePackage": "SYN-RULEPKG-01",
+          "bindings": [
+            { "chargeScope": "SYN-CHARGE-PREPAID", "policy": "SYN-FIN-CONTROL-01" },
+            { "chargeScope": "SYN-CHARGE-COD", "inapplicabilityBasis": "SYN-BASIS-COD-NA-01" }
+          ]
+        },
+        "preAcceptanceControl": {
+          "requirement": "REQUIRED"
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "PRICE_RULE",
+      "objectId": "SYN-PRICE-RULE-CN-SG",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-PRICE-RULE-CN-SG-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-005",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "AUTHORIZATION_RULE",
+      "objectId": "SYN-AUTH-PRICE-DIR-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-AUTH-PRICE-DIR-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "PRICE_RULE": "SYN-PRICE-RULE-CN-SG"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-006",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "AUTHORIZATION_RULE",
+      "objectId": "SYN-AUTH-COST-DIR-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-AUTH-COST-DIR-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-007",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "AUTHORIZATION_RULE",
+      "objectId": "SYN-AUTH-CANCEL-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-AUTH-CANCEL-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-008",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "cancellationAuthority": [
+          { "party": "CUSTOMER", "rule": "SYN-RULE-CANCEL-CUSTOMER-01" },
+          { "party": "OPERATIONS", "rule": "SYN-RULE-CANCEL-OPS-01" }
+        ]
+      }
+    }
+  ]
+}

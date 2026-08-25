@@ -1,0 +1,7 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "code": "SYN-NODE-SIN-HUB",
+  "version": 1,
+  "business_timezone": "Asia/Singapore",
+  "effective_from": "2026-01-01T00:00:00Z"
+}

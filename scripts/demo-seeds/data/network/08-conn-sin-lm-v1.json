@@ -1,0 +1,9 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "code": "SYN-CONN-SIN-LM",
+  "version": 1,
+  "from_node": "SYN-NODE-SIN-HUB",
+  "to_node": "SYN-NODE-SIN-LM",
+  "business_timezone": "Asia/Singapore",
+  "effective_from": "2026-01-01T00:00:00Z"
+}

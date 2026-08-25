@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "resultLayer": "RELEASE_RESULT",
+  "jurisdictionRef": "SYN-JUR-CN",
+  "ruleRef": "SYN-IR-CN-RELEASE-01",
+  "appliesFrom": "2026-01-01T00:00:00Z"
+}

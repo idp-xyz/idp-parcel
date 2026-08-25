@@ -1,0 +1,11 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "caseRef": "SYN-CASE-CN-SG-01",
+  "obligation": "SYN-OBL-EXPORT-DECL-CLOSURE",
+  "scope": "SYN-SCOPE-01",
+  "state": "CONCLUDED",
+  "basis": "SYN-BASIS-OBL-01",
+  "handedTo": "",
+  "appliesFrom": "2026-01-01T00:00:00Z",
+  "appliesUntil": null
+}

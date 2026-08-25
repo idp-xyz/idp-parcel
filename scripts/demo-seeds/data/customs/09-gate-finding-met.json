@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scopeRef": "SYN-SCOPE-01",
+  "action": "CROSS_CUSTOMS_MOVEMENT",
+  "boundaryRef": "SYN-PROC-CN-EXPORT",
+  "preconditionRef": "SYN-PRE-EXPORT-DECL-RELEASED",
+  "state": "MET"
+}

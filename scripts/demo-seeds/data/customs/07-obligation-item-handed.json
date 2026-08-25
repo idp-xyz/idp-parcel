@@ -1,0 +1,11 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "caseRef": "SYN-CASE-CN-SG-01",
+  "obligation": "SYN-OBL-TAX-FOLLOW-UP",
+  "scope": "SYN-SCOPE-01",
+  "state": "HANDED_OVER",
+  "basis": "SYN-BASIS-OBL-02",
+  "handedTo": "SYN-BROKER-01",
+  "appliesFrom": "2026-01-01T00:00:00Z",
+  "appliesUntil": null
+}

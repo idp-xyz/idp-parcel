@@ -1,0 +1,11 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "code": "SYN-ADJ-TYPHOON-2607",
+  "version": 1,
+  "target_kind": "CONNECTION",
+  "target_code": "SYN-CONN-SHA-SZX",
+  "kind": "SUSPENSION",
+  "source": "SYN-WEATHER-DESK",
+  "effective_at": "2026-07-15T00:00:00Z",
+  "lifted_at": "2026-07-17T00:00:00Z"
+}
