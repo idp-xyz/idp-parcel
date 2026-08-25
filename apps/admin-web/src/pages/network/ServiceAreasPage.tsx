@@ -4,53 +4,50 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
-  listServiceAreas,
-  type ServiceAreaVersionRecord,
-  type ServiceAreaVersionsResponseBody,
+  listNetworkCatalog,
+  type NetworkCatalogListResponseBody,
+  type NetworkVersionRecord,
 } from './api';
 
 const info = moduleInfoById['service-areas'];
 
-const columns: ListColumn<ServiceAreaVersionRecord>[] = [
+// 本轮只读 0008 的服务区域版本骨架(spec「明确不做」与 MCP-3 裁决④):地理覆盖
+// (包含/排除区域)属 0007 network_definition 登记册,该册尚无写入方(PAR-NET-14),
+// 覆盖列尚不存在——页面如实说明,不为它发请求、不虚构列。
+const columns: ListColumn<NetworkVersionRecord>[] = [
   {
     id: 'area',
     header: '服务区域 / 版本',
     render: (row) => (
       <div className="min-w-48">
-        <p className="font-mono font-medium text-idpxyz-text">{row.code}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.version}</p>
+        <p className="font-mono font-medium text-idpxyz-text">{row.code ?? '—'}</p>
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">v{row.version}</p>
       </div>
     ),
-  },
-  {
-    id: 'included-regions',
-    header: '包含区域',
-    className: 'min-w-64 font-mono text-xs',
-    render: (row) => row.includedRegions.join('、'),
-  },
-  {
-    id: 'excluded-regions',
-    header: '排除区域',
-    className: 'min-w-64 font-mono text-xs',
-    render: (row) => row.excludedRegions.join('、') || '—',
   },
   {
     id: 'effective',
     header: '适用区间',
     className: 'min-w-64 font-mono text-xs',
-    render: (row) => formatRange(row.effectiveFrom, row.effectiveTo),
+    render: (row) => (row.effectiveFrom ? formatRange(row.effectiveFrom, row.effectiveTo) : '—'),
+  },
+  {
+    id: 'coverage',
+    header: '地理覆盖',
+    className: 'min-w-64 text-xs text-idpxyz-textMuted',
+    render: () => '尚不存在——0007 登记册无写入方(PAR-NET-14),本页不虚构覆盖关系',
   },
 ];
 
 export function ServiceAreasPage() {
   const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<ServiceAreaVersionsResponseBody> | null>(null);
+  const [answer, setAnswer] = useState<ApiResult<NetworkCatalogListResponseBody> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setAnswer(null);
-    void listServiceAreas().then((next) => {
+    void listNetworkCatalog('service-area').then((next) => {
       if (!cancelled) setAnswer(next);
     });
     return () => {
@@ -61,22 +58,18 @@ export function ServiceAreasPage() {
   const areas = answer?.kind === 'outcome' ? answer.body.versions : [];
   const needle = keyword.trim().toLowerCase();
   const visibleAreas = needle
-    ? areas.filter((row) =>
-        [row.code, ...row.includedRegions, ...row.excludedRegions].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
+    ? areas.filter((row) => (row.code ?? '').toLowerCase().includes(needle))
     : areas;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<ServiceAreaVersionRecord>
+    <ListPageTemplate<NetworkVersionRecord>
       title={info.title}
-      description={`${info.owner}——服务区域不取得客户地址所有权，也不直接证明逻辑可达。`}
+      description={`${info.owner}——版本骨架查阅;地理覆盖列尚不存在(PAR-NET-14),页面不虚构覆盖关系`}
       search={{
         value: keyword,
         onChange: setKeyword,
-        placeholder: '按区域代码或地理范围检索',
+        placeholder: '按区域代码检索',
       }}
       filterSummary={`当前返回 ${areas.length} 个版本`}
       columns={columns}
@@ -86,7 +79,7 @@ export function ServiceAreasPage() {
         module: info,
         endpoint: 'GET /network-catalog?family=service-area',
         emptyTitle: '当前租户尚无服务区域版本',
-        emptyDescription: '读取入口已配置，但服务区域目录为空；页面不会虚构区域与节点关系。',
+        emptyDescription: '读取入口已配置,但服务区域目录为空;页面不会虚构区域与覆盖关系。',
       })}
     />
   );

@@ -2,13 +2,12 @@
 // 形状以 internal/parcelpricing/adapters/http 传输层为准,此处只做镜像不虚构。
 //
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
-// 响应体的 `outcome`。五格判别与全程追踪页同款。
+// 响应体的 `outcome`。五格判别与全程追踪页同款,传输实现收敛在共享 catalogue-api
+// (装配侧只在 bootstrap 配置那一处前缀),本文件只保留本上下文的类型与查询函数。
 
-let apiBase = '';
+import { exchangeMasterData } from '../catalogue-api';
 
-export function configurePricingApi(options: { basePrefix: string }): void {
-  apiBase = options.basePrefix;
-}
+export type { ApiResult } from '../catalogue-api';
 
 export interface PriceCardRecord {
   planId: string;
@@ -58,55 +57,10 @@ export interface ReferenceSeriesListResponseBody {
   series: ReferenceSeriesRecord[];
 }
 
-export type ApiResult<Body> =
-  | { kind: 'outcome'; status: number; body: Body }
-  | { kind: 'unconfigured' }
-  | { kind: 'callerProblem'; status: number; code: string }
-  | { kind: 'noAnswer'; status: number; code: string }
-  | { kind: 'transport'; message: string };
-
-export function listPriceCards(): Promise<ApiResult<PriceCardListResponseBody>> {
-  return exchange<PriceCardListResponseBody>('/pricing-price-cards', { method: 'GET' });
+export function listPriceCards() {
+  return exchangeMasterData<PriceCardListResponseBody>('/pricing-price-cards');
 }
 
-export function listReferenceSeries(): Promise<ApiResult<ReferenceSeriesListResponseBody>> {
-  return exchange<ReferenceSeriesListResponseBody>('/pricing-reference-series', {
-    method: 'GET',
-  });
-}
-
-async function exchange<Body>(path: string, init: RequestInit): Promise<ApiResult<Body>> {
-  let response: Response;
-  try {
-    response = await fetch(apiBase + path, init);
-  } catch (cause) {
-    return {
-      kind: 'transport',
-      message: cause instanceof Error ? cause.message : String(cause),
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await response.json();
-  } catch {
-    return {
-      kind: 'transport',
-      message: `响应不是 JSON(HTTP ${response.status}),请求可能未到达 parcel-api`,
-    };
-  }
-
-  if (response.ok) {
-    return { kind: 'outcome', status: response.status, body: parsed as Body };
-  }
-
-  const code =
-    (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
-  if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
-    return { kind: 'unconfigured' };
-  }
-  if (response.status >= 500) {
-    return { kind: 'noAnswer', status: response.status, code };
-  }
-  return { kind: 'callerProblem', status: response.status, code };
+export function listReferenceSeries() {
+  return exchangeMasterData<ReferenceSeriesListResponseBody>('/pricing-reference-series');
 }

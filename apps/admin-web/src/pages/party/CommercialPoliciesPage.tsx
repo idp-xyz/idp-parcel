@@ -2,21 +2,19 @@ import { useEffect, useState } from 'react';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import type { ApiResult } from '../catalogue-api';
-import { catalogueViewState, formatRange } from '../catalogue-view';
+import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listCommercialPolicies,
-  type CommercialPoliciesResponseBody,
   type CommercialPolicyKind,
+  type CommercialPolicyListResponseBody,
 } from './api';
 import {
-  bindingConversionLabel,
-  checkGroupLabel,
-  commercialDirectionLabel,
-  commercialPolicyKindLabel,
-  commercialStatusLabel,
-  controlRequirementLabel,
-  judgmentTypeLabel,
-  settlementMethodLabel,
+  commercialDirectionLabels,
+  commercialPolicyKinds,
+  controlRequirementLabels,
+  labelOf,
+  policyKindLabels,
+  settlementMethodLabels,
 } from './presentation';
 
 const info = moduleInfoById['commercial-policies'];
@@ -35,65 +33,54 @@ function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
   };
 }
 
-const commonColumns = [
-  col('identity', '政策对象 / 版本', true),
-  col('scopeReference', '适用范围', true),
-  col('effective', '有效区间', true),
-  col('status', '生命周期状态'),
-];
-
-const kinds: ReadonlyArray<{
-  id: CommercialPolicyKind;
-  columns: ListColumn<PolicyRow>[];
-}> = [
-  {
-    id: 'acceptance-control',
-    columns: [
-      ...commonColumns,
-      col('checkGroupType', '校验组'),
-      col('receivablesAccountReference', '应收账户引用', true),
-    ],
-  },
-  {
-    id: 'price',
-    columns: [
-      ...commonColumns,
-      col('direction', '政策方向'),
-      col('pricingPlanReference', '定价方案引用', true),
-      col('planDirection', '方案方向'),
-      col('bindingConversion', '绑定转换'),
-    ],
-  },
-  {
-    id: 'settlement',
-    columns: [
-      ...commonColumns,
-      col('method', '结算方式'),
-      col('legalEntityReference', '责任法人', true),
-      col('counterpartyReference', '相对方', true),
-      col('contractVersion', '合同版本', true),
-      col('chargeScopeReference', '费用范围', true),
-      col('currency', '币种', true),
-    ],
-  },
-  {
-    id: 'contract-control',
-    columns: [
-      ...commonColumns,
-      col('requirement', '接受前财务控制'),
-      col('notApplicableBasis', '不适用依据', true),
-    ],
-  },
-  {
-    id: 'as-of',
-    columns: [
-      ...commonColumns,
-      col('judgmentType', '判断类型'),
-      col('semanticsReference', '时点语义引用', true),
-      col('policyVersion', '时点政策版本', true),
-    ],
-  },
-];
+// 按 kind 换列(MCP-3 裁决⑦):五种册子的行形状互不相同,列向各随其册。种类命名
+// 册子而非商业对象类别;信用政策没有独立正文册,封闭集里如实没有它,页面不预留格。
+const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
+  ACCEPTANCE_RULE_PACKAGE: [
+    col('identity', '规则包 / 版本', true),
+    col('serviceProduct', '服务产品', true),
+    col('contract', '客户合同', true),
+    col('legalEntity', '责任法人', true),
+    col('scope', '适用范围', true),
+    col('rules', '组装规则(类别:引用)', true),
+    col('effective', '有效区间', true),
+    col('declaredAt', '声明时间', true),
+  ],
+  PRE_ACCEPTANCE_CONTROL: [
+    col('contract', '客户合同 / 版本', true),
+    col('requirement', '控制要求'),
+    col('notApplicableBasis', '不适用依据', true),
+    col('declaredAt', '声明时间', true),
+  ],
+  PRICE_POLICY: [
+    col('identity', '政策对象 / 版本', true),
+    col('direction', '政策方向'),
+    col('planRef', '定价方案引用', true),
+    col('planDirection', '方案方向'),
+    col('bindingConversion', '绑定转换', true),
+    col('policyScope', '适用范围', true),
+    col('effective', '有效区间', true),
+    col('registeredAt', '登记时间', true),
+  ],
+  SETTLEMENT_POLICY: [
+    col('identity', '政策对象 / 版本', true),
+    col('method', '结算方式'),
+    col('legalEntity', '责任法人', true),
+    col('counterparty', '相对方', true),
+    col('contractLabel', '合同标签', true),
+    col('chargeScope', '费用范围', true),
+    col('currency', '币种', true),
+    col('effective', '有效区间', true),
+    col('registeredAt', '登记时间', true),
+  ],
+  AS_OF_POLICY: [
+    col('package', '规则包 / 版本', true),
+    col('judgmentType', '判断类型', true),
+    col('semanticsRef', '时点语义引用', true),
+    col('policyVersion', '时点政策版本', true),
+    col('declaredAt', '声明时间', true),
+  ],
+};
 
 const chipClass = (active: boolean) =>
   `px-2.5 py-1 text-[12px] rounded border ${
@@ -102,89 +89,88 @@ const chipClass = (active: boolean) =>
       : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
   }`;
 
-function baseValues(record: {
-  objectId: string;
-  version: string;
-  scopeReference: string;
-  effectiveFrom: string;
-  effectiveTo?: string;
-  status: string;
-}): Record<string, string> {
-  return {
-    identity: `${record.objectId}@${record.version}`,
-    scopeReference: record.scopeReference,
-    effective: formatRange(record.effectiveFrom, record.effectiveTo),
-    status: commercialStatusLabel(record.status),
-  };
-}
-
-function rowsOf(body: CommercialPoliciesResponseBody): PolicyRow[] {
-  switch (body.outcome) {
-    case 'ACCEPTANCE_CONTROL_POLICIES_LISTED':
+// 响应体按 kind 判别(api.ts 的联合),各分支读各自的行形;判断类型与绑定转换是
+// 开放引用集,按原词展示不配词表。
+function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
+  switch (body.kind) {
+    case 'ACCEPTANCE_RULE_PACKAGE':
       return body.policies.map((record) => ({
-        key: `acceptance:${record.objectId}@${record.version}:${record.checkGroupType}`,
+        key: `package:${record.objectId}@${record.version}`,
         values: {
-          ...baseValues(record),
-          checkGroupType: checkGroupLabel(record.checkGroupType),
-          receivablesAccountReference: record.receivablesAccountReference,
+          identity: `${record.objectId}@${record.version}`,
+          serviceProduct: record.serviceProduct,
+          contract: record.contract,
+          legalEntity: record.legalEntity,
+          scope: record.scope,
+          rules: record.rules
+            .map((rule) => `${rule.category}:${rule.reference}`)
+            .join('、'),
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          declaredAt: formatInstant(record.declaredAt),
         },
       }));
-    case 'PRICE_POLICIES_LISTED':
+    case 'PRE_ACCEPTANCE_CONTROL':
+      return body.policies.map((record) => ({
+        key: `control:${record.contractObjectId}@${record.contractVersion}`,
+        values: {
+          contract: `${record.contractObjectId}@${record.contractVersion}`,
+          requirement: labelOf(controlRequirementLabels, record.requirement),
+          notApplicableBasis: record.notApplicableBasis ?? '—',
+          declaredAt: formatInstant(record.declaredAt),
+        },
+      }));
+    case 'PRICE_POLICY':
       return body.policies.map((record) => ({
         key: `price:${record.objectId}@${record.version}`,
         values: {
-          ...baseValues(record),
-          direction: commercialDirectionLabel(record.direction),
-          pricingPlanReference: record.pricingPlanReference,
-          planDirection: commercialDirectionLabel(record.planDirection),
-          bindingConversion: bindingConversionLabel(record.bindingConversion),
+          identity: `${record.objectId}@${record.version}`,
+          direction: labelOf(commercialDirectionLabels, record.direction),
+          planRef: record.planRef,
+          planDirection: labelOf(commercialDirectionLabels, record.planDirection),
+          bindingConversion: record.bindingConversion,
+          policyScope: record.policyScope,
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          registeredAt: formatInstant(record.registeredAt),
         },
       }));
-    case 'SETTLEMENT_POLICIES_LISTED':
+    case 'SETTLEMENT_POLICY':
       return body.policies.map((record) => ({
         key: `settlement:${record.objectId}@${record.version}`,
         values: {
-          ...baseValues(record),
-          method: settlementMethodLabel(record.method),
-          legalEntityReference: record.legalEntityReference,
-          counterpartyReference: record.counterpartyReference,
-          contractVersion: record.contractVersion,
-          chargeScopeReference: record.chargeScopeReference,
+          identity: `${record.objectId}@${record.version}`,
+          method: labelOf(settlementMethodLabels, record.method),
+          legalEntity: record.legalEntity,
+          counterparty: record.counterparty,
+          contractLabel: record.contractLabel,
+          chargeScope: record.chargeScope,
           currency: record.currency,
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          registeredAt: formatInstant(record.registeredAt),
         },
       }));
-    case 'CONTRACT_CONTROL_DECLARATIONS_LISTED':
+    case 'AS_OF_POLICY':
       return body.policies.map((record) => ({
-        key: `contract-control:${record.objectId}@${record.version}`,
+        key: `as-of:${record.rulePackageObjectId}@${record.rulePackageVersion}:${record.judgmentType}`,
         values: {
-          ...baseValues(record),
-          requirement: controlRequirementLabel(record.requirement),
-          notApplicableBasis: record.notApplicableBasis ?? '—',
-        },
-      }));
-    case 'AS_OF_POLICIES_LISTED':
-      return body.policies.map((record) => ({
-        key: `as-of:${record.objectId}@${record.version}:${record.judgmentType}`,
-        values: {
-          ...baseValues(record),
-          judgmentType: judgmentTypeLabel(record.judgmentType),
-          semanticsReference: record.semanticsReference,
+          package: `${record.rulePackageObjectId}@${record.rulePackageVersion}`,
+          judgmentType: record.judgmentType,
+          semanticsRef: record.semanticsRef,
           policyVersion: record.policyVersion,
+          declaredAt: formatInstant(record.declaredAt),
         },
       }));
   }
 }
 
-// 各政策族独立请求、独立列形；同页切换不把五类对象折成一份“大配置”。
+// 各政策册独立请求、独立列形;同页切换不把五类对象折成一份「大配置」。
 export function CommercialPoliciesPage() {
-  const [kind, setKind] = useState<CommercialPolicyKind>('acceptance-control');
+  const [kind, setKind] = useState<CommercialPolicyKind>('ACCEPTANCE_RULE_PACKAGE');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [loaded, setLoaded] = useState<{
     kind: CommercialPolicyKind;
-    answer: ApiResult<CommercialPoliciesResponseBody>;
+    answer: ApiResult<CommercialPolicyListResponseBody>;
   } | null>(null);
-  const selected = kinds.find((candidate) => candidate.id === kind) ?? kinds[0];
 
   useEffect(() => {
     let cancelled = false;
@@ -209,7 +195,7 @@ export function CommercialPoliciesPage() {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——五类政策分别查阅，重叠候选仍是适用冲突而非“同时生效”`}
+      description={`${info.owner}——五类政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」;信用政策无独立正文册,如实不上列`}
       search={{
         value: search,
         onChange: setSearch,
@@ -217,27 +203,27 @@ export function CommercialPoliciesPage() {
       }}
       filters={
         <>
-          {kinds.map((candidate) => (
+          {commercialPolicyKinds.map((candidate) => (
             <button
-              key={candidate.id}
+              key={candidate}
               type="button"
-              className={chipClass(candidate.id === kind)}
-              onClick={() => setKind(candidate.id)}
+              className={chipClass(candidate === kind)}
+              onClick={() => setKind(candidate)}
             >
-              {commercialPolicyKindLabel(candidate.id)}
+              {policyKindLabels[candidate]}
             </button>
           ))}
         </>
       }
-      filterSummary={`${commercialPolicyKindLabel(kind)} ${rows.length} 条`}
-      columns={selected.columns}
+      filterSummary={`${policyKindLabels[kind]} ${rows.length} 条`}
+      columns={kindColumns[kind]}
       rows={visibleRows}
       rowKey={(row) => row.key}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /commercial-policies?kind=${kind}`,
-        emptyTitle: `当前租户尚无${commercialPolicyKindLabel(kind)}`,
-        emptyDescription: '读取入口已配置，但该政策登记为空；页面不会生成默认政策。',
+        emptyTitle: `当前租户尚无${policyKindLabels[kind]}`,
+        emptyDescription: '读取入口已配置,但该政策册为空;页面不会生成默认政策。',
       })}
     />
   );

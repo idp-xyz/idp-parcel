@@ -7,6 +7,26 @@ export const registryLabels: Record<ComplianceRegistry, string> = {
   interpretation: '解释规则',
 };
 
+export const directionLabels: Record<string, string> = {
+  IMPORT: '进口',
+  EXPORT: '出口',
+};
+
+// 外部结果六层的中文取 GLOSSARY 与关务用例的领域原词(监管接收、业务受理、
+// 监管过程决定、监管核定税费、放行结果、监管处置决定),不自造译法。
+export const resultLayerLabels: Record<string, string> = {
+  REGULATORY_RECEIPT: '监管接收',
+  BUSINESS_ACCEPTANCE: '业务受理',
+  PROCESS_DECISION: '监管过程决定',
+  ASSESSED_DUTY: '监管核定税费',
+  RELEASE_RESULT: '放行结果',
+  DISPOSITION_DECISION: '监管处置决定',
+};
+
+export function labelOf(table: Record<string, string>, code: string): string {
+  return table[code] ?? code;
+}
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST:

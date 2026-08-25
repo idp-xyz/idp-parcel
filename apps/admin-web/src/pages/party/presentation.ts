@@ -32,6 +32,26 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'AS_OF_POLICY',
 ];
 
+// 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
+// 概念不因出现在不同页而换名。
+export const commercialDirectionLabels: Record<string, string> = {
+  BUY: '买价',
+  SELL: '卖价',
+  INTERNAL: '内部',
+};
+
+// 结算方式封闭两格(domain SettlementMethod)。
+export const settlementMethodLabels: Record<string, string> = {
+  PREPAID: '预付',
+  TERMS: '账期',
+};
+
+// 接受前财务控制要求封闭两格(domain PreAcceptanceControl)。
+export const controlRequirementLabels: Record<string, string> = {
+  REQUIRED: '要求',
+  NOT_APPLICABLE: '不适用',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST:

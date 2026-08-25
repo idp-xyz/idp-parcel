@@ -1,10 +1,9 @@
 // 本目录 fetch 出口:服务产品与商业策略目录(ADR-0077、票 master-data-wiring/05)。
+// 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
-let apiBase = '';
+import { exchangeMasterData, type ApiResult } from '../catalogue-api';
 
-export function configurePartyCommercialApi(options: { basePrefix: string }): void {
-  apiBase = options.basePrefix;
-}
+export type { ApiResult } from '../catalogue-api';
 
 export interface ServiceProductRecord {
   objectId: string;
@@ -91,73 +90,23 @@ export interface AsOfPolicyRecord {
   declaredAt: string;
 }
 
-export type CommercialPolicyRecord =
-  | RulePackageRecord
-  | PreAcceptanceControlRecord
-  | PricePolicyRecord
-  | SettlementPolicyRecord
-  | AsOfPolicyRecord;
-
-export interface CommercialPolicyListResponseBody {
-  outcome: 'COMMERCIAL_POLICIES_LISTED';
-  kind: CommercialPolicyKind;
-  policies: CommercialPolicyRecord[];
-}
-
-export type ApiResult<Body> =
-  | { kind: 'outcome'; status: number; body: Body }
-  | { kind: 'unconfigured' }
-  | { kind: 'callerProblem'; status: number; code: string }
-  | { kind: 'noAnswer'; status: number; code: string }
-  | { kind: 'transport'; message: string };
+// 响应体按 kind 判别:五种册子的行形状互不相同(传输层注释原话),合成一个字段并集
+// 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
+export type CommercialPolicyListResponseBody =
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'ACCEPTANCE_RULE_PACKAGE'; policies: RulePackageRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRE_ACCEPTANCE_CONTROL'; policies: PreAcceptanceControlRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRICE_POLICY'; policies: PricePolicyRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'SETTLEMENT_POLICY'; policies: SettlementPolicyRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AS_OF_POLICY'; policies: AsOfPolicyRecord[] };
 
 export function listServiceProducts(): Promise<ApiResult<ServiceProductListResponseBody>> {
-  return exchange<ServiceProductListResponseBody>('/commercial-service-products', {
-    method: 'GET',
-  });
+  return exchangeMasterData<ServiceProductListResponseBody>('/commercial-service-products');
 }
 
 export function listCommercialPolicies(
   kind: CommercialPolicyKind,
 ): Promise<ApiResult<CommercialPolicyListResponseBody>> {
-  return exchange<CommercialPolicyListResponseBody>(
+  return exchangeMasterData<CommercialPolicyListResponseBody>(
     `/commercial-policies?kind=${encodeURIComponent(kind)}`,
-    { method: 'GET' },
   );
-}
-
-async function exchange<Body>(path: string, init: RequestInit): Promise<ApiResult<Body>> {
-  let response: Response;
-  try {
-    response = await fetch(apiBase + path, init);
-  } catch (cause) {
-    return {
-      kind: 'transport',
-      message: cause instanceof Error ? cause.message : String(cause),
-    };
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = await response.json();
-  } catch {
-    return {
-      kind: 'transport',
-      message: `响应不是 JSON(HTTP ${response.status}),请求可能未到达 parcel-api`,
-    };
-  }
-
-  if (response.ok) {
-    return { kind: 'outcome', status: response.status, body: parsed as Body };
-  }
-
-  const code =
-    (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
-  if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
-    return { kind: 'unconfigured' };
-  }
-  if (response.status >= 500) {
-    return { kind: 'noAnswer', status: response.status, code };
-  }
-  return { kind: 'callerProblem', status: response.status, code };
 }

@@ -101,6 +101,13 @@ export const liveIds: ReadonlySet<string> = new Set([
   'shipment-request-inquiry',
   'cancel-parcel',
   'tracking-projection',
+  'price-card-catalog',
+  'reference-series',
+  'network-catalog',
+  'service-areas',
+  'compliance-rules',
+  'service-products',
+  'commercial-policies',
 ]);
 
 /**
