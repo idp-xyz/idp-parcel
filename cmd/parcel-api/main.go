@@ -10,7 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
@@ -90,9 +94,45 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 
+	// 主数据目录查阅直接接所属上下文的存储读面（ADR-0077），不绕进应用编排。
+	// 同一上下文的多个端点共享同一只读适配器，读的仍是各登记写口背后的那份库。
+	pricingCatalog, err := pppostgres.NewOperationsCatalogue(db)
+	if err != nil {
+		return err
+	}
+	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		return err
+	}
+	complianceRules, err := ccpostgres.NewRuleCatalogue(db)
+	if err != nil {
+		return err
+	}
+	commercialCatalog, err := pcpostgres.NewOperationsCatalogue(db)
+	if err != nil {
+		return err
+	}
+
 	server := &http.Server{
-		Addr:              address,
-		Handler:           httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(submission, withdrawal, requestViews, cancellation, reception, delivery, trackingViews, projectionViews, claims, results)),
+		Addr: address,
+		Handler: httpapi.NewWithEndpoints(buildinfo.Current(), assembleBusinessEndpoints(
+			submission,
+			withdrawal,
+			requestViews,
+			cancellation,
+			reception,
+			delivery,
+			trackingViews,
+			projectionViews,
+			claims,
+			results,
+			pricingCatalog,
+			pricingCatalog,
+			networkCatalog,
+			complianceRules,
+			commercialCatalog,
+			commercialCatalog,
+		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

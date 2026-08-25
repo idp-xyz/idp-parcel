@@ -5,10 +5,18 @@ import (
 	"errors"
 
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
+	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	customsports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	networkdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	networkports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
+	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	shipmentdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -143,6 +151,152 @@ func (unwiredProjectionViews) FindByVersion(
 	visibilitydomain.ProjectionVersionID,
 ) (visibilitydomain.TrackingProjection, bool, error) {
 	return visibilitydomain.TrackingProjection{}, false, errOrchestrationNotWired
+}
+
+// 主数据目录的 unwired* 同样只供装配测试。生产 main 为同一上下文的端点交入同一只
+// 真库适配器；这里按上下文合成替身，既钉住接口形状，也避免把一次读故障伪装成空目录。
+type unwiredPricingCatalogue struct{}
+
+func (unwiredPricingCatalogue) ListPriceCards(
+	context.Context,
+	pricingdomain.TenantID,
+	int,
+) ([]pricingports.PriceCardCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredPricingCatalogue) ListReferenceSeries(
+	context.Context,
+	pricingdomain.TenantID,
+	int,
+) ([]pricingports.ReferenceSeriesCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+type unwiredNetworkCatalogue struct{}
+
+func (unwiredNetworkCatalogue) ListNodeVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.NodeDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListConnectionVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.ConnectionDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListLineVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.LineDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListServiceAreaVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.ServiceAreaDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListServiceCalendarVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.ServiceCalendarDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListAvailabilityAdjustments(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.AvailabilityAdjustmentStatement, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogue) ListRouteStrategyVersions(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.RouteStrategyDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+type unwiredComplianceRules struct{}
+
+func (unwiredComplianceRules) ListCaseRequirementRules(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.CaseRequirementRuleEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredComplianceRules) ListInterpretationRules(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.InterpretationRuleEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
+type unwiredCommercialCatalogue struct{}
+
+func (unwiredCommercialCatalogue) ListServiceProducts(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.ServiceProductCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListAcceptanceRulePackages(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.AcceptanceRulePackageRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListPreAcceptanceControls(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.PreAcceptanceControlRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListPricePolicies(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.PricePolicyRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListSettlementPolicies(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.SettlementPolicyRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListAsOfPolicyDeclarations(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.AsOfPolicyRow, error) {
+	return nil, errOrchestrationNotWired
 }
 
 type unwiredCancellation struct{}

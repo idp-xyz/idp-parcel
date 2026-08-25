@@ -2,16 +2,19 @@ package main
 
 import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
+	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
+	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
 
-// assembleBusinessEndpoints 是业务端点的装配点（组合根）。五个上下文的 adapters/http
-// 里的接入面处理器全部挂在这里：PS 提交、撤回、委托查阅与取消、NO 收寄登记、TF 交付
-// 登记与 POD 更正、VE 视图查询与索赔受理、CC 外部结果接收。
+// assembleBusinessEndpoints 是业务端点的装配点（组合根）。各上下文 adapters/http
+// 里的接入面处理器全部挂在这里：命令面、业务查阅面与主数据目录查阅面都从这一处进入
+// 进程路由，领域边界仍由各自的处理器和读口保持。
 //
 // 按 ADR-0055，本函数不再以空清单等 `PAR-INT-01`：每个端点各以「未配置即拒」的 Intake
 // 起步——不读业务内容、不采信自报身份、不构造命令，对每个请求如实答「接入渠道未配置」
@@ -30,23 +33,17 @@ import (
 // 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
 // 路径今天还不是任何租户的对外契约——真渠道就位那笔工作若要改，改的是本函数一处。
 //
-// 各端点的第二参（应用编排或读口）与 Intake 是两笔独立的接线：提交编排已按审计票 13
-// 接真，撤回编排随 UI 阶段 B 后端序列接真，NO 收寄、TF 交付双端点、VE 索赔受理与 CC
-// 外部结果按接线票 `.scratch/parcel-api-remaining-endpoint-wiring` 的票 01、02、04、05
-// 接真（均经真库，由 main 构造后入参交入），委托查阅与 VE 客户追踪视图两个读口接真库
-// 读适配器。九格至此全部接真；unwired* 类型只余装配测试在用，分辨见
-// unwired_orchestration.go 的文件注释。
+// 各端点的第二参（应用编排或读口）与 Intake 是两笔独立的接线：命令面编排均经真库，
+// 委托、追踪与主数据目录查阅直接消费所属上下文的真库存储读面，全部由 main 构造后入参
+// 交入。unwired* 类型只余装配测试在用，分辨见 unwired_orchestration.go 的文件注释。
 //
-// 清单是十一项（PS 四、NO 一、TF 二、VE 三、CC 一）。ADR-0055 与开发主线曾把它称作
-// 「七个」，那是把 TF 双端点计作一项的算术口径错，后按逐项枚举定为八项；第九项是
-// 委托查阅（GET /shipment-request-views，UI 阶段 B 的读切片）；第十项是接受后取消
-// （POST /shipment-requests/parcel-cancellations，UC-PS-006）；第十一项是运营追踪查阅
-// （GET /tracking-projections，ADR-0076——读投影库，与客户视图端点各答各的对象）。
-// 此处按逐项枚举装配，少装一个就是把一个端点折回 404，那正是该记录要治的病。
+// 主数据目录查阅按 ADR-0077 各自消费所属上下文存储；网络目录与服务区域共用
+// /network-catalog 的 family 分派，其余页面各有独立入口。此处按入口逐项枚举，少装一个
+// 就是把它折回 404，与「渠道未配置」不可分辨，那正是 ADR-0055 要治的病。
 //
-// requestViews、trackingViews 与 projectionViews 是查阅端点的读口：读面不是编排（查阅
-// 不触发判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们
-// 之前，接入渠道就位前一次也不会被调到。
+// 所有 *Views、*Catalog 与 *Rules 参数都是查阅端点的读口：读面不是编排（查阅不触发
+// 判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，
+// 接入渠道就位前一次也不会被调到。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
@@ -58,6 +55,12 @@ func assembleBusinessEndpoints(
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
 	results customshttp.ResultHandler,
+	priceCards pricinghttp.PriceCardCatalogueReader,
+	referenceSeries pricinghttp.ReferenceSeriesCatalogueReader,
+	networkCatalog networkhttp.OperationsCatalogReader,
+	complianceRules customshttp.RuleCatalogueReader,
+	serviceProducts commercialhttp.ServiceProductCatalogueReader,
+	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 ) []httpapi.BusinessEndpoint {
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
@@ -71,5 +74,11 @@ func assembleBusinessEndpoints(
 		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(visibilityhttp.UnconfiguredIntake{}, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, results)},
+		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricinghttp.UnconfiguredIntake{}, priceCards)},
+		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeries)},
+		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalog)},
+		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(customshttp.UnconfiguredIntake{}, complianceRules)},
+		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialhttp.UnconfiguredIntake{}, serviceProducts)},
+		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPolicies)},
 	}
 }

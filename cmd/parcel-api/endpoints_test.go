@@ -10,22 +10,35 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// businessEndpointMethods 是本进程应当服务的全部业务端点及各自的方法。它与装配点
-// 互为对照：表里多一项说明装配漏了一个端点（那一项会退回路由层的 404，正是 ADR-0055
-// 要治的折叠），装配点里多一项说明上线了一个没人钉过形状的面。方法必须逐个写对——
-// 拿错方法测出来的 405 会盖过 403，断言就什么也没守住。
-var businessEndpointMethods = map[string]string{
-	"/shipment-requests":                                http.MethodPost,
-	"/shipment-requests/withdrawals":                    http.MethodPost,
-	"/shipment-requests/parcel-cancellations":           http.MethodPost,
-	"/shipment-request-views":                           http.MethodGet,
-	"/node-operations/receptions":                       http.MethodPost,
-	"/transport-fulfillment/deliveries":                 http.MethodPost,
-	"/transport-fulfillment/delivery-proof-corrections": http.MethodPost,
-	"/customer-tracking-view":                           http.MethodGet,
-	"/tracking-projections":                             http.MethodGet,
-	"/claims":                                           http.MethodPost,
-	"/customs/external-results":                         http.MethodPost,
+// businessEndpointProbes 是本进程应当服务的全部业务端点及各自的有效探测请求。它与
+// 装配点互为对照：表里多一项说明装配漏了一个端点（那一项会退回路由层的 404，正是
+// ADR-0055 要治的折叠），装配点里多一项说明上线了一个没人钉过形状的面。
+//
+// 方法与必填分派参数必须逐项写对：拿错方法测出来的 405、漏掉 family/registry/kind
+// 测出来的 400 都会盖过未配置 Intake 的 403，断言就什么也没守住。
+type businessEndpointProbe struct {
+	method string
+	target string
+}
+
+var businessEndpointProbes = map[string]businessEndpointProbe{
+	"/shipment-requests":                                {method: http.MethodPost, target: "/shipment-requests"},
+	"/shipment-requests/withdrawals":                    {method: http.MethodPost, target: "/shipment-requests/withdrawals"},
+	"/shipment-requests/parcel-cancellations":           {method: http.MethodPost, target: "/shipment-requests/parcel-cancellations"},
+	"/shipment-request-views":                           {method: http.MethodGet, target: "/shipment-request-views"},
+	"/node-operations/receptions":                       {method: http.MethodPost, target: "/node-operations/receptions"},
+	"/transport-fulfillment/deliveries":                 {method: http.MethodPost, target: "/transport-fulfillment/deliveries"},
+	"/transport-fulfillment/delivery-proof-corrections": {method: http.MethodPost, target: "/transport-fulfillment/delivery-proof-corrections"},
+	"/customer-tracking-view":                           {method: http.MethodGet, target: "/customer-tracking-view"},
+	"/tracking-projections":                             {method: http.MethodGet, target: "/tracking-projections"},
+	"/claims":                                           {method: http.MethodPost, target: "/claims"},
+	"/customs/external-results":                         {method: http.MethodPost, target: "/customs/external-results"},
+	"/pricing-price-cards":                              {method: http.MethodGet, target: "/pricing-price-cards"},
+	"/pricing-reference-series":                         {method: http.MethodGet, target: "/pricing-reference-series"},
+	"/network-catalog":                                  {method: http.MethodGet, target: "/network-catalog?family=node"},
+	"/customs-compliance-rules":                         {method: http.MethodGet, target: "/customs-compliance-rules?registry=case-requirement"},
+	"/commercial-service-products":                      {method: http.MethodGet, target: "/commercial-service-products"},
+	"/commercial-policies":                              {method: http.MethodGet, target: "/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -35,12 +48,12 @@ var businessEndpointMethods = map[string]string{
 func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 	// 传 unwired* 占位而非真编排与真读口：本测试钉的是未配置面（403 在编排之前），
 	// 真编排的装配与行为由各 assemble_*_test.go 对真库另证。
-	endpoints := assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredCancellation{}, unwiredReception{}, unwiredDelivery{}, unwiredTrackingViews{}, unwiredProjectionViews{}, unwiredClaims{}, unwiredResults{})
+	endpoints := assembleUnconfiguredBusinessEndpoints()
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, endpoints)
 
 	mounted := make(map[string]bool, len(endpoints))
 	for _, endpoint := range endpoints {
-		method, listed := businessEndpointMethods[endpoint.Pattern]
+		probe, listed := businessEndpointProbes[endpoint.Pattern]
 		if !listed {
 			t.Fatalf("装配了未登记的端点 %s：形状没有任何测试钉住", endpoint.Pattern)
 		}
@@ -50,10 +63,10 @@ func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 		mounted[endpoint.Pattern] = true
 
 		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(method, endpoint.Pattern, nil))
+		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, nil))
 
 		if response.Code != http.StatusForbidden {
-			t.Fatalf("%s %s: status = %d, want %d", method, endpoint.Pattern, response.Code, http.StatusForbidden)
+			t.Fatalf("%s %s: status = %d, want %d", probe.method, probe.target, response.Code, http.StatusForbidden)
 		}
 		if got := problemCode(t, response); got != "ACCESS_CHANNEL_NOT_CONFIGURED" {
 			t.Fatalf("%s: code = %q, want ACCESS_CHANNEL_NOT_CONFIGURED", endpoint.Pattern, got)
@@ -61,7 +74,7 @@ func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 		assertNoOutcome(t, response, endpoint.Pattern)
 	}
 
-	for pattern := range businessEndpointMethods {
+	for pattern := range businessEndpointProbes {
 		if !mounted[pattern] {
 			t.Fatalf("端点 %s 没进装配：它会答 404，与「产品没有这个能力」不可分辨", pattern)
 		}
@@ -71,7 +84,7 @@ func TestEveryAssembledEndpointAnswersUnconfigured(t *testing.T) {
 // Covers: ADR-0055 「未配置格住在 Intake 缝里，不在路由层另设闸」 — 未配置不改变方法
 // 约束：方法不对仍由处理器自己答 405，403 不越过它抢答。两处各有权威就会各改一次。
 func TestUnconfiguredDoesNotSwallowTheMethodGate(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredCancellation{}, unwiredReception{}, unwiredDelivery{}, unwiredTrackingViews{}, unwiredProjectionViews{}, unwiredClaims{}, unwiredResults{}))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
 
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/shipment-requests", nil))
@@ -87,7 +100,7 @@ func TestUnconfiguredDoesNotSwallowTheMethodGate(t *testing.T) {
 // Covers: ADR-0055 「答复对一切请求内容与自报身份一致」 — 在装配后的路由上再钉一次：
 // 各包的替身证的是自己那个处理器，这里证的是进程真正对外的那一个。
 func TestAssembledEndpointsIgnoreSelfReportedIdentity(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleBusinessEndpoints(unwiredSubmission{}, unwiredWithdrawal{}, unwiredRequestViews{}, unwiredCancellation{}, unwiredReception{}, unwiredDelivery{}, unwiredTrackingViews{}, unwiredProjectionViews{}, unwiredClaims{}, unwiredResults{}))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
 
 	baseline := httptest.NewRecorder()
 	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, "/shipment-requests", nil))
@@ -102,6 +115,27 @@ func TestAssembledEndpointsIgnoreSelfReportedIdentity(t *testing.T) {
 		t.Fatalf("answer differs from baseline: %d %s vs %d %s",
 			response.Code, response.Body.String(), baseline.Code, baseline.Body.String())
 	}
+}
+
+func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
+	return assembleBusinessEndpoints(
+		unwiredSubmission{},
+		unwiredWithdrawal{},
+		unwiredRequestViews{},
+		unwiredCancellation{},
+		unwiredReception{},
+		unwiredDelivery{},
+		unwiredTrackingViews{},
+		unwiredProjectionViews{},
+		unwiredClaims{},
+		unwiredResults{},
+		unwiredPricingCatalogue{},
+		unwiredPricingCatalogue{},
+		unwiredNetworkCatalogue{},
+		unwiredComplianceRules{},
+		unwiredCommercialCatalogue{},
+		unwiredCommercialCatalogue{},
+	)
 }
 
 func problemCode(t *testing.T, response *httptest.ResponseRecorder) string {
