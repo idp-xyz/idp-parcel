@@ -1,90 +1,244 @@
-import { useState } from 'react';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { useEffect, useState } from 'react';
 import { moduleInfoById } from '../../navigation';
+import { ListPageTemplate, type ListColumn } from '../../templates';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatRange } from '../catalogue-view';
+import {
+  listCommercialPolicies,
+  type CommercialPoliciesResponseBody,
+  type CommercialPolicyKind,
+} from './api';
+import {
+  bindingConversionLabel,
+  checkGroupLabel,
+  commercialDirectionLabel,
+  commercialPolicyKindLabel,
+  commercialStatusLabel,
+  controlRequirementLabel,
+  judgmentTypeLabel,
+  settlementMethodLabel,
+} from './presentation';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['commercial-policies'];
 
-/**
- * 商业规则与政策版本列表行。字段取 party-commercial CONTEXT.md「商业版本」
- * 定义与「商业规则与政策版本」生命周期；接线前没有任何实例数据。
- */
-export interface CommercialPolicyVersionRow {
-  /** 版本标识：商业版本具有稳定身份、对象类型、适用范围、有效区间、来源与批准依据。 */
-  id: string;
-  /**
-   * 对象类型：接单规则包 / 接受前财务控制策略 / 商业价格政策 / 结算政策 /
-   * 信用政策 / 税务分类依据 / 客户服务规则。一列共览不是合并——各对象保持
-   * 独立身份，不因此合并为一份「大配置」，本页只是查阅面。
-   */
-  policyKind: string;
-  /** 适用对象与范围：责任法人、客户或供应商相对方、服务/费用/关务范围等，由各对象自行声明。 */
-  appliesTo: string;
-  /** 版本。 */
-  version: string;
-  /** 有效区间：重叠候选不是「同时生效」，而是必须阻断解析的适用冲突。 */
-  validity: string;
-  /** 状态：草稿 / 已发布 / 已生效 / 已到期 / 已退役 / 已替代。发布后正文不可覆盖。 */
-  status: string;
-  /** 来源与批准依据。 */
-  basis: string;
+interface PolicyRow {
+  key: string;
+  values: Readonly<Record<string, string>>;
 }
 
-const columns: ListColumn<CommercialPolicyVersionRow>[] = [
-  { id: 'id', header: '版本标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'policy-kind', header: '对象类型', render: (row) => row.policyKind },
-  { id: 'applies-to', header: '适用对象与范围', render: (row) => row.appliesTo },
-  { id: 'version', header: '版本', align: 'center', className: 'w-[56px] font-mono', render: (row) => row.version },
-  { id: 'validity', header: '有效区间', render: (row) => row.validity },
-  { id: 'status', header: '状态', align: 'center', render: (row) => row.status },
-  { id: 'basis', header: '来源与批准依据', render: (row) => row.basis },
+function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
+  return {
+    id,
+    header,
+    className: mono ? 'font-mono text-xs' : undefined,
+    render: (row) => row.values[id] ?? '—',
+  };
+}
+
+const commonColumns = [
+  col('identity', '政策对象 / 版本', true),
+  col('scopeReference', '适用范围', true),
+  col('effective', '有效区间', true),
+  col('status', '生命周期状态'),
 ];
 
-/**
- * 商业规则与策略（party-commercial）。行对象是商业规则与政策的不可覆盖版本。
- * 同一解析键和商业选择锚点下每种必需商业依据必须唯一适用：零候选是无适用
- * 依据、多候选是适用冲突、权威读取失败是解析未决——任何一种都不得由系统
- * 任选一条、默认通过或伪装成确定性业务拒绝；绑定缺失、过期、区间重叠或
- * 引用未决时不使用默认价。查阅面，不设登记与发布动作。
- */
+const kinds: ReadonlyArray<{
+  id: CommercialPolicyKind;
+  columns: ListColumn<PolicyRow>[];
+}> = [
+  {
+    id: 'acceptance-control',
+    columns: [
+      ...commonColumns,
+      col('checkGroupType', '校验组'),
+      col('receivablesAccountReference', '应收账户引用', true),
+    ],
+  },
+  {
+    id: 'price',
+    columns: [
+      ...commonColumns,
+      col('direction', '政策方向'),
+      col('pricingPlanReference', '定价方案引用', true),
+      col('planDirection', '方案方向'),
+      col('bindingConversion', '绑定转换'),
+    ],
+  },
+  {
+    id: 'settlement',
+    columns: [
+      ...commonColumns,
+      col('method', '结算方式'),
+      col('legalEntityReference', '责任法人', true),
+      col('counterpartyReference', '相对方', true),
+      col('contractVersion', '合同版本', true),
+      col('chargeScopeReference', '费用范围', true),
+      col('currency', '币种', true),
+    ],
+  },
+  {
+    id: 'contract-control',
+    columns: [
+      ...commonColumns,
+      col('requirement', '接受前财务控制'),
+      col('notApplicableBasis', '不适用依据', true),
+    ],
+  },
+  {
+    id: 'as-of',
+    columns: [
+      ...commonColumns,
+      col('judgmentType', '判断类型'),
+      col('semanticsReference', '时点语义引用', true),
+      col('policyVersion', '时点政策版本', true),
+    ],
+  },
+];
+
+const chipClass = (active: boolean) =>
+  `px-2.5 py-1 text-[12px] rounded border ${
+    active
+      ? 'border-idpxyz-accent text-idpxyz-accent'
+      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
+  }`;
+
+function baseValues(record: {
+  objectId: string;
+  version: string;
+  scopeReference: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status: string;
+}): Record<string, string> {
+  return {
+    identity: `${record.objectId}@${record.version}`,
+    scopeReference: record.scopeReference,
+    effective: formatRange(record.effectiveFrom, record.effectiveTo),
+    status: commercialStatusLabel(record.status),
+  };
+}
+
+function rowsOf(body: CommercialPoliciesResponseBody): PolicyRow[] {
+  switch (body.outcome) {
+    case 'ACCEPTANCE_CONTROL_POLICIES_LISTED':
+      return body.policies.map((record) => ({
+        key: `acceptance:${record.objectId}@${record.version}:${record.checkGroupType}`,
+        values: {
+          ...baseValues(record),
+          checkGroupType: checkGroupLabel(record.checkGroupType),
+          receivablesAccountReference: record.receivablesAccountReference,
+        },
+      }));
+    case 'PRICE_POLICIES_LISTED':
+      return body.policies.map((record) => ({
+        key: `price:${record.objectId}@${record.version}`,
+        values: {
+          ...baseValues(record),
+          direction: commercialDirectionLabel(record.direction),
+          pricingPlanReference: record.pricingPlanReference,
+          planDirection: commercialDirectionLabel(record.planDirection),
+          bindingConversion: bindingConversionLabel(record.bindingConversion),
+        },
+      }));
+    case 'SETTLEMENT_POLICIES_LISTED':
+      return body.policies.map((record) => ({
+        key: `settlement:${record.objectId}@${record.version}`,
+        values: {
+          ...baseValues(record),
+          method: settlementMethodLabel(record.method),
+          legalEntityReference: record.legalEntityReference,
+          counterpartyReference: record.counterpartyReference,
+          contractVersion: record.contractVersion,
+          chargeScopeReference: record.chargeScopeReference,
+          currency: record.currency,
+        },
+      }));
+    case 'CONTRACT_CONTROL_DECLARATIONS_LISTED':
+      return body.policies.map((record) => ({
+        key: `contract-control:${record.objectId}@${record.version}`,
+        values: {
+          ...baseValues(record),
+          requirement: controlRequirementLabel(record.requirement),
+          notApplicableBasis: record.notApplicableBasis ?? '—',
+        },
+      }));
+    case 'AS_OF_POLICIES_LISTED':
+      return body.policies.map((record) => ({
+        key: `as-of:${record.objectId}@${record.version}:${record.judgmentType}`,
+        values: {
+          ...baseValues(record),
+          judgmentType: judgmentTypeLabel(record.judgmentType),
+          semanticsReference: record.semanticsReference,
+          policyVersion: record.policyVersion,
+        },
+      }));
+  }
+}
+
+// 各政策族独立请求、独立列形；同页切换不把五类对象折成一份“大配置”。
 export function CommercialPoliciesPage() {
+  const [kind, setKind] = useState<CommercialPolicyKind>('acceptance-control');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState<{
+    kind: CommercialPolicyKind;
+    answer: ApiResult<CommercialPoliciesResponseBody>;
+  } | null>(null);
+  const selected = kinds.find((candidate) => candidate.id === kind) ?? kinds[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    void listCommercialPolicies(kind).then((answer) => {
+      if (!cancelled) setLoaded({ kind, answer });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, reloadKey]);
+
+  const answer = loaded?.kind === kind ? loaded.answer : null;
+  const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<CommercialPolicyVersionRow>
+    <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：对象类型（接单规则包/接受前财务控制
-      // 策略/商业价格政策/结算政策/信用政策/税务分类依据/客户服务规则，行注释的
-      // 封闭清单）、状态（草稿/已发布/已生效/已到期/已退役/已替代）。
+      description={`${info.owner}——五类政策分别查阅，重叠候选仍是适用冲突而非“同时生效”`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索对象类型 / 适用对象',
+        placeholder: '搜索政策对象、范围或引用',
       }}
-      columns={columns}
-      // 接线前无实例：行数据与总数届时由 party-commercial 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '参与方与商业模块尚未接线',
-        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      filters={
+        <>
+          {kinds.map((candidate) => (
+            <button
+              key={candidate.id}
+              type="button"
+              className={chipClass(candidate.id === kind)}
+              onClick={() => setKind(candidate.id)}
+            >
+              {commercialPolicyKindLabel(candidate.id)}
+            </button>
+          ))}
+        </>
+      }
+      filterSummary={`${commercialPolicyKindLabel(kind)} ${rows.length} 条`}
+      columns={selected.columns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: `GET /commercial-policies?kind=${kind}`,
+        emptyTitle: `当前租户尚无${commercialPolicyKindLabel(kind)}`,
+        emptyDescription: '读取入口已配置，但该政策登记为空；页面不会生成默认政策。',
+      })}
     />
   );
 }

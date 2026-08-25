@@ -1,23 +1,21 @@
-import { useState } from 'react';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { useEffect, useState } from 'react';
 import { moduleInfoById } from '../../navigation';
+import { ListPageTemplate, type ListColumn } from '../../templates';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import {
+  listNetworkCatalog,
+  type NetworkCatalogFamily,
+  type NetworkCatalogResponseBody,
+} from './api';
+import { adjustmentKindLabel, networkFamilyLabel, targetKindLabel } from './presentation';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['network-catalog'];
 
-/**
- * 网络目录查阅面。七族对象取 network-routing CONTEXT.md 原词：物流节点、网络连接、
- * 线路、服务区域、服务日历、网络可用性调整、路由策略版本；族的划分与登记口
- * cmd/parcel-network-register 的 -kind 七族一一对应。
- *
- * 登记走受控 CLI（治理动作，不是在线请求面），本页只查阅、无登记动作。查询端点
- * 未建，数据区如实呈现「未配置」态，不发请求、不含合成数据。
- *
- * 行形状不在此复刻：七族真实字段的权威是登记口的七个载荷形状（nodePayload 等，
- * 见 cmd/parcel-network-register），查询契约落地时以其为准重谈；本页行用列 id
- * 索引的字符串占位，栏目语义全在列头与注释。
- */
-type CatalogRow = Record<string, string>;
+interface CatalogRow {
+  key: string;
+  values: Readonly<Record<string, string>>;
+}
 
 function col(
   id: string,
@@ -31,114 +29,88 @@ function col(
     className: options?.className,
     render: (row) =>
       options?.mono ? (
-        <span className="font-mono text-[12px]">{row[id]}</span>
+        <span className="font-mono text-[12px]">{row.values[id] ?? '—'}</span>
       ) : (
-        row[id]
+        row.values[id] ?? '—'
       ),
   };
 }
 
 interface CatalogFamily {
-  /** 与登记口 -kind 的族名一致，接线时按此族请求查询。 */
-  id: string;
-  /** CONTEXT.md 原词。 */
-  word: string;
+  id: NetworkCatalogFamily;
   columns: ListColumn<CatalogRow>[];
 }
 
-// 版本与生效区间是七族共有的版本骨架；「生效至」缺席表示无终点（登记口用指针
-// 表达「不在场」，呈现侧同样不得把零时刻当无终点）。
 const families: CatalogFamily[] = [
   {
     id: 'node',
-    word: '物流节点',
     columns: [
       col('code', '节点代码', { mono: true }),
       col('version', '版本', { align: 'right', className: 'w-[72px]' }),
       col('businessTimezone', '业务时区', { mono: true }),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
     ],
   },
   {
     id: 'connection',
-    word: '网络连接',
-    // 网络连接是有向拓扑关系(CONTEXT):方向由自节点/至节点两列表达,不折叠成一格。
     columns: [
       col('code', '连接代码', { mono: true }),
       col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('fromNode', '自节点', { mono: true }),
-      col('toNode', '至节点', { mono: true }),
-      col('businessTimezone', '业务时区', { mono: true }),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('endpoints', '端点节点（按登记顺序）', { mono: true }),
+      col('directed', '方向性'),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
     ],
   },
   {
     id: 'line',
-    word: '线路',
-    // 线路由一个或多个网络连接按明确顺序组成(CONTEXT),组成连接列按序呈现。
     columns: [
       col('code', '线路代码', { mono: true }),
       col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('segments', '组成连接（按序）', { mono: true }),
-      col('applicableScope', '适用范围'),
-      col('businessTimezone', '业务时区', { mono: true }),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('connections', '组成连接（按序）', { mono: true }),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
     ],
   },
   {
     id: 'service-area',
-    word: '服务区域',
-    // 地理覆盖定义的列还不存在(PAR-NET-14,登记口同注):今天登的就是版本骨架,
-    // 本族栏目照实只有骨架,不虚构覆盖列。
     columns: [
       col('code', '区域代码', { mono: true }),
       col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('includedRegions', '包含区域', { mono: true }),
+      col('excludedRegions', '排除区域', { mono: true }),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
     ],
   },
   {
     id: 'service-calendar',
-    word: '服务日历',
-    // 服务日历按适用对象(节点、网络连接或线路)登记;营业日/节假日/服务窗口/截单
-    // 条件的内容列还不存在(PAR-NET-14),同上只列版本骨架。
+    columns: [
+      col('code', '日历代码', { mono: true }),
+      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
+      col('timezone', '时区', { mono: true }),
+      col('serviceDays', '服务日', { mono: true }),
+      col('exceptionDates', '例外日期', { mono: true }),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
+    ],
+  },
+  {
+    id: 'calendar-binding',
     columns: [
       col('targetKind', '适用对象族'),
       col('targetCode', '适用对象代码', { mono: true }),
-      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('version', '绑定版本', { align: 'right', className: 'w-[80px]' }),
+      col('calendar', '服务日历版本', { mono: true }),
+      col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
     ],
   },
   {
     id: 'availability-adjustment',
-    word: '网络可用性调整',
-    // 调整必须记录来源、范围、生效时间和解除时间(CONTEXT),四者各占一列;
-    // 解除时间缺席即仍然生效,解除只恢复候选资格。
     columns: [
-      col('code', '调整代码', { mono: true }),
-      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
       col('targetKind', '适用对象族'),
       col('targetCode', '适用对象代码', { mono: true }),
-      col('kind', '调整类别'),
-      col('source', '来源'),
-      col('effectiveAt', '生效时间', { mono: true }),
-      col('liftedAt', '解除时间', { mono: true }),
-    ],
-  },
-  {
-    id: 'route-strategy',
-    word: '路由策略版本',
-    // 策略规则正文的列还不存在(PAR-NET-14),只列版本骨架。
-    columns: [
-      col('code', '策略代码', { mono: true }),
-      col('version', '版本', { align: 'right', className: 'w-[72px]' }),
-      col('applicableScope', '适用范围'),
-      col('effectiveFrom', '生效自', { mono: true }),
-      col('effectiveTo', '生效至', { mono: true }),
+      col('version', '调整版本', { align: 'right', className: 'w-[80px]' }),
+      col('adjustmentKind', '调整类别'),
+      col('window', '适用窗口', { mono: true, className: 'min-w-64' }),
+      col('scopeReference', '适用范围依据', { mono: true }),
+      col('reasonReference', '原因依据', { mono: true }),
     ],
   },
 ];
@@ -150,15 +122,125 @@ const chipClass = (active: boolean) =>
       : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
   }`;
 
+function rowsOf(body: NetworkCatalogResponseBody): CatalogRow[] {
+  switch (body.outcome) {
+    case 'NODE_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `node:${record.code}@${record.version}`,
+        values: {
+          code: record.code,
+          version: String(record.version),
+          businessTimezone: record.businessTimezone,
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'CONNECTION_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `connection:${record.code}@${record.version}`,
+        values: {
+          code: record.code,
+          version: String(record.version),
+          endpoints: record.endpointNodeCodes.join(' → '),
+          directed: record.directed ? '有向' : '无向',
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'LINE_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `line:${record.code}@${record.version}`,
+        values: {
+          code: record.code,
+          version: String(record.version),
+          connections: record.orderedConnectionCodes.join(' → '),
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'SERVICE_AREA_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `service-area:${record.code}@${record.version}`,
+        values: {
+          code: record.code,
+          version: String(record.version),
+          includedRegions: record.includedRegions.join('、'),
+          excludedRegions: record.excludedRegions.join('、') || '—',
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'SERVICE_CALENDAR_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `service-calendar:${record.code}@${record.version}`,
+        values: {
+          code: record.code,
+          version: String(record.version),
+          timezone: record.timezone,
+          serviceDays: record.serviceDays,
+          exceptionDates: record.exceptionDates,
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'CALENDAR_BINDING_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `calendar-binding:${record.targetKind}:${record.targetCode}@${record.version}`,
+        values: {
+          targetKind: targetKindLabel(record.targetKind),
+          targetCode: record.targetCode,
+          version: String(record.version),
+          calendar: `${record.calendarCode}@${record.calendarVersion}`,
+          effective: formatRange(record.effectiveFrom, record.effectiveTo),
+        },
+      }));
+    case 'AVAILABILITY_ADJUSTMENT_VERSIONS_LISTED':
+      return body.versions.map((record) => ({
+        key: `availability:${record.targetKind}:${record.targetCode}@${record.version}`,
+        values: {
+          targetKind: targetKindLabel(record.targetKind),
+          targetCode: record.targetCode,
+          version: String(record.version),
+          adjustmentKind: adjustmentKindLabel(record.adjustmentKind),
+          window: `${formatInstant(record.windowStart)} → ${
+            record.windowEnd ? formatInstant(record.windowEnd) : '持续有效'
+          }`,
+          scopeReference: record.scopeReference,
+          reasonReference: record.reasonReference,
+        },
+      }));
+  }
+}
+
 export function NetworkCatalogPage() {
-  const [familyId, setFamilyId] = useState(families[0].id);
+  const [familyId, setFamilyId] = useState<NetworkCatalogFamily>('node');
   const [keyword, setKeyword] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState<{
+    family: NetworkCatalogFamily;
+    answer: ApiResult<NetworkCatalogResponseBody>;
+  } | null>(null);
   const family = families.find((candidate) => candidate.id === familyId) ?? families[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    void listNetworkCatalog(familyId).then((answer) => {
+      if (!cancelled) setLoaded({ family: familyId, answer });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [familyId, reloadKey]);
+
+  const answer = loaded?.family === familyId ? loaded.answer : null;
+  const rows = answer?.kind === 'outcome' ? rowsOf(answer.body) : [];
+  const needle = keyword.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<CatalogRow>
       title={info.title}
-      description={`${info.owner} · 登记走受控 CLI（cmd/parcel-network-register），本页只查阅、无登记动作。`}
+      description={`${info.owner}——逐族查阅版本原文，不选版、不折叠为路由判断`}
       search={{
         value: keyword,
         onChange: setKeyword,
@@ -173,25 +255,21 @@ export function NetworkCatalogPage() {
               className={chipClass(candidate.id === familyId)}
               onClick={() => setFamilyId(candidate.id)}
             >
-              {candidate.word}
+              {networkFamilyLabel(candidate.id)}
             </button>
           ))}
         </>
       }
       columns={family.columns}
-      rows={[]}
-      rowKey={(row) => `${row.code ?? row.targetCode}#${row.version}`}
-      viewState={{
-        kind: 'unconfigured',
-        title: '网络与路由模块尚未接线',
-        description:
-          '登记口已可写入七族版本骨架，但查阅面的查询契约待建；本页不发请求、不含合成数据。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '网络目录查询契约建成并经 ADR-0017 准入闸门放行后接线；登记动作留在受控 CLI（cmd/parcel-network-register）',
-        },
-      }}
+      filterSummary={`${networkFamilyLabel(familyId)} ${rows.length} 个版本`}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: `GET /network-catalog?family=${familyId}`,
+        emptyTitle: `当前租户尚无${networkFamilyLabel(familyId)}版本`,
+        emptyDescription: '读取入口已配置，但该目录族为空；页面不会借其他族的数据补位。',
+      })}
     />
   );
 }

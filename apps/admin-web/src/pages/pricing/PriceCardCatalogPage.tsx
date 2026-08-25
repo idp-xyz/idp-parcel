@@ -1,94 +1,216 @@
-import { useState } from 'react';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { useEffect, useState } from 'react';
+import {
+  ListPageTemplate,
+  type ListColumn,
+  type TemplateViewState,
+} from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
+import {
+  listPriceCards,
+  type ApiResult,
+  type PriceCardListResponseBody,
+  type PriceCardRecord,
+} from './api';
 
-// 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['price-card-catalog'];
 
-/**
- * 价卡目录列表行。字段取 parcel-pricing CONTEXT.md「定价方案」「定价方案版本」定义与
- * 价卡版本登记册的比对/检索列；登记快照的方案全图（价表、规则工件）属详情区，接线时
- * 另行呈现。登记册行只增不改，本页没有任何改写动作。
- */
-export interface PriceCardVersionRow {
-  /** 定价方案标识。 */
-  plan: string;
-  /** 定价方案版本——一次受控发布形成的不可覆盖可执行版本。 */
-  planVersion: string;
-  /** 价格方向（BUY / SELL / INTERNAL）；三方向不因同名产品或渠道自动合并。 */
-  direction: string;
-  /** 计算目的；首发取值与方向一一配对，不得携带不匹配的组合。 */
-  purpose: string;
-  /** 适用期。 */
-  applicablePeriod: string;
-  /** 规范化版本。 */
-  canonicalizationVersion: string;
-  /** 版本内容摘要；展示截断归供数方，本页不改写摘要。 */
-  contentDigest: string;
-  /** 源文件身份（名称）；真文件外置，登记册只登名称与 SHA-256。 */
-  sourceFile: string;
-  /** 发布批准责任方。 */
-  approvedBy: string;
-}
-
-// 规范化版本与内容摘要相邻成列——摘要只在同一规范化版本内可比、不携规范化版本的摘要
-// 视为不完整（CONTEXT「版本内容摘要」，ADR-0014），呈现时不把两者拆散。
-const columns: ListColumn<PriceCardVersionRow>[] = [
-  { id: 'plan', header: '定价方案', className: 'font-mono', render: (row) => row.plan },
-  { id: 'version', header: '方案版本', align: 'center', render: (row) => row.planVersion },
-  { id: 'direction', header: '价格方向', align: 'center', className: 'w-[88px] font-mono', render: (row) => row.direction },
-  { id: 'purpose', header: '计算目的', className: 'font-mono', render: (row) => row.purpose },
-  { id: 'period', header: '适用期', render: (row) => row.applicablePeriod },
-  { id: 'canon', header: '规范化版本', align: 'center', render: (row) => row.canonicalizationVersion },
-  { id: 'digest', header: '版本内容摘要', className: 'font-mono', render: (row) => row.contentDigest },
-  { id: 'source', header: '源文件身份', render: (row) => row.sourceFile },
-  { id: 'approved', header: '发布批准责任方', render: (row) => row.approvedBy },
+const columns: ListColumn<PriceCardRecord>[] = [
+  {
+    id: 'plan',
+    header: '定价方案',
+    className: 'w-[140px]',
+    render: (row) => (
+      <div>
+        <div className="font-mono text-[12px] text-idpxyz-accent">{row.planId}</div>
+        <div className="font-mono text-[11px] text-idpxyz-textMuted">{row.planVersion}</div>
+      </div>
+    ),
+  },
+  {
+    id: 'direction',
+    header: '价格方向',
+    align: 'center',
+    className: 'w-[72px]',
+    render: (row) => labelOf(directionLabels, row.direction),
+  },
+  {
+    id: 'purpose',
+    header: '计算目的',
+    render: (row) => (
+      <span className="font-mono text-[12px]">{labelOf(purposeLabels, row.purpose)}</span>
+    ),
+  },
+  { id: 'scope', header: '适用范围', render: (row) => row.scope },
+  {
+    id: 'rate-table',
+    header: '价表',
+    render: (row) => (
+      <span className="font-mono text-[12px]">
+        {row.rateTableId}@{row.rateTableVersion}
+      </span>
+    ),
+  },
+  {
+    id: 'period',
+    header: '适用期',
+    className: 'w-[200px]',
+    render: (row) => (
+      <span className="font-mono text-[12px]">
+        {row.effectiveFrom}
+        {row.effectiveTo ? ` → ${row.effectiveTo}` : ' → 开放'}
+      </span>
+    ),
+  },
+  {
+    id: 'canon',
+    header: '规范化版本',
+    align: 'center',
+    render: (row) => <span className="font-mono text-[12px]">{row.canonicalization}</span>,
+  },
+  {
+    id: 'digest',
+    header: '版本内容摘要',
+    render: (row) => (
+      <span className="font-mono text-[11px]" title={row.contentDigest}>
+        {row.contentDigest.length > 16
+          ? `${row.contentDigest.slice(0, 16)}…`
+          : row.contentDigest}
+      </span>
+    ),
+  },
+  {
+    id: 'source',
+    header: '源文件身份',
+    render: (row) => (
+      <div>
+        <div>{row.sourceFileName}</div>
+        <div className="font-mono text-[11px] text-idpxyz-textMuted" title={row.sourceFileSha256}>
+          {row.sourceFileSha256.slice(0, 12)}…
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: 'auth',
+    header: '发布授权',
+    render: (row) => (
+      <span className="font-mono text-[12px]">
+        {row.authorizationId}@{row.authorizationVersion}
+      </span>
+    ),
+  },
+  { id: 'approver', header: '发布批准责任方', render: (row) => row.publicationApprover },
+  {
+    id: 'registered',
+    header: '登记时间',
+    className: 'w-[180px]',
+    render: (row) => <span className="font-mono text-[12px]">{row.registeredAt}</span>,
+  },
 ];
 
-/**
- * 价卡目录：已登记定价方案版本的查阅/复核面。
- * 页面刻意没有「新建 / 登记」动作——价卡登记是治理动作，走受控登记口
- * （parcel-pricing-register，操作员在数据库网络内手跑），不进在线请求面；
- * 在这里放登记按钮等于把治理动作搬回在线面，与登记口的存在理由相悖。
- */
-export function PriceCardCatalogPage() {
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-
-  return (
-    <ListPageTemplate<PriceCardVersionRow>
-      title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：价格方向（BUY/SELL/INTERNAL 封闭三向，
-      // 不因同名产品或渠道自动合并）、计算目的（与方向一一配对）、适用期窗口。
-      // 方案标识与源文件身份经搜索，不出筛选。
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索定价方案 / 源文件身份',
-      }}
-      columns={columns}
-      // 接线前无实例：价卡内容全属实例半边（PAR-SET-02/03 待提供），不造合成行。
-      rows={[]}
-      rowKey={(row) => `${row.plan}@${row.planVersion}`}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
+function viewStateOf(
+  answer: ApiResult<PriceCardListResponseBody> | null,
+  rowCount: number,
+  retry: () => void,
+): TemplateViewState {
+  if (answer === null) return { kind: 'loading' };
+  switch (answer.kind) {
+    case 'outcome':
+      return rowCount === 0
+        ? {
+            kind: 'empty',
+            title: '当前租户内尚无价卡版本',
+            description:
+              '空列表是正常业务答案(PRICE_CARDS_LISTED),不是故障;经受控登记口登记价卡后本页即可见。',
+          }
+        : { kind: 'ready' };
+    case 'unconfigured':
+      return {
         kind: 'unconfigured',
-        title: '计价模块尚未接线',
-        description: '价卡登记走受控登记口（parcel-pricing-register），不经在线端点；本页是查阅面，其查询端点尚未建，不发请求、不含合成数据与未确认参数的默认值。',
+        title: '接入渠道未配置',
+        description:
+          '价卡目录查阅端点(GET /pricing-price-cards)已建立并装配,但接入渠道认证方式未登记,' +
+          '服务端按 ADR-0055 如实答 403 ACCESS_CHANNEL_NOT_CONFIGURED。这是诚实答案不是接线缺陷;' +
+          '改请求或重试不会改变结果。',
         facts: {
           owner: info.owner,
           source: info.source,
-          unlock: '查阅用查询端点建成并经 ADR-0017 准入闸门放行后接线；登记动作留在受控登记口，不回在线面',
+          unlock:
+            '登记接入渠道认证参数(PAR-INT-01,实例半边)后由装配侧换上真 Intake 即放行;' +
+            '价卡登记仍走受控登记口(parcel-pricing-register),不进在线面。',
         },
+      };
+    case 'callerProblem':
+      return {
+        kind: 'error',
+        title: `调用方式问题(HTTP ${answer.status})`,
+        description: problemNote(answer.code),
+      };
+    case 'noAnswer':
+      return {
+        kind: 'error',
+        title: `服务端未形成答案(HTTP ${answer.status})`,
+        description: problemNote(answer.code),
+        onRetry: retry,
+      };
+    case 'transport':
+      return {
+        kind: 'error',
+        title: '请求未到达 parcel-api',
+        description: `${answer.message};请确认代理与服务端在运行(约定走 /api 经代理转发)。`,
+        onRetry: retry,
+      };
+  }
+}
+
+/**
+ * 价卡目录:已登记定价方案版本的查阅/复核面。
+ * 页面刻意没有「新建 / 登记」动作——价卡登记是治理动作,走受控登记口。
+ */
+export function PriceCardCatalogPage() {
+  const [keyword, setKeyword] = useState('');
+  const [answer, setAnswer] = useState<ApiResult<PriceCardListResponseBody> | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listPriceCards().then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  const retry = () => setReloadToken((token) => token + 1);
+  const rows = answer?.kind === 'outcome' ? answer.body.cards : [];
+  const needle = keyword.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        [row.planId, row.sourceFileName, row.publicationApprover].some((field) =>
+          field.toLowerCase().includes(needle),
+        ),
+      )
+    : rows;
+
+  return (
+    <ListPageTemplate<PriceCardRecord>
+      title={info.title}
+      description={`${info.owner}——价卡登记走受控登记口,本页只查阅`}
+      search={{
+        value: keyword,
+        onChange: setKeyword,
+        placeholder: '搜索定价方案 / 源文件身份 / 批准责任方',
       }}
+      filterSummary={
+        answer?.kind === 'outcome' ? `共 ${visibleRows.length} 条` : undefined
+      }
+      columns={columns}
+      rows={visibleRows}
+      rowKey={(row) => `${row.planId}@${row.planVersion}`}
+      viewState={viewStateOf(answer, rows.length, retry)}
     />
   );
 }
