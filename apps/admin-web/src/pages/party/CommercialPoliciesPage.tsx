@@ -215,7 +215,10 @@ export function CommercialPoliciesPage() {
           ))}
         </>
       }
-      filterSummary={`${policyKindLabels[kind]} ${rows.length} 条`}
+      filterSummary={
+        // 计数只在拿到业务答案后显示,未配置态不报「0 条」(与 pricing 两页同一守卫)。
+        answer?.kind === 'outcome' ? `${policyKindLabels[kind]} ${rows.length} 条` : undefined
+      }
       columns={kindColumns[kind]}
       rows={visibleRows}
       rowKey={(row) => row.key}

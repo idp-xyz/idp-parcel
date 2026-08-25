@@ -71,7 +71,10 @@ export function ServiceAreasPage() {
         onChange: setKeyword,
         placeholder: '按区域代码检索',
       }}
-      filterSummary={`当前返回 ${areas.length} 个版本`}
+      filterSummary={
+        // 同 NetworkCatalogPage:无业务答案不报数,免与未配置态说明打架。
+        answer?.kind === 'outcome' ? `当前返回 ${areas.length} 个版本` : undefined
+      }
       columns={columns}
       rows={visibleAreas}
       rowKey={(row) => `${row.code}@${row.version}`}

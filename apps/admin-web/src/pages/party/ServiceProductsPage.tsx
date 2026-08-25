@@ -92,7 +92,10 @@ export function ServiceProductsPage() {
         onChange: setSearch,
         placeholder: '搜索服务产品、版本或适用范围',
       }}
-      filterSummary={`当前返回 ${products.length} 个版本`}
+      filterSummary={
+        // 计数只在拿到业务答案后显示,未配置态不报「0 个版本」(与 pricing 两页同一守卫)。
+        answer?.kind === 'outcome' ? `当前返回 ${products.length} 个版本` : undefined
+      }
       columns={columns}
       rows={visibleProducts}
       rowKey={(row) => `${row.objectId}@${row.version}`}

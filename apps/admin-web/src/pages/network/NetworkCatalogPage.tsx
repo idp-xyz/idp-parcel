@@ -226,7 +226,13 @@ export function NetworkCatalogPage() {
           ))}
         </>
       }
-      filterSummary={`${familyLabels[familyId]} ${rows.length} 个版本`}
+      filterSummary={
+        // 计数只在拿到业务答案后显示:未配置/错误态下「0 个版本」会与状态区
+        // 「这不是目录为空」的说明自相矛盾(与 pricing 两页同一守卫)。
+        answer?.kind === 'outcome'
+          ? `${familyLabels[familyId]} ${rows.length} 个版本`
+          : undefined
+      }
       columns={familyColumns[familyId]}
       rows={visibleRows}
       rowKey={(row) => row.key}
