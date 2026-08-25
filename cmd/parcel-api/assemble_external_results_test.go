@@ -109,14 +109,15 @@ func seedExternalResultChain(t *testing.T, pool *pgxpool.Pool, tenant, unit, cas
 	t.Helper()
 	formedAt := externalResultOccurredAt.Add(-24 * time.Hour)
 
+	// is_current 显式给 true——迁移 0012 撤掉了列默认，播种方与写入方同责。
 	if _, err := pool.Exec(context.Background(),
 		`INSERT INTO customs_compliance.declaration_submission
 			(tenant_id, unit_id, procedure_ref, version_id, content_digest,
 			 members, dossier_ref, roles_ref, readiness_basis, authority_ref,
-			 fixed_at, recorded_at)
+			 is_current, fixed_at, recorded_at)
 		 VALUES ($1, $2, 'EXPORT/GENERAL', $3, 'SYN-DIGEST-1',
 			 '["SYN-PARCEL-1"]', 'SYN-DOSSIER/v1', 'SYN-ROLES/v1', 'SYN-READINESS/v1', 'SYN-AUTHORITY/v1',
-			 $4, $4)`,
+			 true, $4, $4)`,
 		tenant, unit, version, formedAt,
 	); err != nil {
 		t.Fatalf("植入申报提交：%v", err)

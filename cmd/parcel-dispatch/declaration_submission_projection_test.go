@@ -148,9 +148,11 @@ func recordFormedDeclarationSubmission(t *testing.T, fixture *synVerticalFixture
 	if outcome != ccports.DeclarationSubmissionSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	// 信封 ID 取提交幂等键三维（今天不含版本维，版本身份的权威来源是载荷 versionId），
-	// 与 OutboxDeclarationSubmissionHandoff 的 ADR-0043 认领一致。
-	return tenant.String() + "/" + declarationSubmissionUnit + "/" + declarationSubmissionProcedure
+	// 信封 ID 取提交幂等键三维加版本维（原案内更正在同一目标下换版出第二封，ID 按
+	// 版本认领才不被 EnqueueOnce 吞掉），与 OutboxDeclarationSubmissionHandoff 的
+	// ADR-0043 认领一致。
+	return tenant.String() + "/" + declarationSubmissionUnit + "/" +
+		declarationSubmissionProcedure + "/" + declarationSubmissionVersion
 }
 
 func assertUnclassifiedSubmissionProjection(t *testing.T, fixture *synVerticalFixture, member string) {

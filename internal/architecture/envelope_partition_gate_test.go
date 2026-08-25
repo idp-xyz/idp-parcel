@@ -135,8 +135,8 @@ var allowedSameExpression = map[string]string{
 	// 「无先后」；关闭口那行随分区键收窄一并删除（ID 与分区键不再同源）。
 	"internal/customscompliance/adapters/postgres/customs_case_handoff.go": annotationNoOrdering +
 		"案件链不建立跨口保序（ADR-0069）；本口 eventID 维持五维范围键，职责是建案幂等——「同一法律行为一案」",
-	"internal/customscompliance/adapters/postgres/declaration_submission_handoff.go": annotationNoOrdering +
-		"案件链不建立跨口保序（ADR-0069）；ID 缺版本维一事已另有票（.scratch/declaration-envelope-version-dedup/issues/01），今天无触发路径",
+	// declaration_submission_handoff.go 的例外行随原案内更正编排删除：信封 ID 补了
+	// 版本维（按版本认领）、分区键保持三维目标键（保版本链序），两者不再同源。
 	"internal/customscompliance/adapters/postgres/external_result_handoff.go": annotationNoOrdering +
 		"同一来源标识只出一份内容——ReceiveExternalResultHandler.Handle 对异内容判冲突，不出第二封",
 
