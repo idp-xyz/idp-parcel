@@ -1,8 +1,8 @@
 # 08 合成 S 主数据种子包
 
 Category: feature
-Status: ready-for-agent
-Owner: MCP-5(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮)
+Status: in-progress
+Owner: MCP-5(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮;MCP-5 于 13:0X 认领开工)
 
 一套隔离合成 S 主数据种子,经四个登记 CLI(parcel-pricing-register /
 parcel-network-register / parcel-customs-register / parcel-commercial)灌入本机库,
