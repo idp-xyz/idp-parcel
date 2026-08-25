@@ -8,8 +8,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
 
-// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：真实监管回执通道的
-// 认证方式属 `PAR-INT-03` 待提供，装配点上还没有一行真通道 Intake（ADR-0055）。
+// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：监管回执通道的认证
+// 方式属 `PAR-INT-03`、运营查阅接入面的认证方式属 `PAR-INT-01`，都待提供，装配点上还
+// 没有一行真通道 Intake（ADR-0055）。哨兵只此一个而不随端点分设：未配置是渠道这一层
+// 的状态，按端点分设哨兵会让装配点看起来能只配一半（判据同 visibilityhttp）。
 //
 // 它与 ErrMalformedRequest、依赖故障分成三格，判据同 ADR-0029——恢复动作不同：这一格
 // 要接入方去提供并配置通道参数，改报文或重试都不会好。本包据以回 403 +
@@ -32,9 +34,18 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 // 路由层与处理器不动（ADR-0055）。
 type UnconfiguredIntake struct{}
 
-var _ ResultIntake = UnconfiguredIntake{}
+var (
+	_ ResultIntake         = UnconfiguredIntake{}
+	_ CatalogueQueryIntake = UnconfiguredIntake{}
+)
 
 // IntakeResult 不读报文。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeResult(context.Context, *http.Request) (application.ReceiveExternalResultCommand, error) {
 	return application.ReceiveExternalResultCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeCatalogueQuery 同 IntakeResult：不读请求，只答未配置。运营接入面的认证方式
+// 同属接入渠道实例半边（ADR-0077 Decision 三），未登记前不铸造任何作用域。
+func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (RuleCatalogueQuery, error) {
+	return RuleCatalogueQuery{}, ErrAccessChannelNotConfigured
 }

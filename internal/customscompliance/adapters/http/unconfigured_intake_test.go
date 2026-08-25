@@ -13,9 +13,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
 
-// unconfiguredResultEndpoint 装出本包唯一那个端点的未配置形态。编排一律是「被调即
+// unconfiguredResultEndpoint 装出外部结果接收端点的未配置形态。编排一律是「被调即
 // 失败」的替身：未配置 Intake 的合同就是不构造命令，编排若被触到，说明有请求穿过了
-// 未配置格——装配点因此才允许在真通道就位前不装配任何应用编排。
+// 未配置格——装配点因此才允许在真通道就位前不装配任何应用编排。规则库查阅端点的
+// 未配置形态由其自己的测试文件覆盖。
 func unconfiguredResultEndpoint(t *testing.T) http.Handler {
 	t.Helper()
 	return customshttp.NewReceiveExternalResultEndpoint(

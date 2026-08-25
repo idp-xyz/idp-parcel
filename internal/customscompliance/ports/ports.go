@@ -690,3 +690,46 @@ type DeclarationSubmissionHandoffIntent struct {
 type DeclarationSubmissionHandoff interface {
 	HandOffDeclarationSubmission(ctx context.Context, intent DeclarationSubmissionHandoffIntent) error
 }
+
+// CaseRequirementRuleEntry 是建案要求规则登记册的一行：监管范围三维与判断内容。依据
+// 随行透出——「不要求」也是有依据的答案，上列时藏掉依据就分不出它与「没登记」。
+type CaseRequirementRuleEntry struct {
+	Jurisdiction domain.RegulatoryJurisdictionReference
+	Direction    domain.ManifestDirection
+	Procedure    domain.CustomsProcedureReference
+	Judgment     CaseRequirementJudgment
+}
+
+// InterpretationRuleEntry 是解释规则登记册的一行：选择键三维、法定生效区间与规则引用
+// （ADR-0070 问一甲的登记面形状）。AppliesUntil 零值即尚无终点（开放版），与
+// ObligationRegistration 同约定——终点不是登记输入，它在后继版本登记时落定。
+type InterpretationRuleEntry struct {
+	Layer        domain.ResultLayer
+	Jurisdiction domain.RegulatoryJurisdictionReference
+	Rule         domain.InterpretationRuleReference
+	AppliesFrom  time.Time
+	AppliesUntil time.Time
+}
+
+// RuleCatalogueRead 是合规规则库的伴生列表读口（ADR-0077 Decision 一/五）：管理台
+// 主数据页上列两本规则登记册——建案要求规则与解释规则。上列范围按词汇对照裁定：
+// 这两本按监管维度立键、登记的是规则内容（ADR-0070 称两者同为关务规则）；案件配置里
+// 就绪/提交授权/关闭义务/门禁条件四本按申报单元、案件或决定范围立键，是案件处理的
+// 运行态，不属规则库页，不在本读口。
+//
+// 查阅不触发判断、决定或披露——它接存储读面，不接应用编排（分界句沿
+// /shipment-request-views 先例）。不拓宽既有写口与判断读口：扩既有接口会拆全部测试
+// 替身，伴生读口另立（ADR-0077 Decision 五）。租户维在方法签名上；limit 必须为正，
+// 页大小由接入面按渠道契约裁决，读口只拒绝无意义的取值。
+type RuleCatalogueRead interface {
+	ListCaseRequirementRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CaseRequirementRuleEntry, error)
+	ListInterpretationRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]InterpretationRuleEntry, error)
+}
