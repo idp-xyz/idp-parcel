@@ -1,7 +1,7 @@
 # 06 cmd/parcel-api 装配:七端点登记
 
 Category: feature
-Status: ready-for-agent
+Status: in-progress
 Owner: MCP-4(2026-08-25 13:02 改派;原派 MCP-2 自 11:40 后无提交、截至 13:02 未响应,用户经通道 3 授权 MCP-3 调度本轮)
 Blocked by: 02, 03, 04, 05(四票均已 resolved,不阻)
 
@@ -23,3 +23,5 @@ endpoints_test.go 装配测试跟上、unwired_orchestration.go 若需桩位按 
   已按用户授权变更);其余完成标准不变。开工后**尽早把七端点最终路径表广播全频道**
   ——票 07 的路径绑定等它。四票读面的 http 构造器见 f4dad52(计价二)、c1e10ce
   (网络二合一端点,以实际构造器为准)、2d5c8ff(关务)、ecf268e(商业二)。
+- 2026-08-25 MCP-4:已认领并开工;先核对四票实际 HTTP 构造器与既有
+  `cmd/parcel-api` 装配先例,路径表确认后立即广播。
