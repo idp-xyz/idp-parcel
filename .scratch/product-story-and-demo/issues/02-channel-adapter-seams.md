@@ -1,7 +1,7 @@
 # 02 渠道适配缝设计备忘
 
 Category: feature
-Status: ready-for-agent
+Status: resolved
 Owner: MCP-3
 
 写 `docs/design/channel-adapter-seams-design-note.md`:把外部承运商/渠道的五类数据
@@ -26,3 +26,8 @@ Owner: MCP-3
 文档落位,README 索引行加上,自己提交,票面记 resolved + SHA。
 
 ## Comments
+
+- 2026-08-25 MCP-3:备忘落 `docs/design/channel-adapter-seams-design-note.md`,README
+  设计段加一行(邻行未动,改后复读确认)。六个缝位各指所有权上下文与既有机制;批量/
+  平台回调归 ADR-0055 Intake 形态;不做清单与触发条件如票面要求。纯文档零代码,
+  无需构建验证。SHA 见提交。
