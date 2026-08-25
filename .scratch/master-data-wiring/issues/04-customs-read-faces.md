@@ -1,8 +1,8 @@
 # 04 customs-compliance 读面:合规规则库
 
 Category: feature
-Status: ready-for-agent
-Owner: 派 MCP-5
+Status: in-progress
+Owner: MCP-5(2026-08-25 10:57 认领)
 Blocked by: 01(已 resolved 即不阻)
 
 给管理台一页供数:compliance-rules(合规规则库)。四件套的前三件,装配件不在本票,
