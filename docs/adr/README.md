@@ -82,6 +82,7 @@
 - [ADR-0074：TF 载运对象与 VE 包裹是两个排队主体，TF 对象链分区键带口名段](./0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)
 - [ADR-0075：客户地址随判断请求在请求期携带过界，network-routing 不建读取端口](./0075-customer-address-is-carried-with-the-routing-request.md)
 - [ADR-0076：运营追踪查阅走独立读口消费投影库，不复用客户视图端点；运营作用域是租户级、无客户维](./0076-operations-tracking-read-is-a-separate-endpoint-on-the-projection-store.md)
+- [ADR-0077：主数据登记目录查阅沿运营读口通例——独立查询端点、每上下文自立租户级作用域、未配置即拒；空目录如实答空](./0077-master-data-catalogue-read-follows-the-operations-read-pattern.md)
 
 ## 已被取代决策
 
