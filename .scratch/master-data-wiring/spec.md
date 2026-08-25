@@ -71,10 +71,17 @@ PAR-INT-01 接入认证未登记,一切新端点装配 UnconfiguredIntake,生产
 ## 子票
 
 - 01 ADR-0077 主数据目录查阅通例 —— MCP-2,已落
-- 02 parcel-pricing 读面(价卡目录+参考序列) —— 派 MCP-3
-- 03 network-routing 读面(网络目录+服务区域) —— 派 MCP-4
-- 04 customs-compliance 读面(合规规则库) —— 派 MCP-5
-- 05 party-commercial 读面(服务产品+商业策略) —— 派 MCP-6
-- 06 cmd/parcel-api 装配(七端点登记) —— MCP-2,Blocked by: 02,03,04,05
-- 07 admin-web 七页接线 —— MCP-2,Blocked by: 06
-- 08 合成 S 主数据种子包 —— MCP-2
+- 02 parcel-pricing 读面(价卡目录+参考序列) —— resolved(f4dad52)
+- 03 network-routing 读面(网络目录+服务区域) —— resolved(c1e10ce)
+- 04 customs-compliance 读面(合规规则库) —— resolved(2d5c8ff)
+- 05 party-commercial 读面(服务产品+商业策略) —— resolved(ecf268e)
+- 06 cmd/parcel-api 装配(七端点登记) —— resolved(820c5a4,补验 3b6c03d)
+- 07 admin-web 七页接线 —— 2026-08-25 18:02 改派 WSL 队列频道 3,证据见票面 Comments
+- 08 合成 S 主数据种子包 —— 2026-08-25 18:02 改派 WSL 队列频道 5,证据见票面 Comments
+
+## 调度轮注记
+
+- 2026-08-25 18:02 WSL 队列频道 1:用户经该队列指示「启动 idp-parcel 实施」并授权调度
+  频道 3/5/7/9。02–06 的 resolved 与 SHA 按 git log 与各票面对账回填;07/08 改派证据记
+  在各票面 Comments。演示动线(product-story-and-demo/04)的筹备半边(只读)同轮派频道 7,
+  执行半边仍候 07/08。本轮完工报告一律改报 WSL 队列频道 1;不推远端照旧。

@@ -34,4 +34,6 @@ AI 功能、SaaS 计费。这些记为方向,等能力范围判据点名真实�
 - 01 产品故事文档 —— MCP-3,resolved(8cf351d)
 - 02 渠道适配缝设计备忘 —— MCP-3,resolved(3244e5a)
 - 03 PRD 入档与索引 —— MCP-3,resolved(3f2e606)
-- 04 演示动线(合成 S 端到端) —— 待派,Blocked by: master-data-wiring/06,07,08
+- 04 演示动线(合成 S 端到端) —— 待派,Blocked by: master-data-wiring/07,08(06 已于
+  820c5a4 收口);筹备半边(只读:动线脚本草案+种子缺口清单+CLI 勘察)2026-08-25 18:02 派
+  WSL 队列频道 7,产出落本目录 journey-draft.md,执行半边仍候 07/08 收口

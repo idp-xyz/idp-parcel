@@ -26,3 +26,7 @@ parcel-network-register / parcel-customs-register / parcel-commercial)灌入本�
   能讲通「建产品→配价→一单的一生」;不是每表孤立几行。②脚本与 JSON 的入库位置
   由你定并记回本票(建议 `scripts/demo-seeds/` 一类,明确标注仅限隔离环境);本轮
   完工报告改回**频道 3**。
+- 2026-08-25 18:02 WSL 队列频道 1(本轮调度):本票改派 WSL 队列频道 5。证据:原主 13:02
+  认领后至 17:57 零提交,git status 全树(含 untracked)亦无种子 JSON/脚本产物。开工先查
+  库内有无 SYN- 残留(原主可能灌过半截)并把发现记回本票。完工报告改报 WSL 队列频道 1
+  (上一条「改回频道 3」为上一轮调度口径,本轮作废)。
