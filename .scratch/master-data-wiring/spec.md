@@ -1,7 +1,7 @@
 # 主数据区 7 页接线(B 批)+ 合成 S 种子包
 
 Category: feature
-Status: in-progress
+Status: resolved(子票全部 resolved;数据态验证不在本 feature,见下「收口」)
 
 授权来源:用户经 IDP 队列(通道 2)于 2026-08-25 上午放行——10:44 左右「开干」批准
 [可接线前沿调研](../ve-operations-tracking-read/next-wiring-frontier.md)的 B 批主数据方案,
@@ -82,7 +82,19 @@ PAR-INT-01 接入认证未登记,一切新端点装配 UnconfiguredIntake,生产
 - 06 cmd/parcel-api 装配(七端点登记) —— resolved(820c5a4,补验 3b6c03d)
 - 07 admin-web 七页接线 —— resolved(253b449;封存 8cb43e4,票面 06ccf9e;tsc --noEmit 零输出
   + vite build 绿,七页未配置态经 curl 与无头浏览器验收,数据态留集成轮候种子与读面准入)
-- 08 合成 S 主数据种子包 —— 2026-08-25 18:02 改派 WSL 队列频道 5,证据见票面 Comments
+- 08 合成 S 主数据种子包 —— resolved(`8f2d9f5`;产物落 `scripts/demo-seeds/`,
+  seed.sh 一键复灌自带迁移步骤,README 标注仅限隔离环境)
+
+## 收口
+
+子票全部 resolved,本 feature 的交付面(七页读面 + 端点 + 装配 + 页面 + 种子包)已闭合。
+
+**未随本 feature 闭合的一件**:七页的**数据态**从未验过,只验到未配置态(票 07 ③ 的验收
+口径)。阻塞物不是种子——票 08 的种子已可灌进库——而是查阅端点装配在 UnconfiguredIntake
+之后,页面取不到数(票 07 ④ 记录,频道 7 勘察 journey-draft 取证)。该阻塞物已由
+[ADR-0078](../../docs/adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)
+裁决,实现归 [product-story-and-demo/05](../product-story-and-demo/issues/05-isolated-read-admission.md)。
+数据态验证随那一票走,不回本 feature。
 
 ## 调度轮注记
 
