@@ -1,8 +1,8 @@
 # 05 隔离读面准入:按 ADR-0078 落装配注入放行
 
 Category: feature
-Status: ready-for-agent
-Owner: 待派
+Status: resolved
+Owner: MCP-1
 Blocked by: (无——ADR-0078 已接受,机制半边即刻可做)
 
 实现 [ADR-0078](../../../docs/adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md):
@@ -36,3 +36,13 @@ Blocked by: (无——ADR-0078 已接受,机制半边即刻可做)
 
 - 2026-08-26 立票:用户经队列通道 1 委托裁断,三路选项(简报)裁定 b 路,ADR-0078
   记录裁决与全部理由。
+- 2026-08-26 收口(MCP-1):**resolved**。实现 5023279(六上下文隔离 Intake+装配切换+
+  main 门禁与启动日志+两态测试),ADR 勘误 affc299(委托查阅作用域带可见账户维、
+  定位标识属传输形状),门禁修正 766bd58(前缀常量去分隔符,标识前缀门禁所拦)。
+  **绿的种类**:①全量真库套件 `go test -p 1 ./...` 退出码 0(79 包 ok / 0 FAIL,
+  DSN 55432);②受影响七包单测绿;③架构门禁绿。**手验**(本机,库内为频道 5 已灌
+  种子):未设变量六探针全 403;`SYN-TENANT-01` 启用后八条查阅端点全 200(价卡端点
+  逐行可见 SYN-PLAN-* 种子),POST /shipment-requests 与 /customer-tracking-view
+  维持 403;`TENANT-PROD-1` 启动即拒且报错点名 SYN- 前缀与 ADR-0078;启动日志出声
+  (Isolated read admission enabled + tenant)。委托/追踪两读页答空列表属实——事实链
+  种子归票 04,账户约定 SYN-ACCOUNT-01 已写进票 04 要求。

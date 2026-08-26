@@ -3,7 +3,8 @@
 Category: feature
 Status: draft
 Owner: 待派
-Blocked by: ./05-isolated-read-admission.md(master-data-wiring/06,07,08 已各自 resolved 解除;v1「页面负责如实展示」经勘察证实还需读面准入,裁决见 ADR-0078,实现在票 05)
+Blocked by: (已全解除——master-data-wiring/06,07,08 与本 feature 票 05 均 resolved;
+读面准入已按 ADR-0078 落地,`IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` 启用)
 
 把「产品就绪 = 可演示」具体化为一条动线:租户的物流产品经理用合成 S 数据走
 「建服务产品 → 配价卡与线路 → 一单委托从提交到终局 → 追踪与对账」,管理台全链可看。

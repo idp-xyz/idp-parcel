@@ -34,9 +34,9 @@ AI 功能、SaaS 计费。这些记为方向,等能力范围判据点名真实�
 - 01 产品故事文档 —— MCP-3,resolved(8cf351d)
 - 02 渠道适配缝设计备忘 —— MCP-3,resolved(3244e5a)
 - 03 PRD 入档与索引 —— MCP-3,resolved(3f2e606)
-- 04 演示动线(合成 S 端到端) —— 待派,Blocked by: 票 05(master-data-wiring/06,07,08
-  已各自收口解除;勘察发现 v1 还需读面准入,见 journey-draft.md 与 read-admission-brief.md)
-- 05 隔离读面准入(ADR-0078 实现) —— 待派,ready-for-agent。裁决经过:简报备三路
-  选项,用户 2026-08-26 经队列通道 1 委托本会话裁断,裁定 b 路(装配注入放行),
-  记录与全部理由在 ADR-0078;a 路(合成渠道 S 级登记)与 c 路(数据态不走页面)的
-  否决理由记于该 ADR Alternatives
+- 04 演示动线(合成 S 端到端) —— 待派,阻塞已全解除(master-data-wiring/06,07,08
+  与本 feature 票 05 均 resolved);种子账户约定见票面要求
+- 05 隔离读面准入(ADR-0078 实现) —— MCP-1,resolved(实现 5023279,勘误 affc299,
+  门禁修正 766bd58;全量真库套件退出码 0)。裁决经过:简报备三路选项,用户 2026-08-26
+  经队列通道 1 委托本会话裁断,裁定 b 路(装配注入放行),记录与全部理由在 ADR-0078;
+  a 路(合成渠道 S 级登记)与 c 路(数据态不走页面)的否决理由记于该 ADR Alternatives
