@@ -28,6 +28,23 @@ func NewControlBasisReference(value string) (ControlBasisReference, error) {
 	return ControlBasisReference{required}, err
 }
 
+// CommercialResolutionReference 回指一次已固定的商业解析。它是本上下文向商业侧提问
+// 「这个范围要不要接受前财务控制」时唯一带得动的键。
+//
+// 为什么不是合同版本：结算作用域（法人/账户/币种）与商业侧的声明键（客户合同版本）不同维，
+// 由本上下文自行从作用域反查合同等于在这里发明第二处账户映射定义，而 CONTEXT 明禁本上下文
+// 自行推导商业结论。为什么不是整份闭包：调用方带着闭包回来，键就可以被替换（ADR-0027 /
+// ADR-0062 「消费方只回指标识」）。
+//
+// 它是调用方回显来的，不是本上下文铸造的——施加路径的作用域本就派生自同一次解析，两者
+// 因此必然同源。
+type CommercialResolutionReference struct{ requiredValue }
+
+func NewCommercialResolutionReference(value string) (CommercialResolutionReference, error) {
+	required, err := newRequiredValue("commercial resolution reference", value)
+	return CommercialResolutionReference{required}, err
+}
+
 type AsOfSemantic struct{ requiredValue }
 
 func NewAsOfSemantic(value string) (AsOfSemantic, error) {

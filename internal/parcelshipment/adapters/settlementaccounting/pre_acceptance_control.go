@@ -25,18 +25,30 @@ const (
 	reasonAmountNotConfigured = "CONTROL_AMOUNT_NOT_CONFIGURED"
 )
 
-// ControlScopeSource 为一份委托解析资金作用域（责任法人/结算账户/币种）。
+// ControlScope 是一次控制请求的资金坐标连同它的商业来路。两者装在一个值里而不是分两个
+// 方法取，是因为资金作用域本就是从那次商业解析的结算政策回显派生的：同出一次解析，就该
+// 同进同出。拆成两口会给出两次解析的机会，而「施加与释放两径同引用」正靠它们同源——
+// 一旦分头取，同源就退化成一条谁也没在证的约定。
+type ControlScope struct {
+	Settlement sadomain.SettlementScope
+	Resolution sadomain.CommercialResolutionReference
+}
+
+// ControlScopeSource 为一份委托解析资金作用域（责任法人/结算账户/币种）与商业解析回指。
 //
 // 作用域该从已解析的结算政策来（ADR-0044 已让方式与六维范围可观察），接通那条缝之前它是
 // 实例半边：没有租户就没有账户映射。nil 或第二个返回值为 false 都是「显式未配置」，本适配
 // 器据以停在`未形成`——停下，不代拟一个账户去冻别人的钱。
+//
+// 回指是 SA 控制策略视图向商业侧提问的键（sa-preacceptance-policy-view/01 裁决）：SA 不得
+// 自行从资金作用域反查合同，那会成为账户映射的第二处定义。
 type ControlScopeSource interface {
 	FormControlScope(
 		ctx context.Context,
 		identity psdomain.SourceIdentity,
 		shipmentRequestID psdomain.ShipmentRequestID,
 		submissionVersion psdomain.SubmissionVersionID,
-	) (sadomain.SettlementScope, bool, error)
+	) (ControlScope, bool, error)
 }
 
 // ControlAmountSource 形成本次控制要占用的金额（最小币单位）。金额该由估价形成（计价缝），
@@ -99,7 +111,7 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	if adapter.scopes == nil {
 		return notFormed(reasonScopeNotConfigured)
 	}
-	scope, formedScope, err := adapter.scopes.FormControlScope(
+	controlScope, formedScope, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("form control scope: %w", err)
@@ -119,7 +131,7 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 		return notFormed(reasonAmountNotConfigured)
 	}
 
-	command, err := applyCommandFor(request, scope, amount)
+	command, err := applyCommandFor(request, controlScope, amount)
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, err
 	}
@@ -140,7 +152,7 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 	if adapter.scopes == nil {
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
 	}
-	scope, formed, err := adapter.scopes.FormControlScope(
+	controlScope, formed, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
 	if err != nil {
 		return fmt.Errorf("form control scope: %w", err)
@@ -149,10 +161,13 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
 	}
 
+	// 释放命令不带商业解析回指：释放不问控制策略，它按原请求身份在冻结账本上认领
+	// （ReleasePreAcceptanceControlCommand 的注释已把「不带额外入参」的理由写在那里）。
+	// 回指在这条路径上取到了却不用，是因为它与施加路径共用同一个作用域来源。
 	answer, err := adapter.release.Handle(ctx, saapplication.ReleasePreAcceptanceControlCommand{
 		TenantID:  tenantFor(request.Identity),
 		RequestID: releaseRequestIdentity(request.ControlResultID),
-		Scope:     scope,
+		Scope:     controlScope.Settlement,
 	})
 	if err != nil {
 		return fmt.Errorf("release pre-acceptance control: %w", err)
@@ -178,14 +193,15 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 // （`未受理`），不在这里替它先答——与 partycommercial 适配器同一条纪律。
 func applyCommandFor(
 	request psports.FinancialControlRequest,
-	scope sadomain.SettlementScope,
+	scope ControlScope,
 	amount int64,
 ) (saapplication.ApplyPreAcceptanceControlCommand, error) {
 	identity := controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion)
 	command := saapplication.ApplyPreAcceptanceControlCommand{
 		TenantID:    tenantFor(request.Identity),
-		Scope:       scope,
+		Scope:       scope.Settlement,
 		AmountMinor: amount,
+		Resolution:  scope.Resolution,
 	}
 	if requestID, err := sadomain.NewControlRequestID(identity); err == nil {
 		command.RequestID = requestID

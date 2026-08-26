@@ -28,14 +28,18 @@ type policyDouble struct {
 	unconfigured bool
 	err          error
 	asked        int
+	// askedWith 记下最后一次被问到的商业解析回指，供「编排把回指原样透传」那条用例取证。
+	askedWith domain.CommercialResolutionReference
 }
 
 func (double *policyDouble) LoadControlPolicy(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.SettlementScope,
+	resolution domain.CommercialResolutionReference,
 ) (domain.PreAcceptanceControlPolicy, bool, error) {
 	double.asked++
+	double.askedWith = resolution
 	if double.err != nil {
 		return domain.PreAcceptanceControlPolicy{}, false, double.err
 	}
@@ -258,6 +262,7 @@ func command(t *testing.T, amountMinor int64) application.ApplyPreAcceptanceCont
 		AmountMinor: amountMinor,
 		Association: value(t, domain.NewBusinessAssociationReference, "submission-1"),
 		AsOf:        asOf,
+		Resolution:  value(t, domain.NewCommercialResolutionReference, "RES-1"),
 	}
 }
 
@@ -488,6 +493,59 @@ func TestIncompleteRequestIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
 	}
 	if policy.asked != 0 || balance.loaded != 0 || repository.loaded != 0 {
 		t.Fatal("身份不成立却已经读了权威")
+	}
+}
+
+// Covers: sa-preacceptance-policy-view/01 键形裁决——缺商业解析回指的命令停在`未受理`，
+// 且一次也不去问控制策略。
+//
+// 这一格必须与`未配置`分开：放它过去，视图拿不到键只能答 found=false，编排就会落成
+// CONTROL_POLICY_NOT_CONFIGURED——那句话是「商业侧没登记过这份合同」，会把租户支去补一份
+// 其实早就存在的声明，而真正缺的是调用方少给了一个键。两种缺口的补法完全相反。
+func TestAControlRequestWithoutACommercialResolutionIsRefusedBeforeAsking(t *testing.T) {
+	policy := requiredPolicy(t)
+	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
+	repository := &ledgerDouble{ledger: domain.NewFreezeLedger()}
+	handler := newHandler(policy, balance, repository)
+
+	unreferenced := command(t, 4_000)
+	unreferenced.Resolution = domain.CommercialResolutionReference{}
+
+	result, err := handler.Handle(context.Background(), unreferenced)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ControlRequestNotAccepted {
+		t.Fatalf("outcome = %q, want CONTROL_REQUEST_NOT_ACCEPTED", result.Outcome())
+	}
+	if result.NotFormedReason() == application.ControlPolicyNotConfigured {
+		t.Fatal("少给键被答成了「商业侧未登记」——租户会去补一份已经存在的声明")
+	}
+	if policy.asked != 0 {
+		t.Fatal("没有回指还是去问了控制策略——那一问问的是哪份合同，谁也说不出")
+	}
+	if balance.loaded != 0 || repository.loaded != 0 {
+		t.Fatal("回指缺席却已经读了这个客户的资金")
+	}
+}
+
+// Covers: sa-preacceptance-policy-view/01 —— 编排把命令上的回指原样交给控制策略视图。
+// 编排不得在这里挑、改或补一个回指：它自己不认识商业侧的键，能做的只有转交。
+func TestTheCommercialResolutionReachesThePolicyViewVerbatim(t *testing.T) {
+	policy := requiredPolicy(t)
+	handler := newHandler(policy, &balanceDouble{balance: balanceWith(t, 10_000)},
+		&ledgerDouble{ledger: domain.NewFreezeLedger()})
+
+	referenced := command(t, 4_000)
+	referenced.Resolution = value(t, domain.NewCommercialResolutionReference, "RES-OTHER-9")
+
+	if _, err := handler.Handle(context.Background(), referenced); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if policy.askedWith.String() != "RES-OTHER-9" {
+		t.Fatalf("视图被问到的回指 = %q, want RES-OTHER-9", policy.askedWith)
 	}
 }
 

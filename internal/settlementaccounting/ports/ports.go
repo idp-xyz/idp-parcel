@@ -28,11 +28,21 @@ import (
 //
 // 第三格不是可有可无的形状之争：少了它，适配器交回零值加 nil 就会在编排里落成一个带空
 // 依据的`无控制`，而两格代数里没有任何地方能把那一格拦下来。
+//
+// 键形（sa-preacceptance-policy-view/01 裁决）：除作用域外还收一格**商业解析回指**。
+// 作用域是资金维（法人/账户/币种），而商业侧的控制声明按客户合同版本键入——两者不同维，
+// 少了回指，实现者只能自己从作用域反查合同，那正是「本上下文只消费不自行推导」禁的事，
+// 且反查目录会成为账户映射的第二处定义。回指由调用方从同一次解析回显带来（施加路径的
+// 作用域本就派生自它），实现凭（租户+回指）取商业侧已固定的闭包再读声明。
+//
+// 回指是必备入参，不是可选：空回指下没有任何诚实答案——它既不是「未登记」（没人问过，
+// 谈不上登记与否）也不是「调不通」。调用方给不出回指时，命令在编排的受理判断处就该停住。
 type PreAcceptanceControlPolicyView interface {
 	LoadControlPolicy(
 		ctx context.Context,
 		tenant domain.TenantID,
 		scope domain.SettlementScope,
+		resolution domain.CommercialResolutionReference,
 	) (domain.PreAcceptanceControlPolicy, bool, error)
 }
 

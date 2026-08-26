@@ -98,10 +98,18 @@ type ApplyPreAcceptanceControlCommand struct {
 	AmountMinor int64
 	Association domain.BusinessAssociationReference
 	AsOf        domain.ControlAsOf
+	// Resolution 回指调用方那次商业解析，控制策略视图凭它向商业侧提问
+	// （sa-preacceptance-policy-view/01 裁决）。作用域与它同源：作用域正是从这次解析的
+	// 结算政策回显派生的，所以要求调用方一并带上不是多一次索取，是把已有的那一份写明。
+	Resolution domain.CommercialResolutionReference
 }
 
 // minimumIdentityEstablished 在读任何权威之前判断该不该读。金额算在受理条件里而不留给
 // 领域构造期：非正数金额的请求根本不该去读这个客户的余额，而一次已经发出的读取收不回来。
+//
+// 商业解析回指同理算在受理条件里，而且理由更硬：少了它，控制策略视图根本无从提问，
+// 而它答出的任何一格都会是假话——`未登记`会把「没问成」说成「商业侧没登记过」，等来的
+// 是租户去补一份其实已经存在的声明。停在`未受理`才说得清是调用方少给了键。
 func (command ApplyPreAcceptanceControlCommand) minimumIdentityEstablished() bool {
 	return command.TenantID.String() != "" &&
 		command.RequestID.String() != "" &&
@@ -110,7 +118,8 @@ func (command ApplyPreAcceptanceControlCommand) minimumIdentityEstablished() boo
 		command.Scope.Currency().String() != "" &&
 		command.Association.String() != "" &&
 		command.AsOf.Valid() &&
-		command.AmountMinor > 0
+		command.AmountMinor > 0 &&
+		command.Resolution.String() != ""
 }
 
 type ApplyPreAcceptanceControlResult struct {
@@ -219,7 +228,8 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 
 	// 控制策略先于余额与登记册。合同规定本范围无财务控制时，连读余额都不该发生——那次
 	// 读取既是白做的，也已经取了这个客户的资金状况。
-	policy, configured, err := handler.policy.LoadControlPolicy(ctx, command.TenantID, command.Scope)
+	policy, configured, err := handler.policy.LoadControlPolicy(
+		ctx, command.TenantID, command.Scope, command.Resolution)
 	if err != nil {
 		// 商业侧调不通形成待判断，不读成「不要求控制」。后者正是 CONTEXT 禁止的默认信用
 		// 通过：一次商业故障会因此变成一个看起来通过了的接受前控制。
@@ -372,6 +382,9 @@ func (handler *ApplyPreAcceptanceControlHandler) notFormed(
 
 // continuationFor 由请求身份、作用域、金额与原因共同派生，因此同一请求因同一原因停滞时拿到
 // 的引用始终相同——这正是调用方能查询原次尝试而不必靠猜的原因。
+//
+// 商业解析回指也在摘要里：它决定策略视图问到的是哪一份合同，换了回指就是换了一次问答，
+// 两者共用一条续办引用会让续办方按引用查回来的是另一份商业依据下的停摆。
 func continuationFor(command ApplyPreAcceptanceControlCommand, reason NotFormedReason) ContinuationReference {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		reason.String(),
@@ -385,6 +398,7 @@ func continuationFor(command ApplyPreAcceptanceControlCommand, reason NotFormedR
 		command.AsOf.Semantic().String(),
 		command.AsOf.StrategyVersion().String(),
 		command.AsOf.At().Format(time.RFC3339Nano),
+		command.Resolution.String(),
 	}, "\x00")))
 	return ContinuationReference{value: "CONT-" + hex.EncodeToString(digest[:8])}
 }

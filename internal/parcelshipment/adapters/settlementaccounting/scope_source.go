@@ -22,7 +22,8 @@ type SettlementAccountDirectory interface {
 }
 
 // PolicyBackedControlScopeSource 从已解析的结算政策推导资金作用域（ADR-0044/0047 接通
-// 的那条缝）：解析回显给出法人与币种，账户目录补上结算账户。
+// 的那条缝）：解析回显给出法人与币种，账户目录补上结算账户；同一次解析的标识一并交回，
+// 作为 SA 向商业侧提问控制策略的键。
 //
 // 它走 CommercialBasisResolver 而不是另开取数口：解析幂等（同一查询交回同一采用），施加
 // 与释放两条路径因此拿到同一个作用域，不需要在请求上多背一份回显。
@@ -45,14 +46,18 @@ var _ ControlScopeSource = (*PolicyBackedControlScopeSource)(nil)
 // FormControlScope 分三段：解析取回显 → 目录换账户 → 拼作用域。任何一段答「没有」都是
 // 未形成而不是错误——解析未含结算政策、目录未配置、映射查无，三者都要停在
 // `CONTROL_SCOPE_NOT_CONFIGURED` 等配置或商业依据补齐，而不是让编排把它当故障重试。
+//
+// 解析标识与作用域同出这一次解析，一并交回。译不动它是编程错误不是未形成：解析既然成了，
+// 标识就在快照的构造期受过护（NewCommercialBasisSnapshot 拒无标识），此处译不过去只可能是
+// 两侧词汇表出了分歧。
 func (source *PolicyBackedControlScopeSource) FormControlScope(
 	ctx context.Context,
 	identity psdomain.SourceIdentity,
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
-) (sadomain.SettlementScope, bool, error) {
+) (ControlScope, bool, error) {
 	if source.commercial == nil || source.directory == nil {
-		return sadomain.SettlementScope{}, false, nil
+		return ControlScope{}, false, nil
 	}
 
 	resolution, err := source.commercial.ResolveCommercialBasis(ctx, psports.CommercialBasisQuery{
@@ -61,34 +66,39 @@ func (source *PolicyBackedControlScopeSource) FormControlScope(
 		SubmissionVersion: submissionVersion,
 	})
 	if err != nil {
-		return sadomain.SettlementScope{}, false, fmt.Errorf("resolve commercial basis for control scope: %w", err)
+		return ControlScope{}, false, fmt.Errorf("resolve commercial basis for control scope: %w", err)
 	}
 	terms, present := resolution.Snapshot.SettlementTerms()
 	if !present {
 		// 解析没成或成了但不含结算政策：两者下都推不出作用域。不在这里区分——该由谁
 		// 补什么，判断编排在商业解析那一步早已答过。
-		return sadomain.SettlementScope{}, false, nil
+		return ControlScope{}, false, nil
 	}
 
 	account, found, err := source.directory.FindSettlementAccount(ctx, identity, terms)
 	if err != nil {
-		return sadomain.SettlementScope{}, false, fmt.Errorf("find settlement account: %w", err)
+		return ControlScope{}, false, fmt.Errorf("find settlement account: %w", err)
 	}
 	if !found {
-		return sadomain.SettlementScope{}, false, nil
+		return ControlScope{}, false, nil
 	}
 
 	legalEntity, err := sadomain.NewLegalEntityReference(terms.LegalEntity().String())
 	if err != nil {
-		return sadomain.SettlementScope{}, false, fmt.Errorf("%w: legal entity: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, false, fmt.Errorf("%w: legal entity: %v", ErrUntranslatableAnswer, err)
 	}
 	currency, err := sadomain.NewCurrencyCode(terms.Currency().String())
 	if err != nil {
-		return sadomain.SettlementScope{}, false, fmt.Errorf("%w: currency: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, false, fmt.Errorf("%w: currency: %v", ErrUntranslatableAnswer, err)
 	}
 	scope, err := sadomain.NewSettlementScope(legalEntity, account, currency)
 	if err != nil {
-		return sadomain.SettlementScope{}, false, fmt.Errorf("%w: settlement scope: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, false, fmt.Errorf("%w: settlement scope: %v", ErrUntranslatableAnswer, err)
 	}
-	return scope, true, nil
+	reference, err := sadomain.NewCommercialResolutionReference(resolution.Snapshot.ResolutionID().String())
+	if err != nil {
+		return ControlScope{}, false, fmt.Errorf("%w: commercial resolution reference: %v",
+			ErrUntranslatableAnswer, err)
+	}
+	return ControlScope{Settlement: scope, Resolution: reference}, true, nil
 }

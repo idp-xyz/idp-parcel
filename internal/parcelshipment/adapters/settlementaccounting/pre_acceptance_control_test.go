@@ -34,14 +34,19 @@ type policyDouble struct {
 	unconfigured bool
 	err          error
 	asked        int
+	// askedWith 记下最后一次被问到的商业解析回指：本适配器铸的命令带没带对回指，
+	// 只有到这一层才看得见。
+	askedWith sadomain.CommercialResolutionReference
 }
 
 func (double *policyDouble) LoadControlPolicy(
 	_ context.Context,
 	_ sadomain.TenantID,
 	_ sadomain.SettlementScope,
+	resolution sadomain.CommercialResolutionReference,
 ) (sadomain.PreAcceptanceControlPolicy, bool, error) {
 	double.asked++
+	double.askedWith = resolution
 	if double.err != nil {
 		return sadomain.PreAcceptanceControlPolicy{}, false, double.err
 	}
@@ -148,7 +153,7 @@ var (
 )
 
 type scopeSourceDouble struct {
-	scope  sadomain.SettlementScope
+	scope  adapter.ControlScope
 	formed bool
 	err    error
 }
@@ -158,7 +163,7 @@ func (double *scopeSourceDouble) FormControlScope(
 	_ psdomain.SourceIdentity,
 	_ psdomain.ShipmentRequestID,
 	_ psdomain.SubmissionVersionID,
-) (sadomain.SettlementScope, bool, error) {
+) (adapter.ControlScope, bool, error) {
 	return double.scope, double.formed, double.err
 }
 
@@ -197,6 +202,16 @@ func settlementScope(t *testing.T) sadomain.SettlementScope {
 	return scope
 }
 
+// controlScope 把资金作用域与商业解析回指装成 ControlScopeSource 交回的那一件。回指用
+// 与 scope_source_test 同一个字面量，两处夹具因此说的是同一次解析。
+func controlScope(t *testing.T, settlement sadomain.SettlementScope) adapter.ControlScope {
+	t.Helper()
+	return adapter.ControlScope{
+		Settlement: settlement,
+		Resolution: value(t, sadomain.NewCommercialResolutionReference, "RES-1"),
+	}
+}
+
 func newControlFixture(t *testing.T) *controlFixture {
 	t.Helper()
 
@@ -217,7 +232,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 		policy:  &policyDouble{policy: policy},
 		balance: &balanceDouble{balance: balance},
 		ledger:  &ledgerDouble{ledger: sadomain.NewFreezeLedger()},
-		scopes:  &scopeSourceDouble{scope: scope, formed: true},
+		scopes:  &scopeSourceDouble{scope: controlScope(t, scope), formed: true},
 		amounts: &amountSourceDouble{amount: 4_000, formed: true},
 	}
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
@@ -310,6 +325,26 @@ func TestAHeldFreezeBecomesAFormedHeldResult(t *testing.T) {
 	}
 	if assessment.Result.AsOf() != fixture.expectedAsOf(t) {
 		t.Fatalf("as-of = %#v, want the provider echo", assessment.Result.AsOf())
+	}
+}
+
+// Covers: sa-preacceptance-policy-view/01 —— 本适配器铸的命令带上作用域源交回的那个商业
+// 解析回指，一路到达提供方的控制策略视图。
+//
+// 断言落在视图被问到的值上而不是命令字段上：命令是本包内部的中间物，钉住它只证明字段被
+// 赋过值；钉住视图收到什么，才证明这条回指真的走完了「作用域源 → 命令 → 编排 → 视图」
+// 全程。中途任何一段丢了它，提供方就会拿不到键，而那一格已由 SA 编排答`未受理`。
+func TestTheAdapterCarriesTheResolutionEchoThroughToThePolicyView(t *testing.T) {
+	fixture := newControlFixture(t)
+	fixture.scopes.scope.Resolution = value(t, sadomain.NewCommercialResolutionReference, "RES-ECHOED-2")
+
+	if _, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(
+		context.Background(), fixture.request(t)); err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+
+	if fixture.policy.askedWith.String() != "RES-ECHOED-2" {
+		t.Fatalf("视图被问到的回指 = %q, want 作用域源交回的 RES-ECHOED-2", fixture.policy.askedWith)
 	}
 }
 

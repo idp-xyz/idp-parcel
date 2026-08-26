@@ -108,7 +108,8 @@ func scopeIdentity(t *testing.T) psdomain.SourceIdentity {
 
 // Covers: ADR-0047 作用域缝的机制半边——法人与币种取自解析采用的结算政策回显
 // （ADR-0044），账户由目录按同一份回显换取；三维拼成的作用域正是 SA 要求的
-// 「责任法人/结算账户/币种」。
+// 「责任法人/结算账户/币种」。并覆 sa-preacceptance-policy-view/01：同一次解析的标识
+// 与作用域一并交回，SA 控制策略视图凭它向商业侧提问，不必也不得从资金维反查合同。
 func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 	terms := adoptedTerms(t)
 	resolver := &resolverDouble{resolution: psports.CommercialBasisResolution{
@@ -130,13 +131,19 @@ func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 	if !formed {
 		t.Fatal("回显与目录都在，作用域却没形成")
 	}
-	if scope.LegalEntity().String() != "legal-1" ||
-		scope.Account().String() != "account-7" ||
-		scope.Currency().String() != "CNY" {
-		t.Fatalf("scope = %s/%s/%s; 三维必须来自回显与目录", scope.LegalEntity(), scope.Account(), scope.Currency())
+	settlement := scope.Settlement
+	if settlement.LegalEntity().String() != "legal-1" ||
+		settlement.Account().String() != "account-7" ||
+		settlement.Currency().String() != "CNY" {
+		t.Fatalf("scope = %s/%s/%s; 三维必须来自回显与目录",
+			settlement.LegalEntity(), settlement.Account(), settlement.Currency())
 	}
 	if directory.askedTerms.Policy().String() != "settlement-policy-1/v3" {
 		t.Fatal("目录没拿到解析回显的那份政策——它换出的账户无从对上采用依据")
+	}
+	// 回指必须是本次解析那一个。铸一个新标识、或从别处取一个，都会让 SA 去问另一份合同。
+	if scope.Resolution.String() != "RES-1" {
+		t.Fatalf("resolution = %q, want 本次解析的 RES-1", scope.Resolution)
 	}
 }
 
