@@ -77,6 +77,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/commercial-policies":            true,
 	"/commercial-customer-contracts":  true,
 	"/commercial-supplier-agreements": true,
+	"/visibility-catalogues":          true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

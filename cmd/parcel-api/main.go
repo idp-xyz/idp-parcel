@@ -123,6 +123,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	visibilityCatalogues, err := vepostgres.NewOperationsCatalogue(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -144,6 +148,7 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
+			visibilityCatalogues,
 			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,

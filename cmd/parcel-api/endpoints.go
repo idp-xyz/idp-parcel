@@ -63,6 +63,7 @@ func assembleBusinessEndpoints(
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
+	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：isolatedRead 为 nil 时，下面六个变量全取未配置即拒，整份装配与
@@ -103,5 +104,9 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},
 		{Pattern: "/commercial-supplier-agreements", Handler: commercialhttp.NewQuerySupplierAgreementsEndpoint(commercialCatalogueIntake, commercialRelations)},
+		// VE 六类目录查阅与运营追踪查阅同属租户内运营读面，共用同一个
+		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
+		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
+		{Pattern: "/visibility-catalogues", Handler: visibilityhttp.NewQueryVisibilityCataloguesEndpoint(trackingProjectionsIntake, visibilityCatalogues)},
 	}
 }

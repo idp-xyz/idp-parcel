@@ -20,6 +20,7 @@ import (
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	visibilityports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // 各端点构造函数的第二参是应用编排；未配置 Intake 在它之前就拒了，因此本文件这几个
@@ -320,6 +321,58 @@ func (unwiredCommercialCatalogue) ListSupplierAgreements(
 	commercialdomain.TenantID,
 	int,
 ) ([]commercialports.SupplierAgreementCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredVisibilityCatalogue 是 VE 六类目录列表读口的占位，方法表与
+// visibilityports.CatalogueListRead 逐一对上（票 admin-web-page-wiring-frontier/02）。
+type unwiredVisibilityCatalogue struct{}
+
+func (unwiredVisibilityCatalogue) ListMilestoneMappings(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.MilestoneMappingCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListTriageRules(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.TriageRuleCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListNotificationPolicies(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.NotificationPolicyCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListClaimEligibilities(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ClaimEligibilityCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListClaimAuthorizations(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ClaimAuthorizationCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListDisclosurePolicies(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.DisclosurePolicyCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

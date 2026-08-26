@@ -41,6 +41,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/commercial-policies":                              {method: http.MethodGet, target: "/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE"},
 	"/commercial-customer-contracts":                    {method: http.MethodGet, target: "/commercial-customer-contracts"},
 	"/commercial-supplier-agreements":                   {method: http.MethodGet, target: "/commercial-supplier-agreements"},
+	"/visibility-catalogues":                            {method: http.MethodGet, target: "/visibility-catalogues?kind=MILESTONE_MAPPING"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -144,6 +145,7 @@ func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpa
 		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},
+		unwiredVisibilityCatalogue{},
 		isolatedRead,
 	)
 }
