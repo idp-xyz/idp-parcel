@@ -7,6 +7,12 @@ Status: resolved
 派单:MCP-1(低优先级,票 02 抢占位)。中断时点:`c6c7914`(票 01 ADR-0076)落库,
 票 02 解锁,按硬约束让位。
 
+**本文是快照,不是当前态。** 下表「缺件与半边归类」列盘于上述 SHA;此后 B 批已由
+`.scratch/master-data-wiring/` 接线完毕(读面 + 端点 + 装配 + admin-web 页面),那几行
+的「缺列表读面+端点」不再成立。拿本文做规划时,**当前接线态一律以
+`apps/admin-web/src/page-registry.tsx` 的 `liveIds` 为准**——那是代码,不会与自己漂。
+本文的价值在批次口径与阻断判据(含断点节的取证),那部分不随接线进度失效。
+
 ## 与两份既有盘点的关系(delta 声明)
 
 - `.scratch/port-inventory-r25/report.md`:Status 已 superseded(盘于 `d40b03a`,被产品
