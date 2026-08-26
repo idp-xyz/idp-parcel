@@ -1,7 +1,8 @@
 # VE 六类目录查阅面与导航条目——登记通道齐备、库里零行、无页可归
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
+Owner: MCP-1（2026-08-26 认领；ve-claims-read-seams/01、/02 已先行收口，资格与证据两缝接真不影响本票读面）
 
 自[接线前沿盘点](../report.md)批 B 的干净那半。与票 01 无文件重叠，可完全并行；只有末段 `cmd/parcel-api` 装配要等票 01 释号（见 [spec](../spec.md) 地盘与占号）。
 
@@ -36,3 +37,19 @@ Status: ready-for-agent
 - 全仓 `go test -count=1 ./...` 绿（**含真库**——单跑一个真库用例看 `-v` 下是 `PASS` 不是 `SKIP`）。
 - 页面层取证：WSL 起 vite + Edge 无头取 DOM，新页见 `SYN` 数据、无未配置码。
 - `seed.sh --reset` 复灌零报错（六类 CLI 各自幂等）。
+
+## 收口（2026-08-26 · MCP-1）
+
+`8f1c8e7` 读面（端口 `ports/catalogue_read.go`、真库适配器、`/visibility-catalogues?kind=` 处理器、`cmd/parcel-api` 装配），`202e15b` 种子第六步（六类七笔，含一份显式空名单授权），`708b10f` 管理台三页与导航。
+
+**票面两问的裁决**：①六类按性质拆三页——判断规则（里程碑映射+分诊规则）、对外披露口径（通知策略+披露策略）、索赔前置（索赔资格+索赔授权），各页两页签，理由写在各页文件头注释；②三条目全归主数据区（排序注释补「→ 追踪异常」），不塞追踪异常区那三张案件页。端点形状循 `/commercial-policies`：单端点 `?kind=` 封闭六格分派，准入复用 VE 既有 `OperationsTrackingIntake`，不新立一路。
+
+**取证**
+
+1. 端点：六 kind 各答 `200` + 非空 `catalogues`（隔离读实例 `:19081`，`CLAIM_AUTHORIZATION` 两行——一行两申请人、一行显式空名单）；未配置 Intake 时 403 由 `endpoints_test.go` 的 unwired 探针与处理器测试钉住。
+2. 真库测试九条全 `PASS` 非 `SKIP`（单跑 `TestListMilestoneMappingsReturnsVersionsWithEntriesNewestFirst`、`TestCatalogueListsAreTenantScoped` 各 0.2s+ 实跑）；父子同快照靠 `json_agg` 相关子查询一语句取回（票 07 笛卡尔积教训，六册各聚各的）。
+3. `go test -count=1 ./...`：94 包全绿。唯一红点是工作树里**未提交**的 `internal/settlementaccounting/adapters/partycommercial/`（票 sa-preacceptance-policy-view/01 的半成品，MCP-1 自己的，5 用例红），与本票三笔提交无关，接下来在那张票内收拾。
+4. `seed.sh --reset` 复灌零报错，末行「五上下文全部落库」。
+5. 页面层：重起 vite（inotify 注记照旧）后 Edge 无头取 DOM——三页首屏 + 三个第二页签（`dom-dump-tab.mjs`）。判断规则页 4 条映射 + 4 条分诊（四个结果词各在场）；披露页通知策略 1 条、披露策略两客户四维（`展示:SYN-VE-CONTENT-…`×3、`待确认`×3、`不披露`×2）；索赔页资格 1 份、授权 2 份（`显式空名单:不授权任何申请人代提` 在场）。全部产物零未配置码。
+
+**页面层一处刻意分文件**：目录读走共享 `catalogue-api` 传输（与 party/customs 目录页同款五格判读），追踪投影查阅仍走 `visibility/api.ts` 自己的出口——两族读面语义不同（登记态目录 vs 派生态投影），分文件即分口径，`api.ts` 头注已改「唯一出口」措辞。
