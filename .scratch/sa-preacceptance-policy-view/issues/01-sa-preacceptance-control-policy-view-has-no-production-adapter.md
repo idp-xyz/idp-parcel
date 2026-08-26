@@ -1,7 +1,7 @@
 # SA 接受前控制策略视图无生产适配器——提供方表面已具备，键形裁决已出
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress（MCP-2 认领于 2026-08-26；开工前重核见下方「重核」节）
 
 发现并定形于[第二十六轮重盘](../../mechanism-reinventory-r26/report.md)第四节（盘于
 `e5301f8`）。判据 B 剩余 7 口中唯一「可做未做」的一口：其余六口各有留待依据，这一口的
@@ -64,3 +64,14 @@ Status: ready-for-agent
 - SA 编排在种子租户下走通「要求-预付」分支到冻结（作用域与金额两缝仍显式未配置即停在
   `CONTROL_SCOPE_NOT_CONFIGURED`——那不属本票，不得为验它而造账户映射）；
 - 未登记路径停 `CONTROL_POLICY_NOT_CONFIGURED`，与调不通格分开（ADR-0054/0029 维持）。
+
+## 重核（2026-08-26 · MCP-2 认领，锚 `a7aa75b`）
+
+票面「实现范围」首条要求开工时对新 tip 重核，照做，四条事实全部仍成立：
+
+1. `ports.PreAcceptanceControlPolicyView.LoadControlPolicy` 仍是 `(ctx, tenant, scope)` 三参，键形错位未变。
+2. `internal/settlementaccounting/adapters/` 下**只有** `postgres/` 一个子包，票面预留的 `partycommercial/` 落点仍空。
+3. PC 侧提供方表面在位：`domain/pre_acceptance_control.go`、`ports.PreAcceptanceControlDeclarationView`、`postgres.PreAcceptanceControlDeclarations`。
+4. 种子仍含 `SYN-FIN-CONTROL-01`，且这一轮接线后它在管理台 `party-contracts` 页与 `commercial-policies` 的接受前财务控制页签上都已可见（票 01 / 07 的 DOM 取证），落地当天即有可验数据这一条比写票时更硬。
+
+**地盘核对（`docs/agents/parallel-sessions.md`）**：本票动 `internal/settlementaccounting/**`、新增 `internal/settlementaccounting/adapters/partycommercial/`、以及 PS→SA 适配器；MCP-1 同期在 `internal/visibilityexception/**` 与 `internal/customscompliance/**`（前沿票 02/05/06），**无重叠**。唯一可能相碰的是 `cmd/parcel-api` 的接受链装配跟随，与 MCP-1 那两票的端点增删不在同一 hunk 区，且本票不增删端点。
