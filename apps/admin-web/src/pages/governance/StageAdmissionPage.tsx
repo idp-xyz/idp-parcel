@@ -13,6 +13,12 @@ const info = moduleInfoById['stage-admission'];
  * 接线时基本信息区至少呈现：当前阶段、生效阶段决定、暂停状态；
  * 业务区块呈现证据登记册引用与阶段历史；决定动作放 headerActions。
  * 字段与动作口径出处见 moduleInfoById 引用的 PN-08 交接文档，此处不复述。
+ *
+ * 未接线的原因写成「归属未定」而非「端点未放行」，是一次裁决的结果，不是措辞选择：
+ * 治理登记册是产品级机制、无租户维（见 migrations/pilot_governance/0001 抬头），
+ * 而本管理台的隔离读准入按租户放行——形状对不上不是工期问题。写「尚未接线」
+ * 会让人以为在排期，那是假信息。裁决与重开判据见
+ * .scratch/admin-web-page-wiring-frontier/issues/03。
  */
 export function StageAdmissionPage() {
   return (
@@ -23,12 +29,14 @@ export function StageAdmissionPage() {
       basicFields={[]}
       viewState={{
         kind: 'unconfigured',
-        title: '治理模块尚未接线',
-        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
+        title: '本页数据的归属尚未裁定，不在本管理台接线',
+        description:
+          '试点治理登记的是产品级事实（本产品此刻拿什么去评审、谁在写生产），没有租户维；'
+          + '本管理台的查阅面按租户隔离放行，两者形状对不上。本页不发请求、不填任何默认值。',
         facts: {
           owner: info.owner,
           source: info.source,
-          unlock: '对应查询与决定端点经 ADR-0017 准入闸门放行后接线',
+          unlock: '待裁：这些产品级记录该由哪个承载面呈现（不默认是租户管理台）',
         },
       }}
     />
