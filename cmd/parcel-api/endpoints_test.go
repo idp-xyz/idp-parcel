@@ -118,6 +118,12 @@ func TestAssembledEndpointsIgnoreSelfReportedIdentity(t *testing.T) {
 }
 
 func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
+	return assembleUnwiredBusinessEndpoints(nil)
+}
+
+// assembleUnwiredBusinessEndpoints 以 unwired* 占位读口与编排装配全部端点，隔离读面
+// 输入由调用方给：nil 钉「未配置面」，非 nil 钉「放行只及运营查阅行」（isolated_read_test.go）。
+func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
 		unwiredWithdrawal{},
@@ -135,6 +141,7 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 		unwiredComplianceRules{},
 		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},
+		isolatedRead,
 	)
 }
 

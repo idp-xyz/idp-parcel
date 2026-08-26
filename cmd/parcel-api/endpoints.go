@@ -43,7 +43,8 @@ import (
 //
 // 所有 *Views、*Catalog 与 *Rules 参数都是查阅端点的读口：读面不是编排（查阅不触发
 // 判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，
-// 接入渠道就位前一次也不会被调到。
+// 接入渠道就位前一次也不会被调到——除非隔离读面准入按 ADR-0078 被显式启用（见
+// isolatedReadIntakes），且被换的只有运营查阅行。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
@@ -61,24 +62,43 @@ func assembleBusinessEndpoints(
 	complianceRules customshttp.RuleCatalogueReader,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
+	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
+	// 缺省朝拦：isolatedRead 为 nil 时，下面六个变量全取未配置即拒，整份装配与
+	// ADR-0078 之前逐字节同形。启用时也只有这六个变量换值——命令面与客户查阅面
+	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
+	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
+	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
+	pricingCatalogueIntake := pricinghttp.PricingCatalogueIntake(pricinghttp.UnconfiguredIntake{})
+	networkCatalogIntake := networkhttp.CatalogueQueryIntake(networkhttp.UnconfiguredIntake{})
+	complianceRulesIntake := customshttp.CatalogueQueryIntake(customshttp.UnconfiguredIntake{})
+	commercialCatalogueIntake := commercialhttp.CommercialCatalogueIntake(commercialhttp.UnconfiguredIntake{})
+	if isolatedRead != nil {
+		shipmentViewsIntake = isolatedRead.shipmentRequestViews
+		trackingProjectionsIntake = isolatedRead.trackingProjections
+		pricingCatalogueIntake = isolatedRead.pricingCatalogue
+		networkCatalogIntake = isolatedRead.networkCatalog
+		complianceRulesIntake = isolatedRead.complianceRules
+		commercialCatalogueIntake = isolatedRead.commercialCatalogue
+	}
+
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
-		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmenthttp.UnconfiguredIntake{}, requestViews)},
+		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
-		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(visibilityhttp.UnconfiguredIntake{}, projectionViews)},
+		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(trackingProjectionsIntake, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, results)},
-		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricinghttp.UnconfiguredIntake{}, priceCards)},
-		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeries)},
-		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalog)},
-		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(customshttp.UnconfiguredIntake{}, complianceRules)},
-		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialhttp.UnconfiguredIntake{}, serviceProducts)},
-		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPolicies)},
+		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, priceCards)},
+		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
+		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
+		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
+		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
+		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 	}
 }

@@ -39,6 +39,17 @@ func run(logger *slog.Logger) error {
 		address = defaultAddress
 	}
 
+	// 隔离读面准入（ADR-0078）在开池之前解析：门禁不合规要在启动最早处带原因退出。
+	// 放行必须出声（Decision 三）——启用与所用合成租户写进启动日志，事后可查。
+	isolatedRead, err := buildIsolatedReadIntakes(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if isolatedRead != nil {
+		logger.Info("Isolated read admission enabled (ADR-0078): operations query endpoints answer with injected synthetic scope",
+			"tenant", os.Getenv(isolatedReadTenantEnv))
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -132,6 +143,7 @@ func run(logger *slog.Logger) error {
 			complianceRules,
 			commercialCatalog,
 			commercialCatalog,
+			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
