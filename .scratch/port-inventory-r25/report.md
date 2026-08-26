@@ -9,6 +9,10 @@ Status: superseded
 > 本报告的头条数字失去时效。第五节点名的 `assemble.go` 过期注释也已随 ADR-0049 落地
 > （`NewDirectPublisher` 进程内直投）整体消失：`cmd/parcel-dispatch` 下现已搜不到
 > `publish channel is undecided`。第四节「判据 A 虚高」的方法论仍有效，留档供下轮盘点引用。
+>
+> 2026-08-26 MCP-1：第二十六轮已落（[mechanism-reinventory-r26](../mechanism-reinventory-r26/report.md)），
+> 沿用本报告判据 A 口径并以 `go/types.Implements` 补齐第六节留的精确口径；其工具对本报告
+> 发布树 `d40b03a` 复现校验逐格一致。本报告自此只存方法论价值。
 
 只读清点，无代码改动，无既有文档改动。承 MCP-1 派包。**盘于 `d40b03a`**——共享工作树在我开盘时已被推进到该提交
 （`195cfe4` → `98ce0ee` → `d40b03a`），因此扫描到的文件含 ADR-0050 那两笔；差式表里 `d40b03a` 关掉的两口即为佐证。

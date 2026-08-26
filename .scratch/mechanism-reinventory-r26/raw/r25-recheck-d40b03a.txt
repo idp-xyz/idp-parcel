@@ -1,0 +1,46 @@
+dir=C:\Users\topsx\AppData\Local\Temp\idp-census-d40b03a mode=a pkgErrors=0 adapters/platform 生产文件=166
+上下文 | 接口总数 | A缺(全局) | A缺(同上下文) | B缺(types.Implements)
+customscompliance | 30 | 0 | 0 | 0
+networkrouting | 14 | 3 | 3 | 0
+nodeoperations | 12 | 1 | 1 | 0
+parcelpricing | 3 | 0 | 0 | 0
+parcelshipment | 33 | 4 | 4 | 0
+partycommercial | 7 | 0 | 3 | 0
+pilotgovernance | 8 | 0 | 0 | 0
+settlementaccounting | 36 | 4 | 4 | 0
+transportfulfillment | 24 | 0 | 0 | 0
+visibilityexception | 33 | 1 | 1 | 0
+合计 | 200 | 13 | 16 | 0
+
+== 判据 A 缺（全局口径，头条） ==
+networkrouting.AutoRerouteFactsView
+networkrouting.InitialRouteEvidenceView
+networkrouting.NetworkEvidenceView
+nodeoperations.ParcelIdentityView
+parcelshipment.ProductionOwnershipAuthority
+parcelshipment.SourceDataAmendmentAuthorizer
+parcelshipment.SourceDataRuleDeclaration
+parcelshipment.WithdrawalAuthorizer
+settlementaccounting.ClaimAmountRuleView
+settlementaccounting.ContractResponsibilityView
+settlementaccounting.PreAcceptanceControlPolicyView
+settlementaccounting.SupplierAuditAuthorityView
+visibilityexception.NotificationChannelGateway
+
+== 判据 A 缺（同上下文子树口径，交叉核对） ==
+networkrouting.AutoRerouteFactsView
+networkrouting.InitialRouteEvidenceView
+networkrouting.NetworkEvidenceView
+nodeoperations.ParcelIdentityView
+parcelshipment.ProductionOwnershipAuthority
+parcelshipment.SourceDataAmendmentAuthorizer
+parcelshipment.SourceDataRuleDeclaration
+parcelshipment.WithdrawalAuthorizer
+partycommercial.AcceptanceContentDeclaration
+partycommercial.AsOfPolicyDeclaration
+partycommercial.Clock
+settlementaccounting.ClaimAmountRuleView
+settlementaccounting.ContractResponsibilityView
+settlementaccounting.PreAcceptanceControlPolicyView
+settlementaccounting.SupplierAuditAuthorityView
+visibilityexception.NotificationChannelGateway

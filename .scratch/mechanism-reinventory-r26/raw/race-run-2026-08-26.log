@@ -1,0 +1,97 @@
+START:2026-08-26T13:30:46+08:00
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-api	3.008s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-commercial	1.298s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-customs-register	1.326s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-dispatch	18.693s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-governance-register	1.291s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-network-register	1.016s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-pricing-register	1.011s
+ok  	go.idp.xyz/idp-parcel/cmd/parcel-ve-register	1.279s
+ok  	go.idp.xyz/idp-parcel/internal/architecture	57.017s
+ok  	go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/customscompliance/adapters/identity	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres	43.721s
+ok  	go.idp.xyz/idp-parcel/internal/customscompliance/application	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/customscompliance/domain	1.011s
+?   	go.idp.xyz/idp-parcel/internal/customscompliance/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox	4.577s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres	14.261s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/application	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/networkrouting/domain	1.012s
+?   	go.idp.xyz/idp-parcel/internal/networkrouting/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres	11.392s
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/transportfulfillment	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/application	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/nodeoperations/domain	1.011s
+?   	go.idp.xyz/idp-parcel/internal/nodeoperations/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres	8.260s
+ok  	go.idp.xyz/idp-parcel/internal/parcelpricing/application	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/parcelpricing/domain	1.071s
+?   	go.idp.xyz/idp-parcel/internal/parcelpricing/ports	[no test files]
+?   	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/adoptconsume	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http	1.020s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity	1.015s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox	7.065s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/networkrouting	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations	1.270s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/parcelpricing	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial	2.023s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres	21.477s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment	1.494s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/application	1.021s
+ok  	go.idp.xyz/idp-parcel/internal/parcelshipment/domain	1.119s
+?   	go.idp.xyz/idp-parcel/internal/parcelshipment/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres	26.999s
+ok  	go.idp.xyz/idp-parcel/internal/partycommercial/application	1.013s
+ok  	go.idp.xyz/idp-parcel/internal/partycommercial/domain	1.024s
+?   	go.idp.xyz/idp-parcel/internal/partycommercial/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres	9.798s
+ok  	go.idp.xyz/idp-parcel/internal/pilotgovernance/application	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/pilotgovernance/domain	1.010s
+?   	go.idp.xyz/idp-parcel/internal/pilotgovernance/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/platform/buildinfo	1.009s
+ok  	go.idp.xyz/idp-parcel/internal/platform/dispatch	4.861s
+ok  	go.idp.xyz/idp-parcel/internal/platform/httpapi	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/platform/identity	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/platform/inboxconsume	2.218s
+ok  	go.idp.xyz/idp-parcel/internal/platform/migrate	1.997s
+ok  	go.idp.xyz/idp-parcel/internal/platform/outboxintent	1.235s
+?   	go.idp.xyz/idp-parcel/internal/platform/pgtest	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres	23.234s
+ok  	go.idp.xyz/idp-parcel/internal/settlementaccounting/application	1.016s
+ok  	go.idp.xyz/idp-parcel/internal/settlementaccounting/domain	1.017s
+?   	go.idp.xyz/idp-parcel/internal/settlementaccounting/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres	21.040s
+ok  	go.idp.xyz/idp-parcel/internal/transportfulfillment/application	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/transportfulfillment/domain	1.016s
+?   	go.idp.xyz/idp-parcel/internal/transportfulfillment/ports	[no test files]
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/customscompliance	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox	30.103s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/networkrouting	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/nodeoperations	1.011s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres	36.924s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/transportfulfillment	1.012s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume	1.010s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/application	1.014s
+ok  	go.idp.xyz/idp-parcel/internal/visibilityexception/domain	1.010s
+?   	go.idp.xyz/idp-parcel/internal/visibilityexception/ports	[no test files]
+?   	go.idp.xyz/idp-parcel/migrations	[no test files]
+?   	go.idp.xyz/idp-parcel/scripts/demo-seeds/migrate	[no test files]
+?   	go.idp.xyz/idp-parcel/scripts/demo-seeds/seedgen	[no test files]
+ok  	go.idp.xyz/idp-parcel/tests/bentocontract	6.064s
+EXIT:0
+END:2026-08-26T13:39:25+08:00
