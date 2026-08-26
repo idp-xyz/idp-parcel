@@ -1,7 +1,7 @@
 # 接单规则包页签扩正文：收寄资格与终局规则
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 自[票 04 的导航裁决](./04-registered-but-unreadable-rows-need-a-nav-ruling.md)。**不新增端点、不加页签**——这两样是接单规则包这一个商业对象的其余正文面，归 `/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE` 那一格。
 
@@ -32,3 +32,19 @@ Status: ready-for-agent
 - `/commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE` 答 `200`，`SYN-RULEPKG-01` 一行上同时可见规则集、允许来源、资格引用（或显式空）与四个终局结果。
 - 真库测试钉住：三族互不串行数（笛卡尔积回归）、壳缺席与零子行可分辨、租户隔离、`limit` 非正即拒。
 - 全仓 `go test -count=1 ./...` 绿（含真库）；页面层 DOM 取证照票 01 脚本。
+
+## 收口（2026-08-26 · MCP-2）
+
+`836cef0` 后端（端口扩字段、装载口改相关子查询、传输层、真库测试），`5b1e8ab` 页面层与取证脚本。共享接线文件一处未碰，如实照票面「要做什么」末条。
+
+**取证**
+
+1. 端点：`GET /commercial-policies?kind=ACCEPTANCE_RULE_PACKAGE&tenantId=SYN-TENANT-01`（隔离读实例 `:19081`）答 `200`，`SYN-RULEPKG-01` 一行上 `rules` 5 条、`allowedIntakeSources` 2 个、`intakeQualificationRefs` 1 条、`finalRules` 4 条，两个 `*Declared` 皆真。**5×2×4 都保持原数**，笛卡尔积若在场这三个数会一起变。
+2. 真库测试两条：`TestRulePackageCatalogueDoesNotFanOutAcrossStageContentFamilies`（改回并列 LEFT JOIN 即红）、`TestRulePackageCatalogueSeparatesUndeclaredStageContentFromEmptyDeclaration`。
+3. `go test -count=1 ./...`：本票所涉全绿。唯一红点 `internal/architecture` 的 `TestNoTransactionClosureCarriesAGoexitAssertion`，指的是**工作树里 MCP-1 未提交的** `cmd/parcel-api/assemble_claims_test.go`（事务回调内 `t.Fatalf`），与本票无关，已另行告知。
+4. 页面层：Edge 无头 DOM，`commercial-policies` 十项该在的全 HIT，`未声明` / `已声明,正文为空` / 四个未配置码全 miss；顺带回核 `party-contracts`、`supplier-agreements` 仍绿。
+
+**取证工具两处修，都因为踩了才修**
+
+- `vite-dev.sh`（新）：核 DOM 前必须重起 dev server。`/mnt/d` 的写入不产生 WSL inotify 事件，vite 的模块图不失效，会继续交上一版转译产物。这次先撞了一次假失败——端点已答出新字段、真库测试全绿，只有 DOM 核不中，看起来像「新列没接上」。
+- `dom-dump.sh` 参数改成与 `dom-check.sh` 同序（先产物目录、再页 id，基址走 `PARCEL_WEB_BASE`）。两个脚本总是连着跑，原先 dump 把基址排在第一位，串起来错位一格时 dump 静默地一页都不取、check 转去核上一轮的旧产物，**两边都不报错**。这次也撞了。
