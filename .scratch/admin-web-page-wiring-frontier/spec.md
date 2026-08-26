@@ -17,7 +17,7 @@ Status: in-progress
 - 05 关务案件页收三类（就绪判断、提交授权、关闭核对）—— `Status: ready-for-agent`，关务组
 - 06 合规限制页收放行门禁两表 —— `Status: ready-for-agent`，关务组
 - 07 接单规则包页签扩正文（收寄资格 + 终局规则）—— `Status: resolved`，MCP-2（`836cef0` / `5b1e8ab`；交付与取证见票面）
-- 08 商业策略页加授权规则页签（含取消授权目录）—— `Status: ready-for-agent`，商业组
+- 08 商业策略页加授权规则页签（含取消授权目录）—— `Status: resolved`，MCP-2（`2131d05` / `04de101`；交付与取证见票面）
 
 票 02 与票 03 原本是同一批，盘点时按「都有 CLI、都零行、都缺查阅面」归在一起；实读库结构后拆开，分界与理由见 report.md 批 B 一节（治理三张表无租户列，`ADR-0077` 的形状装不上）。
 
@@ -36,6 +36,8 @@ Status: in-progress
 
 释号在频道里说一声，不靠猜。
 
-**票 05–08 这一轮的地盘不同，不必占号。** 关务组（05、06）独占 `internal/customscompliance/**` 与 `apps/admin-web/src/pages/customs/**`，只有 `cmd/parcel-api` 与 `page-registry.tsx` 两个文件要占号；商业组（07、08）独占 `internal/partycommercial/**` 与 `apps/admin-web/src/pages/party/**`，**一个共享文件都不碰**——两页与两个端点都已 live，本轮只在既有读面上扩字段与页签。因此**跨组完全并行、组内必须串行**。
+**票 05–08 这一轮的地盘不同，不必占号。** 关务组（05、06）独占 `internal/customscompliance/**` 与 `apps/admin-web/src/pages/customs/**`，只有 `cmd/parcel-api` 与 `page-registry.tsx` 两个文件要占号；商业组（07、08）独占 `internal/partycommercial/**` 与 `apps/admin-web/src/pages/party/**`。因此**跨组完全并行、组内必须串行**。
+
+上一句原写作商业组「一个共享文件都不碰」，**票 08 实做时不成立**：扩 `CommercialPolicyCatalogueRead` 会让 `cmd/parcel-api/unwired_orchestration.go` 的未接线替身编译不过，必须补一个方法（追加在方法表末尾，不动邻行）。**凡扩读口的票都会碰到这个文件**，排期时按「要占一次号」算，别照原句以为零接触。票 07 只在既有读面上扩字段，确实一个都没碰——两者的分界在有没有动接口方法表，不在有没有加端点。
 
 **2026-08-26：票 01 已释号**（`3f5fad9` 落地，六个共享文件里它实际动了四个：`endpoints.go`、`main.go`、`unwired_orchestration.go`、`page-registry.tsx`，各只加自己的行，未动邻行）。票 02 可以进装配段。`navigation.ts` 与 `seed.sh` 票 01 没碰——两页早在导航里，种子走的是既有 `publish-batch.json`。
