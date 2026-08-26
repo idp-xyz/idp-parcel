@@ -299,6 +299,14 @@ func (unwiredCommercialCatalogue) ListAsOfPolicyDeclarations(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListAuthorizationRules(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.AuthorizationRuleRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredCommercialCatalogue) ListCustomerContracts(
 	context.Context,
 	commercialdomain.TenantID,

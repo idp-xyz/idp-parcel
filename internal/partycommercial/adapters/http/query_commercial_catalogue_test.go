@@ -84,6 +84,7 @@ type policyReaderDouble struct {
 	prices      []ports.PricePolicyRow
 	settlements []ports.SettlementPolicyRow
 	asOf        []ports.AsOfPolicyRow
+	authz       []ports.AuthorizationRuleRow
 	calls       map[string]int
 	err         error
 }
@@ -158,6 +159,19 @@ func (double *policyReaderDouble) ListAsOfPolicyDeclarations(
 		return nil, nil
 	}
 	return double.asOf, nil
+}
+
+func (double *policyReaderDouble) ListAuthorizationRules(
+	_ context.Context, tenant domain.TenantID, _ int,
+) ([]ports.AuthorizationRuleRow, error) {
+	double.record("authz")
+	if double.err != nil {
+		return nil, double.err
+	}
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.authz, nil
 }
 
 func decodeBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {

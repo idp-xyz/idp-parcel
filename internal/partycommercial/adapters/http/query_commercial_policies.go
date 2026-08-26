@@ -35,6 +35,11 @@ type CommercialPolicyCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.AsOfPolicyRow, error)
+	ListAuthorizationRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.AuthorizationRuleRow, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -48,12 +53,17 @@ const outcomeCommercialPoliciesListed = "COMMERCIAL_POLICIES_LISTED"
 // 商业对象类别:接受前财务控制声明挂在客户合同版本下、时点锚声明挂在接单规则包版本
 // 下,拿对象类别当种类名会指错拥有者。CONTEXT 词条里的信用政策没有独立正文册,集合
 // 里如实没有它——预留一格就是替租户拟一种它还没有的册子。
+//
+// kindAuthorizationRule 的名字**恰好**是一个商业对象类别,不是上面那条的例外:它拦的
+// 是拥有者指错,而这一格上列的对象就是授权规则版本壳自己,取消授权目录挂在它下面——
+// 拥有者与被列者同一,与 kindAcceptanceRulePackage 同形。
 const (
 	kindAcceptanceRulePackage = "ACCEPTANCE_RULE_PACKAGE"
 	kindPreAcceptanceControl  = "PRE_ACCEPTANCE_CONTROL"
 	kindPricePolicy           = "PRICE_POLICY"
 	kindSettlementPolicy      = "SETTLEMENT_POLICY"
 	kindAsOfPolicy            = "AS_OF_POLICY"
+	kindAuthorizationRule     = "AUTHORIZATION_RULE"
 )
 
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
@@ -76,7 +86,8 @@ func NewQueryCommercialPoliciesEndpoint(
 		kind := request.URL.Query().Get("kind")
 		switch kind {
 		case kindAcceptanceRulePackage, kindPreAcceptanceControl,
-			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy:
+			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy,
+			kindAuthorizationRule:
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -100,6 +111,8 @@ func NewQueryCommercialPoliciesEndpoint(
 			serveSettlementPolicies(response, request, reader, tenant, query.Limit)
 		case kindAsOfPolicy:
 			serveAsOfPolicies(response, request, reader, tenant, query.Limit)
+		case kindAuthorizationRule:
+			serveAuthorizationRules(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -263,8 +276,31 @@ func serveAsOfPolicies(
 	})
 }
 
-// 五种册子各自的响应与行体。字段名不共享一套泛化壳:五种行形状互不相同,共享壳要么
-// 空出四份字段,要么把强类型折成 any——kind 回显加各自成形的 policies 数组,调用方
+func serveAuthorizationRules(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader CommercialPolicyCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListAuthorizationRules(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]authorizationRuleBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, authorizationRuleBodyOf(row))
+	}
+	writeJSON(response, http.StatusOK, authorizationRuleListResponse{
+		Outcome:  outcomeCommercialPoliciesListed,
+		Kind:     kindAuthorizationRule,
+		Policies: bodies,
+	})
+}
+
+// 六种册子各自的响应与行体。字段名不共享一套泛化壳:六种行形状互不相同,共享壳要么
+// 空出五份字段,要么把强类型折成 any——kind 回显加各自成形的 policies 数组,调用方
 // 按 kind 择形状。
 
 type rulePackageListResponse struct {
@@ -412,4 +448,61 @@ type asOfPolicyBody struct {
 	SemanticsRef        string `json:"semanticsRef"`
 	PolicyVersion       string `json:"policyVersion"`
 	DeclaredAt          string `json:"declaredAt"`
+}
+
+type authorizationRuleListResponse struct {
+	Outcome  string                  `json:"outcome"`
+	Kind     string                  `json:"kind"`
+	Policies []authorizationRuleBody `json:"policies"`
+}
+
+type cancellationAuthorityBody struct {
+	Party         string `json:"party"`
+	RuleReference string `json:"ruleReference"`
+}
+
+// authorizationRuleBody 是授权规则版本壳加它的取消授权目录。
+//
+// cancellationAuthorityDeclared 这个布尔在本族比别处更要紧:数组里少一个请求方**不是**
+// 少一份声明,而是这份目录说出的真话(该请求方不许取消)。调用方只有先看布尔才知道
+// 手上这份空缺属于哪一种,判据见 ports.AuthorizationRuleRow。
+type authorizationRuleBody struct {
+	ObjectID          string `json:"objectId"`
+	Version           string `json:"version"`
+	Scope             string `json:"scope"`
+	Status            string `json:"status"`
+	EffectiveStartsAt string `json:"effectiveStartsAt"`
+	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
+	PublishedAt       string `json:"publishedAt"`
+
+	CancellationAuthorityDeclared bool                        `json:"cancellationAuthorityDeclared"`
+	DeclaredAt                    string                      `json:"declaredAt,omitempty"`
+	CancellationAuthorities       []cancellationAuthorityBody `json:"cancellationAuthorities"`
+}
+
+func authorizationRuleBodyOf(row ports.AuthorizationRuleRow) authorizationRuleBody {
+	body := authorizationRuleBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		Scope:             row.Scope,
+		Status:            row.Status,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		PublishedAt:       rfc3339(row.PublishedAt),
+
+		CancellationAuthorityDeclared: row.HasCancellationAuthority,
+		CancellationAuthorities:       make([]cancellationAuthorityBody, 0, len(row.CancellationAuthorities)),
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	if row.HasCancellationAuthority {
+		body.DeclaredAt = rfc3339(row.DeclaredAt)
+	}
+	for _, authority := range row.CancellationAuthorities {
+		body.CancellationAuthorities = append(body.CancellationAuthorities, cancellationAuthorityBody{
+			Party:         authority.Party,
+			RuleReference: authority.RuleReference,
+		})
+	}
+	return body
 }

@@ -663,6 +663,127 @@ func bothOrNeither(neither bool) string {
 	return "皆有"
 }
 
+// ListAuthorizationRules 上列授权规则版本(壳),连同挂在它上面的取消授权目录。
+//
+// 目录壳与父同主键、至多一行,走 LEFT JOIN——「壳在不在」正需要连接后的 NULL 来判;
+// 请求方声明走相关子查询,理由见 ListAcceptanceRulePackages 上那段。这里今天只有一族
+// 子表,叠 LEFT JOIN + GROUP BY 也不会错,用子查询是为了第二族挂上来时不必重走一遍
+// 那个坑。
+func (catalogue *OperationsCatalogue) ListAuthorizationRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.AuthorizationRuleRow, error) {
+	if err := requirePositiveLimit("list authorization rules", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list authorization rules: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        content.declared_at,
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'party',     declaration.party,
+		                            'reference', declaration.rule_reference
+		                        )
+		                        ORDER BY declaration.party
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM party_commercial.cancellation_authority_declaration AS declaration
+		          WHERE declaration.tenant_id     = version.tenant_id
+		            AND declaration.object_kind   = version.object_kind
+		            AND declaration.object_id     = version.object_id
+		            AND declaration.version_label = version.version_label)
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.cancellation_authority_content AS content
+		          ON content.tenant_id     = version.tenant_id
+		         AND content.object_kind   = version.object_kind
+		         AND content.object_id     = version.object_id
+		         AND content.version_label = version.version_label
+		  WHERE version.tenant_id   = $1
+		    AND version.object_kind = $2
+		  ORDER BY version.published_at DESC, version.object_id, version.version_label
+		  LIMIT $3`,
+		tenant.String(),
+		uint8(domain.AuthorizationRuleObject),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list authorization rules: %w", err)
+	}
+	defer rows.Close()
+
+	ruleRows := make([]ports.AuthorizationRuleRow, 0, limit)
+	for rows.Next() {
+		var row ports.AuthorizationRuleRow
+		var status int16
+		var endsAt *time.Time
+		var declaredAt *time.Time
+		var authoritiesJSON []byte
+		if err := rows.Scan(
+			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&declaredAt, &authoritiesJSON,
+		); err != nil {
+			return nil, fmt.Errorf("list authorization rules: %w", err)
+		}
+		statusWord := domain.CommercialVersionStatus(status).String()
+		if statusWord == "" {
+			return nil, fmt.Errorf("list authorization rules: 版本状态 %d 不在封闭集内", status)
+		}
+		row.Status = statusWord
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		// declared_at 在目录壳上 NOT NULL,它的在场即壳的在场。
+		if declaredAt != nil {
+			row.DeclaredAt = *declaredAt
+			row.HasCancellationAuthority = true
+		}
+		if row.CancellationAuthorities, err = cancellationAuthorityRowsFromJSON(authoritiesJSON); err != nil {
+			return nil, fmt.Errorf("list authorization rules: %w", err)
+		}
+		ruleRows = append(ruleRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list authorization rules: %w", err)
+	}
+	return ruleRows, nil
+}
+
+type cancellationAuthorityDocument struct {
+	Party     string `json:"party"`
+	Reference string `json:"reference"`
+}
+
+// cancellationAuthorityRowsFromJSON 只转写,不校验请求方是否在封闭二值内——判据同
+// finalRuleRowsFromJSON。
+func cancellationAuthorityRowsFromJSON(raw []byte) ([]ports.CancellationAuthorityRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []cancellationAuthorityDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("cancellation authorities are not this adapter's shape: %w", err)
+	}
+	authorities := make([]ports.CancellationAuthorityRow, 0, len(documents))
+	for _, document := range documents {
+		authorities = append(authorities, ports.CancellationAuthorityRow{
+			Party:         document.Party,
+			RuleReference: document.Reference,
+		})
+	}
+	return authorities, nil
+}
+
 // ListSupplierAgreements 上列供应商协议版本(壳)。
 //
 // 只有壳可列——供应商、采购定价方案与方向在领域的 SupplierAgreement 上,但没有正文

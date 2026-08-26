@@ -684,13 +684,46 @@ type AsOfPolicyRow struct {
 	DeclaredAt          time.Time
 }
 
+// CancellationAuthorityRow 是取消授权目录里的一行:某种请求方格被允许取消,依据
+// 哪条规则。请求方是封闭二值(0013 库上 CHECK),读回集外取值即坏数据,由装载方上抛。
+type CancellationAuthorityRow struct {
+	Party         string
+	RuleReference string
+}
+
+// AuthorizationRuleRow 是授权规则目录上列的一行:一份已入册的授权规则版本壳,连同
+// 挂在它上面的取消授权目录(0013)。
+//
+// **缺一行不等于缺一份。** 这一族的三态比别处多一层,照 CancellationAuthorityContent
+// 的规矩:目录壳缺席是**未声明**;壳在而某个请求方格没有行,是这份目录说出的真话
+// (此授权规则下该请求方不许取消),不是配置缺件;壳在而一行都没有才是缺件——领域
+// 要求至少一行,SQL 表达不了,因此那是坏数据。上列不重建领域对象、不形成判断,照
+// ListAcceptanceRulePackages 既有那条注释的先例如实交回空集合,拦坏数据仍归内容读口。
+//
+// 因此消费方不能拿「数组里没有 CUSTOMER」直接当「未声明」:那两件事的恢复动作相反,
+// 分它们要看 HasCancellationAuthority。DeclaredAt 同理只在该布尔为真时有意义。
+type AuthorizationRuleRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+
+	HasCancellationAuthority bool
+	DeclaredAt               time.Time
+	CancellationAuthorities  []CancellationAuthorityRow
+}
+
 // CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
 // commercial-policies 页的供数面,策略种类是封闭集,每种一个方法。
 //
-// 五种册子:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
-// 结算政策(0011)、时点锚声明(0005)。CONTEXT 词条里的**信用政策**没有独立正文表
-// (版本壳可入册,正文册未建),如实不列——预留一个空方法就是替租户拟一种它还没有
-// 的册子;正文表落库时按封闭集扩方法,不开通用口。
+// 六种册子:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
+// 结算政策(0011)、时点锚声明(0005)、授权规则与它的取消授权目录(0013)。CONTEXT
+// 词条里的**信用政策**没有独立正文表(版本壳可入册,正文册未建),如实不列——预留
+// 一个空方法就是替租户拟一种它还没有的册子;正文表落库时按封闭集扩方法,不开通用口。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
@@ -721,6 +754,11 @@ type CommercialPolicyCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]AsOfPolicyRow, error)
+	ListAuthorizationRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]AuthorizationRuleRow, error)
 }
 
 // ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。
