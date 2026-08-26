@@ -1,45 +1,56 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import {
+  listSupplierAgreements,
+  type SupplierAgreementListResponseBody,
+  type SupplierAgreementRecord,
+} from './api';
+import { commercialStatusLabels, labelOf } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
 
-/**
- * 供应商商业协议版本列表行。字段取 party-commercial CONTEXT.md
- * 「供应商商业协议版本」定义与其生命周期；接线前没有任何实例数据。
- */
-export interface SupplierAgreementRow {
-  /** 协议版本标识。 */
-  id: string;
-  /** 责任法人。 */
-  legalEntity: string;
-  /** 供应商：明确供应商、代理商或其他服务提供方。 */
-  supplier: string;
-  /** 采购服务范围。 */
-  serviceScope: string;
-  /** 采购价格条件：销售、采购和法人间价格规则分别表达，一个方向的变化不改写另一方向。 */
-  pricingTerms: string;
-  /** 结算条件。 */
-  settlementTerms: string;
-  /** 版本：采购服务、价格、结算或责任条件变化时形成新版本，不覆盖原版本。 */
-  version: string;
-  /** 适用期间：协议在批准生效后才能用于新的采购决定和供应商预期成本计算。 */
-  validity: string;
-  /** 状态：到期、终止或被替代后不改变已形成的运输委托、履约事实、账单主张或审核应付依据。 */
-  status: string;
-}
-
-const columns: ListColumn<SupplierAgreementRow>[] = [
-  { id: 'id', header: '协议版本标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'legal-entity', header: '责任法人', render: (row) => row.legalEntity },
-  { id: 'supplier', header: '供应商', render: (row) => row.supplier },
-  { id: 'service-scope', header: '采购服务范围', render: (row) => row.serviceScope },
-  { id: 'pricing-terms', header: '采购价格条件', render: (row) => row.pricingTerms },
-  { id: 'settlement-terms', header: '结算条件', render: (row) => row.settlementTerms },
-  { id: 'version', header: '版本', align: 'center', className: 'w-[56px] font-mono', render: (row) => row.version },
-  { id: 'validity', header: '适用期间', render: (row) => row.validity },
-  { id: 'status', header: '状态', align: 'center', render: (row) => row.status },
+// 只列版本壳。骨架期这里还列过供应商、采购服务范围、采购价格条件与结算条件——领域的
+// SupplierAgreement 确实携这些，但今天没有对应的正文表可读（后端
+// ports.SupplierAgreementCatalogueRow 记着这条），因此四列都不上：缺的是登记面，
+// 不是转写。正文表落库后在读面上扩字段，那时才谈得上列它们。
+const columns: ListColumn<SupplierAgreementRecord>[] = [
+  {
+    id: 'agreement',
+    header: '协议 / 版本',
+    render: (row) => (
+      <div className="min-w-48">
+        <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.version}</p>
+      </div>
+    ),
+  },
+  {
+    id: 'scope',
+    header: '适用范围',
+    className: 'font-mono text-xs',
+    render: (row) => row.scope,
+  },
+  {
+    id: 'status',
+    header: '生命周期状态',
+    render: (row) => labelOf(commercialStatusLabels, row.status),
+  },
+  {
+    id: 'effective',
+    header: '有效区间',
+    className: 'min-w-64 font-mono text-xs',
+    render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
+  },
+  {
+    id: 'published-at',
+    header: '发布时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.publishedAt),
+  },
 ];
 
 /**
@@ -50,41 +61,55 @@ const columns: ListColumn<SupplierAgreementRow>[] = [
  */
 export function SupplierAgreementsPage() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<SupplierAgreementListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listSupplierAgreements().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const agreements = answer?.kind === 'outcome' ? answer.body.agreements : [];
+  const needle = search.trim().toLowerCase();
+  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
+  const visibleAgreements = needle
+    ? agreements.filter((row) =>
+        [row.objectId, row.version, row.scope, row.status].some((value) =>
+          value.toLowerCase().includes(needle),
+        ),
+      )
+    : agreements;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<SupplierAgreementRow>
+    <ListPageTemplate<SupplierAgreementRecord>
       title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：责任法人、供应商、状态（商业版本
-      // 生命周期封闭词：草稿/已发布/已生效/已到期/已终止/已替代）。
+      description={`${info.owner}——当前读面只展示协议版本壳，供应商、采购价格条件与结算条件尚无正文册可读，不上列`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索供应商 / 责任法人',
+        placeholder: '搜索协议、版本或适用范围',
       }}
+      filterSummary={
+        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
+        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
+        answer?.kind === 'outcome' ? `当前返回 ${agreements.length} 份协议版本` : undefined
+      }
       columns={columns}
-      // 接线前无实例：行数据与总数届时由 party-commercial 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '参与方与商业模块尚未接线',
-        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      rows={visibleAgreements}
+      rowKey={(row) => `${row.objectId}@${row.version}`}
+      viewState={catalogueViewState(answer, agreements.length, retry, {
+        module: info,
+        endpoint: 'GET /commercial-supplier-agreements',
+        emptyTitle: '当前租户尚无供应商协议版本',
+        emptyDescription: '读取入口已配置，但目录为空；页面不会预置供应商或采购条件。',
+      })}
     />
   );
 }
