@@ -13,10 +13,11 @@ Blocked by: (无——ADR-0078 已接受,机制半边即刻可做)
 
 1. 六个上下文(`parcelshipment`、`visibilityexception`、`parcelpricing`、`networkrouting`、
    `customscompliance`、`partycommercial`)各在 `adapters/http` 立一个隔离运营查阅
-   Intake 类型:作用域与页大小由构造参数注入,实现不读请求任何部分(参数匿名,
-   同 `UnconfiguredIntake` 纪律);**只实现查阅 Intake 接口**,命令 Intake 一个不碰;
-   带编译期断言。传输层测试:作用域来自注入、答复与请求内容无关、命令端点装不进
-   (编译期即无此可能,测试覆盖查阅口行为即可)。
+   Intake 类型:作用域与页大小由构造参数注入,实现不读请求中的任何授权输入(无定位
+   参数的查阅参数匿名,同 `UnconfiguredIntake` 纪律;PS 详情分支的 `shipmentRequestId`
+   属传输形状,照既有分工在 Intake 内解析——ADR-0078 勘误后措辞);**只实现查阅
+   Intake 接口**,命令 Intake 一个不碰;带编译期断言。传输层测试:作用域来自注入、
+   答复与请求内容无关、命令端点装不进(编译期即无此可能,测试覆盖查阅口行为即可)。
 2. `assembleBusinessEndpoints` 增隔离读面输入(零值 = 现状逐字节同形):只切
    ADR-0078 Decision 一枚举的八条查阅行;`/customer-tracking-view` 与全部命令行
    不动。装配测试覆盖未设/设置两态。

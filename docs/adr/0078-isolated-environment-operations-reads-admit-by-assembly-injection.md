@@ -1,6 +1,6 @@
 # ADR-0078: 隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒
 
-Status: Accepted（2026-08-26，用户经 IDP 队列通道 1 委托本会话在取证简报三路选项间裁断；取证材料为[读面准入简报](../../.scratch/product-story-and-demo/read-admission-brief.md)，其四部分材料是本记录的事实底座，本文不复述取证细节）  
+Status: Accepted（2026-08-26，用户经 IDP 队列通道 1 委托本会话在取证简报三路选项间裁断；取证材料为[读面准入简报](../../.scratch/product-story-and-demo/read-admission-brief.md)，其四部分材料是本记录的事实底座，本文不复述取证细节。**勘误**，2026-08-26 实现取证：Decision 一第三判据原写「无客户维」、Decision 二原写「不读请求的任何部分」，均比代码实况写宽——`/shipment-request-views` 的 `AuthorizedQueryScope` 带可见客户账户维（授权结果的可见集，非调用方身份主张），其详情分支按既有分工在 Intake 内解析定位标识 `shipmentRequestId`。两句已按此更正；放行面枚举、排除面与各条界线不变）  
 Date: 2026-08-26
 
 ## Context
@@ -15,9 +15,9 @@ Date: 2026-08-26
 
 ## Decision
 
-**一、隔离读面准入成立，覆盖面只有运营查阅端点。** 入格判据三条同时满足：消费所属上下文的存储读面且查阅不触发判断、派生或披露（`assembleBusinessEndpoints` 注释与 ADR-0076/0077 的同一分界句）；零持久化——不铸来源信封、不写任何行、不构造命令；作用域是租户级运营作用域、无客户维（ADR-0076 Decision 二、ADR-0077 Decision 二的形状）。按此判据，当前装配点上入格的是这八行：`/shipment-request-views`、`/tracking-projections`、`/pricing-price-cards`、`/pricing-reference-series`、`/network-catalog`、`/customs-compliance-rules`、`/commercial-service-products`、`/commercial-policies`。**`/customer-tracking-view` 明确排除**：其查询键带货主客户账户维，UC-VE-008 要求请求方身份、账户与对象授权整组同时核对——那正是 `PAR-INT-01` 拥有的实例半边语义，给它注入合成客户身份就是在参数登记册拥有的位置上放替身。命令面端点全部不在本记录，维持未配置即拒。
+**一、隔离读面准入成立，覆盖面只有运营查阅端点。** 入格判据三条同时满足：消费所属上下文的存储读面且查阅不触发判断、派生或披露（`assembleBusinessEndpoints` 注释与 ADR-0076/0077 的同一分界句）；零持久化——不铸来源信封、不写任何行、不构造命令；作用域是运营侧的授权结果——租户维是最高隔离边界（ADR-0076 Decision 二、ADR-0077 Decision 二的租户级形状；委托查阅的 `AuthorizedQueryScope` 另带可见客户账户维，那一维是授权结果里的可见集、同样由装配注入，不是调用方身份主张）。按此判据，当前装配点上入格的是这八行：`/shipment-request-views`、`/tracking-projections`、`/pricing-price-cards`、`/pricing-reference-series`、`/network-catalog`、`/customs-compliance-rules`、`/commercial-service-products`、`/commercial-policies`。**`/customer-tracking-view` 明确排除**：其查询键的客户维是调用方自己的身份主张，UC-VE-008 要求请求方身份、账户与对象授权整组同时核对——那正是 `PAR-INT-01` 拥有的实例半边语义，给它注入合成客户身份就是在参数登记册拥有的位置上放替身。排除判据是身份主张，不是「带账户字段」。命令面端点全部不在本记录，维持未配置即拒。
 
-**二、放行形态是装配注入，不是认证。** 每个入格上下文在生产代码里自立一个隔离运营查阅 Intake 类型（与 `UnconfiguredIntake` 同层同款、每上下文自立不共享），其作用域全部维度与页大小由装配注入合成值给定；实现不读请求的任何部分，延续 `UnconfiguredIntake` 的匿名参数纪律——签名不给「读一眼再决定」留位置。该类型只实现所属上下文的查阅 Intake 接口、不实现任何命令 Intake：放行装不进命令端点由编译期保证，不靠纪律。它不是 ADR-0055/0077 禁的「开发用」采信实现——采信要有自报被信，这里没有任何自报被读取；ADR-0055 否决采信头部 Intake 的理由「事后没有任何东西能把这些信封与真实认证结果区分开」在零持久化的查阅面上没有落点——运营查阅不铸信封、查询作用域不落库，事后无物可混。
+**二、放行形态是装配注入，不是认证。** 每个入格上下文在生产代码里自立一个隔离运营查阅 Intake 类型（与 `UnconfiguredIntake` 同层同款、每上下文自立不共享），其作用域全部维度与页大小由装配注入合成值给定；实现不读请求中的任何授权输入——作用域整组只能来自注入，无定位参数的查阅沿 `UnconfiguredIntake` 的匿名参数纪律。定位标识（委托查阅详情分支的 `shipmentRequestId`）属传输形状，照该端点既有分工在 Intake 内解析：标识只定位候选对象，不单独证明查询权限。该类型只实现所属上下文的查阅 Intake 接口、不实现任何命令 Intake：放行装不进命令端点由编译期保证，不靠纪律。它不是 ADR-0055/0077 禁的「开发用」采信实现——采信要有自报被信，这里没有任何自报被读取；ADR-0055 否决采信头部 Intake 的理由「事后没有任何东西能把这些信封与真实认证结果区分开」在零持久化的查阅面上没有落点——运营查阅不铸信封、查询作用域不落库，事后无物可混。
 
 **三、激活是显式装配输入，缺省朝拦，合成标识由启动门禁钉死。** `cmd/parcel-api` 新增环境变量 `IDP_PARCEL_ISOLATED_READ_TENANT`：未设时装配与本记录之前逐字节同形，全部端点未配置即拒——缺省方向朝拦。设置时仅 Decision 一枚举的查阅行换注入式 Intake，命令行与 `/customer-tracking-view` 不动。值必须带合成标识前缀 `SYN-`（种子包既有纪律的同一前缀）：不带前缀的值使进程**启动即拒、报错退出**，不静默回落——静默回落会让配置错误与「刻意拦着」两态可观察签名相同，那是「默认值不出声」病。放行生效时启动日志必须写明隔离读面准入已启用与所用合成租户——放行必须出声，事后可查。这道前缀门禁使真实租户标识结构上进不了这个开关：`SYN-` 是证据层级 S 在代码里的锚。作用域引用与页大小的具体合成常量属实现票，不属本记录。
 
@@ -27,7 +27,7 @@ Date: 2026-08-26
 
 ## Consequences
 
-- 六个上下文（parcel-shipment、visibility-exception、parcel-pricing、network-routing、customs-compliance、party-commercial）各得一个隔离运营查阅 Intake 类型与配套传输层测试（作用域来自注入、不读请求、只实现查阅接口）；`assembleBusinessEndpoints` 增一个隔离读面输入并只切查阅行；`cmd/parcel-api` main 增环境变量解析、前缀门禁与启动日志；装配测试覆盖未设/设置两态。
+- 六个上下文（parcel-shipment、visibility-exception、parcel-pricing、network-routing、customs-compliance、party-commercial）各得一个隔离运营查阅 Intake 类型与配套传输层测试（作用域来自注入、不读授权输入、只实现查阅接口）；`assembleBusinessEndpoints` 增一个隔离读面输入并只切查阅行；`cmd/parcel-api` main 增环境变量解析、前缀门禁与启动日志；装配测试覆盖未设/设置两态。
 - 票 04 v1 的前提恢复：隔离环境里种子灌入后，管理台读页可见合成 S 数据；PRODUCT-STORY「今天能演示什么」的页面全链可看一条可兑现。页面所见一切数据来自 `SYN-` 前缀合成种子，S 只记 S。
 - 演示深度上限不因此改变：写动作从页面发起仍等票 04 v2 的前件（两项未决闭合与那次渠道裁决）；本记录不缩短那条路，也不为它立任何先例。
 - 隔离读面准入启用的进程对外表面：查阅端点如实答数据，命令端点照旧 403——两类端点答复不同是本记录的刻意结果，不是缺陷。

@@ -24,6 +24,9 @@ Blocked by: ./05-isolated-read-admission.md(master-data-wiring/06,07,08 已各�
 
 - 种子要「成套成故事」:同一合成租户下,产品/价卡/线路/委托/事实链相互引用,
   能讲通一单的一生;不是每表孤立几行。票 08 的种子包是基础,缺口在本票补。
+- 委托侧事实链种子的客户账户用 `SYN-ACCOUNT-01`(隔离读面准入注入的可见账户,
+  见 cmd/parcel-api 的 isolatedReadCustomerAccount);换账户或加账户先扩那处常量,
+  否则灌入的委托行在 /shipment-request-views 上不可见。
 - 页面如实标注演示态(demo/S),不冒充生产;不 mock、不绕 Intake。
 - 动线脚本(哪个角色、按什么顺序、每步看哪页、讲哪句)落一份文档,位置开工时定
   (docs/design 或随管理台文档)。
