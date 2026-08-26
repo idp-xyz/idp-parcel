@@ -93,13 +93,23 @@ try {
   // 轮询等页签出现，不用固定等待。开发服首次加载要现场转译整棵模块树，冷启动
   // 常常几秒都不止，而固定等待要么定得太短（点不到，看起来像页面没接上），要么
   // 一律定得很长。轮询两头都省。
+  //
+  // 激活不能只靠 element.click()：Radix Tabs 的 trigger 把切换挂在 mousedown 上，
+  // .click() 只合成 click 事件，按钮被"点"了而页签纹丝不动——产物字节数与默认页
+  // 签几乎一样，needle 全 miss，看起来像页面没接上（票 05 踩到；此前各页的筛选
+  // 片是普通 onClick 按钮，所以没暴露）。这里按真实点击的事件序补发
+  // mousedown → mouseup → click，两类按钮都吃这一序。
   const clickTab = `(() => {
      const buttons = [...document.querySelectorAll('button')];
      const button = buttons.find(
        (element) => element.textContent.trim() === ${JSON.stringify(tabText)},
      );
      if (!button) return buttons.map((element) => element.textContent.trim());
-     button.click();
+     for (const type of ['mousedown', 'mouseup', 'click']) {
+       button.dispatchEvent(
+         new MouseEvent(type, { bubbles: true, cancelable: true, button: 0 }),
+       );
+     }
      return true;
    })()`;
 
@@ -130,5 +140,13 @@ try {
   socket.close();
 } finally {
   edge.kill();
-  rmSync(profile, { recursive: true, force: true });
+  // Browser.close 返回时 Windows 侧 Edge 可能还没写完/放开 profile，立即递归删除
+  // 会撞 ENOTEMPTY——产物明明已落盘，进程却以 1 退出，把 && 链上的后续步骤全部
+  // 吞掉（票 05 踩到）。带重试删，删不干净也不值得让取证报失败：目录在 /tmp，
+  // 系统自会回收。
+  try {
+    rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+  } catch {
+    // 留给 /tmp 回收。
+  }
 }
