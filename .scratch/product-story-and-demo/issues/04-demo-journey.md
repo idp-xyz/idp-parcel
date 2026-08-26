@@ -3,7 +3,7 @@
 Category: feature
 Status: draft
 Owner: 待派
-Blocked by: ../master-data-wiring/issues/06-parcel-api-assembly.md, ../master-data-wiring/issues/07-admin-web-pages.md, ../master-data-wiring/issues/08-synthetic-seed-pack.md
+Blocked by: ./05-isolated-read-admission.md(master-data-wiring/06,07,08 已各自 resolved 解除;v1「页面负责如实展示」经勘察证实还需读面准入,裁决见 ADR-0078,实现在票 05)
 
 把「产品就绪 = 可演示」具体化为一条动线:租户的物流产品经理用合成 S 数据走
 「建服务产品 → 配价卡与线路 → 一单委托从提交到终局 → 追踪与对账」,管理台全链可看。
@@ -14,6 +14,9 @@ Blocked by: ../master-data-wiring/issues/06-parcel-api-assembly.md, ../master-da
   履约、投影、费用),页面负责如实展示;写动作(下单等)由 CLI 侧演示。理由:生产
   路径 403 是刻意的(ADR-0055),隔离环境的合成接入渠道也被 ADR-0055 Decision 五
   两项机制未决拦着(载荷规范化摘要、准入范围装配)。
+  【2026-08-26 补】v1 的「页面如实展示」经勘察证实自身还差一道读面准入——已裁定
+  走装配注入放行(ADR-0078),实现在票 05;两项写侧未决对运营查阅面的豁免由该 ADR
+  显式作出,本条理由句对写路径依然成立。
 - **v2 可点击**:上述两项闭合后,在隔离环境按 S 级登记合成接入渠道,演示动线的写
   路径才能从页面发起。v2 需要一次明确裁决(小 ADR 或票内决定),本票不做。
 
