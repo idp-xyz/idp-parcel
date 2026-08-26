@@ -1,7 +1,7 @@
 # SA 接受前控制策略视图无生产适配器——提供方表面已具备，键形裁决已出
 
 Category: enhancement
-Status: in-progress（MCP-2 认领于 2026-08-26；开工前重核见下方「重核」节）
+Status: resolved（MCP-2，2026-08-26；裁决落 [ADR-0079](../../../docs/adr/0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)，收口与取证见末节）
 
 发现并定形于[第二十六轮重盘](../../mechanism-reinventory-r26/report.md)第四节（盘于
 `e5301f8`）。判据 B 剩余 7 口中唯一「可做未做」的一口：其余六口各有留待依据，这一口的
@@ -75,3 +75,36 @@ Status: in-progress（MCP-2 认领于 2026-08-26；开工前重核见下方「�
 4. 种子仍含 `SYN-FIN-CONTROL-01`，且这一轮接线后它在管理台 `party-contracts` 页与 `commercial-policies` 的接受前财务控制页签上都已可见（票 01 / 07 的 DOM 取证），落地当天即有可验数据这一条比写票时更硬。
 
 **地盘核对（`docs/agents/parallel-sessions.md`）**：本票动 `internal/settlementaccounting/**`、新增 `internal/settlementaccounting/adapters/partycommercial/`、以及 PS→SA 适配器；MCP-1 同期在 `internal/visibilityexception/**` 与 `internal/customscompliance/**`（前沿票 02/05/06），**无重叠**。唯一可能相碰的是 `cmd/parcel-api` 的接受链装配跟随，与 MCP-1 那两票的端点增删不在同一 hunk 区，且本票不增删端点。
+
+## 收口（2026-08-26 · MCP-2）
+
+丙案按票面实现，裁决另落 [ADR-0079](../../../docs/adr/0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)（票面「实现范围」倒数第二条要求的那一份，编号取当时下一号）。三笔提交：
+
+- `5ef68de` — SA `ports.PreAcceptanceControlPolicyView` 与 `ApplyPreAcceptanceControlCommand` 各扩解析回指格；回指列入 `minimumIdentityEstablished` 并纳入续办摘要；PS→SA 适配器的 `ControlScopeSource` 改交 `ControlScope{Settlement, Resolution}` 整体（同源即两径同引用）。
+- `5911d3b` — 顺修下述持久化缺陷（见「实现期发现」）。
+- `be389d3` — 新包 `internal/settlementaccounting/adapters/partycommercial/` 与真库用例。
+
+### 实现期发现：解析闭包快照写得进、读不回
+
+写真库用例时撞上的，不是本票预期内的工作，但它把本票的主径整条堵死，故同笔修复而非另开票。
+
+采用了结算政策的闭包**写成功、读必失败**：解析键上的结算选择器没进快照，读回时 `ClosureResolutionKey.minimumIdentityEstablished()` 立不起来，重建门整份拒掉；纵使过了那道门，方式与六维适用范围也没落库，`AdoptedBasis.SettlementPolicy()` 一律缺席。两侧都不响——`Save` 答 `SAVED`，`Load` 报一句听着像是快照坏了的话。
+
+生产今天撞不到：PS 的解析键登记面明拒结算政策与价格规则两类依据（「需要键携带额外选择维度，本登记面不承载」），这样的闭包目前形不成。但本票正是要让 SA 凭这份方式决定冻不冻款，缺席会被读成「商业侧没登记过控制」——ADR-0054 第一格与第二格因此混成一格。修复与配对用例在 `commercial_resolution.go` / `commercial_resolution_test.go`；裁决层面记为 ADR-0079 Decision 九（已固定的闭包快照必须原样读得回消费方要读的每一样东西）。
+
+**价格政策的同处缺席不在本次修复内**：`NewCommercialPricePolicy` 要方案方向与跨向转换两个入参才立得起来，而类型本身不留存它们，重建要先决定「已固定的价格政策还要不要重验绑定」。那是一道决定不是一段代码，缺口记在 `RehydrateAdoptedBasisSpec` 的注释里等它自己的票。
+
+### 完成标准逐条
+
+1. **判据 B 复点该口从缺转有** — 达成。r26 工具在 `b69bdaa` 重跑（`tool/`，`go.sum` 本轮补齐，原先缺它跑不起来），原始输出 [raw/r26-recheck-b69bdaa.txt](../../mechanism-reinventory-r26/raw/r26-recheck-b69bdaa.txt)。对 `e5301f8` 那次逐行比：B 缺合计 7 → 6，`settlementaccounting.PreAcceptanceControlPolicyView` 从三份名单（A 全局、A 同上下文、B）里同时消失，SA 一列 4 → 3。同次比对里 `visibilityexception.ClaimEvidenceView` 也从两份 A 名单消失、VE 接口数 37 → 39——那是 MCP-1 同期前沿票 02 的产物，不计在本票名下。
+2. **未登记路径与调不通格分开** — 达成，真库逐格取证（下节）。
+3. **SA 编排在种子租户下走通「要求-预付」分支到冻结** — **未达成，且按票面本就不该在本票达成**。票面括号里写明作用域与金额两缝仍显式未配置即停在 `CONTROL_SCOPE_NOT_CONFIGURED`，「不得为验它而造账户映射」。实际还多一道：上游 PS 的解析键登记面不承载结算政策依据，闭包形不成，`PolicyBackedControlScopeSource` 取不到结算回显。**因此适配器暂不装进 `cmd/parcel-api`**——装上去也走不到`要求`那一格，接线与那道登记面同票。这一条记为遗留，不假装收口。
+
+### 取证
+
+`go vet ./...` 净；`gofmt -l internal/ cmd/` 空。真 PostgreSQL 16（DSN 已设，非跳过态）：
+
+- `internal/settlementaccounting/adapters/partycommercial` — 七例全绿（含三条子例）。覆盖三格：`要求`带闭包给的方式与采用政策（预付、账期各一）、`不适用`带合同给的依据且不带方式、合同在声明没写答 `found=false`、坏回指/他租户借回指/空回指三条均走 error、声明挂他租户同号合同上本租户读不到、缺任一只读半边装配期即拒。
+- `internal/partycommercial/...`、`internal/settlementaccounting/...`、`internal/parcelshipment/...`、`internal/architecture` — `-count=1` 全绿。
+
+顺带记一处不改的问题：ADR-0054 的 Links 指向 `0029-recovery-action-is-the-error-algebra.md`，该文件不存在（实际是 `0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md`）。已接受记录，未在本票改动。

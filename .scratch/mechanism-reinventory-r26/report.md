@@ -127,6 +127,17 @@ ADR-0054 预留的落点）凭解析标识读 PC 落库闭包取已采用合同�
 [票面](../sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md)
 （ready-for-agent）。本轮不实现：盘点轮不动生产代码，签名改动横跨 SA/PS 两包按票另开工。
 
+**追补（2026-08-26 · MCP-2，本节盘点结论不改，只记后续）**：该票已 resolved，裁决落
+[ADR-0079](../../docs/adr/0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)。
+同一工具在 `b69bdaa` 重跑（[raw/r26-recheck-b69bdaa.txt](./raw/r26-recheck-b69bdaa.txt)，
+`tool/go.sum` 本轮补齐——原先缺它工具跑不起来）：**判据 B 缺 7 → 6**，本口从 A 全局、
+A 同上下文、B 三份名单里同时消失，第三节表格首行的「可做未做（本轮唯一）」一格因此清空。
+同次比对里 VE `ClaimEvidenceView` 也从两份 A 名单消失、VE 接口数 37 → 39，那是 MCP-1
+同期前沿票的产物，与本节无关。实现期另撞出一处持久化缺陷（采用结算政策的解析闭包写得进
+读不回），同笔修复，记在票面「实现期发现」节——它是**端口计数看不见的又一条机制余量**，
+与第三节末尾「7 口之外、端口计数看不见的机制余量」那一组同型：判据 A/B 都记「已实现」，
+坏的是那个实现读不回自己写的东西。
+
 ## 五、八切片逐三判据（判断）
 
 三判据的全局证据底座，先摆事实：
