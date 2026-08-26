@@ -1,15 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import {
+  listCaseRegisters,
+  type ClosureObligationCatalogueRecord,
+  type ClosureObligationListResponseBody,
+  type ReadinessJudgmentRecord,
+  type ReadinessJudgmentListResponseBody,
+  type SubmissionAuthorityRecord,
+  type SubmissionAuthorityListResponseBody,
+} from './api';
+import { caseRegisterLabels, labelOf, obligationStateLabels } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-cases'];
 
+// 本页两类页签（票 admin-web-page-wiring-frontier/05）：
+//
+// 已接线的是案件配置册查阅两签——「就绪与授权」（单元维，两栏各带撤销态）与
+// 「关闭义务」（案件维，目录连义务项），都接 GET /customs-case-registers 按
+// registry 分派。
+//
 // 四个对象族（关务案件、申报单元、正式申报资料快照、提交版本）分页签呈现：
 // 案件是稳定业务容器，单元是申报对象集合，快照是版本化资料，提交版本是
 // 不可覆盖的对外快照——各自的版本与替代关系独立，折进一张表就会让
-// 「案件状态」冒充其余三层的进度。
+// 「案件状态」冒充其余三层的进度。四族的列表端点尚未建立，保持如实占位。
 
 /**
  * 关务案件列表行。字段取 customs-compliance CONTEXT.md「关务案件」定义与
@@ -161,8 +179,9 @@ const submissionColumns: ListColumn<SubmissionVersionRow>[] = [
 
 const unconfigured = {
   kind: 'unconfigured' as const,
-  title: '关务合规模块尚未接线',
-  description: '查阅读口尚未建立（已接线的关务端点是接收面：外部结果接收等），本页不发请求、不含未确认参数的默认值。',
+  title: '对象族列表端点尚未建立',
+  description:
+    '本页已接线的是案件配置册查阅（就绪与授权、关闭义务两签）；案件/单元/快照/提交版本四个对象族的列表端点尚未建立，这四签不发请求、不含未确认参数的默认值。',
   facts: {
     owner: info.owner,
     source: info.source,
@@ -258,20 +277,264 @@ function SubmissionVersionsTable() {
   );
 }
 
+// —— 案件配置册查阅两签（接真面）——
+
+interface CatalogueRow {
+  key: string;
+  values: Readonly<Record<string, string>>;
+}
+
+function col(id: string, header: string, mono = false): ListColumn<CatalogueRow> {
+  return {
+    id,
+    header,
+    className: mono ? 'font-mono text-xs' : undefined,
+    render: (row) => row.values[id] ?? '—',
+  };
+}
+
+// 就绪与授权两栏并排、各带自己的依据/时间/现况三列（CONTEXT 硬句 164：申报就绪判断
+// 与提交授权必须独立存在；票 05 形状约束一）。并排只对齐单元行——不设「可提交」合成
+// 列：0006 迁移自注点名「就绪还在、授权已撤销」是必须表达得出的一格，合成布尔正好把
+// 它抹掉。
+const preconditionColumns: ListColumn<CatalogueRow>[] = [
+  col('unit', '申报单元', true),
+  col('readinessBasis', '就绪判断依据', true),
+  col('readinessAt', '就绪形成时间', true),
+  col('readinessState', '就绪现况'),
+  col('authorityRef', '提交授权依据', true),
+  col('authorityAt', '授权形成时间', true),
+  col('authorityState', '授权现况'),
+];
+
+// 现况一栏封闭三态，词各有所指：「未登记」＝这本册子没有该单元的行；「仍有效」＝
+// 撤销两列缺席；「已撤销」＝失效在场且原依据原样留在左边两列——失效不是删除，也
+// 不得谎报成未配置（0006 自注、票 05 形状约束二）。
+function trackState(record?: { revokedBy?: string; revokedAt?: string }): string {
+  if (!record) return '未登记';
+  if (record.revokedBy && record.revokedAt) {
+    return `已撤销：${record.revokedBy}（${formatInstant(record.revokedAt)}）`;
+  }
+  return '仍有效';
+}
+
+function preconditionRows(
+  judgments: ReadinessJudgmentRecord[],
+  authorities: SubmissionAuthorityRecord[],
+): CatalogueRow[] {
+  const byUnit = new Map<
+    string,
+    { judgment?: ReadinessJudgmentRecord; authority?: SubmissionAuthorityRecord }
+  >();
+  for (const judgment of judgments) {
+    byUnit.set(judgment.unit, { ...byUnit.get(judgment.unit), judgment });
+  }
+  for (const authority of authorities) {
+    byUnit.set(authority.unit, { ...byUnit.get(authority.unit), authority });
+  }
+  return [...byUnit.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([unit, pair]) => ({
+      key: `unit:${unit}`,
+      values: {
+        unit,
+        readinessBasis: pair.judgment?.basis ?? '—',
+        readinessAt: pair.judgment ? formatInstant(pair.judgment.judgedAt) : '—',
+        readinessState: trackState(pair.judgment),
+        authorityRef: pair.authority?.authority ?? '—',
+        authorityAt: pair.authority ? formatInstant(pair.authority.grantedAt) : '—',
+        authorityState: trackState(pair.authority),
+      },
+    }));
+}
+
+function SubmissionPreconditionsTable() {
+  const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loaded, setLoaded] = useState<{
+    readiness: ApiResult<ReadinessJudgmentListResponseBody>;
+    authority: ApiResult<SubmissionAuthorityListResponseBody>;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([
+      listCaseRegisters('readiness'),
+      listCaseRegisters('submission-authority'),
+    ]).then(([readiness, authority]) => {
+      if (!cancelled) setLoaded({ readiness, authority });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  // 两册并排要两问都成业务答案才可判读：任一问不成，按那一问的状态呈现——只拿到
+  // 半份数据就开画，会把另一栏整列画成「未登记」的假话。
+  const readiness = loaded?.readiness ?? null;
+  const authority = loaded?.authority ?? null;
+  const answer: ApiResult<unknown> | null =
+    readiness === null || authority === null
+      ? null
+      : readiness.kind !== 'outcome'
+        ? readiness
+        : authority;
+  const listed =
+    readiness?.kind === 'outcome' && authority?.kind === 'outcome'
+      ? { judgments: readiness.body.judgments, authorities: authority.body.authorities }
+      : null;
+  const rows = listed ? preconditionRows(listed.judgments, listed.authorities) : [];
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
+
+  return (
+    <ListPageTemplate<CatalogueRow>
+      title="申报就绪判断与提交授权"
+      description={`${info.owner}——就绪与授权分别形成、分别失效，两栏各带自己的撤销态；页面不合成「可提交」标记`}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索申报单元或依据引用' }}
+      filterSummary={
+        listed
+          ? `${caseRegisterLabels.readiness} ${listed.judgments.length} 条 · ${caseRegisterLabels['submission-authority']} ${listed.authorities.length} 条 · 覆盖申报单元 ${rows.length} 个`
+          : undefined
+      }
+      columns={preconditionColumns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /customs-case-registers?registry=readiness 与 ?registry=submission-authority',
+        emptyTitle: '当前租户尚无就绪判断或提交授权登记',
+        emptyDescription: '读取入口已配置,但两本登记册都为空;页面不会预置判断或授权。',
+      })}
+    />
+  );
+}
+
+// 目录行与义务项是两条独立信息（0008 自注、票 05 形状约束三）：有义务项的目录逐项
+// 成行；目录已登记而清单为空占一行写明——它与「目录未登记 → 未决」含义相反，后者
+// 根本不在本列（空册文案另说）。适用区间原样上列不设截点参数，判读归读者（裁决在
+// query_case_registers.go 文件头）。
+const closureColumns: ListColumn<CatalogueRow>[] = [
+  col('caseRef', '关务案件', true),
+  col('registeredAt', '目录登记时间', true),
+  col('obligation', '义务事项'),
+  col('scope', '适用范围'),
+  col('state', '处理状态'),
+  col('basis', '依据引用', true),
+  col('handedTo', '承接方'),
+  col('applies', '适用区间', true),
+];
+
+function closureRows(catalogues: ClosureObligationCatalogueRecord[]): CatalogueRow[] {
+  return catalogues.flatMap((catalogue) => {
+    const base = {
+      caseRef: catalogue.case,
+      registeredAt: formatInstant(catalogue.registeredAt),
+    };
+    if (catalogue.items.length === 0) {
+      return [
+        {
+          key: `catalogue:${catalogue.case}`,
+          values: { ...base, obligation: '目录已登记，当前无义务项' },
+        },
+      ];
+    }
+    return catalogue.items.map((item) => ({
+      // 行键循库主键 (tenant, case_ref, obligation)：同目录内义务名唯一。
+      key: `item:${catalogue.case}:${item.obligation}`,
+      values: {
+        ...base,
+        obligation: item.obligation,
+        scope: item.scope,
+        state: labelOf(obligationStateLabels, item.state),
+        basis: item.basis,
+        // 承接方只在承接项在场（CONTEXT 硬句 219）；非承接项由 col 的 '—' 兜底。
+        ...(item.handedTo ? { handedTo: item.handedTo } : {}),
+        applies: formatRange(item.appliesFrom, item.appliesUntil),
+      },
+    }));
+  });
+}
+
+function ClosureObligationsTable() {
+  const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<ClosureObligationListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listCaseRegisters('closure-obligation').then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const catalogues = answer?.kind === 'outcome' ? answer.body.catalogues : [];
+  const rows = closureRows(catalogues);
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
+  const itemCount = catalogues.reduce((sum, catalogue) => sum + catalogue.items.length, 0);
+
+  return (
+    <ListPageTemplate<CatalogueRow>
+      title="关闭义务目录"
+      description={`${info.owner}——目录未登记的案件按未决处理，不在本列；目录已登记而清单为空才是如实的「无义务项」`}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索关务案件、义务事项或依据' }}
+      filterSummary={
+        answer?.kind === 'outcome'
+          ? `${caseRegisterLabels['closure-obligation']} ${catalogues.length} 份 · 义务项 ${itemCount} 项`
+          : undefined
+      }
+      columns={closureColumns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /customs-case-registers?registry=closure-obligation',
+        emptyTitle: '当前租户尚无已登记的关闭义务目录',
+        emptyDescription:
+          '上列只含已登记目录:目录未登记 ≠ 无义务,未登记案件的关闭核对读作未决。页面不会预置目录。',
+      })}
+    />
+  );
+}
+
 /**
- * 关务案件与申报（customs-compliance）。页签顺序按对象层级：案件容器 →
- * 申报单元 → 资料快照 → 提交版本，逐层向外，越靠后越接近对外发送。
+ * 关务案件与申报（customs-compliance）。已接线的案件配置册两签在前（就绪与授权、
+ * 关闭义务——页面当前能如实作答的查阅面）；对象族四签（案件容器 → 申报单元 →
+ * 资料快照 → 提交版本，逐层向外，越靠后越接近对外发送）列表端点未建，如实占位
+ * 在后，端点建成接线时可回归对象层级排序。
  */
 export function CustomsCasesPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="cases" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs defaultValue="preconditions" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="preconditions">就绪与授权</TabsTrigger>
+          <TabsTrigger value="closure-obligations">关闭义务</TabsTrigger>
           <TabsTrigger value="cases">关务案件</TabsTrigger>
           <TabsTrigger value="units">申报单元</TabsTrigger>
           <TabsTrigger value="snapshots">资料快照</TabsTrigger>
           <TabsTrigger value="submissions">提交版本</TabsTrigger>
         </TabsList>
+        <TabsContent value="preconditions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <SubmissionPreconditionsTable />
+        </TabsContent>
+        <TabsContent value="closure-obligations" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <ClosureObligationsTable />
+        </TabsContent>
         <TabsContent value="cases" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CustomsCasesTable />
         </TabsContent>

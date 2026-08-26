@@ -1,10 +1,25 @@
-// 合规规则库查阅词表。册子名与查询参数 registry 同词;中文取 customs-compliance CONTEXT。
+// 关务目录查阅词表(合规规则库 + 案件配置册)。册子名与查询参数 registry 同词;
+// 中文取 customs-compliance CONTEXT。
 
-import type { ComplianceRegistry } from './api';
+import type { CaseRegisterRegistry, ComplianceRegistry } from './api';
 
 export const registryLabels: Record<ComplianceRegistry, string> = {
   'case-requirement': '案件要求规则',
   interpretation: '解释规则',
+};
+
+export const caseRegisterLabels: Record<CaseRegisterRegistry, string> = {
+  readiness: '申报就绪判断',
+  'submission-authority': '提交授权',
+  'closure-obligation': '关闭义务目录',
+};
+
+// 关闭依据项封闭三值的中文取 domain ObligationItemState 的注释原词:已终结、已被
+// 有权接收方有效承接(短写「已承接」,承接方另列一栏指名)、未解决。
+export const obligationStateLabels: Record<string, string> = {
+  CONCLUDED: '已终结',
+  HANDED_OVER: '已承接',
+  UNRESOLVED: '未解决',
 };
 
 export const directionLabels: Record<string, string> = {
