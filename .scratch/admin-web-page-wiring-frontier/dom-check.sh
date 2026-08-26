@@ -35,6 +35,17 @@ for id in "${@:2}"; do
       check "$f" want "SYN-SUPPLIER-TRUNK-CN-SG-01" "SYN-SUPPLIER-LASTMILE-SG-01" \
         "已生效" "份协议版本"
       ;;
+    commercial-policies-authz)
+      # 票 08:授权规则页签。三条授权规则全在,只有取消目录那条带请求方声明——另两条
+      # 如实答「未声明」,那正是本页签要说清的三态之一。
+      #
+      # 「不许取消」核不到不是漏:种子里那份目录两方齐全,库里没有「已声明而某方缺行」
+      # 的行。那一态由真库测试
+      # TestAuthorizationRuleCatalogueSeparatesUndeclaredFromPartyAbsent 钉住。
+      check "$f" want "SYN-AUTH-CANCEL-01" "SYN-AUTH-PRICE-DIR-01" "SYN-AUTH-COST-DIR-01" \
+        "SYN-RULE-CANCEL-CUSTOMER-01" "SYN-RULE-CANCEL-OPS-01" \
+        "客户取消授权" "运营取消授权" "未声明" "已生效" "授权规则 3 条"
+      ;;
     commercial-policies)
       # 票 07：接单规则包页签上新增的两族阶段内容声明。四个终局结果与两个收寄来源
       # 都要在，且规则引用仍是 5 条——三族若互相翻倍，条数会一起变。
