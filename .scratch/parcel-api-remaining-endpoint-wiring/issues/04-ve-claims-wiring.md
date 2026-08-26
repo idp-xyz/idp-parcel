@@ -46,3 +46,8 @@ error、不是业务否定)。Evidence 显式未配置——归集面机制未�
 装配测试 assemble_claims_test.go 对真库实跑 PASS:受理真实落库、重放走已有项证首笔
 事务提交、资格未决指名到缝、证据缝形状直钉。全仓验证按 20cdc5d 在临时 worktree 检出:
 gofmt 清、build/vet 退 0、go test -count=1 ./... 全 ok(DSN 已设,PG 包实跑非跳过)。
+
+2026-08-26 MCP-1 追记:上段点名的资格缝缺口已随票 `ve-claims-read-seams/01` 收口
+(`bfabc0d`)——查询自带租户的多租户读适配器接真,报错桩与 UNAVAILABLE 验收钉退役,
+装配测试改钉「未登记停待登记 / 别的租户登册不改答 / 本租户登册后按册答」三态。原句
+一律保留。证据缝仍显式未配置,承载票 `ve-claims-read-seams/02`。

@@ -1,7 +1,7 @@
 # VE 资格规则视图缺带租户维的读法——真适配器是单租户装配形状，多租户入口接不上
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 自[接线票 04](../../parcel-api-remaining-endpoint-wiring/issues/04-ve-claims-wiring.md)
 Comments 里的既知事实提出立票（该票 resolved 时如实记了成因但没有后续票承载）；
@@ -31,3 +31,15 @@ Comments 里的既知事实提出立票（该票 resolved 时如实记了成因�
   不再是报错桩的技术未决；已登记（含合成 `SYN-` 种子）租户按册答。
 - 装配测试对真库钉住两态；全仓真库套件绿。
 - 接线票 04 记的「资格未决指名到缝」断言随之更新（那格从 UNAVAILABLE 换成按册答案）。
+
+## Comments
+
+- 2026-08-26 MCP-1：**resolved**，实现 `bfabc0d`。落法与票面裁定一致，另有两处实现期
+  决定记录在案：① `EligibilityQuery` 扩 `Tenant` 格（租户随查询到达），两形状共用同一
+  查询本体 `claimRulesForTenant`——共用的是未导出函数，登记口的调用面没有变宽；② 守卫
+  按「依赖调不通=报错」落两边：多租户视图拒不带租户的查询（折成「声明不在场」会把恢复
+  动作指去登记声明），现绑视图拒错配租户（沉默用钉住租户作答会把接错装成接对），不带
+  租户的既有调用面（登记口测试）原样成立。验证：VE 全包+`cmd/parcel-api` 对真库实跑
+  全绿；装配测试钉三态（未登记停 `ELIGIBILITY_CATALOGUE_NOT_CONFIGURED`、别的租户登册
+  不改本租户的答、本租户登册后按册答到 `ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED`）；
+  完成标准第三条那格如实换下（UNAVAILABLE 钉退役，改钉待登记与按册两态）。
