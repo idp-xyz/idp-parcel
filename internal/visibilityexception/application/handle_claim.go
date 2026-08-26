@@ -423,6 +423,7 @@ func (handler *HandleClaimHandler) ScreenClaim(
 	// 如实停下，不在这里拦。
 	applicant, _ := claim.Applicant()
 	rules, declared, err := handler.deps.Eligibility.RulesForClaim(ctx, ports.EligibilityQuery{
+		Tenant:    command.TenantID,
 		Batch:     command.Batch,
 		Item:      command.Item,
 		Customer:  claim.Customer(),

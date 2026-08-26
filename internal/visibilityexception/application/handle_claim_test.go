@@ -97,17 +97,19 @@ func (double *claimStoreDouble) Save(
 }
 
 type eligibilityRuleDouble struct {
-	rules    ports.EligibilityRules
-	declared bool
-	err      error
-	calls    int
+	rules     ports.EligibilityRules
+	declared  bool
+	err       error
+	calls     int
+	lastQuery ports.EligibilityQuery
 }
 
 func (double *eligibilityRuleDouble) RulesForClaim(
 	_ context.Context,
-	_ ports.EligibilityQuery,
+	query ports.EligibilityQuery,
 ) (ports.EligibilityRules, bool, error) {
 	double.calls++
+	double.lastQuery = query
 	if double.err != nil {
 		return ports.EligibilityRules{}, false, double.err
 	}
@@ -473,6 +475,11 @@ func TestAScreenRecordsEveryDimensionsBasisAndTerminalIsScreenedOnce(t *testing.
 	claim, _ := screened.Claim()
 	if screen, ok := claim.Screen(); !ok || screen != domain.ClaimIneligible {
 		t.Fatalf("screen = %q ok = %v，want 合同不承担该类型落 INELIGIBLE", screen, ok)
+	}
+	// 目录查询自带租户（ve-claims-read-seams/01）：多租户读适配器凭这一格按册作答，
+	// 编排漏装它，视图就只能报错或答错人的册。
+	if got := fixture.eligibility.lastQuery.Tenant; got != screenCommand(t, "item-1").TenantID {
+		t.Fatalf("资格查询携带的租户 = %q，编排没把命令租户装进查询", got)
 	}
 
 	// 五维缺一段，就说明有一维没核过而结果照样写下了。

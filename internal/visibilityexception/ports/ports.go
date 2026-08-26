@@ -539,11 +539,14 @@ type ClaimStore interface {
 }
 
 // EligibilityQuery 是资格规则的查找键：按客户账户、合同版本、目标范围与索赔类型
-// 找出适用的那一版规则。Applicant 也是查找键——授权名单可按它收窄到相关行；存量
-// 索赔未带申请人时为零值，实现照常答目录登记情况，缺席那一维由编排如实停下。除此
-// 之外查询不带事实——事实由编排另取（见 ClaimStore 与 ClaimEvidenceView），目录只答
-// 规则是什么。
+// 找出适用的那一版规则。Tenant 随查询到达（ADR-0003 显式入参一族）：目录行只在租户
+// 内成立，多租户入口的读适配器凭它按册作答；把租户钉在构造期的形状留给受控登记口，
+// 两个形状不合并（.scratch/ve-claims-read-seams/01——合并会让登记口拿到跨租户读）。
+// Applicant 也是查找键——授权名单可按它收窄到相关行；存量索赔未带申请人时为零值，
+// 实现照常答目录登记情况，缺席那一维由编排如实停下。除此之外查询不带事实——事实由
+// 编排另取（见 ClaimStore 与 ClaimEvidenceView），目录只答规则是什么。
 type EligibilityQuery struct {
+	Tenant    domain.TenantID
 	Batch     domain.ClaimBatchReference
 	Item      domain.ClaimItemID
 	Customer  domain.CustomerAccountReference

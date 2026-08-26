@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,15 +9,19 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
+	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
 // Covers: `/claims` 的第二参是真编排——索赔库、追偿库、标识签发与责任结论 Outbox
 // 在真实 PostgreSQL 上装得起来；受理真实落库且重放走已有项（证首笔事务真的提交了）；
-// 资格缝显式未配置时审核入口的答案是指名到缝的未决——不是 error（那会被端点折成
-// 5xx），也不是`不予受理`或`不受理`（那是业务否定），索赔项一字不动（接线票 04 的
-// 验收钉）。测试输入是隔离合成，只记 `S`，不进生产装配。
+// 资格缝接真后（票 ve-claims-read-seams/01）审核入口按租户的册作答且两态分明——
+// 未登记租户停在「声明待登记」的业务格（不是 error，那会被端点折成 5xx；也不是
+// `不予受理`或`不受理`，那是业务否定），别的租户登了册也不改这一答；本租户登册后
+// 审核走进逐维核对、停在册上真实缺的那一维。索赔项全程一字不动。测试输入是隔离
+// 合成，只记 `S`，不进生产装配。
 func TestTheWiredClaimsAnswerHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -60,25 +65,77 @@ func TestTheWiredClaimsAnswerHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("outcome = %v, want CLAIM_EXISTING_RESULT——重放没走已有项，首笔事务的落库没有提交", got)
 	}
 
-	// 接线票 04 的验收钉：资格缝显式未配置时，审核入口必须停在携带续办指名的未决。
-	// 三个都不是它的答案——error（端点会折成 5xx NO_ANSWER_FORMED）、`不予受理`
-	// （ADR-0051 的永久格，默认拒赔）、`已过审`（默认放行）。
-	screened, err := claims.ScreenClaim(t.Context(), visibilityapp.ScreenClaimCommand{
+	// 票 ve-claims-read-seams/01 的验收钉（换下接线票 04 的 UNAVAILABLE 钉）：资格缝
+	// 已接真，未登记租户的审核停在「声明待登记」的业务格。三个都不是它的答案——error
+	// （端点会折成 5xx NO_ANSWER_FORMED）、`不予受理`（ADR-0051 的永久格，默认拒赔）、
+	// `已过审`（默认放行）。
+	screenCommand := visibilityapp.ScreenClaimCommand{
 		TenantID: command.TenantID,
 		Batch:    command.Batch,
 		Item:     command.Item,
-	})
+	}
+	screened, err := claims.ScreenClaim(t.Context(), screenCommand)
 	if err != nil {
-		t.Fatalf("资格缝未配置不该以 error 交回（那是 5xx，不是未决）：%v", err)
+		t.Fatalf("未登记租户的审核不该以 error 交回（那是 5xx，不是未决）：%v", err)
 	}
 	if got := screened.Outcome(); got != visibilityapp.HandleClaimUndecided {
-		t.Fatalf("outcome = %v, want UNDECIDED——资格未配置既不是业务否定也不是放行", got)
+		t.Fatalf("outcome = %v, want UNDECIDED——声明待登记既不是业务否定也不是放行", got)
 	}
-	if got := screened.UndecidedReason(); got != visibilityapp.EligibilityRulesUnavailable {
-		t.Fatalf("reason = %v, want ELIGIBILITY_RULES_UNAVAILABLE——未决要指名到缝，人才知道去接哪一条", got)
+	if got := screened.UndecidedReason(); got != visibilityapp.EligibilityCatalogueNotConfigured {
+		t.Fatalf("reason = %v, want ELIGIBILITY_CATALOGUE_NOT_CONFIGURED——恢复动作是登记声明，不再是接缝", got)
 	}
 
-	// 审核在资格缝就停了，证据缝经公开入口走不到；直接钉它的形状：未配置答「归集
+	// 别的租户登了册也不改这一答：读的若不是查询租户自己的册，这一格就会串。
+	registrar, err := vepostgres.NewCatalogRegistrar(db)
+	if err != nil {
+		t.Fatalf("构造目录写入方：%v", err)
+	}
+	registerEligibility := func(tenant visibilitydomain.TenantID) {
+		t.Helper()
+		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			outcome, registerErr := registrar.RegisterClaimEligibility(txCtx, tenant,
+				veports.ClaimEligibilityRegistration{
+					Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
+					Contract:     command.Contract,
+					CoveredKinds: []visibilitydomain.ClaimKindReference{command.Kind},
+				})
+			if registerErr != nil {
+				return registerErr
+			}
+			if outcome != veports.CatalogVersionRegistered {
+				t.Fatalf("登记索赔声明应成功，实得 %s", outcome)
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("事务内登记失败：%v", err)
+		}
+	}
+	registerEligibility(mustValue(t, visibilitydomain.NewTenantID, "SYN-TENANT-2"))
+	crossTenant, err := claims.ScreenClaim(t.Context(), screenCommand)
+	if err != nil {
+		t.Fatalf("跨租户审核：%v", err)
+	}
+	if got := crossTenant.UndecidedReason(); got != visibilityapp.EligibilityCatalogueNotConfigured {
+		t.Fatalf("reason = %v——别的租户登册改了本租户的答案，租户维没真的进查询", got)
+	}
+
+	// 本租户登册后按册作答：声明在场、类型在保，审核走进逐维核对，停在册上真实缺的
+	// 第一维（首次索赔期限属 `PAR-VIS-08` 待登记实例参数）——证明答案确实来自这租户
+	// 的册，而不是任何一格顶位。
+	registerEligibility(command.TenantID)
+	registered, err := claims.ScreenClaim(t.Context(), screenCommand)
+	if err != nil {
+		t.Fatalf("登册后的审核：%v", err)
+	}
+	if got := registered.Outcome(); got != visibilityapp.HandleClaimUndecided {
+		t.Fatalf("outcome = %v, want UNDECIDED——期限维还没登记", got)
+	}
+	if got := registered.UndecidedReason(); got != visibilityapp.EligibilityFilingDeadlineNotRegistered {
+		t.Fatalf("reason = %v, want ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED——登册后要按册答到真实缺的那一维", got)
+	}
+
+	// 证据缝经公开入口仍走不到：材料清单维未登记时，逐维核对在读证据之前就停下
+	// （judgeMinimumMaterials 先看 Registered）。直接钉它的形状：未配置答「归集
 	// 无从查起」（端口自设的核不了格），不是 error，更不是「查过了零件」的空清单。
 	materials, known, err := unconfiguredClaimEvidence{}.ReceivedMaterials(
 		t.Context(), command.TenantID, command.Batch, command.Item)

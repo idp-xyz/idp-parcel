@@ -31,7 +31,10 @@ import (
 // 就会变成不可逆的默认拒赔（ADR-0051：终局格一经写下不可经补充翻案），而编译与测试
 // 都不会拦。本视图连 `EligibilityScreen` 都不再交出，那条路在类型上已经走不通。
 //
-// 租户在装配期固定，理由同本包另外几个视图：RulesForClaim 的签名里没有租户。
+// 租户在装配期固定，形状为受控登记口而设：登记口只该看见自己那一户。查询自带租户
+// 之后（.scratch/ve-claims-read-seams/01），多租户入口走 MultiTenantClaimEligibilityRules，
+// 两个形状不合并——合并会让登记口拿到跨租户读。本视图收到带租户的查询时要求与钉住的
+// 一致，不一致按「依赖调不通」报错：沉默地用钉住租户作答会把接错装成接对。
 type ClaimEligibilityRules struct {
 	db     *bentopg.DB
 	tenant domain.TenantID
@@ -60,11 +63,27 @@ func (view *ClaimEligibilityRules) RulesForClaim(
 	ctx context.Context,
 	query ports.EligibilityQuery,
 ) (ports.EligibilityRules, bool, error) {
-	if view.tenant.String() == "" || query.Contract.String() == "" || query.Kind.String() == "" {
+	if query.Tenant.String() != "" && query.Tenant != view.tenant {
+		return ports.EligibilityRules{}, false, fmt.Errorf(
+			"rules for claim: view is pinned to tenant %q but the query carries %q",
+			view.tenant, query.Tenant)
+	}
+	return claimRulesForTenant(ctx, view.db, view.tenant, query)
+}
+
+// claimRulesForTenant 是两个形状共用的查询本体：答案语义一份，差别只在租户从哪来。
+// 守卫沿单租户形状既有的样子：租户、合同或类型为零值即「声明不在场」。
+func claimRulesForTenant(
+	ctx context.Context,
+	db *bentopg.DB,
+	tenant domain.TenantID,
+	query ports.EligibilityQuery,
+) (ports.EligibilityRules, bool, error) {
+	if tenant.String() == "" || query.Contract.String() == "" || query.Kind.String() == "" {
 		return ports.EligibilityRules{}, false, nil
 	}
 
-	querier, err := view.db.ReadExecutor(ctx)
+	querier, err := db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.EligibilityRules{}, false, fmt.Errorf("rules for claim: %w", err)
 	}
@@ -82,7 +101,7 @@ func (view *ClaimEligibilityRules) RulesForClaim(
 		        )
 		   FROM visibility_exception.claim_contract_scope AS scope
 		  WHERE scope.tenant_id = $1 AND scope.contract_scope_ref = $2`,
-		view.tenant.String(), query.Contract.String(), query.Kind.String(),
+		tenant.String(), query.Contract.String(), query.Kind.String(),
 	).Scan(&ruleVersion, &covered)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.EligibilityRules{}, false, nil
@@ -91,7 +110,7 @@ func (view *ClaimEligibilityRules) RulesForClaim(
 		return ports.EligibilityRules{}, false, fmt.Errorf("rules for claim: %w", err)
 	}
 
-	authorization, err := view.authorizationFor(ctx, querier, query)
+	authorization, err := claimAuthorizationForTenant(ctx, querier, tenant, query)
 	if err != nil {
 		return ports.EligibilityRules{}, false, err
 	}
@@ -105,13 +124,14 @@ func (view *ClaimEligibilityRules) RulesForClaim(
 	}, true, nil
 }
 
-// authorizationFor 取申请人授权目录。没有目录行即未登记（实例半边，编排停在未决）。
-// 名单按查询里的申请人收窄到相关那一行——端口注释允许收窄且语义不变：在列即获授权。
-// 查询没带申请人（存量索赔）时只答登记情况，整份名单没有读者：编排在核对之前就会
-// 停在「申请人缺席」那一维。
-func (view *ClaimEligibilityRules) authorizationFor(
+// claimAuthorizationForTenant 取申请人授权目录。没有目录行即未登记（实例半边，编排
+// 停在未决）。名单按查询里的申请人收窄到相关那一行——端口注释允许收窄且语义不变：
+// 在列即获授权。查询没带申请人（存量索赔）时只答登记情况，整份名单没有读者：编排在
+// 核对之前就会停在「申请人缺席」那一维。
+func claimAuthorizationForTenant(
 	ctx context.Context,
 	querier bentopg.Querier,
+	tenant domain.TenantID,
 	query ports.EligibilityQuery,
 ) (ports.AuthorizationCatalogue, error) {
 	var ruleVersion string
@@ -119,7 +139,7 @@ func (view *ClaimEligibilityRules) authorizationFor(
 		`SELECT rule_version
 		   FROM visibility_exception.claim_authorization_catalogue
 		  WHERE tenant_id = $1 AND customer_ref = $2`,
-		view.tenant.String(), query.Customer.String(),
+		tenant.String(), query.Customer.String(),
 	).Scan(&ruleVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.AuthorizationCatalogue{}, nil
@@ -139,7 +159,7 @@ func (view *ClaimEligibilityRules) authorizationFor(
 		              FROM visibility_exception.claim_authorized_applicant
 		             WHERE tenant_id = $1 AND customer_ref = $2 AND applicant_ref = $3
 		        )`,
-		view.tenant.String(), query.Customer.String(), query.Applicant.String(),
+		tenant.String(), query.Customer.String(), query.Applicant.String(),
 	).Scan(&listed)
 	if err != nil {
 		return ports.AuthorizationCatalogue{}, fmt.Errorf("authorization catalogue: %w", err)
