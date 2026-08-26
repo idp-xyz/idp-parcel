@@ -48,7 +48,7 @@ Owner: MCP-1（2026-08-26 认领；ve-claims-read-seams/01、/02 已先行收口
 
 1. 端点：六 kind 各答 `200` + 非空 `catalogues`（隔离读实例 `:19081`，`CLAIM_AUTHORIZATION` 两行——一行两申请人、一行显式空名单）；未配置 Intake 时 403 由 `endpoints_test.go` 的 unwired 探针与处理器测试钉住。
 2. 真库测试九条全 `PASS` 非 `SKIP`（单跑 `TestListMilestoneMappingsReturnsVersionsWithEntriesNewestFirst`、`TestCatalogueListsAreTenantScoped` 各 0.2s+ 实跑）；父子同快照靠 `json_agg` 相关子查询一语句取回（票 07 笛卡尔积教训，六册各聚各的）。
-3. `go test -count=1 ./...`：94 包全绿。唯一红点是工作树里**未提交**的 `internal/settlementaccounting/adapters/partycommercial/`（票 sa-preacceptance-policy-view/01 的半成品，MCP-1 自己的，5 用例红），与本票三笔提交无关，接下来在那张票内收拾。
+3. `go test -count=1 ./...`：94 包全绿。收口时全套里曾见 5 用例红点，在 `internal/settlementaccounting/adapters/partycommercial/`——**归属更正**：那是 MCP-2 认领的票 sa-preacceptance-policy-view/01 的在途件（本节初版误记为 MCP-1 自己的），红的根因是解析闭包快照当时还没落结算选择器（写得进读不回），MCP-2 已在 `5911d3b` 修复、`be389d3` 收适配器，修复后含该包的全套复跑全绿。与本票三笔提交无关。
 4. `seed.sh --reset` 复灌零报错，末行「五上下文全部落库」。
 5. 页面层：重起 vite（inotify 注记照旧）后 Edge 无头取 DOM——三页首屏 + 三个第二页签（`dom-dump-tab.mjs`）。判断规则页 4 条映射 + 4 条分诊（四个结果词各在场）；披露页通知策略 1 条、披露策略两客户四维（`展示:SYN-VE-CONTENT-…`×3、`待确认`×3、`不披露`×2）；索赔页资格 1 份、授权 2 份（`显式空名单:不授权任何申请人代提` 在场）。全部产物零未配置码。
 
