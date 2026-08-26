@@ -57,8 +57,8 @@ cancel-parcel)+ 演示 1(template-preview)+ 骨架 31。tracking-projection 接�
 | service-products | party-commercial | service_product_form(0008)在,有仓储写入方 | 缺列表读面+端点;登记进程口归 cmd/parcel-commercial 范围待核 | B |
 | channel-product-catalog | party-commercial | 无渠道产品目录专表;CommercialObjectKind 封闭三元不含它(断点 1 已核) | 本体机制未开工(建模先行) | 阻断 |
 | commercial-policies | party-commercial | acceptance_rule_package(0014)/price_policy(0010)/settlement_policy(0011)/pre_acceptance_control(0007)/as_of_policy(0005)在;发布走 cmd/parcel-commercial | 缺列表读面+端点 | B |
-| price-card-catalog | parcel-pricing | price_card_catalog 表(0002)+登记用例+CLI 全在 | 缺列表读面+端点 | B |
-| reference-series | parcel-pricing | reference_series_register 表(0003)+登记用例+CLI 全在 | 缺列表读面+端点 | B |
+| price-card-catalog | parcel-pricing | price_card_version 表(0002)+登记用例+CLI 全在 | 缺列表读面+端点 | B |
+| reference-series | parcel-pricing | reference_series_version 表(0003)+登记用例+CLI 全在 | 缺列表读面+端点 | B |
 | network-catalog | network-routing | network_catalog 表(0008)+CLI(parcel-network-register)在 | 缺列表读面+端点 | B |
 | service-areas | network-routing | 0008 服务区域目录版本表+CLI service-area 族在;0007 network_definition 登记册明文不在登记口(ADR-0068 Decision 六待解)(断点 2 已核) | 目录版本查阅面可接;网络定义登记册仍无写入方 | B(目录版本)/阻断(登记册) |
 | customs-ports-paths | customs-compliance | 案件配置五登记册(就绪/申报权威/解释规则/义务清单/闸门条件)不含口岸与申报路径维(断点 3 已核) | 对象无存储,建模先行 | 阻断 |

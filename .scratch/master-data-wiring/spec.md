@@ -13,13 +13,17 @@ Status: in-progress
 
 | 页面(moduleId) | 主责上下文 | 存储 | 票 |
 |---|---|---|---|
-| price-card-catalog | parcel-pricing | price_card_catalog(0002) | 02 |
-| reference-series | parcel-pricing | reference_series_register(0003) | 02 |
+| price-card-catalog | parcel-pricing | price_card_version(0002) | 02 |
+| reference-series | parcel-pricing | reference_series_version(0003) | 02 |
 | network-catalog | network-routing | 0008 七张版本表 | 03 |
 | service-areas | network-routing | 0008 的 service-area 族 | 03 |
 | compliance-rules | customs-compliance | 案件配置五登记册 + 案件要求规则 | 04 |
 | service-products | party-commercial | service_product_form(0008) | 05 |
 | commercial-policies | party-commercial | 五策略表(0005/0007/0010/0011/0014) | 05 |
+
+parcel-pricing 两行的迁移文件名与表名不是一个词:`0002_price_card_catalog.sql` 建的表叫
+`price_card_version`,`0003_reference_series_register.sql` 建的表叫
+`reference_series_version`。写 SQL 一律按表名,照搬文件名会得到 relation does not exist。
 
 **明确不做**(前沿调研三断点已于 2026-08-25 复核,证据见下):
 

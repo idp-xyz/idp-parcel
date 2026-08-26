@@ -17,8 +17,9 @@ Blocked by: 01(已 resolved 即不阻)
    语义同款:作用域引用+租户两维非零,无客户维)。
 2. **ports**:价卡目录与参考序列的伴生列表读端口(租户在签名上;不拓宽既有登记写口
    接口——扩写侧接口会拆写侧替身,267cb44 提交信记过这条风险)。
-3. **adapters/postgres**:读适配器实现,读 0002 price_card_catalog 与 0003
-   reference_series_register 两张表(表结构以迁移 SQL 为准);真库测试
+3. **adapters/postgres**:读适配器实现,读 0002 的 price_card_version 与 0003 的
+   reference_series_version 两张表(表结构以迁移 SQL 为准;两处表名都与迁移文件名不同,
+   按表名写);真库测试
    (internal/platform/pgtest 先例见 visibilityexception 的 projection_list_test.go):
    至少覆盖「跨租户不可见」「空租户答空列表」「limit 边界」。
 4. **adapters/http**:查询端点(参照
