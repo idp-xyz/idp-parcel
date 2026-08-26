@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "policy": "SYN-VE-DISCLOSE-V1",
+  "channel": "EMAIL",
+  "deadlineAfter": "72h",
+  "obligation": "CUSTOMER_NOTIFIED",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD"
+}

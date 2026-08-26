@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "version": "SYN-VE-CLAIMS-V1",
+  "approvedBy": "SYN-OPS-CLAIMS-LEAD",
+  "contract": "SYN-CONTRACT-01",
+  "coveredKinds": ["LOSS", "DAMAGE"]
+}

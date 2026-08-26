@@ -9,7 +9,7 @@
 #
 #   --reset  先 DROP 全部 parcel schema 再重迁重灌（干净库复灌用，破坏性，仅限演示库）。
 #
-# 干净库上全程零报错；四个登记 CLI 的非零退出码会经 set -e 中止脚本并如实透出。
+# 干净库上全程零报错；五个登记 CLI 的非零退出码会经 set -e 中止脚本并如实透出。
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -25,27 +25,28 @@ SEEDS=scripts/demo-seeds/data
 BIN="$(mktemp -d)"
 trap 'rm -rf "$BIN"' EXIT
 
-echo "== 0/5 编译登记 CLI 与迁移助手 =="
+echo "== 0/6 编译登记 CLI 与迁移助手 =="
 go build -o "$BIN/" \
   ./cmd/parcel-pricing-register \
   ./cmd/parcel-network-register \
   ./cmd/parcel-customs-register \
   ./cmd/parcel-commercial \
+  ./cmd/parcel-ve-register \
   ./scripts/demo-seeds/migrate
 
-echo "== 1/5 施加迁移计划（${RESET_FLAG:-不重置}） =="
+echo "== 1/6 施加迁移计划（${RESET_FLAG:-不重置}） =="
 "$BIN/migrate" $RESET_FLAG
 
-echo "== 2/5 商业权威发布（party-commercial：服务产品与五策略） =="
+echo "== 2/6 商业权威发布（party-commercial：服务产品与五策略） =="
 "$BIN/parcel-commercial" publish -input "$SEEDS/commercial/publish-batch.json"
 
-echo "== 3/5 计价登记（parcel-pricing：价卡 + 参考序列） =="
+echo "== 3/6 计价登记（parcel-pricing：价卡 + 参考序列） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg-cost.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fuel.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fx-cny-sgd.json"
 
-echo "== 4/5 网络目录登记（network-routing：七族版本行） =="
+echo "== 4/6 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind node -file "$SEEDS/network/01-node-sha-hub-v1.json"
 "$BIN/parcel-network-register" -kind node -file "$SEEDS/network/02-node-szx-gate-v1.json"
 "$BIN/parcel-network-register" -kind node -file "$SEEDS/network/03-node-sin-hub-v1.json"
@@ -61,7 +62,7 @@ echo "== 4/5 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind availability-adjustment -file "$SEEDS/network/13-adjustment-typhoon-v1.json"
 "$BIN/parcel-network-register" -kind route-strategy -file "$SEEDS/network/14-route-strategy-cn-sg-v1.json"
 
-echo "== 5/5 关务案件配置登记（customs-compliance：六册） =="
+echo "== 5/6 关务案件配置登记（customs-compliance：六册） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"
 "$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/02-authority-grant.json"
 "$BIN/parcel-customs-register" interpretation-rule -input "$SEEDS/customs/03-interpretation-rule-v1.json"
@@ -74,4 +75,13 @@ echo "== 5/5 关务案件配置登记（customs-compliance：六册） =="
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/10-case-requirement-cn-export.json"
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/11-case-requirement-sg-import.json"
 
-echo "种子灌入完成：租户 SYN-TENANT-01，四上下文全部落库。"
+echo "== 6/6 追踪与异常目录登记（visibility-exception：六类七笔） =="
+"$BIN/parcel-ve-register" milestone-mapping -input "$SEEDS/visibility/01-milestone-mapping-v1.json"
+"$BIN/parcel-ve-register" triage-rules -input "$SEEDS/visibility/02-triage-rules-v1.json"
+"$BIN/parcel-ve-register" notification-policy -input "$SEEDS/visibility/03-notification-policy-disclose-v1.json"
+"$BIN/parcel-ve-register" claim-eligibility -input "$SEEDS/visibility/04-claim-eligibility-contract-01.json"
+"$BIN/parcel-ve-register" claim-authorization -input "$SEEDS/visibility/05-claim-authorization-account-01.json"
+"$BIN/parcel-ve-register" claim-authorization -input "$SEEDS/visibility/06-claim-authorization-account-02-empty.json"
+"$BIN/parcel-ve-register" disclosure-policy -input "$SEEDS/visibility/07-disclosure-policy-v1.json"
+
+echo "种子灌入完成：租户 SYN-TENANT-01，五上下文全部落库。"

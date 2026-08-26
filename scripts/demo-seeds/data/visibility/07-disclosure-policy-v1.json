@@ -1,0 +1,22 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "version": "SYN-VE-DISCLOSE-V1",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD",
+  "effectiveFrom": "2026-01-05T00:00:00Z",
+  "entries": [
+    {
+      "customer": "SYN-ACCOUNT-01",
+      "milestones": { "state": "SHOWN", "content": "SYN-VE-CONTENT-PUBLIC-MILESTONES-V1" },
+      "eta": { "state": "SHOWN", "content": "SYN-VE-CONTENT-ETA-BAND-V1" },
+      "final": { "state": "PENDING_CONFIRMATION" },
+      "note": { "state": "NOT_DISCLOSED" }
+    },
+    {
+      "customer": "SYN-ACCOUNT-02",
+      "milestones": { "state": "SHOWN", "content": "SYN-VE-CONTENT-PUBLIC-MILESTONES-V1" },
+      "eta": { "state": "PENDING_CONFIRMATION" },
+      "final": { "state": "PENDING_CONFIRMATION" },
+      "note": { "state": "NOT_DISCLOSED" }
+    }
+  ]
+}

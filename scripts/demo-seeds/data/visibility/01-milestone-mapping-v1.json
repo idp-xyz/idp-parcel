@@ -1,0 +1,12 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "version": "SYN-VE-MAP-V1",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD",
+  "effectiveFrom": "2026-01-05T00:00:00Z",
+  "entries": [
+    { "source": "NODE_OPERATIONS", "factKind": "node-intake", "milestone": "PICKED_UP" },
+    { "source": "TRANSPORT_FULFILLMENT", "factKind": "transport-handover", "milestone": "IN_TRANSIT" },
+    { "source": "CUSTOMS_COMPLIANCE", "factKind": "external-result", "milestone": "CUSTOMS_CLEARED" },
+    { "source": "TRANSPORT_FULFILLMENT", "factKind": "effective-delivery", "milestone": "DELIVERED" }
+  ]
+}
