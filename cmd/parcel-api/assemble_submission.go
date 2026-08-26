@@ -104,9 +104,14 @@ func (submission transactionalSubmission) Handle(
 //
 // 治理桥的三个读口（权威区间、暂停、接管）接真库；GovernanceScopeDirectory 与
 // SelfAuthority 是范围缝的实例半边——没有租户就没有目录，缺席即适配器的「显式未配置」，
-// 归属如实答`权威未确定`，提交停在 OWNERSHIP_UNRESOLVED。与接线前的区别不在结果，
-// 在结果的来源：恢复动作从「写代码」变成「登记一条权威区间」（ADR-0063 的「显式未配置」
-// 讲的就是这个差别）。
+// 归属如实答`权威未确定`，提交停在 OWNERSHIP_UNRESOLVED。
+//
+// 与接线前的区别不在结果，在结果的来源，但这句话只对那三个读口成立：它们的恢复动作
+// 已从「写代码」变成「登记」（ADR-0063 的「显式未配置」讲的就是这个差别）。**下面留空
+// 的两样不在其内**——`governanceScope` 在目录缺席或自身权威串为空时先于读登记册就早退，
+// 因此往 authority_interval 里登记多少行都不会改变答案，那两格的恢复动作仍是「写一个
+// 目录实现并说出自己的权威串」。把它们读成「登记一条区间就好」会让人登完仍撞
+// OWNERSHIP_UNRESOLVED 而不知道为什么。
 func buildSubmissionOrchestration(db *bentopg.DB) (shipmenthttp.SubmissionHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {

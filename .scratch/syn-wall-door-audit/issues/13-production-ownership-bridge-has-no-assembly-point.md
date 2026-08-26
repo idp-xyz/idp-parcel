@@ -136,3 +136,16 @@ Status: resolved
      `-v` 真 PASS 非 SKIP（目录未配置提交停 `OWNERSHIP_UNRESOLVED` 且带归属决定、重放答
      `已有结果`、被拒提交保全来源）；全仓 `go test -p 1 -count=1 ./...` 设 DSN 零 FAIL。
      棘轮门禁不受本笔影响：它网 domain 非 `New*` 工厂，本笔接的是 `New*` 构造与 cmd 装配。
+
+- 2026-08-26 · MCP-2（勘误，不翻交付）：本票「要答的第二问」那句「恢复动作从『写代码』
+  变成『登记一条权威区间』」**对 `Directory` 与 `SelfAuthority` 不成立**，同句被照抄进
+  `buildSubmissionOrchestration` 头注，已随
+  `.scratch/product-story-and-demo/issues/04-demo-journey.md` 的勘察一并改掉（仅注释）。
+  取证：`ProductionOwnershipAdapter.governanceScope` 在 `Directory == nil` 或
+  `SelfAuthority == ""` 时**先于** `matchInterval` 读登记册就返回未配置——因此往
+  `pilot_governance.authority_interval` 里登多少行都不会改变答案，那两格的恢复动作仍是
+  「写一个目录实现并说出自己的权威串」。演示库实测该表 0 行，两头都不在。
+
+  这不改本票的交付判断：留空本身是对的（实例半边不代拟坐标，红线「证据层级诚实」），
+  改的只是那句对**恢复路径**的描述——它读起来是结论，而照它去登记的人会登完仍撞
+  `OWNERSHIP_UNRESOLVED` 且不知道为什么。三个治理读口那半句原样成立，未动。
