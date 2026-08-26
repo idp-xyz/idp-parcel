@@ -299,6 +299,22 @@ func (unwiredCommercialCatalogue) ListAsOfPolicyDeclarations(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListCustomerContracts(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.CustomerContractCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListSupplierAgreements(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.SupplierAgreementCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCancellation struct{}
 
 func (unwiredCancellation) Handle(

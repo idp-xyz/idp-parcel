@@ -143,6 +143,7 @@ func run(logger *slog.Logger) error {
 			complianceRules,
 			commercialCatalog,
 			commercialCatalog,
+			commercialCatalog,
 			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,

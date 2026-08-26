@@ -58,18 +58,25 @@ func TestBuildIsolatedReadIntakesGrantsAllSixContexts(t *testing.T) {
 	}
 }
 
-// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一枚举的放行面。它与下面的两态
+// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一的放行面。它与下面的两态
 // 测试互为对照：这里多列一个端点，启用态断言会在该端点上撞到 403 而失败；少列一个，
 // 会在「其余端点仍拒」的断言上失败——枚举漂移在两个方向上都有测试信号。
+//
+// 入格靠的是那三条判据（消费所属上下文的存储读面且不触发判断、派生或披露；零持久化；
+// 作用域是运营侧的授权结果），不是 ADR 正文里那份名单——正文自己把名单限定在「当前
+// 装配点上」，新的目录查阅端点满足同三条即入格，不另开 ADR。合同与协议两行就是照这
+// 条进来的（票 admin-web-page-wiring-frontier/01）。
 var isolatedReadAdmittedPatterns = map[string]bool{
-	"/shipment-request-views":      true,
-	"/tracking-projections":        true,
-	"/pricing-price-cards":         true,
-	"/pricing-reference-series":    true,
-	"/network-catalog":             true,
-	"/customs-compliance-rules":    true,
-	"/commercial-service-products": true,
-	"/commercial-policies":         true,
+	"/shipment-request-views":         true,
+	"/tracking-projections":           true,
+	"/pricing-price-cards":            true,
+	"/pricing-reference-series":       true,
+	"/network-catalog":                true,
+	"/customs-compliance-rules":       true,
+	"/commercial-service-products":    true,
+	"/commercial-policies":            true,
+	"/commercial-customer-contracts":  true,
+	"/commercial-supplier-agreements": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

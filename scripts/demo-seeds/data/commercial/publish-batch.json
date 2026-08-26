@@ -131,6 +131,36 @@
     },
     {
       "tenantId": "SYN-TENANT-01",
+      "kind": "SUPPLIER_AGREEMENT",
+      "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-SUPPLIER-TRUNK-CN-SG-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-009",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "SUPPLIER_AGREEMENT",
+      "objectId": "SYN-SUPPLIER-LASTMILE-SG-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-SUPPLIER-LASTMILE-SG-01-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-010",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
       "kind": "PRICE_RULE",
       "objectId": "SYN-PRICE-RULE-CN-SG",
       "version": "v1",

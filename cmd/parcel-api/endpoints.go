@@ -62,6 +62,7 @@ func assembleBusinessEndpoints(
 	complianceRules customshttp.RuleCatalogueReader,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
+	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：isolatedRead 为 nil 时，下面六个变量全取未配置即拒，整份装配与
@@ -100,5 +101,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
+		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},
+		{Pattern: "/commercial-supplier-agreements", Handler: commercialhttp.NewQuerySupplierAgreementsEndpoint(commercialCatalogueIntake, commercialRelations)},
 	}
 }
