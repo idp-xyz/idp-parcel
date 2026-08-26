@@ -887,3 +887,67 @@ type CatalogRegistry interface {
 		registration DisclosurePolicyRegistration,
 	) (CatalogRegistrationOutcome, error)
 }
+
+// MaterialReceipt 是一笔材料收讫登记：某项索赔的某件材料在某时刻经受控通道登记为
+// 已收讫（.scratch/ve-claims-read-seams/02）。行身份是（租户、批次、项、材料要求
+// 引用、收讫时间）五件——租户照本端口家族的惯例走方法签名，其余四件在此。材料要求
+// 引用必须是资格目录签发的词：ClaimEvidenceView 与最低材料要求相减才核得出缺口，
+// 两边不同词，差集就永远不为空。
+//
+// ReceivedBy 是执行者身份双轨的第②轨（登记内容，「登记者声明了谁经手收讫」），
+// 显式必填；第①轨通道技术身份由 CLI 入口自取、与登记同笔事务落
+// visibility_exception.channel_execution，不进本结构——结构上不存在从输入伪造
+// 通道身份的路径。行上只登收讫事实与经手声明，不登材料内容实体（敏感实例外置）。
+type MaterialReceipt struct {
+	Batch      domain.ClaimBatchReference
+	Item       domain.ClaimItemID
+	Material   domain.MaterialRequirementReference
+	ReceivedAt time.Time
+	ReceivedBy string
+}
+
+// MaterialReceiptRevocation 撤销一笔收讫：以收讫行的五件全键指名对象——同一
+// （批次+项+材料）可能收讫多次，缺收讫时间就指不清撤的是哪一次。撤销不删收讫行，
+// 另立撤销行（0021）；撤销之后同一材料要再次采信，走新的收讫行。
+type MaterialReceiptRevocation struct {
+	Batch      domain.ClaimBatchReference
+	Item       domain.ClaimItemID
+	Material   domain.MaterialRequirementReference
+	ReceivedAt time.Time
+	RevokedBy  string
+	RevokedAt  time.Time
+}
+
+type MaterialReceiptWriteOutcome uint8
+
+const (
+	MaterialReceiptWriteOutcomeInvalid MaterialReceiptWriteOutcome = iota
+	MaterialReceiptRecorded
+	MaterialReceiptAlreadyRecorded
+	MaterialReceiptRevocationRecorded
+	MaterialReceiptRevocationAlreadyRecorded
+	// MaterialReceiptUnknown 只由撤销给出：五件指名的收讫行不在场，无从撤销。这是
+	// 登记册的治理答案，不是故障——恢复动作是人工核对引用，不是重试。
+	MaterialReceiptUnknown
+)
+
+// MaterialReceiptRegistry 是材料归集面的写入口，与 ClaimEvidenceView 成对：读口答
+// 「已经收到什么」，本口把收讫与撤销写进去。与目录册（CatalogRegistry）分列两个端口
+// ——那边登的是规则版本，重登同版本号是要人换号的治理答案；这边登的是事实，行身份
+// 就是事实本身，同五件重登幂等（AlreadyRecorded），没有内容可被顶替。重放答案已指名
+// 本次没有写入，实现不比对经手声明——先登的那份声明留在行上。
+//
+// 两个方法都在调用方的事务内执行（RequireExecutor 语义）：登记与通道留痕必须同一
+// 提交——痕不声称一笔没落库的登记，登记也不许在无痕状态下落地。
+type MaterialReceiptRegistry interface {
+	RegisterReceipt(
+		ctx context.Context,
+		tenant domain.TenantID,
+		receipt MaterialReceipt,
+	) (MaterialReceiptWriteOutcome, error)
+	RevokeReceipt(
+		ctx context.Context,
+		tenant domain.TenantID,
+		revocation MaterialReceiptRevocation,
+	) (MaterialReceiptWriteOutcome, error)
+}

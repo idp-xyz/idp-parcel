@@ -1,14 +1,19 @@
-// parcel-ve-register 是 VE 五类规则与策略目录的受控登记口（syn-wall-door-audit
-// 票 15，即票 09 的 B 半边）：运营方操作员在数据库网络内手跑，不监听任何端口。目录
-// 登记是租户运营方的治理动作，信任边界是运维边界而不是商业渠道，故走受控 CLI 而不进
+// parcel-ve-register 是 VE 五类规则与策略目录（syn-wall-door-audit 票 15，即票 09
+// 的 B 半边）与索赔材料归集面（票 ve-claims-read-seams/02）的受控登记口：运营方操作
+// 员在数据库网络内手跑，不监听任何端口。目录登记是租户运营方的治理动作，收讫登记是
+// 租户作业面的操作动作，信任边界都是运维边界而不是商业渠道，故走受控 CLI 而不进
 // parcel-api 的端点面（形状循 parcel-pricing-register / parcel-governance-register；
 // 票 12 已裁治理类登记不受 ADR-0055 业务端点章程管）。它也不碰任何装配接线——
 // `tenantBoundCustomerViewDerive` 那格哨兵等的是目录内容（实例半边），不是代码接线。
 //
-// 六个登记种类覆盖五类七表（`PAR-VIS-08` 跨索赔资格与申请人授权两组表）：
+// 目录册六个登记种类覆盖五类七表（`PAR-VIS-08` 跨索赔资格与申请人授权两组表）：
 // milestone-mapping（`PAR-VIS-01`）、triage-rules（`PAR-VIS-05`）、
 // notification-policy（`PAR-VIS-07`）、claim-eligibility / claim-authorization
-// （`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）。
+// （`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）。此外材料归集面两命令
+// claim-material-receipt / claim-material-receipt-revocation（票
+// ve-claims-read-seams/02）登的是收讫事实不是规则册——材料实物经租户的客服/作业面
+// 收到后由操作者在此登记收讫，客户自助提交材料属 PAR-INT-01 之后的渠道工作，不在
+// 本入口。
 //
 // 执行者身份走双轨（票 12 裁决，经票 15 沿用）：①通道技术身份（OS 进程属主、主机名）
 // 由本入口自取，没有任何参数能传入或覆盖它，与登记同笔事务落
@@ -22,9 +27,11 @@
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
 // 退出码：0 = 已登记；1 = 用法或输入不合法（含用例指名的缺件拒绝）；2 = 登记册治理
-// 答案（版本不可覆盖 / 同一时点已有另一适用版本——原行未被顶替，人工核对后换版本号
-// 或改区间续办）；3 = 未决（依赖故障，登记与否未知，重跑同一命令续办）。与姊妹登记
-// 口不同，本口没有「幂等重放」格：登记册不比对内容，同版本号再登一律答版本不可覆盖。
+// 答案（目录册：版本不可覆盖 / 同一时点已有另一适用版本——原行未被顶替，人工核对后
+// 换版本号或改区间续办；归集面：无从撤销——五件指名的收讫行不在册）；3 = 未决（依赖
+// 故障，登记与否未知，重跑同一命令续办）。幂等重放格只归集面有（同五件重登答
+// ALREADY_* 且走 0——行身份就是事实本身，没有内容可被顶替）；目录册没有：登记册不
+// 比对内容，同版本号再登一律答版本不可覆盖。
 package main
 
 import (
@@ -58,15 +65,19 @@ const (
 )
 
 const (
-	commandMilestoneMapping   = "milestone-mapping"
-	commandTriageRules        = "triage-rules"
-	commandNotificationPolicy = "notification-policy"
-	commandClaimEligibility   = "claim-eligibility"
-	commandClaimAuthorization = "claim-authorization"
-	commandDisclosurePolicy   = "disclosure-policy"
+	commandMilestoneMapping          = "milestone-mapping"
+	commandTriageRules               = "triage-rules"
+	commandNotificationPolicy        = "notification-policy"
+	commandClaimEligibility          = "claim-eligibility"
+	commandClaimAuthorization        = "claim-authorization"
+	commandDisclosurePolicy          = "disclosure-policy"
+	commandMaterialReceipt           = "claim-material-receipt"
+	commandMaterialReceiptRevocation = "claim-material-receipt-revocation"
 )
 
 // registerCommands 是本入口开的全部登记种类，用法提示与路由共用一份，不各列一遍。
+// 前六个是目录册，后两个是材料归集面的事实登记（票 ve-claims-read-seams/02）——两族
+// 的答案代数不同（见 executeMaterialReceipt），路由在 execute 分岔。
 var registerCommands = []string{
 	commandMilestoneMapping,
 	commandTriageRules,
@@ -74,6 +85,8 @@ var registerCommands = []string{
 	commandClaimEligibility,
 	commandClaimAuthorization,
 	commandDisclosurePolicy,
+	commandMaterialReceipt,
+	commandMaterialReceiptRevocation,
 }
 
 type systemClock struct{}
@@ -108,6 +121,7 @@ var _ executionTracer = (*vepg.ChannelExecutions)(nil)
 
 type registrars struct {
 	catalogs   *application.CatalogRegistration
+	receipts   *application.MaterialReceiptRegistration
 	tracer     executionTracer
 	transactor bentoapp.Transactor
 	clock      ports.Clock
@@ -203,7 +217,7 @@ func joinCommands(separator string) string {
 	return joined
 }
 
-// buildRegistrars 装配真实登记链：目录写入方 + 登记用例 + 留痕库。
+// buildRegistrars 装配真实登记链：目录写入方与归集面写入方 + 各自用例 + 留痕库。
 func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	none := registrars{}
 	registrar, err := vepg.NewCatalogRegistrar(db)
@@ -214,12 +228,21 @@ func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造登记用例：%w", err)
 	}
+	receiptRegistrar, err := vepg.NewMaterialReceiptRegistrar(db)
+	if err != nil {
+		return none, fmt.Errorf("构造归集面写入方：%w", err)
+	}
+	receipts, err := application.NewMaterialReceiptRegistration(receiptRegistrar)
+	if err != nil {
+		return none, fmt.Errorf("构造收讫登记用例：%w", err)
+	}
 	tracer, err := vepg.NewChannelExecutions(db)
 	if err != nil {
 		return none, fmt.Errorf("构造留痕库：%w", err)
 	}
 	return registrars{
 		catalogs:   catalogs,
+		receipts:   receipts,
 		tracer:     tracer,
 		transactor: db.Transactor(),
 		clock:      systemClock{},
@@ -312,6 +335,9 @@ func translateCommand(command string, raw []byte) (registration, error) {
 // 执行留痕 → 答案译成退出码。留痕失败随事务翻成未决——登记不许在无痕状态下落地，
 // 痕也不声称一笔没落库的登记。拒绝不留痕：无论缺件拒绝还是登记册治理答案，都没有
 // 任何行到达登记册。
+//
+// 材料归集两命令在此分岔（executeMaterialReceipt）：骨架同款，答案代数不同——那一族
+// 有幂等重放格，目录册没有。
 func execute(
 	ctx context.Context,
 	command string,
@@ -319,6 +345,9 @@ func execute(
 	identity channelIdentity,
 	regs registrars,
 ) (string, int) {
+	if command == commandMaterialReceipt || command == commandMaterialReceiptRevocation {
+		return executeMaterialReceipt(ctx, command, raw, identity, regs)
+	}
 	reg, err := translateCommand(command, raw)
 	if err != nil {
 		return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
@@ -347,6 +376,120 @@ func execute(
 		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 	}
 	return catalogAnswer(command, result)
+}
+
+// receiptExecution 是材料归集两命令的翻译产物，形状随 registration：执行闭包加留痕
+// 引用（五件行身份连成一串——归集面没有版本号，行身份就是这笔登记的名字）。
+type receiptExecution struct {
+	reference string
+	perform   func(context.Context, *application.MaterialReceiptRegistration) (application.MaterialReceiptResult, error)
+}
+
+func translateReceiptCommand(command string, raw []byte) (receiptExecution, error) {
+	none := receiptExecution{}
+	switch command {
+	case commandMaterialReceipt:
+		cmd, err := materialReceiptFromJSON(raw)
+		if err != nil {
+			return none, err
+		}
+		return receiptExecution{
+			reference: receiptReference(cmd.TenantID, cmd.Batch, cmd.Item, cmd.Material, cmd.ReceivedAt),
+			perform: func(ctx context.Context, receipts *application.MaterialReceiptRegistration) (application.MaterialReceiptResult, error) {
+				return receipts.RegisterReceipt(ctx, cmd)
+			},
+		}, nil
+	case commandMaterialReceiptRevocation:
+		cmd, err := materialReceiptRevocationFromJSON(raw)
+		if err != nil {
+			return none, err
+		}
+		return receiptExecution{
+			reference: receiptReference(cmd.TenantID, cmd.Batch, cmd.Item, cmd.Material, cmd.ReceivedAt),
+			perform: func(ctx context.Context, receipts *application.MaterialReceiptRegistration) (application.MaterialReceiptResult, error) {
+				return receipts.RevokeReceipt(ctx, cmd)
+			},
+		}, nil
+	default:
+		return none, fmt.Errorf("未知登记种类 %q", command)
+	}
+}
+
+// receiptReference 把五件行身份连成留痕引用。收讫时刻带满精度（RFC3339Nano）：它是
+// 行身份的一件，截掉精度会让两笔不同收讫在痕里同名。
+func receiptReference(
+	tenant fmt.Stringer,
+	batch fmt.Stringer,
+	item fmt.Stringer,
+	material fmt.Stringer,
+	receivedAt time.Time,
+) string {
+	return tenant.String() + "/" + batch.String() + "/" + item.String() + "/" +
+		material.String() + "@" + receivedAt.UTC().Format(time.RFC3339Nano)
+}
+
+// executeMaterialReceipt 与 execute 同骨架：翻译 → 同一笔事务内交用例并给真正落库的
+// 执行留痕 → 答案译成退出码。留痕只随 REGISTERED 与 REVOKED 两格——幂等重放没有行
+// 到达登记册，与拒绝同样不留痕（留痕表证「这笔登记经受控通道执行且落了库」，不证
+// 「有人跑过命令」）。
+func executeMaterialReceipt(
+	ctx context.Context,
+	command string,
+	raw []byte,
+	identity channelIdentity,
+	regs registrars,
+) (string, int) {
+	reg, err := translateReceiptCommand(command, raw)
+	if err != nil {
+		return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
+	}
+
+	var result application.MaterialReceiptResult
+	err = regs.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, err := reg.perform(txCtx, regs.receipts)
+		if err != nil {
+			return err
+		}
+		result = handled
+		outcome := result.Outcome()
+		if outcome != application.MaterialReceiptRegistered && outcome != application.MaterialReceiptRevoked {
+			return nil
+		}
+		return regs.tracer.Append(txCtx, vepg.ChannelExecution{
+			Command:         command,
+			RecordReference: reg.reference,
+			OSUser:          identity.osUser,
+			Hostname:        identity.hostname,
+			Outcome:         outcome.String(),
+			ExecutedAt:      regs.clock.Now(),
+		})
+	})
+	if err != nil {
+		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
+	}
+	return receiptAnswer(command, result)
+}
+
+// receiptAnswer 把归集面用例答案译成退出码。幂等重放（ALREADY_*）走 0：重跑同一命令
+// 是未决路的续办动作，答案已指名本次没有写入，不能让续办被读成失败。「无从撤销」是
+// 登记册的治理答案——五件指名的收讫行不在册，人工核对引用后再来（2）；其余拒绝要
+// 登记方改输入（1）。
+func receiptAnswer(command string, result application.MaterialReceiptResult) (string, int) {
+	switch result.Outcome() {
+	case application.MaterialReceiptRegistered,
+		application.MaterialReceiptReplayed,
+		application.MaterialReceiptRevoked,
+		application.MaterialReceiptRevocationReplayed:
+		return command + ": " + result.Outcome().String(), exitRegistered
+	case application.MaterialReceiptRefused:
+		message := command + ": " + result.Outcome().String() + " " + result.RefusalReason().String()
+		if result.RefusalReason() == application.ReceiptNotFound {
+			return message, exitGovernance
+		}
+		return message, exitUsage
+	default:
+		return fmt.Sprintf("%s: 未知用例结果 %d", command, result.Outcome()), exitUndecided
+	}
 }
 
 // catalogAnswer 把用例答案译成退出码。拒绝按恢复动作分两路：缺件与矛盾要登记方改

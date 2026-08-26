@@ -148,6 +148,17 @@ func TestCatalogAndTraceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Errorf("无事务登记索赔授权目录应返回 ErrTransactionRequired，实得：%v", err)
 	}
 
+	receipts, err := adapter.NewMaterialReceiptRegistrar(db)
+	if err != nil {
+		t.Fatalf("构造归集面写入方：%v", err)
+	}
+	if _, err := receipts.RegisterReceipt(ctx, domain.TenantID{}, ports.MaterialReceipt{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记材料收讫应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := receipts.RevokeReceipt(ctx, domain.TenantID{}, ports.MaterialReceiptRevocation{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务撤销材料收讫应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
 	executions, err := adapter.NewChannelExecutions(db)
 	if err != nil {
 		t.Fatalf("构造留痕库：%v", err)

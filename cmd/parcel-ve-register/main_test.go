@@ -15,10 +15,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件证登记口的编排：六命令各自路由到对的登记方法、退出码翻译、身份双轨各行
-// 其道（②登记内容不得冒充①通道身份）、只有已登记的执行留痕、留痕失败随事务翻成
-// 未决。用例的缺件判据在应用层已证，这里接真用例配写入口替身，证的是登记口把它们
-// 接对。
+// 本文件证登记口的编排：目录册六命令与归集面两命令各自路由到对的登记方法、退出码
+// 翻译（两族答案代数不同——归集面有幂等重放格）、身份双轨各行其道（②登记内容不得
+// 冒充①通道身份）、只有真正落库的执行留痕、留痕失败随事务翻成未决。用例的缺件判据
+// 在应用层已证，这里接真用例配写入口替身，证的是登记口把它们接对。
 
 var executeAt = time.Date(2026, 8, 24, 6, 0, 0, 0, time.UTC)
 
@@ -263,5 +263,171 @@ func TestExecuteRejectsCommandsOutsideTheSet(t *testing.T) {
 	message, code := execute(t.Context(), "suspend", []byte(`{}`), testIdentity, regs)
 	if code != exitUsage || !strings.Contains(message, "suspend") {
 		t.Fatalf("退出码 = %d（%s），要 1 且点名命令", code, message)
+	}
+}
+
+// cliReceiptRegistry 是归集面写入口替身，形状随 cliCatalogRegistry。
+type cliReceiptRegistry struct {
+	outcome ports.MaterialReceiptWriteOutcome
+	err     error
+	calls   []string
+}
+
+func (registry *cliReceiptRegistry) RegisterReceipt(
+	_ context.Context, tenant domain.TenantID, _ ports.MaterialReceipt,
+) (ports.MaterialReceiptWriteOutcome, error) {
+	registry.calls = append(registry.calls, commandMaterialReceipt+"/"+tenant.String())
+	return registry.outcome, registry.err
+}
+
+func (registry *cliReceiptRegistry) RevokeReceipt(
+	_ context.Context, tenant domain.TenantID, _ ports.MaterialReceiptRevocation,
+) (ports.MaterialReceiptWriteOutcome, error) {
+	registry.calls = append(registry.calls, commandMaterialReceiptRevocation+"/"+tenant.String())
+	return registry.outcome, registry.err
+}
+
+var _ ports.MaterialReceiptRegistry = (*cliReceiptRegistry)(nil)
+
+// newReceiptTestRegistrars 只装归集面那半（catalogs 留空）：路由在 execute 已分岔，
+// 归集面命令碰不到目录用例。
+func newReceiptTestRegistrars(t *testing.T, registry ports.MaterialReceiptRegistry, tracer executionTracer) registrars {
+	t.Helper()
+	receipts, err := application.NewMaterialReceiptRegistration(registry)
+	if err != nil {
+		t.Fatalf("构造收讫登记用例：%v", err)
+	}
+	return registrars{
+		receipts:   receipts,
+		tracer:     tracer,
+		transactor: passthroughTransactor{},
+		clock:      fixedClock{at: executeAt},
+	}
+}
+
+const validReceiptInput = `{"tenantId":"SYN-TEN-VE15","batch":"SYN-BATCH-1","item":"SYN-ITEM-1",
+	"material":"SYN-MAT-PHOTO","receivedAt":"2026-08-20T08:00:00Z","receivedBy":"SYN-operator-9"}`
+
+const validRevocationInput = `{"tenantId":"SYN-TEN-VE15","batch":"SYN-BATCH-1","item":"SYN-ITEM-1",
+	"material":"SYN-MAT-PHOTO","receivedAt":"2026-08-20T08:00:00Z",
+	"revokedBy":"SYN-supervisor-1","revokedAt":"2026-08-22T10:00:00Z"}`
+
+// 归集面留痕引用是五件行身份连串，收讫时刻带满精度。
+const expectedReceiptReference = "SYN-TEN-VE15/SYN-BATCH-1/SYN-ITEM-1/SYN-MAT-PHOTO@2026-08-20T08:00:00Z"
+
+// TestExecuteRoutesReceiptCommandsAndTracesLandedWrites 证归集面两命令各自到达对的
+// 写方法，真正落库的两格（REGISTERED / REVOKED）带通道身份落痕。
+func TestExecuteRoutesReceiptCommandsAndTracesLandedWrites(t *testing.T) {
+	for _, testCase := range []struct {
+		command string
+		input   string
+		outcome ports.MaterialReceiptWriteOutcome
+		want    string
+	}{
+		{commandMaterialReceipt, validReceiptInput, ports.MaterialReceiptRecorded, "REGISTERED"},
+		{commandMaterialReceiptRevocation, validRevocationInput, ports.MaterialReceiptRevocationRecorded, "REVOKED"},
+	} {
+		t.Run(testCase.command, func(t *testing.T) {
+			registry := &cliReceiptRegistry{outcome: testCase.outcome}
+			tracer := &traceRecorder{}
+			regs := newReceiptTestRegistrars(t, registry, tracer)
+
+			message, code := execute(t.Context(), testCase.command, []byte(testCase.input), testIdentity, regs)
+			if code != exitRegistered || !strings.Contains(message, testCase.want) {
+				t.Fatalf("退出码 = %d（%s），要 0 且指名 %s", code, message, testCase.want)
+			}
+			if len(registry.calls) != 1 || registry.calls[0] != testCase.command+"/SYN-TEN-VE15" {
+				t.Fatalf("写入口调用 = %v", registry.calls)
+			}
+			if len(tracer.executions) != 1 {
+				t.Fatalf("留痕数 = %d，要 1", len(tracer.executions))
+			}
+			trace := tracer.executions[0]
+			if trace.Command != testCase.command ||
+				trace.RecordReference != expectedReceiptReference ||
+				trace.OSUser != testIdentity.osUser ||
+				trace.Hostname != testIdentity.hostname ||
+				trace.Outcome != testCase.want ||
+				!trace.ExecutedAt.Equal(executeAt) {
+				t.Fatalf("留痕 = %+v", trace)
+			}
+		})
+	}
+}
+
+// TestExecuteReceiptReplayExitsZeroWithoutTrace 证幂等重放走 0 且不留痕：答案已指名
+// 本次没有写入（ALREADY_*），续办不被读成失败，痕也不声称一笔没落库的登记。
+func TestExecuteReceiptReplayExitsZeroWithoutTrace(t *testing.T) {
+	for _, testCase := range []struct {
+		command string
+		input   string
+		outcome ports.MaterialReceiptWriteOutcome
+		want    string
+	}{
+		{commandMaterialReceipt, validReceiptInput, ports.MaterialReceiptAlreadyRecorded, "ALREADY_REGISTERED"},
+		{commandMaterialReceiptRevocation, validRevocationInput, ports.MaterialReceiptRevocationAlreadyRecorded, "ALREADY_REVOKED"},
+	} {
+		t.Run(testCase.command, func(t *testing.T) {
+			registry := &cliReceiptRegistry{outcome: testCase.outcome}
+			tracer := &traceRecorder{}
+			regs := newReceiptTestRegistrars(t, registry, tracer)
+
+			message, code := execute(t.Context(), testCase.command, []byte(testCase.input), testIdentity, regs)
+			if code != exitRegistered || !strings.Contains(message, testCase.want) {
+				t.Fatalf("退出码 = %d（%s），要 0 且指名 %s", code, message, testCase.want)
+			}
+			if len(tracer.executions) != 0 {
+				t.Fatalf("重放留了痕：%+v", tracer.executions)
+			}
+		})
+	}
+}
+
+// TestExecuteReceiptRefusalsSplitByRecoveryAction 证归集面拒绝按恢复动作分路：无从
+// 撤销是登记册治理答案（2，人工核对收讫引用）；缺经手声明要改输入（1）。两路都不碰
+// 留痕，缺件那路连写入口都不碰。
+func TestExecuteReceiptRefusalsSplitByRecoveryAction(t *testing.T) {
+	t.Run("无从撤销走 2", func(t *testing.T) {
+		registry := &cliReceiptRegistry{outcome: ports.MaterialReceiptUnknown}
+		tracer := &traceRecorder{}
+		regs := newReceiptTestRegistrars(t, registry, tracer)
+
+		message, code := execute(t.Context(), commandMaterialReceiptRevocation,
+			[]byte(validRevocationInput), testIdentity, regs)
+		if code != exitGovernance || !strings.Contains(message, "RECEIPT_NOT_FOUND") {
+			t.Fatalf("退出码 = %d（%s），要 2 且指名 RECEIPT_NOT_FOUND", code, message)
+		}
+		if len(tracer.executions) != 0 {
+			t.Fatalf("治理答案留了痕：%+v", tracer.executions)
+		}
+	})
+
+	t.Run("缺经手声明走 1", func(t *testing.T) {
+		registry := &cliReceiptRegistry{outcome: ports.MaterialReceiptRecorded}
+		tracer := &traceRecorder{}
+		regs := newReceiptTestRegistrars(t, registry, tracer)
+
+		missing := `{"tenantId":"SYN-TEN-VE15","batch":"SYN-BATCH-1","item":"SYN-ITEM-1",
+			"material":"SYN-MAT-PHOTO","receivedAt":"2026-08-20T08:00:00Z","receivedBy":""}`
+		message, code := execute(t.Context(), commandMaterialReceipt, []byte(missing), testIdentity, regs)
+		if code != exitUsage || !strings.Contains(message, "RESPONSIBLE_MISSING") {
+			t.Fatalf("退出码 = %d（%s），要 1 且指名 RESPONSIBLE_MISSING", code, message)
+		}
+		if len(registry.calls) != 0 || len(tracer.executions) != 0 {
+			t.Fatalf("缺件拒绝碰了写入口或留痕：calls=%v traces=%d", registry.calls, len(tracer.executions))
+		}
+	})
+}
+
+// TestExecuteReceiptTraceFailureTurnsUndecided 证归集面路的留痕失败同样随事务翻成
+// 未决——两族命令共守「登记不许在无痕状态下落地」。
+func TestExecuteReceiptTraceFailureTurnsUndecided(t *testing.T) {
+	registry := &cliReceiptRegistry{outcome: ports.MaterialReceiptRecorded}
+	tracer := &traceRecorder{err: errors.New("trace store down")}
+	regs := newReceiptTestRegistrars(t, registry, tracer)
+
+	message, code := execute(t.Context(), commandMaterialReceipt, []byte(validReceiptInput), testIdentity, regs)
+	if code != exitUndecided || !strings.Contains(message, "未决") {
+		t.Fatalf("退出码 = %d（%s），要 3", code, message)
 	}
 }

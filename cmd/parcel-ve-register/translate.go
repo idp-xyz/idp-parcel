@@ -12,9 +12,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件把六种登记输入 JSON 折成应用命令。翻译严格且零默认：未知字段拒收（打错
-// 字段名不得静默变成「没给」）、有构造门的标识在这里就拒、其余内容原样递给用例门
-// ——缺版本号、缺发布批准责任、条目撞键那类判据在用例，这里绝不代填。
+// 本文件把各登记种类的输入 JSON 折成应用命令（六类目录册加材料归集两命令）。翻译
+// 严格且零默认：未知字段拒收（打错字段名不得静默变成「没给」）、有构造门的标识在
+// 这里就拒、其余内容原样递给用例门——缺版本号、缺发布批准责任、条目撞键、缺收讫
+// 时刻那类判据在用例，这里绝不代填。
 //
 // 输入里没有任何通道技术身份字段：那是身份双轨的第①轨，由入口自取（见 main.go 的
 // currentChannelIdentity），不可由参数传入或覆盖；这里翻译的 approvedBy 是第②轨
@@ -364,6 +365,102 @@ type disclosureEntryDocument struct {
 type disclosurePolicyDocument struct {
 	versionHeaderDocument
 	Entries []disclosureEntryDocument `json:"entries"`
+}
+
+// materialReceiptDocument 是一笔收讫登记的输入：五件行身份加经手声明。receivedAt
+// 取材料实际收讫的业务时刻（行身份的一件），不由本入口的时钟代填；receivedBy 是
+// 身份双轨的第②轨，册面语义是「登记者声明了谁经手收讫」。
+type materialReceiptDocument struct {
+	TenantID   string    `json:"tenantId"`
+	Batch      string    `json:"batch"`
+	Item       string    `json:"item"`
+	Material   string    `json:"material"`
+	ReceivedAt time.Time `json:"receivedAt"`
+	ReceivedBy string    `json:"receivedBy"`
+}
+
+// receiptIdentityFromDocument 折五件行身份里带构造门的四件。零值时刻放行——缺时刻
+// 的判据在用例（TIME_MISSING），这里只管形状。
+func receiptIdentityFromDocument(
+	tenantValue, batchValue, itemValue, materialValue string,
+) (domain.TenantID, domain.ClaimBatchReference, domain.ClaimItemID, domain.MaterialRequirementReference, error) {
+	var (
+		none         domain.TenantID
+		noneBatch    domain.ClaimBatchReference
+		noneItem     domain.ClaimItemID
+		noneMaterial domain.MaterialRequirementReference
+	)
+	tenant, err := domain.NewTenantID(tenantValue)
+	if err != nil {
+		return none, noneBatch, noneItem, noneMaterial, err
+	}
+	batch, err := domain.NewClaimBatchReference(batchValue)
+	if err != nil {
+		return none, noneBatch, noneItem, noneMaterial, err
+	}
+	item, err := domain.NewClaimItemID(itemValue)
+	if err != nil {
+		return none, noneBatch, noneItem, noneMaterial, err
+	}
+	material, err := domain.NewMaterialRequirementReference(materialValue)
+	if err != nil {
+		return none, noneBatch, noneItem, noneMaterial, err
+	}
+	return tenant, batch, item, material, nil
+}
+
+func materialReceiptFromJSON(raw []byte) (application.RegisterMaterialReceiptCommand, error) {
+	none := application.RegisterMaterialReceiptCommand{}
+	var document materialReceiptDocument
+	if err := decodeStrict(raw, &document, "材料收讫"); err != nil {
+		return none, err
+	}
+	tenant, batch, item, material, err := receiptIdentityFromDocument(
+		document.TenantID, document.Batch, document.Item, document.Material)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterMaterialReceiptCommand{
+		TenantID:   tenant,
+		Batch:      batch,
+		Item:       item,
+		Material:   material,
+		ReceivedAt: document.ReceivedAt,
+		ReceivedBy: document.ReceivedBy,
+	}, nil
+}
+
+// materialReceiptRevocationDocument 以收讫行的五件全键指名撤销对象，加撤销声明两件。
+type materialReceiptRevocationDocument struct {
+	TenantID   string    `json:"tenantId"`
+	Batch      string    `json:"batch"`
+	Item       string    `json:"item"`
+	Material   string    `json:"material"`
+	ReceivedAt time.Time `json:"receivedAt"`
+	RevokedBy  string    `json:"revokedBy"`
+	RevokedAt  time.Time `json:"revokedAt"`
+}
+
+func materialReceiptRevocationFromJSON(raw []byte) (application.RevokeMaterialReceiptCommand, error) {
+	none := application.RevokeMaterialReceiptCommand{}
+	var document materialReceiptRevocationDocument
+	if err := decodeStrict(raw, &document, "材料收讫撤销"); err != nil {
+		return none, err
+	}
+	tenant, batch, item, material, err := receiptIdentityFromDocument(
+		document.TenantID, document.Batch, document.Item, document.Material)
+	if err != nil {
+		return none, err
+	}
+	return application.RevokeMaterialReceiptCommand{
+		TenantID:   tenant,
+		Batch:      batch,
+		Item:       item,
+		Material:   material,
+		ReceivedAt: document.ReceivedAt,
+		RevokedBy:  document.RevokedBy,
+		RevokedAt:  document.RevokedAt,
+	}, nil
 }
 
 func disclosurePolicyFromJSON(raw []byte) (application.RegisterDisclosurePolicyCommand, error) {
