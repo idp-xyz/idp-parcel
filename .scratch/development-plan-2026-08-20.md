@@ -71,9 +71,15 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
 
 ### T4 重盘与达标（终点闸门）
 
-1. 按 r25 口径程序**两口径**重算端口（松口径判「名字出现」，方法集口径判真实缺口）；
-2. 第二十六轮机制半边重盘，八切片逐三判据核；
+1. 按 r25 口径程序**两口径**重算端口（松口径判「名字出现」，方法集口径判真实缺口）——
+   **已完成**（08-26，[r26 报告](./mechanism-reinventory-r26/report.md)：235 口，松口径缺 9，
+   精确口径缺 7；工具对 r25 发布树复现校验逐格一致）；
+2. 第二十六轮机制半边重盘，八切片逐三判据核——**已完成**（同上：PN-01/04/05/08 首次达标，
+   其余四切片差量点名到口，基线「机制半边现状」节已重戳）；
 3. 全绿（CI 含 `-race` 含真库）后向用户提交「产品就绪候选」宣布——宣布本身是用户的决定。
+   本机真库全量 `-race` 已实跑全绿（79 包 ok、零竞态）；候选材料齐备，**骨架完整差三张
+   可派票**（sa-preacceptance-policy-view/01、ve-claims-read-seams/01、02，互不撞文件不占号），
+   建议收票后作第二十七轮戳再交宣布。
 
 ## 三、依赖与串行约束
 
@@ -200,3 +206,22 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
     declaration-submission 信封 ID 版本段，declaration-envelope-version-dedup/01 随之动工）。
     余票就此收敛为 needs-info 5：三张等租户证据（PAR-INT-01 ×2、PAR-NET-14）、一张等
     子域排期（外部标识+面单交易）、一张等②立案（裁定后的停放）。
+- 2026-08-26 T4 执行轮（MCP-1 承用户「自决」委托，对 `main=e5301f8`）：里程碑 M4 三件套落地——
+  - **两口径端口复点**：总数 200→235、松口径缺 13→9、精确口径（`go/types.Implements`，r25
+    第六节留的活）缺 7；工具对 r25 发布树 `d40b03a` 复现校验逐格一致。报告、工具源码与原始
+    输出在 [mechanism-reinventory-r26](./mechanism-reinventory-r26/report.md)。
+  - **第二十六轮八切片重盘**：PN-01/04/05/08 **首次达标**；其余四切片差量点名到口——三张
+    新票全部 ready-for-agent 且互不撞文件、不占 `assemble.go`/`endpoints.go` 号：
+    [SA 接受前控制策略视图](./sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md)
+    （键形已裁：命令携带解析引用回显，SA→PC 适配器凭标识读 PC 落库闭包，ADR-0027/0062 同形）、
+    [VE 资格规则带租户维读法](./ve-claims-read-seams/issues/01-eligibility-rule-view-needs-a-tenant-dimensioned-read.md)、
+    [VE 材料归集面](./ve-claims-read-seams/issues/02-claim-evidence-collection-surface-is-unbuilt.md)
+    （裁走受控 CLI 登记，与票 12/15 同形）；四口登记面留待实例证据（维持 r25 分类不翻案，
+    翻案留裁断轮）；外部标识子域照旧等排期；VE 通知网关等真实渠道。基线「机制半边现状」节
+    随之重戳（盘点戳换 `e5301f8`/第二十六轮，四行达标，判据二补 538/529 与本机 -race 证据，
+    横切缺口段全面换数：69 编排、160 真库适配器、两口径 9/7 及虚高虚低取证）。
+  - **全绿证据**：本机对真库全量 `-race` 实跑退出码 0（79 包全 ok、零 FAIL、零 DATA RACE；
+    WSL go1.26.5 + cgo，Windows 侧无 gcc 跑不了 `-race` 的环境口径入档 r26 raw/）。
+  - **就绪候选结论（呈用户）**：可复算与显式未配置两判据全库满足、S 级演示动线页面层取证
+    在案，「可以演示」今天成立；骨架完整差上述三票。建议收三票后作第二十七轮戳再交宣布——
+    宣布本身是用户的决定（T4 第 3 条口径不变）。M4 记**进行中：候选材料齐备，差量三票**。
