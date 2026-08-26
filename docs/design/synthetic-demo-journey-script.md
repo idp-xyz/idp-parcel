@@ -13,7 +13,7 @@
 | 演示库 | `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable` | 本机隔离库；**任何一步都不得指向生产库** |
 | 种子 | `scripts/demo-seeds/seed.sh` | 合成 `SYN-` 主数据，四条登记 CLI 灌入；复灌用 `--reset` |
 | 后端 | `cmd/parcel-api` | 需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` |
-| 管理台 | `apps/admin-web` | `pnpm dev`，用 `PARCEL_API_TARGET` 指向后端 |
+| 管理台 | `apps/admin-web` | dev 服务器**从 WSL 起**（本机 `node_modules` 是 WSL 侧 pnpm 装的 POSIX 链接农场，Windows 进程解析不到属预期），用 `PARCEL_API_TARGET` 指向后端；原样命令见「取证」页面层一节 |
 
 起后端（本机 8080 被 Windows 服务占用，换端口，见 admin-web README 的暗礁一节）：
 
@@ -156,7 +156,32 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 库内委托侧逐张 0 行：`parcel_shipment` 的 `source_submission` / `shipment_request` / `final_outcome`、`node_operations.reception`、`transport_fulfillment.effective_delivery`、`visibility_exception` 的 `customer_view` / `tracking_projection_current`、`settlement_accounting.customer_charge`；`network_routing.network_definition` 亦为 0 行（墙三）。
 
-**没有取证的那一半，如实记下**：本轮**未**在浏览器里走过页面。`apps/admin-web/node_modules` 的 pnpm 链接农场当前整片失效（顶层与 `.pnpm` 内层的包链接均解析不到，`vite` 与 `react` 都起不来），修复要跑真实 `pnpm install`，而那需要能读 GitHub Packages 的 PAT（admin-web README 已记这份本机安装是无 PAT 时用本地 tarball 装的）——本机同时连不上 `github.com`。因此上表是**端点层**的取证，页面层的接线事实沿用票 `master-data-wiring/07` 的验证，本文未重新取证。页面层能起来之后，第 1–5 步应照本文顺序再走一遍并把结果补在这里。
+**页面层取证（后补，实测于 `9213acf` 树，种子先经 `--reset` 复灌重验）**：本节初版（存于 git 史 `2b37b30`）曾记页面层无法取证并把原因定在链接农场失效上，定因错了——`apps/admin-web/node_modules` 不是坏，是 **WSL 侧 pnpm 装的**（POSIX 符号链接农场，Windows 进程解析不到属预期；这次安装的来历见票 `master-data-wiring/07` 的环境注记）。从 WSL 起 dev 服务器即可用，无需 PAT、无需碰 `github.com`：
+
+```bash
+# WSL 内起 dev 服务器（node 22 在 ~/.local/node22；本机镜像网络下
+# 127.0.0.1 与 Windows 侧互通——种子脚本连 55432、vite 代理连 API 皆为实证）
+cd /mnt/d/tops/idp-parcel/apps/admin-web
+PATH=$HOME/.local/node22/bin:$PATH PARCEL_API_TARGET=http://127.0.0.1:19080 \
+  node node_modules/vite/bin/vite.js --port 5199
+```
+
+页面层结果（Edge 无头 `--dump-dom --virtual-time-budget=9000` 按 hash 路由逐页取默认视图；本轮实测 API 监听 `:18091`、vite `:5199`——端口任选，前后一致即可）：
+
+| 页（hash 路由） | 所见 |
+|---|---|
+| `#/price-card-catalog` | `SYN-PLAN-CN-SG-01` 等价卡行在列 |
+| `#/reference-series` | `SYN-SERIES-FUEL-01` 等序列行在列 |
+| `#/network-catalog` | `SYN-NODE-SHA-HUB`（含 v1→v2 版本轴）在列 |
+| `#/service-areas` | 2 个版本在列，地理覆盖如实标「尚不存在（PAR-NET-14）」，不虚构覆盖关系 |
+| `#/compliance-rules` | 默认册（建案要求）两行在列：`SYN-PROC-CN-EXPORT` 要求、`SYN-PROC-SG-IMPORT` 显式不要求 |
+| `#/service-products` | `SYN-PROD-CN-SG-EXPRESS` v1 `EFFECTIVE` 在列 |
+| `#/commercial-policies` | `SYN-RULEPKG-01` 在列（默认种类） |
+| `#/shipment-request-inquiry` | 空态：「共 0 个 · 当前作用域内没有可见委托 · 空列表是正常业务答案（LISTED）」 |
+| `#/tracking-projection` | 空态：「共 0 个 · 当前租户内尚无投影 · 空列表是正常业务答案（PROJECTIONS_LISTED）」 |
+| `#/workbench` | 就绪度总览：已接线 11、页面骨架 23、合成 S 演示 1 |
+
+十页 DOM 无一处 `ACCESS_CHANNEL_NOT_CONFIGURED`——未配置态整片退场，与端点层三态对照互为印证。无头取证只覆盖各页默认视图；册子/族/种类的切换分支已在端点层逐参数实测（上表），页面切换走同一代码路径（参数变体的接线核对见票 `master-data-wiring/07` 收口记录）。验完请停掉 api 与 dev 进程，防「api 绑错库」被下一轮当成已接好（同票 07 的清场纪律）。
 
 ## 这条动线什么时候会变
 

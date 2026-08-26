@@ -3,6 +3,10 @@
 Category: draft
 Status: 筹备半边产物,只读勘察,不是权威文档
 取证时点:2026-08-25,HEAD `8cb43e4`(全文所有「当前」「共几个」类断言均锚此 SHA;执行半边开工时按票 07/08 收口后的树重验,不要把本文当那时的事实读)
+落位追记(2026-08-26):执行半边已收口——权威动线脚本落
+[docs/design/synthetic-demo-journey-script.md](../../docs/design/synthetic-demo-journey-script.md)
+(2b37b30 落位,页面层取证与环境定因勘误随票 04 收口笔);本文只余取证史料价值,
+断言一律以那份文档与当时代码为准。
 
 本文是 [04-demo-journey](./issues/04-demo-journey.md) 开工时的执行清单,由 WSL 队列频道 7 按 2026-08-25 18:02 调度轮产出。票 04 维持 draft,执行半边候 master-data-wiring/07、08 收口。本文只报勘察事实与脚本草案,不替执行半边做任何裁决;与票面、ADR、CONTEXT 冲突时本文错。
 
