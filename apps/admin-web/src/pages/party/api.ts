@@ -34,6 +34,14 @@ export interface AssembledRuleRecord {
   reference: string;
 }
 
+export interface FinalRuleRecord {
+  outcome: string;
+  finalKind: string;
+}
+
+// 两个 *Declared 布尔与合同页的 contentRegistered 同款:未声明与「声明了但为空」都
+// 表现为空数组,恢复动作却相反。allowedIntakeSources 与 intakeQualificationRefs 不并
+// 成一栏——前者不允许空、后者允许显式空,两栏的「空」不是同一件事。
 export interface RulePackageRecord {
   objectId: string;
   version: string;
@@ -45,6 +53,11 @@ export interface RulePackageRecord {
   effectiveEndsAt?: string;
   declaredAt: string;
   rules: AssembledRuleRecord[];
+  intakeQualificationDeclared: boolean;
+  allowedIntakeSources: string[];
+  intakeQualificationRefs: string[];
+  finalRulesDeclared: boolean;
+  finalRules: FinalRuleRecord[];
 }
 
 export interface PreAcceptanceControlRecord {

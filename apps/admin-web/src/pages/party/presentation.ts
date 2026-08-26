@@ -52,6 +52,20 @@ export const controlRequirementLabels: Record<string, string> = {
   NOT_APPLICABLE: '不适用',
 };
 
+// 收寄来源封闭二值(domain DeclaredIntakeSource),对应 parcel-shipment 来源联合的两格。
+export const intakeSourceLabels: Record<string, string> = {
+  NODE_INTAKE: '节点收寄',
+  OFFSITE_PICKUP: '场外揽收',
+};
+
+// 终局责任结果封闭四值(domain 的终局规则声明),中文取 CONTEXT 原词。
+export const finalOutcomeLabels: Record<string, string> = {
+  EFFECTIVE_DELIVERY: '有效送达',
+  RETURN_COMPLETED: '退回完成',
+  SERVICE_TERMINATED: '服务终止',
+  REGULATORY_DISPOSITION: '监管处置',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST:

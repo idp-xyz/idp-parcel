@@ -12,6 +12,8 @@ import {
   commercialDirectionLabels,
   commercialPolicyKinds,
   controlRequirementLabels,
+  finalOutcomeLabels,
+  intakeSourceLabels,
   labelOf,
   policyKindLabels,
   settlementMethodLabels,
@@ -43,6 +45,9 @@ const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
     col('legalEntity', '责任法人', true),
     col('scope', '适用范围', true),
     col('rules', '组装规则(类别:引用)', true),
+    col('allowedIntakeSources', '允许收寄来源'),
+    col('intakeQualifications', '收寄硬资格', true),
+    col('finalRules', '终局规则(结果:分类)', true),
     col('effective', '有效区间', true),
     col('declaredAt', '声明时间', true),
   ],
@@ -89,6 +94,19 @@ const chipClass = (active: boolean) =>
       : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
   }`;
 
+// 两族阶段内容声明的三栏各有自己的「空」。「未声明」与「声明了但为空」在数组长度上
+// 撞成同一签名,靠服务端给的 *Declared 布尔分——两者的恢复动作相反(前者去登记声明,
+// 后者无事可做)。
+//
+// 允许来源与终局结果两栏的「已声明却为空」按领域规矩根本不该出现(两处都要求至少
+// 一行),所以那句写成「已声明,正文为空」而不是一句无害的空话:它是一份坏数据的
+// 如实呈现,不该读起来像正常态。资格引用那栏不同——显式声明「无硬资格」是合法的。
+function declaredList(declared: boolean, values: string[], emptyNote: string): string {
+  if (!declared) return '未声明';
+  if (values.length === 0) return emptyNote;
+  return values.join('、');
+}
+
 // 响应体按 kind 判别(api.ts 的联合),各分支读各自的行形;判断类型与绑定转换是
 // 开放引用集,按原词展示不配词表。
 function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
@@ -105,6 +123,23 @@ function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           rules: record.rules
             .map((rule) => `${rule.category}:${rule.reference}`)
             .join('、'),
+          allowedIntakeSources: declaredList(
+            record.intakeQualificationDeclared,
+            record.allowedIntakeSources.map((source) => labelOf(intakeSourceLabels, source)),
+            '已声明,正文为空',
+          ),
+          intakeQualifications: declaredList(
+            record.intakeQualificationDeclared,
+            record.intakeQualificationRefs,
+            '已声明,无硬资格',
+          ),
+          finalRules: declaredList(
+            record.finalRulesDeclared,
+            record.finalRules.map(
+              (final) => `${labelOf(finalOutcomeLabels, final.outcome)}:${final.finalKind}`,
+            ),
+            '已声明,正文为空',
+          ),
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           declaredAt: formatInstant(record.declaredAt),
         },
@@ -195,7 +230,7 @@ export function CommercialPoliciesPage() {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——五类政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」;信用政策无独立正文册,如实不上列`}
+      description={`${info.owner}——五类政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」;信用政策无独立正文册,如实不上列。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明`}
       search={{
         value: search,
         onChange: setSearch,
