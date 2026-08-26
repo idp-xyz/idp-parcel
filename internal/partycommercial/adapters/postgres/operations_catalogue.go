@@ -116,10 +116,17 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	return catalogueRows, nil
 }
 
-// ListAcceptanceRulePackages 上列接单规则包正文册。父 LEFT JOIN 子一次取回,分类内
-// 按引用排序——ReadExecutor 不保证两条语句同一快照,分两次会拼出从未同时存在的父子
-// 状态(与 LoadAcceptanceRulePackage 同一条理由)。有父零子在内容读口是坏数据,在
-// 目录上列如实交回空规则集:上列不重建领域对象、不形成判断,拦坏数据仍归内容读口。
+// ListAcceptanceRulePackages 上列接单规则包正文册,连同挂在同一份规则包上的两族阶段
+// 内容声明(0013 的收寄资格与终局规则)。一条语句取回全部父子——ReadExecutor 不保证
+// 两条语句同一快照,分次取会拼出从未同时存在的父子状态(与 LoadAcceptanceRulePackage
+// 同一条理由)。有父零子在内容读口是坏数据,在目录上列如实交回空集合:上列不重建领域
+// 对象、不形成判断,拦坏数据仍归内容读口。
+//
+// **三族子表用相关子查询各聚各的,不再叠 LEFT JOIN + GROUP BY。** 多族子表同时以
+// LEFT JOIN 挂上来会互相做笛卡尔积——规则 3 条 × 允许来源 2 条会摊成 6 行,`json_agg`
+// 于是把每族都数重。本函数原先只有一族,那个形状看不出问题;第二族一挂就出。两个
+// 声明壳仍走 LEFT JOIN:它们与父同主键、至多一行,不产生扇出,而「壳在不在」正需要
+// 连接后的 NULL 来判。
 func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -138,27 +145,62 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 		        parent.service_product_id, parent.contract_id, parent.legal_entity_ref,
 		        parent.scope_ref, parent.effective_starts_at, parent.effective_ends_at,
 		        parent.declared_at,
-		        COALESCE(
-		            json_agg(
-		                json_build_object(
-		                    'category',  child.rule_category,
-		                    'reference', child.rule_reference
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'category',  rule.rule_category,
+		                            'reference', rule.rule_reference
+		                        )
+		                        ORDER BY rule.rule_category, rule.rule_reference
+		                    ),
+		                    '[]'::json
 		                )
-		                ORDER BY child.rule_category, child.rule_reference
-		            ) FILTER (WHERE child.rule_reference IS NOT NULL),
-		            '[]'::json
-		        )
+		           FROM party_commercial.acceptance_rule_package_rule AS rule
+		          WHERE rule.tenant_id     = parent.tenant_id
+		            AND rule.object_kind   = parent.object_kind
+		            AND rule.object_id     = parent.object_id
+		            AND rule.version_label = parent.version_label),
+		        intake.object_id IS NOT NULL,
+		        (SELECT COALESCE(json_agg(source.source_kind ORDER BY source.source_kind), '[]'::json)
+		           FROM party_commercial.intake_allowed_source AS source
+		          WHERE source.tenant_id     = parent.tenant_id
+		            AND source.object_kind   = parent.object_kind
+		            AND source.object_id     = parent.object_id
+		            AND source.version_label = parent.version_label),
+		        (SELECT COALESCE(json_agg(ref.rule_reference ORDER BY ref.rule_reference), '[]'::json)
+		           FROM party_commercial.intake_qualification_ref AS ref
+		          WHERE ref.tenant_id     = parent.tenant_id
+		            AND ref.object_kind   = parent.object_kind
+		            AND ref.object_id     = parent.object_id
+		            AND ref.version_label = parent.version_label),
+		        finals.object_id IS NOT NULL,
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'outcome',   final.outcome,
+		                            'finalKind', final.final_kind
+		                        )
+		                        ORDER BY final.outcome
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM party_commercial.final_rule_declaration AS final
+		          WHERE final.tenant_id     = parent.tenant_id
+		            AND final.object_kind   = parent.object_kind
+		            AND final.object_id     = parent.object_id
+		            AND final.version_label = parent.version_label)
 		   FROM party_commercial.acceptance_rule_package AS parent
-		   LEFT JOIN party_commercial.acceptance_rule_package_rule AS child
-		          ON child.tenant_id     = parent.tenant_id
-		         AND child.object_kind   = parent.object_kind
-		         AND child.object_id     = parent.object_id
-		         AND child.version_label = parent.version_label
+		   LEFT JOIN party_commercial.intake_qualification_content AS intake
+		          ON intake.tenant_id     = parent.tenant_id
+		         AND intake.object_kind   = parent.object_kind
+		         AND intake.object_id     = parent.object_id
+		         AND intake.version_label = parent.version_label
+		   LEFT JOIN party_commercial.final_rule_content AS finals
+		          ON finals.tenant_id     = parent.tenant_id
+		         AND finals.object_kind   = parent.object_kind
+		         AND finals.object_id     = parent.object_id
+		         AND finals.version_label = parent.version_label
 		  WHERE parent.tenant_id = $1
-		  GROUP BY parent.tenant_id, parent.object_kind, parent.object_id,
-		           parent.version_label, parent.service_product_id, parent.contract_id,
-		           parent.legal_entity_ref, parent.scope_ref, parent.effective_starts_at,
-		           parent.effective_ends_at, parent.declared_at
 		  ORDER BY parent.declared_at DESC, parent.object_id, parent.version_label
 		  LIMIT $2`,
 		tenant.String(),
@@ -173,11 +215,13 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 	for rows.Next() {
 		var row ports.AcceptanceRulePackageRow
 		var endsAt *time.Time
-		var rulesJSON []byte
+		var rulesJSON, sourcesJSON, refsJSON, finalsJSON []byte
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel,
 			&row.ServiceProduct, &row.Contract, &row.LegalEntity,
 			&row.Scope, &row.EffectiveStartsAt, &endsAt, &row.DeclaredAt, &rulesJSON,
+			&row.HasIntakeQualification, &sourcesJSON, &refsJSON,
+			&row.HasFinalRules, &finalsJSON,
 		); err != nil {
 			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
 		}
@@ -190,12 +234,58 @@ func (catalogue *OperationsCatalogue) ListAcceptanceRulePackages(
 			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
 		}
 		row.Rules = rules
+		if row.AllowedIntakeSources, err = stringsFromJSON(sourcesJSON); err != nil {
+			return nil, fmt.Errorf("list acceptance rule packages: allowed intake sources: %w", err)
+		}
+		if row.IntakeQualificationRefs, err = stringsFromJSON(refsJSON); err != nil {
+			return nil, fmt.Errorf("list acceptance rule packages: intake qualification refs: %w", err)
+		}
+		if row.FinalRules, err = finalRuleRowsFromJSON(finalsJSON); err != nil {
+			return nil, fmt.Errorf("list acceptance rule packages: %w", err)
+		}
 		packageRows = append(packageRows, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list acceptance rule packages: %w", err)
 	}
 	return packageRows, nil
+}
+
+func stringsFromJSON(raw []byte) ([]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var values []string
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, fmt.Errorf("not a string array: %w", err)
+	}
+	return values, nil
+}
+
+type finalRuleDocument struct {
+	Outcome   string `json:"outcome"`
+	FinalKind string `json:"finalKind"`
+}
+
+// finalRuleRowsFromJSON 只转写,不校验责任结果是否在封闭四值内——库上 CHECK 已经把
+// 集外取值挡在写侧,这里再判一次会把「库被绕过写脏」与「本适配器读错列」两件事说成
+// 同一句话。集外值随行透出,页面词表照 labelOf 的规矩回落显示原码。
+func finalRuleRowsFromJSON(raw []byte) ([]ports.FinalRuleRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []finalRuleDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("final rules are not this adapter's shape: %w", err)
+	}
+	finals := make([]ports.FinalRuleRow, 0, len(documents))
+	for _, document := range documents {
+		finals = append(finals, ports.FinalRuleRow{
+			Outcome:   document.Outcome,
+			FinalKind: document.FinalKind,
+		})
+	}
+	return finals, nil
 }
 
 func assembledRuleRowsFromJSON(raw []byte) ([]ports.AssembledRuleRow, error) {

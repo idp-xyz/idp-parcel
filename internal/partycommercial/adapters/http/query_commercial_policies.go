@@ -278,6 +278,17 @@ type assembledRuleBody struct {
 	Reference string `json:"reference"`
 }
 
+type finalRuleBody struct {
+	Outcome   string `json:"outcome"`
+	FinalKind string `json:"finalKind"`
+}
+
+// rulePackageBody 除规则集外还带两族阶段内容声明(0013:收寄资格、终局规则)。
+//
+// 两个 *Declared 布尔与票 01 的 contentRegistered 同款:未声明与「声明了但为空」都
+// 表现为空数组,恢复动作却相反,少了布尔调用方分不开。allowedIntakeSources 与
+// intakeQualificationRefs 分两个字段而不是并成一栏——前者不允许空、后者允许显式空,
+// 两者的「空」不是同一件事。
 type rulePackageBody struct {
 	ObjectID          string              `json:"objectId"`
 	Version           string              `json:"version"`
@@ -289,6 +300,13 @@ type rulePackageBody struct {
 	EffectiveEndsAt   string              `json:"effectiveEndsAt,omitempty"`
 	DeclaredAt        string              `json:"declaredAt"`
 	Rules             []assembledRuleBody `json:"rules"`
+
+	IntakeQualificationDeclared bool     `json:"intakeQualificationDeclared"`
+	AllowedIntakeSources        []string `json:"allowedIntakeSources"`
+	IntakeQualificationRefs     []string `json:"intakeQualificationRefs"`
+
+	FinalRulesDeclared bool            `json:"finalRulesDeclared"`
+	FinalRules         []finalRuleBody `json:"finalRules"`
 }
 
 func rulePackageBodyOf(row ports.AcceptanceRulePackageRow) rulePackageBody {
@@ -302,6 +320,13 @@ func rulePackageBodyOf(row ports.AcceptanceRulePackageRow) rulePackageBody {
 		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
 		DeclaredAt:        rfc3339(row.DeclaredAt),
 		Rules:             make([]assembledRuleBody, 0, len(row.Rules)),
+
+		IntakeQualificationDeclared: row.HasIntakeQualification,
+		AllowedIntakeSources:        append([]string{}, row.AllowedIntakeSources...),
+		IntakeQualificationRefs:     append([]string{}, row.IntakeQualificationRefs...),
+
+		FinalRulesDeclared: row.HasFinalRules,
+		FinalRules:         make([]finalRuleBody, 0, len(row.FinalRules)),
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
@@ -310,6 +335,12 @@ func rulePackageBodyOf(row ports.AcceptanceRulePackageRow) rulePackageBody {
 		body.Rules = append(body.Rules, assembledRuleBody{
 			Category:  rule.Category,
 			Reference: rule.Reference,
+		})
+	}
+	for _, final := range row.FinalRules {
+		body.FinalRules = append(body.FinalRules, finalRuleBody{
+			Outcome:   final.Outcome,
+			FinalKind: final.FinalKind,
 		})
 	}
 	return body

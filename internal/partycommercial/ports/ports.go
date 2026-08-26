@@ -587,9 +587,26 @@ type AssembledRuleRow struct {
 	Reference string
 }
 
+// FinalRuleRow 是终局规则声明里一条「责任结果 → 终局分类」的上列转写。责任结果是
+// 封闭四值(0013 库上 CHECK),读回集外取值即坏数据,由装载方上抛。
+type FinalRuleRow struct {
+	Outcome   string
+	FinalKind string
+}
+
 // AcceptanceRulePackageRow 是接单规则包正文册(0014 父子两表)上列的一行:五维适用
 // 性与按分类归档的规则引用。正文照上列,不参与选择——选包仍走版本壳(ADR-0059,
 // 五维不进 ViewRevision),目录读它不改变这一点。
+//
+// 0013 的两族阶段内容声明(收寄资格、终局规则)也挂在这份规则包上,一并上列。两族
+// 各带一个「壳在不在」的布尔,理由同 CustomerContractCatalogueRow.HasContent:无父行
+// 是**未声明**,有父行零子行是**明确的空**,两者在空集合上撞成同一签名而恢复动作
+// 相反。0013 自注写着领域要求「至少一行」子声明、SQL 表达不了,因此有父零子在内容
+// 读口是坏数据——但目录上列不重建领域对象、不形成判断,照 ListAcceptanceRulePackages
+// 既有那条注释的先例如实交回空集合,拦坏数据仍归内容读口。
+//
+// AllowedIntakeSources 与 IntakeQualificationRefs 不合成一栏:前者不允许空、后者允许
+// 显式空(真没有硬资格),两栏的「空」含义不同,合并会把这个区别抹掉。
 type AcceptanceRulePackageRow struct {
 	ObjectID          string
 	VersionLabel      string
@@ -602,6 +619,13 @@ type AcceptanceRulePackageRow struct {
 	HasEffectiveEnd   bool
 	DeclaredAt        time.Time
 	Rules             []AssembledRuleRow
+
+	HasIntakeQualification  bool
+	AllowedIntakeSources    []string
+	IntakeQualificationRefs []string
+
+	HasFinalRules bool
+	FinalRules    []FinalRuleRow
 }
 
 // PreAcceptanceControlRow 是接受前财务控制声明册上列的一行。拥有对象是**客户合同
