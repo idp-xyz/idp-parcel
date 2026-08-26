@@ -19,18 +19,25 @@ type ClosureResolutionKey struct {
 	PriceDirection       PriceDirection
 	// Settlement 只在必需依据含结算政策时有意义（ADR-0044）：含则必填、不含则必缺，
 	// 纪律与 PriceDirection 相同。
+	//
+	// 与单依据键的差别只有一处：闭包键上它**只带三维，合同维必须缺席**。合同在闭包里是
+	// 结论不是输入，由本闭包解出后填（ADR-0080）。
 	Settlement    SettlementSelector
 	Anchor        SelectionAnchor
 	RequiredBases []CommercialObjectKind
 }
 
-func (key ClosureResolutionKey) requiresSettlementBasis() bool {
-	for _, kind := range key.RequiredBases {
-		if kind == SettlementPolicyObject {
+func (key ClosureResolutionKey) requires(kind CommercialObjectKind) bool {
+	for _, required := range key.RequiredBases {
+		if required == kind {
 			return true
 		}
 	}
 	return false
+}
+
+func (key ClosureResolutionKey) requiresSettlementBasis() bool {
+	return key.requires(SettlementPolicyObject)
 }
 
 func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
@@ -50,7 +57,12 @@ func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
 		return false
 	}
 	if key.requiresSettlementBasis() {
-		if !key.Settlement.declared() {
+		// 三维在场、合同维缺席、且客户合同本身也在必需依据里（ADR-0080）。第三条不是
+		// 附赠的严格：合同维要由本闭包解出的合同来填，不请求合同就永远没人填得上，那是
+		// 一个立不起来的键——放它进来只会在后面变成一句像是「没有适用结算政策」的话。
+		if !key.Settlement.declaredWithoutContract() ||
+			key.Settlement.carriesContract() ||
+			!key.requires(CustomerContractObject) {
 			return false
 		}
 	} else if !key.Settlement.empty() {
@@ -91,10 +103,11 @@ func (key ClosureResolutionKey) fingerprint() string {
 	}, bases...), "\x00")
 }
 
-// singleBasisKey 只在成员就是结算政策时携带选择器：其余成员的单依据键要求选择器缺席，
-// 无差别透传会让整个闭包被误判输入未受理。
+// singleBasisKey 一律不携带选择器：单依据键要求结算之外的成员选择器缺席，无差别透传会
+// 让整个闭包被误判输入未受理。结算政策那一项走 settlementBasisKey，它要等合同解出来才形
+// 得成——本方法给不出那一维，因此这里不为它开口子（ADR-0080）。
 func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) ResolutionKey {
-	single := ResolutionKey{
+	return ResolutionKey{
 		TenantID:             key.TenantID,
 		CustomerAccountID:    key.CustomerAccountID,
 		LegalEntityCandidate: key.LegalEntityCandidate,
@@ -104,9 +117,13 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 		PriceDirection:       key.PriceDirection,
 		Anchor:               key.Anchor,
 	}
-	if kind == SettlementPolicyObject {
-		single.Settlement = key.Settlement
-	}
+}
+
+// settlementBasisKey 形成结算政策那一项的单依据键：闭包键上的三维，加上本次闭包解出的
+// 那一版客户合同。合同由调用方给不得，理由见 SettlementSelector.declaredWithoutContract。
+func (key ClosureResolutionKey) settlementBasisKey(contract CommercialVersionLabel) ResolutionKey {
+	single := key.singleBasisKey(SettlementPolicyObject)
+	single.Settlement = key.Settlement.WithContract(contract)
 	return single
 }
 
@@ -164,11 +181,16 @@ type CommercialClosure struct {
 	key          ClosureResolutionKey
 	anchor       SelectionAnchor
 	viewRevision AuthorityViewRevision
-	adopted      []AdoptedBasis
-	unresolved   []CommercialObjectKind
-	conflicting  []CommercialObjectKind
-	continuation ContinuationReference
-	reason       ResolutionReason
+	adopted     []AdoptedBasis
+	unresolved  []CommercialObjectKind
+	conflicting []CommercialObjectKind
+	// premiseUnresolved 是「前提没解出来，因此根本没问」的那一格（ADR-0080）。它与
+	// unresolved 分开，是因为两句话说的不是同一件事：`无适用依据`是权威说了这个范围里没有
+	// 这类对象，可以拿去跟商业责任方说「去登一份」；而这里连问都没问过——去登一份结算政策
+	// 也不会让闭包解开，要先有那一版合同。压进同一格，运维会照着一句假话去修。
+	premiseUnresolved []CommercialObjectKind
+	continuation      ContinuationReference
+	reason            ResolutionReason
 }
 
 // ResolutionKey 交回形成这份结果的那次查询，供调用方按原键读取权威视图。
@@ -229,6 +251,13 @@ func (closure CommercialClosure) ConflictingBases() []CommercialObjectKind {
 	return append([]CommercialObjectKind(nil), closure.conflicting...)
 }
 
+// PremiseUnresolvedBases 报出因前提未解析而未被问过的那些依据。它永远伴随 unresolved 或
+// conflicting 非空出现——前提解开了就会真的去问，前提以未决收场则整份闭包已经未决——
+// 所以它自己不决定结局，只说明「这一项的空缺不是权威给的答案」。
+func (closure CommercialClosure) PremiseUnresolvedBases() []CommercialObjectKind {
+	return append([]CommercialObjectKind(nil), closure.premiseUnresolved...)
+}
+
 func (closure CommercialClosure) ContinuationReference() ContinuationReference {
 	return closure.continuation
 }
@@ -239,6 +268,10 @@ func (closure CommercialClosure) Reason() ResolutionReason {
 
 // ResolveCommercialClosure 在同一个商业选择锚点和同一份权威视图下解析每一项必需
 // 依据。只有全部唯一解出才算成功。
+//
+// 解析分两段而不是一遍扫过（ADR-0080）：结算政策要按「哪一版客户合同」选，而那一版正是
+// 同一个闭包在解的另一项依据。第一段解其余成员，第二段拿解出的合同版本去解结算政策。
+// 顺序只在这一处，且只朝一个方向——合同不引用结算政策，两段之间不会再折回来。
 //
 // standingOf 传给计价目的下的价格规则路径（ADR-0034）；其他依据忽略它。
 //
@@ -268,8 +301,20 @@ func ResolveCommercialClosure(
 		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
 	}
 	adopted := make([]AdoptedBasis, 0, len(key.RequiredBases))
-	for _, kind := range key.RequiredBases {
-		result := ResolveCommercialBasis(registry, key.singleBasisKey(kind), standingOf)
+	for _, kind := range resolutionOrder(key.RequiredBases) {
+		single := key.singleBasisKey(kind)
+		if kind == SettlementPolicyObject {
+			// 合同没解出来就不去问结算政策。问了也只能得到零候选，而零候选在这条路径上会
+			// 被读成`无适用依据`——那句话的意思是权威说这个范围没有结算约定，与实情（还不
+			// 知道该按哪一版合同去问）不是同一件事。
+			contract, premiseResolved := adoptedContractLabel(adopted)
+			if !premiseResolved {
+				closure.premiseUnresolved = append(closure.premiseUnresolved, kind)
+				continue
+			}
+			single = key.settlementBasisKey(contract)
+		}
+		result := ResolveCommercialBasis(registry, single, standingOf)
 		switch result.Outcome() {
 		case UniquelyResolved:
 			version, _ := result.AdoptedVersion()
@@ -301,7 +346,11 @@ func ResolveCommercialClosure(
 	switch {
 	case len(closure.conflicting) > 0:
 		closure.outcome = ApplicabilityConflict
-	case len(closure.unresolved) > 0:
+	// 没问过的那一项一并算进「解不出来」。按今天的解析顺序，前提塌了必然已经落在上面两格
+	// 之一，第二个析取项永远不会单独成立；留着它，是因为它守的是「全有或全无」——少一项就
+	// 不是唯一解析，而这条不该依赖 resolutionOrder 恰好把前提排在前面。分格只在报出的那两
+	// 个清单上，结局仍是一个。
+	case len(closure.unresolved) > 0 || len(closure.premiseUnresolved) > 0:
 		closure.outcome = NoApplicableBasis
 	default:
 		// 采用之前先确认指名引用。这一步放在这里而不是逐项解析之中：「采用错了对象」只在
@@ -314,6 +363,43 @@ func ResolveCommercialClosure(
 		closure.resolutionID = closureIdentity(key, closure.viewRevision, adopted)
 	}
 	return closure
+}
+
+// resolutionOrder 把结算政策排到最后，其余成员保持调用方声明的次序。
+//
+// 这是本上下文里唯一一条成员间的解析先后（ADR-0080）：结算政策按「哪一版客户合同」选，
+// 而那一版是同一个闭包在解的另一项。写成一处排序而不是散在解析里的几个 if，是因为「谁在
+// 谁之后」本身就是要被读到的规则；顺序稳定还让 Adopted() 与快照里的成员次序不随声明顺序
+// 摆动。
+//
+// 只挪一类，不做通用拓扑排序：正文指名引用之间的相互约束由 namedReferencesConfirmed 事后
+// 核对，那条路径不需要顺序。真出现第二条依赖时再谈通用解法——现在写一个只有一条边的图算法，
+// 读的人得先证明它没有环才敢信。
+func resolutionOrder(bases []CommercialObjectKind) []CommercialObjectKind {
+	ordered := make([]CommercialObjectKind, 0, len(bases))
+	deferred := make([]CommercialObjectKind, 0, 1)
+	for _, kind := range bases {
+		if kind == SettlementPolicyObject {
+			deferred = append(deferred, kind)
+			continue
+		}
+		ordered = append(ordered, kind)
+	}
+	return append(ordered, deferred...)
+}
+
+// adoptedContractLabel 交回本次已采用的那一版客户合同的两段式指称，供结算政策据以选择。
+// 合同不在已采用之列时交回 false——它要么冲突、要么无适用依据，两种都不构成一个可以拿去
+// 提问的前提。
+func adoptedContractLabel(adopted []AdoptedBasis) (CommercialVersionLabel, bool) {
+	for _, basis := range adopted {
+		if basis.kind != CustomerContractObject {
+			continue
+		}
+		label := basis.version.QualifiedLabel()
+		return label, label.valid()
+	}
+	return CommercialVersionLabel{}, false
 }
 
 // namedReferencesConfirmed 核对每个采用版本在正文里指名的对外引用：凡是本次闭包也在解的
@@ -400,8 +486,11 @@ func ValidateClosureBeforeDecision(
 		viewRevision: current.viewRevision,
 		unresolved:   current.unresolved,
 		conflicting:  current.conflicting,
-		reason:       CurrentResolutionChanged,
-		continuation: continuationFor(prior.key.fingerprint(), prior.resolutionID, CurrentResolutionChanged),
+		// 前提未解析的那些一并带上，理由与 unresolved/conflicting 同：去修的人需要知道
+		// 「这一项没答案」是因为没人登，还是因为它的前提先塌了。
+		premiseUnresolved: current.premiseUnresolved,
+		reason:            CurrentResolutionChanged,
+		continuation:      continuationFor(prior.key.fingerprint(), prior.resolutionID, CurrentResolutionChanged),
 	}
 }
 

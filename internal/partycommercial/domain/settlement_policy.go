@@ -173,17 +173,36 @@ type SettlementSelector struct {
 }
 
 func (selector SettlementSelector) declared() bool {
+	return selector.declaredWithoutContract() && selector.Contract.valid()
+}
+
+// declaredWithoutContract 是**闭包**解析键上的齐备判据：三维在场、合同维缺席。
+//
+// 合同维在闭包里不是输入而是结论——同一个闭包的另一项必需依据要解析的正是「哪一版合同
+// 适用」，由调用方在键上先指名一个，就是消费方在指定该选中哪个商业版本（消费方端口注释
+// 明禁的那件事）。它由 ResolveCommercialClosure 在解出合同之后填（ADR-0080）。
+//
+// 单依据键（ResolutionKey）仍要四维：那条路径上没有任何东西在解合同，调用方不给就没人给。
+func (selector SettlementSelector) declaredWithoutContract() bool {
 	return selector.Counterparty.valid() &&
-		selector.Contract.valid() &&
 		selector.ChargeScope.valid() &&
 		selector.Currency.valid()
 }
 
-// Declared 让持久化面判断该不该把选择器写进快照。它不另立判据而是转调 declared：
-// 「选择器齐了没有」在本上下文只能有一处定义，落库那侧若自己数四个字段，日后加一维时
-// 那份快照会少写一维，而它写得进去、读回来却立不起最小身份。
-func (selector SettlementSelector) Declared() bool {
-	return selector.declared()
+// Empty 让持久化面判断该不该把选择器写进快照。它不另立判据而是转调 empty：
+// 「选择器有没有内容」在本上下文只能有一处定义，落库那侧若自己数字段，日后加一维时那份
+// 快照会少写一维，而它写得进去、读回来却立不起最小身份。
+//
+// 判据是「非空」而不是「齐备」：闭包键上的选择器按定义就少一维，用齐备去判会把它整份漏掉。
+func (selector SettlementSelector) Empty() bool {
+	return selector.empty()
+}
+
+// WithContract 交回一份补上合同维的副本。闭包解出合同之后由它形成结算依据的单依据键；
+// 原值不改，因为解析键要随结果走且不得被替换。
+func (selector SettlementSelector) WithContract(contract CommercialVersionLabel) SettlementSelector {
+	selector.Contract = contract
+	return selector
 }
 
 func (selector SettlementSelector) empty() bool {
@@ -191,6 +210,10 @@ func (selector SettlementSelector) empty() bool {
 		!selector.Contract.valid() &&
 		!selector.ChargeScope.valid() &&
 		!selector.Currency.valid()
+}
+
+func (selector SettlementSelector) carriesContract() bool {
+	return selector.Contract.valid()
 }
 
 func (selector SettlementSelector) fingerprint() string {

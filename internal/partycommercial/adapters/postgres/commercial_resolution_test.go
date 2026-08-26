@@ -94,11 +94,18 @@ func TestResolutionRoundTripsTheAdoptedSettlementPolicy(t *testing.T) {
 	}
 
 	selector := found.ResolutionKey().Settlement
-	if !selector.Declared() {
+	if selector.Empty() {
 		t.Fatalf("读回的解析键丢了结算选择器：%#v", selector)
 	}
-	if selector.ChargeScope.String() != "charge-express" || selector.Currency.String() != "SYN" {
+	if selector.Counterparty.String() != "customer-1" ||
+		selector.ChargeScope.String() != "charge-express" ||
+		selector.Currency.String() != "SYN" {
 		t.Fatalf("选择器读回后变了形：%#v", selector)
+	}
+	// 合同维在闭包键上必须缺席（ADR-0080）。落库时顺手把解出的合同写回选择器，读回的键
+	// 就不再是当初提问的那个键，而重校验正是照这个键重解——它会去问一个没人问过的问题。
+	if selector.Contract.String() != "" {
+		t.Fatalf("闭包键上长出了合同维：%q", selector.Contract)
 	}
 
 	adopted, present := found.AdoptedFor(domain.SettlementPolicyObject)
@@ -147,7 +154,7 @@ func TestAClosureWithoutSettlementCarriesNoSelectorBack(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("按标识取回：found=%v err=%v", ok, err)
 	}
-	if found.ResolutionKey().Settlement.Declared() {
+	if !found.ResolutionKey().Settlement.Empty() {
 		t.Fatal("不要结算依据的闭包读回后带上了选择器")
 	}
 	adopted, present := found.AdoptedFor(domain.CustomerContractObject)
@@ -456,9 +463,9 @@ func uniqueClosureWithSettlementPolicy(
 		Scope:                pcScope(t),
 		Purpose:              domain.AcceptanceControlPurpose,
 		Anchor:               anchor,
+		// 合同维不在键上：它由本闭包解出的 contract-1/v1 填（ADR-0080）。
 		Settlement: domain.SettlementSelector{
 			Counterparty: pcValue(t, domain.NewCounterpartyReference, "customer-1"),
-			Contract:     pcValue(t, domain.NewCommercialVersionLabel, "contract-1/v1"),
 			ChargeScope:  pcValue(t, domain.NewChargeScopeReference, "charge-express"),
 			Currency:     pcValue(t, domain.NewCurrencyCode, "SYN"),
 		},

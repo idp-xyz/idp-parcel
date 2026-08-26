@@ -155,9 +155,11 @@ type closureDocument struct {
 	Adopted      []adoptedDocument           `json:"adopted"`
 }
 
+// settlementSelectorDocument 只有三维：闭包解析键上的选择器按定义不带合同，那一维是本次
+// 闭包解出来的结论（ADR-0080）。已采用的那一版合同另有去处——它就在 Adopted 里，还随结算
+// 政策正文的适用范围一起写下。这里再写一遍，等于给同一件事留两个可以互相打架的记录。
 type settlementSelectorDocument struct {
 	Counterparty string `json:"counterparty"`
-	Contract     string `json:"contract"`
 	ChargeScope  string `json:"chargeScope"`
 	Currency     string `json:"currency"`
 }
@@ -199,10 +201,9 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		AnchorAt:     key.Anchor.At().UTC(),
 		AnchorPolicy: key.Anchor.PolicyVersion().String(),
 	}
-	if key.Settlement.Declared() {
+	if !key.Settlement.Empty() {
 		document.Settlement = &settlementSelectorDocument{
 			Counterparty: key.Settlement.Counterparty.String(),
-			Contract:     key.Settlement.Contract.String(),
 			ChargeScope:  key.Settlement.ChargeScope.String(),
 			Currency:     key.Settlement.Currency.String(),
 		}
@@ -331,9 +332,6 @@ func (document settlementSelectorDocument) selector() (domain.SettlementSelector
 	var selector domain.SettlementSelector
 	var err error
 	if selector.Counterparty, err = domain.NewCounterpartyReference(document.Counterparty); err != nil {
-		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
-	}
-	if selector.Contract, err = domain.NewCommercialVersionLabel(document.Contract); err != nil {
 		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
 	}
 	if selector.ChargeScope, err = domain.NewChargeScopeReference(document.ChargeScope); err != nil {

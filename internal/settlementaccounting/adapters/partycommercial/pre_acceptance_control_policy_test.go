@@ -304,9 +304,10 @@ func fixedClosure(t *testing.T, method pcdomain.SettlementMethod) pcdomain.Comme
 		Scope:                pcValue(t, pcdomain.NewCommercialScopeReference, "scope-1"),
 		Purpose:              pcdomain.AcceptanceControlPurpose,
 		Anchor:               anchor,
+		// 合同维不上键：它由闭包解出的 contract-1/v1 填（ADR-0080），正是 settlementApplicability
+		// 指名的那一版。
 		Settlement: pcdomain.SettlementSelector{
 			Counterparty: pcValue(t, pcdomain.NewCounterpartyReference, "customer-1"),
-			Contract:     pcValue(t, pcdomain.NewCommercialVersionLabel, "contract-1/v1"),
 			ChargeScope:  pcValue(t, pcdomain.NewChargeScopeReference, "charge-express"),
 			Currency:     pcValue(t, pcdomain.NewCurrencyCode, "CNY"),
 		},

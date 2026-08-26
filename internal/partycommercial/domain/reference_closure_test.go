@@ -21,22 +21,42 @@ func closureKey(t *testing.T, scope string, required ...domain.CommercialObjectK
 	}
 	for _, kind := range required {
 		if kind == domain.SettlementPolicyObject {
-			key.Settlement = settlementSelector(t)
+			key.Settlement = closureSettlementSelector(t)
 		}
 	}
 	return key
 }
 
-// settlementSelector 与 registerSettlementPolicyIn 的适用范围逐维对齐：闭包请求结算依据时，
-// 键上的精确范围要能命中夹具登记的那份政策（ADR-0044）。
+// fixtureContractObjectID 与 fixtureContractLabel 是夹具里那一版客户合同的对象标识与两段式
+// 指称。两者只写一处：结算政策的适用范围必须与闭包解出的合同逐字对齐（ADR-0080），各写一个
+// 字面量的话，改了其中一个之后命中会静静失败，看起来像「这个范围没有结算政策」。
+const fixtureContractObjectID = "contract-1"
+
+func fixtureContractLabel(t *testing.T) domain.CommercialVersionLabel {
+	t.Helper()
+	return commercialValue(t, domain.NewCommercialVersionLabel, fixtureContractObjectID+"/v1")
+}
+
+// settlementSelector 与 registerSettlementPolicyIn 的适用范围逐维对齐：单依据键请求结算
+// 依据时，键上的精确范围要能命中夹具登记的那份政策（ADR-0044）。合同维在这条路径上由
+// 调用方给——没有别的东西在解它。
 func settlementSelector(t *testing.T) domain.SettlementSelector {
 	t.Helper()
 	return domain.SettlementSelector{
 		Counterparty: commercialValue(t, domain.NewCounterpartyReference, "customer-1"),
-		Contract:     commercialValue(t, domain.NewCommercialVersionLabel, "contract-1/v1"),
+		Contract:     fixtureContractLabel(t),
 		ChargeScope:  commercialValue(t, domain.NewChargeScopeReference, "charge-express"),
 		Currency:     commercialValue(t, domain.NewCurrencyCode, "SYN"),
 	}
+}
+
+// closureSettlementSelector 是同一个选择器在**闭包**键上的样子：合同维缺席，由解析器拿本
+// 次解出的合同来填（ADR-0080）。
+func closureSettlementSelector(t *testing.T) domain.SettlementSelector {
+	t.Helper()
+	selector := settlementSelector(t)
+	selector.Contract = domain.CommercialVersionLabel{}
+	return selector
 }
 
 func registerSettlementPolicyIn(
@@ -48,7 +68,7 @@ func registerSettlementPolicyIn(
 	t.Helper()
 	version := effectiveIn(t, registry, domain.SettlementPolicyObject, objectID, "v1", "sha256:"+objectID, scope)
 	policy, err := domain.NewSettlementPolicy(version, method,
-		applicability(t, "customer-1", "contract-1/v1", "charge-express", "SYN"))
+		applicability(t, "customer-1", fixtureContractLabel(t).String(), "charge-express", "SYN"))
 	if err != nil {
 		t.Fatalf("new settlement policy: %v", err)
 	}
@@ -64,7 +84,13 @@ func seedClosure(t *testing.T, registry *domain.CommercialRegistry, scope string
 			registerSettlementPolicyIn(t, registry, scope, "object-"+kind.String(), domain.PrepaidMethod)
 			continue
 		}
-		effectiveIn(t, registry, kind, "object-"+kind.String(), "v1", "sha256:"+kind.String(), scope)
+		objectID := "object-" + kind.String()
+		if kind == domain.CustomerContractObject {
+			// 合同用夹具那个名字登：结算政策的适用范围指名的就是它，闭包解出合同之后要拿
+			// 「对象/版本」去命中那一维（ADR-0080）。
+			objectID = fixtureContractObjectID
+		}
+		effectiveIn(t, registry, kind, objectID, "v1", "sha256:"+kind.String(), scope)
 	}
 }
 

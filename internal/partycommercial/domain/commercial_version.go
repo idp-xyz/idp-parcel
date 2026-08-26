@@ -579,6 +579,26 @@ func (version CommercialVersion) Version() CommercialVersionLabel {
 	return version.version
 }
 
+// QualifiedLabel 是「对象/版本」两段式的版本指称，本上下文内引用某一版正文时用它。
+//
+// 它单列一处，是因为**两边必须写出同一个串才对得上**：结算政策的适用范围里那一维记的是
+// 「本约定属于哪一版客户合同」，而闭包解出合同之后要拿这个串去命中它（ADR-0080）。两处
+// 各自拼一遍字符串，日后谁改了分隔符，命中就会静静失败——看起来像「这个范围没有结算
+// 政策」，而其实是两串对不上。
+//
+// 版本身份不成立时交回零值：把一个残缺版本拼成 "/" 之类的串，等于凭空造出一个能被匹配的
+// 指称。
+func (version CommercialVersion) QualifiedLabel() CommercialVersionLabel {
+	if !version.objectID.valid() || !version.version.valid() {
+		return CommercialVersionLabel{}
+	}
+	label, err := NewCommercialVersionLabel(version.objectID.String() + "/" + version.version.String())
+	if err != nil {
+		return CommercialVersionLabel{}
+	}
+	return label
+}
+
 func (version CommercialVersion) Scope() CommercialScopeReference {
 	return version.scope
 }

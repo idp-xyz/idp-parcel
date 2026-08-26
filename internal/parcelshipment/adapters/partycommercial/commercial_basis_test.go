@@ -210,9 +210,9 @@ func (fixture *basisFixture) withSettlementBasis(t *testing.T, method pcdomain.S
 	fixture.registry.RegisterSettlementPolicy(policy)
 
 	fixture.keys.key.RequiredBases = append(fixture.keys.key.RequiredBases, pcdomain.SettlementPolicyObject)
+	// 合同维不上键：它由闭包解出的 contract-1/v1 填（ADR-0080），正是上面适用范围指名的那一版。
 	fixture.keys.key.Settlement = pcdomain.SettlementSelector{
 		Counterparty: value(t, pcdomain.NewCounterpartyReference, "customer-1"),
-		Contract:     value(t, pcdomain.NewCommercialVersionLabel, "contract-1/v1"),
 		ChargeScope:  value(t, pcdomain.NewChargeScopeReference, "charge-express"),
 		Currency:     value(t, pcdomain.NewCurrencyCode, "SYN"),
 	}

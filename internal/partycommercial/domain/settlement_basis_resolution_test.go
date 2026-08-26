@@ -20,9 +20,20 @@ func registerSettlementPolicyOn(
 	method domain.SettlementMethod,
 ) domain.SettlementPolicy {
 	t.Helper()
+	return registerSettlementPolicyUnder(
+		t, registry, scope, objectID, fixtureContractLabel(t).String(), chargeScope, method)
+}
+
+func registerSettlementPolicyUnder(
+	t *testing.T,
+	registry *domain.CommercialRegistry,
+	scope, objectID, contract, chargeScope string,
+	method domain.SettlementMethod,
+) domain.SettlementPolicy {
+	t.Helper()
 	version := effectiveIn(t, registry, domain.SettlementPolicyObject, objectID, "v1", "sha256:"+objectID, scope)
 	policy, err := domain.NewSettlementPolicy(version, method,
-		applicability(t, "customer-1", "contract-1/v1", chargeScope, "SYN"))
+		applicability(t, "customer-1", contract, chargeScope, "SYN"))
 	if err != nil {
 		t.Fatalf("new settlement policy: %v", err)
 	}
@@ -177,6 +188,123 @@ func TestClosureCarriesTheAdoptedSettlementPolicy(t *testing.T) {
 		t.Fatal("closure lost the contract member")
 	} else if _, leaked := contractBasis.SettlementPolicy(); leaked {
 		t.Fatal("非结算成员也带上了结算政策")
+	}
+}
+
+// Covers: ADR-0080 —— 闭包键不得预选合同维。
+//
+// 合同版本是同一个闭包正在解的另一项依据；由调用方在键上指名一个，就是消费方在指定该
+// 选中哪个商业版本（`psports.CommercialBasisQuery` 明禁的那件事），而且它与闭包实际解出的
+// 那一版可以不同——那时闭包会「按 A 版合同接单、按 B 版合同的结算政策控制」，两边都不报错。
+func TestAClosureKeyMayNotPreselectTheContractDimension(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+
+	key := closureKey(t, "scope-a", closureBases...)
+	key.Settlement.Contract = fixtureContractLabel(t)
+
+	// 指名的正是本次会解出的那一版：连这个都要拒，否则「预选」只是碰巧对了的那些次不报错。
+	if got := domain.ResolveCommercialClosure(registry, key, nil).Outcome(); got != domain.InputNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", got)
+	}
+}
+
+// Covers: ADR-0080 —— 要结算依据就必须在同一个闭包里要客户合同。
+//
+// 合同维要由本闭包解出的合同来填；不请求合同就永远没人填得上。放这样的键进来，结果会是
+// 一句像「没有适用结算政策」的话，而实情是这个请求本身立不起来。
+func TestSettlementBasisRequiresTheContractInTheSameClosure(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+
+	key := closureKey(t, "scope-a", domain.SettlementPolicyObject)
+
+	if got := domain.ResolveCommercialClosure(registry, key, nil).Outcome(); got != domain.InputNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", got)
+	}
+}
+
+// Covers: ADR-0080 的「前提未解析」那一格——合同解不出时，结算政策不得落成`无适用依据`。
+//
+// 这是本决定要买的东西。两句话的恢复动作不同：`无适用依据`是权威说了这个范围没有结算约定，
+// 照它去做就是「让商业侧登一份结算政策」——登完闭包照样解不开，因为缺的是合同。
+func TestAnUnresolvedContractLeavesTheSettlementBasisUnasked(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	// 合同不登，其余两项齐备：结算政策在库、能命中，只差没人告诉它是哪一版合同。
+	seedClosure(t, registry, "scope-a", domain.AcceptanceRulePackageObject, domain.SettlementPolicyObject)
+
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
+
+	if closure.Outcome() != domain.NoApplicableBasis {
+		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS（合同缺项）", closure.Outcome())
+	}
+	unresolved := closure.UnresolvedBases()
+	if len(unresolved) != 1 || unresolved[0] != domain.CustomerContractObject {
+		t.Fatalf("unresolved = %v, want exactly the customer contract——结算政策不是权威说没有的",
+			unresolved)
+	}
+	premise := closure.PremiseUnresolvedBases()
+	if len(premise) != 1 || premise[0] != domain.SettlementPolicyObject {
+		t.Fatalf("premise-unresolved = %v, want exactly the settlement policy", premise)
+	}
+}
+
+// Covers: ADR-0080 —— 解析顺序由依赖决定，不由调用方的声明顺序决定。
+//
+// 必需依据集合是调用方给的，它按什么次序写下来不构成不同的请求（闭包指纹先排序正是这个
+// 意思）。结算政策排在合同之前声明时若解不出来，这条纪律就有一个静默的例外。
+func TestSettlementResolvesEvenWhenDeclaredBeforeTheContract(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", closureBases...)
+
+	reversed := []domain.CommercialObjectKind{
+		domain.SettlementPolicyObject,
+		domain.AcceptanceRulePackageObject,
+		domain.CustomerContractObject,
+	}
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", reversed...), nil)
+
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q，前提未解析=%v）",
+			closure.Outcome(), closure.Reason(), closure.PremiseUnresolvedBases())
+	}
+	basis, present := closure.AdoptedFor(domain.SettlementPolicyObject)
+	if !present {
+		t.Fatal("闭包没有采用结算依据")
+	}
+	if _, ok := basis.SettlementPolicy(); !ok {
+		t.Fatal("闭包采用了结算依据却丢了政策")
+	}
+	// 同一请求换个声明次序必须得到同一个解析身份，否则续办引用与失效检测都会跟着次序摆动。
+	inOrder := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
+	if closure.ResolutionID() != inOrder.ResolutionID() {
+		t.Fatalf("声明次序改变了解析身份：%q vs %q", closure.ResolutionID(), inOrder.ResolutionID())
+	}
+}
+
+// Covers: ADR-0080 —— 结算政策按**解出的**那一版合同选，不是按范围里碰巧存在的任何一份。
+//
+// 与上一例配对：只证「合同解不出时不问」，一个把合同维填成空串或任意值的实现也能通过，
+// 而那样会采用一份约定给别的合同的结算方式。
+func TestASettlementPolicyNamingAnotherContractIsNotAdopted(t *testing.T) {
+	registry := domain.NewCommercialRegistry()
+	seedClosure(t, registry, "scope-a", domain.CustomerContractObject, domain.AcceptanceRulePackageObject)
+	registerSettlementPolicyUnder(
+		t, registry, "scope-a", "policy-other-contract", "contract-9/v9", "charge-express",
+		domain.TermsMethod)
+
+	closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", closureBases...), nil)
+
+	if closure.Outcome() != domain.NoApplicableBasis {
+		t.Fatalf("outcome = %q, want NO_APPLICABLE_BASIS——别的合同的结算约定被采用了",
+			closure.Outcome())
+	}
+	unresolved := closure.UnresolvedBases()
+	if len(unresolved) != 1 || unresolved[0] != domain.SettlementPolicyObject {
+		t.Fatalf("unresolved = %v, want exactly the settlement policy", unresolved)
+	}
+	if premise := closure.PremiseUnresolvedBases(); len(premise) != 0 {
+		t.Fatalf("premise-unresolved = %v, want empty——合同解出来了，这一项是真的问过", premise)
 	}
 }
 

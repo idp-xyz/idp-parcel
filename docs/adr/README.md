@@ -85,6 +85,7 @@
 - [ADR-0077：主数据登记目录查阅沿运营读口通例——独立查询端点、每上下文自立租户级作用域、未配置即拒；空目录如实答空](./0077-master-data-catalogue-read-follows-the-operations-read-pattern.md)
 - [ADR-0078：隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)
 - [ADR-0079：接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同；坏回指是 error 不是未登记](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)
+- [ADR-0080：引用闭包先解合同再据以解结算政策——合同维是结论不是输入，前提未解析自成一格](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)
 
 ## 已被取代决策
 
