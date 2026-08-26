@@ -1,7 +1,7 @@
 # VE 索赔材料归集面机制未建——ClaimEvidenceView 只能答「无从查起」
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 
 自[接线票 04](../../parcel-api-remaining-endpoint-wiring/issues/04-ve-claims-wiring.md)
 Comments 里的既知事实提出立票；[第二十六轮重盘](../../mechanism-reinventory-r26/report.md)
@@ -38,3 +38,21 @@ Comments 里的既知事实提出立票；[第二十六轮重盘](../../mechanis
 - 归集面空时 known=true + 零件（「查过了，一件都没收到」的有效事实——注意这与今天桩的
   known=false 语义不同，接真后差集成立、限期补充可以推进）；未建/读不通才走各自的格。
 - 登记-读回-撤销三态真库测试；全仓真库套件绿；判据 A 复点该口从缺转有。
+
+## Comments
+
+- MCP-1（2026-08-26，收口）：实现落在 a85fbbf，四段全交付——迁移 0021（五件成行 +
+  撤销另立行、revoked_at ≥ received_at）、`MaterialReceiptRegistry` 端口与
+  `MaterialReceiptRegistration` 用例（缺件逐格拒且不碰写口，一个默认值都不补）、
+  `ClaimMaterialReceipts` 读「收讫减撤销」+ `MaterialReceiptRegistrar` 写口（撤销先核
+  在场，「无从撤销」在外键违规前作为治理答案交回）、`parcel-ve-register` 两子命令
+  （幂等重放退 0 不留痕——行身份即事实，没有版本可顶替）、`parcel-api` 换桩接真。
+  实现期两决定记录在案：①收讫多次去重交一份、撤销按收讫行逐次抵扣（端口只答「已收
+  到什么」，收到几次不改差集）；②读口三件身份缺一按「依赖调不通」报错不答业务格
+  （编排已校验过三件非空，走到这里还缺是接线错误，答「零件」会立出一个没被问对的
+  「一件都没收到」）。完成标准逐条核过：零收讫 known=true 零件与登记后按行作答由
+  parcel-api 装配真库测试钉住；三态真库测试与 CLI 纵切在 `claim_material_receipt_test.go`
+  / `vertical_test.go`；全仓真库套件唯一红是事务闭包门禁（d98e443）抓出的
+  assemble_claims_test 两处闭包内断言（其一 bfabc0d 引入），同笔搬出修复后门禁与受
+  影响三包复跑全绿；判据 A 复点：`ClaimEvidenceView` 的实现断言
+  （`var _ ports.ClaimEvidenceView`）已落在 adapters/postgres，该口从缺转有。
