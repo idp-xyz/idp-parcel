@@ -1,6 +1,8 @@
-// 本目录唯一的 fetch 出口:运营追踪查阅(GET /tracking-projections,ADR-0076)。
+// 运营追踪查阅的 fetch 出口(GET /tracking-projections,ADR-0076)。
 // 列表、单件当前版与按版本读回共用一个端点,按 parcel / version 查询参数分派;
 // 形状以 internal/visibilityexception/adapters/http 传输层为准,此处只做镜像不虚构。
+// 六类规则与策略目录的读面不在本文件:那是主数据目录查阅,收敛在共享
+// catalogue-api 传输上,见同目录 catalogue-api.ts(两族读面语义不同,分文件即分口径)。
 //
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
 // 响应体的 `outcome`,取封闭集合的原字符串,传输层不合并、不改名。五格判别与委托

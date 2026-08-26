@@ -2,6 +2,7 @@ import type { ElementType } from 'react';
 import {
   AlertTriangle,
   Anchor,
+  BadgeCheck,
   BadgeDollarSign,
   Banknote,
   Boxes,
@@ -9,6 +10,7 @@ import {
   Calculator,
   ClipboardCheck,
   Coins,
+  Eye,
   FileText,
   FlaskConical,
   FolderOpen,
@@ -18,6 +20,7 @@ import {
   Library,
   LineChart,
   Megaphone,
+  Milestone,
   Network,
   PackageOpen,
   PackageSearch,
@@ -56,7 +59,10 @@ export const navigationSections: NavigationSection[] = [
     // 「数据去哪找」的心智一处找齐。分区是呈现分组：各条目的主责上下文与
     // 出处仍由 moduleInfoById 逐条表达，跨上下文集中不改变所有权，也不改变
     // 写入纪律（登记一律走各自受控入口，本区页面只查阅）。排序按
-    // 组织 → 参与方 → 合同协议 → 产品渠道 → 策略 → 价格 → 网络 → 关务。
+    // 组织 → 参与方 → 合同协议 → 产品渠道 → 策略 → 价格 → 网络 → 关务 → 追踪异常。
+    // 追踪异常那三条是目录（规则与口径），不塞进追踪异常区的案件页：目录是规则，
+    // 案件不是——案件页空着是三堵墙拦的，混进目录会让人以为墙降了
+    // （票 admin-web-page-wiring-frontier/02 的导航裁决）。
     title: '主数据',
     items: [
       { id: 'group-legal-entities', label: '集团与法人', icon: 'group-legal-entities' },
@@ -72,6 +78,9 @@ export const navigationSections: NavigationSection[] = [
       { id: 'service-areas', label: '服务区域与覆盖', icon: 'service-areas' },
       { id: 'customs-ports-paths', label: '口岸与申报路径', icon: 'customs-ports-paths' },
       { id: 'compliance-rules', label: '合规规则库', icon: 'compliance-rules' },
+      { id: 'tracking-judgment-rules', label: '追踪判断规则', icon: 'tracking-judgment-rules' },
+      { id: 'disclosure-policies', label: '披露与通知策略', icon: 'disclosure-policies' },
+      { id: 'claim-prerequisites', label: '索赔资格与授权', icon: 'claim-prerequisites' },
     ],
   },
   {
@@ -173,6 +182,9 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'compliance-rules': Library,
   'customs-ports-paths': Anchor,
   'customs-restrictions': ShieldAlert,
+  'tracking-judgment-rules': Milestone,
+  'disclosure-policies': Eye,
+  'claim-prerequisites': BadgeCheck,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
   'exception-cases': FolderOpen,
@@ -348,6 +360,26 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '索赔与追偿',
     owner: '全程追踪与异常（visibility-exception）',
     source: 'docs/domain/visibility-exception/CONTEXT.md 客户异常通知决定、客户索赔项与供应商或保险追偿事项（金额结算归 settlement-accounting）',
+  },
+
+  // —— VE 六类规则与策略目录（主数据区呈现，主责仍在 visibility-exception）——
+  'tracking-judgment-rules': {
+    title: '追踪判断规则',
+    owner: '全程追踪与异常（visibility-exception）',
+    source:
+      'docs/domain/visibility-exception/CONTEXT.md 标准里程碑映射按源上下文与事实类型版本化登记；高可信且命中版本化分诊规则的信号可自动建立或关联案件，低可信先进入分诊',
+  },
+  'disclosure-policies': {
+    title: '披露与通知策略',
+    owner: '全程追踪与异常（visibility-exception）',
+    source:
+      'docs/domain/visibility-exception/CONTEXT.md 客户披露必须使用经批准的最小范围和内容；通知义务能否被满足由客户合同和通知策略另行判断（通知保存目标客户、要求时限和适用渠道）',
+  },
+  'claim-prerequisites': {
+    title: '索赔资格与授权',
+    owner: '全程追踪与异常（visibility-exception）',
+    source:
+      'docs/domain/visibility-exception/CONTEXT.md 按申请人授权、客户账户、合同版本、索赔时限、目标范围、重复关系和最低材料要求判断资格',
   },
 
   // —— 结算与核算（settlement-accounting）——

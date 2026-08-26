@@ -33,6 +33,9 @@ import {
   TrackingProjectionPage,
   ExceptionCasesPage,
   ClaimsRecoveryPage,
+  TrackingJudgmentRulesPage,
+  DisclosurePoliciesPage,
+  ClaimPrerequisitesPage,
 } from './pages/visibility';
 import {
   CustomsCasesPage,
@@ -78,6 +81,9 @@ export const pageById: Record<string, ComponentType> = {
   'tracking-projection': TrackingProjectionPage,
   'exception-cases': ExceptionCasesPage,
   'claims-recovery': ClaimsRecoveryPage,
+  'tracking-judgment-rules': TrackingJudgmentRulesPage,
+  'disclosure-policies': DisclosurePoliciesPage,
+  'claim-prerequisites': ClaimPrerequisitesPage,
   'customs-cases': CustomsCasesPage,
   'customs-restrictions': CustomsRestrictionsPage,
   'customs-ports-paths': CustomsPortsPathsPage,
@@ -110,6 +116,9 @@ export const liveIds: ReadonlySet<string> = new Set([
   'commercial-policies',
   'party-contracts',
   'supplier-agreements',
+  'tracking-judgment-rules',
+  'disclosure-policies',
+  'claim-prerequisites',
 ]);
 
 /**
