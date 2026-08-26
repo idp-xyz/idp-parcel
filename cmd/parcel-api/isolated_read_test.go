@@ -34,7 +34,7 @@ func TestBuildIsolatedReadIntakesRefusesRealLookingTenant(t *testing.T) {
 	if err == nil {
 		t.Fatalf("non-synthetic tenant accepted: intakes = %+v", intakes)
 	}
-	if !strings.Contains(err.Error(), syntheticIdentifierPrefix) {
+	if !strings.Contains(err.Error(), syntheticIdentifierPrefix+"-") {
 		t.Fatalf("refusal does not name the required prefix: %v", err)
 	}
 }

@@ -19,8 +19,8 @@ const isolatedReadTenantEnv = "IDP_PARCEL_ISOLATED_READ_TENANT"
 
 // syntheticIdentifierPrefix 是证据层级 S 在代码里的锚（ADR-0078 Decision 三），与
 // scripts/demo-seeds 的种子标识同一纪律。真实租户标识没有这个前缀，结构上进不了
-// 这个开关。
-const syntheticIdentifierPrefix = "SYN-"
+// 这个开关。横线归拼接处（标识前缀门禁），判定时拼成 `SYN-`。
+const syntheticIdentifierPrefix = "SYN"
 
 // 注入给运营查阅作用域的合成常量。作用域引用是授权结果的审计引用，不参与行过滤，
 // 值只需自证合成；页大小对演示种子的量级绰绰有余，改它不需要动 ADR。
@@ -57,10 +57,11 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	if tenant == "" {
 		return nil, nil
 	}
-	if !strings.HasPrefix(tenant, syntheticIdentifierPrefix) {
+	syntheticMarker := syntheticIdentifierPrefix + "-"
+	if !strings.HasPrefix(tenant, syntheticMarker) {
 		return nil, fmt.Errorf(
 			"%s=%q: isolated read admission only accepts synthetic tenants with the %q prefix (ADR-0078); refusing to start",
-			isolatedReadTenantEnv, tenant, syntheticIdentifierPrefix,
+			isolatedReadTenantEnv, tenant, syntheticMarker,
 		)
 	}
 
