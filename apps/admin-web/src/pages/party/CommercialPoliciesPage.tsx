@@ -5,12 +5,14 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listCommercialPolicies,
+  type AuthorizationRuleRecord,
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
 import {
   commercialDirectionLabels,
   commercialPolicyKinds,
+  commercialStatusLabels,
   controlRequirementLabels,
   finalOutcomeLabels,
   intakeSourceLabels,
@@ -35,7 +37,7 @@ function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
   };
 }
 
-// 按 kind 换列(MCP-3 裁决⑦):五种册子的行形状互不相同,列向各随其册。种类命名
+// 按 kind 换列(MCP-3 裁决⑦):六种册子的行形状互不相同,列向各随其册。种类命名
 // 册子而非商业对象类别;信用政策没有独立正文册,封闭集里如实没有它,页面不预留格。
 const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
   ACCEPTANCE_RULE_PACKAGE: [
@@ -85,6 +87,17 @@ const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
     col('policyVersion', '时点政策版本', true),
     col('declaredAt', '声明时间', true),
   ],
+  // 两个请求方各占一列,不并成「取消授权」一栏:「客户可取消」与「运营可取消」是两条
+  // 独立授权,合成一栏读不出哪一方缺席。
+  AUTHORIZATION_RULE: [
+    col('identity', '授权规则 / 版本', true),
+    col('scope', '适用范围', true),
+    col('status', '生命周期状态'),
+    col('customerCancellation', '客户取消授权'),
+    col('operationsCancellation', '运营取消授权'),
+    col('effective', '有效区间', true),
+    col('publishedAt', '发布时间', true),
+  ],
 };
 
 const chipClass = (active: boolean) =>
@@ -105,6 +118,15 @@ function declaredList(declared: boolean, values: string[], emptyNote: string): s
   if (!declared) return '未声明';
   if (values.length === 0) return emptyNote;
   return values.join('、');
+}
+
+// 取消授权按请求方逐格作答,三态各有各的说法。中间那态最容易写错:目录在场而这一方
+// 没有行,是这份目录说出的真话——该请求方不许取消——不是配置缺件。把它显示成空白或
+// 「未声明」会让人去补一份已经写好的目录,而那份目录正是拒绝的依据。
+function cancellationCell(record: AuthorizationRuleRecord, party: string): string {
+  if (!record.cancellationAuthorityDeclared) return '未声明';
+  const declaration = record.cancellationAuthorities.find((entry) => entry.party === party);
+  return declaration ? `允许:${declaration.ruleReference}` : '不许取消';
 }
 
 // 响应体按 kind 判别(api.ts 的联合),各分支读各自的行形;判断类型与绑定转换是
@@ -194,6 +216,19 @@ function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           declaredAt: formatInstant(record.declaredAt),
         },
       }));
+    case 'AUTHORIZATION_RULE':
+      return body.policies.map((record) => ({
+        key: `authz:${record.objectId}@${record.version}`,
+        values: {
+          identity: `${record.objectId}@${record.version}`,
+          scope: record.scope,
+          status: labelOf(commercialStatusLabels, record.status),
+          customerCancellation: cancellationCell(record, 'CUSTOMER'),
+          operationsCancellation: cancellationCell(record, 'OPERATIONS'),
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          publishedAt: formatInstant(record.publishedAt),
+        },
+      }));
   }
 }
 
@@ -230,7 +265,7 @@ export function CommercialPoliciesPage() {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——五类政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」;信用政策无独立正文册,如实不上列。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明`}
+      description={`${info.owner}——六类政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」;信用政策无独立正文册,如实不上列。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明,授权规则一栏按请求方逐格列出取消授权`}
       search={{
         value: search,
         onChange: setSearch,

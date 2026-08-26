@@ -22,6 +22,7 @@ export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   PRICE_POLICY: '商业价格政策',
   SETTLEMENT_POLICY: '结算政策',
   AS_OF_POLICY: '时点锚声明',
+  AUTHORIZATION_RULE: '授权规则',
 };
 
 export const commercialPolicyKinds: CommercialPolicyKind[] = [
@@ -30,6 +31,7 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'PRICE_POLICY',
   'SETTLEMENT_POLICY',
   'AS_OF_POLICY',
+  'AUTHORIZATION_RULE',
 ];
 
 // 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
@@ -64,6 +66,12 @@ export const finalOutcomeLabels: Record<string, string> = {
   RETURN_COMPLETED: '退回完成',
   SERVICE_TERMINATED: '服务终止',
   REGULATORY_DISPOSITION: '监管处置',
+};
+
+// 取消请求方封闭二值(domain DeclaredCancellationParty)。
+export const cancellationPartyLabels: Record<string, string> = {
+  CUSTOMER: '客户',
+  OPERATIONS: '运营',
 };
 
 export const problemCodeNotes: Record<string, string> = {

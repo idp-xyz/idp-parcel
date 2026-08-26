@@ -27,7 +27,8 @@ export type CommercialPolicyKind =
   | 'PRE_ACCEPTANCE_CONTROL'
   | 'PRICE_POLICY'
   | 'SETTLEMENT_POLICY'
-  | 'AS_OF_POLICY';
+  | 'AS_OF_POLICY'
+  | 'AUTHORIZATION_RULE';
 
 export interface AssembledRuleRecord {
   category: string;
@@ -104,14 +105,36 @@ export interface AsOfPolicyRecord {
   declaredAt: string;
 }
 
-// 响应体按 kind 判别:五种册子的行形状互不相同(传输层注释原话),合成一个字段并集
+export interface CancellationAuthorityRecord {
+  party: string;
+  ruleReference: string;
+}
+
+// cancellationAuthorityDeclared 这个布尔在本族比别处更要紧:数组里少一个请求方**不是**
+// 少一份声明,而是这份目录说出的真话(该请求方不许取消)。三态因此是「未声明 / 已声明
+// 且该方允许 / 已声明但该方不许」,页面必须先看布尔才知道手上这份空缺属于哪一种。
+export interface AuthorizationRuleRecord {
+  objectId: string;
+  version: string;
+  scope: string;
+  status: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  publishedAt: string;
+  cancellationAuthorityDeclared: boolean;
+  declaredAt?: string;
+  cancellationAuthorities: CancellationAuthorityRecord[];
+}
+
+// 响应体按 kind 判别:六种册子的行形状互不相同(传输层注释原话),合成一个字段并集
 // 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
 export type CommercialPolicyListResponseBody =
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'ACCEPTANCE_RULE_PACKAGE'; policies: RulePackageRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRE_ACCEPTANCE_CONTROL'; policies: PreAcceptanceControlRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRICE_POLICY'; policies: PricePolicyRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'SETTLEMENT_POLICY'; policies: SettlementPolicyRecord[] }
-  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AS_OF_POLICY'; policies: AsOfPolicyRecord[] };
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AS_OF_POLICY'; policies: AsOfPolicyRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AUTHORIZATION_RULE'; policies: AuthorizationRuleRecord[] };
 
 export interface ControlBindingRecord {
   chargeScope: string;
