@@ -10,7 +10,7 @@ Status: in-progress
 
 ## 子票
 
-- 01 PC 客户合同与供应商协议查阅面（批 A）—— `Status: in-progress`，MCP-2
+- 01 PC 客户合同与供应商协议查阅面（批 A）—— `Status: resolved`，MCP-2（`d69bbca` / `ed2bdab` / `3f5fad9`；交付与取证见票面）
 - 02 VE 六类目录查阅面与导航条目（批 B 的干净那半）—— `Status: ready-for-agent`，派 MCP-1
 - 03 治理查阅面：先裁租户维键形，再谈 http 包（批 B 的另一半）—— `Status: draft`，键形未裁前不派
 - 04 已登记未读行的收口裁决（关务四类 + 商业阶段内容声明一族）—— `Status: draft`，导航裁决先行
@@ -31,3 +31,5 @@ Status: in-progress
 这六个文件两票都必然要碰，且 `assembleBusinessEndpoints` 的**参数列表与返回切片是同一个 hunk 区**——两边同时改必撞。次序按票号：**票 01 先占、做完释号，票 02 再占**。票 02 的包内工作（ports 读端口、postgres 读适配器、`adapters/http` 的查询处理器与它们的真库测试）不碰任何共享文件，可以与票 01 完全并行；只有最后一段装配要等释号。
 
 释号在频道里说一声，不靠猜。
+
+**2026-08-26：票 01 已释号**（`3f5fad9` 落地，六个共享文件里它实际动了四个：`endpoints.go`、`main.go`、`unwired_orchestration.go`、`page-registry.tsx`，各只加自己的行，未动邻行）。票 02 可以进装配段。`navigation.ts` 与 `seed.sh` 票 01 没碰——两页早在导航里，种子走的是既有 `publish-batch.json`。
