@@ -698,3 +698,82 @@ type CommercialPolicyCatalogueRead interface {
 		limit int,
 	) ([]AsOfPolicyRow, error)
 }
+
+// ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。
+// 指名策略与显式不适用恰有一个在场(库上 CHECK 钉住,两列同空的行进不来),因此这里
+// 不设「两者皆无」的第三态:读回两空即坏数据,由装载方上抛。
+type ControlBindingRow struct {
+	ChargeScope          string
+	PolicyID             string
+	InapplicabilityBasis string
+}
+
+// CustomerContractCatalogueRow 是客户与合同目录上列的一行:一份已入册的客户合同
+// 版本壳,连同它登记过的正文与按费用范围的控制约定。
+//
+// 上列对象是版本壳,判据同 ServiceProductCatalogueRow:身份、范围、区间与状态都在
+// 壳上,正文缺席是合法的。
+//
+// HasContent 不能省,也不能拿 len(Bindings) 兼作它。0012 迁移把这条写进了表形:
+// **无正文行 = 正文未登记**,**有正文行零绑定 = 明确的空约定**——后者是合同已登记
+// 且对任何费用范围都没作约定,与前者的恢复动作完全不同(前者去登记正文,后者无事
+// 可做)。两态在「零绑定」上撞成同一个可观察签名,只有这个布尔分得开。
+// RulePackageID 同理只在 HasContent 为真时有意义:它必存于正文行(库上 NOT NULL)。
+type CustomerContractCatalogueRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+	RulePackageID     string
+	DeclaredAt        time.Time
+	HasContent        bool
+	Bindings          []ControlBindingRow
+}
+
+// SupplierAgreementCatalogueRow 是供应商协议目录上列的一行:一份已入册的供应商
+// 商业协议版本壳。
+//
+// **只有壳**。领域的 SupplierAgreement 还携供应商、采购定价方案与方向,但那些今天
+// 没有正文表——与 CommercialPolicyCatalogueRead 注释里信用政策那一格同形:版本壳
+// 可入册,正文册未建。如实只列壳,不从别处拼一份看起来完整的行;正文表落库时在本
+// 结构上扩字段,那时才谈得上列它们。
+type SupplierAgreementCatalogueRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+}
+
+// CommercialRelationCatalogueRead 是商业关系载体目录的伴生列表读端口(ADR-0077):
+// 管理台 party-contracts 与 supplier-agreements 两页的供数面。
+//
+// 它与 CommercialPolicyCatalogueRead 分开而不并入,因为两者装的不是一类东西:那边
+// 是**策略**(接单规则包、财务控制、价格、结算、时点锚),这边是**商业关系的载体**
+// (客户合同、供应商协议)。合同不是一种策略——把它并进去,那个读口连同它对外的
+// `kind` 参数就开始说谎,而端点路径是对外契约的一部分,日后改的代价比现在分开大。
+//
+// 两类各一个方法,不开按 object_kind 传参的通用口:通用口会让「本上下文支持哪几类
+// 目录查阅」从代码里读不出来,而那正是封闭集要表达的东西(判据同
+// CommercialPolicyCatalogueRead 的「正文表落库时按封闭集扩方法」)。
+//
+// 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
+type CommercialRelationCatalogueRead interface {
+	ListCustomerContracts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CustomerContractCatalogueRow, error)
+	ListSupplierAgreements(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]SupplierAgreementCatalogueRow, error)
+}

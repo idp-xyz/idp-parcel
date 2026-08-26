@@ -31,6 +31,7 @@ func NewOperationsCatalogue(db *bentopg.DB) (*OperationsCatalogue, error) {
 
 var _ ports.ServiceProductCatalogueRead = (*OperationsCatalogue)(nil)
 var _ ports.CommercialPolicyCatalogueRead = (*OperationsCatalogue)(nil)
+var _ ports.CommercialRelationCatalogueRead = (*OperationsCatalogue)(nil)
 
 // requirePositiveLimit 把「忘了传页大小」挡在读口上:静默答一页会把缺参变成一个
 // 没人决定过的页大小(ADR-0077 Decision 五,判据与运营追踪读口同款)。
@@ -414,4 +415,223 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 		return nil, fmt.Errorf("list as-of policy declarations: %w", err)
 	}
 	return declarationRows, nil
+}
+
+// ListCustomerContracts 上列客户合同版本(壳),左连接正文册与控制约定册。
+//
+// 三张表一条语句取回,不分两次:ReadExecutor 不保证两条语句同一快照,分次会拼出
+// 从未同时存在的壳/正文/绑定组合(与 ListAcceptanceRulePackages 同一条理由)。
+//
+// 两级 LEFT JOIN 的第二级挂在**正文**上而不是壳上,这不是写法偏好:0012 的外键
+// 就是绑定→正文,挂壳上会在正文缺席时把绑定行也带进来,而那种行库上根本不存在,
+// 读出来只会是一份自相矛盾的证据。
+func (catalogue *OperationsCatalogue) ListCustomerContracts(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CustomerContractCatalogueRow, error) {
+	if err := requirePositiveLimit("list customer contracts", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list customer contracts: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        content.rule_package_id, content.declared_at,
+		        COALESCE(
+		            json_agg(
+		                json_build_object(
+		                    'chargeScope', binding.charge_scope_ref,
+		                    'policyId',    binding.policy_id,
+		                    'basis',       binding.inapplicability_basis
+		                )
+		                ORDER BY binding.charge_scope_ref
+		            ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
+		            '[]'::json
+		        )
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.customer_contract_content AS content
+		          ON content.tenant_id     = version.tenant_id
+		         AND content.object_kind   = version.object_kind
+		         AND content.object_id     = version.object_id
+		         AND content.version_label = version.version_label
+		   LEFT JOIN party_commercial.customer_contract_control_binding AS binding
+		          ON binding.tenant_id     = content.tenant_id
+		         AND binding.object_kind   = content.object_kind
+		         AND binding.object_id     = content.object_id
+		         AND binding.version_label = content.version_label
+		  WHERE version.tenant_id   = $1
+		    AND version.object_kind = $2
+		  GROUP BY version.object_id, version.version_label, version.scope_ref, version.status,
+		           version.effective_starts_at, version.effective_ends_at, version.published_at,
+		           content.rule_package_id, content.declared_at
+		  ORDER BY version.published_at DESC, version.object_id, version.version_label
+		  LIMIT $3`,
+		tenant.String(),
+		uint8(domain.CustomerContractObject),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list customer contracts: %w", err)
+	}
+	defer rows.Close()
+
+	contractRows := make([]ports.CustomerContractCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.CustomerContractCatalogueRow
+		var status int16
+		var endsAt *time.Time
+		var rulePackage *string
+		var declaredAt *time.Time
+		var bindingsJSON []byte
+		if err := rows.Scan(
+			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&rulePackage, &declaredAt, &bindingsJSON,
+		); err != nil {
+			return nil, fmt.Errorf("list customer contracts: %w", err)
+		}
+		statusWord := domain.CommercialVersionStatus(status).String()
+		if statusWord == "" {
+			return nil, fmt.Errorf("list customer contracts: 版本状态 %d 不在封闭集内", status)
+		}
+		row.Status = statusWord
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		// rule_package_id 在正文表上 NOT NULL,它的在场即正文行的在场——不必再多取
+		// 一列去问「有没有正文」。
+		if rulePackage != nil {
+			row.RulePackageID = *rulePackage
+			row.HasContent = true
+		}
+		if declaredAt != nil {
+			row.DeclaredAt = *declaredAt
+		}
+		bindings, err := controlBindingRowsFromJSON(bindingsJSON)
+		if err != nil {
+			return nil, fmt.Errorf("list customer contracts: %w", err)
+		}
+		row.Bindings = bindings
+		contractRows = append(contractRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list customer contracts: %w", err)
+	}
+	return contractRows, nil
+}
+
+type controlBindingDocument struct {
+	ChargeScope string  `json:"chargeScope"`
+	PolicyID    *string `json:"policyId"`
+	Basis       *string `json:"basis"`
+}
+
+// controlBindingRowsFromJSON 把聚合出来的绑定数组转写成上列行。
+//
+// 两列同空要上抛而不是折成一行空约定:0012 的 CHECK 保证指名策略与显式不适用恰有
+// 一个在场,读回两空说明库上那条约束没生效过——把它当成「没约定」会让一次结构性
+// 损坏看起来像一份如实的记录。
+func controlBindingRowsFromJSON(raw []byte) ([]ports.ControlBindingRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []controlBindingDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("control bindings are not this adapter's shape: %w", err)
+	}
+	bindings := make([]ports.ControlBindingRow, 0, len(documents))
+	for _, document := range documents {
+		if (document.PolicyID == nil) == (document.Basis == nil) {
+			return nil, fmt.Errorf(
+				"control binding %q: 指名策略与显式不适用恰有一个在场,读回的这行两者%s",
+				document.ChargeScope,
+				bothOrNeither(document.PolicyID == nil),
+			)
+		}
+		binding := ports.ControlBindingRow{ChargeScope: document.ChargeScope}
+		if document.PolicyID != nil {
+			binding.PolicyID = *document.PolicyID
+		}
+		if document.Basis != nil {
+			binding.InapplicabilityBasis = *document.Basis
+		}
+		bindings = append(bindings, binding)
+	}
+	return bindings, nil
+}
+
+func bothOrNeither(neither bool) string {
+	if neither {
+		return "皆无"
+	}
+	return "皆有"
+}
+
+// ListSupplierAgreements 上列供应商协议版本(壳)。
+//
+// 只有壳可列——供应商、采购定价方案与方向在领域的 SupplierAgreement 上,但没有正文
+// 表可读(与信用政策同形,见 ports.SupplierAgreementCatalogueRow)。这里不左连接任何
+// 东西,不是漏了。
+func (catalogue *OperationsCatalogue) ListSupplierAgreements(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.SupplierAgreementCatalogueRow, error) {
+	if err := requirePositiveLimit("list supplier agreements", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list supplier agreements: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT object_id, version_label, scope_ref, status,
+		        effective_starts_at, effective_ends_at, published_at
+		   FROM party_commercial.commercial_version
+		  WHERE tenant_id   = $1
+		    AND object_kind = $2
+		  ORDER BY published_at DESC, object_id, version_label
+		  LIMIT $3`,
+		tenant.String(),
+		uint8(domain.SupplierAgreementObject),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list supplier agreements: %w", err)
+	}
+	defer rows.Close()
+
+	agreementRows := make([]ports.SupplierAgreementCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.SupplierAgreementCatalogueRow
+		var status int16
+		var endsAt *time.Time
+		if err := rows.Scan(
+			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+		); err != nil {
+			return nil, fmt.Errorf("list supplier agreements: %w", err)
+		}
+		statusWord := domain.CommercialVersionStatus(status).String()
+		if statusWord == "" {
+			return nil, fmt.Errorf("list supplier agreements: 版本状态 %d 不在封闭集内", status)
+		}
+		row.Status = statusWord
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		agreementRows = append(agreementRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list supplier agreements: %w", err)
+	}
+	return agreementRows, nil
 }
