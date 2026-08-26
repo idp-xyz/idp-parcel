@@ -65,6 +65,11 @@ echo "== 4/6 网络目录登记（network-routing：七族版本行） =="
 echo "== 5/6 关务案件配置登记（customs-compliance：六册） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"
 "$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/02-authority-grant.json"
+# 第二单元灌出「就绪仍有效、授权已撤销」——0006 迁移自注点名必须表达得出的那一格，
+# 案件页提交前件两栏据它展示各自独立的撤销态（票 admin-web-page-wiring-frontier/05）。
+"$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/12-readiness-cn-export-02.json"
+"$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/13-authority-grant-02.json"
+"$BIN/parcel-customs-register" authority-revoke -input "$SEEDS/customs/14-authority-revoke-02.json"
 "$BIN/parcel-customs-register" interpretation-rule -input "$SEEDS/customs/03-interpretation-rule-v1.json"
 "$BIN/parcel-customs-register" interpretation-rule -input "$SEEDS/customs/04-interpretation-rule-v2.json"
 "$BIN/parcel-customs-register" obligation-catalog -input "$SEEDS/customs/05-obligation-catalog.json"
