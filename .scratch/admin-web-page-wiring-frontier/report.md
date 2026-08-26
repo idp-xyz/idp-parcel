@@ -36,14 +36,18 @@
 
 ### 批 B · 登记 CLI 已在、库里零行
 
-**写入方已经建好了，只是种子没用它。** 灌一批种子就有真数据，之后同样只差读面两件。
+**写入方已经建好了，只是种子没用它。** 灌一批种子就有真数据。但这一批内部分两半，分界是**租户维**——它决定了 `ADR-0077` 的读面形状能不能照抄。
 
-| 页 | 表 | 写入方（已在，种子未用） | 额外缺件 |
+| 表族 | 写入方（已在，种子未用） | 租户维 | 额外缺件 |
 |---|---|---|---|
-| **阶段决定与暂停恢复** `stage-admission` | `pilot_governance.authority_interval` / `suspension_decision` / `resumption_decision` | `parcel-governance-register` 的 `authority-interval`、`suspend`、`resume` | `pilotgovernance` **整个 `adapters/http` 包不存在**（含未配置 Intake 与隔离读 Intake 一对）；`adapters/postgres` 五个全是写口 |
-| （无页可归，见下节「导航缺口」） | `visibility_exception` 的六类目录表 | `parcel-ve-register` 的六个子命令 | 同上，VE 有 http 包但无目录查阅端点 |
+| `visibility_exception` 的六类目录 | `parcel-ve-register` 的六个子命令 | **有**（`tenant_id` 在主键里） | 目录查阅端点与读适配器；VE 已有 http 包与隔离读 Intake，形状可逐字照抄 |
+| `pilot_governance.authority_interval` / `suspension_decision` / `resumption_decision` | `parcel-governance-register` 的 `authority-interval`、`suspend`、`resume` | **没有**（三张表都无租户列） | `pilotgovernance` **整个 `adapters/http` 包不存在**；`adapters/postgres` 五个全是写口（`AuthorityIntervals.ListCurrent` 是唯一的列读，但它不收租户参数） |
 
-`stage-admission` 页面所指的「阶段评审」与「接管」两格今天灌不进去：`parcel-governance-register` 自己写着那两类属第二批、未开。所以这一页接出来会是**三格有内容、两格如实说明未开**——那符合仓内纪律，但要在票面里先说清，别让人以为漏了。
+**治理这一半因此不是「阻断物为零」，先要裁一道键形。** `ADR-0077` 把租户放在读口方法签名上，`ADR-0078` 的隔离读准入注入的也是一个**租户**范围——而治理登记册压根没有这一维。试点治理治的是试点本身、不是租户的数据，这多半是对的设计；但那样一来，隔离读准入按什么放行、页面按什么隔离，都要先答。这一问不答就动手，会得到一个「按租户过滤」的读口去查一张没有租户的表——接错看着像接对。
+
+另有一格与键形无关、要在票面先说清：`stage-admission` 页面所指的「阶段评审」与「接管」两格今天灌不进去，`parcel-governance-register` 自己写着那两类属第二批、未开。这一页接出来会是**三格有内容、两格如实说明未开**。
+
+VE 那半没有这个问题：六类目录表全部以 `tenant_id` 打头做主键，`ADR-0077` 的形状逐字成立。它才是批 B 里真正阻断物为零的一半。
 
 ### 批 C · 表在、装载口或写入方缺，要先补机制
 
@@ -89,7 +93,9 @@
 按「机制阻断物为零」排，只有两组：
 
 1. **批 A 合一票**（客户与合同 + 供应商协议）——同表同读法，今天就能开工，做完两页转 live。
-2. **批 B 的治理三格**（`stage-admission`）——要先建 `pilotgovernance/adapters/http` 包，工作量大于批 A，但阻断物同样为零；顺带把 VE 六类目录的读面按同一形状裁出来，因为两者缺的是同一样东西（有 CLI、有表、无查阅面）。
+2. **批 B 的 VE 六类目录**——有 CLI、有表、有租户维，`ADR-0077` 的形状逐字照抄即可；要连带补主数据区的导航条目（今天这六类无页可归）。
+
+治理那半（`stage-admission`）**不排在这两组里**：它要先裁租户维那道键形，裁完才谈得上工作量。裁决归它自己的票。
 
 批 C 里除渠道产品目录与合规限制两页外，其余全部压在同三堵墙上（委托侧无入库通道、生产归属答不出、路由拿不到证据）。**墙不降，这些页接了也只能演空态**——降墙的判据不看本文，看 `.scratch/syn-wall-door-audit/issues/` 的对应机制票，动线上的表述见 `docs/design/synthetic-demo-journey-script.md` 第 5 步。
 
