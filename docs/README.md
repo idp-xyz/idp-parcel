@@ -14,6 +14,7 @@
 - [产品基线](./product/PRODUCT-BASELINE.md)：定义产品定位、独立项目边界以及已经确认的长期领域原则，是判断产品是否偏离既定方向的权威依据。
 - [国际小包网络运营首发产品基线与开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：定义产品核心闭环、关务控制域的位置、首发纵向切片和端到端开发准入，是产品级首发开发入口。
 - [产品故事](./product/PRODUCT-STORY.md)：面向商务洽谈的叙事层——卖给谁、解决什么痛、差异化、AI 路线立场与演进路线；只引用权威文档不定义规则，与基线冲突时以基线为准。
+- [产品业务全景与端到端流程说明书](./product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)：面向产品、售前、实施、运营、研发和测试的统一导览，串联业务主链、产品操作、系统协作、异常分支、模块职责、跨模块交接与试点治理；只组织已有权威文档，不新增领域规则或实例参数。
 - [首发试点范围](./product/PILOT-SCOPE.md)：定义首发试点已经确认的范围原则、明确排除项和待确认参数，是判断首发是否越界的权威依据。
 - [首发试点验收场景矩阵](./product/PILOT-ACCEPTANCE-MATRIX.md)：把试点范围和领域场景转化为带证据层级、验收门槛、责任与待填参数的执行清单，是试点证据规划和最终验收判定的权威入口。
 - [首发试点参数与证据登记册](./product/PILOT-PARAMETER-REGISTER.md)：集中登记真实客户、线路、伙伴、合同、规模和治理参数及其证据引用；只记录实例状态，不重新定义领域规则。
@@ -87,25 +88,26 @@
 1. 阅读本页，了解文档职责和决策记录原则。
 2. 阅读[产品基线](./product/PRODUCT-BASELINE.md)，理解产品边界与长期核心原则。
 3. 阅读[国际小包网络运营首发产品基线与开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)，理解产品主链、核心能力和关务控制域位置。
-4. 阅读[首发试点范围](./product/PILOT-SCOPE.md)，理解首期验证目标和仍待确认的实施参数。
-5. 阅读[首发试点验收场景矩阵](./product/PILOT-ACCEPTANCE-MATRIX.md)，理解每项首发能力采用的证据层级、验收门槛和执行记录要求。
-6. 阅读[首发试点参数与证据登记册](./product/PILOT-PARAMETER-REGISTER.md)，填充真实试点实例及其证据引用。
-7. 阅读[领域上下文地图](./domain/CONTEXT-MAP.md)和[统一领域语言](./domain/GLOSSARY.md)，理解所有权和核心对象区别。
-8. 依次阅读[参与方与商业](./domain/party-commercial/CONTEXT.md)、[小包托运](./domain/parcel-shipment/CONTEXT.md)、[网络与路由](./domain/network-routing/CONTEXT.md)、[节点作业](./domain/node-operations/CONTEXT.md)和[运输履约](./domain/transport-fulfillment/CONTEXT.md)，理解接单到交付的主链边界。
-9. 阅读[小包计价](./domain/parcel-pricing/CONTEXT.md)，理解商业绑定、可执行价卡、纯评价和结算金额责任之间的边界。
-10. 阅读[关务与贸易合规上下文](./domain/customs-compliance/CONTEXT.md)，理解关务控制域及其与物理执行和运输事实的边界。
-11. 依次阅读[全程追踪与异常](./domain/visibility-exception/CONTEXT.md)和[结算与经营核算](./domain/settlement-accounting/CONTEXT.md)，理解追踪、异常、计价采用和运营结算边界。
-12. 后续产品版本如果确认包含 COD，阅读[领域上下文地图](./domain/CONTEXT-MAP.md)中的 `collection-remittance` 边界；详细上下文只在真实范围确认后创建。
-13. 阅读[核心领域场景](./domain/SCENARIOS.md)，检验这些边界如何共同完成实际业务。
-14. 阅读[架构决策记录](./adr/README.md)，理解长期约束背后的取舍。
-15. 阅读[应用用例](./application/README.md)，落实 PN-02 至 PN-07 已形成的通用应用编排，并识别各切片的真实参数、联合验证和代码实现缺口。
-16. 阅读[`PN-02` 真实参数取证与开发交接](./design/pn-02-real-parameter-evidence-and-development-handoff.md)。当前无真实数据时，先按 [`PN02-SYN`](./design/pn-02-synthetic-business-contract-development-task-pack.md) 执行 `S02-W01..W06` 与 `S01-W01..W05`；它汇总 [`PN02-S02`](./design/pn-02-synthetic-ingress-and-production-ownership-development-handoff.md) 和 [`PN02-S01`](./design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md)，只形成隔离 `S`，不解除生产阻断。取得真实资料后，依次按 [`PN02-W01`](./design/pn-02-w01-anchor-commercial-scope-evidence-request.md)、[`PN02-W02`](./design/pn-02-w02-ingress-production-ownership-evidence-request.md)、[`PN02-W03`](./design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md) 和 [`PN02-W04`](./design/pn-02-w04-pre-acceptance-logical-reachability-evidence-request.md) 提交业务证据，再按 [`PN02-W05`](./design/pn-02-w05-joint-verification-and-production-branch-admission.md) 形成同版本联合验证与生产候选证据，并提交 PN-08 阶段评审。
-17. 阅读[`PN-03` 网络收寄与节点作业开发交接](./design/pn-03-network-intake-and-node-operations-development-handoff.md)，按 W01 至 W08 推进接受后路由、两类真实收寄来源、正式承诺、路由复核和节点作业，并只把同版本联合验证结果提交 PN-08 评审。
-18. 阅读[`PN-04` 运输履约与包裹终局开发交接](./design/pn-04-transport-fulfillment-and-parcel-finalization-development-handoff.md)，按 W01 至 W08 推进班次、容量、交接、实际履约、派送和逐包裹终局，并只把同版本联合验证结果提交 PN-08 评审。
-19. 阅读[`PN-06` 追踪、异常与客户披露开发交接](./design/pn-06-visibility-and-exception-development-handoff.md)，按 W01 至 W08 推进追踪投影、ETA/缺口、异常案件和客户披露，并只把同版本联合验证结果提交 PN-08 评审。
-20. 阅读[`PN-07` 运营结算与经营核算开发交接](./design/pn-07-operational-settlement-and-accounting-development-handoff.md)，按 W01 至 W09 推进计价、财务控制、客户/供应商结算、核销、分摊和金额结算，并只把同版本联合账期结果提交 PN-08 评审。
-21. 阅读[`PN-08` 端到端试点与阶段准入开发交接](./design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)，按 W01 至 W09 汇总各切片候选，依次形成回放、影子、限量生产和正式验收的实际证据与 `Go/No-Go`；不要把阶段治理实现成全局运输状态。
-22. 阅读[Go 首个消费者切片实施决策简报](./design/parcel-go-first-consumer-slice-decision-brief.md)，理解产品主线下的技术代码基线、Bento 消费者合同和首个可编码子切片。
+4. 阅读[产品业务全景与端到端流程说明书](./product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)，先建立业务主链、产品操作和模块协作的整体地图。
+5. 阅读[首发试点范围](./product/PILOT-SCOPE.md)，理解首期验证目标和仍待确认的实施参数。
+6. 阅读[首发试点验收场景矩阵](./product/PILOT-ACCEPTANCE-MATRIX.md)，理解每项首发能力采用的证据层级、验收门槛和执行记录要求。
+7. 阅读[首发试点参数与证据登记册](./product/PILOT-PARAMETER-REGISTER.md)，填充真实试点实例及其证据引用。
+8. 阅读[领域上下文地图](./domain/CONTEXT-MAP.md)和[统一领域语言](./domain/GLOSSARY.md)，理解所有权和核心对象区别。
+9. 依次阅读[参与方与商业](./domain/party-commercial/CONTEXT.md)、[小包托运](./domain/parcel-shipment/CONTEXT.md)、[网络与路由](./domain/network-routing/CONTEXT.md)、[节点作业](./domain/node-operations/CONTEXT.md)和[运输履约](./domain/transport-fulfillment/CONTEXT.md)，理解接单到交付的主链边界。
+10. 阅读[小包计价](./domain/parcel-pricing/CONTEXT.md)，理解商业绑定、可执行价卡、纯评价和结算金额责任之间的边界。
+11. 阅读[关务与贸易合规上下文](./domain/customs-compliance/CONTEXT.md)，理解关务控制域及其与物理执行和运输事实的边界。
+12. 依次阅读[全程追踪与异常](./domain/visibility-exception/CONTEXT.md)和[结算与经营核算](./domain/settlement-accounting/CONTEXT.md)，理解追踪、异常、计价采用和运营结算边界。
+13. 后续产品版本如果确认包含 COD，阅读[领域上下文地图](./domain/CONTEXT-MAP.md)中的 `collection-remittance` 边界；详细上下文只在真实范围确认后创建。
+14. 阅读[核心领域场景](./domain/SCENARIOS.md)，检验这些边界如何共同完成实际业务。
+15. 阅读[架构决策记录](./adr/README.md)，理解长期约束背后的取舍。
+16. 阅读[应用用例](./application/README.md)，落实 PN-02 至 PN-07 已形成的通用应用编排，并识别各切片的真实参数、联合验证和代码实现缺口。
+17. 阅读[`PN-02` 真实参数取证与开发交接](./design/pn-02-real-parameter-evidence-and-development-handoff.md)。当前无真实数据时，先按 [`PN02-SYN`](./design/pn-02-synthetic-business-contract-development-task-pack.md) 执行 `S02-W01..W06` 与 `S01-W01..W05`；它汇总 [`PN02-S02`](./design/pn-02-synthetic-ingress-and-production-ownership-development-handoff.md) 和 [`PN02-S01`](./design/pn-02-synthetic-commercial-and-financial-control-development-handoff.md)，只形成隔离 `S`，不解除生产阻断。取得真实资料后，依次按 [`PN02-W01`](./design/pn-02-w01-anchor-commercial-scope-evidence-request.md)、[`PN02-W02`](./design/pn-02-w02-ingress-production-ownership-evidence-request.md)、[`PN02-W03`](./design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md) 和 [`PN02-W04`](./design/pn-02-w04-pre-acceptance-logical-reachability-evidence-request.md) 提交业务证据，再按 [`PN02-W05`](./design/pn-02-w05-joint-verification-and-production-branch-admission.md) 形成同版本联合验证与生产候选证据，并提交 PN-08 阶段评审。
+18. 阅读[`PN-03` 网络收寄与节点作业开发交接](./design/pn-03-network-intake-and-node-operations-development-handoff.md)，按 W01 至 W08 推进接受后路由、两类真实收寄来源、正式承诺、路由复核和节点作业，并只把同版本联合验证结果提交 PN-08 评审。
+19. 阅读[`PN-04` 运输履约与包裹终局开发交接](./design/pn-04-transport-fulfillment-and-parcel-finalization-development-handoff.md)，按 W01 至 W08 推进班次、容量、交接、实际履约、派送和逐包裹终局，并只把同版本联合验证结果提交 PN-08 评审。
+20. 阅读[`PN-06` 追踪、异常与客户披露开发交接](./design/pn-06-visibility-and-exception-development-handoff.md)，按 W01 至 W08 推进追踪投影、ETA/缺口、异常案件和客户披露，并只把同版本联合验证结果提交 PN-08 评审。
+21. 阅读[`PN-07` 运营结算与经营核算开发交接](./design/pn-07-operational-settlement-and-accounting-development-handoff.md)，按 W01 至 W09 推进计价、财务控制、客户/供应商结算、核销、分摊和金额结算，并只把同版本联合账期结果提交 PN-08 评审。
+22. 阅读[`PN-08` 端到端试点与阶段准入开发交接](./design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)，按 W01 至 W09 汇总各切片候选，依次形成回放、影子、限量生产和正式验收的实际证据与 `Go/No-Go`；不要把阶段治理实现成全局运输状态。
+23. 阅读[Go 首个消费者切片实施决策简报](./design/parcel-go-first-consumer-slice-decision-brief.md)，理解产品主线下的技术代码基线、Bento 消费者合同和首个可编码子切片。
 
 ## PN-05 关务专项阅读顺序
 
