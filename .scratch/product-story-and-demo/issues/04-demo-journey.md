@@ -1,7 +1,7 @@
 # 04 演示动线:产品经理视角的合成 S 端到端
 
 Category: feature
-Status: in-progress
+Status: resolved(脚本 2b37b30,勘误与页面层取证 73a789e)
 Owner: MCP-1(队列通道 1)
 Blocked by: 无——范围经 2026-08-26 裁决收敛(见下方 MCP-1 评论)。读面半边全解除
 (master-data-wiring/06,07,08 与本 feature 票 05 均 resolved,读面准入按 ADR-0078 落地,
@@ -116,3 +116,25 @@ Blocked by: 无——范围经 2026-08-26 裁决收敛(见下方 MCP-1 评论)�
   是诚实演示不是降级;保持原范围会把本票挂进无限期。不需要新 ADR——读面放行与写侧
   禁区 ADR-0078 已定,本裁只改本票范围。票头 Status/Owner、「要求」「完成标准」两节
   同笔按裁决改写,原文以 git 史为准(基线 627d339)。
+
+- 2026-08-26 · MCP-1(收口):**resolved。** 交付两笔:脚本文档 `2b37b30`
+  (docs/design/synthetic-demo-journey-script.md + docs/README 入口),勘误与页面层取证
+  `73a789e`。**并行撞车如实记**:2b37b30 由另一会话在本票认领笔(9213acf,12:43 已推送)
+  之后 12:49 落于本地——内容与本会话同期独立取证的端点层事实完全一致,故整体采纳、
+  不另立第二份;其「页面层无法取证(链接农场失效/需 PAT/连不上 github)」一节定因错误,
+  已在 73a789e 勘误(node_modules 是 WSL 侧安装,从 WSL 起 vite 即可),该会话遗留的
+  parcel-api-journey.exe(:19080)已清停。
+  **验证种别(S,本轮实测)**:①复灌——seed.sh --reset 干净重灌全程零报错(37 行登记
+  全落);②启用态——IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01 起 parcel-api,
+  ADR-0078 启动日志在场,放行面 19 条参数化请求全 200(行数见脚本「取证」表),
+  POST /shipment-requests 与 /customer-tracking-view 均 403 ACCESS_CHANNEL_NOT_CONFIGURED;
+  ③页面层——WSL 起 vite(代理指 API),Edge 无头逐页 DOM 取证十页:七主数据页见 SYN-
+  数据行、委托查阅与追踪投影诚实空态(LISTED/PROJECTIONS_LISTED,0 行)、工作台就绪度
+  11/23/1,十页无一处未配置码。未设变量态与非 SYN- 前缀拒启态本轮未重跑,沿用票 05
+  收口验证与 2b37b30 的三态实测记录。
+  **「页面如实标注演示态」的落点**:数据在带 SYN- 前缀(PN-02 合成口径)、启用放行必写
+  启动日志(ADR-0078)、脚本文档全文标注 S 与生产库禁令;页面组件不加横幅——合成性是
+  环境属性而非页面属性(page-registry 的 demo 档是模块属性,七页属接线档),加横幅反而
+  把「页面已接真端点」说成「页面是演示件」。
+  **零代码改动**:本票全程只动 docs 与 .scratch,.go/.ts/.sql 零改,故无构建信号可报;
+  委托侧的墙与重启条件照脚本第 5 步记录,本票不降墙。
