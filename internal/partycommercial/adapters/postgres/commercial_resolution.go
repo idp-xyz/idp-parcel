@@ -137,18 +137,29 @@ func (repository *CommercialResolutions) Save(
 }
 
 type closureDocument struct {
-	Outcome      uint8             `json:"outcome"`
-	ResolutionID string            `json:"resolutionId"`
-	TenantID     string            `json:"tenantId"`
-	Customer     string            `json:"customerAccountId"`
-	LegalEntity  string            `json:"legalEntity"`
-	Scope        string            `json:"scope"`
-	Purpose      uint8             `json:"purpose"`
-	Direction    uint8             `json:"priceDirection"`
-	AnchorAt     time.Time         `json:"anchorAt"`
-	AnchorPolicy string            `json:"anchorPolicy"`
-	ViewRevision string            `json:"viewRevision"`
-	Adopted      []adoptedDocument `json:"adopted"`
+	Outcome      uint8     `json:"outcome"`
+	ResolutionID string    `json:"resolutionId"`
+	TenantID     string    `json:"tenantId"`
+	Customer     string    `json:"customerAccountId"`
+	LegalEntity  string    `json:"legalEntity"`
+	Scope        string    `json:"scope"`
+	Purpose      uint8     `json:"purpose"`
+	Direction    uint8     `json:"priceDirection"`
+	AnchorAt     time.Time `json:"anchorAt"`
+	AnchorPolicy string    `json:"anchorPolicy"`
+	// Settlement 只在必需依据含结算政策时出现（ADR-0044 的「含则必填、不含则必缺」）。
+	// 它必须原样写下来：解析键的最小身份把选择器算在内，落库时丢掉，读回的键就立不起来，
+	// 于是一份写得进去的闭包永远读不回来——写成功、读失败，两侧都不报错。
+	Settlement   *settlementSelectorDocument `json:"settlement,omitempty"`
+	ViewRevision string                      `json:"viewRevision"`
+	Adopted      []adoptedDocument           `json:"adopted"`
+}
+
+type settlementSelectorDocument struct {
+	Counterparty string `json:"counterparty"`
+	Contract     string `json:"contract"`
+	ChargeScope  string `json:"chargeScope"`
+	Currency     string `json:"currency"`
 }
 
 type adoptedDocument struct {
@@ -157,6 +168,21 @@ type adoptedDocument struct {
 	// Form 只在采用了服务产品时出现（ADR-0050）。omitempty：既有不含形态的快照
 	// 读回仍是缺席，不发明 NETWORK_SERVICE。
 	Form string `json:"form,omitempty"`
+	// SettlementPolicy 只在采用了结算政策时出现（ADR-0044）。方式与六维适用范围整份留在
+	// 快照里，不回登记册按版本重读：登记册那份正文改一次，一次已固定的解析就会改口说自己
+	// 当初采用的是别的方式，而快照的全部意义就是不许它改口（ADR-0028）。
+	SettlementPolicy *settlementPolicyDocument `json:"settlementPolicy,omitempty"`
+}
+
+type settlementPolicyDocument struct {
+	Method       uint8      `json:"method"`
+	LegalEntity  string     `json:"legalEntity"`
+	Counterparty string     `json:"counterparty"`
+	Contract     string     `json:"contract"`
+	ChargeScope  string     `json:"chargeScope"`
+	Currency     string     `json:"currency"`
+	StartsAt     time.Time  `json:"startsAt"`
+	EndsAt       *time.Time `json:"endsAt,omitempty"`
 }
 
 func documentOfClosure(closure domain.CommercialClosure) closureDocument {
@@ -173,6 +199,14 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		AnchorAt:     key.Anchor.At().UTC(),
 		AnchorPolicy: key.Anchor.PolicyVersion().String(),
 	}
+	if key.Settlement.Declared() {
+		document.Settlement = &settlementSelectorDocument{
+			Counterparty: key.Settlement.Counterparty.String(),
+			Contract:     key.Settlement.Contract.String(),
+			ChargeScope:  key.Settlement.ChargeScope.String(),
+			Currency:     key.Settlement.Currency.String(),
+		}
+	}
 	if revision, ok := closure.ViewRevision(); ok {
 		document.ViewRevision = revision.String()
 	}
@@ -184,7 +218,30 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		if product, ok := adopted.ServiceProduct(); ok {
 			item.Form = product.Form().String()
 		}
+		if policy, ok := adopted.SettlementPolicy(); ok {
+			item.SettlementPolicy = documentOfSettlementPolicy(policy)
+		}
 		document.Adopted = append(document.Adopted, item)
+	}
+	return document
+}
+
+func documentOfSettlementPolicy(policy domain.SettlementPolicy) *settlementPolicyDocument {
+	applicability := policy.Applicability()
+	document := &settlementPolicyDocument{
+		Method:       uint8(policy.Method()),
+		LegalEntity:  applicability.LegalEntity().String(),
+		Counterparty: applicability.Counterparty().String(),
+		Contract:     applicability.Contract().String(),
+		ChargeScope:  applicability.ChargeScope().String(),
+		Currency:     applicability.Currency().String(),
+		StartsAt:     applicability.Effective().StartsAt().UTC(),
+	}
+	// 开放结束是合法形状（一份政策可以适用到被替代为止），所以终止时刻缺席与零值必须
+	// 分开写：写成零值读回时 NewEffectiveInterval 会把它当成有界区间的坏边界而整份拒掉。
+	if end, bounded := applicability.Effective().EndsAt(); bounded {
+		utc := end.UTC()
+		document.EndsAt = &utc
 	}
 	return document
 }
@@ -224,6 +281,11 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 	if key.Scope, err = domain.NewCommercialScopeReference(document.Scope); err != nil {
 		return domain.CommercialClosure{}, err
 	}
+	if document.Settlement != nil {
+		if key.Settlement, err = document.Settlement.selector(); err != nil {
+			return domain.CommercialClosure{}, err
+		}
+	}
 
 	adopted := make([]domain.RehydrateAdoptedBasisSpec, 0, len(document.Adopted))
 	bases := make([]domain.CommercialObjectKind, 0, len(document.Adopted))
@@ -242,6 +304,14 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			spec.ServiceProduct = product
 			spec.HasServiceProduct = true
 		}
+		if item.SettlementPolicy != nil {
+			policy, err := item.SettlementPolicy.policy(version)
+			if err != nil {
+				return domain.CommercialClosure{}, err
+			}
+			spec.SettlementPolicy = policy
+			spec.HasSettlementPolicy = true
+		}
 		adopted = append(adopted, spec)
 		bases = append(bases, kind)
 	}
@@ -255,6 +325,81 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 		ViewRevision: viewRevision,
 		Adopted:      adopted,
 	})
+}
+
+func (document settlementSelectorDocument) selector() (domain.SettlementSelector, error) {
+	var selector domain.SettlementSelector
+	var err error
+	if selector.Counterparty, err = domain.NewCounterpartyReference(document.Counterparty); err != nil {
+		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	if selector.Contract, err = domain.NewCommercialVersionLabel(document.Contract); err != nil {
+		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	if selector.ChargeScope, err = domain.NewChargeScopeReference(document.ChargeScope); err != nil {
+		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	if selector.Currency, err = domain.NewCurrencyCode(document.Currency); err != nil {
+		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	return selector, nil
+}
+
+// policy 把快照里的结算正文译回政策。方式按封闭二值逐格认，未知取值响亮失败：一份读不懂
+// 方式的政策若吸收成预付，一个约定了账期的客户会在这里被冻资金（ADR-0044 只留两格，第三
+// 格「客户级默认」正是本上下文明禁的那个）。
+func (document settlementPolicyDocument) policy(
+	version domain.CommercialVersion,
+) (domain.SettlementPolicy, error) {
+	var method domain.SettlementMethod
+	switch document.Method {
+	case uint8(domain.PrepaidMethod):
+		method = domain.PrepaidMethod
+	case uint8(domain.TermsMethod):
+		method = domain.TermsMethod
+	default:
+		return domain.SettlementPolicy{}, fmt.Errorf(
+			"load commercial resolution: 无法翻译的结算方式 %d", document.Method)
+	}
+
+	legalEntity, err := domain.NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	counterparty, err := domain.NewCounterpartyReference(document.Counterparty)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	contract, err := domain.NewCommercialVersionLabel(document.Contract)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	chargeScope, err := domain.NewChargeScopeReference(document.ChargeScope)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	currency, err := domain.NewCurrencyCode(document.Currency)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	endsAt := time.Time{}
+	if document.EndsAt != nil {
+		endsAt = *document.EndsAt
+	}
+	effective, err := domain.NewEffectiveInterval(document.StartsAt, endsAt)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	applicability, err := domain.NewSettlementApplicability(
+		legalEntity, counterparty, contract, chargeScope, currency, effective)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	policy, err := domain.NewSettlementPolicy(version, method, applicability)
+	if err != nil {
+		return domain.SettlementPolicy{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	return policy, nil
 }
 
 // rehydrateServiceProduct 把快照里的形态字符串译回产品。未知取值响亮失败，不吸收成

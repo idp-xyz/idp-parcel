@@ -179,6 +179,13 @@ func (selector SettlementSelector) declared() bool {
 		selector.Currency.valid()
 }
 
+// Declared 让持久化面判断该不该把选择器写进快照。它不另立判据而是转调 declared：
+// 「选择器齐了没有」在本上下文只能有一处定义，落库那侧若自己数四个字段，日后加一维时
+// 那份快照会少写一维，而它写得进去、读回来却立不起最小身份。
+func (selector SettlementSelector) Declared() bool {
+	return selector.declared()
+}
+
 func (selector SettlementSelector) empty() bool {
 	return !selector.Counterparty.valid() &&
 		!selector.Contract.valid() &&

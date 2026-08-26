@@ -11,12 +11,19 @@ import (
 var ErrInvalidRehydratedResolution = errors.New("party commercial: invalid rehydrated commercial resolution")
 
 // RehydrateAdoptedBasisSpec 是闭包里一项已采用依据在库里的样子。版本身份始终固定；
-// 服务产品快照在场时一并重建（ADR-0050），价格/结算政策嵌套仍随闭包另票。
+// 服务产品（ADR-0050）与结算政策（ADR-0044）快照在场时一并重建。
+//
+// 价格政策不在其中：`NewCommercialPricePolicy` 要方案方向与跨向转换两个入参才立得起来，
+// 而 `CommercialPricePolicy` 并不留存它们——照本形状重建就得跳过那道绑定校验，或者在
+// 快照里再存一份只为过校验的输入。两条路都要先决定「已固定的价格政策还要不要重验绑定」，
+// 那是一道决定，不是一段代码，留给它自己的票。
 type RehydrateAdoptedBasisSpec struct {
-	Kind              CommercialObjectKind
-	Version           CommercialVersion
-	ServiceProduct    ServiceProduct
-	HasServiceProduct bool
+	Kind                CommercialObjectKind
+	Version             CommercialVersion
+	ServiceProduct      ServiceProduct
+	HasServiceProduct   bool
+	SettlementPolicy    SettlementPolicy
+	HasSettlementPolicy bool
 }
 
 // RehydrateCommercialClosureSpec 是一次已固定解析在库里的样子。字段一律当数据收下，
@@ -65,6 +72,19 @@ func RehydrateCommercialClosure(spec RehydrateCommercialClosureSpec) (Commercial
 			}
 			basis.serviceProduct = item.ServiceProduct
 			basis.hasServiceProduct = true
+		}
+		if item.HasSettlementPolicy {
+			// 与服务产品同纪律：政策必须挂在结算政策这一格上，且正文所指的版本就是本项
+			// 采用的那一版。允许两者不一致，闭包就会声称「采用了 A 版，方式按 B 版」——
+			// 而调用方正是凭这份方式决定冻不冻款。
+			if item.Kind != SettlementPolicyObject ||
+				item.SettlementPolicy.version.objectID != item.Version.objectID ||
+				item.SettlementPolicy.version.version != item.Version.version ||
+				!item.SettlementPolicy.method.valid() {
+				return CommercialClosure{}, rehydratedResolutionRefusal("结算政策快照与采用版本对不上")
+			}
+			basis.settlementPolicy = item.SettlementPolicy
+			basis.hasSettlementPolicy = true
 		}
 		adopted = append(adopted, basis)
 	}

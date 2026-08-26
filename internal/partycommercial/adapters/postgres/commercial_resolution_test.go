@@ -71,6 +71,94 @@ func TestResolutionRoundTripsTheAdoptedServiceProduct(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0044 —— 采用了结算政策的闭包必须读得回来，且方式与六维适用范围随它读回。
+//
+// 这一票之前是「写得进、读不回」：解析键上的结算选择器没落库，读回时最小身份立不起来，
+// 整份闭包被重建门拒掉；就算过了那道门，方式也没落库，`SettlementPolicy()` 一律缺席。
+// 两处都不报错——Save 答 SAVED，Load 答一句像是「快照坏了」的话。生产今天走不到这里
+// （PS 的解析键登记面明拒结算政策依据），所以它一直没被撞见；但下游 SA 正是凭这份方式
+// 决定冻不冻款，缺席会被读成「商业侧没登记过控制」。
+func TestResolutionRoundTripsTheAdoptedSettlementPolicy(t *testing.T) {
+	repository, transactor, _ := newResolutions(t)
+	ctx := t.Context()
+	closure := uniqueClosureWithSettlementPolicy(t, domain.TermsMethod)
+
+	mustSaveResolution(t, transactor, ctx, repository, closure)
+
+	found, ok, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+	if err != nil {
+		t.Fatalf("按标识取回：%v", err)
+	}
+	if !ok {
+		t.Fatal("写入后 found=false")
+	}
+
+	selector := found.ResolutionKey().Settlement
+	if !selector.Declared() {
+		t.Fatalf("读回的解析键丢了结算选择器：%#v", selector)
+	}
+	if selector.ChargeScope.String() != "charge-express" || selector.Currency.String() != "SYN" {
+		t.Fatalf("选择器读回后变了形：%#v", selector)
+	}
+
+	adopted, present := found.AdoptedFor(domain.SettlementPolicyObject)
+	if !present {
+		t.Fatal("读回的闭包丢了结算政策依据")
+	}
+	policy, observable := adopted.SettlementPolicy()
+	if !observable {
+		t.Fatal("政策正文没有随闭包读回——方式又不可观察了")
+	}
+	if policy.Method() != domain.TermsMethod {
+		t.Fatalf("method = %q, want TERMS；从预付默认里长出来的账期正是 ADR-0044 要堵的",
+			policy.Method())
+	}
+	if policy.Version().ObjectID() != adopted.Version().ObjectID() ||
+		policy.Version().Version() != adopted.Version().Version() {
+		t.Fatalf("政策所指版本 %s/%s 与采用版本 %s/%s 对不上",
+			policy.Version().ObjectID(), policy.Version().Version(),
+			adopted.Version().ObjectID(), adopted.Version().Version())
+	}
+	applicability := policy.Applicability()
+	if applicability.LegalEntity().String() != "legal-1" ||
+		applicability.Counterparty().String() != "customer-1" ||
+		applicability.Contract().String() != "contract-1/v1" ||
+		applicability.ChargeScope().String() != "charge-express" ||
+		applicability.Currency().String() != "SYN" {
+		t.Fatalf("六维适用范围读回后变了形：%#v", applicability)
+	}
+	if end, bounded := applicability.Effective().EndsAt(); !bounded ||
+		!end.Equal(effectiveAtRow.Add(90*24*time.Hour)) {
+		t.Fatalf("有效区间终止时刻读回后变了形：end=%v bounded=%v", end, bounded)
+	}
+}
+
+// Covers: 不要结算依据的闭包读回后选择器必须仍然缺席（ADR-0044「含则必填、不含则必缺」）。
+// 它与上一例配对：只证「写得进读得回」会让一个无条件写下空选择器的实现也通过，而那样的
+// 快照读回时会因为「不该带却带了」被重建门整份拒掉。
+func TestAClosureWithoutSettlementCarriesNoSelectorBack(t *testing.T) {
+	repository, transactor, _ := newResolutions(t)
+	ctx := t.Context()
+	closure := uniqueClosure(t)
+
+	mustSaveResolution(t, transactor, ctx, repository, closure)
+
+	found, ok, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+	if err != nil || !ok {
+		t.Fatalf("按标识取回：found=%v err=%v", ok, err)
+	}
+	if found.ResolutionKey().Settlement.Declared() {
+		t.Fatal("不要结算依据的闭包读回后带上了选择器")
+	}
+	adopted, present := found.AdoptedFor(domain.CustomerContractObject)
+	if !present {
+		t.Fatal("读回的闭包丢了客户合同")
+	}
+	if _, observable := adopted.SettlementPolicy(); observable {
+		t.Fatal("客户合同这一格读回后长出了结算政策")
+	}
+}
+
 func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 	repository, transactor, pool := newResolutions(t)
 	ctx := t.Context()
@@ -309,6 +397,79 @@ func uniqueClosureWithServiceProduct(t *testing.T) domain.CommercialClosure {
 		t.Fatal("闭包没采用服务产品")
 	} else if _, present := adopted.ServiceProduct(); !present {
 		t.Fatal("登记了产品的闭包 ServiceProduct() 仍缺席")
+	}
+	return closure
+}
+
+// uniqueClosureWithSettlementPolicy 造一份含合同、规则包与结算政策的唯一已解析闭包——
+// 正是接受控制目的下下游 SA 要凭以问「要不要控制、按哪种方式」的那个形状。政策的适用
+// 范围与键上的选择器逐维对齐，否则解析选不中它。
+func uniqueClosureWithSettlementPolicy(
+	t *testing.T,
+	method domain.SettlementMethod,
+) domain.CommercialClosure {
+	t.Helper()
+
+	registry := domain.NewCommercialRegistry()
+	for _, version := range []domain.CommercialVersion{
+		effectiveContract(t, "contract-1", "v1", "digest-1"),
+		effectiveRules(t, "rules-1", "v1", "digest-r1"),
+	} {
+		if _, err := registry.Register(version); err != nil {
+			t.Fatalf("登记 %s：%v", version.ObjectID(), err)
+		}
+	}
+	policyVersion := effectiveVersionOfKind(t, domain.SettlementPolicyObject, "policy-1", "v1", "digest-s1")
+	if _, err := registry.Register(policyVersion); err != nil {
+		t.Fatalf("登记结算政策版本：%v", err)
+	}
+	interval, err := domain.NewEffectiveInterval(effectiveAtRow, effectiveAtRow.Add(90*24*time.Hour))
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	applicability, err := domain.NewSettlementApplicability(
+		pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		pcValue(t, domain.NewCounterpartyReference, "customer-1"),
+		pcValue(t, domain.NewCommercialVersionLabel, "contract-1/v1"),
+		pcValue(t, domain.NewChargeScopeReference, "charge-express"),
+		pcValue(t, domain.NewCurrencyCode, "SYN"),
+		interval,
+	)
+	if err != nil {
+		t.Fatalf("结算适用范围：%v", err)
+	}
+	policy, err := domain.NewSettlementPolicy(policyVersion, method, applicability)
+	if err != nil {
+		t.Fatalf("构造结算政策：%v", err)
+	}
+	registry.RegisterSettlementPolicy(policy)
+
+	anchor, err := domain.NewSelectionAnchor(effectiveAtRow.Add(24*time.Hour),
+		pcValue(t, domain.NewAnchorPolicyVersion, "anchor-policy-v1"))
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	closure := domain.ResolveCommercialClosure(registry, domain.ClosureResolutionKey{
+		TenantID:             pcTenant(t, "tenant-1"),
+		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:                pcScope(t),
+		Purpose:              domain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		Settlement: domain.SettlementSelector{
+			Counterparty: pcValue(t, domain.NewCounterpartyReference, "customer-1"),
+			Contract:     pcValue(t, domain.NewCommercialVersionLabel, "contract-1/v1"),
+			ChargeScope:  pcValue(t, domain.NewChargeScopeReference, "charge-express"),
+			Currency:     pcValue(t, domain.NewCurrencyCode, "SYN"),
+		},
+		RequiredBases: []domain.CommercialObjectKind{
+			domain.CustomerContractObject,
+			domain.AcceptanceRulePackageObject,
+			domain.SettlementPolicyObject,
+		},
+	}, nil)
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", closure.Outcome())
 	}
 	return closure
 }
