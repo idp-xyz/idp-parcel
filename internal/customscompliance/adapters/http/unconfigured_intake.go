@@ -46,6 +46,6 @@ func (UnconfiguredIntake) IntakeResult(context.Context, *http.Request) (applicat
 
 // IntakeCatalogueQuery 同 IntakeResult：不读请求，只答未配置。运营接入面的认证方式
 // 同属接入渠道实例半边（ADR-0077 Decision 三），未登记前不铸造任何作用域。
-func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (RuleCatalogueQuery, error) {
-	return RuleCatalogueQuery{}, ErrAccessChannelNotConfigured
+func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
+	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }

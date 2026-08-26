@@ -250,6 +250,34 @@ func (unwiredComplianceRules) ListInterpretationRules(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredCaseRegisters 是案件配置三册列表读口的占位，方法表与
+// customsports.CaseRegisterCatalogueRead 逐一对上（票 admin-web-page-wiring-frontier/05）。
+type unwiredCaseRegisters struct{}
+
+func (unwiredCaseRegisters) ListReadinessJudgments(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsdomain.ReadinessJudgment, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseRegisters) ListSubmissionAuthorities(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsdomain.SubmissionAuthorization, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseRegisters) ListClosureObligations(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.ClosureObligationCatalogueEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCommercialCatalogue struct{}
 
 func (unwiredCommercialCatalogue) ListServiceProducts(

@@ -60,6 +60,7 @@ func assembleBusinessEndpoints(
 	referenceSeries pricinghttp.ReferenceSeriesCatalogueReader,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	complianceRules customshttp.RuleCatalogueReader,
+	caseRegisters customshttp.CaseRegisterCatalogueReader,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
@@ -100,6 +101,10 @@ func assembleBusinessEndpoints(
 		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
+		// 案件配置册查阅与规则库查阅同属关务租户内运营读面，共用同一个
+		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
+		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
+		{Pattern: "/customs-case-registers", Handler: customshttp.NewQueryCaseRegistersEndpoint(complianceRulesIntake, caseRegisters)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},

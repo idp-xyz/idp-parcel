@@ -10,10 +10,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// RuleCatalogueQuery 是一次已授权的合规规则库查阅（ADR-0077、CONTEXT「合规判断」的
-// 规则登记面）。作用域来自认证与授权结果，授权边界只有租户——没有客户维；页大小由
-// 接入面按渠道契约裁决——两样都不采信调用方自报。
-type RuleCatalogueQuery struct {
+// CatalogueQuery 是一次已授权的主数据目录查阅（ADR-0077）：合规规则库
+// （/customs-compliance-rules）与案件配置册（/customs-case-registers）两个端点共用
+// 同一个查询形状与同一路准入。作用域来自认证与授权结果，授权边界只有租户——没有
+// 客户维；页大小由接入面按渠道契约裁决——两样都不采信调用方自报。
+type CatalogueQuery struct {
 	Scope domain.OperationsQueryScope
 	Limit int
 }
@@ -24,7 +25,7 @@ type RuleCatalogueQuery struct {
 // 运营接入面的认证方式属 `PAR-INT-01` 待提供；采信自报租户会穿透 ADR-0003 的隔离
 // 边界。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
 type CatalogueQueryIntake interface {
-	IntakeCatalogueQuery(ctx context.Context, request *http.Request) (RuleCatalogueQuery, error)
+	IntakeCatalogueQuery(ctx context.Context, request *http.Request) (CatalogueQuery, error)
 }
 
 // RuleCatalogueReader 是本端点消费的读口。查阅不触发判断、决定或披露——所以这里接

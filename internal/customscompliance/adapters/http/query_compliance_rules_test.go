@@ -27,28 +27,28 @@ type grantedCatalogueIntake struct {
 
 func (intake grantedCatalogueIntake) IntakeCatalogueQuery(
 	_ context.Context, _ *http.Request,
-) (customshttp.RuleCatalogueQuery, error) {
+) (customshttp.CatalogueQuery, error) {
 	reference, err := domain.NewOperationsScopeReference("OPS-SCOPE-1")
 	if err != nil {
-		return customshttp.RuleCatalogueQuery{}, err
+		return customshttp.CatalogueQuery{}, err
 	}
 	tenant, err := domain.NewTenantID(intake.tenant)
 	if err != nil {
-		return customshttp.RuleCatalogueQuery{}, err
+		return customshttp.CatalogueQuery{}, err
 	}
 	scope, err := domain.NewOperationsQueryScope(reference, tenant)
 	if err != nil {
-		return customshttp.RuleCatalogueQuery{}, err
+		return customshttp.CatalogueQuery{}, err
 	}
-	return customshttp.RuleCatalogueQuery{Scope: scope, Limit: intake.limit}, nil
+	return customshttp.CatalogueQuery{Scope: scope, Limit: intake.limit}, nil
 }
 
 type failingCatalogueIntake struct{ err error }
 
 func (intake failingCatalogueIntake) IntakeCatalogueQuery(
 	_ context.Context, _ *http.Request,
-) (customshttp.RuleCatalogueQuery, error) {
-	return customshttp.RuleCatalogueQuery{}, intake.err
+) (customshttp.CatalogueQuery, error) {
+	return customshttp.CatalogueQuery{}, intake.err
 }
 
 // stubRuleCatalogue 是读口替身：记录收到的键，交回预置的条目或故障。

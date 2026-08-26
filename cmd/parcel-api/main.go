@@ -119,6 +119,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	caseRegisters, err := ccpostgres.NewCaseRegisterCatalogue(db)
+	if err != nil {
+		return err
+	}
 	commercialCatalog, err := pcpostgres.NewOperationsCatalogue(db)
 	if err != nil {
 		return err
@@ -145,6 +149,7 @@ func run(logger *slog.Logger) error {
 			pricingCatalog,
 			networkCatalog,
 			complianceRules,
+			caseRegisters,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,

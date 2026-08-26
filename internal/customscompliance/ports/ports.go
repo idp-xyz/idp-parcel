@@ -758,3 +758,45 @@ type RuleCatalogueRead interface {
 		limit int,
 	) ([]InterpretationRuleEntry, error)
 }
+
+// ClosureObligationCatalogueEntry 是关闭义务目录上列的一行：目录行（案件与登记时间）
+// 连同该案全部已登记义务项。Items 直接用登记面的 ObligationRegistration——上列回显的
+// 就是登记进去的东西（义务项加适用区间），不为读面另铸第二种词形。空 Items 是「目录
+// 已登记、当前无义务项」的如实一格；整行缺席才是「目录未登记 → 未决」（0008 迁移
+// 自注：这两格含义相反，压成一个信号会把未决读成可关）。
+type ClosureObligationCatalogueEntry struct {
+	Case         domain.CustomsCaseID
+	RegisteredAt time.Time
+	Items        []ObligationRegistration
+}
+
+// CaseRegisterCatalogueRead 是案件配置登记册的伴生列表读口（ADR-0077 Decision 一/五）：
+// 管理台 customs-cases 页上列三本——就绪判断、提交授权与关闭义务目录（票
+// admin-web-page-wiring-frontier/04 的归属裁决）。四本案件配置册的另一本（门禁条件）
+// 归 customs-restrictions 页，随该页的读口另立，不进本口；建案要求与解释规则两本是
+// 规则库页的（RuleCatalogueRead 注释里那条词汇对照）。三本各一个方法，封闭集从代码
+// 里读得出来（判据同 CommercialRelationCatalogueRead）。
+//
+// 就绪与授权两口直接交回领域判断对象：撤销态在对象上有格可表（Revocation 出口），
+// 上列不必另造行形状——把失效读成未配置或仍有效正是这两个类型要挡的误读，读口换个
+// 扁平行形状就等于把那道门拆了重考一遍。不拓宽 LoadReadiness / LoadSubmissionAuthority
+// / LoadObligationItems 三个点读口：点读按键伺候编排判断（义务盘点还带业务截点），
+// 上列按租户伺候查阅，两个调用面各答各的问题，扩点读签名会拆全部编排侧测试替身
+// （ADR-0077 Decision 五）。租户在签名上、limit 非正拒、空册答空列表。
+type CaseRegisterCatalogueRead interface {
+	ListReadinessJudgments(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]domain.ReadinessJudgment, error)
+	ListSubmissionAuthorities(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]domain.SubmissionAuthorization, error)
+	ListClosureObligations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ClosureObligationCatalogueEntry, error)
+}

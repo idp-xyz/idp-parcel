@@ -73,6 +73,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/pricing-reference-series":       true,
 	"/network-catalog":                true,
 	"/customs-compliance-rules":       true,
+	"/customs-case-registers":         true,
 	"/commercial-service-products":    true,
 	"/commercial-policies":            true,
 	"/commercial-customer-contracts":  true,
