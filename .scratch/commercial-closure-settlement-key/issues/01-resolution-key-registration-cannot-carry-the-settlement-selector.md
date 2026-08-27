@@ -1,7 +1,8 @@
 # 解析键登记面装不下结算选择器——接受前控制链因此整条走不通，且合同维有一处循环要先裁
 
 Category: enhancement
-Status: ready-for-agent（裁决未出，见「三案」；实现前须先定案）
+Status: blocked（裁决已出＝乙案，落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)；PC 解析顺序、PS 登记面与种子三段已落，收口卡在两条上游缺口，见末节「进展与两条阻断」）
+Blocked by: 02, 03
 
 发现于 [sa-preacceptance-policy-view/01](../../sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md) 收口时留的那条遗留（锚 `0fb4040`）。那一票把 SA 这一侧全部做完了——控制策略视图有了生产适配器，判据 B 该口从缺转有——但适配器**暂不装进 `cmd/parcel-api`**，因为上游形不成它要读的那份闭包。本票就是那一道。
 
@@ -49,3 +50,67 @@ Status: ready-for-agent（裁决未出，见「三案」；实现前须先定案
 ## 地盘
 
 `internal/parcelshipment/adapters/{partycommercial,postgres}`、`internal/partycommercial/domain`、`migrations/parcel_shipment/`、`cmd/parcel-commercial`、`cmd/parcel-api` 接受链装配。MCP-1 于 `0fb4040` 时在 `internal/customscompliance/**`（前沿票 05/06），无重叠；`cmd/parcel-api` 那一处本票只加装配行、不增删端点。
+
+## 进展与两条阻断（2026-08-27 · MCP-1，锚 `9c95d7c`）
+
+裁决取乙案，另落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)。「实现范围」六条里已落四条：
+
+- **PC 领域层的两段解析** — `resolutionOrder` 把结算政策排到最后，`adoptedContractLabel` 取解出的合同补第四维，`premiseUnresolved` 单独成格。
+- **PS 登记面扩三维、放行 `SETTLEMENT_POLICY`** — `8dfe2e4`；`validateSettlement` 与迁移 `0008` 的 `..._settlement_paired` 两道镜像。
+- **`cmd/parcel-commercial` 跟随** — 同笔，`settlementSelectorDocument` 三维、给了节却少一维就响亮失败。
+- **种子补一行含结算依据的登记** — `9c95d7c`。
+
+### 阻断一：结算政策没有任何发布路径，因此种子里发不出一份可被采用的结算政策
+
+`ports.PublicationRegistry.SaveSettlementPolicy` 有端口、有真库适配器
+（`internal/partycommercial/adapters/postgres/settlement_policy.go`）、有配对用例，但
+**没有任何生产调用方**——`PublishCommercialAuthorityHandler` 的 `declarationWrites` 里没有
+结算政策这一路，`cmd/parcel-commercial` 的发布批文档也没有承载它的字段。种子 README 的
+「已知边界」早已记着这条（与价格政策、服务产品形态同处），写它时那还只是「商业策略页
+两列为空」；本票把它顶成了主径上的墙。
+
+真库取证（演示库灌完种子后跑「折键 → 解闭包」，锚 `9c95d7c`）：
+
+    formed=true purpose=ACCEPTANCE_CONTROL
+    bases=[SERVICE_PRODUCT ACCEPTANCE_RULE_PACKAGE CUSTOMER_CONTRACT SETTLEMENT_POLICY]
+    settlement="SYN-ACCOUNT-01"/"SYN-CHARGE-PREPAID"/"CNY" contract=""
+    outcome=NO_APPLICABLE_BASIS unresolved=[SETTLEMENT_POLICY]
+    conflicting=[] premiseUnresolved=[]
+
+`premiseUnresolved` 空说明合同解出来了、这一项是真的问过；剩下的唯一成因是本范围里没有
+已发布的结算政策版本。补它要在 `internal/partycommercial/{application,ports}` 加一路声明
+通道（`SaveSettlementPolicy` 交回的是 `SettlementPolicySaveOutcome` 而不是
+`DeclarationSaveOutcome`，`declarationWrite` 的形状要跟着改一格），并决定价格政策的同处
+缺席要不要一并补——那是另一道决定，且不在本票地盘内（本票只写 `internal/partycommercial/domain`）。
+
+### 阻断二：`cmd/parcel-api` 根本没有接受链
+
+票面「实现范围」最后一条与 sa-preacceptance-policy-view/01 的占号核对都假定
+`cmd/parcel-api` 有一条接受链等着装配适配器。实读代码不成立：
+
+- `NewAdvanceAcceptanceJudgmentHandler`、`NewAdvanceFinancialControlJudgmentHandler`、
+  `NewFormAcceptanceDecisionHandler` 三个编排的构造函数在 `cmd/` 下**只有**
+  `cmd/parcel-dispatch/synthetic_v0_test.go` 一个调用点，那是测试夹具。
+- `saapplication.NewApplyPreAcceptanceControlHandler` 同样只在测试里被调；
+  `cmd/parcel-api/assemble_withdrawal.go` 装的是同一个适配器的**释放**半边，`Apply` 显式留空。
+- SA→PC 控制策略适配器 `partycommercial.NewPreAcceptanceControlPolicy` 零生产调用方。
+- `assembleBusinessEndpoints` 的端点清单里没有任何接受判断入口。
+
+所以「装上适配器」不是加一行装配，而是先给接受链一个装配点与进程入口——那是增端点，
+票面自己写着本票不增删端点（占号纪律）。这一段应另开票，并先定它是 HTTP 端点还是像
+派发那样由信封驱动。
+
+### 完成标准逐条
+
+1. **种子租户下走通到`要求-预付`并停在账户映射未配置** — 未达成，被阻断一与阻断二同时挡住。
+   停摆原因确已换格（从「登记面明拒结算依据」换到「本范围没有结算政策」），但那还不是
+   票面要的那一格「账户目录未配置」。
+2. **`CONTROL_SCOPE_NOT_CONFIGURED` 只剩实例半边一个成因** — 部分达成，且不可端到端举证。
+   机制半边的欠账（登记面装不下结算选择器）已清；但 `PolicyBackedControlScopeSource`
+   在今天的种子上仍走 `SettlementTerms()` 缺席那一支，因为闭包里没有结算政策——而那不是
+   实例半边缺配置，是阻断一那条缺失的写入路径。
+3. **乙案的那一例证** — 已达成：
+   `internal/partycommercial/domain/settlement_basis_resolution_test.go` 的
+   `TestAnUnresolvedContractLeavesTheSettlementBasisUnasked` 证「合同解不出时结算政策落
+   `前提未解析`、不落`无适用依据`」；配对的 `TestASettlementPolicyNamingAnotherContractIsNotAdopted`
+   证反面（合同解出来了就真去问，且不采用指名另一版合同的结算约定）。
