@@ -316,6 +316,21 @@ func (state PreconditionState) valid() bool {
 	return state >= PreconditionMet && state <= PreconditionConflicting
 }
 
+// String 是封闭三值的词形出口，库列与传输层同词（判据同 GuardedAction.String：
+// 集外答空串，调用方以空串拒收，不给「未知」留第四格）。
+func (state PreconditionState) String() string {
+	switch state {
+	case PreconditionMet:
+		return "MET"
+	case PreconditionUnmet:
+		return "UNMET"
+	case PreconditionConflicting:
+		return "CONFLICTING"
+	default:
+		return ""
+	}
+}
+
 // PreconditionFinding 是一项前置条件及其判断。
 type PreconditionFinding struct {
 	Precondition PreconditionReference

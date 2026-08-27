@@ -800,3 +800,33 @@ type CaseRegisterCatalogueRead interface {
 		limit int,
 	) ([]ClosureObligationCatalogueEntry, error)
 }
+
+// GateConditionCatalogueEntry 是门禁条件目录上列的一行：目录行（范围+动作+边界三维
+// 键与登记时间）连同该门禁全部已登记的前置条件认定。Findings 直接用领域的
+// PreconditionFinding——认定封闭三值刻意没有「未知」格，读回集外取值在适配器上抛，
+// 不为读面折出第四格。空 Findings 是「此动作在此边界本就不受门禁」的如实一格（领域
+// FoldGateConclusion 折为不适用）；整行缺席才是「目录未登记 → 未决」。两格含义与
+// 关闭义务那对**相反**（0008 迁移自注）：这里空清单是「不受管」的绿灯，未登记才是
+// 无从复核；压成一个信号就是用「查不到」冒充「不受管」，等于把门禁放开。
+type GateConditionCatalogueEntry struct {
+	Scope        domain.DecisionScopeReference
+	Action       domain.GuardedAction
+	Boundary     domain.CustomsProcedureReference
+	RegisteredAt time.Time
+	Findings     []domain.PreconditionFinding
+}
+
+// GateConditionCatalogueRead 是门禁条件登记册的伴生列表读口（ADR-0077 Decision
+// 一/五）：管理台 customs-restrictions 页上列目录与认定两表（票
+// admin-web-page-wiring-frontier/04 的归属裁决、06 实施）。案件配置四册的另外三本归
+// customs-cases 页（CaseRegisterCatalogueRead 注释里那条对照）。不拓宽
+// LoadPreconditionFindings 点读口：点读按（范围+动作+边界）三维键伺候门禁编排，上列
+// 按租户伺候查阅，两个调用面各答各的问题（ADR-0077 Decision 五）。租户在签名上、
+// limit 非正拒、空册答空列表。
+type GateConditionCatalogueRead interface {
+	ListGateConditions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]GateConditionCatalogueEntry, error)
+}

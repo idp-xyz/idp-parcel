@@ -440,7 +440,7 @@ func (registry *GateConditionRegistrations) RegisterGateFinding(
 		return ports.CaseConfigurationSaveOutcomeInvalid,
 			fmt.Errorf("register gate finding: unknown guarded action %d", action)
 	}
-	stateText := preconditionStateText(finding.State)
+	stateText := finding.State.String()
 	if stateText == "" {
 		return ports.CaseConfigurationSaveOutcomeInvalid,
 			fmt.Errorf("register gate finding: unknown precondition state %d", finding.State)
@@ -466,19 +466,4 @@ func (registry *GateConditionRegistrations) RegisterGateFinding(
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
 	return ports.CaseConfigurationRegistered, nil
-}
-
-// preconditionStateText 是 preconditionStateOf 的反向。没有「未知」格可写：判断不出
-// 来的前置条件不该进折叠，也就不该有一行。
-func preconditionStateText(state domain.PreconditionState) string {
-	switch state {
-	case domain.PreconditionMet:
-		return "MET"
-	case domain.PreconditionUnmet:
-		return "UNMET"
-	case domain.PreconditionConflicting:
-		return "CONFLICTING"
-	default:
-		return ""
-	}
 }
