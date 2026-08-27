@@ -23,9 +23,15 @@ const acceptanceChainConsumerName = "parcel-shipment/advance-acceptance-chain"
 // Outbox 交接适配器，但两边仍各写各的字符串——它们在不同包里，导入对方的未导出常量
 // 等于让消费方依赖提供方的内部形状。
 //
-// 两串万一漂开不会静默：本进程的路由表按这个类型登记，发布侧发出的那一封会撞
-// `dispatch.no_subscriber`（装配错误里最响的一格）；`cmd/parcel-dispatch` 的合成纵向
-// 用例走的正是「真发布 → 真派发 → 真消费」，字符串对不上时它当场红。
+// 类型串漂开不会静默：本进程的路由表按这个类型登记，发布侧发出的那一封会撞
+// `dispatch.no_subscriber`（装配错误里最响的一格）。
+//
+// 载荷字段名漂开则相反，它是静默的：译不出即毒丸，消费门拒收入账后交回 nil，那一封
+// 于是被记成投递成功，而接受判断链一次都没跑过——与「实例半边还没配置」在库里长着
+// 同一张脸。守这一格的是 `cmd/parcel-api` 的
+// TestTheMintedEnvelopeDecodesIntoTheAcceptanceChainCommand：它把生产发布侧真铸的那
+// 一封喂给本消费门，两侧标签对不上时当场红。本包与 `cmd/parcel-dispatch` 各自的载荷
+// 字面量都是手抄，守的只是自己那一侧对自己抄本的忠诚。
 const ShipmentRequestSubmittedEventType eventing.EventType = "parcel-shipment.shipment-request.submitted"
 
 // ErrAcceptanceChainUndecided 是本路的未决哨兵：接受链收到并推进了这一轮，但停在自己
