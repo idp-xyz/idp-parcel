@@ -414,6 +414,15 @@ type resolutionKeyDocument struct {
 	AnchorPolicy      string    `json:"anchorPolicyVersion"`
 	AnchorAt          time.Time `json:"anchorAt"`
 	RequiredBases     []string  `json:"requiredBases"`
+	// Settlement 只在必需依据含 SETTLEMENT_POLICY 时给出，且只有三维——合同维由闭包解出
+	// 的客户合同来填，登记面结构上就没有它（ADR-0080）。
+	Settlement *settlementSelectorDocument `json:"settlement,omitempty"`
+}
+
+type settlementSelectorDocument struct {
+	Counterparty string `json:"counterparty"`
+	ChargeScope  string `json:"chargeScope"`
+	Currency     string `json:"currency"`
 }
 
 func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistration, error) {
@@ -448,6 +457,22 @@ func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistr
 			return none, err
 		}
 		registration.RequiredBases = append(registration.RequiredBases, kind)
+	}
+	// 三维逐维过构造门。缺席整节即三维全缺，登记面据此判「本次不要结算依据」；给了节却
+	// 少一维在这里就响亮失败，不折成缺席——那会让一次打错字段名变成一句「没登记结算」。
+	if document.Settlement != nil {
+		if registration.SettlementCounterparty, err = pcdomain.NewCounterpartyReference(
+			document.Settlement.Counterparty); err != nil {
+			return none, err
+		}
+		if registration.SettlementChargeScope, err = pcdomain.NewChargeScopeReference(
+			document.Settlement.ChargeScope); err != nil {
+			return none, err
+		}
+		if registration.SettlementCurrency, err = pcdomain.NewCurrencyCode(
+			document.Settlement.Currency); err != nil {
+			return none, err
+		}
 	}
 	return registration, nil
 }

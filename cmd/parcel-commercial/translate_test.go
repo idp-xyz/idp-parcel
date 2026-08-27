@@ -237,3 +237,45 @@ func TestKeyRegistrationTranslates(t *testing.T) {
 		t.Fatalf("集合外依据种类没有被点名拒收：%v", err)
 	}
 }
+
+// Covers: ADR-0080 —— 登记 JSON 的结算节只有三维；合同维在这一层无从表达（多写一个
+// contract 字段是未知字段，DisallowUnknownFields 当场拒），三维给一半同样拒。
+func TestSettlementSelectorTranslatesWithoutAContractDimension(t *testing.T) {
+	registration, err := keyRegistrationFromJSON([]byte(`{
+		"tenantId": "tenant-1",
+		"customerAccountId": "customer-1",
+		"scope": "scope-1",
+		"legalEntity": "legal-1",
+		"anchorPolicyVersion": "anchor-policy/v1",
+		"anchorAt": "2026-07-01T00:00:00Z",
+		"requiredBases": ["CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE", "SETTLEMENT_POLICY"],
+		"settlement": {"counterparty": "customer-1", "chargeScope": "charge-express", "currency": "SYN"}
+	}`))
+	if err != nil {
+		t.Fatalf("翻译带结算三维的登记：%v", err)
+	}
+	if registration.SettlementCounterparty.String() != "customer-1" ||
+		registration.SettlementChargeScope.String() != "charge-express" ||
+		registration.SettlementCurrency.String() != "SYN" {
+		t.Fatalf("结算三维变形：%+v", registration)
+	}
+
+	refusals := map[string]string{
+		"带合同维": `{"tenantId": "t", "customerAccountId": "c", "scope": "s", "legalEntity": "l",
+			"anchorPolicyVersion": "a", "anchorAt": "2026-07-01T00:00:00Z",
+			"requiredBases": ["CUSTOMER_CONTRACT", "SETTLEMENT_POLICY"],
+			"settlement": {"counterparty": "c", "contract": "contract-1/v1",
+				"chargeScope": "charge-express", "currency": "SYN"}}`,
+		"三维缺一": `{"tenantId": "t", "customerAccountId": "c", "scope": "s", "legalEntity": "l",
+			"anchorPolicyVersion": "a", "anchorAt": "2026-07-01T00:00:00Z",
+			"requiredBases": ["CUSTOMER_CONTRACT", "SETTLEMENT_POLICY"],
+			"settlement": {"counterparty": "c", "chargeScope": "charge-express"}}`,
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := keyRegistrationFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}

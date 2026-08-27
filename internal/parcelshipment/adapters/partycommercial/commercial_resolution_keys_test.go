@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -26,6 +27,18 @@ var resolutionKeyAnchorAt = time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 
 func newResolutionKeys(t *testing.T) (*adapter.CommercialResolutionKeys, bentoapp.Transactor) {
 	t.Helper()
+	keys, transactor, _ := newResolutionKeysOnPool(t)
+	return keys, transactor
+}
+
+// newResolutionKeysOnPool 额外交出池，供直插库证「库内 CHECK 是第二道镜像」：登记面拒过的
+// 组合，绕开登记面照样进不去。
+func newResolutionKeysOnPool(t *testing.T) (
+	*adapter.CommercialResolutionKeys,
+	bentoapp.Transactor,
+	*pgxpool.Pool,
+) {
+	t.Helper()
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -39,7 +52,7 @@ func newResolutionKeys(t *testing.T) (*adapter.CommercialResolutionKeys, bentoap
 	if err != nil {
 		t.Fatalf("构造解析键登记面：%v", err)
 	}
-	return keys, db.Transactor()
+	return keys, db.Transactor(), pool
 }
 
 // mustWithinKeyTransaction 只把闭包的 error 交给事务判提交还是回滚。断言一律留在闭包外：
@@ -86,6 +99,18 @@ func keyRegistration(t *testing.T, tenant, customer, scope string) adapter.Resol
 			pcdomain.ServiceProductObject,
 		},
 	}
+}
+
+// settlementKeyRegistration 是同一行登记再加上结算依据与它的三维（ADR-0080）。合同维不在
+// 其中：登记面结构上就没有那个字段，它由闭包解出的合同来填。
+func settlementKeyRegistration(t *testing.T, tenant, customer, scope string) adapter.ResolutionKeyRegistration {
+	t.Helper()
+	registration := keyRegistration(t, tenant, customer, scope)
+	registration.RequiredBases = append(registration.RequiredBases, pcdomain.SettlementPolicyObject)
+	registration.SettlementCounterparty = value(t, pcdomain.NewCounterpartyReference, customer)
+	registration.SettlementChargeScope = value(t, pcdomain.NewChargeScopeReference, "charge-express")
+	registration.SettlementCurrency = value(t, pcdomain.NewCurrencyCode, "SYN")
+	return registration
 }
 
 func basisQuery(t *testing.T, tenant, customer string) psports.CommercialBasisQuery {
@@ -145,6 +170,123 @@ func TestARegisteredKeyFormsACompleteResolutionKey(t *testing.T) {
 	if len(key.RequiredBases) != 3 {
 		t.Fatalf("必需依据 = %v, want 3 项", key.RequiredBases)
 	}
+}
+
+// Covers: ADR-0080 —— 登记面放行 SETTLEMENT_POLICY，携三维不携合同维；折出的键最小身份
+// 成立，合同维留空等闭包解出的合同来填。
+//
+// 这是接受前控制链上游那一段：没有它，闭包里就没有已采用结算政策，PS 的商业依据快照缺
+// `SettlementTerms`，编排一律停在 `CONTROL_SCOPE_NOT_CONFIGURED`——与「账户映射未配置」同码
+// 不同因。
+func TestARegisteredSettlementBasisFormsAThreeDimensionSelector(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	mustRegisterKey(t, transactor, keys,
+		settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1"), adapter.ResolutionKeySaved)
+
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil || !formed {
+		t.Fatalf("formed=%v err=%v", formed, err)
+	}
+	if !key.MinimumIdentityEstablished() {
+		t.Fatalf("带结算依据的键最小身份不成立：%#v", key.Settlement)
+	}
+	if key.Settlement.Counterparty.String() != "customer-1" ||
+		key.Settlement.ChargeScope.String() != "charge-express" ||
+		key.Settlement.Currency.String() != "SYN" {
+		t.Fatalf("结算三维读回后变了形：%#v", key.Settlement)
+	}
+	// 合同维必须缺席：登记进来就是消费方在指定该选中哪个商业版本，而它由本闭包解出。
+	if key.Settlement.Contract.String() != "" {
+		t.Fatalf("登记面填出了合同维：%q", key.Settlement.Contract)
+	}
+	var found bool
+	for _, kind := range key.RequiredBases {
+		if kind == pcdomain.SettlementPolicyObject {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("必需依据里没有结算政策：%v", key.RequiredBases)
+	}
+}
+
+// Covers: 换一维结算维度是换一套解析口径——与换范围、换锚点同级，判`内容冲突`且原登记
+// 一行不动，不静默覆盖。漏比它，一次改维会被答成`已登记`而库里留着旧维。
+func TestChangingASettlementDimensionIsAContentConflict(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	original := settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+	mustRegisterKey(t, transactor, keys, original, adapter.ResolutionKeySaved)
+	mustRegisterKey(t, transactor, keys, original, adapter.ResolutionKeyAlreadyRegistered)
+
+	changed := settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+	changed.SettlementChargeScope = value(t, pcdomain.NewChargeScopeReference, "charge-economy")
+	mustRegisterKey(t, transactor, keys, changed, adapter.ResolutionKeyContentConflict)
+
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil || !formed {
+		t.Fatalf("formed=%v err=%v", formed, err)
+	}
+	if key.Settlement.ChargeScope.String() != "charge-express" {
+		t.Fatalf("冲突写入改动了原登记：%q", key.Settlement.ChargeScope)
+	}
+}
+
+// Covers: 库内 CHECK 是同一判据的第二道镜像，不是唯一一道，也不是摆设。绕开登记面直插，
+// 登记面拒过的每一种组合仍然进不去。
+//
+// 两道都要有：只靠 Go 那道，任何别的写入路径（迁移脚本、手工修数、日后另一个适配器）都能
+// 造出一行永远立不起来的键；只靠库那道，判读理由到了调用方那里只剩一句约束名。
+func TestTheDatabaseMirrorsTheSettlementPairingRule(t *testing.T) {
+	_, _, pool := newResolutionKeysOnPool(t)
+	ctx := t.Context()
+
+	insert := func(t *testing.T, customer string, bases []string, counterparty, chargeScope, currency *string) error {
+		t.Helper()
+		_, err := pool.Exec(ctx,
+			`INSERT INTO parcel_shipment.commercial_resolution_key_registration
+				(tenant_id, customer_account_id, scope_ref, legal_entity_ref,
+				 anchor_policy_version, anchor_at, required_bases,
+				 settlement_counterparty_ref, settlement_charge_scope_ref, settlement_currency_code)
+			 VALUES ('tenant-1', $1, 'scope-1', 'legal-1', 'anchor-policy/v1', $2, $3, $4, $5, $6)`,
+			customer, resolutionKeyAnchorAt, bases, counterparty, chargeScope, currency)
+		return err
+	}
+	text := func(value string) *string { return &value }
+	withSettlement := []string{"CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE", "SETTLEMENT_POLICY"}
+
+	t.Run("要结算却三维缺一", func(t *testing.T) {
+		if err := insert(t, "c-1", withSettlement, text("customer-1"), text("charge-express"), nil); err == nil {
+			t.Fatal("部分给出的结算维度直插进去了")
+		}
+	})
+	t.Run("不要结算却带维度", func(t *testing.T) {
+		bases := []string{"CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE"}
+		if err := insert(t, "c-2", bases, text("customer-1"), text("charge-express"), text("SYN")); err == nil {
+			t.Fatal("不要结算依据的行带上了结算维度")
+		}
+	})
+	t.Run("要结算却不要合同", func(t *testing.T) {
+		bases := []string{"ACCEPTANCE_RULE_PACKAGE", "SETTLEMENT_POLICY"}
+		if err := insert(t, "c-3", bases, text("customer-1"), text("charge-express"), text("SYN")); err == nil {
+			t.Fatal("要结算却不要合同的行直插进去了——合同维永远没人填得上")
+		}
+	})
+	t.Run("维度写成空串", func(t *testing.T) {
+		if err := insert(t, "c-4", withSettlement, text("customer-1"), text("charge-express"), text("")); err == nil {
+			t.Fatal("空串冒充了在场的维度")
+		}
+	})
+	t.Run("价格规则仍在名集之外", func(t *testing.T) {
+		bases := []string{"CUSTOMER_CONTRACT", "PRICE_RULE"}
+		if err := insert(t, "c-5", bases, nil, nil, nil); err == nil {
+			t.Fatal("PRICE_RULE 进了封闭名集——价格方向那一维本表仍不承载")
+		}
+	})
+	t.Run("齐备则放行", func(t *testing.T) {
+		if err := insert(t, "c-6", withSettlement, text("customer-1"), text("charge-express"), text("SYN")); err != nil {
+			t.Fatalf("齐备的一行被挡了：%v", err)
+		}
+	})
 }
 
 // Covers: 「今天 nil 即显式未配置」的登记面版本——无行交回 formed=false 且无错误，
@@ -221,7 +363,7 @@ func TestKeyRegistrationRefusesDefaultsAndBareCalls(t *testing.T) {
 		}
 	})
 
-	t.Run("结算政策要选择器", func(t *testing.T) {
+	t.Run("结算政策要三维", func(t *testing.T) {
 		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
 		broken.RequiredBases = append(broken.RequiredBases, pcdomain.SettlementPolicyObject)
 		var registerErr error
@@ -230,7 +372,62 @@ func TestKeyRegistrationRefusesDefaultsAndBareCalls(t *testing.T) {
 			return nil
 		})
 		if registerErr == nil {
-			t.Fatal("结算政策进了不带选择器的登记面——那个键永远立不起来")
+			t.Fatal("结算政策进了不带三维的登记——那个键永远立不起来")
+		}
+	})
+
+	t.Run("三维缺一", func(t *testing.T) {
+		broken := settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.SettlementCurrency = pcdomain.CurrencyCode{}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("部分给出的结算维度被登记了")
+		}
+	})
+
+	t.Run("不要结算却带维度", func(t *testing.T) {
+		broken := settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.RequiredBases = keyRegistration(t, "tenant-1", "customer-1", "scope-1").RequiredBases
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("不要结算依据的登记带上了结算维度——ADR-0044 的「不含则必缺」破了")
+		}
+	})
+
+	t.Run("要结算却不要合同", func(t *testing.T) {
+		broken := settlementKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.RequiredBases = []pcdomain.CommercialObjectKind{
+			pcdomain.AcceptanceRulePackageObject,
+			pcdomain.SettlementPolicyObject,
+		}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("要结算却不要合同的登记过了——合同维永远没人填得上（ADR-0080）")
+		}
+	})
+
+	t.Run("价格规则仍不承载", func(t *testing.T) {
+		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.RequiredBases = append(broken.RequiredBases, pcdomain.PriceRuleObject)
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("价格规则进了登记面——价格方向那一维本面仍不承载")
 		}
 	})
 

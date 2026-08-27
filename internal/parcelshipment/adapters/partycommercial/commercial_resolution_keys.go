@@ -26,6 +26,11 @@ type ResolutionKeyRow struct {
 	AnchorPolicy      string
 	AnchorAt          time.Time
 	RequiredBases     []string
+	// 结算三维只在必需依据含结算政策时在场，空串表示缺席（ADR-0080）。合同维不在其中，
+	// 它是闭包解出来的结论——理由见 ResolutionKeyRegistration。
+	SettlementCounterparty string
+	SettlementChargeScope  string
+	SettlementCurrency     string
 }
 
 // ResolutionKeySaveOutcome 是一次登记在持久化面的落点（ADR-0031 同款）：`已登记`是
@@ -82,6 +87,11 @@ var _ ResolutionKeySource = (*CommercialResolutionKeys)(nil)
 
 // ResolutionKeyRegistration 是一行登记的输入。全部字段都是显式实例参数：锚点时刻
 // 是登记下来的值，不是任何时钟；必需依据种类由登记方逐项指名。
+//
+// 结算三维逐维列出，而不是收一个 `pcdomain.SettlementSelector`：那个类型带合同维，而本
+// 登记面**不得承载合同维**（ADR-0080——合同是闭包解出的结论，登记它就是消费方在指定该
+// 选中哪个商业版本）。拆成三个字段之后，那一维在这一层根本无从表达，而不是靠一句校验
+// 拦着。
 type ResolutionKeyRegistration struct {
 	TenantID          psdomain.TenantID
 	CustomerAccountID psdomain.CustomerAccountID
@@ -90,6 +100,10 @@ type ResolutionKeyRegistration struct {
 	AnchorPolicy      pcdomain.AnchorPolicyVersion
 	AnchorAt          time.Time
 	RequiredBases     []pcdomain.CommercialObjectKind
+	// 三维只在必需依据含结算政策时给出，否则必须全缺（ADR-0044 的「含则必填、不含则必缺」）。
+	SettlementCounterparty pcdomain.CounterpartyReference
+	SettlementChargeScope  pcdomain.ChargeScopeReference
+	SettlementCurrency     pcdomain.CurrencyCode
 }
 
 // Register 登记一行解析键参数。集合与默认值的判读全在触库前做完——库内 CHECK 是同一
@@ -106,13 +120,16 @@ func (adapter *CommercialResolutionKeys) Register(
 		bases = append(bases, kind.String())
 	}
 	return adapter.store.RegisterResolutionKey(ctx, ResolutionKeyRow{
-		TenantID:          registration.TenantID.String(),
-		CustomerAccountID: registration.CustomerAccountID.String(),
-		Scope:             registration.Scope.String(),
-		LegalEntity:       registration.LegalEntity.String(),
-		AnchorPolicy:      registration.AnchorPolicy.String(),
-		AnchorAt:          registration.AnchorAt.UTC(),
-		RequiredBases:     bases,
+		TenantID:               registration.TenantID.String(),
+		CustomerAccountID:      registration.CustomerAccountID.String(),
+		Scope:                  registration.Scope.String(),
+		LegalEntity:            registration.LegalEntity.String(),
+		AnchorPolicy:           registration.AnchorPolicy.String(),
+		AnchorAt:               registration.AnchorAt.UTC(),
+		RequiredBases:          bases,
+		SettlementCounterparty: registration.SettlementCounterparty.String(),
+		SettlementChargeScope:  registration.SettlementChargeScope.String(),
+		SettlementCurrency:     registration.SettlementCurrency.String(),
 	})
 }
 
@@ -135,15 +152,46 @@ func (registration ResolutionKeyRegistration) validate() error {
 		if kind.String() == "" {
 			return fmt.Errorf("必需依据种类含集合外取值")
 		}
-		// 结算政策与价格规则要求键额外携带选择器/方向（ADR-0044/0034 含则必填），
-		// 本登记面没有那些维度——放行等于登记一个永远立不起来的键。库内 CHECK 同拦。
-		if kind == pcdomain.SettlementPolicyObject || kind == pcdomain.PriceRuleObject {
+		// 价格规则要求键携带价格方向（ADR-0034 含则必填），本登记面没有那一维——放行
+		// 等于登记一个永远立不起来的键。结算政策已随 ADR-0080 放行（见下方三维校验）。
+		// 库内 CHECK 同拦。
+		if kind == pcdomain.PriceRuleObject {
 			return fmt.Errorf("%s 需要键携带额外选择维度，本登记面不承载", kind)
 		}
 		if seen[kind] {
 			return fmt.Errorf("必需依据种类重复：%s", kind)
 		}
 		seen[kind] = true
+	}
+	return registration.validateSettlement(seen[pcdomain.SettlementPolicyObject],
+		seen[pcdomain.CustomerContractObject])
+}
+
+// validateSettlement 是 ADR-0044「含则必填、不含则必缺」加 ADR-0080「要结算就要合同」在
+// 登记面的一道。库内 `..._settlement_paired` 是同一判据的第二道镜像，不是唯一一道。
+func (registration ResolutionKeyRegistration) validateSettlement(needsSettlement, needsContract bool) error {
+	given := 0
+	for _, dimension := range []string{
+		registration.SettlementCounterparty.String(),
+		registration.SettlementChargeScope.String(),
+		registration.SettlementCurrency.String(),
+	} {
+		if dimension != "" {
+			given++
+		}
+	}
+	if !needsSettlement {
+		if given > 0 {
+			return fmt.Errorf("不要结算依据的登记不得携带结算维度")
+		}
+		return nil
+	}
+	if given < 3 {
+		return fmt.Errorf("要结算依据就必须登记结算相对方、费用范围与币种三维")
+	}
+	// 合同维由闭包解出的合同来填；不请求合同就永远没人填得上（ADR-0080）。
+	if !needsContract {
+		return fmt.Errorf("要结算依据就必须一并要客户合同——结算政策按哪一版合同选，由本闭包解出")
 	}
 	return nil
 }
@@ -204,7 +252,34 @@ func (adapter *CommercialResolutionKeys) FormResolutionKey(
 		}
 		key.RequiredBases = append(key.RequiredBases, kind)
 	}
+	if key.Settlement, err = settlementSelectorFromRow(row); err != nil {
+		return none, false, fmt.Errorf("form resolution key: %w", err)
+	}
 	return key, true, nil
+}
+
+// settlementSelectorFromRow 把登记行上的三维折成闭包键上的选择器。三维全缺时交回零值，
+// 那是「本次不要结算依据」的正常形状。
+//
+// 合同维一律不填：它由 ResolveCommercialClosure 解出客户合同之后补上（ADR-0080）。这里
+// 若顺手塞一个，闭包键的最小身份当场就不成立——那道校验挡的正是本函数这一手。
+func settlementSelectorFromRow(row ResolutionKeyRow) (pcdomain.SettlementSelector, error) {
+	none := pcdomain.SettlementSelector{}
+	if row.SettlementCounterparty == "" && row.SettlementChargeScope == "" && row.SettlementCurrency == "" {
+		return none, nil
+	}
+	var selector pcdomain.SettlementSelector
+	var err error
+	if selector.Counterparty, err = pcdomain.NewCounterpartyReference(row.SettlementCounterparty); err != nil {
+		return none, err
+	}
+	if selector.ChargeScope, err = pcdomain.NewChargeScopeReference(row.SettlementChargeScope); err != nil {
+		return none, err
+	}
+	if selector.Currency, err = pcdomain.NewCurrencyCode(row.SettlementCurrency); err != nil {
+		return none, err
+	}
+	return selector, nil
 }
 
 func commercialKindFrom(name string) (pcdomain.CommercialObjectKind, error) {
