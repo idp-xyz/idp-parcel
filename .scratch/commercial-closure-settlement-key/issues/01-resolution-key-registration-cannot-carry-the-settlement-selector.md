@@ -1,8 +1,7 @@
 # 解析键登记面装不下结算选择器——接受前控制链因此整条走不通，且合同维有一处循环要先裁
 
 Category: enhancement
-Status: blocked（裁决已出＝乙案，落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)；PC 解析顺序、PS 登记面与种子三段已落。阻断一已由 [02](./02-settlement-policy-body-has-no-publication-channel.md) 清除，收口只剩阻断二，见末节）
-Blocked by: 03
+Status: resolved（裁决已出＝乙案，落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)；PC 解析顺序、PS 登记面与种子三段已落。两条阻断分别由 [02](./02-settlement-policy-body-has-no-publication-channel.md) 与 [03](./03-acceptance-chain-has-no-assembly-point.md) 清除，完成标准三条逐条见末节）
 
 发现于 [sa-preacceptance-policy-view/01](../../sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md) 收口时留的那条遗留（锚 `0fb4040`）。那一票把 SA 这一侧全部做完了——控制策略视图有了生产适配器，判据 B 该口从缺转有——但适配器**暂不装进 `cmd/parcel-api`**，因为上游形不成它要读的那份闭包。本票就是那一道。
 
@@ -108,14 +107,23 @@ Blocked by: 03
 票面自己写着本票不增删端点（占号纪律）。这一段应另开票，并先定它是 HTTP 端点还是像
 派发那样由信封驱动。
 
+**已由票 [03](./03-acceptance-chain-has-no-assembly-point.md) 清除。** 那一裁决取信封驱动
+（[ADR-0081](../../../docs/adr/0081-acceptance-judgment-is-envelope-driven.md)）：接受链挂
+「委托已提交」的消费门，装配点落在 `cmd/parcel-dispatch`，端点面一个入口都没增——本票
+「不增删端点」的占号约束因此始终成立。三个编排与 SA→PC 控制策略适配器从此各有生产
+调用方；出站那半（提交建单即在同一事务交出信封）落在 `cmd/parcel-api`。
+
 ### 完成标准逐条
 
-1. **种子租户下走通到`要求-预付`并停在账户映射未配置** — 未达成，被阻断二挡住（阻断一已清）。
-   闭包现在解得开、结算依据带得出方式与六维范围，但没有任何进程会去走那条接受前控制链，
-   所以「停在账户目录未配置」这一格今天仍无处可观察。
-2. **`CONTROL_SCOPE_NOT_CONFIGURED` 只剩实例半边一个成因** — 机制半边的两处欠账都已清
-   （登记面装得下结算选择器、权威册里有结算政策），`PolicyBackedControlScopeSource` 不再走
-   `SettlementTerms()` 缺席那一支。仍不可端到端举证，理由同上条：没有装配点就没有调用方。
+1. **种子租户下走通到`要求-预付`并停在账户映射未配置** — 已达成。取证由票 03 的收口给出
+   （MCP-1 在种子库 `SYN-TENANT-01` 上按生产同一条路径造键、解析、提问）：控制策略答
+   `configured=true required=true method=PREPAID`，控制本身停在
+   `APPLY outcome=NOT_FORMED reason=CONTROL_SCOPE_NOT_CONFIGURED`。逐行输出与「为什么这
+   与闭包形不成可分辨」的推理留在 03，不在此复制第二份。
+2. **`CONTROL_SCOPE_NOT_CONFIGURED` 只剩实例半边一个成因** — 已达成，且现在可端到端举证。
+   机制半边的两处欠账早已清（登记面装得下结算选择器、权威册里有结算政策），上一条那次
+   实测把「有调用方去走」这最后一格也补上了：策略视图既然答得出`预付`，闭包必然形得成，
+   那么停摆的成因只可能是账户目录（与排在作用域之后的金额源）——两者都是实例半边。
 3. **乙案的那一例证** — 已达成：
    `internal/partycommercial/domain/settlement_basis_resolution_test.go` 的
    `TestAnUnresolvedContractLeavesTheSettlementBasisUnasked` 证「合同解不出时结算政策落

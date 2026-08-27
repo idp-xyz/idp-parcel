@@ -1,7 +1,8 @@
 # 接受链没有装配点也没有进程入口——三个编排至今只在一份测试夹具里被构造过
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
+Owner: MCP-1（入站）+ MCP-2（裁决、出站、往返取证）
 
 从 [01](./01-resolution-key-registration-cannot-carry-the-settlement-selector.md) 收口时撞出来的阻断二（锚 `9c95d7c`）。票 01 与 [sa-preacceptance-policy-view/01](../../sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md) 都写着「装上 SA→PC 控制策略适配器到 `cmd/parcel-api` 的接受链」，两份票面的占号核对也据此判「只加装配行、不增删端点」。**那条接受链不存在**，两份票面的这一条都建立在一个没核过的前提上。
 
@@ -64,12 +65,22 @@ APPLY          outcome=NOT_FORMED reason=CONTROL_SCOPE_NOT_CONFIGURED
 
 `cmd/parcel-dispatch/assemble_test.go` 三条：毒丸载荷证路由表挂对了人；各维齐全的载荷证整张依赖图在生产装配上跑得动（空库没登记解析键，链停成未决，路由条目翻成 `dispatch.consumer_undecided`）；失败分格用生产的同一份哨兵名单，另三格保持 `dispatch.publish_failed`。全仓真库套件绿（含架构门禁与 `tests/bentocontract`）。
 
-### 还欠
+## 收口 · 出站这半与裁决落档（MCP-2，`cc1d646` / `46dbb90` / `9ba78ff`）
 
-出站那半与 ADR 落档（MCP-2）：提交编排交出「委托已提交」信封。在它接上之前，这条链在生产路径上收不到信封——入站已就位，等发信的那一侧。
+裁决落成 [ADR-0081](../../../docs/adr/0081-acceptance-judgment-is-envelope-driven.md)（`cc1d646`）：接受判断是被触发的不是被请求的，驱动信封即「委托已提交」，不新增事件类型也不在端点面开判断入口；同步半边与事件半边的分工、消费门的失败分格、以及实例半边一格不填，都在那份记录里权威，此处只记实现。
+
+**出站装配（`46dbb90`）。** `cmd/parcel-api` 的整段 Handle 单事务壳 `transactionalSubmission` 退役，换成简报「事务边界」的两段——`preservationBoundary` 给来源保全的每笔写入各开一个事务（保全一经提交就不随后续步骤回滚，UC-PS-001 步骤 2 要的正是这条），`submissionBoundary` 携 `OutboxShipmentRequestSubmittedHandoff`（建单与信封同事务原子；`Insert` 答`已存在`时本事务没写下任何东西，不入队第二份意图）。两个壳与 `tests/bentocontract` 里 PBC-04/05/07 取证过的形状同形。编排签名不动，事件机制不进应用层。
+
+**往返取证（`9ba78ff`）。** 接上之后，两侧载荷标签漂开是一条**静默**失效面：译不出即毒丸，消费门显式拒收入账交回 nil，那一封被记成发布成功，而链一次都没跑过——库里的样子与「实例半边还没配置」逐字相同。既有用例守的是各自那一侧对自己抄本的忠诚，不是两侧彼此对得上。实测于 `46dbb90` 的三组探针（改完即还原）：只改发布侧 → PBC-05 红；只改消费侧 → `adapters/inbox` 与 `cmd/parcel-dispatch` 红；**发布侧连同它自己的 PBC-05 镜像一起改（消费侧不动）→ 四个包全绿**。第三组正是最自然的那一步。`TestTheMintedEnvelopeDecodesIntoTheAcceptanceChainCommand` 不手抄载荷：建单落下的那一封按派发一拍同一条认领路径取回来，喂给生产消费门，译不出与译错分两格断言。
+
+**取证强度。** 全仓 `go test -count=1 ./...` 绿（含 PG，`-v` 下 PASS 非 SKIP）；`46dbb90` 另在临时 worktree 上按提交状态复验过一遍。
+
+### 本票收口后仍未合的一格
+
+**生产 HTTP 路径今天造不出信封**：提交先撞墙一（`ACCESS_CHANNEL_NOT_CONFIGURED`）或墙二（`OWNERSHIP_UNRESOLVED`），建单一段走不到，链因此不动。这不是本票的欠账——两堵墙各有自己的票，ADR-0081 的 Consequences 已把这一格记明。上面两条取证走的都是合成路径（归属权威用放行替身，只记 `S`）与种子租户，与票 02/03 的完成标准同路。
 
 ## 地盘
 
 `cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配面（按裁决二选一）、`internal/parcelshipment/adapters/http`（若取 HTTP 路）。占号敏感：这两份接线文件由占号纪律管着。
 
-裁决取路 B 之后本票实际动的是 `cmd/parcel-dispatch` 那一侧（MCP-1，已收口）与 `cmd/parcel-api/assemble_submission.go` 的出站装配（MCP-2，进行中）；`internal/parcelshipment/adapters/http` 一行未动。
+裁决取路 B 之后本票实际动的是 `cmd/parcel-dispatch` 那一侧（MCP-1）与 `cmd/parcel-api` 的出站装配及其用例（MCP-2）；`internal/parcelshipment/adapters/http` 一行未动，端点面没有新增任何入口。
