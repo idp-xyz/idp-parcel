@@ -61,6 +61,7 @@ func assembleBusinessEndpoints(
 	networkCatalog networkhttp.OperationsCatalogReader,
 	complianceRules customshttp.RuleCatalogueReader,
 	caseRegisters customshttp.CaseRegisterCatalogueReader,
+	gateConditions customshttp.GateConditionCatalogueReader,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
@@ -101,10 +102,15 @@ func assembleBusinessEndpoints(
 		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
-		// 案件配置册查阅与规则库查阅同属关务租户内运营读面，共用同一个
-		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
+		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
+		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时它们随该变量一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
+		//
+		// 门禁条件不并进 /customs-case-registers 的 registry 分派：那三册归 customs-cases
+		// 一张页面，门禁两表归 customs-restrictions——分派对应「一页里的页签」，各立入口
+		// 对应「各自独立的页」（票 admin-web-page-wiring-frontier/04 的归属裁决、06 实施）。
 		{Pattern: "/customs-case-registers", Handler: customshttp.NewQueryCaseRegistersEndpoint(complianceRulesIntake, caseRegisters)},
+		{Pattern: "/customs-gate-conditions", Handler: customshttp.NewQueryGateConditionsEndpoint(complianceRulesIntake, gateConditions)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},

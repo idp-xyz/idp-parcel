@@ -278,6 +278,18 @@ func (unwiredCaseRegisters) ListClosureObligations(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredGateConditions 是门禁条件目录列表读口的占位，方法表与
+// customsports.GateConditionCatalogueRead 逐一对上（票 admin-web-page-wiring-frontier/06）。
+type unwiredGateConditions struct{}
+
+func (unwiredGateConditions) ListGateConditions(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.GateConditionCatalogueEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCommercialCatalogue struct{}
 
 func (unwiredCommercialCatalogue) ListServiceProducts(
