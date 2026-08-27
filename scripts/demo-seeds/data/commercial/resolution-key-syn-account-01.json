@@ -1,0 +1,19 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "customerAccountId": "SYN-ACCOUNT-01",
+  "scope": "SYN-SCOPE-01",
+  "legalEntity": "SYN-LE-01",
+  "anchorPolicyVersion": "SYN-ANCHOR-POLICY-01",
+  "anchorAt": "2026-02-01T00:00:00Z",
+  "requiredBases": [
+    "SERVICE_PRODUCT",
+    "ACCEPTANCE_RULE_PACKAGE",
+    "CUSTOMER_CONTRACT",
+    "SETTLEMENT_POLICY"
+  ],
+  "settlement": {
+    "counterparty": "SYN-ACCOUNT-01",
+    "chargeScope": "SYN-CHARGE-PREPAID",
+    "currency": "CNY"
+  }
+}

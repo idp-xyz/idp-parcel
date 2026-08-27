@@ -23,6 +23,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | 目录 | 入库通道 | 内容 |
 |---|---|---|
 | `data/commercial/` | `cmd/parcel-commercial publish` | 发布批 8 项：服务产品、财务控制策略、接单规则包（五类规则正文+受理内容+收寄资格+时点锚+终局规则）、客户合同（正文+受理前控制）、价格规则、三条授权规则 |
+| `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 1 行：四项必需依据加结算三维——它不是商业权威发布，只是与发布共用一个 CLI |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略 |
 | `data/customs/` | `cmd/parcel-customs-register` | 六册 11 份：就绪、授权、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断、建案要求两向（要求/显式不要求） |
@@ -56,5 +57,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   （`SavePricePolicy` / `SaveSettlementPolicy` / `SaveServiceProduct` 无 cmd 调用方）。
   商业策略页的价格政策与结算政策两列、服务产品页的形态列因此如实为空——按 ADR-0077
   空册本身就是内容；补写入口属机制半边，不归种子票。
+- 上一条现在还多挡一件事：解析键已经要得动结算依据（ADR-0080），但本范围里没有已发布
+  的结算政策版本，闭包因此停在`无适用依据`（结算政策）。这与灌之前那一格不同——那时是
+  登记面明拒结算依据、键根本立不起来。停摆原因换格本身就是票
+  `commercial-closure-settlement-key/01` 要的东西，剩下那一半等结算政策的发布通道。
 - 七页真数据展示还依赖查询端点的目录 Intake 配置（PAR-INT-01 未决期间装配
   UnconfiguredIntake，生产路径 403 是刻意的）；本包只负责库内数据态，页面接线归票 07。

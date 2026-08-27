@@ -37,8 +37,17 @@ go build -o "$BIN/" \
 echo "== 1/6 施加迁移计划（${RESET_FLAG:-不重置}） =="
 "$BIN/migrate" $RESET_FLAG
 
-echo "== 2/6 商业权威发布（party-commercial：服务产品与五策略） =="
+echo "== 2/6 商业权威发布（party-commercial：服务产品与五策略）与消费方解析键登记 =="
 "$BIN/parcel-commercial" publish -input "$SEEDS/commercial/publish-batch.json"
+# 解析键属消费方（parcel-shipment）的实例半边，与上一行的商业权威发布不是同一件事，
+# 只因同一个 CLI 承两个入口才挨在一起。键上要结算依据、因而也要客户合同——结算政策按
+# 哪一版合同选由闭包解出（ADR-0080），登记面结构上没有合同维。
+#
+# 灌完这一行，闭包仍解不开，但停摆原因换了一格：不再是登记面明拒结算依据，而是本范围
+# 里没有已发布的结算政策版本。那一格今天补不上——`SaveSettlementPolicy` 有持久化面却没有
+# 任何发布路径调它（票 commercial-closure-settlement-key/01 收口时记的第一条遗留）。
+"$BIN/parcel-commercial" register-resolution-key \
+  -input "$SEEDS/commercial/resolution-key-syn-account-01.json"
 
 echo "== 3/6 计价登记（parcel-pricing：价卡 + 参考序列） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"
