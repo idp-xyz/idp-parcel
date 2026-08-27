@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,59 @@ import (
 const DSNVariable = "IDP_PARCEL_POSTGRES_DSN"
 
 var databaseSequence atomic.Uint64
+
+// 管理面（建库/删库）走每测试进程一条常驻连接，互斥串行。
+//
+// 动机不是省时间而是省端口：Windows 把主动关闭的 TCP 连接压在 TIME_WAIT 里占用
+// 动态端口，逐用例新建管理连接时单包实测就产出六百余条指向 :55432 的 TIME_WAIT，
+// 多包并行足以耗尽端口预算（WSAEADDRINUSE）。四类连接里只有管理连接可以跨用例
+// 复用而不破坏「每测试一个物理库」的隔离语义——它只跑 CREATE/DROP DATABASE，
+// 不携带任何测试库内状态。
+var (
+	adminMu   sync.Mutex
+	adminConn *pgx.Conn
+)
+
+// runAsAdmin 在进程级共享的管理连接上执行 op。
+//
+// 共享连接必须用 Background 建立：挂在任何一个用例的 t.Context() 上，那个用例
+// 结束时的取消会把之后所有用例的管理面一起带走。每次操作各自限时，免得一条
+// 卡死的管理语句拖住整个进程的建库/删库队列。
+func runAsAdmin(adminDSN string, op func(ctx context.Context, conn *pgx.Conn) error) error {
+	adminMu.Lock()
+	defer adminMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if adminConn == nil || adminConn.IsClosed() {
+		conn, err := pgx.Connect(ctx, adminDSN)
+		if err != nil {
+			return fmt.Errorf("以管理身份连接：%w", err)
+		}
+		adminConn = conn
+	}
+	if err := op(ctx, adminConn); err != nil {
+		// 这里分不清语句级失败（库名冲突之类，连接还好好的）与连接级失败
+		// （网络断、协议错乱）。Ping 一次，坏了就弃掉让下次重建，别让一条
+		// 坏连接把后续所有管理操作拖成同一种假错。
+		pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer pingCancel()
+		if adminConn.Ping(pingCtx) != nil {
+			_ = adminConn.Close(pingCtx)
+			adminConn = nil
+		}
+		return err
+	}
+	return nil
+}
+
+func createDatabase(adminDSN, name string) error {
+	return runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `CREATE DATABASE `+quoteIdentifier(name)+` ENCODING 'UTF8'`)
+		return err
+	})
+}
 
 // uniqueDatabaseName 造一个在整个 PostgreSQL 实例里唯一的库名。
 //
@@ -61,16 +115,8 @@ func Pool(t *testing.T) *pgxpool.Pool {
 	ctx := t.Context()
 	name := uniqueDatabaseName(t)
 
-	admin, err := pgx.Connect(ctx, adminDSN)
-	if err != nil {
-		t.Fatalf("以管理身份连接失败：%v", err)
-	}
-	if _, err := admin.Exec(ctx, `CREATE DATABASE `+quoteIdentifier(name)+` ENCODING 'UTF8'`); err != nil {
-		_ = admin.Close(ctx)
+	if err := createDatabase(adminDSN, name); err != nil {
 		t.Fatalf("创建测试库失败：%v", err)
-	}
-	if err := admin.Close(ctx); err != nil {
-		t.Fatalf("关闭管理连接失败：%v", err)
 	}
 
 	testDSN, err := withDatabase(adminDSN, name)
@@ -90,14 +136,17 @@ func Pool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("关闭迁移连接失败：%v", err)
 	}
 
-	pool, err := pgxpool.New(ctx, testDSN)
+	// pgxpool 默认按 CPU 数开连接，测试用例的并发度用不满它，尖峰时却成倍放大
+	// TIME_WAIT。封顶 2 保留「一条在事务里、一条旁路观察」的余量；真需要更高
+	// 并发的用例应自己掌管连接（AdminDSN 那条路），不抬这里的默认。
+	pool, err := pgxpool.New(ctx, testDSN+" pool_max_conns=2")
 	if err != nil {
 		t.Fatalf("打开连接池失败：%v", err)
 	}
 
 	t.Cleanup(func() {
 		pool.Close()
-		dropDatabase(adminDSN, name)
+		dropDatabase(t, adminDSN, name)
 	})
 	return pool
 }
@@ -123,39 +172,32 @@ func FreshDatabase(t *testing.T) string {
 	t.Helper()
 
 	adminDSN := AdminDSN(t)
-	ctx := t.Context()
 	name := uniqueDatabaseName(t)
 
-	admin, err := pgx.Connect(ctx, adminDSN)
-	if err != nil {
-		t.Fatalf("以管理身份连接失败：%v", err)
-	}
-	if _, err := admin.Exec(ctx, `CREATE DATABASE `+quoteIdentifier(name)+` ENCODING 'UTF8'`); err != nil {
-		_ = admin.Close(ctx)
+	if err := createDatabase(adminDSN, name); err != nil {
 		t.Fatalf("创建测试库失败：%v", err)
-	}
-	if err := admin.Close(ctx); err != nil {
-		t.Fatalf("关闭管理连接失败：%v", err)
 	}
 
 	testDSN, err := withDatabase(adminDSN, name)
 	if err != nil {
 		t.Fatalf("构造测试库连接串失败：%v", err)
 	}
-	t.Cleanup(func() { dropDatabase(adminDSN, name) })
+	t.Cleanup(func() { dropDatabase(t, adminDSN, name) })
 	return testDSN
 }
 
-func dropDatabase(adminDSN, name string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// dropDatabase 删除测试库，失败必须出声：此前连不上就静默 return，孤儿库会无声
+// 积累到没人记得来历。出声不等于清扫——清扫要按「无活跃 backend + 建立时间足够旧」
+// 双条件另行处理，这里只保证失败可见。
+func dropDatabase(t *testing.T, adminDSN, name string) {
+	t.Helper()
 
-	admin, err := pgx.Connect(ctx, adminDSN)
-	if err != nil {
-		return
+	if err := runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
+		return err
+	}); err != nil {
+		t.Errorf("删除测试库 %s 失败，将遗留孤儿库：%v", name, err)
 	}
-	defer func() { _ = admin.Close(ctx) }()
-	_, _ = admin.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
 }
 
 // withDatabase 改写连接串的库名部分，过程中不把凭据带进任何日志。
