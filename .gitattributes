@@ -7,3 +7,10 @@
 *.sql text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+
+# bash 读不了 CRLF：`set -uo pipefail\r` 报 `invalid option name`，`trap ... EXIT\r` 报
+# `invalid signal specification`，脚本在第一行就死。而本机 core.autocrlf=true，检出时
+# 把 LF 换成 CRLF——于是 Windows 上一次全新检出就得到一批跑不动的脚本，且报的是
+# 语法错，不是「行尾不对」。取证脚本坏在这上面尤其难认：WSL 里 Edge 取回的是
+# Chromium 自己的错误页，看起来跟「页面没接上」一模一样。
+*.sh text eol=lf
