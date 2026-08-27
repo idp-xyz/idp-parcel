@@ -2,7 +2,9 @@
 
 Category: chore
 Status: in-progress——轨道与依赖是本文的主张；逐票放行原等用户/协调岗点头，该等待已由两轮受托
-裁断消化（2026-08-21 MCP-3、2026-08-24 MCP-1，见「复核记录」），当前无「等人」格；轨道照旧。
+裁断消化（2026-08-21 MCP-3、2026-08-24 MCP-1，见「复核记录」）。2026-08-27 终盘（第二十七轮）后
+机制轨道 T0–T4 全部到账、可派池清零；唯一余项是 M4 收尾——r27 留待清单交用户认可与宣布，按
+T4 第 3 条那是用户的决定，本文不代记完成，故不转 resolved。
 
 依据：[完成度评估快照](./completion-assessment-2026-08-20.md)（入库于 `24c6b4a`）+ 票面现状（盘于 `b9f6cba`，含墙/门审计十票入主线与四件悬决裁断之后）。计划只覆盖**机制半边**；实例半边按基线定义等租户，不进本计划。
 
@@ -44,13 +46,13 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
 | 组 | 票 | 主责 | 解锁 |
 |---|---|---|---|
 | 关键路径 | [03 PC 声明无发布写入方](./syn-wall-door-audit/issues/03-pc-declarations-have-no-publication-writer.md) | PC | 一件解七墙（W04–W08/W11/W12）——**已收口 resolved**：死会话现场复活全绿合入（`364606f`/`8821e28`），AT-PC-011 批内逐项独立成败与 runPublish 真库批推进补齐（`119a0b0`/`acd74d5`）；PS/SA 墙后消费自此可排 |
-| 可并行 | [04 网络定义登记册无写入方无解析层](./syn-wall-door-audit/issues/04-network-definition-register-no-writer-no-resolver.md)、[05 自动改路事实目录](./syn-wall-door-audit/issues/05-auto-reroute-facts-catalog-unimplemented.md) | NR | W09/W10；04 票面已按 NR-CATALOG-MECH（`3b9f212`，ADR-0068）改写完，复为 ready-for-agent；05 照旧 ready-for-agent，碰 `assemble.go` 装配点，占号 |
-| 可并行 | [06 CC 案件配置登记册无写入方](./syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md) | CC | W13；A 半边已入 main（`171e08b` 五本登记册写口+真库往返，`2cc7146` 五类登记用例、冲突判定落编排），票仍 ready-for-agent，余量以票面为准 |
+| 可并行 | [04 网络定义登记册无写入方无解析层](./syn-wall-door-audit/issues/04-network-definition-register-no-writer-no-resolver.md)、[05 自动改路事实目录](./syn-wall-door-audit/issues/05-auto-reroute-facts-catalog-unimplemented.md) | NR | W09/W10；04 票面已按 NR-CATALOG-MECH（`3b9f212`，ADR-0068）改写完；**04/05 均已收口 resolved**（08-27 票面实测），05 的 `assemble.go` 占号随收口释放 |
+| 可并行 | [06 CC 案件配置登记册无写入方](./syn-wall-door-audit/issues/06-cc-case-config-registries-have-no-writer.md) | CC | W13；A 半边已入 main（`171e08b` 五本登记册写口+真库往返，`2cc7146` 五类登记用例、冲突判定落编排）；**票已收口 resolved**（08-27 票面实测） |
 | 可并行 | [07 价卡无版本仓储](./syn-wall-door-audit/issues/07-pricing-plan-and-rate-table-no-version-repository.md)、[08 参考序列登记册缺失](./syn-wall-door-audit/issues/08-pricing-reference-series-register-missing.md) | PP | W14/W15——**双双 resolved**（`a4070fe`：版本表+按方向范围时点装载/按基准时点解析+结果代数写入+受控 CLI 登记口） |
-| 可并行 | [09 VE 规则与政策登记册无写入方](./syn-wall-door-audit/issues/09-ve-rule-and-policy-registries-have-no-writer.md) | VE | W16/W17/W18——**A/B 拆分收口**：A 半边（登记册写口六方法覆盖五类七表、迁移 0019）合入 `b394adf`，票转 resolved；B 半边成[票 15](./syn-wall-door-audit/issues/15-ve-catalog-registration-has-no-process-entry.md)（受控 CLI 登记入口，ready-for-agent，**不占号**——开票时纠正了「B=assemble.go」的误绑） |
+| 可并行 | [09 VE 规则与政策登记册无写入方](./syn-wall-door-audit/issues/09-ve-rule-and-policy-registries-have-no-writer.md) | VE | W16/W17/W18——**A/B 拆分收口**：A 半边（登记册写口六方法覆盖五类七表、迁移 0019）合入 `b394adf`，票转 resolved；B 半边成[票 15](./syn-wall-door-audit/issues/15-ve-catalog-registration-has-no-process-entry.md)（受控 CLI 登记入口，**不占号**——开票时纠正了「B=assemble.go」的误绑；已收口 resolved，08-27 票面实测） |
 | 桥/缝 | [02 生产归属权威无适配器](./syn-wall-door-audit/issues/02-production-ownership-authority-has-no-adapter.md) | PS←PG | W03——**resolved**（`57e0b1f` 治理侧补「尚未恢复暂停」读口并接桥，`c0ea050` 准入暂停查询三态化）；收口后衍生三张 needs-triage 新票，见 T3 |
 | 桥/缝 | [10 收寄资格证据源未实现](./syn-wall-door-audit/issues/10-intake-qualification-evidence-source-unimplemented.md) | PS←NO | W11 证据口（ADR-0063）——**resolved**（`5f795bc` 节点执行事实接证据口，`eafb2b1` 接进采用装配，未认领时显式未配置） |
-| 平台 | [01 接入渠道登记册与首个真实 Intake](./syn-wall-door-audit/issues/01-access-channel-registry-and-first-real-intake.md) | platform/HTTP | W01/W02——**已裁（ADR-0072，08-21 受托）**：所有权归共享接入身份能力（`internal/accessidentity/` 落点），ADR-0055 否决维持，登记册形状等 `PAR-INT-01` 证据；票转 needs-info，W01/W02 记「按票裁定显式留待」；载荷规范化摘要拆出为[票 14](./syn-wall-door-audit/issues/14-ps-payload-canonicalization-digest.md)（ready-for-agent，纯领域件不占号） |
+| 平台 | [01 接入渠道登记册与首个真实 Intake](./syn-wall-door-audit/issues/01-access-channel-registry-and-first-real-intake.md) | platform/HTTP | W01/W02——**已裁（ADR-0072，08-21 受托）**：所有权归共享接入身份能力（`internal/accessidentity/` 落点），ADR-0055 否决维持，登记册形状等 `PAR-INT-01` 证据；票转 needs-info，W01/W02 记「按票裁定显式留待」；载荷规范化摘要拆出为[票 14](./syn-wall-door-audit/issues/14-ps-payload-canonicalization-digest.md)（纯领域件不占号；已收口 resolved，08-27 票面实测） |
 
 **每票开工前按采纳注记对当时 main tip 重核四件**（仓储/装载口/写入方/登记口）——十票已全部重核完毕（`ee58c1a` 核 01/02/07/08/10，`d6453a7` 核 03/04/05/06/09，结论录各票 Comments），后续开工只需对新 tip 做连续性确认，不必重做全量。
 
@@ -72,14 +74,21 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
 ### T4 重盘与达标（终点闸门）
 
 1. 按 r25 口径程序**两口径**重算端口（松口径判「名字出现」，方法集口径判真实缺口）——
-   **已完成**（08-26，[r26 报告](./mechanism-reinventory-r26/report.md)：235 口，松口径缺 9，
-   精确口径缺 7；工具对 r25 发布树复现校验逐格一致）；
-2. 第二十六轮机制半边重盘，八切片逐三判据核——**已完成**（同上：PN-01/04/05/08 首次达标，
-   其余四切片差量点名到口，基线「机制半边现状」节已重戳）；
+   **已完成，终盘第二十七轮**（08-26 [r26 报告](./mechanism-reinventory-r26/report.md)：235 口，
+   松口径缺 9，精确口径缺 7，工具对 r25 发布树复现校验逐格一致；08-27
+   [r27 报告](./mechanism-reinventory-r27/report.md)「端口两口径复点」节：240 口、判据 A 缺 7、
+   判据 B 缺 6，新开五读口两口径全记已实现，原始输出
+   [raw/r27-head-f6f0029.txt](./mechanism-reinventory-r27/raw/r27-head-f6f0029.txt)；
+   报告入库 `4e72e24`）；
+2. 机制半边重盘，八切片逐三判据核——**已完成，终盘第二十七轮**（08-26 r26：PN-01/04/05/08
+   首次达标、其余四切片差量点名到口；08-27 r27「八切片逐三判据」节：八切片全数
+   「达标或有裁定的显式留待」，r26 点名三票全部收讫，判据 B 剩余六口全部是有记录的显式留待；
+   基线「机制半边现状」节重戳 `f6f0029`，落库 `86cc5d8`）；
 3. 全绿（CI 含 `-race` 含真库）后向用户提交「产品就绪候选」宣布——宣布本身是用户的决定。
-   本机真库全量 `-race` 已实跑全绿（79 包 ok、零竞态）；候选材料齐备，**骨架完整差三张
-   可派票**（sa-preacceptance-policy-view/01、ve-claims-read-seams/01、02，互不撞文件不占号），
-   建议收票后作第二十七轮戳再交宣布。
+   全绿证据已锚 SHA：`go test -race -p 1 -count=1 ./...` 于 `f6f0029` 对真库实跑 EXIT 0、
+   80 包全 ok 零竞态（[raw/race-run-2026-08-27-f6f0029.log](./mechanism-reinventory-r27/raw/race-run-2026-08-27-f6f0029.log)）；
+   候选材料齐备，**留待清单已随 r27 报告「八切片逐三判据」节呈用户**——认可即宣布就绪的
+   前提；本文只记「候选已交」，M4 不记完成。
 
 ## 三、依赖与串行约束
 
@@ -96,7 +105,7 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
 | M1 | T0 清零 | 表内各票 resolved，在途分支合入或裁弃 |
 | M2 | T1 门族收口 | 十八墙全部「有门」或按票裁定显式留待（裁定记录在票） |
 | M3 | T2 按 UC 闭合 + T3 裁断清零 | 消费方向清单上每条要么接通要么裁不接；needs-triage 归零 |
-| M4 | T4 重盘通过 | 第二十六轮盘点记录八切片达标，交用户宣布产品就绪候选 |
+| M4 | T4 重盘通过 | 终盘盘点（实际落在第二十七轮）记录八切片达标或有裁定的显式留待，交用户宣布产品就绪候选——宣布与留待认可是用户的决定 |
 
 ## 本计划不包含
 
@@ -225,3 +234,25 @@ Status: in-progress——轨道与依赖是本文的主张；逐票放行原等�
   - **就绪候选结论（呈用户）**：可复算与显式未配置两判据全库满足、S 级演示动线页面层取证
     在案，「可以演示」今天成立；骨架完整差上述三票。建议收三票后作第二十七轮戳再交宣布——
     宣布本身是用户的决定（T4 第 3 条口径不变）。M4 记**进行中：候选材料齐备，差量三票**。
+- 2026-08-27 终盘收口轮（MCP-2 承 MCP-1 叫号，对 `origin/main=86cc5d8`；r27 由 MCP-1 执盘，
+  本轮只收计划文档，只改本文件）：
+  - **T4 三件套记账为已完成（终盘第二十七轮）**：两口径复点（240 口、A 缺 7、B 缺 6，新开
+    五读口无新账）、八切片重盘（全数「达标或有裁定的显式留待」，r26 点名三票全部收讫）、
+    全绿证据（`-race` 锚 `f6f0029`、80 包全 ok 零竞态零 FAIL，比 r26 多出的第 80 包正是
+    ADR-0079 新缝）。证据：[r27 报告](./mechanism-reinventory-r27/report.md)（入库 `4e72e24`，
+    raw 原始输出随报告族入库，含先行作业三件的记账）与基线重戳笔 `86cc5d8`。
+  - **M4 分寸**：材料齐备、留待清单已随 r27 报告「八切片逐三判据」节呈用户；按 T4 第 3 条，
+    宣布（含认可各处留待）是用户的决定——**M4 不记完成**，本文 Status 照旧 in-progress，
+    只记「候选已交」。M4 判据行同笔把过期的「第二十六轮」改指终盘轮次并补留待半句；
+    T4 第 2 条行首同笔去掉写死的轮次。
+  - **余票按 08-27 票面实测全数收口**：审计 04/05/06/11/12/13/14/15、Bento 03、SA-05
+    （供应商成本更正族）、CC 解释规则版本维、PG 接管重放、sa-preacceptance-policy-view/01、
+    ve-claims-read-seams/01+02 均 resolved——**可派池清零**（与 `86cc5d8` 提交信息互证）；
+    T1 表内四处过期的「ready-for-agent」就地更正，`assemble.go`/`endpoints.go` 两装配点
+    无人占号。
+  - **余量口径**：needs-info 余四张（审计 01、ve-008/04、PAR-NET-14、PS 外部标记关系），
+    逐票核过均为裁定后的显式停放，按 M2「按票裁定显式留待」判据算收口形态，不强转；
+    T2 量尺（棘轮普查/消费清单）r27 未重取（其「本轮没做的事」节自记），下次接线批开工前
+    按量尺重核；B-06 双消费者绑定照旧在 T4 之外另行报批（08-25 已记）。
+  - 轨道、串行约束与里程碑判据（除 M4 行更正外）：不动。计划的下一动只剩用户侧：认可留待
+    清单并宣布，或点名翻案某处留待——届时按翻案开票，不改本文轨道。
