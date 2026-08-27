@@ -2,14 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
+	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -112,35 +116,7 @@ func TestASubmittedRequestHandsOffExactlyOneEnvelope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-
-	sources, err := pspostgres.NewSourceSubmissions(db)
-	if err != nil {
-		t.Fatalf("构造来源保全仓储：%v", err)
-	}
-	requests, err := pspostgres.NewShipmentRequests(db)
-	if err != nil {
-		t.Fatalf("构造委托仓储：%v", err)
-	}
-	store, err := outbox.NewStore(db)
-	if err != nil {
-		t.Fatalf("构造 Outbox Store：%v", err)
-	}
-	clock := fixedClock{at: envelopeProofAnchor}
-	handoff, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(db, store, clock)
-	if err != nil {
-		t.Fatalf("构造意图适配器：%v", err)
-	}
-	identities, err := psidentity.NewSubmissionIdentities()
-	if err != nil {
-		t.Fatalf("构造标识工厂：%v", err)
-	}
-	submission := shipmentapp.NewSubmitShipmentRequestHandler(
-		preservationBoundary{transactor: db.Transactor(), inner: sources},
-		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
-		permittingOwnership{anchor: envelopeProofAnchor},
-		identities,
-		clock,
-	)
+	submission, _ := envelopeMintingSubmission(t, db)
 
 	command := submissionCommand(t)
 	submitted, err := submission.Handle(t.Context(), command)
@@ -164,6 +140,166 @@ func TestASubmittedRequestHandsOffExactlyOneEnvelope(t *testing.T) {
 	if got := submittedEnvelopeCount(t, pool); got != 1 {
 		t.Fatalf("重放后信封 = %d 份——重放不得入队第二份意图", got)
 	}
+}
+
+// Covers: 发布侧铸出的那一封，生产消费门真的译得出（ADR-0081 把这条缝从死接到活：
+// 在此之前发布侧零生产调用方，两边对不上也不会有任何一封信真的走过这条路）。
+//
+// 两半各写各的载荷标签——消费门明写不导入发布侧的未导出结构，免得消费方依赖提供方的
+// 内部形状。代价是**字段名漂开时的症状是静默的**：译不出即毒丸，消费门显式拒收入账
+// 并交回 nil，那一封于是被记成发布成功，而接受判断链一次都没跑过。它与「实例半边还
+// 没配置」在库里长着同一张脸——两边都是链没往前走，都不报错。
+//
+// 既有用例守的是各自那一侧对自己抄本的忠诚，不是两侧彼此对得上：发布侧由 PBC-05 的
+// 镜像结构守，消费侧由 `adapters/inbox` 的字面量守，`cmd/parcel-dispatch` 那份同样是
+// 手抄。**改发布侧标签时顺手改它自己的镜像**是最自然的一步，而那一步之后没有任何东西
+// 会红——实测于 `46dbb90`：把 `submissionVersionId` 连同 PBC-05 镜像一起改名（消费侧
+// 不动），上述四个包全绿，只有本用例红。它走的是真字节：建单落下的那一封按派发一拍
+// 的同一条认领路径取回来，喂给生产消费门。
+func TestTheMintedEnvelopeDecodesIntoTheAcceptanceChainCommand(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	submission, store := envelopeMintingSubmission(t, db)
+
+	command := submissionCommand(t)
+	submitted, err := submission.Handle(t.Context(), command)
+	if err != nil {
+		t.Fatalf("首次提交：%v", err)
+	}
+	if got := submitted.Outcome(); got != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("outcome = %v, want SUBMITTED", got)
+	}
+
+	envelope := claimSubmittedEnvelope(t, store)
+
+	inboxStore, err := inbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Inbox Store：%v", err)
+	}
+	advancer := &recordingAdvancer{err: errAdvancerProbe}
+	consumer, err := psinbox.NewShipmentRequestSubmittedConsumer(db.Transactor(), inboxStore, advancer)
+	if err != nil {
+		t.Fatalf("构造接受链消费门：%v", err)
+	}
+
+	// 探针错误让编排那一层不必真装起来，同时把「译到了」与「毒丸」分成两个可观察结果：
+	// 毒丸时消费门交回 nil，probe 时它把错误原样上抛。
+	err = consumer.Consume(t.Context(), envelope)
+	if errors.Is(err, psinbox.ErrPoisonEnvelope) || err == nil {
+		t.Fatalf("生产消费门译不出生产发布侧铸的信封：err = %v；两侧载荷字段名已漂开", err)
+	}
+	if !errors.Is(err, errAdvancerProbe) {
+		t.Fatalf("err = %v, want 探针错误——译码之后该走到编排", err)
+	}
+	if len(advancer.commands) != 1 {
+		t.Fatalf("推进次数 = %d, want 1", len(advancer.commands))
+	}
+
+	// 译得出还不够：四维互换也照样译得出，而错位的租户维会让接受链去问另一个租户的
+	// 权威，答出来的`无适用依据`与本租户没登记一模一样。逐维对回提交时那一份。
+	got := advancer.commands[0]
+	if got.Identity != command.Identity {
+		t.Fatalf("来源身份 = %+v, want %+v", got.Identity, command.Identity)
+	}
+	if got.ShipmentRequestID != command.ShipmentRequestID {
+		t.Fatalf("委托 = %q, want %q", got.ShipmentRequestID, command.ShipmentRequestID)
+	}
+	if len(got.DeclaredParcelIDs) != len(command.DeclaredParcelIDs) {
+		t.Fatalf("声明成员 = %v, want %v", got.DeclaredParcelIDs, command.DeclaredParcelIDs)
+	}
+	for index, parcel := range command.DeclaredParcelIDs {
+		if got.DeclaredParcelIDs[index] != parcel {
+			t.Fatalf("声明成员[%d] = %q, want %q", index, got.DeclaredParcelIDs[index], parcel)
+		}
+	}
+	// 提交版本由标识工厂现签，命令里没有可对的原件；译得出非空即证这一维没漂——
+	// 标签对不上时它是空串，而空串过不了 NewSubmissionVersionID，上面那格就已经红了。
+	if got.SubmissionVersion.String() == "" {
+		t.Fatal("提交版本为空——发布侧没写或消费侧没译")
+	}
+}
+
+// envelopeMintingSubmission 装配「会真发信封」的提交编排：仓储、边界壳、Outbox Store、
+// 意图适配器与标识工厂全是生产实现，只有归属权威换成放行替身（隔离合成 `S`，不进生产
+// 装配）——真实治理桥在目录未配置时把提交停在 OWNERSHIP_UNRESOLVED，建单一段走不到，
+// 而这两个用例要取证的恰是建单一段。
+func envelopeMintingSubmission(
+	t *testing.T,
+	db *bentopg.DB,
+) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
+	t.Helper()
+
+	sources, err := pspostgres.NewSourceSubmissions(db)
+	if err != nil {
+		t.Fatalf("构造来源保全仓储：%v", err)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	clock := fixedClock{at: envelopeProofAnchor}
+	handoff, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(db, store, clock)
+	if err != nil {
+		t.Fatalf("构造意图适配器：%v", err)
+	}
+	identities, err := psidentity.NewSubmissionIdentities()
+	if err != nil {
+		t.Fatalf("构造标识工厂：%v", err)
+	}
+	return shipmentapp.NewSubmitShipmentRequestHandler(
+		preservationBoundary{transactor: db.Transactor(), inner: sources},
+		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
+		permittingOwnership{anchor: envelopeProofAnchor},
+		identities,
+		clock,
+	), store
+}
+
+// claimSubmittedEnvelope 按派发一拍的同一条认领路径把信封取回来。走 Claim 而不是自己
+// 拼一个 Envelope：要证的正是「库里那一封」，自己拼等于把发布侧那半换成手抄本。
+func claimSubmittedEnvelope(t *testing.T, store *outbox.Store) eventing.Envelope {
+	t.Helper()
+
+	deliveries, err := store.Claim(t.Context(), eventing.OutboxClaim{
+		Now:         envelopeProofAnchor,
+		Limit:       10,
+		LeaseFor:    time.Minute,
+		MaxAttempts: 5,
+	})
+	if err != nil {
+		t.Fatalf("认领待发信封：%v", err)
+	}
+	for _, delivery := range deliveries {
+		if string(delivery.Envelope.Type) == submittedEnvelopeType {
+			return delivery.Envelope
+		}
+	}
+	t.Fatalf("认领到 %d 封，其中没有「委托已提交」", len(deliveries))
+	return eventing.Envelope{}
+}
+
+// errAdvancerProbe 让接受链编排那一层不必在本包真装起来：本用例问的是「载荷译成了
+// 什么」，不是「链会答什么」。
+var errAdvancerProbe = errors.New("advancer probe")
+
+type recordingAdvancer struct {
+	commands []shipmentapp.AdvanceAcceptanceChainCommand
+	err      error
+}
+
+func (advancer *recordingAdvancer) Handle(
+	_ context.Context,
+	command shipmentapp.AdvanceAcceptanceChainCommand,
+) (shipmentapp.AdvanceAcceptanceChainResult, error) {
+	advancer.commands = append(advancer.commands, command)
+	return shipmentapp.AdvanceAcceptanceChainResult{}, advancer.err
 }
 
 // envelopeProofAnchor 是信封取证的固定时钟读数：门禁评估时刻必须落在归属替身声明的
