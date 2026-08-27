@@ -127,8 +127,8 @@ func TestCaseRegisterQueryRejectsAnAbsentOrUnknownRegistry(t *testing.T) {
 		unreachableCaseRegisters{t: t},
 	)
 	for name, query := range map[string]string{
-		"absent":       "",
-		"blank":        "?registry=",
+		"absent":        "",
+		"blank":         "?registry=",
 		"rule-registry": "?registry=case-requirement",
 	} {
 		response := httptest.NewRecorder()

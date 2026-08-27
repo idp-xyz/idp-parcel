@@ -181,9 +181,9 @@ type CommercialClosure struct {
 	key          ClosureResolutionKey
 	anchor       SelectionAnchor
 	viewRevision AuthorityViewRevision
-	adopted     []AdoptedBasis
-	unresolved  []CommercialObjectKind
-	conflicting []CommercialObjectKind
+	adopted      []AdoptedBasis
+	unresolved   []CommercialObjectKind
+	conflicting  []CommercialObjectKind
 	// premiseUnresolved 是「前提没解出来，因此根本没问」的那一格（ADR-0080）。它与
 	// unresolved 分开，是因为两句话说的不是同一件事：`无适用依据`是权威说了这个范围里没有
 	// 这类对象，可以拿去跟商业责任方说「去登一份」；而这里连问都没问过——去登一份结算政策

@@ -36,16 +36,16 @@ var _ CaseRegisterCatalogueReader = ports.CaseRegisterCatalogueRead(nil)
 // 业务结果的封闭集合：三本册子各占一格。空册如实答空列表走 2xx 成格，不折成未配置
 // （ADR-0077 Decision 四）。
 const (
-	outcomeReadinessJudgmentsListed   = "READINESS_JUDGMENTS_LISTED"
+	outcomeReadinessJudgmentsListed    = "READINESS_JUDGMENTS_LISTED"
 	outcomeSubmissionAuthoritiesListed = "SUBMISSION_AUTHORITIES_LISTED"
-	outcomeClosureObligationsListed   = "CLOSURE_OBLIGATIONS_LISTED"
+	outcomeClosureObligationsListed    = "CLOSURE_OBLIGATIONS_LISTED"
 )
 
 // registry 查询参数的封闭集（未知值坏请求），判据同 /customs-compliance-rules。
 const (
-	registryReadiness          = "readiness"
+	registryReadiness           = "readiness"
 	registrySubmissionAuthority = "submission-authority"
-	registryClosureObligation  = "closure-obligation"
+	registryClosureObligation   = "closure-obligation"
 )
 
 // NewQueryCaseRegistersEndpoint 交回案件配置册查阅的 HTTP 入口
