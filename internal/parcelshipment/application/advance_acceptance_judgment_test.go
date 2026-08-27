@@ -614,6 +614,9 @@ type reachabilityDouble struct {
 	record   func(string)
 	calls    int
 	lastAsOf domain.JudgmentAsOf
+	// parcels 按序留下每一轮问的是哪个成员。计数分不出「逐成员各问一次」和「问了同一个
+	// 成员两次」，而接受决定要的是每个成员各有一份判断。
+	parcels []domain.DeclaredParcelID
 }
 
 func (double *reachabilityDouble) AssessParcelReachability(
@@ -624,6 +627,7 @@ func (double *reachabilityDouble) AssessParcelReachability(
 	double.record("assess-reachability")
 	double.calls++
 	double.lastAsOf = request.AsOf
+	double.parcels = append(double.parcels, request.DeclaredParcelID)
 	if double.err != nil {
 		return ports.ReachabilityAssessment{}, double.err
 	}
