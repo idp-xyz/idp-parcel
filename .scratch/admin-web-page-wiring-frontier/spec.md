@@ -1,6 +1,6 @@
 # 管理台骨架页接线：批 A 与批 B
 
-Status: in-progress
+Status: resolved
 
 盘点见同目录 [report.md](./report.md)（锚 `7ce41e4`）。本 spec 只承载它划出的**阻断物为零的两批**——批 C 压在三堵墙上、批 D 上下文尚未存在，都不在本 spec 范围内。
 
@@ -11,11 +11,11 @@ Status: in-progress
 ## 子票
 
 - 01 PC 客户合同与供应商协议查阅面（批 A）—— `Status: resolved`，MCP-2（`d69bbca` / `ed2bdab` / `3f5fad9`；交付与取证见票面）
-- 02 VE 六类目录查阅面与导航条目（批 B 的干净那半）—— `Status: ready-for-agent`，派 MCP-1
+- 02 VE 六类目录查阅面与导航条目（批 B 的干净那半）—— `Status: resolved`，MCP-1（`8f1c8e7` / `202e15b` / `708b10f`；交付与取证见票面）
 - 03 治理查阅面：先裁租户维键形，再谈 http 包（批 B 的另一半）—— `Status: resolved`（裁决票，无代码产物）。**不为「产品级无租户读面」开第二种隔离读准入形态**，`ADR-0078` Decision 四「只此一维」维持原文；`stage-admission` 维持骨架，但未接线的原因改写为「归属未定」而非「端点未放行」。决定性理由是问错了层：治理数据主是产品团队，页面却长在租户管理台，**归属未答之前不该去答键形**。八表零行、写侧 `ListCurrent` 是冲突预检口不可复用为读面（施工量是三件缺三件）。重开判据三条与将来若接的形状预钉见票面。
 - 04 已登记未读行的收口裁决（关务六类 + 商业阶段内容声明一族）—— `Status: resolved`（裁决票，产物是下面四张接线子票）。导航裁决：**一张新页都不开**，七类全部并进既有页；商业那一族按拥有对象拆成两半，其中授权规则要给 `commercial-policies` 加第六个页签。
-- 05 关务案件页收三类（就绪判断、提交授权、关闭核对）—— `Status: ready-for-agent`，关务组
-- 06 合规限制页收放行门禁两表 —— `Status: ready-for-agent`，关务组
+- 05 关务案件页收三类（就绪判断、提交授权、关闭核对）—— `Status: resolved`，MCP-1（`0cfa6b9` / `88b8607` / `d9e90d3`；交付与取证见票面）
+- 06 合规限制页收放行门禁两表 —— `Status: resolved`，MCP-1（`cd23768` / `56af09a` / `be26d97` / `fb1fb01`；交付与取证见票面）
 - 07 接单规则包页签扩正文（收寄资格 + 终局规则）—— `Status: resolved`，MCP-2（`836cef0` / `5b1e8ab`；交付与取证见票面）
 - 08 商业策略页加授权规则页签（含取消授权目录）—— `Status: resolved`，MCP-2（`2131d05` / `04de101`；交付与取证见票面）
 
@@ -41,3 +41,11 @@ Status: in-progress
 上一句原写作商业组「一个共享文件都不碰」，**票 08 实做时不成立**：扩 `CommercialPolicyCatalogueRead` 会让 `cmd/parcel-api/unwired_orchestration.go` 的未接线替身编译不过，必须补一个方法（追加在方法表末尾，不动邻行）。**凡扩读口的票都会碰到这个文件**，排期时按「要占一次号」算，别照原句以为零接触。票 07 只在既有读面上扩字段，确实一个都没碰——两者的分界在有没有动接口方法表，不在有没有加端点。
 
 **2026-08-26：票 01 已释号**（`3f5fad9` 落地，六个共享文件里它实际动了四个：`endpoints.go`、`main.go`、`unwired_orchestration.go`、`page-registry.tsx`，各只加自己的行，未动邻行）。票 02 可以进装配段。`navigation.ts` 与 `seed.sh` 票 01 没碰——两页早在导航里，种子走的是既有 `publish-batch.json`。
+
+## 收口（2026-08-27 · MCP-1）
+
+八子票逐一核过均 resolved，按 tracker「父随子清」收口。其中 03、04 是裁决票无代码产物；04 的产物即 05–08 四张接线子票，也已俱清。各票的交付 SHA、真库测试与 DOM 取证在各票面，不在此复述。
+
+收口自查（锚 `515359c` 提交态，工作树无未提交代码）：apps/admin-web 下 `tsc --noEmit` 绿，全仓 `go build ./...` 绿。
+
+界外重申：本 spec 只收批 A 与批 B——批 C 压着的三堵墙与批 D 的缺上下文不因本收口改变，墙态看 `.scratch/syn-wall-door-audit/` 的机制票，接线态权威始终是 `page-registry.tsx` 的 `liveIds`，不拿本 spec 当第二处登记。
