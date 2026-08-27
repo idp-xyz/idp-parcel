@@ -1,8 +1,8 @@
 # 解析键登记面装不下结算选择器——接受前控制链因此整条走不通，且合同维有一处循环要先裁
 
 Category: enhancement
-Status: blocked（裁决已出＝乙案，落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)；PC 解析顺序、PS 登记面与种子三段已落，收口卡在两条上游缺口，见末节「进展与两条阻断」）
-Blocked by: 02, 03
+Status: blocked（裁决已出＝乙案，落 [ADR-0080](../../../docs/adr/0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)；PC 解析顺序、PS 登记面与种子三段已落。阻断一已由 [02](./02-settlement-policy-body-has-no-publication-channel.md) 清除，收口只剩阻断二，见末节）
+Blocked by: 03
 
 发现于 [sa-preacceptance-policy-view/01](../../sa-preacceptance-policy-view/issues/01-sa-preacceptance-control-policy-view-has-no-production-adapter.md) 收口时留的那条遗留（锚 `0fb4040`）。那一票把 SA 这一侧全部做完了——控制策略视图有了生产适配器，判据 B 该口从缺转有——但适配器**暂不装进 `cmd/parcel-api`**，因为上游形不成它要读的那份闭包。本票就是那一道。
 
@@ -83,6 +83,14 @@ Blocked by: 02, 03
 `DeclarationSaveOutcome`，`declarationWrite` 的形状要跟着改一格），并决定价格政策的同处
 缺席要不要一并补——那是另一道决定，且不在本票地盘内（本票只写 `internal/partycommercial/domain`）。
 
+**已由票 [02](./02-settlement-policy-body-has-no-publication-channel.md) 清除**（`ae966e6` /
+`41250b1`）。端口未改：`SettlementPolicySaveOutcome` 在应用层逐值折成 `DeclarationSaveOutcome`；
+价格政策的同处缺席显式不补（理由记在 02 的收口一节）。同一支探针在同一个演示库上现在答：
+
+    outcome=UNIQUELY_RESOLVED unresolved=[] conflicting=[] premiseUnresolved=[] adopted=4
+      adopted SETTLEMENT_POLICY -> SYN-SETTLEMENT-PREPAID-01/v1
+        method=PREPAID contract=SYN-CONTRACT-01/v1 chargeScope=SYN-CHARGE-PREPAID currency=CNY
+
 ### 阻断二：`cmd/parcel-api` 根本没有接受链
 
 票面「实现范围」最后一条与 sa-preacceptance-policy-view/01 的占号核对都假定
@@ -102,13 +110,12 @@ Blocked by: 02, 03
 
 ### 完成标准逐条
 
-1. **种子租户下走通到`要求-预付`并停在账户映射未配置** — 未达成，被阻断一与阻断二同时挡住。
-   停摆原因确已换格（从「登记面明拒结算依据」换到「本范围没有结算政策」），但那还不是
-   票面要的那一格「账户目录未配置」。
-2. **`CONTROL_SCOPE_NOT_CONFIGURED` 只剩实例半边一个成因** — 部分达成，且不可端到端举证。
-   机制半边的欠账（登记面装不下结算选择器）已清；但 `PolicyBackedControlScopeSource`
-   在今天的种子上仍走 `SettlementTerms()` 缺席那一支，因为闭包里没有结算政策——而那不是
-   实例半边缺配置，是阻断一那条缺失的写入路径。
+1. **种子租户下走通到`要求-预付`并停在账户映射未配置** — 未达成，被阻断二挡住（阻断一已清）。
+   闭包现在解得开、结算依据带得出方式与六维范围，但没有任何进程会去走那条接受前控制链，
+   所以「停在账户目录未配置」这一格今天仍无处可观察。
+2. **`CONTROL_SCOPE_NOT_CONFIGURED` 只剩实例半边一个成因** — 机制半边的两处欠账都已清
+   （登记面装得下结算选择器、权威册里有结算政策），`PolicyBackedControlScopeSource` 不再走
+   `SettlementTerms()` 缺席那一支。仍不可端到端举证，理由同上条：没有装配点就没有调用方。
 3. **乙案的那一例证** — 已达成：
    `internal/partycommercial/domain/settlement_basis_resolution_test.go` 的
    `TestAnUnresolvedContractLeavesTheSettlementBasisUnasked` 证「合同解不出时结算政策落

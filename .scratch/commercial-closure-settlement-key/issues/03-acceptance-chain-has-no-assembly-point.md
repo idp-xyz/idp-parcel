@@ -31,10 +31,8 @@ Status: ready-for-agent
 ## 完成标准
 
 - 种子租户下接受前控制走通到`要求-预付`分支，停在 `CONTROL_SCOPE_NOT_CONFIGURED` 且原因是**账户目录未配置**——与「闭包形不成」可分辨（票 01 完成标准的第一条，它要的正是这一格）。
-- 本票需要 [02](./02-settlement-policy-body-has-no-publication-channel.md) 先落：闭包里没有已采用结算政策时，作用域源在 `SettlementTerms()` 缺席那一支就早退，走不到账户目录那一步，上一条判不出来。
+- 上一条曾要等 [02](./02-settlement-policy-body-has-no-publication-channel.md)：闭包里没有已采用结算政策时，作用域源在 `SettlementTerms()` 缺席那一支就早退，走不到账户目录那一步。**02 已收口**（`ae966e6` / `41250b1`），种子租户下闭包解出`唯一解析`且结算依据带得出方式与六维范围，这条前置不再成立。
 
 ## 地盘
 
 `cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配面（按裁决二选一）、`internal/parcelshipment/adapters/http`（若取 HTTP 路）。占号敏感：这两份接线文件由占号纪律管着。
-
-Blocked by: 02
