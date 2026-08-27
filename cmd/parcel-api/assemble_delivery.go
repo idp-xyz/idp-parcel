@@ -13,7 +13,7 @@ import (
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 )
 
-// transactionalDelivery 把交付编排的两个入口各包进一笔事务，理由随 transactionalSubmission：
+// transactionalDelivery 把交付编排的两个入口各包进一笔事务，理由随 transactionalCancellation：
 // 交付登记库的写口（Save 与 Supersede）按框架合同无事务即拒，事务边界归装配点。意图
 // 交付失败不翻结果——编排把它吞成续办引用后照常交回业务答案，事务照常提交，重放重发
 // 同一份；编排返回错误时整笔回滚。一个类型顶两个端点：首登与更正共用 DeliveryHandler，

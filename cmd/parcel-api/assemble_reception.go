@@ -40,7 +40,7 @@ func (unconfiguredParcelIdentityView) ResolveParcelIdentity(
 	return nil, errParcelIdentityViewNotConfigured
 }
 
-// transactionalReception 把收寄编排包进一笔事务，理由随 transactionalSubmission：收寄
+// transactionalReception 把收寄编排包进一笔事务，理由随 transactionalCancellation：收寄
 // 库的写口按框架合同无事务即拒（收寄判断落库与同一步的意图发布必须同生共死），事务
 // 边界归装配点。意图交付失败不翻结果——编排把它吞成续办引用后照常交回业务答案，事务
 // 因此照常提交，重放重发同一份（AT-NO-027 的语义靠的正是「结果已提交而意图没跟上」

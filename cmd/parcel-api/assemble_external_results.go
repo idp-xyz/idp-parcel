@@ -13,7 +13,7 @@ import (
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
 
-// transactionalResults 把外部结果接收编排包进一笔事务，理由随 transactionalSubmission：
+// transactionalResults 把外部结果接收编排包进一笔事务，理由随 transactionalCancellation：
 // 结果登记册的写口按框架合同无事务即拒，事务边界归装配点。编排交回业务答案（含未决、
 // 留存不猜与同层冲突留存双方）时事务提交；意图投递失败不翻结果——编排吞成续办引用后
 // 照常作答，重放重发同一份；编排返回错误时整笔回滚。

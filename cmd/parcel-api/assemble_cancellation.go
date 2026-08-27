@@ -15,8 +15,8 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 )
 
-// transactionalCancellation 把取消编排包进一笔事务，理由随 transactionalSubmission：
-// 取消库的写口按框架合同无事务即拒，事务边界归装配点。编排交回业务答案（含未决、
+// transactionalCancellation 把取消编排包进一笔事务：取消库的写口按框架合同走
+// RequireExecutor，无事务即拒，事务边界因此归装配点，编排自己不开也不提交。编排交回业务答案（含未决、
 // 拒绝、待处置与已有结果）时事务提交；发布意图交不出不翻决定——编排吞成重发引用后
 // 照常作答，重放重发同一份；编排返回错误时整笔回滚。
 type transactionalCancellation struct {

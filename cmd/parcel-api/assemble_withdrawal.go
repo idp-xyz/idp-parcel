@@ -19,7 +19,7 @@ import (
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 )
 
-// transactionalWithdrawal 把撤回编排包进一笔事务，理由随 transactionalSubmission：PS 的
+// transactionalWithdrawal 把撤回编排包进一笔事务，理由随 transactionalCancellation：PS 的
 // 写口按框架合同无事务即拒，事务边界归装配点。编排交回业务答案（含未决与已有决定）时
 // 事务提交——被拦下的撤回也已保全来源；编排返回错误时整笔回滚（指名查不到的委托正是
 // 这一格：调用方的错不留半截写入）。

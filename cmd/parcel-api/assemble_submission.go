@@ -8,12 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
@@ -69,38 +72,121 @@ func openDatabase(ctx context.Context, getenv func(string) string) (*bentopg.DB,
 	return db, pool.Close, nil
 }
 
-// transactionalSubmission 把提交编排包进一笔事务。PS 的写口按框架合同走
-// RequireExecutor，无事务即拒，事务边界因此归装配点，编排自己不开也不提交。
+// 提交的事务边界按首个消费者切片简报「事务边界」分两段（ADR-0081；PBC-04/05/07 在
+// `tests/bentocontract` 取证的正是这两条边界）：来源保全逐笔独立提交，建单与「委托已
+// 提交」信封同一事务原子。PS 的写口按框架合同走 RequireExecutor，无事务即拒，事务
+// 边界因此归装配点，编排自己不开也不提交；两个边界壳只切事务，不含业务判断。
 //
-// 编排交回业务答案（含被门禁拦下的那几格）时事务提交——被拦下的提交也已保全来源，
-// 重放同一份输入答`已有结果`正是靠这笔提交；编排返回错误时整笔回滚，半截写入不落库。
-type transactionalSubmission struct {
+// 先前的整段 Handle 单事务壳（transactionalSubmission）随 ADR-0081 退役：它让编排
+// 报错时把已保全的来源一并回滚，而 UC-PS-001 步骤 2 明写「后续解析或依赖失败不能
+// 删除该记录」——保全的存活不能系在后续步骤的成败上。
+
+// preservationBoundary 给来源保全的每笔写入各开一个事务（简报「事务边界」第一段）：
+// 保全一经提交就不随后续步骤回滚。读口直通——读不改状态，无需事务。
+type preservationBoundary struct {
 	transactor bentoapp.Transactor
-	inner      *shipmentapp.SubmitShipmentRequestHandler
+	inner      ports.SourceSubmissionRepository
 }
 
-var _ shipmenthttp.SubmissionHandler = transactionalSubmission{}
+var _ ports.SourceSubmissionRepository = preservationBoundary{}
 
-func (submission transactionalSubmission) Handle(
+func (boundary preservationBoundary) FindPreserved(
 	ctx context.Context,
-	command shipmentapp.SubmitShipmentRequestCommand,
-) (shipmentapp.SubmitShipmentRequestResult, error) {
-	var result shipmentapp.SubmitShipmentRequestResult
-	err := submission.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		handled, handleErr := submission.inner.Handle(txCtx, command)
-		if handleErr != nil {
-			return handleErr
+	identity domain.SourceIdentity,
+) (domain.SourceSubmissionFingerprint, bool, error) {
+	return boundary.inner.FindPreserved(ctx, identity)
+}
+
+func (boundary preservationBoundary) Preserve(
+	ctx context.Context,
+	submission domain.SourceSubmissionFingerprint,
+) error {
+	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return boundary.inner.Preserve(txCtx, submission)
+	})
+}
+
+func (boundary preservationBoundary) AppendObservation(
+	ctx context.Context,
+	observed domain.SourceSubmissionFingerprint,
+) error {
+	return boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return boundary.inner.AppendObservation(txCtx, observed)
+	})
+}
+
+// submissionBoundary 是简报「事务边界」的第二段：建单与「委托已提交」信封在同一个
+// 事务里成立或一起消失（ports.ShipmentRequestSubmittedHandoff 的合同即此义）。已存在
+// 时本事务没有写下任何东西，把答案交回编排按重放规则重答，不入队第二份意图。
+type submissionBoundary struct {
+	transactor bentoapp.Transactor
+	inner      ports.ShipmentRequestRepository
+	handoff    ports.ShipmentRequestSubmittedHandoff
+}
+
+var _ ports.ShipmentRequestRepository = submissionBoundary{}
+
+func (boundary submissionBoundary) FindBySourceIdentity(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+) (domain.ShipmentRequest, bool, error) {
+	return boundary.inner.FindBySourceIdentity(ctx, identity)
+}
+
+func (boundary submissionBoundary) Insert(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) (ports.ShipmentRequestInsertOutcome, error) {
+	var outcome ports.ShipmentRequestInsertOutcome
+	err := boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		inserted, err := boundary.inner.Insert(txCtx, identity, request)
+		if err != nil {
+			return err
 		}
-		result = handled
+		outcome = inserted
+		if inserted != ports.ShipmentRequestInserted {
+			return nil
+		}
+		return boundary.handoff.HandOffShipmentRequestSubmitted(txCtx, ports.ShipmentRequestSubmittedHandoffIntent{
+			Identity: identity,
+			Request:  request,
+		})
+	})
+	if err != nil {
+		return ports.ShipmentRequestInsertOutcomeInvalid, err
+	}
+	return outcome, nil
+}
+
+// Save 只切事务、不发信封：「委托已提交」是建单那一刻的事实，改写既有委托（撤回、
+// 拒绝、新提交版本）各有自己的意图与装配点。提交编排走不到这一口，它在这里是因为
+// 端口带着它——同规格切事务，谁日后复用这个壳都不会撞 RequireExecutor。
+func (boundary submissionBoundary) Save(
+	ctx context.Context,
+	identity domain.SourceIdentity,
+	request domain.ShipmentRequest,
+) (ports.ShipmentRequestSaveOutcome, error) {
+	var outcome ports.ShipmentRequestSaveOutcome
+	err := boundary.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		saved, err := boundary.inner.Save(txCtx, identity, request)
+		if err != nil {
+			return err
+		}
+		outcome = saved
 		return nil
 	})
 	if err != nil {
-		return shipmentapp.SubmitShipmentRequestResult{}, err
+		return ports.ShipmentRequestSaveOutcomeInvalid, err
 	}
-	return result, nil
+	return outcome, nil
 }
 
 // buildSubmissionOrchestration 装配 `/shipment-requests` 的真编排（UC-PS-001；审计票 13）。
+//
+// 建单落库即在同一事务交出「委托已提交」信封（ADR-0081 的出站半边）：submissionBoundary
+// 携 OutboxShipmentRequestSubmittedHandoff，事件类型 `parcel-shipment.shipment-request.submitted`，
+// 消费门在 cmd/parcel-dispatch（接受判断链由它推进，本编排不判接受）。
 //
 // 治理桥的三个读口（权威区间、暂停、接管）接真库；GovernanceScopeDirectory 与
 // SelfAuthority 是范围缝的实例半边——没有租户就没有目录，缺席即适配器的「显式未配置」，
@@ -150,6 +236,20 @@ func buildSubmissionOrchestration(db *bentopg.DB) (shipmenthttp.SubmissionHandle
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: submission identities: %w", err)
 	}
-	handler := shipmentapp.NewSubmitShipmentRequestHandler(sources, requests, ownership, identities, clock)
-	return transactionalSubmission{transactor: db.Transactor(), inner: handler}, nil
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: outbox store: %w", err)
+	}
+	downstream, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(db, store, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment request submitted handoff: %w", err)
+	}
+	handler := shipmentapp.NewSubmitShipmentRequestHandler(
+		preservationBoundary{transactor: db.Transactor(), inner: sources},
+		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
+		ownership,
+		identities,
+		clock,
+	)
+	return handler, nil
 }

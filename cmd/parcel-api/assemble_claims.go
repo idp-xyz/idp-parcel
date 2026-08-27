@@ -14,7 +14,7 @@ import (
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
-// transactionalClaims 把索赔编排的入口各包进一笔事务，理由随 transactionalSubmission：
+// transactionalClaims 把索赔编排的入口各包进一笔事务，理由随 transactionalCancellation：
 // 索赔库的写口（UPSERT 与只增历史）按框架合同无事务即拒，事务边界归装配点。编排交回
 // 业务答案（含未决与已有项）时事务提交；返回错误时整笔回滚。
 //
