@@ -33,6 +33,43 @@ Status: ready-for-agent
 - 种子租户下接受前控制走通到`要求-预付`分支，停在 `CONTROL_SCOPE_NOT_CONFIGURED` 且原因是**账户目录未配置**——与「闭包形不成」可分辨（票 01 完成标准的第一条，它要的正是这一格）。
 - 上一条曾要等 [02](./02-settlement-policy-body-has-no-publication-channel.md)：闭包里没有已采用结算政策时，作用域源在 `SettlementTerms()` 缺席那一支就早退，走不到账户目录那一步。**02 已收口**（`ae966e6` / `41250b1`），种子租户下闭包解出`唯一解析`且结算依据带得出方式与六维范围，这条前置不再成立。
 
+## 进展 · 裁决已定，入站这半已收口（MCP-1，锚 `5fce8ab`）
+
+**裁决取路 B（信封驱动）**，依据见 [前置裁决简报](../acceptance-drive-decision-brief.md)，用户授权 1-2 号通道协同推进。落档的 ADR 与出站那半归 MCP-2，本节只记入站这半。
+
+入站已落库推送两笔：
+
+- `e3fdcff` — 编排 `AdvanceAcceptanceChainHandler` 与消费门 `ShipmentRequestSubmittedConsumer`。编排把三步串成一件事（逐成员可达性 → 整份委托财务控制 → 形成决定），任一步未决即整条停下，停在哪一步由 `AcceptanceChainStage` 单独交回；装配缺件与空成员清单响亮报错而不压成未决。消费门按简报第二格「一个消费者内按顺序推进，不拆中间事件类型」实现。
+- `5fce8ab` — `wireDispatcher` 装上这条链：路由表加一行，未决哨兵一格（简报第三格）。三条判断腿共用同一个商业依据适配器实例（形成决定要按判断当初采用的那份解析重校验）；控制策略视图接 PC 声明册，作用域源接 `PolicyBackedControlScopeSource`。
+
+实现范围里的三件按票面办了：`NewPreAcceptanceControlPolicy` 与 `PreAcceptanceControlAdapter` 的 `Apply` 半边都接真，`SettlementAccountDirectory` 与 `ControlAmountSource` 留 nil。
+
+### 完成标准第一条已取证
+
+种子库（`SYN-TENANT-01`）上按生产同一条路径造键、解析、提问，一次性探针实测：
+
+```
+KEY            purpose=ACCEPTANCE_CONTROL bases=[SERVICE_PRODUCT ACCEPTANCE_RULE_PACKAGE CUSTOMER_CONTRACT SETTLEMENT_POLICY]
+CLOSURE        outcome="UNIQUELY_RESOLVED" resolutionID="CLO-2e7e0fc5e2b61c04" fixed=SAVED
+SETTLEMENT     adopted present=true method=PREPAID version=SYN-SETTLEMENT-PREPAID-01/v1
+CONTROL POLICY configured=true required=true method=PREPAID adopted=SYN-SETTLEMENT-PREPAID-01/v1
+APPLY          outcome=NOT_FORMED reason=CONTROL_SCOPE_NOT_CONFIGURED
+```
+
+两格正是本条要的：控制策略答**要求-预付**（第三、四行），控制本身停在 `CONTROL_SCOPE_NOT_CONFIGURED`（第五行）。**与「闭包形不成」可分辨**靠的就是第三、四行——策略视图要先取到唯一已解析闭包、再从闭包里取出已采用结算政策才答得出方式，它既然答了`预付`，闭包必然形得成，那么第五行的缺口只可能是账户目录（与金额源，它在作用域之后）。
+
+探针用完即删，因为它要的是**已灌种子**的库，而 `pgtest` 给每个用例开一个独立空库——留下来只会在别人的干净库上红。代价如实记：它在演示库里留下了一份固定闭包 `CLO-2e7e0fc5e2b61c04`，那正是一次真解析该留的东西，复灌用 `seed.sh --reset` 清。
+
+### 入站这半的装配取证（真库，随仓测试常驻）
+
+`cmd/parcel-dispatch/assemble_test.go` 三条：毒丸载荷证路由表挂对了人；各维齐全的载荷证整张依赖图在生产装配上跑得动（空库没登记解析键，链停成未决，路由条目翻成 `dispatch.consumer_undecided`）；失败分格用生产的同一份哨兵名单，另三格保持 `dispatch.publish_failed`。全仓真库套件绿（含架构门禁与 `tests/bentocontract`）。
+
+### 还欠
+
+出站那半与 ADR 落档（MCP-2）：提交编排交出「委托已提交」信封。在它接上之前，这条链在生产路径上收不到信封——入站已就位，等发信的那一侧。
+
 ## 地盘
 
 `cmd/parcel-api` 或 `cmd/parcel-dispatch` 的装配面（按裁决二选一）、`internal/parcelshipment/adapters/http`（若取 HTTP 路）。占号敏感：这两份接线文件由占号纪律管着。
+
+裁决取路 B 之后本票实际动的是 `cmd/parcel-dispatch` 那一侧（MCP-1，已收口）与 `cmd/parcel-api/assemble_submission.go` 的出站装配（MCP-2，进行中）；`internal/parcelshipment/adapters/http` 一行未动。
