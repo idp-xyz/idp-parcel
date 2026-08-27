@@ -113,6 +113,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'service-areas',
   'compliance-rules',
   'customs-cases',
+  'customs-restrictions',
   'service-products',
   'commercial-policies',
   'party-contracts',

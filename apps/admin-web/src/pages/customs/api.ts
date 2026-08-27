@@ -1,6 +1,7 @@
-// 本目录 fetch 出口:关务两条目录查阅端点——合规规则库(GET /customs-compliance-rules,
-// ADR-0077、票 master-data-wiring/04)与案件配置册(GET /customs-case-registers,票
-// admin-web-page-wiring-frontier/05)。册子都按 ?registry= 分派,各端点各自封闭集。
+// 本目录 fetch 出口:关务各条目录查阅端点——合规规则库(GET /customs-compliance-rules,
+// ADR-0077、票 master-data-wiring/04)、案件配置册(GET /customs-case-registers,票
+// admin-web-page-wiring-frontier/05)与门禁条件册(GET /customs-gate-conditions,票 06)。
+// 前两个按 ?registry= 分派、各端点各自封闭集;门禁册只有一本,不设分派参数。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
@@ -134,4 +135,49 @@ export function listCaseRegisters<Registry extends CaseRegisterRegistry>(
   return exchangeMasterData<CaseRegisterBodyByRegistry[Registry]>(
     `/customs-case-registers?registry=${encodeURIComponent(registry)}`,
   );
+}
+
+// —— 门禁条件册(customs-restrictions 页放行门禁核对签) ——
+// 形状以 internal/customscompliance/adapters/http/query_gate_conditions.go 为准,
+// 此处只做镜像不虚构。
+
+/**
+ * 一项前置条件认定。state 封闭三值 MET / UNMET / CONFLICTING,刻意没有「未知」格
+ * ——判断不出来的前置条件不该进折叠,读回集外取值在服务端读口就上抛,传输层不折第
+ * 四格(词表在 presentation.ts)。
+ */
+export interface GateFindingRecord {
+  precondition: string;
+  state: string;
+}
+
+/**
+ * 一份门禁条件目录连同全部已登记认定。findings 空数组是「此动作在此边界本就不受
+ * 门禁」的如实一格(领域 FoldGateConclusion 折为不适用);「目录未登记 → 未决」表现
+ * 为整份目录不在 gates 里。
+ *
+ * 这两格的含义与关闭义务那对**相反**(0008 自注、票 06 形状约束一):那边空清单是
+ * 「无义务项」的中性事实,这边空清单是放行侧的绿灯,未登记才无从复核。页面文案因此
+ * 不得照抄 ClosureObligationCatalogueRecord 那一份。
+ */
+export interface GateConditionCatalogueRecord {
+  scope: string;
+  /** 封闭四值 OUTBOUND_RELEASE / LOADING_DEPARTURE / CROSS_CUSTOMS_MOVEMENT / FINAL_DELIVERY。 */
+  action: string;
+  boundary: string;
+  registeredAt: string;
+  findings: GateFindingRecord[];
+}
+
+export interface GateConditionListResponseBody {
+  outcome: 'GATE_CONDITIONS_LISTED';
+  gates: GateConditionCatalogueRecord[];
+}
+
+/**
+ * 门禁册只有一本,故本函数不收分派参数——封闭集为一时参数只会造出一个恒定值。
+ * 它与上面两个查询函数形状不同,正是「各立入口 vs 一页里的页签」那道裁决的表形。
+ */
+export function listGateConditions(): Promise<ApiResult<GateConditionListResponseBody>> {
+  return exchangeMasterData<GateConditionListResponseBody>('/customs-gate-conditions');
 }

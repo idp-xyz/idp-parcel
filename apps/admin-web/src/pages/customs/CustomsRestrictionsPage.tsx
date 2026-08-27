@@ -1,12 +1,22 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
+import {
+  listGateConditions,
+  type GateConditionCatalogueRecord,
+  type GateConditionListResponseBody,
+} from './api';
+import { guardedActionLabels, labelOf, preconditionStateLabels } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-restrictions'];
 
-// 三个对象族（内部合规限制、监管核定税费、放行门禁核对）分页签呈现。
+// 三个对象族（内部合规限制、监管核定税费、放行门禁核对）分页签呈现。已接线的是
+// 门禁核对签，接 GET /customs-gate-conditions（票 admin-web-page-wiring-frontier/06）；
+// 另两族列表端点未建，如实占位。
 // 本页两条 CONTEXT 硬句落进表形：
 // ①「外部放行不自动解除内部限制，内部限制解除也不证明监管机构已经放行」——
 //   限制表把两类解除分成两列，永不合并为一个「已解除」；
@@ -99,46 +109,15 @@ const dutyColumns: ListColumn<RegulatoryDutyRow>[] = [
   { id: 'validity', header: '核对·有效性', align: 'center', render: (row) => row.validityStatus },
 ];
 
-/**
- * 放行门禁核对列表行。字段取 customs-compliance CONTEXT.md「放行门禁核对」
- * 原词：判断绑定申报范围、拟执行动作与适用监管边界，不能复用于其他动作或
- * 边界；门禁满足不生成放行，门禁未满足也不能删除已经接收的放行结果。
- */
-export interface ReleaseGateRow {
-  /** 核对标识。 */
-  id: string;
-  /** 申报范围。 */
-  declarationScope: string;
-  /** 拟执行动作：门禁按动作逐一核对，出库、装载出发、跨关务区域移动、交付分别判断。 */
-  intendedAction: string;
-  /** 适用监管边界。 */
-  regulatoryBoundary: string;
-  /** 前置条件：税费付款核对、限制、处置及其他已接受监管事实。 */
-  prerequisites: string;
-  /** 门禁判断：待满足、部分满足、满足、冲突或不适用。 */
-  verdict: string;
-  /** 放行结果（外部引用）：仍由监管机构形成，UC-CC-006 接收和解释；门禁满足只允许进入监管结果等待或放行复核。 */
-  releaseResultRef: string;
-}
-
-const gateColumns: ListColumn<ReleaseGateRow>[] = [
-  { id: 'id', header: '核对标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'scope', header: '申报范围', render: (row) => row.declarationScope },
-  { id: 'action', header: '拟执行动作', render: (row) => row.intendedAction },
-  { id: 'boundary', header: '适用监管边界', render: (row) => row.regulatoryBoundary },
-  { id: 'prerequisites', header: '前置条件', render: (row) => row.prerequisites },
-  { id: 'verdict', header: '门禁判断', align: 'center', render: (row) => row.verdict },
-  { id: 'release', header: '放行结果（外部引用）', render: (row) => row.releaseResultRef },
-];
-
 const unconfigured = {
   kind: 'unconfigured' as const,
-  title: '关务合规模块尚未接线',
-  description: '查阅读口尚未建立（已接线的关务端点是接收面：外部结果接收等），本页不发请求、不含未确认参数的默认值。',
+  title: '本对象族的列表端点尚未建立',
+  description:
+    '本页已接线的是门禁条件册查阅（放行门禁核对签）；内部合规限制与监管核定税费两族的列表端点尚未建立，这两签不发请求、不含未确认参数的默认值。',
   facts: {
     owner: info.owner,
     source: info.source,
-    unlock: '限制/税费/门禁核对的查询端点建成并经 ADR-0017 准入闸门放行后接线',
+    unlock: '限制与税费的查询端点建成并经 ADR-0017 准入闸门放行后接线',
   },
 };
 
@@ -187,52 +166,147 @@ function RegulatoryDutiesTable() {
   );
 }
 
+// —— 放行门禁核对（接真面，票 admin-web-page-wiring-frontier/06）——
+
+interface GateRow {
+  key: string;
+  values: Readonly<Record<string, string>>;
+}
+
+function gateCol(id: string, header: string, mono = false): ListColumn<GateRow> {
+  return {
+    id,
+    header,
+    className: mono ? 'font-mono text-xs' : undefined,
+    render: (row) => row.values[id] ?? '—',
+  };
+}
+
+// 三元键（范围·动作·边界）三列并列，是「判断绑定动作与边界、不复用于其他动作」这条
+// CONTEXT 硬句的表形：折成一个「核对标识」就会让判断看起来可以跨动作复用。
+//
+// 刻意不设「门禁判断」列。五值结论（领域 FoldGateConclusion）是门禁编排的判断语义，
+// 查阅面转述登记册本身——在这里折一次，页面就成了第二处判断权威，而它读到的还只是
+// 登记册的一部分。
+const gateConditionColumns: ListColumn<GateRow>[] = [
+  gateCol('scope', '申报范围', true),
+  gateCol('action', '拟执行动作'),
+  gateCol('boundary', '适用监管边界', true),
+  gateCol('registeredAt', '登记时间', true),
+  gateCol('precondition', '前置条件', true),
+  gateCol('state', '认定'),
+];
+
+function gateRows(gates: GateConditionCatalogueRecord[]): GateRow[] {
+  return gates.flatMap((gate) => {
+    const base = {
+      scope: gate.scope,
+      action: labelOf(guardedActionLabels, gate.action),
+      boundary: gate.boundary,
+      registeredAt: formatInstant(gate.registeredAt),
+    };
+    // 空清单是登记方明说「此动作在此边界本就不受门禁」（领域折为不适用），不是查不到。
+    // 与关闭义务那边的空清单相反：那边是中性的「无义务项」，这边是放行侧的绿灯，所以
+    // 这句话另写，不照抄票 05——照抄会把一句绿灯说成一句中性事实。
+    if (gate.findings.length === 0) {
+      return [
+        {
+          // 行键循库主键 (tenant, scope_ref, action, boundary_ref)。
+          key: `gate:${gate.scope}:${gate.action}:${gate.boundary}`,
+          values: { ...base, precondition: '（未登记任何前置条件）', state: '本就不受门禁' },
+        },
+      ];
+    }
+    return gate.findings.map((finding) => ({
+      key: `finding:${gate.scope}:${gate.action}:${gate.boundary}:${finding.precondition}`,
+      values: {
+        ...base,
+        precondition: finding.precondition,
+        // labelOf 对集外取值原样回显：认定三值没有第四格，坏数据露出来而不是被译顺。
+        state: labelOf(preconditionStateLabels, finding.state),
+      },
+    }));
+  });
+}
+
 function ReleaseGatesTable() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<GateConditionListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listGateConditions().then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const gates = answer?.kind === 'outcome' ? answer.body.gates : [];
+  const rows = gateRows(gates);
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
+  const findingCount = gates.reduce((sum, gate) => sum + gate.findings.length, 0);
+  const unguarded = gates.filter((gate) => gate.findings.length === 0).length;
 
   return (
-    <ListPageTemplate<ReleaseGateRow>
+    <ListPageTemplate<GateRow>
       title="放行门禁核对"
-      // 页头携带安全作业不受阻断的硬句：未放行阻断的只是方向性动作。
-      description={`${info.owner}——尚未放行只阻断出库、装载出发、跨关务区域移动或交付，不阻止接收、隔离、测量、查验协作或已授权处置执行`}
-      // 筛选维度（接线时实装进 filters 槽）：拟执行动作（出库/装载出发/跨关务区域
-      // 移动/交付，封闭四动作）、门禁判断（待满足/部分满足/满足/冲突/不适用，封闭
-      // 五格）、适用监管边界。核对标识与申报范围经搜索。
-      search={{ value: search, onChange: setSearch, placeholder: '搜索核对标识 / 申报范围 / 拟执行动作' }}
-      columns={gateColumns}
-      // 接线前无实例：行数据与总数届时由 customs-compliance 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{ page, pageSize, total: 0, onPageChange: setPage, onPageSizeChange: setPageSize }}
-      viewState={unconfigured}
+      // 页头携带的是本页最容易读错的那一格：未登记不等于不受门禁。安全作业不受阻断
+      // 那条硬句在下面的空册文案里另说——它讲的是「阻断什么」，与「读得出什么」不同题。
+      description={`${info.owner}——未登记的（范围·动作·边界）不在本列，其门禁判断读作未决；已登记而无前置条件才是「本就不受门禁」`}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索申报范围 / 拟执行动作 / 监管边界 / 前置条件' }}
+      filterSummary={
+        answer?.kind === 'outcome'
+          ? `门禁 ${gates.length} 份 · 前置条件认定 ${findingCount} 项 · 其中不受门禁 ${unguarded} 份`
+          : undefined
+      }
+      columns={gateConditionColumns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /customs-gate-conditions',
+        emptyTitle: '当前租户尚无已登记的门禁条件',
+        emptyDescription:
+          '上列只含已登记门禁：未登记 ≠ 不受门禁，未登记的动作与边界其门禁判断读作未决、无从复核。页面不会预置门禁。',
+      })}
     />
   );
 }
 
 /**
- * 合规限制与监管税费（customs-compliance）。页签顺序按动作被放行前要过的层：
- * 内部限制 → 税费义务 → 门禁核对；门禁满足也不生成放行，放行结果始终是
- * 监管机构的外部事实。
+ * 合规限制与监管税费（customs-compliance）。已接线的门禁核对签在前——页面当前能
+ * 如实作答的只有它；内部限制与税费两族列表端点未建，如实占位在后。端点建成接线
+ * 时可回归「动作被放行前要过的层」那个顺序（内部限制 → 税费义务 → 门禁核对），
+ * 与 customs-cases 页同一处置。
+ *
+ * 门禁满足也不生成放行：放行结果始终是监管机构的外部事实，本页三签都不表达它。
  */
 export function CustomsRestrictionsPage() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="restrictions" className="flex-1 flex flex-col overflow-hidden gap-0">
+      <Tabs defaultValue="gates" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="gates">放行门禁核对</TabsTrigger>
           <TabsTrigger value="restrictions">内部合规限制</TabsTrigger>
           <TabsTrigger value="duties">监管核定税费</TabsTrigger>
-          <TabsTrigger value="gates">放行门禁核对</TabsTrigger>
         </TabsList>
+        <TabsContent value="gates" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <ReleaseGatesTable />
+        </TabsContent>
         <TabsContent value="restrictions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ComplianceRestrictionsTable />
         </TabsContent>
         <TabsContent value="duties" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <RegulatoryDutiesTable />
-        </TabsContent>
-        <TabsContent value="gates" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <ReleaseGatesTable />
         </TabsContent>
       </Tabs>
     </div>

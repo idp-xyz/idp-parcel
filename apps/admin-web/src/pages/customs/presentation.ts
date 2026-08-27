@@ -1,5 +1,5 @@
-// 关务目录查阅词表(合规规则库 + 案件配置册)。册子名与查询参数 registry 同词;
-// 中文取 customs-compliance CONTEXT。
+// 关务目录查阅词表(合规规则库 + 案件配置册 + 门禁条件册)。册子名与查询参数
+// registry 同词;中文取 customs-compliance CONTEXT。
 
 import type { CaseRegisterRegistry, ComplianceRegistry } from './api';
 
@@ -20,6 +20,24 @@ export const obligationStateLabels: Record<string, string> = {
   CONCLUDED: '已终结',
   HANDED_OVER: '已承接',
   UNRESOLVED: '未解决',
+};
+
+// 受门禁约束的方向性动作封闭四值(domain GuardedAction),中文取 CONTEXT 硬句逐词。
+// 接收、隔离、测量、查验协作与已授权的处置执行刻意不在此集——「不因此阻止」在领域
+// 枚举上就没有格,词表跟着没有,不为它们造一个「不受约束」的假条目。
+export const guardedActionLabels: Record<string, string> = {
+  OUTBOUND_RELEASE: '出库',
+  LOADING_DEPARTURE: '装载出发',
+  CROSS_CUSTOMS_MOVEMENT: '跨关务区域移动',
+  FINAL_DELIVERY: '交付',
+};
+
+// 前置条件认定封闭三值(domain PreconditionState),中文取其注释原词。没有「未知」格,
+// 词表也不补一个:集外取值由 labelOf 原样回显,坏数据该露出来,不该被译成一句像样的话。
+export const preconditionStateLabels: Record<string, string> = {
+  MET: '满足',
+  UNMET: '未满足',
+  CONFLICTING: '事实冲突',
 };
 
 export const directionLabels: Record<string, string> = {
