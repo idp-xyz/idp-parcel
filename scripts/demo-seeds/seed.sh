@@ -77,6 +77,10 @@ echo "== 5/6 关务案件配置登记（customs-compliance：六册） =="
 "$BIN/parcel-customs-register" obligation-item -input "$SEEDS/customs/07-obligation-item-handed.json"
 "$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/08-gate-catalog.json"
 "$BIN/parcel-customs-register" gate-finding -input "$SEEDS/customs/09-gate-finding-met.json"
+# 第二份门禁只登目录、不登任何前置条件——0008 自注点名必须与「目录未登记」分得开的
+# 那一格：登记了空清单是「此动作在此边界本就不受门禁」（领域折为不适用），未登记才是
+# 无从复核。合规限制页据它展示两态各说各话（票 admin-web-page-wiring-frontier/06）。
+"$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/15-gate-catalog-unguarded.json"
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/10-case-requirement-cn-export.json"
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/11-case-requirement-sg-import.json"
 
