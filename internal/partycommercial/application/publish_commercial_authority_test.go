@@ -35,6 +35,12 @@ type publicationRegistryDouble struct {
 	savedAsOf          []domain.AsOfDeclaration
 	savedContract      []domain.CustomerContract
 	savedIntake        []domain.IntakeQualificationContent
+	savedSettlement    []domain.SettlementPolicy
+
+	// settlementOutcome 单列一格而不是复用 declarationOutcome：结算政策册交回的是另一族
+	// 落点，本替身要能演出「政策册答了它自己那族的某一格」，用例才看得见应用层把它折成了
+	// 哪一格。
+	settlementOutcome ports.SettlementPolicySaveOutcome
 }
 
 func (double *publicationRegistryDouble) declarationAnswer(name string) (ports.DeclarationSaveOutcome, error) {
@@ -167,9 +173,17 @@ func (double *publicationRegistryDouble) SavePricePolicy(
 
 func (double *publicationRegistryDouble) SaveSettlementPolicy(
 	_ context.Context,
-	_ domain.SettlementPolicy,
+	policy domain.SettlementPolicy,
 ) (ports.SettlementPolicySaveOutcome, error) {
-	return ports.SettlementPolicySaveOutcomeInvalid, errors.New("发布用例不该触碰结算政策册")
+	if double.declarationErr != nil {
+		return ports.SettlementPolicySaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedSettlement = append(double.savedSettlement, policy)
+	double.declarationLog = append(double.declarationLog, "settlement-policy-body")
+	if double.settlementOutcome == ports.SettlementPolicySaveOutcomeInvalid {
+		return ports.SettlementPolicySaved, nil
+	}
+	return double.settlementOutcome, nil
 }
 
 func publishSpec(t *testing.T, kind domain.CommercialObjectKind, objectID, label string) domain.CommercialVersionSpec {
@@ -673,6 +687,136 @@ func TestContractContentMustAgreeWithTheShellReference(t *testing.T) {
 	}
 	if len(registry.savedVersions) != 0 || len(registry.declarationLog) != 0 {
 		t.Fatal("分歧的正文写了库")
+	}
+}
+
+// settlementApplicability 造一份六维齐全的结算适用范围。合同维走
+// domain.NewQualifiedVersionLabel，与闭包解出合同后拿去命中的那个串同出一处（ADR-0080）。
+func settlementApplicability(t *testing.T, chargeScope, currency string) domain.SettlementApplicability {
+	t.Helper()
+	contract, err := domain.NewQualifiedVersionLabel(
+		pcValue(t, domain.NewCommercialObjectID, "contract-1"),
+		pcValue(t, domain.NewCommercialVersionLabel, "v1"),
+	)
+	if err != nil {
+		t.Fatalf("两段式合同指称：%v", err)
+	}
+	interval, err := domain.NewEffectiveInterval(pubStartsAt, time.Time{})
+	if err != nil {
+		t.Fatalf("适用区间：%v", err)
+	}
+	applicability, err := domain.NewSettlementApplicability(
+		pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		pcValue(t, domain.NewCounterpartyReference, "account-1"),
+		contract,
+		pcValue(t, domain.NewChargeScopeReference, chargeScope),
+		pcValue(t, domain.NewCurrencyCode, currency),
+		interval,
+	)
+	if err != nil {
+		t.Fatalf("六维适用范围：%v", err)
+	}
+	return applicability
+}
+
+// Covers: 票 commercial-closure-settlement-key/02——结算政策正文随它自己那一版发布登记。
+// 在这一路接上之前，`SaveSettlementPolicy` 全仓没有生产调用方：库表、端口、适配器都在，
+// 权威册里却一份结算政策也放不进去，闭包问「这个范围的结算约定是哪一份」只能答`无适用依据`。
+//
+// 六维原样交给持久化面是本条的重点：发布通道不得代填、不得归并任何一维（ADR-0044）。
+func TestASettlementPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	applicability := settlementApplicability(t, "charge-prepaid", "CNY")
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+		Approval:     publishApproval(t, "settlement-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
+				Method:        domain.PrepaidMethod,
+				Applicability: applicability,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+
+	if len(registry.savedSettlement) != 1 {
+		t.Fatalf("结算政策册收到 %d 份, want 1", len(registry.savedSettlement))
+	}
+	saved := registry.savedSettlement[0]
+	if saved.Version().Status() != domain.CommercialVersionEffective {
+		t.Fatalf("拥有版本 = %q, want EFFECTIVE", saved.Version().Status())
+	}
+	if saved.Method() != domain.PrepaidMethod {
+		t.Fatalf("结算方式 = %q, want PREPAID", saved.Method())
+	}
+	if saved.Applicability() != applicability {
+		t.Fatalf("六维适用范围被改动了：%#v", saved.Applicability())
+	}
+
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.SettlementPolicyBodyChannel ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want SETTLEMENT_POLICY_BODY=SAVED 一条", reports)
+	}
+}
+
+// Covers: 结算政策正文的拥有对象类别由 domain.NewSettlementPolicy 把守——把它挂在客户
+// 合同版本上是装配错误，整项拒绝且一行不写，与其余九路同一条纪律（ADR-0042/0058）。
+func TestASettlementPolicyBodyOnAnotherObjectKindIsRejected(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+
+	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+		Approval:     publishApproval(t, "contract-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
+				Method:        domain.PrepaidMethod,
+				Applicability: settlementApplicability(t, "charge-prepaid", "CNY"),
+			},
+		},
+	}); !errors.Is(err, domain.ErrInvalidSettlementPolicy) {
+		t.Fatalf("err = %v, want ErrInvalidSettlementPolicy", err)
+	}
+	if len(registry.savedVersions) != 0 || len(registry.savedSettlement) != 0 {
+		t.Fatal("挂错拥有对象的结算政策正文写了库")
+	}
+}
+
+// Covers: 结算政策册交回的是它自己那一族落点，应用层把它逐值折成声明通道的落点。
+// `内容冲突`因此留在报告里而不是变成 error——事务保持可用，由商业责任方对着报告修正
+// （ADR-0031）；折的是落点，不是把两族正文说成同一种东西（见 declarationWrites 处注释）。
+func TestASettlementPolicyConflictLandsInTheReportNotInAnError(t *testing.T) {
+	registry := &publicationRegistryDouble{settlementOutcome: ports.SettlementPolicyContentConflict}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+		Approval:     publishApproval(t, "settlement-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
+				Method:        domain.TermsMethod,
+				Applicability: settlementApplicability(t, "charge-terms", "CNY"),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v——内容冲突不是 error", err)
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
+		t.Fatalf("报告 = %#v, want SETTLEMENT_POLICY_BODY=CONTENT_CONFLICT 一条", reports)
 	}
 }
 

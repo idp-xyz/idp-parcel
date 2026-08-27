@@ -589,14 +589,27 @@ func (version CommercialVersion) Version() CommercialVersionLabel {
 // 版本身份不成立时交回零值：把一个残缺版本拼成 "/" 之类的串，等于凭空造出一个能被匹配的
 // 指称。
 func (version CommercialVersion) QualifiedLabel() CommercialVersionLabel {
-	if !version.objectID.valid() || !version.version.valid() {
-		return CommercialVersionLabel{}
-	}
-	label, err := NewCommercialVersionLabel(version.objectID.String() + "/" + version.version.String())
+	label, err := NewQualifiedVersionLabel(version.objectID, version.version)
 	if err != nil {
 		return CommercialVersionLabel{}
 	}
 	return label
+}
+
+// NewQualifiedVersionLabel 是那「一处」本身：`QualifiedLabel` 转调它，登记方指名某一版
+// 正文时（发布结算政策要说出它属于哪一版客户合同）也走它。
+//
+// 单开这个构造函数而不是让登记方自己写 "对象/版本"，理由与 `QualifiedLabel` 的注释同一
+// 条，只是失配处从代码挪到了输入文件：登记方手拼的串一样会在分隔符变化那天静静失配，
+// 而那时看起来像「这个范围没有结算政策」。
+func NewQualifiedVersionLabel(
+	objectID CommercialObjectID,
+	version CommercialVersionLabel,
+) (CommercialVersionLabel, error) {
+	if !objectID.valid() || !version.valid() {
+		return CommercialVersionLabel{}, ErrInvalidCommercialVersion
+	}
+	return NewCommercialVersionLabel(objectID.String() + "/" + version.String())
 }
 
 func (version CommercialVersion) Scope() CommercialScopeReference {

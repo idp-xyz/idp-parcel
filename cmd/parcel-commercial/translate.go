@@ -51,6 +51,7 @@ type declarationsDocument struct {
 	FinalRules            []finalRuleDocument           `json:"finalRules,omitempty"`
 	CancellationAuthority []cancellationRuleDocument    `json:"cancellationAuthority,omitempty"`
 	RulePackageBody       *rulePackageBodyDocument      `json:"rulePackageBody,omitempty"`
+	SettlementPolicyBody  *settlementPolicyBodyDocument `json:"settlementPolicyBody,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -108,6 +109,29 @@ type rulePackageBodyDocument struct {
 type assembledRuleDoc struct {
 	Category  string `json:"category"`
 	Reference string `json:"reference"`
+}
+
+// settlementPolicyBodyDocument 是一份结算政策正文：一种结算方式与它覆盖的六维适用范围。
+// 六维一维不少地摆在这里，是因为本上下文禁止借宽泛的客户关系跨维归集——批文里省掉哪一维，
+// 都会变成「这一维随便什么值都算命中」。
+type settlementPolicyBodyDocument struct {
+	Method            string                  `json:"method"`
+	LegalEntity       string                  `json:"legalEntity"`
+	Counterparty      string                  `json:"counterparty"`
+	Contract          contractVersionDocument `json:"contract"`
+	ChargeScope       string                  `json:"chargeScope"`
+	Currency          string                  `json:"currency"`
+	EffectiveStartsAt time.Time               `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time              `json:"effectiveEndsAt,omitempty"`
+}
+
+// contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
+// 串由 pcdomain.NewQualifiedVersionLabel 拼，与闭包解出合同后拿去命中的那个串同出一处
+// （ADR-0080）；收现成串等于把分隔符这件事交给写批文的人，改法那天两边静静对不上，而
+// 看起来像「这个范围没有结算政策」。
+type contractVersionDocument struct {
+	ObjectID string `json:"objectId"`
+	Version  string `json:"version"`
 }
 
 func publishCommandsFromJSON(raw []byte) ([]pcapplication.PublishCommercialAuthorityCommand, error) {
@@ -353,6 +377,14 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.RulePackageBody = body
 	}
 
+	if document.SettlementPolicyBody != nil {
+		body, err := settlementPolicyBodyFrom(*document.SettlementPolicyBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.SettlementPolicyBody = body
+	}
+
 	return declarations, nil
 }
 
@@ -402,6 +434,57 @@ func rulePackageBodyFrom(document rulePackageBodyDocument) (*pcapplication.RuleP
 		rules = append(rules, assembled)
 	}
 	return &pcapplication.RulePackageBodyDeclaration{Applicability: applicability, Rules: rules}, nil
+}
+
+func settlementPolicyBodyFrom(
+	document settlementPolicyBodyDocument,
+) (*pcapplication.SettlementPolicyBodyDeclaration, error) {
+	method, err := settlementMethodFrom(document.Method)
+	if err != nil {
+		return nil, err
+	}
+	legalEntity, err := pcdomain.NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return nil, err
+	}
+	counterparty, err := pcdomain.NewCounterpartyReference(document.Counterparty)
+	if err != nil {
+		return nil, err
+	}
+	contractObject, err := pcdomain.NewCommercialObjectID(document.Contract.ObjectID)
+	if err != nil {
+		return nil, err
+	}
+	contractVersion, err := pcdomain.NewCommercialVersionLabel(document.Contract.Version)
+	if err != nil {
+		return nil, err
+	}
+	contract, err := pcdomain.NewQualifiedVersionLabel(contractObject, contractVersion)
+	if err != nil {
+		return nil, err
+	}
+	chargeScope, err := pcdomain.NewChargeScopeReference(document.ChargeScope)
+	if err != nil {
+		return nil, err
+	}
+	currency, err := pcdomain.NewCurrencyCode(document.Currency)
+	if err != nil {
+		return nil, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return nil, err
+	}
+	applicability, err := pcdomain.NewSettlementApplicability(
+		legalEntity, counterparty, contract, chargeScope, currency, interval)
+	if err != nil {
+		return nil, err
+	}
+	return &pcapplication.SettlementPolicyBodyDeclaration{Method: method, Applicability: applicability}, nil
 }
 
 // ---- 解析键登记的 JSON 形状 ----
@@ -618,6 +701,19 @@ func cancellationPartyFrom(name string) (pcdomain.DeclaredCancellationParty, err
 		return pcdomain.DeclaredOperationsCancellation, nil
 	default:
 		return pcdomain.DeclaredCancellationPartyInvalid, fmt.Errorf("集合外的取消请求方 %q", name)
+	}
+}
+
+// settlementMethodFrom 只认两个取值。第三个取值——某种客户级默认——正是本上下文明禁的：
+// 未命中的范围必须报出`无适用依据`，而不是回落到某种通行做法，进程口这一层也不许开这个口。
+func settlementMethodFrom(name string) (pcdomain.SettlementMethod, error) {
+	switch name {
+	case pcdomain.PrepaidMethod.String():
+		return pcdomain.PrepaidMethod, nil
+	case pcdomain.TermsMethod.String():
+		return pcdomain.TermsMethod, nil
+	default:
+		return pcdomain.SettlementMethodInvalid, fmt.Errorf("集合外的结算方式 %q", name)
 	}
 }
 

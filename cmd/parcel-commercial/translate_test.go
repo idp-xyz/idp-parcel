@@ -3,11 +3,12 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
-// 本文件证进程口的翻译纪律：批文逐字段过领域构造门、九族声明全部可携带；未知字段、
+// 本文件证进程口的翻译纪律：批文逐字段过领域构造门、各族声明都携带得动；未知字段、
 // 集合外取值与缺件在触库之前拒收，绝不代填默认。
 
 const fullBatchJSON = `{
@@ -119,7 +120,7 @@ const fullBatchJSON = `{
   ]
 }`
 
-// Covers: 票 03 件 3 的进程口输入面——九族声明全部有非测试入口；批准责任、有效区间、
+// Covers: 票 03 件 3 的进程口输入面——各族声明都有非测试入口；批准责任、有效区间、
 // 指名引用与角色确认逐项过领域构造门后进命令。
 func TestAFullBatchTranslatesEveryDeclarationFamily(t *testing.T) {
 	commands, err := publishCommandsFromJSON([]byte(fullBatchJSON))
@@ -204,6 +205,134 @@ func TestTranslationRefusesUnknownFieldsAndOutOfSetValues(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Covers: 票 commercial-closure-settlement-key/02 的进程口输入面——发布批表达得出一份
+// 结算政策正文：方式两取值的名称镜像加六维适用范围。合同维分两段收、由
+// NewQualifiedVersionLabel 拼成闭包要命中的那个串（ADR-0080）；六维缺一维、方式取集合外
+// 的值都在触库前拒收，绝不代填。
+func TestASettlementPolicyBodyTranslatesWithAllSixDimensions(t *testing.T) {
+	commands, err := publishCommandsFromJSON([]byte(`{
+	  "items": [
+	    {
+	      "tenantId": "tenant-1",
+	      "kind": "SETTLEMENT_POLICY",
+	      "objectId": "settlement-1",
+	      "version": "v1",
+	      "scope": "scope-1",
+	      "contentDigest": "sha256:settlement-1",
+	      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+	      "references": {"CUSTOMER_CONTRACT": "contract-1"},
+	      "approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+	      "approvalRoleStanding": "CONFIRMED",
+	      "declarations": {
+	        "settlementPolicyBody": {
+	          "method": "PREPAID",
+	          "legalEntity": "legal-1",
+	          "counterparty": "customer-1",
+	          "contract": {"objectId": "contract-1", "version": "v1"},
+	          "chargeScope": "charge-prepaid",
+	          "currency": "CNY",
+	          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+	        }
+	      }
+	    }
+	  ]
+	}`))
+	if err != nil {
+		t.Fatalf("翻译结算政策批：%v", err)
+	}
+	body := commands[0].Declarations.SettlementPolicyBody
+	if body == nil {
+		t.Fatal("结算政策正文没有翻过去")
+	}
+	if body.Method != pcdomain.PrepaidMethod {
+		t.Fatalf("结算方式 = %q, want PREPAID", body.Method)
+	}
+	// 合同维要与闭包那侧同出一处：拿一个同身份版本的 QualifiedLabel 比对，两边分头拼串
+	// 时这一条会立刻红。
+	wantContract, err := pcdomain.NewQualifiedVersionLabel(
+		mustObjectID(t, "contract-1"), mustVersionLabel(t, "v1"))
+	if err != nil {
+		t.Fatalf("两段式合同指称：%v", err)
+	}
+	applicability := body.Applicability
+	if applicability.Contract() != wantContract {
+		t.Fatalf("合同维 = %q, want %q", applicability.Contract(), wantContract)
+	}
+	if applicability.LegalEntity().String() != "legal-1" ||
+		applicability.Counterparty().String() != "customer-1" ||
+		applicability.ChargeScope().String() != "charge-prepaid" ||
+		applicability.Currency().String() != "CNY" ||
+		!applicability.Effective().Contains(mustTime(t, "2026-02-01T00:00:00Z")) {
+		t.Fatalf("六维适用范围变形：%+v", applicability)
+	}
+
+	refusals := map[string]string{
+		"集合外结算方式": settlementBatchJSON(`"method": "ON_ACCOUNT",
+			"legalEntity": "l", "counterparty": "c",
+			"contract": {"objectId": "contract-1", "version": "v1"},
+			"chargeScope": "x", "currency": "CNY",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"缺币种一维": settlementBatchJSON(`"method": "PREPAID",
+			"legalEntity": "l", "counterparty": "c",
+			"contract": {"objectId": "contract-1", "version": "v1"},
+			"chargeScope": "x",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"合同维只给对象不给版本": settlementBatchJSON(`"method": "PREPAID",
+			"legalEntity": "l", "counterparty": "c",
+			"contract": {"objectId": "contract-1"},
+			"chargeScope": "x", "currency": "CNY",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"合同维收现成串": settlementBatchJSON(`"method": "PREPAID",
+			"legalEntity": "l", "counterparty": "c",
+			"contract": "contract-1/v1",
+			"chargeScope": "x", "currency": "CNY",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
+func settlementBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "SETTLEMENT_POLICY", "objectId": "settlement-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"settlementPolicyBody": {` + body + `}}}]}`
+}
+
+func mustObjectID(t *testing.T, raw string) pcdomain.CommercialObjectID {
+	t.Helper()
+	value, err := pcdomain.NewCommercialObjectID(raw)
+	if err != nil {
+		t.Fatalf("对象标识 %q：%v", raw, err)
+	}
+	return value
+}
+
+func mustVersionLabel(t *testing.T, raw string) pcdomain.CommercialVersionLabel {
+	t.Helper()
+	value, err := pcdomain.NewCommercialVersionLabel(raw)
+	if err != nil {
+		t.Fatalf("版本号 %q：%v", raw, err)
+	}
+	return value
+}
+
+func mustTime(t *testing.T, raw string) time.Time {
+	t.Helper()
+	value, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		t.Fatalf("时刻 %q：%v", raw, err)
+	}
+	return value
 }
 
 // Covers: 解析键登记的进程口输入面——四项实例参数与必需依据种类逐项过构造门；

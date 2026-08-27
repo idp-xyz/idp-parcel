@@ -53,7 +53,7 @@ type PublishCommercialAuthorityCommand struct {
 	Declarations CommercialDeclarations
 }
 
-// CommercialDeclarations 收拢一次发布随行的声明正文（票 03 的六族）。字段全部可缺：
+// CommercialDeclarations 收拢一次发布随行的声明正文。字段全部可缺：
 // 声明属实例半边，缺席就是没有声明，本用例不代拟。归属由领域构造门把守——把收寄资格
 // 挂在合同上会在构造时被拒，不会静默丢弃（ADR-0042/0058）。
 //
@@ -69,6 +69,7 @@ type CommercialDeclarations struct {
 	FinalRules            []domain.FinalizationDeclaration
 	CancellationAuthority []domain.CancellationAuthorityDeclaration
 	RulePackageBody       *RulePackageBodyDeclaration
+	SettlementPolicyBody  *SettlementPolicyBodyDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -80,7 +81,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.IntakeQualification == nil &&
 		len(declarations.FinalRules) == 0 &&
 		len(declarations.CancellationAuthority) == 0 &&
-		declarations.RulePackageBody == nil
+		declarations.RulePackageBody == nil &&
+		declarations.SettlementPolicyBody == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -117,6 +119,17 @@ type RulePackageBodyDeclaration struct {
 	Rules         []domain.AssembledRule
 }
 
+// SettlementPolicyBodyDeclaration 是结算政策版本的正文输入（ADR-0044）：一种结算方式
+// 与它覆盖的六维适用范围。
+//
+// 六维整体由 domain.NewSettlementApplicability 构造，本类型不逐维摊平：摊平之后应用层
+// 就得自己判「六维齐不齐」，而那条判据只能有一处——少一维的适用范围写得进库，读回来却
+// 命不中任何查询，看起来像「这个范围没有结算政策」。
+type SettlementPolicyBodyDeclaration struct {
+	Method        domain.SettlementMethod
+	Applicability domain.SettlementApplicability
+}
+
 // DeclarationChannel 点名一次发布里的一个声明通道，供报告与进程口展示落点。
 type DeclarationChannel uint8
 
@@ -131,6 +144,7 @@ const (
 	FinalRuleChannel
 	CancellationAuthorityChannel
 	RulePackageBodyChannel
+	SettlementPolicyBodyChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -153,6 +167,8 @@ func (channel DeclarationChannel) String() string {
 		return "CANCELLATION_AUTHORITY"
 	case RulePackageBodyChannel:
 		return "RULE_PACKAGE_BODY"
+	case SettlementPolicyBodyChannel:
+		return "SETTLEMENT_POLICY_BODY"
 	default:
 		return ""
 	}
@@ -460,5 +476,48 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.SettlementPolicyBody != nil {
+		policy, err := domain.NewSettlementPolicy(
+			version, declarations.SettlementPolicyBody.Method, declarations.SettlementPolicyBody.Applicability)
+		if err != nil {
+			return nil, fmt.Errorf("settlement policy body: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: SettlementPolicyBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SaveSettlementPolicy(ctx, policy)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfSettlementPolicy(outcome)
+			},
+		})
+	}
+
 	return writes, nil
+}
+
+// declarationOutcomeOfSettlementPolicy 把结算政策册的落点折成声明通道的落点。
+//
+// 折的是「落在哪一格」，不是「两族正文是同一种东西」。端口上的两族 Save 因此不合并：
+// 政策册按版本四元组存一行方式与六维范围，声明表按拥有版本挂一份正文，两者的行形状与
+// 冲突判据各自不同。三格同构也不是这两族碰巧一样——ADR-0031 给本上下文所有登记面定的
+// 就是同一条纪律：重放与内容冲突都不是 error，都绝不覆盖，事务保持可用。
+//
+// 逐值折而不做数值转换：将来任一族多出一格时，这里会响亮失败，而不是把新格静静读成
+// 旧格里的某一个。
+func declarationOutcomeOfSettlementPolicy(
+	outcome ports.SettlementPolicySaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.SettlementPolicySaved:
+		return ports.DeclarationSaved, nil
+	case ports.SettlementPolicyAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.SettlementPolicyContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("settlement policy body: 集合外的结算政策落点 %q", outcome)
+	}
 }
