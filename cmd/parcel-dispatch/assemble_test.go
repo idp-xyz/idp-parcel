@@ -15,6 +15,7 @@ import (
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
+	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -253,6 +254,148 @@ func TestAFormedInitialRouteReachesTheConsumerThroughTheRouteTable(t *testing.T)
 	if published != 1 {
 		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把初始路由判断投给 VE",
 			published, recordedFailureCode(t, db, "initial-route-1"))
+	}
+}
+
+// submittedForChain 是发布侧 OutboxShipmentRequestSubmittedHandoff 写出的载荷形状，
+// 各维都填得出领域标识。它用来证「整条接受判断链在真依赖图上跑得动」——毒丸载荷在译码
+// 处就被拦下，证不到编排那一层。
+const submittedForChain = `{
+	"tenantId": "tenant-a",
+	"customerAccountId": "customer-1",
+	"source": "source-a",
+	"sourceRequestKey": "key-1",
+	"shipmentRequestId": "request-1",
+	"submissionBatchId": "batch-1",
+	"submissionVersionId": "version-1",
+	"declaredParcelIds": ["parcel-1"]
+}`
+
+// Covers: 路由表新增的这一条——PS「委托已提交」投给接受判断链消费者（UC-PS-001 步骤 8
+// 「自动接受」）。手法同前几条：毒丸载荷（各维皆空）让消费门显式拒收入账并交回 nil，
+// 因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+//
+// 方向与前几条都不同：发布侧与消费侧同属 parcel-shipment，本进程里唯一一条自发自收的
+// 链。它照样得走路由表——提交事务只负责把意图落进 outbox，推进判断是下一拍的事。
+func TestASubmittedShipmentRequestReachesTheAcceptanceChainThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "submitted-1", psinbox.ShipmentRequestSubmittedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把已提交委托投给接受判断链",
+			published, recordedFailureCode(t, db, "submitted-1"))
+	}
+}
+
+// Covers: 接受判断链在**生产依赖图**上真的接得起来，且实例半边空着时停成未决而不是报错。
+//
+// 这一条比前一条重得多。前一条只证路由表挂对了人：毒丸在译码处就被拦下，编排那一层
+// 一步都没走过。这里给一份各维齐全的载荷，链会一路走到第一步的商业依据——本库没有登记
+// 过任何解析键，于是它按「显式未配置」答解析未决，编排收成`本轮没形成决定`，消费门挂
+// 未决哨兵，路由条目翻成 dispatch.consumer_undecided。
+//
+// 三件事同时被钉住：
+//   - acceptanceChainConsumer 那张依赖图（商业依据、可达性、财务控制、形成决定四组构造）
+//     全部构造得出来，没有哪一个 nil 依赖让装配悄悄成立；
+//   - 空实例半边的答复是「等参数」而不是「炸开」——首发就该停在这里；
+//   - 未决哨兵登记生效，失败码不是 dispatch.publish_failed。
+//
+// 落成 publish_failed 的话运维会去查一个并不存在的故障，而实情是这个租户还没登记解析键。
+func TestAnUnconfiguredAcceptanceChainStallsAsUndecidedOnTheRealGraph(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "submitted-live-1", psinbox.ShipmentRequestSubmittedEventType, submittedForChain)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 0 {
+		t.Fatalf("未决的一封被当成发布成功定稿了：published = %d", published)
+	}
+	if got := recordedFailureCode(t, db, "submitted-live-1"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+}
+
+// beatWithAcceptanceChainConsumer 用生产的接受链哨兵名单包一个替身，接成一拍。
+//
+// 名单取 acceptanceChainUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试
+// 里绿、在生产里塌成 dispatch.publish_failed。
+func beatWithAcceptanceChainConsumer(t *testing.T, inner dispatch.Consumer) (Beat, *bentopg.DB, *outbox.Store) {
+	t.Helper()
+
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	routed, err := dispatch.WithUndecidedSentinels(inner, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		t.Fatalf("包装未决哨兵：%v", err)
+	}
+	config := dispatch.Config{Limit: 10, LeaseFor: time.Minute, MaxAttempts: 5, RetryAfter: 30 * time.Second}
+	publisher, err := dispatch.NewDirectPublisher(
+		map[eventing.EventType]dispatch.Consumer{psinbox.ShipmentRequestSubmittedEventType: routed},
+		5*time.Second,
+		config,
+	)
+	if err != nil {
+		t.Fatalf("直投发布器：%v", err)
+	}
+	beat, err := dispatch.NewDispatcher(store, store, publisher, systemClock{}, config)
+	if err != nil {
+		t.Fatalf("派发器：%v", err)
+	}
+	return beat, db, store
+}
+
+// Covers: 接受判断链这条链的失败分格——名单只有一格落 dispatch.consumer_undecided，
+// 其余保持 dispatch.publish_failed。
+//
+// 三步各自的未决原因（时点未配置、可达性权威答不出、控制策略未配置、人工复核待办……）
+// 在编排里已经收成同一个「本轮没形成决定」，因此这里只有一个哨兵，而不是每步一个。
+// 另外三格要运维做的事与「等依赖」相反：
+//   - 封闭集合外是编程错误，重投改不了它；
+//   - 装配缺件是本进程漏接了一步，等多久也不会长出一个没接上的编排；
+//   - 空成员清单是发布侧发错了，`已提交`委托必有声明成员。
+//
+// 三者若落成未决，这一封会一路重投到失败预算耗尽，而日志上看起来像「一直在等某个依赖」。
+func TestAcceptanceChainFailuresLandInTheRightPartition(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode string
+	}{
+		{"本轮没形成决定", psinbox.ErrAcceptanceChainUndecided, "dispatch.consumer_undecided"},
+		{"封闭集合外", psinbox.ErrUnexpectedAcceptanceChainOutcome, "dispatch.publish_failed"},
+		{"装配缺件", psapplication.ErrAcceptanceChainNotAssembled, "dispatch.publish_failed"},
+		{"成员清单为空", psapplication.ErrAcceptanceChainHasNoMembers, "dispatch.publish_failed"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			beat, db, store := beatWithAcceptanceChainConsumer(t, &stallingConsumer{err: test.err})
+			enqueueForBeat(t, db, store, "submitted-1", psinbox.ShipmentRequestSubmittedEventType, `{}`)
+
+			published, err := beat.DispatchOnce(t.Context())
+			if err != nil {
+				t.Fatalf("一拍：%v", err)
+			}
+			if published != 0 {
+				t.Fatalf("失败的投递被定稿了 %d 条", published)
+			}
+			if got := recordedFailureCode(t, db, "submitted-1"); got != test.wantCode {
+				t.Fatalf("failure_code = %q, want %q", got, test.wantCode)
+			}
+		})
 	}
 }
 

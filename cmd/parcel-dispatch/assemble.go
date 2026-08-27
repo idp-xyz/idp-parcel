@@ -23,15 +23,21 @@ import (
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	psnetworkrouting "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/networkrouting"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	pstf "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/transportfulfillment"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	sapartycommercial "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
+	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	vecc "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/customscompliance"
 	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
@@ -199,6 +205,20 @@ func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, 
 		return nil, nil, err
 	}
 	return beat, pool.Close, nil
+}
+
+// acceptanceChainUndecidedSentinels 是接受判断链这条路登记的未决哨兵。名单只有一格：
+// 三步各自的未决（商业依据、时点策略、可达性权威、财务控制、人工复核……）在编排里已经
+// 收成同一个「本轮没形成决定」，消费门这一侧只认得那一格，停在哪一步与原因都在错误正文里。
+//
+// 两个不在名单里，恢复动作与「等一个依赖」相反：
+//   - psinbox.ErrUnexpectedAcceptanceChainOutcome——编排交回了封闭集合以外的结果，是
+//     编程错误。登记成未决只会一路重投到失败预算耗尽，而重投改不了它。
+//   - psapplication.ErrAcceptanceChainNotAssembled / ErrAcceptanceChainHasNoMembers——
+//     前者是本文件漏接了一步，后者是发布侧发了一份没有声明成员的委托。两者都不会因为
+//     等下去而长出来，保持 dispatch.publish_failed 让它们响亮。
+var acceptanceChainUndecidedSentinels = []error{
+	psinbox.ErrAcceptanceChainUndecided,
 }
 
 // nodeIntakeUndecidedSentinels 是采用那条链登记的未决哨兵。做成包级量是为了让测试
@@ -436,6 +456,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: inbox store: %w", err)
 	}
 
+	chain, err := acceptanceChainConsumer(db, outboxStore, inboxStore, settings, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedChain, err := dispatch.WithUndecidedSentinels(chain, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance chain undecided translation: %w", err)
+	}
+
 	consumer, err := acceptanceConsumer(db, outboxStore, inboxStore, settings, clock)
 	if err != nil {
 		return nil, err
@@ -621,6 +650,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
+			psinbox.ShipmentRequestSubmittedEventType:    routedChain,
 			nrinbox.AcceptedDecisionEventType:            acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
 			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
@@ -646,6 +676,265 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: dispatcher: %w", err)
 	}
 	return dispatcher, nil
+}
+
+// acceptanceChainConsumer 接 UC-PS-001 步骤 8 那条线：PS「委托已提交」信封 → 消费门 →
+// 接受判断链（逐成员可达性 → 整份委托财务控制 → 形成决定）。
+//
+// 它是本进程里唯一一条**信封驱动本上下文自己**的链：发布侧是 parcel-shipment 的提交事务，
+// 消费侧也是 parcel-shipment。之所以不做成 HTTP 端点，是因为「提交之后自动推进接受判断」
+// 在用例里是提交的后继，不是外部再发一条命令——由调用方显式推进会把「谁来调它」变成新的
+// 实例半边问题，而 outbox/inbox 的续办语义正好是这条链需要的（未决整笔回滚等重投）。
+//
+// 三步共用一个商业依据适配器实例，不是省事：形成决定那一步要按**判断当初采用的那份解析**
+// 重校验（UC-PC-002 步骤 8），三步各建一个适配器不改变行为，但会让「三条腿问的是同一个
+// 权威」这件事在装配上看不出来，下一个改这里的人很容易给某一条腿换上另一份配置。
+//
+// 实例半边全部留空，各自的「显式未配置」形状各归各口——今天没有租户，这些参数一个也说
+// 不出，而每一个空位都是首发该停下的地方，不是要绕过的地方：
+//
+//   - 时点取值源（AsOfValueSource）nil——时点停在`未配置`，判断不发起；
+//   - 可达性闭包标识（ReachabilityClosureIdentity）nil——资格视图答未配置，判断`未形成`；
+//   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
+//     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
+//     代拟一个账户或拿零去占客户资金。
+//
+// 解析键登记面（Keys）反而接真：它是本上下文自己的登记表，`parcel-commercial
+// register-resolution-key` 已经能往里写，空册时按「显式未配置」答`解析未决`。接上它与留
+// nil 的区别不在结果在来源——恢复动作从「写代码」变成「登记参数」（ADR-0063）。
+func acceptanceChainConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	settings dispatchSettings,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance chain shipment requests: %w", err)
+	}
+	// 判断库一物两用：AcceptanceJudgmentRecorder（前两步写）与 RecordedJudgmentReader
+	// （形成决定读）读写的是同一批判断行。拆两个对象等于让写的那半与读的那半各自决定
+	// 认哪些列，而形成决定要的正是「前两步刚记下的那几条」。
+	judgments, err := pspostgres.NewAcceptanceJudgments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance judgments: %w", err)
+	}
+
+	commercial, err := acceptanceCommercialBasis(db, clock)
+	if err != nil {
+		return nil, err
+	}
+	// 解析库在下面三处各要一次（商业依据、可达性资格、控制策略）。它在 acceptanceCommercialBasis
+	// 里已经建过一个，这里再建一个：都是 db 上的无状态包装，共享反而让三条依赖看不出各自要什么
+	// （与 acceptanceConsumer / networkIntakeConsumer 各建各的仓储同一条理由）。
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance chain commercial resolutions: %w", err)
+	}
+
+	reachability, err := acceptanceReachability(db, outboxStore, resolutions, settings, clock)
+	if err != nil {
+		return nil, err
+	}
+	control, err := acceptanceFinancialControl(db, commercial, resolutions, clock)
+	if err != nil {
+		return nil, err
+	}
+
+	identities, err := psidentity.NewAcceptanceDecisions()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance decision identities: %w", err)
+	}
+	downstream, err := pspostgres.NewOutboxAcceptanceDecisionHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance decision handoff: %w", err)
+	}
+
+	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
+		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
+			commercial, reachability, judgments, clock),
+		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
+			commercial, control, judgments, clock),
+		Decision: psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
+			Requests:     requests,
+			Commercial:   commercial,
+			Reachability: reachability,
+			Judgments:    judgments,
+			Recorder:     judgments,
+			Release:      control,
+			Downstream:   downstream,
+			Identities:   identities,
+			Clock:        clock,
+		}),
+	})
+
+	consumer, err := psinbox.NewShipmentRequestSubmittedConsumer(db.Transactor(), inboxStore, chain)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance chain consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// acceptanceCommercialBasis 接商业依据三阶段（UC-PC-002）：解析闭包、按规则包声明形成
+// 判断时点、提交决定前按原解析重校验。
+//
+// Values 留 nil 的代价要说清：时点语义的取值（「按哪个时刻算」）属 `PAR-COM-14` 实例半边，
+// 没有租户就说不出。留 nil 时第二阶段答`未配置`，两条判断腿都在发起权威调用之前停下——
+// 那是对的，一次在无人授权的时点上作出的判断，既解释不了自己按哪一版策略执行，也没法
+// 在事后核对。
+func acceptanceCommercialBasis(
+	db *bentopg.DB,
+	clock systemClock,
+) (*pspartycommercial.CommercialBasisAdapter, error) {
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commercial publications: %w", err)
+	}
+	authority, err := pcpostgres.NewCommercialAuthority(publications)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commercial authority: %w", err)
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commercial basis resolutions: %w", err)
+	}
+	asOfPolicies, err := pcpostgres.NewAsOfPolicyDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: as-of policy declarations: %w", err)
+	}
+	contents, err := pcpostgres.NewAcceptanceContentDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: acceptance content declarations: %w", err)
+	}
+	keyStore, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: resolution key store: %w", err)
+	}
+	keys, err := pspartycommercial.NewCommercialResolutionKeys(keyStore)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: resolution keys: %w", err)
+	}
+	return pspartycommercial.NewCommercialBasisAdapter(pspartycommercial.CommercialBasisAdapterDeps{
+		Resolve:      pcapplication.NewResolveCommercialBasisHandler(authority, resolutions, clock),
+		Revalidate:   pcapplication.NewValidateCommercialBasisHandler(resolutions, authority, clock),
+		Judgments:    pcapplication.NewFormJudgmentAsOfHandler(resolutions, asOfPolicies),
+		AsOfPolicies: asOfPolicies,
+		Contents:     contents,
+		Keys:         keys,
+		// Values 留空：实例半边，见函数注释。
+	}), nil
+}
+
+// acceptanceReachability 接可达性两个端口（UC-NR-002）：形成三值判断，与提交决定前重校
+// 那一份是否仍基于当前网络证据视图。
+//
+// 服务目的取本进程的部署形态参数——它属实例半边但已由 settingsFromEnv 强制必填，因此这
+// 里拿到的一定是配置过的值，不是零值兜底。
+//
+// 资格视图的闭包标识留 nil：可达性判断键上没有解析标识，而范围到解析的映射属试点参数
+// （ADR-0064 明写本记录只改初始路由那条链，可达性这条不变）。留 nil 时资格视图答未配置，
+// 编排形成`未形成判断`——不代拟一个解析标识去问另一个产品的网络资格。
+func acceptanceReachability(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	resolutions *pcpostgres.CommercialResolutions,
+	settings dispatchSettings,
+	clock systemClock,
+) (*psnetworkrouting.ReachabilityAdapter, error) {
+	definitions, err := nrpostgres.NewNetworkDefinitions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reachability network definitions: %w", err)
+	}
+	store, err := nrpostgres.NewReachabilityJudgments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reachability judgments: %w", err)
+	}
+	handoff, err := nrpostgres.NewOutboxReachabilityHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reachability handoff: %w", err)
+	}
+	eligibility, err := nrpartycommercial.NewCommercialEligibility(
+		resolutions,
+		// 闭包标识留空：实例半边，见函数注释。
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reachability commercial eligibility: %w", err)
+	}
+	return psnetworkrouting.NewReachabilityAdapter(psnetworkrouting.ReachabilityAdapterDeps{
+		Assess: nrapplication.NewAssessParcelReachabilityHandler(
+			eligibility, definitions, store, handoff, clock),
+		Revalidate: nrapplication.NewValidateReachabilityJudgmentHandler(definitions, store),
+		Purpose:    settings.purpose,
+	}), nil
+}
+
+// acceptanceFinancialControl 接接受前财务控制两个端口：施加与释放。
+//
+// 两侧都接真而不是只接施加半边：形成决定那一步在拒绝时要按原关联释放冻结（AT-PS-035），
+// 只接施加会让一次拒绝把货主的钱留在原处占着。撤回那条链（cmd/parcel-api）只接释放半边，
+// 两处的取舍相反而各自都对——那里根本不发起控制。
+//
+// 控制策略视图接 PC 的声明册：SA 不得自行从资金作用域反查合同（sa-preacceptance-policy-view
+// 那笔裁决），回指由本装配显式接上。空册时它答未配置，编排形成`待判断`而不是「不要求控制」
+// ——后者正是 CONTEXT 禁止的默认信用通过。
+//
+// 作用域源接 PolicyBackedControlScopeSource 而不是留 nil，两者今天的答复同为
+// `CONTROL_SCOPE_NOT_CONFIGURED`，差别在缺的是哪一半：留 nil 是机制半边也没接，接上它
+// 之后缺的只剩账户目录这一个租户参数（`SettlementAccountDirectory` 留 nil，不得为验它
+// 造一份映射）。恢复动作因此从「写代码」变成「登记参数」，与解析键登记面同一条理由。
+//
+// 它与三条判断腿共用同一个商业依据适配器：作用域从**那一次**解析的结算政策回显派生
+// （ADR-0044/0047 接通的缝），另建一个解析入口会给出第二次解析的机会，而施加与释放两径
+// 同引用正靠同源。
+func acceptanceFinancialControl(
+	db *bentopg.DB,
+	commercial *pspartycommercial.CommercialBasisAdapter,
+	resolutions *pcpostgres.CommercialResolutions,
+	clock systemClock,
+) (*pssettlement.PreAcceptanceControlAdapter, error) {
+	freezes, err := sapostgres.NewFreezeLedgers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: freeze ledgers: %w", err)
+	}
+	exposures, err := sapostgres.NewCreditExposureLedgers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: credit exposure ledgers: %w", err)
+	}
+	balances, err := sapostgres.NewOperationalBalances(db, freezes)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: operational balances: %w", err)
+	}
+	standings, err := sapostgres.NewCreditStandings(db, exposures)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: credit standings: %w", err)
+	}
+	declarations, err := pcpostgres.NewPreAcceptanceControlDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control declarations: %w", err)
+	}
+	policy, err := sapartycommercial.NewPreAcceptanceControlPolicy(resolutions, declarations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control policy: %w", err)
+	}
+	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
+		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+			Policy:    policy,
+			Balance:   balances,
+			Freezes:   freezes,
+			Credit:    standings,
+			Exposures: exposures,
+			Clock:     clock,
+		}),
+		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
+		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
+			commercial,
+			// 账户目录留空：实例半边，见函数注释。
+			nil,
+		),
+		// Amounts 留空：估价缝属实例半边，见 acceptanceChainConsumer 的注释。
+	}), nil
 }
 
 // acceptanceConsumer 接 UC-NR-001 那条线：PS 接受决定信封 → 消费门 → 初始路由编排。
