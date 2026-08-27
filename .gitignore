@@ -9,6 +9,16 @@
 coverage.out
 *.test
 *.prof
+/*.exe
+/*.exe~
+
+# Go caches pointed at the repository root. They must never be committed, and
+# they are worth naming here for a second reason: several architecture gates walk
+# the whole tree and parse every .go file they find, so a toolchain download
+# landing under the root breaks the entire gate with a parse error coming out of
+# Go's own testdata. Keep local caches outside the repository.
+/.tmp-gocache/
+/.tmp-gomodcache/
 
 # Local multi-repository workspace only
 go.work
@@ -18,6 +28,8 @@ go.work.sum
 .idea/
 .vscode/
 .codex-*
+/.codex/
+/output/
 
 # Client apps under apps/ (Node toolchain)
 node_modules/
