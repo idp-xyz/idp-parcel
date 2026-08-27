@@ -461,7 +461,7 @@ type ExternalResultHandoffIntent struct {
 	Record ExternalResultRecord
 }
 
-// ExternalResultHandoff 今天没有实现，唯一实现是测试替身。
+// ExternalResultHandoff 把接收记录写入 Outbox（`OutboxExternalResultHandoff`）。
 type ExternalResultHandoff interface {
 	HandOffExternalResult(ctx context.Context, intent ExternalResultHandoffIntent) error
 }

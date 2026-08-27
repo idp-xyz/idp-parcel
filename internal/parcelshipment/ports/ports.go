@@ -1130,8 +1130,7 @@ type SourceDataVersionRecords interface {
 // 意图由版本标识认领，因此重发的是同一份而不是第二份——`AT-PS-031` 要的「版本只形成一次；仅
 // 重试同一发布意图」正落在这里。首次交接失败时编排停在`技术未形成`，版本不因此重形成一遍。
 //
-// 它今天没有实现：outbox 与事务发布侧仍阻断于 ADR-0017 的 Bento 持久化闸门，端口接口属机制
-// 半边因而可以先定，唯一的实现是测试用的确定性替身。
+// 交接写入 Outbox（`OutboxSourceDataHandoff`）。
 type SourceDataVersionHandoff interface {
 	HandOffSourceDataVersion(ctx context.Context, intent SourceDataVersionHandoffIntent) error
 }

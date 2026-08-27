@@ -168,8 +168,7 @@ type SupplierBillHandoffIntent struct {
 	Record BillReceptionRecord
 }
 
-// SupplierBillHandoff 今天没有实现，唯一实现是测试替身；事务发布仍阻断于 ADR-0017
-// 的 Bento/Outbox 闸门。
+// SupplierBillHandoff 把接收记录写入 Outbox（`OutboxSupplierBillHandoff`）。
 type SupplierBillHandoff interface {
 	HandOffSupplierBill(ctx context.Context, intent SupplierBillHandoffIntent) error
 }
@@ -224,7 +223,7 @@ type ChargeConfirmationHandoffIntent struct {
 	Charge   domain.CustomerCharge
 }
 
-// ChargeConfirmationHandoff 今天没有实现，唯一实现是测试替身。
+// ChargeConfirmationHandoff 把已确认费用写入 Outbox（`OutboxChargeConfirmationHandoff`）。
 type ChargeConfirmationHandoff interface {
 	HandOffChargeConfirmation(ctx context.Context, intent ChargeConfirmationHandoffIntent) error
 }
@@ -331,7 +330,7 @@ type AdvanceRecoveryIntent struct {
 	Adjustment RecoveryAdjustmentRecord
 }
 
-// AdvanceRecoveryHandoff 今天没有实现，唯一实现是测试替身。
+// AdvanceRecoveryHandoff 把回收与调整写入 Outbox（`OutboxAdvanceRecoveryHandoff`）。
 type AdvanceRecoveryHandoff interface {
 	HandOffAdvanceRecovery(ctx context.Context, intent AdvanceRecoveryIntent) error
 }
@@ -431,7 +430,7 @@ type StatementIntent struct {
 	Inclusion InclusionRecord
 }
 
-// StatementHandoff 今天没有实现，唯一实现是测试替身。
+// StatementHandoff 把对账单事件写入 Outbox（`OutboxStatementHandoff`）。
 type StatementHandoff interface {
 	HandOffStatement(ctx context.Context, intent StatementIntent) error
 }
@@ -528,7 +527,7 @@ type SettlementApplicationIntent struct {
 	Record SettlementApplicationRecord
 }
 
-// SettlementApplicationHandoff 今天没有实现，唯一实现是测试替身。
+// SettlementApplicationHandoff 把核销与撤销写入 Outbox（`OutboxSettlementApplicationHandoff`）。
 type SettlementApplicationHandoff interface {
 	HandOffSettlementApplication(ctx context.Context, intent SettlementApplicationIntent) error
 }
@@ -610,7 +609,7 @@ type OperatingIntent struct {
 	Result     OperatingResultRecord
 }
 
-// OperatingHandoff 今天没有实现，唯一实现是测试替身。
+// OperatingHandoff 把分摊与指标写入 Outbox（`OutboxOperatingHandoff`）。
 type OperatingHandoff interface {
 	HandOffOperating(ctx context.Context, intent OperatingIntent) error
 }
@@ -746,7 +745,7 @@ type ClaimSettlementIntent struct {
 	Adjustment      ClaimAdjustmentRecord
 }
 
-// ClaimSettlementHandoff 今天没有实现，唯一实现是测试替身。
+// ClaimSettlementHandoff 把索赔结算各记录写入 Outbox（`OutboxClaimSettlementHandoff`）。
 type ClaimSettlementHandoff interface {
 	HandOffClaimSettlement(ctx context.Context, intent ClaimSettlementIntent) error
 }
