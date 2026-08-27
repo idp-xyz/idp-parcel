@@ -1,0 +1,41 @@
+dir=D:/tops/idp-parcel mode=ab pkgErrors=0 adapters/platform 生产文件=280
+上下文 | 接口总数 | A缺(全局) | A缺(同上下文) | B缺(types.Implements)
+customscompliance | 40 | 0 | 0 | 0
+networkrouting | 17 | 0 | 0 | 0
+nodeoperations | 12 | 1 | 1 | 0
+parcelpricing | 7 | 0 | 0 | 0
+parcelshipment | 38 | 2 | 2 | 2
+partycommercial | 18 | 0 | 2 | 0
+pilotgovernance | 9 | 0 | 0 | 0
+settlementaccounting | 36 | 3 | 3 | 3
+transportfulfillment | 24 | 0 | 0 | 0
+visibilityexception | 39 | 1 | 1 | 1
+合计 | 240 | 7 | 9 | 6
+
+== 判据 A 缺（全局口径，头条） ==
+nodeoperations.ParcelIdentityView   <- B 已实现（A 虚低：实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
+parcelshipment.SourceDataAmendmentAuthorizer
+parcelshipment.SourceDataRuleDeclaration
+settlementaccounting.ClaimAmountRuleView
+settlementaccounting.ContractResponsibilityView
+settlementaccounting.SupplierAuditAuthorityView
+visibilityexception.NotificationChannelGateway
+
+== 判据 A 缺（同上下文子树口径，交叉核对） ==
+nodeoperations.ParcelIdentityView
+parcelshipment.SourceDataAmendmentAuthorizer
+parcelshipment.SourceDataRuleDeclaration
+partycommercial.Clock
+partycommercial.CommercialResolutionView
+settlementaccounting.ClaimAmountRuleView
+settlementaccounting.ContractResponsibilityView
+settlementaccounting.SupplierAuditAuthorityView
+visibilityexception.NotificationChannelGateway
+
+== 判据 B 缺（真无生产实现） ==
+parcelshipment.SourceDataAmendmentAuthorizer
+parcelshipment.SourceDataRuleDeclaration
+settlementaccounting.ClaimAmountRuleView
+settlementaccounting.ContractResponsibilityView
+settlementaccounting.SupplierAuditAuthorityView
+visibilityexception.NotificationChannelGateway
