@@ -1,7 +1,7 @@
 # 04 代收分户账：collection-remittance 上下文从零
 
 Category: feature
-Status: in-progress——原派 MCP-2 未开工（用户 08-28 告知其空闲），收回由 MCP-1 自办（2026-08-28）
+Status: in-progress——用户指示全批协同（08-28 第二轮），改派两段：后端主体（CONTEXT/域模型/迁移/写入方/CLI）归 MCP-2，读面与页面与种子归 MCP-3（接力点：迁移表形定型即通知），合装与页登仍占号 MCP-1（批务票 05）
 
 ## 准入依据
 
