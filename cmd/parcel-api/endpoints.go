@@ -66,6 +66,7 @@ func assembleBusinessEndpoints(
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
+	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
@@ -121,6 +122,10 @@ func assembleBusinessEndpoints(
 		// 行形状与状态代数不同（裁决在 ports.PartyIdentityCatalogueRead 注释）。
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
+		// 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）独立入口，不并进
+		// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
+		// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
+		{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, productChannelMappings)},
 		// VE 六类目录查阅与运营追踪查阅同属租户内运营读面，共用同一个
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。

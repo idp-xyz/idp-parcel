@@ -1,0 +1,28 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "scope": "SYN-SCOPE-01",
+  "forms": [
+    { "productId": "SYN-PROD-CN-SG-EXPRESS", "version": "v1", "form": "NETWORK_SERVICE" },
+    { "productId": "SYN-PROD-CN-SG-ECON", "version": "v1", "form": "NETWORK_SERVICE" }
+  ],
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-CN-SG-EXPRESS-01",
+      "revision": 1,
+      "productId": "SYN-PROD-CN-SG-EXPRESS",
+      "productVersion": "v1",
+      "channels": ["SYN-CH-SG-POST-STD", "SYN-CH-AGG-SEA-01"],
+      "basis": "SYN-DEC-CHANNEL-2026-001",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z"
+    },
+    {
+      "mappingId": "SYN-MAP-CN-SG-ECON-01",
+      "revision": 1,
+      "productId": "SYN-PROD-CN-SG-ECON",
+      "productVersion": "v1",
+      "channels": [],
+      "basis": "SYN-DEC-CHANNEL-2026-002",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z"
+    }
+  ]
+}

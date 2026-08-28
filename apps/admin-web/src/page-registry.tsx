@@ -120,6 +120,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'supplier-agreements',
   'group-legal-entities',
   'business-parties',
+  'channel-product-catalog',
   'tracking-judgment-rules',
   'disclosure-policies',
   'claim-prerequisites',

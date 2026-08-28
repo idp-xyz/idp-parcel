@@ -67,21 +67,22 @@ func TestBuildIsolatedReadIntakesGrantsAllSixContexts(t *testing.T) {
 // 装配点上」，新的目录查阅端点满足同三条即入格，不另开 ADR。合同与协议两行就是照这
 // 条进来的（票 admin-web-page-wiring-frontier/01）。
 var isolatedReadAdmittedPatterns = map[string]bool{
-	"/shipment-request-views":          true,
-	"/tracking-projections":            true,
-	"/pricing-price-cards":             true,
-	"/pricing-reference-series":        true,
-	"/network-catalog":                 true,
-	"/customs-compliance-rules":        true,
-	"/customs-case-registers":          true,
-	"/customs-gate-conditions":         true,
-	"/commercial-service-products":     true,
-	"/commercial-policies":             true,
-	"/commercial-customer-contracts":   true,
-	"/commercial-supplier-agreements":  true,
-	"/commercial-group-legal-entities": true,
-	"/commercial-party-relationships":  true,
-	"/visibility-catalogues":           true,
+	"/shipment-request-views":              true,
+	"/tracking-projections":                true,
+	"/pricing-price-cards":                 true,
+	"/pricing-reference-series":            true,
+	"/network-catalog":                     true,
+	"/customs-compliance-rules":            true,
+	"/customs-case-registers":              true,
+	"/customs-gate-conditions":             true,
+	"/commercial-service-products":         true,
+	"/commercial-policies":                 true,
+	"/commercial-customer-contracts":       true,
+	"/commercial-supplier-agreements":      true,
+	"/commercial-group-legal-entities":     true,
+	"/commercial-party-relationships":      true,
+	"/commercial-product-channel-mappings": true,
+	"/visibility-catalogues":               true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

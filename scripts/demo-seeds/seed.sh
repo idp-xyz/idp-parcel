@@ -54,6 +54,10 @@ echo "== 2/6 商业权威发布（party-commercial：服务产品与五策略）
 "$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-parties.json"
 "$BIN/parcel-commercial" deactivate-party-identity \
   -input "$SEEDS/commercial/deactivate-party-retired-01.json"
+# 服务形态与产品—渠道映射（票 admin-remainder-mechanism-batch/02）：EXPRESS 配两个
+# 渠道引用，ECON 显式登记「未配置」——批级判据点名实例格显式未配置要有真实例可显；
+# 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。
+"$BIN/parcel-commercial" register-products -input "$SEEDS/commercial/register-products.json"
 
 echo "== 3/6 计价登记（parcel-pricing：价卡 + 参考序列） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"

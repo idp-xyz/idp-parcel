@@ -380,6 +380,14 @@ func (unwiredCommercialCatalogue) ListPartyRelationships(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListProductChannelMappings(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.ProductChannelMappingRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredVisibilityCatalogue 是 VE 六类目录列表读口的占位，方法表与
 // visibilityports.CatalogueListRead 逐一对上（票 admin-web-page-wiring-frontier/02）。
 type unwiredVisibilityCatalogue struct{}

@@ -45,6 +45,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/commercial-supplier-agreements":                   {method: http.MethodGet, target: "/commercial-supplier-agreements"},
 	"/commercial-group-legal-entities":                  {method: http.MethodGet, target: "/commercial-group-legal-entities"},
 	"/commercial-party-relationships":                   {method: http.MethodGet, target: "/commercial-party-relationships"},
+	"/commercial-product-channel-mappings":              {method: http.MethodGet, target: "/commercial-product-channel-mappings"},
 	"/visibility-catalogues":                            {method: http.MethodGet, target: "/visibility-catalogues?kind=MILESTONE_MAPPING"},
 }
 
@@ -148,6 +149,7 @@ func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpa
 		unwiredComplianceRules{},
 		unwiredCaseRegisters{},
 		unwiredGateConditions{},
+		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},
 		unwiredCommercialCatalogue{},

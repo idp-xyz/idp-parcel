@@ -20,6 +20,21 @@
     },
     {
       "tenantId": "SYN-TENANT-01",
+      "kind": "SERVICE_PRODUCT",
+      "objectId": "SYN-PROD-CN-SG-ECON",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "sha256:syn-SYN-PROD-CN-SG-ECON-v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-012",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
       "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY",
       "objectId": "SYN-FIN-CONTROL-01",
       "version": "v1",

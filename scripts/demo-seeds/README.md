@@ -24,6 +24,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 |---|---|---|
 | `data/commercial/` | `cmd/parcel-commercial publish` | 发布批：服务产品、财务控制策略、接单规则包（五类规则正文+受理内容+收寄资格+时点锚+终局规则）、客户合同（正文+受理前控制）、结算政策（预付，六维范围对齐解析键）、供应商协议、价格规则、授权规则 |
 | `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 1 行：四项必需依据加结算三维——它不是商业权威发布，只是与发布共用一个 CLI |
+| `data/commercial/register-products.json` | `cmd/parcel-commercial register-products` | 服务形态两笔（EXPRESS/ECON 均网络服务）+ 产品—渠道映射两笔：EXPRESS 配两个渠道标识引用，ECON 显式登记「未配置」（该产品尚无可用渠道候选）——渠道本体不预造（ADR-0072） |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略 |
 | `data/customs/` | `cmd/parcel-customs-register` | 六册 11 份：就绪、授权、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断、建案要求两向（要求/显式不要求） |
@@ -37,7 +38,10 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 1. **建产品**（party-commercial）：服务产品 `SYN-PROD-CN-SG-EXPRESS`（中国→新加坡合成快递）
    携待路由许可；接单规则包 `SYN-RULEPKG-01` 的适用性钉住（产品，合同 `SYN-CONTRACT-01`，
    法人 `SYN-LE-01`，范围）四维；合同正文绑财务控制策略 `SYN-FIN-CONTROL-01`（预付适用、
-   到付显式不适用）。
+   到付显式不适用）。第二个产品 `SYN-PROD-CN-SG-ECON`（合成经济线）用来撑渠道绑定的另一格：
+   EXPRESS 的映射 `SYN-MAP-CN-SG-EXPRESS-01` 配 `SYN-CH-SG-POST-STD` 与 `SYN-CH-AGG-SEA-01`
+   两个渠道标识引用，ECON 的映射 `SYN-MAP-CN-SG-ECON-01` 显式登记「未配置」——渠道接入后
+   以新修订配置绑定，历史修订保留。
 2. **配价**（parcel-pricing）：售价卡 `SYN-PLAN-CN-SG-01`（首重 0.5kg ¥55 续重 ¥18/0.5kg，
    Z1/Z2 两区，MAX 计费重体积系数 5000）方向授权引商业授权对象 `SYN-AUTH-PRICE-DIR-01`，
    方案结构绑燃油序列 `SYN-SERIES-FUEL-01`；成本卡 `SYN-PLAN-CN-SG-COST-01`（BUY）引
@@ -52,11 +56,13 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 ## 已知边界（如实记录，不是缺陷）
 
-- `commercial_price_policy`（0010）与 `service_product_form`（0008）两张表的持久化面存在，
-  但**没有进程级写入口**（`SavePricePolicy` / `SaveServiceProduct` 无 cmd 调用方）。商业策略
-  页的价格政策列、服务产品页的形态列因此如实为空——按 ADR-0077 空册本身就是内容；补写入口
-  属机制半边，不归种子票。价格政策还多一道：`RehydrateAdoptedBasisSpec` 的快照重建至今缺席，
-  补发布通道不等于补重建（记于票 `commercial-closure-settlement-key/02`）。
+- `commercial_price_policy`（0010）的持久化面存在，但**没有进程级写入口**（`SavePricePolicy`
+  无 cmd 调用方）。商业策略页的价格政策列因此如实为空——按 ADR-0077 空册本身就是内容；补写
+  入口属机制半边，不归种子票。价格政策还多一道：`RehydrateAdoptedBasisSpec` 的快照重建至今
+  缺席，补发布通道不等于补重建（记于票 `commercial-closure-settlement-key/02`）。
+  `service_product_form`（0008）那半边已经补上（票 `admin-remainder-mechanism-batch/02`）：
+  `register-products` 子命令是 `SaveServiceProduct` 的进程级调用方，本包两个产品的形态随
+  种子落册，服务产品页的形态列不再为空。
 - 结算政策那一格已经补上（票 `commercial-closure-settlement-key/02`）：发布批里的
   `SYN-SETTLEMENT-PREPAID-01` 是本包唯一一份结算约定，六维与解析键那三维加闭包解出的合同
   版本严丝合缝——差一维就不再被采用，本上下文不许借宽泛客户关系跨维归集。
