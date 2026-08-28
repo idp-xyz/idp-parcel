@@ -62,6 +62,7 @@ func assembleBusinessEndpoints(
 	complianceRules customshttp.RuleCatalogueReader,
 	caseRegisters customshttp.CaseRegisterCatalogueReader,
 	gateConditions customshttp.GateConditionCatalogueReader,
+	portsPaths customshttp.PortsPathsCatalogueReader,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
@@ -113,6 +114,9 @@ func assembleBusinessEndpoints(
 		// 对应「各自独立的页」（票 admin-web-page-wiring-frontier/04 的归属裁决、06 实施）。
 		{Pattern: "/customs-case-registers", Handler: customshttp.NewQueryCaseRegistersEndpoint(complianceRulesIntake, caseRegisters)},
 		{Pattern: "/customs-gate-conditions", Handler: customshttp.NewQueryGateConditionsEndpoint(complianceRulesIntake, gateConditions)},
+		// 口岸与申报路径两册（票 admin-remainder-mechanism-batch/03）是一张页面的两签
+		// 查阅面，共用一个端点按 registry 分派，Intake 与关务运营读面同族同变量。
+		{Pattern: "/customs-ports-paths", Handler: customshttp.NewQueryPortsPathsEndpoint(complianceRulesIntake, portsPaths)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},

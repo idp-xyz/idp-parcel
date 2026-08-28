@@ -127,6 +127,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	portsPaths, err := ccpostgres.NewPortsPathsCatalogue(db)
+	if err != nil {
+		return err
+	}
 	commercialCatalog, err := pcpostgres.NewOperationsCatalogue(db)
 	if err != nil {
 		return err
@@ -155,6 +159,7 @@ func run(logger *slog.Logger) error {
 			complianceRules,
 			caseRegisters,
 			gateConditions,
+			portsPaths,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,

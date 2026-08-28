@@ -290,6 +290,26 @@ func (unwiredGateConditions) ListGateConditions(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredPortsPaths 是口岸与申报路径两册列表读口的占位，方法表与
+// customsports.PortsPathsCatalogueRead 逐一对上（票 admin-remainder-mechanism-batch/03）。
+type unwiredPortsPaths struct{}
+
+func (unwiredPortsPaths) ListCandidatePorts(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.CandidatePortEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredPortsPaths) ListDeclarationPaths(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.DeclarationPathEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCommercialCatalogue struct{}
 
 func (unwiredCommercialCatalogue) ListServiceProducts(
