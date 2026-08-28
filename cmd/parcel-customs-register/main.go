@@ -3,12 +3,14 @@
 // 不是在线请求面，走独立进程而不进 parcel-api 的端点表（先例：parcel-pricing-register、
 // parcel-network-register、parcel-governance-register）。
 //
-// 六本册子十个命令：就绪判断与提交授权各带撤销半边（撤销是状态推进不是删除，原判断
+// 八本册子十二个命令：就绪判断与提交授权各带撤销半边（撤销是状态推进不是删除，原判断
 // 原样留在行内）；解释规则按（辖区，法定生效起点）登记不可覆盖的版本（ADR-0070——
 // 换版即登记更晚起点的新版，开放前版终点随之落定，历史区间不接受追改）；关闭义务与
 // 门禁前置条件各分目录与明细两个命令——「目录登记了但清单空」是必须登得出来的一格，
 // 与「未登记」含义相反；建案要求规则（case-requirement）挡的是建案链第一步那堵
-// EstablishCaseUndecided 墙，「不要求建案」也必须带依据登记，未登记是未决不是「不要求」。
+// EstablishCaseUndecided 墙，「不要求建案」也必须带依据登记，未登记是未决不是「不要求」；
+// 口岸目录与申报路径目录（candidate-port / declaration-path，票
+// admin-remainder-mechanism-batch/03）按（键，生效起点）登记版本，代数同解释规则。
 //
 // 输入全部来自 -input 指定的 JSON 文件，未知字段一律拒绝；进程不内置任何生产默认——
 // 配置内容属实例半边（PAR-CUS-01..07 待提供），机制先行，验证用脱敏合成值（S 级只记 S）。
@@ -54,10 +56,11 @@ const (
 	exitUndecided  = 3
 )
 
-// registrar 是本口的全部依赖：两个登记用例 handler 加环境事务的来源。
+// registrar 是本口的全部依赖：三个登记用例 handler 加环境事务的来源。
 type registrar struct {
 	configurations *application.RegisterCaseConfigurationHandler
 	requirements   *application.RegisterCaseRequirementRuleHandler
+	portsPaths     *application.RegisterPortsPathsHandler
 	transactor     bentoapp.Transactor
 }
 
@@ -130,7 +133,7 @@ func knownCommand(command string) bool {
 	return false
 }
 
-// buildRegistrar 装配真实登记链：五本册子写口加五个只读视图。读口不是可选的便利，
+// buildRegistrar 装配真实登记链：八本册子写口加对应只读视图。读口不是可选的便利，
 // 冲突判定就靠它——只有写口时「已在册」永远说不出是重放还是改内容。
 func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	none := registrar{}
@@ -182,6 +185,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造建案规则读口：%w", err)
 	}
+	portsPaths, err := adapter.NewPortsPathsRegistrations(db)
+	if err != nil {
+		return none, fmt.Errorf("构造口岸路径写口：%w", err)
+	}
+	portsPathsView, err := adapter.NewPortsPathsPointView(db)
+	if err != nil {
+		return none, fmt.Errorf("构造口岸路径读口：%w", err)
+	}
 
 	configurations := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
@@ -197,9 +208,12 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	})
 	requirementHandler := application.NewRegisterCaseRequirementRuleHandler(
 		application.RegisterCaseRequirementRuleDeps{Rules: requirements, View: requirementView})
+	portsPathsHandler := application.NewRegisterPortsPathsHandler(
+		application.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPathsView})
 	return registrar{
 		configurations: configurations,
 		requirements:   requirementHandler,
+		portsPaths:     portsPathsHandler,
 		transactor:     db.Transactor(),
 	}, nil
 }

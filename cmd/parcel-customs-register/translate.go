@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
 
-// 本文件把九种登记输入 JSON 译装成应用命令。译装严格且零默认：未知字段拒收（打错
+// 本文件把十一种登记输入 JSON 译装成应用命令。译装严格且零默认：未知字段拒收（打错
 // 字段名不得静默变成「没给」）、有构造门的标识在这里就拒、封闭词表在这里就核——
 // 词表外的取值走到库上 CHECK 才被拦时，答案已经滑到未决（3），而它明明是用法错误
 // （1）。时间与撤销原因那类有领域门的内容原样递给领域，这里绝不代判。
@@ -24,10 +24,12 @@ import (
 //   - 义务项的承接配对与内容格——库的 CHECK 拦得住，但那属「依赖故障」的退出码，
 //     缺格该在入库前指名拒绝。
 
-// 封闭十命令：前九个对齐案件配置登记用例的九个方法——就绪与授权各带撤销半边（撤销
+// 封闭十二命令：前九个对齐案件配置登记用例的九个方法——就绪与授权各带撤销半边（撤销
 // 是状态推进不是删除）、解释规则按（辖区，法定生效起点）登记版本（换版即登记更晚
 // 起点的新版，前版终点随之落定）、义务与门禁各分目录与明细；第十个是第六本册子
-// （case-requirement，建案要求规则），随 cc-case-requirement-rule-registry 01 并入本口。
+// （case-requirement，建案要求规则），随 cc-case-requirement-rule-registry 01 并入本口；
+// 末两个是口岸目录与申报路径目录（票 admin-remainder-mechanism-batch/03），版本代数
+// 同解释规则——起点入键、终点在换版时落定。
 const (
 	commandReadinessRegister  = "readiness-register"
 	commandReadinessRevoke    = "readiness-revoke"
@@ -39,6 +41,8 @@ const (
 	commandGateCatalog        = "gate-catalog"
 	commandGateFinding        = "gate-finding"
 	commandCaseRequirement    = "case-requirement"
+	commandCandidatePort      = "candidate-port"
+	commandDeclarationPath    = "declaration-path"
 )
 
 var allCommands = []string{
@@ -48,6 +52,7 @@ var allCommands = []string{
 	commandObligationCatalog, commandObligationItem,
 	commandGateCatalog, commandGateFinding,
 	commandCaseRequirement,
+	commandCandidatePort, commandDeclarationPath,
 }
 
 type dispatchFunc func(
@@ -55,7 +60,7 @@ type dispatchFunc func(
 	registrar registrar,
 ) (application.CaseConfigurationOutcome, error)
 
-// commandFor 按命令译装输入，交回一个在事务内执行的调用。命令在这里定死为封闭十个。
+// commandFor 按命令译装输入，交回一个在事务内执行的调用。命令在这里定死为封闭十二个。
 func commandFor(command string, raw []byte) (dispatchFunc, error) {
 	switch command {
 	case commandReadinessRegister:
@@ -78,6 +83,10 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		return gateFindingFromJSON(raw)
 	case commandCaseRequirement:
 		return caseRequirementFromJSON(raw)
+	case commandCandidatePort:
+		return candidatePortFromJSON(raw)
+	case commandDeclarationPath:
+		return declarationPathFromJSON(raw)
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
@@ -508,6 +517,99 @@ func caseRequirementFromJSON(raw []byte) (dispatchFunc, error) {
 		registrar registrar,
 	) (application.CaseConfigurationOutcome, error) {
 		return registrar.requirements.Handle(ctx, command)
+	}, nil
+}
+
+type candidatePortDocument struct {
+	TenantID    string    `json:"tenantId"`
+	PortRef     string    `json:"portRef"`
+	AppliesFrom time.Time `json:"appliesFrom"`
+}
+
+func candidatePortFromJSON(raw []byte) (dispatchFunc, error) {
+	var document candidatePortDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return nil, fmt.Errorf("口岸目录登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	port, err := domain.NewCustomsPortReference(document.PortRef)
+	if err != nil {
+		return nil, err
+	}
+	// 生效起点在键上且无默认可言（同解释规则那格）；终点不是输入——后继版本登记时
+	// 自动给前版落终点（换版）。
+	if document.AppliesFrom.IsZero() {
+		return nil, fmt.Errorf("口岸目录登记缺 appliesFrom——生效起点没有默认值")
+	}
+	command := application.RegisterCandidatePortCommand{
+		TenantID:    tenant,
+		Port:        port,
+		AppliesFrom: document.AppliesFrom,
+	}
+	return func(
+		ctx context.Context,
+		registrar registrar,
+	) (application.CaseConfigurationOutcome, error) {
+		return registrar.portsPaths.RegisterCandidatePort(ctx, command)
+	}, nil
+}
+
+type declarationPathDocument struct {
+	TenantID        string    `json:"tenantId"`
+	PathRef         string    `json:"pathRef"`
+	PortRef         string    `json:"portRef"`
+	Direction       string    `json:"direction"`
+	DeclarationMode string    `json:"declarationMode"`
+	AppliesFrom     time.Time `json:"appliesFrom"`
+}
+
+func declarationPathFromJSON(raw []byte) (dispatchFunc, error) {
+	var document declarationPathDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return nil, fmt.Errorf("申报路径登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	path, err := domain.NewDeclarationPathReference(document.PathRef)
+	if err != nil {
+		return nil, err
+	}
+	port, err := domain.NewCustomsPortReference(document.PortRef)
+	if err != nil {
+		return nil, err
+	}
+	direction, err := manifestDirectionFrom(document.Direction)
+	if err != nil {
+		return nil, err
+	}
+	// 申报模式是引用不是封闭词表（真实模式集属监管规则实例半边），构造门只拒空白。
+	mode, err := domain.NewDeclarationModeReference(document.DeclarationMode)
+	if err != nil {
+		return nil, err
+	}
+	route, err := domain.NewDeclarationPathRoute(port, direction, mode)
+	if err != nil {
+		return nil, err
+	}
+	if document.AppliesFrom.IsZero() {
+		return nil, fmt.Errorf("申报路径登记缺 appliesFrom——生效起点没有默认值")
+	}
+	command := application.RegisterDeclarationPathCommand{
+		TenantID:    tenant,
+		Path:        path,
+		Route:       route,
+		AppliesFrom: document.AppliesFrom,
+	}
+	return func(
+		ctx context.Context,
+		registrar registrar,
+	) (application.CaseConfigurationOutcome, error) {
+		return registrar.portsPaths.RegisterDeclarationPath(ctx, command)
 	}, nil
 }
 

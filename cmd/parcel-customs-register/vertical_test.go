@@ -22,7 +22,7 @@ func mustInstant(t *testing.T, value string) time.Time {
 	return instant
 }
 
-// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装配的整条登记链（隔离合成 S）：六本
+// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装配的整条登记链（隔离合成 S）：八本
 // 册子各自贯通「译装 → 用例 → 真库」，重放与内容冲突在真库上分得开，撤销走状态推进
 // 且原判断留在行内，义务明细撞上库的外键防线时答未决。本口与写口适配器各持一份私有
 // 词表映射，本用例同时把两份钉在迁移 CHECK 的同一词表上。
@@ -185,4 +185,43 @@ func TestCustomsRegisterVerticalOnRealPostgres(t *testing.T) {
 	mustExecute(commandCaseRequirement, requirement("false"), exitRegistered, "REGISTERED")
 	mustExecute(commandCaseRequirement, requirement("false"), exitRegistered, "EXISTING")
 	mustExecute(commandCaseRequirement, requirement("true"), exitConflict, "CONTENT_CONFLICT")
+
+	// 口岸目录与申报路径目录（第七、八本）：版本代数同解释规则——重放已存在、错序
+	// 冲突、换版是登记更晚起点的新版，旧区间时点仍解析回旧版三维。
+	candidatePort := func(appliesFrom string) string {
+		return `{
+			"tenantId": "SYN-T1", "portRef": "SYN-PORT-HAM",
+			"appliesFrom": "` + appliesFrom + `"
+		}`
+	}
+	mustExecute(commandCandidatePort, candidatePort("2026-08-01T00:00:00Z"), exitRegistered, "REGISTERED")
+	mustExecute(commandCandidatePort, candidatePort("2026-08-01T00:00:00Z"), exitRegistered, "EXISTING")
+	mustExecute(commandCandidatePort, candidatePort("2026-07-01T00:00:00Z"), exitConflict, "CONTENT_CONFLICT")
+
+	declarationPath := func(mode, appliesFrom string) string {
+		return `{
+			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-HAM-IMPORT", "portRef": "SYN-PORT-HAM",
+			"direction": "IMPORT", "declarationMode": "` + mode + `",
+			"appliesFrom": "` + appliesFrom + `"
+		}`
+	}
+	mustExecute(commandDeclarationPath, declarationPath("SYN-MODE-GENERAL", "2026-08-01T00:00:00Z"), exitRegistered, "REGISTERED")
+	mustExecute(commandDeclarationPath, declarationPath("SYN-MODE-GENERAL", "2026-08-01T00:00:00Z"), exitRegistered, "EXISTING")
+	mustExecute(commandDeclarationPath, declarationPath("SYN-MODE-SIMPLIFIED", "2026-08-01T00:00:00Z"), exitConflict, "CONTENT_CONFLICT")
+	mustExecute(commandDeclarationPath, declarationPath("SYN-MODE-SIMPLIFIED", "2026-08-20T00:00:00Z"), exitRegistered, "REGISTERED")
+
+	portsPathsView, err := adapter.NewPortsPathsPointView(db)
+	if err != nil {
+		t.Fatalf("构造口岸路径读口：%v", err)
+	}
+	pathRef, err := domain.NewDeclarationPathReference("SYN-PATH-HAM-IMPORT")
+	if err != nil {
+		t.Fatalf("构造路径引用：%v", err)
+	}
+	earlyPath, foundEarlyPath, err := portsPathsView.LoadDeclarationPath(ctx, tenant, pathRef,
+		mustInstant(t, "2026-08-10T00:00:00Z"))
+	if err != nil || !foundEarlyPath || earlyPath.Route.Mode().String() != "SYN-MODE-GENERAL" {
+		t.Fatalf("换版后旧区间时点没解析回旧版三维：err=%v found=%v entry=%+v",
+			err, foundEarlyPath, earlyPath)
+	}
 }

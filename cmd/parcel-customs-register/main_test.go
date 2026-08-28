@@ -329,6 +329,67 @@ func (book *fakeRequirementBook) JudgeCaseRequirement(
 	return judgment, found, nil
 }
 
+// fakePortsPathsBook 口岸目录与申报路径目录的替身，按版本键（租户/引用/生效起点）
+// 存行、读口按请求起点精确取回——同 fakeRuleBook 的简化：区间语义在应用层替身与
+// 真库用例各证过一遍，本口只证译装出的键与三维原样到册。
+type fakePortsPathsBook struct {
+	portsByKey map[string]ports.CandidatePortEntry
+	pathsByKey map[string]ports.DeclarationPathEntry
+}
+
+func portsPathsVersionKey(tenant domain.TenantID, ref string, instant time.Time) string {
+	return tenant.String() + "/" + ref + "/" + instant.UTC().Format(time.RFC3339Nano)
+}
+
+func (book *fakePortsPathsBook) RegisterCandidatePort(
+	_ context.Context,
+	tenant domain.TenantID,
+	port domain.CustomsPortReference,
+	appliesFrom time.Time,
+) (ports.CaseConfigurationSaveOutcome, error) {
+	key := portsPathsVersionKey(tenant, port.String(), appliesFrom)
+	if _, exists := book.portsByKey[key]; exists {
+		return ports.CaseConfigurationAlreadyRegistered, nil
+	}
+	book.portsByKey[key] = ports.CandidatePortEntry{Port: port, AppliesFrom: appliesFrom}
+	return ports.CaseConfigurationRegistered, nil
+}
+
+func (book *fakePortsPathsBook) RegisterDeclarationPath(
+	_ context.Context,
+	tenant domain.TenantID,
+	path domain.DeclarationPathReference,
+	route domain.DeclarationPathRoute,
+	appliesFrom time.Time,
+) (ports.CaseConfigurationSaveOutcome, error) {
+	key := portsPathsVersionKey(tenant, path.String(), appliesFrom)
+	if _, exists := book.pathsByKey[key]; exists {
+		return ports.CaseConfigurationAlreadyRegistered, nil
+	}
+	book.pathsByKey[key] = ports.DeclarationPathEntry{Path: path, Route: route, AppliesFrom: appliesFrom}
+	return ports.CaseConfigurationRegistered, nil
+}
+
+func (book *fakePortsPathsBook) LoadCandidatePort(
+	_ context.Context,
+	tenant domain.TenantID,
+	port domain.CustomsPortReference,
+	evaluatedAt time.Time,
+) (ports.CandidatePortEntry, bool, error) {
+	entry, found := book.portsByKey[portsPathsVersionKey(tenant, port.String(), evaluatedAt)]
+	return entry, found, nil
+}
+
+func (book *fakePortsPathsBook) LoadDeclarationPath(
+	_ context.Context,
+	tenant domain.TenantID,
+	path domain.DeclarationPathReference,
+	evaluatedAt time.Time,
+) (ports.DeclarationPathEntry, bool, error) {
+	entry, found := book.pathsByKey[portsPathsVersionKey(tenant, path.String(), evaluatedAt)]
+	return entry, found, nil
+}
+
 type executeFixture struct {
 	registrar    registrar
 	readiness    *fakeReadinessBook
@@ -337,6 +398,7 @@ type executeFixture struct {
 	obligations  *fakeObligationBook
 	gates        *fakeGateBook
 	requirements *fakeRequirementBook
+	portsPaths   *fakePortsPathsBook
 }
 
 func newExecuteFixture() *executeFixture {
@@ -352,6 +414,10 @@ func newExecuteFixture() *executeFixture {
 		findings: map[string]domain.PreconditionFinding{},
 	}
 	requirements := &fakeRequirementBook{byKey: map[string]ports.CaseRequirementJudgment{}}
+	portsPaths := &fakePortsPathsBook{
+		portsByKey: map[string]ports.CandidatePortEntry{},
+		pathsByKey: map[string]ports.DeclarationPathEntry{},
+	}
 	configurations := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
 		ReadinessView:  readiness,
@@ -366,10 +432,13 @@ func newExecuteFixture() *executeFixture {
 	})
 	requirementHandler := application.NewRegisterCaseRequirementRuleHandler(
 		application.RegisterCaseRequirementRuleDeps{Rules: requirements, View: requirements})
+	portsPathsHandler := application.NewRegisterPortsPathsHandler(
+		application.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPaths})
 	return &executeFixture{
 		registrar: registrar{
 			configurations: configurations,
 			requirements:   requirementHandler,
+			portsPaths:     portsPathsHandler,
 			transactor:     passthroughTransactor{},
 		},
 		readiness:    readiness,
@@ -378,6 +447,7 @@ func newExecuteFixture() *executeFixture {
 		obligations:  obligations,
 		gates:        gates,
 		requirements: requirements,
+		portsPaths:   portsPaths,
 	}
 }
 
@@ -573,6 +643,54 @@ func TestExecuteCaseRequirementFidelityAndConflict(t *testing.T) {
 		if judgment.Required {
 			t.Fatalf("冲突顶掉了册面")
 		}
+	}
+}
+
+// TestExecutePortsPathsFidelityAndConflict 证末两个命令接对了：口岸键与路径三维原样
+// 到册（保真），重放答已存在（0），同键换三维答内容冲突（2）且册面纹丝不动。
+func TestExecutePortsPathsFidelityAndConflict(t *testing.T) {
+	fixture := newExecuteFixture()
+	ctx := context.Background()
+
+	port := []byte(`{
+		"tenantId": "SYN-T1", "portRef": "SYN-PORT-HAM",
+		"appliesFrom": "2026-08-24T01:00:00Z"
+	}`)
+	message, code := execute(ctx, commandCandidatePort, port, fixture.registrar)
+	if code != exitRegistered || !strings.Contains(message, "REGISTERED") {
+		t.Fatalf("口岸登记 = %d（%s）", code, message)
+	}
+	message, code = execute(ctx, commandCandidatePort, port, fixture.registrar)
+	if code != exitRegistered || !strings.Contains(message, "EXISTING") {
+		t.Fatalf("口岸重放 = %d（%s），要 0 且含 EXISTING", code, message)
+	}
+
+	path := func(mode string) []byte {
+		return []byte(`{
+			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-01", "portRef": "SYN-PORT-HAM",
+			"direction": "EXPORT", "declarationMode": "` + mode + `",
+			"appliesFrom": "2026-08-24T01:00:00Z"
+		}`)
+	}
+	if message, code := execute(ctx, commandDeclarationPath, path("SYN-MODE-GENERAL"), fixture.registrar); code != exitRegistered {
+		t.Fatalf("路径登记 = %d（%s）", code, message)
+	}
+	wantFrom := time.Date(2026, 8, 24, 1, 0, 0, 0, time.UTC)
+	entry, found := fixture.portsPaths.pathsByKey["SYN-T1/SYN-PATH-01/"+wantFrom.Format(time.RFC3339Nano)]
+	if !found {
+		t.Fatalf("路径没落册")
+	}
+	if entry.Route.Port().String() != "SYN-PORT-HAM" ||
+		entry.Route.Direction() != domain.ExportManifest ||
+		entry.Route.Mode().String() != "SYN-MODE-GENERAL" {
+		t.Fatalf("路径三维失真：%+v", entry.Route)
+	}
+	message, code = execute(ctx, commandDeclarationPath, path("SYN-MODE-SIMPLIFIED"), fixture.registrar)
+	if code != exitConflict || !strings.Contains(message, "CONTENT_CONFLICT") {
+		t.Fatalf("同键换模式 = %d（%s），要 %d 且含 CONTENT_CONFLICT", code, message, exitConflict)
+	}
+	if entry.Route.Mode().String() != "SYN-MODE-GENERAL" {
+		t.Fatalf("冲突顶掉了在册三维")
 	}
 }
 

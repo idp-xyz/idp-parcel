@@ -15,17 +15,10 @@ func TestCommandForRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestCommandForRejectsUnknownFields 证九个命令全部拒未知字段：打错的键静默丢弃会让
-// 操作员以为登进去的比实际多。
+// TestCommandForRejectsUnknownFields 证十二个命令全部拒未知字段：打错的键静默丢弃
+// 会让操作员以为登进去的比实际多。
 func TestCommandForRejectsUnknownFields(t *testing.T) {
-	for _, command := range []string{
-		commandReadinessRegister, commandReadinessRevoke,
-		commandAuthorityGrant, commandAuthorityRevoke,
-		commandInterpretationRule,
-		commandObligationCatalog, commandObligationItem,
-		commandGateCatalog, commandGateFinding,
-		commandCaseRequirement,
-	} {
+	for _, command := range allCommands {
 		if _, err := commandFor(command, []byte(`{"typo": 1}`)); err == nil {
 			t.Fatalf("%s 未拒未知字段", command)
 		}
@@ -52,6 +45,15 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 		commandGateFinding: `{
 			"tenantId": "SYN-T1", "scopeRef": "scope-1", "action": "FINAL_DELIVERY",
 			"boundaryRef": "boundary-1", "preconditionRef": "", "state": "MET"
+		}`,
+		commandCandidatePort: `{
+			"tenantId": "SYN-T1", "portRef": "  ",
+			"appliesFrom": "2026-08-24T01:00:00Z"
+		}`,
+		commandDeclarationPath: `{
+			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-01", "portRef": "SYN-PORT-01",
+			"direction": "IMPORT", "declarationMode": " ",
+			"appliesFrom": "2026-08-24T01:00:00Z"
 		}`,
 	}
 	for command, raw := range cases {
@@ -88,6 +90,11 @@ func TestCommandForRejectsVocabularyOutsideTheClosedSets(t *testing.T) {
 		{commandCaseRequirement, `{
 			"tenantId": "SYN-T1", "jurisdictionRef": "JURIS/DE", "direction": "TRANSIT",
 			"procedureRef": "PROC/EXPORT-STANDARD", "required": true, "basis": "basis-1"
+		}`, "direction"},
+		{commandDeclarationPath, `{
+			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-01", "portRef": "SYN-PORT-01",
+			"direction": "TRANSIT", "declarationMode": "SYN-MODE-GENERAL",
+			"appliesFrom": "2026-08-24T01:00:00Z"
 		}`, "direction"},
 	}
 	for _, spec := range cases {
@@ -144,20 +151,29 @@ func TestCommandForRejectsAbsentRegistrationInstant(t *testing.T) {
 	}
 }
 
-// TestCommandForRejectsAbsentAppliesFrom 证解释规则的法定生效起点必填：它在键上且
-// 领域与库都没有零值门（timestamptz 装得下 0001 年），缺格只能在译装处拦——静默落成
-// 0001 年的版本边界正是「缺格变成错事实」。
+// TestCommandForRejectsAbsentAppliesFrom 证版本键上的生效起点必填：解释规则与口岸/
+// 路径两目录同款——起点在键上且领域与库都没有零值门（timestamptz 装得下 0001 年），
+// 缺格只能在译装处拦——静默落成 0001 年的版本边界正是「缺格变成错事实」。
 func TestCommandForRejectsAbsentAppliesFrom(t *testing.T) {
-	absent := `{
-		"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT",
-		"jurisdictionRef": "SYN-JURIS-DE", "ruleRef": "SYN-RULE-1"
-	}`
-	_, err := commandFor(commandInterpretationRule, []byte(absent))
-	if err == nil {
-		t.Fatalf("缺席的 appliesFrom 要拒——法定生效起点没有默认值")
+	cases := map[string]string{
+		commandInterpretationRule: `{
+			"tenantId": "SYN-T1", "resultLayer": "RELEASE_RESULT",
+			"jurisdictionRef": "SYN-JURIS-DE", "ruleRef": "SYN-RULE-1"
+		}`,
+		commandCandidatePort: `{"tenantId": "SYN-T1", "portRef": "SYN-PORT-01"}`,
+		commandDeclarationPath: `{
+			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-01", "portRef": "SYN-PORT-01",
+			"direction": "IMPORT", "declarationMode": "SYN-MODE-GENERAL"
+		}`,
 	}
-	if !strings.Contains(err.Error(), "appliesFrom") {
-		t.Fatalf("拒绝没指名 appliesFrom：%v", err)
+	for command, raw := range cases {
+		_, err := commandFor(command, []byte(raw))
+		if err == nil {
+			t.Fatalf("%s 未拒缺席的 appliesFrom——生效起点没有默认值", command)
+		}
+		if !strings.Contains(err.Error(), "appliesFrom") {
+			t.Fatalf("%s 的拒绝没指名 appliesFrom：%v", command, err)
+		}
 	}
 }
 
