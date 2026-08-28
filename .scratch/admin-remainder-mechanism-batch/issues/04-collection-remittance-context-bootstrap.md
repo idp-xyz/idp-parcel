@@ -30,3 +30,23 @@ spec 范围裁定 + 基线 `PA-CR-01`（COD 代收回汇是目标客户群常规
 
 `CONTEXT.md` 与 GLOSSARY/CONTEXT-MAP 一致；`SYN-` 种子灌入后代收分户账页非空册且回汇批次
 实例格显式未配置；全仓绿（报绿注明含不含真库）。
+
+## 后端主体裁量（MCP-2，08-28）
+
+形状取舍已定并记 [ADR-0082](../../../docs/adr/0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md)。
+票面之外另定的几件，记在这里供读面与种子对齐：
+
+- **依据种类五值**（`COLLECTION_FACT` / `ALLOCATION` / `REMITTANCE_BATCH` / `DISCREPANCY` /
+  `CORRECTION`）。`ALLOCATION` 是票面没点名的一格：清分（待清分 → 应付客户）的依据是代收
+  指令而不是代收事实——一层来源事实说的是「有人报了这笔钱」，说不出「它是谁的」。
+- **分户账键不是记账的输入**，由依据推出（事实→指令→键、指令→键、批次自带、差异→指令→键、
+  原记账自带）。记账命令因此也不带币种。
+- **入账无法冲正**，明认为代价：去向侧没有账外位置。来源侧记错走追加更正事实，那笔钱在账面
+  上如何退出取决于真实渠道退款与银行退回形态，属实例半边，本切片不猜也不预留位置。
+- **答案十格、退出码五档**：余额不足（`UNDERFUNDED`，退出码 4）与未决（3）分开——前者确定
+  没落账、等实收或先清分后重跑即可，后者连落没落都不知道。
+
+后端主体交付：`docs/domain/collection-remittance/CONTEXT.md`、
+`migrations/collection_remittance/0001_collection_subledger_and_remittance.sql`（六表）、
+`internal/collectionremittance/{domain,ports,application,adapters/postgres}`、
+`cmd/parcel-collection-register`（七命令）。读面、页面与种子仍归 MCP-3；页登与装配仍占号 05。
