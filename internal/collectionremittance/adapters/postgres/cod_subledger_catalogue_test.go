@@ -75,7 +75,8 @@ func (fixture *catalogueFixture) seedSubledger(t *testing.T, tenant, customer, e
 		tenant, customer, entity, currency, channel, catalogueBaseAt)
 }
 
-// seedPosting 追加一笔记账;依据种类按库上三条依据门取合法值,读口用例不关心写口
+// seedPosting 追加一笔记账;依据种类按库上四条依据门取合法值(入账凭代收事实、进
+// 应付客户不得凭代收事实、进已汇付凭批次、进短溢款凭差异事项),读口用例不关心写口
 // 编排,只要行进得了库。
 func (fixture *catalogueFixture) seedPosting(
 	t *testing.T,
@@ -119,9 +120,10 @@ func TestCodSubledgerCatalogueDerivesBalancesAndAttachesBatches(t *testing.T) {
 	fixture.seedPosting(t, "tenant-a", "SYN-POST-02",
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
 		"IN_TRANSIT_AT_CHANNEL", "AWAITING_ALLOCATION", 150000, "COLLECTION_FACT", "SYN-FACT-02")
+	// 清分凭代收指令(ALLOCATION)——库上 CHECK 拒绝凭一层来源事实直接进应付客户。
 	fixture.seedPosting(t, "tenant-a", "SYN-POST-03",
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
-		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 100000, "COLLECTION_FACT", "SYN-FACT-02")
+		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 100000, "ALLOCATION", "SYN-INSTR-01")
 
 	successionAt := catalogueBaseAt.Add(72 * time.Hour)
 	fixture.seed(t,
@@ -199,11 +201,11 @@ func TestCodSubledgerCatalogueKeepsOpenedButUnpostedLedgersInPlace(t *testing.T)
 func TestCodSubledgerCatalogueTranscribesNegativeBalancesFaithfully(t *testing.T) {
 	catalogue, fixture := newCodSubledgerCatalogue(t)
 	fixture.seedSubledger(t, "tenant-a", "SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01")
-	// 无入账直接清分:待清分被扣成负——这行在库上合法(依据门只管三条),只有写口
-	// 编排会拦。
+	// 无入账直接清分:待清分被扣成负——这行在库上合法(依据门不核余额),只有写口
+	// 编排的余额守卫会拦。
 	fixture.seedPosting(t, "tenant-a", "SYN-POST-01",
 		"SYN-CUST-01", "SYN-LE-01", "SYN-CUR-01", "SYN-CHAN-01",
-		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 500, "COLLECTION_FACT", "SYN-FACT-01")
+		"AWAITING_ALLOCATION", "PAYABLE_TO_CUSTOMER", 500, "ALLOCATION", "SYN-INSTR-01")
 
 	entries, err := catalogue.ListCodSubledgers(t.Context(),
 		catalogueValue(t, domain.NewTenantID, "tenant-a"), 10)
