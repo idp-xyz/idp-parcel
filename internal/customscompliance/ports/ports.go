@@ -830,3 +830,84 @@ type GateConditionCatalogueRead interface {
 		limit int,
 	) ([]GateConditionCatalogueEntry, error)
 }
+
+// CandidatePortEntry 是口岸目录登记册的一行：口岸标识与生效区间。目录事实只有这
+// 两件——所属区域与适用性判断都不在册（区域维未建模，适用性是判断链的产物）。
+// AppliesUntil 零值即尚无终点（开放版），与 InterpretationRuleEntry 同约定——终点
+// 不是登记输入，它在后继版本登记时落定。
+type CandidatePortEntry struct {
+	Port         domain.CustomsPortReference
+	AppliesFrom  time.Time
+	AppliesUntil time.Time
+}
+
+// DeclarationPathEntry 是申报路径目录登记册的一行：路径标识、三维路径事实（口岸、
+// 方向、申报模式）与生效区间。区间约定同 CandidatePortEntry。
+type DeclarationPathEntry struct {
+	Path         domain.DeclarationPathReference
+	Route        domain.DeclarationPathRoute
+	AppliesFrom  time.Time
+	AppliesUntil time.Time
+}
+
+// PortsPathsRegistry 是口岸目录与申报路径目录两本登记册的写口半边。目录内容属实例
+// 半边（真实口岸与路径待 PAR-NET-02 / PAR-CUS-01），但放进库里的那条受控路径属机制
+// 半边——没有它，「口岸与申报路径」页今天没处配（判据同 ReadinessRegistry 那句）。
+//
+// 版本代数照 InterpretationRuleRegistry：起点随登记给出并入键，终点不是输入——后继
+// 版本登记时前版终点落定为后继起点（换版），rule 侧那条「历史区间不接受追改」在这里
+// 一字不差成立。写入代数与其余登记册同（ADR-0031，不 UPSERT）：撞键与撞重叠都折成
+// `已登记`交回，内容是否同一份由编排读回自己比。
+type PortsPathsRegistry interface {
+	RegisterCandidatePort(
+		ctx context.Context,
+		tenant domain.TenantID,
+		port domain.CustomsPortReference,
+		appliesFrom time.Time,
+	) (CaseConfigurationSaveOutcome, error)
+	RegisterDeclarationPath(
+		ctx context.Context,
+		tenant domain.TenantID,
+		path domain.DeclarationPathReference,
+		route domain.DeclarationPathRoute,
+		appliesFrom time.Time,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// PortsPathsView 按键在评估时点上解析目录版本（半开区间，判据同
+// InterpretationRuleView）。它伺候两个调用面：登记编排的冲突判定按请求起点读回在册
+// 版本逐字段比对；候选读取按业务时点取当刻有效版本。found=false 即该键该时点无已
+// 登记版本——实例半边未提供时停在未决，不拿开放版或当前时间兜底。
+type PortsPathsView interface {
+	LoadCandidatePort(
+		ctx context.Context,
+		tenant domain.TenantID,
+		port domain.CustomsPortReference,
+		evaluatedAt time.Time,
+	) (CandidatePortEntry, bool, error)
+	LoadDeclarationPath(
+		ctx context.Context,
+		tenant domain.TenantID,
+		path domain.DeclarationPathReference,
+		evaluatedAt time.Time,
+	) (DeclarationPathEntry, bool, error)
+}
+
+// PortsPathsCatalogueRead 是两本目录的伴生列表读口（ADR-0077 Decision 一/五）：
+// 管理台 customs-ports-paths 页上列口岸目录与申报路径目录两册（票
+// admin-remainder-mechanism-batch/03）。查阅不触发判断、决定或披露——它接存储读面，
+// 不接应用编排；全部版本连同区间原样上列，区间判读留给读者（判据同关闭义务上列不
+// 下推截点那条）。不拓宽 PortsPathsView 点读口：点读按键与时点伺候判断，上列按租户
+// 伺候查阅。租户在签名上、limit 非正拒、空册答空列表。
+type PortsPathsCatalogueRead interface {
+	ListCandidatePorts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CandidatePortEntry, error)
+	ListDeclarationPaths(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]DeclarationPathEntry, error)
+}
