@@ -30,7 +30,10 @@ Status: in-progress——批内各票以票面为准；本 spec 只承载范围�
 | 05 | 批务（MCP-1） | `apps/admin-web/**`（`page-registry.tsx`、导航登记）、本目录 | **页面登记占号在 05**：各线交付页面组件文件并报注册条目，不自改 `page-registry.tsx` |
 
 worktree、逐文件 add、不推（完工报已验 SHA 与验证强度给 MCP-1）照 `docs/agents/parallel-sessions.md`。
-`cmd/parcel-dispatch/assemble.go` 与 `cmd/parcel-api/endpoints.go` 本批无票占号，谁也不碰。
+`cmd/parcel-dispatch/assemble.go` 本批无票碰它。`cmd/parcel-api` 装配三件（`endpoints.go`、
+`main.go`、装配测试）随读面接线**占号在批务票 05**（MCP-1）：各线交付 `adapters/http` 处理器
+与真库读适配器并报端点行，不自改装配三件——开批时那句「endpoints.go 谁也不碰」在此更正，
+读面接线绕不开装配点，绕开的写法（页面直连库）才是要禁的。
 
 ## 完成判据（批级）
 
