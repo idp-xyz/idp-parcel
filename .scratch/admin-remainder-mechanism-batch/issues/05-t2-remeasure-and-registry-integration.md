@@ -25,8 +25,8 @@ Status: in-progress——MCP-1
   隔离验证见 MCP-5 完工报）；迁移推进 `steps=96 applied=2`（customs 0013、party_commercial
   0016 落库），补灌口岸三笔、路径两笔、发布批重放（ECON 版本新发布）、渠道产品四项，
   全部 REGISTERED/REPLAYED。
-- **根因跟进（未做，批收口前裁）**：Windows 上任何把 .sql 重写成 CRLF 的工具都会凭空造出
-  「校验和漂移」，且 build/vet/test 全无信号，只在真库推进时炸。MCP-5 盘了两路：归一
-  `checksumOf`（治本但全部既有校验和作废，代价大）或加守卫测试（嵌入迁移资产内含 `\r\n`
-  即失败，挡在提交前）。倾向守卫测试；落点在 `internal/platform/migrate` 或 `migrations`
-  包测试，MCP-2 释号 `migrations.go` 后再动，避免同包撞车。
+- **根因跟进（已落，9132594）**：Windows 上任何把 .sql 重写成 CRLF 的工具都会凭空造出
+  「校验和漂移」，且 build/vet 全无信号，只在真库推进时炸。两路方案里取守卫测试
+  （`migrations/eol_guard_test.go`：嵌入迁移资产含 `\r` 即红，另带「一个 .sql 都没走到」
+  的空转自检），弃 `checksumOf` 归一（全部既有校验和作废，代价不对等）。守卫经证伪：
+  临时 CRLF 化一份 SQL 立即 FAIL 报文件与偏移，还原后绿。

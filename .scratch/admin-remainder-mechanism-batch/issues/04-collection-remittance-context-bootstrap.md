@@ -1,7 +1,10 @@
 # 04 代收分户账：collection-remittance 上下文从零
 
 Category: feature
-Status: in-progress——用户指示全批协同（08-28 第二轮），改派两段：后端主体（CONTEXT/域模型/迁移/写入方/CLI）归 MCP-2，读面与页面与种子归 MCP-3（接力点：迁移表形定型即通知），合装与页登仍占号 MCP-1（批务票 05）
+Status: in-progress——后端主体（MCP-2）已合装：cr04-backend 八笔（完工报已验 45aff42，含真库全绿）
+逐笔对应落本仓 2ad600c..7cc5cfe，代码态 diff 为空故验证照片适用（MCP-1 复核 build/vet 零信号）；
+CR 0001 迁移已施加演示库（97 步）。读面/页面/种子归 MCP-3 在途（worktree cr04-readface），
+合装与页登仍占号 MCP-1（批务票 05）
 
 ## 准入依据
 
