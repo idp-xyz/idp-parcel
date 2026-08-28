@@ -1,7 +1,7 @@
 # 03 口岸与申报路径目录：CC 两本登记册与页面
 
 Category: feature
-Status: in-progress——已派 MCP-2（2026-08-28）
+Status: resolved——MCP-2 完工报已收，合装与装配随批务票 05 落库（2026-08-28）
 
 ## 问题
 
@@ -45,3 +45,13 @@ CLI 灌 `SYN-` 种子后页面非空册；全仓 `go build ./...` 与含真库 `
 可逆性：日后要库内钉住引用，加一道迁移即可，不动已登记内容——非难逆转，不走 ADR。
 落点：`0013_candidate_ports_and_declaration_paths.sql` 表注、`query_ports_paths.go`
 `declarationPathBody` 字段注、种子 `19/20-declaration-path-*.json`（引用与被引用两册对得上）。
+
+## 收口（2026-08-28，MCP-1 记）
+
+- 交付十笔已合装本仓 `8bec938..f372359`（MCP-2 分支 cc03-ports-declaration-paths，
+  完工报已验 0f3ebb1，逐笔对应）；装配行与 liveIds 登记随批务票 05 落 9ad99df。
+- 验证（MCP-1 于 9ad99df 提交态复跑）：全仓 `go build ./...` 与 `go vet ./...` 零信号、
+  gofmt 零输出；`go test -p 1 -count=1 ./...` 含真库 80 包 ok、零 FAIL（DSN 指向 55432，
+  真库实跑非跳过）；`tsc --noEmit` 绿。未跑 `-race`（Windows 无 cgo，CI 覆盖，同完工报口径）。
+- 完工报发现的共享演示库欠账（parcel_shipment/0008 校验和不一致）转记批务票 05，
+  批收口前处置。
