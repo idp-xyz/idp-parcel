@@ -210,13 +210,17 @@ CREATE TABLE collection_remittance.discrepancy_item (
 -- 已接受的代收事实进账，账上不许出现无来源的金额；也没有任何记账把钱移出账外——
 -- 已汇付是账内的终局位置，于是全账总额恒等于入账之和，守恒可在一条 SQL 上核完。
 --
--- 三条依据门写进 CHECK 而不是只写进注释：入账必须凭代收事实、进入 REMITTED 必须凭
--- 回汇批次、进入 SHORTFALL/SURPLUS 必须凭差异事项。这三件都是 CONTEXT 的硬句，能做
--- 进结构就不留给调用方自觉——留给自觉的那半在库里看不出守没守。
+-- 四条依据门写进 CHECK 而不是只写进注释：入账必须凭代收事实、进入 REMITTED 必须凭
+-- 回汇批次、进入 SHORTFALL/SURPLUS 必须凭差异事项，而 PAYABLE_TO_CUSTOMER **不得**
+-- 凭代收事实到达——那一条正是「未实际收到的代收款不得进入应付客户」的结构落点：
+-- 归属要另有一笔以代收指令为依据的清分记账，一层来源事实推不出可付客户余额。四件
+-- 都是 CONTEXT 的硬句，能做进结构就不留给调用方自觉——留给自觉的那半在库里看不出
+-- 守没守。
 --
--- basis_ref 不设外键：basis_kind 四种依据分别指向代收事实、回汇批次、差异事项与
--- 另一笔记账，一列上立不出四个方向的外键。按依据种类分派核对由写口完成（写口读回
--- 依据行再落账），这一格的裁量与关务申报路径「以标识引用口岸、不设外键」同款。
+-- basis_ref 不设外键：basis_kind 五种依据分别指向代收事实、代收指令、回汇批次、
+-- 差异事项与另一笔记账，一列上立不出五个方向的外键。按依据种类分派核对由写口完成
+-- （写口读回依据行再落账），这一格的裁量与关务申报路径「以标识引用口岸、不设外键」
+-- 同款。
 CREATE TABLE collection_remittance.subledger_posting (
     tenant_id        text        NOT NULL,
     posting_ref      text        NOT NULL,
@@ -279,6 +283,7 @@ CREATE TABLE collection_remittance.subledger_posting (
     CONSTRAINT subledger_posting_basis_kind_closed
         CHECK (basis_kind IN (
             'COLLECTION_FACT',
+            'ALLOCATION',
             'REMITTANCE_BATCH',
             'DISCREPANCY',
             'CORRECTION'
@@ -286,6 +291,11 @@ CREATE TABLE collection_remittance.subledger_posting (
 
     CONSTRAINT subledger_posting_intake_needs_collection_fact
         CHECK (from_position <> 'EXTERNAL_SOURCE' OR basis_kind = 'COLLECTION_FACT'),
+
+    -- 清分依据是代收指令（这笔钱按该指令归属该客户）。这道 CHECK 只挡住「凭一层来源
+    -- 事实直接记成可付客户余额」这一种走法，不规定归属该由谁判——那是编排的事。
+    CONSTRAINT subledger_posting_payable_needs_allocation
+        CHECK (to_position <> 'PAYABLE_TO_CUSTOMER' OR basis_kind <> 'COLLECTION_FACT'),
 
     CONSTRAINT subledger_posting_remittance_needs_batch
         CHECK (to_position <> 'REMITTED' OR basis_kind = 'REMITTANCE_BATCH'),

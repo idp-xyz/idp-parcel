@@ -166,6 +166,9 @@ const (
 	PostingBasisUnknown PostingBasisKind = iota
 	// BasisCollectionFact 凭一条已接受的代收事实。入账只认这一种。
 	BasisCollectionFact
+	// BasisAllocation 凭一条代收指令：这笔钱按该指令归属该客户。清分走它而不是走
+	// 代收事实——一层来源事实说的是「有人报了这笔钱」，说不出「它是谁的」。
+	BasisAllocation
 	// BasisRemittanceBatch 凭一个已形成的回汇批次。进入`已汇付`只认这一种。
 	BasisRemittanceBatch
 	// BasisDiscrepancy 凭一项已登记的差异事项。进入`短款`/`溢款`只认这一种。
@@ -179,6 +182,8 @@ func (kind PostingBasisKind) String() string {
 	switch kind {
 	case BasisCollectionFact:
 		return "COLLECTION_FACT"
+	case BasisAllocation:
+		return "ALLOCATION"
 	case BasisRemittanceBatch:
 		return "REMITTANCE_BATCH"
 	case BasisDiscrepancy:
@@ -194,7 +199,7 @@ func (kind PostingBasisKind) valid() bool { return kind.String() != "" }
 
 func ParsePostingBasisKind(text string) (PostingBasisKind, bool) {
 	for _, candidate := range []PostingBasisKind{
-		BasisCollectionFact, BasisRemittanceBatch, BasisDiscrepancy, BasisCorrection,
+		BasisCollectionFact, BasisAllocation, BasisRemittanceBatch, BasisDiscrepancy, BasisCorrection,
 	} {
 		if candidate.String() == text {
 			return candidate, true
@@ -228,8 +233,10 @@ type SubledgerPosting struct {
 	postedAt  time.Time
 }
 
-// RecordSubledgerPosting 形成一笔记账。三条依据门在这里就把住，不留给调用方自觉：
+// RecordSubledgerPosting 形成一笔记账。四条依据门在这里就把住，不留给调用方自觉：
 //   - 入账（来源是外部来源）必须凭代收事实——账上不许出现无来源的本金；
+//   - 进入`应付客户`**不得**凭代收事实——「未实际收到的代收款不得进入应付客户」的
+//     落点在这一格：归属要另有一笔凭代收指令的清分记账，来源事实推不出可付余额；
 //   - 进入`已汇付`必须凭回汇批次——没有批次依据的资金不算汇付出去；
 //   - 进入`短款`或`溢款`必须凭差异事项——差额不自动落账，先有事项再有记账。
 //
@@ -265,6 +272,11 @@ func RecordSubledgerPosting(spec SubledgerPostingSpec) (SubledgerPosting, error)
 	if spec.From == PositionExternalSource && spec.BasisKind != BasisCollectionFact {
 		return SubledgerPosting{}, fmt.Errorf(
 			"%w: intake must cite a collection fact", ErrInvalidPosting)
+	}
+	if spec.To == PositionPayableToCustomer && spec.BasisKind == BasisCollectionFact {
+		return SubledgerPosting{}, fmt.Errorf(
+			"%w: a collection fact alone does not make principal payable to the customer",
+			ErrInvalidPosting)
 	}
 	if spec.To == PositionRemitted && spec.BasisKind != BasisRemittanceBatch {
 		return SubledgerPosting{}, fmt.Errorf(

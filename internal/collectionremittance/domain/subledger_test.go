@@ -171,6 +171,39 @@ func TestAPostingMustCiteTheBasisItsDestinationRequires(t *testing.T) {
 	}
 }
 
+// 「未实际收到的代收款不得进入应付客户」在记账形状上的落点：一层来源事实推不出
+// 可付余额，归属要另有一笔凭代收指令的清分记账。
+func TestACollectionFactAloneDoesNotMakePrincipalPayable(t *testing.T) {
+	key := ledgerKey(t, "EUR")
+	byFact := domain.SubledgerPostingSpec{
+		ID:        postingID(t, "SYN-POST-PAYABLE"),
+		Ledger:    key,
+		From:      domain.PositionAwaitingAllocation,
+		To:        domain.PositionPayableToCustomer,
+		Amount:    money(t, "EUR", 1000),
+		BasisKind: domain.BasisCollectionFact,
+		Basis:     basisRef(t, "SYN-FACT-1"),
+		PostedAt:  instant(t, "2026-08-24T02:00:00Z"),
+	}
+	if _, err := domain.RecordSubledgerPosting(byFact); err == nil {
+		t.Fatal("凭代收事实直接记成应付客户被接受——可付客户余额被一层来源事实推出来了")
+	}
+
+	// 入账更不许一步到应付客户：外部来源那一格只认代收事实，而代收事实到不了这里。
+	intakeToPayable := byFact
+	intakeToPayable.From = domain.PositionExternalSource
+	if _, err := domain.RecordSubledgerPosting(intakeToPayable); err == nil {
+		t.Fatal("入账一步落到应付客户被接受")
+	}
+
+	byAllocation := byFact
+	byAllocation.BasisKind = domain.BasisAllocation
+	byAllocation.Basis = basisRef(t, "SYN-INSTR-1")
+	if _, err := domain.RecordSubledgerPosting(byAllocation); err != nil {
+		t.Fatalf("凭代收指令的清分记账被拒：%v", err)
+	}
+}
+
 func TestNoPostingMovesPrincipalOutOfTheLedgerOrAcrossCurrencies(t *testing.T) {
 	key := ledgerKey(t, "EUR")
 	outward := domain.SubledgerPostingSpec{
@@ -214,8 +247,8 @@ func TestABalanceIsDerivedFromPostingsAndStaysConserved(t *testing.T) {
 			From:      domain.PositionInTransitAtChannel,
 			To:        domain.PositionAwaitingAllocation,
 			Amount:    money(t, "EUR", 1200),
-			BasisKind: domain.BasisCorrection,
-			Basis:     basisRef(t, "SYN-POST-1"),
+			BasisKind: domain.BasisCollectionFact,
+			Basis:     basisRef(t, "SYN-FACT-CREDIT-1"),
 			PostedAt:  instant(t, "2026-08-24T02:00:00Z"),
 		}),
 	}
@@ -305,8 +338,8 @@ func TestAnUnderfundedPositionIsNotAnInvalidRequest(t *testing.T) {
 		From:      domain.PositionAwaitingAllocation,
 		To:        domain.PositionPayableToCustomer,
 		Amount:    money(t, "EUR", 1001),
-		BasisKind: domain.BasisCorrection,
-		Basis:     basisRef(t, "SYN-POST-1"),
+		BasisKind: domain.BasisAllocation,
+		Basis:     basisRef(t, "SYN-INSTR-1"),
 		PostedAt:  instant(t, "2026-08-24T04:00:00Z"),
 	})
 	if err := balance.Admit(tooMuch); !errors.Is(err, domain.ErrPositionUnderfunded) {
@@ -319,8 +352,8 @@ func TestAnUnderfundedPositionIsNotAnInvalidRequest(t *testing.T) {
 		From:      domain.PositionAwaitingAllocation,
 		To:        domain.PositionPayableToCustomer,
 		Amount:    money(t, "EUR", 1000),
-		BasisKind: domain.BasisCorrection,
-		Basis:     basisRef(t, "SYN-POST-1"),
+		BasisKind: domain.BasisAllocation,
+		Basis:     basisRef(t, "SYN-INSTR-1"),
 		PostedAt:  instant(t, "2026-08-24T04:00:00Z"),
 	})
 	next, err := balance.Apply(exact)
