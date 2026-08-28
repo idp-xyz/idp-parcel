@@ -181,6 +181,62 @@ export interface SupplierAgreementListResponseBody {
   agreements: SupplierAgreementRecord[];
 }
 
+// 参与方身份两册（票 admin-remainder-mechanism-batch/01）。partyNameKnown 与合同页
+// contentRegistered 同款显式布尔：法人钉着的参与方在册上查无此人是写入门失败才会
+// 出现的悬空，页面按缺席如实显示，不拿空串去推、不补占位文本。
+export interface GroupLegalEntityRecord {
+  tenantId: string;
+  legalEntityId: string;
+  /** 封闭词转写：本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格（经营组织没有登记面）。 */
+  kind: string;
+  partyId: string;
+  partyName?: string;
+  partyNameKnown: boolean;
+  /** 装载时点对生命周期事实的导出：REGISTERED / EFFECTIVE / DEACTIVATED。 */
+  status: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+export interface GroupLegalEntityListResponseBody {
+  outcome: 'GROUP_LEGAL_ENTITIES_LISTED';
+  entities: GroupLegalEntityRecord[];
+}
+
+// 方向由持有方→相对方的字段次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」
+// 表达，不另设标志位）。status 是登记进来的关系状态事实（CANDIDATE/EFFECTIVE/
+// EXPIRED/REVOKED/SUPERSEDED），不随装载时钟走。
+export interface PartyRelationshipRecord {
+  tenantId: string;
+  relationshipId: string;
+  revision: number;
+  holderId: string;
+  holderName?: string;
+  holderNameKnown: boolean;
+  counterpartyId: string;
+  counterpartyName?: string;
+  counterpartyNameKnown: boolean;
+  role: string;
+  scope: string;
+  basis: string;
+  status: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  endedAt?: string;
+  endBasis?: string;
+  successorId?: string;
+  registeredAt: string;
+}
+
+export interface PartyRelationshipListResponseBody {
+  outcome: 'PARTY_RELATIONSHIPS_LISTED';
+  relationships: PartyRelationshipRecord[];
+}
+
 export function listServiceProducts(): Promise<ApiResult<ServiceProductListResponseBody>> {
   return exchangeMasterData<ServiceProductListResponseBody>('/commercial-service-products');
 }
@@ -202,4 +258,15 @@ export function listCustomerContracts(): Promise<ApiResult<CustomerContractListR
 
 export function listSupplierAgreements(): Promise<ApiResult<SupplierAgreementListResponseBody>> {
   return exchangeMasterData<SupplierAgreementListResponseBody>('/commercial-supplier-agreements');
+}
+
+// 集团与法人、业务参与方各走自己的路径，判据与合同/协议同一条：管理台上两张独立的
+// 页一页一入口，且两册的状态代数不同（身份状态按时点导出、关系状态是登记事实），
+// 折进一个带 kind 的入口会让两种状态在同一响应形状里相互冒充。
+export function listGroupLegalEntities(): Promise<ApiResult<GroupLegalEntityListResponseBody>> {
+  return exchangeMasterData<GroupLegalEntityListResponseBody>('/commercial-group-legal-entities');
+}
+
+export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {
+  return exchangeMasterData<PartyRelationshipListResponseBody>('/commercial-party-relationships');
 }

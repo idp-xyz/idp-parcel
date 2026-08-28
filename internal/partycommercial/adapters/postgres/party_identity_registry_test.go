@@ -90,6 +90,29 @@ func legalEntityRegistrationFixture(t *testing.T, tenant, entityID, partyID stri
 	return registration
 }
 
+func customerAccountRegistrationFixture(t *testing.T, tenant, accountID, partyID string) domain.CustomerAccountRegistration {
+	t.Helper()
+	account, err := domain.RehydrateCustomerAccount(
+		pcTenant(t, tenant),
+		pcValue(t, domain.NewCustomerAccountID, accountID),
+		pcValue(t, domain.NewPartyID, partyID),
+	)
+	if err != nil {
+		t.Fatalf("rehydrate account: %v", err)
+	}
+	lifecycle, err := domain.NewIdentityLifecycle(identityEffectiveFrom)
+	if err != nil {
+		t.Fatalf("account lifecycle: %v", err)
+	}
+	registration, err := domain.NewCustomerAccountRegistration(
+		account, 1, pcValue(t, domain.NewIdentityBasisReference, "basis-"+accountID), lifecycle,
+	)
+	if err != nil {
+		t.Fatalf("account registration: %v", err)
+	}
+	return registration
+}
+
 func relationshipRegistrationFixture(
 	t *testing.T,
 	tenant, id, holder, counterparty string,
@@ -166,24 +189,7 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 		return registrations.SaveLegalEntity(txCtx, entity)
 	})
 
-	account, err := domain.RehydrateCustomerAccount(
-		pcTenant(t, "tenant-1"),
-		pcValue(t, domain.NewCustomerAccountID, "account-1"),
-		pcValue(t, domain.NewPartyID, "party-cust"),
-	)
-	if err != nil {
-		t.Fatalf("rehydrate account: %v", err)
-	}
-	accountLifecycle, err := domain.NewIdentityLifecycle(identityEffectiveFrom)
-	if err != nil {
-		t.Fatalf("account lifecycle: %v", err)
-	}
-	accountRegistration, err := domain.NewCustomerAccountRegistration(
-		account, 1, pcValue(t, domain.NewIdentityBasisReference, "basis-account-1"), accountLifecycle,
-	)
-	if err != nil {
-		t.Fatalf("account registration: %v", err)
-	}
+	accountRegistration := customerAccountRegistrationFixture(t, "tenant-1", "account-1", "party-cust")
 	mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
 		return registrations.SaveCustomerAccount(txCtx, accountRegistration)
 	})
@@ -346,9 +352,33 @@ func TestACandidateRelationshipRoundTripsWithoutApproval(t *testing.T) {
 
 func TestPartyIdentityWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	registrations, _, _ := newPartyIdentityRegistrations(t)
-	_, err := registrations.SaveBusinessParty(t.Context(),
-		partyRegistrationFixture(t, "tenant-1", "party-1", "参与方一号"))
-	if !errors.Is(err, bentopg.ErrTransactionRequired) {
-		t.Errorf("无事务登记应返回 ErrTransactionRequired，实得：%v", err)
+	ctx := t.Context()
+
+	// 四个写方法逐个验：RequireExecutor 的拒绝随适配器方法逐个成立，不由一个方法
+	// 替其余三个背书（架构闸门 PBC-08 的逐方法证据要求）。
+	saves := map[string]func() (ports.PartyRegistrySaveOutcome, error){
+		"SaveBusinessParty": func() (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveBusinessParty(ctx,
+				partyRegistrationFixture(t, "tenant-1", "party-1", "参与方一号"))
+		},
+		"SaveLegalEntity": func() (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveLegalEntity(ctx,
+				legalEntityRegistrationFixture(t, "tenant-1", "legal-1", "party-1"))
+		},
+		"SaveCustomerAccount": func() (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveCustomerAccount(ctx,
+				customerAccountRegistrationFixture(t, "tenant-1", "account-1", "party-1"))
+		},
+		"SaveRelationship": func() (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveRelationship(ctx,
+				relationshipRegistrationFixture(t, "tenant-1", "rel-1", "party-1", "party-2", false))
+		},
+	}
+	for name, save := range saves {
+		t.Run(name, func(t *testing.T) {
+			if _, err := save(); !errors.Is(err, bentopg.ErrTransactionRequired) {
+				t.Errorf("无事务 %s 应返回 ErrTransactionRequired，实得：%v", name, err)
+			}
+		})
 	}
 }

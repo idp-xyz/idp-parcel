@@ -74,6 +74,39 @@ export const cancellationPartyLabels: Record<string, string> = {
   OPERATIONS: '运营',
 };
 
+// 参与方身份生命周期封闭三格(domain IdentityStatus)。与 commercialStatusLabels 分表:
+// 身份状态按时点导出,商业对象状态是发布生命周期,同词 EFFECTIVE 在两套代数里含义
+// 不同,并表会让一套的封闭性替另一套背书。
+export const identityStatusLabels: Record<string, string> = {
+  REGISTERED: '已登记',
+  EFFECTIVE: '已生效',
+  DEACTIVATED: '已停用',
+};
+
+// 参与方关系生命周期封闭五格(domain RelationshipStatus),中文取 CONTEXT 原词。
+export const relationshipStatusLabels: Record<string, string> = {
+  CANDIDATE: '候选关系',
+  EFFECTIVE: '已生效',
+  EXPIRED: '已到期',
+  REVOKED: '已撤销',
+  SUPERSEDED: '已替代',
+};
+
+// 参与方角色封闭五格(domain PartyRole),中文取 CONTEXT 原词。
+export const partyRoleLabels: Record<string, string> = {
+  CUSTOMER: '客户',
+  SUPPLIER: '供应商',
+  CARRIER_AGENT: '承运商代理',
+  RESELLER: '转售',
+  ACCOUNT_HOLDER: '渠道账号持有',
+};
+
+// 法人册对象类型今天只有一格(传输层 kindResponsibleLegalEntity):经营组织没有
+// 登记面,如实不上列,不预开空格。
+export const legalEntityKindLabels: Record<string, string> = {
+  RESPONSIBLE_LEGAL_ENTITY: '责任法人',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST:
