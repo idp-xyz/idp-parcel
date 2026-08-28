@@ -87,6 +87,7 @@
 - [ADR-0079：接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同；坏回指是 error 不是未登记](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)
 - [ADR-0080：引用闭包先解合同再据以解结算政策——合同维是结论不是输入，前提未解析自成一格](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)
 - [ADR-0081：接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界](./0081-acceptance-judgment-is-envelope-driven.md)
+- [ADR-0082：代收分户账按四维立键、余额只由追加式记账派生，回汇批次形成即冻结——分配守恒由记账形状交付，不靠事后对平](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md)
 
 ## 已被取代决策
 
