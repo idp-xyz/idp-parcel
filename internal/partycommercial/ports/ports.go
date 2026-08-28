@@ -650,6 +650,97 @@ type PartyIdentityCatalogueRead interface {
 	) ([]PartyRelationshipRow, error)
 }
 
+// ServiceProductFormRegistry 是形态登记用例的持久化面：整册装载 + 形态写入。
+// 它是 PublicationRegistry 的一个切面——形态登记不该持有 SaveVersion 等其他写口
+// （判据同 CommercialPublicationView 那半边的分口理由），实现方仍是同一个登记册。
+type ServiceProductFormRegistry interface {
+	CommercialPublicationView
+	SaveServiceProduct(
+		ctx context.Context,
+		product domain.ServiceProduct,
+	) (ServiceProductSaveOutcome, error)
+}
+
+// MappingSaveOutcome 是一笔产品—渠道映射登记修订在持久化面的落点（ADR-0031 同款，
+// 判据同 PartyRegistrySaveOutcome——映射不是身份，两册不共用一个落点类型）。
+type MappingSaveOutcome uint8
+
+const (
+	MappingSaveOutcomeInvalid MappingSaveOutcome = iota
+	MappingSaved
+	MappingAlreadyRegistered
+	MappingContentConflict
+)
+
+func (outcome MappingSaveOutcome) String() string {
+	switch outcome {
+	case MappingSaved:
+		return "SAVED"
+	case MappingAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case MappingContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// ProductChannelMappingRegistry 是产品—渠道映射登记册的持久化面（0016 迁移）：
+// 键=租户+映射标识+修订，修订不可覆盖。
+//
+// LoadLatestMapping 取某映射的**最新修订**：写入用例靠它做修订连续性检查。
+// found=false = 从未登记；读取失败走 error，不得折成 found=false（判据同
+// PartyIdentityRegistry 的 Load*）。
+type ProductChannelMappingRegistry interface {
+	SaveMapping(
+		ctx context.Context,
+		registration domain.ProductChannelMappingRegistration,
+	) (MappingSaveOutcome, error)
+	LoadLatestMapping(
+		ctx context.Context,
+		tenant domain.TenantID,
+		mapping domain.ProductChannelMappingID,
+	) (domain.ProductChannelMappingRegistration, bool, error)
+}
+
+// ProductChannelMappingRow 是渠道产品目录上列的一行：一笔产品—渠道映射的最新登记
+// 修订。
+//
+// Channels 为空列表即显式登记的“未配置”绑定——空数组只能经领域门的显式声明进册
+// （domain.UnconfiguredChannelBinding），页面据此如实显示“未配置”，那不是数据缺件。
+// 行上不带状态列：映射没有独立状态代数（CONTEXT 生命周期节），是否参与新的渠道
+// 决策由消费方对区间判断，目录不代答——判据同 PartyRelationshipRow 的区间那条。
+type ProductChannelMappingRow struct {
+	TenantID            string
+	MappingID           string
+	Revision            int
+	ProductObjectID     string
+	ProductVersionLabel string
+	Channels            []string
+	Basis               string
+	EffectiveStartsAt   time.Time
+	EffectiveEndsAt     time.Time
+	HasEffectiveEnd     bool
+	RegisteredAt        time.Time
+}
+
+// ProductChannelMappingCatalogueRead 是渠道产品目录的伴生列表读端口（ADR-0077）：
+// 管理台 channel-product-catalog 页的供数面。
+//
+// 它不并进 ServiceProductCatalogueRead：那边上列的是**版本壳**（服务产品版本的
+// 身份、区间与生命周期状态），这边上列的是**登记册信封**（产品×渠道×区间的修订）。
+// 行形状与修订轴都不同，并进去 kind 参数就开始说谎（判据同
+// PartyIdentityCatalogueRead 的分立那条）。
+//
+// 租户在签名上、Limit 非正拒、空册答空列表，判据同 ServiceProductCatalogueRead。
+type ProductChannelMappingCatalogueRead interface {
+	ListProductChannelMappings(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ProductChannelMappingRow, error)
+}
+
 // GrantSaveOutcome 是一次授权规则登记在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放，`内容冲突`是同版本号携带不同授权内容——绝不覆盖。
 type GrantSaveOutcome uint8
