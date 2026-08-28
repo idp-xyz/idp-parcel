@@ -1685,6 +1685,53 @@ Status: Confirmed
 - 代收本金不是经营口径物流收入或普通运营结算余额；COD 服务费和有效协议允许的抵扣金额由 `settlement-accounting` 管理。
 - 避免使用：运费收入、客户预付余额、COD 服务费。
 
+### 代收指令
+
+依据客户代收服务要求，对明确包裹范围成立的一项代收资金义务，固定应向收件人收取的金额、币种、责任法人、货主客户和代收渠道。
+
+- 所有者：`collection-remittance`；客户代收服务要求快照仍归 `parcel-shipment`。
+- 代收指令是义务的登记，不是收款事实，也不是已确认的应付客户款。
+- 服务要求在来源侧变化时登记新指令并关联原指令，已依原指令形成的记账继续有效。
+- 避免使用：COD 订单、应收货款、客户代收服务要求。
+
+### 代收事实
+
+一次已被 `collection-remittance` 接受的收款主张或资金事实，携带金额、币种、发生时间、来源层级和来源证据引用。
+
+- 所有者：`collection-remittance` 拥有接受判断；来源证据本身归 `transport-fulfillment` 或外部银行与支付系统。
+- 来源层级是收件人付款、渠道代收报告、渠道回款通知和运营企业真实到账四者之一，分别保存且不得互相推导；有效交付和 POD 都不能替代它。
+- 代收事实追加式登记，更正或撤销通过追加新事实并关联原事实表达。
+- 避免使用：已到账、渠道回款、POD。
+
+### 代收分户账
+
+按货主客户、责任法人、币种和代收渠道四维隔离的一本受托保管账，账内本金属客户所有。
+
+- 所有者：`collection-remittance`。
+- 四维齐备才构成一本账；账上不持可改写的余额字段，余额由分户账记账派生。
+- 资金位置封闭为渠道在途、待清分、应付客户、已汇付、短款和溢款；未实际收到的代收款不得进入应付客户。
+- 它不是结算账户，也不是运营结算余额；两者是不同口径的量，不得合并为一个“客户余额”。
+- 避免使用：客户余额、结算账户、运营分户账。
+
+### 回汇批次
+
+把某一本代收分户账在归集截点前已可汇付的本金归为一批，形成对该客户的一次汇付主张。
+
+- 所有者：`collection-remittance`。
+- 批次形成即冻结分户账键、币种和归集截点，不接受删除、重开或改写；成员只通过引用该批次的汇付记账体现。
+- 汇付主张不等于真实付款：付款执行、清算和到账由外部支付与银行系统拥有。
+- 回汇周期、汇付通道和手续费属运营企业的商业与实例参数，不由机制预设。
+- 避免使用：打款单、结算周期、付款成功。
+
+### 差异事项
+
+实收与代收指令不一致时登记的待处置事项，分短款与溢款，携带金额、币种、观察时间和依据引用。
+
+- 所有者：`collection-remittance`。
+- 差异事项是需要处置的声明，不自动冲销：它不改写代收指令，差额落账要另有一笔以该事项为依据的分户账记账。
+- 短款不得通过缩小代收指令抹平，溢款不得直接计入应付客户款。
+- 避免使用：调账、核销、坏账。
+
 ## 文档关系
 
 - `party-commercial` 的详细规则和生命周期见 [party-commercial/CONTEXT.md](./party-commercial/CONTEXT.md)。
@@ -1695,5 +1742,6 @@ Status: Confirmed
 - `customs-compliance` 的详细规则和生命周期见 [customs-compliance/CONTEXT.md](./customs-compliance/CONTEXT.md)。
 - `visibility-exception` 的详细规则和生命周期见 [visibility-exception/CONTEXT.md](./visibility-exception/CONTEXT.md)。
 - `settlement-accounting` 的详细规则和生命周期见 [settlement-accounting/CONTEXT.md](./settlement-accounting/CONTEXT.md)。
+- `collection-remittance` 的详细规则和生命周期见 [collection-remittance/CONTEXT.md](./collection-remittance/CONTEXT.md)。
 - 上下文所有权和关系见 [CONTEXT-MAP.md](./CONTEXT-MAP.md)。
 - 术语在端到端流程中的验证见 [SCENARIOS.md](./SCENARIOS.md)。

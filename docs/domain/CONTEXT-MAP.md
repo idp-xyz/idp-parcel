@@ -198,7 +198,7 @@ Status: Confirmed
 - 代收货款本金、渠道在途代收款、待清分款、应付客户款或代收汇付结果。
 - 通过改写源事实、已确认费用或已发布对账单修正结算结果的权力。
 
-### `collection-remittance`：代收与清分
+### [`collection-remittance`](./collection-remittance/CONTEXT.md)：代收与清分
 
 **拥有**：
 
@@ -331,5 +331,6 @@ flowchart LR
 - `customs-compliance` 的语言、规则和生命周期见 [customs-compliance/CONTEXT.md](./customs-compliance/CONTEXT.md)。
 - `visibility-exception` 的语言、规则和生命周期见 [visibility-exception/CONTEXT.md](./visibility-exception/CONTEXT.md)。
 - `settlement-accounting` 的语言、规则和生命周期见 [settlement-accounting/CONTEXT.md](./settlement-accounting/CONTEXT.md)。
+- `collection-remittance` 的语言、规则和生命周期见 [collection-remittance/CONTEXT.md](./collection-remittance/CONTEXT.md)。
 - 统一术语见 [GLOSSARY.md](./GLOSSARY.md)。
 - 跨上下文业务验证见 [SCENARIOS.md](./SCENARIOS.md)。
