@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "pathRef": "SYN-PATH-SG-IMPORT-01",
+  "portRef": "SYN-PORT-SIN-01",
+  "direction": "IMPORT",
+  "declarationMode": "SYN-MODE-FORMAL-01",
+  "appliesFrom": "2026-01-01T00:00:00Z"
+}

@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "pathRef": "SYN-PATH-CN-EXPORT-01",
+  "portRef": "SYN-PORT-SZX-01",
+  "direction": "EXPORT",
+  "declarationMode": "SYN-MODE-MANIFEST-01",
+  "appliesFrom": "2026-01-01T00:00:00Z"
+}

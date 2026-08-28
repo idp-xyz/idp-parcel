@@ -81,7 +81,7 @@ echo "== 4/6 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind availability-adjustment -file "$SEEDS/network/13-adjustment-typhoon-v1.json"
 "$BIN/parcel-network-register" -kind route-strategy -file "$SEEDS/network/14-route-strategy-cn-sg-v1.json"
 
-echo "== 5/6 关务案件配置登记（customs-compliance：六册） =="
+echo "== 5/6 关务案件配置登记（customs-compliance：八册） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"
 "$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/02-authority-grant.json"
 # 第二单元灌出「就绪仍有效、授权已撤销」——0006 迁移自注点名必须表达得出的那一格，
@@ -102,6 +102,14 @@ echo "== 5/6 关务案件配置登记（customs-compliance：六册） =="
 "$BIN/parcel-customs-register" gate-catalog -input "$SEEDS/customs/15-gate-catalog-unguarded.json"
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/10-case-requirement-cn-export.json"
 "$BIN/parcel-customs-register" case-requirement -input "$SEEDS/customs/11-case-requirement-sg-import.json"
+# 口岸目录与申报路径目录（票 admin-remainder-mechanism-batch/03）：SZX 口岸 v1→v2 换版
+# 展示版本轴（v1 终点由 v2 登记落定），两条路径三维（口岸、方向、申报模式）齐全。
+# 路径以标识引用口岸、不查在册性——两册对照是读侧判断，裁量记在票 03。
+"$BIN/parcel-customs-register" candidate-port -input "$SEEDS/customs/16-candidate-port-szx-v1.json"
+"$BIN/parcel-customs-register" candidate-port -input "$SEEDS/customs/17-candidate-port-szx-v2.json"
+"$BIN/parcel-customs-register" candidate-port -input "$SEEDS/customs/18-candidate-port-sin-v1.json"
+"$BIN/parcel-customs-register" declaration-path -input "$SEEDS/customs/19-declaration-path-cn-export.json"
+"$BIN/parcel-customs-register" declaration-path -input "$SEEDS/customs/20-declaration-path-sg-import.json"
 
 echo "== 6/6 追踪与异常目录登记（visibility-exception：六类七笔） =="
 "$BIN/parcel-ve-register" milestone-mapping -input "$SEEDS/visibility/01-milestone-mapping-v1.json"

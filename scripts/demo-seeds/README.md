@@ -27,7 +27,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/commercial/register-products.json` | `cmd/parcel-commercial register-products` | 服务形态两笔（EXPRESS/ECON 均网络服务）+ 产品—渠道映射两笔：EXPRESS 配两个渠道标识引用，ECON 显式登记「未配置」（该产品尚无可用渠道候选）——渠道本体不预造（ADR-0072） |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略 |
-| `data/customs/` | `cmd/parcel-customs-register` | 六册 11 份：就绪、授权、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断、建案要求两向（要求/显式不要求） |
+| `data/customs/` | `cmd/parcel-customs-register` | 八册 20 份：就绪与授权（各含第二单元，授权含一次撤销）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口） |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡与序列的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS 规范化版本升级时重跑并提交新产物 |
 
@@ -52,7 +52,10 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    换版展示版本轴；一次台风停运（SUSPENSION，已解除）展示临时调整与稳定定义分离。
 4. **过关的规则**（customs-compliance）：中国出口侧就绪+提交授权、放行结果解释规则 v1→v2
    换版、案件 `SYN-CASE-CN-SG-01` 的关闭义务（一项已了结、一项承接给 `SYN-BROKER-01`）、
-   跨关区移动门禁（前置条件已满足）、建案要求两向（CN 出口要求建案、SG 进口显式不要求）。
+   跨关区移动门禁（前置条件已满足）、建案要求两向（CN 出口要求建案、SG 进口显式不要求）；
+   合规候选口岸 `SYN-PORT-SZX-01`（v1→v2 换版）与 `SYN-PORT-SIN-01`，申报路径
+   `SYN-PATH-CN-EXPORT-01`（经 SZX、EXPORT、舱单模式）与 `SYN-PATH-SG-IMPORT-01`
+   （经 SIN、IMPORT、正式模式）——路径以标识引用口岸，两册对照属读侧（票 03 裁量）。
 
 ## 已知边界（如实记录，不是缺陷）
 
