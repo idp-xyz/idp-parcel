@@ -13,7 +13,7 @@ import { commercialStatusLabels, labelOf, serviceFormLabels } from './presentati
 const info = moduleInfoById['service-products'];
 
 // 只列版本壳(MCP-3 裁决⑥):读面交回的就是 service_product_form 的版本行;
-// 产品—渠道映射与渠道账号授权不在读面体内,不上列、由页面说明,不以空列伪装已实现。
+// 产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
 const columns: ListColumn<ServiceProductRecord>[] = [
   {
     id: 'product',
@@ -55,7 +55,9 @@ const columns: ListColumn<ServiceProductRecord>[] = [
   },
 ];
 
-// 产品—渠道映射和渠道账号授权不在本端点体内;页面不以空列伪装这两类读取已经实现。
+// 渠道账号授权不在本端点体内，页面不以空列伪装该类读取已经实现；产品—渠道映射自
+// 票 admin-remainder-mechanism-batch/02 起有自己的页（channel-product-catalog）与
+// 端点，不并进本页——那边上列登记册信封，这边上列版本壳，行形状与修订轴不同。
 export function ServiceProductsPage() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -86,7 +88,7 @@ export function ServiceProductsPage() {
   return (
     <ListPageTemplate<ServiceProductRecord>
       title={info.title}
-      description={`${info.owner}——当前读面只展示服务产品版本壳,渠道映射与账号授权读取尚未建立,不上列`}
+      description={`${info.owner}——本页上列服务产品版本壳,产品—渠道映射在渠道产品目录页,账号授权读取尚未建立`}
       search={{
         value: search,
         onChange: setSearch,

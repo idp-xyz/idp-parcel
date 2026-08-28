@@ -237,6 +237,28 @@ export interface PartyRelationshipListResponseBody {
   relationships: PartyRelationshipRecord[];
 }
 
+// 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）。channels 为空数组即显式
+// 登记的“未配置”绑定——那是登记者说出的商业声明（该产品尚无可用渠道候选），不是
+// 数据缺件，页面据此如实显示。行上没有状态字段：映射没有独立状态代数，是否参与新的
+// 渠道决策由消费方对有效区间判断。
+export interface ProductChannelMappingRecord {
+  tenantId: string;
+  mappingId: string;
+  revision: number;
+  productObjectId: string;
+  productVersionLabel: string;
+  channels: string[];
+  basis: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  registeredAt: string;
+}
+
+export interface ProductChannelMappingListResponseBody {
+  outcome: 'PRODUCT_CHANNEL_MAPPINGS_LISTED';
+  mappings: ProductChannelMappingRecord[];
+}
+
 export function listServiceProducts(): Promise<ApiResult<ServiceProductListResponseBody>> {
   return exchangeMasterData<ServiceProductListResponseBody>('/commercial-service-products');
 }
@@ -269,4 +291,14 @@ export function listGroupLegalEntities(): Promise<ApiResult<GroupLegalEntityList
 
 export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {
   return exchangeMasterData<PartyRelationshipListResponseBody>('/commercial-party-relationships');
+}
+
+// 映射目录不并进 /commercial-service-products：那边上列版本壳，这边上列登记册信封
+// （产品×渠道×区间的修订），行形状与修订轴不同（后端读口注释同一条裁决）。
+export function listProductChannelMappings(): Promise<
+  ApiResult<ProductChannelMappingListResponseBody>
+> {
+  return exchangeMasterData<ProductChannelMappingListResponseBody>(
+    '/commercial-product-channel-mappings',
+  );
 }

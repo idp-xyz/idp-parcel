@@ -1,88 +1,138 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import {
+  listProductChannelMappings,
+  type ProductChannelMappingListResponseBody,
+  type ProductChannelMappingRecord,
+} from './api';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['channel-product-catalog'];
 
-/**
- * 渠道产品目录列表行。字段取 party-commercial CONTEXT.md「渠道产品」
- * 「渠道约束」定义与渠道商业可用性规则；接线前没有任何实例数据。
- */
-export interface ChannelProductRow {
-  /** 渠道产品标识：目录身份稳定，不等同于运营企业服务产品、实际承运商或一次具体面单交易。 */
-  id: string;
-  /** 渠道产品。 */
-  name: string;
-  /** 渠道服务方：承运商直营渠道、承运商代理商、转售商或聚合平台。 */
-  channelProvider: string;
-  /**
-   * 商业适用性：停止商业可用或相关映射到期只将其排除在新的渠道选择之外，
-   * 不删除历史依据，也不自动关闭包裹；恢复可用只恢复候选资格。
-   */
-  commercialApplicability: string;
-  /**
-   * 可复用渠道约束：客户合同或客户明确授权对可用渠道范围的限制。约束可以
-   * 保留运营企业在允许范围内的选择权，也可以指定一个渠道产品；指定渠道产品
-   * 时该次适用选择被锁定，锁定不据此锁定底层承运商或实际承运商。
-   */
-  reusableConstraints: string;
-  /** 适用有效期。 */
-  validity: string;
-}
-
-const columns: ListColumn<ChannelProductRow>[] = [
-  { id: 'id', header: '渠道产品标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'name', header: '渠道产品', render: (row) => row.name },
-  { id: 'channel-provider', header: '渠道服务方', render: (row) => row.channelProvider },
-  { id: 'commercial-applicability', header: '商业适用性', render: (row) => row.commercialApplicability },
-  { id: 'reusable-constraints', header: '可复用渠道约束', render: (row) => row.reusableConstraints },
-  { id: 'validity', header: '适用有效期', render: (row) => row.validity },
+// 行对象是产品—渠道映射的最新登记修订（票 admin-remainder-mechanism-batch/02）。
+// 骨架期这里列过渠道服务方与商业适用性——渠道产品目录身份正文不在本上下文预造
+// （ADR-0072：渠道本体等 PAR-INT-01 的接入证据），映射册只持标识引用，接线时按
+// 「不以空列伪装已实现」撤下，渠道本体列随渠道接入另立。
+const columns: ListColumn<ProductChannelMappingRecord>[] = [
+  {
+    id: 'mapping',
+    header: '映射标识 / 修订',
+    render: (row) => (
+      <div className="min-w-40">
+        <p className="font-mono font-medium text-idpxyz-text">{row.mappingId}</p>
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">r{row.revision}</p>
+      </div>
+    ),
+  },
+  {
+    id: 'product',
+    header: '服务产品版本',
+    render: (row) => (
+      <div className="min-w-44">
+        <p className="font-mono text-idpxyz-text">{row.productObjectId}</p>
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.productVersionLabel}</p>
+      </div>
+    ),
+  },
+  {
+    id: 'channels',
+    header: '渠道产品引用',
+    // 空数组是显式登记的“未配置”声明（该产品尚无可用渠道候选），如实显示这句话
+    // 而不是留白——留白读起来像数据缺件，而这格恰恰是登记者说出的内容。
+    render: (row) =>
+      row.channels.length > 0 ? (
+        <div className="min-w-44 font-mono text-xs">
+          {row.channels.map((channel) => (
+            <p key={channel}>{channel}</p>
+          ))}
+        </div>
+      ) : (
+        <span className="text-idpxyz-textMuted">未配置（尚无可用渠道候选）</span>
+      ),
+  },
+  {
+    id: 'basis',
+    header: '登记依据',
+    className: 'font-mono text-xs',
+    render: (row) => row.basis,
+  },
+  {
+    id: 'effective',
+    header: '有效区间',
+    className: 'min-w-64 font-mono text-xs',
+    render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
+  },
+  {
+    id: 'registered-at',
+    header: '登记时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.registeredAt),
+  },
 ];
 
 /**
- * 渠道产品目录（party-commercial）。行对象是外部渠道产品的目录身份与商业
- * 适用性：渠道产品由渠道服务方提供，party-commercial 决定可复用的候选范围、
- * 合同约束和授权是否有效，但不把候选关系伪装成实际选择——委托级约束快照、
- * 具体渠道选择和锁定结果由拥有该交易的上下文记录。查阅面，不设登记动作。
+ * 渠道产品目录（party-commercial）。行对象是产品—渠道映射的最新登记修订：服务产品
+ * 版本 × 渠道产品标识引用 × 有效区间。映射只定义新渠道决策的候选范围，不把候选
+ * 伪装成实际选择——某次交易实际用了哪个渠道由拥有该交易的上下文记录；调整绑定或
+ * 区间形成新修订，不覆盖历史。查阅面，不设登记动作——登记走 parcel-commercial
+ * 受控 CLI（register-products）。
  */
 export function ChannelProductCatalogPage() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<ProductChannelMappingListResponseBody> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listProductChannelMappings().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const mappings = answer?.kind === 'outcome' ? answer.body.mappings : [];
+  const needle = search.trim().toLowerCase();
+  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
+  const visibleMappings = needle
+    ? mappings.filter((row) =>
+        [row.mappingId, row.productObjectId, row.productVersionLabel, row.basis, ...row.channels]
+          .some((value) => value.toLowerCase().includes(needle)),
+      )
+    : mappings;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<ChannelProductRow>
+    <ListPageTemplate<ProductChannelMappingRecord>
       title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：渠道服务方、商业适用性（可用/停止
-      // 商业可用——停止只排除新选择，历史依据仍在列）。
+      description={`${info.owner}——行对象是产品—渠道映射的最新登记修订，渠道以标识引用，渠道本体待接入`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索渠道产品 / 渠道服务方',
+        placeholder: '搜索映射、服务产品或渠道引用',
       }}
+      filterSummary={
+        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 笔」会与状态区
+        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
+        answer?.kind === 'outcome' ? `当前返回 ${mappings.length} 笔映射` : undefined
+      }
       columns={columns}
-      // 接线前无实例：行数据与总数届时由 party-commercial 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '参与方与商业模块尚未接线',
-        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '对应查询端点经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      rows={visibleMappings}
+      rowKey={(row) => row.mappingId}
+      viewState={catalogueViewState(answer, mappings.length, retry, {
+        module: info,
+        endpoint: 'GET /commercial-product-channel-mappings',
+        emptyTitle: '当前租户尚无产品—渠道映射登记',
+        emptyDescription:
+          '读取入口已配置，但登记册为空；页面不会预置映射或渠道候选，登记走 parcel-commercial 受控 CLI。',
+      })}
     />
   );
 }
