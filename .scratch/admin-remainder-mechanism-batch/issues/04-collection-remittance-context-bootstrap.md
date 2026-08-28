@@ -1,7 +1,7 @@
 # 04 代收分户账：collection-remittance 上下文从零
 
 Category: feature
-Status: ready-for-agent——排在 01/02 之后或有空闲会话时开工；开工前对 main tip 重核
+Status: in-progress——原派 MCP-2 未开工（用户 08-28 告知其空闲），收回由 MCP-1 自办（2026-08-28）
 
 ## 准入依据
 
