@@ -259,6 +259,14 @@ func (relationship PartyRelationship) Status() RelationshipStatus {
 	return relationship.status
 }
 
+// Approval 交回批准事实。只有经 Approve 出过候选格的关系才有它——候选关系答 false。
+func (relationship PartyRelationship) Approval() (ApprovalReference, time.Time, bool) {
+	if !relationship.approval.valid() {
+		return ApprovalReference{}, time.Time{}, false
+	}
+	return relationship.approval, relationship.approvedAt, true
+}
+
 func (relationship PartyRelationship) EndedAt() (time.Time, bool) {
 	if relationship.endedAt.IsZero() {
 		return time.Time{}, false
@@ -280,6 +288,61 @@ func (relationship PartyRelationship) Successor() (PartyID, bool) {
 	return relationship.successor, true
 }
 
+// RelationshipID 是一段参与方关系在登记册上的稳定标识。关系本体（PartyRelationship）
+// 刻意不带标识——双方+角色+范围+区间是它的内容；登记册需要一个可回指的键，键在
+// 登记信封上。
+type RelationshipID struct{ requiredValue }
+
+func NewRelationshipID(value string) (RelationshipID, error) {
+	required, err := newRequiredValue("relationship ID", value)
+	return RelationshipID{required}, err
+}
+
+// PartyRelationshipRegistration 给一段参与方关系一个登记册身份：租户 + 关系标识 +
+// 修订。关系正文沿既有 PartyRelationship 模型，不另起第二套生命周期；内容、角色或
+// 范围变化形成新修订（CONTEXT「不原地改写此前有效事实」），修订从 1 起连续递增。
+type PartyRelationshipRegistration struct {
+	tenant       TenantID
+	id           RelationshipID
+	revision     int
+	relationship PartyRelationship
+}
+
+func NewPartyRelationshipRegistration(
+	tenant TenantID,
+	id RelationshipID,
+	revision int,
+	relationship PartyRelationship,
+) (PartyRelationshipRegistration, error) {
+	// 状态为零值即关系没经真构造门建成；登记册不收裸结构。
+	if !tenant.valid() || !id.valid() || revision < 1 ||
+		relationship.Status() == RelationshipStatusInvalid {
+		return PartyRelationshipRegistration{}, ErrInvalidPartyRelationship
+	}
+	return PartyRelationshipRegistration{
+		tenant:       tenant,
+		id:           id,
+		revision:     revision,
+		relationship: relationship,
+	}, nil
+}
+
+func (registration PartyRelationshipRegistration) Tenant() TenantID {
+	return registration.tenant
+}
+
+func (registration PartyRelationshipRegistration) ID() RelationshipID {
+	return registration.id
+}
+
+func (registration PartyRelationshipRegistration) Revision() int {
+	return registration.revision
+}
+
+func (registration PartyRelationshipRegistration) Relationship() PartyRelationship {
+	return registration.relationship
+}
+
 // CustomerAccount 是一个货主客户的业务隔离边界。它必须指明所属租户与客户参与方：
 // 账户、参与方、法人和合同标识各自不同，任何一个都不能替代另一个（ADR-0041）。
 type CustomerAccount struct {
@@ -297,6 +360,20 @@ func NewCustomerAccount(tenant TenantID, id CustomerAccountID, customerParty Bus
 		return CustomerAccount{}, ErrCrossTenantCustomerAccount
 	}
 	return CustomerAccount{tenant: tenant, id: id, customerParty: customerParty.id}, nil
+}
+
+// RehydrateCustomerAccount 从登记册快照重建账户。快照里只有客户参与方引用（名称在
+// 参与方册上），因此收 PartyID；跨租守卫在写入时已把过门，判据同
+// RehydrateResponsibleLegalEntity。
+func RehydrateCustomerAccount(
+	tenant TenantID,
+	id CustomerAccountID,
+	customerParty PartyID,
+) (CustomerAccount, error) {
+	if !tenant.valid() || !id.valid() || !customerParty.valid() {
+		return CustomerAccount{}, ErrInvalidCustomerAccount
+	}
+	return CustomerAccount{tenant: tenant, id: id, customerParty: customerParty}, nil
 }
 
 func (account CustomerAccount) Tenant() TenantID {

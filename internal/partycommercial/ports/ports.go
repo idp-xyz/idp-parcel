@@ -499,6 +499,157 @@ type Clock interface {
 	Now() time.Time
 }
 
+// PartyRegistrySaveOutcome 是一笔身份或关系登记修订在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放（同键同内容），`内容冲突`是同修订号携带不同内容——修订不可覆盖，
+// 内容更正要占下一个修订号；两者都不是 error，事务保持可用。
+type PartyRegistrySaveOutcome uint8
+
+const (
+	PartyRegistrySaveOutcomeInvalid PartyRegistrySaveOutcome = iota
+	PartyRegistrySaved
+	PartyRegistryAlreadyRegistered
+	PartyRegistryContentConflict
+)
+
+func (outcome PartyRegistrySaveOutcome) String() string {
+	switch outcome {
+	case PartyRegistrySaved:
+		return "SAVED"
+	case PartyRegistryAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case PartyRegistryContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// PartyIdentityRegistry 是参与方身份与关系登记册的持久化面（CONTEXT「参与方身份」节，
+// 0015 迁移四表）：键=租户+对象标识+修订，修订不可覆盖。
+//
+// Load* 取某身份/关系的**最新修订**：写入用例靠它做修订连续性与悬空引用检查（法人
+// 与账户必须钉在已登记且届时已生效的参与方上），停用用例靠它取要停用的那笔。
+// found=false = 从未登记；读取失败走 error，不得折成 found=false——那会把一次该重试
+// 的故障伪装成「可以从修订 1 开始登记」。
+//
+// 租户是显式入参，同本包其余端口（ADR-0003）。
+type PartyIdentityRegistry interface {
+	SaveBusinessParty(
+		ctx context.Context,
+		registration domain.BusinessPartyRegistration,
+	) (PartyRegistrySaveOutcome, error)
+	SaveLegalEntity(
+		ctx context.Context,
+		registration domain.LegalEntityRegistration,
+	) (PartyRegistrySaveOutcome, error)
+	SaveCustomerAccount(
+		ctx context.Context,
+		registration domain.CustomerAccountRegistration,
+	) (PartyRegistrySaveOutcome, error)
+	SaveRelationship(
+		ctx context.Context,
+		registration domain.PartyRelationshipRegistration,
+	) (PartyRegistrySaveOutcome, error)
+
+	LoadLatestBusinessParty(
+		ctx context.Context,
+		tenant domain.TenantID,
+		party domain.PartyID,
+	) (domain.BusinessPartyRegistration, bool, error)
+	LoadLatestLegalEntity(
+		ctx context.Context,
+		tenant domain.TenantID,
+		entity domain.LegalEntityReference,
+	) (domain.LegalEntityRegistration, bool, error)
+	LoadLatestCustomerAccount(
+		ctx context.Context,
+		tenant domain.TenantID,
+		account domain.CustomerAccountID,
+	) (domain.CustomerAccountRegistration, bool, error)
+	LoadLatestRelationship(
+		ctx context.Context,
+		tenant domain.TenantID,
+		relationship domain.RelationshipID,
+	) (domain.PartyRelationshipRegistration, bool, error)
+}
+
+// GroupLegalEntityRow 是集团与法人目录上列的一行：一个责任法人的最新登记修订，连同
+// 其参与方身份的名称转写。
+//
+// Status 是装载时点对生命周期事实的导出（domain.IdentityLifecycle.StatusAt 的 SQL
+// 镜像）：REGISTERED / EFFECTIVE / DEACTIVATED。停用两件只在 HasDeactivation 为真时
+// 有意义，判据同 ServiceProductCatalogueRow.HasEffectiveEnd——零时刻是合法时刻，
+// 不拿零值兼作「没停用」。
+//
+// PartyName 从参与方册的最新修订左连接转写；参与方册上查无此人时 HasPartyName 为假
+// ——那是写入用例把门失败才会出现的悬空引用，目录如实上列不遮掩。
+type GroupLegalEntityRow struct {
+	TenantID          string
+	LegalEntityID     string
+	PartyID           string
+	PartyName         string
+	HasPartyName      bool
+	Status            string
+	Revision          int
+	Basis             string
+	EffectiveFrom     time.Time
+	DeactivatedAt     time.Time
+	DeactivationBasis string
+	HasDeactivation   bool
+	RegisteredAt      time.Time
+}
+
+// PartyRelationshipRow 是业务参与方目录上列的一行：一段参与方关系的最新登记修订。
+// 双方名称从参与方册左连接转写（HasHolderName/HasCounterpartyName 判据同上）。
+// Status 是登记进来的关系状态事实（CANDIDATE/EFFECTIVE/EXPIRED/REVOKED/SUPERSEDED），
+// 不随装载时钟走——关系是否还在有效区间内由消费方对区间判断，目录不代答。
+type PartyRelationshipRow struct {
+	TenantID            string
+	RelationshipID      string
+	Revision            int
+	HolderID            string
+	HolderName          string
+	HasHolderName       bool
+	CounterpartyID      string
+	CounterpartyName    string
+	HasCounterpartyName bool
+	Role                string
+	Scope               string
+	Basis               string
+	Status              string
+	EffectiveStartsAt   time.Time
+	EffectiveEndsAt     time.Time
+	HasEffectiveEnd     bool
+	EndedAt             time.Time
+	HasEnd              bool
+	EndBasis            string
+	SuccessorID         string
+	RegisteredAt        time.Time
+}
+
+// PartyIdentityCatalogueRead 是参与方身份目录的伴生列表读端口（ADR-0077）：管理台
+// group-legal-entities 与 business-parties 两页的供数面。
+//
+// 它与 CommercialRelationCatalogueRead 分开：那边装的是商业关系的**载体**（合同、
+// 协议——版本化商业对象），这边装的是**参与方身份与关系**（登记→生效→停用的身份
+// 生命周期）。两类册子的行形状、状态代数与修订轴都不同，并进去 kind 参数就开始说谎。
+//
+// 上列对象是**最新修订**而不是全部修订：目录回答「这个租户今天有哪些身份、各处哪格」，
+// 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒、空册答空列表，
+// 判据同 ServiceProductCatalogueRead。
+type PartyIdentityCatalogueRead interface {
+	ListGroupLegalEntities(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]GroupLegalEntityRow, error)
+	ListPartyRelationships(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]PartyRelationshipRow, error)
+}
+
 // GrantSaveOutcome 是一次授权规则登记在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放，`内容冲突`是同版本号携带不同授权内容——绝不覆盖。
 type GrantSaveOutcome uint8
