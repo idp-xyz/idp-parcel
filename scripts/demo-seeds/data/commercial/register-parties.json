@@ -1,0 +1,84 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "businessParties": [
+    {
+      "partyId": "SYN-PARTY-OPERATOR-01",
+      "name": "合成运营方一号（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-OPERATOR-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-SHIPPER-01",
+      "name": "合成货主一号（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-SHIPPER-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-AGENT-01",
+      "name": "合成承运代理一号（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-AGENT-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-RETIRED-01",
+      "name": "合成停用示例（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-RETIRED-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-FUTURE-01",
+      "name": "合成未来生效示例（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-FUTURE-01",
+      "effectiveFrom": "2030-01-01T00:00:00Z"
+    }
+  ],
+  "legalEntities": [
+    {
+      "legalEntityId": "SYN-LE-01",
+      "partyId": "SYN-PARTY-OPERATOR-01",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-LE-01",
+      "effectiveFrom": "2026-01-02T00:00:00Z"
+    }
+  ],
+  "customerAccounts": [
+    {
+      "accountId": "SYN-ACCOUNT-01",
+      "customerPartyId": "SYN-PARTY-SHIPPER-01",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-ACCOUNT-01",
+      "effectiveFrom": "2026-01-02T00:00:00Z"
+    }
+  ],
+  "relationships": [
+    {
+      "relationshipId": "SYN-REL-CUSTOMER-01",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-01",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-01",
+      "basis": "SYN-CONTRACT-01",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-REL-01",
+        "approvedAt": "2026-01-04T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-AGENT-01",
+      "revision": 1,
+      "holder": "SYN-PARTY-AGENT-01",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CARRIER_AGENT",
+      "scope": "SYN-SCOPE-01",
+      "basis": "SYN-AGENT-AGREEMENT-01",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z"
+    }
+  ]
+}

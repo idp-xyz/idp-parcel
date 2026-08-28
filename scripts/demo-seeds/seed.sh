@@ -48,6 +48,12 @@ echo "== 2/6 商业权威发布（party-commercial：服务产品与五策略）
 # 巧合要维护，而是本上下文明禁借宽泛客户关系跨维归集。
 "$BIN/parcel-commercial" register-resolution-key \
   -input "$SEEDS/commercial/resolution-key-syn-account-01.json"
+# 参与方身份四册（票 admin-remainder-mechanism-batch/01）：SYN-LE-01 与 SYN-ACCOUNT-01
+# 在此获得身份册登记，与上面发布批里的同名引用同指一物。停用批单独一笔，让法人页
+# 与参与方页的身份状态三格（已登记/已生效/已停用）都有真实例可显。
+"$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-parties.json"
+"$BIN/parcel-commercial" deactivate-party-identity \
+  -input "$SEEDS/commercial/deactivate-party-retired-01.json"
 
 echo "== 3/6 计价登记（parcel-pricing：价卡 + 参考序列） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"

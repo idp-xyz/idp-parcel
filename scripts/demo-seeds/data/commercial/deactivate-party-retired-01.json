@@ -1,0 +1,12 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "deactivations": [
+    {
+      "kind": "BUSINESS_PARTY",
+      "id": "SYN-PARTY-RETIRED-01",
+      "revision": 2,
+      "basis": "SYN-DEREG-BASIS-PARTY-RETIRED-01",
+      "at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}

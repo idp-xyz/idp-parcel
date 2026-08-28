@@ -364,6 +364,22 @@ func (unwiredCommercialCatalogue) ListSupplierAgreements(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListGroupLegalEntities(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.GroupLegalEntityRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListPartyRelationships(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.PartyRelationshipRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredVisibilityCatalogue 是 VE 六类目录列表读口的占位，方法表与
 // visibilityports.CatalogueListRead 逐一对上（票 admin-web-page-wiring-frontier/02）。
 type unwiredVisibilityCatalogue struct{}
