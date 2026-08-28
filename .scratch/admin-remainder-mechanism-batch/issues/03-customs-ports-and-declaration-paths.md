@@ -31,3 +31,17 @@ Status: in-progress——已派 MCP-2（2026-08-28）
 
 CLI 灌 `SYN-` 种子后页面非空册；全仓 `go build ./...` 与含真库 `go test -p 1 -count=1 ./...`
 绿（报绿注明含不含真库）；worktree 逐文件 add，完工报已验 SHA 与验证强度给 MCP-1，不自推。
+
+## 裁量记录（2026-08-28，MCP-2 实施时记）
+
+申报路径对口岸的引用做成**标识引用**：`declaration_path.port_ref` 存口岸标识文本，
+不设指向 `candidate_port` 的外键，登记时也不校验「引用的口岸已在册」。依据两条：
+
+- 外键立不住：口岸册按生效区间版本化，`(tenant_id, port_ref)` 不是它的键——行级外键
+  只能钉到某一版本行，而「路径该引用哪一版口岸」本身不是登记事实；
+- 「引用的口岸此刻是否在册」是拿两册按时点对照的适用性判断，属读侧，不是目录行的
+  登记前提（边界第一条：目录事实不做判断）。
+
+可逆性：日后要库内钉住引用，加一道迁移即可，不动已登记内容——非难逆转，不走 ADR。
+落点：`0013_candidate_ports_and_declaration_paths.sql` 表注、`query_ports_paths.go`
+`declarationPathBody` 字段注、种子 `19/20-declaration-path-*.json`（引用与被引用两册对得上）。
