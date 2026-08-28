@@ -1,7 +1,8 @@
 // 本目录 fetch 出口:关务各条目录查阅端点——合规规则库(GET /customs-compliance-rules,
 // ADR-0077、票 master-data-wiring/04)、案件配置册(GET /customs-case-registers,票
-// admin-web-page-wiring-frontier/05)与门禁条件册(GET /customs-gate-conditions,票 06)。
-// 前两个按 ?registry= 分派、各端点各自封闭集;门禁册只有一本,不设分派参数。
+// admin-web-page-wiring-frontier/05)、门禁条件册(GET /customs-gate-conditions,票 06)
+// 与口岸/申报路径册(GET /customs-ports-paths,票 admin-remainder-mechanism-batch/03)。
+// 除门禁册只有一本不设分派参数外,其余按 ?registry= 分派、各端点各自封闭集。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
@@ -180,4 +181,67 @@ export interface GateConditionListResponseBody {
  */
 export function listGateConditions(): Promise<ApiResult<GateConditionListResponseBody>> {
   return exchangeMasterData<GateConditionListResponseBody>('/customs-gate-conditions');
+}
+
+// —— 口岸目录与申报路径目录(customs-ports-paths 页两签查阅面) ——
+// 形状以 internal/customscompliance/adapters/http/query_ports_paths.go 为准,
+// 此处只做镜像不虚构。
+
+/**
+ * 口岸/申报路径册封闭两格,与传输层 ?registry= 分派同词(也与受控 CLI 的两命令同词)。
+ * 合规候选区域不在本集:区域维未建模(等自己的票),封闭集不为它预留假格。
+ */
+export type PortsPathsRegistry = 'candidate-port' | 'declaration-path';
+
+/**
+ * 一版口岸合规候选:口岸标识与生效区间。目录事实只有这两件——所属区域与关务适用性
+ * 判断都不在册(区域维未建模;适用性是判断链的产物,不是目录事实)。
+ */
+export interface CandidatePortRecord {
+  port: string;
+  appliesFrom: string;
+  /** 缺席即尚无终点(开放版),不是已失效;终点在后继版本登记时落定(换版)。 */
+  appliesUntil?: string;
+}
+
+/**
+ * 一版申报路径:路径标识、三维路径事实(经哪个口岸、按哪个方向、以哪种申报模式)与
+ * 生效区间。port 是标识引用——「引用的口岸此刻是否在册」是读者拿两册对照的判断,
+ * 本行不代答。
+ */
+export interface DeclarationPathRecord {
+  path: string;
+  port: string;
+  /** 封闭二向 IMPORT / EXPORT;词表在 presentation.ts。 */
+  direction: string;
+  /** 申报模式是引用不是封闭词表:真实模式集属监管规则实例半边。 */
+  declarationMode: string;
+  appliesFrom: string;
+  /** 缺席即尚无终点,约定同 CandidatePortRecord。 */
+  appliesUntil?: string;
+}
+
+export interface CandidatePortListResponseBody {
+  outcome: 'CANDIDATE_PORTS_LISTED';
+  ports: CandidatePortRecord[];
+}
+
+export interface DeclarationPathListResponseBody {
+  outcome: 'DECLARATION_PATHS_LISTED';
+  paths: DeclarationPathRecord[];
+}
+
+// registry → 结果格的对照,判据同 CaseRegisterBodyByRegistry:调用侧按 registry 收窄
+// 后拿到单格类型,不必写空分支。
+interface PortsPathsBodyByRegistry {
+  'candidate-port': CandidatePortListResponseBody;
+  'declaration-path': DeclarationPathListResponseBody;
+}
+
+export function listPortsPaths<Registry extends PortsPathsRegistry>(
+  registry: Registry,
+): Promise<ApiResult<PortsPathsBodyByRegistry[Registry]>> {
+  return exchangeMasterData<PortsPathsBodyByRegistry[Registry]>(
+    `/customs-ports-paths?registry=${encodeURIComponent(registry)}`,
+  );
 }

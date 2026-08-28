@@ -1,7 +1,7 @@
-// 关务目录查阅词表(合规规则库 + 案件配置册 + 门禁条件册)。册子名与查询参数
-// registry 同词;中文取 customs-compliance CONTEXT。
+// 关务目录查阅词表(合规规则库 + 案件配置册 + 门禁条件册 + 口岸/申报路径册)。册子名
+// 与查询参数 registry 同词;中文取 customs-compliance CONTEXT。
 
-import type { CaseRegisterRegistry, ComplianceRegistry } from './api';
+import type { CaseRegisterRegistry, ComplianceRegistry, PortsPathsRegistry } from './api';
 
 export const registryLabels: Record<ComplianceRegistry, string> = {
   'case-requirement': '案件要求规则',
@@ -12,6 +12,12 @@ export const caseRegisterLabels: Record<CaseRegisterRegistry, string> = {
   readiness: '申报就绪判断',
   'submission-authority': '提交授权',
   'closure-obligation': '关闭义务目录',
+};
+
+// 口岸/申报路径两册,中文取 CONTEXT 所有权句原词(合规候选口岸、申报路径)。
+export const portsPathsRegistryLabels: Record<PortsPathsRegistry, string> = {
+  'candidate-port': '合规候选口岸',
+  'declaration-path': '申报路径',
 };
 
 // 关闭依据项封闭三值的中文取 domain ObligationItemState 的注释原词:已终结、已被
