@@ -38,6 +38,56 @@ export const adjustmentKindLabels: Record<string, string> = {
   SCOPE_ADJUSTMENT: '适用范围调整',
 };
 
+// ——以下为路由判断两册的词表(票 admin-skeleton-closure-batch/03 阶段二)。
+// 库面原词见 migrations/network_routing/0002 与 0005 的 CHECK;中文取 CONTEXT 原词。
+
+/** register 查询参数封闭两册,词与查阅口、库表同(端点纪律:同一册同一个词)。 */
+export type RoutePlanRegister = 'initial-route' | 'reassessment';
+
+export const routePlanRegisters: RoutePlanRegister[] = ['initial-route', 'reassessment'];
+
+export const routePlanRegisterLabels: Record<RoutePlanRegister, string> = {
+  'initial-route': '初始路由判断',
+  reassessment: '路由复核',
+};
+
+// 初始判断结论封闭两格。「无当前有效路由」是明确判断而非空行(CONTEXT 硬句),
+// 词表给它完整的一格,不折进成计划行。
+export const initialRouteConclusionLabels: Record<string, string> = {
+  ROUTE_FORMED: '已成计划',
+  NO_CURRENT_ROUTE: '无当前有效路由',
+};
+
+// 计划适用性封闭四态,中文取 CONTEXT 生命周期原词(当前有效/已被替代/已失效/已结束)。
+export const applicabilityStateLabels: Record<string, string> = {
+  CURRENTLY_EFFECTIVE: '当前有效',
+  SUPERSEDED: '已被替代',
+  LAPSED: '已失效',
+  CONCLUDED: '已结束',
+};
+
+// 复核走向封闭四格。
+export const reassessmentConclusionLabels: Record<string, string> = {
+  STILL_APPLICABLE: '仍适用',
+  PLAN_LAPSED: '计划失效',
+  FIRST_PLAN_FORMED: '首次成计划',
+  REROUTED: '已改路',
+};
+
+// 候选评估封闭三态;缺席(NULL)表示本走向不评估,缺席的呈现归页面,词表不设假格。
+export const candidateStateLabels: Record<string, string> = {
+  CANDIDATES_AVAILABLE: '有可用候选',
+  NO_QUALIFIED_CANDIDATES: '无合格候选',
+  CANDIDATE_REVIEW_UNDECIDED: '候选评审未决',
+};
+
+// 改路判定封闭三态;缺席(NULL)表示没评估过改路。
+export const rerouteStateLabels: Record<string, string> = {
+  AUTOMATIC_ALLOWED: '允许自动改路',
+  SUGGESTION_ONLY: '仅出建议',
+  BARRED: '禁止改路',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST:
