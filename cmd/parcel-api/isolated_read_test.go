@@ -54,7 +54,7 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 	if intakes.shipmentRequestViews == nil || intakes.trackingProjections == nil ||
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
-		intakes.collectionCatalogue == nil {
+		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil {
 		t.Fatalf("some context intake is nil: %+v", intakes)
 	}
 }
@@ -86,6 +86,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/commercial-product-channel-mappings": true,
 	"/visibility-catalogues":               true,
 	"/collection-subledgers":               true,
+	"/settlement-charges":                  true,
+	"/settlement-statements":               true,
+	"/settlement-funds-applications":       true,
+	"/settlement-operating-results":        true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

@@ -49,6 +49,10 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/commercial-product-channel-mappings":              {method: http.MethodGet, target: "/commercial-product-channel-mappings"},
 	"/visibility-catalogues":                            {method: http.MethodGet, target: "/visibility-catalogues?kind=MILESTONE_MAPPING"},
 	"/collection-subledgers":                            {method: http.MethodGet, target: "/collection-subledgers"},
+	"/settlement-charges":                               {method: http.MethodGet, target: "/settlement-charges?registry=customer-charge"},
+	"/settlement-statements":                            {method: http.MethodGet, target: "/settlement-statements?registry=customer-statement"},
+	"/settlement-funds-applications":                    {method: http.MethodGet, target: "/settlement-funds-applications"},
+	"/settlement-operating-results":                     {method: http.MethodGet, target: "/settlement-operating-results?registry=operating-result"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -159,6 +163,10 @@ func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpa
 		unwiredCommercialCatalogue{},
 		unwiredVisibilityCatalogue{},
 		unwiredCodSubledgers{},
+		unwiredSettlementCharges{},
+		unwiredSettlementStatements{},
+		unwiredSettlementFundsApplications{},
+		unwiredSettlementOperatingResults{},
 		isolatedRead,
 	)
 }

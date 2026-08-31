@@ -18,6 +18,7 @@ import (
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 )
 
@@ -144,6 +145,24 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 结算与核算四页各接自己的读适配器：四本目录读的是同一份库，但行形状与所属用例
+	// 各不相同，合成一个适配器就得把四组读口挤进一个类型（判据同各读口的分册裁决）。
+	settlementCharges, err := sapostgres.NewChargeCatalogue(db)
+	if err != nil {
+		return err
+	}
+	settlementStatements, err := sapostgres.NewStatementCatalogue(db)
+	if err != nil {
+		return err
+	}
+	settlementFundsApplications, err := sapostgres.NewFundsApplicationCatalogue(db)
+	if err != nil {
+		return err
+	}
+	settlementOperatingResults, err := sapostgres.NewOperatingCatalogue(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -172,6 +191,10 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			visibilityCatalogues,
 			codSubledgers,
+			settlementCharges,
+			settlementStatements,
+			settlementFundsApplications,
+			settlementOperatingResults,
 			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,

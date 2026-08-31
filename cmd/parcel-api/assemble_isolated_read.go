@@ -10,6 +10,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
+	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
 
@@ -47,6 +48,7 @@ type isolatedReadIntakes struct {
 	complianceRules      customshttp.CatalogueQueryIntake
 	commercialCatalogue  commercialhttp.CommercialCatalogueIntake
 	collectionCatalogue  collectionhttp.CatalogueQueryIntake
+	settlementCatalogue  settlementhttp.CatalogueQueryIntake
 }
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
@@ -102,6 +104,13 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	if err != nil {
 		return nil, err
 	}
+	// 结算与核算四页共用本上下文的一个 Intake：作用域形状同为「租户」一维，责任法人、
+	// 结算账户与币种是账上的归属维不是查阅方身份（判据在 settlementhttp.CatalogueQuery）。
+	settlementCatalogue, err := settlementhttp.NewIsolatedOperationsReadIntake(
+		isolatedReadScopeReference, tenant, isolatedReadLimit)
+	if err != nil {
+		return nil, err
+	}
 
 	return &isolatedReadIntakes{
 		shipmentRequestViews: shipmentViews,
@@ -111,5 +120,6 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 		complianceRules:      complianceRules,
 		commercialCatalogue:  commercialCatalogue,
 		collectionCatalogue:  collectionCatalogue,
+		settlementCatalogue:  settlementCatalogue,
 	}, nil
 }

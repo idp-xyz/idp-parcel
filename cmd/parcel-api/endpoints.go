@@ -9,6 +9,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
@@ -71,10 +72,14 @@ func assembleBusinessEndpoints(
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	codSubledgers collectionhttp.CodSubledgerCatalogueReader,
+	settlementCharges settlementhttp.ChargeCatalogueReader,
+	settlementStatements settlementhttp.StatementCatalogueReader,
+	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader,
+	settlementOperatingResults settlementhttp.OperatingCatalogueReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
-	// 缺省朝拦：isolatedRead 为 nil 时，下面七个变量全取未配置即拒，整份装配与
-	// ADR-0078 之前逐字节同形。启用时也只有这七个变量换值——命令面与客户查阅面
+	// 缺省朝拦：isolatedRead 为 nil 时，下面这组变量全取未配置即拒，整份装配与
+	// ADR-0078 之前逐字节同形。启用时也只有这组变量换值——命令面与客户查阅面
 	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
@@ -83,6 +88,7 @@ func assembleBusinessEndpoints(
 	complianceRulesIntake := customshttp.CatalogueQueryIntake(customshttp.UnconfiguredIntake{})
 	commercialCatalogueIntake := commercialhttp.CommercialCatalogueIntake(commercialhttp.UnconfiguredIntake{})
 	collectionCatalogueIntake := collectionhttp.CatalogueQueryIntake(collectionhttp.UnconfiguredIntake{})
+	settlementCatalogueIntake := settlementhttp.CatalogueQueryIntake(settlementhttp.UnconfiguredIntake{})
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 		trackingProjectionsIntake = isolatedRead.trackingProjections
@@ -91,6 +97,7 @@ func assembleBusinessEndpoints(
 		complianceRulesIntake = isolatedRead.complianceRules
 		commercialCatalogueIntake = isolatedRead.commercialCatalogue
 		collectionCatalogueIntake = isolatedRead.collectionCatalogue
+		settlementCatalogueIntake = isolatedRead.settlementCatalogue
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -142,5 +149,13 @@ func assembleBusinessEndpoints(
 		// 批次引用一次上列。册只一本，不设分派参数（裁决在端点文件头）；隔离读准入
 		// 按同三条判据入格，随本上下文自己的 Intake 变量换值。
 		{Pattern: "/collection-subledgers", Handler: collectionhttp.NewQueryCodSubledgersEndpoint(collectionCatalogueIntake, codSubledgers)},
+		// 结算与核算四页（票 admin-skeleton-closure-batch/04）各立入口，四行共用本上下文
+		// 自己的 Intake 变量：作用域形状同为租户一维，责任法人、结算账户与币种是账上的
+		// 归属维不是查阅方身份，分设只会让装配点看起来能只配一半。哪几本册进哪个入口、
+		// 资金冻结与运营结算余额为何不在其中，裁决在各构造函数的注释，此处不复述。
+		{Pattern: "/settlement-charges", Handler: settlementhttp.NewQuerySettlementChargesEndpoint(settlementCatalogueIntake, settlementCharges)},
+		{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, settlementStatements)},
+		{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, settlementFundsApplications)},
+		{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, settlementOperatingResults)},
 	}
 }

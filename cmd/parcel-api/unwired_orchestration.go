@@ -19,6 +19,8 @@ import (
 	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	settlementports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -471,6 +473,80 @@ func (unwiredCodSubledgers) ListCodSubledgers(
 	collectiondomain.TenantID,
 	int,
 ) ([]collectionports.CodSubledgerCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// 结算与核算四页的读口占位（票 admin-skeleton-closure-batch/04）。四个类型而不是一个：
+// 生产装配点上它们也是四个各自成形的读适配器，占位并成一个会让装配测试盖不住「某一本
+// 册接错了适配器」这一格。
+
+// unwiredSettlementCharges 的方法表与 settlementports.ChargeCatalogueRead 逐一对上。
+type unwiredSettlementCharges struct{}
+
+func (unwiredSettlementCharges) ListCustomerCharges(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.CustomerChargeCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredSettlementCharges) ListSupplierExpectedCosts(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.SupplierExpectedCostCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredSettlementStatements 的方法表与 settlementports.StatementCatalogueRead 逐一对上。
+type unwiredSettlementStatements struct{}
+
+func (unwiredSettlementStatements) ListCustomerStatements(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.CustomerStatementCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredSettlementStatements) ListSupplierBillReceptions(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.SupplierBillReceptionCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredSettlementFundsApplications 的方法表与 settlementports.FundsApplicationCatalogueRead
+// 逐一对上。
+type unwiredSettlementFundsApplications struct{}
+
+func (unwiredSettlementFundsApplications) ListExternalFundsFacts(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.ExternalFundsFactCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredSettlementOperatingResults 的方法表与 settlementports.OperatingCatalogueRead
+// 逐一对上。
+type unwiredSettlementOperatingResults struct{}
+
+func (unwiredSettlementOperatingResults) ListOperatingResults(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.OperatingResultCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredSettlementOperatingResults) ListCostAllocations(
+	context.Context,
+	settlementdomain.TenantID,
+	int,
+) ([]settlementports.CostAllocationCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
 }
 
