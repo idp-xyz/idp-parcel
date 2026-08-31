@@ -182,6 +182,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// VE 案件侧三页读面（票 admin-skeleton-closure-batch/06）：一个适配器实现三读口，
+	// 分诊、案件与理赔追偿六本册子照行转写。
+	caseReview, err := vepostgres.NewCaseReview(db)
+	if err != nil {
+		return err
+	}
 	// 节点作业与运输履约查阅页读面（票 admin-skeleton-closure-batch/05）：只是查阅
 	// 读口，与上面 buildReceptionOrchestration/buildDeliveryOrchestration 构造的命令
 	// 编排互不相知——读面不是编排，查阅不触发判断、派生或披露。
@@ -224,6 +230,9 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			visibilityCatalogues,
+			caseReview,
+			caseReview,
+			caseReview,
 			codSubledgers,
 			settlementCharges,
 			settlementStatements,

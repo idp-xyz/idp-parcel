@@ -76,6 +76,9 @@ func assembleBusinessEndpoints(
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
+	exceptionTriageRecords visibilityhttp.TriageReviewReader,
+	exceptionCaseRecords visibilityhttp.CaseReviewReader,
+	claimsRecoveryRecords visibilityhttp.ClaimsRecoveryReviewReader,
 	codSubledgers collectionhttp.CodSubledgerCatalogueReader,
 	settlementCharges settlementhttp.ChargeCatalogueReader,
 	settlementStatements settlementhttp.StatementCatalogueReader,
@@ -168,6 +171,13 @@ func assembleBusinessEndpoints(
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
 		{Pattern: "/visibility-catalogues", Handler: visibilityhttp.NewQueryVisibilityCataloguesEndpoint(trackingProjectionsIntake, visibilityCatalogues)},
+		// VE 案件侧三页（票 admin-skeleton-closure-batch/06）：分诊两册、案件单册、
+		// 理赔追偿三册，与目录及追踪查阅同族同 Intake 变量。生产装配三口共用一个
+		// CaseReview 读适配器（六方法一型），此处三参分收是为了让装配测试盖得住
+		// 「某一口接错适配器」——参数分、实现合，两侧各取所需。
+		{Pattern: "/exception-triage-records", Handler: visibilityhttp.NewQueryExceptionTriageRecordsEndpoint(trackingProjectionsIntake, exceptionTriageRecords)},
+		{Pattern: "/exception-case-records", Handler: visibilityhttp.NewQueryExceptionCaseRecordsEndpoint(trackingProjectionsIntake, exceptionCaseRecords)},
+		{Pattern: "/claims-recovery-records", Handler: visibilityhttp.NewQueryClaimsRecoveryRecordsEndpoint(trackingProjectionsIntake, claimsRecoveryRecords)},
 		// 代收分户账册（票 admin-remainder-mechanism-batch/04）：分户账连派生余额与
 		// 批次引用一次上列。册只一本，不设分派参数（裁决在端点文件头）；隔离读准入
 		// 按同三条判据入格，随本上下文自己的 Intake 变量换值。

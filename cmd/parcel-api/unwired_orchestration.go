@@ -595,6 +595,60 @@ func (unwiredVisibilityCatalogue) ListDisclosurePolicies(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredCaseReview 是 VE 案件侧三读口（分诊两册、案件单册、理赔追偿三册）的占位，
+// 方法表与 visibilityports 的 TriageReviewRead/CaseReviewRead/ClaimsRecoveryReviewRead
+// 逐一对上（票 admin-skeleton-closure-batch/06）。一型三用不违「盖住接错适配器」：
+// 生产装配点上三口本就共用一个 CaseReview 适配器，占位与生产同形。
+type unwiredCaseReview struct{}
+
+func (unwiredCaseReview) ListSignalEpisodes(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.SignalEpisodeCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseReview) ListDispositionRequests(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.DispositionRequestCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseReview) ListExceptionCases(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ExceptionCaseCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseReview) ListCustomerNotifications(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.CustomerNotificationCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseReview) ListClaimItems(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ClaimItemCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCaseReview) ListRecoveryMatters(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.RecoveryMatterCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredCodSubledgers 是代收分户账册列表读口的占位，方法表与
 // collectionports.CodSubledgerCatalogueRead 逐一对上（票 admin-remainder-mechanism-batch/04）。
 type unwiredCodSubledgers struct{}
