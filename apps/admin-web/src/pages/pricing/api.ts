@@ -64,3 +64,24 @@ export function listPriceCards() {
 export function listReferenceSeries() {
   return exchangeMasterData<ReferenceSeriesListResponseBody>('/pricing-reference-series');
 }
+
+// 评价登记册检索列面(GET /pricing-evaluations,票 admin-skeleton-closure-batch/03)。
+// 评价的语义细节(对象、方向、金额)住在快照内属详情读法,端点不透出,这里也不虚构。
+export interface PricingEvaluationRecord {
+  evaluationId: string;
+  /** 封闭五格原词:COMPLETED/PENDING/CONFLICT/FAILED/UNRATABLE。 */
+  status: string;
+  semanticDigest: string;
+  planContentDigest: string;
+  canonicalization: string;
+  recordedAt: string;
+}
+
+export interface PricingEvaluationListResponseBody {
+  outcome: 'EVALUATIONS_LISTED';
+  evaluations: PricingEvaluationRecord[];
+}
+
+export function listPricingEvaluations() {
+  return exchangeMasterData<PricingEvaluationListResponseBody>('/pricing-evaluations');
+}
