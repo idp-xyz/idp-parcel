@@ -133,6 +133,8 @@ export const liveIds: ReadonlySet<string> = new Set([
   'pricing-evaluation',
   'route-plans',
   'stage-admission',
+  'node-operations-review',
+  'transport-fulfillment-review',
 ]);
 
 /**
