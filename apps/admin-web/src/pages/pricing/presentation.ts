@@ -22,6 +22,17 @@ export const evidenceGradeLabels: Record<string, string> = {
   ASSERTION: '断言强度',
 };
 
+// 评价状态封闭五格(migrations/parcel_pricing/0001 CHECK 原词)。四种非完成结果
+// 不得互相冒充——FAILED 是「未形成」(该重试的故障),UNRATABLE 是「不可计价」
+// (终局业务判断),两词分开是 CONTEXT 硬句,词表不折叠。
+export const evaluationStatusLabels: Record<string, string> = {
+  COMPLETED: '已完成',
+  PENDING: '待判断',
+  CONFLICT: '冲突',
+  FAILED: '未形成',
+  UNRATABLE: '不可计价',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST: '请求构造不出查询,重发同样的内容不会改变结果。',
