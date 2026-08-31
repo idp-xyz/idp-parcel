@@ -35,6 +35,7 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var _ DeliveryIntake = UnconfiguredIntake{}
+var _ CatalogueQueryIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -44,4 +45,13 @@ func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (ap
 // IntakeCorrection 同 IntakeRegistration：不读请求，只答未配置。
 func (UnconfiguredIntake) IntakeCorrection(context.Context, *http.Request) (application.CorrectDeliveryProofCommand, error) {
 	return application.CorrectDeliveryProofCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeCatalogueQuery 同上两个方法：不读请求，只答未配置。命令面与查阅面同堵——
+// 本类型注释立的正是这条：未配置是渠道这一层的状态，不是某个端点的状态，只堵命令
+// 就是给查阅留了条无渠道也能进的路。未登记前不铸造任何作用域（ADR-0077 Decision
+// 三）。隔离读准入启用时由装配点换成 IsolatedOperationsReadIntake，本类型在查阅面
+// 随之退场，命令面不受影响（ADR-0078）。
+func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
+	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }
