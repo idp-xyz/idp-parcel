@@ -205,6 +205,70 @@ func TestPostingMoreThanThePositionHoldsIsUnderfundedNotInvalid(t *testing.T) {
 	}
 }
 
+// 重放的答案只由在册记录定，不随之后的账面漂移：一笔清分把待清分清空之后，重放同一笔
+// 清分必须答 EXISTING——若让余额守卫先答成 UNDERFUNDED，那格的处置指引（等实收或先清分，
+// 重跑就会成）对已落账的请求全是假话。同键不同内容也一样先定案：CONTENT_CONFLICT。
+func TestReplayingAPostingWhoseSourceWasSinceDrainedAnswersExisting(t *testing.T) {
+	store := newStore()
+	handler := store.handler()
+	ctx := t.Context()
+	openLedger(t, store, handler)
+	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
+	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
+	mustPost(t, handler, postCommand(t, "SYN-POST-1",
+		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
+		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+
+	allocation := postCommand(t, "SYN-POST-2",
+		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
+		12000, domain.BasisAllocation, "SYN-INSTR-1", "2026-08-24T03:00:00Z")
+	mustPost(t, handler, allocation)
+
+	if outcome, _ := handler.PostSubledger(ctx, allocation); outcome != application.OutcomeExisting {
+		t.Fatalf("清空来源后的重放 = %s，要 EXISTING", outcome)
+	}
+
+	changed := allocation
+	changed.AmountMinor = 6000
+	if outcome, _ := handler.PostSubledger(ctx, changed); outcome != application.OutcomeContentConflict {
+		t.Fatalf("同键改金额 = %s，要 CONTENT_CONFLICT——绝不覆盖，也不折成账面答案", outcome)
+	}
+}
+
+// 批次收口同样是按当下状态作答的门，只对新成员生效；已在册成员的重放仍答 EXISTING。
+func TestReplayingABatchMemberPostingAfterHandOverAnswersExisting(t *testing.T) {
+	store := newStore()
+	handler := store.handler()
+	ctx := t.Context()
+	openLedger(t, store, handler)
+	seedInstruction(t, store, handler, "SYN-INSTR-1", 12000)
+	seedFact(t, store, handler, "SYN-FACT-CREDIT", "SYN-INSTR-1", domain.OperatorBankCredit, 12000)
+	mustPost(t, handler, postCommand(t, "SYN-POST-1",
+		domain.PositionExternalSource, domain.PositionAwaitingAllocation,
+		12000, domain.BasisCollectionFact, "SYN-FACT-CREDIT", "2026-08-24T01:10:00Z"))
+	mustPost(t, handler, postCommand(t, "SYN-POST-2",
+		domain.PositionAwaitingAllocation, domain.PositionPayableToCustomer,
+		12000, domain.BasisAllocation, "SYN-INSTR-1", "2026-08-24T03:00:00Z"))
+	if outcome, _ := handler.FormBatch(ctx, application.FormBatchCommand{
+		Tenant: tenantID(t), Batch: testBatch(t, "SYN-BATCH-1"),
+	}); outcome != application.OutcomeRegistered {
+		t.Fatalf("形成批次 = %s", outcome)
+	}
+	member := postCommand(t, "SYN-POST-3",
+		domain.PositionPayableToCustomer, domain.PositionRemitted,
+		5000, domain.BasisRemittanceBatch, "SYN-BATCH-1", "2026-08-31T02:00:00Z")
+	mustPost(t, handler, member)
+	if outcome, _ := handler.HandOverBatch(ctx, application.HandOverBatchCommand{
+		Tenant: tenantID(t), Batch: testBatch(t, "SYN-BATCH-1").ID(),
+	}); outcome != application.OutcomeHandedOver {
+		t.Fatalf("交出汇付主张 = %s", outcome)
+	}
+
+	if outcome, _ := handler.PostSubledger(ctx, member); outcome != application.OutcomeExisting {
+		t.Fatalf("交出后重放已在册成员 = %s，要 EXISTING——BATCH_CLOSED 只答新成员", outcome)
+	}
+}
+
 // 差异事项只登事项，差额落账要另有一笔以它为依据的记账；短款不得靠缩小指令抹平。
 func TestADiscrepancySettlesOnlyThroughItsOwnPosting(t *testing.T) {
 	store := newStore()

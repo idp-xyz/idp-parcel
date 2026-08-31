@@ -67,7 +67,13 @@ type PostCommand struct {
 	PostedAt    time.Time
 }
 
-// PostSubledger 追加一笔记账：解依据 → 定分户账与形状 → 读回账面 → 余额守卫 → 落账。
+// PostSubledger 追加一笔记账：重放判定 → 解依据 → 定分户账与形状 → 读回账面 →
+// 余额守卫 → 落账。
+//
+// 重放判定必须先于一切按**当下状态**作答的门（余额守卫、批次收口）：那些门回答的是
+// 「这笔新账现在能不能落」，而重放的真相是「这笔账已经落了」，答案只由在册记录定。
+// 反过来排，重放一笔已把来源清空的记账会得到 UNDERFUNDED，其处置指引（等实收或先
+// 清分，重跑就会成）对已落账的请求全是假话——已灌演示库上实测出过这一格。
 //
 // 余额守卫必须在同一笔事务内读回账面再判（写口 RequireExecutor 保证有环境事务）：
 // 隔着事务判出来的「够扣」在落账时可能已经不够了，而透支后的账面看上去与正常账面
@@ -79,6 +85,17 @@ func (handler *Handler) PostSubledger(ctx context.Context, command PostCommand) 
 		command.AmountMinor <= 0 ||
 		command.PostedAt.IsZero() {
 		return OutcomeNotAccepted, nil
+	}
+
+	recorded, found, err := handler.deps.Subledger.LoadPosting(ctx, command.Tenant, command.ID)
+	if err != nil {
+		return OutcomeUndecided, nil
+	}
+	if found {
+		if !postingMatchesCommand(recorded, command) {
+			return OutcomeContentConflict, nil
+		}
+		return OutcomeExisting, nil
 	}
 
 	ledger, outcome, err := handler.resolveLedgerForPosting(ctx, command)
@@ -298,6 +315,17 @@ func discrepancyPostingShapeHolds(command PostCommand, item domain.DiscrepancyIt
 	return item.Kind() == domain.DiscrepancySurplus &&
 		command.From == domain.PositionSurplus &&
 		command.To == domain.PositionPayableToCustomer
+}
+
+// postingMatchesCommand 按命令携带的格比对在册记账。分户账与币种不参与比对——它们
+// 不是命令输入，由依据推出，而依据在册后不可变：命令格逐一相同时，派生格不可能不同。
+func postingMatchesCommand(recorded domain.SubledgerPosting, command PostCommand) bool {
+	return recorded.From() == command.From &&
+		recorded.To() == command.To &&
+		recorded.Amount().AmountMinor() == command.AmountMinor &&
+		recorded.BasisKind() == command.BasisKind &&
+		recorded.Basis() == command.Basis &&
+		recorded.PostedAt().Equal(command.PostedAt)
 }
 
 func samePosting(left, right domain.SubledgerPosting) bool {
