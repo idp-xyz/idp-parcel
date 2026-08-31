@@ -39,9 +39,9 @@ func TestBuildIsolatedReadIntakesRefusesRealLookingTenant(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0078 Decision 三 — 合成租户合规时六上下文 Intake 全部就位；漏一个字段
+// Covers: ADR-0078 Decision 三 — 合成租户合规时各上下文 Intake 全部就位；漏一个字段
 // 会让对应端点在启用态仍答 403，与放行面枚举失配。
-func TestBuildIsolatedReadIntakesGrantsAllSixContexts(t *testing.T) {
+func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 	intakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{
 		isolatedReadTenantEnv: "SYN-TENANT-01",
 	}))
@@ -53,7 +53,8 @@ func TestBuildIsolatedReadIntakesGrantsAllSixContexts(t *testing.T) {
 	}
 	if intakes.shipmentRequestViews == nil || intakes.trackingProjections == nil ||
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
-		intakes.complianceRules == nil || intakes.commercialCatalogue == nil {
+		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
+		intakes.collectionCatalogue == nil {
 		t.Fatalf("some context intake is nil: %+v", intakes)
 	}
 }
@@ -84,6 +85,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/commercial-party-relationships":      true,
 	"/commercial-product-channel-mappings": true,
 	"/visibility-catalogues":               true,
+	"/collection-subledgers":               true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

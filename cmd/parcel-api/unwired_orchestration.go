@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 
+	collectiondomain "go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
+	collectionports "go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	customsports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
@@ -457,6 +459,18 @@ func (unwiredVisibilityCatalogue) ListDisclosurePolicies(
 	visibilitydomain.TenantID,
 	int,
 ) ([]visibilityports.DisclosurePolicyCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredCodSubledgers 是代收分户账册列表读口的占位，方法表与
+// collectionports.CodSubledgerCatalogueRead 逐一对上（票 admin-remainder-mechanism-batch/04）。
+type unwiredCodSubledgers struct{}
+
+func (unwiredCodSubledgers) ListCodSubledgers(
+	context.Context,
+	collectiondomain.TenantID,
+	int,
+) ([]collectionports.CodSubledgerCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

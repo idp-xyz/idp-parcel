@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
@@ -34,7 +35,7 @@ const (
 // 扩账户在这里加，不另设输入。
 const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
 
-// isolatedReadIntakes 携带 ADR-0078 放行面的注入式 Intake，六个字段对应六个上下文；
+// isolatedReadIntakes 携带 ADR-0078 放行面的注入式 Intake，字段逐一对应各上下文；
 // parcel-pricing 与 party-commercial 各自的两条目录行共用本上下文的一个 Intake
 // （「分设只会让装配点看起来能只配一半」，与各包 Intake 注释同句）。nil 指针表示
 // 未启用——assembleBusinessEndpoints 对 nil 的处理与 ADR-0078 之前逐字节同形。
@@ -45,13 +46,14 @@ type isolatedReadIntakes struct {
 	networkCatalog       networkhttp.CatalogueQueryIntake
 	complianceRules      customshttp.CatalogueQueryIntake
 	commercialCatalogue  commercialhttp.CommercialCatalogueIntake
+	collectionCatalogue  collectionhttp.CatalogueQueryIntake
 }
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
 //
 // 三态：未设 → (nil, nil)，全部端点未配置即拒；设了但不带合成前缀 → 报错，进程
 // 启动即拒——静默回落会让配置错误与「刻意拦着」两态可观察签名相同，那正是「默认值
-// 不出声」病；设了且合规 → 交回六上下文的注入式 Intake，启动日志由调用方写。
+// 不出声」病；设了且合规 → 交回各上下文的注入式 Intake，启动日志由调用方写。
 func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes, error) {
 	tenant := getenv(isolatedReadTenantEnv)
 	if tenant == "" {
@@ -95,6 +97,11 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	if err != nil {
 		return nil, err
 	}
+	collectionCatalogue, err := collectionhttp.NewIsolatedOperationsReadIntake(
+		isolatedReadScopeReference, tenant, isolatedReadLimit)
+	if err != nil {
+		return nil, err
+	}
 
 	return &isolatedReadIntakes{
 		shipmentRequestViews: shipmentViews,
@@ -103,5 +110,6 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 		networkCatalog:       networkCatalog,
 		complianceRules:      complianceRules,
 		commercialCatalogue:  commercialCatalogue,
+		collectionCatalogue:  collectionCatalogue,
 	}, nil
 }

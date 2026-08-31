@@ -1,6 +1,7 @@
 package main
 
 import (
+	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
@@ -69,10 +70,11 @@ func assembleBusinessEndpoints(
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
+	codSubledgers collectionhttp.CodSubledgerCatalogueReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
-	// 缺省朝拦：isolatedRead 为 nil 时，下面六个变量全取未配置即拒，整份装配与
-	// ADR-0078 之前逐字节同形。启用时也只有这六个变量换值——命令面与客户查阅面
+	// 缺省朝拦：isolatedRead 为 nil 时，下面七个变量全取未配置即拒，整份装配与
+	// ADR-0078 之前逐字节同形。启用时也只有这七个变量换值——命令面与客户查阅面
 	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
@@ -80,6 +82,7 @@ func assembleBusinessEndpoints(
 	networkCatalogIntake := networkhttp.CatalogueQueryIntake(networkhttp.UnconfiguredIntake{})
 	complianceRulesIntake := customshttp.CatalogueQueryIntake(customshttp.UnconfiguredIntake{})
 	commercialCatalogueIntake := commercialhttp.CommercialCatalogueIntake(commercialhttp.UnconfiguredIntake{})
+	collectionCatalogueIntake := collectionhttp.CatalogueQueryIntake(collectionhttp.UnconfiguredIntake{})
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 		trackingProjectionsIntake = isolatedRead.trackingProjections
@@ -87,6 +90,7 @@ func assembleBusinessEndpoints(
 		networkCatalogIntake = isolatedRead.networkCatalog
 		complianceRulesIntake = isolatedRead.complianceRules
 		commercialCatalogueIntake = isolatedRead.commercialCatalogue
+		collectionCatalogueIntake = isolatedRead.collectionCatalogue
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -134,5 +138,9 @@ func assembleBusinessEndpoints(
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
 		{Pattern: "/visibility-catalogues", Handler: visibilityhttp.NewQueryVisibilityCataloguesEndpoint(trackingProjectionsIntake, visibilityCatalogues)},
+		// 代收分户账册（票 admin-remainder-mechanism-batch/04）：分户账连派生余额与
+		// 批次引用一次上列。册只一本，不设分派参数（裁决在端点文件头）；隔离读准入
+		// 按同三条判据入格，随本上下文自己的 Intake 变量换值。
+		{Pattern: "/collection-subledgers", Handler: collectionhttp.NewQueryCodSubledgersEndpoint(collectionCatalogueIntake, codSubledgers)},
 	}
 }

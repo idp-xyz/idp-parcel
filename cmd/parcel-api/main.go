@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	crpostgres "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
@@ -139,6 +140,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	codSubledgers, err := crpostgres.NewCodSubledgerCatalogue(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -166,6 +171,7 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			visibilityCatalogues,
+			codSubledgers,
 			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,

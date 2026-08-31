@@ -405,11 +405,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     source: 'docs/domain/settlement-accounting/CONTEXT.md 按明确口径、版本、币种及截至时点派生的经营毛利与经营损失指标',
   },
 
-  // —— 代收与清分（collection-remittance，尚无独立 CONTEXT.md，出处为上下文地图）——
+  // —— 代收与清分（collection-remittance）——
   'cod-ledger': {
     title: '代收分户账',
     owner: '代收与清分（collection-remittance）',
-    source: 'docs/domain/CONTEXT-MAP.md collection-remittance：代收资金义务、渠道在途代收款、待清分款、应付客户款与汇付',
+    source: 'docs/domain/collection-remittance/CONTEXT.md 代收指令、代收事实、代收分户账、回汇批次与差异事项',
   },
 
   // —— 试点治理（pilotgovernance）——
