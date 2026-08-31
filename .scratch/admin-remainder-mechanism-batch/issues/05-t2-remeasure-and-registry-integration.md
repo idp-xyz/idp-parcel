@@ -30,3 +30,21 @@ Status: in-progress——MCP-1
   （`migrations/eol_guard_test.go`：嵌入迁移资产含 `\r` 即红，另带「一个 .sql 都没走到」
   的空转自检），弃 `checksumOf` 归一（全部既有校验和作废，代价不对等）。守卫经证伪：
   临时 CRLF 化一份 SQL 立即 FAIL 报文件与偏移，还原后绿。
+
+## 进展
+
+- 2026-08-31（MCP-1）**第 2 项销项**：01–04 交付的五张页面（`group-legal-entities`、
+  `business-parties`、`channel-product-catalog`、`customs-ports-paths`、`cod-ledger`）已全部
+  登进 `liveIds` 与导航，最后一张随 `e66eb8c` 补上。`cod-ledger` 是此前唯一缺口：页面自
+  `d815c5e` 起就在发 `GET /collection-subledgers`、端点自 `b456678` 起在装配表上，只差登记
+  这一行——`b456678` 标题写着「页登半边」，实际只改了 `navigation.ts` 的出处引用。缺口是
+  用户可见的：`Workbench` 的档位全由 `readinessOf` 派生自 `liveIds`，于是该页显示成「页面
+  骨架」、「代收与清分」分区显示「已接线 0/1」，而页面真在发请求——正是「未接线看着像已
+  接线」的反面一格。同笔核过反向漂移（登了 live 却不发请求者为零）：前端调用的路径逐条
+  对得上 `cmd/parcel-api/endpoints.go` 的装配表。补后档位 23 已接线 / 14 骨架 / 1 演示 /
+  0 规划占位，锚 `e66eb8c`。
+  验证于临时 worktree 检出 `e66eb8c` 提交态：`go build`、`go vet`、`go test -count=1 ./...`
+  全绿且**含真库**（同刻单跑门禁用例得 `PASS` 非 `SKIP`），`apps/admin-web` `pnpm build` 绿
+  2704 模块。这一跑同时可充第 3 项「全仓绿（真库口径注明）」的取证；第 3 项余下的基线接线态
+  同步与本批 spec 收口未做，第 1 项 T2 量尺重核亦未做，故本票仍 in-progress。
+  `e66eb8c:main` 已推，同链带出 22 笔他会话未推提交，均在上述验证覆盖内。
