@@ -1,7 +1,7 @@
 # 试点治理读面与 `stage-admission` 接真——本批唯一能真出数据的一页
 
 Category: feature
-Status: ready-for-agent——MCP-3
+Status: resolved——MCP-3（阶段二已交票闭，合入 `6989cd1`、注记校正 `e3b56f8`；状态行由 MCP-1 批务代结，见票 07）
 Blocked by: 01
 
 ## 为什么这一页与其余十三张性质不同

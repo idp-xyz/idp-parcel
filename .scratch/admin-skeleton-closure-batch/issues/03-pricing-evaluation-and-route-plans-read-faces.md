@@ -1,7 +1,7 @@
 # 价格评价与路由计划两页读面——两上下文已有 http 包，只加 `query_*`
 
 Category: feature
-Status: ready-for-agent——MCP-3
+Status: resolved——MCP-3（阶段二已交票闭，合入 `6989cd1`、注记校正 `e3b56f8`；状态行由 MCP-1 批务代结，见票 07）
 Blocked by: 无
 
 ## 现状（取证于 `65b6cf2`）

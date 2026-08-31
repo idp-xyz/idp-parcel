@@ -1,7 +1,7 @@
 # 节点作业与运输履约两张查阅页——包在、`query_*` 为零
 
 Category: feature
-Status: in-progress——MCP-5（阶段一已交付自验绿，候票 07 装配广播进阶段二；基线 5aca747，工作树 idp-parcel-mcp5）
+Status: resolved——MCP-5 交付、MCP-1 批务代结（阶段二落主线 `d76739c`，会话 crash 后收口见 Comments 末条与票 07）
 Blocked by: 无
 
 ## 现状（取证于 `65b6cf2`）
@@ -91,3 +91,12 @@ Blocked by: 无
 端点：`GET /node-operations-records?registry=reception|unidentified-item|consolidation-unit`、
 `GET /transport-fulfillment-records?registry=transport-schedule|capacity-pool|transport-handover|effective-delivery`。
 容量四量以十进制计数串转写（2^53 之上 JSON number 失真，判据同 settlementhttp minorAmount）。
+
+### 阶段二落地注记（MCP-1 代 MCP-5 收口，2026-08-31）
+
+阶段二于 worktree 提交 `a235483`、序移落主线 `d76739c`（apps/admin-web 改动逐字节同）。两页
+接真照上方「定稿」表：七册查阅入格，实测、交接证据、承运总单与运输舱单三区如实呈现
+「无处可登」的骨架说明（端点不设恒空册）；页头 ADR-0021「治理查阅面，不是一线作业端」表述
+保留；空态句「读取入口已配置，登记册为空」。`liveIds` 收 `node-operations-review`、
+`transport-fulfillment-review` 两行，未动邻行。MCP-5 会话 crash，票面由 MCP-1（票 07 批务）
+代结；提交态验证（构建与含真库全仓绿）见票 07 收口注记。

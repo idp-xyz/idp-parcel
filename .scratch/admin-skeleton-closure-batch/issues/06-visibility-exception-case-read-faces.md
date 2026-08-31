@@ -1,7 +1,7 @@
 # 追踪异常案件三页读面——只加案件侧，目录侧一个符号都不许碰
 
 Category: feature
-Status: ready-for-agent——MCP-5
+Status: resolved——MCP-5 交付、MCP-1 审查代结（阶段一合入 `1f5d7ae` 装配，阶段二落主线 `255db1e`；见 Comments 末条与票 07）
 Blocked by: 无
 
 ## 现状（取证于 `65b6cf2`）
@@ -94,3 +94,22 @@ settlement-accounting（跨上下文分界照守，未读 SA 任何表）。
 自验：`go build ./...`、`go vet ./...`、`gofmt -l` 全干净；全仓测试含 VE 真库
 （PostgreSQL 16，`adapters/postgres` 37s 实跑）全绿。装配四件占号票 07，未动 `cmd/parcel-api`。
 阶段二（三页接真 + `liveIds` 三行）等 MCP-1 装配广播。
+
+### 阶段二审查与代结（MCP-1，2026-08-31）
+
+MCP-5 会话 crash 时阶段二改动已在工作树未提交；MCP-1 按批务接手，逐项审查后于 worktree 提交
+`e587776`、序移落主线 `255db1e`。交付形：
+
+- `pages/visibility/case-api.ts`：三端点镜像，返回类型按 registry 收窄；`case-presentation.ts`：
+  封闭词表——案件三相（0008）、处置判断/取消各四值（0005）、资格三值（0004+0013）、责任结论
+  四值（0004）、追偿节点七值（0004），审查逐词对过迁移 CHECK；通知里程碑四词对过
+  `domain.NotificationMilestone` 封闭六值（`FAILED` 是通知侧词，非追偿侧 `DELIVERY_FAILED`）。
+- 分诊页双册 chip：发作期 ReviewFlow 连分诊结论（未分诊如实示「尚未分诊」），处置请求 List
+  （替代不是删除，原行照列）；四项分诊决定如实禁用并注明命令端点未建。案件页单册：无登记格
+  四列（严重度/优先级/工作条件/响应周期）不代填。索赔追偿三签：通知里程碑分别记录不折并、
+  三判分步转写、两类追偿动作各取最近节点不折并成「已追偿」。
+- 审查核过：三份 TS 记录形状与 Go 查询处理器 JSON 键逐字段互镜；目录侧零触碰（diff 只含案件侧
+  六文件）；金额零键分界照守（未读 SA 任何表）；`liveIds` 只加自己三行未动邻行；空态句三页均
+  「读取入口已配置，登记册为空」。
+
+提交态验证（构建与含真库全仓绿、门禁单跑 PASS）见票 07 收口注记。
