@@ -1,7 +1,7 @@
 # 节点作业与运输履约两张查阅页——包在、`query_*` 为零
 
 Category: feature
-Status: ready-for-agent——MCP-5
+Status: in-progress——MCP-5（阶段一已交付自验绿，候票 07 装配广播进阶段二；基线 5aca747，工作树 idp-parcel-mcp5）
 Blocked by: 无
 
 ## 现状（取证于 `65b6cf2`）
@@ -55,3 +55,39 @@ Blocked by: 无
 保留；含真库全仓绿（注明）；两包既有命令端点回归无变化。
 
 ## Comments
+
+### 两页与表的对应：定稿（MCP-5，复核过两份 CONTEXT.md、迁移 0001/0002 与 0001/0003/0004/0005、两张页骨架）
+
+**节点侧四区**，页面五块（含待识别实物）对表：
+
+| 页面区 | 登记册 | 说明 |
+|---|---|---|
+| 节点收寄 | `reception` | 只列带收寄与控制在场的两格（`INTAKE_FORMED` / `PENDING_IDENTIFICATION`，0001 的在场规则）；另两格是提交处理结果，没有收寄事实可列，也不是 CONTEXT「节点收寄」词条——到站扫描、卸载不等于节点收寄。 |
+| 待识别实物 | `reception`（`PENDING_IDENTIFICATION` 格的身份视角） | 候选、冲突标、正式关联引用照登记转写；识别成功不回写原行（永久作业记录），关联缺席说的是「登记那一刻还没有」。 |
+| 集运单元 | `consolidation_unit` | 三相封闭词照转写；成员数照 `members` 计数，最近封签取快照末元素。 |
+| 实测 | **无登记册（本批无端点）** | 0002 的 `execution_fact` 主键含协作事项（`item_ref`），是海关协查的执行事实，不是通用实测登记——挪来供数会把协查演成日常作业。 |
+| 交接证据 | **无登记册（本批无端点）** | `collaboration_acceptance` 同理是协查承接决定；CONTEXT 的「节点侧交接证据」在存储上还没有登记格。 |
+
+**履约侧五区**对表：
+
+| 页面区 | 登记册 | 说明 |
+|---|---|---|
+| 班次 | `transport_schedule` | 行上只登身份、方向、出发时刻——执行准备与实际执行两组（开放/关闭订舱、暂停、出发、到达…）无登记格，读面不代填「未出发」一类派生状态词。 |
+| 容量池 | `capacity_pool` + `capacity_reservation` | 四量分别维护照 CONTEXT：有效容量照行，已预占/已释放/实际使用按预占子表逐维求和，不互相抵扣、不代算可用量；适用期间池级无登记格。 |
+| 权威交接结果 | `transport_handover` | 一行一判断版本，更正是新行指回前版，版本链在册面完整可见；`basis` 只在拒收/待确认在场。 |
+| 交付证明 | `effective_delivery` | 只列当前版（`is_current`）；`proof` 是证明引用不是证据内容。 |
+| 承运总单与运输舱单 | **无登记册（本批无端点）** | `transport_commission` 是委托订舱应答，不是总单/舱单；册名封闭集刻意没有这格。 |
+
+三处「无登记册」的空态都属「无处可登」，不是「登记册为空」——端点不设恒空册，页面接真时该三区保持骨架说明文案。
+
+### 阶段一交付（MCP-5）
+
+两包各四类文件：`domain/operations_query_scope.go`（本上下文作用域，租户单维授权边界）、
+`ports/catalogue_read.go`（伴生读端口，不扩写侧接口）、`adapters/postgres/review_catalogue.go`
+（真库读适配器 + 真库测试，测试内经写侧适配器插行再读回）、`adapters/http` 里
+`catalogue_intake.go` + `query_*_records.go` + `isolated_read_intake.go`（命令处理器零改动，
+`UnconfiguredIntake` 补查阅面同堵）。
+
+端点：`GET /node-operations-records?registry=reception|unidentified-item|consolidation-unit`、
+`GET /transport-fulfillment-records?registry=transport-schedule|capacity-pool|transport-handover|effective-delivery`。
+容量四量以十进制计数串转写（2^53 之上 JSON number 失真，判据同 settlementhttp minorAmount）。
