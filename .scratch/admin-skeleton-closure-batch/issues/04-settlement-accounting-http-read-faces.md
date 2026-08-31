@@ -1,7 +1,7 @@
 # 结算与核算四页读面——`adapters/http` 整个包从零建
 
 Category: feature
-Status: done——MCP-4（阶段二完成：四页接真转 live；推送由 MCP-1 统一）
+Status: resolved——MCP-4（阶段二完成：四页接真转 live，代码与完工注记落 f3f7c55；推送由 MCP-1 统一）
 Blocked by: 无
 
 本批最大一块，但**零设计裁决**：形状可逐字照抄。
@@ -249,4 +249,9 @@ Comments 里——本轮已有通道 crash 带走队列消息的先例）：
   Go 门禁。前端在共享树构建而非隔离 worktree：`node_modules` 只在共享树有（装依赖要
   read:packages PAT），而 `apps/admin-web` 下未提交改动恰好全属本票，无外来 hunk。
 - 交接旁注：本笔工作主体是上一个 MCP-4 会话掉线前留在共享树的未提交改动；本会话按
-  dead-session-salvage 惯例，对着票面裁定与 Go 源逐文件复核后带走，未照单全收。
+  dead-session-salvage 惯例，对着票面裁定与 Go 源逐文件复核后带走，未照单全收。MCP-5
+  受用户委托对同一现场做过独立审查，结论与本复核一致（build 绿、api.ts 与 Go 侧逐键
+  一致、四页符合对栏裁定），双验合流。
+- 落地 SHA：f3f7c55（f3f7c5529ee13bfbbc5f180c5e38be1e4c6e98a1），基 5aca747 上一笔，
+  含九件代码与本注记初版。Status 词按 docs/agents/issue-tracker.md 词表用 resolved
+  （初版误写 done），与本行同笔补正。
