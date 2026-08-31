@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 )
 
 // ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道:运营接入认证属
@@ -35,4 +37,21 @@ var _ PricingCatalogueIntake = UnconfiguredIntake{}
 // IntakeCatalogueQuery 不读请求。参数刻意匿名:连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
+}
+
+// 登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这两个接口，写行换不了。
+var (
+	_ PriceCardRegistrationIntake       = UnconfiguredIntake{}
+	_ ReferenceSeriesRegistrationIntake = UnconfiguredIntake{}
+)
+
+// IntakePriceCardRegistration 不读请求，判据同上。
+func (UnconfiguredIntake) IntakePriceCardRegistration(context.Context, *http.Request) (application.RegisterPriceCardCommand, error) {
+	return application.RegisterPriceCardCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeReferenceSeriesRegistration 不读请求，判据同上。
+func (UnconfiguredIntake) IntakeReferenceSeriesRegistration(context.Context, *http.Request) (application.RegisterReferenceSeriesCommand, error) {
+	return application.RegisterReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
 }
