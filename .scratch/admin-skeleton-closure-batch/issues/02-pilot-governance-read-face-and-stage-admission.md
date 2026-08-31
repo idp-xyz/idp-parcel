@@ -52,3 +52,14 @@ Blocked by: 01
 显示已接线 1/1。
 
 ## Comments
+
+- **2026-08-31 MCP-3（阶段一已交，待批 07 装配后做阶段二）**：已验 SHA `5ba4ede`（前置票 01 的
+  ADR-0083 在 `0c03b66`；基 `f3f7c55`，worktree 分支 mcp3-skeleton-closure）。键形照 ADR-0083：
+  `ports.GovernanceRegistryRead` 三口 `(ctx, limit)` 不收租户，写侧 `ListCurrent` 原样不动；
+  `GovernanceRegisters`（postgres）语句无租户条件、盘点 jsonb 不透出；`governancehttp` 从零建包
+  ——GET `/governance-registers`（`register=authority-interval|suspension|resumption` 一口三册）、
+  未配置与隔离读 Intake 一对，后者以（作用域引用，页大小）构造无租户可注。种子：seed.sh 加
+  构建行+治理步（占号广播已发），`data/governance/` 六笔——**已实跑演示库**：三区间 REGISTERED、
+  两暂停 SUSPENSION_RECORDED、一恢复 RESUMPTION_RECORDED，幂等重放 exit 0，八表非零行已成立。
+  含真库全仓绿。阶段二待办：页接真（三格出 SYN- 值、阶段评审与接管两格明示第二批未开、页面
+  明示产品实例级作用域）+ `liveIds` 加行。

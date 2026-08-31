@@ -46,3 +46,13 @@ Blocked by: 无
 回归无变化。
 
 ## Comments
+
+- **2026-08-31 MCP-3（阶段一已交，待批 07 装配后做阶段二）**：已验 SHA `694182a`（基 `f3f7c55`，
+  worktree 分支 mcp3-skeleton-closure）。计价侧：`ports.EvaluationCatalogueRead` /
+  `EvaluationCatalogue`（postgres）/ `NewQueryEvaluationsEndpoint`（GET `/pricing-evaluations`，
+  复用既有 `PricingCatalogueIntake`，不另立准入形）。网络侧：`ports.RoutePlanCatalogueRead`
+  两口 / `RoutePlanCatalogue`（`plan_applicability` 无租户列，适用性经本租户判断行的计划版本
+  LEFT JOIN，作用域由判断行承担）/ `NewQueryRoutePlansEndpoint`（GET `/route-plans`，
+  `register=initial-route|reassessment` 一口两册）。真库测试含跨租不可见、空册答空、limit
+  非正拒；含真库全仓 `go test -count=1` 绿。既有已接线四页零改动（本票只加新文件）。
+  待装配行在完工报里交 MCP-1；页面与 `liveIds` 阶段二动。
