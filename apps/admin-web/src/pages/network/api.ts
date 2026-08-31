@@ -56,3 +56,67 @@ export function listNetworkCatalog(
     `/network-catalog?family=${encodeURIComponent(family)}`,
   );
 }
+
+// ——以下为路由判断两册的检索列面(GET /route-plans,票 admin-skeleton-closure-batch/03)。
+// 两册按 ?register= 分派;计划本体、无路可走判断与改路决定住在判断快照(jsonb)内,
+// 属各判断口的权威读法,端点不透出,这里也不虚构。
+
+/** 计划适用性组;仅计划版本已有适用性登记时在场。basis/successor 逐态在场。 */
+export interface RoutePlanApplicability {
+  /** 封闭四态原词:CURRENTLY_EFFECTIVE/SUPERSEDED/LAPSED/CONCLUDED。 */
+  state: string;
+  transitionedAt: string;
+  basis?: string;
+  successor?: string;
+}
+
+export interface InitialRouteRecord {
+  customerAccountId: string;
+  shipmentRequestId: string;
+  acceptanceBaseline: string;
+  declaredParcelId: string;
+  servicePurpose: string;
+  /** 封闭两格原词:ROUTE_FORMED/NO_CURRENT_ROUTE。 */
+  conclusion: string;
+  /** 仅成计划行在场。 */
+  planVersion?: string;
+  applicability?: RoutePlanApplicability;
+  recordedAt: string;
+}
+
+export interface InitialRouteListResponseBody {
+  outcome: 'INITIAL_ROUTES_LISTED';
+  judgments: InitialRouteRecord[];
+}
+
+export interface RouteReassessmentRecord {
+  correlationId: string;
+  customerAccountId: string;
+  shipmentRequestId: string;
+  acceptanceBaseline: string;
+  declaredParcelId: string;
+  servicePurpose: string;
+  /** 封闭四格原词:STILL_APPLICABLE/PLAN_LAPSED/FIRST_PLAN_FORMED/REROUTED。 */
+  conclusion: string;
+  reviewedPlan?: string;
+  lapseBasis?: string;
+  /** 封闭三态原词;缺席即本走向不评估。 */
+  candidateState?: string;
+  /** 封闭三态原词;缺席即未评估改路。 */
+  rerouteState?: string;
+  reassessedAt: string;
+  recordedAt: string;
+}
+
+export interface RouteReassessmentListResponseBody {
+  outcome: 'ROUTE_REASSESSMENTS_LISTED';
+  reassessments: RouteReassessmentRecord[];
+}
+
+export function listInitialRoutes(): Promise<ApiResult<InitialRouteListResponseBody>> {
+  return exchangeMasterData<InitialRouteListResponseBody>('/route-plans?register=initial-route');
+}
+
+export function listRouteReassessments(): Promise<ApiResult<RouteReassessmentListResponseBody>> {
+  return exchangeMasterData<RouteReassessmentListResponseBody>('/route-plans?register=reassessment');
+}
