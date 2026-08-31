@@ -1,106 +1,151 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import {
+  StatusBadgeFor,
+  domainStatusTones,
+  type DomainStatus,
+} from '../../domain/status';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
+import {
+  listExceptionCaseRecords,
+  type ApiResult,
+  type ExceptionCaseListResponseBody,
+} from './case-api';
+import { caseLabelOf, casePhaseLabels } from './case-presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['exception-cases'];
 
 /**
- * 异常案件列表行。字段取 visibility-exception CONTEXT.md「案件身份、范围与隔离」
- * 「案件责任、响应与闭环」的原词；接线前没有任何实例数据。分诊队列另有专页
- * （governance 的 ExceptionTriagePage），本页是案件本体的查阅面。
+ * 异常案件册的列表行（GET /exception-case-records，票 admin-skeleton-closure-batch/06）。
+ *
+ * 骨架期的「当前工作条件」「严重度」「处置优先级」「响应周期」四列不在本表：案件行
+ * 在存储上刻意只落精简主生命周期（0008），那四键结构上不存在——列出来只能代填，
+ * 代填会把工作条件升格成第二套主状态（票 06 Comments 记明）。那几维登记落地后随
+ * 查询契约扩列。
  */
-export interface ExceptionCaseRow {
-  /** 案件标识。 */
-  id: string;
-  /** 根对象：每个案件必须具有一个根对象。 */
-  rootObject: string;
-  /**
-   * 影响范围（版本化）：明确覆盖的受影响对象集合。范围扩大、缩小、排除或拆出
-   * 都保留依据与历史；成员、装载或同批关系不使对象动态、隐式继承案件。
-   */
-  impactScope: string;
-  /** 主状态：待响应、处理中、已关闭的精简主生命周期。 */
-  mainStatus: string;
-  /**
-   * 当前工作条件：等待客户、合作伙伴、监管或内部团队，以及监控中、已升级等。
-   * 它们作为工作条件和下一行动管理，不扩展为互斥主状态——因此与主状态分列。
-   */
-  workCondition: string;
-  /** 严重度：描述已经造成或可能造成的影响，不表示处置顺序，也不产生执行限制。 */
-  severity: string;
-  /** 处置优先级：综合严重度、干预窗口、客户承诺、影响范围和可恢复性，驱动队列、时限和升级。 */
-  priority: string;
-  /** 案件责任团队与当前处理人：每个开放案件始终必须有一个内部责任团队；团队不是原因方或赔偿责任方。 */
-  responsibleTeam: string;
-  /** 响应周期：首次响应、下一行动、客户更新与解决目标的当前时限版本；转派与归并不重置原周期。 */
-  responseCycle: string;
-  /**
-   * 关闭结论：含受控归并的「已归并」（关联主案件，原编号与绩效历史不删除）；
-   * 受控重开形成新的响应周期并保留原周期。
-   */
-  closureConclusion: string;
+interface CaseRow {
+  key: string;
+  values: Readonly<Record<string, string>>;
 }
 
-// 主状态与当前工作条件分列、严重度与处置优先级分列，都是 CONTEXT 明文的
-// 「分别」关系；折成一列就把工作条件升格成了主状态、把影响混进了紧迫性。
-const columns: ListColumn<ExceptionCaseRow>[] = [
-  { id: 'id', header: '案件标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'root', header: '根对象', render: (row) => row.rootObject },
-  { id: 'scope', header: '影响范围（版本化）', render: (row) => row.impactScope },
-  { id: 'status', header: '主状态', align: 'center', className: 'w-[80px]', render: (row) => row.mainStatus },
-  { id: 'condition', header: '当前工作条件', render: (row) => row.workCondition },
-  { id: 'severity', header: '严重度', align: 'center', className: 'w-[72px]', render: (row) => row.severity },
-  { id: 'priority', header: '处置优先级', align: 'center', className: 'w-[88px]', render: (row) => row.priority },
-  { id: 'team', header: '责任团队 / 处理人', render: (row) => row.responsibleTeam },
-  { id: 'cycle', header: '响应周期', render: (row) => row.responseCycle },
-  { id: 'closure', header: '关闭结论', render: (row) => row.closureConclusion },
+// 主状态词（待响应/处理中/已关闭）与共享词表同词，按词表着色；词表没收录的词
+// 原样示文，不猜色调。
+function toneWordOrText(value: string) {
+  return value in domainStatusTones ? (
+    <StatusBadgeFor status={value as DomainStatus} />
+  ) : (
+    value
+  );
+}
+
+function col(
+  id: string,
+  header: string,
+  options?: {
+    mono?: boolean;
+    align?: 'left' | 'center' | 'right';
+    className?: string;
+    toneWord?: boolean;
+  },
+): ListColumn<CaseRow> {
+  return {
+    id,
+    header,
+    align: options?.align,
+    className: options?.className,
+    render: (row) => {
+      const value = row.values[id] ?? '—';
+      if (options?.toneWord) return toneWordOrText(value);
+      if (options?.mono) return <span className="font-mono text-[12px]">{value}</span>;
+      return value;
+    },
+  };
+}
+
+// 关闭结论只随已关闭在场（0008 成对约束）；归并指向在场即受控归并——被并入的
+// 案件不从册面消失，原编号照列（归并是登记事实不是删除）。
+const columns: ListColumn<CaseRow>[] = [
+  col('caseId', '案件标识', { mono: true }),
+  col('rootParcel', '根对象', { mono: true }),
+  col('impactScope', '影响范围', { mono: true }),
+  col('phase', '主状态', { toneWord: true, className: 'w-[96px]' }),
+  col('responsibleTeam', '责任团队', { mono: true }),
+  col('establishedAt', '建立时间', { mono: true }),
+  col('firstResponse', '首次响应', { mono: true }),
+  col('closedAt', '关闭时间', { mono: true }),
+  col('conclusion', '关闭结论', { mono: true }),
+  col('mergedInto', '归并指向', { mono: true }),
 ];
 
 /**
  * 异常案件（visibility-exception）。行对象是围绕同一因果链和处置范围建立的
- * 业务案件。案件关闭不修改源事实、不解除来源限制；重开不自动重开委托、
- * 路由计划、关务案件、限制、面单交易或财务事项。
+ * 业务案件。案件关闭不修改源事实、不解除来源限制；查阅不推进阶段、不合并、
+ * 不关闭——那些是案件命令面的判断，本页只消费存储读面。
  */
 export function ExceptionCasesPage() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<ExceptionCaseListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listExceptionCaseRecords().then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const body = answer?.kind === 'outcome' ? answer.body : null;
+  const rows: CaseRow[] = body
+    ? body.cases.map((record) => ({
+        key: `case:${record.caseId}`,
+        values: {
+          caseId: record.caseId,
+          rootParcel: record.rootParcel,
+          impactScope: record.impactScope,
+          phase: caseLabelOf(casePhaseLabels, record.phase),
+          responsibleTeam: record.responsibleTeam,
+          establishedAt: formatInstant(record.establishedAt),
+          firstResponse: record.firstResponse ? formatInstant(record.firstResponse) : '',
+          closedAt: record.closedAt ? formatInstant(record.closedAt) : '',
+          conclusion: record.conclusion ?? '',
+          mergedInto: record.mergedInto ?? '',
+        },
+      }))
+    : [];
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<ExceptionCaseRow>
+    <ListPageTemplate<CaseRow>
       title={info.title}
       // 页头携带归并与重开的共同底线：两者都以追加表达，不删除历史。
-      description={`${info.owner}——受控归并以「已归并」关闭并关联主案件，受控重开形成新响应周期，均不删除历史`}
-      // 筛选维度（接线时实装进 filters 槽）：主状态（待响应/处理中/已关闭，精简主
-      // 生命周期封闭三格）、当前工作条件（与主状态分立，不升格）、严重度、处置
-      // 优先级、责任团队。案件标识与根对象经搜索。
+      description={`${info.owner}——受控归并以「已归并」关闭并关联主案件（原编号照列），均不删除历史；严重度、优先级与工作条件在案件行上无登记格，本表不代填`}
       search={{
         value: search,
         onChange: setSearch,
         placeholder: '搜索案件标识 / 根对象',
       }}
+      filterSummary={body ? `异常案件 ${visibleRows.length} 行` : undefined}
       columns={columns}
-      // 接线前无实例：行数据与总数届时由 visibility-exception 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '追踪与异常模块尚未接线',
-        description: '异常案件的查阅读口尚未建立（已接线的 VE 端点是受理与视图面：索赔受理、客户追踪视图），本页不发请求、不含未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '异常案件查询端点建成并经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /exception-case-records',
+        emptyTitle: '当前租户尚无异常案件',
+        emptyDescription:
+          '读取入口已配置，登记册为空——案件由信号、分诊、建案的编排形成，事实在接入渠道墙后面，空册是预期不是缺陷。',
+      })}
     />
   );
 }
