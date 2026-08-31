@@ -32,8 +32,18 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var _ ReceptionIntake = UnconfiguredIntake{}
+var _ CatalogueQueryIntake = UnconfiguredIntake{}
 
 // IntakeReception 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeReception(context.Context, *http.Request) (application.ReceiveDeliveredUnitCommand, error) {
 	return application.ReceiveDeliveredUnitCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeCatalogueQuery 同 IntakeReception：不读请求，只答未配置。命令面与查阅面
+// 同堵——未配置是渠道这一层的状态，不是某个端点的状态，只堵命令就是给查阅留了条
+// 无渠道也能进的路（判据同 tfhttp UnconfiguredIntake）。未登记前不铸造任何作用域
+// （ADR-0077 Decision 三）。隔离读准入启用时由装配点换成
+// IsolatedOperationsReadIntake，本类型在查阅面随之退场，命令面不受影响（ADR-0078）。
+func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
+	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }
