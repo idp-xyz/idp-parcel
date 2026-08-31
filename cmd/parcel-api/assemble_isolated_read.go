@@ -7,11 +7,13 @@ import (
 	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
+	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
 
@@ -42,15 +44,17 @@ const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
 // （「分设只会让装配点看起来能只配一半」，与各包 Intake 注释同句）。nil 指针表示
 // 未启用——assembleBusinessEndpoints 对 nil 的处理与 ADR-0078 之前逐字节同形。
 type isolatedReadIntakes struct {
-	shipmentRequestViews shipmenthttp.ShipmentRequestViewsIntake
-	trackingProjections  visibilityhttp.OperationsTrackingIntake
-	pricingCatalogue     pricinghttp.PricingCatalogueIntake
-	networkCatalog       networkhttp.CatalogueQueryIntake
-	complianceRules      customshttp.CatalogueQueryIntake
-	commercialCatalogue  commercialhttp.CommercialCatalogueIntake
-	collectionCatalogue  collectionhttp.CatalogueQueryIntake
-	settlementCatalogue  settlementhttp.CatalogueQueryIntake
-	governanceRegisters  governancehttp.RegistryQueryIntake
+	shipmentRequestViews    shipmenthttp.ShipmentRequestViewsIntake
+	nodeOperationsCatalogue nodeopshttp.CatalogueQueryIntake
+	transportCatalogue      tfhttp.CatalogueQueryIntake
+	trackingProjections     visibilityhttp.OperationsTrackingIntake
+	pricingCatalogue        pricinghttp.PricingCatalogueIntake
+	networkCatalog          networkhttp.CatalogueQueryIntake
+	complianceRules         customshttp.CatalogueQueryIntake
+	commercialCatalogue     commercialhttp.CommercialCatalogueIntake
+	collectionCatalogue     collectionhttp.CatalogueQueryIntake
+	settlementCatalogue     settlementhttp.CatalogueQueryIntake
+	governanceRegisters     governancehttp.RegistryQueryIntake
 }
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
@@ -73,6 +77,16 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 
 	shipmentViews, err := shipmenthttp.NewIsolatedOperationsReadIntake(
 		isolatedReadScopeReference, tenant, []string{isolatedReadCustomerAccount}, isolatedReadLimit)
+	if err != nil {
+		return nil, err
+	}
+	nodeOperationsCatalogue, err := nodeopshttp.NewIsolatedOperationsReadIntake(
+		isolatedReadScopeReference, tenant, isolatedReadLimit)
+	if err != nil {
+		return nil, err
+	}
+	transportCatalogue, err := tfhttp.NewIsolatedOperationsReadIntake(
+		isolatedReadScopeReference, tenant, isolatedReadLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -123,14 +137,16 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	}
 
 	return &isolatedReadIntakes{
-		shipmentRequestViews: shipmentViews,
-		trackingProjections:  trackingProjections,
-		pricingCatalogue:     pricingCatalogue,
-		networkCatalog:       networkCatalog,
-		complianceRules:      complianceRules,
-		commercialCatalogue:  commercialCatalogue,
-		collectionCatalogue:  collectionCatalogue,
-		settlementCatalogue:  settlementCatalogue,
-		governanceRegisters:  governanceRegisters,
+		shipmentRequestViews:    shipmentViews,
+		nodeOperationsCatalogue: nodeOperationsCatalogue,
+		transportCatalogue:      transportCatalogue,
+		trackingProjections:     trackingProjections,
+		pricingCatalogue:        pricingCatalogue,
+		networkCatalog:          networkCatalog,
+		complianceRules:         complianceRules,
+		commercialCatalogue:     commercialCatalogue,
+		collectionCatalogue:     collectionCatalogue,
+		settlementCatalogue:     settlementCatalogue,
+		governanceRegisters:     governanceRegisters,
 	}, nil
 }

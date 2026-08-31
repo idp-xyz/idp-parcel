@@ -54,7 +54,9 @@ func assembleBusinessEndpoints(
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
 	cancellation shipmenthttp.CancellationHandler,
 	reception nodeopshttp.ReceptionHandler,
+	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
 	delivery tfhttp.DeliveryHandler,
+	transportFulfillmentRecords tfhttp.ReviewCatalogueReader,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -86,6 +88,8 @@ func assembleBusinessEndpoints(
 	// ADR-0078 之前逐字节同形。启用时也只有这组变量换值——命令面与客户查阅面
 	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
+	nodeOperationsCatalogueIntake := nodeopshttp.CatalogueQueryIntake(nodeopshttp.UnconfiguredIntake{})
+	transportCatalogueIntake := tfhttp.CatalogueQueryIntake(tfhttp.UnconfiguredIntake{})
 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
 	pricingCatalogueIntake := pricinghttp.PricingCatalogueIntake(pricinghttp.UnconfiguredIntake{})
 	networkCatalogIntake := networkhttp.CatalogueQueryIntake(networkhttp.UnconfiguredIntake{})
@@ -96,6 +100,8 @@ func assembleBusinessEndpoints(
 	governanceRegistryIntake := governancehttp.RegistryQueryIntake(governancehttp.UnconfiguredIntake{})
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
+		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
+		transportCatalogueIntake = isolatedRead.transportCatalogue
 		trackingProjectionsIntake = isolatedRead.trackingProjections
 		pricingCatalogueIntake = isolatedRead.pricingCatalogue
 		networkCatalogIntake = isolatedRead.networkCatalog
@@ -112,8 +118,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
+		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
+		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，
+		// 用的是字面量 UnconfiguredIntake{}；查阅行走本上下文自己的 Intake 变量，
+		// 隔离读准入（ADR-0078）启用时只换查阅行，命令行换不了。
+		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(trackingProjectionsIntake, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},

@@ -12,6 +12,8 @@ import (
 	networkdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	networkports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
+	nodeopsdomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
+	nodeopsports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -23,6 +25,8 @@ import (
 	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	settlementports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	visibilitydomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 	visibilityports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
@@ -77,6 +81,35 @@ func (unwiredReception) Handle(
 	return nodeopsapp.ReceiveDeliveredUnitResult{}, errOrchestrationNotWired
 }
 
+// unwiredNodeOperationsRecords 是节点作业查阅页三册读口的占位，方法表与
+// nodeopsports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
+// 独立成形的理由同 unwiredPricingEvaluations：并进命令占位会盖不住「册接错适配器」。
+type unwiredNodeOperationsRecords struct{}
+
+func (unwiredNodeOperationsRecords) ListReceptions(
+	context.Context,
+	nodeopsdomain.TenantID,
+	int,
+) ([]nodeopsports.ReceptionCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNodeOperationsRecords) ListUnidentifiedItems(
+	context.Context,
+	nodeopsdomain.TenantID,
+	int,
+) ([]nodeopsports.UnidentifiedItemCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNodeOperationsRecords) ListConsolidationUnits(
+	context.Context,
+	nodeopsdomain.TenantID,
+	int,
+) ([]nodeopsports.ConsolidationUnitCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredDelivery 一个类型顶两个端点：首登与更正共用 DeliveryHandler 这一个接口。
 type unwiredDelivery struct{}
 
@@ -92,6 +125,42 @@ func (unwiredDelivery) Correct(
 	tfapp.CorrectDeliveryProofCommand,
 ) (tfapp.RegisterEffectiveDeliveryResult, error) {
 	return tfapp.RegisterEffectiveDeliveryResult{}, errOrchestrationNotWired
+}
+
+// unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
+// tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
+type unwiredTransportFulfillmentRecords struct{}
+
+func (unwiredTransportFulfillmentRecords) ListTransportSchedules(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.TransportScheduleCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredTransportFulfillmentRecords) ListCapacityPools(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.CapacityPoolCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredTransportFulfillmentRecords) ListTransportHandovers(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.TransportHandoverCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredTransportFulfillmentRecords) ListEffectiveDeliveries(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.EffectiveDeliveryCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
 }
 
 // unwiredTrackingViews 只被装配测试使用：生产装配（main）把 VE 真库读适配器交进装配

@@ -55,7 +55,8 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
 		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil ||
-		intakes.governanceRegisters == nil {
+		intakes.governanceRegisters == nil || intakes.nodeOperationsCatalogue == nil ||
+		intakes.transportCatalogue == nil {
 		t.Fatalf("some context intake is nil: %+v", intakes)
 	}
 }
@@ -70,6 +71,8 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 // 条进来的（票 admin-web-page-wiring-frontier/01）。
 var isolatedReadAdmittedPatterns = map[string]bool{
 	"/shipment-request-views":              true,
+	"/node-operations-records":             true,
+	"/transport-fulfillment-records":       true,
 	"/tracking-projections":                true,
 	"/pricing-price-cards":                 true,
 	"/pricing-reference-series":            true,

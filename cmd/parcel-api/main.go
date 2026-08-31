@@ -13,6 +13,7 @@ import (
 	crpostgres "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
@@ -20,6 +21,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 )
 
@@ -180,6 +182,17 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 节点作业与运输履约查阅页读面（票 admin-skeleton-closure-batch/05）：只是查阅
+	// 读口，与上面 buildReceptionOrchestration/buildDeliveryOrchestration 构造的命令
+	// 编排互不相知——读面不是编排，查阅不触发判断、派生或披露。
+	nodeOperationsRecords, err := nopostgres.NewReviewCatalogue(db)
+	if err != nil {
+		return err
+	}
+	transportFulfillmentRecords, err := tfpostgres.NewReviewCatalogue(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -189,7 +202,9 @@ func run(logger *slog.Logger) error {
 			requestViews,
 			cancellation,
 			reception,
+			nodeOperationsRecords,
 			delivery,
+			transportFulfillmentRecords,
 			trackingViews,
 			projectionViews,
 			claims,
