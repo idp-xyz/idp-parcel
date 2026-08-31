@@ -1,0 +1,11 @@
+{
+  "suspensionId": "SYN-GOV-SUS-0001",
+  "triggerSource": "SYN-TRIGGER/shadow-diff-alarm",
+  "basis": "SYN-BASIS/stage-review-no-go-r8",
+  "evidence": "SYN-EVIDENCE/gov-incident-260810",
+  "scope": "SYN-PILOT-SCOPE/routing@v3",
+  "executedBy": "SYN-GOV-OPERATOR-01",
+  "occurredAt": "2026-08-10T02:00:00Z",
+  "effectiveAt": "2026-08-10T03:00:00Z",
+  "inTransitNote": "SYN-NOTE/在途对象维持原权威处理，不迁移不回退（合成演示）"
+}

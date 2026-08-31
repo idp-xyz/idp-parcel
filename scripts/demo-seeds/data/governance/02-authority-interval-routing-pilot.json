@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/routing@v3",
+  "capability": "SYN-CAP/route-planning",
+  "factKind": "SYN-FACT/route-plan",
+  "authority": "SYN-AUTH/pilot-routing-engine",
+  "fromAt": "2026-06-01T00:00:00Z"
+}

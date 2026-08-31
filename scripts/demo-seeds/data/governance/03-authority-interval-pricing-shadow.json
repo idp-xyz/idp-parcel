@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/pricing@v1",
+  "capability": "SYN-CAP/price-evaluation",
+  "factKind": "SYN-FACT/price-evaluation",
+  "authority": "SYN-AUTH/shadow-pricing-engine",
+  "fromAt": "2026-03-01T00:00:00Z"
+}

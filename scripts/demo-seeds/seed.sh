@@ -33,6 +33,7 @@ go build -o "$BIN/" \
   ./cmd/parcel-commercial \
   ./cmd/parcel-ve-register \
   ./cmd/parcel-collection-register \
+  ./cmd/parcel-governance-register \
   ./scripts/demo-seeds/migrate
 
 echo "== 1/7 施加迁移计划（${RESET_FLAG:-不重置}） =="
@@ -139,4 +140,16 @@ echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令�
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/09-posting-shortfall.json"
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/10-posting-allocation-payable.json"
 
-echo "种子灌入完成：租户 SYN-TENANT-01，六上下文全部落库。"
+echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复；票 admin-skeleton-closure-batch/02） =="
+# 治理是产品级机制，登记无租户维（ADR-0083）；登记走受控 CLI（票 syn-wall-door-audit/12），
+# 首批只开三类——阶段评审与接管第二批，故 stage-admission 页那两格如实说明未开，不造数。
+# 权威区间讲一次交接：旧引擎区间已闭、试点引擎接棒开放区间，相邻不重叠（冲突预检半开区间语义）。
+# 暂停两笔一笔已恢复：恢复四件（解除证据、一致性核对、在途盘点、决定人）由领域门把守，缺一不可。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/01-authority-interval-routing-legacy.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/02-authority-interval-routing-pilot.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/03-authority-interval-pricing-shadow.json"
+"$BIN/parcel-governance-register" suspend -input "$SEEDS/governance/04-suspension-routing-scope.json"
+"$BIN/parcel-governance-register" resume -input "$SEEDS/governance/05-resumption-routing-scope.json"
+"$BIN/parcel-governance-register" suspend -input "$SEEDS/governance/06-suspension-pricing-scope.json"
+
+echo "种子灌入完成：租户 SYN-TENANT-01，七上下文全部落库。"

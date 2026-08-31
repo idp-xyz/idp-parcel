@@ -1,0 +1,21 @@
+{
+  "suspensionId": "SYN-GOV-SUS-0001",
+  "releaseEvidence": "SYN-EVIDENCE/release-260812",
+  "consistencyCheck": "SYN-CHECK/route-ledger-consistent-260812",
+  "inventory": {
+    "takenAt": "2026-08-12T01:00:00Z",
+    "entries": [
+      {
+        "objectIdentity": "SYN-PARCEL-0001",
+        "currentFacts": "SYN-FACT-REF/route-plan-0001-v1",
+        "currentAuthority": "SYN-AUTH/pilot-routing-engine",
+        "responsibleParty": "SYN-GOV-OPERATOR-01",
+        "nextAction": "SYN-ACTION/hold-until-resume",
+        "reviewBy": "2026-08-13T00:00:00Z"
+      }
+    ]
+  },
+  "decidedBy": "SYN-GOV-OPERATOR-01",
+  "decidedAt": "2026-08-12T02:00:00Z",
+  "effectiveAt": "2026-08-12T03:00:00Z"
+}

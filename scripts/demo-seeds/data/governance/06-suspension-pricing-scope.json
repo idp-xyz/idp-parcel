@@ -1,0 +1,11 @@
+{
+  "suspensionId": "SYN-GOV-SUS-0002",
+  "triggerSource": "SYN-TRIGGER/reference-series-gap",
+  "basis": "SYN-BASIS/fuel-series-stale-week",
+  "evidence": "SYN-EVIDENCE/gov-incident-260820",
+  "scope": "SYN-PILOT-SCOPE/pricing@v1",
+  "executedBy": "SYN-GOV-OPERATOR-02",
+  "occurredAt": "2026-08-20T06:00:00Z",
+  "effectiveAt": "2026-08-20T07:00:00Z",
+  "inTransitNote": "SYN-NOTE/在途评价按已锁版本清单继续，不产生新准入（合成演示）"
+}
