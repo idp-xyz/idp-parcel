@@ -125,6 +125,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'tracking-judgment-rules',
   'disclosure-policies',
   'claim-prerequisites',
+  'cod-ledger',
 ]);
 
 /**
