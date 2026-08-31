@@ -8,6 +8,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
+	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -60,7 +61,9 @@ func assembleBusinessEndpoints(
 	results customshttp.ResultHandler,
 	priceCards pricinghttp.PriceCardCatalogueReader,
 	referenceSeries pricinghttp.ReferenceSeriesCatalogueReader,
+	pricingEvaluations pricinghttp.EvaluationCatalogueReader,
 	networkCatalog networkhttp.OperationsCatalogReader,
+	routePlans networkhttp.RoutePlanCatalogueReader,
 	complianceRules customshttp.RuleCatalogueReader,
 	caseRegisters customshttp.CaseRegisterCatalogueReader,
 	gateConditions customshttp.GateConditionCatalogueReader,
@@ -76,6 +79,7 @@ func assembleBusinessEndpoints(
 	settlementStatements settlementhttp.StatementCatalogueReader,
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader,
 	settlementOperatingResults settlementhttp.OperatingCatalogueReader,
+	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：isolatedRead 为 nil 时，下面这组变量全取未配置即拒，整份装配与
@@ -89,6 +93,7 @@ func assembleBusinessEndpoints(
 	commercialCatalogueIntake := commercialhttp.CommercialCatalogueIntake(commercialhttp.UnconfiguredIntake{})
 	collectionCatalogueIntake := collectionhttp.CatalogueQueryIntake(collectionhttp.UnconfiguredIntake{})
 	settlementCatalogueIntake := settlementhttp.CatalogueQueryIntake(settlementhttp.UnconfiguredIntake{})
+	governanceRegistryIntake := governancehttp.RegistryQueryIntake(governancehttp.UnconfiguredIntake{})
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 		trackingProjectionsIntake = isolatedRead.trackingProjections
@@ -98,6 +103,7 @@ func assembleBusinessEndpoints(
 		commercialCatalogueIntake = isolatedRead.commercialCatalogue
 		collectionCatalogueIntake = isolatedRead.collectionCatalogue
 		settlementCatalogueIntake = isolatedRead.settlementCatalogue
+		governanceRegistryIntake = isolatedRead.governanceRegisters
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -114,7 +120,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, results)},
 		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, priceCards)},
 		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
+		// 评价册与路由判断两册（票 admin-skeleton-closure-batch/03）：业务事实册的
+		// 查阅与目录查阅同属租户内运营读面，各随本上下文既有的 Intake 变量换值，
+		// 不为事实册另立第二种准入形（裁决在各端点构造函数注释）。
+		{Pattern: "/pricing-evaluations", Handler: pricinghttp.NewQueryEvaluationsEndpoint(pricingCatalogueIntake, pricingEvaluations)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
+		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
 		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时它们随该变量一起换值，
@@ -157,5 +168,9 @@ func assembleBusinessEndpoints(
 		{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, settlementStatements)},
 		{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, settlementFundsApplications)},
 		{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, settlementOperatingResults)},
+		// 治理登记册三册一口（票 admin-skeleton-closure-batch/02）：治理无租户维是
+		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形——隔离读
+		// 启用与 SYN- 门禁同走一个开关，但开关值里的合成租户不进治理作用域。
+		{Pattern: "/governance-registers", Handler: governancehttp.NewQueryGovernanceRegistersEndpoint(governanceRegistryIntake, governanceRegisters)},
 	}
 }

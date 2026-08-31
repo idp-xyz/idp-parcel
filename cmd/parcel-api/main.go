@@ -16,6 +16,7 @@ import (
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	govpg "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
@@ -113,7 +114,17 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 评价册与路由判断两册是业务事实册的查阅面（票 admin-skeleton-closure-batch/03）：
+	// 与目录读面同上下文同库，但行形状归各自用例，适配器各自成形。
+	pricingEvaluations, err := pppostgres.NewEvaluationCatalogue(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		return err
+	}
+	routePlans, err := nrpostgres.NewRoutePlanCatalogue(db)
 	if err != nil {
 		return err
 	}
@@ -163,6 +174,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 治理登记册读面（票 admin-skeleton-closure-batch/02）：读口无租户参是设计
+	// （ADR-0083），适配器读的就是治理登记 CLI 写入的那三张表。
+	governanceRegisters, err := govpg.NewGovernanceRegisters(db)
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr: address,
@@ -179,7 +196,9 @@ func run(logger *slog.Logger) error {
 			results,
 			pricingCatalog,
 			pricingCatalog,
+			pricingEvaluations,
 			networkCatalog,
+			routePlans,
 			complianceRules,
 			caseRegisters,
 			gateConditions,
@@ -195,6 +214,7 @@ func run(logger *slog.Logger) error {
 			settlementStatements,
 			settlementFundsApplications,
 			settlementOperatingResults,
+			governanceRegisters,
 			isolatedRead,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,

@@ -35,7 +35,10 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/customs/external-results":                         {method: http.MethodPost, target: "/customs/external-results"},
 	"/pricing-price-cards":                              {method: http.MethodGet, target: "/pricing-price-cards"},
 	"/pricing-reference-series":                         {method: http.MethodGet, target: "/pricing-reference-series"},
+	"/pricing-evaluations":                              {method: http.MethodGet, target: "/pricing-evaluations"},
 	"/network-catalog":                                  {method: http.MethodGet, target: "/network-catalog?family=node"},
+	"/route-plans":                                      {method: http.MethodGet, target: "/route-plans?register=initial-route"},
+	"/governance-registers":                             {method: http.MethodGet, target: "/governance-registers?register=authority-interval"},
 	"/customs-compliance-rules":                         {method: http.MethodGet, target: "/customs-compliance-rules?registry=case-requirement"},
 	"/customs-case-registers":                           {method: http.MethodGet, target: "/customs-case-registers?registry=readiness"},
 	"/customs-gate-conditions":                          {method: http.MethodGet, target: "/customs-gate-conditions"},
@@ -151,7 +154,9 @@ func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpa
 		unwiredResults{},
 		unwiredPricingCatalogue{},
 		unwiredPricingCatalogue{},
+		unwiredPricingEvaluations{},
 		unwiredNetworkCatalogue{},
+		unwiredRoutePlans{},
 		unwiredComplianceRules{},
 		unwiredCaseRegisters{},
 		unwiredGateConditions{},
@@ -167,6 +172,7 @@ func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpa
 		unwiredSettlementStatements{},
 		unwiredSettlementFundsApplications{},
 		unwiredSettlementOperatingResults{},
+		unwiredGovernanceRegisters{},
 		isolatedRead,
 	)
 }

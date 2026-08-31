@@ -19,6 +19,7 @@ import (
 	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	govports "go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	settlementports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -178,6 +179,20 @@ func (unwiredPricingCatalogue) ListReferenceSeries(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredPricingEvaluations 是评价册列表读口的占位，方法表与
+// pricingports.EvaluationCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/03）。
+// 不并进 unwiredPricingCatalogue：生产装配点上评价册是独立适配器，并成一个会让装配
+// 测试盖不住「这本册接错了适配器」这一格（判据同结算四占位）。
+type unwiredPricingEvaluations struct{}
+
+func (unwiredPricingEvaluations) ListEvaluations(
+	context.Context,
+	pricingdomain.TenantID,
+	int,
+) ([]pricingports.EvaluationCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredNetworkCatalogue struct{}
 
 func (unwiredNetworkCatalogue) ListNodeVersions(
@@ -233,6 +248,53 @@ func (unwiredNetworkCatalogue) ListRouteStrategyVersions(
 	networkdomain.TenantID,
 	int,
 ) ([]networkports.RouteStrategyDefinitionVersion, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredRoutePlans 是路由判断两册列表读口的占位，方法表与
+// networkports.RoutePlanCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/03）。
+// 独立成形的理由同 unwiredPricingEvaluations。
+type unwiredRoutePlans struct{}
+
+func (unwiredRoutePlans) ListInitialRoutes(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.InitialRouteCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredRoutePlans) ListRouteReassessments(
+	context.Context,
+	networkdomain.TenantID,
+	int,
+) ([]networkports.RouteReassessmentCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredGovernanceRegisters 是治理登记册读口的占位，方法表与
+// govports.GovernanceRegistryRead 逐一对上（票 admin-skeleton-closure-batch/02）。
+// 方法无租户参不是漏写：治理登记册以对象范围四维为身份，无租户维（ADR-0083）。
+type unwiredGovernanceRegisters struct{}
+
+func (unwiredGovernanceRegisters) ListAuthorityIntervals(
+	context.Context,
+	int,
+) ([]govports.AuthorityIntervalRegistryRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredGovernanceRegisters) ListSuspensions(
+	context.Context,
+	int,
+) ([]govports.SuspensionRegistryRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredGovernanceRegisters) ListResumptions(
+	context.Context,
+	int,
+) ([]govports.ResumptionRegistryRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

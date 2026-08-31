@@ -54,7 +54,8 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 	if intakes.shipmentRequestViews == nil || intakes.trackingProjections == nil ||
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
-		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil {
+		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil ||
+		intakes.governanceRegisters == nil {
 		t.Fatalf("some context intake is nil: %+v", intakes)
 	}
 }
@@ -72,7 +73,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/tracking-projections":                true,
 	"/pricing-price-cards":                 true,
 	"/pricing-reference-series":            true,
+	"/pricing-evaluations":                 true,
 	"/network-catalog":                     true,
+	"/route-plans":                         true,
+	"/governance-registers":                true,
 	"/customs-compliance-rules":            true,
 	"/customs-case-registers":              true,
 	"/customs-gate-conditions":             true,

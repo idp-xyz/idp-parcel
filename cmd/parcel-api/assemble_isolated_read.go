@@ -10,6 +10,7 @@ import (
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
+	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 )
@@ -49,6 +50,7 @@ type isolatedReadIntakes struct {
 	commercialCatalogue  commercialhttp.CommercialCatalogueIntake
 	collectionCatalogue  collectionhttp.CatalogueQueryIntake
 	settlementCatalogue  settlementhttp.CatalogueQueryIntake
+	governanceRegisters  governancehttp.RegistryQueryIntake
 }
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
@@ -111,6 +113,14 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	if err != nil {
 		return nil, err
 	}
+	// 治理格不收合成租户：治理登记册无租户维是设计（ADR-0083 Decision 三）——同一个
+	// 开关决定启用与 SYN- 门禁，但开关值只作启用凭据，不进治理作用域。把 tenant 传进去
+	// 就是给一张没有租户列的表造一个过滤维。
+	governanceRegisters, err := governancehttp.NewIsolatedOperationsReadIntake(
+		isolatedReadScopeReference, isolatedReadLimit)
+	if err != nil {
+		return nil, err
+	}
 
 	return &isolatedReadIntakes{
 		shipmentRequestViews: shipmentViews,
@@ -121,5 +131,6 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 		commercialCatalogue:  commercialCatalogue,
 		collectionCatalogue:  collectionCatalogue,
 		settlementCatalogue:  settlementCatalogue,
+		governanceRegisters:  governanceRegisters,
 	}, nil
 }
