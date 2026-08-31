@@ -122,6 +122,16 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 价卡与序列登记写面编排（ADR-0085，票 admin-write-faces/01）：接真不等墙降——
+	// 未配置 Intake 拒在编排之前，墙降那笔工作在装配点换的只是 Intake。
+	priceCardRegistration, err := buildPriceCardRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
+	referenceSeriesRegistration, err := buildReferenceSeriesRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -218,6 +228,8 @@ func run(logger *slog.Logger) error {
 			pricingCatalog,
 			pricingCatalog,
 			pricingEvaluations,
+			priceCardRegistration,
+			referenceSeriesRegistration,
 			networkCatalog,
 			routePlans,
 			complianceRules,

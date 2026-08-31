@@ -107,6 +107,23 @@ Status: in-progress
 - 2026-08-31 · MCP-3：用户随后指示「直接开干」→ 裁决落 ADR-0085，本票 needs-triage →
   in-progress，切片 01a 上下文侧完成：`gofmt` 零信号、`go build`/`go vet` 计价与 CLI 包
   零信号、`go test -count=1 ./internal/parcelpricing/adapters/http/` 全绿（纯传输层，
-  不含真库用例）。交付分支 `t3-admin-write-faces`（隔离 worktree，SHA 见频道交活消息）；
+  不含真库用例）。  交付分支 `t3-admin-write-faces`（隔离 worktree，SHA 见频道交活消息）；
   README 侧只带 0085 自己那一行——0084 行是 MCP-5 未提交在途改动，按「add 前逐块核」
   不卷带。
+- 2026-08-31 · MCP-3：切片 01a 已验 SHA = `2ab7f89`（基 `4b35815`，含 `.go` 改动、无
+  `.sql`）。提交态全量验证：`gofmt -l` 零输出、`go build ./...`/`go vet ./...` 零信号、
+  `go test -p 1 -count=1 ./...` 88 包全 ok 且**含真库**（单跑
+  `TestFreezeScopesAreInvisibleToEachOther` 带 `-v` 为 PASS 非 SKIP，DSN 指
+  `idp-parcel-postgres-gate`）。worktree 与分支指针保留待集成核对。装配行已交 MCP-1
+  接线（建议两行见「实施切片」），01b 等装配广播。
+- 2026-08-31 · MCP-1：装配落地。`2ab7f89` 快进合入主线（九件与共享树逐件哈希核对：七件
+  字节同，票面与 README 树版为超集按行作者归并——0085 行随提交入库，0084 行保持 MCP-5
+  未提交在途；本票面「已验 SHA」注记随本装配笔入库，内容作者 MCP-3）。装配笔接线两行：
+  `POST /pricing-price-card-registrations`、`POST /pricing-reference-series-registrations`，
+  第二参照建议接真——登记用例 + `db.Transactor()` 事务包装，形照登记 CLI 的 execute
+  （`assemble_pricing_registration.go`，两包装不合并，判据见该文件）；unwired 两桩与
+  探针两条随行；隔离读放行表零改动——写行不入格，启用态命令行仍 403 由
+  `TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines` 在进程真路由上钉。真库装配
+  证据：`TestTheWiredPricingRegistrationsRecordAgainstARealDatabase` 单跑 PASS 非 SKIP
+  （首登 RECORDED、同内容重放 ALREADY_ON_REGISTER——重放读得到首行即证首登事务提交）。
+  提交态验证见频道装配广播。**01b 可开工**：`liveIds` 你自己那行照批例自己加。

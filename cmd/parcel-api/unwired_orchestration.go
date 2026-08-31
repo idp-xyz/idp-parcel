@@ -14,6 +14,7 @@ import (
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodeopsdomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	nodeopsports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	pricingports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -260,6 +261,27 @@ func (unwiredPricingEvaluations) ListEvaluations(
 	int,
 ) ([]pricingports.EvaluationCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
+}
+
+// 价卡与序列登记两格的命令占位（ADR-0085，票 admin-write-faces/01）：与其余命令占位
+// 同形——不交回零值业务答案，稳定错误让「越过了 Intake」在传输层可观察为
+// NO_ANSWER_FORMED。两个类型不合并，判据同生产侧的两个事务包装。
+type unwiredPriceCardRegistration struct{}
+
+func (unwiredPriceCardRegistration) Handle(
+	context.Context,
+	pricingapp.RegisterPriceCardCommand,
+) (pricingapp.RegisterPriceCardOutcome, error) {
+	return pricingapp.RegisterPriceCardOutcomeInvalid, errOrchestrationNotWired
+}
+
+type unwiredReferenceSeriesRegistration struct{}
+
+func (unwiredReferenceSeriesRegistration) Handle(
+	context.Context,
+	pricingapp.RegisterReferenceSeriesCommand,
+) (pricingapp.RegisterReferenceSeriesOutcome, error) {
+	return pricingapp.RegisterReferenceSeriesOutcomeInvalid, errOrchestrationNotWired
 }
 
 type unwiredNetworkCatalogue struct{}
