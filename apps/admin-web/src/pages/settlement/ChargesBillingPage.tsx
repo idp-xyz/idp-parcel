@@ -1,113 +1,337 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
+import {
+  listSettlementCharges,
+  type CustomerChargeListResponseBody,
+  type CustomerChargeRecord,
+  type SupplierExpectedCostListResponseBody,
+  type SupplierExpectedCostRecord,
+} from './api';
+import { chargeStageLabels, labelOf, unregistered } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['charges-billing'];
 
-/**
- * 费用明细列表行。字段取 settlement-accounting CONTEXT.md「费用明细」定义与
- * 「费用形成与证据」规则里确认费用必须固定的属性；接线前没有任何实例数据。
- * 金额是已格式化展示串——格式化归供数方，本页不做币种或精度决策。
- */
-export interface ChargeDetailRow {
-  /** 费用明细标识。 */
-  id: string;
-  /** 费用项目：对经济含义的稳定定义，不包含某次交易实际使用的价格和金额。 */
-  feeItem: string;
-  /** 主要计费范围：一条费用明细必须且只能有一个。 */
-  primaryScope: string;
-  /** 收付方向。 */
-  direction: string;
-  /** 责任法人。 */
-  legalEntity: string;
-  /** 结算相对方。 */
-  counterparty: string;
-  /**
-   * 阶段：预估 / 暂估 / 确认 / 调整。追加式生命周期，四者分别保留，
-   * 不用一个可覆盖金额表达；确认后的变化只能追加调整明细或新版本。
-   */
-  stage: string;
-  /** 版本：确认后出现新事实、源事实更正或规则适用性变化时形成新版本，不覆盖历史结果。 */
-  version: string;
-  /**
-   * 计费重量采用：客户计费重量或供应商计费重量的财务采用结果。
-   * 两者分别依据各自合同与计量规则形成，任一方不改写另一方，也不覆盖原始测量。
-   */
-  billingWeight: string;
-  /** 原币金额。 */
-  originalAmount: string;
-  /**
-   * 合同结算币金额。原币、合同结算币与换算依据是从同一个评价采用来的一组，
-   * 整组重述不拆散；原币与合同结算币相同时两个金额必须相等。
-   */
-  settlementAmount: string;
-  /**
-   * 依据：实际采用的 PricingEvaluation 与采用解释。无法解释命中规则、计算顺序
-   * 或责任范围的金额不得成为确认费用。调整行的依据另含调整类型、业务原因、
-   * 权威依据与唯一创建用例（见 CONTEXT「调整类型与唯一所有权」表）。
-   */
-  basis: string;
+// 本页两签，都接 GET /settlement-charges 按 registry 分派。
+//
+// 两册各自成形而不合流成一张「费用明细」表（票 admin-skeleton-closure-batch/04 对栏裁定）：
+// 客户费用有阶段与确认依据、无采购规则版本，供应商预期成本有版本链与纠错原因、无阶段。
+// 合流要现编一个「收付方向」——库上客户费用册不存这一维，而 CONTEXT 明写确认费用必须固定
+// 收付方向且「不能通过当前组织、当前客户属性或报表筛选临时推断」，由读面按行落在哪张表反推
+// 正是这条禁的东西。
+//
+// 旧骨架十二栏里的主要计费范围、收付方向、责任法人、结算相对方、版本、计费重量采用六栏随
+// 对栏裁定撤下：它们是**册级缺席**（这一册根本不记这件事），整列永远「未登记」不叫如实，
+// 那会把「本册不记」说成「本册记漏了」，反过来招人去别处推断补齐。行级缺席（这一行还没有）
+// 才保留成栏并显示「未登记」——确认依据与确认时间是本页仅有的两处。
+
+// 金额与币种同格呈现不拆两栏：原币、合同结算币与换算依据是从同一个评价采用来的一组，
+// CONTEXT 要求整组重述不拆散。金额是币种最小单位的十进制计数串，照实转写不做换算。
+function amountWithCurrency(amount: string, currency: string): string {
+  return `${amount} ${currency}`;
 }
 
-const columns: ListColumn<ChargeDetailRow>[] = [
-  { id: 'id', header: '费用明细标识', className: 'font-mono', render: (row) => row.id },
-  { id: 'fee-item', header: '费用项目', render: (row) => row.feeItem },
-  { id: 'primary-scope', header: '主要计费范围', render: (row) => row.primaryScope },
-  { id: 'direction', header: '收付方向', align: 'center', className: 'w-[72px]', render: (row) => row.direction },
-  { id: 'legal-entity', header: '责任法人', render: (row) => row.legalEntity },
-  { id: 'counterparty', header: '结算相对方', render: (row) => row.counterparty },
-  { id: 'stage', header: '阶段', align: 'center', className: 'w-[64px]', render: (row) => row.stage },
-  { id: 'version', header: '版本', align: 'center', className: 'w-[56px] font-mono', render: (row) => row.version },
-  { id: 'billing-weight', header: '计费重量采用', align: 'right', className: 'font-mono', render: (row) => row.billingWeight },
-  { id: 'original-amount', header: '原币金额', align: 'right', className: 'font-mono', render: (row) => row.originalAmount },
-  { id: 'settlement-amount', header: '合同结算币金额', align: 'right', className: 'font-mono', render: (row) => row.settlementAmount },
-  { id: 'basis', header: '依据', render: (row) => row.basis },
+// —— 客户费用签 ——
+
+const customerChargeColumns: ListColumn<CustomerChargeRecord>[] = [
+  { id: 'charge', header: '费用明细标识', className: 'font-mono text-xs', render: (row) => row.charge },
+  { id: 'fee-item', header: '费用项目', className: 'font-mono text-xs', render: (row) => row.feeItem },
+  {
+    id: 'stage',
+    header: '阶段',
+    align: 'center',
+    className: 'w-[64px]',
+    // 封闭三格，与库上一致。旧骨架注释写的「预估/暂估/确认/调整」四格不成立：调整是追加的
+    // 调整明细（各由唯一创建用例形成、另落自己的册），不是阶段的第四个取值。
+    render: (row) => labelOf(chargeStageLabels, row.stage),
+  },
+  {
+    id: 'original',
+    header: '原币金额',
+    align: 'right',
+    className: 'font-mono text-xs',
+    render: (row) => amountWithCurrency(row.originalAmount, row.originalCurrency),
+  },
+  {
+    id: 'settlement',
+    header: '合同结算币金额',
+    align: 'right',
+    className: 'font-mono text-xs',
+    render: (row) => amountWithCurrency(row.settlementAmount, row.settlementCurrency),
+  },
+  {
+    id: 'conversion',
+    header: '换算依据',
+    className: 'font-mono text-xs',
+    // 缺席不是缺数据而是「这一步不存在」的正面形状（原币即结算币时无换算），故不写「未登记」。
+    render: (row) => row.conversionStep ?? <span className="text-idpxyz-textMuted">无换算</span>,
+  },
+  { id: 'evaluation', header: '评价引用', className: 'font-mono text-xs', render: (row) => row.evaluation },
+  {
+    id: 'confirmation-basis',
+    header: '确认依据',
+    className: 'font-mono text-xs',
+    // 真正的行级缺席：预估与暂估行没有确认依据（库上守着依据与确认时刻两半同在或同缺）。
+    // 空即「尚未确认」，读的人据它去催确认。
+    render: (row) =>
+      row.confirmationBasis ?? <span className="text-idpxyz-textMuted">{unregistered}</span>,
+  },
+  {
+    id: 'required-basis-kind',
+    header: '要求依据种类',
+    className: 'font-mono text-xs',
+    // 与「已到达确认依据」分两格上列，**不代算交集**：「这类费用要哪一种」与「到了哪几种」
+    // 是两张表两个答案，分两张表正是为了让「确认条件已满足」没有第三条成立路径。
+    // 缺席表示该费用项目在确认条件目录里没有行——与「配了但依据没到」续办不同：前者要人去
+    // 配条件，后者要人去催依据，故两格分开由读者判。
+    render: (row) =>
+      row.requiredBasisKind ?? <span className="text-idpxyz-textMuted">未配置确认条件</span>,
+  },
+  {
+    id: 'arrived-bases',
+    header: '已到达确认依据',
+    render: (row) =>
+      row.confirmationBases.length > 0 ? (
+        <div className="min-w-44 font-mono text-xs">
+          {row.confirmationBases.map((basis) => (
+            <p key={`${basis.basisKind}:${basis.basis}`}>
+              {basis.basisKind}／{basis.basis}（{formatInstant(basis.recordedAt)}）
+            </p>
+          ))}
+        </div>
+      ) : (
+        <span className="text-idpxyz-textMuted">尚无</span>
+      ),
+  },
+  {
+    id: 'formed-at',
+    header: '形成时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.formedAt),
+  },
+  {
+    id: 'confirmed-at',
+    header: '确认时间',
+    className: 'min-w-44 font-mono text-xs',
+    // 与确认依据成对：未确认时服务端整键不出现，不为它编造零时刻。
+    render: (row) =>
+      row.confirmedAt ? (
+        formatInstant(row.confirmedAt)
+      ) : (
+        <span className="text-idpxyz-textMuted">{unregistered}</span>
+      ),
+  },
 ];
 
-/**
- * 费用与计费（settlement-accounting）。行对象是费用明细：预估、暂估、确认与
- * 调整分别保留成行，版本与依据（实际 PricingEvaluation 及采用解释）随行呈现。
- * 本页是查阅面，不设任何调整创建动作——每类调整只能由「调整类型与唯一所有权」
- * 表指定的唯一创建用例形成，页面入口不取得创建权。
- */
-export function ChargesBillingPage() {
+function CustomerChargesTable() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<CustomerChargeListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listSettlementCharges('customer-charge').then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const charges = answer?.kind === 'outcome' ? answer.body.charges : [];
+  const needle = search.trim().toLowerCase();
+  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
+  const visibleCharges = needle
+    ? charges.filter((row) =>
+        [row.charge, row.feeItem, row.evaluation].some((value) =>
+          value.toLowerCase().includes(needle),
+        ),
+      )
+    : charges;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<ChargeDetailRow>
-      title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：阶段（预估/暂估/确认/调整，追加式生命
-      // 周期封闭四格）、收付方向、责任法人、结算相对方、费用项目。标识与范围经搜索。
+    <ListPageTemplate<CustomerChargeRecord>
+      title="客户费用"
+      description={`${info.owner}——一行即一条客户费用；收付方向、责任法人与结算相对方不在本册，页面不推断`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索费用明细标识 / 费用项目 / 主要计费范围',
+        placeholder: '搜索费用明细标识 / 费用项目 / 评价引用',
       }}
-      columns={columns}
-      // 接线前无实例：行数据与总数届时由 settlement-accounting 应用端口供给。
-      rows={[]}
-      rowKey={(row) => row.id}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '结算与核算模块尚未接线',
-        description: '业务端点按 ADR-0017 的准入闸门尚未放行，本页不发请求、不含未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '费用明细查询端点建成并经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      filterSummary={
+        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区
+        // 「这不是登记册为空」直接矛盾。
+        answer?.kind === 'outcome' ? `当前返回 ${charges.length} 条客户费用` : undefined
+      }
+      columns={customerChargeColumns}
+      rows={visibleCharges}
+      // 行键循库主键（租户，费用）：一费用一行，册上没有版本列。
+      rowKey={(row) => row.charge}
+      viewState={catalogueViewState(answer, charges.length, retry, {
+        module: info,
+        endpoint: 'GET /settlement-charges?registry=customer-charge',
+        emptyTitle: '当前租户尚无已登记的客户费用',
+        emptyDescription:
+          '读取入口已配置，但客户费用登记册为空；费用由计价评价经 UC-SA-002 形成，事务链在接入渠道墙后面，页面不会预置费用。',
+      })}
     />
+  );
+}
+
+// —— 供应商预期成本签 ——
+
+// 本册不设阶段栏：整册属预估口径（CONTEXT「预期成本属预估口径，从不进对账单」），那是
+// **册级事实**。补一个恒为「预估」的阶段栏，是把册级事实伪装成行级取值，还会让读者以为
+// 它可能变成别的值。该册另有客户册没有的栏（采购规则版本、供应商协议、运输收费发生项与
+// 版本、前版与纠错原因），按册上原样呈现——这正是两册不合流的用处。
+const supplierExpectedCostColumns: ListColumn<SupplierExpectedCostRecord>[] = [
+  { id: 'version', header: '成本版本', className: 'font-mono text-xs', render: (row) => row.version },
+  { id: 'fee-item', header: '费用项目', className: 'font-mono text-xs', render: (row) => row.feeItem },
+  { id: 'occurrence', header: '运输收费发生项', className: 'font-mono text-xs', render: (row) => row.occurrence },
+  { id: 'occurrence-reason', header: '发生原因', className: 'font-mono text-xs', render: (row) => row.occurrenceReason },
+  {
+    id: 'occurrence-version',
+    header: '发生项版本',
+    className: 'font-mono text-xs',
+    render: (row) => row.occurrenceVersion,
+  },
+  {
+    id: 'occurred-at',
+    header: '发生时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.occurredAt),
+  },
+  {
+    id: 'purchase-rule-version',
+    header: '采购规则版本',
+    className: 'font-mono text-xs',
+    render: (row) => row.purchaseRuleVersion,
+  },
+  { id: 'agreement', header: '供应商协议', className: 'font-mono text-xs', render: (row) => row.agreement },
+  { id: 'evaluation', header: '评价引用', className: 'font-mono text-xs', render: (row) => row.evaluation },
+  {
+    id: 'original',
+    header: '原币金额',
+    align: 'right',
+    className: 'font-mono text-xs',
+    render: (row) => amountWithCurrency(row.originalAmount, row.originalCurrency),
+  },
+  {
+    id: 'settlement',
+    header: '结算币金额',
+    align: 'right',
+    className: 'font-mono text-xs',
+    render: (row) => amountWithCurrency(row.settlementAmount, row.settlementCurrency),
+  },
+  {
+    id: 'conversion',
+    header: '换算依据',
+    className: 'font-mono text-xs',
+    render: (row) => row.conversionStep ?? <span className="text-idpxyz-textMuted">无换算</span>,
+  },
+  {
+    id: 'prior-version',
+    header: '前版',
+    className: 'font-mono text-xs',
+    // 与纠错原因成对缺席表示首版——计价纠错换版本、原版本保留，一份成本的历史因此是多行
+    // 而不是一行被改写。故缺席不是「未登记」。
+    render: (row) => row.priorVersion ?? <span className="text-idpxyz-textMuted">首版</span>,
+  },
+  {
+    id: 'correction-reason',
+    header: '纠错原因',
+    render: (row) => row.correctionReason ?? <span className="text-idpxyz-textMuted">—</span>,
+  },
+  {
+    id: 'recorded-at',
+    header: '登记时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.recordedAt),
+  },
+];
+
+function SupplierExpectedCostsTable() {
+  const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<SupplierExpectedCostListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listSettlementCharges('supplier-expected-cost').then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const costs = answer?.kind === 'outcome' ? answer.body.costs : [];
+  const needle = search.trim().toLowerCase();
+  const visibleCosts = needle
+    ? costs.filter((row) =>
+        [row.version, row.feeItem, row.occurrence, row.agreement].some((value) =>
+          value.toLowerCase().includes(needle),
+        ),
+      )
+    : costs;
+  const retry = () => setReloadKey((value) => value + 1);
+
+  return (
+    <ListPageTemplate<SupplierExpectedCostRecord>
+      title="供应商预期成本"
+      description={`${info.owner}——整册属预估口径、从不进对账单，故不设阶段栏；一行即一版，纠错换版本不覆盖历史`}
+      search={{
+        value: search,
+        onChange: setSearch,
+        placeholder: '搜索成本版本 / 费用项目 / 收费发生项 / 供应商协议',
+      }}
+      filterSummary={
+        answer?.kind === 'outcome' ? `当前返回 ${costs.length} 版预期成本` : undefined
+      }
+      columns={supplierExpectedCostColumns}
+      rows={visibleCosts}
+      // 行键即版本标识：一版一行，历史版本连同当前版一并在册。
+      rowKey={(row) => row.version}
+      viewState={catalogueViewState(answer, costs.length, retry, {
+        module: info,
+        endpoint: 'GET /settlement-charges?registry=supplier-expected-cost',
+        emptyTitle: '当前租户尚无已登记的供应商预期成本',
+        emptyDescription:
+          '读取入口已配置，但供应商预期成本登记册为空；预期成本由运输收费发生项经采购规则评价形成，事务链在接入渠道墙后面，页面不会预置成本。',
+      })}
+    />
+  );
+}
+
+/**
+ * 费用与计费（settlement-accounting）。两册各自成签：客户费用（UC-SA-002 形成，经历预估、
+ * 暂估与确认三段）与供应商预期成本（预估口径的版本册）。
+ *
+ * 本页是查阅面，不设任何调整创建动作——每类调整只能由 CONTEXT「调整类型与唯一所有权」表
+ * 指定的唯一创建用例形成，接线不取得创建权。
+ */
+export function ChargesBillingPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="customer" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="customer">客户费用</TabsTrigger>
+          <TabsTrigger value="supplier">供应商预期成本</TabsTrigger>
+        </TabsList>
+        <TabsContent value="customer" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <CustomerChargesTable />
+        </TabsContent>
+        <TabsContent value="supplier" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <SupplierExpectedCostsTable />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

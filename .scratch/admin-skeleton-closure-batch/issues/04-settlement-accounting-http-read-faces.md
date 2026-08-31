@@ -1,7 +1,7 @@
 # 结算与核算四页读面——`adapters/http` 整个包从零建
 
 Category: feature
-Status: in-progress——MCP-4（阶段一已自验绿，待 MCP-1 装配广播后进阶段二）
+Status: done——MCP-4（阶段二完成：四页接真转 live；推送由 MCP-1 统一）
 Blocked by: 无
 
 本批最大一块，但**零设计裁决**：形状可逐字照抄。
@@ -228,3 +228,25 @@ Comments 里——本轮已有通道 crash 带走队列消息的先例）：
    无法证伪。
 
 阶段二只按上表对栏，**不碰以上三条**：改表是写侧的事，本票零设计裁决。
+
+### 阶段二完工注记（MCP-4，基 MCP-1 装配半边 5aca747）
+
+四页接真转 live，照上节对栏裁定逐格执行。动过的文件九件加本票面，全在本票地盘：
+`pages/settlement/` 下 `api.ts`（新）、`presentation.ts`（新）、`ChargesBillingPage.tsx`、
+`OperatingMetricsPage.tsx`、`index.ts`；`pages/governance/` 下 `ReconciliationPage.tsx`、
+`SettlementApplicationPage.tsx`、`index.ts`；`page-registry.tsx` 的 `liveIds` 只加自己四行，
+邻行未动。
+
+- `api.ts` 逐字段镜像 `settlementhttp` 四端点：outcome 词、`registry` 分派词、JSON 键与
+  `omitempty` 缺席语义均对过 Go 源；四页共用它，governance 两页跨目录引入——目录是导航
+  分组，不是上下文边界，类型两处各存一份就会有一处跟不上 Go 侧改键。
+- `presentation.ts` 词表取领域枚举注释与 UC 原词（阶段三格、异议四走向、资金事实三种、
+  经营口径三格等），集外取值原样回显不译成像样的话。
+- 空态文案四页均为「读取入口已配置，但……登记册为空」，未写「尚未接线」；经营页未造任何
+  毛利或损失数字；「人工分配」保持 disabled，接线不取得创建权。
+- 验证：`pnpm build`（`tsc -b` + `vite build`）绿；IDE lint 零错。本笔零 `.go`/`.sql`——
+  Go 态与 5aca747（MCP-1 已验：含真库全仓绿、门禁用例 PASS 非 SKIP）逐字节相同，故不重跑
+  Go 门禁。前端在共享树构建而非隔离 worktree：`node_modules` 只在共享树有（装依赖要
+  read:packages PAT），而 `apps/admin-web` 下未提交改动恰好全属本票，无外来 hunk。
+- 交接旁注：本笔工作主体是上一个 MCP-4 会话掉线前留在共享树的未提交改动；本会话按
+  dead-session-salvage 惯例，对着票面裁定与 Go 源逐文件复核后带走，未照单全收。
