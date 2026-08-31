@@ -1,91 +1,130 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import type { ApiResult } from '../catalogue-api';
+import { catalogueViewState, formatInstant } from '../catalogue-view';
+import {
+  listPricingEvaluations,
+  type PricingEvaluationListResponseBody,
+  type PricingEvaluationRecord,
+} from './api';
+import { evaluationStatusLabels, labelOf } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['pricing-evaluation'];
 
-/**
- * 价格评价列表行。字段取 parcel-pricing CONTEXT.md「价格评价」定义与评价必带轴：
- * 每次评价必须明确租户、主要业务范围、价格方向、计算目的、计价基准时点和版本清单。
- * 选中事实、费用行、解释与版本清单全文属详情区，接线时另行呈现。
- */
-export interface PricingEvaluationRow {
-  /** 评价引用。回放形成新的评价引用，不复用原评价 ID，原评价不发生状态迁移。 */
-  evaluationRef: string;
-  /** 评价对象：已受理包裹或试算对象；对象种类进入评价语义摘要，呈现时不得省略种类。 */
-  subject: string;
-  /** 价格方向（BUY / SELL / INTERNAL）。方向隔离：一个方向的结论不推导另一方向。 */
-  direction: string;
-  /** 计算目的。 */
-  purpose: string;
-  /** 计价基准时点。 */
-  basisTime: string;
-  /** 结果：已完成 / 待判断 / 冲突 / 不可计价 / 未形成——四种非完成结果不得互相冒充。 */
-  outcome: string;
-  /**
-   * 结算币种金额，仅已完成评价有值。不可计价不含金额与费用行，这一列必须留空——
-   * 「不得以金额为零的已完成评价表达不可计价」是 CONTEXT 硬句，展示层同样不得用 0 顶替。
-   */
-  settlementAmount: string;
-  /** 版本清单引用。重放必须使用原版本清单，不读取当前最新版本替代。 */
-  manifest: string;
-}
-
-const columns: ListColumn<PricingEvaluationRow>[] = [
-  { id: 'ref', header: '评价引用', className: 'font-mono', render: (row) => row.evaluationRef },
-  { id: 'subject', header: '评价对象', render: (row) => row.subject },
-  { id: 'direction', header: '价格方向', align: 'center', className: 'w-[88px] font-mono', render: (row) => row.direction },
-  { id: 'purpose', header: '计算目的', className: 'font-mono', render: (row) => row.purpose },
-  { id: 'basis', header: '计价基准时点', render: (row) => row.basisTime },
-  { id: 'outcome', header: '结果', align: 'center', render: (row) => row.outcome },
-  { id: 'amount', header: '结算币种金额', align: 'right', className: 'font-mono', render: (row) => row.settlementAmount },
-  { id: 'manifest', header: '版本清单', className: 'font-mono', render: (row) => row.manifest },
+// 本页接 GET /pricing-evaluations（票 admin-skeleton-closure-batch/03 阶段二）。
+// 上列的是评价登记册的检索列面——评价是业务事实不是主数据，册上只有引用、
+// 状态与比对列；语义细节住在评价快照（jsonb）内，属详情读法，端点不透出。
+//
+// 旧骨架各栏随对栏裁定处置（判据同结算申请页：目录事实只有本册登了什么）：
+//   评价对象、价格方向、计算目的、计价基准时点、版本清单——**全撤**。五者都住在
+//     快照内，检索列面上册级缺席；留栏就是请页面去拆 jsonb 自造第二个权威读法。
+//   结算币种金额——**全撤且不换栏**。CONTEXT 硬句「不得以金额为零的已完成评价表达
+//     不可计价」；列面不透出金额，连用 0 顶替的机会也不给。金额归详情读法。
+//   加两栏：语义摘要与计划内容摘要（ADR-0014 的双摘要比对列，争议复核按此对账）、
+//     规范化版本。摘要是 64 位十六进制，照登全文不截断——比对列截半就不能比对。
+//   分页——**撤**。端点无分页参数，一次交回注入上限内的行（与代收分户账页同款）。
+const columns: ListColumn<PricingEvaluationRecord>[] = [
+  {
+    id: 'evaluation-id',
+    header: '评价引用',
+    className: 'font-mono text-xs',
+    render: (row) => <span className="text-idpxyz-accent">{row.evaluationId}</span>,
+  },
+  {
+    id: 'status',
+    header: '结果',
+    align: 'center',
+    className: 'w-[88px]',
+    // 封闭五格词表转写；集外取值原样显示，不代折成已知格。
+    render: (row) => labelOf(evaluationStatusLabels, row.status),
+  },
+  {
+    id: 'semantic-digest',
+    header: '语义摘要',
+    className: 'font-mono text-xs min-w-64',
+    render: (row) => row.semanticDigest,
+  },
+  {
+    id: 'plan-digest',
+    header: '计划内容摘要',
+    className: 'font-mono text-xs min-w-64',
+    render: (row) => row.planContentDigest,
+  },
+  {
+    id: 'canonicalization',
+    header: '规范化版本',
+    align: 'center',
+    className: 'w-[104px] font-mono text-xs',
+    render: (row) => row.canonicalization,
+  },
+  {
+    id: 'recorded-at',
+    header: '登记时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => formatInstant(row.recordedAt),
+  },
 ];
 
 /**
- * 价格评价：已保存评价的查阅面，服务 CONTEXT 点名的争议复核与回放场景。
- * 页面没有「重算 / 修改」动作——已完成评价不可变，回放以原版本清单形成新的评价引用；
- * 接线时若提供回放入口，它属「发起一次新评价」而非修改本行，交互届时按该语义另定。
+ * 价格评价：已保存评价的登记册查阅面，服务争议复核与回放场景的检索一步。
+ * 页面没有「重算 / 修改」动作——已完成评价不可变；回放属「发起一次新评价」，
+ * 入口归渠道墙后的评价编排，不在查阅面上。
  */
 export function PricingEvaluationsPage() {
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<PricingEvaluationListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listPricingEvaluations().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const evaluations = answer?.kind === 'outcome' ? answer.body.evaluations : [];
+  const needle = search.trim().toLowerCase();
+  // 过滤只在已取回的行上做，不下推成查询参数——那要改端点契约。可检索字段即列面
+  // 的引用与两条摘要（比对场景手里拿的就是这三种串）。
+  const visibleEvaluations = needle
+    ? evaluations.filter((row) =>
+        [row.evaluationId, row.semanticDigest, row.planContentDigest].some((value) =>
+          value.toLowerCase().includes(needle),
+        ),
+      )
+    : evaluations;
+  const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<PricingEvaluationRow>
+    <ListPageTemplate<PricingEvaluationRecord>
       title={info.title}
-      description={info.owner}
-      // 筛选维度（接线时实装进 filters 槽）：价格方向（BUY/SELL/INTERNAL 封闭三向，
-      // 方向隔离）、计算目的、结果（已完成/待判断/冲突/不可计价/未形成——封闭五格，
-      // 四种非完成结果不得互相冒充）、计价基准时点窗口。评价引用与对象经搜索。
+      description={`${info.owner}——登记册检索列面；语义细节与金额住在评价快照内，属详情读法`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索评价引用 / 评价对象',
+        placeholder: '搜索评价引用 / 语义摘要 / 计划内容摘要',
       }}
+      filterSummary={
+        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 条」会与状态区
+        // 「这不是登记册为空」直接矛盾（README 列表页上列通则第六条）。
+        answer?.kind === 'outcome' ? `当前返回 ${evaluations.length} 条评价` : undefined
+      }
       columns={columns}
-      // 接线前无实例：评价用例（evaluate_pricing）尚未接入任何进程，没有运行时评价可查。
-      rows={[]}
-      rowKey={(row) => row.evaluationRef}
-      pagination={{
-        page,
-        pageSize,
-        total: 0,
-        onPageChange: setPage,
-        onPageSizeChange: setPageSize,
-      }}
-      viewState={{
-        kind: 'unconfigured',
-        title: '计价模块尚未接线',
-        description: '评价由计价用例按版本清单在进程内形成；该用例与本页的查询端点当前都未接入进程，本页不发请求、不含合成数据与未确认参数的默认值。',
-        facts: {
-          owner: info.owner,
-          source: info.source,
-          unlock: '计价用例（evaluate_pricing）与查询端点接入进程并经 ADR-0017 准入闸门放行后接线',
-        },
-      }}
+      rows={visibleEvaluations}
+      rowKey={(row) => row.evaluationId}
+      viewState={catalogueViewState(answer, evaluations.length, retry, {
+        module: info,
+        endpoint: 'GET /pricing-evaluations',
+        emptyTitle: '当前租户尚无已登记的价格评价',
+        emptyDescription:
+          '读取入口已配置，但评价登记册为空；评价的写入方是渠道墙后的评价编排用例，尚未接入任何进程——册空是墙拦不是缺陷，本页不预置数据。',
+      })}
     />
   );
 }
