@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "postingRef": "SYN-COD-POST-03",
+  "fromPosition": "IN_TRANSIT_AT_CHANNEL",
+  "toPosition": "SHORTFALL",
+  "amountMinor": 10000,
+  "basisKind": "DISCREPANCY",
+  "basisRef": "SYN-COD-DISC-01",
+  "postedAt": "2026-02-21T00:30:00Z"
+}

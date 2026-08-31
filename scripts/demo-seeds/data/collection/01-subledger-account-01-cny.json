@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "customerRef": "SYN-ACCOUNT-01",
+  "legalEntityRef": "SYN-LE-01",
+  "currency": "CNY",
+  "channelRef": "SYN-CH-SG-POST-STD",
+  "custodyBasisRef": "SYN-COD-CUSTODY-2026-001",
+  "openedAt": "2026-02-01T00:00:00Z"
+}

@@ -1,0 +1,12 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "instructionRef": "SYN-COD-INSTR-01",
+  "parcelRef": "SYN-PARCEL-COD-01",
+  "requirementRef": "SYN-COD-REQ-01",
+  "customerRef": "SYN-ACCOUNT-01",
+  "legalEntityRef": "SYN-LE-01",
+  "currency": "CNY",
+  "channelRef": "SYN-CH-SG-POST-STD",
+  "amountMinor": 150000,
+  "instructedAt": "2026-02-03T00:00:00Z"
+}

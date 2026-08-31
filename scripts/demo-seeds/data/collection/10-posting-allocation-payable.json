@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "postingRef": "SYN-COD-POST-04",
+  "fromPosition": "AWAITING_ALLOCATION",
+  "toPosition": "PAYABLE_TO_CUSTOMER",
+  "amountMinor": 140000,
+  "basisKind": "ALLOCATION",
+  "basisRef": "SYN-COD-INSTR-01",
+  "postedAt": "2026-02-22T00:00:00Z"
+}

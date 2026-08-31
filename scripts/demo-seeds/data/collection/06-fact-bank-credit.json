@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "factRef": "SYN-COD-FACT-02",
+  "instructionRef": "SYN-COD-INSTR-01",
+  "sourceLayer": "OPERATOR_BANK_CREDIT",
+  "evidenceRef": "SYN-COD-EVID-BANK-01",
+  "currency": "CNY",
+  "amountMinor": 140000,
+  "occurredAt": "2026-02-20T00:00:00Z"
+}

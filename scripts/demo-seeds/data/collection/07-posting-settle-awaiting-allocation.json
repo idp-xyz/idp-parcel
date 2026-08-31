@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "postingRef": "SYN-COD-POST-02",
+  "fromPosition": "IN_TRANSIT_AT_CHANNEL",
+  "toPosition": "AWAITING_ALLOCATION",
+  "amountMinor": 140000,
+  "basisKind": "COLLECTION_FACT",
+  "basisRef": "SYN-COD-FACT-02",
+  "postedAt": "2026-02-20T00:30:00Z"
+}
