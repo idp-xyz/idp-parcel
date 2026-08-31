@@ -208,14 +208,23 @@ Blocked by: 无
 也就是说，页面骨架是照 CONTEXT 词条写的，登记册是照用例落的，两者的差不是「实例还没到」，
 是登记册上就没有那一维。四页接完仍是空册，**接完之后这些栏也不会长出来**。
 
-其中三处够得上「登记册缺口」，记在此处供写侧裁量（**不属本票范围，本票不改表不建列**）：
+其中三处够得上「登记册缺口」。**已各立一票**，落在
+[`.scratch/settlement-register-context-gaps/`](../../settlement-register-context-gaps/spec.md)
+（不塞进本批：本批是机制半边收口，那三处是写侧要不要补列，性质不同；也不该只活在这一节
+Comments 里——本轮已有通道 crash 带走队列消息的先例）：
 
-1. **`customer_charge` 与 CONTEXT 硬句 122 有实质出入**。该句要求每条确认费用固定责任法人、
-   结算相对方、收付方向、结算账户、合同或责任依据、结算币种、主要计费范围与来源事实八项；
-   表上只有结算币种（0013）与来源事实（`evaluation_ref`），其余六项一列都没有。
-2. **客户费用没有版本链，供应商预期成本有**。CONTEXT 对两侧都写了「确认后形成新版本或调整明细，
-   不覆盖历史结果」，但 `customer_charge` 一费用一行、无前版回指。
-3. **`operating_result.components` 元素上没有角色维**，而 CONTEXT 要求审核应付与贷项按各自借贷
-   方向分别计入一次并可查——没有角色名，这条要求在读面上验证不了。
+1. [票 01](../../settlement-register-context-gaps/issues/01-customer-charge-does-not-fix-the-eight-confirmation-facts.md)
+   ——**`customer_charge` 固定不了 CONTEXT 要求的那八项**：责任法人、结算相对方、收付方向、
+   结算账户、合同或责任依据、结算币种、主要计费范围、来源事实，册上直接成列的只有结算币种一项。
+   且约束这一层允许落进一条「已确认」而五项皆无的费用，那句「不能临时推断」因此空转。
+2. [票 02](../../settlement-register-context-gaps/issues/02-customer-charge-has-no-version-chain-while-supplier-cost-does.md)
+   ——**客户费用两条路都没有**。「新版本」没有（一费用一行、无前版回指），「调整明细」也没有
+   自己的册：`ChargeAdjustment` 只作为 `customer_statement.adjustment_lines` 的元素落库，
+   于是一笔调整先进对账单才存在，而 CONTEXT 明写「对账纳入不能代替金额调整」。供应商侧对照，
+   版本链齐全。
+3. [票 03](../../settlement-register-context-gaps/issues/03-operating-result-components-have-no-role-dimension.md)
+   ——**`operating_result.components` 元素只有 `source`／`effect`／`amountMinor` 三个键，
+   没有角色维**，「审核应付与贷项按各自借贷方向分别计入一次、不得视为已净含贷项」因此在册上
+   无法证伪。
 
 阶段二只按上表对栏，**不碰以上三条**：改表是写侧的事，本票零设计裁决。
