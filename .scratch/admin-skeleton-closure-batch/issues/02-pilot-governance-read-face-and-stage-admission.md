@@ -63,12 +63,12 @@ Blocked by: 01
   两暂停 SUSPENSION_RECORDED、一恢复 RESUMPTION_RECORDED，幂等重放 exit 0，八表非零行已成立。
   含真库全仓绿。阶段二待办：页接真（三格出 SYN- 值、阶段评审与接管两格明示第二批未开、页面
   明示产品实例级作用域）+ `liveIds` 加行。
-- **2026-08-31 MCP-3（阶段二已交，票闭）**：基 `ffbc2d8`（批 07 装配第三笔，MCP-1 点名换基，
-  含装配线 A `de09f55` 全部内容；变基零冲突——线 C 六笔无 admin-web 改动）。`pages/governance/
-  api.ts` 新建（`7d40300`，GET `/governance-registers` 三册镜像，
-  无租户维注释随行）；`StageAdmissionPage` 重写（`a4223bd`）——DetailPageTemplate 三真格
+- **2026-08-31 MCP-3（阶段二已交，票闭）**：基 `ffbc2d8` 交付，MCP-1 序移落地于 `1f5d7ae`
+  之上、合入笔 `6989cd1`（本条 SHA 经校正笔改为主线实号；apps/admin-web 与交付链逐字节同）。
+  `pages/governance/api.ts` 新建（`63da3f3`，GET `/governance-registers` 三册镜像，
+  无租户维注释随行）；`StageAdmissionPage` 重写（`980c510`）——DetailPageTemplate 三真格
   （权威区间/暂停/恢复，Table 照登转写，空册句「读取入口已配置，尚无登记」）+ 阶段评审与
   接管两格明示「第二批未开（syn-wall-door-audit 票 12 首批裁定），机制分批不是数据缺件」；
   页头与基本信息区明示产品实例级作用域、无租户维（ADR-0083 Decision 四），旧「归属未定」
-  文案随裁决取代；页面只读，无登记动作。`liveIds` 加 `'stage-admission'`（`5d9022d`，与票 03
+  文案随裁决取代；页面只读，无登记动作。`liveIds` 加 `'stage-admission'`（`528b1fd`，与票 03
   两行同笔，只加行不动邻行）。`tsc --noEmit` 绿；三册未配置态合成一格 403 陈述、错误态可重试。
