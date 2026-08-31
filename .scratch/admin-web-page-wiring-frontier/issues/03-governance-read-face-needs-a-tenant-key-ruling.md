@@ -105,3 +105,7 @@ Status: resolved
 - 准入原文：`docs/adr/0078-...md` Decision 一第三条判据、Decision 三前缀门禁、Decision 四先例钉窄，三处均逐字复核。
 - 写侧预检口：`internal/pilotgovernance/ports/ports.go:44-49`；调用点 `register_authority_interval.go:79`、`record_stage_review.go:160,233`、`govern_incident.go:211,265`。
 - 对照形状：`internal/visibilityexception/ports/ports.go:93-101`（查阅读法不并进写侧接口的明文理由）。
+
+## Comments
+
+- 2026-08-31 MCP-3：本票「不接线」裁决自 [ADR-0083](../../../docs/adr/0083-pilot-governance-read-face-carries-registry-dimensions-only.md) 起被取代。三条重开判据在该记录 Context 逐条对表：种子随批 admin-skeleton-closure 票 02 落地（有行可看）；受众按 [syn-wall-door-audit 票 12](../../syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md) 的「登记主体是租户运营方」裁定重答（有人要看且认了受众）；「不止一张」以钉窄不立通用先例的方式消解。本票推理中仍成立的部分（写侧预检口不当读面复用、空洞满足陷阱、按租户过滤无租户表的警告）已逐条收进该记录。

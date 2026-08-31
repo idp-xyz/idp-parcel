@@ -1,7 +1,7 @@
 # 试点治理读面的准入形状要先裁一道键形——治理登记册没有租户维
 
 Category: chore
-Status: ready-for-agent——MCP-3
+Status: resolved——交付 [ADR-0083](../../../docs/adr/0083-pilot-governance-read-face-carries-registry-dimensions-only.md)（MCP-3，2026-08-31）
 Blocked by: 无
 
 本票**只出一份 ADR，不写实现代码**。裁完之前票 02 不许动读口。
@@ -58,3 +58,5 @@ ADR-0077、ADR-0078、ADR-0017；`docs/design/pn-08-end-to-end-pilot-and-stage-a
 `.scratch/syn-wall-door-audit/issues/12-governance-registration-has-no-process-entry.md`。
 
 ## Comments
+
+- 2026-08-31 MCP-3：三问出裁，交付 ADR-0083。①无租户维是设计，「加 `tenant_id`」明文否决；②隔离读放行沿用同一开关同一装配点，治理行注入（作用域引用，页大小）不带租户，钉窄只覆盖 `pilot_governance`，ADR-0078 Decision 四原文不动；③页面留在管理台「试点治理」分区，明示产品实例级作用域——受众按 syn-wall-door-audit 票 12 的登记主体裁定作答，「移出管理台」否决（复活 ADR-0019 排除的跨租户运维后台），票 02 范围不改写。08-26 旧裁（admin-web-page-wiring-frontier/03）的三条重开判据在 ADR Context 逐条对表，该票已补取代注记。
