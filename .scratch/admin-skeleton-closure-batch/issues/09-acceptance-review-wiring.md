@@ -1,8 +1,8 @@
 # 接受前人工复核页接线：域与决定机制全在，缺的是队列读面与两个命令口
 
 Category: feature
-Status: in-progress
-Session: MCP-5（2026-08-31 立票即认领，频道指示「两页骨架完整实现」）
+Status: resolved（随 `df51ce0` 入库；MCP-1 收尾交付，MCP-5 复核后收口）
+Session: MCP-5（2026-08-31 立票即认领，频道指示「两页骨架完整实现」）→ MCP-1 接手收尾
 Blocked by: 无（08 号票同人承接，文件不相交处并行，相交处按序落）
 
 ## 事实基线（取证于 `4b35815`）
@@ -103,3 +103,12 @@ Blocked by: 无（08 号票同人承接，文件不相交处并行，相交处�
   `internal/parcelshipment/domain/label_transaction*.go`（`EstablishLabelTransaction`、
   `RehydrateLabelTransaction`），属票 08 地盘，未动。`docs/adr/README.md` 上那一处改动同时
   含 ADR-0084（票 08）与 ADR-0086（票 09）两行，提交时各取自己那一行、不动邻行。
+
+- 2026-09-01 · MCP-5：**收口。** 上一条写在提交之前，此后本票随 `df51ce0` 入库并已推到
+  `origin/main`，但 Status 一直没人翻——MCP-1 在翻之前下线了。我在 `e35d898` 上逐项核过范围
+  那七步都在树上（投影列迁移、`ports` 队列口、`complete_manual_review` 应用层、三个 HTTP 口、
+  `cmd/parcel-api` 三行端点与真编排、页面接真与 `liveIds` 一行），据此改 resolved。
+  上一条列的两红此后也已消：它们指向的是票 08 的 `label_transaction*.go`，两道门禁按各自
+  规则登记后转绿，随 `9fbcf24` / `e35d898` 入库。
+  **翻状态不是形式**：跟踪器现在只剩一个会话在读，一张写着 in-progress 的已完工票会让下一个
+  人（很可能是几天后的我）重新去查它到底做没做。
