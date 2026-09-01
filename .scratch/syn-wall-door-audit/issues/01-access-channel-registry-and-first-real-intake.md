@@ -90,6 +90,7 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 - **先看这一条，否则一 import 就红**：`internal/architecture` 的 `nonBusinessDirectories` 目前只列 `platform` 与 `architecture`，`businessModules` 由 `internal/` 的实际目录反推，因此 `accessidentity` 现在被当成业务模块受跨模块规则管。PS 的 HTTP 适配器一 import 它，`TestBusinessModulesDoNotReachIntoEachOther` 就报——`isCrossContextAdapter` 只放行 `internal/<consumer>/adapters/<provider>/` 这个形状，而 `adapters/http` 的第三段是 `http`，不是模块名，放行不了。两条出路，各有代价，接 S3 的人择一并把理由写进票面：
   - **把 `accessidentity` 加进 `nonBusinessDirectories`**。ADR-0072 一「它是技术能力而非业务限界上下文，不进 CONTEXT-MAP」背书得住。代价：动门禁的黑名单，而那份名单自己的注释写明反向列举正是为了让新目录默认受护——开一次口子要说清为什么这一个不该受护。
   - **把 PS 侧的 Intake 实现放在 `internal/parcelshipment/adapters/accessidentity/`**。现有门禁**不用改一个字**就放行，且与 `adapters/pilotgovernance/`、`adapters/parcelpricing/` 等既有跨界适配器同形。代价：这个路径形状在字面上把 accessidentity 摆成了「另一个上下文」，与 ADR-0072 一的定性有张力——虽然该约定管的是跨界翻译落在哪，不是对方是不是业务上下文。
+  - **已择此条**（MCP-5 2026-09-01，理由见文末 Comment）：代价不对称，且这条可逆。
 - **验收点**：
   - 只换这一行；其余命令面仍答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`，由装配测试钉住「换了一口不等于全开」。
   - 隔离读开关与这一行互不顶替：两种准入形并存，谁也不能替对方放行（ADR-0078）。
@@ -288,6 +289,37 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 
   验证：`gofmt -l` 空、`go build ./...`、`go vet`、`go test -count=1 ./...` 全绿且**含真库**
   （同刻单跑 `TestFreezeScopesAreInvisibleToEachOther` 得 `PASS` 非 `SKIP`）。
+
+- 2026-09-01 MCP-5：**重新评估「S3 能否拆出不依赖 S0 的一半」，结论是不能。** 逐项追而不是
+  笼统答「等 S0」——S3 的范围只有一句「把 `/shipment-requests` 那一行的字面量换成真渠道
+  Intake」，所以判据是：那个 Intake 要产出 `application.SubmitShipmentRequestCommand`，它的
+  各组入参今天各自卡在哪。核于 `63b6e19`：
+
+  - **`Identity`** ← 铸造出来的 `SubmissionEnvelope`。铸造要 `Minter{registry, verifier}`，
+    而 `ChannelRegistry` 与 `CredentialVerifier` 仓内都只有接口没有生产实现，两者的形状按
+    ADR-0072 二明文等 `PAR-INT-01`。另有一道更硬的：`NewChannelRegistration` 要求
+    `RequestKeyDerivation` 非空，而「哪个渠道字段铸成来源请求键」正是 S0 验收点的头一问。
+    **三处全卡，且两处直接卡在 S0。**
+  - **`PayloadDigest`** ← 规范化机制已落（票 14），但它的入参要先由渠道载荷译成
+    `SubmissionPayloadSpec`，而按 S2 验收点四那套词表落在 accessidentity 侧。E-02 覆盖了字段，
+    所以严格说它不卡 S0；**但它没有地方登记**——「哪个渠道用哪套映射」要由登记行说，而登记行
+    等 S1。现在写死一套映射，就是把一个租户的渠道词表焊进仓库。
+  - **`AdmissionScope` / `ExpectedRevision`** ← 机制已落（票 02/13），实例值 `PAR-GOV-03..07`
+    全为「待提供」，是 S4 明写的硬阻断。
+  - 其余（`BatchID`、`ShipmentRequestID`、成员与画像）来自上面两组的下游，不单独成阻断。
+
+  **四组入参里三组卡住，没有哪一半能单独产出一个能用的 Intake。** 与 S2 那次倒序不同：S2 能先做
+  是因为铸造机制真的不依赖表（依赖的那一格按裁定留了未决口），而 S3 依赖的是**取值本身**——留口
+  留不出一个能跑的登记册。
+
+  **唯一可以现在定下、且不写代码的是那道架构门禁的路径选择**，本轮据 MCP-4 给的两条择一并把理由
+  写在这里，免得接 S3 的人再论一遍：**取 `internal/parcelshipment/adapters/accessidentity/`。**
+  理由是代价不对称——该路径现成通过 `isCrossContextAdapter`（第三段是模块名），门禁一个字不用改；
+  而改 `nonBusinessDirectories` 要在一份自注「反向列举正是为了让新目录默认受护」的黑名单上开口子，
+  开了之后 accessidentity 下所有目录一并脱离跨模块规则，而它日后会长出更多东西。至于路径形状与
+  ADR-0072 一「它不是业务上下文」的字面张力：`adapters/<provider>/` 这个约定管的是**跨界翻译落在
+  哪一侧**，不是对方是不是限界上下文——`adapters/pilotgovernance/` 同形，而试点治理同样不是业务
+  上下文。这条选择可逆（换个目录即可），真做 S3 时若发现别的理由，改它的代价只有一次移动。
 
 - 2026-09-01 MCP-4：把上面这条裁决与交付**回写进步骤表本身**，此前它们只在 Comments 里——
   读票的人从 S0..S5 那份表看不出 S2 已经做完、也看不出编号不是执行顺序。三处：S1 加「编号
