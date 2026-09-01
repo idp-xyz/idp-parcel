@@ -249,6 +249,65 @@ export interface AcceptanceReviewCaseResponseBody {
   recordedJudgments: RecordedJudgmentsRecord;
 }
 
+// ---- 面单交易查阅响应形状(票 admin-skeleton-closure-batch/08,ADR-0084 决定七) ----
+//
+// 行粒度是交易 × 包裹:一笔交易覆盖几件包裹就摊几行,摊开在服务端读侧完成,页面不再
+// 二次组装。作用域只有租户维——覆盖包裹可以跨委托,按客户账户过滤会把一笔跨客户的交易
+// 归给其中一个客户,所以这是运营查阅面而不是客户面。
+
+/**
+ * 面单交易查阅的一行。
+ *
+ * hasParcelResult 与 parcelAccepted 是两格不是一格:结果未回时 parcelAccepted 为
+ * false,而把它读成「未受理」就是把 CONTEXT 禁止的「结果不确定按失败处理」搬到页面上。
+ * 呈现时必须先看 hasParcelResult。
+ */
+export interface LabelTransactionRow {
+  transactionId: string;
+  parcelId: string;
+  channelAccount: string;
+  /** 渠道账号持有人。与渠道服务方、合同与结算相对方是三个独立角色,不合并。 */
+  accountHolder: string;
+  channelServicer: string;
+  settlementCounterparty: string;
+  contract: string;
+  rate: string;
+  responsibilityBasis: string;
+  /** 交易级结果(状态枚举原词)。交易级失败不能推导包裹失败。 */
+  transactionResult: string;
+  /** 面单交易定案:交易级结果已落在成功/部分成功/失败之一,派生而非存储列。 */
+  finalized: boolean;
+  hasParcelResult: boolean;
+  parcelAccepted: boolean;
+  parcelIdentifier?: string;
+  parcelResultReason?: string;
+  /** 作用到本件包裹的后续动作种类(渠道作废/退款/替代),追加式,不改写原结果。 */
+  followUpKinds: string[];
+  /** 包裹级继续尝试判断:开放 / 受控关闭。派生依据见 continuedAttemptBasis。 */
+  continuedAttemptOpen: boolean;
+  establishedAt: string;
+  submittedAt?: string;
+  resultObservedAt?: string;
+  priorTransactionId?: string;
+  priorLinkKind?: string;
+}
+
+/**
+ * 列表:空册仍是 LISTED + 空数组。渠道墙未降前登记零行是设计,不是缺陷。
+ *
+ * continuedAttemptBasis 是「继续尝试判断」那一列的派生依据代码,页头要如实转述它——
+ * 决定登记册尚未落地时整列「开放」派生自一段真实为空的决定历史,不写明就会被读成
+ * 「已核对过关闭册」。
+ */
+export interface LabelTransactionsListResponseBody {
+  outcome: 'LABEL_TRANSACTIONS_LISTED';
+  continuedAttemptBasis: string;
+  rows: LabelTransactionRow[];
+}
+
+/** 继续尝试判断派生自空决定历史时服务端交回的依据代码。 */
+export const CONTINUED_ATTEMPT_BASIS_EMPTY_HISTORY = 'DERIVED_FROM_EMPTY_DECISION_HISTORY';
+
 /** 复核完成命令的封闭结果。`已有完成`带先到那份的留痕:操作员要知道签的是谁。 */
 export type ManualReviewCompletionOutcome =
   | 'RECORDED'
@@ -429,6 +488,10 @@ export function findAcceptanceReviewCase(
     `/acceptance-review-queue?shipmentRequestId=${encodeURIComponent(shipmentRequestId)}`,
     { method: 'GET' },
   );
+}
+
+export function listLabelTransactions(): Promise<ApiResult<LabelTransactionsListResponseBody>> {
+  return exchange<LabelTransactionsListResponseBody>('/label-transactions', { method: 'GET' });
 }
 
 export function completeManualReview(

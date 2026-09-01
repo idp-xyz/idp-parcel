@@ -99,7 +99,7 @@ func TestEstablishingALabelTransactionFixesItsCoverageAndBasis(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 规则 161「一笔面单交易按一次真实渠道业务请求划分，可以关联一个或多个
+// Covers: CONTEXT「一笔面单交易按一次真实渠道业务请求划分，可以关联一个或多个
 // 明确包裹」（ADR-0084 决定二的「至少一件，重复拒绝」）——空覆盖的交易没有可归属的包裹级
 // 结果，重复覆盖会让「每件覆盖包裹恰一条结果」的完备校验自相矛盾。固定还要挡住建立之后
 // 从外部改写：调用方手里的切片与聚合内部共享底层数组时，覆盖范围其实并没有被固定。
@@ -204,7 +204,7 @@ func refusedParcelResult(t *testing.T, parcel, reason string) domain.LabelTransa
 }
 
 // Covers: CONTEXT 生命周期「已提交渠道或结果不确定 → 成功、部分成功或失败：同时保存整笔
-// 交易结果和各包裹结果」与规则 142「多包裹面单交易可以具有共同交易结果，也必须分别保存每个
+// 交易结果和各包裹结果」与「多包裹面单交易可以具有共同交易结果，也必须分别保存每个
 // 包裹的业务结果；部分成功、部分失败或不同作废范围不得压缩成一个无法解释的通用状态」
 // （ADR-0084 决定三）——两层在同一次写入里落地，校验只到结构为止：覆盖完备、无越界、无重复，
 // 每条自身说得通（受理才有包裹级标识，未受理必须给原因）。
@@ -282,7 +282,7 @@ func TestRecordingAChannelResultWritesBothLevelsAtOnce(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 规则 146「交易级失败不能推导包裹失败」与生命周期「不能由一个层次覆盖另一个
+// Covers: CONTEXT「交易级失败不能推导包裹失败」与生命周期「不能由一个层次覆盖另一个
 // 层次」（ADR-0084 决定三「不做跨层推导」）——一笔交易级失败里仍可以有已被受理的包裹（渠道
 // 整单判失败但个别包裹已下号），两层各自记各自的事实。这条测试守的是「别顺手加一致性校验」：
 // 加上「失败 ⇒ 全部未受理」这类看似合理的规则，就是用一个层次覆盖另一个层次。
@@ -409,6 +409,28 @@ func TestFinalisationIsDerivedFromTheTransactionLevelResult(t *testing.T) {
 			}
 		})
 	}
+
+	// 读面不重建聚合（读的是「登记过什么」），却同样要答定案。它必须用同一条规则算，
+	// 而不是在适配器里另写一个「state 是不是那三格」——两处各写一份，某天集合增减时
+	// 只会改到其中一处。
+	for _, state := range []domain.LabelTransactionState{
+		domain.LabelTransactionEstablished,
+		domain.LabelTransactionSubmitted,
+		domain.LabelTransactionResultUncertain,
+		domain.LabelTransactionSucceeded,
+		domain.LabelTransactionPartiallySucceeded,
+		domain.LabelTransactionFailed,
+	} {
+		transaction := recordedLabelTransaction(t, domain.LabelTransactionSucceeded, accepted)
+		if state.IsChannelResult() != (state == domain.LabelTransactionSucceeded ||
+			state == domain.LabelTransactionPartiallySucceeded ||
+			state == domain.LabelTransactionFailed) {
+			t.Fatalf("%s 的定案派生与结果格集合不一致", state)
+		}
+		if transaction.State().IsChannelResult() != transaction.Finalized() {
+			t.Fatalf("聚合与读面对同一笔交易的定案派生不一致")
+		}
+	}
 }
 
 // Covers: CONTEXT 生命周期「渠道作废、渠道退款和替代是针对明确交易范围或包裹范围形成的后续
@@ -528,7 +550,7 @@ func TestAFollowUpActionNeedsAResultAndAScopeInsideTheCoverage(t *testing.T) {
 }
 
 // Covers: CONTEXT 生命周期「原交易 → 被替代：失败后的新申请、换单或明确重新下单形成新交易，
-// 并保留重试或替代关系」与规则 161「一个包裹可以关联多笔具有重试、替代、作废或换单关系的
+// 并保留重试或替代关系」与「一个包裹可以关联多笔具有重试、替代、作废或换单关系的
 // 交易」（ADR-0084 决定二照 PriorRequestLink 先例）——关系是**新**交易的出生属性，原交易的
 // 状态、结果与后续动作一概不动：那句话改的是新交易的出处，不是原交易的状态。
 func TestARetryOrReplacementIsBornOnTheNewTransaction(t *testing.T) {

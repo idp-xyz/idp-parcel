@@ -42,7 +42,7 @@ Date: 2026-08-31
 
 ## Links
 
-- [CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)：面单交易一族术语、规则 141–155、161–167、生命周期「面单交易」「面单继续尝试」——本裁决全部硬句的出处
+- [CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)：面单交易一族术语、`Rules and invariants` 里「多包裹面单交易可以具有共同交易结果」与「交易级失败不能推导包裹失败」两族硬句、生命周期「面单交易」「面单继续尝试」——本裁决全部硬句的出处
 - [ADR-0028](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)、[ADR-0060](./0060-parcel-lookup-uses-current-snapshot-projection.md)、[ADR-0031](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：持久化与写入代数纹样
 - [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)、[ADR-0078](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)：未配置即拒与隔离读准入，Decision 七的两半
 - [渠道适配缝设计记](../design/channel-adapter-seams-design-note.md)、[首发开发基线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：写入方缺席是设计的出处

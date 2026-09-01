@@ -229,7 +229,7 @@ type EstablishLabelTransactionSpec struct {
 //   - **面单继续尝试决定**（受控关闭/重开）。CONTEXT 把它定义为「针对明确包裹当前完整面单
 //     服务范围」的版本化决定——范围是包裹跨其全部相关交易，不是某一笔交易的内部状态；它单列
 //     追加式登记册（决定六），本切片不建。
-//   - **包裹终局**。CONTEXT 规则 146 明说「交易级失败不能推导包裹失败，单笔交易中的包裹级
+//   - **包裹终局**。CONTEXT 明说「交易级失败不能推导包裹失败，单笔交易中的包裹级
 //     失败、渠道作废或失效也不自动形成包裹终局」；终局要跨该包裹全部相关交易与实际承运商
 //     收寄事实判断，一笔交易看不到那个范围。
 //
@@ -356,9 +356,13 @@ type RecordChannelResultSpec struct {
 	ObservedAt    time.Time
 }
 
-// isChannelResult 划出交易级结果的三格。它复用状态枚举而不另立一套结果类型：结果就是
+// IsChannelResult 划出交易级结果的三格。它复用状态枚举而不另立一套结果类型：结果就是
 // 交易停下的那一格，两套表示法会在读面上产生「状态说失败、结果说成功」的分歧。
-func (state LabelTransactionState) isChannelResult() bool {
+//
+// 导出是为了让读面用同一条规则派生定案：查阅读的是登记过什么、不重建聚合（ADR-0060 的读面
+// 纹样），手上只有状态列而没有 LabelTransaction，在适配器里另写一个「是不是那三格」就是把
+// 定案规则抄成第二份。
+func (state LabelTransactionState) IsChannelResult() bool {
 	switch state {
 	case LabelTransactionSucceeded, LabelTransactionPartiallySucceeded, LabelTransactionFailed:
 		return true
@@ -380,7 +384,7 @@ func (transaction LabelTransaction) RecordChannelResult(spec RecordChannelResult
 	if transaction.state != LabelTransactionSubmitted && transaction.state != LabelTransactionResultUncertain {
 		return LabelTransaction{}, ErrLabelTransactionStateNotAdmitted
 	}
-	if !spec.Outcome.isChannelResult() ||
+	if !spec.Outcome.IsChannelResult() ||
 		spec.ObservedAt.IsZero() ||
 		spec.ObservedAt.Before(transaction.submittedAt) {
 		return LabelTransaction{}, ErrInvalidLabelTransaction
@@ -718,5 +722,5 @@ func (transaction LabelTransaction) State() LabelTransactionState {
 // 忘了改列，两处便各说各话。渠道退款、对账与运营结算按 CONTEXT 明文不属定案条件，因此追加
 // 后续动作不动这个谓词。
 func (transaction LabelTransaction) Finalized() bool {
-	return transaction.state.isChannelResult()
+	return transaction.state.IsChannelResult()
 }

@@ -45,6 +45,7 @@ const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
 // 未启用——assembleBusinessEndpoints 对 nil 的处理与 ADR-0078 之前逐字节同形。
 type isolatedReadIntakes struct {
 	shipmentRequestViews    shipmenthttp.ShipmentRequestViewsIntake
+	labelTransactions       shipmenthttp.LabelTransactionQueryIntake
 	nodeOperationsCatalogue nodeopshttp.CatalogueQueryIntake
 	transportCatalogue      tfhttp.CatalogueQueryIntake
 	trackingProjections     visibilityhttp.OperationsTrackingIntake
@@ -137,7 +138,11 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 	}
 
 	return &isolatedReadIntakes{
-		shipmentRequestViews:    shipmentViews,
+		shipmentRequestViews: shipmentViews,
+		// 面单交易查阅由同一个注入值服务，但走的是它的另一半接口
+		// （LabelTransactionQueryIntake，只交出租户维）：同一开关、同一装配点是
+		// ADR-0084 决定七要的，而两种查阅面收到的作用域形状不同是决定七同一句话的另一半。
+		labelTransactions:       shipmentViews,
 		nodeOperationsCatalogue: nodeOperationsCatalogue,
 		transportCatalogue:      transportCatalogue,
 		trackingProjections:     trackingProjections,

@@ -9,8 +9,9 @@ export { ShipmentRequestListPage } from './ShipmentRequestListPage';
 export { ShipmentRequestDetailPage } from './ShipmentRequestDetailPage';
 // UC-PS-006 接受后取消入口(已接线:逐件分发到 POST /shipment-requests/parcel-cancellations)。
 export { CancelParcelPage } from './CancelParcelPage';
-// 面单交易查阅面(行粒度交易×包裹,查询端点未建为未配置骨架)。
-export { LabelTransactionsPage, type LabelTransactionRow } from './LabelTransactionsPage';
+// 面单交易查阅面(行粒度交易×包裹,已接线:GET /label-transactions)。行形状是查询契约的
+// 镜像,与其余查阅面同住 api.ts,从下方 api 类型块一并导出。
+export { LabelTransactionsPage } from './LabelTransactionsPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,
@@ -33,4 +34,6 @@ export type {
   DecisionRecord,
   ViewsListResponseBody,
   ViewDetailResponseBody,
+  LabelTransactionRow,
+  LabelTransactionsListResponseBody,
 } from './api';

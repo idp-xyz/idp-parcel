@@ -1305,6 +1305,127 @@ type AcceptanceReviewQueue interface {
 	) (ShipmentRequestDetailRecord, bool, error)
 }
 
+// LabelTransactionInsertOutcome 与 LabelTransactionSaveOutcome 是面单交易写入的两套代数，
+// 与委托那两套同形同理（ADR-0031）：`已存在`要回去按重放规则重答，`版本冲突`要重读再重放，
+// 两者的恢复动作不同，因此不共用一个集合，也都不译成 error。
+//
+// 它们与 ShipmentRequest 那两套**不复用同一个类型**：面单交易是独立聚合（ADR-0084 决定一），
+// 共用类型会让某天其中一侧多一格取值时另一侧被迫接受一个它答不出的答案。
+type LabelTransactionInsertOutcome uint8
+
+const (
+	LabelTransactionInsertOutcomeInvalid LabelTransactionInsertOutcome = iota
+	LabelTransactionInserted
+	LabelTransactionAlreadyExists
+)
+
+func (outcome LabelTransactionInsertOutcome) String() string {
+	switch outcome {
+	case LabelTransactionInserted:
+		return "INSERTED"
+	case LabelTransactionAlreadyExists:
+		return "ALREADY_EXISTS"
+	default:
+		return ""
+	}
+}
+
+type LabelTransactionSaveOutcome uint8
+
+const (
+	LabelTransactionSaveOutcomeInvalid LabelTransactionSaveOutcome = iota
+	LabelTransactionSaved
+	LabelTransactionRevisionConflict
+)
+
+func (outcome LabelTransactionSaveOutcome) String() string {
+	switch outcome {
+	case LabelTransactionSaved:
+		return "SAVED"
+	case LabelTransactionRevisionConflict:
+		return "REVISION_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// LabelTransactionRepository 以（租户 + 面单交易标识）为键存储面单交易聚合。
+//
+// 键不含来源身份，也不含委托：覆盖包裹可以跨委托（ADR-0084 决定一），拿委托的来源身份作键
+// 会让一笔跨委托交易无处安放。Insert 与 Save 分开的理由同委托仓储：建立只发生一次，结果与
+// 后续动作是在既有交易上推进。Save 的预期版本由聚合自己携带（`transaction.Revision()`）。
+//
+// **本口今天没有生产写入方，这是设计而不是欠账**：写入方是渠道适配器，而首发基线明写「独立
+// 面单渠道服务不进入首发生产」。机制先立起来，墙降那天写编排对着的不是一张裸表。
+type LabelTransactionRepository interface {
+	FindByID(
+		ctx context.Context,
+		tenant domain.TenantID,
+		transactionID domain.LabelTransactionID,
+	) (domain.LabelTransaction, bool, error)
+	Insert(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionInsertOutcome, error)
+	Save(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionSaveOutcome, error)
+}
+
+// LabelTransactionParcelRow 是读面上「交易 × 包裹」那一行（ADR-0084 决定七：页面行粒度在
+// 读侧由快照摊开）。每件覆盖包裹恒有一行，结果未回时也在——覆盖范围是建立即固定的事实，
+// 结果回来与否不改变「这笔交易覆盖了它」。
+//
+// HasResult 因此必须与 Accepted 分开：结果未回的一行 Accepted 为零值，而零值读作「未受理」
+// 就是把「还没有结果」当成失败处理，与 CONTEXT 禁止的「结果不确定按失败处理」是同一个错，
+// 只是错在读面这一侧。两层结果照搬不折算，也不互推——CONTEXT 明写「部分成功、部分失败或
+// 不同作废范围不得压缩成一个无法解释的通用状态」。
+type LabelTransactionParcelRow struct {
+	Parcel     domain.DeclaredParcelID
+	HasResult  bool
+	Accepted   bool
+	Identifier string
+	Reason     string
+	// FollowUpKinds 是作用到本件包裹的后续动作种类，按追加顺序；整笔范围的动作作用于每一件，
+	// 因此也出现在这里。它与 Accepted 并列而不改写它：渠道作废与「当初有没有被受理」是两件事。
+	FollowUpKinds []domain.FollowUpActionKind
+	// ContinuedAttemptOpen 是**包裹级**继续尝试判断，按 CONTEXT「只由有效的关闭、重开决定
+	// 及当前有效终局结果派生」算出，不是存下来的状态。决定登记册尚未落地（ADR-0084 决定六
+	// 另票），因此它此刻派生自一段**真实为空**的决定历史——这不是默认值，读面要在页头把这条
+	// 依据讲明白，免得读成「已核对过关闭册」。
+	ContinuedAttemptOpen bool
+}
+
+// LabelTransactionRecord 是面单交易查阅的一笔。
+type LabelTransactionRecord struct {
+	TransactionID          domain.LabelTransactionID
+	State                  domain.LabelTransactionState
+	Finalized              bool
+	ChannelAccount         string
+	AccountHolder          string
+	ServiceProvider        string
+	SettlementCounterparty string
+	Contract               string
+	Rate                   string
+	ResponsibilityBasis    string
+	EstablishedAt          time.Time
+	SubmittedAt            time.Time
+	ResultObservedAt       time.Time
+	PriorTransactionID     string
+	PriorLinkKind          domain.LabelTransactionLinkKind
+	Parcels                []LabelTransactionParcelRow
+}
+
+// LabelTransactionViews 是面单交易查阅的读口。
+//
+// 签名收（租户, limit）而不是完整授权作用域：客户账户不是交易的维度——覆盖包裹可以跨委托，
+// 按客户过滤会把一笔跨客户的交易归给其中一个客户（ADR-0084 决定七）。租户维照 ADR-0003
+// 的隔离边界照常在。
+//
+// 命令面不在这里：本上下文的面单交易写入等渠道墙，本切片根本不开写行。
+type LabelTransactionViews interface {
+	ListLabelTransactions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]LabelTransactionRecord, error)
+}
+
 // AcceptanceJudgmentRecorder 把一个已采用的判断记到它所推进的那份委托的接受判断任务上。
 //
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样

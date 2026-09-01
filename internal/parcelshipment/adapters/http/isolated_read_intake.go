@@ -25,7 +25,10 @@ type IsolatedOperationsReadIntake struct {
 	limit int
 }
 
-var _ ShipmentRequestViewsIntake = IsolatedOperationsReadIntake{}
+var (
+	_ ShipmentRequestViewsIntake  = IsolatedOperationsReadIntake{}
+	_ LabelTransactionQueryIntake = IsolatedOperationsReadIntake{}
+)
 
 // NewIsolatedOperationsReadIntake 由装配点以显式合成值构造。立不起来的作用域与非正
 // 页大小在这里拒：装配错误要在启动时暴露，不该等到第一个请求。
@@ -65,6 +68,13 @@ func NewIsolatedOperationsReadIntake(
 // 身份无关。
 func (intake IsolatedOperationsReadIntake) IntakeListQuery(context.Context, *http.Request) (ShipmentRequestViewsQuery, error) {
 	return ShipmentRequestViewsQuery{Scope: intake.scope, Limit: intake.limit}, nil
+}
+
+// IntakeLabelTransactionQuery 只交出注入作用域的租户维。同一个注入值同时服务两种查阅面
+// 不是把两者混为一谈：面单交易没有账户维可分（ADR-0084 决定七），所以这里交出去的比委托
+// 查阅少一维，而少的那一维是本册压根没有的那一维，不是被丢掉的过滤条件。
+func (intake IsolatedOperationsReadIntake) IntakeLabelTransactionQuery(context.Context, *http.Request) (LabelTransactionQuery, error) {
+	return LabelTransactionQuery{Tenant: intake.scope.TenantID(), Limit: intake.limit}, nil
 }
 
 // IntakeDetailQuery 解析定位标识 `shipmentRequestId`。标识只定位候选对象，不单独证明

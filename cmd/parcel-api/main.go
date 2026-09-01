@@ -93,6 +93,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 面单交易查阅读的是自己那张表（票 admin-skeleton-closure-batch/08）：与委托查阅
+	// 不同表、不同作用域维度（只有租户），因此另立适配器而不是往上面那只补方法。
+	labelTransactions, err := pspostgres.NewLabelTransactionViews(db)
+	if err != nil {
+		return err
+	}
 	cancellation, err := buildCancellationOrchestration(db)
 	if err != nil {
 		return err
@@ -234,6 +240,7 @@ func run(logger *slog.Logger) error {
 			rejection,
 			requestViews,
 			reviewJudgments,
+			labelTransactions,
 			cancellation,
 			reception,
 			nodeOperationsRecords,

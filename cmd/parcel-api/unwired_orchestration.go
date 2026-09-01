@@ -238,6 +238,20 @@ func (unwiredReviewQueue) FindVisibleByID(
 	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
 }
 
+// unwiredLabelTransactions 是面单交易查阅读口的占位（票 admin-skeleton-closure-batch/08）。
+// 生产装配交入的是本上下文自己的面单交易读适配器；独立成形，装配测试才盖得住「这一口
+// 接错了适配器」。**读不回交回稳定错误而不是空册**：渠道墙未降前空册是真答案，一次读故障
+// 顶成空册会让「登记册确实没有行」与「库连不上」在页面上长得一模一样。
+type unwiredLabelTransactions struct{}
+
+func (unwiredLabelTransactions) ListLabelTransactions(
+	context.Context,
+	shipmentdomain.TenantID,
+	int,
+) ([]shipmentports.LabelTransactionRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredReviewJudgments struct{}
 
 func (unwiredReviewJudgments) LoadRecordedJudgments(

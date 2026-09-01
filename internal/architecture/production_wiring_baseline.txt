@@ -9,8 +9,8 @@
 # 初版这 33 条实测于 2026-08-21，两套独立方法各数一遍同得 33 且名单逐条相同：一套是 git 侧
 # 正则（排注释行、cmd 计数），一套是本门禁的 go/ast 解析。**当日随后删掉两条死代码为 31；
 # 同日晚随审计票 14 新增两条（PS 载荷规范化摘要一对），现为 33；2026-09-01 随票 08 面单
-# 交易域模型新增三条，现为 36**——这句逐次记增减而不是只写一个数，是因为下一次增减时只改
-# 一处会让另一处变错。
+# 交易域模型新增三条为 36，同日票 08 的仓储落地后重建那条接上生产调用路径剪掉，现为 35**
+# ——这句逐次记增减而不是只写一个数，是因为下一次增减时只改一处会让另一处变错。
 #
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
@@ -34,15 +34,14 @@ internal/parcelshipment/domain AssessSafeHandoff
 # 版本报出口，接上那天一起出名单。
 internal/parcelshipment/domain CanonicalizeSubmissionPayload
 internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
-# 票 08 的面单交易域模型（ADR-0084）：建立、关系出处与重建三扇门。**此刻无生产调用点是设计
-# 而非遗漏**——面单交易的写入方是渠道适配器，而首发基线明写「独立面单渠道服务不进入首发生
-# 产」，渠道墙未降前登记零行。ADR-0084 Context 那句「写入方缺席是设计，本裁决不因为暂时没人
-# 写就把不变式的守护者省掉」正是这三条现在就存在的理由。写编排（随委托提交产生交易、渠道
-# 结果回填）落地那天，三条一起出名单；重建那条要等 adapters/postgres 侧的面单交易仓储，与
-# 写编排同批。
+# 票 08 的面单交易域模型（ADR-0084）：建立与关系出处两扇门。**此刻无生产调用点是设计而非
+# 遗漏**——面单交易的写入方是渠道适配器，而首发基线明写「独立面单渠道服务不进入首发生产」，
+# 渠道墙未降前登记零行。ADR-0084 Context 那句「写入方缺席是设计，本裁决不因为暂时没人写就把
+# 不变式的守护者省掉」正是这两条现在就存在的理由。写编排（随委托提交产生交易、渠道结果回填）
+# 落地那天，两条一起出名单。同批的 RehydrateLabelTransaction 已经不在这里：面单交易仓储
+# （adapters/postgres/label_transaction.go）读回时调它，那条路已经接上。
 internal/parcelshipment/domain EstablishLabelTransaction
 internal/parcelshipment/domain EstablishPriorLabelTransactionLink
-internal/parcelshipment/domain RehydrateLabelTransaction
 
 
 # —— visibility-exception ——

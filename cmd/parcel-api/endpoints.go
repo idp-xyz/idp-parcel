@@ -56,6 +56,7 @@ func assembleBusinessEndpoints(
 	rejection shipmenthttp.ActiveRejectionHandler,
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
+	labelTransactions shipmenthttp.LabelTransactionsReader,
 	cancellation shipmenthttp.CancellationHandler,
 	reception nodeopshttp.ReceptionHandler,
 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
@@ -97,6 +98,7 @@ func assembleBusinessEndpoints(
 	// ADR-0078 之前逐字节同形。启用时也只有这组变量换值——命令面与客户查阅面
 	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
+	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	nodeOperationsCatalogueIntake := nodeopshttp.CatalogueQueryIntake(nodeopshttp.UnconfiguredIntake{})
 	transportCatalogueIntake := tfhttp.CatalogueQueryIntake(tfhttp.UnconfiguredIntake{})
 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
@@ -109,6 +111,7 @@ func assembleBusinessEndpoints(
 	governanceRegistryIntake := governancehttp.RegistryQueryIntake(governancehttp.UnconfiguredIntake{})
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
+		labelTransactionIntake = isolatedRead.labelTransactions
 		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
 		transportCatalogueIntake = isolatedRead.transportCatalogue
 		trackingProjectionsIntake = isolatedRead.trackingProjections
@@ -133,6 +136,12 @@ func assembleBusinessEndpoints(
 		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
 		// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。
 		{Pattern: "/acceptance-review-queue", Handler: shipmenthttp.NewQueryAcceptanceReviewQueueEndpoint(shipmentViewsIntake, reviewQueue, reviewJudgments)},
+		// 面单交易查阅（票 admin-skeleton-closure-batch/08，ADR-0084 决定七）：**另立一种
+		// 准入形**而不是复用委托查阅那个变量。两者由同一个隔离读开关、同一个装配点换值
+		// （决定七要的「沿用同一开关」），但接口不同：面单交易没有账户维可分，收一个必带
+		// 账户维的作用域等于在类型上声称会按账户过滤而它不会。渠道墙未降前这一口读到的是
+		// 空册，那是设计：写入方是渠道适配器，首发不进生产。
+		{Pattern: "/label-transactions", Handler: shipmenthttp.NewQueryLabelTransactionsEndpoint(labelTransactionIntake, labelTransactions)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，

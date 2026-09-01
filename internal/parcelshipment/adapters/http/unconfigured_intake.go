@@ -34,6 +34,7 @@ var (
 	_ SubmissionIntake             = UnconfiguredIntake{}
 	_ WithdrawalIntake             = UnconfiguredIntake{}
 	_ ShipmentRequestViewsIntake   = UnconfiguredIntake{}
+	_ LabelTransactionQueryIntake  = UnconfiguredIntake{}
 	_ CancellationIntake           = UnconfiguredIntake{}
 	_ ManualReviewCompletionIntake = UnconfiguredIntake{}
 	_ ActiveRejectionIntake        = UnconfiguredIntake{}
@@ -73,4 +74,9 @@ func (UnconfiguredIntake) IntakeListQuery(context.Context, *http.Request) (Shipm
 // IntakeDetailQuery 同上。
 func (UnconfiguredIntake) IntakeDetailQuery(context.Context, *http.Request) (ShipmentRequestViewQuery, error) {
 	return ShipmentRequestViewQuery{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeLabelTransactionQuery 同上：面单交易查阅的租户维同样只能来自认证与授权结果。
+func (UnconfiguredIntake) IntakeLabelTransactionQuery(context.Context, *http.Request) (LabelTransactionQuery, error) {
+	return LabelTransactionQuery{}, ErrAccessChannelNotConfigured
 }

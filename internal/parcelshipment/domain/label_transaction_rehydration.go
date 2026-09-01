@@ -112,7 +112,7 @@ func (transaction *LabelTransaction) rehydrateChannelTrace(spec RehydrateLabelTr
 	}
 	transaction.submittedAt = spec.SubmittedAt.UTC()
 
-	if !transaction.state.isChannelResult() {
+	if !transaction.state.IsChannelResult() {
 		if hasResultTrace {
 			return ErrInvalidRehydratedLabelTransaction
 		}

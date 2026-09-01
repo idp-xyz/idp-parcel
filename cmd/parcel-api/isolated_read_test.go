@@ -51,7 +51,8 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 	if intakes == nil {
 		t.Fatal("synthetic tenant yielded nil intakes")
 	}
-	if intakes.shipmentRequestViews == nil || intakes.trackingProjections == nil ||
+	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil ||
+		intakes.trackingProjections == nil ||
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
 		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil ||
@@ -74,7 +75,12 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 复核队列是委托查阅面的子集视图，在装配上与它共用同一个 Intake 变量，因此启用态
 	// 必然随它一起放行——这一行不是可选项，漏了它就等于断言「同一个 Intake 会给出两种
 	// 答案」，而那是装不出来的形状（票 admin-skeleton-closure-batch/09）。
-	"/acceptance-review-queue":             true,
+	"/acceptance-review-queue": true,
+	// 面单交易查阅同样共用委托查阅的 Intake 变量，因此启用态必然随它一起放行（票
+	// admin-skeleton-closure-batch/08）。它照样满足那三条判据：消费本上下文自己的存储
+	// 读面、零持久化、作用域来自运营侧授权结果——查阅一笔面单交易不触发任何判断、派生
+	// 或披露，渠道墙未降前它读到的还是空册。
+	"/label-transactions":                  true,
 	"/node-operations-records":             true,
 	"/transport-fulfillment-records":       true,
 	"/tracking-projections":                true,
