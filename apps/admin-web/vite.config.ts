@@ -35,6 +35,14 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
+      // OIDC 令牌交换同源转发：gk.idp.xyz 的 token 端点不对本地开发源放 CORS
+      // （实测预检无 Access-Control-Allow-Origin），授权跳转是顶层导航不受约束，
+      // 只有换令牌的 XHR 需要借道。目标与 src/auth/oidc.ts 的 ISSUER 同源。
+      '/oidc': {
+        target: 'https://gk.idp.xyz',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/oidc/, ''),
+      },
     },
   },
 });

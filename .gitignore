@@ -44,6 +44,9 @@ apps/*/dist/
 /docs/reference/**/*.xls
 /docs/reference/**/*.pdf
 /docs/*.rar
+# Raw tenant webhook captures carry live credentials and recipient PII; only a
+# de-identified evidence index may be committed in their place.
+/docs/wooolink/
 
 # Local agent scratch at the repo root
 /parallel_prompt.md
