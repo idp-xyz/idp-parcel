@@ -14,6 +14,11 @@ var (
 	// 余额显式保留（AT-SA-125）。
 	ErrAllocationImbalance    = errors.New("settlement accounting: portions exceed the source amount")
 	ErrInvalidOperatingResult = errors.New("settlement accounting: invalid operating result")
+	// ErrOperatingComponentRoles：组成项的角色在本口径下不成立，或审核应付与贷项那一对
+	// 不合规（各至多一项、贷项在场应付必须在场）。与 ErrInvalidOperatingResult 分开是
+	// 为了让「派生形状不对」与「口径采用物不对」在错误上就分得开——后者指向的是 CONTEXT
+	// 的成对采用那句，恢复动作是重新选料，不是改数（ADR-0087 决定三）。
+	ErrOperatingComponentRoles = errors.New("settlement accounting: operating component roles do not hold for the basis")
 )
 
 // AllocationRuleVersionReference 指名采用的分摊规则版本（版本生命周期属商业/结算
@@ -267,9 +272,90 @@ func NewComponentSourceReference(value string) (ComponentSourceReference, error)
 	return ComponentSourceReference{required}, err
 }
 
-// ResultComponent 是经营结果的一个组成项：来源、方向与金额。
+// ComponentRole 是组成项在本口径下的采用物身份（ADR-0087 决定三）。来源引用说的是
+// 「这笔钱是哪一条」，角色说的是「它在这个口径里充当什么」——CONTEXT 那句
+// 「审核应付与贷项按各自借贷方向分别计入一次……不得把审核应付视为已净含贷项」要的是
+// 后者，没有它写口连复验都无从谈起。
+//
+// **取值按口径分组，不是一个跨口径的大平集。** CONTEXT「经营毛利的客户与外部供应商
+// 基础必须按阶段成对采用」逐口径点名了各自的采用物；平集会放进「这个角色在这个口径下
+// 不该出现」的组成，那等于把一处空转换成另一处。
+type ComponentRole uint8
+
+const (
+	ComponentRoleInvalid ComponentRole = iota
+	// 预估口径：当前有效客户预估费用与当前有效供应商预期成本。
+	CustomerEstimateRole
+	SupplierExpectedCostRole
+	// 已确认口径：当前有效客户运营应收，以及当前有效审核应付和与其关联的当前有效贷项。
+	CustomerOperatingReceivableRole
+	AuditedPayableRole
+	SupplierCreditNoteRole
+	// 已结算口径：只用 UC-SA-005 对上述三者分别形成的运营核销分配范围。
+	SettledCustomerReceivableRole
+	SettledAuditedPayableRole
+	SettledSupplierCreditNoteRole
+)
+
+func (role ComponentRole) String() string {
+	switch role {
+	case CustomerEstimateRole:
+		return "CUSTOMER_ESTIMATE"
+	case SupplierExpectedCostRole:
+		return "SUPPLIER_EXPECTED_COST"
+	case CustomerOperatingReceivableRole:
+		return "CUSTOMER_OPERATING_RECEIVABLE"
+	case AuditedPayableRole:
+		return "AUDITED_PAYABLE"
+	case SupplierCreditNoteRole:
+		return "SUPPLIER_CREDIT_NOTE"
+	case SettledCustomerReceivableRole:
+		return "SETTLED_CUSTOMER_RECEIVABLE"
+	case SettledAuditedPayableRole:
+		return "SETTLED_AUDITED_PAYABLE"
+	case SettledSupplierCreditNoteRole:
+		return "SETTLED_SUPPLIER_CREDIT_NOTE"
+	default:
+		return ""
+	}
+}
+
+// admittedBy 判这个角色在该口径下成不成立。跨阶段替代由此拒：CONTEXT 明写「均不能把
+// 缺失成本记为零、把审核应付视为已净含贷项或跨阶段替代」。
+func (role ComponentRole) admittedBy(basis OperatingBasis) bool {
+	switch basis {
+	case EstimatedBasis:
+		return role == CustomerEstimateRole || role == SupplierExpectedCostRole
+	case ConfirmedBasis:
+		return role == CustomerOperatingReceivableRole ||
+			role == AuditedPayableRole ||
+			role == SupplierCreditNoteRole
+	case SettledBasis:
+		return role == SettledCustomerReceivableRole ||
+			role == SettledAuditedPayableRole ||
+			role == SettledSupplierCreditNoteRole
+	default:
+		return false
+	}
+}
+
+// payableAndCreditRolesOf 给出该口径下的「审核应付」与「与其关联的贷项」两个角色。
+// 预估口径没有这一对——它采用的是预估费用与预期成本，账单与贷项都还不存在。
+func payableAndCreditRolesOf(basis OperatingBasis) (payable, credit ComponentRole, paired bool) {
+	switch basis {
+	case ConfirmedBasis:
+		return AuditedPayableRole, SupplierCreditNoteRole, true
+	case SettledBasis:
+		return SettledAuditedPayableRole, SettledSupplierCreditNoteRole, true
+	default:
+		return ComponentRoleInvalid, ComponentRoleInvalid, false
+	}
+}
+
+// ResultComponent 是经营结果的一个组成项：来源、角色、方向与金额。
 type ResultComponent struct {
 	Source      ComponentSourceReference
+	Role        ComponentRole
 	Effect      ComponentEffect
 	AmountMinor int64
 }
@@ -327,11 +413,17 @@ func DeriveOperatingResult(
 		if !component.Source.valid() || !component.Effect.valid() || component.AmountMinor <= 0 {
 			return OperatingResult{}, ErrInvalidOperatingResult
 		}
+		if !component.Role.admittedBy(basis) {
+			return OperatingResult{}, ErrOperatingComponentRoles
+		}
 		if component.Effect == IncreasesResult {
 			margin += component.AmountMinor
 		} else {
 			margin -= component.AmountMinor
 		}
+	}
+	if err := verifyPayableAndCredit(basis, components); err != nil {
+		return OperatingResult{}, err
 	}
 	return OperatingResult{
 		scope:       scope,
@@ -343,6 +435,38 @@ func DeriveOperatingResult(
 		version:     version,
 		asOf:        asOf.UTC(),
 	}, nil
+}
+
+// verifyPayableAndCredit 是 CONTEXT「审核应付与贷项按各自借贷方向分别计入一次……不得
+// 把审核应付视为已净含贷项」那句在写侧的可核对形式（ADR-0087 决定三）：同一口径下两者
+// 各至多一项，且贷项在场时应付必须在场。
+//
+// 各至多一项拦的是「分别计入一次」的反面；贷项不得独自在场拦的是净额化——一个只带贷项
+// 而不带应付的口径，读起来就是应付已经把贷项吃进去了，而那正是那句禁的。
+//
+// 判据落在写侧而不是 SQL CHECK：逐元素校验 jsonb 在本模块无先例，而写口复验有（组成与
+// 毛利是否相符就是在那里守的）。日后若出现绕过写口的写入路径，这一条要重裁。
+func verifyPayableAndCredit(basis OperatingBasis, components []ResultComponent) error {
+	payableRole, creditRole, paired := payableAndCreditRolesOf(basis)
+	if !paired {
+		return nil
+	}
+	payables, credits := 0, 0
+	for _, component := range components {
+		switch component.Role {
+		case payableRole:
+			payables++
+		case creditRole:
+			credits++
+		}
+	}
+	if payables > 1 || credits > 1 {
+		return ErrOperatingComponentRoles
+	}
+	if credits == 1 && payables == 0 {
+		return ErrOperatingComponentRoles
+	}
+	return nil
 }
 
 func (result OperatingResult) Scope() OperatingScopeReference {

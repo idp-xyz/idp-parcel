@@ -90,6 +90,26 @@ func (double *conditionViewDouble) LoadConfirmationCondition(
 	return ports.ConfirmationCondition{Met: true, Basis: basis}, true, nil
 }
 
+type factsViewDouble struct {
+	configured bool
+	facts      domain.ConfirmedChargeFacts
+	err        error
+}
+
+func (double *factsViewDouble) LoadConfirmedChargeFacts(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.CustomerChargeID,
+) (domain.ConfirmedChargeFacts, bool, error) {
+	if double.err != nil {
+		return domain.ConfirmedChargeFacts{}, false, double.err
+	}
+	if !double.configured {
+		return domain.ConfirmedChargeFacts{}, false, nil
+	}
+	return double.facts, true, nil
+}
+
 type confirmationHandoffDouble struct {
 	intents []ports.ChargeConfirmationHandoffIntent
 	err     error
@@ -113,6 +133,7 @@ func (clock confirmClock) Now() time.Time { return clock.at }
 type confirmFixture struct {
 	store      *chargeStoreDouble
 	conditions *conditionViewDouble
+	facts      *factsViewDouble
 	handoff    *confirmationHandoffDouble
 	handler    *application.ConfirmChargeHandler
 }
@@ -122,16 +143,31 @@ func newConfirmFixture(t *testing.T) *confirmFixture {
 	fixture := &confirmFixture{
 		store:      newChargeStore(),
 		conditions: &conditionViewDouble{configured: true, met: true},
+		facts:      &factsViewDouble{configured: true, facts: registeredFacts(t)},
 		handoff:    &confirmationHandoffDouble{},
 	}
 	fixture.handler = application.NewConfirmChargeHandler(application.ConfirmChargeDeps{
 		Charges:    fixture.store,
 		Conditions: fixture.conditions,
+		Facts:      fixture.facts,
 		Downstream: fixture.handoff,
 		Clock:      confirmClock{at: chargeConfirmedAt},
 	})
 	fixture.store.charges["charge-1"] = provisionalCharge(t)
 	return fixture
+}
+
+func registeredFacts(t *testing.T) domain.ConfirmedChargeFacts {
+	t.Helper()
+	return domain.ConfirmedChargeFacts{
+		ResponsibleEntity:    billValue(t, domain.NewLegalEntityReference, "LEGAL-ENTITY/syn-1"),
+		Counterparty:         billValue(t, domain.NewSettlementCounterpartyReference, "COUNTERPARTY/syn-1"),
+		Direction:            domain.ChargeReceivable,
+		SettlementAccount:    billValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+		ContractBasis:        billValue(t, domain.NewContractBasisReference, "CONTRACT/syn-1"),
+		PrimaryChargingScope: billValue(t, domain.NewChargingScopeReference, "SCOPE/syn-1"),
+		SourceFact:           billValue(t, domain.NewSourceFactReference, "SOURCE-FACT/syn-1"),
+	}
 }
 
 func provisionalCharge(t *testing.T) domain.CustomerCharge {
@@ -235,6 +271,7 @@ func TestAnAlreadyConfirmedChargeIsNotConfirmedTwice(t *testing.T) {
 		loser.store.saveResult = ports.ChargeAlreadyConfirmed
 		// 赢家已确认在库：落败方 Save 撞 AlreadyConfirmed 后读回赢家作答。
 		winner, err := provisionalCharge(t).Confirm(
+			registeredFacts(t),
 			billValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-winner"),
 			chargeConfirmedAt.Add(-time.Minute))
 		if err != nil {
@@ -268,6 +305,97 @@ func TestAnAlreadyConfirmedChargeIsNotConfirmedTwice(t *testing.T) {
 		}
 		if replay.ConfirmationHandoffReference() != "" || len(fixture.handoff.intents) != 1 {
 			t.Fatalf("intents = %d handoff = %q", len(fixture.handoff.intents), replay.ConfirmationHandoffReference())
+		}
+	})
+}
+
+// Covers: SA CONTEXT「每条确认费用必须固定责任法人、结算相对方、收付方向、结算账户、
+// 合同或责任依据、结算币种、主要计费范围和来源事实……任何一项不能通过当前组织、当前
+// 客户属性或报表筛选临时推断」与 ADR-0087 决定一。
+//
+// 七项由结算事实读口交出，不进命令：命令带得了它们，「临时推断」就只是换了个人做，
+// 那句硬句照样空转。事实无处可取与确认条件未配置分两格，因为两者的恢复动作不同——
+// 一个等结算事实册、一个等确认条件目录，并成一格之后「未配置」这个答案就说不出等的
+// 是哪一半。
+func TestConfirmationFactsComeFromTheRegisterNotTheCaller(t *testing.T) {
+	commandType := reflect.TypeOf(application.ConfirmChargeCommand{})
+	for index := 0; index < commandType.NumField(); index++ {
+		name := strings.ToLower(commandType.Field(index).Name)
+		for _, claimed := range []string{"entity", "counterparty", "direction", "account", "contract", "scope", "fact"} {
+			if strings.Contains(name, claimed) {
+				t.Fatalf("ConfirmChargeCommand 携带 %q——七项由调用方声称就是那句禁的临时推断换了个人做",
+					commandType.Field(index).Name)
+			}
+		}
+	}
+
+	fixture := newConfirmFixture(t)
+	result, err := fixture.handler.Handle(context.Background(), confirmCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ChargeConfirmedOutcome {
+		t.Fatalf("outcome = %q, want CHARGE_CONFIRMED", result.Outcome())
+	}
+	charge, present := result.Charge()
+	if !present {
+		t.Fatal("确认成功却交不回费用")
+	}
+	fixed, confirmed := charge.ConfirmedFacts()
+	if !confirmed {
+		t.Fatal("已确认费用交不回它固定的七项")
+	}
+	if fixed != fixture.facts.facts {
+		t.Fatalf("固定下来的事实不是结算事实读口交出的那一份：%#v", fixed)
+	}
+
+	t.Run("facts nowhere to be had is undecided, not a default", func(t *testing.T) {
+		fixture := newConfirmFixture(t)
+		fixture.facts.configured = false
+		result, err := fixture.handler.Handle(context.Background(), confirmCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ConfirmUndecided ||
+			result.UndecidedReason() != application.ConfirmationFactsUnconfigured {
+			t.Fatalf("outcome = %q reason = %q（无处可取不得用空值凑格）",
+				result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.store.saves != 0 {
+			t.Fatal("七项无处可取还提交了确认")
+		}
+	})
+
+	t.Run("a facts view failure is its own undecided reason", func(t *testing.T) {
+		fixture := newConfirmFixture(t)
+		fixture.facts.err = errors.New("facts view down")
+		result, err := fixture.handler.Handle(context.Background(), confirmCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ConfirmUndecided ||
+			result.UndecidedReason() != application.FactsViewUnavailable {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+		if result.ContinuationReference() == "" {
+			t.Fatal("依赖故障没有留下续办引用")
+		}
+	})
+
+	t.Run("an incomplete register entry does not become a confirmation", func(t *testing.T) {
+		fixture := newConfirmFixture(t)
+		short := registeredFacts(t)
+		short.PrimaryChargingScope = domain.ChargingScopeReference{}
+		fixture.facts.facts = short
+		result, err := fixture.handler.Handle(context.Background(), confirmCommand(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.Outcome() != application.ConfirmNotAccepted {
+			t.Fatalf("outcome = %q；册上交出缺项的一份，确认照样成立了", result.Outcome())
+		}
+		if fixture.store.saves != 0 {
+			t.Fatal("缺项还提交了确认")
 		}
 	})
 }
@@ -352,6 +480,7 @@ func TestConditionGridsSplitByRecoveryAction(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.ConfirmUndecidedReason{
 			application.ChargeStoreUnavailable, application.ConditionViewUnavailable, application.ConditionUnconfigured,
+			application.FactsViewUnavailable, application.ConfirmationFactsUnconfigured,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -359,7 +488,7 @@ func TestConditionGridsSplitByRecoveryAction(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 3 {
+		if len(labels) != 5 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ConfirmUndecidedReason(len(labels)+1).String() != "" {

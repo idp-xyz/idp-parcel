@@ -214,6 +214,7 @@ func confirmedStatementCharge(t *testing.T, id string, amount int64) domain.Cust
 		t.Fatalf("form charge: %v", err)
 	}
 	confirmed, err := charge.Confirm(
+		registeredFacts(t),
 		billValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-"+id),
 		statementCutOffAt.Add(-24*time.Hour))
 	if err != nil {

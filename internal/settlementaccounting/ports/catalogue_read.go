@@ -49,21 +49,33 @@ type ChargeConfirmationBasisEntry struct {
 // 没有租户时整张表是空的。它与「配了但依据没到」（RequiredBasisKind 有值而
 // ConfirmationBases 里没有那一种）是两个不同的答案，读面分两格摆开，由读的人判，
 // 不共用一格。
+// 确认时固定的七项（责任法人、结算相对方、收付方向、结算账户、合同或责任依据、主要
+// 计费范围、来源事实）随 ADR-0087 决定一入册，读面照册转写。它们在非确认行上一律为空，
+// 那是库上 customer_charge_confirmation_facts_coupled 的正面结果——「这一行还没确认」，
+// 不是缺数据；票 admin-skeleton-closure-batch/04 当初按「册级缺席即撤栏」撤掉的那几栏
+// 因此可以照册加回，缺席从册级降成了行级。
 type CustomerChargeCatalogueRow struct {
-	Charge             string
-	FeeItem            string
-	Evaluation         string
-	Stage              string
-	OriginalCurrency   string
-	OriginalMinor      int64
-	SettlementCurrency string
-	SettlementMinor    int64
-	ConversionStep     string
-	ConfirmationBasis  string
-	FormedAt           time.Time
-	ConfirmedAt        *time.Time
-	RequiredBasisKind  string
-	ConfirmationBases  []ChargeConfirmationBasisEntry
+	Charge               string
+	FeeItem              string
+	Evaluation           string
+	Stage                string
+	OriginalCurrency     string
+	OriginalMinor        int64
+	SettlementCurrency   string
+	SettlementMinor      int64
+	ConversionStep       string
+	ConfirmationBasis    string
+	ResponsibleEntity    string
+	Counterparty         string
+	ChargeDirection      string
+	SettlementAccount    string
+	ContractBasis        string
+	PrimaryChargingScope string
+	SourceFact           string
+	FormedAt             time.Time
+	ConfirmedAt          *time.Time
+	RequiredBasisKind    string
+	ConfirmationBases    []ChargeConfirmationBasisEntry
 }
 
 // SupplierExpectedCostCatalogueRow 是供应商预期成本版本册上列的一行。
@@ -277,8 +289,15 @@ type FundsApplicationCatalogueRead interface {
 // 组成逐项上列而不只给毛利：CONTEXT 硬要求审核应付与供应商费用贷项按各自借贷方向
 // 分别计入一次，「当前有效审核应付」不得被解释为已经静默净含贷项——净额把这条要求
 // 抹掉之后，页面上再也看不出它有没有被遵守。
+// Role 照册上原样转写（ADR-0087 决定三补的角色维）。读面不按 Source 猜某一项是客户侧
+// 还是审核应付还是贷项——那正是票 admin-skeleton-closure-batch/04 撤掉经营页四栏的理由：
+// 由读面代贴标签，等于把那条硬要求重新藏起来。现在角色在册上，转写它就是如实。
+//
+// 也不在这里按角色合计成四栏：合计是页面按角色分组就能做的事，读面多做一层就多一处
+// 定义，而两处一旦不一致，页面上看到的是没人验过的那个数（同 MarginMinor 那条理由）。
 type OperatingComponentEntry struct {
 	Source      string
+	Role        string
 	Effect      string
 	AmountMinor int64
 }

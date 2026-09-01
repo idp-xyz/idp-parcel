@@ -58,9 +58,17 @@ func TestCustomerChargeQueryTranscribesChargesVerbatim(t *testing.T) {
 				SettlementMinor:    98000,
 				ConversionStep:     "SYN-FX-01",
 				ConfirmationBasis:  "SYN-BASIS-01",
-				FormedAt:           catalogueBaseAt,
-				ConfirmedAt:        &confirmedAt,
-				RequiredBasisKind:  "DELIVERY_PROOF",
+				// 确认时固定的七项（ADR-0087 决定一）。
+				ResponsibleEntity:    "SYN-ENTITY-01",
+				Counterparty:         "SYN-PARTY-01",
+				ChargeDirection:      "RECEIVABLE",
+				SettlementAccount:    "SYN-ACCT-01",
+				ContractBasis:        "SYN-CONTRACT-01",
+				PrimaryChargingScope: "SYN-SCOPE-01",
+				SourceFact:           "SYN-FACT-01",
+				FormedAt:             catalogueBaseAt,
+				ConfirmedAt:          &confirmedAt,
+				RequiredBasisKind:    "DELIVERY_PROOF",
 				ConfirmationBases: []ports.ChargeConfirmationBasisEntry{
 					{BasisKind: "DELIVERY_PROOF", Basis: "SYN-BASIS-01", RecordedAt: confirmedAt},
 				},
@@ -79,20 +87,27 @@ func TestCustomerChargeQueryTranscribesChargesVerbatim(t *testing.T) {
 	var body struct {
 		Outcome string `json:"outcome"`
 		Charges []struct {
-			Charge             string          `json:"charge"`
-			FeeItem            string          `json:"feeItem"`
-			Evaluation         string          `json:"evaluation"`
-			Stage              string          `json:"stage"`
-			OriginalCurrency   string          `json:"originalCurrency"`
-			OriginalAmount     string          `json:"originalAmount"`
-			SettlementCurrency string          `json:"settlementCurrency"`
-			SettlementAmount   string          `json:"settlementAmount"`
-			ConversionStep     string          `json:"conversionStep"`
-			ConfirmationBasis  string          `json:"confirmationBasis"`
-			FormedAt           string          `json:"formedAt"`
-			ConfirmedAt        string          `json:"confirmedAt"`
-			RequiredBasisKind  string          `json:"requiredBasisKind"`
-			ConfirmationBases  json.RawMessage `json:"confirmationBases"`
+			Charge               string          `json:"charge"`
+			FeeItem              string          `json:"feeItem"`
+			Evaluation           string          `json:"evaluation"`
+			Stage                string          `json:"stage"`
+			OriginalCurrency     string          `json:"originalCurrency"`
+			OriginalAmount       string          `json:"originalAmount"`
+			SettlementCurrency   string          `json:"settlementCurrency"`
+			SettlementAmount     string          `json:"settlementAmount"`
+			ConversionStep       string          `json:"conversionStep"`
+			ConfirmationBasis    string          `json:"confirmationBasis"`
+			ResponsibleEntity    string          `json:"responsibleEntity"`
+			Counterparty         string          `json:"counterparty"`
+			ChargeDirection      string          `json:"chargeDirection"`
+			SettlementAccount    string          `json:"settlementAccount"`
+			ContractBasis        string          `json:"contractBasis"`
+			PrimaryChargingScope string          `json:"primaryChargingScope"`
+			SourceFact           string          `json:"sourceFact"`
+			FormedAt             string          `json:"formedAt"`
+			ConfirmedAt          string          `json:"confirmedAt"`
+			RequiredBasisKind    string          `json:"requiredBasisKind"`
+			ConfirmationBases    json.RawMessage `json:"confirmationBases"`
 		} `json:"charges"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
@@ -115,6 +130,21 @@ func TestCustomerChargeQueryTranscribesChargesVerbatim(t *testing.T) {
 		charge.ConversionStep != "SYN-FX-01" {
 		t.Fatalf("币种三件组走样：%+v", charge)
 	}
+	// 七项逐格点名：七个键同型，报文里错位一个照样每格都有值。
+	for name, pair := range map[string][2]string{
+		"responsibleEntity":    {charge.ResponsibleEntity, "SYN-ENTITY-01"},
+		"counterparty":         {charge.Counterparty, "SYN-PARTY-01"},
+		"chargeDirection":      {charge.ChargeDirection, "RECEIVABLE"},
+		"settlementAccount":    {charge.SettlementAccount, "SYN-ACCT-01"},
+		"contractBasis":        {charge.ContractBasis, "SYN-CONTRACT-01"},
+		"primaryChargingScope": {charge.PrimaryChargingScope, "SYN-SCOPE-01"},
+		"sourceFact":           {charge.SourceFact, "SYN-FACT-01"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s 透出成了 %q，要 %q", name, pair[0], pair[1])
+		}
+	}
+
 	var bases []struct {
 		BasisKind  string `json:"basisKind"`
 		Basis      string `json:"basis"`
@@ -174,7 +204,13 @@ func TestCustomerChargeQueryKeepsUnconfiguredConditionApartFromMissingBasis(t *t
 	}
 
 	unconfigured := body.Charges[0]
-	for _, absent := range []string{"confirmedAt", "confirmationBasis", "requiredBasisKind", "conversionStep"} {
+	for _, absent := range []string{
+		"confirmedAt", "confirmationBasis", "requiredBasisKind", "conversionStep",
+		// 未确认行整键不出现，与 confirmedAt 同一处置：那是「这一行还没确认」的正面
+		// 形状，透出七个空串会让页面以为册上记漏了（ADR-0087 决定一）。
+		"responsibleEntity", "counterparty", "chargeDirection", "settlementAccount",
+		"contractBasis", "primaryChargingScope", "sourceFact",
+	} {
 		if _, present := unconfigured[absent]; present {
 			t.Fatalf("缺席的 %q 不该出现在报文里：%s", absent, response.Body.String())
 		}

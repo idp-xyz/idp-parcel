@@ -42,6 +42,7 @@ func TestAChargeWalksFromEstimateToConfirmation(t *testing.T) {
 	}
 
 	confirmed, err := charge.Confirm(
+		confirmationFacts(t),
 		mustValue(t, domain.NewConfirmationBasisReference, "DELIVERY_FINALIZED/final-1"),
 		chargeFormedAt.Add(48*time.Hour),
 	)
@@ -64,6 +65,7 @@ func TestAChargeWalksFromEstimateToConfirmation(t *testing.T) {
 	}
 
 	if _, err := confirmed.Confirm(
+		confirmationFacts(t),
 		mustValue(t, domain.NewConfirmationBasisReference, "AGAIN"),
 		chargeFormedAt.Add(72*time.Hour),
 	); !errors.Is(err, domain.ErrChargeAlreadyFinal) {
@@ -149,6 +151,69 @@ func TestAChargeCarriesTheCurrencyTripleFromItsEvaluation(t *testing.T) {
 
 	if _, present := estimatedCharge(t).Conversion(); present {
 		t.Fatal("同币种费用凭空带了换算依据")
+	}
+}
+
+func confirmationFacts(t *testing.T) domain.ConfirmedChargeFacts {
+	t.Helper()
+	return domain.ConfirmedChargeFacts{
+		ResponsibleEntity:    mustValue(t, domain.NewLegalEntityReference, "LEGAL-ENTITY/syn-1"),
+		Counterparty:         mustValue(t, domain.NewSettlementCounterpartyReference, "COUNTERPARTY/syn-1"),
+		Direction:            domain.ChargeReceivable,
+		SettlementAccount:    mustValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+		ContractBasis:        mustValue(t, domain.NewContractBasisReference, "CONTRACT/syn-1"),
+		PrimaryChargingScope: mustValue(t, domain.NewChargingScopeReference, "SCOPE/syn-1"),
+		SourceFact:           mustValue(t, domain.NewSourceFactReference, "SOURCE-FACT/syn-1"),
+	}
+}
+
+// Covers: SA CONTEXT「费用形成与证据」硬句「每条确认费用必须固定责任法人、结算相对方、
+// 收付方向、结算账户、合同或责任依据、结算币种、主要计费范围和来源事实……任何一项不能
+// 通过当前组织、当前客户属性或报表筛选临时推断」，形状照 ADR-0087 决定一。
+//
+// 七项在确认那一刻一并钉上，缺一项则这笔确认根本不成立——这是那句硬句唯一可核对的
+// 形式：留一项可空就等于留一条事后推断的路，而它禁的正是那条路。结算币种不在七项里，
+// 它已由三件组成列。合同或责任依据与确认依据分两格、来源事实与评价分两格：前者是这笔钱
+// 依据哪份合同该收付、后者是哪份依据让它可以确认；评价是依据、来源事实是评价的输入。
+func TestConfirmationFixesTheFactsThatMustNotBeInferred(t *testing.T) {
+	facts := confirmationFacts(t)
+	basis := mustValue(t, domain.NewConfirmationBasisReference, "DELIVERY_FINALIZED/final-1")
+	confirmedAt := chargeFormedAt.Add(48 * time.Hour)
+
+	confirmed, err := estimatedCharge(t).Confirm(facts, basis, confirmedAt)
+	if err != nil {
+		t.Fatalf("confirm: %v", err)
+	}
+	fixed, present := confirmed.ConfirmedFacts()
+	if !present {
+		t.Fatal("已确认费用交不回它固定的事实")
+	}
+	if fixed != facts {
+		t.Fatalf("读回的事实变形：%#v", fixed)
+	}
+	if fixed.Direction != domain.ChargeReceivable || fixed.Direction.String() != "RECEIVABLE" {
+		t.Fatalf("收付方向 = %q；它是收付不是借贷，与 AdjustmentDirection 不共用词表", fixed.Direction)
+	}
+
+	if _, present := estimatedCharge(t).ConfirmedFacts(); present {
+		t.Fatal("预估费用凭空带了确认才该固定的事实")
+	}
+
+	// 逐项抽掉一格：七项是一个整体，任何一格缺席都不构成一次确认。
+	for name, omit := range map[string]func(*domain.ConfirmedChargeFacts){
+		"责任法人":    func(f *domain.ConfirmedChargeFacts) { f.ResponsibleEntity = domain.LegalEntityReference{} },
+		"结算相对方":   func(f *domain.ConfirmedChargeFacts) { f.Counterparty = domain.SettlementCounterpartyReference{} },
+		"收付方向":    func(f *domain.ConfirmedChargeFacts) { f.Direction = domain.ChargeDirectionInvalid },
+		"结算账户":    func(f *domain.ConfirmedChargeFacts) { f.SettlementAccount = domain.SettlementAccountID{} },
+		"合同或责任依据": func(f *domain.ConfirmedChargeFacts) { f.ContractBasis = domain.ContractBasisReference{} },
+		"主要计费范围":  func(f *domain.ConfirmedChargeFacts) { f.PrimaryChargingScope = domain.ChargingScopeReference{} },
+		"来源事实":    func(f *domain.ConfirmedChargeFacts) { f.SourceFact = domain.SourceFactReference{} },
+	} {
+		incomplete := confirmationFacts(t)
+		omit(&incomplete)
+		if _, err := estimatedCharge(t).Confirm(incomplete, basis, confirmedAt); !errors.Is(err, domain.ErrInvalidCustomerCharge) {
+			t.Fatalf("err = %v；缺「%s」的确认被收下了", err, name)
+		}
 	}
 }
 

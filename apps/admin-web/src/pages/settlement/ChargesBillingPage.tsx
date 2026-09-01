@@ -11,7 +11,14 @@ import {
   type SupplierExpectedCostListResponseBody,
   type SupplierExpectedCostRecord,
 } from './api';
-import { chargeStageLabels, labelOf, unregistered } from './presentation';
+import { chargeDirectionLabels, chargeStageLabels, labelOf, unregistered } from './presentation';
+
+// unregisteredUntilConfirmed 是确认时固定那七项的统一呈现：未确认行整键不出现，如实写
+// 「未登记」而不留白也不补默认值。七项共用一个渲染而不各写一遍——它们的缺席是同一件事
+// （这一行还没确认），写七遍就会有一处日后跟别处不一样。
+function unregisteredUntilConfirmed(value: string | undefined) {
+  return value ?? <span className="text-idpxyz-textMuted">{unregistered}</span>;
+}
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['charges-billing'];
@@ -24,10 +31,15 @@ const info = moduleInfoById['charges-billing'];
 // 收付方向且「不能通过当前组织、当前客户属性或报表筛选临时推断」，由读面按行落在哪张表反推
 // 正是这条禁的东西。
 //
-// 旧骨架十二栏里的主要计费范围、收付方向、责任法人、结算相对方、版本、计费重量采用六栏随
-// 对栏裁定撤下：它们是**册级缺席**（这一册根本不记这件事），整列永远「未登记」不叫如实，
-// 那会把「本册不记」说成「本册记漏了」，反过来招人去别处推断补齐。行级缺席（这一行还没有）
-// 才保留成栏并显示「未登记」——确认依据与确认时间是本页仅有的两处。
+// 旧骨架十二栏里的版本与计费重量采用两栏仍撤：它们是**册级缺席**（这一册根本不记这件事），
+// 整列永远「未登记」不叫如实，那会把「本册不记」说成「本册记漏了」，反过来招人去别处推断
+// 补齐。版本这一栏尤其不该回来——ADR-0087 决定二给客户侧选的是调整明细册而不是版本链，
+// customer_charge 主键仍是一费用一行；调整落 charge_adjustment，要显示「被调整过」是另一
+// 条读面，不是把版本栏加回来。
+//
+// 主要计费范围、收付方向、责任法人、结算相对方四栏**已随 ADR-0087 决定一加回**，另加合同
+// 或责任依据与来源事实两栏：那七项现在真在册上（迁移 0014），缺席从册级降成了行级——未确认
+// 行整键不出现，由库上同在或同缺的 CHECK 守着。撤栏的判据没变，是判据的输入变了。
 
 // 金额与币种同格呈现不拆两栏：原币、合同结算币与换算依据是从同一个评价采用来的一组，
 // CONTEXT 要求整组重述不拆散。金额是币种最小单位的十进制计数串，照实转写不做换算。
@@ -79,6 +91,62 @@ const customerChargeColumns: ListColumn<CustomerChargeRecord>[] = [
     // 空即「尚未确认」，读的人据它去催确认。
     render: (row) =>
       row.confirmationBasis ?? <span className="text-idpxyz-textMuted">{unregistered}</span>,
+  },
+  // 确认时固定的七项（ADR-0087 决定一）。这六栏是票 04 对栏裁定当初以**册级缺席**撤下的
+  // 那几栏加回来的——判据没变，是判据的输入变了：册上真有了这些列，缺席从册级降成了行级
+  // （未确认行整键不出现，那是库上同在或同缺 CHECK 的正面结果），按同一条判据就该保留栏
+  // 并如实显示「未登记」。
+  //
+  // 「来源事实」不另设栏而与评价引用相邻同格：它是评价的输入，两者是一条链上的两环，
+  // 分成互不相邻的两栏会让读者以为可以各取各的。
+  {
+    id: 'responsible-entity',
+    header: '责任法人',
+    className: 'font-mono text-xs',
+    render: (row) => unregisteredUntilConfirmed(row.responsibleEntity),
+  },
+  {
+    id: 'counterparty',
+    header: '结算相对方',
+    className: 'font-mono text-xs',
+    render: (row) => unregisteredUntilConfirmed(row.counterparty),
+  },
+  {
+    id: 'charge-direction',
+    header: '收付方向',
+    // 照册转写，**不由页面推断**：CONTEXT 明写这一项「不能通过当前组织、当前客户属性或
+    // 报表筛选临时推断」。集外取值原样回显，不译成像样的话。
+    render: (row) =>
+      row.chargeDirection
+        ? labelOf(chargeDirectionLabels, row.chargeDirection)
+        : unregisteredUntilConfirmed(undefined),
+  },
+  {
+    id: 'settlement-account',
+    header: '结算账户',
+    className: 'font-mono text-xs',
+    render: (row) => unregisteredUntilConfirmed(row.settlementAccount),
+  },
+  {
+    id: 'contract-basis',
+    header: '合同或责任依据',
+    className: 'font-mono text-xs',
+    // 与「确认依据」是两栏不是一栏：后者说的是哪份依据让它可以确认，这一栏说的是这笔钱
+    // 依据哪份合同该收付，合用会让其中一个永远说不出口。
+    render: (row) => unregisteredUntilConfirmed(row.contractBasis),
+  },
+  {
+    id: 'primary-charging-scope',
+    header: '主要计费范围',
+    className: 'font-mono text-xs',
+    render: (row) => unregisteredUntilConfirmed(row.primaryChargingScope),
+  },
+  {
+    id: 'source-fact',
+    header: '来源事实',
+    className: 'font-mono text-xs',
+    // 与评价引用分两栏：评价是依据，来源事实是评价的输入。
+    render: (row) => unregisteredUntilConfirmed(row.sourceFact),
   },
   {
     id: 'required-basis-kind',

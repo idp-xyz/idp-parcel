@@ -11,7 +11,12 @@ import {
   type OperatingResultListResponseBody,
   type OperatingResultRecord,
 } from './api';
-import { componentEffectLabels, labelOf, operatingBasisLabels } from './presentation';
+import {
+  componentEffectLabels,
+  componentRoleLabels,
+  labelOf,
+  operatingBasisLabels,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['operating-metrics'];
@@ -20,11 +25,15 @@ const info = moduleInfoById['operating-metrics'];
 // 费用页：两册同属 UC-SA-006（分摊与指标由同一个用例形成、经同一个 OperatingIntent 交下游），
 // 而分摊只改变经营归因、不转移原债权债务责任——摆进费用页会让读者以为它动了应收应付。
 //
-// 旧骨架的「客户侧采用／供应商侧采用／其中：审核应付／其中：供应商费用贷项」四栏随对栏裁定
-// 撤下，改为组成逐项呈现：组成元素上只有来源、增减向与金额三个键，**没有角色维**。要填那
-// 四栏，读面得先判某个来源属于客户侧还是供应商侧、是不是审核应付、是不是贷项——而那正是
-// CONTEXT 硬要求「审核应付与贷项按各自借贷方向分别计入一次、不得净含贷项」想让人看见的
-// 东西，由读面代贴标签等于把它重新藏起来。
+// 旧骨架的「客户侧采用／供应商侧采用／其中：审核应付／其中：供应商费用贷项」四栏当初随
+// 对栏裁定撤下，理由是组成元素上没有角色维、要填那四栏就得由读面先猜某个来源属于哪一类。
+// ADR-0087 决定三把角色维补进了元素，那个理由不再成立——**但四栏仍不设**，改成在逐项呈现
+// 里把角色一并显示出来。
+//
+// 换的是理由不是结论：四栏是按角色对组成求和，求和这一层放在页面就成了第二处定义，而
+// 「审核应付与贷项按各自借贷方向分别计入一次、不得净含贷项」要人看见的恰恰是**逐项**，
+// 不是四个合计数。角色在项上显示之后，哪一项是审核应付、哪一项是贷项一眼可辨，那句硬句
+// 想让人看见的东西就已经在页面上了，再合计成四栏只会把它重新收拢回去。
 //
 // 「经营损失」栏一并撤下：它与经营毛利是同一个数按正负分两栏，会让「零」落进两栏都不占的
 // 缝里。毛利一栏带符号呈现，负值即经营损失。
@@ -55,16 +64,16 @@ const operatingResultColumns: ListColumn<OperatingResultRecord>[] = [
   },
   {
     id: 'components',
-    header: '组成（来源／增减向／金额）',
-    // 逐项呈现而不按角色归栏（理由见文件头）。空数组是「这份快照没有组成项」的如实一格，
-    // 不留白——留白读起来像渲染掉了东西。
+    header: '组成（角色／来源／增减向／金额）',
+    // 逐项呈现而不按角色合计成四栏（理由见文件头）。角色照册转写，不是页面判出来的。
+    // 空数组是「这份快照没有组成项」的如实一格，不留白——留白读起来像渲染掉了东西。
     render: (row) =>
       row.components.length > 0 ? (
-        <div className="min-w-56 font-mono text-xs">
+        <div className="min-w-72 font-mono text-xs">
           {row.components.map((component) => (
-            <p key={`${component.source}:${component.effect}:${component.amount}`}>
-              {component.source}／{labelOf(componentEffectLabels, component.effect)}／
-              {component.amount}
+            <p key={`${component.role}:${component.source}:${component.effect}:${component.amount}`}>
+              {labelOf(componentRoleLabels, component.role)}／{component.source}／
+              {labelOf(componentEffectLabels, component.effect)}／{component.amount}
             </p>
           ))}
         </div>

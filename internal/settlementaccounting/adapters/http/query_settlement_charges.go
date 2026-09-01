@@ -105,20 +105,27 @@ func serveCustomerCharges(
 			})
 		}
 		bodies = append(bodies, customerChargeBody{
-			Charge:             row.Charge,
-			FeeItem:            row.FeeItem,
-			Evaluation:         row.Evaluation,
-			Stage:              row.Stage,
-			OriginalCurrency:   row.OriginalCurrency,
-			OriginalAmount:     minorAmount(row.OriginalMinor),
-			SettlementCurrency: row.SettlementCurrency,
-			SettlementAmount:   minorAmount(row.SettlementMinor),
-			ConversionStep:     row.ConversionStep,
-			ConfirmationBasis:  row.ConfirmationBasis,
-			FormedAt:           rfc3339(row.FormedAt),
-			ConfirmedAt:        optionalInstant(row.ConfirmedAt),
-			RequiredBasisKind:  row.RequiredBasisKind,
-			ConfirmationBases:  bases,
+			Charge:               row.Charge,
+			FeeItem:              row.FeeItem,
+			Evaluation:           row.Evaluation,
+			Stage:                row.Stage,
+			OriginalCurrency:     row.OriginalCurrency,
+			OriginalAmount:       minorAmount(row.OriginalMinor),
+			SettlementCurrency:   row.SettlementCurrency,
+			SettlementAmount:     minorAmount(row.SettlementMinor),
+			ConversionStep:       row.ConversionStep,
+			ConfirmationBasis:    row.ConfirmationBasis,
+			ResponsibleEntity:    row.ResponsibleEntity,
+			Counterparty:         row.Counterparty,
+			ChargeDirection:      row.ChargeDirection,
+			SettlementAccount:    row.SettlementAccount,
+			ContractBasis:        row.ContractBasis,
+			PrimaryChargingScope: row.PrimaryChargingScope,
+			SourceFact:           row.SourceFact,
+			FormedAt:             rfc3339(row.FormedAt),
+			ConfirmedAt:          optionalInstant(row.ConfirmedAt),
+			RequiredBasisKind:    row.RequiredBasisKind,
+			ConfirmationBases:    bases,
 		})
 	}
 	writeJSON(response, http.StatusOK, customerChargeListResponse{
@@ -182,21 +189,31 @@ type customerChargeListResponse struct {
 // 费用项目在确认条件目录里没有行，与「配了但依据没到」（有 requiredBasisKind 而
 // confirmationBases 里没有那一种）分成两格摆开，由读的人判——两者的续办不同：前者
 // 要人去配条件，后者要人去催依据。
+// 确认时固定的七项（ADR-0087 决定一）随 `omitempty` 透出：未确认行整键不出现，那是
+// 「这一行还没确认」的正面形状，与 confirmedAt 同一处置。它们不合并成一个对象——七项
+// 在册上是七列，报文里拆成一层嵌套会多出一个册上没有的层次。
 type customerChargeBody struct {
-	Charge             string                        `json:"charge"`
-	FeeItem            string                        `json:"feeItem"`
-	Evaluation         string                        `json:"evaluation"`
-	Stage              string                        `json:"stage"`
-	OriginalCurrency   string                        `json:"originalCurrency"`
-	OriginalAmount     string                        `json:"originalAmount"`
-	SettlementCurrency string                        `json:"settlementCurrency"`
-	SettlementAmount   string                        `json:"settlementAmount"`
-	ConversionStep     string                        `json:"conversionStep,omitempty"`
-	ConfirmationBasis  string                        `json:"confirmationBasis,omitempty"`
-	FormedAt           string                        `json:"formedAt"`
-	ConfirmedAt        string                        `json:"confirmedAt,omitempty"`
-	RequiredBasisKind  string                        `json:"requiredBasisKind,omitempty"`
-	ConfirmationBases  []chargeConfirmationBasisBody `json:"confirmationBases"`
+	Charge               string                        `json:"charge"`
+	FeeItem              string                        `json:"feeItem"`
+	Evaluation           string                        `json:"evaluation"`
+	Stage                string                        `json:"stage"`
+	OriginalCurrency     string                        `json:"originalCurrency"`
+	OriginalAmount       string                        `json:"originalAmount"`
+	SettlementCurrency   string                        `json:"settlementCurrency"`
+	SettlementAmount     string                        `json:"settlementAmount"`
+	ConversionStep       string                        `json:"conversionStep,omitempty"`
+	ConfirmationBasis    string                        `json:"confirmationBasis,omitempty"`
+	ResponsibleEntity    string                        `json:"responsibleEntity,omitempty"`
+	Counterparty         string                        `json:"counterparty,omitempty"`
+	ChargeDirection      string                        `json:"chargeDirection,omitempty"`
+	SettlementAccount    string                        `json:"settlementAccount,omitempty"`
+	ContractBasis        string                        `json:"contractBasis,omitempty"`
+	PrimaryChargingScope string                        `json:"primaryChargingScope,omitempty"`
+	SourceFact           string                        `json:"sourceFact,omitempty"`
+	FormedAt             string                        `json:"formedAt"`
+	ConfirmedAt          string                        `json:"confirmedAt,omitempty"`
+	RequiredBasisKind    string                        `json:"requiredBasisKind,omitempty"`
+	ConfirmationBases    []chargeConfirmationBasisBody `json:"confirmationBases"`
 }
 
 // chargeConfirmationBasisBody 逐字段透出一种已到达的确认依据。「到了哪几种」与

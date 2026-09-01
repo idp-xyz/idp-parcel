@@ -11,6 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 结算与核算四张页读面的真库用例（ADR-0077 Decision 四/五那几句在这四本册上的样子，
@@ -172,10 +173,20 @@ func (fixture *catalogueFixture) seedCustomerCharge(
 	t.Helper()
 	var confirmedAt *time.Time
 	var basis *string
+	// 七项与确认留痕同进同出：customer_charge_confirmation_facts_coupled 要求确认行
+	// 俱全、非确认行全缺，播种绕不过它（ADR-0087 决定一）。
+	var facts [7]*string
 	if stage == "CONFIRMED" {
 		confirmed := catalogueBaseAt.Add(time.Hour)
 		confirmedAt = &confirmed
 		basis = &confirmationBasis
+		values := []string{
+			"LEGAL-ENTITY/SYN-01", "COUNTERPARTY/SYN-01", "RECEIVABLE",
+			"ACCOUNT/SYN-01", "CONTRACT/SYN-01", "SCOPE/SYN-01", "SOURCE-FACT/SYN-01",
+		}
+		for index := range values {
+			facts[index] = &values[index]
+		}
 	}
 	var conversionRef *string
 	if conversion != "" {
@@ -186,10 +197,15 @@ func (fixture *catalogueFixture) seedCustomerCharge(
 			(tenant_id, charge_id, fee_item, evaluation_ref,
 			 settlement_currency, settlement_minor, stage, confirmation_basis,
 			 formed_at, confirmed_at, recorded_at,
-			 original_currency, original_minor, conversion_ref)
-		 VALUES ($1, $2, $3, 'SYN-EVAL-01', $4, $5, $6, $7, $8, $9, $8, $10, $11, $12)`,
+			 original_currency, original_minor, conversion_ref,
+			 responsible_entity, counterparty_ref, charge_direction,
+			 settlement_account_id, contract_basis, primary_charging_scope,
+			 source_fact_ref)
+		 VALUES ($1, $2, $3, 'SYN-EVAL-01', $4, $5, $6, $7, $8, $9, $8, $10, $11, $12,
+		         $13, $14, $15, $16, $17, $18, $19)`,
 		tenant, charge, feeItem, settlementCurrency, settlementMinor, stage, basis,
-		catalogueBaseAt, confirmedAt, originalCurrency, originalMinor, conversionRef)
+		catalogueBaseAt, confirmedAt, originalCurrency, originalMinor, conversionRef,
+		facts[0], facts[1], facts[2], facts[3], facts[4], facts[5], facts[6])
 }
 
 // Covers: 客户费用逐格转写 — 币种三件组整组在场、确认留痕成对、已到达依据按种类
@@ -241,6 +257,47 @@ func TestCustomerChargeCatalogueTranscribesChargesAndTheirBases(t *testing.T) {
 		!row.FormedAt.Equal(catalogueBaseAt) {
 		t.Fatalf("确认留痕走样：%+v", row)
 	}
+	// 确认时固定的七项逐格转写（ADR-0087 决定一）。逐格点名而不是只判非空：七列同型
+	// 同种，SQL 里错位一列照样每格都有值，只有对上各自的播种值才认得出来。
+	for name, pair := range map[string][2]string{
+		"责任法人":    {row.ResponsibleEntity, "LEGAL-ENTITY/SYN-01"},
+		"结算相对方":   {row.Counterparty, "COUNTERPARTY/SYN-01"},
+		"收付方向":    {row.ChargeDirection, "RECEIVABLE"},
+		"结算账户":    {row.SettlementAccount, "ACCOUNT/SYN-01"},
+		"合同或责任依据": {row.ContractBasis, "CONTRACT/SYN-01"},
+		"主要计费范围":  {row.PrimaryChargingScope, "SCOPE/SYN-01"},
+		"来源事实":    {row.SourceFact, "SOURCE-FACT/SYN-01"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("「%s」转写成了 %q，要 %q——七列同型，错位一列每格照样有值", name, pair[0], pair[1])
+		}
+	}
+
+	t.Run("an unconfirmed row carries none of the seven", func(t *testing.T) {
+		fixture.seedCustomerCharge(t, catalogueTenant, "SYN-CHG-02", "SYN-FEE-01", "ESTIMATED",
+			"SYN-CUR-01", 500, "SYN-CUR-01", 500, "", "")
+		rows, err := fixture.charges.ListCustomerCharges(
+			t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+		if err != nil {
+			t.Fatalf("上列客户费用：%v", err)
+		}
+		var estimated *ports.CustomerChargeCatalogueRow
+		for index := range rows {
+			if rows[index].Charge == "SYN-CHG-02" {
+				estimated = &rows[index]
+			}
+		}
+		if estimated == nil {
+			t.Fatal("预估行没上列")
+		}
+		// 七格皆空是「这一行还没确认」的正面形状，由库上那条同在或同缺守着；读面不代填。
+		if estimated.ResponsibleEntity != "" || estimated.Counterparty != "" ||
+			estimated.ChargeDirection != "" || estimated.SettlementAccount != "" ||
+			estimated.ContractBasis != "" || estimated.PrimaryChargingScope != "" ||
+			estimated.SourceFact != "" {
+			t.Fatalf("预估行带了确认才该固定的事实：%+v", estimated)
+		}
+	})
 	if row.RequiredBasisKind != "DELIVERY_CONFIRMED" {
 		t.Fatalf("确认条件目录要求的依据种类走样：%q", row.RequiredBasisKind)
 	}
@@ -611,9 +668,9 @@ func TestOperatingResultCatalogueTranscribesComponentsWithoutNetting(t *testing.
 			(tenant_id, scope_ref, period_ref, basis, currency, components, margin_minor,
 			 version, as_of, content_digest, recorded_at)
 		 VALUES ($1, 'SYN-SCOPE-01', 'SYN-PER-01', 'CONFIRMED', 'SYN-CUR-01',
-		         '[{"source":"SYN-RECEIVABLE-01","effect":"INCREASES","amountMinor":150000},
-		           {"source":"SYN-PAYABLE-01","effect":"DECREASES","amountMinor":90000},
-		           {"source":"SYN-CREDIT-01","effect":"INCREASES","amountMinor":5000}]'::jsonb,
+		         '[{"source":"SYN-RECEIVABLE-01","role":"CUSTOMER_OPERATING_RECEIVABLE","effect":"INCREASES","amountMinor":150000},
+		           {"source":"SYN-PAYABLE-01","role":"AUDITED_PAYABLE","effect":"DECREASES","amountMinor":90000},
+		           {"source":"SYN-CREDIT-01","role":"SUPPLIER_CREDIT_NOTE","effect":"INCREASES","amountMinor":5000}]'::jsonb,
 		         65000, 'SYN-RESV-01', $2, 'SYN-DIGEST-O1', $2)`,
 		catalogueTenant, catalogueBaseAt)
 
@@ -637,6 +694,14 @@ func TestOperatingResultCatalogueTranscribesComponentsWithoutNetting(t *testing.
 		row.Components[1].Effect != "DECREASES" || row.Components[1].AmountMinor != 90000 ||
 		row.Components[2].Source != "SYN-CREDIT-01" {
 		t.Fatalf("组成项逐格转写走样：%+v", row.Components)
+	}
+	// 角色照册原样转写（ADR-0087 决定三）：审核应付与贷项从此在读面上分得开，不必由
+	// 读的人按 source 去猜——票 admin-skeleton-closure-batch/04 撤掉经营页四栏正是因为
+	// 那时只能猜。
+	if row.Components[0].Role != "CUSTOMER_OPERATING_RECEIVABLE" ||
+		row.Components[1].Role != "AUDITED_PAYABLE" ||
+		row.Components[2].Role != "SUPPLIER_CREDIT_NOTE" {
+		t.Fatalf("组成项角色转写走样：%+v", row.Components)
 	}
 }
 

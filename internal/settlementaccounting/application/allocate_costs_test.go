@@ -208,8 +208,8 @@ func deriveCommand(t *testing.T) application.DeriveResultCommand {
 		Basis:    domain.ConfirmedBasis,
 		Currency: "USD",
 		Components: []application.ComponentDirective{
-			{Source: "confirmed-revenue-1", Effect: domain.IncreasesResult, AmountMinor: 20000},
-			{Source: "allocated-cost-1", Effect: domain.DecreasesResult, AmountMinor: 12000},
+			{Source: "confirmed-revenue-1", Role: domain.CustomerOperatingReceivableRole, Effect: domain.IncreasesResult, AmountMinor: 20000},
+			{Source: "allocated-cost-1", Role: domain.AuditedPayableRole, Effect: domain.DecreasesResult, AmountMinor: 12000},
 		},
 		Version: "result/v1",
 		AsOf:    operatingAsOf,
@@ -380,9 +380,9 @@ func TestOperatingResultsDeriveAndRederive(t *testing.T) {
 			Period:   "2026-08",
 			Basis:    domain.ConfirmedBasis,
 			Components: []application.ComponentDirective{
-				{Source: "confirmed-revenue-1", Effect: domain.IncreasesResult, AmountMinor: 20000},
-				{Source: "allocated-cost-1", Effect: domain.DecreasesResult, AmountMinor: 12000},
-				{Source: "late-cost-1", Effect: domain.DecreasesResult, AmountMinor: 3000},
+				{Source: "confirmed-revenue-1", Role: domain.CustomerOperatingReceivableRole, Effect: domain.IncreasesResult, AmountMinor: 20000},
+				{Source: "allocated-cost-1", Role: domain.AuditedPayableRole, Effect: domain.DecreasesResult, AmountMinor: 12000},
+				{Source: "late-cost-1", Role: domain.CustomerOperatingReceivableRole, Effect: domain.DecreasesResult, AmountMinor: 3000},
 			},
 			NewVersion: "result/v2",
 			AsOf:       operatingAsOf.Add(48 * time.Hour),
@@ -410,7 +410,7 @@ func TestOperatingResultsDeriveAndRederive(t *testing.T) {
 			Scope:      "customer-9",
 			Period:     "2026-08",
 			Basis:      domain.ConfirmedBasis,
-			Components: []application.ComponentDirective{{Source: "x", Effect: domain.IncreasesResult, AmountMinor: 1}},
+			Components: []application.ComponentDirective{{Source: "x", Role: domain.CustomerOperatingReceivableRole, Effect: domain.IncreasesResult, AmountMinor: 1}},
 			NewVersion: "result/v2",
 			AsOf:       operatingAsOf.Add(48 * time.Hour),
 		})

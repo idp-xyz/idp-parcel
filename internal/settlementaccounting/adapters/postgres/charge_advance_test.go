@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -345,6 +346,68 @@ func TestChargeAdvanceCheckConstraintsRejectImpossibleRows(t *testing.T) {
 		t.Fatal("一行「跨币种却没有换算依据」溜进了费用库")
 	}
 
+	// 以下四格钉 ADR-0087 决定一的库面：CONTEXT 那句「任何一项不能通过当前组织、当前
+	// 客户属性或报表筛选临时推断」，在库上唯一可核对的形式就是确认行七项俱全。
+	// confirmed_at 与 formed_at 都由库侧 now() 出（同事务同值，满足 confirmed_at >=
+	// formed_at）：Go 侧取一次时间再传进来，两个时钟谁先谁后不确定，行会被旧的
+	// customer_charge_confirmation_coupled 先拒掉，于是这几格测的就不是它们要测的东西。
+	confirmedWithFacts := `INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
+			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at,
+			 responsible_entity, counterparty_ref, charge_direction,
+			 settlement_account_id, contract_basis, primary_charging_scope,
+			 source_fact_ref)
+		 VALUES ('tenant-a', $1, 'BASE_FREIGHT', 'eval-1', 'CNY', 100, 'CNY', 100,
+		         $2, $3, now(), CASE WHEN $2 = 'CONFIRMED' THEN now() END, now(),
+		         $4, $5, $6, $7, $8, $9, $10)`
+
+	// 逐格钉住**是哪条约束**拒的，不只钉「拒了」：只断言 err != nil 时，一个写错的
+	// INSERT 与一条真正生效的 CHECK 在测试里长着同一张脸。
+	for _, refusal := range []struct {
+		name       string
+		args       []any
+		constraint string
+		complaint  string
+	}{
+		{
+			name:       "c-bad-5",
+			args:       []any{"CONFIRMED", "basis-1", nil, nil, nil, nil, nil, nil, nil},
+			constraint: "customer_charge_confirmation_facts_coupled",
+			complaint:  "一行「已确认却一项事实都不带」溜进了费用库——那句硬句在库上还是空转",
+		},
+		{
+			name: "c-bad-6",
+			args: []any{"CONFIRMED", "basis-1",
+				"entity-1", "counterparty-1", "RECEIVABLE", "account-1", "contract-1", nil, "source-1"},
+			constraint: "customer_charge_confirmation_facts_coupled",
+			complaint:  "一行「已确认却缺主要计费范围」溜进了费用库——七项不是同在或同缺",
+		},
+		{
+			name: "c-bad-7",
+			args: []any{"ESTIMATED", nil,
+				"entity-1", "counterparty-1", "RECEIVABLE", "account-1", "contract-1", "scope-1", "source-1"},
+			constraint: "customer_charge_confirmation_facts_coupled",
+			complaint:  "一行「预估却带着确认才该固定的事实」溜进了费用库——领域产不出这样一行",
+		},
+		{
+			name: "c-bad-8",
+			args: []any{"CONFIRMED", "basis-1",
+				"entity-1", "counterparty-1", "DEBIT", "account-1", "contract-1", "scope-1", "source-1"},
+			constraint: "customer_charge_direction_closed",
+			complaint:  "借贷方向被当成收付方向收下了——两个词表不是一回事",
+		},
+	} {
+		_, err := pool.Exec(ctx, confirmedWithFacts, append([]any{refusal.name}, refusal.args...)...)
+		if err == nil {
+			t.Fatal(refusal.complaint)
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != refusal.constraint {
+			t.Fatalf("%s 被拒了，但不是 %s 拒的：%v", refusal.name, refusal.constraint, err)
+		}
+	}
+
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO settlement_accounting.advance_assessment
 			(tenant_id, assessment_id, obligation_ref, verdict, funds_fact, payer_ref,
@@ -419,11 +482,28 @@ func confirmedCharge(t *testing.T, id, basis string) domain.CustomerCharge {
 	if err != nil {
 		t.Fatalf("构造预估费用：%v", err)
 	}
-	confirmed, err := charge.Confirm(saValue(t, domain.NewConfirmationBasisReference, basis), chargeConfirmedAt)
+	confirmed, err := charge.Confirm(
+		saConfirmationFacts(t),
+		saValue(t, domain.NewConfirmationBasisReference, basis),
+		chargeConfirmedAt,
+	)
 	if err != nil {
 		t.Fatalf("确认费用：%v", err)
 	}
 	return confirmed
+}
+
+func saConfirmationFacts(t *testing.T) domain.ConfirmedChargeFacts {
+	t.Helper()
+	return domain.ConfirmedChargeFacts{
+		ResponsibleEntity:    saValue(t, domain.NewLegalEntityReference, "LEGAL-ENTITY/syn-1"),
+		Counterparty:         saValue(t, domain.NewSettlementCounterpartyReference, "COUNTERPARTY/syn-1"),
+		Direction:            domain.ChargeReceivable,
+		SettlementAccount:    saValue(t, domain.NewSettlementAccountID, "ACCOUNT/syn-1"),
+		ContractBasis:        saValue(t, domain.NewContractBasisReference, "CONTRACT/syn-1"),
+		PrimaryChargingScope: saValue(t, domain.NewChargingScopeReference, "SCOPE/syn-1"),
+		SourceFact:           saValue(t, domain.NewSourceFactReference, "SOURCE-FACT/syn-1"),
+	}
 }
 
 func establishedAssessmentRecord(t *testing.T, tenant, id string) ports.AdvanceAssessmentRecord {

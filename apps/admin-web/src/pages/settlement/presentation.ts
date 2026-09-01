@@ -72,6 +72,27 @@ export const componentEffectLabels: Record<string, string> = {
   DECREASES: '减少',
 };
 
+// 组成项在本口径下的采用物身份，中文取 CONTEXT「经营毛利的客户与外部供应商基础必须按阶段
+// 成对采用」那句逐口径点名的原词（ADR-0087 决定三）。词表按口径分组不是一个平集：同一个
+// 「审核应付」在预估口径下不成立，那个口径采用的是预期成本。
+export const componentRoleLabels: Record<string, string> = {
+  CUSTOMER_ESTIMATE: '客户预估费用',
+  SUPPLIER_EXPECTED_COST: '供应商预期成本',
+  CUSTOMER_OPERATING_RECEIVABLE: '客户运营应收',
+  AUDITED_PAYABLE: '审核应付',
+  SUPPLIER_CREDIT_NOTE: '供应商费用贷项',
+  SETTLED_CUSTOMER_RECEIVABLE: '已核销客户运营应收',
+  SETTLED_AUDITED_PAYABLE: '已核销审核应付',
+  SETTLED_SUPPLIER_CREDIT_NOTE: '已核销供应商费用贷项',
+};
+
+// 客户费用的收付方向，中文取 ChargeDirection 注释原词。**是收付不是借贷**：本模块另有
+// DEBIT/CREDIT 的借贷方向词表（调整用），两者不是一回事，不共用（ADR-0087 决定一）。
+export const chargeDirectionLabels: Record<string, string> = {
+  RECEIVABLE: '应收',
+  PAYABLE: '应付',
+};
+
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }

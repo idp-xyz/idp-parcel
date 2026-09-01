@@ -92,6 +92,7 @@ func serveOperatingResults(
 		for _, component := range row.Components {
 			components = append(components, operatingComponentBody{
 				Source: component.Source,
+				Role:   component.Role,
 				Effect: component.Effect,
 				Amount: minorAmount(component.AmountMinor),
 			})
@@ -179,14 +180,19 @@ type operatingResultBody struct {
 	Components []operatingComponentBody `json:"components"`
 }
 
-// operatingComponentBody 逐字段透出一个组成项：来源金额身份、对指标的封闭二向
-// （INCREASES / DECREASES）与金额。
+// operatingComponentBody 逐字段透出一个组成项：来源金额身份、在本口径下的角色、对指标
+// 的封闭二向（INCREASES / DECREASES）与金额。
 //
 // 组成逐项透出而不只给毛利：CONTEXT 硬要求审核应付与供应商费用贷项按各自借贷方向
 // 分别计入一次，「当前有效审核应付」不得被解释为已经静默净含贷项——净额把这条要求
 // 抹掉之后，页面上再也看不出它有没有被遵守。
+//
+// role 随 ADR-0087 决定三透出，是册上原样不是本端点判出来的。本端点也不按角色合计成
+// 「客户侧采用／供应商侧采用／其中审核应付／其中贷项」四栏：页面按角色分组就能得到，
+// 端点多算一层就多一处定义。
 type operatingComponentBody struct {
 	Source string `json:"source"`
+	Role   string `json:"role"`
 	Effect string `json:"effect"`
 	Amount string `json:"amount"`
 }

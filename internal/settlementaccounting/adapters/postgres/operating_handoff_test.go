@@ -73,8 +73,8 @@ func TestReallocationAndRederivationEachEnqueueInTheSamePartition(t *testing.T) 
 	resultFirst := ports.OperatingIntent{Result: derivedResultRecord(t, "tenant-a", domain.ConfirmedBasis)}
 	rederived, err := resultFirst.Result.Result.Rederive(
 		[]domain.ResultComponent{
-			{Source: saValue(t, domain.NewComponentSourceReference, "charge-1"), Effect: domain.IncreasesResult, AmountMinor: 10000},
-			{Source: saValue(t, domain.NewComponentSourceReference, "payable-1"), Effect: domain.DecreasesResult, AmountMinor: 4000},
+			{Source: saValue(t, domain.NewComponentSourceReference, "charge-1"), Role: domain.CustomerOperatingReceivableRole, Effect: domain.IncreasesResult, AmountMinor: 10000},
+			{Source: saValue(t, domain.NewComponentSourceReference, "payable-1"), Role: domain.AuditedPayableRole, Effect: domain.DecreasesResult, AmountMinor: 4000},
 		},
 		saValue(t, domain.NewOperatingResultVersion, "result/v2"),
 		derivedAsOf.Add(time.Hour),

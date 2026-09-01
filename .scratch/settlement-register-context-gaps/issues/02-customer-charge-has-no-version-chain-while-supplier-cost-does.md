@@ -1,10 +1,8 @@
 # 同一条「不覆盖历史结果」，供应商侧有整条版本链，客户侧两条路都没有
 
 Category: chore
-Status: ready-for-agent——已裁：补调整明细册（不走版本链），含唯一创建用例门（用户
-2026-09-01 裁，形状落
-[ADR-0087](../../../docs/adr/0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
-Decision 二）；实施未开工
+Status: resolved——机制半边已落地（2026-09-01，见文末 Comment）：调整册、唯一创建用例
+与所有权门禁齐备；`customer_statement.adjustment_lines` 退回纳入关系那一步另立票
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -102,6 +100,43 @@ Blocked by: 无
 都不需要数据清洗；补列须新开序号文件，不改写已施加的迁移。
 
 ## Comments
+
+- 2026-09-01 · MCP-1：**按路二实施完毕（ADR-0087 决定二），机制半边收口。** 本票上文
+  「客户侧两条路一条都没有」自此描述的是补齐**之前**的状态。
+
+  - **库**：迁移 `0015_customer_charge_adjustment_register.sql` 立 `charge_adjustment`。
+    主键（租户+调整）一次成形；`kind` 封闭在 `PRICING_CORRECTION`/`COMMERCIAL_CONCESSION`；
+    依据按种类分格且有此无彼；三件组两道门与 `customer_charge` 同款。`charge_id` 以标识
+    引用不设外键，照本模块既有做法。
+  - **端口与适配器**：`ports.ChargeAdjustmentStore`（幂等键 + 只追加写入代数，同 ADR-0031）；
+    postgres 写口 `ON CONFLICT DO NOTHING` 答`已登记`，读口重建时走 `FormChargeAdjustment`
+    而不旁路形成门——库上的 CHECK 与领域形成门是同一组判据的两份，任一份先松掉当场露出来。
+  - **应用**：`RecordChargeAdjustmentHandler`（UC-SA-002）。调整只挂已确认费用，预估/暂估
+    停专格 `CHARGE_NOT_CONFIRMED`；形成时点由时钟给出，不由调用方声称；重复触发返回原结果；
+    册答`已登记`却读不回原件时答未决，不拿刚形成的那份冒充原件。原费用的写口一次都不碰。
+  - **唯一创建用例门**：`internal/architecture` 新增
+    `TestOnlyTheOwningUseCaseReachesTheChargeAdjustmentRegister`，守住编排包内只有
+    `record_charge_adjustment.go` 够得着 `ChargeAdjustmentStore`。
+
+  **为什么门不落在种类封闭集上，也不落在一列 `created_by_use_case` 上**（这一段是本次
+  实施里唯一的新裁量，记下来免得日后重走）：种类封闭集管的是「册上表达得出什么类型」，
+  而 CONTEXT「调整类型与唯一所有权」表通篇管的是「谁能写」——`UC-SA-003` 只要依赖那个端口
+  就能写一条完全合法的 `PRICING_CORRECTION`，CHECK 与领域都会收下。`created_by_use_case`
+  列的值由写入方自己填，与决定一里被否决的「七项进命令」是同一个毛病，且今天只可能有一个
+  取值，是个看着像门却什么都不守的列。Go 没有 friend 可见性、编排又同在一个包，同包所有权
+  只有扫源码守得住，故落成文件级闸门；门禁自带「这门真能红」的合成用例，照本包约定。
+
+  **未做**：`customer_statement.adjustment_lines` 尚未退回「纳入关系」的角色——册立起来了，
+  但对账单那一列还照旧，属另一片。管理台费用页的调整栏同理可按册加回。生产装配未做：
+  `NewRecordChargeAdjustmentHandler` 至今只在测试里被调用，未进 `cmd/parcel-api`。
+
+  **验证**（父提交 `a573551`，本笔改动尚未提交时实测）：`gofmt -l` 无输出、`go build ./...`、
+  `go vet ./...` 绿；`go test -count=1 ./...` 全仓 89 包 ok、0 FAIL；
+  `settlementaccounting/adapters/postgres` 单跑 `-v` 得 108 PASS / 0 SKIP / 0 FAIL，SKIP 为零
+  即证明不是未设 DSN 跳过冒充的绿。实施过程中被既有门禁拦下两次，均照其指示处置：写口缺
+  `ErrTransactionRequired` 负向证据（补断言，原先只写 `err == nil` 等于没测）、接线棘轮报
+  `FormChargeAdjustment` 已走出基线（按门禁要求先搜同名声明排除误判，确认是真接上生产
+  调用路径，剪掉基线该行）。
 
 - 2026-09-01 · MCP-5：**重新取证于 `d11e0f0`，票面结论一字未变。** `customer_charge` 仍无
   `version`／`prior_version`／`correction_reason`，主键仍是（租户, 费用标识）一条费用一行；

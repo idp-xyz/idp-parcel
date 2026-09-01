@@ -56,9 +56,9 @@ func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 				AsOf:        catalogueBaseAt,
 				RecordedAt:  catalogueBaseAt,
 				Components: []ports.OperatingComponentEntry{
-					{Source: "SYN-RECEIVABLE-01", Effect: "INCREASES", AmountMinor: 100000},
-					{Source: "SYN-PAYABLE-01", Effect: "DECREASES", AmountMinor: 80000},
-					{Source: "SYN-CREDIT-NOTE-01", Effect: "INCREASES", AmountMinor: 10000},
+					{Source: "SYN-RECEIVABLE-01", Role: "CUSTOMER_OPERATING_RECEIVABLE", Effect: "INCREASES", AmountMinor: 100000},
+					{Source: "SYN-PAYABLE-01", Role: "AUDITED_PAYABLE", Effect: "DECREASES", AmountMinor: 80000},
+					{Source: "SYN-CREDIT-NOTE-01", Role: "SUPPLIER_CREDIT_NOTE", Effect: "INCREASES", AmountMinor: 10000},
 				},
 			},
 			{
@@ -72,7 +72,7 @@ func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 				Corrects:    "SYN-RESULT-PRIOR",
 				RecordedAt:  catalogueBaseAt,
 				Components: []ports.OperatingComponentEntry{
-					{Source: "SYN-EXPECTED-COST-01", Effect: "DECREASES", AmountMinor: 15000},
+					{Source: "SYN-EXPECTED-COST-01", Role: "SUPPLIER_EXPECTED_COST", Effect: "DECREASES", AmountMinor: 15000},
 				},
 			},
 		},
@@ -115,6 +115,7 @@ func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 	}
 	var components []struct {
 		Source string `json:"source"`
+		Role   string `json:"role"`
 		Effect string `json:"effect"`
 		Amount string `json:"amount"`
 	}
@@ -130,6 +131,13 @@ func TestOperatingResultQueryTranscribesComponentsWithoutNetting(t *testing.T) {
 		components[2].Source != "SYN-CREDIT-NOTE-01" || components[2].Effect != "INCREASES" ||
 		components[2].Amount != "10000" {
 		t.Fatalf("组成被净额化或走样：%+v", components)
+	}
+	// 角色照册透出（ADR-0087 决定三）：哪一项是审核应付、哪一项是贷项，页面从此读得出
+	// 而不是按 source 猜——票 04 撤掉经营页四栏正是因为那时只能猜。
+	if components[0].Role != "CUSTOMER_OPERATING_RECEIVABLE" ||
+		components[1].Role != "AUDITED_PAYABLE" ||
+		components[2].Role != "SUPPLIER_CREDIT_NOTE" {
+		t.Fatalf("组成项角色透出走样：%+v", components)
 	}
 
 	// 负毛利即经营损失，走同一个键——按正负分两键会让「零」落进两键都不占的缝里。

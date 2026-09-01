@@ -32,6 +32,7 @@ func confirmedCharge(t *testing.T, id string, amountMinor int64) domain.Customer
 		t.Fatalf("form charge: %v", err)
 	}
 	confirmed, err := charge.Confirm(
+		confirmationFacts(t),
 		settlementValue(t, domain.NewConfirmationBasisReference, "delivery-confirmed-"+id),
 		statementCutOffAt.Add(-48*time.Hour),
 	)

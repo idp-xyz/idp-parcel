@@ -57,6 +57,8 @@ const (
 	ChargeStoreUnavailable
 	ConditionViewUnavailable
 	ConditionUnconfigured
+	FactsViewUnavailable
+	ConfirmationFactsUnconfigured
 )
 
 func (reason ConfirmUndecidedReason) String() string {
@@ -67,13 +69,19 @@ func (reason ConfirmUndecidedReason) String() string {
 		return "CONDITION_VIEW_UNAVAILABLE"
 	case ConditionUnconfigured:
 		return "CONDITION_UNCONFIGURED"
+	case FactsViewUnavailable:
+		return "FACTS_VIEW_UNAVAILABLE"
+	case ConfirmationFactsUnconfigured:
+		return "CONFIRMATION_FACTS_UNCONFIGURED"
 	default:
 		return ""
 	}
 }
 
 // ConfirmChargeCommand 只指名要确认哪笔费用。刻意没有金额与依据字段——确认不改金额
-// （金额变化走调整），确认依据由条件核对给出，不由调用方口头声称。
+// （金额变化走调整），确认依据由条件核对给出，不由调用方口头声称。确认时要固定的七项
+// 事实同理由结算事实读口给出：命令带得了它们，CONTEXT 禁的「临时推断」就只是换了个人做
+// （ADR-0087 决定一）。
 type ConfirmChargeCommand struct {
 	TenantID domain.TenantID
 	ChargeID string
@@ -113,6 +121,7 @@ func (result ConfirmChargeResult) ConfirmationHandoffReference() string {
 type ConfirmChargeDeps struct {
 	Charges    ports.CustomerChargeStore
 	Conditions ports.ConfirmationConditionView
+	Facts      ports.ConfirmedChargeFactsView
 	Downstream ports.ChargeConfirmationHandoff
 	Clock      ports.Clock
 }
@@ -170,7 +179,20 @@ func (handler *ConfirmChargeHandler) Handle(
 			continuation: confirmContinuation("CONDITION_NOT_MET", command.ChargeID, condition.Gap)}, nil
 	}
 
-	confirmed, err := charge.Confirm(condition.Basis, handler.deps.Clock.Now())
+	facts, registered, err := handler.deps.Facts.LoadConfirmedChargeFacts(ctx, command.TenantID, chargeID)
+	if err != nil {
+		return ConfirmChargeResult{outcome: ConfirmUndecided, reason: FactsViewUnavailable,
+			continuation: confirmContinuation("FACTS_VIEW_UNAVAILABLE", command.ChargeID)}, nil
+	}
+	if !registered {
+		// 七项事实是实例半边：无处可取停在未决，不用空值凑出一次确认——那正是 CONTEXT
+		// 禁的「临时推断」，只不过推断的人换成了这段代码。
+		return ConfirmChargeResult{outcome: ConfirmUndecided, reason: ConfirmationFactsUnconfigured,
+			continuation: confirmContinuation("CONFIRMATION_FACTS_UNCONFIGURED", command.ChargeID)}, nil
+	}
+
+	// 缺项由领域的确认门拒：册上交出一份不全的，是册与本用例之间的提交矛盾，改单重来。
+	confirmed, err := charge.Confirm(facts, condition.Basis, handler.deps.Clock.Now())
 	if err != nil {
 		return ConfirmChargeResult{outcome: ConfirmNotAccepted}, nil
 	}

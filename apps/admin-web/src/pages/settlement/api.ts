@@ -34,6 +34,11 @@ export interface ChargeConfirmationBasisRecord {
  * requiredBasisKind 缺席表示该费用项目在确认条件目录里没有行，与「配了但依据没到」
  * （有 requiredBasisKind 而 confirmationBases 里没有那一种）是两格，续办不同：前者要人去配
  * 条件，后者要人去催依据。confirmedAt 未确认时整键不出现，不为它编造零时刻。
+ *
+ * 确认时固定的七项（责任法人、结算相对方、收付方向、结算账户、合同或责任依据、主要计费
+ * 范围、来源事实）随 ADR-0087 决定一入册，未确认行整键不出现——与 confirmedAt 同一处置，
+ * 那是「这一行还没确认」的正面形状，不是缺数据。**页面不得为它们补默认值或由别处推断**：
+ * CONTEXT 那句明禁「通过当前组织、当前客户属性或报表筛选临时推断」。
  */
 export interface CustomerChargeRecord {
   charge: string;
@@ -47,6 +52,14 @@ export interface CustomerChargeRecord {
   settlementAmount: string;
   conversionStep?: string;
   confirmationBasis?: string;
+  responsibleEntity?: string;
+  counterparty?: string;
+  /** 封闭二格 RECEIVABLE / PAYABLE；是**收付**方向不是借贷方向，词表在 presentation.ts。 */
+  chargeDirection?: string;
+  settlementAccount?: string;
+  contractBasis?: string;
+  primaryChargingScope?: string;
+  sourceFact?: string;
   formedAt: string;
   confirmedAt?: string;
   requiredBasisKind?: string;
@@ -282,12 +295,19 @@ export function listSettlementFundsApplications(): Promise<
 export type OperatingRegistry = 'operating-result' | 'cost-allocation';
 
 /**
- * 一个组成项：来源金额身份、对指标的封闭二向与金额。组成逐项呈现而不按角色归栏——元素上
- * 没有角色维，要归栏就得由读侧先判某个 source 属于哪一类，而那正是 CONTEXT 硬要求
- * 「审核应付与贷项按各自借贷方向分别计入一次、不得净含贷项」想让人看见的东西。
+ * 一个组成项：来源金额身份、在本口径下的角色、对指标的封闭二向与金额。
+ *
+ * role 随 ADR-0087 决定三入册并由服务端照册透出——**不是页面判出来的**。此前元素上没有
+ * 角色维，要归栏就得由读侧先猜某个 source 属于哪一类，而那正是 CONTEXT 硬要求「审核应付
+ * 与贷项按各自借贷方向分别计入一次、不得净含贷项」想让人看见的东西；现在册上说得出，
+ * 页面照它分组即可，仍然不自行判断、不代贴标签。
+ *
+ * 取值按口径分组（预估／已确认／已结算各有自己的采用物），集外取值原样回显。
  */
 export interface OperatingComponentRecord {
   source: string;
+  /** 封闭八格，按口径分组；词表在 presentation.ts。 */
+  role: string;
   /** 封闭二格 INCREASES / DECREASES；词表在 presentation.ts。 */
   effect: string;
   amount: string;

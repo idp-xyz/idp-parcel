@@ -117,8 +117,12 @@ type ReallocateCommand struct {
 }
 
 // ComponentDirective 是一条指标组成项指令。
+// ComponentDirective 是一个组成项的选料指令。Role 必填且由编排给出——CONTEXT
+// 「经营毛利的客户与外部供应商基础必须按阶段成对采用」说的就是选料这一步，角色在这里
+// 声明，能不能在该口径下成立由领域判（ADR-0087 决定三）。
 type ComponentDirective struct {
 	Source      string
+	Role        domain.ComponentRole
 	Effect      domain.ComponentEffect
 	AmountMinor int64
 }
@@ -487,6 +491,7 @@ func componentsFrom(directives []ComponentDirective) ([]domain.ResultComponent, 
 		}
 		components = append(components, domain.ResultComponent{
 			Source:      source,
+			Role:        directive.Role,
 			Effect:      directive.Effect,
 			AmountMinor: directive.AmountMinor,
 		})

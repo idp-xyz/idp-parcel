@@ -70,7 +70,6 @@ internal/transportfulfillment/domain SummarizeHandovers
 # —— settlement-accounting ——
 # 以下各条均产出带不变式校验的领域对象；除 FormSupplierExpectedCost（见其自注）外包外零引用。
 internal/settlementaccounting/domain FormAuditedPayable
-internal/settlementaccounting/domain FormChargeAdjustment
 internal/settlementaccounting/domain FormSupplierCreditNote
 internal/settlementaccounting/domain IncludeAdjustmentInSubsequentPeriod
 # 这一条与 DecideDisclosure 是全部 33 条里仅有的两个**已经走出 domain 层**的：适配器与应用层

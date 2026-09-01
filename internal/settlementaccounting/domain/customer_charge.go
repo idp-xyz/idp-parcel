@@ -60,6 +60,94 @@ func NewConfirmationBasisReference(value string) (ConfirmationBasisReference, er
 	return ConfirmationBasisReference{required}, err
 }
 
+// SettlementCounterpartyReference 指名这笔钱与谁结算。
+type SettlementCounterpartyReference struct{ requiredValue }
+
+func NewSettlementCounterpartyReference(value string) (SettlementCounterpartyReference, error) {
+	required, err := newRequiredValue("settlement counterparty reference", value)
+	return SettlementCounterpartyReference{required}, err
+}
+
+// ContractBasisReference 指名这笔钱依据哪份合同或责任该收付。它与
+// ConfirmationBasisReference 分两格而不合用：后者是确认依据（哪份依据让它可以确认），
+// 两者不同物，合用会让其中一个永远说不出口（ADR-0087 决定一）。
+type ContractBasisReference struct{ requiredValue }
+
+func NewContractBasisReference(value string) (ContractBasisReference, error) {
+	required, err := newRequiredValue("contract basis reference", value)
+	return ContractBasisReference{required}, err
+}
+
+// ChargingScopeReference 指名费用的主要计费范围。CONTEXT 另有硬句「每条费用明细必须
+// 且只能有一个主要计费范围」，故这一格是单值不是集合。
+type ChargingScopeReference struct{ requiredValue }
+
+func NewChargingScopeReference(value string) (ChargingScopeReference, error) {
+	required, err := newRequiredValue("charging scope reference", value)
+	return ChargingScopeReference{required}, err
+}
+
+// SourceFactReference 指名费用的来源事实。它与 SellEvaluationReference 分两格：评价是
+// 依据，来源事实是评价的输入，合用会把两者之一说没（ADR-0087 决定一）。
+type SourceFactReference struct{ requiredValue }
+
+func NewSourceFactReference(value string) (SourceFactReference, error) {
+	required, err := newRequiredValue("source fact reference", value)
+	return SourceFactReference{required}, err
+}
+
+// ChargeDirection 是费用的收付方向：这笔钱是应收还是应付。**不复用 AdjustmentDirection
+// 的借贷二值**——那是借贷方向，与收付不是一回事，共用一个词表会让册上分不出问的是哪个
+// （ADR-0087 决定一）。
+type ChargeDirection uint8
+
+const (
+	ChargeDirectionInvalid ChargeDirection = iota
+	ChargeReceivable
+	ChargePayable
+)
+
+func (direction ChargeDirection) valid() bool {
+	return direction == ChargeReceivable || direction == ChargePayable
+}
+
+func (direction ChargeDirection) String() string {
+	switch direction {
+	case ChargeReceivable:
+		return "RECEIVABLE"
+	case ChargePayable:
+		return "PAYABLE"
+	default:
+		return ""
+	}
+}
+
+// ConfirmedChargeFacts 是 CONTEXT「每条确认费用必须固定……」那句点名的七项。结算币种
+// 是那句里的第八项，已由三件组成列，不重复放这里。
+//
+// 七项打成一个类型而不是七个参数，为的是让「同在或同缺」在类型上就成立：确认费用带
+// 全套，未确认费用一项不带。留任何一格可空，等于给事后推断留一条路，而 CONTEXT 那句
+// 的后半截禁的正是「通过当前组织、当前客户属性或报表筛选临时推断」。
+type ConfirmedChargeFacts struct {
+	ResponsibleEntity    LegalEntityReference
+	Counterparty         SettlementCounterpartyReference
+	Direction            ChargeDirection
+	SettlementAccount    SettlementAccountID
+	ContractBasis        ContractBasisReference
+	PrimaryChargingScope ChargingScopeReference
+	SourceFact           SourceFactReference
+}
+
+func (facts ConfirmedChargeFacts) complete() bool {
+	return facts.ResponsibleEntity.valid() &&
+		facts.Counterparty.valid() &&
+		facts.Direction.valid() &&
+		facts.SettlementAccount.valid() &&
+		facts.ContractBasis.valid() &&
+		facts.PrimaryChargingScope.valid() &&
+		facts.SourceFact.valid()
+}
+
 // CustomerChargeSpec 是形成一笔客户费用所需的全部输入。原币金额、合同结算币金额与
 // 换算依据是从它引用的那一个 SELL 评价采用来的一组（CONTEXT：每条费用分别保存原币
 // 金额、合同结算币金额及换算依据），不是可各自另取的三件。
@@ -90,6 +178,7 @@ type CustomerCharge struct {
 	conversion         ConversionStepReference
 	stage              ChargeStage
 	confirmation       ConfirmationBasisReference
+	facts              ConfirmedChargeFacts
 	formedAt           time.Time
 	confirmedAt        time.Time
 }
@@ -179,22 +268,32 @@ func (charge CustomerCharge) ConfirmedAt() (time.Time, bool) {
 	return charge.confirmedAt, charge.stage == ChargeConfirmed
 }
 
+// ConfirmedFacts 只在已确认费用上给出。
+func (charge CustomerCharge) ConfirmedFacts() (ConfirmedChargeFacts, bool) {
+	return charge.facts, charge.stage == ChargeConfirmed
+}
+
 // Confirm 在确认条件满足时定格费用（UC-SA-002 结果契约「费用已确认」）。确认依据
 // 必备——没有依据的确认与预估阶段的静默转正分不开；已确认不再确认第二次；确认不
 // 改金额，金额变化走调整。
+//
+// 七项事实与确认同一步钉上，缺一项即不成立：CONTEXT 要求确认费用「固定」它们，而分
+// 两步（先确认、后补事实）会开出一个七项为空的已确认态，那正是要禁的（ADR-0087 决定一）。
 func (charge CustomerCharge) Confirm(
+	facts ConfirmedChargeFacts,
 	basis ConfirmationBasisReference,
 	at time.Time,
 ) (CustomerCharge, error) {
 	if charge.stage == ChargeConfirmed {
 		return CustomerCharge{}, ErrChargeAlreadyFinal
 	}
-	if !basis.valid() || at.IsZero() || at.Before(charge.formedAt) {
+	if !facts.complete() || !basis.valid() || at.IsZero() || at.Before(charge.formedAt) {
 		return CustomerCharge{}, ErrInvalidCustomerCharge
 	}
 	confirmed := charge
 	confirmed.stage = ChargeConfirmed
 	confirmed.confirmation = basis
+	confirmed.facts = facts
 	confirmed.confirmedAt = at.UTC()
 	return confirmed, nil
 }
@@ -396,4 +495,10 @@ func (adjustment ChargeAdjustment) SettlementAmount() (CurrencyCode, int64) {
 // 上下文不重算也不改用其他汇率。
 func (adjustment ChargeAdjustment) Conversion() (ConversionStepReference, bool) {
 	return adjustment.conversion, adjustment.conversion.valid()
+}
+
+// FormedAt 是调整形成的时点。调整册按它排序——同一笔费用上的多次调整是追加序列，
+// 顺序属调整本身，不由登记先后决定（ADR-0087 决定二）。
+func (adjustment ChargeAdjustment) FormedAt() time.Time {
+	return adjustment.formedAt
 }

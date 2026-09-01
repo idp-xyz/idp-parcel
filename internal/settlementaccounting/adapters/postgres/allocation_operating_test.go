@@ -132,6 +132,7 @@ func TestAnOperatingResultRoundTripsAndReplaceRewritesVersionNotScope(t *testing
 	rederived, err := found.Result.Rederive(
 		[]domain.ResultComponent{{
 			Source:      saValue(t, domain.NewComponentSourceReference, "charge-2"),
+			Role:        domain.CustomerOperatingReceivableRole,
 			Effect:      domain.IncreasesResult,
 			AmountMinor: 5000,
 		}},
@@ -338,16 +339,25 @@ func formedAllocationRecord(t *testing.T, tenant, id string) ports.AllocationRec
 	}
 }
 
+// derivedResultRecord 造一份该口径下的经营结果。角色随口径取——CONTEXT 逐口径点名了
+// 各自的采用物，夹具写死一套会让预估口径那一格造不出来（ADR-0087 决定三）。
 func derivedResultRecord(t *testing.T, tenant string, basis domain.OperatingBasis) ports.OperatingResultRecord {
 	t.Helper()
+	revenueRole, costRole := domain.CustomerOperatingReceivableRole, domain.AuditedPayableRole
+	switch basis {
+	case domain.EstimatedBasis:
+		revenueRole, costRole = domain.CustomerEstimateRole, domain.SupplierExpectedCostRole
+	case domain.SettledBasis:
+		revenueRole, costRole = domain.SettledCustomerReceivableRole, domain.SettledAuditedPayableRole
+	}
 	result, err := domain.DeriveOperatingResult(
 		saValue(t, domain.NewOperatingScopeReference, "customer-1"),
 		saValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
 		basis,
 		saValue(t, domain.NewCurrencyCode, "USD"),
 		[]domain.ResultComponent{
-			{Source: saValue(t, domain.NewComponentSourceReference, "charge-1"), Effect: domain.IncreasesResult, AmountMinor: 10000},
-			{Source: saValue(t, domain.NewComponentSourceReference, "payable-1"), Effect: domain.DecreasesResult, AmountMinor: 3000},
+			{Source: saValue(t, domain.NewComponentSourceReference, "charge-1"), Role: revenueRole, Effect: domain.IncreasesResult, AmountMinor: 10000},
+			{Source: saValue(t, domain.NewComponentSourceReference, "payable-1"), Role: costRole, Effect: domain.DecreasesResult, AmountMinor: 3000},
 		},
 		saValue(t, domain.NewOperatingResultVersion, "result/v1"),
 		derivedAsOf,

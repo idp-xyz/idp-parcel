@@ -62,6 +62,9 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 		        c.original_currency, c.original_minor,
 		        c.settlement_currency, c.settlement_minor,
 		        c.conversion_ref, c.confirmation_basis, c.formed_at, c.confirmed_at,
+		        c.responsible_entity, c.counterparty_ref, c.charge_direction,
+		        c.settlement_account_id, c.contract_basis, c.primary_charging_scope,
+		        c.source_fact_ref,
 		        req.required_basis_kind,
 		        (SELECT COALESCE(
 		                    json_agg(
@@ -102,12 +105,16 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 			formedAt          time.Time
 			confirmedAt       *time.Time
 			basesJSON         []byte
+			facts             confirmationFactColumns
 		)
 		if err := rows.Scan(
 			&row.Charge, &row.FeeItem, &row.Evaluation, &row.Stage,
 			&row.OriginalCurrency, &row.OriginalMinor,
 			&row.SettlementCurrency, &row.SettlementMinor,
 			&conversionStep, &confirmationBasis, &formedAt, &confirmedAt,
+			&facts.responsibleEntity, &facts.counterparty, &facts.direction,
+			&facts.settlementAccount, &facts.contractBasis, &facts.primaryChargingScope,
+			&facts.sourceFact,
 			&requiredBasisKind,
 			&basesJSON,
 		); err != nil {
@@ -115,6 +122,15 @@ func (catalogue *ChargeCatalogue) ListCustomerCharges(
 		}
 		row.ConversionStep = catalogueText(conversionStep)
 		row.ConfirmationBasis = catalogueText(confirmationBasis)
+		// 七项在非确认行上一律为空，读面照实交空串——库上那条同在或同缺的 CHECK 保证
+		// 这不是缺数据而是「这一行还没确认」，读面不代填也不合并成一句话。
+		row.ResponsibleEntity = catalogueText(facts.responsibleEntity)
+		row.Counterparty = catalogueText(facts.counterparty)
+		row.ChargeDirection = catalogueText(facts.direction)
+		row.SettlementAccount = catalogueText(facts.settlementAccount)
+		row.ContractBasis = catalogueText(facts.contractBasis)
+		row.PrimaryChargingScope = catalogueText(facts.primaryChargingScope)
+		row.SourceFact = catalogueText(facts.sourceFact)
 		row.RequiredBasisKind = catalogueText(requiredBasisKind)
 		row.FormedAt = formedAt.UTC()
 		row.ConfirmedAt = catalogueInstant(confirmedAt)

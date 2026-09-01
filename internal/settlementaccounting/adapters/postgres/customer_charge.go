@@ -44,10 +44,14 @@ func (repository *CustomerCharges) FindByID(
 	var formedAt, recordedAt time.Time
 	var confirmation *string
 	var confirmedAt *time.Time
+	var facts confirmationFactColumns
 	err = querier.QueryRow(ctx,
 		`SELECT fee_item, evaluation_ref, original_currency, original_minor,
 		        settlement_currency, settlement_minor, conversion_ref, stage,
-		        confirmation_basis, formed_at, confirmed_at, recorded_at
+		        confirmation_basis, formed_at, confirmed_at, recorded_at,
+		        responsible_entity, counterparty_ref, charge_direction,
+		        settlement_account_id, contract_basis, primary_charging_scope,
+		        source_fact_ref
 		   FROM settlement_accounting.customer_charge
 		  WHERE tenant_id = $1
 		    AND charge_id = $2`,
@@ -55,7 +59,10 @@ func (repository *CustomerCharges) FindByID(
 		id.String(),
 	).Scan(&feeItem, &evaluation, &originalCurrency, &originalMinor,
 		&settlementCurrency, &settlementMinor, &conversion, &stageName,
-		&confirmation, &formedAt, &confirmedAt, &recordedAt)
+		&confirmation, &formedAt, &confirmedAt, &recordedAt,
+		&facts.responsibleEntity, &facts.counterparty, &facts.direction,
+		&facts.settlementAccount, &facts.contractBasis, &facts.primaryChargingScope,
+		&facts.sourceFact)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.CustomerCharge{}, false, nil
 	}
@@ -74,6 +81,7 @@ func (repository *CustomerCharges) FindByID(
 		conversion:         conversion,
 		stageName:          stageName,
 		confirmation:       confirmation,
+		facts:              facts,
 		formedAt:           formedAt,
 		confirmedAt:        confirmedAt,
 	})
@@ -104,6 +112,10 @@ func (repository *CustomerCharges) SaveConfirmed(
 	if !ok {
 		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save confirmed charge: confirmed at missing")
 	}
+	facts, ok := charge.ConfirmedFacts()
+	if !ok {
+		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save confirmed charge: confirmation facts missing")
+	}
 	originalCurrency, originalMinor := charge.OriginalAmount()
 	settlementCurrency, settlementMinor := charge.SettlementAmount()
 	var conversion *string
@@ -112,17 +124,30 @@ func (repository *CustomerCharges) SaveConfirmed(
 		conversion = &value
 	}
 
+	// 七项随确认同笔落库、冲突分支同笔改写：分两笔写会让库上出现一个七项为空的已确认
+	// 行，而 customer_charge_confirmation_facts_coupled 正是要挡住它。
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.customer_charge
 			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
 			 original_minor, settlement_currency, settlement_minor, conversion_ref,
-			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CONFIRMED', $10, $11, $12, $12)
+			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at,
+			 responsible_entity, counterparty_ref, charge_direction,
+			 settlement_account_id, contract_basis, primary_charging_scope,
+			 source_fact_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'CONFIRMED', $10, $11, $12, $12,
+		         $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT (tenant_id, charge_id) DO UPDATE
 		    SET stage = 'CONFIRMED',
 		        confirmation_basis = EXCLUDED.confirmation_basis,
 		        confirmed_at = EXCLUDED.confirmed_at,
-		        recorded_at = EXCLUDED.recorded_at
+		        recorded_at = EXCLUDED.recorded_at,
+		        responsible_entity = EXCLUDED.responsible_entity,
+		        counterparty_ref = EXCLUDED.counterparty_ref,
+		        charge_direction = EXCLUDED.charge_direction,
+		        settlement_account_id = EXCLUDED.settlement_account_id,
+		        contract_basis = EXCLUDED.contract_basis,
+		        primary_charging_scope = EXCLUDED.primary_charging_scope,
+		        source_fact_ref = EXCLUDED.source_fact_ref
 		  WHERE settlement_accounting.customer_charge.stage IS DISTINCT FROM 'CONFIRMED'`,
 		tenant.String(),
 		charge.ID().String(),
@@ -136,6 +161,13 @@ func (repository *CustomerCharges) SaveConfirmed(
 		basis.String(),
 		charge.FormedAt().UTC(),
 		confirmedAt.UTC(),
+		facts.ResponsibleEntity.String(),
+		facts.Counterparty.String(),
+		facts.Direction.String(),
+		facts.SettlementAccount.String(),
+		facts.ContractBasis.String(),
+		facts.PrimaryChargingScope.String(),
+		facts.SourceFact.String(),
 	)
 	if err != nil {
 		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save confirmed charge: %w", err)
@@ -158,8 +190,75 @@ type chargeRow struct {
 	conversion         *string
 	stageName          string
 	confirmation       *string
+	facts              confirmationFactColumns
 	formedAt           time.Time
 	confirmedAt        *time.Time
+}
+
+// confirmationFactColumns 是确认时固定的七项在行上的原始列值。全部可空：非确认行按
+// customer_charge_confirmation_facts_coupled 要求七项全缺。
+type confirmationFactColumns struct {
+	responsibleEntity    *string
+	counterparty         *string
+	direction            *string
+	settlementAccount    *string
+	contractBasis        *string
+	primaryChargingScope *string
+	sourceFact           *string
+}
+
+// rebuildConfirmedFacts 把七列走各自的构造门装回领域类型。任一列缺席即报错而不是留空
+// 位：留空位造出的是一份领域拒收的事实，错会在 Confirm 那里以「提交矛盾」的面目出现，
+// 而真正的病因是行本身不全。
+func rebuildConfirmedFacts(columns confirmationFactColumns) (domain.ConfirmedChargeFacts, error) {
+	var facts domain.ConfirmedChargeFacts
+	for name, column := range map[string]*string{
+		"responsible_entity":     columns.responsibleEntity,
+		"counterparty_ref":       columns.counterparty,
+		"charge_direction":       columns.direction,
+		"settlement_account_id":  columns.settlementAccount,
+		"contract_basis":         columns.contractBasis,
+		"primary_charging_scope": columns.primaryChargingScope,
+		"source_fact_ref":        columns.sourceFact,
+	} {
+		if column == nil {
+			return facts, fmt.Errorf("confirmed charge missing %s", name)
+		}
+	}
+	var err error
+	if facts.ResponsibleEntity, err = domain.NewLegalEntityReference(*columns.responsibleEntity); err != nil {
+		return facts, err
+	}
+	if facts.Counterparty, err = domain.NewSettlementCounterpartyReference(*columns.counterparty); err != nil {
+		return facts, err
+	}
+	if facts.Direction, err = chargeDirectionFrom(*columns.direction); err != nil {
+		return facts, err
+	}
+	if facts.SettlementAccount, err = domain.NewSettlementAccountID(*columns.settlementAccount); err != nil {
+		return facts, err
+	}
+	if facts.ContractBasis, err = domain.NewContractBasisReference(*columns.contractBasis); err != nil {
+		return facts, err
+	}
+	if facts.PrimaryChargingScope, err = domain.NewChargingScopeReference(*columns.primaryChargingScope); err != nil {
+		return facts, err
+	}
+	if facts.SourceFact, err = domain.NewSourceFactReference(*columns.sourceFact); err != nil {
+		return facts, err
+	}
+	return facts, nil
+}
+
+func chargeDirectionFrom(raw string) (domain.ChargeDirection, error) {
+	switch raw {
+	case domain.ChargeReceivable.String():
+		return domain.ChargeReceivable, nil
+	case domain.ChargePayable.String():
+		return domain.ChargePayable, nil
+	default:
+		return 0, fmt.Errorf("unknown charge direction %q", raw)
+	}
 }
 
 func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
@@ -219,7 +318,11 @@ func rebuildCustomerCharge(row chargeRow) (domain.CustomerCharge, error) {
 	if err != nil {
 		return domain.CustomerCharge{}, err
 	}
-	return charge.Confirm(basis, *row.confirmedAt)
+	facts, err := rebuildConfirmedFacts(row.facts)
+	if err != nil {
+		return domain.CustomerCharge{}, err
+	}
+	return charge.Confirm(facts, basis, *row.confirmedAt)
 }
 
 func chargeStageFrom(raw string) (domain.ChargeStage, error) {

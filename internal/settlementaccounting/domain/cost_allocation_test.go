@@ -154,16 +154,19 @@ func TestOperatingResultIsDerivedNotEdited(t *testing.T) {
 	components := []domain.ResultComponent{
 		{
 			Source:      settlementValue(t, domain.NewComponentSourceReference, "customer-charge-1"),
+			Role:        domain.CustomerOperatingReceivableRole,
 			Effect:      domain.IncreasesResult,
 			AmountMinor: 15000,
 		},
 		{
 			Source:      settlementValue(t, domain.NewComponentSourceReference, "payable-1"),
+			Role:        domain.AuditedPayableRole,
 			Effect:      domain.DecreasesResult,
 			AmountMinor: 10000,
 		},
 		{
 			Source:      settlementValue(t, domain.NewComponentSourceReference, "credit-note-1"),
+			Role:        domain.SupplierCreditNoteRole,
 			Effect:      domain.IncreasesResult,
 			AmountMinor: 2000,
 		},
@@ -192,6 +195,7 @@ func TestOperatingResultIsDerivedNotEdited(t *testing.T) {
 	t.Run("a late cost rederives a new version keeping the snapshot", func(t *testing.T) {
 		late := append(append([]domain.ResultComponent(nil), components...), domain.ResultComponent{
 			Source:      settlementValue(t, domain.NewComponentSourceReference, "late-cost-1"),
+			Role:        domain.CustomerOperatingReceivableRole,
 			Effect:      domain.DecreasesResult,
 			AmountMinor: 1000,
 		})
@@ -227,6 +231,122 @@ func TestOperatingResultIsDerivedNotEdited(t *testing.T) {
 			derivedAsOf,
 		); !errors.Is(err, domain.ErrInvalidOperatingResult) {
 			t.Fatalf("error = %v; 没有组成的指标是编出来的数", err)
+		}
+	})
+
+	// Covers: SA CONTEXT「审核应付与贷项按各自借贷方向分别计入一次……不得把审核应付
+	// 视为已净含贷项」与「经营毛利的客户与外部供应商基础必须按阶段成对采用……不能……
+	// 跨阶段替代」，形状照 ADR-0087 决定三。
+	//
+	// 角色按口径分组：同一个「审核应付」在预估口径下不成立——那个口径采用的是预期成本，
+	// 账单还没到。判据落写侧重建复验而不是 SQL CHECK（逐元素校验 jsonb 本模块无先例）。
+	t.Run("component roles hold per basis and the payable-credit pair is verified", func(t *testing.T) {
+		derive := func(basis domain.OperatingBasis, components []domain.ResultComponent) error {
+			_, err := domain.DeriveOperatingResult(
+				settlementValue(t, domain.NewOperatingScopeReference, "customer-1"),
+				settlementValue(t, domain.NewBillingPeriodReference, "period-2026-08"),
+				basis,
+				settlementValue(t, domain.NewCurrencyCode, "USD"),
+				components,
+				settlementValue(t, domain.NewOperatingResultVersion, "result/vrole"),
+				derivedAsOf,
+			)
+			return err
+		}
+		component := func(role domain.ComponentRole, effect domain.ComponentEffect, amount int64) domain.ResultComponent {
+			return domain.ResultComponent{
+				Source:      settlementValue(t, domain.NewComponentSourceReference, "source-"+role.String()),
+				Role:        role,
+				Effect:      effect,
+				AmountMinor: amount,
+			}
+		}
+
+		// 预估口径按它自己点名的采用物成立。
+		if err := derive(domain.EstimatedBasis, []domain.ResultComponent{
+			component(domain.CustomerEstimateRole, domain.IncreasesResult, 5000),
+			component(domain.SupplierExpectedCostRole, domain.DecreasesResult, 3000),
+		}); err != nil {
+			t.Fatalf("预估口径按自己的采用物派生失败：%v", err)
+		}
+
+		// 跨阶段替代：审核应付是已确认口径的采用物，预估口径下没有它的格。
+		if err := derive(domain.EstimatedBasis, []domain.ResultComponent{
+			component(domain.CustomerEstimateRole, domain.IncreasesResult, 5000),
+			component(domain.AuditedPayableRole, domain.DecreasesResult, 3000),
+		}); !errors.Is(err, domain.ErrOperatingComponentRoles) {
+			t.Fatalf("error = %v；审核应付混进了预估口径——这正是「跨阶段替代」", err)
+		}
+
+		// 未指名角色的组成落不进任何口径：零值在哪个口径下都不成立。
+		if err := derive(domain.ConfirmedBasis, []domain.ResultComponent{
+			component(domain.ComponentRoleInvalid, domain.IncreasesResult, 5000),
+		}); !errors.Is(err, domain.ErrOperatingComponentRoles) {
+			t.Fatalf("error = %v；不指名角色的组成被收下了", err)
+		}
+
+		// 贷项独自在场：读起来就是应付已经净含了贷项，而那句硬句禁的正是这个。
+		if err := derive(domain.ConfirmedBasis, []domain.ResultComponent{
+			component(domain.CustomerOperatingReceivableRole, domain.IncreasesResult, 15000),
+			component(domain.SupplierCreditNoteRole, domain.IncreasesResult, 2000),
+		}); !errors.Is(err, domain.ErrOperatingComponentRoles) {
+			t.Fatalf("error = %v；贷项独自在场被收下了——审核应付被视为已净含贷项", err)
+		}
+
+		// 各至多一项：两笔应付就不是「分别计入一次」。
+		if err := derive(domain.ConfirmedBasis, []domain.ResultComponent{
+			component(domain.CustomerOperatingReceivableRole, domain.IncreasesResult, 15000),
+			domain.ResultComponent{
+				Source:      settlementValue(t, domain.NewComponentSourceReference, "payable-a"),
+				Role:        domain.AuditedPayableRole,
+				Effect:      domain.DecreasesResult,
+				AmountMinor: 4000,
+			},
+			domain.ResultComponent{
+				Source:      settlementValue(t, domain.NewComponentSourceReference, "payable-b"),
+				Role:        domain.AuditedPayableRole,
+				Effect:      domain.DecreasesResult,
+				AmountMinor: 6000,
+			},
+		}); !errors.Is(err, domain.ErrOperatingComponentRoles) {
+			t.Fatalf("error = %v；同口径两笔审核应付被收下了", err)
+		}
+
+		// 已结算口径同一条判据，用的是它自己那三个角色。
+		if err := derive(domain.SettledBasis, []domain.ResultComponent{
+			component(domain.SettledCustomerReceivableRole, domain.IncreasesResult, 15000),
+			component(domain.SettledSupplierCreditNoteRole, domain.IncreasesResult, 2000),
+		}); !errors.Is(err, domain.ErrOperatingComponentRoles) {
+			t.Fatalf("error = %v；已结算口径的贷项独自在场被收下了", err)
+		}
+		if err := derive(domain.SettledBasis, []domain.ResultComponent{
+			component(domain.SettledCustomerReceivableRole, domain.IncreasesResult, 15000),
+			component(domain.SettledAuditedPayableRole, domain.DecreasesResult, 10000),
+			component(domain.SettledSupplierCreditNoteRole, domain.IncreasesResult, 2000),
+		}); err != nil {
+			t.Fatalf("已结算口径成对采用被拒：%v", err)
+		}
+	})
+
+	t.Run("the component role set is closed", func(t *testing.T) {
+		labels := map[string]struct{}{}
+		for _, role := range []domain.ComponentRole{
+			domain.CustomerEstimateRole, domain.SupplierExpectedCostRole,
+			domain.CustomerOperatingReceivableRole, domain.AuditedPayableRole,
+			domain.SupplierCreditNoteRole, domain.SettledCustomerReceivableRole,
+			domain.SettledAuditedPayableRole, domain.SettledSupplierCreditNoteRole,
+		} {
+			label := role.String()
+			if label == "" {
+				t.Fatalf("role %d has no label", role)
+			}
+			labels[label] = struct{}{}
+		}
+		if len(labels) != 8 {
+			t.Fatalf("labels collapsed into %d", len(labels))
+		}
+		if domain.ComponentRole(len(labels)+1).String() != "" {
+			t.Fatal("第九个角色带了标签——封闭集合被悄悄放开")
 		}
 	})
 

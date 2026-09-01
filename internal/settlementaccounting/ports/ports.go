@@ -193,6 +193,21 @@ type ConfirmationConditionView interface {
 	) (ConfirmationCondition, bool, error)
 }
 
+// ConfirmedChargeFactsView 取这笔费用在确认时必须固定的七项事实（SA CONTEXT「费用形成
+// 与证据」硬句，ADR-0087 决定一）。found=false 表示这些事实无处可取——实例半边未提供时
+// 确认停在未决，不用空值凑格。
+//
+// 与 ConfirmationConditionView 分两个读口而不并成一个：条件核对答的是「这笔费用能不能
+// 确认」，本读口答的是「确认下来钉哪些事实」，两者的未配置态等的东西不同（一个等确认
+// 条件目录，一个等结算事实册），并成一格之后未决理由就说不出等的是哪一半。
+type ConfirmedChargeFactsView interface {
+	LoadConfirmedChargeFacts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerChargeID,
+	) (domain.ConfirmedChargeFacts, bool, error)
+}
+
 type ChargeSaveOutcome uint8
 
 const (
@@ -391,6 +406,46 @@ const (
 type SubsequentInclusionStore interface {
 	FindByKey(ctx context.Context, key InclusionKey) (InclusionRecord, bool, error)
 	Save(ctx context.Context, record InclusionRecord) (InclusionSaveOutcome, error)
+}
+
+// ChargeAdjustmentKey 是一笔客户费用调整的幂等键。
+type ChargeAdjustmentKey struct {
+	TenantID   domain.TenantID
+	Adjustment domain.ChargeAdjustmentID
+}
+
+// ChargeAdjustmentRecord 是一笔调整越过提交边界留下的东西。
+type ChargeAdjustmentRecord struct {
+	Key        ChargeAdjustmentKey
+	Adjustment domain.ChargeAdjustment
+	RecordedAt time.Time
+}
+
+type ChargeAdjustmentSaveOutcome uint8
+
+const (
+	ChargeAdjustmentSaveOutcomeInvalid ChargeAdjustmentSaveOutcome = iota
+	ChargeAdjustmentSaved
+	ChargeAdjustmentAlreadyRecorded
+)
+
+// ChargeAdjustmentStore 是普通客户费用调整的追加式登记册（ADR-0087 决定二）。写入代数
+// 同 ADR-0031：同标识重放答`已登记`，不覆盖先到者。
+//
+// 只追加、无改写口：CONTEXT「重复触发返回原结果，语义或范围不同则形成独立关联调整」
+// ——语义不同的那一笔本就该另起一个调整标识，因此这里不需要内容冲突格。
+//
+// 本册只收 domain.ChargeAdjustment，而它的种类封闭在 UC-SA-002 拥有的计价纠错与商业让利
+// 两格；赔付、索赔退款、追偿与供应商贷项各归其唯一创建用例与各自的册，在这里连可表达的
+// 取值都没有（CONTEXT「调整类型与唯一所有权」表）。
+type ChargeAdjustmentStore interface {
+	FindByKey(ctx context.Context, key ChargeAdjustmentKey) (ChargeAdjustmentRecord, bool, error)
+	ListByCharge(
+		ctx context.Context,
+		tenant domain.TenantID,
+		charge domain.CustomerChargeID,
+	) ([]ChargeAdjustmentRecord, error)
+	Save(ctx context.Context, record ChargeAdjustmentRecord) (ChargeAdjustmentSaveOutcome, error)
 }
 
 // DisputeKey 是客户异议的幂等键。

@@ -252,6 +252,46 @@ Comments 里——本轮已有通道 crash 带走队列消息的先例）：
   dead-session-salvage 惯例，对着票面裁定与 Go 源逐文件复核后带走，未照单全收。MCP-5
   受用户委托对同一现场做过独立审查，结论与本复核一致（build 绿、api.ts 与 Go 侧逐键
   一致、四页符合对栏裁定），双验合流。
+- 2026-09-01 · MCP-1：**当初按「册级缺席即撤栏」撤掉的那几栏，册补上之后 Go 读面已回填。**
+  ADR-0087 三条决定落地后，「主要计费范围／收付方向／责任法人／结算相对方」在
+  `customer_charge` 上真有了列（迁移 `0014`），经营页那四栏所依赖的角色维也在
+  `operating_result.components` 元素上真有了键。**撤栏的判据没变，是判据的输入变了**——
+  这几处的缺席从**册级**降成了**行级**（未确认行七格皆空，那是库上同在或同缺 CHECK 的
+  正面结果），按本票同一条判据就该保留栏并如实呈现。
+
+  Go 侧已改：`ports.CustomerChargeCatalogueRow` 加七个字段、`OperatingComponentEntry` 加
+  `Role`；两个 postgres 目录读口取数跟上；两个 HTTP 端点透出，七项与 `role` 随 `omitempty`
+  ——未确认行整键不出现，与 `confirmedAt` 同一处置，透出七个空串会让页面以为册上记漏了。
+
+  **两处刻意没做**：读面不按角色把组成合计成「客户侧采用／供应商侧采用／其中审核应付／
+  其中贷项」四栏（页面按角色分组就能得到，端点多算一层就多一处定义，同 `MarginMinor`
+  那条理由）；七项不合并成一层嵌套对象（册上是七列，报文多一层是册上没有的层次）。
+
+  **版本栏仍撤**：决定二选的是调整明细册而不是版本链，`customer_charge` 主键仍是一费用
+  一行。调整现在落 `charge_adjustment`（迁移 `0015`），若要在费用页显示「被调整过」，那是
+  另一条读面，不是把版本栏加回来。**计费重量采用栏同样仍撤**，册上依旧没有。
+
+  **admin-web 同笔跟上**：`pages/settlement/api.ts` 两个记录类型加键（七项与 `role`，均按
+  服务端 `omitempty` 声明为可选）；`presentation.ts` 新增 `componentRoleLabels`（八格按口径
+  分组）与 `chargeDirectionLabels`（收付两格，注明不与借贷共用）；`ChargesBillingPage.tsx`
+  加七栏、共用一个 `unregisteredUntilConfirmed` 渲染（七项的缺席是同一件事，写七遍就会有
+  一处日后跟别处不一样）；`OperatingMetricsPage.tsx` 的组成逐项加显角色。
+
+  **经营页那四栏仍不设，但换了理由**——这一点值得记：当初撤它是因为元素上没有角色维、
+  归栏就得由读面猜；角色补上之后那个理由不再成立，可四栏依然不该回来，因为它是**按角色
+  对组成求和**，求和放页面就成了第二处定义，而那句硬句要人看见的恰恰是逐项不是四个合计
+  数。角色显示在项上之后，哪一项是审核应付、哪一项是贷项一眼可辨，再合计回去等于把它
+  重新收拢。**换理由不换结论时把新理由写下来**，否则下一个人看到「角色已有」会以为撤栏
+  是漏改的。
+
+  前端验证：`npx tsc --noEmit` 无输出、`pnpm build`（`tsc -b` + `vite build`）绿、IDE lint
+  零错。在共享树上构建（`node_modules` 只在共享树有），`apps/admin-web` 下未提交改动全属
+  本批，无外来 hunk。
+
+  验证（父提交 `a573551`，未提交）：`gofmt -l` 无输出、`go build ./...`、`go vet ./...` 绿；
+  `go test -count=1 ./...` 全仓 89 包 ok、0 FAIL，真库。新增断言逐格点名各自的播种值而不是
+  只判非空——七列同型，SQL 里错位一列每格照样有值。
+
 - 落地 SHA：f3f7c55（f3f7c5529ee13bfbbc5f180c5e38be1e4c6e98a1），基 5aca747 上一笔，
   含九件代码与本注记初版。Status 词按 docs/agents/issue-tracker.md 词表用 resolved
   （初版误写 done），与本行同笔补正。

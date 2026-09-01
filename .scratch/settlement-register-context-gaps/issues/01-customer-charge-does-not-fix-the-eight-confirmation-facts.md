@@ -1,9 +1,9 @@
 # `customer_charge` 固定不了 CONTEXT 要求的那八项——册上直接成列的只有一项
 
 Category: chore
-Status: ready-for-agent——已裁：补列 + 约束 + 写侧（用户 2026-09-01 裁，形状落
-[ADR-0087](../../../docs/adr/0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
-Decision 一）；实施未开工
+Status: resolved——机制半边已落地（2026-09-01，见文末 Comment）；实例半边留空，
+`ConfirmedChargeFactsView` 无生产实现，确认在事实无处可取时停在
+`CONFIRMATION_FACTS_UNCONFIGURED`
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -96,6 +96,40 @@ CONTEXT 那句的后半截——「任何一项不能通过当前组织、当前
 读面按册上实有的内容照实转写，补不补列都成立。
 
 ## Comments
+
+- 2026-09-01 · MCP-1：**ADR-0087 决定一实施完毕，机制半边收口。** 本票上文的差异描述
+  自此描述的是补齐**之前**的状态，不再是现状。
+
+  落地的四层：
+
+  - **领域**：`ConfirmedChargeFacts` 把七项打成一个类型，`Confirm(facts, basis, at)` 一步
+    钉上、缺任一项返 `ErrInvalidCustomerCharge`，`ConfirmedFacts()` 只在已确认费用上给出。
+    收付方向立 `ChargeDirection`（`RECEIVABLE`/`PAYABLE`），未复用同文件的 `AdjustmentDirection`
+    借贷二值。合同或责任依据、来源事实各自成格，未与 `ConfirmationBasisReference`、
+    `SellEvaluationReference` 合用。
+  - **库**：迁移 `0014_customer_charge_confirmation_facts.sql` 补七列，
+    `customer_charge_confirmation_facts_coupled` 按同在或同缺把门、
+    `customer_charge_direction_closed` 镜像封闭词表。非确认行要求七项**全缺**而非「不作要求」，
+    理由记在迁移注释里：领域在确认之前表达不出这些事实，放行带事实的预估行等于开出一条
+    领域产不出也读不回的写入路径。
+  - **应用**：七项由新端口 `ports.ConfirmedChargeFactsView` 交出，**不进 `ConfirmChargeCommand`**
+    ——命令带得了它们，CONTEXT 禁的「临时推断」就只是换了个人做。事实无处可取与确认条件
+    未配置分两格（`CONFIRMATION_FACTS_UNCONFIGURED` / `CONDITION_UNCONFIGURED`），判据是两者
+    的恢复动作不同：一个等结算事实册，一个等确认条件目录。
+  - **适配器**：写口七项与确认留痕同笔 INSERT、冲突分支同笔改写；读口重建时逐列走各自
+    构造门装回。
+
+  **未做且有意未做**：`ConfirmedChargeFactsView` 没有生产实现——那是实例半边，本仓无租户
+  因而无册可读，不造默认值。`ConfirmChargeHandler` 至今只在测试里装配，未进 `cmd/parcel-api`。
+  票 04 撤掉的四栏可以按册加回，属另一片。
+
+  **验证**（父提交 `a573551`，本笔改动尚未提交时实测）：`gofmt -l` 无输出、`go build ./...`、
+  `go vet ./...` 绿；`go test -count=1 ./...` 全仓 89 包 ok、0 FAIL，DSN 已设为门禁容器，
+  `settlementaccounting/adapters/postgres` 单跑 `-v` 得 104 PASS / 0 SKIP / 0 FAIL——SKIP 为零
+  即证明这不是未设 DSN 跳过冒充的绿。新增四格库面判据各自钉住**是哪条约束**拒的而不只是「拒了」——写成
+  `err != nil` 的第一版当场放过了一个真缺陷：`confirmed_at` 取 Go 侧时间、`formed_at` 取库侧
+  `now()`，两个时钟谁先谁后不定，行其实是被旧的 `customer_charge_confirmation_coupled` 拒的，
+  单跑侥幸通过、全仓跑才翻出来。
 
 - 2026-09-01 · MCP-5：**重新取证于 `d11e0f0`，票面结论一字未变。** `customer_charge` 的列今天
   仍是 `0003` 那批加 `0013` 的币种三件——责任法人、结算相对方、收付方向、结算账户、主要计费

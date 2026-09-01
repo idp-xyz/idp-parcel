@@ -27,8 +27,12 @@ func NewOperatingResults(db *bentopg.DB) (*OperatingResults, error) {
 	return &OperatingResults{db: db}, nil
 }
 
+// componentRow 是 operating_result.components 的元素形状。role 随 ADR-0087 决定三加入：
+// 列是 jsonb，改元素形状无需迁移，但写侧与读侧必须同笔改——读回旧形状译不出角色，而表
+// 此刻 0 行，这一点无历史负担。
 type componentRow struct {
 	Source      string `json:"source"`
+	Role        string `json:"role"`
 	Effect      string `json:"effect"`
 	AmountMinor int64  `json:"amountMinor"`
 }
@@ -212,6 +216,7 @@ func marshalComponents(components []domain.ResultComponent) ([]byte, error) {
 	for _, component := range components {
 		rows = append(rows, componentRow{
 			Source:      component.Source.String(),
+			Role:        component.Role.String(),
 			Effect:      component.Effect.String(),
 			AmountMinor: component.AmountMinor,
 		})
@@ -234,13 +239,34 @@ func unmarshalComponents(raw []byte) ([]domain.ResultComponent, error) {
 		if err != nil {
 			return nil, err
 		}
+		role, err := componentRoleFrom(row.Role)
+		if err != nil {
+			return nil, err
+		}
 		components = append(components, domain.ResultComponent{
 			Source:      source,
+			Role:        role,
 			Effect:      effect,
 			AmountMinor: row.AmountMinor,
 		})
 	}
 	return components, nil
+}
+
+// componentRoleFrom 逐格译回角色。空串明确报错而不是落成零值：一个零值角色在任何口径
+// 下都不成立，交给重建门会答「角色在本口径不成立」，把「行是旧形状」说成「选料选错了」。
+func componentRoleFrom(raw string) (domain.ComponentRole, error) {
+	for _, role := range []domain.ComponentRole{
+		domain.CustomerEstimateRole, domain.SupplierExpectedCostRole,
+		domain.CustomerOperatingReceivableRole, domain.AuditedPayableRole, domain.SupplierCreditNoteRole,
+		domain.SettledCustomerReceivableRole, domain.SettledAuditedPayableRole,
+		domain.SettledSupplierCreditNoteRole,
+	} {
+		if role.String() == raw {
+			return role, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown component role %q", raw)
 }
 
 func componentEffectFrom(raw string) (domain.ComponentEffect, error) {

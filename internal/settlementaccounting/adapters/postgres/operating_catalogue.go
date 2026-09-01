@@ -92,6 +92,7 @@ func (catalogue *OperatingCatalogue) ListOperatingResults(
 		for _, document := range documents {
 			components = append(components, ports.OperatingComponentEntry{
 				Source:      document.Source,
+				Role:        document.Role,
 				Effect:      document.Effect,
 				AmountMinor: document.AmountMinor,
 			})
