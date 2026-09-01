@@ -1,7 +1,8 @@
 # 面单交易：全仓没有这张表，缺的是领域建模不是接线
 
 Category: feature
-Status: draft——待裁范围与承接会话，暂不派工
+Status: in-progress
+Session: MCP-5（2026-08-31 认领，重启范围见文末 Comments）
 Blocked by: 无（但与本批其余各票性质不同，不并线）
 
 ## 为什么单列
@@ -48,3 +49,19 @@ Blocked by: 无（但与本批其余各票性质不同，不并线）
 [本批 spec](../spec.md) 的事实基线；`docs/agents/parallel-sessions.md` 的地盘一节。
 
 ## Comments
+
+- 2026-08-31 · MCP-5：**重启并认领。** 频道指示「这两个页面骨架（acceptance-review、
+  label-transactions）完整实现」。三条不派理由逐一核销（基线 `4b35815`）：
+  1. ADR——聚合边界 ADR 作为本票第一件交付先落（编号以 `docs/adr/README.md` 下一空位为准），
+     不在实现里顺手定；
+  2. 写入方在墙后——**维持成立，且首发基线明写「独立面单渠道服务不进入首发生产」**。因此本票
+     范围按机制半边裁：域模型、迁移、仓储写入机制（构造与不变式由测试驱动）、读端口、真库读
+     适配器、HTTP 查阅端点、隔离读准入（ADR-0078 读行）、页面接真。**不造任何伪写入方**：
+     渠道墙未降前登记零行，页面如实呈现空册（同批 05/06 阶段二的先例）。写编排（随委托提交
+     产生面单交易）等渠道墙降后另票；
+  3. 地盘——`internal/parcelshipment/**` 的在途改动已随 `4b35815` 批收口落地，工作树此刻
+     除他人 `docs/wooolink/`、`.scratch/admin-write-faces/` 外干净。已在频道广播认领
+     `internal/parcelshipment/**`、`cmd/parcel-api/**`、`apps/admin-web/src/**`、
+     `migrations/parcel_shipment/**` 与本批票面。
+  同批新开 [09-acceptance-review-wiring](./09-acceptance-review-wiring.md) 承接另一页，两票
+  分开提交。

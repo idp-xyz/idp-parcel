@@ -26,6 +26,8 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateExpectedCommitmentSpec": true,
 	"RehydrateParcelFinalOutcome":     true,
 	"RehydrateParcelFinalOutcomeSpec": true,
+	"RehydrateLabelTransaction":       true,
+	"RehydrateLabelTransactionSpec":   true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。
