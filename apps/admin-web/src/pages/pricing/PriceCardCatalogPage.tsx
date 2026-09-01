@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import {
   ListPageTemplate,
   type ListColumn,
@@ -6,8 +7,10 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
+import { RegistrationPanel } from './RegistrationPanel';
 import {
   listPriceCards,
+  registerPriceCard,
   type ApiResult,
   type PriceCardListResponseBody,
   type PriceCardRecord,
@@ -138,7 +141,8 @@ function viewStateOf(
           source: info.source,
           unlock:
             '登记接入渠道认证参数(PAR-INT-01,实例半边)后由装配侧换上真 Intake 即放行;' +
-            '价卡登记仍走受控登记口(parcel-pricing-register),不进在线面。',
+            '在此之前登记走受控登记口(parcel-pricing-register)。在线登记口本身已建立' +
+            '(见「登记价卡」签,ADR-0085),它挂的是同一堵墙,因此今天同答未配置。',
         },
       };
     case 'callerProblem':
@@ -165,10 +169,14 @@ function viewStateOf(
 }
 
 /**
- * 价卡目录:已登记定价方案版本的查阅/复核面。
- * 页面刻意没有「新建 / 登记」动作——价卡登记是治理动作,走受控登记口。
+ * 价卡目录:已登记定价方案版本的查阅/复核面,外加登记签(ADR-0085,票
+ * admin-write-faces/01 切片 01b)。
+ *
+ * 登记签不是「新建按钮」:登记册不可覆盖,更正翻旧插新,停用走状态推进不删行——所以这里
+ * 只有一个登记动作,没有行级编辑或删除面。它今天必然答 403「接入渠道未配置」,那是诚实
+ * 答案;墙降当天在装配点换真 Intake 即点亮,本页一行不用改。
  */
-export function PriceCardCatalogPage() {
+function PriceCardCatalogTable() {
   const [keyword, setKeyword] = useState('');
   const [answer, setAnswer] = useState<ApiResult<PriceCardListResponseBody> | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -198,7 +206,7 @@ export function PriceCardCatalogPage() {
   return (
     <ListPageTemplate<PriceCardRecord>
       title={info.title}
-      description={`${info.owner}——价卡登记走受控登记口,本页只查阅`}
+      description={`${info.owner}——本签只查阅;登记走「登记价卡」签或受控登记口,两口消费同一登记用例`}
       search={{
         value: keyword,
         onChange: setKeyword,
@@ -212,5 +220,36 @@ export function PriceCardCatalogPage() {
       rowKey={(row) => `${row.planId}@${row.planVersion}`}
       viewState={viewStateOf(answer, rows.length, retry)}
     />
+  );
+}
+
+export function PriceCardCatalogPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalog">价卡目录</TabsTrigger>
+          <TabsTrigger value="register">登记价卡</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalog"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <PriceCardCatalogTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="price-card-catalog"
+            title="登记价卡版本"
+            endpoint="POST /pricing-price-card-registrations"
+            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind price-card -file 吃的同一份；本页不逐字段建表单，因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约，随 PAR-INT-01 提供。"
+            submit={registerPriceCard}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

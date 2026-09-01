@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import {
   ListPageTemplate,
   type ListColumn,
@@ -11,8 +12,10 @@ import {
   problemNote,
   seriesKindLabels,
 } from './presentation';
+import { RegistrationPanel } from './RegistrationPanel';
 import {
   listReferenceSeries,
+  registerReferenceSeries,
   type ApiResult,
   type ReferenceSeriesListResponseBody,
   type ReferenceSeriesRecord,
@@ -140,7 +143,8 @@ function viewStateOf(
           source: info.source,
           unlock:
             '登记接入渠道认证参数(PAR-INT-01,实例半边)后由装配侧换上真 Intake 即放行;' +
-            '序列数值仍由外部来源产生、经登记口登记(ADR-0013)。',
+            '序列数值仍由外部来源产生、经登记口登记(ADR-0013)。在线登记口本身已建立' +
+            '(见「登记序列」签,ADR-0085),它挂的是同一堵墙,因此今天同答未配置。',
         },
       };
     case 'callerProblem':
@@ -167,10 +171,13 @@ function viewStateOf(
 }
 
 /**
- * 计价参考序列:已登记序列版本的查阅/复核面。
- * 页面刻意没有「登记 / 修改」动作——序列登记走受控登记口,且数值由外部产生。
+ * 计价参考序列:已登记序列版本的查阅/复核面,外加登记签(ADR-0085,票
+ * admin-write-faces/01 切片 01b)。
+ *
+ * 登记签只有登记一个动作,没有行级修改或删除面:参考序列只登记不产生数值(ADR-0013),
+ * 数值由外部来源产生;登记册本身不可覆盖。
  */
-export function ReferenceSeriesPage() {
+function ReferenceSeriesTable() {
   const [keyword, setKeyword] = useState('');
   const [answer, setAnswer] = useState<ApiResult<ReferenceSeriesListResponseBody> | null>(
     null,
@@ -216,5 +223,36 @@ export function ReferenceSeriesPage() {
       rowKey={(row) => `${row.seriesId}@${row.seriesVersion}`}
       viewState={viewStateOf(answer, rows.length, retry)}
     />
+  );
+}
+
+export function ReferenceSeriesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalog">参考序列</TabsTrigger>
+          <TabsTrigger value="register">登记序列</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalog"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <ReferenceSeriesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="reference-series"
+            title="登记参考序列版本"
+            endpoint="POST /pricing-reference-series-registrations"
+            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind reference-series -file 吃的同一份；本页不逐字段建表单，因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约，随 PAR-INT-01 提供。"
+            submit={registerReferenceSeries}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

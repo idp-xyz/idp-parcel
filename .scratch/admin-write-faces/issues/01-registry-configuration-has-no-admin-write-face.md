@@ -95,8 +95,8 @@ Status: in-progress
   装配行交 MCP-1：建议路径 `POST /pricing-price-card-registrations`、
   `POST /pricing-reference-series-registrations`，第二参为「登记用例 + `db.Transactor()`
   事务包装」（形状照登记 CLI 的 execute），或先以 unwired 守卫顶住。
-- **01b（阶段二，等 MCP-1 装配广播）**：管理台价卡/参考系列页增写表单，三态如实呈现，
-  未配置态文案「接入渠道未配置」。
+- **01b（阶段二）——已交付，MCP-5 2026-09-01**：管理台价卡/参考系列页各增一个「登记」签，
+  三态如实呈现，未配置态文案「接入渠道未配置」。详见文末 Comment。
 - **02+（后续票）**：网络、关务、商业、VE、代收各上下文逐册跟进，每票照 01a 形状。
 
 ## Comments
@@ -127,3 +127,33 @@ Status: in-progress
   证据：`TestTheWiredPricingRegistrationsRecordAgainstARealDatabase` 单跑 PASS 非 SKIP
   （首登 RECORDED、同内容重放 ALREADY_ON_REGISTER——重放读得到首行即证首登事务提交）。
   提交态验证见频道装配广播。**01b 可开工**：`liveIds` 你自己那行照批例自己加。
+
+- 2026-09-01 · MCP-5：**切片 01b 交付。** 价卡页与参考系列页各改成两签（目录 / 登记），
+  登记签是共用的 `RegistrationPanel`。`liveIds` 无需改动——两页早因读面在册。
+
+  **表单收的是登记快照 JSON 本体，不逐字段建表单。** 这不是省事：ADR-0085 Decision 三
+  把「渠道原始载荷 → 登记快照」的翻译划给渠道接入契约、随 `PAR-INT-01` 提供，现在把它拆成
+  字段就是替租户拟那份还没有的契约。收快照 JSON 则不是发明——那是受控登记 CLI
+  （`parcel-pricing-register -file`）已有文档的同一份形状，两口本就消费同一登记用例。
+  api.ts 里按 shipment-request 草案那节的先例写明：真渠道接线时以渠道契约为准重谈，
+  不得反过来把这里当成已发布的 Schema。
+
+  **三态逐格落地**：403 未配置（今天的必然答复，文案讲明它是诚实答案、改请求或重试都不会
+  好、墙降当天换真 Intake 即点亮）；登记册治理答案（RECORDED / ALREADY_REGISTERED /
+  CONTENT_CONFLICT / CANONICALIZATION_DIFFERS / NOT_ACCEPTED 逐格中文，**后两格是答案不是
+  失败**——原行不被顶替、续办属治理裁决，折成「提交失败」会让操作者以为重试有用）；未决
+  （UNDECIDED 与 5xx，登记与否未知、可重试）。未收录的 outcome 原样示出英文原名，不归进
+  某个既有中文说法——那会让服务端新增的一种答案冒充另一种。畸形 JSON 在本地就拦下不发送：
+  送上去回来的 400 会与服务端的业务拒绝挤在同一格，而两者续办动作不同。
+
+  **顺带修掉两处被本裁决作废的页面文案**：两页此前写着「页面刻意没有登记动作，登记走受控
+  登记口，不进在线面」，未配置态的 unlock 文案也说「不进在线面」。ADR-0085 之后这两句是
+  假话——在线登记口已经建立并装配，只是挂着同一堵墙。改成「在线登记口已建立，它挂的是同一
+  堵墙，因此今天同答未配置」。
+
+  **共享 `postMasterData`**：查阅侧的 `exchangeMasterData` 只做 GET，写面另立一个函数而不是
+  给它加可选参数——写行与读行的 Intake 不是同一个（隔离读准入换得了读行换不了写行），
+  调用点长得一样会让这条区别在阅读时消失。
+
+  **验证**：`tsc --noEmit` 无输出、`pnpm build` 绿。本切片纯前端，Go 侧零改动。
+  **02+ 仍未开工**：网络、关务、商业、VE、代收各上下文逐册跟进，每票照 01a 形状。
