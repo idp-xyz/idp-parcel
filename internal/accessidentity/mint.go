@@ -22,6 +22,10 @@ var ErrRequestKeyNotDerived = errors.New("access identity: source request key wa
 // 的那一行登记，请求那一侧只经 ChannelRequest 流向推导口、且只影响来源请求键。这是
 // ADR-0003 最高隔离边界在铸造这一步的落法：不是「实现里记得别读请求里的租户」，而是
 // 读得到的地方压根没有租户可读。
+//
+// 它做的是「已核验的渠道 → 四要素信封」这一段。凭据怎么核由 CredentialVerifier 的实现
+// 方决定，本包连出示材料长什么样都不知道（ChannelCredentialProof 只交出查找键）——凭据
+// 形态属 ADR-0072 Decision 二挡住的那一半。
 type Minter struct {
 	registry ChannelRegistry
 	verifier CredentialVerifier
@@ -37,11 +41,11 @@ func NewMinter(registry ChannelRegistry, verifier CredentialVerifier) (*Minter, 
 // MintSubmission 铸造一次提交的来源信封。
 func (minter *Minter) MintSubmission(
 	ctx context.Context,
-	presented PresentedCredential,
+	proof ChannelCredentialProof,
 	request ChannelRequest,
 ) (SubmissionEnvelope, error) {
 
-	registration, err := minter.authenticate(ctx, presented)
+	registration, err := minter.authenticate(ctx, proof)
 	if err != nil {
 		return SubmissionEnvelope{}, err
 	}
@@ -64,11 +68,11 @@ func (minter *Minter) MintSubmission(
 // 分开，合用一个会让撤回被判成原提交的重放（WithdrawalIntake 注释里的原句）。
 func (minter *Minter) MintWithdrawal(
 	ctx context.Context,
-	presented PresentedCredential,
+	proof ChannelCredentialProof,
 	request ChannelRequest,
 ) (WithdrawalEnvelope, error) {
 
-	registration, err := minter.authenticate(ctx, presented)
+	registration, err := minter.authenticate(ctx, proof)
 	if err != nil {
 		return WithdrawalEnvelope{}, err
 	}
@@ -91,14 +95,20 @@ func (minter *Minter) MintWithdrawal(
 // 答一个含糊的失败，两格就又折回一格了。
 func (minter *Minter) authenticate(
 	ctx context.Context,
-	presented PresentedCredential,
+	proof ChannelCredentialProof,
 ) (ChannelRegistration, error) {
 
-	if presented.key.value == "" {
-		return ChannelRegistration{}, ErrInvalidCredential
+	// 显式判 nil 接口：少了这一步，缺凭证的调用会在 ClaimedChannel() 上 panic，
+	// 而 panic 与「这次出示没说清认领哪一行」是两回事，前者还会把装配缺陷报成崩溃。
+	if proof == nil {
+		return ChannelRegistration{}, ErrInvalidChannelKey
+	}
+	key := proof.ClaimedChannel()
+	if key.value == "" {
+		return ChannelRegistration{}, ErrInvalidChannelKey
 	}
 
-	registration, found, err := minter.registry.FindChannel(ctx, presented.key)
+	registration, found, err := minter.registry.FindChannel(ctx, key)
 	if err != nil {
 		// 读不动登记册是依赖故障，与「册里没有这一行」分开交回：前者要运维去救，
 		// 后者要接入方去配。把它折进未配置会让人去配一个其实已经配好的渠道。
@@ -108,7 +118,7 @@ func (minter *Minter) authenticate(
 		return ChannelRegistration{}, ErrAccessChannelNotConfigured
 	}
 
-	accepted, err := minter.verifier.VerifyCredential(ctx, registration.credential, presented)
+	accepted, err := minter.verifier.VerifyCredential(ctx, registration.credential, proof)
 	if err != nil {
 		return ChannelRegistration{}, fmt.Errorf("verify access credential: %w", err)
 	}

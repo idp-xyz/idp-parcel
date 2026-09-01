@@ -3,23 +3,27 @@ package accessidentity
 import (
 	"context"
 	"errors"
-	"strings"
+	"reflect"
 	"testing"
 )
 
 // —— 测试替身 ——
 //
-// 三个口都没有生产实现（登记册的表等 PAR-INT-01、凭据本体外置、推导口的判重口径等
+// 三个口都没有生产实现（登记册的表等 PAR-INT-01、凭据形态还锁着、推导口的判重口径等
 // S0），所以这里的替身不是「先用假的顶着」，它们是本轮唯一可能的驱动方。
+
+type proofDouble struct{ key ChannelKey }
+
+func (double proofDouble) ClaimedChannel() ChannelKey { return double.key }
 
 type registryDouble struct {
 	registration ChannelRegistration
 	found        bool
 	err          error
-	askedKey     CredentialKey
+	askedKey     ChannelKey
 }
 
-func (double *registryDouble) FindChannel(_ context.Context, key CredentialKey) (ChannelRegistration, bool, error) {
+func (double *registryDouble) FindChannel(_ context.Context, key ChannelKey) (ChannelRegistration, bool, error) {
 	double.askedKey = key
 	return double.registration, double.found, double.err
 }
@@ -27,17 +31,17 @@ func (double *registryDouble) FindChannel(_ context.Context, key CredentialKey) 
 type verifierDouble struct {
 	accepted     bool
 	err          error
-	seenSecret   string
+	seenProof    ChannelCredentialProof
 	seenRefValue string
 }
 
 func (double *verifierDouble) VerifyCredential(
 	_ context.Context,
 	reference CredentialReference,
-	presented PresentedCredential,
+	proof ChannelCredentialProof,
 ) (bool, error) {
 	double.seenRefValue = reference.String()
-	double.seenSecret = presented.secret
+	double.seenProof = proof
 	return double.accepted, double.err
 }
 
@@ -69,17 +73,13 @@ func mustRegistration(t *testing.T, derivation RequestKeyDerivation) ChannelRegi
 	return registration
 }
 
-func mustPresented(t *testing.T) PresentedCredential {
+func mustProof(t *testing.T) ChannelCredentialProof {
 	t.Helper()
-	key, err := NewCredentialKey("ak_live_anchor")
+	key, err := NewChannelKey("chan_anchor")
 	if err != nil {
-		t.Fatalf("建凭据键：%v", err)
+		t.Fatalf("建登记查找键：%v", err)
 	}
-	presented, err := NewPresentedCredential(key, "s3cr3t")
-	if err != nil {
-		t.Fatalf("建出示凭据：%v", err)
-	}
-	return presented
+	return proofDouble{key: key}
 }
 
 func mustMinter(t *testing.T, registry ChannelRegistry, verifier CredentialVerifier) *Minter {
@@ -106,7 +106,7 @@ func TestEnvelopeIdentityIgnoresWhateverTheRequestClaims(t *testing.T) {
 		"source":            "CHANNEL-FORGED",
 	})
 
-	submission, err := minter.MintSubmission(context.Background(), mustPresented(t), hostile)
+	submission, err := minter.MintSubmission(context.Background(), mustProof(t), hostile)
 	if err != nil {
 		t.Fatalf("铸造提交信封：%v", err)
 	}
@@ -138,11 +138,11 @@ func TestSubmissionAndWithdrawalDoNotShareOneEnvelope(t *testing.T) {
 	minter := mustMinter(t, registry, &verifierDouble{accepted: true})
 	same := NewChannelRequest(map[string]string{"orderNo": "SO-1"})
 
-	submission, err := minter.MintSubmission(context.Background(), mustPresented(t), same)
+	submission, err := minter.MintSubmission(context.Background(), mustProof(t), same)
 	if err != nil {
 		t.Fatalf("铸造提交信封：%v", err)
 	}
-	withdrawal, err := minter.MintWithdrawal(context.Background(), mustPresented(t), same)
+	withdrawal, err := minter.MintWithdrawal(context.Background(), mustProof(t), same)
 	if err != nil {
 		t.Fatalf("铸造撤回信封：%v", err)
 	}
@@ -167,23 +167,23 @@ func TestUnconfiguredChannelAndRejectedCredentialAreTwoAnswers(t *testing.T) {
 		// 空册：found=false 且 err=nil。这一格必须走通而不是报错——空册可读是正常态。
 		minter := mustMinter(t, &registryDouble{found: false}, &verifierDouble{accepted: true})
 
-		_, err := minter.MintSubmission(context.Background(), mustPresented(t), NewChannelRequest(nil))
+		_, err := minter.MintSubmission(context.Background(), mustProof(t), NewChannelRequest(nil))
 		if !errors.Is(err, ErrAccessChannelNotConfigured) {
 			t.Fatalf("空册没有答未配置：%v", err)
 		}
 	})
 
-	t.Run("行在册但凭据不符", func(t *testing.T) {
+	t.Run("行在册但核验被拒", func(t *testing.T) {
 		t.Parallel()
 		registry := &registryDouble{registration: mustRegistration(t, derivationDouble{submissionKey: "REQ-1"}), found: true}
 		minter := mustMinter(t, registry, &verifierDouble{accepted: false})
 
-		_, err := minter.MintSubmission(context.Background(), mustPresented(t), NewChannelRequest(nil))
+		_, err := minter.MintSubmission(context.Background(), mustProof(t), NewChannelRequest(nil))
 		if !errors.Is(err, ErrCredentialRejected) {
-			t.Fatalf("凭据不符没有答被拒：%v", err)
+			t.Fatalf("核验被拒没有答被拒：%v", err)
 		}
 		if errors.Is(err, ErrAccessChannelNotConfigured) {
-			t.Fatal("凭据不符折进了未配置：两格的恢复动作不同，折在一起会把人指错方向")
+			t.Fatal("核验被拒折进了未配置：两格的恢复动作不同，折在一起会把人指错方向")
 		}
 	})
 }
@@ -196,7 +196,7 @@ func TestRegistryFailureIsNotAnUnconfiguredAnswer(t *testing.T) {
 	broken := errors.New("dial registry: connection refused")
 	minter := mustMinter(t, &registryDouble{err: broken}, &verifierDouble{accepted: true})
 
-	_, err := minter.MintSubmission(context.Background(), mustPresented(t), NewChannelRequest(nil))
+	_, err := minter.MintSubmission(context.Background(), mustProof(t), NewChannelRequest(nil))
 	if !errors.Is(err, broken) {
 		t.Fatalf("依赖故障没有原样交回：%v", err)
 	}
@@ -251,47 +251,69 @@ func TestUnderivedRequestKeyIsItsOwnAnswer(t *testing.T) {
 	registry := &registryDouble{registration: mustRegistration(t, derivationDouble{submissionKey: "   "}), found: true}
 	minter := mustMinter(t, registry, &verifierDouble{accepted: true})
 
-	_, err := minter.MintSubmission(context.Background(), mustPresented(t), NewChannelRequest(nil))
+	_, err := minter.MintSubmission(context.Background(), mustProof(t), NewChannelRequest(nil))
 	if !errors.Is(err, ErrRequestKeyNotDerived) {
 		t.Fatalf("空的来源请求键没有自成一答：%v", err)
 	}
 }
 
-// TestPresentedCredentialDoesNotPrintItsSecret 守秘密不随 %v 漏进日志。
-func TestPresentedCredentialDoesNotPrintItsSecret(t *testing.T) {
+// TestCredentialProofExposesNothingButTheChannelKey 守住 ADR-0072 Decision 二挡着的那
+// 半边：凭据**形态**不在本轮范围内。
+//
+// 判据落在接口的方法集上而不是留给注释：往 ChannelCredentialProof 上加一个
+// Secret()、Certificate() 或 SessionToken()，就是在替某一种渠道拟凭据形态，而那件事
+// 要等 PAR-INT-01。加了这条，那一天会变红而不是悄悄过去。
+func TestCredentialProofExposesNothingButTheChannelKey(t *testing.T) {
 	t.Parallel()
 
-	presented := mustPresented(t)
-	printed := presented.String()
-
-	if strings.Contains(printed, "s3cr3t") {
-		t.Fatalf("String() 把秘密打了出来：%s", printed)
+	proofType := reflect.TypeOf((*ChannelCredentialProof)(nil)).Elem()
+	if proofType.NumMethod() != 1 {
+		var names []string
+		for index := 0; index < proofType.NumMethod(); index++ {
+			names = append(names, proofType.Method(index).Name)
+		}
+		t.Fatalf("凭证接口不再只交出查找键，方法集为 %v：多出来的每一个都在替某种渠道拟凭据形态", names)
 	}
-	if !strings.Contains(printed, "ak_live_anchor") {
-		t.Errorf("String() 连公开的定位键都不给，排障时无从对账：%s", printed)
+	if got := proofType.Method(0).Name; got != "ClaimedChannel" {
+		t.Fatalf("凭证接口的唯一方法变成了 %q", got)
 	}
 }
 
-// TestVerifierGetsTheSecretAndTheRegisteredReference 是上一条的阳性对照：脱敏不能顺手
-// 把秘密也从核验方那里挡掉，否则核验永远不通过而测试只会看见「被拒」。
-func TestVerifierGetsTheSecretAndTheRegisteredReference(t *testing.T) {
+// TestVerifierGetsTheRegisteredReferenceAndTheProof 是上一条的阳性对照：本包不拆凭证，
+// 不能顺手把它也从核验方那里挡掉——那样核验永远做不成，而测试只会看见「被拒」。
+func TestVerifierGetsTheRegisteredReferenceAndTheProof(t *testing.T) {
 	t.Parallel()
 
 	registry := &registryDouble{registration: mustRegistration(t, derivationDouble{submissionKey: "REQ-1"}), found: true}
 	verifier := &verifierDouble{accepted: true}
 	minter := mustMinter(t, registry, verifier)
 
-	if _, err := minter.MintSubmission(context.Background(), mustPresented(t), NewChannelRequest(nil)); err != nil {
+	if _, err := minter.MintSubmission(context.Background(), mustProof(t), NewChannelRequest(nil)); err != nil {
 		t.Fatalf("铸造提交信封：%v", err)
 	}
-	if verifier.seenSecret != "s3cr3t" {
-		t.Errorf("核验方没拿到秘密部分：得 %q", verifier.seenSecret)
+	if verifier.seenProof == nil {
+		t.Fatal("核验方没拿到凭证：本包不拆它，但必须原样递过去")
 	}
 	if verifier.seenRefValue != "vault://channel/anchor-shipper" {
 		t.Errorf("核验方拿到的不是登记行上的受控引用：得 %q", verifier.seenRefValue)
 	}
-	if registry.askedKey.String() != "ak_live_anchor" {
-		t.Errorf("登记册不是按出示凭据的公开键查的：得 %q", registry.askedKey.String())
+	if registry.askedKey.String() != "chan_anchor" {
+		t.Errorf("登记册不是按凭证认领的键查的：得 %q", registry.askedKey.String())
+	}
+}
+
+// TestMissingProofIsAnAnswerNotAPanic 守 nil 凭证不把装配缺陷报成崩溃。
+func TestMissingProofIsAnAnswerNotAPanic(t *testing.T) {
+	t.Parallel()
+
+	registry := &registryDouble{registration: mustRegistration(t, derivationDouble{submissionKey: "REQ-1"}), found: true}
+	minter := mustMinter(t, registry, &verifierDouble{accepted: true})
+
+	if _, err := minter.MintSubmission(context.Background(), nil, NewChannelRequest(nil)); !errors.Is(err, ErrInvalidChannelKey) {
+		t.Fatalf("缺凭证没有如实作答：%v", err)
+	}
+	if _, err := minter.MintWithdrawal(context.Background(), proofDouble{}, NewChannelRequest(nil)); !errors.Is(err, ErrInvalidChannelKey) {
+		t.Fatalf("凭证不说认领哪一行也没有如实作答：%v", err)
 	}
 }
 

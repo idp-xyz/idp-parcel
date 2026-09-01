@@ -71,7 +71,7 @@ func (registration ChannelRegistration) CredentialReference() CredentialReferenc
 //
 // 本仓此刻没有它的生产实现——按 ADR-0072 二，表与迁移等 PAR-INT-01 证据。
 type ChannelRegistry interface {
-	FindChannel(ctx context.Context, key CredentialKey) (ChannelRegistration, bool, error)
+	FindChannel(ctx context.Context, key ChannelKey) (ChannelRegistration, bool, error)
 }
 
 // RequestKeyDerivation 决定**哪个渠道字段铸成来源请求键**。

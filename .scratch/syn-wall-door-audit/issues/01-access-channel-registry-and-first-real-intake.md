@@ -61,6 +61,8 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 
 #### S1 · 在 `internal/accessidentity/` 按 API 型渠道形状立册
 
+**编号不是执行顺序**：S2 已先于本步落地（2026-09-01 裁决 A，见 Comments）。S1 不再是 S2 的前置，两步之间剩下的只有装载口那条缝——S2 交付的是接口，实现等本步。
+
 - **范围**：接入渠道登记册的表与迁移、只读装载口、登记口。形状**只按 API 型渠道**立——ADR-0072 二说的是「按实际渠道形状立册」，替标准文件与门户两种尚未出现的渠道预拟列，正是那条被维持的否决所禁。
 - **依赖**：S0（幂等与冲突两列的形状）；ADR-0072 一（落点与所有权）；ADR-0003（适用范围维按租户／责任法人／客户账户三级边界表达）。
 - **验收点**：
@@ -69,10 +71,12 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
   - 空册可读：无行时装载口如实答「未配置」，既不报错也不用零值冒充配置（ADR-0052 的分界句在这里第二次生效）。
   - `accessidentity` 不进 CONTEXT-MAP 业务地图，不拥有业务领域语言（ADR-0072 一：它是技术能力，不是限界上下文）。
 
-#### S2 · 凭据验证与来源信封铸造
+#### S2 · 凭据验证与来源信封铸造 —— **机制半边已落，`cf34943`**
+
+铸造机制与 `internal/accessidentity/` 包骨架已交付，四条验收点各有测试。**未做**：`ChannelRegistry`／`CredentialVerifier`／`RequestKeyDerivation` 三个口的生产实现（前两个等 S1 的表，第三个等 S0 那一格取值），以及撤回目标委托的身份取回（归 S3 的 PS 侧 Intake）。
 
 - **范围**：验证渠道凭据 → 铸造来源信封（租户、客户账户、来源、来源请求键）→ 交给各上下文既有的 Intake 缝。
-- **依赖**：S1。
+- **依赖**：原记为 S1，**实际执行时倒了过来**——铸造不依赖表，依赖的是「来源请求键由哪个渠道字段铸成」这一格已按可配置注入留口（见 S0 末条）。ADR-0072 写下「立册 → 铸造 → 替换」的是 Consequences 不是 Decision，故倒序不需新 ADR，但代价记在这里：S2 交付时装载口只有接口没有实现，多一道缝。
 - **验收点**：
   - 信封四要素无一取自请求体或自报头部。要有一条测试钉住：报文里写别人的租户，铸出来的信封不变（ADR-0003 的最高隔离边界）。
   - 提交与撤回各自铸信封，不合用——合用会让撤回被判成原提交的重放（`WithdrawalIntake` 注释里的原句）。
@@ -82,7 +86,10 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 #### S3 · 首个端点替换（`/shipment-requests`）
 
 - **范围**：在 `assembleBusinessEndpoints` 把这一行的字面量 `UnconfiguredIntake{}` 换成真渠道 Intake。路由层与处理器不动（ADR-0055 一已预留这条缝）。
-- **依赖**：S2。
+- **依赖**：S2；另有一道**架构门禁**要先处理，见下。
+- **先看这一条，否则一 import 就红**：`internal/architecture` 的 `nonBusinessDirectories` 目前只列 `platform` 与 `architecture`，`businessModules` 由 `internal/` 的实际目录反推，因此 `accessidentity` 现在被当成业务模块受跨模块规则管。PS 的 HTTP 适配器一 import 它，`TestBusinessModulesDoNotReachIntoEachOther` 就报——`isCrossContextAdapter` 只放行 `internal/<consumer>/adapters/<provider>/` 这个形状，而 `adapters/http` 的第三段是 `http`，不是模块名，放行不了。两条出路，各有代价，接 S3 的人择一并把理由写进票面：
+  - **把 `accessidentity` 加进 `nonBusinessDirectories`**。ADR-0072 一「它是技术能力而非业务限界上下文，不进 CONTEXT-MAP」背书得住。代价：动门禁的黑名单，而那份名单自己的注释写明反向列举正是为了让新目录默认受护——开一次口子要说清为什么这一个不该受护。
+  - **把 PS 侧的 Intake 实现放在 `internal/parcelshipment/adapters/accessidentity/`**。现有门禁**不用改一个字**就放行，且与 `adapters/pilotgovernance/`、`adapters/parcelpricing/` 等既有跨界适配器同形。代价：这个路径形状在字面上把 accessidentity 摆成了「另一个上下文」，与 ADR-0072 一的定性有张力——虽然该约定管的是跨界翻译落在哪，不是对方是不是业务上下文。
 - **验收点**：
   - 只换这一行；其余命令面仍答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`，由装配测试钉住「换了一口不等于全开」。
   - 隔离读开关与这一行互不顶替：两种准入形并存，谁也不能替对方放行（ADR-0078）。
@@ -214,12 +221,24 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
   **不立表、不写迁移、不建 `migrations/access_identity/`、不碰 `migrations/migrations.go`**。
   S1 原样留在 S0 之后，本票因此**不可收口**。
 
-  **一处补正：挡路的那半比先前理解的窄。** ADR-0072 **Decision 二**只说「登记册表结构与凭据
-  形态在 `PAR-INT-01` 最低证据到位前不立」——它没有一个字谈铸造。写下「按渠道形状立册 →
-  凭据验证与信封铸造 → 在装配点逐端点替换」这个顺序的是 **Consequences**，那是推论不是裁决。
-  所以只做 S2 不撞 Decision，**只是把 ADR 自己写下的排序倒了过来**，因此不需要新 ADR 或
-  supersede，但必须在此写明而不是静默倒：下一个读 ADR-0072 的人会把 Consequences 那句顺序
-  当成已执行的事实。倒序的代价是 S2 交付时装载口那一侧只有接口没有实现，多一道缝。
+  **一处补正：Decision 二挡的是表结构与凭据形态，没有一个字谈铸造。** 原句是「登记册表结构
+  **与凭据形态**在 `PAR-INT-01` 最低证据（该租户渠道的现行流程）到位前不立」。写下「按渠道
+  形状立册 → 凭据验证与信封铸造 → 在装配点逐端点替换」这个顺序的是 **Consequences**，那是
+  推论不是裁决。所以只做「已核验的渠道 → 四要素信封」这一段不撞 Decision，**只是把 ADR 自己
+  写下的排序倒了过来**，因此不需要新 ADR 或 supersede，但必须在此写明而不是静默倒：下一个读
+  ADR-0072 的人会把 Consequences 那句顺序当成已执行的事实。倒序的代价是 S2 交付时装载口那一侧
+  只有接口没有实现，多一道缝。
+
+  **边界很窄，写死在此**：凭据**验证本身**不在本轮范围内——不是排期取舍，是 Decision 二明文
+  挡着的另一半。谁顺手把「怎么验 apikey」做进来就跨回去了。交付侧照此收窄的做法见下方
+  「同轮交付」的凭证那一条。
+
+  **两条门槛不是一条，理由别记错。** ADR-0072 的重启门槛是括号里那一件（该租户渠道的现行
+  流程），**已到**（E-02，见本票「重启范围」首节）；参数登记册 `PAR-INT-01` 的最低证据是四件，
+  只到两件半。所以**本轮不立表的理由是后者，不是 ADR 还锁着**：S0 缺的两件决定判重语义，也就
+  决定登记册有哪几列。差别在以后——S0 齐了那天，按「ADR 锁着」的写法，接手的人会以为还得先出
+  一份新 ADR 或 supersede 才能立表；按实际情况他直接开工即可。
+  （本条与下面「执行方变更」里的相应措辞由 MCP-4 当轮指出并更正，本通道复核 ADR-0072 原文后认下。）
 
   **一处附加硬条件：S2 并非完全不欠 S0。** MCP-2 报称「铸造侧的不变式全部有 ADR 背书、不靠
   S0」，它列的四条（不采信自报身份、提交与撤回各铸不合用、两答可分辨、渠道词表不进 PS 领域包）
@@ -230,9 +249,9 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 
   **执行方变更**：MCP-2 与 MCP-3 于本轮 crash（用户告知），发给 MCP-2 的裁决落进无人读的队列，
   本票改由 MCP-1 通道自行执行。`internal/accessidentity/**` 与本条 Comment 由 MCP-1 占号，
-  该目录其余文件仍归 MCP-4。**crash 前本通道派给 MCP-2 的原话是「accessidentity 立册 + 渠道
-  注册 + 源信封铸造」，其中「立册」与 ADR-0072 Decision 二冲突**；谁接本票都按本条的 A 范围走，
-  不按那条派工原文。
+  该目录其余文件仍归 MCP-4。crash 前本通道派给 MCP-2 的原话是「accessidentity 立册 + 渠道
+  注册 + 源信封铸造」；**那条派工把立册排在了前面，而立册所需的那几列尚无证据可依（S0）**，
+  谁接本票都按本条的 A 范围走，不按那条派工原文。
 
   **不受本裁定改变的**：`PAR-INT-01` 登记状态上限仍是「待核验」；S4 的 `PAR-GOV-03..07` 硬阻断
   不动；未配置即拒的兜底在尚未替换的端点上不撤。
@@ -252,6 +271,13 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
     （行在册凭据不符）分格；另守住第三个方向——读不动登记册是依赖故障，不折进那两格。
   - **渠道词表不进 PS 领域包**：本包不导入任何业务上下文，四要素是四个字符串。
 
+  **凭据形态按 Decision 二收窄（`cf34943` 的初版越了界，随后一笔改回）**：初版把出示材料写成
+  `PresentedCredential{公开键, 秘密}`——那已经替三种渠道拟了同一种形态，而标准文件投递与门户
+  登录都没有「秘密」这一栏。改后本包**不知道凭据长什么样**：`ChannelCredentialProof` 只有一个
+  方法、只交出登记行的查找键，核验交给 `CredentialVerifier` 的实现方。这一条不留给注释守——
+  `TestCredentialProofExposesNothingButTheChannelKey` 用反射钉住该接口的方法集恰为一个，往上加
+  `Secret()` / `Certificate()` / `SessionToken()` 任何一个都会变红。
+
   **来源请求键那一格按裁定留未决**：`RequestKeyDerivation` 只有接口、仓内零生产实现，且
   `NewChannelRegistration` 要求它非空——没有推导口的登记行建不成，于是「行在册但判重口径
   没配」这第三态不存在，不必再造一个与未配置分不开的答复格。
@@ -262,3 +288,20 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
 
   验证：`gofmt -l` 空、`go build ./...`、`go vet`、`go test -count=1 ./...` 全绿且**含真库**
   （同刻单跑 `TestFreezeScopesAreInvisibleToEachOther` 得 `PASS` 非 `SKIP`）。
+
+- 2026-09-01 MCP-4：把上面这条裁决与交付**回写进步骤表本身**，此前它们只在 Comments 里——
+  读票的人从 S0..S5 那份表看不出 S2 已经做完、也看不出编号不是执行顺序。三处：S1 加「编号
+  不是执行顺序」的头注；S2 标 `cf34943` 与未做项，依赖栏改记实际倒序及其代价；S3 依赖栏加
+  架构门禁。
+
+  **S3 那道门禁我独立核过，MCP-1 报的方向对，但出路不止一条。** `nonBusinessDirectories` 现
+  只列 `platform` 与 `architecture`，`businessModules` 由 `internal/` 实际目录反推，故
+  `accessidentity` 当前受跨模块规则管；`isCrossContextAdapter` 只放行
+  `internal/<consumer>/adapters/<provider>/`，而 `adapters/http` 第三段是 `http` 不是模块名，
+  所以 PS 的 HTTP 适配器一 import 就报。**但把 PS 侧 Intake 实现放在
+  `internal/parcelshipment/adapters/accessidentity/` 则门禁一个字都不用改**——第三段是模块名，
+  现成放行，且与 `adapters/pilotgovernance/` 等既有跨界适配器同形。两条路的代价都写在 S3，
+  未替接手的人择一：改黑名单要说清「为什么这一个不该受护」，走适配器路径则要认下路径形状与
+  ADR-0072 一 的定性张力。
+
+  未动 MCP-1 的 Comment 段与 `internal/accessidentity/**`，未开代码。证据等级 `S`。
