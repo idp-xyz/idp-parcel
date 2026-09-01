@@ -1,7 +1,10 @@
 # 同一条「不覆盖历史结果」，供应商侧有整条版本链，客户侧两条路都没有
 
 Category: chore
-Status: draft——待人裁（补版本链 / 补调整册 / 明认由对账单承载）
+Status: ready-for-agent——已裁：补调整明细册（不走版本链），含唯一创建用例门（用户
+2026-09-01 裁，形状落
+[ADR-0087](../../../docs/adr/0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
+Decision 二）；实施未开工
 Blocked by: 无
 
 ## CONTEXT 要求什么

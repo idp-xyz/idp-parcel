@@ -1,7 +1,9 @@
 # `customer_charge` 固定不了 CONTEXT 要求的那八项——册上直接成列的只有一项
 
 Category: chore
-Status: draft——待人裁（补列 / 改文档 / 明认分歧）
+Status: ready-for-agent——已裁：补列 + 约束 + 写侧（用户 2026-09-01 裁，形状落
+[ADR-0087](../../../docs/adr/0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
+Decision 一）；实施未开工
 Blocked by: 无
 
 ## CONTEXT 要求什么

@@ -92,6 +92,7 @@
 - [ADR-0084：面单交易是独立聚合——建立即固定覆盖与依据，双层结果一次记录不许互推，定案是派生谓词；继续尝试决定单列登记册不进聚合](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)
 - [ADR-0085：登记册配置写面进端点表带未配置格——写表单属产品能力，CLI 保留为受控批量口；写准入不另立形，与其余命令面同等真渠道证据](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
 - [ADR-0086：等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动；细分 ADR-0081 的未决语义，重投留给会自己回来的依赖](./0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md)
+- [ADR-0087：结算登记册补齐硬句所要求的可核对事实——确认费用固定八项且收付方向自立词表，客户费用调整单列追加册（含唯一创建用例门），经营组成项带按口径分组的角色维](./0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
 
 ## 已被取代决策
 
