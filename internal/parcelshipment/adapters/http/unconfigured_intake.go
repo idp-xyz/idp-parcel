@@ -31,10 +31,12 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var (
-	_ SubmissionIntake           = UnconfiguredIntake{}
-	_ WithdrawalIntake           = UnconfiguredIntake{}
-	_ ShipmentRequestViewsIntake = UnconfiguredIntake{}
-	_ CancellationIntake         = UnconfiguredIntake{}
+	_ SubmissionIntake             = UnconfiguredIntake{}
+	_ WithdrawalIntake             = UnconfiguredIntake{}
+	_ ShipmentRequestViewsIntake   = UnconfiguredIntake{}
+	_ CancellationIntake           = UnconfiguredIntake{}
+	_ ManualReviewCompletionIntake = UnconfiguredIntake{}
+	_ ActiveRejectionIntake        = UnconfiguredIntake{}
 )
 
 // IntakeSubmission 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -50,6 +52,17 @@ func (UnconfiguredIntake) IntakeWithdrawal(context.Context, *http.Request) (appl
 // IntakeCancellation 同上。
 func (UnconfiguredIntake) IntakeCancellation(context.Context, *http.Request) (application.CancelParcelCommand, error) {
 	return application.CancelParcelCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeManualReviewCompletion 同上：复核人与授权引用整组来自认证结果，采信自报的
+// 复核人等于让任何调用方替任何角色签复核。
+func (UnconfiguredIntake) IntakeManualReviewCompletion(context.Context, *http.Request) (application.CompleteManualReviewCommand, error) {
+	return application.CompleteManualReviewCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeActiveRejection 同上。
+func (UnconfiguredIntake) IntakeActiveRejection(context.Context, *http.Request) (application.RejectShipmentRequestCommand, error) {
+	return application.RejectShipmentRequestCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeListQuery 同上：查阅的作用域整组来自认证与授权结果，渠道未配置就无从铸造。

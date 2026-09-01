@@ -79,6 +79,20 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	manualReview, err := buildManualReviewOrchestration(db)
+	if err != nil {
+		return err
+	}
+	rejection, err := buildRejectionOrchestration(db)
+	if err != nil {
+		return err
+	}
+	// 复核队列读口就是委托查阅适配器（ports.AcceptanceReviewQueue 在其上补齐，同表同
+	// 作用域纪律）；判断读口与形成决定读的是同一批判断行。
+	reviewJudgments, err := pspostgres.NewAcceptanceJudgments(db)
+	if err != nil {
+		return err
+	}
 	cancellation, err := buildCancellationOrchestration(db)
 	if err != nil {
 		return err
@@ -216,6 +230,10 @@ func run(logger *slog.Logger) error {
 			submission,
 			withdrawal,
 			requestViews,
+			manualReview,
+			rejection,
+			requestViews,
+			reviewJudgments,
 			cancellation,
 			reception,
 			nodeOperationsRecords,

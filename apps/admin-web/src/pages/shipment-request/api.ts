@@ -177,6 +177,106 @@ export interface ViewDetailResponseBody {
   request: ShipmentRequestDetail;
 }
 
+// ---- 复核队列响应形状(票 admin-skeleton-closure-batch/09) ----
+//
+// 队列是委托查阅面的子集视图,复用同一套作用域与页大小裁决,因此这里只加复核语境
+// 特有的那几格:任务停在哪、复核留痕录了没、判断表上已记录的权威判断说了什么。
+// 委托本身的字段一律复用上面的 ShipmentRequestSummary / ShipmentRequestDetail,
+// 不另抄一份——抄第二份就得在两处约定哪一份是准的。
+
+/** 队列一行:委托摘要 + 最近一次未推进的处理记录 + 复核留痕(录了才在场)。 */
+export interface AcceptanceReviewQueueEntry extends ShipmentRequestSummary {
+  lastAttemptReason?: string;
+  lastAttemptContinuation?: string;
+  lastAttemptedAt?: string;
+  /** 复核已录完成但尚未续办的行照列不出队——出队与否由下一轮判断决定,不由读面折叠。 */
+  reviewCompleted: boolean;
+  reviewAuthority?: string;
+  reviewReviewer?: string;
+  reviewEvidence?: string;
+  reviewCompletedAt?: string;
+}
+
+export interface AcceptanceReviewQueueListResponseBody {
+  outcome: 'REVIEW_QUEUE_LISTED';
+  entries: AcceptanceReviewQueueEntry[];
+}
+
+/**
+ * 任务文档上的等待与留痕。waitingOn 取 ResumePath 原词(MANUAL_REVIEW 等),缺席即
+ * 决定已形成或任务已完结——详情不按它过滤,深链一份已续办的委托如实呈现当前状态。
+ */
+export interface ReviewStatusRecord {
+  waitingOn?: string;
+  completed: boolean;
+  authority?: string;
+  reviewer?: string;
+  evidence?: string;
+  completedAt?: string;
+}
+
+/** 可达性判断一行。`不适用`带依据说明这个问题为什么不该问,其余三值带判断标识。 */
+export interface ReviewReachabilityRecord {
+  parcelId: string;
+  value: string;
+  judgmentId?: string;
+  basis?: string;
+  asOfAt?: string;
+  asOfSemantics?: string;
+  asOfPolicyVersion?: string;
+}
+
+export interface ReviewFinancialControlRecord {
+  outcome: string;
+  resultId?: string;
+  basis?: string;
+  asOfAt?: string;
+  asOfSemantics?: string;
+  asOfPolicyVersion?: string;
+}
+
+/** 财务控制与采用解析尚未形成时整格缺席——不造「空结果」冒充判断过。 */
+export interface RecordedJudgmentsRecord {
+  reachability: ReviewReachabilityRecord[];
+  financialControl?: ReviewFinancialControlRecord;
+  adoptedResolutionId?: string;
+}
+
+export interface AcceptanceReviewCaseResponseBody {
+  outcome: 'REVIEW_CASE';
+  request: ShipmentRequestDetail;
+  review: ReviewStatusRecord;
+  recordedJudgments: RecordedJudgmentsRecord;
+}
+
+/** 复核完成命令的封闭结果。`已有完成`带先到那份的留痕:操作员要知道签的是谁。 */
+export type ManualReviewCompletionOutcome =
+  | 'RECORDED'
+  | 'ALREADY_COMPLETED'
+  | 'TASK_CONCLUDED'
+  | 'VERSION_SUPERSEDED';
+
+export interface ManualReviewCompletionResponseBody {
+  outcome: ManualReviewCompletionOutcome;
+  requestState?: string;
+  reviewer?: string;
+  authority?: string;
+  evidence?: string;
+  completedAt?: string;
+  decisionKind?: 'ACCEPTED' | 'REJECTED';
+  currentVersion?: string;
+}
+
+/** 主动拒绝命令的封闭结果。撞上既有决定时交回先到那一个,可能是接受。 */
+export interface ActiveRejectionResponseBody {
+  outcome: string;
+  requestState?: string;
+  decisionKind?: 'ACCEPTED' | 'REJECTED';
+  pendingReason?: string;
+  continuationReference?: string;
+  compensationReference?: string;
+}
+
 // ---- 请求草案形状 ----
 //
 // 真实线格式不是本目录能定的:动作端点当前一律挂「未配置即拒」Intake,不读请求体;
@@ -254,6 +354,26 @@ export interface CancellationDraft {
   reasonReference: string;
 }
 
+/**
+ * 复核完成草案。**故意只有这两个字段。**
+ *
+ * 复核人、授权依据与证据引用不在这里:那三样是「谁在签」,由 PAR-INT-01 的接入面从
+ * 已认证的操作员身份翻译出来(ManualReviewCompletionIntake 的注释:采信自报的复核人
+ * 等于让任何调用方替任何角色签复核)。页面把它们填成任何值都是伪造采信身份,哪怕
+ * 填的是「开发用」占位。这里送的两样都是页面自己手上的事实:审的是哪一份、理由是什么。
+ */
+export interface ManualReviewCompletionDraft {
+  shipmentRequestId: string;
+  /** 复核理由。模板保证非空白后才提交。 */
+  reason: string;
+}
+
+/** 主动拒绝草案。决定人同样不在这里,理由同上——授权由编排去问 party-commercial。 */
+export interface ActiveRejectionDraft {
+  shipmentRequestId: string;
+  reason: string;
+}
+
 // ---- 调用结果 ----
 
 export type ApiResult<Body> =
@@ -292,6 +412,38 @@ export function findShipmentRequestView(
     `/shipment-request-views?shipmentRequestId=${encodeURIComponent(shipmentRequestId)}`,
     { method: 'GET' },
   );
+}
+
+export function listAcceptanceReviewQueue(): Promise<
+  ApiResult<AcceptanceReviewQueueListResponseBody>
+> {
+  return exchange<AcceptanceReviewQueueListResponseBody>('/acceptance-review-queue', {
+    method: 'GET',
+  });
+}
+
+export function findAcceptanceReviewCase(
+  shipmentRequestId: string,
+): Promise<ApiResult<AcceptanceReviewCaseResponseBody>> {
+  return exchange<AcceptanceReviewCaseResponseBody>(
+    `/acceptance-review-queue?shipmentRequestId=${encodeURIComponent(shipmentRequestId)}`,
+    { method: 'GET' },
+  );
+}
+
+export function completeManualReview(
+  draft: ManualReviewCompletionDraft,
+): Promise<ApiResult<ManualReviewCompletionResponseBody>> {
+  return post<ManualReviewCompletionResponseBody>(
+    '/shipment-requests/manual-review-completions',
+    draft,
+  );
+}
+
+export function rejectShipmentRequest(
+  draft: ActiveRejectionDraft,
+): Promise<ApiResult<ActiveRejectionResponseBody>> {
+  return post<ActiveRejectionResponseBody>('/shipment-requests/rejections', draft);
 }
 
 function post<Body>(path: string, payload: unknown): Promise<ApiResult<Body>> {

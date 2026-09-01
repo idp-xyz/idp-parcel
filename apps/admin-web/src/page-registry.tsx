@@ -138,6 +138,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'exception-triage',
   'exception-cases',
   'claims-recovery',
+  'acceptance-review',
 ]);
 
 /**

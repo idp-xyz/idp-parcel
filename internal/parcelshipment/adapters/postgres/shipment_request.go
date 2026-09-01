@@ -110,8 +110,8 @@ func (repository *ShipmentRequests) Insert(
 		`INSERT INTO parcel_shipment.shipment_request
 			(tenant_id, customer_account_id, source, source_request_key,
 			 shipment_request_id, revision, state, snapshot, submitted_at,
-			 current_submission_version_id, declared_parcel_ids)
-		 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)
+			 current_submission_version_id, declared_parcel_ids, task_waiting_on)
+		 VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		identity.TenantID().String(),
 		identity.CustomerAccountID().String(),
@@ -123,6 +123,7 @@ func (repository *ShipmentRequests) Insert(
 		request.SubmittedAt().UTC(),
 		versionID,
 		parcels,
+		taskWaitingOnProjection(request),
 	)
 	if err != nil {
 		return ports.ShipmentRequestInsertOutcomeInvalid, fmt.Errorf("insert shipment request: %w", err)
@@ -158,7 +159,8 @@ func (repository *ShipmentRequests) Save(
 		        snapshot = $7,
 		        saved_at = now(),
 		        current_submission_version_id = $8,
-		        declared_parcel_ids = $9
+		        declared_parcel_ids = $9,
+		        task_waiting_on = $10
 		  WHERE tenant_id = $1
 		    AND customer_account_id = $2
 		    AND source = $3
@@ -173,6 +175,7 @@ func (repository *ShipmentRequests) Save(
 		raw,
 		versionID,
 		parcels,
+		taskWaitingOnProjection(request),
 	)
 	if err != nil {
 		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
@@ -181,6 +184,16 @@ func (repository *ShipmentRequests) Save(
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
 	return ports.ShipmentRequestSaved, nil
+}
+
+// taskWaitingOnProjection 是当前任务等待态的查询投影值（迁移 0009）：与快照同一条 SQL
+// 写下，分两次写会在两次之间把一份已续办的委托继续列在复核队列里。不在等待即 0——列上
+// 的 0 与快照里 waitingOn 缺席同义，编号的唯一来源仍是领域 ResumePath。
+func taskWaitingOnProjection(request domain.ShipmentRequest) uint8 {
+	if waiting, present := request.AcceptanceDecisionTask().WaitingOn(); present {
+		return uint8(waiting)
+	}
+	return 0
 }
 
 func currentParcelProjection(request domain.ShipmentRequest) (string, []string) {

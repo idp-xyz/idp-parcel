@@ -120,6 +120,24 @@ type ShipmentRequestSubmittedHandoff interface {
 	HandOffShipmentRequestSubmitted(ctx context.Context, intent ShipmentRequestSubmittedHandoffIntent) error
 }
 
+// ManualReviewCompletedHandoffIntent 把一次刚记下的复核完成交给适用下游（ADR-0086
+// Decision 二）。携带完成后的聚合而不是逐字段抄写：信封要的成员清单、提交版本与完成
+// 时刻都在聚合上，抄成平铺字段就得在两处约定哪一份是准的。
+type ManualReviewCompletedHandoffIntent struct {
+	Identity domain.SourceIdentity
+	Request  domain.ShipmentRequest
+}
+
+// ManualReviewCompletedHandoff 把「复核已完成」写入 Outbox
+// （`OutboxManualReviewCompletedHandoff`）。信封 ID 由来源身份加提交版本再加类型段认领：
+// 同一提交版本至多一次`已记录`完成（领域对重复完成答`已有完成`，不再走到交接），重放
+// 因此重发同一份（ADR-0043）。它必须与完成落库同一事务交出（ADR-0086：完成与信封一起
+// 成立或一起消失），任一步失败全部回滚——完成落了库而信封没入队，停等复核的委托就再也
+// 没有投递来续办。
+type ManualReviewCompletedHandoff interface {
+	HandOffManualReviewCompleted(ctx context.Context, intent ManualReviewCompletedHandoffIntent) error
+}
+
 // CurrentAcceptedParcelTargetView 按（租户+声明包裹）反查**当前已接受**委托目标。
 //
 // 它与 ShipmentRequestRepository 分开：建单与推进的调用方不该持有反查；收寄/交付
@@ -1196,15 +1214,23 @@ type AcceptanceDecisionViewRecord struct {
 	DecidedAt  time.Time
 }
 
-// AcceptanceTaskViewRecord 是详情里当前接受判断任务的查阅面：任务阶段与最近一次没能
-// 推进的处理记录。两样都留是用例对任务的要求——只留成功判断，一份卡了十轮的委托看
-// 起来会和刚建单的一模一样。
+// AcceptanceTaskViewRecord 是详情里当前接受判断任务的查阅面：任务阶段、最近一次没能
+// 推进的处理记录、当前停在哪个等待态、复核完成留痕。前两样是用例对任务的要求——只留
+// 成功判断，一份卡了十轮的委托看起来会和刚建单的一模一样；后两样是复核队列查阅面
+// （票 acceptance-review-read-face/01）要如实呈现的「停在哪、复核录了没」——WaitingOn
+// 零值即缺席（决定已形成或任务已完成），复核留痕四字段只在 ReviewCompleted 时在场。
 type AcceptanceTaskViewRecord struct {
 	State                   domain.AcceptanceTaskState
 	HasAttempt              bool
 	LastAttemptReason       string
 	LastAttemptContinuation string
 	LastAttemptedAt         time.Time
+	WaitingOn               domain.ResumePath
+	ReviewCompleted         bool
+	ReviewAuthority         string
+	ReviewReviewer          string
+	ReviewEvidence          string
+	ReviewCompletedAt       time.Time
 }
 
 // ShipmentRequestDetailRecord 是单份委托的查阅详情。
@@ -1233,6 +1259,45 @@ type ShipmentRequestViews interface {
 		scope domain.AuthorizedQueryScope,
 		limit int,
 	) ([]ShipmentRequestSummaryRecord, error)
+	FindVisibleByID(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		requestID domain.ShipmentRequestID,
+	) (ShipmentRequestDetailRecord, bool, error)
+}
+
+// AcceptanceReviewQueueRecord 是复核队列上的一行：一份当前停在「等待人工复核」的
+// 委托（票 acceptance-review-read-face/01）。概要之外带两样队列要看的东西——最近
+// 一次没能推进的处理记录（这份委托此前卡在哪）与复核完成留痕（复核已录完成但还没
+// 续办的行照列并标示，出队靠下一轮判断清等待态，不靠读侧折叠）。「停等起点」刻意
+// 缺席：未决的一轮不落决定时刻，读面没有它就不上列。
+type AcceptanceReviewQueueRecord struct {
+	ShipmentRequestSummaryRecord
+	HasAttempt              bool
+	LastAttemptReason       string
+	LastAttemptContinuation string
+	LastAttemptedAt         time.Time
+	ReviewCompleted         bool
+	ReviewAuthority         string
+	ReviewReviewer          string
+	ReviewEvidence          string
+	ReviewCompletedAt       time.Time
+}
+
+// AcceptanceReviewQueue 是复核队列查阅的读口。队列的定义就是任务文档上的
+// `waitingOn = MANUAL_REVIEW`——那由 Decide 看过全部校验后写下（三个终态转移各自
+// 清零），读口照登记过滤，不在读侧重推域判断。
+//
+// FindVisibleByID 与 ShipmentRequestViews 同签名不是巧合：复核详情复用委托查阅详情
+// （审的就是这份委托登记过什么），不另造第二种详情。同一真库适配器同时满足两口。
+//
+// 排序与列表读口相反：老的在前（先来先审），同刻按委托标识正序保证分页可重复。
+type AcceptanceReviewQueue interface {
+	ListAwaitingManualReview(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		limit int,
+	) ([]AcceptanceReviewQueueRecord, error)
 	FindVisibleByID(
 		ctx context.Context,
 		scope domain.AuthorizedQueryScope,

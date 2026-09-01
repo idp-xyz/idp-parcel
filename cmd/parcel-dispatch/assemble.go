@@ -417,7 +417,9 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
-// 路由表今天有十二类事件：PS 接受决定 → FanOut（先 VE 客户归属确立补派生 UC-VE-008
+// 路由表登记这些事件：PS 委托已提交 → 接受判断链、PS 复核已完成 → 同一条接受判断
+// 链的续办门（ADR-0086；两扇门同一编排、各记各的 inbox 账）、
+// PS 接受决定 → FanOut（先 VE 客户归属确立补派生 UC-VE-008
 // AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → 路由复核
 // （UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
 // 再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）、
@@ -432,10 +434,15 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
 // ADR-0066）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）。
-// 第二条投向 network-routing；四类 FanOut 同一 EventType 各投两个独立消费者，顺序
-// 一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局规则墙或路由证据墙上。
-// 第五条只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。第六条
-// 只接 `transport-handover.registered`，不接 PS。
+// 「PS 有效网络收寄采用结果」那一路单投 network-routing；各类 FanOut 同一 EventType
+// 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局
+// 规则墙或路由证据墙上。
+// 「TF 有效交付登记」只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。
+// 「TF 权威交接登记」只接 `transport-handover.registered`，不接 PS。
+//
+// 上面几处一律按名字指，不按「第几条」——本注释的枚举刚被 ADR-0086 的两扇门从头部
+// 顶偏过一次（原三处序数在 1665fdb 上还都是对的，加了「委托已提交」与「复核已完成」
+// 之后同时错位两位），而 build、vet 与全仓 test 对此零信号。
 // `visibility-exception.tracking-projection.derived` 已登记（UC-VE-008）：早先不登记
 // 的理由是 Customer 那一维填不上；ADR-0060 的按包裹反查把账户随来源身份一并交回之后
 // 本进程真接得住它了——接得住才登记，正是 ADR-0049 第三条的判据。
@@ -456,13 +463,19 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: inbox store: %w", err)
 	}
 
-	chain, err := acceptanceChainConsumer(db, outboxStore, inboxStore, settings, clock)
+	chainGates, err := acceptanceChainConsumers(db, outboxStore, inboxStore, settings, clock)
 	if err != nil {
 		return nil, err
 	}
-	routedChain, err := dispatch.WithUndecidedSentinels(chain, acceptanceChainUndecidedSentinels...)
+	routedChain, err := dispatch.WithUndecidedSentinels(chainGates.submitted, acceptanceChainUndecidedSentinels...)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: acceptance chain undecided translation: %w", err)
+	}
+	// 续办门与提交门同一份哨兵：两扇门转交同一个编排，未决面完全相同（ADR-0086 第四条
+	// ——重跑停在其它未决即回滚重投）。各列一份就会有漂开的那一天。
+	routedResume, err := dispatch.WithUndecidedSentinels(chainGates.reviewCompleted, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: review resume undecided translation: %w", err)
 	}
 
 	consumer, err := acceptanceConsumer(db, outboxStore, inboxStore, settings, clock)
@@ -651,6 +664,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			psinbox.ShipmentRequestSubmittedEventType:    routedChain,
+			psinbox.ManualReviewCompletedEventType:       routedResume,
 			nrinbox.AcceptedDecisionEventType:            acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
 			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
@@ -678,13 +692,24 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 	return dispatcher, nil
 }
 
-// acceptanceChainConsumer 接 UC-PS-001 步骤 8 那条线：PS「委托已提交」信封 → 消费门 →
-// 接受判断链（逐成员可达性 → 整份委托财务控制 → 形成决定）。
+// acceptanceChainGates 是接受判断链的两扇消费门：同一个编排，两个触发时机（ADR-0086
+// ——「委托已提交」开局，「复核已完成」续办）。两扇门各占各的 inbox 名与事件类型，
+// 但依赖图必须同一份，所以由同一个装配函数一次建成。
+type acceptanceChainGates struct {
+	submitted       dispatch.Consumer
+	reviewCompleted dispatch.Consumer
+}
+
+// acceptanceChainConsumers 接 UC-PS-001 步骤 8 那条线：PS「委托已提交」信封 → 消费门 →
+// 接受判断链（逐成员可达性 → 整份委托财务控制 → 形成决定）；外加 ADR-0086 的续办门：
+// PS「复核已完成」信封 → 同一条链再驱一拍（前两步读回已记录判断即过，形成决定读到已
+// 完成的复核即成决定）。
 //
-// 它是本进程里唯一一条**信封驱动本上下文自己**的链：发布侧是 parcel-shipment 的提交事务，
-// 消费侧也是 parcel-shipment。之所以不做成 HTTP 端点，是因为「提交之后自动推进接受判断」
-// 在用例里是提交的后继，不是外部再发一条命令——由调用方显式推进会把「谁来调它」变成新的
-// 实例半边问题，而 outbox/inbox 的续办语义正好是这条链需要的（未决整笔回滚等重投）。
+// 它是本进程里**信封驱动本上下文自己**的链：发布侧是 parcel-shipment 的提交事务（续办
+// 那扇是 cmd/parcel-api 的复核完成事务），消费侧也是 parcel-shipment。之所以不做成 HTTP
+// 端点，是因为「提交之后自动推进接受判断」在用例里是提交的后继，不是外部再发一条命令——
+// 由调用方显式推进会把「谁来调它」变成新的实例半边问题，而 outbox/inbox 的续办语义正好
+// 是这条链需要的（未决整笔回滚等重投；停等复核那一格的例外见 ADR-0086）。
 //
 // 三步共用一个商业依据适配器实例，不是省事：形成决定那一步要按**判断当初采用的那份解析**
 // 重校验（UC-PC-002 步骤 8），三步各建一个适配器不改变行为，但会让「三条腿问的是同一个
@@ -702,53 +727,54 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 // 解析键登记面（Keys）反而接真：它是本上下文自己的登记表，`parcel-commercial
 // register-resolution-key` 已经能往里写，空册时按「显式未配置」答`解析未决`。接上它与留
 // nil 的区别不在结果在来源——恢复动作从「写代码」变成「登记参数」（ADR-0063）。
-func acceptanceChainConsumer(
+func acceptanceChainConsumers(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
 	settings dispatchSettings,
 	clock systemClock,
-) (dispatch.Consumer, error) {
+) (acceptanceChainGates, error) {
+	none := acceptanceChainGates{}
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance chain shipment requests: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance chain shipment requests: %w", err)
 	}
 	// 判断库一物两用：AcceptanceJudgmentRecorder（前两步写）与 RecordedJudgmentReader
 	// （形成决定读）读写的是同一批判断行。拆两个对象等于让写的那半与读的那半各自决定
 	// 认哪些列，而形成决定要的正是「前两步刚记下的那几条」。
 	judgments, err := pspostgres.NewAcceptanceJudgments(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance judgments: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance judgments: %w", err)
 	}
 
 	commercial, err := acceptanceCommercialBasis(db, clock)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	// 解析库在下面三处各要一次（商业依据、可达性资格、控制策略）。它在 acceptanceCommercialBasis
 	// 里已经建过一个，这里再建一个：都是 db 上的无状态包装，共享反而让三条依赖看不出各自要什么
 	// （与 acceptanceConsumer / networkIntakeConsumer 各建各的仓储同一条理由）。
 	resolutions, err := pcpostgres.NewCommercialResolutions(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance chain commercial resolutions: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance chain commercial resolutions: %w", err)
 	}
 
 	reachability, err := acceptanceReachability(db, outboxStore, resolutions, settings, clock)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	control, err := acceptanceFinancialControl(db, commercial, resolutions, clock)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 
 	identities, err := psidentity.NewAcceptanceDecisions()
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance decision identities: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance decision identities: %w", err)
 	}
 	downstream, err := pspostgres.NewOutboxAcceptanceDecisionHandoff(db, outboxStore, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance decision handoff: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance decision handoff: %w", err)
 	}
 
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
@@ -769,11 +795,15 @@ func acceptanceChainConsumer(
 		}),
 	})
 
-	consumer, err := psinbox.NewShipmentRequestSubmittedConsumer(db.Transactor(), inboxStore, chain)
+	submitted, err := psinbox.NewShipmentRequestSubmittedConsumer(db.Transactor(), inboxStore, chain)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: acceptance chain consumer: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: acceptance chain consumer: %w", err)
 	}
-	return consumer, nil
+	reviewCompleted, err := psinbox.NewManualReviewCompletedConsumer(db.Transactor(), inboxStore, chain)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: review resume consumer: %w", err)
+	}
+	return acceptanceChainGates{submitted: submitted, reviewCompleted: reviewCompleted}, nil
 }
 
 // acceptanceCommercialBasis 接商业依据三阶段（UC-PC-002）：解析闭包、按规则包声明形成

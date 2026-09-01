@@ -216,7 +216,11 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	if !formed {
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
-		return handler.undecided(ctx, command, pendingReasonFor(decided), request.State()), nil
+		reason := pendingReasonFor(decided)
+		if reason == ManualReviewPending {
+			return handler.pauseForManualReview(ctx, command, request, decided)
+		}
+		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
 	if err != nil {
@@ -250,6 +254,39 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		compensation: handler.releaseIfRejected(ctx, command, decided, recorded.FinancialControl),
 		handoff:      handler.handOffDecision(ctx, command, decided),
 	}, nil
+}
+
+// pauseForManualReview 把「等待人工复核」这一停写进聚合再交回未决。
+//
+// 三个等待态里只有它要落库，因为只有它的续办方是第三方：内部续办与客户补充都由信封重投或
+// 新提交版本自然再驱（重投会重跑同一轮，等待态即便不落库也会在下一轮重新推出），而人工
+// 复核「内部重试推进不了它，客户也补不出它」（CONTEXT 等待人工复核态）——重投改变不了任何
+// 东西，只会烧完失败预算；不落库的话，复核角色的队列读面也永远列不出「等复核的都有谁」。
+// 消费门据本轮原因把这份投递记为处理完毕（提交侧不再重投），续办由「复核已完成」信封另行
+// 驱动（ADR-0086）。
+//
+// 保存失败或撞上版本冲突时**不**交回`等待人工复核`：那个原因是消费门提交暂停的凭据，暂停
+// 没落库就交它，等待态会随本轮回滚蒸发，队列上从此没有这份委托。改交保存那一格自己的原因
+// （没落库/换代冲突），消费门照旧回滚重投，下一轮重新走到这里。集合外的保存结果按端口坏了
+// 上抛，与越过提交边界那一支同一判断。
+func (handler *FormAcceptanceDecisionHandler) pauseForManualReview(
+	ctx context.Context,
+	command FormAcceptanceDecisionCommand,
+	request domain.ShipmentRequest,
+	decided domain.ShipmentRequest,
+) (FormAcceptanceDecisionResult, error) {
+	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
+	if err != nil {
+		return handler.undecided(ctx, command, DecisionNotRecorded, request.State()), nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		reason, stallErr := saveStallReason(saved)
+		if stallErr != nil {
+			return FormAcceptanceDecisionResult{}, stallErr
+		}
+		return handler.undecided(ctx, command, reason, request.State()), nil
+	}
+	return handler.undecided(ctx, command, ManualReviewPending, decided.State()), nil
 }
 
 // revalidateOrResolve 执行 `UC-PC-002` 步骤 8：已经有采用过的解析时按它重解，看这份依据在

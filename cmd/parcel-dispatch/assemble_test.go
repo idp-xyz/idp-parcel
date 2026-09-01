@@ -291,6 +291,24 @@ func TestASubmittedShipmentRequestReachesTheAcceptanceChainThroughTheRouteTable(
 	}
 }
 
+// Covers: 路由表续办这一条——PS「复核已完成」投给接受判断链的第二扇门（ADR-0086
+// Decision 二）。手法同前几条：毒丸载荷（各维皆空）让消费门显式拒收入账并交回 nil，
+// 因此这一条会被定稿。漏挂的话，复核完成事务铸出的每一封续办信封都撞
+// dispatch.no_subscriber——暂停的委托从此没人续办。
+func TestACompletedManualReviewReachesTheResumeGateThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "review-completed-1", psinbox.ManualReviewCompletedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把复核完成投给续办门",
+			published, recordedFailureCode(t, db, "review-completed-1"))
+	}
+}
+
 // Covers: 接受判断链在**生产依赖图**上真的接得起来，且实例半边空着时停成未决而不是报错。
 //
 // 这一条比前一条重得多。前一条只证路由表挂对了人：毒丸在译码处就被拦下，编排那一层

@@ -41,6 +41,11 @@ const ShipmentRequestSubmittedEventType eventing.EventType = "parcel-shipment.sh
 // 未决整笔回滚是消费门的既有语义，本路照此。代价要如实记下：推进途中记下的处理尝试
 // 与已记录判断一并回滚，因此「未决按原因分类统计」不跨重投累计——重投会从同一份信封
 // 重跑，结论不变，只是那几次尝试不留痕。
+//
+// 唯一的例外是`等待人工复核`（ADR-0086）：重投推不动它（内部重试推进不了，客户也补不出），
+// 回滚重投只会烧完失败预算然后把等待态一起蒸发，队列读面从此列不出这份委托。那一格按
+// 「本份投递处理完毕」提交——编排已把等待态写进聚合，暂停与入账同一事务落库；续办由
+// 「复核已完成」信封另行驱动。
 var ErrAcceptanceChainUndecided = errors.New("parcel shipment inbox: acceptance chain is undecided")
 
 // ErrUnexpectedAcceptanceChainOutcome 表示编排交回了封闭集合以外的结果。它不进未决名单：
@@ -83,8 +88,8 @@ func NewShipmentRequestSubmittedConsumer(
 		Store:      store,
 		Name:       acceptanceChainConsumerName,
 		EventType:  ShipmentRequestSubmittedEventType,
-		Decode:     decodeSubmittedShipmentRequest,
-		Handle:     consumer.advanceThrough(advancer),
+		Decode:     decodeAcceptanceChainPayload,
+		Handle:     advanceAcceptanceChainThrough(advancer),
 		// 同包三个跨上下文消费者译到字符串再由处理适配器翻；本路的载荷是本上下文
 		// 自己铸的，标识就在自家 ID 空间里，因此直接译成领域标识——「译不出标识」
 		// 与「重投也长不出字段」是同一格，正是毒丸该判的那一格。
@@ -106,10 +111,14 @@ func (consumer *ShipmentRequestSubmittedConsumer) Consume(
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// advanceThrough 把编排的三值结果折成消费门认的两格：形成决定即本份投递处理完毕，
-// 未决即整笔回滚等重投。编排上抛的错误原样上抛——那是端口交回了集合外的答复或装配
-// 缺件，重投改不了它，不该混进未决。
-func (consumer *ShipmentRequestSubmittedConsumer) advanceThrough(
+// advanceAcceptanceChainThrough 把编排的三值结果折成消费门认的两格：形成决定即本份投递
+// 处理完毕，未决即整笔回滚等重投。编排上抛的错误原样上抛——那是端口交回了集合外的答复
+// 或装配缺件，重投改不了它，不该混进未决。
+//
+// 它是包级函数而不是某个消费者的方法：「委托已提交」与「复核已完成」两个门转交同一个
+// 编排（ADR-0086：两类信封是同一次驱动的两个触发时机），折法各抄一份就会有漂开的那一天，
+// 而漂开的症状是同一条链在两个门下对同一结果一个重投一个入账。
+func advanceAcceptanceChainThrough(
 	advancer AcceptanceChainAdvancer,
 ) inboxconsume.Handler[psapplication.AdvanceAcceptanceChainCommand] {
 	return func(ctx context.Context, command psapplication.AdvanceAcceptanceChainCommand) error {
@@ -121,6 +130,12 @@ func (consumer *ShipmentRequestSubmittedConsumer) advanceThrough(
 		case psapplication.AcceptanceChainDecided:
 			return nil
 		case psapplication.AcceptanceChainUndecided:
+			if result.PendingReason() == psapplication.ManualReviewPending {
+				// 等待人工复核不重投（ErrAcceptanceChainUndecided 注释的例外条）。
+				// 走到这一格时编排已把等待态 Save 进聚合——没保存成时它交回的是
+				// 保存那一格自己的原因，仍走下面的回滚重投。
+				return nil
+			}
 			// 停在哪一步与未决原因都写进错误正文：路由条目只把哨兵翻成失败码，
 			// 原错误原样留在链上供运维读（dispatch.WithUndecidedSentinels 两个都用 %w）。
 			return fmt.Errorf("%w: stage %s, reason %s",
@@ -132,15 +147,17 @@ func (consumer *ShipmentRequestSubmittedConsumer) advanceThrough(
 	}
 }
 
-// decodeSubmittedShipmentRequest 译载荷。
+// decodeAcceptanceChainPayload 译载荷。「委托已提交」与「复核已完成」两封信共用这份译码：
+// 发布侧刻意让两者的字段同名同义（复核完成的 Outbox 适配器注释记着这条），两个门要译的
+// 是同一个推进命令。
 //
-// 只取接受链要的那几维：来源身份四维、委托、当前提交版本与声明成员。提交批次在载荷里
-// 但本路不用——译进来会让人以为下游按批次做了什么。
+// 只取接受链要的那几维：来源身份四维、委托、当前提交版本与声明成员。提交批次在提交
+// 载荷里但本路不用——译进来会让人以为下游按批次做了什么。
 //
 // 任一维缺席或构造不出领域标识即毒丸：这些都是发布侧铸信封时就该齐的东西，重投同一份
 // 内容不会长出字段来。成员清单为空同样是毒丸：`已提交`委托必有声明成员，空清单意味着
 // 发布侧发错了，等下去也不会变。
-func decodeSubmittedShipmentRequest(payload []byte) (psapplication.AdvanceAcceptanceChainCommand, error) {
+func decodeAcceptanceChainPayload(payload []byte) (psapplication.AdvanceAcceptanceChainCommand, error) {
 	var body struct {
 		TenantID            string   `json:"tenantId"`
 		CustomerAccountID   string   `json:"customerAccountId"`

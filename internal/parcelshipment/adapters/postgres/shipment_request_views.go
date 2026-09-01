@@ -294,5 +294,21 @@ func taskViewRecord(document taskDocument) (ports.AcceptanceTaskViewRecord, erro
 		record.LastAttemptContinuation = last.Continuation
 		record.LastAttemptedAt = last.AttemptedAt
 	}
+	// 等待态值域在读面也查一道（判据同重建侧）：越界值不校会被读成缺席——「这任务
+	// 不等任何人」——而不是被拒成一行坏数据。零值即缺席，照实留零。
+	if document.WaitingOn != 0 {
+		waiting := domain.ResumePath(document.WaitingOn)
+		if waiting.String() == "" {
+			return ports.AcceptanceTaskViewRecord{}, fmt.Errorf("任务等待态不是本上下文的取值：%d", document.WaitingOn)
+		}
+		record.WaitingOn = waiting
+	}
+	if document.ReviewCompletion != nil {
+		record.ReviewCompleted = true
+		record.ReviewAuthority = document.ReviewCompletion.Authority
+		record.ReviewReviewer = document.ReviewCompletion.Reviewer
+		record.ReviewEvidence = document.ReviewCompletion.Evidence
+		record.ReviewCompletedAt = document.ReviewCompletion.CompletedAt
+	}
 	return record, nil
 }

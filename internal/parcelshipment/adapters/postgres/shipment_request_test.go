@@ -519,6 +519,13 @@ func checkReason(t *testing.T, reason string) domain.CheckReason {
 
 func acceptanceBasis(t *testing.T) domain.CommercialBasisSnapshot {
 	t.Helper()
+	return basisWithReviewPolicy(t, domain.ManualReviewNotRequiredByRules)
+}
+
+// basisWithReviewPolicy 是 acceptanceBasis 的参数化形：复核队列读面的夹具（票
+// acceptance-review-read-face/01）要一份「规则要求复核」的依据，其余组件同一配方。
+func basisWithReviewPolicy(t *testing.T, policy domain.ManualReviewPolicy) domain.CommercialBasisSnapshot {
+	t.Helper()
 	applicable, err := domain.NewApplicableCheckGroups(
 		domain.CustomerRelationshipCheck,
 		domain.LegalEntityAndContractCheck,
@@ -553,7 +560,7 @@ func acceptanceBasis(t *testing.T) domain.CommercialBasisSnapshot {
 		ViewRevision: mustBuild(t, domain.NewCommercialViewRevision, "VIEW-1"),
 		DeclaredAsOf: []domain.DeclaredAsOf{reachability, control},
 		Applicable:   applicable,
-		ManualReview: domain.ManualReviewNotRequiredByRules,
+		ManualReview: policy,
 	})
 	if err != nil {
 		t.Fatalf("商业依据：%v", err)

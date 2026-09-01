@@ -52,6 +52,10 @@ func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
+	manualReview shipmenthttp.ManualReviewCompletionHandler,
+	rejection shipmenthttp.ActiveRejectionHandler,
+	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
+	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
 	cancellation shipmenthttp.CancellationHandler,
 	reception nodeopshttp.ReceptionHandler,
 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
@@ -121,7 +125,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
+		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
+		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
+		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},
+		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, rejection)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
+		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
+		// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。
+		{Pattern: "/acceptance-review-queue", Handler: shipmenthttp.NewQueryAcceptanceReviewQueueEndpoint(shipmentViewsIntake, reviewQueue, reviewJudgments)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，

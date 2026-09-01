@@ -200,6 +200,54 @@ func (unwiredRequestViews) FindVisibleByID(
 	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
 }
 
+type unwiredManualReview struct{}
+
+func (unwiredManualReview) Handle(
+	context.Context,
+	shipmentapp.CompleteManualReviewCommand,
+) (shipmentapp.CompleteManualReviewResult, error) {
+	return shipmentapp.CompleteManualReviewResult{}, errOrchestrationNotWired
+}
+
+type unwiredRejection struct{}
+
+func (unwiredRejection) Handle(
+	context.Context,
+	shipmentapp.RejectShipmentRequestCommand,
+) (shipmentapp.RejectShipmentRequestResult, error) {
+	return shipmentapp.RejectShipmentRequestResult{}, errOrchestrationNotWired
+}
+
+// unwiredReviewQueue 是复核队列读口的占位（票 09）。生产装配交入的是委托查阅适配器
+// 本尊（同表同作用域纪律）；这里独立成形，装配测试才盖得住「队列口接错适配器」。
+type unwiredReviewQueue struct{}
+
+func (unwiredReviewQueue) ListAwaitingManualReview(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	int,
+) ([]shipmentports.AcceptanceReviewQueueRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredReviewQueue) FindVisibleByID(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	shipmentdomain.ShipmentRequestID,
+) (shipmentports.ShipmentRequestDetailRecord, bool, error) {
+	return shipmentports.ShipmentRequestDetailRecord{}, false, errOrchestrationNotWired
+}
+
+type unwiredReviewJudgments struct{}
+
+func (unwiredReviewJudgments) LoadRecordedJudgments(
+	context.Context,
+	shipmentdomain.TenantID,
+	shipmentdomain.ShipmentRequestID,
+) (shipmentports.RecordedJudgments, error) {
+	return shipmentports.RecordedJudgments{}, errOrchestrationNotWired
+}
+
 // unwiredProjectionViews 只被装配测试使用：生产装配（main）把真库投影读适配器交进
 // 装配点。填法同 unwiredTrackingViews——读不回按 ADR-0022 是「没形成答案」的 5xx，
 // 绝不顶成空列表或「投影未形成」。

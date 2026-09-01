@@ -117,7 +117,11 @@ var declaredPartitionSubjects = map[string]string{
 	// 委托互不阻塞。与上面接受决定口的「租户/委托请求」是同一聚合的两个口、两个分区
 	// 字符串：本表的可扫性正是为让这类取舍摆在明面（要不要并队归裁定，不归本行）。
 	"internal/parcelshipment/adapters/postgres/shipment_request_submitted_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
-	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":                partitionSubjectPrefix + "租户/来源请求键",
+	// 「复核已完成」与上一行同主体是有意的，不是漏改的重复行：续办信封必须与同一份委托的
+	// 提交信封排同一条队，否则续办可能越过一封还没投出去的提交（ADR-0086 Decision 二）。
+	// 两行同名同上下文，跨上下文那道裁段不适用。
+	"internal/parcelshipment/adapters/postgres/manual_review_completed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
+	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":             partitionSubjectPrefix + "租户/来源请求键",
 
 	// —— pilot-governance ——
 	// 治理两形的键今天都不带租户段，如实转录；要不要补租户维归 PG 地盘，不在本表定。

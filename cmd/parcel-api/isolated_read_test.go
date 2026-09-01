@@ -70,7 +70,11 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 // 装配点上」，新的目录查阅端点满足同三条即入格，不另开 ADR。合同与协议两行就是照这
 // 条进来的（票 admin-web-page-wiring-frontier/01）。
 var isolatedReadAdmittedPatterns = map[string]bool{
-	"/shipment-request-views":              true,
+	"/shipment-request-views": true,
+	// 复核队列是委托查阅面的子集视图，在装配上与它共用同一个 Intake 变量，因此启用态
+	// 必然随它一起放行——这一行不是可选项，漏了它就等于断言「同一个 Intake 会给出两种
+	// 答案」，而那是装不出来的形状（票 admin-skeleton-closure-batch/09）。
+	"/acceptance-review-queue":             true,
 	"/node-operations-records":             true,
 	"/transport-fulfillment-records":       true,
 	"/tracking-projections":                true,
