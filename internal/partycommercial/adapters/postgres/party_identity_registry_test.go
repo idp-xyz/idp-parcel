@@ -292,6 +292,98 @@ func TestPartyIdentityRegistryRoundTripAndCatalogue(t *testing.T) {
 	}
 }
 
+// futurePartyRegistrationFixture 造一份生效时点在未来的参与方登记：`已登记`那一格要有
+// 实例可显，就得有一笔登了但还没到生效时点的身份。
+func futurePartyRegistrationFixture(t *testing.T, tenant, id, name string) domain.BusinessPartyRegistration {
+	t.Helper()
+	party, err := domain.NewBusinessParty(
+		pcTenant(t, tenant),
+		pcValue(t, domain.NewPartyID, id),
+		pcValue(t, domain.NewPartyName, name),
+	)
+	if err != nil {
+		t.Fatalf("new business party: %v", err)
+	}
+	lifecycle, err := domain.NewIdentityLifecycle(time.Now().UTC().Add(72 * time.Hour))
+	if err != nil {
+		t.Fatalf("new identity lifecycle: %v", err)
+	}
+	registration, err := domain.NewBusinessPartyRegistration(
+		party, 1, pcValue(t, domain.NewIdentityBasisReference, "basis-"+id), lifecycle,
+	)
+	if err != nil {
+		t.Fatalf("new party registration: %v", err)
+	}
+	return registration
+}
+
+// Covers: 票 01 的补格裁定（2026-08-28 MCP-4 取证 / MCP-1 裁）——完成判据里「停用后目录
+// 如实显示状态」此前**未达**，因为参与方身份本体没有上列面：法人读口只上列法人、关系读口
+// 只上列关系，而一个既非法人、也不在任何关系里的参与方（被停用的那种恰恰如此）在管理台
+// 一行都不出现，`DEACTIVATED` 与 `REGISTERED` 两格因此无实例可见。
+//
+// 裁定是补身份本体这一册，而不是拿种子把停用对象换成法人让某一格有实例——后者是用数据绕
+// 读面缺口，接错会看着像接对。本测试据此钉三格各有实例：未来生效的登了未生效、已过生效
+// 时点的生效、带停用两件的停用。
+func TestBusinessPartyCatalogueShowsAllThreeLifecycleCells(t *testing.T) {
+	registrations, catalogue, transactor := newPartyIdentityRegistrations(t)
+	ctx := t.Context()
+
+	effective := partyRegistrationFixture(t, "tenant-1", "party-effective", "已生效参与方")
+	retiring := partyRegistrationFixture(t, "tenant-1", "party-retired", "待停用参与方")
+	future := futurePartyRegistrationFixture(t, "tenant-1", "party-future", "未来生效参与方")
+	for _, registration := range []domain.BusinessPartyRegistration{effective, retiring, future} {
+		mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveBusinessParty(txCtx, registration)
+		})
+	}
+
+	deactivated, err := retiring.Deactivate(
+		pcValue(t, domain.NewIdentityBasisReference, "basis-deact"), identityDeactivateAt)
+	if err != nil {
+		t.Fatalf("deactivate party: %v", err)
+	}
+	mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+		return registrations.SaveBusinessParty(txCtx, deactivated)
+	})
+
+	rows, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 10)
+	if err != nil {
+		t.Fatalf("list business parties: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3（三格各一）", len(rows))
+	}
+	byParty := make(map[string]ports.BusinessPartyRow, len(rows))
+	for _, row := range rows {
+		byParty[row.PartyID] = row
+	}
+
+	if got := byParty["party-effective"]; got.Status != "EFFECTIVE" ||
+		got.PartyName != "已生效参与方" || got.Revision != 1 || got.HasDeactivation {
+		t.Fatalf("已生效那一行 = %+v", got)
+	}
+	if got := byParty["party-future"]; got.Status != "REGISTERED" || got.HasDeactivation {
+		t.Fatalf("未来生效那一行 = %+v", got)
+	}
+	// 停用行：上列的是停用那一笔修订（修订 2），停用两件都在——只有其一的行说不出
+	// 「依据什么停用」或「何时起停用」，库上那条 paired 约束守的也是这个。
+	retired := byParty["party-retired"]
+	if retired.Status != "DEACTIVATED" || retired.Revision != 2 ||
+		!retired.HasDeactivation || retired.DeactivationBasis != "basis-deact" ||
+		!retired.DeactivatedAt.Equal(identityDeactivateAt) {
+		t.Fatalf("已停用那一行 = %+v", retired)
+	}
+
+	foreign, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-b"), 10)
+	if err != nil || len(foreign) != 0 {
+		t.Fatalf("跨租户 = (%d, %v)；隔离边界按 ADR-0003 在 SQL 条件上", len(foreign), err)
+	}
+	if _, err := catalogue.ListBusinessParties(ctx, pcTenant(t, "tenant-1"), 0); err == nil {
+		t.Fatal("limit 为 0 时读面静默答了一页")
+	}
+}
+
 // Covers: ADR-0031 登记面代数在四册上的镜像——同键同内容重放，同键异内容冲突。
 func TestPartyIdentitySavesReplayAndConflict(t *testing.T) {
 	registrations, _, transactor := newPartyIdentityRegistrations(t)

@@ -20,9 +20,22 @@ import (
 
 type partyIdentityReaderDouble struct {
 	tenant        domain.TenantID
+	parties       []ports.BusinessPartyRow
 	entities      []ports.GroupLegalEntityRow
 	relationships []ports.PartyRelationshipRow
 	err           error
+}
+
+func (double *partyIdentityReaderDouble) ListBusinessParties(
+	_ context.Context, tenant domain.TenantID, _ int,
+) ([]ports.BusinessPartyRow, error) {
+	if double.err != nil {
+		return nil, double.err
+	}
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.parties, nil
 }
 
 func (double *partyIdentityReaderDouble) ListGroupLegalEntities(
@@ -50,6 +63,110 @@ func (double *partyIdentityReaderDouble) ListPartyRelationships(
 }
 
 var identityListedAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
+
+// Covers: 票 admin-remainder-mechanism-batch/01 的补格裁定——身份本体这一口要能把生命
+// 周期三格都透出来，尤其是`已停用`：那类参与方既不在法人册也不在关系册，另两口一行都
+// 不给，本口不给就等于管理台看不见它。停用两件只在已停用时在场，不拿空串兼表没停用。
+func TestBusinessPartiesEndpointTranscribesTheLifecycleCells(t *testing.T) {
+	reader := &partyIdentityReaderDouble{
+		tenant: catValue(t, domain.NewTenantID, "tenant-1"),
+		parties: []ports.BusinessPartyRow{
+			{
+				TenantID:      "tenant-1",
+				PartyID:       "party-effective",
+				PartyName:     "已生效参与方",
+				Status:        "EFFECTIVE",
+				Revision:      1,
+				Basis:         "basis-effective",
+				EffectiveFrom: identityListedAt,
+				RegisteredAt:  identityListedAt,
+			},
+			{
+				TenantID:          "tenant-1",
+				PartyID:           "party-retired",
+				PartyName:         "已停用参与方",
+				Status:            "DEACTIVATED",
+				Revision:          2,
+				Basis:             "basis-retired",
+				EffectiveFrom:     identityListedAt,
+				DeactivatedAt:     identityListedAt.Add(time.Hour),
+				DeactivationBasis: "basis-deact",
+				HasDeactivation:   true,
+				RegisteredAt:      identityListedAt,
+			},
+		},
+	}
+	endpoint := commercialhttp.NewQueryBusinessPartiesEndpoint(
+		intakeDouble{query: catalogueQuery(t)}, reader)
+
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-business-parties", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body)
+	}
+
+	var body struct {
+		Outcome string `json:"outcome"`
+		Parties []struct {
+			PartyID           string `json:"partyId"`
+			PartyName         string `json:"partyName"`
+			Status            string `json:"status"`
+			Revision          int    `json:"revision"`
+			Basis             string `json:"basis"`
+			DeactivatedAt     string `json:"deactivatedAt"`
+			DeactivationBasis string `json:"deactivationBasis"`
+		} `json:"parties"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", recorder.Body.Bytes(), err)
+	}
+	if body.Outcome != "BUSINESS_PARTIES_LISTED" || len(body.Parties) != 2 {
+		t.Fatalf("body = %+v", body)
+	}
+	if got := body.Parties[0]; got.PartyID != "party-effective" || got.Status != "EFFECTIVE" ||
+		got.PartyName != "已生效参与方" || got.DeactivatedAt != "" || got.DeactivationBasis != "" {
+		t.Fatalf("已生效那一行 = %+v；未停用的行不该带停用两件", got)
+	}
+	if got := body.Parties[1]; got.Status != "DEACTIVATED" || got.Revision != 2 ||
+		got.DeactivationBasis != "basis-deact" ||
+		got.DeactivatedAt != identityListedAt.Add(time.Hour).Format(time.RFC3339Nano) {
+		t.Fatalf("已停用那一行 = %+v", got)
+	}
+}
+
+// Covers: 空册是答案不是错误（ADR-0077 Decision 四），读不回才是 5xx；非 GET 拒在方法门。
+func TestBusinessPartiesEndpointAnswersEmptyAndFailureApart(t *testing.T) {
+	empty := commercialhttp.NewQueryBusinessPartiesEndpoint(
+		intakeDouble{query: catalogueQuery(t)},
+		&partyIdentityReaderDouble{tenant: catValue(t, domain.NewTenantID, "tenant-1")})
+	recorder := httptest.NewRecorder()
+	empty.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-business-parties", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("空册 status = %d", recorder.Code)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &fields); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if string(fields["parties"]) != "[]" {
+		t.Fatalf("parties = %s, want []", fields["parties"])
+	}
+
+	failing := commercialhttp.NewQueryBusinessPartiesEndpoint(
+		intakeDouble{query: catalogueQuery(t)},
+		&partyIdentityReaderDouble{err: errors.New("库连不上")})
+	failed := httptest.NewRecorder()
+	failing.ServeHTTP(failed, httptest.NewRequest(http.MethodGet, "/commercial-business-parties", nil))
+	if failed.Code != http.StatusInternalServerError {
+		t.Fatalf("读失败 status = %d, want 500", failed.Code)
+	}
+
+	posted := httptest.NewRecorder()
+	empty.ServeHTTP(posted, httptest.NewRequest(http.MethodPost, "/commercial-business-parties", nil))
+	if posted.Code != http.StatusMethodNotAllowed || posted.Header().Get("Allow") != http.MethodGet {
+		t.Fatalf("POST status = %d, allow = %q", posted.Code, posted.Header().Get("Allow"))
+	}
+}
 
 func TestGroupLegalEntitiesEndpointTranscribesRows(t *testing.T) {
 	reader := &partyIdentityReaderDouble{

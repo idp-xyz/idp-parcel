@@ -14,6 +14,77 @@ import (
 // 证据面，不是目录的行。
 var _ ports.PartyIdentityCatalogueRead = (*OperationsCatalogue)(nil)
 
+// ListBusinessParties 上列业务参与方身份本体的最新修订。
+//
+// 它不左连接任何东西：名称就在本册行上。status 的导出与法人册逐字相同（停用判断在先，
+// 其次生效时点），因为两册用的是同一个 domain.IdentityLifecycle。
+func (catalogue *OperationsCatalogue) ListBusinessParties(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.BusinessPartyRow, error) {
+	if err := requirePositiveLimit("list business parties", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list business parties: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT party.tenant_id, party.party_id, party.party_name,
+		        party.revision, party.basis_ref, party.effective_from,
+		        party.deactivated_at, party.deactivation_basis, party.recorded_at,
+		        CASE
+		            WHEN party.deactivated_at IS NOT NULL AND party.deactivated_at <= now()
+		                THEN 'DEACTIVATED'
+		            WHEN party.effective_from <= now() THEN 'EFFECTIVE'
+		            ELSE 'REGISTERED'
+		        END AS status
+		   FROM (
+		        SELECT DISTINCT ON (party_id) *
+		          FROM party_commercial.business_party_registration
+		         WHERE tenant_id = $1
+		         ORDER BY party_id, revision DESC
+		   ) AS party
+		  ORDER BY party.recorded_at DESC, party.party_id
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list business parties: %w", err)
+	}
+	defer rows.Close()
+
+	catalogueRows := make([]ports.BusinessPartyRow, 0, limit)
+	for rows.Next() {
+		var row ports.BusinessPartyRow
+		var deactivatedAt *time.Time
+		var deactivationBasis *string
+		if err := rows.Scan(
+			&row.TenantID, &row.PartyID, &row.PartyName,
+			&row.Revision, &row.Basis, &row.EffectiveFrom,
+			&deactivatedAt, &deactivationBasis, &row.RegisteredAt,
+			&row.Status,
+		); err != nil {
+			return nil, fmt.Errorf("list business parties: %w", err)
+		}
+		if deactivatedAt != nil {
+			row.DeactivatedAt = *deactivatedAt
+			row.HasDeactivation = true
+			if deactivationBasis != nil {
+				row.DeactivationBasis = *deactivationBasis
+			}
+		}
+		catalogueRows = append(catalogueRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list business parties: %w", err)
+	}
+	return catalogueRows, nil
+}
+
 // ListGroupLegalEntities 上列责任法人的最新修订，左连接参与方册的最新修订取名称。
 //
 // status 在 SQL 里按 now() 导出，是 domain.IdentityLifecycle.StatusAt 的逐字镜像：

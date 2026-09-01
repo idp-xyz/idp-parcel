@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
+  listBusinessParties,
   listPartyRelationships,
+  type BusinessPartyListResponseBody,
+  type BusinessPartyRecord,
   type PartyRelationshipListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
-import { labelOf, partyRoleLabels, relationshipStatusLabels } from './presentation';
+import {
+  identityStatusLabels,
+  labelOf,
+  partyRoleLabels,
+  relationshipStatusLabels,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
@@ -100,13 +109,120 @@ const columns: ListColumn<PartyRelationshipRecord>[] = [
   },
 ];
 
+// 身份本体册的列。停用两件（时点 + 依据）与状态同格呈现：看这格的人要知道自何时起
+// 停用、依据是什么；只显示一个「已停用」说不出这两样。
+const identityColumns: ListColumn<BusinessPartyRecord>[] = [
+  {
+    id: 'party',
+    header: '参与方标识 / 修订',
+    render: (row) => (
+      <div className="min-w-36">
+        <p className="font-mono font-medium text-idpxyz-text">{row.partyId}</p>
+        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">r{row.revision}</p>
+      </div>
+    ),
+  },
+  { id: 'name', header: '名称', render: (row) => row.partyName },
+  {
+    id: 'basis',
+    header: '依据',
+    className: 'font-mono text-xs',
+    render: (row) => row.basis,
+  },
+  {
+    id: 'effective-from',
+    header: '生效时点',
+    className: 'font-mono text-xs',
+    render: (row) => formatInstant(row.effectiveFrom),
+  },
+  {
+    id: 'status',
+    header: '状态',
+    align: 'center',
+    render: (row) => (
+      <div>
+        <p>{labelOf(identityStatusLabels, row.status)}</p>
+        {row.deactivatedAt ? (
+          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
+            自 {formatInstant(row.deactivatedAt)}
+          </p>
+        ) : null}
+        {row.deactivationBasis ? (
+          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.deactivationBasis}</p>
+        ) : null}
+      </div>
+    ),
+  },
+];
+
 /**
- * 业务参与方（party-commercial）。行对象是参与方关系的最新登记修订：承运商、
- * 承运商代理商、转售商、聚合平台与渠道账号持有人都以「双方 + 角色 + 有效区间」
- * 的时态关系表达，代理关系不自动合并交易角色；关系登记按修订版本化不可覆盖。
+ * 参与方身份本体册。它与关系册同页分签，而不是并进关系表：一个参与方既可以不是法人、
+ * 也可以不在任何关系里，被停用的那种恰恰如此——身份生命周期的「已登记」与「已停用」
+ * 两格只有在这一册上才有实例可显（票 admin-remainder-mechanism-batch/01 的补格裁定）。
+ */
+function BusinessPartyIdentitiesTable() {
+  const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<BusinessPartyListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void listBusinessParties().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const parties = answer?.kind === 'outcome' ? answer.body.parties : [];
+  const needle = search.trim().toLowerCase();
+  const visibleParties = needle
+    ? parties.filter((row) =>
+        [row.partyId, row.partyName, row.status].some((value) =>
+          value.toLowerCase().includes(needle),
+        ),
+      )
+    : parties;
+  const retry = () => setReloadKey((value) => value + 1);
+
+  return (
+    <ListPageTemplate<BusinessPartyRecord>
+      title={info.title}
+      description={`${info.owner}——行对象是角色中立的参与方身份本体的最新登记修订，状态按装载时点导出`}
+      search={{
+        value: search,
+        onChange: setSearch,
+        placeholder: '搜索参与方标识、名称或状态',
+      }}
+      filterSummary={
+        answer?.kind === 'outcome' ? `当前返回 ${parties.length} 个参与方身份` : undefined
+      }
+      columns={identityColumns}
+      rows={visibleParties}
+      rowKey={(row) => row.partyId}
+      viewState={catalogueViewState(answer, parties.length, retry, {
+        module: info,
+        endpoint: 'GET /commercial-business-parties',
+        emptyTitle: '当前租户尚无参与方身份登记',
+        emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方。',
+      })}
+    />
+  );
+}
+
+/**
+ * 业务参与方（party-commercial）。两签：身份本体册与关系册。
+ *
+ * 关系行对象是参与方关系的最新登记修订：承运商、承运商代理商、转售商、聚合平台与渠道
+ * 账号持有人都以「双方 + 角色 + 有效区间」的时态关系表达，代理关系不自动合并交易角色；
+ * 关系登记按修订版本化不可覆盖。两册的状态代数不同——身份状态按时点导出、关系状态是
+ * 登记进来的事实，所以分签而不是并表。
+ *
  * 查阅面，不设登记动作——登记走 parcel-commercial 受控 CLI。
  */
-export function BusinessPartiesPage() {
+function PartyRelationshipsTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<PartyRelationshipListResponseBody> | null>(null);
@@ -164,5 +280,30 @@ export function BusinessPartiesPage() {
         emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方或关系。',
       })}
     />
+  );
+}
+
+export function BusinessPartiesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="identities" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="identities">参与方身份</TabsTrigger>
+          <TabsTrigger value="relationships">参与方关系</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="identities"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <BusinessPartyIdentitiesTable />
+        </TabsContent>
+        <TabsContent
+          value="relationships"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <PartyRelationshipsTable />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

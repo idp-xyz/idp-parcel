@@ -94,6 +94,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/customs-case-registers":              true,
 	"/customs-gate-conditions":             true,
 	"/customs-ports-paths":                 true,
+	"/commercial-business-parties":         true,
 	"/commercial-service-products":         true,
 	"/commercial-policies":                 true,
 	"/commercial-customer-contracts":       true,

@@ -190,6 +190,11 @@ func assembleBusinessEndpoints(
 		// 参与方身份两册（票 admin-remainder-mechanism-batch/01）各立入口，不并进上面
 		// 载体目录的读口：载体是版本化商业对象，身份与关系是登记→生效→停用的生命周期，
 		// 行形状与状态代数不同（裁决在 ports.PartyIdentityCatalogueRead 注释）。
+		// 身份本体那一册与法人、关系两册各立入口（票 admin-remainder-mechanism-batch/01
+		// 的补格裁定）：一个参与方既可以不是法人、也可以不在任何关系里，被停用的那种恰恰
+		// 如此；不给它自己的入口，身份生命周期的`已登记`与`已停用`两格在管理台就没有实例
+		// 可显，而那正是本票标题那个生命周期。三口共用同一个读口参数与同一个 Intake 变量。
+		{Pattern: "/commercial-business-parties", Handler: commercialhttp.NewQueryBusinessPartiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）独立入口，不并进

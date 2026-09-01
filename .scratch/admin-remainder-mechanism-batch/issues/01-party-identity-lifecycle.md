@@ -1,9 +1,8 @@
 # 01 参与方身份生命周期：集团法人与货主客户账户的登记机制
 
 Category: feature
-Status: in-progress——主体已落库；完成判据经 MCP-4 只读核验（2026-08-28）：两页非空册达、
-全仓绿达（引 MCP-6 c140b71 基线），「停用后目录如实显示状态」**未达**——补格裁定见文末，
-实施派 MCP-5
+Status: resolved——补格裁定已实施（MCP-5，2026-09-01）：参与方身份本体册的读法、真库读
+适配器、第三端点与页面身份签均已落地，身份生命周期三格各有实例可显，完成判据全达
 
 ## 问题
 
@@ -44,3 +43,31 @@ MCP-4 实证：停用登记本身如实（RETIRED-01 rev2 携停用两件，CLI 
 不可见等于本票标题那个生命周期不可观察；拿种子把停用对象换成法人能让一格有实例，但那是用
 数据绕读面缺口——接错看着像接对的形状。范围：`ports` 加身份本体列表读法、真库读适配器、
 http 第三端点、`BusinessPartiesPage` 加身份册区；装配行与页登照旧占号 MCP-1。实施派 MCP-5。
+
+## 补格实施（2026-09-01，MCP-5）
+
+裁定范围逐件落地，未改种子——绕行那条路按裁定不走。
+
+- `ports.BusinessPartyRow` + `PartyIdentityCatalogueRead.ListBusinessParties`：与法人行、
+  关系行并列的第三种行形状。它没有 `HasPartyName` 那一格——名称就在本册行上，法人与关系
+  两册才需要左连接过来，那两处的「查无此人」是写入门失败的悬空引用，本册没有那一格可缺。
+- `adapters/postgres` 的 `ListBusinessParties`：`DISTINCT ON (party_id)` 取最新修订，status
+  的 `CASE` 与法人册逐字相同（停用判断在先，其次生效时点）——两册用的是同一个
+  `domain.IdentityLifecycle`，判据不该有第二种写法。
+- `adapters/http` 的 `NewQueryBusinessPartiesEndpoint`（`GET /commercial-business-parties`）：
+  与关系那一口分立而不是折进去，理由就是裁定那一句——折进去，不在任何关系里的参与方永远
+  不上列，而被停用的那种恰恰如此。
+- `cmd/parcel-api`：端点表加一行（复用既有的 `partyIdentities` 读口参数与
+  `commercialCatalogueIntake`，`main.go` 因此不用改）、`businessEndpointProbes` 与
+  `isolatedReadAdmittedPatterns` 各加一行、`unwiredCommercialCatalogue` 补占位方法。
+- `BusinessPartiesPage` 改为两签（参与方身份 / 参与方关系），照
+  `CustomsPortsPathsPage` 的分签先例。**分签而不是并表**：身份状态按时点导出、关系状态是
+  登记进来的事实，两套代数并进一张表，同一个「已生效」会在两种含义间相互冒充。
+
+**测试钉的是裁定本身**：`TestBusinessPartyCatalogueShowsAllThreeLifecycleCells` 对真库造三笔
+——未来生效（`REGISTERED`）、已过生效时点（`EFFECTIVE`）、带停用两件（`DEACTIVATED`）——
+断言三格各有实例可显，外加跨租户零行与 limit 非正拒；传输层另有两条证行体逐字段转写与
+「空册是答案、读不回才是 5xx」。
+
+**验证**：全仓 `gofmt -l` 无输出、`go build`、`go vet` 绿；`go test -count=1 ./...` 绿且
+**含真库**；`apps/admin-web` 的 `tsc --noEmit` 无输出、`pnpm build` 绿。

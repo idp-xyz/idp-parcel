@@ -237,6 +237,30 @@ export interface PartyRelationshipListResponseBody {
   relationships: PartyRelationshipRecord[];
 }
 
+// 参与方身份本体册（票 admin-remainder-mechanism-batch/01 的补格裁定）。它与法人册、
+// 关系册并列：一个参与方既可以不是法人、也可以不在任何关系里，被停用的那种恰恰如此，
+// 少了本册，身份生命周期的「已登记」与「已停用」两格在管理台没有实例可显。
+//
+// status 按装载时点导出（REGISTERED / EFFECTIVE / DEACTIVATED）；停用两件只在已停用时
+// 在场。这里没有 partyNameKnown：名称就在本册行上，不像法人与关系那样要左连接过来。
+export interface BusinessPartyRecord {
+  tenantId: string;
+  partyId: string;
+  partyName: string;
+  status: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+export interface BusinessPartyListResponseBody {
+  outcome: 'BUSINESS_PARTIES_LISTED';
+  parties: BusinessPartyRecord[];
+}
+
 // 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）。channels 为空数组即显式
 // 登记的“未配置”绑定——那是登记者说出的商业声明（该产品尚无可用渠道候选），不是
 // 数据缺件，页面据此如实显示。行上没有状态字段：映射没有独立状态代数，是否参与新的
@@ -291,6 +315,10 @@ export function listGroupLegalEntities(): Promise<ApiResult<GroupLegalEntityList
 
 export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {
   return exchangeMasterData<PartyRelationshipListResponseBody>('/commercial-party-relationships');
+}
+
+export function listBusinessParties(): Promise<ApiResult<BusinessPartyListResponseBody>> {
+  return exchangeMasterData<BusinessPartyListResponseBody>('/commercial-business-parties');
 }
 
 // 映射目录不并进 /commercial-service-products：那边上列版本壳，这边上列登记册信封

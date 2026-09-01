@@ -573,6 +573,31 @@ type PartyIdentityRegistry interface {
 	) (domain.PartyRelationshipRegistration, bool, error)
 }
 
+// BusinessPartyRow 是业务参与方身份本体目录上列的一行：一个角色中立的参与方身份的最新
+// 登记修订。
+//
+// 它与 GroupLegalEntityRow、PartyRelationshipRow 并列而不是并入任一方：法人册上列的是
+// 「谁是责任法人」，关系册上列的是「谁与谁有什么关系」，而一个参与方**既可以不是法人、
+// 也可以不在任何关系里**——被停用的那种恰恰如此。少了本册，身份生命周期的`已登记`与
+// `已停用`两格在管理台没有实例可显，而本票标题那个生命周期就变成不可观察的
+// （票 admin-remainder-mechanism-batch/01 的补格裁定）。
+//
+// Status 与停用两件的判据同 GroupLegalEntityRow：装载时点导出，零时刻不兼作「没停用」。
+// 名称就在本册行上，不必左连接——法人与关系两册才需要连过来取名。
+type BusinessPartyRow struct {
+	TenantID          string
+	PartyID           string
+	PartyName         string
+	Status            string
+	Revision          int
+	Basis             string
+	EffectiveFrom     time.Time
+	DeactivatedAt     time.Time
+	DeactivationBasis string
+	HasDeactivation   bool
+	RegisteredAt      time.Time
+}
+
 // GroupLegalEntityRow 是集团与法人目录上列的一行：一个责任法人的最新登记修订，连同
 // 其参与方身份的名称转写。
 //
@@ -638,6 +663,11 @@ type PartyRelationshipRow struct {
 // 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒、空册答空列表，
 // 判据同 ServiceProductCatalogueRead。
 type PartyIdentityCatalogueRead interface {
+	ListBusinessParties(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]BusinessPartyRow, error)
 	ListGroupLegalEntities(
 		ctx context.Context,
 		tenant domain.TenantID,

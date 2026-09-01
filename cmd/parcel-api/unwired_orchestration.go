@@ -603,6 +603,14 @@ func (unwiredCommercialCatalogue) ListSupplierAgreements(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListBusinessParties(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.BusinessPartyRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredCommercialCatalogue) ListGroupLegalEntities(
 	context.Context,
 	commercialdomain.TenantID,
