@@ -216,3 +216,23 @@ Bento 闸门解除前写的，现在都有 `Outbox*Handoff` 实现了。注释�
 - 没有开任何消费者、没有碰 `cmd/`、没有改任何代码。
 - 没有判定「第三格那 16 种要不要继续走 Outbox」——那是装配决定，不是方向判定。
 - `pilot-governance` 那三条与「判不准」那 8 条需要人定，路由表在它们定下来之前不完整。
+
+## 底数注记 as-of `1665fdb`（2026-09-01，MCP-3，批务票 admin-remainder-mechanism-batch/05 第 1 项）
+
+本文已被取代（见头注），本节不复活它，只把**它与现行权威共用的那个底数**钉一次时点——
+头注写着「两份底层类型集合一致（55 类、46 适配器）」，那句话锚在 2026-08-17，今天不再是当前值。
+
+实测于 `1665fdb`（口径同现行权威表，命令见
+[T2 量尺重核 `1665fdb`](../admin-remainder-mechanism-batch/t2-remeasure-1665fdb.md)）：
+**Outbox 发布适配器 47、信封类型 59**（`4d57ecd` 上按同一命令回跑得 46 / 55，与头注一致，
+所以这是树在动不是量法在动）。新增四类是
+`parcel-shipment.shipment-request.submitted`、`customs-compliance.follow-up.replacement-proposed`、
+`customs-compliance.follow-up.replacement-effective`、`settlement-accounting.settlement-application.reversed`，
+**四类都不在本文那 46 / 55 的任何一格里**——本文的四格分类（已有消费者 1 / 应有但未开 30 /
+本就不应该有 16 / 判不准 8）因此对它们无话可说，别把 55 当全集去减。
+
+本文头注列为「仍然成立且新表未重复」的两点：
+
+- **「按 46 配会漏 9 类」这条结论仍成立，数变了**：`1665fdb` 上是 47 个适配器发 59 类，
+  按适配器去配会漏 **12** 类。哪几个适配器一对多、各发几类，本轮未重数。
+- 「适配器注释不是意图的出处，端口接口注释才是」不是计数断言，不随 HEAD 过期，原样成立。
