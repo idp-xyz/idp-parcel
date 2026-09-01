@@ -1,10 +1,8 @@
 # 04 代收分户账：collection-remittance 上下文从零
 
 Category: feature
-Status: in-progress——后端主体（MCP-2）已合装：cr04-backend 八笔（完工报已验 45aff42，含真库全绿）
-逐笔对应落本仓 2ad600c..7cc5cfe，代码态 diff 为空故验证照片适用（MCP-1 复核 build/vet 零信号）；
-CR 0001 迁移已施加演示库（97 步）。读面/页面/种子归 MCP-3 在途（worktree cr04-readface），
-合装与页登仍占号 MCP-1（批务票 05）
+Status: resolved——完成判据经 MCP-5 于 `d11e0f0` 逐项核实全达（核实记录见文末 Comment）；
+后端主体（MCP-2）、读面/页面/种子（MCP-3）与合装页登（MCP-1）三方交付均已入库
 
 ## 准入依据
 
@@ -53,3 +51,22 @@ spec 范围裁定 + 基线 `PA-CR-01`（COD 代收回汇是目标客户群常规
 `migrations/collection_remittance/0001_collection_subledger_and_remittance.sql`（六表）、
 `internal/collectionremittance/{domain,ports,application,adapters/postgres}`、
 `cmd/parcel-collection-register`（七命令）。读面、页面与种子仍归 MCP-3；页登与装配仍占号 05。
+
+## Comments
+
+- 2026-09-01 · MCP-5：**收口。** 状态行停在 08-28 的在途口径，而三方交付此后都已入库；
+  MCP-2/3/4 相继下线，无人翻状态。在 `d11e0f0` 上逐项核过完成判据：
+  `docs/domain/collection-remittance/CONTEXT.md` 在、CONTEXT-MAP 有本上下文行、GLOSSARY 六个
+  词条在（代收货款、代收指令、代收事实、代收分户账、回汇批次、差异事项）；迁移
+  `0001_collection_subledger_and_remittance.sql`、`internal/collectionremittance/**` 四层、
+  受控 CLI `cmd/parcel-collection-register` 在；读端口 `CodSubledgerCatalogueRead`、真库读
+  适配器 `cod_subledger_catalogue.go`、HTTP 端点 `/collection-subledgers`、页面
+  `pages/collection/CodLedgerPage.tsx` 与导航、`liveIds` 登记、`scripts/demo-seeds/data/collection/`
+  十份 `SYN-` 种子全部在树上。全仓 `go build`/`go vet`/`go test -count=1 ./...`（含真库）绿。
+  据此改 resolved。
+
+  **一处过程记录，因为它值得下一个人知道**：我核 GLOSSARY 时先用 `git show … | Select-String`
+  搜「代收」，得零命中，据此差点判「GLOSSARY 缺词、票不可收口」。零命中是假的——PowerShell
+  管道把中文解成了乱码，搜索词匹配不上。这正是 `docs/agents/workflow.md` 本机环境节警告的那
+  一格（「零命中恰恰就是自查想要的结果」），而我当天早些时候刚往那条补过一句。改用直读文件
+  的方式重搜，六个词条都在。**核「有没有」这类判据时不要走 PowerShell 文本管道。**

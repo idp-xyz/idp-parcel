@@ -97,3 +97,10 @@ Blocked by: 无
 
 本票**不改表、不建列、不写迁移、不动领域模型**。不构成票 04 的阻断。表当前 0 行，无论走哪条路
 都不需要数据清洗；补列须新开序号文件，不改写已施加的迁移。
+
+## Comments
+
+- 2026-09-01 · MCP-5：**重新取证于 `d11e0f0`，票面结论一字未变。** `customer_charge` 仍无
+  `version`／`prior_version`／`correction_reason`，主键仍是（租户, 费用标识）一条费用一行；
+  `settlement_accounting` 下也仍没有客户侧调整明细册。供应商侧那条对照（`supplier_expected_cost`
+  的整条版本链）同样照旧。本票仍 `draft`，待裁三选一原样有效。
