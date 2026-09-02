@@ -116,12 +116,18 @@ func TestRehydrationAcceptsAParticipationWithoutAPlannedSegment(t *testing.T) {
 func TestRehydrationRefusesAHalfEndedParticipation(t *testing.T) {
 	full := endedParticipationSpec(t, "parcel-1")
 	for name, mutate := range map[string]func(*domain.RehydrateParticipationSpec){
-		"只有种类":   func(s *domain.RehydrateParticipationSpec) { s.EndBasis, s.EndedAt = domain.ParticipationBasisReference{}, time.Time{} },
-		"只有依据":   func(s *domain.RehydrateParticipationSpec) { s.EndKind, s.EndedAt = domain.ParticipationEndKindInvalid, time.Time{} },
-		"只有时刻":   func(s *domain.RehydrateParticipationSpec) { s.EndKind, s.EndBasis = domain.ParticipationEndKindInvalid, domain.ParticipationBasisReference{} },
-		"缺种类":    func(s *domain.RehydrateParticipationSpec) { s.EndKind = domain.ParticipationEndKindInvalid },
-		"缺依据":    func(s *domain.RehydrateParticipationSpec) { s.EndBasis = domain.ParticipationBasisReference{} },
-		"缺时刻":    func(s *domain.RehydrateParticipationSpec) { s.EndedAt = time.Time{} },
+		"只有种类": func(s *domain.RehydrateParticipationSpec) {
+			s.EndBasis, s.EndedAt = domain.ParticipationBasisReference{}, time.Time{}
+		},
+		"只有依据": func(s *domain.RehydrateParticipationSpec) {
+			s.EndKind, s.EndedAt = domain.ParticipationEndKindInvalid, time.Time{}
+		},
+		"只有时刻": func(s *domain.RehydrateParticipationSpec) {
+			s.EndKind, s.EndBasis = domain.ParticipationEndKindInvalid, domain.ParticipationBasisReference{}
+		},
+		"缺种类": func(s *domain.RehydrateParticipationSpec) { s.EndKind = domain.ParticipationEndKindInvalid },
+		"缺依据": func(s *domain.RehydrateParticipationSpec) { s.EndBasis = domain.ParticipationBasisReference{} },
+		"缺时刻": func(s *domain.RehydrateParticipationSpec) { s.EndedAt = time.Time{} },
 	} {
 		t.Run(name, func(t *testing.T) {
 			broken := full

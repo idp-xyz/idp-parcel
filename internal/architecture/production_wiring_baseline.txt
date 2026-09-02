@@ -63,6 +63,16 @@
 # 无他人在途改动（为空），在那棵干净树上量得底数 **32**，加后实测 **33**——两个数因此锚在
 # 同一棵树上，不是一个减一个加出来的。
 #
+# 2026-09-02 随同一票下一层（段册适配器）**又把那条剪掉**，加它时写的「适配器落地那天出
+# 名单」当天兑现。**两处各量各的，都记在这里，因为它们是两个不同的数而不是一个数量错了**：
+# 隔离 worktree（检出 `d54fe5d`）上剪前 32 剪后 31；本笔实际提交的父提交 `b321885` 上剪前
+# 33 剪后 **32**。两棵树相差一条，是因为中间别人各有增减。
+#
+# **而这一条本身栽了一次，就在写下它的那一分钟里。** 我先按更早的共享树读数顺手写了「剪后
+# 32」，跑完隔离树才发现那里实测是 31。上面那条处方我自己刚写完就没照做：**底数不是拿来
+# 记住的，是每次都要在你正操作的那个检出上重取的**。留着这句不删——它比处方本身更能说明
+# 那条处方为什么必要：知道规则并不会让你自动照做，只有每次真去量才会。
+#
 # **那个 32 又错了一格，同一种错第二次。** 2026-09-02 晚 label-channel/10 加这一条之前重数，
 # 实测 31——某次增减（隔离写面那批的名单改动）只改了名单没改这句。加入登记册重建入口一条后
 # **实测 32**，这个数是数出来的不是从 31 加出来的**
@@ -146,13 +156,12 @@ internal/transportfulfillment/domain EstablishSegmentWithPickup
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
 internal/transportfulfillment/domain RecordMovementFact
-# 实际履约段的重建门（ADR-0028，tf-unwired-seven/01）。它现在没有调用方，是因为**这一票
-# 只落了领域层**：读它的仓储适配器（段册 + 参与关系册）是本票的下一层，落地那天这一条出
-# 名单。与上面 PS 那条 RehydrateContinuedAttemptRegister 同形同因。
+# 实际履约段的重建门曾在这里（ADR-0028，tf-unwired-seven/01），2026-09-02 同票下一层落地后
+# 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
+# 加它那天写的是「适配器落地那天这一条出名单」，当天兑现。
 #
-# 转换门与访问器不在名单上——EstablishSegmentWith* 已各占一行（见本组上方），JoinWith*、
-# EndParticipationWith*、CloseSegment 是聚合方法而非导出工厂，本门禁只量后者。
-internal/transportfulfillment/domain RehydrateActualFulfillmentSegment
+# 转换门与访问器本就不在名单上——EstablishSegmentWith* 各占一行（见本组上方，仍未接），
+# JoinWith*、EndParticipationWith*、CloseSegment 是聚合方法而非导出工厂，本门禁只量后者。
 
 
 # —— settlement-accounting ——
