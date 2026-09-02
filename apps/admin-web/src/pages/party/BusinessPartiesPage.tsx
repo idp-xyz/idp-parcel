@@ -291,11 +291,20 @@ function PartyRelationshipsTable() {
 }
 
 /**
- * 登记签装的两本册，与本页两张读签一一对应（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ * 登记签装的三本册（ADR-0085，票 admin-write-faces/02 切片 02c）。前两本与本页两张读签
+ * 一一对应，选册按钮的词取读签自己的词，不为登记签另造说法。
  *
- * 选册按钮的词取读签自己的词，不为登记签另造说法。停用不在这里：identity-deactivation
- * 一个口收三种身份，其中货主客户账户今天连读面都没有，摆进本页会让一种登进去就再也看不见
- * 的登记从这里出得去——落点未决，等裁，不预占。
+ * 第三本停用摆在本页，理由是本页读得见它刚写进去的那两件：停用快照每项必填 basis，而三个
+ * 身份读面里只有身份本体册把停用时点与停用依据都渲染出来——法人册那格只有时点。登在哪里
+ * 看得见结果就摆哪里，这是「写签跟着读签走」在本册上的落法。
+ *
+ * **不按 kind 切成两签**：快照收的是 deactivations 数组，kind 在每一项上、tenantId 在整批
+ * 上，一次提交本来就可以同时停一个参与方与一个法人。切签就得让每页拒收非本页那种 kind，
+ * 那是管理台编一条服务端没有的约束——页面不教一条不真的规则。
+ *
+ * 「登记签不比读签多铺一册」那条没有被触发：它禁的是同一册在两处都能登、其中一处看不见
+ * 结果，而这里是一册一处登、读面分三处。另两处的去处由停用那条 snapshotHint 末句说出，
+ * 披露义务已在词表里尽过，不在这里补第二遍。
  */
 const registrationTargets = [
   {
@@ -314,7 +323,18 @@ const registrationTargets = [
     endpoint: `POST ${commercialRegistrationEndpoints['party-relationship']}`,
     snapshotHint: registrationSnapshotHints['party-relationship'],
     submit: (snapshot: unknown) => registerCommercial('party-relationship', snapshot),
-    // 两册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），不各抄一份。
+    outcomeLabels: partyIdentityOutcomeLabels,
+  },
+  {
+    id: 'identity-deactivation',
+    // 「停用」取身份状态格里的封闭词（已停用），不为登记签另造一个动词。
+    label: '身份停用',
+    title: registrationTitles['identity-deactivation'],
+    endpoint: `POST ${commercialRegistrationEndpoints['identity-deactivation']}`,
+    snapshotHint: registrationSnapshotHints['identity-deactivation'],
+    submit: (snapshot: unknown) => registerCommercial('identity-deactivation', snapshot),
+    // 三册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），不各抄一份；
+    // 其中`已停用`与`册上没有这一个身份`两格只可能来自本册。
     outcomeLabels: partyIdentityOutcomeLabels,
   },
 ];

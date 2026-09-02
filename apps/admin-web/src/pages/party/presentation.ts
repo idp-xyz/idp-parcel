@@ -2,9 +2,15 @@
 
 import type { CommercialPolicyKind, CommercialRegistrationKind } from './api';
 
+// 服务形态封闭集今天只有一格。此前这里还列着 LABEL_CHANNEL_SERVICE「面单渠道服务」,而那个
+// 取值服务端产生不出来:domain.ServiceProductForm 只认 NETWORK_SERVICE、迁移 0008 的
+// service_product_form_closed 也只放这一个词,构造独立面单渠道形态在领域里是响亮失败。
+// 撤下它是因为本页现在同屏摆着形态登记签,签里的提示句说「今天只有一格」——一格词表与一句
+// 提示在同一屏上各说各的,操作者会照读面那个词填进快照,而回来的是受理门拒绝。
+// PAR-COM-12 解封那天先扩领域封闭集与迁移 CHECK,再补这一格;在那之前 labelOf 会把没收录的
+// 取值原样示出英文原名,不会静默丢失。
 export const serviceFormLabels: Record<string, string> = {
   NETWORK_SERVICE: '网络服务产品',
-  LABEL_CHANNEL_SERVICE: '面单渠道服务',
 };
 
 export const commercialStatusLabels: Record<string, string> = {
