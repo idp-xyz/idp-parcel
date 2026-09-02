@@ -12,19 +12,19 @@
 | customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
 | networkrouting | 52 | 47 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
-| parcelpricing | 45 | 46 | 3 | 6 | 1 | 8 |
-| parcelshipment | 109 | 106 | 15 | 20 | 7 | 11 |
+| parcelpricing | 46 | 47 | 3 | 6 | 1 | 8 |
+| parcelshipment | 111 | 108 | 15 | 20 | 7 | 11 |
 | partycommercial | 65 | 66 | 7 | 20 | 0 | 12 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 14 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
 | transportfulfillment | 53 | 44 | 8 | 22 | 9 | 5 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 643 | 588 | 81 | 195 | 48 | 78 |
+| **合计** | 646 | 591 | 81 | 195 | 48 | 78 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
-## 跨上下文消费缝：16 组，43 个生产文件
+## 跨上下文消费缝：16 组，44 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -33,7 +33,7 @@
 | nodeoperations | transportfulfillment | 1 |
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 3 |
-| parcelshipment | parcelpricing | 1 |
+| parcelshipment | parcelpricing | 2 |
 | parcelshipment | partycommercial | 10 |
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 2 |
