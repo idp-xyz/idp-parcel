@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 )
 
 // ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：运营查阅接入面的
@@ -34,4 +36,47 @@ var _ CatalogueQueryIntake = UnconfiguredIntake{}
 // 未登记前不铸造任何作用域（ADR-0077 Decision 三）。
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (NetworkCatalogQuery, error) {
 	return NetworkCatalogQuery{}, ErrAccessChannelNotConfigured
+}
+
+// 七族登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这七个接口，写行换不了。
+var (
+	_ NodeVersionRegistrationIntake            = UnconfiguredIntake{}
+	_ ConnectionVersionRegistrationIntake      = UnconfiguredIntake{}
+	_ LineVersionRegistrationIntake            = UnconfiguredIntake{}
+	_ ServiceAreaVersionRegistrationIntake     = UnconfiguredIntake{}
+	_ ServiceCalendarVersionRegistrationIntake = UnconfiguredIntake{}
+	_ AvailabilityAdjustmentRegistrationIntake = UnconfiguredIntake{}
+	_ RouteStrategyVersionRegistrationIntake   = UnconfiguredIntake{}
+)
+
+// 七个方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每族各有
+// 一个具名方法」——某族将来换上真 Intake 时，替换的是装配点那一行，本类型不动。
+
+func (UnconfiguredIntake) IntakeNodeVersionRegistration(context.Context, *http.Request) (application.RegisterNodeVersionCommand, error) {
+	return application.RegisterNodeVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeConnectionVersionRegistration(context.Context, *http.Request) (application.RegisterConnectionVersionCommand, error) {
+	return application.RegisterConnectionVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeLineVersionRegistration(context.Context, *http.Request) (application.RegisterLineVersionCommand, error) {
+	return application.RegisterLineVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeServiceAreaVersionRegistration(context.Context, *http.Request) (application.RegisterServiceAreaVersionCommand, error) {
+	return application.RegisterServiceAreaVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeServiceCalendarVersionRegistration(context.Context, *http.Request) (application.RegisterServiceCalendarVersionCommand, error) {
+	return application.RegisterServiceCalendarVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeAvailabilityAdjustmentRegistration(context.Context, *http.Request) (application.RegisterAvailabilityAdjustmentCommand, error) {
+	return application.RegisterAvailabilityAdjustmentCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeRouteStrategyVersionRegistration(context.Context, *http.Request) (application.RegisterRouteStrategyVersionCommand, error) {
+	return application.RegisterRouteStrategyVersionCommand{}, ErrAccessChannelNotConfigured
 }
