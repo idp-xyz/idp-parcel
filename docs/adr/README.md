@@ -98,6 +98,9 @@
 - [ADR-0090：出向集成的结果代数按调用方的恢复动作分格，「有没有形成答案」由适配器判定且不得看 HTTP 状态码；未配置即拒，不设重试默认值](./0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)
 - [ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)
 - [ADR-0092：渠道面单载荷在领域与库里只落引用，本体存放是一条未配置的出向缝；载荷记录追加不可覆盖](./0092-channel-label-payload-lands-as-a-reference-and-the-body-store-is-an-unconfigured-outbound-seam.md)｜**摘要与定位符不对称**：摘要必备（证明收到过这份件）、定位符可缺（回答此刻在哪），合成一格会让「收到了但没处放」表达不出来，而在文件组件就位前那是唯一走得到的分支。**适用场景**：渠道交回的面单件；本体存放端口未配置期间 `BodyStored` 恒为假，那是真话不是默认值
+- [ADR-0093：渠道账号使用授权不是商业版本，走自己的修订式登记册；撤销是状态取值、自然到期由区间导出，撤销不回溯](./0093-channel-account-use-authorization-is-not-a-commercial-version.md)｜**归族判据**：判一个对象进不进 `CommercialObjectKind`，看它的生命周期是不是版本演进（有没有「新版本取代旧版本、旧版本留在册上」），持不持有 `CommercialVersion` 只是这件事在代码里的表现，不是判据本身。**适用场景**：`party-commercial` 新增对象的归族；票 04 的客户服务规则版本须按同一判据重问一次，且很可能得出相反答案
+- [ADR-0094：未决重投与否由领域的 `ResumePath` 决定，并增设「等运营登记」第四格](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)｜**分格判据**：看恢复动作，不看缺了什么——重试、客户补件、人工复核都推不动、只有一次登记动作推得动的，是新的第四格。**适用场景**：接受判断链的未决处置；新增未决原因时先答它的恢复动作，消费门不再持有原因字面量
+- [ADR-0095：未决的停站与原因分两层出声——不自愈那格靠入账留痕，自愈那格靠装配方注入的失败观察口](./0095-undecided-stage-and-reason-surface-in-two-layers.md)｜**两层对应**：会自愈的进日志、不自愈的进库，是按恢复动作分格那条判据在可观测性上的投影。**适用场景**：派发逐条失败的观察；本记录只补观察不补告警，「未决多久算异常」属实例半边
 
 ## 已被取代决策
 

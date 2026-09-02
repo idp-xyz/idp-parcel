@@ -105,6 +105,93 @@ func TestTechnicallyAvailableAccountDoesNotPublishWithoutBusinessAuthorization(t
 	})
 }
 
+// Covers: CONTEXT「渠道账号使用授权」生命周期——「授权可以在到期前被显式撤销；撤销和
+// 自然到期均终止后续新使用，但不删除已经形成的授权证据和交易快照」。
+//
+// 两个终止成因后果相同而来源不同，必须在类型上就分得开。合并成一个终止时刻之后，下游读到
+// 的「现在不能用」既可能是持有人收回了授权、也可能只是这一版到期了——前者要去重新取得授权，
+// 后者要去续期，两件事要人做的动作相反。这正是本仓反复记的那个形状：两种状态可观察签名相同。
+func TestRevocationAndNaturalExpiryTerminateUseButStayDistinguishable(t *testing.T) {
+	authorization := publishedChannelAccountUse(t)
+	insideInterval := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	afterInterval := time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("revocation stops use inside the interval", func(t *testing.T) {
+		revoked, err := authorization.Revoke(
+			commercialValue(t, domain.NewChannelAccountRevocationBasisReference, "revocation-1"),
+			time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
+		)
+		if err != nil {
+			t.Fatalf("revoke: %v", err)
+		}
+		if revoked.AllowsUseAt(insideInterval) {
+			t.Fatal("撤销之后仍允许在有效期内发起新的业务使用")
+		}
+		if revoked.Status() != domain.ChannelAccountUseAuthorizationRevoked {
+			t.Fatalf("status = %q, want REVOKED", revoked.Status())
+		}
+	})
+
+	t.Run("natural expiry is not recorded as a revocation", func(t *testing.T) {
+		// 到期同样终止后续新使用，但它不是撤销：状态仍停在已发布，撤销时刻缺席。
+		if authorization.AllowsUseAt(afterInterval) {
+			t.Fatal("有效期之外仍允许发起新的业务使用")
+		}
+		if authorization.Status() != domain.ChannelAccountUseAuthorizationPublished {
+			t.Fatalf("status = %q, want PUBLISHED", authorization.Status())
+		}
+		if _, revoked := authorization.RevokedAt(); revoked {
+			t.Fatal("自然到期被记成了撤销")
+		}
+	})
+}
+
+// Covers: CONTEXT「撤销和自然到期均终止**后续**新使用……已经形成的交易仍保留当时有效的
+// 授权依据」。
+//
+// 撤销自其自身时点起生效，不回溯。判据同 SupplierAgreement.SupportsProcurementAt。把撤销
+// 做成整段失效会让追溯答错方向：一笔在撤销之前正当形成的交易，事后复核时会被判成当时就无
+// 授权，而 CONTEXT 明说那笔仍保留当时有效的依据。
+func TestRevocationClosesFutureUseWithoutUnmakingPastUse(t *testing.T) {
+	revokedAt := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	revoked, err := publishedChannelAccountUse(t).Revoke(
+		commercialValue(t, domain.NewChannelAccountRevocationBasisReference, "revocation-1"),
+		revokedAt,
+	)
+	if err != nil {
+		t.Fatalf("revoke: %v", err)
+	}
+
+	if !revoked.AllowsUseAt(revokedAt.Add(-24 * time.Hour)) {
+		t.Fatal("撤销回溯了：撤销时点之前的使用被判成无授权")
+	}
+	if revoked.AllowsUseAt(revokedAt) {
+		t.Fatal("撤销当刻仍允许发起新的业务使用")
+	}
+	if revoked.AllowsUseAt(revokedAt.Add(24 * time.Hour)) {
+		t.Fatal("撤销之后仍允许发起新的业务使用")
+	}
+}
+
+func publishedChannelAccountUse(t *testing.T) domain.ChannelAccountUseAuthorization {
+	t.Helper()
+	published, err := domain.PublishChannelAccountUseAuthorization(
+		commercialValue(t, domain.NewChannelAccountID, "channel-acct-1"),
+		commercialValue(t, domain.NewPartyID, "holder-1"),
+		commercialValue(t, domain.NewPartyID, "operator-1"),
+		commercialValue(t, domain.NewChannelProductReference, "channel-product-1"),
+		commercialValue(t, domain.NewCommercialScopeReference, "scope-a"),
+		mustInterval(t),
+		domain.ChannelAccountTechnicallyAvailable,
+		domain.ChannelAccountBusinessAuthorized,
+		time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	return published
+}
+
 func mustServiceProduct(t *testing.T) domain.ServiceProduct {
 	t.Helper()
 	version := registerable(t, domain.ServiceProductObject, "product-channel-1", "v1", "sha256:product-channel-1")

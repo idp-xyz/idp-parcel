@@ -16,9 +16,13 @@
 # ——不是拿 32 加 2 得来的，照下面那两段的教训办。
 #
 # 2026-09-02 随 party-commercial-context-gaps/01 剪掉 PublishChannelAccountUseAuthorization
-# （渠道账号使用授权补齐执行器，接上生产调用路径），剪后**重数实测 33**——同样是数出来的。
-# 顺带一句给下一个人：34 减 1 这次恰好也得 33，但那是巧合不是方法。上面两段记的两次错，
-# 错的都不是算术，是「名单被别人动过而你不知道」。
+# （渠道账号使用授权补齐执行器，接上生产调用路径）。本笔的计数见下面那段——它写于同一次
+# 改动，因为这一剪恰好撞上了一种此前没记过的失效。
+#
+# 一件该留档的现场：本段与下面那段曾在 HEAD 上与被剪的条目**脱节**——两段注释先随别人的
+# 提交入了库，条目本身还留在名单里，于是文件有一阵子自己说剪了而实际没剪。成因是共享索引
+# （见 parallel-sessions 的卷带那节）。这正好是本文件反复在防的东西的镜像：以往是名单变了
+# 注释没跟上，这次是注释先走了名单没跟上，两者一样让读的人信一句假话。
 #
 # 2026-09-02 随 tf-unwired-seven/03 剪掉 SummarizeHandovers（交接范围汇总读面落地，
 # application/summarize_handover_scope.go 是它的生产调用方），**本笔单独作用于其父提交
@@ -29,8 +33,9 @@
 # **这一笔撞上了本文件此前没记过的一种失效，写下来因为它比上面两次都难防。** 上面各句都写
 # 「剪后重数实测 N」，那句话默认**树上只有一个版本的名单**。共享工作树上不成立：同一时刻可以
 # 有好几处未提交的增减各自躺着，你量到的 N 是它们叠加后的数，而每个人都会把它当成自己那一笔
-# 的结果。本笔实测过这一格：在共享树上量得 32，因为树上同时压着另一处未提交的剪；而本笔单独
-# 作用于父提交是 33。**两个数都不假，量的不是同一个东西。**
+# 的结果。本笔实测过这一格三次，三次都对而三个数不同：先在共享树上量得 33（当时压着另一处
+# 未提交的剪），后来那一剪先入了库、HEAD 变成 33，本笔加上去**实测 32**。
+# **三个数都不假，量的不是同一个东西。**
 #
 # 所以记数时要连「在哪量的」一起记。要一个能给下一个人用的数，只有一处量得准——**在干净检出
 # 上量**，那里不含任何人的在途改动。逐块核（`git add` 前 `git diff HEAD -- <file>`）能在提交
@@ -140,7 +145,11 @@ internal/customscompliance/domain VerifyDutyPayment
 
 
 # —— party-commercial ——
-internal/partycommercial/domain PublishChannelAccountUseAuthorization
+# PublishChannelAccountUseAuthorization 曾在这里，2026-09-02 随 party-commercial-context-gaps/01
+# 剪掉：渠道账号使用授权补齐了执行器（0018 登记册、ports 登记面、application 写侧编排），
+# 发布门的生产调用方是 application/register_channel_account_use.go。
+# **剪之前按本门禁的提示逐条分过成因**：这个名字在全仓只有一处声明（domain/
+# channel_account_use_authorization.go），不存在「别处同名声明造成误判」那一种，因此是第二种。
 internal/partycommercial/domain ResolveCreditPolicy
 # 下面两条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词，
 # ValidateBeforeDecision 返回同型 Resolution 是变换不是构造。**留着不排除是有意的**——

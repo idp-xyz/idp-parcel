@@ -39,9 +39,12 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }
 
-// 八个登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 下列登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
 // 自报身份、不构造命令。隔离读放行（ADR-0078）只实现 CommercialCatalogueIntake，
-// 这八个接口它一个也不实现，因此启用隔离读换得了查阅行、换不了写行。
+// 下列接口它一个也不实现，因此启用隔离读换得了查阅行、换不了写行。
+//
+// 这段注释此前写着一个数（「八个」），已改成指代整份名单：名单每增一类就要有人记得回来改
+// 那个数，而漏改不会有任何东西变红——本仓已因同形的计数吃过几次亏。
 var (
 	_ CommercialPublicationIntake             = UnconfiguredIntake{}
 	_ BusinessPartyRegistrationIntake         = UnconfiguredIntake{}
@@ -51,9 +54,11 @@ var (
 	_ PartyIdentityDeactivationIntake         = UnconfiguredIntake{}
 	_ ServiceProductFormRegistrationIntake    = UnconfiguredIntake{}
 	_ ProductChannelMappingRegistrationIntake = UnconfiguredIntake{}
+	_ ChannelAccountUseRegistrationIntake     = UnconfiguredIntake{}
+	_ ChannelAccountUseRevocationIntake       = UnconfiguredIntake{}
 )
 
-// 八个方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每类各有
+// 方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每类各有
 // 一个具名方法」——某类将来换上真 Intake 时，替换的是装配点那一行，本类型不动。
 
 func (UnconfiguredIntake) IntakeCommercialPublication(
@@ -102,4 +107,16 @@ func (UnconfiguredIntake) IntakeProductChannelMappingRegistration(
 	context.Context, *http.Request,
 ) (application.RegisterProductChannelMappingCommand, error) {
 	return application.RegisterProductChannelMappingCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChannelAccountUseRegistration(
+	context.Context, *http.Request,
+) (application.RegisterChannelAccountUseCommand, error) {
+	return application.RegisterChannelAccountUseCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeChannelAccountUseRevocation(
+	context.Context, *http.Request,
+) (application.RevokeChannelAccountUseCommand, error) {
+	return application.RevokeChannelAccountUseCommand{}, ErrAccessChannelNotConfigured
 }

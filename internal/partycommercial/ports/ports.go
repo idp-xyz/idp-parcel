@@ -1111,3 +1111,58 @@ type CommercialRelationCatalogueRead interface {
 		limit int,
 	) ([]SupplierAgreementCatalogueRow, error)
 }
+
+// ChannelAccountUseSaveOutcome 是一笔账号使用授权登记修订在持久化面的落点（ADR-0031
+// 同款）。它不与 MappingSaveOutcome 共用：判据虽同，但两册各自演进，共用一个类型会让
+// 其中一册日后多出一格时另一册被迫认它。
+type ChannelAccountUseSaveOutcome uint8
+
+const (
+	ChannelAccountUseSaveOutcomeInvalid ChannelAccountUseSaveOutcome = iota
+	ChannelAccountUseSaved
+	ChannelAccountUseAlreadyRegistered
+	ChannelAccountUseContentConflict
+)
+
+func (outcome ChannelAccountUseSaveOutcome) String() string {
+	switch outcome {
+	case ChannelAccountUseSaved:
+		return "SAVED"
+	case ChannelAccountUseAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case ChannelAccountUseContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// ChannelAccountUseAuthorizationRegistry 是渠道账号使用授权登记册的持久化面（0018 迁移，
+// ADR-0093）：键=租户+登记标识+修订，修订不可覆盖，撤销以新修订追加。
+//
+// LoadLatest 取某笔授权的**最新修订**：写入用例靠它做修订连续性检查，也靠它拿到前一修订
+// 交给 domain 的 Succeed——后继修订不得改换账号或授权双方，那条主键守不住。
+// found=false = 从未登记；读取失败走 error，不得折成 found=false（判据同
+// ProductChannelMappingRegistry.LoadLatestMapping）。
+//
+// LoadAuthorizedAccountUse 按**渠道账号**而非登记标识发问，服务的是另一条路：委托接受与
+// 面单交易在形成新交易时必须独立校验当前授权，不复用委托接受时的快照（CONTEXT）。同一个
+// 账号可以先后授给不同的被授权人，因此它交回列表而不是单值——判「此刻这一方许不许用」是
+// 调用方拿 domain 的 AllowsUseAt 对时点做的事，登记册不代答，那样会把一份会过期的推导
+// 固化在读口上。
+type ChannelAccountUseAuthorizationRegistry interface {
+	SaveChannelAccountUse(
+		ctx context.Context,
+		registration domain.ChannelAccountUseAuthorizationRegistration,
+	) (ChannelAccountUseSaveOutcome, error)
+	LoadLatest(
+		ctx context.Context,
+		tenant domain.TenantID,
+		authorization domain.ChannelAccountUseAuthorizationID,
+	) (domain.ChannelAccountUseAuthorizationRegistration, bool, error)
+	LoadAuthorizedAccountUse(
+		ctx context.Context,
+		tenant domain.TenantID,
+		account domain.ChannelAccountID,
+	) ([]domain.ChannelAccountUseAuthorizationRegistration, error)
+}
