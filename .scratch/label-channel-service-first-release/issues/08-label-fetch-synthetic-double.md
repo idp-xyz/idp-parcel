@@ -1,8 +1,8 @@
 # 08 取面单合成替身：把结果不确定、部分成功、批粒度三条走通
 
 Category: enhancement
-Status: draft
-Blocked by: 07
+Status: in-progress——MCP-1 认领（`07` 已 resolved，阻塞解除）
+Blocked by: 07（已 resolved）
 
 ## 为什么要一个替身
 
