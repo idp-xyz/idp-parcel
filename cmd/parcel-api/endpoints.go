@@ -87,6 +87,9 @@ func assembleBusinessEndpoints(
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
+	commercialPublication commercialhttp.CommercialAuthorityPublisher,
+	partyIdentityRegistration commercialhttp.PartyIdentityRegistrar,
+	productChannelRegistration commercialhttp.ProductChannelRegistrar,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	milestoneMappingRegistration visibilityhttp.MilestoneMappingRegistrar,
 	triageRulesRegistration visibilityhttp.TriageRulesRegistrar,
@@ -238,6 +241,25 @@ func assembleBusinessEndpoints(
 		// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
 		// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
 		{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, productChannelMappings)},
+		// 商业八类配置写面（ADR-0085，票 admin-write-faces/02 切片 02c）：写准入不另立形，
+		// 判据同上——命令面一律挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
+		//
+		// 发布口不带 `-registrations` 后缀：本上下文这一格的动词是发布，答案代数说的也是
+		// 发布（`已发布已生效`/`已计划生效`），叫成登记会与身份、映射两族的登记答案混为
+		// 一谈（裁决在端点文件头）。它也只有一个端点——服务产品、规则包、合同、协议与各类
+		// 策略是同一个发布用例的输入，类别在版本规格里，不是另一种命令。
+		//
+		// 停用口叫 `-deactivations` 而不是 `-registrations`：它是往修订链上插一笔新修订的
+		// 状态推进，不是登记一个新身份。名字照实说，是因为「登记」与「停用」在这本册上的
+		// 续办动作不同，路径是登记方看见的第一样东西。
+		{Pattern: "/commercial-publications", Handler: commercialhttp.NewPublishCommercialAuthorityEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublication)},
+		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
+		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
 		// VE 六类目录查阅与运营追踪查阅同属租户内运营读面，共用同一个
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。

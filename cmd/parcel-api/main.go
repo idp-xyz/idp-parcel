@@ -174,6 +174,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	commercialRegistration, err := buildCommercialRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	complianceRules, err := ccpostgres.NewRuleCatalogue(db)
 	if err != nil {
 		return err
@@ -285,6 +289,9 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
+			commercialRegistration.publication,
+			commercialRegistration.partyIdentity,
+			commercialRegistration.productChannel,
 			visibilityCatalogues,
 			veRegistration.milestoneMapping,
 			veRegistration.triageRules,

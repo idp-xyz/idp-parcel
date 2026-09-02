@@ -21,6 +21,7 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	shipmentdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	commercialapp "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	govports "go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
@@ -494,6 +495,70 @@ func (unwiredDisclosurePolicyRegistration) Handle(
 	visibilityapp.RegisterDisclosurePolicyCommand,
 ) (visibilityapp.RegisterCatalogResult, error) {
 	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+// 商业八类配置写面的命令占位（票 admin-write-faces/02 切片 02c）。按族分三个类型，随
+// 生产侧的三个事务包装：同族的方法各自具名，一个类型装得下全族。
+type unwiredCommercialPublication struct{}
+
+func (unwiredCommercialPublication) Handle(
+	context.Context,
+	commercialapp.PublishCommercialAuthorityCommand,
+) (commercialapp.PublishCommercialAuthorityResult, error) {
+	return commercialapp.PublishCommercialAuthorityResult{}, errOrchestrationNotWired
+}
+
+type unwiredPartyIdentityRegistration struct{}
+
+func (unwiredPartyIdentityRegistration) RegisterBusinessParty(
+	context.Context,
+	commercialapp.RegisterBusinessPartyCommand,
+) (commercialapp.PartyRegistryResult, error) {
+	return commercialapp.PartyRegistryResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPartyIdentityRegistration) RegisterLegalEntity(
+	context.Context,
+	commercialapp.RegisterLegalEntityCommand,
+) (commercialapp.PartyRegistryResult, error) {
+	return commercialapp.PartyRegistryResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPartyIdentityRegistration) RegisterCustomerAccount(
+	context.Context,
+	commercialapp.RegisterCustomerAccountCommand,
+) (commercialapp.PartyRegistryResult, error) {
+	return commercialapp.PartyRegistryResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPartyIdentityRegistration) RegisterRelationship(
+	context.Context,
+	commercialapp.RegisterPartyRelationshipCommand,
+) (commercialapp.PartyRegistryResult, error) {
+	return commercialapp.PartyRegistryResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPartyIdentityRegistration) Deactivate(
+	context.Context,
+	commercialapp.DeactivatePartyIdentityCommand,
+) (commercialapp.PartyRegistryResult, error) {
+	return commercialapp.PartyRegistryResult{}, errOrchestrationNotWired
+}
+
+type unwiredProductChannelRegistration struct{}
+
+func (unwiredProductChannelRegistration) RegisterServiceProductForm(
+	context.Context,
+	commercialapp.RegisterServiceProductFormCommand,
+) (commercialapp.ProductChannelResult, error) {
+	return commercialapp.ProductChannelResult{}, errOrchestrationNotWired
+}
+
+func (unwiredProductChannelRegistration) RegisterMapping(
+	context.Context,
+	commercialapp.RegisterProductChannelMappingCommand,
+) (commercialapp.ProductChannelResult, error) {
+	return commercialapp.ProductChannelResult{}, errOrchestrationNotWired
 }
 
 type unwiredNetworkCatalogue struct{}
