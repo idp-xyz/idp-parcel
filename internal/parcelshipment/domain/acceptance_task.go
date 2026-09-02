@@ -124,11 +124,17 @@ func NewProcessingAttemptReason(value string) (ProcessingAttemptReason, error) {
 	return ProcessingAttemptReason{required}, err
 }
 
-// ResumePath 区分这一轮该由谁来续，取值与 CONTEXT 接受判断任务的三个等待态一一对应：
-// 等待受控补充、等待内部续办、等待人工复核。CONTEXT 要求三者「使用不同原因和续办路径」，
-// 因为续办方分别是客户、系统和授权复核角色，后续动作互不替代——通知客户并等新提交版本、
-// 重试依赖且绝不惊动客户、把复核派给够格的角色。合并任意两个都会让等待对象弄错：压成一个
-// 字段，依赖抖动就会变成催客户补件；把复核算作内部重试，则会永远重试一件重试推不动的事。
+// ResumePath 区分这一轮该由谁来续，取值与 CONTEXT 接受判断任务的四个等待态一一对应：
+// 等待受控补充、等待内部续办、等待人工复核、等待运营登记。CONTEXT 要求四者「使用不同原因
+// 和续办路径」，因为续办方分别是客户、系统、授权复核角色和运营企业的登记动作，后续动作互不
+// 替代——通知客户并等新提交版本、重试依赖且绝不惊动客户、把复核派给够格的角色、等运营企业
+// 按那份参数自己的登记路径补齐。合并任意两个都会让等待对象弄错：压成一个字段，依赖抖动就会
+// 变成催客户补件；把复核算作内部重试，则会永远重试一件重试推不动的事。
+//
+// `等待运营登记`是第四格（ADR-0094）。它与`等待内部续办`最容易压在一起，而两者的区别不在
+// 谁失败了而在**有没有可答的东西**：权威一时答不出会自行恢复，重试是对的；某个范围一条现行
+// 规则或参数都没有登记时，权威并没有答不出，是根本没有可答的东西，重试一万次也长不出一条
+// 登记。压成一格的代价是失败预算被一件重试永远推不动的事烧尽。
 type ResumePath uint8
 
 const (
@@ -136,10 +142,11 @@ const (
 	ResumeByCustomerSupplement
 	ResumeByInternalRetry
 	ResumeByManualReview
+	ResumeByOperatorRegistration
 )
 
 func (path ResumePath) valid() bool {
-	return path >= ResumeByCustomerSupplement && path <= ResumeByManualReview
+	return path >= ResumeByCustomerSupplement && path <= ResumeByOperatorRegistration
 }
 
 func (path ResumePath) String() string {
@@ -150,6 +157,8 @@ func (path ResumePath) String() string {
 		return "INTERNAL_RETRY"
 	case ResumeByManualReview:
 		return "MANUAL_REVIEW"
+	case ResumeByOperatorRegistration:
+		return "OPERATOR_REGISTRATION"
 	default:
 		return ""
 	}

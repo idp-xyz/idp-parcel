@@ -106,6 +106,16 @@ func (result AdvanceAcceptanceChainResult) PendingReason() JudgmentPendingReason
 	return result.reason
 }
 
+// ResumePath 交回本轮未决该由谁来续。消费门按它决定回滚重投还是入账（ADR-0094 Decision 一），
+// 因此这里只是把 `JudgmentPendingReason.resumePath()` 那份唯一映射转交出去，不在此另立一套。
+//
+// 交恢复动作而不是交原因，是为了让消费门够不到「原因」这一层：它一旦按原因名字判，同一份
+// 「谁能推动这件事」的知识就有了第二处定义，而两处漂开时的症状是同一个原因在两个门下一个
+// 重投一个入账。形成决定那一轮它是零值——那一轮没有人在等。
+func (result AdvanceAcceptanceChainResult) ResumePath() domain.ResumePath {
+	return result.reason.resumePath()
+}
+
 func (result AdvanceAcceptanceChainResult) ContinuationReference() domain.OwnershipContinuationReference {
 	return result.continuation
 }

@@ -132,6 +132,19 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		return domain.ResumeByCustomerSupplement
 	case ManualReviewPending:
 		return domain.ResumeByManualReview
+	case RejectionAuthorityRulesNotConfigured,
+		WithdrawalAuthorityRulesNotConfigured,
+		SourceDataAmendmentAuthorityRulesNotConfigured,
+		ReachabilityAsOfNotConfigured,
+		FinancialControlAsOfNotConfigured:
+		// 这一族等的是运营企业做一次登记，不是等某个权威恢复（ADR-0094）。它们与同一支上的
+		// *Unavailable 只差一个词而恢复动作相反：权威答不出会自愈，而一个从未登记过的范围
+		// 重试一万次也长不出一条登记。这几个取值自己的注释早写过这句话，此前却落在下面那个
+		// default 的内部重试上——判据在、细分在，只是导出到恢复动作时又被压回去了。
+		//
+		// 逐个列举不写成按名字前缀判：命名相近不构成同一个恢复动作，而这份名单正是那条判据
+		// 的落地——新增一个原因时要回答的是它等谁，不是它叫什么。
+		return domain.ResumeByOperatorRegistration
 	default:
 		// 其余取值全是依赖答不出或声明未到，只有本方推得动。这一条不靠任何未确认规则：
 		// 客户和复核角色都补不出一个查不回来的授权，或者一次没落库的保存。

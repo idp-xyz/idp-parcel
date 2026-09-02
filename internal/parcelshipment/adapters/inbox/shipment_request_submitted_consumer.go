@@ -130,16 +130,13 @@ func advanceAcceptanceChainThrough(
 		case psapplication.AcceptanceChainDecided:
 			return nil
 		case psapplication.AcceptanceChainUndecided:
-			if result.PendingReason() == psapplication.ManualReviewPending {
-				// 等待人工复核不重投（ErrAcceptanceChainUndecided 注释的例外条）。
-				// 走到这一格时编排已把等待态 Save 进聚合——没保存成时它交回的是
-				// 保存那一格自己的原因，仍走下面的回滚重投。
-				return nil
+			if err := undecidedDisposition(result.ResumePath()); err != nil {
+				// 停在哪一步与未决原因都写进错误正文：路由条目只把哨兵翻成失败码，
+				// 原错误原样留在链上供运维读（dispatch.WithUndecidedSentinels 两个都用 %w）。
+				return fmt.Errorf("%w: stage %s, reason %s",
+					err, result.Stage(), result.PendingReason())
 			}
-			// 停在哪一步与未决原因都写进错误正文：路由条目只把哨兵翻成失败码，
-			// 原错误原样留在链上供运维读（dispatch.WithUndecidedSentinels 两个都用 %w）。
-			return fmt.Errorf("%w: stage %s, reason %s",
-				ErrAcceptanceChainUndecided, result.Stage(), result.PendingReason())
+			return nil
 		default:
 			// 不留 default 兜底成未决：静默重投等于替编排作判断。
 			return fmt.Errorf("%w: %q", ErrUnexpectedAcceptanceChainOutcome, result.Outcome())
