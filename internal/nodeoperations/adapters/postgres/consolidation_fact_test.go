@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -86,4 +87,174 @@ func TestConsolidationFactWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, found, err := facts.FindByKey(ctx, record.Key); err != nil || found {
 		t.Errorf("被拒绝的写入仍然落库：found=%v err=%v", found, err)
 	}
+}
+
+// TestAConsolidationFactRoundTripsAndKeepsTheTwoTimesApart 证 UC-NO-003 结果契约点名
+// 要保存的那几项确实落库并读得回，且业务发生时间与记录时刻各占一列。
+//
+// 两个时间分立是本票的要害：它们若同源，一份补录或导入进来的事实就再也说不出现场究竟
+// 什么时候发生过——而那正是 ADR-0023 判给设备、不许服务端代铸的东西。所以这里让两者
+// 相隔九十分钟，读回后逐个比对，任一被对方顶替都会当场失配。
+//
+// 取封装格而不是开启格：六格里只有它带封签列，顺带把「在场的那一格真写进去了」证掉。
+func TestAConsolidationFactRoundTripsAndKeepsTheTwoTimesApart(t *testing.T) {
+	facts, units, transactor, _ := newConsolidationFacts(t)
+	ctx := t.Context()
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+	unit := openConsolidation(t, "bag-1", "asset-7")
+	saveConsolidation(t, transactor, ctx, units, tenant, unit)
+
+	source := workSource(t, "src-seal-1", consolidationAt)
+	recordedAt := consolidationAt.Add(90 * time.Minute)
+	record := ports.ConsolidationFactRecord{
+		Key:           ports.ConsolidationFactKey{TenantID: tenant, SourceID: source.SourceID()},
+		ContentDigest: "digest-seal-1",
+		Action:        domain.SealUnitAction,
+		Unit:          unit.ID(),
+		Seal:          ref(t, domain.NewSealReference, "seal-1"),
+		PerformedBy:   source.PerformedBy(),
+		Evidence:      source.Evidence(),
+		OccurredAt:    source.OccurredAt(),
+		RecordedAt:    recordedAt,
+	}
+	saveConsolidationFact(t, transactor, ctx, facts, record)
+
+	found, exists, err := facts.FindByKey(ctx, record.Key)
+	if err != nil || !exists {
+		t.Fatalf("读回失败：err=%v exists=%v", err, exists)
+	}
+	if found.ContentDigest != record.ContentDigest ||
+		found.Action != domain.SealUnitAction ||
+		found.Unit != unit.ID() ||
+		found.Seal.String() != record.Seal.String() {
+		t.Errorf("作业事实往返变形：digest=%q action=%q unit=%q seal=%q",
+			found.ContentDigest, found.Action, found.Unit, found.Seal)
+	}
+	if found.PerformedBy.String() != record.PerformedBy.String() ||
+		found.Evidence.String() != record.Evidence.String() {
+		t.Errorf("执行方或证据未落库：performedBy=%q evidence=%q", found.PerformedBy, found.Evidence)
+	}
+	if !found.OccurredAt.Equal(consolidationAt) {
+		t.Errorf("业务发生时间 = %v，应为现场自带的 %v", found.OccurredAt, consolidationAt)
+	}
+	if !found.RecordedAt.Equal(recordedAt) {
+		t.Errorf("记录时刻 = %v，应为 %v", found.RecordedAt, recordedAt)
+	}
+	if found.Member.String() != "" {
+		t.Errorf("封装格读回了成员 %q——缺席在这一格是真话，不是漏填", found.Member)
+	}
+
+	tenantB := ref(t, domain.NewTenantID, "tenant-b")
+	crossKey := ports.ConsolidationFactKey{TenantID: tenantB, SourceID: record.Key.SourceID}
+	if _, leaked, err := facts.FindByKey(ctx, crossKey); err != nil || leaked {
+		t.Errorf("另一个租户读到了作业事实：found=%v err=%v", leaked, err)
+	}
+}
+
+// TestASecondConsolidationFactWriterKeepsTheFirst 守 AT-NO-043 落在库面上的那一半：同一
+// 来源身份的第二份写入一律答`已有记录`，先到者一个字都不改。
+//
+// 重放与冲突在这一层长得一样是有意的——分辨两者要比内容指纹，那是编排受理闸的活；库面
+// 只负责先到者不被顶替，所以两向都在这里各取一次证：同指纹的重放不重复落行，异指纹的
+// 冲突也不覆盖，读回的始终是先到那一份的指纹。
+func TestASecondConsolidationFactWriterKeepsTheFirst(t *testing.T) {
+	facts, units, transactor, _ := newConsolidationFacts(t)
+	ctx := t.Context()
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+	unit := openConsolidation(t, "bag-1", "asset-7")
+	saveConsolidation(t, transactor, ctx, units, tenant, unit)
+
+	first := consolidationFactRecord(t, tenant, unit, "src-open-1")
+	saveConsolidationFact(t, transactor, ctx, facts, first)
+
+	replay := first
+	conflicting := first
+	conflicting.ContentDigest = "digest-another-content"
+
+	for name, second := range map[string]ports.ConsolidationFactRecord{
+		"重放同一内容": replay,
+		"同身份异内容": conflicting,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var outcome ports.ConsolidationFactSaveOutcome
+			var winner ports.ConsolidationFactRecord
+			var winnerFound bool
+			inTx(t, transactor, ctx, func(txCtx context.Context) error {
+				saved, err := facts.Save(txCtx, second)
+				if err != nil {
+					return err
+				}
+				outcome = saved
+				winner, winnerFound, err = facts.FindByKey(txCtx, first.Key)
+				return err
+			})
+			if outcome != ports.ConsolidationFactAlreadyRecorded {
+				t.Fatalf("第二份写入结果 = %d，应为 ALREADY_RECORDED", outcome)
+			}
+			if !winnerFound || winner.ContentDigest != first.ContentDigest {
+				t.Fatalf("同事务读回赢家失败：found=%v digest=%q", winnerFound, winner.ContentDigest)
+			}
+		})
+	}
+}
+
+// TestConsolidationFactPresenceConstraintsRejectImpossibleRows 守库面按动作判成员与封签
+// 两列在场的那两条 CHECK。它们不是重复领域校验：绕过适配器直接写库的一行——迁移脚本、
+// 运维改数、日后新写的另一个适配器——领域构造器一次都不会经过，这两列于是可以又缺又多。
+func TestConsolidationFactPresenceConstraintsRejectImpossibleRows(t *testing.T) {
+	_, units, transactor, pool := newConsolidationFacts(t)
+	ctx := t.Context()
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+	unit := openConsolidation(t, "bag-1", "asset-7")
+	saveConsolidation(t, transactor, ctx, units, tenant, unit)
+
+	insert := func(sourceID, action string, member, seal any) error {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO node_operations.consolidation_fact
+				(tenant_id, source_id, content_digest, action, unit_id, member_id, seal_ref,
+				 performed_by, evidence, occurred_at, recorded_at)
+			 VALUES ('tenant-a', $1, 'digest-x', $2, 'bag-1', $3, $4,
+			         'packer-1', 'WORK-EVIDENCE/x', now(), now())`,
+			sourceID, action, member, seal)
+		return err
+	}
+
+	if err := insert("bad-member-missing", "ADD_MEMBER", nil, nil); err == nil {
+		t.Error("一行「移入却没有成员」溜进了作业事实登记")
+	}
+	if err := insert("bad-member-extra", "OPEN_UNIT", "unit-1", nil); err == nil {
+		t.Error("一行「开启却带着成员」溜进了作业事实登记")
+	}
+	if err := insert("bad-seal-missing", "SEAL_UNIT", nil, nil); err == nil {
+		t.Error("一行「封装却没有封签」溜进了作业事实登记")
+	}
+	if err := insert("bad-seal-extra", "REMOVE_MEMBER", "unit-1", "seal-1"); err == nil {
+		t.Error("一行「移出却带着封签」溜进了作业事实登记")
+	}
+	if err := insert("bad-action", "REWEIGH", nil, nil); err == nil {
+		t.Error("一个封闭词表外的动作溜进了作业事实登记")
+	}
+	if err := insert("good-open", "OPEN_UNIT", nil, nil); err != nil {
+		t.Errorf("合法的一行被拒，上面五条拒绝因此说明不了是这几条 CHECK 在起作用：%v", err)
+	}
+}
+
+func saveConsolidationFact(
+	t *testing.T,
+	transactor bentoapp.Transactor,
+	ctx context.Context,
+	facts *adapter.ConsolidationFacts,
+	record ports.ConsolidationFactRecord,
+) {
+	t.Helper()
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		outcome, err := facts.Save(txCtx, record)
+		if err != nil {
+			return err
+		}
+		if outcome != ports.ConsolidationFactSaved {
+			t.Fatalf("save outcome = %d", outcome)
+		}
+		return nil
+	})
 }
