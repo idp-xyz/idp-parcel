@@ -541,7 +541,25 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   **承接票已由 MCP-3 立**：[04](./04-customer-account-register-has-no-read-face.md)。在那之前
   登记走受控 CLI，`snapshotHint` 里已写明「本册今天没有读面」。
 
-  **六、验证。** 仓内 typescript 5.6.3 跑 `tsc --noEmit` 退 0，`--listFiles` 载入 612 份且四份
+  **六、商业片比网络与 VE 少一道锁：两口的快照译装不是同一份。** 网络片把译装下沉成
+  `internal/networkrouting/adapters/registrationjson`，VE 片随后照做（`8ebfcac`，见上面 MCP-6
+  那条），于是受控 CLI 与在线登记口**共用同一份翻译**，形状漂移在编译期就红。商业片没有这一
+  步：译装留在 `cmd/parcel-commercial` 的 `package main` 里，在线口够不着，两口只锁得到同一个
+  登记用例。**因此「前端提示句里的键名与 CLI 真的同形」今天只有人工核对在守**——本次逐字核过
+  （`serviceProductFormDocument` 是 `productId`/`version`/`form` 加整批的 `tenantId`/`scope`；
+  `deactivationDocument` 是 `kind`/`id`/`revision`/`basis`/`at` 加整批的 `tenantId`），与
+  `presentation.ts` 的两条 `snapshotHint` 对得上，但**这次对得上不能替下次担保**。
+
+  还有一件连人工核对也够不着：提示句说「在线口收的是其中一项，不是整批」，而在线口的请求体
+  形状**今天根本不存在**——`ServiceProductFormRegistrationIntake` 那一族接口没有实现，服务端
+  一律先答 403。这句话是前端按 CLI 批信封不是聚合推出来的设计断言，不是服务端在守的契约；
+  `PAR-INT-01` 真渠道接线时以渠道契约为准重谈，不得反过来把它当已发布的 Schema。
+
+  `api.ts` 那句「缺口记在票 02 的商业片 Comment」指的就是本节。**它此前指空**：写下那句时
+  商业片还没有 Comment，而空指针在 `tsc` 与 `go build` 下都不报——这正是 AGENTS.md 禁行号、
+  要引符号名的同一条理由的另一种形态，引文对不上至少看得见，引「某处有一条」则连失配都没有。
+
+  **七、验证。** 仓内 typescript 5.6.3 跑 `tsc --noEmit` 退 0，`--listFiles` 载入 612 份且四份
   改动逐一在内——这一步是刻意做的，本票此前记过 `npx tsc` 会落到占位包上退 0 而什么都没编，
   只看退出码分不出真绿与空配置的假绿。编辑器诊断对改过的四份零条目。Go 侧零改动，未重跑全仓
   测试。`pnpm build` 照本票已定的措辞如实记「本机跑不了，以 `tsc --noEmit` 代替」，不写成绿；
