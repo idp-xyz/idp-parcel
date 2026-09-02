@@ -14,13 +14,13 @@
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 46 | 47 | 3 | 6 | 1 | 8 |
 | parcelshipment | 111 | 108 | 15 | 20 | 7 | 11 |
-| partycommercial | 65 | 66 | 7 | 20 | 0 | 12 |
+| partycommercial | 69 | 69 | 8 | 21 | 0 | 13 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 14 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
-| transportfulfillment | 53 | 44 | 8 | 22 | 9 | 5 |
+| transportfulfillment | 54 | 45 | 9 | 22 | 9 | 5 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 646 | 591 | 81 | 195 | 48 | 78 |
+| **合计** | 651 | 595 | 83 | 196 | 48 | 79 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 4 |
 
-## 迁移：11 个模块共 102 份 SQL
+## 迁移：11 个模块共 103 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -55,13 +55,13 @@
 | node_operations | 3 |
 | parcel_pricing | 3 |
 | parcel_shipment | 10 |
-| party_commercial | 17 |
+| party_commercial | 18 |
 | pilot_governance | 5 |
 | settlement_accounting | 15 |
 | transport_fulfillment | 5 |
 | visibility_exception | 21 |
 
-## 端口：声明 275 个；基线口径缺 10，精确口径缺 8
+## 端口：声明 277 个；基线口径缺 11，精确口径缺 9
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -74,6 +74,7 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `transportfulfillment.HandoverScopeView` 
 - `visibilityexception.NotificationChannelGateway` 
 
 精确口径缺（无具体类型完整实现）：
@@ -85,4 +86,5 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `transportfulfillment.HandoverScopeView` 
 - `visibilityexception.NotificationChannelGateway` 
