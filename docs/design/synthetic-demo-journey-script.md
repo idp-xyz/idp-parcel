@@ -12,7 +12,7 @@
 |---|---|---|
 | 演示库 | `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable` | 本机隔离库；**任何一步都不得指向生产库** |
 | 种子 | `scripts/demo-seeds/seed.sh` | 合成 `SYN-` 主数据，四条登记 CLI 灌入；复灌用 `--reset` |
-| 后端 | `cmd/parcel-api` | 需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` |
+| 后端 | `cmd/parcel-api` | 需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
 | 管理台 | `apps/admin-web` | dev 服务器**从 WSL 起**（本机 `node_modules` 是 WSL 侧 pnpm 装的 POSIX 链接农场，Windows 进程解析不到属预期），用 `PARCEL_API_TARGET` 指向后端；原样命令见「取证」页面层一节 |
 
 起后端（本机 8080 被 Windows 服务占用，换端口，见 admin-web README 的暗礁一节）：
@@ -85,18 +85,29 @@ go run ./cmd/parcel-api
 |---|---|---|
 | 委托查阅 | `GET /shipment-request-views` | **空态**：`200`，`{"outcome":"LISTED","requests":[]}` |
 | 追踪投影 | `GET /tracking-projections` | **空态**：`200`，`{"outcome":"PROJECTIONS_LISTED","projections":[]}` |
-| 提交委托 | `POST /shipment-requests` | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED` |
-| 取消包裹 | `POST /shipment-requests/parcel-cancellations` | **未配置态**：`403`，同上 |
+| 提交委托 | `POST /shipment-requests` | 见下面「委托侧两种跑法」 |
+| 取消包裹 | `POST /shipment-requests/parcel-cancellations` | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED` |
 
 两种状态挨在一起出现，正好把第 1 步埋的那句话兑现：查阅面已经放行了（读得到，答的是「册里没有」），写面根本没放行（连问都没问成，答的是「这条渠道没人配过」）。管理台在这两态下的呈现不同，且**未配置态不得显示「0 条」**——那会与状态区「这不是目录为空」自相矛盾。
 
-委托侧之所以一行都没有，是三堵各自独立的墙，任一堵单独就足以拦住。演示时按这个顺序讲：
+#### 委托侧两种跑法
 
-**墙一 · 委托侧没有入库通道。** 各上下文的写端点一律装 `UnconfiguredIntake{}`（`cmd/parcel-api` 的 `assembleBusinessEndpoints`），ADR-0078 的放行面只枚举运营查阅那几行、把写端点显式排除在外。主数据那四条通道是登记 CLI，委托侧没有对应物；`cmd/parcel-dispatch` 也不是入口，它只转投已在 Outbox 里的信封。
-**重启条件**：`PAR-INT-01` 最低证据到位（该租户渠道的现行流程）。[ADR-0072](../adr/0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md) 已裁定这份能力归共享接入身份技术能力、落点 `internal/accessidentity/`，并**维持** [ADR-0055](../adr/0055-business-endpoint-intake-has-an-unconfigured-grade.md) 对运行时渠道登记表的否决——登记册形状等真实渠道证据，不预先替租户拟。
+[ADR-0091](../adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 之后，提交那一行由第二个开关决定，与读开关分设：
 
-**墙二 · 生产归属答不出。** 即便绕过通道直调提交编排，`cmd/parcel-api` 的 `buildSubmissionOrchestration` 把 `Directory` 与 `SelfAuthority` 留空（实例半边，不代拟坐标），而归属适配器的 `governanceScope` 在这两样任一缺席时**先于**读治理登记册就返回未配置，归属如实答`权威未确定`，提交停在 `OWNERSHIP_UNRESOLVED`。
-**重启条件**：写出一个 `GovernanceScopeDirectory` 实现并说出本产品的权威串。**注意这一格不是「登记一条权威区间」就能解开的**——目录缺席时那条区间根本不会被读到。
+| 起进程时 | `POST /shipment-requests` |
+|---|---|
+| 只设 `IDP_PARCEL_ISOLATED_READ_TENANT` | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED`——读开关换不了写行 |
+| 另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'` | 走到编排：合成种子里那条委托受理维的权威区间在册，归属答本产品承接，委托建成`已提交` |
+
+第一种跑法适合讲「门是分级的」，第二种适合讲「墙拆掉之后链路真的通」。**两个开关取值必须相同**，不同则进程启动即拒——写下的委托挂在一个读面不过滤的租户上，页面就看不见它。
+
+委托侧原本是三堵各自独立的墙，任一堵单独就足以拦住。前两堵已按 ADR-0091 在隔离形态下拆掉，第三堵仍在。演示时按这个顺序讲：
+
+**墙一 · 委托侧的入库通道（隔离形态已开，生产仍拦）。** 各上下文的写端点默认装 `UnconfiguredIntake{}`（`cmd/parcel-api` 的 `assembleBusinessEndpoints`）。ADR-0091 只把 `/shipment-requests` 一行改成按写开关换值，其余命令面仍是不经任何变量的字面量。主数据那四条通道是登记 CLI，委托侧没有对应物；`cmd/parcel-dispatch` 也不是入口，它只转投已在 Outbox 里的信封。
+**生产侧的重启条件不变**：`PAR-INT-01` 最低证据到位（该租户渠道的现行流程）。[ADR-0072](../adr/0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md) 已裁定这份能力归共享接入身份技术能力、落点 `internal/accessidentity/`，并**维持** [ADR-0055](../adr/0055-business-endpoint-intake-has-an-unconfigured-grade.md) 对运行时渠道登记表的否决——登记册形状等真实渠道证据，不预先替租户拟。隔离形态的那个 Intake 翻译的是本仓自己那张管理台页面的草案形状，不是任何租户的渠道契约，**不能当成 `PAR-INT-01` 已有答案**。
+
+**墙二 · 生产归属（隔离形态已开，生产仍拦）。** 生产形态下 `buildSubmissionOrchestration` 把 `Directory` 与 `SelfAuthority` 留空（实例半边，不代拟坐标），而归属适配器的 `governanceScope` 在这两样任一缺席时**先于**读治理登记册就返回未配置，归属如实答`权威未确定`，提交停在 `OWNERSHIP_UNRESOLVED`。**注意这一格不是「登记一条权威区间」就能解开的**——目录缺席时那条区间根本不会被读到。
+隔离形态下两格由装配注入合成值，但**归属仍要真的读登记册**：把种子里那条 `07-authority-interval-shipment-intake.json` 删掉再灌，提交会退回 `OWNERSHIP_UNRESOLVED`。这一手是现场证明「合成目录不是一句谎话」的最短路径。
 
 **墙三 · 路由拿不到证据。** 就算前两堵都过、委托成`已接受`，初始路由会停在 `RouteEvidenceNotConfigured`：三个证据视图只读 `network_routing.network_definition`，而那张表至今零生产写入方（第 3 步登记的是另一套目录表，`bumpRevision` 推的是目录修订锚，长不出这张表的行）。没有路由就没有下游的费用。
 **重启条件**：解析层——把目录折成逐候选事实。被 `PAR-NET-14` 阻断，且 [ADR-0068](../adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) Consequences 已明文接受这段「目录可写可读、尚无人读它产出事实」的时期。
@@ -110,10 +121,14 @@ go run ./cmd/parcel-api
 | 环境变量 | 结果 |
 |---|---|
 | 不设 `IDP_PARCEL_ISOLATED_READ_TENANT` | **全部**端点答 `403`，包括第 1–4 步走过的那些 |
-| `SYN-TENANT-01` | 八条运营查阅端点答 `200`，其余仍 `403` |
-| `TENANT-PROD-1`（无 `SYN-` 前缀） | **进程启动即拒**，带原因退出，不静默回落 |
+| `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` | 运营查阅端点答 `200`，其余仍 `403`——**含提交口** |
+| 再加 `IDP_PARCEL_ISOLATED_WRITE_TENANT=SYN-TENANT-01` | 提交口走到编排，其余命令面仍 `403` |
+| 任一开关取 `TENANT-PROD-1`（无 `SYN-` 前缀） | **进程启动即拒**，带原因退出，不静默回落 |
+| 两开关取不同的 `SYN-` 租户 | **进程启动即拒**，报文同时点名两个开关 |
 
-第三条是重点：静默回落会让「配置错了」与「刻意拦着」两态的可观察签名变成同一个，那正是 ADR-0078 要避免的「默认值不出声」病。演示时把这一条留到最后，它比前两条更能说明这套门禁不是摆设。
+第二、三行挨着看是这套门禁分级的证据：读开关开到底也开不了写行，那是 [ADR-0091](../adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 把两个开关分设的全部理由——合一的话，今天所有设了读开关的环境会在升级那一刻静默获得写准入。
+
+后两条是重点：静默回落会让「配置错了」与「刻意拦着」两态的可观察签名变成同一个，那正是 ADR-0078 要避免的「默认值不出声」病。演示时把它们留到最后，比前几条更能说明这套门禁不是摆设。
 
 ## 复灌
 

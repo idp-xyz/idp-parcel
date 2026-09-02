@@ -55,6 +55,19 @@ func run(logger *slog.Logger) error {
 			"tenant", os.Getenv(isolatedReadTenantEnv))
 	}
 
+	// 隔离写路径准入（ADR-0091）与读面同处最早：它也带一道启动即拒的前缀门禁，且
+	// 多一条两开关一致性校验。放行同样必须出声——写路径会落行，事后要查得出这些行
+	// 是在哪一次启动、以哪个合成租户写下的。
+	isolatedWrite, err := buildIsolatedWriteAdmission(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if isolatedWrite != nil {
+		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates",
+			"tenant", os.Getenv(isolatedWriteTenantEnv),
+			"selfAuthority", isolatedWrite.selfAuthority)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -67,7 +80,11 @@ func run(logger *slog.Logger) error {
 	}
 	defer closeDB()
 
-	submission, err := buildSubmissionOrchestration(db)
+	submission, err := buildSubmissionOrchestration(db, isolatedWrite)
+	if err != nil {
+		return err
+	}
+	isolatedSubmissionIntake, err := buildIsolatedSubmissionIntake(db, isolatedWrite)
 	if err != nil {
 		return err
 	}
@@ -310,6 +327,7 @@ func run(logger *slog.Logger) error {
 			settlementOperatingResults,
 			governanceRegisters,
 			isolatedRead,
+			isolatedSubmissionIntake,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

@@ -193,12 +193,19 @@ func (boundary submissionBoundary) Save(
 // 归属如实答`权威未确定`，提交停在 OWNERSHIP_UNRESOLVED。
 //
 // 与接线前的区别不在结果，在结果的来源，但这句话只对那三个读口成立：它们的恢复动作
-// 已从「写代码」变成「登记」（ADR-0063 的「显式未配置」讲的就是这个差别）。**下面留空
-// 的两样不在其内**——`governanceScope` 在目录缺席或自身权威串为空时先于读登记册就早退，
-// 因此往 authority_interval 里登记多少行都不会改变答案，那两格的恢复动作仍是「写一个
-// 目录实现并说出自己的权威串」。把它们读成「登记一条区间就好」会让人登完仍撞
+// 已从「写代码」变成「登记」（ADR-0063 的「显式未配置」讲的就是这个差别）。**生产形态
+// 下留空的两样不在其内**——`governanceScope` 在目录缺席或自身权威串为空时先于读登记册
+// 就早退，因此往 authority_interval 里登记多少行都不会改变答案，那两格的恢复动作仍是
+// 「写一个目录实现并说出自己的权威串」。把它们读成「登记一条区间就好」会让人登完仍撞
 // OWNERSHIP_UNRESOLVED 而不知道为什么。
-func buildSubmissionOrchestration(db *bentopg.DB) (shipmenthttp.SubmissionHandler, error) {
+//
+// `isolated` 为 nil 即生产形态，那两格照旧留空，整份装配与 ADR-0091 之前逐字节同形；
+// 非 nil 时按隔离形态注入合成坐标与合成权威串（ADR-0091 决定二、五），恢复动作这才
+// 变成「往登记册里登一条匹配的区间」——注入的只是坐标，归属仍要读册后才有答案。
+func buildSubmissionOrchestration(
+	db *bentopg.DB,
+	isolated *isolatedWriteAdmission,
+) (shipmenthttp.SubmissionHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)
@@ -207,30 +214,10 @@ func buildSubmissionOrchestration(db *bentopg.DB) (shipmenthttp.SubmissionHandle
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
 	}
-	intervals, err := pgpostgres.NewAuthorityIntervals(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: authority intervals: %w", err)
-	}
-	suspensions, err := pgpostgres.NewSuspensions(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: suspensions: %w", err)
-	}
-	takeovers, err := pgpostgres.NewTakeovers(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: takeovers: %w", err)
-	}
 	clock := systemClock{}
-	ownership, err := pspilot.NewProductionOwnershipAdapter(pspilot.ProductionOwnershipAdapterDeps{
-		Intervals:   intervals,
-		Suspensions: suspensions,
-		Handoffs:    takeovers,
-		// Directory 与 SelfAuthority 留空：实例半边，租户随试点登记后在此填上；
-		// 在那之前适配器对缺席的回答就是`权威未确定`，不代拟任何坐标。
-		Clock:          clock,
-		AnswerValidity: submissionOwnershipAnswerValidity,
-	})
+	ownership, err := buildProductionOwnership(db, isolated)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: production ownership adapter: %w", err)
+		return nil, err
 	}
 	identities, err := psidentity.NewSubmissionIdentities()
 	if err != nil {
@@ -252,4 +239,75 @@ func buildSubmissionOrchestration(db *bentopg.DB) (shipmenthttp.SubmissionHandle
 		clock,
 	)
 	return handler, nil
+}
+
+// buildProductionOwnership 装配治理桥的三个读口与两格实例半边。
+//
+// 它被提交编排与隔离形态的提交 Intake 各调一次，因此两处**读的是同一本登记册**——
+// 那正是门禁要的：Intake 预取的修订与编排提交时点重判出的修订，只在登记册真的变过时
+// 才该不同。两处各建一个适配器实例不影响这一点（三个读口都是无状态读，修订由登记内容
+// 派生，不由实例派生）；共用一个实例要把它穿过生产装配路径，而生产形态根本没有 Intake
+// 这一侧。
+func buildProductionOwnership(
+	db *bentopg.DB,
+	isolated *isolatedWriteAdmission,
+) (*pspilot.ProductionOwnershipAdapter, error) {
+	intervals, err := pgpostgres.NewAuthorityIntervals(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: authority intervals: %w", err)
+	}
+	suspensions, err := pgpostgres.NewSuspensions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: suspensions: %w", err)
+	}
+	takeovers, err := pgpostgres.NewTakeovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: takeovers: %w", err)
+	}
+	deps := pspilot.ProductionOwnershipAdapterDeps{
+		Intervals:   intervals,
+		Suspensions: suspensions,
+		Handoffs:    takeovers,
+		// Directory 与 SelfAuthority 生产形态留空：实例半边，租户随试点登记后在此
+		// 填上；在那之前适配器对缺席的回答就是`权威未确定`，不代拟任何坐标。
+		Clock:          systemClock{},
+		AnswerValidity: submissionOwnershipAnswerValidity,
+	}
+	if isolated != nil {
+		deps.Directory = isolated.governanceDirectory
+		deps.SelfAuthority = isolated.selfAuthority
+	}
+	adapter, err := pspilot.NewProductionOwnershipAdapter(deps)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: production ownership adapter: %w", err)
+	}
+	return adapter, nil
+}
+
+// buildIsolatedSubmissionIntake 装配 ADR-0091 放行的提交口 Intake。isolated 为 nil 即
+// 生产形态，交回 nil，装配点那一行照旧挂字面量未配置即拒。
+func buildIsolatedSubmissionIntake(
+	db *bentopg.DB,
+	isolated *isolatedWriteAdmission,
+) (shipmenthttp.SubmissionIntake, error) {
+	if isolated == nil {
+		return nil, nil
+	}
+	ownership, err := buildProductionOwnership(db, isolated)
+	if err != nil {
+		return nil, err
+	}
+	intake, err := shipmenthttp.NewIsolatedSubmissionIntake(shipmenthttp.IsolatedSubmissionIntakeDeps{
+		Tenant:          isolated.tenant,
+		CustomerAccount: isolatedSubmissionCustomerAcct,
+		Source:          isolatedSubmissionSource,
+		ScopeReference:  isolatedSubmissionScopeRef,
+		ScopeDigest:     isolatedSubmissionScopeDigest,
+		Ownership:       ownership,
+		Clock:           systemClock{},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated submission intake: %w", err)
+	}
+	return intake, nil
 }

@@ -1,7 +1,7 @@
 # 隔离形态的生产归属目录与自身权威串
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved（2026-09-02，MCP-5；形态判定所缺的那份 ADR 同轮落文为 [ADR-0091](../../../docs/adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)）
 
 演示动线三堵墙的**墙二**。取证基线 `c9835bf`。
 
@@ -39,3 +39,19 @@ Status: ready-for-agent
 ## 参照
 
 `internal/parcelshipment/adapters/pilotgovernance/production_ownership.go`；`cmd/parcel-api` 的 `buildSubmissionOrchestration` 与 `assemble_submission.go`；[ADR-0063](../../../docs/adr/0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)、[ADR-0017](../../../docs/adr/0017-admission-gates-judged-by-blocking-cause.md)（按阻断原因判读）；`.scratch/syn-wall-door-audit/issues/` 的票 02 与票 13。
+
+## Comments
+
+- 2026-09-02 MCP-5（用户经通道 5 授权接本票，并在四路范围选项间裁定「一份 ADR 同时裁两格」）：**墙二已降。**
+
+  **先撞上的是形态判定，不是实现。** 票面写「落点跟随票 01 的形态判定」，而票 01 是 `ready-for-human`；照抄 ADR-0078 那套开关又撞 [ADR-0078](../../../docs/adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) Decision 四「按环境选择的只有装配点上查阅行的 Intake 一件事」——归属目录不是查阅行的 Intake，是第二维。另核出票 01 那份 ADR 按其原范围（写端点的 Intake）也**不自动覆盖本票**：两条缝各自都要碰 Decision 四。用户裁定合并为一份记录，即 ADR-0091；它把适用面由枚举改为三条入格判据，并明写写面有持久化、ADR-0078 的「零持久化」论证在这一侧不成立，可分辨物改由 `SYN-` 前缀承担（形状同 ADR-0089 的 `FTI/` 标记）。
+
+  **本票不重开的那个定性也没被重开。** 票面「一处要先想清楚的」问的是 `SelfAuthority` 到底是不是实例半边；本轮按票面办，只在隔离形态下给合成值，生产形态两格照旧留空，票 13 的定性一字未动。
+
+  **交付**：`internal/parcelshipment/adapters/pilotgovernance/isolated_governance_scope.go`（`IsolatedGovernanceScopeDirectory`，只交坐标、参数匿名、残缺坐标构造期即拒）、`cmd/parcel-api/assemble_isolated_write.go`（`IDP_PARCEL_ISOLATED_WRITE_TENANT` 三态门、两开关一致性校验、合成坐标与权威串常量）、`buildSubmissionOrchestration` 多一个隔离入参（nil 即生产形态）、`main.go` 的解析与启动日志、`scripts/demo-seeds/data/governance/07-authority-interval-shipment-intake.json` 与 seed.sh 一行。
+
+  **「必须守住的一格」有反证钉着**：三个真库用例互为对照——生产形态（nil）答 `OWNERSHIP_UNRESOLVED`、隔离形态空册仍答 `OWNERSHIP_UNRESOLVED`、隔离形态且册里有匹配区间才走到 `SUBMITTED`。一个直接返回「已确定」的假目录会让第二条变红。期望修订不在用例里照 `revisionFor` 重算，改走调用方真实拿得到的那条路：先提交一次从归属决定里读出修订，再以另一份来源身份提交。
+
+  **未做，且是有意的**：墙一（命令面 Intake）不与本票同批落地。ADR-0091 Consequences 已把这个中间态写明——设了写开关只降墙二，`POST /shipment-requests` 仍答 `403`，因此演示动线脚本本轮**不改**：它描述的行为没有变。
+
+  验证：`gofmt -l` 空、`go build ./...` 与 `go vet ./...` 退 0、`go test -count=1 ./...` **含真库**（同刻探针 `TestFreezeScopesAreInvisibleToEachOther` 得 `PASS` 非 `SKIP`）。首跑有一处 `FAIL` 落在 `internal/platform/outboundcall`，经核是另一会话正把该目录改名为 `internal/platform/outbound/` 的半途态，与本票改动无交集。

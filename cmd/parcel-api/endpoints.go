@@ -108,10 +108,16 @@ func assembleBusinessEndpoints(
 	settlementOperatingResults settlementhttp.OperatingCatalogueReader,
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
+	isolatedSubmission shipmenthttp.SubmissionIntake,
 ) []httpapi.BusinessEndpoint {
-	// 缺省朝拦：isolatedRead 为 nil 时，下面这组变量全取未配置即拒，整份装配与
-	// ADR-0078 之前逐字节同形。启用时也只有这组变量换值——命令面与客户查阅面
-	// 的字面量 UnconfiguredIntake{} 不经由任何变量，读这段代码就能看出它们换不了。
+	// 缺省朝拦：两个隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
+	// ADR-0078/0091 之前逐字节同形。
+	//
+	// **两个入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
+	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行。其余命令面仍挂字面量
+	// `UnconfiguredIntake{}`，不经由任何变量——读这段代码就能看出它们两个开关都换不了。
+	// 这句从前说的是「命令面全都换不了」，ADR-0091 让提交那一行成了例外，因此改成现在
+	// 这句；剩下那几行的字面量纪律一字未松。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	nodeOperationsCatalogueIntake := nodeopshttp.CatalogueQueryIntake(nodeopshttp.UnconfiguredIntake{})
@@ -139,8 +145,16 @@ func assembleBusinessEndpoints(
 		governanceRegistryIntake = isolatedRead.governanceRegisters
 	}
 
+	// 提交口是 ADR-0091 放行的第一格，也是唯一一格：它单独一个变量，与上面那组查阅
+	// 变量分开，免得日后有人顺手把它并进 isolatedRead 那个 if 里——并进去就等于让读
+	// 开关也能开写行，而两个开关分设的全部理由就是不许这样。
+	submissionIntake := shipmenthttp.SubmissionIntake(shipmenthttp.UnconfiguredIntake{})
+	if isolatedSubmission != nil {
+		submissionIntake = isolatedSubmission
+	}
+
 	return []httpapi.BusinessEndpoint{
-		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, submission)},
+		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
 		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：

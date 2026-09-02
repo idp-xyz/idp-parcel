@@ -17,6 +17,8 @@ import (
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
+	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -25,6 +27,9 @@ import (
 // 上装得起来；治理目录未配置时归属如实答`权威未确定`、提交停在 OWNERSHIP_UNRESOLVED
 // 且带着归属决定；来源保全确实落库——重放同一份输入答`已有结果`，证明首笔事务真的
 // 提交了，而不是装配在某个替身上悄悄成立。测试输入是隔离合成，只记 `S`，不进生产装配。
+//
+// 隔离形态入参传 nil，因此本用例同时是 ADR-0091「生产形态一字未变」那条的钉子：
+// 隔离形态哪天漏进生产装配，停在 OWNERSHIP_UNRESOLVED 这一格会在这里先变绿再被发现。
 func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -32,7 +37,7 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db)
+	submission, err := buildSubmissionOrchestration(db, nil)
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -71,7 +76,7 @@ func TestARefusedSubmissionStillPreservesItsSource(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db)
+	submission, err := buildSubmissionOrchestration(db, nil)
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -220,6 +225,136 @@ func TestTheMintedEnvelopeDecodesIntoTheAcceptanceChainCommand(t *testing.T) {
 	if got.SubmissionVersion.String() == "" {
 		t.Fatal("提交版本为空——发布侧没写或消费侧没译")
 	}
+}
+
+// Covers: ADR-0091 决定二——隔离形态接上合成目录之后，归属**真的读了**治理登记册：
+// 册里有一条匹配的合成权威区间时，提交越过 OWNERSHIP_UNRESOLVED 直到建单成立。
+//
+// 期望修订不由本用例照着 revisionFor 再算一遍——那样断言会按构造成立，改坏派生规则
+// 它也跟着变。改为走调用方真实拿得到的那条路：先提交一次拿回归属决定，从**决定自己**
+// 读出修订，再以另一份来源身份提交。这也顺带钉住了被拦的提交确实带回了续办所需的
+// 决定（`UC-PS-001` 结果语义要求归属未决要给得出续办引用）。
+func TestIsolatedSubmissionCrossesOwnershipOnceTheRegisterHasAMatchingInterval(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	appendIsolatedAuthorityInterval(t, db)
+
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t))
+	if err != nil {
+		t.Fatalf("装配隔离形态提交编排：%v", err)
+	}
+
+	probe, err := submission.Handle(t.Context(), submissionCommand(t))
+	if err != nil {
+		t.Fatalf("首次提交：%v", err)
+	}
+	decision, has := probe.OwnershipDecision()
+	if !has {
+		t.Fatal("被拦的提交没带归属决定——调用方无从知道该带哪个修订回来")
+	}
+
+	command := submissionCommand(t)
+	command.Identity = secondIdentity(t)
+	command.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "syn-request-2")
+	command.ExpectedRevision = decision.Revision()
+
+	admitted, err := submission.Handle(t.Context(), command)
+	if err != nil {
+		t.Fatalf("带着决定给出的修订再提交：%v", err)
+	}
+	if got := admitted.Outcome(); got != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("outcome = %v, want SUBMITTED——合成目录已配、登记册有匹配区间，归属该确定；门禁拦截理由 = %v",
+			got, admitted.GateBlockReasons())
+	}
+}
+
+// Covers: 票 02「必须守住的一格」——答案的来源变了，结论不许被抄近路。合成目录只交
+// 坐标，登记册为空时归属照旧答`权威未确定`。这条是「假目录」的反证：一个直接返回
+// 「已确定」的目录会让本用例变绿，而它在库里与真实放行不可分辨。
+func TestIsolatedSubmissionStillAnswersUnresolvedOnAnEmptyRegister(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t))
+	if err != nil {
+		t.Fatalf("装配隔离形态提交编排：%v", err)
+	}
+
+	result, err := submission.Handle(t.Context(), submissionCommand(t))
+	if err != nil {
+		t.Fatalf("空册上提交：%v", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.OutcomeOwnershipUnresolved {
+		t.Fatalf("outcome = %v, want OWNERSHIP_UNRESOLVED——空册上合成目录不得替登记册作答", got)
+	}
+	decision, has := result.OwnershipDecision()
+	if !has {
+		t.Fatal("空册上的`权威未确定`没带决定")
+	}
+	if decision.Authority() != domain.ProductionAuthorityUnresolved {
+		t.Fatalf("authority = %s, want UNRESOLVED", decision.Authority())
+	}
+}
+
+// isolatedWriteAdmissionForTest 走的是进程自己那道门（buildIsolatedWriteAdmission），
+// 不在测试里另拼一个注入值：要证的正是装配点交出来的那一组坐标与登记的那一行对得上，
+// 自己拼等于把被测的那半换成手抄本。
+func isolatedWriteAdmissionForTest(t *testing.T) *isolatedWriteAdmission {
+	t.Helper()
+	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv: "SYN-TENANT-01",
+	}))
+	if err != nil {
+		t.Fatalf("解析隔离写路径准入：%v", err)
+	}
+	if admission == nil {
+		t.Fatal("隔离写路径准入未启用")
+	}
+	return admission
+}
+
+// appendIsolatedAuthorityInterval 往治理登记册里放一条匹配的合成权威区间。四维取装配点
+// 那组常量而不是字面量重抄一遍：常量与登记行对不上的后果不是报错，是查不到那一行。
+func appendIsolatedAuthorityInterval(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	intervals, err := pgpostgres.NewAuthorityIntervals(db)
+	if err != nil {
+		t.Fatalf("构造权威区间仓储：%v", err)
+	}
+	interval := pgdomain.AuthorityInterval{
+		ObjectScope: isolatedGovernanceObjectScope,
+		Capability:  isolatedGovernanceCapability,
+		FactKind:    isolatedGovernanceFactKind,
+		Authority:   isolatedSelfAuthority,
+		From:        time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+	err = db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return intervals.Append(txCtx, interval)
+	})
+	if err != nil {
+		t.Fatalf("登记合成权威区间：%v", err)
+	}
+}
+
+// secondIdentity 是同一客户的第二份来源身份：换身份是为了绕开重放判重，不是为了换客户。
+func secondIdentity(t *testing.T) domain.SourceIdentity {
+	t.Helper()
+	identity, err := domain.NewSourceIdentity(
+		mustValue(t, domain.NewTenantID, "SYN-TENANT-1"),
+		mustValue(t, domain.NewCustomerAccountID, "SYN-CUSTOMER-1"),
+		mustValue(t, domain.NewSource, "SYN-SOURCE-A"),
+		mustValue(t, domain.NewSourceRequestKey, "SYN-KEY-3"),
+	)
+	if err != nil {
+		t.Fatalf("new second source identity: %v", err)
+	}
+	return identity
 }
 
 // envelopeMintingSubmission 装配「会真发信封」的提交编排：仓储、边界壳、Outbox Store、

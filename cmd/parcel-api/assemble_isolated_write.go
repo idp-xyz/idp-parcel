@@ -1,0 +1,94 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+
+	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
+)
+
+// isolatedWriteTenantEnv 是隔离写路径准入（ADR-0091）的显式输入。它与隔离读面的开关
+// 分成两个而不是合一：合一会让今天所有设了读开关的环境在升级那一刻静默获得写准入，
+// 而「已存在的配置被后来的代码改宽」正是缺省朝拦要防的那件事（ADR-0091 决定四）。
+const isolatedWriteTenantEnv = "IDP_PARCEL_ISOLATED_WRITE_TENANT"
+
+// 隔离形态的合成治理坐标。它们不从租户派生：治理登记册无租户维是设计（ADR-0083），
+// 开关的值在这一格只作启用凭据——与 buildIsolatedReadIntakes 对治理读面的处置同款。
+//
+// 四个值要与种子包里那条委托受理维的权威区间逐字对上，对不上的后果不是报错而是查不到
+// 那一行，答出来的`权威未确定`与「压根没登记」一模一样。
+const (
+	isolatedGovernanceObjectScope = "SYN-PILOT-SCOPE/shipment-intake@v1"
+	isolatedGovernanceCapability  = "SYN-CAP/shipment-intake"
+	isolatedGovernanceFactKind    = "SYN-FACT/shipment-request"
+	isolatedGovernancePilotScope  = "SYN-PILOT-SCOPE/shipment-intake@v1"
+)
+
+// isolatedSelfAuthority 是隔离形态下代表本产品的那个权威串。它进归属决定的修订串，
+// 因此也带 `SYN-` 前缀：修订串会随决定一路传到调用方与门禁，合成来源要在那里也看得见。
+const isolatedSelfAuthority = "SYN-AUTH/idp-parcel-pilot"
+
+// 提交口注入的合成来源与准入范围（ADR-0091 决定二）。
+//
+// 客户账户**刻意复用隔离读面那一个**：写下的委托挂在哪个账户上，决定了它在委托查阅页
+// 上可不可见。两处各写各的常量会长出一种「提交成功但页面查无此单」的配置，而那个症状
+// 看起来像缺陷不像配置错——与两开关取值必须相同是同一条理由。
+const (
+	isolatedSubmissionSource       = "SYN-SOURCE/admin-web"
+	isolatedSubmissionScopeRef     = "SYN-ADM-SCOPE/shipment-intake"
+	isolatedSubmissionScopeDigest  = "sha256:syn-adm-scope-shipment-intake"
+	isolatedSubmissionCustomerAcct = isolatedReadCustomerAccount
+)
+
+// isolatedWriteAdmission 携带 ADR-0091 放行的写路径两格。nil 表示未启用——各装配函数
+// 对 nil 的处理与本记录之前逐字节同形。
+//
+// 命令面 Intake（墙一）不在本结构里：它是同一记录裁的另一格，按 Consequences 分批
+// 落地。设了写开关而命令面仍答 403 是那个分批的中间态，不是配置没生效。
+type isolatedWriteAdmission struct {
+	governanceDirectory pspilot.GovernanceScopeDirectory
+	selfAuthority       string
+	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
+	// 来源信封的租户维就是它。
+	tenant string
+}
+
+// buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
+//
+// 三态与隔离读面同款：未设 → (nil, nil)；设了但不带合成前缀 → 报错，进程启动即拒；
+// 设了且合规 → 交回两格，启动日志由调用方写。另加一条读面没有的校验：两开关都设时
+// 取值必须相同。
+func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmission, error) {
+	tenant := getenv(isolatedWriteTenantEnv)
+	if tenant == "" {
+		return nil, nil
+	}
+	syntheticMarker := syntheticIdentifierPrefix + "-"
+	if !strings.HasPrefix(tenant, syntheticMarker) {
+		return nil, fmt.Errorf(
+			"%s=%q: isolated write admission only accepts synthetic tenants with the %q prefix (ADR-0091); refusing to start",
+			isolatedWriteTenantEnv, tenant, syntheticMarker,
+		)
+	}
+	if readTenant := getenv(isolatedReadTenantEnv); readTenant != "" && readTenant != tenant {
+		return nil, fmt.Errorf(
+			"%s=%q and %s=%q disagree: a request written under one tenant is invisible to a read face filtering by the other (ADR-0091); refusing to start",
+			isolatedWriteTenantEnv, tenant, isolatedReadTenantEnv, readTenant,
+		)
+	}
+
+	directory, err := pspilot.NewIsolatedGovernanceScopeDirectory(
+		isolatedGovernanceObjectScope,
+		isolatedGovernanceCapability,
+		isolatedGovernanceFactKind,
+		isolatedGovernancePilotScope,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated governance scope: %w", err)
+	}
+	return &isolatedWriteAdmission{
+		governanceDirectory: directory,
+		selfAuthority:       isolatedSelfAuthority,
+		tenant:              tenant,
+	}, nil
+}

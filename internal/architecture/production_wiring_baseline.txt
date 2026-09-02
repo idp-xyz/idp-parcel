@@ -33,12 +33,16 @@
 # —— parcel-shipment ——
 # 产出带校验的安全交接评估，测试里调 9 次，包外零引用。
 internal/parcelshipment/domain AssessSafeHandoff
-# 审计票 14 的规范化摘要机制件：按 ADR-0014 版本化形状（PSC-1）产出 PayloadDigest，供测试
-# 与未来真渠道 Intake 共用。生产接线点在真渠道 Intake 那笔工作（PAR-INT-01 证据到位、审计
-# 票 01 重启之后）；ADR-0055 未配置即拒期间，adapters/http 侧不得出现调用它的「开发用」
-# 实现，所以此刻无生产调用点是设计而非遗漏。下面两条是同一条路径的两端：摘要函数与它的
-# 版本报出口，接上那天一起出名单。
-internal/parcelshipment/domain CanonicalizeSubmissionPayload
+# 审计票 14 的规范化摘要机制件：按 ADR-0014 版本化形状（PSC-1）产出 PayloadDigest。
+#
+# 这里原有两条——摘要函数 CanonicalizeSubmissionPayload 与它的版本报出口——并预言「同一条
+# 路径的两端，接上那天一起出名单」。**那个预言没兑现，摘要函数已于 ADR-0091 单独出名单。**
+# 接它的是隔离形态的提交 Intake（IsolatedSubmissionIntake），不是原先设想的真渠道 Intake：
+# 真渠道那笔工作仍等 PAR-INT-01。原注释还写着「adapters/http 侧不得出现调用它的『开发用』
+# 实现」，那句仍然有效且未被违反——它禁的是采信自报身份、从请求内容铸信封的那一种，而隔离
+# Intake 整组注入身份，且生产装配里没有通往它的代码路径（ADR-0091 判据三）。
+#
+# 版本报出口留在名单上：至今零生产调用点，接它的仍是真渠道那笔工作。
 internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 票 08 的面单交易域模型（ADR-0084）曾在这里占两条（EstablishLabelTransaction 与
 # EstablishPriorLabelTransactionLink），理由是「写入方是渠道适配器，渠道墙未降前登记零行」，

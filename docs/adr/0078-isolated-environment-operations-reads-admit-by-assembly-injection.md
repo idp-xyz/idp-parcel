@@ -1,6 +1,6 @@
 # ADR-0078: 隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒
 
-Status: Accepted（2026-08-26，用户经 IDP 队列通道 1 委托本会话在取证简报三路选项间裁断；取证材料为[读面准入简报](../../.scratch/product-story-and-demo/read-admission-brief.md)，其四部分材料是本记录的事实底座，本文不复述取证细节。**勘误**，2026-08-26 实现取证：Decision 一第三判据原写「无客户维」、Decision 二原写「不读请求的任何部分」，均比代码实况写宽——`/shipment-request-views` 的 `AuthorizedQueryScope` 带可见客户账户维（授权结果的可见集，非调用方身份主张），其详情分支按既有分工在 Intake 内解析定位标识 `shipmentRequestId`。两句已按此更正；放行面枚举、排除面与各条界线不变）  
+Status: Accepted（2026-08-26，用户经 IDP 队列通道 1 委托本会话在取证简报三路选项间裁断；取证材料为[读面准入简报](../../.scratch/product-story-and-demo/read-admission-brief.md)，其四部分材料是本记录的事实底座，本文不复述取证细节。**勘误**，2026-08-26 实现取证：Decision 一第三判据原写「无客户维」、Decision 二原写「不读请求的任何部分」，均比代码实况写宽——`/shipment-request-views` 的 `AuthorizedQueryScope` 带可见客户账户维（授权结果的可见集，非调用方身份主张），其详情分支按既有分工在 Intake 内解析定位标识 `shipmentRequestId`。两句已按此更正；放行面枚举、排除面与各条界线不变。**部分停用**，2026-09-02：Decision 四中「按环境选择的只有装配点上查阅行的 Intake 一件事」一句已由 [ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 停用，适用面改由入格判据裁定；同条另两句与其余各条不变）  
 Date: 2026-08-26
 
 ## Context
@@ -41,6 +41,7 @@ Date: 2026-08-26
 
 ## Links
 
+- [ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)：停用本记录 Decision 四「只此一维」那一句，改由入格判据裁定；写面有持久化，本记录 Decision 二的「零持久化」论证在那一侧明写不成立，另有抵消物
 - [读面准入简报](../../.scratch/product-story-and-demo/read-admission-brief.md)：四部分取证材料与三路选项的来源（ADR 约束盘点、现状取证、先例普查、路径代价）
 - [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)：未配置格机制与替换缝；其 Decision 五两项未决的适用界由本记录 Decision 五显式裁出
 - [ADR-0072](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)：登记册形状等真渠道证据的原判，本记录不触碰并在 Alternatives 里维持

@@ -83,7 +83,7 @@
 - [ADR-0075：客户地址随判断请求在请求期携带过界，network-routing 不建读取端口](./0075-customer-address-is-carried-with-the-routing-request.md)
 - [ADR-0076：运营追踪查阅走独立读口消费投影库，不复用客户视图端点；运营作用域是租户级、无客户维](./0076-operations-tracking-read-is-a-separate-endpoint-on-the-projection-store.md)
 - [ADR-0077：主数据登记目录查阅沿运营读口通例——独立查询端点、每上下文自立租户级作用域、未配置即拒；空目录如实答空](./0077-master-data-catalogue-read-follows-the-operations-read-pattern.md)
-- [ADR-0078：隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)
+- [ADR-0078：隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)｜**部分停用**：其 Decision 四中「按环境选择的只有装配点上查阅行的 Intake 一件事」一句已由 [ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 停用——适用面由枚举改为入格判据（注入值全为 `SYN-` 合成、不采信自报身份、生产装配无此路径），写路径的命令面 Intake 与生产归属范围目录据此入格。同条另两句（不得据此再添 demo/mode 类全局开关或第二个 main；pgtest 环境处理通例不变）与其余各条不变。**适用场景**：仅限满足那三条判据的缝；`/customer-tracking-view` 的排除判据（客户维是调用方自己的身份主张）不因判据化而松动
 - [ADR-0079：接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同；坏回指是 error 不是未登记](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)
 - [ADR-0080：引用闭包先解合同再据以解结算政策——合同维是结论不是输入，前提未解析自成一格](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)
 - [ADR-0081：接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界](./0081-acceptance-judgment-is-envelope-driven.md)
@@ -96,6 +96,7 @@
 - [ADR-0088：面单渠道服务进入首发对客服务形态——`PAR-COM-12` 由范围裁剪改为纳入，首发形态成为网络服务与面单渠道服务的明确组合；领域语言一字不改，「一条线路」约束只作用于网络服务主链路](./0088-label-channel-service-enters-the-first-release-service-forms.md)
 - [ADR-0089：一线作业过渡走受控批量导入并内置结构性拆除期限——ADR-0021 的带期限例外，管理台一个作业动词都不加；导入事实带来源标记以与设备事实可分辨](./0089-frontline-transition-controlled-import-with-structural-sunset.md)｜**带期限例外**：它不停用 [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md) 与 [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md) 任何一条，只在一线作业客户端开工之前开一个到 `2026-12-31T23:59:59+08:00` 为止的口子；两记录各条不变，延长期限须 supersede ADR-0089。**适用场景**：仅限过渡期受控批量导入这一条路径灌入的作业事实，标记为例外的印记；经设备签发的作业事实仍全数照 ADR-0023 办
 - [ADR-0090：出向集成的结果代数按调用方的恢复动作分格，「有没有形成答案」由适配器判定且不得看 HTTP 状态码；未配置即拒，不设重试默认值](./0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)
+- [ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)
 
 ## 已被取代决策
 

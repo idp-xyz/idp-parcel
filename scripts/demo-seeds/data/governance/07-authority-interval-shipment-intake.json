@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/shipment-intake@v1",
+  "capability": "SYN-CAP/shipment-intake",
+  "factKind": "SYN-FACT/shipment-request",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

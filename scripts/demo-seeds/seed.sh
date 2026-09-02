@@ -151,5 +151,10 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" suspend -input "$SEEDS/governance/04-suspension-routing-scope.json"
 "$BIN/parcel-governance-register" resume -input "$SEEDS/governance/05-resumption-routing-scope.json"
 "$BIN/parcel-governance-register" suspend -input "$SEEDS/governance/06-suspension-pricing-scope.json"
+# 委托受理维的权威区间（ADR-0091）：隔离写路径准入启用时，生产归属就是拿这一行作答。
+# 四维必须与 cmd/parcel-api 的 isolatedGovernance* 常量逐字相同——对不上的后果不是报错，
+# 是查不到这一行，答出来的`权威未确定`与「压根没登记」一模一样。本行的试点范围版本与
+# 上面两笔暂停各不相同，因此不受它们影响，准入控制为 OPEN。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/07-authority-interval-shipment-intake.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，七上下文全部落库。"
