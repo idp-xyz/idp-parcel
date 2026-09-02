@@ -6,11 +6,12 @@ import {
   type TemplateViewState,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { RegistrationPanel } from '../../components/registration';
 import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
-import { RegistrationPanel } from './RegistrationPanel';
 import {
   listPriceCards,
   registerPriceCard,
+  registrationOutcomeLabels,
   type ApiResult,
   type PriceCardListResponseBody,
   type PriceCardRecord,
@@ -247,6 +248,8 @@ export function PriceCardCatalogPage() {
             endpoint="POST /pricing-price-card-registrations"
             snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind price-card -file 吃的同一份；本页不逐字段建表单，因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约，随 PAR-INT-01 提供。"
             submit={registerPriceCard}
+            outcomeLabels={registrationOutcomeLabels}
+            problemNote={problemNote}
           />
         </TabsContent>
       </Tabs>

@@ -7,6 +7,7 @@
 
 import { exchangeMasterData, postMasterData } from '../catalogue-api';
 import type { ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -23,10 +24,8 @@ export type { ApiResult } from '../catalogue-api';
 // 原样作为请求体送出。真渠道接线时以渠道契约为准重谈，不得反过来把这里当成已发布的
 // Schema——判据与 shipment-request 草案那节同一条。
 
-/** 登记端点的封闭响应形状：`outcome` 取应用结果枚举原名，与登记 CLI 同源。 */
-export interface RegistrationResponseBody {
-  outcome: string;
-}
+// 登记端点的封闭响应形状（`outcome` 取应用结果枚举原名，与登记 CLI 同源）随表单区一起
+// 抽到 components/registration；本上下文的两个登记口不带拒绝理由，只用到 `outcome` 一格。
 
 /**
  * 两类登记的答案代数（`application.RegisterPriceCardOutcome` /
