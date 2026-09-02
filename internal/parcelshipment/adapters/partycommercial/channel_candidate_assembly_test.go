@@ -287,3 +287,59 @@ func TestAssemblyStopsWhenTheMappedProductVersionIsNotEffective(t *testing.T) {
 		t.Fatalf("停下的装配仍交回了 %d 个候选", len(candidates))
 	}
 }
+
+// Covers: 这笔映射从未登记时停下，且与「登记了但此刻没有候选」分成两格。
+//
+// 两者都交回零个候选，压成一格就分不出续办：从未登记要去登记映射，而到期或被约束收窄到
+// 空是映射如实作过答，续办是改约束或换产品版本。票 14 的落选留痕要答的正是这一类问题。
+func TestAnUnregisteredMappingStopsTheAssembly(t *testing.T) {
+	t.Parallel()
+
+	registry := pcdomain.NewCommercialRegistry()
+	effectiveLabelChannelProduct(t, registry)
+	assembler := adapter.NewChannelCandidateAssembler(adapter.ChannelCandidateAssemblerDeps{
+		Mappings:    stubMappings{found: false},
+		Publication: stubPublication{registry: registry},
+		Constraints: stubConstraints{constraint: adapter.UnconstrainedChannels()},
+	})
+
+	candidates, err := assembler.AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if !errors.Is(err, adapter.ErrProductChannelMappingNotRegistered) {
+		t.Fatalf("装配 err = %v，want %v", err, adapter.ErrProductChannelMappingNotRegistered)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("停下的装配仍交回了 %d 个候选", len(candidates))
+	}
+}
+
+// Covers: 时点落在映射有效期之外时交回**零个候选而不是错误**。
+//
+// 这一格的要害是它**不是**失败：到期正是映射把渠道排除在新决定之外的方式，而它对这个
+// 时点如实作过答。折成错误会让调用方把「这个时点没有可用渠道」与「装配没能进行」混为
+// 一谈，前者的续办是换时点或换产品版本，后者是修装配。
+//
+// 同一份夹具在区间内交回候选、区间外交回零个，两次对照摆在一个用例里：只断言区间外为空
+// 时，一个恒返回空的实现也能过。
+func TestATimeOutsideTheMappingIntervalYieldsNoCandidatesRatherThanAnError(t *testing.T) {
+	t.Parallel()
+
+	assembler := assemblerWith(t, adapter.UnconstrainedChannels())
+
+	inside, err := assembler.AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if err != nil {
+		t.Fatalf("区间内装配：%v", err)
+	}
+	if len(inside) != 2 {
+		t.Fatalf("区间内候选数 = %d，want 2——对照的那一半没立住，区间外为空就说明不了问题", len(inside))
+	}
+
+	expired := assemblyQuery(t)
+	expired.At = time.Date(2027, 6, 1, 0, 0, 0, 0, time.UTC)
+	outside, err := assembler.AssembleChannelCandidates(context.Background(), expired)
+	if err != nil {
+		t.Fatalf("区间外装配报了错，而到期是映射如实作过的答：%v", err)
+	}
+	if len(outside) != 0 {
+		t.Fatalf("区间外候选 = %d 个，want 0——到期的映射仍在为新决定提供渠道", len(outside))
+	}
+}
