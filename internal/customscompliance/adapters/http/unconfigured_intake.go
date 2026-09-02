@@ -49,3 +49,41 @@ func (UnconfiguredIntake) IntakeResult(context.Context, *http.Request) (applicat
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }
+
+// 四类配置登记命令口的未配置实现（ADR-0085）：与上面两口同一分界——不读业务内容、
+// 不采信自报身份、不构造命令。隔离读放行（ADR-0078）不实现这四个接口，写行换不了。
+var (
+	_ InterpretationRuleRegistrationIntake = UnconfiguredIntake{}
+	_ GateCatalogRegistrationIntake        = UnconfiguredIntake{}
+	_ CandidatePortRegistrationIntake      = UnconfiguredIntake{}
+	_ DeclarationPathRegistrationIntake    = UnconfiguredIntake{}
+)
+
+// IntakeInterpretationRuleRegistration 不读请求，判据同上。以下三个同此。
+func (UnconfiguredIntake) IntakeInterpretationRuleRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterInterpretationRuleCommand, error) {
+	return application.RegisterInterpretationRuleCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeGateCatalogRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterGateCatalogCommand, error) {
+	return application.RegisterGateCatalogCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeCandidatePortRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterCandidatePortCommand, error) {
+	return application.RegisterCandidatePortCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDeclarationPathRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterDeclarationPathCommand, error) {
+	return application.RegisterDeclarationPathCommand{}, ErrAccessChannelNotConfigured
+}
