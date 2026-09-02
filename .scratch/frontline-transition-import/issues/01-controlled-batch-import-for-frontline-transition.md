@@ -46,9 +46,11 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
    这一点打印出来。`REFUSED` / `SCAN_ONLY` 两支不经身份核对，照常落库。恢复动作在 PS 侧，
    见 `.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md`；
    本口要换的只有 `buildIntakeImporter` 的 `identity` 参数那一格。
-2. **集运子命令本期不建。** 集运三口没有来源、执行方、证据与业务时间的落点，缺口另立票
-   [no-consolidation-fact-provenance/01](../../no-consolidation-fact-provenance/issues/01-consolidation-commands-carry-no-source-executor-evidence-or-business-time.md)。
-   该票解阻后本票再加子命令，备料已在映射表「集运：输入逐格」节。
+2. ~~**集运子命令本期不建。**~~ **已解阻（2026-09-02）**：
+   [no-consolidation-fact-provenance/01](../../no-consolidation-fact-provenance/issues/01-consolidation-commands-carry-no-source-executor-evidence-or-business-time.md)
+   已落主线，集运六口现在收 `domain.WorkFactSource`（来源身份、执行方、证据、业务发生时间），
+   来源身份兼幂等键，业务时间不再取 `Clock.Now()`。本票加子命令的前提已备齐，备料仍在
+   映射表「集运：输入逐格」节。
 
 换单与称重两类无既有用例可接，按 ADR-0089 细则⑤ 如实记缺口、不造用例，见映射表。
 
@@ -74,3 +76,8 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
   DSN 已设（门禁容器 55432）：`TestFrontlineImportVerticalOnRealPostgres` 与
   `TestFrontlineImportLandsReceivedRowOnceIdentityResolves` 各 PASS**。反向那次真的数出了 2 个 SKIP，
   「这两个用例确实连了库」才算验过，而不是只看到一行 `ok`。
+- 2026-09-02 MCP-1：**集运那一格的阻断解除**（`98e1752`，三笔 `f9c04da` / `3f304c9` / `98e1752`）。
+  集运六口补上了来源事实那一层，形状与本 CLI 收寄口用的 `ReceptionKey` 同源，因此加子命令时
+  模板那几列不必另谈一套词。要注意的是导入来源标记落点：收寄口走的是 `SourceID` 加证据引用，
+  集运口同样由 `WorkFactSource` 的来源身份承担，节点作业查阅页的「开启来源」「封装来源」两列
+  已能把导入与扫描两条路分开显示——这正是本票当初报出边界 B 的那个诉求。
