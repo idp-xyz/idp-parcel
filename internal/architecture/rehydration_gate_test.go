@@ -28,6 +28,11 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateParcelFinalOutcomeSpec": true,
 	"RehydrateLabelTransaction":       true,
 	"RehydrateLabelTransactionSpec":   true,
+	// `面单继续尝试决定`登记册（label-channel/10）。与上面各条同类：只对持久化适配器开放，
+	// 不对其余调用方开放——重建门相信输入，而这一册的决定历史正是判断的全部依据，从别处
+	// 灌一份进来就等于绕过追加式那条不变量。
+	"RehydrateContinuedAttemptRegister":     true,
+	"RehydrateContinuedAttemptRegisterSpec": true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。
