@@ -166,14 +166,18 @@ func serveConsolidationUnits(
 	bodies := make([]consolidationUnitBody, 0, len(rows))
 	for _, row := range rows {
 		bodies = append(bodies, consolidationUnitBody{
-			UnitID:         row.UnitID,
-			Asset:          row.Asset,
-			Phase:          row.Phase,
-			MemberCount:    row.MemberCount,
-			SealCount:      row.SealCount,
-			LatestSeal:     row.LatestSeal,
-			LatestSealedAt: optionalInstant(row.LatestSealedAt),
-			ClosedAt:       optionalInstant(row.ClosedAt),
+			UnitID:                row.UnitID,
+			Asset:                 row.Asset,
+			Phase:                 row.Phase,
+			MemberCount:           row.MemberCount,
+			SealCount:             row.SealCount,
+			OpenedSourceID:        row.OpenedSourceID,
+			OpenedBy:              row.OpenedBy,
+			LatestSeal:            row.LatestSeal,
+			LatestSealSourceID:    row.LatestSealSourceID,
+			LatestSealPerformedBy: row.LatestSealPerformedBy,
+			LatestSealedAt:        optionalInstant(row.LatestSealedAt),
+			ClosedAt:              optionalInstant(row.ClosedAt),
 		})
 	}
 	writeJSON(response, http.StatusOK, consolidationUnitListResponse{
@@ -244,13 +248,28 @@ type consolidationUnitListResponse struct {
 // 成员清单：成员逐件属写模型与容纳索引，列面只说多少。latestSeal 两件取最近一次
 // 封装快照，尚未封装过则成对缺席；sealCount 把「从未封装」与「重新封装过」分开。
 // 没有形成时间键——单元行上只有库面簿记时刻，不是业务事实，代填会把簿记演成作业。
+//
+// openedSourceId 与 openedBy 是 UC-NO-003 结果契约要求保存的`来源`与`执行方`，取自
+// 开启那一次作业，恒在场（库面该列 NOT NULL）。latestSealSourceId 与
+// latestSealPerformedBy 是最近一次封装的同两件，与 latestSeal 同缺同在。
+//
+// 来源身份透出而不只透执行方，是因为**分辨导入进来的事实与设备扫描的事实靠的是它**：
+// 执行方两条路上可以是同一个人，来源身份不会。少了它，一线过渡期导入的封签在页面上与
+// 现场扫描的封签长得一模一样。
+//
+// 移入、移出、开封与关闭各自的执行方不在本体：一个单元会有许多次那样的作业，列面每格
+// 只放得下一个值。要逐次看得读来源事实登记，那是另一本册子。
 type consolidationUnitBody struct {
-	UnitID         string `json:"unitId"`
-	Asset          string `json:"asset"`
-	Phase          string `json:"phase"`
-	MemberCount    int64  `json:"memberCount"`
-	SealCount      int64  `json:"sealCount"`
-	LatestSeal     string `json:"latestSeal,omitempty"`
-	LatestSealedAt string `json:"latestSealedAt,omitempty"`
-	ClosedAt       string `json:"closedAt,omitempty"`
+	UnitID                string `json:"unitId"`
+	Asset                 string `json:"asset"`
+	Phase                 string `json:"phase"`
+	MemberCount           int64  `json:"memberCount"`
+	SealCount             int64  `json:"sealCount"`
+	OpenedSourceID        string `json:"openedSourceId"`
+	OpenedBy              string `json:"openedBy"`
+	LatestSeal            string `json:"latestSeal,omitempty"`
+	LatestSealSourceID    string `json:"latestSealSourceId,omitempty"`
+	LatestSealPerformedBy string `json:"latestSealPerformedBy,omitempty"`
+	LatestSealedAt        string `json:"latestSealedAt,omitempty"`
+	ClosedAt              string `json:"closedAt,omitempty"`
 }

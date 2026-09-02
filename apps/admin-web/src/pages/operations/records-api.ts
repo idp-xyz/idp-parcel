@@ -61,6 +61,11 @@ export interface UnidentifiedItemRecord {
  * 一个集运单元实例。phase 三相封闭词（OPEN / SEALED / CLOSED）；memberCount 是
  * 当前成员数不是成员清单；latestSeal 两键成对缺席即从未封装过，sealCount 把
  * 「从未封装」与「重新封装过」分开。
+ *
+ * openedSourceId 与 openedBy 是开启那一次作业的来源与执行方，三相上恒在场；
+ * latestSealSourceId 与 latestSealPerformedBy 是最近一次封装的同两件，与
+ * latestSeal 同缺同在。来源身份要与执行方一起显示，因为**分辨一线过渡期导入
+ * 进来的事实与设备扫描的事实靠的是它**——执行方在两条路上可以是同一个人。
  */
 export interface ConsolidationUnitRecord {
   unitId: string;
@@ -68,7 +73,11 @@ export interface ConsolidationUnitRecord {
   phase: string;
   memberCount: number;
   sealCount: number;
+  openedSourceId: string;
+  openedBy: string;
   latestSeal?: string;
+  latestSealSourceId?: string;
+  latestSealPerformedBy?: string;
   latestSealedAt?: string;
   closedAt?: string;
 }

@@ -329,9 +329,16 @@ func newConsolidationStore(t *testing.T) (*adapter.ConsolidationUnits, bentoapp.
 // 这正是 Clock.Now() 让位之后落库该有的样子（ADR-0023）。
 func workSource(t *testing.T, sourceID string, at time.Time) domain.WorkFactSource {
 	t.Helper()
+	return workSourceBy(t, sourceID, "packer-1", at)
+}
+
+// workSourceBy 与 workSource 同形，另指定执行方。同一行里要同时看两处来源时用它——
+// 两处若共用默认执行方，读面把它们取反了也验不出来。
+func workSourceBy(t *testing.T, sourceID, performedBy string, at time.Time) domain.WorkFactSource {
+	t.Helper()
 	source, err := domain.NewWorkFactSource(
 		sourceID,
-		ref(t, domain.NewPerformingPartyReference, "packer-1"),
+		ref(t, domain.NewPerformingPartyReference, performedBy),
 		ref(t, domain.NewExecutionEvidenceReference, "WORK-EVIDENCE/"+sourceID),
 		at,
 	)

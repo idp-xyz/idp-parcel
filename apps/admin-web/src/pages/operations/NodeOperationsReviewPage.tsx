@@ -97,13 +97,19 @@ const sections: ReviewSection[] = [
     // (CONTEXT);实例阶段封闭三相(开放装入/已封装/已关闭)。集运成员列的是当前
     // 成员数不是清单;封签取最近一次快照,封装次数把「从未封装」与「重新封装过」
     // 分开。没有形成时间列——单元行上只有库面簿记时刻,不是业务事实。
+    //
+    // 开启作业与最近封装各列一格「来源 · 执行方」(UC-NO-003 结果契约要保存的那两
+    // 件)。两格都把来源身份摆在执行方前面:一线过渡期由内勤汇总导入的封签事实与
+    // 现场设备扫描的封签事实,执行方可以是同一个人,分得开两者的只有来源身份。
     columns: [
       col('unitId', '实例标识', { mono: true }),
       col('asset', '可复用载具', { mono: true }),
       col('phase', '实例阶段', { className: 'w-[96px]' }),
       col('memberCount', '集运成员', { align: 'right', className: 'w-[88px]', mono: true }),
       col('sealCount', '封装次数', { align: 'right', className: 'w-[88px]', mono: true }),
+      col('openedSource', '开启来源', { mono: true }),
       col('seal', '最近封签', { mono: true }),
+      col('sealSource', '封装来源', { mono: true }),
       col('closedAt', '关闭时间', { mono: true }),
     ],
   },
@@ -216,8 +222,12 @@ function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
           phase: labelOf(consolidationPhaseLabels, record.phase),
           memberCount: String(record.memberCount),
           sealCount: String(record.sealCount),
+          openedSource: `${record.openedSourceId} · ${record.openedBy}`,
           seal: record.latestSeal
             ? `${record.latestSeal}${record.latestSealedAt ? ` · ${formatInstant(record.latestSealedAt)}` : ''}`
+            : '',
+          sealSource: record.latestSealSourceId
+            ? `${record.latestSealSourceId} · ${record.latestSealPerformedBy ?? ''}`
             : '',
           closedAt: record.closedAt ? formatInstant(record.closedAt) : '',
         },

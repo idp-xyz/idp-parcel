@@ -162,10 +162,12 @@ func TestReviewCatalogueListsConsolidationUnitsByIdentity(t *testing.T) {
 	if err := sealed.AddMember(ref(t, domain.NewHandlingUnitID, "unit-22")); err != nil {
 		t.Fatalf("加入成员：%v", err)
 	}
+	// 封装的执行方特意与开启的（workSource 里的 packer-1）取不同值：两列若被同一个人
+	// 填满，SELECT 把开启来源与快照来源取反了也照样过。
 	if err := sealed.Seal(
 		ref(t, domain.NewSealReference, "seal-1"),
 		ref(t, domain.NewWorkBasisReference, "PACK/1"),
-		workSource(t, "src-seal-catalogue", consolidationAt),
+		workSourceBy(t, "src-seal-catalogue", "sealer-9", consolidationAt),
 	); err != nil {
 		t.Fatalf("封装：%v", err)
 	}
@@ -202,6 +204,13 @@ func TestReviewCatalogueListsConsolidationUnitsByIdentity(t *testing.T) {
 		rows[0].ClosedAt != nil {
 		t.Errorf("开放行转写变形：%+v", rows[0])
 	}
+	// 开启来源两件三相上恒在场；封装来源两件与 LatestSeal 同缺同在，所以开放行上必须空。
+	if rows[0].OpenedSourceID != "src-open-bag-1" ||
+		rows[0].OpenedBy != "packer-1" ||
+		rows[0].LatestSealSourceID != "" ||
+		rows[0].LatestSealPerformedBy != "" {
+		t.Errorf("开放行的来源两件变形：%+v", rows[0])
+	}
 	if rows[1].Phase != domain.ConsolidationPhaseSealed ||
 		rows[1].MemberCount != 2 ||
 		rows[1].SealCount != 1 ||
@@ -210,6 +219,14 @@ func TestReviewCatalogueListsConsolidationUnitsByIdentity(t *testing.T) {
 		!rows[1].LatestSealedAt.Equal(consolidationAt) ||
 		rows[1].ClosedAt != nil {
 		t.Errorf("封装行转写变形：%+v", rows[1])
+	}
+	// 同一行上两处来源各归各位：开启那一组来自单元行本体，封装那一组来自最近一份快照。
+	// 执行方在这一行上取了不同值，两组被 SELECT 取反会当场失配。
+	if rows[1].OpenedSourceID != "src-open-bag-2" ||
+		rows[1].OpenedBy != "packer-1" ||
+		rows[1].LatestSealSourceID != "src-seal-catalogue" ||
+		rows[1].LatestSealPerformedBy != "sealer-9" {
+		t.Errorf("封装行的来源两组串位：%+v", rows[1])
 	}
 	if rows[2].Phase != domain.ConsolidationPhaseClosed ||
 		rows[2].MemberCount != 1 ||

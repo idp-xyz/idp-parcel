@@ -396,16 +396,23 @@ func TestConsolidationUnitRegistryTranscribesRows(t *testing.T) {
 	closedAt := catalogueBaseAt.Add(2 * time.Hour)
 	register := &stubReviewCatalogue{
 		units: []ports.ConsolidationUnitCatalogueRow{
-			{UnitID: "bag-1", Asset: "asset-1", Phase: "OPEN"},
+			{
+				UnitID: "bag-1", Asset: "asset-1", Phase: "OPEN",
+				OpenedSourceID: "scan-open-1", OpenedBy: "packer-1",
+			},
 			{
 				UnitID: "bag-2", Asset: "asset-2", Phase: "SEALED",
 				MemberCount: 2, SealCount: 1,
+				OpenedSourceID: "scan-open-2", OpenedBy: "packer-1",
 				LatestSeal: "seal-1", LatestSealedAt: &sealedAt,
+				LatestSealSourceID: "scan-seal-2", LatestSealPerformedBy: "packer-2",
 			},
 			{
 				UnitID: "bag-3", Asset: "asset-3", Phase: "CLOSED",
 				MemberCount: 1, SealCount: 2,
+				OpenedSourceID: "scan-open-3", OpenedBy: "packer-1",
 				LatestSeal: "seal-9", LatestSealedAt: &sealedAt,
+				LatestSealSourceID: "scan-seal-3", LatestSealPerformedBy: "packer-3",
 				ClosedAt: &closedAt,
 			},
 		},
@@ -429,7 +436,14 @@ func TestConsolidationUnitRegistryTranscribesRows(t *testing.T) {
 	if string(open["phase"]) != `"OPEN"` || string(open["memberCount"]) != `0` {
 		t.Fatalf("开放行转写走样：%s", response.Body.String())
 	}
-	for _, key := range []string{"latestSeal", "latestSealedAt", "closedAt"} {
+	// 开启来源两件在三相上都在场：单元不可能没有开启那一次作业，库面该列也是 NOT NULL。
+	// 它们与封签那两件的分别正在这里——后者随「有没有封装过」成对进出。
+	if string(open["openedSourceId"]) != `"scan-open-1"` || string(open["openedBy"]) != `"packer-1"` {
+		t.Fatalf("开放行丢了开启来源两件：%s", response.Body.String())
+	}
+	for _, key := range []string{
+		"latestSeal", "latestSealSourceId", "latestSealPerformedBy", "latestSealedAt", "closedAt",
+	} {
 		if _, present := open[key]; present {
 			t.Fatalf("开放行不该带 %q 键：%s", key, response.Body.String())
 		}
@@ -442,10 +456,18 @@ func TestConsolidationUnitRegistryTranscribesRows(t *testing.T) {
 		string(sealed["latestSealedAt"]) != `"`+sealedAt.Format(time.RFC3339Nano)+`"` {
 		t.Fatalf("封装行转写走样：%s", response.Body.String())
 	}
+	// 封签的来源身份与执行方各自成键，且与开启那一组不同值——两组若被同一个值填满，
+	// 「这次封装是谁报的」就说不清了，而分辨导入与扫描正靠 latestSealSourceId。
+	if string(sealed["latestSealSourceId"]) != `"scan-seal-2"` ||
+		string(sealed["latestSealPerformedBy"]) != `"packer-2"` ||
+		string(sealed["openedBy"]) != `"packer-1"` {
+		t.Fatalf("封装行的来源两件走样：%s", response.Body.String())
+	}
 	closed := body.Units[2]
 	if string(closed["phase"]) != `"CLOSED"` ||
 		string(closed["closedAt"]) != `"`+closedAt.Format(time.RFC3339Nano)+`"` ||
-		string(closed["sealCount"]) != `2` {
+		string(closed["sealCount"]) != `2` ||
+		string(closed["latestSealSourceId"]) != `"scan-seal-3"` {
 		t.Fatalf("关闭行转写走样：%s", response.Body.String())
 	}
 }
