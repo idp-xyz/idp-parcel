@@ -60,3 +60,20 @@ jobs:
 
       - name: Build
         run: go build ./...
+
+      # 清点工具自成一个模块（它要 golang.org/x/tools，而主模块的直接依赖只有三个，
+      # 且那件事本身被开发主线当作「参数显式未配置」的佐证在引用）。因此根目录的
+      # go vet / go test 扫不到它，要单列一步。
+      - name: Vet and test the inventory tool
+        working-directory: tools/mechanism-inventory
+        run: |
+          go vet ./...
+          go test ./...
+
+      # 与 gofmt 那一步同形：重新生成，与提交进来的那份不一致就红。清点报告因此不可能
+      # 落后于代码——手工重盘二十七轮之后每一轮都带假，靠的正是没有这道门。
+      - name: Mechanism inventory is current
+        run: |
+          (cd tools/mechanism-inventory && go run . -dir "$GITHUB_WORKSPACE" -out "$GITHUB_WORKSPACE/docs/product/MECHANISM-INVENTORY.md")
+          # 用 status 不用 diff：diff 看不见未跟踪文件，报告一旦被删就会静默通过。
+          test -z "$(git status --porcelain -- docs/product/MECHANISM-INVENTORY.md)"
