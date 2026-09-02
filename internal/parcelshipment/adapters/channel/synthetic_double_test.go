@@ -167,8 +167,9 @@ func TestABatchLabelStaysOneDocumentCoveringManyParcels(t *testing.T) {
 			Documents: []ports.LabelDocument{{
 				Role:           "shipping-label",
 				Format:         "channel-declared-format",
-				Granularity:    ports.LabelDocumentPerBatch,
+				Granularity:    domain.LabelDocumentPerBatch,
 				CoveredParcels: []domain.DeclaredParcelID{first, second},
+				Digest:         "synthetic-digest-1",
 				Content:        []byte("synthetic batch label"),
 			}},
 		},
@@ -183,7 +184,7 @@ func TestABatchLabelStaysOneDocumentCoveringManyParcels(t *testing.T) {
 	}
 
 	document := answered.Documents[0]
-	if got := document.Granularity; got != ports.LabelDocumentPerBatch {
+	if got := document.Granularity; got != domain.LabelDocumentPerBatch {
 		t.Errorf("粒度 = %q，想要 PER_BATCH", got)
 	}
 	if len(document.CoveredParcels) != 2 ||

@@ -38,6 +38,7 @@ type RehydrateLabelTransactionSpec struct {
 	ParcelResults          []LabelTransactionParcelResultSpec
 	ResultObservedAt       time.Time
 	FollowUpActions        []FollowUpActionSpec
+	LabelDocuments         []RecordLabelDocumentSpec
 }
 
 // RehydrateLabelTransaction 逐字段过领域校验把一行读回聚合。
@@ -101,7 +102,7 @@ func (transaction *LabelTransaction) rehydrateChannelTrace(spec RehydrateLabelTr
 		len(spec.FollowUpActions) != 0
 
 	if transaction.state == LabelTransactionEstablished {
-		if !spec.SubmittedAt.IsZero() || hasResultTrace {
+		if !spec.SubmittedAt.IsZero() || hasResultTrace || len(spec.LabelDocuments) != 0 {
 			return ErrInvalidRehydratedLabelTransaction
 		}
 		return nil
@@ -111,6 +112,16 @@ func (transaction *LabelTransaction) rehydrateChannelTrace(spec RehydrateLabelTr
 		return ErrInvalidRehydratedLabelTransaction
 	}
 	transaction.submittedAt = spec.SubmittedAt.UTC()
+
+	// 载荷单独核，不跟着 hasResultTrace 走：件可能随提交应答就回来，那时状态还是`已提交渠道`
+	// 而一条结果痕迹都没有。
+	//
+	// **这一侧比 AppendLabelDocument 宽一格，是有意的。** 追加时不收`失败`——整笔未受理不会
+	// 产生面单；但一行`失败`带着载荷完全可能是本上下文写出来的：件在`已提交渠道`时追加，结果
+	// 随后才记成失败。重建门以结果自证一致，不逆推形成过程。
+	if err := transaction.rehydrateLabelDocuments(spec.LabelDocuments); err != nil {
+		return err
+	}
 
 	if !transaction.state.IsChannelResult() {
 		if hasResultTrace {
@@ -149,5 +160,24 @@ func (transaction *LabelTransaction) rehydrateChannelTrace(spec RehydrateLabelTr
 		})
 	}
 	transaction.followUpActions = actions
+	return nil
+}
+
+// rehydrateLabelDocuments 把载荷记录过与写入时同一套结构校验装回去。复用
+// labelDocumentRecord 而不另写一份：抄成第二份的那一天，两处会在某条规则上分家，而分家
+// 的表现是库里一行读得回来、同样内容却写不进去。
+func (transaction *LabelTransaction) rehydrateLabelDocuments(specs []RecordLabelDocumentSpec) error {
+	if len(specs) == 0 {
+		return nil
+	}
+	documents := make([]LabelDocumentRecord, 0, len(specs))
+	for _, spec := range specs {
+		record, err := transaction.labelDocumentRecord(spec)
+		if err != nil {
+			return ErrInvalidRehydratedLabelTransaction
+		}
+		documents = append(documents, record)
+	}
+	transaction.labelDocuments = documents
 	return nil
 }

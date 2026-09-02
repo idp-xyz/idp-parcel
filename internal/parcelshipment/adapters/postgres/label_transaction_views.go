@@ -139,6 +139,26 @@ func (document labelTransactionDocument) viewRecord(
 		}
 		record.Parcels = append(record.Parcels, row)
 	}
+
+	for _, raw := range document.LabelDocuments {
+		row := ports.LabelTransactionDocumentRow{
+			Role:        raw.Role,
+			Format:      raw.Format,
+			Granularity: domain.LabelDocumentGranularity(raw.Granularity),
+			Digest:      raw.Digest,
+			// 本体在不在按定位符派生，与聚合上 BodyStored 同一条规则；读面不另存一格。
+			BodyStored: raw.Locator != "",
+			ObservedAt: raw.ObservedAt,
+		}
+		for _, rawParcel := range raw.Parcels {
+			parcel, err := domain.NewDeclaredParcelID(rawParcel)
+			if err != nil {
+				return ports.LabelTransactionRecord{}, err
+			}
+			row.CoveredParcels = append(row.CoveredParcels, parcel)
+		}
+		record.Documents = append(record.Documents, row)
+	}
 	return record, nil
 }
 

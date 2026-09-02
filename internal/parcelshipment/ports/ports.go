@@ -1409,6 +1409,32 @@ type LabelTransactionRecord struct {
 	PriorTransactionID     string
 	PriorLinkKind          domain.LabelTransactionLinkKind
 	Parcels                []LabelTransactionParcelRow
+	// Documents 挂在交易级而不是包裹行上（ADR-0092 决定一）：一份批粒度件覆盖多件包裹，
+	// 挂到包裹行就等于把它复制成 N 行，而那正是端口形状当初拒绝的「拆成假的逐件」——复制
+	// 之后没有任何东西说得出这 N 行其实是同一张纸。要按包裹看，从每一行自带的覆盖范围过滤。
+	Documents []LabelTransactionDocumentRow
+}
+
+// LabelTransactionDocumentRow 是读面上的一条载荷记录。
+//
+// 顺序即追加顺序，**不要取最后一条**：重打产生的新件与被替换的旧件在时间上相邻而在业务上
+// 不同，要哪一份得按业务规则挑（ADR-0092 决定三）。
+//
+// 这里没有定位符。读面回答的是「有没有这份件、它是什么、本体拿不拿得到」；本体在哪是存放
+// 端口的事，把存放地址摊到查阅面上，等于让查阅面替存放方作证。
+type LabelTransactionDocumentRow struct {
+	Role           string
+	Format         string
+	Granularity    domain.LabelDocumentGranularity
+	CoveredParcels []domain.DeclaredParcelID
+	Digest         string
+	// BodyStored 派生自定位符在不在，不是存下来的一格。
+	//
+	// **它今天恒为假，而这是真话不是默认值**：本体存放是一条未配置的出向缝（ADR-0092
+	// 决定二），文件组件尚不存在，所以每一条载荷都只有摘要没有本体。读面要在页头把这条
+	// 依据讲明白，免得读成「存过但取不回来」——那是两件事。
+	BodyStored bool
+	ObservedAt time.Time
 }
 
 // LabelTransactionViews 是面单交易查阅的读口。

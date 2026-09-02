@@ -179,6 +179,24 @@ type labelTransactionDocument struct {
 	ParcelResults          []labelTransactionParcelResultDoc   `json:"parcelResults,omitempty"`
 	ResultObservedAt       time.Time                           `json:"resultObservedAt"`
 	FollowUpActions        []labelTransactionFollowUpActionDoc `json:"followUpActions,omitempty"`
+	// LabelDocuments 带 omitempty：本字段在 `0010` 之后才出现，缺席的旧快照读回来就是一份
+	// 没有载荷的交易——那正是它当时的真相，不必迁移改写历史行。
+	LabelDocuments []labelDocumentDoc `json:"labelDocuments,omitempty"`
+}
+
+// labelDocumentDoc 是一条载荷记录的文档形状（ADR-0092）。存的是引用不是本体，因此这里
+// 只有摘要与定位符两个字符串，没有任何字节——本体一旦进这份快照，就被焊进了每一次读回
+// 这笔交易的热路径，而那些场合绝大多数根本不看面单。
+//
+// Locator 带 omitempty：本体无存放处是今天唯一走得到的分支，缺席即那一格。
+type labelDocumentDoc struct {
+	Role        string    `json:"role"`
+	Format      string    `json:"format"`
+	Granularity uint8     `json:"granularity"`
+	Parcels     []string  `json:"parcels"`
+	Digest      string    `json:"digest"`
+	Locator     string    `json:"locator,omitempty"`
+	ObservedAt  time.Time `json:"observedAt"`
 }
 
 type labelTransactionLinkDocument struct {
@@ -242,6 +260,20 @@ func labelTransactionDocumentOf(transaction domain.LabelTransaction) labelTransa
 			actionDoc.Parcels = append(actionDoc.Parcels, parcel.String())
 		}
 		document.FollowUpActions = append(document.FollowUpActions, actionDoc)
+	}
+	for _, record := range transaction.LabelDocuments() {
+		recordDoc := labelDocumentDoc{
+			Role:        record.Role().String(),
+			Format:      record.Format().String(),
+			Granularity: uint8(record.Granularity()),
+			Digest:      record.Digest().String(),
+			Locator:     record.Locator().String(),
+			ObservedAt:  record.ObservedAt().UTC(),
+		}
+		for _, parcel := range record.CoveredParcels() {
+			recordDoc.Parcels = append(recordDoc.Parcels, parcel.String())
+		}
+		document.LabelDocuments = append(document.LabelDocuments, recordDoc)
 	}
 	return document
 }
@@ -328,6 +360,13 @@ func (document labelTransactionDocument) rehydrationSpec(
 		}
 		spec.FollowUpActions = append(spec.FollowUpActions, action)
 	}
+	for _, raw := range document.LabelDocuments {
+		record, err := raw.spec()
+		if err != nil {
+			return domain.RehydrateLabelTransactionSpec{}, err
+		}
+		spec.LabelDocuments = append(spec.LabelDocuments, record)
+	}
 	return spec, nil
 }
 
@@ -352,6 +391,45 @@ func (document labelTransactionParcelResultDoc) spec() (domain.LabelTransactionP
 			return domain.LabelTransactionParcelResultSpec{}, err
 		}
 		spec.Reason = reason
+	}
+	return spec, nil
+}
+
+func (document labelDocumentDoc) spec() (domain.RecordLabelDocumentSpec, error) {
+	role, err := domain.NewLabelDocumentRole(document.Role)
+	if err != nil {
+		return domain.RecordLabelDocumentSpec{}, err
+	}
+	format, err := domain.NewLabelDocumentFormat(document.Format)
+	if err != nil {
+		return domain.RecordLabelDocumentSpec{}, err
+	}
+	digest, err := domain.NewLabelDocumentDigest(document.Digest)
+	if err != nil {
+		return domain.RecordLabelDocumentSpec{}, err
+	}
+	spec := domain.RecordLabelDocumentSpec{
+		Role:        role,
+		Format:      format,
+		Granularity: domain.LabelDocumentGranularity(document.Granularity),
+		Digest:      digest,
+		ObservedAt:  document.ObservedAt,
+	}
+	// 定位符缺席即本体无存放处，是一格如实的答复而不是坏数据；在这里补一个空值判断会把那一格
+	// 变成读回失败。
+	if document.Locator != "" {
+		locator, err := domain.NewLabelDocumentLocator(document.Locator)
+		if err != nil {
+			return domain.RecordLabelDocumentSpec{}, err
+		}
+		spec.Locator = locator
+	}
+	for _, raw := range document.Parcels {
+		parcel, err := domain.NewDeclaredParcelID(raw)
+		if err != nil {
+			return domain.RecordLabelDocumentSpec{}, err
+		}
+		spec.CoveredParcels = append(spec.CoveredParcels, parcel)
 	}
 	return spec, nil
 }

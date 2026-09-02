@@ -14,29 +14,11 @@ import (
 // 落点记在下面各自的注释里。任何一家的账号、字段名、格式取值与 DPI 都不在这里（实例半边，
 // `PAR-INT-02`／`PAR-SET-03`）。
 
-// LabelDocumentGranularity 说一份面单件覆盖的是一件包裹还是一批。
+// 「面单粒度是否恒为包裹」这处差异的落点是 `domain.LabelDocumentGranularity`，不在本包。
 //
-// **这是四处差异里的「面单粒度是否恒为包裹」。** 有渠道按批签发面单，一份件覆盖多件包裹；
-// 若把粒度设成恒为包裹，那种件只能被拆成假的逐件记录或被丢掉一部分覆盖范围，两种都是在
-// 类型层面说谎。
-type LabelDocumentGranularity uint8
-
-const (
-	LabelDocumentGranularityInvalid LabelDocumentGranularity = iota
-	LabelDocumentPerParcel
-	LabelDocumentPerBatch
-)
-
-func (granularity LabelDocumentGranularity) String() string {
-	switch granularity {
-	case LabelDocumentPerParcel:
-		return "PER_PARCEL"
-	case LabelDocumentPerBatch:
-		return "PER_BATCH"
-	default:
-		return ""
-	}
-}
+// 它本来在这里，随 ADR-0092 挪进领域：载荷记录进了聚合，而粒度是那条记录的结构分叉（决定
+// 「这份件对应哪些包裹」），不是只在线上存在的传输细节。留在本包会成两份——领域不能 import
+// ports（会成环），于是那边只能再声明一个同名枚举，两份迟早在某一格上分家。
 
 // LabelDocumentAvailability 说面单件此刻在不在手上。
 //
@@ -103,16 +85,22 @@ func (support LabelChannelQuerySupport) String() string {
 // 实例半边。把它们做成封闭枚举会在接第一家真渠道时就被撑破，而撑破的表现是一个认不出的
 // 取值被译成零值。
 //
-// CoveredParcels 在 LabelDocumentPerBatch 时列出该件覆盖的全部包裹，在 LabelDocumentPerParcel
-// 时恰一件。**这条不变量在本层没有守卫**：本包按仓内约定只放记录结构，构造门在领域侧；
-// 件往领域与库里落的形状归票 `09`，那一票要把它守住。
+// CoveredParcels 在 `domain.LabelDocumentPerBatch` 时列出该件覆盖的全部包裹，在
+// `domain.LabelDocumentPerParcel` 时恰一件。**这条不变量在本层没有守卫**：本包按仓内约定
+// 只放记录结构，构造门在领域侧——`AppendLabelDocument` 按粒度分两条把它守住。
 //
-// Content 是件的字节。它在这里只是过路——落到领域、库与读面的哪里同样归票 `09`。
+// Digest 是收到本体那一刻算出的完整性摘要。适配器**必须**在字节还在手上时算出它：它是
+// 「我们确实收到过这份件」的全部证据，而本体今天没有存放处（ADR-0092 决定二），漏算之后
+// 事后补不回来。
+//
+// Content 是件的字节，在这里只是过路：本体不进领域也不进库，交由存放端口，未配置时如实
+// 答未配置——载荷记录照记，定位符留空。
 type LabelDocument struct {
 	Role           string
 	Format         string
-	Granularity    LabelDocumentGranularity
+	Granularity    domain.LabelDocumentGranularity
 	CoveredParcels []domain.DeclaredParcelID
+	Digest         string
 	Content        []byte
 }
 

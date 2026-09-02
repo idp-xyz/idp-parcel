@@ -258,6 +258,9 @@ type LabelTransaction struct {
 	parcelResults          []LabelTransactionParcelResult
 	resultObservedAt       time.Time
 	followUpActions        []LabelTransactionFollowUpAction
+	// labelDocuments 是渠道交回的载荷记录，只增不改（ADR-0092 决定三）。存的是引用不是
+	// 本体：本体存放属技术组件，而那个组件今天不存在，定位符因此可缺。
+	labelDocuments []LabelDocumentRecord
 }
 
 // EstablishLabelTransaction 建立交易并就地固定覆盖与依据。此后没有任何方法能改这些
@@ -546,6 +549,74 @@ func (transaction LabelTransaction) AppendFollowUpAction(spec FollowUpActionSpec
 	actions = append(actions, transaction.followUpActions...)
 	transaction.followUpActions = append(actions, action)
 	return transaction, nil
+}
+
+// AppendLabelDocument 追加一条渠道载荷记录（ADR-0092 决定三）。
+//
+// 只增不改：同一次结果的载荷不得被后来的调用顶替，重打、换单与替换各自产生新的一条并保留
+// 原条。聚合上因此没有任何改写或删除载荷的路径，也没有「当前载荷」这一格——要哪一份由读面
+// 按业务规则派生，理由同 Finalized 不存列。
+//
+// `已建立`与`失败`两格不收：前者还没提交渠道，没有渠道会交回件；后者整笔未受理，一份面单
+// 也不会产生。其余各格都收——件可能随提交应答回来（此时仍是`已提交渠道`），也可能等另一次
+// 取件才拿到，而那时结果可能已经记下了。
+func (transaction LabelTransaction) AppendLabelDocument(spec RecordLabelDocumentSpec) (LabelTransaction, error) {
+	if transaction.state == LabelTransactionEstablished || transaction.state == LabelTransactionFailed {
+		return LabelTransaction{}, ErrLabelTransactionStateNotAdmitted
+	}
+	record, err := transaction.labelDocumentRecord(spec)
+	if err != nil {
+		return LabelTransaction{}, err
+	}
+	// 显式复制再追加，理由同 AppendFollowUpAction：append 到内部切片上，两份聚合值会共享
+	// 同一底层数组。
+	documents := make([]LabelDocumentRecord, 0, len(transaction.labelDocuments)+1)
+	documents = append(documents, transaction.labelDocuments...)
+	transaction.labelDocuments = append(documents, record)
+	return transaction, nil
+}
+
+// labelDocumentRecord 把一条载荷输入过完结构校验。
+//
+// 覆盖范围按粒度分两条：逐件那一格**恰一件**，批那一格至少一件。逐件却列出多件说不清这份
+// 纸是谁的；两格都放开则粒度这个字段就不再约束任何东西，与不写它无异。
+//
+// 定位符不在必备之列——本体无存放处是今天唯一走得到的分支（ADR-0092 决定二）；摘要在，
+// 因为它是「我们确实收到过这份件」的全部证据。
+func (transaction LabelTransaction) labelDocumentRecord(spec RecordLabelDocumentSpec) (LabelDocumentRecord, error) {
+	if !spec.Role.valid() ||
+		!spec.Format.valid() ||
+		!spec.Digest.valid() ||
+		!spec.Granularity.valid() ||
+		spec.ObservedAt.IsZero() ||
+		spec.ObservedAt.Before(transaction.submittedAt) {
+		return LabelDocumentRecord{}, ErrInvalidLabelTransaction
+	}
+	if len(spec.CoveredParcels) == 0 ||
+		(spec.Granularity == LabelDocumentPerParcel && len(spec.CoveredParcels) != 1) {
+		return LabelDocumentRecord{}, ErrInvalidLabelTransaction
+	}
+	parcels, err := transaction.scopeWithinCoverage(spec.CoveredParcels)
+	if err != nil {
+		return LabelDocumentRecord{}, err
+	}
+	return LabelDocumentRecord{
+		role:        spec.Role,
+		format:      spec.Format,
+		granularity: spec.Granularity,
+		parcels:     parcels,
+		digest:      spec.Digest,
+		locator:     spec.Locator,
+		observedAt:  spec.ObservedAt.UTC(),
+	}, nil
+}
+
+// LabelDocuments 交回副本，顺序即追加顺序。读的人要哪一份自己按业务规则挑——**不要取最后
+// 一条**：重打产生的新件与被替换的旧件在时间上相邻而在业务上不同。
+func (transaction LabelTransaction) LabelDocuments() []LabelDocumentRecord {
+	documents := make([]LabelDocumentRecord, len(transaction.labelDocuments))
+	copy(documents, transaction.labelDocuments)
+	return documents
 }
 
 // scopeWithinCoverage 校验指名包裹范围落在固定下来的覆盖范围内，并交回副本；空范围即整笔。
