@@ -21,6 +21,8 @@
 $env:IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable'
 $env:IDP_PARCEL_HTTP_ADDR=':19080'
 $env:IDP_PARCEL_ISOLATED_READ_TENANT='SYN-TENANT-01'
+# 要演示委托提交才需要下面这行；只看主数据各页时不设它（ADR-0091，两值必须相同）
+$env:IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'
 go run ./cmd/parcel-api
 ```
 
@@ -30,7 +32,27 @@ go run ./cmd/parcel-api
 {"level":"INFO","msg":"Isolated read admission enabled (ADR-0078): operations query endpoints answer with injected synthetic scope","tenant":"SYN-TENANT-01"}
 ```
 
-放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把八条运营查阅端点从`未配置`切成可答，这件事要在事后可查。
+放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把八条运营查阅端点从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。
+
+### 起 dispatch（只在演示委托提交时需要）
+
+**`cmd/parcel-api` 只把委托建到`已提交`就交出信封，接受判断链由 `cmd/parcel-dispatch` 驱动**（ADR-0081）。不起它，委托会一直停在`已提交`而没有任何报错——那个静默此前没写进本脚本，实测时踩过一次。
+
+```powershell
+$env:IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable'
+$env:IDP_PARCEL_ROUTE_SERVICE_PURPOSE='NETWORK_SERVICE'
+$env:IDP_PARCEL_DISPATCH_INTERVAL='2s'
+$env:IDP_PARCEL_DISPATCH_DELIVERY_TIMEOUT='5s'
+$env:IDP_PARCEL_DISPATCH_LIMIT='10'
+$env:IDP_PARCEL_DISPATCH_LEASE='1m'
+$env:IDP_PARCEL_DISPATCH_MAX_ATTEMPTS='3'
+$env:IDP_PARCEL_DISPATCH_RETRY_AFTER='10s'
+go run ./cmd/parcel-dispatch
+```
+
+七个变量一个都不能省——缺一个进程启动即拒并指名缺哪个（那是刻意的，见各变量在 `cmd/parcel-dispatch/assemble.go` 的解析）。上面的取值是演示用的短拍子，不是生产建议值。
+
+**dispatch 对逐条投递失败一行日志都不打，全程静默不代表链跑通了。** `Dispatcher.DispatchOnce` 把失败码写进库那一行就 `continue`，进程循环只在整拍失败（认领不到、定稿写不进去）时才出声。要看它把委托推到哪一步，查 `bento.outbox` 那一行的 `status` 与 `failure_code`，别只看进程有没有报错——失败码之外的东西（停在哪一站、未决的原因是什么）今天在真进程上根本取不到，那是另一个已知缺口，记在 `.scratch/first-tenant-runway/issues/08`。实测于 2026-09-02：只灌治理权威区间、不灌商业主数据时，链如实答未决，重投烧完预算后那一行落 `ABANDONED` + `dispatch.consumer_undecided`，而委托停在`已提交`——那是一个已知缺口，记在 `.scratch/first-tenant-runway/issues/07`，演示前先读它，免得把它当成现场故障。
 
 ## 动线
 
