@@ -28,6 +28,10 @@
 # **在 7ae3c7a 上改后重数实测 31**。这两笔之间隔了别的会话的若干提交，所以 32 与 31 不是
 # 相邻的两个数——**它们各自只对自己那个 SHA 成立**，中间那段本文件被谁改过要看 git 历史。
 #
+# 2026-09-02 随 party-commercial-context-gaps/04 第二笔新增两条（客户服务规则版本的两格适用
+# 声明），**在 c1e8f68 上改后重数实测 33**。理由行按现行要求写「谁是它应该的调用方、那一层
+# 何时落」（调用方是票 05），不写「切片还没到」——那句已于本日作废。
+#
 # 2026-09-02 随 party-commercial-context-gaps/01 剪掉 PublishChannelAccountUseAuthorization
 # （渠道账号使用授权补齐执行器，接上生产调用路径）。本笔的计数见下面那段——它写于同一次
 # 改动，因为这一剪恰好撞上了一种此前没记过的失效。
@@ -170,6 +174,13 @@ internal/customscompliance/domain VerifyDutyPayment
 
 
 # —— party-commercial ——
+# 客户服务规则版本的两格适用声明（票 party-commercial-context-gaps/04 第二笔）。
+# **它们应该的调用方是票 05**：那一票要落正文表、解析口与 visibility-exception 的消费缝，
+# 而规则版本正是从那条路上被解析出来后才需要声明适用对象的。票 05 落地时两行一起出名单。
+# 现在不接不是排期问题——本笔有意只落领域类型（票 04 裁决拆两笔，理由是把 VE 那条缝并进来
+# 会把封闭集拓宽的变红窗口拉长），正文与解析属另一票的范围。
+internal/partycommercial/domain CustomerServiceRuleAppliesToCustomerContract
+internal/partycommercial/domain CustomerServiceRuleAppliesToServiceProduct
 # PublishChannelAccountUseAuthorization 曾在这里，2026-09-02 随 party-commercial-context-gaps/01
 # 剪掉：渠道账号使用授权补齐了执行器（0018 登记册、ports 登记面、application 写侧编排），
 # 发布门的生产调用方是 application/register_channel_account_use.go。
