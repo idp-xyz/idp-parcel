@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——17 张子票立齐；`01`..`06` 与 `17` 已 resolved（四张裁决 ＋ 两张实现票），其余实现票待做
+Status: in-progress——17 张子票立齐；`01`..`07` 与 `17` 已 resolved（四张裁决 ＋ 三张实现票），其余实现票待做
 
 ## 这个 feature 是什么
 
@@ -53,14 +53,14 @@ Status: in-progress——17 张子票立齐；`01`..`06` 与 `17` 已 resolved�
 |---|---|---|
 | [`05` `ServiceProductForm` 第二取值](./issues/05-service-product-form-second-value.md) | **已落地**：`LABEL_CHANNEL_SERVICE` 八处同步扩展（盘点漏列 CLI 与管理台两处）＋两条守卫用例；迁移另起 `0017`，不得就地改 `0008` | `resolved` |
 | [`06` 面单交易写侧执行器链](./issues/06-label-transaction-write-side-executors.md) | **已落地**：五步编排共用一套按恢复动作分格的代数；棘轮基线两条剪掉并改正一处错了的计数；不发起任何渠道调用 | `resolved` |
-| [`07` 取面单出向端口形状](./issues/07-outbound-label-fetch-port-shape.md) | 四处公开形态差异要进类型；**兼作 ADR-0090 平台包的落地处** | `ready-for-agent` |
+| [`07` 取面单出向端口形状](./issues/07-outbound-label-fetch-port-shape.md) | **已落地**：出向缝落 `internal/platform/outbound`（两条链共用），端口落 PS `ports`；四处差异各有类型落点；`确证未受理`过举证门（举不出实据即降级）；「不得重发」与「只能查询收口」两条纪律做进谓词而非留给人记住；另加一道出向缝不得看见传输层的门禁 | `resolved` |
 | [`10` 面单继续尝试决定登记册](./issues/10-continued-attempt-decision-registry.md) | 读面那一格今天派生自空历史 | `ready-for-agent` |
 | [`12` 候选装配](./issues/12-channel-candidate-assembly.md) | 产品—渠道映射到候选集合之间无适配器；落 PS 侧 | `ready-for-agent` |
 | [`13` `BUY` 批量评价与成本分值桥](./issues/13-buy-evaluation-to-cost-score-bridge.md) | 逐候选各算各的计费重；出局判断落择优层，不得以零金额顶替 | `ready-for-agent` |
 | [`15` 轨迹源的拉取/接收端口](./issues/15-tracking-source-inbound-port.md) | 形态选择（拉取/回调）；`OccurredAt` 缺失要如实交出不得代补 | `ready-for-agent` |
-| [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | 走通结果不确定、部分成功、批粒度三条 | `draft`｜`07` |
-| [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | 领域、库、读面三处；只留一份载荷（`04` 已裁）；本体入库还是只入引用要正面答 | `draft`｜`07` |
-| [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | 与既有终局是不是同一个，要正面答 | `draft`｜`06` |
+| [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | 走通结果不确定、部分成功、批粒度三条 | `draft`（`07` 已 resolved，阻塞解除） |
+| [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | 领域、库、读面三处；只留一份载荷（`04` 已裁）；本体入库还是只入引用要正面答 | `draft`（`04`/`07` 均已 resolved，阻塞解除） |
+| [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | 与既有终局是不是同一个，要正面答 | `draft`（`06` 已 resolved，阻塞解除） |
 | [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 不复用 `RouteCandidate`（`01` 已裁），落 PS 侧 | `draft`｜`12` |
 | [`16` 外部轨迹的收编执行器](./issues/16-external-tracking-fact-adoption-executor.md) | 译成 TF 新立的一类事实；**开工前须先补 TF `CONTEXT.md` 与三时间 ADR** | `draft`｜`15` ＋落文前置 |
 | [`17` TF 两类事实补在线登记口](./issues/17-tf-handover-and-offsite-pickup-need-online-faces.md) | **已判定不做**——`03` 裁定走新立事实，这两个口无用例在守；缺口登记仍留在盘点里 | `resolved` |
