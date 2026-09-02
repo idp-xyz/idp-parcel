@@ -110,7 +110,35 @@ Blocked by: 无
   `RehydrateCapacityPool` 的注释把这条理由写得最清楚：「读回已有预占不能重放
   Reserve/Release/Consume：那三条是转换门，有效期与装载分配是调用期依据，不是行上的事实」。
 
-  **一处要当心的**：段是值类型且参与关系是未导出切片，重建入口必须能设它——这意味着入口
+- 2026-09-02 · MCP-3：**重建门已落地（领域层第一刀）。表、端口、适配器仍未做。**
+
+  `domain/segment_rehydration.go`：`RehydrateActualFulfillmentSegmentSpec` +
+  `RehydrateParticipationSpec` + 入口函数，十个测试用例。**验形状与成对关系，不重走转换门**
+  ——照上一条 Comment 定的口径。
+
+  落地时定了一处上一条没说清的分界，写进了代码注释：**「已关闭且仍有在场参与」要拒，而这
+  不算重放 `CloseSegment`。** 判据是本门只拿**行上已有的两个事实**作比对、不引入任何调用期
+  输入；而重放转换门的特征是拿今天的输入去追认昨天的判断（`RehydrateCapacityPool` 注释里
+  那句话）。收下那种行等于让重建门造出一个构造门造不出的聚合，所以它必须拒。
+  上一条 Comment 写的「不重算 `ErrSegmentStillActive`」按此收窄：不重算「此刻该不该关」，
+  但要核「已经关了的那一行自身立不立得住」。
+
+  **顺带补了两个枚举的 `valid()`**（`ParticipationEntryKind` / `ParticipationEndKind`）——
+  此前没有，因为两个 `JoinWith*` 自己设种类、从不接受外来取值；重建门接受外来取值，所以
+  封闭集必须能自己把门。
+
+  **棘轮当场拦了一次**：新工厂无生产调用方即报红。按本仓先例（PS 的
+  `RehydrateContinuedAttemptRegister`，同形同因）加进基线并写明理由——适配器是本票下一层，
+  落地那天这一条出名单。**加之前先 `git diff` 确认树上无他人在途改动，在那棵干净树上量得
+  底数 32、加后 33**，两个数锚在同一棵树上。这是本轮刚写进 `parallel-sessions.md` 那条
+  「记数要连在哪量的一起记」第一次被照着用。
+
+  **验证：绿（含真库）。** `go build ./...` 与 `go vet` 退 0；`go test -p 1 -count=1 ./...`
+  设 DSN 指向门禁容器，**93 包全 ok、零 FAIL**，TF 的 postgres 包实跑 20.8 秒（同一容器上
+  本轮早先单测过 88 PASS / 0 SKIP，SKIP 为零即证明不是未设 DSN 跳过冒充的绿）。架构十一道
+  门禁全绿。`-race` 未跑，归收尾批。
+
+  **一处要当心的**（写给做适配器那一层的人）：段是值类型且参与关系是未导出切片，重建入口必须能设它——这意味着入口
   只能待在 `domain` 包内（与 `parcel-shipment` 那扇门当年排除掉「入口放新包」的理由一字
   相同：包外设不了未导出字段）。`internal/architecture/rehydration_gate_test.go` 那道门禁
   **只作用于 `parcel-shipment`**（`rehydrationSurfaceFile` 与 `aggregateTypeName` 都写死在

@@ -41,6 +41,11 @@
 # 上量**，那里不含任何人的在途改动。逐块核（`git add` 前 `git diff HEAD -- <file>`）能在提交
 # 之前逼出这个区别：本笔就是在那一步才发现自己写下的 32 记的不是自己那一剪。
 #
+# 2026-09-02 随 tf-unwired-seven/01 **新增**一条 RehydrateActualFulfillmentSegment（理由写在
+# 那一行上方）。**这一笔是上面那条处方第一次被照着用**：动手前先 `git diff` 该文件确认树上
+# 无他人在途改动（为空），在那棵干净树上量得底数 **32**，加后实测 **33**——两个数因此锚在
+# 同一棵树上，不是一个减一个加出来的。
+#
 # **那个 32 又错了一格，同一种错第二次。** 2026-09-02 晚 label-channel/10 加这一条之前重数，
 # 实测 31——某次增减（隔离写面那批的名单改动）只改了名单没改这句。加入登记册重建入口一条后
 # **实测 32**，这个数是数出来的不是从 31 加出来的**
@@ -124,6 +129,13 @@ internal/transportfulfillment/domain EstablishSegmentWithPickup
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
 internal/transportfulfillment/domain RecordMovementFact
+# 实际履约段的重建门（ADR-0028，tf-unwired-seven/01）。它现在没有调用方，是因为**这一票
+# 只落了领域层**：读它的仓储适配器（段册 + 参与关系册）是本票的下一层，落地那天这一条出
+# 名单。与上面 PS 那条 RehydrateContinuedAttemptRegister 同形同因。
+#
+# 转换门与访问器不在名单上——EstablishSegmentWith* 已各占一行（见本组上方），JoinWith*、
+# EndParticipationWith*、CloseSegment 是聚合方法而非导出工厂，本门禁只量后者。
+internal/transportfulfillment/domain RehydrateActualFulfillmentSegment
 
 
 # —— settlement-accounting ——
