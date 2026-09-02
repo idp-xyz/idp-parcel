@@ -1,7 +1,7 @@
 # 10 `面单继续尝试决定`登记册未建，读面那一格派生自空历史
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-1 认领
 Blocked by: 无
 
 ## 缺口
