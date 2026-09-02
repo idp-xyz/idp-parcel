@@ -1,7 +1,16 @@
 # 信用政策与供应商协议：能入册、能被选中，选中之后拿不到正文
 
 Category: chore
-Status: draft
+Status: ready-for-agent——产品已裁「两张都补」（2026-09-02，owner）
+
+> **裁决**：信用政策与供应商协议**两张正文表都补**。额度取值形态已定：**并存两列 + 恰一非空**，
+> 领域侧配两格封闭值对象（形照 `ProductChannelBinding`），不做「`limitMinor` 加一个布尔」
+> ——理由见下面「前置岔口已答」一节。
+>
+> 连带：`limitMinor` 之外的比例形态是领域缺口，本次一并补（票面原写「裁补则连带处理」）。
+> 端口按注释里说的**扩方法不开通用口**。
+>
+> 地盘：`internal/partycommercial/` 与 `migrations/party_commercial/`（两份新迁移）。
 Blocked by: 无
 
 ## 这两件为什么合成一票
