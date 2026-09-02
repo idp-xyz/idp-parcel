@@ -1,8 +1,8 @@
 # 09 渠道返回的面单载荷在领域、库与读面都没有落点
 
 Category: enhancement
-Status: draft
-Blocked by: 04, 07
+Status: in-progress——MCP-1 认领（`04`/`07` 均已 resolved，阻塞解除）
+Blocked by: 04（已 resolved）、07（已 resolved）
 
 ## 缺口
 
