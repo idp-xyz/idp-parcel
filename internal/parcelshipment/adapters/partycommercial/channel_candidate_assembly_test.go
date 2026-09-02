@@ -1,0 +1,289 @@
+package partycommercial_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
+	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+)
+
+// 本文件证渠道候选装配（票 `label-channel/12`）。装配自己不判优劣也不定价——它只回答
+// 「这一票此刻有哪些渠道可选」，交给票 13 那条链去评价与择优。
+//
+// 收窄规则本身不在这个缝上证：`CandidatesAllowedBy` 只收窄不扩张已由 party-commercial
+// 自己的 TestCustomerConstraintOnlyNarrowsTheCandidateRange 守着。这里要证的是**装配调用
+// 了它，而不是自己又写了一遍**，以及调用之前那几道门。
+
+const (
+	assemblyTenant  = "tenant-1"
+	assemblyScope   = "scope-a"
+	assemblyProduct = "product-label-channel"
+	assemblyMapping = "mapping-1"
+)
+
+func assemblyAt(t testing.TB) time.Time {
+	t.Helper()
+	return time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
+}
+
+func assemblyValue[T any](t testing.TB, constructor func(string) (T, error), value string) T {
+	t.Helper()
+	result, err := constructor(value)
+	if err != nil {
+		t.Fatalf("构造 %q：%v", value, err)
+	}
+	return result
+}
+
+// effectiveLabelChannelProduct 造一份**已生效**的面单渠道服务产品版本，并登记进册。
+//
+// 走完整的草稿→发布→生效三步而不是直接拼一个版本值：NewServiceProduct 只收已生效版本，
+// 那条不变量正是装配要依赖的（退役产品不得再产候选），绕过它造夹具等于把待证的那一半
+// 先替实现假设掉。
+func effectiveLabelChannelProduct(t testing.TB, registry *pcdomain.CommercialRegistry) pcdomain.ServiceProduct {
+	t.Helper()
+
+	interval, err := pcdomain.NewEffectiveInterval(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("构造生效区间：%v", err)
+	}
+	draft, err := pcdomain.NewCommercialDraft(pcdomain.CommercialVersionSpec{
+		TenantID:      assemblyValue(t, pcdomain.NewTenantID, assemblyTenant),
+		Kind:          pcdomain.ServiceProductObject,
+		ObjectID:      assemblyValue(t, pcdomain.NewCommercialObjectID, assemblyProduct),
+		Version:       assemblyValue(t, pcdomain.NewCommercialVersionLabel, "v1"),
+		Scope:         assemblyValue(t, pcdomain.NewCommercialScopeReference, assemblyScope),
+		ContentDigest: assemblyValue(t, pcdomain.NewCommercialContentDigest, "sha256:syn-label-channel-v1"),
+		Effective:     interval,
+	})
+	if err != nil {
+		t.Fatalf("构造草稿：%v", err)
+	}
+	basis, err := pcdomain.NewApprovalBasis(
+		assemblyValue(t, pcdomain.NewApprovalReference, "approval-label-channel-v1"),
+		assemblyValue(t, pcdomain.NewCommercialSourceReference, "syn-source"),
+		time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("构造批准依据：%v", err)
+	}
+	published, err := draft.Publish(basis, pcdomain.ApprovalRoleConfirmed, time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC), nil)
+	if err != nil {
+		t.Fatalf("发布：%v", err)
+	}
+	live, err := published.TakeEffect(time.Date(2026, 1, 4, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("生效：%v", err)
+	}
+	product, err := pcdomain.NewServiceProduct(live, pcdomain.LabelChannelServiceForm)
+	if err != nil {
+		t.Fatalf("构造服务产品：%v", err)
+	}
+	if _, err := registry.Register(live); err != nil {
+		t.Fatalf("登记版本：%v", err)
+	}
+	registry.RegisterServiceProduct(product)
+	return product
+}
+
+// twoChannelRegistration 造一笔登记两个渠道的产品—渠道映射登记。两个而不是一个：一个
+// 渠道时「全部放行」与「恰好只剩它」在结果上分不开。
+func twoChannelRegistration(t testing.TB) pcdomain.ProductChannelMappingRegistration {
+	t.Helper()
+
+	return twoChannelRegistrationFor(t, "v1")
+}
+
+func twoChannelRegistrationFor(t testing.TB, productVersion string) pcdomain.ProductChannelMappingRegistration {
+	t.Helper()
+
+	binding, err := pcdomain.NewConfiguredChannelBinding([]pcdomain.ChannelProductReference{
+		assemblyValue(t, pcdomain.NewChannelProductReference, "channel-a"),
+		assemblyValue(t, pcdomain.NewChannelProductReference, "channel-b"),
+	})
+	if err != nil {
+		t.Fatalf("构造渠道绑定：%v", err)
+	}
+	interval, err := pcdomain.NewEffectiveInterval(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("构造映射生效区间：%v", err)
+	}
+	registration, err := pcdomain.NewProductChannelMappingRegistration(
+		assemblyValue(t, pcdomain.NewTenantID, assemblyTenant),
+		assemblyValue(t, pcdomain.NewProductChannelMappingID, assemblyMapping),
+		1,
+		pcdomain.ProductChannelMappingSpec{
+			Product:        assemblyValue(t, pcdomain.NewCommercialObjectID, assemblyProduct),
+			ProductVersion: assemblyValue(t, pcdomain.NewCommercialVersionLabel, productVersion),
+			Binding:        binding,
+			Effective:      interval,
+			Basis:          assemblyValue(t, pcdomain.NewMappingBasisReference, "syn-mapping-basis"),
+		},
+	)
+	if err != nil {
+		t.Fatalf("构造映射登记：%v", err)
+	}
+	return registration
+}
+
+// stubMappings 与 stubPublication 是提供方两个读口的替身。它们如实作答，不模拟失败——
+// 本文件此刻要证的门都在装配这一侧。
+type stubMappings struct {
+	registration pcdomain.ProductChannelMappingRegistration
+	found        bool
+}
+
+func (stub stubMappings) LoadLatestMapping(
+	_ context.Context,
+	_ pcdomain.TenantID,
+	_ pcdomain.ProductChannelMappingID,
+) (pcdomain.ProductChannelMappingRegistration, bool, error) {
+	return stub.registration, stub.found, nil
+}
+
+type stubPublication struct {
+	registry *pcdomain.CommercialRegistry
+}
+
+func (stub stubPublication) LoadForScope(
+	_ context.Context,
+	_ pcdomain.TenantID,
+	_ pcdomain.CommercialScopeReference,
+) (*pcdomain.CommercialRegistry, error) {
+	return stub.registry, nil
+}
+
+// stubConstraints 按三态作答。零值 = 未配置，与真实装配面对的缺席同形。
+type stubConstraints struct {
+	constraint adapter.ChannelConstraint
+}
+
+func (stub stubConstraints) ChannelConstraintFor(
+	_ context.Context,
+	_ adapter.ChannelCandidateQuery,
+) (adapter.ChannelConstraint, error) {
+	return stub.constraint, nil
+}
+
+func assemblerWith(t testing.TB, constraint adapter.ChannelConstraint) *adapter.ChannelCandidateAssembler {
+	t.Helper()
+
+	return assemblerFor(t, constraint, twoChannelRegistration(t))
+}
+
+// assemblerFor 装出一个协作方齐备的装配器：发布册里只有 v1 这一份已生效的面单渠道服务
+// 产品，登记册交回给定的那一笔映射。
+func assemblerFor(
+	t testing.TB,
+	constraint adapter.ChannelConstraint,
+	registration pcdomain.ProductChannelMappingRegistration,
+) *adapter.ChannelCandidateAssembler {
+	t.Helper()
+
+	registry := pcdomain.NewCommercialRegistry()
+	effectiveLabelChannelProduct(t, registry)
+	return adapter.NewChannelCandidateAssembler(adapter.ChannelCandidateAssemblerDeps{
+		Mappings:    stubMappings{registration: registration, found: true},
+		Publication: stubPublication{registry: registry},
+		Constraints: stubConstraints{constraint: constraint},
+	})
+}
+
+func assemblyQuery(t testing.TB) adapter.ChannelCandidateQuery {
+	t.Helper()
+
+	return adapter.ChannelCandidateQuery{
+		Tenant:  assemblyValue(t, pcdomain.NewTenantID, assemblyTenant),
+		Scope:   assemblyValue(t, pcdomain.NewCommercialScopeReference, assemblyScope),
+		Mapping: assemblyValue(t, pcdomain.NewProductChannelMappingID, assemblyMapping),
+		At:      assemblyAt(t),
+	}
+}
+
+// Covers: 票 12 红线「不填任何候选内容、渠道账号、映射取值（实例半边）」在读取失败一侧的
+// 落法——**渠道约束读不回来时装配停下，不得当作「客户没提约束」**。
+//
+// 这一格是本票最贵的一格，理由在 CandidatesAllowedBy 自己的实现里：它在 allowed 为空时
+// 交回**全部**可用渠道。对它自己这是对的（客户没提约束本就等于不收窄），但装配若把「未
+// 配置」也折成空切片传进去，一次读取失败就静默变成一次**范围放大**——放大出来的渠道客户
+// 可能恰好禁止过，而下游只看到一个多出来的候选，看不出它是怎么进来的。
+//
+// 夹具刻意让映射真的有两个渠道可放：映射为空时「停下」与「没有候选」在结果上分不开，
+// 那样的绿是假的。
+func TestAnUnconfiguredChannelConstraintStopsTheAssemblyRatherThanAllowingEveryChannel(t *testing.T) {
+	t.Parallel()
+
+	assembler := assemblerWith(t, adapter.ChannelConstraint{})
+
+	candidates, err := assembler.AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if !errors.Is(err, adapter.ErrChannelConstraintNotConfigured) {
+		t.Fatalf("装配 err = %v，want %v", err, adapter.ErrChannelConstraintNotConfigured)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("停下的装配仍交回了 %d 个候选——读取失败被当成了「无约束」", len(candidates))
+	}
+}
+
+// Covers: 装配交回的是**映射给出、再经客户约束收窄**的那一批，且译成择优侧的候选标识。
+//
+// 约束里刻意多点一个映射并未提供的 channel-z：客户点名不等于该渠道就成为候选，运营企业
+// 只能在商业上可用的范围内选择（PC CONTEXT）。它与被收窄掉的 channel-a 一起，把两个方向
+// 的错都钉住——只做交集的一半会漏掉其中一个。
+func TestAssemblyReturnsTheMappedChannelsNarrowedByTheCustomerConstraint(t *testing.T) {
+	t.Parallel()
+
+	constraint, err := adapter.ConstrainedToChannels(
+		assemblyValue(t, pcdomain.NewChannelProductReference, "channel-b"),
+		assemblyValue(t, pcdomain.NewChannelProductReference, "channel-z"),
+	)
+	if err != nil {
+		t.Fatalf("构造渠道约束：%v", err)
+	}
+
+	candidates, err := assemblerWith(t, constraint).
+		AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+
+	got := make([]string, len(candidates))
+	for index, candidate := range candidates {
+		got[index] = candidate.String()
+	}
+	if len(got) != 1 || got[0] != "channel-b" {
+		t.Fatalf("候选 = %v，want [channel-b]——channel-a 该被约束收窄掉，channel-z 客户点了名但映射没提供", got)
+	}
+}
+
+// Covers: 映射指名的服务产品版本此刻不在册（或不已生效）时装配停下，不产候选。
+//
+// 这道门不是仪式。ProductChannelMapping 的候选逻辑以「属于一份已生效产品」为前提——那正是
+// NewProductChannelMapping 收 ServiceProduct 而 ServiceProduct 只收已生效版本的原因。跳过它
+// 就等于让一份草稿、已到期或已退役的产品继续产出新候选，而候选下游是一笔真实的供应商采购：
+// 一个已经收尾的商业决定会因此重新参与新的采购。
+//
+// 摆法取「映射指着 v2，而册上生效的是 v1」：这是版本推进时的常见错位，且它与「映射根本
+// 没登记」不同——那一格由 ErrProductChannelMappingNotRegistered 表达，续办也不同。
+func TestAssemblyStopsWhenTheMappedProductVersionIsNotEffective(t *testing.T) {
+	t.Parallel()
+
+	constraint := adapter.UnconstrainedChannels()
+	assembler := assemblerFor(t, constraint, twoChannelRegistrationFor(t, "v2"))
+
+	candidates, err := assembler.AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if !errors.Is(err, adapter.ErrMappedServiceProductNotEffective) {
+		t.Fatalf("装配 err = %v，want %v", err, adapter.ErrMappedServiceProductNotEffective)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("停下的装配仍交回了 %d 个候选", len(candidates))
+	}
+}
