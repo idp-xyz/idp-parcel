@@ -414,6 +414,20 @@ export const publicationOutcomeLabels: Record<string, string> = {
 };
 
 /**
+ * 声明通道落点的逐格中文（`ports.DeclarationSaveOutcome` 原名）。
+ *
+ * 与 publicationOutcomeLabels 分表而不并进去：两套代数有重名格。`CONTENT_CONFLICT` 在
+ * 版本那一栏说的是同键异内容、改内容要发新版本号；在声明这一栏说的是同一个拥有版本
+ * 携带了不同正文——声明随发布固定，改声明必须发新版本，事后补不进去。并表会让其中
+ * 一种顶着另一种的中文显示出来。
+ */
+export const declarationLandingLabels: Record<string, string> = {
+  SAVED: '已登记',
+  ALREADY_REGISTERED: '同拥有版本同正文重放（原正文不被顶替）',
+  CONTENT_CONFLICT: '内容冲突（同拥有版本携带了不同正文；声明随发布固定，改声明要发新版本）',
+};
+
+/**
  * 参与方身份与关系的登记答案代数（`application.PartyRegistryOutcome` 原名）。
  *
  * `未找到`只出现在停用：要停用的身份从未登记。它不是「路由不存在」——能力在、册也在，

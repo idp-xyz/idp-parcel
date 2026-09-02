@@ -33,6 +33,42 @@ import type { ApiResult } from '../../pages/catalogue-api';
 export interface RegistrationResponseBody {
   outcome: string;
   refusalReason?: string;
+  /**
+   * 受理门拒绝的**散文**原因（party-commercial 的身份族与产品渠道族是首例）。
+   *
+   * 它与 `refusalReason` 分开而不是共用一格：那一格是封闭枚举，逐格有中文词表，缺格
+   * 时原名过线仍读得懂；这一格是用例随结果交回的一句话（「修订必须连续：册上最新为
+   * 2，收到 5」），没有代数可查表。折进 `refusalReason` 会让散文冒充枚举，而调用侧
+   * 一旦对着它分支，用例改一个字就拆掉了。
+   *
+   * 那为什么不丢掉：登记方拿一个没有指名的 `NOT_ACCEPTED` 什么也补不了——他分不出是
+   * 修订跳号、引用悬空还是领域门拒。要可判别的理由代数，得在用例侧立封闭枚举（先例
+   * 是网络目录登记的 `CatalogRefusalReason`），不是在传输层按字符串拼。
+   */
+  cause?: string;
+  /**
+   * 发布未决的原因（party-commercial 的发布口）。它只随`发布未决`在场，说的是「等批准
+   * 角色确认」还是「等正文指名的对象发布」——两者的续办动作不同，靠格分辨不出来。
+   *
+   * 不与 `cause` 共用一个名：那一格随`未受理`（输入被登记册的引用检查拒绝），这一格的
+   * 输入本身没问题。同名会让两种续办动作看起来是一回事。
+   */
+  pendingCause?: string;
+  /**
+   * 随本次发布一并登记的各声明通道落点。
+   *
+   * **这一栏不能省。** 声明与版本同笔落库，某个通道撞上同键异内容时版本仍可能答
+   * `PUBLISHED_EFFECTIVE`——不呈现它，一次半数声明没进去的发布在页面上与全都落定的
+   * 发布长得一模一样，而受控 CLI 的 publish 恰恰按这一格抬退出码要商业责任方去看。
+   * 两口对同一件事不同答法，本身就是个缺口。
+   */
+  declarations?: RegistrationDeclarationLanding[];
+}
+
+/** 一个声明通道的落点。通道名与落点名都取应用枚举原名，不改名也不合并。 */
+export interface RegistrationDeclarationLanding {
+  channel: string;
+  outcome: string;
 }
 
 export interface RegistrationPanelProps {
@@ -46,6 +82,14 @@ export interface RegistrationPanelProps {
   outcomeLabels: Record<string, string>;
   /** 受理门拒绝理由的逐格中文；只有答案带 `refusalReason` 的登记口需要给。 */
   refusalReasonLabels?: Record<string, string>;
+  /**
+   * 声明通道落点的逐格中文；只有答案带 `declarations` 的登记口需要给。
+   *
+   * 单立一张表而不复用 `outcomeLabels`：两套代数有重名格。`CONTENT_CONFLICT` 在版本那
+   * 一栏说的是「同键异内容，改内容要发新版本号」，在声明这一栏说的是「同拥有版本携带
+   * 不同正文」——续办动作不同。共用一张表，其中一种会顶着另一种的中文显示出来。
+   */
+  declarationLandingLabels?: Record<string, string>;
   /** problem+json 错误码的中文说明，取该上下文自己的 presentation，不在此处统一措辞。 */
   problemNote: (code: string) => string;
 }
@@ -64,6 +108,7 @@ export function RegistrationPanel({
   submit,
   outcomeLabels,
   refusalReasonLabels,
+  declarationLandingLabels,
   problemNote,
 }: RegistrationPanelProps) {
   const info = moduleInfoById[moduleId];
@@ -116,6 +161,7 @@ export function RegistrationPanel({
               owner={info.owner}
               outcomeLabels={outcomeLabels}
               refusalReasonLabels={refusalReasonLabels}
+              declarationLandingLabels={declarationLandingLabels}
               problemNote={problemNote}
             />
           </div>
@@ -130,12 +176,14 @@ function AnswerNote({
   owner,
   outcomeLabels,
   refusalReasonLabels,
+  declarationLandingLabels,
   problemNote,
 }: {
   state: PanelState;
   owner: string;
   outcomeLabels: Record<string, string>;
   refusalReasonLabels?: Record<string, string>;
+  declarationLandingLabels?: Record<string, string>;
   problemNote: (code: string) => string;
 }) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
@@ -151,16 +199,39 @@ function AnswerNote({
       // 未收录的 outcome 原样示出：服务端新增一格时，页面宁可显示英文原名，也不把它
       // 归进某个既有中文说法——那会让一种新答案冒充另一种。拒绝理由同一纪律。
       const reason = answer.body.refusalReason;
+      // 散文原因与未决原因原样示出，不查表也不截断：它们没有代数可查，而截断掉的
+      // 往往正是「册上最新为几、收到几」那半句——登记方要改的就是那个数。
+      const prose = answer.body.cause ?? answer.body.pendingCause;
+      const landings = answer.body.declarations ?? [];
       return (
-        <p className="text-xs text-idpxyz-textMuted">
-          登记册答复：<span className="font-mono">{outcome}</span> —— {label}
-          {reason ? (
-            <>
-              ；拒绝理由：<span className="font-mono">{reason}</span> ——{' '}
-              {refusalReasonLabels?.[reason] ?? reason}
-            </>
+        <div className="text-xs text-idpxyz-textMuted">
+          <p>
+            登记册答复：<span className="font-mono">{outcome}</span> —— {label}
+            {reason ? (
+              <>
+                ；拒绝理由：<span className="font-mono">{reason}</span> ——{' '}
+                {refusalReasonLabels?.[reason] ?? reason}
+              </>
+            ) : null}
+          </p>
+          {prose ? <p className="mt-1">原因：{prose}</p> : null}
+          {landings.length > 0 ? (
+            <div className="mt-1">
+              {/* 声明落点与版本答案分行列出，不折进上面那句：某通道内容冲突时版本
+                  仍可能是「已发布已生效」，两者挤在一行会让人只读到前半句。 */}
+              <p>随本次发布登记的声明落点：</p>
+              <ul className="mt-0.5 ml-4 list-disc">
+                {landings.map((landing) => (
+                  <li key={landing.channel}>
+                    <span className="font-mono">{landing.channel}</span> ——{' '}
+                    <span className="font-mono">{landing.outcome}</span>{' '}
+                    {declarationLandingLabels?.[landing.outcome] ?? ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
-        </p>
+        </div>
       );
     }
     case 'unconfigured':
