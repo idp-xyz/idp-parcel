@@ -24,6 +24,10 @@
 # 2026-09-02 随 label-channel/12 的择优编排落地，剪掉 SelectChannelCandidateByCost 一条，
 # **在 a5a32cc 上改后重数实测 32**（不是拿任何先前的数加减出来的）。
 #
+# 2026-09-02 随 label-channel/12 的成本取数适配器落地，剪掉 EvaluatePricingAcrossPlans 一条，
+# **在 7ae3c7a 上改后重数实测 31**。这两笔之间隔了别的会话的若干提交，所以 32 与 31 不是
+# 相邻的两个数——**它们各自只对自己那个 SHA 成立**，中间那段本文件被谁改过要看 git 历史。
+#
 # 2026-09-02 随 party-commercial-context-gaps/01 剪掉 PublishChannelAccountUseAuthorization
 # （渠道账号使用授权补齐执行器，接上生产调用路径）。本笔的计数见下面那段——它写于同一次
 # 改动，因为这一剪恰好撞上了一种此前没记过的失效。
@@ -187,17 +191,14 @@ internal/parcelpricing/domain MarshalPricingPlanSnapshot
 internal/parcelpricing/domain RehydratePricingPlanSnapshot
 # 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
 internal/parcelpricing/domain ParseCanonical
-# 一份输入对多份 `BUY` 价卡的批量评价口（票 `label-channel/13` 缝一）。
+# 批量评价口 EvaluatePricingAcrossPlans 曾在这里（票 `label-channel/13` 缝一）。它比 PS 侧
+# 那条择优比较器晚一步出名单，因为两者缺的调用方本就不是同一个：比较器缺编排，而它缺的是
+# 把编排接到自己身上的那个适配器（`application` 不得导入 `parcel-pricing`，编排只能经
+# `ports.ChannelCandidateCostSource` 取成本）。2026-09-02 那个适配器随票 `12` 落地
+# （parcelshipment/adapters/parcelpricing/cost_source.go），按上句剪掉。
 #
-# 它原与 PS 侧那条择优比较器共写一条成因（「候选装配未落地」），而那一条已于 2026-09-02
-# 随票 12 的择优编排剪掉，本条没有跟着走：**两者缺的调用方不是同一个**。比较器缺的是编排，
-# 编排已经有了；本条缺的是把它接到编排上的那个适配器——按架构门禁，`application` 不得导入
-# `parcel-pricing`，所以编排只能经 `ports.ChannelCandidateCostSource` 取成本，而实现那个口的
-# 适配器（落 `parcelshipment/adapters/parcelpricing/`）还没写。它写出来那天这一条出名单。
-#
-# 与上面那对快照函数不同，这一条**不是「路径两端」**——它自己就是一个完整入口，缺的只是
-# 调用者，不是缺另一半。所以它出名单不会连带谁。
-internal/parcelpricing/domain EvaluatePricingAcrossPlans
+# **剪之前按本门禁的提示分过三种成因**：全仓一处声明（parcelpricing/domain/
+# batch_evaluation.go）、一处非测试调用点（上述适配器），其余命中全在测试里，不是同名误判。
 # 初版这里还有两条与其余不同类的：DecimalFromInt64 与 Evaluate 全仓无人调用、测试里也是零，
 # 不是「只被测试接线」而是死代码，各自都是一行转发给同文件里的正主（NewDecimalFromInt64 与
 # EvaluatePricing，两个正主分别有 11 与 25 处引用）。**已删**，见本文件的 git 历史。
