@@ -87,7 +87,25 @@ flowchart TD
   **反过来也要防一格：读错编码得到的乱码，与真被 `Set-Content` 写坏的文件在屏幕上一模一样。** 实测踩到过——用 `Get-Content` 不带 `-Encoding UTF8` 读两份新票面，满屏 `娓犻亾鍊欓€夋嫨`，差一步就要广播「有人把票面写坏了」；换读文件工具重读一遍，文件好好的，坏的是读法。下一条讲的是这个毛病对计数的影响，这里只说归因：**看到乱码先换一种读法再读一遍，确认是文件坏了再说话。** 判错方向的代价不对称——把自己的读错报成别人写坏，会让那个人回去翻一份根本没问题的文件。
 - **写多行提交消息用 `git commit -F` 加**单引号**here-string，双引号那种会吃掉反引号。** `@" … "@` 是可扩展 here-string，反引号在里面是转义符：`` `resolutionOrder `` 里的 `` `r `` 被当成回车写进消息，整行从此断在那里；`` `CommercialBasisQuery `` 之类没撞上转义名的只是丢掉两个反引号。而本仓的提交消息几乎必然引到代码符号，反引号是默认写法。用 `@' … '@`（单引号 here-string，字面量、不做任何替换），再 `[System.IO.File]::WriteAllText($path, $msg, (New-Object System.Text.UTF8Encoding $false))` 写盘、`git commit -F $path`。**别用 `git commit -m` 写多行中文**：换行处会另有一处损坏。识别标志是消息里出现半行截断或凭空多出的换行，而 `git commit` 本身退 0。
 - **读中文源文件同样要显式指定 UTF-8，否则按行统计会静默偏小。** `Get-Content -Raw` 和走 PowerShell 管道的 `git show` 都不假定 UTF-8，无 BOM 时退回 ANSI 代码页（本机 GBK）；中文注释的 UTF-8 字节按 GBK 解会剩下一个落单的前导字节，它把紧跟的换行当成自己的后继字节一并吃掉，于是 `// …守的形状。` 与下一行的 `func TestXxx` 并成一行。后果不是乱码报错，而是**行首锚点失配**——`(?m)^func Test` 在导入 `pgtest` 的 141 个用例文件上实测数出 455 条，显式 UTF-8 读同一批是 806 条，少掉 351 条，全程零报错。识别标志是**同一份计数换个读法就变大**，以及子集反超全集（同一次统计里全仓 772 条竟小于该子集的 806 条）。按行首匹配或按行计数读中文源码时用 `[System.IO.File]::ReadAllText($path, (New-Object System.Text.UTF8Encoding $false))`；非要走 `git show` 管道就先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`。与上一条是同一族问题的读写两半，上一条至少会红，这一条不会。**拿它做「零命中即干净」那类自查时尤其危险**：偏小时人还可能觉得数对不上，偏到零时，**零命中恰恰就是自查想要的结果**。实测有人用中文模式 `Select-String` 自查「我有没有写过计数」，零命中，差一点据此报「我干净」。**读回来再写回去，这条就从「数偏小」升级成「毁文件」**：`(Get-Content -Raw $p).Replace(…) | Set-Content $p` 这种一行流批量替换，改的哪怕只是一个 ASCII 标识符、全程没碰中文，落盘的仍是被 GBK 解坏又并掉换行的那份——`//` 注释吞掉下一行代码，`go build` 报的是 `expected declaration` 与 `string literal not terminated`，**错因在报文里一个字都看不见**，人会先去找自己刚改的那处语法。要在脚本里改中文源文件，两端都得显式：`[System.IO.File]::ReadAllText` 读、`WriteAllText` 配不带 BOM 的 `UTF8Encoding` 写；改完顺手核一次 CR 与 BOM 字节。
-- **`gofmt -l .` 会对刚写出来的 `.go` 误报，而误报的方向是「有活要干」。** 它读的是工作副本，而本机新写的文件带 CRLF；`.gitattributes` 写着 `*.go text eol=lf`，`git ls-files --eol` 给的是 `i/lf w/crlf`——**入库的是 LF**，ubuntu 上检出即 LF，CI 的 `test -z "$(gofmt -l .)"` 不会红。判真假一律用 `git ls-files --eol <path>` 看 `i/` 那一格，别看 `gofmt -l`。**临时 worktree 里不会误报**，因为那是一次全新检出——这是「推前在临时 worktree 里验」的第二个理由，与它免疫于别人未提交改动那条并列。实测于 2026-09-02：共享树上 `gofmt -l .` 点名了一份刚写下的 `.scratch` 探针，差一步被广播成「它过不了 CI 那道门」。它与「与宿主无关」一节 `gofmt -l` 退出码那条不同属：那条说的是**它不用退出码说话**，这条说的是**它说出来的那句话本身可能不成立**。
+- **`gofmt -l .` 在本机会误报，而误报的方向是「有活要干」。** 它读**工作副本**，而本机新写或未经检出的文件带 CRLF；`.gitattributes` 是 `*.go text eol=lf`，入库仍是 LF，ubuntu 上检出即 LF，CI 的 `test -z "$(gofmt -l .)"` 不会红。**临时 worktree 里不会误报**，因为那是一次全新检出——这是「推前在临时 worktree 里验」的第二个理由，与它免疫于别人未提交改动那条并列。它与「与宿主无关」一节 `gofmt -l` 退出码那条不同属：那条说的是**它不用退出码说话**，这条说的是**它说出来的那句话本身可能不成立**。
+
+  **判真假只有一句话：量将要入库的字节，不量工作副本。** CI 检出的就是那些字节，而工作副本的 CRLF 正是噪声源本身。按文件此刻在哪一阶段换引用：
+
+  ```powershell
+  git cat-file blob :<path>       # 已暂存、正要提的 —— 这一份就是将要入库的字节
+  git cat-file blob HEAD:<path>   # 已提交的
+  # 都没有（新写、未 add）—— 不必判，直接 gofmt -w
+  ```
+
+  **第二行与第一行的区别是会咬人的那一格**：`HEAD:` 量的是**上一版**，而你想知道的是这一次提上去的那份会不会红，两者在输出上一模一样，且你刚改的这一次恰恰最可能引入 BOM。`core.autocrlf=true` 在**暂存时**就把 CRLF 收成 LF，所以索引里那份 blob 不多不少正是将要入库的内容。
+
+  这一步同时排掉**行尾**与 **BOM** 两个成因（都是字节层的事实），剩下还被 `gofmt -l` 列出的才是真的格式差异（如 CJK 键的对齐——`gofmt` 按字节数对齐，手写时看着齐了它不认）。
+
+  **入口是 `gofmt -l` 列出的每一个文件，不是抽一个判完推及其余。** 这一句比上面那几行更容易被省掉，而 2026-09-02 有现成反例：同一批、同一作者、同一时间写出的四个文件，成因分三种（行尾误报、BOM、对齐）；当晚有人抽验了其中两个非测试文件、看到 `w/crlf` 就把结论说成四个，另两个 `_test.go` 是真失败，差一步被整批放过。**这条判据好用到会被当成万能解释**，而它只排除得了行尾与 BOM，且必须逐个文件量。
+
+  **比判它更便宜的是不让它发生：新写完的 `.go` 无条件 `gofmt -w` 一遍再提。** 那个 BOM 是写文件的工具加的、不是手敲的，因此同一批里只有一个带、不稳定复现——事后分辨三种成因的成本远高于顺手跑一次。
+
+  顺带一格不属这一族但同源：**`.sql` 写成 CRLF 是真问题，不是误报**。迁移校验和按字节算，CRLF 会让已施加的库在干净检出下报漂移。
 - **`git hash-object -w` 省掉 `--path` 不一定错，但对错的依据会从仓里换到机器上。** 「HEAD＋只有自己的块」那套（见 [parallel-sessions](./parallel-sessions.md)）要把一份临时副本写成 blob，而副本从工作树拷来时带 CRLF。带 `--path <目标路径>` 时 `hash-object` 按仓内 `.gitattributes` 规范化；不带则落到本机 `core.autocrlf`，而它在这台机器上恰好是 `true`，于是也对。实测于 `54ae107`（真提交，非演练）：没带 `--path`、副本是工作树 CRLF，入库仍是 LF，`git show --numstat` 为 21 行纯新增零删除，`git ls-files --eol` 给 `i/lf w/crlf`。**仍建议带上，理由是依据的出处**——`.gitattributes` 跟着仓走、人人一致，`core.autocrlf` 是一个人可以改、换台机器就不同的开关。**把理由写准要紧**：这一条先前被写成「不带就会入库 CRLF」，那是推的不是量的；而一条理由错的纪律，第一个验出它不必要的人会把它整条丢掉。
 - **`git worktree remove` 的退出码两个方向都不可信，收尾动作因此不能按它写。** 本机实测到过它报 `Permission denied` 退 **255**，而它其实**已经把工作树内容删光、登记也从 `.git/worktrees` 摘掉了**，只剩最后一层空目录没删成；照退出码判会读成「拆失败」，于是去重试、或者加 `--force`——而 `--force` 在别的场合会连真正未提交的改动一起丢。反方向同样不成立：退 0 只说明命令自认为成功。它还是**间歇**的而不是 Windows 必发，同一天里有会话连拆五处全部退 0、零残留，所以别写成「Windows 上必然如此」，那会让下一个人看到退 0 反而怀疑自己。可靠的收尾是四步各自查自己那一格：`git worktree remove <path>`（**永不加 `--force`**）→ `git worktree prune` → `Test-Path <path>`，有壳才 `Remove-Item -Recurse -Force` → `git worktree list` 复核登记已摘。
 - **数命令输出的行数时让 git 自己数，别用 `@(...).Count`。** 上一条那个吃换行的毛病同样打在**自验时用来数东西的方法**上，而这一层最难察觉：结果不是报错，是一个小一点的数。实测同一段区间——`@(git log --oneline A..HEAD).Count` 给 **1**，先设 `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` 再跑同一句给 **2**，`git rev-list --count A..HEAD` 给 **2**（中文提交消息末尾那个字吃掉了换行，两行并成一行）；同一份 diff 默认管道数出 22 行、设 UTF-8 后 34 行、`git diff --numstat` 是 18 增 1 删。**用 `git rev-list --count`、`git diff --numstat` 这类由 git 自己出数的写法**，根本不经 PowerShell 解码——比「记得先设 `OutputEncoding`」那条纪律硬，因为它不依赖谁记得。**但换成 git 自己数只挡住了解码那一半，传参这一半仍在人手里**，而且只有一种写法会坏——别因此一律改写。同一时刻同一仓，正确答案 3：
