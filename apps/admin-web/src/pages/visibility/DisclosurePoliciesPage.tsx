@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
   listVisibilityCatalogues,
+  registerVisibilityCatalogue,
+  visibilityRegistrationEndpoints,
   type ApiResult,
   type DisclosureCellRecord,
   type VisibilityCatalogueListResponseBody,
@@ -11,6 +15,11 @@ import {
 import {
   disclosureStateLabels,
   labelOf,
+  problemNote,
+  registrationOutcomeLabels,
+  registrationRefusalReasonLabels,
+  registrationSnapshotHints,
+  registrationTitles,
   visibilityCatalogueKindLabels,
 } from './presentation';
 
@@ -117,7 +126,7 @@ function rowsOf(body: DisclosureListBody): PolicyRow[] {
   }
 }
 
-export function DisclosurePoliciesPage() {
+function DisclosurePoliciesTable() {
   const [kind, setKind] = useState<DisclosureKind>('NOTIFICATION_POLICY');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -189,5 +198,53 @@ export function DisclosurePoliciesPage() {
         emptyDescription: '读取入口已配置,但该目录为空;页面不会生成默认策略。',
       })}
     />
+  );
+}
+
+// 登记签装本页读签的同两册,判据同判断规则页。
+const registrationTargets: RegistrationTarget[] = disclosureKinds.map((candidate) => ({
+  id: candidate,
+  label: visibilityCatalogueKindLabels[candidate],
+  title: registrationTitles[candidate],
+  endpoint: `POST ${visibilityRegistrationEndpoints[candidate]}`,
+  snapshotHint: registrationSnapshotHints[candidate],
+  submit: (snapshot) => registerVisibilityCatalogue(candidate, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+  refusalReasonLabels: registrationRefusalReasonLabels,
+}));
+
+/**
+ * 对外披露口径两册:逐册查阅,外加登记签(ADR-0085,票 admin-write-faces/02 切片 02d)。
+ *
+ * 两册换版的走法不同,登记签照实呈现而不抹平:披露策略按版本抬头翻旧插新;通知策略没有
+ * 版本抬头,版本化由披露策略引用本身承担,换版即换引用、新旧两行并存。两者都没有覆盖或
+ * 删除动作,所以这里也只有登记一个动作。
+ */
+export function DisclosurePoliciesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalogue">披露口径</TabsTrigger>
+          <TabsTrigger value="register">登记披露口径</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalogue"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <DisclosurePoliciesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <MultiRegistrationPanel
+            moduleId="disclosure-policies"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

@@ -24,10 +24,17 @@ export const sourceContextLabels: Record<string, string> = {
 // 刻意不带自由文本(防泄露),所以措辞只指下一步动作。
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
+  // 本上下文的查阅口与登记口共用这一格,所以措辞要同时说得通:两侧都表示「这次请求
+  // 构造不出命令」,续办动作也同为改请求形状,只是能构造不出的原因各随入口。
   MALFORMED_REQUEST:
-    '请求构造不出查询(定位参数为空,或 parcel 与 version 同时在场),重发同样的内容不会改变结果。',
+    '请求构造不出查询或登记命令(查阅口:定位参数为空、parcel 与 version 同时在场,或 kind 不在封闭集;登记口:快照不是该种类的形状),重发同样的内容不会改变结果。',
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
+  // 应用层交回了一个没有名字的枚举:那是服务端缺陷,不是登记方能改的东西。单列出来
+  // 而不落进兜底句,是因为兜底句让人去查记录,这两格该做的是报缺陷。
+  UNNAMED_OUTCOME: '服务端交回了没有名字的处理结果,属服务端缺陷;重试不会好,请报缺陷。',
+  UNNAMED_REFUSAL_REASON:
+    '登记被拒但服务端没给出拒绝理由,属服务端缺陷——没有理由就无从知道该改什么;重试不会好,请报缺陷。',
 };
 
 export function problemNote(code: string): string {
@@ -68,3 +75,107 @@ export const disclosureStateLabels: Record<string, string> = {
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }
+
+// ---- 六类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d）----
+
+/** 登记签的标题。册名取读签同一个词;有无版本抬头照各册实情说,不给通知策略补一个。 */
+export const registrationTitles: Record<VisibilityCatalogueKind, string> = {
+  MILESTONE_MAPPING: '登记里程碑映射版本',
+  TRIAGE_RULE: '登记分诊规则版本',
+  NOTIFICATION_POLICY: '登记通知策略',
+  CLAIM_ELIGIBILITY: '登记索赔资格声明',
+  CLAIM_AUTHORIZATION: '登记申请人授权名单',
+  DISCLOSURE_POLICY: '登记披露策略版本',
+};
+
+/** 受控登记口的命令名,逐册一个;词取 cmd/parcel-ve-register 已发布的原词。 */
+const registrationCommands: Record<VisibilityCatalogueKind, string> = {
+  MILESTONE_MAPPING: 'milestone-mapping',
+  TRIAGE_RULE: 'triage-rules',
+  NOTIFICATION_POLICY: 'notification-policy',
+  CLAIM_ELIGIBILITY: 'claim-eligibility',
+  CLAIM_AUTHORIZATION: 'claim-authorization',
+  DISCLOSURE_POLICY: 'disclosure-policy',
+};
+
+// 登记快照形状的提示句。六册只差命令名一词,所以由一处拼出:抄六遍会让「不逐字段建
+// 表单」这条理由在其中一遍被改动时悄悄分叉。
+function snapshotHint(kind: VisibilityCatalogueKind, particulars?: string): string {
+  return (
+    `登记快照 JSON 的形状与受控登记口 parcel-ve-register ${registrationCommands[kind]} -input <file> 吃的同一份` +
+    '(两口共用同一份译装,不是两份碰巧同形);本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」' +
+    '的翻译属渠道接入契约,随 PAR-INT-01 提供。未知字段一律拒收——打错字段名不会静默变成「没给」。' +
+    (particulars ?? '')
+  );
+}
+
+/**
+ * 各册登记快照的形状提示。带封闭集或带反直觉判据的册把话说出来:那几件打错之后,受理门
+ * 给的是一句指名拒绝,而从册名上看不出来自己错在哪。
+ */
+export const registrationSnapshotHints: Record<VisibilityCatalogueKind, string> = {
+  MILESTONE_MAPPING: snapshotHint(
+    'MILESTONE_MAPPING',
+    '源上下文取封闭五词 PARCEL_SHIPMENT / NETWORK_ROUTING / NODE_OPERATIONS / TRANSPORT_FULFILLMENT / CUSTOMS_COMPLIANCE;' +
+      '标准里程碑是租户自己的实例参数,登记口不校对词表。',
+  ),
+  TRIAGE_RULE: snapshotHint(
+    'TRIAGE_RULE',
+    '分诊走向取封闭四词 AUTO_ESTABLISH / ATTACH_TO_EXISTING / MANUAL_REVIEW / NO_CASE;' +
+      '信号类型与可信度是开放引用,原词收下。',
+  ),
+  NOTIFICATION_POLICY: snapshotHint(
+    'NOTIFICATION_POLICY',
+    '这册没有版本抬头:版本化由披露策略引用本身承担,换版即换引用。时限收 Go 时长字面(如 "72h")' +
+      '且必须为正——非正时限算出的截止点在披露决定之前,那样的通知一生成就已逾期。',
+  ),
+  CLAIM_ELIGIBILITY: snapshotHint(
+    'CLAIM_ELIGIBILITY',
+    '覆盖索赔种类至少一项:一份不覆盖任何种类的责任范围声明会把索赔核成永久的「不予受理」,' +
+      '所以宁可不登这份声明——没有声明行时缺一个种类是「没人声明过」,那一格还能续办。',
+  ),
+  CLAIM_AUTHORIZATION: snapshotHint(
+    'CLAIM_AUTHORIZATION',
+    '申请人名单字段必须在场:不授权任何人写 [],那是「此账户当前不授权任何人代提」的显式决定;' +
+      '整个字段缺席是漏填,两者恢复动作不同,登记口不压成一格。',
+  ),
+  DISCLOSURE_POLICY: snapshotHint(
+    'DISCLOSURE_POLICY',
+    '四维各取封闭三态 SHOWN / PENDING_CONFIRMATION / NOT_DISCLOSED;内容只在 SHOWN 时在场,' +
+      '另两态带了内容即矛盾输入,登记口拒收而不是替登记方丢掉那半句声明。',
+  ),
+};
+
+/**
+ * 登记答案代数（`application.RegisterCatalogOutcome` 原名）,两格中文。
+ *
+ * 本口没有「未决」格:目录登记是租户的管理动作,依赖调不通时没有一个如实的中间答案可记,
+ * 那一路由传输层答「没形成答案」(5xx),不冒充一种业务答案。
+ */
+export const registrationOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记',
+  REFUSED: '未登记——拒绝理由逐格指名;原行不被顶替',
+};
+
+/**
+ * 拒绝理由（`application.CatalogRefusalReason` 原名）,逐格中文。
+ *
+ * 逐格分开而不折成一句「内容不合法」:各格的续办动作不同——缺版本号要给一个,缺发布批准
+ * 责任要走审批,条目撞键要改内容,版本号已登记要换号。末两格更是登记册的治理答案而不是
+ * 打错字,受控登记口正按这条界线分退出码 2 与 1 两路。
+ */
+export const registrationRefusalReasonLabels: Record<string, string> = {
+  SCOPE_MISSING:
+    '缺管辖或身份维——目录行只在租户内唯一;索赔资格与索赔授权两册还要指出合同责任范围或客户账户,通知策略要指出策略引用',
+  VERSION_MISSING: '缺版本号——版本由登记方给,登记口不代拟',
+  APPROVAL_MISSING: '缺发布批准责任——册面记的是「登记者声明了谁批准」,不代填',
+  EFFECTIVE_RANGE_MISSING: '缺生效时间——零时刻不是能用的生效边界,拿它登记等于这一版从公元元年起适用',
+  EFFECTIVE_RANGE_REVERSED: '生效区间倒序或为空——半开区间两端相等即不覆盖任何时点',
+  ENTRIES_MISSING: '缺条目——空册不当作一版收;索赔资格的空覆盖集尤其通向永久的「不予受理」',
+  ENTRY_INCOMPLETE: '条目缺件——某一条没说全;通知策略的非正时限也落这一格',
+  ENTRY_DUPLICATED: '条目撞键——同一版里两条落在同一个键上,说不出以哪条为准',
+  VERSION_NOT_OVERWRITABLE:
+    '该版本号已登记——登记册不比对内容,同号再登一律不覆盖;换个版本号续办（治理答案,不是失败）',
+  VERSION_OVERLAPS_EXISTING:
+    '同一时点已有另一适用版本——原行未被顶替,人工核对后改区间续办（治理答案,不是失败）',
+};

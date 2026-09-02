@@ -1,13 +1,24 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import { catalogueViewState } from '../catalogue-view';
 import {
   listVisibilityCatalogues,
+  registerVisibilityCatalogue,
+  visibilityRegistrationEndpoints,
   type ApiResult,
   type VisibilityCatalogueListResponseBody,
 } from './catalogue-api';
-import { visibilityCatalogueKindLabels } from './presentation';
+import {
+  problemNote,
+  registrationOutcomeLabels,
+  registrationRefusalReasonLabels,
+  registrationSnapshotHints,
+  registrationTitles,
+  visibilityCatalogueKindLabels,
+} from './presentation';
 
 // VE 六类目录拆三页,本页装**索赔前置**那组:索赔资格与索赔授权(票
 // admin-web-page-wiring-frontier/02 的页面裁决)。两册同答「谁、就什么可以提索赔」
@@ -98,7 +109,7 @@ function rowsOf(body: PrerequisiteListBody): CatalogueRow[] {
   }
 }
 
-export function ClaimPrerequisitesPage() {
+function ClaimPrerequisitesTable() {
   const [kind, setKind] = useState<PrerequisiteKind>('CLAIM_ELIGIBILITY');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -164,5 +175,54 @@ export function ClaimPrerequisitesPage() {
         emptyDescription: '读取入口已配置,但该目录为空;页面不会生成默认目录。',
       })}
     />
+  );
+}
+
+// 登记签装本页读签的同两册,判据同判断规则页。
+const registrationTargets: RegistrationTarget[] = prerequisiteKinds.map((candidate) => ({
+  id: candidate,
+  label: visibilityCatalogueKindLabels[candidate],
+  title: registrationTitles[candidate],
+  endpoint: `POST ${visibilityRegistrationEndpoints[candidate]}`,
+  snapshotHint: registrationSnapshotHints[candidate],
+  submit: (snapshot) => registerVisibilityCatalogue(candidate, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+  refusalReasonLabels: registrationRefusalReasonLabels,
+}));
+
+/**
+ * 索赔前置两册:逐册查阅,外加登记签(ADR-0085,票 admin-write-faces/02 切片 02d)。
+ *
+ * 两册登的都是租户的配置而不是某一笔索赔的事实:资格声明说的是一份合同责任范围覆盖哪些
+ * 索赔种类,授权名单说的是这个账户声明了谁可以代提——某一笔够不够资格、由谁提得成,是
+ * 案上判断,由索赔用例按这两册核出,不在本签。换名单走版本链,没有撤销命令,所以这里同样
+ * 只有登记一个动作。
+ */
+export function ClaimPrerequisitesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalogue">索赔前置</TabsTrigger>
+          <TabsTrigger value="register">登记索赔前置</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalogue"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <ClaimPrerequisitesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <MultiRegistrationPanel
+            moduleId="claim-prerequisites"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

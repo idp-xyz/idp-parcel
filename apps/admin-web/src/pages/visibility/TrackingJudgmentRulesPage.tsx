@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
   listVisibilityCatalogues,
+  registerVisibilityCatalogue,
+  visibilityRegistrationEndpoints,
   type ApiResult,
   type VisibilityCatalogueListResponseBody,
 } from './catalogue-api';
 import {
   labelOf,
+  problemNote,
+  registrationOutcomeLabels,
+  registrationRefusalReasonLabels,
+  registrationSnapshotHints,
+  registrationTitles,
   sourceContextLabels,
   triageOutcomeLabels,
   visibilityCatalogueKindLabels,
@@ -110,7 +119,7 @@ function rowsOf(body: JudgmentListBody): RuleRow[] {
   }
 }
 
-export function TrackingJudgmentRulesPage() {
+function TrackingJudgmentRulesTable() {
   const [kind, setKind] = useState<JudgmentKind>('MILESTONE_MAPPING');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -179,5 +188,55 @@ export function TrackingJudgmentRulesPage() {
         emptyDescription: '读取入口已配置,但该目录为空;页面不会生成默认规则。',
       })}
     />
+  );
+}
+
+// 登记签装本页读签的同两册,不多铺:多铺一册会让同一本册在两处都能登,而其中一处的
+// 页面上根本看不到登进去的结果。
+const registrationTargets: RegistrationTarget[] = judgmentKinds.map((candidate) => ({
+  id: candidate,
+  label: visibilityCatalogueKindLabels[candidate],
+  title: registrationTitles[candidate],
+  endpoint: `POST ${visibilityRegistrationEndpoints[candidate]}`,
+  snapshotHint: registrationSnapshotHints[candidate],
+  submit: (snapshot) => registerVisibilityCatalogue(candidate, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+  refusalReasonLabels: registrationRefusalReasonLabels,
+}));
+
+/**
+ * 判断规则两册:逐册查阅版本原文,外加登记签(ADR-0085,票 admin-write-faces/02 切片 02d)。
+ *
+ * 登记签不是「新建一版」的表单:目录修订按笔推进,新版翻旧插新、不覆盖行,同版本号再登
+ * 一律答版本不可覆盖——所以这里只有登记一个动作,没有行级编辑或删除面。墙降之前它必然
+ * 答 403「接入渠道未配置」,那是诚实答案;墙降当天在装配点换真 Intake 即点亮,本页一行
+ * 不用改。
+ */
+export function TrackingJudgmentRulesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalogue" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalogue">判断规则</TabsTrigger>
+          <TabsTrigger value="register">登记判断规则</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalogue"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <TrackingJudgmentRulesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <MultiRegistrationPanel
+            moduleId="tracking-judgment-rules"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

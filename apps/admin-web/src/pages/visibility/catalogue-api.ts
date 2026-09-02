@@ -8,7 +8,8 @@
 // 为准，此处只做镜像不虚构：六种册子的行形状互不相同，kind 由服务端随响应回显，
 // 调用方按 kind 择形状。
 
-import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -131,4 +132,46 @@ export function listVisibilityCatalogues<Kind extends VisibilityCatalogueKind>(
   return exchangeMasterData<Extract<VisibilityCatalogueListResponseBody, { kind: Kind }>>(
     `/visibility-catalogues?kind=${encodeURIComponent(kind)}`,
   );
+}
+
+// ---- 六类目录登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）----
+//
+// 登记端点与其余命令面同挂字面量 `UnconfiguredIntake{}`：写准入不另立形，隔离读准入
+// （ADR-0078）换得了读行换不了写行。因此**墙降之前提交必然答 403
+// ACCESS_CHANNEL_NOT_CONFIGURED**，那是诚实答案不是接线缺陷；登记参数（PAR-INT-01，
+// 实例半边）到位后由装配点换真 Intake 即点亮，本文件一行不用改。
+//
+// **请求体形状此刻没有契约。** ADR-0085 决定三把「渠道原始载荷 → 登记快照」的翻译划给
+// 渠道接入契约，随 `PAR-INT-01` 提供。所以这里不发明字段：页面收的是登记快照 JSON 本体，
+// 与受控登记口 `parcel-ve-register <种类> -input <file>` 吃的同一份形状——两口共用
+// internal/visibilityexception/adapters/registrationjson 那一份翻译，不是两份碰巧同形。
+// 真渠道接线时以渠道契约为准重谈，不得反过来把这里当成已发布的 Schema。
+
+/**
+ * 逐种类登记端点。同一本册在读口 `?kind=`、写口路径与 CLI 命令名下是同一个词，只随
+ * 各入口的拼写惯例变形（查阅用大写下划线，路径与命令用小写连字符）；分诊那册的册名
+ * 在 CLI 是复数 `triage-rules`，路径与读口都用单数，取各自入口已发布的原词，不统一。
+ */
+export const visibilityRegistrationEndpoints: Record<VisibilityCatalogueKind, string> = {
+  MILESTONE_MAPPING: '/visibility-catalogue-milestone-mapping-registrations',
+  TRIAGE_RULE: '/visibility-catalogue-triage-rule-registrations',
+  NOTIFICATION_POLICY: '/visibility-catalogue-notification-policy-registrations',
+  CLAIM_ELIGIBILITY: '/visibility-catalogue-claim-eligibility-registrations',
+  CLAIM_AUTHORIZATION: '/visibility-catalogue-claim-authorization-registrations',
+  DISCLOSURE_POLICY: '/visibility-catalogue-disclosure-policy-registrations',
+};
+
+/**
+ * 一种类一个端点，本函数按种类取路径而不是裂成六个同形包装。
+ *
+ * 传输层那边逐类各立一个 Intake 接口与一个端点构造函数，为的是让「把一类的译装接到
+ * 另一类的端点上」在编译期就红；那条保护在这里没有落点——快照本体在前端是未翻译的
+ * JSON，分不分函数都一样送得出去。所以这里与读口的 listVisibilityCatalogues 同形：
+ * 种类是封闭集里的一个参数。
+ */
+export function registerVisibilityCatalogue(
+  kind: VisibilityCatalogueKind,
+  snapshot: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(visibilityRegistrationEndpoints[kind], snapshot);
 }
