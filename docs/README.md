@@ -14,6 +14,7 @@
 - [产品基线](./product/PRODUCT-BASELINE.md)：定义产品定位、独立项目边界以及已经确认的长期领域原则，是判断产品是否偏离既定方向的权威依据。
 - [国际小包网络运营首发产品基线与开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：定义产品核心闭环、关务控制域的位置、首发纵向切片和端到端开发准入，是产品级首发开发入口。
 - [产品故事](./product/PRODUCT-STORY.md)：面向商务洽谈的叙事层——卖给谁、解决什么痛、差异化、AI 路线立场与演进路线；只引用权威文档不定义规则，与基线冲突时以基线为准。
+- [竞品公开事实台账](./product/COMPETITOR-FACT-LEDGER.md)：本仓自行核对的 Shippo / Easyship 公开事实登记处，按`已核实`、`部分未核`、`未取到`三态标注并带本仓核对日期；它只记核对时点的公开表述，不定义产品规则、不描述本产品能力、不作验收依据，也**不得作为本产品定价或成本假设的依据**。
 - [产品业务全景与端到端流程说明书](./product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)：面向产品、售前、实施、运营、研发和测试的统一导览，串联业务主链、产品操作、系统协作、异常分支、模块职责、跨模块交接与试点治理；只组织已有权威文档，不新增领域规则或实例参数。
 - [首发试点范围](./product/PILOT-SCOPE.md)：定义首发试点已经确认的范围原则、明确排除项和待确认参数，是判断首发是否越界的权威依据。
 - [首发试点验收场景矩阵](./product/PILOT-ACCEPTANCE-MATRIX.md)：把试点范围和领域场景转化为带证据层级、验收门槛、责任与待填参数的执行清单，是试点证据规划和最终验收判定的权威入口。
@@ -82,6 +83,7 @@
 - [参考设计的源价卡抽取](./archive/reference-design-rate-card-extraction-v1.0.1.json)：外部参考设计对源价卡所作抽取的原样保存，含一张 `WEIGHT_ZONE` 价表与 25 项附加费金额；本仓从未核实过它，无任何案例引用它，仅供回查当初怎么抽，**不得作为价卡数据、计价夹具或验收证据使用**。
 - [参考设计（外部交付）](./reference/reference-design/)：外部提供的《国际小包计费与结算平台》整套交付物原件，28 份，含三版最终解决方案、领域模型、Rating Runtime 语义与技术设计、Rating API 契约、治理案例集与 MVP 实施设计；定性见 [ADR-0012](./adr/0012-parcel-pricing-context-within-idp-parcel.md)，**非权威、非规格、非验收依据**，任何规则若只能靠它读懂即属缺陷。原路径为根目录 `foo/`。落点与吸收结论查[吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)。
 - [IDP Parcel 聚合平台 PRD（参考）](./prd/idp-prd-v0.1.0.md)：外部愿景与市场叙事的参考输入，**非权威、非首发范围、非验收依据**；冲突处以产品基线与首发开发主线为准，启发吸收结论见[产品故事](./product/PRODUCT-STORY.md)与[渠道适配缝设计备忘](./design/channel-adapter-seams-design-note.md)。
+- [IDP Parcel 产品战略与产品蓝图 V1.0（参考）](./reference/IDP_Parcel_Product_Strategy_Blueprint_V1.0.md)：基于 Shippo / Easyship 竞争研究的外部战略、领域链与商业模式输入，**非权威、非首发范围、非验收依据**。它自称「产品母文档」，要求后续研发与销售材料一律从它派生、并把它的领域对象当作不可随意更改的建模基线；本仓不接受这一地位——那会造出第二套口径。产品口径以[产品基线](./product/PRODUCT-BASELINE.md)与[首发开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)为准，领域对象以[领域上下文地图](./domain/CONTEXT-MAP.md)与各 `CONTEXT.md` 为准；它的三阶段路线图假定首发即可取得承运商账号与凭据，与 [ADR-0016](./adr/0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md) 两轨制的前提不同，不作为开发顺序依据。本仓尚无同类内容的只有附录 A 的来源清单，已逐条重核并转为[竞品公开事实台账](./product/COMPETITOR-FACT-LEDGER.md)（该清单 15 条里 1 条链接失效、2 条被反爬挡住、2 条关键价格取不到，引用竞品事实一律以台账为准）；其余章节的对应位置在[产品故事](./product/PRODUCT-STORY.md)与各 `CONTEXT.md`。原件为同目录 `.docx`，二进制不可检索，正文以本 `.md` 为准。
 
 ## 产品主线阅读顺序
 
