@@ -1,7 +1,7 @@
 # 一线作业过渡的受控批量导入 CLI——模板 → 既有命令用例，硬期限守卫，来源标记
 
 Category: enhancement
-Status: in-progress——收寄子命令、期限守卫、模板与真库往返用例已落主线；模板人读说明未办
+Status: in-progress——本轮范围（收寄子命令、期限守卫、模板与说明、真库往返用例）已全部落主线；余下的是被别处阻断的两格，见下
 Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立票，见「阻断在别处的两格」）
 
 [ADR-0089](../../../docs/adr/0089-frontline-transition-controlled-import-with-structural-sunset.md) 的机制半边。
@@ -27,6 +27,15 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
   其他行已合法形成的事实（UC-NO-002「部分收寄不回滚其他实物已合法形成的事实」）。
   `intakeRowDisposition` 把 UC-NO-002 的六格结果译成四格去向，不增不减；退出码里未决压过
   被拒，因为「重跑同一文件」在还有未决时仍是必要动作，而已落地的行重跑答重放、无副作用。
+- **真库往返** `vertical_test.go`（照登记 CLI 家族形状）：`REFUSED` / `SCAN_ONLY` 两支真落库
+  并读得回、`RECEIVED` 行在身份核对缝不通时**一行都不落**、重跑答重放、同一 `factRef` 换业务
+  时间答来源冲突且原行记录时刻与摘要都不变。第二个用例换能解析的替身跑同一份模板，证
+  `buildIntakeImporter` 的 `identity` 参数就是 PS 侧到位后唯一要换的那一格，并在真库上钉住
+  证据引用带录入者、业务时间来自模板而记录时刻来自时钟——两者若同源，导入的事实就再也
+  说不出现场什么时候发生的。
+- **模板人读说明** [template.md](../template.md)：逐列格式、三态各自的必填与禁填、导入后四种
+  去向各自要做什么。示例值全为合成值；`cmd/parcel-frontline-import/testdata/intake-v1.csv` 是
+  机器侧的同一份形状，两边换列必须同时换 `intakeTemplateVersion`。**待 MCP-1 转客户**。
 
 ## 阻断在别处的两格
 
@@ -43,18 +52,10 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
 
 换单与称重两类无既有用例可接，按 ADR-0089 细则⑤ 如实记缺口、不造用例，见映射表。
 
-- **真库往返** `vertical_test.go`（照登记 CLI 家族形状）：`REFUSED` / `SCAN_ONLY` 两支真落库
-  并读得回、`RECEIVED` 行在身份核对缝不通时**一行都不落**、重跑答重放、同一 `factRef` 换业务
-  时间答来源冲突且原行记录时刻与摘要都不变。第二个用例换能解析的替身跑同一份模板，证
-  `buildIntakeImporter` 的 `identity` 参数就是 PS 侧到位后唯一要换的那一格，并在真库上钉住
-  证据引用带录入者、业务时间来自模板而记录时刻来自时钟——两者若同源，导入的事实就再也
-  说不出现场什么时候发生的。
-
 ## 未办
 
-- **模板人读说明** `.scratch/frontline-transition-import/template.md`：给内勤填的字段说明与
-  填写纪律，供转客户。示例行只用合成值；`cmd/parcel-frontline-import/testdata/intake-v1.csv`
-  是机器侧的同一份形状，两边换列必须同时换 `intakeTemplateVersion`。
+本票本轮范围已清。余下两件都不在本票地盘，各自解阻后再回来加子命令，见上「阻断在别处
+的两格」。
 
 ## 完成判据
 
