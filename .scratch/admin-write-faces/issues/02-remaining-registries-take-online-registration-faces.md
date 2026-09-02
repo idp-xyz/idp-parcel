@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: in-progress——形状已由 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
-与票 01 的切片 01a/01b 定死，本票只是逐上下文照做；2026-09-02 起四片并行认领，分工见「并行分工」
+与票 01 的切片 01a/01b 定死，本票只是逐上下文照做；2026-09-02 并行分工经用户裁定作废，全片归 MCP-1
 Blocked by: 无
 
 ## 为什么是一张票而不是五张
@@ -15,10 +15,10 @@ Blocked by: 无
 
 若日后恢复多会话并行，按片拆票即可——片的边界就是票的边界，不必重写范围。
 
-## 并行分工（2026-09-02，MCP-3 分派）
+## 并行分工（2026-09-02，MCP-3 分派）——**已由用户裁定作废**
 
-多会话已恢复，四片同时开工。**不拆票**：片的边界本来就写在下面「分片」一节，拆成四份
-只会把同一份范围与红线抄四遍。地盘按上下文划，一片一个写入方：
+用户 2026-09-02 18:3x 当面裁定：这张分工表作废，后续全部工作由 MCP-1 一人接手，其余通道停手。
+表的原文不删，留在下面供回查它为什么会与另一份派工撞上：
 
 | 片 | 通道 | 地盘（只写这两处） |
 |---|---|---|
@@ -28,10 +28,20 @@ Blocked by: 无
 | 集成、共享接线、批务收口 | MCP-3 | `cmd/parcel-api/**`、票面 |
 
 分工是**改过一次的**：头一版按上下文四等分，派完才查主线，发现 02a/02b/02d 的 Go 侧早已落地
-（见下节）。表里现在这版是纠正后的实况。
+（见下节）。表里这版是纠正后的实况。
 
-`apps/admin-web/src/components/registration/`（`a492f51` 抽出的共享登记面组件）是三片共用的
-第三类文件：要改先在频道占号，只改自己那几行；能靠传参解决就不改组件本体。
+作废的直接原因不是分工划错了，而是**同一批文件同时收到了两份派工**：用户另外指示 MCP-1
+「接手全部后续」，而这张表把 `cmd/parcel-api/**` 划给 MCP-3、把 02c 划给 MCP-5。两份派工谁都
+没错，但没有一处能同时看见两份——写票面的会话不知道用户对另一个通道说了什么。
+
+真正让它变贵的是第二件事：认领各片的会话**直接在主树 `D:/tops/idp-parcel` 里写**，没有按
+[parallel-sessions.md](../../../docs/agents/parallel-sessions.md) 建隔离 worktree，而 MCP-1
+同时在同一棵树上集成与全仓验证。三份改动在同一个 `git status` 里混成一片，谁的活是谁的要靠
+读内容分辨。所幸各片改的是不相交的目录，未发生互相覆盖；未提交现场已由 MCP-1 逐片原样接收
+并落笔（见下节 SHA），一份没丢。
+
+`apps/admin-web/src/components/registration/`（`a492f51` 抽出的共享登记面组件）当时被列为三片
+共用的第三类文件；接手后归 MCP-1 一处写，占号规矩随分工表一并作废。
 
 ### 本票的 `Status:` 行曾经骗过一次分派
 
@@ -57,8 +67,16 @@ Go 侧早已落地。**票面状态行不是取证结果**，它只在有人回�
 
 「已落」栏引的是提交，不是本票的自述——重核只需 `git log --oneline -- <路径>`。
 
-02a 的 Go 侧七族与 UI 两页是否**逐族对得上**尚未逐格核（两页加起来该是七族，路由策略归目录页
-还是 `RoutePlansPage` 未定），归 MCP-4 收口时核清。
+02a 的 Go 侧七族与 UI 两页**已逐格核对，恰好对得上**（2026-09-02 MCP-4，核于 `10754b4`）：
+`networkCatalogFamilies` 是六族（`presentation.ts` 里刻意不含服务区域），目录页的
+`MultiRegistrationPanel` 映这六族；服务区域页单走 `RegistrationPanel` 补第七族。两页加起来
+七族各盖一次，无一族缺席、无一族两页都有；`networkRegistrationEndpoints` 七格齐，与端点表
+七行、CLI 的 `-kind` 七格逐字同词。
+
+**路由策略归目录页，不归 `RoutePlansPage`**——判据是写签跟着读签走：路由策略版本的读面就在
+目录页的族 chip 里，而 `RoutePlansPage` 读的是初始路由判断与路由复核两册，那是「某个包裹此刻
+的判断」不是租户配置，登进去的策略版本在那一页根本看不见。这条判据不是本次新造，它就是服务
+区域族的登记签被放去专页所用的同一句（见 `ServiceAreasPage` 文件头）。
 
 **`cmd/parcel-api/**` 不属任何一片，由 MCP-3 统一接线。** 四片都要往端点表、探针表与
 unwired 占位加行，那是 [parallel-sessions.md](../../../docs/agents/parallel-sessions.md)
@@ -241,3 +259,138 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   的模块解析阶段，早于任何项目源码被转译**（Windows 侧断在 PostCSS 载 tailwind，WSL 侧断在
   rollup 载原生件），与 `.tsx` 改动无关。修它要动入库的锁文件或补一份带 WSL 绝对路径的
   workspace 配置——那是共享工具链的取舍，不在本片地盘，未擅动，报给 MCP-3。
+
+- 2026-09-02 · MCP-4：**02a 收口核验完成（无代码改动），02b 关务前端交付。**
+
+  **一、02a 逐族核对：七族恰好各盖一次，零缺席零重复。** 结论与判据已写进上面「已落地实况」
+  节那一格，不在此复述。核对方式是拿 `networkCatalogFamilies` 的六族与 `ServiceAreasPage`
+  的第七族对 `networkRegistrationEndpoints` 的七格，再对端点表七行与 CLI 的 `-kind` 七格。
+  **02a 因此不需要补任何一族**，本片对 `pages/network/` 零改动——MCP-3 分派时说的「发现真缺
+  一族就补上」这一支没有触发。
+
+  **二、02a 的范围分辨（补做，此前只有 02b/02d 做过）。** 判据同本票那一条，过的是
+  `internal/networkrouting/application` 的**全部**用例而不只是 CLI 的七格：
+
+  **配置类、已接（七族）**：节点、连接、线路、服务区域、服务日历、可用性调整、路由策略。
+  其中**可用性调整是七格里最靠近事实那一侧的一格**，仍判为配置——它是版本化、带适用区间、
+  按租户陈述的目录行（临时停运/关闭/恢复/适用范围调整四态），不挂在某个包裹或某个案件上。
+
+  **事实类、不属本票（四个）**：`CreateInitialRoute`（为具体包裹形成初始路由计划）、
+  `AssessParcelReachability`（对具体包裹的可达性判断）、`ValidateReachabilityJudgment`
+  （校验某个可达性判断）、`ReassessRoute`（对某次中断的重评）。都挂在具体包裹或具体判断上。
+
+  **三、`RegisterAutoRerouteFacts` 是配置类但全仓无写入方——本片未接，建议另立票。**
+  名字带「事实」，登的却是自动改路的四条件：改善阈值、改路条件与权限、冻结边界。按本票判据
+  它是「这个租户怎么配置」；它有版本、绝不覆盖、答案代数就是登记册那套（已登记/已存在/内容
+  冲突/被拒），用例注释自己写着「登记是管理动作」。它没进 02a 是因为切片按 CLI 的 `-kind`
+  七格切，**而这个用例没有 CLI**——按 ADR-0085 Decision 二「有登记用例**与** CLI 先例」进
+  首批，无 CLI 落在首批外站得住。但本票自己警告过「分界线在用例之间」，所以记下来而不是无声
+  漏掉：现状是登记用例 + postgres 写口 + ports 齐全，CLI 与在线端点两个入口都没有，属票 01
+  说的「无写入方」那类墙。**判它进不进首批不是本片能定的事，留给 MCP-3 或用户裁。**
+
+  **四、02b 关务前端：四类登记签落在三页。** Go 侧四类此前已在册（见「已落地实况」），本片
+  只补管理台那一件：
+
+  - `ComplianceRulesPage` 改成两签，登记签装**解释规则**（`RegistrationPanel`）。
+  - `CustomsRestrictionsPage` 加第四签，装**门禁前置条件目录**（`RegistrationPanel`）。
+  - `CustomsPortsPathsPage` 加第四签，装**候选口岸 + 申报路径**（`MultiRegistrationPanel`，
+    两册的读口 `registry` 词与登记类别词逐字相同，选册按钮直接取读面已有的词表）。
+
+  **登记签只装有在线端点的那四类**，`liveIds` / `page-registry.tsx` / `navigation.ts` 零改动。
+
+  **五、`case-requirement`（建案要求规则）没有在线登记口——这是关务片的第五类，缺口记在此。**
+  本票 02b 那节把十二个用例分成「配置四类」与「案件事实七类」，四加七只有十一个；漏掉的第十二
+  个正是 `RegisterCaseRequirementRule`。它按判据是配置（「某辖区+方向+程序是否要求建案」加
+  依据，答案代数与另四类同为 `CaseConfigurationOutcome`），受控 CLI 里也有 `case-requirement`
+  一命令，读面早就在 `ComplianceRulesPage` 的册 chip 里，**唯独端点表没有它的登记行**。
+  本片不为一个不存在的端点造前端入口——造了会答 404，而 404 与今天必然的 403「接入渠道未
+  配置」长得像却是两件事：后者是诚实答案，前者是页面自己编出来的路。规则页的签名因此写死
+  「登记解释规则」而不是「登记合规规则」，让这一半的缺席在签上看得见。**补它要先加 Go 侧端点，
+  不在本片地盘，报 MCP-3。**
+
+  **六、表单收登记快照 JSON 本体，不逐字段建。** 与受控口
+  `parcel-customs-register <命令> -input <file>` 同一份形状（注意关务用 `-input` 不是网络的
+  `-file`）。快照提示句逐类列出键名与封闭集词：解释规则的外部结果层六词、门禁目录的拟执行
+  动作四词、申报路径的进出口方向两词与「申报模式是引用不是封闭词表」。三本版本册都写明
+  **终点不是输入**——换版是登一个更晚生效起点的新版（ADR-0070），因为读面上「持续有效」那
+  一格最容易被读成「可以回头补个终点」。
+
+  **七、答案代数四格中文，四类共用一份**（服务端四个端点交回同一个
+  `CaseConfigurationOutcome`）：`REGISTERED` / `EXISTING` / `CONTENT_CONFLICT` /
+  `NOT_ACCEPTED`。**刻意没有 `UNDECIDED` 一格**——用例把依赖故障折成那个枚举值，而传输层按
+  ADR-0022 把它写成「没形成答案」的 5xx，它到不了这张表；真落进来会被当成登记册的治理答案
+  示出，而两者续办动作相反（未决重跑同一份即可，治理答案重试没有用）。负向三格逐格分开说：
+  冲突要人工核对既有登记，受理门拒绝要补齐缺件，重放什么都不用做。
+
+  **验证**：`tsc --noEmit` 无输出、退 0（仓内 typescript 5.6.3，走
+  `node node_modules/typescript/bin/tsc`——`npx tsc` 会落到占位包上，退 0 但什么都没编）；
+  编辑器诊断对改过的三页零条目（未单独跑 ESLint，本仓 `apps/admin-web` 无 lint 脚本）。
+  Go 侧零改动，故全仓 `gofmt -l` 空、`go build`/`go vet` 退 0、
+  `go test -p 1 -count=1 ./...` 全绿一并复核过；**其中真库单跑
+  `TestTheWiredCatalogRegistrationsRecordAgainstARealDatabase` 为 `--- PASS` 非 SKIP**
+  （DSN 指门禁容器 55432，三条子用例：网络目录 / 关务候选口岸 / VE 里程碑映射），不带 DSN
+  的全仓跑则 PG 用例跳过——两种强度分开报。`pnpm build` 跑不起来，成因与上面 MCP-6 那条
+  逐字相同（`node_modules` 残缺 + 锁文件 `overrides` 无对应 `pnpm-workspace.yaml`），
+  独立复核结论一致：断在模块解析阶段，早于任何项目源码被转译，与本片改动无关。
+
+  **交付状态提醒（并行事故，请 MCP-3 过目）**：本片的 `api.ts`、`presentation.ts` 与
+  `CustomsPortsPathsPage.tsx` 三份改动**在我尚未交活时被另一会话连同它自己的改动一起提交**
+  为 `f723a2c`，提交信写的是「落在口岸路径页与规则页」，但那一笔里**并没有规则页**——规则页
+  与限制页当时还在我的工作树里没写完。这正是 parallel-sessions.md 点名的卷带，且逐块核防不住
+  （被卷的那几行本身是对的）。现存未提交改动只剩规则页、限制页与口岸页的一段文件头注释更正，
+  内容完整且已验绿。**按纪律我不 push；是否由我逐文件提交余下三份，请 MCP-3 定。**
+
+- 2026-09-02 19:xx（MCP-1，接手后收口）
+
+  用户裁定并行分工作废后，本片余下各件由 MCP-1 一人落完。上一条问的「余下三份由谁提交」
+  由此有了答案：由我提交，见下表 `1f0207f`。
+
+  **各路未提交现场逐份原样接收，一份没丢。** 接收方式是读完内容再逐目录 `git add`，不是
+  整树 `git add -A`——各路的活混在同一个 `git status` 里，整树提交会把「我读过并认可」与
+  「碰巧在树上」两件事混成一笔，而这正是上一条那次卷带的成因。
+
+  | SHA | 内容 | 来处 |
+  |---|---|---|
+  | `dc900b1` | 商业八类写面进传输层（发布、身份四类与停用、形态与映射） | 接收自主树未提交现场 |
+  | `729e135` | 商业八类写面的传输面证据（17 条，含隔离读排除） | 同上 |
+  | `f723a2c` | 关务口岸路径页登记签 | 同上 |
+  | `1f0207f` | 关务规则页与限制页登记签 | 同上（即上一条说的余下三份） |
+  | `10754b4` | VE 六类登记签落三页 | 同上 |
+  | `9d1e941` | 商业八类写面的前端接线 | 同上 |
+  | `a446cc8` | 商业八类接进端点表 + `assemble_commercial_registration.go` | MCP-1 |
+  | `fb98943` | 商业身份登记链的真库装配用例 | MCP-1 |
+  | `81b05d3` | **建案要求规则补第五个登记口**（上一条第五点那个缺口） | MCP-1 |
+
+  **上一条留给 MCP-3 或用户裁的两件，接手后逐件处置：**
+
+  **`case-requirement` 已补，不另立票**（`81b05d3`）。上一条的判断是对的——它按本票判据就是
+  配置，有登记用例、有 CLI 命令、读面早在合规规则页的册 chip 里，唯独端点表没有它的行。
+  它没进首批不是因为哪条判据把它排除了，而是那节把十二个用例数成了十一个。补的是一整条：
+  `CaseRequirementRegistrationIntake` + `CaseRequirementRegistrar` + 端点构造函数 +
+  `UnconfiguredIntake` 第五个方法 + 端点表 `/customs-case-requirement-registrations` +
+  `assemble_customs_registration.go` 的第五格（自己的 handler，不与案件配置面五本共用）+
+  探针与 unwired 占位。**管理台规则页的签名仍写死「登记解释规则」**：前端归下一步，端点先
+  在，前端补上时那个签名才该改——先改签名会让页面指向一个它还不会调的口。
+
+  **`RegisterAutoRerouteFacts` 维持不进首批，另立票。** 它按判据是配置（版本化、绝不覆盖、
+  答案代数就是登记册那套），但**没有 CLI**，而 ADR-0085 Decision 二的入选条件是「有登记
+  用例**与** CLI 先例」。与 `case-requirement` 的差别正在这里：那个两件齐全只是被数漏了，
+  这个是真的少一件。补它要先决定 CLI 进不进（那是 ADR-0085 那条判据的适用问题，不是本票
+  能顺手定的），故不在本票内消化。现状记在此：登记用例 + postgres 写口 + ports 齐全，
+  CLI 与在线端点两个入口都没有。
+
+  **端点表本波总计接进 26 个写面**：网络七、关务五（四加建案要求）、VE 六、商业八。
+  未配置态 403 与隔离读启用态仍 403 两条断言覆盖全部 26 行（`endpoints_test.go` 的探针表与
+  `isolated_read_test.go` 的两态断言，缺一行两侧都会红）。
+
+  **验证强度**：`gofmt -l` 空、`go build`/`go vet` 退 0、`go test -p 1 -count=1 ./...` 全绿
+  （含真库，DSN 指门禁容器 55432）；`apps/admin-web` 以**仓内** typescript 5.6.3 跑
+  `tsc --noEmit` 退 0。真库装配用例按探针纪律两向各取一次：设 DSN 时
+  `TestTheWiredCatalogRegistrationsRecordAgainstARealDatabase`（网络/关务/VE 三格）与
+  `TestTheWiredCommercialRegistrationsRecordAgainstARealDatabase` 各 PASS，不设 DSN 时各 SKIP。
+
+  **本机环境新踩出一个坑，记在这里免得下一个人再踩**：门禁容器在机器重启后会**丢掉端口
+  映射**——`docker ps` 显示 `Up (healthy)` 而 PORTS 只有 `5432/tcp`，没有 `127.0.0.1:55432->`。
+  `docker compose up -d` 只是把旧容器启起来、沿用它原来的配置，映射不会自己回来，于是全部
+  真库用例以「连不上」失败，而那个失败长得跟「库根本没起」一模一样。修法：`docker compose down`
+  之后 `docker compose up -d --force-recreate`。
