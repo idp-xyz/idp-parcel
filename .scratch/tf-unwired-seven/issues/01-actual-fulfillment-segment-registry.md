@@ -51,6 +51,9 @@ Blocked by: 无
 本票**只建册，不接入口**——两条立段入口进现有编排是[票 02](./02-establish-segment-from-pickup-and-handover.md)。
 分开是因为建册可以独立验绿，而接入口会碰两例现有编排，风险不同。
 
+**本票原写「不动领域模型」，那一句作废**（2026-09-02 更正，理由见下方 Comment 第二条）：
+建册必须同时开一个重建入口，那是领域侧的新增。改动仍限于**新增**符号，不动任何既有签名。
+
 ## 完工判据
 
 段与参与关系可以从生产路径登记并取回；棘轮基线上两条立段入口**仍在名单上**（它们由票 02 剪）。
@@ -88,3 +91,28 @@ Blocked by: 无
   三值。段的幂等键是（租户 + 段引用），参与关系挂在段下按对象唯一。
 
   **下一步**是写红测试再落迁移。本票仍 `draft`，未占号到具体人。
+
+- 2026-09-02 · MCP-3：**本票还缺一件，而且它推翻了本票自己写的一条边界：实际履约段没有
+  重建入口，建册必须先补上它。**
+
+  `internal/transportfulfillment/domain/` 下已有五个重建入口——`RehydrateTransportHandover`、
+  `RehydrateCapacityPool`、`RehydrateTransportCommission`、`RehydrateCarrierAcceptance`、
+  `RehydrateEffectiveDelivery`——**唯独 `ActualFulfillmentSegment` 没有**。而按 ADR-0028
+  构造与重建是两扇门：`EstablishSegmentWith*` 是构造门（从零创生、每条不变量当场算），
+  从库里读回一个已经成立的段走不了它，因为那会重放「首个对象立段」的语义。
+
+  所以本票正文那句「不动领域模型」是我在不知道这件事时写的，**已就地作废**。新增仍限于
+  新增符号（`RehydrateActualFulfillmentSegmentSpec` + 入口函数），不动任何既有签名。
+
+  **重建门要验什么，照 TF 既有五扇的做法**：验形状与成对关系，**不重走转换门**。具体到段：
+  逐条参与关系的入场三件必须齐、离场三件同在或同缺、封闭集取值在集内、`closed` 与
+  `closedAt` 成对；**但不重放 `JoinWith*` 也不重算 `ErrSegmentStillActive`**——
+  `RehydrateCapacityPool` 的注释把这条理由写得最清楚：「读回已有预占不能重放
+  Reserve/Release/Consume：那三条是转换门，有效期与装载分配是调用期依据，不是行上的事实」。
+
+  **一处要当心的**：段是值类型且参与关系是未导出切片，重建入口必须能设它——这意味着入口
+  只能待在 `domain` 包内（与 `parcel-shipment` 那扇门当年排除掉「入口放新包」的理由一字
+  相同：包外设不了未导出字段）。`internal/architecture/rehydration_gate_test.go` 那道门禁
+  **只作用于 `parcel-shipment`**（`rehydrationSurfaceFile` 与 `aggregateTypeName` 都写死在
+  那个上下文），所以 TF 这一侧靠的是惯例不是门禁——**这本身是一处值得单独裁的缺口**，
+  但不在本票范围内，别顺手扩。
