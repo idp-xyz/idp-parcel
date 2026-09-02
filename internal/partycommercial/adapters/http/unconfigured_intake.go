@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 )
 
 // ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道:运营接入认证属
@@ -35,4 +37,69 @@ var _ CommercialCatalogueIntake = UnconfiguredIntake{}
 // IntakeCatalogueQuery 不读请求。参数刻意匿名:连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
+}
+
+// 八个登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 自报身份、不构造命令。隔离读放行（ADR-0078）只实现 CommercialCatalogueIntake，
+// 这八个接口它一个也不实现，因此启用隔离读换得了查阅行、换不了写行。
+var (
+	_ CommercialPublicationIntake             = UnconfiguredIntake{}
+	_ BusinessPartyRegistrationIntake         = UnconfiguredIntake{}
+	_ LegalEntityRegistrationIntake           = UnconfiguredIntake{}
+	_ CustomerAccountRegistrationIntake       = UnconfiguredIntake{}
+	_ PartyRelationshipRegistrationIntake     = UnconfiguredIntake{}
+	_ PartyIdentityDeactivationIntake         = UnconfiguredIntake{}
+	_ ServiceProductFormRegistrationIntake    = UnconfiguredIntake{}
+	_ ProductChannelMappingRegistrationIntake = UnconfiguredIntake{}
+)
+
+// 八个方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每类各有
+// 一个具名方法」——某类将来换上真 Intake 时，替换的是装配点那一行，本类型不动。
+
+func (UnconfiguredIntake) IntakeCommercialPublication(
+	context.Context, *http.Request,
+) (application.PublishCommercialAuthorityCommand, error) {
+	return application.PublishCommercialAuthorityCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeBusinessPartyRegistration(
+	context.Context, *http.Request,
+) (application.RegisterBusinessPartyCommand, error) {
+	return application.RegisterBusinessPartyCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeLegalEntityRegistration(
+	context.Context, *http.Request,
+) (application.RegisterLegalEntityCommand, error) {
+	return application.RegisterLegalEntityCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeCustomerAccountRegistration(
+	context.Context, *http.Request,
+) (application.RegisterCustomerAccountCommand, error) {
+	return application.RegisterCustomerAccountCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePartyRelationshipRegistration(
+	context.Context, *http.Request,
+) (application.RegisterPartyRelationshipCommand, error) {
+	return application.RegisterPartyRelationshipCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePartyIdentityDeactivation(
+	context.Context, *http.Request,
+) (application.DeactivatePartyIdentityCommand, error) {
+	return application.DeactivatePartyIdentityCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeServiceProductFormRegistration(
+	context.Context, *http.Request,
+) (application.RegisterServiceProductFormCommand, error) {
+	return application.RegisterServiceProductFormCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeProductChannelMappingRegistration(
+	context.Context, *http.Request,
+) (application.RegisterProductChannelMappingCommand, error) {
+	return application.RegisterProductChannelMappingCommand{}, ErrAccessChannelNotConfigured
 }
