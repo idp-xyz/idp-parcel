@@ -2,14 +2,26 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
+  customsRegistrationEndpoints,
   listPortsPaths,
+  registerCustomsConfiguration,
+  registrationOutcomeLabels,
   type CandidatePortListResponseBody,
   type DeclarationPathListResponseBody,
+  type PortsPathsRegistry,
 } from './api';
-import { directionLabels, labelOf, portsPathsRegistryLabels } from './presentation';
+import {
+  directionLabels,
+  labelOf,
+  portsPathsRegistryLabels,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-ports-paths'];
@@ -221,6 +233,22 @@ function CandidateRegionsTable() {
   );
 }
 
+// —— 登记签（ADR-0085，票 admin-write-faces/02 切片 02b）——
+
+// 两册的读口 registry 词与登记口的类别词逐字相同，所以选册按钮直接取读面已有的词表，
+// 不为写签另造一套说法。区域不在此列：它连读面都还没有册（维未建模），登记口更无从谈起。
+const registrationKinds: PortsPathsRegistry[] = ['candidate-port', 'declaration-path'];
+
+const registrationTargets: RegistrationTarget[] = registrationKinds.map((kind) => ({
+  id: kind,
+  label: portsPathsRegistryLabels[kind],
+  title: registrationTitles[kind],
+  endpoint: `POST ${customsRegistrationEndpoints[kind]}`,
+  snapshotHint: registrationSnapshotHints[kind],
+  submit: (snapshot: unknown) => registerCustomsConfiguration(kind, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+}));
+
 /**
  * 口岸与申报路径（customs-compliance）。词取两处原句：CONTEXT-MAP「customs-compliance
  * ↔ network-routing」——关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由
@@ -239,6 +267,7 @@ export function CustomsPortsPathsPage() {
           <TabsTrigger value="ports">合规候选口岸</TabsTrigger>
           <TabsTrigger value="paths">申报路径</TabsTrigger>
           <TabsTrigger value="regions">合规候选区域</TabsTrigger>
+          <TabsTrigger value="register">登记口岸与路径</TabsTrigger>
         </TabsList>
         <TabsContent value="ports" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CandidatePortsTable />
@@ -248,6 +277,13 @@ export function CustomsPortsPathsPage() {
         </TabsContent>
         <TabsContent value="regions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <CandidateRegionsTable />
+        </TabsContent>
+        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <MultiRegistrationPanel
+            moduleId="customs-ports-paths"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
         </TabsContent>
       </Tabs>
     </div>

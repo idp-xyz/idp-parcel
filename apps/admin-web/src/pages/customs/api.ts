@@ -5,7 +5,8 @@
 // 除门禁册只有一本不设分派参数外,其余按 ?registry= 分派、各端点各自封闭集。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
-import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -245,3 +246,70 @@ export function listPortsPaths<Registry extends PortsPathsRegistry>(
     `/customs-ports-paths?registry=${encodeURIComponent(registry)}`,
   );
 }
+
+// —— 四类配置登记的在线登记口(ADR-0085,票 admin-write-faces/02 切片 02b) ——
+// 形状以 internal/customscompliance/adapters/http/register_configuration.go 为准。
+//
+// 登记端点与其余命令面同挂字面量 UnconfiguredIntake{}:写准入不另立形,隔离读准入
+// (ADR-0078)换得了读行换不了写行。因此墙降之前提交必然答 403
+// ACCESS_CHANNEL_NOT_CONFIGURED,那是诚实答案不是接线缺陷;登记参数(PAR-INT-01,实例
+// 半边)到位后由装配点换真 Intake 即点亮,本文件一行不用改。
+//
+// 请求体形状此刻没有契约。ADR-0085 决定三把「渠道原始载荷 → 登记快照」的翻译划给渠道
+// 接入契约、随 PAR-INT-01 提供,所以这里不发明字段:页面收的是登记快照 JSON 本体,与
+// 受控登记口 parcel-customs-register <命令> -input 吃的同一份形状,原样作请求体送出。
+// 真渠道接线时以渠道契约为准重谈,不得反过来把这里当成已发布的 Schema。
+
+/**
+ * 可在线登记的关务配置册封闭四格。词与端点路径、受控 CLI 的子命令逐字同一个——同一本
+ * 册在写口与 CLI 不换词。解释规则的读口参数是 interpretation 而写口词是
+ * interpretation-rule,两处不同源自各自端点,本类型跟写口,不改读口那半。
+ *
+ * 建案要求规则(CLI 的 case-requirement)不在本集:按票 02 的判据它同属租户配置、也有
+ * CLI 先例,但服务端尚无在线登记端点,前端不为一个不存在的端点造入口。案件事实那七个
+ * 命令(就绪、提交授权及其撤销、关闭义务目录与明细、门禁发现)按票 02 的范围裁定本就
+ * 不进写面——它们改的是案上此刻的事实,不是这个租户怎么配置。
+ */
+export type CustomsRegistrationKind =
+  | 'interpretation-rule'
+  | 'gate-catalog'
+  | 'candidate-port'
+  | 'declaration-path';
+
+export const customsRegistrationEndpoints: Record<CustomsRegistrationKind, string> = {
+  'interpretation-rule': '/customs-interpretation-rule-registrations',
+  'gate-catalog': '/customs-gate-catalog-registrations',
+  'candidate-port': '/customs-candidate-port-registrations',
+  'declaration-path': '/customs-declaration-path-registrations',
+};
+
+/**
+ * 一类一个端点,本函数按类取路径而不是裂成四个同形包装。传输层那边逐类各立一个端点
+ * 构造函数,为的是让「把一类的译装接到另一类的端点上」在编译期就红;那条保护在这里
+ * 没有落点——快照本体在前端是未翻译的 JSON,分不分函数都一样送得出去。
+ */
+export function registerCustomsConfiguration(
+  kind: CustomsRegistrationKind,
+  snapshot: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(customsRegistrationEndpoints[kind], snapshot);
+}
+
+/**
+ * 登记答案代数(application.CaseConfigurationOutcome 原名),逐格中文。四类共用一份——
+ * 服务端四个端点交回的就是同一个枚举。
+ *
+ * 没有 UNDECIDED 一格。用例把依赖故障折成那个枚举值,而传输层按 ADR-0022 把它写成
+ * 「没形成答案」的 5xx,它到不了这张表;真落进来会被 RegistrationPanel 当成登记册的治理
+ * 答案示出,而两者的续办动作相反——未决重跑同一份即可,治理答案重试没有用。
+ *
+ * 负向三格逐格分开说而不折成一句「提交失败」:原行都不被顶替,但续办动作各不相同——
+ * 冲突要人工核对既有登记,受理门拒绝要补齐缺件,重放则什么都不用做。
+ */
+export const registrationOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记',
+  EXISTING: '已在册——同键同内容的重放,原行不动',
+  CONTENT_CONFLICT:
+    '内容冲突——同键异内容绝不顶替;核对既有登记后改内容,或换一个生效起点登新版',
+  NOT_ACCEPTED: '受理门拒绝——缺件或形状不合,补齐后重登;原行不被顶替',
+};

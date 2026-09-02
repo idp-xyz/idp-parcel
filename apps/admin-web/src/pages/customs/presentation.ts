@@ -1,7 +1,12 @@
 // 关务目录查阅词表(合规规则库 + 案件配置册 + 门禁条件册 + 口岸/申报路径册)。册子名
 // 与查询参数 registry 同词;中文取 customs-compliance CONTEXT。
 
-import type { CaseRegisterRegistry, ComplianceRegistry, PortsPathsRegistry } from './api';
+import type {
+  CaseRegisterRegistry,
+  ComplianceRegistry,
+  CustomsRegistrationKind,
+  PortsPathsRegistry,
+} from './api';
 
 export const registryLabels: Record<ComplianceRegistry, string> = {
   'case-requirement': '案件要求规则',
@@ -77,3 +82,59 @@ export const problemCodeNotes: Record<string, string> = {
 export function problemNote(code: string): string {
   return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
 }
+
+// ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02b)。
+
+/**
+ * 四类登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
+ * 门禁目录登的是目录本身而不是目录里的条件项,标题因此说「目录」不说「条件」。
+ */
+export const registrationTitles: Record<CustomsRegistrationKind, string> = {
+  'interpretation-rule': '登记解释规则版本',
+  'gate-catalog': '登记门禁前置条件目录',
+  'candidate-port': '登记合规候选口岸版本',
+  'declaration-path': '登记申报路径版本',
+};
+
+// 登记快照形状的提示句。四类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
+// 拼出:抄四遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+function snapshotHint(kind: CustomsRegistrationKind, fields: string): string {
+  return (
+    `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份;` +
+    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
+    fields
+  );
+}
+
+/**
+ * 各类登记快照的形状提示。逐类把键名与封闭集词列出来:未知键一律被译装拒绝(打错的键
+ * 静默丢弃会让操作员以为登进去的比实际多),而封闭集里的词打错在族名上看不出来。
+ *
+ * 三本版本册都不收终点:换版是登记一个更晚生效起点的新版,前版终点随之落定,历史区间
+ * 不接受追改(ADR-0070)。这句写进提示是因为读面上「持续有效」那一格最容易被读成「可以
+ * 回头补个终点」。
+ */
+export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> = {
+  'interpretation-rule': snapshotHint(
+    'interpretation-rule',
+    '键为 tenantId / resultLayer / jurisdictionRef / ruleRef / appliesFrom;' +
+      '外部结果层取封闭六词 REGULATORY_RECEIPT / BUSINESS_ACCEPTANCE / PROCESS_DECISION / ' +
+      'ASSESSED_DUTY / RELEASE_RESULT / DISPOSITION_DECISION。终点不是输入——换版登新起点。',
+  ),
+  'gate-catalog': snapshotHint(
+    'gate-catalog',
+    '键为 tenantId / scopeRef / action / boundaryRef / registeredAt;' +
+      '拟执行动作取封闭四词 OUTBOUND_RELEASE / LOADING_DEPARTURE / CROSS_CUSTOMS_MOVEMENT / ' +
+      'FINAL_DELIVERY。本口登的是目录在场本身,目录里的逐项认定是另一个命令,不在本签。',
+  ),
+  'candidate-port': snapshotHint(
+    'candidate-port',
+    '键为 tenantId / portRef / appliesFrom。终点不是输入——换版登新起点。',
+  ),
+  'declaration-path': snapshotHint(
+    'declaration-path',
+    '键为 tenantId / pathRef / portRef / direction / declarationMode / appliesFrom;' +
+      '进出口方向取封闭两词 IMPORT / EXPORT,申报模式是引用不是封闭词表(真实模式集属实例半边)。' +
+      '终点不是输入——换版登新起点。',
+  ),
+};
