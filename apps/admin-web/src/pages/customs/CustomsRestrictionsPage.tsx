@@ -2,14 +2,25 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
+  customsRegistrationEndpoints,
   listGateConditions,
+  registerCustomsConfiguration,
+  registrationOutcomeLabels,
   type GateConditionCatalogueRecord,
   type GateConditionListResponseBody,
 } from './api';
-import { guardedActionLabels, labelOf, preconditionStateLabels } from './presentation';
+import {
+  guardedActionLabels,
+  labelOf,
+  preconditionStateLabels,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-restrictions'];
@@ -282,13 +293,23 @@ function ReleaseGatesTable() {
   );
 }
 
+// —— 门禁目录登记签（ADR-0085，票 admin-write-faces/02 切片 02b）——
+//
+// 本页三本册里只有门禁目录有在线登记口：内部限制与监管税费两族连查阅端点都还没有，
+// 更没有登记用例可接（票 02「无用例可接就如实跳过，不为凑齐而造用例」）。
+//
+// 登的是目录在场本身——某（范围·动作·边界）这本前置条件目录存在，没有可比内容，所以
+// 它的答案代数里没有内容冲突那一格。目录里的逐项认定（门禁发现）是另一个命令，按票 02
+// 的范围裁定属「案上此刻的事实」不进写面，本签因此不收它。
+
 /**
  * 合规限制与监管税费（customs-compliance）。已接线的门禁核对签在前——页面当前能
- * 如实作答的只有它；内部限制与税费两族列表端点未建，如实占位在后。端点建成接线
- * 时可回归「动作被放行前要过的层」那个顺序（内部限制 → 税费义务 → 门禁核对），
- * 与 customs-cases 页同一处置。
+ * 如实作答的只有它；内部限制与税费两族列表端点未建，如实占位在后；门禁目录的登记签
+ * 排在三张读签之后，读写各占各的签。端点建成接线时可回归「动作被放行前要过的层」
+ * 那个顺序（内部限制 → 税费义务 → 门禁核对），与 customs-cases 页同一处置。
  *
- * 门禁满足也不生成放行：放行结果始终是监管机构的外部事实，本页三签都不表达它。
+ * 门禁满足也不生成放行：放行结果始终是监管机构的外部事实，本页四签都不表达它。
+ * 登记签同理不表达放行——它只登「这本目录在场」，不登任何一次核对结论。
  */
 export function CustomsRestrictionsPage() {
   return (
@@ -298,6 +319,7 @@ export function CustomsRestrictionsPage() {
           <TabsTrigger value="gates">放行门禁核对</TabsTrigger>
           <TabsTrigger value="restrictions">内部合规限制</TabsTrigger>
           <TabsTrigger value="duties">监管核定税费</TabsTrigger>
+          <TabsTrigger value="register">登记门禁目录</TabsTrigger>
         </TabsList>
         <TabsContent value="gates" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ReleaseGatesTable />
@@ -307,6 +329,17 @@ export function CustomsRestrictionsPage() {
         </TabsContent>
         <TabsContent value="duties" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <RegulatoryDutiesTable />
+        </TabsContent>
+        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <RegistrationPanel
+            moduleId="customs-restrictions"
+            title={registrationTitles['gate-catalog']}
+            endpoint={`POST ${customsRegistrationEndpoints['gate-catalog']}`}
+            snapshotHint={registrationSnapshotHints['gate-catalog']}
+            submit={(snapshot) => registerCustomsConfiguration('gate-catalog', snapshot)}
+            outcomeLabels={registrationOutcomeLabels}
+            problemNote={problemNote}
+          />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,14 +1,27 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
+  customsRegistrationEndpoints,
   listComplianceRules,
+  registerCustomsConfiguration,
+  registrationOutcomeLabels,
   type ComplianceRegistry,
   type ComplianceRulesListResponseBody,
 } from './api';
-import { directionLabels, labelOf, registryLabels, resultLayerLabels } from './presentation';
+import {
+  directionLabels,
+  labelOf,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+  registryLabels,
+  resultLayerLabels,
+} from './presentation';
 
 const info = moduleInfoById['compliance-rules'];
 
@@ -87,7 +100,7 @@ function rowsOf(body: ComplianceRulesListResponseBody): RuleRow[] {
 }
 
 // 两本登记册分别呈现,避免把「是否建案」与「如何解释外部结果」折成一套规则。
-export function ComplianceRulesPage() {
+function ComplianceRulesTable() {
   const [registry, setRegistry] = useState<ComplianceRegistry>('case-requirement');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -156,5 +169,53 @@ export function ComplianceRulesPage() {
         emptyDescription: '读取入口已配置,但该登记册为空;页面不会预置关务规则。',
       })}
     />
+  );
+}
+
+/**
+ * 合规规则库(customs-compliance):两本册子查阅一签,解释规则登记一签(ADR-0085,
+ * 票 admin-write-faces/02 切片 02b)。
+ *
+ * **登记签只装解释规则,不装案件要求规则。** 两本册在读签上并列,写签却只有一本,不是
+ * 漏了一半:案件要求规则按票 02 的判据同属租户配置、受控 CLI 里也有 case-requirement
+ * 一命令,但服务端至今没有它的在线登记端点(端点表里关务只有解释规则、门禁目录、候选
+ * 口岸、申报路径四个登记口)。页面不为一个不存在的端点造入口——造了就会答 404,而 404
+ * 与本签今天必然的 403「接入渠道未配置」长得像却是两件事:后者是诚实答案,前者是页面
+ * 自己编出来的路。签名写死「登记解释规则」而不是「登记合规规则」,为的就是让这一半的
+ * 缺席在签上看得见。
+ *
+ * 登记签只有登记一个动作:解释规则不可覆盖,更正是登一个更晚法定起点的新版、开放前版
+ * 终点随之落定(ADR-0070),历史区间不接受追改,所以没有行级编辑或删除面。
+ */
+export function ComplianceRulesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="rules" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="rules">合规规则库</TabsTrigger>
+          <TabsTrigger value="register">登记解释规则</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="rules"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <ComplianceRulesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="compliance-rules"
+            title={registrationTitles['interpretation-rule']}
+            endpoint={`POST ${customsRegistrationEndpoints['interpretation-rule']}`}
+            snapshotHint={registrationSnapshotHints['interpretation-rule']}
+            submit={(snapshot) => registerCustomsConfiguration('interpretation-rule', snapshot)}
+            outcomeLabels={registrationOutcomeLabels}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
