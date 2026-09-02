@@ -15,6 +15,7 @@
 - [国际小包网络运营首发产品基线与开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：定义产品核心闭环、关务控制域的位置、首发纵向切片和端到端开发准入，是产品级首发开发入口。
 - [机制半边清点](./product/MECHANISM-INVENTORY.md)：**生成物，勿手改**。逐上下文的生产/测试文件、应用编排、适配器、Outbox 投递、跨上下文消费缝、迁移份数与端口两口径缺口，由 `tools/mechanism-inventory` 生成、CI 逐次重新生成并比对，不一致即失败。它只有数没有定级——「达标／部分／未开始」与留待裁定仍在[首发开发主线](./product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)的「机制半边现状」一节。引任何计数引这里，不要引那一节的正文叙述。
 - [产品故事](./product/PRODUCT-STORY.md)：面向商务洽谈的叙事层——卖给谁、解决什么痛、差异化、AI 路线立场与演进路线；只引用权威文档不定义规则，与基线冲突时以基线为准。
+- [产品自身收费模型](./product/PRODUCT-MONETIZATION-MODEL.md)：开发方把产品卖给物流企业时按什么计量收钱——各收费层的计量单位、面向客户群哪一层、价值逻辑与依据强度，以及每层要的计量事实今天在本仓有没有落点。它是形态结论不是已确认参数，**全文不含任何价位**，也不进[参数登记册](./product/PILOT-PARAMETER-REGISTER.md)；与[结算与经营核算上下文](./domain/settlement-accounting/CONTEXT.md)分属两件事——那里记的是租户对其客户与供应商的钱。
 - [竞品公开事实台账](./product/COMPETITOR-FACT-LEDGER.md)：本仓自行核对的 Shippo / Easyship 公开事实登记处，按`已核实`、`部分未核`、`未取到`三态标注并带本仓核对日期；它只记核对时点的公开表述，不定义产品规则、不描述本产品能力、不作验收依据，也**不得作为本产品定价或成本假设的依据**。
 - [产品业务全景与端到端流程说明书](./product/IDP-PARCEL-BUSINESS-PROCESS-AND-MODULE-GUIDE.md)：面向产品、售前、实施、运营、研发和测试的统一导览，串联业务主链、产品操作、系统协作、异常分支、模块职责、跨模块交接与试点治理；只组织已有权威文档，不新增领域规则或实例参数。
 - [首发试点范围](./product/PILOT-SCOPE.md)：定义首发试点已经确认的范围原则、明确排除项和待确认参数，是判断首发是否越界的权威依据。
