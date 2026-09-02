@@ -46,6 +46,7 @@ Date: 2026-08-10
 ## Links
 
 - [ADR-0020：产品自带租户管理界面；后台 worker 是进程入口，一线作业界面未决](./0020-tenant-admin-client-in-product-workers-are-processes.md)：被本记录取代；其未决项由本记录关闭
+- [ADR-0089：一线作业过渡走受控批量导入并内置结构性拆除期限](./0089-frontline-transition-controlled-import-with-structural-sunset.md)：本记录各条**不受停用**，「管理台无作业动词是有意设计」不因过渡而废；ADR-0089 只在本记录所定的作业端开工之前开一个带期限的受控导入口
 - [ADR-0018：产品内客户端应用与后端共享发布边界并落在顶层 `apps/`](./0018-product-clients-share-release-boundary-under-apps.md)：落位与发布边界的出处，经 ADR-0019、ADR-0020 保留至今
 - [ADR-0016：产品交付与租户试点作为两条并行验收轨道](./0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md)：据以判定本项属机制半边、不等真实租户
 - [ADR-0006：场站节点管理小包网络作业而非完整 WMS](./0006-parcel-node-operations-not-full-wms.md)：本产品拥有节点作业，同时排除完整 WMS，本记录的范围两端都由它划定
