@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: ready-for-human（要先裁一句：`未决` 里那一格「等的是人去登记」算不算 `未决`）
+Status: ready-for-agent（2026-09-02 已裁，见 [ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)；实现范围比本票原文大，且要动领域封闭集合，见文末 Comments 末条）
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -91,3 +91,17 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   顺带留一条给 `PAR-NET-14` 那边：`ErrNetworkDefinitionUnresolvable` 的注释说它是装配缺口、必须响亮、「装配缺口要看得见」，而它到 `AssessParcelReachabilityHandler` 就被折进「依赖调不通」那一格。缺解析层的构建于是在下游长得像一次瞬时故障。本票不判它属不属缺陷，只如实记下。
 
   **而之所以只能靠插探针去猜，是因为进程那一侧什么都问不到**——另立 [08](./08-undecided-stage-and-reason-are-invisible-on-a-real-process.md)。
+
+- 2026-09-02 · MCP-1（owner 授权自决，裁决落 [ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)，转 ready-for-agent）。
+
+  **裁的不是票面那三条。** 领域层已经有「按恢复动作分格」的封闭集合——`domain.ResumePath`，由 `JudgmentPendingReason.resumePath()` 全函数导出，而 ADR-0086 的 Context 原话正是「这正是领域 `ResumePath` 三分的理由」。缺的是第四格与消费门那次常量比较：`*RulesNotConfigured` 与 `*AsOfNotConfigured` 那一族今天落在 default 的内部重试上，而它们**自己的注释**早写明「压成一格会对着一个没配置的租户参数无休止内部重试，而重试永远等不到一次登记」。判据（ADR-0029）与细分（原因那一层）都在，只是导出到恢复动作时被压回去了。
+
+  因此候选一被改造后采纳：分格判据放在 `ResumePath` 而不是消费门（消费门是适配层，恢复动作是领域语言，在那里重建一份映射必然漂开）。候选二、三照票面理由否决，逐条记在 ADR 的 Alternatives。
+
+  **两件本票原文没有的，都写进 ADR 了。**
+
+  一、`ManualReviewPending` 那个硬编码常量比较消失，规则变成逐格分派且不留 default——新增未决原因时要答的是恢复动作，而 `resumePath()` 里本来就必须答。
+
+  二、**第四格必须与它的续办触发同笔落地**（ADR-0094 Decision 四）。人工复核有「复核已完成」信封、客户补件有新提交版本，「参数已登记」什么都没有；只把回滚改成提交，得到的是把 `ABANDONED` 换成一个更安静的永久停滞。**所以本票的实现范围比票面大**，它不是改一处折法；且 `ResumePath` 是领域封闭集合，加一格属并行会话说的「会让旧调用点对不上」那一类，开工前占号、走三步法或单独 worktree。
+
+  **一句收回。** 取证途中我一度认为 `CustomerSupplementPending` 也在烧预算、可以顺带修好。ADR-0086 的 Context 明确判过那一格「回滚重投是对的」，理由是「客户新提交版本会自己回来」；而 ADR-0045 把「受控补充的…重触发判断」划为另一切片，那条前提今天核不实也证不伪。**推翻一条已接受判断要有证据，我没有**，因此 ADR-0094 维持它不动，只把它从一个沉默的 default 变成一个具名的、写着理由的格。要不要重开，另立取证票。

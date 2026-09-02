@@ -1,7 +1,7 @@
 # 未决停在哪一站、原因是什么，在真进程上没有任何人读得到
 
 Category: bug
-Status: ready-for-human（要先定一句：错误正文该在哪一层出声——派发器自己打，还是把逐条失败交回装配方）
+Status: ready-for-agent（2026-09-02 已裁，见 [ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md)；第一层由 ADR-0094 带走，第二层可独立落地）
 
 来源：2026-09-02 MCP-1 接手 MCP-5 崩溃后的现场时取证。锚 `9d6063c`（工作树的未提交改动只有 `.md` 与 `.scratch/**`，不含任何 `internal/`）。
 
@@ -47,3 +47,15 @@ Status: ready-for-human（要先定一句：错误正文该在哪一层出声—
 ## 参照
 
 `internal/platform/dispatch/dispatcher.go`（`DispatchOnce` 丢弃 `err` 那一处、`failureCodeFor` 的分格判据）、`cmd/parcel-dispatch/loop.go`（`Loop.report`）、`internal/parcelshipment/adapters/inbox/shipment_request_submitted_consumer.go`（`advanceAcceptanceChainThrough` 写进错误正文的 stage 与 reason，以及 `ErrAcceptanceChainUndecided` 那句「供运维读」）、票 [07](./07-undecided-that-never-self-heals-burns-the-retry-budget.md)。
+
+## Comments
+
+- 2026-09-02 · MCP-1（owner 授权自决，裁决落 [ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md)，转 ready-for-agent）。
+
+  **本票立起来之后又发现一层，它把票面缩小了一半。** 领域其实一直在记：`recordAttempt` 会把未决原因、恢复路径与续办引用写成一条处理尝试挂到接受判断任务上，`UC-PS-001` 要的「保存当前判断、失败位置和安全续办依据」正是它。**是消费门的整笔回滚把它擦掉了**——那个消费门自己的注释就记着这条代价。所以不自愈那一格的可观测性不需要新机制，[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 把它改成提交入账之后自动补上。
+
+  **剩下的是自愈那一格**，它仍该回滚（回滚是对的，那一轮不该在库里留业务事实），因此只能在进程侧出声。裁的是票面两条之外的第三条形状：**装配方注入的失败观察口**——`Dispatcher` 收一个可选回调，`cmd/parcel-dispatch` 用自己的 logger 实现。不改 `Beat`（所有装配点共用），也不给平台层塞 logger（该包对事件类型一无所知、十个上下文共用一拍，这条分工不是风格偏好）。票面候选一、二的否决理由逐条记在 ADR 的 Alternatives。
+
+  两层的划分不是凑数：会自愈的进日志、不自愈的进库，正是 ADR-0029「按恢复动作分格」在可观测性这一面的投影。
+
+  **一条明确不做的**：本票只补观察，不补告警。「未决持续多久算异常」是运营口径，属实例半边，不填。
