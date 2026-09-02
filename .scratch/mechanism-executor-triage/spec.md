@@ -129,17 +129,36 @@ VE 被记为「达标—有裁定的显式留待」，留待项是**真实渠道
 
 | 条目 | 分类 | 依据 | 取证 |
 |---|---|---|---|
-| `EstablishSegmentWithPickup` | 支路未接 | 编排 `perform_offsite_pickup.go` 造了 `FulfillmentAttempt`（`FormFulfillmentAttempt` / `FormAttemptObjectResult`）却**不由揽收事实立履约段** | 核 |
-| `EstablishSegmentWithHandover` | 支路未接 | 同族，交接那一端 | 组 |
-| `ChargeOccurrenceForFailedAttempt` | 支路未接 | 失败尝试的收费发生项 | 组 |
-| `FormLoadAssignment` | 支路未接 | 装载分配 | 组 |
-| `OpenDispatchTask` | 支路未接 | 派送任务开启；`NewDispatchTaskReference` 被编排用着，任务本体没有 | 组 |
-| `RecordMovementFact` | 支路未接 | 实际移动事实 | 组 |
-| `SummarizeHandovers` | 支路未接 | 交接汇总 | 组 |
+**七条已逐条核完**（2026-09-02，方法与逐条对表见[票 02](issues/02-transport-fulfillment-seven-need-per-entry-evidence.md)
+的 Comments）：把 TF 八例编排各自调的领域构造摘出来与七条对表，**没有一例调过其中任何一条**。
 
-TF 记为**达标**（非「留待」），且开发主线称「TF 编排八例对应七个 UC 全触」。这 7 条是 32 条里
-最大的一簇，**这一组最该优先逐条核**——若「全触」指的是每个 UC 有触点而非每条规则有执行器，
-那两句话说的不是一件事。
+| 条目 | 分类 | 依据 | 取证 |
+|---|---|---|---|
+| `EstablishSegmentWithPickup` | 支路未接 | 揽收两例编排造 `FormOffsitePickup` / `FormFulfillmentAttempt`，**不由揽收事实立履约段** | 核 |
+| `EstablishSegmentWithHandover` | 支路未接 | `register_transport_handover.go` 造 `FormTransportHandover`，不立段 | 核 |
+| `SummarizeHandovers` | 支路未接 | 同一编排，交接汇总从不派生 | 核 |
+| `ChargeOccurrenceForFailedAttempt` | 支路未接 | 入参 `AttemptObjectResult` 就在 `perform_offsite_pickup.go` 里造出来，隔几行没人再用。守的是 `AT-TF-094` | 核 |
+| `OpenDispatchTask` | 支路未接 | 编排造 `NewDispatchTaskReference`，任务本体零调用点 | 核 |
+| `FormLoadAssignment` | 支路未接 | 编排造 `NewLoadAssignmentReference`，分配本体零调用点 | 核 |
+| `RecordMovementFact` | 支路未接 | 八例编排无一处理实际移动 | 核 |
+
+两件要点：
+
+**重复三次的形状是「引用造得出，本体造不出」**——生产代码里流转着指向从未被创建过的东西的
+引用。CONTEXT 明写「装载分配分别拥有业务身份」，而它今天只有引用没有身份。
+
+**最重的是前两条合起来。** CONTEXT 这句是实际履约段成立的定义性边界：
+
+> 载运对象通过有效收寄或权威交接进入运输方控制时，其履约参与关系和适用实际履约段才成立。
+> 扫描、订舱确认、承运接受、列入总单或舱单、车辆到场、装载分配和物理装载中的任一单项均不能
+> 替代该边界。
+
+两条成立入口都无生产调用方：收寄登记得进去、交接登记得进去，而**那条 CONTEXT 称为边界的
+边界，生产路径上跨不过去**。实际履约段、履约参与关系、实际承运商今天在真进程上一个都形成
+不了。
+
+TF 记为**达标**且差量列写**「无」**。按本轮取证，「差量：无」与名单上这七条对不上，二者必有
+一句要改——改哪一句是产品判断，不在本目录范围内。
 
 ### settlement-accounting（4）与 customs-compliance（4）
 
@@ -186,5 +205,6 @@ r27 对另五项做的那样，但要逐条写理由）、下调某几个切片�
 - **不擅自改开发主线的状态列。** 定级是人的决定，本仓已有明文（r27：「宣布本身是用户的决定」）。
 - 探针是扔弃件，`.scratch` 下留着当取证过程，**不进 CI**；要不要把 `New*` 一族并进棘轮见
   [票 04](issues/04-should-the-ratchet-cover-the-new-family.md)。
-- **「组」标的 12 条尚未逐条核。** 按本仓「写证据不写结论」的纪律，那 12 行是推断不是取证，
-  引用时请照此读；TF 那 7 条最该先补。
+- **未逐条核的还剩 5 条**（`parcel-pricing` 4 条 + 早先按组推断的余量）。按本仓「写证据不写
+  结论」的纪律，标「组」的那几行是推断不是取证，引用时请照此读。TF 那 7 条原本标「组」，
+  2026-09-02 已逐条补核并改标「核」，结论无一翻案且比推断更重。

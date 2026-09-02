@@ -65,3 +65,49 @@ TF 是**达标且差量为「无」**的四个切片之一（另三个是 PN-01�
 ## 边界
 
 本票**不接线、不改代码、不改基线名单**。产出是七行带举证的分类，交人裁。
+
+## Comments
+
+- 2026-09-02 · MCP-3：**七条逐条核完，全部归「支路未接」，无一例外。** 方法是把 TF 八例编排
+  逐个摘出它调的领域构造，再与七条对表。八例编排全部存在且都在造领域对象——**没有一例调过
+  这七条里的任何一条**。
+
+  | 条目 | 该由谁调 | 那个编排实际调的 |
+  |---|---|---|
+  | `EstablishSegmentWithPickup` | `register_offsite_pickup.go` / `perform_offsite_pickup.go` | `FormOffsitePickup`、`FormFulfillmentAttempt`、`FormAttemptObjectResult` |
+  | `EstablishSegmentWithHandover` | `register_transport_handover.go` | `FormTransportHandover` |
+  | `SummarizeHandovers` | `register_transport_handover.go` | 同上，汇总从不派生 |
+  | `ChargeOccurrenceForFailedAttempt` | `perform_offsite_pickup.go` | `FormAttemptObjectResult`——**它的入参就在这个 handler 里造出来，然后没被用** |
+  | `OpenDispatchTask` | 无 | `perform_offsite_pickup.go` 造 `NewDispatchTaskReference` |
+  | `FormLoadAssignment` | 无 | `prepare_transport_opportunity.go` 造 `NewLoadAssignmentReference` |
+  | `RecordMovementFact` | 无 | 八例编排里没有任何一例处理实际移动 |
+
+  **重复出现三次的形状：引用造得出，本体造不出。** `NewDispatchTaskReference` 与
+  `NewLoadAssignmentReference` 都在编排里被调用，而 `OpenDispatchTask` 与 `FormLoadAssignment`
+  零调用点——生产代码里流转着指向从未被创建过的东西的引用。CONTEXT 明写「运输委托、订舱、
+  容量预占、承运接受和装载分配分别拥有业务身份、对象范围、数量、条件和生命周期」，而装载
+  分配今天只有引用没有身份。
+
+  **最重的一条是前两条合起来。** CONTEXT 这句是实际履约段成立的定义性边界：
+
+  > 载运对象通过有效收寄或权威交接进入运输方控制时，其履约参与关系和适用实际履约段才成立。
+  > 扫描、订舱确认、承运接受、列入总单或舱单、车辆到场、装载分配和物理装载中的任一单项均
+  > 不能替代该边界。
+
+  两条成立入口（`EstablishSegmentWithPickup` 注「由首个对象的有效收寄成立段（CONTEXT
+  生命周期①）」、`EstablishSegmentWithHandover` 注「由首个对象的『已交接』权威交接成立段」）
+  **都没有生产调用方**。收寄登记得进去、交接登记得进去，而**那条 CONTEXT 称为边界的边界，
+  生产路径上跨不过去**。实际履约段、履约参与关系、实际承运商——CONTEXT 用整整一节写的这些，
+  今天在真进程上一个都形成不了。
+
+  `ChargeOccurrenceForFailedAttempt` 是最容易修也最刺眼的一条：它要的 `AttemptObjectResult`
+  就在 `perform_offsite_pickup.go` 里由 `FormAttemptObjectResult` 造出来，隔几行就没人再用。
+  它守的是 `AT-TF-094`（失败尝试形成发生项，第二次成功不覆盖第一次），验收判据编号都在
+  代码注释里写着。
+
+  **结论对 PN-04 定级的影响**：开发主线 PN-04 行记「达标」、差量列写「无」。按本轮取证，
+  这七条都是机制半边的支路未接，**「差量：无」这句话与名单上的七条对不上**，二者必有一句
+  要改。改哪一句是产品判断，本票不裁——但两句同时留着不成立。
+
+  取证锚 `9d6063c`（编排文件与领域文件在 `9d6063c..0c4b5a1` 间未变动）。本笔只读，未改
+  任何代码。
