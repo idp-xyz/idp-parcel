@@ -337,3 +337,29 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
   ADR-0072 一 的定性张力。
 
   未动 MCP-1 的 Comment 段与 `internal/accessidentity/**`，未开代码。证据等级 `S`。
+
+- 2026-09-01 MCP-4（用户授权接本票后复核）：**本票当前没有未被阻断的工程活，一行代码都没写。**
+  记在这里免得下一个接手的人再走一遍。
+
+  **派工单已作废，已关。** MCP-1 于 17:59 派给 MCP-2 的任务（标题「accessidentity 立册 + 渠道注册
+  + 源信封铸造」）在队列里一直是 `pending`——MCP-2 未及消费即失去响应。该派工的措辞把立册排在
+  最前，而**本票 MCP-1 那条裁定已明写「谁接本票都按本条的 A 范围走，不按那条派工原文」**，A 范围
+  即「只做 S2」。故按已被票面取代关闭，非执行失败。
+
+  **A 范围已交付且在 main 上是绿的。** `cf34943` 经 `git merge-base --is-ancestor` 核为 `aeeb709`
+  的祖先；`internal/accessidentity/` 六个文件在册；同刻 `gofmt -l` 空、`go build ./...`、
+  `go vet`、`go test -count=1 ./internal/accessidentity/...` 全过。`migrations/` 下确无
+  accessidentity 目录，与「本轮不立表」一致。
+
+  **余下各步逐条复核，无一可动**：S1 等 S0 的判重与冲突语义（那决定列，不是决定值）；S3 的四组
+  入参三组卡住，MCP-5 已逐项追过，结论「没有哪一半能单独产出一个能用的 Intake」本轮复核成立；
+  S4 卡 `PAR-GOV-03..07`；S5 依赖 S4。S3 的架构门禁路径已由 MCP-5 择定
+  （`internal/parcelshipment/adapters/accessidentity/`），那一格不必再论。
+
+  **所以本票的排期就是 S0 的排期，而 S0 归用户 → 客户。** 它同时是
+  `.scratch/tenant-implementation-01/implementation-checklist.md` 的 C0，两处指的是同一件事、
+  同三个问题，别当成两笔活。
+
+  **本票此刻无在线负责人**：MCP-1、MCP-2、MCP-5、MCP-6 频道心跳均已停（实测于 22:2x–22:3x）。
+
+  未开代码，未建 worktree，未提交。证据等级 `S`。
