@@ -19,10 +19,11 @@ const (
 	DecimalMaxTextLength = DecimalMaxDigits + DecimalMaxScale + 2
 )
 
-func NewDecimal(raw string) (Decimal, error) {
-	return ParseDecimal(raw)
-}
-
+// ParseDecimal 是本包**唯一**的文本入口。这里曾并列过一个一行转发给它的 `NewDecimal`，
+// 与更早被删掉的 `DecimalFromInt64`／`Evaluate` 那对影子函数同形；棘轮基线的头部注释记着
+// 那次事故，并留话说删掉之后不会再有任何机制提醒下一个人这里曾有过第二个写法。这句注释
+// 就是那个提醒——**同文件里已有正主时，不要再开一个只做转发的构造器**：两个名字会各自
+// 长出调用点，而它们的行为约束只写在其中一个的注释里。
 func ParseDecimal(raw string) (Decimal, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" || strings.ContainsAny(value, "eE") {
