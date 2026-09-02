@@ -1,8 +1,8 @@
 # 12 候选装配：产品—渠道映射到候选集合之间没有适配器
 
 Category: enhancement
-Status: draft
-Blocked by: 01
+Status: ready-for-agent
+Blocked by: 01（已 resolved：择优取乙落 `parcel-shipment`，装配随之落该上下文的 `adapters/partycommercial/`）
 
 ## 缺口
 

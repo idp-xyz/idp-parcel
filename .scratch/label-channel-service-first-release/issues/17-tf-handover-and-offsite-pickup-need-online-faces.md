@@ -1,8 +1,8 @@
 # 17 TF 的交接与外场取件两类事实没有在线登记口
 
 Category: enhancement
-Status: draft
-Blocked by: 03
+Status: resolved——`03` 已裁定不走这条路，本票判定**不做**，依据见文末
+Blocked by: 03（已 resolved）
 
 ## 缺口
 
@@ -46,3 +46,23 @@ Blocked by: 03
 ## 参照
 
 [轨迹源盘点](../tracking-source-seam-inventory.md)第二段；票 `03`；ADR-0085。
+
+## 判定：不做
+
+`03` 裁定末端渠道轨迹译成 TF **新立**的一类「外部承运轨迹事实」，不复用既有自营作业事实
+类型。本票上面「为什么被 `03` 阻塞」那一节写的正是这个分支：
+
+> 若 `03` 裁定收编走别的路径（例如另立一类渠道轨迹事实、或走受控进程而不进端点表），
+> 那么这两个在线口就没有必要，**补了就是给写面凭空多两个入口**。
+
+该分支成立，因此本票按自身完成判据置 `resolved`，不留一张永远 `draft` 的票。
+
+**要说清这不等于「TF 那两个口不该有」。** 缺口本身是真的——`register_transport_handover`
+与 `register_offsite_pickup` 今天确实没有在线登记口，这一条实测于 `9e6d53a` 仍然成立。
+不做的理由只有一个：**本 feature 不是它的成因**。面单渠道服务用不到这两个口，为它补口
+属于「顺手」，而顺手补出来的写面入口没有任何用例在守。真要补，应由 TF 自己的切片按
+[ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
+立票，判据是那两类事实自己需不需要在线登记，不是这里需不需要。
+
+缺口的登记处仍在[轨迹源盘点](../tracking-source-seam-inventory.md)第二段与其汇总表，
+本票 `resolved` 不抹掉那条记录。

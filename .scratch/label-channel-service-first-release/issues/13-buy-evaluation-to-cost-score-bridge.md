@@ -1,8 +1,8 @@
 # 13 `BUY` 评价到成本准则分值之间没有桥，也没有逐候选批量评价口
 
 Category: enhancement
-Status: draft
-Blocked by: 01
+Status: ready-for-agent
+Blocked by: 01（已 resolved：出局判断落**渠道择优比较器**这一层，`parcelpricing` 只答算不算得出价）
 
 ## 缺口
 
@@ -38,7 +38,9 @@ Blocked by: 01
 ## 红线
 
 - 不填任何价卡、体积系数、进位分段、金额（`PAR-SET-03`，实例半边）。
-- 出局判断放在哪一层由 `01` 裁定，本票照裁定落，不自定。
+- 出局判断放在哪一层已由 `01` 裁定：落**渠道择优比较器**这一层，不放 `parcelpricing`。
+  `parcelpricing` 只答「这个候选算不算得出价」（既有 `EvaluationPending` 那一格），
+  「算不出就出局、且不得以零金额顶替」是择优的规则，由择优侧守。本票照此落，不自定。
 
 ## 完成判据
 

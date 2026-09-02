@@ -1,8 +1,8 @@
 # 07 朝外的取面单端口不存在，四处形态差异要先进类型
 
 Category: enhancement
-Status: draft
-Blocked by: 02
+Status: ready-for-agent
+Blocked by: 02（已 resolved，落 [ADR-0090](../../../docs/adr/0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)）
 
 ## 缺口
 
@@ -26,7 +26,11 @@ Blocked by: 02
 4. **成败信号在哪一层**——UniUni HTTP 一律 200，成败在 body 的 `code` 上，
    **HTTP 状态码不能用来判结果不确定**。
 
-第 4 点与 `02` 定的出向结果代数直接相接：**本票消费 `02` 的结论，不自己另定一套**。
+第 4 点与出向结果代数直接相接：**照 ADR-0090 办，不自己另定一套**。该记录明写「有没有形成
+答案」由每家适配器判定、平台层不得看 HTTP 状态码代答——UniUni 恒 200 正是它举的反例。
+
+**本票同时是 ADR-0090 平台包的落地处**：出向缝的代码随第一个消费者一起落 `internal/platform/`，
+`15` 复用同一个包。若发现三格代数装不下取面单的某种情形，回票 `02` 重开，不在本票私自加格。
 
 ## 红线
 

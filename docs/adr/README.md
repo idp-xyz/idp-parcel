@@ -95,6 +95,7 @@
 - [ADR-0087：结算登记册补齐硬句所要求的可核对事实——确认费用固定八项且收付方向自立词表，客户费用调整单列追加册（含唯一创建用例门），经营组成项带按口径分组的角色维](./0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
 - [ADR-0088：面单渠道服务进入首发对客服务形态——`PAR-COM-12` 由范围裁剪改为纳入，首发形态成为网络服务与面单渠道服务的明确组合；领域语言一字不改，「一条线路」约束只作用于网络服务主链路](./0088-label-channel-service-enters-the-first-release-service-forms.md)
 - [ADR-0089：一线作业过渡走受控批量导入并内置结构性拆除期限——ADR-0021 的带期限例外，管理台一个作业动词都不加；导入事实带来源标记以与设备事实可分辨](./0089-frontline-transition-controlled-import-with-structural-sunset.md)｜**带期限例外**：它不停用 [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md) 与 [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md) 任何一条，只在一线作业客户端开工之前开一个到 `2026-12-31T23:59:59+08:00` 为止的口子；两记录各条不变，延长期限须 supersede ADR-0089。**适用场景**：仅限过渡期受控批量导入这一条路径灌入的作业事实，标记为例外的印记；经设备签发的作业事实仍全数照 ADR-0023 办
+- [ADR-0090：出向集成的结果代数按调用方的恢复动作分格，「有没有形成答案」由适配器判定且不得看 HTTP 状态码；未配置即拒，不设重试默认值](./0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)
 
 ## 已被取代决策
 
