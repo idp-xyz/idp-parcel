@@ -64,6 +64,20 @@ type DeclarationPathRegistrationIntake interface {
 	) (application.RegisterDeclarationPathCommand, error)
 }
 
+// CaseRequirementRegistrationIntake 同上，翻译建案要求规则登记。
+//
+// 它是本端点族的第五类，比另四类晚一步进来：票 admin-write-faces/02 的关务片把十二个
+// 用例分成「配置四类」与「案件事实七类」，四加七只有十一个，漏掉的第十二个正是它。
+// 按该票的判据它明明白白是配置——登的是「某辖区+方向+程序要不要建案」加依据，答案代数
+// 与另四类同为 CaseConfigurationOutcome，受控 CLI 里也有 case-requirement 一命令，读面
+// 早在合规规则页的册 chip 里。漏它没有理由，只是数错了。
+type CaseRequirementRegistrationIntake interface {
+	IntakeCaseRequirementRegistration(
+		ctx context.Context,
+		request *http.Request,
+	) (application.RegisterCaseRequirementRuleCommand, error)
+}
+
 // InterpretationRuleRegistrar 是本端点转交的登记编排。事务边界在编排之外给出（登记
 // 写口无环境事务即拒，形照登记 CLI 的 execute：一次调用一笔事务，登记与它的冲突判定
 // 读回因此看同一份快照），适配器只转交与映射，不判断任何业务结果。
@@ -95,6 +109,16 @@ type DeclarationPathRegistrar interface {
 	Handle(
 		ctx context.Context,
 		command application.RegisterDeclarationPathCommand,
+	) (application.CaseConfigurationOutcome, error)
+}
+
+// CaseRequirementRegistrar 同上，转交建案要求规则登记编排。它的实现方是自己的用例
+// （RegisterCaseRequirementRuleHandler），不与案件配置面那五本共一个 handler——那五本
+// 按票收窄执行完毕，本册随 cc-case-requirement-rule-registry 01 另立。
+type CaseRequirementRegistrar interface {
+	Handle(
+		ctx context.Context,
+		command application.RegisterCaseRequirementRuleCommand,
 	) (application.CaseConfigurationOutcome, error)
 }
 
@@ -141,6 +165,18 @@ func NewRegisterDeclarationPathEndpoint(
 ) http.Handler {
 	return newConfigurationRegistrationEndpoint(
 		intake.IntakeDeclarationPathRegistration, registrar.Handle)
+}
+
+// NewRegisterCaseRequirementEndpoint 交回建案要求规则登记的 HTTP 入口。它登的是「这个
+// 租户在某辖区、某方向、某程序下要不要建案」，依据对`要求`与`不要求`都必填——说不出依据
+// 的`不要求建案`与`规则没登记`在库上分不开，而两者的续办动作相反（前者照常推进，后者
+// 等实例参数）。本册没有版本维：它是键上的当前判断，换判断走同键重登由登记册答冲突。
+func NewRegisterCaseRequirementEndpoint(
+	intake CaseRequirementRegistrationIntake,
+	registrar CaseRequirementRegistrar,
+) http.Handler {
+	return newConfigurationRegistrationEndpoint(
+		intake.IntakeCaseRequirementRegistration, registrar.Handle)
 }
 
 // newConfigurationRegistrationEndpoint 是四类共用的端点体。

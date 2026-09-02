@@ -50,16 +50,17 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
 }
 
-// 四类配置登记命令口的未配置实现（ADR-0085）：与上面两口同一分界——不读业务内容、
-// 不采信自报身份、不构造命令。隔离读放行（ADR-0078）不实现这四个接口，写行换不了。
+// 五类配置登记命令口的未配置实现（ADR-0085）：与上面两口同一分界——不读业务内容、
+// 不采信自报身份、不构造命令。隔离读放行（ADR-0078）不实现这五个接口，写行换不了。
 var (
 	_ InterpretationRuleRegistrationIntake = UnconfiguredIntake{}
 	_ GateCatalogRegistrationIntake        = UnconfiguredIntake{}
 	_ CandidatePortRegistrationIntake      = UnconfiguredIntake{}
 	_ DeclarationPathRegistrationIntake    = UnconfiguredIntake{}
+	_ CaseRequirementRegistrationIntake    = UnconfiguredIntake{}
 )
 
-// IntakeInterpretationRuleRegistration 不读请求，判据同上。以下三个同此。
+// IntakeInterpretationRuleRegistration 不读请求，判据同上。以下四个同此。
 func (UnconfiguredIntake) IntakeInterpretationRuleRegistration(
 	context.Context,
 	*http.Request,
@@ -86,4 +87,11 @@ func (UnconfiguredIntake) IntakeDeclarationPathRegistration(
 	*http.Request,
 ) (application.RegisterDeclarationPathCommand, error) {
 	return application.RegisterDeclarationPathCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeCaseRequirementRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterCaseRequirementRuleCommand, error) {
+	return application.RegisterCaseRequirementRuleCommand{}, ErrAccessChannelNotConfigured
 }

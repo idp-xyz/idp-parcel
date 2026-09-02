@@ -284,6 +284,7 @@ func run(logger *slog.Logger) error {
 			customsRegistration.gateCatalog,
 			customsRegistration.candidatePort,
 			customsRegistration.declarationPath,
+			customsRegistration.caseRequirement,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,

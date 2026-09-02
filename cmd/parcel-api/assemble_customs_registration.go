@@ -111,7 +111,24 @@ func (registration transactionalDeclarationPathRegistration) Handle(
 		})
 }
 
-// customsRegistrationOrchestration 收拢四格，供装配点一次取回。分四个字段而不是一个
+type transactionalCaseRequirementRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *customsapp.RegisterCaseRequirementRuleHandler
+}
+
+var _ customshttp.CaseRequirementRegistrar = transactionalCaseRequirementRegistration{}
+
+func (registration transactionalCaseRequirementRegistration) Handle(
+	ctx context.Context,
+	command customsapp.RegisterCaseRequirementRuleCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return caseConfigurationInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (customsapp.CaseConfigurationOutcome, error) {
+			return registration.inner.Handle(txCtx, command)
+		})
+}
+
+// customsRegistrationOrchestration 收拢五格，供装配点一次取回。分五个字段而不是一个
 // handler：端点表按类各接一格，收成一格就得在装配行上现取字段，那正是要避免的「谁接
 // 谁在装配点看不出来」。
 type customsRegistrationOrchestration struct {
@@ -119,6 +136,7 @@ type customsRegistrationOrchestration struct {
 	gateCatalog        transactionalGateCatalogRegistration
 	candidatePort      transactionalCandidatePortRegistration
 	declarationPath    transactionalDeclarationPathRegistration
+	caseRequirement    transactionalCaseRequirementRegistration
 }
 
 // buildCustomsRegistrationOrchestration 装配四个 `/customs-*-registrations` 的真编排。
@@ -179,6 +197,14 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs ports paths view: %w", err)
 	}
+	requirements, err := ccpostgres.NewCaseRequirementRegistrations(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs case requirement registry: %w", err)
+	}
+	requirementView, err := ccpostgres.NewCaseRequirementView(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs case requirement view: %w", err)
+	}
 
 	configurations := customsapp.NewRegisterCaseConfigurationHandler(customsapp.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
@@ -194,6 +220,8 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 	})
 	portsPathsHandler := customsapp.NewRegisterPortsPathsHandler(
 		customsapp.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPathsView})
+	requirementHandler := customsapp.NewRegisterCaseRequirementRuleHandler(
+		customsapp.RegisterCaseRequirementRuleDeps{Rules: requirements, View: requirementView})
 
 	transactor := db.Transactor()
 	return customsRegistrationOrchestration{
@@ -201,5 +229,6 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 		gateCatalog:        transactionalGateCatalogRegistration{transactor: transactor, inner: configurations},
 		candidatePort:      transactionalCandidatePortRegistration{transactor: transactor, inner: portsPathsHandler},
 		declarationPath:    transactionalDeclarationPathRegistration{transactor: transactor, inner: portsPathsHandler},
+		caseRequirement:    transactionalCaseRequirementRegistration{transactor: transactor, inner: requirementHandler},
 	}, nil
 }

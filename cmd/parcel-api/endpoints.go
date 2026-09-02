@@ -82,6 +82,7 @@ func assembleBusinessEndpoints(
 	gateCatalogRegistration customshttp.GateCatalogRegistrar,
 	candidatePortRegistration customshttp.CandidatePortRegistrar,
 	declarationPathRegistration customshttp.DeclarationPathRegistrar,
+	caseRequirementRegistration customshttp.CaseRequirementRegistrar,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
@@ -223,6 +224,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/customs-gate-catalog-registrations", Handler: customshttp.NewRegisterGateCatalogEndpoint(customshttp.UnconfiguredIntake{}, gateCatalogRegistration)},
 		{Pattern: "/customs-candidate-port-registrations", Handler: customshttp.NewRegisterCandidatePortEndpoint(customshttp.UnconfiguredIntake{}, candidatePortRegistration)},
 		{Pattern: "/customs-declaration-path-registrations", Handler: customshttp.NewRegisterDeclarationPathEndpoint(customshttp.UnconfiguredIntake{}, declarationPathRegistration)},
+		// 建案要求规则是关务的第五类配置，比另四类晚一步接进来：票 admin-write-faces/02
+		// 的关务片把十二个用例分成「配置四类」与「案件事实七类」，四加七只有十一个，漏掉
+		// 的第十二个正是它。它有登记用例、有 CLI 命令（case-requirement）、读面早在合规
+		// 规则页的册 chip 里，唯独端点表没有它的行——管理台的规则页因此只能把签名写死成
+		// 「登记解释规则」，那一半的缺席是页面在替它认账。
+		{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(customshttp.UnconfiguredIntake{}, caseRequirementRegistration)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},

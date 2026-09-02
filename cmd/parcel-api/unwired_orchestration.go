@@ -440,6 +440,15 @@ func (unwiredDeclarationPathRegistration) Handle(
 	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
 }
 
+type unwiredCaseRequirementRegistration struct{}
+
+func (unwiredCaseRequirementRegistration) Handle(
+	context.Context,
+	customsapp.RegisterCaseRequirementRuleCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
 // VE 六类配置登记的命令占位（票 admin-write-faces/02 切片 02d）。六个类型分立不是抄
 // 六遍：六个 Registrar 契约的方法同名 `Handle` 而命令类型互不相同，一个类型实现不了
 // 六个。
