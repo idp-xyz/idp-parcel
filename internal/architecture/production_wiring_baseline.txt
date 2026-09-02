@@ -63,6 +63,11 @@
 # 无他人在途改动（为空），在那棵干净树上量得底数 **32**，加后实测 **33**——两个数因此锚在
 # 同一棵树上，不是一个减一个加出来的。
 #
+# 2026-09-02 随 tf-unwired-seven/04 剪掉 ChargeOccurrenceForFailedAttempt（理由写在那一组
+# 的注释里）。**量在一棵 detached 隔离 worktree 上**（检出 `f5a0f38`，不含任何人的在途
+# 改动）：`git show` 取该检出的本文件数得剪前 **32**，剪后 **31**。按上面那条处方，这两个数
+# 只对这个检出成立；谁要拿一个数当底，请在自己动手那一刻重取 HEAD 再数。
+#
 # 2026-09-02 随同一票下一层（段册适配器）**又把那条剪掉**，加它时写的「适配器落地那天出
 # 名单」当天兑现。**两处各量各的，都记在这里，因为它们是两个不同的数而不是一个数量错了**：
 # 隔离 worktree（检出 `d54fe5d`）上剪前 32 剪后 31；本笔实际提交的父提交 `b321885` 上剪前
@@ -150,7 +155,11 @@ internal/visibilityexception/domain SubmitEvidence
 
 # —— transport-fulfillment ——
 # 以下各条均产出带不变式校验的领域对象，包外零引用。
-internal/transportfulfillment/domain ChargeOccurrenceForFailedAttempt
+#
+# ChargeOccurrenceForFailedAttempt 曾在这里，2026-09-02 随 tf-unwired-seven/04 剪掉：
+# application/register_failed_attempt_charge.go 是它的生产调用方。**它没有接进揽收编排**
+# ——ADR-0098 裁了不在那里形成，理由是 CONTEXT 禁「任一对象的成功、失败或取消被压缩成其他
+# 对象的状态」，且揽收登记必须照常成功、塞进去会造出一个静默不发生且无人重试的派生步骤。
 internal/transportfulfillment/domain EstablishSegmentWithHandover
 internal/transportfulfillment/domain EstablishSegmentWithPickup
 internal/transportfulfillment/domain FormLoadAssignment
