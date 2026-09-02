@@ -180,12 +180,52 @@ CC 与 SA 均记为**达标**，且分别称「编排九例，十二个 UC 全�
 
 ### parcel-pricing（4）
 
+**四条已逐条核完**（2026-09-02）。**基线对这一组的注释已经过期**，逐条结论与它不同：
+
 | 条目 | 分类 | 依据 | 取证 |
 |---|---|---|---|
-| `ReplayPricingEvaluation` | 支路未接 | 重放入口无生产调用方 | 组 |
-| `MarshalPricingPlanSnapshot` | 支路未接 | 基线称适配器 `price_card_catalog.go` 正文没用、只有测试用 | 组 |
-| `RehydratePricingPlanSnapshot` | 支路未接 | 同上，同一条路径两端 | 组 |
-| `ParseCanonical` | 待定 | 基线称是值解析助手，「留两行比写排除规则便宜」 | 组 |
+| `ReplayPricingEvaluation` | 支路未接 | 只在领域与契约测试里。重放是 PN-08 的治理能力，生产无入口 | 核 |
+| `MarshalPricingPlanSnapshot` | **平行第二写法** | 见下 | 核 |
+| `RehydratePricingPlanSnapshot` | **平行第二写法** | 见下 | 核 |
+| `ParseCanonical` | 守卫未接到它自称的边界 | 见下 | 核 |
+
+**基线注今天不成立。** 它写着这两个快照函数是「同一条未接线路径的两端：适配器
+`price_card_catalog.go` 正文没用它们，只有它的测试用了」，并预言「一次修好会同时去掉两行」。
+实测：`price_card_catalog.go` **正文确实在存取快照**，走的是
+`MarshalPriceCardRegistration` / `RehydratePriceCardRegistration`，而那一对内部直接用未导出的
+`pricingPlanDocumentOf` / `pricingPlanFrom`。**路径已经接上了，而这两行没有跟着消失**——
+因为生产是在**登记**这一层持久化的，方案层那对导出函数成了平行的第二个公开写法。预言没兑现，
+不是因为还没修，是因为修的时候绕过了它们。
+
+**`ParseCanonical` 不只是死码。** 它的注释写着「用在序列化边界上——那里不允许同一个数的
+不同写法产生不同的内容摘要」，而序列化边界 `decimalFrom` 是这样重建的：
+
+    func decimalFrom(snapshot decimalSnapshot) Decimal {
+        return Decimal{coefficient: snapshot.Coefficient, scale: snapshot.Scale}
+    }
+
+**直接按字段构造，不解析也不校验。** 这未必是缺陷——`evaluation_snapshot.go` 头注称重建后
+必过 `evaluation.valid()` 的整图重验（含语义摘要自校），那道后置门可能拦得住非规范写法。
+但**守卫与它自称的用处对不上**，两条路二选一：接上，或者改注释别再说它用在序列化边界上。
+
+### 顺带撞见的：影子函数复发了，而棘轮这次看不见
+
+基线记过一次事故——初版名单里的 `DecimalFromInt64` 与 `Evaluate` 是「一行转发给同文件里
+正主」的影子函数，已删，并留话说「删掉之后**不会再有任何机制提醒下一个人这里曾有过一对
+影子函数**；它俩当初能长出来，正是因为同文件里已有正主却没有东西拦住第二个写法」。
+
+**同一个文件 `domain/decimal.go` 里今天有 `NewDecimal`**：
+
+    func NewDecimal(raw string) (Decimal, error) {
+        return ParseDecimal(raw)
+    }
+
+全仓 `\bNewDecimal\b` 只命中一处——它自己的声明。零调用点，连测试都没有。
+
+**而这一次棘轮抓不到它**：旧那对叫 `DecimalFromInt64`（非 `New` 开头，在网内，所以被看见并
+删掉了），这一个叫 `NewDecimal`（被 `New*` 排除规则挡在网外）。同一种缺陷，命名方向相反，
+门禁只守得住一个方向。这是[票 04](issues/04-should-the-ratchet-cover-the-new-family.md)
+那条论证的实例，不是设想。
 
 ## 结论
 
@@ -205,6 +245,6 @@ r27 对另五项做的那样，但要逐条写理由）、下调某几个切片�
 - **不擅自改开发主线的状态列。** 定级是人的决定，本仓已有明文（r27：「宣布本身是用户的决定」）。
 - 探针是扔弃件，`.scratch` 下留着当取证过程，**不进 CI**；要不要把 `New*` 一族并进棘轮见
   [票 04](issues/04-should-the-ratchet-cover-the-new-family.md)。
-- **未逐条核的还剩 5 条**（`parcel-pricing` 4 条 + 早先按组推断的余量）。按本仓「写证据不写
-  结论」的纪律，标「组」的那几行是推断不是取证，引用时请照此读。TF 那 7 条原本标「组」，
-  2026-09-02 已逐条补核并改标「核」，结论无一翻案且比推断更重。
+- **32 条已全部逐条核完（32/32），表内不再有标「组」的行。** TF 七条与 PP 四条原本按组推断，
+  2026-09-02 补核：TF 无一翻案且比推断更重，**PP 四条与基线注释不同**——那条注今天已过期，
+  详见 PP 一节。按本仓「断言有保质期」的纪律，本文自身也是一次快照，锚在 `9d6063c`。
