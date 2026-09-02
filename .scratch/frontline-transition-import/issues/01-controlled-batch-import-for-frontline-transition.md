@@ -1,7 +1,7 @@
 # 一线作业过渡的受控批量导入 CLI——模板 → 既有命令用例，硬期限守卫，来源标记
 
 Category: enhancement
-Status: in-progress——收寄子命令、期限守卫与模板已落主线；真库往返用例与模板人读说明未办
+Status: in-progress——收寄子命令、期限守卫、模板与真库往返用例已落主线；模板人读说明未办
 Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立票，见「阻断在别处的两格」）
 
 [ADR-0089](../../../docs/adr/0089-frontline-transition-controlled-import-with-structural-sunset.md) 的机制半边。
@@ -43,11 +43,15 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
 
 换单与称重两类无既有用例可接，按 ADR-0089 细则⑤ 如实记缺口、不造用例，见映射表。
 
+- **真库往返** `vertical_test.go`（照登记 CLI 家族形状）：`REFUSED` / `SCAN_ONLY` 两支真落库
+  并读得回、`RECEIVED` 行在身份核对缝不通时**一行都不落**、重跑答重放、同一 `factRef` 换业务
+  时间答来源冲突且原行记录时刻与摘要都不变。第二个用例换能解析的替身跑同一份模板，证
+  `buildIntakeImporter` 的 `identity` 参数就是 PS 侧到位后唯一要换的那一格，并在真库上钉住
+  证据引用带录入者、业务时间来自模板而记录时刻来自时钟——两者若同源，导入的事实就再也
+  说不出现场什么时候发生的。
+
 ## 未办
 
-- **真库往返用例**：照登记 CLI 家族的 `vertical_test` 形状，证 `REFUSED` / `SCAN_ONLY` 两支真
-  落库并能读回，以及同一 `factRef` 换内容答来源冲突（被拒）、同内容答重放。今天的六个用例
-  全是纯解码与守卫，未碰数据库。
 - **模板人读说明** `.scratch/frontline-transition-import/template.md`：给内勤填的字段说明与
   填写纪律，供转客户。示例行只用合成值；`cmd/parcel-frontline-import/testdata/intake-v1.csv`
   是机器侧的同一份形状，两边换列必须同时换 `intakeTemplateVersion`。
@@ -56,7 +60,7 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
 
 - `gofmt -l` 对改过文件无输出；`go build ./...`、`go vet ./...`、`go test -count=1 ./...` 绿并注明含不含真库。
 - 期限守卫有拨钟用例（已办）。
-- 真库往返用例贴 PASS 非 SKIP 的证据行。
+- 真库往返用例贴 PASS 非 SKIP 的证据行（已办，取证见 Comments）。
 - 模板说明存在且示例行无真实实例值。
 
 ## Comments
@@ -65,3 +69,7 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
   的封存件，经复核（`go build` / `go vet` 退 0、六个用例全 PASS）后按集成候选取回主树，
   只补了 `sunset_test.go` 的 `gofmt`。ADR-0089 先于代码落文（`32b78d7`），否则「一线过渡选 B」
   这个决定会只存在于代码注释里。
+- 2026-09-02 MCP-1：补真库往返用例。按探针纪律一正一反各取一次证——**DSN 未设：6 PASS / 2 SKIP；
+  DSN 已设（门禁容器 55432）：`TestFrontlineImportVerticalOnRealPostgres` 与
+  `TestFrontlineImportLandsReceivedRowOnceIdentityResolves` 各 PASS**。反向那次真的数出了 2 个 SKIP，
+  「这两个用例确实连了库」才算验过，而不是只看到一行 `ok`。
