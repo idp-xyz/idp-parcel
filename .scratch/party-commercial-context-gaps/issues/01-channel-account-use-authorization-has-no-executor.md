@@ -1,8 +1,24 @@
 # 渠道账号使用授权有整套规则，却没有执行器——类型在 `internal/` 下零引用
 
 Category: chore
-Status: draft
+Status: in-progress——执行器已落，只欠装配（2026-09-02，MCP-5，无人认领）
 Blocked by: 无
+
+> **读本票前先看这一段：核心指控已经作废。** 「这条规则今天没有执行器」在 `fa98df1` 之后
+> 不再成立——领域（撤销、重建门、登记信封）、迁移 `0018`、端口、postgres 适配器、应用编排、
+> HTTP 两个端点整条路都在，含真库验过。归族裁决见
+> [ADR-0093](../../../docs/adr/0093-channel-account-use-authorization-is-not-a-commercial-version.md)：
+> 它**不是**商业版本，走自己的修订式登记册，因此没有拓宽 `CommercialObjectKind`。
+>
+> **只欠最后一步：`cmd/parcel-api` 装配与路由登记。** 不做这一步，租户仍然调不到，本票的
+> 指控在可观察行为上等于没修。六处改动：`endpoints.go` 加一个 `ChannelAccountUseRegistrar`
+> 参数与两行路由、`main.go` 传参、`endpoints_test.go` 两个装配助手、`isolated_write_test.go`
+> 一个助手、`assemble_commercial_registration.go` 照 `transactionalProductChannelRegistration`
+> 加一个事务包装类型与编排结构体字段。
+>
+> **它属「会让旧调用点对不上」那一类**（四个调用点），接的人须先在频道占号并预告变红窗口，
+> 走单独 worktree 或三步法。下面正文写于执行器落地之前，其中「逐层点名缺什么」那张表除
+> 「HTTP 接入面」一行外均已作废，留着是为了让人看得出当初缺的是什么。
 
 ## CONTEXT 要求什么
 
