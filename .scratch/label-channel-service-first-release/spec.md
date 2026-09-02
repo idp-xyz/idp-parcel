@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——17 张子票立齐；`01`..`05` 与 `17` 已 resolved（四张裁决 ＋ 首张实现票），其余实现票待做
+Status: in-progress——17 张子票立齐；`01`..`06` 与 `17` 已 resolved（四张裁决 ＋ 两张实现票），其余实现票待做
 
 ## 这个 feature 是什么
 
@@ -52,7 +52,7 @@ Status: in-progress——17 张子票立齐；`01`..`05` 与 `17` 已 resolved�
 | 票 | 内容 | 状态 / Blocked by |
 |---|---|---|
 | [`05` `ServiceProductForm` 第二取值](./issues/05-service-product-form-second-value.md) | **已落地**：`LABEL_CHANNEL_SERVICE` 八处同步扩展（盘点漏列 CLI 与管理台两处）＋两条守卫用例；迁移另起 `0017`，不得就地改 `0008` | `resolved` |
-| [`06` 面单交易写侧执行器链](./issues/06-label-transaction-write-side-executors.md) | 聚合方法齐备而编排一环没有；同笔更正 `production_wiring_baseline.txt` | `ready-for-agent` |
+| [`06` 面单交易写侧执行器链](./issues/06-label-transaction-write-side-executors.md) | **已落地**：五步编排共用一套按恢复动作分格的代数；棘轮基线两条剪掉并改正一处错了的计数；不发起任何渠道调用 | `resolved` |
 | [`07` 取面单出向端口形状](./issues/07-outbound-label-fetch-port-shape.md) | 四处公开形态差异要进类型；**兼作 ADR-0090 平台包的落地处** | `ready-for-agent` |
 | [`10` 面单继续尝试决定登记册](./issues/10-continued-attempt-decision-registry.md) | 读面那一格今天派生自空历史 | `ready-for-agent` |
 | [`12` 候选装配](./issues/12-channel-candidate-assembly.md) | 产品—渠道映射到候选集合之间无适配器；落 PS 侧 | `ready-for-agent` |

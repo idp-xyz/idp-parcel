@@ -1,7 +1,7 @@
 # 06 面单交易写侧执行器全缺：聚合方法齐备而编排一环没有
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——五步编排链与测试落地，棘轮基线两条随之剪掉，见文末「完成记录」
 Blocked by: 无
 
 ## 缺口
@@ -51,3 +51,44 @@ Blocked by: 无
 
 [能力形状盘点](../capability-shape-inventory.md)第一段；ADR-0084；
 `internal/parcelshipment/domain/label_transaction.go`。
+
+## 完成记录
+
+2026-09-02 由 MCP-4 落地，落 `internal/parcelshipment/application/operate_label_transaction.go`。
+聚合一行未改——本票只补编排，那是立票时就写明的边界。
+
+**五步一个 handler 而不是五个**：它们操作同一个聚合、依赖同一对端口，拆开只会让装配点多四次
+接线而缝一条都不少。后四步共用一个 `advance` 骨架，因为它们在**恢复动作**上完全同形（读不回、
+状态不允许、版本冲突三处一字不差），各写一遍就有四份会各自漂移的口径，而漂移在编译期不报。
+
+**结果代数按恢复动作分格**（ADR-0029），五步共用一套六格：`已落下` / `重放` / `状态不允许` /
+`原交易未定案` / `输入未受理` / `版本冲突`。领域已经把这条分界守在错误上
+（`ErrInvalidLabelTransaction` 与 `ErrLabelTransactionStateNotAdmitted` 分立，
+`ErrPriorLabelTransactionNotFinalized` 再单列），本层照搬不重新发明。
+
+**时间分两种来源，与 `03` 的裁决同一条分界**：建立与提交渠道是我方的动作，时间取编排时钟；
+渠道结果时间与后续动作时间随命令进来，不代铸——那是渠道那边的业务事实。
+
+**不发起任何渠道调用。** 出向形状归 [ADR-0090](../../../docs/adr/0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)
+与票 `07`，本编排只在提交之后留缝。测试里因此**没有任何渠道替身**——有的话就说明编排替调用方
+发了请求。ADR-0090 那条「`答案未确定` 不得重发」在本上下文的落点是 `MarkResultUncertain` 落库：
+之后重发路径读到的不再是`已提交渠道`，`SubmitToChannel` 的状态门自动挡住第二次提交，纪律由
+状态机交付而不靠调用方自觉。用例 `TestOnceTheResultIsUncertainTheTransactionCannotBeSubmittedAgain`
+钉住这一条。
+
+### 棘轮基线：两条剪掉，顺带改正一处已经错了的计数
+
+`production_wiring_baseline.txt` 那两条按它自己写的「写编排落地那天，两条一起出名单」剪掉。
+剪之前按门禁提示逐条分过成因：两个名字全仓各只有一处声明，不存在「别处同名声明造成误判」
+那一种。**同时留了一句边界**：该门禁量的是 domain 包外的非测试引用，而这条编排尚未进
+`cmd/parcel-api` 的装配，所以「出名单」不等于「生产可达」，装配随 `07` 落。
+
+**顺带改正**：剪之前实测条目数为 **34**，而表头流水账写着「现为 35」——某次增减只改了名单
+没改那句。剪后的 32 是**实测**得来的，不是拿 35 减 2 算的（那样会得 33，继续错下去）。
+这处不一致连同判据一并记在表头，没有静默改数。
+
+### 验证
+
+`gofmt -l` 空，`go build ./...`／`go vet ./...` 退 0，`go test -count=1 ./...` 退 0 **含真库**
+（DSN 已设，同刻抽验真库用例为 `PASS` 不是 `SKIP`）；提交后另在临时 worktree 检出提交态复跑
+同样全绿。
