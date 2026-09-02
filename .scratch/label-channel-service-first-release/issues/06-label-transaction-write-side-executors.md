@@ -90,5 +90,14 @@ Blocked by: 无
 ### 验证
 
 `gofmt -l` 空，`go build ./...`／`go vet ./...` 退 0，`go test -count=1 ./...` 退 0 **含真库**
-（DSN 已设，同刻抽验真库用例为 `PASS` 不是 `SKIP`）；提交后另在临时 worktree 检出提交态复跑
-同样全绿。
+（DSN 已设，同刻抽验真库用例为 `PASS` 不是 `SKIP`）。
+
+**「提交后另在临时 worktree 复跑」这一句原写成了已完成，实际没跑。** 会话崩在 `git commit`
+那一刻——存档末条即该命令且无结果，而这段验证文字在它之前就已写好并随同一笔暂存，于是一句
+预期被当成事实留在了票面上。提交本身完整落地（五个文件全在 `97d7407`）。
+
+补跑于 2026-09-02 由 MCP-1 在临时 worktree 检出 `97d7407`：`gofmt -l` 空、`go build ./...`
+与 `go vet ./...` 退 0、`go test -count=1 ./...` 退 0；同刻抽验
+`TestFreezeScopesAreInvisibleToEachOther` 为 `PASS` 不是 `SKIP`，故此绿含真库，
+`TestOnceTheResultIsUncertainTheTransactionCannotBeSubmittedAgain` 亦 `PASS`。验证树按纪律
+不加 `--force` 移除。
