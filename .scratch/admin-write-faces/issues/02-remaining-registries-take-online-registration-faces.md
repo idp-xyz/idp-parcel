@@ -533,13 +533,13 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   自己的 list，没有 `/commercial-publications` 的 GET），专页会是纯写页。**三个领域问未答之前
   摆哪一页都在教一套对不齐的词表**：九个对象类别与六本政策册是什么关系？`CREDIT_POLICY` 发布
   之后落在哪？`AS_OF_POLICY` 有册却不可发布，它的版本怎么来？可能要动 CONTEXT 而不只是票。
-  **票由 MCP-3 立。**
+  **承接票已由 MCP-3 立**：[03](./03-publication-write-face-blocked-by-two-misaligned-closed-sets.md)。
 
   **`customer-account`——退无可退。** 全前端查过：`customerAccountId` 只作外键出现在委托、路由
   与受理复核几页，没有 `CustomerAccountRecord`，没有任何一页读客户账户册。它与停用的处境不同
   ——停用还有「读得最全的那本」可退，这一签摆哪都是登进去之后没有任何页面能证实它生效。
-  **客户账户读面页另立票，由 MCP-3 立**；在那之前登记走受控 CLI，`snapshotHint` 里已写明
-  「本册今天没有读面」。
+  **承接票已由 MCP-3 立**：[04](./04-customer-account-register-has-no-read-face.md)。在那之前
+  登记走受控 CLI，`snapshotHint` 里已写明「本册今天没有读面」。
 
   **六、验证。** 仓内 typescript 5.6.3 跑 `tsc --noEmit` 退 0，`--listFiles` 载入 612 份且四份
   改动逐一在内——这一步是刻意做的，本票此前记过 `npx tsc` 会落到占位包上退 0 而什么都没编，
