@@ -194,11 +194,14 @@ func productChannelMappingCommandFrom(
 	}, nil
 }
 
-// serviceProductFormFromName 是 domain.ServiceProductForm 封闭集的名称镜像；集合外
-// 取值拒收不吸收（独立面单渠道形态对首发不适用，PAR-COM-12，故封闭集只有一格）。
+// serviceProductFormFromName 是 domain.ServiceProductForm 封闭集的名称镜像；集合外取值
+// 拒收不吸收。两格自 ADR-0088 起并列（面单渠道服务由 PAR-COM-12 的范围裁剪改为纳入）。
 func serviceProductFormFromName(raw string) (pcdomain.ServiceProductForm, error) {
-	if raw == pcdomain.NetworkServiceForm.String() {
+	switch raw {
+	case pcdomain.NetworkServiceForm.String():
 		return pcdomain.NetworkServiceForm, nil
+	case pcdomain.LabelChannelServiceForm.String():
+		return pcdomain.LabelChannelServiceForm, nil
 	}
 	return pcdomain.ServiceProductFormInvalid, fmt.Errorf("未知服务形态 %q", raw)
 }

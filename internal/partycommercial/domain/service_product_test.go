@@ -20,34 +20,44 @@ func productVersion(t *testing.T, objectID string) domain.CommercialVersion {
 	return live
 }
 
-// Covers: `AT-PC-015`「首发尝试发布独立面单渠道服务生产范围 → 按 `PAR-COM-12` 阻断为本期
-// 不适用」与 `AT-PC-030`「首发请求独立面单渠道服务 → 按已确认 `N/A` 返回无适用生产依据，不
-// 进入面单专属主链」。此前全仓无任何 `Covers` 提及 015（030 的守卫同缝）。
+// Covers: `AT-PC-015`「发布独立面单渠道服务的服务产品版本 → 按 `PAR-COM-12` 与网络服务产品
+// **同等**进入首发发布范围」与 `AT-PC-030`「请求独立面单渠道服务 → 与网络服务同一两阶段机制，
+// 且**不把网络服务产品当作面单渠道服务的候选**」。两条验收行均已随 ADR-0088 修订。
 //
-// 实现早就对了而且是有意的：`ServiceProductForm` 的注释与 `PAR-COM-12`（登记册里标的是
-// **已确认范围决策**，不是待提供）都写明首发不销售这一形态，因此枚举里根本不列它。
+// **本用例的断言方向随 ADR-0088 反转过一次，原样记在这里。** 它原名
+// `TestNoServiceProductCanTakeAnIndependentWaybillChannelForm`，断言的是「除网络服务外任何
+// 取值都构造不出服务产品」，依据是 `PAR-COM-12` 当时登记为**本期不适用**。ADR-0088 把该参数
+// 由范围裁剪改为纳入，那条依据不再成立，因此原断言不再成立——不是它写错了，是它守的那条
+// 范围决策被改了。守卫本身的价值没变，换的只是期望集合。
 //
-// 本用例与 `TestServiceProductFormIsAFacetNotASeparateCatalog` 不重复，后者有一个真实的
-// 假阴性：它只探 `ServiceProductForm(2)` 这一个写死的取值，且只问它有没有名字。实测（于
-// `cab9a45`）把面单渠道形态加在取值 **3** 上并让它 `valid()`，那条用例照绿，枚举门禁也照绿，
-// 只有本用例变红——新加的那一格取什么数，不由守卫这边说了算。
-//
-// 因此这里扫完整个 uint8 值域，并且问的是「构造得出服务产品吗」而不只是「有没有名字」：
-// 没有名字却构造得出，照样等于首发默认卖出了第二种服务形态。
-func TestNoServiceProductCanTakeAnIndependentWaybillChannelForm(t *testing.T) {
+// 没变的那部分是它当初为什么这么写：扫完整个 uint8 值域，并且问「构造得出服务产品吗」而不只是
+// 「有没有名字」。`TestServiceProductFormIsAFacetNotASeparateCatalog` 有一个真实的假阴性——
+// 它只探一个写死的取值。实测（于 `cab9a45`）把新形态加在取值 3 上并让它 `valid()`，那条用例
+// 照绿而本用例变红：**新加的那一格取什么数，不由守卫这边说了算**。这一条今天照旧成立，
+// 只是它现在挡的是第三格而不是第二格。
+func TestOnlyTheTwoDocumentedServiceProductFormsConstruct(t *testing.T) {
 	live := productVersion(t, "product-form-guard")
 
-	if _, err := domain.NewServiceProduct(live, domain.NetworkServiceForm); err != nil {
-		t.Fatalf("网络服务是首发唯一成立的形态，它却构造不出来: %v", err)
+	documented := map[domain.ServiceProductForm]string{
+		domain.NetworkServiceForm:      "NETWORK_SERVICE",
+		domain.LabelChannelServiceForm: "LABEL_CHANNEL_SERVICE",
+	}
+	for form, name := range documented {
+		if _, err := domain.NewServiceProduct(live, form); err != nil {
+			t.Fatalf("%s 已由 ADR-0088 进入首发形态，它却构造不出来: %v", name, err)
+		}
+		if form.String() != name {
+			t.Fatalf("形态名 = %q, want %q——取值名取的是领域文档原词，不得就地改", form.String(), name)
+		}
 	}
 
 	for value := 0; value <= 255; value++ {
 		form := domain.ServiceProductForm(value)
-		if form == domain.NetworkServiceForm {
+		if _, documented := documented[form]; documented {
 			continue
 		}
 		if _, err := domain.NewServiceProduct(live, form); !errors.Is(err, domain.ErrInvalidServiceProduct) {
-			t.Fatalf("服务形态取值 %d 构造出了服务产品（error = %v），而首发只允许网络服务", value, err)
+			t.Fatalf("服务形态取值 %d 构造出了服务产品（error = %v），而领域今天只有两格", value, err)
 		}
 		if name := form.String(); name != "" {
 			t.Fatalf("服务形态取值 %d 已经有名字 %q，形态枚举被扩过而这道守卫没有跟上", value, name)
@@ -138,19 +148,34 @@ func TestAnExpiredMappingStopsOfferingCandidatesButKeepsItsRecord(t *testing.T) 
 	}
 }
 
-// Covers: CONTEXT「网络产品是服务产品的一种形态，不建立独立于服务产品的第三套产品目录」，
-// 以及首发由 `PAR-COM-12` 明确不适用独立面单渠道服务。
+// Covers: CONTEXT「网络产品是服务产品的一种形态，不建立独立于服务产品的第三套产品目录」。
+//
+// 原用例的后半段断言 `ServiceProductForm(2).String() == ""`，依据是首发不适用面单渠道服务；
+// ADR-0088 之后取值 2 正是它，那半段随之失效。**换掉的不是「第三套目录」这条不变量，是它
+// 当初借来表达该不变量的手段**——两种形态都由服务产品版本承载，才是「不另立目录」的直接说法，
+// 而「第二格没有名字」只是当时恰好也成立的一个推论。取值域边界由
+// `TestOnlyTheTwoDocumentedServiceProductFormsConstruct` 扫全域守，这里不再重复探单个取值。
+//
+// `AT-PC-030`「不把网络服务产品当作面单渠道服务的候选」要求两格可分辨，因此这里也钉住它们
+// 不同名——同名会让解析在选候选时分不出两种形态。
 func TestServiceProductFormIsAFacetNotASeparateCatalog(t *testing.T) {
-	product := serviceProduct(t, "product-1")
+	live := productVersion(t, "product-facet")
 
-	if product.Form() != domain.NetworkServiceForm {
-		t.Fatalf("form = %q, want NETWORK_SERVICE", product.Form())
+	for _, form := range []domain.ServiceProductForm{domain.NetworkServiceForm, domain.LabelChannelServiceForm} {
+		product, err := domain.NewServiceProduct(live, form)
+		if err != nil {
+			t.Fatalf("形态 %q 构造服务产品失败: %v", form, err)
+		}
+		if product.Form() != form {
+			t.Fatalf("form = %q, want %q", product.Form(), form)
+		}
+		if product.Version().Kind() != domain.ServiceProductObject {
+			t.Fatalf("形态 %q 的产品不由服务产品版本承载，等于它自带了第二套目录", form)
+		}
 	}
-	if product.Version().Kind() != domain.ServiceProductObject {
-		t.Fatal("a network product is not carried by a service product version")
-	}
-	if domain.ServiceProductForm(2).String() != "" {
-		t.Fatal("a second product form carries a label; the label-channel form is not in the first release")
+
+	if domain.NetworkServiceForm.String() == domain.LabelChannelServiceForm.String() {
+		t.Fatal("两种形态同名，解析选候选时将分不出它们（AT-PC-030）")
 	}
 }
 

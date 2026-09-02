@@ -1,7 +1,7 @@
 # 05 `ServiceProductForm` 第二取值缺席，六处同步扩展
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——八处同步扩展与两条守卫用例同笔落地，见文末「完成记录」
 Blocked by: 无
 
 ## 缺口
@@ -16,14 +16,61 @@ Blocked by: 无
 扩展的一组（少改一处就是一半说谎）：
 
 - `domain/service_product.go`：`ServiceProductForm.valid()`、`String()`、`NewServiceProduct` 的门。
-- `migrations/party_commercial/0008_service_product_form.sql`：`service_product_form_closed` CHECK，
-  其注释自己写明「扩展先改领域封闭集，再改这一条」。
+- `service_product_form_closed` CHECK。**⚠ 不是就地改 `0008`——见下面「迁移的改法」一节，
+  本条原写「改 `migrations/party_commercial/0008_service_product_form.sql`」是错的。**
 - `adapters/postgres/service_product_form.go` 的 `serviceProductFormFrom` 分派。
 - `adapters/postgres/commercial_resolution.go` 的 `rehydrateServiceProduct` 分派。
 - `internal/networkrouting/adapters/partycommercial/form.go` 的 `translateForm`——**波及面里最实
   的一处**：面单渠道服务恰恰是「不要求网络可达性判断」那一格（依据引用 `LABEL_ONLY_CHANNEL_SERVICE`
   已在 NR 侧测试里出现），而它今天会把该形态判成 `ErrUntranslatableAnswer`。
-- `application/register_product_channel.go` 的 `RegisterServiceProductFormCommand.Form` 写路。
+- `application/register_product_channel.go` 的 `RegisterServiceProductFormCommand.Form` 写路
+  （实测为直通，`command.Form` 原样交 `NewServiceProduct`，**无需改动**）。
+
+## 盘点漏掉的两处（2026-09-02 实做时查出）
+
+立票时按能力形状盘点第四段写成「六处」，并加了一句「少改一处就是一半说谎」。**实做时全仓
+重扫 `ServiceProductForm|NETWORK_SERVICE` 又查出两处名称镜像，盘点第四段没有列**——它盘的
+范围是 `internal/partycommercial` 与 NR 适配器，没有扫 `cmd/` 与 `apps/`：
+
+- **`cmd/parcel-commercial/register_products.go` 的 `serviceProductFormFromName`**：受控 CLI
+  的字符串→形态镜像，第三处 `switch`。不改的话面单渠道服务产品**根本登记不进去**——
+  它是今天唯一有真实实现的写入路径。
+- **`apps/admin-web/src/pages/party/presentation.ts` 的 `serviceFormLabels` 与
+  `service-product-form` 提示句**：词表此前列过 `LABEL_CHANNEL_SERVICE` 又撤下，注释写明撤下
+  理由是「那个取值服务端产生不出来，填进快照回来的是受理门拒绝」，并留了「解封那天先扩领域
+  封闭集与迁移 CHECK，再补这一格」的指引——本票就是那一天。提示句原写「服务形态今天只有
+  一格」，不同笔改就会与两格词表在同一屏上各说各的，那正是当初撤下时点名要防的事。
+
+**`internal/partycommercial/adapters/http/register_product_channel.go` 不用改**：
+`ServiceProductFormRegistrationIntake` 是接口且本包不带实现（`PAR-INT-01` 待提供），
+那里没有任何字符串→形态的翻译。
+
+同步点因此是**八处**而不是六处（两条守卫用例另计）。教训与 `04` 那条同形：
+**盘点的搜索范围决定了它能看见什么，而它的结论不自带这个边界。**
+
+## 迁移的改法：另起一份，**不得就地改 `0008`**（2026-09-02 更正）
+
+立票时把这处写成「改 `0008` 的 CHECK」，依据是 `0008` 自己那句注释「扩展先改领域封闭集，
+再改这一条」。**那句话指的是改动次序，不是改动位置**，照字面做会踩本仓的迁移门禁：
+
+`internal/platform/migrate/runner.go` 的 `verifyNoDrift` 拿每条**已施加**迁移的记录校验和与
+本次构建的工件比对，不一致即以 `ErrChecksumDrift` **阻断整次运行**；校验和由
+`migrations.checksumOf` 对文件原始内容算。就地改 `0008` 会让所有已经跑过它的库在下一次
+迁移时全部卡死，且这个后果在本机空库上**看不出来**——空库没有历史行，比不出漂移。
+
+仓里已有一模一样的先例，`migrations/party_commercial/0004_commercial_version_kind_range.sql`
+放宽 `0001` 的 `object_kind` CHECK 时，注释写的就是这条：
+
+> 不改 0001：已随提交落库的迁移正文按校验和守着，改写它会让下一次运行以校验和不一致暴露
+> （见 `migrations.Asset`）。放宽只能是一份新的不可变迁移。
+
+**因此本票照 `0004` 的形状办**：新增 `migrations/party_commercial/0017_service_product_form_label_channel.sql`，
+`DROP CONSTRAINT` 再 `ADD CONSTRAINT` 重建 `service_product_form_closed`。`0008` 一字不改，
+但要在新迁移的注释里指回它，说明这一对为什么分两份。
+
+**不需要动 `migrations/migrations.go`**：`assetsForModule` 按目录扫 `*.sql` 并以零填充序号
+排序，`party_commercial` 已在 `//go:embed` 清单里，放一份新文件即被收进计划。这一格与
+新建模块目录不同——那种才要同笔改嵌入行。
 
 ## 会变红的守卫（这是设计，不是意外）
 
@@ -87,3 +134,32 @@ Blocked by: 无
 ## 参照
 
 [能力形状盘点](../capability-shape-inventory.md)第四段；ADR-0088 Decision 二；参数登记册 `PAR-COM-12`。
+
+## 完成记录
+
+2026-09-02 由 MCP-4 落地，八处 + 两条守卫用例 **同一笔提交**——少一处这一对就走散，而走散
+在 `go build` 下不报。取值取 `LabelChannelServiceForm` / `"LABEL_CHANNEL_SERVICE"`，落点与
+依据来源照本票「口径裁决」一节，实现未另定。
+
+改动分布：领域封闭集与 `valid()`/`String()`；新迁移 `0017`（**不改 `0008`**，理由见上）；
+`serviceProductFormFrom`、`rehydrateServiceProduct`、`translateForm` 三处 `switch`；
+CLI 的 `serviceProductFormFromName`；管理台 `serviceFormLabels` 与同屏提示句。
+`register_product_channel.go` 实测直通未改，HTTP Intake 无翻译未改。
+
+守卫用例两条按设计改，**并各自写明原断言为何不再成立**：
+`TestNoServiceProductCanTakeAnIndependentWaybillChannelForm` 更名为
+`TestOnlyTheTwoDocumentedServiceProductFormsConstruct`，保留全 `uint8` 值域扫描（它当初就是
+为了挡住「新形态加在别的取值上」而这么写的，今天照旧成立，只是改挡第三格）；
+`TestServiceProductFormIsAFacetNotASeparateCatalog` 换掉借来表达不变量的手段——原来靠
+「第二格没有名字」，现在直接断言两种形态都由服务产品版本承载，并按 `AT-PC-030` 钉住两格
+不同名。
+
+真库侧补两条用例：`内容冲突`（同版本改登另一形态不得覆盖）与面单渠道形态的往返。
+同时**更正了那份文件头的一句预言**：它写「第二种形态落地那一天，两条防御分支同时变得
+够得着」，实际只有`内容冲突`够得着了；「形态取值不认识」仍够不着，而且它本来就不会因为
+封闭集变大而够得着——它够得着的唯一条件是 CHECK 与 Go 封闭集**走散**，那不是用例造得出的
+状态，正是那段代码存在的理由。
+
+验证（`gofmt -l` 空，`go build ./...`、`go vet` 退 0）：`go test -count=1 ./...` **退 0，含真库**
+——DSN 已设且同刻单跑 `TestFreezeScopesAreInvisibleToEachOther` 为 `PASS` 不是 `SKIP`；
+本票动 SQL CHECK，真库实跑是完成判据的一部分。前端 `tsc --noEmit` 退 0。

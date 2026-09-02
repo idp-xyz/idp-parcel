@@ -2,15 +2,15 @@
 
 import type { CommercialPolicyKind, CommercialRegistrationKind } from './api';
 
-// 服务形态封闭集今天只有一格。此前这里还列着 LABEL_CHANNEL_SERVICE「面单渠道服务」,而那个
-// 取值服务端产生不出来:domain.ServiceProductForm 只认 NETWORK_SERVICE、迁移 0008 的
-// service_product_form_closed 也只放这一个词,构造独立面单渠道形态在领域里是响亮失败。
-// 撤下它是因为本页现在同屏摆着形态登记签,签里的提示句说「今天只有一格」——一格词表与一句
-// 提示在同一屏上各说各的,操作者会照读面那个词填进快照,而回来的是受理门拒绝。
-// PAR-COM-12 解封那天先扩领域封闭集与迁移 CHECK,再补这一格;在那之前 labelOf 会把没收录的
-// 取值原样示出英文原名,不会静默丢失。
+// 服务形态封闭集今天两格。LABEL_CHANNEL_SERVICE 此前在这里列过又被撤下,因为那时服务端
+// 产生不出来:domain.ServiceProductForm 只认 NETWORK_SERVICE,填进快照会被受理门拒绝。
+// ADR-0088 把 PAR-COM-12 由范围裁剪改为纳入,领域封闭集与迁移 CHECK(0017 放宽 0008 立下的
+// service_product_form_closed)都已扩到两格,这一格因此装回来——**撤下时那条纪律照旧成立**:
+// 词表与同屏那句提示必须一起改,一格词表配一句「只有一格」的提示会让操作者照读面填、
+// 而回来的是拒绝。
 export const serviceFormLabels: Record<string, string> = {
   NETWORK_SERVICE: '网络服务产品',
+  LABEL_CHANNEL_SERVICE: '面单渠道服务',
 };
 
 export const commercialStatusLabels: Record<string, string> = {
@@ -223,7 +223,8 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
   'service-product-form': snapshotHint(
     'register-products',
     'forms 数组里一项的键为 productId / version / form,外加整批的 tenantId 与 scope。' +
-      '服务形态今天只有一格 NETWORK_SERVICE(独立面单渠道形态对首发不适用,PAR-COM-12)。' +
+      '服务形态取封闭两词 NETWORK_SERVICE / LABEL_CHANNEL_SERVICE(面单渠道服务已由 ADR-0088 ' +
+      '纳入首发对客形态,PAR-COM-12 随之改为纳入)。' +
       '版本必须已在册且已生效——形态是解析采用的内容,挂在未生效或已收尾的版本上永远选不中。',
   ),
   'product-channel-mapping': snapshotHint(

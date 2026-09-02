@@ -407,6 +407,8 @@ func rehydrateServiceProduct(version domain.CommercialVersion, form string) (dom
 	switch form {
 	case domain.NetworkServiceForm.String():
 		parsed = domain.NetworkServiceForm
+	case domain.LabelChannelServiceForm.String():
+		parsed = domain.LabelChannelServiceForm
 	default:
 		return domain.ServiceProduct{}, fmt.Errorf("load commercial resolution: 无法翻译的服务形态 %q", form)
 	}

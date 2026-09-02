@@ -19,26 +19,33 @@ func NewChannelProductReference(value string) (ChannelProductReference, error) {
 	return ChannelProductReference{required}, err
 }
 
-// ServiceProductForm 是服务产品的一种服务形态，不是另一套目录：网络服务产品就是
-// 由运营企业自己的网络履约的服务产品，本上下文禁止在它旁边再建第三套产品目录。
+// ServiceProductForm 是服务产品的一种服务形态，不是另一套目录：两种形态都由服务产品
+// 版本承载，本上下文禁止在它们旁边再建第三套产品目录。
 //
-// 独立面单渠道服务是长期产品形态，`PAR-COM-12` 明确它对首发不适用，所以这里有意
-// 不列出它，而不是列出来却不实现。
+// 两格的分界是**责任起点**而不是渠道用不用得上：网络服务由运营企业自己的网络履约，
+// 责任起于有效网络收寄结果；面单渠道服务不虚构运营企业收寄，责任来源于面单交易绑定
+// 的账号与合同，运输观察从实际承运商收寄事实开始（PC CONTEXT「网络服务产品与面单渠道
+// 服务必须分别表达服务责任」）。网络服务同样可以用外部渠道，所以不能按「有没有渠道」分。
+//
+// 面单渠道服务此前有意不列，依据是 `PAR-COM-12` 对首发不适用；ADR-0088 已把它改为纳入。
 type ServiceProductForm uint8
 
 const (
 	ServiceProductFormInvalid ServiceProductForm = iota
 	NetworkServiceForm
+	LabelChannelServiceForm
 )
 
 func (form ServiceProductForm) valid() bool {
-	return form == NetworkServiceForm
+	return form == NetworkServiceForm || form == LabelChannelServiceForm
 }
 
 func (form ServiceProductForm) String() string {
 	switch form {
 	case NetworkServiceForm:
 		return "NETWORK_SERVICE"
+	case LabelChannelServiceForm:
+		return "LABEL_CHANNEL_SERVICE"
 	default:
 		return ""
 	}

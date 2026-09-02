@@ -113,6 +113,8 @@ func serviceProductFormFrom(raw string) (domain.ServiceProductForm, error) {
 	switch raw {
 	case domain.NetworkServiceForm.String():
 		return domain.NetworkServiceForm, nil
+	case domain.LabelChannelServiceForm.String():
+		return domain.LabelChannelServiceForm, nil
 	default:
 		return domain.ServiceProductFormInvalid, fmt.Errorf("unknown service product form %q", raw)
 	}

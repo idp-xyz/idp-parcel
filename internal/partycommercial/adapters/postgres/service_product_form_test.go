@@ -17,11 +17,17 @@ import (
 // 版本、只登版本不登形态是一格合法的缺席、版本非生效时形态不进视图、登记形态推动该范围的
 // ViewRevision、撞键按形态判重放、他租形态不入本租户的册。
 //
-// 两条防御分支在今天的封闭集下**够不着，因此没有用例**：`内容冲突`（同一产品版本登记成另一
-// 种形态）与「形态取值不认识」。两者都要求库里出现 NETWORK_SERVICE 之外的取值，而迁移 0008
-// 的 CHECK 与 domain.ServiceProductForm 今天各自只有这一个值。它们不是死代码——它们正是这
-// 一对（SQL CHECK 与 Go 封闭集，两份要同步扩展的东西）走散时唯一会报的地方；`PAR-COM-12`
-// 解封、第二种形态落地那一天，两条同时变得够得着，届时补用例。
+// 本文件头此前登记了两条「够不着因此没有用例」的防御分支，并写明「第二种形态落地那一天，
+// 两条同时变得够得着，届时补用例」。ADR-0088 让第二种形态落了地（迁移 0017 把 CHECK 放宽到
+// 两值，domain.ServiceProductForm 同步扩到两格），**但那句预言只对了一半，如实更正**：
+//
+//   - `内容冲突`（同一产品版本先登记成一种形态、再登记成另一种）**现在够得着了**，用例见
+//     TestRegisteringADifferentFormForTheSameVersionIsAConflict。
+//   - 「形态取值不认识」**仍然够不着**，而且它本来就不会因为封闭集变大而够得着：CHECK 与 Go
+//     封闭集同步扩展之后，库里能出现的每一个取值 serviceProductFormFrom 都认得。它够得着的
+//     唯一条件是这一对**走散**——只改了一边。那不是能用用例造出来的状态，它正是这段代码存在
+//     的理由：走散时它是唯一会报的地方。写死用例去伪造这个状态（例如绕过 CHECK 直接写库）
+//     只会证明分支能跑，证明不了它守的那件事。
 
 func TestServiceProductFormRoundTripsWithTheRegistry(t *testing.T) {
 	repository, transactor, _ := newPublications(t)
@@ -149,6 +155,73 @@ func TestSavingTheSameFormTwiceIsAReplay(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// Covers: 撞键判据的另一半——同一产品版本登记成**另一种**形态是`内容冲突`，不是重放。
+//
+// 这一格随 ADR-0088（第二种服务形态进入首发）才够得着：在此之前封闭集只有一个值，造不出
+// 两种形态。SaveServiceProduct 的注释写明「一次发布固定下来的形态改不了，要改只能另发一个
+// 版本」——本用例钉的就是它不会被静默覆盖。
+func TestRegisteringADifferentFormForTheSameVersionIsAConflict(t *testing.T) {
+	repository, transactor, _ := newPublications(t)
+	ctx := t.Context()
+
+	version := productVersionInTenant(t, "tenant-1", "product-1", "v1", "digest-product-1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	mustSaveServiceProduct(t, transactor, ctx, repository, serviceProductOf(t, version))
+
+	labelChannel, err := domain.NewServiceProduct(version, domain.LabelChannelServiceForm)
+	if err != nil {
+		t.Fatalf("面单渠道服务形态的产品：%v", err)
+	}
+	mustWithinPublicationTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		outcome, err := repository.SaveServiceProduct(txCtx, labelChannel)
+		if err != nil {
+			return err
+		}
+		if outcome != ports.ServiceProductContentConflict {
+			t.Fatalf("改形态的 outcome = %q, want CONTENT_CONFLICT", outcome)
+		}
+		return nil
+	})
+
+	// 冲突不得改动既有行：读回来仍要是最初登记的那一种。
+	registry, err := repository.LoadForScope(ctx, pcTenant(t, "tenant-1"), pcScope(t))
+	if err != nil {
+		t.Fatalf("整册读回：%v", err)
+	}
+	products := registry.ServiceProducts()
+	if len(products) != 1 || products[0].Form() != domain.NetworkServiceForm {
+		t.Fatalf("冲突之后册里的形态 = %v，原登记被覆盖了", products)
+	}
+}
+
+// Covers: 迁移 0017 把 service_product_form_closed 放宽到两值，库能存下面单渠道服务形态并
+// 原样读回。CHECK 与 domain.ServiceProductForm 是同步扩展的一对，这条用例是那一对**没有
+// 走散**的正向证据——只改 Go 不改 CHECK 时它会以约束违反变红。
+func TestTheLabelChannelFormRoundTripsThroughTheRegistry(t *testing.T) {
+	repository, transactor, _ := newPublications(t)
+	ctx := t.Context()
+
+	version := productVersionInTenant(t, "tenant-1", "product-1", "v1", "digest-product-1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	labelChannel, err := domain.NewServiceProduct(version, domain.LabelChannelServiceForm)
+	if err != nil {
+		t.Fatalf("面单渠道服务形态的产品：%v", err)
+	}
+	mustSaveServiceProduct(t, transactor, ctx, repository, labelChannel)
+
+	registry, err := repository.LoadForScope(ctx, pcTenant(t, "tenant-1"), pcScope(t))
+	if err != nil {
+		t.Fatalf("整册读回：%v", err)
+	}
+	products := registry.ServiceProducts()
+	if len(products) != 1 {
+		t.Fatalf("读回 %d 份产品形态，want 1", len(products))
+	}
+	if products[0].Form() != domain.LabelChannelServiceForm {
+		t.Fatalf("form = %q, want LABEL_CHANNEL_SERVICE", products[0].Form())
+	}
 }
 
 // Covers: `AT-PC-014` 的形态册半边（ADR-0040 / ADR-0003）：租户是身份的一部分，不是过滤器。

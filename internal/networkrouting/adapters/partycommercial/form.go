@@ -39,6 +39,18 @@ func translateForm(form pcdomain.ServiceProductForm) (nrdomain.NetworkEligibilit
 	switch form {
 	case pcdomain.NetworkServiceForm:
 		return nrdomain.NewNetworkEligibility(nrdomain.NetworkJudgmentRequired, nrdomain.EligibilityBasisReference{})
+	case pcdomain.LabelChannelServiceForm:
+		// 面单渠道服务落`不要求`而不是`不可达`：NR CONTEXT「仅提供面单渠道服务时，不得虚构
+		// 运营企业不控制的端到端网络路由」说的是这个问题不该问，不是问过了答案是否定的。
+		//
+		// 依据取形态自身的取值，本适配器不另铸一个字面量。EligibilityBasisReference 指名的是
+		// **商业事实**，由消费侧写一个字符串就是替商业侧铸事实；而「已采用产品的服务形态是
+		// 面单渠道服务」正是刚从闭包里读到的那条事实，复核时按依据维度答得出。
+		basis, err := nrdomain.NewEligibilityBasisReference(form.String())
+		if err != nil {
+			return nrdomain.NetworkEligibility{}, fmt.Errorf("%w: %w", ErrUntranslatableAnswer, err)
+		}
+		return nrdomain.NewNetworkEligibility(nrdomain.NetworkJudgmentNotRequired, basis)
 	default:
 		return nrdomain.NetworkEligibility{}, fmt.Errorf("%w: service product form %q", ErrUntranslatableAnswer, form)
 	}
