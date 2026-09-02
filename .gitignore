@@ -50,3 +50,20 @@ apps/*/dist/
 
 # Local agent scratch at the repo root
 /parallel_prompt.md
+# Numbered markdown at the repository root is always a session artefact that
+# missed its home. Session output belongs under .scratch/<feature>/, and every
+# tracked root file is named for what it is (AGENTS.md, README.md, compose.yaml).
+# Chat exports and loose analyses landing here as 01.md/02.md dirty `git status`
+# for every shared worktree at once, and the session that finds them cannot tell
+# whose they are or whether they may be deleted.
+/[0-9][0-9].md
+# Helper scripts parked directly in .scratch/ are one-off local tooling. Scripts
+# that belong to a feature live in that feature's directory and stay tracked.
+/.scratch/*.ps1
+
+# Produced by the IDP sidebar rather than maintained by hand (see
+# .cursor/rules/idp-mcp-messenger.mdc), and it carries this host's loopback
+# ports and absolute interpreter paths. Every host therefore rewrites it and
+# every session sees it dirty, so it is deliberately not under version control.
+# A fresh clone has no MCP channels until the sidebar writes this file.
+/.cursor/mcp.json
