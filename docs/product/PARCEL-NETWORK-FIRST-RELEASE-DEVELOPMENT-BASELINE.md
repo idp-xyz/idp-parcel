@@ -177,6 +177,40 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **八个切片全数达标（PN-01/04/05/08 自第二十六轮维持；PN-02/03/06/07 为「达标—有裁定的显式留待」，留待清单见 `.scratch/mechanism-reinventory-r27/` 第五节，2026-08-28 经用户委托受托裁断逐项认可、无一翻案——产品就绪里程碑就此成立，认可记录见 `.scratch/development-plan-2026-08-20.md` 复核记录末条），未开始清零，无一张可派的机制工作票。** 十个上下文全部有生产代码与应用编排（`internal/` 下 `parcelshipment`、`partycommercial`、`networkrouting`、`parcelpricing`、`settlementaccounting`、`nodeoperations`、`transportfulfillment`、`visibilityexception`、`customscompliance`、`pilotgovernance`，另有 `platform` 与 `architecture` 两个非业务目录）。`docs/application/` 下四十八个 UC（另有一份 `UC-PS-001` 配套商业简报不是独立 UC）**每一个都有对应编排触点，48/48 无空缺**——第十九轮曾凭会话摘要提前下此断言被评审驳回（当时 SA 五票与 `UC-TF-001` 仍是「领域件在而编排为零」），六票补齐后经文件级清点与独立评审复核两道确认，其后一轮按文件重数过一遍（SA 九个 handler 对应七个 UC、TF 八个对七个、CC 九个对十二个——`receive_manifest.go` 是外部舱单那一票的编排）；第二十七轮 `application` 生产文件 69→71（CC 12、PS 13、SA 9、TF 8、VE 9、NR 6、PC 5、NO 3、PG 3、PP 3——PS 增的是接受判断链编排、VE 增的是材料归集编排），增量对应其后收口各票的 resolved 记录，逐 UC 触点映射未重走、以各票记录为准。跨上下文消费适配器已铺到十六组消费方侧缝、共 43 个生产文件（`internal/<消费方>/adapters/<提供方>/`，第二十七轮重数——此前记载的「八组缝十二个文件」是旧轮快照；最新一组是 SA→PC 的接受前控制策略读缝，ADR-0079）。数文件时当心 `judgment_as_of.go`：它是 `CommercialBasisAdapter` 的逐项时点那一段，不是独立适配器。**卡住达标的原因此后又换过一次内容**：持久化闸门已解除、投递侧四十六口全部换真，而**派发未装配这一处已经关闭**（详见下方投递条目——组合根接通了真实连接池、Outbox/Inbox、直投发布通道与首个消费者）。机制半边只剩一处——**端口没接满，且缺口已点名到口**（计数盘于 `f6f0029`，第二十七轮两口径复点，工具沿 r26 且其对 r25 发布树的复现校验在案：`internal/*/ports` 共声明 240 个接口；基线口径「名字在适配器/平台生产文件出现过」缺 7；精确口径 `go/types.Implements` 缺 6——四口登记面形状留待实例证据（SA 合同责任/金额规则/审核授权三目录与 PS 的 `PAR-COM-13` 规则登记，端口注释即留待记录），一口等真实渠道凭证（VE 通知网关），一口建模未决（PS 修订授权，`BD-PS-009`）；r26 唯一的「可做未做」（SA 接受前控制策略视图）已随 ADR-0079 生产适配器收口，该分类清零，本轮新开的五张读口两口径全部记已实现。虚低两例走向不同：VE 索赔证据视图随材料归集面换真库读退出名单，NO 身份读口维持 `cmd/parcel-api` 显式未配置桩（ADR-0063 形状，松口径只扫 `internal/` 记缺、精确口径记有）。端口计数之外的两条装配缝级机制余量（VE 资格规则视图带租户维读法、材料归集面）已随 `.scratch/ve-claims-read-seams/` 两票收口。差 3 悬案维持（r24 记 65 对重算 62），绝对数与更早记载的可比仍以差式为准；数字明细、分类依据与原始输出在 `.scratch/mechanism-reinventory-r27/`，工具源码在 `.scratch/mechanism-reinventory-r26/tool/`）。HTTP 接入面不在此列：它的机制半边已成型，缺的 Intake 认证方式属 `PAR-INT-01`，是实例半边，按本节规则不计入缺口。
 
+#### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立
+
+上表各行的差量格与紧接其上那句「**无一张可派的机制工作票**」，**在本节范围内已被本条更正**。
+各行正文未逐格重写（那些单元格很长且正被多条线引用），差量以本条为准。
+
+`internal/architecture/production_wiring_baseline.txt` 冻着 32 条**零生产调用点的导出领域
+工厂**。棘轮门禁明确声明自己不判「接过线后来烂了还是切片还没到」，理由是那属产品判断。
+2026-09-02 逐条做了那次判断，**32/32 全部逐条取证**，记录在
+[`.scratch/mechanism-executor-triage/`](../../.scratch/mechanism-executor-triage/spec.md)。
+结论两条：
+
+- **「实例半边等租户」解释不了缺调用点。** 缺失的调用点是代码事实不是数据事实——接线若在，
+  无租户时它会照常返回「查无此行」或停在`未配置`。没有租户解释得了册子是空的，解释不了没有
+  人去读那本册子。
+- 棘轮基线里那句免责「切片还没开工的能力本来就该是这样」是**排期**主张，写于 2026-08-21；
+  八切片全数达标宣布于 08-28 之后它不再成立，而它没有跟着改。
+
+因此 32 条**无一可归入实例半边**，全部计入机制半边差量。逐上下文：`transport-fulfillment` 7、
+`visibility-exception` 6、`settlement-accounting` 4、`customs-compliance` 4、
+`party-commercial` 4、`parcel-shipment` 3、`parcel-pricing` 4。另有
+[`party-commercial` 四处](../../.scratch/party-commercial-context-gaps/spec.md)属同类而不在
+棘轮网内（它排除 `New*` 构造）。
+
+**这不改本节的定级列**——定级是人的决定；改的是「差量为无」这一句。三条处置路（逐条认可为
+显式留待 / 下调相关切片定级 / 改「骨架完整」判据口径为「UC 有编排触点」）见
+[triage 票 01](../../.scratch/mechanism-executor-triage/issues/01-skeleton-criterion-and-its-instruments-measure-different-things.md)。
+**取第三条路要改的是本文「切片的机制半边与实例半边」一节的判据正文**，它现在写的是「该切片
+的规则与判断都有执行器」。
+
+一句要说清的量具事实：「骨架完整」此前的三样证据——生产代码零 `TODO|FIXME|not implemented|panic(`、
+编排与适配器计数、端口两口径缺口——**对这一类在构造上全盲**。端口两个口径都从
+`internal/*/ports` 已声明的接口出发（见 `portcensus.go` 头注），量的是「声明的端口 → 实现」，
+不是「规则 → 端口」；一条从未开过端口的规则不在样本里。这不是量得不准，是不在样本内。
+
 #### 三条判据各自的现状
 
 **骨架完整——已写的部分没有作假，未写的部分是干净的空缺。** 生产代码搜不到 `TODO`、`FIXME`、`not implemented` 或 `panic(`（测试脚手架的替身与门禁合成源码字符串不在此列），没有用空实现顶住的假完成。这使定级可信：各「部分」列出的剩余就是剩余，不是被 stub 掩盖的部分完成。此前点名的具名缺口——`parcel-pricing` 的 `FeatureSource` 实现五项而 `CONTEXT` 声明十项——已经闭合：三项类别特征（分区、地址类型、服务选项）按取值相等判定且与次序运算的配对在构造期互拦，体积重与计价重量作为评价器填入的派生量可被条件读取、缺席时判定报特征不可用而不是悄悄未命中。
