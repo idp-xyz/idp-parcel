@@ -12,6 +12,14 @@
 # 交易域模型新增三条为 36，同日票 08 的仓储落地后重建那条接上生产调用路径剪掉，记为 35；
 # 2026-09-02 随 label-channel/06 写侧编排落地剪掉面单交易那两条，记为 32。
 #
+# 2026-09-02 随 label-channel/13 新增两条（渠道择优比较器与批量评价口），改后**重数实测 34**
+# ——不是拿 32 加 2 得来的，照下面那两段的教训办。
+#
+# 2026-09-02 随 party-commercial-context-gaps/01 剪掉 PublishChannelAccountUseAuthorization
+# （渠道账号使用授权补齐执行器，接上生产调用路径），剪后**重数实测 33**——同样是数出来的。
+# 顺带一句给下一个人：34 减 1 这次恰好也得 33，但那是巧合不是方法。上面两段记的两次错，
+# 错的都不是算术，是「名单被别人动过而你不知道」。
+#
 # **那个 32 又错了一格，同一种错第二次。** 2026-09-02 晚 label-channel/10 加这一条之前重数，
 # 实测 31——某次增减（隔离写面那批的名单改动）只改了名单没改这句。加入登记册重建入口一条后
 # **实测 32**，这个数是数出来的不是从 31 加出来的**
@@ -66,6 +74,13 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 名单。追加与派生两个入口（Append、Judge）不在名单上——它们是聚合方法而非导出工厂，本门禁
 # 只量后者。
 internal/parcelshipment/domain RehydrateContinuedAttemptRegister
+# 渠道候选择优比较器（票 `label-channel/13`；出局判断落这一层由票 `01` 裁定）。零生产调用点
+# 的成因是**喂给它的那一批候选还没有人装配**——候选装配是票 `12`，落 PS 侧的 partycommercial
+# 适配器；本票只做到成本单维的取值、比较与出局格。票 `12` 落地那天这一条出名单。
+#
+# 同一票的成本分值桥不在名单上，不是漏了：它落在 adapters/parcelpricing，而本门禁只扫
+# domain 包。所以这一条出名单时，桥那半不会跟着一起动。
+internal/parcelshipment/domain SelectChannelCandidateByCost
 
 
 # —— visibility-exception ——
@@ -127,6 +142,12 @@ internal/parcelpricing/domain MarshalPricingPlanSnapshot
 internal/parcelpricing/domain RehydratePricingPlanSnapshot
 # 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
 internal/parcelpricing/domain ParseCanonical
+# 一份输入对多份 `BUY` 价卡的批量评价口（票 `label-channel/13` 缝一）。成因与 PS 侧那条择优
+# 比较器是同一个：它的调用方是渠道择优那条链，而链上游的候选装配（票 `12`）未落地。
+#
+# 与上面那对快照函数不同，这一条**不是「路径两端」**——它自己就是一个完整入口，缺的只是
+# 调用者，不是缺另一半。所以它出名单不会连带谁。
+internal/parcelpricing/domain EvaluatePricingAcrossPlans
 # 初版这里还有两条与其余不同类的：DecimalFromInt64 与 Evaluate 全仓无人调用、测试里也是零，
 # 不是「只被测试接线」而是死代码，各自都是一行转发给同文件里的正主（NewDecimalFromInt64 与
 # EvaluatePricing，两个正主分别有 11 与 25 处引用）。**已删**，见本文件的 git 历史。

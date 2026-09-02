@@ -56,6 +56,7 @@ var (
 	ErrPricingScopeMismatch               = errors.New("parcel pricing: pricing scope mismatch")
 	ErrPricingInputInvalid                = errors.New("parcel pricing: invalid pricing input")
 	ErrEvaluationRequestInvalid           = errors.New("parcel pricing: invalid evaluation request")
+	ErrInvalidPlanEvaluationTarget        = errors.New("parcel pricing: invalid plan evaluation target")
 	ErrEvaluationVersionConflict          = errors.New("parcel pricing: evaluation version conflict")
 	ErrEvaluationContentConflict          = errors.New("parcel pricing: evaluation content conflict")
 	ErrCanonicalizationVersionUnsupported = errors.New("parcel pricing: canonicalization version not supported by this build")
