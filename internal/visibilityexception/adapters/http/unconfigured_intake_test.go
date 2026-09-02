@@ -14,33 +14,79 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// 本包两个端点的方法不同：视图查询是 GET，索赔提交是 POST。未配置格要在各自的方法上
-// 成立——拿错方法测出来的 405 会盖过 403，测试就什么也没钉住。
+// 本包各端点的方法并不相同：视图查询是 GET，索赔提交与配置登记是 POST。未配置格要在各自
+// 的方法上成立——拿错方法测出来的 405 会盖过 403，测试就什么也没钉住。
 type unconfiguredCase struct {
 	endpoint http.Handler
 	method   string
 	path     string
 }
 
-// unconfiguredVisibilityEndpoints 遍历本包装着 UnconfiguredIntake 的两个端点。下游一律
+// unconfiguredVisibilityEndpoints 遍历本包装着 UnconfiguredIntake 的全部端点。下游一律
 // 是「被调即失败」的替身：未配置 Intake 的合同就是不构造查询键也不构造命令，下游若被
 // 触到，说明有请求穿过了未配置格。
+//
+// 六个配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）一并进这张表，判据与读面
+// 同一条：写面的未配置格也住在 Intake 缝里，且它更要紧——穿过去的不是一次读，是一次写。
 func unconfiguredVisibilityEndpoints(t *testing.T) map[string]unconfiguredCase {
 	t.Helper()
+	unconfigured := visibilityhttp.UnconfiguredIntake{}
 	return map[string]unconfiguredCase{
 		"tracking view": {
 			endpoint: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(
-				visibilityhttp.UnconfiguredIntake{}, unreachableViewReader{t: t},
+				unconfigured, unreachableViewReader{t: t},
 			),
 			method: http.MethodGet,
 			path:   "/customer-tracking-view",
 		},
 		"claim": {
 			endpoint: visibilityhttp.NewReceiveClaimEndpoint(
-				visibilityhttp.UnconfiguredIntake{}, unreachableClaimReceiver{t: t},
+				unconfigured, unreachableClaimReceiver{t: t},
 			),
 			method: http.MethodPost,
 			path:   "/claims",
+		},
+		"milestone mapping registration": {
+			endpoint: visibilityhttp.NewRegisterMilestoneMappingEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterMilestoneMappingCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-milestone-mapping-registrations",
+		},
+		"triage rules registration": {
+			endpoint: visibilityhttp.NewRegisterTriageRulesEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterTriageRulesCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-triage-rule-registrations",
+		},
+		"notification policy registration": {
+			endpoint: visibilityhttp.NewRegisterNotificationPolicyEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterNotificationPolicyCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-notification-policy-registrations",
+		},
+		"claim eligibility registration": {
+			endpoint: visibilityhttp.NewRegisterClaimEligibilityEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterClaimEligibilityCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-claim-eligibility-registrations",
+		},
+		"claim authorization registration": {
+			endpoint: visibilityhttp.NewRegisterClaimAuthorizationEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterClaimAuthorizationCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-claim-authorization-registrations",
+		},
+		"disclosure policy registration": {
+			endpoint: visibilityhttp.NewRegisterDisclosurePolicyEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterDisclosurePolicyCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-disclosure-policy-registrations",
 		},
 	}
 }

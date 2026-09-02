@@ -57,3 +57,57 @@ func (UnconfiguredIntake) IntakeClaim(context.Context, *http.Request) (applicati
 func (UnconfiguredIntake) IntakeOperationsQuery(context.Context, *http.Request) (OperationsTrackingQuery, error) {
 	return OperationsTrackingQuery{}, ErrAccessChannelNotConfigured
 }
+
+// 六类配置登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这六个接口，写行换不了。
+var (
+	_ MilestoneMappingRegistrationIntake   = UnconfiguredIntake{}
+	_ TriageRulesRegistrationIntake        = UnconfiguredIntake{}
+	_ NotificationPolicyRegistrationIntake = UnconfiguredIntake{}
+	_ ClaimEligibilityRegistrationIntake   = UnconfiguredIntake{}
+	_ ClaimAuthorizationRegistrationIntake = UnconfiguredIntake{}
+	_ DisclosurePolicyRegistrationIntake   = UnconfiguredIntake{}
+)
+
+// IntakeMilestoneMappingRegistration 不读请求，判据同上。以下五个同此。
+func (UnconfiguredIntake) IntakeMilestoneMappingRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterMilestoneMappingCommand, error) {
+	return application.RegisterMilestoneMappingCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeTriageRulesRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterTriageRulesCommand, error) {
+	return application.RegisterTriageRulesCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeNotificationPolicyRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterNotificationPolicyCommand, error) {
+	return application.RegisterNotificationPolicyCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeClaimEligibilityRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterClaimEligibilityCommand, error) {
+	return application.RegisterClaimEligibilityCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeClaimAuthorizationRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterClaimAuthorizationCommand, error) {
+	return application.RegisterClaimAuthorizationCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDisclosurePolicyRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterDisclosurePolicyCommand, error) {
+	return application.RegisterDisclosurePolicyCommand{}, ErrAccessChannelNotConfigured
+}
