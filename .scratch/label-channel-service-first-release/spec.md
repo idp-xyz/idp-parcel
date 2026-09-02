@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——17 张子票立齐；`01`..`07` 与 `17` 已 resolved（四张裁决 ＋ 三张实现票），其余实现票待做
+Status: in-progress——17 张子票立齐；`01`..`08` 与 `17` 已 resolved（四张裁决 ＋ 四张实现票），其余实现票待做
 
 ## 这个 feature 是什么
 
@@ -58,7 +58,7 @@ Status: in-progress——17 张子票立齐；`01`..`07` 与 `17` 已 resolved�
 | [`12` 候选装配](./issues/12-channel-candidate-assembly.md) | 产品—渠道映射到候选集合之间无适配器；落 PS 侧 | `ready-for-agent` |
 | [`13` `BUY` 批量评价与成本分值桥](./issues/13-buy-evaluation-to-cost-score-bridge.md) | 逐候选各算各的计费重；出局判断落择优层，不得以零金额顶替 | `ready-for-agent` |
 | [`15` 轨迹源的拉取/接收端口](./issues/15-tracking-source-inbound-port.md) | 形态选择（拉取/回调）；`OccurredAt` 缺失要如实交出不得代补 | `ready-for-agent` |
-| [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | 走通结果不确定、部分成功、批粒度三条 | `draft`（`07` 已 resolved，阻塞解除） |
+| [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | **已落地**：三条各有测试证据，`07` 的端口形状装得下、无一条需回；替身落测试专属包，「不进生产装配」由编译器守 | `resolved` |
 | [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | 领域、库、读面三处；只留一份载荷（`04` 已裁）；本体入库还是只入引用要正面答 | `draft`（`04`/`07` 均已 resolved，阻塞解除） |
 | [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | 与既有终局是不是同一个，要正面答 | `draft`（`06` 已 resolved，阻塞解除） |
 | [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 不复用 `RouteCandidate`（`01` 已裁），落 PS 侧 | `draft`｜`12` |

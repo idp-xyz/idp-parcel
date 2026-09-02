@@ -81,4 +81,9 @@ Blocked by: 07（已 resolved）
 落笔时共享工作树上另一会话的隔离写面处于在途中间态（`adapters/http/isolated_write_intake.go`
 引用了一个尚未落盘的符号），全仓 `go build` 因此红在别人地盘上。按那份文档，别人包里的编译错
 不修、也不当成自己验证失败；改在临时 worktree 按提交 SHA 验——它检出的是提交，不含任何人的
-未提交改动。结果记在本节下方。
+未提交改动。
+
+**提交态验证结果**：临时 worktree 检出 `1040b71`，`gofmt -l` 空、`go build ./...` 与
+`go vet ./...` 退 0、`go test -count=1 ./...` 退 0 **含真库**（DSN 已设，同刻抽验
+`TestFreezeScopesAreInvisibleToEachOther` 为 `PASS` 不是 `SKIP`）。这同时证实了共享树上那片红
+全在另一会话的未提交件上，与本票无关。验证树按纪律不加 `--force` 移除。
