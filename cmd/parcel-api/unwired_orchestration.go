@@ -9,6 +9,7 @@ import (
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	customsports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	networkapp "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	networkdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	networkports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
@@ -344,6 +345,155 @@ func (unwiredReferenceSeriesRegistration) Handle(
 	pricingapp.RegisterReferenceSeriesCommand,
 ) (pricingapp.RegisterReferenceSeriesOutcome, error) {
 	return pricingapp.RegisterReferenceSeriesOutcomeInvalid, errOrchestrationNotWired
+}
+
+// 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
+// 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
+// 换不来第二道保障。
+type unwiredNetworkCatalogRegistration struct{}
+
+func (unwiredNetworkCatalogRegistration) RegisterNodeVersion(
+	context.Context,
+	networkapp.RegisterNodeVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterConnectionVersion(
+	context.Context,
+	networkapp.RegisterConnectionVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterLineVersion(
+	context.Context,
+	networkapp.RegisterLineVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterServiceAreaVersion(
+	context.Context,
+	networkapp.RegisterServiceAreaVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterServiceCalendarVersion(
+	context.Context,
+	networkapp.RegisterServiceCalendarVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterAvailabilityAdjustment(
+	context.Context,
+	networkapp.RegisterAvailabilityAdjustmentCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+func (unwiredNetworkCatalogRegistration) RegisterRouteStrategyVersion(
+	context.Context,
+	networkapp.RegisterRouteStrategyVersionCommand,
+) (networkapp.RegisterCatalogResult, error) {
+	return networkapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+// 关务四类配置登记的命令占位（票 admin-write-faces/02 切片 02b）。四个类型分立，随
+// 生产侧的四个事务包装：合成一个会让装配测试盖不住「某一格接错了编排」。
+type unwiredInterpretationRuleRegistration struct{}
+
+func (unwiredInterpretationRuleRegistration) Handle(
+	context.Context,
+	customsapp.RegisterInterpretationRuleCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
+type unwiredGateCatalogRegistration struct{}
+
+func (unwiredGateCatalogRegistration) Handle(
+	context.Context,
+	customsapp.RegisterGateCatalogCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
+type unwiredCandidatePortRegistration struct{}
+
+func (unwiredCandidatePortRegistration) Handle(
+	context.Context,
+	customsapp.RegisterCandidatePortCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
+type unwiredDeclarationPathRegistration struct{}
+
+func (unwiredDeclarationPathRegistration) Handle(
+	context.Context,
+	customsapp.RegisterDeclarationPathCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
+// VE 六类配置登记的命令占位（票 admin-write-faces/02 切片 02d）。六个类型分立不是抄
+// 六遍：六个 Registrar 契约的方法同名 `Handle` 而命令类型互不相同，一个类型实现不了
+// 六个。
+type unwiredMilestoneMappingRegistration struct{}
+
+func (unwiredMilestoneMappingRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterMilestoneMappingCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredTriageRulesRegistration struct{}
+
+func (unwiredTriageRulesRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterTriageRulesCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredNotificationPolicyRegistration struct{}
+
+func (unwiredNotificationPolicyRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterNotificationPolicyCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredClaimEligibilityRegistration struct{}
+
+func (unwiredClaimEligibilityRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterClaimEligibilityCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredClaimAuthorizationRegistration struct{}
+
+func (unwiredClaimAuthorizationRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterClaimAuthorizationCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredDisclosurePolicyRegistration struct{}
+
+func (unwiredDisclosurePolicyRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterDisclosurePolicyCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
 }
 
 type unwiredNetworkCatalogue struct{}

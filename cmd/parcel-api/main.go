@@ -160,6 +160,20 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 网络七族、关务四类与 VE 六类登记写面编排（票 admin-write-faces/02 切片
+	// 02a/02b/02d）：判据同价卡首切片，接真不等墙降。
+	networkCatalogRegistration, err := buildNetworkCatalogRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
+	customsRegistration, err := buildCustomsRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
+	veRegistration, err := buildVERegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	complianceRules, err := ccpostgres.NewRuleCatalogue(db)
 	if err != nil {
 		return err
@@ -257,16 +271,27 @@ func run(logger *slog.Logger) error {
 			referenceSeriesRegistration,
 			networkCatalog,
 			routePlans,
+			networkCatalogRegistration,
 			complianceRules,
 			caseRegisters,
 			gateConditions,
 			portsPaths,
+			customsRegistration.interpretationRule,
+			customsRegistration.gateCatalog,
+			customsRegistration.candidatePort,
+			customsRegistration.declarationPath,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
 			visibilityCatalogues,
+			veRegistration.milestoneMapping,
+			veRegistration.triageRules,
+			veRegistration.notificationPolicy,
+			veRegistration.claimEligibility,
+			veRegistration.claimAuthorization,
+			veRegistration.disclosurePolicy,
 			caseReview,
 			caseReview,
 			caseReview,

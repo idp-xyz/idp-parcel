@@ -73,16 +73,27 @@ func assembleBusinessEndpoints(
 	referenceSeriesRegistration pricinghttp.ReferenceSeriesRegistrar,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
+	networkCatalogRegistration networkhttp.CatalogRegistrar,
 	complianceRules customshttp.RuleCatalogueReader,
 	caseRegisters customshttp.CaseRegisterCatalogueReader,
 	gateConditions customshttp.GateConditionCatalogueReader,
 	portsPaths customshttp.PortsPathsCatalogueReader,
+	interpretationRuleRegistration customshttp.InterpretationRuleRegistrar,
+	gateCatalogRegistration customshttp.GateCatalogRegistrar,
+	candidatePortRegistration customshttp.CandidatePortRegistrar,
+	declarationPathRegistration customshttp.DeclarationPathRegistrar,
 	serviceProducts commercialhttp.ServiceProductCatalogueReader,
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
+	milestoneMappingRegistration visibilityhttp.MilestoneMappingRegistrar,
+	triageRulesRegistration visibilityhttp.TriageRulesRegistrar,
+	notificationPolicyRegistration visibilityhttp.NotificationPolicyRegistrar,
+	claimEligibilityRegistration visibilityhttp.ClaimEligibilityRegistrar,
+	claimAuthorizationRegistration visibilityhttp.ClaimAuthorizationRegistrar,
+	disclosurePolicyRegistration visibilityhttp.DisclosurePolicyRegistrar,
 	exceptionTriageRecords visibilityhttp.TriageReviewReader,
 	exceptionCaseRecords visibilityhttp.CaseReviewReader,
 	claimsRecoveryRecords visibilityhttp.ClaimsRecoveryReviewReader,
@@ -170,6 +181,21 @@ func assembleBusinessEndpoints(
 		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesRegistration)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
+		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令
+		// 行，与其余命令面同挂字面量 UnconfiguredIntake{}——写准入不另立形，隔离读准入
+		// （ADR-0078）只经查阅行的 Intake 变量换值，写行换不了。
+		//
+		// 路径取「读口册名 + 该族原词 + -registrations」：族词与查阅的 `?family=`、登记
+		// CLI 的 `-kind` 逐字同一个，同一本册在三处不换词。一族一个端点而不用 `?family=`
+		// 把七族塑进一个口：七族的命令类型互不相同，合成一口就得在 Intake 里先认族再定
+		// 形状，装配点从此可以把一族的译装接到另一族的端点上而编译仍绿。
+		{Pattern: "/network-catalog-node-registrations", Handler: networkhttp.NewRegisterNodeVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-connection-registrations", Handler: networkhttp.NewRegisterConnectionVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-line-registrations", Handler: networkhttp.NewRegisterLineVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-service-area-registrations", Handler: networkhttp.NewRegisterServiceAreaVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-service-calendar-registrations", Handler: networkhttp.NewRegisterServiceCalendarVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-availability-adjustment-registrations", Handler: networkhttp.NewRegisterAvailabilityAdjustmentEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-route-strategy-registrations", Handler: networkhttp.NewRegisterRouteStrategyVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
 		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时它们随该变量一起换值，
@@ -183,6 +209,17 @@ func assembleBusinessEndpoints(
 		// 口岸与申报路径两册（票 admin-remainder-mechanism-batch/03）是一张页面的两签
 		// 查阅面，共用一个端点按 registry 分派，Intake 与关务运营读面同族同变量。
 		{Pattern: "/customs-ports-paths", Handler: customshttp.NewQueryPortsPathsEndpoint(complianceRulesIntake, portsPaths)},
+		// 关务四类配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02b）：写准入不
+		// 另立形，判据同上。同一受控 CLI 里改「案上此刻的事实」的那些命令不在本端点族内，
+		// 范围判据在票上，此处不复述。
+		//
+		// 路径不照网络那样带上读口册名：关务的查阅入口本就按事物平铺（/customs-case-registers、
+		// /customs-gate-conditions、/customs-ports-paths），四个事物词在整个关务面上唯一，
+		// 前缀套前缀只会把路径拉长而分不出更多东西。事物词与读口的 `?registry=` 同源。
+		{Pattern: "/customs-interpretation-rule-registrations", Handler: customshttp.NewRegisterInterpretationRuleEndpoint(customshttp.UnconfiguredIntake{}, interpretationRuleRegistration)},
+		{Pattern: "/customs-gate-catalog-registrations", Handler: customshttp.NewRegisterGateCatalogEndpoint(customshttp.UnconfiguredIntake{}, gateCatalogRegistration)},
+		{Pattern: "/customs-candidate-port-registrations", Handler: customshttp.NewRegisterCandidatePortEndpoint(customshttp.UnconfiguredIntake{}, candidatePortRegistration)},
+		{Pattern: "/customs-declaration-path-registrations", Handler: customshttp.NewRegisterDeclarationPathEndpoint(customshttp.UnconfiguredIntake{}, declarationPathRegistration)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},
@@ -205,6 +242,16 @@ func assembleBusinessEndpoints(
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
 		{Pattern: "/visibility-catalogues", Handler: visibilityhttp.NewQueryVisibilityCataloguesEndpoint(trackingProjectionsIntake, visibilityCatalogues)},
+		// VE 六类配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）：写准入不另
+		// 立形，判据同上。路径取「读口册名 + 该类种类词 + -registrations」，种类词与查阅
+		// 的 `?kind=` 同字（换成小写连字）——同一本册在读口与写口不换词；分诊那一格 CLI
+		// 叫 triage-rules 而读口 kind 叫 TRIAGE_RULE，路径随读口，单复数不在此处再分叉。
+		{Pattern: "/visibility-catalogue-milestone-mapping-registrations", Handler: visibilityhttp.NewRegisterMilestoneMappingEndpoint(visibilityhttp.UnconfiguredIntake{}, milestoneMappingRegistration)},
+		{Pattern: "/visibility-catalogue-triage-rule-registrations", Handler: visibilityhttp.NewRegisterTriageRulesEndpoint(visibilityhttp.UnconfiguredIntake{}, triageRulesRegistration)},
+		{Pattern: "/visibility-catalogue-notification-policy-registrations", Handler: visibilityhttp.NewRegisterNotificationPolicyEndpoint(visibilityhttp.UnconfiguredIntake{}, notificationPolicyRegistration)},
+		{Pattern: "/visibility-catalogue-claim-eligibility-registrations", Handler: visibilityhttp.NewRegisterClaimEligibilityEndpoint(visibilityhttp.UnconfiguredIntake{}, claimEligibilityRegistration)},
+		{Pattern: "/visibility-catalogue-claim-authorization-registrations", Handler: visibilityhttp.NewRegisterClaimAuthorizationEndpoint(visibilityhttp.UnconfiguredIntake{}, claimAuthorizationRegistration)},
+		{Pattern: "/visibility-catalogue-disclosure-policy-registrations", Handler: visibilityhttp.NewRegisterDisclosurePolicyEndpoint(visibilityhttp.UnconfiguredIntake{}, disclosurePolicyRegistration)},
 		// VE 案件侧三页（票 admin-skeleton-closure-batch/06）：分诊两册、案件单册、
 		// 理赔追偿三册，与目录及追踪查阅同族同 Intake 变量。生产装配三口共用一个
 		// CaseReview 读适配器（六方法一型），此处三参分收是为了让装配测试盖得住
