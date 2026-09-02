@@ -1,14 +1,26 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
+  commercialRegistrationEndpoints,
   listGroupLegalEntities,
+  partyIdentityOutcomeLabels,
+  registerCommercial,
   type GroupLegalEntityListResponseBody,
   type GroupLegalEntityRecord,
 } from './api';
-import { identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import {
+  identityStatusLabels,
+  labelOf,
+  legalEntityKindLabels,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
@@ -90,10 +102,9 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
 /**
  * 集团与法人（party-commercial）。行对象是责任法人的最新登记修订：法人钉在稳定的
  * 业务参与方身份上（ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按
- * 修订版本化不可覆盖，停用形成新修订而不是删除。查阅面，不设登记动作——登记与
- * 停用走 parcel-commercial 受控 CLI。
+ * 修订版本化不可覆盖，停用形成新修订而不是删除。
  */
-export function GroupLegalEntitiesPage() {
+function GroupLegalEntitiesTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<GroupLegalEntityListResponseBody> | null>(null);
@@ -145,5 +156,49 @@ export function GroupLegalEntitiesPage() {
         emptyDescription: '读取入口已配置，但登记册为空；页面不会预置法人或参与方身份。',
       })}
     />
+  );
+}
+
+/**
+ * 集团与法人：查阅法人册，外加登记签（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ *
+ * 登记签只装法人身份登记一册。停用不摆这里：identity-deactivation 一个口收三种身份
+ * （业务参与方 / 责任法人 / 货主客户账户），摆进本页会让另外两种也能从这里登进去，而登
+ * 进去的结果本页看不见——判据同 VE 三页那条「登记签不比读签多铺一册」。
+ *
+ * 也没有行级编辑或删除面：身份登记按修订版本化不可覆盖，更正占下一个修订号翻旧插新，
+ * 停用形成新修订，所以本签只有登记一个动作。墙降之前它必然答 403「接入渠道未配置」，
+ * 那是诚实答案；墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
+ */
+export function GroupLegalEntitiesPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="entities" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="entities">集团与法人</TabsTrigger>
+          <TabsTrigger value="register">登记法人</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="entities"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <GroupLegalEntitiesTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="group-legal-entities"
+            title={registrationTitles['legal-entity']}
+            endpoint={`POST ${commercialRegistrationEndpoints['legal-entity']}`}
+            snapshotHint={registrationSnapshotHints['legal-entity']}
+            submit={(snapshot) => registerCommercial('legal-entity', snapshot)}
+            outcomeLabels={partyIdentityOutcomeLabels}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

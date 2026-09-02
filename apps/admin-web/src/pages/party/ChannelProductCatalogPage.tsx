@@ -1,13 +1,19 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
+  commercialRegistrationEndpoints,
   listProductChannelMappings,
+  productChannelOutcomeLabels,
+  registerCommercial,
   type ProductChannelMappingListResponseBody,
   type ProductChannelMappingRecord,
 } from './api';
+import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['channel-product-catalog'];
@@ -77,10 +83,9 @@ const columns: ListColumn<ProductChannelMappingRecord>[] = [
  * 渠道产品目录（party-commercial）。行对象是产品—渠道映射的最新登记修订：服务产品
  * 版本 × 渠道产品标识引用 × 有效区间。映射只定义新渠道决策的候选范围，不把候选
  * 伪装成实际选择——某次交易实际用了哪个渠道由拥有该交易的上下文记录；调整绑定或
- * 区间形成新修订，不覆盖历史。查阅面，不设登记动作——登记走 parcel-commercial
- * 受控 CLI（register-products）。
+ * 区间形成新修订，不覆盖历史。
  */
-export function ChannelProductCatalogPage() {
+function ProductChannelMappingTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ProductChannelMappingListResponseBody> | null>(
@@ -131,8 +136,49 @@ export function ChannelProductCatalogPage() {
         endpoint: 'GET /commercial-product-channel-mappings',
         emptyTitle: '当前租户尚无产品—渠道映射登记',
         emptyDescription:
-          '读取入口已配置，但登记册为空；页面不会预置映射或渠道候选，登记走 parcel-commercial 受控 CLI。',
+          '读取入口已配置，但登记册为空；页面不会预置映射或渠道候选。登记可走本页「登记」签，或受控 CLI parcel-commercial register-products。',
       })}
     />
+  );
+}
+
+/**
+ * 渠道产品目录：查阅映射册，外加登记签（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ *
+ * 登记签不是「编辑映射」的表单：映射按修订推进，调整绑定或区间翻旧插新、不覆盖行，
+ * 改指产品则是另一笔映射——所以这里只有登记一个动作，没有行级编辑或删除面。墙降之前
+ * 它必然答 403「接入渠道未配置」，那是诚实答案；墙降当天在装配点换真 Intake 即点亮，
+ * 本页一行不用改。
+ */
+export function ChannelProductCatalogPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalog">渠道产品目录</TabsTrigger>
+          <TabsTrigger value="register">登记映射</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalog"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <ProductChannelMappingTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="channel-product-catalog"
+            title={registrationTitles['product-channel-mapping']}
+            endpoint={`POST ${commercialRegistrationEndpoints['product-channel-mapping']}`}
+            snapshotHint={registrationSnapshotHints['product-channel-mapping']}
+            submit={(snapshot) => registerCommercial('product-channel-mapping', snapshot)}
+            outcomeLabels={productChannelOutcomeLabels}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
