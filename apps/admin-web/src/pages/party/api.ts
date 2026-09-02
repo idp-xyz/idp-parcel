@@ -349,8 +349,8 @@ export function listProductChannelMappings(): Promise<
 // Comment）。
 
 /**
- * 登记种类封闭集。取值与传输层的八个端点构造函数一一对应；`publication` 之外的种类词
- * 与受控 CLI 的子命令同源。
+ * 登记种类封闭集。取值与传输层的端点构造函数一一对应；`publication` 之外的种类词与受控
+ * CLI 的子命令同源。
  */
 export type CommercialRegistrationKind =
   | 'publication'
@@ -398,6 +398,11 @@ export function registerCommercial(
 
 /**
  * 发布答案代数（`application.PublishCommercialAuthorityOutcome` 原名），逐格中文。
+ *
+ * 本表与下面的声明落点表**没有页面在消费**：发布端点已在册，发布签却还没有落点——它的对象
+ * 类别词表与商业政策页的册词是两条对不齐的分类轴，摆在任何一页都会教一套错词，故出批另立
+ * 票 admin-write-faces/03。两表跟着端点走而不是跟着页面走，所以留在这里；找不到调用方不是
+ * 漏接线。
  *
  * `已计划生效`单列而不并进`已发布已生效`：它入了册，但生效边界未开，**不得用于生产
  * 解析**——两格折成一句「已发布」，操作者会以为这一版此刻就在算数。

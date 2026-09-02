@@ -299,8 +299,8 @@ export function registerCustomsConfiguration(
 }
 
 /**
- * 登记答案代数(application.CaseConfigurationOutcome 原名),逐格中文。五类共用一份——
- * 服务端五个端点交回的就是同一个枚举。
+ * 登记答案代数(application.CaseConfigurationOutcome 原名),逐格中文。本上下文各类共用
+ * 一份——服务端那几个登记端点交回的就是同一个枚举。
  *
  * 没有 UNDECIDED 一格。用例把依赖故障折成那个枚举值,而传输层按 ADR-0022 把它写成
  * 「没形成答案」的 5xx,它到不了这张表;真落进来会被 RegistrationPanel 当成登记册的治理

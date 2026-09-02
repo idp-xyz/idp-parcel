@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { MultiRegistrationPanel } from '../../components/registration';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
@@ -306,38 +306,24 @@ function PartyRelationshipsTable() {
  * 结果，而这里是一册一处登、读面分三处。另两处的去处由停用那条 snapshotHint 末句说出，
  * 披露义务已在词表里尽过，不在这里补第二遍。
  */
-const registrationTargets = [
-  {
-    id: 'business-party',
-    label: '参与方身份',
-    title: registrationTitles['business-party'],
-    endpoint: `POST ${commercialRegistrationEndpoints['business-party']}`,
-    snapshotHint: registrationSnapshotHints['business-party'],
-    submit: (snapshot: unknown) => registerCommercial('business-party', snapshot),
-    outcomeLabels: partyIdentityOutcomeLabels,
-  },
-  {
-    id: 'party-relationship',
-    label: '参与方关系',
-    title: registrationTitles['party-relationship'],
-    endpoint: `POST ${commercialRegistrationEndpoints['party-relationship']}`,
-    snapshotHint: registrationSnapshotHints['party-relationship'],
-    submit: (snapshot: unknown) => registerCommercial('party-relationship', snapshot),
-    outcomeLabels: partyIdentityOutcomeLabels,
-  },
-  {
-    id: 'identity-deactivation',
+const registrationTargets: RegistrationTarget[] = (
+  [
+    ['business-party', '参与方身份'],
+    ['party-relationship', '参与方关系'],
     // 「停用」取身份状态格里的封闭词（已停用），不为登记签另造一个动词。
-    label: '身份停用',
-    title: registrationTitles['identity-deactivation'],
-    endpoint: `POST ${commercialRegistrationEndpoints['identity-deactivation']}`,
-    snapshotHint: registrationSnapshotHints['identity-deactivation'],
-    submit: (snapshot: unknown) => registerCommercial('identity-deactivation', snapshot),
-    // 三册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），不各抄一份；
-    // 其中`已停用`与`册上没有这一个身份`两格只可能来自本册。
-    outcomeLabels: partyIdentityOutcomeLabels,
-  },
-];
+    ['identity-deactivation', '身份停用'],
+  ] as const
+).map(([kind, label]) => ({
+  id: kind,
+  label,
+  title: registrationTitles[kind],
+  endpoint: `POST ${commercialRegistrationEndpoints[kind]}`,
+  snapshotHint: registrationSnapshotHints[kind],
+  submit: (snapshot: unknown) => registerCommercial(kind, snapshot),
+  // 三册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），所以这一格在这里给一次
+  // 而不是逐册各抄；其中`已停用`与`册上没有这一个身份`两格只可能来自停用那一册。
+  outcomeLabels: partyIdentityOutcomeLabels,
+}));
 
 export function BusinessPartiesPage() {
   return (
