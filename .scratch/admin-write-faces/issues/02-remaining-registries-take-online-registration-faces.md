@@ -1,8 +1,8 @@
 # 02 其余登记册逐个接在线登记口与登记签：网络、关务、商业、VE、代收
 
 Category: enhancement
-Status: ready-for-agent——形状已由 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
-与票 01 的切片 01a/01b 定死，本票只是逐上下文照做
+Status: in-progress——形状已由 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
+与票 01 的切片 01a/01b 定死，本票只是逐上下文照做；2026-09-02 起四片并行认领，分工见「并行分工」
 Blocked by: 无
 
 ## 为什么是一张票而不是五张
@@ -14,6 +14,60 @@ Blocked by: 无
 分片（02a..02e），每片自带完成判据，做完在本票记一条。
 
 若日后恢复多会话并行，按片拆票即可——片的边界就是票的边界，不必重写范围。
+
+## 并行分工（2026-09-02，MCP-3 分派）
+
+多会话已恢复，四片同时开工。**不拆票**：片的边界本来就写在下面「分片」一节，拆成四份
+只会把同一份范围与红线抄四遍。地盘按上下文划，一片一个写入方：
+
+| 片 | 通道 | 地盘（只写这两处） |
+|---|---|---|
+| 02a 网络（收口核验）+ 02b 关务前端 | MCP-4 | `apps/admin-web/src/pages/network/`、`apps/admin-web/src/pages/customs/` |
+| 02c 商业（整片） | MCP-5 | `internal/partycommercial/adapters/http/`、`apps/admin-web/src/pages/party/` |
+| 02d VE 前端 | MCP-6 | `apps/admin-web/src/pages/visibility/` |
+| 集成、共享接线、批务收口 | MCP-3 | `cmd/parcel-api/**`、票面 |
+
+分工是**改过一次的**：头一版按上下文四等分，派完才查主线，发现 02a/02b/02d 的 Go 侧早已落地
+（见下节）。表里现在这版是纠正后的实况。
+
+`apps/admin-web/src/components/registration/`（`a492f51` 抽出的共享登记面组件）是三片共用的
+第三类文件：要改先在频道占号，只改自己那几行；能靠传参解决就不改组件本体。
+
+### 本票的 `Status:` 行曾经骗过一次分派
+
+分派时本票写着 `ready-for-agent`，据此四片被当成全未开工派了出去；派完查主线才发现三片的
+Go 侧早已落地。**票面状态行不是取证结果**，它只在有人回来改它的时候才更新，而交付方连着落了
+六笔却没回来改这一行。这与 [parallel-sessions.md](../../../docs/agents/parallel-sessions.md)
+「断言有保质期」是同一件事的票面形态：`ready-for-agent` 读起来像当前事实，实际是**上一次有人
+写它时的事实**，而它过期时不会有任何东西变红。
+
+后果不是虚惊——若三个会话照头一版分派动手，产出的是三份与主线重复的实现，而重复实现在
+`go build` 与 `go test` 下**全绿**，要到集成时才看得见。
+
+处方按本仓惯例是写证据不写结论：下面这节的每一格都锚了 SHA，读的人不必信状态行。
+
+### 已落地实况（核于 `ddba601`，2026-09-02 MCP-3）
+
+| 片 | Go 侧 | 管理台写面 |
+|---|---|---|
+| 02a 网络 | **已落**：七族传输层 `4776670`、进端点表接真编排 `1199934`、真库事务壳 `ddba601` | **已落** `a492f51`：目录页走 `MultiRegistrationPanel` 映 `networkCatalogFamilies`，服务区域页单走 `RegistrationPanel` |
+| 02b 关务 | **已落**：四类传输层 `6d7c213`、传输面证据 `ec944e6`、进端点表接真编排 `1199934`、真库重放格 `ddba601` | **未落**：`pages/customs/` 下无一页 import `components/registration` |
+| 02c 商业 | **未落**：`internal/partycommercial/adapters/http/` 下 `RegistrationIntake` 命中为零，端点表无 `partycommercial` 登记行 | **未落** |
+| 02d VE | **已落**：六类进端点表接真编排 `1199934`、真库重放格 `ddba601`、`cmd/parcel-api/assemble_ve_registration.go` 在库 | **未落**：`pages/visibility/` 下无一页 import `components/registration` |
+
+「已落」栏引的是提交，不是本票的自述——重核只需 `git log --oneline -- <路径>`。
+
+02a 的 Go 侧七族与 UI 两页是否**逐族对得上**尚未逐格核（两页加起来该是七族，路由策略归目录页
+还是 `RoutePlansPage` 未定），归 MCP-4 收口时核清。
+
+**`cmd/parcel-api/**` 不属任何一片，由 MCP-3 统一接线。** 四片都要往端点表、探针表与
+unwired 占位加行，那是 [parallel-sessions.md](../../../docs/agents/parallel-sessions.md)
+点名的「共享接线文件」——`migrations.go` 那一类，两个会话相隔几十秒各自提交同一对文件就
+会把对方的接线剥掉，逐块核防得住卷带、防不住盖掉。各片交活时只给建议装配行与已验 SHA，
+形照票 01 里 MCP-3 交 MCP-1 的那条 Comment。
+
+前端 `page-registry.tsx` / `navigation.ts` / `liveIds` 同属第三类：四个上下文的页早已在册，
+预期零改动；真要动只加自己那一行，不动邻行。
 
 ## 形状（照 01a，不重新裁）
 
@@ -105,3 +159,85 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
 切片 01a 的实现（`internal/parcelpricing/adapters/http/register_price_card.go` 与
 `cmd/parcel-api/assemble_pricing_registration.go`）、01b 的表单区
 （`apps/admin-web/src/pages/pricing/RegistrationPanel.tsx`）。
+
+## Comments
+
+- 2026-09-02 · MCP-6：**切片 02d（VE）交付**，四件齐。
+
+  **范围分辨（逐个用例过一遍，核于 `ddba601`）。** 判据用本票 02b/02e 那一条：改的是「这个
+  租户怎么配置」，还是「账上/案上此刻的事实」。不只过 CLI 命令族——`internal/visibility
+  exception/application` 下的**全部**用例方法都过了一遍，因为分界线在用例之间不在入口之间：
+
+  **配置类（属本票，六类全接）**：`RegisterMilestoneMapping`（里程碑映射）、
+  `RegisterTriageRules`（分诊规则）、`RegisterNotificationPolicy`（通知策略）、
+  `RegisterClaimEligibility`（索赔资格声明）、`RegisterClaimAuthorization`（申请人授权
+  名单）、`RegisterDisclosurePolicy`（披露策略）。六类改的都是租户的规则与目录，与价卡、
+  参考序列同类。
+
+  **业务操作类（不属本票）**：`RegisterReceipt` / `RevokeReceipt`（材料收讫与撤销，受控
+  CLI 的 `claim-material-receipt` 两命令）。它们登的是某一笔索赔案上「这份材料此刻收到没
+  有」，行身份就是事实本身；`Revoke*` 更明显——撤销不是登记，是状态推进。与 02b 踢出去的
+  那七类、02e 整片被排除的那七个同类。**这两类的在线操作面随代收那张票一并另立，先裁操作者
+  授权模型**（同一条未决）。
+
+  **既不是登记也不是操作面的（不在本票任何一侧）**：`HandleClaimHandler` 六法
+  （`ReceiveClaim` / `ScreenClaim` / `ConcludeClaim` / `ReviewClaim` / `OpenRecovery` /
+  `RecordRecovery`）、`DeriveCustomerViewHandler.Handle`、`DeriveProjectionHandler.Handle`、
+  `RaiseSignalHandler.Handle`、`FormETAHandler.FormETA` / `FormVisibilityGap`、
+  `NotifyCustomerHandler.Handle`、`SendDispositionRequestHandler` 三法。它们是本上下文的
+  派生与案件流转，由事件与案上动作驱动，本来就不经登记口，列在这里只为说明「逐个过了」不是
+  只数了 CLI 那八个。
+
+  **`claim-authorization` 判为配置而不是业务操作——这一格最像案上事实，理由写明。** 它以
+  货主客户账户为键，登的是「这个租户为该账户声明了谁可以代提索赔」这份带版本与发布批准责任
+  的名单册，换名单走版本链，**没有撤销命令**；关务片里被判为案件事实的 `GrantSubmission
+  Authority` 则是对某**一个案件**的提交授权，且成对带 `Revoke`。分界不在「有没有指名对象」，
+  在改的是租户的配置还是某一笔案上此刻的事实。同一条理由已写在
+  `internal/visibilityexception/adapters/http/register_catalog.go` 的
+  `NewRegisterClaimAuthorizationEndpoint` 头上。
+
+  **无用例可接而跳过的：零。** 六类配置登记的用例与受控 CLI 命令都在册，没有为凑齐造过用例。
+
+  **四件的落点。** 前三件在本次分派之前就已入库，本片只补第四件：
+
+  1. `adapters/http` 六接口 + 六端点构造函数 + `UnconfiguredIntake` 六实现 + 传输层测试
+     （含「隔离读 Intake 装不进登记口」的编译期断言）——`8c6c57f`；登记快照译装先下沉为
+     `adapters/registrationjson` 包，受控 CLI 与在线登记口从此**共用同一份翻译**而不是两份
+     碰巧同形——`8ebfcac`。
+  2. 端点表六行 + 探针 + unwired 占位——`1199934`（MCP-3 统一接线，隔离读放行表零改动）。
+  3. 生产装配 `buildVERegistrationOrchestration` 六格接真（登记用例 + `db.Transactor()`
+     事务包装）——`1199934`；事务壳确实提交由真库测试靠重放格钉住——`ddba601`。
+     **因此本片无装配建议行要交**：接线与真编排都已在册，MCP-3 无需为 VE 再加行。
+  4. **本片新增**：三张 VE 目录页各加「登记」签，复用 `components/registration` 的
+     `MultiRegistrationPanel`（02a 抽出的共享组件）——判断规则页装里程碑映射与分诊规则，
+     披露口径页装通知策略与披露策略，索赔前置页装索赔资格与索赔授权。**登记签不比读签多铺
+     一册**：多铺会让同一本册在两处都能登，而其中一处的页面上看不到登进去的结果。
+
+  **表单收登记快照 JSON 本体，不逐字段建。** 与受控口 `parcel-ve-register <种类> -input
+  <file>` 同一份形状，且是同一份译装。快照提示句把几件从册名上看不出来的判据说出来：分诊走向
+  与披露维态的封闭集、通知策略的时限必须为正、索赔资格的覆盖集不得为空（空覆盖集通向永久
+  「不予受理」）、授权名单字段必须在场（不授权任何人写 `[]`，缺字段是漏填）。
+
+  **答案代数逐格中文，负向答案是答案不是失败。** `REGISTERED` / `REFUSED` 两格加十格拒绝
+  理由；末两格 `VERSION_NOT_OVERWRITABLE` 与 `VERSION_OVERLAPS_EXISTING` 标明是**治理答案**
+  ——原行不被顶替，换版本号或改区间续办，受控 CLI 正按这条界线分退出码 2 与 1 两路。折成
+  一句「提交失败」会让操作者以为重试有用。未收录的 outcome 与理由原样示出英文原名。
+
+  **顺带**：本上下文的 `problemCodeNotes` 此前只按查阅口措辞（`MALFORMED_REQUEST` 写的是
+  「构造不出查询」），登记口共用同一张表，照原样会让写面的 400 说成读面的原因；改成两侧都
+  说得通的一句，并补 `UNNAMED_OUTCOME` / `UNNAMED_REFUSAL_REASON` 两格——那两格是服务端缺陷
+  不是登记方能改的东西，落进兜底句会劝人去查记录。
+
+  **`liveIds` / `page-registry.tsx` / `navigation.ts` 零改动**：三页早因读面在册，登记签不
+  新增页。
+
+  **验证**：`tsc --noEmit` 无输出（Windows 与 WSL 各跑一次）、`tsc -b` 绿。
+  **`pnpm build` 跑不起来，成因在共享环境不在本片改动**：`apps/admin-web/node_modules` 目前
+  是一份 Windows 侧的残缺安装——`.bin` 整个缺席、tailwind 的传递依赖 `@alloc/quick-lru`
+  不在场，`.pnpm` 下只有 win32 的 rollup 原生件而没有 linux 的；而入库的 `pnpm-lock.yaml`
+  带着指向 WSL 路径的 `overrides`（`file:/home/tops/idp-ui-tgz/*.tgz`），仓内却没有任何
+  `pnpm.overrides` 或 `pnpm-workspace.yaml` 与之匹配，故 `pnpm install --frozen-lockfile`
+  以 `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` 拒绝。两个平台的失败都发生在**读 `node_modules`
+  的模块解析阶段，早于任何项目源码被转译**（Windows 侧断在 PostCSS 载 tailwind，WSL 侧断在
+  rollup 载原生件），与 `.tsx` 改动无关。修它要动入库的锁文件或补一份带 WSL 绝对路径的
+  workspace 配置——那是共享工具链的取舍，不在本片地盘，未擅动，报给 MCP-3。

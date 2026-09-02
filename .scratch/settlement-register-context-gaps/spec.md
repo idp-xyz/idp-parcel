@@ -1,7 +1,7 @@
 # 结算登记册与 CONTEXT 硬句的三处出入（写侧待裁：补列还是改文档）
 
 Category: chore
-Status: draft——三票均待人裁；本 spec 只承载出处、取证口径与「不属谁的范围」
+Status: resolved——三票已裁并已实施（ADR-0087，`63b6e19` 落文、`aeeb709` 落码），子票全 resolved；收口取证见文末
 
 ## 这三处是怎么被看见的
 
@@ -48,3 +48,30 @@ CONTEXT 引 `docs/domain/settlement-accounting/CONTEXT.md`。
   `visibility_exception` 0003、本模块 0012 撤销 0008 的例外支），不得改写已施加的迁移。
 - 三张表当前**全部 0 行**（写入方在接入渠道墙后面），所以补列不需要数据清洗——这一点对三票都成立，
   是现在裁比以后裁便宜的唯一理由。
+
+## 收口（2026-09-02 MCP-3 核）
+
+三处出入**都按「补」裁并已实施**，本 spec 上文「三票均待人裁」「本目录不改表、不建列、不写迁移」
+两句自 2026-09-01 起描述的是裁决**之前**的状态。裁决落
+[ADR-0087](../../docs/adr/0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
+（`63b6e19` 落文，`aeeb709` 落码，三条决定一并裁）。
+
+逐票核对（判据是 [issue-tracker](../../docs/agents/issue-tracker.md) 的「Complete a parent」：
+子票全 resolved 才收父票）：
+
+| 票 | 状态 | 落地物 |
+|---|---|---|
+| 01 确认费用七项事实 | resolved | `ConfirmedChargeFacts` 类型 + 迁移 `0014_customer_charge_confirmation_facts.sql`（同在或同缺的耦合 CHECK、封闭收付方向）+ 端口 `ConfirmedChargeFactsView` |
+| 02 客户费用版本链 | resolved | 迁移 `0015_customer_charge_adjustment_register.sql` 立 `charge_adjustment` + `RecordChargeAdjustmentHandler`（UC-SA-002）+ 唯一创建用例门 |
+| 03 组成项角色维 | resolved | `ComponentRole` 封闭八值按口径分组 + `verifyPayableAndCredit` 写侧复验 |
+
+**收的是本目录，不是这三件事的全部。** 三张票的 Comment 各自记了「未做且有意未做」，都在本目录
+范围之外，别当成随本 spec 一起收掉了：
+
+- 三个用例的**生产装配未做**——`ConfirmChargeHandler`、`RecordChargeAdjustmentHandler` 至今只在
+  测试里装配，未进 `cmd/parcel-api`。
+- `ConfirmedChargeFactsView` **无生产实现**，那是实例半边：本仓无租户因而无册可读，不造默认值。
+- 票 04 撤掉的经营页四栏、`customer_statement.adjustment_lines` 的角色退回、费用页调整栏——
+  册子现在给得出了，加栏属读面那一片。
+
+这三条不是欠账遗漏，是本 spec 开头「本目录只写到差什么为止」那条边界的正当结果。
