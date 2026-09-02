@@ -15,8 +15,16 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
 // 本文件只证装配点的「启动时就坏」这一格：库不可达或框架 schema 未施加时，
 // assembleDispatcher 带原因失败，而不是交出一个起得来的进程。
+//
+// discardLogger 让本文件不去管失败观察口（ADR-0095）：这里证的是启动就绪，与投递失败
+// 怎么出声无关，而真让它往测试输出里打日志只会淹掉用例自己的信号。传 nil 也能过，但那走的
+// 是「没有观察口」那一支——装配点仍应收到一个真 logger，才与生产形状一致。
 //
 // 与 Loop 那一格刻意分开，两者不是同一件事。Loop 对一拍失败只记不停是对的——运行
 // 中的依赖抖动不该拖死进程；但部署错误若也经那条路径表现，就与抖动在日志里长成同一
@@ -71,7 +79,7 @@ func TestAssemblyFailsWhenTheDatabaseIsUnreachable(t *testing.T) {
 	defer cancel()
 
 	beat, cleanup, err := assembleDispatcher(
-		ctx, startupEnv("postgres://parcel:parcel@127.0.0.1:1/postgres?sslmode=disable"))
+		ctx, startupEnv("postgres://parcel:parcel@127.0.0.1:1/postgres?sslmode=disable"), discardLogger())
 	if err == nil {
 		if cleanup != nil {
 			cleanup()
@@ -87,7 +95,7 @@ func TestAssemblyFailsWhenTheFrameworkSchemaIsMissing(t *testing.T) {
 	// FreshDatabase 建库但不施加任何迁移，正是「部署漏跑迁移」那一格。
 	dsn := pgtest.FreshDatabase(t)
 
-	beat, cleanup, err := assembleDispatcher(t.Context(), startupEnv(dsn))
+	beat, cleanup, err := assembleDispatcher(t.Context(), startupEnv(dsn), discardLogger())
 	if err == nil {
 		if cleanup != nil {
 			cleanup()
@@ -106,7 +114,7 @@ func TestAssemblyFailsWhenTheFrameworkSchemaIsMissing(t *testing.T) {
 func TestAssemblySucceedsOnAMigratedDatabase(t *testing.T) {
 	dsn := migratedDatabase(t)
 
-	beat, cleanup, err := assembleDispatcher(t.Context(), startupEnv(dsn))
+	beat, cleanup, err := assembleDispatcher(t.Context(), startupEnv(dsn), discardLogger())
 	if err != nil {
 		t.Fatalf("已施加迁移的库上装配失败：%v", err)
 	}

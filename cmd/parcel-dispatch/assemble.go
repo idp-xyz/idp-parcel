@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -168,7 +169,14 @@ func positiveIntFromEnv(getenv func(string) string, name string) (int, error) {
 // 条独占连接、会建表，而那个包明写自己从不在应用启动时运行；没有可用的只读状态读口。
 // 因此业务表缺失这一格仍会起得来并按每拍报错表现——要补得先给 `migrate` 定出只读
 // 状态口，那是另一件事。
-func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, func(), error) {
+// logger 只用来构造失败观察口（ADR-0095）。收 logger 而不是收一个现成的观察口，是因为
+// 「怎么出声」本就该在这一层定：平台层交出原始错误，装配点决定级别与维度。传 nil 即不观察，
+// 行为与加这道缝之前逐字相同。
+func assembleDispatcher(
+	ctx context.Context,
+	getenv func(string) string,
+	logger *slog.Logger,
+) (Beat, func(), error) {
 	settings, err := settingsFromEnv(getenv)
 	if err != nil {
 		return nil, nil, err
@@ -199,7 +207,7 @@ func assembleDispatcher(ctx context.Context, getenv func(string) string) (Beat, 
 		pool.Close()
 		return nil, nil, fmt.Errorf("parcel-dispatch: schema check: %w", err)
 	}
-	beat, err := wireDispatcher(db, settings)
+	beat, err := wireDispatcher(db, settings, dispatch.WithDeliveryFailureObserver(logDeliveryFailure(logger)))
 	if err != nil {
 		pool.Close()
 		return nil, nil, err
@@ -448,7 +456,9 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 本进程真接得住它了——接得住才登记，正是 ADR-0049 第三条的判据。
 // 登记的仍然只有本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记
 // 更糟。其余已发布但无消费者的类型照旧撞 `dispatch.no_subscriber`。
-func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
+// options 用变参收：多数调用点（含各真库装配用例）不需要观察口，变参让它们一个都不必改，
+// 与 dispatch.NewDispatcher 那一处同一手法（ADR-0095 Decision 四）。
+func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispatch.Option) (Beat, error) {
 	if db == nil {
 		return nil, errors.New("parcel-dispatch: framework db is required")
 	}
@@ -685,11 +695,42 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings) (Beat, error) {
 		return nil, fmt.Errorf("parcel-dispatch: direct publisher: %w", err)
 	}
 
-	dispatcher, err := dispatch.NewDispatcher(outboxStore, outboxStore, publisher, clock, settings.config)
+	dispatcher, err := dispatch.NewDispatcher(outboxStore, outboxStore, publisher, clock, settings.config, options...)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: dispatcher: %w", err)
 	}
 	return dispatcher, nil
+}
+
+// logDeliveryFailure 是 ADR-0095 Decision 二那个观察口在本装配点的实现。
+//
+// 出声这件事归装配方：平台层对事件类型一无所知、十个上下文共用同一拍，它只把手上那个原始
+// 错误交出来。这里决定用哪个 logger、什么级别、带哪几个维度。
+//
+// 带上 `error` 是要害。库里那一行只留得下失败码，而失败码按运维要做的动作取值，答不出「停在
+// 哪一站」；消费方恰恰把停站与未决原因写在错误正文里（见 psinbox 的
+// `advanceAcceptanceChainThrough`）。此前它被派发器就地丢弃，于是那些字没有任何人读得到——
+// 实测 dispatch 连跑 11 分钟、库里累计 24 次失败、进程输出零行。
+//
+// 用 Warn 不用 Error：这一条失败已经入账且会按重投节奏再来，进程本身没坏。整拍失败才是
+// Error，那一格由 `Loop.report` 管。
+//
+// 会按重投节奏重复出现，这是真实的，不在这里压噪——要压由部署形态决定，而只有装配方知道
+// 这个部署的节奏。
+func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
+	if logger == nil {
+		return nil
+	}
+	return func(delivery eventing.Delivery, code eventing.FailureCode, err error) {
+		logger.Warn("Delivery failed and was recorded for retry",
+			"eventType", delivery.Envelope.Type,
+			"subject", delivery.Envelope.Subject,
+			"eventId", delivery.Envelope.ID,
+			"attempt", delivery.Attempt,
+			"failures", delivery.Failures,
+			"failureCode", code,
+			"error", err)
+	}
 }
 
 // acceptanceChainGates 是接受判断链的两扇消费门：同一个编排，两个触发时机（ADR-0086

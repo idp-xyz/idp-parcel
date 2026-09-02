@@ -156,13 +156,33 @@ func (config Config) validate() error {
 	return nil
 }
 
+// DeliveryFailureObserver 由装配方注入，用来看见逐条投递失败（ADR-0095 Decision 二）。
+//
+// 它交出三样：这一条投递、已分格的失败码、以及**原始错误**。第三样是要害——失败码按运维要做
+// 的动作取值（见 failureCodeFor 的分格判据），本就不负责答「停在哪一站」，而消费方恰恰把
+// 停在哪一站与未决原因都写在原始错误的正文里。丢掉它，那些字就没有任何人读得到。
+//
+// 平台层不决定怎么出声、也不决定出声到哪里：本包对事件类型一无所知，十个上下文共用同一拍，
+// 循环与节奏本就是装配职责（见包注释）。这个口只把它手上已经有的那个 err 交出去。
+type DeliveryFailureObserver func(delivery eventing.Delivery, code eventing.FailureCode, err error)
+
+// Option 是 NewDispatcher 的可选装配项。用变参而不是多加一个位置参数，是为了让既有装配点
+// 一个都不必改——ADR-0095 Decision 四要求「回调为 nil 时行为与今天逐字相同」。
+type Option func(*Dispatcher)
+
+// WithDeliveryFailureObserver 注入失败观察口。传 nil 等同于不注入。
+func WithDeliveryFailureObserver(observe DeliveryFailureObserver) Option {
+	return func(dispatcher *Dispatcher) { dispatcher.observeFailure = observe }
+}
+
 // Dispatcher 把已入队的信封逐条交给发布通道并定稿。
 type Dispatcher struct {
-	claimer   eventing.OutboxClaimer
-	finalizer eventing.OutboxFinalizer
-	publisher eventing.Publisher
-	clock     Clock
-	config    Config
+	claimer        eventing.OutboxClaimer
+	finalizer      eventing.OutboxFinalizer
+	publisher      eventing.Publisher
+	clock          Clock
+	config         Config
+	observeFailure DeliveryFailureObserver
 }
 
 func NewDispatcher(
@@ -171,6 +191,7 @@ func NewDispatcher(
 	publisher eventing.Publisher,
 	clock Clock,
 	config Config,
+	options ...Option,
 ) (*Dispatcher, error) {
 	if claimer == nil || finalizer == nil || publisher == nil || clock == nil {
 		return nil, errors.New("dispatch: all dependencies are required")
@@ -178,13 +199,17 @@ func NewDispatcher(
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
-	return &Dispatcher{
+	dispatcher := &Dispatcher{
 		claimer:   claimer,
 		finalizer: finalizer,
 		publisher: publisher,
 		clock:     clock,
 		config:    config,
-	}, nil
+	}
+	for _, option := range options {
+		option(dispatcher)
+	}
+	return dispatcher, nil
 }
 
 // DispatchOnce 执行一拍：认领一批、逐条发布、逐条定稿。交回本拍成功发布的条数。
@@ -212,16 +237,21 @@ func (dispatcher *Dispatcher) DispatchOnce(ctx context.Context) (int, error) {
 	for _, delivery := range deliveries {
 		if err := dispatcher.publisher.Publish(ctx, delivery.Envelope); err != nil {
 			failedAt := dispatcher.clock.Now().UTC()
+			code := failureCodeFor(err)
 			if recordErr := dispatcher.finalizer.RecordFailure(ctx, delivery.Ref, eventing.DeliveryFailure{
 				FailedAt:    failedAt,
 				RetryAt:     failedAt.Add(dispatcher.config.RetryAfter),
-				Code:        failureCodeFor(err),
+				Code:        code,
 				MaxFailures: dispatcher.config.MaxAttempts,
 			}); recordErr != nil {
 				// 失败没记上：租约还在，条目会在租约过期后被重新认领——比静默
 				// 丢失强，但要让装配方看见这一拍没走完。
 				return published, fmt.Errorf("dispatch: record failure: %w", errors.Join(recordErr, err))
 			}
+			// 记上之后才观察：观察口报的是一条**已经入账**的失败，而不是一次可能还会
+			// 回滚的尝试。它只观察，不改变派发——返回值不看，因此一条日志写不出去不会
+			// 变成一次投递失败（ADR-0095 Decision 四）。
+			dispatcher.observe(delivery, code, err)
 			continue
 		}
 		if err := dispatcher.finalizer.MarkPublished(ctx, delivery.Ref, dispatcher.clock.Now().UTC()); err != nil {
@@ -232,4 +262,17 @@ func (dispatcher *Dispatcher) DispatchOnce(ctx context.Context) (int, error) {
 		published++
 	}
 	return published, nil
+}
+
+// observe 把一条已入账的失败交给装配方。没注入观察口时什么都不做——那是既有装配点的形状，
+// ADR-0095 Decision 四要求它与今天逐字相同。
+func (dispatcher *Dispatcher) observe(
+	delivery eventing.Delivery,
+	code eventing.FailureCode,
+	err error,
+) {
+	if dispatcher.observeFailure == nil {
+		return
+	}
+	dispatcher.observeFailure(delivery, code, err)
 }

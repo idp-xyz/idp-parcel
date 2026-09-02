@@ -24,7 +24,7 @@ func run(logger *slog.Logger, getenv func(string) string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	beat, cleanup, err := assembleDispatcher(ctx, getenv)
+	beat, cleanup, err := assembleDispatcher(ctx, getenv, logger)
 	if err != nil {
 		return err
 	}
