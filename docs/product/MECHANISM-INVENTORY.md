@@ -7,20 +7,20 @@
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
-| architecture（非业务） | 0 | 10 | 0 | 0 | 0 | 0 |
+| architecture（非业务） | 0 | 11 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
 | networkrouting | 52 | 47 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 45 | 46 | 3 | 6 | 1 | 8 |
-| parcelshipment | 103 | 100 | 15 | 20 | 7 | 10 |
+| parcelshipment | 104 | 100 | 15 | 20 | 7 | 10 |
 | partycommercial | 65 | 66 | 7 | 20 | 0 | 12 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
-| platform（非业务） | 12 | 11 | 0 | 0 | 0 | 0 |
+| platform（非业务） | 15 | 14 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
 | transportfulfillment | 53 | 44 | 8 | 22 | 9 | 5 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 634 | 578 | 81 | 195 | 48 | 77 |
+| **合计** | 638 | 582 | 81 | 195 | 48 | 77 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 37、测试 55。
 
@@ -61,11 +61,12 @@
 | transport_fulfillment | 5 |
 | visibility_exception | 21 |
 
-## 端口：声明 274 个；基线口径缺 9，精确口径缺 7
+## 端口：声明 275 个；基线口径缺 10，精确口径缺 8
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
+- `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
@@ -77,6 +78,7 @@
 
 精确口径缺（无具体类型完整实现）：
 
+- `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
 - `settlementaccounting.ClaimAmountRuleView` 
