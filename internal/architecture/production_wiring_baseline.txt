@@ -15,6 +15,15 @@
 # 2026-09-02 随 label-channel/13 新增两条（渠道择优比较器与批量评价口），改后**重数实测 34**
 # ——不是拿 32 加 2 得来的，照下面那两段的教训办。
 #
+# **上面那个 34 后来被当成基准用过一次，而它当时已经过期了**——记它的人（本会话）没写它是在
+# 哪一笔上量的，读它的人据以推算就会错。它的准确说法是「在 e03efd3 上量得 34」；此后
+# 3c4efe5 与 fa98df1 各剪一条，到 71daac5 已是 32。**所以本文件此后每记一个数都连 SHA 一起
+# 记**：这份名单一晚内被四个会话改过，「干净检出上量的」已经不足以定位——干净检出本身每几
+# 分钟就是一个新的。
+#
+# 2026-09-02 随 label-channel/12 的择优编排落地，剪掉 SelectChannelCandidateByCost 一条，
+# **在 a5a32cc 上改后重数实测 32**（不是拿任何先前的数加减出来的）。
+#
 # 2026-09-02 随 party-commercial-context-gaps/01 剪掉 PublishChannelAccountUseAuthorization
 # （渠道账号使用授权补齐执行器，接上生产调用路径）。本笔的计数见下面那段——它写于同一次
 # 改动，因为这一剪恰好撞上了一种此前没记过的失效。
@@ -100,13 +109,13 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 名单。追加与派生两个入口（Append、Judge）不在名单上——它们是聚合方法而非导出工厂，本门禁
 # 只量后者。
 internal/parcelshipment/domain RehydrateContinuedAttemptRegister
-# 渠道候选择优比较器（票 `label-channel/13`；出局判断落这一层由票 `01` 裁定）。零生产调用点
-# 的成因是**喂给它的那一批候选还没有人装配**——候选装配是票 `12`，落 PS 侧的 partycommercial
-# 适配器；本票只做到成本单维的取值、比较与出局格。票 `12` 落地那天这一条出名单。
+# 渠道候选择优比较器 SelectChannelCandidateByCost 曾在这里（票 `label-channel/13`），预言
+# 「票 12 落地那天这一条出名单」——2026-09-02 票 12 的择优编排
+# （parcelshipment/application/select_channel_candidate.go）落地并调用它，按上句剪掉。
 #
-# 同一票的成本分值桥不在名单上，不是漏了：它落在 adapters/parcelpricing，而本门禁只扫
-# domain 包。所以这一条出名单时，桥那半不会跟着一起动。
-internal/parcelshipment/domain SelectChannelCandidateByCost
+# **剪之前按本门禁的提示分过三种成因**：这个名字在全仓只有一处声明（domain/
+# channel_candidate_cost.go）、一处非测试调用点（上述编排），其余命中全在测试里，
+# 因此不是「别处同名声明造成误判」那一种，是真的接上了。
 
 
 # —— visibility-exception ——
@@ -178,8 +187,13 @@ internal/parcelpricing/domain MarshalPricingPlanSnapshot
 internal/parcelpricing/domain RehydratePricingPlanSnapshot
 # 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
 internal/parcelpricing/domain ParseCanonical
-# 一份输入对多份 `BUY` 价卡的批量评价口（票 `label-channel/13` 缝一）。成因与 PS 侧那条择优
-# 比较器是同一个：它的调用方是渠道择优那条链，而链上游的候选装配（票 `12`）未落地。
+# 一份输入对多份 `BUY` 价卡的批量评价口（票 `label-channel/13` 缝一）。
+#
+# 它原与 PS 侧那条择优比较器共写一条成因（「候选装配未落地」），而那一条已于 2026-09-02
+# 随票 12 的择优编排剪掉，本条没有跟着走：**两者缺的调用方不是同一个**。比较器缺的是编排，
+# 编排已经有了；本条缺的是把它接到编排上的那个适配器——按架构门禁，`application` 不得导入
+# `parcel-pricing`，所以编排只能经 `ports.ChannelCandidateCostSource` 取成本，而实现那个口的
+# 适配器（落 `parcelshipment/adapters/parcelpricing/`）还没写。它写出来那天这一条出名单。
 #
 # 与上面那对快照函数不同，这一条**不是「路径两端」**——它自己就是一个完整入口，缺的只是
 # 调用者，不是缺另一半。所以它出名单不会连带谁。
