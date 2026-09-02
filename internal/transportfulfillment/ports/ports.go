@@ -209,6 +209,23 @@ type TransportHandoverRegistry interface {
 	Save(ctx context.Context, record TransportHandoverRecord) (HandoverSaveOutcome, error)
 }
 
+// HandoverScopeView 列出一个交接范围内已登记的交接判断，供汇总派生。
+//
+// 与 TransportHandoverRegistry 分开而不是给它加一个方法：那个口是写侧的幂等存取，
+// 这里要的是按范围的只读列举，两者的实现者可以是同一个类型但契约不同。分开还有一个
+// 现实理由——往既有接口加方法会打断所有实现者，属「会让旧调用点对不上」的那一类。
+//
+// 空范围答空列表且不报错：「这个范围还没有交接」与「读不回来」是两种答案，调用方据以
+// 选择的恢复动作不同，合并成一个就把它们的区别交给了调用方去猜。汇总本身不在这里派生
+// ——那是 domain.SummarizeHandovers 的事，本口只交回成员。
+type HandoverScopeView interface {
+	ListByScope(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.HandoverScopeReference,
+	) ([]TransportHandoverRecord, error)
+}
+
 // TransportHandoverRegistrationIntent 把交接判断交给下游消费：一份意图，消费方自分
 // ——node-operations 的控制转移只认得出 TransferOutBasis 的已交接，network-routing
 // 以 TransportHandoverControl 证据种类触发重判；拒收与待确认同样是它们要看的事实。

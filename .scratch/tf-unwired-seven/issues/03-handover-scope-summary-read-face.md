@@ -49,3 +49,33 @@ Blocked by: 无
 `SummarizeHandovers` 出现在非测试的生产调用路径上，棘轮基线里
 `internal/transportfulfillment/domain SummarizeHandovers` 那一行可以剪掉；剪之前按基线要求
 核一遍全仓是否只有一处同名声明。
+
+## Comments
+
+- 2026-09-02 · MCP-3：**四层里落了两层（端口 + 应用），棘轮那一行已剪。余下适配器与 HTTP。**
+
+  **端口**：新开 `ports.HandoverScopeView`，**没有**给 `TransportHandoverRegistry` 加方法
+  ——那会打断所有实现者，属「会让旧调用点对不上」那一类。分开还有个契约上的理由：那个口是
+  写侧的幂等存取，这里要的是按范围的只读列举，实现者可以是同一个类型但契约不同。
+
+  **应用**：`SummarizeHandoverScopeHandler`。四格结果（`已汇总` / `不成立汇总` / `未决` /
+  `输入未受理`），其中`不成立汇总`独立成格而不复用「三个零的汇总」——零说的是「这个范围有
+  交接，只是这一格没有」，不成立说的是「这个范围还没有交接」，调用方要做的事不同。读失败
+  形成本上下文自己的未决并带续办引用，不上抛技术错误、也不冒充空范围。
+
+  **计数没有下沉到 SQL**，也没在编排里自己数：`SummarizeHandovers` 自带跨范围与跨租户的成员
+  校验，绕过它去数就等于为同一形状立第二个口径。
+
+  **剪基线前按门禁要求分过三种成因**：全仓 `SummarizeHandovers` 只有一处声明
+  （`domain/transport_handover.go`），不存在「别处同名声明造成误判」那一种，因此是第二种
+  ——真的接上了包外非测试引用。剪后按基线要求**重数实测 32 条**（不是拿 33 减 1 算的），
+  并把这一笔记进了它的流水账。
+
+  **未做且要说清**：postgres 适配器与 HTTP 读面都没做，所以**「出名单」等于「有了应用层
+  调用方」，不等于「生产可达」**——这与基线里 `label-channel/06` 那条注记的是同一件事。
+  `HandoverScopeView` 目前无生产实现。
+
+  **验证**：`go build ./...` 退 0、`go vet ./internal/transportfulfillment/...` 退 0、
+  `go test -count=1 ./...` 全仓零 FAIL，架构十一道门禁（含棘轮）全绿。**这是「绿（未设 DSN，
+  PG 用例跳过）」不是含真库的绿**——本笔没有 postgres 适配器，那一层也无从验。`-race` 未跑：
+  本机无 C 工具链（MCP-6 当日实测 `cgo: C compiler "gcc" not found`）。

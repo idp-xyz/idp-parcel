@@ -20,6 +20,22 @@
 # 顺带一句给下一个人：34 减 1 这次恰好也得 33，但那是巧合不是方法。上面两段记的两次错，
 # 错的都不是算术，是「名单被别人动过而你不知道」。
 #
+# 2026-09-02 随 tf-unwired-seven/03 剪掉 SummarizeHandovers（交接范围汇总读面落地，
+# application/summarize_handover_scope.go 是它的生产调用方），**本笔单独作用于其父提交
+# 后重数实测 33**。按本门禁报错时要求的三分先分过成因：全仓 `SummarizeHandovers` 只有一处
+# 声明（domain/transport_handover.go），不存在「别处同名声明造成误判」那一种，因此是第二种
+# ——真的接上了包外非测试引用。
+#
+# **这一笔撞上了本文件此前没记过的一种失效，写下来因为它比上面两次都难防。** 上面各句都写
+# 「剪后重数实测 N」，那句话默认**树上只有一个版本的名单**。共享工作树上不成立：同一时刻可以
+# 有好几处未提交的增减各自躺着，你量到的 N 是它们叠加后的数，而每个人都会把它当成自己那一笔
+# 的结果。本笔实测过这一格：在共享树上量得 32，因为树上同时压着另一处未提交的剪；而本笔单独
+# 作用于父提交是 33。**两个数都不假，量的不是同一个东西。**
+#
+# 所以记数时要连「在哪量的」一起记。要一个能给下一个人用的数，只有一处量得准——**在干净检出
+# 上量**，那里不含任何人的在途改动。逐块核（`git add` 前 `git diff HEAD -- <file>`）能在提交
+# 之前逼出这个区别：本笔就是在那一步才发现自己写下的 32 记的不是自己那一剪。
+#
 # **那个 32 又错了一格，同一种错第二次。** 2026-09-02 晚 label-channel/10 加这一条之前重数，
 # 实测 31——某次增减（隔离写面那批的名单改动）只改了名单没改这句。加入登记册重建入口一条后
 # **实测 32**，这个数是数出来的不是从 31 加出来的**
@@ -103,7 +119,6 @@ internal/transportfulfillment/domain EstablishSegmentWithPickup
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
 internal/transportfulfillment/domain RecordMovementFact
-internal/transportfulfillment/domain SummarizeHandovers
 
 
 # —— settlement-accounting ——
