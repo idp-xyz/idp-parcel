@@ -310,6 +310,7 @@ func run(logger *slog.Logger) error {
 			commercialRegistration.publication,
 			commercialRegistration.partyIdentity,
 			commercialRegistration.productChannel,
+			commercialRegistration.channelAccountUse,
 			visibilityCatalogues,
 			veRegistration.milestoneMapping,
 			veRegistration.triageRules,

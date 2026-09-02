@@ -151,10 +151,41 @@ func (registration transactionalProductChannelRegistration) RegisterMapping(
 }
 
 // commercialRegistrationOrchestration 收拢三族，供装配点一次取回。
+type transactionalChannelAccountUse struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterChannelAccountUseHandler
+}
+
+var _ commercialhttp.ChannelAccountUseRegistrar = transactionalChannelAccountUse{}
+
+func (registration transactionalChannelAccountUse) Register(
+	ctx context.Context,
+	command commercialapp.RegisterChannelAccountUseCommand,
+) (commercialapp.ChannelAccountUseResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.ChannelAccountUseResult, error) {
+			return registration.inner.Register(txCtx, command)
+		})
+}
+
+// Revoke 与 Register 同样包一层事务：撤销走的是登记册的同一个只增写口，把前一修订读回来再
+// 追加一条，读与写必须在同一个事务里——否则两次并发撤销会各自读到同一个最新修订，各自追加，
+// 而登记册的主键只挡得住同修订号的第二条，挡不住两条号相同内容不同的竞态在应用层就已分岔。
+func (registration transactionalChannelAccountUse) Revoke(
+	ctx context.Context,
+	command commercialapp.RevokeChannelAccountUseCommand,
+) (commercialapp.ChannelAccountUseResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.ChannelAccountUseResult, error) {
+			return registration.inner.Revoke(txCtx, command)
+		})
+}
+
 type commercialRegistrationOrchestration struct {
-	publication    transactionalCommercialPublication
-	partyIdentity  transactionalPartyIdentityRegistration
-	productChannel transactionalProductChannelRegistration
+	publication       transactionalCommercialPublication
+	partyIdentity     transactionalPartyIdentityRegistration
+	productChannel    transactionalProductChannelRegistration
+	channelAccountUse transactionalChannelAccountUse
 }
 
 // buildCommercialRegistrationOrchestration 装配八个 `/commercial-*` 写面的真编排。
@@ -175,6 +206,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: party identity registry: %w", err)
 	}
+	channelAccountUse, err := pcpostgres.NewChannelAccountUseAuthorizations(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: channel account use authorization registry: %w", err)
+	}
 
 	transactor := db.Transactor()
 	return commercialRegistrationOrchestration{
@@ -189,6 +224,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		productChannel: transactionalProductChannelRegistration{
 			transactor: transactor,
 			inner:      commercialapp.NewRegisterProductChannelHandler(publications, mappings),
+		},
+		channelAccountUse: transactionalChannelAccountUse{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterChannelAccountUseHandler(channelAccountUse),
 		},
 	}, nil
 }

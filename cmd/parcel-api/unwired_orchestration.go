@@ -570,6 +570,22 @@ func (unwiredProductChannelRegistration) RegisterMapping(
 	return commercialapp.ProductChannelResult{}, errOrchestrationNotWired
 }
 
+type unwiredChannelAccountUseRegistration struct{}
+
+func (unwiredChannelAccountUseRegistration) Register(
+	context.Context,
+	commercialapp.RegisterChannelAccountUseCommand,
+) (commercialapp.ChannelAccountUseResult, error) {
+	return commercialapp.ChannelAccountUseResult{}, errOrchestrationNotWired
+}
+
+func (unwiredChannelAccountUseRegistration) Revoke(
+	context.Context,
+	commercialapp.RevokeChannelAccountUseCommand,
+) (commercialapp.ChannelAccountUseResult, error) {
+	return commercialapp.ChannelAccountUseResult{}, errOrchestrationNotWired
+}
+
 type unwiredNetworkCatalogue struct{}
 
 func (unwiredNetworkCatalogue) ListNodeVersions(
