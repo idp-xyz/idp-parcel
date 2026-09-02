@@ -97,6 +97,7 @@
 - [ADR-0089：一线作业过渡走受控批量导入并内置结构性拆除期限——ADR-0021 的带期限例外，管理台一个作业动词都不加；导入事实带来源标记以与设备事实可分辨](./0089-frontline-transition-controlled-import-with-structural-sunset.md)｜**带期限例外**：它不停用 [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md) 与 [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md) 任何一条，只在一线作业客户端开工之前开一个到 `2026-12-31T23:59:59+08:00` 为止的口子；两记录各条不变，延长期限须 supersede ADR-0089。**适用场景**：仅限过渡期受控批量导入这一条路径灌入的作业事实，标记为例外的印记；经设备签发的作业事实仍全数照 ADR-0023 办
 - [ADR-0090：出向集成的结果代数按调用方的恢复动作分格，「有没有形成答案」由适配器判定且不得看 HTTP 状态码；未配置即拒，不设重试默认值](./0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)
 - [ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)
+- [ADR-0092：渠道面单载荷在领域与库里只落引用，本体存放是一条未配置的出向缝；载荷记录追加不可覆盖](./0092-channel-label-payload-lands-as-a-reference-and-the-body-store-is-an-unconfigured-outbound-seam.md)｜**摘要与定位符不对称**：摘要必备（证明收到过这份件）、定位符可缺（回答此刻在哪），合成一格会让「收到了但没处放」表达不出来，而在文件组件就位前那是唯一走得到的分支。**适用场景**：渠道交回的面单件；本体存放端口未配置期间 `BodyStored` 恒为假，那是真话不是默认值
 
 ## 已被取代决策
 
