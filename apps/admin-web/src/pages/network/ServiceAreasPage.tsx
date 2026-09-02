@@ -1,13 +1,20 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
   listNetworkCatalog,
+  networkRegistrationEndpoints,
+  registerNetworkCatalogVersion,
+  registrationOutcomeLabels,
+  registrationRefusalReasonLabels,
   type NetworkCatalogListResponseBody,
   type NetworkVersionRecord,
 } from './api';
+import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 const info = moduleInfoById['service-areas'];
 
@@ -39,7 +46,7 @@ const columns: ListColumn<NetworkVersionRecord>[] = [
   },
 ];
 
-export function ServiceAreasPage() {
+function ServiceAreasTable() {
   const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<NetworkCatalogListResponseBody> | null>(null);
@@ -85,5 +92,48 @@ export function ServiceAreasPage() {
         emptyDescription: '读取入口已配置,但服务区域目录为空;页面不会虚构区域与覆盖关系。',
       })}
     />
+  );
+}
+
+/**
+ * 服务区域:版本骨架查阅,外加登记签(ADR-0085,票 admin-write-faces/02 切片 02a)。
+ *
+ * 服务区域族的登记签落在本页而不在网络目录页,判据与读面同一条(MCP-3 裁决③):该族由
+ * 专页承担,写签跟着读签走,登进去的结果才看得见。
+ *
+ * 登的仍是 0008 的版本骨架:地理覆盖属 0007 登记册,该册尚无写入方(PAR-NET-14)——本签
+ * 因此收不了覆盖关系,快照里也没有那几格,页面不为它造字段。
+ */
+export function ServiceAreasPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalog">服务区域</TabsTrigger>
+          <TabsTrigger value="register">登记服务区域</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalog"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <ServiceAreasTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <RegistrationPanel
+            moduleId="service-areas"
+            title={registrationTitles['service-area']}
+            endpoint={`POST ${networkRegistrationEndpoints['service-area']}`}
+            snapshotHint={registrationSnapshotHints['service-area']}
+            submit={(snapshot) => registerNetworkCatalogVersion('service-area', snapshot)}
+            outcomeLabels={registrationOutcomeLabels}
+            refusalReasonLabels={registrationRefusalReasonLabels}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

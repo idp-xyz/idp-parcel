@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listNetworkCatalog,
+  networkRegistrationEndpoints,
+  registerNetworkCatalogVersion,
+  registrationOutcomeLabels,
+  registrationRefusalReasonLabels,
   type NetworkCatalogFamily,
   type NetworkCatalogListResponseBody,
   type NetworkVersionRecord,
@@ -14,6 +20,9 @@ import {
   familyLabels,
   labelOf,
   networkCatalogFamilies,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
   targetKindLabels,
 } from './presentation';
 
@@ -171,7 +180,7 @@ function rowValues(family: NetworkCatalogFamily, record: NetworkVersionRecord): 
 }
 
 // 逐族查阅版本原文;chip 六族不含服务区域(MCP-3 裁决③,服务区域由专页承担)。
-export function NetworkCatalogPage() {
+function NetworkCatalogTable() {
   const [familyId, setFamilyId] = useState<NetworkCatalogFamily>('node');
   const [keyword, setKeyword] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -243,5 +252,56 @@ export function NetworkCatalogPage() {
         emptyDescription: '读取入口已配置,但该目录族为空;页面不会借其他族的数据补位。',
       })}
     />
+  );
+}
+
+// 登记签装本页读签的同六族——服务区域的登记面随它的读面归专页,写签不比读签多铺一族:
+// 那会让同一本册在两处都能登,而其中一处的页面上根本看不到登进去的结果。
+const registrationTargets: RegistrationTarget[] = networkCatalogFamilies.map((family) => ({
+  id: family,
+  label: familyLabels[family],
+  title: registrationTitles[family],
+  endpoint: `POST ${networkRegistrationEndpoints[family]}`,
+  snapshotHint: registrationSnapshotHints[family],
+  submit: (snapshot) => registerNetworkCatalogVersion(family, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+  refusalReasonLabels: registrationRefusalReasonLabels,
+}));
+
+/**
+ * 版本化网络目录:逐族查阅版本原文,外加登记签(ADR-0085,票 admin-write-faces/02
+ * 切片 02a)。
+ *
+ * 登记签不是「新建版本」的表单:目录修订按笔推进,新版翻旧插新、不覆盖行,停用由
+ * 可用性调整另族陈述——所以这里只有登记一个动作,没有行级编辑或删除面。墙降之前它
+ * 必然答 403「接入渠道未配置」,那是诚实答案;墙降当天在装配点换真 Intake 即点亮,
+ * 本页一行不用改。
+ */
+export function NetworkCatalogPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="catalog">网络目录</TabsTrigger>
+          <TabsTrigger value="register">登记网络目录</TabsTrigger>
+        </TabsList>
+        <TabsContent
+          value="catalog"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <NetworkCatalogTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <MultiRegistrationPanel
+            moduleId="network-catalog"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

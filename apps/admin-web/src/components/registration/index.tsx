@@ -5,3 +5,8 @@ export {
   type RegistrationPanelProps,
   type RegistrationResponseBody,
 } from './RegistrationPanel';
+export {
+  MultiRegistrationPanel,
+  type MultiRegistrationPanelProps,
+  type RegistrationTarget,
+} from './MultiRegistrationPanel';

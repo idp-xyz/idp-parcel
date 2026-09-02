@@ -38,6 +38,52 @@ export const adjustmentKindLabels: Record<string, string> = {
   SCOPE_ADJUSTMENT: '适用范围调整',
 };
 
+// ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02a)。
+
+/**
+ * 各族登记签的标题。族名与 familyLabels 同词——同一本册不因换到写签而换名;
+ * 「路由策略版本」与「服务日历」的词表值本身带不带「版本」不一,所以逐族写死而不拼。
+ */
+export const registrationTitles: Record<NetworkCatalogFamily, string> = {
+  node: '登记物流节点版本',
+  connection: '登记网络连接版本',
+  line: '登记线路版本',
+  'service-area': '登记服务区域版本',
+  'service-calendar': '登记服务日历版本',
+  'availability-adjustment': '登记网络可用性调整',
+  'route-strategy': '登记路由策略版本',
+};
+
+// 登记快照形状的提示句。各族只差 -kind 一词(族词与 ?family= 同字),所以由一处拼出:
+// 抄七遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+function snapshotHint(family: NetworkCatalogFamily, closedSets?: string): string {
+  return (
+    `登记快照 JSON 的形状与受控登记口 parcel-network-register -kind ${family} -file 吃的同一份;` +
+    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
+    (closedSets ?? '')
+  );
+}
+
+/**
+ * 各族登记快照的形状提示。带封闭集的两族把词列出来:那两个词打错会被受理门以
+ * TARGET_KIND_UNKNOWN / ADJUSTMENT_KIND_UNKNOWN 指名拒绝,而从 -kind 的族名上看不出来。
+ */
+export const registrationSnapshotHints: Record<NetworkCatalogFamily, string> = {
+  node: snapshotHint('node'),
+  connection: snapshotHint('connection'),
+  line: snapshotHint('line'),
+  'service-area': snapshotHint('service-area'),
+  'service-calendar': snapshotHint(
+    'service-calendar',
+    '适用对象类别取封闭三词 NODE / CONNECTION / LINE。',
+  ),
+  'availability-adjustment': snapshotHint(
+    'availability-adjustment',
+    '适用对象类别取 NODE / CONNECTION / LINE,调整种类取 SUSPENSION / CLOSURE / RESUMPTION / SCOPE_ADJUSTMENT。',
+  ),
+  'route-strategy': snapshotHint('route-strategy'),
+};
+
 // ——以下为路由判断两册的词表(票 admin-skeleton-closure-batch/03 阶段二)。
 // 库面原词见 migrations/network_routing/0002 与 0005 的 CHECK;中文取 CONTEXT 原词。
 
