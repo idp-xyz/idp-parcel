@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { MultiRegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
+  commercialRegistrationEndpoints,
   listBusinessParties,
   listPartyRelationships,
+  partyIdentityOutcomeLabels,
+  registerCommercial,
   type BusinessPartyListResponseBody,
   type BusinessPartyRecord,
   type PartyRelationshipListResponseBody,
@@ -16,6 +20,9 @@ import {
   identityStatusLabels,
   labelOf,
   partyRoleLabels,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
   relationshipStatusLabels,
 } from './presentation';
 
@@ -206,21 +213,20 @@ function BusinessPartyIdentitiesTable() {
         module: info,
         endpoint: 'GET /commercial-business-parties',
         emptyTitle: '当前租户尚无参与方身份登记',
-        emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方。',
+        emptyDescription:
+          '读取入口已配置，但登记册为空；页面不会预置参与方。登记可走本页「登记」签，或受控 CLI parcel-commercial register-parties。',
       })}
     />
   );
 }
 
 /**
- * 业务参与方（party-commercial）。两签：身份本体册与关系册。
+ * 业务参与方（party-commercial）。三签：身份本体册、关系册与登记签。
  *
  * 关系行对象是参与方关系的最新登记修订：承运商、承运商代理商、转售商、聚合平台与渠道
  * 账号持有人都以「双方 + 角色 + 有效区间」的时态关系表达，代理关系不自动合并交易角色；
  * 关系登记按修订版本化不可覆盖。两册的状态代数不同——身份状态按时点导出、关系状态是
  * 登记进来的事实，所以分签而不是并表。
- *
- * 查阅面，不设登记动作——登记走 parcel-commercial 受控 CLI。
  */
 function PartyRelationshipsTable() {
   const [search, setSearch] = useState('');
@@ -277,11 +283,41 @@ function PartyRelationshipsTable() {
         module: info,
         endpoint: 'GET /commercial-party-relationships',
         emptyTitle: '当前租户尚无参与方关系登记',
-        emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方或关系。',
+        emptyDescription:
+          '读取入口已配置，但登记册为空；页面不会预置参与方或关系。登记可走本页「登记」签，或受控 CLI parcel-commercial register-parties。',
       })}
     />
   );
 }
+
+/**
+ * 登记签装的两本册，与本页两张读签一一对应（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ *
+ * 选册按钮的词取读签自己的词，不为登记签另造说法。停用不在这里：identity-deactivation
+ * 一个口收三种身份，其中货主客户账户今天连读面都没有，摆进本页会让一种登进去就再也看不见
+ * 的登记从这里出得去——落点未决，等裁，不预占。
+ */
+const registrationTargets = [
+  {
+    id: 'business-party',
+    label: '参与方身份',
+    title: registrationTitles['business-party'],
+    endpoint: `POST ${commercialRegistrationEndpoints['business-party']}`,
+    snapshotHint: registrationSnapshotHints['business-party'],
+    submit: (snapshot: unknown) => registerCommercial('business-party', snapshot),
+    outcomeLabels: partyIdentityOutcomeLabels,
+  },
+  {
+    id: 'party-relationship',
+    label: '参与方关系',
+    title: registrationTitles['party-relationship'],
+    endpoint: `POST ${commercialRegistrationEndpoints['party-relationship']}`,
+    snapshotHint: registrationSnapshotHints['party-relationship'],
+    submit: (snapshot: unknown) => registerCommercial('party-relationship', snapshot),
+    // 两册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），不各抄一份。
+    outcomeLabels: partyIdentityOutcomeLabels,
+  },
+];
 
 export function BusinessPartiesPage() {
   return (
@@ -290,6 +326,7 @@ export function BusinessPartiesPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="identities">参与方身份</TabsTrigger>
           <TabsTrigger value="relationships">参与方关系</TabsTrigger>
+          <TabsTrigger value="register">登记</TabsTrigger>
         </TabsList>
         <TabsContent
           value="identities"
@@ -302,6 +339,16 @@ export function BusinessPartiesPage() {
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <PartyRelationshipsTable />
+        </TabsContent>
+        <TabsContent
+          value="register"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <MultiRegistrationPanel
+            moduleId="business-parties"
+            targets={registrationTargets}
+            problemNote={problemNote}
+          />
         </TabsContent>
       </Tabs>
     </div>
