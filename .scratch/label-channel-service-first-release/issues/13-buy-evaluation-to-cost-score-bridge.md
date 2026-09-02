@@ -1,7 +1,7 @@
 # 13 `BUY` 评价到成本准则分值之间没有桥，也没有逐候选批量评价口
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-4 认领
 Blocked by: 01（已 resolved：出局判断落**渠道择优比较器**这一层，`parcelpricing` 只答算不算得出价）
 
 ## 缺口
