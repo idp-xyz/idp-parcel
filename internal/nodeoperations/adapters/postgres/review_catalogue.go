@@ -192,7 +192,11 @@ func (catalogue *ReviewCatalogue) ListConsolidationUnits(
 		`SELECT unit_id, asset_ref, phase,
 		        jsonb_array_length(members),
 		        jsonb_array_length(snapshots),
+		        opened_source ->> 'sourceId',
+		        opened_source ->> 'performedBy',
 		        COALESCE(snapshots -> -1 ->> 'seal', ''),
+		        COALESCE(snapshots -> -1 -> 'source' ->> 'sourceId', ''),
+		        COALESCE(snapshots -> -1 -> 'source' ->> 'performedBy', ''),
 		        (snapshots -> -1 ->> 'sealedAt')::timestamptz,
 		        closed_at
 		   FROM node_operations.consolidation_unit
@@ -217,7 +221,9 @@ func (catalogue *ReviewCatalogue) ListConsolidationUnits(
 		if err := rows.Scan(
 			&row.UnitID, &row.Asset, &row.Phase,
 			&row.MemberCount, &row.SealCount,
-			&row.LatestSeal, &latestSealedAt, &closedAt,
+			&row.OpenedSourceID, &row.OpenedBy,
+			&row.LatestSeal, &row.LatestSealSourceID, &row.LatestSealPerformedBy,
+			&latestSealedAt, &closedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list consolidation units: %w", err)
 		}

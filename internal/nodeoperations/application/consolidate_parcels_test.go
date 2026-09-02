@@ -87,9 +87,42 @@ func (double *snapshotDownstreamDouble) HandOffSnapshot(
 	return nil
 }
 
+// consolidationFactStoreDouble 是来源事实登记的替身：按（租户+来源身份）幂等，同键
+// 第二份答`已有记录`而不覆盖先到者——与真实仓储的 ON CONFLICT DO NOTHING 同一语义
+// （AT-NO-043）。
+type consolidationFactStoreDouble struct {
+	byKey map[ports.ConsolidationFactKey]ports.ConsolidationFactRecord
+	saved int
+}
+
+func newConsolidationFactStore() *consolidationFactStoreDouble {
+	return &consolidationFactStoreDouble{byKey: map[ports.ConsolidationFactKey]ports.ConsolidationFactRecord{}}
+}
+
+func (double *consolidationFactStoreDouble) FindByKey(
+	_ context.Context,
+	key ports.ConsolidationFactKey,
+) (ports.ConsolidationFactRecord, bool, error) {
+	record, found := double.byKey[key]
+	return record, found, nil
+}
+
+func (double *consolidationFactStoreDouble) Save(
+	_ context.Context,
+	record ports.ConsolidationFactRecord,
+) (ports.ConsolidationFactSaveOutcome, error) {
+	if _, exists := double.byKey[record.Key]; exists {
+		return ports.ConsolidationFactAlreadyRecorded, nil
+	}
+	double.byKey[record.Key] = record
+	double.saved++
+	return ports.ConsolidationFactSaved, nil
+}
+
 type consolidateFixture struct {
 	handler    *application.ConsolidateParcelsHandler
 	store      *consolidationStoreDouble
+	facts      *consolidationFactStoreDouble
 	downstream *snapshotDownstreamDouble
 }
 
@@ -98,15 +131,36 @@ func newConsolidateFixture(t *testing.T) *consolidateFixture {
 	store := &consolidationStoreDouble{byID: map[string]*domain.ConsolidationUnit{}}
 	fixture := &consolidateFixture{
 		store:      store,
+		facts:      newConsolidationFactStore(),
 		downstream: &snapshotDownstreamDouble{},
 	}
 	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
 		Store:       store,
+		Facts:       fixture.facts,
 		Containment: &containmentIndexDouble{store: store},
 		Downstream:  fixture.downstream,
 		Clock:       fixedClock{at: consolidationAt},
 	})
 	return fixture
+}
+
+// workSource 造一份完整的来源表达。业务时间由调用方给，六口各带各的现场时刻——这正是
+// Clock.Now() 让位之后现场该有的样子。
+//
+// 每个调用点都换一个来源身份：同一身份重复报同一内容会被受理闸判成`已有结果`，那是
+// 另一条性质（AT-NO-043 的重放向），本文件下面几例要看的是领域三相与跨单元核对。
+func workSource(t *testing.T, sourceID string, at time.Time) domain.WorkFactSource {
+	t.Helper()
+	source, err := domain.NewWorkFactSource(
+		sourceID,
+		mustValue(t, domain.NewPerformingPartyReference, "packer-1"),
+		mustValue(t, domain.NewExecutionEvidenceReference, "WORK-EVIDENCE/"+sourceID),
+		at,
+	)
+	if err != nil {
+		t.Fatalf("work fact source %q: %v", sourceID, err)
+	}
+	return source
 }
 
 func consolidationTenant(t *testing.T) domain.TenantID {
@@ -142,7 +196,12 @@ func openUnit(t *testing.T, fixture *consolidateFixture, id string) {
 	if err != nil {
 		t.Fatalf("asset: %v", err)
 	}
-	opened, err := fixture.handler.Open(context.Background(), consolidationTenant(t), unitID(t, id), asset)
+	opened, err := fixture.handler.Open(context.Background(), application.OpenUnitCommand{
+		TenantID: consolidationTenant(t),
+		Unit:     unitID(t, id),
+		Asset:    asset,
+		Source:   workSource(t, "src-open-"+id, consolidationAt),
+	})
 	if err != nil {
 		t.Fatalf("open %s: %v", id, err)
 	}
@@ -162,7 +221,12 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 	openUnit(t, fixture, "unit-1")
 	openUnit(t, fixture, "unit-2")
 
-	added, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-1"))
+	added, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-add-1", consolidationAt),
+	})
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -170,7 +234,14 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		t.Fatalf("outcome = %q", added.Outcome())
 	}
 
-	replay, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-1"))
+	// 另一台设备把同一次移入又报了一遍：来源身份不同，因此不是重放而是一次新的作业
+	// 报告，跨单元核对照样把它判成`已在本单元`。
+	replay, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-add-1-again", consolidationAt.Add(time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("replay add: %v", err)
 	}
@@ -178,7 +249,12 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		t.Fatalf("replay = %q", replay.Outcome())
 	}
 
-	elsewhere, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-2"), handlingUnit(t, "hu-1"))
+	elsewhere, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-2"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-add-elsewhere", consolidationAt.Add(2*time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("elsewhere add: %v", err)
 	}
@@ -187,10 +263,20 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		t.Fatalf("outcome = %q elsewhere = %v", elsewhere.Outcome(), elsewhere.Elsewhere())
 	}
 
-	if _, err := fixture.handler.RemoveMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-1")); err != nil {
+	if _, err := fixture.handler.RemoveMember(context.Background(), application.RemoveMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-remove-1", consolidationAt.Add(3*time.Minute)),
+	}); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	moved, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-2"), handlingUnit(t, "hu-1"))
+	moved, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-2"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-add-moved", consolidationAt.Add(4*time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("moved add: %v", err)
 	}
@@ -208,7 +294,12 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 	fixture := newConsolidateFixture(t)
 	tenant := consolidationTenant(t)
 	openUnit(t, fixture, "unit-1")
-	if _, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-1")); err != nil {
+	if _, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-add-seal-case", consolidationAt),
+	}); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
@@ -221,7 +312,13 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		t.Fatalf("basis: %v", err)
 	}
 	fixture.downstream.err = errors.New("downstream unreachable")
-	sealed, err := fixture.handler.Seal(context.Background(), tenant, unitID(t, "unit-1"), seal, basis)
+	sealed, err := fixture.handler.Seal(context.Background(), application.SealUnitCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Seal:     seal,
+		Basis:    basis,
+		Source:   workSource(t, "src-seal-1", consolidationAt.Add(time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("seal: %v", err)
 	}
@@ -229,7 +326,12 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		t.Fatalf("outcome = %q ref = %q; 投递失败封装不翻但要留续办", sealed.Outcome(), sealed.HandoffReference())
 	}
 
-	frozen, err := fixture.handler.AddMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-2"))
+	frozen, err := fixture.handler.AddMember(context.Background(), application.AddMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-2"),
+		Source:   workSource(t, "src-add-frozen", consolidationAt.Add(2*time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("frozen add: %v", err)
 	}
@@ -237,14 +339,28 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		t.Fatalf("frozen = %q; 封装后改成员必须先开封", frozen.Outcome())
 	}
 
-	if _, err := fixture.handler.Unseal(context.Background(), tenant, unitID(t, "unit-1"), basis); err != nil {
+	if _, err := fixture.handler.Unseal(context.Background(), application.UnsealUnitCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Basis:    basis,
+		Source:   workSource(t, "src-unseal-1", consolidationAt.Add(3*time.Minute)),
+	}); err != nil {
 		t.Fatalf("unseal: %v", err)
 	}
-	if _, err := fixture.handler.RemoveMember(context.Background(), tenant, unitID(t, "unit-1"), handlingUnit(t, "hu-1")); err != nil {
+	if _, err := fixture.handler.RemoveMember(context.Background(), application.RemoveMemberCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Member:   handlingUnit(t, "hu-1"),
+		Source:   workSource(t, "src-remove-after-unseal", consolidationAt.Add(4*time.Minute)),
+	}); err != nil {
 		t.Fatalf("remove after unseal: %v", err)
 	}
 
-	closed, err := fixture.handler.Close(context.Background(), tenant, unitID(t, "unit-1"), domain.WorkBasisReference{}, consolidationAt)
+	closed, err := fixture.handler.Close(context.Background(), application.CloseUnitCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Source:   workSource(t, "src-close-1", consolidationAt.Add(5*time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("close: %v", err)
 	}
@@ -256,7 +372,13 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		t.Fatalf("snapshots = %d; 历史快照被开封或关闭动掉了", len(unit.Snapshots()))
 	}
 
-	again, err := fixture.handler.Close(context.Background(), tenant, unitID(t, "unit-1"), domain.WorkBasisReference{}, consolidationAt.Add(time.Minute))
+	// 换一个来源身份再关一次：这不是重放（重放答`已有结果`），是另一次真的想关已关
+	// 实例的作业，必须落进未受理——终局不重演。
+	again, err := fixture.handler.Close(context.Background(), application.CloseUnitCommand{
+		TenantID: tenant,
+		Unit:     unitID(t, "unit-1"),
+		Source:   workSource(t, "src-close-again", consolidationAt.Add(6*time.Minute)),
+	})
 	if err != nil {
 		t.Fatalf("close again: %v", err)
 	}

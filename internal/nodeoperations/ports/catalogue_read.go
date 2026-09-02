@@ -75,15 +75,27 @@ type UnidentifiedItemCatalogueRow struct {
 // 成对缺席；SealCount 把「从未封装」与「重新封装过几次」分开——快照历史本体属写
 // 模型，列面只给计数不展开。单元的形成时间没有登记格（行上只有库面簿记时刻，不是
 // 业务事实），本行刻意不带形成时间（票 05 Comments 记明）。
+//
+// Opened* 与 LatestSeal* 的来源两件是 UC-NO-003 结果契约要求保存的`执行方`与`来源`：
+// 开启那一组取自单元行的开启来源，恒在场；封装那一组取自最近一份快照，与 LatestSeal
+// 同缺同在。**页面据此分得开导入进来的封签事实与设备扫描的封签事实**——两者此前在
+// 列面上长得一模一样。
+//
+// 移入、移出、开封与关闭各自的执行方不在本行：它们是逐次的作业事实，一个单元会有
+// 许多次，列面每格只放得下一个值。要看那些得读来源事实登记，而本册是单元册。
 type ConsolidationUnitCatalogueRow struct {
-	UnitID         string
-	Asset          string
-	Phase          string
-	MemberCount    int64
-	SealCount      int64
-	LatestSeal     string
-	LatestSealedAt *time.Time
-	ClosedAt       *time.Time
+	UnitID                string
+	Asset                 string
+	Phase                 string
+	MemberCount           int64
+	SealCount             int64
+	OpenedSourceID        string
+	OpenedBy              string
+	LatestSeal            string
+	LatestSealSourceID    string
+	LatestSealPerformedBy string
+	LatestSealedAt        *time.Time
+	ClosedAt              *time.Time
 }
 
 // ReviewCatalogueRead 是节点作业查阅页的伴生列表读端口。

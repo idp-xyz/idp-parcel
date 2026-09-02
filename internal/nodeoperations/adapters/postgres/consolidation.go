@@ -29,11 +29,23 @@ func NewConsolidationUnits(db *bentopg.DB) (*ConsolidationUnits, error) {
 	return &ConsolidationUnits{db: db}, nil
 }
 
+// workFactSourceRow 是一次作业事实的来源在 jsonb 里的样子。四格与 domain.WorkFactSource
+// 一一对应；迁移 0003 的在场 CHECK 按这几个键名判，改名要同改那一条。
+type workFactSourceRow struct {
+	SourceID    string    `json:"sourceId"`
+	PerformedBy string    `json:"performedBy"`
+	Evidence    string    `json:"evidence"`
+	OccurredAt  time.Time `json:"occurredAt"`
+}
+
+// snapshotRow 里 SealedAt 与 Source.OccurredAt 同值——前者是既有列面，读回时以 Source
+// 为准（重建门按来源自带的业务时间定快照时刻），保留它只为不改动已在读的 SQL 表达式。
 type snapshotRow struct {
-	Members  []string  `json:"members"`
-	Seal     string    `json:"seal"`
-	Basis    string    `json:"basis"`
-	SealedAt time.Time `json:"sealedAt"`
+	Members  []string          `json:"members"`
+	Seal     string            `json:"seal"`
+	Basis    string            `json:"basis"`
+	Source   workFactSourceRow `json:"source"`
+	SealedAt time.Time         `json:"sealedAt"`
 }
 
 // FindByID 按（租户+实例）取回集运单元。否定结果只回 false。读回经重建门复验。
@@ -48,16 +60,16 @@ func (repository *ConsolidationUnits) FindByID(
 	}
 
 	var assetRef, phase string
-	var membersJSON, snapshotsJSON []byte
+	var openedSourceJSON, membersJSON, snapshotsJSON []byte
 	var closedAt *time.Time
 	err = querier.QueryRow(ctx,
-		`SELECT asset_ref, phase, members, snapshots, closed_at
+		`SELECT asset_ref, phase, opened_source, members, snapshots, closed_at
 		   FROM node_operations.consolidation_unit
 		  WHERE tenant_id = $1
 		    AND unit_id = $2`,
 		tenant.String(),
 		id.String(),
-	).Scan(&assetRef, &phase, &membersJSON, &snapshotsJSON, &closedAt)
+	).Scan(&assetRef, &phase, &openedSourceJSON, &membersJSON, &snapshotsJSON, &closedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -65,7 +77,7 @@ func (repository *ConsolidationUnits) FindByID(
 		return nil, false, fmt.Errorf("find consolidation: %w", err)
 	}
 
-	unit, err := rebuildConsolidation(id, assetRef, phase, membersJSON, snapshotsJSON, closedAt)
+	unit, err := rebuildConsolidation(id, assetRef, phase, openedSourceJSON, membersJSON, snapshotsJSON, closedAt)
 	if err != nil {
 		return nil, false, fmt.Errorf("find consolidation: %w", err)
 	}
@@ -87,16 +99,21 @@ func (repository *ConsolidationUnits) Save(
 	if err != nil {
 		return ports.ConsolidationSaveOutcomeInvalid, fmt.Errorf("save consolidation: %w", err)
 	}
+	openedSourceJSON, err := json.Marshal(sourceRowOf(unit.OpenedBy()))
+	if err != nil {
+		return ports.ConsolidationSaveOutcomeInvalid, fmt.Errorf("save consolidation: %w", err)
+	}
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.consolidation_unit
-			(tenant_id, unit_id, asset_ref, phase, members, snapshots, closed_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			(tenant_id, unit_id, asset_ref, phase, opened_source, members, snapshots, closed_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		unit.ID().String(),
 		unit.Asset().String(),
 		consolidationPhaseOf(unit),
+		openedSourceJSON,
 		membersJSON,
 		snapshotsJSON,
 		closedAtColumn(unit),
@@ -113,8 +130,9 @@ func (repository *ConsolidationUnits) Save(
 	return ports.ConsolidationSaved, nil
 }
 
-// Update 落加入/移出/封装/开封/关闭这一步状态推进：身份与载具在开启时固定，重写
-// 等值也不给入口。行不存在如实报错；租户条件进语句（ADR-0003）。
+// Update 落加入/移出/封装/开封/关闭这一步状态推进：身份、载具与开启来源在开启时固定，
+// 重写等值也不给入口——每一步各自的来源事实归 ConsolidationFacts 登记，不回头改这一行。
+// 行不存在如实报错；租户条件进语句（ADR-0003）。
 func (repository *ConsolidationUnits) Update(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -299,6 +317,7 @@ func marshalConsolidation(unit *domain.ConsolidationUnit) ([]byte, []byte, error
 			Members:  members,
 			Seal:     snapshot.Seal().String(),
 			Basis:    snapshot.Basis().String(),
+			Source:   sourceRowOf(snapshot.Source()),
 			SealedAt: snapshot.SealedAt().UTC(),
 		})
 	}
@@ -312,10 +331,19 @@ func marshalConsolidation(unit *domain.ConsolidationUnit) ([]byte, []byte, error
 func rebuildConsolidation(
 	id domain.ConsolidationUnitID,
 	assetRef, phase string,
-	membersJSON, snapshotsJSON []byte,
+	openedSourceJSON, membersJSON, snapshotsJSON []byte,
 	closedAt *time.Time,
 ) (*domain.ConsolidationUnit, error) {
 	asset, err := domain.NewCarrierAssetReference(assetRef)
+	if err != nil {
+		return nil, err
+	}
+
+	var openedSourceRow workFactSourceRow
+	if err := json.Unmarshal(openedSourceJSON, &openedSourceRow); err != nil {
+		return nil, err
+	}
+	openedBy, err := rebuildWorkFactSource(openedSourceRow)
 	if err != nil {
 		return nil, err
 	}
@@ -355,17 +383,22 @@ func rebuildConsolidation(
 		if err != nil {
 			return nil, err
 		}
+		source, err := rebuildWorkFactSource(row.Source)
+		if err != nil {
+			return nil, err
+		}
 		snapshots = append(snapshots, domain.RehydrateSealedSnapshotSpec{
-			Members:  snapMembers,
-			Seal:     seal,
-			Basis:    basis,
-			SealedAt: row.SealedAt,
+			Members: snapMembers,
+			Seal:    seal,
+			Basis:   basis,
+			Source:  source,
 		})
 	}
 
 	spec := domain.RehydrateConsolidationUnitSpec{
 		ID:        id,
 		Asset:     asset,
+		OpenedBy:  openedBy,
 		Phase:     phase,
 		Members:   members,
 		Snapshots: snapshots,
@@ -374,6 +407,29 @@ func rebuildConsolidation(
 		spec.ClosedAt = closedAt.UTC()
 	}
 	return domain.RehydrateConsolidationUnit(spec)
+}
+
+func sourceRowOf(source domain.WorkFactSource) workFactSourceRow {
+	return workFactSourceRow{
+		SourceID:    source.SourceID(),
+		PerformedBy: source.PerformedBy().String(),
+		Evidence:    source.Evidence().String(),
+		OccurredAt:  source.OccurredAt().UTC(),
+	}
+}
+
+// rebuildWorkFactSource 经领域构造器回到来源值对象——行数据不直接当合法来源用，
+// 与重建门同一条纪律：缺格或空白的行在读回时就被拦下，不留到业务代码里。
+func rebuildWorkFactSource(row workFactSourceRow) (domain.WorkFactSource, error) {
+	performedBy, err := domain.NewPerformingPartyReference(row.PerformedBy)
+	if err != nil {
+		return domain.WorkFactSource{}, err
+	}
+	evidence, err := domain.NewExecutionEvidenceReference(row.Evidence)
+	if err != nil {
+		return domain.WorkFactSource{}, err
+	}
+	return domain.NewWorkFactSource(row.SourceID, performedBy, evidence, row.OccurredAt)
 }
 
 func consolidationPhaseOf(unit *domain.ConsolidationUnit) string {

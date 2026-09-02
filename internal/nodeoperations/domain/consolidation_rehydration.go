@@ -18,12 +18,13 @@ const (
 	ConsolidationPhaseClosed = "CLOSED"
 )
 
-// RehydrateSealedSnapshotSpec 是一行封装快照在库里的样子。
+// RehydrateSealedSnapshotSpec 是一行封装快照在库里的样子。SealedAt 不单列——它由
+// Source 自带的业务时间决定，两处并存时读回的快照会与写入时不是同一个时刻。
 type RehydrateSealedSnapshotSpec struct {
-	Members  []HandlingUnitID
-	Seal     SealReference
-	Basis    WorkBasisReference
-	SealedAt time.Time
+	Members []HandlingUnitID
+	Seal    SealReference
+	Basis   WorkBasisReference
+	Source  WorkFactSource
 }
 
 // RehydrateConsolidationUnitSpec 是从行数据重建一个集运单元所需的全部字段。
@@ -31,6 +32,7 @@ type RehydrateSealedSnapshotSpec struct {
 type RehydrateConsolidationUnitSpec struct {
 	ID        ConsolidationUnitID
 	Asset     CarrierAssetReference
+	OpenedBy  WorkFactSource
 	Phase     string
 	Members   []HandlingUnitID
 	Snapshots []RehydrateSealedSnapshotSpec
@@ -40,7 +42,7 @@ type RehydrateConsolidationUnitSpec struct {
 // RehydrateConsolidationUnit 验三相与在场件：关闭必有时刻、封装必有至少一份快照
 // 且当前成员与最后一份快照一致、开放/封装不得带关闭时刻。历史快照在开封后仍保留。
 func RehydrateConsolidationUnit(spec RehydrateConsolidationUnitSpec) (*ConsolidationUnit, error) {
-	if !spec.ID.valid() || !spec.Asset.valid() {
+	if !spec.ID.valid() || !spec.Asset.valid() || !spec.OpenedBy.valid() {
 		return nil, ErrInvalidRehydratedConsolidation
 	}
 	phase, err := unitPhaseFrom(spec.Phase)
@@ -90,6 +92,7 @@ func RehydrateConsolidationUnit(spec RehydrateConsolidationUnitSpec) (*Consolida
 	return &ConsolidationUnit{
 		id:        spec.ID,
 		asset:     spec.Asset,
+		openedBy:  spec.OpenedBy,
 		phase:     phase,
 		members:   members,
 		snapshots: snapshots,
@@ -98,7 +101,7 @@ func RehydrateConsolidationUnit(spec RehydrateConsolidationUnitSpec) (*Consolida
 }
 
 func rehydrateSealedSnapshot(spec RehydrateSealedSnapshotSpec) (SealedSnapshot, error) {
-	if !spec.Seal.valid() || !spec.Basis.valid() || spec.SealedAt.IsZero() || len(spec.Members) == 0 {
+	if !spec.Seal.valid() || !spec.Basis.valid() || !spec.Source.valid() || len(spec.Members) == 0 {
 		return SealedSnapshot{}, ErrInvalidRehydratedConsolidation
 	}
 	seen := make(map[HandlingUnitID]struct{}, len(spec.Members))
@@ -117,7 +120,8 @@ func rehydrateSealedSnapshot(spec RehydrateSealedSnapshotSpec) (SealedSnapshot, 
 		members:  members,
 		seal:     spec.Seal,
 		basis:    spec.Basis,
-		sealedAt: spec.SealedAt.UTC(),
+		source:   spec.Source,
+		sealedAt: spec.Source.OccurredAt(),
 	}, nil
 }
 

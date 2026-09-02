@@ -196,6 +196,47 @@ type ExecutionFactHandoff interface {
 	HandOffExecutionFact(ctx context.Context, intent ExecutionFactHandoffIntent) error
 }
 
+// ConsolidationFactKey 是集运作业事实的幂等键：同一来源身份和内容返回已有结果，同一
+// 身份不同内容形成冲突（AT-NO-043）。形状照 ReceptionKey——同一上下文里`来源身份`的
+// 表达只有一种，集运再造一套会让两个口的重放语义各说各话。
+type ConsolidationFactKey struct {
+	TenantID domain.TenantID
+	SourceID string
+}
+
+// ConsolidationFactRecord 是一次集运作业事实越过提交边界留下的东西，也就是集运口此前
+// 整个缺席的那一层来源事实（ADR-0005）。它与单元行分开存：单元行是派生状态，同一个
+// 单元会被许多次作业推进，把来源挤进单元行只留得下最后一次。
+//
+// Member 只在移入/移出两格在场，Seal 只在封装格在场——其余格上它们缺席是真话，不是漏填。
+// OccurredAt 是现场自带的业务时间，RecordedAt 是服务端的记录时刻，两者分列（ADR-0023）。
+type ConsolidationFactRecord struct {
+	Key           ConsolidationFactKey
+	ContentDigest string
+	Action        domain.ConsolidationActionKind
+	Unit          domain.ConsolidationUnitID
+	Member        domain.HandlingUnitID
+	Seal          domain.SealReference
+	PerformedBy   domain.PerformingPartyReference
+	Evidence      domain.ExecutionEvidenceReference
+	OccurredAt    time.Time
+	RecordedAt    time.Time
+}
+
+type ConsolidationFactSaveOutcome uint8
+
+const (
+	ConsolidationFactSaveOutcomeInvalid ConsolidationFactSaveOutcome = iota
+	ConsolidationFactSaved
+	ConsolidationFactAlreadyRecorded
+)
+
+// ConsolidationFactStore 按幂等键找回并保存集运作业来源事实（写入代数同 ADR-0031）。
+type ConsolidationFactStore interface {
+	FindByKey(ctx context.Context, key ConsolidationFactKey) (ConsolidationFactRecord, bool, error)
+	Save(ctx context.Context, record ConsolidationFactRecord) (ConsolidationFactSaveOutcome, error)
+}
+
 type ConsolidationSaveOutcome uint8
 
 const (

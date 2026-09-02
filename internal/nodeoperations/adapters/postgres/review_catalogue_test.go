@@ -165,7 +165,7 @@ func TestReviewCatalogueListsConsolidationUnitsByIdentity(t *testing.T) {
 	if err := sealed.Seal(
 		ref(t, domain.NewSealReference, "seal-1"),
 		ref(t, domain.NewWorkBasisReference, "PACK/1"),
-		consolidationAt,
+		workSource(t, "src-seal-catalogue", consolidationAt),
 	); err != nil {
 		t.Fatalf("封装：%v", err)
 	}

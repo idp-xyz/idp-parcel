@@ -76,7 +76,7 @@ func sealedSnapshotIntent(t *testing.T, tenant, unitID, seal string) (ports.Seal
 	if err := unit.Seal(
 		ref(t, domain.NewSealReference, seal),
 		ref(t, domain.NewWorkBasisReference, "PACK/1"),
-		consolidationAt,
+		workSource(t, "src-seal-"+seal, consolidationAt),
 	); err != nil {
 		t.Fatalf("封装：%v", err)
 	}
@@ -99,7 +99,7 @@ func sealOpenedUnit(t *testing.T, unit *domain.ConsolidationUnit, seal string) {
 	if err := unit.Seal(
 		ref(t, domain.NewSealReference, seal),
 		ref(t, domain.NewWorkBasisReference, "PACK/1"),
-		consolidationAt,
+		workSource(t, "src-seal-"+seal, consolidationAt),
 	); err != nil {
 		t.Fatalf("封装：%v", err)
 	}
@@ -122,7 +122,7 @@ func TestTwoSnapshotsOfTheSameUnitShareOnePartition(t *testing.T) {
 	if err := unit.Seal(
 		ref(t, domain.NewSealReference, "seal-2"),
 		ref(t, domain.NewWorkBasisReference, "PACK/2"),
-		consolidationAt.Add(2*time.Hour),
+		workSource(t, "src-reseal-2", consolidationAt.Add(2*time.Hour)),
 	); err != nil {
 		t.Fatalf("再封：%v", err)
 	}

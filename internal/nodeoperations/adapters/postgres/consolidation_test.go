@@ -90,7 +90,7 @@ func TestMembershipSealUnsealAndCloseRoundTripThroughUpdate(t *testing.T) {
 	if err := unit.Seal(
 		ref(t, domain.NewSealReference, "seal-1"),
 		ref(t, domain.NewWorkBasisReference, "PACK/1"),
-		consolidationAt,
+		workSource(t, "src-seal-1", consolidationAt),
 	); err != nil {
 		t.Fatalf("seal：%v", err)
 	}
@@ -325,11 +325,28 @@ func newConsolidationStore(t *testing.T) (*adapter.ConsolidationUnits, bentoapp.
 	return store, db.Transactor(), pool
 }
 
+// workSource 造一份完整的来源表达。业务时间由调用方给——每一步作业各带各的现场时刻，
+// 这正是 Clock.Now() 让位之后落库该有的样子（ADR-0023）。
+func workSource(t *testing.T, sourceID string, at time.Time) domain.WorkFactSource {
+	t.Helper()
+	source, err := domain.NewWorkFactSource(
+		sourceID,
+		ref(t, domain.NewPerformingPartyReference, "packer-1"),
+		ref(t, domain.NewExecutionEvidenceReference, "WORK-EVIDENCE/"+sourceID),
+		at,
+	)
+	if err != nil {
+		t.Fatalf("来源表达 %q：%v", sourceID, err)
+	}
+	return source
+}
+
 func openConsolidation(t *testing.T, id, asset string) *domain.ConsolidationUnit {
 	t.Helper()
 	unit, err := domain.OpenConsolidationUnit(
 		ref(t, domain.NewConsolidationUnitID, id),
 		ref(t, domain.NewCarrierAssetReference, asset),
+		workSource(t, "src-open-"+id, consolidationAt),
 	)
 	if err != nil {
 		t.Fatalf("开启集运单元：%v", err)

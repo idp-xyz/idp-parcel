@@ -47,12 +47,18 @@ func NewWorkBasisReference(value string) (WorkBasisReference, error) {
 	return WorkBasisReference{required}, err
 }
 
-// SealedSnapshot 是封装时冻结的成员关系版本（CONTEXT「封装成员快照」）：成员集、
-// 封签与作业依据一次进入，值类型无改写入口——历史快照不被新版本覆盖是结构性的。
+// SealedSnapshot 是封装时冻结的成员关系版本（CONTEXT「封装成员快照」），同时承载这一次
+// 的「封签记录」：成员集、封签、作业依据与来源一次进入，值类型无改写入口——历史快照不被
+// 新版本覆盖是结构性的。
+//
+// source 是这次封装的来源那一层。CONTEXT「封签记录」要保存的`施封依据`是 basis，`执行方、
+// 来源和证据`（UC-NO-003 结果契约）则全在 source 里；封装时刻也取自它自带的业务时间，
+// 不再是处理时的系统时钟。
 type SealedSnapshot struct {
 	members  []HandlingUnitID
 	seal     SealReference
 	basis    WorkBasisReference
+	source   WorkFactSource
 	sealedAt time.Time
 }
 
@@ -66,6 +72,11 @@ func (snapshot SealedSnapshot) Seal() SealReference {
 
 func (snapshot SealedSnapshot) Basis() WorkBasisReference {
 	return snapshot.basis
+}
+
+// Source 交回这次封装的来源、执行方与证据。
+func (snapshot SealedSnapshot) Source() WorkFactSource {
+	return snapshot.source
 }
 
 func (snapshot SealedSnapshot) SealedAt() time.Time {
@@ -89,25 +100,32 @@ const (
 type ConsolidationUnit struct {
 	id        ConsolidationUnitID
 	asset     CarrierAssetReference
+	openedBy  WorkFactSource
 	phase     unitPhase
 	members   map[HandlingUnitID]bool
 	snapshots []SealedSnapshot
 	closedAt  time.Time
 }
 
-// OpenConsolidationUnit 开启一个新实例。
+// OpenConsolidationUnit 开启一个新实例。来源必备：一个说不出谁开的、依据什么开的实例，
+// 后面挂在它下面的成员与封签都没有可追溯的起点。
 func OpenConsolidationUnit(
 	id ConsolidationUnitID,
 	asset CarrierAssetReference,
+	source WorkFactSource,
 ) (*ConsolidationUnit, error) {
 	if !id.valid() || !asset.valid() {
 		return nil, ErrInvalidConsolidation
 	}
+	if !source.valid() {
+		return nil, ErrInvalidWorkFactSource
+	}
 	return &ConsolidationUnit{
-		id:      id,
-		asset:   asset,
-		phase:   unitOpen,
-		members: map[HandlingUnitID]bool{},
+		id:       id,
+		asset:    asset,
+		openedBy: source,
+		phase:    unitOpen,
+		members:  map[HandlingUnitID]bool{},
 	}, nil
 }
 
@@ -117,6 +135,11 @@ func (unit *ConsolidationUnit) ID() ConsolidationUnitID {
 
 func (unit *ConsolidationUnit) Asset() CarrierAssetReference {
 	return unit.asset
+}
+
+// OpenedBy 交回开启这个实例的来源、执行方与证据。
+func (unit *ConsolidationUnit) OpenedBy() WorkFactSource {
+	return unit.openedBy
 }
 
 // Members 给出当前直接成员（稳定排序的副本）。
@@ -177,10 +200,13 @@ func (unit *ConsolidationUnit) RemoveMember(member HandlingUnitID) error {
 
 // Seal 封装：冻结当时成员快照并记封签。空单元封不了——没有成员的封装冻结不出任何
 // 关系；已封装再封必须先开封。
+//
+// 封装时刻取自 source 自带的业务时间，不再由调用方另给一个 at：两处时间并存时，快照会
+// 记下与来源事实不一致的那一个，而现场只报了一个时间。
 func (unit *ConsolidationUnit) Seal(
 	seal SealReference,
 	basis WorkBasisReference,
-	at time.Time,
+	source WorkFactSource,
 ) error {
 	if unit.phase == unitClosed {
 		return ErrUnitClosed
@@ -188,14 +214,18 @@ func (unit *ConsolidationUnit) Seal(
 	if unit.phase == unitSealed {
 		return ErrUnitSealed
 	}
-	if !seal.valid() || !basis.valid() || at.IsZero() || len(unit.members) == 0 {
+	if !source.valid() {
+		return ErrInvalidWorkFactSource
+	}
+	if !seal.valid() || !basis.valid() || len(unit.members) == 0 {
 		return ErrInvalidConsolidation
 	}
 	unit.snapshots = append(unit.snapshots, SealedSnapshot{
 		members:  unit.Members(),
 		seal:     seal,
 		basis:    basis,
-		sealedAt: at.UTC(),
+		source:   source,
+		sealedAt: source.OccurredAt(),
 	})
 	unit.phase = unitSealed
 	return nil
