@@ -1,7 +1,7 @@
 # 10 `面单继续尝试决定`登记册未建，读面那一格派生自空历史
 
 Category: enhancement
-Status: in-progress——MCP-1 认领
+Status: in-progress——MCP-1；**领域层已落**（`7c79b3d`，十条用例），端口／持久化／读面派生三层未做，接手点见文末「进度」
 Blocked by: 无
 
 ## 缺口
@@ -73,3 +73,28 @@ Blocked by: 无
 **可复用的既有值类型**：`RequesterReference`、`DeciderReference`（两者分立的理由 CONTEXT 已写死：
 「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」）。授权依据快照沿本仓惯例按用途
 另立类型，不与 `AmendmentAuthoritySnapshot` 共用。
+
+## 进度：领域层已落，余三层
+
+2026-09-02 MCP-1。**已落**（`7c79b3d`）：`domain/continued_attempt.go` 与
+`domain/continued_attempt_register.go`，十条用例。要点都在那两个文件的注释里，此处只记接手点。
+
+- `ContinuedAttemptRegister` 按（租户 + 包裹）成册，决定追加不可覆盖；`Judge(currentFinalPresent)`
+  现算判断、不存列；`HasAnyDecision()` 承载「没有人作过决定」那一句；`RehydrateContinuedAttemptRegister`
+  已备（重建时终局一律按不在场传入，理由见其注释）。
+
+**余下三层，按此顺序做：**
+
+1. **端口**：`ports` 加登记册仓储（`FindByParcel`／`Insert`／`Save`，写入代数照
+   `LabelTransactionInsertOutcome`／`SaveOutcome` 那一对分立），以及读面取数口。
+2. **持久化**：**本层要新迁移**（`parcel_shipment/0011`），与票 `09` 不同——那一票落的是聚合内的
+   小值走既有快照，这一册是**另一个聚合**（键为租户+包裹），没有现成的行可挂。行模型可照
+   `0010`：键 + `revision` + `snapshot jsonb`。迁移用目录级 `go:embed`，**不必碰
+   `migrations/migrations.go`**（已核，`all:parcel_shipment` 是整目录嵌入），因此并行会话那条
+   「共享接线文件占号」不适用于本票。真库必须实跑。
+3. **读面派生**：把 `adapters/postgres/label_transaction_views.go` 的 `deriveContinuedAttemptOpen`
+   换成真输入。**注意它今天恒答开放且注释写明「不是默认值」**——换真之后那句注释要一并改，
+   否则它会从一句诚实的说明变成旧话。同时按上文红线，读面要另外交代决定历史在不在。
+
+**一处接手时要当心的**：读面那一格还需要「当前有效终局在不在」。终局属本上下文（`ParcelFinalOutcome`）
+但不在本册，也不在面单交易快照里——读面怎么拿到它是这一层第一个要答的问题，别顺手在本册里存一份。
