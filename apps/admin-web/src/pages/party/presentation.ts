@@ -1,6 +1,6 @@
 // 参与方与商业目录查阅词表。kind 取值与传输层封闭集同词;中文取 CONTEXT 原词。
 
-import type { CommercialPolicyKind } from './api';
+import type { CommercialPolicyKind, CommercialRegistrationKind } from './api';
 
 export const serviceFormLabels: Record<string, string> = {
   NETWORK_SERVICE: '网络服务产品',
@@ -113,6 +113,9 @@ export const problemCodeNotes: Record<string, string> = {
     '请求构造不出查询(kind 缺席或不在封闭集),重发同样的内容不会改变结果。',
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
+  // 只可能来自登记写面：服务端交回了一个没有名字的答案，那是实现坏了，不是一种新的
+  // 业务结果。续办与 NO_ANSWER_FORMED 同为去查服务端记录，但成因不同，因此不合并。
+  UNNAMED_OUTCOME: '服务端交回了没有名字的答案。这是服务端实现缺陷,不是业务结果,请报障。',
 };
 
 export function problemNote(code: string): string {
@@ -122,3 +125,107 @@ export function problemNote(code: string): string {
 export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }
+
+// ——以下为登记签的页面口径（ADR-0085，票 admin-write-faces/02 商业片）。
+
+/**
+ * 八类登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名。
+ *
+ * 发布那一格说「发布」不说「登记」：UC-PC-001 的动词就是发布，答案代数也是发布的
+ * （已生效/已计划生效/未决），改叫登记会让操作者拿它与身份、映射两族的登记答案对齐。
+ */
+export const registrationTitles: Record<CommercialRegistrationKind, string> = {
+  publication: '发布商业权威依据版本',
+  'business-party': '登记业务参与方身份修订',
+  'legal-entity': '登记责任法人身份修订',
+  'customer-account': '登记货主客户账户修订',
+  'party-relationship': '登记参与方关系修订',
+  'identity-deactivation': '停用身份（形成新修订）',
+  'service-product-form': '登记服务产品版本的服务形态',
+  'product-channel-mapping': '登记产品—渠道映射修订',
+};
+
+// 登记快照形状的提示句。八类共用的前半由一处拼出：抄八遍会让「不逐字段建表单」这条
+// 理由在其中一遍被改动时悄悄分叉。
+//
+// `subcommand` 是受控 CLI 的子命令名，与端点路径的种类词不逐字相同（CLI 一个子命令收
+// 一整批四类，在线口一类一个端点）——所以提示句里同时说清「本签收一项，不是 CLI 那份
+// 整批」。这不是措辞讲究：把整批粘进来会被译装拒绝，而拒绝理由说的是形状不对，操作者
+// 看不出自己错在多包了一层。
+function snapshotHint(subcommand: string, fields: string): string {
+  return (
+    `登记快照 JSON 的键与受控登记口 parcel-commercial ${subcommand} -input 吃的同一份;` +
+    '在线口收的是其中**一项**,不是整批——批不是聚合,逐项各起事务,在线口把一项作为一次请求。' +
+    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
+    fields
+  );
+}
+
+/**
+ * 各类登记快照的形状提示。逐类把键名与封闭集词列出来：未知键一律被译装拒绝（打错的键
+ * 静默丢弃会让操作员以为登进去的比实际多），而封闭集里的词打错在类名上看不出来。
+ *
+ * 身份三册与关系册都不收「改内容」：更正占下一个修订号翻旧插新，停用走 identity-
+ * deactivation 那一签形成新修订。这句写进提示，是因为读面上「最新登记修订」那一格最
+ * 容易被读成「改这一行」。
+ */
+export const registrationSnapshotHints: Record<CommercialRegistrationKind, string> = {
+  publication: snapshotHint(
+    'publish',
+    '一项的键为 tenantId / kind / objectId / version / scope / contentDigest / ' +
+      'effectiveStartsAt / approval{reference,source,approvedAt} / approvalRoleStanding,' +
+      '可选 effectiveEndsAt / references / declarations。对象类别取封闭九词 SERVICE_PRODUCT / ' +
+      'CUSTOMER_CONTRACT / SUPPLIER_AGREEMENT / ACCEPTANCE_RULE_PACKAGE / ' +
+      'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY / PRICE_RULE / SETTLEMENT_POLICY / ' +
+      'CREDIT_POLICY / AUTHORIZATION_RULE——**它决定这一版落进哪本册,本页不代填也不校验**,' +
+      '贴错类别会发布成功但结果显示在那一类自己的页上。声明只能随发布登记:正文随发布固定,' +
+      '事后补声明等于改一份已固定的正文,那要发新版本。',
+  ),
+  'business-party': snapshotHint(
+    'register-parties',
+    'businessParties 数组里一项的键为 partyId / name / revision / basis / effectiveFrom,' +
+      '外加整批的 tenantId。首笔修订必须是 1,此后必须连续——跳号说明你看到的册面已陈旧,' +
+      '会被受理门拒绝而不是替你猜。',
+  ),
+  'legal-entity': snapshotHint(
+    'register-parties',
+    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom,' +
+      '外加整批的 tenantId。参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
+  ),
+  'customer-account': snapshotHint(
+    'register-parties',
+    'customerAccounts 数组里一项的键为 accountId / customerPartyId / revision / basis / ' +
+      'effectiveFrom,外加整批的 tenantId。引用判据同法人登记;跨租户绑定由领域构造门拒绝。' +
+      '**本册今天没有读面**:登进去的结果在管理台上看不到,要核对请走受控 CLI 或直连登记册。',
+  ),
+  'party-relationship': snapshotHint(
+    'register-parties',
+    'relationships 数组里一项的键为 relationshipId / revision / holder / counterparty / role / ' +
+      'scope / basis / effectiveStartsAt,可选 effectiveEndsAt 与 approval{reference,approvedAt};' +
+      '外加整批的 tenantId。角色取封闭五词 CUSTOMER / SUPPLIER / CARRIER_AGENT / RESELLER / ' +
+      'ACCOUNT_HOLDER。缺 approval 即登记为候选关系,批准另行形成新修订。',
+  ),
+  'identity-deactivation': snapshotHint(
+    'deactivate-party-identity',
+    'deactivations 数组里一项的键为 kind / id / revision / basis / at,外加整批的 tenantId。' +
+      '身份种类取封闭三词 BUSINESS_PARTY / LEGAL_ENTITY / CUSTOMER_ACCOUNT——关系不在内,' +
+      '关系的终止走撤销/到期/替代,不叫停用。revision 是停用落点的修订号(册上最新 + 1):' +
+      '你声明自己看到的册面,错位说明册面已被并发推进或意图已陈旧。' +
+      '**法人与客户账户的停用也走本签**(一个命令带种类),结果分别显示在集团与法人页、以及' +
+      '今天还没有的客户账户页上。',
+  ),
+  'service-product-form': snapshotHint(
+    'register-products',
+    'forms 数组里一项的键为 productId / version / form,外加整批的 tenantId 与 scope。' +
+      '服务形态今天只有一格 NETWORK_SERVICE(独立面单渠道形态对首发不适用,PAR-COM-12)。' +
+      '版本必须已在册且已生效——形态是解析采用的内容,挂在未生效或已收尾的版本上永远选不中。',
+  ),
+  'product-channel-mapping': snapshotHint(
+    'register-products',
+    'mappings 数组里一项的键为 mappingId / revision / productId / productVersion / channels / ' +
+      'basis / effectiveStartsAt,可选 effectiveEndsAt;外加整批的 tenantId 与 scope。' +
+      'channels 缺席是输入缺件,写 [] 才是登记者说出的“未配置”声明(该产品尚无可用渠道候选)——' +
+      '两者不可分辨会让一句商业声明冒充一次漏填。映射标识钉着它的产品版本:改指产品是另一笔' +
+      '映射,登记新映射标识,不是本映射的新修订。',
+  ),
+};

@@ -2,7 +2,8 @@
 // master-data-wiring/05 与 admin-web-page-wiring-frontier/01)。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
-import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -330,3 +331,107 @@ export function listProductChannelMappings(): Promise<
     '/commercial-product-channel-mappings',
   );
 }
+
+// ——以下为在线登记口（ADR-0085，票 admin-write-faces/02 商业片）。
+//
+// **今天这些请求必然答 403 ACCESS_CHANNEL_NOT_CONFIGURED**，那是诚实答案不是接线缺陷：
+// 写准入不另立形（决定一），登记端点挂的是字面量 UnconfiguredIntake{}，与其余命令面同等
+// `PAR-INT-01` 证据；墙降当天由装配点换真 Intake 即点亮，本文件一行不用改。
+//
+// **请求体形状此刻没有契约。** 决定三把「渠道原始载荷 → 登记快照」的翻译划给渠道接入
+// 契约、随 `PAR-INT-01` 提供，所以这里不发明字段：页面收的是登记快照 JSON 本体，与受控
+// 登记口 `parcel-commercial <子命令> -input` 吃的同一份形状，原样作请求体送出。真渠道
+// 接线时以渠道契约为准重谈，不得反过来把这里当成已发布的 Schema。
+//
+// 与网络那一族还差一格：网络的在线口与 CLI 共用 registrationjson 那份译装，形状被编译期
+// 钉住；商业的译装在 cmd/parcel-commercial 的 package main 里，两口只锁得到同一个登记
+// 用例。快照形状对不对，今天只有 CLI 文档与人工核对在守（缺口记在票 02 的商业片
+// Comment）。
+
+/**
+ * 登记种类封闭集。取值与传输层的八个端点构造函数一一对应；`publication` 之外的种类词
+ * 与受控 CLI 的子命令同源。
+ */
+export type CommercialRegistrationKind =
+  | 'publication'
+  | 'business-party'
+  | 'legal-entity'
+  | 'customer-account'
+  | 'party-relationship'
+  | 'identity-deactivation'
+  | 'service-product-form'
+  | 'product-channel-mapping';
+
+/**
+ * 逐类登记端点。路径取「读口册名 + 该类种类词 + -registrations」，与网络、关务、VE
+ * 三族同一条命名约定。
+ *
+ * 发布那一个是例外，取 `/commercial-publications` 不带 `-registrations`：本上下文的动词
+ * 是发布，答案代数说的也是发布（`已发布已生效`/`已计划生效`），叫成登记会让它与身份、
+ * 映射两族的登记答案混为一谈。它也只有一个端点而不是按对象类别铺一排——服务产品、
+ * 规则包、合同、协议与各类策略是同一个发布用例的输入，类别在快照的版本规格里。
+ */
+export const commercialRegistrationEndpoints: Record<CommercialRegistrationKind, string> = {
+  publication: '/commercial-publications',
+  'business-party': '/commercial-business-party-registrations',
+  'legal-entity': '/commercial-legal-entity-registrations',
+  'customer-account': '/commercial-customer-account-registrations',
+  'party-relationship': '/commercial-party-relationship-registrations',
+  'identity-deactivation': '/commercial-party-identity-deactivations',
+  'service-product-form': '/commercial-service-product-form-registrations',
+  'product-channel-mapping': '/commercial-product-channel-mapping-registrations',
+};
+
+/**
+ * 一类一个端点，本函数按种类取路径而不是裂成八个同形包装。
+ *
+ * 传输层那边逐类各立一个端点构造函数与一个 Intake 接口，为的是让「把一类的译装接到另一
+ * 类的端点上」在编译期就红；那条保护在这里没有落点——快照本体在前端是未翻译的 JSON，
+ * 分不分函数都一样送得出去。判据与网络页的 registerNetworkCatalogVersion 同一条。
+ */
+export function registerCommercial(
+  kind: CommercialRegistrationKind,
+  snapshot: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(commercialRegistrationEndpoints[kind], snapshot);
+}
+
+/**
+ * 发布答案代数（`application.PublishCommercialAuthorityOutcome` 原名），逐格中文。
+ *
+ * `已计划生效`单列而不并进`已发布已生效`：它入了册，但生效边界未开，**不得用于生产
+ * 解析**——两格折成一句「已发布」，操作者会以为这一版此刻就在算数。
+ *
+ * `发布未决`是答案不是失败：草稿与来源原样保留、一个字节没写，续办是去确认批准角色或
+ * 先发布被引对象；折成「提交失败」会让人以为重试有用。
+ */
+export const publicationOutcomeLabels: Record<string, string> = {
+  PUBLISHED_EFFECTIVE: '已发布并已生效（生效边界已开，本版此刻算数）',
+  PLANNED_EFFECTIVE: '已发布、已计划生效（边界未开，此刻还不参与生产解析）',
+  REPLAYED: '同一份重放（原版本不被顶替，本次没有造第二个版本）',
+  CONTENT_CONFLICT: '内容冲突（同键异内容，原版本不被顶替；改内容要发新版本号）',
+  PENDING: '发布未决（批准角色未确认，或正文指名的对象尚未发布；一个字节没写）',
+};
+
+/**
+ * 参与方身份与关系的登记答案代数（`application.PartyRegistryOutcome` 原名）。
+ *
+ * `未找到`只出现在停用：要停用的身份从未登记。它不是「路由不存在」——能力在、册也在，
+ * 登记方要去查的是册面。
+ */
+export const partyIdentityOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记（本次落库）',
+  DEACTIVATED: '已停用（停用是修订链上新的一笔，原修订不被改写）',
+  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
+  CONTENT_CONFLICT: '内容冲突（同修订号异内容；更正要占下一个修订号，不覆盖）',
+  NOT_ACCEPTED: '受理门拒绝（修订错位或引用悬空，一个字节没写；原因随答复交回）',
+  NOT_FOUND: '册上没有这一个身份（停用的对象从未登记）',
+};
+
+/** 服务形态与产品—渠道映射的登记答案代数（`application.ProductChannelOutcome` 原名）。 */
+export const productChannelOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记（本次落库）',
+  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
+  CONTENT_CONFLICT: '内容冲突（同修订号异内容；更正要占下一个修订号，不覆盖）',
+  NOT_ACCEPTED: '受理门拒绝（产品版本悬空、已收尾或修订错位，一个字节没写；原因随答复交回）',
+};
