@@ -86,18 +86,22 @@ export function problemNote(code: string): string {
 // ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02b)。
 
 /**
- * 四类登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
+ * 五类登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
  * 门禁目录登的是目录本身而不是目录里的条件项,标题因此说「目录」不说「条件」。
+ *
+ * 只有建案要求规则的标题不带「版本」二字:它没有版本维,是键上的当前判断(换判断走同键
+ * 重登,由登记册答冲突)。标题跟着册的形状走,不为整齐划一而给它一个不存在的版本维。
  */
 export const registrationTitles: Record<CustomsRegistrationKind, string> = {
   'interpretation-rule': '登记解释规则版本',
+  'case-requirement': '登记建案要求规则',
   'gate-catalog': '登记门禁前置条件目录',
   'candidate-port': '登记合规候选口岸版本',
   'declaration-path': '登记申报路径版本',
 };
 
-// 登记快照形状的提示句。四类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
-// 拼出:抄四遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+// 登记快照形状的提示句。五类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
+// 拼出:抄五遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
 function snapshotHint(kind: CustomsRegistrationKind, fields: string): string {
   return (
     `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份;` +
@@ -112,7 +116,8 @@ function snapshotHint(kind: CustomsRegistrationKind, fields: string): string {
  *
  * 三本版本册都不收终点:换版是登记一个更晚生效起点的新版,前版终点随之落定,历史区间
  * 不接受追改(ADR-0070)。这句写进提示是因为读面上「持续有效」那一格最容易被读成「可以
- * 回头补个终点」。
+ * 回头补个终点」。**建案要求规则不在这三本之列**,它连生效起点都没有,提示句因此不许
+ * 照抄那半句——照抄会让登记方去找一个本册没有的字段。
  */
 export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> = {
   'interpretation-rule': snapshotHint(
@@ -120,6 +125,15 @@ export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> 
     '键为 tenantId / resultLayer / jurisdictionRef / ruleRef / appliesFrom;' +
       '外部结果层取封闭六词 REGULATORY_RECEIPT / BUSINESS_ACCEPTANCE / PROCESS_DECISION / ' +
       'ASSESSED_DUTY / RELEASE_RESULT / DISPOSITION_DECISION。终点不是输入——换版登新起点。',
+  ),
+  'case-requirement': snapshotHint(
+    'case-requirement',
+    '键为 tenantId / jurisdictionRef / direction / procedureRef / required / basis;' +
+      '申报方向取封闭两词 IMPORT / EXPORT。' +
+      'required 必须显式给出:它是布尔而非可省字段,缺席不会被当成「不要求」而是直接被拒——' +
+      '「不要求建案」与「规则没登记」在库上分不开,而两者续办动作相反(前者照常推进,后者等实例参数)。' +
+      'basis 对「要求」与「不要求」同样必填,理由同上。' +
+      '本册没有版本维,不收生效起点:换判断是同键重登,登记册会答内容冲突而不是接受覆盖。',
   ),
   'gate-catalog': snapshotHint(
     'gate-catalog',

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import { RegistrationPanel } from '../../components/registration';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
@@ -172,20 +172,43 @@ function ComplianceRulesTable() {
   );
 }
 
+// —— 登记签(ADR-0085,票 admin-write-faces/02 切片 02b)——
+//
+// 两册的顺序与上面读签的 `registries` 一致,让同一本册在读签与写签里排在同一位。
+//
+// 选册按钮取读面已有的 `registryLabels`,不为写签另造说法;但键要转一道——读口的册词是
+// `interpretation`,写口与 CLI 的册词是 `interpretation-rule`,两处各随自己的端点,谁也
+// 不迁就谁。这一行转换就是那道差异的全部落点,写在这里而不是在词表里改名。
+const registrationTargets: RegistrationTarget[] = (
+  [
+    ['case-requirement', 'case-requirement'],
+    ['interpretation-rule', 'interpretation'],
+  ] as const
+).map(([kind, readRegistry]) => ({
+  id: kind,
+  label: registryLabels[readRegistry],
+  title: registrationTitles[kind],
+  endpoint: `POST ${customsRegistrationEndpoints[kind]}`,
+  snapshotHint: registrationSnapshotHints[kind],
+  submit: (snapshot: unknown) => registerCustomsConfiguration(kind, snapshot),
+  outcomeLabels: registrationOutcomeLabels,
+}));
+
 /**
- * 合规规则库(customs-compliance):两本册子查阅一签,解释规则登记一签(ADR-0085,
+ * 合规规则库(customs-compliance):两本册子查阅一签,两本册子登记一签(ADR-0085,
  * 票 admin-write-faces/02 切片 02b)。
  *
- * **登记签只装解释规则,不装案件要求规则。** 两本册在读签上并列,写签却只有一本,不是
- * 漏了一半:案件要求规则按票 02 的判据同属租户配置、受控 CLI 里也有 case-requirement
- * 一命令,但服务端至今没有它的在线登记端点(端点表里关务只有解释规则、门禁目录、候选
- * 口岸、申报路径四个登记口)。页面不为一个不存在的端点造入口——造了就会答 404,而 404
- * 与本签今天必然的 403「接入渠道未配置」长得像却是两件事:后者是诚实答案,前者是页面
- * 自己编出来的路。签名写死「登记解释规则」而不是「登记合规规则」,为的就是让这一半的
- * 缺席在签上看得见。
+ * **建案要求规则的登记口比另一本晚一步到。** 票 02 的关务片把十二个用例分成「配置四类」
+ * 与「案件事实七类」,四加七只有十一个,漏掉的第十二个正是它;它按判据明明白白是配置——
+ * 登的是「某辖区+方向+程序要不要建案」加依据,答案代数与另四类同为 `CaseConfigurationOutcome`,
+ * 受控 CLI 里也有 `case-requirement` 一命令。端点补建后本签随之从一册变两册,签名也从
+ * 「登记解释规则」改回「登记合规规则」——**在它到位之前签名是写死单册的**,为的是不让
+ * 一个不存在的端点在页面上长出入口(那会答 404,而 404 与今天必然的 403「接入渠道未配置」
+ * 长得像却是两件事:后者是诚实答案,前者是页面自己编出来的路)。
  *
- * 登记签只有登记一个动作:解释规则不可覆盖,更正是登一个更晚法定起点的新版、开放前版
- * 终点随之落定(ADR-0070),历史区间不接受追改,所以没有行级编辑或删除面。
+ * 登记签只有登记一个动作,两册的理由却不同形:解释规则不可覆盖,更正是登一个更晚法定
+ * 起点的新版、开放前版终点随之落定(ADR-0070);建案要求规则没有版本维,是键上的当前
+ * 判断,同键重登异内容由登记册答冲突。两者都没有行级编辑或删除面。
  */
 export function ComplianceRulesPage() {
   return (
@@ -193,7 +216,7 @@ export function ComplianceRulesPage() {
       <Tabs defaultValue="rules" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="rules">合规规则库</TabsTrigger>
-          <TabsTrigger value="register">登记解释规则</TabsTrigger>
+          <TabsTrigger value="register">登记合规规则</TabsTrigger>
         </TabsList>
         <TabsContent
           value="rules"
@@ -205,13 +228,9 @@ export function ComplianceRulesPage() {
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <RegistrationPanel
+          <MultiRegistrationPanel
             moduleId="compliance-rules"
-            title={registrationTitles['interpretation-rule']}
-            endpoint={`POST ${customsRegistrationEndpoints['interpretation-rule']}`}
-            snapshotHint={registrationSnapshotHints['interpretation-rule']}
-            submit={(snapshot) => registerCustomsConfiguration('interpretation-rule', snapshot)}
-            outcomeLabels={registrationOutcomeLabels}
+            targets={registrationTargets}
             problemNote={problemNote}
           />
         </TabsContent>

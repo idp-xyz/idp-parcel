@@ -247,7 +247,7 @@ export function listPortsPaths<Registry extends PortsPathsRegistry>(
   );
 }
 
-// —— 四类配置登记的在线登记口(ADR-0085,票 admin-write-faces/02 切片 02b) ——
+// —— 五类配置登记的在线登记口(ADR-0085,票 admin-write-faces/02 切片 02b) ——
 // 形状以 internal/customscompliance/adapters/http/register_configuration.go 为准。
 //
 // 登记端点与其余命令面同挂字面量 UnconfiguredIntake{}:写准入不另立形,隔离读准入
@@ -261,30 +261,33 @@ export function listPortsPaths<Registry extends PortsPathsRegistry>(
 // 真渠道接线时以渠道契约为准重谈,不得反过来把这里当成已发布的 Schema。
 
 /**
- * 可在线登记的关务配置册封闭四格。词与端点路径、受控 CLI 的子命令逐字同一个——同一本
+ * 可在线登记的关务配置册封闭五格。词与端点路径、受控 CLI 的子命令逐字同一个——同一本
  * 册在写口与 CLI 不换词。解释规则的读口参数是 interpretation 而写口词是
  * interpretation-rule,两处不同源自各自端点,本类型跟写口,不改读口那半。
  *
- * 建案要求规则(CLI 的 case-requirement)不在本集:按票 02 的判据它同属租户配置、也有
- * CLI 先例,但服务端尚无在线登记端点,前端不为一个不存在的端点造入口。案件事实那七个
- * 命令(就绪、提交授权及其撤销、关闭义务目录与明细、门禁发现)按票 02 的范围裁定本就
- * 不进写面——它们改的是案上此刻的事实,不是这个租户怎么配置。
+ * 建案要求规则是第五格,比另四格晚一步进来:票 02 的关务片把十二个用例分成「配置四类」
+ * 与「案件事实七类」,四加七只有十一个,漏掉的第十二个正是它,端点随之补建。
+ *
+ * 案件事实那七个命令(就绪、提交授权及其撤销、关闭义务目录与明细、门禁发现)按票 02 的
+ * 范围裁定本就不进写面——它们改的是案上此刻的事实,不是这个租户怎么配置。
  */
 export type CustomsRegistrationKind =
   | 'interpretation-rule'
+  | 'case-requirement'
   | 'gate-catalog'
   | 'candidate-port'
   | 'declaration-path';
 
 export const customsRegistrationEndpoints: Record<CustomsRegistrationKind, string> = {
   'interpretation-rule': '/customs-interpretation-rule-registrations',
+  'case-requirement': '/customs-case-requirement-registrations',
   'gate-catalog': '/customs-gate-catalog-registrations',
   'candidate-port': '/customs-candidate-port-registrations',
   'declaration-path': '/customs-declaration-path-registrations',
 };
 
 /**
- * 一类一个端点,本函数按类取路径而不是裂成四个同形包装。传输层那边逐类各立一个端点
+ * 一类一个端点,本函数按类取路径而不是裂成五个同形包装。传输层那边逐类各立一个端点
  * 构造函数,为的是让「把一类的译装接到另一类的端点上」在编译期就红;那条保护在这里
  * 没有落点——快照本体在前端是未翻译的 JSON,分不分函数都一样送得出去。
  */
@@ -296,8 +299,8 @@ export function registerCustomsConfiguration(
 }
 
 /**
- * 登记答案代数(application.CaseConfigurationOutcome 原名),逐格中文。四类共用一份——
- * 服务端四个端点交回的就是同一个枚举。
+ * 登记答案代数(application.CaseConfigurationOutcome 原名),逐格中文。五类共用一份——
+ * 服务端五个端点交回的就是同一个枚举。
  *
  * 没有 UNDECIDED 一格。用例把依赖故障折成那个枚举值,而传输层按 ADR-0022 把它写成
  * 「没形成答案」的 5xx,它到不了这张表;真落进来会被 RegistrationPanel 当成登记册的治理
@@ -309,7 +312,10 @@ export function registerCustomsConfiguration(
 export const registrationOutcomeLabels: Record<string, string> = {
   REGISTERED: '已登记',
   EXISTING: '已在册——同键同内容的重放,原行不动',
+  // 改法随各册而异,所以这一格只说不变式加「去核对」,不给一个只对一半册子成立的处方:
+  // 三本版本册可以换一个更晚的生效起点登新版,建案要求规则没有版本维,同键异内容一律
+  // 落在本格。写死「换生效起点」会让登记方在后者上试一个根本不存在的动作。
   CONTENT_CONFLICT:
-    '内容冲突——同键异内容绝不顶替;核对既有登记后改内容,或换一个生效起点登新版',
+    '内容冲突——同键异内容绝不顶替,原行原样留着;续办先核对既有登记,改法随该册有无版本维而异',
   NOT_ACCEPTED: '受理门拒绝——缺件或形状不合,补齐后重登;原行不被顶替',
 };
