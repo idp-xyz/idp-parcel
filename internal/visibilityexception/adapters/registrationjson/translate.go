@@ -1,4 +1,14 @@
-package main
+// Package registrationjson 把 VE 各登记种类的登记快照 JSON 折成应用命令。
+//
+// 它从 parcel-ve-register 的 package main 下沉到上下文的适配器层，是因为登记快照的
+// 形状不再只属受控 CLI：配置登记的在线登记口（ADR-0085）收的是同一份快照本体，与
+// CLI 的 -input 同源。翻译只此一份——两口各写一份解析，同一个字段名会在两处各自演化，
+// 而登记方看到的「形状」从此取决于他走哪个口。
+//
+// 它不是接入渠道 Intake，也顶替不了：Intake 还要认操作者、定租户，那两件属渠道接入
+// 契约（`PAR-INT-01` 待提供）。本包只认字节到命令这一段，不读任何身份，因此拿它拼不出
+// 一个采信自报租户的实现。
+package registrationjson
 
 import (
 	"bytes"
@@ -12,14 +22,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件把各登记种类的输入 JSON 折成应用命令（六类目录册加材料归集两命令）。翻译
-// 严格且零默认：未知字段拒收（打错字段名不得静默变成「没给」）、有构造门的标识在
+// 翻译严格且零默认：未知字段拒收（打错字段名不得静默变成「没给」）、有构造门的标识在
 // 这里就拒、其余内容原样递给用例门——缺版本号、缺发布批准责任、条目撞键、缺收讫
 // 时刻那类判据在用例，这里绝不代填。
 //
-// 输入里没有任何通道技术身份字段：那是身份双轨的第①轨，由入口自取（见 main.go 的
-// currentChannelIdentity），不可由参数传入或覆盖；这里翻译的 approvedBy 是第②轨
-// ——登记内容，册面语义是「登记者声明了谁批准」。
+// 输入里没有任何通道技术身份字段：那是身份双轨的第①轨，由入口自取（见
+// parcel-ve-register 的 currentChannelIdentity），不可由参数传入或覆盖；这里翻译的
+// approvedBy 是第②轨——登记内容，册面语义是「登记者声明了谁批准」。
 
 func decodeStrict(raw []byte, document any, what string) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -97,7 +106,7 @@ type milestoneMappingDocument struct {
 	Entries []milestoneEntryDocument `json:"entries"`
 }
 
-func milestoneMappingFromJSON(raw []byte) (application.RegisterMilestoneMappingCommand, error) {
+func MilestoneMappingFromJSON(raw []byte) (application.RegisterMilestoneMappingCommand, error) {
 	none := application.RegisterMilestoneMappingCommand{}
 	var document milestoneMappingDocument
 	if err := decodeStrict(raw, &document, "里程碑映射"); err != nil {
@@ -145,7 +154,7 @@ type triageRulesDocument struct {
 	Entries []triageEntryDocument `json:"entries"`
 }
 
-func triageRulesFromJSON(raw []byte) (application.RegisterTriageRulesCommand, error) {
+func TriageRulesFromJSON(raw []byte) (application.RegisterTriageRulesCommand, error) {
 	none := application.RegisterTriageRulesCommand{}
 	var document triageRulesDocument
 	if err := decodeStrict(raw, &document, "分诊规则"); err != nil {
@@ -195,7 +204,7 @@ type notificationPolicyDocument struct {
 	ApprovedBy    string `json:"approvedBy"`
 }
 
-func notificationPolicyFromJSON(raw []byte) (application.RegisterNotificationPolicyCommand, error) {
+func NotificationPolicyFromJSON(raw []byte) (application.RegisterNotificationPolicyCommand, error) {
 	none := application.RegisterNotificationPolicyCommand{}
 	var document notificationPolicyDocument
 	if err := decodeStrict(raw, &document, "通知策略"); err != nil {
@@ -240,7 +249,7 @@ type claimEligibilityDocument struct {
 	CoveredKinds []string `json:"coveredKinds"`
 }
 
-func claimEligibilityFromJSON(raw []byte) (application.RegisterClaimEligibilityCommand, error) {
+func ClaimEligibilityFromJSON(raw []byte) (application.RegisterClaimEligibilityCommand, error) {
 	none := application.RegisterClaimEligibilityCommand{}
 	var document claimEligibilityDocument
 	if err := decodeStrict(raw, &document, "索赔资格声明"); err != nil {
@@ -285,7 +294,7 @@ type claimAuthorizationDocument struct {
 	Applicants *[]string `json:"applicants"`
 }
 
-func claimAuthorizationFromJSON(raw []byte) (application.RegisterClaimAuthorizationCommand, error) {
+func ClaimAuthorizationFromJSON(raw []byte) (application.RegisterClaimAuthorizationCommand, error) {
 	none := application.RegisterClaimAuthorizationCommand{}
 	var document claimAuthorizationDocument
 	if err := decodeStrict(raw, &document, "申请人授权名单"); err != nil {
@@ -409,7 +418,7 @@ func receiptIdentityFromDocument(
 	return tenant, batch, item, material, nil
 }
 
-func materialReceiptFromJSON(raw []byte) (application.RegisterMaterialReceiptCommand, error) {
+func MaterialReceiptFromJSON(raw []byte) (application.RegisterMaterialReceiptCommand, error) {
 	none := application.RegisterMaterialReceiptCommand{}
 	var document materialReceiptDocument
 	if err := decodeStrict(raw, &document, "材料收讫"); err != nil {
@@ -441,7 +450,7 @@ type materialReceiptRevocationDocument struct {
 	RevokedAt  time.Time `json:"revokedAt"`
 }
 
-func materialReceiptRevocationFromJSON(raw []byte) (application.RevokeMaterialReceiptCommand, error) {
+func MaterialReceiptRevocationFromJSON(raw []byte) (application.RevokeMaterialReceiptCommand, error) {
 	none := application.RevokeMaterialReceiptCommand{}
 	var document materialReceiptRevocationDocument
 	if err := decodeStrict(raw, &document, "材料收讫撤销"); err != nil {
@@ -463,7 +472,7 @@ func materialReceiptRevocationFromJSON(raw []byte) (application.RevokeMaterialRe
 	}, nil
 }
 
-func disclosurePolicyFromJSON(raw []byte) (application.RegisterDisclosurePolicyCommand, error) {
+func DisclosurePolicyFromJSON(raw []byte) (application.RegisterDisclosurePolicyCommand, error) {
 	none := application.RegisterDisclosurePolicyCommand{}
 	var document disclosurePolicyDocument
 	if err := decodeStrict(raw, &document, "披露策略"); err != nil {

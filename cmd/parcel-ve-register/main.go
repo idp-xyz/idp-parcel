@@ -51,6 +51,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	vepg "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
@@ -261,7 +262,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 	none := registration{}
 	switch command {
 	case commandMilestoneMapping:
-		cmd, err := milestoneMappingFromJSON(raw)
+		cmd, err := registrationjson.MilestoneMappingFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -272,7 +273,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			},
 		}, nil
 	case commandTriageRules:
-		cmd, err := triageRulesFromJSON(raw)
+		cmd, err := registrationjson.TriageRulesFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -283,7 +284,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			},
 		}, nil
 	case commandNotificationPolicy:
-		cmd, err := notificationPolicyFromJSON(raw)
+		cmd, err := registrationjson.NotificationPolicyFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -294,7 +295,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			},
 		}, nil
 	case commandClaimEligibility:
-		cmd, err := claimEligibilityFromJSON(raw)
+		cmd, err := registrationjson.ClaimEligibilityFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -305,7 +306,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			},
 		}, nil
 	case commandClaimAuthorization:
-		cmd, err := claimAuthorizationFromJSON(raw)
+		cmd, err := registrationjson.ClaimAuthorizationFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -316,7 +317,7 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			},
 		}, nil
 	case commandDisclosurePolicy:
-		cmd, err := disclosurePolicyFromJSON(raw)
+		cmd, err := registrationjson.DisclosurePolicyFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -389,7 +390,7 @@ func translateReceiptCommand(command string, raw []byte) (receiptExecution, erro
 	none := receiptExecution{}
 	switch command {
 	case commandMaterialReceipt:
-		cmd, err := materialReceiptFromJSON(raw)
+		cmd, err := registrationjson.MaterialReceiptFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
@@ -400,7 +401,7 @@ func translateReceiptCommand(command string, raw []byte) (receiptExecution, erro
 			},
 		}, nil
 	case commandMaterialReceiptRevocation:
-		cmd, err := materialReceiptRevocationFromJSON(raw)
+		cmd, err := registrationjson.MaterialReceiptRevocationFromJSON(raw)
 		if err != nil {
 			return none, err
 		}
