@@ -476,6 +476,77 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   记，未写成绿。`pnpm install` 仍无人可跑（锁文件 `overrides` 指 WSL 绝对路径而仓内无
   `pnpm-workspace.yaml`，修法要动经用户核准的锁文件，已上报用户未回）——**这条对所有通道有效**。
 
+- 2026-09-02 · MCP-5：**切片 02c 商业前端收口（`c43153f`，未推）。八类里六类有在线入口，
+  两类记缺口不摆。**
+
+  **一、本批两张页，各补一册。** 业务参与方页登记签由两册变三册（补 `identity-deactivation`），
+  服务产品页新加登记签装 `service-product-form` 一册。两个落点都照 MCP-3 的裁定，判据不在此
+  复述——它们写在两页各自的页头与登记面注释里，那是下一个改这两页的人会读到的地方。
+
+  **二、法人页页头那句引错的判据已更正**（随同一笔）。原文写「判据同 VE 三页那条『登记签不比
+  读签多铺一册』」，结论对而判据引错：那条禁的是一册两处能登，本笔是一册一处登、读面分三处。
+  改成真判据（本页身份状态格只显停用时点、没有依据，业务参与方页的身份本体册两件都显）。
+  照原样留着会让下一个人推出「一个口跨多读面 = 哪都不能摆」，与实际裁定相反。
+
+  **三、商业八类落点一览（本片收口态）。**
+
+  | 类 | 落点 | 依据 |
+  |---|---|---|
+  | `business-party` | 业务参与方页 | 读签一一对应 |
+  | `party-relationship` | 业务参与方页 | 读签一一对应 |
+  | `legal-entity` | 集团与法人页 | 读签一一对应 |
+  | `product-channel-mapping` | 渠道产品目录页 | 读签一一对应 |
+  | `identity-deactivation` | 业务参与方页（一处，不按 `kind` 切） | 停用依据只有身份本体册显得出来；切签等于编一条服务端没有的约束 |
+  | `service-product-form` | 服务产品页 | 读面即 `listServiceProducts` 的形态格 |
+  | `publication` | **不摆** | 词表未对齐，见第五节 |
+  | `customer-account` | **不摆** | 全前端无读面，见第五节 |
+
+  **四、顺手撤掉一个服务端产生不出来的词：`serviceFormLabels` 的 `LABEL_CHANNEL_SERVICE`。**
+  取证于 `0d07866`（本笔改动前的 HEAD）：这个字符串全仓只在 `apps/admin-web` 的
+  `presentation.ts` 出现过，Go 侧一处没有。`domain.ServiceProductForm` 的封闭集只有
+  `NetworkServiceForm`，迁移 0008 的 `service_product_form_closed` 是 `form IN ('NETWORK_SERVICE')`，
+  postgres 侧 `serviceProductFormFrom` 读到未知取值是响亮失败，领域里还有一条
+  `TestNoServiceProductCanTakeAnIndependentWaybillChannelForm` 专钉这件事。
+
+  **为什么现在才值得动它**：在本批之前它只是读面上一格没人对得上的死词——服务端交不回这个
+  取值，那一格永远不显示，无人受害。**本批把形态登记签摆到同一页之后它变成活的害处**：签里
+  的提示句写着「服务形态今天只有一格 `NETWORK_SERVICE`」，而同一屏的读面词表列着两格。操作者
+  照读面那个词填进快照，得到的是受理门拒绝，而那个词是页面刚教给他的。判据与 MCP-3 否掉
+  `publication` 摆进商业政策页那条**一字不差**（chip 词与快照 `kind` 词并排而近形不同），
+  只是这一处更直接：同一页、同一个概念、两套词。`labelOf` 对未收录取值原样示出英文原名，
+  所以撤下不会静默丢失；`PAR-COM-12` 解封那天先扩领域封闭集与迁移 CHECK，再补这一格。
+
+  **这一笔不在 MCP-3 派的两页之内，故不静默**：它是本批改动**造成**的同屏矛盾，按本票自己的
+  判据必须一起处置，已在交回时点名报出。
+
+  **五、两类不摆，缺口在此**（形照 MCP-4 记 `case-requirement` 那条：缺席在票面看得见，不在
+  页面上编一条路）。
+
+  **`publication`——词表未对齐，不是 UI 落点问题。** 发布口的对象类别是九词
+  （`SERVICE_PRODUCT` / `CUSTOMER_CONTRACT` / `SUPPLIER_AGREEMENT` / `ACCEPTANCE_RULE_PACKAGE` /
+  `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` / `PRICE_RULE` / `SETTLEMENT_POLICY` / `CREDIT_POLICY` /
+  `AUTHORIZATION_RULE`），商业政策页的册 chip 是六词（`commercialPolicyKinds`），**两套不是子集
+  关系**：精确同词只有三个，`PRICE_POLICY`≠`PRICE_RULE`、`PRE_ACCEPTANCE_CONTROL`≠
+  `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 两对近形不同词，`AS_OF_POLICY` 有册不在发布集里，
+  `CREDIT_POLICY` 在发布集里而哪本册都没有。根因写在 `api.ts` 的 `kindColumns` 头上：**一套命名
+  册子、一套命名对象类别，是两条分类轴**。发布口在管理台上也**没有读面**（`api.ts` 里九类各走
+  自己的 list，没有 `/commercial-publications` 的 GET），专页会是纯写页。**三个领域问未答之前
+  摆哪一页都在教一套对不齐的词表**：九个对象类别与六本政策册是什么关系？`CREDIT_POLICY` 发布
+  之后落在哪？`AS_OF_POLICY` 有册却不可发布，它的版本怎么来？可能要动 CONTEXT 而不只是票。
+  **票由 MCP-3 立。**
+
+  **`customer-account`——退无可退。** 全前端查过：`customerAccountId` 只作外键出现在委托、路由
+  与受理复核几页，没有 `CustomerAccountRecord`，没有任何一页读客户账户册。它与停用的处境不同
+  ——停用还有「读得最全的那本」可退，这一签摆哪都是登进去之后没有任何页面能证实它生效。
+  **客户账户读面页另立票，由 MCP-3 立**；在那之前登记走受控 CLI，`snapshotHint` 里已写明
+  「本册今天没有读面」。
+
+  **六、验证。** 仓内 typescript 5.6.3 跑 `tsc --noEmit` 退 0，`--listFiles` 载入 612 份且四份
+  改动逐一在内——这一步是刻意做的，本票此前记过 `npx tsc` 会落到占位包上退 0 而什么都没编，
+  只看退出码分不出真绿与空配置的假绿。编辑器诊断对改过的四份零条目。Go 侧零改动，未重跑全仓
+  测试。`pnpm build` 照本票已定的措辞如实记「本机跑不了，以 `tsc --noEmit` 代替」，不写成绿；
+  `pnpm install` 未跑（锁文件那条对所有通道有效）；**未 push**。
+
   **四、`publication` 本批不做，成因是两套封闭集对不齐，不是落点难选**（补裁，同日）。
 
   MCP-5 报的是「四张读面页各摆一个发布签会四处登同一册」，提了三条路（另开发布专页 / 摆商业
