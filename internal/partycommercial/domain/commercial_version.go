@@ -108,10 +108,16 @@ const (
 	SettlementPolicyObject
 	CreditPolicyObject
 	AuthorizationRuleObject
+	// CustomerServiceRuleObject 进集的判据是生命周期是不是版本演进，不是它像不像商业对象
+	// （ADR-0093）。它走草稿 → 已发布 → 已生效 → 已到期或已替代，与本集合共同生命周期逐格
+	// 同形，末一格的「已替代」正是版本演进的标志；旧版本留在册上被既有案件、通知与索赔历史
+	// 继续引用（CONTEXT）。与之相对，渠道账号使用授权走建立 → 撤销或自然到期，换了范围是
+	// 另一笔授权而不是第二版，因此**不在**本集合里。
+	CustomerServiceRuleObject
 )
 
 func (kind CommercialObjectKind) valid() bool {
-	return kind >= ServiceProductObject && kind <= AuthorizationRuleObject
+	return kind >= ServiceProductObject && kind <= CustomerServiceRuleObject
 }
 
 func (kind CommercialObjectKind) String() string {
@@ -134,6 +140,8 @@ func (kind CommercialObjectKind) String() string {
 		return "CREDIT_POLICY"
 	case AuthorizationRuleObject:
 		return "AUTHORIZATION_RULE"
+	case CustomerServiceRuleObject:
+		return "CUSTOMER_SERVICE_RULE"
 	default:
 		return ""
 	}

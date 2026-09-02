@@ -144,6 +144,9 @@ func TestTheLastTwoObjectKindsReachTheRegistry(t *testing.T) {
 
 // TestAnObjectKindOutsideTheClosedSetIsRefused 是上一条的另一半：放宽不等于放开。
 // 绕过领域直插一个封闭集之外的类别仍须被库拒——否则上一条的「对齐」会退化成「取消约束」。
+// 下面那个字面量是**当前上界加一**，封闭集每拓宽一次它就要跟着走一格（0004 从 7 到 9、
+// 0019 从 9 到 10 时都动过）。写死一个数是有意的——按符号取会让它跟着领域自动漂，而本条
+// 要证的恰是「库上那道 CHECK 与领域集合对齐」，两边都跟着同一个符号走就证不出对齐了。
 func TestAnObjectKindOutsideTheClosedSetIsRefused(t *testing.T) {
 	_, _, pool := newPublications(t)
 
@@ -152,7 +155,7 @@ func TestAnObjectKindOutsideTheClosedSetIsRefused(t *testing.T) {
 			(tenant_id, object_kind, object_id, version_label, scope_ref,
 			 content_digest, effective_starts_at, effective_ends_at, status,
 			 snapshot, published_at)
-		 VALUES ('tenant-1', 10, 'object-x', 'v1', 'scope-1',
+		 VALUES ('tenant-1', 11, 'object-x', 'v1', 'scope-1',
 		         'digest-x', now(), NULL, 3, '{}', now())`)
 	if err == nil {
 		t.Fatal("封闭集之外的对象类别进了发布登记册")

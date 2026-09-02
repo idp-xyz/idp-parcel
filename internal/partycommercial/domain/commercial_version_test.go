@@ -245,6 +245,7 @@ func TestCommercialObjectKindsStayIndependentAndClosed(t *testing.T) {
 		domain.SettlementPolicyObject,
 		domain.CreditPolicyObject,
 		domain.AuthorizationRuleObject,
+		domain.CustomerServiceRuleObject,
 	}
 
 	seen := make(map[string]struct{}, len(kinds))
