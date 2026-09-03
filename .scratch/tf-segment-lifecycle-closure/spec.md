@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01、03、04、05、07 resolved；06 ready-for-agent（MCP-3 已答两问）；02 ready-for-agent（ADR-0103）；08、09 draft 待 MCP-3 裁
+Status: in-progress——01、03、04、05、06、07 resolved；02 ready-for-agent（ADR-0103）；08、09 draft 待 MCP-3 裁
 
 ## 从哪里分出来
 
@@ -34,7 +34,7 @@ Status: in-progress——01、03、04、05、07 resolved；06 ready-for-agent（
 | [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：新版本还是失效 + 替代（draft，领域问题先裁） | MCP-3 裁 |
 | [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：触发条件先裁（draft） | 05；MCP-3 裁 |
 
-04、05、07 已 resolved（2026-09-03）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
+04、05、06、07 已 resolved（2026-09-03）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
 ## 红线（沿 tf-unwired-seven，不复述其正文）
 

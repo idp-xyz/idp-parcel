@@ -1,10 +1,11 @@
 # 结束参与的两处内部触发：挂在交付与交接落库之后
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——2026-09-03 MCP-4，四笔代码 `275646e` / `14388c5` / `fad9d87` / `8165c84`（若并回前再 rebase，以
+Comments 末行为准），验证见 Comments
 Blocked by: 无。MCP-1 2026-09-03 答 A（票 16 只加新文件，不碰 `register_effective_delivery.go` 与
 `register_transport_handover.go`），开工前置已满足；票 16 两刀已落 `a3e28ff`、`65b369f`。
-两问 MCP-3 同日已答（见「裁决」节），可开工；MCP-3 排的队列是 05 → 07 → 06。
+两问 MCP-3 同日已答（见「裁决」节）。
 
 ## 裁决（MCP-3，2026-09-03，原文追录）
 
@@ -71,3 +72,26 @@ inner 成功后调 `EndFulfillmentParticipationHandler.End`。(ii) 不碰 TF app
 两处触发各有测试钉住：交付落库后同对象在段内的参与关系已结束；交接落库后对象在前一段的参与
 已结束、在新段的参与已成立；`End` 依赖故障时交付 / 交接结果不变而欠账格非空。装配点接真、临时
 worktree 全绿、提交带 pathspec、向 MCP-3 报 SHA 与验证种类。
+
+**判据第三句按 MCP-3 裁决改了**：`End` 依赖故障不再是「结果不变 + 欠账格」，而是整笔不落（error → 5xx）。
+
+## Comments
+
+2026-09-03 · MCP-4 完成记录（隔离 worktree `mcp4-tf03`，四片各自红过再绿）：
+
+- 第一片 `275646e`：`ports.ActualFulfillmentSegmentRegistry.FindActiveSegments(tenant, object)`——唯一按对象问的读口；
+  postgres 按 `ended_at IS NULL` 实现（与 EndParticipation 窄口同一判据）；真库测试钉在场/已离场/他租户/两段全交回。
+- 第二片 `14388c5`：`EndFulfillmentParticipationCommand.Segment` 在交付与交接两路可缺席，由读口按对象找；零条答
+  新格 `NO_ACTIVE_PARTICIPATION`；多于一条 `ErrObjectActiveInSeveralSegments`；终止那一路仍要显式段。Result 加 `Segment()`。
+- 第三片 `fad9d87`：`ParticipationEnder` 接口；两条来源编排 Deps **必填** `ParticipationEnds`，构造时 nil 即
+  panic（不改构造函数签名的前提下让漏接线起进程就看得见）。交付：落库后同事务 End，error 与`未决`都作 error
+  交回整笔回滚。交接：只有`已交接`触发；**先结束前段参与再进新段**（反过来会找到两条在场）；新段的拒绝格与欠账
+  仍由 establishSegment 答，两条路不各进一次。既有夹具改用 stub，触发本身由两份新测试守。
+- 第四片 `8165c84`：两个响应加 `participationEnd`；`buildParticipationEnder` 装配，交付与交接两条装配交入；真库测试
+  证首次交接 → 下一次交接结束前段 → 交付结束新段，命令从头到尾不带前段。
+- 一处随裁决改变的既有行为：交接口在段登记册**读不回**时从「201 + 欠账」改为 5xx（按对象找段那步先失败），
+  欠账只剩「找得到、写不进」。
+- 「下一段已关闭同答 SEGMENT_CLOSED」由 establishSegment 的 `SegmentEntryRefusal` 承担（票 04 已落）；
+  `enterNextSegment` 那条路（显式带 NextSegment 直接调 End）生产上无调用方，未改。
+- 验证：全仓 gofmt / build / vet / `go test -count=1 ./...` 在最终 SHA 的干净检出上跑，含真库（PASS 非 SKIP）。
+  机制清点已重生成（TF 测试 +4）。
