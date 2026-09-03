@@ -1,6 +1,6 @@
 // mechanism-inventory 清点「机制半边现状」里那些能由代码算出来的数：逐上下文的生产/测试
 // 文件、应用编排、PostgreSQL 与 HTTP 适配器、Outbox 投递适配器、跨上下文消费缝、迁移份数，
-// 以及端口的两口径实现缺口。
+// 接线面的接入面端点、消费适配器与直投路由表条目，以及端口的两口径实现缺口。
 //
 // 它**只清点，不定级**。「达标 / 部分 / 未开始」与「显式留待已认可」是判断与裁定，代码算不
 // 出来，也不该由一个脚本的启发式覆盖——那两栏留在开发主线正文里由人维护。
@@ -76,6 +76,12 @@ func run(dir string, withPorts bool, outPath string) error {
 		fmt.Fprintf(&b, "| %s | %d |\n", m.Name, m.Files)
 	}
 
+	wiring, err := CensusWiring(os.DirFS(dir))
+	if err != nil {
+		return err
+	}
+	writeWiring(&b, wiring)
+
 	if withPorts {
 		ports, err := CensusPorts(dir)
 		if err != nil {
@@ -112,6 +118,49 @@ func run(dir string, withPorts bool, outPath string) error {
 		return err
 	}
 	return os.WriteFile(outPath, []byte(b.String()), 0o644)
+}
+
+// writeWiring 落接线面三栏。数据源各写一句在表前：三栏数的是「装了多少」不是「写了多少文件」，
+// 而这正是它们此前只能活在叙述里、并在叙述里烂掉的原因——文件数一眼数得出，装配条目要读装配点。
+func writeWiring(b *strings.Builder, wiring WiringCensus) {
+	fmt.Fprintf(b, "\n## 接线面：接入面端点 %d 个，消费适配器 %d 个生产文件，直投路由表 %d 条\n\n",
+		wiring.EndpointTotal, wiring.ConsumerTotal, wiring.RouteTotal)
+
+	b.WriteString("接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，")
+	b.WriteString("按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——")
+	b.WriteString("一个处理器可挂多个端点。\n\n")
+	b.WriteString("| 上下文 | 端点 |\n|---|---|\n")
+	for _, tally := range wiring.Endpoints {
+		fmt.Fprintf(b, "| %s | %d |\n", tally.Context, tally.Count)
+	}
+	fmt.Fprintf(b, "| **合计** | %d |\n\n", wiring.EndpointTotal)
+
+	b.WriteString("消费适配器按 `internal/<消费方>/adapters/` 下 `")
+	b.WriteString(strings.Join(consumerDirs, "`、`"))
+	b.WriteString("` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。\n\n")
+	b.WriteString("| 消费方 | " + strings.Join(consumerDirs, " | ") + " | 合计 |\n|---|")
+	b.WriteString(strings.Repeat("---|", len(consumerDirs)+1))
+	b.WriteString("\n")
+	for _, consumer := range wiring.Consumers {
+		fmt.Fprintf(b, "| %s |", consumer.Consumer)
+		for _, dir := range consumerDirs {
+			fmt.Fprintf(b, " %d |", consumer.ByDir[dir])
+		}
+		fmt.Fprintf(b, " %d |\n", consumer.Total)
+	}
+	b.WriteString("| **合计** |")
+	for _, total := range wiring.ConsumerDirTotals() {
+		fmt.Fprintf(b, " %d |", total)
+	}
+	fmt.Fprintf(b, " %d |\n\n", wiring.ConsumerTotal)
+
+	b.WriteString("直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，")
+	b.WriteString("按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。\n\n")
+	b.WriteString("| 事件类型所属消费方 | 条目 |\n|---|---|\n")
+	for _, tally := range wiring.Routes {
+		fmt.Fprintf(b, "| %s | %d |\n", tally.Context, tally.Count)
+	}
+	fmt.Fprintf(b, "| **合计** | %d |\n", wiring.RouteTotal)
 }
 
 func writePortList(b *strings.Builder, ports []PortEntry, note func(PortEntry) string) {

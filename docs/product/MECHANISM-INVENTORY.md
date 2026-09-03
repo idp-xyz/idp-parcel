@@ -12,19 +12,19 @@
 | customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
 | networkrouting | 52 | 47 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
-| parcelpricing | 46 | 47 | 3 | 6 | 1 | 8 |
-| parcelshipment | 111 | 108 | 15 | 20 | 7 | 11 |
-| partycommercial | 69 | 69 | 8 | 21 | 0 | 13 |
+| parcelpricing | 46 | 48 | 3 | 6 | 1 | 8 |
+| parcelshipment | 117 | 114 | 16 | 20 | 7 | 11 |
+| partycommercial | 72 | 72 | 8 | 21 | 0 | 13 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
-| platform（非业务） | 15 | 14 | 0 | 0 | 0 | 0 |
+| platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
-| transportfulfillment | 54 | 45 | 9 | 22 | 9 | 5 |
+| transportfulfillment | 61 | 50 | 10 | 24 | 9 | 5 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 651 | 595 | 83 | 196 | 48 | 79 |
+| **合计** | 667 | 611 | 85 | 198 | 48 | 79 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
-## 跨上下文消费缝：16 组，44 个生产文件
+## 跨上下文消费缝：16 组，46 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -33,8 +33,8 @@
 | nodeoperations | transportfulfillment | 1 |
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 3 |
-| parcelshipment | parcelpricing | 2 |
-| parcelshipment | partycommercial | 10 |
+| parcelshipment | parcelpricing | 3 |
+| parcelshipment | partycommercial | 11 |
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 2 |
 | parcelshipment | transportfulfillment | 4 |
@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 4 |
 
-## 迁移：11 个模块共 103 份 SQL
+## 迁移：11 个模块共 106 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -55,13 +55,50 @@
 | node_operations | 3 |
 | parcel_pricing | 3 |
 | parcel_shipment | 10 |
-| party_commercial | 18 |
+| party_commercial | 19 |
 | pilot_governance | 5 |
 | settlement_accounting | 15 |
-| transport_fulfillment | 5 |
+| transport_fulfillment | 7 |
 | visibility_exception | 21 |
 
-## 端口：声明 277 个；基线口径缺 11，精确口径缺 9
+## 接线面：接入面端点 74 个，消费适配器 23 个生产文件，直投路由表 14 条
+
+接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
+
+| 上下文 | 端点 |
+|---|---|
+| collectionremittance | 1 |
+| customscompliance | 10 |
+| networkrouting | 9 |
+| nodeoperations | 2 |
+| parcelpricing | 5 |
+| parcelshipment | 8 |
+| partycommercial | 18 |
+| pilotgovernance | 1 |
+| settlementaccounting | 4 |
+| transportfulfillment | 3 |
+| visibilityexception | 13 |
+| **合计** | 74 |
+
+消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
+
+| 消费方 | inbox | adoptconsume | finalconsume | veconsume | 合计 |
+|---|---|---|---|---|---|
+| networkrouting | 2 | 0 | 0 | 0 | 2 |
+| parcelshipment | 6 | 1 | 1 | 0 | 8 |
+| visibilityexception | 11 | 0 | 0 | 2 | 13 |
+| **合计** | 19 | 1 | 1 | 2 | 23 |
+
+直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
+
+| 事件类型所属消费方 | 条目 |
+|---|---|
+| networkrouting | 2 |
+| parcelshipment | 5 |
+| visibilityexception | 7 |
+| **合计** | 14 |
+
+## 端口：声明 282 个；基线口径缺 12，精确口径缺 9
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -74,6 +111,7 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `transportfulfillment.HandoverScopeView` 
 - `visibilityexception.NotificationChannelGateway` 
 
