@@ -1,7 +1,7 @@
 # 客户服务规则版本进了封闭集，但 `visibility-exception` 那条消费缝仍然是断的
 
 Category: chore
-Status: draft——四问已按票 03 落地后的形状摆到可裁（2026-09-03，MCP-2，见末节），待 owner 裁三处
+Status: ready-for-agent——三处已由 MCP-3 裁（owner 2026-09-03 授权自决），裁决落 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；要做的形状见文末「裁决」节，**不动 VE**
 Blocked by: 04（封闭集拓宽已随 `85c1c7f` 落地，本票的前置已解除）
 
 ## 为什么单独一票
@@ -153,3 +153,13 @@ Rules 一节两条：
 替它预设。
 
 **不属本票**：封闭集拓宽（票 04 第一笔，已完成）。
+
+## 裁决（2026-09-03 · MCP-3，owner 授权自决；正文与理由在 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)，此处只列对上面「待 owner 裁的三处」的答与本票要做的形状）
+
+1. **所有权**：客户服务规则正文归 PC（重申 CONTEXT）。VE 两本册**不是**这六项的正文——看键：通知策略键是披露策略引用、索赔资格声明键是客户合同，都不是（产品/合同版本 + 时点 → 规则版本）这一形；它们是 VE 自己业务结果的判断参数，维持现状、不迁移、不改键。上面「先纠一条前提」那一节把它们读成「承载的正是规则正文」，这一句由本裁决更正。
+2. **被引侧**：索赔期限与最低材料在 PC 以**正文**形态落（不是引用）——被引侧不存在且 VE 注释明拒造它。形状：期限按种类（首次索赔 / 资料补充 / 结论复核）× 起算事件 × 时长 × 日历或时区引用成行；材料按索赔类型成行带条目清单。**值一律不入仓**。
+3. **首发范围**：只进这两项；另四项 VE 无消费形状，不进。**子行至少一项**（照 0014），不允许显式空版本。
+
+**本票要做的**（与票 03 同一条流水线，不动 VE）：一份迁移（父子两表照 0014，项类 CHECK 首发两值）、`CustomerServiceRuleVersion` 补两项正文的领域类型与构造门（只校形状不校值）、`PublicationRegistry` 一个具名 Save、点读口 `CustomerServiceRuleContentView.LoadCustomerServiceRule`（`found=false` 即未登记）、目录读面一格、CLI 批文一节。解析不改：既有闭包对封闭集内类别一视同仁。
+
+**另立而不在本票**：VE 侧 `ClaimEligibilityRules` 两维改经消费侧适配器（ADR-0025）读 PC 点读口——VE 地盘，另立票；落地前 VE 行为一字不变。
