@@ -263,3 +263,20 @@ r27 对另五项做的那样，但要逐条写理由）、下调某几个切片�
   新增那两条的成因已由 MCP-6 报明且**不属本文分类的任何一格**：它们不是存量支路未接，是当天
   新生且调用方已有名有姓（两者都等票 `label-channel-service-first-release/12` 的候选装配，
   票 12 落地那天一起出名单）。按 owner 的裁决，那正是新增条目理由行该有的写法。
+
+## 第四格：有语言无形状（2026-09-03 追加 · MCP-3）
+
+上面三格量的都是**已有工厂而无调用点**。TF 票 04 动笔时核出另一族：CONTEXT 用整节写了一件事，
+而代码里连它的落点都没有——没有类型可数，棘轮与探针在构造上都看不见它。
+[ADR-0098](../../docs/adr/0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)
+后果一节要求把这一条记进本表同族，记在这里；本节只追加，不动上面任何一行。
+
+| 缺口 | 依据 | 出处 |
+|---|---|---|
+| 揽收任务↔运输委托的连线（「这次揽收是不是外包、依哪份协议」） | CONTEXT 整节写了采购责任与协议快照，`TransportCommission` 也持有 `AgreementSnapshotReference`；而 `OffsitePickup`、`FulfillmentAttempt`、`PickupAttemptStore` 都不带采购上下文，揽收这条路上没有它的落点。ADR-0098 决定四裁定**今天不建**：建它等于在无租户实证下先定一种采购组织方式。后果是失败尝试费发生项机制齐备、生产触发链未接通 | ADR-0098；[tf-unwired-seven/04](../tf-unwired-seven/issues/04-transport-charge-occurrence-registry.md) |
+
+同族先例各自票面已记、此处不重复归档：客户服务规则版本（`product-version-closure/design.md`，
+「CONTEXT 有语言、代码无形状」）、渠道候选的约束册（`label-channel-service-first-release/12`）。
+本格与前三格的区别在处置：前三格接线即可，本格要先裁形状，而且可能裁成「留空」——ADR-0098
+就是这样裁的，所以它进本表不是为了排队接线，是为了让下一个读到「发生项没登上」的人先看到
+这一行再动手。

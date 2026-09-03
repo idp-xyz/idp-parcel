@@ -1,7 +1,8 @@
 # 运输收费发生项登记册与失败尝试入口
 
 Category: enhancement
-Status: draft
+Status: resolved——登记册层（`f5a0f38`）+ 显式登记用例（`81957c7`）两层齐，棘轮那条已剪；
+生产触发链未接通是 ADR-0098 决定四留的已知缺口，不是本票遗留，见文末末条
 Blocked by: 无
 
 ## 这一票为什么刺眼
@@ -39,6 +40,10 @@ Blocked by: 无
 > **⚠ 上面这句话是错的，2026-09-02 动笔时核出来，见文末 Comment。** 手上有
 > `AttemptObjectResult` 只满足事实依据那一格，其余七格都不在那个 handler 里。这一票**不是
 > 机械活**，接线前需要一次裁决。
+>
+> 裁决落在 [ADR-0098](../../../docs/adr/0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)：
+> **不接进揽收编排**，另开显式登记用例 `application/register_failed_attempt_charge.go`，
+> 采购上下文由调用方显式给出。落地情况见文末 2026-09-03 那条 Comment。
 
 ## 陷阱
 
@@ -90,3 +95,42 @@ Blocked by: 无
   **四、体量也比票面写的大**：成员是列表（`Members []CarriedObjectReference`），要第二张
   表；另有有效性版本链（`corrects` / `revisionKind` / `revisionBasis` / `revisedAt`）四件
   成组。按票 01 的实测，这一票接近「大」而不是「中」。
+
+- 2026-09-03 · MCP-3：**两层齐，本票 resolved。票面此前停在 `draft` 是漏登——`81957c7` 收口了
+  代码，没回写票面；本条补齐。**
+
+  **落地两笔**：`f5a0f38` 登记册层——迁移 `0007_transport_charge_occurrence.sql`（发生项与
+  成员两张表，**无金额列无币种列**，迁移头注写明了为什么）、`ports/charge_occurrence.go`、
+  真库适配器 `charge_occurrence_registry.go`、重建门 `charge_occurrence_rehydration.go`；
+  `81957c7` 显式登记用例 `application/register_failed_attempt_charge.go`，它是
+  `ChargeOccurrenceForFailedAttempt` 全仓唯一的 domain 包外非测试调用点（声明也只一处，
+  不是同名误判）。
+
+  **ADR-0098 三条各落在哪**：决定一——用例独立于揽收编排，`perform_offsite_pickup.go`
+  一行未动；决定二——采购上下文七格由 `RegisterFailedAttemptChargeCommand` 显式携带，本上下文
+  不推导；决定三——`Agreement` 留空即自营，答 `FailedAttemptChargeNotApplicable` /
+  `SelfOperatedHasNoExternalCostSource`，且**判在 `chargeSpecFrom` 与构造门之前**：构造门把
+  协议快照当必备项，落过去会报成 `ErrInvalidChargeOccurrence`，那是同一件事的错误措辞，会把
+  一个正确答案说成缺件。`不适用`、`未决`、`输入未受理`三格分开，因为三者的恢复动作分别是
+  什么都不用做、重试、改请求。
+
+  **端口收窄一格**：用例只读揽收尝试，新开只读口 `FailedAttemptSource`，不依赖带 `Save` 的
+  `PickupAttemptStore`——依赖它等于声明自己可能写揽收那一侧，而按 ADR-0098 本用例恰恰不碰。
+  `PickupAttempts` 适配器天然满足，无第二实现。
+
+  **棘轮**：隔离检出 `f5a0f38` 上剪前 32、剪后 31（`81957c7` 提交信）；2026-09-03 在 `371f6cb`
+  上用 `git show` 取内容重数仍为 31。两个数各只对各自的 SHA 成立，谁要拿一个数当底请自己重取。
+
+  **完工判据要读准**：「有生产调用路径」按棘轮口径成立，即 domain 包外有非测试调用方。但
+  `NewRegisterFailedAttemptChargeHandler` **未进 `cmd/parcel-api` 装配**，全仓引用它的只有 TF
+  包自身。这与 ADR-0098 决定四的后果原话一致——「机制齐备且可达，生产触发链仍未接通」，因为
+  揽收↔委托那条连线今天不在，且 ADR 裁定今天不建（建它等于在无租户实证下先定一种采购组织
+  方式）。**这是 ADR 显式留下的已知缺口，不是本票遗留**；接通那天的入口按 ADR-0098 三条约束
+  走，不回头改 `perform_offsite_pickup.go`。
+
+  **ADR-0098 后果里另一条此前无落点**：「揽收↔委托连线作为独立已知缺口记进分类表同族」。
+  本日已追加到[分类表](../../mechanism-executor-triage/spec.md)末尾一节，只追加不动既有行。
+
+  **验证（2026-09-03，共享树）**：先在 `371f6cb`、后在 `74ab82f` 各跑一遍——`go build ./...`
+  与 `go vet` 退 0；`internal/architecture` 门禁 ok；TF 四包 + `migrations` 对门禁容器实跑全
+  ok（postgres 包 25.3 / 25.2 秒，DSN 已设，不是跳过冒充的绿）。`-race` 仍归收尾批。
