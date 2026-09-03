@@ -19,7 +19,7 @@ Owner: MCP-2（用户 2026-09-03 授权「自决」）
 | 前端发出的 URL 与后端端点表今天逐条对得上（0 悬空），但没有任何东西守它；下一次漂移仍要靠人工审查撞见 | [03](./issues/03-admin-web-endpoint-consumers-gate.md) |
 | 前端 TS 响应类型全部手写，后端 JSON 形状由 Go 单测钉住，两侧之间无共享夹具——票 02 那条漂移正是从这条缝长出来的 | [04](./issues/04-contract-fixtures-shared-with-backend-tests.md) |
 | `pages/governance/` 下混放结算两页、VE 分诊页与 PS 受理复核页，与 `moduleInfoById` 声明的主责上下文不一致 | [05](./issues/05-relocate-pages-under-owning-context-folders.md) |
-| TF 交接范围汇总四层俱在，`cmd/parcel-api/endpoints.go` 无它的行（MCP-3 在途） | [06](./issues/06-mount-tf-handover-scope-summary-endpoint.md) |
+| TF 交接范围汇总四层俱在，`cmd/parcel-api/endpoints.go` 无它的行 | [06](./issues/06-mount-tf-handover-scope-summary-endpoint.md) |
 
 ## 审查里**不**落票的
 
@@ -34,3 +34,6 @@ Owner: MCP-2（用户 2026-09-03 授权「自决」）
 
 01 → 02（02 的 TDD 依赖 01 的运行器）；03、05、06 相互独立；04 依赖 01 且其后端半边落在
 MCP-5 地盘，本批只落前端半边或留票。
+
+六张票的票面均已转 resolved（06 于 2026-09-03 由 MCP-1 收口）。**批状态留给批 Owner 判**：
+04 是首切片收口，pricing 与 party-commercial 的同形夹具仍未做，那算不算本批的余项由 MCP-2 定。
