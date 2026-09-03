@@ -1,0 +1,16 @@
+{
+  // 测试编译配置（票 admin-web-audit-followups/01）。源码 import 不带扩展名，Node 的 ESM
+  // 解析吃不下，所以测试不直接跑 .ts：先按 CommonJS 编到 .tmp-test/，再交给 node --test。
+  // 主配置的 include 仍覆盖测试文件，类型检查不在这里分叉；这里只改「要不要发射、发成什么」。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "allowImportingTsExtensions": false,
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "outDir": ".tmp-test",
+    "rootDir": "src",
+    "sourceMap": true
+  },
+  "include": ["src/**/*.test.ts", "src/test/**/*.d.ts"]
+}
