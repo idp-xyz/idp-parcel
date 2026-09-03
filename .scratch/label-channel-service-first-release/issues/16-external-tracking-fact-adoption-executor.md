@@ -1,8 +1,8 @@
 # 16 外部轨迹的收编执行器：译成所有者自己的事实
 
 Category: enhancement
-Status: draft
-Blocked by: 03, 15
+Status: in-progress——MCP-1 于 2026-09-03 19:2x 占号（MCP-5 已明确让位）；开工前置三件已落 `2bb9300`
+Blocked by: 03, 15（均已 resolved：03 裁决在票面，15 落 `7904003`）
 
 ## 缺口
 
@@ -28,6 +28,10 @@ Blocked by: 03, 15
 3. 必要时同步 [GLOSSARY](../../../docs/domain/GLOSSARY.md) 与 CONTEXT-MAP。
 
 **这三件没做完，本票不得动 `internal/`。** 落文在评审中被否则 `03` 与本票一并重开。
+
+三件已落 `2bb9300`：[ADR-0102](../../../docs/adr/0102-external-fact-three-times-are-minted-by-ownership.md)、
+TF `CONTEXT.md` 两词＋规则节＋生命周期节＋Boundaries 一行、GLOSSARY 两条、CONTEXT-MAP TF 拥有清单一项。
+事实类型词定为 `external-carrier-tracking`（定义在 CONTEXT.md，不在本票）。
 
 ## 做什么
 
