@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
@@ -38,6 +38,12 @@ var (
 	// 停下而不是照样产候选：映射的候选逻辑以「属于一份已生效产品」为前提，一份草稿、已到期
 	// 或已退役的产品继续给出新候选，等于让收尾过的商业决定重新参与新的采购。
 	ErrMappedServiceProductNotEffective = errors.New("parcel shipment: mapped service product is not effective")
+	// ErrUntranslatableQuery 说择优侧给的引用译不成提供方的键——与 ErrUntranslatableAnswer
+	// 方向相反：那个是提供方的答复进不了本上下文，这个是本上下文的问题出不去。
+	//
+	// 正常构造出来的引用译不失败（两侧的构造门都拒空白）；到这里的只会是没经构造门的零值。
+	// 单列一格而不并进「读取失败」：它的续办是修调用方，不是等依赖恢复。
+	ErrUntranslatableQuery = errors.New("parcel shipment partycommercial adapter: untranslatable channel selection query")
 )
 
 // ChannelConstraint 是一次装配适用的客户渠道约束，三态：
@@ -79,8 +85,10 @@ func (constraint ChannelConstraint) Declared() bool {
 //
 // 接口留在本包而不进 psports：约束的取数路径是消费方自己的实例半边（同 ADR-0025 下
 // ResolutionKeySource 留在本包的那条理由），提供方不拥有「这次装配该用哪份约束」。
+// 它收的是择优侧的查询而不是译好的提供方键：约束是本上下文对自己客户的事实，本就该按
+// 本上下文的引用去问。
 type ChannelConstraintSource interface {
-	ChannelConstraintFor(ctx context.Context, query ChannelCandidateQuery) (ChannelConstraint, error)
+	ChannelConstraintFor(ctx context.Context, query psports.ChannelSelectionQuery) (ChannelConstraint, error)
 }
 
 // ProductChannelMappingReader 是产品—渠道映射登记册的只读半边。
@@ -95,14 +103,32 @@ type ProductChannelMappingReader interface {
 	) (pcdomain.ProductChannelMappingRegistration, bool, error)
 }
 
-// ChannelCandidateQuery 是一次装配的输入：在哪个租户的哪个商业范围下、按哪笔映射、
-// 对准哪个时点。时点由调用方给而不是取当下时钟——同一份委托重算两次必须得到同一批
-// 候选，读时钟会让它随调用时刻漂移。
-type ChannelCandidateQuery struct {
-	Tenant  pcdomain.TenantID
-	Scope   pcdomain.CommercialScopeReference
-	Mapping pcdomain.ProductChannelMappingID
-	At      time.Time
+// providerKeys 是一次查询译到提供方词汇后的三个键。它只在本文件内活到读口调用完为止——
+// 编排与约束口拿到的一直是择优侧的查询，提供方的键不往外交。
+type providerKeys struct {
+	tenant  pcdomain.TenantID
+	scope   pcdomain.CommercialScopeReference
+	mapping pcdomain.ProductChannelMappingID
+}
+
+// providerKeysOf 把择优侧的引用译成提供方的键。
+//
+// 翻译落在这里而不是让调用方先译好再给：编排住在应用层，架构门禁不许它导入
+// party-commercial，它手上只有本上下文的引用。这正是本适配器包存在的理由——两套词汇
+// 之间的翻译只许在这一层发生。
+func providerKeysOf(query psports.ChannelSelectionQuery) (providerKeys, error) {
+	var keys providerKeys
+	var err error
+	if keys.tenant, err = pcdomain.NewTenantID(query.Tenant.String()); err != nil {
+		return providerKeys{}, fmt.Errorf("%w: tenant: %v", ErrUntranslatableQuery, err)
+	}
+	if keys.scope, err = pcdomain.NewCommercialScopeReference(query.Scope.String()); err != nil {
+		return providerKeys{}, fmt.Errorf("%w: commercial scope: %v", ErrUntranslatableQuery, err)
+	}
+	if keys.mapping, err = pcdomain.NewProductChannelMappingID(query.Mapping.String()); err != nil {
+		return providerKeys{}, fmt.Errorf("%w: product channel mapping: %v", ErrUntranslatableQuery, err)
+	}
+	return keys, nil
 }
 
 // ChannelCandidateAssemblerDeps 收拢三个协作方。
@@ -127,11 +153,20 @@ func NewChannelCandidateAssembler(deps ChannelCandidateAssemblerDeps) *ChannelCa
 	}
 }
 
+var _ psports.ChannelCandidateAssembly = (*ChannelCandidateAssembler)(nil)
+
 // AssembleChannelCandidates 交回该时点可参与择优的渠道候选。
 func (assembler *ChannelCandidateAssembler) AssembleChannelCandidates(
 	ctx context.Context,
-	query ChannelCandidateQuery,
+	query psports.ChannelSelectionQuery,
 ) ([]psdomain.ChannelCandidateID, error) {
+	// 译不过去的查询在问任何协作方之前就停：约束口可能是一次远程读，为一个立不住的
+	// 查询去问它，答回来的东西也没处用。
+	keys, err := providerKeysOf(query)
+	if err != nil {
+		return nil, err
+	}
+
 	// 约束先问，且答不上来即停：后面每一步都会让候选集合变大，先放行再补判就等于让
 	// 一次读取失败先把范围撑开。
 	constraint, err := assembler.constraints.ChannelConstraintFor(ctx, query)
@@ -142,7 +177,7 @@ func (assembler *ChannelCandidateAssembler) AssembleChannelCandidates(
 		return nil, ErrChannelConstraintNotConfigured
 	}
 
-	mapping, err := assembler.mappingFor(ctx, query)
+	mapping, err := assembler.mappingFor(ctx, keys)
 	if err != nil {
 		return nil, err
 	}
@@ -168,9 +203,9 @@ func (assembler *ChannelCandidateAssembler) AssembleChannelCandidates(
 // 已收尾的产品继续产候选，所以这里如实去发布册取回它，取不到就停。
 func (assembler *ChannelCandidateAssembler) mappingFor(
 	ctx context.Context,
-	query ChannelCandidateQuery,
+	keys providerKeys,
 ) (pcdomain.ProductChannelMapping, error) {
-	registration, found, err := assembler.mappings.LoadLatestMapping(ctx, query.Tenant, query.Mapping)
+	registration, found, err := assembler.mappings.LoadLatestMapping(ctx, keys.tenant, keys.mapping)
 	if err != nil {
 		return pcdomain.ProductChannelMapping{}, fmt.Errorf("load product channel mapping: %w", err)
 	}
@@ -178,7 +213,7 @@ func (assembler *ChannelCandidateAssembler) mappingFor(
 		return pcdomain.ProductChannelMapping{}, ErrProductChannelMappingNotRegistered
 	}
 
-	registry, err := assembler.publication.LoadForScope(ctx, query.Tenant, query.Scope)
+	registry, err := assembler.publication.LoadForScope(ctx, keys.tenant, keys.scope)
 	if err != nil {
 		return pcdomain.ProductChannelMapping{}, fmt.Errorf("load commercial publication: %w", err)
 	}

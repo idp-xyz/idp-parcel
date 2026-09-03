@@ -7,6 +7,8 @@ import (
 	"time"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
@@ -16,6 +18,10 @@ import (
 // 收窄规则本身不在这个缝上证：`CandidatesAllowedBy` 只收窄不扩张已由 party-commercial
 // 自己的 TestCustomerConstraintOnlyNarrowsTheCandidateRange 守着。这里要证的是**装配调用
 // 了它，而不是自己又写了一遍**，以及调用之前那几道门。
+
+// 装配器就是择优编排要的那个口。断言写在测试里而不只靠编排测试的替身：编排测试用替身
+// 一路绿，装配器却可以一直接不进 Deps——那正是接线后曾经的状态。
+var _ psports.ChannelCandidateAssembly = (*adapter.ChannelCandidateAssembler)(nil)
 
 const (
 	assemblyTenant  = "tenant-1"
@@ -169,9 +175,60 @@ type stubConstraints struct {
 
 func (stub stubConstraints) ChannelConstraintFor(
 	_ context.Context,
-	_ adapter.ChannelCandidateQuery,
+	_ psports.ChannelSelectionQuery,
 ) (adapter.ChannelConstraint, error) {
 	return stub.constraint, nil
+}
+
+// recordingMappings 与 recordingPublication 记下提供方读口收到了什么键。它们存在只为证
+// 翻译：择优侧给的是自己的引用，到提供方读口时必须是提供方的键且取值原样。
+type recordingMappings struct {
+	stubMappings
+	tenant  string
+	mapping string
+	calls   int
+}
+
+func (stub *recordingMappings) LoadLatestMapping(
+	ctx context.Context,
+	tenant pcdomain.TenantID,
+	mapping pcdomain.ProductChannelMappingID,
+) (pcdomain.ProductChannelMappingRegistration, bool, error) {
+	stub.calls++
+	stub.tenant = tenant.String()
+	stub.mapping = mapping.String()
+	return stub.stubMappings.LoadLatestMapping(ctx, tenant, mapping)
+}
+
+type recordingPublication struct {
+	stubPublication
+	tenant string
+	scope  string
+	calls  int
+}
+
+func (stub *recordingPublication) LoadForScope(
+	ctx context.Context,
+	tenant pcdomain.TenantID,
+	scope pcdomain.CommercialScopeReference,
+) (*pcdomain.CommercialRegistry, error) {
+	stub.calls++
+	stub.tenant = tenant.String()
+	stub.scope = scope.String()
+	return stub.stubPublication.LoadForScope(ctx, tenant, scope)
+}
+
+type recordingConstraints struct {
+	stubConstraints
+	calls int
+}
+
+func (stub *recordingConstraints) ChannelConstraintFor(
+	ctx context.Context,
+	query psports.ChannelSelectionQuery,
+) (adapter.ChannelConstraint, error) {
+	stub.calls++
+	return stub.stubConstraints.ChannelConstraintFor(ctx, query)
 }
 
 func assemblerWith(t testing.TB, constraint adapter.ChannelConstraint) *adapter.ChannelCandidateAssembler {
@@ -198,14 +255,90 @@ func assemblerFor(
 	})
 }
 
-func assemblyQuery(t testing.TB) adapter.ChannelCandidateQuery {
+// assemblyQuery 用**择优侧**的引用造查询——编排住在 parcel-shipment 的应用层，手上只有
+// 这一套；提供方的键由装配器译出来，不由调用方先译好再给。
+func assemblyQuery(t testing.TB) psports.ChannelSelectionQuery {
 	t.Helper()
 
-	return adapter.ChannelCandidateQuery{
-		Tenant:  assemblyValue(t, pcdomain.NewTenantID, assemblyTenant),
-		Scope:   assemblyValue(t, pcdomain.NewCommercialScopeReference, assemblyScope),
-		Mapping: assemblyValue(t, pcdomain.NewProductChannelMappingID, assemblyMapping),
+	return psports.ChannelSelectionQuery{
+		Tenant:  assemblyValue(t, psdomain.NewTenantID, assemblyTenant),
+		Scope:   assemblyValue(t, psdomain.NewCommercialScopeReference, assemblyScope),
+		Mapping: assemblyValue(t, psdomain.NewProductChannelMappingReference, assemblyMapping),
 		At:      assemblyAt(t),
+	}
+}
+
+// Covers: 装配器答的是 ports.ChannelCandidateAssembly 这道口，且择优侧引用的取值**原样**
+// 到达提供方的两个读口——租户与映射标识到登记册，租户与商业范围到发布册。
+//
+// 这一格是接线那笔留下的缝：编排经端口传的是本上下文的引用，装配器原先只收提供方的键，
+// 两边各自绿而真装配器交不进编排的 Deps。只断言「实现了接口」不够——译错一个字段照样
+// 满足接口，所以让两个读口把收到的键记下来对。
+func TestTheAssemblerAnswersTheSelectionPortWithTheQueryTranslatedIntoProviderKeys(t *testing.T) {
+	t.Parallel()
+
+	registry := pcdomain.NewCommercialRegistry()
+	effectiveLabelChannelProduct(t, registry)
+	mappings := &recordingMappings{stubMappings: stubMappings{registration: twoChannelRegistration(t), found: true}}
+	publication := &recordingPublication{stubPublication: stubPublication{registry: registry}}
+	var assembly psports.ChannelCandidateAssembly = adapter.NewChannelCandidateAssembler(
+		adapter.ChannelCandidateAssemblerDeps{
+			Mappings:    mappings,
+			Publication: publication,
+			Constraints: stubConstraints{constraint: adapter.UnconstrainedChannels()},
+		},
+	)
+
+	candidates, err := assembly.AssembleChannelCandidates(context.Background(), assemblyQuery(t))
+	if err != nil {
+		t.Fatalf("经端口装配：%v", err)
+	}
+	if len(candidates) != 2 {
+		t.Fatalf("候选数 = %d，want 2", len(candidates))
+	}
+	if mappings.tenant != assemblyTenant || mappings.mapping != assemblyMapping {
+		t.Fatalf("登记册收到的键 = (%q, %q)，want (%q, %q)——择优侧的引用没有原样译到提供方",
+			mappings.tenant, mappings.mapping, assemblyTenant, assemblyMapping)
+	}
+	if publication.tenant != assemblyTenant || publication.scope != assemblyScope {
+		t.Fatalf("发布册收到的键 = (%q, %q)，want (%q, %q)",
+			publication.tenant, publication.scope, assemblyTenant, assemblyScope)
+	}
+}
+
+// Covers: 译不成提供方键的查询在问**任何**协作方之前就被拒，且落在 ErrUntranslatableQuery
+// 这一格而不是混进「读取失败」。
+//
+// 零值查询是唯一能到这里的形状（两侧构造门都拒空白）。三个协作方都记调用次数：约束口是
+// 消费方自己的实例半边、可能是一次远程读，为一个立不住的查询去问它，答回来也没处用；
+// 而若先问了再拒，一次「拒」在约束口那侧看起来就是一次正常读取。
+func TestAQueryThatCannotBeTranslatedIsRefusedBeforeAnyCollaboratorIsAsked(t *testing.T) {
+	t.Parallel()
+
+	registry := pcdomain.NewCommercialRegistry()
+	effectiveLabelChannelProduct(t, registry)
+	mappings := &recordingMappings{stubMappings: stubMappings{registration: twoChannelRegistration(t), found: true}}
+	publication := &recordingPublication{stubPublication: stubPublication{registry: registry}}
+	constraints := &recordingConstraints{stubConstraints: stubConstraints{constraint: adapter.UnconstrainedChannels()}}
+	assembler := adapter.NewChannelCandidateAssembler(adapter.ChannelCandidateAssemblerDeps{
+		Mappings:    mappings,
+		Publication: publication,
+		Constraints: constraints,
+	})
+
+	candidates, err := assembler.AssembleChannelCandidates(
+		context.Background(),
+		psports.ChannelSelectionQuery{At: assemblyAt(t)},
+	)
+	if !errors.Is(err, adapter.ErrUntranslatableQuery) {
+		t.Fatalf("装配 err = %v，want %v", err, adapter.ErrUntranslatableQuery)
+	}
+	if len(candidates) != 0 {
+		t.Fatalf("被拒的装配仍交回了 %d 个候选", len(candidates))
+	}
+	if constraints.calls != 0 || mappings.calls != 0 || publication.calls != 0 {
+		t.Fatalf("协作方被问了 (约束 %d, 登记册 %d, 发布册 %d) 次，want 全 0——译不过去的查询不该出门",
+			constraints.calls, mappings.calls, publication.calls)
 	}
 }
 
