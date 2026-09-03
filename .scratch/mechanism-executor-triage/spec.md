@@ -160,6 +160,13 @@ VE 被记为「达标—有裁定的显式留待」，留待项是**真实渠道
 TF 记为**达标**且差量列写**「无」**。按本轮取证，「差量：无」与名单上这七条对不上，二者必有
 一句要改——改哪一句是产品判断，不在本目录范围内。
 
+**2026-09-03 追加（MCP-1，只追加不改上表）**：那一句已由 owner 改定——「差量：无」被更正为
+计入差量（`84c2eed`）；七条随 [`tf-unwired-seven`](../tf-unwired-seven/spec.md) 八票全部接上
+生产调用方，棘轮 `transport-fulfillment` 组清空（`0c8d65d`）。上表七行**作为 `9d6063c` 时点
+的取证仍成立**，作为当前值已全部失效——按本文「不追这个数」的纪律，要当前值请重数名单。
+接上的是编排层，`cmd/parcel-api` 尚无路走到这批编排；那件另立于
+[`tf-segment-lifecycle-closure`](../tf-segment-lifecycle-closure/spec.md)。
+
 ### settlement-accounting（4）与 customs-compliance（4）
 
 八条**全部只出现在测试里**，无一有生产调用点。

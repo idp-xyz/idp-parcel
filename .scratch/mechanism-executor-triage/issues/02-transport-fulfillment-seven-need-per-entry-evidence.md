@@ -1,7 +1,8 @@
 # TF 七条：32 条里最大的一簇，而它记的是「达标」不是「留待」
 
 Category: chore
-Status: draft
+Status: resolved——七条逐条分类已出（2026-09-02），处置已由 owner 裁定并兑现：计入差量（`84c2eed`），
+七条随 `tf-unwired-seven` 八票全部接上生产调用方，棘轮该组清空（`0c8d65d`）
 Blocked by: 无
 
 ## 为什么单开一票
@@ -111,3 +112,15 @@ TF 是**达标且差量为「无」**的四个切片之一（另三个是 PN-01�
 
   取证锚 `9d6063c`（编排文件与领域文件在 `9d6063c..0c4b5a1` 间未变动）。本笔只读，未改
   任何代码。
+
+- 2026-09-03 · MCP-1：**转 resolved，本票要做的（分类、交人裁）两件都已闭环。** 裁：owner
+  于 09-02 取「计入机制半边差量」一路（`84c2eed`，开发主线那节「差量：无」被更正），本票末段
+  提出的「两句同时留着不成立」由此消解。兑现：七条按切片分成
+  [`tf-unwired-seven`](../../tf-unwired-seven/spec.md) 八票，09-03 全部 resolved，
+  `production_wiring_baseline.txt` 的 `transport-fulfillment` 组由 7 条清空到 0（`0c8d65d`）。
+
+  **一句要如实**：清空量的是「导出工厂有了生产调用方」——调用方落在
+  `internal/transportfulfillment/application/` 的编排层，`cmd/parcel-api` 对这批新编排尚无
+  装配与端点。本票开头那句「收寄登记得进去、交接登记得进去，而那条边界生产路径上跨不过去」
+  今天改成：**编排层跨得过去，端点层还没有路走到编排**。那件不在本票也不在 tf-unwired-seven，
+  另立于 [`tf-segment-lifecycle-closure`](../../tf-segment-lifecycle-closure/spec.md)。
