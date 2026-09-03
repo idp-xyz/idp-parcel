@@ -98,11 +98,12 @@
 | visibilityexception | 7 |
 | **合计** | 14 |
 
-## 端口：声明 285 个；基线口径缺 11，精确口径缺 8
+## 端口：声明 286 个；基线口径缺 12，精确口径缺 9
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
+- `parcelshipment.ContinuedAttemptRegisterRepository` 
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
@@ -116,6 +117,7 @@
 
 精确口径缺（无具体类型完整实现）：
 
+- `parcelshipment.ContinuedAttemptRegisterRepository` 
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
