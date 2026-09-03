@@ -82,6 +82,9 @@ type handoverResponse struct {
 	HandoffReference             string `json:"handoffReference,omitempty"`
 	SegmentContinuationReference string `json:"segmentContinuationReference,omitempty"`
 	SegmentEntryRefusal          string `json:"segmentEntryRefusal,omitempty"`
+	// ParticipationEnd 是`已交接`落库后结束前段参与那一半的答案（票 06）：PARTICIPATION_ENDED、
+	// NO_ACTIVE_PARTICIPATION 等，拒收/待确认与重放时为空。
+	ParticipationEnd string `json:"participationEnd,omitempty"`
 }
 
 func writeHandoverOutcome(response http.ResponseWriter, result application.RegisterTransportHandoverResult) {
@@ -98,6 +101,7 @@ func writeHandoverOutcome(response http.ResponseWriter, result application.Regis
 		HandoffReference:             result.HandoverHandoffReference(),
 		SegmentContinuationReference: result.SegmentContinuationReference(),
 		SegmentEntryRefusal:          result.SegmentEntryRefusal().String(),
+		ParticipationEnd:             result.ParticipationEnd().String(),
 	}
 	if record, present := result.Record(); present {
 		body.HandoverVersion = record.Handover.Version().String()

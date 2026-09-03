@@ -154,6 +154,26 @@ type tfClock struct{ at time.Time }
 
 func (clock tfClock) Now() time.Time { return clock.at }
 
+// participationEnderDouble 替结束参与那条编排答一个固定格：端点测试只证「那一格被透出」，结束参与自己的
+// 规则在应用层测试守。结果类型的字段不可导出，替身只能借编排本尊造一个带该 outcome 的结果——这里用一个
+// 只有空段登记册的真处理器，NO_ACTIVE_PARTICIPATION 正是它对任何对象的答案。
+type participationEnderDouble struct {
+	outcome application.ParticipationEndOutcome
+}
+
+func (double participationEnderDouble) End(
+	ctx context.Context,
+	command application.EndFulfillmentParticipationCommand,
+) (application.EndFulfillmentParticipationResult, error) {
+	real := application.NewEndFulfillmentParticipationHandler(application.EndFulfillmentParticipationDeps{
+		Segments:   newSegmentRegistry(),
+		Handovers:  newHandoverRegistry(),
+		Deliveries: newDeliveryStore(),
+		Clock:      tfClock{},
+	})
+	return real.End(ctx, command)
+}
+
 // ---- 请求体与 intake 替身（信封固定、事实从体收）----
 
 type registerBody struct {
@@ -238,11 +258,12 @@ func newTFFixture(t *testing.T) *tfFixture {
 		view:   &deliveryViewDouble{outcome: domain.ObjectDelivered},
 	}
 	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
-		Attempts:   fixture.view,
-		Deliveries: newDeliveryStore(),
-		Versions:   &deliveryVersionFactory{},
-		Downstream: deliveryHandoffDouble{},
-		Clock:      tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+		Attempts:          fixture.view,
+		Deliveries:        newDeliveryStore(),
+		Versions:          &deliveryVersionFactory{},
+		Downstream:        deliveryHandoffDouble{},
+		Clock:             tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+		ParticipationEnds: participationEnderDouble{outcome: application.ParticipationNoActiveParticipation},
 	})
 	fixture.register = tfhttp.NewRegisterEffectiveDeliveryEndpoint(fixture.intake, handler)
 	fixture.correct = tfhttp.NewCorrectDeliveryProofEndpoint(fixture.intake, handler)

@@ -126,6 +126,9 @@ type deliveryResponse struct {
 	Proof                 string `json:"proof,omitempty"`
 	Corrects              string `json:"corrects,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
+	// ParticipationEnd 是交付落库后结束该对象履约参与那一半的答案（票 06）：PARTICIPATION_ENDED 或
+	// NO_ACTIVE_PARTICIPATION 等；更正与重放时为空。
+	ParticipationEnd string `json:"participationEnd,omitempty"`
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、对象或尝试的存在
@@ -148,7 +151,7 @@ func writeOutcome(response http.ResponseWriter, result application.RegisterEffec
 		return
 	}
 
-	body := deliveryResponse{Outcome: outcome}
+	body := deliveryResponse{Outcome: outcome, ParticipationEnd: result.ParticipationEnd().String()}
 	if record, present := result.Record(); present {
 		body.DeliveryVersion = record.Delivery.Version().String()
 		body.Object = record.Delivery.Object().String()

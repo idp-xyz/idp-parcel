@@ -92,12 +92,41 @@ func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) 
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: effective delivery handoff: %w", err)
 	}
+	participationEnds, err := buildParticipationEnder(db, clock)
+	if err != nil {
+		return nil, err
+	}
 	handler := tfapp.NewRegisterEffectiveDeliveryHandler(tfapp.RegisterEffectiveDeliveryDeps{
-		Attempts:   attempts,
-		Deliveries: deliveries,
-		Versions:   versions,
-		Downstream: downstream,
-		Clock:      clock,
+		Attempts:          attempts,
+		Deliveries:        deliveries,
+		Versions:          versions,
+		Downstream:        downstream,
+		Clock:             clock,
+		ParticipationEnds: participationEnds,
 	})
 	return transactionalDelivery{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildParticipationEnder 装配结束参与那条编排，供交付与交接两条来源编排在各自事务里同步调用（票
+// tf-segment-lifecycle-closure/06 裁决 (i)）。它不包事务：调用它的编排已经在事务里，同一 ctx 带着同一笔。
+// 缝全接真——段登记册（按对象找段的读口也在这只上）、交接登记册、交付登记库、时钟。
+func buildParticipationEnder(db *bentopg.DB, clock systemClock) (*tfapp.EndFulfillmentParticipationHandler, error) {
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
+	}
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: transport handovers: %w", err)
+	}
+	deliveries, err := tfpostgres.NewEffectiveDeliveries(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: effective deliveries: %w", err)
+	}
+	return tfapp.NewEndFulfillmentParticipationHandler(tfapp.EndFulfillmentParticipationDeps{
+		Segments:   segments,
+		Handovers:  handovers,
+		Deliveries: deliveries,
+		Clock:      clock,
+	}), nil
 }

@@ -158,6 +158,10 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 	if err != nil {
 		return controlFactOrchestrations{}, fmt.Errorf("parcel-api: transport handover handoff: %w", err)
 	}
+	participationEnds, err := buildParticipationEnder(db, clock)
+	if err != nil {
+		return controlFactOrchestrations{}, err
+	}
 
 	pickups, err := tfpostgres.NewOffsitePickupRegistrations(db)
 	if err != nil {
@@ -182,10 +186,11 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 		handover: transactionalHandover{
 			transactor: transactor,
 			inner: tfapp.NewRegisterTransportHandoverHandler(tfapp.RegisterTransportHandoverDeps{
-				Handovers:  handovers,
-				Segments:   segments,
-				Downstream: handoverDownstream,
-				Clock:      clock,
+				Handovers:         handovers,
+				Segments:          segments,
+				Downstream:        handoverDownstream,
+				Clock:             clock,
+				ParticipationEnds: participationEnds,
 			}),
 		},
 		pickupRegistration: transactionalPickupRegistration{

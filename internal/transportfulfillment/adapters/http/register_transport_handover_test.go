@@ -190,11 +190,19 @@ func newHandoverFixture(t *testing.T) *handoverFixture {
 		registry: newHandoverRegistry(),
 		segments: newSegmentRegistry(),
 	}
+	// 结束参与那一半接真处理器、共用同一个段登记册替身：交接口的测试里对象都是第一次到场，答案恒为
+	// NO_ACTIVE_PARTICIPATION；它被透出这件事由 TestRegisterHandoverExposesTheParticipationEnd 钉。
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
 		Handovers:  fixture.registry,
 		Segments:   fixture.segments,
 		Downstream: handoverHandoffDouble{},
 		Clock:      tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+		ParticipationEnds: application.NewEndFulfillmentParticipationHandler(application.EndFulfillmentParticipationDeps{
+			Segments:   fixture.segments,
+			Handovers:  fixture.registry,
+			Deliveries: newDeliveryStore(),
+			Clock:      tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+		}),
 	})
 	fixture.register = tfhttp.NewRegisterTransportHandoverEndpoint(fixture.intake, handler)
 	fixture.correct = tfhttp.NewCorrectTransportHandoverEndpoint(fixture.intake, handler)
@@ -240,6 +248,40 @@ type handoverView struct {
 	HandoffReference             string `json:"handoffReference"`
 	SegmentContinuationReference string `json:"segmentContinuationReference"`
 	SegmentEntryRefusal          string `json:"segmentEntryRefusal"`
+	ParticipationEnd             string `json:"participationEnd"`
+}
+
+// Covers: 票 06——`已交接`落库后结束前段参与那一半的答案透出（`participationEnd`）。第一次到场的对象答
+// NO_ACTIVE_PARTICIPATION 而不是空：交接登上了、没有任何参与被它结束，调用方要看得见。
+func TestRegisterHandoverExposesTheParticipationEnd(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	body := defaultHandoverBody()
+	body.Segment = "segment-1"
+
+	response := postTo(t, fixture.register, "/transport-fulfillment/handovers", body)
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	if view := decodeHandover(t, response); view.ParticipationEnd != "NO_ACTIVE_PARTICIPATION" {
+		t.Fatalf("participationEnd = %q, want NO_ACTIVE_PARTICIPATION", view.ParticipationEnd)
+	}
+
+	next := defaultHandoverBody()
+	next.Scope = "handover-scope-2"
+	next.Version = "handover-result/parcel-1/v2"
+	next.JudgedAt = "2026-09-05T11:00:00Z"
+	next.Segment = "segment-2"
+	moved := postTo(t, fixture.register, "/transport-fulfillment/handovers", next)
+	if moved.Code != http.StatusCreated {
+		t.Fatalf("status = %d body = %s", moved.Code, moved.Body.String())
+	}
+	if view := decodeHandover(t, moved); view.ParticipationEnd != "PARTICIPATION_ENDED" {
+		t.Fatalf("participationEnd = %q, want PARTICIPATION_ENDED", view.ParticipationEnd)
+	}
+	if fixture.segments.participationOf(t, "tenant-1", "segment-1", "parcel-1").Active() {
+		t.Fatal("下一次交接后前段参与仍在场")
+	}
 }
 
 func decodeHandover(t *testing.T, recorder *httptest.ResponseRecorder) handoverView {
@@ -409,11 +451,12 @@ func TestRegisterHandoverReportsOKForEveryAnswerThatRegisteredNothing(t *testing
 	}
 }
 
-// Covers: 票 04 专钉第 2 条——段那一半的欠账要透出。段登记册故障时交接照登（201），响应里
+// Covers: 票 04 专钉第 2 条——段那一半的欠账要透出。段立不起来（写不进）时交接照登（201），响应里
 // `segmentContinuationReference` 非空；这一格被传输层吞掉，调用方就会以为对象已经进段。
+// 用 saveErr 而不是 findErr：票 06 之后按对象找段那一步读不回是整笔不落（5xx），不再是欠账。
 func TestRegisterHandoverExposesTheSegmentDebtWhenTheRegistryIsDown(t *testing.T) {
 	fixture := newHandoverFixture(t)
-	fixture.segments.findErr = errors.New("segment registry down")
+	fixture.segments.saveErr = errors.New("segment registry cannot write")
 	body := defaultHandoverBody()
 	body.Segment = "segment-1"
 
@@ -432,6 +475,15 @@ func TestRegisterHandoverExposesTheSegmentDebtWhenTheRegistryIsDown(t *testing.T
 	if fixture.segments.hasSegment("tenant-1", "segment-1") {
 		t.Fatal("段登记册故障时不该有段")
 	}
+
+	t.Run("a registry that cannot even be read fails the whole registration", func(t *testing.T) {
+		fixture := newHandoverFixture(t)
+		fixture.segments.findErr = errors.New("segment registry down")
+		response := postTo(t, fixture.register, "/transport-fulfillment/handovers", body)
+		if response.Code != http.StatusInternalServerError || problemCode(t, response) != "NO_ANSWER_FORMED" {
+			t.Fatalf("status = %d body = %s，want 5xx——结束参与那一半没答上，交付/交接不落半成品（票 06）", response.Code, response.Body.String())
+		}
+	})
 }
 
 // 传输层分法：405 带 Allow；构造不出命令是 4xx；接入层其他失败与编排错误是 5xx，且 5xx 体里

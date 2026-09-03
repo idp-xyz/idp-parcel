@@ -19,6 +19,9 @@ import (
 type segmentRegistryDouble struct {
 	rows    map[string]*segmentRowsDouble
 	findErr error
+	// saveErr 只让立段那一步写不进，读照常——用它模拟「结束参与那一半成立、进段那一半欠着」：findErr
+	// 会先把按对象找段那一步打成`未决`，按票 06 那是整笔不落，模拟不出欠账。
+	saveErr error
 }
 
 type segmentRowsDouble struct {
@@ -103,6 +106,9 @@ func (double *segmentRegistryDouble) Save(
 	_ context.Context,
 	record ports.FulfillmentSegmentRecord,
 ) (ports.SegmentSaveOutcome, error) {
+	if double.saveErr != nil {
+		return ports.SegmentSaveOutcomeInvalid, double.saveErr
+	}
 	if _, exists := double.rows[segmentRegistryKey(record.Key)]; exists {
 		return ports.SegmentAlreadyRegistered, nil
 	}
