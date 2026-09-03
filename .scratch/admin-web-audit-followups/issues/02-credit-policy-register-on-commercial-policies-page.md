@@ -1,8 +1,8 @@
 # 02 商业政策页补「信用政策」册——后端已供七类，前端只认六类
 
 Category: bug
-Status: ready-for-agent
-Blocked by: 01
+Status: in-progress——MCP-2
+Blocked by: 01（已 resolved，`d722301`）
 
 ## 缺什么
 

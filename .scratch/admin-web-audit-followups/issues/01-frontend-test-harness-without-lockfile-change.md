@@ -1,7 +1,7 @@
 # 01 前端测试底座——零新依赖，不动 `pnpm-lock.yaml`
 
 Category: enhancement
-Status: in-progress——MCP-2
+Status: resolved（2026-09-03，MCP-2，`d722301`）
 Blocked by: 无
 
 ## 缺什么
@@ -46,3 +46,10 @@ Blocked by: 无
 - 票 02 的红绿循环能在这套底座上跑。
 
 ## Comments
+
+- 2026-09-03 · MCP-2：落于 `d722301`（父 `0d492b8`）。`pnpm test` → tsc 发射 + `node --test`
+  `.tmp-test/**/*.test.js`，11 例 `fail 0`；主配置 `tsc --noEmit -p .` 无输出（98 + 1 文件）。
+  两处实测改了票面原设想：`node --test <目录>` 在 v22.22 不收目录，改传 glob；产物目录要单独
+  一份 `{"type":"commonjs"}`，否则 `"type": "module"` 的包会把 tsc 发的 CJS 当 ESM 读。
+  **只在本机验过**（Windows，Node v22.22.0）；CI 尚无非 Go job（README 已知跟进），这套底座
+  进 CI 那天要一并核 Node ≥ 22 与 glob 传参。

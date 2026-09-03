@@ -29,7 +29,8 @@ export type CommercialPolicyKind =
   | 'PRICE_POLICY'
   | 'SETTLEMENT_POLICY'
   | 'AS_OF_POLICY'
-  | 'AUTHORIZATION_RULE';
+  | 'AUTHORIZATION_RULE'
+  | 'CREDIT_POLICY';
 
 export interface AssembledRuleRecord {
   category: string;
@@ -127,7 +128,24 @@ export interface AuthorizationRuleRecord {
   cancellationAuthorities: CancellationAuthorityRecord[];
 }
 
-// 响应体按 kind 判别:六种册子的行形状互不相同(传输层注释原话),合成一个字段并集
+// 信用政策册（0020_credit_policy.sql）。额度两键**恰一在场**：金额行只有 limitMinor（最小货币
+// 单位），比例行只有 limitRatioBasisPoints（基点）。后端用指针而不用 omitempty 的整数，是因为
+// 零额度是合法声明（「授予零信用」）——前端同样不得拿 0 当缺席；两键都缺才是响应不合契约。
+// 授权层级与费用类型是开放引用集，按原词展示。
+export interface CreditPolicyRecord {
+  objectId: string;
+  version: string;
+  legalEntity: string;
+  authorityLevel: string;
+  chargeType: string;
+  limitMinor?: number;
+  limitRatioBasisPoints?: number;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  registeredAt: string;
+}
+
+// 响应体按 kind 判别:七种册子的行形状互不相同(传输层注释原话),合成一个字段并集
 // 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
 export type CommercialPolicyListResponseBody =
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'ACCEPTANCE_RULE_PACKAGE'; policies: RulePackageRecord[] }
@@ -135,7 +153,8 @@ export type CommercialPolicyListResponseBody =
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'PRICE_POLICY'; policies: PricePolicyRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'SETTLEMENT_POLICY'; policies: SettlementPolicyRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AS_OF_POLICY'; policies: AsOfPolicyRecord[] }
-  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AUTHORIZATION_RULE'; policies: AuthorizationRuleRecord[] };
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AUTHORIZATION_RULE'; policies: AuthorizationRuleRecord[] }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CREDIT_POLICY'; policies: CreditPolicyRecord[] };
 
 export interface ControlBindingRecord {
   chargeScope: string;

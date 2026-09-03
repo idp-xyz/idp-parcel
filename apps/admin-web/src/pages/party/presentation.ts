@@ -29,6 +29,7 @@ export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   SETTLEMENT_POLICY: '结算政策',
   AS_OF_POLICY: '时点锚声明',
   AUTHORIZATION_RULE: '授权规则',
+  CREDIT_POLICY: '信用政策',
 };
 
 export const commercialPolicyKinds: CommercialPolicyKind[] = [
@@ -38,6 +39,7 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'SETTLEMENT_POLICY',
   'AS_OF_POLICY',
   'AUTHORIZATION_RULE',
+  'CREDIT_POLICY',
 ];
 
 // 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
