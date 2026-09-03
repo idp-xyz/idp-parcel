@@ -1,7 +1,8 @@
 # 把 TF 七条支路接起来
 
 Category: enhancement
-Status: in-progress——MCP-3 占 internal/transportfulfillment/ 与 migrations/transport_fulfillment/
+Status: resolved——八票全 resolved（本批立时七票，票 02 分出票 08）；`transport-fulfillment`
+那组棘轮条目由 7 条清空到 0，但「名单清空」不等于「都接上了」，见下方完工判据那节
 
 ## 范围来自哪条裁决
 
