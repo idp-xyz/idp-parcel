@@ -9,10 +9,53 @@ import (
 )
 
 type participationFixture struct {
-	segments  *segmentRegistryDouble
-	handovers *handoverRegistryDouble
-	handler   *application.EndFulfillmentParticipationHandler
-	tenant    domain.TenantID
+	segments   *segmentRegistryDouble
+	handovers  *handoverRegistryDouble
+	deliveries *deliveryStoreDouble
+	handler    *application.EndFulfillmentParticipationHandler
+	tenant     domain.TenantID
+}
+
+// joinEarlyMember 让一个起点早于交付到场时刻的对象进段。
+//
+// 交付夹具的到场时刻（`deliveryArrivedAt`）比 `handoverJudgedTime` 早几个小时，而领域拒绝终点
+// 早于起点——所以验交付结束要用一个进段更早的成员，不能拿两成员段里那两个。**那条拒绝本身另有
+// 一条用例专钉**，不是绕开它。
+func (fixture *participationFixture) joinEarlyMember(t *testing.T, object string) {
+	t.Helper()
+	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
+		Handovers:  fixture.handovers,
+		Segments:   fixture.segments,
+		Downstream: &handoverHandoffDouble{},
+		Clock:      handoverClock{at: handoverRegisteredAt},
+	})
+	command := registerHandoverCommand(t)
+	command.Object = object
+	command.Version = "handover-result/" + object + "/v1"
+	command.JudgedAt = deliveryArrivedAt.Add(-2 * time.Hour)
+	command.Segment = "segment-1"
+	if _, err := handler.Register(t.Context(), command); err != nil {
+		t.Fatalf("%s 进段：%v", object, err)
+	}
+}
+
+// registerDelivery 把一条真实的交付登记进册——结束参与要凭读得回来的控制事实，测试因此不能
+// 手搓一条记录塞进替身，得走生产登记路径。
+func (fixture *participationFixture) registerDelivery(t *testing.T, object, attempt string) {
+	t.Helper()
+	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+		Attempts:   &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
+		Deliveries: fixture.deliveries,
+		Versions:   &deliveryVersionFactory{},
+		Downstream: &deliveryHandoffDouble{},
+		Clock:      deliveryClock{at: deliveryRecordedAt},
+	})
+	command := registerCommand(t)
+	command.Object = object
+	command.Attempt = attempt
+	if _, err := handler.Register(t.Context(), command); err != nil {
+		t.Fatalf("登记交付：%v", err)
+	}
 }
 
 func newParticipationFixture(t *testing.T) *participationFixture {
@@ -22,15 +65,17 @@ func newParticipationFixture(t *testing.T) *participationFixture {
 		t.Fatalf("tenant: %v", err)
 	}
 	fixture := &participationFixture{
-		segments:  newSegmentRegistry(),
-		handovers: newHandoverRegistry(),
-		tenant:    tenant,
+		segments:   newSegmentRegistry(),
+		handovers:  newHandoverRegistry(),
+		deliveries: newDeliveryStore(),
+		tenant:     tenant,
 	}
 	fixture.handler = application.NewEndFulfillmentParticipationHandler(
 		application.EndFulfillmentParticipationDeps{
-			Segments:  fixture.segments,
-			Handovers: fixture.handovers,
-			Clock:     handoverClock{at: handoverRegisteredAt},
+			Segments:   fixture.segments,
+			Handovers:  fixture.handovers,
+			Deliveries: fixture.deliveries,
+			Clock:      handoverClock{at: handoverRegisteredAt},
 		})
 	return fixture
 }
@@ -249,6 +294,174 @@ func TestATerminationWithoutABasisIsNotAccepted(t *testing.T) {
 	}
 	if result.Outcome() != application.ParticipationEndNotAccepted {
 		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
+	}
+}
+
+// 有效交付结束参与：CONTEXT「有效交付同时形成该对象向收件方的控制转移并结束相应履约参与
+// 关系」。依据同样凭一条读得回来的交付登记，不收自报引用。
+func TestAnEffectiveDeliveryEndsTheParticipation(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	fixture.twoMemberSegment(t)
+	fixture.joinEarlyMember(t, "parcel-3")
+	fixture.registerDelivery(t, "parcel-3", "attempt-1")
+
+	command := terminationCommand(t, "parcel-3")
+	command.Source = application.ParticipationEndedByDelivery
+	command.Basis = ""
+	command.Attempt = "attempt-1"
+
+	result, err := fixture.handler.End(t.Context(), command)
+	if err != nil {
+		t.Fatalf("交付结束：%v", err)
+	}
+	if result.Outcome() != application.ParticipationEndedNow {
+		t.Fatalf("outcome = %q, want PARTICIPATION_ENDED", result.Outcome())
+	}
+	kind, _, _, ended := fixture.participation(t, "parcel-3").End()
+	if !ended || kind != domain.EndedByEffectiveDelivery {
+		t.Fatalf("结果 = %q ended=%v, want EFFECTIVE_DELIVERY", kind, ended)
+	}
+	// 同段另外两个成员一动没动——结束一条不碰别人。
+	if _, _, _, otherEnded := fixture.participation(t, "parcel-1").End(); otherEnded {
+		t.Fatal("交付结束 parcel-3 顺手把 parcel-1 也结束了")
+	}
+}
+
+// **终点早于起点要被拒**，而这一条是写上一条用例时撞出来的：交付夹具的到场时刻比两成员段的
+// 参与起点早几个小时，于是领域当场拒了。它不是夹具凑巧，是 CONTEXT 那条「实际控制起止」的
+// 直接后果——一次发生在对象进段之前的交付，结束不了它此后才成立的参与。
+func TestADeliveryEarlierThanTheParticipationStartIsRefused(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	fixture.twoMemberSegment(t)
+	fixture.registerDelivery(t, "parcel-1", "attempt-1")
+
+	command := terminationCommand(t, "parcel-1")
+	command.Source = application.ParticipationEndedByDelivery
+	command.Basis = ""
+	command.Attempt = "attempt-1"
+
+	result, err := fixture.handler.End(t.Context(), command)
+	if err != nil {
+		t.Fatalf("不该上抛：%v", err)
+	}
+	if result.Outcome() != application.ParticipationEndNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
+	}
+	if _, _, _, ended := fixture.participation(t, "parcel-1").End(); ended {
+		t.Fatal("一条早于起点的交付把参与结束了")
+	}
+}
+
+// 凭一条不存在的交付结束参与要被拒——与交接那一路同一条判据。
+func TestEndingByADeliveryThatWasNeverRegisteredIsRefused(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	fixture.twoMemberSegment(t)
+
+	command := terminationCommand(t, "parcel-1")
+	command.Source = application.ParticipationEndedByDelivery
+	command.Basis = ""
+	command.Attempt = "attempt-never"
+
+	result, err := fixture.handler.End(t.Context(), command)
+	if err != nil {
+		t.Fatalf("交付不在册不该上抛：%v", err)
+	}
+	if result.Outcome() != application.ParticipationControlFactNotFound {
+		t.Fatalf("outcome = %q, want CONTROL_FACT_NOT_FOUND", result.Outcome())
+	}
+}
+
+// **控制边界变化：结束原关系并形成下一段。** CONTEXT「可验证的实际承运责任或运输控制边界
+// 发生变化时，结束原载运对象的履约参与关系并形成下一实际履约段」。
+//
+// 下一段的段引用由调用方显式给（与票 02 同一条裁定），缺席则只结束不立新段。
+func TestAControlBoundaryChangeEndsHereAndEntersTheNextSegment(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	fixture.twoMemberSegment(t)
+
+	next := registerHandoverCommand(t)
+	next.Object = "parcel-1"
+	next.Scope = "handover-scope-2"
+	next.Version = "handover-result/parcel-1/v2"
+	next.JudgedAt = handoverJudgedTime.Add(9 * time.Hour)
+	registrar := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
+		Handovers:  fixture.handovers,
+		Downstream: &handoverHandoffDouble{},
+		Clock:      handoverClock{at: handoverRegisteredAt},
+	})
+	if _, err := registrar.Register(t.Context(), next); err != nil {
+		t.Fatalf("登记下一次交接：%v", err)
+	}
+
+	command := terminationCommand(t, "parcel-1")
+	command.Source = application.ParticipationEndedByNextHandover
+	command.Basis = ""
+	command.Scope = "handover-scope-2"
+	command.Version = "handover-result/parcel-1/v2"
+	command.NextSegment = "segment-2"
+
+	result, err := fixture.handler.End(t.Context(), command)
+	if err != nil {
+		t.Fatalf("边界变化：%v", err)
+	}
+	if result.Outcome() != application.ParticipationEndedNow {
+		t.Fatalf("outcome = %q", result.Outcome())
+	}
+	if reference := result.NextSegmentContinuationReference(); reference != "" {
+		t.Fatalf("下一段没进去却报了成功：%q", reference)
+	}
+
+	// 原段那一条已离场，新段里同一对象凭同一条交接成立了新的参与起点。
+	if _, _, _, ended := fixture.participation(t, "parcel-1").End(); !ended {
+		t.Fatal("原段那一条没结束")
+	}
+	nextRecord := fixture.segments.saved(t, "tenant-1", "segment-2")
+	object, err := domain.NewCarriedObjectReference("parcel-1")
+	if err != nil {
+		t.Fatalf("对象引用：%v", err)
+	}
+	joined, present := nextRecord.Segment.ParticipationFor(object)
+	if !present {
+		t.Fatal("下一段里没有这个对象")
+	}
+	if joined.EntryKind() != domain.EnteredByTransportHandover || !joined.Active() {
+		t.Fatalf("下一段的参与起点不对：kind=%q active=%v", joined.EntryKind(), joined.Active())
+	}
+	// 原段那一条的终点与新段那一条的起点取同一条交接的裁决时刻——它们是同一件事的两面。
+	if !joined.EnteredAt().Equal(handoverJudgedTime.Add(9 * time.Hour)) {
+		t.Fatalf("下一段起点 = %s", joined.EnteredAt())
+	}
+}
+
+// **交付或终止不得带下一段。** 有效交付把控制转给收件方、终止是控制结束——两者之后都没有
+// 「下一段」。允许它就等于能表达「已交付但又进了下一段」，而那在 CONTEXT 里不成立。
+func TestADeliveryOrTerminationCannotCarryANextSegment(t *testing.T) {
+	for name, source := range map[string]application.ParticipationEndSource{
+		"终止带下一段": application.ParticipationEndedByTermination,
+		"交付带下一段": application.ParticipationEndedByDelivery,
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newParticipationFixture(t)
+			fixture.twoMemberSegment(t)
+			fixture.joinEarlyMember(t, "parcel-3")
+			fixture.registerDelivery(t, "parcel-3", "attempt-1")
+
+			command := terminationCommand(t, "parcel-3")
+			command.Source = source
+			command.Attempt = "attempt-1"
+			command.NextSegment = "segment-2"
+
+			result, err := fixture.handler.End(t.Context(), command)
+			if err != nil {
+				t.Fatalf("不该上抛：%v", err)
+			}
+			if result.Outcome() != application.ParticipationEndNotAccepted {
+				t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
+			}
+			if _, _, _, ended := fixture.participation(t, "parcel-3").End(); ended {
+				t.Fatal("被拒的命令仍然把参与结束了")
+			}
+		})
 	}
 }
 

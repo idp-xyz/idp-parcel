@@ -23,9 +23,18 @@ type ParticipationEndSource uint8
 
 const (
 	ParticipationEndSourceInvalid ParticipationEndSource = iota
+	ParticipationEndedByDelivery
 	ParticipationEndedByNextHandover
 	ParticipationEndedByTermination
 )
+
+// carriesControlOnward 只有下一次权威交接为真：控制移入下一段，本段对该对象的责任到此为止。
+//
+// 有效交付把控制转给收件方、明确终止是控制结束——**两者之后都没有「下一段」**。这个谓词存在
+// 就是为了让「已交付但又进了下一段」在编排里表达不出来。
+func (source ParticipationEndSource) carriesControlOnward() bool {
+	return source == ParticipationEndedByNextHandover
+}
 
 // ParticipationEndOutcome 是结束一条参与关系的结果代数。
 //
@@ -81,14 +90,27 @@ type EndFulfillmentParticipationCommand struct {
 	Scope   string
 	Version string
 
+	// 有效交付那一路：指名已登记的那一次（交付的幂等键是租户+对象+尝试）。
+	Attempt string
+
 	// 明确控制终止那一路：依据必备，时刻由调用方给（终止是何时发生的不由写库那一刻决定）。
 	Basis   string
 	EndedAt time.Time
+
+	// NextSegment 指名控制边界变化后对象进入的下一段（CONTEXT「结束原载运对象的履约参与关系
+	// 并形成下一实际履约段」），NextPlannedSegment 是它在新段里关联的计划段，可缺席。
+	//
+	// **段引用仍由调用方显式给，缺席就只结束不立新段**——与票 02 同一条裁定：段身份由谁铸出
+	// 至今没有裁决，编排不拿手边任一引用顶替。**只有交接那一路收得下它**，理由见
+	// carriesControlOnward。
+	NextSegment        string
+	NextPlannedSegment string
 }
 
 type EndFulfillmentParticipationResult struct {
 	outcome      ParticipationEndOutcome
 	continuation string
+	nextSegment  string
 }
 
 func (result EndFulfillmentParticipationResult) Outcome() ParticipationEndOutcome {
@@ -100,10 +122,19 @@ func (result EndFulfillmentParticipationResult) ContinuationReference() string {
 	return result.continuation
 }
 
+// NextSegmentContinuationReference 非空说明本段这一条已结束、进下一段那一半还欠着。
+//
+// 它与 Outcome 分开是因为**两半的失败后果不同**：结束是来源保全那一侧（对象在本段的责任到此
+// 为止，这一点已经成立），进下一段是派生的一侧；后者失败不该把前者翻回去。
+func (result EndFulfillmentParticipationResult) NextSegmentContinuationReference() string {
+	return result.nextSegment
+}
+
 type EndFulfillmentParticipationDeps struct {
-	Segments  ports.ActualFulfillmentSegmentRegistry
-	Handovers ports.TransportHandoverRegistry
-	Clock     ports.Clock
+	Segments   ports.ActualFulfillmentSegmentRegistry
+	Handovers  ports.TransportHandoverRegistry
+	Deliveries ports.EffectiveDeliveryStore
+	Clock      ports.Clock
 }
 
 type EndFulfillmentParticipationHandler struct {
@@ -133,6 +164,10 @@ func (handler *EndFulfillmentParticipationHandler) End(
 	if !accepted {
 		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
 	}
+	// 交付与终止之后没有下一段；带着它来就是一条自相矛盾的命令，在动库之前就拒。
+	if strings.TrimSpace(command.NextSegment) != "" && !command.Source.carriesControlOnward() {
+		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
+	}
 
 	key := ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segment}
 	record, found, err := handler.deps.Segments.FindByKey(ctx, key)
@@ -151,7 +186,7 @@ func (handler *EndFulfillmentParticipationHandler) End(
 		return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded}, nil
 	}
 
-	ended, outcome := handler.applyEnd(ctx, command, record.Segment, object)
+	ended, fact, outcome := handler.applyEnd(ctx, command, record.Segment, object)
 	if outcome != ParticipationEndOutcomeInvalid {
 		return EndFulfillmentParticipationResult{outcome: outcome, continuation: continuationFor(outcome, command)}, nil
 	}
@@ -166,7 +201,10 @@ func (handler *EndFulfillmentParticipationHandler) End(
 	}
 	switch saved {
 	case ports.ParticipationEnded:
-		return EndFulfillmentParticipationResult{outcome: ParticipationEndedNow}, nil
+		return EndFulfillmentParticipationResult{
+			outcome:     ParticipationEndedNow,
+			nextSegment: handler.enterNextSegment(ctx, command, fact),
+		}, nil
 	case ports.ParticipationAlreadyEnded:
 		// 并发下另一方先结束：那是业务答案，不是本次失败。
 		return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded}, nil
@@ -175,40 +213,115 @@ func (handler *EndFulfillmentParticipationHandler) End(
 	}
 }
 
-// applyEnd 按来源走对应的领域门。第二个返回值非零表示这一步已经有了答案，段不必再写。
+// enterNextSegment 让控制边界变化后的对象进入下一段，交回续办引用；空串表示这一半没有欠账。
+//
+// 走的是与两条立段入口同一道门（enterFulfillmentSegment），不另写一份——同一形状两个口径正是
+// 那道门存在的理由。**这一半失败不把「本段这一条已结束」翻回去**：责任到此为止已经成立，进下
+// 一段是派生的一侧。
+func (handler *EndFulfillmentParticipationHandler) enterNextSegment(
+	ctx context.Context,
+	command EndFulfillmentParticipationCommand,
+	handover domain.TransportHandover,
+) string {
+	if !command.Source.carriesControlOnward() || strings.TrimSpace(command.NextSegment) == "" {
+		return ""
+	}
+	return enterFulfillmentSegment(
+		ctx, handler.deps.Segments, handler.deps.Clock,
+		command.TenantID, command.NextSegment, command.NextPlannedSegment,
+		segmentEntryDoors{
+			object: handover.Object(),
+			establish: func(
+				segment domain.FulfillmentSegmentReference,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return domain.EstablishSegmentWithHandover(segment, handover, planned)
+			},
+			join: func(
+				existing domain.ActualFulfillmentSegment,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return existing.JoinWithHandover(handover, planned)
+			},
+		},
+	)
+}
+
+// applyEnd 按来源走对应的领域门。第三个返回值非零表示这一步已经有了答案，段不必再写；
+// 第二个返回值只在交接那一路有意义（下一段要凭同一条交接进）。
 func (handler *EndFulfillmentParticipationHandler) applyEnd(
 	ctx context.Context,
 	command EndFulfillmentParticipationCommand,
 	segment domain.ActualFulfillmentSegment,
 	object domain.CarriedObjectReference,
-) (domain.ActualFulfillmentSegment, ParticipationEndOutcome) {
+) (domain.ActualFulfillmentSegment, domain.TransportHandover, ParticipationEndOutcome) {
+	none := domain.TransportHandover{}
 	switch command.Source {
 	case ParticipationEndedByTermination:
 		basis, err := domain.NewParticipationBasisReference(command.Basis)
 		if err != nil || command.EndedAt.IsZero() {
-			return domain.ActualFulfillmentSegment{}, ParticipationEndNotAccepted
+			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 		}
 		ended, err := segment.EndParticipationWithTermination(object, basis, command.EndedAt)
 		if err != nil {
-			return domain.ActualFulfillmentSegment{}, ParticipationEndNotAccepted
+			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 		}
-		return ended, ParticipationEndOutcomeInvalid
+		return ended, none, ParticipationEndOutcomeInvalid
 
 	case ParticipationEndedByNextHandover:
 		handover, outcome := handler.handoverFact(ctx, command, object)
 		if outcome != ParticipationEndOutcomeInvalid {
-			return domain.ActualFulfillmentSegment{}, outcome
+			return domain.ActualFulfillmentSegment{}, none, outcome
 		}
 		ended, err := segment.EndParticipationWithNextHandover(handover)
 		if err != nil {
 			// 拒收与待确认转不出控制，结束不了参与——那是正当结果，由领域把门。
-			return domain.ActualFulfillmentSegment{}, ParticipationEndNotAccepted
+			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 		}
-		return ended, ParticipationEndOutcomeInvalid
+		return ended, handover, ParticipationEndOutcomeInvalid
+
+	case ParticipationEndedByDelivery:
+		delivery, outcome := handler.deliveryFact(ctx, command, object)
+		if outcome != ParticipationEndOutcomeInvalid {
+			return domain.ActualFulfillmentSegment{}, none, outcome
+		}
+		ended, err := segment.EndParticipationWithDelivery(delivery)
+		if err != nil {
+			return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
+		}
+		return ended, none, ParticipationEndOutcomeInvalid
 
 	default:
-		return domain.ActualFulfillmentSegment{}, ParticipationEndNotAccepted
+		return domain.ActualFulfillmentSegment{}, none, ParticipationEndNotAccepted
 	}
+}
+
+// deliveryFact 取回指名的那一次交付。**读不回来就不结束**——与交接那一路同一条判据：依据必须
+// 是一条真实存在的控制事实，不是调用方自报的引用串。
+func (handler *EndFulfillmentParticipationHandler) deliveryFact(
+	ctx context.Context,
+	command EndFulfillmentParticipationCommand,
+	object domain.CarriedObjectReference,
+) (domain.EffectiveDelivery, ParticipationEndOutcome) {
+	if handler.deps.Deliveries == nil {
+		return domain.EffectiveDelivery{}, ParticipationControlFactNotFound
+	}
+	attempt, err := domain.NewAttemptReference(command.Attempt)
+	if err != nil {
+		return domain.EffectiveDelivery{}, ParticipationEndNotAccepted
+	}
+	record, found, err := handler.deps.Deliveries.FindByKey(ctx, ports.EffectiveDeliveryKey{
+		TenantID: command.TenantID,
+		Object:   object,
+		Attempt:  attempt,
+	})
+	if err != nil {
+		return domain.EffectiveDelivery{}, ParticipationEndUndecided
+	}
+	if !found {
+		return domain.EffectiveDelivery{}, ParticipationControlFactNotFound
+	}
+	return record.Delivery, ParticipationEndOutcomeInvalid
 }
 
 // handoverFact 取回指名的那一条交接。**读不回来就不结束**——依据必须是一条真实存在的控制事实。
