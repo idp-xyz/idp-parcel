@@ -1,7 +1,7 @@
 # 计价参考序列（汇率 / 燃油）的运营形态：绑定标识、复核进在用、评价时解析
 
 Category: enhancement
-Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 可认领，04–05 ready-for-agent（按阻塞边顺序），06–07 draft
+Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 in-progress（代码全落 `f62d619`，只欠真库冒烟一格，MCP-3），04 in-progress（04a 落 `9035df7`，04b 余件并入 08），05 in-progress（05a 与第 3 项已落，05b 按 ADR-0105 做），06/08 已裁转 MCP-5 实施，07 待 MCP-3 裁；状态行由 MCP-3 于 2026-09-03 对票面重核后改写
 
 依据：[ADR-0099](../../docs/adr/0099-price-card-binds-series-identity-and-in-force-version-is-derived-from-review.md)；术语与生命周期已落 [parcel-pricing CONTEXT](../../docs/domain/parcel-pricing/CONTEXT.md)「计价参考序列 / 序列版本复核 / 在用序列版本」与「计价参考序列版本」。本目录只引用，不复述第二套口径。
 

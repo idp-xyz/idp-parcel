@@ -1,7 +1,7 @@
 # `party-commercial` 声明拥有、但今天没有执行器的四处（写侧待裁）
 
 Category: chore
-Status: in-progress——01/03/04 resolved，02 ready-for-agent（汇率口径已落，持久化三层未做），05 draft（四问已摆到可裁）
+Status: in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 draft → 待 MCP-3 裁三处（owner 2026-09-03 授权自决，裁决落 ADR-0104）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写
 
 ## 这四处是怎么被看见的
 
