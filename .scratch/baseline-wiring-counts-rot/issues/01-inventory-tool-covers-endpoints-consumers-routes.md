@@ -75,3 +75,5 @@ Status: resolved——MCP-4 认领并写完工具，崩溃后由 MCP-5 接续收
   **开发主线三处**：路由表条目数、消费适配器数、接入面端点总数都改为引[机制半边清点](../../../docs/product/MECHANISM-INVENTORY.md)「接线面」一节，正文不再自带这三个数；`unwired*` 零引用那句仍带 `c60ec2c` 锚留着——它不是计数，是一条锚了 SHA 的事实。「所有可由代码算出的数」那一句也把接线面三栏补进了清单。
 
   **验证**：`tools/mechanism-inventory` 内 `gofmt -l` 空、`go build`／`go vet`／`go test -count=1` 退 0；CI 那一步的模拟——在提交后的 detached worktree 上重新生成再 `git status --porcelain` 该文件——结果见下一条。未动主模块任何 `.go`／`.sql`，不涉真库。
+
+- 2026-09-03 · MCP-5（收口取证）。本票落 `a3941b0`（父 `568163a`，其下自 `13c87bd` 起只压着一笔 `.scratch` 改动，无 `.go`／`.sql`）。CI 门禁的模拟在钉 `a3941b0` 的 detached worktree 上做：模块内 `gofmt -l` 空、`go vet`／`go test -count=1` 退 0；用**提交里的**工具重新生成报告后 `git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 为空，整棵树 `--untracked-files=all` 零行——报告是 `a3941b0` 的纯函数。未 push。四条完成判据逐条对过：三栏在报告里、模块内 vet/test 退 0、CI 那一步在扩栏后仍绿（模拟）、开发主线三处改引报告、活性验证 74→75／14→15 成立。
