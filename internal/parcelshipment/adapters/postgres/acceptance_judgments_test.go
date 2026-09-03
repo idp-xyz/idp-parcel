@@ -347,6 +347,65 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 	}
 }
 
+// TestEveryResumePathLandsInTheAttemptTable 证库面镜像与领域封闭集合**逐格**对得上：ResumePath
+// 的每一个取值都写得进处理尝试库。上一条只钉「集合外被拒」，钉不住「集合内也被拒」——第四格
+// 加进领域而 0005 的 CHECK 没跟时，全仓照样绿，真进程上却把一次如实的未决落成
+// dispatch.publish_failed（票 first-tenant-runway/07 在真库上量到过；迁移 0011 对齐后本条才绿）。
+//
+// 集合以 String() 非空为界，与领域那条遍历门禁同一口径；不写死条数——日后再加一格，这里自动
+// 跟着走，而库面镜像没跟时它就红。单独钉一句 OPERATOR_REGISTRATION 在遍历里，是防遍历口径
+// 变了之后本条空转成绿。
+func TestEveryResumePathLandsInTheAttemptTable(t *testing.T) {
+	judgments, transactor, _ := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	sawOperatorRegistration := false
+	for path := domain.ResumePath(1); path.String() != ""; path++ {
+		attempt := taskAttempt(t, "SOME_REASON", path, "CONT-"+path.String(), taskAttemptedAt)
+		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			return judgments.RecordProcessingAttempt(txCtx, tenant, requestID, attempt)
+		}); err != nil {
+			t.Errorf("续办路径 %s 写不进处理尝试库——库面镜像落后于领域封闭集合：%v", path, err)
+		}
+		sawOperatorRegistration = sawOperatorRegistration || path == domain.ResumeByOperatorRegistration
+	}
+	if !sawOperatorRegistration {
+		t.Fatal("遍历没走到 OPERATOR_REGISTRATION——String() 的遍历口径变了，本条要跟着改")
+	}
+}
+
+// TestTaskWaitingOnProjectionMirrorsEveryResumePath 证等待态投影列 task_waiting_on 的 CHECK
+// 与领域封闭集合逐格对得上、上界外仍被拒（0009 立的约束，0011 对齐到第四格）。
+//
+// 用裸写而不走 Save：领域今天没有一条路径把等待态写成`等待运营登记`——Decide 把未决一律折成
+// 内部续办或客户补充，第四格的等待态要等 ADR-0094 Decision 五那一片。所以这里钉的只是库面镜像：
+// 那一片落地那天 Save 写下 4，不该在这条约束上撞死；而它撞死的样子与快照一起整份落不了库，
+// 因为投影列与快照是同一条 SQL。
+func TestTaskWaitingOnProjectionMirrorsEveryResumePath(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	ctx := t.Context()
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "arq-w", "REQ-WAIT-1"))
+
+	last := domain.ResumePathInvalid
+	for path := domain.ResumePath(1); path.String() != ""; path++ {
+		if _, err := pool.Exec(ctx,
+			`UPDATE parcel_shipment.shipment_request SET task_waiting_on = $1
+			  WHERE shipment_request_id = 'REQ-WAIT-1'`, uint8(path)); err != nil {
+			t.Errorf("等待态 %s 写不进投影列——库面镜像落后于领域封闭集合：%v", path, err)
+		}
+		last = path
+	}
+	if last != domain.ResumeByOperatorRegistration {
+		t.Fatalf("遍历止于 %s，want OPERATOR_REGISTRATION——String() 的遍历口径变了，本条要跟着改", last)
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.shipment_request SET task_waiting_on = $1
+		  WHERE shipment_request_id = 'REQ-WAIT-1'`, uint8(last)+1); err == nil {
+		t.Error("一个领域集合外的等待态溜进了投影列——队列过滤会按一个不存在的续办方列出委托")
+	}
+}
+
 func TestAcceptanceJudgmentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	judgments, _, _ := newAcceptanceJudgments(t)
 	ctx := t.Context()
