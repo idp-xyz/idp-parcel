@@ -1,7 +1,7 @@
 # 价卡绑序列标识；评价清单组合解析到的序列版本；PPC-4；复核与在用选择的领域件
 
 Category: enhancement
-Status: in-progress——MCP-3（2026-09-03）
+Status: resolved——`7042a38`（MCP-3，2026-09-03）
 Blocked by: 无
 
 ## 要改成什么
@@ -25,3 +25,17 @@ Blocked by: 无
 
 - `internal/parcelpricing/domain` 单测：绑定改形、`PPC-4` 摘要、清单组合、重放清单比对、`SeriesReview` 四眼门、在用选择的排序与边界（同刻、退回、未来复核）。
 - 全仓 `go build` / `go vet` / `go test -count=1 ./...`；seedgen 产物重生成后 `cmd/parcel-pricing-register` 单测仍绿。
+
+## Comments
+
+- 2026-09-03 MCP-3：落地 `7042a38`（在隔离 worktree `mcp3-rsops` 上做完验绿，cherry-pick 到 main；
+  父提交 `29085fe`）。六项全部按票面落：绑定改形、`PPC-4`、`resolveSeries` 比标识、评价清单组合
+  （`composeEvaluationManifest`，重放比对改比评价清单）、`SeriesReview`（四眼门以登记为入参）、
+  `SelectInForceSeriesVersion`。棘轮基线加一行（调用方是票 02 的真库读口；`New*` 构造按门禁判据
+  不入名单）。seedgen 调用点同笔跟上，两张 SYN 价卡快照升 `PPC-4`；两条序列快照 PRS-1 内容不变。
+  **验证**：在 `7042a38` 的 detached 检出上 gofmt 零输出、`go build` / `go vet` / `go test -count=1 ./...`
+  全绿；**未设 PG DSN，PG 用例跳过**（本票无 .sql、无适配器改动）；domain 新增与改动的用例 `-v` 下
+  逐条 PASS。
+  一处与票面不同：票面写「评价原因文字区分无版本 / 未复核 / 期次缺口」属票 03（编排层才知道
+  是哪一格），本票纯函数只在解释里带 `序列@版本`。
+  **`go test -race` 未跑**（本机 Windows 侧无 cgo，见 workflow.md）；本票无并发代码。
