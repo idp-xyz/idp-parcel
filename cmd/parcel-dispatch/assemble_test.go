@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,7 +38,8 @@ import (
 // 会一条都取不到，而每个「published = 0」的断言都会假绿。
 func beatInstant() time.Time { return time.Now().UTC().Add(-time.Minute) }
 
-func wiredBeat(t *testing.T) (Beat, *bentopg.DB, *outbox.Store) {
+// options 原样转给 wireDispatcher：多数用例不需要观察口，变参让它们一个都不必改。
+func wiredBeat(t *testing.T, options ...dispatch.Option) (Beat, *bentopg.DB, *outbox.Store) {
 	t.Helper()
 
 	pool := pgtest.Pool(t)
@@ -62,7 +65,7 @@ func wiredBeat(t *testing.T) (Beat, *bentopg.DB, *outbox.Store) {
 			MaxAttempts: 5,
 			RetryAfter:  30 * time.Second,
 		},
-	})
+	}, options...)
 	if err != nil {
 		t.Fatalf("装配派发器：%v", err)
 	}
@@ -336,6 +339,41 @@ func TestAnUnconfiguredAcceptanceChainStallsAsUndecidedOnTheRealGraph(t *testing
 	}
 	if got := recordedFailureCode(t, db, "submitted-live-1"); got != "dispatch.consumer_undecided" {
 		t.Fatalf("failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+}
+
+// Covers: 同一场未决，停在哪一站、原因是什么，在 dispatch 这一侧读得到（ADR-0095 Decision 二）。
+//
+// 上一条只证失败码落对了格，而失败码按恢复动作取值，本来就答不出「停在哪一站」——那句话
+// 消费门写在错误正文里（`stage …, reason …`）。这里在**生产依赖图**上接一个替身观察口，
+// 钉的是那句原文穿过 WithUndecidedSentinels 的 `%w: %w` 包装之后仍然在。平台包里那条
+// 「交出的是原始 err」用例钉的是替身发布器上的 errors.Is，证不到这一层：包装形状归路由
+// 条目，只有真图上才看得见它有没有把原文吞掉。
+//
+// 断言只认 "stage " 与 "reason " 两个词，不认具体取值：本库空着时停在哪一站是实例半边
+// 的事实，这条用例钉的是「说了」，不是「说了什么」。
+func TestAnUndecidedStallSurfacesStageAndReasonToTheObserver(t *testing.T) {
+	var observed []error
+	beat, db, store := wiredBeat(t, dispatch.WithDeliveryFailureObserver(
+		func(_ eventing.Delivery, _ eventing.FailureCode, err error) {
+			observed = append(observed, err)
+		}))
+	enqueueForBeat(t, db, store, "submitted-live-2", psinbox.ShipmentRequestSubmittedEventType, submittedForChain)
+
+	if _, err := beat.DispatchOnce(t.Context()); err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if len(observed) != 1 {
+		t.Fatalf("观察口收到 %d 条失败，want 1", len(observed))
+	}
+	if !errors.Is(observed[0], psinbox.ErrAcceptanceChainUndecided) {
+		t.Fatalf("观察口交出的不是消费门的原始未决：%v", observed[0])
+	}
+	text := observed[0].Error()
+	for _, want := range []string{"stage ", "reason "} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("错误正文不含 %q，运维读不出停在哪一站：%q", want, text)
+		}
 	}
 }
 
