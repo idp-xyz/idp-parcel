@@ -214,3 +214,42 @@ export function listTransportFulfillmentRecords<
     `/transport-fulfillment-records?registry=${encodeURIComponent(registry)}`,
   );
 }
+
+// ---- 交接范围汇总（transport-fulfillment-review 页的范围汇总区） ----
+
+/**
+ * 一份交接范围汇总。三格计数按裁决分列，total 与 allHandedOver 是领域的派生问答，
+ * 原样读取而不由页面三格相加再比对——CONTEXT 的交接硬句要求整批结论只能由对象级结果
+ * 派生，前端自己算等于在页面上立第二个口径。
+ */
+export interface HandoverScopeSummary {
+  scope: string;
+  handedOver: number;
+  refused: number;
+  unconfirmed: number;
+  total: number;
+  allHandedOver: boolean;
+}
+
+/**
+ * 四格结果代数，与应用层 SummarizeHandoverScopeOutcome 同词。
+ *
+ * `SCOPE_NOT_SUMMARIZABLE` 这一格**在类型上就没有 summary 键**：后端刻意不带它，
+ * 而零说的是「这个范围有交接，只是这一格没有」，不成立说的是「这个范围还没有交接」，
+ * 调用方要做的事不同。写成可缺席的 summary 会让页面能在不成立那格上读出三个零，把
+ * 两件事又折回一处；判别联合让那种读法在编译期就不成立。
+ */
+export type HandoverScopeSummaryResponseBody =
+  | { outcome: 'SCOPE_SUMMARIZED'; summary: HandoverScopeSummary }
+  | { outcome: 'SCOPE_NOT_SUMMARIZABLE' }
+  | { outcome: 'SCOPE_UNDECIDED'; reason: string; continuationReference: string }
+  | { outcome: 'INPUT_NOT_ACCEPTED' };
+
+/** 汇总按范围取，范围是必备维——缺席在服务端是 400，本函数不替调用方兜。 */
+export function summarizeHandoverScope(
+  scope: string,
+): Promise<ApiResult<HandoverScopeSummaryResponseBody>> {
+  return exchangeMasterData<HandoverScopeSummaryResponseBody>(
+    `/transport-fulfillment-handover-scope-summary?scope=${encodeURIComponent(scope)}`,
+  );
+}

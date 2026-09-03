@@ -62,6 +62,7 @@ func assembleBusinessEndpoints(
 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
 	delivery tfhttp.DeliveryHandler,
 	transportFulfillmentRecords tfhttp.ReviewCatalogueReader,
+	handoverScopeSummary tfhttp.HandoverScopeSummarizer,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -182,6 +183,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
+		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
+		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
+		// 只能由 domain.SummarizeHandovers 派生（理由在 tfhttp.HandoverScopeSummarizer）。
+		// 读用例零登记零编辑零披露，查阅的性质没变，因此 Intake 随运输履约查阅同一个变量
+		// ——隔离读准入（ADR-0078）启用时两行一起换值，那三条判据它逐条满足。
+		{Pattern: "/transport-fulfillment-handover-scope-summary", Handler: tfhttp.NewQueryHandoverScopeSummaryEndpoint(transportCatalogueIntake, handoverScopeSummary)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(trackingProjectionsIntake, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},

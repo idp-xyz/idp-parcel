@@ -22,6 +22,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
+	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 )
 
@@ -264,6 +265,15 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 交接范围汇总读用例（票 admin-web-audit-followups/06）。读口取交接登记册本尊：它同时
+	// 实现写侧的幂等存取与 ports.HandoverScopeView，两个契约一只适配器（分口的理由在
+	// ports.HandoverScopeView 注释）。这一格与上面几只不同——交入装配点的是应用用例不是
+	// 读口，因为计数只能由领域派生；在这里预先数一遍就等于为同一形状立第二个口径。
+	transportHandovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		return err
+	}
+	handoverScopeSummary := tfapp.NewSummarizeHandoverScopeHandler(transportHandovers)
 
 	server := &http.Server{
 		Addr: address,
@@ -281,6 +291,7 @@ func run(logger *slog.Logger) error {
 			nodeOperationsRecords,
 			delivery,
 			transportFulfillmentRecords,
+			handoverScopeSummary,
 			trackingViews,
 			projectionViews,
 			claims,

@@ -9,23 +9,30 @@ import {
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listTransportFulfillmentRecords,
+  summarizeHandoverScope,
   type ApiResult,
+  type HandoverScopeSummaryResponseBody,
   type TransportFulfillmentListResponseBody,
   type TransportFulfillmentRegistry,
 } from './records-api';
+import { scopeSummaryRowsOf, scopeSummaryViewState } from './handover-scope-summary';
 import { handoverVerdictLabels, labelOf } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['transport-fulfillment-review'];
 
 /**
- * 运输履约的治理查阅面。五区栏目取 transport-fulfillment CONTEXT.md 原词。本页只
+ * 运输履约的治理查阅面。各区栏目取 transport-fulfillment CONTEXT.md 原词。本页只
  * 查阅履约判断与事实，不建班次、不订舱、不改交接结果、不更正交付。
  *
- * 四区接真（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05）：
+ * 四区接册面（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05）：
  * 班次、容量池、权威交接结果、交付证明。承运总单与运输舱单一区在存储上还没有
  * 登记册——服务端的册名封闭集刻意不含那一格（没有表就没有读法，票 05 Comments），
  * 该区不发请求、如实呈现「无登记册」，不把「无处可登」演成「登记册为空」。
+ *
+ * 交接范围汇总一区走另一条读路（GET /transport-fulfillment-handover-scope-summary，
+ * 票 admin-web-audit-followups/06）：它不整册上列，是按范围问一次的派生答案，因此有
+ * 自己的入参、自己的四格结果代数与自己的空态措辞（判读在 handover-scope-summary.ts）。
  */
 interface ReviewRow {
   key: string;
@@ -70,6 +77,7 @@ type SectionId =
   | 'transport-legs'
   | 'capacity-pools'
   | 'handover-results'
+  | 'handover-scope-summary'
   | 'delivery-proofs'
   | 'transport-documents';
 
@@ -82,6 +90,8 @@ interface ReviewSection {
   columns: ListColumn<ReviewRow>[];
   /** 无册区的如实呈现；与「登记册为空」严格分词。 */
   absence?: { title: string; description: string; unlock: string };
+  /** 汇总区：不整册上列，按范围逐次问一个派生答案（另一条读路，见下方 useEffect）。 */
+  scopeSummary?: true;
 }
 
 const sections: ReviewSection[] = [
@@ -132,6 +142,23 @@ const sections: ReviewSection[] = [
       col('judgedAt', '判断时间', { mono: true }),
       col('version', '判断版本', { mono: true }),
       col('corrects', '更正指回', { mono: true }),
+    ],
+  },
+  {
+    id: 'handover-scope-summary',
+    word: '交接范围汇总',
+    scopeSummary: true,
+    // 整批/整车/整袋结论只能由对象级结果派生(CONTEXT);本区因此不是第六本册,是上一区
+    // 那本册的派生问答——一个范围问一次,答的是「各裁决各有多少」。三格计数与`全部已
+    // 交接`都取服务端派生的那一份,页面不相加也不比对:自己算就是为同一条规则立第二个
+    // 口径,领域改一次判据、页面这份会悄悄漂移。
+    columns: [
+      col('scope', '交接范围', { mono: true }),
+      col('handedOver', '已交接', { align: 'right', mono: true }),
+      col('refused', '已拒收', { align: 'right', mono: true }),
+      col('unconfirmed', '待确认', { align: 'right', mono: true }),
+      col('total', '成员合计', { align: 'right', mono: true }),
+      col('allHandedOver', '全部已交接', { align: 'center', className: 'w-[104px]' }),
     ],
   },
   {
@@ -248,8 +275,17 @@ export function TransportFulfillmentReviewPage() {
     registry: TransportFulfillmentRegistry;
     answer: ApiResult<TransportFulfillmentListResponseBody>;
   } | null>(null);
+  // 汇总区的范围入参分两格：输入框里的草稿与已提交的那一个。合成一格就会逐键触发查询,
+  // 而这一区每问一次都是一次真请求(册区的检索是本地过滤,不是)。
+  const [scopeDraft, setScopeDraft] = useState('');
+  const [scope, setScope] = useState('');
+  const [summaryLoaded, setSummaryLoaded] = useState<{
+    scope: string;
+    answer: ApiResult<HandoverScopeSummaryResponseBody>;
+  } | null>(null);
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
   const registry = section.registry;
+  const isScopeSummary = section.scopeSummary === true;
 
   useEffect(() => {
     // 无册区不发请求：服务端册名封闭集没有那一格，发了只会收 400。
@@ -263,10 +299,33 @@ export function TransportFulfillmentReviewPage() {
     };
   }, [registry, reloadKey]);
 
+  useEffect(() => {
+    // 范围空着不发请求：范围是这个读面的必备维，缺席在服务端是 400，而那条 400 说的是
+    // 「你问错了」，与「还没问」不是一件事。
+    if (!isScopeSummary || scope.trim() === '') return undefined;
+    let cancelled = false;
+    void summarizeHandoverScope(scope).then((answer) => {
+      if (!cancelled) setSummaryLoaded({ scope, answer });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isScopeSummary, scope, reloadKey]);
+
   const answer = registry && loaded?.registry === registry ? loaded.answer : null;
   const body = answer?.kind === 'outcome' ? answer.body : null;
-  const rows = body ? rowsOf(body) : [];
-  const needle = keyword.trim().toLowerCase();
+  const summaryAnswer =
+    isScopeSummary && summaryLoaded?.scope === scope ? summaryLoaded.answer : null;
+  const summaryBody = summaryAnswer?.kind === 'outcome' ? summaryAnswer.body : null;
+  const rows = isScopeSummary
+    ? summaryBody
+      ? scopeSummaryRowsOf(summaryBody)
+      : []
+    : body
+      ? rowsOf(body)
+      : [];
+  // 汇总区至多一行，本地检索对它没有意义——检索框在那一区是范围入参，不是过滤词。
+  const needle = isScopeSummary ? '' : keyword.trim().toLowerCase();
   const visibleRows = needle
     ? rows.filter((row) =>
         Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
@@ -281,23 +340,36 @@ export function TransportFulfillmentReviewPage() {
         description: section.absence.description,
         facts: { owner: info.owner, source: info.source, unlock: section.absence.unlock },
       }
-    : catalogueViewState(answer, rows.length, retry, {
-        module: info,
-        endpoint: `GET /transport-fulfillment-records?registry=${registry ?? ''}`,
-        emptyTitle: `当前租户尚无${section.word}登记`,
-        emptyDescription:
-          '读取入口已配置，登记册为空——履约判断与事实的写入方在接入渠道墙后面，空册是预期不是缺陷；页面不含合成数据。',
-      });
+    : isScopeSummary
+      ? scopeSummaryViewState(summaryAnswer, scope, retry, {
+          module: info,
+          endpoint: 'GET /transport-fulfillment-handover-scope-summary?scope=…',
+        })
+      : catalogueViewState(answer, rows.length, retry, {
+          module: info,
+          endpoint: `GET /transport-fulfillment-records?registry=${registry ?? ''}`,
+          emptyTitle: `当前租户尚无${section.word}登记`,
+          emptyDescription:
+            '读取入口已配置，登记册为空——履约判断与事实的写入方在接入渠道墙后面，空册是预期不是缺陷；页面不含合成数据。',
+        });
 
   return (
     <ListPageTemplate<ReviewRow>
       title={info.title}
       description={`${info.owner} · 治理查阅面，只读履约判断与事实；实时现场作业属一线作业端（ADR-0021）。`}
-      search={{
-        value: keyword,
-        onChange: setKeyword,
-        placeholder: '按载运对象或班次标识检索',
-      }}
+      search={
+        isScopeSummary
+          ? {
+              value: scopeDraft,
+              onChange: setScopeDraft,
+              placeholder: '输入交接范围，再点「查询汇总」',
+            }
+          : {
+              value: keyword,
+              onChange: setKeyword,
+              placeholder: '按载运对象或班次标识检索',
+            }
+      }
       filters={
         <>
           {sections.map((candidate) => (
@@ -310,11 +382,21 @@ export function TransportFulfillmentReviewPage() {
               {candidate.word}
             </button>
           ))}
+          {isScopeSummary && (
+            <button
+              type="button"
+              className={chipClass(scopeDraft.trim() !== '')}
+              onClick={() => setScope(scopeDraft.trim())}
+            >
+              查询汇总
+            </button>
+          )}
         </>
       }
       filterSummary={
-        // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。
-        body ? `${section.word} ${visibleRows.length} 行` : undefined
+        // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。汇总区不报行数——一份
+        // 汇总不是「1 行数据」,报出来会把派生答案说成一本只有一行的册子。
+        !isScopeSummary && body ? `${section.word} ${visibleRows.length} 行` : undefined
       }
       columns={section.columns}
       rows={visibleRows}

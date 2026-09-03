@@ -112,6 +112,15 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/settlement-statements":               true,
 	"/settlement-funds-applications":       true,
 	"/settlement-operating-results":        true,
+	// 交接范围汇总（票 admin-web-audit-followups/06）与运输履约查阅共用同一个 Intake 变量，
+	// 因此启用态必然随它一起放行——漏了这一行等于断言「同一个 Intake 会给出两种答案」，
+	// 那是装不出来的形状。它照样满足那三条判据：消费本上下文自己的存储读面、零持久化、
+	// 作用域来自运营侧授权结果。第二参是应用读用例而不是读口，判据不因此改口径——那个
+	// 用例零登记零编辑零披露，只把成员交给领域派生。
+	//
+	// 单独列在表尾而不挨着 /transport-fulfillment-records：这个键比表里最长的还长，插进
+	// 那一段会让 gofmt 把整段的对齐列一起改掉，而这是一份几个会话都在往里加行的共享文件。
+	"/transport-fulfillment-handover-scope-summary": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

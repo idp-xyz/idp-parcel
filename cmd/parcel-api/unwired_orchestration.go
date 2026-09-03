@@ -166,6 +166,23 @@ func (unwiredTransportFulfillmentRecords) ListEffectiveDeliveries(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredHandoverScopeSummary 是交接范围汇总读用例的占位，方法表与
+// tfhttp.HandoverScopeSummarizer 对上（票 admin-web-audit-followups/06）。
+//
+// 它填的是**应用读用例**那一格而不是读口，因此不能照读口那样答一个零值结果：
+// SummarizeHandoverScopeResult 的零值 outcome 是 Invalid，端点会把它判成
+// UNNAMED_OUTCOME 的 5xx——那条路径本是用来抓「应用层漏了一格没具名」的，占位走
+// 上去等于把一次未接线伪装成一处结果代数缺口。交回稳定错误落在 NO_ANSWER_FORMED，
+// 与其余占位同形。
+type unwiredHandoverScopeSummary struct{}
+
+func (unwiredHandoverScopeSummary) Summarize(
+	context.Context,
+	tfapp.SummarizeHandoverScopeQuery,
+) (tfapp.SummarizeHandoverScopeResult, error) {
+	return tfapp.SummarizeHandoverScopeResult{}, errOrchestrationNotWired
+}
+
 // unwiredTrackingViews 只被装配测试使用：生产装配（main）把 VE 真库读适配器交进装配
 // 点，这里的占位让「未配置面」测试不必开库。填法照旧：读不回按 ADR-0022 是「没形成
 // 答案」的 5xx，绝不能顶成 VIEW_NOT_FOUND——那会把一次进程故障伪装成「查无此件」的
