@@ -131,6 +131,14 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
 
   我倾向 1：它是 ADR 原话，且改动一行、有用例钉着；2 要改 ADR-0094 Decision 四的措辞才站得住。**未擅自动，等裁。**
 
+- 2026-09-03 · MCP-1（库面镜像已对齐，`f8301e4`）。
+
+  迁移 `0011_resume_path_operator_registration.sql` 把 0005 的 `resume_path` CHECK 与 0009 的 `task_waiting_on` CHECK 放到第四格，不建索引（`等待运营登记`的队列谓词属 Decision 五，到那时照 `shipment_request_manual_review_queue` 建部分索引）。两条真库用例 `TestEveryResumePathLandsInTheAttemptTable`、`TestTaskWaitingOnProjectionMirrorsEveryResumePath` 逐格写入 `ResumePath` 全部取值并证上界外仍被拒——镜像再落后于领域集合时**必红**，不再靠人记。非空洞性：没有 0011 时两条各自红在那两条约束上（SQLSTATE 23514）。
+
+  **给接 Decision 五的人一条取证**：领域今天没有任何路径把等待态写成第四格——`Decide` 对未决一律折成 `ResumeByInternalRetry`，仅 `awaitingSupplement` 时改 `ResumeByCustomerSupplement`；一条带 `ResumeByOperatorRegistration` 的 `NewUndeterminedAcceptanceCheck` 进去，出来的 waitingOn 是 `INTERNAL_RETRY`。所以 D5 不止是「as-of 那段先 Save」，`Decide` 里那段折法也得认第四格。第二条用例因此用裸写而不走 `Save`。
+
+  验证：钉 `f8301e4` 在临时 worktree 跑 `gofmt -l` 空、`go build`/`go vet` 退 0、`go test -p 1 -count=1 ./...` 93 包零 FAIL、DSN 探针 `PASS` 非 `SKIP`（含真库），382s。`undecidedDisposition` 未动，入账那一层仍等上一条的裁。
+
   验证：在隔离 worktree 钉 `c96065b`（= `81957c7` ＋ 本批四笔）跑 `gofmt -l` 空、`go build`/`go vet` 退 0、`go test -p 1 -count=1 ./...` 93 包零 FAIL，DSN 探针 `PASS` 非 `SKIP`（含真库）；快进到 `74ab82f` 前重数 `c96065b..74ab82f` 无 `.go`/`.sql`。**未跑 `-race`**：本 shell 无 gcc（`CGO_ENABLED=0`），MCP-6 装的 mingw 不在本会话 PATH。
 
 - 2026-09-03 · MCP-4（开工前在 `371f6cb`——本地 main HEAD，非票面旧锚——重取一遍证据；只取证不改代码）。
