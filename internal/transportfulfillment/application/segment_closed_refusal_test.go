@@ -26,10 +26,11 @@ func newClosedSegmentFixture(t *testing.T) *closedSegmentFixture {
 
 func (fixture *closedSegmentFixture) handoverHandler() *application.RegisterTransportHandoverHandler {
 	return application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 }
 

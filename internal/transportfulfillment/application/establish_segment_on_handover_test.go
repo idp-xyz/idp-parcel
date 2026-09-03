@@ -239,10 +239,11 @@ func newHandoverSegmentFixture(t *testing.T) *handoverSegmentFixture {
 		segments:  newSegmentRegistry(),
 	}
 	fixture.handler = application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	return fixture
 }

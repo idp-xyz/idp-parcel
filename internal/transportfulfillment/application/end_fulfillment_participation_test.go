@@ -24,10 +24,11 @@ type participationFixture struct {
 func (fixture *participationFixture) joinEarlyMember(t *testing.T, object string) {
 	t.Helper()
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	command := registerHandoverCommand(t)
 	command.Object = object
@@ -43,12 +44,15 @@ func (fixture *participationFixture) joinEarlyMember(t *testing.T, object string
 // 手搓一条记录塞进替身，得走生产登记路径。
 func (fixture *participationFixture) registerDelivery(t *testing.T, object, attempt string) {
 	t.Helper()
+	// 这里只登交付、不触发结束参与（stub）：本文件的用例要的是「登了交付之后再显式 End」那条路，
+	// 触发本身由 delivery_ends_participation_test 守。
 	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
-		Attempts:   &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
-		Deliveries: fixture.deliveries,
-		Versions:   &deliveryVersionFactory{},
-		Downstream: &deliveryHandoffDouble{},
-		Clock:      deliveryClock{at: deliveryRecordedAt},
+		Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
+		Deliveries:        fixture.deliveries,
+		Versions:          &deliveryVersionFactory{},
+		Downstream:        &deliveryHandoffDouble{},
+		Clock:             deliveryClock{at: deliveryRecordedAt},
+		ParticipationEnds: &participationEnderStub{},
 	})
 	command := registerCommand(t)
 	command.Object = object
@@ -84,10 +88,11 @@ func newParticipationFixture(t *testing.T) *participationFixture {
 func (fixture *participationFixture) twoMemberSegment(t *testing.T) {
 	t.Helper()
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	for index, object := range []string{"parcel-1", "parcel-2"} {
 		command := registerHandoverCommand(t)
@@ -153,9 +158,10 @@ func TestTwoMembersEndWithDifferentResultsWithoutOverwritingEachOther(t *testing
 	next.Version = "handover-result/parcel-2/v2"
 	next.JudgedAt = handoverJudgedTime.Add(8 * time.Hour)
 	registrar := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	if _, err := registrar.Register(t.Context(), next); err != nil {
 		t.Fatalf("登记下一次交接：%v", err)
@@ -385,9 +391,10 @@ func TestAControlBoundaryChangeEndsHereAndEntersTheNextSegment(t *testing.T) {
 	next.Version = "handover-result/parcel-1/v2"
 	next.JudgedAt = handoverJudgedTime.Add(9 * time.Hour)
 	registrar := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	if _, err := registrar.Register(t.Context(), next); err != nil {
 		t.Fatalf("登记下一次交接：%v", err)

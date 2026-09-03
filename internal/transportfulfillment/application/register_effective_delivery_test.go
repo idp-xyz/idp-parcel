@@ -203,11 +203,12 @@ func newDeliveryFixture(t *testing.T) *deliveryFixture {
 		handoff:  &deliveryHandoffDouble{},
 	}
 	fixture.handler = application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
-		Attempts:   fixture.view,
-		Deliveries: fixture.store,
-		Versions:   fixture.versions,
-		Downstream: fixture.handoff,
-		Clock:      deliveryClock{at: deliveryRecordedAt},
+		Attempts:          fixture.view,
+		Deliveries:        fixture.store,
+		Versions:          fixture.versions,
+		Downstream:        fixture.handoff,
+		Clock:             deliveryClock{at: deliveryRecordedAt},
+		ParticipationEnds: &participationEnderStub{},
 	})
 	return fixture
 }

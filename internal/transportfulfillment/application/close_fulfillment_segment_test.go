@@ -45,10 +45,11 @@ func (fixture *closureFixture) endBoth(t *testing.T) {
 func (fixture *closureFixture) arriveByHandover(t *testing.T, object string) {
 	t.Helper()
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	command := registerHandoverCommand(t)
 	command.Object = object

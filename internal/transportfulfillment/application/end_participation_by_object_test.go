@@ -66,10 +66,11 @@ func TestEndingAnObjectActiveInTwoSegmentsIsALoudError(t *testing.T) {
 	fixture.twoMemberSegment(t)
 	// 同一对象再进第二个段：库面不一致的形状，替身如实存两条。
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.handovers,
-		Segments:   fixture.segments,
-		Downstream: &handoverHandoffDouble{},
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.handovers,
+		Segments:          fixture.segments,
+		Downstream:        &handoverHandoffDouble{},
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	second := registerHandoverCommand(t)
 	second.Object = "parcel-1"

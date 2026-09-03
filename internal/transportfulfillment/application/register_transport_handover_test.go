@@ -95,9 +95,10 @@ func newHandoverFixture(t *testing.T) *handoverFixture {
 		handoff:  &handoverHandoffDouble{},
 	}
 	fixture.handler = application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
-		Handovers:  fixture.registry,
-		Downstream: fixture.handoff,
-		Clock:      handoverClock{at: handoverRegisteredAt},
+		ParticipationEnds: &participationEnderStub{},
+		Handovers:         fixture.registry,
+		Downstream:        fixture.handoff,
+		Clock:             handoverClock{at: handoverRegisteredAt},
 	})
 	return fixture
 }

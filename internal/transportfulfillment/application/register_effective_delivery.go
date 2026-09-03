@@ -98,12 +98,20 @@ type CorrectDeliveryProofCommand struct {
 }
 
 type RegisterEffectiveDeliveryResult struct {
-	outcome      DeliveryRegistrationOutcome
-	reason       DeliveryUndecidedReason
-	record       ports.EffectiveDeliveryRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
+	outcome          DeliveryRegistrationOutcome
+	reason           DeliveryUndecidedReason
+	record           ports.EffectiveDeliveryRecord
+	hasRecord        bool
+	continuation     string
+	handoff          string
+	participationEnd ParticipationEndOutcome
+}
+
+// ParticipationEnd 是交付落库后同事务触发的「结束参与」那一半的答案（票 06 裁决 (i)：交付→结束参与是
+// TF 自己的生命周期规则，归编排）。只在首登成立时非零；`NO_ACTIVE_PARTICIPATION` 是可观察的一格而不是
+// 静默——交付登上了、但没有任何参与被它结束，调用方要知道。
+func (result RegisterEffectiveDeliveryResult) ParticipationEnd() ParticipationEndOutcome {
+	return result.participationEnd
 }
 
 func (result RegisterEffectiveDeliveryResult) Outcome() DeliveryRegistrationOutcome {
@@ -128,12 +136,25 @@ func (result RegisterEffectiveDeliveryResult) DeliveryHandoffReference() string 
 	return result.handoff
 }
 
+// ParticipationEnder 是结束参与那条编排在两条来源编排（交付、交接）眼里的形状。它是接口而不是具体
+// 处理器，只为了测试能用替身把「触发发生了没有」与「结束参与自己的规则」分开测。
+type ParticipationEnder interface {
+	End(ctx context.Context, command EndFulfillmentParticipationCommand) (EndFulfillmentParticipationResult, error)
+}
+
+// ErrParticipationEndsNotWired 说明装配点没有给 ParticipationEnds。它在构造时就 panic 而不是留到运行期：
+// 「有效交付→结束参与」是 CONTEXT 生命周期③，可缺席会造出 ADR-0098 那一族「静默不发生」；改构造函数签名
+// 返回 error 又违反不改既有导出签名的红线——构造期 panic 是剩下那条让漏接线在起进程时就看得见的路。
+var ErrParticipationEndsNotWired = errors.New("transport fulfillment: ParticipationEnds is required — ending the participation on delivery is a lifecycle rule, not an option")
+
 type RegisterEffectiveDeliveryDeps struct {
 	Attempts   ports.DeliveryAttemptView
 	Deliveries ports.EffectiveDeliveryStore
 	Versions   ports.DeliveryIdentityFactory
 	Downstream ports.EffectiveDeliveryHandoff
 	Clock      ports.Clock
+	// ParticipationEnds **必填**（票 06 裁决 (i)）：交付落库后同事务结束该对象的履约参与。
+	ParticipationEnds ParticipationEnder
 }
 
 type RegisterEffectiveDeliveryHandler struct {
@@ -141,6 +162,9 @@ type RegisterEffectiveDeliveryHandler struct {
 }
 
 func NewRegisterEffectiveDeliveryHandler(deps RegisterEffectiveDeliveryDeps) *RegisterEffectiveDeliveryHandler {
+	if deps.ParticipationEnds == nil {
+		panic(ErrParticipationEndsNotWired)
+	}
 	return &RegisterEffectiveDeliveryHandler{deps: deps}
 }
 
@@ -211,6 +235,9 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 	case ports.DeliverySaved:
 		out := RegisterEffectiveDeliveryResult{outcome: DeliveryRegistered, record: record, hasRecord: true}
 		out.handoff = handler.handOff(ctx, record)
+		if out.participationEnd, err = handler.endParticipation(ctx, command); err != nil {
+			return RegisterEffectiveDeliveryResult{}, err
+		}
 		return out, nil
 	case ports.DeliveryAlreadyRegistered:
 		winner, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
@@ -222,6 +249,34 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 		return RegisterEffectiveDeliveryResult{}, fmt.Errorf("%w: %d", ErrUnexpectedDeliverySave, saved)
 	}
 }
+
+// endParticipation 在交付落库后同事务结束该对象的履约参与（CONTEXT 生命周期③，票 06 裁决 (i)）。
+//
+// 命令不带段：交付是关于对象的事实，段由结束参与那条编排按对象找。**结束失败则整笔不落**——编排返回
+// error，或依赖没应上的`未决`，都作 error 交回，让事务边界把交付一起回滚：不要「交付落了参与没结」的半成品。
+// 零个在场参与不是失败，那一格原样透出。
+func (handler *RegisterEffectiveDeliveryHandler) endParticipation(
+	ctx context.Context,
+	command RegisterEffectiveDeliveryCommand,
+) (ParticipationEndOutcome, error) {
+	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
+		TenantID: command.TenantID,
+		Object:   command.Object,
+		Source:   ParticipationEndedByDelivery,
+		Attempt:  command.Attempt,
+	})
+	if err != nil {
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on delivery: %w", err)
+	}
+	if ended.Outcome() == ParticipationEndUndecided {
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on delivery: %w: %s", ErrParticipationEndUnsettled, ended.ContinuationReference())
+	}
+	return ended.Outcome(), nil
+}
+
+// ErrParticipationEndUnsettled 说明结束参与那一半停在`未决`：与来源保全那侧不同，这里按票 06 裁决整笔回滚，
+// 调用方重试整次交付。
+var ErrParticipationEndUnsettled = errors.New("transport fulfillment: the participation end did not settle")
 
 // Correct 对已登记的交付生效落 POD 更正版本：CorrectProof 换新版回指前版（领域已钉
 // 同版本覆盖拒、更正早于交付拒），原版本链随本体保全；新版本随意图重新交付下游。

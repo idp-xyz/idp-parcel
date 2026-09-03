@@ -106,14 +106,23 @@ type CorrectTransportHandoverCommand struct {
 }
 
 type RegisterTransportHandoverResult struct {
-	outcome        HandoverRegistrationOutcome
-	reason         HandoverRegistrationUndecidedReason
-	record         ports.TransportHandoverRecord
-	hasRecord      bool
-	continuation   string
-	handoff        string
-	segment        string
-	segmentRefusal SegmentEntryRefusal
+	outcome          HandoverRegistrationOutcome
+	reason           HandoverRegistrationUndecidedReason
+	record           ports.TransportHandoverRecord
+	hasRecord        bool
+	continuation     string
+	handoff          string
+	segment          string
+	segmentRefusal   SegmentEntryRefusal
+	participationEnd ParticipationEndOutcome
+}
+
+// ParticipationEnd 是`已交接`落库后同事务触发的「结束前一段参与」那一半的答案（票 06 裁决 (i)：下一次
+// 权威交接结束对象在前一段的参与，是 TF 自己的生命周期规则）。只在首登成立且裁决转出控制时非零；拒收与
+// 待确认不转出控制，不结束任何参与。`NO_ACTIVE_PARTICIPATION` 是对象的第一次交接时的正常答案（此前不在任何
+// 段里），照实透出而不静默。
+func (result RegisterTransportHandoverResult) ParticipationEnd() ParticipationEndOutcome {
+	return result.participationEnd
 }
 
 func (result RegisterTransportHandoverResult) Outcome() HandoverRegistrationOutcome {
@@ -158,6 +167,9 @@ type RegisterTransportHandoverDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
 	Downstream ports.TransportHandoverRegistrationHandoff
 	Clock      ports.Clock
+	// ParticipationEnds **必填**（票 06 裁决 (i)）：`已交接`落库后同事务结束该对象在前一段的参与。与 Segments
+	// 可缺席不同——进段是派生，结束参与是 UC-TF-005 步骤 7 本身，漏接它就是漏掉一条生命周期规则。
+	ParticipationEnds ParticipationEnder
 }
 
 type RegisterTransportHandoverHandler struct {
@@ -165,6 +177,9 @@ type RegisterTransportHandoverHandler struct {
 }
 
 func NewRegisterTransportHandoverHandler(deps RegisterTransportHandoverDeps) *RegisterTransportHandoverHandler {
+	if deps.ParticipationEnds == nil {
+		panic(ErrParticipationEndsNotWired)
+	}
 	return &RegisterTransportHandoverHandler{deps: deps}
 }
 
@@ -209,9 +224,44 @@ func (handler *RegisterTransportHandoverHandler) Register(
 	if err != nil || result.outcome != HandoverRegistered {
 		return result, err
 	}
+	// 先结束前一段的参与，再进新段：结束那一半按对象找「此刻在场的段」，若先进了新段，它会找到两条
+	// 而响亮报错。顺序就是这条规则的一部分。
+	if result.participationEnd, err = handler.endPreviousParticipation(ctx, command, handover); err != nil {
+		return RegisterTransportHandoverResult{}, err
+	}
 	entry := handler.establishSegment(ctx, command, handover)
 	result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 	return result, nil
+}
+
+// endPreviousParticipation 在`已交接`落库后同事务结束该对象在前一段的参与（CONTEXT 生命周期③「下一次权威
+// 交接」，票 06 裁决 (i)）。
+//
+// 只有转出控制的裁决走到这里：拒收与待确认没有让控制移入接收方，前段的参与照常在场。命令不带段也不带
+// 下一段——前段由结束参与那条编排按对象找；新段由本编排自己的 establishSegment 进（进段的拒绝格与欠账
+// 也在那边答），不让两条路各进一次。失败则整笔不落，理由同交付那一侧。
+func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
+	ctx context.Context,
+	command RegisterTransportHandoverCommand,
+	handover domain.TransportHandover,
+) (ParticipationEndOutcome, error) {
+	if !handover.TransfersControl() {
+		return ParticipationEndOutcomeInvalid, nil
+	}
+	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
+		TenantID: command.TenantID,
+		Object:   command.Object,
+		Source:   ParticipationEndedByNextHandover,
+		Scope:    command.Scope,
+		Version:  command.Version,
+	})
+	if err != nil {
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on handover: %w", err)
+	}
+	if ended.Outcome() == ParticipationEndUndecided {
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on handover: %w: %s", ErrParticipationEndUnsettled, ended.ContinuationReference())
+	}
+	return ended.Outcome(), nil
 }
 
 // establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①②）。
