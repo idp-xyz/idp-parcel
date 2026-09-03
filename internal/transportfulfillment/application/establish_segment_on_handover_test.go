@@ -21,8 +21,11 @@ type segmentRegistryDouble struct {
 	findErr error
 	saveErr error
 	joinErr error
-	saves   int
-	joins   int
+	// joinErrObject 限定 joinErr 只作用于某一个对象；空则所有加入都失败。多对象到访要
+	// 证「只有没进去的那几个被报出来」，得让同一次到访里一部分成一部分败。
+	joinErrObject string
+	saves         int
+	joins         int
 }
 
 type segmentRowsDouble struct {
@@ -104,7 +107,8 @@ func (double *segmentRegistryDouble) Join(
 	recordedAt time.Time,
 ) (ports.SegmentJoinOutcome, error) {
 	double.joins++
-	if double.joinErr != nil {
+	if double.joinErr != nil &&
+		(double.joinErrObject == "" || double.joinErrObject == participation.Object().String()) {
 		return ports.SegmentJoinOutcomeInvalid, double.joinErr
 	}
 	rows, found := double.rows[segmentRegistryKey(key)]

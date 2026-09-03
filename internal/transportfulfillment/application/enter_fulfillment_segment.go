@@ -28,6 +28,11 @@ type segmentEntryDoors struct {
 // **段引用缺席时不进段，也不算失败。** 实际履约段不等同于交接范围、计划段、班次或订舱，段身份
 // 由谁铸出至今没有裁决，这里不拿手边任一引用顶替；今天的调用方都不给段号，那不是错。
 //
+// 下面两处 `err != nil` 交回空串**今天走不到**：两个引用构造器唯一的失败是去空白后为空，而那
+// 一种已经被上面那道缺席判据先筛走了。留着它们是构造器合同的一部分（引用日后加了格式规则就会
+// 真的失败），但**不要据此以为「引用写坏了」是个可观察的答案格**——票 tf-unwired-seven/08
+// 曾按那个前提要求开一格，取证后作废，经过记在该票面。
+//
 // **进段是派生的一侧，它的失败不得回滚来源登记。** 收寄与交接都是控制事实的保全，接货时间是
 // 责任起点锚——一次段登记故障抹不掉一条已经发生的物理事实，所以失败只留续办引用。
 //
@@ -62,7 +67,7 @@ func enterFulfillmentSegment(
 	key := ports.FulfillmentSegmentKey{TenantID: tenant, Segment: segment}
 	existing, found, err := segments.FindByKey(ctx, key)
 	if err != nil {
-		return segmentEntryContinuation("SEGMENT_REGISTRY_UNAVAILABLE", tenant, segmentReference, doors.object)
+		return owed("SEGMENT_REGISTRY_UNAVAILABLE", tenant, segmentReference, doors.object)
 	}
 	if found {
 		return joinExistingSegment(ctx, segments, clock, key, existing, planned, doors)
@@ -78,7 +83,7 @@ func enterFulfillmentSegment(
 		RecordedAt: clock.Now(),
 	})
 	if err != nil || saved == ports.SegmentSaveOutcomeInvalid {
-		return segmentEntryContinuation("SEGMENT_NOT_ESTABLISHED", tenant, segmentReference, doors.object)
+		return owed("SEGMENT_NOT_ESTABLISHED", tenant, segmentReference, doors.object)
 	}
 	return ""
 }
@@ -106,12 +111,13 @@ func joinExistingSegment(
 	// `已在段内`是业务答案不是欠账：同一控制范围不因伙伴重投、任务重建或批量重试重复建立参与。
 	outcome, err := segments.Join(ctx, key, participation, clock.Now())
 	if err != nil || outcome == ports.SegmentJoinOutcomeInvalid {
-		return segmentEntryContinuation("OBJECT_NOT_JOINED", key.TenantID, key.Segment.String(), doors.object)
+		return owed("OBJECT_NOT_JOINED", key.TenantID, key.Segment.String(), doors.object)
 	}
 	return ""
 }
 
-func segmentEntryContinuation(
+// owed 造一个续办引用：只有登记册这一侧读不到或写不进才走到这里。
+func owed(
 	cause string,
 	tenant domain.TenantID,
 	segmentReference string,

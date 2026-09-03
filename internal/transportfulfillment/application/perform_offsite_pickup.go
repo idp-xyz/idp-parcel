@@ -83,6 +83,22 @@ type ObjectPickupSubmission struct {
 	Basis      domain.AttemptResultBasisReference
 	Control    domain.TransportControlReference
 	OccurredAt time.Time
+	// PlannedSegment 是这个对象自己关联的计划履约段，可缺席。**逐对象一个而不是整次到访
+	// 一个**：CONTEXT 要求每个对象分别关联自己的计划履约段，共用一个就抹掉了成员差异。
+	PlannedSegment string
+}
+
+// ObjectSegmentEntry 是一个对象进段那一半的欠账。**逐对象而不是整批一个**（票
+// tf-unwired-seven/08 的口径裁定）：一次到访里可能只有部分对象没进去，整批一个引用说不出
+// 是哪几个，而 CONTEXT 要求任务汇总只能由对象结果派生。
+//
+// 只有真有欠账的对象才在列——进去了、没要求进、以及领域正当拒绝的都不在，与单对象入口
+// 那边「空串即无欠账」同义。
+type ObjectSegmentEntry struct {
+	Object domain.CarriedObjectReference
+	// ContinuationReference 恒非空：这一格只为登记册读不到或写不进而存在，等它恢复重试
+	// 同一份。没有欠账的对象根本不进这张表。
+	ContinuationReference string
 }
 
 // PerformOffsitePickupCommand 携带一次实际到场的全部来源：尝试身份与内容、逐对象结果。
@@ -100,6 +116,10 @@ type PerformOffsitePickupCommand struct {
 	Evidence        string
 	RescheduledFrom string
 	Objects         []ObjectPickupSubmission
+	// Segment 指名这次到访把取得控制的对象送进哪个实际履约段，**缺席时不立段**。它整次
+	// 到访共用——同一次到访取得控制的对象进同一个共同控制范围；逐对象那一半是各自的
+	// PlannedSegment。两层分设的理由与形状同 enterFulfillmentSegment 的自注。
+	Segment string
 }
 
 type PerformOffsitePickupResult struct {
@@ -109,6 +129,7 @@ type PerformOffsitePickupResult struct {
 	hasRecord    bool
 	continuation string
 	handoff      string
+	segments     []ObjectSegmentEntry
 }
 
 func (result PerformOffsitePickupResult) Outcome() PickupOutcome {
@@ -135,8 +156,16 @@ func (result PerformOffsitePickupResult) PickupHandoffReference() string {
 	return result.handoff
 }
 
+// SegmentEntries 逐对象交回进段那一半的欠账，空表示没有欠账。**只列真有欠账的对象**，
+// 进去了的不在列——与单对象入口「空串即无欠账」同义。
+func (result PerformOffsitePickupResult) SegmentEntries() []ObjectSegmentEntry {
+	return append([]ObjectSegmentEntry(nil), result.segments...)
+}
+
 type PerformOffsitePickupDeps struct {
-	Attempts   ports.PickupAttemptStore
+	Attempts ports.PickupAttemptStore
+	// Segments 可缺席：没有段登记册时到访照登不误。派生一侧缺席不该让来源保全停摆。
+	Segments   ports.ActualFulfillmentSegmentRegistry
 	Versions   ports.PickupIdentityFactory
 	Downstream ports.OffsitePickupHandoff
 	Clock      ports.Clock
@@ -222,7 +251,7 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		record.Pickups = append(record.Pickups, pickup)
 	}
 
-	return handler.commit(ctx, record)
+	return handler.commit(ctx, command, record)
 }
 
 func storeUndecided(sourceID string) PerformOffsitePickupResult {
@@ -315,6 +344,7 @@ func (handler *PerformOffsitePickupHandler) formPickup(
 // commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。
 func (handler *PerformOffsitePickupHandler) commit(
 	ctx context.Context,
+	command PerformOffsitePickupCommand,
 	record ports.PickupAttemptRecord,
 ) (PerformOffsitePickupResult, error) {
 	saved, err := handler.deps.Attempts.Save(ctx, record)
@@ -325,6 +355,7 @@ func (handler *PerformOffsitePickupHandler) commit(
 	case ports.PickupSaved:
 		result := PerformOffsitePickupResult{outcome: PickupAttemptRecorded, record: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
+		result.segments = handler.enterSegments(ctx, command, record)
 		return result, nil
 	case ports.PickupAlreadyRecorded:
 		winner, found, err := handler.deps.Attempts.FindByKey(ctx, record.Key)
@@ -335,6 +366,57 @@ func (handler *PerformOffsitePickupHandler) commit(
 	default:
 		return PerformOffsitePickupResult{}, fmt.Errorf("%w: %d", ErrUnexpectedPickupSave, saved)
 	}
+}
+
+// enterSegments 让这次到访取得控制的对象逐个进入同一个实际履约段（CONTEXT 生命周期①②）。
+//
+// **失败对象走不到这里**：形不成 OffsitePickup 就不在 record.Pickups 里，CONTEXT「客户不在、
+// 货物未备好、包装不合格或其他失败结果不制造实际履约段」由那道构造门守着，本编排不重判一遍。
+//
+// 第一个对象立段、其余加入，而这条编排**不记「段立了没有」**——那道门每次都问登记册，编排
+// 自己记住就是一次竞态（理由在 enterFulfillmentSegment）。
+//
+// 一个对象没进去不影响后面的：登记册故障可以只落在某一次加入上，逐个走完再逐个报，正是
+// 本票与两条单对象入口的全部差别。
+func (handler *PerformOffsitePickupHandler) enterSegments(
+	ctx context.Context,
+	command PerformOffsitePickupCommand,
+	record ports.PickupAttemptRecord,
+) []ObjectSegmentEntry {
+	planned := make(map[domain.CarriedObjectReference]string, len(command.Objects))
+	for _, submission := range command.Objects {
+		planned[submission.Object] = submission.PlannedSegment
+	}
+
+	var entries []ObjectSegmentEntry
+	for _, pickup := range record.Pickups {
+		continuation := enterFulfillmentSegment(
+			ctx, handler.deps.Segments, handler.deps.Clock,
+			command.TenantID, command.Segment, planned[pickup.Object()],
+			segmentEntryDoors{
+				object: pickup.Object(),
+				establish: func(
+					segment domain.FulfillmentSegmentReference,
+					plannedSegment domain.PlannedSegmentReference,
+				) (domain.ActualFulfillmentSegment, error) {
+					return domain.EstablishSegmentWithPickup(segment, pickup, plannedSegment)
+				},
+				join: func(
+					existing domain.ActualFulfillmentSegment,
+					plannedSegment domain.PlannedSegmentReference,
+				) (domain.ActualFulfillmentSegment, error) {
+					return existing.JoinWithPickup(pickup, plannedSegment)
+				},
+			},
+		)
+		if continuation != "" {
+			entries = append(entries, ObjectSegmentEntry{
+				Object:                pickup.Object(),
+				ContinuationReference: continuation,
+			})
+		}
+	}
+	return entries
 }
 
 // existingResult 按已有记录作答并重发同一份意图（AT-TF-019/024）。
