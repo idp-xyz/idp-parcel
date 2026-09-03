@@ -68,6 +68,8 @@ Status: in-progress——MCP-1；[ADR-0095](../../../docs/adr/0095-undecided-sta
 
   验证同票 07 末条（钉 `c96065b`，含真库，未跑 `-race`）。
 
+  **完成判据的直接证据补在 `c25d145`**：`TestAnUndecidedStallSurfacesStageAndReasonToTheObserver` 在生产依赖图上接替身观察口，钉住消费门那句 `stage …, reason …` 穿过 `WithUndecidedSentinels` 的 `%w: %w` 包装后仍在。此前三条平台用例钉的是替身发布器上的 `errors.Is`，证不到这一层。建议来自 MCP-4 对 `20d21f4` 的对读。钉 `c25d145` 在临时 worktree 验：gofmt 空、build/vet 退 0、`cmd/parcel-dispatch` 49 条 PASS 非 SKIP（含真库）。
+
 - 2026-09-03 · MCP-4（开工前在 `371f6cb`——本地 main HEAD，非票面旧锚——重取一遍证据；只取证不改代码）。
 
   票面与 ADR-0095 的结论都不过期：`Dispatcher.DispatchOnce` 逐条 `Publish` 失败仍只把 `failureCodeFor(err)` 交给 `RecordFailure` 随即 `continue`，`err` 本体丢弃；`Loop.report` 仍只在 `DispatchOnce` 整拍返错时打 `dispatch beat failed`；`internal/platform/dispatch` 包内零 logger、零 `slog` 引用。
