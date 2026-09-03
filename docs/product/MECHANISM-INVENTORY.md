@@ -18,9 +18,9 @@
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
-| transportfulfillment | 61 | 50 | 10 | 24 | 9 | 5 |
+| transportfulfillment | 62 | 51 | 10 | 24 | 9 | 6 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 674 | 618 | 85 | 201 | 48 | 80 |
+| **合计** | 675 | 619 | 85 | 201 | 48 | 81 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
@@ -98,7 +98,7 @@
 | visibilityexception | 7 |
 | **合计** | 14 |
 
-## 端口：声明 285 个；基线口径缺 12，精确口径缺 9
+## 端口：声明 285 个；基线口径缺 11，精确口径缺 8
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -112,7 +112,6 @@
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
-- `transportfulfillment.HandoverScopeView` 
 - `visibilityexception.NotificationChannelGateway` 
 
 精确口径缺（无具体类型完整实现）：
@@ -124,5 +123,4 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
-- `transportfulfillment.HandoverScopeView` 
 - `visibilityexception.NotificationChannelGateway` 
