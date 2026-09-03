@@ -221,6 +221,118 @@ func TestHandoverWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
+// —— 按范围列举（ports.HandoverScopeView，票 tf-unwired-seven/03）——
+
+// TestListByScopeReturnsEveryRegisteredVersionOfTheScopeOnly 证读口只交回「这一次交接」的
+// 成员：同租户同范围的每个已登记版本都在（含被更正的原版本——原行不删，读口也不替领域
+// 决定哪一版有效）；他租户、他范围一条不混入。逐行经构造门重建，坏行在这里暴露。
+func TestListByScopeReturnsEveryRegisteredVersionOfTheScopeOnly(t *testing.T) {
+	repository, transactor, _ := newTransportHandovers(t)
+	ctx := t.Context()
+
+	first := handedOverRecord(t, "HRV-000000000001")
+	mustSaveHandover(t, transactor, ctx, repository, first)
+	corrected, err := first.Handover.Correct(domain.HandoverCorrection{
+		Verdict:     domain.HandoverRefused,
+		Basis:       handoverValue(t, domain.NewHandoverBasisReference, "count-mismatch"),
+		Version:     handoverValue(t, domain.NewHandoverResultVersion, "HRV-000000000002"),
+		CorrectedAt: handoverJudgedAtFixture.Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("更正：%v", err)
+	}
+	mustSaveHandover(t, transactor, ctx, repository, ports.TransportHandoverRecord{
+		Key:           handoverKeyFixture(t, "tenant-1", "HRV-000000000002"),
+		ContentDigest: "digest-corrected",
+		Handover:      corrected,
+		RecordedAt:    handoverJudgedAtFixture.Add(2 * time.Hour),
+	})
+	mustSaveHandover(t, transactor, ctx, repository, scopedRecord(t, "tenant-1", "parcel-2", "scope-1", "HRV-000000000003"))
+	// 同租户他范围、他租户同范围：两条都不该出现在 scope-1 的成员里。
+	mustSaveHandover(t, transactor, ctx, repository, scopedRecord(t, "tenant-1", "parcel-3", "scope-2", "HRV-000000000004"))
+	mustSaveHandover(t, transactor, ctx, repository, scopedRecord(t, "tenant-b", "parcel-1", "scope-1", "HRV-000000000005"))
+
+	records, err := repository.ListByScope(ctx,
+		handoverValue(t, domain.NewTenantID, "tenant-1"),
+		handoverValue(t, domain.NewHandoverScopeReference, "scope-1"))
+	if err != nil {
+		t.Fatalf("按范围列举：%v", err)
+	}
+	got := map[string]domain.HandoverVerdict{}
+	for _, record := range records {
+		if record.Key.TenantID.String() != "tenant-1" || record.Key.Scope.String() != "scope-1" {
+			t.Fatalf("混入了他租户或他范围的成员：%+v", record.Key)
+		}
+		if record.Handover.Version() != record.Key.Version || record.Handover.Object() != record.Key.Object {
+			t.Fatalf("读回的本体与键不一致：%+v", record.Key)
+		}
+		got[record.Key.Object.String()+"@"+record.Key.Version.String()] = record.Handover.Verdict()
+	}
+	want := map[string]domain.HandoverVerdict{
+		"parcel-1@HRV-000000000001": domain.ObjectHandedOver,
+		"parcel-1@HRV-000000000002": domain.HandoverRefused,
+		"parcel-2@HRV-000000000003": domain.ObjectHandedOver,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("成员 = %v, want %v", got, want)
+	}
+	for key, verdict := range want {
+		if got[key] != verdict {
+			t.Fatalf("成员 %s 的裁决 = %v, want %v（全部：%v）", key, got[key], verdict, got)
+		}
+	}
+}
+
+// TestListByScopeAnswersAnEmptyScopeWithoutError 证「这个范围还没有交接」与「读不回来」
+// 分得开：空范围答空且不报错，调用方据此走`不成立汇总`而不是`未决`。
+func TestListByScopeAnswersAnEmptyScopeWithoutError(t *testing.T) {
+	repository, transactor, _ := newTransportHandovers(t)
+	ctx := t.Context()
+	mustSaveHandover(t, transactor, ctx, repository, handedOverRecord(t, "HRV-000000000001"))
+
+	records, err := repository.ListByScope(ctx,
+		handoverValue(t, domain.NewTenantID, "tenant-1"),
+		handoverValue(t, domain.NewHandoverScopeReference, "scope-never-used"))
+	if err != nil {
+		t.Fatalf("空范围不该报错：%v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("空范围读回了 %d 条", len(records))
+	}
+}
+
+// scopedRecord 造一条指定租户/对象/范围的已交接登记，供隔离用例摆放邻居。
+func scopedRecord(t *testing.T, tenant, object, scope, version string) ports.TransportHandoverRecord {
+	t.Helper()
+	handover, err := domain.FormTransportHandover(domain.TransportHandoverSpec{
+		TenantID:          handoverValue(t, domain.NewTenantID, tenant),
+		Object:            handoverValue(t, domain.NewCarriedObjectReference, object),
+		Scope:             handoverValue(t, domain.NewHandoverScopeReference, scope),
+		ReleasedBy:        handoverValue(t, domain.NewHandoverPartyReference, "node-1"),
+		ReceivedBy:        handoverValue(t, domain.NewHandoverPartyReference, "carrier-1"),
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: handoverValue(t, domain.NewHandoverEvidenceReference, "seal-out"),
+		ReceivingEvidence: handoverValue(t, domain.NewHandoverEvidenceReference, "seal-in"),
+		Rule:              handoverValue(t, domain.NewHandoverRuleReference, "rule/v1"),
+		Version:           handoverValue(t, domain.NewHandoverResultVersion, version),
+		JudgedAt:          handoverJudgedAtFixture,
+	})
+	if err != nil {
+		t.Fatalf("构造 %s/%s/%s 夹具：%v", tenant, object, scope, err)
+	}
+	return ports.TransportHandoverRecord{
+		Key: ports.TransportHandoverKey{
+			TenantID: handover.TenantID(),
+			Object:   handover.Object(),
+			Scope:    handover.Scope(),
+			Version:  handover.Version(),
+		},
+		ContentDigest: "digest-" + version,
+		Handover:      handover,
+		RecordedAt:    handoverJudgedAtFixture,
+	}
+}
+
 // ---- 夹具 ----
 
 func newTransportHandovers(t *testing.T) (*adapter.TransportHandovers, bentoapp.Transactor, *pgxpool.Pool) {

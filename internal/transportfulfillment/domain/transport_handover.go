@@ -332,15 +332,35 @@ type HandoverScopeSummary struct {
 
 // SummarizeHandovers 派生一个交接范围的汇总。空集不成立汇总；跨范围或跨租户混入即
 // 拒绝——那不是「这一次交接」的成员。
+//
+// 收到的可以是整条版本链：被后续版本回指（`Corrects`）的那一代不计——它留在册上是
+// 「不删除原交接」，但它不再是这个对象的结果（「更正形成新版本使原结果失效或被替代」）。
+// 折叠在这里而不在读口：哪一版有效是领域的判断，读口只交回成员。回指按（对象，版本）配，
+// 版本标识只在对象内唯一，跨对象可重。
 func SummarizeHandovers(results []TransportHandover) (HandoverScopeSummary, error) {
 	if len(results) == 0 {
 		return HandoverScopeSummary{}, ErrInvalidTransportHandover
 	}
 	first := results[0]
 	summary := HandoverScopeSummary{scope: first.scope}
+
+	type objectVersion struct {
+		object  CarriedObjectReference
+		version HandoverResultVersion
+	}
+	superseded := make(map[objectVersion]struct{})
+	for _, result := range results {
+		if predecessor, corrects := result.Corrects(); corrects {
+			superseded[objectVersion{result.object, predecessor}] = struct{}{}
+		}
+	}
+
 	for _, result := range results {
 		if result.scope != first.scope || result.tenantID != first.tenantID {
 			return HandoverScopeSummary{}, ErrMixedHandoverScopes
+		}
+		if _, replaced := superseded[objectVersion{result.object, result.version}]; replaced {
+			continue
 		}
 		switch result.verdict {
 		case ObjectHandedOver:

@@ -182,6 +182,30 @@ func TestBatchConclusionsDeriveOnlyFromObjectResults(t *testing.T) {
 		}
 	})
 
+	// Covers: CONTEXT「更正形成新版本使原结果失效或被替代，不删除原交接」——原版本留在
+	// 册上，但它不再是这个对象的结果。汇总收到整条版本链时按对象只计有效那一版；否则一次
+	// 更正会把一个对象数成两个，而且两格裁决各多一。
+	t.Run("a corrected object counts once by its effective verdict", func(t *testing.T) {
+		corrected, err := handed.Correct(domain.HandoverCorrection{
+			Verdict:     domain.HandoverRefused,
+			Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-late"),
+			Version:     mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v2"),
+			CorrectedAt: handoverJudgedAt.Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("correct: %v", err)
+		}
+		// 更正版排在原版本之前：读口不承诺顺序，折叠不得依赖它。
+		summary, err := domain.SummarizeHandovers([]domain.TransportHandover{corrected, refused, handed})
+		if err != nil {
+			t.Fatalf("summarize: %v", err)
+		}
+		if summary.Total() != 2 || summary.HandedOver() != 0 || summary.Refused() != 2 {
+			t.Fatalf("summary = %d/%d/%d total %d; 被更正的原版本仍被计了一次",
+				summary.HandedOver(), summary.Refused(), summary.Unconfirmed(), summary.Total())
+		}
+	})
+
 	t.Run("the verdict set is closed", func(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, verdict := range []domain.HandoverVerdict{

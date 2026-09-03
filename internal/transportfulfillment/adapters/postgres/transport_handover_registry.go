@@ -29,7 +29,10 @@ func NewTransportHandovers(db *bentopg.DB) (*TransportHandovers, error) {
 	return &TransportHandovers{db: db}, nil
 }
 
-var _ ports.TransportHandoverRegistry = (*TransportHandovers)(nil)
+var (
+	_ ports.TransportHandoverRegistry = (*TransportHandovers)(nil)
+	_ ports.HandoverScopeView         = (*TransportHandovers)(nil)
+)
 
 // FindByKey 按（租户+对象+范围+版本）取回交接判断。否定结果只回 false。读回经
 // RehydrateTransportHandover 复验逐格完备性与版本链，坏行在这里暴露。
@@ -90,6 +93,89 @@ func (repository *TransportHandovers) FindByKey(
 		Handover:      handover,
 		RecordedAt:    recordedAt.UTC(),
 	}, true, nil
+}
+
+// ListByScope 交回一个交接范围内**全部已登记的版本**，供 domain.SummarizeHandovers 派生汇总
+// （ports.HandoverScopeView）。
+//
+// 这里刻意不判「哪一版是当前有效的」——被更正的原版本照样入列。原行不删是 CONTEXT 的话，
+// 而「更正使原结果失效」是领域的判断：SummarizeHandovers 自己按版本链折掉被替代的那一代。
+// 在 SQL 里先筛一遍等于为同一条规则立第二个口径，领域改一次判据、这里那份会悄悄漂移
+// ——与本票不在 SQL 里 COUNT 的理由是同一条。
+//
+// 空范围答空切片且不报错：「这个范围还没有交接」与「读不回来」的恢复动作不同。
+func (repository *TransportHandovers) ListByScope(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.HandoverScopeReference,
+) ([]ports.TransportHandoverRecord, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT object_ref, handover_version,
+		        released_by, received_by, verdict,
+		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
+		        corrects_version, corrected_at, judged_at, content_digest, recorded_at
+		   FROM transport_fulfillment.transport_handover
+		  WHERE tenant_id = $1
+		    AND scope_ref = $2
+		  ORDER BY object_ref, judged_at, handover_version`,
+		tenant.String(),
+		scope.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+	}
+	defer rows.Close()
+
+	records := make([]ports.TransportHandoverRecord, 0)
+	for rows.Next() {
+		var objectRaw, versionRaw, releasedBy, receivedBy, verdictName, digest string
+		var releasing, receiving, rule, basis, corrects *string
+		var correctedAt *time.Time
+		var judgedAt, recordedAt time.Time
+		if err := rows.Scan(&objectRaw, &versionRaw, &releasedBy, &receivedBy, &verdictName,
+			&releasing, &receiving, &rule, &basis,
+			&corrects, &correctedAt, &judgedAt, &digest, &recordedAt); err != nil {
+			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+		}
+
+		key := ports.TransportHandoverKey{TenantID: tenant, Scope: scope}
+		if key.Object, err = domain.NewCarriedObjectReference(objectRaw); err != nil {
+			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+		}
+		if key.Version, err = domain.NewHandoverResultVersion(versionRaw); err != nil {
+			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+		}
+		handover, err := rebuildHandover(key, handoverRow{
+			releasedBy:  releasedBy,
+			receivedBy:  receivedBy,
+			verdictName: verdictName,
+			releasing:   releasing,
+			receiving:   receiving,
+			rule:        rule,
+			basis:       basis,
+			corrects:    corrects,
+			correctedAt: correctedAt,
+			judgedAt:    judgedAt,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+		}
+		records = append(records, ports.TransportHandoverRecord{
+			Key:           key,
+			ContentDigest: digest,
+			Handover:      handover,
+			RecordedAt:    recordedAt.UTC(),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list transport handovers by scope: %w", err)
+	}
+	return records, nil
 }
 
 // Save 落一个交接判断版本。撞键答`已登记`（ADR-0031），编排据此读回赢家。
