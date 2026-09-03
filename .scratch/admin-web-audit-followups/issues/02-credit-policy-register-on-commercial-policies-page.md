@@ -1,7 +1,7 @@
 # 02 商业政策页补「信用政策」册——后端已供七类，前端只认六类
 
 Category: bug
-Status: in-progress——MCP-2
+Status: resolved（2026-09-03，MCP-2，`42846ed`）
 Blocked by: 01（已 resolved，`d722301`）
 
 ## 缺什么
@@ -50,3 +50,9 @@ CONTEXT 原句（`docs/domain/party-commercial/CONTEXT.md`）：「信用政策�
 - 全树 `apps/admin-web/src` 不再出现「无独立正文册」。
 
 ## Comments
+
+- 2026-09-03 · MCP-2：落于 `42846ed`（父 `1a5ce70`）。红：`policy-rows.test.ts` 在 tsc 层红
+  （`CREDIT_POLICY` 不在联合）；绿：`api.ts` 加类型与分支、`presentation.ts` 加词与 chip、
+  `policy-rows.ts` 加列与行转写。`pnpm test` 16 例 `fail 0`，`tsc --noEmit` 无输出，
+  `apps/admin-web/src` 下「无独立正文册」零命中（VE 那句「六种册子」是 VE 自己的六类，不属本票）。
+  抽出的行转写模块顺带钉住了取消授权三态——那三句是页面替目录说的话，抽出来之后不能变。
