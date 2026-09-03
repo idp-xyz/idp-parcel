@@ -1,7 +1,8 @@
 # 交接范围汇总读面——`SummarizeHandovers` 至今没有调用方
 
 Category: enhancement
-Status: in-progress——MCP-3
+Status: resolved——四层齐（端口 + 应用 + 真库适配器 + HTTP 读面），棘轮那条已剪；
+接进 cmd/parcel-api 装配不在本票判据内，另票认领，理由见文末末条
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -88,3 +89,35 @@ Blocked by: 无
   **不为本笔单独补跑，是有裁定的**：`-race` 逐笔补会得到一堆各钉不同 SHA、拼不成一句完整
   断言的绿——今晚 HEAD 每几分钟往前走一笔。按频道约定它归收尾那一批，与 `gofmt -l` 为空、
   清点重生成比对三件一次跑齐并钉住同一个 SHA。
+
+- 2026-09-03 · MCP-3：**余下两层已落 `0005897`，本票转 resolved。**
+
+  **适配器**：`ListByScope` 落在 `TransportHandovers` 上，作 `ports.HandoverScopeView` 的真库
+  实现。交回范围内全部已登记版本，逐行过 `rebuildHandover` 的构造门，空范围答空列表不报错。
+  没在 SQL 里筛，也没在 SQL 里数——理由与票面「陷阱」那条同一条。
+
+  **动笔时核出一处两层之前没说清的事**：更正是新版本新行、原行不删，于是按范围读回的是整条
+  版本链，而 `SummarizeHandovers` 原先逐条计数——**一次更正会把一个对象数成两个**，两格裁决
+  各多一。折叠落在领域而不在读口：「更正形成新版本使原结果失效或被替代」是 CONTEXT 的判断，
+  读口若先筛一遍，就是为同一条规则立第二个口径。回指按对象配对，因为版本标识只在对象内唯一。
+
+  **HTTP 读面** `GET /transport-fulfillment-handover-scope-summary?scope=…`：接的是读用例而不是
+  存储读面——汇总是派生量，与 ADR-0077 目录上列的那些不同属，端点直读存储再自己数就是第二个
+  口径。门次序照本包查阅面通例（方法 → `scope` 形状 → 准入），租户只取自准入结果。四格答案
+  一律 200 进 `outcome`：成立带 `summary`（三格计数 + 总数 + 整批结论原样透出，派生只由领域做，
+  不留给页面自己算），**不成立汇总没有 `summary` 键**（三个零与「还没有交接」是两种答案），
+  未决带 `reason` 与续办引用，无名结果 500 `UNNAMED_OUTCOME`。
+
+  **未接进 `cmd/parcel-api` 装配，且这不在本票判据内。** 那是共享接线文件（端点表、探针、
+  放行表）且要改 `assembleBusinessEndpoints` 的签名，按 `docs/agents/parallel-sessions.md`
+  要先占号再另起一笔。它现在有自己的票：`admin-web-audit-followups/06`。**因此本票 resolved
+  说的是「四层齐、判据满足」，不等于「生产可达」**——`HandoverScopeView` 在装配点接上之前
+  仍无生产实现，与上一条注记里 `label-channel/06` 那件事同形。
+
+  **验证**：隔离 worktree（检出 `828dbfa`）——`go build`/`go vet` 退 0，`gofmt -l .` 空，
+  `go test -count=1 -p 1 ./...` 全仓 93 包 ok 零 FAIL（DSN 已设，TF postgres 包实跑；
+  `ListByScope` 两例 `-v` 下 PASS 非 SKIP）。共享树 `c808d01` 上应用后再跑：build/vet 退 0，
+  架构门禁 ok，TF 四包 ok。棘轮名单未动——上一层剪过之后本笔不新增导出工厂。
+
+  **上一条注记里那三件收尾验证仍未跑**（`-race`、`gofmt -l` 为空、清点重生成比对）。裁定不变：
+  归收尾那一批，一次跑齐并钉同一个 SHA。本票 resolved 不把它们带走。
