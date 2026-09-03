@@ -18,13 +18,13 @@
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
-| transportfulfillment | 76 | 63 | 15 | 27 | 9 | 6 |
-| visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 699 | 643 | 91 | 208 | 48 | 83 |
+| transportfulfillment | 85 | 71 | 18 | 29 | 10 | 6 |
+| visibilityexception | 89 | 86 | 9 | 26 | 8 | 10 |
+| **合计** | 710 | 653 | 94 | 210 | 49 | 83 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
-## 跨上下文消费缝：16 组，46 个生产文件
+## 跨上下文消费缝：16 组，47 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -43,9 +43,9 @@
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 1 |
 | visibilityexception | parcelshipment | 4 |
-| visibilityexception | transportfulfillment | 4 |
+| visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 115 份 SQL
+## 迁移：11 个模块共 116 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -58,10 +58,10 @@
 | party_commercial | 22 |
 | pilot_governance | 5 |
 | settlement_accounting | 15 |
-| transport_fulfillment | 10 |
+| transport_fulfillment | 11 |
 | visibility_exception | 21 |
 
-## 接线面：接入面端点 78 个，消费适配器 23 个生产文件，直投路由表 14 条
+## 接线面：接入面端点 78 个，消费适配器 24 个生产文件，直投路由表 15 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -86,8 +86,8 @@
 |---|---|---|---|---|---|
 | networkrouting | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 6 | 1 | 1 | 0 | 8 |
-| visibilityexception | 11 | 0 | 0 | 2 | 13 |
-| **合计** | 19 | 1 | 1 | 2 | 23 |
+| visibilityexception | 12 | 0 | 0 | 2 | 14 |
+| **合计** | 20 | 1 | 1 | 2 | 24 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -95,10 +95,10 @@
 |---|---|
 | networkrouting | 2 |
 | parcelshipment | 5 |
-| visibilityexception | 7 |
-| **合计** | 14 |
+| visibilityexception | 8 |
+| **合计** | 15 |
 
-## 端口：声明 294 个；基线口径缺 11，精确口径缺 8
+## 端口：声明 301 个；基线口径缺 14，精确口径缺 11
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -111,7 +111,10 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `transportfulfillment.EffectiveTimeRules` 
+- `transportfulfillment.ExternalCarrierCredentialResolver` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
+- `transportfulfillment.TrackingSource` 
 - `visibilityexception.NotificationChannelGateway` 
 
 精确口径缺（无具体类型完整实现）：
@@ -123,4 +126,7 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `transportfulfillment.EffectiveTimeRules` 
+- `transportfulfillment.ExternalCarrierCredentialResolver` 
+- `transportfulfillment.TrackingSource` 
 - `visibilityexception.NotificationChannelGateway` 
