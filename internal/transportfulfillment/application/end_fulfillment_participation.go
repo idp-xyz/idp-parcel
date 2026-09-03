@@ -218,6 +218,9 @@ func (handler *EndFulfillmentParticipationHandler) End(
 // 走的是与两条立段入口同一道门（enterFulfillmentSegment），不另写一份——同一形状两个口径正是
 // 那道门存在的理由。**这一半失败不把「本段这一条已结束」翻回去**：责任到此为止已经成立，进下
 // 一段是派生的一侧。
+//
+// 那道门交回的`段已关闭`拒绝格这里**暂不透出**，只取续办引用：下一段已关闭要不要单开一格答给
+// 调用方，与「下一段由谁指名」是同一次裁决的两半，归票 tf-segment-lifecycle-closure/06。
 func (handler *EndFulfillmentParticipationHandler) enterNextSegment(
 	ctx context.Context,
 	command EndFulfillmentParticipationCommand,
@@ -226,6 +229,15 @@ func (handler *EndFulfillmentParticipationHandler) enterNextSegment(
 	if !command.Source.carriesControlOnward() || strings.TrimSpace(command.NextSegment) == "" {
 		return ""
 	}
+	return enterNextSegmentEntry(ctx, handler, command, handover).continuation
+}
+
+func enterNextSegmentEntry(
+	ctx context.Context,
+	handler *EndFulfillmentParticipationHandler,
+	command EndFulfillmentParticipationCommand,
+	handover domain.TransportHandover,
+) segmentEntry {
 	return enterFulfillmentSegment(
 		ctx, handler.deps.Segments, handler.deps.Clock,
 		command.TenantID, command.NextSegment, command.NextPlannedSegment,

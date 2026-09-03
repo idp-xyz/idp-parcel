@@ -172,6 +172,7 @@ type pickupRegistrationView struct {
 	ContinuationReference        string `json:"continuationReference"`
 	HandoffReference             string `json:"handoffReference"`
 	SegmentContinuationReference string `json:"segmentContinuationReference"`
+	SegmentEntryRefusal          string `json:"segmentEntryRefusal"`
 }
 
 func decodePickupRegistration(t *testing.T, recorder *httptest.ResponseRecorder) pickupRegistrationView {

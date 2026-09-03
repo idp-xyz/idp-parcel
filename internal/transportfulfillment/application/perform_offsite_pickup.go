@@ -123,13 +123,14 @@ type PerformOffsitePickupCommand struct {
 }
 
 type PerformOffsitePickupResult struct {
-	outcome      PickupOutcome
-	reason       PickupUndecidedReason
-	record       ports.PickupAttemptRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
-	segments     []ObjectSegmentEntry
+	outcome        PickupOutcome
+	reason         PickupUndecidedReason
+	record         ports.PickupAttemptRecord
+	hasRecord      bool
+	continuation   string
+	handoff        string
+	segments       []ObjectSegmentEntry
+	segmentRefusal SegmentEntryRefusal
 }
 
 func (result PerformOffsitePickupResult) Outcome() PickupOutcome {
@@ -160,6 +161,14 @@ func (result PerformOffsitePickupResult) PickupHandoffReference() string {
 // 进去了的不在列——与单对象入口「空串即无欠账」同义。
 func (result PerformOffsitePickupResult) SegmentEntries() []ObjectSegmentEntry {
 	return append([]ObjectSegmentEntry(nil), result.segments...)
+}
+
+// SegmentEntryRefusal 非空说明到访已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格）。
+// **整次一格而不是逐对象**：段是整次到访共用的一个，它关了就对这次到访的每个成功对象都关了，
+// 逐对象重复同一句话说不出更多东西——与逐对象的欠账（SegmentEntries）恰相反，那边每个对象可以
+// 各自成败。
+func (result PerformOffsitePickupResult) SegmentEntryRefusal() SegmentEntryRefusal {
+	return result.segmentRefusal
 }
 
 type PerformOffsitePickupDeps struct {
@@ -355,7 +364,7 @@ func (handler *PerformOffsitePickupHandler) commit(
 	case ports.PickupSaved:
 		result := PerformOffsitePickupResult{outcome: PickupAttemptRecorded, record: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
-		result.segments = handler.enterSegments(ctx, command, record)
+		result.segments, result.segmentRefusal = handler.enterSegments(ctx, command, record)
 		return result, nil
 	case ports.PickupAlreadyRecorded:
 		winner, found, err := handler.deps.Attempts.FindByKey(ctx, record.Key)
@@ -382,15 +391,16 @@ func (handler *PerformOffsitePickupHandler) enterSegments(
 	ctx context.Context,
 	command PerformOffsitePickupCommand,
 	record ports.PickupAttemptRecord,
-) []ObjectSegmentEntry {
+) ([]ObjectSegmentEntry, SegmentEntryRefusal) {
 	planned := make(map[domain.CarriedObjectReference]string, len(command.Objects))
 	for _, submission := range command.Objects {
 		planned[submission.Object] = submission.PlannedSegment
 	}
 
 	var entries []ObjectSegmentEntry
+	refusal := SegmentEntryRefusalNone
 	for _, pickup := range record.Pickups {
-		continuation := enterFulfillmentSegment(
+		entry := enterFulfillmentSegment(
 			ctx, handler.deps.Segments, handler.deps.Clock,
 			command.TenantID, command.Segment, planned[pickup.Object()],
 			segmentEntryDoors{
@@ -409,14 +419,17 @@ func (handler *PerformOffsitePickupHandler) enterSegments(
 				},
 			},
 		)
-		if continuation != "" {
+		if entry.continuation != "" {
 			entries = append(entries, ObjectSegmentEntry{
 				Object:                pickup.Object(),
-				ContinuationReference: continuation,
+				ContinuationReference: entry.continuation,
 			})
 		}
+		if entry.refusal != SegmentEntryRefusalNone {
+			refusal = entry.refusal
+		}
 	}
-	return entries
+	return entries, refusal
 }
 
 // existingResult 按已有记录作答并重发同一份意图（AT-TF-019/024）。

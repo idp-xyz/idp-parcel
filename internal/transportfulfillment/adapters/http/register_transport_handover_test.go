@@ -239,6 +239,7 @@ type handoverView struct {
 	ContinuationReference        string `json:"continuationReference"`
 	HandoffReference             string `json:"handoffReference"`
 	SegmentContinuationReference string `json:"segmentContinuationReference"`
+	SegmentEntryRefusal          string `json:"segmentEntryRefusal"`
 }
 
 func decodeHandover(t *testing.T, recorder *httptest.ResponseRecorder) handoverView {

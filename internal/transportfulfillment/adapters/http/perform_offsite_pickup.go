@@ -42,6 +42,7 @@ func NewPerformOffsitePickupEndpoint(intake PickupAttemptIntake, handler PickupA
 // `objects` 逐对象透出成败与版本：UC-TF-002 要求任务汇总只能由对象结果派生，传输层不替它
 // 汇总成一个「本次到访成功/失败」。`segmentEntries` 逐对象列进段那一半的欠账，只列真有欠账
 // 的对象——进去了的、没要求进的、领域正当拒绝的都不在列，与编排交回的形状一致。
+// `segmentEntryRefusal` 整次一格（段是整次到访共用的一个，它关了就对每个成功对象都关了）。
 type pickupAttemptResponse struct {
 	Outcome               string                      `json:"outcome"`
 	UndecidedReason       string                      `json:"undecidedReason,omitempty"`
@@ -51,6 +52,7 @@ type pickupAttemptResponse struct {
 	ContinuationReference string                      `json:"continuationReference,omitempty"`
 	HandoffReference      string                      `json:"handoffReference,omitempty"`
 	SegmentEntries        []segmentEntryResponse      `json:"segmentEntries,omitempty"`
+	SegmentEntryRefusal   string                      `json:"segmentEntryRefusal,omitempty"`
 }
 
 type pickupAttemptObjectResult struct {
@@ -77,6 +79,7 @@ func writePickupAttemptOutcome(response http.ResponseWriter, result application.
 		UndecidedReason:       result.UndecidedReason().String(),
 		ContinuationReference: result.ContinuationReference(),
 		HandoffReference:      result.PickupHandoffReference(),
+		SegmentEntryRefusal:   result.SegmentEntryRefusal().String(),
 	}
 	if record, present := result.Record(); present {
 		body.Attempt = record.Attempt.Attempt().String()

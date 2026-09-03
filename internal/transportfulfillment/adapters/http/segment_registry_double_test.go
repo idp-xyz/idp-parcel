@@ -180,6 +180,31 @@ func (double *segmentRegistryDouble) participationOf(
 	return domain.FulfillmentParticipation{}
 }
 
+// closeSegment 把一个已成立的段按「全部参与已结束且不再接受新对象」的样子收口：逐条参与以明确
+// 控制终止收尾，再落关闭两列。它直接改替身的行而不走编排，因为端点测试要的只是一个关着的段，
+// 关段本身的规则由应用层与票 01 的测试守。
+func (double *segmentRegistryDouble) closeSegment(t *testing.T, tenant, segment string, closedAt time.Time) {
+	t.Helper()
+	basis, err := domain.NewParticipationBasisReference("control-termination/test")
+	if err != nil {
+		t.Fatalf("basis: %v", err)
+	}
+	for _, rows := range double.rows {
+		if rows.key.TenantID.String() != tenant || rows.key.Segment.String() != segment {
+			continue
+		}
+		for index := range rows.participations {
+			row := &rows.participations[index]
+			if row.EndedAt.IsZero() {
+				row.EndKind, row.EndBasis, row.EndedAt = domain.EndedByControlTermination, basis, closedAt.Add(-time.Minute)
+			}
+		}
+		rows.closed, rows.closedAt = true, closedAt
+		return
+	}
+	t.Fatalf("段登记册里没有 (%s, %s)，关不了", tenant, segment)
+}
+
 func (double *segmentRegistryDouble) hasSegment(tenant, segment string) bool {
 	for _, rows := range double.rows {
 		if rows.key.TenantID.String() == tenant && rows.key.Segment.String() == segment {

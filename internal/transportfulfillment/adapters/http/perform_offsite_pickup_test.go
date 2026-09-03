@@ -235,6 +235,7 @@ type pickupAttemptView struct {
 	ContinuationReference string                    `json:"continuationReference"`
 	HandoffReference      string                    `json:"handoffReference"`
 	SegmentEntries        []segmentEntryView        `json:"segmentEntries"`
+	SegmentEntryRefusal   string                    `json:"segmentEntryRefusal"`
 }
 
 func decodePickupAttempt(t *testing.T, recorder *httptest.ResponseRecorder) pickupAttemptView {

@@ -85,13 +85,14 @@ type RegisterOffsitePickupCommand struct {
 }
 
 type RegisterOffsitePickupResult struct {
-	outcome      PickupRegistrationOutcome
-	reason       PickupRegistrationUndecidedReason
-	record       ports.OffsitePickupRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
-	segment      string
+	outcome        PickupRegistrationOutcome
+	reason         PickupRegistrationUndecidedReason
+	record         ports.OffsitePickupRecord
+	hasRecord      bool
+	continuation   string
+	handoff        string
+	segment        string
+	segmentRefusal SegmentEntryRefusal
 }
 
 func (result RegisterOffsitePickupResult) Outcome() PickupRegistrationOutcome {
@@ -102,6 +103,12 @@ func (result RegisterOffsitePickupResult) Outcome() PickupRegistrationOutcome {
 // 给出——领域拒绝（对象已在段内、段已关闭）是正当结果不是欠账。
 func (result RegisterOffsitePickupResult) SegmentContinuationReference() string {
 	return result.segment
+}
+
+// SegmentEntryRefusal 非空说明收寄已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格），
+// 与 SegmentContinuationReference 不会同时非空——理由同交接那一侧。
+func (result RegisterOffsitePickupResult) SegmentEntryRefusal() SegmentEntryRefusal {
+	return result.segmentRefusal
 }
 
 // UndecidedReason 只在`未决`时非零。
@@ -203,7 +210,8 @@ func (handler *RegisterOffsitePickupHandler) Register(
 	case ports.OffsitePickupSaved:
 		result := RegisterOffsitePickupResult{outcome: PickupRegistered, record: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
-		result.segment = handler.establishSegment(ctx, command, pickup)
+		entry := handler.establishSegment(ctx, command, pickup)
+		result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 		return result, nil
 	case ports.OffsitePickupAlreadyRegistered:
 		winner, found, err := handler.deps.Pickups.FindByKey(ctx, key)
@@ -225,7 +233,7 @@ func (handler *RegisterOffsitePickupHandler) establishSegment(
 	ctx context.Context,
 	command RegisterOffsitePickupCommand,
 	pickup domain.OffsitePickup,
-) string {
+) segmentEntry {
 	return enterFulfillmentSegment(
 		ctx, handler.deps.Segments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,

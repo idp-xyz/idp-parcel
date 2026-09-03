@@ -106,13 +106,14 @@ type CorrectTransportHandoverCommand struct {
 }
 
 type RegisterTransportHandoverResult struct {
-	outcome      HandoverRegistrationOutcome
-	reason       HandoverRegistrationUndecidedReason
-	record       ports.TransportHandoverRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
-	segment      string
+	outcome        HandoverRegistrationOutcome
+	reason         HandoverRegistrationUndecidedReason
+	record         ports.TransportHandoverRecord
+	hasRecord      bool
+	continuation   string
+	handoff        string
+	segment        string
+	segmentRefusal SegmentEntryRefusal
 }
 
 func (result RegisterTransportHandoverResult) Outcome() HandoverRegistrationOutcome {
@@ -143,6 +144,12 @@ func (result RegisterTransportHandoverResult) HandoverHandoffReference() string 
 // 反复重试一件本就不该发生的事。
 func (result RegisterTransportHandoverResult) SegmentContinuationReference() string {
 	return result.segment
+}
+
+// SegmentEntryRefusal 非空说明交接已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格）。
+// 它与 SegmentContinuationReference 不会同时非空：一个说去另立新段，一个说等登记册恢复重试。
+func (result RegisterTransportHandoverResult) SegmentEntryRefusal() SegmentEntryRefusal {
+	return result.segmentRefusal
 }
 
 type RegisterTransportHandoverDeps struct {
@@ -202,7 +209,8 @@ func (handler *RegisterTransportHandoverHandler) Register(
 	if err != nil || result.outcome != HandoverRegistered {
 		return result, err
 	}
-	result.segment = handler.establishSegment(ctx, command, handover)
+	entry := handler.establishSegment(ctx, command, handover)
+	result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 	return result, nil
 }
 
@@ -215,7 +223,7 @@ func (handler *RegisterTransportHandoverHandler) establishSegment(
 	ctx context.Context,
 	command RegisterTransportHandoverCommand,
 	handover domain.TransportHandover,
-) string {
+) segmentEntry {
 	return enterFulfillmentSegment(
 		ctx, handler.deps.Segments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,

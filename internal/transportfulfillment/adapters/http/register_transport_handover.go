@@ -67,6 +67,9 @@ func NewCorrectTransportHandoverEndpoint(intake HandoverIntake, handler Handover
 // `handoffReference` 说记录已提交但意图还没交出去；`segmentContinuationReference` 说交接已登记、
 // 进段那一半还欠着。编排把它们与 outcome 分开交回，正因为来源保全成立而派生一侧欠着时，
 // 调用方要做的事不同——传输层吞掉任何一格，调用方就没法续办那一半。
+//
+// `segmentEntryRefusal` 是第四格（票 03 裁决 3）：段那一半被领域正当拒绝——今天只有 `SEGMENT_CLOSED`，
+// 含义是「去另立新段」，与欠账那格恰相反（一个说别重试、一个说等恢复重试）。
 type handoverResponse struct {
 	Outcome                      string `json:"outcome"`
 	UndecidedReason              string `json:"undecidedReason,omitempty"`
@@ -78,6 +81,7 @@ type handoverResponse struct {
 	ContinuationReference        string `json:"continuationReference,omitempty"`
 	HandoffReference             string `json:"handoffReference,omitempty"`
 	SegmentContinuationReference string `json:"segmentContinuationReference,omitempty"`
+	SegmentEntryRefusal          string `json:"segmentEntryRefusal,omitempty"`
 }
 
 func writeHandoverOutcome(response http.ResponseWriter, result application.RegisterTransportHandoverResult) {
@@ -93,6 +97,7 @@ func writeHandoverOutcome(response http.ResponseWriter, result application.Regis
 		ContinuationReference:        result.ContinuationReference(),
 		HandoffReference:             result.HandoverHandoffReference(),
 		SegmentContinuationReference: result.SegmentContinuationReference(),
+		SegmentEntryRefusal:          result.SegmentEntryRefusal().String(),
 	}
 	if record, present := result.Record(); present {
 		body.HandoverVersion = record.Handover.Version().String()

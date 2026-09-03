@@ -37,7 +37,8 @@ func NewRegisterOffsitePickupEndpoint(intake PickupRegistrationIntake, handler P
 	}, writePickupRegistrationOutcome)
 }
 
-// pickupRegistrationResponse 是揽收登记口的封闭响应形状。三个引用格各自透出，理由同 handoverResponse。
+// pickupRegistrationResponse 是揽收登记口的封闭响应形状。三个引用格与 `segmentEntryRefusal` 各自
+// 透出，理由同 handoverResponse。
 type pickupRegistrationResponse struct {
 	Outcome                      string `json:"outcome"`
 	UndecidedReason              string `json:"undecidedReason,omitempty"`
@@ -48,6 +49,7 @@ type pickupRegistrationResponse struct {
 	ContinuationReference        string `json:"continuationReference,omitempty"`
 	HandoffReference             string `json:"handoffReference,omitempty"`
 	SegmentContinuationReference string `json:"segmentContinuationReference,omitempty"`
+	SegmentEntryRefusal          string `json:"segmentEntryRefusal,omitempty"`
 }
 
 func writePickupRegistrationOutcome(response http.ResponseWriter, result application.RegisterOffsitePickupResult) {
@@ -63,6 +65,7 @@ func writePickupRegistrationOutcome(response http.ResponseWriter, result applica
 		ContinuationReference:        result.ContinuationReference(),
 		HandoffReference:             result.PickupHandoffReference(),
 		SegmentContinuationReference: result.SegmentContinuationReference(),
+		SegmentEntryRefusal:          result.SegmentEntryRefusal().String(),
 	}
 	if record, present := result.Record(); present {
 		body.PickupVersion = record.Pickup.Version().String()
