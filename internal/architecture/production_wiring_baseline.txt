@@ -199,7 +199,11 @@ internal/visibilityexception/domain SubmitEvidence
 # application/enter_fulfillment_segment.go 那道进段门。段引用作显式入参进命令，**缺席时不立段**
 # ——实际履约段不等同于交接范围、计划段、班次或订舱，段身份由谁铸出至今没有裁决，编排不拿
 # 手边任一引用顶替。**PerformOffsitePickupHandler（多对象到访）尚未接**，它不在本门禁量的范围里
-# （只量导出工厂），所以剪掉这两行之后没有任何信号会提醒它还欠着——记在这里就是那个提醒。
+# （只量导出工厂），所以剪掉这两行之后没有任何信号会提醒它还欠着——记在这里就是那个提醒，
+# 它另有一张票：.scratch/tf-unwired-seven/ 下的
+# 08-multi-object-pickup-attempt-establishes-no-segment.md（ready-for-agent）。
+# **票与注释两条路都留着，因为它们被不同的人看见**：票会被从跟踪器名单里看见，这句会被改这份
+# 名单的人看见，而那不是同一批人。
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
 internal/transportfulfillment/domain RecordMovementFact
