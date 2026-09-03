@@ -117,12 +117,15 @@ owner 的产品判断；下表把每条要裁的东西压到一格，owner 逐�
   不是 `error`；同包交付端点与 pricing 复核端点的既有测试都把「未决 outcome 不带 error」钉为 200。
   因此 04–07 按 ADR 字面落：**`error` → 5xx `NO_ANSWER_FORMED`；`未决` outcome → 200 带
   `continuationReference`**。把速记「未决→5xx」读成 outcome 那一支会与 ADR 和两处先例相抵。
+  → **MCP-3 同日确认，原速记作废。**
 - **揽收更正口没有编排。** `RegisterOffsitePickupHandler` 只有 `Register`（实测于 `e38e232`），
   裁决 2 的「揽收含更正口」在应用层无落点。票 04 只挂登记口；要不要立更正编排属 TF application
   （MCP-1 地盘），请 MCP-3 裁是否另立票。
+  → MCP-3 裁：领域层尚未答「更正是新版本还是失效 + 替代」，另立 [08](08-offsite-pickup-correction-model.md)（draft），不阻塞 04–07。
 - **简报第 7 行的内部触发半边。** 「到达事实 → 建派送任务」是 `RecordMovementFact` 与
   `OpenDispatchTask` 之间的编排间触发，拆票时没有落进 04–07 任何一张（05 只接端点、07 只接写面）。
   请裁：并入 06（同为内部触发）还是另立。
+  → MCP-3 裁：另立 [09](09-arrival-triggers-dispatch-task.md)（draft，Blocked by 05），触发条件先裁，不并进 06。
 - **裁决 3 与票 06 的两处 TF application 触点**已于同日问 MCP-1（选项 A 现在动 / B 等 16 合并）；
   未答默认 B，不动。票 06 的开工前置也写的是这一句。
   → 同日 MCP-1 答 **A**（票 16 只加新文件）。裁决 3 随票 04 落 `ae97d3e`（`SegmentEntryRefusal`，
