@@ -88,6 +88,12 @@
 # 不是拿 35 减 2 算出来的；照那句算会得 33，继续错下去。逐次流水账防不住这个，它只是让
 # 错误可追；**下一个改名单的人请重数一遍再改这句**。
 #
+# 2026-09-03 随 label-channel/10 的登记册仓储适配器（adapters/postgres/continued_attempt_register.go）
+# 落地，剪掉 RehydrateContinuedAttemptRegister——加它时写的「读它的仓储适配器落地那天这一条出
+# 名单」兑现。成因三分先分过：全仓该名字只有一处声明（domain/continued_attempt_register.go），
+# 非测试调用点就是上述适配器，是第二种。**在 `0d4eb0d` 的干净内容上（`git show` 取本文件）数得
+# 剪前 31、剪后 30**；两个数只对该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -127,11 +133,11 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 一句要说清的边界：本门禁量的是**domain 包外的非测试引用**，而那条编排此刻**尚未进
 # cmd/parcel-api 的装配**。所以「出名单」等于「有了应用层调用方」，不等于「生产可达」。
 # 装配随取面单出向端口（label-channel/07）那笔一起落。
-# `面单继续尝试决定`登记册（ADR-0084 决定六留待、label-channel/10）的重建入口。它现在没有
-# 调用方，是因为**这一票只落了领域层**：读它的仓储适配器是本票的下一层，落地那天这一条出
-# 名单。追加与派生两个入口（Append、Judge）不在名单上——它们是聚合方法而非导出工厂，本门禁
-# 只量后者。
-internal/parcelshipment/domain RehydrateContinuedAttemptRegister
+# `面单继续尝试决定`登记册（ADR-0084 决定六留待、label-channel/10）的重建入口
+# RehydrateContinuedAttemptRegister 曾在这里，理由是「这一票只落了领域层，读它的仓储适配器落地
+# 那天出名单」——2026-09-03 该适配器（adapters/postgres/continued_attempt_register.go）落地并
+# 调用它，按上句剪掉。追加与派生两个入口（Append、Judge）从未在名单上——它们是聚合方法而非
+# 导出工厂，本门禁只量后者。
 # 渠道候选择优比较器 SelectChannelCandidateByCost 曾在这里（票 `label-channel/13`），预言
 # 「票 12 落地那天这一条出名单」——2026-09-02 票 12 的择优编排
 # （parcelshipment/application/select_channel_candidate.go）落地并调用它，按上句剪掉。
