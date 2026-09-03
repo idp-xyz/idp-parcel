@@ -85,39 +85,47 @@ func TestPricingPlanContentDigestCoversChargeDependencies(t *testing.T) {
 	}
 }
 
-// 要解析燃油费率或汇率的方案会绑定到一条已登记的计价参考序列；换掉所绑的序列，即便其余
-// 规则一字不差，这个方案收的钱也变了。
+// 要解析燃油费率或汇率的方案会绑定到一条计价参考序列；换掉所绑的序列，即便其余规则一字
+// 不差，这个方案收的钱也变了。
 func TestPricingPlanContentDigestCoversReferenceSeriesBindings(t *testing.T) {
 	unbound := planWithStructures(t, structuresWithSurcharge(t, "48"))
-	bound := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
+	bound := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly"))
 	if unbound.ContentDigest() == bound.ContentDigest() {
 		t.Fatal("reference series bindings were omitted from the plan content digest")
 	}
-	rebound := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v2"))
+	rebound := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-other-carrier"))
 	if bound.ContentDigest() == rebound.ContentDigest() {
-		t.Fatal("reference series version was omitted from the plan content digest")
+		t.Fatal("reference series identity was omitted from the plan content digest")
 	}
 }
 
-// Covers: CONTEXT「计价参考序列必须按计价基准时点解析并写入版本清单；重放使用原序列取值，
-// 不读取当前值」— 重放要拿回它当初用的那批序列取值，而它是去版本清单里找的。清单没有带上
-// 的绑定，就只能对着序列今天的值去解析。
-func TestPricingPlanManifestCarriesBoundReferenceSeries(t *testing.T) {
-	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
+// Covers: ADR-0099 决定一——方案绑定序列标识，不绑序列版本：方案清单里不出现任何序列版本
+// 引用。序列出一版就要重登每一张卡，是这条被绑错对象时的代价；用到哪一版由评价清单冻结。
+func TestPricingPlanManifestDoesNotPinAnySeriesVersion(t *testing.T) {
+	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly"))
 	for _, reference := range plan.Manifest().References() {
-		if reference.Kind() == domain.ArtifactReferenceSeries && reference.ID() == "fuel-weekly" {
-			return
+		if reference.Kind() == domain.ArtifactReferenceSeries {
+			t.Fatalf("plan manifest pins series version %s@%s", reference.ID(), reference.Version())
 		}
 	}
-	t.Fatal("bound reference series is missing from the plan version manifest")
+	bindings := plan.Structures().ReferenceSeries()
+	if len(bindings) != 1 || bindings[0].SeriesID() != "fuel-weekly" || bindings[0].Kind() != domain.ReferenceSeriesFuelRate {
+		t.Fatalf("bindings = %#v, want one FUEL_RATE binding to fuel-weekly", bindings)
+	}
 }
 
-func structuresWithReferenceSeries(t testing.TB, id, version string) domain.PricingPlanStructures {
+// 序列标识是身份，带边空白或空串都指不到任何一条序列。
+func TestReferenceSeriesBindingRefusesABlankSeriesIdentity(t *testing.T) {
+	for _, blank := range []string{"", " ", " fuel-weekly", "fuel-weekly "} {
+		if _, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, blank); err == nil {
+			t.Fatalf("binding accepted series identity %q", blank)
+		}
+	}
+}
+
+func structuresWithReferenceSeries(t testing.TB, id string) domain.PricingPlanStructures {
 	t.Helper()
-	binding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesFuelRate,
-		versionReference(t, domain.ArtifactReferenceSeries, id, version),
-	)
+	binding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, id)
 	if err != nil {
 		t.Fatalf("reference series binding: %v", err)
 	}
@@ -329,7 +337,7 @@ func structuresWithCalculation(t testing.TB, calculation domain.SurchargeCalcula
 // 尺寸是给足的，好让缺失的读数是唯一那处不足。夹具同时声明了附加费，若快照连尺寸也没有，
 // 就会一次缺两样，报哪一样将取决于评价器碰巧按什么顺序检查。
 func TestEvaluationDoesNotCompleteWhenABoundSeriesWasNotSupplied(t *testing.T) {
-	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly", "v1"))
+	plan := planWithStructures(t, structuresWithReferenceSeries(t, "fuel-weekly"))
 	evaluation := evaluateWithSides(t, plan, "eval-declared-structures", "50")
 	if evaluation.Status() == domain.EvaluationCompleted {
 		t.Fatal("evaluation completed while a bound reference series had no reading")

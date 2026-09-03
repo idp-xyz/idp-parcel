@@ -387,14 +387,14 @@ func canonicalExclusionRuleValue(rule ExclusionRule) canonicalExclusionRuleDocum
 }
 
 type canonicalReferenceSeriesDocument struct {
-	Kind      string                    `json:"kind"`
-	Reference canonicalVersionReference `json:"reference"`
+	Kind     string `json:"kind"`
+	SeriesID string `json:"series_id"`
 }
 
 func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalReferenceSeriesDocument {
 	return canonicalReferenceSeriesDocument{
-		Kind:      binding.kind.String(),
-		Reference: canonicalReference(binding.reference),
+		Kind:     binding.kind.String(),
+		SeriesID: binding.seriesID,
 	}
 }
 
@@ -408,7 +408,10 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // 判定条件 + 操作数」，不再是一个裸判定条件。只读一个判定条件的规则会序列化成
 // PREDICATE 触发条件，形状与 PPC-2 写出的裸判定条件不同；没有任何一种拓宽能让旧字节
 // 保持原样。
-const canonicalizationVersion = "PPC-3"
+// PPC-4 把序列绑定从「序列版本引用」改成「序列标识」（ADR-0099）：绑定文档由
+// kind + reference 变为 kind + series_id，方案清单不再含序列版本引用。这不是拓宽而是
+// 换对象——旧字节里那个版本引用在新形状下没有落点，PPC-3 快照因此在重建门被拒。
+const canonicalizationVersion = "PPC-4"
 
 // CurrentCanonicalizationVersion 报出本构建按哪套形状做规范化。按其他取值记录的工件，
 // 在这里无法重新算出其摘要。

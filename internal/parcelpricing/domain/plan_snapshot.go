@@ -147,8 +147,8 @@ type chargeDependencySnapshot struct {
 }
 
 type referenceSeriesBindingSnapshot struct {
-	Kind      string                   `json:"kind"`
-	Reference versionReferenceSnapshot `json:"reference"`
+	Kind     string `json:"kind"`
+	SeriesID string `json:"seriesId"`
 }
 
 type exclusionRuleSnapshot struct {
@@ -233,7 +233,7 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 	}
 	for _, binding := range plan.structures.referenceSeries {
 		document.ReferenceSeries = append(document.ReferenceSeries, referenceSeriesBindingSnapshot{
-			Kind: binding.kind.String(), Reference: versionReferenceOf(binding.reference),
+			Kind: binding.kind.String(), SeriesID: binding.seriesID,
 		})
 	}
 	for _, rule := range plan.structures.exclusions {
@@ -275,7 +275,7 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 	}
 	for _, binding := range document.ReferenceSeries {
 		plan.structures.referenceSeries = append(plan.structures.referenceSeries, ReferenceSeriesBinding{
-			kind: ReferenceSeriesKind(binding.Kind), reference: versionReferenceFrom(binding.Reference),
+			kind: ReferenceSeriesKind(binding.Kind), seriesID: binding.SeriesID,
 		})
 	}
 	for _, rule := range document.Exclusions {

@@ -219,6 +219,18 @@ internal/partycommercial/domain ValidateBeforeDecision
 
 
 # —— parcel-pricing ——
+# 在用序列版本的选择规则（ADR-0099 决定三，票 pricing-reference-series-operations/01）。
+# **它应该的调用方是票 02 的真库读口** `ReferenceSeriesInForceResolver`：读口只取候选（版本引用
+# + 登记时刻 + 每条复核的时刻与结论），选择规则调这里而不在 SQL 里排序裁决——否则「按复核时刻、
+# 同刻按登记时刻、再按版本号」这条判定会在 Go 与 SQL 各写一遍。票 02 落地那天这一条出名单。
+# 本笔只落领域层是有意的：绑定改形（PPC-4）与 seedgen 重跑要在隔离 worktree 一次验绿应用，
+# 不把复核表与端口一起塞进同一个窗口。
+# 同一票新增的 NewSeriesReview 与 NewReviewedSeriesVersion 不在名单上：本门禁按名字跳过
+# `New` 前缀的构造（production_wiring_ratchet_test.go 收集工厂时 `strings.HasPrefix(name, "New")`
+# 即 continue），所以只点名了本条。它们同样零生产调用点，接线随票 02/03 一起。
+# 2026-09-03 加本条：在 42846ed 的干净内容上（`git show` 取本文件）数得加前 **30**，加后 **31**；
+# 两个数只对该检出成立。
+internal/parcelpricing/domain SelectInForceSeriesVersion
 internal/parcelpricing/domain ReplayPricingEvaluation
 # 快照序列化与重建是**同一条未接线路径的两端**：适配器 price_card_catalog.go 正文没用它们，
 # 只有它的测试用了。修的是那段路径，不是这两个函数——一次修好会同时去掉两行。

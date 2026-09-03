@@ -40,22 +40,98 @@ func TestPlanBoundToASeriesTheSnapshotDoesNotCarryStaysPending(t *testing.T) {
 	}
 }
 
-// 快照带的序列版本与方案所绑的不同，这不是空档而是分歧：拿碰巧递过来的那个去重放，等于
-// 悄悄按一个方案从未声明过的费率计价。
-func TestSeriesVersionDisagreementIsAConflict(t *testing.T) {
+// 快照带的取值来自另一条序列，这不是空档而是分歧：拿碰巧递过来的那个去计价，等于悄悄按
+// 一个方案从未声明过的序列收费。
+func TestSeriesIdentityDisagreementIsAConflict(t *testing.T) {
 	plan := seriesPlan(t, "0.8")
 	input := syntheticInputWithDimensions(t, "5", "Z1", dimensions(t, "50", "10", "10", domain.LengthUnitInch))
-	other, err := input.WithReferenceSeries(seriesValue(t, "fuel-weekly", "v2", "20"))
+	other, err := input.WithReferenceSeries(seriesValue(t, "fuel-other-carrier", "v1", "20"))
 	if err != nil {
 		t.Fatalf("attach series: %v", err)
 	}
-	request, err := domain.NewEvaluationRequest(mustValue(t, domain.NewEvaluationID, "eval-series-version"), plan, other, domain.EvidenceSynthetic)
+	request, err := domain.NewEvaluationRequest(mustValue(t, domain.NewEvaluationID, "eval-series-identity"), plan, other, domain.EvidenceSynthetic)
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	if status := domain.EvaluatePricing(request).Status(); status != domain.EvaluationConflict {
-		t.Fatalf("status = %s, want CONFLICT when the supplied series version differs from the bound one", status)
+		t.Fatalf("status = %s, want CONFLICT when the supplied reading belongs to another series", status)
 	}
+}
+
+// Covers: ADR-0099 决定一与四——方案绑的是序列标识，不是版本；序列出了新版本，卡一字不改
+// 就能用上它，而这次用的是哪一版由评价自己的版本清单冻结，不由方案清单冻结。
+func TestAnyVersionOfTheBoundSeriesIsAcceptedAndFrozenIntoTheEvaluationManifest(t *testing.T) {
+	plan := seriesPlan(t, "0.8")
+	for _, reference := range plan.Manifest().References() {
+		if reference.Kind() == domain.ArtifactReferenceSeries {
+			t.Fatalf("plan manifest pins a series version: %s@%s", reference.ID(), reference.Version())
+		}
+	}
+
+	input := syntheticInputWithDimensions(t, "5", "Z1", dimensions(t, "50", "10", "10", domain.LengthUnitInch))
+	withV2, err := input.WithReferenceSeries(seriesValue(t, "fuel-weekly", "v2", "20"))
+	if err != nil {
+		t.Fatalf("attach series: %v", err)
+	}
+	request, err := domain.NewEvaluationRequest(mustValue(t, domain.NewEvaluationID, "eval-series-v2"), plan, withV2, domain.EvidenceSynthetic)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	evaluation := domain.EvaluatePricing(request)
+	if evaluation.Status() != domain.EvaluationCompleted {
+		t.Fatalf("status = %s, issues = %#v", evaluation.Status(), evaluation.Issues())
+	}
+	frozen := false
+	for _, reference := range evaluation.Manifest().References() {
+		if reference.Kind() == domain.ArtifactReferenceSeries && reference.ID() == "fuel-weekly" && reference.Version() == "v2" {
+			frozen = true
+		}
+	}
+	if !frozen {
+		t.Fatalf("evaluation manifest = %#v, want the resolved series version fuel-weekly@v2 frozen in", evaluation.Manifest().References())
+	}
+	if !explanationMentions(evaluation, "fuel-weekly@v2") {
+		t.Fatalf("explanation = %#v, want the series version named", evaluation.Explanation())
+	}
+}
+
+// Covers: CONTEXT「重放使用原序列取值，不读取当前值」——重放读的是评价清单里冻结的那一版；
+// 同一张卡此后用到别的版本形成的评价，清单不同，彼此不相干。
+func TestReplayKeepsTheSeriesVersionTheOriginalEvaluationFroze(t *testing.T) {
+	plan := seriesPlan(t, "0.8")
+	original := evaluateWithSeries(t, plan, "eval-series-frozen", "20")
+	if original.Status() != domain.EvaluationCompleted {
+		t.Fatalf("status = %s, issues = %#v", original.Status(), original.Issues())
+	}
+	replay, err := domain.ReplayPricingEvaluation(mustValue(t, domain.NewEvaluationID, "eval-series-frozen-replay"), original, plan, domain.EvidenceSynthetic)
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if replay.Status() != domain.EvaluationCompleted || replay.SemanticDigest() != original.SemanticDigest() {
+		t.Fatalf("replay status/digest = %s/%s, issues = %#v", replay.Status(), replay.SemanticDigest(), replay.Issues())
+	}
+	if !replay.Manifest().Equal(original.Manifest()) {
+		t.Fatalf("replay manifest = %#v, want the original's %#v", replay.Manifest().References(), original.Manifest().References())
+	}
+
+	input := syntheticInputWithDimensions(t, "5", "Z1", dimensions(t, "50", "10", "10", domain.LengthUnitInch))
+	withV2, err := input.WithReferenceSeries(seriesValue(t, "fuel-weekly", "v2", "20"))
+	if err != nil {
+		t.Fatalf("attach series: %v", err)
+	}
+	later := domain.EvaluatePricing(mustRequest(t, "eval-series-later", plan, withV2))
+	if later.Manifest().Equal(original.Manifest()) {
+		t.Fatal("evaluations formed against different series versions share a manifest")
+	}
+}
+
+func mustRequest(t testing.TB, id string, plan domain.PricingPlanVersion, input domain.PricingInputSnapshot) domain.EvaluationRequest {
+	t.Helper()
+	request, err := domain.NewEvaluationRequest(mustValue(t, domain.NewEvaluationID, id), plan, input, domain.EvidenceSynthetic)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	return request
 }
 
 // Covers: CONTEXT「燃油费率是承运商当周公布费率与价卡折扣系数的乘积，两者都必须写入版本
@@ -117,10 +193,7 @@ func seriesPlan(t *testing.T, factor string) domain.PricingPlanVersion {
 		t.Fatalf("series calculation: %v", err)
 	}
 	rule := standaloneRule(t, surchargeRuleWithCalculation(t, "fuel", "FUEL", "48", calculation))
-	binding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesFuelRate,
-		versionReference(t, domain.ArtifactReferenceSeries, "fuel-weekly", "v1"),
-	)
+	binding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, "fuel-weekly")
 	if err != nil {
 		t.Fatalf("binding: %v", err)
 	}

@@ -226,11 +226,10 @@ func NewPricingPlanVersion(
 		seenCodes[surcharge.chargeCode.String()] = struct{}{}
 	}
 
-	manifestReferences := make([]VersionReference, 0, 4+len(structures.referenceSeries)+len(dependencies))
+	// 序列绑定不进方案清单：方案绑的是序列标识，用到哪一版是评价形成时的结论，由评价
+	// 自己的清单冻结（ADR-0099）。
+	manifestReferences := make([]VersionReference, 0, 4+len(dependencies))
 	manifestReferences = append(manifestReferences, reference, rateTable.reference, weight.reference, NumericProfileV1Reference())
-	for _, binding := range structures.referenceSeries {
-		manifestReferences = append(manifestReferences, binding.reference)
-	}
 	manifestReferences = append(manifestReferences, dependencies...)
 	manifest, err := NewVersionManifest(manifestReferences)
 	if err != nil {
@@ -326,9 +325,6 @@ func (plan PricingPlanVersion) valid() bool {
 		plan.rateTable.reference,
 		plan.weight.reference,
 		NumericProfileV1Reference(),
-	}
-	for _, binding := range plan.structures.referenceSeries {
-		requiredReferences = append(requiredReferences, binding.reference)
 	}
 	for _, required := range requiredReferences {
 		found := false

@@ -216,7 +216,9 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if request.expectedCanonicalization != "" && request.expectedCanonicalization != CurrentCanonicalizationVersion() {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CANONICALIZATION_VERSION_UNSUPPORTED", ErrCanonicalizationVersionUnsupported.Error()))
 	}
-	if request.expectedManifest != nil && !request.expectedManifest.Equal(request.plan.manifest) {
+	// 比的是评价自己的清单（方案清单 + 本次采用的序列版本），不是方案清单：重放带着原输入
+	// 快照进来，快照里的序列版本引用就是当初冻结的那一版，换了一版就在这里露出来。
+	if request.expectedManifest != nil && !request.expectedManifest.Equal(evaluation.manifest) {
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("VERSION_MANIFEST_MISMATCH", ErrEvaluationVersionConflict.Error()))
 	}
 	if request.expectedContentDigest != "" && request.expectedContentDigest != request.plan.contentDigest {
@@ -280,7 +282,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	for _, binding := range request.plan.structures.referenceSeries {
 		reading := series[binding.kind]
 		evaluation.explanation = append(evaluation.explanation,
-			fmt.Sprintf("reference series %s resolved to %s from %s", binding.kind, reading.value.String(), reading.reference.ID()))
+			fmt.Sprintf("reference series %s resolved to %s from %s@%s", binding.kind, reading.value.String(), reading.reference.ID(), reading.reference.Version()))
 	}
 
 	var floors []Weight
@@ -693,8 +695,25 @@ func baseEvaluation(request EvaluationRequest) PricingEvaluation {
 		tablePeriod:          request.plan.rateTable.period,
 		planContentDigest:    request.plan.contentDigest,
 		planCanonicalization: request.plan.canonicalization,
-		manifest:             request.plan.manifest,
+		manifest:             composeEvaluationManifest(request.plan, request.input),
 	}
+}
+
+// composeEvaluationManifest 把本次采用的序列版本并进方案清单，得到评价自己的清单
+// （ADR-0099 决定四）。方案清单不含序列版本——方案绑的是序列标识；哪一版是这次评价的
+// 结论，所以由评价冻结。序列取值缺席时清单就是方案清单，评价随后落待判断。
+func composeEvaluationManifest(plan PricingPlanVersion, input PricingInputSnapshot) VersionManifest {
+	series := input.boundSeriesReferences(plan.structures.referenceSeries)
+	if len(series) == 0 {
+		return plan.manifest
+	}
+	manifest, err := NewVersionManifest(append(plan.manifest.References(), series...))
+	if err != nil {
+		// 序列引用与方案清单撞键只会是「同一（种类、标识、版本）出现两次」，而方案清单
+		// 里没有序列种类；这里守的是不让一次坏输入把评价做成无清单。
+		return plan.manifest
+	}
+	return manifest
 }
 
 func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvaluation {

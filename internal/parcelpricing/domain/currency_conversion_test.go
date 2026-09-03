@@ -135,10 +135,7 @@ func evaluateWithConversion(t *testing.T, id, rate string) domain.PricingEvaluat
 	if err != nil {
 		t.Fatalf("settlement currency: %v", err)
 	}
-	binding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesExchangeRate,
-		versionReference(t, domain.ArtifactReferenceSeries, "fx-daily", "v1"),
-	)
+	binding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesExchangeRate, "fx-daily")
 	if err != nil {
 		t.Fatalf("binding: %v", err)
 	}

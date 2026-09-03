@@ -49,7 +49,7 @@ var (
 	ErrInvalidChargeDependency            = errors.New("parcel pricing: invalid charge dependency")
 	ErrInvalidReferenceSeries             = errors.New("parcel pricing: invalid reference series binding")
 	ErrMissingReferenceSeriesValue        = errors.New("parcel pricing: bound reference series has no resolved value")
-	ErrReferenceSeriesVersionConflict     = errors.New("parcel pricing: resolved reference series version differs from the bound one")
+	ErrReferenceSeriesVersionConflict     = errors.New("parcel pricing: resolved reference series reading belongs to a series the plan did not bind")
 	ErrInvalidPlanStructures              = errors.New("parcel pricing: invalid pricing plan structures")
 	ErrPlanStructuresNotExecutable        = errors.New("parcel pricing: declared plan structures are not executable")
 	ErrInvalidPricingPlan                 = errors.New("parcel pricing: invalid pricing plan")

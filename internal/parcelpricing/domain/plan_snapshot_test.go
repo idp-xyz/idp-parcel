@@ -214,17 +214,11 @@ func fullyDeclaredSyntheticPlan(t *testing.T) domain.PricingPlanVersion {
 		t.Fatalf("构造列举基数依赖：%v", err)
 	}
 
-	fuelBinding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesFuelRate,
-		versionReference(t, domain.ArtifactReferenceSeries, "SYN-PRC-FUEL-WEEKLY", "v1"),
-	)
+	fuelBinding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, "SYN-PRC-FUEL-WEEKLY")
 	if err != nil {
 		t.Fatalf("构造燃油序列绑定：%v", err)
 	}
-	fxBinding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesExchangeRate,
-		versionReference(t, domain.ArtifactReferenceSeries, "SYN-PRC-USD-CNY", "v1"),
-	)
+	fxBinding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesExchangeRate, "SYN-PRC-USD-CNY")
 	if err != nil {
 		t.Fatalf("构造汇率序列绑定：%v", err)
 	}

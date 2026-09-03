@@ -65,8 +65,9 @@ func (resolved ReferenceSeriesValue) valid() bool {
 // resolveSeries 把方案绑定的每一个序列与快照携带的取值逐一对上。
 //
 // 绑定了却没有取值是证据不足：费率是存在的，只是这次评价没拿到，所以评价保持`待判断`。
-// 拿到的是另一个版本的取值则是分歧而不是缺口——按方案从未声明过的版本计价，会静默地
-// 用错误的费率收费——所以那是`冲突`。
+// 拿到的取值来自另一条序列则是分歧而不是缺口——按方案从未声明过的序列计价，会静默地
+// 用错误的费率收费——所以那是`冲突`。版本不在这里比：方案绑的是序列标识（ADR-0099），
+// 同一条序列的任何一版都可以是这次评价用的那一版，用了哪一版由评价清单冻结。
 func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBinding) (map[ReferenceSeriesKind]ReferenceSeriesValue, error) {
 	resolved := make(map[ReferenceSeriesKind]ReferenceSeriesValue, len(bindings))
 	for _, binding := range bindings {
@@ -74,13 +75,27 @@ func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBindin
 		if !found {
 			return nil, fmt.Errorf("%w: no reading for %s", ErrMissingReferenceSeriesValue, binding.kind)
 		}
-		if compareVersionReferences(reading.reference, binding.reference) != 0 {
-			return nil, fmt.Errorf("%w: %s reading is %s but the plan bound %s",
-				ErrReferenceSeriesVersionConflict, binding.kind, reading.reference.ID(), binding.reference.ID())
+		if reading.reference.ID() != binding.seriesID {
+			return nil, fmt.Errorf("%w: %s reading comes from series %s but the plan bound series %s",
+				ErrReferenceSeriesVersionConflict, binding.kind, reading.reference.ID(), binding.seriesID)
 		}
 		resolved[binding.kind] = reading
 	}
 	return resolved, nil
+}
+
+// boundSeriesReferences 列出快照里落在方案绑定上的序列版本引用——这些是本次评价实际
+// 采用的版本，要进评价自己的清单。落在绑定之外的取值不进清单：方案没声明过的序列不
+// 参与计价，冻结它会让清单说了一件评价没做的事。
+func (input PricingInputSnapshot) boundSeriesReferences(bindings []ReferenceSeriesBinding) []VersionReference {
+	references := make([]VersionReference, 0, len(bindings))
+	for _, binding := range bindings {
+		reading, found := input.seriesReading(binding.kind)
+		if found && reading.reference.ID() == binding.seriesID {
+			references = append(references, reading.reference)
+		}
+	}
+	return references
 }
 
 func (input PricingInputSnapshot) seriesReading(kind ReferenceSeriesKind) (ReferenceSeriesValue, bool) {

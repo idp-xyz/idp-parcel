@@ -509,26 +509,46 @@ func (kind ReferenceSeriesKind) valid() bool {
 	}
 }
 
-// ReferenceSeriesBinding 把方案绑定到一个已登记的序列版本。绑定指名的是序列，绝不是
-// 取值：取值按计价基准时点在每次评价中解析，并冻结进该次评价的版本清单。
+// ReferenceSeriesBinding 把方案绑定到一条计价参考序列——按种类与序列标识，不按序列版本
+// （ADR-0099 决定一）。绑定指名的是序列，绝不是取值也不是版本：用哪一版由评价形成时刻的
+// 在用序列版本决定，取值按计价基准时点在该版本内解析，两者一并冻结进该次评价的版本清单。
+// 绑住版本的代价是序列每出一版、引用它的每张卡都要重登，而按日公布的汇率会让这条路在
+// 结构上走不通。
 type ReferenceSeriesBinding struct {
-	kind      ReferenceSeriesKind
-	reference VersionReference
+	kind     ReferenceSeriesKind
+	seriesID string
 }
 
-func NewReferenceSeriesBinding(kind ReferenceSeriesKind, reference VersionReference) (ReferenceSeriesBinding, error) {
-	binding := ReferenceSeriesBinding{kind: kind, reference: reference}
+func NewReferenceSeriesBinding(kind ReferenceSeriesKind, seriesID string) (ReferenceSeriesBinding, error) {
+	binding := ReferenceSeriesBinding{kind: kind, seriesID: seriesID}
 	if !binding.valid() {
 		return ReferenceSeriesBinding{}, ErrInvalidReferenceSeries
 	}
 	return binding, nil
 }
 
-func (binding ReferenceSeriesBinding) Kind() ReferenceSeriesKind   { return binding.kind }
-func (binding ReferenceSeriesBinding) Reference() VersionReference { return binding.reference }
+func (binding ReferenceSeriesBinding) Kind() ReferenceSeriesKind { return binding.kind }
+
+// SeriesID 是租户内的序列标识，与登记册里的序列 ID 同一取值。
+func (binding ReferenceSeriesBinding) SeriesID() string { return binding.seriesID }
 
 func (binding ReferenceSeriesBinding) valid() bool {
-	return binding.kind.valid() && binding.reference.kind == ArtifactReferenceSeries && binding.reference.valid()
+	return binding.kind.valid() && trimmed(binding.seriesID)
+}
+
+func compareSeriesBindings(left, right ReferenceSeriesBinding) int {
+	for _, pair := range [][2]string{
+		{string(left.kind), string(right.kind)},
+		{left.seriesID, right.seriesID},
+	} {
+		if pair[0] < pair[1] {
+			return -1
+		}
+		if pair[0] > pair[1] {
+			return 1
+		}
+	}
+	return 0
 }
 
 // PricingPlanStructures 携带一个已发布方案在基础价表和无条件固定规则之外声明的规则
@@ -590,7 +610,7 @@ func NewPricingPlanStructures(
 		}
 	}
 	sort.SliceStable(copyOfSeries, func(left, right int) bool {
-		return compareVersionReferences(copyOfSeries[left].reference, copyOfSeries[right].reference) < 0
+		return compareSeriesBindings(copyOfSeries[left], copyOfSeries[right]) < 0
 	})
 	declaredBases := make(map[string]struct{}, len(copyOfDependencies))
 	for _, dependency := range copyOfDependencies {
@@ -703,7 +723,7 @@ func (structures PricingPlanStructures) valid() bool {
 		if !binding.valid() {
 			return false
 		}
-		if index > 0 && compareVersionReferences(structures.referenceSeries[index-1].reference, binding.reference) >= 0 {
+		if index > 0 && compareSeriesBindings(structures.referenceSeries[index-1], binding) >= 0 {
 			return false
 		}
 		if _, exists := seenKinds[binding.kind]; exists {

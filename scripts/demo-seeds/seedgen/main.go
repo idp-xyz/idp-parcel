@@ -87,10 +87,8 @@ func sellCardSnapshot() []byte {
 	)
 	must("偏远附加规则", err)
 
-	fuelBinding, err := domain.NewReferenceSeriesBinding(
-		domain.ReferenceSeriesFuelRate,
-		reference(domain.ArtifactReferenceSeries, "SYN-SERIES-FUEL-01", "v1"),
-	)
+	// 绑序列标识不绑版本（ADR-0099）：燃油序列出新版本、复核通过后，这张卡不必重登。
+	fuelBinding, err := domain.NewReferenceSeriesBinding(domain.ReferenceSeriesFuelRate, "SYN-SERIES-FUEL-01")
 	must("燃油序列绑定", err)
 	structures, err := domain.NewPricingPlanStructures(nil, nil, []domain.ReferenceSeriesBinding{fuelBinding})
 	must("方案结构", err)
