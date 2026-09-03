@@ -133,6 +133,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	movementFact, err := buildMovementFactOrchestration(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -309,6 +313,7 @@ func run(logger *slog.Logger) error {
 			controlFacts.handover,
 			controlFacts.pickupRegistration,
 			controlFacts.pickupAttempt,
+			movementFact,
 			trackingViews,
 			projectionViews,
 			claims,

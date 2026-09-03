@@ -169,6 +169,16 @@ func (unwiredPickupAttempt) Handle(
 	return tfapp.PerformOffsitePickupResult{}, errOrchestrationNotWired
 }
 
+// unwiredMovementFact 是移动事实口的编排占位（票 tf-segment-lifecycle-closure/05）。
+type unwiredMovementFact struct{}
+
+func (unwiredMovementFact) Record(
+	context.Context,
+	tfapp.RecordMovementFactCommand,
+) (tfapp.RecordMovementFactResult, error) {
+	return tfapp.RecordMovementFactResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

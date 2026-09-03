@@ -66,6 +66,7 @@ func assembleBusinessEndpoints(
 	handover tfhttp.HandoverHandler,
 	pickupRegistration tfhttp.PickupRegistrationHandler,
 	pickupAttempt tfhttp.PickupAttemptHandler,
+	movementFact tfhttp.MovementFactHandler,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -197,6 +198,10 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
 		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupRegistration)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupAttempt)},
+		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
+		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营
+		// 执行方由 Intake 的认证结果说，渠道未就位前同挂字面量 UnconfiguredIntake{}。
+		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(tfhttp.UnconfiguredIntake{}, movementFact)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，

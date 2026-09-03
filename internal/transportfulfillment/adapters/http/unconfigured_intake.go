@@ -39,6 +39,7 @@ var _ CatalogueQueryIntake = UnconfiguredIntake{}
 var _ HandoverIntake = UnconfiguredIntake{}
 var _ PickupRegistrationIntake = UnconfiguredIntake{}
 var _ PickupAttemptIntake = UnconfiguredIntake{}
+var _ MovementFactIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -77,4 +78,10 @@ func (UnconfiguredIntake) IntakePickupRegistration(context.Context, *http.Reques
 
 func (UnconfiguredIntake) IntakePickupAttempt(context.Context, *http.Request) (application.PerformOffsitePickupCommand, error) {
 	return application.PerformOffsitePickupCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeMovementFact 堵住移动事实口（票 05）。渠道未就位前「自营执行方」这个身份无从认定，所以
+// 连命令都不构造——这一格也是「外部轨迹不从这里进」在渠道层的第一道门。
+func (UnconfiguredIntake) IntakeMovementFact(context.Context, *http.Request) (application.RecordMovementFactCommand, error) {
+	return application.RecordMovementFactCommand{}, ErrAccessChannelNotConfigured
 }
