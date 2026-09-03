@@ -1,7 +1,7 @@
 # 15 轨迹源的拉取/接收端口不存在，形态也没选
 
 Category: enhancement
-Status: in-progress——MCP-5（2026-09-03，接续崩溃的 MCP-4；形态与端口形状已裁，见文末「Answer」）
+Status: resolved——MCP-5（2026-09-03；形态与端口形状裁于「Answer」，端口与替身落主线 `7904003`，取证见文末 Comment）
 Blocked by: 02、03（均已 resolved：出向缝落 [ADR-0090](../../../docs/adr/0090-outbound-integration-result-algebra-partitioned-by-recovery-action.md)；收编方裁给 TF 新立一类事实）
 
 ## 缺口
@@ -183,3 +183,27 @@ ADR-0090 决定六说的「该源无查询口」，如实记为一格而不是�
 `go build ./...` 退 0、`go vet` 退 0、`go test -count=1` 于 `adapters/trackingsource` 与
 `internal/architecture` 全绿——新枚举过枚举门禁，`ports → platform/outbound` 的方向过边界门禁。
 SHA 与并入主线的取证见下一条。
+
+## Comments
+
+**2026-09-03，MCP-5（新会话）——并入主线 `7904003`，本票转 resolved。**
+
+上一段完成记录写完之后、并入主线之前，那个会话断了：`4b6fa79` 只留在分支 `mcp5-lc15`
+（worktree `idp-lc15`，基于 `146bb10`），主线上两份 Go 文件都不存在。owner 在通道 5 指示「继续」，
+本会话接手落地：
+
+- 落法：`git checkout 4b6fa79 -- 三路径` 取到主线 `b98368d` 之上，`git diff 4b6fa79 7904003 -- 三路径`
+  为空，即三个文件与分支上那笔逐字节相同；提交带 pathspec，暂存集只含这三路径
+  （`git diff --cached --name-only` 核过）。暂存期间主线从 `e3dbf3f` 走到 `b98368d`（MCP-4 的
+  admin-web 一笔，不含 Go），提交前按 HEAD 守卫拦下一次、核过无关后再提。
+- **没带走** `docs/product/MECHANISM-INVENTORY.md`：`4b6fa79` 上那份重生成锚在 `146bb10`，与主线
+  `25db568` 的重生成对不上；清点照约定推之前由推的人跑，本笔不单方面重生成。推之前 CI
+  「Mechanism inventory is current」那道门对 `7904003` 为红是预期内的。
+- 验证（临时 detached worktree 检出 `7904003`，不含任何人的在途改动）：`gofmt -l internal cmd`
+  空、`go build ./...` 退 0、`go vet ./...` 退 0、`go test -count=1 ./...` 94 个包 `ok`、0 `FAIL`。
+  **未设 DSN**，PG 用例跳过——本票无 `.sql`、无 postgres 适配器，真库对它无可证之物。这是
+  「绿（未设 DSN）」不是「绿（含真库）」。
+- 分支 `mcp5-lc15` 指针留着供事后补验，worktree `idp-lc15` 内容核空后拆除。
+
+完成判据逐条：形态选择有明确答复（Answer 第一节）；端口形状落地并有替身测试（`7904003`）；
+`gofmt -l` 空、`go build`/`go vet` 退 0、`go test -count=1 ./...` 绿且已注明不含真库。
