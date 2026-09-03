@@ -367,6 +367,29 @@ func MarshalReferenceSeriesRegistration(registration ReferenceSeriesRegistration
 	return json.Marshal(document)
 }
 
+// PeekReferenceSeriesRegistrationReference 只从快照里读出这一版的版本引用，不重建、不重验
+// 整版。给在用解析用：那一步要在一条序列的全部版本上挑一版，挑完才由 ResolveAt 对选中的
+// 那一版做整版重验（含摘要自校）；对每个候选都整版重建，代价随版本数乘期次数增长，而挑选
+// 只需要引用。形状版本不被本构建支持时照样拒绝——按别的形状记的引用不该被当成本形状的。
+func PeekReferenceSeriesRegistrationReference(raw []byte) (VersionReference, error) {
+	var document struct {
+		Canonicalization string                   `json:"canonicalization"`
+		Reference        versionReferenceSnapshot `json:"reference"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return VersionReference{}, fmt.Errorf("%w: %v", ErrReferenceSeriesRegistrationSnapshotInvalid, err)
+	}
+	if document.Canonicalization != seriesCanonicalization {
+		return VersionReference{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q",
+			ErrCanonicalizationVersionUnsupported, document.Canonicalization, seriesCanonicalization)
+	}
+	reference := versionReferenceFrom(document.Reference)
+	if reference.kind != ArtifactReferenceSeries || !reference.valid() {
+		return VersionReference{}, ErrReferenceSeriesRegistrationSnapshotInvalid
+	}
+	return reference, nil
+}
+
 // RehydrateReferenceSeriesRegistration 从快照重建序列登记并整版重验：形状版本不被
 // 当前构建支持时拒绝重建（按别的形状重算摘要在结构上不可能），登记后被改过的取值以
 // 摘要自校暴露。

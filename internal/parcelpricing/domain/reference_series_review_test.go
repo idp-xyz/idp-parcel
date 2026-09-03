@@ -181,6 +181,30 @@ func TestALaterReturnDoesNotRevokeAnApproval(t *testing.T) {
 	}
 }
 
+// TestPeekReferenceSeriesRegistrationReference 证只读引用的窥视口：读出的引用与整版重建
+// 的引用一字不差；按别的形状记的快照与不成引用的快照都拒。它给在用解析用——挑版只需要引用，
+// 选中之后才由 ResolveAt 整版重验。
+func TestPeekReferenceSeriesRegistrationReference(t *testing.T) {
+	registration := fuelSeries(t)
+	raw, err := domain.MarshalReferenceSeriesRegistration(registration)
+	if err != nil {
+		t.Fatalf("折装：%v", err)
+	}
+	reference, err := domain.PeekReferenceSeriesRegistrationReference(raw)
+	if err != nil || reference != registration.Reference() {
+		t.Fatalf("窥视引用 = %v / %v，想要 %v", reference, err, registration.Reference())
+	}
+	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`{"canonicalization":"PRS-0","reference":{"kind":"reference-series","id":"s","version":"v1","digest":"d"}}`)); !errors.Is(err, domain.ErrCanonicalizationVersionUnsupported) {
+		t.Fatalf("别的形状被接受：%v", err)
+	}
+	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`{"canonicalization":"PRS-1","reference":{"kind":"pricing-plan","id":"s","version":"v1","digest":"d"}}`)); !errors.Is(err, domain.ErrReferenceSeriesRegistrationSnapshotInvalid) {
+		t.Fatalf("非序列引用被接受：%v", err)
+	}
+	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`not json`)); !errors.Is(err, domain.ErrReferenceSeriesRegistrationSnapshotInvalid) {
+		t.Fatalf("坏字节被接受：%v", err)
+	}
+}
+
 // TestReviewedSeriesVersionRefusesIncompleteCandidates 证候选载体自己把门：不是序列引用、
 // 缺时刻、结论不在封闭集，都不成候选。
 func TestReviewedSeriesVersionRefusesIncompleteCandidates(t *testing.T) {

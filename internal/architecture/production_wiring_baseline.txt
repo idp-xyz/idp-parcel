@@ -219,18 +219,15 @@ internal/partycommercial/domain ValidateBeforeDecision
 
 
 # —— parcel-pricing ——
-# 在用序列版本的选择规则（ADR-0099 决定三，票 pricing-reference-series-operations/01）。
-# **它应该的调用方是票 02 的真库读口** `ReferenceSeriesInForceResolver`：读口只取候选（版本引用
-# + 登记时刻 + 每条复核的时刻与结论），选择规则调这里而不在 SQL 里排序裁决——否则「按复核时刻、
-# 同刻按登记时刻、再按版本号」这条判定会在 Go 与 SQL 各写一遍。票 02 落地那天这一条出名单。
-# 本笔只落领域层是有意的：绑定改形（PPC-4）与 seedgen 重跑要在隔离 worktree 一次验绿应用，
-# 不把复核表与端口一起塞进同一个窗口。
-# 同一票新增的 NewSeriesReview 与 NewReviewedSeriesVersion 不在名单上：本门禁按名字跳过
-# `New` 前缀的构造（production_wiring_ratchet_test.go 收集工厂时 `strings.HasPrefix(name, "New")`
-# 即 continue），所以只点名了本条。它们同样零生产调用点，接线随票 02/03 一起。
-# 2026-09-03 加本条：在 42846ed 的干净内容上（`git show` 取本文件）数得加前 **30**，加后 **31**；
-# 两个数只对该检出成立。
-internal/parcelpricing/domain SelectInForceSeriesVersion
+# 在用序列版本的选择规则 SelectInForceSeriesVersion（ADR-0099 决定三）曾在这里，票
+# pricing-reference-series-operations/01 加入时写「票 02 的真库读口落地那天出名单」——2026-09-03
+# 票 02 的 adapters/postgres/reference_series_review.go（ResolveInForce）落地并调用它，按上句剪掉。
+# **剪之前按本门禁的提示分过三种成因**：全仓该名字只有一处声明（domain/reference_series_review.go），
+# 非测试调用点就是上述适配器，是第二种。加时在 42846ed 上数得 30→31；剪时**在 2a9a76a 的干净内容
+# 上（`git show` 取本文件）数得剪前 31、剪后 30**——两组数各自只对自己那个检出成立（本笔提交
+# 的父提交若不是 2a9a76a，请在自己那一刻的 HEAD 上重取，别拿这两个数加减）。
+# 同一票的 NewSeriesReview / NewReviewedSeriesVersion / PeekReferenceSeriesRegistrationReference
+# 不在名单上：前两个按名字被门禁跳过（`New` 前缀），第三个由同一适配器调用。
 internal/parcelpricing/domain ReplayPricingEvaluation
 # 快照序列化与重建是**同一条未接线路径的两端**：适配器 price_card_catalog.go 正文没用它们，
 # 只有它的测试用了。修的是那段路径，不是这两个函数——一次修好会同时去掉两行。
