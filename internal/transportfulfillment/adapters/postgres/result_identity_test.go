@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -113,6 +114,41 @@ func TestMintingRefusesToRunOutsideATransaction(t *testing.T) {
 	}
 	if _, err := factory.NextDeliveryResultVersion(ctx); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务签发交付版本应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := factory.NextExternalTrackingFactReference(ctx); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务签发外部轨迹事实身份应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := factory.NextExternalTrackingFactVersion(ctx); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务签发外部轨迹事实版本应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// TestExternalTrackingIdentitiesAreMintedFromTheirOwnSequences 证事实身份与版本各走一条序列，
+// 号带前缀且两次不重——源事件标识由源给、本仓自己的身份另铸，两者分开保存（ADR-0102 决定四）。
+func TestExternalTrackingIdentitiesAreMintedFromTheirOwnSequences(t *testing.T) {
+	factory, transactor := newResultVersions(t)
+	ctx := t.Context()
+	var first, second, version string
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		a, err := factory.NextExternalTrackingFactReference(txCtx)
+		if err != nil {
+			return err
+		}
+		b, err := factory.NextExternalTrackingFactReference(txCtx)
+		if err != nil {
+			return err
+		}
+		v, err := factory.NextExternalTrackingFactVersion(txCtx)
+		if err != nil {
+			return err
+		}
+		first, second, version = a.String(), b.String(), v.String()
+		return nil
+	}); err != nil {
+		t.Fatalf("签发：%v", err)
+	}
+	if first == second || !strings.HasPrefix(first, "EXTF-") || !strings.HasPrefix(version, "EXTV-") {
+		t.Fatalf("身份与版本应各带前缀且不重：%q %q %q", first, second, version)
 	}
 }
 

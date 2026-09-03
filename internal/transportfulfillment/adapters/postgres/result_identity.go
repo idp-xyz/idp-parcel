@@ -14,14 +14,17 @@ import (
 // 在登记键上，写进号里就成了第二处定义。分隔符归拼接处所有，因此这里不带横线（与四家
 // adapters/identity 同一条裁定）。
 const (
-	pickupResultVersionPrefix   = "PRV"
-	deliveryResultVersionPrefix = "DRV"
+	pickupResultVersionPrefix     = "PRV"
+	deliveryResultVersionPrefix   = "DRV"
+	externalTrackingFactPrefix    = "EXTF"
+	externalTrackingVersionPrefix = "EXTV"
 )
 
-// ResultVersions 实现 ports.PickupIdentityFactory 与 ports.DeliveryIdentityFactory：
-// 用 transport_fulfillment 自己的两条序列签发揽收与交付的结果版本。
+// ResultVersions 实现 ports.PickupIdentityFactory、ports.DeliveryIdentityFactory 与
+// ports.ExternalTrackingIdentityFactory：用 transport_fulfillment 自己的几条序列签发揽收与
+// 交付的结果版本，以及外部承运轨迹事实的身份与版本。
 //
-// 一个类型担两个端口是因为两者是同一件事的两个域，装配处仍按端口各自注入——需要把
+// 一个类型担几个端口是因为它们是同一件事的几个域，装配处仍按端口各自注入——需要把
 // 其中一个换成别的签发方式时，替换的是装配那一行，不必先把类型拆开。
 type ResultVersions struct {
 	db *bentopg.DB
@@ -35,9 +38,33 @@ func NewResultVersions(db *bentopg.DB) (*ResultVersions, error) {
 }
 
 var (
-	_ ports.PickupIdentityFactory   = (*ResultVersions)(nil)
-	_ ports.DeliveryIdentityFactory = (*ResultVersions)(nil)
+	_ ports.PickupIdentityFactory           = (*ResultVersions)(nil)
+	_ ports.DeliveryIdentityFactory         = (*ResultVersions)(nil)
+	_ ports.ExternalTrackingIdentityFactory = (*ResultVersions)(nil)
 )
+
+// NextExternalTrackingFactReference 为一条新认领的外部承运轨迹事实铸本上下文自己的身份。
+// 源事件标识由源给、本仓不代铸；本仓自己的身份另铸，两者分开保存（ADR-0102 决定四）。
+func (factory *ResultVersions) NextExternalTrackingFactReference(
+	ctx context.Context,
+) (domain.ExternalTrackingFactReference, error) {
+	sequence, err := factory.next(ctx, "transport_fulfillment.external_tracking_fact_ref_seq")
+	if err != nil {
+		return domain.ExternalTrackingFactReference{}, fmt.Errorf("next external tracking fact reference: %w", err)
+	}
+	return domain.NewExternalTrackingFactReference(fmt.Sprintf("%s-%012d", externalTrackingFactPrefix, sequence))
+}
+
+// NextExternalTrackingFactVersion 为首次认领、源声明更正与有效时间判断各签一个新版本。
+func (factory *ResultVersions) NextExternalTrackingFactVersion(
+	ctx context.Context,
+) (domain.ExternalTrackingFactVersion, error) {
+	sequence, err := factory.next(ctx, "transport_fulfillment.external_tracking_fact_version_seq")
+	if err != nil {
+		return domain.ExternalTrackingFactVersion{}, fmt.Errorf("next external tracking fact version: %w", err)
+	}
+	return domain.NewExternalTrackingFactVersion(fmt.Sprintf("%s-%012d", externalTrackingVersionPrefix, sequence))
+}
 
 // NextPickupResultVersion 逐成功对象签发揽收结果版本。来源更正形成新版本而不覆盖本版
 // （parcel-shipment 的采用判断按版本幂等），所以这里绝不能复用上一次的号。
