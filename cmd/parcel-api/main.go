@@ -154,6 +154,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 覆盖地平线读口（票 pricing-reference-series-operations/05 第 1 项）：与目录读面
+	// 同库，但它要连版本与复核两张表，且在用版本由领域按时刻挑，故自成一只适配器。
+	referenceSeriesCoverage, err := pppostgres.NewReferenceSeriesCoverage(db)
+	if err != nil {
+		return err
+	}
 	// 评价册与路由判断两册是业务事实册的查阅面（票 admin-skeleton-closure-batch/03）：
 	// 与目录读面同上下文同库，但行形状归各自用例，适配器各自成形。
 	pricingEvaluations, err := pppostgres.NewEvaluationCatalogue(db)
@@ -302,6 +308,7 @@ func run(logger *slog.Logger) error {
 			results,
 			pricingCatalog,
 			pricingCatalog,
+			referenceSeriesCoverage,
 			pricingEvaluations,
 			priceCardRegistration,
 			referenceSeriesRegistration,

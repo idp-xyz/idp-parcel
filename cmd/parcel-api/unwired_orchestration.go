@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"time"
 
 	collectiondomain "go.idp.xyz/idp-parcel/internal/collectionremittance/domain"
 	collectionports "go.idp.xyz/idp-parcel/internal/collectionremittance/ports"
@@ -327,6 +328,21 @@ func (unwiredPricingCatalogue) ListReferenceSeries(
 	pricingdomain.TenantID,
 	int,
 ) ([]pricingports.ReferenceSeriesCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredReferenceSeriesCoverage 是覆盖地平线读口的占位（票
+// pricing-reference-series-operations/05 切片 05a）。不并进 unwiredPricingCatalogue：
+// 生产装配点上它是独立适配器（那两口只读版本表一张，这一口连版本与复核两张），并成一个
+// 会让装配测试盖不住「这本册接错了适配器」这一格——判据同下面评价册那条。
+type unwiredReferenceSeriesCoverage struct{}
+
+func (unwiredReferenceSeriesCoverage) ListReferenceSeriesCoverage(
+	context.Context,
+	pricingdomain.TenantID,
+	time.Time,
+	int,
+) ([]pricingports.ReferenceSeriesCoverageRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

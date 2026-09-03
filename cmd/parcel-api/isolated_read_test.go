@@ -86,6 +86,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/tracking-projections":                true,
 	"/pricing-price-cards":                 true,
 	"/pricing-reference-series":            true,
+	"/pricing-reference-series-coverage":   true,
 	"/pricing-evaluations":                 true,
 	"/network-catalog":                     true,
 	"/route-plans":                         true,
