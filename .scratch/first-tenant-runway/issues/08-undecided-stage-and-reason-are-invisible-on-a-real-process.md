@@ -1,7 +1,7 @@
 # 未决停在哪一站、原因是什么，在真进程上没有任何人读得到
 
 Category: bug
-Status: ready-for-agent（2026-09-02 已裁，见 [ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md)；第一层由 ADR-0094 带走，第二层可独立落地）
+Status: in-progress——MCP-1；[ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md) 第二层（自愈那格的进程侧观察口）已落 `20d21f4`；第一层随票 07 的 Decision 四/五 切片收口，见文末 Comments 末条
 
 来源：2026-09-02 MCP-1 接手 MCP-5 崩溃后的现场时取证。锚 `9d6063c`（工作树的未提交改动只有 `.md` 与 `.scratch/**`，不含任何 `internal/`）。
 
@@ -59,3 +59,17 @@ Status: ready-for-agent（2026-09-02 已裁，见 [ADR-0095](../../../docs/adr/0
   两层的划分不是凑数：会自愈的进日志、不自愈的进库，正是 ADR-0029「按恢复动作分格」在可观测性这一面的投影。
 
   **一条明确不做的**：本票只补观察，不补告警。「未决持续多久算异常」是运营口径，属实例半边，不填。
+
+- 2026-09-03 · MCP-1（第二层已合入主线 `20d21f4`；第一层的收口挂在票 07）。
+
+  **第二层已落**（ADR-0095 Decision 二/三/四）：`dispatch.Dispatcher` 增可选的 `DeliveryFailureObserver`，在 `RecordFailure` 成功之后、`continue` 之前调用，交出这一条投递、已分格的失败码与**原始 `err`**；用变参 `Option` 给出，既有装配点一个没动，`nil` 时行为与之前逐字相同（有用例钉着）。`cmd/parcel-dispatch` 用自己的 `slog.Logger` 实现，`Warn` 不用 `Error`——这一条失败已入账且会按重投节奏再来，进程本身没坏，整拍失败那一格仍归 `Loop.report`。`assembleDispatcher` 收 logger 而不是收一个现成的观察口，「怎么出声」留在装配层定。日志会按重投节奏重复，那是真实的，不在平台层压噪。**票面观察到的「进程输出零行」从此不成立**：同一现场再跑，每一拍都会把 `stage … reason …` 那句原文打出来。
+
+  **第一层**（不自愈那格靠入账留痕）**今天在库里已经成立，但成立的方式悬着**：`32d6a49` 让消费门对 `ResumeByOperatorRegistration` 入账，`recordAttempt` 写下的处理尝试（原因、恢复路径、续办引用）因此留在库里、委托读面可见——这就是 ADR-0095 Decision 一要的东西。但那次入账本身是否允许在续办触发之前落地，是票 07 末条记的那处要人裁的口子；若裁成暂时收回入账，这一层随之退回「随回滚蒸发」，等 Decision 四/五 切片一起回来。**本票不另设机制，收口跟着 07 走。**
+
+  验证同票 07 末条（钉 `c96065b`，含真库，未跑 `-race`）。
+
+- 2026-09-03 · MCP-4（开工前在 `371f6cb`——本地 main HEAD，非票面旧锚——重取一遍证据；只取证不改代码）。
+
+  票面与 ADR-0095 的结论都不过期：`Dispatcher.DispatchOnce` 逐条 `Publish` 失败仍只把 `failureCodeFor(err)` 交给 `RecordFailure` 随即 `continue`，`err` 本体丢弃；`Loop.report` 仍只在 `DispatchOnce` 整拍返错时打 `dispatch beat failed`；`internal/platform/dispatch` 包内零 logger、零 `slog` 引用。
+
+  与实现直接相关的两条现场事实：`NewDispatcher` 五个位置参数，调用点共九处且全在本会话地盘（`cmd/parcel-dispatch/assemble.go` 一处、`assemble_test.go` 五处、`internal/platform/dispatch/dispatcher_test.go` 两处、`fanout_failure_code_test.go` 一处）——加一个可选参数属「会让旧调用点对不上」那一类，但调用点少且不跨地盘，按 parallel-sessions 走单独 worktree 一次性应用。`wireDispatcher(db, settings)` 今天拿不到 logger（logger 停在 `run` → `NewLoop`），装配方要实现观察口就得把 logger 或观察口穿过 `assembleDispatcher` → `wireDispatcher`，那两个签名同在本地盘。

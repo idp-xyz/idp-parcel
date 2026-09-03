@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: ready-for-agent（2026-09-02 已裁，见 [ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)；实现范围比本票原文大，且要动领域封闭集合，见文末 Comments 末条）
+Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），Decision 四/五 未落，**且已落那一笔与 Decision 四的「否则不许落地」有一处要人裁**，见文末 Comments 末条
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -105,3 +105,33 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   二、**第四格必须与它的续办触发同笔落地**（ADR-0094 Decision 四）。人工复核有「复核已完成」信封、客户补件有新提交版本，「参数已登记」什么都没有；只把回滚改成提交，得到的是把 `ABANDONED` 换成一个更安静的永久停滞。**所以本票的实现范围比票面大**，它不是改一处折法；且 `ResumePath` 是领域封闭集合，加一格属并行会话说的「会让旧调用点对不上」那一类，开工前占号、走三步法或单独 worktree。
 
   **一句收回。** 取证途中我一度认为 `CustomerSupplementPending` 也在烧预算、可以顺带修好。ADR-0086 的 Context 明确判过那一格「回滚重投是对的」，理由是「客户新提交版本会自己回来」；而 ADR-0045 把「受控补充的…重触发判断」划为另一切片，那条前提今天核不实也证不伪。**推翻一条已接受判断要有证据，我没有**，因此 ADR-0094 维持它不动，只把它从一个沉默的 default 变成一个具名的、写着理由的格。要不要重开，另立取证票。
+
+- 2026-09-03 · MCP-1（第一笔已合入主线 `32d6a49`；本条记它落了什么、没落什么，以及一处要人裁的口子）。
+
+  **已落**：Decision 一/二/三。CONTEXT 先加`等待运营登记`并把`等待内部续办`收窄到只覆盖会自行恢复的那一类（ADR-0094 写漏了这一步——`ResumePath` 的取值与 CONTEXT 等待态一一对应，加格是领域语言改动不是代码改动）；`UC-PS-001` 与业务流程指南的同源枚举一并对齐。领域层 `ResumePath` 增 `ResumeByOperatorRegistration`；应用层 `resumePath()` 把五个 `*NotConfigured` 原因逐个显式改映到新格；消费门改按 `ResumePath` 折（`undecidedDisposition`，纯全函数、穷尽、不留 default），`ManualReviewPending` 那次常量比较消失。`等待受控补充`维持回滚重投，代码与测试写明是刻意留下的，取证归票 09。
+
+  **未落**：Decision 四（登记动作发续办信封 + 消费门）与 Decision 五（落新格前先把带等待态的聚合 `Save` 落库）。两个 `*AsOfNotConfigured` 发生在形成决定**之前**，而等待态今天只由领域的 `Decide` 写下——那一段没有落等待态的路径，要新开一条；续办信封类型同理不存在。它们合起来是另一个完整切片。
+
+  **要人裁的口子。** 上一条提交信写的是「本笔尚不足以让新格在真进程上产生效果」，这句话**说轻了**。消费门这一笔已经把 `ResumeByOperatorRegistration` 折成入账（`undecidedDisposition` 对它交回 `nil`），而经接受判断链能走到这一格的原因有两个——`ReachabilityAsOfNotConfigured` 与 `FinancialControlAsOfNotConfigured`（另三个 `*RulesNotConfigured` 来自拒绝／撤回／修订三条命令口，不经消费门）。于是这两种未决的现场行为已经变了：**从「回滚重投、烧完预算落 `ABANDONED`」变成「本份投递记为处理完毕，`recordAttempt` 写下的处理尝试随提交落库（委托读面可见），但没有等待态、没有任何东西会续办它」**。这正是 Decision 四那句「把 `ABANDONED` 换成一个更安静的永久停滞」描述的形状，而 Decision 四的原话是「第三格必须与它的续办触发同笔落地，**否则不许落地**」。
+
+  两条路，都不由实现票自己定：
+  1. **按 Decision 四的字面收回入账**——在 Decision 四/五 落地前，`undecidedDisposition` 对 `ResumeByOperatorRegistration` 暂交回哨兵（回滚重投，即旧行为），并在代码与测试里写明这是被 Decision 四挡住的过渡态、挡到哪一笔为止。语言、分格、映射三层不动，只把「处置」这一层退回。代价是 ADR-0094 Consequences 说的「失败预算只花在真会自愈的依赖上」暂不成立。
+  2. **接受现状并把 Decision 四/五 切片提到最前**——理由是入账后处理尝试至少留在了库里（比 `ABANDONED` 那一格多出一条可查的原因与恢复路径），且这两个原因只在租户已登记商业依据、却未登记 `PAR-COM-14` 时点策略时出现，合成运道跑不到。代价是在切片落地前，这一格在真租户上就是那个「更安静的永久停滞」。
+
+  我倾向 1：它是 ADR 原话，且改动一行、有用例钉着；2 要改 ADR-0094 Decision 四的措辞才站得住。**未擅自动，等裁。**
+
+  验证：在隔离 worktree 钉 `c96065b`（= `81957c7` ＋ 本批四笔）跑 `gofmt -l` 空、`go build`/`go vet` 退 0、`go test -p 1 -count=1 ./...` 93 包零 FAIL，DSN 探针 `PASS` 非 `SKIP`（含真库）；快进到 `74ab82f` 前重数 `c96065b..74ab82f` 无 `.go`/`.sql`。**未跑 `-race`**：本 shell 无 gcc（`CGO_ENABLED=0`），MCP-6 装的 mingw 不在本会话 PATH。
+
+- 2026-09-03 · MCP-4（开工前在 `371f6cb`——本地 main HEAD，非票面旧锚——重取一遍证据；只取证不改代码）。
+
+  **票面与 ADR-0094 的结论都不过期，但实现落点比开工总则划给本会话的地盘（`parcelshipment/domain` + `adapters/inbox`）宽得多。** 逐项：
+
+  - `domain.ResumePath` 仍是三格加零值 `ResumePathInvalid`；`valid()` 是 `ResumeByCustomerSupplement..ResumeByManualReview` 的闭区间判断，加第四格要同时改上界；`String()` 三格。
+  - `resumePath()` **不在 domain，在 `internal/parcelshipment/application/judgment_continuation.go`**（ADR-0094 写的 `JudgmentPendingReason.resumePath()` 属 application 包）。default 仍归 `ResumeByInternalRetry`，具名的只有 `CustomerSupplementPending` 与 `ManualReviewPending`；ADR 点名的五个 `*NotConfigured` 今天全落 default。
+  - 消费门 `advanceAcceptanceChainThrough` 仍是 `result.PendingReason() == psapplication.ManualReviewPending` 常量比较。`AdvanceAcceptanceChainResult` 今天只交出 `Outcome()` / `Stage()` / `PendingReason()`，**没有交出恢复动作**——消费门要按 `ResumePath` 分派，编排结果得先多一个读口（application 层改动）。
+  - 持久层两道 CHECK 挡着第四格：`migrations/parcel_shipment/0005_acceptance_judgment_task.sql` 的 `acceptance_processing_attempt_resume_path_closed`（三个字面值）与 `0009_task_waiting_on_projection.sql` 的 `shipment_request_task_waiting_on_known`（`BETWEEN 0 AND 3`）。不新加一份迁移放宽，第四格的处理尝试与等待态一落库就撞约束。`adapters/postgres/shipment_request_views.go` 读回 WaitingOn 时也按 `valid()` 校验。
+  - `Decide`（`domain/acceptance_decision.go`）只会写三格 waitingOn，且写的依据是校验结果；而五个 `*NotConfigured` 都在 application 编排里形成（`formAdoptedBasis` 的时点那一支、三个授权端口），不是 Decide 的校验。因此 ADR-0094 决定五「落此格前先把带等待态的聚合 Save 落库」**需要一条新的领域操作**在聚合上写下第四格等待态——今天没有这条路。
+  - `pendingReasonFor`（`application/form_acceptance_decision.go`）按 WaitingOn 反译原因，default 归 `AcceptanceJudgmentIncomplete`；`TestEveryPendingReasonHasAStringAndAResumePath` 的 switch 硬编码三格，加格后要跟。
+  - 决定四的续办触发：仓内今天没有任何「参数已登记」信封。五个 `*NotConfigured` 对应的登记动作在 party-commercial（授权规则 `PAR-COM-14`、时点策略声明），**发信封那一半在 party-commercial 地盘**，PS 侧只能立消费门与路由条目。
+
+  据此实现至少要动：`parcelshipment/{domain,application,ports,adapters/inbox,adapters/postgres}`、`migrations/parcel_shipment`、`cmd/parcel-dispatch`（路由条目），并依赖 party-commercial 侧发信封。已报频道 5 等地盘裁定，裁定前不动代码。
