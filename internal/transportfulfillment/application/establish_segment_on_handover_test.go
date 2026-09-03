@@ -25,6 +25,7 @@ type segmentRegistryDouble struct {
 	// 证「只有没进去的那几个被报出来」，得让同一次到访里一部分成一部分败。
 	joinErrObject string
 	endErr        error
+	closeErr      error
 	saves         int
 	joins         int
 }
@@ -33,6 +34,8 @@ type segmentRowsDouble struct {
 	key            ports.FulfillmentSegmentKey
 	participations []domain.RehydrateParticipationSpec
 	recordedAt     time.Time
+	closed         bool
+	closedAt       time.Time
 }
 
 func newSegmentRegistry() *segmentRegistryDouble {
@@ -75,6 +78,8 @@ func (double *segmentRegistryDouble) FindByKey(
 		TenantID:       key.TenantID,
 		Segment:        key.Segment,
 		Participations: rows.participations,
+		Closed:         rows.closed,
+		ClosedAt:       rows.closedAt,
 	})
 	if err != nil {
 		return ports.FulfillmentSegmentRecord{}, false, err
@@ -159,12 +164,26 @@ func (double *segmentRegistryDouble) EndParticipation(
 	return ports.ParticipationEndOutcomeInvalid, nil
 }
 
+// CloseSegment 只填关闭两列，且只作用于尚未关闭的段——与真库那个窄口同形（`WHERE closed = false`
+// 是它的全部要害）。替身不查「全部参与已结束」：那是跨行条件，真库窄口也不查，由编排先读回整段
+// 走领域判——替身若替编排查了，编排绕过领域直接关段这一类就永远测不出来。
 func (double *segmentRegistryDouble) CloseSegment(
 	_ context.Context,
-	_ ports.FulfillmentSegmentKey,
-	_ time.Time,
+	key ports.FulfillmentSegmentKey,
+	closedAt time.Time,
 ) (ports.SegmentCloseOutcome, error) {
-	return ports.SegmentCloseOutcomeInvalid, nil
+	if double.closeErr != nil {
+		return ports.SegmentCloseOutcomeInvalid, double.closeErr
+	}
+	rows, found := double.rows[segmentRegistryKey(key)]
+	if !found {
+		return ports.SegmentCloseOutcomeInvalid, nil
+	}
+	if rows.closed {
+		return ports.SegmentAlreadyClosed, nil
+	}
+	rows.closed, rows.closedAt = true, closedAt.UTC()
+	return ports.SegmentClosed, nil
 }
 
 func (double *segmentRegistryDouble) saved(t *testing.T, tenant, segment string) ports.FulfillmentSegmentRecord {
