@@ -7,20 +7,20 @@
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
-| architecture（非业务） | 0 | 11 | 0 | 0 | 0 | 0 |
+| architecture（非业务） | 0 | 12 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
-| networkrouting | 52 | 47 | 6 | 13 | 2 | 5 |
+| networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
-| parcelpricing | 46 | 48 | 3 | 6 | 1 | 8 |
-| parcelshipment | 117 | 114 | 16 | 20 | 7 | 11 |
-| partycommercial | 79 | 79 | 8 | 24 | 0 | 14 |
+| parcelpricing | 50 | 52 | 4 | 7 | 1 | 8 |
+| parcelshipment | 118 | 115 | 16 | 21 | 7 | 11 |
+| partycommercial | 81 | 81 | 8 | 25 | 0 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
-| transportfulfillment | 62 | 51 | 10 | 24 | 9 | 6 |
+| transportfulfillment | 63 | 53 | 11 | 24 | 9 | 6 |
 | visibilityexception | 87 | 84 | 9 | 26 | 8 | 10 |
-| **合计** | 675 | 619 | 85 | 201 | 48 | 81 |
+| **合计** | 683 | 630 | 87 | 204 | 48 | 81 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 38、测试 56。
 
@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 4 |
 
-## 迁移：11 个模块共 109 份 SQL
+## 迁移：11 个模块共 112 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -53,15 +53,15 @@
 | customs_compliance | 13 |
 | network_routing | 9 |
 | node_operations | 3 |
-| parcel_pricing | 3 |
-| parcel_shipment | 11 |
-| party_commercial | 21 |
+| parcel_pricing | 4 |
+| parcel_shipment | 12 |
+| party_commercial | 22 |
 | pilot_governance | 5 |
 | settlement_accounting | 15 |
 | transport_fulfillment | 7 |
 | visibility_exception | 21 |
 
-## 接线面：接入面端点 75 个，消费适配器 23 个生产文件，直投路由表 14 条
+## 接线面：接入面端点 76 个，消费适配器 23 个生产文件，直投路由表 14 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -76,9 +76,9 @@
 | partycommercial | 19 |
 | pilotgovernance | 1 |
 | settlementaccounting | 4 |
-| transportfulfillment | 3 |
+| transportfulfillment | 4 |
 | visibilityexception | 13 |
-| **合计** | 75 |
+| **合计** | 76 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -98,12 +98,11 @@
 | visibilityexception | 7 |
 | **合计** | 14 |
 
-## 端口：声明 286 个；基线口径缺 12，精确口径缺 9
+## 端口：声明 290 个；基线口径缺 11，精确口径缺 8
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
-- `parcelshipment.ContinuedAttemptRegisterRepository` 
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
@@ -117,7 +116,6 @@
 
 精确口径缺（无具体类型完整实现）：
 
-- `parcelshipment.ContinuedAttemptRegisterRepository` 
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
