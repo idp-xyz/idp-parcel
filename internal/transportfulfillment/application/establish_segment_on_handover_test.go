@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -205,4 +206,132 @@ func TestHandedOverFirstObjectEstablishesSegment(t *testing.T) {
 	if !participation.EnteredAt().Equal(handoverJudgedTime) {
 		t.Fatalf("参与起点时刻 = %s, want %s", participation.EnteredAt(), handoverJudgedTime)
 	}
+}
+
+// 后续对象加入既有段：CONTEXT 生命周期②「后续兼容载运对象取得同一运输控制 → 分别加入
+// 实际履约段并形成自己的参与起点，不修改其他对象的起点」。
+//
+// 「这个段是否已成立」这一判落在段登记册的取回上，不在编排里记——并发两个对象同时到达时，
+// 那个缓存就是一次竞态。
+func TestSecondHandedOverObjectJoinsTheSameSegment(t *testing.T) {
+	fixture := newHandoverSegmentFixture(t)
+
+	first := registerHandoverCommand(t)
+	first.Segment = "segment-1"
+	if _, err := fixture.handler.Register(t.Context(), first); err != nil {
+		t.Fatalf("首个对象登记：%v", err)
+	}
+
+	secondJudgedAt := handoverJudgedTime.Add(90 * time.Minute)
+	second := registerHandoverCommand(t)
+	second.Object = "parcel-2"
+	second.Version = "handover-result/parcel-2/v1"
+	second.JudgedAt = secondJudgedAt
+	second.Segment = "segment-1"
+	if _, err := fixture.handler.Register(t.Context(), second); err != nil {
+		t.Fatalf("后续对象登记：%v", err)
+	}
+
+	if fixture.segments.saves != 1 {
+		t.Fatalf("段首登 %d 次——后续对象该加入既有段而不是另立一个", fixture.segments.saves)
+	}
+	if fixture.segments.joins != 1 {
+		t.Fatalf("加入既有段 %d 次, want 1", fixture.segments.joins)
+	}
+
+	record := fixture.segments.saved(t, "tenant-1", "segment-1")
+	firstEnteredAt := participationEnteredAt(t, record, "parcel-1")
+	secondEnteredAt := participationEnteredAt(t, record, "parcel-2")
+	if !secondEnteredAt.Equal(secondJudgedAt) {
+		t.Fatalf("后续对象起点 = %s, want %s", secondEnteredAt, secondJudgedAt)
+	}
+	// 后一个对象加入不得改写前一个的起点——整段结果覆盖不了成员差异。
+	if !firstEnteredAt.Equal(handoverJudgedTime) {
+		t.Fatalf("首个对象起点被改写成 %s, want %s", firstEnteredAt, handoverJudgedTime)
+	}
+}
+
+// 拒收与待确认立不起段，而登记本身照样成立：CONTEXT「已拒收或待确认不转出控制，此前
+// 控制方在结果成立前继续保持控制」。**不立段不是失败**——那是正当的业务结果，把它做成
+// 错误会让调用方以为这次交接没登上。
+func TestHandoverWithoutControlTransferEstablishesNoSegment(t *testing.T) {
+	for _, verdict := range []domain.HandoverVerdict{
+		domain.HandoverRefused,
+		domain.HandoverPendingConfirmation,
+	} {
+		t.Run(verdict.String(), func(t *testing.T) {
+			fixture := newHandoverSegmentFixture(t)
+			command := registerHandoverCommand(t)
+			command.Verdict = verdict
+			// 拒收与待确认必须带依据、且不带双方证据与适用规则（构造门的分格要求）。
+			command.ReleasingEvidence = ""
+			command.ReceivingEvidence = ""
+			command.Rule = ""
+			command.Basis = "handover-basis/refusal-1"
+			command.Segment = "segment-1"
+
+			result, err := fixture.handler.Register(t.Context(), command)
+			if err != nil {
+				t.Fatalf("登记：%v", err)
+			}
+			if result.Outcome() != application.HandoverRegistered {
+				t.Fatalf("outcome = %q, want HANDOVER_REGISTERED——立不起段不该翻掉登记", result.Outcome())
+			}
+			if fixture.segments.saves != 0 || fixture.segments.joins != 0 {
+				t.Fatalf("不转出控制的裁决动了段登记册：saves=%d joins=%d", fixture.segments.saves, fixture.segments.joins)
+			}
+		})
+	}
+}
+
+// 立段失败不回滚交接登记，但要留下续办引用：接货时间是责任起点锚，一次段登记故障抹不掉
+// 一条已经发生的物理事实；而派生的那一半没做成，调用方得有东西据以续办。
+func TestSegmentRegistryFailureKeepsTheHandoverRegistered(t *testing.T) {
+	fixture := newHandoverSegmentFixture(t)
+	fixture.segments.saveErr = errors.New("段登记册不可用")
+	command := registerHandoverCommand(t)
+	command.Segment = "segment-1"
+
+	result, err := fixture.handler.Register(t.Context(), command)
+	if err != nil {
+		t.Fatalf("立段失败不该上抛技术错误：%v", err)
+	}
+	if result.Outcome() != application.HandoverRegistered {
+		t.Fatalf("outcome = %q, want HANDOVER_REGISTERED——段没立起来抹不掉已经发生的交接", result.Outcome())
+	}
+	if _, recorded := result.Record(); !recorded {
+		t.Fatal("交接记录没交回来")
+	}
+	if result.SegmentContinuationReference() == "" {
+		t.Fatal("段没立起来却没有续办引用——调用方无从续办这一半")
+	}
+}
+
+// 段立住时不留续办引用：那个引用非空的意思是「这一半还欠着」，成立时留着会让调用方
+// 反复重试一件已经做完的事。
+func TestEstablishedSegmentLeavesNoContinuation(t *testing.T) {
+	fixture := newHandoverSegmentFixture(t)
+	command := registerHandoverCommand(t)
+	command.Segment = "segment-1"
+
+	result, err := fixture.handler.Register(t.Context(), command)
+	if err != nil {
+		t.Fatalf("登记：%v", err)
+	}
+	if reference := result.SegmentContinuationReference(); reference != "" {
+		t.Fatalf("段已立起却留了续办引用 %q", reference)
+	}
+}
+
+func participationEnteredAt(t *testing.T, record ports.FulfillmentSegmentRecord, object string) time.Time {
+	t.Helper()
+	reference, err := domain.NewCarriedObjectReference(object)
+	if err != nil {
+		t.Fatalf("对象引用：%v", err)
+	}
+	participation, joined := record.Segment.ParticipationFor(reference)
+	if !joined {
+		t.Fatalf("段里没有 %s 的履约参与关系", object)
+	}
+	return participation.EnteredAt()
 }

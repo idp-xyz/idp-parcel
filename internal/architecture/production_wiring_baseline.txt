@@ -94,6 +94,20 @@
 # 非测试调用点就是上述适配器，是第二种。**在 `0d4eb0d` 的干净内容上（`git show` 取本文件）数得
 # 剪前 31、剪后 30**；两个数只对该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
 #
+# 2026-09-03 随 tf-unwired-seven/02 剪掉 EstablishSegmentWithHandover（交接登记编排接上立段，
+# application/register_transport_handover.go 的 establishSegment 是它的生产调用方）。成因三分
+# 先分过：全仓该名字只有一处声明（domain/actual_fulfillment_segment.go），不存在「别处同名
+# 声明造成误判」那一种，是第二种。**剪后重数实测 29**，不是拿上一个数减一得来的。
+#
+# **这个 29 量在工作副本上而不是干净检出上，所以要连怎么量的一起说清。** 动手前先
+# `git status -- internal/architecture/` 确认树上无他人在途改动（为空），改完再
+# `git diff HEAD -- 本文件` 复核只有本笔两处 hunk——两步合起来才等价于「本笔单独作用于其父
+# 提交」。父提交 `28e2990`，它未碰本文件。**并且 HEAD 在本次编辑期间真的往前走过一笔**
+# （从 `a318f0e` 到 `28e2990`，另一个会话的票 06），这正是上面反复记的那格竞态；这次没咬到
+# 是因为那两笔碰的是 cmd/parcel-api 与 apps/admin-web，不是运气好，是查过。
+# 两套独立方法各数一遍同得 29：一套按 UTF-8 逐行读后滤非空非注释，一套在字节层数行首非 `#`
+# ——后者不经文本解码，防的是本机把中文按 GBK 解时并掉换行导致的静默偏小。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -166,7 +180,11 @@ internal/visibilityexception/domain SubmitEvidence
 # application/register_failed_attempt_charge.go 是它的生产调用方。**它没有接进揽收编排**
 # ——ADR-0098 裁了不在那里形成，理由是 CONTEXT 禁「任一对象的成功、失败或取消被压缩成其他
 # 对象的状态」，且揽收登记必须照常成功、塞进去会造出一个静默不发生且无人重试的派生步骤。
-internal/transportfulfillment/domain EstablishSegmentWithHandover
+#
+# EstablishSegmentWithHandover 曾在这里，2026-09-03 随 tf-unwired-seven/02 剪掉：
+# application/register_transport_handover.go 的 establishSegment 是它的生产调用方。段引用作
+# 显式入参进命令，**缺席时不立段**——段身份由谁铸出至今没有裁决，编排不拿交接范围顶替。
+# 同票的 EstablishSegmentWithPickup 仍未接，揽收侧两条编排是本票余下的一刀。
 internal/transportfulfillment/domain EstablishSegmentWithPickup
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
@@ -175,7 +193,7 @@ internal/transportfulfillment/domain RecordMovementFact
 # 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
 # 加它那天写的是「适配器落地那天这一条出名单」，当天兑现。
 #
-# 转换门与访问器本就不在名单上——EstablishSegmentWith* 各占一行（见本组上方，仍未接），
+# 转换门与访问器本就不在名单上——EstablishSegmentWithPickup 仍占一行（见本组上方），
 # JoinWith*、EndParticipationWith*、CloseSegment 是聚合方法而非导出工厂，本门禁只量后者。
 
 
