@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import {
   ListPageTemplate,
   type ListColumn,
@@ -21,6 +21,7 @@ import {
   type ReferenceSeriesListResponseBody,
   type ReferenceSeriesRecord,
 } from './api';
+import { SeriesReviewPanel, type SeriesReviewTarget } from './SeriesReviewPanel';
 
 const info = moduleInfoById['reference-series'];
 
@@ -115,6 +116,35 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
   },
 ];
 
+// 行动作列单独拼装：它要 setState，而上面那张表是模块级常量。
+function columnsWithReview(
+  onReview: (target: SeriesReviewTarget) => void,
+): ListColumn<ReferenceSeriesRecord>[] {
+  return [
+    ...columns,
+    {
+      id: 'review',
+      header: '复核',
+      align: 'center',
+      className: 'w-[72px]',
+      render: (row) => (
+        <Button
+          variant="outline"
+          onClick={() =>
+            onReview({
+              seriesId: row.seriesId,
+              seriesVersion: row.seriesVersion,
+              registrant: row.registrant,
+            })
+          }
+        >
+          复核
+        </Button>
+      ),
+    },
+  ];
+}
+
 function viewStateOf(
   answer: ApiResult<ReferenceSeriesListResponseBody> | null,
   rowCount: number,
@@ -184,6 +214,7 @@ function ReferenceSeriesTable() {
     null,
   );
   const [reloadToken, setReloadToken] = useState(0);
+  const [reviewing, setReviewing] = useState<SeriesReviewTarget | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,22 +239,32 @@ function ReferenceSeriesTable() {
     : rows;
 
   return (
-    <ListPageTemplate<ReferenceSeriesRecord>
-      title={info.title}
-      description={`${info.owner}——计价只登记不生产数值(ADR-0013)`}
-      search={{
-        value: keyword,
-        onChange: setKeyword,
-        placeholder: '搜索序列标识 / 来源 / 登记责任方',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `共 ${visibleRows.length} 条` : undefined
-      }
-      columns={columns}
-      rows={visibleRows}
-      rowKey={(row) => `${row.seriesId}@${row.seriesVersion}`}
-      viewState={viewStateOf(answer, rows.length, retry)}
-    />
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <ListPageTemplate<ReferenceSeriesRecord>
+        title={info.title}
+        description={`${info.owner}——计价只登记不生产数值(ADR-0013)`}
+        search={{
+          value: keyword,
+          onChange: setKeyword,
+          placeholder: '搜索序列标识 / 来源 / 登记责任方',
+        }}
+        filterSummary={
+          answer?.kind === 'outcome' ? `共 ${visibleRows.length} 条` : undefined
+        }
+        columns={columnsWithReview(setReviewing)}
+        rows={visibleRows}
+        rowKey={(row) => `${row.seriesId}@${row.seriesVersion}`}
+        viewState={viewStateOf(answer, rows.length, retry)}
+      />
+      {reviewing ? (
+        <SeriesReviewPanel
+          // 换一行复核时重建面板：结论与依据是上一行的，留着会让人把 A 的依据提给 B。
+          key={`${reviewing.seriesId}@${reviewing.seriesVersion}`}
+          target={reviewing}
+          onClose={() => setReviewing(null)}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -233,7 +274,12 @@ export function ReferenceSeriesPage() {
       <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">参考序列</TabsTrigger>
-          <TabsTrigger value="register">登记序列</TabsTrigger>
+          {/* 「高级」二字是 ADR-0101 决定一的落点，不是措辞偏好：JSON 快照口退为受控批量
+              口的在线镜像，**不是运营配置员的主路径**。主路径（逐字段表单 + 提交前预览）
+              要一个「先校验、回摘要与证据等级、尚未登记」的后端步骤，本册今天没有——同
+              ADR 决定三、四为价卡立的那套草稿/预览机制，参考序列册按决定八另裁另建。
+              在那之前这一签仍是唯一在线入口，所以它留着而不是藏起来。 */}
+          <TabsTrigger value="register">高级：JSON 登记口</TabsTrigger>
         </TabsList>
         <TabsContent
           value="catalog"
@@ -247,9 +293,9 @@ export function ReferenceSeriesPage() {
         >
           <RegistrationPanel
             moduleId="reference-series"
-            title="登记参考序列版本"
+            title="登记参考序列版本（高级：受控批量口的在线镜像）"
             endpoint="POST /pricing-reference-series-registrations"
-            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind reference-series -file 吃的同一份；本页不逐字段建表单，因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约，随 PAR-INT-01 提供。"
+            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind reference-series -file 吃的同一份。这是受控批量口的在线镜像，供 API 集成方与批量登记用；运营配置员的主路径是逐字段表单加提交前预览（证据等级、内容摘要、与上一版逐期差异），那一路需要一个先校验、回摘要而尚未登记的后端步骤，本册今天还没有——ADR-0101 决定三、四已为价卡立了同构的草稿与预览机制，本册按决定八另裁另建。在那之前这一口仍是唯一在线入口。"
             submit={registerReferenceSeries}
             outcomeLabels={registrationOutcomeLabels}
             problemNote={problemNote}

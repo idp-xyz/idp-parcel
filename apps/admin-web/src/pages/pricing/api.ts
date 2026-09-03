@@ -58,6 +58,61 @@ export function registerReferenceSeries(
   );
 }
 
+// ---- 序列版本复核（ADR-0099 决定二；票 pricing-reference-series-operations/04 切片 04b）----
+//
+// **这一族的载荷形状是产品定的，不是发明的。** 上面登记那一段写着「请求体形状此刻没有
+// 契约」，那句对本族不成立：[ADR-0101](docs/adr/0101-…) 决定一把「翻译属渠道接入契约」
+// 的适用场景收窄为**客户渠道载荷**，并明定运营操作者面的载荷形状由产品定义、属机制半边，
+// 各登记签按「登记频次 × 操作者角色 × 载荷结构」逐册裁形。复核是低频、结构极简（两格）
+// 的治理动作，因此取逐字段表单——不是 JSON 快照口。
+
+/**
+ * 复核请求体。**只有内容，没有身份。**
+ *
+ * 复核责任方**不在这里**，也不该在这里：它是四眼门的一半（领域拒绝复核责任方等于登记
+ * 责任方），从浏览器送一个上去就是自报身份。传输层 `ReferenceSeriesReviewIntake` 的注释
+ * 原话是「从请求内容里铸一个出来就等于把那道门拆了」；身份的正当出处是 ADR-0100 的
+ * `OperatorEnvelope`，由接入渠道给。今天渠道未配置，所以本请求必然答 403——那是诚实答案。
+ *
+ * 复核时刻同理不在这里。复核就是复核责任方此刻作出的确认，时刻取服务端时钟；页面替人挑
+ * 一个时刻，等于让「什么时候确认的」变成前端说了算的事实。受控批量口补录历史复核时才显式
+ * 带它（`parcel-pricing-register -kind reference-series-review`）。
+ */
+export interface SeriesReviewRequest {
+  seriesId: string;
+  seriesVersion: string;
+  /** 封闭两格，取 `domain.SeriesReviewDecision` 原词。 */
+  decision: 'APPROVED' | 'RETURNED';
+  basis: string;
+}
+
+/**
+ * 复核答案代数（`application.ReviewReferenceSeriesOutcome` 原名），逐格中文。
+ *
+ * **七格里有三格是治理答案不是调用方错误**，而它们的续办动作各不相同：`需换人复核`要换个
+ * 人来、`版本不在册`要先去登记、`冲突`要另追加一条。折成一句「提交失败」会让操作者以为改
+ * 字段重试就成。
+ *
+ * 与 `registrationOutcomeLabels` 分表而不合并：两套代数有重名格。`CONFLICT` 在登记那栏说的
+ * 是同版本号异内容、改内容要发新版本；在这栏说的是同键复核结论或依据不同、改主意要另追加
+ * 一条。合表会让其中一种顶着另一种的中文显示出来。
+ */
+export const seriesReviewOutcomeLabels: Record<string, string> = {
+  RECORDED: '复核已追加（结论为通过时，该版本自复核时刻起在用）',
+  ALREADY_RECORDED: '同键同内容已在册（幂等重放，没有造第二条复核）',
+  CONFLICT: '同键在册而结论或依据不同（原行不顶替；改主意请另追加一条）',
+  VERSION_UNKNOWN: '被复核的版本不在册（先去登记该版本）',
+  NEEDS_ANOTHER_REVIEWER: '四眼门拒：复核责任方就是登记责任方（换一个人来，不是改字段）',
+  NOT_ACCEPTED: '请求不受理（结论不在封闭集或缺依据；未到达复核册）',
+  UNDECIDED: '未决（依赖故障，记录与否未知，可重试）',
+};
+
+export function reviewReferenceSeries(
+  request: SeriesReviewRequest,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>('/pricing-reference-series-reviews', request);
+}
+
 export interface PriceCardRecord {
   planId: string;
   planVersion: string;
