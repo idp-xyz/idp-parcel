@@ -1,7 +1,7 @@
 # 移动事实端点：只收自营执行方
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——2026-09-03 MCP-4，代码一笔 `4c48bac`（若并回前再 rebase，以票 Comments 末行为准），验证见 Comments
 Blocked by: 无
 
 ## 从哪里来
@@ -56,3 +56,18 @@ customs-compliance），后者去改输入——编排把它们分开的理由�
 
 同票 04：端点在表上、未配置即拒在前、装配测试含真库 PASS、专钉测试红过再绿、临时 worktree 全绿、
 提交带 pathspec、向 MCP-3 报 SHA 与验证种类。
+
+## Comments
+
+2026-09-03 · MCP-4 完成记录（隔离 worktree `mcp4-tf03`）：
+
+- 代码一笔：`record_movement_fact.go`（Intake / Handler / 端点 / 封闭响应）、`UnconfiguredIntake` 补格、
+  端点表一行一参、`unwiredMovementFact`、`assemble_movement_fact.go`（登记册 + 时钟，无意图交付）、
+  `main.go` 交入、探针表一行、真库装配测试。
+- 专钉的红绿：端点构造函数与探针行各红过一次；`gateRequired`/`gateClearance` 到编排那条以门禁那道领域门
+  被触到为判据（无放行 → `DEPARTURE_GATE_BLOCKED`，带放行 → 201 透出放行），不是命令镜像。
+- 「外部轨迹不从这里进」写在端点文件头与端点表行注释两处。
+- 验证：全仓 gofmt / build / vet / `go test -count=1 ./...` 在最终 SHA 的干净检出上跑，含真库（PASS 非 SKIP）。
+- 机制清点已重生成（TF 生产 +1 / 测试 +1 / http +1 / 端点 +1）。
+
+未做：简报第 7 行「到达事实 → 建派送任务」的内部触发半边（归属待 MCP-3 裁，见票 03 Comments）。
