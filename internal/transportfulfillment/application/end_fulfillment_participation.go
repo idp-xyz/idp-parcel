@@ -4,12 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
+
+// ErrObjectActiveInSeveralSegments 说明登记册按对象找回了多于一条在场参与。一对象同时只能在一个共同控制
+// 范围里（CONTEXT），多于一条是库面不一致——不挑一个去结束，响亮报错让人来看（票 06 裁决 (a)）。
+var ErrObjectActiveInSeveralSegments = errors.New("transport fulfillment: the object is active in several fulfillment segments")
 
 // ParticipationEndSource 是结束一条履约参与关系的控制事实来源。
 //
@@ -51,6 +56,10 @@ const (
 	ParticipationControlFactNotFound
 	ParticipationEndNotAccepted
 	ParticipationEndUndecided
+	// ParticipationNoActiveParticipation 只在命令不带段、由登记册按对象找段的两路出现：对象此刻不在任何
+	// 段里在场。它不是失败（重试不会变）也不是`对象不在段内`（那一格说的是指名的某个段），单开一格让
+	// 调用方看得见——交付登上了、但没有任何参与被它结束（票 06 裁决 (a)）。
+	ParticipationNoActiveParticipation
 )
 
 func (outcome ParticipationEndOutcome) String() string {
@@ -61,6 +70,8 @@ func (outcome ParticipationEndOutcome) String() string {
 		return "PARTICIPATION_ALREADY_ENDED"
 	case ParticipationObjectNotInSegment:
 		return "OBJECT_NOT_IN_SEGMENT"
+	case ParticipationNoActiveParticipation:
+		return "NO_ACTIVE_PARTICIPATION"
 	case ParticipationSegmentNotFound:
 		return "SEGMENT_NOT_FOUND"
 	case ParticipationControlFactNotFound:
@@ -82,9 +93,11 @@ func (outcome ParticipationEndOutcome) String() string {
 // 不是疏漏。
 type EndFulfillmentParticipationCommand struct {
 	TenantID domain.TenantID
-	Segment  string
-	Object   string
-	Source   ParticipationEndSource
+	// Segment 在终止那一路必填（运营决定，操作者面对的是具体某个段）；在交付与下一次交接两路**可缺席**
+	// ——缺席时由登记册按对象找它此刻在场的段（票 06 裁决 (a)）：那两路是关于对象的事实，回传方不知道段。
+	Segment string
+	Object  string
+	Source  ParticipationEndSource
 
 	// 下一次权威交接那一路：指名已登记的那一条。
 	Scope   string
@@ -111,10 +124,17 @@ type EndFulfillmentParticipationResult struct {
 	outcome      ParticipationEndOutcome
 	continuation string
 	nextSegment  string
+	segment      string
 }
 
 func (result EndFulfillmentParticipationResult) Outcome() ParticipationEndOutcome {
 	return result.outcome
+}
+
+// Segment 是这次结束落在哪个段上；命令不带段时它是登记册按对象找到的那一个，调用方据以知道结束的是哪段。
+// 没结束任何参与时为空。
+func (result EndFulfillmentParticipationResult) Segment() string {
+	return result.segment
 }
 
 // ContinuationReference 只在`未决`时非空。
@@ -160,12 +180,22 @@ func (handler *EndFulfillmentParticipationHandler) End(
 	ctx context.Context,
 	command EndFulfillmentParticipationCommand,
 ) (EndFulfillmentParticipationResult, error) {
-	segment, object, accepted := participationEndTargetFrom(command)
-	if !accepted {
-		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
-	}
 	// 交付与终止之后没有下一段；带着它来就是一条自相矛盾的命令，在动库之前就拒。
 	if strings.TrimSpace(command.NextSegment) != "" && !command.Source.carriesControlOnward() {
+		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
+	}
+	if strings.TrimSpace(command.Segment) == "" && command.Source != ParticipationEndedByTermination {
+		resolved, outcome, err := handler.resolveSegmentByObject(ctx, command)
+		if err != nil {
+			return EndFulfillmentParticipationResult{}, err
+		}
+		if outcome != ParticipationEndOutcomeInvalid {
+			return EndFulfillmentParticipationResult{outcome: outcome, continuation: continuationFor(outcome, command)}, nil
+		}
+		command.Segment = resolved
+	}
+	segment, object, accepted := participationEndTargetFrom(command)
+	if !accepted {
 		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
 	}
 
@@ -203,6 +233,7 @@ func (handler *EndFulfillmentParticipationHandler) End(
 	case ports.ParticipationEnded:
 		return EndFulfillmentParticipationResult{
 			outcome:     ParticipationEndedNow,
+			segment:     command.Segment,
 			nextSegment: handler.enterNextSegment(ctx, command, fact),
 		}, nil
 	case ports.ParticipationAlreadyEnded:
@@ -210,6 +241,35 @@ func (handler *EndFulfillmentParticipationHandler) End(
 		return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded}, nil
 	default:
 		return participationEndUndecided(command), nil
+	}
+}
+
+// resolveSegmentByObject 在命令不带段时问登记册「这个对象此刻在哪个段里在场」（票 06 裁决 (a)）。
+//
+// 三种回答三种走向：恰一条 → 交回段引用继续；零条 → `NO_ACTIVE_PARTICIPATION`（形成了的答案，不静默）；
+// 多于一条 → error——库面不一致，不挑一个。登记册读不回是欠账（`未决`），与 FindByKey 读不回同格。
+func (handler *EndFulfillmentParticipationHandler) resolveSegmentByObject(
+	ctx context.Context,
+	command EndFulfillmentParticipationCommand,
+) (string, ParticipationEndOutcome, error) {
+	if strings.TrimSpace(command.TenantID.String()) == "" {
+		return "", ParticipationEndNotAccepted, nil
+	}
+	object, err := domain.NewCarriedObjectReference(command.Object)
+	if err != nil {
+		return "", ParticipationEndNotAccepted, nil
+	}
+	active, err := handler.deps.Segments.FindActiveSegments(ctx, command.TenantID, object)
+	if err != nil {
+		return "", ParticipationEndUndecided, nil
+	}
+	switch len(active) {
+	case 0:
+		return "", ParticipationNoActiveParticipation, nil
+	case 1:
+		return active[0].Segment.String(), ParticipationEndOutcomeInvalid, nil
+	default:
+		return "", ParticipationEndOutcomeInvalid, ErrObjectActiveInSeveralSegments
 	}
 }
 
