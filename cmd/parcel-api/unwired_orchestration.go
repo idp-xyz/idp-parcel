@@ -365,6 +365,18 @@ func (unwiredReferenceSeriesRegistration) Handle(
 	return pricingapp.RegisterReferenceSeriesOutcomeInvalid, errOrchestrationNotWired
 }
 
+// unwiredReferenceSeriesReview 是序列版本复核的命令占位（票
+// pricing-reference-series-operations/04）。不与两个登记占位合并，判据同生产侧的三个
+// 事务包装：合成一个会让装配测试盖不住「复核端点接了登记编排」。
+type unwiredReferenceSeriesReview struct{}
+
+func (unwiredReferenceSeriesReview) Handle(
+	context.Context,
+	pricingapp.ReviewReferenceSeriesCommand,
+) (pricingapp.ReviewReferenceSeriesOutcome, error) {
+	return pricingapp.ReviewReferenceSeriesOutcomeInvalid, errOrchestrationNotWired
+}
+
 // 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
 // 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
 // 换不来第二道保障。

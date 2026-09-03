@@ -170,6 +170,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	referenceSeriesReview, err := buildReferenceSeriesReviewOrchestration(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -301,6 +305,7 @@ func run(logger *slog.Logger) error {
 			pricingEvaluations,
 			priceCardRegistration,
 			referenceSeriesRegistration,
+			referenceSeriesReview,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

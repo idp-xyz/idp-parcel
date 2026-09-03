@@ -44,6 +44,7 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 var (
 	_ PriceCardRegistrationIntake       = UnconfiguredIntake{}
 	_ ReferenceSeriesRegistrationIntake = UnconfiguredIntake{}
+	_ ReferenceSeriesReviewIntake       = UnconfiguredIntake{}
 )
 
 // IntakePriceCardRegistration 不读请求，判据同上。
@@ -54,4 +55,10 @@ func (UnconfiguredIntake) IntakePriceCardRegistration(context.Context, *http.Req
 // IntakeReferenceSeriesRegistration 不读请求，判据同上。
 func (UnconfiguredIntake) IntakeReferenceSeriesRegistration(context.Context, *http.Request) (application.RegisterReferenceSeriesCommand, error) {
 	return application.RegisterReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeReferenceSeriesReview 不读请求，判据同上。**这一口尤其不能有「开发用」版本**：
+// 复核责任方是四眼门的一半，从请求内容里铸一个出来就等于把那道门拆了。
+func (UnconfiguredIntake) IntakeReferenceSeriesReview(context.Context, *http.Request) (application.ReviewReferenceSeriesCommand, error) {
+	return application.ReviewReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
 }

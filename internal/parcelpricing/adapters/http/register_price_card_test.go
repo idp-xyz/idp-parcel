@@ -166,4 +166,9 @@ func TestIsolatedReadIntakeCannotServeRegistration(t *testing.T) {
 	if _, ok := intake.(pricinghttp.ReferenceSeriesRegistrationIntake); ok {
 		t.Fatal("隔离读 Intake 不该装得进序列登记口")
 	}
+	// 复核口同属写面（票 pricing-reference-series-operations/04）。它比两个登记口更不能放
+	// ——复核责任方是四眼门的一半，让隔离读那个注入的合成身份装进来，四眼门就没了。
+	if _, ok := intake.(pricinghttp.ReferenceSeriesReviewIntake); ok {
+		t.Fatal("隔离读 Intake 不该装得进序列复核口")
+	}
 }

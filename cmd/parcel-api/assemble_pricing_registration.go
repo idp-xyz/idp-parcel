@@ -72,6 +72,37 @@ func (registration transactionalReferenceSeriesRegistration) Handle(
 	return outcome, nil
 }
 
+// transactionalReferenceSeriesReview 为序列版本复核包事务，判据同上两个包装。
+//
+// 它不并进 transactionalReferenceSeriesRegistration：登记与复核是两种命令、两套答案代数，
+// 而**四眼门只在复核那一侧**（领域拒绝复核责任方等于登记责任方）。合成一个类型之后装配点
+// 可以把登记那一格的编排接到复核端点上而编译仍绿，装配测试也盖不住。
+type transactionalReferenceSeriesReview struct {
+	transactor bentoapp.Transactor
+	inner      *pricingapp.ReviewReferenceSeriesHandler
+}
+
+var _ pricinghttp.ReferenceSeriesReviewer = transactionalReferenceSeriesReview{}
+
+func (review transactionalReferenceSeriesReview) Handle(
+	ctx context.Context,
+	command pricingapp.ReviewReferenceSeriesCommand,
+) (pricingapp.ReviewReferenceSeriesOutcome, error) {
+	var outcome pricingapp.ReviewReferenceSeriesOutcome
+	err := review.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := review.inner.Handle(txCtx, command)
+		if handleErr != nil {
+			return handleErr
+		}
+		outcome = handled
+		return nil
+	})
+	if err != nil {
+		return pricingapp.ReviewReferenceSeriesOutcomeInvalid, err
+	}
+	return outcome, nil
+}
+
 // buildPriceCardRegistrationOrchestration 装配 `/pricing-price-card-registrations`
 // 的真编排（ADR-0085 首切片，票 admin-write-faces/01）。接真不等墙降：未配置 Intake
 // 拒在编排之前，接入渠道就位前编排一次也不会被调到——墙降那笔工作换的只是 Intake。
@@ -93,4 +124,27 @@ func buildReferenceSeriesRegistrationOrchestration(db *bentopg.DB) (transactiona
 	}
 	handler := pricingapp.NewRegisterReferenceSeriesHandler(pricingapp.RegisterReferenceSeriesDeps{Register: register})
 	return transactionalReferenceSeriesRegistration{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildReferenceSeriesReviewOrchestration 装配 `/pricing-reference-series-reviews` 的真编排
+// （ADR-0099 决定二，票 pricing-reference-series-operations/04）。
+//
+// 版本读口与复核写口是两只适配器：读回一版登记走 ReferenceSeriesVersions（四眼门要拿到登记
+// 责任方，而 domain.NewSeriesReview 以登记为入参），追加复核走 ReferenceSeriesReviews。它们
+// 落在两张表上，分设不是为了对称。
+func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalReferenceSeriesReview, error) {
+	versions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: reference series version loader: %w", err)
+	}
+	reviews, err := pppostgres.NewReferenceSeriesReviews(db)
+	if err != nil {
+		return transactionalReferenceSeriesReview{}, fmt.Errorf("parcel-api: reference series review register: %w", err)
+	}
+	handler := pricingapp.NewReviewReferenceSeriesHandler(pricingapp.ReviewReferenceSeriesDeps{
+		Versions: versions,
+		Reviews:  reviews,
+		Clock:    systemClock{},
+	})
+	return transactionalReferenceSeriesReview{transactor: db.Transactor(), inner: handler}, nil
 }

@@ -72,6 +72,7 @@ func assembleBusinessEndpoints(
 	pricingEvaluations pricinghttp.EvaluationCatalogueReader,
 	priceCardRegistration pricinghttp.PriceCardRegistrar,
 	referenceSeriesRegistration pricinghttp.ReferenceSeriesRegistrar,
+	referenceSeriesReview pricinghttp.ReferenceSeriesReviewer,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -206,6 +207,10 @@ func assembleBusinessEndpoints(
 		// 两口消费同一登记用例，答案代数一致。
 		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(pricinghttp.UnconfiguredIntake{}, priceCardRegistration)},
 		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesRegistration)},
+		// 序列版本复核（ADR-0099 决定二，票 pricing-reference-series-operations/04）：治理
+		// 动作也是命令行，同挂字面量 UnconfiguredIntake{}。**这一口比两个登记口更不能松**
+		// ——复核责任方是四眼门的一半，任何采信自报身份的 Intake 都等于把那道门拆了。
+		{Pattern: "/pricing-reference-series-reviews", Handler: pricinghttp.NewReviewReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesReview)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令
