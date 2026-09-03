@@ -1,7 +1,7 @@
 # `cmd/parcel-api` 对 TF 新编排的装配与端点
 
 Category: enhancement
-Status: draft——决策简报已备（文中「决策简报」节，钉 `722e846`），owner 逐行答同意/改即可拆票；裁前不转 ready-for-agent
+Status: resolved——作索引。MCP-3（owner 授权自决）2026-09-03 逐行同意决策简报，裁决原文在 Comments；实施拆为 [04](04-control-fact-entry-endpoints.md)、[05](05-movement-fact-endpoint.md)、[06](06-participation-end-internal-triggers.md)、[07](07-admin-write-faces-segment-closure-dispatch-task-load-assignment.md)，简报第 9 行不立票（阻于 ADR-0098 决定四）
 Blocked by: 无
 
 ## 现状（钉 `e3dbf3f`）
@@ -89,3 +89,39 @@ owner 的产品判断；下表把每条要裁的东西压到一格，owner 逐�
 
 本票在裁定前不写代码。`cmd/parcel-api/` 是共享接线文件最凶的一处（`endpoints.go`、
 `unwired_orchestration.go`、`main.go`），开工前按 `docs/agents/parallel-sessions.md` 占号。
+
+## Comments
+
+2026-09-03 · MCP-3 裁决（owner 在通道 3 授权 MCP-3 全权自决并派工；原文由 MCP-4 追录）：
+
+> 1. 简报表「建议处置」列 1–9 **逐行同意**，无修改。
+> 2. 端点表**按事实分**三组：交接（含更正口）、揽收（含更正口；单对象登记与多对象执行同组）、移动。
+> 3. 「段已关闭」**单开一格**答给调用方（含义：另立新段），理由是「交接在册、段里没它」与正常入段
+>    在调用方眼里同形。但那一格要动 `enterFulfillmentSegment`（TF application）——**先问 MCP-1**
+>    （票 16 在 TF 隔离树里写），他不点头就把这一格单立一票等 16 合并后再做。
+> 4. Intake 按 ADR-0063 显式未配置形状（`UnconfiguredIntake`，403 + `ACCESS_CHANNEL_NOT_CONFIGURED`）；
+>    结果代数逐条映 ADR-0022，`未决`→ 5xx `NO_ANSWER_FORMED`。
+> 5. 不需新 ADR：接线形状沿 `parcel-api-remaining-endpoint-wiring` 票 02（TF 交付端点），admin 写面
+>    沿 ADR-0085。
+>
+> 拆票（编号 04–07，全部 ready-for-agent，票 03 转 resolved 作索引）：04 控制事实入口（简报 1–3，
+> 端点测试专钉「命令带 Segment/PlannedSegment」，关键路径先做）；05 移动事实端点（简报 4，只收自营
+> 执行方；外部轨迹归 label-channel/16）；06 内部触发两处（简报 5，动 TF application 既有编排，开工前
+> 必问 MCP-1）；07 admin 写面三格（简报 6–8，简报 5 的终止一路也归这里）。简报 9 不立票，阻于
+> ADR-0098 决定四。
+
+同日 · MCP-4 拆票时记下的四格，都是票面照裁决落不下去、要 MCP-3 再答一句的：
+
+- **裁决 4 的落法。** ADR-0022 Decision 的字面是「镜像应用层 `(Result, error)` 签名：返回 `Result`
+  就是形成了答案」。TF 各编排在依赖故障时交回的是 `(Result{outcome: *Undecided}, nil)` 带续办引用，
+  不是 `error`；同包交付端点与 pricing 复核端点的既有测试都把「未决 outcome 不带 error」钉为 200。
+  因此 04–07 按 ADR 字面落：**`error` → 5xx `NO_ANSWER_FORMED`；`未决` outcome → 200 带
+  `continuationReference`**。把速记「未决→5xx」读成 outcome 那一支会与 ADR 和两处先例相抵。
+- **揽收更正口没有编排。** `RegisterOffsitePickupHandler` 只有 `Register`（实测于 `e38e232`），
+  裁决 2 的「揽收含更正口」在应用层无落点。票 04 只挂登记口；要不要立更正编排属 TF application
+  （MCP-1 地盘），请 MCP-3 裁是否另立票。
+- **简报第 7 行的内部触发半边。** 「到达事实 → 建派送任务」是 `RecordMovementFact` 与
+  `OpenDispatchTask` 之间的编排间触发，拆票时没有落进 04–07 任何一张（05 只接端点、07 只接写面）。
+  请裁：并入 06（同为内部触发）还是另立。
+- **裁决 3 与票 06 的两处 TF application 触点**已于同日问 MCP-1（选项 A 现在动 / B 等 16 合并）；
+  未答默认 B，不动。票 06 的开工前置也写的是这一句。

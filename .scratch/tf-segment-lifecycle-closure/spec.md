@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01 resolved（`2b4f6d7` + `722e846`）；02、03 draft，各需一次裁决才能转 ready-for-agent
+Status: in-progress——01 resolved（`2b4f6d7` + `722e846`）；03 resolved 作索引（MCP-3 2026-09-03 裁决，拆出 04–07 全部 ready-for-agent）；02 draft，需一次 `/domain-modeling`
 
 ## 从哪里分出来
 
@@ -22,6 +22,17 @@ Status: in-progress——01 resolved（`2b4f6d7` + `722e846`）；02、03 draft�
 
 无阻塞边：三票互不依赖。**01 与 03 之间有一条先后偏好不是阻塞**——03 若开，把 01 的编排一起
 挂上比事后再补一格便宜。
+
+### 03 裁后拆出的实施票（2026-09-03，MCP-3 裁、MCP-4 拆）
+
+| 票 | 内容 | 开工前置 |
+|---|---|---|
+| [04](issues/04-control-fact-entry-endpoints.md) | 控制事实入口：交接（登记 + 更正）、揽收（登记 + 执行）四个端点、装配、进段带段引用 | 无；关键路径先做 |
+| [05](issues/05-movement-fact-endpoint.md) | 移动事实端点，只收自营执行方 | 无 |
+| [06](issues/06-participation-end-internal-triggers.md) | 结束参与的两处内部触发（交付后、交接后） | MCP-1 对动 TF application 的答复 |
+| [07](issues/07-admin-write-faces-segment-closure-dispatch-task-load-assignment.md) | admin 写面四格：关段、建派送任务、装载分配、明确终止参与 | 无 |
+
+01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
 ## 红线（沿 tf-unwired-seven，不复述其正文）
 
