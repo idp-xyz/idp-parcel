@@ -1,8 +1,8 @@
 # 两条立段入口接进现有两例编排
 
 Category: enhancement
-Status: draft
-Blocked by: 01
+Status: in-progress——MCP-3（owner 于 2026-09-03 激活）
+Blocked by: 01（已 resolved）
 
 ## 要接的两条
 

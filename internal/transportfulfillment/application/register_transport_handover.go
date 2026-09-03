@@ -81,6 +81,12 @@ type RegisterTransportHandoverCommand struct {
 	Basis             string
 	Version           string
 	JudgedAt          time.Time
+	// Segment 指名这次交接把对象送进哪个实际履约段。**缺席时不立段**——实际履约段不等同于
+	// 交接范围、计划段、班次或订舱（CONTEXT），段身份由谁铸出至今没有裁决，这里不拿手边
+	// 任一引用顶替。缺席不是失败：交接登记是控制事实的保全，它自己成立。
+	Segment string
+	// PlannedSegment 是该对象自己关联的计划履约段，可缺席（待路由产品此刻还没有计划段）。
+	PlannedSegment string
 }
 
 // CorrectTransportHandoverCommand 携带更正入口的全部输入：指名被更正的前版，更正走
@@ -131,7 +137,9 @@ func (result RegisterTransportHandoverResult) HandoverHandoffReference() string 
 }
 
 type RegisterTransportHandoverDeps struct {
-	Handovers  ports.TransportHandoverRegistry
+	Handovers ports.TransportHandoverRegistry
+	// Segments 可缺席：没有段登记册时交接照登不误。派生一侧缺席不该让来源保全停摆。
+	Segments   ports.ActualFulfillmentSegmentRegistry
 	Downstream ports.TransportHandoverRegistrationHandoff
 	Clock      ports.Clock
 }
@@ -176,12 +184,51 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		return handler.existingResult(ctx, existing), nil
 	}
 
-	return handler.commit(ctx, ports.TransportHandoverRecord{
+	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Handover:      handover,
 		RecordedAt:    handler.deps.Clock.Now(),
 	}, HandoverRegistered)
+	if err != nil || result.outcome != HandoverRegistered {
+		return result, err
+	}
+	handler.establishSegment(ctx, command, handover)
+	return result, nil
+}
+
+// establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①）。
+//
+// 立段是派生的一侧，**它的失败不得回滚交接登记**：接货时间是责任起点锚，一次段登记故障
+// 抹不掉一条已经发生的物理事实。三裁决里只有`已交接`转出控制，拒收与待确认立不起段也不
+// 报错——那是正当的业务结果，由领域的 TransferOutBasis 把门，这里不重判一遍。
+func (handler *RegisterTransportHandoverHandler) establishSegment(
+	ctx context.Context,
+	command RegisterTransportHandoverCommand,
+	handover domain.TransportHandover,
+) {
+	if handler.deps.Segments == nil || strings.TrimSpace(command.Segment) == "" {
+		return
+	}
+	segment, err := domain.NewFulfillmentSegmentReference(command.Segment)
+	if err != nil {
+		return
+	}
+	var planned domain.PlannedSegmentReference
+	if strings.TrimSpace(command.PlannedSegment) != "" {
+		if planned, err = domain.NewPlannedSegmentReference(command.PlannedSegment); err != nil {
+			return
+		}
+	}
+	established, err := domain.EstablishSegmentWithHandover(segment, handover, planned)
+	if err != nil {
+		return
+	}
+	_, _ = handler.deps.Segments.Save(ctx, ports.FulfillmentSegmentRecord{
+		Key:        ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segment},
+		Segment:    established,
+		RecordedAt: handler.deps.Clock.Now(),
+	})
 }
 
 // Correct 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性
