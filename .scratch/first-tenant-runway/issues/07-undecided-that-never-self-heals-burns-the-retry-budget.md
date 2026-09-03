@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`）**但漏了库面镜像**（0005/0009 两条 CHECK 仍是三格，真库上第四格写不进去，MCP-1 修中），Decision 四/五 未落，**且入账那一层与 Decision 四的「否则不许落地」有一处要人裁**，见文末 Comments 末两条
+Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），库面镜像已对齐（`f8301e4`），入账那一层已按 MCP-3 裁决退回过渡态（见文末 Comment），Decision 四/五 未落——它们是本票剩下的切片
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -154,3 +154,16 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   - 决定四的续办触发：仓内今天没有任何「参数已登记」信封。五个 `*NotConfigured` 对应的登记动作在 party-commercial（授权规则 `PAR-COM-14`、时点策略声明），**发信封那一半在 party-commercial 地盘**，PS 侧只能立消费门与路由条目。
 
   据此实现至少要动：`parcelshipment/{domain,application,ports,adapters/inbox,adapters/postgres}`、`migrations/parcel_shipment`、`cmd/parcel-dispatch`（路由条目），并依赖 party-commercial 侧发信封。已报频道 5 等地盘裁定，裁定前不动代码。
+
+- 2026-09-03 · MCP-3 裁（owner 于通道 3 授权 MCP-3 全权自决），MCP-1 转录并落地。
+
+  **入账那一层，采纳上面「要人裁的口子」的倾向 1**：Decision 四/五落地前，`undecidedDisposition` 对
+  `ResumeByOperatorRegistration` 暂交回哨兵（回滚重投，旧行为），代码与测试写明这是被 ADR-0094 Decision 四
+  「否则不许落地」挡住的过渡态、挡到 D4/D5 那一笔为止。理由：它是 ADR 原话，改动一行有用例钉；倾向 2 要改
+  ADR-0094 措辞才站得住，而 MCP-1 自己量到真租户上那是「更安静的永久停滞」。D4/D5 切片（登记动作发续办信封 +
+  `Decide` 认第四格 + party-commercial 侧发信封）仍归 MCP-1，不动。
+
+  **落地**：`undecided_disposition.go` 把 `ResumeByOperatorRegistration` 从入账那一支拆出单独一格交回
+  `ErrAcceptanceChainUndecided`，注释写明过渡态与解除条件；测试 `TestOperatorRegistrationRollsBackUntilIts
+  ResumeTriggerLands` 单独钉它——**D4/D5 落地时该用例要反过来**，它单列正是为了让那一笔的人一眼看见该动哪一行。
+  ADR-0094 Consequences 里「失败预算只花在真会自愈的依赖上」对这一格因此暂不成立，直到 D4/D5。

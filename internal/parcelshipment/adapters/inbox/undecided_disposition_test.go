@@ -36,19 +36,31 @@ func TestRetriedWaitsRollBack(t *testing.T) {
 
 // TestWaitsThatRetryCannotMoveAreCommitted 钉住入账那一组。
 //
-// 两者的续办方分别是授权复核角色与运营企业的登记动作，**都不是本进程重试推得动的**。按
-// ADR-0086 给`等待人工复核`开的那个形状，它们按「本份投递处理完毕」提交入账：等待态与处理
-// 尝试因此留在库里，而不是随回滚蒸发。
+// 续办方是授权复核角色，**不是本进程重试推得动的**。按 ADR-0086 给`等待人工复核`开的那个形状，
+// 它按「本份投递处理完毕」提交入账：等待态与处理尝试因此留在库里，而不是随回滚蒸发。
 func TestWaitsThatRetryCannotMoveAreCommitted(t *testing.T) {
 	cannotBeRetried := []domain.ResumePath{
 		domain.ResumeByManualReview,
-		domain.ResumeByOperatorRegistration,
 	}
 
 	for _, path := range cannotBeRetried {
 		if err := undecidedDisposition(path); err != nil {
 			t.Errorf("%s 重投推不动，应按本份投递处理完毕入账，实际 err = %v", path.String(), err)
 		}
+	}
+}
+
+// TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands 钉住那个**过渡态**。
+//
+// `等待运营登记`按恢复动作本该与人工复核同组入账，但 ADR-0094 Decision 四写的是「第四格必须与
+// 它的续办触发同笔落地，否则不许落地」——续办信封（D4）与落等待态那一段（D5）今天都没有，此刻
+// 入账只会把 ABANDONED 换成一个更安静的永久停滞。所以在 D4/D5 落地前它暂按旧行为回滚重投
+// （票 first-tenant-runway/07，MCP-3 裁）。**D4/D5 那一笔落地时本用例要反过来**：把它并进
+// 上面那一组。它单独成一条而不是塞进 TestRetriedWaitsRollBack，是为了让那一笔的人一眼看见
+// 该动哪一行。
+func TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands(t *testing.T) {
+	if err := undecidedDisposition(domain.ResumeByOperatorRegistration); !errors.Is(err, ErrAcceptanceChainUndecided) {
+		t.Fatalf("D4/D5 未落地前，等待运营登记应暂按旧行为回滚重投，实际 err = %v", err)
 	}
 }
 

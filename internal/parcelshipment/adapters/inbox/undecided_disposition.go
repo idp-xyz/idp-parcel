@@ -38,10 +38,19 @@ func undecidedDisposition(path domain.ResumePath) error {
 	switch path {
 	case domain.ResumeByInternalRetry, domain.ResumeByCustomerSupplement:
 		return ErrAcceptanceChainUndecided
-	case domain.ResumeByManualReview, domain.ResumeByOperatorRegistration:
-		// 走到这两格时编排已把等待态 Save 进聚合——没保存成时它交回的是保存那一格自己的
+	case domain.ResumeByOperatorRegistration:
+		// **过渡态，不是这一格的定论。** 它该与`等待人工复核`同组入账（上面那段注释的理由
+		// 对它逐字成立），但 ADR-0094 Decision 四要求「第四格必须与它的续办触发同笔落地，
+		// 否则不许落地」，而「参数已登记」的续办信封（Decision 四）与落等待态那一段
+		// （Decision 五）今天都还没有——此刻入账得到的是把 ABANDONED 换成一个更安静的永久
+		// 停滞。所以在 D4/D5 那一笔落地之前，这一格暂按旧行为回滚重投；那一笔落地时改的就
+		// 是这一行，把它并回下面那一支。裁决记在票 first-tenant-runway/07 的 Comments
+		// （MCP-3 裁，owner 授权）。
+		return ErrAcceptanceChainUndecided
+	case domain.ResumeByManualReview:
+		// 走到这一格时编排已把等待态 Save 进聚合——没保存成时它交回的是保存那一格自己的
 		// 原因，其恢复动作是内部重试，因此仍走上面那一支回滚重投（ADR-0086 Decision 一
-		// 那道护栏，ADR-0094 Decision 五把它原样扩用到新格）。
+		// 那道护栏）。
 		return nil
 	default:
 		return fmt.Errorf("%w: %d", ErrUnknownResumePath, path)
