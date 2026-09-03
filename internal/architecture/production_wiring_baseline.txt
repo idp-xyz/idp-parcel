@@ -137,6 +137,14 @@
 # 声明；同笔又新增了四个以 FormLoadAssignment 为前缀的标识符，而门禁比的是精确相等不是子串
 # （上一段已核过匹配码，此处不重复读）。**剪后重数实测 26**，两法同得，父提交 `e6a66ed`。
 #
+# 2026-09-03 随 tf-unwired-seven/06 剪掉 RecordMovementFact（实际移动事实登记编排落地）。
+# 成因三分同上；全仓该名字只有一处声明。**剪后重数实测 25**，两法同得，父提交 `06322cf`。
+#
+# **`transport-fulfillment` 这一组至此清空——本批（tf-unwired-seven）开工时它有 7 条。**
+# 但别把「这一组空了」读成「TF 都接上了」：本门禁只量**导出工厂**，一条编排没接它是量不到的。
+# 实测过一次：票 05 剪掉两行之后 `PerformOffsitePickupHandler` 仍不立段，而名单再不会为它红
+# （那件另立了票 08，已 resolved）。**名单清空只判名单清空。**
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -225,7 +233,11 @@ internal/visibilityexception/domain SubmitEvidence
 # OpenDispatchTask 与 FormLoadAssignment 曾在这里，2026-09-03 随 tf-unwired-seven/05 分两刀剪掉：
 # 生产调用方分别是 application/open_dispatch_task.go 与 application/form_load_assignment.go。
 # 同批的 RecordMovementFact 仍未接，它归票 06。
-internal/transportfulfillment/domain RecordMovementFact
+#
+# RecordMovementFact 曾在这里，2026-09-03 随 tf-unwired-seven/06 剪掉：
+# application/record_movement_fact.go 的 RecordMovementFactHandler.Record 是它的生产调用方。
+# **至此 transport-fulfillment 这一组清空了**——本组开头那句「以下各条均产出带不变式校验的
+# 领域对象，包外零引用」现在没有条目可指，留着它是为了让下一个往本组加条目的人看见这段历史。
 # 实际履约段的重建门曾在这里（ADR-0028，tf-unwired-seven/01），2026-09-02 同票下一层落地后
 # 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
 # 加它那天写的是「适配器落地那天这一条出名单」，当天兑现。
