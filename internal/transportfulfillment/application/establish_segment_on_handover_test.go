@@ -24,6 +24,7 @@ type segmentRegistryDouble struct {
 	// joinErrObject 限定 joinErr 只作用于某一个对象；空则所有加入都失败。多对象到访要
 	// 证「只有没进去的那几个被报出来」，得让同一次到访里一部分成一部分败。
 	joinErrObject string
+	endErr        error
 	saves         int
 	joins         int
 }
@@ -125,11 +126,36 @@ func (double *segmentRegistryDouble) Join(
 	return ports.ObjectJoined, nil
 }
 
+// EndParticipation 只填那一条的离场三列，且只作用于仍在场的那一条——与真库那个窄口同形
+// （`WHERE ended_at IS NULL` 是那个口的全部要害）。**替身也只改一行**：若它按段整批写回，
+// 「整段结果覆盖成员差异」这一类就永远测不出来。
 func (double *segmentRegistryDouble) EndParticipation(
 	_ context.Context,
-	_ ports.FulfillmentSegmentKey,
-	_ domain.FulfillmentParticipation,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
 ) (ports.ParticipationEndOutcome, error) {
+	if double.endErr != nil {
+		return ports.ParticipationEndOutcomeInvalid, double.endErr
+	}
+	rows, found := double.rows[segmentRegistryKey(key)]
+	if !found {
+		return ports.ParticipationEndOutcomeInvalid, nil
+	}
+	for index := range rows.participations {
+		row := &rows.participations[index]
+		if row.Object != participation.Object() {
+			continue
+		}
+		if !row.EndedAt.IsZero() {
+			return ports.ParticipationAlreadyEnded, nil
+		}
+		endKind, endBasis, endedAt, ended := participation.End()
+		if !ended {
+			return ports.ParticipationEndOutcomeInvalid, nil
+		}
+		row.EndKind, row.EndBasis, row.EndedAt = endKind, endBasis, endedAt
+		return ports.ParticipationEnded, nil
+	}
 	return ports.ParticipationEndOutcomeInvalid, nil
 }
 
