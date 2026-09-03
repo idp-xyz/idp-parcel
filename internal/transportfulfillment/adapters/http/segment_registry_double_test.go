@@ -77,6 +77,28 @@ func (double *segmentRegistryDouble) FindByKey(
 	return ports.FulfillmentSegmentRecord{Key: key, Segment: segment, RecordedAt: rows.recordedAt}, true, nil
 }
 
+func (double *segmentRegistryDouble) FindActiveSegments(
+	_ context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
+	if double.findErr != nil {
+		return nil, double.findErr
+	}
+	var keys []ports.FulfillmentSegmentKey
+	for _, rows := range double.rows {
+		if rows.key.TenantID != tenant {
+			continue
+		}
+		for _, participation := range rows.participations {
+			if participation.Object == object && participation.EndedAt.IsZero() {
+				keys = append(keys, rows.key)
+			}
+		}
+	}
+	return keys, nil
+}
+
 func (double *segmentRegistryDouble) Save(
 	_ context.Context,
 	record ports.FulfillmentSegmentRecord,

@@ -92,6 +92,14 @@ type ActualFulfillmentSegmentRegistry interface {
 	FindByKey(ctx context.Context, key FulfillmentSegmentKey) (FulfillmentSegmentRecord, bool, error)
 	Save(ctx context.Context, record FulfillmentSegmentRecord) (SegmentSaveOutcome, error)
 
+	// FindActiveSegments 答「这个对象此刻在哪些段里在场」（票 tf-segment-lifecycle-closure/06 裁决 (a)）。
+	//
+	// 它是唯一一个按对象而不按段问的读口：有效交付与下一次权威交接是关于**对象**的事实，回传方
+	// 不知道段（CONTEXT 生命周期③按对象说），结束参与那一半只能由登记册替它找段。正常答案是零个
+	// 或一个；多于一个是库面不一致（一对象同时只能在一个共同控制范围里），本口如实全交回、不挑一个，
+	// 由编排响亮报错。
+	FindActiveSegments(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) ([]FulfillmentSegmentKey, error)
+
 	// Join 把一个对象的参与关系插进既有段。参与关系整体由调用方从领域取出——本口不拆解它，
 	// 拆解就等于让适配器重新组装一遍领域已经判完的东西。
 	Join(

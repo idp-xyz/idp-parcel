@@ -187,6 +187,49 @@ func (repository *FulfillmentSegments) Join(
 	return ports.ObjectJoined, nil
 }
 
+// FindActiveSegments 按（租户 + 对象）找回该对象仍在场的全部段键。
+//
+// 只看 `ended_at IS NULL`——与 EndParticipation 那个窄口用的是同一个判据，读写两侧对「在场」的
+// 定义因此只有一处。按入场时刻排序只为读回稳定，不进任何判断。
+func (repository *FulfillmentSegments) FindActiveSegments(
+	ctx context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find active segments: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT segment_ref
+		   FROM transport_fulfillment.fulfillment_participation
+		  WHERE tenant_id = $1 AND object_ref = $2 AND ended_at IS NULL
+		  ORDER BY entered_at, segment_ref`,
+		tenant.String(), object.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find active segments: %w", err)
+	}
+	defer rows.Close()
+
+	var keys []ports.FulfillmentSegmentKey
+	for rows.Next() {
+		var segmentRef string
+		if err := rows.Scan(&segmentRef); err != nil {
+			return nil, fmt.Errorf("find active segments: %w", err)
+		}
+		segment, err := domain.NewFulfillmentSegmentReference(segmentRef)
+		if err != nil {
+			return nil, fmt.Errorf("find active segments: %w", err)
+		}
+		keys = append(keys, ports.FulfillmentSegmentKey{TenantID: tenant, Segment: segment})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find active segments: %w", err)
+	}
+	return keys, nil
+}
+
 // EndParticipation 填离场三列（ADR-0097 第二个窄口）。
 //
 // `WHERE ended_at IS NULL` 是这个口的全部要害：**它让"改写一条已离场的参与"表达不出来**。

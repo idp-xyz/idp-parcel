@@ -87,6 +87,30 @@ func (double *segmentRegistryDouble) FindByKey(
 	return ports.FulfillmentSegmentRecord{Key: key, Segment: segment, RecordedAt: rows.recordedAt}, true, nil
 }
 
+// FindActiveSegments 与真库同一个判据：EndedAt 为零值即在场。替身不挑一个、不去重——多于一个时
+// 编排要响亮报错，替身若替它挑了，那一格就永远测不出来。
+func (double *segmentRegistryDouble) FindActiveSegments(
+	_ context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
+	if double.findErr != nil {
+		return nil, double.findErr
+	}
+	var keys []ports.FulfillmentSegmentKey
+	for _, rows := range double.rows {
+		if rows.key.TenantID != tenant {
+			continue
+		}
+		for _, participation := range rows.participations {
+			if participation.Object == object && participation.EndedAt.IsZero() {
+				keys = append(keys, rows.key)
+			}
+		}
+	}
+	return keys, nil
+}
+
 func (double *segmentRegistryDouble) Save(
 	_ context.Context,
 	record ports.FulfillmentSegmentRecord,
