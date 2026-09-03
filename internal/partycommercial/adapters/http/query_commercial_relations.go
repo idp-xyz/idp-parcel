@@ -182,9 +182,11 @@ type supplierAgreementListResponse struct {
 	Agreements []supplierAgreementBody `json:"agreements"`
 }
 
-// supplierAgreementBody 只有版本壳。供应商、采购定价方案与方向在领域对象上,但没有
-// 正文表可读(见 ports.SupplierAgreementCatalogueRow),因此这里没有对应字段——缺的
-// 是登记面,不是转写。
+// supplierAgreementBody 逐字段透出版本壳与正文(0021)。
+//
+// contentRegistered 与 customerContractBody 同款:壳在正文缺是合法状态,正文各键只在它为真
+// 时在场——拿空串兼作「没登记」会让一份供应商标识为空的坏行与一份未登记的正文长得一样。
+// 方向不透出:领域恒为 BUY,库上不成列,转写一个常量等于为同一件事立第二个口径。
 type supplierAgreementBody struct {
 	ObjectID          string `json:"objectId"`
 	Version           string `json:"version"`
@@ -193,6 +195,15 @@ type supplierAgreementBody struct {
 	EffectiveStartsAt string `json:"effectiveStartsAt"`
 	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
 	PublishedAt       string `json:"publishedAt"`
+
+	ContentRegistered          bool   `json:"contentRegistered"`
+	Supplier                   string `json:"supplier,omitempty"`
+	LegalEntity                string `json:"legalEntity,omitempty"`
+	PurchasePlan               string `json:"purchasePlan,omitempty"`
+	AgreementScope             string `json:"agreementScope,omitempty"`
+	AgreementEffectiveStartsAt string `json:"agreementEffectiveStartsAt,omitempty"`
+	AgreementEffectiveEndsAt   string `json:"agreementEffectiveEndsAt,omitempty"`
+	RegisteredAt               string `json:"registeredAt,omitempty"`
 }
 
 func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAgreementBody {
@@ -203,9 +214,21 @@ func supplierAgreementBodyOf(row ports.SupplierAgreementCatalogueRow) supplierAg
 		Status:            row.Status,
 		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
 		PublishedAt:       rfc3339(row.PublishedAt),
+		ContentRegistered: row.HasContent,
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	if row.HasContent {
+		body.Supplier = row.Supplier
+		body.LegalEntity = row.LegalEntity
+		body.PurchasePlan = row.PurchasePlan
+		body.AgreementScope = row.AgreementScope
+		body.AgreementEffectiveStartsAt = rfc3339(row.AgreementEffectiveStartsAt)
+		body.RegisteredAt = rfc3339(row.RegisteredAt)
+		if row.HasAgreementEffectiveEnd {
+			body.AgreementEffectiveEndsAt = rfc3339(row.AgreementEffectiveEndsAt)
+		}
 	}
 	return body
 }

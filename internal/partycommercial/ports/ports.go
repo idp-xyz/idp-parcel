@@ -117,6 +117,41 @@ type CustomerContractContentView interface {
 	) (domain.CustomerContract, bool, error)
 }
 
+// CreditPolicyContentView 取已唯一选出的信用政策版本的正文：为哪个责任法人、权限等级与
+// 费用类型授权多少额度（金额或比例）。
+//
+// 它与 CommercialAuthorityView 分开，分界同 CustomerContractContentView：前者回答「这个
+// 范围有几个适用候选」，本口回答已选出版本的正文。正文不进整册与 ViewRevision——今天没有
+// 解析在信用政策之间选（ResolveCreditPolicy 零生产调用点），让它进闭包是解析语义的改动，
+// 不是登记正文的连带（票 party-commercial-context-gaps/03）。
+//
+// found=false = 正文未登记（无行）。读取失败与坏数据（含额度两列同空/同满、版本壳与正文
+// 类别不符）走 error，不得折成 found=false——那会把一份损坏的正文伪装成从未登记。本口不
+// 提供默认额度：缺政策既不是无限信用也不是零额度，该是哪一种只有拥有商业依据的一方能说。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type CreditPolicyContentView interface {
+	LoadCreditPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		policy domain.CommercialVersion,
+	) (domain.CreditPolicy, bool, error)
+}
+
+// SupplierAgreementContentView 取已唯一选出的供应商商业协议版本的正文：供应商、责任法人、
+// 适用范围与采购定价方案。
+//
+// 分界与三格含义同 CreditPolicyContentView。它交回的协议**不带终止**：终止是生效后的一次
+// 事件，不是发布时的正文，本票只登正文（票 party-commercial-context-gaps/03「两件明确不做」）；
+// 调用方对 SupportsProcurementAt 的答案因此只覆盖生效与区间两条。
+type SupplierAgreementContentView interface {
+	LoadSupplierAgreement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		agreement domain.CommercialVersion,
+	) (domain.SupplierAgreement, bool, error)
+}
+
 // IntakeQualificationView 取已唯一选出的接单规则包版本的收寄资格声明（PAR-COM-16）。
 //
 // 它与 CommercialAuthorityView 分开：前者回答「这个范围有几个适用候选」，本口回答已
@@ -368,6 +403,59 @@ func (outcome SettlementPolicySaveOutcome) String() string {
 	}
 }
 
+// CreditPolicySaveOutcome 是一次信用政策正文登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同一信用政策版本被登记成另一份正文（法人、权限等级、费用
+// 类型、额度或区间任一不同）。两者都不是 error，绝不覆盖。
+//
+// 不与 SettlementPolicySaveOutcome 共用：判据虽同，两册各自演进，共用一个类型会让其中一册
+// 日后多出一格时另一册被迫认它（判据同 ChannelAccountUseSaveOutcome）。
+type CreditPolicySaveOutcome uint8
+
+const (
+	CreditPolicySaveOutcomeInvalid CreditPolicySaveOutcome = iota
+	CreditPolicySaved
+	CreditPolicyAlreadyRegistered
+	CreditPolicyContentConflict
+)
+
+func (outcome CreditPolicySaveOutcome) String() string {
+	switch outcome {
+	case CreditPolicySaved:
+		return "SAVED"
+	case CreditPolicyAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case CreditPolicyContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// SupplierAgreementSaveOutcome 是一次供应商商业协议正文登记在持久化面的落点（ADR-0031
+// 同款）：`已登记`是重放，`内容冲突`是同一协议版本被登记成另一份正文（供应商、法人、
+// 范围、采购定价方案或区间任一不同）。两者都不是 error，绝不覆盖。
+type SupplierAgreementSaveOutcome uint8
+
+const (
+	SupplierAgreementSaveOutcomeInvalid SupplierAgreementSaveOutcome = iota
+	SupplierAgreementSaved
+	SupplierAgreementAlreadyRegistered
+	SupplierAgreementContentConflict
+)
+
+func (outcome SupplierAgreementSaveOutcome) String() string {
+	switch outcome {
+	case SupplierAgreementSaved:
+		return "SAVED"
+	case SupplierAgreementAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case SupplierAgreementContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // DeclarationSaveOutcome 是一份版本化声明正文在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放（同拥有版本同正文），`内容冲突`是同拥有版本携带不同正文——声明随
 // 发布固定，改声明必须发新版本，绝不覆盖也绝不并写；两者都不是 error，事务保持可用。
@@ -417,8 +505,9 @@ type CommercialPublicationView interface {
 // 本口内嵌 CommercialPublicationView，再叠加各通道的具名 Save。写侧调用方依赖本口；
 // 只需读的解析与权威视图依赖内嵌的只读口，不持有任何 Save。
 //
-// 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）以及
-// 价格与结算政策册（ADR-0034/0044/0057）。端口按具名 Save 扩展，不开通用口。
+// 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）、价格与
+// 结算政策册（ADR-0034/0044/0057），以及信用政策册与供应商协议册（票
+// party-commercial-context-gaps/03）。端口按具名 Save 扩展，不开通用口。
 type PublicationRegistry interface {
 	CommercialPublicationView
 	SaveVersion(
@@ -451,6 +540,21 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		policy domain.SettlementPolicy,
 	) (SettlementPolicySaveOutcome, error)
+	// SaveCreditPolicy 登记一份信用政策版本的正文：责任法人、权限等级、费用类型、额度
+	// （金额或比例恰一）与区间。它不代替 SaveVersion。正文不进整册（LoadForScope）：今天
+	// 没有任何解析在信用政策之间选，消费方按已选中的版本经 CreditPolicyContentView 点读
+	// （票 party-commercial-context-gaps/03）。
+	SaveCreditPolicy(
+		ctx context.Context,
+		policy domain.CreditPolicy,
+	) (CreditPolicySaveOutcome, error)
+	// SaveSupplierAgreement 登记一份供应商商业协议版本的正文：供应商、责任法人、适用范围、
+	// 采购定价方案与区间。它不代替 SaveVersion；方向恒为 BUY 由领域类型保证，不入列。
+	// 正文同样不进整册，消费方经 SupplierAgreementContentView 点读。
+	SaveSupplierAgreement(
+		ctx context.Context,
+		agreement domain.SupplierAgreement,
+	) (SupplierAgreementSaveOutcome, error)
 
 	// 以下是六族声明表的具名 Save（syn-wall-door-audit 票 03 的写入半边）。声明正文
 	// 随其拥有版本的发布一并登记，键=拥有版本完整身份；按拥有对象挂、不合并
@@ -945,6 +1049,26 @@ type SettlementPolicyRow struct {
 	RegisteredAt      time.Time
 }
 
+// CreditPolicyRow 是信用政策册上列的一行：责任法人、权限等级、费用类型、额度与区间。
+//
+// 额度两格恰一在场（库上 CHECK 钉住），HasAmount 为真读 LimitMinor、为假读 LimitRatioBasisPoints；
+// 不设「两者皆无」的第三态，读回两空或两满即坏数据，由装载方上抛。用显式布尔而不是拿零值兼作
+// 「不在场」：零额度是合法的商业声明。
+type CreditPolicyRow struct {
+	ObjectID              string
+	VersionLabel          string
+	LegalEntity           string
+	AuthorityLevel        string
+	ChargeType            string
+	HasAmount             bool
+	LimitMinor            int64
+	LimitRatioBasisPoints int64
+	EffectiveStartsAt     time.Time
+	EffectiveEndsAt       time.Time
+	HasEffectiveEnd       bool
+	RegisteredAt          time.Time
+}
+
 // AsOfPolicyRow 是时点锚声明册上列的一行:某接单规则包版本为某类下游判断声明的
 // 时点语义与政策版本。它不存时点值本身——取值由消费方逐项形成,目录照实转写。
 type AsOfPolicyRow struct {
@@ -992,10 +1116,10 @@ type AuthorizationRuleRow struct {
 // CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
 // commercial-policies 页的供数面,策略种类是封闭集,每种一个方法。
 //
-// 六种册子:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
-// 结算政策(0011)、时点锚声明(0005)、授权规则与它的取消授权目录(0013)。CONTEXT
-// 词条里的**信用政策**没有独立正文表(版本壳可入册,正文册未建),如实不列——预留
-// 一个空方法就是替租户拟一种它还没有的册子;正文表落库时按封闭集扩方法,不开通用口。
+// 册子逐一列出:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
+// 结算政策(0011)、时点锚声明(0005)、授权规则与它的取消授权目录(0013)、信用政策正文
+// (0020)。没有正文册的对象类别不预留方法——预留一个空方法就是替租户拟一种它还没有的
+// 册子;正文表落库时按封闭集扩方法,不开通用口。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
@@ -1031,6 +1155,11 @@ type CommercialPolicyCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]AuthorizationRuleRow, error)
+	ListCreditPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CreditPolicyRow, error)
 }
 
 // ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。
@@ -1069,12 +1198,13 @@ type CustomerContractCatalogueRow struct {
 }
 
 // SupplierAgreementCatalogueRow 是供应商协议目录上列的一行:一份已入册的供应商
-// 商业协议版本壳。
+// 商业协议版本壳,连同它登记过的正文(供应商、责任法人、采购定价方案、协议自己的
+// 适用范围与区间,0021)。
 //
-// **只有壳**。领域的 SupplierAgreement 还携供应商、采购定价方案与方向,但那些今天
-// 没有正文表——与 CommercialPolicyCatalogueRead 注释里信用政策那一格同形:版本壳
-// 可入册,正文册未建。如实只列壳,不从别处拼一份看起来完整的行;正文表落库时在本
-// 结构上扩字段,那时才谈得上列它们。
+// 上列对象是版本壳,判据同 CustomerContractCatalogueRow:身份、范围、区间与状态都在
+// 壳上,正文缺席是合法的——壳可先入册,正文随发布登记。HasContent 因此不能省,也不能
+// 拿任一正文字段的零值兼作它;正文各字段只在 HasContent 为真时有意义。方向不在行上:
+// 领域里恒为 BUY、库上不成列,列一个常量等于为同一件事立第二个口径。
 type SupplierAgreementCatalogueRow struct {
 	ObjectID          string
 	VersionLabel      string
@@ -1084,6 +1214,16 @@ type SupplierAgreementCatalogueRow struct {
 	EffectiveEndsAt   time.Time
 	HasEffectiveEnd   bool
 	PublishedAt       time.Time
+
+	HasContent                 bool
+	Supplier                   string
+	LegalEntity                string
+	PurchasePlan               string
+	AgreementScope             string
+	AgreementEffectiveStartsAt time.Time
+	AgreementEffectiveEndsAt   time.Time
+	HasAgreementEffectiveEnd   bool
+	RegisteredAt               time.Time
 }
 
 // CommercialRelationCatalogueRead 是商业关系载体目录的伴生列表读端口(ADR-0077):

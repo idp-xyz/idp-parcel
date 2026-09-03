@@ -827,6 +827,14 @@ func (unwiredCommercialCatalogue) ListAuthorizationRules(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListCreditPolicies(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.CreditPolicyRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 func (unwiredCommercialCatalogue) ListCustomerContracts(
 	context.Context,
 	commercialdomain.TenantID,

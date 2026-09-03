@@ -42,16 +42,18 @@ type approvalDocument struct {
 }
 
 type declarationsDocument struct {
-	AsOfPolicies          []asOfPolicyDocument          `json:"asOfPolicies,omitempty"`
-	AcceptanceContent     *acceptanceContentDocument    `json:"acceptanceContent,omitempty"`
-	PendingRoutingBasis   string                        `json:"pendingRoutingBasis,omitempty"`
-	PreAcceptanceControl  *preAcceptanceControlDocument `json:"preAcceptanceControl,omitempty"`
-	ContractContent       *contractContentDocument      `json:"contractContent,omitempty"`
-	IntakeQualification   *intakeQualificationDocument  `json:"intakeQualification,omitempty"`
-	FinalRules            []finalRuleDocument           `json:"finalRules,omitempty"`
-	CancellationAuthority []cancellationRuleDocument    `json:"cancellationAuthority,omitempty"`
-	RulePackageBody       *rulePackageBodyDocument      `json:"rulePackageBody,omitempty"`
-	SettlementPolicyBody  *settlementPolicyBodyDocument `json:"settlementPolicyBody,omitempty"`
+	AsOfPolicies          []asOfPolicyDocument           `json:"asOfPolicies,omitempty"`
+	AcceptanceContent     *acceptanceContentDocument     `json:"acceptanceContent,omitempty"`
+	PendingRoutingBasis   string                         `json:"pendingRoutingBasis,omitempty"`
+	PreAcceptanceControl  *preAcceptanceControlDocument  `json:"preAcceptanceControl,omitempty"`
+	ContractContent       *contractContentDocument       `json:"contractContent,omitempty"`
+	IntakeQualification   *intakeQualificationDocument   `json:"intakeQualification,omitempty"`
+	FinalRules            []finalRuleDocument            `json:"finalRules,omitempty"`
+	CancellationAuthority []cancellationRuleDocument     `json:"cancellationAuthority,omitempty"`
+	RulePackageBody       *rulePackageBodyDocument       `json:"rulePackageBody,omitempty"`
+	SettlementPolicyBody  *settlementPolicyBodyDocument  `json:"settlementPolicyBody,omitempty"`
+	CreditPolicyBody      *creditPolicyBodyDocument      `json:"creditPolicyBody,omitempty"`
+	SupplierAgreementBody *supplierAgreementBodyDocument `json:"supplierAgreementBody,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -123,6 +125,33 @@ type settlementPolicyBodyDocument struct {
 	Currency          string                  `json:"currency"`
 	EffectiveStartsAt time.Time               `json:"effectiveStartsAt"`
 	EffectiveEndsAt   *time.Time              `json:"effectiveEndsAt,omitempty"`
+}
+
+// creditPolicyBodyDocument 是一份信用政策正文（票 party-commercial-context-gaps/03）。
+//
+// 额度是两个键恰一在场：limitMinor（最小货币单位）或 limitRatioBasisPoints（万分比）。两个都
+// 是指针，因为 `0` 是一句合法的商业声明（授予零额度）而不是「没给」——用普通整数就分不出
+// 这两件事，而它们要人做的事相反。两个都给或都不给在这里就拒收，不交给库上的 CHECK 去以一条
+// 技术错误报出一件领域上早该拒绝的事。
+type creditPolicyBodyDocument struct {
+	LegalEntity           string     `json:"legalEntity"`
+	AuthorityLevel        string     `json:"authorityLevel"`
+	ChargeType            string     `json:"chargeType"`
+	LimitMinor            *int64     `json:"limitMinor,omitempty"`
+	LimitRatioBasisPoints *int64     `json:"limitRatioBasisPoints,omitempty"`
+	EffectiveStartsAt     time.Time  `json:"effectiveStartsAt"`
+	EffectiveEndsAt       *time.Time `json:"effectiveEndsAt,omitempty"`
+}
+
+// supplierAgreementBodyDocument 是一份供应商商业协议正文（同票）。没有方向键：领域把它钉死为
+// BUY，批文里出现 direction 就是未知字段，由 DisallowUnknownFields 拒收。
+type supplierAgreementBodyDocument struct {
+	Supplier          string     `json:"supplier"`
+	LegalEntity       string     `json:"legalEntity"`
+	Scope             string     `json:"scope"`
+	PurchasePlan      string     `json:"purchasePlan"`
+	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
 }
 
 // contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
@@ -385,7 +414,106 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.SettlementPolicyBody = body
 	}
 
+	if document.CreditPolicyBody != nil {
+		body, err := creditPolicyBodyFrom(*document.CreditPolicyBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.CreditPolicyBody = body
+	}
+
+	if document.SupplierAgreementBody != nil {
+		body, err := supplierAgreementBodyFrom(*document.SupplierAgreementBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.SupplierAgreementBody = body
+	}
+
 	return declarations, nil
+}
+
+func creditPolicyBodyFrom(document creditPolicyBodyDocument) (*pcapplication.CreditPolicyBodyDeclaration, error) {
+	legalEntity, err := pcdomain.NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return nil, err
+	}
+	level, err := pcdomain.NewAuthorityLevel(document.AuthorityLevel)
+	if err != nil {
+		return nil, err
+	}
+	chargeType, err := pcdomain.NewChargeTypeReference(document.ChargeType)
+	if err != nil {
+		return nil, err
+	}
+	limit, err := creditLimitFrom(document.LimitMinor, document.LimitRatioBasisPoints)
+	if err != nil {
+		return nil, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return nil, err
+	}
+	return &pcapplication.CreditPolicyBodyDeclaration{
+		LegalEntity: legalEntity,
+		Level:       level,
+		ChargeType:  chargeType,
+		Limit:       limit,
+		Effective:   interval,
+	}, nil
+}
+
+// creditLimitFrom 只认恰一格在场。两格都给时不挑一格读——那正是「一个数加一列标记」那种表形
+// 会静默犯的错，这里把它变成一次响亮的拒收。
+func creditLimitFrom(limitMinor, limitBps *int64) (pcdomain.CreditLimit, error) {
+	switch {
+	case limitMinor != nil && limitBps == nil:
+		return pcdomain.NewCreditAmountLimit(*limitMinor)
+	case limitMinor == nil && limitBps != nil:
+		return pcdomain.NewCreditRatioLimit(*limitBps)
+	default:
+		return pcdomain.CreditLimit{}, fmt.Errorf("信用额度必须恰好给出 limitMinor 或 limitRatioBasisPoints 之一")
+	}
+}
+
+func supplierAgreementBodyFrom(
+	document supplierAgreementBodyDocument,
+) (*pcapplication.SupplierAgreementBodyDeclaration, error) {
+	supplier, err := pcdomain.NewPartyID(document.Supplier)
+	if err != nil {
+		return nil, err
+	}
+	legalEntity, err := pcdomain.NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := pcdomain.NewCommercialScopeReference(document.Scope)
+	if err != nil {
+		return nil, err
+	}
+	purchasePlan, err := pcdomain.NewPricingPlanReference(document.PurchasePlan)
+	if err != nil {
+		return nil, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return nil, err
+	}
+	return &pcapplication.SupplierAgreementBodyDeclaration{
+		Supplier:     supplier,
+		LegalEntity:  legalEntity,
+		Scope:        scope,
+		PurchasePlan: purchasePlan,
+		Effective:    interval,
+	}, nil
 }
 
 func rulePackageBodyFrom(document rulePackageBodyDocument) (*pcapplication.RulePackageBodyDeclaration, error) {

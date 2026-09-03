@@ -85,6 +85,7 @@ type policyReaderDouble struct {
 	settlements []ports.SettlementPolicyRow
 	asOf        []ports.AsOfPolicyRow
 	authz       []ports.AuthorizationRuleRow
+	credits     []ports.CreditPolicyRow
 	calls       map[string]int
 	err         error
 }
@@ -172,6 +173,19 @@ func (double *policyReaderDouble) ListAuthorizationRules(
 		return nil, nil
 	}
 	return double.authz, nil
+}
+
+func (double *policyReaderDouble) ListCreditPolicies(
+	_ context.Context, tenant domain.TenantID, _ int,
+) ([]ports.CreditPolicyRow, error) {
+	double.record("credits")
+	if double.err != nil {
+		return nil, double.err
+	}
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.credits, nil
 }
 
 func decodeBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
@@ -329,7 +343,8 @@ func TestServiceProductsEndpointAnswersReadFailureWith500(t *testing.T) {
 }
 
 // Covers: kind 封闭集是传输形状,先于 Intake——缺席或集外即 400,即便渠道未配置也
-// 不折成 403;信用政策没有独立正文册,如实不在集合内。
+// 不折成 403;客户服务规则版本没有独立正文册(票 party-commercial-context-gaps/05 未落),
+// 如实不在集合内。
 func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
 	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(
 		commercialhttp.UnconfiguredIntake{},
@@ -337,7 +352,7 @@ func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
 	)
 	for _, target := range []string{
 		"/commercial-policies",
-		"/commercial-policies?kind=CREDIT_POLICY",
+		"/commercial-policies?kind=CUSTOMER_SERVICE_RULE",
 	} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
@@ -414,6 +429,9 @@ func TestPoliciesEndpointDispatchesEachKindToItsOwnList(t *testing.T) {
 		}},
 		{"AS_OF_POLICY", "asOf", func(double *policyReaderDouble) {
 			double.asOf = []ports.AsOfPolicyRow{{RulePackageObjectID: "rules-1", JudgmentType: "NETWORK_REACHABILITY"}}
+		}},
+		{"CREDIT_POLICY", "credits", func(double *policyReaderDouble) {
+			double.credits = []ports.CreditPolicyRow{{ObjectID: "credit-1", HasAmount: true, LimitMinor: 500000}}
 		}},
 	}
 	for _, testCase := range cases {
@@ -505,6 +523,57 @@ func TestPoliciesEndpointTranscribesKindSpecificBodies(t *testing.T) {
 	waived := controlRows[1].(map[string]any)
 	if waived["notApplicableBasis"] != "CONTRACT-CLAUSE/NO-CONTROL" {
 		t.Fatalf("不适用依据没透出:%v", waived)
+	}
+}
+
+// Covers: 信用政策行体的额度两格——金额行只长 limitMinor 键、比例行只长 limitRatioBasisPoints
+// 键，另一格的键不在场。零额度是合法声明，所以在场与否不能靠零值判，靠的是行上的 HasAmount。
+func TestPoliciesEndpointTranscribesCreditLimitAsExactlyOneKey(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &policyReaderDouble{
+		tenant: query.Scope.Tenant(),
+		credits: []ports.CreditPolicyRow{
+			{ObjectID: "credit-zero", VersionLabel: "v1", LegalEntity: "legal-1", AuthorityLevel: "level-commercial",
+				ChargeType: "charge-freight", HasAmount: true, LimitMinor: 0,
+				EffectiveStartsAt: catBaseAt, RegisteredAt: catBaseAt},
+			{ObjectID: "credit-ratio", VersionLabel: "v1", LegalEntity: "legal-1", AuthorityLevel: "level-commercial",
+				ChargeType: "charge-freight", LimitRatioBasisPoints: 1500,
+				EffectiveStartsAt: catBaseAt, EffectiveEndsAt: catBaseAt.Add(time.Hour), HasEffectiveEnd: true,
+				RegisteredAt: catBaseAt},
+		},
+	}
+	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: query}, reader)
+
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder,
+		httptest.NewRequest(http.MethodGet, "/commercial-policies?kind=CREDIT_POLICY", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := decodeBody(t, recorder)
+	rows := body["policies"].([]any)
+	if len(rows) != 2 {
+		t.Fatalf("policies = %v", body["policies"])
+	}
+	zero := rows[0].(map[string]any)
+	if minor, has := zero["limitMinor"]; !has || minor != float64(0) {
+		t.Fatalf("零金额额度没有以 limitMinor=0 在场:%v", zero)
+	}
+	if _, has := zero["limitRatioBasisPoints"]; has {
+		t.Fatal("金额行长出了比例键")
+	}
+	if _, has := zero["effectiveEndsAt"]; has {
+		t.Fatal("开放结束的信用政策长出了 effectiveEndsAt 键")
+	}
+	ratio := rows[1].(map[string]any)
+	if bps, has := ratio["limitRatioBasisPoints"]; !has || bps != float64(1500) {
+		t.Fatalf("比例额度没透出:%v", ratio)
+	}
+	if _, has := ratio["limitMinor"]; has {
+		t.Fatal("比例行长出了金额键")
+	}
+	if ratio["effectiveEndsAt"] == nil || ratio["chargeType"] != "charge-freight" {
+		t.Fatalf("其余字段没有照列:%v", ratio)
 	}
 }
 

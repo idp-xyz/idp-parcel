@@ -39,4 +39,10 @@ func TestDeclarationContentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := publications.SaveValidityCorrection(ctx, domain.ValidityCorrection{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记有效性更正应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := publications.SaveCreditPolicy(ctx, domain.CreditPolicy{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记信用政策正文应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := publications.SaveSupplierAgreement(ctx, domain.SupplierAgreement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记供应商协议正文应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

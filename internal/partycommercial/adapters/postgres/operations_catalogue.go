@@ -784,11 +784,11 @@ func cancellationAuthorityRowsFromJSON(raw []byte) ([]ports.CancellationAuthorit
 	return authorities, nil
 }
 
-// ListSupplierAgreements 上列供应商协议版本(壳)。
+// ListSupplierAgreements 上列供应商协议版本壳,正文(0021)左连接。
 //
-// 只有壳可列——供应商、采购定价方案与方向在领域的 SupplierAgreement 上,但没有正文
-// 表可读(与信用政策同形,见 ports.SupplierAgreementCatalogueRow)。这里不左连接任何
-// 东西,不是漏了。
+// 装载方向与 ListCustomerContracts 同派:版本侧驱动,正文左连接——壳可先入册、正文随发布
+// 登记,只列正文行会让未登正文的已发布协议从目录上消失。方向不在行上:领域恒为 BUY、库上
+// 不成列。
 func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -803,12 +803,20 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, scope_ref, status,
-		        effective_starts_at, effective_ends_at, published_at
-		   FROM party_commercial.commercial_version
-		  WHERE tenant_id   = $1
-		    AND object_kind = $2
-		  ORDER BY published_at DESC, object_id, version_label
+		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        content.supplier_party_id, content.legal_entity_ref, content.purchase_plan_ref,
+		        content.agreement_scope_ref, content.effective_starts_at, content.effective_ends_at,
+		        content.registered_at
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.supplier_agreement AS content
+		          ON content.tenant_id     = version.tenant_id
+		         AND content.object_kind   = version.object_kind
+		         AND content.object_id     = version.object_id
+		         AND content.version_label = version.version_label
+		  WHERE version.tenant_id   = $1
+		    AND version.object_kind = $2
+		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
 		tenant.String(),
 		uint8(domain.SupplierAgreementObject),
@@ -824,9 +832,13 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		var row ports.SupplierAgreementCatalogueRow
 		var status int16
 		var endsAt *time.Time
+		var supplier, legalEntity, purchasePlan, agreementScope *string
+		var agreementStartsAt, agreementEndsAt, registeredAt *time.Time
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&supplier, &legalEntity, &purchasePlan, &agreementScope,
+			&agreementStartsAt, &agreementEndsAt, &registeredAt,
 		); err != nil {
 			return nil, fmt.Errorf("list supplier agreements: %w", err)
 		}
@@ -838,6 +850,26 @@ func (catalogue *OperationsCatalogue) ListSupplierAgreements(
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
+		}
+		// supplier_party_id 在正文表上 NOT NULL,它的在场即正文行的在场;其余正文列同为
+		// NOT NULL(除区间终点),到这里非空是表形保证的,缺一列即坏数据。
+		if supplier != nil {
+			if legalEntity == nil || purchasePlan == nil || agreementScope == nil ||
+				agreementStartsAt == nil || registeredAt == nil {
+				return nil, fmt.Errorf("list supplier agreements: %s/%s 的正文行不完整",
+					row.ObjectID, row.VersionLabel)
+			}
+			row.HasContent = true
+			row.Supplier = *supplier
+			row.LegalEntity = *legalEntity
+			row.PurchasePlan = *purchasePlan
+			row.AgreementScope = *agreementScope
+			row.AgreementEffectiveStartsAt = *agreementStartsAt
+			row.RegisteredAt = *registeredAt
+			if agreementEndsAt != nil {
+				row.AgreementEffectiveEndsAt = *agreementEndsAt
+				row.HasAgreementEffectiveEnd = true
+			}
 		}
 		agreementRows = append(agreementRows, row)
 	}

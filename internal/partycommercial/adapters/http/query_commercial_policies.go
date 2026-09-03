@@ -40,6 +40,11 @@ type CommercialPolicyCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.AuthorizationRuleRow, error)
+	ListCreditPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.CreditPolicyRow, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -51,12 +56,12 @@ const outcomeCommercialPoliciesListed = "COMMERCIAL_POLICIES_LISTED"
 
 // 策略种类的封闭集(票 master-data-wiring/05:?kind= 分派)。种类命名**册子**而不是
 // 商业对象类别:接受前财务控制声明挂在客户合同版本下、时点锚声明挂在接单规则包版本
-// 下,拿对象类别当种类名会指错拥有者。CONTEXT 词条里的信用政策没有独立正文册,集合
-// 里如实没有它——预留一格就是替租户拟一种它还没有的册子。
+// 下,拿对象类别当种类名会指错拥有者。没有正文册的对象类别(如客户服务规则版本)不在
+// 集合里——预留一格就是替租户拟一种它还没有的册子。
 //
-// kindAuthorizationRule 的名字**恰好**是一个商业对象类别,不是上面那条的例外:它拦的
-// 是拥有者指错,而这一格上列的对象就是授权规则版本壳自己,取消授权目录挂在它下面——
-// 拥有者与被列者同一,与 kindAcceptanceRulePackage 同形。
+// kindAuthorizationRule 与 kindCreditPolicy 的名字**恰好**是商业对象类别,不是上面那条
+// 的例外:它拦的是拥有者指错,而这两格上列的对象就是那类版本自己(取消授权目录挂在授权
+// 规则下、信用正文挂在信用政策下)——拥有者与被列者同一,与 kindAcceptanceRulePackage 同形。
 const (
 	kindAcceptanceRulePackage = "ACCEPTANCE_RULE_PACKAGE"
 	kindPreAcceptanceControl  = "PRE_ACCEPTANCE_CONTROL"
@@ -64,12 +69,13 @@ const (
 	kindSettlementPolicy      = "SETTLEMENT_POLICY"
 	kindAsOfPolicy            = "AS_OF_POLICY"
 	kindAuthorizationRule     = "AUTHORIZATION_RULE"
+	kindCreditPolicy          = "CREDIT_POLICY"
 )
 
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
 // (GET /commercial-policies?kind=,ADR-0077、票 master-data-wiring/05)。
 //
-// kind 缺席或集外按坏请求拒:五种册子的行形状互不相同,替调用方选一种就是猜。kind
+// kind 缺席或集外按坏请求拒:各册子的行形状互不相同,替调用方选一种就是猜。kind
 // 的在场与取值属传输形状(与方法检查同级,先于 Intake),读它不构成读业务内容——
 // 未配置 Intake 对全部种类同答 403,分支选择不泄露任何东西。
 func NewQueryCommercialPoliciesEndpoint(
@@ -87,7 +93,7 @@ func NewQueryCommercialPoliciesEndpoint(
 		switch kind {
 		case kindAcceptanceRulePackage, kindPreAcceptanceControl,
 			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy,
-			kindAuthorizationRule:
+			kindAuthorizationRule, kindCreditPolicy:
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -113,6 +119,8 @@ func NewQueryCommercialPoliciesEndpoint(
 			serveAsOfPolicies(response, request, reader, tenant, query.Limit)
 		case kindAuthorizationRule:
 			serveAuthorizationRules(response, request, reader, tenant, query.Limit)
+		case kindCreditPolicy:
+			serveCreditPolicies(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -299,8 +307,31 @@ func serveAuthorizationRules(
 	})
 }
 
-// 六种册子各自的响应与行体。字段名不共享一套泛化壳:六种行形状互不相同,共享壳要么
-// 空出五份字段,要么把强类型折成 any——kind 回显加各自成形的 policies 数组,调用方
+func serveCreditPolicies(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader CommercialPolicyCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListCreditPolicies(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]creditPolicyBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, creditPolicyBodyOf(row))
+	}
+	writeJSON(response, http.StatusOK, creditPolicyListResponse{
+		Outcome:  outcomeCommercialPoliciesListed,
+		Kind:     kindCreditPolicy,
+		Policies: bodies,
+	})
+}
+
+// 各册子各自的响应与行体。字段名不共享一套泛化壳:各册行形状互不相同,共享壳要么
+// 空出大半字段,要么把强类型折成 any——kind 回显加各自成形的 policies 数组,调用方
 // 按 kind 择形状。
 
 type rulePackageListResponse struct {
@@ -448,6 +479,51 @@ type asOfPolicyBody struct {
 	SemanticsRef        string `json:"semanticsRef"`
 	PolicyVersion       string `json:"policyVersion"`
 	DeclaredAt          string `json:"declaredAt"`
+}
+
+type creditPolicyListResponse struct {
+	Outcome  string             `json:"outcome"`
+	Kind     string             `json:"kind"`
+	Policies []creditPolicyBody `json:"policies"`
+}
+
+// creditPolicyBody 的额度是两个指针键恰一在场:金额行只长 limitMinor、比例行只长
+// limitRatioBasisPoints。用指针而不是 omitempty 的整数——零额度是合法的商业声明
+// （「授予零信用」），omitempty 会把它抹成「没声明」，而那两件事要人做的事相反。
+type creditPolicyBody struct {
+	ObjectID              string `json:"objectId"`
+	Version               string `json:"version"`
+	LegalEntity           string `json:"legalEntity"`
+	AuthorityLevel        string `json:"authorityLevel"`
+	ChargeType            string `json:"chargeType"`
+	LimitMinor            *int64 `json:"limitMinor,omitempty"`
+	LimitRatioBasisPoints *int64 `json:"limitRatioBasisPoints,omitempty"`
+	EffectiveStartsAt     string `json:"effectiveStartsAt"`
+	EffectiveEndsAt       string `json:"effectiveEndsAt,omitempty"`
+	RegisteredAt          string `json:"registeredAt"`
+}
+
+func creditPolicyBodyOf(row ports.CreditPolicyRow) creditPolicyBody {
+	body := creditPolicyBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		LegalEntity:       row.LegalEntity,
+		AuthorityLevel:    row.AuthorityLevel,
+		ChargeType:        row.ChargeType,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		RegisteredAt:      rfc3339(row.RegisteredAt),
+	}
+	if row.HasAmount {
+		minor := row.LimitMinor
+		body.LimitMinor = &minor
+	} else {
+		bps := row.LimitRatioBasisPoints
+		body.LimitRatioBasisPoints = &bps
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	return body
 }
 
 type authorizationRuleListResponse struct {

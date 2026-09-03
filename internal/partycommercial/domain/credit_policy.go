@@ -22,13 +22,13 @@ func NewChargeTypeReference(value string) (ChargeTypeReference, error) {
 }
 
 // CreditPolicy 是一个信用政策版本的正文：为哪个责任法人、商业权限等级和费用类型，
-// 在哪个有效区间内授权多少信用额度。
+// 在哪个有效区间内授权多少信用额度（金额或比例，见 CreditLimit）。
 type CreditPolicy struct {
 	version     CommercialVersion
 	legalEntity LegalEntityReference
 	level       AuthorityLevel
 	chargeType  ChargeTypeReference
-	limitMinor  int64
+	limit       CreditLimit
 	effective   EffectiveInterval
 }
 
@@ -37,13 +37,13 @@ func NewCreditPolicy(
 	legalEntity LegalEntityReference,
 	level AuthorityLevel,
 	chargeType ChargeTypeReference,
-	limitMinor int64,
+	limit CreditLimit,
 	effective EffectiveInterval,
 ) (CreditPolicy, error) {
 	if version.kind != CreditPolicyObject ||
 		version.status != CommercialVersionEffective ||
 		!legalEntity.valid() || !level.valid() || !chargeType.valid() ||
-		limitMinor < 0 || !effective.valid() {
+		!limit.valid() || !effective.valid() {
 		return CreditPolicy{}, ErrInvalidCreditPolicy
 	}
 	return CreditPolicy{
@@ -51,7 +51,7 @@ func NewCreditPolicy(
 		legalEntity: legalEntity,
 		level:       level,
 		chargeType:  chargeType,
-		limitMinor:  limitMinor,
+		limit:       limit,
 		effective:   effective,
 	}, nil
 }
@@ -60,8 +60,24 @@ func (policy CreditPolicy) Version() CommercialVersion {
 	return policy.version
 }
 
-func (policy CreditPolicy) AuthorizedLimitMinor() int64 {
-	return policy.limitMinor
+func (policy CreditPolicy) LegalEntity() LegalEntityReference {
+	return policy.legalEntity
+}
+
+func (policy CreditPolicy) Level() AuthorityLevel {
+	return policy.level
+}
+
+func (policy CreditPolicy) ChargeType() ChargeTypeReference {
+	return policy.chargeType
+}
+
+func (policy CreditPolicy) AuthorizedLimit() CreditLimit {
+	return policy.limit
+}
+
+func (policy CreditPolicy) Effective() EffectiveInterval {
+	return policy.effective
 }
 
 func (policy CreditPolicy) covers(query CreditPolicyQuery) bool {
@@ -98,7 +114,7 @@ func NewCreditPolicyQuery(
 // 读起来完全一样，`无适用依据` 会静默变成「授予零信用」。
 type CreditBasis struct {
 	policyVersion CommercialVersion
-	limitMinor    int64
+	limit         CreditLimit
 	applicable    bool
 }
 
@@ -106,8 +122,10 @@ func (basis CreditBasis) PolicyVersion() CommercialVersion {
 	return basis.policyVersion
 }
 
-func (basis CreditBasis) AuthorizedLimitMinor() int64 {
-	return basis.limitMinor
+// AuthorizedLimit 交回政策授权的额度。无适用依据时它是零值 CreditLimit——两个访问器都答
+// 「不在场」，与 applicable 为假一致；调用方不该从一个零值里读出任何数。
+func (basis CreditBasis) AuthorizedLimit() CreditLimit {
+	return basis.limit
 }
 
 func (basis CreditBasis) Applicable() bool {
@@ -131,7 +149,7 @@ func ResolveCreditPolicy(policies []CreditPolicy, query CreditPolicyQuery) (Cred
 	case 1:
 		return CreditBasis{
 			policyVersion: matches[0].version,
-			limitMinor:    matches[0].limitMinor,
+			limit:         matches[0].limit,
 			applicable:    true,
 		}, nil
 	default:

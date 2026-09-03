@@ -10,6 +10,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
+func creditAmount(t *testing.T, minor int64) domain.CreditLimit {
+	t.Helper()
+	limit, err := domain.NewCreditAmountLimit(minor)
+	if err != nil {
+		t.Fatalf("new credit amount limit: %v", err)
+	}
+	return limit
+}
+
 func creditPolicy(t *testing.T, objectID, chargeType string, limitMinor int64) domain.CreditPolicy {
 	t.Helper()
 	live, err := registerable(t, domain.CreditPolicyObject, objectID, "v1", "sha256:"+objectID).
@@ -22,7 +31,7 @@ func creditPolicy(t *testing.T, objectID, chargeType string, limitMinor int64) d
 		commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
 		commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
 		commercialValue(t, domain.NewChargeTypeReference, chargeType),
-		limitMinor,
+		creditAmount(t, limitMinor),
 		mustInterval(t),
 	)
 	if err != nil {
@@ -54,8 +63,8 @@ func TestCreditPolicyYieldsABasisNotAnEffect(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if basis.AuthorizedLimitMinor() != 500000 {
-		t.Fatalf("limit = %d, want 500000", basis.AuthorizedLimitMinor())
+	if minor, ok := basis.AuthorizedLimit().AmountMinor(); !ok || minor != 500000 {
+		t.Fatalf("limit = (%d, %v), want 500000", minor, ok)
 	}
 	if basis.PolicyVersion().ObjectID().String() != "credit-1" {
 		t.Fatal("the basis does not name the policy version it came from")
@@ -123,7 +132,7 @@ func TestAbsentOrOverlappingCreditPoliciesAreNeitherUnlimitedNorZero(t *testing.
 		if !errors.Is(err, domain.ErrNoApplicableCreditPolicy) {
 			t.Fatalf("error = %v, want ErrNoApplicableCreditPolicy", err)
 		}
-		if basis.AuthorizedLimitMinor() != 0 || basis.Applicable() {
+		if _, granted := basis.AuthorizedLimit().AmountMinor(); granted || basis.Applicable() {
 			t.Fatal("an absent policy produced a usable basis; zero must not read as a granted limit")
 		}
 	})
@@ -139,25 +148,47 @@ func TestAbsentOrOverlappingCreditPoliciesAreNeitherUnlimitedNorZero(t *testing.
 	})
 }
 
-// Covers: CONTEXT — 授信额度是政策携带的取值，负额度无意义；内容挂在当前可用的信用政策
-// 版本上。
-func TestCreditPolicyNeedsAUsableVersionAndANonNegativeLimit(t *testing.T) {
+// Covers: CONTEXT — 授信额度是政策携带的取值，没有额度的政策不是政策；内容挂在当前可用的
+// 信用政策版本上。
+func TestCreditPolicyNeedsAUsableVersionAndADeclaredLimit(t *testing.T) {
 	live, err := registerable(t, domain.CreditPolicyObject, "credit-x", "v1", "sha256:x").
 		TakeEffect(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("take effect: %v", err)
 	}
 
-	t.Run("refuses a negative limit", func(t *testing.T) {
+	// 零值 CreditLimit 是「忘了填」而不是零额度——零额度要经 NewCreditAmountLimit(0) 显式说出。
+	t.Run("refuses an undeclared limit", func(t *testing.T) {
 		if _, err := domain.NewCreditPolicy(
 			live,
 			commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
 			commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
 			commercialValue(t, domain.NewChargeTypeReference, "charge-freight"),
-			-1,
+			domain.CreditLimit{},
 			mustInterval(t),
 		); !errors.Is(err, domain.ErrInvalidCreditPolicy) {
 			t.Fatalf("error = %v, want ErrInvalidCreditPolicy", err)
+		}
+	})
+
+	t.Run("carries a ratio limit as readily as an amount", func(t *testing.T) {
+		ratio, err := domain.NewCreditRatioLimit(2500)
+		if err != nil {
+			t.Fatalf("new ratio limit: %v", err)
+		}
+		policy, err := domain.NewCreditPolicy(
+			live,
+			commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
+			commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
+			commercialValue(t, domain.NewChargeTypeReference, "charge-freight"),
+			ratio,
+			mustInterval(t),
+		)
+		if err != nil {
+			t.Fatalf("new credit policy: %v", err)
+		}
+		if bps, ok := policy.AuthorizedLimit().RatioBasisPoints(); !ok || bps != 2500 {
+			t.Fatalf("ratio = (%d, %v), want 2500", bps, ok)
 		}
 	})
 
@@ -167,7 +198,7 @@ func TestCreditPolicyNeedsAUsableVersionAndANonNegativeLimit(t *testing.T) {
 			commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
 			commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
 			commercialValue(t, domain.NewChargeTypeReference, "charge-freight"),
-			500000,
+			creditAmount(t, 500000),
 			mustInterval(t),
 		); !errors.Is(err, domain.ErrInvalidCreditPolicy) {
 			t.Fatalf("error = %v, want ErrInvalidCreditPolicy", err)

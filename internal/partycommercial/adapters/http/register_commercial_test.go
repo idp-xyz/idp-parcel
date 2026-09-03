@@ -957,6 +957,18 @@ func (stub stubPublicationRegistry) SaveSettlementPolicy(
 	return ports.SettlementPolicySaveOutcomeInvalid, errors.New("本片不用结算政策册")
 }
 
+func (stub stubPublicationRegistry) SaveCreditPolicy(
+	context.Context, domain.CreditPolicy,
+) (ports.CreditPolicySaveOutcome, error) {
+	return ports.CreditPolicySaveOutcomeInvalid, errors.New("本片不用信用政策册")
+}
+
+func (stub stubPublicationRegistry) SaveSupplierAgreement(
+	context.Context, domain.SupplierAgreement,
+) (ports.SupplierAgreementSaveOutcome, error) {
+	return ports.SupplierAgreementSaveOutcomeInvalid, errors.New("本片不用供应商协议册")
+}
+
 func (stub stubPublicationRegistry) SaveAsOfPolicies(
 	context.Context, domain.AsOfDeclaration,
 ) (ports.DeclarationSaveOutcome, error) {

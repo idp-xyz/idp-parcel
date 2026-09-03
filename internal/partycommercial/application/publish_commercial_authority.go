@@ -70,6 +70,8 @@ type CommercialDeclarations struct {
 	CancellationAuthority []domain.CancellationAuthorityDeclaration
 	RulePackageBody       *RulePackageBodyDeclaration
 	SettlementPolicyBody  *SettlementPolicyBodyDeclaration
+	CreditPolicyBody      *CreditPolicyBodyDeclaration
+	SupplierAgreementBody *SupplierAgreementBodyDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -82,7 +84,9 @@ func (declarations CommercialDeclarations) empty() bool {
 		len(declarations.FinalRules) == 0 &&
 		len(declarations.CancellationAuthority) == 0 &&
 		declarations.RulePackageBody == nil &&
-		declarations.SettlementPolicyBody == nil
+		declarations.SettlementPolicyBody == nil &&
+		declarations.CreditPolicyBody == nil &&
+		declarations.SupplierAgreementBody == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -130,6 +134,30 @@ type SettlementPolicyBodyDeclaration struct {
 	Applicability domain.SettlementApplicability
 }
 
+// CreditPolicyBodyDeclaration 是信用政策版本的正文输入（票 party-commercial-context-gaps/03）：
+// 责任法人、权限等级、费用类型、额度与区间。
+//
+// Limit 直接收领域的 CreditLimit 而不是摊成「金额、比例、哪一格」三个字段：金额或比例恰一在场
+// 那条判据只能有一处，摊平之后应用层就得自己判「两格齐不齐」，而判错的形状恰恰是那种没有任何
+// 东西会报的——两格都填时挑一格读、都空时读成零额度。
+type CreditPolicyBodyDeclaration struct {
+	LegalEntity domain.LegalEntityReference
+	Level       domain.AuthorityLevel
+	ChargeType  domain.ChargeTypeReference
+	Limit       domain.CreditLimit
+	Effective   domain.EffectiveInterval
+}
+
+// SupplierAgreementBodyDeclaration 是供应商商业协议版本的正文输入（同票）：供应商、责任法人、
+// 协议自己的适用范围、采购定价方案与区间。方向不在输入上——领域把它钉死为 BUY。
+type SupplierAgreementBodyDeclaration struct {
+	Supplier     domain.PartyID
+	LegalEntity  domain.LegalEntityReference
+	Scope        domain.CommercialScopeReference
+	PurchasePlan domain.PricingPlanReference
+	Effective    domain.EffectiveInterval
+}
+
 // DeclarationChannel 点名一次发布里的一个声明通道，供报告与进程口展示落点。
 type DeclarationChannel uint8
 
@@ -145,6 +173,8 @@ const (
 	CancellationAuthorityChannel
 	RulePackageBodyChannel
 	SettlementPolicyBodyChannel
+	CreditPolicyBodyChannel
+	SupplierAgreementBodyChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -169,6 +199,10 @@ func (channel DeclarationChannel) String() string {
 		return "RULE_PACKAGE_BODY"
 	case SettlementPolicyBodyChannel:
 		return "SETTLEMENT_POLICY_BODY"
+	case CreditPolicyBodyChannel:
+		return "CREDIT_POLICY_BODY"
+	case SupplierAgreementBodyChannel:
+		return "SUPPLIER_AGREEMENT_BODY"
 	default:
 		return ""
 	}
@@ -494,7 +528,80 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.CreditPolicyBody != nil {
+		body := declarations.CreditPolicyBody
+		policy, err := domain.NewCreditPolicy(
+			version, body.LegalEntity, body.Level, body.ChargeType, body.Limit, body.Effective)
+		if err != nil {
+			return nil, fmt.Errorf("credit policy body: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: CreditPolicyBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SaveCreditPolicy(ctx, policy)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfCreditPolicy(outcome)
+			},
+		})
+	}
+
+	if declarations.SupplierAgreementBody != nil {
+		body := declarations.SupplierAgreementBody
+		agreement, err := domain.NewSupplierAgreement(
+			version, body.Supplier, body.LegalEntity, body.Scope, body.PurchasePlan, body.Effective)
+		if err != nil {
+			return nil, fmt.Errorf("supplier agreement body: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: SupplierAgreementBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SaveSupplierAgreement(ctx, agreement)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfSupplierAgreement(outcome)
+			},
+		})
+	}
+
 	return writes, nil
+}
+
+// declarationOutcomeOfCreditPolicy 与 declarationOutcomeOfSupplierAgreement 把两册各自的落点
+// 折成声明通道的落点，判据与 declarationOutcomeOfSettlementPolicy 同一条：折的是「落在哪一格」，
+// 逐值折不做数值转换，任一族多出一格时这里响亮失败。
+func declarationOutcomeOfCreditPolicy(
+	outcome ports.CreditPolicySaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.CreditPolicySaved:
+		return ports.DeclarationSaved, nil
+	case ports.CreditPolicyAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.CreditPolicyContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("credit policy body: 集合外的信用政策落点 %q", outcome)
+	}
+}
+
+func declarationOutcomeOfSupplierAgreement(
+	outcome ports.SupplierAgreementSaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.SupplierAgreementSaved:
+		return ports.DeclarationSaved, nil
+	case ports.SupplierAgreementAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.SupplierAgreementContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("supplier agreement body: 集合外的供应商协议落点 %q", outcome)
+	}
 }
 
 // declarationOutcomeOfSettlementPolicy 把结算政策册的落点折成声明通道的落点。

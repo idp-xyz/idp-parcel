@@ -308,6 +308,128 @@ func settlementBatchJSON(body string) string {
 		"declarations": {"settlementPolicyBody": {` + body + `}}}]}`
 }
 
+// Covers: 信用政策正文（票 party-commercial-context-gaps/03）：额度在批文里是 limitMinor 与
+// limitRatioBasisPoints 两个键恰一在场——两个都给、一个不给、负值，都在触库前拒收；零额度是
+// 合法声明，`"limitMinor": 0` 必须翻成一份零金额额度而不是「没给」。
+func TestACreditPolicyBodyTranslatesExactlyOneLimitForm(t *testing.T) {
+	t.Run("amount", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(creditBatchJSON(`"legalEntity": "legal-1",
+			"authorityLevel": "level-commercial", "chargeType": "charge-freight",
+			"limitMinor": 500000, "effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
+		if err != nil {
+			t.Fatalf("翻译信用政策批：%v", err)
+		}
+		body := commands[0].Declarations.CreditPolicyBody
+		if body == nil {
+			t.Fatal("信用政策正文没有翻过去")
+		}
+		if minor, ok := body.Limit.AmountMinor(); !ok || minor != 500000 {
+			t.Fatalf("额度 = (%d, %v), want 500000", minor, ok)
+		}
+		if body.LegalEntity.String() != "legal-1" || body.Level.String() != "level-commercial" ||
+			body.ChargeType.String() != "charge-freight" ||
+			!body.Effective.Contains(mustTime(t, "2026-02-01T00:00:00Z")) {
+			t.Fatalf("正文变形：%+v", body)
+		}
+	})
+
+	t.Run("zero amount is a declared limit", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(creditBatchJSON(`"legalEntity": "legal-1",
+			"authorityLevel": "level-commercial", "chargeType": "charge-freight",
+			"limitMinor": 0, "effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
+		if err != nil {
+			t.Fatalf("零金额额度被拒收：%v", err)
+		}
+		if minor, ok := commands[0].Declarations.CreditPolicyBody.Limit.AmountMinor(); !ok || minor != 0 {
+			t.Fatalf("零金额额度 = (%d, %v)，被读成了「没给」", minor, ok)
+		}
+	})
+
+	t.Run("ratio", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(creditBatchJSON(`"legalEntity": "legal-1",
+			"authorityLevel": "level-commercial", "chargeType": "charge-freight",
+			"limitRatioBasisPoints": 1500, "effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
+		if err != nil {
+			t.Fatalf("翻译信用政策批：%v", err)
+		}
+		if bps, ok := commands[0].Declarations.CreditPolicyBody.Limit.RatioBasisPoints(); !ok || bps != 1500 {
+			t.Fatalf("额度 = (%d, %v), want 1500 bps", bps, ok)
+		}
+	})
+
+	refusals := map[string]string{
+		"两格都给": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"limitMinor": 100, "limitRatioBasisPoints": 100, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"两格都不给": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"负金额": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"limitMinor": -1, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"缺费用类型": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a",
+			"limitMinor": 1, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
+func creditBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "CREDIT_POLICY", "objectId": "credit-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"creditPolicyBody": {` + body + `}}}]}`
+}
+
+// Covers: 供应商商业协议正文（同票）：供应商、责任法人、协议范围、采购定价方案与区间逐项过
+// 构造门；批文里没有方向键——领域把它钉死为 BUY，给了就是未知字段、拒收。
+func TestASupplierAgreementBodyTranslatesWithoutADirectionKey(t *testing.T) {
+	commands, err := publishCommandsFromJSON([]byte(supplierBatchJSON(`"supplier": "supplier-1",
+		"legalEntity": "legal-1", "scope": "scope-procurement", "purchasePlan": "plan-buy-1",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z", "effectiveEndsAt": "2026-12-31T00:00:00Z"`)))
+	if err != nil {
+		t.Fatalf("翻译供应商协议批：%v", err)
+	}
+	body := commands[0].Declarations.SupplierAgreementBody
+	if body == nil {
+		t.Fatal("供应商协议正文没有翻过去")
+	}
+	if body.Supplier.String() != "supplier-1" || body.LegalEntity.String() != "legal-1" ||
+		body.Scope.String() != "scope-procurement" || body.PurchasePlan.String() != "plan-buy-1" {
+		t.Fatalf("正文变形：%+v", body)
+	}
+	if body.Effective.Contains(mustTime(t, "2027-01-01T00:00:00Z")) {
+		t.Fatal("区间终点没有翻过去")
+	}
+
+	refusals := map[string]string{
+		"带方向键": supplierBatchJSON(`"supplier": "s", "legalEntity": "l", "scope": "sc",
+			"purchasePlan": "p", "direction": "BUY", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"缺采购定价方案": supplierBatchJSON(`"supplier": "s", "legalEntity": "l", "scope": "sc",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
+func supplierBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "SUPPLIER_AGREEMENT", "objectId": "agreement-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"supplierAgreementBody": {` + body + `}}}]}`
+}
+
 func mustObjectID(t *testing.T, raw string) pcdomain.CommercialObjectID {
 	t.Helper()
 	value, err := pcdomain.NewCommercialObjectID(raw)

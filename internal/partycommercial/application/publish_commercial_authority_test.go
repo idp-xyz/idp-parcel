@@ -39,8 +39,44 @@ type publicationRegistryDouble struct {
 
 	// settlementOutcome 单列一格而不是复用 declarationOutcome：结算政策册交回的是另一族
 	// 落点，本替身要能演出「政策册答了它自己那族的某一格」，用例才看得见应用层把它折成了
-	// 哪一格。
+	// 哪一格。信用政策册与供应商协议册同理各占一格。
 	settlementOutcome ports.SettlementPolicySaveOutcome
+
+	savedCredit   []domain.CreditPolicy
+	creditOutcome ports.CreditPolicySaveOutcome
+
+	savedSupplier   []domain.SupplierAgreement
+	supplierOutcome ports.SupplierAgreementSaveOutcome
+}
+
+func (double *publicationRegistryDouble) SaveCreditPolicy(
+	_ context.Context,
+	policy domain.CreditPolicy,
+) (ports.CreditPolicySaveOutcome, error) {
+	if double.declarationErr != nil {
+		return ports.CreditPolicySaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedCredit = append(double.savedCredit, policy)
+	double.declarationLog = append(double.declarationLog, "credit-policy-body")
+	if double.creditOutcome == ports.CreditPolicySaveOutcomeInvalid {
+		return ports.CreditPolicySaved, nil
+	}
+	return double.creditOutcome, nil
+}
+
+func (double *publicationRegistryDouble) SaveSupplierAgreement(
+	_ context.Context,
+	agreement domain.SupplierAgreement,
+) (ports.SupplierAgreementSaveOutcome, error) {
+	if double.declarationErr != nil {
+		return ports.SupplierAgreementSaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedSupplier = append(double.savedSupplier, agreement)
+	double.declarationLog = append(double.declarationLog, "supplier-agreement-body")
+	if double.supplierOutcome == ports.SupplierAgreementSaveOutcomeInvalid {
+		return ports.SupplierAgreementSaved, nil
+	}
+	return double.supplierOutcome, nil
 }
 
 func (double *publicationRegistryDouble) declarationAnswer(name string) (ports.DeclarationSaveOutcome, error) {
@@ -817,6 +853,151 @@ func TestASettlementPolicyConflictLandsInTheReportNotInAnError(t *testing.T) {
 	reports := result.Declarations()
 	if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
 		t.Fatalf("报告 = %#v, want SETTLEMENT_POLICY_BODY=CONTENT_CONFLICT 一条", reports)
+	}
+}
+
+func creditPolicyBody(t *testing.T, limit domain.CreditLimit) *application.CreditPolicyBodyDeclaration {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(pubStartsAt, time.Time{})
+	if err != nil {
+		t.Fatalf("适用区间：%v", err)
+	}
+	return &application.CreditPolicyBodyDeclaration{
+		LegalEntity: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Level:       pcValue(t, domain.NewAuthorityLevel, "level-commercial"),
+		ChargeType:  pcValue(t, domain.NewChargeTypeReference, "charge-freight"),
+		Limit:       limit,
+		Effective:   interval,
+	}
+}
+
+// Covers: 票 party-commercial-context-gaps/03——信用政策正文随它自己那一版发布登记。在这一路
+// 接上之前，信用政策版本壳能入册、能被选中，选中之后额度无处可取。额度原样交给持久化面：
+// 金额或比例哪一格在场由 CreditLimit 自己说，发布通道不代填、不换格。
+func TestACreditPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	ratio, err := domain.NewCreditRatioLimit(1500)
+	if err != nil {
+		t.Fatalf("比例额度：%v", err)
+	}
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+		Approval:     publishApproval(t, "credit-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{CreditPolicyBody: creditPolicyBody(t, ratio)},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+	if len(registry.savedCredit) != 1 {
+		t.Fatalf("信用政策册收到 %d 份, want 1", len(registry.savedCredit))
+	}
+	saved := registry.savedCredit[0]
+	if saved.Version().Status() != domain.CommercialVersionEffective {
+		t.Fatalf("拥有版本 = %q, want EFFECTIVE", saved.Version().Status())
+	}
+	if bps, ok := saved.AuthorizedLimit().RatioBasisPoints(); !ok || bps != 1500 {
+		t.Fatalf("额度 = (%d, %v)，比例格没有原样到达持久化面", bps, ok)
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.CreditPolicyBodyChannel ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want CREDIT_POLICY_BODY=SAVED 一条", reports)
+	}
+}
+
+// Covers: 信用政策正文的拥有对象类别由 domain.NewCreditPolicy 把守——挂在别的版本上整项拒绝
+// 且一行不写；信用政策册的`内容冲突`折进报告而不是 error（ADR-0031）。
+func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
+	amount, err := domain.NewCreditAmountLimit(500000)
+	if err != nil {
+		t.Fatalf("金额额度：%v", err)
+	}
+
+	t.Run("another object kind is rejected before any write", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+			Approval:     publishApproval(t, "settlement-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CreditPolicyBody: creditPolicyBody(t, amount)},
+		}); !errors.Is(err, domain.ErrInvalidCreditPolicy) {
+			t.Fatalf("err = %v, want ErrInvalidCreditPolicy", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedCredit) != 0 {
+			t.Fatal("挂错拥有对象的信用政策正文写了库")
+		}
+	})
+
+	t.Run("a content conflict lands in the report", func(t *testing.T) {
+		registry := &publicationRegistryDouble{creditOutcome: ports.CreditPolicyContentConflict}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+			Approval:     publishApproval(t, "credit-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CreditPolicyBody: creditPolicyBody(t, amount)},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——内容冲突不是 error", err)
+		}
+		reports := result.Declarations()
+		if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want CREDIT_POLICY_BODY=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}
+
+// Covers: 票 party-commercial-context-gaps/03——供应商商业协议正文随它自己那一版发布登记。
+// CONTEXT：协议「在批准生效后，才能用于新的采购决定和供应商预期成本计算」；正文不落库，
+// settlement-accounting 问采购定价方案时什么也拿不到。
+func TestASupplierAgreementBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	interval, err := domain.NewEffectiveInterval(pubStartsAt, time.Time{})
+	if err != nil {
+		t.Fatalf("适用区间：%v", err)
+	}
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.SupplierAgreementObject, "agreement-1", "v1"),
+		Approval:     publishApproval(t, "agreement-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			SupplierAgreementBody: &application.SupplierAgreementBodyDeclaration{
+				Supplier:     pcValue(t, domain.NewPartyID, "supplier-1"),
+				LegalEntity:  pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+				Scope:        pcValue(t, domain.NewCommercialScopeReference, "scope-procurement"),
+				PurchasePlan: pcValue(t, domain.NewPricingPlanReference, "plan-buy-1"),
+				Effective:    interval,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if len(registry.savedSupplier) != 1 {
+		t.Fatalf("供应商协议册收到 %d 份, want 1", len(registry.savedSupplier))
+	}
+	saved := registry.savedSupplier[0]
+	if saved.PurchasePricingPlan().String() != "plan-buy-1" || saved.Supplier().String() != "supplier-1" {
+		t.Fatalf("正文被改动了：%#v", saved)
+	}
+	if saved.Direction() != domain.BuyDirection {
+		t.Fatalf("方向 = %q，供应商协议只能是采购", saved.Direction())
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.SupplierAgreementBodyChannel ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want SUPPLIER_AGREEMENT_BODY=SAVED 一条", reports)
 	}
 }
 

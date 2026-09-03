@@ -56,8 +56,16 @@ func (agreement SupplierAgreement) Supplier() PartyID {
 	return agreement.supplier
 }
 
+func (agreement SupplierAgreement) LegalEntity() LegalEntityReference {
+	return agreement.legalEntity
+}
+
 func (agreement SupplierAgreement) Scope() CommercialScopeReference {
 	return agreement.scope
+}
+
+func (agreement SupplierAgreement) Effective() EffectiveInterval {
+	return agreement.effective
 }
 
 // PurchasePricingPlan 是本协议绑定的采购方向定价方案。采购、销售和法人间结算价格
