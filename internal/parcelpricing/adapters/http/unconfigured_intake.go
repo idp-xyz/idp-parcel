@@ -59,6 +59,10 @@ func (UnconfiguredIntake) IntakeReferenceSeriesRegistration(context.Context, *ht
 
 // IntakeReferenceSeriesReview 不读请求，判据同上。**这一口尤其不能有「开发用」版本**：
 // 复核责任方是四眼门的一半，从请求内容里铸一个出来就等于把那道门拆了。
+//
+// 它等的与上面两个登记口不同：那两个等渠道接入契约，这一个等 ADR-0100 的操作者信封接线
+// ——载荷形状不在等待之列，ADR-0101 决定一已把运营操作者面的它划归产品。展开在
+// ReferenceSeriesReviewIntake 的自注。
 func (UnconfiguredIntake) IntakeReferenceSeriesReview(context.Context, *http.Request) (application.ReviewReferenceSeriesCommand, error) {
 	return application.ReviewReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
 }
