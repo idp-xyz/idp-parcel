@@ -115,14 +115,20 @@ func (register ContinuedAttemptRegister) decisionFrom(
 
 	switch spec.Kind {
 	case ControlledClosureDecision:
-		// 截断边界是关闭独有的必备项；关闭不指向此前关闭——那是重开才有的关系。
-		if !spec.CutoffBoundary.valid() || spec.RelatedPriorClosure.valid() {
+		// 截断边界与关闭责任来源是关闭独有的必备项；关闭不指向此前关闭——那是重开才有的关系。
+		if !spec.CutoffBoundary.valid() ||
+			!spec.ClosureResponsibilitySource.valid() ||
+			spec.RelatedPriorClosure.valid() {
 			return ContinuedAttemptDecision{}, ErrInvalidContinuedAttemptDecision
 		}
 		decision.cutoffBoundary = spec.CutoffBoundary
+		decision.closureResponsibilitySource = spec.ClosureResponsibilitySource
 	case ReopeningDecision:
-		// 重开不带截断边界：它「只允许未来形成新交易」，不裁决任何并发尝试的合法性。
-		if !spec.RelatedPriorClosure.valid() || spec.CutoffBoundary.valid() {
+		// 重开不带截断边界，也不带关闭责任来源：它「只允许未来形成新交易」，不裁决任何并发尝试的
+		// 合法性；要核的那份来源在它所关联的关闭上。
+		if !spec.RelatedPriorClosure.valid() ||
+			spec.CutoffBoundary.valid() ||
+			spec.ClosureResponsibilitySource.valid() {
 			return ContinuedAttemptDecision{}, ErrInvalidContinuedAttemptDecision
 		}
 		if currentFinalPresent {

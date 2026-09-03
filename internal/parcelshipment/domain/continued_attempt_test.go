@@ -35,6 +35,8 @@ func closureSpec(t *testing.T, id string, effectiveAt time.Time) domain.Continue
 		Reason:            mustValue(t, domain.NewContinuedAttemptReasonReference, "CHANNEL_SUSPENDED"),
 		EffectiveAt:       effectiveAt,
 		CutoffBoundary:    mustValue(t, domain.NewAuthoritativeCutoffBoundary, "PS-CUTOFF-1"),
+		ClosureResponsibilitySource: mustValue(t,
+			domain.NewClosureResponsibilitySourceReference, "PC-CHANNEL-ACCOUNT-SUSPENSION-1"),
 	}
 }
 
@@ -181,6 +183,34 @@ func TestTheCutoffBoundaryBelongsToClosureAlone(t *testing.T) {
 	withBoundary.CutoffBoundary = mustValue(t, domain.NewAuthoritativeCutoffBoundary, "PS-CUTOFF-2")
 	if _, err := closed.Append(withBoundary, false); !errors.Is(err, domain.ErrInvalidContinuedAttemptDecision) {
 		t.Errorf("重开带截断边界应被拒，实得 %v", err)
+	}
+}
+
+// 关闭责任来源同截断边界：关闭独有的必备项（CONTEXT「受控关闭决定必须固定……关闭责任来源……」）。
+// 重开要核的是「原关闭责任来源的限制已解除」，那个来源在它所关联的关闭上，重开自己再记一份
+// 就是第二个来源。
+func TestTheClosureResponsibilitySourceBelongsToClosureAlone(t *testing.T) {
+	t.Parallel()
+
+	withoutSource := closureSpec(t, "decision-1", continuedAttemptAt)
+	withoutSource.ClosureResponsibilitySource = domain.ClosureResponsibilitySourceReference{}
+	if _, err := emptyRegister(t).Append(withoutSource, false); !errors.Is(err, domain.ErrInvalidContinuedAttemptDecision) {
+		t.Errorf("关闭没有关闭责任来源应被拒，实得 %v", err)
+	}
+
+	closed, err := emptyRegister(t).Append(closureSpec(t, "decision-1", continuedAttemptAt), false)
+	if err != nil {
+		t.Fatalf("追加关闭：%v", err)
+	}
+	if got := closed.Decisions()[0].ClosureResponsibilitySource().String(); got != "PC-CHANNEL-ACCOUNT-SUSPENSION-1" {
+		t.Errorf("关闭应原样带着关闭责任来源，实得 %q", got)
+	}
+
+	withSource := reopeningSpec(t, "decision-2", "decision-1", continuedAttemptAt.Add(time.Hour))
+	withSource.ClosureResponsibilitySource = mustValue(t,
+		domain.NewClosureResponsibilitySourceReference, "PC-CHANNEL-ACCOUNT-SUSPENSION-1")
+	if _, err := closed.Append(withSource, false); !errors.Is(err, domain.ErrInvalidContinuedAttemptDecision) {
+		t.Errorf("重开带关闭责任来源应被拒，实得 %v", err)
 	}
 }
 

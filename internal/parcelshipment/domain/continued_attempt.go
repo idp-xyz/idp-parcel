@@ -133,29 +133,34 @@ type ContinuedAttemptDecisionSpec struct {
 	// Requester 只有关闭这一格允许缺席（CONTEXT 原文「请求方（如有）」）——运营企业自行发起
 	// 的关闭没有外部请求方。它与 Decider 分立是硬要求：「登录操作人可以作为操作证据，但不能
 	// 替代实际决定方和授权角色」。
-	Requester           RequesterReference
-	Decider             DeciderReference
-	AuthorityRole       ContinuedAttemptAuthorityRoleReference
-	AuthoritySnapshot   ContinuedAttemptAuthoritySnapshot
-	Reason              ContinuedAttemptReasonReference
-	EffectiveAt         time.Time
-	CutoffBoundary      AuthoritativeCutoffBoundary
-	RelatedPriorClosure ContinuedAttemptDecisionID
+	Requester         RequesterReference
+	Decider           DeciderReference
+	AuthorityRole     ContinuedAttemptAuthorityRoleReference
+	AuthoritySnapshot ContinuedAttemptAuthoritySnapshot
+	Reason            ContinuedAttemptReasonReference
+	EffectiveAt       time.Time
+	CutoffBoundary    AuthoritativeCutoffBoundary
+	// ClosureResponsibilitySource 与 CutoffBoundary 同属关闭独有的必备项（CONTEXT「受控关闭决定
+	// 必须固定……关闭责任来源……」）。重开不带它：重开要核的是「原关闭责任来源的限制已解除」，
+	// 那个来源在它所关联的关闭上，重开自己再记一份就是第二个来源。
+	ClosureResponsibilitySource ClosureResponsibilitySourceReference
+	RelatedPriorClosure         ContinuedAttemptDecisionID
 }
 
 // ContinuedAttemptDecision 是登记册上的一条决定。它只增不改：更正走版本链，不覆盖
 // （CONTEXT「追加式、版本化」）。类型上没有任何改写方法。
 type ContinuedAttemptDecision struct {
-	id                  ContinuedAttemptDecisionID
-	kind                ContinuedAttemptDecisionKind
-	requester           RequesterReference
-	decider             DeciderReference
-	authorityRole       ContinuedAttemptAuthorityRoleReference
-	authoritySnapshot   ContinuedAttemptAuthoritySnapshot
-	reason              ContinuedAttemptReasonReference
-	effectiveAt         time.Time
-	cutoffBoundary      AuthoritativeCutoffBoundary
-	relatedPriorClosure ContinuedAttemptDecisionID
+	id                          ContinuedAttemptDecisionID
+	kind                        ContinuedAttemptDecisionKind
+	requester                   RequesterReference
+	decider                     DeciderReference
+	authorityRole               ContinuedAttemptAuthorityRoleReference
+	authoritySnapshot           ContinuedAttemptAuthoritySnapshot
+	reason                      ContinuedAttemptReasonReference
+	effectiveAt                 time.Time
+	cutoffBoundary              AuthoritativeCutoffBoundary
+	closureResponsibilitySource ClosureResponsibilitySourceReference
+	relatedPriorClosure         ContinuedAttemptDecisionID
 }
 
 func (decision ContinuedAttemptDecision) ID() ContinuedAttemptDecisionID {
@@ -194,6 +199,11 @@ func (decision ContinuedAttemptDecision) EffectiveAt() time.Time {
 // 而不裁决任何并发尝试的合法性。
 func (decision ContinuedAttemptDecision) CutoffBoundary() AuthoritativeCutoffBoundary {
 	return decision.cutoffBoundary
+}
+
+// ClosureResponsibilitySource 只有关闭这一格有值：重开时要核的那份限制解除，指的就是它。
+func (decision ContinuedAttemptDecision) ClosureResponsibilitySource() ClosureResponsibilitySourceReference {
+	return decision.closureResponsibilitySource
 }
 
 // RelatedPriorClosure 只有重开这一格有值：CONTEXT 要求重开「关联此前关闭」。
