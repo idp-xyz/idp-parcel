@@ -288,6 +288,17 @@ var veHandoverUndecidedSentinels = []error{
 	vetf.ErrHandoverProjectionUndecided,
 }
 
+// veExternalTrackingUndecidedSentinels 只给 VE 外部承运轨迹投影这一路（label-channel/16）。
+//
+// 不在名单里：ErrExternalTrackingRecordInconsistent——它含「待判断版本到了这里」那一格，那是
+// TF 侧交接口的缺陷不是等谁（ADR-0102 决定三：待判断的不提供给 VE）；以及
+// ErrExternalTrackingUntranslatableAnswer、ErrExternalTrackingProjectionHandoffPending、
+// veconsume.ErrUnexpectedProjectionOutcome。
+var veExternalTrackingUndecidedSentinels = []error{
+	vetf.ErrExternalTrackingNotVisible,
+	vetf.ErrExternalTrackingProjectionUndecided,
+}
+
 // veFinalOutcomeUndecidedSentinels 只给 VE 终局投影这一路。与上面四份分开列：本路
 // 的未决面只有终局登记可见性与派生未决两样，合用别路名单会把不存在的格子也宣布成
 // 「等依赖」。
@@ -613,6 +624,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: handover projection undecided translation: %w", err)
 	}
 
+	veExternalTracking, err := deriveExternalTrackingConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veExternalTrackingRouted, err := dispatch.WithUndecidedSentinels(
+		veExternalTracking, veExternalTrackingUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: external tracking projection undecided translation: %w", err)
+	}
+
 	veFinalOutcome, err := deriveFinalOutcomeConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -673,20 +694,21 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
-			psinbox.ShipmentRequestSubmittedEventType:    routedChain,
-			psinbox.ManualReviewCompletedEventType:       routedResume,
-			nrinbox.AcceptedDecisionEventType:            acceptanceFan,
-			nrinbox.AdoptedNetworkIntakeEventType:        routedIntakes,
-			psinbox.NodeIntakeFormedEventType:            nodeIntakeFan,
-			psinbox.OffsitePickupRegisteredEventType:     pickupFan,
-			psinbox.EffectiveDeliveryRegisteredEventType: deliveryFan,
-			veinbox.TransportHandoverRegisteredEventType: veHandoverRouted,
-			veinbox.FinalOutcomeFormedEventType:          veFinalOutcomeRouted,
-			veinbox.InitialRouteFormedEventType:          veInitialRouteRouted,
-			veinbox.ExceptionJourneyRecordedEventType:    veExceptionJourneyRouted,
-			veinbox.CustomsCaseEstablishedEventType:      veCustomsCaseRouted,
-			veinbox.DeclarationSubmissionFormedEventType: veDeclarationSubmissionRouted,
-			veinbox.TrackingProjectionDerivedEventType:   veCustomerViewRouted,
+			psinbox.ShipmentRequestSubmittedEventType:      routedChain,
+			psinbox.ManualReviewCompletedEventType:         routedResume,
+			nrinbox.AcceptedDecisionEventType:              acceptanceFan,
+			nrinbox.AdoptedNetworkIntakeEventType:          routedIntakes,
+			psinbox.NodeIntakeFormedEventType:              nodeIntakeFan,
+			psinbox.OffsitePickupRegisteredEventType:       pickupFan,
+			psinbox.EffectiveDeliveryRegisteredEventType:   deliveryFan,
+			veinbox.TransportHandoverRegisteredEventType:   veHandoverRouted,
+			veinbox.ExternalCarrierTrackingJudgedEventType: veExternalTrackingRouted,
+			veinbox.FinalOutcomeFormedEventType:            veFinalOutcomeRouted,
+			veinbox.InitialRouteFormedEventType:            veInitialRouteRouted,
+			veinbox.ExceptionJourneyRecordedEventType:      veExceptionJourneyRouted,
+			veinbox.CustomsCaseEstablishedEventType:        veCustomsCaseRouted,
+			veinbox.DeclarationSubmissionFormedEventType:   veDeclarationSubmissionRouted,
+			veinbox.TrackingProjectionDerivedEventType:     veCustomerViewRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -1249,6 +1271,28 @@ func deriveDeliveryConsumer(
 	consumer, err := veinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: derive delivery consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// deriveExternalTrackingConsumer 接 TF 外部承运轨迹事实（有效时间已判断的版本）→ VE 投影。
+// 本路不接 PS：外部轨迹是来源事实，不是有效交付，也不构成终局（TF CONTEXT「外部承运轨迹事实」）。
+func deriveExternalTrackingConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	facts, err := tfpostgres.NewExternalTrackingFacts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection external tracking facts: %w", err)
+	}
+	processing, err := vetf.NewDeriveOnExternalCarrierTrackingAdapter(facts, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on external carrier tracking: %w", err)
+	}
+	consumer, err := veinbox.NewExternalTrackingConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive external tracking consumer: %w", err)
 	}
 	return consumer, nil
 }

@@ -242,6 +242,24 @@ func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *t
 	}
 }
 
+// Covers: 路由表的外部承运轨迹一条（label-channel/16）——TF 判断过有效时间的外部承运轨迹事实
+// 只投 VE 投影，不 FanOut 给 PS：它是来源事实，不是有效交付，不构成终局。手法同前几条：毒丸
+// 载荷（缺 tenantId/fact/version 三维之一）让消费门显式拒收入账并交回 nil，因此这一条会被定稿。
+// 漏挂或挂错的话这里撞的是无订阅者。
+func TestAJudgedExternalCarrierTrackingReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "external-tracking-1", veinbox.ExternalCarrierTrackingJudgedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把外部承运轨迹事实投给 VE",
+			published, recordedFailureCode(t, db, "external-tracking-1"))
+	}
+}
+
 // Covers: 路由表第八条——NR 包裹级初始路由判断只投 VE 投影，不 FanOut（应消费方还有
 // NO/TF，但两侧消费者今天不存在，登记接不住的比不登记更糟）。手法同前几条：毒丸载荷
 // （缺六维之一）让消费门显式拒收入账并交回 nil，因此这一条会被定稿。漏挂或挂错的话
