@@ -1,7 +1,7 @@
 # 12 候选装配：产品—渠道映射到候选集合之间没有适配器
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-02 认领并已落五片，当时漏改本行；2026-09-03 补记。未完，缺项见 Comments 末条）
+Status: resolved——装配器接上择优端口（`cb86027`），完成判据满足；生产可达（组合根与调用入口）不在本票范围，另立票承接，见 Comments 末条（2026-09-03，MCP-6）
 Blocked by: 01（已 resolved：择优取乙落 `parcel-shipment`，装配随之落该上下文的 `adapters/partycommercial/`）
 
 ## 缺口
@@ -109,3 +109,42 @@ Consequences，渠道候选来自**产品—渠道映射与渠道约束**，那�
 
   **映射未登记与「登记了但没有候选」分成两格**同理：都交回零个候选，压成一格就答不出续办
   是去登记映射，还是改约束/换产品版本。票 `14` 的落选留痕要答的正是这一类。
+
+- 2026-09-03 MCP-6：**收尾重核（取证于 `966c4ce`..`c25d145`）。** 上条之后还有两笔在本票名下
+  落地而没回写票面：`21b0ef2`（择优编排 `application/select_channel_candidate.go`、
+  `ports/channel_selection.go`、`domain/channel_selection.go`，剪掉比较器那条棘轮基线）与
+  `4474ece`（成本取数适配器 `adapters/parcelpricing/cost_source.go`，剪掉批量评价口那条）。
+  上条「尚缺接上生产调用路径」写在它们之前，已过期——但只过期了一半。
+
+  **接线那笔留了一道缝，且三道门禁都量不到它。** 编排经 `ports.ChannelCandidateAssembly`
+  传的是本上下文的 `ChannelSelectionQuery`（PS 侧引用），而装配器只收自己那套 PC 侧
+  `ChannelCandidateQuery`——`*ChannelCandidateAssembler` **不实现**该端口，真装配器交不进
+  `SelectChannelCandidateDeps.Assembly`。编排测试用替身一路绿，装配器测试用自己的查询一路绿，
+  棘轮只量领域工厂的包外引用。成本取数适配器那侧有 `var _ psports.ChannelCandidateCostSource`
+  的编译期断言，装配器这侧没有——缝恰好在没有断言的那一半。这是「不同的绿长着同一张脸」
+  的又一面：两个都绿的包，合起来接不上。
+
+  `cb86027` 补上：装配器改收 `ports.ChannelSelectionQuery`，`providerKeysOf` 在本适配器内把
+  租户 / 商业范围 / 映射引用译成 `pcdomain` 的键——翻译只许发生在这一层（应用层不得导入
+  party-commercial）；译不过去的查询在问任何协作方之前即停，单列 `ErrUntranslatableQuery`
+  （与 `ErrUntranslatableAnswer` 方向相反）；`ChannelConstraintSource` 随之改收择优侧查询——
+  约束是本上下文对自己客户的事实，本就该按本上下文的引用去问。`ChannelCandidateQuery` 删除，
+  全仓只有本包与其测试引用过它，不拆别处调用点。
+
+  测试两片。一：编译期断言 + 两个提供方读口**记录收到的键**——只断言实现了接口不够，译错
+  一个字段照样满足接口。二：译不过去先拒、三个协作方零调用——这片**没经过红**（green 时
+  顺序已带上），照本票前面的办法用一次变异（先问约束再翻译）坐实测试当场红在「约束 1 次」，
+  随后还原。
+
+  **验证（detached worktree 检出 `cb86027`）**：`gofmt -l` 空、`go build ./...` 与
+  `go vet ./...` 退 0、`go test -count=1 ./...` 退 0；**未设 DSN，PG 用例 SKIP**（同刻
+  `TestFreezeScopesAreInvisibleToEachOther -v` 为 SKIP）。本笔不涉 `.sql` 与 postgres 适配器，
+  真库对它无可证之物，故不把「未接真库」算作缺口。
+
+  **生产可达仍差两步，且都不在本票「做什么」里。** (1) 组合根：`cmd/parcel-api` 里整条面单
+  渠道链——票 06 的编排、票 07 的出向端口、本票的编排与两个适配器——都没有装配点，取证
+  于 `c25d145`（`cmd/` 下 `OperateLabel`、`NewChannelCandidate`、`outbound` 零命中）。
+  (2) 调用入口：择优是运营端点还是面单交易编排的前置步，是产品流程决定；票 06 的编排「只在
+  提交之后留缝」没把择优放进去，票 `14` 的落选留痕又会改择优结果的形状。这两步应另立一票承接
+  整条链的组合根与入口，不在本票硬造一个端点。本票完成判据（装配有适配器与测试、能从映射产出
+  候选、四项门禁绿）至此满足，转 resolved；差的那两步如实记在这里，不算进本票。
