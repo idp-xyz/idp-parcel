@@ -63,8 +63,16 @@
 | 段 | 输入 | 生产 handler | 真库 repo | handoff | 消费方 | 期望业务结果 | 当前缺口 |
 |---|---|---|---|---|---|---|---|
 | 初始路由 | 接受决定信封 | `CreateInitialRouteHandler`（**cmd 已构造**） | `InitialRoutes`、`RouteHandoffLogs`、`RouteIdentities` | `network-routing.initial-route.formed` | 应有 NO/TF/VE，**未开** | 形成初始路由计划 | **缺实例参数**（适用性映射、网络定义）；即便登记定义也 **缺解析层**（ADR-0053）。形成后立刻 **缺消费者** → `no_subscriber` 堵分区 |
-| 收寄复核 | 网络收寄采用信封 | `ReassessRouteHandler`（cmd 已构造） | `RouteReassessments` 等 | 无 | — | 失效落库；自动改路 `AutoReroute=nil` 不做 | 上游 `network-intake.recorded` 要有人发。今天发它的是 PS `AdoptNetworkIntakeHandler`，cmd 未构造 |
+| 收寄复核 | 网络收寄采用信封 | `ReassessRouteHandler`（cmd 已构造） | `RouteReassessments` 等 | 无 | — | 失效落库；自动改路仍不做，但原因已换（见表下注） | 上游 `network-intake.recorded` 要有人发。今天发它的是 PS `AdoptNetworkIntakeHandler`，cmd 未构造 |
 | 可达性判断 | 同步端口 | `AssessParcelReachabilityHandler`（cmd 未构造） | 可达性仓储已有 | `network-routing.reachability-judgment.formed` | PS 续办 **缺消费适配器**（事件侧）；同步读口已有 | 三值判断参与接受 | 事件 vs 同步分工未裁。首个 SYN **走同步口**，不新开事件消费者 |
+
+**注（2026-09-03，MCP-3）：上表「自动改路 `AutoReroute=nil` 不做」那句已改。** 缝不再是 `nil`
+——出处、SHA 与「本表其余行未逐行重核」那句都在 §4 开头那段，此处不复述，只补它没说的一格。
+
+**改路照样不发生，但换掉的是哪一半要点清**：`ReassessRouteHandler` 上有两道结果完全相同的关口
+——缝是 `nil`，与事实目录答 `configured=false`。两者都让失效照常落库、改路整段不做、连建议都不
+形成，**在任何可观察的地方逐字相同**。今天走的是后一道。照旧写「因为是 `nil`」会让下一个人去接
+一根已经接上的线。
 
 ### 2.3 收寄（node-operations / transport-fulfillment → PS）
 
@@ -158,6 +166,15 @@
 
 每票可独立验绿：有自己的 `go test` 范围与失败语义。标 S 的夹具不得进生产组合根。
 
+**本表「验绿」栏描述的是写表当时的代码形态，不是现行事实。** `CONS-INTAKE-REASSESS` 那格原写
+「`AutoReroute` 仍 nil」，失效于 `ed77025`（审计票
+[syn-wall-door-audit/05](../syn-wall-door-audit/issues/05-auto-reroute-facts-catalog-unimplemented.md)），
+已于 2026-09-03 更正，理由见 §2.2 表下注。**其余各行未逐行重核**——本句只报这一处已证失效，
+不担保别处仍成立（核于 `8cf6162`）。它会无声变旧是因为改 `cmd/parcel-dispatch/assemble.go` 的人
+不会路过这份文档，而 `go build` 与 `go test` 都不读 `.md`，这一类结构上没有信号。照本表排期前请
+逐行重取证（[auto-reroute-demo-reachability/01](../auto-reroute-demo-reachability/issues/01-no-runtime-path-reaches-the-reassess-auto-reroute-branch.md)
+已把这件事列为认领第一步）。
+
 | ID | 内容 | 依赖 | 可并行 | 验绿 | 共享文件风险 |
 |---|---|---|---|---|---|
 | **SYN-V0** | 进程测试：提交（S 归属）→ 形成决定（S 依据/判断）→ 真 Outbox → 真 Dispatcher → NR 消费门 → 诚实未决 | 无新生产代码亦可先写测试（红）；绿需要测试装配，可能抽 `wireDispatcher` 为可测函数 | 与反查口可并行 | `tests/synthetic` 真 PG，断言 §3.1 | `cmd/parcel-dispatch/assemble.go` 若抽取签名 |
@@ -168,7 +185,7 @@
 | **NR-RESOLVER** | `PAR-NET-14` 解析层机制（无真实线路实例） | 领域/ADR 已有 0053 | 与 V0 并行但更大 | 有定义时交出九族或显式未配置，不再 `Unresolvable` | NR ports、migrations |
 | **CONS-INTAKE** | `node-intake.formed` → PS 采认消费者 + 路由表第三条 | PS-PARCEL-INDEX | 互斥改 assemble.go | Dispatcher 投递后 `IntakeAdoptions` 有行并可能发 `network-intake.recorded` | **`cmd/parcel-dispatch/assemble.go`**、NR/PS inbox 包 |
 | **CONS-DELIVERY** | `effective-delivery.registered` → `FormParcelFinal` | PS-PARCEL-INDEX | 与 CONS-INTAKE 抢 assemble.go | 终局落库 + `final-outcome.formed` 入队 | 同上 |
-| **CONS-INTAKE-REASSESS** | 采用信封已有消费者；接 CONS-INTAKE 后跑第二跳 | CONS-INTAKE | — | 复核行落库；`AutoReroute` 仍 nil | 低 |
+| **CONS-INTAKE-REASSESS** | 采用信封已有消费者；接 CONS-INTAKE 后跑第二跳 | CONS-INTAKE | — | 复核行落库；改路仍不做，但缝已非 nil（见 §2.2 表下注） | 低 |
 | **CONS-ROUTE-NO** | `initial-route.formed` → NO | **先要 NO 的「接收路由指令」UC** | 不可抢跑 | — | assemble.go、NO CONTEXT |
 | **CONS-EVAL-SA** | `evaluation.recorded` → SA | SYN 价卡索引 + EvaluatePricing cmd 测试装配 | 晚 | 评价入 SA | assemble.go、SA ports |
 | **HTTP-SYN-INTAKE** | 测试专用 Intake，**永远不进** `assembleBusinessEndpoints` | V0 已绿 | 晚 | 仅 syntest HTTP 或明确 `testing` build tag | **`cmd/parcel-api/endpoints.go` 严禁**默认渠道 |
