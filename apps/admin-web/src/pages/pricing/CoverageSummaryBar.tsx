@@ -5,7 +5,22 @@ import {
   type ReferenceSeriesCoverageListResponseBody,
 } from './api';
 import { coverageNote, coverageRowOf, type CoverageRow } from './coverage-rows';
+import { sameSeries, type SeriesKey } from './catalogue-filter';
 import { labelOf, seriesKindLabels } from './presentation';
+
+interface CoverageSummaryBarProps {
+  /**
+   * 「一键跳到该序列的复核动作」的落法：点一格，页面把下方目录只看到这条序列（标识 + 种类），
+   * 行上的「复核」按钮就收到眼前；再点同一格取消。传 `null` 即取消。
+   *
+   * 为什么不是直接开复核面板：复核面板吃的是（标识 + 版本 + 登记责任方），而覆盖响应一条序列
+   * 一行、没有责任方，「今天没有在用版本」那一格更没有可指的版本——摘要条拿不出一个能直接开
+   * 面板的目标，硬拼一个就是替人挑了要复核哪一版。收窄目录让人自己挑，是不造数据的那条路。
+   */
+  onSelectSeries?: (key: SeriesKey | null) => void;
+  /** 当前只看的那条；由页面持有，摘要条只据它高亮与切换。 */
+  focusedSeries?: SeriesKey | null;
+}
 
 /**
  * 参考序列页顶部的覆盖地平线摘要条（票 pricing-reference-series-operations/05 第 3 项）。
@@ -23,7 +38,10 @@ import { labelOf, seriesKindLabels } from './presentation';
  *    看起来永久的权威答案。同一条判据下目录页的状态列被裁为不含「在用」——那一页没有正当
  *    的时刻源，本端点有，代价就是把它显出来。
  */
-export function CoverageSummaryBar() {
+export function CoverageSummaryBar({
+  onSelectSeries,
+  focusedSeries = null,
+}: CoverageSummaryBarProps = {}) {
   const [answer, setAnswer] =
     useState<ApiResult<ReferenceSeriesCoverageListResponseBody> | null>(null);
 
@@ -66,15 +84,38 @@ export function CoverageSummaryBar() {
       <div className="flex items-baseline justify-between">
         <span className="text-xs text-idpxyz-textMuted">
           覆盖地平线 —— 一条序列一格
+          {onSelectSeries ? (focusedSeries ? '；下方目录只看所选' : '；点一格只看它') : null}
+          {onSelectSeries && focusedSeries ? (
+            <button
+              type="button"
+              className="ml-2 underline"
+              onClick={() => onSelectSeries(null)}
+            >
+              取消只看
+            </button>
+          ) : null}
         </span>
         <span className="font-mono text-[11px] text-idpxyz-textMuted">
           在用判定基准时刻 asOf {asOf}
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        {rows.map((row) => (
-          <CoverageChip key={`${row.seriesId}/${row.kind}`} row={row} />
-        ))}
+        {rows.map((row) => {
+          const focused = focusedSeries !== null && sameSeries(row, focusedSeries);
+          return (
+            <CoverageChip
+              key={`${row.seriesId}/${row.kind}`}
+              row={row}
+              focused={focused}
+              // 再点已选中的那格即取消，与「取消只看」同义；不选中的格点了就换成它。
+              onSelect={
+                onSelectSeries
+                  ? () => onSelectSeries(focused ? null : { seriesId: row.seriesId, kind: row.kind })
+                  : undefined
+              }
+            />
+          );
+        })}
       </div>
       <p className="mt-2 text-[11px] text-idpxyz-textMuted">
         告警阈值未配置（实例半边）：本条只把数摆出来，不判紧急、不标色——「剩余低于几天算
@@ -84,9 +125,17 @@ export function CoverageSummaryBar() {
   );
 }
 
-function CoverageChip({ row }: { row: CoverageRow }) {
-  return (
-    <div className="rounded border border-idpxyz-border px-3 py-2 text-xs">
+function CoverageChip({
+  row,
+  focused,
+  onSelect,
+}: {
+  row: CoverageRow;
+  focused: boolean;
+  onSelect?: () => void;
+}) {
+  const body = (
+    <>
       <div className="font-mono text-[12px] text-idpxyz-accent">{row.seriesId}</div>
       <div className="text-[11px] text-idpxyz-textMuted">
         {labelOf(seriesKindLabels, row.kind)} · 已登记 {row.registeredVersionCount} 版
@@ -110,6 +159,23 @@ function CoverageChip({ row }: { row: CoverageRow }) {
           ? `最近复核 ${row.lastReview.at}（${row.lastReview.decision}）`
           : '尚无复核记录'}
       </div>
-    </div>
+    </>
+  );
+
+  // 高亮只标「选中」，不标颜色等级——这一格仍然不判紧急（阈值未配置，见上）。
+  const frame = `rounded border px-3 py-2 text-xs text-left ${
+    focused ? 'border-idpxyz-accent' : 'border-idpxyz-border'
+  }`;
+  if (!onSelect) return <div className={frame}>{body}</div>;
+  return (
+    <button
+      type="button"
+      className={frame}
+      onClick={onSelect}
+      aria-pressed={focused}
+      title={focused ? '取消只看这条序列' : '在下方目录中只看这条序列'}
+    >
+      {body}
+    </button>
   );
 }

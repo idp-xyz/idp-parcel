@@ -23,6 +23,7 @@ import {
 } from './api';
 import { SeriesReviewPanel, type SeriesReviewTarget } from './SeriesReviewPanel';
 import { CoverageSummaryBar } from './CoverageSummaryBar';
+import { visibleSeriesRows, type SeriesKey } from './catalogue-filter';
 
 const info = moduleInfoById['reference-series'];
 
@@ -216,6 +217,8 @@ function ReferenceSeriesTable() {
   );
   const [reloadToken, setReloadToken] = useState(0);
   const [reviewing, setReviewing] = useState<SeriesReviewTarget | null>(null);
+  // 「只看这条序列」与搜索词是两种收窄，分开持有；判据在 catalogue-filter.ts。
+  const [focus, setFocus] = useState<SeriesKey | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,20 +233,13 @@ function ReferenceSeriesTable() {
 
   const retry = () => setReloadToken((token) => token + 1);
   const rows = answer?.kind === 'outcome' ? answer.body.series : [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        [row.seriesId, row.sourceIdentifier, row.registrant].some((field) =>
-          field.toLowerCase().includes(needle),
-        ),
-      )
-    : rows;
+  const visibleRows = visibleSeriesRows(rows, { focus, keyword });
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 摘要条摆在目录之上而不是另开一页：本票要的是「让缺口在当天被看见」，
           而另开一页等于要人先想起来去看它。 */}
-      <CoverageSummaryBar />
+      <CoverageSummaryBar onSelectSeries={setFocus} focusedSeries={focus} />
       <ListPageTemplate<ReferenceSeriesRecord>
         title={info.title}
         description={`${info.owner}——计价只登记不生产数值(ADR-0013)`}
@@ -253,7 +249,11 @@ function ReferenceSeriesTable() {
           placeholder: '搜索序列标识 / 来源 / 登记责任方',
         }}
         filterSummary={
-          answer?.kind === 'outcome' ? `共 ${visibleRows.length} 条` : undefined
+          answer?.kind === 'outcome'
+            ? focus
+              ? `共 ${visibleRows.length} 条 · 只看 ${focus.seriesId}（${labelOf(seriesKindLabels, focus.kind)}）`
+              : `共 ${visibleRows.length} 条`
+            : undefined
         }
         columns={columnsWithReview(setReviewing)}
         rows={visibleRows}
