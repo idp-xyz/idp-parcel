@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01 resolved（`2b4f6d7`）；02、03 draft，各需一次裁决才能转 ready-for-agent
+Status: in-progress——01 resolved（`2b4f6d7` + `722e846`）；02、03 draft，各需一次裁决才能转 ready-for-agent
 
 ## 从哪里分出来
 

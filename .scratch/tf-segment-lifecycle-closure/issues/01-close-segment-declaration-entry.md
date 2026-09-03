@@ -1,7 +1,7 @@
 # 关段声明口：`CloseFulfillmentSegment` 编排
 
 Category: enhancement
-Status: resolved——`2b4f6d7`（MCP-1，2026-09-03）；完工判据三条各有测试，见文末 Comments
+Status: resolved——`2b4f6d7` + 补刀 `722e846`（MCP-1，2026-09-03）；完工判据三条各有测试，见文末 Comments
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -79,7 +79,24 @@ Blocked by: 无
   接端点时的问题，记在这里免得丢。
 
   **未做**（票面「陷阱」已记）：关闭时刻早于最后一条参与终点，领域不查，本票不加。
+  → **已随补刀 `722e846` 做掉**，见下一条。
 
   **验证**：在 `2b4f6d7` 的干净检出上 `gofmt -l` 空、`go build ./...` 退 0、`go vet` TF 与
   architecture 退 0、`go test -count=1` TF 五包 + architecture 全 ok。未跑真库（无适配器层改动），
   `-race` 未跑。
+
+- 2026-09-03 · MCP-1：**补刀 `722e846`——关闭时刻不得早于任何参与终点，转换门与重建门各守一次。**
+  owner 「继续」后接的第一件。它是 CONTEXT「一个仍在控制中的对象足以让段继续存在」的时序面：关闭
+  早于某成员离场，等于段在那个对象仍受控时已经结束。`CloseSegment` 在无在场参与之后再比一次时刻，
+  早于任一终点拒 `ErrInvalidFulfillmentSegment`（与「终点早于起点」同错同族）；**同刻允许**——最后一个
+  对象交出去那一刻关段是正当的，测试两边都钉了。重建门加同一条行间核对，仍只比行上两个时刻，不重放
+  `CloseSegment`（ADR-0028 那条分界）。
+
+  无签名变更；编排不改（它已把领域其余错误映到`不受理`）。`ports/fulfillment_segment.go` 头注里
+  「ADR-0097 唯一一条靠纪律」的计数改成「这一类」并点名生产调用方；ADR 正文不动。
+
+  **陷阱一节那条随之失效**，票面正文不改，此处记：它说的「本票不加」已由本条推翻。
+
+  **验证**：在 `722e846` 的干净检出上 `gofmt -l` 空、`go build ./...` 退 0、`go vet` TF 退 0、
+  `go test -count=1` TF 六包 + architecture 全 ok；**TF postgres 包带 DSN 实跑**（本机 55432，
+  `-v` 下单条 `PASS` 非 `SKIP`），全包 124 PASS / 0 SKIP / 0 FAIL。`-race` 未跑。
