@@ -129,6 +129,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	controlFacts, err := buildControlFactOrchestrations(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -302,6 +306,9 @@ func run(logger *slog.Logger) error {
 			delivery,
 			transportFulfillmentRecords,
 			handoverScopeSummary,
+			controlFacts.handover,
+			controlFacts.pickupRegistration,
+			controlFacts.pickupAttempt,
 			trackingViews,
 			projectionViews,
 			claims,

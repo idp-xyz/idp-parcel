@@ -131,6 +131,44 @@ func (unwiredDelivery) Correct(
 	return tfapp.RegisterEffectiveDeliveryResult{}, errOrchestrationNotWired
 }
 
+// unwiredHandover 一个类型顶两个端点：首登与更正共用 HandoverHandler（票
+// tf-segment-lifecycle-closure/04），理由同 unwiredDelivery。
+type unwiredHandover struct{}
+
+func (unwiredHandover) Register(
+	context.Context,
+	tfapp.RegisterTransportHandoverCommand,
+) (tfapp.RegisterTransportHandoverResult, error) {
+	return tfapp.RegisterTransportHandoverResult{}, errOrchestrationNotWired
+}
+
+func (unwiredHandover) Correct(
+	context.Context,
+	tfapp.CorrectTransportHandoverCommand,
+) (tfapp.RegisterTransportHandoverResult, error) {
+	return tfapp.RegisterTransportHandoverResult{}, errOrchestrationNotWired
+}
+
+// unwiredPickupRegistration 与 unwiredPickupAttempt 分立：揽收登记与揽收执行是两条编排、两个
+// 处理器接口，合成一个会让装配测试盖不住「单对象口接了多对象编排」。
+type unwiredPickupRegistration struct{}
+
+func (unwiredPickupRegistration) Register(
+	context.Context,
+	tfapp.RegisterOffsitePickupCommand,
+) (tfapp.RegisterOffsitePickupResult, error) {
+	return tfapp.RegisterOffsitePickupResult{}, errOrchestrationNotWired
+}
+
+type unwiredPickupAttempt struct{}
+
+func (unwiredPickupAttempt) Handle(
+	context.Context,
+	tfapp.PerformOffsitePickupCommand,
+) (tfapp.PerformOffsitePickupResult, error) {
+	return tfapp.PerformOffsitePickupResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

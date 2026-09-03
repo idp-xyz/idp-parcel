@@ -63,6 +63,9 @@ func assembleBusinessEndpoints(
 	delivery tfhttp.DeliveryHandler,
 	transportFulfillmentRecords tfhttp.ReviewCatalogueReader,
 	handoverScopeSummary tfhttp.HandoverScopeSummarizer,
+	handover tfhttp.HandoverHandler,
+	pickupRegistration tfhttp.PickupRegistrationHandler,
+	pickupAttempt tfhttp.PickupAttemptHandler,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -184,6 +187,16 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		// 控制事实入口四口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
+		// （单对象登记 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
+		// 进段那道门（enterFulfillmentSegment）在生产上只从这四行走得到——接上之前它没有任何路。
+		// 命令面，同挂字面量 UnconfiguredIntake{}；命令里带着段引用，这四行比交付更不能让隔离读
+		// 开关换值：一条穿过去的请求会在段登记册上立出一个来源不明的实际履约段。
+		// 揽收更正口不在表上：应用层没有更正编排，端点表不替它造一个（票 04 未做项）。
+		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
+		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
+		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupRegistration)},
+		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupAttempt)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
