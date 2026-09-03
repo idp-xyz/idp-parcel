@@ -12,7 +12,7 @@
 - `src/components/states/` — 页面四态组件（加载/空/错误/**未配置**），「未配置」专门呈现 403 `ACCESS_CHANNEL_NOT_CONFIGURED`（[ADR-0022](../../docs/adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 语义：HTTP 状态只表示答案是否形成）；
 - `src/templates/` — 列表页/详情页/复核工作流三个页面模板（演示数据隔离在 `demo.ts`，标注合成 `S`，不进桶导出）；
 - `src/pages/shipment-request/` — UC-PS-001 提交、UC-PS-005 决定前撤回、委托查阅（列表/详情，对 `GET /shipment-request-views` 真实查询契约取数，统一不可见结果按 CONTEXT 语义呈现）与 UC-PS-006 取消与收寄后处置（对 `POST /shipment-requests/parcel-cancellations` 逐件受理、逐件呈现，三种已提交走向同为有效业务答案），对 `parcel-api` 真实端点形状；接入渠道未配置时如实呈现「未配置」态；
-- `src/pages/governance/` — 治理与复核类页面（接受前人工复核、异常分诊、对账单、收付款核销、阶段决定），模板骨架已按各自 CONTEXT 语义搭好（栏目、列、动作命名），数据区以「未配置」态如实呈现，不含合成数据；
+- `src/pages/governance/` — 试点治理页（阶段决定）；曾一并放在这里的接受前人工复核、异常分诊、对账单、收付款核销已按 `src/navigation.ts` 声明的主责上下文归位到 `shipment-request/`、`visibility/`、`settlement/`——页面目录按限界上下文分，不按「治理与复核」这个呈现分组分；模板骨架按各自 CONTEXT 语义搭好，数据区以「未配置」态如实呈现，不含合成数据；
 - 导航按 CONTEXT-MAP 业务价值链分区覆盖全部十个限界上下文：全部模块条目均已登记页面（已接线/骨架/演示三档、零规划占位，条目清单与各自档位以 `src/navigation.ts` 与 `src/page-registry.tsx` 为准，不在此复述计数），带主责与出处的 `UnwiredModule` 占位机制保留但当前无消费者——「导航先于页面」的外壳设计行为已走完它的占位期；
 - `src/pages/template-preview/` — 模板预览页（导航「演示」区）：用隔离合成 `S` 数据实例化三套模板并带四态切换器，是 `templates/demo.ts` 的唯一合法消费者。
 

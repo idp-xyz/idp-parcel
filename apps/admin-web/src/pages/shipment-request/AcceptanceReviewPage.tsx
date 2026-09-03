@@ -19,7 +19,7 @@ import {
   type ApiResult,
   type RecordedJudgmentsRecord,
   type ReviewStatusRecord,
-} from '../shipment-request/api';
+} from './api';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['acceptance-review'];

@@ -8,8 +8,8 @@ import {
   listSettlementFundsApplications,
   type ExternalFundsFactListResponseBody,
   type ExternalFundsFactRecord,
-} from '../settlement/api';
-import { fundsFactKindLabels, labelOf } from '../settlement/presentation';
+} from './api';
+import { fundsFactKindLabels, labelOf } from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['settlement-application'];

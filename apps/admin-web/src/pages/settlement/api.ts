@@ -3,10 +3,9 @@
 // internal/settlementaccounting/adapters/http 下四个 query_settlement_* 为准，此处只做
 // 镜像不虚构。传输与五格判读收敛在共享 catalogue-api，本文件只保留本上下文的类型与查询函数。
 //
-// 四个端点合在这一个文件而不按页面目录分两份：对账单与收付款核销两页历史上落在
-// pages/governance/（见本目录 index.ts 的自注），但四页同属一个上下文、镜像的是同一个 Go 包。
-// 拆成两份就会有两处各自维护同一批字段，而 Go 那侧改一个键时只会有一处跟上。故 governance
-// 两页从此处引入——目录是导航分组，不是上下文边界。
+// 四个端点合在这一个文件而不按页面分四份：四页同属一个上下文、镜像的是同一个 Go 包，
+// 拆开就会有几处各自维护同一批字段，而 Go 那侧改一个键时只会有一处跟上。对账单与收付款
+// 核销两页曾落在 pages/governance/ 时也是从此处引入的，归位本目录后这条理由不变。
 
 import { exchangeMasterData, type ApiResult } from '../catalogue-api';
 

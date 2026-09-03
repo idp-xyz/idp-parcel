@@ -12,6 +12,9 @@ export { CancelParcelPage } from './CancelParcelPage';
 // 面单交易查阅面(行粒度交易×包裹,已接线:GET /label-transactions)。行形状是查询契约的
 // 镜像,与其余查阅面同住 api.ts,从下方 api 类型块一并导出。
 export { LabelTransactionsPage } from './LabelTransactionsPage';
+// 接受前人工复核工作流(队列与单案读 GET /acceptance-review-queue,复核完成与拒绝两个命令)。
+// 曾落在 pages/governance/,现已归位本目录——主责上下文是小包托运,读写面与其余页同住 api.ts。
+export { AcceptanceReviewPage } from './AcceptanceReviewPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,

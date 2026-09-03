@@ -4,15 +4,10 @@ import {
   ShipmentRequestListPage,
   CancelParcelPage,
   LabelTransactionsPage,
+  AcceptanceReviewPage,
 } from './pages/shipment-request';
 import { TemplatePreviewPage } from './pages/template-preview';
-import {
-  AcceptanceReviewPage,
-  ExceptionTriagePage,
-  ReconciliationPage,
-  SettlementApplicationPage,
-  StageAdmissionPage,
-} from './pages/governance';
+import { StageAdmissionPage } from './pages/governance';
 import {
   PriceCardCatalogPage,
   ReferenceSeriesPage,
@@ -27,11 +22,17 @@ import {
   NodeOperationsReviewPage,
   TransportFulfillmentReviewPage,
 } from './pages/operations';
-import { ChargesBillingPage, OperatingMetricsPage } from './pages/settlement';
+import {
+  ChargesBillingPage,
+  OperatingMetricsPage,
+  ReconciliationPage,
+  SettlementApplicationPage,
+} from './pages/settlement';
 import { CodLedgerPage } from './pages/collection';
 import {
   TrackingProjectionPage,
   ExceptionCasesPage,
+  ExceptionTriagePage,
   ClaimsRecoveryPage,
   TrackingJudgmentRulesPage,
   DisclosurePoliciesPage,
