@@ -200,6 +200,16 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 [`party-commercial` 四处](../../.scratch/party-commercial-context-gaps/spec.md)属同类而不在
 棘轮网内（它排除 `New*` 构造）。
 
+**2026-09-03 补记（钉 `e3dbf3f`，仅作此刻取证，不作别人的基准）**：上面「32」与逐上下文
+那串数是 09-02 裁决时点的快照，名单是活的。`transport-fulfillment` 那 7 条已随
+[`tf-unwired-seven`](../../.scratch/tf-unwired-seven/spec.md) 八票全部有了生产调用方，棘轮
+该组清空；在 `e3dbf3f` 的干净检出上重数名单为 **25**（PS 2、VE 6、SA 4、CC 4、PC 5、PP 4、
+TF 0；其余上下文的增减各归各票，本条不追）。**一句要如实**：接上的是
+`internal/transportfulfillment/application/` 这一层的编排，`cmd/parcel-api` 对这批新编排尚无
+装配与端点——「该组清空」量的是导出工厂有了生产调用点，不等于真进程已能跨过 CONTEXT 那条
+「进入运输方控制」的成立边界；后者只有票面与端点接线守得住，该 spec 完工判据一节写的是同一句。
+差量口径不变，本条只更新数与它的限度。
+
 **这不改本节的定级列**——定级是人的决定；改的是「差量为无」这一句。三条处置路（逐条认可为
 显式留待 / 下调相关切片定级 / 改「骨架完整」判据口径为「UC 有编排触点」）见
 [triage 票 01](../../.scratch/mechanism-executor-triage/issues/01-skeleton-criterion-and-its-instruments-measure-different-things.md)。
