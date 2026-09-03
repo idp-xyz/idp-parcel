@@ -1491,3 +1491,70 @@ type AcceptanceJudgmentRecorder interface {
 		resolution domain.CommercialResolutionID,
 	) error
 }
+
+// ContinuedAttemptRegisterInsertOutcome 与 ContinuedAttemptRegisterSaveOutcome 是`面单继续尝试
+// 决定`登记册写入的两套代数，形照面单交易那一对（ADR-0031）：`已存在`要回去读那一册再重放，
+// `版本冲突`要重读再重放，恢复动作不同，因此不共用一个集合，也都不译成 error。
+//
+// 不复用 LabelTransaction 那两个类型，理由与那一对不复用委托的相同：登记册是另一个聚合（键为
+// 租户 + 包裹），共用类型会让某天其中一侧多一格取值时另一侧被迫接受一个它答不出的答案。
+type ContinuedAttemptRegisterInsertOutcome uint8
+
+const (
+	ContinuedAttemptRegisterInsertOutcomeInvalid ContinuedAttemptRegisterInsertOutcome = iota
+	ContinuedAttemptRegisterInserted
+	ContinuedAttemptRegisterAlreadyExists
+)
+
+func (outcome ContinuedAttemptRegisterInsertOutcome) String() string {
+	switch outcome {
+	case ContinuedAttemptRegisterInserted:
+		return "INSERTED"
+	case ContinuedAttemptRegisterAlreadyExists:
+		return "ALREADY_EXISTS"
+	default:
+		return ""
+	}
+}
+
+type ContinuedAttemptRegisterSaveOutcome uint8
+
+const (
+	ContinuedAttemptRegisterSaveOutcomeInvalid ContinuedAttemptRegisterSaveOutcome = iota
+	ContinuedAttemptRegisterSaved
+	ContinuedAttemptRegisterRevisionConflict
+)
+
+func (outcome ContinuedAttemptRegisterSaveOutcome) String() string {
+	switch outcome {
+	case ContinuedAttemptRegisterSaved:
+		return "SAVED"
+	case ContinuedAttemptRegisterRevisionConflict:
+		return "REVISION_CONFLICT"
+	default:
+		return ""
+	}
+}
+
+// ContinuedAttemptRegisterRepository 以（租户 + 包裹）为键存储`面单继续尝试决定`登记册。
+//
+// 键是包裹而不是面单交易：CONTEXT 把决定定义为「针对明确包裹当前完整面单服务范围形成」，一个
+// 包裹可关联多笔重试、替代、作废或换单交易，挂在交易上会让同一个包裹在不同交易下各有一套关闭
+// 状态。键也不含委托：覆盖包裹可以跨委托（ADR-0084 决定一）。
+//
+// Insert 与 Save 分开，理由同面单交易仓储：开册只发生一次，决定是在既有册上追加。Save 的预期
+// 版本由聚合自己携带（`register.Revision()`）。否定的 FindByParcel 只回 false，不区分「没开过册」
+// 与「属于另一个租户」——区分它们等于泄露其他租户下是否存在该包裹。
+//
+// **本口今天没有生产写入方，这是设计而不是欠账**：形成关闭或重开决定的命令口要先过 party-commercial
+// 的授权规则校验（CONTEXT「形成关闭或重开决定时仍须重新校验当前角色与客户授权」），那是另一张票；
+// 本票立的是册、端口、持久化与读面派生四层，让那张票落地那天对着的不是一张裸表。
+type ContinuedAttemptRegisterRepository interface {
+	FindByParcel(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (domain.ContinuedAttemptRegister, bool, error)
+	Insert(ctx context.Context, register domain.ContinuedAttemptRegister) (ContinuedAttemptRegisterInsertOutcome, error)
+	Save(ctx context.Context, register domain.ContinuedAttemptRegister) (ContinuedAttemptRegisterSaveOutcome, error)
+}
