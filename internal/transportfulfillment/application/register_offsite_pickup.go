@@ -77,6 +77,11 @@ type RegisterOffsitePickupCommand struct {
 	Control    string
 	ExecutedBy string
 	OccurredAt time.Time
+	// Segment 指名这次收寄把对象送进哪个实际履约段，**缺席时不立段**；PlannedSegment 是该
+	// 对象自己关联的计划履约段，可缺席。两者与交接登记那一侧同形，理由见
+	// enterFulfillmentSegment 的自注。
+	Segment        string
+	PlannedSegment string
 }
 
 type RegisterOffsitePickupResult struct {
@@ -86,10 +91,17 @@ type RegisterOffsitePickupResult struct {
 	hasRecord    bool
 	continuation string
 	handoff      string
+	segment      string
 }
 
 func (result RegisterOffsitePickupResult) Outcome() PickupRegistrationOutcome {
 	return result.outcome
+}
+
+// SegmentContinuationReference 非空说明收寄已登记、段那一半还欠着。它只在段登记册故障时
+// 给出——领域拒绝（对象已在段内、段已关闭）是正当结果不是欠账。
+func (result RegisterOffsitePickupResult) SegmentContinuationReference() string {
+	return result.segment
 }
 
 // UndecidedReason 只在`未决`时非零。
@@ -111,7 +123,9 @@ func (result RegisterOffsitePickupResult) PickupHandoffReference() string {
 }
 
 type RegisterOffsitePickupDeps struct {
-	Pickups    ports.OffsitePickupRegistry
+	Pickups ports.OffsitePickupRegistry
+	// Segments 可缺席：没有段登记册时收寄照登不误。派生一侧缺席不该让来源保全停摆。
+	Segments   ports.ActualFulfillmentSegmentRegistry
 	Versions   ports.PickupIdentityFactory
 	Downstream ports.OffsitePickupRegistrationHandoff
 	Clock      ports.Clock
@@ -189,6 +203,7 @@ func (handler *RegisterOffsitePickupHandler) Register(
 	case ports.OffsitePickupSaved:
 		result := RegisterOffsitePickupResult{outcome: PickupRegistered, record: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
+		result.segment = handler.establishSegment(ctx, command, pickup)
 		return result, nil
 	case ports.OffsitePickupAlreadyRegistered:
 		winner, found, err := handler.deps.Pickups.FindByKey(ctx, key)
@@ -199,6 +214,37 @@ func (handler *RegisterOffsitePickupHandler) Register(
 	default:
 		return RegisterOffsitePickupResult{}, fmt.Errorf("%w: %d", ErrUnexpectedPickupRegistrySave, saved)
 	}
+}
+
+// establishSegment 让这次收寄的对象进入实际履约段（CONTEXT 生命周期①②）。
+//
+// 本编排只提供收寄那一侧的两道领域门；其余判断与交接那一侧逐字相同，收在
+// enterFulfillmentSegment 里。**失败尝试走不到这里**——没有控制证据就形成不了 OffsitePickup，
+// CONTEXT「客户不在、货物未备好、包装不合格或其他失败结果不制造实际履约段」由那道门守着。
+func (handler *RegisterOffsitePickupHandler) establishSegment(
+	ctx context.Context,
+	command RegisterOffsitePickupCommand,
+	pickup domain.OffsitePickup,
+) string {
+	return enterFulfillmentSegment(
+		ctx, handler.deps.Segments, handler.deps.Clock,
+		command.TenantID, command.Segment, command.PlannedSegment,
+		segmentEntryDoors{
+			object: pickup.Object(),
+			establish: func(
+				segment domain.FulfillmentSegmentReference,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return domain.EstablishSegmentWithPickup(segment, pickup, planned)
+			},
+			join: func(
+				existing domain.ActualFulfillmentSegment,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return existing.JoinWithPickup(pickup, planned)
+			},
+		},
+	)
 }
 
 func pickupSpecFrom(command RegisterOffsitePickupCommand) (domain.OffsitePickupSpec, bool) {

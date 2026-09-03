@@ -206,88 +206,35 @@ func (handler *RegisterTransportHandoverHandler) Register(
 	return result, nil
 }
 
-// establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①），交回续办引用；
-// 空串表示这一半没有欠账。
+// establishSegment 让这次交接的对象进入实际履约段（CONTEXT 生命周期①②）。
 //
-// 立段是派生的一侧，**它的失败不得回滚交接登记**：接货时间是责任起点锚，一次段登记故障
-// 抹不掉一条已经发生的物理事实，所以失败只留续办引用，不翻登记结果。
-//
-// 领域拒绝与登记册故障是两种答案。三裁决里只有`已交接`转出控制，拒收与待确认立不起段是
-// 正当的业务结果——那道门在领域的 TransferOutBasis 上，这里不重判一遍，也**不留引用**：
-// 留了会让调用方反复重试一件本就不该发生的事。只有登记册这一侧读不到或写不进才是欠账。
+// 本编排只提供交接那一侧的两道领域门：三裁决里只有`已交接`转出控制，拒收与待确认在
+// TransferOutBasis 上就被挡住，这里不重判一遍。其余判断（要不要进段、段是否已成立、
+// 失败算不算欠账）与收寄那一侧逐字相同，收在 enterFulfillmentSegment 里。
 func (handler *RegisterTransportHandoverHandler) establishSegment(
 	ctx context.Context,
 	command RegisterTransportHandoverCommand,
 	handover domain.TransportHandover,
 ) string {
-	if handler.deps.Segments == nil || strings.TrimSpace(command.Segment) == "" {
-		return ""
-	}
-	segment, err := domain.NewFulfillmentSegmentReference(command.Segment)
-	if err != nil {
-		return ""
-	}
-	var planned domain.PlannedSegmentReference
-	if strings.TrimSpace(command.PlannedSegment) != "" {
-		if planned, err = domain.NewPlannedSegmentReference(command.PlannedSegment); err != nil {
-			return ""
-		}
-	}
-	// 「这个段是否已成立」每次都问登记册。编排自己记住就是一次竞态：两个对象并发到达时，
-	// 各自那份缓存都会说「还没成立」，于是同一个段被立两回。
-	key := ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segment}
-	existing, found, err := handler.deps.Segments.FindByKey(ctx, key)
-	if err != nil {
-		return segmentContinuation(command, "SEGMENT_REGISTRY_UNAVAILABLE")
-	}
-	if found {
-		return handler.joinSegment(ctx, command, key, existing, handover, planned)
-	}
-
-	established, err := domain.EstablishSegmentWithHandover(segment, handover, planned)
-	if err != nil {
-		return ""
-	}
-	saved, err := handler.deps.Segments.Save(ctx, ports.FulfillmentSegmentRecord{
-		Key:        key,
-		Segment:    established,
-		RecordedAt: handler.deps.Clock.Now(),
-	})
-	if err != nil || saved == ports.SegmentSaveOutcomeInvalid {
-		return segmentContinuation(command, "SEGMENT_NOT_ESTABLISHED")
-	}
-	return ""
-}
-
-// joinSegment 让后续对象加入既有段并形成自己的参与起点，不动其他对象的起点
-// （CONTEXT 生命周期②）。参与关系整体从领域取出后原样交给写口——拆开来传就等于让
-// 适配器重新组装一遍领域已经判完的东西。
-func (handler *RegisterTransportHandoverHandler) joinSegment(
-	ctx context.Context,
-	command RegisterTransportHandoverCommand,
-	key ports.FulfillmentSegmentKey,
-	existing ports.FulfillmentSegmentRecord,
-	handover domain.TransportHandover,
-	planned domain.PlannedSegmentReference,
-) string {
-	joined, err := existing.Segment.JoinWithHandover(handover, planned)
-	if err != nil {
-		return ""
-	}
-	participation, present := joined.ParticipationFor(handover.Object())
-	if !present {
-		return ""
-	}
-	// `已在段内`是业务答案不是欠账：同一控制范围不因伙伴重投或批量重试重复建立参与。
-	outcome, err := handler.deps.Segments.Join(ctx, key, participation, handler.deps.Clock.Now())
-	if err != nil || outcome == ports.SegmentJoinOutcomeInvalid {
-		return segmentContinuation(command, "OBJECT_NOT_JOINED")
-	}
-	return ""
-}
-
-func segmentContinuation(command RegisterTransportHandoverCommand, cause string) string {
-	return handoverRegistrationContinuation(cause, command.TenantID.String(), command.Segment, command.Object)
+	return enterFulfillmentSegment(
+		ctx, handler.deps.Segments, handler.deps.Clock,
+		command.TenantID, command.Segment, command.PlannedSegment,
+		segmentEntryDoors{
+			object: handover.Object(),
+			establish: func(
+				segment domain.FulfillmentSegmentReference,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return domain.EstablishSegmentWithHandover(segment, handover, planned)
+			},
+			join: func(
+				existing domain.ActualFulfillmentSegment,
+				planned domain.PlannedSegmentReference,
+			) (domain.ActualFulfillmentSegment, error) {
+				return existing.JoinWithHandover(handover, planned)
+			},
+		},
+	)
 }
 
 // Correct 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性

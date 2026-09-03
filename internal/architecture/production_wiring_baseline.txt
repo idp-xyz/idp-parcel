@@ -108,6 +108,18 @@
 # 两套独立方法各数一遍同得 29：一套按 UTF-8 逐行读后滤非空非注释，一套在字节层数行首非 `#`
 # ——后者不经文本解码，防的是本机把中文按 GBK 解时并掉换行导致的静默偏小。
 #
+# 2026-09-03 同票下一刀，剪掉 EstablishSegmentWithPickup（收寄登记编排接上立段，
+# application/register_offsite_pickup.go 的 establishSegment 是它的生产调用方）。成因三分同上
+# 一段先分过：全仓该名字只有一处声明。**剪后重数实测 28**，两法同得，量法同上一段（动手前
+# `git status -- internal/architecture/` 为空，改完 `git diff HEAD -- 本文件` 只有本笔的 hunk），
+# 父提交 `0054a13`。
+#
+# **这两刀之间隔的不只是时间，还有一句注释的两次失真**，记下来因为门禁对它完全无声：同一组里
+# 「转换门与访问器本就不在名单上——EstablishSegmentWith* 各占一行（仍未接）」那句，第一刀后
+# 「仍未接」对 Handover 已假，第二刀后「各占一行」也假。TestWiringBaselineHasNoStaleEntry 只比
+# 条目行与未接线名单、**不读 `#` 注释**，两次都全绿。两次都是剪的人顺手改的，而不是被谁报出来的
+# ——这正是 AGENTS.md「改文档」那条说的、结构上守不住只能靠路过的人的那一类。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -181,11 +193,13 @@ internal/visibilityexception/domain SubmitEvidence
 # ——ADR-0098 裁了不在那里形成，理由是 CONTEXT 禁「任一对象的成功、失败或取消被压缩成其他
 # 对象的状态」，且揽收登记必须照常成功、塞进去会造出一个静默不发生且无人重试的派生步骤。
 #
-# EstablishSegmentWithHandover 曾在这里，2026-09-03 随 tf-unwired-seven/02 剪掉：
-# application/register_transport_handover.go 的 establishSegment 是它的生产调用方。段引用作
-# 显式入参进命令，**缺席时不立段**——段身份由谁铸出至今没有裁决，编排不拿交接范围顶替。
-# 同票的 EstablishSegmentWithPickup 仍未接，揽收侧两条编排是本票余下的一刀。
-internal/transportfulfillment/domain EstablishSegmentWithPickup
+# EstablishSegmentWithHandover 与 EstablishSegmentWithPickup 曾在这里，2026-09-03 随
+# tf-unwired-seven/02 分两笔剪掉：生产调用方分别是 application/register_transport_handover.go
+# 与 application/register_offsite_pickup.go 的 establishSegment，两者共用
+# application/enter_fulfillment_segment.go 那道进段门。段引用作显式入参进命令，**缺席时不立段**
+# ——实际履约段不等同于交接范围、计划段、班次或订舱，段身份由谁铸出至今没有裁决，编排不拿
+# 手边任一引用顶替。**PerformOffsitePickupHandler（多对象到访）尚未接**，它不在本门禁量的范围里
+# （只量导出工厂），所以剪掉这两行之后没有任何信号会提醒它还欠着——记在这里就是那个提醒。
 internal/transportfulfillment/domain FormLoadAssignment
 internal/transportfulfillment/domain OpenDispatchTask
 internal/transportfulfillment/domain RecordMovementFact
@@ -193,8 +207,9 @@ internal/transportfulfillment/domain RecordMovementFact
 # 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
 # 加它那天写的是「适配器落地那天这一条出名单」，当天兑现。
 #
-# 转换门与访问器本就不在名单上——EstablishSegmentWithPickup 仍占一行（见本组上方），
-# JoinWith*、EndParticipationWith*、CloseSegment 是聚合方法而非导出工厂，本门禁只量后者。
+# 转换门与访问器本就不在名单上——JoinWith*、EndParticipationWith*、CloseSegment 是聚合方法
+# 而非导出工厂，本门禁只量后者。段的两个导出工厂（EstablishSegmentWith*）本日已双双出名单，
+# 出处见本组上方那段。
 
 
 # —— settlement-accounting ——
