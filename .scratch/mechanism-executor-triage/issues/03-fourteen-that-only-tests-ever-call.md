@@ -1,7 +1,7 @@
 # 只有测试调得到的那十四条——「真烂会先烂在这两条上」的预言该复核了
 
 Category: chore
-Status: draft
+Status: in-progress——MCP-3 取证中（2026-09-03，owner 授权自决）；处置规则已裁（见 [spec「处置裁决」](../spec.md) 第 1 条）：答得出调用方的按上下文立实现票接线，答不出的在基线理由行逐条写明在等什么
 Blocked by: 无
 
 ## 十四条

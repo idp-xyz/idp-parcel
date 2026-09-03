@@ -1,7 +1,7 @@
 # 骨架完整判据要的是「规则有执行器」，量它的三样东西量的是别的
 
 Category: chore
-Status: draft
+Status: resolved——裁走第一条改造版（2026-09-03，MCP-3，owner 授权自决）：判据不改；答得出调用方的立票接线、答不出的逐条写理由留待；定级归 owner。全文见 [spec 的「处置裁决」](../spec.md)
 Blocked by: 无
 
 ## 判据怎么写的

@@ -1,7 +1,7 @@
 # 棘轮刻意排除的 `New*` 一族里也躺着真缺口——要不要把网加宽
 
 Category: chore
-Status: draft
+Status: resolved——裁第三条路（2026-09-03，MCP-3，owner 授权自决）：**不动棘轮、另立类型侧名单**；探针不留在 `.scratch` 当没人跑的工具，做成第二道棘轮后退役。实现见票 [05](./05-type-reachability-ratchet-as-a-second-baseline.md)。理由：按返回类型改判据会重建基线、历轮不可比，而棘轮的价值有一半在可比；两份名单各守一族的维护代价，比丢掉可比性便宜
 Blocked by: 无
 
 ## 棘轮排除 `New*` 是有理由的

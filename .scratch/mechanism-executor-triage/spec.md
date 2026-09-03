@@ -1,7 +1,7 @@
 # 替棘轮门禁做它声明自己不做的那次判断：32 条未接线领域工厂逐条分类
 
 Category: chore
-Status: draft——分类已出，处置待裁
+Status: in-progress——处置已裁（2026-09-03，MCP-3，owner 授权自决，见文末「处置裁决」）：判据不改；32 条按票 03 逐条落为实现票或带理由的显式留待；棘轮不加宽、另立类型侧名单（票 05）；定级归 owner，本目录不动
 
 ## 起因
 
@@ -287,3 +287,36 @@ r27 对另五项做的那样，但要逐条写理由）、下调某几个切片�
 本格与前三格的区别在处置：前三格接线即可，本格要先裁形状，而且可能裁成「留空」——ADR-0098
 就是这样裁的，所以它进本表不是为了排队接线，是为了让下一个读到「发生项没登上」的人先看到
 这一行再动手。
+
+| 缺口 | 处置 | 出处 |
+|---|---|---|
+| 实际承运商判断（CONTEXT 整节有语言，`FulfillmentParticipation` / `ActualFulfillmentSegment` 上无承运商字段） | **已裁形状，进实现票**（2026-09-03）：按段一份带版本记录、待确认是带原因的值、来源封闭四格、身份只引用 PC；形状全由 CONTEXT 硬句推得、无一格依赖租户取值，故不留空 | [ADR-0103](../../docs/adr/0103-actual-carrier-judgment-is-a-versioned-record-per-segment-with-pending-as-a-value.md)；[tf-segment-lifecycle-closure/02](../tf-segment-lifecycle-closure/issues/02-actual-carrier-judgment-model.md) |
+| 客户服务规则版本正文（封闭集有格、无正文表） | **已裁，进实现票**（2026-09-03）：正文归 PC，首发只进索赔期限与最低材料两项 | [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；[party-commercial-context-gaps/05](../party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md) |
+
+## 处置裁决（2026-09-03 · MCP-3，owner 授权自决）
+
+票 01 摆的三条路，取**第一条改造版**：认可为显式留待**且逐条写理由**，但「留待」只给答得出「它在等什么」
+的条目；答得出「调用方该在哪个 UC」的条目**不留待，立实现票接线**。第二条（下调定级）归 owner，
+本目录不动也不建议；第三条（改判据口径为「UC 有触点」）否决——判据写的是「规则有执行器」，那是
+对的，量具不够不是判据的错。
+
+逐条落法：
+
+1. **十四条只被测试调到的**（票 03）：每条答「调用方该在哪个 UC 的哪一步、落在哪个编排文件」。
+   答得出的 → 按上下文各立一张实现票（SA 一张、CC 一张、VE 一张，票内逐条列），接线到已有编排；
+   答不出的 → 在 `production_wiring_baseline.txt` 该条目的理由行写明「等哪个上游事实来源 / 哪个
+   `PAR-*` / 哪个切片」，**不按组写**。取证由本目录持有者完成后写回票 03。
+2. **PC 四条、PS 三条、PP 四条**：各自已有归属票（pc-gaps 01/03 已 resolved、label-channel/10 在
+   MCP-1 手上、`ReplayPricingEvaluation` 是 PN-08 治理能力）；PP 那对**平行第二写法**
+   （`MarshalPricingPlanSnapshot` / `RehydratePricingPlanSnapshot`）与 `NewDecimal` 影子函数是
+   **死码**，删——归 parcelpricing 地盘（MCP-5 本轮顺带）；`ParseCanonical` 二选一（接上或改注释）
+   同归。
+3. **TF 七条**已随 tf-unwired-seven 清空（MCP-1 2026-09-03 追记），不再计。
+4. **棘轮不加宽**（票 04）：不按返回类型改判据（改判据即重建基线、历轮不可比），**另立类型侧名单**
+   ——把探针的类型可达性口径做成 `internal/architecture` 下第二道棘轮测试与它自己的基线文件，探针
+   随之从 `.scratch` 退役，不留没人跑的工具。立票 05。
+5. **基线文件里那句过期免责**（「切片还没开工的能力本来就该是这样」）由下一个改基线的人删——它在
+   八切片全数达标之后不再成立（票 01 已证）。
+6. **对 owner 的一句建议（不是本目录的动作）**：按判据字面，CC 与 SA 的「达标」在其各四条处置完
+   之前与 TF 当初「差量：无」同形；TF 那一句 owner 已改为计入差量（`84c2eed`），CC/SA 是否同样改，
+   由 owner 定。
