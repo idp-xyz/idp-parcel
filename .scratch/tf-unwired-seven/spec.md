@@ -33,6 +33,7 @@ owner 于 2026-09-02 裁定：生产接线棘轮基线上那 32 条**算当前�
 | [05](issues/05-dispatch-task-and-load-assignment-bodies.md) | 派送任务与装载分配本体 | 大 | — |
 | [06](issues/06-movement-fact-registry.md) | 实际移动事实登记册 | 中 | 01 |
 | [07](issues/07-fulfillment-participation-per-object.md) | 履约参与关系逐对象成立与结束 | 大 | 01, 02 |
+| [08](issues/08-multi-object-pickup-attempt-establishes-no-segment.md) | 多对象到访立段（票 02 分出来的第八张） | 中 | — |
 
 **票 03 与 04 无阻塞边且互不交叉，可与 01 并行。** 票 03 最小（只读面、不建表，`SummarizeHandovers`
 是纯派生，交接册已存在），适合作为本批第一刀验证形状。
@@ -62,6 +63,11 @@ CONTEXT 这句是实际履约段成立的定义性边界：
 
 ## 完工判据
 
-七票全 resolved 时，`production_wiring_baseline.txt` 里 `transport-fulfillment` 那 7 行应当
-**全部被剪掉**（棘轮门禁会自己发现它们有了生产调用点）。剪的时候按基线要求逐条分成因：
-两个名字在全仓是否各只有一处声明，排除「别处同名声明造成误判」那一种。
+立本批时 `production_wiring_baseline.txt` 里 `transport-fulfillment` 有 7 行，本批全 resolved 时
+应当**全部被剪掉**（棘轮门禁会自己发现它们有了生产调用点）。剪的时候按基线要求逐条分成因：
+那个名字在全仓是否只有一处声明，排除「别处同名声明造成误判」那一种。
+
+**但「棘轮全绿」不等于「本批做完」，这一格是 2026-09-03 撞出来的。** 票 02 剪掉
+`EstablishSegmentWith*` 两行之后，`PerformOffsitePickupHandler` 仍然不立段——**而棘轮只量导出
+工厂，此后不会再为它红一次**。票 08 就是从这个缝里分出来的。所以上面那句判据只判「名单清空」，
+判不了「每个入口都接上了」；后者只有票面与测试守得住。同一句写在基线该组的注释里。
