@@ -1,7 +1,7 @@
 # admin 写面四格：关段、建派送任务、装载分配、明确终止参与
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved——2026-09-03 MCP-4，代码一笔 `3b6c480`（若并回前再 rebase，以 Comments 末行为准），验证见 Comments
 Blocked by: 无
 
 ## 从哪里来
@@ -72,3 +72,19 @@ Blocked by: 无
 
 同票 04：四个端点在表上、未配置即拒在前、装配测试含真库 PASS 且那一串关段序列走通、专钉测试
 红过再绿、临时 worktree 全绿、提交带 pathspec、向 MCP-3 报 SHA 与验证种类。
+
+## Comments
+
+2026-09-03 · MCP-4 完成记录（隔离 worktree `mcp4-tf03`）：
+
+- 四个适配器一用例一文件；终止口用比应用命令更窄的 `tfhttp.ParticipationTermination`，Intake 造不出 `Source`
+  与下一段/交接/交付键——「只能铸终止那一路」在类型上成立，并有捕获替身测试钉住编排实际收到的命令。
+- 关段与终止两口的结果类型自己不带段/对象引用，端点用一个小包装把命令里的引用带给映射回显。
+- 装配 `assemble_segment_operations.go`：四条各包事务、四个包装类型分立；`EndFulfillmentParticipationDeps`
+  四缝全接真（终止一路不读交接与交付两册，但 Deps 是一份）。
+- 真库装配测试第一次把票 01 的三条判据在装配点串起来：仍有在场关不上 → 终止 → 关上 → 重放已关闭 → 新对象
+  来到关闭段答 `SEGMENT_CLOSED`（票 04 那一格在真库上同样成立）。
+- 验证：全仓 gofmt / build / vet / `go test -count=1 ./...` 在最终 SHA 的干净检出上跑，含真库（PASS 非 SKIP）。
+- 机制清点已重生成（TF 生产 +4 / 测试 +1 / http +4 / 端点 +4）。
+
+未做：管理台表单页（ADR-0085 决定三，两阶段纪律，页另立票）；简报第 7 行「到达事实 → 建派送任务」归票 09。
