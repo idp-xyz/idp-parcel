@@ -87,6 +87,7 @@ func assembleBusinessEndpoints(
 	commercialPolicies commercialhttp.CommercialPolicyCatalogueReader,
 	commercialRelations commercialhttp.CommercialRelationCatalogueReader,
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
+	customerAccounts commercialhttp.CustomerAccountCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	commercialPublication commercialhttp.CommercialAuthorityPublisher,
 	partyIdentityRegistration commercialhttp.PartyIdentityRegistrar,
@@ -259,6 +260,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-business-parties", Handler: commercialhttp.NewQueryBusinessPartiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
+		// 货主客户账户册（票 admin-write-faces/04）——身份三级里的第三级，独立入口且独立读口
+		// 参数：它按 CONTEXT 落在客户与合同页而不是上面两册所在的页（一页一入口），读口跟着
+		// 页走；不并进 /commercial-customer-contracts，合同是商业版本、账户是身份登记修订，
+		// 状态代数不同（裁决在 ports.CustomerAccountCatalogueRead 注释）。生产装配交入的仍是
+		// 同一只商业目录适配器。
+		{Pattern: "/commercial-customer-accounts", Handler: commercialhttp.NewQueryCustomerAccountsEndpoint(commercialCatalogueIntake, customerAccounts)},
 		// 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）独立入口，不并进
 		// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
 		// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。

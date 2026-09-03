@@ -307,6 +307,7 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
+			commercialCatalog,
 			commercialRegistration.publication,
 			commercialRegistration.partyIdentity,
 			commercialRegistration.productChannel,

@@ -101,6 +101,7 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	"/commercial-supplier-agreements":      true,
 	"/commercial-group-legal-entities":     true,
 	"/commercial-party-relationships":      true,
+	"/commercial-customer-accounts":        true,
 	"/commercial-product-channel-mappings": true,
 	"/visibility-catalogues":               true,
 	"/exception-triage-records":            true,
