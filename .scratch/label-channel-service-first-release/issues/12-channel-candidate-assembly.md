@@ -1,7 +1,7 @@
 # 12 候选装配：产品—渠道映射到候选集合之间没有适配器
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-6（2026-09-02 认领并已落五片，当时漏改本行；2026-09-03 补记。未完，缺项见 Comments 末条）
 Blocked by: 01（已 resolved：择优取乙落 `parcel-shipment`，装配随之落该上下文的 `adapters/partycommercial/`）
 
 ## 缺口
