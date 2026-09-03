@@ -179,6 +179,44 @@ func (unwiredMovementFact) Record(
 	return tfapp.RecordMovementFactResult{}, errOrchestrationNotWired
 }
 
+// TF 四个 admin 写面的编排占位（票 tf-segment-lifecycle-closure/07）。四个类型分立，随生产侧的四个事务
+// 包装：合成一个会让装配测试盖不住「某一口接错了编排」。
+type unwiredSegmentCloser struct{}
+
+func (unwiredSegmentCloser) Close(
+	context.Context,
+	tfapp.CloseFulfillmentSegmentCommand,
+) (tfapp.CloseFulfillmentSegmentResult, error) {
+	return tfapp.CloseFulfillmentSegmentResult{}, errOrchestrationNotWired
+}
+
+type unwiredDispatchTaskOpener struct{}
+
+func (unwiredDispatchTaskOpener) Open(
+	context.Context,
+	tfapp.OpenDispatchTaskCommand,
+) (tfapp.OpenDispatchTaskResult, error) {
+	return tfapp.OpenDispatchTaskResult{}, errOrchestrationNotWired
+}
+
+type unwiredLoadAssigner struct{}
+
+func (unwiredLoadAssigner) Form(
+	context.Context,
+	tfapp.FormLoadAssignmentCommand,
+) (tfapp.FormLoadAssignmentResult, error) {
+	return tfapp.FormLoadAssignmentResult{}, errOrchestrationNotWired
+}
+
+type unwiredParticipationEnder struct{}
+
+func (unwiredParticipationEnder) End(
+	context.Context,
+	tfapp.EndFulfillmentParticipationCommand,
+) (tfapp.EndFulfillmentParticipationResult, error) {
+	return tfapp.EndFulfillmentParticipationResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

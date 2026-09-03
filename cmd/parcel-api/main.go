@@ -137,6 +137,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	segmentOps, err := buildSegmentOperations(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -314,6 +318,10 @@ func run(logger *slog.Logger) error {
 			controlFacts.pickupRegistration,
 			controlFacts.pickupAttempt,
 			movementFact,
+			segmentOps.closer,
+			segmentOps.opener,
+			segmentOps.assign,
+			segmentOps.enderOf,
 			trackingViews,
 			projectionViews,
 			claims,

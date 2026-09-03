@@ -205,6 +205,29 @@ func (double *segmentRegistryDouble) closeSegment(t *testing.T, tenant, segment 
 	t.Fatalf("段登记册里没有 (%s, %s)，关不了", tenant, segment)
 }
 
+// endAllParticipations 让某段的每条在场参与以明确控制终止收尾，但**不关段**——关段那一步留给被测的
+// 关段编排走，这样「全部参与已结束 → 才关得上」这条判据才是被端点真正触到的。
+func (double *segmentRegistryDouble) endAllParticipations(t *testing.T, tenant, segment string, endedAt time.Time) {
+	t.Helper()
+	basis, err := domain.NewParticipationBasisReference("control-termination/test")
+	if err != nil {
+		t.Fatalf("basis: %v", err)
+	}
+	for _, rows := range double.rows {
+		if rows.key.TenantID.String() != tenant || rows.key.Segment.String() != segment {
+			continue
+		}
+		for index := range rows.participations {
+			row := &rows.participations[index]
+			if row.EndedAt.IsZero() {
+				row.EndKind, row.EndBasis, row.EndedAt = domain.EndedByControlTermination, basis, endedAt
+			}
+		}
+		return
+	}
+	t.Fatalf("段登记册里没有 (%s, %s)", tenant, segment)
+}
+
 func (double *segmentRegistryDouble) hasSegment(tenant, segment string) bool {
 	for _, rows := range double.rows {
 		if rows.key.TenantID.String() == tenant && rows.key.Segment.String() == segment {

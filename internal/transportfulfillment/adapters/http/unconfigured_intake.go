@@ -40,6 +40,10 @@ var _ HandoverIntake = UnconfiguredIntake{}
 var _ PickupRegistrationIntake = UnconfiguredIntake{}
 var _ PickupAttemptIntake = UnconfiguredIntake{}
 var _ MovementFactIntake = UnconfiguredIntake{}
+var _ SegmentClosureIntake = UnconfiguredIntake{}
+var _ DispatchTaskIntake = UnconfiguredIntake{}
+var _ LoadAssignmentIntake = UnconfiguredIntake{}
+var _ ParticipationTerminationIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -84,4 +88,22 @@ func (UnconfiguredIntake) IntakePickupAttempt(context.Context, *http.Request) (a
 // 连命令都不构造——这一格也是「外部轨迹不从这里进」在渠道层的第一道门。
 func (UnconfiguredIntake) IntakeMovementFact(context.Context, *http.Request) (application.RecordMovementFactCommand, error) {
 	return application.RecordMovementFactCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 四个 admin 写面（票 07）同堵：写准入不另立形（ADR-0085 决定二），运营写决定在渠道就位前一样没有
+// 可采信的身份，连命令都不构造。
+func (UnconfiguredIntake) IntakeSegmentClosure(context.Context, *http.Request) (application.CloseFulfillmentSegmentCommand, error) {
+	return application.CloseFulfillmentSegmentCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDispatchTask(context.Context, *http.Request) (application.OpenDispatchTaskCommand, error) {
+	return application.OpenDispatchTaskCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeLoadAssignment(context.Context, *http.Request) (application.FormLoadAssignmentCommand, error) {
+	return application.FormLoadAssignmentCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeParticipationTermination(context.Context, *http.Request) (ParticipationTermination, error) {
+	return ParticipationTermination{}, ErrAccessChannelNotConfigured
 }

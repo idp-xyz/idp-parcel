@@ -67,6 +67,10 @@ func assembleBusinessEndpoints(
 	pickupRegistration tfhttp.PickupRegistrationHandler,
 	pickupAttempt tfhttp.PickupAttemptHandler,
 	movementFact tfhttp.MovementFactHandler,
+	segmentCloser tfhttp.SegmentCloser,
+	dispatchTaskOpener tfhttp.DispatchTaskOpener,
+	loadAssigner tfhttp.LoadAssigner,
+	participationEnder tfhttp.ParticipationEnder,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -202,6 +206,14 @@ func assembleBusinessEndpoints(
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营
 		// 执行方由 Intake 的认证结果说，渠道未就位前同挂字面量 UnconfiguredIntake{}。
 		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(tfhttp.UnconfiguredIntake{}, movementFact)},
+		// TF 四个 admin 写面（ADR-0085，票 tf-segment-lifecycle-closure/07）：关段、建派送任务、装载分配、
+		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
+		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形，同挂字面量 UnconfiguredIntake{}。
+		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
+		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(tfhttp.UnconfiguredIntake{}, segmentCloser)},
+		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(tfhttp.UnconfiguredIntake{}, dispatchTaskOpener)},
+		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(tfhttp.UnconfiguredIntake{}, loadAssigner)},
+		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(tfhttp.UnconfiguredIntake{}, participationEnder)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
