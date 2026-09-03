@@ -299,3 +299,160 @@ func segmentRecord(
 	}
 	return ports.FulfillmentSegmentRecord{Key: key, Segment: built, RecordedAt: segmentEnteredAtFixture}
 }
+
+// —— 三个窄写口（ADR-0097）——
+
+// TestJoiningAnExistingSegmentIsInsertOnly 证第一个窄口：只插不改，撞键是业务答案。
+func TestJoiningAnExistingSegmentIsInsertOnly(t *testing.T) {
+	repository, transactor, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	key := segmentKeyFixture(t, "tenant-1", "SEG-J001")
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-J001", activeMember(t, "parcel-1")))
+
+	joined := rebuiltParticipation(t, "SEG-J001", activeMember(t, "parcel-2"))
+	var first, second ports.SegmentJoinOutcome
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		if first, err = repository.Join(txCtx, key, joined, segmentEnteredAtFixture); err != nil {
+			return err
+		}
+		second, err = repository.Join(txCtx, key, joined, segmentEnteredAtFixture)
+		return err
+	})
+	if first != ports.ObjectJoined {
+		t.Fatalf("首次加入 outcome = %d", first)
+	}
+	if second != ports.ObjectAlreadyParticipating {
+		t.Fatalf("重复加入 outcome = %d, want ObjectAlreadyParticipating", second)
+	}
+
+	found, _, err := repository.FindByKey(ctx, key)
+	if err != nil {
+		t.Fatalf("取回：%v", err)
+	}
+	if found.Segment.ActiveParticipations() != 2 {
+		t.Fatalf("在场参与 = %d, want 2", found.Segment.ActiveParticipations())
+	}
+}
+
+// TestEndingAParticipationCannotOverwriteAnExistingEnd 证第二个窄口最要紧的那一条：
+// WHERE ended_at IS NULL 让「改写一条已离场的参与」表达不出来——第二次离场既不报错也不
+// 生效，原离场三件原样留着。
+func TestEndingAParticipationCannotOverwriteAnExistingEnd(t *testing.T) {
+	repository, transactor, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	key := segmentKeyFixture(t, "tenant-1", "SEG-E001")
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-E001", activeMember(t, "parcel-1")))
+
+	delivered := rebuiltParticipation(t, "SEG-E001", deliveredMember(t, "parcel-1"))
+	var first ports.ParticipationEndOutcome
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		first, err = repository.EndParticipation(txCtx, key, delivered)
+		return err
+	})
+	if first != ports.ParticipationEnded {
+		t.Fatalf("首次离场 outcome = %d", first)
+	}
+
+	// 换一套完全不同的离场三件再试一次——若它生效，原离场就被改写了。
+	other := activeMember(t, "parcel-1")
+	other.EndKind = domain.EndedByControlTermination
+	other.EndBasis = segmentRef(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/other")
+	other.EndedAt = segmentEnteredAtFixture.Add(20 * time.Hour)
+	var second ports.ParticipationEndOutcome
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		second, err = repository.EndParticipation(txCtx, key, rebuiltParticipation(t, "SEG-E001", other))
+		return err
+	})
+	if second != ports.ParticipationAlreadyEnded {
+		t.Fatalf("二次离场 outcome = %d, want ParticipationAlreadyEnded", second)
+	}
+
+	found, _, err := repository.FindByKey(ctx, key)
+	if err != nil {
+		t.Fatalf("取回：%v", err)
+	}
+	participation, _ := found.Segment.ParticipationFor(segmentRef(t, domain.NewCarriedObjectReference, "parcel-1"))
+	kind, basis, at, ended := participation.End()
+	if !ended || kind != domain.EndedByEffectiveDelivery ||
+		basis.String() != "EFFECTIVE-DELIVERY/parcel-1" || !at.Equal(segmentEnteredAtFixture.Add(8*time.Hour)) {
+		t.Fatalf("原离场被改写了：%q %q %v", kind, basis, at)
+	}
+}
+
+// TestClosingASegmentTwiceIsAlreadyClosed 证第三个窄口：WHERE closed = false 让重复关段与
+// 「把已关闭的段改回未关闭」都表达不出来。
+func TestClosingASegmentTwiceIsAlreadyClosed(t *testing.T) {
+	repository, transactor, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+
+	key := segmentKeyFixture(t, "tenant-1", "SEG-C001")
+	mustSaveSegment(t, transactor, ctx, repository, segmentRecord(t, "SEG-C001", deliveredMember(t, "parcel-1")))
+
+	closedAt := segmentEnteredAtFixture.Add(12 * time.Hour)
+	var first, second ports.SegmentCloseOutcome
+	mustWithinSegmentTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		if first, err = repository.CloseSegment(txCtx, key, closedAt); err != nil {
+			return err
+		}
+		second, err = repository.CloseSegment(txCtx, key, closedAt.Add(time.Hour))
+		return err
+	})
+	if first != ports.SegmentClosed {
+		t.Fatalf("首次关段 outcome = %d", first)
+	}
+	if second != ports.SegmentAlreadyClosed {
+		t.Fatalf("二次关段 outcome = %d, want SegmentAlreadyClosed", second)
+	}
+
+	found, _, err := repository.FindByKey(ctx, key)
+	if err != nil {
+		t.Fatalf("取回：%v", err)
+	}
+	at, isClosed := found.Segment.ClosedAt()
+	if !isClosed || !at.Equal(closedAt) {
+		t.Fatalf("关闭时刻被二次关段改写了：%v", at)
+	}
+}
+
+// TestNarrowSegmentDoorsRefuseToRunOutsideATransaction 证三个窄口各自都要环境事务。
+func TestNarrowSegmentDoorsRefuseToRunOutsideATransaction(t *testing.T) {
+	repository, _, _ := newSegmentRegistry(t)
+	ctx := t.Context()
+	key := segmentKeyFixture(t, "tenant-1", "SEG-T001")
+	member := rebuiltParticipation(t, "SEG-T001", deliveredMember(t, "parcel-1"))
+
+	if _, err := repository.Join(ctx, key, member, segmentEnteredAtFixture); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("Join 无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := repository.EndParticipation(ctx, key, member); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("EndParticipation 无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := repository.CloseSegment(ctx, key, segmentEnteredAtFixture); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("CloseSegment 无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// rebuiltParticipation 从重建规格取出单条参与关系——测试要传给窄口的是领域值，
+// 而领域值只能由段交出来。
+func rebuiltParticipation(
+	t *testing.T,
+	segment string,
+	member domain.RehydrateParticipationSpec,
+) domain.FulfillmentParticipation {
+	t.Helper()
+	built, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+		TenantID:       segmentRef(t, domain.NewTenantID, "tenant-1"),
+		Segment:        segmentRef(t, domain.NewFulfillmentSegmentReference, segment),
+		Participations: []domain.RehydrateParticipationSpec{member},
+	})
+	if err != nil {
+		t.Fatalf("构造参与关系：%v", err)
+	}
+	return built.Participations()[0]
+}

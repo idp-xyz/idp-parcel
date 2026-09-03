@@ -153,19 +153,118 @@ func (repository *FulfillmentSegments) Save(
 	}
 
 	for _, participation := range record.Segment.Participations() {
-		if err := insertParticipation(ctx, executor, record, participation); err != nil {
+		if _, err := insertParticipationRow(
+			ctx, executor, record.Key, participation, record.RecordedAt, false,
+		); err != nil {
 			return ports.SegmentSaveOutcomeInvalid, fmt.Errorf("save fulfillment segment: %w", err)
 		}
 	}
 	return ports.SegmentSaved, nil
 }
 
-func insertParticipation(
+// Join 把一个对象插进既有段（ADR-0097 第一个窄口）。**只插不改**：撞主键即「该对象已在
+// 段内」，是业务答案不是错误。
+//
+// 不校验段是否已关闭——那由外键之外的领域判断负责（`join` 在段已关闭时拒）。本口若替它判，
+// 就成了第二个口径。
+func (repository *FulfillmentSegments) Join(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+	recordedAt time.Time,
+) (ports.SegmentJoinOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.SegmentJoinOutcomeInvalid, fmt.Errorf("join fulfillment segment: %w", err)
+	}
+	tag, err := insertParticipationRow(ctx, executor, key, participation, recordedAt, true)
+	if err != nil {
+		return ports.SegmentJoinOutcomeInvalid, fmt.Errorf("join fulfillment segment: %w", err)
+	}
+	if tag == 0 {
+		return ports.ObjectAlreadyParticipating, nil
+	}
+	return ports.ObjectJoined, nil
+}
+
+// EndParticipation 填离场三列（ADR-0097 第二个窄口）。
+//
+// `WHERE ended_at IS NULL` 是这个口的全部要害：**它让"改写一条已离场的参与"表达不出来**。
+// 没有匹配行时答`已离场`，而不是报错——已结束的参与不重复结束也不改写，那是业务答案。
+func (repository *FulfillmentSegments) EndParticipation(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+) (ports.ParticipationEndOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ParticipationEndOutcomeInvalid, fmt.Errorf("end participation: %w", err)
+	}
+	kind, basis, endedAt, ended := participation.End()
+	if !ended {
+		return ports.ParticipationEndOutcomeInvalid,
+			errors.New("end participation: the participation carries no end")
+	}
+
+	tag, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.fulfillment_participation
+		    SET end_kind = $1, end_basis = $2, ended_at = $3
+		  WHERE tenant_id = $4 AND segment_ref = $5 AND object_ref = $6
+		    AND ended_at IS NULL`,
+		kind.String(), basis.String(), endedAt.UTC(),
+		key.TenantID.String(), key.Segment.String(), participation.Object().String(),
+	)
+	if err != nil {
+		return ports.ParticipationEndOutcomeInvalid, fmt.Errorf("end participation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ParticipationAlreadyEnded, nil
+	}
+	return ports.ParticipationEnded, nil
+}
+
+// CloseSegment 填关闭两列（ADR-0097 第三个窄口）。`WHERE closed = false` 让重复关段与
+// 「把已关闭的段改回未关闭」都表达不出来。
+//
+// **它不校验是否仍有在场参与**——那是跨行条件，本口表达不了，留在领域。编排必须先读回整段、
+// 走 `CloseSegment` 转换门再调本口。
+func (repository *FulfillmentSegments) CloseSegment(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	closedAt time.Time,
+) (ports.SegmentCloseOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.SegmentCloseOutcomeInvalid, fmt.Errorf("close fulfillment segment: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.actual_fulfillment_segment
+		    SET closed = true, closed_at = $1
+		  WHERE tenant_id = $2 AND segment_ref = $3 AND closed = false`,
+		closedAt.UTC(), key.TenantID.String(), key.Segment.String(),
+	)
+	if err != nil {
+		return ports.SegmentCloseOutcomeInvalid, fmt.Errorf("close fulfillment segment: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.SegmentAlreadyClosed, nil
+	}
+	return ports.SegmentClosed, nil
+}
+
+// insertParticipationRow 落一条参与关系。`ignoreConflict` 区分两个调用方：首登时撞键说明
+// 记录本身有问题（同一段里同一对象两条），应当报错；`Join` 时撞键是业务答案。
+//
+// 两个调用方共用同一段 INSERT 而不是各写一遍：列一多，两份就会在下一次加列时分叉，而分叉
+// 处正是「首登写得对、加入写漏一列」这种不可能靠测试穷尽的错。
+func insertParticipationRow(
 	ctx context.Context,
 	executor bentopg.Executor,
-	record ports.FulfillmentSegmentRecord,
+	key ports.FulfillmentSegmentKey,
 	participation domain.FulfillmentParticipation,
-) error {
+	recordedAt time.Time,
+	ignoreConflict bool,
+) (int64, error) {
 	var plannedRef *string
 	if planned, has := participation.PlannedSegment(); has {
 		value := planned.String()
@@ -179,13 +278,17 @@ func insertParticipation(
 		endKind, endBasis, endedAt = &kindName, &basisValue, &endMoment
 	}
 
-	_, err := executor.Exec(ctx,
-		`INSERT INTO transport_fulfillment.fulfillment_participation
+	statement := `INSERT INTO transport_fulfillment.fulfillment_participation
 		     (tenant_id, segment_ref, object_ref, planned_ref, entry_kind, entry_basis,
 		      entered_at, end_kind, end_basis, ended_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-		record.Key.TenantID.String(),
-		record.Key.Segment.String(),
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	if ignoreConflict {
+		statement += ` ON CONFLICT DO NOTHING`
+	}
+
+	tag, err := executor.Exec(ctx, statement,
+		key.TenantID.String(),
+		key.Segment.String(),
 		participation.Object().String(),
 		plannedRef,
 		participation.EntryKind().String(),
@@ -194,9 +297,12 @@ func insertParticipation(
 		endKind,
 		endBasis,
 		endedAt,
-		record.RecordedAt.UTC(),
+		recordedAt.UTC(),
 	)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }
 
 // participationRow 是参与关系在库面的一行。
