@@ -15,10 +15,14 @@
 //
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
-// 退出码：0 = 已登记；1 = 用法或输入不合法（含受理门指名拒绝）；3 = 未决（依赖故障
-// 或撞上库上防线，登记与否未知）。没有退出码 2：本口今天没有治理格——重复版本号由
-// 主键挡（ADR-0068 Consequences），落在未决的错误文本里由人按约束名续办（换号或核对
-// 内容），工具不替登记方决定哪个版本号是对的。
+// 退出码：0 = 已登记；1 = 用法或输入不合法（含受理门指名拒绝）；2 = 治理答案（原行
+// 不被顶替，续办属治理裁决）；3 = 未决（依赖故障或撞上库上防线，登记与否未知）。
+//
+// 退出码 2 只出在自动改路事实那一族。0008 的七族没有治理格——重复版本号由主键挡
+// （ADR-0068 Consequences），落在未决的错误文本里由人按约束名续办（换号或核对内容），
+// 工具不替登记方决定哪个版本号是对的。0009 的事实目录不同：它的登记用例自己就答
+// `已存在`与`内容冲突`（同键同版本重登不覆盖，内容之争没有「后到为准」），把这两格
+// 折成失败会让操作员以为重试有用。
 package main
 
 import (
@@ -28,6 +32,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,6 +49,7 @@ import (
 const (
 	exitRegistered = 0
 	exitUsage      = 1
+	exitAttention  = 2
 	exitUndecided  = 3
 )
 
@@ -55,10 +61,33 @@ const (
 	kindServiceCalendar        = "service-calendar"
 	kindAvailabilityAdjustment = "availability-adjustment"
 	kindRouteStrategy          = "route-strategy"
+	kindAutoRerouteFacts       = "auto-reroute-facts"
 )
 
+// supportedKinds 只为 `-kind` 的用法文本与未知族的错误文本服务。列成一处是因为这两段
+// 文本此前各自抄了一遍族名，而新增一族时漏改其中一段不会有任何东西变红。
+var supportedKinds = []string{
+	kindNode, kindConnection, kindLine, kindServiceArea,
+	kindServiceCalendar, kindAvailabilityAdjustment, kindRouteStrategy,
+	kindAutoRerouteFacts,
+}
+
+// systemClock 是 Clock 端口的生产实现，与各进程级入口同形。事实登记的时刻由用例取
+// 时钟，不由登记行携带——登记方说了不算「这是什么时候陈述的」。
+type systemClock struct{}
+
+func (systemClock) Now() time.Time { return time.Now().UTC() }
+
+// registrars 收本口要用到的登记用例。两族不合并成一个接口：目录七族的答案代数是
+// `已登记`/`被拒`两格，事实目录多出`已存在`与`内容冲突`两格治理答案，合并要先造一个
+// 两边都不自然的结果类型，而那正好会把「重试有用」与「重试没用」抹平成一格。
+type registrars struct {
+	catalog          *application.NetworkCatalogRegistration
+	autoRerouteFacts *application.RegisterAutoRerouteFactsHandler
+}
+
 func main() {
-	kind := flag.String("kind", "", "登记族：node / connection / line / service-area / service-calendar / availability-adjustment / route-strategy")
+	kind := flag.String("kind", "", "登记族："+strings.Join(supportedKinds, " / "))
 	file := flag.String("file", "", "登记行 JSON 路径")
 	flag.Parse()
 
@@ -99,8 +128,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造登记用例：%v\n", err)
 		os.Exit(exitUndecided)
 	}
+	facts, err := adapter.NewAutoRerouteFactsCatalog(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造自动改路事实目录：%v\n", err)
+		os.Exit(exitUndecided)
+	}
 
-	message, code := execute(ctx, *kind, raw, registration, db.Transactor())
+	message, code := execute(ctx, *kind, raw, registrars{
+		catalog: registration,
+		autoRerouteFacts: application.NewRegisterAutoRerouteFactsHandler(
+			application.RegisterAutoRerouteFactsDeps{Registry: facts, Clock: systemClock{}},
+		),
+	}, db.Transactor())
 	fmt.Println(message)
 	os.Exit(code)
 }
@@ -113,9 +152,15 @@ func execute(
 	ctx context.Context,
 	kind string,
 	raw []byte,
-	registrar *application.NetworkCatalogRegistration,
+	reg registrars,
 	transactor bentoapp.Transactor,
 ) (string, int) {
+	// 事实目录那一族在这里分出去而不是并进 commandFor：两族的结果类型与答案代数都不
+	// 同，硬并要先把治理答案挤进一个只有两格的类型里。族路由仍只有这一处。
+	if kind == kindAutoRerouteFacts {
+		return executeAutoRerouteFacts(ctx, raw, reg.autoRerouteFacts, transactor)
+	}
+
 	dispatch, err := commandFor(kind, raw)
 	if err != nil {
 		return fmt.Sprintf("%s: 译装被拒：%v", kind, err), exitUsage
@@ -123,7 +168,7 @@ func execute(
 
 	var result application.RegisterCatalogResult
 	err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		outcome, err := dispatch(txCtx, registrar)
+		outcome, err := dispatch(txCtx, reg.catalog)
 		result = outcome
 		return err
 	})
@@ -328,9 +373,47 @@ func commandFor(
 			return registrar.RegisterRouteStrategyVersion(ctx, command)
 		}, nil
 	default:
-		return nil, fmt.Errorf("未知登记族 %q（支持 %s / %s / %s / %s / %s / %s / %s）",
-			kind, kindNode, kindConnection, kindLine, kindServiceArea,
-			kindServiceCalendar, kindAvailabilityAdjustment, kindRouteStrategy)
+		return nil, fmt.Errorf("未知登记族 %q（支持 %s）", kind, strings.Join(supportedKinds, " / "))
+	}
+}
+
+// executeAutoRerouteFacts 把一版自动改路四条件事实推进到应用答案。它与七族那条路平行
+// 而不共用，因为答案代数多两格：`已存在`与`内容冲突`都不是失败——原行不被顶替，续办
+// 属治理裁决，折成退出码 1 会让操作员以为改一改输入重试就成。
+func executeAutoRerouteFacts(
+	ctx context.Context,
+	raw []byte,
+	handler *application.RegisterAutoRerouteFactsHandler,
+	transactor bentoapp.Transactor,
+) (string, int) {
+	var payload autoRerouteFactsPayload
+	if err := decodeStrict(raw, &payload); err != nil {
+		return fmt.Sprintf("%s: 译装被拒：%v", kindAutoRerouteFacts, err), exitUsage
+	}
+	command, err := payload.command()
+	if err != nil {
+		return fmt.Sprintf("%s: 译装被拒：%v", kindAutoRerouteFacts, err), exitUsage
+	}
+
+	var result application.RegisterAutoRerouteFactsResult
+	err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		outcome, err := handler.Handle(txCtx, command)
+		result = outcome
+		return err
+	})
+	if err != nil {
+		return fmt.Sprintf("%s: 未决：%v", kindAutoRerouteFacts, err), exitUndecided
+	}
+	switch result.Outcome() {
+	case application.AutoRerouteFactsAccepted:
+		return kindAutoRerouteFacts + ": " + result.Outcome().String(), exitRegistered
+	case application.AutoRerouteFactsAlreadyExists, application.AutoRerouteFactsConflict:
+		return kindAutoRerouteFacts + ": " + result.Outcome().String(), exitAttention
+	case application.AutoRerouteFactsRefused:
+		return fmt.Sprintf("%s: %s(%s)", kindAutoRerouteFacts, result.Outcome(), result.RefusalReason()), exitUsage
+	default:
+		// 用例交回一个它自己都不认识的格是实现坏了，不是业务答案。
+		return fmt.Sprintf("%s: 未知应用结果 %d", kindAutoRerouteFacts, result.Outcome()), exitUndecided
 	}
 }
 
@@ -419,4 +502,71 @@ type strategyPayload struct {
 	ApplicableScope string     `json:"applicable_scope"`
 	EffectiveFrom   time.Time  `json:"effective_from"`
 	EffectiveTo     *time.Time `json:"effective_to"`
+}
+
+// autoRerouteFactsPayload 是四条件事实登记行的 JSON 形状。判断键六维逐个到达——键是
+// 包裹级判断范围，不是一个可缩写的标识；两份清单以原始字符串到达，翻译成领域引用由
+// 受理门做。登记时刻不在这里：它由用例取时钟。
+type autoRerouteFactsPayload struct {
+	TenantID           string `json:"tenant_id"`
+	CustomerAccountID  string `json:"customer_account_id"`
+	ShipmentRequestID  string `json:"shipment_request_id"`
+	AcceptanceBaseline string `json:"acceptance_baseline"`
+	DeclaredParcelID   string `json:"declared_parcel_id"`
+	ServicePurpose     string `json:"service_purpose"`
+
+	Version                     int      `json:"version"`
+	PolicyAllowsAutomatic       bool     `json:"policy_allows_automatic"`
+	AtControlledNode            bool     `json:"at_controlled_node"`
+	OnlyUnexecutedAffected      bool     `json:"only_unexecuted_affected"`
+	UnresolvedRestrictions      []string `json:"unresolved_restrictions"`
+	OutstandingResponsibilities []string `json:"outstanding_responsibilities"`
+	StrategyBasis               string   `json:"strategy_basis"`
+}
+
+// command 把登记行译成命令。六维各自过自己的构造器：键不成立在这里就断，不留给受理门
+// 用一个笼统的`键不完整`回答——那格是给「维度确实缺了」用的，不是给「这一维写坏了」。
+func (payload autoRerouteFactsPayload) command() (application.RegisterAutoRerouteFactsCommand, error) {
+	none := application.RegisterAutoRerouteFactsCommand{}
+	tenant, err := domain.NewTenantID(payload.TenantID)
+	if err != nil {
+		return none, err
+	}
+	account, err := domain.NewCustomerAccountID(payload.CustomerAccountID)
+	if err != nil {
+		return none, err
+	}
+	request, err := domain.NewShipmentRequestID(payload.ShipmentRequestID)
+	if err != nil {
+		return none, err
+	}
+	baseline, err := domain.NewAcceptanceBaselineReference(payload.AcceptanceBaseline)
+	if err != nil {
+		return none, err
+	}
+	parcel, err := domain.NewDeclaredParcelID(payload.DeclaredParcelID)
+	if err != nil {
+		return none, err
+	}
+	purpose, err := domain.NewServicePurpose(payload.ServicePurpose)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterAutoRerouteFactsCommand{
+		Key: domain.InitialRouteJudgmentKey{
+			TenantID:           tenant,
+			CustomerAccountID:  account,
+			ShipmentRequestID:  request,
+			AcceptanceBaseline: baseline,
+			DeclaredParcelID:   parcel,
+			ServicePurpose:     purpose,
+		},
+		Version:                     payload.Version,
+		PolicyAllowsAutomatic:       payload.PolicyAllowsAutomatic,
+		AtControlledNode:            payload.AtControlledNode,
+		OnlyUnexecutedAffected:      payload.OnlyUnexecutedAffected,
+		UnresolvedRestrictions:      payload.UnresolvedRestrictions,
+		OutstandingResponsibilities: payload.OutstandingResponsibilities,
+		StrategyBasis:               payload.StrategyBasis,
+	}, nil
 }
