@@ -135,13 +135,39 @@ func (register *ReferenceSeriesVersions) ResolveAt(
 	reference domain.VersionReference,
 	asOf time.Time,
 ) (domain.ResolvedSeriesReading, bool, error) {
-	if tenant.String() == "" || reference.ID() == "" || asOf.IsZero() {
+	if asOf.IsZero() {
 		return domain.ResolvedSeriesReading{}, false, fmt.Errorf(
 			"resolve reference series: tenant, reference and asOf are required")
 	}
-	querier, err := register.db.ReadExecutor(ctx)
+	registration, found, err := register.LoadVersion(ctx, tenant, reference.ID(), reference.Version())
 	if err != nil {
 		return domain.ResolvedSeriesReading{}, false, fmt.Errorf("resolve reference series: %w", err)
+	}
+	if !found {
+		return domain.ResolvedSeriesReading{}, false, nil
+	}
+	reading, found := registration.ResolveAt(asOf)
+	if !found {
+		return domain.ResolvedSeriesReading{}, false, nil
+	}
+	return reading, true, nil
+}
+
+// LoadVersion 实现 ports.ReferenceSeriesVersionLoader：读回一版登记并整版重验，再与比对
+// 列交叉核。ResolveAt 与复核用例都从这里取登记——一处读回门。
+func (register *ReferenceSeriesVersions) LoadVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	seriesID string,
+	seriesVersion string,
+) (domain.ReferenceSeriesRegistration, bool, error) {
+	if tenant.String() == "" || seriesID == "" || seriesVersion == "" {
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf(
+			"load reference series version: tenant, series and version are required")
+	}
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf("load reference series version: %w", err)
 	}
 
 	var kind, grade, canonicalization, digest string
@@ -150,39 +176,36 @@ func (register *ReferenceSeriesVersions) ResolveAt(
 		`SELECT kind, evidence_grade, canonicalization, content_digest, snapshot
 		   FROM parcel_pricing.reference_series_version
 		  WHERE tenant_id = $1 AND series_id = $2 AND series_version = $3`,
-		tenant.String(), reference.ID(), reference.Version(),
+		tenant.String(), seriesID, seriesVersion,
 	).Scan(&kind, &grade, &canonicalization, &digest, &snapshot)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.ResolvedSeriesReading{}, false, nil
+		return domain.ReferenceSeriesRegistration{}, false, nil
 	}
 	if err != nil {
-		return domain.ResolvedSeriesReading{}, false, fmt.Errorf("resolve reference series: %w", err)
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf("load reference series version: %w", err)
 	}
 
 	registration, err := domain.RehydrateReferenceSeriesRegistration(snapshot)
 	if err != nil {
-		return domain.ResolvedSeriesReading{}, false, fmt.Errorf(
-			"resolve reference series: %s/%s：%w", reference.ID(), reference.Version(), err)
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf(
+			"load reference series version: %s/%s：%w", seriesID, seriesVersion, err)
 	}
 	expectedGrade := seriesGradeAsserted
 	if registration.Verifiable() {
 		expectedGrade = seriesGradeVerifiable
 	}
 	if registration.Tenant() != tenant ||
-		registration.Reference().ID() != reference.ID() ||
-		registration.Reference().Version() != reference.Version() ||
+		registration.Reference().ID() != seriesID ||
+		registration.Reference().Version() != seriesVersion ||
 		registration.Kind().String() != kind ||
 		expectedGrade != grade ||
 		registration.Canonicalization() != canonicalization ||
 		registration.ContentDigest() != digest {
-		return domain.ResolvedSeriesReading{}, false, fmt.Errorf(
-			"resolve reference series: comparison columns disagree with the snapshot for %s/%s",
-			reference.ID(), reference.Version())
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf(
+			"load reference series version: comparison columns disagree with the snapshot for %s/%s",
+			seriesID, seriesVersion)
 	}
-
-	reading, found := registration.ResolveAt(asOf)
-	if !found {
-		return domain.ResolvedSeriesReading{}, false, nil
-	}
-	return reading, true, nil
+	return registration, true, nil
 }
+
+var _ ports.ReferenceSeriesVersionLoader = (*ReferenceSeriesVersions)(nil)

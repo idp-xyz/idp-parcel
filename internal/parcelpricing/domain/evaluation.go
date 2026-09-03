@@ -121,6 +121,22 @@ type EvaluationRequest struct {
 	expectedManifest         *VersionManifest
 	expectedContentDigest    string
 	expectedCanonicalization string
+	seriesNotes              []string
+}
+
+// WithSeriesResolutionNotes 带上编排层在解析在用序列版本时留下的说明（无已登记版本 /
+// 有版本未复核 / 在用版本无覆盖该时点的期次 / 种类不合）。它们只进解释，不进输入快照
+// 也不进语义摘要：那是形成评价那一刻登记册的状态，不是评价的语义——重放按原输入重算，
+// 不该因登记册后来变了而判成结果不一致。
+func (request EvaluationRequest) WithSeriesResolutionNotes(notes ...string) EvaluationRequest {
+	copyOfRequest := request
+	copyOfRequest.seriesNotes = append([]string(nil), request.seriesNotes...)
+	for _, note := range notes {
+		if trimmed(note) {
+			copyOfRequest.seriesNotes = append(copyOfRequest.seriesNotes, note)
+		}
+	}
+	return copyOfRequest
 }
 
 func NewEvaluationRequest(
@@ -696,6 +712,7 @@ func baseEvaluation(request EvaluationRequest) PricingEvaluation {
 		planContentDigest:    request.plan.contentDigest,
 		planCanonicalization: request.plan.canonicalization,
 		manifest:             composeEvaluationManifest(request.plan, request.input),
+		explanation:          append([]string(nil), request.seriesNotes...),
 	}
 }
 

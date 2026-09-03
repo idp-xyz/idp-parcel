@@ -14,6 +14,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,8 @@ const (
 	// 演示动线的统一生效起点：全套种子讲同一段 2026 年的合成故事。
 	registrant = "SYN-PRICING-OPS-01"
 	approver   = "SYN-PRICING-GOVERNOR-01"
+	// 序列版本复核责任方；须与 registrant 不同（四眼门，ADR-0099 决定二）。
+	reviewer = "SYN-PRICING-REVIEW-01"
 )
 
 func main() {
@@ -40,6 +43,28 @@ func main() {
 	write(outDir, "price-card-cn-sg-cost.json", buyCardSnapshot())
 	write(outDir, "reference-series-fuel.json", fuelSeriesSnapshot())
 	write(outDir, "reference-series-fx-cny-sgd.json", fxSeriesSnapshot())
+	// 两条序列各一份复核：不复核就不在用，demo 评价会如实挂起（ADR-0099 决定二、三）。
+	// 复核责任方与登记责任方不是同一个合成身份——四眼门在种子里也照守。
+	write(outDir, "reference-series-fuel-review.json", seriesReviewDocument("SYN-SERIES-FUEL-01", "v1"))
+	write(outDir, "reference-series-fx-cny-sgd-review.json", seriesReviewDocument("SYN-SERIES-FX-CNY-SGD", "v1"))
+}
+
+// seriesReviewDocument 产出 parcel-pricing-register -kind reference-series-review 吃的复核
+// 文档。它不是领域折装快照（复核没有摘要自校那一层），所以这里直接写线格式；字段名与
+// 该 CLI 的 reviewDocument 一致。
+func seriesReviewDocument(seriesID, version string) []byte {
+	document := map[string]string{
+		"tenant":        tenantID,
+		"seriesId":      seriesID,
+		"seriesVersion": version,
+		"reviewer":      reviewer,
+		"decision":      "APPROVED",
+		"basis":         "SYN-REVIEW/合成序列逐期对照公布记录（S 级，仅隔离验证）",
+		"reviewedAt":    "2026-01-02T00:00:00Z",
+	}
+	raw, err := json.Marshal(document)
+	must("复核文档 "+seriesID, err)
+	return raw
 }
 
 // sellCardSnapshot 折装售价卡 SYN-PLAN-CN-SG-01 v1：华东/华南→新加坡的首重+续重

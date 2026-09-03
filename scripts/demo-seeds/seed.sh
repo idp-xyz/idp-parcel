@@ -61,11 +61,14 @@ echo "== 2/7 商业权威发布（party-commercial：服务产品与五策略）
 # 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。
 "$BIN/parcel-commercial" register-products -input "$SEEDS/commercial/register-products.json"
 
-echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列） =="
+echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复核） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg-cost.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fuel.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fx-cny-sgd.json"
+# 序列版本经复核通过才在用（ADR-0099）：先登记再复核，复核责任方与登记责任方不同。
+"$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fuel-review.json"
+"$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fx-cny-sgd-review.json"
 
 echo "== 4/7 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind node -file "$SEEDS/network/01-node-sha-hub-v1.json"

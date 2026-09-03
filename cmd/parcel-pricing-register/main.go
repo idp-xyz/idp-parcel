@@ -9,18 +9,25 @@
 // 拒绝。本工具不携带任何默认取值——实例内容全属实例半边（PAR-SET-02/03/11 待提供），
 // 机制先行。
 //
+// 第三种登记 reference-series-review 是序列版本复核（ADR-0099 决定二）：输入不是折装
+// 快照而是一份复核文档（租户、序列标识、版本号、复核责任方、结论、依据、可选的复核
+// 时刻），四眼门与在册与否由复核用例判。种子与补录历史复核走这里；在线口另按 ADR-0085
+// 进端点表。
+//
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
 // 退出码：0 = 已登记/幂等重放；1 = 用法或输入不合法（含重建门拒绝）；2 = 登记册
-// 治理答案（版本内容冲突/规范化形状不同——原行未被顶替，人工续办）；3 = 未决
-// （依赖故障，登记与否未知）。
+// 治理答案（版本内容冲突/规范化形状不同/复核的版本不在册/复核责任方就是登记责任方
+// ——原行未被顶替，人工续办）；3 = 未决（依赖故障，登记与否未知）。
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -40,12 +47,13 @@ const (
 )
 
 const (
-	kindPriceCard       = "price-card"
-	kindReferenceSeries = "reference-series"
+	kindPriceCard             = "price-card"
+	kindReferenceSeries       = "reference-series"
+	kindReferenceSeriesReview = "reference-series-review"
 )
 
-// priceCardRegistrar 与 referenceSeriesRegistrar 把两个登记用例收窄成本工具消费的
-// 形状，测试用替身顶上。
+// priceCardRegistrar、referenceSeriesRegistrar 与 referenceSeriesReviewer 把三个用例
+// 收窄成本工具消费的形状，测试用替身顶上。
 type priceCardRegistrar interface {
 	Handle(ctx context.Context, command application.RegisterPriceCardCommand) (application.RegisterPriceCardOutcome, error)
 }
@@ -54,8 +62,56 @@ type referenceSeriesRegistrar interface {
 	Handle(ctx context.Context, command application.RegisterReferenceSeriesCommand) (application.RegisterReferenceSeriesOutcome, error)
 }
 
+type referenceSeriesReviewer interface {
+	Handle(ctx context.Context, command application.ReviewReferenceSeriesCommand) (application.ReviewReferenceSeriesOutcome, error)
+}
+
+type systemClock struct{}
+
+func (systemClock) Now() time.Time { return time.Now() }
+
+// reviewDocument 是复核文档的线格式。reviewedAt 可缺：缺时由用例取时钟当下。
+type reviewDocument struct {
+	Tenant        string `json:"tenant"`
+	SeriesID      string `json:"seriesId"`
+	SeriesVersion string `json:"seriesVersion"`
+	Reviewer      string `json:"reviewer"`
+	Decision      string `json:"decision"`
+	Basis         string `json:"basis"`
+	ReviewedAt    string `json:"reviewedAt,omitempty"`
+}
+
+// parseReviewDocument 把复核文档译成用例命令。只做形状翻译（时刻按 RFC 3339 解），
+// 四件齐不齐、结论在不在封闭集、四眼门都留给用例与领域判。
+func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, error) {
+	var document reviewDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return application.ReviewReferenceSeriesCommand{}, fmt.Errorf("复核文档不是合法 JSON：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.Tenant)
+	if err != nil {
+		return application.ReviewReferenceSeriesCommand{}, fmt.Errorf("复核文档 tenant：%w", err)
+	}
+	command := application.ReviewReferenceSeriesCommand{
+		Tenant:        tenant,
+		SeriesID:      document.SeriesID,
+		SeriesVersion: document.SeriesVersion,
+		Reviewer:      document.Reviewer,
+		Decision:      domain.SeriesReviewDecision(document.Decision),
+		Basis:         document.Basis,
+	}
+	if document.ReviewedAt != "" {
+		reviewedAt, err := time.Parse(time.RFC3339, document.ReviewedAt)
+		if err != nil {
+			return application.ReviewReferenceSeriesCommand{}, fmt.Errorf("复核文档 reviewedAt 须为 RFC 3339：%w", err)
+		}
+		command.ReviewedAt = reviewedAt
+	}
+	return command, nil
+}
+
 func main() {
-	kind := flag.String("kind", "", "登记种类：price-card 或 reference-series")
+	kind := flag.String("kind", "", "登记种类：price-card、reference-series 或 reference-series-review")
 	file := flag.String("file", "", "登记快照 JSON 路径")
 	flag.Parse()
 
@@ -96,10 +152,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造序列登记册：%v\n", err)
 		os.Exit(exitUndecided)
 	}
+	reviews, err := adapter.NewReferenceSeriesReviews(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造序列复核册：%v\n", err)
+		os.Exit(exitUndecided)
+	}
 
 	message, code := execute(ctx, *kind, raw,
 		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards}),
 		application.NewRegisterReferenceSeriesHandler(application.RegisterReferenceSeriesDeps{Register: series}),
+		application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
+			Versions: series, Reviews: reviews, Clock: systemClock{},
+		}),
 		db.Transactor(),
 	)
 	fmt.Println(message)
@@ -115,6 +179,7 @@ func execute(
 	raw []byte,
 	cards priceCardRegistrar,
 	series referenceSeriesRegistrar,
+	reviewer referenceSeriesReviewer,
 	transactor bentoapp.Transactor,
 ) (string, int) {
 	switch kind {
@@ -148,8 +213,38 @@ func execute(
 			return fmt.Sprintf("reference-series: 未决：%v", err), exitUndecided
 		}
 		return "reference-series: " + outcome.String(), referenceSeriesExitCode(outcome)
+	case kindReferenceSeriesReview:
+		command, err := parseReviewDocument(raw)
+		if err != nil {
+			return fmt.Sprintf("reference-series-review: %v", err), exitUsage
+		}
+		var outcome application.ReviewReferenceSeriesOutcome
+		err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			result, err := reviewer.Handle(txCtx, command)
+			outcome = result
+			return err
+		})
+		if err != nil {
+			return fmt.Sprintf("reference-series-review: 未决：%v", err), exitUndecided
+		}
+		return "reference-series-review: " + outcome.String(), referenceSeriesReviewExitCode(outcome)
 	default:
-		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s）", kind, kindPriceCard, kindReferenceSeries), exitUsage
+		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s）", kind, kindPriceCard, kindReferenceSeries, kindReferenceSeriesReview), exitUsage
+	}
+}
+
+// referenceSeriesReviewExitCode：版本不在册与四眼不满足都是复核册的治理答案——什么都没
+// 被写、也不是本工具用错了，操作者拿答案去登记或换人。
+func referenceSeriesReviewExitCode(outcome application.ReviewReferenceSeriesOutcome) int {
+	switch outcome {
+	case application.SeriesReviewRecorded, application.SeriesReviewAlreadyOnRegister:
+		return exitRegistered
+	case application.SeriesReviewConflict, application.SeriesReviewVersionUnknown, application.SeriesReviewNeedsAnotherReviewer:
+		return exitGovernance
+	case application.SeriesReviewNotAccepted:
+		return exitUsage
+	default:
+		return exitUndecided
 	}
 }
 
@@ -179,8 +274,9 @@ func referenceSeriesExitCode(outcome application.RegisterReferenceSeriesOutcome)
 	}
 }
 
-// 静态钉住两个真实用例满足登记口的窄接口——接口漂移在编译期暴露。
+// 静态钉住三个真实用例满足登记口的窄接口——接口漂移在编译期暴露。
 var (
 	_ priceCardRegistrar       = (*application.RegisterPriceCardHandler)(nil)
 	_ referenceSeriesRegistrar = (*application.RegisterReferenceSeriesHandler)(nil)
+	_ referenceSeriesReviewer  = (*application.ReviewReferenceSeriesHandler)(nil)
 )

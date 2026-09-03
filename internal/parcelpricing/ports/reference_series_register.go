@@ -40,3 +40,14 @@ type ReferenceSeriesRegister interface {
 	// ——缺口是证据不足，评价侧据以挂起，不编数值。
 	ResolveAt(ctx context.Context, tenant domain.TenantID, reference domain.VersionReference, asOf time.Time) (domain.ResolvedSeriesReading, bool, error)
 }
+
+// ReferenceSeriesVersionLoader 按（租户 + 序列版本引用）读回一版已登记序列（整版重验）。
+// 复核用例需要它：四眼门要拿到登记责任方，而 domain.NewSeriesReview 以登记为入参。另立
+// 接口而不扩 ReferenceSeriesRegister，理由同 catalogue_read.go——扩写侧接口会拆全部写侧
+// 测试替身。
+type ReferenceSeriesVersionLoader interface {
+	// LoadVersion 按（租户、序列标识、版本号）读回。键上不要摘要：复核责任方与受控批量口
+	// 手上只有标识与版本号，摘要在登记里，读回之后才有。版本不在册答 false 不答 error；
+	// 读回的登记已过领域重建门与比对列交叉核。
+	LoadVersion(ctx context.Context, tenant domain.TenantID, seriesID, seriesVersion string) (domain.ReferenceSeriesRegistration, bool, error)
+}
