@@ -22,6 +22,7 @@ import {
   type ReferenceSeriesRecord,
 } from './api';
 import { SeriesReviewPanel, type SeriesReviewTarget } from './SeriesReviewPanel';
+import { CoverageSummaryBar } from './CoverageSummaryBar';
 
 const info = moduleInfoById['reference-series'];
 
@@ -240,6 +241,9 @@ function ReferenceSeriesTable() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* 摘要条摆在目录之上而不是另开一页：本票要的是「让缺口在当天被看见」，
+          而另开一页等于要人先想起来去看它。 */}
+      <CoverageSummaryBar />
       <ListPageTemplate<ReferenceSeriesRecord>
         title={info.title}
         description={`${info.owner}——计价只登记不生产数值(ADR-0013)`}

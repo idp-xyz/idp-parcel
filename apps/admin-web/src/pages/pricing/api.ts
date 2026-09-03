@@ -169,6 +169,66 @@ export function listReferenceSeries() {
   return exchangeMasterData<ReferenceSeriesListResponseBody>('/pricing-reference-series');
 }
 
+// ---- 覆盖地平线（票 pricing-reference-series-operations/05 第 1、3 项）----
+//
+// 一条序列一行，不是一版一行——一版一行的问法归上面那个 `/pricing-reference-series`。
+
+/**
+ * 在用那一版的引用与适用期。**它是子对象而不是平铺的几个可缺席键，那是后端刻意防的一处
+ * 折叠**：若把止点平铺上去，「这条序列没有在用版本」与「有在用版本但它没有上界」都表现为
+ * 止点缺席，而前者是「今天没得用」、后者是「用着且不会到期」，续办动作相反。
+ *
+ * `openEnded` 为真时 `effectiveTo` 缺席，那是**没有终点**不是终点未知。
+ */
+export interface ReferenceSeriesInForce {
+  version: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  openEnded: boolean;
+}
+
+/**
+ * 一条序列的覆盖摘要。
+ *
+ * `inForceResolved` 与 `inForce` 成对，判据同 party-commercial 的 `caliberDeclared`：布尔让
+ * 调用方分得开「服务端说没有」与「这个键没序列化出来」。
+ *
+ * **两个未复核计数不合并**：`unreviewedVersionCount` 是一条复核都还没有的（等复核人），
+ * `returnedVersionCount` 是复核过但至今没通过的（等登记方更正）。续办动作不同的东西合成
+ * 一个数字，看的人就不知道该去找谁。
+ *
+ * **没有「剩余多少天」这一格，那是后端有意不给的**：无上界时那个数既不是 0 也不是无穷，
+ * 是「没有终点」；算差值要挑时区与舍入口径，属呈现面。页面拿 `asOf` 与 `effectiveTo` 自己算。
+ */
+export interface ReferenceSeriesCoverageRecord {
+  seriesId: string;
+  kind: string;
+  registeredVersionCount: number;
+  inForceResolved: boolean;
+  inForce?: ReferenceSeriesInForce;
+  lastReviewedAt?: string;
+  lastReviewDecision?: string;
+  unreviewedVersionCount: number;
+  returnedVersionCount: number;
+}
+
+/**
+ * 顶层的 `asOf` **不是装饰，页面必须显示它**。「在用」是只对某一刻成立的结论，不回显那一刻，
+ * 页面上就会出现一个看起来永久的权威答案。同一条判据下，目录页的状态列被裁为不含「在用」
+ * ——那一页没有正当的时刻源；本端点有，代价就是把它说出来。
+ */
+export interface ReferenceSeriesCoverageListResponseBody {
+  outcome: 'REFERENCE_SERIES_COVERAGE_LISTED';
+  asOf: string;
+  series: ReferenceSeriesCoverageRecord[];
+}
+
+export function listReferenceSeriesCoverage() {
+  return exchangeMasterData<ReferenceSeriesCoverageListResponseBody>(
+    '/pricing-reference-series-coverage',
+  );
+}
+
 // 评价登记册检索列面(GET /pricing-evaluations,票 admin-skeleton-closure-batch/03)。
 // 评价的语义细节(对象、方向、金额)住在快照内属详情读法,端点不透出,这里也不虚构。
 export interface PricingEvaluationRecord {
