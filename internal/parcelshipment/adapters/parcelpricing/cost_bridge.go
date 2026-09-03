@@ -19,8 +19,8 @@ import (
 var (
 	// ErrUntranslatableEvaluation 说提供方交回了本桥认不出的取值。
 	//
-	// 逐格分派不留兜底（ADR-0031）：认不出就上抛，不静默落进某一格。计价侧日后新增第六种
-	// 评价结果时，这里必须红——否则那一格会悄悄被读成`未形成`，而`未形成`的续办是重试，
+	// 逐格分派不留兜底（ADR-0031）：认不出就上抛，不静默落进某一格。计价侧日后新增一种
+	// 评价结果时，这里必须上抛——否则那一格会悄悄被读成`未形成`，而`未形成`的续办是重试，
 	// 对一个其实需要人工裁决的新结果来说，重试是永远不会停的。
 	ErrUntranslatableEvaluation = errors.New("parcel shipment: untranslatable pricing evaluation")
 	// ErrNotASupplierCostEvaluation 说这份评价答的不是「运营企业花多少」。
@@ -33,8 +33,8 @@ var (
 
 // ChannelCandidateCostOf 把一个渠道候选的 `BUY` 评价译成它在成本单维上的取值。
 //
-// 全函数：提供方的五种评价结果各有去处，没有一种会让桥交回零值加 nil。已完成译成已确立
-// 成本，其余四种各译到自己的出局格——四格不合并的理由写在 psdomain.ChannelCostUnavailability
+// 全函数：提供方的每一种评价结果各有去处，没有一种会让桥交回零值加 nil。已完成译成已确立
+// 成本，其余各译到自己的出局格——出局格不合并的理由写在 psdomain.ChannelCostUnavailability
 // 上，此处不重述。
 func ChannelCandidateCostOf(
 	candidate psdomain.ChannelCandidateID,
