@@ -1,7 +1,7 @@
 # `party-commercial` 声明拥有、但今天没有执行器的四处（写侧待裁）
 
 Category: chore
-Status: draft——四票均未裁，本目录只写到「差什么、补与不补各自的连带」为止
+Status: in-progress——01/03/04 resolved，02 ready-for-agent（汇率口径已落，持久化三层未做），05 draft（四问已摆到可裁）
 
 ## 这四处是怎么被看见的
 

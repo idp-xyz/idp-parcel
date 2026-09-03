@@ -1,7 +1,8 @@
 # 计价口径：引用是强制的，被引的那份商业价格政策却没有口径列
 
 Category: chore
-Status: ready-for-agent——产品已裁「补」（2026-09-02，owner）
+Status: ready-for-agent——汇率口径 `FxCaliber` 已落（`828dbfa`），六项里五项有领域类型；剩接进
+`CommercialPricePolicy`、新迁移落列、读面上列三层，与加点规则的重启条件（见「加点规则的裁决」）
 
 > **裁决**：六项口径全补（汇率牌价类型、取值时点、加点规则、销售方向体积系数、含税/未税、
 > 税务分类）。取回路径已定：**登记时冻结**，不走端口现取，理由见下面「前置岔口已答」一节。
@@ -227,6 +228,60 @@ PS 按接单规则包版本读的那个册子里，PS 的接受判断链整条�
 而加点是**商业约定**，`parcel-pricing` 侧没有对应工件承载它。做成纯引用等于说「数在别处」，
 而那个别处今天不存在——那会造出与本票开头所纠的同一个形状：**引用是强制的，被引的那份是空的**。
 本票正是为消除这个形状而立的，不能在同一票里再造一个。
+
+## 上一节那个「不裁不能动手」的问题不需要裁——它在结构上已经答了（2026-09-03，MCP-2）
+
+上一节把笔一的安全性挂在「时点政策登记在哪个键下」这一问上。接手后往下多查了一层：
+**整个 `AsOfPolicy` 机制三层都钉死在接单规则包上**，「登记在商业价格政策版本下」在今天的
+机制里根本没有落点，因此那一问不是两条路选一条，是只有一条路而它走不通。
+
+- 领域：`DeclareAsOfPolicies` 要求 `rulePackage.kind == AcceptanceRulePackageObject`。
+- 库：`0005_as_of_policy_declaration.sql` 有 `CHECK (object_kind = 4)`，注释原话「声明只挂
+  接单规则包……另表承载」，依据 ADR-0042「接受内容声明按对象归属建模」。
+- 适配器：`LoadAsOfPolicies` 的 SQL 硬编 `object_kind = AcceptanceRulePackageObject`。
+
+而 `JudgmentType` 的注释把自己定义为「规则包当前会为其声明时点锚的下游判断的封闭集合」。
+汇率取值时点按 CONTEXT 是**商业价格政策版本**声明的口径，归属对象不是规则包。借这条壳等于：
+既要动 PS 的 `consumerJudgmentKindFor`（跨地盘，上一节量出的运行期爆炸半径），又要按
+ADR-0042 为它另建一张表（0005 的 CHECK 挡着），换来的只是把一个不属于规则包的判断塞进
+规则包的封闭集。**MCP-5 与 MCP-6 两节里「给 `JudgmentType` 加一格」的路线因此都不成立。**
+
+### 改走的路：`FxCaliber`，与已落两片同形
+
+放进 `pricing_caliber.go` 那一族，三格全是引用、不持数值：
+
+- 牌价类型：`FxQuoteTypeReference`，实例半边，形照 `VolumetricFactorReference`（上一节
+  第二条已裁，不变）。
+- 取值时点：**复用**既有的 `AsOfSemanticsReference` + `AsOfPolicyVersion` 两个类型，不新造
+  枚举、不碰 `JudgmentType`、不碰 `AsOfPolicy`。MCP-5 那条「接已有时点锚不新开枚举」的约束
+  仍然守着——守的是「时点语义是引用」这一层，而不是 `JudgmentType` 那层壳。
+- 加点规则：见下一小节，首发**不进** `FxCaliber`。
+
+零改 PS、零新迁移，与前两片一致。`FxCaliber` 落地后六项口径里五项有了领域类型，本票仍不
+resolved：把口径接进 `CommercialPricePolicy`、新迁移落列、读面上列三层都还没做，与前两片
+同一状态。
+
+**已落于 `828dbfa`**（2026-09-03，MCP-2）：`domain/fx_caliber.go` 与测试。验证：领域包
+`go test -count=1` 绿，全仓 `go build` / `go vet` 退 0；该提交是 `877444a`（票 03）的父提交，
+后者在 detached 临时 worktree 上跑过含 PG 的全仓 `go test -count=1 ./...` 零 FAIL，本笔内容随之
+一并被验。两轴评审：独立子代理鉴权失败改串行自评，Standards 与 Spec 均无发现。
+
+### 加点规则的裁决：首发显式未决，不做成引用也不持数值
+
+上一节第三条量出的两难成立——本上下文按立场不持数值；做成引用则被引处（`parcel-pricing`）
+今天没有承载加点的工件，会再造一个本票开头要消除的形状。三条路里取第一条：
+
+- **(a) 首发 `FxCaliber` 只收牌价类型与取值时点两格，加点规则不落任何类型**——这是本次采的。
+  「不落类型」不等于「默认不加点」：加点是否存在、是多少，都属实例半边，本仓无从替租户拟。
+  消费方（`parcel-pricing`）今天拿不到加点声明就该停在未决，不得读成零加点。
+- (b) 做成 `MarkupRuleReference` 并在 `parcel-pricing` 另开票承载正文——被否：跨地盘，且在
+  被引处落地前那个引用就是空的。
+- (c) 本上下文破例持数值——被否：与 `VolumetricFactorReference` 注释写明的立场冲突，要走 ADR。
+
+**重启条件**：`parcel-pricing` 有了承载加点正文的工件（那一侧的 CONTEXT 或 ADR 说清加点的
+数值归谁、随什么版本化）之后，本上下文补一格 `MarkupRuleReference` 进 `FxCaliber`，那时它
+才是一个指得到东西的引用。CONTEXT「它还声明……加点规则」那句**不改**：它说的是目标语言，
+缺的是机制半边，与票面开头的裁决口径一致。
 
 ## 边界
 

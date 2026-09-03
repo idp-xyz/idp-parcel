@@ -1,7 +1,7 @@
 # 信用政策与供应商协议：能入册、能被选中，选中之后拿不到正文
 
 Category: chore
-Status: ready-for-agent——产品已裁「两张都补」（2026-09-02，owner）
+Status: resolved——`877444a`（2026-09-03，MCP-2），验证见 Comments 末条
 
 > **裁决**：信用政策与供应商协议**两张正文表都补**。额度取值形态已定：**并存两列 + 恰一非空**，
 > 领域侧配两格封闭值对象（形照 `ProductChannelBinding`），不做「`limitMinor` 加一个布尔」
@@ -143,10 +143,83 @@ Rules 一节：
 
 **这一裁只答形状，不答补不补**，后者仍待产品侧裁。若裁「不补」，本节随之搁置。
 
+## 动手前定形的几处（2026-09-03，MCP-2）
+
+裁决把「补不补」与「额度形态」都答了，剩下几处是实现层的形状，动手前写在这里，免得写到一半
+各走一路。
+
+**一、额度值对象 `CreditLimit`，两格封闭。** `NewCreditAmountLimit(minor)` 与
+`NewCreditRatioLimit(basisPoints)`，零值立不住，访问器各带一个布尔分「本格不适用」与「本该有
+却缺了」（后者造不出来），形照 `TaxCaliber.Classification`。比例取**万分比整数**：本上下文
+没有 Decimal 类型（票 02 已量过，那是立场不是缺漏），而万分比是商业约定里最细的常用整数刻度；
+选 `numeric` 列就得另裁一个精度，那不在裁决里。负值拒、零允许——与既有 `limitMinor` 同判据，
+零额度与无政策的分辨仍由 `CreditBasis.Applicable` 承担。
+
+**二、正文进不进整册（`LoadForScope` / `ViewRevision`）——不进，走族 B 点读。** 价格与结算
+政策进整册是因为解析要在它们之间选；信用政策与供应商协议今天没有任何解析在它们之间选——
+`ResolveCreditPolicy` 在棘轮基线上、零生产调用点。让 `CREDIT_POLICY` 成为闭包里的一种必需
+依据是解析语义的改动，裁决没有答它，本票不替它答。消费方走既有路：先按版本壳解析选中，再按
+（租户 + 版本）点读正文——与 `CustomerContractContentView` 同形。两个读口因此是
+`CreditPolicyContentView.LoadCreditPolicy` 与 `SupplierAgreementContentView.LoadSupplierAgreement`，
+`found=false` = 正文未登记，读失败与坏数据走 error 不折成未登记。
+
+**三、写口挂在 `PublicationRegistry` 上，具名 `SaveCreditPolicy` / `SaveSupplierAgreement`，
+各配自己的落点类型**（形照 `PricePolicySaveOutcome`，判据见 `ChannelAccountUseSaveOutcome`
+注释：两册各自演进，共用类型会让一册多一格时另一册被迫认它）。正文随发布同笔登记——
+`CommercialDeclarations` 加 `CreditPolicyBody` 与 `SupplierAgreementBody` 两通道，受控 CLI 的
+批文翻译跟上；事后补正文等于改一份已固定的正文，那要发新版本（既有声明通道同一条纪律）。
+
+**四、目录读面**：`CommercialPolicyCatalogueRead.ListCreditPolicies`（按端口注释「正文表落库时
+按封闭集扩方法」）；`SupplierAgreementCatalogueRow` 上扩正文字段并带 `HasContent`——壳在正文缺
+是合法状态，与 `CustomerContractCatalogueRow.HasContent` 同一条理由。
+
+**五、两件明确不做，写清是决定不是遗漏**：
+
+- 供应商协议**不成方向列**。`Direction()` 在领域里恒为 `BUY`，存一列常量等于为同一件事立第二个
+  口径，读回来若不是 `BUY` 反倒要人判是坏数据还是新语义；类别 CHECK（`object_kind = 3`）已把
+  「这是一份采购协议」钉住。
+- 供应商协议的**终止（`Terminate`）不入本表**。终止是生效后的一次事件，不是发布时的正文，
+  形状与有效性更正（`0009`）同族——按版本追加、不改写原行。它要不要建册、建在哪，是另一裁，
+  本票只登正文。今天 `SupportsProcurementAt` 对读回的协议因此永远看不见终止；这与今天完全
+  没有正文可读相比是进步不是退步，但要写在这里免得被读成「已支持终止」。
+
 ## 边界
 
-本票**不建表、不写迁移、不动领域模型、不扩端口**。领域对象已建好这一点对两条路都是资产。
+本票原写「不建表、不写迁移、不动领域模型、不扩端口」——那是裁决前的措辞，裁决落面后四件都在
+本票范围内，上一节是它们的形状。领域对象已建好这一点对两条路都是资产。
 上一节答的是**取值形态**这个前置岔口，不是本票动手建表。
 
 有一件明确**不属本票**：`limitMinor` 之外的比例形态是领域缺口，若裁「补」则连带处理，若裁
 「不补」则它随之搁置——本票不单独为它开票。
+
+## Comments
+
+- 2026-09-03 · MCP-2：**落地于 `877444a`，转 resolved。** 上一节「动手前定形的几处」五条全部照做，
+  无偏离。落点逐层：领域 `CreditLimit` + `CreditPolicy` 改携它 + `SupplierAgreement` 补两个访问器；
+  库 `0020_credit_policy.sql` / `0021_supplier_agreement.sql`；端口两具名 Save + 两点读口 +
+  `ListCreditPolicies` + `SupplierAgreementCatalogueRow` 扩字段；应用两声明通道；受控 CLI 批文翻译；
+  HTTP `?kind=CREDIT_POLICY` 与供应商协议行体正文键。
+
+  **越出票面地盘的两处，写清**：`cmd/parcel-commercial/translate.go`（本上下文的受控 CLI，不翻它
+  租户就登不了正文，等于链没通）；`cmd/parcel-api/unwired_orchestration.go` 的
+  `unwiredCommercialCatalogue` 加一个方法——它实现 `CommercialPolicyCatalogueRead`，接口扩方法
+  必然拆到它，是唯一一处别人地盘上的改动，已在频道报过。
+
+  **「生产可达」差什么**：写侧经受控 CLI 可达；HTTP 发布口的 Intake 仍是未配置（PAR-INT-01 待提供，
+  与本票无关）；两个点读口（`CreditPolicyContentView` / `SupplierAgreementContentView`）今天**零
+  生产调用方**——它们的消费方是接受前财务控制的信用校验分支与 settlement-accounting 的供应商预期
+  成本，两者都还没接。这与基线里「出名单不等于生产可达」那条注记的是同一件事。棘轮基线上
+  `ResolveCreditPolicy` 那一行**未剪**：它仍然零生产调用点，本票没有为它造调用方，那属解析语义。
+
+  **验证**：先在共享树跑，再按 parallel-sessions 处方在 detached 临时 worktree 检出 `877444a`
+  重跑，两处都是——`gofmt -l .` 为空、`go build ./...` 与 `go vet ./...` 退 0、
+  `go test -count=1 ./...` 零 FAIL、架构门禁含棘轮全绿。**这是「绿（含 PG）」**：DSN 指向门禁容器
+  `idp-parcel-postgres-gate`，`internal/partycommercial/adapters/postgres` 一包约 59 秒，本票新增
+  的真库用例在 `-v` 下逐条 `PASS`（不是 `SKIP`）——额度两格往返、缺正文 found=false、重放与冲突、
+  租户绑定、CHECK 拒两空/两满/负值、目录上列。`-race` 本笔未跑，与本批其余票同归收尾那一批。
+
+  **本笔的两轴评审**：独立评审子代理两次都因鉴权错误未能启动，退为串行自评。Standards 轴拿住三处
+  ——两处注释写成了变更叙述（「曾缺席、0020 落库后补进来」）、一处「七种册子」计数，已就地改成只
+  写现行理由；Duplicated Code 一处记为判断题不改：`creditLimitFrom` 在 CLI 翻译与 postgres 适配器
+  各一份，形状同、译的表示不同（JSON 文档 vs SQL 行），抽到领域会把「两个可空指针」这种传输形状
+  塞进领域 API。Spec 轴无发现。
