@@ -64,7 +64,7 @@ Status: in-progress——MCP-1；[ADR-0095](../../../docs/adr/0095-undecided-sta
 
   **第二层已落**（ADR-0095 Decision 二/三/四）：`dispatch.Dispatcher` 增可选的 `DeliveryFailureObserver`，在 `RecordFailure` 成功之后、`continue` 之前调用，交出这一条投递、已分格的失败码与**原始 `err`**；用变参 `Option` 给出，既有装配点一个没动，`nil` 时行为与之前逐字相同（有用例钉着）。`cmd/parcel-dispatch` 用自己的 `slog.Logger` 实现，`Warn` 不用 `Error`——这一条失败已入账且会按重投节奏再来，进程本身没坏，整拍失败那一格仍归 `Loop.report`。`assembleDispatcher` 收 logger 而不是收一个现成的观察口，「怎么出声」留在装配层定。日志会按重投节奏重复，那是真实的，不在平台层压噪。**票面观察到的「进程输出零行」从此不成立**：同一现场再跑，每一拍都会把 `stage … reason …` 那句原文打出来。
 
-  **第一层**（不自愈那格靠入账留痕）**今天在库里已经成立，但成立的方式悬着**：`32d6a49` 让消费门对 `ResumeByOperatorRegistration` 入账，`recordAttempt` 写下的处理尝试（原因、恢复路径、续办引用）因此留在库里、委托读面可见——这就是 ADR-0095 Decision 一要的东西。但那次入账本身是否允许在续办触发之前落地，是票 07 末条记的那处要人裁的口子；若裁成暂时收回入账，这一层随之退回「随回滚蒸发」，等 Decision 四/五 切片一起回来。**本票不另设机制，收口跟着 07 走。**
+  **第一层**（不自愈那格靠入账留痕）**今天不成立，且本条初版写错了。** 初版写它「今天在库里已经成立」——那是读代码推的。同日 MCP-4 指出并经真库探针证实（见票 07 末条）：`0005` 的 `resume_path` CHECK 只认三个字面值，第四格的 `recordAttempt` INSERT 被拒、错误被吞、事务被毒，最终落 `dispatch.publish_failed` 重投到 `ABANDONED`——**一条痕都没留**。要它成立先得放宽库面镜像（MCP-1 修，见 07），再看入账那一层怎么裁（07 那处口子）。**本票不另设机制，收口跟着 07 走。**
 
   验证同票 07 末条（钉 `c96065b`，含真库，未跑 `-race`）。
 

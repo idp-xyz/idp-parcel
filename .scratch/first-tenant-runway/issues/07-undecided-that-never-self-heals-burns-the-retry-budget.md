@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），Decision 四/五 未落，**且已落那一笔与 Decision 四的「否则不许落地」有一处要人裁**，见文末 Comments 末条
+Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`）**但漏了库面镜像**（0005/0009 两条 CHECK 仍是三格，真库上第四格写不进去，MCP-1 修中），Decision 四/五 未落，**且入账那一层与 Decision 四的「否则不许落地」有一处要人裁**，见文末 Comments 末两条
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -112,11 +112,22 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
 
   **未落**：Decision 四（登记动作发续办信封 + 消费门）与 Decision 五（落新格前先把带等待态的聚合 `Save` 落库）。两个 `*AsOfNotConfigured` 发生在形成决定**之前**，而等待态今天只由领域的 `Decide` 写下——那一段没有落等待态的路径，要新开一条；续办信封类型同理不存在。它们合起来是另一个完整切片。
 
-  **要人裁的口子。** 上一条提交信写的是「本笔尚不足以让新格在真进程上产生效果」，这句话**说轻了**。消费门这一笔已经把 `ResumeByOperatorRegistration` 折成入账（`undecidedDisposition` 对它交回 `nil`），而经接受判断链能走到这一格的原因有两个——`ReachabilityAsOfNotConfigured` 与 `FinancialControlAsOfNotConfigured`（另三个 `*RulesNotConfigured` 来自拒绝／撤回／修订三条命令口，不经消费门）。于是这两种未决的现场行为已经变了：**从「回滚重投、烧完预算落 `ABANDONED`」变成「本份投递记为处理完毕，`recordAttempt` 写下的处理尝试随提交落库（委托读面可见），但没有等待态、没有任何东西会续办它」**。这正是 Decision 四那句「把 `ABANDONED` 换成一个更安静的永久停滞」描述的形状，而 Decision 四的原话是「第三格必须与它的续办触发同笔落地，**否则不许落地**」。
+  **要人裁的口子。** 上一条提交信写的是「本笔尚不足以让新格在真进程上产生效果」，这句话**说轻了**。消费门这一笔已经把 `ResumeByOperatorRegistration` 折成入账（`undecidedDisposition` 对它交回 `nil`），而经接受判断链能走到这一格的原因有两个——`ReachabilityAsOfNotConfigured` 与 `FinancialControlAsOfNotConfigured`（另三个 `*RulesNotConfigured` 来自拒绝／撤回／修订三条命令口，不经消费门）。Decision 四的原话是「第三格必须与它的续办触发同笔落地，**否则不许落地**」，而这一笔落了处置、没落触发。
 
-  两条路，都不由实现票自己定：
+  **本条初版此处写过一句假话，同日更正。** 初版写这两种未决的现场行为变成「本份投递记为处理完毕，`recordAttempt` 写下的处理尝试随提交落库（委托读面可见）」——那是读代码推的，没量。MCP-4 随后指出 `migrations/parcel_shipment/0005` 的 `acceptance_processing_attempt_resume_path_closed` 只认三个字面值、`0009` 的 `task_waiting_on BETWEEN 0 AND 3`，而 `32d6a49` 零 `.sql`。在 `74ab82f` 的隔离树上用一次性探针（已删）走真库 `RecordProcessingAttempt` 量到：
+
+  ```
+  insert = ERROR: new row for relation "acceptance_processing_attempt" violates check constraint
+           "acceptance_processing_attempt_resume_path_closed" (SQLSTATE 23514)
+  照 recordAttempt 的形状吞掉错误、回调交回 nil → commit = "commit unexpectedly resulted in rollback"
+  ```
+
+  所以**真进程上今天的现场是**：`recordAttempt` 的 INSERT 被 CHECK 拒 → 错误被 `_ =` 吞掉 → 事务已被 PG 标为 aborted → 消费门交回 `nil` → 框架 COMMIT 失败 → `Consume` 返回的不是未决哨兵 → `failureCodeFor` 落 **`dispatch.publish_failed`** → 重投到 `ABANDONED`。既无留痕，码面还指错方向。**而且不止消费门**：三个 `*RulesNotConfigured` 在拒绝／撤回／修订三条命令口同样经 `recordAttempt` 写 `'OPERATOR_REGISTRATION'`，同样被拒、同样毒掉事务——租户未登记授权规则时那三条命令从「交回未决」变成「提交失败」。全仓 93 包绿是因为没有一条真库用例写过第四格：三条代码测试全在纯函数上，形状矩阵那条只钉「集合外被拒」不枚举集合内，真图用例停在更早的解析键那一站。**这是 `32d6a49` 的遗漏——ADR-0094 Decision 二的持久化那半没做**，责在 MCP-1。
+
+  **两件事因此分开。** 一件不需要裁：库面镜像要跟上领域封闭集合（新迁移放宽 0005 与 0009 两条 CHECK，并加一条逐个写入 `domain.ResumePath` 全部取值的真库用例，让镜像再落后时必红）——这是修自己的遗漏，MCP-1 在频道占号后做，见下一条 Comment。另一件仍要裁，即处置那一层：
+
   1. **按 Decision 四的字面收回入账**——在 Decision 四/五 落地前，`undecidedDisposition` 对 `ResumeByOperatorRegistration` 暂交回哨兵（回滚重投，即旧行为），并在代码与测试里写明这是被 Decision 四挡住的过渡态、挡到哪一笔为止。语言、分格、映射三层不动，只把「处置」这一层退回。代价是 ADR-0094 Consequences 说的「失败预算只花在真会自愈的依赖上」暂不成立。
-  2. **接受现状并把 Decision 四/五 切片提到最前**——理由是入账后处理尝试至少留在了库里（比 `ABANDONED` 那一格多出一条可查的原因与恢复路径），且这两个原因只在租户已登记商业依据、却未登记 `PAR-COM-14` 时点策略时出现，合成运道跑不到。代价是在切片落地前，这一格在真租户上就是那个「更安静的永久停滞」。
+  2. **接受入账并把 Decision 四/五 切片提到最前**——CHECK 修好之后入账确实能让处理尝试留库（原因、恢复路径、续办引用），比 `ABANDONED` 多出可查的一条；且这两个原因只在租户已登记商业依据、却未登记 `PAR-COM-14` 时点策略时出现，合成运道跑不到。代价是在切片落地前，这一格在真租户上就是 Decision 四说的那个「更安静的永久停滞」。
 
   我倾向 1：它是 ADR 原话，且改动一行、有用例钉着；2 要改 ADR-0094 Decision 四的措辞才站得住。**未擅自动，等裁。**
 
