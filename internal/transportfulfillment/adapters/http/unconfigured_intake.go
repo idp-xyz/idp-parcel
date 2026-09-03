@@ -36,6 +36,9 @@ type UnconfiguredIntake struct{}
 
 var _ DeliveryIntake = UnconfiguredIntake{}
 var _ CatalogueQueryIntake = UnconfiguredIntake{}
+var _ HandoverIntake = UnconfiguredIntake{}
+var _ PickupRegistrationIntake = UnconfiguredIntake{}
+var _ PickupAttemptIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -54,4 +57,24 @@ func (UnconfiguredIntake) IntakeCorrection(context.Context, *http.Request) (appl
 // 随之退场，命令面不受影响（ADR-0078）。
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeHandoverRegistration 与 IntakeHandoverCorrection 堵住交接两口（票 04）。控制事实入口
+// 比交付更要堵严：命令里带着段引用，任何一条穿过去的请求都会在段登记册上立出一个来源
+// 不明的实际履约段。同样不读请求、不构造命令。
+func (UnconfiguredIntake) IntakeHandoverRegistration(context.Context, *http.Request) (application.RegisterTransportHandoverCommand, error) {
+	return application.RegisterTransportHandoverCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeHandoverCorrection(context.Context, *http.Request) (application.CorrectTransportHandoverCommand, error) {
+	return application.CorrectTransportHandoverCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakePickupRegistration 与 IntakePickupAttempt 堵住揽收两口，理由同交接两口。
+func (UnconfiguredIntake) IntakePickupRegistration(context.Context, *http.Request) (application.RegisterOffsitePickupCommand, error) {
+	return application.RegisterOffsitePickupCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePickupAttempt(context.Context, *http.Request) (application.PerformOffsitePickupCommand, error) {
+	return application.PerformOffsitePickupCommand{}, ErrAccessChannelNotConfigured
 }
