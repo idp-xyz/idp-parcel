@@ -132,6 +132,11 @@
 # 四个前缀名一个都不命中。所以这一剪立在真调用上（`domain.OpenDispatchTask(spec)`），不是
 # 立在名字上。下一个剪条目时同时引入近名符号的人，照这一步先去读那段匹配码。
 #
+# 2026-09-03 随 tf-unwired-seven/05 第三刀剪掉 FormLoadAssignment（装载分配形成编排落地，
+# application/form_load_assignment.go 是它的生产调用方）。成因三分同上：全仓该名字只有一处
+# 声明；同笔又新增了四个以 FormLoadAssignment 为前缀的标识符，而门禁比的是精确相等不是子串
+# （上一段已核过匹配码，此处不重复读）。**剪后重数实测 26**，两法同得，父提交 `e6a66ed`。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -216,11 +221,10 @@ internal/visibilityexception/domain SubmitEvidence
 # 08-multi-object-pickup-attempt-establishes-no-segment.md（ready-for-agent）。
 # **票与注释两条路都留着，因为它们被不同的人看见**：票会被从跟踪器名单里看见，这句会被改这份
 # 名单的人看见，而那不是同一批人。
-internal/transportfulfillment/domain FormLoadAssignment
 #
-# OpenDispatchTask 曾在这里，2026-09-03 随 tf-unwired-seven/05 剪掉：
-# application/open_dispatch_task.go 的 OpenDispatchTaskHandler.Open 是它的生产调用方。
-# 同票的 FormLoadAssignment 仍未接（装载分配那一半另起一刀，它的数量守恒与版本链比任务重）。
+# OpenDispatchTask 与 FormLoadAssignment 曾在这里，2026-09-03 随 tf-unwired-seven/05 分两刀剪掉：
+# 生产调用方分别是 application/open_dispatch_task.go 与 application/form_load_assignment.go。
+# 同批的 RecordMovementFact 仍未接，它归票 06。
 internal/transportfulfillment/domain RecordMovementFact
 # 实际履约段的重建门曾在这里（ADR-0028，tf-unwired-seven/01），2026-09-02 同票下一层落地后
 # 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
