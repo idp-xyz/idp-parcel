@@ -222,6 +222,18 @@ func TestParticipationEndsPerObjectWithItsFact(t *testing.T) {
 			t.Fatalf("error = %v, want ErrSegmentClosed", err)
 		}
 	})
+
+	// 段结束在最后一个对象离开控制之后：parcel-2 在 handoverJudgedAt 才交出去，一个早于它的
+	// 关闭时刻意味着段在那个对象仍受控时就结束了——与「一个仍在控制中的对象足以让段继续存在」
+	// 同一条，只是换成时序面。等于允许（同一刻交出最后一个对象并关段）。
+	t.Run("the segment cannot close before its last participation ended", func(t *testing.T) {
+		if _, err := afterHandover.CloseSegment(handoverJudgedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+			t.Fatalf("error = %v, want ErrInvalidFulfillmentSegment（关闭早于最后一条参与的终点）", err)
+		}
+		if _, err := afterHandover.CloseSegment(handoverJudgedAt); err != nil {
+			t.Fatalf("与最后一条参与终点同刻的关闭应当收得下：%v", err)
+		}
+	})
 }
 
 // Covers: CONTEXT「车辆故障、运输中断、失联…不自动结束实际履约段。没有有效交付、权威

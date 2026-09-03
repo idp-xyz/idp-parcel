@@ -84,9 +84,10 @@ const (
 //
 // **`Save` 仍只用于首登**（段由首个对象的控制事实成立），不承担演进。
 //
-// 一条本口守不住、留在领域的：`ErrSegmentStillActive`——仍有在场参与时段关不上。那是跨行
-// 条件，`CloseSegment` 的前置条件表达不了。**编排必须先读回整段、走领域的 `CloseSegment`
-// 再落库**，不得直接调本口关段。这是 ADR-0097 里唯一一条靠纪律而非结构的约束，如实标出。
+// 本口守不住、留在领域的一类：关段的跨行条件——仍有在场参与时关不上（`ErrSegmentStillActive`），
+// 关闭时刻也不得早于任何参与的终点。`CloseSegment` 的前置条件表达不了跨行。**编排必须先读回
+// 整段、走领域的 `CloseSegment` 再落库**，不得直接调本口关段。这一类是 ADR-0097 里靠纪律而非
+// 结构守的约束，如实标出；`application.CloseFulfillmentSegmentHandler` 是那条纪律的生产调用方。
 type ActualFulfillmentSegmentRegistry interface {
 	FindByKey(ctx context.Context, key FulfillmentSegmentKey) (FulfillmentSegmentRecord, bool, error)
 	Save(ctx context.Context, record FulfillmentSegmentRecord) (SegmentSaveOutcome, error)

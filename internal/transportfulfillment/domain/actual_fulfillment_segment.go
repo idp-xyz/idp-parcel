@@ -367,6 +367,9 @@ func (segment ActualFulfillmentSegment) end(
 // CloseSegment 声明段不再接受新对象并结束段。只有全部有效参与关系已经结束才关得上
 // ——各对象可以带着不同结果收尾（CONTEXT 生命周期④），但一个仍在控制中的对象足以
 // 让段继续存在。
+//
+// 同一条规则的时序面：关闭时刻不得早于任何参与的终点。早于它就等于说段在那个对象仍受控时
+// 已经结束——与上一句矛盾。同刻允许：最后一个对象交出去的那一刻关段是正当的。
 func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfillmentSegment, error) {
 	if !segment.Established() || at.IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
@@ -377,8 +380,22 @@ func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfil
 	if segment.ActiveParticipations() > 0 {
 		return ActualFulfillmentSegment{}, ErrSegmentStillActive
 	}
+	if segment.closesBeforeAParticipationEnded(at) {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
 	closed := segment
 	closed.closed = true
 	closed.closedAt = at.UTC()
 	return closed, nil
+}
+
+// closesBeforeAParticipationEnded 只比对已结束参与的终点；在场的参与由 ActiveParticipations
+// 那一道另判，这里不重复。
+func (segment ActualFulfillmentSegment) closesBeforeAParticipationEnded(at time.Time) bool {
+	for _, participation := range segment.participations {
+		if !participation.Active() && at.Before(participation.endedAt) {
+			return true
+		}
+	}
+	return false
 }

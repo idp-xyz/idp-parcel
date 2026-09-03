@@ -221,6 +221,25 @@ func TestRehydrationRefusesAClosedSegmentThatStillHasActiveParticipations(t *tes
 	}
 }
 
+// Covers: 段的关闭不得早于任何成员的离场。与「已关闭且仍有在场参与」同族：一个在某成员仍受控时
+// 就已结束的段，领域任何路径都产不出。同样只比对行上已有的两个时刻，不重放 CloseSegment。
+func TestRehydrationRefusesAClosureBeforeAMemberEnded(t *testing.T) {
+	spec := segmentSpec(t, endedParticipationSpec(t, "parcel-1"), endedParticipationSpec(t, "parcel-2"))
+	spec.Closed, spec.ClosedAt = true, segmentEndedAt.Add(-time.Minute)
+
+	if _, err := domain.RehydrateActualFulfillmentSegment(spec); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+		t.Fatalf("err = %v, want ErrInvalidFulfillmentSegment（关闭早于成员离场）", err)
+	}
+
+	t.Run("closing at the very moment the last member left is consistent", func(t *testing.T) {
+		sameMoment := spec
+		sameMoment.ClosedAt = segmentEndedAt
+		if _, err := domain.RehydrateActualFulfillmentSegment(sameMoment); err != nil {
+			t.Fatalf("与最后一次离场同刻的关闭应当收得下：%v", err)
+		}
+	})
+}
+
 // Covers: 离场不得早于入场——同一行上的两个时刻，行内就比得出来。
 func TestRehydrationRefusesAnEndBeforeItsEntry(t *testing.T) {
 	broken := endedParticipationSpec(t, "parcel-1")

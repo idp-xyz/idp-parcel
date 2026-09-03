@@ -81,6 +81,11 @@ func RehydrateActualFulfillmentSegment(spec RehydrateActualFulfillmentSegmentSpe
 	if segment.closed && segment.ActiveParticipations() > 0 {
 		return ActualFulfillmentSegment{}, ErrSegmentStillActive
 	}
+	// 同一类行间核对的时序面：关闭早于某成员离场，是转换门产不出的状态。仍只拿行上的两个时刻
+	// 比对，不重放 CloseSegment。
+	if segment.closed && segment.closesBeforeAParticipationEnded(segment.closedAt) {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
 	return segment, nil
 }
 
