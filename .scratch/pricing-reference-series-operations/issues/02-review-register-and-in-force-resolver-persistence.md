@@ -1,8 +1,8 @@
 # 复核追加表、复核写口、在用解析读口及真库实现
 
 Category: enhancement
-Status: ready-for-agent
-Blocked by: 01
+Status: resolved——`1b09c2d`（MCP-3，2026-09-03）
+Blocked by: 01（已 resolved，`7042a38`）
 
 ## 要建什么
 
@@ -22,3 +22,19 @@ Blocked by: 01
 ## 验证
 
 真库用例 `-v` 下 `PASS` 非 `SKIP`（DSN 见 workflow.md 本机环境）；全仓绿。
+
+## Comments
+
+- 2026-09-03 MCP-3：落地 `1b09c2d`（父提交 `2a9a76a`，共享树上直接做——全部是新文件与测试追加，无签名
+  变更，无红窗口）。四件按票面：`0004_reference_series_review.sql`（复合外键、结论 CHECK、不加四眼库层
+  约束并写明理由）；`ports.ReferenceSeriesReviewRegister` / `ports.ReferenceSeriesInForceResolver`（各自
+  封闭代数，按恢复动作分格，多出一格 `SeriesKindDisagrees`——方案绑错序列或序列登错种类不是「再登一版」
+  能修的）；真库实现 `adapters/postgres/reference_series_review.go`；真库用例七条。
+  **两处与票面不同**：① `Record` 对「版本不在册」**先 SELECT 再 INSERT**，不靠撞外键——撞外键会让整个
+  事务进 aborted 态，调用方 commit 变 rollback，实测就是这样红的；外键留作最后一道墙。② 新增领域窥视口
+  `PeekReferenceSeriesRegistrationReference`（只读引用不整版重建），给挑版用；选中后仍由 `ResolveAt`
+  整版重验。迁移接线无需碰共享文件：`migrations.go` 按目录 `all:parcel_pricing` 嵌入，`0004` 自动进计划。
+  **验证**：在 `1b09c2d` 的 detached 检出上、DSN 已设：gofmt 零输出，`go build` / `go vet` /
+  `go test -count=1 ./...` 全绿（**含 PG**），`adapters/postgres` 用例 `-v` 下 PASS 非 SKIP。
+  棘轮基线剪掉 `SelectInForceSeriesVersion`，在 `2a9a76a` 干净内容上数得 31→30。PBC-08 门禁要求的无事务
+  负向证据并入 `TestPricingWritesRefuseToRunOutsideATransaction`。`-race` 未跑（Windows 侧无 cgo）。
