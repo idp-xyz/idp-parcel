@@ -1,0 +1,30 @@
+{
+  "outcome": "INITIAL_ROUTES_LISTED",
+  "judgments": [
+    {
+      "customerAccountId": "SYN-ACC-1",
+      "shipmentRequestId": "SYN-REQ-1",
+      "acceptanceBaseline": "SYN-BASELINE-1",
+      "declaredParcelId": "SYN-PARCEL-1",
+      "servicePurpose": "DELIVERY",
+      "conclusion": "ROUTE_FORMED",
+      "planVersion": "SYN-PLAN-1#v1",
+      "applicability": {
+        "state": "SUPERSEDED",
+        "transitionedAt": "2026-08-20T13:00:00Z",
+        "basis": "SYN-REROUTE/network-lapse",
+        "successor": "SYN-PLAN-1#v2"
+      },
+      "recordedAt": "2026-08-20T12:00:00Z"
+    },
+    {
+      "customerAccountId": "SYN-ACC-1",
+      "shipmentRequestId": "SYN-REQ-2",
+      "acceptanceBaseline": "SYN-BASELINE-1",
+      "declaredParcelId": "SYN-PARCEL-2",
+      "servicePurpose": "DELIVERY",
+      "conclusion": "NO_CURRENT_ROUTE",
+      "recordedAt": "2026-08-20T12:00:00Z"
+    }
+  ]
+}

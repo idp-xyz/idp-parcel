@@ -1,0 +1,34 @@
+{
+  "outcome": "ROUTE_REASSESSMENTS_LISTED",
+  "reassessments": [
+    {
+      "correlationId": "SYN-CORR-1",
+      "customerAccountId": "SYN-ACC-1",
+      "shipmentRequestId": "SYN-REQ-1",
+      "acceptanceBaseline": "SYN-BASELINE-1",
+      "declaredParcelId": "SYN-PARCEL-1",
+      "servicePurpose": "DELIVERY",
+      "conclusion": "PLAN_LAPSED",
+      "reviewedPlan": "SYN-PLAN-1#v1",
+      "lapseBasis": "SYN-LAPSE/line-withdrawn",
+      "candidateState": "NO_QUALIFIED_CANDIDATES",
+      "reassessedAt": "2026-08-20T12:00:00Z",
+      "recordedAt": "2026-08-20T12:01:00Z"
+    },
+    {
+      "correlationId": "SYN-CORR-2",
+      "customerAccountId": "SYN-ACC-1",
+      "shipmentRequestId": "SYN-REQ-2",
+      "acceptanceBaseline": "SYN-BASELINE-1",
+      "declaredParcelId": "SYN-PARCEL-2",
+      "servicePurpose": "DELIVERY",
+      "conclusion": "REROUTED",
+      "reviewedPlan": "SYN-PLAN-2#v1",
+      "lapseBasis": "SYN-LAPSE/closure-7",
+      "candidateState": "CANDIDATES_AVAILABLE",
+      "rerouteState": "AUTOMATIC_ALLOWED",
+      "reassessedAt": "2026-08-20T12:02:00Z",
+      "recordedAt": "2026-08-20T12:03:00Z"
+    }
+  ]
+}

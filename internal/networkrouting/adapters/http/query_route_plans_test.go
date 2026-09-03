@@ -179,6 +179,10 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 	if _, present := noRoute["applicability"]; present {
 		t.Fatalf("无路可走行长出了适用性：%v", noRoute)
 	}
+
+	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性、一无路可走，
+	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。
+	assertContractFixture(t, "route_plans_initial_route.json", recorder.Body.Bytes())
 }
 
 func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *testing.T) {
@@ -200,6 +204,27 @@ func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *te
 			ReassessedAt:       endpointBaseAt,
 			RecordedAt:         endpointBaseAt.Add(time.Minute),
 		},
+		// 已改路的一行：四个可缺席键同时在场——这是唯一能让 rerouteState 上列的走向，
+		// 契约夹具要靠它给前端一个 rerouteState 的实例。
+		{
+			CorrelationID:      "SYN-CORR-2",
+			CustomerAccountID:  "SYN-ACC-1",
+			ShipmentRequestID:  "SYN-REQ-2",
+			AcceptanceBaseline: "SYN-BASELINE-1",
+			DeclaredParcelID:   "SYN-PARCEL-2",
+			ServicePurpose:     "DELIVERY",
+			Conclusion:         "REROUTED",
+			ReviewedPlan:       "SYN-PLAN-2#v1",
+			HasReviewedPlan:    true,
+			LapseBasis:         "SYN-LAPSE/closure-7",
+			HasLapseBasis:      true,
+			CandidateState:     "CANDIDATES_AVAILABLE",
+			HasCandidateState:  true,
+			RerouteState:       "AUTOMATIC_ALLOWED",
+			HasRerouteState:    true,
+			ReassessedAt:       endpointBaseAt.Add(2 * time.Minute),
+			RecordedAt:         endpointBaseAt.Add(3 * time.Minute),
+		},
 	}}
 	endpoint := networkhttp.NewQueryRoutePlansEndpoint(
 		grantedCatalogueIntake{tenant: "tenant-1", limit: 25}, reader)
@@ -215,7 +240,7 @@ func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *te
 		t.Fatalf("outcome = %v", body["outcome"])
 	}
 	reassessments, ok := body["reassessments"].([]any)
-	if !ok || len(reassessments) != 1 {
+	if !ok || len(reassessments) != 2 {
 		t.Fatalf("reassessments 形状变形：%v", body["reassessments"])
 	}
 	lapsed, _ := reassessments[0].(map[string]any)
@@ -227,6 +252,15 @@ func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *te
 	if _, present := lapsed["rerouteState"]; present {
 		t.Fatalf("未评估的改路判定长出来了：%v", lapsed)
 	}
+	rerouted, _ := reassessments[1].(map[string]any)
+	if rerouted["conclusion"] != "REROUTED" || rerouted["rerouteState"] != "AUTOMATIC_ALLOWED" ||
+		rerouted["candidateState"] != "CANDIDATES_AVAILABLE" {
+		t.Fatalf("已改路行转写变形：%v", rerouted)
+	}
+
+	// 上面逐键断言过的这份响应体原样钉成契约夹具：一行失效、一行已改路，可缺席键都至少
+	// 出场一次（rerouteState 还兼有缺席的实例），前端对着它校类型时每一格都有得核。
+	assertContractFixture(t, "route_plans_reassessment.json", recorder.Body.Bytes())
 
 	// 空册答空数组：换一个没有预置行的读口再问一次。
 	empty := networkhttp.NewQueryRoutePlansEndpoint(
