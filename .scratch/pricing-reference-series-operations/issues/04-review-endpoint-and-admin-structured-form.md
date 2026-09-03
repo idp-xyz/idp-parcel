@@ -3,7 +3,7 @@
 Category: enhancement
 Status: in-progress——MCP-1（切片 04a 后端已落 `9035df7`，04b 前端未做且已释号，谁都可以接）
 Blocked by: 无（03 的代码已是主线祖先 `f62d619`；票 03 卡的只是 `seed.sh` 真库冒烟那一格，
-不拦本票——那一格真正缺的是 WSL 里的 Go 工具链而不是票面旧写的「WSL 够不到 PG」，MCP-5 实测）
+不拦本票）
 
 ## 要建什么
 
@@ -66,3 +66,51 @@ http 单测：只收 POST、未配置 403、三态响应。`node node_modules/ty
   ./internal/parcelpricing/...` 退 0、`go test -count=1 ./cmd/parcel-api/
   ./internal/parcelpricing/... ./internal/architecture/` 全 ok（含真库；本切片对
   `adapters/postgres` 零改动，那一层的绿是既有用例给的）。`-race` 未跑。
+
+- 2026-09-03 · MCP-4：**认领 04b。开工前先取证，结果改了本票三处形状；两处待裁已由 owner
+  裁完。本条只记结论与依据，实现随后。**
+
+  **一、`Blocked by` 行里那半句已删。** 原写「那一格真正缺的是 WSL 里的 Go 工具链」——
+  MCP-5 已自行撤回（它那次探测用的是不读 `~/.profile` 的非登录 shell，`go` 实际在
+  `/usr/local/go/bin/go`，登录 shell 下是 go1.26.5），MCP-3 已在票 03 就地更正
+  （`426f3fb`）。**那句是在更正之前被抄到本票的**，而本票本就 `Blocked by: 无`，那个子句
+  对它自己不起作用，只是把一个错因多存了一份。MCP-5 的自评值得连着记：**「我撤回得够快，
+  但没有任何机制把撤回追到已经抄走它的地方。」**
+
+  **二、票面担心的「口径读口今天可能没有」不成立，那条退路不要走。**
+  `GET /commercial-policies?kind=PRICE_POLICY` 的 `pricePolicyBody` 已带 `caliberDeclared`
+  与 `caliber.fx{quoteType, asOfSemantics, asOfPolicyVersion}`，而序列登记的 `QuoteBasis`
+  正是 `ArtifactCommercialPolicy` 的版本引用，键对得上。**做成手填两格不只是多余，是错的**
+  ——它让操作员手敲一个服务端已经知道的值，而手敲值与目录里那个版本对不对得上没有任何
+  东西在校。真正要做的在前端：`apps/admin-web/src/pages/party/api.ts` 的
+  `PricePolicyRecord` 止于 `registeredAt`，**没有那几个字段**；接上即可（MCP-5 取证）。
+  注意 `caliberDeclared` 可为假（0010 早于 0022，只有正文没口径的行合法），选单要把这两类
+  分开——那个布尔存在就是为了分开它俩。
+
+  **三、「状态列」与「更正预填」纯前端做不了，owner 已授权本票扩到后端读口。**
+  `ports.ReferenceSeriesCatalogueRow` 逐字段核过：既无复核状态也无期次。更正动作要预填
+  全部期次，而列面不返期次、今天也没有任何详情读口——没它就得让人重敲一遍全部期次，
+  **而那正好制造本票要防的那类错误**。
+
+  **四、裁决：状态列不含「在用」，只透纯转写的复核事实（owner 2026-09-03 裁）。**
+
+  这一格是取证时才看清的：`domain.SelectInForceSeriesVersion(candidates, at)` **要一个
+  时刻**——在用是相对**评价形成时刻**派生的结论，而目录页没有那个时刻。拿「浏览此刻」
+  代入会让页面显示一个只对此刻成立的结论，而昨天形成的评价可能用的是另一版，**那种页面
+  看起来是权威的**；读面这么做还会形成判断，违反 ADR-0077 读面通例。
+
+  **而 `0004_reference_series_review.sql` 的文件头早就把话说死了**：「『在用』不是它上面的
+  状态列，而是从本表按评价形成时刻派生的结论……做成状态列会让『谁在何时凭什么通过』在
+  结构上无处落。」票面原句「状态列：已登记／在用／已退回／已替代」与它直接冲突——**写票面
+  的人没读到那段**。
+
+  因此本票的列改为**复核状态**，只透后端能纯转写、不需要发明任何排序的事实；「在用」
+  留给票 05a 的覆盖读口（它本就要给在用版本引用，且那里有正当的时刻来源）。
+
+  **五、一条约束，与谁做无关，接 05a 的人同守**：在用判定只在
+  `domain.SelectInForceSeriesVersion` 一处。`ports/reference_series_review.go` 的注释原话是
+  「SQL 若也排一遍就是两处口径」。本票读口只取事实、不在 SQL 里裁。
+
+  **六、这是今晚第六件同族的事**（前五件：撤销的合成种子、票 03 照抄的网络理由、票 02 五处
+  错引 ADR、票 08 那个永远不可达的答案格、MCP-5 的非登录 shell 伪象）。**六件里有五件是
+  写票面的人当时没去量那一句，而它在票面上与量过的那些长得一模一样。**
