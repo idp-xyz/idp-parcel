@@ -1,7 +1,7 @@
 # 复核用例；评价用例形成前解析在用版本补齐取值；CLI 增复核种类；seedgen 重跑
 
 Category: enhancement
-Status: in-progress——MCP-3（2026-09-03，owner 在通道 3 指示「继续」）
+Status: resolved——五项全落 `f62d619`；验证行「`seed.sh` 在真库跑通」已于 2026-09-03 在独立 database 上实跑通过（见文末），「形成一条 `S` 评价」那半句因仓内没有评价写路径的生产入口而改归 T2 票（理由见文末，MCP-3 裁，owner 授权自决）
 Blocked by: 02（已 resolved，`1b09c2d`）
 
 ## 要建什么
@@ -71,3 +71,27 @@ Blocked by: 02（已 resolved，`1b09c2d`）
   **给下一个认领的人**：命令形如
   `IDP_PARCEL_POSTGRES_DSN=… bash -lc ./scripts/demo-seeds/seed.sh`（**`-lc` 不能省**，否则 `go`
   不在 PATH 上，你会得到那个假的「没装 Go」）。跑之前在频道说一声。
+
+- 2026-09-03 · MCP-3（owner 授权自决；本条把那一格跑了，并把跑不了的那半句改归它该在的票）。
+
+  **跑通了，且不必约人。** 上一条说「它对共享门禁库施加迁移、`--reset` 会 DROP」，所以不单方面跑——
+  绕法是**同一 PG 实例上新建一个独立 database**（`seed_smoke_mcp3`），DSN 指它，共享 schema 一个字节
+  不碰，也不用 `--reset`。钉 `40c62bd`，WSL 侧 `bash -lc`，`go1.26.5`：`seed.sh` **退出码 0**，七步全部
+  `RECORDED`/`REGISTERED`，全程 9 秒。第 3 步四行如实：两张价卡 `RECORDED`、两条序列 `RECORDED`、
+  **两条 `reference-series-review: RECORDED`**——`-kind reference-series-review` 在真库上走通了。库里
+  `parcel_pricing.reference_series_review` 两行：`SYN-SERIES-FUEL-01 v1` 与 `SYN-SERIES-FX-CNY-SGD v1`，
+  `decision=APPROVED`，`reviewer=SYN-PRICING-REVIEW-01`（≠ 登记责任方 `SYN-PRICING-OPS-01`，四眼门在
+  种子里照守），`reviewed_at=2026-01-02`。登记 → 复核的顺序按脚本原样。
+
+  **「能形成一条 `S` 评价」那半句本票做不到，也不该由本票做——改归 T2。** 实测 `parcel_pricing.evaluation`
+  在灌完种子后是 **0 行**，原因不是种子缺什么：仓内没有任何生产入口构造 `EvaluatePricingHandler`
+  （`cmd/` 下零命中；`parcel-api` 只挂了评价册的**读**口 `/pricing-evaluations`）。要「形成」一条评价，
+  只能写一个仓外驱动去拼 `EvaluationRequest`——那是在替一条本该由 T2（应用层处理器零非测试调用点那
+  一族，票 [admin-remainder-mechanism-batch/05](../../admin-remainder-mechanism-batch/issues/05-t2-remeasure-and-registry-integration.md)）
+  接的线临时补一个私人版本，做出来的证据只对那个驱动成立。评价写路径接上生产入口的那天，新建一个独立库
+  重灌（9 秒）再跑一条评价是两句命令的事，届时由接线的票顺带验，本票不再挂着等它。本次用的
+  `seed_smoke_mcp3` 库取证后即删，不留一份会随迁移漂移的旧库。
+
+  **五项与四格验证的对账**：应用层替身测试四条（有取值不解析 / 无取值解析后完成且清单含版本 / 无在用
+  版本待判断且解释含原因 / 重放不解析）在 `f62d619` 已落且今日仍绿（`evaluate_pricing_series_test.go`）；
+  CLI 单测三格已落；`seed.sh` 真库跑通本条实跑。**转 resolved。**
