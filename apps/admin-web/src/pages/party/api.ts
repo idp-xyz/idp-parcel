@@ -262,6 +262,31 @@ export interface BusinessPartyListResponseBody {
   parties: BusinessPartyRecord[];
 }
 
+// 货主客户账户册（票 admin-write-faces/04）——ADR-0003 三级边界的第三级。账户面向一个货主
+// 客户建立、必须显式关联其客户参与方（PC CONTEXT），所以它与法人册同形而不与身份本体册
+// 同形：名称不在本册行上，从参与方册左连接转写，customerPartyNameKnown 为假是写入门失败
+// 才会出现的悬空引用。status 按装载时点导出（REGISTERED / EFFECTIVE / DEACTIVATED），
+// 表上没有状态列。
+export interface CustomerAccountRecord {
+  tenantId: string;
+  accountId: string;
+  customerPartyId: string;
+  customerPartyName?: string;
+  customerPartyNameKnown: boolean;
+  status: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+export interface CustomerAccountListResponseBody {
+  outcome: 'CUSTOMER_ACCOUNTS_LISTED';
+  accounts: CustomerAccountRecord[];
+}
+
 // 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）。channels 为空数组即显式
 // 登记的“未配置”绑定——那是登记者说出的商业声明（该产品尚无可用渠道候选），不是
 // 数据缺件，页面据此如实显示。行上没有状态字段：映射没有独立状态代数，是否参与新的
@@ -320,6 +345,13 @@ export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipLis
 
 export function listBusinessParties(): Promise<ApiResult<BusinessPartyListResponseBody>> {
   return exchangeMasterData<BusinessPartyListResponseBody>('/commercial-business-parties');
+}
+
+// 客户账户册与客户合同同页分签却各走自己的入口：合同上列的是商业版本壳（草稿→发布→
+// 退役），账户上列的是参与方身份的登记修订（登记→生效→停用），两套状态代数不同——判据
+// 与上面身份/关系两口分立那条同一句。
+export function listCustomerAccounts(): Promise<ApiResult<CustomerAccountListResponseBody>> {
+  return exchangeMasterData<CustomerAccountListResponseBody>('/commercial-customer-accounts');
 }
 
 // 映射目录不并进 /commercial-service-products：那边上列版本壳，这边上列登记册信封

@@ -202,7 +202,7 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
     'register-parties',
     'customerAccounts 数组里一项的键为 accountId / customerPartyId / revision / basis / ' +
       'effectiveFrom,外加整批的 tenantId。引用判据同法人登记;跨租户绑定由领域构造门拒绝。' +
-      '**本册今天没有读面**:登进去的结果在管理台上看不到,要核对请走受控 CLI 或直连登记册。',
+      '结果显示在本页「客户账户」签(客户与合同页)。',
   ),
   'party-relationship': snapshotHint(
     'register-parties',
@@ -218,7 +218,7 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
       '关系的终止走撤销/到期/替代,不叫停用。revision 是停用落点的修订号(册上最新 + 1):' +
       '你声明自己看到的册面,错位说明册面已被并发推进或意图已陈旧。' +
       '**法人与客户账户的停用也走本签**(一个命令带种类),结果分别显示在集团与法人页、以及' +
-      '今天还没有的客户账户页上。',
+      '客户与合同页的「客户账户」签上。',
   ),
   'service-product-form': snapshotHint(
     'register-products',
