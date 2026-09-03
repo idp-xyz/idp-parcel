@@ -120,6 +120,18 @@
 # 条目行与未接线名单、**不读 `#` 注释**，两次都全绿。两次都是剪的人顺手改的，而不是被谁报出来的
 # ——这正是 AGENTS.md「改文档」那条说的、结构上守不住只能靠路过的人的那一类。
 #
+# 2026-09-03 随 tf-unwired-seven/05 剪掉 OpenDispatchTask（揽派任务建立编排落地，
+# application/open_dispatch_task.go 是它的生产调用方）。**剪后重数实测 27**，两法同得，量法与
+# 上两段同（动手前 `git status -- internal/architecture/` 为空，改完 `git diff HEAD -- 本文件`
+# 只有本笔的 hunk），父提交 `426f3fb`。
+#
+# **本笔的成因三分值得多写一句，因为它差一点就该是第三种。** 同一笔里新增了
+# OpenDispatchTaskHandler / Command / Result / Deps 四个以 `OpenDispatchTask` 为前缀的标识符
+# ——那正是「别处新出现同名符号把它误判成已接线」的形状。**去读了本门禁的匹配码才敢剪**：
+# `countProductionReferences` 比的是 `typed.Sel.Name == entry.name`，**精确相等不是子串**，
+# 四个前缀名一个都不命中。所以这一剪立在真调用上（`domain.OpenDispatchTask(spec)`），不是
+# 立在名字上。下一个剪条目时同时引入近名符号的人，照这一步先去读那段匹配码。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -205,7 +217,10 @@ internal/visibilityexception/domain SubmitEvidence
 # **票与注释两条路都留着，因为它们被不同的人看见**：票会被从跟踪器名单里看见，这句会被改这份
 # 名单的人看见，而那不是同一批人。
 internal/transportfulfillment/domain FormLoadAssignment
-internal/transportfulfillment/domain OpenDispatchTask
+#
+# OpenDispatchTask 曾在这里，2026-09-03 随 tf-unwired-seven/05 剪掉：
+# application/open_dispatch_task.go 的 OpenDispatchTaskHandler.Open 是它的生产调用方。
+# 同票的 FormLoadAssignment 仍未接（装载分配那一半另起一刀，它的数量守恒与版本链比任务重）。
 internal/transportfulfillment/domain RecordMovementFact
 # 实际履约段的重建门曾在这里（ADR-0028，tf-unwired-seven/01），2026-09-02 同票下一层落地后
 # 剪掉：`adapters/postgres/fulfillment_segment_registry.go` 的 FindByKey 是它的生产调用方。
