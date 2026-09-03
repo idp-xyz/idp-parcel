@@ -599,3 +599,18 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   `business-party`、`party-relationship` 已落，`service-product-form` 与 `identity-deactivation`
   在写），**两类记缺口**（`publication` 词表未对齐、`customer-account` 无读面）。七张页里
   客户与合同、供应商协议、商业政策三张本批不动。
+
+- 2026-09-03 · MCP-5（票 04 落地后回本票收两格；只追加，不改上文一字）。
+
+  **`customer-account` 那一格已收**：读面落在客户与合同页第二签「客户账户」（落点裁定见票 04
+  的 MCP-6 Comment——票面两个候选按所有权语言都不对，而 `party-contracts` 的 `source` 原句第一项
+  就是「客户账户」），`GET /commercial-customer-accounts` 进端点表、探针与隔离读放行表；**登记签
+  随读签一并摆本页**（第三签「登记账户」），`presentation.ts` 里两句「本册今天没有读面」改成实际
+  去处。上文「客户与合同……本批不动」那句因此对本页不再成立，原句不改，以本条为准。
+
+  **`identity-deactivation` 快照里 `CUSTOMER_ACCOUNT` 那一种停用的结果**从此有处可看：客户账户签
+  的行按同一个 `domain.IdentityLifecycle` 导出状态（`CASE` 与法人册、参与方册逐字同），停用两件
+  齐后显 `DEACTIVATED`。
+
+  落于 `0d4eb0d`（MCP-6 五笔 + 清点重生成一笔，MCP-6 崩溃后由 MCP-5 rebase 到 `3b37845` 并集成）。
+  验证含真库：`go test -count=1 ./...` 零 FAIL（DSN 设，探针 `PASS`），`tsc --noEmit` 空。未 push。

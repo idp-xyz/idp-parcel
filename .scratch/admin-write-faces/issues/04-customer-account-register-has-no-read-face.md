@@ -1,7 +1,7 @@
 # 04 货主客户账户册有写口无读面——身份三级里唯一看不见的一级
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-03）。落点已裁：**客户与合同页（`party-contracts`）加「客户账户」签**，不并进业务参与方页、不新开页，依据见 Comments 首条
+Status: resolved——MCP-6 裁落点并写完五笔，崩溃后由 MCP-5 集成收口（2026-09-03，`0d4eb0d`）。落点：**客户与合同页（`party-contracts`）加「客户账户」签**，不并进业务参与方页、不新开页，依据见 Comments 首条
 Blocked by: 无。它**阻塞**票 [02](./02-remaining-registries-take-online-registration-faces.md)
 的 `customer-account` 登记签，以及 `identity-deactivation` 的第三格
 
@@ -124,3 +124,21 @@ Blocked by: 无。它**阻塞**票 [02](./02-remaining-registries-take-online-re
   MCP-5 裁定等它释号。本票代码因此在隔离 worktree 分支上做：只加新文件、不改 MCP-2 正在写的
   文件；`cmd/parcel-api` 那几行（端点表、探针、放行表、unwired 占位）待释号后占号再加。以已验
   SHA 交集成。
+
+- 2026-09-03 · MCP-5（MCP-6 崩溃后集成收口；用户指示）。
+
+  **归属先说清**：分支 `mcp6-awf04` 上五笔全是 MCP-6 所提——页面侧三签 + `api.ts`/`presentation.ts`
+  （原 `80b0962`）、独立端口 `ports.CustomerAccountCatalogueRead` + `GET /commercial-customer-accounts`
+  （原 `750dc6b`；不往 `PartyIdentityCatalogueRead` 加方法，因为加方法要同笔拆 `cmd/parcel-api`
+  占位与 http 替身，是跨包红窗，且一页一入口）、postgres `ListCustomerAccounts`（原 `f023b4c`；
+  `CASE` 与另两册一字不差、左连接参与方册，三格各一 + 悬空参与方 + 跨租户零行 + limit 非正拒）、
+  `cmd/parcel-api` 五处接线、清点重生成。我做的只有：rebase 到 `3b37845`、在分支干净树上重生成
+  清点（增量是 MCP-1 `3b37845` 的新端口，与本票无关）、全仓验证、ff 到 main、回票 02 收两格。
+
+  **完成判据逐条**：生命周期三格各有实例可显 + 跨租户零行 + limit 非正拒——`f023b4c` 那笔的真库
+  用例；`gofmt -l` 空、`go build`／`go vet` 退 0、`go test -count=1 ./...` 零 FAIL **含真库**
+  （DSN 设，`TestFreezeScopesAreInvisibleToEachOther -v` 为 `PASS` 非 `SKIP`）；`tsc --noEmit`
+  无输出（`pnpm build` 未跑，照票 02 已定措辞如实记）；票 02 已追加一条 Comment 收
+  `customer-account` 登记签与 `identity-deactivation` 的 `CUSTOMER_ACCOUNT` 两格。
+
+  落于 **`0d4eb0d`**（父 `3b37845`）。未 push。
