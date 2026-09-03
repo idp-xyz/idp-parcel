@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——17 张子票立齐；`01`..`09` 与 `17` 已 resolved（四张裁决 ＋ 五张实现票，`09` 自带一次难逆转裁决落 ADR-0092），其余实现票待做
+Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`09`、`12`、`15`、`16`、`17` 已 resolved，其余实现票待做
 
 ## 这个 feature 是什么
 
@@ -62,8 +62,12 @@ Status: in-progress——17 张子票立齐；`01`..`09` 与 `17` 已 resolved�
 | [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | **已落地**：裁「只入引用」并落 [ADR-0092](../../docs/adr/0092-channel-label-payload-lands-as-a-reference-and-the-body-store-is-an-unconfigured-outbound-seam.md)——本体存放是未配置的出向缝；摘要必备、定位符可缺；载荷追加不可覆盖。**无新迁移**（引用是小值，走既有快照），真库实跑改证快照往返 | `resolved` |
 | [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | 与既有终局是不是同一个，要正面答 | `draft`（`06` 已 resolved，阻塞解除） |
 | [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 不复用 `RouteCandidate`（`01` 已裁），落 PS 侧 | `draft`｜`12` |
-| [`16` 外部轨迹的收编执行器](./issues/16-external-tracking-fact-adoption-executor.md) | 译成 TF 新立的一类事实；**开工前须先补 TF `CONTEXT.md` 与三时间 ADR** | `draft`｜`15` ＋落文前置 |
+| [`16` 外部轨迹的收编执行器](./issues/16-external-tracking-fact-adoption-executor.md) | **已落地**：落文 `2bb9300`（ADR-0102 ＋ TF CONTEXT 两词），TF 侧认领/判断/登记/outbox（`a3e28ff`）、VE 侧消费与译装＋路由表（`65b369f`）；一条外部轨迹走到投影。刻意留下三格拆成 `18`–`21` | `resolved` |
 | [`17` TF 两类事实补在线登记口](./issues/17-tf-handover-and-offsite-pickup-need-online-faces.md) | **已判定不做**——`03` 裁定走新立事实，这两个口无用例在守；缺口登记仍留在盘点里 | `resolved` |
+| [`18` 外部承运凭证登记册](./issues/18-external-carrier-credential-registry.md) | `ExternalCarrierCredentialResolver` 的生产实现：凭证 → 真实标识对象；无登记册时收编答`未决`不留痕 | `ready-for-agent` |
+| [`19` 轨迹源有效时间规则目录](./issues/19-tracking-source-effective-time-rule-catalogue.md) | `EffectiveTimeRules` 的生产实现：按源登记带版本的规则，无规则如实答`无`；**不得默认等于发生时间** | `ready-for-agent` |
+| [`20` 轨迹拉取节拍](./issues/20-tracking-pull-beat.md) | `TrackingSource.Pull` → `Adopt` 的生产入口；随第一家真源的适配器立，节奏属 `PAR-INT-02` | `draft`｜`18` |
+| [`21` 有效时间显式判断的在线面](./issues/21-effective-time-judgment-online-face.md) | `JudgeEffectiveTimeHandler` 的管理台写面；对象是待判断的事实 | `ready-for-agent` |
 
 ### 盘点判为「无缺口」因而不立票的三段
 
