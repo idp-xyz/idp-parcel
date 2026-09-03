@@ -42,6 +42,34 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'CREDIT_POLICY',
 ];
 
+/**
+ * 每本册列的是什么、由发布口的哪一类版本（或哪个声明通道）喂进来。
+ *
+ * 册（`?kind=`）与发布口的对象类别是两条分类轴，**刻意不对齐**：后端 query_commercial_policies.go
+ * 头注写明「种类命名册子而不是商业对象类别……拿对象类别当种类名会指错拥有者」。同屏只摆两套词
+ * 而不说清关系，操作者会照 chip 抄一个 PRICE_POLICY 进发布快照，然后被受理门拒——票
+ * admin-write-faces/03 记的正是这一格。所以这里逐册把「谁喂它」写成一句，页面在册名旁原样显示。
+ *
+ * 声明通道两本（接受前财务控制、时点锚）没有自己的版本：它们是随所属版本一并发布的 `declarations`，
+ * 页面上的「版本」列指的是所属版本。
+ */
+export const policyKindSources: Record<CommercialPolicyKind, string> = {
+  ACCEPTANCE_RULE_PACKAGE:
+    '列接单规则包版本及其正文；由发布口对象类别 ACCEPTANCE_RULE_PACKAGE 喂入，正文经声明通道 RULE_PACKAGE_BODY 随发布登记。',
+  PRE_ACCEPTANCE_CONTROL:
+    '列「这份合同要不要接受前财务控制」的声明；它挂在 CUSTOMER_CONTRACT 版本下、经声明通道 PRE_ACCEPTANCE_CONTROL 随合同发布登记——不是 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本本身（那一类版本今天没有册可看）。',
+  PRICE_POLICY:
+    '列商业价格政策正文（方向 × 定价方案绑定）；它挂在发布口对象类别 PRICE_RULE 的版本下，经声明通道 PRICE_POLICY_BODY 随发布登记。',
+  SETTLEMENT_POLICY:
+    '列结算政策正文；由发布口对象类别 SETTLEMENT_POLICY 喂入，正文经声明通道 SETTLEMENT_POLICY_BODY 随发布登记。',
+  AS_OF_POLICY:
+    '列时点锚声明；它没有自己的版本，挂在 ACCEPTANCE_RULE_PACKAGE 版本下、经声明通道 AS_OF_POLICY 随规则包发布登记。',
+  AUTHORIZATION_RULE:
+    '列授权规则版本及按请求方逐格的取消授权；由发布口对象类别 AUTHORIZATION_RULE 喂入，取消授权经声明通道 CANCELLATION_AUTHORITY 随发布登记。',
+  CREDIT_POLICY:
+    '列信用政策正文；由发布口对象类别 CREDIT_POLICY 喂入，正文经声明通道 CREDIT_POLICY_BODY 随发布登记。',
+};
+
 // 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
 // 概念不因出现在不同页而换名。
 export const commercialDirectionLabels: Record<string, string> = {
@@ -153,18 +181,23 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
   'product-channel-mapping': '登记产品—渠道映射修订',
 };
 
-// 登记快照形状的提示句。八类共用的前半由一处拼出：抄八遍会让「不逐字段建表单」这条
-// 理由在其中一遍被改动时悄悄分叉。
+// 登记快照形状的提示句。八类共用的前半由一处拼出：抄八遍会让「这一签是什么」那句
+// 在其中一遍被改动时悄悄分叉。
 //
 // `subcommand` 是受控 CLI 的子命令名，与端点路径的种类词不逐字相同（CLI 一个子命令收
 // 一整批四类，在线口一类一个端点）——所以提示句里同时说清「本签收一项，不是 CLI 那份
 // 整批」。这不是措辞讲究：把整批粘进来会被译装拒绝，而拒绝理由说的是形状不对，操作者
 // 看不出自己错在多包了一层。
+//
+// 这一签的定位按 ADR-0101 决定一：JSON 快照签是受控批量口的在线镜像，不是运营配置员的
+// 主路径；各册的逐字段表单由实施票逐册裁形另建。此前这里写的理由（「渠道原始载荷 →
+// 登记快照」的翻译属渠道接入契约、随 PAR-INT-01 提供）被 ADR-0101 收窄为只适用客户渠道
+// 载荷，对操作者面不成立，故不再这样说。
 function snapshotHint(subcommand: string, fields: string): string {
   return (
     `登记快照 JSON 的键与受控登记口 parcel-commercial ${subcommand} -input 吃的同一份;` +
     '在线口收的是其中**一项**,不是整批——批不是聚合,逐项各起事务,在线口把一项作为一次请求。' +
-    '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
+    '本签是受控批量口的在线镜像(ADR-0101),不是运营配置员的主路径;逐字段表单按各册实施票另建。' +
     fields
   );
 }
@@ -182,12 +215,16 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
     'publish',
     '一项的键为 tenantId / kind / objectId / version / scope / contentDigest / ' +
       'effectiveStartsAt / approval{reference,source,approvedAt} / approvalRoleStanding,' +
-      '可选 effectiveEndsAt / references / declarations。对象类别取封闭九词 SERVICE_PRODUCT / ' +
-      'CUSTOMER_CONTRACT / SUPPLIER_AGREEMENT / ACCEPTANCE_RULE_PACKAGE / ' +
+      '可选 effectiveEndsAt / references / declarations。kind 是**发布轴的对象类别**,封闭九词:' +
+      'SERVICE_PRODUCT / CUSTOMER_CONTRACT / SUPPLIER_AGREEMENT / ACCEPTANCE_RULE_PACKAGE / ' +
       'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY / PRICE_RULE / SETTLEMENT_POLICY / ' +
-      'CREDIT_POLICY / AUTHORIZATION_RULE——**它决定这一版落进哪本册,本页不代填也不校验**,' +
-      '贴错类别会发布成功但结果显示在那一类自己的页上。声明只能随发布登记:正文随发布固定,' +
-      '事后补声明等于改一份已固定的正文,那要发新版本。',
+      'CREDIT_POLICY / AUTHORIZATION_RULE。**它与本台各页的册名是两条分类轴,不逐字对应**:' +
+      '前三类各显示在服务产品、客户与合同、供应商协议三页;后六类的版本与正文显示在「商业规则与策略」' +
+      '页对应的册里(PRICE_RULE → 商业价格政策册,PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本今天没有册可看)。' +
+      '本页不代填也不校验 kind。declarations 里的通道(AS_OF_POLICY、PRE_ACCEPTANCE_CONTROL、' +
+      'RULE_PACKAGE_BODY、PRICE_POLICY_BODY 等)不是 kind:它们没有自己的版本,随所属版本一并发布,' +
+      '各自显示在册名旁写着的那本册。声明只能随发布登记:正文随发布固定,事后补声明等于改一份' +
+      '已固定的正文,那要发新版本。',
   ),
   'business-party': snapshotHint(
     'register-parties',

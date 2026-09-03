@@ -1,7 +1,7 @@
 # 03 发布口的在线写面卡在两套对不齐的封闭集上，先答词表再谈落点
 
 Category: question
-Status: ready-for-agent——但**第一步不是写页面**，是答下面三个领域问题
+Status: resolved——三问已答、落点已裁并落地（2026-09-03，MCP-3，owner 授权自决），见文末「裁决与交付」；两处顺带核出的缺口另立票 06、07
 Blocked by: 无（票 [02](./02-remaining-registries-take-online-registration-faces.md) 已把
 `publication` 排出本批，本票承接）
 
@@ -72,3 +72,54 @@ Blocked by: 无（票 [02](./02-remaining-registries-take-online-registration-fa
 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)；
 票 [02](./02-remaining-registries-take-online-registration-faces.md) 的 MCP-3 Comment
 （本票的举证与裁定出处）。
+
+## 裁决与交付（2026-09-03 · MCP-3，owner 授权自决；取证锚 `c93abba`）
+
+**三问的答案，都是代码里已经有的事实，不是新裁——本票只把它们摆到操作者看得见的地方。**
+
+1. **九类与六本册（今天七本）是两条分类轴，本来就不该对齐。** 权威在后端
+   `query_commercial_policies.go` 的头注：「种类命名**册子**而不是商业对象类别：接受前财务控制
+   声明挂在客户合同版本下、时点锚声明挂在接单规则包版本下，拿对象类别当种类名会指错拥有者」。
+   发布轴是 `CommercialObjectKind`（版本是哪一类），册轴是「谁拥有这本正文 / 声明」。逐册对应：
+   接单规则包 ← `ACCEPTANCE_RULE_PACKAGE` 版本（正文经 `RULE_PACKAGE_BODY` 通道）；接受前财务
+   控制 ← 挂 `CUSTOMER_CONTRACT` 版本的声明（`PRE_ACCEPTANCE_CONTROL` 通道，`0007` 的
+   `object_kind=2`），**不是** `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 版本；商业价格政策 ←
+   挂 `PRICE_RULE` 版本的正文（`PRICE_POLICY_BODY` 通道，`0010` 的 `object_kind=6`）；结算政策 ←
+   `SETTLEMENT_POLICY` 版本；时点锚 ← 挂 `ACCEPTANCE_RULE_PACKAGE` 版本的声明（`AS_OF_POLICY`
+   通道，`0005`）；授权规则 ← `AUTHORIZATION_RULE` 版本（取消授权经 `CANCELLATION_AUTHORITY`）；
+   信用政策 ← `CREDIT_POLICY` 版本（`CREDIT_POLICY_BODY` 通道，`0020`）。**处置不是对齐词表**
+   （对齐会把两个拥有者压成一个），**是在管理台把对应关系说出来**：册名旁一句「谁喂它」
+   （`policyKindSources`），发布签提示句写明 kind 是发布轴、与册名不逐字对应、`declarations`
+   里的通道不是 kind。
+2. **`CREDIT_POLICY` 发布之后落在信用政策册。** 本票立票时那一句「没有独立正文册」已过期：
+   票 party-commercial-context-gaps/03 落了正文表（`0020`，`877444a`），读面第七本册随之上了
+   页面（`policy-rows.test.ts` 已钉「信用政策是第七本册」）。问题消失，不是被裁掉。
+3. **`AS_OF_POLICY` 没有自己的版本。** 它是 `DeclarationChannel` 的一格，随所属接单规则包
+   版本在同一次发布的 `declarations` 里登记（`0005` 归属键取规则包版本四维）；它的「版本」
+   就是规则包版本。所以它不在九词里是对的，册在页面上也是对的——缺的只是页面没说这件事，
+   现在册名旁那一句说了。
+
+**落点裁决**：发布签摆在**商业规则与策略页**，作最后一签「受控发布（JSON 镜像）」。理由：
+九类里六类的结果显示在本页的册里，本页是「写签跟着读签走」能走到的最大一页；专页是九类
+结果一个都不在场的纯写页（票面已排除的第二条路，理由不变）。票面排除本页的理由（同屏两套
+词）由上面第 1 条的处置解掉：两套词各自是什么、怎么对应，签上和册名旁都写了，页面教的是
+真规则。按 ADR-0101 决定一，这一签是受控批量口的在线镜像、不是运营配置员的主路径，故列末签；
+各册的逐字段表单按决定八逐册另裁（票 07）。
+
+**顺带纠正一句八类共用的提示**：`snapshotHint()` 里「本页不逐字段建表单，因为『渠道原始载荷 →
+登记快照』的翻译属渠道接入契约，随 PAR-INT-01 提供」——这条理由已被 ADR-0101 收窄为只适用
+客户渠道载荷，对操作者面不成立，改为「本签是受控批量口的在线镜像（ADR-0101），逐字段表单按
+各册实施票另建」。`api.ts` 里「本表没有页面在消费」那段注释同步改写。
+
+**交付**：`CommercialPoliciesPage.tsx`（两签：政策册 / 受控发布；册名旁「谁喂它」一句）、
+`presentation.ts`（`policyKindSources`、发布提示句改写、共用提示句改写）、`api.ts`（注释）、
+`policy-rows.test.ts`（钉每本册都有那一句、两对近形词互相点名、提示句含九词且不再说
+PAR-INT-01）。验证：`tsc --noEmit` 退 0、`node scripts/run-tests.mjs` 38/38（原 36 + 新 2）。
+纯前端，Go 侧零改动；`vite build` 不声称（本机 `node_modules` 缺件，见票 pricing/05 MCP-4
+Comment，未在共享树上 `pnpm install`）。
+
+**两处顺带核出的缺口，另立票**：
+- **票 06**：`PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 版本本身没有任何册可看（发布成功后
+  管理台上找不到它，只能被解析读到）——与 `customer-account` 当初「有写面无读面」同族。
+- **票 07**：九类发布的运营主路径（逐字段表单或模板导入）按 ADR-0101 决定八逐册裁形，本票
+  只落了 JSON 镜像签。
