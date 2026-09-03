@@ -159,3 +159,27 @@ ADR-0090 决定六说的「该源无查询口」，如实记为一格而不是�
   增补 + 三时间 ADR）本票也不代做。
 - **不接任何真源、不填账号／密钥／频率／状态码表**（`PAR-INT-02`）。
 - **不为拉取开「可安全重拉」的代数例外**——理由在第三节。
+
+## 完成记录（2026-09-03，MCP-5）
+
+两处，都是新文件，不动 TF 任何既有文件：
+
+- 端口 `internal/transportfulfillment/ports/tracking_source.go`：`TrackingSourceReference`、
+  `TrackingSubject`、`SourceTime{Given, At}`、`TrackingMaterial`、不透明 `PullCursor`、封闭两格
+  `TrackingPullSupport`、`TrackingPullRequest`／`TrackingPullOutcome`（收 `outbound.Outcome`），
+  与单方法接口 `TrackingSource.Pull`。`ports` 包照仓内约定零测试。
+- 替身 `internal/transportfulfillment/adapters/trackingsource/synthetic_double_test.go`：只有测试
+  文件的包，生产代码导入不了；证据层级 `S`。四条用例各钉一格：源未给发生时间的素材如实
+  `Given=false` 且不被 `ReceivedAt` 顶替；只推送的源答「不提供拉取」而不被读成「去查询」；游标
+  往返且`答案未确定`不准重拉；一次拉取装得下多个对象且零值配置不放行调用。
+
+**清点报告随本笔重生成**（在检出本分支的干净 worktree 上跑生成器）：TF 生产 +1、测试 +1，端口
+声明 +1；`transportfulfillment.TrackingSource` 如实进入两口径的「无生产实现」名单——与
+`parcelshipment.LabelChannelGateway` 同一格，是设计不是欠账（本口的生产实现是各家源的适配器，
+逐家另立）。
+
+**验证**（隔离 worktree，未设 DSN——本笔无 `.sql`、无 postgres 适配器，真库对它无可证之物）：
+`gofmt -l` 空（两文件先按 CRLF 落盘被 gofmt 报出，`gofmt -w` 后字节级核过零 CRLF、无 BOM）、
+`go build ./...` 退 0、`go vet` 退 0、`go test -count=1` 于 `adapters/trackingsource` 与
+`internal/architecture` 全绿——新枚举过枚举门禁，`ports → platform/outbound` 的方向过边界门禁。
+SHA 与并入主线的取证见下一条。
