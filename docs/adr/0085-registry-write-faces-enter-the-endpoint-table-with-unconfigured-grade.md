@@ -1,6 +1,6 @@
 # ADR-0085: 登记册配置写面进端点表带未配置格——写表单属产品能力，CLI 保留为受控批量口；写准入不另立形，与其余命令面同等真渠道证据
 
-Status: Accepted（2026-08-31，用户经 IDP 队列通道 3 授权本会话「作为业务和系统专家直接开干」，据此对 [admin-write-faces/01](../../.scratch/admin-write-faces/issues/01-registry-configuration-has-no-admin-write-face.md) 的三项待裁作出裁决。裁决能力边界：读过 ADR-0055/0072/0077/0078 全文、`assembleBusinessEndpoints` 装配表、`cmd/parcel-pricing-register` 与 parcel-pricing 登记用例先例、closure-batch spec 与产品基线「产品就绪与试点就绪」「首发范围约束」两节；未逐一重读各上下文 `CONTEXT.md`——本记录因此只裁结构（写面走哪条准入、落在哪一层），不裁任何单册的领域不变量，各册表单形状与答案代数由实施票按其登记用例照抄）
+Status: Accepted（2026-08-31，用户经 IDP 队列通道 3 授权本会话「作为业务和系统专家直接开干」，据此对 [admin-write-faces/01](../../.scratch/admin-write-faces/issues/01-registry-configuration-has-no-admin-write-face.md) 的三项待裁作出裁决。裁决能力边界：读过 ADR-0055/0072/0077/0078 全文、`assembleBusinessEndpoints` 装配表、`cmd/parcel-pricing-register` 与 parcel-pricing 登记用例先例、closure-batch spec 与产品基线「产品就绪与试点就绪」「首发范围约束」两节；未逐一重读各上下文 `CONTEXT.md`——本记录因此只裁结构（写面走哪条准入、落在哪一层），不裁任何单册的领域不变量，各册表单形状与答案代数由实施票按其登记用例照抄。**部分停用**，2026-09-03：Decision 二补记中「两族各自要过 `PAR-INT-01` 的真证据门」一句的前半，与 Decision 二「本记录新增的登记端点也在被拦之列」一句，已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 停用——**适用场景**限管理台操作者族与登记册配置写面；「不得互相顶替」后半保留，客户业务面照旧过 `PAR-INT-01` 并被 ADR-0055 Decision 五两项拦着。另，票 admin-write-faces/01 评论对 Decision 三「翻译属渠道接入契约」的引申已由 [ADR-0101](./0101-operator-facing-registration-payload-shape-is-product-defined.md) 收窄为客户渠道载荷，Decision 三原句不变。其余各条不变）
 Date: 2026-08-31
 
 ## Context
@@ -49,3 +49,5 @@ Date: 2026-08-31
 - [ADR-0077](./0077-master-data-catalogue-read-follows-the-operations-read-pattern.md)：读面通例——写面响应形状与「未配置即拒」分界的对照物
 - [admin-write-faces/01](../../.scratch/admin-write-faces/issues/01-registry-configuration-has-no-admin-write-face.md)：本记录裁决的三项待裁与事实基线
 - [产品基线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：「产品就绪与试点就绪」与「首发范围约束」——写面属长期能力的依据
+- [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：补记点名的那份 ADR——操作者族的信任锚、校验方式与授权模型由产品定义；停用本记录 Decision 二「两族各自要过 `PAR-INT-01` 的真证据门」前半与「本记录新增的登记端点也在被拦之列」一句
+- [ADR-0101](./0101-operator-facing-registration-payload-shape-is-product-defined.md)：操作者面的登记载荷形状由产品定义——收窄票 01 评论对本记录 Decision 三的引申，Decision 三原句不变

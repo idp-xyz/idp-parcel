@@ -77,7 +77,7 @@
 - [ADR-0069：关务案件链乱序由重读与重试消化，不由分区保证；关闭信封携关闭周期维](./0069-customs-case-chain-ordering-absorbed-by-reread-and-retry.md)
 - [ADR-0070：关务规则登记册分记录侧与选择侧；解释规则的选择侧违反硬句 191，案件要求规则的版本维随同一模型决定裁](./0070-customs-rule-registries-split-recording-from-selection.md)
 - [ADR-0071：visibility-exception 的目录与策略视图把租户放进方法签名，不在构造期绑定](./0071-catalogue-views-carry-tenant-in-the-method-signature.md)｜**草案**：Status 为 Proposed，尚非依据
-- [ADR-0072：接入渠道与凭据验证归共享接入身份能力，登记册形状等真渠道证据](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)
+- [ADR-0072：接入渠道与凭据验证归共享接入身份能力，登记册形状等真渠道证据](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md)｜**部分停用**：其 Decision 2「登记册表结构与凭据形态在 `PAR-INT-01` 最低证据（该租户渠道的现行流程）到位前不立」一句已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 收窄——**适用场景**限客户接入渠道的登记行与凭据；管理台运营操作者渠道的登记册结构与凭据形态由产品定义、现在就立。Decision 1（能力归 `internal/accessidentity`）、Decision 3 与其余各条不变
 - [ADR-0073：申报单元是持久化聚合，案件关联落在单元上且成立即定](./0073-declaration-unit-is-a-persisted-aggregate-holding-its-case.md)
 - [ADR-0074：TF 载运对象与 VE 包裹是两个排队主体，TF 对象链分区键带口名段](./0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)
 - [ADR-0075：客户地址随判断请求在请求期携带过界，network-routing 不建读取端口](./0075-customer-address-is-carried-with-the-routing-request.md)
@@ -90,7 +90,7 @@
 - [ADR-0082：代收分户账按四维立键、余额只由追加式记账派生，回汇批次形成即冻结——分配守恒由记账形状交付，不靠事后对平](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md)
 - [ADR-0083：试点治理读面按登记册实有维度成形——无租户维是设计；隔离读放行沿用同一开关，注入不带租户的产品级作用域；呈现面留在管理台并明示实例级作用域](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)
 - [ADR-0084：面单交易是独立聚合——建立即固定覆盖与依据，双层结果一次记录不许互推，定案是派生谓词；继续尝试决定单列登记册不进聚合](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)
-- [ADR-0085：登记册配置写面进端点表带未配置格——写表单属产品能力，CLI 保留为受控批量口；写准入不另立形，与其余命令面同等真渠道证据](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
+- [ADR-0085：登记册配置写面进端点表带未配置格——写表单属产品能力，CLI 保留为受控批量口；写准入不另立形，与其余命令面同等真渠道证据](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)｜**部分停用**：其 Decision 二补记「两族各自要过 `PAR-INT-01` 的真证据门」一句的前半，与 Decision 二「本记录新增的登记端点也在被拦之列」一句，已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 停用——**适用场景**限管理台操作者族与登记册配置写面；「不得互相顶替」后半保留，客户业务面照旧过 `PAR-INT-01` 并被 ADR-0055 Decision 五两项拦着。Decision 三原句不变，票 01 评论对它「翻译属渠道接入契约」的引申由 [ADR-0101](./0101-operator-facing-registration-payload-shape-is-product-defined.md) 收窄为客户渠道载荷。其余各条不变
 - [ADR-0086：等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动；细分 ADR-0081 的未决语义，重投留给会自己回来的依赖](./0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md)
 - [ADR-0087：结算登记册补齐硬句所要求的可核对事实——确认费用固定八项且收付方向自立词表，客户费用调整单列追加册（含唯一创建用例门），经营组成项带按口径分组的角色维](./0087-settlement-registers-carry-the-facts-their-hard-sentences-require-checking.md)
 - [ADR-0088：面单渠道服务进入首发对客服务形态——`PAR-COM-12` 由范围裁剪改为纳入，首发形态成为网络服务与面单渠道服务的明确组合；领域语言一字不改，「一条线路」约束只作用于网络服务主链路](./0088-label-channel-service-enters-the-first-release-service-forms.md)
@@ -105,6 +105,8 @@
 - [ADR-0097：段成立之后按动作分三个窄写口（加入 / 逐对象离场 / 关段），不开通用 Update](./0097-segment-evolution-writes-through-narrow-doors-not-a-general-update.md)｜**结构判据**：窄口的价值不在窄，在于「回写为未发生」「整段覆盖成员差异」在这个口上**表达不出来**；整段重写口挡住倒退靠的是调用方纪律，且并发下会静默丢成员。**适用场景**：逐对象演进的聚合怎么开写口；`ErrSegmentStillActive` 那条跨行不变量仍靠纪律不靠结构，已在记录里如实标出
 - [ADR-0098：失败尝试费发生项不在揽收编排里形成，采购上下文显式给出而不推导；自营揽收失败不形成发生项是正确答案不是缺席](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)｜**位置判据**：CONTEXT 禁「任一对象的成功、失败或取消被压缩成其他对象的状态」，而把派生塞进一个必须照常成功的登记编排，会造出静默不发生且无人重试的一步（同 ADR-0094 那一类）。**适用场景**：一个派生事实该在哪个编排里形成；「不适用」与「未决」「报错」三格恢复动作不同必须分开；揽收↔委托的连线显式留空待租户实证
 - [ADR-0099：价卡绑定序列标识而不是序列版本；在用序列版本按评价形成时刻从复核记录派生，解析结果冻结进评价的版本清单](./0099-price-card-binds-series-identity-and-in-force-version-is-derived-from-review.md)｜**两个时点判据**：计价基准时点决定期次，评价形成时刻决定版本——合成一个日期就是 SAP 式用当前表回看，重放随之失效。**适用场景**：方案对参考序列的引用与评价用例的解析；序列版本的复核是追加记录不是状态列，在用版本是派生结论不是可维护指针
+- [ADR-0100：管理台运营操作者身份是产品自有的接入渠道族，属机制半边——信任锚、校验方式与操作者—租户授权模型由产品定义，不等 `PAR-INT-01`；登记册配置写面的真 Intake 据此现在就立](./0100-operator-identity-is-a-product-owned-access-channel-family.md)｜**归族判据**：一族身份的证据由谁出，看它的三件（信任锚、校验方式、授权模型）取决于谁——取决于产品的就是机制半边；`PAR-INT-01` 最低证据列里的每一件都是客户渠道的属性，容不下操作者。**适用场景**：管理台登记册配置写面与目录查阅面的真 Intake，答复按恢复动作分三格（发行方未配置 / 令牌无效 / 无授予）；客户业务命令面照旧过 `PAR-INT-01` 并被 ADR-0055 Decision 五两项拦着，隔离形态的 `SYN-` 写开关与之是装配点上的两行
+- [ADR-0101：运营操作者面的登记载荷形状由产品定义，属机制半边——「渠道原始载荷 → 登记快照」的翻译只在客户渠道上属渠道契约；价卡首例：版本化导入模板、持久化草稿、校验与发布共用一份摘要、批准是独立操作者动作、审批职责规则缺省朝拦](./0101-operator-facing-registration-payload-shape-is-product-defined.md)｜**形状归属判据**：载荷形状归它唯一的来源——客户渠道的报文是客户系统的既成事实，操作者面的载荷只有产品这一个来源，产品不定义就没人定义。**适用场景**：管理台各登记签的形态由实施票按「登记频次 × 操作者角色 × 载荷结构」逐册裁；价卡首例走模板导入 → 草稿 → 批准 → 交既有 `RegisterPriceCard` 发布，CONTEXT 生命周期的草稿、已校验、已批准、已发布由此各有载体；蓝图「价卡导入与治理」节其余门禁按计价规则模型最终设计的范围判据另裁
 
 ## 已被取代决策
 

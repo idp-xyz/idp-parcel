@@ -1,6 +1,6 @@
 # ADR-0072：接入渠道与凭据验证归共享接入身份能力，登记册形状等真渠道证据
 
-Status: 已接受（2026-08-21，MCP-3 受用户委托裁断）
+Status: 已接受（2026-08-21，MCP-3 受用户委托裁断。**部分停用**，2026-09-03：Decision 2 中「登记册表结构与凭据形态在 `PAR-INT-01` 最低证据（该租户渠道的现行流程）到位前不立」一句已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 收窄——**适用场景**限客户接入渠道的登记行与凭据；管理台运营操作者渠道的登记册结构与凭据形态由产品定义、现在就立。Decision 1、3 与其余各条不变）
 
 ## Context
 
@@ -34,5 +34,6 @@ Status: 已接受（2026-08-21，MCP-3 受用户委托裁断）
 ## Links
 
 - 确认维持：ADR-0055（其 Alternatives 中对运行时渠道登记表的否决）
+- 部分停用本记录：[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)——Decision 2 的适用场景收窄为客户接入渠道；操作者渠道那一半在 Decision 1 划定的 `internal/accessidentity` 落点上立第一份生产实现
 - 相关：ADR-0003、ADR-0014、ADR-0068
 - 来源：`.scratch/syn-wall-door-audit/issues/01`（MCP-6 复核与三条阻断）、`.scratch/syn-wall-door-audit/issues/12`（ADR-0017 分辨表）
