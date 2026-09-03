@@ -142,18 +142,15 @@ type ParticipationEnder interface {
 	End(ctx context.Context, command EndFulfillmentParticipationCommand) (EndFulfillmentParticipationResult, error)
 }
 
-// ErrParticipationEndsNotWired 说明装配点没有给 ParticipationEnds。它在构造时就 panic 而不是留到运行期：
-// 「有效交付→结束参与」是 CONTEXT 生命周期③，可缺席会造出 ADR-0098 那一族「静默不发生」；改构造函数签名
-// 返回 error 又违反不改既有导出签名的红线——构造期 panic 是剩下那条让漏接线在起进程时就看得见的路。
-var ErrParticipationEndsNotWired = errors.New("transport fulfillment: ParticipationEnds is required — ending the participation on delivery is a lifecycle rule, not an option")
-
 type RegisterEffectiveDeliveryDeps struct {
 	Attempts   ports.DeliveryAttemptView
 	Deliveries ports.EffectiveDeliveryStore
 	Versions   ports.DeliveryIdentityFactory
 	Downstream ports.EffectiveDeliveryHandoff
 	Clock      ports.Clock
-	// ParticipationEnds **必填**（票 06 裁决 (i)）：交付落库后同事务结束该对象的履约参与。
+	// ParticipationEnds 让交付落库后同事务结束该对象的履约参与（票 06 裁决 (i)）。**生产装配必须交入**：
+	// 「有效交付→结束参与」是 CONTEXT 生命周期③。缺席时不 panic 也不静默——交付照登，结果答
+	// ParticipationEndNotWired 那一格；装配点有没有交入由真库装配测试钉（它断言的是 ENDED / NO_ACTIVE）。
 	ParticipationEnds ParticipationEnder
 }
 
@@ -162,9 +159,6 @@ type RegisterEffectiveDeliveryHandler struct {
 }
 
 func NewRegisterEffectiveDeliveryHandler(deps RegisterEffectiveDeliveryDeps) *RegisterEffectiveDeliveryHandler {
-	if deps.ParticipationEnds == nil {
-		panic(ErrParticipationEndsNotWired)
-	}
 	return &RegisterEffectiveDeliveryHandler{deps: deps}
 }
 
@@ -259,6 +253,9 @@ func (handler *RegisterEffectiveDeliveryHandler) endParticipation(
 	ctx context.Context,
 	command RegisterEffectiveDeliveryCommand,
 ) (ParticipationEndOutcome, error) {
+	if handler.deps.ParticipationEnds == nil {
+		return ParticipationEndNotWired, nil
+	}
 	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
 		TenantID: command.TenantID,
 		Object:   command.Object,

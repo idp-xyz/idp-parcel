@@ -115,17 +115,24 @@ func TestADeliveryWhoseParticipationEndFailsFormsNoAnswer(t *testing.T) {
 	})
 }
 
-// 构造时就看得见：漏接 ParticipationEnds 不是运行期 5xx，是起进程就 panic。
-func TestConstructingTheDeliveryHandlerWithoutAParticipationEnderPanics(t *testing.T) {
-	defer func() {
-		recovered := recover()
-		err, ok := recovered.(error)
-		if !ok || !errors.Is(err, application.ErrParticipationEndsNotWired) {
-			t.Fatalf("recovered = %v, want ErrParticipationEndsNotWired", recovered)
-		}
-	}()
-	application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{})
-	t.Fatal("没有 panic")
+// 漏接 ParticipationEnds 看得见但不崩：交付照登，结果答 PARTICIPATION_END_NOT_WIRED。不 panic 是因为按旧 Deps
+// 构造处理器的测试遍布各处，一次 panic 会把整个测试进程连栈炸掉；不静默是因为那正是 ADR-0098 那一族的病。
+func TestADeliveryWithoutAParticipationEnderSaysSo(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+		Attempts:   &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
+		Deliveries: fixture.deliveries,
+		Versions:   &deliveryVersionFactory{},
+		Downstream: &deliveryHandoffDouble{},
+		Clock:      deliveryClock{at: deliveryRecordedAt},
+	})
+	result, err := handler.Register(t.Context(), deliveryCommandFor(t, "parcel-1", "attempt-1"))
+	if err != nil {
+		t.Fatalf("首登交付：%v", err)
+	}
+	if result.Outcome() != application.DeliveryRegistered || result.ParticipationEnd() != application.ParticipationEndNotWired {
+		t.Fatalf("outcome = %s participationEnd = %s, want PARTICIPATION_END_NOT_WIRED", result.Outcome(), result.ParticipationEnd())
+	}
 }
 
 func deliveryCommandFor(t *testing.T, object, attempt string) application.RegisterEffectiveDeliveryCommand {

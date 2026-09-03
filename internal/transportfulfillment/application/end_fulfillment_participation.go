@@ -60,6 +60,11 @@ const (
 	// 段里在场。它不是失败（重试不会变）也不是`对象不在段内`（那一格说的是指名的某个段），单开一格让
 	// 调用方看得见——交付登上了、但没有任何参与被它结束（票 06 裁决 (a)）。
 	ParticipationNoActiveParticipation
+	// ParticipationEndNotWired 是来源编排（交付、交接）在装配点没被交入 ParticipationEnds 时答的格：登记
+	// 照常成立，结束参与那一半**没有发生**，并且说出来。它取代了构造期 panic——panic 会把别的会话里
+	// 一切按旧 Deps 构造处理器的测试连栈一起炸掉；而漏接线要的只是「看得见」，一个具名格在结果与响应
+	// 里都看得见，生产装配另有真库测试钉住它不会出现。
+	ParticipationEndNotWired
 )
 
 func (outcome ParticipationEndOutcome) String() string {
@@ -72,6 +77,8 @@ func (outcome ParticipationEndOutcome) String() string {
 		return "OBJECT_NOT_IN_SEGMENT"
 	case ParticipationNoActiveParticipation:
 		return "NO_ACTIVE_PARTICIPATION"
+	case ParticipationEndNotWired:
+		return "PARTICIPATION_END_NOT_WIRED"
 	case ParticipationSegmentNotFound:
 		return "SEGMENT_NOT_FOUND"
 	case ParticipationControlFactNotFound:

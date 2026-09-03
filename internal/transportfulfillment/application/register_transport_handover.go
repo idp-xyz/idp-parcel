@@ -167,8 +167,9 @@ type RegisterTransportHandoverDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
 	Downstream ports.TransportHandoverRegistrationHandoff
 	Clock      ports.Clock
-	// ParticipationEnds **必填**（票 06 裁决 (i)）：`已交接`落库后同事务结束该对象在前一段的参与。与 Segments
-	// 可缺席不同——进段是派生，结束参与是 UC-TF-005 步骤 7 本身，漏接它就是漏掉一条生命周期规则。
+	// ParticipationEnds 让`已交接`落库后同事务结束该对象在前一段的参与（票 06 裁决 (i)）。**生产装配必须交入**
+	// ——结束参与是 UC-TF-005 步骤 7 本身。缺席时不 panic 也不静默：交接照登，结果答 ParticipationEndNotWired
+	// 那一格；装配点有没有交入由真库装配测试钉。
 	ParticipationEnds ParticipationEnder
 }
 
@@ -177,9 +178,6 @@ type RegisterTransportHandoverHandler struct {
 }
 
 func NewRegisterTransportHandoverHandler(deps RegisterTransportHandoverDeps) *RegisterTransportHandoverHandler {
-	if deps.ParticipationEnds == nil {
-		panic(ErrParticipationEndsNotWired)
-	}
 	return &RegisterTransportHandoverHandler{deps: deps}
 }
 
@@ -247,6 +245,9 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 ) (ParticipationEndOutcome, error) {
 	if !handover.TransfersControl() {
 		return ParticipationEndOutcomeInvalid, nil
+	}
+	if handler.deps.ParticipationEnds == nil {
+		return ParticipationEndNotWired, nil
 	}
 	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
 		TenantID: command.TenantID,

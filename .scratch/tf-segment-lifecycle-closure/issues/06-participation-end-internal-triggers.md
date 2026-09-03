@@ -95,3 +95,9 @@ worktree 全绿、提交带 pathspec、向 MCP-3 报 SHA 与验证种类。
   `enterNextSegment` 那条路（显式带 NextSegment 直接调 End）生产上无调用方，未改。
 - 验证：全仓 gofmt / build / vet / `go test -count=1 ./...` 在最终 SHA 的干净检出上跑，含真库（PASS 非 SKIP）。
   机制清点已重生成（TF 测试 +4）。
+
+同日补刀（owner 报其他通道因此崩溃）：**构造期 panic 撤回**。nil `ParticipationEnds` 时不 panic 也不静默——
+登记照常成立，结果与响应答具名格 `PARTICIPATION_END_NOT_WIRED`。理由：按旧 Deps 构造这两个处理器的测试遍布
+各会话的隔离树，一次 panic 把整个测试进程连栈炸掉；而裁决 (i) 要的「漏接线看得见」由两处保证——那一格在结果里
+可观察，生产装配有没有交入由真库装配测试钉（它断言 ENDED / NO_ACTIVE，装配点漏掉就红）。「必填」因此从构造期
+硬门改为生产装配门 + 可观察格，`ErrParticipationEndsNotWired` 随之删除。

@@ -93,12 +93,19 @@ func TestARegisteredHandoverEndsThePreviousParticipationThenEntersTheNextSegment
 	})
 }
 
-// 构造时就看得见：交接那一侧同样漏接即 panic。
-func TestConstructingTheHandoverHandlerWithoutAParticipationEnderPanics(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("没有 panic")
-		}
-	}()
-	application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{})
+// 漏接 ParticipationEnds 看得见但不崩：`已交接`照登，结果答 PARTICIPATION_END_NOT_WIRED（理由同交付那一侧）。
+func TestAHandoverWithoutAParticipationEnderSaysSo(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
+		Handovers:  fixture.registry,
+		Downstream: fixture.handoff,
+		Clock:      handoverClock{at: handoverRegisteredAt},
+	})
+	result, err := handler.Register(t.Context(), registerHandoverCommand(t))
+	if err != nil {
+		t.Fatalf("交接：%v", err)
+	}
+	if result.Outcome() != application.HandoverRegistered || result.ParticipationEnd() != application.ParticipationEndNotWired {
+		t.Fatalf("outcome = %s participationEnd = %s, want PARTICIPATION_END_NOT_WIRED", result.Outcome(), result.ParticipationEnd())
+	}
 }
