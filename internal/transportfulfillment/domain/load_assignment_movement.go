@@ -120,6 +120,17 @@ func (assignment LoadAssignment) Corrects() (LoadAssignmentVersion, bool) {
 	return assignment.corrects, true
 }
 
+// RevisedAt 交回本版本因变化而形成的时刻（若有）。
+//
+// 撤回形成的版本**不**在这里给出时刻——它走 Withdrawn()。两条路各自产出一版且互斥，合用一个
+// 时刻会让「这一版是改了对象范围」与「这一版是撤回」读起来一样。
+func (assignment LoadAssignment) RevisedAt() (time.Time, bool) {
+	if assignment.revisedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return assignment.revisedAt, true
+}
+
 func (assignment LoadAssignment) Withdrawn() (time.Time, bool) {
 	if !assignment.withdrawn {
 		return time.Time{}, false
