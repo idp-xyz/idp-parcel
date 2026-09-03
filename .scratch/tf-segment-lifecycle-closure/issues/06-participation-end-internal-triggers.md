@@ -2,9 +2,9 @@
 
 Category: enhancement
 Status: ready-for-agent
-Blocked by: 无票号阻塞。**开工前置**：MCP-1 对「动 TF application 既有编排」的答复（MCP-4 已于
-2026-09-03 问，见票 03 Comments）；若答「等」，本票 Blocked by 改为
-`label-channel-service-first-release/16` 合并。
+Blocked by: 无。MCP-1 2026-09-03 答 A（票 16 只加新文件，不碰 `register_effective_delivery.go` 与
+`register_transport_handover.go`），开工前置已满足；票 16 两刀已落 `a3e28ff`、`65b369f`。
+**仍要 MCP-3 先答「段引用从哪来」与「触发在哪一层」两问**（见下），不自裁。
 
 ## 从哪里来
 
@@ -37,6 +37,10 @@ Blocked by: 无票号阻塞。**开工前置**：MCP-1 对「动 TF application 
 inner 成功后调 `EndFulfillmentParticipationHandler.End`。(ii) 不碰 TF application，但它把「交付
 结束参与」这条 CONTEXT 规则放进了装配点——装配点换一个进程（CLI、消费者）这条规则就丢了。
 倾向 (i)，由 MCP-3 与 MCP-1 定。
+
+**下一段已关闭要不要答格。** 票 04 随裁决 3 让进段门交回 `SegmentEntryRefusal`（`SEGMENT_CLOSED`），
+三条控制事实入口都透出了；`EndFulfillmentParticipationHandler.enterNextSegment` 走同一道门但**暂只取
+续办引用**，那一格没透出。它与「下一段由谁指名」是同一次裁决的两半，本票一并答。
 
 ## 红线（沿票 03 与 tf-unwired-seven）
 

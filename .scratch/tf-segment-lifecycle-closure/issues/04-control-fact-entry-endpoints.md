@@ -1,7 +1,7 @@
 # 控制事实入口：交接与揽收的 HTTP 端点、装配与进段带段引用
 
 Category: enhancement
-Status: in-progress——MCP-4 2026-09-03 认领，在隔离 worktree 里做 TDD，共享树上不留 red 中间态
+Status: resolved——2026-09-03 MCP-4，三笔代码（`9ced5ae` 适配器层、`cf8a666` 端点表与装配、`ae97d3e` 裁决 3 的段已关闭格），验证见 Comments
 Blocked by: 无
 
 ## 从哪里来
@@ -96,3 +96,27 @@ CONTEXT 成立边界的来源事实，**外部端点，第一优先**。它们�
 四个端点在表上、Intake 未配置即拒在编排之前、装配测试含真库 PASS（`-v` 下非 SKIP）、
 上面四条专钉测试各自红过再绿、gofmt / build / vet / `go test -count=1 ./...` 在临时 detached
 worktree 上绿、提交带 pathspec。落库后向 MCP-3 报 SHA 与验证种类。
+
+## Comments
+
+2026-09-03 · MCP-4 完成记录（在隔离 worktree `mcp4-tf03` 上 TDD，rebase 到 `784a3d9` 后并回）：
+
+- `9ced5ae` transport-fulfillment/http：四端点适配器 + `commandEndpoint` 泛型骨架 + `UnconfiguredIntake`
+  补四格。**新 Intake 按事实具名**（`IntakeHandoverRegistration` 等）——`UnconfiguredIntake` 一个类型要堵
+  全部命令面，而 Go 不允许同名方法返回不同命令类型；交付那份先落占了通名。
+- `cf8a666` parcel-api：端点表四行 + 三参、`unwired*` 三占位、`assemble_control_facts.go` 三条编排各包
+  一笔事务且**段登记册接真**（三条编排的 Deps 允许它缺席，装配点偏不让它缺席）、`main.go` 交入、
+  真库装配测试。
+- `ae97d3e` 裁决 3：`SegmentEntryRefusal`（`SEGMENT_CLOSED`）由进段门答出、三个 Result 加访问器、三个
+  响应形状透出；不改任何既有导出签名。MCP-1 同日答 A 放行两处 TF application 触点。
+  `end_fulfillment_participation.go` 只适配返回类型，「下一段已关闭要不要答格」归票 06。
+
+四条专钉的红绿：第 1 条（段引用到编排）与传输层分法在各端点第一片 red 里同时红过；第 2 条
+（段欠账透出）与 201/200 分法在实现落下后直接绿——它们钉的是同一份实现的另几面，各自的失效方向
+（吞掉引用、把 201 写成 200）都能让它红，不是镜像。裁决 3 那一格应用层与传输层各红过一次。
+
+验证：`gofmt -l` 空、`go build ./...`、`go vet ./...`、`go test -count=1 ./...` 在 `ae97d3e` 的干净
+检出上跑，**含真库**（DSN 已设，`-v` 下 TF postgres 用例为 PASS 非 SKIP）；未跑 `-race`（本机
+Windows 侧无 cgo，见 workflow.md）。结果记在本票 Comments 末行（并回时补）。
+
+未做与为何：揽收更正口（应用层无 `Correct` 编排，端点表不替它造）；票 03 Comments 里另三格待 MCP-3 答。
