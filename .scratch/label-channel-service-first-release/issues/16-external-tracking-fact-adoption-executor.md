@@ -1,7 +1,7 @@
 # 16 外部轨迹的收编执行器：译成所有者自己的事实
 
 Category: enhancement
-Status: in-progress——MCP-1 于 2026-09-03 19:2x 占号（MCP-5 已明确让位）；开工前置三件已落 `2bb9300`
+Status: resolved——MCP-1（2026-09-03）；落文 `2bb9300`，实现三笔 `a3e28ff`／`65b369f`／`e697c9a`，完成记录见文末
 Blocked by: 03, 15（均已 resolved：03 裁决在票面，15 落 `7904003`）
 
 ## 缺口
@@ -68,3 +68,39 @@ TF `CONTEXT.md` 两词＋规则节＋生命周期节＋Boundaries 一行、GLOSS
 
 [轨迹源盘点](../tracking-source-seam-inventory.md)第二段；票 `03`、`15`；
 `internal/visibilityexception/domain/tracking_projection.go`。
+
+## 完成记录（2026-09-03，MCP-1）
+
+三笔，全部在隔离 worktree（分支 `mcp1-lc16`）里写完再 fast-forward 回主线，共享树上没出现过在途 `.go`：
+
+- `a3e28ff` **TF 侧**。领域 `ExternalCarrierTrackingFact`：`AdoptExternalCarrierTracking` 构造门对「源未给发生
+  时间」以专用理由 `ErrOccurredAtNotGivenBySource` 拒绝（走留痕），源事件标识可缺席不代铸，原始状态词原样保存；
+  `EffectiveTimeJudgment` 三格（待判断／显式／按带版本的规则），零值不算待判断，`JudgeEffectiveTime` 换版本回指
+  前版且不动源给内容；`VersionOrigin` 把「素材到达」与「本仓判断」两种版本分开——幂等锚（源，源事件）只锚前者。
+  应用 `AdoptTrackingMaterialHandler.Adopt` 六格结果代数（已认领／已认领待判断／重复投递／留痕／未受理／未决），
+  `JudgeEffectiveTimeHandler.Judge` 是 ADR-0102 决定三第一种来源的入口。端口新增登记册、留痕册、身份签发、
+  凭证解析、有效时间规则、交接意图六口。迁移 `0011` 两表两序列，CHECK 逐条镜像构造门（含「待判断却带有效时间」
+  ——那正是默认等于发生时间在库面上的样子）。`OutboxExternalTrackingFactHandoff` 对待判断版本响亮拒绝入队。
+- `65b369f` **VE 侧**。`ExternalTrackingConsumer` + `DeriveOnExternalCarrierTrackingAdapter`：三个时间各归各位
+  过桥，类型词 `external-carrier-tracking`（不含状态词），前版回指译进 `Supersedes`；待判断版本到达算不一致不算
+  未决。`parcel-dispatch` 路由表加一条，只投 VE 不 FanOut 给 PS。用例 `TestAJudgedExternalTrackingFactLandsWith
+  ItsThreeTimesAndKind` 把一条事实走到了投影上，且映射未登记时如实未归类。
+- `e697c9a` 机制清点在干净检出上重生成。
+
+**完成判据逐条**：执行器有实现与测试且一条外部轨迹走到投影 ✓；三时间（源未给即留痕、无规则即待判断、判断过
+才交 VE）与取代关系（源声明更正解析到当前版并回指、不认识的被更正事件只登记声明不回指）各有用例 ✓；隔离
+worktree 内 `gofmt -l internal cmd` 空、`go build ./...` 与 `go vet ./...` 退 0、`go test -count=1 ./...` 全绿
+——**DSN 已设、本机 PG 门禁容器实跑，真库用例 `-v` 下为 PASS 不是 SKIP**（含 TF 登记册／outbox、VE inbox、
+parcel-dispatch 路由表）。
+
+**刻意留下的三格**（不是欠账，各有归处）：
+
+1. 收编执行器的**生产入口**没接线：拉取节拍（调 `TrackingSource.Pull` 再喂 `Adopt`）随第一家真源的适配器票
+   一起立（渠道适配缝备忘「一类数据一张票」）；今天没有任何一家源，接一个空转的节拍只会挂未配置。
+2. `ExternalCarrierCredentialResolver` 与 `EffectiveTimeRules` 两口**无生产实现**，清点「缺」名单已如实列入。前者
+   的实现是 CONTEXT「外部承运凭证」的登记册（真实标识对象），后者是 `PAR-INT-02` 的有效时间规则目录；两者都是
+   实例半边的东西，各自立票。执行器对前者未配置答`未决`（本上下文的缺口，不留痕），对后者无规则答`待判断`。
+3. `JudgeEffectiveTimeHandler` 没有在线面。与票 17 同一条理由：先有事实再谈面。
+
+**一处更正**：`2bb9300` 提交信里写「四件落文本体是本频道上一会话的在途产出」——**有误**。MCP-5 事后确认那四件是
+MCP-5 上一会话的产出，中断于提交前，本会话（MCP-1）经 MCP-5 明确让位后接手提交。提交信改不掉，记在这里。
