@@ -577,6 +577,84 @@ func TestPoliciesEndpointTranscribesCreditLimitAsExactlyOneKey(t *testing.T) {
 	}
 }
 
+// Covers: 价格政策行体的口径转写（票 party-commercial-context-gaps/06）——caliberDeclared 说明有没有
+// 口径（0010 早于 0022，只有正文没有口径的行合法），有则 caliber 节在场：分类只在含税/未税时在场、
+// 系数只在 SELL 时在场、fx 节只在声明了汇率口径时在场——三处缺席都是口径说出的真话，不补空串。
+func TestPoliciesEndpointTranscribesPriceCaliberOnlyWhenDeclared(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &policyReaderDouble{
+		tenant: query.Scope.Tenant(),
+		prices: []ports.PricePolicyRow{
+			{ObjectID: "price-fx", VersionLabel: "v1", Direction: "SELL", PlanRef: "plan-buy-1", PlanDirection: "BUY",
+				BindingConversion: "FROZEN_BUY_EVALUATION", PolicyScope: "scope-1",
+				EffectiveStartsAt: catBaseAt, RegisteredAt: catBaseAt,
+				HasCaliber: true, TaxDisposition: "TAX_INCLUSIVE", TaxClassification: "vat-standard",
+				VolumetricFactor: "sell-divisor-5000-cm",
+				HasFx:            true, FxQuoteType: "boc-cash-selling", FxAsOfSemantics: "AT_ORDER_DATE", FxAsOfPolicyVersion: "asof-policy/v3",
+				CaliberRegisteredAt: catBaseAt.Add(time.Minute)},
+			{ObjectID: "price-plain", VersionLabel: "v1", Direction: "BUY", PlanRef: "plan-buy-2", PlanDirection: "BUY",
+				BindingConversion: "NONE", PolicyScope: "scope-1",
+				EffectiveStartsAt: catBaseAt, RegisteredAt: catBaseAt,
+				HasCaliber: true, TaxDisposition: "TAX_NOT_APPLICABLE", CaliberRegisteredAt: catBaseAt},
+			{ObjectID: "price-bare", VersionLabel: "v1", Direction: "SELL", PlanRef: "plan-sell-1", PlanDirection: "SELL",
+				BindingConversion: "NONE", PolicyScope: "scope-1",
+				EffectiveStartsAt: catBaseAt, RegisteredAt: catBaseAt},
+		},
+	}
+	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: query}, reader)
+
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder,
+		httptest.NewRequest(http.MethodGet, "/commercial-policies?kind=PRICE_POLICY", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := decodeBody(t, recorder)
+	rows := body["policies"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("policies = %v", body["policies"])
+	}
+
+	withFx := rows[0].(map[string]any)
+	if withFx["caliberDeclared"] != true || withFx["planDirection"] != "BUY" {
+		t.Fatalf("含口径的行 = %v", withFx)
+	}
+	caliber, ok := withFx["caliber"].(map[string]any)
+	if !ok {
+		t.Fatalf("caliber 节没透出:%v", withFx)
+	}
+	if caliber["taxDisposition"] != "TAX_INCLUSIVE" || caliber["taxClassification"] != "vat-standard" ||
+		caliber["volumetricFactor"] != "sell-divisor-5000-cm" || caliber["registeredAt"] == nil {
+		t.Fatalf("口径转写变形:%v", caliber)
+	}
+	fx, ok := caliber["fx"].(map[string]any)
+	if !ok || fx["quoteType"] != "boc-cash-selling" || fx["asOfSemantics"] != "AT_ORDER_DATE" || fx["asOfPolicyVersion"] != "asof-policy/v3" {
+		t.Fatalf("汇率口径转写变形:%v", caliber["fx"])
+	}
+
+	plain := rows[1].(map[string]any)
+	caliber = plain["caliber"].(map[string]any)
+	if caliber["taxDisposition"] != "TAX_NOT_APPLICABLE" {
+		t.Fatalf("不适用的税务口径没透出:%v", caliber)
+	}
+	for _, key := range []string{"taxClassification", "volumetricFactor", "fx"} {
+		if _, has := caliber[key]; has {
+			t.Fatalf("缺席的 %s 长出了键:%v", key, caliber)
+		}
+	}
+
+	bare := rows[2].(map[string]any)
+	if bare["caliberDeclared"] != false {
+		t.Fatalf("无口径的行 caliberDeclared = %v", bare["caliberDeclared"])
+	}
+	if _, has := bare["caliber"]; has {
+		t.Fatal("没登记口径却长出了 caliber 节")
+	}
+	if bare["direction"] != "SELL" || bare["planRef"] != "plan-sell-1" {
+		t.Fatalf("正文字段没有照列:%v", bare)
+	}
+}
+
 func TestPoliciesEndpointAnswersReadFailureWith500(t *testing.T) {
 	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(
 		intakeDouble{query: catalogueQuery(t)},

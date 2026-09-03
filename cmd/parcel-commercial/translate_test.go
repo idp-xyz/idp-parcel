@@ -430,6 +430,127 @@ func supplierBatchJSON(body string) string {
 		"declarations": {"supplierAgreementBody": {` + body + `}}}]}`
 }
 
+// Covers: 价格政策正文（票 party-commercial-context-gaps/06）：方向、方案绑定、发布当时 parcel-pricing
+// 的答复（planDirection / conversion，ADR-0057，由写批文的人照价卡目录抄）、范围与区间逐项过构造门；
+// 口径嵌在正文里，税务两格与体积一格随方向耦合，汇率一节可缺——缺席翻成 nil 而不是零口径。
+func TestAPricePolicyBodyTranslatesWithItsCaliber(t *testing.T) {
+	t.Run("sell with full caliber", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(priceBatchJSON(`"direction": "SELL",
+			"pricingPlan": "plan-buy-1", "planDirection": "BUY", "conversion": "FROZEN_BUY_EVALUATION",
+			"scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z", "effectiveEndsAt": "2026-12-31T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_INCLUSIVE", "taxClassification": "vat-standard",
+				"volumetricFactor": "sell-divisor-5000-cm",
+				"fx": {"quoteType": "boc-cash-selling", "asOfSemantics": "AT_ORDER_DATE", "asOfPolicyVersion": "asof-policy/v3"}}`)))
+		if err != nil {
+			t.Fatalf("翻译价格政策批：%v", err)
+		}
+		body := commands[0].Declarations.PricePolicyBody
+		if body == nil {
+			t.Fatal("价格政策正文没有翻过去")
+		}
+		if body.Direction != pcdomain.SellDirection || body.PlanDirection != pcdomain.BuyDirection ||
+			body.Conversion != pcdomain.PlanBindingFrozenBuyEvaluation ||
+			body.PricingPlan.String() != "plan-buy-1" || body.Scope.String() != "scope-1" ||
+			body.Effective.Contains(mustTime(t, "2027-01-01T00:00:00Z")) {
+			t.Fatalf("正文变形：%+v", body)
+		}
+		if body.Caliber == nil {
+			t.Fatal("口径没有翻过去")
+		}
+		classification, ok := body.Caliber.Tax.Classification()
+		if body.Caliber.Tax.Disposition() != pcdomain.TaxInclusive || !ok || classification.String() != "vat-standard" {
+			t.Fatalf("税务口径变形：%+v", body.Caliber.Tax)
+		}
+		factor, ok := body.Caliber.Volumetric.Factor()
+		if body.Caliber.Volumetric.Direction() != pcdomain.SellDirection || !ok || factor.String() != "sell-divisor-5000-cm" {
+			t.Fatalf("体积口径变形：%+v", body.Caliber.Volumetric)
+		}
+		if body.Caliber.Fx == nil || body.Caliber.Fx.QuoteType().String() != "boc-cash-selling" ||
+			body.Caliber.Fx.AsOfSemantics().String() != "AT_ORDER_DATE" ||
+			body.Caliber.Fx.AsOfPolicyVersion().String() != "asof-policy/v3" {
+			t.Fatalf("汇率口径变形：%+v", body.Caliber.Fx)
+		}
+	})
+
+	t.Run("buy caliber without fx", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(priceBatchJSON(`"direction": "BUY",
+			"pricingPlan": "plan-buy-1", "planDirection": "BUY", "conversion": "NONE",
+			"scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE"}`)))
+		if err != nil {
+			t.Fatalf("翻译价格政策批：%v", err)
+		}
+		caliber := commands[0].Declarations.PricePolicyBody.Caliber
+		if caliber == nil || caliber.Fx != nil {
+			t.Fatalf("没声明汇率口径却翻出了一份：%+v", caliber)
+		}
+		if _, ok := caliber.Tax.Classification(); ok || caliber.Tax.Disposition() != pcdomain.TaxNotApplicable {
+			t.Fatalf("税务口径变形：%+v", caliber.Tax)
+		}
+		if _, ok := caliber.Volumetric.Factor(); ok || caliber.Volumetric.Direction() != pcdomain.BuyDirection {
+			t.Fatalf("采购方向的体积口径不该有系数：%+v", caliber.Volumetric)
+		}
+	})
+
+	t.Run("body without caliber", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(priceBatchJSON(`"direction": "SELL",
+			"pricingPlan": "plan-sell-1", "planDirection": "SELL", "conversion": "NONE",
+			"scope": "scope-1", "effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
+		if err != nil {
+			t.Fatalf("翻译价格政策批：%v", err)
+		}
+		if commands[0].Declarations.PricePolicyBody.Caliber != nil {
+			t.Fatal("没给口径却翻出了一份")
+		}
+	})
+
+	refusals := map[string]string{
+		"集合外方向": priceBatchJSON(`"direction": "SIDEWAYS", "pricingPlan": "p", "planDirection": "SELL",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"集合外转换": priceBatchJSON(`"direction": "SELL", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "GUESS", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"缺定价方案": priceBatchJSON(`"direction": "SELL", "planDirection": "SELL",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"销售口径缺体积系数": priceBatchJSON(`"direction": "SELL", "pricingPlan": "p", "planDirection": "SELL",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE"}`),
+		"采购口径带体积系数": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "volumetricFactor": "f"}`),
+		"含税缺分类": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_INCLUSIVE"}`),
+		"不适用带分类": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "taxClassification": "vat"}`),
+		"集合外税务三值": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_MAYBE"}`),
+		"汇率半缺": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "fx": {"quoteType": "q"}}`),
+		"口径带加点键": priceBatchJSON(`"direction": "BUY", "pricingPlan": "p", "planDirection": "BUY",
+			"conversion": "NONE", "scope": "s", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"caliber": {"taxDisposition": "TAX_NOT_APPLICABLE", "markup": "plus-1pct"}`),
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
+func priceBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "PRICE_RULE", "objectId": "price-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"pricePolicyBody": {` + body + `}}}]}`
+}
+
 func mustObjectID(t *testing.T, raw string) pcdomain.CommercialObjectID {
 	t.Helper()
 	value, err := pcdomain.NewCommercialObjectID(raw)

@@ -47,6 +47,29 @@ type publicationRegistryDouble struct {
 
 	savedSupplier   []domain.SupplierAgreement
 	supplierOutcome ports.SupplierAgreementSaveOutcome
+
+	savedPrice          []domain.CommercialPricePolicy
+	savedPlanDirections []domain.PriceDirection
+	savedConversions    []domain.PlanBindingConversion
+	priceOutcome        ports.PricePolicySaveOutcome
+
+	savedCaliber   []domain.PricePolicyCaliber
+	caliberOutcome ports.PricePolicyCaliberSaveOutcome
+}
+
+func (double *publicationRegistryDouble) SavePricePolicyCaliber(
+	_ context.Context,
+	caliber domain.PricePolicyCaliber,
+) (ports.PricePolicyCaliberSaveOutcome, error) {
+	if double.declarationErr != nil {
+		return ports.PricePolicyCaliberSaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedCaliber = append(double.savedCaliber, caliber)
+	double.declarationLog = append(double.declarationLog, "price-policy-caliber")
+	if double.caliberOutcome == ports.PricePolicyCaliberSaveOutcomeInvalid {
+		return ports.PricePolicyCaliberSaved, nil
+	}
+	return double.caliberOutcome, nil
 }
 
 func (double *publicationRegistryDouble) SaveCreditPolicy(
@@ -200,11 +223,21 @@ func (double *publicationRegistryDouble) SaveValidityCorrection(
 
 func (double *publicationRegistryDouble) SavePricePolicy(
 	_ context.Context,
-	_ domain.CommercialPricePolicy,
-	_ domain.PriceDirection,
-	_ domain.PlanBindingConversion,
+	policy domain.CommercialPricePolicy,
+	planDirection domain.PriceDirection,
+	conversion domain.PlanBindingConversion,
 ) (ports.PricePolicySaveOutcome, error) {
-	return ports.PricePolicySaveOutcomeInvalid, errors.New("发布用例不该触碰价格政策册")
+	if double.declarationErr != nil {
+		return ports.PricePolicySaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedPrice = append(double.savedPrice, policy)
+	double.savedPlanDirections = append(double.savedPlanDirections, planDirection)
+	double.savedConversions = append(double.savedConversions, conversion)
+	double.declarationLog = append(double.declarationLog, "price-policy-body")
+	if double.priceOutcome == ports.PricePolicySaveOutcomeInvalid {
+		return ports.PricePolicySaved, nil
+	}
+	return double.priceOutcome, nil
 }
 
 func (double *publicationRegistryDouble) SaveSettlementPolicy(
@@ -998,6 +1031,187 @@ func TestASupplierAgreementBodyPublishesWithItsOwnVersion(t *testing.T) {
 		reports[0].Channel != application.SupplierAgreementBodyChannel ||
 		reports[0].Outcome != ports.DeclarationSaved {
 		t.Fatalf("报告 = %#v, want SUPPLIER_AGREEMENT_BODY=SAVED 一条", reports)
+	}
+}
+
+func pricePolicyBody(t *testing.T, direction, planDirection domain.PriceDirection, conversion domain.PlanBindingConversion) *application.PricePolicyBodyDeclaration {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(pubStartsAt, time.Time{})
+	if err != nil {
+		t.Fatalf("适用区间：%v", err)
+	}
+	return &application.PricePolicyBodyDeclaration{
+		Direction:     direction,
+		PricingPlan:   pcValue(t, domain.NewPricingPlanReference, "plan-1"),
+		PlanDirection: planDirection,
+		Conversion:    conversion,
+		Scope:         pcValue(t, domain.NewCommercialScopeReference, "pricing-scope-1"),
+		Effective:     interval,
+	}
+}
+
+func sellCaliber(t *testing.T, withFx bool) *application.PricePolicyCaliberDeclaration {
+	t.Helper()
+	tax, err := domain.NewTaxCaliber(domain.TaxExclusive, pcValue(t, domain.NewTaxClassificationReference, "vat-standard"))
+	if err != nil {
+		t.Fatalf("税务口径：%v", err)
+	}
+	volumetric, err := domain.NewVolumetricCaliber(domain.SellDirection,
+		pcValue(t, domain.NewVolumetricFactorReference, "sell-divisor-5000-cm"))
+	if err != nil {
+		t.Fatalf("体积口径：%v", err)
+	}
+	declaration := &application.PricePolicyCaliberDeclaration{Tax: tax, Volumetric: volumetric}
+	if withFx {
+		fx, err := domain.NewFxCaliber(
+			pcValue(t, domain.NewFxQuoteTypeReference, "boc-cash-selling"),
+			pcValue(t, domain.NewAsOfSemanticsReference, "AT_ORDER_DATE"),
+			pcValue(t, domain.NewAsOfPolicyVersion, "asof-policy/v3"),
+		)
+		if err != nil {
+			t.Fatalf("汇率口径：%v", err)
+		}
+		declaration.Fx = &fx
+	}
+	return declaration
+}
+
+// Covers: 票 party-commercial-context-gaps/06——价格政策正文随它自己那一版发布登记。在这一路接上
+// 之前 `SavePricePolicy` 全仓没有生产调用方：租户连方向与定价方案都登不进去。发布期邻接答复
+// （planDirection）与声明的转换按 ADR-0057 原样交给持久化面，不推断、不代填。
+func TestAPricePolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
+		Approval:     publishApproval(t, "price-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			PricePolicyBody: pricePolicyBody(t, domain.SellDirection, domain.BuyDirection, domain.PlanBindingFrozenBuyEvaluation),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+	if len(registry.savedPrice) != 1 {
+		t.Fatalf("价格政策册收到 %d 份, want 1", len(registry.savedPrice))
+	}
+	if registry.savedPrice[0].Direction() != domain.SellDirection ||
+		registry.savedPlanDirections[0] != domain.BuyDirection ||
+		registry.savedConversions[0] != domain.PlanBindingFrozenBuyEvaluation {
+		t.Fatalf("方向 / 方案方向 / 转换没有原样到达持久化面：%v %v %v",
+			registry.savedPrice[0].Direction(), registry.savedPlanDirections[0], registry.savedConversions[0])
+	}
+	if len(registry.savedCaliber) != 0 {
+		t.Fatal("没声明口径却写了口径册")
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 || reports[0].Channel != application.PricePolicyBodyChannel || reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want PRICE_POLICY_BODY=SAVED 一条", reports)
+	}
+}
+
+// Covers: AT-PC-033——SELL 政策绑 BUY 价卡而未声明转换是发布冲突，整项拒绝一行不写；这道门在
+// 发布面由 NewCommercialPricePolicy 把守，装载面再走一遍（ADR-0057）。
+func TestAPricePolicyBodyWithAnUndeclaredCrossDirectionBindingIsRejected(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+
+	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
+		Approval:     publishApproval(t, "price-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{
+			PricePolicyBody: pricePolicyBody(t, domain.SellDirection, domain.BuyDirection, domain.PlanBindingConversionNone),
+		},
+	}); !errors.Is(err, domain.ErrPriceDirectionBindingConflict) {
+		t.Fatalf("err = %v, want ErrPriceDirectionBindingConflict", err)
+	}
+	if len(registry.savedVersions) != 0 || len(registry.savedPrice) != 0 {
+		t.Fatal("未声明转换的跨向绑定写了库")
+	}
+}
+
+// Covers: 票 02/06——口径随价格政策正文同一次发布登记，正文先写、口径后写（0022 的外键要求
+// 正文行先在）；汇率一格可缺，缺席按缺席落而不是零值。
+func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
+	body.Caliber = sellCaliber(t, true)
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
+		Approval:     publishApproval(t, "price-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{PricePolicyBody: body},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if len(registry.savedCaliber) != 1 {
+		t.Fatalf("口径册收到 %d 份, want 1", len(registry.savedCaliber))
+	}
+	saved := registry.savedCaliber[0]
+	if fx, declared := saved.Fx(); !declared || fx.QuoteType().String() != "boc-cash-selling" {
+		t.Fatalf("汇率口径没有原样到达：(%v, %v)", fx, declared)
+	}
+	if saved.Tax().Disposition() != domain.TaxExclusive {
+		t.Fatalf("税务口径 = %q", saved.Tax().Disposition())
+	}
+	if registry.declarationLog[len(registry.declarationLog)-2] != "price-policy-body" ||
+		registry.declarationLog[len(registry.declarationLog)-1] != "price-policy-caliber" {
+		t.Fatalf("写入顺序 = %v，口径必须跟在正文后面", registry.declarationLog)
+	}
+	reports := result.Declarations()
+	if len(reports) != 2 ||
+		reports[0].Channel != application.PricePolicyBodyChannel ||
+		reports[1].Channel != application.PricePolicyCaliberChannel ||
+		reports[1].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want PRICE_POLICY_BODY 与 PRICE_POLICY_CALIBER 各一条", reports)
+	}
+
+	t.Run("without fx lands as absent", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
+		body.Caliber = sellCaliber(t, false)
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
+			Approval:     publishApproval(t, "price-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{PricePolicyBody: body},
+		}); err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if _, declared := registry.savedCaliber[0].Fx(); declared {
+			t.Fatal("没声明汇率口径却以在场落库")
+		}
+	})
+}
+
+// Covers: 口径里的体积方向必须与政策方向一致——采购政策带一份销售方向的体积口径，整项拒绝
+// 一行不写（正文也不写：两者是同一份声明的两半）。
+func TestAPricePolicyCaliberDisagreeingWithTheBodyDirectionIsRejected(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	body := pricePolicyBody(t, domain.BuyDirection, domain.BuyDirection, domain.PlanBindingConversionNone)
+	body.Caliber = sellCaliber(t, false)
+
+	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
+		Approval:     publishApproval(t, "price-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{PricePolicyBody: body},
+	}); !errors.Is(err, domain.ErrPricePolicyCaliberDirectionMismatch) {
+		t.Fatalf("err = %v, want ErrPricePolicyCaliberDirectionMismatch", err)
+	}
+	if len(registry.savedVersions) != 0 || len(registry.savedPrice) != 0 || len(registry.savedCaliber) != 0 {
+		t.Fatal("方向不一致的口径连同正文写了库")
 	}
 }
 

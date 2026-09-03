@@ -45,4 +45,7 @@ func TestDeclarationContentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := publications.SaveSupplierAgreement(ctx, domain.SupplierAgreement{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记供应商协议正文应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := publications.SavePricePolicyCaliber(ctx, domain.PricePolicyCaliber{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记价格政策口径应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

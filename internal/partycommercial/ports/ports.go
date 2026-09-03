@@ -152,6 +152,24 @@ type SupplierAgreementContentView interface {
 	) (domain.SupplierAgreement, bool, error)
 }
 
+// PricePolicyCaliberView 取已唯一选出的价格规则版本声明的计价口径：税务口径、体积口径与可缺的
+// 汇率口径。这是 parcel-pricing 在登记参考序列取值时按 quoteBasis 冻结口径正文要走的读口
+// （票 02 裁「登记时冻结，不走端口现取」——冻的是这里读回的正文，读一次、冻进序列，之后不再回来问）。
+//
+// 分界同 CreditPolicyContentView：口径不参与选用，不进整册与 ViewRevision。found=false = 口径
+// 未登记（无行）——按 0022 的外键，那同时意味着政策正文可能也未登记，调用方分不出也不必分：
+// 两种缺席的续办都是去发布。读取失败与坏数据（含税务三值与分类耦合破缺、汇率三列半缺）走
+// error，不得折成 found=false。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type PricePolicyCaliberView interface {
+	LoadPricePolicyCaliber(
+		ctx context.Context,
+		tenant domain.TenantID,
+		policy domain.CommercialVersion,
+	) (domain.PricePolicyCaliber, bool, error)
+}
+
 // IntakeQualificationView 取已唯一选出的接单规则包版本的收寄资格声明（PAR-COM-16）。
 //
 // 它与 CommercialAuthorityView 分开：前者回答「这个范围有几个适用候选」，本口回答已
@@ -456,6 +474,31 @@ func (outcome SupplierAgreementSaveOutcome) String() string {
 	}
 }
 
+// PricePolicyCaliberSaveOutcome 是一次价格政策口径登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份口径（税务、体积、汇率任一格
+// 不同，含汇率格从缺席变在场）。两者都不是 error，绝不覆盖。
+type PricePolicyCaliberSaveOutcome uint8
+
+const (
+	PricePolicyCaliberSaveOutcomeInvalid PricePolicyCaliberSaveOutcome = iota
+	PricePolicyCaliberSaved
+	PricePolicyCaliberAlreadyRegistered
+	PricePolicyCaliberContentConflict
+)
+
+func (outcome PricePolicyCaliberSaveOutcome) String() string {
+	switch outcome {
+	case PricePolicyCaliberSaved:
+		return "SAVED"
+	case PricePolicyCaliberAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case PricePolicyCaliberContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // DeclarationSaveOutcome 是一份版本化声明正文在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放（同拥有版本同正文），`内容冲突`是同拥有版本携带不同正文——声明随
 // 发布固定，改声明必须发新版本，绝不覆盖也绝不并写；两者都不是 error，事务保持可用。
@@ -555,6 +598,14 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		agreement domain.SupplierAgreement,
 	) (SupplierAgreementSaveOutcome, error)
+	// SavePricePolicyCaliber 登记一份价格规则版本声明的计价口径（税务、体积、可缺的汇率）。
+	// 它不代替 SavePricePolicy，且**只能在同一事务里跟在它后面**：0022 以外键把口径钉在
+	// 政策正文行上并连带方向一致——没有正文行、或体积方向与政策方向不符，库上就进不去
+	// （票 party-commercial-context-gaps/06）。口径不进整册，消费方经 PricePolicyCaliberView 点读。
+	SavePricePolicyCaliber(
+		ctx context.Context,
+		caliber domain.PricePolicyCaliber,
+	) (PricePolicyCaliberSaveOutcome, error)
 
 	// 以下是六族声明表的具名 Save（syn-wall-door-audit 票 03 的写入半边）。声明正文
 	// 随其拥有版本的发布一并登记，键=拥有版本完整身份；按拥有对象挂、不合并
@@ -1016,9 +1067,14 @@ type PreAcceptanceControlRow struct {
 	DeclaredAt         time.Time
 }
 
-// PricePolicyRow 是商业价格政策册上列的一行:方向、方案绑定与政策自己的适用范围。
-// PlanDirection 与 BindingConversion 是发布当时保全的答复与声明(ADR-0057),照列
-// 转写。
+// PricePolicyRow 是商业价格政策册上列的一行:方向、方案绑定与政策自己的适用范围,连同
+// 它声明过的计价口径(0022,左连接)。PlanDirection 与 BindingConversion 是发布当时保全的
+// 答复与声明(ADR-0057),照列转写。
+//
+// HasCaliber 不能省:口径随正文同笔登记是发布编排的纪律,但 0010 早于 0022 存在,历史上
+// 只有正文没有口径的行是合法状态。口径各字段只在 HasCaliber 为真时有意义;其中
+// TaxClassification 只在含税/未税时在场、VolumetricFactor 只在销售方向在场、汇率三格只在
+// HasFx 为真时在场——三处缺席都是口径说出的真话,不是缺件,与库上 CHECK 同形。
 type PricePolicyRow struct {
 	ObjectID          string
 	VersionLabel      string
@@ -1031,6 +1087,16 @@ type PricePolicyRow struct {
 	EffectiveEndsAt   time.Time
 	HasEffectiveEnd   bool
 	RegisteredAt      time.Time
+
+	HasCaliber          bool
+	TaxDisposition      string
+	TaxClassification   string
+	VolumetricFactor    string
+	HasFx               bool
+	FxQuoteType         string
+	FxAsOfSemantics     string
+	FxAsOfPolicyVersion string
+	CaliberRegisteredAt time.Time
 }
 
 // SettlementPolicyRow 是结算政策册上列的一行:方式与六维适用范围平铺(ADR-0044)。

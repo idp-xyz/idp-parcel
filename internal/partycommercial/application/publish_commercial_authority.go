@@ -72,6 +72,7 @@ type CommercialDeclarations struct {
 	SettlementPolicyBody  *SettlementPolicyBodyDeclaration
 	CreditPolicyBody      *CreditPolicyBodyDeclaration
 	SupplierAgreementBody *SupplierAgreementBodyDeclaration
+	PricePolicyBody       *PricePolicyBodyDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -86,7 +87,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.RulePackageBody == nil &&
 		declarations.SettlementPolicyBody == nil &&
 		declarations.CreditPolicyBody == nil &&
-		declarations.SupplierAgreementBody == nil
+		declarations.SupplierAgreementBody == nil &&
+		declarations.PricePolicyBody == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -158,6 +160,33 @@ type SupplierAgreementBodyDeclaration struct {
 	Effective    domain.EffectiveInterval
 }
 
+// PricePolicyBodyDeclaration 是价格规则版本的正文输入（票 party-commercial-context-gaps/06）：
+// 方向、定价方案绑定、政策自己的适用范围与区间，以及可缺的计价口径。
+//
+// PlanDirection 与 Conversion 按 ADR-0057 是**发布当时** parcel-pricing 的答复与当时声明的转换，
+// 由调用方交出、本用例不推断——受控 CLI 的批文照价卡目录抄，在线口将来要向 parcel-pricing 现问
+// （票 06「planDirection 从哪来」）。
+//
+// Caliber 嵌在正文里而不是另一条平行通道：口径只能随正文同一次发布登记（0022 的外键把它钉在
+// 正文行上并连带方向一致），嵌套让「只给口径不给正文」在结构上就写不出来。
+type PricePolicyBodyDeclaration struct {
+	Direction     domain.PriceDirection
+	PricingPlan   domain.PricingPlanReference
+	PlanDirection domain.PriceDirection
+	Conversion    domain.PlanBindingConversion
+	Scope         domain.CommercialScopeReference
+	Effective     domain.EffectiveInterval
+	Caliber       *PricePolicyCaliberDeclaration
+}
+
+// PricePolicyCaliberDeclaration 是价格政策声明的计价口径输入。Tax 与 Volumetric 必需（零值由
+// 领域构造门拒），Fx 可缺——不涉及外币的政策没有汇率口径，nil 就是「没声明」而不是零口径。
+type PricePolicyCaliberDeclaration struct {
+	Tax        domain.TaxCaliber
+	Volumetric domain.VolumetricCaliber
+	Fx         *domain.FxCaliber
+}
+
 // DeclarationChannel 点名一次发布里的一个声明通道，供报告与进程口展示落点。
 type DeclarationChannel uint8
 
@@ -175,6 +204,8 @@ const (
 	SettlementPolicyBodyChannel
 	CreditPolicyBodyChannel
 	SupplierAgreementBodyChannel
+	PricePolicyBodyChannel
+	PricePolicyCaliberChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -203,6 +234,10 @@ func (channel DeclarationChannel) String() string {
 		return "CREDIT_POLICY_BODY"
 	case SupplierAgreementBodyChannel:
 		return "SUPPLIER_AGREEMENT_BODY"
+	case PricePolicyBodyChannel:
+		return "PRICE_POLICY_BODY"
+	case PricePolicyCaliberChannel:
+		return "PRICE_POLICY_CALIBER"
 	default:
 		return ""
 	}
@@ -566,7 +601,95 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.PricePolicyBody != nil {
+		body := declarations.PricePolicyBody
+		policy, err := domain.NewCommercialPricePolicy(
+			version, body.Direction, body.PricingPlan, body.PlanDirection, body.Conversion, body.Scope, body.Effective)
+		if err != nil {
+			return nil, fmt.Errorf("price policy body: %w", err)
+		}
+		planDirection, conversion := body.PlanDirection, body.Conversion
+		writes = append(writes, declarationWrite{
+			channel: PricePolicyBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SavePricePolicy(ctx, policy, planDirection, conversion)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfPricePolicy(outcome)
+			},
+		})
+
+		if body.Caliber != nil {
+			caliber, err := pricePolicyCaliberOf(version, *body.Caliber)
+			if err != nil {
+				return nil, fmt.Errorf("price policy caliber: %w", err)
+			}
+			// 口径与正文是同一份声明的两半：方向对不上整项拒绝，正文也不写。
+			if err := caliber.ConsistentWithDirection(body.Direction); err != nil {
+				return nil, fmt.Errorf("price policy caliber: %w", err)
+			}
+			// 紧跟正文之后写：0022 的外键要求正文行先在。
+			writes = append(writes, declarationWrite{
+				channel: PricePolicyCaliberChannel,
+				save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+					outcome, err := registry.SavePricePolicyCaliber(ctx, caliber)
+					if err != nil {
+						return ports.DeclarationSaveOutcomeInvalid, err
+					}
+					return declarationOutcomeOfPricePolicyCaliber(outcome)
+				},
+			})
+		}
+	}
+
 	return writes, nil
+}
+
+// pricePolicyCaliberOf 按汇率格在不在场选构造门：nil 是合法缺席，走不带 Fx 的那条；零值 Fx 只会
+// 从带指针的那条进来并被领域拒，缺席与缺件因此在这里就分开。
+func pricePolicyCaliberOf(
+	version domain.CommercialVersion,
+	declaration PricePolicyCaliberDeclaration,
+) (domain.PricePolicyCaliber, error) {
+	if declaration.Fx == nil {
+		return domain.NewPricePolicyCaliber(version, declaration.Tax, declaration.Volumetric)
+	}
+	return domain.NewPricePolicyCaliberWithFx(version, declaration.Tax, declaration.Volumetric, *declaration.Fx)
+}
+
+// declarationOutcomeOfPricePolicy 与 declarationOutcomeOfPricePolicyCaliber 把两册各自的落点折成
+// 声明通道的落点，判据同 declarationOutcomeOfSettlementPolicy。
+func declarationOutcomeOfPricePolicy(
+	outcome ports.PricePolicySaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.PricePolicySaved:
+		return ports.DeclarationSaved, nil
+	case ports.PricePolicyAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.PricePolicyContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("price policy body: 集合外的价格政策落点 %q", outcome)
+	}
+}
+
+func declarationOutcomeOfPricePolicyCaliber(
+	outcome ports.PricePolicyCaliberSaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.PricePolicyCaliberSaved:
+		return ports.DeclarationSaved, nil
+	case ports.PricePolicyCaliberAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.PricePolicyCaliberContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("price policy caliber: 集合外的口径落点 %q", outcome)
+	}
 }
 
 // declarationOutcomeOfCreditPolicy 与 declarationOutcomeOfSupplierAgreement 把两册各自的落点

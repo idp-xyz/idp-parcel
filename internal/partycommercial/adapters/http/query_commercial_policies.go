@@ -193,21 +193,7 @@ func servePricePolicies(
 	}
 	bodies := make([]pricePolicyBody, 0, len(rows))
 	for _, row := range rows {
-		body := pricePolicyBody{
-			ObjectID:          row.ObjectID,
-			Version:           row.VersionLabel,
-			Direction:         row.Direction,
-			PlanRef:           row.PlanRef,
-			PlanDirection:     row.PlanDirection,
-			BindingConversion: row.BindingConversion,
-			PolicyScope:       row.PolicyScope,
-			EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
-			RegisteredAt:      rfc3339(row.RegisteredAt),
-		}
-		if row.HasEffectiveEnd {
-			body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
-		}
-		bodies = append(bodies, body)
+		bodies = append(bodies, pricePolicyBodyOf(row))
 	}
 	writeJSON(response, http.StatusOK, pricePolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
@@ -433,6 +419,12 @@ type pricePolicyListResponse struct {
 	Policies []pricePolicyBody `json:"policies"`
 }
 
+// pricePolicyBody 是价格政策正文加它声明的计价口径（0022,票 party-commercial-context-gaps/06）。
+//
+// caliberDeclared 与 caliber 节成对:0010 早于 0022,只有正文没有口径的行是合法状态,布尔让调用方
+// 分得开「没登记口径」与「口径节缺了」。口径节里三处可缺的键(分类、系数、fx)都是口径说出的
+// 真话——不适用因而没有分类、采购方向因而没有系数、不涉外币因而没有汇率——所以用 omitempty 让键
+// 不在场,而不是补空串让人去猜空串是「没有」还是「没填」。
 type pricePolicyBody struct {
 	ObjectID          string `json:"objectId"`
 	Version           string `json:"version"`
@@ -444,6 +436,58 @@ type pricePolicyBody struct {
 	EffectiveStartsAt string `json:"effectiveStartsAt"`
 	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+
+	CaliberDeclared bool                    `json:"caliberDeclared"`
+	Caliber         *pricePolicyCaliberBody `json:"caliber,omitempty"`
+}
+
+type pricePolicyCaliberBody struct {
+	TaxDisposition    string         `json:"taxDisposition"`
+	TaxClassification string         `json:"taxClassification,omitempty"`
+	VolumetricFactor  string         `json:"volumetricFactor,omitempty"`
+	Fx                *fxCaliberBody `json:"fx,omitempty"`
+	RegisteredAt      string         `json:"registeredAt"`
+}
+
+type fxCaliberBody struct {
+	QuoteType         string `json:"quoteType"`
+	AsOfSemantics     string `json:"asOfSemantics"`
+	AsOfPolicyVersion string `json:"asOfPolicyVersion"`
+}
+
+func pricePolicyBodyOf(row ports.PricePolicyRow) pricePolicyBody {
+	body := pricePolicyBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		Direction:         row.Direction,
+		PlanRef:           row.PlanRef,
+		PlanDirection:     row.PlanDirection,
+		BindingConversion: row.BindingConversion,
+		PolicyScope:       row.PolicyScope,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		RegisteredAt:      rfc3339(row.RegisteredAt),
+		CaliberDeclared:   row.HasCaliber,
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	if row.HasCaliber {
+		caliber := &pricePolicyCaliberBody{
+			TaxDisposition:    row.TaxDisposition,
+			TaxClassification: row.TaxClassification,
+			VolumetricFactor:  row.VolumetricFactor,
+			RegisteredAt:      rfc3339(row.CaliberRegisteredAt),
+		}
+		if row.HasFx {
+			caliber.Fx = &fxCaliberBody{
+				QuoteType:         row.FxQuoteType,
+				AsOfSemantics:     row.FxAsOfSemantics,
+				AsOfPolicyVersion: row.FxAsOfPolicyVersion,
+			}
+		}
+		body.Caliber = caliber
+	}
+	return body
 }
 
 type settlementPolicyListResponse struct {

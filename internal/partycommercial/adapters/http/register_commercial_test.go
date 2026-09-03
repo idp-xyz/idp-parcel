@@ -969,6 +969,12 @@ func (stub stubPublicationRegistry) SaveSupplierAgreement(
 	return ports.SupplierAgreementSaveOutcomeInvalid, errors.New("本片不用供应商协议册")
 }
 
+func (stub stubPublicationRegistry) SavePricePolicyCaliber(
+	context.Context, domain.PricePolicyCaliber,
+) (ports.PricePolicyCaliberSaveOutcome, error) {
+	return ports.PricePolicyCaliberSaveOutcomeInvalid, errors.New("本片不用口径册")
+}
+
 func (stub stubPublicationRegistry) SaveAsOfPolicies(
 	context.Context, domain.AsOfDeclaration,
 ) (ports.DeclarationSaveOutcome, error) {

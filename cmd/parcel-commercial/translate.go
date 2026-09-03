@@ -54,6 +54,7 @@ type declarationsDocument struct {
 	SettlementPolicyBody  *settlementPolicyBodyDocument  `json:"settlementPolicyBody,omitempty"`
 	CreditPolicyBody      *creditPolicyBodyDocument      `json:"creditPolicyBody,omitempty"`
 	SupplierAgreementBody *supplierAgreementBodyDocument `json:"supplierAgreementBody,omitempty"`
+	PricePolicyBody       *pricePolicyBodyDocument       `json:"pricePolicyBody,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -152,6 +153,45 @@ type supplierAgreementBodyDocument struct {
 	PurchasePlan      string     `json:"purchasePlan"`
 	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
 	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
+}
+
+// pricePolicyBodyDocument 是一份商业价格政策正文（票 party-commercial-context-gaps/06）：方向、
+// 定价方案绑定、政策自己的适用范围与区间，以及可缺的计价口径。
+//
+// planDirection 与 conversion 按 ADR-0057 是**发布当时** parcel-pricing 的答复与当时声明的转换。
+// 受控登记口采信批文：写批文的人从 parcel-pricing 的价卡目录抄来方案方向，与 contentDigest、
+// approval 同一信任级。抄错的后果是 checkPlanBinding 在发布面按错的方向判——这一格在批文口
+// 守不住，与 contentDigest 抄错同级；在线发布口那天必须改为向 parcel-pricing 现问（票 06）。
+type pricePolicyBodyDocument struct {
+	Direction         string                      `json:"direction"`
+	PricingPlan       string                      `json:"pricingPlan"`
+	PlanDirection     string                      `json:"planDirection"`
+	Conversion        string                      `json:"conversion"`
+	Scope             string                      `json:"scope"`
+	EffectiveStartsAt time.Time                   `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time                  `json:"effectiveEndsAt,omitempty"`
+	Caliber           *pricePolicyCaliberDocument `json:"caliber,omitempty"`
+}
+
+// pricePolicyCaliberDocument 是价格政策声明的计价口径。没有方向键：体积口径的方向就是政策的
+// 方向，批文里再写一遍只会造出「两个方向对不上」这种本不该存在的输入。taxClassification 只在
+// 含税/未税时给、volumetricFactor 只在 SELL 时给——反过来给了或漏了都由领域构造门拒。fx 一节
+// 可缺：不涉及外币的政策没有汇率口径，缺席是「没声明」而不是零口径。
+//
+// 没有加点键，且不是漏掉：票 02 裁 (a) 首发显式未决，批文里出现 markup 之类就是未知字段、拒收。
+type pricePolicyCaliberDocument struct {
+	TaxDisposition    string             `json:"taxDisposition"`
+	TaxClassification string             `json:"taxClassification,omitempty"`
+	VolumetricFactor  string             `json:"volumetricFactor,omitempty"`
+	Fx                *fxCaliberDocument `json:"fx,omitempty"`
+}
+
+// fxCaliberDocument 是汇率口径的三格引用：牌价类型（实例半边，租户与其银行的约定）、取值时点的
+// 语义引用与时点政策版本。三格缺一不可，由 pcdomain.NewFxCaliber 拒。
+type fxCaliberDocument struct {
+	QuoteType         string `json:"quoteType"`
+	AsOfSemantics     string `json:"asOfSemantics"`
+	AsOfPolicyVersion string `json:"asOfPolicyVersion"`
 }
 
 // contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
@@ -430,7 +470,115 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.SupplierAgreementBody = body
 	}
 
+	if document.PricePolicyBody != nil {
+		body, err := pricePolicyBodyFrom(*document.PricePolicyBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.PricePolicyBody = body
+	}
+
 	return declarations, nil
+}
+
+func pricePolicyBodyFrom(document pricePolicyBodyDocument) (*pcapplication.PricePolicyBodyDeclaration, error) {
+	direction, err := priceDirectionFrom(document.Direction)
+	if err != nil {
+		return nil, err
+	}
+	pricingPlan, err := pcdomain.NewPricingPlanReference(document.PricingPlan)
+	if err != nil {
+		return nil, err
+	}
+	planDirection, err := priceDirectionFrom(document.PlanDirection)
+	if err != nil {
+		return nil, err
+	}
+	conversion, err := planBindingConversionFrom(document.Conversion)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := pcdomain.NewCommercialScopeReference(document.Scope)
+	if err != nil {
+		return nil, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return nil, err
+	}
+	body := &pcapplication.PricePolicyBodyDeclaration{
+		Direction:     direction,
+		PricingPlan:   pricingPlan,
+		PlanDirection: planDirection,
+		Conversion:    conversion,
+		Scope:         scope,
+		Effective:     interval,
+	}
+	if document.Caliber != nil {
+		caliber, err := pricePolicyCaliberFrom(direction, *document.Caliber)
+		if err != nil {
+			return nil, err
+		}
+		body.Caliber = caliber
+	}
+	return body, nil
+}
+
+// pricePolicyCaliberFrom 按政策方向装体积口径——方向不从批文读，所以批文口造不出方向不一致的口径；
+// 用例里那道 ConsistentWithDirection 守的是绕开本翻译的调用方。
+func pricePolicyCaliberFrom(
+	direction pcdomain.PriceDirection,
+	document pricePolicyCaliberDocument,
+) (*pcapplication.PricePolicyCaliberDeclaration, error) {
+	disposition, err := taxDispositionFrom(document.TaxDisposition)
+	if err != nil {
+		return nil, err
+	}
+	classification := pcdomain.TaxClassificationReference{}
+	if document.TaxClassification != "" {
+		if classification, err = pcdomain.NewTaxClassificationReference(document.TaxClassification); err != nil {
+			return nil, err
+		}
+	}
+	tax, err := pcdomain.NewTaxCaliber(disposition, classification)
+	if err != nil {
+		return nil, fmt.Errorf("税务口径 %q 与分类 %q：%w", document.TaxDisposition, document.TaxClassification, err)
+	}
+	factor := pcdomain.VolumetricFactorReference{}
+	if document.VolumetricFactor != "" {
+		if factor, err = pcdomain.NewVolumetricFactorReference(document.VolumetricFactor); err != nil {
+			return nil, err
+		}
+	}
+	volumetric, err := pcdomain.NewVolumetricCaliber(direction, factor)
+	if err != nil {
+		return nil, fmt.Errorf("方向 %s 的体积口径（系数 %q）：%w", direction, document.VolumetricFactor, err)
+	}
+	caliber := &pcapplication.PricePolicyCaliberDeclaration{Tax: tax, Volumetric: volumetric}
+	if document.Fx != nil {
+		quoteType, err := pcdomain.NewFxQuoteTypeReference(document.Fx.QuoteType)
+		if err != nil {
+			return nil, err
+		}
+		semantics, err := pcdomain.NewAsOfSemanticsReference(document.Fx.AsOfSemantics)
+		if err != nil {
+			return nil, err
+		}
+		policyVersion, err := pcdomain.NewAsOfPolicyVersion(document.Fx.AsOfPolicyVersion)
+		if err != nil {
+			return nil, err
+		}
+		fx, err := pcdomain.NewFxCaliber(quoteType, semantics, policyVersion)
+		if err != nil {
+			return nil, err
+		}
+		caliber.Fx = &fx
+	}
+	return caliber, nil
 }
 
 func creditPolicyBodyFrom(document creditPolicyBodyDocument) (*pcapplication.CreditPolicyBodyDeclaration, error) {
@@ -830,6 +978,48 @@ func cancellationPartyFrom(name string) (pcdomain.DeclaredCancellationParty, err
 	default:
 		return pcdomain.DeclaredCancellationPartyInvalid, fmt.Errorf("集合外的取消请求方 %q", name)
 	}
+}
+
+func priceDirectionFrom(name string) (pcdomain.PriceDirection, error) {
+	for _, direction := range []pcdomain.PriceDirection{
+		pcdomain.BuyDirection,
+		pcdomain.SellDirection,
+		pcdomain.InternalDirection,
+	} {
+		if direction.String() == name {
+			return direction, nil
+		}
+	}
+	return pcdomain.PriceDirectionInvalid, fmt.Errorf("集合外的价格方向 %q", name)
+}
+
+// planBindingConversionFrom 只认两个取值。缺席不折成 NONE：SELL 政策绑 BUY 价卡而没写转换，该由
+// NewCommercialPricePolicy 报出`适用冲突`（AT-PC-033），代填 NONE 会把它报成同一件事，但把
+// 「没写」与「明说不转换」混在一起——批文口这一层先要求写出来。
+func planBindingConversionFrom(name string) (pcdomain.PlanBindingConversion, error) {
+	switch name {
+	case pcdomain.PlanBindingConversionNone.String():
+		return pcdomain.PlanBindingConversionNone, nil
+	case pcdomain.PlanBindingFrozenBuyEvaluation.String():
+		return pcdomain.PlanBindingFrozenBuyEvaluation, nil
+	default:
+		return pcdomain.PlanBindingConversionNone, fmt.Errorf("集合外的方案绑定转换 %q", name)
+	}
+}
+
+// taxDispositionFrom 只认三个取值。零值哨兵不落进「不适用」，与领域同判据：缺席与已判定为
+// 不适用要人做的事不同，前者去补声明。
+func taxDispositionFrom(name string) (pcdomain.TaxDisposition, error) {
+	for _, disposition := range []pcdomain.TaxDisposition{
+		pcdomain.TaxInclusive,
+		pcdomain.TaxExclusive,
+		pcdomain.TaxNotApplicable,
+	} {
+		if disposition.String() == name {
+			return disposition, nil
+		}
+	}
+	return pcdomain.TaxDispositionInvalid, fmt.Errorf("集合外的税务口径 %q", name)
 }
 
 // settlementMethodFrom 只认两个取值。第三个取值——某种客户级默认——正是本上下文明禁的：

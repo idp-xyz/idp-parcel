@@ -355,7 +355,9 @@ func (catalogue *OperationsCatalogue) ListPreAcceptanceControls(
 	return controlRows, nil
 }
 
-// ListPricePolicies 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)。
+// ListPricePolicies 上列商业价格政策册。发布期保全的方案方向与转换照列转写(ADR-0057)；口径册
+// (0022)左连接挂在正文行上,HasCaliber 说明有没有——0010 早于 0022,只有正文没有口径的行是合法
+// 状态。汇率三列半缺是库与领域分叉的坏数据,上抛不吸收。
 func (catalogue *OperationsCatalogue) ListPricePolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -370,12 +372,20 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT object_id, version_label, direction, plan_ref, plan_direction,
-		        binding_conversion, policy_scope_ref,
-		        effective_starts_at, effective_ends_at, registered_at
-		   FROM party_commercial.commercial_price_policy
-		  WHERE tenant_id = $1
-		  ORDER BY registered_at DESC, object_id, version_label
+		`SELECT price.object_id, price.version_label, price.direction, price.plan_ref, price.plan_direction,
+		        price.binding_conversion, price.policy_scope_ref,
+		        price.effective_starts_at, price.effective_ends_at, price.registered_at,
+		        caliber.tax_disposition, caliber.tax_classification_ref, caliber.volumetric_factor_ref,
+		        caliber.fx_quote_type_ref, caliber.fx_as_of_semantics_ref, caliber.fx_as_of_policy_version,
+		        caliber.registered_at
+		   FROM party_commercial.commercial_price_policy AS price
+		   LEFT JOIN party_commercial.price_policy_caliber AS caliber
+		          ON caliber.tenant_id     = price.tenant_id
+		         AND caliber.object_kind   = price.object_kind
+		         AND caliber.object_id     = price.object_id
+		         AND caliber.version_label = price.version_label
+		  WHERE price.tenant_id = $1
+		  ORDER BY price.registered_at DESC, price.object_id, price.version_label
 		  LIMIT $2`,
 		tenant.String(),
 		limit,
@@ -389,16 +399,42 @@ func (catalogue *OperationsCatalogue) ListPricePolicies(
 	for rows.Next() {
 		var row ports.PricePolicyRow
 		var endsAt *time.Time
+		var taxDisposition, taxClassification, volumetricFactor *string
+		var fxQuoteType, fxAsOfSemantics, fxAsOfPolicyVersion *string
+		var caliberRegisteredAt *time.Time
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel, &row.Direction, &row.PlanRef, &row.PlanDirection,
 			&row.BindingConversion, &row.PolicyScope,
 			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
+			&taxDisposition, &taxClassification, &volumetricFactor,
+			&fxQuoteType, &fxAsOfSemantics, &fxAsOfPolicyVersion,
+			&caliberRegisteredAt,
 		); err != nil {
 			return nil, fmt.Errorf("list price policies: %w", err)
 		}
 		if endsAt != nil {
 			row.EffectiveEndsAt = *endsAt
 			row.HasEffectiveEnd = true
+		}
+		if taxDisposition != nil {
+			row.HasCaliber = true
+			row.TaxDisposition = *taxDisposition
+			row.TaxClassification = stringOrEmpty(taxClassification)
+			row.VolumetricFactor = stringOrEmpty(volumetricFactor)
+			if caliberRegisteredAt != nil {
+				row.CaliberRegisteredAt = *caliberRegisteredAt
+			}
+			switch {
+			case fxQuoteType != nil && fxAsOfSemantics != nil && fxAsOfPolicyVersion != nil:
+				row.HasFx = true
+				row.FxQuoteType = *fxQuoteType
+				row.FxAsOfSemantics = *fxAsOfSemantics
+				row.FxAsOfPolicyVersion = *fxAsOfPolicyVersion
+			case fxQuoteType == nil && fxAsOfSemantics == nil && fxAsOfPolicyVersion == nil:
+			default:
+				return nil, fmt.Errorf("list price policies: %s/%s 的汇率口径半缺",
+					row.ObjectID, row.VersionLabel)
+			}
 		}
 		policyRows = append(policyRows, row)
 	}
