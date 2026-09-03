@@ -1,8 +1,10 @@
 # 计价口径：引用是强制的，被引的那份商业价格政策却没有口径列
 
 Category: chore
-Status: ready-for-agent——汇率口径 `FxCaliber` 已落（`828dbfa`），六项里五项有领域类型；剩接进
-`CommercialPricePolicy`、新迁移落列、读面上列三层，与加点规则的重启条件（见「加点规则的裁决」）
+Status: resolved——剩下的三层随票 06 落于 `29085fe`（2026-09-03，MCP-1 收口）：口径**不**接进
+`CommercialPricePolicy`，而是独立聚合 `PricePolicyCaliber` 走族 B（理由在票 06「口径正文放哪」）；
+迁移 `0022`；读面 `PricePolicyCaliberView` 点读 + `PricePolicyRow` 扩口径字段。加点规则按
+「加点规则的裁决」(a) 保持显式未决，重启条件不变。验证见 Comments
 
 > **裁决**：六项口径全补（汇率牌价类型、取值时点、加点规则、销售方向体积系数、含税/未税、
 > 税务分类）。取回路径已定：**登记时冻结**，不走端口现取，理由见下面「前置岔口已答」一节。
@@ -288,3 +290,21 @@ resolved：把口径接进 `CommercialPricePolicy`、新迁移落列、读面上
 本票**不改表、不建列、不写迁移、不动两侧领域模型**。特别地，**不动 `parcel-pricing`**：那一侧
 按 CONTEXT 已经做对了，本票的缺口全在 `party-commercial` 这头。上一节答的是**取回路径**这个
 前置岔口，不是本票动手实现；它也不等于产品侧已裁「补」。
+
+## Comments
+
+- 2026-09-03 · MCP-1：**转 resolved，落点在票 06 的 `29085fe`。** Status 里原写的「剩三层」在那一笔
+  全部有了着落，但第一层的形状与原措辞不同，写清楚免得被读成漏做：口径**没有**接进
+  `CommercialPricePolicy` 结构体，而是独立聚合 `PricePolicyCaliber`——ADR-0057 Decision 三给发布期
+  邻接答复的理由对口径同样成立（结构体表达选用时要观察的正文，口径不参与选用），所以走票 03 定下
+  的族 B：独立表 `0022`、具名 `SavePricePolicyCaliber`、点读口 `PricePolicyCaliberView`、目录行扩字段。
+  「若补」一节留的两小项在票 02 切片一、二已裁并已进类型（含税三值与分类充要耦合；SELL 必声明
+  系数、BUY/INTERNAL 禁止），0022 的 CHECK 是它们的库上镜像。
+
+  本票开头说的「引用是强制的、被引的那份是空的」这个形状到此消掉一半：`quoteBasis` 指向的价格政策
+  版本今天**能**声明并登记口径正文了。另一半——`parcel-pricing` 在登记参考序列时经
+  `PricePolicyCaliberView` 读一次、冻进序列——属消费侧，本票地盘「不动 `parcel-pricing`」，
+  今天该读口零生产调用方。它与 MCP-3 新开的 `.scratch/pricing-reference-series-operations/`
+  是邻居，接缝在那一组里落还是另立票，由 owner 定。
+
+  验证同票 06 末条 Comment（共享树与 detached worktree 两处，含 PG 用例 `PASS` 判别）。
