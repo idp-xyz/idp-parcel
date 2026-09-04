@@ -1,7 +1,7 @@
 # `party-commercial` 声明拥有、但今天没有执行器的四处（写侧待裁）
 
 Category: chore
-Status: in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 draft → 待 MCP-3 裁三处（owner 2026-09-03 授权自决，裁决落 ADR-0104）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写
+Status: in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 ready-for-agent（三处已由 MCP-3 裁，裁决落 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；本波 MCP-4 在做，分支 `mcp4-pcgaps05`，未入 main），07 draft（接受前财务控制策略正文表，2026-09-04 随 admin-write-faces/06 裁②立票，待 `/domain-modeling`）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，05/07 两格由通道 2 于 2026-09-04 对票面重核后对齐
 
 ## 这四处是怎么被看见的
 

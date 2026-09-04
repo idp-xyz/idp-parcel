@@ -1,7 +1,7 @@
 # 计价参考序列（汇率 / 燃油）的运营形态：绑定标识、复核进在用、评价时解析
 
 Category: enhancement
-Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 in-progress（代码全落 `f62d619`，只欠真库冒烟一格，MCP-3），04 in-progress（04a 落 `9035df7`，04b 余件并入 08），05 in-progress（05a 与第 3 项已落，05b 按 ADR-0105 做），06 已裁转 MCP-5 实施，07 待 MCP-3 裁，08 resolved（`0a67406`，随 `f148759` 发布），09 draft（需 ADR）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，08/09 两格由 MCP-5 于 2026-09-04 追记
+Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 resolved（`f62d619`；真库冒烟已于 2026-09-03 实跑通过，「形成一条 `S` 评价」改归 T2 票），04 resolved（04a `9035df7`，04b 两件 `121097d`，余三件并入 08），05 in-progress（05a 与第 3 项已落；05b 两件已由 ADR-0105 答完，可开工——见 `f25d692`），06 draft（出网与工件存放两问，本波裁决由通道 6 在做），07 resolved（裁 (c) 今天不做，不立 ADR），08 resolved（`0a67406`，随 `f148759` 发布），09 draft（需 ADR，本波由通道 6 裁）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，08/09 两格由 MCP-5 于 2026-09-04 追记，03/04/06/07 四格由通道 2 于 2026-09-04 对票面重核后对齐（此后**以各票文件 `Status:` 为准**）
 
 依据：[ADR-0099](../../docs/adr/0099-price-card-binds-series-identity-and-in-force-version-is-derived-from-review.md)；术语与生命周期已落 [parcel-pricing CONTEXT](../../docs/domain/parcel-pricing/CONTEXT.md)「计价参考序列 / 序列版本复核 / 在用序列版本」与「计价参考序列版本」。本目录只引用，不复述第二套口径。
 

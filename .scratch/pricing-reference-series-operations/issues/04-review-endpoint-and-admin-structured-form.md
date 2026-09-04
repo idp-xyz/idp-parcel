@@ -1,7 +1,7 @@
 # 复核端点（未配置格）；管理台复核动作、逐字段登记表单、更正动作
 
 Category: enhancement
-Status: in-progress——MCP-1（切片 04a 后端已落 `9035df7`，04b 前端未做且已释号，谁都可以接）
+Status: resolved——04a 后端落 `9035df7`（MCP-1）；04b 前端两件（复核行动作、JSON 登记口退为「高级」）落 `121097d`（MCP-4），余三件（复核状态列、逐字段登记表单与预览、更正此版本预填）按 Comments 末条并入票 [08](./08-series-write-face-needs-a-draft-and-a-version-read-face.md)，08 已 resolved（`0a67406`，随远端 `f148759` 发布）。本票要建的五件因此各有落点，只差状态行。状态由通道 2 于 2026-09-04 代簿记
 Blocked by: 无（03 的代码已是主线祖先 `f62d619`；票 03 卡的只是 `seed.sh` 真库冒烟那一格，
 不拦本票）
 
