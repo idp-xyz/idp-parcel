@@ -326,3 +326,84 @@ func (judgment ActualCarrierJudgment) Versions() []ActualCarrierJudgmentVersion 
 func (judgment ActualCarrierJudgment) Current() ActualCarrierJudgmentVersion {
 	return judgment.versions[len(judgment.versions)-1]
 }
+
+// Consider 收一条新的合格依据，追加一个版本；原版本一字不动（CONTEXT「新版本只追加、不覆盖」）。
+//
+// 新版的判断值由**全部**在场依据派生，不是由这一条单独派生：同段既有依据指向 X、这一条指向 Y，
+// 答案是待确认（来源冲突）而不是「换成 Y」——不由到达先后或来源种类自动裁（ADR-0103 决定一）。
+// 业务时间取这条依据的来源事实时间，形成时间由调用方的时钟给。
+func (judgment ActualCarrierJudgment) Consider(
+	evidence CarrierEvidence,
+	formedAt time.Time,
+) (ActualCarrierJudgment, error) {
+	if !evidence.valid() {
+		return ActualCarrierJudgment{}, ErrInvalidCarrierEvidence
+	}
+	if formedAt.IsZero() || !judgment.established() {
+		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
+	}
+	if evidence.occurredAt.Before(judgment.establishedAt) {
+		return ActualCarrierJudgment{}, ErrCarrierEvidencePrecedesSegment
+	}
+	bases := judgment.Current().Bases()
+	bases = append(bases, evidence)
+	return judgment.appendVersion(bases, evidence.occurredAt, formedAt), nil
+}
+
+// appendVersion 由一组在场依据派生判断值并追加为新版。所有转换门都从这里出去——判断值只有一种算法，
+// 门之间不会各自长出一套口径。
+func (judgment ActualCarrierJudgment) appendVersion(
+	bases []CarrierEvidence,
+	businessTime time.Time,
+	formedAt time.Time,
+) ActualCarrierJudgment {
+	appended := judgment
+	appended.versions = append(append([]ActualCarrierJudgmentVersion(nil), judgment.versions...), ActualCarrierJudgmentVersion{
+		sequence:     judgment.Current().sequence + 1,
+		verdict:      deriveCarrierVerdict(bases),
+		businessTime: businessTime.UTC(),
+		formedAt:     formedAt.UTC(),
+		bases:        bases,
+	})
+	return appended
+}
+
+// deriveCarrierVerdict 是判断值的唯一算法（ADR-0103 决定一、二、六）：
+//
+//   - 在场依据指向两个以上不同的在册主体 → 待确认（来源冲突），全部依据保留，等人裁；
+//   - 有依据的承运主体身份未在册（只有名称素材）→ 待确认（承运主体身份未登记）。**哪怕另有依据已指向
+//     一个在册主体也如此**：那个名字可能就是它，也可能是另一家，在登记之前没人答得出，先答已识别等于
+//     把「找不到」当成「就是它」；
+//   - 恰一个在册主体 → 已识别；
+//   - 一条依据都没有 → 待确认（无合格证据）。
+func deriveCarrierVerdict(bases []CarrierEvidence) CarrierVerdict {
+	var identified CarrierSubject
+	distinct := 0
+	unregistered := false
+	for _, basis := range bases {
+		subject, registered := basis.Subject()
+		if !registered {
+			unregistered = true
+			continue
+		}
+		if distinct == 0 || subject != identified {
+			distinct++
+			identified = subject
+		}
+	}
+	switch {
+	case distinct >= 2:
+		return CarrierVerdict{pending: CarrierEvidenceSourceConflict}
+	case unregistered:
+		return CarrierVerdict{pending: CarrierIdentityNotRegistered}
+	case distinct == 1:
+		return CarrierVerdict{subject: identified}
+	default:
+		return CarrierVerdict{pending: NoQualifiedCarrierEvidence}
+	}
+}
+
+func (judgment ActualCarrierJudgment) established() bool {
+	return judgment.tenantID.valid() && judgment.segment.valid() &&
+		!judgment.establishedAt.IsZero() && len(judgment.versions) > 0
+}
