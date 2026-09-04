@@ -16,8 +16,8 @@ import (
 // 实现（判据同外部承运轨迹事实那格）。读面不是编排——查阅不触发判断、决定或披露，这里没有事务边界要包，
 // 也没有「显式未配置」缝：读的都是本上下文自己形成的记录，没有等租户参数的实例半边。
 //
-// 写那一半今天没有生产装配点（择优编排 SelectChannelCandidate 在 cmd/ 下零命中，票 14 完成记录）：接线之前
-// 这一口在生产上读到的是空册，而空册是如实答案（ADR-0077 Decision 四），与「接入渠道未配置」分得开。
+// 写那一半今天没有生产装配点（择优编排自身尚无组合根，票 14 完成记录「无生产装配点」）：接线之前这一口
+// 在生产上读到的是空册，而空册是如实答案（ADR-0077 Decision 四），与「接入渠道未配置」分得开。
 func buildChannelSelectionDecisionRead(db *bentopg.DB) (shipmenthttp.ChannelSelectionDecisionsReader, error) {
 	decisions, err := pspostgres.NewChannelSelectionDecisions(db)
 	if err != nil {

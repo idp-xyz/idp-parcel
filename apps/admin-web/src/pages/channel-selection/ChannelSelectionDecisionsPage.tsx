@@ -32,6 +32,7 @@ import {
   ruleLabels,
   tiedListViewState,
   wordOf,
+  type DecisionDetailState,
   type DecisionRow,
 } from './channel-selection-decisions';
 
@@ -228,15 +229,8 @@ function DecisionPanel({ decisionId, onClose }: { decisionId: string; onClose: (
   );
 }
 
-function DecisionPanelBody({
-  state,
-  retry,
-}: {
-  state: ReturnType<typeof decisionDetailState>;
-  retry: () => void;
-}) {
+function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry: () => void }) {
   switch (state.kind) {
-    case 'idle':
     case 'loading':
       return <p className="text-xs text-idpxyz-textMuted">读取中…</p>;
     case 'notVisible':

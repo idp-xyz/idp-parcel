@@ -63,9 +63,10 @@ ADR-0055 作答、管理台页面能列并列冲突并展开逐候选结果；`g
 
 - 2026-09-04 · MCP-2：立票。起因是票 14 裁决把读面划出登记票之外，收口时按裁决原句另立。
   **只写票面，未动代码。**
-- 2026-09-04 · MCP-2：**管理台落点取证**（「做什么」第 4 条）。面单交易 / 包裹侧今天在管理台「委托受理」区有五页：
-  提交与撤回（`shipment-request`）、委托查阅（`shipment-request-inquiry`）、接受前人工复核（`acceptance-review`）、
-  面单交易（`label-transactions`）、取消与收寄后处置（`cancel-parcel`），全部主责 parcel-shipment。择优对象引用的
+- 2026-09-04 · MCP-2：**管理台落点取证**（「做什么」第 4 条，取证于 main `eba019a8` 的 `navigation.ts`）。面单交易 /
+  包裹侧今天在管理台「委托受理」区的页面：提交与撤回（`shipment-request`）、委托查阅（`shipment-request-inquiry`）、
+  接受前人工复核（`acceptance-review`）、面单交易（`label-transactions`）、取消与收寄后处置（`cancel-parcel`），
+  全部主责 parcel-shipment。择优对象引用的
   两半：**产品—渠道映射引用**在主数据区「渠道产品目录」页（`channel-product-catalog`，party-commercial，行对象是
   映射修订、列 `mappingId`）显得出来；**商业范围引用**今天没有任何页面显它——它是择优编排入参里的不透明引用
   （`domain.CommercialScopeReference` 注释：范围取值属实例半边，本上下文只要求它被指名）。裁：**页面落「委托受理」

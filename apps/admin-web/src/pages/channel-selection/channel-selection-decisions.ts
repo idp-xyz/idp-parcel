@@ -146,7 +146,6 @@ export function tiedListViewState(
  * 属别的租户同答），自成一格、不当错误重试；其余 4xx 与 5xx 各归调用方问题与未形成答案。
  */
 export type DecisionDetailState =
-  | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'decision'; decision: ChannelSelectionDecisionRecord }
   | { kind: 'notVisible'; decisionId: string }
