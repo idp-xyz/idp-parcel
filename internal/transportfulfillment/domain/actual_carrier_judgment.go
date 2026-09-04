@@ -354,6 +354,35 @@ func (judgment ActualCarrierJudgment) Consider(
 	return judgment.appendVersion(bases, evidence.occurredAt, formedAt), nil
 }
 
+// RecogniseCarrierIdentity 在 party-commercial 登记了对应身份之后，凭**同一份**证据形成新版本
+// （CONTEXT 生命周期「待确认（承运主体身份未登记）→ 已识别」）。
+//
+// 新版的那条依据从「只有名称素材」换成身份引用，其余依据原样带过去；业务时间仍是那条证据的来源事实
+// 时间——承运主体自那时起就在承运，变的只是我们何时知道——形成时间是补认这一刻。上一版连同它的
+// 名称素材一字不动：未登记期间不追溯改写。补认不是裁决：换上身份之后与既有依据相左，答案照旧是冲突。
+func (judgment ActualCarrierJudgment) RecogniseCarrierIdentity(
+	reference CarrierEvidenceReference,
+	subject CarrierSubject,
+	formedAt time.Time,
+) (ActualCarrierJudgment, error) {
+	if !subject.valid() || !reference.valid() || formedAt.IsZero() || !judgment.established() {
+		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
+	}
+	bases := judgment.Current().Bases()
+	index, present := indexOfBasis(bases, reference)
+	if !present {
+		return ActualCarrierJudgment{}, ErrCarrierEvidenceNotConsidered
+	}
+	if _, registered := bases[index].Subject(); registered {
+		return ActualCarrierJudgment{}, ErrCarrierIdentityAlreadyRecognised
+	}
+	recognised := bases[index]
+	recognised.subject = subject
+	recognised.material = ""
+	bases[index] = recognised
+	return judgment.appendVersion(bases, recognised.occurredAt, formedAt), nil
+}
+
 func indexOfBasis(bases []CarrierEvidence, reference CarrierEvidenceReference) (int, bool) {
 	for index, basis := range bases {
 		if basis.reference == reference {

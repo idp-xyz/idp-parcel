@@ -279,6 +279,114 @@ func TestTheSameEvidenceIsNotConsideredTwice(t *testing.T) {
 	}
 }
 
+// Covers: CONTEXT「证据里的承运方名称在参与方册上找不到对应身份时，不据名称铸身份，形成待确认（承运
+// 主体身份未登记），名称作为素材随依据保留」与生命周期「待确认（承运主体身份未登记）→ 已识别：
+// `party-commercial` 登记了对应身份后，凭同一份证据形成新版本；不追溯改写未登记期间」；票面验收场景
+// 「身份未登记→登记后新版本」。
+func TestAnUnregisteredCarrierNameLeavesTheJudgmentPendingUntilTheIdentityIsRecognised(t *testing.T) {
+	pending, err := mustOpenJudgment(t).Consider(
+		unregisteredEvidence(t, domain.TrustedChannelCallback, "CALLBACK-1", judgmentEvidenceAt, "Y Express"),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider: %v", err)
+	}
+	reason, isPending := pending.Current().Verdict().Pending()
+	if !isPending || reason != domain.CarrierIdentityNotRegistered {
+		t.Fatalf("应为待确认（承运主体身份未登记），实得 pending=%v reason=%s", isPending, reason)
+	}
+	basis := pending.Current().Bases()[0]
+	if basis.Material() != "Y Express" {
+		t.Fatalf("名称素材没有随依据保留：%q", basis.Material())
+	}
+	if _, hasSubject := basis.Subject(); hasSubject {
+		t.Fatal("未登记的名称被铸成了身份")
+	}
+
+	// PC 登记之后凭同一份证据补认身份：新版本已识别，业务时间仍是那条证据的时间（事实史），形成时间是
+	// 补认那一刻（知识史）——未登记期间原样留在上一版里。
+	carrierY := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-y")
+	recognisedAt := judgmentEvidenceAt.Add(24 * time.Hour)
+	recognised, err := pending.RecogniseCarrierIdentity(
+		mustRef(t, domain.NewCarrierEvidenceReference, "CALLBACK-1"), carrierY, recognisedAt)
+	if err != nil {
+		t.Fatalf("recognise: %v", err)
+	}
+	if len(recognised.Versions()) != 3 {
+		t.Fatalf("补认应追加一版，实得 %d 版", len(recognised.Versions()))
+	}
+	current := recognised.Current()
+	subject, identified := current.Verdict().Identified()
+	if !identified || subject != carrierY {
+		t.Fatalf("应识别为 carrier-y，实得 identified=%v subject=%+v", identified, subject)
+	}
+	if !current.BusinessTime().Equal(judgmentEvidenceAt) || !current.FormedAt().Equal(recognisedAt) {
+		t.Fatalf("业务时间应仍为证据时间 %s、形成时间应为补认时刻 %s；实得 %s / %s",
+			judgmentEvidenceAt, recognisedAt, current.BusinessTime(), current.FormedAt())
+	}
+	if got := current.Bases(); len(got) != 1 || got[0].Material() != "" {
+		t.Fatalf("补认后的依据应指向身份而不再只有素材：%+v", got)
+	}
+	if recognisedSubject, has := current.Bases()[0].Subject(); !has || recognisedSubject != carrierY {
+		t.Fatal("补认后的依据没有带上身份引用")
+	}
+	// 上一版（未登记期间）一字不动。
+	if got := recognised.Versions()[1].Bases()[0].Material(); got != "Y Express" {
+		t.Fatalf("未登记期间那一版被追溯改写了：%q", got)
+	}
+}
+
+// 补认身份之后若与既有在册依据相左，答案照旧是冲突——补认不是裁决。
+func TestRecognisingAnIdentityThatContradictsOtherEvidenceFormsAConflict(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	carrierY := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-y")
+	judgment, err := mustOpenJudgment(t).Consider(
+		registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider X: %v", err)
+	}
+	judgment, err = judgment.Consider(
+		unregisteredEvidence(t, domain.TrustedChannelCallback, "CALLBACK-B", judgmentEvidenceAt.Add(time.Hour), "Y Express"),
+		judgmentEvidenceAt.Add(time.Hour+time.Minute))
+	if err != nil {
+		t.Fatalf("consider unregistered: %v", err)
+	}
+	// 一条在册、一条未在册：先答身份未登记，不因另一条在册就答已识别。
+	if reason, pending := judgment.Current().Verdict().Pending(); !pending || reason != domain.CarrierIdentityNotRegistered {
+		t.Fatalf("在册与未在册并存应答身份未登记，实得 pending=%v reason=%s", pending, reason)
+	}
+
+	recognised, err := judgment.RecogniseCarrierIdentity(
+		mustRef(t, domain.NewCarrierEvidenceReference, "CALLBACK-B"), carrierY, judgmentEvidenceAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("recognise: %v", err)
+	}
+	if reason, pending := recognised.Current().Verdict().Pending(); !pending || reason != domain.CarrierEvidenceSourceConflict {
+		t.Fatalf("补认成 Y 与既有 X 相左应为来源冲突，实得 pending=%v reason=%s", pending, reason)
+	}
+}
+
+func TestRecognisingAnIdentityRefusesEvidenceItCannotFindOrThatIsAlreadyRecognised(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	judgment, err := mustOpenJudgment(t).Consider(
+		registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider: %v", err)
+	}
+	later := judgmentEvidenceAt.Add(time.Hour)
+
+	if _, err := judgment.RecogniseCarrierIdentity(mustRef(t, domain.NewCarrierEvidenceReference, "NOT-THERE"), carrierX, later); !errors.Is(err, domain.ErrCarrierEvidenceNotConsidered) {
+		t.Fatalf("不在依据里的引用：error = %v, want ErrCarrierEvidenceNotConsidered", err)
+	}
+	if _, err := judgment.RecogniseCarrierIdentity(mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-A"), carrierX, later); !errors.Is(err, domain.ErrCarrierIdentityAlreadyRecognised) {
+		t.Fatalf("已指向在册身份的依据：error = %v, want ErrCarrierIdentityAlreadyRecognised", err)
+	}
+	if _, err := judgment.RecogniseCarrierIdentity(mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-A"), domain.CarrierSubject{}, later); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("零值身份：error = %v, want ErrInvalidActualCarrierJudgment", err)
+	}
+}
+
 func TestConsideringRequiresAValidEvidenceAndAFormationTime(t *testing.T) {
 	judgment := mustOpenJudgment(t)
 	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
