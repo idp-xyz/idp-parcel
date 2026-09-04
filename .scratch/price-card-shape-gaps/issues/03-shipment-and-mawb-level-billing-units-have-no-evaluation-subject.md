@@ -1,7 +1,7 @@
 # 清关报价按票、按 MAWB 计费的项目没有评价主体：计价只逐包裹
 
 Category: enhancement
-Status: in-progress（票级，MCP-3 接手实施，2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一；此前 MCP-6 领了未开工，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4，交接点见文末 Comments）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
+Status: resolved（票级，MCP-3 实施完成，2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一，分支 SHA 见文末「完成记录」；此前 MCP-6 领了未开工，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4，交接点见文末 Comments）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
 Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-master-document-register/01](../../tf-carrier-master-document-register/issues/01-carrier-master-document-register-does-not-exist.md)（draft，归 TF owner）；票级那一半无
 
 ## 为什么立
@@ -43,6 +43,19 @@ Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-mast
 ## 验证
 
 裁决记进 CONTEXT，必要时 ADR 编号落进上面某一条，再按所选拆实施票；本票 `resolved` 的判据是那条引用在。
+
+## 完成记录（2026-09-04，MCP-3，分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`）
+
+分支上两笔（main 上的 SHA 由 MCP-1 重放后在 Comments 补对照）：
+
+- `f4b42116`（范围第 1、2 项，PP 侧）：`AggregationMode` 加 `PER_SHIPMENT` / `PER_MASTER_DOCUMENT`；`EvaluationSubjectKind` 加 `SHIPMENT`（`NewShipmentSubject`，身份归 parcel-shipment）与 `MASTER_DOCUMENT`（`NewMasterDocumentSubject`，身份归 TF）；`MemberManifest`（成员包裹引用 + 合计实重 + 可缺合计体积重）经 `NewAggregatePricingInputSnapshot` 进快照，构造门按主体种类拒错配，进语义摘要；`NewAggregatePricingPlanVersion(aggregation, …)`（`NewPricingPlanVersion` 保持签名，别的上下文在用）；`ChargeUnit` PER_PIECE 经 `FixedChargeRule.PerPiece` / `SurchargeRule.PerPiece` 声明、只在聚合卡上立得住；评价：聚合方式与主体种类不合 → `AGGREGATION_SUBJECT_MISMATCH` 冲突，按 KG 行在合计计价重量上查表、按件行按件数乘定额、每主体的行取定额一次，费用行标聚合单位（`ChargeScope` 加 `SHIPMENT` / `MASTER_DOCUMENT`，按件的行标 `PACKAGE`），`validCompletedCharges` 按主体种类分支；MAX 策略在聚合主体上取合计实重与声明的合计体积重较大者，未声明即待判断不退回实重；聚合主体的特征只有重量与类别，几何条件报特征不可用。规范化 `unit` 与输入 `members` 均 omitempty，PPC-5 不换号。
+- `2bef7c9e`（范围第 3 项，SA 侧）：SA-c 缝的消费侧适配器（见票 pricing-amount-precision/02 完成记录）把评价主体种类与成员清单如实带到 `ports.BuyEvaluationAdoption`（`SubjectKind` / `MemberPackages`）；归因仍归 SA 既有「成本分摊结果 / 未分摊余额」机制，分摊规则是实例参数，本票不填。
+
+**主单级留格的落点**：`SubjectMasterDocument`、`AggregationPerMasterDocument`、`ChargeScopeMasterDocument` 与成员清单形状都在，`NewMasterDocumentSubject` 只收一个引用字串、不铸身份、不拿包裹或集运单元引用顶替；用例里的引用是 SYN 夹具。生产上形成一次主单级评价要等 [tf-carrier-master-document-register/01](../../tf-carrier-master-document-register/issues/01-carrier-master-document-register-does-not-exist.md) 立册，届时 PP 不改，只是快照里的主单引用有了真实来源；E2 对按 MAWB 的行如实列「未转换：等 TF 承运总单登记册」。
+
+**没做、归谁**：范围第 3 项里「成本分值桥读到聚合单位与成员清单」——`internal/parcelshipment/adapters/parcelpricing/cost_bridge.go` 是 PS 地盘，本批未动，留给 PS owner（评价读面上聚合单位在费用行 `Scope()`、成员清单在 `Input().Members()`）。范围第 4 项（E2）未开工，落地后按票的行转成 PER_SHIPMENT 卡 + PER_PIECE / 每主体规则。「委托主体引用委托身份还是提交版本」照 MCP-6 记的默认读法做（`NewShipmentSubject` 收委托身份；提交版本随 `PricingInputSnapshot` 的事实引用带），待 PS owner 确认一句。
+
+验证：分支 tip 上 `gofmt -l` 空、build / vet 退 0、`go test -count=1 ./...` 绿（含 `internal/parcelshipment/adapters/parcelpricing`）；`internal/architecture` 绿。
 
 ## Comments
 

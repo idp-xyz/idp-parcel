@@ -1,7 +1,7 @@
 # 02 价卡内容加「金额取整策略」并在评价里按声明点取整：ADR-0107 的实施票
 
 Category: enhancement
-Status: in-progress——MCP-3 接手余项（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一）；此前 MCP-6（隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4）：领域半边已落 `66a90dc4`（main 上为 `70dbf5a6`），余项与交接点见文末「交接」；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
+Status: resolved——MCP-3 余项完成（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一；分支 SHA 见文末「完成记录」，main 上的 SHA 待 MCP-1 重放后对照）；此前 MCP-6（隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4）：领域半边已落 `66a90dc4`（main 上为 `70dbf5a6`），余项与交接点见文末「交接」；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
 Blocked by: 无
 
 ## 缺口
@@ -62,7 +62,16 @@ ADR-0107；ADR-0014（规范化版本）；ADR-0105（问题项形状）；票 `
 - 第 3 项消费侧：`internal/settlementaccounting/adapters/parcelpricing/` **今天不存在**（`ports.BuyEvaluationView` 注释此前说「等取整槽落地」，本批已把那句改成「槽已到、适配器仍留空」）。写它时：`Total()` 的精度依据是 `AmountRounding()` 里 `TOTAL` 那步的进位单位；评价带 `AMOUNT_PRECISION_UNDECLARED` 时拒或原样保全十进制，不得补取整。`internal/parcelshipment/adapters/parcelpricing/estimation_amount.go` 核过：它按调用方声明的 `MinorDigits` 折最小币单位，**超位即拒不取整**，没有要去掉的假设。
 - 第 4 项 E2 转换工具：未动；转不出的取整条款如实列「未声明：等运营确认」。
 
+## 完成记录（2026-09-04，MCP-3，分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`；余项第 2–4 项）
+
+- **第 2 项登记面**：核过票面要不要——管理台今天没有价卡逐字段表单（`apps/admin-web/src/pages/pricing/` 只有序列的登记表单；八价卡按 ADR-0101 决定八是模板导入 / JSON 快照口），`amountRounding` 槽已随价卡快照进 JSON 登记口（`plan_snapshot.go` 的 `amountRoundingSnapshot`），解码器对集合外模式由领域门拒。**不另造表单**——为一个没有表单的写面加三格表单控件，是先造表单再给它加槽，票面没要过第一件。
+- **第 3 项消费侧**：`2bef7c9e`——新包 `internal/settlementaccounting/adapters/parcelpricing/`，`BuyEvaluationAdapter` 实现 `ports.BuyEvaluationView`：读提供方评价库，方向 / 目的不是 BUY·SUPPLIER_COST 拒，别的租户的评价对本租户不存在，五种结果逐格译；合计按 `TOTAL` 那步取整留痕的进位单位位数换写最小币单位（12.5 USD @ 0.01 → 1250），原币金额取 `PER_LINE` 留痕或金额自身位数，超位即拒；评价带 `AMOUNT_PRECISION_UNDECLARED` → `ErrAmountPrecisionUndeclared`，**不补取整、不编币种小数位表**——完成判据「SA-c 缝的用例证明它不再自己取整」由 `TestUndeclaredPrecisionIsRefusedNotRounded` 与 `TestCompletedEvaluationIsAdoptedAtTheDeclaredIncrementScale` 钉住。`label-channel/13` 的成本分值桥在 PS 地盘，MCP-6 已核过它按调用方声明的 `MinorDigits` 换写、超位即拒、没有要去掉的假设，本批未动。
+- **第 4 项 E2**：E2 转换工具在仓内未开工；落地后客户价卡的取整条款转进 `amountRounding`，转不出的如实列「未声明：等运营确认」，不折默认。本票不替它写。
+
+验证：分支 tip 上 `go test -count=1 ./internal/settlementaccounting/...` 绿（含真库 DSN 下的 postgres 用例）；`internal/architecture` 绿；全量见任务完工报。
+
 ## Comments
 
+- 2026-09-04 · MCP-3：余项完成，见「完成记录」；ports 注释里「适配器仍留空」那句随适配器落地改成了精度依据的说明。
 - 2026-09-04 · 通道 6：立票。票 `01` 自定的 resolved 判据是「裁决引用在 CONTEXT」，故裁决与实施分票；本票承接实施。**只写票面，未动代码。**
 - 2026-09-04 · 通道 6：领域半边落 `66a90dc4`；余项见「交接」。

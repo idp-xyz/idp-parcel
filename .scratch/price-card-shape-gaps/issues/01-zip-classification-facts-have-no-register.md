@@ -1,7 +1,7 @@
 # 邮编分类事实（分区表、偏远档位表）在仓内没有登记载体，计价的类别特征只有消费侧
 
 Category: enhancement
-Status: in-progress——MCP-3 接手实施（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一）；此前 MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；交接点见文末 Comments）；两件已裁（2026-09-04，通道 6，owner 授权）：归属取 1（`parcel-pricing` 自有「计价参考目录」），形状照票面第二问并落文 [ADR-0109](../../../docs/adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)，CONTEXT 已补词条「计价参考目录」并改口「地址分类」；本票转实施票，范围见「裁决」节末段
+Status: resolved——MCP-3 实施完成（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一；分支 SHA 见文末「完成记录」，main 上的 SHA 待 MCP-1 重放后对照）；此前 MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；交接点见文末 Comments）；两件已裁（2026-09-04，通道 6，owner 授权）：归属取 1（`parcel-pricing` 自有「计价参考目录」），形状照票面第二问并落文 [ADR-0109](../../../docs/adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)，CONTEXT 已补词条「计价参考目录」并改口「地址分类」；本票转实施票，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
@@ -48,7 +48,22 @@ Blocked by: 无
 
 裁决记进 CONTEXT（归属改动按 AGENTS「改文档」），必要时 ADR 编号落进上面某一条，再按所选拆实施票；本票 `resolved` 的判据是那条引用在。
 
+## 完成记录（2026-09-04，MCP-3，分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`）
+
+分支上五笔（main 上的 SHA 由 MCP-1 重放后在 Comments 补对照）：
+
+- `1d8b6f71`：`CatalogueKind`（ZONE / REMOTE_TIER）与 `ReferenceCatalogueLink`（绑目录标识不绑版本，Go 名避开 Binding 词根）；`PricingPlanStructures.WithReferenceCatalogues` builder；规范化 `reference_catalogues` 与快照 `referenceCatalogues` 均 omitempty，留在 PPC-5。
+- `0fec7f2a`：`PostalRoute` + `NewPostalPricingInputSnapshot`（不带调用方分区的输入路径；`NewPricingInputSnapshot` 签名不动）；`ResolvedCatalogueValue`（解出值 / 查过没查到两态）随快照冻结；评价 `resolveCatalogues`：绑了目录只认读数、没绑读调用方分区、两边都没有即 `ZONE_UNRESOLVED`，档位那格 `REMOTE_TIER_UNRESOLVED`，读数来自别本目录 `REFERENCE_CATALOGUE_MISMATCH`；解出的分区与档位第一次填进 `PackageFeatures`；目录版本引用（`ArtifactReferenceCatalogue`）冻进评价清单。
+- `ea030966`：`ReferenceCatalogueRegistration`（来源标识、登记责任方、始发维度、目的邮编前缀映射、生效区间、更正关系；前缀粒度由该版声明）；`ResolveAt(asOf, route)`；PRC-1 快照折装 / 只读引用 / 整版重验；`CatalogueReview` 四眼门与 `SelectInForceCatalogueVersion`（与序列共用 `selectInForceVersion`）。
+- `235a58d8`：ports `ReferenceCatalogueRegister` / `VersionLoader` / `ReviewRegister` / `InForceResolver`；postgres `reference_catalogue_version`（迁移 **0007**）与 `reference_catalogue_review`（迁移 **0008**）；application 登记 / 复核用例；写面按 ADR-0101 决定八自裁为模板导入——HTTP `POST /pricing-reference-catalogue-registrations`（载荷带整张表、身份从信封来、挂 UnconfiguredIntake）与 CLI `reference-catalogue` / `reference-catalogue-review`；无事务负向证据补进 `transaction_guard_test`。
+- `b0009c1c`：`EvaluatePricingDeps` 加 `CatalogueInForce` + `Catalogues` 成对可选；形成评价前补齐读数，查过没查到照样冻结，无在用版本留说明。
+
+**范围第 4 项（E2）**：E2 转换工具在仓内尚未开工（`tenant-implementation-01/implementation-checklist.md` 那一项未勾），本票落地后 E2 应把客户分区表与 DAS 表转成 `ReferenceCataloguePayload` 形状（HTTP 载荷）或 `MarshalReferenceCatalogueRegistration` 的折装快照（CLI），走目录自己的登记与复核用例；本票不替它写。**管理台**没有为目录另立读面（票面未要求）。
+
+验证（分支 tip，本机）：`gofmt -l` 空；`go build ./...`、`go vet ./...` 退 0；`go test -count=1 ./...` 不设 DSN 绿；真库（DSN → 55432）`go test -count=1 -v ./internal/parcelpricing/adapters/postgres/ -run ReferenceCatalogue` 三条 PASS 非 SKIP；`internal/architecture` 绿。汇总证据行见任务完工报。
+
 ## Comments
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对到第 15 项时发现触发侧齐、提供侧空。**只写票面，未动代码。**
+- 2026-09-04 · MCP-3：实施完成，见「完成记录」。两条读法记在这里等 owner 复核（都不是裁决）：① **档位对到 `FeatureAddressType`**——ADR-0109 Context 把 `FeatureZone` / `FeatureAddressType` 列为分区与档位的消费侧，CONTEXT「地址分类」词条又说偏远档位与地址性质（商业 / 住宅）是两个独立维度；本实现照 ADR 把目录解出的档位填进 ADDRESS_TYPE 那一格类别特征，没有给「特征」闭合集加第十一项——若 owner 判定地址性质也要成为可判定量，那是「特征」词条的一次拓宽，另立票。② **在用版本按评价形成时刻选**（复核门照 ADR-0099），这一版**在计价基准时点是否生效**由目录自己的生效区间判——CONTEXT「计价参考目录」写的「采用哪一版由评价基准时点的在用版本决定」在本实现里由这两道合起来落地；一本目录逐年出新版时，旧年份的补评价会因在用版本不生效而待判断——若要按基准时点在已通过的版本里挑生效的那一版，得改在用读口，另立票。③ 始发维度落了「不区分始发」与「始发邮编前缀集」两格，ADR 提到的「始发分区」没落：评价输入里没有始发分区的来源（它本身要另一本目录解），等真表出现再加一格。
 - 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：规范化号已在 `b8dfc9a8` 换成 PPC-5（`fingerprint.go` 的 `canonicalizationVersion` 注释预告本票的目录绑定落这一号，**不再换号**，规范化文档新增字段照 `amount_rounding` 那样 `omitempty` 即可）；版本引用是三元 + 可选指纹（`NewVersionReferenceIdentity`），目录版本引用冻进 `VersionManifest` 用它；`CatalogueBinding` 进 `PricingPlanStructures` 可照 `WithAmountRounding` 的 builder 写法（可缺的另一个轴，不改 `NewPricingPlanVersion` 签名）；迁移取 `parcel_pricing/0006`（本批占号广播已点名）；解析口与复核记录照 `0a67406` / ADR-0099 那套。

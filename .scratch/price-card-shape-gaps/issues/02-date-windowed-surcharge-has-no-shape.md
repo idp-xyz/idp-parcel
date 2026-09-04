@@ -1,7 +1,7 @@
 # 只在日期窗内生效、金额逐周变的附加费（PSS / 高峰附加费）没有形状
 
 Category: enhancement
-Status: in-progress——MCP-3 接手实施（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一）；此前 MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；交接点见文末 Comments）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
+Status: resolved——MCP-3 实施完成（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一；分支 SHA 见文末「完成记录」，main 上的 SHA 待 MCP-1 重放后对照）；此前 MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；交接点见文末 Comments）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
@@ -47,7 +47,21 @@ Blocked by: 无
 
 ADR 接受后按所选改法另拆实施票；本票 `resolved` 的判据是 ADR 编号落进上面某一条并被引用。
 
+## 完成记录（2026-09-04，MCP-3，分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`）
+
+分支上两笔（main 上的 SHA 由 MCP-1 重放后在 Comments 补对照）：
+
+- `4c5d8938`（领域）：`ReferenceSeriesKind` 加 `PUBLISHED_AMOUNT`，取值带币种（`NewPublishedAmountSeriesValue`），登记 spec 加 `Currency`（金额序列必备、费率序列拒），PRS-2 内 omitempty；`ChargeMethodSeriesAmount` + `NewSeriesAmountSurcharge(seriesID, outOfWindow)`，`OutOfWindowBehaviour` 封闭两格（NOT_CHARGED / PENDING）、未声明不立；规则指名的金额序列必须已绑定；金额序列按标识引用、同种可绑多条（费率序列仍每种一条）；「窗外无期次」以缺席读数（`NewAbsentSeriesReading`）冻结进输入——不计收即规则不成行、解释留痕、不进互斥竞争，待判断即 `REFERENCE_SERIES_UNRESOLVED`，根本没有读数不论声明都待判断；金额币种与方案不一致 → `REFERENCE_SERIES_CURRENCY_MISMATCH` 冲突；解释记「取自序列 X@V」（期次以「在用版本 + 基准时点」定位，没有另编期号）；规范化 `series_id` / `out_of_window` / `currency` / `absent` 均 omitempty，PPC-5 不换号。
+- `d7f33d9b`（登记面与编排）：迁移 **0006** 把 `reference_series_version.kind` 的库层封闭集扩到 PUBLISHED_AMOUNT；序列登记载荷 `currency`；编排按（种类，标识）对绑定与读数，在用版本无期次时对金额序列冻结缺席读数；管理台序列表单多一格「按期公布金额」与币种输入（tsc 退 0、run-tests 67/67）。
+
+**范围第 2 项里「卡的附加费规则表单加该计算种类与窗外行为」**：管理台今天没有价卡逐字段表单（八价卡按 ADR-0101 决定八是模板导入 / JSON 快照口），两格随价卡快照的 `surchargeRules[].calculation.seriesId` / `outOfWindow` 进来，没有表单可加。**第 3 项（E2）**：E2 未开工，落地后客户 PSS 表应转成 PUBLISHED_AMOUNT 序列登记（每分区一条）+ 每分区一条 SERIES_AMOUNT 规则并声明窗外行为；本票不替它写。
+
+**给 MCP-1 / owner 的一格**：CONTEXT「计算方法」词条仍写「只有定额、查表、按基数百分比，以及取较大值」四种，ADR-0110 Decision 二加了第五种「取当期序列定额」——`docs/domain` 不在本批地盘，词条那句请随 spec 对齐一起改（AGENTS「改文档」）。
+
+验证：分支 tip 上 `gofmt -l` 空、build / vet 退 0、`go test -count=1 ./...` 绿；真库 `TestPublishedAmountSeriesRegistersAndResolvesWithItsCurrency` 带 DSN PASS（0006 的 CHECK 放行）。
+
 ## Comments
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对第 16 项。**只写票面，未动代码。**
+- 2026-09-04 · MCP-3：实施完成，见「完成记录」。裁决能力边界点名的那一问——「窗外无期次」在解析口今天怎么答——核过：`ReferenceSeriesRegistration.ResolveAt` 对不在任何期次内的时点答「未解析」，编排此前只留一条说明、不给读数，纯函数据以落待判断；本票没有改那个答法，而是在编排层对金额序列多加一格「查过这一版、无期次」的缺席读数，让窗外行为在纯函数里按卡的声明分流且可重放。
 - 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：PPC-5 已在 `b8dfc9a8` 换好、本票的规范化改动落同一号不再换（`fingerprint.go` 注释已预告）；序列登记快照族已是 PRS-2（同笔），期次取值若加「带币种金额」判别形状，新字段 `omitempty` 可留在 PRS-2 内，改既有字段含义才需 PRS-3；「窗外无期次」在解析口今天怎么答先核 `reference_series.go` 的期次解析路径（裁决能力边界点名未读）；`SurchargeCalculation` 的规范化写法在 `fingerprint.go` `canonicalSurchargeCalculationDocument`——加「取当期序列定额」方法与「窗外行为」两格时照 `series_kind` / `series_factor` 那样 `omitempty`。
