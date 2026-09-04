@@ -25,6 +25,7 @@ const (
 	PickupRegistered
 	PickupExistingVersion
 	PickupRegistrationConflict
+	PickupCorrected
 	PickupRegistrationNotAccepted
 	PickupRegistrationUndecided
 )
@@ -37,6 +38,8 @@ func (outcome PickupRegistrationOutcome) String() string {
 		return "EXISTING_VERSION"
 	case PickupRegistrationConflict:
 		return "SOURCE_CONFLICT"
+	case PickupCorrected:
+		return "PICKUP_CORRECTED"
 	case PickupRegistrationNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
 	case PickupRegistrationUndecided:
@@ -82,6 +85,22 @@ type RegisterOffsitePickupCommand struct {
 	// enterFulfillmentSegment 的自注。
 	Segment        string
 	PlannedSegment string
+}
+
+// CorrectOffsitePickupCommand 携带更正入口的全部输入：指名被更正的前版（租户+对象+尝试+前版版本号），
+// 更正只带「证据说了什么」四格与更正时刻（票 tf-segment-lifecycle-closure/08 裁决）。没有 Segment——
+// 段侧「来源更正 → 参与关系重派生」另立票，本编排不进段。新版本号不由调用方指名：它是本上下文签发的
+// 号，同首登（交接那一侧的版本由裁决过程指名，是另一种身份）。
+type CorrectOffsitePickupCommand struct {
+	TenantID           domain.TenantID
+	Object             string
+	Attempt            string
+	PredecessorVersion string
+	Place              string
+	Control            string
+	ExecutedBy         string
+	OccurredAt         time.Time
+	CorrectedAt        time.Time
 }
 
 type RegisterOffsitePickupResult struct {
@@ -151,7 +170,8 @@ func NewRegisterOffsitePickupHandler(deps RegisterOffsitePickupDeps) *RegisterOf
 
 // Register 首登一次对象级揽收：受理（控制证据等七件由领域构造器把门）→ 幂等按
 // （租户+对象+尝试）分重放/冲突 → FormOffsitePickup → 原子提交 → 意图交 PS 采认
-// （UC-PS-003 揽收源链）。
+// （UC-PS-003 揽收源链）。重放/冲突对的是这次揽收的**当前版**：首登被更正之后，原内容的重放
+// 对不上当前版，答冲突——首登不顶替，来源更正走 Correct。
 func (handler *RegisterOffsitePickupHandler) Register(
 	ctx context.Context,
 	command RegisterOffsitePickupCommand,
@@ -258,6 +278,128 @@ func (handler *RegisterOffsitePickupHandler) establishSegment(
 	)
 }
 
+// Correct 对已登记的揽收落更正版本（票 tf-segment-lifecycle-closure/08 裁决 A）：读回当前版 → 指名的
+// 前版必须就是当前版 → 更正时刻不早于其登记时刻 → 签发新版本 → 领域 Correct（四格完备性同首登、
+// 回指前版）→ 以新版本落新行 → 意图重新交 parcel-shipment 采认。**不进段**：段侧「来源更正 → 参与
+// 关系重派生」对交接更正同样没有，另立一票覆盖两种来源；本编排照交接那一侧的现状。
+//
+// 前版核对为什么钉在「当前版」而不是「链上任一版」：登记册按键只答一个当前版（下游 parcel-shipment
+// 也按键读），链因此必须线性——一版最多被更正一次。指名一个已被更正过的版本时，同内容是这份更正
+// 的重放（答已有版本、重发同一份意图），异内容是冲突（v1 已被 v2 更正为别的内容，要改请对当前版
+// 提更正），两格与首登那一侧的重放/冲突同一套判据：内容比对锚。
+func (handler *RegisterOffsitePickupHandler) Correct(
+	ctx context.Context,
+	command CorrectOffsitePickupCommand,
+) (RegisterOffsitePickupResult, error) {
+	key, predecessor, badKey := pickupCorrectionKey(command)
+	if badKey {
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
+	}
+	current, found, err := handler.deps.Pickups.FindByKey(ctx, key)
+	if err != nil {
+		return pickupRegistryUndecided(command.Object), nil
+	}
+	if !found {
+		// 没有可更正的登记：更正不出无中生有的揽收。
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
+	}
+	digest := pickupRegistrationContentDigest(current.Pickup.Task().String(), command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
+	if current.Pickup.Version() != predecessor {
+		if current.ContentDigest == digest {
+			return handler.existingResult(ctx, current), nil
+		}
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationConflict}, nil
+	}
+	if command.CorrectedAt.IsZero() || command.CorrectedAt.Before(current.RecordedAt) {
+		// 更正时刻不得早于被更正版本的登记时刻（裁决）。下界取登记时刻不取发生时刻——发生时刻本身
+		// 是可更正的四格之一，被更正的那一版可能恰恰把它记晚了。
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
+	}
+	correction, badInput := pickupCorrectionFrom(command)
+	if badInput {
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
+	}
+	version, err := handler.deps.Versions.NextPickupResultVersion(ctx)
+	if err != nil {
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationUndecided, reason: PickupVersionUnavailable,
+			continuation: pickupRegistrationContinuation("PICKUP_VERSION_UNAVAILABLE", command.Object)}, nil
+	}
+	correction.Version = version
+
+	corrected, err := current.Pickup.Correct(correction)
+	if err != nil {
+		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
+	}
+
+	record := ports.OffsitePickupRecord{
+		Key:           key,
+		ContentDigest: digest,
+		Pickup:        corrected,
+		RecordedAt:    handler.deps.Clock.Now(),
+	}
+	saved, err := handler.deps.Pickups.Save(ctx, record)
+	if err != nil {
+		return pickupRegistryUndecided(command.Object), nil
+	}
+	switch saved {
+	case ports.OffsitePickupSaved:
+		result := RegisterOffsitePickupResult{outcome: PickupCorrected, record: record, hasRecord: true}
+		result.handoff = handler.handOff(ctx, record)
+		return result, nil
+	case ports.OffsitePickupAlreadyRegistered:
+		// 另一方先把同一前版更正掉了（一版最多被更正一次）：读回赢家作答。
+		winner, found, err := handler.deps.Pickups.FindByKey(ctx, key)
+		if err != nil || !found {
+			return pickupRegistryUndecided(command.Object), nil
+		}
+		return handler.existingResult(ctx, winner), nil
+	default:
+		return RegisterOffsitePickupResult{}, fmt.Errorf("%w: %d", ErrUnexpectedPickupRegistrySave, saved)
+	}
+}
+
+func pickupCorrectionKey(command CorrectOffsitePickupCommand) (ports.OffsitePickupKey, domain.PickupResultVersion, bool) {
+	if strings.TrimSpace(command.TenantID.String()) == "" {
+		return ports.OffsitePickupKey{}, domain.PickupResultVersion{}, true
+	}
+	object, err := domain.NewCarriedObjectReference(command.Object)
+	if err != nil {
+		return ports.OffsitePickupKey{}, domain.PickupResultVersion{}, true
+	}
+	attempt, err := domain.NewAttemptReference(command.Attempt)
+	if err != nil {
+		return ports.OffsitePickupKey{}, domain.PickupResultVersion{}, true
+	}
+	predecessor, err := domain.NewPickupResultVersion(command.PredecessorVersion)
+	if err != nil {
+		return ports.OffsitePickupKey{}, domain.PickupResultVersion{}, true
+	}
+	return ports.OffsitePickupKey{TenantID: command.TenantID, Object: object, Attempt: attempt}, predecessor, false
+}
+
+// pickupCorrectionFrom 只译四格与更正时刻；版本由编排签发后填入。四格在这里就要齐——签发在它之后，
+// 一份形成不了的更正不该烧掉一个版本号。
+func pickupCorrectionFrom(command CorrectOffsitePickupCommand) (domain.PickupCorrection, bool) {
+	if command.OccurredAt.IsZero() {
+		return domain.PickupCorrection{}, true
+	}
+	correction := domain.PickupCorrection{
+		OccurredAt:  command.OccurredAt,
+		CorrectedAt: command.CorrectedAt,
+	}
+	var err error
+	if correction.Place, err = domain.NewPickupPlaceReference(command.Place); err != nil {
+		return domain.PickupCorrection{}, true
+	}
+	if correction.Control, err = domain.NewTransportControlReference(command.Control); err != nil {
+		return domain.PickupCorrection{}, true
+	}
+	if correction.ExecutedBy, err = domain.NewExecutingPartyReference(command.ExecutedBy); err != nil {
+		return domain.PickupCorrection{}, true
+	}
+	return correction, false
+}
+
 func pickupSpecFrom(command RegisterOffsitePickupCommand) (domain.OffsitePickupSpec, bool) {
 	spec := domain.OffsitePickupSpec{
 		TenantID:   command.TenantID,
@@ -326,12 +468,19 @@ func pickupRegistrationContinuation(parts ...string) string {
 // pickupRegistrationDigest 是同一（对象+尝试）首登的内容比对锚：任务、地点、控制、
 // 执行方与业务时间任一不同即是另一份内容。
 func pickupRegistrationDigest(command RegisterOffsitePickupCommand) string {
+	return pickupRegistrationContentDigest(command.Task, command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
+}
+
+// pickupRegistrationContentDigest 让首登与更正版本的记录带同一种内容比对锚——它描述的是这一版**说了什么**，
+// 而不是这一版怎么来的。于是重放与冲突在两个入口上是同一套判据：首登重放对上当前版是已有版本、
+// 对不上是冲突；更正重放同理。
+func pickupRegistrationContentDigest(task, place, control, executedBy string, occurredAt time.Time) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Task,
-		command.Place,
-		command.Control,
-		command.ExecutedBy,
-		command.OccurredAt.UTC().Format(time.RFC3339Nano),
+		task,
+		place,
+		control,
+		executedBy,
+		occurredAt.UTC().Format(time.RFC3339Nano),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

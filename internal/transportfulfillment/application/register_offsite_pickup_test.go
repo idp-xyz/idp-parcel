@@ -17,8 +17,11 @@ var (
 	pickupRegisteredAt = time.Date(2026, 8, 13, 8, 45, 0, 0, time.UTC)
 )
 
+// pickupRegistryDouble 按键存一条版本链，与真库同一套代数（迁移 0015）：一键一首登、一版一版本号、
+// 一版最多被更正一次，撞任一道都译`已登记`；FindByKey 答链尾（没有任何版本回指它的那一版）。替身若
+// 比真库宽容，编排里「并发第二次更正」「过时前版」这两类就永远测不出来。
 type pickupRegistryDouble struct {
-	records     map[string]ports.OffsitePickupRecord
+	records     map[string][]ports.OffsitePickupRecord
 	findErr     error
 	saveErr     error
 	saveResult  ports.OffsitePickupSaveOutcome
@@ -27,7 +30,7 @@ type pickupRegistryDouble struct {
 }
 
 func newPickupRegistry() *pickupRegistryDouble {
-	return &pickupRegistryDouble{records: map[string]ports.OffsitePickupRecord{}}
+	return &pickupRegistryDouble{records: map[string][]ports.OffsitePickupRecord{}}
 }
 
 func pickupRegistryKey(key ports.OffsitePickupKey) string {
@@ -41,8 +44,20 @@ func (double *pickupRegistryDouble) FindByKey(
 	if double.findErr != nil {
 		return ports.OffsitePickupRecord{}, false, double.findErr
 	}
-	record, found := double.records[pickupRegistryKey(key)]
-	return record, found, nil
+	chain := double.records[pickupRegistryKey(key)]
+	for _, candidate := range chain {
+		superseded := false
+		for _, other := range chain {
+			if predecessor, corrects := other.Pickup.Corrects(); corrects && predecessor == candidate.Pickup.Version() {
+				superseded = true
+				break
+			}
+		}
+		if !superseded {
+			return candidate, true, nil
+		}
+	}
+	return ports.OffsitePickupRecord{}, false, nil
 }
 
 func (double *pickupRegistryDouble) Save(
@@ -56,11 +71,32 @@ func (double *pickupRegistryDouble) Save(
 	if double.forceResult {
 		return double.saveResult, nil
 	}
-	if _, exists := double.records[pickupRegistryKey(record.Key)]; exists {
-		return ports.OffsitePickupAlreadyRegistered, nil
+	chainKey := pickupRegistryKey(record.Key)
+	incomingPredecessor, incomingCorrects := record.Pickup.Corrects()
+	for _, existing := range double.records[chainKey] {
+		if existing.Pickup.Version() == record.Pickup.Version() {
+			return ports.OffsitePickupAlreadyRegistered, nil
+		}
+		existingPredecessor, existingCorrects := existing.Pickup.Corrects()
+		if !incomingCorrects && !existingCorrects {
+			return ports.OffsitePickupAlreadyRegistered, nil
+		}
+		if incomingCorrects && existingCorrects && incomingPredecessor == existingPredecessor {
+			return ports.OffsitePickupAlreadyRegistered, nil
+		}
 	}
-	double.records[pickupRegistryKey(record.Key)] = record
+	double.records[chainKey] = append(double.records[chainKey], record)
 	return ports.OffsitePickupSaved, nil
+}
+
+// chainOf 交回某键下的整条版本链，供断言「原版本不动」。
+func (double *pickupRegistryDouble) chainOf(t *testing.T, key ports.OffsitePickupKey) []ports.OffsitePickupRecord {
+	t.Helper()
+	chain, found := double.records[pickupRegistryKey(key)]
+	if !found {
+		t.Fatalf("登记册里没有 %s 的版本链", pickupRegistryKey(key))
+	}
+	return chain
 }
 
 type pickupRegVersionFactory struct {
