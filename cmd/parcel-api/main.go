@@ -105,6 +105,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 受控补充编排（ADR-0106 Decision 四）：此前它只活在测试里，接进装配后「新提交版本已形成」
+	// 信封才有生产发布方，停在`等待受控补充`并已入账的委托才有人续办。
+	supplement, err := buildCustomerSupplementOrchestration(db)
+	if err != nil {
+		return err
+	}
 	// 复核队列读口就是委托查阅适配器（ports.AcceptanceReviewQueue 在其上补齐，同表同
 	// 作用域纪律）；判断读口与形成决定读的是同一批判断行。
 	reviewJudgments, err := pspostgres.NewAcceptanceJudgments(db)
@@ -328,6 +334,7 @@ func run(logger *slog.Logger) error {
 			requestViews,
 			manualReview,
 			rejection,
+			supplement,
 			requestViews,
 			reviewJudgments,
 			labelTransactions,

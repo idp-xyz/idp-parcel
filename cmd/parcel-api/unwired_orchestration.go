@@ -377,6 +377,19 @@ func (unwiredRejection) Handle(
 	return shipmentapp.RejectShipmentRequestResult{}, errOrchestrationNotWired
 }
 
+// unwiredSupplement 是受控补充命令口的编排占位（票 first-tenant-runway/09，ADR-0106 Decision 四）。
+// 填法同其余命令占位：不交回零值业务答案——FormNewSubmissionVersionResult 的零值 outcome 是 Invalid，
+// 端点会把它判成 UNNAMED_OUTCOME，那条路径本是用来抓「应用层漏了一格没具名」的；稳定错误让「越过了
+// Intake」可观察为 NO_ANSWER_FORMED。
+type unwiredSupplement struct{}
+
+func (unwiredSupplement) Handle(
+	context.Context,
+	shipmentapp.FormNewSubmissionVersionCommand,
+) (shipmentapp.FormNewSubmissionVersionResult, error) {
+	return shipmentapp.FormNewSubmissionVersionResult{}, errOrchestrationNotWired
+}
+
 // unwiredReviewQueue 是复核队列读口的占位（票 09）。生产装配交入的是委托查阅适配器
 // 本尊（同表同作用域纪律）；这里独立成形，装配测试才盖得住「队列口接错适配器」。
 type unwiredReviewQueue struct{}

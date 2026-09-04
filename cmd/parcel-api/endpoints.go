@@ -54,6 +54,7 @@ func assembleBusinessEndpoints(
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
 	manualReview shipmenthttp.ManualReviewCompletionHandler,
 	rejection shipmenthttp.ActiveRejectionHandler,
+	supplement shipmenthttp.SupplementHandler,
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
 	labelTransactions shipmenthttp.LabelTransactionsReader,
@@ -179,6 +180,11 @@ func assembleBusinessEndpoints(
 		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
 		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},
 		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, rejection)},
+		// 受控补充命令口（票 first-tenant-runway/09；ADR-0106 Decision 四）：客户在`已提交`委托上形成
+		// 同一委托的新提交版本，编排随新版本落库同事务铸「新提交版本已形成」信封驱动续办。它是客户
+		// 渠道的写行，同挂字面量 UnconfiguredIntake{}；谁能替哪个客户账户补充、基准版本怎么译，属
+		// `PAR-INT-01` 接入契约（实例半边），隔离读准入与隔离提交放行都换不了这一行。
+		{Pattern: "/shipment-requests/supplements", Handler: shipmenthttp.NewFormNewSubmissionVersionEndpoint(shipmenthttp.UnconfiguredIntake{}, supplement)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
 		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
 		// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。
