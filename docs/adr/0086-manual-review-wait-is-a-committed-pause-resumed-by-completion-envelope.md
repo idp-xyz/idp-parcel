@@ -1,6 +1,6 @@
 # ADR-0086: 等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动
 
-Status: Accepted
+Status: Accepted（部分停用：Context 把`等待受控补充`判在「回滚重投是对的」一侧的那一半，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用——该等待态改为提交入账、由「新提交版本已形成」信封驱动续办；`等待内部续办`的分侧与 Decision 一至四不变）
 Date: 2026-08-31
 
 ## Context
@@ -43,3 +43,4 @@ Date: 2026-08-31
 - [票 09：接受前人工复核页接线](../../.scratch/admin-skeleton-closure-batch/issues/09-acceptance-review-wiring.md)：队列读面与两个命令口的驱动票
 - [CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)：接受判断任务三个等待态「使用不同原因和续办路径」——本记录把处置也分开
 - [ADR-0031](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)：`决定没落库`/`换代冲突`的原因分格，Decision 一的保存失败语义沿用它
+- [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)：前向指针——停用本记录 Context 对`等待受控补充`的分侧，把 Decision 一的保存护栏与 Decision 二的信封驱动形状扩用到那一格

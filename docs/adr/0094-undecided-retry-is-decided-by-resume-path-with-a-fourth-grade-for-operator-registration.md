@@ -1,6 +1,6 @@
 # ADR-0094: 未决重投与否由领域的 `ResumePath` 决定，并增设「等运营登记」第四格
 
-Status: Accepted
+Status: Accepted（部分停用：Decision 三对 `ResumeByCustomerSupplement` 的「维持回滚重投」一格，已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 改为提交入账——那一格写明「另立取证票，不在本记录裁」，取证票 first-tenant-runway/09 的三问已从代码答出；Decision 一、二、四、五与其余三格不变）
 Date: 2026-09-02
 
 ## Context
@@ -56,3 +56,4 @@ Date: 2026-09-02
 - [ADR-0095](./0095-undecided-stage-and-reason-surface-in-two-layers.md)：本记录带走可观测性的一半，那一篇裁另一半
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：「安全续办」与`尚未决定`的结果语义
 - [票 07](../../.scratch/first-tenant-runway/issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md)：现场与三条候选路
+- [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)：前向指针——Decision 三刻意留待取证的那一格（`ResumeByCustomerSupplement`）证据齐后由它改判为提交入账，Decision 四「触发同笔落地」对那一格逐字沿用
