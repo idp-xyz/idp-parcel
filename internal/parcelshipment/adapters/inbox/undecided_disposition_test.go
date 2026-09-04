@@ -50,17 +50,18 @@ func TestWaitsThatRetryCannotMoveAreCommitted(t *testing.T) {
 	}
 }
 
-// TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands 钉住那个**过渡态**。
+// TestOperatorRegistrationIsCommittedNowThatItsResumeTriggerLands 钉住第四格的入账（ADR-0094
+// Decision 三）。
 //
-// `等待运营登记`按恢复动作本该与人工复核同组入账，但 ADR-0094 Decision 四写的是「第四格必须与
-// 它的续办触发同笔落地，否则不许落地」——续办信封（D4）与落等待态那一段（D5）今天都没有，此刻
-// 入账只会把 ABANDONED 换成一个更安静的永久停滞。所以在 D4/D5 落地前它暂按旧行为回滚重投
-// （票 first-tenant-runway/07，MCP-3 裁）。**D4/D5 那一笔落地时本用例要反过来**：把它并进
-// 上面那一组。它单独成一条而不是塞进 TestRetriedWaitsRollBack，是为了让那一笔的人一眼看见
-// 该动哪一行。
-func TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands(t *testing.T) {
-	if err := undecidedDisposition(domain.ResumeByOperatorRegistration); !errors.Is(err, ErrAcceptanceChainUndecided) {
-		t.Fatalf("D4/D5 未落地前，等待运营登记应暂按旧行为回滚重投，实际 err = %v", err)
+// 它曾反着写（`…RollsBackUntilItsResumeTriggerLands`）：Decision 四要求「第四格必须与它的续办触发
+// 同笔落地，否则不许落地」，而落等待态那一段（D5）与「参数已登记」信封（D4）当时都没有，入账只会
+// 把 ABANDONED 换成一个更安静的永久停滞。两半如今都在——D5 由两条 as-of 编排先 Save 等待态再交回
+// 原因，D4 由 party-commercial 的登记动作同事务发信封、OperatorRegistrationCompletedConsumer 按租户
+// 重驱——这一格才并回入账那一组。仍单列一条而不并进 TestWaitsThatRetryCannotMoveAreCommitted，
+// 是为了让读到它的人看见这一格是有过渡史的：谁再想把它挪回重投，先回答续办触发去哪了。
+func TestOperatorRegistrationIsCommittedNowThatItsResumeTriggerLands(t *testing.T) {
+	if err := undecidedDisposition(domain.ResumeByOperatorRegistration); err != nil {
+		t.Fatalf("续办触发已落地，等待运营登记应按本份投递处理完毕入账，实际 err = %v", err)
 	}
 }
 
