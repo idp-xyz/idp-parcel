@@ -1,8 +1,8 @@
 # 索赔期限与最低材料两维改经消费侧适配器读 `party-commercial` 客户服务规则正文——今天恒答未登记
 
 Category: enhancement
-Status: draft
-Blocked by: [party-commercial-context-gaps/05](../../party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md)（正文册、点读口与批文口，分支 `mcp4-pcgaps05`，待重放进 main）
+Status: in-progress——MCP-4（2026-09-04，基线 `mcp4-pcgaps05@34d8ad90`，隔离分支 `mcp4-ve03`；05 入 main 后 rebase）
+Blocked by: [party-commercial-context-gaps/05](../../party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md)（正文册、点读口与批文口，分支 `mcp4-pcgaps05`，待重放进 main；MCP-1 派单 task-10b1e66b 代裁「05 已完、由 MCP-1 重放，本票据以开工」）
 
 由 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)
 Consequences「VE 侧另立一票」与票 pc-gaps/05「另立而不在本票」一句立票。本票是 VE 地盘，
@@ -68,6 +68,57 @@ pc-gaps/05 落地前 **VE 行为一字不变**（ADR-0104 Consequences 原句）
 - **`Registered` 的粒度**：PC 一版规则可以只登期限不登材料（两项合起来至少一项）。两维各自按
   「PC 那一项有没有行」答 `Registered`，还是版本在场即两维都算登记？前者与今天「各维自己交代」的
   纪律一致，本票倾向前者，但要在票面钉死。
+
+## 裁决（2026-09-04 MCP-4，细则受托代裁；用户可 supersede）
+
+开工前按 `/grill-with-docs` 对 VE CONTEXT 索赔一节、ADR-0104 Decision 二/四/五、PC
+`customer_service_rule.go` 类型注释与 VE `handle_claim.go` 逐维核对过一遍。判据只有一条：能在不动
+不变式、不造默认值的前提下答的就答；答不了的在实施里**显式留格**，不拿零值冒充第三态。
+
+- **`Registered` 的粒度——自裁：各维按「PC 那一项有没有行」答。** `FilingDeadline.Registered` 看
+  这一版有没有 `FIRST_CLAIM` 那一行（PC `ClaimDeadline(kind)` found=false 即「这一版对该种期限无
+  客户差异，不是零值期限」）；`Materials.Registered` 看这一版对**本索赔类型**有没有材料清单行
+  （`MinimumMaterialsFor(claimKind)`）。版本壳在场不等于两维都登记：ADR-0104 Decision 三允许一版只
+  登其中一项，而 VE 端口注释要求「某一维规则尚未登记，由各维自己的 Registered 如实交代」——两处
+  合起来只剩这一种读法。恢复动作因此指得准：缺哪一项去 PC 补哪一项，不是重登整版。
+- **起算事实源——留格。** PC 交的是不透明的 `DeadlineStartEventReference`，解释权在 VE；要把它落到
+  VE 的某个已接受事实（交付、资料索取、结论通知/送达/可获取）上，需要一份「起算事件引用 → VE 事实
+  种类」的对应，那是实例半边且今天无任何上下文持有；`EligibilityQuery` 也不带任何时刻。适配器因此
+  只填规则半边（版本引用、起算事件引用、日历引用、范围），`Deadline` 留零值。编排侧
+  `judgeFilingDeadline` 既有守卫把「`Registered` 为真而 `Deadline` 为零」判成核不了、停在指名到维
+  的未决、索赔项一字不动——第三态没有被记下，但那一格的名字 `ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED`
+  对这一状态已经不准（规则登了，缺的是起算事实），改名归 `application`，不在本票地盘，见完成记录。
+- **业务日历——留格。** PC 只带 `BusinessCalendarReference`；按引用算日的能力与日历内容（工作日、
+  节假日、时区）属实例半边，今天没有持有者。适配器照引用转写 `Calendar`，不做任何日期运算。
+- **`Notice` 的来源——留格，报 owner 裁。** 通知义务不在 PC 首发（ADR-0104 Decision 二）；VE 通知
+  策略册的键是披露策略引用，索赔项手上没有那个引用，从它派生要先有一份新的对应（实例半边）。两条
+  出路（等 PC 放宽项类 / VE 自建索赔通知依据册）都不是本票能拍的，`Notice` 留零值。
+- **`SupplementDeadline`——留格，与起算事实源同因。** 它由 PC 的 `MATERIAL_SUPPLEMENT` 那一行 +
+  资料索取的实际时刻 + 日历派生，前一件 PC 有、后两件今天没有。留零值的编排后果要写明：材料维
+  `Registered` 为真且差材料时，`applyScreen` 会先撞 `!SupplementDeadline.After(now)` 那一格、停在
+  `ELIGIBILITY_SUPPLEMENT_WINDOW_CLOSED`——同样是停在未决、不记第三态、不拒赔，但名字说的是「窗口
+  已关」而实情是「截止算不出」。同归 `application` 的改名票。
+- **VE 词到 PC 键的翻译——立缝，不代拟。** PC 闭包键要租户、客户账户、责任法人候选、商业范围、
+  目的、锚点（时刻 + 锚点策略版本）与必需依据；`EligibilityQuery` 只有前两项。缺的三项与锚点全是
+  实例半边（判据同 PS 的 `ResolutionKeySource`：「没有租户时谁也说不出这份委托该在哪个商业范围下
+  解析」）。适配器包内立 `RuleResolutionKeySource` 接口（ADR-0025：实例半边协作者的接口留在适配器
+  包内，不进 `ports`），nil 或 formed=false 即显式未配置，两维答未登记——端口没有逐维的未决格，
+  两个可用的答案里「未登记」的恢复方向（去登记）对得上，「报错」的（重试依赖）对不上。必需依据
+  由登记方给，但必须含 `CustomerServiceRuleObject`，缺了是配置缺陷走 error 不折成未登记；要不要一并
+  要 `CustomerContractObject` 让闭包核指名引用，归登记方。生产装配今天 Keys 留 nil（没有任何租户
+  登记过这份映射，也还没有登记面），装配测试经同一装配函数注入一份键来源钉「已登记」态。登记面
+  另立票。
+- **`RuleVersion` 冻什么——按 ADR-0104 Decision 五。** 三段：租户 / 对象 / 版本号，`/` 连接；
+  不冻正文，`ContentDigest` 也不冻（ADR 说「可」不说「须」，VE 端口没有那一格）。
+- **`Scope`——取索赔自己固定的目标范围**（`EligibilityQuery.Target`），票面「要做什么」第 3 条原句。
+- **不核 `query.Contract` 与规则适用声明的合同是不是同一个标识。** VE 的合同责任范围引用与 PC 的
+  客户合同对象标识是不是同一个标识空间，今天没有任何文档立过；替它们假定相等就是在适配器里判断。
+  壳与正文的一致性由 PC 读口核（ADR-0104 Decision 四），规则与合同的对应由闭包的指名引用核（登记方
+  把合同列进必需依据时）。
+- **闭包各结局的落点（全函数，不留兜底）：** 唯一解析 → 点读；`无适用依据` → 两维未登记（权威说
+  这个范围里没有生效的规则版本，去发布一版）；`适用冲突` / `解析未决` / `输入未受理` → error（前者要
+  商业责任方修重叠，中者要重试或等实例参数，后者是键配错——三种都不是「去登记」，而 VE 端口只有
+  未登记与 error 两个格，error 至少让人来看）；`已失效` / `依据未解析` 第一阶段不产，出现即哨兵错误。
 
 ## 边界
 
