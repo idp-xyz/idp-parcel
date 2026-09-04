@@ -198,6 +198,29 @@ func (registration ReferenceSeriesRegistration) Verifiable() bool {
 	return true
 }
 
+// SeriesEvidenceGrade 是一版登记的证据等级（封闭两格）。它是 Verifiable 的命名形态：登记册
+// 的列、目录读面与登记前预览都要把这一格说给人看，词只在这里定一次——此前登记册适配器自己
+// 持一份同样的两个字面量，与领域各说一遍就是两处口径。
+type SeriesEvidenceGrade string
+
+const (
+	// SeriesEvidenceVerifiable：每一期都携带可再次复核的取值凭证。
+	SeriesEvidenceVerifiable SeriesEvidenceGrade = "VERIFIABLE"
+	// SeriesEvidenceAsserted：至少一期缺凭证，整版只有断言强度——可用于隔离验证，不得支撑
+	// 生产金额（CONTEXT）。
+	SeriesEvidenceAsserted SeriesEvidenceGrade = "ASSERTED"
+)
+
+func (grade SeriesEvidenceGrade) String() string { return string(grade) }
+
+// EvidenceGrade 是 Verifiable 的命名形态，供要把等级说出来的读面与预览用。
+func (registration ReferenceSeriesRegistration) EvidenceGrade() SeriesEvidenceGrade {
+	if registration.Verifiable() {
+		return SeriesEvidenceVerifiable
+	}
+	return SeriesEvidenceAsserted
+}
+
 func (registration ReferenceSeriesRegistration) valid() bool {
 	if !registration.tenant.valid() ||
 		!registration.kind.valid() ||

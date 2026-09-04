@@ -17,9 +17,40 @@ export const seriesKindLabels: Record<string, string> = {
   EXCHANGE_RATE: '汇率',
 };
 
+// 键取 domain.SeriesEvidenceGrade 原词（库上 CHECK 同一组）。此前这里写的是 ASSERTION，与服务端
+// 的 ASSERTED 对不上，断言强度那一格一直原样显示英文——票 08 顺手改正。
 export const evidenceGradeLabels: Record<string, string> = {
   VERIFIABLE: '可复核',
-  ASSERTION: '断言强度',
+  ASSERTED: '断言强度',
+};
+
+// 复核结论封闭两格（domain.SeriesReviewDecision 原词）。
+export const reviewDecisionLabels: Record<string, string> = {
+  APPROVED: '通过',
+  RETURNED: '退回',
+};
+
+// ---- 登记前预览（票 pricing-reference-series-operations/08）----
+
+export const previewOutcomeLabels: Record<string, string> = {
+  PREVIEWED: '已预览（未登记；等级、内容摘要与逐期差异如下）',
+  NOT_ACCEPTED: '请求不受理（登记本体立不起来，什么也没算）',
+  UNDECIDED: '未决（取对照版本时依赖故障，可重试）',
+};
+
+// 对照那一格的四种下场：三种「没比出来」按续办动作分格，不折成一句「无差异」。
+export const comparisonOutcomeLabels: Record<string, string> = {
+  NOT_REQUESTED: '未要求对照（不是更正、也没指名对照版本）',
+  COMPARED: '已与对照版本逐期比对',
+  BASE_UNKNOWN: '对照版本不在册（查版本号）',
+  BASE_INCOMPARABLE: '对照版本在册但不是同一条序列（种类不同——查绑错了哪条）',
+};
+
+export const periodChangeKindLabels: Record<string, string> = {
+  UNCHANGED: '未变',
+  CHANGED: '有改动',
+  ADDED: '新增',
+  REMOVED: '移除',
 };
 
 // 评价状态封闭五格(migrations/parcel_pricing/0001 CHECK 原词)。四种非完成结果

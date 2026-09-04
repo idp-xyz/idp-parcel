@@ -148,3 +148,17 @@ func buildReferenceSeriesReviewOrchestration(db *bentopg.DB) (transactionalRefer
 	})
 	return transactionalReferenceSeriesReview{transactor: db.Transactor(), inner: handler}, nil
 }
+
+// buildReferenceSeriesPreviewOrchestration 装配 `/pricing-reference-series-previews` 的真编排（票
+// pricing-reference-series-operations/08）。**没有事务包装**：预览只从版本读口取对照那一版，不写
+// 任何一张表；给它包一笔事务等于在装配点上宣称它会写。它拿的是与复核编排同一只
+// ReferenceSeriesVersions 适配器——读回门一处，对照版本经整版重验后才进领域比对。
+func buildReferenceSeriesPreviewOrchestration(db *bentopg.DB) (*pricingapp.PreviewReferenceSeriesHandler, error) {
+	versions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: reference series version loader: %w", err)
+	}
+	return pricingapp.NewPreviewReferenceSeriesHandler(pricingapp.PreviewReferenceSeriesDeps{Versions: versions}), nil
+}
+
+var _ pricinghttp.ReferenceSeriesPreviewer = (*pricingapp.PreviewReferenceSeriesHandler)(nil)

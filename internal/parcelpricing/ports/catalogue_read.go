@@ -64,6 +64,21 @@ type PriceCardCatalogueRead interface {
 // 强度,那是登记册汇总好的事实,目录不重算。HasQuoteBasis 为假即无口径声明(燃油
 // 无需口径;汇率必有,库上 CHECK 钉住)。IsCorrection 为真时 PriorVersion 与
 // CorrectionBasis 成对在场(更正两件成对,库上 CHECK 钉住),如实转写不补。
+//
+// 上面那句「逐期取值在快照内,不上列」自票 pricing-reference-series-operations/08 起收窄:
+// 期次与登记时声明的引用 digest 也上列,但**不是从列面来的**——它们只在快照里,读面经
+// 领域重建门(RehydrateReferenceSeriesRegistration,含摘要自校)读回后照实转写,与
+// LoadVersion 同一道门。要它们是因为「更正此版本」要预填该版全部期次,而不给就得让人重敲
+// 一遍,那正好制造更正要防的那类错误。
+//
+// ReferenceDigest 是登记时声明的版本引用 digest(快照 reference.digest),与 ContentDigest
+// (PRS 内容摘要)是两回事:前者是登记责任方铸进引用里的身份成分,后者是登记册按 PRS 形状
+// 算出的内容指纹。更正版本的 PriorVersion 要回指册上的引用,取的是前者。
+//
+// 复核事实照复核册计数:本版复核条数、其中通过条数、最近一次复核的时刻与结论。HasReview
+// 为假时两个计数为零、时刻与结论无意义——无复核是零条不是缺字段。**这里刻意没有「在用」**:
+// 在用是相对评价形成时刻派生的结论(domain.SelectInForceSeriesVersion),目录页没有那个时刻;
+// 它归覆盖读口,那里有正当的时刻源(票 04 的 owner 裁决)。
 type ReferenceSeriesCatalogueRow struct {
 	SeriesID          string
 	SeriesVersion     string
@@ -82,7 +97,28 @@ type ReferenceSeriesCatalogueRow struct {
 	IsCorrection      bool
 	Canonicalization  string
 	ContentDigest     string
+	ReferenceDigest   string
 	RegisteredAt      time.Time
+
+	ReviewCount         int
+	ApprovedReviewCount int
+	LastReviewedAt      time.Time
+	LastReviewDecision  string
+	HasReview           bool
+
+	Periods []ReferenceSeriesPeriodRow
+}
+
+// ReferenceSeriesPeriodRow 是一期取值的转写:区间 [起, 止),HasEndsAt 为假即无上界(只许在
+// 末期,领域构造门钉住);Value 是取值的规范十进制文本;HasEvidence 为假即该期只有断言强度。
+// 用显式布尔而不是零值判断,理由同 PriceCardCatalogueRow 的 HasEffectiveTo。
+type ReferenceSeriesPeriodRow struct {
+	StartsAt    time.Time
+	EndsAt      time.Time
+	HasEndsAt   bool
+	Value       string
+	EvidenceRef string
+	HasEvidence bool
 }
 
 // ReferenceSeriesCatalogueRead 是计价参考序列登记册的伴生列表读端口。

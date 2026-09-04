@@ -101,8 +101,19 @@ func (catalogue *OperationsCatalogue) ListPriceCards(
 	return cards, nil
 }
 
-// ListReferenceSeries 上列参考序列版本的检索列面。逐期取值在快照内,不上列——期次
-// 的消费口是按计价基准时点的 ResolveAt,目录只答「登了哪些版本」。
+// ListReferenceSeries 上列参考序列版本的检索列面,连同两组不在列面上的事实(票
+// pricing-reference-series-operations/08 件①):
+//
+//   - 期次与登记时声明的引用 digest 只在快照里。文件头那句「不读快照」在这里收窄为**不绕过
+//     领域重建门读快照**:每一版经 rehydrateRegisteredSeries(整版重验 + 比对列交叉核)读回
+//     再转写,与 LoadVersion 同一道门;不在 SQL 里展开 JSON。代价是每版一次重建,而目录有
+//     limit 封顶。
+//   - 复核事实从复核册连过来按版本折叠。版本与复核是一对多,limit 因此套在版本上(CTE 先
+//     挑版本再连复核),不然一版多条复核会把一页撑满、把别的版本挤出去。**最近一次复核**取
+//     时刻最大者,同刻按 reviewer 由 ORDER BY 定序取扫到的最后一条——同参数两次查询答同一条。
+//
+// 这里没有「在用」,也不做任何排序裁决:在用是相对评价形成时刻的结论,规则只在
+// domain.SelectInForceSeriesVersion 一处,目录页没有那个时刻(票 04 的 owner 裁决)。
 func (catalogue *OperationsCatalogue) ListReferenceSeries(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -117,14 +128,27 @@ func (catalogue *OperationsCatalogue) ListReferenceSeries(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT series_id, series_version, kind, source_identifier, registrant,
-		        quote_basis_id, quote_basis_version, effective_from, effective_to,
-		        evidence_grade, prior_version, correction_basis,
-		        canonicalization, content_digest, registered_at
-		   FROM parcel_pricing.reference_series_version
-		  WHERE tenant_id = $1
-		  ORDER BY registered_at DESC, series_id, series_version
-		  LIMIT $2`,
+		`WITH picked AS (
+		     SELECT series_id, series_version, kind, source_identifier, registrant,
+		            quote_basis_id, quote_basis_version, effective_from, effective_to,
+		            evidence_grade, prior_version, correction_basis,
+		            canonicalization, content_digest, snapshot, registered_at
+		       FROM parcel_pricing.reference_series_version
+		      WHERE tenant_id = $1
+		      ORDER BY registered_at DESC, series_id, series_version
+		      LIMIT $2
+		 )
+		 SELECT p.series_id, p.series_version, p.kind, p.source_identifier, p.registrant,
+		        p.quote_basis_id, p.quote_basis_version, p.effective_from, p.effective_to,
+		        p.evidence_grade, p.prior_version, p.correction_basis,
+		        p.canonicalization, p.content_digest, p.snapshot, p.registered_at,
+		        r.reviewed_at, r.decision
+		   FROM picked p
+		   LEFT JOIN parcel_pricing.reference_series_review r
+		     ON r.tenant_id = $1
+		    AND r.series_id = p.series_id
+		    AND r.series_version = p.series_version
+		  ORDER BY p.registered_at DESC, p.series_id, p.series_version, r.reviewed_at, r.reviewer`,
 		tenant.String(),
 		limit,
 	)
@@ -134,38 +158,96 @@ func (catalogue *OperationsCatalogue) ListReferenceSeries(
 	defer rows.Close()
 
 	series := make([]ports.ReferenceSeriesCatalogueRow, 0, limit)
+	// 连接后一版会出现多行(每条复核一行),按(标识、版本)折叠;版本列面只在首行转写一次。
+	index := make(map[[2]string]int)
 	for rows.Next() {
 		var row ports.ReferenceSeriesCatalogueRow
 		var quoteBasisID, quoteBasisVersion *string
 		var effectiveTo *time.Time
 		var priorVersion, correctionBasis *string
+		var snapshot []byte
+		var reviewedAt *time.Time
+		var decision *string
 		if err := rows.Scan(
 			&row.SeriesID, &row.SeriesVersion, &row.Kind, &row.SourceIdentifier, &row.Registrant,
 			&quoteBasisID, &quoteBasisVersion, &row.EffectiveFrom, &effectiveTo,
 			&row.EvidenceGrade, &priorVersion, &correctionBasis,
-			&row.Canonicalization, &row.ContentDigest, &row.RegisteredAt,
+			&row.Canonicalization, &row.ContentDigest, &snapshot, &row.RegisteredAt,
+			&reviewedAt, &decision,
 		); err != nil {
 			return nil, fmt.Errorf("list reference series: %w", err)
 		}
-		// 口径两列成对、更正两件成对,库上 CHECK 钉住;这里按在场与否翻译,不补半边。
-		if quoteBasisID != nil && quoteBasisVersion != nil {
-			row.QuoteBasisID = *quoteBasisID
-			row.QuoteBasisVersion = *quoteBasisVersion
-			row.HasQuoteBasis = true
+
+		key := [2]string{row.SeriesID, row.SeriesVersion}
+		position, seen := index[key]
+		if !seen {
+			// 口径两列成对、更正两件成对,库上 CHECK 钉住;这里按在场与否翻译,不补半边。
+			if quoteBasisID != nil && quoteBasisVersion != nil {
+				row.QuoteBasisID = *quoteBasisID
+				row.QuoteBasisVersion = *quoteBasisVersion
+				row.HasQuoteBasis = true
+			}
+			if effectiveTo != nil {
+				row.EffectiveTo = *effectiveTo
+				row.HasEffectiveTo = true
+			}
+			if priorVersion != nil && correctionBasis != nil {
+				row.PriorVersion = *priorVersion
+				row.CorrectionBasis = *correctionBasis
+				row.IsCorrection = true
+			}
+			registration, err := rehydrateRegisteredSeries(snapshot, registeredSeriesColumns{
+				tenant: tenant, seriesID: row.SeriesID, seriesVersion: row.SeriesVersion,
+				kind: row.Kind, grade: row.EvidenceGrade, canonicalization: row.Canonicalization, digest: row.ContentDigest,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("list reference series: %w", err)
+			}
+			row.ReferenceDigest = registration.Reference().Digest()
+			row.Periods = transcribeSeriesPeriods(registration)
+			position = len(series)
+			index[key] = position
+			series = append(series, row)
 		}
-		if effectiveTo != nil {
-			row.EffectiveTo = *effectiveTo
-			row.HasEffectiveTo = true
+		if reviewedAt == nil || decision == nil {
+			continue
 		}
-		if priorVersion != nil && correctionBasis != nil {
-			row.PriorVersion = *priorVersion
-			row.CorrectionBasis = *correctionBasis
-			row.IsCorrection = true
+		listed := &series[position]
+		listed.ReviewCount++
+		if *decision == domain.SeriesReviewApproved.String() {
+			listed.ApprovedReviewCount++
 		}
-		series = append(series, row)
+		if !listed.HasReview || !reviewedAt.Before(listed.LastReviewedAt) {
+			listed.LastReviewedAt = *reviewedAt
+			listed.LastReviewDecision = *decision
+			listed.HasReview = true
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list reference series: %w", err)
 	}
 	return series, nil
+}
+
+// transcribeSeriesPeriods 把重建后的期次表逐期照实转写:无上界与缺凭证各以布尔说出「没有」,
+// 取值取规范十进制文本——它是读面,不折算不舍入。
+func transcribeSeriesPeriods(registration domain.ReferenceSeriesRegistration) []ports.ReferenceSeriesPeriodRow {
+	periods := registration.Periods()
+	transcribed := make([]ports.ReferenceSeriesPeriodRow, 0, len(periods))
+	for _, period := range periods {
+		row := ports.ReferenceSeriesPeriodRow{
+			StartsAt: period.StartsAt(),
+			Value:    period.Value().String(),
+		}
+		if endsAt, bounded := period.EndsAt(); bounded {
+			row.EndsAt = endsAt
+			row.HasEndsAt = true
+		}
+		if evidence, verifiable := period.Evidence(); verifiable {
+			row.EvidenceRef = evidence
+			row.HasEvidence = true
+		}
+		transcribed = append(transcribed, row)
+	}
+	return transcribed
 }

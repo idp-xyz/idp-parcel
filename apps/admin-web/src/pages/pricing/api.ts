@@ -138,6 +138,30 @@ export interface PriceCardListResponseBody {
   cards: PriceCardRecord[];
 }
 
+/**
+ * 一期取值（目录行与预览差异两处同一形状）。`endsAt` 缺席即无上界（只许末期），`evidenceRef`
+ * 缺席即该期只有断言强度——两处都是缺键表达「没有」，不是空串。
+ */
+export interface SeriesPeriodRecord {
+  startsAt: string;
+  endsAt?: string;
+  value: string;
+  evidenceRef?: string;
+}
+
+/**
+ * 目录行。票 pricing-reference-series-operations/08 加的两组：
+ *
+ * - 复核事实：两计数总在场（无复核是 0 条不是缺键），`lastReviewedAt` 与 `lastReviewDecision`
+ *   成对在场或成对缺席。**这里没有「在用」**——在用是相对评价形成时刻派生的结论，目录页没有
+ *   那个时刻，它归覆盖摘要条（票 04 的 owner 裁决）。
+ * - `periods`：该版全部期次，供「更正此版本」预填——不给就得让人重敲一遍，那正好制造更正要
+ *   防的那类错误。
+ *
+ * `referenceDigest` 是登记时声明的**版本引用 digest**，与 `contentDigest`（PRS 内容摘要）是
+ * 两回事：更正版本的回指要带它原样回去（服务端照实回指、不重铸）。页面上**不把它显示为
+ * 「摘要」**，「内容摘要」一词只指 `contentDigest`。
+ */
 export interface ReferenceSeriesRecord {
   seriesId: string;
   seriesVersion: string;
@@ -153,7 +177,140 @@ export interface ReferenceSeriesRecord {
   correctionBasis?: string;
   canonicalization: string;
   contentDigest: string;
+  referenceDigest: string;
   registeredAt: string;
+  reviewCount: number;
+  approvedReviewCount: number;
+  lastReviewedAt?: string;
+  lastReviewDecision?: string;
+  periods: SeriesPeriodRecord[];
+}
+
+// ---- 逐字段登记表单与登记前预览（票 pricing-reference-series-operations/08；ADR-0101 决定一、四）----
+//
+// **这一族的载荷形状是产品定的**（决定一：运营操作者面的载荷由产品定义、属机制半边），镜像
+// `internal/parcelpricing/adapters/http` 的 `ReferenceSeriesRegistrationPayload`，此处只镜像不虚构。
+// 上面登记那一段说的「请求体形状此刻没有契约」对本族不成立；那一段的 JSON 快照口退为受控批量口
+// 的在线镜像（「高级」签），运营配置员的主路径是这里。
+//
+// **载荷里只有内容，没有身份。** 租户与登记责任方由接入渠道的操作者信封（ADR-0100）给，表单不收
+// 也不送；送一个上去服务端按未知键拒。今天渠道未配置，预览与登记都必然答 403——那是诚实答案。
+//
+// **前端不算摘要、不裁证据等级、不铸任何引用令牌**（票 04 红线、MCP-3 裁决四条之四）：三样都由
+// 服务端答，页面只呈现。预览与登记收**同一份**载荷、走同一段解码，预览页上的内容摘要与登记册
+// 记下的逐字节相等（决定四）。
+
+/** 版本引用 digest 槽：更正回指带目录透出的 `referenceDigest`，缺则服务端铸声明令牌。 */
+export interface SeriesCorrectionPayload {
+  priorVersion: string;
+  priorReferenceDigest?: string;
+  basis: string;
+}
+
+/** 口径引用：一版商业价格政策。`digest` 今天不送——PC 读口尚不透出 content_digest，服务端铸令牌。 */
+export interface SeriesQuoteBasisPayload {
+  policyId: string;
+  policyVersion: string;
+  digest?: string;
+}
+
+export interface SeriesPeriodPayload {
+  startsAt: string;
+  endsAt?: string;
+  value: string;
+  evidenceRef?: string;
+}
+
+export interface SeriesRegistrationPayload {
+  seriesId: string;
+  seriesVersion: string;
+  kind: string;
+  sourceIdentifier: string;
+  quoteBasis?: SeriesQuoteBasisPayload;
+  periods: SeriesPeriodPayload[];
+  correction?: SeriesCorrectionPayload;
+  /** 只对预览有意义：指名对照版本。登记忽略它。 */
+  compareWithVersion?: string;
+}
+
+/** 一期的比对结果：两侧按在场与否给键，三个细项布尔总在场（只在 CHANGED 上为真）。 */
+export interface SeriesPeriodChangeRecord {
+  startsAt: string;
+  kind: string;
+  valueChanged: boolean;
+  endChanged: boolean;
+  evidenceChanged: boolean;
+  base?: SeriesPeriodRecord;
+  proposed?: SeriesPeriodRecord;
+}
+
+/**
+ * 预览答复。`outcome` 为 `PREVIEWED` 时其余键在场；`NOT_ACCEPTED` 只有 `outcome`——没有摘要可透，
+ * 服务端不给空串装样子。`comparison` 总在场：没要求比也要说「没要求」，读的人才分得开「没比」
+ * 与「比了没差异」。
+ */
+export interface SeriesPreviewResponseBody {
+  outcome: string;
+  evidenceGrade?: string;
+  canonicalization?: string;
+  contentDigest?: string;
+  comparison?: {
+    outcome: string;
+    baseVersion?: string;
+    changes: SeriesPeriodChangeRecord[];
+  };
+}
+
+export function previewReferenceSeries(
+  payload: SeriesRegistrationPayload,
+): Promise<ApiResult<SeriesPreviewResponseBody>> {
+  return postMasterData<SeriesPreviewResponseBody>('/pricing-reference-series-previews', payload);
+}
+
+/**
+ * 表单路径的登记：与「高级」JSON 口打同一个端点，送的是产品定义的载荷而不是领域折装快照。
+ * 两种形状在同一端点上由 Intake 分辨（快照带 `canonicalization`/`contentDigest` 键，载荷没有）；
+ * 今天两条路都在同一堵墙前答 403。
+ */
+export function registerReferenceSeriesPayload(
+  payload: SeriesRegistrationPayload,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(
+    '/pricing-reference-series-registrations',
+    payload,
+  );
+}
+
+/**
+ * 口径候选：`GET /commercial-policies?kind=PRICE_POLICY` 的价格政策行，**只取本表单要的几格**。
+ * party 页的 `PricePolicyRecord` 止于 `registeredAt`、没有口径节（票 04 那条 MCP-4 取证），
+ * 这里另立一个窄类型而不去改那份——它归 party 页所有；两个类型都只是同一 Go 行体的镜像。
+ *
+ * `caliberDeclared` 可为假（0010 早于 0022，只有正文没口径的行合法）；`caliber.fx` 缺席即该
+ * 政策不涉外币。汇率序列的口径必须选**声明了 fx 口径**的版本，选单把这两类分开就是为了这个。
+ */
+export interface QuoteBasisCandidate {
+  objectId: string;
+  version: string;
+  direction: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  caliberDeclared: boolean;
+  caliber?: {
+    fx?: { quoteType: string; asOfSemantics: string; asOfPolicyVersion: string };
+  };
+}
+
+export interface QuoteBasisCandidateListResponseBody {
+  outcome: string;
+  kind: string;
+  policies: QuoteBasisCandidate[];
+}
+
+export function listQuoteBasisCandidates() {
+  return exchangeMasterData<QuoteBasisCandidateListResponseBody>(
+    '/commercial-policies?kind=PRICE_POLICY',
+  );
 }
 
 export interface ReferenceSeriesListResponseBody {

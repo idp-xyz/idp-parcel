@@ -304,6 +304,113 @@ func TestReferenceSeriesEndpointTranscribesRows(t *testing.T) {
 	}
 }
 
+// Covers: 票 pricing-reference-series-operations/08 件①——行体多出复核事实、引用 digest 与期次:
+// 复核两计数总在场(无复核是 0 不是缺键),最近一次复核两键成对在场或成对缺席;期次逐期
+// 转写,止点与凭证按在场与否给键;**行体上没有任何「在用」键**。
+func TestReferenceSeriesEndpointTranscribesReviewFactsAndPeriods(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &seriesReaderDouble{
+		tenant: query.Scope.Tenant(),
+		rows: []ports.ReferenceSeriesCatalogueRow{
+			{
+				SeriesID:            "SYN-PRC-FUEL-WEEKLY",
+				SeriesVersion:       "v1",
+				Kind:                "FUEL_RATE",
+				SourceIdentifier:    "SYN-CARRIER/fuel-weekly-bulletin",
+				Registrant:          "SYN-PRC-SERIES-REGISTRAR",
+				EffectiveFrom:       pricingBaseAt,
+				EvidenceGrade:       "ASSERTED",
+				Canonicalization:    "PRS-1",
+				ContentDigest:       "digest-fuel",
+				ReferenceDigest:     "sha256:syn-SYN-PRC-FUEL-WEEKLY-v1",
+				RegisteredAt:        pricingBaseAt,
+				ReviewCount:         2,
+				ApprovedReviewCount: 1,
+				LastReviewedAt:      pricingBaseAt.Add(48 * time.Hour),
+				LastReviewDecision:  "APPROVED",
+				HasReview:           true,
+				Periods: []ports.ReferenceSeriesPeriodRow{
+					{StartsAt: pricingBaseAt, EndsAt: pricingBaseAt.Add(7 * 24 * time.Hour), HasEndsAt: true,
+						Value: "0.22", EvidenceRef: "SYN-EVIDENCE/fuel-2026-W32", HasEvidence: true},
+					{StartsAt: pricingBaseAt.Add(7 * 24 * time.Hour), Value: "0.24"},
+				},
+			},
+			{
+				SeriesID:         "SYN-PRC-FUEL-WEEKLY",
+				SeriesVersion:    "v2",
+				Kind:             "FUEL_RATE",
+				SourceIdentifier: "SYN-CARRIER/fuel-weekly-bulletin",
+				Registrant:       "SYN-PRC-SERIES-REGISTRAR",
+				EffectiveFrom:    pricingBaseAt,
+				EvidenceGrade:    "VERIFIABLE",
+				Canonicalization: "PRS-1",
+				ContentDigest:    "digest-fuel-2",
+				ReferenceDigest:  "sha256:syn-SYN-PRC-FUEL-WEEKLY-v2",
+				RegisteredAt:     pricingBaseAt,
+				Periods: []ports.ReferenceSeriesPeriodRow{
+					{StartsAt: pricingBaseAt, Value: "0.23", EvidenceRef: "SYN-EVIDENCE/fuel-2026-W32-reissued", HasEvidence: true},
+				},
+			},
+		},
+	}
+	endpoint := pricinghttp.NewQueryReferenceSeriesEndpoint(intakeDouble{query: query}, reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/pricing-reference-series", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	series := decodeBody(t, recorder)["series"].([]any)
+
+	reviewed := series[0].(map[string]any)
+	if reviewed["referenceDigest"] != "sha256:syn-SYN-PRC-FUEL-WEEKLY-v1" || reviewed["contentDigest"] != "digest-fuel" {
+		t.Fatalf("两种摘要没分开透出:%v", reviewed)
+	}
+	if reviewed["reviewCount"] != float64(2) || reviewed["approvedReviewCount"] != float64(1) {
+		t.Fatalf("复核计数变形:%v", reviewed)
+	}
+	if reviewed["lastReviewedAt"] != pricingBaseAt.Add(48*time.Hour).UTC().Format(time.RFC3339Nano) ||
+		reviewed["lastReviewDecision"] != "APPROVED" {
+		t.Fatalf("最近一次复核变形:%v", reviewed)
+	}
+	for _, forbidden := range []string{"inForce", "inForceVersion", "status"} {
+		if _, has := reviewed[forbidden]; has {
+			t.Fatalf("目录行体长出了 %s 键——在用归覆盖读口,目录页没有时刻源", forbidden)
+		}
+	}
+	periods, ok := reviewed["periods"].([]any)
+	if !ok || len(periods) != 2 {
+		t.Fatalf("periods = %v", reviewed["periods"])
+	}
+	head := periods[0].(map[string]any)
+	if head["startsAt"] != pricingBaseAt.UTC().Format(time.RFC3339Nano) ||
+		head["endsAt"] != pricingBaseAt.Add(7*24*time.Hour).UTC().Format(time.RFC3339Nano) ||
+		head["value"] != "0.22" || head["evidenceRef"] != "SYN-EVIDENCE/fuel-2026-W32" {
+		t.Fatalf("首期变形:%v", head)
+	}
+	tail := periods[1].(map[string]any)
+	if tail["value"] != "0.24" {
+		t.Fatalf("末期变形:%v", tail)
+	}
+	if _, has := tail["endsAt"]; has {
+		t.Fatal("无上界期次长出了 endsAt 键")
+	}
+	if _, has := tail["evidenceRef"]; has {
+		t.Fatal("缺凭证期次长出了 evidenceRef 键")
+	}
+
+	unreviewed := series[1].(map[string]any)
+	if unreviewed["reviewCount"] != float64(0) || unreviewed["approvedReviewCount"] != float64(0) {
+		t.Fatalf("无复核版本的计数应为 0 且在场:%v", unreviewed)
+	}
+	if _, has := unreviewed["lastReviewedAt"]; has {
+		t.Fatal("无复核版本长出了 lastReviewedAt 键")
+	}
+	if _, has := unreviewed["lastReviewDecision"]; has {
+		t.Fatal("无复核版本长出了 lastReviewDecision 键")
+	}
+}
+
 // Covers: ADR-0077 Decision 四——空目录走 2xx 成格、空数组不是 null,也不折成未配置。
 func TestPricingEndpointsAnswerAnEmptyCatalogueWithAnEmptyArray(t *testing.T) {
 	query := catalogueQuery(t)

@@ -497,6 +497,17 @@ func (unwiredReferenceSeriesReview) Handle(
 	return pricingapp.ReviewReferenceSeriesOutcomeInvalid, errOrchestrationNotWired
 }
 
+// unwiredReferenceSeriesPreview 是序列登记前预览的占位（票 pricing-reference-series-operations/08）。
+// 判据同上：不交回零值预览，稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
+type unwiredReferenceSeriesPreview struct{}
+
+func (unwiredReferenceSeriesPreview) Handle(
+	context.Context,
+	pricingapp.PreviewReferenceSeriesCommand,
+) (pricingapp.ReferenceSeriesPreview, error) {
+	return pricingapp.ReferenceSeriesPreview{}, errOrchestrationNotWired
+}
+
 // 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
 // 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
 // 换不来第二道保障。

@@ -45,6 +45,7 @@ var (
 	_ PriceCardRegistrationIntake       = UnconfiguredIntake{}
 	_ ReferenceSeriesRegistrationIntake = UnconfiguredIntake{}
 	_ ReferenceSeriesReviewIntake       = UnconfiguredIntake{}
+	_ ReferenceSeriesPreviewIntake      = UnconfiguredIntake{}
 )
 
 // IntakePriceCardRegistration 不读请求，判据同上。
@@ -65,4 +66,11 @@ func (UnconfiguredIntake) IntakeReferenceSeriesRegistration(context.Context, *ht
 // ReferenceSeriesReviewIntake 的自注。
 func (UnconfiguredIntake) IntakeReferenceSeriesReview(context.Context, *http.Request) (application.ReviewReferenceSeriesCommand, error) {
 	return application.ReviewReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeReferenceSeriesPreview 不读请求，判据同上。预览不写库，但拟登本体要信封里的租户与
+// 登记责任方才立得住，等的与登记口是同一样东西——从载荷里取一个登记责任方来「先预览着」，
+// 登记时换成信封里的那个，摘要就不是同一个了。
+func (UnconfiguredIntake) IntakeReferenceSeriesPreview(context.Context, *http.Request) (application.PreviewReferenceSeriesCommand, error) {
+	return application.PreviewReferenceSeriesCommand{}, ErrAccessChannelNotConfigured
 }

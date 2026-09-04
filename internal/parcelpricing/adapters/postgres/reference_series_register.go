@@ -13,12 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 )
 
-// 证据等级列的两个取值：任何一期缺可复核凭证，整版只有断言强度（CONTEXT：缺凭证的
-// 期次可用于隔离验证，不得支撑生产金额）。
-const (
-	seriesGradeVerifiable = "VERIFIABLE"
-	seriesGradeAsserted   = "ASSERTED"
-)
+// 证据等级列的取值取 domain.SeriesEvidenceGrade 的字面量（VERIFIABLE/ASSERTED），库上
+// CHECK 钉同一组词；本包不再自持一份。
 
 // ReferenceSeriesVersions 实现 ports.ReferenceSeriesRegister（票 08 件①②）。它拥有
 // 序列版本行的登记与按计价基准时点的解析，不生产数值也不选口径——列面只承担键、比对
@@ -53,10 +49,7 @@ func (register *ReferenceSeriesVersions) Register(
 		return ports.ReferenceSeriesRegistrationOutcomeInvalid, fmt.Errorf("register reference series: %w", err)
 	}
 
-	grade := seriesGradeAsserted
-	if registration.Verifiable() {
-		grade = seriesGradeVerifiable
-	}
+	grade := registration.EvidenceGrade().String()
 	var quoteBasisID, quoteBasisVersion *string
 	if basis, declared := registration.QuoteBasis(); declared {
 		id, version := basis.ID(), basis.Version()
@@ -185,27 +178,46 @@ func (register *ReferenceSeriesVersions) LoadVersion(
 		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf("load reference series version: %w", err)
 	}
 
-	registration, err := domain.RehydrateReferenceSeriesRegistration(snapshot)
+	registration, err := rehydrateRegisteredSeries(snapshot, registeredSeriesColumns{
+		tenant: tenant, seriesID: seriesID, seriesVersion: seriesVersion,
+		kind: kind, grade: grade, canonicalization: canonicalization, digest: digest,
+	})
 	if err != nil {
-		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf(
-			"load reference series version: %s/%s：%w", seriesID, seriesVersion, err)
-	}
-	expectedGrade := seriesGradeAsserted
-	if registration.Verifiable() {
-		expectedGrade = seriesGradeVerifiable
-	}
-	if registration.Tenant() != tenant ||
-		registration.Reference().ID() != seriesID ||
-		registration.Reference().Version() != seriesVersion ||
-		registration.Kind().String() != kind ||
-		expectedGrade != grade ||
-		registration.Canonicalization() != canonicalization ||
-		registration.ContentDigest() != digest {
-		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf(
-			"load reference series version: comparison columns disagree with the snapshot for %s/%s",
-			seriesID, seriesVersion)
+		return domain.ReferenceSeriesRegistration{}, false, fmt.Errorf("load reference series version: %w", err)
 	}
 	return registration, true, nil
+}
+
+// registeredSeriesColumns 是一行的比对列——与快照交叉核用的那几列。
+type registeredSeriesColumns struct {
+	tenant           domain.TenantID
+	seriesID         string
+	seriesVersion    string
+	kind             string
+	grade            string
+	canonicalization string
+	digest           string
+}
+
+// rehydrateRegisteredSeries 是本包唯一的序列快照读回门：经领域整版重验（含摘要自校），再与
+// 比对列交叉核——列与快照分岔说明行被改过。LoadVersion 与目录读面的期次转写都从这里过，
+// 目录要期次时不得绕过它直接展开 JSON——那会是第二套读回口径，且没有摘要自校。
+func rehydrateRegisteredSeries(snapshot []byte, columns registeredSeriesColumns) (domain.ReferenceSeriesRegistration, error) {
+	registration, err := domain.RehydrateReferenceSeriesRegistration(snapshot)
+	if err != nil {
+		return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%s/%s：%w", columns.seriesID, columns.seriesVersion, err)
+	}
+	if registration.Tenant() != columns.tenant ||
+		registration.Reference().ID() != columns.seriesID ||
+		registration.Reference().Version() != columns.seriesVersion ||
+		registration.Kind().String() != columns.kind ||
+		registration.EvidenceGrade().String() != columns.grade ||
+		registration.Canonicalization() != columns.canonicalization ||
+		registration.ContentDigest() != columns.digest {
+		return domain.ReferenceSeriesRegistration{}, fmt.Errorf(
+			"comparison columns disagree with the snapshot for %s/%s", columns.seriesID, columns.seriesVersion)
+	}
+	return registration, nil
 }
 
 var _ ports.ReferenceSeriesVersionLoader = (*ReferenceSeriesVersions)(nil)

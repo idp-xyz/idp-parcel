@@ -1,11 +1,14 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pricingapp "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	pricingdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -64,6 +67,115 @@ func TestTheWiredPricingRegistrationsRecordAgainstARealDatabase(t *testing.T) {
 	if seriesReplayed != pricingapp.ReferenceSeriesAlreadyOnRegister {
 		t.Fatalf("序列重放 outcome = %s, 想要 ALREADY_ON_REGISTER", seriesReplayed)
 	}
+}
+
+// Covers: ADR-0101 决定四那句硬句在真库上的钉（票 pricing-reference-series-operations/08）——
+// **同一份运营载荷**经解码器分别走预览编排与登记编排，预览答复的 contentDigest 与登记册随后
+// 上列的 contentDigest 逐字节相同；预览不写库（预览之后目录仍是空的）；更正版本的预览按回指
+// 取回册上那一版并逐期比对。输入是隔离合成，只记 `S`。
+func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	preview, err := buildReferenceSeriesPreviewOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配预览编排：%v", err)
+	}
+	register, err := buildReferenceSeriesRegistrationOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配登记编排：%v", err)
+	}
+	catalogue, err := pppostgres.NewOperationsCatalogue(db)
+	if err != nil {
+		t.Fatalf("构造目录读面：%v", err)
+	}
+	tenant := mustValue(t, pricingdomain.NewTenantID, "SYN-TENANT-1")
+	const registrant = "SYN-PRC-SERIES-REGISTRAR"
+
+	first := decodeSeriesPayload(t, `{
+	  "seriesId": "SYN-PRC-PREVIEW-FUEL", "seriesVersion": "v1", "kind": "FUEL_RATE",
+	  "sourceIdentifier": "SYN-CARRIER/fuel-weekly-bulletin",
+	  "periods": [
+	    {"startsAt": "2026-08-03T00:00:00Z", "endsAt": "2026-08-10T00:00:00Z", "value": "0.22", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W32"},
+	    {"startsAt": "2026-08-10T00:00:00Z", "value": "0.24", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W33"}
+	  ]
+	}`)
+	previewCommand, err := first.PreviewCommand(tenant, registrant)
+	if err != nil {
+		t.Fatalf("预览命令：%v", err)
+	}
+	previewed, err := preview.Handle(t.Context(), previewCommand)
+	if err != nil {
+		t.Fatalf("预览：%v", err)
+	}
+	if previewed.Outcome != pricingapp.ReferenceSeriesPreviewed || previewed.EvidenceGrade != pricingdomain.SeriesEvidenceVerifiable {
+		t.Fatalf("预览 outcome/等级 = %s/%s", previewed.Outcome, previewed.EvidenceGrade)
+	}
+	if rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
+		t.Fatalf("预览之后目录应仍为空：rows=%d err=%v", len(rows), err)
+	}
+
+	registerCommand, err := first.RegistrationCommand(tenant, registrant)
+	if err != nil {
+		t.Fatalf("登记命令：%v", err)
+	}
+	if outcome, err := register.Handle(t.Context(), registerCommand); err != nil || outcome != pricingapp.ReferenceSeriesRecorded {
+		t.Fatalf("登记 outcome = %s err = %v", outcome, err)
+	}
+	rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("登记后上列：rows=%d err=%v", len(rows), err)
+	}
+	if rows[0].ContentDigest != previewed.ContentDigest || rows[0].Canonicalization != previewed.Canonicalization {
+		t.Fatalf("预览摘要 %q 与登记册摘要 %q 不同——决定四那句硬句破了", previewed.ContentDigest, rows[0].ContentDigest)
+	}
+	if rows[0].EvidenceGrade != previewed.EvidenceGrade.String() {
+		t.Fatalf("预览等级 %s 与登记册等级 %s 不同", previewed.EvidenceGrade, rows[0].EvidenceGrade)
+	}
+	if rows[0].ReferenceDigest != registerCommand.Registration.Reference().Digest() ||
+		rows[0].ReferenceDigest != "declared:reference-series/SYN-PRC-PREVIEW-FUEL@v1" {
+		t.Fatalf("册上的引用 digest = %q，想要解码器铸的声明令牌", rows[0].ReferenceDigest)
+	}
+
+	// 更正版本：回指 v1 并带上册上透出的引用 digest，预览要取回 v1 逐期比对。
+	correction := decodeSeriesPayload(t, `{
+	  "seriesId": "SYN-PRC-PREVIEW-FUEL", "seriesVersion": "v2", "kind": "FUEL_RATE",
+	  "sourceIdentifier": "SYN-CARRIER/fuel-weekly-bulletin",
+	  "periods": [
+	    {"startsAt": "2026-08-03T00:00:00Z", "endsAt": "2026-08-10T00:00:00Z", "value": "0.23", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W32"},
+	    {"startsAt": "2026-08-10T00:00:00Z", "value": "0.24", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W33"}
+	  ],
+	  "correction": {"priorVersion": "v1", "priorReferenceDigest": "`+rows[0].ReferenceDigest+`", "basis": "SYN-CORRECTION/fuel-w32-transcription"}
+	}`)
+	correctionPreview, err := correction.PreviewCommand(tenant, registrant)
+	if err != nil {
+		t.Fatalf("更正预览命令：%v", err)
+	}
+	compared, err := preview.Handle(t.Context(), correctionPreview)
+	if err != nil {
+		t.Fatalf("更正预览：%v", err)
+	}
+	if compared.Comparison != pricingapp.SeriesComparisonCompared || compared.BaseVersion != "v1" {
+		t.Fatalf("更正预览对照 = %s/%q", compared.Comparison, compared.BaseVersion)
+	}
+	if len(compared.Changes) != 2 || compared.Changes[0].Kind() != pricingdomain.SeriesPeriodChanged ||
+		!compared.Changes[0].ValueChanged() || compared.Changes[1].Kind() != pricingdomain.SeriesPeriodUnchanged {
+		t.Fatalf("更正预览逐期差异变形：%+v", compared.Changes)
+	}
+	if rows, err := catalogue.ListReferenceSeries(t.Context(), tenant, 10); err != nil || len(rows) != 1 {
+		t.Fatalf("更正预览不该写库：rows=%d err=%v", len(rows), err)
+	}
+}
+
+func decodeSeriesPayload(t *testing.T, raw string) pricinghttp.ReferenceSeriesRegistrationPayload {
+	t.Helper()
+	payload, err := pricinghttp.DecodeReferenceSeriesRegistrationPayload(strings.NewReader(raw))
+	if err != nil {
+		t.Fatalf("解码载荷：%v", err)
+	}
+	return payload
 }
 
 func syntheticPricingReference(t *testing.T, artifact pricingdomain.ArtifactKind, id, version string) pricingdomain.VersionReference {
