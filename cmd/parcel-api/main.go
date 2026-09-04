@@ -206,6 +206,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 被挂起评价联动读口（ADR-0105 Decision 五）：只读问题项子表 evaluation_issue，不扫评价快照。
+	pendingSeriesEvaluations, err := pppostgres.NewPendingSeriesEvaluations(db)
+	if err != nil {
+		return err
+	}
 	// 评价册与路由判断两册是业务事实册的查阅面（票 admin-skeleton-closure-batch/03）：
 	// 与目录读面同上下文同库，但行形状归各自用例，适配器各自成形。
 	pricingEvaluations, err := pppostgres.NewEvaluationCatalogue(db)
@@ -378,6 +383,7 @@ func run(logger *slog.Logger) error {
 			pricingCatalog,
 			pricingCatalog,
 			referenceSeriesCoverage,
+			pendingSeriesEvaluations,
 			pricingEvaluations,
 			priceCardRegistration,
 			referenceSeriesRegistration,

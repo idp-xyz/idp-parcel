@@ -530,6 +530,17 @@ func (unwiredReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredPendingSeriesEvaluations 是被挂起评价联动读口的占位（ADR-0105 Decision 五）。独立成型的理由同上：
+// 生产装配点上它只读问题项子表，与覆盖地平线读的是不同的表。
+type unwiredPendingSeriesEvaluations struct{}
+
+func (unwiredPendingSeriesEvaluations) CountPendingSeriesEvaluations(
+	context.Context,
+	pricingdomain.TenantID,
+) ([]pricingports.PendingSeriesEvaluationCount, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredPricingEvaluations 是评价册列表读口的占位，方法表与
 // pricingports.EvaluationCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/03）。
 // 不并进 unwiredPricingCatalogue：生产装配点上评价册是独立适配器，并成一个会让装配
