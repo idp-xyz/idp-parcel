@@ -387,6 +387,141 @@ func TestRecognisingAnIdentityRefusesEvidenceItCannotFindOrThatIsAlreadyRecognis
 	}
 }
 
+// Covers: CONTEXT 生命周期「依据的来源事实被更正、失效或替代 → 保留原版本，按更正关系重新派生当前版本」；
+// ADR-0103 决定七「重新派生保留原版本，不倒填」。
+func TestWithdrawingEvidenceRederivesTheCurrentVersionAndKeepsHistory(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	carrierY := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-y")
+	conflicting, err := mustOpenJudgment(t).Consider(
+		registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider X: %v", err)
+	}
+	conflicting, err = conflicting.Consider(
+		registeredEvidence(t, domain.TrustedChannelCallback, "CALLBACK-B", judgmentEvidenceAt.Add(time.Hour), carrierY),
+		judgmentEvidenceAt.Add(time.Hour+time.Minute))
+	if err != nil {
+		t.Fatalf("consider Y: %v", err)
+	}
+
+	// 回传 B 被轨迹源更正为失效：剔除它重新派生，剩下的 A 让判断回到已识别 X。
+	rederivedAt := judgmentEvidenceAt.Add(3 * time.Hour)
+	rederived, err := conflicting.WithdrawEvidence(mustRef(t, domain.NewCarrierEvidenceReference, "CALLBACK-B"), rederivedAt)
+	if err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if len(rederived.Versions()) != 4 {
+		t.Fatalf("重新派生是追加一版，实得 %d 版", len(rederived.Versions()))
+	}
+	current := rederived.Current()
+	subject, identified := current.Verdict().Identified()
+	if !identified || subject != carrierX {
+		t.Fatalf("剔除 B 后应回到已识别 X，实得 identified=%v subject=%+v", identified, subject)
+	}
+	if got := current.Bases(); len(got) != 1 || got[0].Reference().String() != "SCAN-A" {
+		t.Fatalf("重新派生后的依据应只剩 A：%+v", got)
+	}
+	// 业务时间取剩余依据里最晚的来源事实时间；形成时间是重新派生这一刻。
+	if !current.BusinessTime().Equal(judgmentEvidenceAt) || !current.FormedAt().Equal(rederivedAt) {
+		t.Fatalf("业务时间 %s / 形成时间 %s，want %s / %s", current.BusinessTime(), current.FormedAt(), judgmentEvidenceAt, rederivedAt)
+	}
+	// 冲突那一版原样保留——不倒填。
+	if reason, pending := rederived.Versions()[2].Verdict().Pending(); !pending || reason != domain.CarrierEvidenceSourceConflict {
+		t.Fatal("冲突版本被改写了")
+	}
+
+	// 再撤回最后一条：没有依据了，回到待确认（无合格证据），业务时间回到段成立时刻。
+	emptied, err := rederived.WithdrawEvidence(mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-A"), rederivedAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("withdraw last: %v", err)
+	}
+	if reason, pending := emptied.Current().Verdict().Pending(); !pending || reason != domain.NoQualifiedCarrierEvidence {
+		t.Fatalf("依据全部撤回应为待确认（无合格证据），实得 pending=%v reason=%s", pending, reason)
+	}
+	if !emptied.Current().BusinessTime().Equal(judgmentSegmentEstablishedAt) || len(emptied.Current().Bases()) != 0 {
+		t.Fatalf("无依据的版本业务时间应回到段成立时刻：%s，依据 %d 条", emptied.Current().BusinessTime(), len(emptied.Current().Bases()))
+	}
+
+	if _, err := emptied.WithdrawEvidence(mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-A"), rederivedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrCarrierEvidenceNotConsidered) {
+		t.Fatalf("撤回不在场的依据：error = %v, want ErrCarrierEvidenceNotConsidered", err)
+	}
+	if _, err := rederived.WithdrawEvidence(mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-A"), time.Time{}); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("缺形成时间：error = %v, want ErrInvalidActualCarrierJudgment", err)
+	}
+}
+
+// 三个封闭集合各自的 String 与 Parse 往返，集外词一律拒——库面靠这几个词，不靠数字。
+func TestCarrierJudgmentClosedSetsRoundTripThroughTheirNames(t *testing.T) {
+	for _, source := range []domain.CarrierEvidenceSource{
+		domain.CarrierDirectPickupScan, domain.CarrierReceiptVoucher, domain.HandedOverToCarrier, domain.TrustedChannelCallback,
+	} {
+		parsed, err := domain.ParseCarrierEvidenceSource(source.String())
+		if err != nil || parsed != source {
+			t.Fatalf("来源 %s 往返失败：%v %s", source, err, parsed)
+		}
+	}
+	if _, err := domain.ParseCarrierEvidenceSource("BOOKING_ACCEPTED"); !errors.Is(err, domain.ErrInvalidCarrierEvidence) {
+		t.Fatalf("订舱接受不是来源：error = %v", err)
+	}
+	for _, kind := range []domain.CarrierSubjectKind{domain.ExternalCarrierParty, domain.OwnOperatingLegalEntity} {
+		parsed, err := domain.ParseCarrierSubjectKind(kind.String())
+		if err != nil || parsed != kind {
+			t.Fatalf("分支 %s 往返失败：%v %s", kind, err, parsed)
+		}
+	}
+	if _, err := domain.ParseCarrierSubjectKind("BRAND"); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("品牌不是承运主体分支：error = %v", err)
+	}
+	for _, reason := range []domain.PendingCarrierReason{
+		domain.NoQualifiedCarrierEvidence, domain.CarrierEvidenceSourceConflict, domain.CarrierIdentityNotRegistered,
+	} {
+		parsed, err := domain.ParsePendingCarrierReason(reason.String())
+		if err != nil || parsed != reason {
+			t.Fatalf("原因 %s 往返失败：%v %s", reason, err, parsed)
+		}
+	}
+	if _, err := domain.ParsePendingCarrierReason("UNKNOWN"); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("集外原因：error = %v", err)
+	}
+	if domain.CarrierEvidenceSourceInvalid.String() != "" || domain.CarrierSubjectKindInvalid.String() != "" || domain.PendingCarrierReasonNone.String() != "" {
+		t.Fatal("零值哨兵不该有名字")
+	}
+}
+
+// 依据的构造门：来源必在四格内、引用与业务时间必备、在册身份与名称素材恰居其一。
+func TestCarrierEvidenceRequiresASourceAReferenceATimeAndExactlyOneSubjectClaim(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	base := domain.CarrierEvidenceSpec{
+		Source:     domain.CarrierDirectPickupScan,
+		Reference:  mustRef(t, domain.NewCarrierEvidenceReference, "SCAN-1"),
+		OccurredAt: judgmentEvidenceAt,
+		Subject:    carrierX,
+	}
+	cases := map[string]func(*domain.CarrierEvidenceSpec){
+		"来源不在四格内": func(spec *domain.CarrierEvidenceSpec) { spec.Source = domain.CarrierEvidenceSourceInvalid },
+		"缺引用":     func(spec *domain.CarrierEvidenceSpec) { spec.Reference = domain.CarrierEvidenceReference{} },
+		"缺业务时间":   func(spec *domain.CarrierEvidenceSpec) { spec.OccurredAt = time.Time{} },
+		"身份与素材都缺": func(spec *domain.CarrierEvidenceSpec) { spec.Subject = domain.CarrierSubject{} },
+		"身份与素材都给": func(spec *domain.CarrierEvidenceSpec) { spec.Material = "Carrier X" },
+	}
+	for name, breakOne := range cases {
+		t.Run(name, func(t *testing.T) {
+			spec := base
+			breakOne(&spec)
+			if _, err := domain.NewCarrierEvidence(spec); !errors.Is(err, domain.ErrInvalidCarrierEvidence) {
+				t.Fatalf("error = %v, want ErrInvalidCarrierEvidence", err)
+			}
+		})
+	}
+	if _, err := domain.NewCarrierSubject(domain.CarrierSubjectKindInvalid, "party/x"); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("分支无效：error = %v", err)
+	}
+	if _, err := domain.NewCarrierSubject(domain.ExternalCarrierParty, "  "); !errors.Is(err, domain.ErrInvalidActualCarrierJudgment) {
+		t.Fatalf("引用空白：error = %v", err)
+	}
+}
+
 func TestConsideringRequiresAValidEvidenceAndAFormationTime(t *testing.T) {
 	judgment := mustOpenJudgment(t)
 	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")

@@ -383,6 +383,34 @@ func (judgment ActualCarrierJudgment) RecogniseCarrierIdentity(
 	return judgment.appendVersion(bases, recognised.occurredAt, formedAt), nil
 }
 
+// WithdrawEvidence 在某条依据的来源事实被更正、失效或替代时，把它从在场依据里剔除并重新派生当前
+// 版本（CONTEXT 生命周期「依据的来源事实被更正、失效或替代 → 保留原版本，按更正关系重新派生」）。
+//
+// 重新派生是追加一版，不是改写：被撤回的依据仍留在此前各版里，冲突或已识别的那些版本一字不动
+// （ADR-0103 决定七「不倒填」）。业务时间取剩余依据里最晚的来源事实时间——没有依据了就回到段成立
+// 时刻，那是「无合格证据」这一版本本来的起点。
+func (judgment ActualCarrierJudgment) WithdrawEvidence(
+	reference CarrierEvidenceReference,
+	formedAt time.Time,
+) (ActualCarrierJudgment, error) {
+	if !reference.valid() || formedAt.IsZero() || !judgment.established() {
+		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
+	}
+	bases := judgment.Current().Bases()
+	index, present := indexOfBasis(bases, reference)
+	if !present {
+		return ActualCarrierJudgment{}, ErrCarrierEvidenceNotConsidered
+	}
+	remaining := append(bases[:index:index], bases[index+1:]...)
+	businessTime := judgment.establishedAt
+	for _, basis := range remaining {
+		if basis.occurredAt.After(businessTime) {
+			businessTime = basis.occurredAt
+		}
+	}
+	return judgment.appendVersion(remaining, businessTime, formedAt), nil
+}
+
 func indexOfBasis(bases []CarrierEvidence, reference CarrierEvidenceReference) (int, bool) {
 	for index, basis := range bases {
 		if basis.reference == reference {
