@@ -200,6 +200,11 @@ type BuyEvaluationAdoption struct {
 	SettlementCurrency domain.CurrencyCode
 	SettlementMinor    int64
 	Conversion         domain.ConversionStepReference
+	// SubjectKind 与 MemberPackages 是票级 / 主单级评价（ADR-0111 Decision 三）交过来的那两件：金额向包裹的归因
+	// 归本上下文既有的「成本分摊结果 / 未分摊余额」机制、按版本化分摊规则做，分摊规则是实例参数——这里只把
+	// 评价主体的种类与成员清单如实带过来，不摊。逐包裹评价的 MemberPackages 为空。
+	SubjectKind    string
+	MemberPackages []string
 }
 
 // BuyEvaluationView 是 BUY `PricingEvaluation` → SA 的入向缝在本上下文这一侧的形状：按评价
@@ -208,11 +213,10 @@ type BuyEvaluationAdoption struct {
 // 缝的形状（mechanism-executor-triage/06 SA-c 裁定）：触发用提供方已发的
 // `parcel-pricing.evaluation.recorded`（指针载荷），内容按引用查回；适配器落在消费侧
 // internal/settlementaccounting/adapters/parcelpricing/（ADR-0025），读提供方的评价库翻译——
-// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。**适配器仍留空，但等的那一格已到**：
-// 提供方的金额取整槽随 ADR-0107 落地——声明了策略的卡，合计已按卡上进位单位取整，进位单位的 scale
-// 就是最小币单位的依据（评价的取整留痕里带着它）；没声明的卡评价带 AMOUNT_PRECISION_UNDECLARED，
-// 适配器读到它只能拒或原样保全十进制交下游，**不得自己补一次取整**（label-channel/13 已裁没有币种
-// 小数位表）。适配器怎么写归票 pricing-amount-precision/02 的消费侧那一项。
+// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。金额的精度依据是提供方的取整留痕
+// （ADR-0107）：声明了策略的卡，合计已按卡上进位单位取整，进位单位的 scale 就是最小币单位的依据；
+// 没声明的卡评价带 AMOUNT_PRECISION_UNDECLARED，适配器拒——**不得自己补一次取整**（label-channel/13
+// 已裁没有币种小数位表）。
 type BuyEvaluationView interface {
 	LoadBuyEvaluation(
 		ctx context.Context,
