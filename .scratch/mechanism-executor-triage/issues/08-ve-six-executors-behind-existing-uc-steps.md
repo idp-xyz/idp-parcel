@@ -1,7 +1,7 @@
 # VE 六条：步骤在 UC 里、执行器不在编排里——接线
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，基线 `3fff246`）
+Status: resolved——四组四笔 `10adcb3` / `3ca94fc` / `7058d92` / `a18cdf7` + VE-c 补刀 `4de7aba`（2026-09-04，MCP-6；清点重生成 `5894320` 与 `4de7aba` 同笔；见文末「完成记录」）
 Blocked by: 无（组内 `PrepareDisclosure` 依赖同票的 `SubmitEvidence` 先接）
 
 由[票 03](./03-fourteen-that-only-tests-ever-call.md) `## Answer` 立出，按 [spec「处置裁决」](../spec.md) 第 1 条。举证在票 03，此处只列改动对象与完成判据。
@@ -32,3 +32,26 @@ Blocked by: 无（组内 `PrepareDisclosure` 依赖同票的 `SubmitEvidence` �
 ## 地盘
 
 `internal/visibilityexception/{application,ports,adapters/postgres}`；新迁移走 `migrations/visibility_exception/` 新号并按「同笔提交」纪律带 `migrations.go`（先占号）。`cmd/parcel-api` 端点表若加行另报。
+
+## 完成记录（2026-09-04，MCP-6）
+
+四组四笔，各自在 detached worktree 检出父提交 + 本笔文件上验过（gofmt -l 空、`go build ./...` 与 `go vet ./...` 退 0、`internal/architecture` 与 VE 全包 `go test -count=1` ok、DSN 已设真库用例 `-v` 下 PASS），提交前 `git diff HEAD -- internal/architecture/` 只有本笔 hunk：
+
+| 组 | 提交 | 接上的领域函数 | 生产调用方 | 迁移 |
+|---|---|---|---|---|
+| VE-b | `10adcb3` | `EstablishCase` | `application/raise_signal.go` 的 `establishCaseFor`（分诊走向为自动建案时，案件随发作期与结论同一记录落库） | `0022` 分诊条目加 `responsible_team`（自动建案必带、其余必不带） |
+| VE-a | `3ca94fc` | `DecideDisclosure` | 新用例 `application/decide_disclosure.go`；`notify_customer.go` 改为引用决定登记册里的产物 | `0023` 异常披露规则目录（版本+条目）与披露决定登记册 |
+| VE-c | `7058d92` | `SubmitEvidence`、`PrepareDisclosure` | 新编排 `application/manage_evidence.go`（票 03 允许「或新文件」；与索赔编排分立是因为两边依赖无一重合） | `0024` 证据项与证据披露版本 |
+| VE-d | `a18cdf7` | `ResolveByBusinessTime`、`RaiseConflictSignal` | `application/derive_projection.go` 的 `judgeForks` / `raiseConflict`，信号直调 `RaiseSignalHandler` 进 `UC-VE-004`；`derive_projection_test` 那句「另一张票」已改 | `0025` 冲突信号规则（一租户一条） |
+
+随后 `5894320` 在 `a18cdf7` 干净检出上重生成机制清点；`4de7aba`（VE-c 补刀）把证据披露版本的行身份补上披露范围（迁移 `0026`；一个版本是「范围 + 脱敏版本」这一对，同一脱敏内容对另一相对方是另一个版本，7058d92 会把它静默读成已有），并同笔重生成清点。在 `a18cdf7` 干净检出上的终验：`go test -count=1 -v ./internal/visibilityexception/... ./internal/architecture/ ./cmd/... ./migrations/ ./internal/platform/migrate/` 全 ok，`--- PASS` 1281 / `--- SKIP` 0 / `--- FAIL` 0（DSN 已设）。
+
+棘轮基线：函数名基线 VE 六条全部剪掉（各笔在自己父提交的干净内容上两法同得：23→22、16→15、15→13、13→11），类型基线 VE 十三型全部剪掉（60→56、34→28、28→25）；VE 组/段清空，注文留着提醒下一个加条目的人。
+
+**与票面的偏差与留待（不在本票范围，各自另立）**：
+
+- 三个新登记面（异常披露规则 `ExceptionDisclosureRuleRegistry`、冲突信号规则 `ConflictSignalRuleRegistry`、分诊条目的团队维已随既有 `RegisterTriageRules` 走 CLI/JSON）中，前两个只立了写入口（postgres，真库测试）与读口，**CLI（`parcel-ve-register`）与在线登记口未接**——单立端口是为了不拆 `CatalogRegistry` 的三处替身与受控 CLI 桩。要接线时形状照 `RegisterNotificationPolicy` 那一族。
+- `DecideDisclosureHandler` / `NotifyCustomerHandler` / `ManageEvidenceHandler` 仍无 `cmd/` 装配（与票 03 取证时 `RaiseSignalHandler` 同一状态：有应用层调用方，尚未生产可达）。`cmd/parcel-dispatch/assemble.go` 已随 VE-d 给投影派生接上 `RaiseSignalHandler`（MCP-1 放行），所以信号 → 分诊 → 自动建案这一条在派发进程里今天是真路径。
+- 待授权 → 披露的授权入口（形成新一版决定）、证据评价（`Appraise`）的编排入口、异常信号发作期上登记保留事实引用的登记格，三件都在票面之外。
+- 影响范围与预计客户影响两维今天没有可查的登记维，异常披露规则条目键只到（客户 + 类型 + 可信度）；等它们有形状再扩键。
+- `cmd/parcel-api` 端点表本票未加行。
