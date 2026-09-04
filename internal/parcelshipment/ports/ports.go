@@ -1385,10 +1385,14 @@ type LabelTransactionParcelRow struct {
 	// 因此也出现在这里。它与 Accepted 并列而不改写它：渠道作废与「当初有没有被受理」是两件事。
 	FollowUpKinds []domain.FollowUpActionKind
 	// ContinuedAttemptOpen 是**包裹级**继续尝试判断，按 CONTEXT「只由有效的关闭、重开决定
-	// 及当前有效终局结果派生」算出，不是存下来的状态。决定登记册尚未落地（ADR-0084 决定六
-	// 另票），因此它此刻派生自一段**真实为空**的决定历史——这不是默认值，读面要在页头把这条
-	// 依据讲明白，免得读成「已核对过关闭册」。
+	// 及当前有效终局结果派生」由登记册聚合的 Judge 现算，不是存下来的状态。读面把它与
+	// ContinuedAttemptDecided 并列交出：「开放」既可能是有人作过决定后重开，也可能是根本没有人
+	// 作过决定——两者在这一个布尔上长得一样，读的人要分得开。
 	ContinuedAttemptOpen bool
+	// ContinuedAttemptDecided 说这件包裹的继续尝试决定登记册里**有没有任何决定**（CONTEXT
+	// 「没有人作过决定」那一句的载体）。为假时 ContinuedAttemptOpen 的开放只来自「无生效关闭且无
+	// 当前有效终局」，不来自任何人的判断。
+	ContinuedAttemptDecided bool
 }
 
 // LabelTransactionRecord 是面单交易查阅的一笔。

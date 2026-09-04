@@ -4,7 +4,7 @@ import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../doma
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
-  CONTINUED_ATTEMPT_BASIS_EMPTY_HISTORY,
+  CONTINUED_ATTEMPT_BASIS_REGISTER_AND_CURRENT_FINAL,
   listLabelTransactions,
   type ApiResult,
   type LabelTransactionRow,
@@ -80,6 +80,26 @@ function parcelResultText(row: LabelTransactionRow): string {
   return `${base}（${row.followUpKinds.map((kind) => wordOr(followUpWords, kind)).join('、')}）`;
 }
 
+/**
+ * 「继续尝试判断」一格的呈现。判断值只有两格（CONTEXT 原词），但「开放」有两种来源——
+ * CONTEXT 生命周期那句「尚无生效的受控关闭**或**最近适用决定为重开」的两半——现场处置相反：
+ * 前者没有任何关闭册可查，后者要去看那份重开依据的什么。不给判断加第三格（那是新造领域
+ * 语言），来源用第二行小字交代。受控关闭不再细分：它可能来自生效关闭，也可能只是当前有效
+ * 终局在场，两者都不允许边界后的新尝试。
+ */
+function continuedAttemptCell(row: LabelTransactionRow) {
+  const judgment = toneWordOrText(row.continuedAttemptOpen ? '开放' : '受控关闭');
+  if (!row.continuedAttemptOpen) return judgment;
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      {judgment}
+      <span className="text-[11px] text-idpxyz-muted">
+        {row.continuedAttemptDecided ? '最近适用决定为重开' : '没有人作过决定'}
+      </span>
+    </div>
+  );
+}
+
 const columns: ListColumn<LabelTransactionRow>[] = [
   {
     id: 'transaction-id',
@@ -122,8 +142,8 @@ const columns: ListColumn<LabelTransactionRow>[] = [
     id: 'continue-attempt',
     header: '继续尝试判断',
     align: 'center',
-    className: 'w-[112px]',
-    render: (row) => toneWordOrText(row.continuedAttemptOpen ? '开放' : '受控关闭'),
+    className: 'w-[132px]',
+    render: (row) => continuedAttemptCell(row),
   },
   {
     id: 'business-time',
@@ -158,11 +178,12 @@ export function LabelTransactionsPage() {
     : rows;
   const retry = () => setReloadToken((token) => token + 1);
 
-  // 页头必须转述服务端给的派生依据：整列「开放」派生自一段真实为空的决定历史（继续尝试
-  // 决定登记册另票落地），不说明就会被读成「已核对过关闭册」。
+  // 页头必须转述服务端给的派生依据：这一列是按 CONTEXT 规则由每件包裹的继续尝试决定登记册
+  // 与当前有效终局现算出来的，不是存下来的状态，也不是有人逐件核对的结果。认不得的依据代码
+  // 不转述——猜一句比不说更坏。
   const continuedAttemptNote =
-    body?.continuedAttemptBasis === CONTINUED_ATTEMPT_BASIS_EMPTY_HISTORY
-      ? '「继续尝试判断」按规则派生自当前决定历史，而继续尝试决定登记册尚未落地——此刻这段历史真实为空，因此整列派生为「开放」，不代表已核对过关闭册。'
+    body?.continuedAttemptBasis === CONTINUED_ATTEMPT_BASIS_REGISTER_AND_CURRENT_FINAL
+      ? '「继续尝试判断」由每件包裹的继续尝试决定登记册（受控关闭 / 重开决定）与当前有效终局按规则现算：无生效关闭且无当前有效终局即「开放」，否则「受控关闭」；「开放」下另注它来自「没有人作过决定」还是「最近适用决定为重开」。'
       : '';
 
   return (

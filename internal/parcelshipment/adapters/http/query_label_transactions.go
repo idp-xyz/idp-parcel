@@ -57,12 +57,14 @@ var _ LabelTransactionsReader = ports.LabelTransactionViews(nil)
 // 它答的是 403 + ACCESS_CHANNEL_NOT_CONFIGURED。
 const outcomeLabelTransactionsListed = "LABEL_TRANSACTIONS_LISTED"
 
-// continuedAttemptBasisEmptyDecisionHistory 是「继续尝试判断」这一列的派生依据代码。
+// continuedAttemptBasisRegisterAndCurrentFinal 是「继续尝试判断」这一列的派生依据代码。
 //
-// 它随每次答复交出，为的是让页头能如实说明这一列是**派生**的，而且派生自一段真实为空的
-// 决定历史——继续尝试决定登记册尚未落地（ADR-0084 决定六另票）。不写这一条，读的人会把
-// 整列「开放」当成「已核对过关闭册」。登记册落地后这个代码随之更换，页头文案跟着变。
-const continuedAttemptBasisEmptyDecisionHistory = "DERIVED_FROM_EMPTY_DECISION_HISTORY"
+// 它随每次答复交出，为的是让页头能如实说明这一列是**派生**的：按 CONTEXT「只由有效的关闭、
+// 重开决定及当前有效终局结果派生」，由该包裹的`面单继续尝试决定`登记册与当前有效终局现算，
+// 不是存下来的状态。同一格「开放」有两种来源——没有人作过决定、关过又重开——判断值本身
+// 分不开（CONTEXT 只有两格，加第三格就是新造领域语言），区别由每行的 continuedAttemptDecided
+// 另外交代。
+const continuedAttemptBasisRegisterAndCurrentFinal = "DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL"
 
 // NewQueryLabelTransactionsEndpoint 交回面单交易查阅的 HTTP 入口（GET /label-transactions）。
 // 行粒度是交易 × 包裹：一笔交易覆盖几件包裹就摊几行，摊开在读侧完成（决定七）。
@@ -95,7 +97,7 @@ func NewQueryLabelTransactionsEndpoint(
 		}
 		writeJSON(response, http.StatusOK, labelTransactionsListResponse{
 			Outcome:               outcomeLabelTransactionsListed,
-			ContinuedAttemptBasis: continuedAttemptBasisEmptyDecisionHistory,
+			ContinuedAttemptBasis: continuedAttemptBasisRegisterAndCurrentFinal,
 			Rows:                  rows,
 		})
 	})
@@ -131,35 +133,39 @@ type labelTransactionRowBody struct {
 	// 空数组而不是 null：调用方判「这件包裹有没有后续动作」不该先判「有没有这个字段」。
 	FollowUpKinds        []string `json:"followUpKinds"`
 	ContinuedAttemptOpen bool     `json:"continuedAttemptOpen"`
-	EstablishedAt        string   `json:"establishedAt"`
-	SubmittedAt          string   `json:"submittedAt,omitempty"`
-	ResultObservedAt     string   `json:"resultObservedAt,omitempty"`
-	PriorTransactionID   string   `json:"priorTransactionId,omitempty"`
-	PriorLinkKind        string   `json:"priorLinkKind,omitempty"`
+	// continuedAttemptDecided 与 continuedAttemptOpen 并列而不折进去：为假时的「开放」只来自
+	// 「无生效关闭且无当前有效终局」，不来自任何人的判断——页面据此说得出「没有人作过决定」。
+	ContinuedAttemptDecided bool   `json:"continuedAttemptDecided"`
+	EstablishedAt           string `json:"establishedAt"`
+	SubmittedAt             string `json:"submittedAt,omitempty"`
+	ResultObservedAt        string `json:"resultObservedAt,omitempty"`
+	PriorTransactionID      string `json:"priorTransactionId,omitempty"`
+	PriorLinkKind           string `json:"priorLinkKind,omitempty"`
 }
 
 func labelTransactionRowsOf(record ports.LabelTransactionRecord) []labelTransactionRowBody {
 	rows := make([]labelTransactionRowBody, 0, len(record.Parcels))
 	for _, parcel := range record.Parcels {
 		row := labelTransactionRowBody{
-			TransactionID:          record.TransactionID.String(),
-			ParcelID:               parcel.Parcel.String(),
-			ChannelAccount:         record.ChannelAccount,
-			AccountHolder:          record.AccountHolder,
-			ChannelServicer:        record.ServiceProvider,
-			SettlementCounterparty: record.SettlementCounterparty,
-			Contract:               record.Contract,
-			Rate:                   record.Rate,
-			ResponsibilityBasis:    record.ResponsibilityBasis,
-			TransactionResult:      record.State.String(),
-			Finalized:              record.Finalized,
-			HasParcelResult:        parcel.HasResult,
-			ParcelAccepted:         parcel.Accepted,
-			ParcelIdentifier:       parcel.Identifier,
-			ParcelResultReason:     parcel.Reason,
-			FollowUpKinds:          followUpKindNames(parcel.FollowUpKinds),
-			ContinuedAttemptOpen:   parcel.ContinuedAttemptOpen,
-			EstablishedAt:          record.EstablishedAt.UTC().Format(time.RFC3339Nano),
+			TransactionID:           record.TransactionID.String(),
+			ParcelID:                parcel.Parcel.String(),
+			ChannelAccount:          record.ChannelAccount,
+			AccountHolder:           record.AccountHolder,
+			ChannelServicer:         record.ServiceProvider,
+			SettlementCounterparty:  record.SettlementCounterparty,
+			Contract:                record.Contract,
+			Rate:                    record.Rate,
+			ResponsibilityBasis:     record.ResponsibilityBasis,
+			TransactionResult:       record.State.String(),
+			Finalized:               record.Finalized,
+			HasParcelResult:         parcel.HasResult,
+			ParcelAccepted:          parcel.Accepted,
+			ParcelIdentifier:        parcel.Identifier,
+			ParcelResultReason:      parcel.Reason,
+			FollowUpKinds:           followUpKindNames(parcel.FollowUpKinds),
+			ContinuedAttemptOpen:    parcel.ContinuedAttemptOpen,
+			ContinuedAttemptDecided: parcel.ContinuedAttemptDecided,
+			EstablishedAt:           record.EstablishedAt.UTC().Format(time.RFC3339Nano),
 		}
 		if !record.SubmittedAt.IsZero() {
 			row.SubmittedAt = record.SubmittedAt.UTC().Format(time.RFC3339Nano)

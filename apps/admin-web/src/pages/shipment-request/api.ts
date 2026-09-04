@@ -285,6 +285,12 @@ export interface LabelTransactionRow {
   followUpKinds: string[];
   /** 包裹级继续尝试判断:开放 / 受控关闭。派生依据见 continuedAttemptBasis。 */
   continuedAttemptOpen: boolean;
+  /**
+   * 这件包裹的继续尝试决定登记册里有没有任何决定。与 continuedAttemptOpen 并列而不折进去:
+   * 「开放」既可能来自「没有人作过决定」,也可能来自「关过又重开」——判断值只有两格
+   * (CONTEXT 原词,不加第三格),两种来源的现场处置却相反,页面靠这一格分开说。
+   */
+  continuedAttemptDecided: boolean;
   establishedAt: string;
   submittedAt?: string;
   resultObservedAt?: string;
@@ -296,8 +302,8 @@ export interface LabelTransactionRow {
  * 列表:空册仍是 LISTED + 空数组。渠道墙未降前登记零行是设计,不是缺陷。
  *
  * continuedAttemptBasis 是「继续尝试判断」那一列的派生依据代码,页头要如实转述它——
- * 决定登记册尚未落地时整列「开放」派生自一段真实为空的决定历史,不写明就会被读成
- * 「已核对过关闭册」。
+ * 这一列是按 CONTEXT 规则由决定登记册与当前有效终局现算出来的,不是存下来的状态,
+ * 不写明就会被读成「有人逐件核对过」。
  */
 export interface LabelTransactionsListResponseBody {
   outcome: 'LABEL_TRANSACTIONS_LISTED';
@@ -305,8 +311,9 @@ export interface LabelTransactionsListResponseBody {
   rows: LabelTransactionRow[];
 }
 
-/** 继续尝试判断派生自空决定历史时服务端交回的依据代码。 */
-export const CONTINUED_ATTEMPT_BASIS_EMPTY_HISTORY = 'DERIVED_FROM_EMPTY_DECISION_HISTORY';
+/** 继续尝试判断由决定登记册与当前有效终局现算时服务端交回的依据代码。 */
+export const CONTINUED_ATTEMPT_BASIS_REGISTER_AND_CURRENT_FINAL =
+  'DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL';
 
 /** 复核完成命令的封闭结果。`已有完成`带先到那份的留痕:操作员要知道签的是谁。 */
 export type ManualReviewCompletionOutcome =

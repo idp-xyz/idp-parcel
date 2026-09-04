@@ -61,7 +61,12 @@ func (views *LabelTransactionViews) ListLabelTransactions(
 	}
 	defer rows.Close()
 
-	var records []ports.LabelTransactionRecord
+	type scannedTransaction struct {
+		id       string
+		state    domain.LabelTransactionState
+		document labelTransactionDocument
+	}
+	var scanned []scannedTransaction
 	for rows.Next() {
 		var transactionID string
 		var state uint8
@@ -73,14 +78,29 @@ func (views *LabelTransactionViews) ListLabelTransactions(
 		if err := json.Unmarshal(raw, &document); err != nil {
 			return nil, fmt.Errorf("list label transactions: 快照不是本适配器写下的形状：%w", err)
 		}
-		record, err := document.viewRecord(transactionID, domain.LabelTransactionState(state))
+		scanned = append(scanned, scannedTransaction{id: transactionID, state: domain.LabelTransactionState(state), document: document})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list label transactions: %w", err)
+	}
+	rows.Close()
+
+	covered := make([]string, 0)
+	for _, transaction := range scanned {
+		covered = append(covered, transaction.document.CoveredParcels...)
+	}
+	judgments, err := views.continuedAttemptJudgments(ctx, tenant, covered)
+	if err != nil {
+		return nil, fmt.Errorf("list label transactions: %w", err)
+	}
+
+	records := make([]ports.LabelTransactionRecord, 0, len(scanned))
+	for _, transaction := range scanned {
+		record, err := transaction.document.viewRecord(transaction.id, transaction.state, judgments)
 		if err != nil {
 			return nil, fmt.Errorf("list label transactions: %w", err)
 		}
 		records = append(records, record)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list label transactions: %w", err)
 	}
 	return records, nil
 }
@@ -92,6 +112,7 @@ func (views *LabelTransactionViews) ListLabelTransactions(
 func (document labelTransactionDocument) viewRecord(
 	transactionID string,
 	state domain.LabelTransactionState,
+	judgments continuedAttemptJudgments,
 ) (ports.LabelTransactionRecord, error) {
 	id, err := domain.NewLabelTransactionID(transactionID)
 	if err != nil {
@@ -126,10 +147,15 @@ func (document labelTransactionDocument) viewRecord(
 		if err != nil {
 			return ports.LabelTransactionRecord{}, err
 		}
+		judgment, err := judgments.judge(parcel)
+		if err != nil {
+			return ports.LabelTransactionRecord{}, err
+		}
 		row := ports.LabelTransactionParcelRow{
-			Parcel:               parcel,
-			FollowUpKinds:        document.followUpKindsFor(raw),
-			ContinuedAttemptOpen: deriveContinuedAttemptOpen(),
+			Parcel:                  parcel,
+			FollowUpKinds:           document.followUpKindsFor(raw),
+			ContinuedAttemptOpen:    judgment.open,
+			ContinuedAttemptDecided: judgment.decided,
 		}
 		if result, present := results[raw]; present {
 			row.HasResult = true
@@ -184,18 +210,110 @@ func containsParcel(parcels []string, parcel string) bool {
 	return false
 }
 
-// deriveContinuedAttemptOpen 把 CONTEXT 的包裹级继续尝试规则——「只由有效的关闭、重开决定
-// 及当前有效终局结果派生」——应用在**当前真实的决定历史**上。
+// continuedAttemptJudgments 是一批包裹的继续尝试判断输入：各自的决定登记册（没开过册的按空册）
+// 与「当前有效终局在不在」。判断本身不在这里算——它只能由聚合的 Judge 现算（CONTEXT「只由有效的
+// 关闭、重开决定及当前有效终局结果派生」），读面绕过重建门自己看快照就是把那条规则抄第二份。
+type continuedAttemptJudgments struct {
+	tenant    domain.TenantID
+	registers map[string]domain.ContinuedAttemptRegister
+	finals    map[string]bool
+}
+
+type continuedAttemptJudgment struct {
+	open    bool
+	decided bool
+}
+
+// judge 对一件包裹现算。没开过册的包裹按一本空册判：空册与非空册同样合法（登记册没有生命周期
+// 状态），空册上 Judge 的答案只取决于当前有效终局在不在——这正是登记册落地前那句「恒答开放」
+// 的规则本体，现在它拿的是真输入。
 //
-// 那段历史此刻是空的：继续尝试决定登记册尚未落地（ADR-0084 决定六判为另票，重启条件是写面
-// 裁决或渠道墙任一先到），全仓没有任何地方能形成一条关闭或重开决定。无生效关闭且无有效终局
-// 即开放，于是本函数恒答开放。
-//
-// **它不是默认值，也不该被读成「已核对过关闭册」。** 两者的区别在读面上要看得见：页头必须
-// 注明这条派生依据。登记册落地后本函数改为联查那册与当前终局，规则一字不变——正因为规则写
-// 在这里而不是写成一个常量 true，那一天要改的只有输入。
-func deriveContinuedAttemptOpen() bool {
-	const effectiveClosurePresent = false
-	const currentFinalOutcomePresent = false
-	return !effectiveClosurePresent && !currentFinalOutcomePresent
+// 开不出空册（租户或包裹不成立）时报错而不是答一个零值：零值读出来是「受控关闭、无人决定」，
+// 一格看着合法的答案会把一行坏数据藏起来。
+func (judgments continuedAttemptJudgments) judge(parcel domain.DeclaredParcelID) (continuedAttemptJudgment, error) {
+	register, opened := judgments.registers[parcel.String()]
+	if !opened {
+		empty, err := domain.OpenContinuedAttemptRegister(judgments.tenant, parcel)
+		if err != nil {
+			return continuedAttemptJudgment{}, fmt.Errorf("continued attempt judgment for %s: %w", parcel, err)
+		}
+		register = empty
+	}
+	return continuedAttemptJudgment{
+		open:    register.Judge(judgments.finals[parcel.String()]) == domain.ContinuedAttemptOpen,
+		decided: register.HasAnyDecision(),
+	}, nil
+}
+
+// continuedAttemptJudgments 一次取回一批包裹的登记册与当前有效终局在不在。两张表都按（租户 +
+// 包裹）取，租户维照 ADR-0003 的隔离边界；终局只看 is_current 那一行——当前有效终局属本上下文的
+// ParcelFinalOutcome，读面只问它在不在，不把它抄进登记册（票 label-channel/10 接手点那条告诫）。
+func (views *LabelTransactionViews) continuedAttemptJudgments(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcels []string,
+) (continuedAttemptJudgments, error) {
+	judgments := continuedAttemptJudgments{
+		tenant:    tenant,
+		registers: map[string]domain.ContinuedAttemptRegister{},
+		finals:    map[string]bool{},
+	}
+	if len(parcels) == 0 {
+		return judgments, nil
+	}
+	querier, err := views.db.ReadExecutor(ctx)
+	if err != nil {
+		return judgments, err
+	}
+
+	registerRows, err := querier.Query(ctx,
+		`SELECT parcel_id, revision, snapshot
+		   FROM parcel_shipment.continued_attempt_register
+		  WHERE tenant_id = $1 AND parcel_id = ANY($2)`,
+		tenant.String(), parcels)
+	if err != nil {
+		return judgments, fmt.Errorf("continued attempt registers: %w", err)
+	}
+	defer registerRows.Close()
+	for registerRows.Next() {
+		var parcel string
+		var revision int64
+		var raw []byte
+		if err := registerRows.Scan(&parcel, &revision, &raw); err != nil {
+			return judgments, fmt.Errorf("continued attempt registers: %w", err)
+		}
+		parcelID, err := domain.NewDeclaredParcelID(parcel)
+		if err != nil {
+			return judgments, fmt.Errorf("continued attempt registers: %w", err)
+		}
+		register, err := rehydrateContinuedAttemptRegister(revision, tenant, parcelID, raw)
+		if err != nil {
+			return judgments, fmt.Errorf("continued attempt registers: %w", err)
+		}
+		judgments.registers[parcel] = register
+	}
+	if err := registerRows.Err(); err != nil {
+		return judgments, fmt.Errorf("continued attempt registers: %w", err)
+	}
+
+	finalRows, err := querier.Query(ctx,
+		`SELECT parcel_id
+		   FROM parcel_shipment.final_outcome
+		  WHERE tenant_id = $1 AND parcel_id = ANY($2) AND is_current`,
+		tenant.String(), parcels)
+	if err != nil {
+		return judgments, fmt.Errorf("current final outcomes: %w", err)
+	}
+	defer finalRows.Close()
+	for finalRows.Next() {
+		var parcel string
+		if err := finalRows.Scan(&parcel); err != nil {
+			return judgments, fmt.Errorf("current final outcomes: %w", err)
+		}
+		judgments.finals[parcel] = true
+	}
+	if err := finalRows.Err(); err != nil {
+		return judgments, fmt.Errorf("current final outcomes: %w", err)
+	}
+	return judgments, nil
 }

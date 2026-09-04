@@ -64,7 +64,8 @@ func (double *labelTransactionsReaderDouble) ListLabelTransactions(
 }
 
 // labelTransactionRecordFixture 是一笔「部分成功」的交易：一件受理带渠道号并被作废，
-// 一件未受理带原因——两层结果与后续动作都在，摊开之后要逐行对得上。
+// 一件未受理带原因——两层结果与后续动作都在，摊开之后要逐行对得上。两件的继续尝试判断
+// 同为开放，但一件关过又重开、一件没有人作过决定：读面交出的这一对布尔要原样过传输层。
 func labelTransactionRecordFixture(t *testing.T) ports.LabelTransactionRecord {
 	t.Helper()
 	return ports.LabelTransactionRecord{
@@ -85,12 +86,13 @@ func labelTransactionRecordFixture(t *testing.T) ports.LabelTransactionRecord {
 		PriorLinkKind:          domain.LabelTransactionRetry,
 		Parcels: []ports.LabelTransactionParcelRow{
 			{
-				Parcel:               mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
-				HasResult:            true,
-				Accepted:             true,
-				Identifier:           "channel-parcel-1",
-				FollowUpKinds:        []domain.FollowUpActionKind{domain.ChannelVoidAction},
-				ContinuedAttemptOpen: true,
+				Parcel:                  mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+				HasResult:               true,
+				Accepted:                true,
+				Identifier:              "channel-parcel-1",
+				FollowUpKinds:           []domain.FollowUpActionKind{domain.ChannelVoidAction},
+				ContinuedAttemptOpen:    true,
+				ContinuedAttemptDecided: true,
 			},
 			{
 				Parcel:               mustValue(t, domain.NewDeclaredParcelID, "parcel-2"),
@@ -119,22 +121,23 @@ type labelTransactionsBody struct {
 	Outcome               string `json:"outcome"`
 	ContinuedAttemptBasis string `json:"continuedAttemptBasis"`
 	Rows                  []struct {
-		TransactionID          string   `json:"transactionId"`
-		ParcelID               string   `json:"parcelId"`
-		AccountHolder          string   `json:"accountHolder"`
-		ChannelServicer        string   `json:"channelServicer"`
-		SettlementCounterparty string   `json:"settlementCounterparty"`
-		TransactionResult      string   `json:"transactionResult"`
-		Finalized              bool     `json:"finalized"`
-		HasParcelResult        bool     `json:"hasParcelResult"`
-		ParcelAccepted         bool     `json:"parcelAccepted"`
-		ParcelIdentifier       string   `json:"parcelIdentifier"`
-		ParcelResultReason     string   `json:"parcelResultReason"`
-		FollowUpKinds          []string `json:"followUpKinds"`
-		ContinuedAttemptOpen   bool     `json:"continuedAttemptOpen"`
-		EstablishedAt          string   `json:"establishedAt"`
-		PriorTransactionID     string   `json:"priorTransactionId"`
-		PriorLinkKind          string   `json:"priorLinkKind"`
+		TransactionID           string   `json:"transactionId"`
+		ParcelID                string   `json:"parcelId"`
+		AccountHolder           string   `json:"accountHolder"`
+		ChannelServicer         string   `json:"channelServicer"`
+		SettlementCounterparty  string   `json:"settlementCounterparty"`
+		TransactionResult       string   `json:"transactionResult"`
+		Finalized               bool     `json:"finalized"`
+		HasParcelResult         bool     `json:"hasParcelResult"`
+		ParcelAccepted          bool     `json:"parcelAccepted"`
+		ParcelIdentifier        string   `json:"parcelIdentifier"`
+		ParcelResultReason      string   `json:"parcelResultReason"`
+		FollowUpKinds           []string `json:"followUpKinds"`
+		ContinuedAttemptOpen    bool     `json:"continuedAttemptOpen"`
+		ContinuedAttemptDecided bool     `json:"continuedAttemptDecided"`
+		EstablishedAt           string   `json:"establishedAt"`
+		PriorTransactionID      string   `json:"priorTransactionId"`
+		PriorLinkKind           string   `json:"priorLinkKind"`
 	} `json:"rows"`
 }
 
@@ -188,6 +191,10 @@ func TestLabelTransactionsListExpandsOneRowPerCoveredParcel(t *testing.T) {
 	if accepted.EstablishedAt != labelEstablishedAtFixture.Format(time.RFC3339Nano) {
 		t.Fatalf("业务时间透出不对：%q", accepted.EstablishedAt)
 	}
+	// 两件同为开放，一件有决定历史一件没有：这一对布尔各自过传输层，不折成一个值。
+	if !accepted.ContinuedAttemptOpen || !accepted.ContinuedAttemptDecided {
+		t.Fatalf("关过又重开的行应透出开放且有决定历史：%+v", accepted)
+	}
 
 	refused := body.Rows[1]
 	if !refused.HasParcelResult || refused.ParcelAccepted || refused.ParcelResultReason != "ADDRESS_UNSUPPORTED" {
@@ -195,6 +202,12 @@ func TestLabelTransactionsListExpandsOneRowPerCoveredParcel(t *testing.T) {
 	}
 	if len(refused.FollowUpKinds) != 0 {
 		t.Fatalf("指名范围的后续动作落到了范围外的行上：%+v", refused.FollowUpKinds)
+	}
+	if !refused.ContinuedAttemptOpen || refused.ContinuedAttemptDecided {
+		t.Fatalf("没有人作过决定的行应透出开放且无决定历史：%+v", refused)
+	}
+	if body.ContinuedAttemptBasis != "DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL" {
+		t.Fatalf("继续尝试判断的派生依据不对：%q", body.ContinuedAttemptBasis)
 	}
 
 	if reader.tenant.String() != "TENANT-1" || reader.limit != 50 {
@@ -216,7 +229,7 @@ func TestAnEmptyLabelTransactionRegisterIsAnAnswerNotAnError(t *testing.T) {
 	if body.Outcome != "LABEL_TRANSACTIONS_LISTED" || len(body.Rows) != 0 {
 		t.Fatalf("空册答案不对：%+v", body)
 	}
-	if body.ContinuedAttemptBasis != "DERIVED_FROM_EMPTY_DECISION_HISTORY" {
+	if body.ContinuedAttemptBasis != "DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL" {
 		t.Fatalf("继续尝试判断的派生依据没带出：%q", body.ContinuedAttemptBasis)
 	}
 	// rows 是空数组不是 null：调用方判「册上有没有行」不该先判「有没有这个字段」。

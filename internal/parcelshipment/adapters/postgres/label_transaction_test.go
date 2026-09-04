@@ -432,9 +432,93 @@ func TestTheLabelTransactionViewExpandsOneRowPerCoveredParcel(t *testing.T) {
 	if awaiting.Parcels[0].Accepted {
 		t.Fatalf("结果未回的行被读成了受理")
 	}
-	// 继续尝试判断此刻派生自空决定历史（ADR-0084 决定六），因此恒为开放；页头另注依据。
-	if !awaiting.Parcels[0].ContinuedAttemptOpen || !recorded.Parcels[0].ContinuedAttemptOpen {
-		t.Fatalf("无生效关闭时继续尝试判断应派生为开放")
+	// 这几件包裹都没开过继续尝试决定册也没有终局：判断派生为开放，且读面要说得出「没有人作过
+	// 决定」——开放的另一种来源（关过又重开）在下一条用例里。
+	for _, row := range []ports.LabelTransactionParcelRow{awaiting.Parcels[0], recorded.Parcels[0]} {
+		if !row.ContinuedAttemptOpen || row.ContinuedAttemptDecided {
+			t.Fatalf("没开过册且无终局的包裹应派生开放且无决定历史，实得 %+v", row)
+		}
+	}
+}
+
+// TestTheLabelTransactionViewDerivesContinuedAttemptFromTheRegisterAndTheCurrentFinal 证读面那一格
+// 拿的是真输入（票 label-channel/10 第三层）：`包裹级继续尝试判断`按 CONTEXT「只由有效的关闭、重开
+// 决定及当前有效终局结果派生」由登记册的 Judge 现算；「没有人作过决定」与「关过又重开」派生出
+// 同一格`开放`，读面靠 ContinuedAttemptDecided 把两者交代开；他租户同号包裹上的关闭渗不进来。
+func TestTheLabelTransactionViewDerivesContinuedAttemptFromTheRegisterAndTheCurrentFinal(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	transactions, err := adapter.NewLabelTransactions(db)
+	if err != nil {
+		t.Fatalf("构造面单交易仓储：%v", err)
+	}
+	views, err := adapter.NewLabelTransactionViews(db)
+	if err != nil {
+		t.Fatalf("构造面单交易读面：%v", err)
+	}
+	registers, err := adapter.NewContinuedAttemptRegisters(db)
+	if err != nil {
+		t.Fatalf("构造继续尝试决定登记册仓储：%v", err)
+	}
+	finals, err := adapter.NewFinalOutcomes(db)
+	if err != nil {
+		t.Fatalf("构造终局库：%v", err)
+	}
+	transactor := db.Transactor()
+	ctx := t.Context()
+
+	// 一笔交易覆盖四件包裹，四件各占一格：
+	//   parcel-1 没开过册、无终局           → 开放，无决定历史
+	//   parcel-2 一条生效关闭               → 受控关闭，有决定历史
+	//   parcel-3 关过又重开、无终局         → 开放，有决定历史（与 parcel-1 同格，靠 Decided 分开）
+	//   parcel-4 没开过册、当前有效终局在场 → 受控关闭，无决定历史（终局关掉了「允许新尝试」）
+	mustInsertLabelTransaction(t, transactor, ctx, transactions,
+		establishedLabelTransactionFixture(t, "tenant-a", "label-txn-1", "parcel-1", "parcel-2", "parcel-3", "parcel-4"))
+	closed, err := openRegisterFixture(t, "tenant-a", "parcel-2").
+		Append(closureDecisionFixture(t, "decision-1", continuedAttemptDecidedAt), false)
+	if err != nil {
+		t.Fatalf("追加关闭：%v", err)
+	}
+	mustInsertRegister(t, transactor, ctx, registers, closed)
+	mustInsertRegister(t, transactor, ctx, registers, closedThenReopenedFixture(t, "tenant-a", "parcel-3"))
+	mustSaveFinal(t, transactor, ctx, finals, firstFinalRecord(t, "tenant-a", "parcel-4", "ORV-1", "digest-4"))
+	// 他租户在同号 parcel-1 上的关闭：登记册按（租户 + 包裹）成册（ADR-0003），本租户读不到它。
+	foreign, err := openRegisterFixture(t, "tenant-b", "parcel-1").
+		Append(closureDecisionFixture(t, "decision-9", continuedAttemptDecidedAt), false)
+	if err != nil {
+		t.Fatalf("他租户追加关闭：%v", err)
+	}
+	mustInsertRegister(t, transactor, ctx, registers, foreign)
+
+	records, err := views.ListLabelTransactions(ctx, mustBuild(t, domain.NewTenantID, "tenant-a"), 10)
+	if err != nil {
+		t.Fatalf("列册：%v", err)
+	}
+	if len(records) != 1 || len(records[0].Parcels) != 4 {
+		t.Fatalf("册上应是一笔交易摊四行，实得 %d 笔", len(records))
+	}
+	want := []struct {
+		parcel  string
+		open    bool
+		decided bool
+	}{
+		{"parcel-1", true, false},
+		{"parcel-2", false, true},
+		{"parcel-3", true, true},
+		{"parcel-4", false, false},
+	}
+	for index, expected := range want {
+		row := records[0].Parcels[index]
+		if row.Parcel.String() != expected.parcel ||
+			row.ContinuedAttemptOpen != expected.open ||
+			row.ContinuedAttemptDecided != expected.decided {
+			t.Errorf("第 %d 行 want %s open=%v decided=%v，实得 %s open=%v decided=%v",
+				index, expected.parcel, expected.open, expected.decided,
+				row.Parcel, row.ContinuedAttemptOpen, row.ContinuedAttemptDecided)
+		}
 	}
 }
 
