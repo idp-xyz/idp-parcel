@@ -229,9 +229,15 @@ type TriageQuery struct {
 }
 
 // TriageAnswer 是版本化分诊规则的答复：四走向之一与所命中的分诊规则版本。
+//
+// Team 只随`自动建案`走向在场：「建立案件 → 固定根对象、初始影响范围、责任团队」
+// （CONTEXT 生命周期），而「每个开放案件始终必须有一个内部案件责任团队」——规则说
+// 自动建案却不说归谁，案件就建不起来。团队因此是自动建案条目登记时必带的一维
+// （`PAR-VIS-05`），其余三走向不带；编排把「自动建案无团队」当端口坏答复上抛，不补。
 type TriageAnswer struct {
 	Outcome domain.TriageOutcome
 	Rule    domain.SignalRuleVersionReference
+	Team    domain.ResponsibleTeamReference
 }
 
 // TriageRuleView 回答「这个信号按版本化分诊规则该走哪一格」。「高可信、高影响且命中
@@ -249,12 +255,18 @@ type TriageRuleView interface {
 // 同一提交。只落发作期不落结论，重试会走进「已有活跃发作期」那一支去记命中，结论就
 // 永远补不上了。租户、对象与类型随记录携带——发作期聚合不导出它们，没有这几维
 // 适配器连存储键都立不起来（与 TriageHandoffIntent 同理）。
+//
+// Case 与结论走向成对：走向为`自动建案`时必带案件，其余走向必不带。案件与结论同一
+// 提交是同一条理由——只落结论不落案件，重放同样走进「已有活跃发作期」那一支，一份
+// 写着 AUTO_ESTABLISH 的结论后面就永远没有案件。实现在写入前核这一对，不核就落库
+// 的是一份自相矛盾的记录。
 type RaisedSignalRecord struct {
 	Tenant     domain.TenantID
 	Parcel     domain.TrackedParcelReference
 	Kind       domain.ExceptionSignalKindReference
 	Episode    *domain.SignalEpisode
 	Conclusion domain.TriageConclusion
+	Case       *domain.ExceptionCase
 }
 
 // SignalEpisodeStore 按租户+对象+类型找回最近一次发作期并保存。租户是最高数据隔离
@@ -275,6 +287,13 @@ type SignalEpisodeStore interface {
 // 不同用例触发，合并会让一个编排依赖它根本不签发的身份。
 type SignalEpisodeIdentityFactory interface {
 	NextEpisodeID(ctx context.Context) (domain.EpisodeID, error)
+}
+
+// CaseIdentityFactory 签发异常案件标识。与发作期身份工厂分开：信号与案件始终是两个
+// 对象（CONTEXT「异常信号与异常案件始终保持独立」），共用一个签发器会让案件借发作期
+// 的号，两份历史从此按同一串编号互相指错。
+type CaseIdentityFactory interface {
+	NextCaseID(ctx context.Context) (domain.CaseID, error)
 }
 
 // TriageHandoffIntent 把分诊结论交给适用下游（建案、复核队列的输入）。意图由租户加
@@ -773,10 +792,14 @@ type MilestoneMappingRegistration struct {
 // TriageRuleEntry 是一条分诊条目：某信号类型在某可信度依据下走哪一格。键含可信度，
 // 因为四走向的分界正立在它上面（「高可信、高影响且命中版本化分诊规则的信号可以自动
 // 建立或关联案件」）。
+//
+// Team 与走向成对：`自动建案`条目必带责任团队，其余走向必不带（理由见 TriageAnswer）。
+// 团队是谁属实例半边——本端口只要求登记方在说「自动建案」的同一行说清归谁，不替它挑。
 type TriageRuleEntry struct {
 	Kind       domain.ExceptionSignalKindReference
 	Confidence domain.ConfidenceReference
 	Outcome    domain.TriageOutcome
+	Team       domain.ResponsibleTeamReference
 }
 
 // TriageRuleRegistration 登记一版分诊规则。条目纪律同映射登记。

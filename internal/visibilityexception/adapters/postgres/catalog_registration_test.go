@@ -326,7 +326,12 @@ func TestRegisteredTriageRulesBecomeReadable(t *testing.T) {
 			// 生效时间取过去：分诊判的是手上这个活信号，装载口按 now() 选版。
 			Header: mappingHeader("triage/v1", time.Now().UTC().Add(-time.Hour)),
 			Entries: []ports.TriageRuleEntry{
-				{Kind: query.Kind, Confidence: query.Confidence, Outcome: domain.AutoEstablishCase},
+				{
+					Kind:       query.Kind,
+					Confidence: query.Confidence,
+					Outcome:    domain.AutoEstablishCase,
+					Team:       build(t, domain.NewResponsibleTeamReference, "team/customs-desk"),
+				},
 				{
 					Kind:       query.Kind,
 					Confidence: build(t, domain.NewConfidenceReference, "LOW"),
@@ -346,14 +351,36 @@ func TestRegisteredTriageRulesBecomeReadable(t *testing.T) {
 	if answer.Outcome != domain.AutoEstablishCase || answer.Rule.String() != "triage/v1" {
 		t.Fatalf("高可信应命中自动建案，实得 %s / %s", answer.Outcome, answer.Rule)
 	}
+	// 自动建案条目登记的责任团队原样读回——案件建立时归谁，就取这一格。
+	if answer.Team.String() != "team/customs-desk" {
+		t.Fatalf("自动建案条目的团队没读回，实得 %q", answer.Team)
+	}
 
 	query.Confidence = build(t, domain.NewConfidenceReference, "LOW")
 	low, _, err := view.TriageSignal(t.Context(), query)
 	if err != nil {
 		t.Fatalf("读低可信：%v", err)
 	}
-	if low.Outcome != domain.ManualReviewRequired {
-		t.Fatalf("低可信应命中人工复核，实得 %s", low.Outcome)
+	if low.Outcome != domain.ManualReviewRequired || low.Team.String() != "" {
+		t.Fatalf("低可信应命中人工复核且不带团队，实得 %s / %q", low.Outcome, low.Team)
+	}
+
+	// 写入口把「自动建案却没说归谁」交给 0022 的成对约束去拒：条目不成对就整版不落。
+	// 换一个租户登，免得先撞上「同租户已有未闭区间版本」那道重叠拒绝。
+	otherTenant := build(t, domain.NewTenantID, "tenant-b")
+	var outcomeWithoutTeam ports.CatalogRegistrationOutcome
+	err = fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		var err error
+		outcomeWithoutTeam, err = fixture.registrar.RegisterTriageRules(txCtx, otherTenant, ports.TriageRuleRegistration{
+			Header: mappingHeader("triage/v1", time.Now().UTC().Add(-time.Hour)),
+			Entries: []ports.TriageRuleEntry{
+				{Kind: query.Kind, Confidence: query.Confidence, Outcome: domain.AutoEstablishCase},
+			},
+		})
+		return err
+	})
+	if err == nil {
+		t.Fatalf("没有责任团队的自动建案条目穿过了写入口（outcome=%s）", outcomeWithoutTeam)
 	}
 }
 

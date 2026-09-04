@@ -303,15 +303,34 @@ func TestTriageRegistrationRequiresAClosedOutcome(t *testing.T) {
 		t.Fatalf("缺走向应指名条目缺维，实得 %s", result.RefusalReason())
 	}
 
+	// 自动建案条目必带责任团队：光有走向没有团队，案件建不起来，仍是条目缺维。
 	command.Entries[0].Outcome = domain.AutoEstablishCase
 	if result, err = service.RegisterTriageRules(t.Context(), command); err != nil {
 		t.Fatalf("补齐走向后登记分诊：%v", err)
 	}
-	if result.Outcome() != application.CatalogRegistered {
-		t.Fatalf("补齐走向后应登记成功，实得 %s / %s", result.Outcome(), result.RefusalReason())
+	if result.RefusalReason() != application.CatalogEntryIncomplete {
+		t.Fatalf("自动建案缺团队应指名条目缺维，实得 %s", result.RefusalReason())
 	}
-	if registry.triage.Entries[0].Outcome != domain.AutoEstablishCase {
-		t.Fatalf("走向没有原样到达写入口，实得 %s", registry.triage.Entries[0].Outcome)
+
+	command.Entries[0].Team = catalogScalar(t, domain.NewResponsibleTeamReference, "team/customs-desk")
+	if result, err = service.RegisterTriageRules(t.Context(), command); err != nil {
+		t.Fatalf("补齐团队后登记分诊：%v", err)
+	}
+	if result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("补齐团队后应登记成功，实得 %s / %s", result.Outcome(), result.RefusalReason())
+	}
+	if registry.triage.Entries[0].Outcome != domain.AutoEstablishCase ||
+		registry.triage.Entries[0].Team.String() != "team/customs-desk" {
+		t.Fatalf("走向与团队没有原样到达写入口，实得 %+v", registry.triage.Entries[0])
+	}
+
+	// 反向也拒：非建案走向挂团队是把「谁来复核」误写进「建案归谁」那一格，矛盾输入不收。
+	command.Entries[0].Outcome = domain.ManualReviewRequired
+	if result, err = service.RegisterTriageRules(t.Context(), command); err != nil {
+		t.Fatalf("人工复核带团队登记分诊：%v", err)
+	}
+	if result.RefusalReason() != application.CatalogEntryIncomplete {
+		t.Fatalf("人工复核条目带团队应拒为条目缺维（矛盾输入），实得 %s", result.RefusalReason())
 	}
 }
 

@@ -1,11 +1,11 @@
-// Package identity 是 visibility-exception 七个标识签发端口的生产实现。
+// Package identity 是 visibility-exception 各标识签发端口的生产实现。
 //
 // 标识是机制半边：签发一个不重的不透明编号既不需要租户参数，也不需要任何商业规则，
-// 因此这里不存在「等真实参数」的一格——七个端口今天就该有真实现，而不是测试替身。
+// 因此这里不存在「等真实参数」的一格——每个端口今天就该有真实现，而不是测试替身。
 //
-// 七个工厂各自成型，不合并成一个「全能签发器」。端口注释已把理由写死：投影派生、
-// 视图派生、发作期、通知、处置请求、预测与追偿由不同用例触发，合并会让一个编排
-// 依赖它根本不签发的身份。共用内核（internal/platform/identity）不改变这一点——
+// 各工厂各自成型，不合并成一个「全能签发器」。端口注释已把理由写死：投影派生、
+// 视图派生、发作期、案件、通知、处置请求、预测与追偿由不同用例触发，合并会让一个
+// 编排依赖它根本不签发的身份。共用内核（internal/platform/identity）不改变这一点——
 // 装配时每个类型仍只交得出它自己那一个标识。
 //
 // 编码、ctx 处置与熵源注入三样都归内核，理由写在那里，本包不复述第二遍。
@@ -20,8 +20,9 @@ import (
 )
 
 // 各类标识的前缀。取值只是日志与工单里的可读性约定，不承载业务含义，也不参与任何
-// 判断：领域侧七个 ID 已是互不相通的 Go 类型，张冠李戴在编译期就被拦住，前缀是给
-// 人看的那一份。分隔符归拼接处所有，因此这里一律不带横线。
+// 判断：领域侧各 ID 已是互不相通的 Go 类型，张冠李戴在编译期就被拦住，前缀是给
+// 人看的那一份。分隔符归拼接处所有，因此这里一律不带横线。全仓前缀唯一由
+// internal/architecture 的前缀门禁守着，新加一个先跑它再定名。
 const (
 	projectionPrefix   = "PRJ"
 	customerViewPrefix = "CVW"
@@ -30,6 +31,7 @@ const (
 	dispositionPrefix  = "DRQ"
 	etaPrefix          = "ETA"
 	recoveryPrefix     = "RCV"
+	casePrefix         = "XCS"
 )
 
 // ProjectionVersions 实现 ports.ProjectionIdentityFactory。
@@ -178,6 +180,30 @@ func (factory *ETAVersions) NextETAVersionID(_ context.Context) (domain.ETAVersi
 		return domain.ETAVersionID{}, err
 	}
 	return domain.NewETAVersionID(value)
+}
+
+// ExceptionCases 实现 ports.CaseIdentityFactory。与发作期签发器分开的理由写在端口上：
+// 信号与案件始终是两个对象，共用签发器会让两份历史按同一串编号互相指错。
+type ExceptionCases struct {
+	minter platformidentity.Minter
+}
+
+func NewExceptionCases(options ...platformidentity.Option) (*ExceptionCases, error) {
+	minter, err := platformidentity.NewMinter(casePrefix, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &ExceptionCases{minter: minter}, nil
+}
+
+var _ ports.CaseIdentityFactory = (*ExceptionCases)(nil)
+
+func (factory *ExceptionCases) NextCaseID(_ context.Context) (domain.CaseID, error) {
+	value, err := factory.minter.Next()
+	if err != nil {
+		return domain.CaseID{}, err
+	}
+	return domain.NewCaseID(value)
 }
 
 // RecoveryMatters 实现 ports.RecoveryIdentityFactory。

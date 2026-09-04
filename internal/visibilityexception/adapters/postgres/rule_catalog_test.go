@@ -222,13 +222,22 @@ func (fixture *catalogFixture) publishTriage(t *testing.T, tenant, version strin
 	}
 }
 
+// triageTestTeam 是用例里自动建案条目登记的责任团队。团队与走向成对（0022）：自动
+// 建案条目带它，其余走向不带——helper 按走向决定，用例不必逐处写。
+const triageTestTeam = "team/exception-ops"
+
 func (fixture *catalogFixture) addTriageEntry(t *testing.T, tenant, version, kind, confidence, outcome string) {
 	t.Helper()
+	var team *string
+	if outcome == "AUTO_ESTABLISH" {
+		value := triageTestTeam
+		team = &value
+	}
 	if _, err := fixture.pool.Exec(t.Context(),
 		`INSERT INTO visibility_exception.triage_rule_entry
-			(tenant_id, rule_version, signal_kind, confidence_ref, outcome)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		tenant, version, kind, confidence, outcome); err != nil {
+			(tenant_id, rule_version, signal_kind, confidence_ref, outcome, responsible_team)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenant, version, kind, confidence, outcome, team); err != nil {
 		t.Fatalf("写入分诊条目：%v", err)
 	}
 }
@@ -278,6 +287,14 @@ func TestTriageCatalogAnswersHitAndSendsMissToManualReview(t *testing.T) {
 		if answer.Rule.String() != "triage/v1" {
 			t.Fatalf("答复没带分诊规则版本：%s", answer.Rule)
 		}
+		// 自动建案条目连责任团队一起答出；其余走向不带团队。
+		wantTeam := ""
+		if testCase.outcome == domain.AutoEstablishCase {
+			wantTeam = triageTestTeam
+		}
+		if answer.Team.String() != wantTeam {
+			t.Fatalf("可信度 %s 的团队 = %q，想要 %q", testCase.confidence, answer.Team, wantTeam)
+		}
 	}
 
 	// 目录已配而这一类没有条目：没命中就不具备自动建案条件，进人工复核，并带上
@@ -320,5 +337,31 @@ func TestTriageRuleEntryOutcomeIsAClosedSet(t *testing.T) {
 			(tenant_id, rule_version, signal_kind, confidence_ref, outcome)
 		 VALUES ('tenant-a', 'triage/v9', 'CUSTOMS_HOLD', 'HIGH', 'NO_CASE')`); err == nil {
 		t.Fatal("库接受了挂在未发布版本下的分诊条目")
+	}
+}
+
+// Covers: 0022 的成对约束——自动建案必带责任团队（没有团队的案件建不起来），其余走向
+// 必不带（给人工复核条目挂团队是矛盾输入）。两向都由库守住，登记口再拒一遍是第一道网。
+func TestTriageRuleEntryTeamPairsWithAutoEstablish(t *testing.T) {
+	fixture := newCatalogFixture(t)
+	fixture.publishTriage(t, "tenant-a", "triage/v1")
+
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.triage_rule_entry
+			(tenant_id, rule_version, signal_kind, confidence_ref, outcome, responsible_team)
+		 VALUES ('tenant-a', 'triage/v1', 'CUSTOMS_HOLD', 'HIGH', 'AUTO_ESTABLISH', NULL)`); err == nil {
+		t.Fatal("库接受了没有责任团队的自动建案条目")
+	}
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.triage_rule_entry
+			(tenant_id, rule_version, signal_kind, confidence_ref, outcome, responsible_team)
+		 VALUES ('tenant-a', 'triage/v1', 'CUSTOMS_HOLD', 'LOW', 'MANUAL_REVIEW', 'team/anyone')`); err == nil {
+		t.Fatal("库接受了挂着团队的人工复核条目")
+	}
+	if _, err := fixture.pool.Exec(t.Context(),
+		`INSERT INTO visibility_exception.triage_rule_entry
+			(tenant_id, rule_version, signal_kind, confidence_ref, outcome, responsible_team)
+		 VALUES ('tenant-a', 'triage/v1', 'CUSTOMS_HOLD', 'HIGH', 'AUTO_ESTABLISH', '  ')`); err == nil {
+		t.Fatal("库接受了空白团队的自动建案条目")
 	}
 }

@@ -143,10 +143,13 @@ func MilestoneMappingFromJSON(raw []byte) (application.RegisterMilestoneMappingC
 	}, nil
 }
 
+// triageEntryDocument 的 team 只随 AUTO_ESTABLISH 在场（ports.TriageRuleEntry）；成对与否
+// 的判据在用例（ENTRY_INCOMPLETE），这里只把在场的字面译成引用、缺席的留零值。
 type triageEntryDocument struct {
 	Kind       string `json:"kind"`
 	Confidence string `json:"confidence"`
 	Outcome    string `json:"outcome"`
+	Team       string `json:"team,omitempty"`
 }
 
 type triageRulesDocument struct {
@@ -178,10 +181,17 @@ func TriageRulesFromJSON(raw []byte) (application.RegisterTriageRulesCommand, er
 		if err != nil {
 			return none, err
 		}
+		var team domain.ResponsibleTeamReference
+		if strings.TrimSpace(entry.Team) != "" {
+			if team, err = domain.NewResponsibleTeamReference(entry.Team); err != nil {
+				return none, err
+			}
+		}
 		entries = append(entries, ports.TriageRuleEntry{
 			Kind:       kind,
 			Confidence: confidence,
 			Outcome:    outcome,
+			Team:       team,
 		})
 	}
 	return application.RegisterTriageRulesCommand{

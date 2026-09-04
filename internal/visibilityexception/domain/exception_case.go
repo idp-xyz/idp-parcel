@@ -398,6 +398,37 @@ func (exceptionCase *ExceptionCase) MergedInto() (CaseID, bool) {
 	return exceptionCase.mergedInto, exceptionCase.mergedInto.valid()
 }
 
+// ExceptionCaseSnapshot 是持久化层落案件所需的全量状态。与 SignalEpisodeSnapshot 同一
+// 形状纪律：已发生的事实（建立、接单、关闭、归并）随快照携带，不由持久化层重演转移。
+type ExceptionCaseSnapshot struct {
+	ID            CaseID
+	Root          TrackedParcelReference
+	Scope         ImpactScopeReference
+	Team          ResponsibleTeamReference
+	Phase         CasePhase
+	EstablishedAt time.Time
+	FirstResponse time.Time
+	ClosedAt      time.Time
+	Conclusion    string
+	MergedInto    CaseID
+}
+
+// Snapshot 折出案件的全量状态供持久化。
+func (exceptionCase *ExceptionCase) Snapshot() ExceptionCaseSnapshot {
+	return ExceptionCaseSnapshot{
+		ID:            exceptionCase.id,
+		Root:          exceptionCase.root,
+		Scope:         exceptionCase.scope,
+		Team:          exceptionCase.team,
+		Phase:         exceptionCase.phase,
+		EstablishedAt: exceptionCase.establishedAt,
+		FirstResponse: exceptionCase.firstResponse,
+		ClosedAt:      exceptionCase.closedAt,
+		Conclusion:    exceptionCase.conclusion,
+		MergedInto:    exceptionCase.mergedInto,
+	}
+}
+
 // TakeUp 接单：待响应 → 处理中，首次响应时间形成。
 func (exceptionCase *ExceptionCase) TakeUp(at time.Time) error {
 	if exceptionCase.phase == CaseClosed {

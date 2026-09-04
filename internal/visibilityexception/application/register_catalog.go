@@ -422,10 +422,17 @@ func milestoneEntryKey(entry ports.MilestoneMappingEntry) string {
 	return entry.Source.String() + "\x00" + entry.Kind.String()
 }
 
+// triageEntryComplete 除三件必备外还核团队与走向成对：`自动建案`必带责任团队（没有团队
+// 的案件建不起来，CONTEXT「每个开放案件始终必须有一个内部案件责任团队」），其余走向必
+// 不带——给一条人工复核条目挂个团队，是登记方把「谁来复核」误写进了「建案归谁」那一格，
+// 矛盾输入不收而不是静默丢掉。
 func triageEntryComplete(entry ports.TriageRuleEntry) bool {
-	return present(entry.Kind.String()) &&
-		present(entry.Confidence.String()) &&
-		present(entry.Outcome.String())
+	if !present(entry.Kind.String()) ||
+		!present(entry.Confidence.String()) ||
+		!present(entry.Outcome.String()) {
+		return false
+	}
+	return (entry.Outcome == domain.AutoEstablishCase) == present(entry.Team.String())
 }
 
 // triageEntryKey 含可信度：四走向的分界正立在它上面，按类型单键会宣布同一类型的信号

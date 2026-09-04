@@ -209,8 +209,15 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 以下各条均产出带不变式校验的领域对象或领域决定；除 DecideDisclosure 外包外零引用——
 # 它的包外引用全在测试里（三个 postgres 适配器测试与一个应用层测试），与
 # FormSupplierExpectedCost 同属仅有的两个走出 domain 层的，另一半注在 SA 组那条上。
+#
+# EstablishCase 曾在这里，2026-09-04 随 mechanism-executor-triage/08 VE-b 剪掉：信号编排
+# （application/raise_signal.go 的 establishCaseFor）在分诊走向为自动建案时建立案件，案件与
+# 发作期、结论同一记录落库。成因三分先分过：全仓该名字只有一处声明（domain/exception_case.go），
+# 同笔新增的符号（ExceptionCaseSnapshot、CaseIdentityFactory）都不与它同名，门禁比的是精确
+# 相等不是子串，是第二种。**在 c3b4311 的干净内容上（工作树对 HEAD 无差）数得剪前 23、
+# 剪后 22**，两法同得（按 UTF-8 逐行滤非空非注释，与字节层数行首非 `#`）；两个数只对该检出
+# 成立，下一个改名单的人在自己那一刻的 HEAD 上重取。同票余五条随 VE-a / VE-c / VE-d 各自出名单。
 internal/visibilityexception/domain DecideDisclosure
-internal/visibilityexception/domain EstablishCase
 internal/visibilityexception/domain PrepareDisclosure
 internal/visibilityexception/domain RaiseConflictSignal
 internal/visibilityexception/domain ResolveByBusinessTime

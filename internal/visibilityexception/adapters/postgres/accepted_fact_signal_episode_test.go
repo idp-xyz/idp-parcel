@@ -27,6 +27,7 @@ type factFixture struct {
 	episodes   *adapter.SignalEpisodes
 	transactor bentoapp.Transactor
 	pool       *pgxpool.Pool
+	db         *bentopg.DB
 }
 
 func newFactFixture(t *testing.T) *factFixture {
@@ -45,7 +46,7 @@ func newFactFixture(t *testing.T) *factFixture {
 	if err != nil {
 		t.Fatalf("构造发作期库：%v", err)
 	}
-	return &factFixture{facts: facts, episodes: episodes, transactor: db.Transactor(), pool: pool}
+	return &factFixture{facts: facts, episodes: episodes, transactor: db.Transactor(), pool: pool, db: db}
 }
 
 func (fixture *factFixture) inTx(t *testing.T, ctx context.Context, fn func(context.Context) error) {
@@ -378,13 +379,34 @@ func raisedRecord(t *testing.T, episode *domain.SignalEpisode, tenant, parcel, k
 	if err != nil {
 		t.Fatalf("构造分诊结论：%v", err)
 	}
-	return ports.RaisedSignalRecord{
+	record := ports.RaisedSignalRecord{
 		Tenant:     factValue(t, domain.NewTenantID, tenant),
 		Parcel:     factValue(t, domain.NewTrackedParcelReference, parcel),
 		Kind:       factValue(t, domain.NewExceptionSignalKindReference, kind),
 		Episode:    episode,
 		Conclusion: conclusion,
 	}
+	if outcome == domain.AutoEstablishCase {
+		// 案件与自动建案结论成对（ports.RaisedSignalRecord）：helper 按走向补上，用例
+		// 不必逐处写。案件标识取发作期标识加后缀，只为在同一用例里多份记录互不撞键。
+		record.Case = establishedCase(t, "case-"+episode.ID().String(), parcel, factBaseAt.Add(5*time.Minute))
+	}
+	return record
+}
+
+func establishedCase(t *testing.T, id, root string, at time.Time) *domain.ExceptionCase {
+	t.Helper()
+	exceptionCase, err := domain.EstablishCase(
+		factValue(t, domain.NewCaseID, id),
+		factValue(t, domain.NewTrackedParcelReference, root),
+		factValue(t, domain.NewImpactScopeReference, root),
+		factValue(t, domain.NewResponsibleTeamReference, "team/exception-ops"),
+		at,
+	)
+	if err != nil {
+		t.Fatalf("建立案件：%v", err)
+	}
+	return exceptionCase
 }
 
 func openedEpisode(t *testing.T, id, parcel, kind string, firstHitAt time.Time) *domain.SignalEpisode {
@@ -569,6 +591,107 @@ func TestReopenedEpisodeWinsFindLatest(t *testing.T) {
 		factValue(t, domain.NewExceptionSignalKindReference, "DELAYED")); err != nil || exists {
 		t.Fatalf("跨类型可见：err=%v exists=%v", err, exists)
 	}
+}
+
+// TestAutoEstablishRecordLandsTheCaseWithTheConclusion 证 `AT-VE-062` 的落库半边：走向
+// 为自动建案的记录把案件随发作期与结论同一事务写进 0008 那张表，建立即待响应、根对象
+// 与责任团队照案件原样在行上，在场判据（ActiveCaseView）随即答「活」；事务失败时三者
+// 一起不存在。
+func TestAutoEstablishRecordLandsTheCaseWithTheConclusion(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+	tenant := factValue(t, domain.NewTenantID, "tenant-a")
+
+	opened := openedEpisode(t, "ep-case", "parcel-1", "STALLED", factBaseAt)
+	record := raisedRecord(t, opened, "tenant-a", "parcel-1", "STALLED", domain.AutoEstablishCase)
+	rollback := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := fixture.episodes.SaveRaised(txCtx, record); err != nil {
+			return err
+		}
+		return context.Canceled
+	})
+	if rollback == nil {
+		t.Fatalf("事务该失败没失败")
+	}
+	if fixture.caseCount(t, ctx, record.Case.ID().String()) != 0 {
+		t.Fatalf("回滚后案件仍在")
+	}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.episodes.SaveRaised(txCtx, record)
+	})
+
+	var rootParcel, scope, team, phase string
+	if err := fixture.pool.QueryRow(ctx,
+		`SELECT root_parcel, impact_scope, responsible_team, phase
+		   FROM visibility_exception.exception_case
+		  WHERE tenant_id = $1 AND case_id = $2`,
+		"tenant-a", record.Case.ID().String(),
+	).Scan(&rootParcel, &scope, &team, &phase); err != nil {
+		t.Fatalf("读回案件行：%v", err)
+	}
+	if rootParcel != "parcel-1" || scope != "parcel-1" || team != "team/exception-ops" || phase != "AWAITING_RESPONSE" {
+		t.Fatalf("案件行走样：root=%s scope=%s team=%s phase=%s", rootParcel, scope, team, phase)
+	}
+
+	cases, err := adapter.NewExceptionCases(fixture.db, tenant)
+	if err != nil {
+		t.Fatalf("构造在场视图：%v", err)
+	}
+	active, found, err := cases.CaseActive(ctx, record.Case.ID())
+	if err != nil || !found || !active {
+		t.Fatalf("刚建立的案件在场判据 = active:%v found:%v err:%v，想要在场且活", active, found, err)
+	}
+}
+
+// TestRaisedRecordPairsTheCaseWithItsConclusion 证成对纪律：自动建案结论不带案件、或
+// 非建案结论带着案件，都在写入前被拒——落了就是一份自相矛盾的记录；案件根对象与信号
+// 对象不同同样拒。
+func TestRaisedRecordPairsTheCaseWithItsConclusion(t *testing.T) {
+	fixture := newFactFixture(t)
+	ctx := t.Context()
+
+	orphanConclusion := raisedRecord(t, openedEpisode(t, "ep-a", "parcel-1", "STALLED", factBaseAt),
+		"tenant-a", "parcel-1", "STALLED", domain.AutoEstablishCase)
+	orphanConclusion.Case = nil
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.episodes.SaveRaised(txCtx, orphanConclusion)
+	}); err == nil {
+		t.Fatalf("没有案件的自动建案结论被接受了")
+	}
+
+	strayCase := raisedRecord(t, openedEpisode(t, "ep-b", "parcel-1", "STALLED", factBaseAt),
+		"tenant-a", "parcel-1", "STALLED", domain.ManualReviewRequired)
+	strayCase.Case = establishedCase(t, "case-stray", "parcel-1", factBaseAt)
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.episodes.SaveRaised(txCtx, strayCase)
+	}); err == nil {
+		t.Fatalf("人工复核结论带着案件被接受了")
+	}
+
+	wrongRoot := raisedRecord(t, openedEpisode(t, "ep-c", "parcel-1", "STALLED", factBaseAt),
+		"tenant-a", "parcel-1", "STALLED", domain.AutoEstablishCase)
+	wrongRoot.Case = establishedCase(t, "case-wrong-root", "parcel-9", factBaseAt)
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.episodes.SaveRaised(txCtx, wrongRoot)
+	}); err == nil {
+		t.Fatalf("根对象与信号对象不同的案件被接受了")
+	}
+	if fixture.conclusionCount(t, ctx, "ep-a")+fixture.conclusionCount(t, ctx, "ep-b")+fixture.conclusionCount(t, ctx, "ep-c") != 0 {
+		t.Fatalf("被拒的记录仍有结论落库")
+	}
+}
+
+func (fixture *factFixture) caseCount(t *testing.T, ctx context.Context, caseID string) int {
+	t.Helper()
+	var count int
+	if err := fixture.pool.QueryRow(ctx,
+		`SELECT count(*) FROM visibility_exception.exception_case WHERE case_id = $1`,
+		caseID,
+	).Scan(&count); err != nil {
+		t.Fatalf("数案件行：%v", err)
+	}
+	return count
 }
 
 // TestSaveHitOnMissingEpisodeFails 证命中只能落在已存在的发作期上。

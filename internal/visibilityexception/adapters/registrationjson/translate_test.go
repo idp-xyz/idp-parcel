@@ -75,15 +75,20 @@ func TestTriageRulesTranslateWithClosedOutcome(t *testing.T) {
 		"approvedBy": "SYN-approver-1",
 		"effectiveFrom": "2026-09-01T00:00:00Z",
 		"entries": [
-			{"kind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-HIGH", "outcome": "AUTO_ESTABLISH"}
+			{"kind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-HIGH", "outcome": "AUTO_ESTABLISH", "team": "SYN-TEAM-EXC"},
+			{"kind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-LOW", "outcome": "MANUAL_REVIEW"}
 		]
 	}`)
 	command, err := registrationjson.TriageRulesFromJSON(raw)
 	if err != nil {
 		t.Fatalf("翻译：%v", err)
 	}
-	if len(command.Entries) != 1 || command.Entries[0].Outcome != domain.AutoEstablishCase {
+	if len(command.Entries) != 2 || command.Entries[0].Outcome != domain.AutoEstablishCase {
 		t.Fatalf("条目 = %+v", command.Entries)
+	}
+	// team 只在场时译成引用；缺席留零值——成对与否归用例判，这里不代填也不拒。
+	if command.Entries[0].Team.String() != "SYN-TEAM-EXC" || command.Entries[1].Team.String() != "" {
+		t.Fatalf("团队维没原样译出：%+v", command.Entries)
 	}
 }
 

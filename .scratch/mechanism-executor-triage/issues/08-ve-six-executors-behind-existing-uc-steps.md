@@ -1,7 +1,7 @@
 # VE 六条：步骤在 UC 里、执行器不在编排里——接线
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-6（2026-09-04，基线 `3fff246`）
 Blocked by: 无（组内 `PrepareDisclosure` 依赖同票的 `SubmitEvidence` 先接）
 
 由[票 03](./03-fourteen-that-only-tests-ever-call.md) `## Answer` 立出，按 [spec「处置裁决」](../spec.md) 第 1 条。举证在票 03，此处只列改动对象与完成判据。

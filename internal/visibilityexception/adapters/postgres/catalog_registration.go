@@ -133,12 +133,15 @@ func (registrar *CatalogRegistrar) RegisterTriageRules(
 		return ports.CatalogRegistrationOutcomeInvalid, fmt.Errorf("register triage rules: %w", err)
 	}
 	for _, entry := range registration.Entries {
+		// 团队用指针而不是空串：0022 的成对约束正是靠 NULL 分辨「这一条不带团队」与
+		// 「登记了一个空团队」，与披露条目内容列同一道理。
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO visibility_exception.triage_rule_entry
-				(tenant_id, rule_version, signal_kind, confidence_ref, outcome)
-			 VALUES ($1, $2, $3, $4, $5)`,
+				(tenant_id, rule_version, signal_kind, confidence_ref, outcome, responsible_team)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
 			tenant.String(), registration.Header.Version,
 			entry.Kind.String(), entry.Confidence.String(), entry.Outcome.String(),
+			nullIfBlank(entry.Team.String()),
 		); err != nil {
 			return ports.CatalogRegistrationOutcomeInvalid,
 				fmt.Errorf("register triage rules: 条目 %s/%s：%w",

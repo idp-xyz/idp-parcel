@@ -113,10 +113,12 @@ internal/settlementaccounting/domain SupplierExpectedCostSpec
 
 # ---- visibility-exception ----
 
-# 一类：经 EstablishCase / RaiseConflictSignal / ResolveByBusinessTime / SubmitEvidence /
-# PrepareDisclosure 取得，五个工厂都在函数名棘轮基线里（异常案件、冲突信号、证据提交与披露的
-# 执行器未接）。随各自工厂出名单。
-internal/visibilityexception/domain CasePhase
+# 一类：经 RaiseConflictSignal / ResolveByBusinessTime / SubmitEvidence / PrepareDisclosure 取得，
+# 四个工厂都在函数名棘轮基线里（冲突信号、证据提交与披露的执行器未接）。随各自工厂出名单。
+# 案件那一族（ExceptionCase / CasePhase / ImpactScopeReference / ResponsibleTeamReference）曾在
+# 这里，2026-09-04 随 mechanism-executor-triage/08 VE-b 剪掉：EstablishCase 接进信号编排后四者
+# 经 RaisedSignalRecord.Case 与 TriageAnswer.Team 入种子。**在 c3b4311 的干净内容上数得剪前 60、
+# 剪后 56**，只对该检出成立。
 internal/visibilityexception/domain ConflictJudgment
 internal/visibilityexception/domain ConflictResolutionBasis
 internal/visibilityexception/domain EvidenceAppraisal
@@ -125,10 +127,7 @@ internal/visibilityexception/domain EvidenceDisclosureVersion
 internal/visibilityexception/domain EvidenceItem
 internal/visibilityexception/domain EvidenceItemID
 internal/visibilityexception/domain EvidenceProviderReference
-internal/visibilityexception/domain ExceptionCase
 internal/visibilityexception/domain ExceptionSignal
-internal/visibilityexception/domain ImpactScopeReference
-internal/visibilityexception/domain ResponsibleTeamReference
 
 # ---- 待改小写候选（三类）----
 #

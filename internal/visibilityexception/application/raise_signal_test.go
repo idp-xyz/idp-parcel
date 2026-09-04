@@ -22,6 +22,7 @@ type episodeKey struct {
 type episodeStoreDouble struct {
 	latest      map[episodeKey]*domain.SignalEpisode
 	conclusions []domain.TriageConclusion
+	cases       []*domain.ExceptionCase
 	findErr     error
 	raiseErr    error
 	hitErr      error
@@ -53,6 +54,9 @@ func (double *episodeStoreDouble) SaveRaised(_ context.Context, record ports.Rai
 	key := episodeKey{tenant: record.Tenant, parcel: record.Parcel, kind: record.Kind}
 	double.latest[key] = record.Episode
 	double.conclusions = append(double.conclusions, record.Conclusion)
+	if record.Case != nil {
+		double.cases = append(double.cases, record.Case)
+	}
 	double.raisedSaves++
 	return nil
 }
@@ -96,6 +100,19 @@ func (double *episodeIdentityDouble) NextEpisodeID(_ context.Context) (domain.Ep
 	return domain.NewEpisodeID("episode-" + string(rune('0'+double.next)))
 }
 
+type caseIdentityDouble struct {
+	next int
+	err  error
+}
+
+func (double *caseIdentityDouble) NextCaseID(_ context.Context) (domain.CaseID, error) {
+	if double.err != nil {
+		return domain.CaseID{}, double.err
+	}
+	double.next++
+	return domain.NewCaseID("case-" + string(rune('0'+double.next)))
+}
+
 type triageDownstreamDouble struct {
 	intents []ports.TriageHandoffIntent
 	err     error
@@ -117,6 +134,7 @@ type raiseFixture struct {
 	episodes   *episodeStoreDouble
 	triage     *triageRuleDouble
 	identities *episodeIdentityDouble
+	cases      *caseIdentityDouble
 	downstream *triageDownstreamDouble
 }
 
@@ -125,19 +143,24 @@ func newRaiseFixture(t *testing.T) *raiseFixture {
 	fixture := &raiseFixture{
 		episodes: newEpisodeStore(),
 		triage: &triageRuleDouble{
+			// 自动建案条目连责任团队一起登记（`PAR-VIS-05`）：没有团队的案件建不起来，
+			// 所以规则说「自动建案」时必须同时说「归谁」。
 			answer: ports.TriageAnswer{
 				Outcome: domain.AutoEstablishCase,
 				Rule:    mustValue(t, domain.NewSignalRuleVersionReference, "triage-rules/v2"),
+				Team:    mustValue(t, domain.NewResponsibleTeamReference, "team/exception-ops"),
 			},
 			configured: true,
 		},
 		identities: &episodeIdentityDouble{},
+		cases:      &caseIdentityDouble{},
 		downstream: &triageDownstreamDouble{},
 	}
 	fixture.handler = application.NewRaiseSignalHandler(application.RaiseSignalDeps{
 		Episodes:   fixture.episodes,
 		Triage:     fixture.triage,
 		Identities: fixture.identities,
+		Cases:      fixture.cases,
 		Downstream: fixture.downstream,
 		Clock:      fixedClock{at: signalHitAt.Add(time.Minute)},
 	})
@@ -160,7 +183,7 @@ func raiseCommand(t *testing.T, hitAt time.Time) application.RaiseSignalCommand 
 // 范围、依据和可信度」与「每个信号必须保存对象、类型、规则版本、判断时间、事实依据、
 // 可信度」——首启建发作期、分诊结论与发作期同一提交、意图由发作期标识认领。点名
 // `AT-VE-062` 的分诊半边「高可信高影响命中自动规则→建案」——命中版本化规则形成
-// 自动建案走向，案件本体由结论的消费方建立。
+// 自动建案走向；案件本体随结论同一提交建立，见下面那条建案用例。
 func TestAFirstHitOpensAnEpisodeAndConcludesTriage(t *testing.T) {
 	fixture := newRaiseFixture(t)
 
@@ -192,6 +215,112 @@ func TestAFirstHitOpensAnEpisodeAndConcludesTriage(t *testing.T) {
 	if len(fixture.downstream.intents) != 1 ||
 		fixture.downstream.intents[0].Conclusion.Episode() != episode.ID() {
 		t.Fatal("exactly one handoff intent claimed by the raised episode was expected")
+	}
+}
+
+// Covers: `AT-VE-062`「高可信高影响命中自动规则→建案并固定范围/责任/目标，不自动停单」
+// 与 CONTEXT 生命周期「建立案件 → 固定根对象、初始影响范围、责任团队……主状态为待响应」
+// ——分诊走向为自动建案时，案件随发作期与结论**同一记录**越过提交边界：根对象取信号
+// 对象、责任团队取命中规则条目登记的那个、主状态待响应；发作期与案件仍是两个对象。
+func TestAnAutoEstablishConclusionEstablishesTheCaseInTheSameRecord(t *testing.T) {
+	fixture := newRaiseFixture(t)
+
+	result, err := fixture.handler.Handle(context.Background(), raiseCommand(t, signalHitAt))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	established, present := result.Case()
+	if !present {
+		t.Fatal("an AUTO_ESTABLISH conclusion left no case behind")
+	}
+	snapshot := established.Snapshot()
+	if established.Phase() != domain.CaseAwaitingResponse {
+		t.Fatalf("phase = %s, want AWAITING_RESPONSE", established.Phase())
+	}
+	if established.Root().String() != "parcel-1" {
+		t.Fatalf("root = %q, want the signalled parcel", established.Root())
+	}
+	if snapshot.Team.String() != "team/exception-ops" {
+		t.Fatalf("team = %q, want the team registered on the triage rule entry", snapshot.Team)
+	}
+	if snapshot.Scope.String() == "" || snapshot.EstablishedAt.IsZero() {
+		t.Fatalf("case = %+v; the initial impact scope and establishment time must be fixed", snapshot)
+	}
+	if len(fixture.episodes.cases) != 1 || fixture.episodes.cases[0].ID() != established.ID() {
+		t.Fatal("the case must cross the commit boundary inside the same raised record")
+	}
+	if fixture.cases.next != 1 {
+		t.Fatalf("issued %d case identities, want exactly 1", fixture.cases.next)
+	}
+	episode, _ := result.Episode()
+	if snapshot.ID.String() == episode.ID().String() {
+		t.Fatal("the case borrowed the episode's identity; signal and case stay independent objects")
+	}
+}
+
+// Covers: `AT-VE-063`「资料不足或可能重复→人工分诊，不按最高严重度建案」与 CONTEXT
+// 「低可信、资料不足、可能重复或关联不明确的信号必须先进入分诊」——非自动建案走向不建
+// 案，也不消耗案件标识；发作期与结论照常成立。
+func TestAManualReviewConclusionEstablishesNoCase(t *testing.T) {
+	fixture := newRaiseFixture(t)
+	fixture.triage.answer = ports.TriageAnswer{
+		Outcome: domain.ManualReviewRequired,
+		Rule:    mustValue(t, domain.NewSignalRuleVersionReference, "triage-rules/v2"),
+	}
+
+	result, err := fixture.handler.Handle(context.Background(), raiseCommand(t, signalHitAt))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.SignalEpisodeOpened {
+		t.Fatalf("outcome = %q, want EPISODE_OPENED", result.Outcome())
+	}
+	if _, present := result.Case(); present {
+		t.Fatal("a MANUAL_REVIEW conclusion established a case")
+	}
+	if len(fixture.episodes.cases) != 0 || fixture.cases.next != 0 {
+		t.Fatal("a non-establishing conclusion still wrote or minted a case")
+	}
+}
+
+// Covers: 端口封闭答复纪律——规则说「自动建案」却没说归谁，是登记面漏了团队（库与登记
+// 口都守着这一格），属端口坏答复：上抛而不建一个没有责任团队的案件（CONTEXT「每个开放
+// 案件始终必须有一个内部案件责任团队」），也不写任何东西。
+func TestAnAutoEstablishAnswerWithoutATeamIsRaisedAsAPortDefect(t *testing.T) {
+	fixture := newRaiseFixture(t)
+	fixture.triage.answer.Team = domain.ResponsibleTeamReference{}
+
+	_, err := fixture.handler.Handle(context.Background(), raiseCommand(t, signalHitAt))
+	if err == nil {
+		t.Fatal("an AUTO_ESTABLISH answer without a team was swallowed instead of raised")
+	}
+	if fixture.episodes.raisedSaves != 0 || fixture.cases.next != 0 {
+		t.Fatal("a defective answer still wrote the store or minted a case identity")
+	}
+}
+
+// Covers: 未决语义的案件标识半边——签发不了案件标识时停在未决，发作期与结论都不落库：
+// 结论「自动建案」与案件必须同一提交，只落结论不落案件会让重放走进「已有活跃发作期」
+// 那一支去记命中，案件就永远补不上了。
+func TestAnUnavailableCaseIdentityIsUndecidedWithoutWritingTheEpisode(t *testing.T) {
+	fixture := newRaiseFixture(t)
+	fixture.cases.err = errors.New("case identity unavailable")
+
+	result, err := fixture.handler.Handle(context.Background(), raiseCommand(t, signalHitAt))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.RaiseSignalUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.UndecidedReason() != application.CaseIdentityUnavailable {
+		t.Fatalf("reason = %q, want CASE_IDENTITY_UNAVAILABLE", result.UndecidedReason())
+	}
+	if fixture.episodes.raisedSaves != 0 {
+		t.Fatal("an undecided round wrote the episode without its case")
 	}
 }
 
@@ -239,6 +368,10 @@ func TestARepeatHitOnAnActiveEpisodeUpdatesItWithoutASecondEpisodeOrTriage(t *te
 	}
 	if len(fixture.downstream.intents) != 1 {
 		t.Fatal("a repeat hit handed off a second triage intent")
+	}
+	// `AT-VE-064` 的建案半边：同一连续期的重复命中不重复建案。
+	if _, established := repeat.Case(); established || len(fixture.episodes.cases) != 1 || fixture.cases.next != 1 {
+		t.Fatal("a repeat hit within the same episode established a second case")
 	}
 }
 

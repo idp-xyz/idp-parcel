@@ -101,11 +101,13 @@ func (repository *SignalEpisodes) FindLatest(
 	return episode, true, nil
 }
 
-// SaveRaised 把新开或重开的发作期与它的分诊结论同一事务写入。发作期是新键新行，
-// 并发撞键不是业务答案而是身份签发失守——不译 ON CONFLICT，让唯一约束如实报错，
-// 事务整体回退后重试会在 FindLatest 看到赢家。
+// SaveRaised 把新开或重开的发作期、它的分诊结论以及（走向为自动建案时）随之建立的
+// 案件同一事务写入。发作期是新键新行，并发撞键不是业务答案而是身份签发失守——不译
+// ON CONFLICT，让唯一约束如实报错，事务整体回退后重试会在 FindLatest 看到赢家。
 //
-// 走 RequireExecutor：两条 INSERT 必须同生共死，这正是本方法存在的理由。
+// 走 RequireExecutor：几条 INSERT 必须同生共死，这正是本方法存在的理由。案件那一条
+// 与结论成对（ports.RaisedSignalRecord）：写入前核对，不成对的记录不落——落了就是一份
+// 写着 AUTO_ESTABLISH 却永远没有案件、或没说建案却凭空多出案件的记录。
 func (repository *SignalEpisodes) SaveRaised(
 	ctx context.Context,
 	record ports.RaisedSignalRecord,
@@ -123,6 +125,12 @@ func (repository *SignalEpisodes) SaveRaised(
 	}
 	if record.Conclusion.Episode() != snapshot.ID {
 		return fmt.Errorf("save raised signal: conclusion belongs to another episode")
+	}
+	if (record.Conclusion.Outcome() == domain.AutoEstablishCase) != (record.Case != nil) {
+		return fmt.Errorf("save raised signal: case and AUTO_ESTABLISH conclusion must come together")
+	}
+	if record.Case != nil && record.Case.Root() != snapshot.Parcel {
+		return fmt.Errorf("save raised signal: case root disagrees with the signalled parcel")
 	}
 
 	if _, err := executor.Exec(ctx,
@@ -157,6 +165,31 @@ func (repository *SignalEpisodes) SaveRaised(
 		record.Conclusion.TriagedAt(),
 	); err != nil {
 		return fmt.Errorf("save raised signal: conclusion: %w", err)
+	}
+
+	if record.Case != nil {
+		// 案件按聚合完整形状落 0008 那张表：新建案件只有待响应格的列在场，接单、关闭与
+		// 归并的列由各自的转移日后回填。案件标识是新键新行，撞键同发作期的处置。
+		exceptionCase := record.Case.Snapshot()
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO visibility_exception.exception_case
+				(tenant_id, case_id, root_parcel, impact_scope, responsible_team, phase,
+				 established_at, first_response, closed_at, conclusion, merged_into)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			record.Tenant.String(),
+			exceptionCase.ID.String(),
+			exceptionCase.Root.String(),
+			exceptionCase.Scope.String(),
+			exceptionCase.Team.String(),
+			exceptionCase.Phase.String(),
+			exceptionCase.EstablishedAt,
+			nullIfZeroTime(exceptionCase.FirstResponse),
+			nullIfZeroTime(exceptionCase.ClosedAt),
+			nullIfBlank(exceptionCase.Conclusion),
+			nullIfBlank(exceptionCase.MergedInto.String()),
+		); err != nil {
+			return fmt.Errorf("save raised signal: case: %w", err)
+		}
 	}
 	return nil
 }

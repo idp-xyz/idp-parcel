@@ -182,16 +182,19 @@ func (view *TriageRules) TriageSignal(
 		return ports.TriageAnswer{}, false, fmt.Errorf("triage signal: %w", err)
 	}
 
-	var outcomeRaw string
+	var (
+		outcomeRaw string
+		teamRaw    *string
+	)
 	err = querier.QueryRow(ctx,
-		`SELECT outcome
+		`SELECT outcome, responsible_team
 		   FROM visibility_exception.triage_rule_entry
 		  WHERE tenant_id = $1
 		    AND rule_version = $2
 		    AND signal_kind = $3
 		    AND confidence_ref = $4`,
 		view.tenant.String(), ruleVersion, query.Kind.String(), query.Confidence.String(),
-	).Scan(&outcomeRaw)
+	).Scan(&outcomeRaw, &teamRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TriageAnswer{Outcome: domain.ManualReviewRequired, Rule: rule}, true, nil
 	}
@@ -203,7 +206,20 @@ func (view *TriageRules) TriageSignal(
 	if err != nil {
 		return ports.TriageAnswer{}, false, fmt.Errorf("triage signal: %w", err)
 	}
-	return ports.TriageAnswer{Outcome: outcome, Rule: rule}, true, nil
+	answer := ports.TriageAnswer{Outcome: outcome, Rule: rule}
+	// 团队与走向成对（0022 的 CHECK 守着）：自动建案带、其余不带。这里再过一遍领域门，
+	// 挡的是 CHECK 被后续迁移放宽而 Go 侧没跟上——那时上抛，不把一个没有团队的自动
+	// 建案答出去让编排建出无人负责的案件。
+	if (outcome == domain.AutoEstablishCase) != (teamRaw != nil) {
+		return ports.TriageAnswer{}, false, fmt.Errorf(
+			"triage signal: 条目 %s/%s 的责任团队与走向 %s 不成对", query.Kind, query.Confidence, outcomeRaw)
+	}
+	if teamRaw != nil {
+		if answer.Team, err = domain.NewResponsibleTeamReference(*teamRaw); err != nil {
+			return ports.TriageAnswer{}, false, fmt.Errorf("triage signal: %w", err)
+		}
+	}
+	return answer, true, nil
 }
 
 // triageQueryComplete 挡下缺维的查询。信号必须保存对象、类型、规则版本与可信度

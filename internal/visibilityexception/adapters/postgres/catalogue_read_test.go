@@ -46,6 +46,7 @@ func triageRegistration(t *testing.T, version string, from time.Time) ports.Tria
 				Kind:       build(t, domain.NewExceptionSignalKindReference, "DELIVERY_FAILED"),
 				Confidence: build(t, domain.NewConfidenceReference, "CARRIER_CONFIRMED"),
 				Outcome:    domain.AutoEstablishCase,
+				Team:       build(t, domain.NewResponsibleTeamReference, "team/delivery-desk"),
 			},
 			{
 				Kind:       build(t, domain.NewExceptionSignalKindReference, "ADDRESS_UNKNOWN"),

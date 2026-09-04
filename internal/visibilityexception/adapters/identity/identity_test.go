@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
 )
 
-// factory 抹掉七个工厂各自的构造器与返回类型，让同一组断言逐个工厂跑一遍。七个实现
+// factory 抹掉各工厂各自的构造器与返回类型，让同一组断言逐个工厂跑一遍。各实现
 // 只差一个前缀，逐个手写断言正是抄漏的来处——本包用例守的就是这一类抄漏。
 type factory struct {
 	name string
@@ -75,6 +75,14 @@ func allFactories() []factory {
 				return "", err
 			}
 			value, err := built.NextRecoveryMatterID(context.Background())
+			return value.String(), err
+		}},
+		{"异常案件", "XCS", func(options ...platformidentity.Option) (string, error) {
+			built, err := identity.NewExceptionCases(options...)
+			if err != nil {
+				return "", err
+			}
+			value, err := built.NextCaseID(context.Background())
 			return value.String(), err
 		}},
 	}
