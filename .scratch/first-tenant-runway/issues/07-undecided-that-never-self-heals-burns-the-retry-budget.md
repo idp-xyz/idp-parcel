@@ -208,3 +208,18 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   4. 票 [08](./08-undecided-stage-and-reason-are-invisible-on-a-real-process.md) 第一层随此笔收口。
 
   **不做**：不加定时扫描重驱（ADR-0094 D4 原话）；不在消费门认原因名字；`等待受控补充`不动（归票 09）。
+
+- 2026-09-04 · MCP-1（第一笔的第一片已合入主线 `a9e3440`；本条记它落了什么、怎么验的）。
+
+  **已落（领域层，4 文件）**：`Decide` 的未决折法改三级——客户补件 > 运营登记 > 内部重试，`classifyAcceptanceChecks`
+  按续办路径记两面旗，不在分类里合成 `ResumePath`；新转移 `ShipmentRequest.AwaitOperatorRegistration`，只写等待态、
+  不动状态/版本/决定、不追加处理记录，已越过决定边界的委托拒；`revision_test` 转移表加一行。
+
+  **验证**：在隔离 worktree 钉 `39b827b`（＝本片 rebase 到 `3fff246`）跑 `gofmt -l` 空、`go build ./...`/`go vet ./...`
+  退 0、`go test -p 1 -count=1 ./...` 95 包零 FAIL，DSN 探针 `TestEveryResumePathLandsInTheAttemptTable` 为 `PASS`
+  非 `SKIP`（含真库），394s。随后 rebase 到 `92875ed`（`3fff246..92875ed` 无 `.go`/`.sql`）得 `a9e3440`，
+  `git diff 39b827b a9e3440 -- '*.go' '*.sql'` 为空，快进主线并推。
+
+  **未落（同票下一片）**：两条 as-of 编排在 `*AsOfNotConfigured` 时取回聚合、调该转移并 `Save`（Deps 加委托仓储，
+  `cmd/parcel-dispatch/assemble.go` 跟上）；`ListWaitingOnOperatorRegistration` 读口与迁移 `0013` 部分索引；真库用例。
+  `undecidedDisposition` 不动，第二笔（D4）才翻。
