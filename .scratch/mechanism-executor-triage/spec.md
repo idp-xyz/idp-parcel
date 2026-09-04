@@ -306,6 +306,9 @@ r27 对另五项做的那样，但要逐条写理由）、下调某几个切片�
    答得出的 → 按上下文各立一张实现票（SA 一张、CC 一张、VE 一张，票内逐条列），接线到已有编排；
    答不出的 → 在 `production_wiring_baseline.txt` 该条目的理由行写明「等哪个上游事实来源 / 哪个
    `PAR-*` / 哪个切片」，**不按组写**。取证由本目录持有者完成后写回票 03。
+   **2026-09-04 追记（MCP-3，锚 `1af59c8`）**：十四条全部答得出，无一条走「留待」那一支；三张实现票已立为
+   [06](issues/06-sa-four-executors-behind-existing-uc-steps.md)、[07](issues/07-cc-four-executors-behind-existing-uc-steps.md)、
+   [08](issues/08-ve-six-executors-behind-existing-uc-steps.md)，`production_wiring_baseline.txt` 理由行因此**一行不改**。
 2. **PC 四条、PS 三条、PP 四条**：各自已有归属票（pc-gaps 01/03 已 resolved、label-channel/10 在
    MCP-1 手上、`ReplayPricingEvaluation` 是 PN-08 治理能力）；PP 那对**平行第二写法**
    （`MarshalPricingPlanSnapshot` / `RehydratePricingPlanSnapshot`）与 `NewDecimal` 影子函数是
