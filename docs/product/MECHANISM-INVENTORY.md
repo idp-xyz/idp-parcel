@@ -9,7 +9,7 @@
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
-| customscompliance | 72 | 73 | 15 | 33 | 9 | 8 |
+| customscompliance | 74 | 75 | 16 | 34 | 9 | 8 |
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 57 | 60 | 5 | 8 | 1 | 12 |
@@ -17,10 +17,10 @@
 | partycommercial | 81 | 81 | 8 | 25 | 0 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 76 | 55 | 11 | 37 | 7 | 7 |
+| settlementaccounting | 77 | 56 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 100 | 89 | 19 | 30 | 10 | 16 |
 | visibilityexception | 89 | 86 | 9 | 26 | 8 | 10 |
-| **合计** | 736 | 690 | 99 | 215 | 49 | 95 |
+| **合计** | 739 | 693 | 101 | 216 | 49 | 95 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 42、测试 61。
 
@@ -45,12 +45,12 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 122 份 SQL
+## 迁移：11 个模块共 123 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | collection_remittance | 1 |
-| customs_compliance | 15 |
+| customs_compliance | 16 |
 | network_routing | 9 |
 | node_operations | 3 |
 | parcel_pricing | 4 |
@@ -98,7 +98,7 @@
 | visibilityexception | 8 |
 | **合计** | 15 |
 
-## 端口：声明 310 个；基线口径缺 13，精确口径缺 11
+## 端口：声明 315 个；基线口径缺 14，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -107,6 +107,7 @@
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
+- `settlementaccounting.BuyEvaluationView` 
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
@@ -121,6 +122,7 @@
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
+- `settlementaccounting.BuyEvaluationView` 
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
