@@ -184,8 +184,10 @@ func TestASameSourceCorrectionChainsOntoTheResponsibilityStart(t *testing.T) {
 	}
 }
 
-// TestSupersessionColumnsMustAgreeWithEachOther 证库内 CHECK 钉住三列同在同缺：只带被取代
-// 版本不带承诺前版、不采用行带被取代版本、更正版自指、承诺前版等于自身版本都进不去。
+// TestSupersessionColumnsMustAgreeWithEachOther 证库内 CHECK 与自引用外键钉住链的形状：三列同在
+// 同缺（只带被取代版本不带承诺前版、不采用行带被取代版本、更正版自指、承诺前版等于自身版本都
+// 进不去）；被取代版本必须是同（租户+包裹+来源种类）下登过的一版——悬空的前版、跨来源种类的
+// 回指都进不去。绕过领域直插也一样。
 func TestSupersessionColumnsMustAgreeWithEachOther(t *testing.T) {
 	_, _, _, _, pool := newJudgmentStores(t)
 	ctx := t.Context()
@@ -195,25 +197,33 @@ func TestSupersessionColumnsMustAgreeWithEachOther(t *testing.T) {
 		 content_digest, adopted, source_object, source_place, source_control, occurred_at,
 		 baseline_version, commitment_version, expected_commitment, refusal_basis, adopted_at,
 		 supersedes_source_version, commitment_prior_version, commitment_adjustment_reason)
-	 VALUES ('tenant-x', $1, 'NODE_INTAKE', $2, 'customer-a', 'REQ-1', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13, $14, $15)`
+	 VALUES ('tenant-x', $1, $2, $3, 'customer-a', 'REQ-1', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), $14, $15, $16)`
 
-	adoptedArgs := func(parcel, version, digest string, supersedes, prior, reason any) []any {
-		return []any{parcel, version, digest, true, "obj", "place", "ctl", intakeOccurredAt, "SUB-V1", "CMT-" + version, "exp", nil, supersedes, prior, reason}
+	adoptedArgs := func(parcel, kind, version, digest string, supersedes, prior, reason any) []any {
+		return []any{parcel, kind, version, digest, true, "obj", "place", "ctl", intakeOccurredAt, "SUB-V1", "CMT-" + version, "exp", nil, supersedes, prior, reason}
+	}
+	// 每个包裹先登一个根 V1（NODE_INTAKE），让下面各格拒的原因落在它自己那条约束上。
+	for _, parcel := range []string{"p-bad-1", "p-bad-2", "p-bad-3", "p-bad-4", "p-bad-5", "p-bad-6", "p-ok"} {
+		if _, err := pool.Exec(ctx, insert, adoptedArgs(parcel, "NODE_INTAKE", "V1", "root-"+parcel, nil, nil, nil)...); err != nil {
+			t.Fatalf("登根 %s：%v", parcel, err)
+		}
 	}
 	cases := map[string][]any{
-		"只带被取代版本":    adoptedArgs("p-bad-1", "V2", "d1", "V1", nil, nil),
-		"只带承诺前版":     adoptedArgs("p-bad-2", "V2", "d2", nil, "CMT-V1", nil),
-		"更正版自指":      adoptedArgs("p-bad-3", "V2", "d3", "V2", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V2"),
-		"承诺前版等于自身":   adoptedArgs("p-bad-4", "V2", "d4", "V1", "CMT-V2", "SOURCE_CORRECTED/NODE_INTAKE/V1"),
-		"不采用行带被取代版本": {"p-bad-5", "V2", "d5", false, nil, nil, nil, nil, nil, nil, nil, "REFUSED/x", "V1", nil, nil},
+		"只带被取代版本":    adoptedArgs("p-bad-1", "NODE_INTAKE", "V2", "d1", "V1", nil, nil),
+		"只带承诺前版":     adoptedArgs("p-bad-2", "NODE_INTAKE", "V2", "d2", nil, "CMT-V1", nil),
+		"更正版自指":      adoptedArgs("p-bad-3", "NODE_INTAKE", "V2", "d3", "V2", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V2"),
+		"承诺前版等于自身":   adoptedArgs("p-bad-4", "NODE_INTAKE", "V2", "d4", "V1", "CMT-V2", "SOURCE_CORRECTED/NODE_INTAKE/V1"),
+		"不采用行带被取代版本": {"p-bad-5", "NODE_INTAKE", "V2", "d5", false, nil, nil, nil, nil, nil, nil, nil, "REFUSED/x", "V1", nil, nil},
+		"前版悬空":       adoptedArgs("p-bad-6", "NODE_INTAKE", "V2", "d6", "V0", "CMT-V0", "SOURCE_CORRECTED/NODE_INTAKE/V0"),
+		"回指跨来源种类":    adoptedArgs("p-bad-6", "OFFSITE_PICKUP", "P2", "d7", "V1", "CMT-V1", "SOURCE_CORRECTED/OFFSITE_PICKUP/V1"),
 	}
 	for label, args := range cases {
 		if _, err := pool.Exec(ctx, insert, args...); err == nil {
 			t.Fatalf("一行「%s」溜进了采用账", label)
 		}
 	}
-	if _, err := pool.Exec(ctx, insert, adoptedArgs("p-ok", "V2", "d-ok", "V1", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V1")...); err != nil {
-		t.Fatalf("三列齐全的更正行被拒：%v", err)
+	if _, err := pool.Exec(ctx, insert, adoptedArgs("p-ok", "NODE_INTAKE", "V2", "d-ok", "V1", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V1")...); err != nil {
+		t.Fatalf("三列齐全、前版登过的更正行被拒：%v", err)
 	}
 }
 

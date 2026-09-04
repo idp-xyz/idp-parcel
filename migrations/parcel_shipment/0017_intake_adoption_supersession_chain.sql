@@ -7,7 +7,9 @@
 -- 的 offsite_pickup（迁移 0015）已用同一形状走通一次。
 --
 -- 三列同在或同缺：更正形成的采用带被取代版本、承诺前版与调整原因（领域
--- RestateOnCorrectedIntake 的产物），根采用与不采用行都不带。
+-- RestateOnCorrectedIntake 的产物），根采用与不采用行都不带。被取代版本以自引用外键指回
+-- 同（租户+包裹+来源种类）下的那一行：链不跨来源种类、不指向不存在的版本，这两句在库面
+-- 由外键说而不靠编排记得。
 --
 -- 原部分唯一索引「每（租户+包裹）至多一行 adopted」换成两条：根唯一守责任起点唯一
 -- （AT-PS-049 仍在库面，第二个根撞墙）；同一前版至多被取代一次守链线性（并发第二个更正
@@ -36,6 +38,12 @@ ALTER TABLE parcel_shipment.intake_adoption
                 AND commitment_prior_version <> commitment_version
                 AND commitment_adjustment_reason IS NOT NULL AND btrim(commitment_adjustment_reason) <> '')
         );
+
+-- 被取代版本必须是同（租户+包裹+来源种类）下确实登过的一版：链不跨种类，也不悬空。
+ALTER TABLE parcel_shipment.intake_adoption
+    ADD CONSTRAINT intake_adoption_supersedes_a_registered_version
+        FOREIGN KEY (tenant_id, parcel_id, source_kind, supersedes_source_version)
+        REFERENCES parcel_shipment.intake_adoption (tenant_id, parcel_id, source_kind, source_version);
 
 DROP INDEX parcel_shipment.intake_adoption_responsibility_start;
 
