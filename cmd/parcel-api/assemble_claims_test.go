@@ -210,8 +210,9 @@ func (keys syntheticRuleKeys) FormRuleResolutionKey(
 // 从 PC 客户服务规则正文读（ADR-0104 Consequences），对真库钉两态：本租户在 PC 没有生效的规则版本时
 // 两维照旧未登记、编排停的格不变；PC 登了正文之后两维 Registered 为真、RuleVersion 是 PC 三段版本引用
 // （Decision 五）、Required 与 PC 材料条目逐项相等，而票面留格的 Deadline / SupplementDeadline / Notice
-// 仍是零值。另钉一格：生产装配（键来源 nil）在 PC 登了正文之后**行为一字不变**——那是显式未配置，
-// 不是接错。测试输入是隔离合成，只记 `S`。
+// 仍是零值。编排侧按票 ve-claims-read-seams/05 钉三态：PC 没登→FILING_DEADLINE_NOT_REGISTERED；登了、
+// 差材料→SUPPLEMENT_DEADLINE_UNDERIVABLE；登了、材料齐→FILING_DEADLINE_UNDERIVABLE。另钉一格：生产装配
+// （键来源 nil）在 PC 登了正文之后**行为一字不变**——那是显式未配置，不是接错。测试输入是隔离合成，只记 `S`。
 func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -380,18 +381,51 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 		t.Fatalf("Notice=%q SupplementDeadline=%v；两样今天都没有来源，只能留格", materials.Notice, materials.SupplementDeadline)
 	}
 
-	// 材料维接通之后，零收讫的索赔走进「差材料」那一支；补充截止是留格的零值，applyScreen 据既有守卫停在
-	// ELIGIBILITY_SUPPLEMENT_WINDOW_CLOSED——停在未决、不记第三态、不拒赔。这一格的名字对「截止算不出」
-	// 已经不准，改名归 application（票 ve-claims-read-seams/05）；那一票落地时这一行随之换名。
+	// 材料维接通之后，零收讫的索赔走进「差材料」那一支；补充截止是留格的零值，编排停在
+	// ELIGIBILITY_SUPPLEMENT_DEADLINE_UNDERIVABLE（票 ve-claims-read-seams/05）——停在未决、不记第三态、
+	// 不拒赔，名字说的是「截止算不出」而不是「窗口已关」。
 	screened, err = claims.ScreenClaim(ctx, screenCommand)
 	if err != nil || screened.Outcome() != visibilityapp.HandleClaimUndecided {
 		t.Fatalf("PC 登了正文后的审核：outcome=%v err=%v，要停在未决而不是拒赔或放行", screened.Outcome(), err)
 	}
-	if got := screened.UndecidedReason(); got != visibilityapp.EligibilitySupplementWindowClosed {
-		t.Fatalf("reason = %v, want ELIGIBILITY_SUPPLEMENT_WINDOW_CLOSED——材料维已按 PC 清单核出缺口、补充截止留格", got)
+	if got := screened.UndecidedReason(); got != visibilityapp.EligibilitySupplementDeadlineUnderivable {
+		t.Fatalf("reason = %v, want ELIGIBILITY_SUPPLEMENT_DEADLINE_UNDERIVABLE——材料维已按 PC 清单核出缺口、补充截止留格", got)
 	}
 	if _, has := screened.Claim(); has {
 		t.Fatal("停在未决却交回了索赔项——未决时索赔项该一字不动、不随答案交出")
+	}
+
+	// 材料按 PC 清单收齐之后，差材料那一支不再走到，停下的换成首次索赔期限维：规则登了而截止算不出
+	// ——ELIGIBILITY_FILING_DEADLINE_UNDERIVABLE，不是「未登记」（规则明明在 PC 里）。
+	receipts, err := vepostgres.NewMaterialReceiptRegistrar(db)
+	if err != nil {
+		t.Fatalf("构造归集面写入方：%v", err)
+	}
+	for _, material := range []string{"SYN-MAT-PHOTO", "SYN-MAT-INVOICE"} {
+		var receiptOutcome veports.MaterialReceiptWriteOutcome
+		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			var registerErr error
+			receiptOutcome, registerErr = receipts.RegisterReceipt(txCtx, command.TenantID, veports.MaterialReceipt{
+				Batch:      command.Batch,
+				Item:       command.Item,
+				Material:   mustValue(t, visibilitydomain.NewMaterialRequirementReference, material),
+				ReceivedAt: time.Date(2026, 8, 23, 9, 0, 0, 0, time.UTC),
+				ReceivedBy: "SYN-OPERATOR-1",
+			})
+			return registerErr
+		}); err != nil {
+			t.Fatalf("事务内登记收讫 %s 失败：%v", material, err)
+		}
+		if receiptOutcome != veports.MaterialReceiptRecorded {
+			t.Fatalf("登记收讫 %s 应成功，实得 %d", material, receiptOutcome)
+		}
+	}
+	screened, err = claims.ScreenClaim(ctx, screenCommand)
+	if err != nil || screened.Outcome() != visibilityapp.HandleClaimUndecided {
+		t.Fatalf("材料齐后的审核：outcome=%v err=%v，要停在未决", screened.Outcome(), err)
+	}
+	if got := screened.UndecidedReason(); got != visibilityapp.EligibilityFilingDeadlineUnderivable {
+		t.Fatalf("reason = %v, want ELIGIBILITY_FILING_DEADLINE_UNDERIVABLE——规则在 PC 里，缺的是起算事实与日历能力", got)
 	}
 
 	// 生产装配：键来源 nil 是显式未配置，PC 登了正文也不改答案——两维仍未登记，编排停的格与本票之前一字不变。
