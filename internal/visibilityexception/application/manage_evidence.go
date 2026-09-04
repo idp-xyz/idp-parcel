@@ -180,8 +180,9 @@ func (handler *ManageEvidenceHandler) SubmitEvidence(
 }
 
 // PrepareDisclosure 为一项已收到的证据形成对外披露版本：证据项不在场即未受理；幂等按
-// （证据项+脱敏指纹），同一脱敏版本返回原版本；披露范围缺席或脱敏指纹与原件相同由领域
-// 门拒下（相同即原件外流），编排答未受理而不是撞错——那是准备方给错了东西，不是故障。
+// （证据项+脱敏指纹+披露范围），同一范围的同一脱敏版本返回原版本，同一脱敏内容对另一
+// 范围是另一个版本；披露范围缺席或脱敏指纹与原件相同由领域门拒下（相同即原件外流），
+// 编排答未受理而不是撞错——那是准备方给错了东西，不是故障。
 // 准备完成只是准备完成：对外提交、送达与对方确认是追偿动作或通知那一侧分别记录的节点
 // （`AT-VE-132`）。
 func (handler *ManageEvidenceHandler) PrepareDisclosure(
@@ -202,7 +203,7 @@ func (handler *ManageEvidenceHandler) PrepareDisclosure(
 		return ManageEvidenceResult{outcome: ManageEvidenceNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Evidence.FindDisclosure(ctx, command.TenantID, command.Evidence, command.Redacted)
+	existing, found, err := handler.deps.Evidence.FindDisclosure(ctx, command.TenantID, command.Evidence, command.Redacted, command.Scope)
 	if err != nil {
 		return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
 	}
@@ -238,7 +239,7 @@ func (handler *ManageEvidenceHandler) PrepareDisclosure(
 			hasDisclosure: true,
 		}, nil
 	case ports.EvidenceAlreadyRecorded:
-		existing, found, err := handler.deps.Evidence.FindDisclosure(ctx, command.TenantID, command.Evidence, command.Redacted)
+		existing, found, err := handler.deps.Evidence.FindDisclosure(ctx, command.TenantID, command.Evidence, command.Redacted, command.Scope)
 		if err != nil || !found {
 			return ManageEvidenceResult{outcome: ManageEvidenceUndecided, reason: EvidenceStoreUnavailable}, nil
 		}

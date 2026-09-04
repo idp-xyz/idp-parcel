@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 126 份 SQL
+## 迁移：11 个模块共 127 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -59,7 +59,7 @@
 | pilot_governance | 5 |
 | settlement_accounting | 16 |
 | transport_fulfillment | 12 |
-| visibility_exception | 25 |
+| visibility_exception | 26 |
 
 ## 接线面：接入面端点 90 个，消费适配器 24 个生产文件，直投路由表 15 条
 

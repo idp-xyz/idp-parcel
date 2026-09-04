@@ -23,6 +23,7 @@ type disclosureVersionKey struct {
 	tenant   domain.TenantID
 	item     domain.EvidenceItemID
 	redacted string
+	scope    string
 }
 
 type evidenceStoreDouble struct {
@@ -91,11 +92,12 @@ func (double *evidenceStoreDouble) FindDisclosure(
 	tenant domain.TenantID,
 	item domain.EvidenceItemID,
 	redacted domain.EvidenceContentDigest,
+	scope string,
 ) (domain.EvidenceDisclosureVersion, bool, error) {
 	if double.findErr != nil {
 		return domain.EvidenceDisclosureVersion{}, false, double.findErr
 	}
-	version, found := double.disclosures[disclosureVersionKey{tenant: tenant, item: item, redacted: redacted.String()}]
+	version, found := double.disclosures[disclosureVersionKey{tenant: tenant, item: item, redacted: redacted.String(), scope: scope}]
 	return version, found, nil
 }
 
@@ -107,7 +109,7 @@ func (double *evidenceStoreDouble) SaveDisclosure(
 	if double.saveErr != nil {
 		return ports.EvidenceSaveOutcomeInvalid, double.saveErr
 	}
-	key := disclosureVersionKey{tenant: tenant, item: version.Item(), redacted: version.Redacted().String()}
+	key := disclosureVersionKey{tenant: tenant, item: version.Item(), redacted: version.Redacted().String(), scope: version.Scope()}
 	if _, found := double.disclosures[key]; found {
 		return ports.EvidenceAlreadyRecorded, nil
 	}
@@ -319,6 +321,21 @@ func TestPreparingADisclosureVersionAnchorsTheOriginalAndIsIdempotent(t *testing
 	if replay.Outcome() != application.EvidenceDisclosureExistingResult || fixture.store.prepared != 1 {
 		t.Fatalf("outcome = %q with %d versions; the same redacted version must be reused, not re-prepared",
 			replay.Outcome(), fixture.store.prepared)
+	}
+
+	// 一个披露版本是「范围 + 脱敏版本」这一对：同一份脱敏内容对另一相对方是另一个版本，
+	// 不是复用——复用了就把准备方要的范围静默换成了别人的。
+	otherScope := prepareCommand(t, item.ID())
+	otherScope.Scope = "claim-counterparty/carrier-9"
+	second, err := fixture.handler.PrepareDisclosure(context.Background(), otherScope)
+	if err != nil {
+		t.Fatalf("prepare for another scope: %v", err)
+	}
+	secondVersion, _ := second.Disclosure()
+	if second.Outcome() != application.EvidenceDisclosurePrepared || fixture.store.prepared != 2 ||
+		secondVersion.Scope() != "claim-counterparty/carrier-9" {
+		t.Fatalf("outcome = %q with %d versions, scope %q; another scope must be its own version",
+			second.Outcome(), fixture.store.prepared, secondVersion.Scope())
 	}
 }
 

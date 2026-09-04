@@ -114,6 +114,7 @@ func (repository *EvidenceItems) FindDisclosure(
 	tenant domain.TenantID,
 	id domain.EvidenceItemID,
 	redacted domain.EvidenceContentDigest,
+	scope string,
 ) (domain.EvidenceDisclosureVersion, bool, error) {
 	item, found, err := repository.FindByID(ctx, tenant, id)
 	if err != nil {
@@ -128,15 +129,15 @@ func (repository *EvidenceItems) FindDisclosure(
 		return domain.EvidenceDisclosureVersion{}, false, fmt.Errorf("find evidence disclosure: %w", err)
 	}
 	var (
-		originalRaw, scope string
-		preparedAt         time.Time
+		originalRaw string
+		preparedAt  time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT original_digest, scope, prepared_at
+		`SELECT original_digest, prepared_at
 		   FROM visibility_exception.evidence_disclosure_version
-		  WHERE tenant_id = $1 AND evidence_id = $2 AND redacted_digest = $3`,
-		tenant.String(), id.String(), redacted.String(),
-	).Scan(&originalRaw, &scope, &preparedAt)
+		  WHERE tenant_id = $1 AND evidence_id = $2 AND redacted_digest = $3 AND scope = $4`,
+		tenant.String(), id.String(), redacted.String(), scope,
+	).Scan(&originalRaw, &preparedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.EvidenceDisclosureVersion{}, false, nil
 	}
@@ -156,8 +157,8 @@ func (repository *EvidenceItems) FindDisclosure(
 	return version, true, nil
 }
 
-// SaveDisclosure 落一个披露版本。撞（证据项+脱敏指纹）主键交回 AlreadyRecorded；版本只增
-// 不改。外键要求证据项在场：给一个不存在的证据项造披露版本，正是「来源不明的附件」。
+// SaveDisclosure 落一个披露版本。撞（证据项+脱敏指纹+范围）主键交回 AlreadyRecorded；版本
+// 只增不改。外键要求证据项在场：给一个不存在的证据项造披露版本，正是「来源不明的附件」。
 func (repository *EvidenceItems) SaveDisclosure(
 	ctx context.Context,
 	tenant domain.TenantID,

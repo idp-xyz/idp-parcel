@@ -113,7 +113,7 @@ func TestEvidenceDisclosureVersionsAnchorTheOriginalAndOnlyAppend(t *testing.T) 
 	saveEvidence(t, fixture, store, tenant, item)
 	redacted := build(t, domain.NewEvidenceContentDigest, "sha256:photo-redacted")
 
-	if _, found, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted); err != nil || found {
+	if _, found, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted, "insurer-1"); err != nil || found {
 		t.Fatalf("准备之前应无版本：err=%v found=%v", err, found)
 	}
 
@@ -130,7 +130,7 @@ func TestEvidenceDisclosureVersionsAnchorTheOriginalAndOnlyAppend(t *testing.T) 
 		t.Fatalf("首存披露版本：err=%v outcome=%d", err, outcome)
 	}
 
-	read, found, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted)
+	read, found, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted, "insurer-1")
 	if err != nil || !found {
 		t.Fatalf("读回披露版本：%v found=%v", err, found)
 	}
@@ -147,6 +147,25 @@ func TestEvidenceDisclosureVersionsAnchorTheOriginalAndOnlyAppend(t *testing.T) 
 		t.Fatalf("重存同一版本：err=%v outcome=%d，想要 AlreadyRecorded", err, outcome)
 	}
 
+	// 同一份脱敏内容对另一范围是另一个版本（0026：范围进行身份）；按原范围查仍只见原版本。
+	carrierVersion, err := domain.PrepareDisclosure(item, redacted, "carrier-9", evidenceBaseAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("形成另一范围的披露版本：%v", err)
+	}
+	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = store.SaveDisclosure(txCtx, tenant, carrierVersion)
+		return err
+	}); err != nil || outcome != ports.EvidenceSaved {
+		t.Fatalf("另一范围的版本应为 Saved：err=%v outcome=%d", err, outcome)
+	}
+	if _, found, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted, "carrier-9"); err != nil || !found {
+		t.Fatalf("读回另一范围的版本：err=%v found=%v", err, found)
+	}
+	if again, _, err := store.FindDisclosure(ctx, tenant, item.ID(), redacted, "insurer-1"); err != nil || again.Scope() != "insurer-1" {
+		t.Fatalf("原范围的版本被另一范围盖掉了：%+v err=%v", again, err)
+	}
+
 	// 证据项不在场：外键拒下——给不存在的原件造披露版本正是「来源不明的附件」。
 	ghost := submittedEvidence(t, "evd-ghost", "customer-1", "sha256:ghost")
 	ghostVersion, err := domain.PrepareDisclosure(ghost, build(t, domain.NewEvidenceContentDigest, "sha256:ghost-redacted"), "x", evidenceBaseAt)
@@ -159,7 +178,7 @@ func TestEvidenceDisclosureVersionsAnchorTheOriginalAndOnlyAppend(t *testing.T) 
 	}); err == nil {
 		t.Fatal("挂在不存在证据项上的披露版本被接受了")
 	}
-	if _, found, err := store.FindDisclosure(ctx, tenant, ghost.ID(), ghostVersion.Redacted()); err != nil || found {
+	if _, found, err := store.FindDisclosure(ctx, tenant, ghost.ID(), ghostVersion.Redacted(), "x"); err != nil || found {
 		t.Fatalf("幽灵版本读回：err=%v found=%v", err, found)
 	}
 }

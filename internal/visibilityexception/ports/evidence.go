@@ -31,9 +31,10 @@ const (
 // 与提供方（CONTEXT），来源不同就不是同一份证据。Save 撞该唯一约束交回 AlreadyRecorded
 // （ADR-0031 写入代数，事务保持可用）。
 //
-// 披露版本按（证据项 + 脱敏指纹）成行，只增不改：同一原件的每个脱敏版本各占一行，
-// FindDisclosure 按这两维答已有与否。读回经 PrepareDisclosure 重过构造门（脱敏指纹不得
-// 与原件相同），一次坏写入不得变成一份看起来合法的披露版本。
+// 披露版本按（证据项 + 脱敏指纹 + 披露范围）成行，只增不改：一个版本是「明确披露范围
+// + 脱敏版本」这一对，同一份脱敏内容对两个相对方是两个版本；FindDisclosure 按这三维答
+// 已有与否。读回经 PrepareDisclosure 重过构造门（脱敏指纹不得与原件相同），一次坏写入
+// 不得变成一份看起来合法的披露版本。
 type EvidenceStore interface {
 	FindByID(
 		ctx context.Context,
@@ -52,6 +53,7 @@ type EvidenceStore interface {
 		tenant domain.TenantID,
 		item domain.EvidenceItemID,
 		redacted domain.EvidenceContentDigest,
+		scope string,
 	) (domain.EvidenceDisclosureVersion, bool, error)
 	SaveDisclosure(
 		ctx context.Context,
