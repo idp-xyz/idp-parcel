@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），库面镜像已对齐（`f8301e4`），入账那一层已按 MCP-3 裁决退回过渡态（见文末 Comment），Decision 四/五 未落——它们是本票剩下的切片
+Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），库面镜像已对齐（`f8301e4`），入账那一层已按 MCP-3 裁决退回过渡态，Decision 五 已落（`a9e3440` 领域层 + `a3adb75` 编排/读口/迁移 0013，见文末两条 Comment）；**Decision 四 未落**——跨 PC/PS 的第二笔（登记动作发「参数已登记」信封 + PS 消费门重驱 + `undecidedDisposition` 翻转）是本票剩下的切片，PC 那半在 party-commercial 地盘，开工前占号
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -223,3 +223,26 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   **未落（同票下一片）**：两条 as-of 编排在 `*AsOfNotConfigured` 时取回聚合、调该转移并 `Save`（Deps 加委托仓储，
   `cmd/parcel-dispatch/assemble.go` 跟上）；`ListWaitingOnOperatorRegistration` 读口与迁移 `0013` 部分索引；真库用例。
   `undecidedDisposition` 不动，第二笔（D4）才翻。
+
+- 2026-09-04 · MCP-1（第一笔的第二片已合入主线并推送 `a3adb75`；**第一笔（D5）至此落完**，本条记它落了什么、怎么验的）。
+
+  **已落（14 文件）**：`awaitOperatorRegistration` 在两条 as-of 编排的停顿处按 `ResumePath` 判——只对`等待运营登记`
+  那一族取回聚合、调 `AwaitOperatorRegistration`、`Save`，再交回原停顿原因；等待态没落库的三种样子各交回自己那一格
+  （`ShipmentRequestUnavailable` / 新原因 `OperatorRegistrationWaitNotSaved` / `StaleShipmentRequestRevision`），
+  全归内部重试，照旧回滚重投——`判断时点未配置`因此只在等待态确已落库时交回，D4 翻转后消费门凭它入账才站得住。
+  转移被聚合拒绝（已决/已停）时原因照交不改。两个处理器多一个 `ports.ShipmentRequestRepository` 参数，
+  `cmd/parcel-dispatch/assemble.go` 与两处测试装配跟上。读口 `ports.OperatorRegistrationQueue.
+  ListWaitingOnOperatorRegistration(ctx, tenant, limit)`（上一条写的 `FindWaitingOn…` 定名时改照复核队列的 `List…`
+  先例），以租户为键，交回来源身份 / 委托标识 / 当前提交版本 / 成员清单，老的在前；实现在 `ShipmentRequests` 上，
+  谓词与迁移 `0013` 的部分索引逐字吻合。真库用例三条（列得出 / 租户与状态两条边 / limit 门）。
+
+  **刻意留下的**：`undecidedDisposition` 未动——消费门对`等待运营登记`仍回滚重投，所以真进程上这次 `Save` 会随本轮
+  回滚，要到 D4 那一笔（续办信封 + `NewOperatorRegistrationCompletedConsumer` + 翻转）才留得住；新读口暂无生产
+  消费者，D4 接。三条命令口的 `*RulesNotConfigured` 不经这两条编排，本片不碰它们的等待态落库——它们是否也该在
+  拒绝/撤回/修订前写第四格，D4 开工时一并看。
+
+  **验证**：隔离 worktree 钉 `86ba464`（＝本片 rebase 到 `8ab9835`）跑 `gofmt -l` 空、`go build`/`go vet` 退 0、
+  `go test -p 1 -count=1 ./...` 95 包零 FAIL、DSN 探针 `PASS`，409s；rebase 到 `10adcb3` 得 `a3adb75`，本片文件
+  `git diff` 为空，再在 `a3adb75` 上整跑一遍同样 95 包零 FAIL（488s，含 b3d3343/024cb5f/c3b4311/10adcb3 四笔他人
+  提交），推 `a3adb75:main`。**漏了一件**：推前没在 tip 重生成机制清点，CI 那道比对在 `a3adb75` 会红，随下一笔
+  （`efdbad7`，锚 `45c3eeb`）补齐。
