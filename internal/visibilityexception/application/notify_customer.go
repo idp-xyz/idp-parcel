@@ -49,6 +49,7 @@ const (
 	NotificationPolicyUnavailable
 	NotificationPolicyNotConfigured
 	NotificationIdentityUnavailable
+	NotificationDecisionStoreUnavailable
 )
 
 func (reason NotifyCustomerUndecidedReason) String() string {
@@ -61,17 +62,23 @@ func (reason NotifyCustomerUndecidedReason) String() string {
 		return "NOTIFICATION_POLICY_NOT_CONFIGURED"
 	case NotificationIdentityUnavailable:
 		return "NOTIFICATION_IDENTITY_UNAVAILABLE"
+	case NotificationDecisionStoreUnavailable:
+		return "NOTIFICATION_DECISION_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
 }
 
-// NotifyCustomerCommand 携带一份已批准披露的决定。通知的对象、内容与目标客户全部
-// 取自它——编排不自造披露内容，也不通知任何没有披露决定的东西。租户显式随命令到达
-// （ADR-0003）：客户账户引用只在租户内唯一。
+// NotifyCustomerCommand 指名要通知的是哪一份已登记的披露决定：（发作期 + 客户账户）是
+// 决定登记册的当前键。命令不裸带一份决定——决定由 DecideDisclosureHandler 形成并入册，
+// 这里只引用产物；裸带会让任何调用方都能凭空造一份「已披露」的决定送进通知，而披露
+// 决定是本上下文拥有的判断，不是输入。通知的对象、内容与目标客户全部取自登记的那份
+// 决定——编排不自造披露内容。租户显式随命令到达（ADR-0003）：客户账户引用只在租户内
+// 唯一。
 type NotifyCustomerCommand struct {
-	TenantID   domain.TenantID
-	Disclosure domain.DisclosureDecision
+	TenantID domain.TenantID
+	Episode  domain.EpisodeID
+	Customer domain.CustomerAccountReference
 }
 
 type NotifyCustomerResult struct {
@@ -100,6 +107,7 @@ func (result NotifyCustomerResult) HandoffReference() string {
 }
 
 type NotifyCustomerDeps struct {
+	Decisions     ports.DisclosureDecisionStore
 	Notifications ports.CustomerNotificationStore
 	Policy        ports.NotificationPolicyView
 	Identities    ports.NotificationIdentityFactory
@@ -116,23 +124,34 @@ func NewNotifyCustomerHandler(deps NotifyCustomerDeps) *NotifyCustomerHandler {
 	return &NotifyCustomerHandler{deps: deps}
 }
 
-// Handle 把一份`披露`结论的决定推进到客户通知：受理（只有披露结论能通知——领域构造器
-// 已钉，编排在门口就答未受理而不是撞领域错）→ 幂等按披露决定（已提交过渠道的不重发，
-// 只重发同一份意图；上次提交失败的按策略重试，新节点接在失败后面）→ 策略取渠道与时限
-// （未配置即未决，不造渠道）→ 生成、提交渠道、分别记录节点 → 意图。查询与门户展示
-// 不经这里——那是不同结果，本编排只做主动通知这一种。
+// Handle 把一份已登记的`披露`结论决定推进到客户通知：受理（发作期与客户缺一即未受理）
+// → 取回当前决定（没有决定就没有可通知的东西；非披露结论构不成通知——领域构造器已钉，
+// 编排在门口就答未受理而不是撞领域错）→ 幂等按披露决定（已提交过渠道的不重发，只重发
+// 同一份意图；上次提交失败的按策略重试，新节点接在失败后面）→ 策略取渠道与时限（未配置
+// 即未决，不造渠道）→ 生成、提交渠道、分别记录节点 → 意图。查询与门户展示不经这里——
+// 那是不同结果，本编排只做主动通知这一种。
 func (handler *NotifyCustomerHandler) Handle(
 	ctx context.Context,
 	command NotifyCustomerCommand,
 ) (NotifyCustomerResult, error) {
-	// 非披露结论构不成通知：暂不披露与待授权都没有可通知的内容。这是门口的业务答案，
-	// 不是等 GenerateNotification 报错——撞出来的错分不清是路由错了还是内容缺了。
-	if command.Disclosure.Conclusion() != domain.DiscloseToCustomer ||
-		command.TenantID.String() == "" {
+	if command.TenantID.String() == "" ||
+		command.Episode.String() == "" ||
+		command.Customer.String() == "" {
 		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
 	}
 
-	existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, command.Disclosure)
+	disclosure, found, err := handler.deps.Decisions.FindCurrent(ctx, command.TenantID, command.Episode, command.Customer)
+	if err != nil {
+		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationDecisionStoreUnavailable}, nil
+	}
+	// 没有决定、或决定不是披露结论，都构不成通知：暂不披露与待授权都没有可通知的内容。
+	// 这是门口的业务答案，不是等 GenerateNotification 报错——撞出来的错分不清是路由错了
+	// 还是内容缺了。
+	if !found || disclosure.Conclusion() != domain.DiscloseToCustomer {
+		return NotifyCustomerResult{outcome: NotifyNotAccepted}, nil
+	}
+
+	existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, disclosure)
 	if err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 	}
@@ -151,7 +170,7 @@ func (handler *NotifyCustomerHandler) Handle(
 		return handler.submit(ctx, command.TenantID, existing)
 	}
 
-	directive, configured, err := handler.deps.Policy.DirectNotification(ctx, command.Disclosure)
+	directive, configured, err := handler.deps.Policy.DirectNotification(ctx, disclosure)
 	if err != nil {
 		return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationPolicyUnavailable}, nil
 	}
@@ -168,7 +187,7 @@ func (handler *NotifyCustomerHandler) Handle(
 
 	notification, err := domain.GenerateNotification(
 		notificationID,
-		command.Disclosure,
+		disclosure,
 		directive.Deadline,
 		directive.Channel,
 		directive.Obligation,
@@ -189,7 +208,7 @@ func (handler *NotifyCustomerHandler) Handle(
 	case ports.NotificationSaved:
 		return handler.submit(ctx, command.TenantID, notification)
 	case ports.NotificationAlreadyRecorded:
-		existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, command.Disclosure)
+		existing, found, err := handler.deps.Notifications.FindByDisclosure(ctx, command.TenantID, disclosure)
 		if err != nil || !found {
 			return NotifyCustomerResult{outcome: NotifyUndecided, reason: NotificationStoreUnavailable}, nil
 		}

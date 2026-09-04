@@ -217,7 +217,15 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 相等不是子串，是第二种。**在 c3b4311 的干净内容上（工作树对 HEAD 无差）数得剪前 23、
 # 剪后 22**，两法同得（按 UTF-8 逐行滤非空非注释，与字节层数行首非 `#`）；两个数只对该检出
 # 成立，下一个改名单的人在自己那一刻的 HEAD 上重取。同票余五条随 VE-a / VE-c / VE-d 各自出名单。
-internal/visibilityexception/domain DecideDisclosure
+#
+# DecideDisclosure 曾在这里，2026-09-04 随同票 VE-a 剪掉：新用例 application/decide_disclosure.go
+# 从发作期、反查到的客户归属与异常披露规则（0023 登记面）形成三态决定并入册，
+# application/notify_customer.go 改为引用已登记的决定；adapters/postgres/disclosure_decision.go
+# 读回时再过一遍同一道构造门。头注那句「与 FormSupplierExpectedCost 是仅有的两个走出 domain
+# 层的」到此两条都已接上。成因三分先分过：全仓该名字只有一处声明（domain/customer_disclosure.go），
+# 同笔新增的 DecideDisclosureHandler / Command / Deps / Result 是前缀名，门禁比的是精确相等不是
+# 子串，是第二种。**在 acb4975 的干净内容上（工作树对 HEAD 无差）数得剪前 16、剪后 15**，
+# 两法同得；只对该检出成立。
 internal/visibilityexception/domain PrepareDisclosure
 internal/visibilityexception/domain RaiseConflictSignal
 internal/visibilityexception/domain ResolveByBusinessTime

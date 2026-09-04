@@ -131,6 +131,7 @@ func (double *notifyDownstreamDouble) HandOffNotification(
 
 type notifyFixture struct {
 	handler       *application.NotifyCustomerHandler
+	decisions     *decisionStoreDouble
 	notifications *notificationStoreDouble
 	policy        *notificationPolicyDouble
 	identities    *notificationIdentityDouble
@@ -138,9 +139,12 @@ type notifyFixture struct {
 	downstream    *notifyDownstreamDouble
 }
 
+// newNotifyFixture 预置一份已登记的`披露`决定（episode-1 / customer-1）——通知只引用决定
+// 登记册里的产物，用例要换结论就换册里那一份。
 func newNotifyFixture(t *testing.T) *notifyFixture {
 	t.Helper()
 	fixture := &notifyFixture{
+		decisions:     newDecisionStore(),
 		notifications: newNotificationStore(),
 		policy: &notificationPolicyDouble{
 			directive: ports.NotificationDirective{
@@ -155,6 +159,7 @@ func newNotifyFixture(t *testing.T) *notifyFixture {
 		downstream: &notifyDownstreamDouble{},
 	}
 	fixture.handler = application.NewNotifyCustomerHandler(application.NotifyCustomerDeps{
+		Decisions:     fixture.decisions,
 		Notifications: fixture.notifications,
 		Policy:        fixture.policy,
 		Identities:    fixture.identities,
@@ -162,7 +167,19 @@ func newNotifyFixture(t *testing.T) *notifyFixture {
 		Downstream:    fixture.downstream,
 		Clock:         fixedClock{at: disclosureDecidedAt.Add(time.Minute)},
 	})
+	fixture.recordDecision(t, discloseDecision(t, domain.DiscloseToCustomer))
 	return fixture
+}
+
+// recordDecision 把一份决定登进册里（覆盖同键的既有决定），模拟 DecideDisclosureHandler
+// 已经跑过。
+func (fixture *notifyFixture) recordDecision(t *testing.T, decision domain.DisclosureDecision) {
+	t.Helper()
+	fixture.decisions.current[decisionKey{
+		tenant:   mustValue(t, domain.NewTenantID, "tenant-1"),
+		episode:  decision.Episode(),
+		customer: decision.Customer(),
+	}] = decision
 }
 
 // discloseDecision 造一份披露决定；conclusion 为披露格时带内容快照，其余不带。
@@ -189,8 +206,9 @@ func discloseDecision(t *testing.T, conclusion domain.DisclosureConclusion) doma
 func notifyCommand(t *testing.T) application.NotifyCustomerCommand {
 	t.Helper()
 	return application.NotifyCustomerCommand{
-		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
-		Disclosure: discloseDecision(t, domain.DiscloseToCustomer),
+		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
+		Episode:  mustValue(t, domain.NewEpisodeID, "episode-1"),
+		Customer: mustValue(t, domain.NewCustomerAccountReference, "customer-1"),
 	}
 }
 
@@ -235,9 +253,10 @@ func TestADiscloseDecisionGeneratesSubmitsAndRecordsTheNotification(t *testing.T
 }
 
 // Covers: 派工受理约束「只有 DiscloseToCustomer 结论能生成通知——领域已钉，编排不绕」
-// 与 CONTEXT「披露条件不成立或授权不足时分别形成暂不披露或待授权结果」——两个非披露格
-// 都构不成通知请求，门口即答未受理，不读任何依赖。点名 `AT-VE-099` 的不发消息半边
-// 「暂不披露，不自动发消息」与 `AT-VE-100` 的不提交渠道半边「待授权，不提交渠道」。
+// 与 CONTEXT「披露条件不成立或授权不足时分别形成暂不披露或待授权结果」——册里登着的
+// 两个非披露格都构不成通知请求，门口即答未受理，不读通知侧任何依赖。点名 `AT-VE-099`
+// 的不发消息半边「暂不披露，不自动发消息」与 `AT-VE-100` 的不提交渠道半边「待授权，
+// 不提交渠道」。
 func TestANonDiscloseConclusionCannotGenerateANotification(t *testing.T) {
 	fixture := newNotifyFixture(t)
 
@@ -245,9 +264,8 @@ func TestANonDiscloseConclusionCannotGenerateANotification(t *testing.T) {
 		"not yet disclosable":    domain.NotYetDisclosable,
 		"awaiting authorization": domain.AwaitingAuthorization,
 	} {
-		result, err := fixture.handler.Handle(context.Background(), application.NotifyCustomerCommand{
-			Disclosure: discloseDecision(t, conclusion),
-		})
+		fixture.recordDecision(t, discloseDecision(t, conclusion))
+		result, err := fixture.handler.Handle(context.Background(), notifyCommand(t))
 		if err != nil {
 			t.Fatalf("handle %s: %v", name, err)
 		}
@@ -257,6 +275,37 @@ func TestANonDiscloseConclusionCannotGenerateANotification(t *testing.T) {
 	}
 	if fixture.policy.calls != 0 || fixture.channel.calls != 0 || fixture.notifications.saved != 0 {
 		t.Fatal("a non-disclose conclusion still reached a dependency")
+	}
+}
+
+// Covers: 命令只引用产物——决定登记册里没有这份（发作期+客户）的决定时，通知无从生成，
+// 门口即答未受理：调用方拿不到「凭空造一份已披露决定送进通知」的路。
+func TestWithoutARecordedDecisionThereIsNothingToNotify(t *testing.T) {
+	fixture := newNotifyFixture(t)
+
+	unknown := notifyCommand(t)
+	unknown.Episode = mustValue(t, domain.NewEpisodeID, "episode-never-decided")
+	result, err := fixture.handler.Handle(context.Background(), unknown)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.NotifyNotAccepted {
+		t.Fatalf("outcome = %q, want NOT_ACCEPTED", result.Outcome())
+	}
+	if fixture.policy.calls != 0 || fixture.channel.calls != 0 || fixture.notifications.saved != 0 {
+		t.Fatal("a command without a recorded decision still reached a dependency")
+	}
+
+	// 决定库读不回是依赖故障，停在未决——与「没有决定」分开：一个重试，一个先去决定。
+	fixture.decisions.findErr = errors.New("decision store unavailable")
+	undecided, err := fixture.handler.Handle(context.Background(), notifyCommand(t))
+	if err != nil {
+		t.Fatalf("handle unavailable: %v", err)
+	}
+	if undecided.Outcome() != application.NotifyUndecided ||
+		undecided.UndecidedReason() != application.NotificationDecisionStoreUnavailable {
+		t.Fatalf("outcome/reason = %q/%q, want UNDECIDED/NOTIFICATION_DECISION_STORE_UNAVAILABLE",
+			undecided.Outcome(), undecided.UndecidedReason())
 	}
 }
 
@@ -439,9 +488,10 @@ func TestAFailedNotificationHandoffLeavesAResumableReference(t *testing.T) {
 	}
 }
 
-// Covers: 受理半边——零值披露决定构不成通知请求，门口即答未受理。
-func TestACommandWithoutADisclosureIsNotAccepted(t *testing.T) {
+// Covers: 受理半边——不带发作期与客户的命令指不出任何决定，门口即答未受理，不读决定库。
+func TestACommandWithoutADecisionReferenceIsNotAccepted(t *testing.T) {
 	fixture := newNotifyFixture(t)
+	fixture.decisions.findErr = errors.New("must not be consulted")
 
 	result, err := fixture.handler.Handle(context.Background(), application.NotifyCustomerCommand{})
 	if err != nil {

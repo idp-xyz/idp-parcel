@@ -313,6 +313,105 @@ type TriageHandoff interface {
 	HandOffTriage(ctx context.Context, intent TriageHandoffIntent) error
 }
 
+// ExceptionDisclosureRule 是异常披露规则目录对（货主客户账户 + 信号类型 + 可信度）的
+// 答复——`UC-VE-006` 前半「判断是否满足披露条件」与「默认等待授权角色确认；只有批准
+// 范围才形成自动发布决定」两步各取一格：
+//   - Disclosable 为假：合同不要求对该客户披露这类异常（`AT-VE-099`），决定落`暂不披露`；
+//   - Disclosable 为真、AutoRelease 为假：影响明确但需授权（`AT-VE-100`），决定落`待授权`；
+//   - 两者皆真：批准范围允许自动发布（`AT-VE-102`），决定落`披露`并带内容快照引用。
+//
+// Content 只随 Disclosable 在场：披露必带内容快照、不披露必不带，与 DecideDisclosure
+// 的构造门同一条线。Policy 是这一版规则的引用，决定带着它走，通知策略按它取渠道与时限。
+//
+// 「客户可见性必须根据服务产品、客户合同、信号可信度、影响范围、预计客户影响和信息
+// 披露规则形成版本化决定」（CONTEXT）——这里按客户账户（合同的落点）、信号类型与可信度
+// 查规则；影响范围与预计客户影响今天没有可查的登记维，等它们有形状再扩键，不先替租户
+// 拟一格。
+type ExceptionDisclosureRule struct {
+	Policy      domain.DisclosurePolicyReference
+	Disclosable bool
+	AutoRelease bool
+	Content     domain.DisclosureContentReference
+}
+
+// ExceptionDisclosureRuleView 回答「对这个客户与这类信号，按当前适用的披露规则该作什么
+// 决定」。规则内容属实例半边（`PAR-VIS-07` 待提供）：第二个返回值为 false 即「未配置」
+// ——目录整个没发布，或发布了但这个（客户+类型+可信度）没有条目，两者都交回未配置：没有
+// 默认披露值可发明，「还没写到这个账户」不能读成「这个账户什么都不披露」。依赖调不通
+// 作为错误返回，由应用层形成未决。
+type ExceptionDisclosureRuleView interface {
+	RuleForSignal(
+		ctx context.Context,
+		customer domain.CustomerAccountReference,
+		kind domain.ExceptionSignalKindReference,
+		confidence domain.ConfidenceReference,
+	) (ExceptionDisclosureRule, bool, error)
+}
+
+// ExceptionDisclosureRuleEntry 是一条异常披露条目：某客户账户的某类信号在某可信度下
+// 披露与否、能否自动发布、内容快照从哪来。Content 与 Disclosable 成对（披露必带、不披露
+// 必不带），AutoRelease 只在 Disclosable 为真时可为真——不披露就谈不上自动发布。
+type ExceptionDisclosureRuleEntry struct {
+	Customer    domain.CustomerAccountReference
+	Kind        domain.ExceptionSignalKindReference
+	Confidence  domain.ConfidenceReference
+	Disclosable bool
+	AutoRelease bool
+	Content     domain.DisclosureContentReference
+}
+
+// ExceptionDisclosureRuleRegistration 登记一版异常披露规则：抬头加整版条目，条目纪律同
+// 映射登记。版本引用（Header.Version）就是决定与通知策略共用的那个披露策略引用：决定
+// 带着它走，`notification_policy` 按它取渠道与时限——两张目录靠这一个值接上。
+type ExceptionDisclosureRuleRegistration struct {
+	Header  CatalogVersionHeader
+	Entries []ExceptionDisclosureRuleEntry
+}
+
+// ExceptionDisclosureRuleRegistry 是异常披露规则目录的写入口（`PAR-VIS-07` 的披露与自动
+// 发布范围那一半；渠道那一半在 CatalogRegistry.RegisterNotificationPolicy）。
+//
+// 单立端口而不并进 CatalogRegistry：那个接口已有六口，每加一口就拆一遍它全部的测试
+// 替身与受控 CLI 的桩；本目录的登记入口（CLI / 在线登记口）另立票接，先把写入方与读口
+// 立起来。事务纪律同 CatalogRegistry：在调用方的事务内执行，一版抬头与整版条目同一提交。
+type ExceptionDisclosureRuleRegistry interface {
+	RegisterExceptionDisclosureRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration ExceptionDisclosureRuleRegistration,
+	) (CatalogRegistrationOutcome, error)
+}
+
+type DisclosureDecisionSaveOutcome uint8
+
+const (
+	DisclosureDecisionSaveOutcomeInvalid DisclosureDecisionSaveOutcome = iota
+	DisclosureDecisionSaved
+	DisclosureDecisionAlreadyRecorded
+)
+
+// DisclosureDecisionStore 保存披露决定并按（发作期+客户账户）取回当前那一份。三态结论
+// 全部入册——「披露条件不成立或授权不足时分别形成暂不披露或待授权结果」（CONTEXT），
+// 暂不披露与待授权是已作出的决定，不是没有决定；不记它们，同一发作期就会被反复重判。
+// 租户是最高数据隔离边界（ADR-0003），跨越它必须在签名上看得见。
+//
+// 决定按身份三维（客户、发作期、决定时间）成行，与 CustomerNotificationStore 定位通知
+// 的三维同一口径；FindCurrent 交回同（发作期+客户）下决定时间最晚的那一份。Save 撞
+// 三维主键交回 AlreadyRecorded（ADR-0031 写入代数），事务保持可用。
+type DisclosureDecisionStore interface {
+	FindCurrent(
+		ctx context.Context,
+		tenant domain.TenantID,
+		episode domain.EpisodeID,
+		customer domain.CustomerAccountReference,
+	) (domain.DisclosureDecision, bool, error)
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		decision domain.DisclosureDecision,
+	) (DisclosureDecisionSaveOutcome, error)
+}
+
 // NotificationDirective 是通知策略对一份披露决定的答复：适用渠道、要求时限与义务判据。
 // 「客户异常通知必须保存……要求时限和适用渠道」（CONTEXT）——三样都来自版本化通知
 // 策略，编排不补默认值。

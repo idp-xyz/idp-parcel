@@ -147,6 +147,17 @@ func TestCatalogAndTraceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := registrar.RegisterClaimAuthorization(ctx, domain.TenantID{}, ports.ClaimAuthorizationRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记索赔授权目录应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := registrar.RegisterExceptionDisclosureRules(ctx, domain.TenantID{}, ports.ExceptionDisclosureRuleRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记异常披露规则应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
+	decisions, err := adapter.NewDisclosureDecisions(db)
+	if err != nil {
+		t.Fatalf("构造披露决定登记册：%v", err)
+	}
+	if _, err := decisions.Save(ctx, domain.TenantID{}, domain.DisclosureDecision{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务保存披露决定应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	receipts, err := adapter.NewMaterialReceiptRegistrar(db)
 	if err != nil {
