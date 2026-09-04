@@ -1,7 +1,7 @@
 # 「等待受控补充」真的会自愈吗——ADR-0086 那条前提没人核过
 
 Category: bug
-Status: in-progress——MCP-6（2026-09-04，隔离分支 `mcp6-ftr09`，基线 main `caca1c4a`）按 task-66cd286c 实施「裁决」节末段五条范围；此前已裁（2026-09-04，通道 6，owner 授权）：取第三种结论「自愈不成立」，选 A，落文 [ADR-0106](../../../docs/adr/0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)；本票转为实施票，范围见「裁决」节末段，处置翻转与续办信封同笔落地否则不许落地
+Status: resolved——MCP-6（2026-09-04，隔离分支 `mcp6-ftr09`，已验 tip `90260aae`，基线 rebase 后 main `eba019a8`）按 task-66cd286c 实施完「裁决」节末段五条范围，见文末「完成记录」；此前已裁（2026-09-04，通道 6，owner 授权）：取第三种结论「自愈不成立」，选 A，落文 [ADR-0106](../../../docs/adr/0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)；本票转为实施票，范围见「裁决」节末段，处置翻转与续办信封同笔落地否则不许落地
 Blocked by: 无
 
 来源：2026-09-02 MCP-1 裁 [ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 时撞见，当场因证据不足没有动它。锚 `ca7441f`。
@@ -73,3 +73,27 @@ ADR-0086 那一句的两半都不成立（依赖不会自己回来；回来了�
 ### 能力边界
 
 读了 ADR-0086 / 0094 / 0045 / 0029 / 0055 全文、`undecided_disposition.go`、`form_new_submission_version.go` 的依赖与符号面、`judgment_continuation.go` 的 `resumePath()`，以及 report.md B 组对本票的取证；**未读** `form_acceptance_decision.go` 里 `pauseForManualReview` 的具体实现与 D5 那两片的 `Save` 护栏代码——本裁决只定处置与形状，护栏怎么写照先例由实施方对；**未跑**任何进程，问 2 的运行时落格未量。
+
+## 完成记录（2026-09-04，通道 6，task-66cd286c）
+
+分支 `mcp6-ftr09`，开工基线 main `caca1c4a`，中途按 MCP-1 放宽 rebase 到 main `eba019a8` 再写 `cmd/parcel-api` 四份共享接线文件；**已验 tip `90260aae`**（分支 SHA，重放进 main 后由推送方写对照）。不推。
+
+**各笔**（分支上的 SHA）：
+
+- `b09e8970` 票面转 in-progress。
+- `2f7b4b75` **翻转 + 保存护栏 + 信封 + 第四扇门 + 路由 + 边界壳同一笔**（范围 1 与 2，ADR-0094 Decision 四那句对这一格逐字成立）：`undecidedDisposition` 的 `ResumeByCustomerSupplement` 改交 nil；`pauseForManualReview` 扩为 `pauseForExternalResume`（`等待受控补充`与`等待人工复核`同走「先 Save 再交回，保存失败改交保存那一格的原因」）；ports 加 `SubmissionVersionFormedHandoff`；postgres 加 `OutboxSubmissionVersionFormedHandoff`；inbox 加 `SubmissionVersionFormedConsumer`；`cmd/parcel-dispatch` 路由表与 `acceptanceChainGates` 各加一行；`cmd/parcel-api` 新增 `assemble_customer_supplement.go`（`supplementBoundary` + `buildCustomerSupplementOrchestration`）；`internal/architecture/partition_subject_registry_test.go` 加一行。真库闭环 `cmd/parcel-dispatch/customer_supplement_resume_loop_test.go`。
+- `c051e070` 范围 3 前半：`adapters/http/form_new_submission_version.go`（`NewFormNewSubmissionVersionEndpoint`、`SupplementIntake`、`SupplementHandler`），`UnconfiguredIntake` 加 `IntakeSupplement`。
+- `1fe9cdbf` 范围 4：ports `CustomerSupplementQueue` / `CustomerSupplementQueueRecord`，postgres `ListWaitingOnCustomerSupplement`（在 `ShipmentRequestViews` 上，作用域为键），迁移 `parcel_shipment/0016_customer_supplement_queue.sql` 部分索引。
+- `df3e913e` 范围 3 后半：`endpoints.go` 加 `/shipment-requests/supplements` 一行（字面量 `UnconfiguredIntake{}`）、`endpoints_test.go` 探针、`unwired_orchestration.go` 的 `unwiredSupplement`、`main.go` 装配。
+- `347e5bb2` 双轴评审修复（队列读口收成只列表一口、装配函数交回 `shipmenthttp.SupplementHandler`、注释不数别处的门与等待态）。
+- `90260aae` 机制清点在 `347e5bb2` 干净检出上重生成。
+
+**常量与键**：事件类型 `parcel-shipment.shipment-request.submission-version-formed`（发布侧 `submissionVersionFormedEventType`、消费侧 `SubmissionVersionFormedEventType` 各写各的字面）；EventID `<租户>/<客户账户>/<来源>/<请求键>/<新提交版本>/submission-version-formed`；分区键与提交、复核信封同键（租户/客户账户/委托）；inbox 消费者名 `parcel-shipment/advance-acceptance-chain-on-submission-version-formed`；载荷与「复核已完成」同名同义，`submissionVersionId` 填新版本。
+
+**验证**（干净 detached 检出，钉 `90260aae`）：`gofmt -l .` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN `go test -count=1 ./...` 退 0，95 ok / 0 FAIL；含 DSN `-v` 跑 parcelshipment、parcel-dispatch、parcel-api、platform/dispatch、architecture、migrations、platform/migrate：**1732 PASS / 0 SKIP / 0 FAIL**，21 ok；探针一正一反（闭环用例与交接原子性用例：带 DSN PASS=2 SKIP=0，不带 PASS=0 SKIP=2）；`tools/mechanism-inventory` vet/test 退 0，在 `90260aae` 上重跑生成器与提交文件一致。`-race` 未在本机跑（Windows 侧无 cgo，见 workflow.md「本机环境」），由 CI 覆盖。
+
+**实例半边留空**：受控补充端点挂字面量 `UnconfiguredIntake{}`，谁能替哪个客户账户补充、基准版本怎么译属 `PAR-INT-01`，本票不带任何采信身份、不造「开发用」Intake；闭环用例里的商业依据、可达性、财务控制三个权威口是隔离合成 `S` 替身，只在测试文件里。
+
+**顺带动了的既有文件**（都只加不改邻行）：`adapters/http/unconfigured_intake.go` 一个方法与一条接口断言、`adapters/http/unconfigured_intake_test.go` 一格遍历项、`internal/architecture/partition_subject_registry_test.go` 一行、`cmd/parcel-api` 四份接线文件 PS 那组各一处、`application/form_acceptance_decision_test.go` 复核暂停用例里「三个等待态里只有它落库」那句改成按 ADR 逐格并入的叙述（ADR-0094 之后它已不成立）。
+
+**发现，不在本票范围**：判断账 `acceptance_reachability_judgment` 以（成员 + 时点）为键、读口 `LoadRecordedJudgments` 按时点取最新且没有提交版本维（迁移 0005 头注自称是 ADR-0045 的已知后续项）。续办一拍拿新版本重跑时，若租户声明的时点策略把两版钉在同一时点，新判断会被 `ON CONFLICT DO NOTHING` 吞掉、决定仍读到旧的`证据不足`，链再次停在`等待受控补充`——入账不烧预算，但补充也推不动它。闭环用例靠「时点随版本推移」的替身策略绕过了这一格，并在文件头写明。要么读口长出版本维，要么规则包的时点策略被要求随版本变化——两者都是 ADR-0045 那条后续项的形状，建议另立一票，不在本票里改判断账。
