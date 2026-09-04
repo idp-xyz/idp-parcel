@@ -60,10 +60,11 @@ const (
 	// 段里在场。它不是失败（重试不会变）也不是`对象不在段内`（那一格说的是指名的某个段），单开一格让
 	// 调用方看得见——交付登上了、但没有任何参与被它结束（票 06 裁决 (a)）。
 	ParticipationNoActiveParticipation
-	// ParticipationEndNotWired 是来源编排（交付、交接）在装配点没被交入 ParticipationEnds 时答的格：登记
-	// 照常成立，结束参与那一半**没有发生**，并且说出来。它取代了构造期 panic——panic 会把别的会话里
-	// 一切按旧 Deps 构造处理器的测试连栈一起炸掉；而漏接线要的只是「看得见」，一个具名格在结果与响应
-	// 里都看得见，生产装配另有真库测试钉住它不会出现。
+	// ParticipationEndNotWired 给「来源编排（交付、交接）在装配点没被交入 ParticipationEnds」这一格一个名字。
+	// 它**不出现在任何结果里**：缺席时来源编排整笔不落，名字坐在 ErrParticipationEndsNotWired 的错误信息里
+	// ——与 End 失败同格，因为 CONTEXT 写的是有效交付**同时**结束参与，让登记落库而参与没结就是应用层写出
+	// 一份违反它的库面状态；NO_ACTIVE 是库面真相，这一格是装配缺陷，后者不该以 201 的样子出现。留在这个集合里
+	// 是让它与其余各格同一处命名、同一个 String，而不是散成一个自由字符串。
 	ParticipationEndNotWired
 )
 

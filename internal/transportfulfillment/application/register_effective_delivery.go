@@ -142,6 +142,12 @@ type ParticipationEnder interface {
 	End(ctx context.Context, command EndFulfillmentParticipationCommand) (EndFulfillmentParticipationResult, error)
 }
 
+// ErrParticipationEndsNotWired 说明装配点没有交入 ParticipationEnds。它坐在 error 里而不坐在结果里：缺席与 End
+// 失败同格——整笔不落（error → 5xx），因为 CONTEXT 交付节写的是有效交付**同时**结束参与，缺席时让交付落库就是
+// 应用层自己写出一份违反它的库面状态。它也不在构造期 panic：那会把别的会话里一切按旧 Deps 构造处理器的测试
+// 连栈炸掉。错误信息带 ParticipationEndNotWired 这一具名格，没人读响应体的宿主（消费者、CLI）只靠 error 也认得出它。
+var ErrParticipationEndsNotWired = fmt.Errorf("transport fulfillment: %s — ParticipationEnds is required, ending the participation is a lifecycle rule not an option", ParticipationEndNotWired)
+
 type RegisterEffectiveDeliveryDeps struct {
 	Attempts   ports.DeliveryAttemptView
 	Deliveries ports.EffectiveDeliveryStore
@@ -149,8 +155,8 @@ type RegisterEffectiveDeliveryDeps struct {
 	Downstream ports.EffectiveDeliveryHandoff
 	Clock      ports.Clock
 	// ParticipationEnds 让交付落库后同事务结束该对象的履约参与（票 06 裁决 (i)）。**生产装配必须交入**：
-	// 「有效交付→结束参与」是 CONTEXT 生命周期③。缺席时不 panic 也不静默——交付照登，结果答
-	// ParticipationEndNotWired 那一格；装配点有没有交入由真库装配测试钉（它断言的是 ENDED / NO_ACTIVE）。
+	// 「有效交付→结束参与」是 CONTEXT 生命周期③。缺席时不 panic、不落地——与 End 失败同格，整笔不落
+	// （ErrParticipationEndsNotWired）；装配点有没有交入由真库装配测试钉（它断言的是 ENDED / NO_ACTIVE）。
 	ParticipationEnds ParticipationEnder
 }
 
@@ -247,14 +253,14 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 // endParticipation 在交付落库后同事务结束该对象的履约参与（CONTEXT 生命周期③，票 06 裁决 (i)）。
 //
 // 命令不带段：交付是关于对象的事实，段由结束参与那条编排按对象找。**结束失败则整笔不落**——编排返回
-// error，或依赖没应上的`未决`，都作 error 交回，让事务边界把交付一起回滚：不要「交付落了参与没结」的半成品。
-// 零个在场参与不是失败，那一格原样透出。
+// error，依赖没应上的`未决`，以及装配点根本没交入 ParticipationEnds，都作 error 交回，让事务边界把交付一起
+// 回滚：不要「交付落了参与没结」的半成品。零个在场参与不是失败，那一格原样透出。
 func (handler *RegisterEffectiveDeliveryHandler) endParticipation(
 	ctx context.Context,
 	command RegisterEffectiveDeliveryCommand,
 ) (ParticipationEndOutcome, error) {
 	if handler.deps.ParticipationEnds == nil {
-		return ParticipationEndNotWired, nil
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on delivery: %w", ErrParticipationEndsNotWired)
 	}
 	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
 		TenantID: command.TenantID,

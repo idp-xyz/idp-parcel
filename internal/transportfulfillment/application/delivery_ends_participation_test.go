@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -115,9 +116,11 @@ func TestADeliveryWhoseParticipationEndFailsFormsNoAnswer(t *testing.T) {
 	})
 }
 
-// 漏接 ParticipationEnds 看得见但不崩：交付照登，结果答 PARTICIPATION_END_NOT_WIRED。不 panic 是因为按旧 Deps
-// 构造处理器的测试遍布各处，一次 panic 会把整个测试进程连栈炸掉；不静默是因为那正是 ADR-0098 那一族的病。
-func TestADeliveryWithoutAParticipationEnderSaysSo(t *testing.T) {
+// 漏接 ParticipationEnds 不崩、不落地：交付不形成答案，error 带具名格 PARTICIPATION_END_NOT_WIRED（票 06 补刀二，
+// MCP-3 裁）。不 panic 是因为按旧 Deps 构造处理器的测试遍布各处，一次 panic 会把整个测试进程连栈炸掉；不落地
+// 是因为 CONTEXT 交付节写的是有效交付**同时**结束参与——缺席时让交付落库，应用层就自己写出了一份违反它的
+// 库面状态，与 End 失败同格（error → 5xx，事务边界据以回滚），而不是一个 201 里的格。
+func TestADeliveryWithoutAParticipationEnderFormsNoAnswer(t *testing.T) {
 	fixture := newParticipationFixture(t)
 	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
 		Attempts:   &deliveryViewDouble{outcome: domain.ObjectDelivered, found: true},
@@ -127,11 +130,14 @@ func TestADeliveryWithoutAParticipationEnderSaysSo(t *testing.T) {
 		Clock:      deliveryClock{at: deliveryRecordedAt},
 	})
 	result, err := handler.Register(t.Context(), deliveryCommandFor(t, "parcel-1", "attempt-1"))
-	if err != nil {
-		t.Fatalf("首登交付：%v", err)
+	if !errors.Is(err, application.ErrParticipationEndsNotWired) {
+		t.Fatalf("err = %v, want ErrParticipationEndsNotWired", err)
 	}
-	if result.Outcome() != application.DeliveryRegistered || result.ParticipationEnd() != application.ParticipationEndNotWired {
-		t.Fatalf("outcome = %s participationEnd = %s, want PARTICIPATION_END_NOT_WIRED", result.Outcome(), result.ParticipationEnd())
+	if !strings.Contains(err.Error(), application.ParticipationEndNotWired.String()) {
+		t.Fatalf("错误信息没带具名格 PARTICIPATION_END_NOT_WIRED：%v", err)
+	}
+	if _, present := result.Record(); present || result.Outcome() != application.DeliveryRegistrationOutcomeInvalid {
+		t.Fatalf("漏接线时交付却形成了答案：outcome = %s", result.Outcome())
 	}
 }
 

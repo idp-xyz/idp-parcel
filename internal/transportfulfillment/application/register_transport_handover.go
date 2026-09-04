@@ -171,8 +171,8 @@ type RegisterTransportHandoverDeps struct {
 	// 判据与形状同 RegisterOffsitePickupDeps.Judgments。
 	Judgments ports.ActualCarrierJudgmentRegistry
 	// ParticipationEnds 让`已交接`落库后同事务结束该对象在前一段的参与（票 06 裁决 (i)）。**生产装配必须交入**
-	// ——结束参与是 UC-TF-005 步骤 7 本身。缺席时不 panic 也不静默：交接照登，结果答 ParticipationEndNotWired
-	// 那一格；装配点有没有交入由真库装配测试钉。
+	// ——结束参与是 UC-TF-005 步骤 7 本身。缺席时不 panic、不落地：与 End 失败同格，`已交接`整笔不落
+	// （ErrParticipationEndsNotWired）；装配点有没有交入由真库装配测试钉。
 	ParticipationEnds ParticipationEnder
 }
 
@@ -238,9 +238,10 @@ func (handler *RegisterTransportHandoverHandler) Register(
 // endPreviousParticipation 在`已交接`落库后同事务结束该对象在前一段的参与（CONTEXT 生命周期③「下一次权威
 // 交接」，票 06 裁决 (i)）。
 //
-// 只有转出控制的裁决走到这里：拒收与待确认没有让控制移入接收方，前段的参与照常在场。命令不带段也不带
-// 下一段——前段由结束参与那条编排按对象找；新段由本编排自己的 establishSegment 进（进段的拒绝格与欠账
-// 也在那边答），不让两条路各进一次。失败则整笔不落，理由同交付那一侧。
+// 只有转出控制的裁决走到这里：拒收与待确认没有让控制移入接收方，前段的参与照常在场——所以 ParticipationEnds
+// 缺席也只在这道门之后才成为失败，拒收与待确认照登。命令不带段也不带下一段——前段由结束参与那条编排按对象找；
+// 新段由本编排自己的 establishSegment 进（进段的拒绝格与欠账也在那边答），不让两条路各进一次。失败则整笔不落，
+// 理由同交付那一侧。
 func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 	ctx context.Context,
 	command RegisterTransportHandoverCommand,
@@ -250,7 +251,7 @@ func (handler *RegisterTransportHandoverHandler) endPreviousParticipation(
 		return ParticipationEndOutcomeInvalid, nil
 	}
 	if handler.deps.ParticipationEnds == nil {
-		return ParticipationEndNotWired, nil
+		return ParticipationEndOutcomeInvalid, fmt.Errorf("end participation on handover: %w", ErrParticipationEndsNotWired)
 	}
 	ended, err := handler.deps.ParticipationEnds.End(ctx, EndFulfillmentParticipationCommand{
 		TenantID: command.TenantID,

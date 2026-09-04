@@ -1,6 +1,8 @@
 package application_test
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,8 +95,10 @@ func TestARegisteredHandoverEndsThePreviousParticipationThenEntersTheNextSegment
 	})
 }
 
-// 漏接 ParticipationEnds 看得见但不崩：`已交接`照登，结果答 PARTICIPATION_END_NOT_WIRED（理由同交付那一侧）。
-func TestAHandoverWithoutAParticipationEnderSaysSo(t *testing.T) {
+// 漏接 ParticipationEnds 不崩、不落地：`已交接`不形成答案，error 带具名格 PARTICIPATION_END_NOT_WIRED（票 06 补刀二，
+// 理由同交付那一侧）。拒收转不出控制、本就不结束任何参与，所以缺席对它不是失败——缺席只在 End 本会被调用的那道门
+// 之后才与 End 失败同格。
+func TestAHandoverWithoutAParticipationEnderFormsNoAnswer(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
 		Handovers:  fixture.registry,
@@ -102,10 +106,29 @@ func TestAHandoverWithoutAParticipationEnderSaysSo(t *testing.T) {
 		Clock:      handoverClock{at: handoverRegisteredAt},
 	})
 	result, err := handler.Register(t.Context(), registerHandoverCommand(t))
-	if err != nil {
-		t.Fatalf("交接：%v", err)
+	if !errors.Is(err, application.ErrParticipationEndsNotWired) {
+		t.Fatalf("err = %v, want ErrParticipationEndsNotWired", err)
 	}
-	if result.Outcome() != application.HandoverRegistered || result.ParticipationEnd() != application.ParticipationEndNotWired {
-		t.Fatalf("outcome = %s participationEnd = %s, want PARTICIPATION_END_NOT_WIRED", result.Outcome(), result.ParticipationEnd())
+	if !strings.Contains(err.Error(), application.ParticipationEndNotWired.String()) {
+		t.Fatalf("错误信息没带具名格 PARTICIPATION_END_NOT_WIRED：%v", err)
 	}
+	if _, present := result.Record(); present || result.Outcome() != application.HandoverRegistrationOutcomeInvalid {
+		t.Fatalf("漏接线时`已交接`却形成了答案：outcome = %s", result.Outcome())
+	}
+
+	t.Run("a refusal transfers no control and needs no ender", func(t *testing.T) {
+		// 替身库没有事务边界，上面那笔`已交接`的记录还躺在里面；拒收换一个判断版本，免得撞成同键冲突。
+		refused := registerHandoverCommand(t)
+		refused.Scope = "handover-scope-2"
+		refused.Version = "handover-result/parcel-1/v2"
+		refused.Verdict = domain.HandoverRefused
+		refused.Basis = "refusal-basis-1"
+		result, err := handler.Register(t.Context(), refused)
+		if err != nil {
+			t.Fatalf("拒收：%v", err)
+		}
+		if result.Outcome() != application.HandoverRegistered || result.ParticipationEnd() != application.ParticipationEndOutcomeInvalid {
+			t.Fatalf("outcome = %s participationEnd = %s", result.Outcome(), result.ParticipationEnd())
+		}
+	})
 }
