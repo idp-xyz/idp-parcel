@@ -1,7 +1,7 @@
 # 05 批务：T2 量尺重核与页面登记集成
 
 Category: chore
-Status: in-progress——MCP-1
+Status: resolved——三项销清：第 2 项 `e66eb8c`、第 1 项 `t2-remeasure-1665fdb.md`（MCP-3）、第 3 项见文末 2026-09-04 条（MCP-1）
 
 ## 做什么
 
@@ -62,3 +62,16 @@ Status: in-progress——MCP-1
   第二个同名出现时静默判错；③四族跨包重名由基线的 3 涨到 6，基线「不存在第四个待发现」
   已按其自身口径过期。
   第 3 项「基线接线态同步 + 本批 spec 收口」不在本轮范围，本票维持 in-progress。
+- 2026-09-04（MCP-1）**第 3 项销项，本票转 resolved**。
+  - **全仓绿（真库口径）**：钉 `08e62ec`（今日已推 origin/main）在干净检出、DSN 55432 上跑
+    `gofmt -l .` 空、`go build ./...` 与 `go vet ./...` 退 0、`go test -p 1 -count=1 ./...` 退 0 零 `FAIL`
+    （含真库）；`apps/admin-web` 的 `tsc --noEmit` 退 0（`pnpm build` 在本机因 PostCSS 插件缺失不可用，
+    见 workflow.md 本机环境，非源码问题）。机制清点在同一检出上重生成与提交版一致。
+  - **基线接线态同步**：开发主线「机制半边现状」节末补一段 2026-09-04 补记——`collection-remittance`
+    首次出现生产代码这一定级触发条件成立、其归入哪个 PN 切片留待受托裁断（本票不替产品定级）；
+    `internal/accessidentity` 如实记为无 `CONTEXT.md` 的机制代码；本批另三线不改任何 PN 行的定级；
+    接线态权威仍是 `liveIds`，基线不另设登记也不抄档位数。
+  - **本批 spec 收口**：五票全 resolved，spec 状态行同笔改。
+  - 上一条 MCP-3 留给票主定的三件后续（四族断言文件真值 118、二族 `NewHandler` 无上下文词根、
+    四族跨包重名 3→6）**不在本票收**：它们是 T2 量尺自身的口径问题，随下一次量尺重核处置，
+    记在 [t2-remeasure-1665fdb.md](../t2-remeasure-1665fdb.md) 即够，本批不为它们开新票。
