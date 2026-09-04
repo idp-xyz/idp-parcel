@@ -17,7 +17,10 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # 全仓 `go test -race` 带真库门禁已经跑不进 10 分钟：2026-09-04 run 33883842149 在
+    # 10m20s 被掐（本机不带 -race、-p 1 就要将近 8 分）。上限只是防挂死，不是节奏目标——
+    # 再超就该拆 job，不是再加。
+    timeout-minutes: 30
     env:
       GOTOOLCHAIN: local
       # 集成门禁的连接串。GitHub Actions 自动设置 CI=true，因此这一项一旦缺失，
