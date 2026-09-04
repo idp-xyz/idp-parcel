@@ -1,7 +1,7 @@
 # 客户服务规则版本进了封闭集，但 `visibility-exception` 那条消费缝仍然是断的
 
 Category: chore
-Status: in-progress——MCP-4（2026-09-04，基线 `299e143`，代码基线 `a17bfac`；隔离分支 `mcp4-pcgaps05`）。三处已由 MCP-3 裁（owner 2026-09-03 授权自决），裁决落 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；要做的形状见文末「裁决」节，**不动 VE**
+Status: resolved——MCP-4（2026-09-04，分支 `mcp4-pcgaps05`，代码 tip `9210b745`，基线 `a17bfac`；完成记录在文末）。三处已由 MCP-3 裁（owner 2026-09-03 授权自决），裁决落 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；要做的形状见文末「裁决」节，**不动 VE**
 Blocked by: 04（封闭集拓宽已随 `85c1c7f` 落地，本票的前置已解除）
 
 ## 为什么单独一票
@@ -163,3 +163,51 @@ Rules 一节两条：
 **本票要做的**（与票 03 同一条流水线，不动 VE）：一份迁移（父子两表照 0014，项类 CHECK 首发两值）、`CustomerServiceRuleVersion` 补两项正文的领域类型与构造门（只校形状不校值）、`PublicationRegistry` 一个具名 Save、点读口 `CustomerServiceRuleContentView.LoadCustomerServiceRule`（`found=false` 即未登记）、目录读面一格、CLI 批文一节。解析不改：既有闭包对封闭集内类别一视同仁。
 
 **另立而不在本票**：VE 侧 `ClaimEligibilityRules` 两维改经消费侧适配器（ADR-0025）读 PC 点读口——VE 地盘，另立票；落地前 VE 行为一字不变。
+
+### 落法上与 ADR-0104 Decision 三字面的一处差别（2026-09-04，MCP-4 提、MCP-1 接受）
+
+Decision 三原文写「子行按『项类 × 内容』，项类首发封闭两值，CHECK 钉死，后续四项进时放宽 CHECK 走新迁移」。
+0023 的落法是**项类成表、没有 item_kind 列**：`customer_service_rule_claim_deadline`（种类 CHECK 三值 × 起算事件
+× 时长>0 × 日历）与 `customer_service_rule_minimum_material`（索赔类型 × 材料条目逐条成行，主键挡重复）两张
+强类型子表。理由：两项内容形状不同，并成一表就得靠 item_kind 标记去选另几列怎么读，正是本上下文反复否决的
+「一个数加一列标记」；材料条目的去重在数组列上也写不进 CHECK。「项类封闭两值、钉死」由「另四项没有表、结构上
+写不进来」兑现，「放宽 CHECK 走新迁移」对应成「建新表走新迁移」。**不新立 ADR**：这是持久化形状的可逆取舍，
+不改 Decision 三的任何决定（正文归 PC、只进两项、至少一项、不允许显式空、值不入仓），只换落法；ADR-0104 正文
+一字不动。父行、外键回 `commercial_version`、`object_kind` CHECK = 10、目录读面 `contentRegistered` 显式布尔
+照 ADR。任何默认时长 / 默认日历 / 默认材料一律没有，`duration_days > 0` 与种类三值是形状约束不是取值。
+
+## 完成记录（2026-09-04，MCP-4；分支 `mcp4-pcgaps05`，merge-base `5051395`，不推）
+
+六笔代码 + 本票面，每笔独立成事务、逐文件 add、pathspec 提交：
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| 前任 | `e30fd98` / `652e582` | 票面转 in-progress；领域类型与构造门（两项正文、`ConsistentCustomerServiceRuleApplicability`） |
+| A | `1fd82e92` | 迁移 `migrations/party_commercial/0023_customer_service_rule.sql` 父子三表；`ports.CustomerServiceRuleSaveOutcome`、`PublicationRegistry.SaveCustomerServiceRule`、`CustomerServiceRuleContentView`；postgres `SaveCustomerServiceRule`（先读回再写，同内容重放 / 异内容冲突且一行不写）与 `CustomerServiceRuleContents.LoadCustomerServiceRule`（一条语句取父子、经构造门重建、核壳与正文所挂对象）；三处测试替身补方法；机制清点随笔重生成 |
+| B | `9facf9f7` | 发布编排 `CustomerServiceRuleBody` 声明通道，写入前核 `ConsistentCustomerServiceRuleApplicability`，落点折成声明三格 |
+| C | `4f8acc81` | 批文 `customerServiceRuleBody` 一节；`commercialKindFrom` 补 `CUSTOMER_SERVICE_RULE`（85c1c7f 只拓宽领域集没接批文口）；端到端真库用例 |
+| D | `f4aa4a5c` | 目录读面一格：`CommercialPolicyCatalogueRead.ListCustomerServiceRules`、`GET /commercial-policies?kind=CUSTOMER_SERVICE_RULE`，上列版本壳左连正文、`contentRegistered` 显式布尔 |
+| E | `cfc4858d` | `cmd/parcel-api/unwired_orchestration.go` 只动 `unwiredCommercialCatalogue` 一格（与 MCP-5 有效时间规则一格不重叠） |
+| F | `9210b745` | 两份 `internal/architecture` 棘轮基线各剪两行（成因二「已接线」，理由行自己写的「票 05 落地时出名单」）：wiring 11→9、reachability 25→23，在 `cfc4858d` 的干净内容上数得 |
+
+**验证**（干净 detached 检出 `9210b745`）：`gofmt -l .` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN
+`go test -count=1 ./...` 94 包 ok / 0 FAIL；DSN 下 `-v` 跑 `./internal/partycommercial/... ./cmd/parcel-commercial/...
+./migrations/... ./cmd/parcel-api/ ./internal/architecture/`：1039 PASS / 0 SKIP / 0 FAIL；反向探针无 DSN 时
+postgres 包本票 8 例全 SKIP、0 PASS。机制清点在 tip 重生成无差（A 笔已并入的那份就是 tip 的）。未跑 `-race`
+（本机走不了，见 workflow.md 本机环境）。
+
+**真库一正一反（本票新增 16 例）**：两项往返、缺正文 found=false、重放 / 改期限 / 改材料 / 多一条期限四路冲突
+且原行不动、租户闭包、壳与正文分歧走 error、有父无子走 error、库上 CHECK 拒两格同空 / 同满 / 空白引用 / 集外
+种类 / 非正时长 / 重复条目、目录上列壳与正文两态；CLI 端到端发布后点读回两项、分歧批停在该项且前项产品仍在。
+
+**要 MCP-1 落的装配行**：无。目录一格走既有 `GET /commercial-policies` 端点按 `kind` 分派，生产装配交入的
+`OperationsCatalogue` 已实现新方法；不需要新端点行、不需要 `main.go` 改动。
+
+**解析不改**：`ResolveCommercialClosure` 对 `CustomerServiceRuleObject` 一视同仁，零改动，与裁决一致。
+
+**VE 后继票**：[ve-claims-read-seams/03](../../ve-claims-read-seams/issues/03-claim-deadline-and-materials-read-party-commercial-rule-content.md)（draft，Blocked by 本票），
+写清了今天两维恒答未登记的代码事实，并摆出四条开工前要答的未决（起算事实源、业务日历能力、`Notice` 来源、
+`Registered` 粒度）——其中 `Notice` 那条是本票取证时才看见的：通知义务不在首发，资料不足那条路四件落点里的
+「通知依据」在 VE 接上 PC 之后仍缺一件。
+
+**父 spec**：`party-commercial-context-gaps/spec.md` 状态行不由本票改（MCP-2 B 簿记批本波已改一次），完工对齐归 MCP-1。
