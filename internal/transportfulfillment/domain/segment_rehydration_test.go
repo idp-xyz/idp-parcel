@@ -162,7 +162,7 @@ func TestRehydrationRefusesAnIncompleteOrOutOfSetEntry(t *testing.T) {
 }
 
 // Covers: 领域 join「同一实际控制范围不能因伙伴重投、任务重建或批量重试重复建立履约
-// 参与」。重建门不重放 join，但同一对象两条参与是行上就看得出的坏，必须拒。
+// 参与」。重建门不重放 join，但同一对象两条**互不相接**的参与是行上就看得出的坏，必须拒。
 func TestRehydrationRefusesTwoParticipationsForTheSameObject(t *testing.T) {
 	if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t,
 		activeParticipationSpec(t, "parcel-1"),
@@ -170,6 +170,103 @@ func TestRehydrationRefusesTwoParticipationsForTheSameObject(t *testing.T) {
 	)); !errors.Is(err, domain.ErrObjectAlreadyParticipating) {
 		t.Fatalf("err = %v, want ErrObjectAlreadyParticipating", err)
 	}
+}
+
+// supersedingParticipationSpec 是一条替代参与版本：回指同对象另一版的入场依据。
+func supersedingParticipationSpec(t *testing.T, object, version, supersedes string) domain.RehydrateParticipationSpec {
+	t.Helper()
+	spec := activeParticipationSpec(t, object)
+	spec.EntryBasis = segmentValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/"+version+"-"+object)
+	spec.EnteredAt = segmentEnteredAt.Add(time.Hour)
+	spec.Supersedes = segmentValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/"+supersedes+"-"+object)
+	return spec
+}
+
+// Covers: ADR-0112 决定一——同一对象在段内的多条参与是一条替代链：重建按回指关系标出被替代的版本，
+// 链尾是当前参与，只数链尾；历史按链序交回。被替代的版本没有终点也不是在场。
+func TestRehydrationRebuildsASupersessionChain(t *testing.T) {
+	rebuilt, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t,
+		supersedingParticipationSpec(t, "parcel-1", "v3", "v2"),
+		activeParticipationSpec(t, "parcel-1"),
+		supersedingParticipationSpec(t, "parcel-1", "v2", "v1"),
+		activeParticipationSpec(t, "parcel-2"),
+	))
+	if err != nil {
+		t.Fatalf("重建替代链：%v", err)
+	}
+	object := segmentValue(t, domain.NewCarriedObjectReference, "parcel-1")
+	current, present := rebuilt.ParticipationFor(object)
+	if !present || current.EntryBasis().String() != "OFFSITE-PICKUP/v3-parcel-1" || !current.Active() {
+		t.Fatalf("链尾不是当前参与：%+v present=%v", current, present)
+	}
+	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "OFFSITE-PICKUP/v2-parcel-1" {
+		t.Fatalf("链尾回指走样：%v %v", supersedes, chained)
+	}
+	history := rebuilt.ParticipationHistory(object)
+	if len(history) != 3 ||
+		history[0].EntryBasis().String() != "OFFSITE-PICKUP/v1-parcel-1" ||
+		history[1].EntryBasis().String() != "OFFSITE-PICKUP/v2-parcel-1" ||
+		history[2].EntryBasis().String() != "OFFSITE-PICKUP/v3-parcel-1" {
+		t.Fatalf("历史不按链序：%+v", history)
+	}
+	if !history[0].Superseded() || !history[1].Superseded() || history[2].Superseded() {
+		t.Fatal("被替代标记打错了位置")
+	}
+	if _, _, _, ended := history[0].End(); ended || history[0].Active() {
+		t.Fatal("被替代的版本既不是已结束也不是在场")
+	}
+	if rebuilt.ActiveParticipations() != 2 {
+		t.Fatalf("在场参与 = %d，两个对象各数链尾", rebuilt.ActiveParticipations())
+	}
+}
+
+// Covers: 同一条规则的反面——不成链的多条参与仍是坏行：两个首登、回指落空、两版回指同一版（分叉）、
+// 自指、同一入场依据出现两次，都拒。
+func TestRehydrationRefusesAMalformedSupersessionChain(t *testing.T) {
+	cases := map[string][]domain.RehydrateParticipationSpec{
+		"两个首登": {
+			activeParticipationSpec(t, "parcel-1"),
+			endedParticipationSpec(t, "parcel-1"),
+		},
+		"回指落空": {
+			activeParticipationSpec(t, "parcel-1"),
+			supersedingParticipationSpec(t, "parcel-1", "v3", "v2"),
+		},
+		"分叉": {
+			activeParticipationSpec(t, "parcel-1"),
+			supersedingParticipationSpec(t, "parcel-1", "v2", "v1"),
+			supersedingParticipationSpec(t, "parcel-1", "v2b", "v1"),
+		},
+		"回指别的对象": {
+			activeParticipationSpec(t, "parcel-1"),
+			activeParticipationSpec(t, "parcel-2"),
+			func() domain.RehydrateParticipationSpec {
+				spec := supersedingParticipationSpec(t, "parcel-2", "v2", "v1")
+				spec.Supersedes = segmentValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/v1-parcel-1")
+				return spec
+			}(),
+		},
+		"只有替代版本没有首登": {
+			supersedingParticipationSpec(t, "parcel-1", "v2", "v1"),
+		},
+		"同一入场依据两次": {
+			activeParticipationSpec(t, "parcel-1"),
+			activeParticipationSpec(t, "parcel-1"),
+		},
+	}
+	for name, rows := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t, rows...)); !errors.Is(err, domain.ErrObjectAlreadyParticipating) {
+				t.Fatalf("err = %v, want ErrObjectAlreadyParticipating", err)
+			}
+		})
+	}
+	t.Run("自指", func(t *testing.T) {
+		spec := supersedingParticipationSpec(t, "parcel-1", "v2", "v2")
+		if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t, spec)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+			t.Fatalf("err = %v, want ErrInvalidFulfillmentSegment", err)
+		}
+	})
 }
 
 // Covers: 段由首个对象的控制事实成立（CONTEXT 生命周期①）。一个没有任何参与关系的段

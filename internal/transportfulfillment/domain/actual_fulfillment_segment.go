@@ -17,6 +17,13 @@ var (
 	// 案件都不是控制结束事实，控制责任不因停止移动而消失（CONTEXT）。
 	ErrSegmentStillActive = errors.New("transport fulfillment: the segment still has active participations")
 	ErrSegmentClosed      = errors.New("transport fulfillment: the segment no longer accepts objects")
+	// ErrNoParticipationToRederive：来源更正只能替代该对象在段内的**当前**参与，且被更正的版本
+	// 必须恰是当前参与的入场依据（ADR-0112 决定二）。不是更正、更正的是前前版、或对象根本不在
+	// 段内，都没有可替代的东西。
+	ErrNoParticipationToRederive = errors.New("transport fulfillment: no current participation matches the corrected source version")
+	// ErrCorrectionWithdrawsControl：更正后的来源不再表达控制转移（交接改判拒收/待确认），没有
+	// 入场依据可立替代版本——那是参与失效，不是替代（ADR-0112 决定四，机制另票）。
+	ErrCorrectionWithdrawsControl = errors.New("transport fulfillment: the correction withdraws the control fact and cannot rederive a participation")
 )
 
 // FulfillmentSegmentReference 指名一个实际履约段。
@@ -93,6 +100,10 @@ func (kind ParticipationEndKind) String() string {
 // FulfillmentParticipation 是一个载运对象参与某实际履约段的对象级关系：保存关联的
 // 计划履约段、实际控制起止、结果及依据（CONTEXT「履约参与关系」）。逐对象成立与结束，
 // 整段结果覆盖不了成员差异——本类型就是那个「分别」。
+//
+// 来源更正引起的重派生在同段内形成替代参与版本（ADR-0112 决定一）：新版本以 supersedes
+// 回指被替代参与的入场依据，原参与一字不动；同一对象在一段内的参与由此成一条链。superseded
+// 是派生态不落列——聚合在重派生与重建时按回指关系标出，被回指的版本不再表达当前控制。
 type FulfillmentParticipation struct {
 	object     CarriedObjectReference
 	planned    PlannedSegmentReference
@@ -102,6 +113,18 @@ type FulfillmentParticipation struct {
 	endKind    ParticipationEndKind
 	endBasis   ParticipationBasisReference
 	endedAt    time.Time
+	supersedes ParticipationBasisReference
+	superseded bool
+}
+
+// Supersedes 只在替代参与版本上给出：被替代参与的入场依据。首次入场答 false。
+func (participation FulfillmentParticipation) Supersedes() (ParticipationBasisReference, bool) {
+	return participation.supersedes, participation.supersedes.valid()
+}
+
+// Superseded 报告本版本是否已被后一版替代——它保留在历史里，但不再是该对象在段内的当前参与。
+func (participation FulfillmentParticipation) Superseded() bool {
+	return participation.superseded
 }
 
 func (participation FulfillmentParticipation) Object() CarriedObjectReference {
@@ -128,13 +151,15 @@ func (participation FulfillmentParticipation) EnteredAt() time.Time {
 	return participation.enteredAt
 }
 
+// Active 报告本参与是否仍表达当前控制：没有离场，也没有被后一版替代。
 func (participation FulfillmentParticipation) Active() bool {
-	return participation.endedAt.IsZero()
+	return participation.endedAt.IsZero() && !participation.superseded
 }
 
-// End 报告终点三件（种类、依据、时刻），只在已结束的参与上给出。
+// End 报告终点三件（种类、依据、时刻），只在已结束的参与上给出。被替代而未离场的版本不算
+// 已结束——它没有终点，只是不再是当前。
 func (participation FulfillmentParticipation) End() (ParticipationEndKind, ParticipationBasisReference, time.Time, bool) {
-	if participation.Active() {
+	if participation.endedAt.IsZero() {
 		return ParticipationEndKindInvalid, ParticipationBasisReference{}, time.Time{}, false
 	}
 	return participation.endKind, participation.endBasis, participation.endedAt, true
@@ -204,13 +229,49 @@ func (segment ActualFulfillmentSegment) Participations() []FulfillmentParticipat
 	return append([]FulfillmentParticipation(nil), segment.participations...)
 }
 
+// ParticipationFor 答该对象在段内的**当前**参与：替代链的链尾（没有被后一版替代的那一条）。
+// 历史各版由 ParticipationHistory 给。
 func (segment ActualFulfillmentSegment) ParticipationFor(object CarriedObjectReference) (FulfillmentParticipation, bool) {
 	for _, participation := range segment.participations {
-		if participation.object == object {
+		if participation.object == object && !participation.superseded {
 			return participation, true
 		}
 	}
 	return FulfillmentParticipation{}, false
+}
+
+// ParticipationHistory 交回该对象在段内的全部参与版本，按入场依据的替代顺序从首次入场到当前。
+func (segment ActualFulfillmentSegment) ParticipationHistory(object CarriedObjectReference) []FulfillmentParticipation {
+	byBasis := make(map[ParticipationBasisReference]FulfillmentParticipation)
+	var root *FulfillmentParticipation
+	for index := range segment.participations {
+		participation := segment.participations[index]
+		if participation.object != object {
+			continue
+		}
+		byBasis[participation.entryBasis] = participation
+		if !participation.supersedes.valid() {
+			root = &segment.participations[index]
+		}
+	}
+	if root == nil {
+		return nil
+	}
+	successorOf := make(map[ParticipationBasisReference]FulfillmentParticipation, len(byBasis))
+	for _, participation := range byBasis {
+		if participation.supersedes.valid() {
+			successorOf[participation.supersedes] = participation
+		}
+	}
+	history := []FulfillmentParticipation{*root}
+	for current := *root; ; {
+		next, chained := successorOf[current.entryBasis]
+		if !chained {
+			return history
+		}
+		history = append(history, next)
+		current = next
+	}
 }
 
 func (segment ActualFulfillmentSegment) ActiveParticipations() int {
@@ -291,6 +352,92 @@ func (segment ActualFulfillmentSegment) join(
 	return joined, nil
 }
 
+// RederiveParticipationWithPickup 以更正后的揽收在同段内形成替代参与版本（ADR-0112 决定一、三）：
+// 新版本回指被替代参与的入场依据，起点随更正后的发生时刻，计划段沿用；原参与一字不动但不再是
+// 当前。段已关闭照样长版本——CONTEXT 封存例外格「除来源事实更正引起的重新派生」——段不重开。
+func (segment ActualFulfillmentSegment) RederiveParticipationWithPickup(pickup OffsitePickup) (ActualFulfillmentSegment, error) {
+	corrects, corrected := pickup.Corrects()
+	if !corrected {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	replaced, err := NewParticipationBasisReference("OFFSITE-PICKUP/" + corrects.String())
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	basis, err := NewParticipationBasisReference("OFFSITE-PICKUP/" + pickup.Version().String())
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	return segment.rederive(pickup.TenantID(), pickup.Object(), EnteredByOffsitePickup, replaced, basis, pickup.OccurredAt())
+}
+
+// RederiveParticipationWithHandover 以更正后的`已交接`交接在同段内形成替代参与版本。更正若撤回了
+// 控制转移（改成拒收或待确认），没有入场依据可立——那是失效格（ADR-0112 决定四），本方法如实拒，
+// 不猜也不把它当替代。
+func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handover TransportHandover) (ActualFulfillmentSegment, error) {
+	corrects, corrected := handover.Corrects()
+	if !corrected {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	reference, transfers := handover.TransferOutBasis()
+	if !transfers {
+		return ActualFulfillmentSegment{}, ErrCorrectionWithdrawsControl
+	}
+	replaced, err := NewParticipationBasisReference("TRANSPORT-HANDOVER/" + corrects.String())
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	basis, err := NewParticipationBasisReference(reference)
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt())
+}
+
+// rederive 是两种来源共用的替代门。被替代的必须是该对象**当前**参与（链尾）且入场依据恰是被更正的
+// 那一版——更正一个已被替代的前版是分叉，更正别的来源种类是另一件事，都拒。替代版本继承原参与的
+// 离场三件：对象的控制终点是它自己的事实，更正入场不改它；更正后的起点晚于继承的终点即先结束再
+// 进入，拒。
+func (segment ActualFulfillmentSegment) rederive(
+	tenant TenantID,
+	object CarriedObjectReference,
+	kind ParticipationEntryKind,
+	replaced ParticipationBasisReference,
+	basis ParticipationBasisReference,
+	enteredAt time.Time,
+) (ActualFulfillmentSegment, error) {
+	if !segment.segment.valid() || !segment.tenantID.valid() || tenant != segment.tenantID || enteredAt.IsZero() {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	current, present := segment.ParticipationFor(object)
+	if !present || current.entryKind != kind || current.entryBasis != replaced {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	replacement := FulfillmentParticipation{
+		object:     object,
+		planned:    current.planned,
+		entryKind:  kind,
+		entryBasis: basis,
+		enteredAt:  enteredAt.UTC(),
+		supersedes: current.entryBasis,
+	}
+	if endKind, endBasis, endedAt, ended := current.End(); ended {
+		if enteredAt.After(endedAt) {
+			return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+		}
+		replacement.endKind, replacement.endBasis, replacement.endedAt = endKind, endBasis, endedAt
+	}
+	rederived := segment
+	rederived.participations = append([]FulfillmentParticipation(nil), segment.participations...)
+	for index := range rederived.participations {
+		if rederived.participations[index].object == object && rederived.participations[index].entryBasis == replaced {
+			rederived.participations[index].superseded = true
+		}
+	}
+	rederived.participations = append(rederived.participations, replacement)
+	return rederived, nil
+}
+
 // EndParticipationWithDelivery 以有效交付结束该对象的参与（CONTEXT 生命周期③；有效
 // 交付同时形成向收件方的控制转移）。
 func (segment ActualFulfillmentSegment) EndParticipationWithDelivery(
@@ -346,7 +493,8 @@ func (segment ActualFulfillmentSegment) end(
 	ended.participations = append([]FulfillmentParticipation(nil), segment.participations...)
 	for index := range ended.participations {
 		participation := &ended.participations[index]
-		if participation.object != object {
+		// 只有当前参与（链尾）会被结束：被替代的版本留在历史里，它没有终点也不再表达控制。
+		if participation.object != object || participation.superseded {
 			continue
 		}
 		if !participation.Active() {
@@ -393,7 +541,7 @@ func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfil
 // 那一道另判，这里不重复。
 func (segment ActualFulfillmentSegment) closesBeforeAParticipationEnded(at time.Time) bool {
 	for _, participation := range segment.participations {
-		if !participation.Active() && at.Before(participation.endedAt) {
+		if _, _, endedAt, ended := participation.End(); ended && at.Before(endedAt) {
 			return true
 		}
 	}

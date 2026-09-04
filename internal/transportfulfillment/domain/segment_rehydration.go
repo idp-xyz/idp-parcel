@@ -20,6 +20,9 @@ import "time"
 // `Planned` 可缺席，且那是**有依据的缺席不是数据缺失**：明确允许待路由的产品在没有可行
 // 候选时照样实际揽收，计划段此刻不存在。离场三件（种类、依据、时刻）必须同在或同缺——
 // `Active()` 按 `EndedAt` 判，半截会重建出一个既非在场又非离场的参与。
+//
+// `Supersedes` 只在替代参与版本上带值（ADR-0112 决定一）：回指同对象在同段内被替代那一版的
+// 入场依据。它是行上的事实；「被替代」那一侧不落列，重建时按回指关系派生。
 type RehydrateParticipationSpec struct {
 	Object     CarriedObjectReference
 	Planned    PlannedSegmentReference
@@ -29,6 +32,7 @@ type RehydrateParticipationSpec struct {
 	EndKind    ParticipationEndKind
 	EndBasis   ParticipationBasisReference
 	EndedAt    time.Time
+	Supersedes ParticipationBasisReference
 }
 
 // RehydrateActualFulfillmentSegmentSpec 是一个段连同它全部成员在库面的样子。
@@ -63,19 +67,18 @@ func RehydrateActualFulfillmentSegment(spec RehydrateActualFulfillmentSegmentSpe
 		segment.closedAt = spec.ClosedAt.UTC()
 	}
 
-	seen := make(map[CarriedObjectReference]struct{}, len(spec.Participations))
 	for _, row := range spec.Participations {
 		participation, err := rehydrateParticipation(row)
 		if err != nil {
 			return ActualFulfillmentSegment{}, err
 		}
-		// 同一对象两条参与是行上就看得出的坏。这不是重放 join——join 判的是「此刻能不能
-		// 加进来」，这里判的是「带回来的这批彼此相容不相容」。
-		if _, duplicate := seen[participation.object]; duplicate {
-			return ActualFulfillmentSegment{}, ErrObjectAlreadyParticipating
-		}
-		seen[participation.object] = struct{}{}
 		segment.participations = append(segment.participations, participation)
+	}
+	// 同一对象的多条参与只能是一条替代链（ADR-0112 决定一）：一个首登、每个替代版本回指同对象
+	// 已有的一版、没有两版回指同一版。这不是重放 rederive——rederive 判的是「此刻这版能不能替代」，
+	// 这里判的是「带回来的这批彼此接不接得上」。链外的第二条参与仍是行上就看得出的坏。
+	if err := segment.markSupersededByChain(); err != nil {
+		return ActualFulfillmentSegment{}, err
 	}
 
 	if segment.closed && segment.ActiveParticipations() > 0 {
@@ -102,12 +105,18 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
 	}
 
+	// 自指的替代没有前版可接，行上就看得出。
+	if row.Supersedes.valid() && row.Supersedes == row.EntryBasis {
+		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
+	}
+
 	participation := FulfillmentParticipation{
 		object:     row.Object,
 		planned:    row.Planned,
 		entryKind:  row.EntryKind,
 		entryBasis: row.EntryBasis,
 		enteredAt:  row.EnteredAt.UTC(),
+		supersedes: row.Supersedes,
 	}
 	if ended {
 		participation.endKind = row.EndKind
@@ -115,6 +124,43 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 		participation.endedAt = row.EndedAt.UTC()
 	}
 	return participation, nil
+}
+
+// markSupersededByChain 按回指关系给被替代的版本打上派生态，并核对每个对象的参与恰成一条链：
+// 一个首登、每次回指都落在同对象已有的一版上、没有两版回指同一版、同一入场依据不出现两次。
+func (segment *ActualFulfillmentSegment) markSupersededByChain() error {
+	type chainKey struct {
+		object CarriedObjectReference
+		basis  ParticipationBasisReference
+	}
+	index := make(map[chainKey]int, len(segment.participations))
+	roots := make(map[CarriedObjectReference]int, len(segment.participations))
+	for position, participation := range segment.participations {
+		key := chainKey{participation.object, participation.entryBasis}
+		if _, duplicate := index[key]; duplicate {
+			return ErrObjectAlreadyParticipating
+		}
+		index[key] = position
+		if !participation.supersedes.valid() {
+			roots[participation.object]++
+		}
+	}
+	for _, participation := range segment.participations {
+		if roots[participation.object] != 1 {
+			return ErrObjectAlreadyParticipating
+		}
+	}
+	for _, participation := range segment.participations {
+		if !participation.supersedes.valid() {
+			continue
+		}
+		replaced, present := index[chainKey{participation.object, participation.supersedes}]
+		if !present || segment.participations[replaced].superseded {
+			return ErrObjectAlreadyParticipating
+		}
+		segment.participations[replaced].superseded = true
+	}
+	return nil
 }
 
 func (kind ParticipationEntryKind) valid() bool {

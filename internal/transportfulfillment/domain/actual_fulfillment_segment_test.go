@@ -301,3 +301,175 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 		}
 	})
 }
+
+// Covers: CONTEXT 生命周期「来源证据被更正……保留原段、原参与关系和原判断，形成失效或替代关系并重新
+// 派生当前有效控制」（ADR-0112 决定一、三）：揽收更正在同段形成替代参与版本——回指被替代参与的入场
+// 依据、起点随更正后的发生时刻、计划段沿用；原参与一字不动但不再是当前；链尾是当前，只数链尾；
+// 已离场的原参与被替代时新版本继承离场三件；段已关闭照样长替代版本且段仍关闭。
+func TestASourceCorrectionRederivesTheParticipationOnTheSameSegment(t *testing.T) {
+	pickup := formedPickup(t, "parcel-1", "attempt-1")
+	segment, err := domain.EstablishSegmentWithPickup(
+		mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), pickup,
+		mustValue(t, domain.NewPlannedSegmentReference, "PLAN-1"))
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	corrected, err := pickup.Correct(pickupCorrection(t, "pickup-result/parcel-1/v2", pickedUpAt.Add(time.Hour)))
+	if err != nil {
+		t.Fatalf("correct pickup: %v", err)
+	}
+
+	rederived, err := segment.RederiveParticipationWithPickup(corrected)
+	if err != nil {
+		t.Fatalf("rederive: %v", err)
+	}
+	current, present := rederived.ParticipationFor(pickup.Object())
+	if !present || current.EntryBasis().String() != "OFFSITE-PICKUP/pickup-result/parcel-1/v2" ||
+		!current.EnteredAt().Equal(corrected.OccurredAt()) || !current.Active() {
+		t.Fatalf("链尾不是替代版本：%+v present=%v", current, present)
+	}
+	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "OFFSITE-PICKUP/pickup-result/parcel-1/v1" {
+		t.Fatalf("替代版本没回指原参与的入场依据：%v %v", supersedes, chained)
+	}
+	if planned, has := current.PlannedSegment(); !has || planned.String() != "PLAN-1" {
+		t.Fatal("替代版本没沿用计划段")
+	}
+	history := rederived.ParticipationHistory(pickup.Object())
+	if len(history) != 2 || history[0].EntryBasis().String() != "OFFSITE-PICKUP/pickup-result/parcel-1/v1" || history[0].Active() {
+		t.Fatalf("原参与不在历史里或仍被当成当前：%+v", history)
+	}
+	if !history[0].EnteredAt().Equal(pickup.OccurredAt()) {
+		t.Fatal("原参与被改写了")
+	}
+	if rederived.ActiveParticipations() != 1 {
+		t.Fatalf("在场参与数 = %d，只数链尾", rederived.ActiveParticipations())
+	}
+	original, _ := segment.ParticipationFor(pickup.Object())
+	if !original.Active() || original.EntryBasis().String() != "OFFSITE-PICKUP/pickup-result/parcel-1/v1" {
+		t.Fatal("值语义：原聚合被改了")
+	}
+
+	// 已离场的参与被更正：替代版本继承离场三件；段已关闭照样长版本，段仍关闭。
+	delivery := formedDelivery(t, "parcel-1")
+	deliveredAt := delivery.OccurredAt()
+	delivered, err := rederived.EndParticipationWithDelivery(delivery)
+	if err != nil {
+		t.Fatalf("end with delivery: %v", err)
+	}
+	closed, err := delivered.CloseSegment(deliveredAt)
+	if err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	third, err := corrected.Correct(pickupCorrection(t, "pickup-result/parcel-1/v3", pickedUpAt.Add(2*time.Hour)))
+	if err != nil {
+		t.Fatalf("correct again: %v", err)
+	}
+	reclosed, err := closed.RederiveParticipationWithPickup(third)
+	if err != nil {
+		t.Fatalf("rederive on a closed segment: %v", err)
+	}
+	if !reclosed.Closed() {
+		t.Fatal("重派生把段重开了")
+	}
+	tail, _ := reclosed.ParticipationFor(pickup.Object())
+	kind, basis, endedAt, ended := tail.End()
+	if tail.EntryBasis().String() != "OFFSITE-PICKUP/pickup-result/parcel-1/v3" || !ended ||
+		kind != domain.EndedByEffectiveDelivery || basis.String() != "EFFECTIVE-DELIVERY/delivery-result/parcel-1/v1" || !endedAt.Equal(deliveredAt) {
+		t.Fatalf("替代版本没继承离场三件：%+v", tail)
+	}
+	if reclosed.ActiveParticipations() != 0 || len(reclosed.ParticipationHistory(pickup.Object())) != 3 {
+		t.Fatal("链或在场计数走样")
+	}
+}
+
+// Covers: ADR-0112 决定一的判据与决定四——更正的不是链尾（前版已被替代、或对象不在段里、或版本不是
+// 更正版）答 ErrNoParticipationToRederive；更正后的起点晚于继承的终点是先结束再进入，拒；撤回控制转移
+// 的交接更正答 ErrCorrectionWithdrawsControl（失效格，另票）；替代版本入场种类必须与原参与相同。
+func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
+	pickup := formedPickup(t, "parcel-1", "attempt-1")
+	segment, err := domain.EstablishSegmentWithPickup(
+		mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), pickup, domain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	if _, err := segment.RederiveParticipationWithPickup(pickup); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("首登版本不是更正：err = %v", err)
+	}
+	stranger := formedPickup(t, "parcel-9", "attempt-9")
+	strangerCorrected, _ := stranger.Correct(pickupCorrection(t, "pickup-result/parcel-9/v2", pickedUpAt.Add(time.Hour)))
+	if _, err := segment.RederiveParticipationWithPickup(strangerCorrected); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("不在段里的对象：err = %v", err)
+	}
+
+	v2, _ := pickup.Correct(pickupCorrection(t, "pickup-result/parcel-1/v2", pickedUpAt.Add(time.Hour)))
+	rederived, err := segment.RederiveParticipationWithPickup(v2)
+	if err != nil {
+		t.Fatalf("rederive v2: %v", err)
+	}
+	if _, err := rederived.RederiveParticipationWithPickup(v2); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("同一更正再来一次：err = %v", err)
+	}
+	fork, _ := pickup.Correct(pickupCorrection(t, "pickup-result/parcel-1/v2b", pickedUpAt.Add(time.Hour)))
+	if _, err := rederived.RederiveParticipationWithPickup(fork); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("更正已被替代的前版（分叉）：err = %v", err)
+	}
+
+	// 起点晚于继承的终点：先结束再进入，拒。
+	delivery := formedDelivery(t, "parcel-1")
+	deliveredAt := delivery.OccurredAt()
+	delivered, err := rederived.EndParticipationWithDelivery(delivery)
+	if err != nil {
+		t.Fatalf("end: %v", err)
+	}
+	late := pickupCorrection(t, "pickup-result/parcel-1/v3", deliveredAt.Add(time.Hour))
+	late.OccurredAt = deliveredAt.Add(time.Minute)
+	v3, err := v2.Correct(late)
+	if err != nil {
+		t.Fatalf("correct v3: %v", err)
+	}
+	if _, err := delivered.RederiveParticipationWithPickup(v3); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+		t.Fatalf("起点晚于终点被收下了：err = %v", err)
+	}
+
+	// 交接那一路：撤回控制的更正是失效格，另票。
+	handover := formedHandover(t, "parcel-2", domain.ObjectHandedOver)
+	withHandover, err := domain.EstablishSegmentWithHandover(
+		mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-2"), handover, domain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("establish with handover: %v", err)
+	}
+	releasing, _ := handover.ReleasingEvidence()
+	receiving, _ := handover.ReceivingEvidence()
+	rule, _ := handover.Rule()
+	refused, err := handover.Correct(domain.HandoverCorrection{
+		Verdict:     domain.HandoverRefused,
+		Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-parcel-2-refused"),
+		Version:     mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-2/v2"),
+		CorrectedAt: handoverJudgedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("correct handover to refused: %v", err)
+	}
+	if _, err := withHandover.RederiveParticipationWithHandover(refused); !errors.Is(err, domain.ErrCorrectionWithdrawsControl) {
+		t.Fatalf("撤回控制的更正：err = %v", err)
+	}
+	stillHanded, err := handover.Correct(domain.HandoverCorrection{
+		Verdict:           domain.ObjectHandedOver,
+		ReleasingEvidence: releasing,
+		ReceivingEvidence: receiving,
+		Rule:              rule,
+		Version:           mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-2/v2"),
+		CorrectedAt:       handoverJudgedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("correct handover: %v", err)
+	}
+	rederivedHandover, err := withHandover.RederiveParticipationWithHandover(stillHanded)
+	if err != nil {
+		t.Fatalf("rederive with handover: %v", err)
+	}
+	current, _ := rederivedHandover.ParticipationFor(handover.Object())
+	if current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-2/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
+		t.Fatalf("交接更正的替代版本走样：%+v", current)
+	}
+}
