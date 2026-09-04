@@ -125,28 +125,61 @@ type issueSnapshot struct {
 	Message string `json:"message"`
 }
 
+// amountRoundingStepSnapshot 是一次金额取整留痕的快照形状（ADR-0107）。
+type amountRoundingStepSnapshot struct {
+	Point     string        `json:"point"`
+	Subject   string        `json:"subject,omitempty"`
+	Mode      string        `json:"mode"`
+	Increment moneySnapshot `json:"increment"`
+	Before    moneySnapshot `json:"before"`
+	After     moneySnapshot `json:"after"`
+}
+
+func amountRoundingStepOf(step AmountRoundingStep) amountRoundingStepSnapshot {
+	return amountRoundingStepSnapshot{
+		Point:     step.point.String(),
+		Subject:   step.subject,
+		Mode:      string(step.mode),
+		Increment: moneyOf(step.increment),
+		Before:    moneyOf(step.before),
+		After:     moneyOf(step.after),
+	}
+}
+
+func amountRoundingStepFrom(snapshot amountRoundingStepSnapshot) AmountRoundingStep {
+	return AmountRoundingStep{
+		point:     AmountRoundingPoint(snapshot.Point),
+		subject:   snapshot.Subject,
+		mode:      RoundingMode(snapshot.Mode),
+		increment: moneyFrom(snapshot.Increment),
+		before:    moneyFrom(snapshot.Before),
+		after:     moneyFrom(snapshot.After),
+	}
+}
+
 type evaluationSnapshot struct {
-	ID                   string                     `json:"id"`
-	ReplayOf             *string                    `json:"replayOf,omitempty"`
-	Status               string                     `json:"status"`
-	Evidence             string                     `json:"evidence"`
-	Direction            string                     `json:"direction"`
-	Purpose              string                     `json:"purpose"`
-	PlanReference        versionReferenceSnapshot   `json:"planReference"`
-	PlanPeriod           periodSnapshot             `json:"planPeriod"`
-	TablePeriod          periodSnapshot             `json:"tablePeriod"`
-	PlanContentDigest    string                     `json:"planContentDigest"`
-	PlanCanonicalization string                     `json:"planCanonicalization"`
-	Manifest             []versionReferenceSnapshot `json:"manifest"`
-	Input                inputSnapshotDocument      `json:"input"`
-	PricingWeight        *weightResultSnapshot      `json:"pricingWeight,omitempty"`
-	MatchedRate          *rateSelectionSnapshot     `json:"matchedRate,omitempty"`
-	ChargeLines          []chargeLineSnapshot       `json:"chargeLines"`
-	Total                *moneySnapshot             `json:"total,omitempty"`
-	Conversion           *conversionSnapshot        `json:"conversion,omitempty"`
-	Issues               []issueSnapshot            `json:"issues"`
-	Explanation          []string                   `json:"explanation"`
-	SemanticDigest       string                     `json:"semanticDigest"`
+	ID                   string                       `json:"id"`
+	ReplayOf             *string                      `json:"replayOf,omitempty"`
+	Status               string                       `json:"status"`
+	Evidence             string                       `json:"evidence"`
+	Direction            string                       `json:"direction"`
+	Purpose              string                       `json:"purpose"`
+	PlanReference        versionReferenceSnapshot     `json:"planReference"`
+	PlanPeriod           periodSnapshot               `json:"planPeriod"`
+	TablePeriod          periodSnapshot               `json:"tablePeriod"`
+	PlanContentDigest    string                       `json:"planContentDigest"`
+	PlanCanonicalization string                       `json:"planCanonicalization"`
+	Manifest             []versionReferenceSnapshot   `json:"manifest"`
+	Input                inputSnapshotDocument        `json:"input"`
+	PricingWeight        *weightResultSnapshot        `json:"pricingWeight,omitempty"`
+	MatchedRate          *rateSelectionSnapshot       `json:"matchedRate,omitempty"`
+	ChargeLines          []chargeLineSnapshot         `json:"chargeLines"`
+	Total                *moneySnapshot               `json:"total,omitempty"`
+	Conversion           *conversionSnapshot          `json:"conversion,omitempty"`
+	AmountRounding       []amountRoundingStepSnapshot `json:"amountRounding,omitempty"`
+	Issues               []issueSnapshot              `json:"issues"`
+	Explanation          []string                     `json:"explanation"`
+	SemanticDigest       string                       `json:"semanticDigest"`
 }
 
 // MarshalEvaluationSnapshot 把一份评价折成持久化快照。只接受立得住的评价——写入前
@@ -204,6 +237,9 @@ func MarshalEvaluationSnapshot(evaluation PricingEvaluation) ([]byte, error) {
 		}
 		document.Conversion = &conversion
 	}
+	for _, step := range evaluation.amountRounding {
+		document.AmountRounding = append(document.AmountRounding, amountRoundingStepOf(step))
+	}
 	for _, issue := range evaluation.issues {
 		document.Issues = append(document.Issues, issueSnapshot{Code: issue.code, Message: issue.message})
 	}
@@ -252,6 +288,9 @@ func RehydrateEvaluationSnapshot(raw []byte) (PricingEvaluation, error) {
 	}
 	for _, line := range document.ChargeLines {
 		evaluation.chargeLines = append(evaluation.chargeLines, chargeLineFrom(line))
+	}
+	for _, step := range document.AmountRounding {
+		evaluation.amountRounding = append(evaluation.amountRounding, amountRoundingStepFrom(step))
 	}
 	if document.Total != nil {
 		total := moneyFrom(*document.Total)

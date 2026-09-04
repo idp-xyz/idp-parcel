@@ -297,16 +297,19 @@ func (method PricingWeightMethod) valid() bool {
 	return method == PricingWeightActualOnly || method == PricingWeightMax
 }
 
+// RoundingMode 是取整模式的封闭集，重量取整与金额取整共用。HALF_UP（半数远离零）随 ADR-0107 加入：
+// 商业取整至少要它；再扩几个由首份真实价卡的条款定，不预填。
 type RoundingMode string
 
 const (
 	RoundingNone    RoundingMode = "NONE"
 	RoundingCeiling RoundingMode = "CEILING"
+	RoundingHalfUp  RoundingMode = "HALF_UP"
 )
 
 func (mode RoundingMode) valid() bool {
 	switch mode {
-	case RoundingNone, RoundingCeiling:
+	case RoundingNone, RoundingCeiling, RoundingHalfUp:
 		return true
 	default:
 		return false

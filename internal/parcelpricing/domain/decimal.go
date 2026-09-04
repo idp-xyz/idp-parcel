@@ -227,14 +227,29 @@ func (value Decimal) RoundToIncrement(increment Decimal, mode RoundingMode) (Dec
 	divisor := increment.scaledCoefficient(commonScale)
 	quotient, remainder := new(big.Int), new(big.Int)
 	quotient.QuoRem(dividend, divisor, remainder)
-	if remainder.Sign() != 0 {
-		switch mode {
-		case RoundingCeiling:
-			quotient.Add(quotient, big.NewInt(1))
-		}
+	if roundsUp(mode, remainder, divisor) {
+		quotient.Add(quotient, big.NewInt(1))
 	}
 	result := new(big.Int).Mul(quotient, divisor)
 	return decimalFromBig(result, commonScale)
+}
+
+// roundsUp 判断非零余数下商要不要进一：CEILING 只要有余数就进；HALF_UP 余数不小于除数一半才进
+// （在放大后的整数上比 2×余数 与除数，不引入任何中间小数）。取整的两个内核共用它，免得一个模式
+// 在两处各写一遍而漂开。
+func roundsUp(mode RoundingMode, remainder, divisor *big.Int) bool {
+	if remainder.Sign() == 0 {
+		return false
+	}
+	switch mode {
+	case RoundingCeiling:
+		return true
+	case RoundingHalfUp:
+		doubled := new(big.Int).Mul(remainder, big.NewInt(2))
+		return doubled.Cmp(divisor) >= 0
+	default:
+		return false
+	}
 }
 
 // DivRoundToIncrement 先除以 divisor，再把商落到 increment 的整数倍上。两步合成一次
@@ -254,7 +269,7 @@ func (value Decimal) DivRoundToIncrement(divisor, increment Decimal, mode Roundi
 	denominator.Mul(denominator, pow10(value.scale))
 	multiples, remainder := new(big.Int), new(big.Int)
 	multiples.QuoRem(numerator, denominator, remainder)
-	if remainder.Sign() != 0 && mode == RoundingCeiling {
+	if roundsUp(mode, remainder, denominator) {
 		multiples.Add(multiples, big.NewInt(1))
 	}
 	return decimalFromBig(multiples.Mul(multiples, increment.bigCoefficient()), increment.scale)

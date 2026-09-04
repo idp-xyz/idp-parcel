@@ -157,6 +157,29 @@ type exclusionRuleSnapshot struct {
 	Condition triggerConditionSnapshot `json:"condition"`
 }
 
+// amountRoundingSnapshot 是金额取整策略在快照里的形状（ADR-0107）：模式、进位单位（带币种）、应用点。
+type amountRoundingSnapshot struct {
+	Mode      string        `json:"mode"`
+	Increment moneySnapshot `json:"increment"`
+	Points    []string      `json:"points"`
+}
+
+func amountRoundingDocumentOf(policy AmountRoundingPolicy) amountRoundingSnapshot {
+	points := make([]string, 0, len(policy.points))
+	for _, point := range policy.points {
+		points = append(points, point.String())
+	}
+	return amountRoundingSnapshot{Mode: string(policy.mode), Increment: moneyOf(policy.increment), Points: points}
+}
+
+func amountRoundingFrom(snapshot amountRoundingSnapshot) AmountRoundingPolicy {
+	points := make([]AmountRoundingPoint, 0, len(snapshot.Points))
+	for _, point := range snapshot.Points {
+		points = append(points, AmountRoundingPoint(point))
+	}
+	return AmountRoundingPolicy{mode: RoundingMode(snapshot.Mode), increment: moneyFrom(snapshot.Increment), points: points}
+}
+
 type pricingPlanSnapshot struct {
 	Canonicalization string                           `json:"canonicalization"`
 	Reference        versionReferenceSnapshot         `json:"reference"`
@@ -173,6 +196,7 @@ type pricingPlanSnapshot struct {
 	Dependencies     []chargeDependencySnapshot       `json:"chargeDependencies,omitempty"`
 	ReferenceSeries  []referenceSeriesBindingSnapshot `json:"referenceSeries,omitempty"`
 	Exclusions       []exclusionRuleSnapshot          `json:"exclusions,omitempty"`
+	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
 	Manifest         []versionReferenceSnapshot       `json:"manifest"`
 	ContentDigest    string                           `json:"contentDigest"`
 }
@@ -241,6 +265,10 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 			ID: rule.id, Clause: rule.clause, Condition: triggerDocumentOf(rule.condition),
 		})
 	}
+	if plan.structures.amountRounding != nil {
+		rounding := amountRoundingDocumentOf(*plan.structures.amountRounding)
+		document.AmountRounding = &rounding
+	}
 	for _, reference := range plan.manifest.references {
 		document.Manifest = append(document.Manifest, versionReferenceOf(reference))
 	}
@@ -282,6 +310,10 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 		plan.structures.exclusions = append(plan.structures.exclusions, ExclusionRule{
 			id: rule.ID, clause: rule.Clause, condition: triggerFrom(rule.Condition),
 		})
+	}
+	if document.AmountRounding != nil {
+		rounding := amountRoundingFrom(*document.AmountRounding)
+		plan.structures.amountRounding = &rounding
 	}
 	references := make([]VersionReference, 0, len(document.Manifest))
 	for _, reference := range document.Manifest {

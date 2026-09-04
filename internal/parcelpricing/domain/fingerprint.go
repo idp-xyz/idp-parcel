@@ -443,6 +443,56 @@ type canonicalPricingPlan struct {
 	// 方案不拒收任何东西时省略该字段，使得所有在排除规则出现之前发布的方案规范化成
 	// 相同的字节、摘要继续可比，而不必额外花掉一个规范化版本。
 	Exclusions []canonicalExclusionRuleDocument `json:"exclusions,omitempty"`
+	// 金额取整策略是价卡内容（ADR-0107 Decision 三），进内容摘要；未声明时省略——两张只差
+	// 「声明了 / 没声明」的卡摘要必须不同，而没声明的卡彼此之间不该因这一格多出差异。
+	AmountRounding *canonicalAmountRoundingDocument `json:"amount_rounding,omitempty"`
+}
+
+type canonicalAmountRoundingDocument struct {
+	Mode      string         `json:"mode"`
+	Increment canonicalMoney `json:"increment"`
+	Points    []string       `json:"points"`
+}
+
+func canonicalAmountRoundingValue(policy AmountRoundingPolicy) canonicalAmountRoundingDocument {
+	points := make([]string, 0, len(policy.points))
+	for _, point := range policy.points {
+		points = append(points, point.String())
+	}
+	return canonicalAmountRoundingDocument{
+		Mode:      string(policy.mode),
+		Increment: canonicalMoneyValue(policy.increment),
+		Points:    points,
+	}
+}
+
+// canonicalAmountRoundingStep 是评价里一次取整的规范化形状：点、对象、模式、进位单位、前后值全进
+// 语义摘要——只哈希取整后的合计，会让一次改模式与一次改进位单位互相抵消而无人察觉。
+type canonicalAmountRoundingStep struct {
+	Point     string         `json:"point"`
+	Subject   string         `json:"subject,omitempty"`
+	Mode      string         `json:"mode"`
+	Increment canonicalMoney `json:"increment"`
+	Before    canonicalMoney `json:"before"`
+	After     canonicalMoney `json:"after"`
+}
+
+func canonicalAmountRoundingSteps(steps []AmountRoundingStep) []canonicalAmountRoundingStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	documents := make([]canonicalAmountRoundingStep, 0, len(steps))
+	for _, step := range steps {
+		documents = append(documents, canonicalAmountRoundingStep{
+			Point:     step.point.String(),
+			Subject:   step.subject,
+			Mode:      string(step.mode),
+			Increment: canonicalMoneyValue(step.increment),
+			Before:    canonicalMoneyValue(step.before),
+			After:     canonicalMoneyValue(step.after),
+		})
+	}
+	return documents
 }
 
 func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
@@ -470,9 +520,15 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 	for _, rule := range plan.structures.exclusions {
 		exclusions = append(exclusions, canonicalExclusionRuleValue(rule))
 	}
+	var amountRounding *canonicalAmountRoundingDocument
+	if plan.structures.amountRounding != nil {
+		rounding := canonicalAmountRoundingValue(*plan.structures.amountRounding)
+		amountRounding = &rounding
+	}
 	document := canonicalPricingPlan{
 		Canonicalization: canonicalizationVersion,
 		Exclusions:       exclusions,
+		AmountRounding:   amountRounding,
 		Reference:        canonicalReference(plan.reference),
 		Scope:            plan.scope.String(),
 		Direction:        plan.direction.String(),
@@ -643,8 +699,10 @@ type canonicalEvaluation struct {
 	MatchedRate      *canonicalRateSelectionDocument `json:"matched_rate,omitempty"`
 	Conversion       *canonicalConversionDocument    `json:"conversion,omitempty"`
 	ChargeLines      []canonicalChargeLineDocument   `json:"charge_lines"`
-	Total            *canonicalMoney                 `json:"total,omitempty"`
-	Issues           []canonicalEvaluationIssue      `json:"issues"`
+	// 没有任何一次取整时省略：未声明策略的卡与 ADR-0107 之前的评价在这一格上字节相同。
+	AmountRounding []canonicalAmountRoundingStep `json:"amount_rounding,omitempty"`
+	Total          *canonicalMoney               `json:"total,omitempty"`
+	Issues         []canonicalEvaluationIssue    `json:"issues"`
 }
 
 type canonicalEvaluationIssue struct {
@@ -699,6 +757,7 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		TablePeriod:      evaluation.tablePeriod.canonicalString(),
 		PlanContent:      evaluation.planContentDigest,
 		Manifest:         manifest,
+		AmountRounding:   canonicalAmountRoundingSteps(evaluation.amountRounding),
 		Issues:           make([]canonicalEvaluationIssue, 0, len(evaluation.issues)),
 	}
 	for _, issue := range evaluation.issues {

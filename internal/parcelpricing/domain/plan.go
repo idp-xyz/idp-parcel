@@ -225,6 +225,10 @@ func NewPricingPlanVersion(
 		}
 		seenCodes[surcharge.chargeCode.String()] = struct{}{}
 	}
+	// 金额取整的进位单位以该卡币种表示（ADR-0107 Decision 二）：另一个币种的 0.01 说的不是这张卡。
+	if structures.amountRounding != nil && structures.amountRounding.increment.currency != rateTable.currency {
+		return PricingPlanVersion{}, ErrCurrencyMismatch
+	}
 
 	// 序列绑定不进方案清单：方案绑的是序列标识，用到哪一版是评价形成时的结论，由评价
 	// 自己的清单冻结（ADR-0099）。

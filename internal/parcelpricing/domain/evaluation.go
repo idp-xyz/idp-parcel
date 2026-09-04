@@ -217,10 +217,17 @@ type PricingEvaluation struct {
 	chargeLines          []ChargeLine
 	total                *Money
 	conversion           *ConversionStep
-	issues               []EvaluationIssue
-	explanation          []string
-	semanticDigest       string
+	// amountRounding 是本次评价按卡上策略做过的每一次取整（ADR-0107）：逐行的先于换算后的，
+	// 换算后的先于合计的。合计不再等于费用行之和时，差在这里可复算。
+	amountRounding []AmountRoundingStep
+	issues         []EvaluationIssue
+	explanation    []string
+	semanticDigest string
 }
+
+// amountPrecisionUndeclaredIssue 是 ADR-0107 Decision 四那条结构化问题项的编码：卡没声明金额取整
+// 策略，评价照精确十进制完成，消费方据此知道这个金额没被任何规则取过整、不得自己补一次。
+const amountPrecisionUndeclaredIssue = "AMOUNT_PRECISION_UNDECLARED"
 
 func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	evaluation := baseEvaluation(request)
@@ -330,32 +337,56 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	// 还是由续重步长或单价推导出来的。
 	evaluation.explanation = append(evaluation.explanation, matchedRate.explanation)
 
-	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, "Base rate", matchedRate.amount, matchedRate.id.String())
+	// 金额取整按卡上的声明做（ADR-0107）：逐行在费用行成形处、换算后与合计在各自那一步；没声明
+	// 就一次也不取整，评价末尾如实记问题项。roundLine 是逐行那一点的唯一入口——基础运费、固定规则、
+	// 附加费三处费用行都经它，逐行取整的留痕与费用行上的金额才始终一致。
+	amountRounding := request.plan.structures.amountRounding
+	roundLine := func(lineID string, amount Money) (Money, error) {
+		rounded, step, roundErr := applyAmountRounding(amountRounding, AmountRoundingPerLine, lineID, amount)
+		if roundErr != nil {
+			return Money{}, roundErr
+		}
+		if step != nil {
+			evaluation.amountRounding = append(evaluation.amountRounding, *step)
+			evaluation.explanation = append(evaluation.explanation, step.explain())
+		}
+		return rounded, nil
+	}
+
+	baseAmount, err := roundLine("base:"+matchedRate.id.String(), matchedRate.amount)
+	if err != nil {
+		return evaluation.withCalculationError(err)
+	}
+	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, "Base rate", baseAmount, matchedRate.id.String())
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
 	evaluation.chargeLines = append(evaluation.chargeLines, baseLine)
-	runningAmount := matchedRate.amount.amount
+	runningAmount := baseAmount.amount
 
 	for _, rule := range request.plan.rules {
-		line, lineErr := newFixedChargeLine("fixed:"+rule.id, rule.chargeCode, rule.description, rule.effect, rule.amount, rule.order, rule.id)
+		lineAmount, roundErr := roundLine("fixed:"+rule.id, rule.amount)
+		if roundErr != nil {
+			return evaluation.withCalculationError(roundErr)
+		}
+		line, lineErr := newFixedChargeLine("fixed:"+rule.id, rule.chargeCode, rule.description, rule.effect, lineAmount, rule.order, rule.id)
 		if lineErr != nil {
 			return evaluation.withCalculationError(lineErr)
 		}
 		evaluation.chargeLines = append(evaluation.chargeLines, line)
 		switch rule.effect {
 		case ChargeEffectAdd:
-			runningAmount, err = runningAmount.Add(rule.amount.amount)
+			runningAmount, err = runningAmount.Add(lineAmount.amount)
 		case ChargeEffectDeduct:
-			if runningAmount.Cmp(rule.amount.amount) < 0 {
+			if runningAmount.Cmp(lineAmount.amount) < 0 {
 				return evaluation.withCalculationError(ErrNegativeChargeTotal)
 			}
-			runningAmount, err = runningAmount.Sub(rule.amount.amount)
+			runningAmount, err = runningAmount.Sub(lineAmount.amount)
 		}
 		if err != nil {
 			return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
 		}
-		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("fixed rule %s %s %s %s", rule.id, rule.effect, rule.amount.amount.String(), rule.amount.currency))
+		evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("fixed rule %s %s %s %s", rule.id, rule.effect, lineAmount.amount.String(), lineAmount.currency))
 	}
 
 	if haveFeatures {
@@ -404,6 +435,13 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 
 		collect := func(outcome *surchargeOutcome) error {
+			// 逐行取整在费用行成形之前、在百分比依据登记之前：读这一行的百分比费用要读到的是卡上
+			// 那个金额，不是取整前的中间值。
+			lineAmount, roundErr := roundLine("surcharge:"+outcome.rule.id, outcome.amount)
+			if roundErr != nil {
+				return roundErr
+			}
+			outcome.amount = lineAmount
 			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
 			if lineErr != nil {
 				return lineErr
@@ -489,6 +527,35 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 				step.converted.amount.String(), step.converted.currency,
 				step.rate.String(), step.series.ID(), basis.ID()))
 		total = step.converted
+		// 换算后那一点只在发生了换算时才有对象；卡币种结算的评价这一点空过。
+		converted, roundStep, roundErr := applyAmountRounding(amountRounding, AmountRoundingAfterConversion, "", total)
+		if roundErr != nil {
+			return evaluation.withCalculationError(roundErr)
+		}
+		if roundStep != nil {
+			evaluation.amountRounding = append(evaluation.amountRounding, *roundStep)
+			evaluation.explanation = append(evaluation.explanation, roundStep.explain())
+		}
+		total = converted
+	}
+
+	// 合计是策略必声明的那一点（ADR-0107 Decision 二）：声明了策略的卡，交出去的合计 scale 就是进位
+	// 单位的 scale，消费方直接采用。
+	roundedTotal, totalStep, err := applyAmountRounding(amountRounding, AmountRoundingTotal, "", total)
+	if err != nil {
+		return evaluation.withCalculationError(err)
+	}
+	if totalStep != nil {
+		evaluation.amountRounding = append(evaluation.amountRounding, *totalStep)
+		evaluation.explanation = append(evaluation.explanation, totalStep.explain())
+	}
+	total = roundedTotal
+	if amountRounding == nil {
+		// 未声明即不取整，且如实记问题项、不给默认（ADR-0107 Decision 四）：评价照样完成，但读
+		// Total() 的人要看见这个金额没被任何规则取过整。
+		evaluation.issues = append(evaluation.issues, newEvaluationIssue(amountPrecisionUndeclaredIssue,
+			"the price card declares no amount rounding policy; the total is exact decimal and has not been rounded by any rule"))
+		evaluation.explanation = append(evaluation.explanation, "amount rounding: not declared by the price card; total left unrounded")
 	}
 
 	evaluation.total = &total
@@ -687,10 +754,44 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 			return false
 		}
 	}
-	if evaluation.conversion != nil {
-		return running.Equal(evaluation.conversion.original.amount)
+	// 费用行之和到合计之间只允许两种东西：一次换算，与卡上声明的取整（换算后、合计两点，逐行那一点
+	// 已经在费用行金额里）。逐步重走留痕：每一步的 before 必须等于此刻的值，after 成为下一刻的值，
+	// 最后落在合计上——多一步、少一步、顺序不对都不合法。
+	value := Money{amount: running, currency: currency}
+	steps := evaluation.amountRounding
+	for len(steps) > 0 && steps[0].point == AmountRoundingPerLine {
+		steps = steps[1:]
 	}
-	return running.Equal(evaluation.total.amount)
+	if evaluation.conversion != nil {
+		if !running.Equal(evaluation.conversion.original.amount) {
+			return false
+		}
+		value = evaluation.conversion.converted
+		if len(steps) > 0 && steps[0].point == AmountRoundingAfterConversion {
+			if !steps[0].valid() || !steps[0].before.Equal(value) {
+				return false
+			}
+			value = steps[0].after
+			steps = steps[1:]
+		}
+	}
+	if len(steps) > 0 && steps[0].point == AmountRoundingTotal {
+		if !steps[0].valid() || !steps[0].before.Equal(value) {
+			return false
+		}
+		value = steps[0].after
+		steps = steps[1:]
+	}
+	if len(steps) != 0 {
+		return false
+	}
+	return value.Equal(*evaluation.total)
+}
+
+// AmountRounding 交回本次评价做过的每一次取整，按评价里的先后。空切片即卡没声明策略（那时
+// Issues 里有 AMOUNT_PRECISION_UNDECLARED）或声明了但一次也没落到可取整的金额上。
+func (evaluation PricingEvaluation) AmountRounding() []AmountRoundingStep {
+	return append([]AmountRoundingStep(nil), evaluation.amountRounding...)
 }
 
 func baseEvaluation(request EvaluationRequest) PricingEvaluation {
@@ -755,7 +856,15 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 func (evaluation PricingEvaluation) withOutcome(status EvaluationStatus, issue EvaluationIssue) PricingEvaluation {
 	evaluation.status = status
 	evaluation.total = nil
-	evaluation.issues = append(evaluation.issues, issue)
+	// 「金额精度未声明」修饰的是交出去的那个合计；合计被收回（重放判冲突、后续步骤失败）时它没有
+	// 对象了，留着会让一份没有金额的结果看起来像在说金额的事。
+	kept := make([]EvaluationIssue, 0, len(evaluation.issues)+1)
+	for _, existing := range evaluation.issues {
+		if existing.code != amountPrecisionUndeclaredIssue {
+			kept = append(kept, existing)
+		}
+	}
+	evaluation.issues = append(kept, issue)
 	evaluation.semanticDigest = evaluation.calculateSemanticDigest()
 	return evaluation
 }

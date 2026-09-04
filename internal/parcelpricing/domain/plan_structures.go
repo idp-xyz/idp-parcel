@@ -563,6 +563,10 @@ type PricingPlanStructures struct {
 	dependencies    []ChargeDependency
 	referenceSeries []ReferenceSeriesBinding
 	exclusions      []ExclusionRule
+	// amountRounding 是卡声明的金额取整策略（ADR-0107），可缺。挂在这里而不是构造参数位，理由同拒收
+	// 条款：它是可缺的另一个轴，多数 SYN 卡不声明；「与重量取整同形」说的是声明的形状（模式 + 进位
+	// 单位），不是构造参数的位置。
+	amountRounding *AmountRoundingPolicy
 }
 
 func NewPricingPlanStructures(
@@ -674,6 +678,29 @@ func (structures PricingPlanStructures) ExclusionRules() []ExclusionRule {
 	return append([]ExclusionRule(nil), structures.exclusions...)
 }
 
+// WithAmountRounding 返回携带金额取整策略的结构集合（ADR-0107 Decision 一、二）。进位单位的币种要
+// 与卡币种一致，那一道在 NewPricingPlanVersion 上判——结构集合自己不知道卡的币种。
+func (structures PricingPlanStructures) WithAmountRounding(policy AmountRoundingPolicy) (PricingPlanStructures, error) {
+	if !policy.valid() {
+		return PricingPlanStructures{}, ErrInvalidAmountRoundingPolicy
+	}
+	declared := policy
+	structures.amountRounding = &declared
+	if !structures.valid() {
+		return PricingPlanStructures{}, ErrInvalidPlanStructures
+	}
+	return structures, nil
+}
+
+// AmountRounding 交回卡声明的金额取整策略；未声明时第二个返回值为假——那不是缺陷，是
+// ADR-0107 Decision 四说的「未声明即不取整并记问题项」那一格的输入。
+func (structures PricingPlanStructures) AmountRounding() (AmountRoundingPolicy, bool) {
+	if structures.amountRounding == nil {
+		return AmountRoundingPolicy{}, false
+	}
+	return *structures.amountRounding, true
+}
+
 // Declared 报出方案是否声明了任何结构，使得求值器必须先执行它才能产出完整金额。
 func (structures PricingPlanStructures) Declared() bool {
 	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 ||
@@ -738,6 +765,9 @@ func (structures PricingPlanStructures) valid() bool {
 		if index > 0 && structures.exclusions[index-1].id >= rule.id {
 			return false
 		}
+	}
+	if structures.amountRounding != nil && !structures.amountRounding.valid() {
+		return false
 	}
 	return true
 }
