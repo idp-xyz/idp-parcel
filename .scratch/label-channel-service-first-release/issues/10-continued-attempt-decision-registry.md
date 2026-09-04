@@ -1,7 +1,7 @@
 # 10 `面单继续尝试决定`登记册未建，读面那一格派生自空历史
 
 Category: enhancement
-Status: in-progress——MCP-1；**领域层已落**（`7c79b3d`，十条用例），端口／持久化／读面派生三层未做，接手点见文末「进度」
+Status: resolved——四层齐：领域 `7c79b3d`、端口 `3b37845`、持久化 `0d492b8`、读面派生 `08e62ec`；完成记录见文末
 Blocked by: 无
 
 ## 缺口
@@ -98,3 +98,28 @@ Blocked by: 无
 
 **一处接手时要当心的**：读面那一格还需要「当前有效终局在不在」。终局属本上下文（`ParcelFinalOutcome`）
 但不在本册，也不在面单交易快照里——读面怎么拿到它是这一层第一个要答的问题，别顺手在本册里存一份。
+
+## 完成记录
+
+2026-09-03／04，MCP-1。四层各一笔：
+
+| 层 | 提交 | 落点 |
+|---|---|---|
+| 领域 | `7c79b3d` | `domain/continued_attempt.go`、`domain/continued_attempt_register.go`：两种决定、两格判断、`Judge` 现算、`HasAnyDecision`、重建门 |
+| 端口 | `3b37845` | `ports.ContinuedAttemptRegisterRepository`（`FindByParcel`／`Insert`／`Save`），写入代数照面单交易那一对分立 |
+| 持久化 | `0d492b8` | 迁移 `parcel_shipment/0012`、`adapters/postgres/continued_attempt_register.go`；键＋`revision`＋`snapshot jsonb`，无判断列 |
+| 读面派生 | `08e62ec` | `adapters/postgres/label_transaction_views.go` 的 `continuedAttemptJudgments`：一次取回覆盖包裹的登记册与 `final_outcome` 的 `is_current` 行，逐件由 `Judge` 现算；`ports.LabelTransactionParcelRow` 加 `ContinuedAttemptDecided`；传输层加 `continuedAttemptDecided`、依据代码换 `DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL`；admin-web 页头改述规则、「开放」下另注来源 |
+
+**逐条完成判据：**
+
+- 登记册四处齐——见上表。
+- `ContinuedAttemptOpen` 不再派生自空历史——`deriveContinuedAttemptOpen` 那个恒答开放的函数已删，换成 `continuedAttemptJudgments.judge`，输入是真登记册（没开过册的按空册）与真终局。原来那句「不是默认值」的注释随之一并换掉，没留成旧话。
+- 红线「登记册为空要说得出没有人作过决定」——按「取词」一节的结论**没有加第三格**：判断仍两格，读面另交出 `ContinuedAttemptDecided`；页面「开放」下注「没有人作过决定」或「最近适用决定为重开」（后者取 CONTEXT 生命周期原词）。
+- 「当前有效终局在不在」怎么拿——读 `final_outcome` 的 `is_current` 行，只问在不在，不抄进本册。
+- 「开不出空册」这条本不可达的失败路报错而不答零值：零值读出来是「受控关闭、无人决定」，一格看着合法的答案会把坏行藏起来。
+
+**真库用例**（`label_transaction_test.go`）：一笔交易四件包裹各占一格——没开过册／一条生效关闭／关过又重开／仅当前终局在场——加他租户同号包裹上的关闭渗不进来。原 `TestTheLabelTransactionViewExpandsOneRowPerCoveredParcel` 里「恒为开放」那条断言改成同时断无决定历史。
+
+**验证**：`08e62ec` 在共享树上——`gofmt -l` 对七个改动文件为空；`go build ./...`、`go vet ./internal/parcelshipment/...` 退 0；`go test -count=1 ./internal/parcelshipment/adapters/postgres/ -run 'LabelTransaction|ContinuedAttempt' -v` 十二条 `PASS`（DSN 55432，非 `SKIP`）；`adapters/http` 三条 `PASS`；admin-web `tsc --noEmit` 退 0、`node scripts/run-tests.mjs` 38 通过。全仓按 `08e62ec` 在临时 worktree 上另验（干净检出，DSN 55432）：`gofmt -l .` 空；`go build ./...` 与 `go vet ./...` 退 0；`go test -p 1 -count=1 ./...` 退 0、零 `FAIL`（含真库）；`tools/mechanism-inventory` 在该检出上重生成，与提交版逐字节一致，本票不需重生成清点。
+
+**刻意没做**：写面（形成关闭／重开决定的命令口）——它要先过 party-commercial 的授权校验，属另一张票（持久化那笔的提交信已写明「本适配器今天没有生产写入方」）；`label_transaction_views.go` 之外没有第二处消费 `Judge`。

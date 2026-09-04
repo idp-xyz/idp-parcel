@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`09`、`12`、`15`、`16`、`17` 已 resolved，其余实现票待做
+Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`10`、`12`、`15`、`16`、`17` 已 resolved，其余实现票待做
 
 ## 这个 feature 是什么
 
@@ -54,7 +54,7 @@ Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 | [`05` `ServiceProductForm` 第二取值](./issues/05-service-product-form-second-value.md) | **已落地**：`LABEL_CHANNEL_SERVICE` 八处同步扩展（盘点漏列 CLI 与管理台两处）＋两条守卫用例；迁移另起 `0017`，不得就地改 `0008` | `resolved` |
 | [`06` 面单交易写侧执行器链](./issues/06-label-transaction-write-side-executors.md) | **已落地**：五步编排共用一套按恢复动作分格的代数；棘轮基线两条剪掉并改正一处错了的计数；不发起任何渠道调用 | `resolved` |
 | [`07` 取面单出向端口形状](./issues/07-outbound-label-fetch-port-shape.md) | **已落地**：出向缝落 `internal/platform/outbound`（两条链共用），端口落 PS `ports`；四处差异各有类型落点；`确证未受理`过举证门（举不出实据即降级）；「不得重发」与「只能查询收口」两条纪律做进谓词而非留给人记住；另加一道出向缝不得看见传输层的门禁 | `resolved` |
-| [`10` 面单继续尝试决定登记册](./issues/10-continued-attempt-decision-registry.md) | 读面那一格今天派生自空历史 | `ready-for-agent` |
+| [`10` 面单继续尝试决定登记册](./issues/10-continued-attempt-decision-registry.md) | **已落地**：登记册按（租户＋包裹）成册、决定只追加、判断由 Judge 现算不存列；读面那一格换真输入（登记册＋当前有效终局），并另交代决定历史在不在——「没有人作过决定」与「最近适用决定为重开」派生同一格，不加第三格 | `resolved` |
 | [`12` 候选装配](./issues/12-channel-candidate-assembly.md) | **已落地**：装配三片＋择优编排＋成本取数适配器，装配器接上择优端口（`cb86027`）；整条链的组合根与调用入口不在本票，待另立票 | `resolved` |
 | [`13` `BUY` 批量评价与成本分值桥](./issues/13-buy-evaluation-to-cost-score-bridge.md) | 逐候选各算各的计费重；出局判断落择优层，不得以零金额顶替 | `ready-for-agent` |
 | [`15` 轨迹源的拉取/接收端口](./issues/15-tracking-source-inbound-port.md) | 形态选择（拉取/回调）；`OccurredAt` 缺失要如实交出不得代补 | `ready-for-agent` |
