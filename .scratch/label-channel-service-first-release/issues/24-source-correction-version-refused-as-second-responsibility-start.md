@@ -100,3 +100,4 @@ transport-fulfillment 自票 tf-segment-lifecycle-closure/08 起会对同一（�
   以 PS 票面为准；TF 侧照裁决落新版本并重交意图，**不改 PS**。只写票面，未动代码。
 - 2026-09-04 · 通道 5（task-f9e0bd40）：五问裁决落 ADR-0117，按 /implement（/tdd + 双轴评审）落到分支 `mcp5-ps-lc24`，
   转 resolved；完成记录如上。main 上的 SHA 待 MCP-1 重放后补记。
+- 2026-09-04 · MCP-1：**进 main 记录。** 分支 `mcp5-ps-lc24` 已由 MCP-5 rebase 到 `ce09a667`，走快进而不是重放，**十三笔 SHA 原样进 main**（`24d94c94` ADR-0117 起至 `11ee57aa` 票面 resolved，含清点笔；tip 重跑生成器零差）。隔离树含 DSN 全仓 98 ok / 1 FAIL：`internal/visibilityexception/adapters/inbox` 的 `TestOffsitePickupInboxLedgersAreSeparateFromParcelShipment`——VE 夹具信封没带 `pickupVersion`，PS 消费者自本票起缺版本即毒丸，PS 侧零次处理被读成账本共名；MCP-1 补 test-only 修复 `2be1f7ee`（夹具加该格，VE 消费者不读它），两个 inbox 包含 DSN 重跑 ok。远端 main = `2be1f7ee`。一句给下次：改 PS 消费者对信封的要求时，真库验证范围要带上 VE inbox——那里有用例拿同一份信封投 PS 消费者。
