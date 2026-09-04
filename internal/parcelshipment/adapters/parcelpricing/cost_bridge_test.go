@@ -261,6 +261,12 @@ func TestAPricedEvaluationCrossesAsAnEstablishedCost(t *testing.T) {
 	if _, unavailable := cost.Unavailability(); unavailable {
 		t.Fatal("算得出价的候选带上了出局格")
 	}
+	// 票 14 的留痕要指得回评价：取值带着它译自的那份评价的标识过来，而不是金额本身——金额
+	// 指不回任何东西。
+	reference, present := cost.Evaluation()
+	if !present || reference.String() != evaluation.ID().String() {
+		t.Fatalf("评价引用 = %q/%v，want %q", reference.String(), present, evaluation.ID().String())
+	}
 }
 
 // Covers: 四种非完成结果各自译到自己那一格，不互相顶替（`parcel-pricing` CONTEXT「依据
@@ -347,6 +353,10 @@ func TestEachUnpriceableOutcomeCrossesIntoItsOwnGrade(t *testing.T) {
 			grade, unavailable := cost.Unavailability()
 			if !unavailable || grade != testCase.wantGrade {
 				t.Fatalf("出局格 = %s，want %s", grade, testCase.wantGrade)
+			}
+			// 出局的候选同样经过了评价，留痕要能指回它为何出局的那份评价。
+			if reference, present := cost.Evaluation(); !present || reference.String() != testCase.evaluation.ID().String() {
+				t.Fatalf("出局候选的评价引用 = %q/%v，want %q", reference.String(), present, testCase.evaluation.ID().String())
 			}
 		})
 	}

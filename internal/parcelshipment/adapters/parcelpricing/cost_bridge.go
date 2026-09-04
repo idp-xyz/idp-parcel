@@ -46,21 +46,49 @@ func ChannelCandidateCostOf(
 			ErrNotASupplierCostEvaluation, evaluation.Direction(), evaluation.Purpose())
 	}
 
+	var (
+		cost psdomain.ChannelCandidateCost
+		err  error
+	)
 	switch status := evaluation.Status(); status {
 	case ppdomain.EvaluationCompleted:
-		return establishedCost(candidate, evaluation)
+		cost, err = establishedCost(candidate, evaluation)
 	case ppdomain.EvaluationPending:
-		return unpriceable(candidate, psdomain.ChannelCostPendingEvidence)
+		cost, err = unpriceable(candidate, psdomain.ChannelCostPendingEvidence)
 	case ppdomain.EvaluationUnratable:
-		return unpriceable(candidate, psdomain.ChannelCostRatecardExclusion)
+		cost, err = unpriceable(candidate, psdomain.ChannelCostRatecardExclusion)
 	case ppdomain.EvaluationConflict:
-		return unpriceable(candidate, psdomain.ChannelCostConflict)
+		cost, err = unpriceable(candidate, psdomain.ChannelCostConflict)
 	case ppdomain.EvaluationFailed:
-		return unpriceable(candidate, psdomain.ChannelCostNotFormed)
+		cost, err = unpriceable(candidate, psdomain.ChannelCostNotFormed)
 	default:
 		return psdomain.ChannelCandidateCost{}, fmt.Errorf("%w: evaluation status %q",
 			ErrUntranslatableEvaluation, status)
 	}
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, err
+	}
+	return withEvaluationReference(cost, evaluation)
+}
+
+// withEvaluationReference 给取值带上它译自的评价的标识（票 `label-channel/14` 的留痕要指得回
+// 评价）。只带标识不带内容：金额与解释留在提供方的评价上，本上下文一列不复制。已确立与出局
+// 两格都带——出局多半也是评价的结果，留痕同样要指回它为何出局的那一份。
+func withEvaluationReference(
+	cost psdomain.ChannelCandidateCost,
+	evaluation ppdomain.PricingEvaluation,
+) (psdomain.ChannelCandidateCost, error) {
+	reference, err := psdomain.NewChannelCostEvaluationReference(evaluation.ID().String())
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, fmt.Errorf("%w: evaluation reference: %v",
+			ErrUntranslatableEvaluation, err)
+	}
+	referenced, err := cost.WithEvaluation(reference)
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, fmt.Errorf("%w: attach evaluation reference: %v",
+			ErrUntranslatableEvaluation, err)
+	}
+	return referenced, nil
 }
 
 // establishedCost 译一份已完成评价。金额与币种照评价原样过去，不折成最小币单位——理由
