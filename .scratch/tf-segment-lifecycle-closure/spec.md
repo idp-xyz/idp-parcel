@@ -31,10 +31,10 @@ Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026
 | [05](issues/05-movement-fact-endpoint.md) | 移动事实端点，只收自营执行方 | 无 |
 | [06](issues/06-participation-end-internal-triggers.md) | 结束参与的两处内部触发（交付后、交接后） | MCP-1 对动 TF application 的答复 |
 | [07](issues/07-admin-write-faces-segment-closure-dispatch-task-load-assignment.md) | admin 写面四格：关段、建派送任务、装载分配、明确终止参与 | 无 |
-| [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：已裁取 A 新版本（`Corrects` 回指，登记册只插不改） | 已裁（`bca02e5`），ready-for-agent |
+| [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：已裁取 A 新版本（`Corrects` 回指，登记册只插不改） | 已裁（`bca02e5`）；已 resolved（2026-09-04，MCP-3，main `91fab19d`..`27116c52`） |
 | [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：四问已裁，触发事实改为对象凭`已交接`进入派送段 | 已裁（`21ee4f0`），ready-for-agent；05 已 resolved 不再阻塞 |
 
-04、05、06、07 已 resolved（2026-09-03）；02 已 resolved（2026-09-04，MCP-2，ADR-0103）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
+04、05、06、07 已 resolved（2026-09-03）；02 已 resolved（2026-09-04，MCP-2，ADR-0103）；08 已 resolved（2026-09-04，MCP-3 于分支 `mcp3-tf08` 完工、MCP-1 重放入 main `91fab19d`..`27116c52`，分支→main 对照见票面 Comments）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
 ## 红线（沿 tf-unwired-seven，不复述其正文）
 

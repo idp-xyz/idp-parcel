@@ -123,3 +123,10 @@ CONTEXT 生命周期⑧「来源证据被更正 → 保留原段、形成失效�
   按 MCP-1 指令：**不改 PS**，立 [label-channel/24](../../label-channel-service-first-release/issues/24-source-correction-version-refused-as-second-responsibility-start.md)
   记事实不写方案。TF 侧照裁决落新版本并重交意图——链到 PS 采用口为止今天是断的，下一个人别以为已通。
 - 2026-09-04 · MCP-3：裁决附问的段侧那半边立 [10](10-source-correction-rederives-participation.md)（draft，覆盖交接与揽收两种来源）。
+- 2026-09-04 · MCP-1（接任）：**进 main 记录——分支 SHA → main SHA 对照。** 上一任 MCP-1 重放推出后未及广播即崩溃，对照由 MCP-3 逐文件核后转交
+  （已验 tip `779f3c4b` 与 `origin/main` 在本票全部文件上 `git diff` 为空）；本任于 21:5x 以 `git cherry origin/main 779f3c4b dc7d44e9` 复核，九笔全为 `-`
+  （patch-id 等价），`0c3470ad` 为 `+`，与下列一致：
+  `b29f9061`→`91fab19d`（票面认领）· `d251c151`→`5746b45b`（领域）· `117be7b8`→`8db97256`（迁移 0015 + 登记册）· `e92208d4`→`ea6c6963`（编排 Correct）·
+  `210b3cfc`→`8327bb90`（handoff）· `9e980842`→`58eb85ba`（端点）· `766d3418`→`54ae9fdc`（parcel-api）· `e0f70463`→`5ec41b0f`（两张 draft 票）·
+  `779f3c4b`→`d52261b7`（评审修复）· `2c82caf0`→`27116c52`（票面转 resolved）。清点笔 `0c3470ad` 未重放，tip 上由 `3bbb1b08` 重生成（一并吸收 label-channel/23）。
+  `git ls-remote origin main` 于 21:5x 为 `cc7f4e97`，含以上全部。分支 `mcp3-tf08` 指针保留（tip `2c82caf0`），其 worktree 已由 MCP-3 拆除（未 `--force`）。
