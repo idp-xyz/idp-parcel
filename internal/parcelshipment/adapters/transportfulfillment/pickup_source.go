@@ -65,7 +65,9 @@ func (adapter *OffsitePickupAdapter) AdoptFromOffsitePickup(
 }
 
 // pickupSourceFor 逐维翻译：载运对象→包裹与来源对象（前置条件见 AdoptFromOffsitePickup）、
-// 实际接货位置→收寄地点、运输控制依据→控制依据、结果版本与实际接货时间原样带过。
+// 实际接货位置→收寄地点、运输控制依据→控制依据、结果版本与实际接货时间原样带过；更正版本
+// 的回指原样译成来源的「被更正版本」——同来源更正与另一来源竞争由采用编排据它分格
+// （ADR-0117 决定一），本层只翻译不判。
 func pickupSourceFor(pickup tfdomain.OffsitePickup) (psdomain.IntakeSourceSpec, error) {
 	parcel, err := psdomain.NewDeclaredParcelID(pickup.Object().String())
 	if err != nil {
@@ -87,7 +89,7 @@ func pickupSourceFor(pickup tfdomain.OffsitePickup) (psdomain.IntakeSourceSpec, 
 	if err != nil {
 		return psdomain.IntakeSourceSpec{}, fmt.Errorf("%w: result version: %v", ErrUntranslatableAnswer, err)
 	}
-	return psdomain.IntakeSourceSpec{
+	spec := psdomain.IntakeSourceSpec{
 		Kind:       psdomain.OffsitePickupSource,
 		Object:     object,
 		Parcel:     parcel,
@@ -95,5 +97,11 @@ func pickupSourceFor(pickup tfdomain.OffsitePickup) (psdomain.IntakeSourceSpec, 
 		Control:    control,
 		Version:    version,
 		OccurredAt: pickup.OccurredAt(),
-	}, nil
+	}
+	if predecessor, corrected := pickup.Corrects(); corrected {
+		if spec.Corrects, err = psdomain.NewSourceResultVersion(predecessor.String()); err != nil {
+			return psdomain.IntakeSourceSpec{}, fmt.Errorf("%w: corrected version: %v", ErrUntranslatableAnswer, err)
+		}
+	}
+	return spec, nil
 }

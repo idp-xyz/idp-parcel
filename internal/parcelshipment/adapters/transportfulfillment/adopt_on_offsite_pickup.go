@@ -36,12 +36,17 @@ var (
 	ErrAdoptionHandoffPending = adoptconsume.ErrAdoptionHandoffPending
 )
 
-// OffsitePickupFinder 按揽收登记幂等键取回对象级揽收。由 TF 的 OffsitePickupRegistry
-// 满足。只取一法：本适配器不写 TF 的库，也不读它的尝试级集合。
+// OffsitePickupFinder 按揽收登记幂等键加结果版本取回对象级揽收的那一代。由 TF 的
+// OffsitePickupRegistrations 结构满足（那一法刻意不进 TF 的端口，理由写在它的注释上）。
+// 只取一法：本适配器不写 TF 的库，也不读它的尝试级集合。
+//
+// 按版本而不按键读（ADR-0117 决定四）：每份信封代表一代，TF 的 FindByKey 答链尾——按它读，
+// 更正之前入队的那一份会读成更正后那一代，更正链在本侧就少了中间那一代。
 type OffsitePickupFinder interface {
-	FindByKey(
+	FindByKeyAndVersion(
 		ctx context.Context,
 		key tfports.OffsitePickupKey,
+		version tfdomain.PickupResultVersion,
 	) (tfports.OffsitePickupRecord, bool, error)
 }
 
@@ -88,31 +93,33 @@ func NewAdoptOnOffsitePickupAdapter(
 
 var _ psinbox.RegisteredOffsitePickupHandler = (*AdoptOnOffsitePickupAdapter)(nil)
 
-// HandleRegisteredOffsitePickup 按信封引用取回揽收登记、反查当前已接受目标、转交采用。
+// HandleRegisteredOffsitePickup 按信封引用取回揽收登记的那一代、反查当前已接受目标、转交采用。
 //
-// 租户从信封带到两次查询：TF FindByKey 与 PS 包裹反查用同一个租户字符串，避免信封租户
-// 与记录租户各说各话。
+// 租户从信封带到两次查询：TF FindByKeyAndVersion 与 PS 包裹反查用同一个租户字符串，避免
+// 信封租户与记录租户各说各话。
 func (adapter *AdoptOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	ctx context.Context,
 	registered psinbox.RegisteredOffsitePickup,
 ) error {
-	key, err := pickupKeyFor(registered)
+	key, version, err := pickupReferenceFor(registered)
 	if err != nil {
 		return err
 	}
-	record, found, err := adapter.pickups.FindByKey(ctx, key)
+	record, found, err := adapter.pickups.FindByKeyAndVersion(ctx, key, version)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPickupNotVisible, err)
 	}
 	if !found {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrPickupNotVisible, registered.Object, registered.Attempt)
+		return fmt.Errorf("%w: object %q attempt %q version %q",
+			ErrPickupNotVisible, registered.Object, registered.Attempt, registered.PickupVersion)
 	}
-	// 键与本体不符时不采认：取回的揽收若指着另一个对象，采用会挂到另一件包裹上。
+	// 键、版本与本体不符时不采认：取回的揽收若指着另一个对象或另一代，采用会挂到另一件
+	// 包裹或另一份内容上。
 	if record.Key != key || record.Pickup.Object() != key.Object ||
-		record.Pickup.Attempt() != key.Attempt || record.Pickup.TenantID() != key.TenantID {
-		return fmt.Errorf("%w: object %q attempt %q",
-			ErrPickupRecordInconsistent, registered.Object, registered.Attempt)
+		record.Pickup.Attempt() != key.Attempt || record.Pickup.TenantID() != key.TenantID ||
+		record.Pickup.Version() != version {
+		return fmt.Errorf("%w: object %q attempt %q version %q",
+			ErrPickupRecordInconsistent, registered.Object, registered.Attempt, registered.PickupVersion)
 	}
 
 	psTenant, err := psdomain.NewTenantID(registered.TenantID)
@@ -143,20 +150,24 @@ func (adapter *AdoptOnOffsitePickupAdapter) HandleRegisteredOffsitePickup(
 	return adoptconsume.Consumption(result)
 }
 
-// pickupKeyFor 把信封三维译成 TF 的幂等键。译不出来是引用坏了，不是等谁。
-func pickupKeyFor(registered psinbox.RegisteredOffsitePickup) (tfports.OffsitePickupKey, error) {
+// pickupReferenceFor 把信封四维译成 TF 的幂等键加结果版本。译不出来是引用坏了，不是等谁。
+func pickupReferenceFor(registered psinbox.RegisteredOffsitePickup) (tfports.OffsitePickupKey, tfdomain.PickupResultVersion, error) {
 	none := tfports.OffsitePickupKey{}
 	tenant, err := tfdomain.NewTenantID(registered.TenantID)
 	if err != nil {
-		return none, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
+		return none, tfdomain.PickupResultVersion{}, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
 	}
 	object, err := tfdomain.NewCarriedObjectReference(registered.Object)
 	if err != nil {
-		return none, fmt.Errorf("%w: carried object: %v", ErrUntranslatableAnswer, err)
+		return none, tfdomain.PickupResultVersion{}, fmt.Errorf("%w: carried object: %v", ErrUntranslatableAnswer, err)
 	}
 	attempt, err := tfdomain.NewAttemptReference(registered.Attempt)
 	if err != nil {
-		return none, fmt.Errorf("%w: attempt: %v", ErrUntranslatableAnswer, err)
+		return none, tfdomain.PickupResultVersion{}, fmt.Errorf("%w: attempt: %v", ErrUntranslatableAnswer, err)
 	}
-	return tfports.OffsitePickupKey{TenantID: tenant, Object: object, Attempt: attempt}, nil
+	version, err := tfdomain.NewPickupResultVersion(registered.PickupVersion)
+	if err != nil {
+		return none, tfdomain.PickupResultVersion{}, fmt.Errorf("%w: pickup version: %v", ErrUntranslatableAnswer, err)
+	}
+	return tfports.OffsitePickupKey{TenantID: tenant, Object: object, Attempt: attempt}, version, nil
 }

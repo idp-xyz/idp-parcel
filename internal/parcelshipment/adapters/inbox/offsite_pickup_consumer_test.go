@@ -59,9 +59,10 @@ func offsitePickupEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	t.Helper()
 
 	payload, err := json.Marshal(map[string]string{
-		"tenantId": "tenant-a",
-		"object":   "parcel-1",
-		"attempt":  "attempt-1",
+		"tenantId":      "tenant-a",
+		"object":        "parcel-1",
+		"attempt":       "attempt-1",
+		"pickupVersion": "PRV-000000000001",
 	})
 	if err != nil {
 		t.Fatalf("载荷：%v", err)
@@ -97,16 +98,19 @@ func TestARegisteredOffsitePickupDeliveryIsProcessedExactlyOnce(t *testing.T) {
 		t.Fatalf("处理次数 = %d, want 1", len(handler.calls))
 	}
 	got := handler.calls[0]
-	if got.TenantID != "tenant-a" || got.Object != "parcel-1" || got.Attempt != "attempt-1" {
+	if got.TenantID != "tenant-a" || got.Object != "parcel-1" || got.Attempt != "attempt-1" || got.PickupVersion != "PRV-000000000001" {
 		t.Fatalf("译码结果 = %+v", got)
 	}
 }
 
+// 四维缺一即毒丸：键三维缺了取不回登记；版本缺了分不出这封信说的是哪一代（ADR-0117 决定四），
+// 而 TF 自 tf/08 起总带它，重投同样内容不会长出字段。
 func TestAnOffsitePickupEnvelopeMissingAnyKeyDimensionIsPoison(t *testing.T) {
 	for name, payload := range map[string]string{
-		"缺 tenantId": `{"object":"parcel-1","attempt":"attempt-1"}`,
-		"缺 object":   `{"tenantId":"tenant-a","attempt":"attempt-1"}`,
-		"缺 attempt":  `{"tenantId":"tenant-a","object":"parcel-1"}`,
+		"缺 tenantId":      `{"object":"parcel-1","attempt":"attempt-1","pickupVersion":"PRV-000000000001"}`,
+		"缺 object":        `{"tenantId":"tenant-a","attempt":"attempt-1","pickupVersion":"PRV-000000000001"}`,
+		"缺 attempt":       `{"tenantId":"tenant-a","object":"parcel-1","pickupVersion":"PRV-000000000001"}`,
+		"缺 pickupVersion": `{"tenantId":"tenant-a","object":"parcel-1","attempt":"attempt-1"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			consumer, handler := newOffsitePickupFixture(t)

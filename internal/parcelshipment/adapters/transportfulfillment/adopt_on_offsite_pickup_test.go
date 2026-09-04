@@ -23,20 +23,22 @@ import (
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 )
 
-// 本文件证消费侧处理适配器：按信封的（租户+对象+尝试）重读 TF 对象级揽收登记，反查
-// 当前已接受委托，再转交采用编排；以及四类停格各自可识别。
+// 本文件证消费侧处理适配器：按信封的（租户+对象+尝试+版本）重读 TF 对象级揽收登记的那一代，
+// 反查当前已接受委托，再转交采用编排；以及四类停格各自可识别。
 
 type pickupRegistryDouble struct {
-	record tfports.OffsitePickupRecord
-	found  bool
-	err    error
-	last   tfports.OffsitePickupKey
+	record      tfports.OffsitePickupRecord
+	found       bool
+	err         error
+	last        tfports.OffsitePickupKey
+	lastVersion tfdomain.PickupResultVersion
 }
 
-func (double *pickupRegistryDouble) FindByKey(
-	_ context.Context, key tfports.OffsitePickupKey,
+func (double *pickupRegistryDouble) FindByKeyAndVersion(
+	_ context.Context, key tfports.OffsitePickupKey, version tfdomain.PickupResultVersion,
 ) (tfports.OffsitePickupRecord, bool, error) {
 	double.last = key
+	double.lastVersion = version
 	if double.err != nil {
 		return tfports.OffsitePickupRecord{}, false, double.err
 	}
@@ -179,10 +181,31 @@ func pickupTarget(t *testing.T) psdomain.CurrentAcceptedParcelTarget {
 
 func registeredRef() psinbox.RegisteredOffsitePickup {
 	return psinbox.RegisteredOffsitePickup{
-		TenantID: "tenant-1",
-		Object:   "parcel-1",
-		Attempt:  "attempt-1",
+		TenantID:      "tenant-1",
+		Object:        "parcel-1",
+		Attempt:       "attempt-1",
+		PickupVersion: "pickup-result/v1",
 	}
+}
+
+// correctedRegisteredPickup 在首登之上造一份更正版本（回指前版、发生时刻提前），键不变。
+func correctedRegisteredPickup(t *testing.T, original tfports.OffsitePickupRecord) tfports.OffsitePickupRecord {
+	t.Helper()
+	corrected, err := original.Pickup.Correct(tfdomain.PickupCorrection{
+		Place:       value(t, tfdomain.NewPickupPlaceReference, "customer-gate-2"),
+		Control:     value(t, tfdomain.NewTransportControlReference, "TF-3"),
+		ExecutedBy:  value(t, tfdomain.NewExecutingPartyReference, "courier-1"),
+		OccurredAt:  pickedUpAt.Add(-15 * time.Minute),
+		Version:     value(t, tfdomain.NewPickupResultVersion, "pickup-result/v2"),
+		CorrectedAt: pickedUpAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("更正揽收：%v", err)
+	}
+	record := original
+	record.ContentDigest = "digest-2"
+	record.Pickup = corrected
+	return record
 }
 
 func TestARegisteredPickupLooksUpTheUniqueAcceptedTargetAndAdopts(t *testing.T) {
@@ -201,8 +224,9 @@ func TestARegisteredPickupLooksUpTheUniqueAcceptedTargetAndAdopts(t *testing.T) 
 
 	if registry.last.TenantID.String() != "tenant-1" ||
 		registry.last.Object.String() != "parcel-1" ||
-		registry.last.Attempt.String() != "attempt-1" {
-		t.Fatalf("揽收查询键 = %+v", registry.last)
+		registry.last.Attempt.String() != "attempt-1" ||
+		registry.lastVersion.String() != "pickup-result/v1" {
+		t.Fatalf("揽收查询键 = %+v 版本 = %q；必须按信封所指的那一代读", registry.last, registry.lastVersion)
 	}
 	if targets.tenant != "tenant-1" || targets.parcel != "parcel-1" {
 		t.Fatalf("反查租户/包裹 = %q / %q", targets.tenant, targets.parcel)
@@ -223,6 +247,57 @@ func TestARegisteredPickupLooksUpTheUniqueAcceptedTargetAndAdopts(t *testing.T) 
 		source.Version.String() != "pickup-result/v1" ||
 		!source.OccurredAt.Equal(pickedUpAt) {
 		t.Fatalf("采用命令来源 = %+v", source)
+	}
+	if source.Corrects.String() != "" {
+		t.Fatalf("首登来源被译出了被更正版本 %q", source.Corrects)
+	}
+}
+
+// Covers: ADR-0117 决定一、四——更正版本按信封所指版本读回，其回指原样译进来源的 Corrects，
+// 采用编排据以分「同来源更正」与「另一来源竞争」；翻译层自己不判。
+func TestACorrectedPickupVersionCarriesItsPredecessorIntoTheSource(t *testing.T) {
+	registry := &pickupRegistryDouble{record: correctedRegisteredPickup(t, registeredPickup(t, "parcel-1")), found: true}
+	recorder := &recordingCommandHandler{inner: pickupAdoptHandler(t, pickupHandlerConfig{})}
+	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
+		registry, &pickupTargetViewDouble{target: pickupTarget(t), found: true}, adapter.NewOffsitePickupAdapter(recorder))
+	if err != nil {
+		t.Fatalf("构造处理适配器：%v", err)
+	}
+
+	reference := registeredRef()
+	reference.PickupVersion = "pickup-result/v2"
+	if err := subject.HandleRegisteredOffsitePickup(t.Context(), reference); err != nil {
+		t.Fatalf("处理更正版登记：%v", err)
+	}
+	if registry.lastVersion.String() != "pickup-result/v2" {
+		t.Fatalf("读的版本 = %q，想要信封所指的 v2", registry.lastVersion)
+	}
+	source := recorder.command.Source
+	if source.Version.String() != "pickup-result/v2" || source.Corrects.String() != "pickup-result/v1" ||
+		source.Place.String() != "customer-gate-2" || !source.OccurredAt.Equal(pickedUpAt.Add(-15*time.Minute)) {
+		t.Fatalf("更正版来源翻译走样：%+v", source)
+	}
+}
+
+// Covers: 读回的那一代与信封所指版本不符是仓储不变量破坏（按版本去查却拿回另一版），与键不符
+// 同格：不采认、不当可续办。
+func TestAPickupRecordOfAnotherVersionIsInconsistentNotInvisible(t *testing.T) {
+	adopter := &pickupAdopterDouble{}
+	subject, err := adapter.NewAdoptOnOffsitePickupAdapter(
+		&pickupRegistryDouble{record: registeredPickup(t, "parcel-1"), found: true},
+		&pickupTargetViewDouble{target: pickupTarget(t), found: true},
+		adopter,
+	)
+	if err != nil {
+		t.Fatalf("构造：%v", err)
+	}
+	reference := registeredRef()
+	reference.PickupVersion = "pickup-result/v2"
+	if err := subject.HandleRegisteredOffsitePickup(t.Context(), reference); !errors.Is(err, adapter.ErrPickupRecordInconsistent) {
+		t.Fatalf("err = %v, want ErrPickupRecordInconsistent", err)
+	}
+	if adopter.calls != 0 {
+		t.Fatal("版本不符不该走到采用")
 	}
 }
 
@@ -383,9 +458,10 @@ func TestAnUntranslatableReferenceKeepsItsSentinel(t *testing.T) {
 		t.Fatalf("构造：%v", err)
 	}
 	for name, reference := range map[string]psinbox.RegisteredOffsitePickup{
-		"空租户": {Object: "parcel-1", Attempt: "attempt-1"},
-		"空对象": {TenantID: "tenant-1", Attempt: "attempt-1"},
-		"空尝试": {TenantID: "tenant-1", Object: "parcel-1"},
+		"空租户": {Object: "parcel-1", Attempt: "attempt-1", PickupVersion: "pickup-result/v1"},
+		"空对象": {TenantID: "tenant-1", Attempt: "attempt-1", PickupVersion: "pickup-result/v1"},
+		"空尝试": {TenantID: "tenant-1", Object: "parcel-1", PickupVersion: "pickup-result/v1"},
+		"空版本": {TenantID: "tenant-1", Object: "parcel-1", Attempt: "attempt-1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := subject.HandleRegisteredOffsitePickup(
@@ -489,9 +565,10 @@ func TestAPendingPickupHandoffDoesNotMarkTheInboxProcessed(t *testing.T) {
 	}
 
 	payload, err := json.Marshal(map[string]string{
-		"tenantId": "tenant-1",
-		"object":   "parcel-1",
-		"attempt":  "attempt-1",
+		"tenantId":      "tenant-1",
+		"object":        "parcel-1",
+		"attempt":       "attempt-1",
+		"pickupVersion": "pickup-result/v1",
 	})
 	if err != nil {
 		t.Fatalf("载荷：%v", err)

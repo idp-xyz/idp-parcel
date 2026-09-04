@@ -23,12 +23,15 @@ const offsitePickupConsumerName = "parcel-shipment/adopt-offsite-pickup"
 // 时起选择作用；没有替代品的多成员事实按 ADR-0066 在消费侧循环拆分，不受此句约束。
 const OffsitePickupRegisteredEventType eventing.EventType = "transport-fulfillment.offsite-pickup.registered"
 
-// RegisteredOffsitePickup 是译码后的揽收登记幂等键引用——只有引用，揽收本体由处理方
-// 按引用重新取（权威事实留在 transport-fulfillment）。
+// RegisteredOffsitePickup 是译码后的揽收登记引用——幂等键三维加这封信所指的结果版本，只有
+// 引用，揽收本体由处理方按引用重新取（权威事实留在 transport-fulfillment）。版本是引用维
+// 不是装饰（ADR-0117 决定四）：一次揽收在 TF 库里一行一版本，键只指到「这次尝试的揽收」，
+// 每份信封代表一代；按键读当前版会让更正之前入队的那一份也读成更正后那一代。
 type RegisteredOffsitePickup struct {
-	TenantID string
-	Object   string
-	Attempt  string
+	TenantID      string
+	Object        string
+	Attempt       string
+	PickupVersion string
 }
 
 // RegisteredOffsitePickupHandler 是本消费者转交的处理方。真实装配接
@@ -77,23 +80,26 @@ func (consumer *OffsitePickupConsumer) Consume(ctx context.Context, envelope eve
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// decodeRegisteredOffsitePickup 译载荷。三维缺一即毒丸——处理方按（租户+对象+尝试）
-// 取回登记，缺了永远取不着，而重投同样内容不会长出字段来。
+// decodeRegisteredOffsitePickup 译载荷。四维缺一即毒丸——处理方按（租户+对象+尝试+版本）
+// 取回登记，缺了永远取不着，而重投同样内容不会长出字段来。版本自 TF 票 tf/08 起总在载荷
+// 里；一封没有它的信封分不出说的是哪一代，按当前版猜会把更正链在本侧读丢中间那一代。
 func decodeRegisteredOffsitePickup(payload []byte) (RegisteredOffsitePickup, error) {
 	var body struct {
-		TenantID string `json:"tenantId"`
-		Object   string `json:"object"`
-		Attempt  string `json:"attempt"`
+		TenantID      string `json:"tenantId"`
+		Object        string `json:"object"`
+		Attempt       string `json:"attempt"`
+		PickupVersion string `json:"pickupVersion"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return RegisteredOffsitePickup{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
 	}
-	if body.TenantID == "" || body.Object == "" || body.Attempt == "" {
-		return RegisteredOffsitePickup{}, fmt.Errorf("%w: missing pickup key fields", ErrPoisonEnvelope)
+	if body.TenantID == "" || body.Object == "" || body.Attempt == "" || body.PickupVersion == "" {
+		return RegisteredOffsitePickup{}, fmt.Errorf("%w: missing pickup key or version fields", ErrPoisonEnvelope)
 	}
 	return RegisteredOffsitePickup{
-		TenantID: body.TenantID,
-		Object:   body.Object,
-		Attempt:  body.Attempt,
+		TenantID:      body.TenantID,
+		Object:        body.Object,
+		Attempt:       body.Attempt,
+		PickupVersion: body.PickupVersion,
 	}, nil
 }
