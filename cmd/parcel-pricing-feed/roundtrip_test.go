@@ -35,7 +35,7 @@ func (clock *steppingClock) Now() time.Time {
 func bindingDocumentFor(seriesID, locator string, exemption domain.ReviewExemption) []byte {
 	return []byte(fmt.Sprintf(`{"tenant":"tenant-1","seriesId":"%s","bindingVersion":"b1","connectorKind":"FILE",
 		"sourceIdentifier":"SYN-SOURCE/%s","sourceLocator":"%s","seriesKind":"EXCHANGE_RATE",
-		"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","digest":"sha256:syn-fx-policy"},
+		"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","fingerprint":"sha256:syn-fx-policy"},
 		"registrant":"SYN-PRC-SERIES-REGISTRAR","reviewExemption":"%s"}`, seriesID, strings.ToLower(seriesID), locator, exemption))
 }
 

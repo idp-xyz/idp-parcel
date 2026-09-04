@@ -11,8 +11,12 @@
 -- review_exemption 三格封闭且 NOT NULL 无默认：「未声明 = 需人工复核」是租户显式写下的取值，
 -- 不是列默认出来的（CONTEXT：产品不设默认）。
 --
--- 口径引用三列成对（含 digest）：绑定没有快照，引用要能原样重建，digest 只能落列；汇率必带口径
--- （CONTEXT：不接受未声明口径的裸汇率）。
+-- 口径引用按 ADR-0108 是三元身份（kind + id + version）加一枚可选指纹。kind 不落列：口径只能由
+-- 商业价格政策版本声明（CONTEXT），因此这条引用的 kind 恒为 COMMERCIAL_POLICY，领域构造门
+-- （NewSourceConnectorBinding）拒任何别的 kind，读回时以该常量重建——列面二列 + 常量一格才凑成
+-- 三元，不是三元在库面只剩二元。id 与 version 成对必备；fingerprint 只在声明时手上有摘要才带、
+-- 不参与身份。绑定没有快照，引用要能原样重建，只能落列；汇率必带口径（CONTEXT：不接受未声明
+-- 口径的裸汇率）。
 --
 -- 抓取原文本体不进本表也不进任何业务表（ADR-0092 决定二）：凭证（摘要、抓取时刻、地址）随
 -- 序列版本的期次进登记快照，本体走出向端口。
@@ -27,9 +31,9 @@ CREATE TABLE parcel_pricing.source_connector_binding (
     source_locator      text        NOT NULL,
     series_kind         text        NOT NULL,
 
-    quote_basis_id      text,
-    quote_basis_version text,
-    quote_basis_digest  text,
+    quote_basis_id          text,
+    quote_basis_version     text,
+    quote_basis_fingerprint text,
 
     registrant          text        NOT NULL,
     cadence             text,
@@ -48,10 +52,10 @@ CREATE TABLE parcel_pricing.source_connector_binding (
 
     CONSTRAINT source_connector_binding_quote_basis_paired
         CHECK (
-            (quote_basis_id IS NULL AND quote_basis_version IS NULL AND quote_basis_digest IS NULL)
+            (quote_basis_id IS NULL AND quote_basis_version IS NULL AND quote_basis_fingerprint IS NULL)
             OR (quote_basis_id IS NOT NULL AND btrim(quote_basis_id) <> ''
                 AND quote_basis_version IS NOT NULL AND btrim(quote_basis_version) <> ''
-                AND quote_basis_digest IS NOT NULL AND btrim(quote_basis_digest) <> '')
+                AND (quote_basis_fingerprint IS NULL OR btrim(quote_basis_fingerprint) <> ''))
         ),
 
     CONSTRAINT source_connector_binding_fx_demands_quote_basis

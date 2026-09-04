@@ -50,7 +50,7 @@ func (double *bindingRegistrarDouble) Handle(_ context.Context, command applicat
 
 const bindingJSON = `{"tenant":"tenant-1","seriesId":"SYN-PRC-USD-CNY","bindingVersion":"b1","connectorKind":"FILE",
 	"sourceIdentifier":"SYN-SOURCE/usd-cny-daily","sourceLocator":"rates/usd-cny/latest.json","seriesKind":"EXCHANGE_RATE",
-	"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","digest":"sha256:syn-fx-policy"},
+	"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","fingerprint":"sha256:syn-fx-policy"},
 	"registrant":"SYN-PRC-SERIES-REGISTRAR","cadence":"DAILY","reviewExemption":"EXEMPT"}`
 
 func feedInput(tenant, series string) executeInput {
@@ -59,7 +59,7 @@ func feedInput(tenant, series string) executeInput {
 
 func reference(t *testing.T) domain.VersionReference {
 	t.Helper()
-	built, err := domain.NewVersionReference(domain.ArtifactReferenceSeries, "SYN-PRC-USD-CNY", "2026-09-04", "sha256:syn")
+	built, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactReferenceSeries, "SYN-PRC-USD-CNY", "2026-09-04", "sha256:syn")
 	if err != nil {
 		t.Fatalf("构造引用：%v", err)
 	}
@@ -121,8 +121,9 @@ func TestExecuteTranslatesFeedAnswersIntoExitCodes(t *testing.T) {
 	}
 }
 
-// TestExecuteRoutesBindingDocumentsToTheRegistrar 证绑定文档译成领域绑定（口径三件、节律、免复核原样
-// 带到），三格答案译码；缺免复核声明、裸汇率、口径缺 digest、坏 JSON 都在入库前拒成 1 且不到达用例。
+// TestExecuteRoutesBindingDocumentsToTheRegistrar 证绑定文档译成领域绑定（口径三元与可选指纹、节律、
+// 免复核原样带到；指纹省掉时引用照立、只是不带指纹——ADR-0108 决定二），三格答案译码；缺免复核声明、
+// 裸汇率、口径缺 policyVersion、坏 JSON 都在入库前拒成 1 且不到达用例。
 func TestExecuteRoutesBindingDocumentsToTheRegistrar(t *testing.T) {
 	registrar := &bindingRegistrarDouble{outcome: application.SourceConnectorBindingRecorded}
 	message, code := execute(t.Context(), executeInput{kind: kindBinding, raw: []byte(bindingJSON)}, &feederDouble{}, registrar, passthroughTransactor{})
@@ -134,10 +135,19 @@ func TestExecuteRoutesBindingDocumentsToTheRegistrar(t *testing.T) {
 	cadence, scheduled := binding.Cadence()
 	if binding.Tenant().String() != "tenant-1" || binding.SeriesID() != "SYN-PRC-USD-CNY" || binding.Version() != "b1" ||
 		binding.ConnectorKind() != "FILE" || binding.SourceLocator() != "rates/usd-cny/latest.json" ||
-		binding.SeriesKind() != domain.ReferenceSeriesExchangeRate || !declared || basis.Digest() != "sha256:syn-fx-policy" ||
+		binding.SeriesKind() != domain.ReferenceSeriesExchangeRate || !declared || basis.Fingerprint() != "sha256:syn-fx-policy" ||
 		binding.Registrant() != "SYN-PRC-SERIES-REGISTRAR" || !scheduled || cadence != "DAILY" ||
 		binding.ReviewExemption() != domain.ReviewExemptionGranted {
 		t.Fatalf("绑定翻译走样：%+v", binding.Spec())
+	}
+
+	withoutFingerprint := &bindingRegistrarDouble{outcome: application.SourceConnectorBindingRecorded}
+	raw := strings.Replace(bindingJSON, `,"fingerprint":"sha256:syn-fx-policy"`, ``, 1)
+	if _, code := execute(t.Context(), executeInput{kind: kindBinding, raw: []byte(raw)}, &feederDouble{}, withoutFingerprint, passthroughTransactor{}); code != exitRegistered || withoutFingerprint.calls != 1 {
+		t.Fatalf("口径不带指纹被拒了：code=%d calls=%d", code, withoutFingerprint.calls)
+	}
+	if basis, declared := withoutFingerprint.last.Binding.QuoteBasis(); !declared || basis.HasFingerprint() || basis.ID() != "SYN-PRC-FX-POLICY" || basis.Version() != "v1" {
+		t.Fatalf("不带指纹的口径引用走样：declared=%v basis=%+v", declared, basis)
 	}
 
 	for label, outcome := range map[string]struct {
@@ -157,12 +167,12 @@ func TestExecuteRoutesBindingDocumentsToTheRegistrar(t *testing.T) {
 
 	untouched := &bindingRegistrarDouble{outcome: application.SourceConnectorBindingRecorded}
 	for label, raw := range map[string]string{
-		"坏 JSON":     `not json`,
-		"缺免复核声明":     strings.Replace(bindingJSON, `,"reviewExemption":"EXEMPT"`, ``, 1),
-		"免复核不在封闭集":   strings.Replace(bindingJSON, `"reviewExemption":"EXEMPT"`, `"reviewExemption":"YES"`, 1),
-		"裸汇率":        strings.Replace(bindingJSON, `"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","digest":"sha256:syn-fx-policy"},`, ``, 1),
-		"口径缺 digest": strings.Replace(bindingJSON, `,"digest":"sha256:syn-fx-policy"`, ``, 1),
-		"缺租户":        strings.Replace(bindingJSON, `"tenant":"tenant-1"`, `"tenant":""`, 1),
+		"坏 JSON":            `not json`,
+		"缺免复核声明":            strings.Replace(bindingJSON, `,"reviewExemption":"EXEMPT"`, ``, 1),
+		"免复核不在封闭集":          strings.Replace(bindingJSON, `"reviewExemption":"EXEMPT"`, `"reviewExemption":"YES"`, 1),
+		"裸汇率":               strings.Replace(bindingJSON, `"quoteBasis":{"policyId":"SYN-PRC-FX-POLICY","policyVersion":"v1","fingerprint":"sha256:syn-fx-policy"},`, ``, 1),
+		"口径缺 policyVersion": strings.Replace(bindingJSON, `"policyVersion":"v1",`, ``, 1),
+		"缺租户":               strings.Replace(bindingJSON, `"tenant":"tenant-1"`, `"tenant":""`, 1),
 	} {
 		message, code := execute(t.Context(), executeInput{kind: kindBinding, raw: []byte(raw)}, &feederDouble{}, untouched, passthroughTransactor{})
 		if code != exitUsage || untouched.calls != 0 {

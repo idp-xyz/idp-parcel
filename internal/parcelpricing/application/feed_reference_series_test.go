@@ -159,7 +159,7 @@ type feedFixture struct {
 
 func feedBinding(t *testing.T, exemption domain.ReviewExemption, registrant string) domain.SourceConnectorBinding {
 	t.Helper()
-	policy, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
+	policy, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
 	if err != nil {
 		t.Fatalf("构造口径引用：%v", err)
 	}
@@ -241,7 +241,7 @@ func (fixture *feedFixture) feed(t *testing.T) application.FeedReferenceSeriesRe
 }
 
 // TestFeedRegistersAndWritesTheExemptionReview 证绿路径：抓取按绑定定位符、本体交存放端口、登记
-// 走同一登记用例（引用版本 = 公布日期、digest = 工件摘要、整版 VERIFIABLE）；声明免复核时复核由
+// 走同一登记用例（引用版本 = 公布日期、引用指纹 = 工件摘要、整版 VERIFIABLE）；声明免复核时复核由
 // 连接器身份代写、结论通过、依据指回绑定版本、时刻取时钟当下；全程零可观察记录。
 func TestFeedRegistersAndWritesTheExemptionReview(t *testing.T) {
 	fixture := newFeedFixture(t, domain.ReviewExemptionGranted)
@@ -261,7 +261,7 @@ func TestFeedRegistersAndWritesTheExemptionReview(t *testing.T) {
 		t.Fatalf("登记 %d 次", len(fixture.register.registered))
 	}
 	registered := fixture.register.registered[0]
-	if registered.Reference().Version() != "2026-09-04" || registered.Reference().Digest() != fixture.connector.record.ContentDigest() ||
+	if registered.Reference().Version() != "2026-09-04" || registered.Reference().Fingerprint() != fixture.connector.record.ContentDigest() ||
 		registered.EvidenceGrade() != domain.SeriesEvidenceVerifiable || result.Reference != registered.Reference() {
 		t.Fatalf("登记走样：%+v result=%+v", registered.Reference(), result.Reference)
 	}

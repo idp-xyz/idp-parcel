@@ -8,8 +8,8 @@
 //     留 draft，绑定声明了本工具未装配的连接器种类时如实答连接器不可用。
 //   - `-kind source-connector-binding -file binding.json`：登记一版来源连接器绑定。绑定是实例半边
 //     （连接器种类、序列标识、来源标识与定位符、口径引用、登记责任方、抓取节律、免人工复核三格），
-//     本工具不带任何默认声明——免复核声明缺省即拒，出厂零绑定。口径引用的 digest 由文档显式给出，
-//     本工具不铸令牌（铸法只在在线口一处；digest 退出引用身份归票 10）。
+//     本工具不带任何默认声明——免复核声明缺省即拒，出厂零绑定。口径引用按 ADR-0108 是三元身份加
+//     一枚可选指纹：文档手上有摘要就写 fingerprint，没有就省，本工具不替它铸任何令牌。
 //
 // 抓取失败不补数、不沿用旧值、不登空版本：缺口留给评价挂起，一条可观察记录写到标准错误
 // （ADR-0095 两层里的观察那层；告警通道属实例半边）。本工具假设业务 schema 已由迁移作业施加。
@@ -84,7 +84,7 @@ type bindingDocument struct {
 type bindingQuoteBasisDocument struct {
 	PolicyID      string `json:"policyId"`
 	PolicyVersion string `json:"policyVersion"`
-	Digest        string `json:"digest"`
+	Fingerprint   string `json:"fingerprint,omitempty"`
 }
 
 // parseBindingDocument 只做形状翻译；声明齐不齐、汇率有没有口径、免复核声明在不在封闭集都留给领域
@@ -111,10 +111,10 @@ func parseBindingDocument(raw []byte) (domain.SourceConnectorBinding, error) {
 		ReviewExemption:  domain.ReviewExemption(document.ReviewExemption),
 	}
 	if document.QuoteBasis != nil {
-		basis, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy,
-			document.QuoteBasis.PolicyID, document.QuoteBasis.PolicyVersion, document.QuoteBasis.Digest)
+		basis, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactCommercialPolicy,
+			document.QuoteBasis.PolicyID, document.QuoteBasis.PolicyVersion, document.QuoteBasis.Fingerprint)
 		if err != nil {
-			return domain.SourceConnectorBinding{}, fmt.Errorf("绑定文档 quoteBasis（policyId、policyVersion、digest 三件必备）：%w", err)
+			return domain.SourceConnectorBinding{}, fmt.Errorf("绑定文档 quoteBasis（policyId、policyVersion 必备，fingerprint 可省）：%w", err)
 		}
 		spec.QuoteBasis = basis
 	}

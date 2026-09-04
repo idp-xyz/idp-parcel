@@ -39,7 +39,7 @@ func newBindingRegister(t *testing.T) (*adapter.SourceConnectorBindings, bentoap
 
 func bindingSpec(t *testing.T, tenant, seriesID, version string, exemption domain.ReviewExemption) domain.SourceConnectorBindingSpec {
 	t.Helper()
-	policy, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
+	policy, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
 	if err != nil {
 		t.Fatalf("构造口径引用：%v", err)
 	}
@@ -80,8 +80,9 @@ func registerBinding(t *testing.T, register *adapter.SourceConnectorBindings, tr
 	return outcome
 }
 
-// TestSourceConnectorBindingRoundTripsAndTheLatestVersionIsCurrent 证登记后原样读回（含口径三件与
-// 节律），再登一版后当前绑定切到新版本而旧版本仍在册；别的租户、别的序列看不见。
+// TestSourceConnectorBindingRoundTripsAndTheLatestVersionIsCurrent 证登记后原样读回（含口径三元与
+// 指纹、节律；不带指纹的口径读回仍不带——NULL 不会变成空串再变成「有指纹」），再登一版后当前绑定
+// 切到新版本而旧版本仍在册；别的租户、别的序列看不见。
 func TestSourceConnectorBindingRoundTripsAndTheLatestVersionIsCurrent(t *testing.T) {
 	register, transactor, _ := newBindingRegister(t)
 	ctx := t.Context()
@@ -102,13 +103,16 @@ func TestSourceConnectorBindingRoundTripsAndTheLatestVersionIsCurrent(t *testing
 	if current.Spec() != first.Spec() {
 		t.Fatalf("读回的绑定与登记的不同：\n%+v\n%+v", current.Spec(), first.Spec())
 	}
-	if basis, declared := current.QuoteBasis(); !declared || basis.Digest() != "sha256:syn-fx-policy" {
-		t.Fatalf("口径引用的 digest 丢了：declared=%v basis=%v", declared, basis)
+	if basis, declared := current.QuoteBasis(); !declared || basis.Fingerprint() != "sha256:syn-fx-policy" {
+		t.Fatalf("口径引用的指纹丢了：declared=%v basis=%v", declared, basis)
 	}
 
 	secondSpec := bindingSpec(t, "tenant-a", "SYN-PRC-USD-CNY", "b2", domain.ReviewExemptionUndeclared)
 	secondSpec.SourceLocator = "rates/usd-cny/2026-09-05.json"
 	secondSpec.Cadence = ""
+	secondSpec.QuoteBasis = evaluationValue(t, func(id string) (domain.VersionReference, error) {
+		return domain.NewVersionReferenceIdentity(domain.ArtifactCommercialPolicy, id, "v2")
+	}, "SYN-PRC-FX-POLICY")
 	second := binding(t, secondSpec)
 	if outcome := registerBinding(t, register, transactor, ctx, second); outcome != ports.SourceConnectorBindingRegistered {
 		t.Fatalf("第二版 outcome = %d", outcome)
@@ -119,6 +123,9 @@ func TestSourceConnectorBindingRoundTripsAndTheLatestVersionIsCurrent(t *testing
 	}
 	if _, scheduled := current.Cadence(); scheduled {
 		t.Fatal("没声明节律却读回了节律")
+	}
+	if basis, declared := current.QuoteBasis(); !declared || basis.HasFingerprint() || basis.Version() != "v2" || current.Spec() != second.Spec() {
+		t.Fatalf("不带指纹的口径引用读回走样：declared=%v basis=%+v", declared, basis)
 	}
 
 	if _, found, err := register.LoadCurrentBinding(ctx, evaluationValue(t, domain.NewTenantID, "tenant-b"), "SYN-PRC-USD-CNY"); err != nil || found {
@@ -164,23 +171,27 @@ func TestSourceConnectorBindingWritesRefuseToRunOutsideATransaction(t *testing.T
 }
 
 // TestSourceConnectorBindingCheckConstraintsRejectImpossibleRows 证库内再守一遍：序列种类封闭、
-// 免复核三格封闭、裸汇率进不去、口径三列缺一不成对、空序列标识进不去。
+// 免复核三格封闭、裸汇率进不去、口径 id/version 缺一不成对、指纹不能单独出现也不能是空串、
+// 空序列标识进不去；而只带 id/version 不带指纹的口径是合法的（ADR-0108 决定二）。
 func TestSourceConnectorBindingCheckConstraintsRejectImpossibleRows(t *testing.T) {
 	_, _, pool := newBindingRegister(t)
 	ctx := t.Context()
 
 	const insert = `INSERT INTO parcel_pricing.source_connector_binding
 		(tenant_id, series_id, binding_version, connector_kind, source_identifier, source_locator, series_kind,
-		 quote_basis_id, quote_basis_version, quote_basis_digest, registrant, review_exemption)
+		 quote_basis_id, quote_basis_version, quote_basis_fingerprint, registrant, review_exemption)
 	 VALUES ($1, $2, 'b1', 'FILE', 'src', 'loc', $3, $4, $5, $6, 'reg', $7)`
 
 	cases := map[string][]any{
 		"未知序列种类":      {"tenant-a", "s-bad-1", "MOON_PHASE", "p", "v1", "d", "EXEMPT"},
 		"未知免复核取值":     {"tenant-a", "s-bad-2", "FUEL_RATE", nil, nil, nil, "MAYBE"},
 		"裸汇率":         {"tenant-a", "s-bad-3", "EXCHANGE_RATE", nil, nil, nil, "EXEMPT"},
-		"口径缺 digest":  {"tenant-a", "s-bad-4", "EXCHANGE_RATE", "p", "v1", nil, "EXEMPT"},
+		"口径缺 version": {"tenant-a", "s-bad-4", "EXCHANGE_RATE", "p", nil, "d", "EXEMPT"},
+		"口径缺 id":      {"tenant-a", "s-bad-5", "EXCHANGE_RATE", nil, "v1", "d", "EXEMPT"},
+		"指纹单独出现":      {"tenant-a", "s-bad-6", "FUEL_RATE", nil, nil, "d", "EXEMPT"},
+		"指纹是空串（有无之外的第三态）": {"tenant-a", "s-bad-7", "EXCHANGE_RATE", "p", "v1", "", "EXEMPT"},
 		"空序列标识":       {"tenant-a", " ", "FUEL_RATE", nil, nil, nil, "UNDECLARED"},
-		"空免复核（无默认可退）": {"tenant-a", "s-bad-6", "FUEL_RATE", nil, nil, nil, ""},
+		"空免复核（无默认可退）": {"tenant-a", "s-bad-8", "FUEL_RATE", nil, nil, nil, ""},
 	}
 	for label, args := range cases {
 		if _, err := pool.Exec(ctx, insert, args...); err == nil {
@@ -189,6 +200,9 @@ func TestSourceConnectorBindingCheckConstraintsRejectImpossibleRows(t *testing.T
 	}
 	if _, err := pool.Exec(ctx, insert, "tenant-a", "s-ok", "FUEL_RATE", nil, nil, nil, "UNDECLARED"); err != nil {
 		t.Fatalf("合法的燃油绑定行被拒：%v", err)
+	}
+	if _, err := pool.Exec(ctx, insert, "tenant-a", "s-ok-fx", "EXCHANGE_RATE", "p", "v1", nil, "UNDECLARED"); err != nil {
+		t.Fatalf("口径不带指纹的汇率绑定行被拒：%v", err)
 	}
 }
 

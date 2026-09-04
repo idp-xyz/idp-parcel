@@ -50,7 +50,7 @@ func fileConnector(t *testing.T, root string) *sourcefeed.FileConnector {
 
 func fileBinding(t *testing.T, seriesID string) domain.SourceConnectorBinding {
 	t.Helper()
-	policy, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
+	policy, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactCommercialPolicy, "SYN-PRC-FX-POLICY", "v1", "sha256:syn-fx-policy")
 	if err != nil {
 		t.Fatalf("构造口径引用：%v", err)
 	}
@@ -173,7 +173,7 @@ func TestFileConnectorTranscribesThroughTheDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("转录出的 spec 立不住：%v", err)
 	}
-	if registration.Reference().Version() != "2026-09-04" || registration.Reference().Digest() != record.ContentDigest() {
+	if registration.Reference().Version() != "2026-09-04" || registration.Reference().Fingerprint() != record.ContentDigest() {
 		t.Fatalf("版本引用走样：%+v", registration.Reference())
 	}
 	periods := registration.Periods()

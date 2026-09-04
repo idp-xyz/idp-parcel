@@ -60,7 +60,10 @@ type SourceConnectorBindingSpec struct {
 	// 出网连接器为公布页地址。地址属绑定不属连接器——连接器里不写死任何真实来源。
 	SourceLocator string
 	SeriesKind    ReferenceSeriesKind
-	// QuoteBasis 是声明取值口径的商业价格政策版本；汇率必备，燃油可缺。
+	// QuoteBasis 是声明取值口径的商业价格政策版本；汇率必备，燃油可缺。它的 kind 恒为
+	// ArtifactCommercialPolicy——口径只能由商业价格政策版本声明（CONTEXT），构造门拒别的 kind；
+	// 三元身份（kind + id + version）里的 kind 因此不必另存，登记册列面只落 id、version 与可选
+	// 指纹（ADR-0108 决定二），读回以该常量重建。
 	QuoteBasis VersionReference
 	// Registrant 是登记责任方。连接器是它的转录代理（ADR-0099 决定六），不是第二种登记
 	// 责任方；免复核时系统代写的复核由连接器身份署名，四眼门因此在结构上仍关得住。

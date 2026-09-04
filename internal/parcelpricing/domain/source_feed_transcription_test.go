@@ -52,7 +52,7 @@ func transcribed(t *testing.T, input domain.SourceFeedTranscription) domain.Refe
 
 // TestTranscribeFirstVersionFromAPublication 证没有前一版时的首版：一期开放期次，取值与生效
 // 起点按观测原样转录（连接器不算数、不改数），口径与来源标识、登记责任方来自绑定（不在连接器里
-// 写死），版本号取来源声明的公布日期，引用 digest 取工件摘要，凭证为工件引用——整版 VERIFIABLE。
+// 写死），版本号取来源声明的公布日期，引用指纹取工件摘要，凭证为工件引用——整版 VERIFIABLE。
 func TestTranscribeFirstVersionFromAPublication(t *testing.T) {
 	binding := fxBinding(t)
 	record := fetchedRecord(t, `{"value":"7.1234"}`, fetchMoment, feedDayOne)
@@ -70,7 +70,7 @@ func TestTranscribeFirstVersionFromAPublication(t *testing.T) {
 	}
 	reference := registration.Reference()
 	if reference.Kind() != domain.ArtifactReferenceSeries || reference.ID() != "SYN-PRC-USD-CNY" ||
-		reference.Version() != "2026-09-04" || reference.Digest() != record.ContentDigest() {
+		reference.Version() != "2026-09-04" || !reference.HasFingerprint() || reference.Fingerprint() != record.ContentDigest() {
 		t.Fatalf("版本引用走样：%+v", reference)
 	}
 	basis, declared := registration.QuoteBasis()
@@ -115,7 +115,7 @@ func TestTranscribeRestatesTheWholeSeriesAndClosesTheOpenTail(t *testing.T) {
 		Observation:    observation(t, feedDayTwo, "7.13"),
 	})
 
-	if extended.Reference().Version() != "2026-09-05" || extended.Reference().Digest() != second.ContentDigest() {
+	if extended.Reference().Version() != "2026-09-05" || extended.Reference().Fingerprint() != second.ContentDigest() {
 		t.Fatalf("延展版引用走样：%+v", extended.Reference())
 	}
 	periods := extended.Periods()

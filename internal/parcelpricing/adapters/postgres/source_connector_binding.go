@@ -28,7 +28,7 @@ func NewSourceConnectorBindings(db *bentopg.DB) (*SourceConnectorBindings, error
 }
 
 const sourceConnectorBindingColumns = `tenant_id, series_id, binding_version, connector_kind, source_identifier,
-	source_locator, series_kind, quote_basis_id, quote_basis_version, quote_basis_digest, registrant, cadence,
+	source_locator, series_kind, quote_basis_id, quote_basis_version, quote_basis_fingerprint, registrant, cadence,
 	review_exemption`
 
 // Register 登记一版绑定。同键第二份由主键拦住，再按声明（Spec）比对译成结果代数：同即幂等重放，
@@ -45,10 +45,15 @@ func (register *SourceConnectorBindings) Register(
 		return ports.SourceConnectorBindingOutcomeInvalid, fmt.Errorf("register source connector binding: binding is not constructed")
 	}
 
-	var quoteBasisID, quoteBasisVersion, quoteBasisDigest *string
+	// 指纹可缺（ADR-0108 决定二）：声明时手上没有摘要就落 NULL，不落空串——列上只认「有」与「没有」。
+	var quoteBasisID, quoteBasisVersion, quoteBasisFingerprint *string
 	if basis, declared := binding.QuoteBasis(); declared {
-		id, version, digest := basis.ID(), basis.Version(), basis.Digest()
-		quoteBasisID, quoteBasisVersion, quoteBasisDigest = &id, &version, &digest
+		id, version := basis.ID(), basis.Version()
+		quoteBasisID, quoteBasisVersion = &id, &version
+		if basis.HasFingerprint() {
+			fingerprint := basis.Fingerprint()
+			quoteBasisFingerprint = &fingerprint
+		}
 	}
 	var cadence *string
 	if declared, scheduled := binding.Cadence(); scheduled {
@@ -68,7 +73,7 @@ func (register *SourceConnectorBindings) Register(
 		binding.SeriesKind().String(),
 		quoteBasisID,
 		quoteBasisVersion,
-		quoteBasisDigest,
+		quoteBasisFingerprint,
 		binding.Registrant(),
 		cadence,
 		binding.ReviewExemption().String(),
@@ -128,10 +133,10 @@ func (register *SourceConnectorBindings) LoadCurrentBinding(
 func scanSourceConnectorBinding(row pgx.Row) (domain.SourceConnectorBinding, error) {
 	var (
 		tenant, seriesID, version, connectorKind, sourceIdentifier, sourceLocator, seriesKind, registrant, exemption string
-		quoteBasisID, quoteBasisVersion, quoteBasisDigest, cadence                                                   *string
+		quoteBasisID, quoteBasisVersion, quoteBasisFingerprint, cadence                                              *string
 	)
 	if err := row.Scan(&tenant, &seriesID, &version, &connectorKind, &sourceIdentifier, &sourceLocator, &seriesKind,
-		&quoteBasisID, &quoteBasisVersion, &quoteBasisDigest, &registrant, &cadence, &exemption); err != nil {
+		&quoteBasisID, &quoteBasisVersion, &quoteBasisFingerprint, &registrant, &cadence, &exemption); err != nil {
 		return domain.SourceConnectorBinding{}, err
 	}
 	tenantID, err := domain.NewTenantID(tenant)
@@ -149,8 +154,12 @@ func scanSourceConnectorBinding(row pgx.Row) (domain.SourceConnectorBinding, err
 		Registrant:       registrant,
 		ReviewExemption:  domain.ReviewExemption(exemption),
 	}
-	if quoteBasisID != nil && quoteBasisVersion != nil && quoteBasisDigest != nil {
-		basis, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy, *quoteBasisID, *quoteBasisVersion, *quoteBasisDigest)
+	if quoteBasisID != nil && quoteBasisVersion != nil {
+		var fingerprint string
+		if quoteBasisFingerprint != nil {
+			fingerprint = *quoteBasisFingerprint
+		}
+		basis, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactCommercialPolicy, *quoteBasisID, *quoteBasisVersion, fingerprint)
 		if err != nil {
 			return domain.SourceConnectorBinding{}, fmt.Errorf("%s/%s quote basis：%w", seriesID, version, err)
 		}

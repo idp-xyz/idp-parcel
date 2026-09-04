@@ -57,11 +57,12 @@ type SourceFeedTranscription struct {
 // 三条规则，各自只在这里定一次，连接器逐家实现时不重写：
 //
 //   - 同一份工件再来一次，交回前一版逐字相同的 spec：认的是工件摘要（连接器登记的版本引用
-//     digest 就是它），登记册据以答幂等重放。若按抓取时刻重铸凭证，同一份文件第二次抓就会
-//     被读成同版本内容冲突。
+//     所附指纹就是它——连接器是引用方里唯一在声明那一刻手上真有摘要的，ADR-0108 决定二的
+//     「有真摘要就带」在这里总是成立），登记册据以答幂等重放。若按抓取时刻重铸凭证，同一份
+//     文件第二次抓就会被读成同版本内容冲突。
 //   - 否则是延展：前一版全部期次原样在，开放末期在新期次起点闭合，新期次接上并开放；不带
 //     更正关系——更正是人的事。
-//   - 版本号取来源声明的公布日期，引用 digest 取工件摘要，凭证为工件引用——连接器登记的
+//   - 版本号取来源声明的公布日期，引用指纹取工件摘要，凭证为工件引用——连接器登记的
 //     期次因此天生 VERIFIABLE。
 func TranscribeSourceFeed(input SourceFeedTranscription) (ReferenceSeriesRegistrationSpec, error) {
 	binding, record := input.Binding, input.Record
@@ -77,7 +78,7 @@ func TranscribeSourceFeed(input SourceFeedTranscription) (ReferenceSeriesRegistr
 			return ReferenceSeriesRegistrationSpec{}, fmt.Errorf(
 				"%w: prior version does not belong to binding %s/%s", ErrInvalidSourceFeedTranscription, binding.tenant, binding.seriesID)
 		}
-		if prior.reference.digest == record.contentDigest {
+		if prior.reference.fingerprint == record.contentDigest {
 			return prior.Spec(), nil
 		}
 		priorPeriods = prior.periods
@@ -92,7 +93,7 @@ func TranscribeSourceFeed(input SourceFeedTranscription) (ReferenceSeriesRegistr
 	if err != nil {
 		return ReferenceSeriesRegistrationSpec{}, err
 	}
-	reference, err := NewVersionReference(
+	reference, err := NewVersionReferenceWithFingerprint(
 		ArtifactReferenceSeries, binding.seriesID, record.publishedOn.Format(publishedVersionLayout), record.contentDigest)
 	if err != nil {
 		return ReferenceSeriesRegistrationSpec{}, fmt.Errorf("%w: %v", ErrInvalidSourceFeedTranscription, err)
