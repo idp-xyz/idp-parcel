@@ -19,35 +19,30 @@ var ErrUnknownResumePath = errors.New("parcel shipment inbox: undecided carries 
 // 认原因名字，就是把同一份知识写第二遍，而两份必然漂开——漂开的症状是同一个原因在两个门下
 // 一个重投一个入账。
 //
-// `等待内部续办`重投：它等的依赖会自行恢复，回滚重跑是对的。
+// `等待内部续办`重投：它等的依赖会自行恢复，回滚重跑是对的。四格里如今只有它在这一组。
 //
-// **`等待受控补充`也重投，而这一格是本记录刻意没有改的。** 单看恢复动作它该与人工复核同组
-// ——客户补件同样不是本进程重试推得动的。但 ADR-0086 的 Context 判过这一格「回滚重投是
-// 对的」，理由是「客户新提交版本会自己回来」；而 ADR-0045 把受控补充的重触发判断划为另一
-// 切片，那条前提今天既核不实也证不伪。推翻一条已接受判断要有证据，因此 ADR-0094 Decision 三
-// 维持原判，只把它从一个沉默的 default 变成这里一个具名的、写着理由的格。取证见票
-// `.scratch/first-tenant-runway/issues/09`；**若那一票判出它不自愈，改的就是这一行**。
-//
-// `等待人工复核`与`等待运营登记`入账：两者的续办方都不是本进程，重投只会把失败预算烧尽，
-// 而预算烧尽之后连那份等待态都随回滚一起蒸发，队列读面从此列不出这份委托（ADR-0086 给
-// `等待人工复核`开例外时列的两条理由，对`等待运营登记`逐字成立）。
+// `等待人工复核`、`等待运营登记`与`等待受控补充`入账：三者的续办方都不是本进程，重投只会把
+// 失败预算烧尽，而预算烧尽之后连那份等待态都随回滚一起蒸发，队列读面从此列不出这份委托
+// （ADR-0086 给`等待人工复核`开例外时列的两条理由，对后两格逐字成立）。
 //
 // 不留 default：新增一个等待态时这里要报错，而不是静默继承某一格。那一格决定的是烧不烧失败
 // 预算，静默继承等于替编排作判断。
 func undecidedDisposition(path domain.ResumePath) error {
 	switch path {
-	case domain.ResumeByInternalRetry, domain.ResumeByCustomerSupplement:
+	case domain.ResumeByInternalRetry:
 		return ErrAcceptanceChainUndecided
-	case domain.ResumeByManualReview, domain.ResumeByOperatorRegistration:
-		// 走到这两格时编排已把等待态 Save 进聚合——没保存成时它交回的是保存那一格自己的
-		// 原因（`等待运营登记`那一支是 OperatorRegistrationWaitNotSaved），其恢复动作是内部
-		// 重试，因此仍走上面那一支回滚重投（ADR-0086 Decision 一那道护栏，ADR-0094
-		// Decision 五扩用到第四格）。
+	case domain.ResumeByManualReview, domain.ResumeByOperatorRegistration, domain.ResumeByCustomerSupplement:
+		// 走到这三格时编排已把等待态 Save 进聚合——没保存成时它交回的是保存那一格自己的
+		// 原因（`等待运营登记`那一支是 OperatorRegistrationWaitNotSaved，另两格是
+		// DecisionNotRecorded / 换代冲突），其恢复动作是内部重试，因此仍走上面那一支回滚重投
+		// （ADR-0086 Decision 一那道护栏，ADR-0094 Decision 五与 ADR-0106 Decision 二各扩用一次）。
 		//
-		// `等待运营登记`曾在这里暂按回滚重投过渡（ADR-0094 Decision 四「第四格必须与它的续办
-		// 触发同笔落地，否则不许落地」），直到续办触发到位：「参数已登记」信封由 party-
-		// commercial 的登记动作同事务发出，OperatorRegistrationCompletedConsumer 按租户把停在
-		// 这一格的委托逐份再驱。两半都在了，入账才不是更安静的永久停滞。
+		// 这三格里两格有过渡史，都是「续办触发与入账同笔落地，否则不许落地」这一句拦出来的：
+		// `等待运营登记`曾暂按回滚重投，直到「参数已登记」信封（party-commercial 同事务发出）与
+		// OperatorRegistrationCompletedConsumer 到位；`等待受控补充`曾与内部续办同组，ADR-0094
+		// Decision 三因缺证据维持 ADR-0086 的原判，票 first-tenant-runway/09 从代码答出
+		// 「新提交版本不会自己回来、回来了也不是在途那封信封受益」之后，ADR-0106 把它并回入账，
+		// 续办由「新提交版本已形成」信封（SubmissionVersionFormedConsumer）驱动。
 		return nil
 	default:
 		return fmt.Errorf("%w: %d", ErrUnknownResumePath, path)

@@ -15,22 +15,32 @@ import (
 // 一个纯函数上，这四格才穷尽得了；接线那一层保持薄，由 cmd/parcel-dispatch 的装配用例按
 // 真编排证。
 
-// TestRetriedWaitsRollBack 钉住重投那一组。
-//
-// `等待内部续办`重投是因为它等的依赖会自行恢复。**`等待受控补充`也在这一组，而它是刻意留下
-// 的**：单看恢复动作它该与人工复核同组，但 ADR-0086 判过这一格且 ADR-0045 把受控补充的重触发
-// 判断划为另一切片，那条前提今天核不实也证不伪，ADR-0094 Decision 三因此维持原判。取证见票
-// `first-tenant-runway/09`——**那一票若判出它不自愈，本用例要跟着改，而不是反过来**。
+// TestRetriedWaitsRollBack 钉住重投那一组——如今只剩`等待内部续办`一格：它等的依赖会自行
+// 恢复，回滚重跑是对的。四格里其余三格的续办方都在进程之外（ADR-0106 Consequences 那句
+// 「消费门只剩一个回滚格」）。
 func TestRetriedWaitsRollBack(t *testing.T) {
 	rolledBack := []domain.ResumePath{
 		domain.ResumeByInternalRetry,
-		domain.ResumeByCustomerSupplement,
 	}
 
 	for _, path := range rolledBack {
 		if err := undecidedDisposition(path); !errors.Is(err, ErrAcceptanceChainUndecided) {
 			t.Errorf("%s 应当整笔回滚重投，实际 err = %v", path.String(), err)
 		}
+	}
+}
+
+// TestCustomerSupplementIsCommittedNowThatItsResumeTriggerLands 钉住`等待受控补充`的入账
+// （ADR-0106 Decision 一）。
+//
+// 它曾与`等待内部续办`同在回滚那一组，且是刻意留下的：ADR-0086 Context 判过「客户新提交版本会
+// 自己回来」，ADR-0094 Decision 三因缺证据维持原判并把取证交给票 first-tenant-runway/09。那一票
+// 从代码答出三条——受控补充编排不铸信封且无生产调用方、等待态从未落库、旧信封重投即便新版本
+// 到达也推不动链——前提两半都不成立，这一格才并回入账那一组。与`等待运营登记`一样单列一条，
+// 让读到的人看见它的过渡史：谁再想把它挪回重投，先回答「新提交版本已形成」那封信封去哪了。
+func TestCustomerSupplementIsCommittedNowThatItsResumeTriggerLands(t *testing.T) {
+	if err := undecidedDisposition(domain.ResumeByCustomerSupplement); err != nil {
+		t.Fatalf("续办触发已落地，等待受控补充应按本份投递处理完毕入账，实际 err = %v", err)
 	}
 }
 

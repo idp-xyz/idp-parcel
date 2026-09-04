@@ -300,6 +300,67 @@ func TestAPauseThatFailedToPersistDoesNotReportManualReviewPending(t *testing.T)
 	}
 }
 
+// Covers: ADR-0106 Decision 二前半——`等待受控补充`在交回之前先把带等待态的聚合落库，且委托
+// 仍是`已提交`。它的续办方是客户，本进程重试推不动；不落库则「等客户补件的都有谁」这个队列
+// 在库里结构上恒空——票 first-tenant-runway/09 第三问答出的正是这一格。
+func TestAPendingCustomerSupplementPersistsThePauseItReports(t *testing.T) {
+	fixture := newDecisionFixture(t)
+	fixture.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.PendingReason() != application.CustomerSupplementPending {
+		t.Fatalf("pending reason = %q, want CUSTOMER_SUPPLEMENT_PENDING", result.PendingReason())
+	}
+	if fixture.requests.saved == nil {
+		t.Fatal("暂停没落库就交回了`等待受控补充`——消费门会据此提交入账，队列从此列不出这份委托")
+	}
+	waiting, present := fixture.requests.saved.AcceptanceDecisionTask().WaitingOn()
+	if !present || waiting != domain.ResumeByCustomerSupplement {
+		t.Fatalf("saved waitingOn = (%v, %v), want CUSTOMER_SUPPLEMENT——落库的聚合没带等待态，投影列会写 0", waiting, present)
+	}
+	if fixture.requests.saved.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("saved state = %q, want SUBMITTED——暂停不是决定，生命周期不得离开已提交", fixture.requests.saved.State())
+	}
+}
+
+// Covers: ADR-0106 Decision 二后半（ADR-0086 Decision 一的护栏原样扩用）——暂停没落库时**不得**
+// 交回`等待受控补充`，改交保存那一格自己的原因，消费门照旧回滚重投。
+func TestAPauseThatFailedToPersistDoesNotReportCustomerSupplementPending(t *testing.T) {
+	unreachable := newDecisionFixture(t)
+	unreachable.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
+	unreachable.requests.err = errors.New("storage unreachable")
+
+	result, err := unreachable.handler.Handle(context.Background(), unreachable.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.PendingReason() == application.CustomerSupplementPending {
+		t.Fatal("保存失败仍交回`等待受控补充`——消费门会提交一份没落库的暂停")
+	}
+	if result.PendingReason() != application.DecisionNotRecorded {
+		t.Fatalf("pending reason = %q, want DECISION_NOT_RECORDED", result.PendingReason())
+	}
+
+	outraced := newDecisionFixture(t)
+	outraced.judgments.reachability["parcel-2"] = domain.ReachabilityInsufficientEvidence
+	outraced.requests.conflict = true
+
+	lost, err := outraced.handler.Handle(context.Background(), outraced.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if lost.PendingReason() == application.CustomerSupplementPending {
+		t.Fatal("版本冲突仍交回`等待受控补充`——抢先那一方写了什么本方并不知道")
+	}
+	if lost.PendingReason() != application.StaleShipmentRequestRevision {
+		t.Fatalf("pending reason = %q, want STALE_SHIPMENT_REQUEST_REVISION", lost.PendingReason())
+	}
+}
+
 // Covers: ADR-0031「版本冲突自占一格未决原因，续办路径仍是内部重试」。
 //
 // 尾段那次比对是本用例真正承重的地方。`版本冲突`与`决定没落库`若共用一个原因，两者会派生出

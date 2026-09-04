@@ -217,8 +217,8 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
 		reason := pendingReasonFor(decided)
-		if reason == ManualReviewPending {
-			return handler.pauseForManualReview(ctx, command, request, decided)
+		if reason == ManualReviewPending || reason == CustomerSupplementPending {
+			return handler.pauseForExternalResume(ctx, command, request, decided, reason)
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
@@ -256,24 +256,26 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	}, nil
 }
 
-// pauseForManualReview 把「等待人工复核」这一停写进聚合再交回未决。
+// pauseForExternalResume 把「等待人工复核」或「等待受控补充」这一停写进聚合再交回未决。
 //
-// 三个等待态里只有它要落库，因为只有它的续办方是第三方：内部续办与客户补充都由信封重投或
-// 新提交版本自然再驱（重投会重跑同一轮，等待态即便不落库也会在下一轮重新推出），而人工
-// 复核「内部重试推进不了它，客户也补不出它」（CONTEXT 等待人工复核态）——重投改变不了任何
-// 东西，只会烧完失败预算；不落库的话，复核角色的队列读面也永远列不出「等复核的都有谁」。
-// 消费门据本轮原因把这份投递记为处理完毕（提交侧不再重投），续办由「复核已完成」信封另行
-// 驱动（ADR-0086）。
+// 这两个等待态要落库，是因为它们的续办方都在进程之外：人工复核「内部重试推进不了它，客户也
+// 补不出它」（CONTEXT 等待人工复核态，ADR-0086）；受控补充等的是客户的新提交版本，而在途那一封
+// 信封携带的是旧版本，重投它要么白烧一次失败预算、要么落到换代原因，续办只能来自新版本自己的
+// 信封（ADR-0106 Context 第 3 条）。两者重投都改变不了任何东西，不落库则各自的队列读面永远列
+// 不出「等谁的都有谁」。消费门据本轮原因把这份投递记为处理完毕（提交侧不再重投），续办分别由
+// 「复核已完成」（ADR-0086 Decision 二）与「新提交版本已形成」（ADR-0106 Decision 三）信封驱动。
+// `等待内部续办`不走这里：它等的依赖会自己回来，回滚重投是对的。
 //
-// 保存失败或撞上版本冲突时**不**交回`等待人工复核`：那个原因是消费门提交暂停的凭据，暂停
+// 保存失败或撞上版本冲突时**不**交回传入的等待原因：那个原因是消费门提交暂停的凭据，暂停
 // 没落库就交它，等待态会随本轮回滚蒸发，队列上从此没有这份委托。改交保存那一格自己的原因
 // （没落库/换代冲突），消费门照旧回滚重投，下一轮重新走到这里。集合外的保存结果按端口坏了
 // 上抛，与越过提交边界那一支同一判断。
-func (handler *FormAcceptanceDecisionHandler) pauseForManualReview(
+func (handler *FormAcceptanceDecisionHandler) pauseForExternalResume(
 	ctx context.Context,
 	command FormAcceptanceDecisionCommand,
 	request domain.ShipmentRequest,
 	decided domain.ShipmentRequest,
+	waiting JudgmentPendingReason,
 ) (FormAcceptanceDecisionResult, error) {
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, decided)
 	if err != nil {
@@ -286,7 +288,7 @@ func (handler *FormAcceptanceDecisionHandler) pauseForManualReview(
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
 	}
-	return handler.undecided(ctx, command, ManualReviewPending, decided.State()), nil
+	return handler.undecided(ctx, command, waiting, decided.State()), nil
 }
 
 // revalidateOrResolve 执行 `UC-PC-002` 步骤 8：已经有采用过的解析时按它重解，看这份依据在

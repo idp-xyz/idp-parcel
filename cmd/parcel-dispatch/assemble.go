@@ -506,6 +506,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: operator registration resume undecided translation: %w", err)
 	}
+	// 受控补充续办门同一份哨兵，理由同复核续办门：同一条链、同一张未决面（ADR-0106 Decision 三）。
+	routedSupplement, err := dispatch.WithUndecidedSentinels(chainGates.submissionVersionFormed, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: submission version formed resume undecided translation: %w", err)
+	}
 
 	consumer, err := acceptanceConsumer(db, outboxStore, inboxStore, settings, clock)
 	if err != nil {
@@ -705,6 +710,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.ShipmentRequestSubmittedEventType:      routedChain,
 			psinbox.ManualReviewCompletedEventType:         routedResume,
 			psinbox.OperatorRegistrationCompletedEventType: routedRegistration,
+			psinbox.SubmissionVersionFormedEventType:       routedSupplement,
 			nrinbox.AcceptedDecisionEventType:              acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:          routedIntakes,
 			psinbox.NodeIntakeFormedEventType:              nodeIntakeFan,
@@ -769,9 +775,10 @@ func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
 // 重驱）。三扇门各占各的 inbox 名与事件类型，但依赖图必须同一份，所以由同一个装配函数
 // 一次建成。
 type acceptanceChainGates struct {
-	submitted            dispatch.Consumer
-	reviewCompleted      dispatch.Consumer
-	operatorRegistration dispatch.Consumer
+	submitted               dispatch.Consumer
+	reviewCompleted         dispatch.Consumer
+	operatorRegistration    dispatch.Consumer
+	submissionVersionFormed dispatch.Consumer
 }
 
 // operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
@@ -890,10 +897,17 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: operator registration resume consumer: %w", err)
 	}
+	// ADR-0106 Decision 三的续办门：PS「新提交版本已形成」信封 → 同一条链拿新版本的任务再驱一拍，
+	// 停在`等待受控补充`的那一版已随入账留在库里。发布侧是 cmd/parcel-api 受控补充的事务边界壳。
+	submissionVersionFormed, err := psinbox.NewSubmissionVersionFormedConsumer(db.Transactor(), inboxStore, chain)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: submission version formed resume consumer: %w", err)
+	}
 	return acceptanceChainGates{
-		submitted:            submitted,
-		reviewCompleted:      reviewCompleted,
-		operatorRegistration: operatorRegistration,
+		submitted:               submitted,
+		reviewCompleted:         reviewCompleted,
+		operatorRegistration:    operatorRegistration,
+		submissionVersionFormed: submissionVersionFormed,
 	}, nil
 }
 

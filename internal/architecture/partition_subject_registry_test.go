@@ -121,7 +121,10 @@ var declaredPartitionSubjects = map[string]string{
 	// 提交信封排同一条队，否则续办可能越过一封还没投出去的提交（ADR-0086 Decision 二）。
 	// 两行同名同上下文，跨上下文那道裁段不适用。
 	"internal/parcelshipment/adapters/postgres/manual_review_completed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
-	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":             partitionSubjectPrefix + "租户/来源请求键",
+	// 「新提交版本已形成」与上两行同主体同理（ADR-0106 Decision 三）：受控补充的续办信封与同一份
+	// 委托的提交信封排同一条队，续办不越过一封还没投出去的提交。
+	"internal/parcelshipment/adapters/postgres/submission_version_formed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
+	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":               partitionSubjectPrefix + "租户/来源请求键",
 
 	// —— party-commercial ——
 	// 「参数已登记」（ADR-0094 决定四的续办触发）按租户排队：消费门对该租户的重驱一轮接一轮，

@@ -138,6 +138,24 @@ type ManualReviewCompletedHandoff interface {
 	HandOffManualReviewCompleted(ctx context.Context, intent ManualReviewCompletedHandoffIntent) error
 }
 
+// SubmissionVersionFormedHandoffIntent 把一份刚形成的新提交版本交给适用下游（ADR-0106
+// Decision 三）。携带形成之后的聚合而不是逐字段抄写，理由同复核完成那份意图：信封要的成员
+// 清单、新版本与形成时刻都在聚合的当前版本上。
+type SubmissionVersionFormedHandoffIntent struct {
+	Identity domain.SourceIdentity
+	Request  domain.ShipmentRequest
+}
+
+// SubmissionVersionFormedHandoff 把「新提交版本已形成」写入 Outbox
+// （`OutboxSubmissionVersionFormedHandoff`）。信封 ID 由来源身份加**新**提交版本再加类型段认领：
+// 同一版本至多形成一次（领域对同一补充身份的重放答`已处理`，走不到交接），重放因此重发同一份
+// （ADR-0043）。它必须与新版本落库同一事务交出（ADR-0106 Decision 三：翻转与信封同笔落地，
+// 否则不许落地），任一步失败全部回滚——版本落了库而信封没入队，停等补充的委托就再也没有投递
+// 来续办，等待态入账反而成了更安静的永久停滞。
+type SubmissionVersionFormedHandoff interface {
+	HandOffSubmissionVersionFormed(ctx context.Context, intent SubmissionVersionFormedHandoffIntent) error
+}
+
 // CurrentAcceptedParcelTargetView 按（租户+声明包裹）反查**当前已接受**委托目标。
 //
 // 它与 ShipmentRequestRepository 分开：建单与推进的调用方不该持有反查；收寄/交付
