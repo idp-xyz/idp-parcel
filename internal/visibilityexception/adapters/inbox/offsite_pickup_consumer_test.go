@@ -59,10 +59,14 @@ func newVEOffsitePickupFixture(t *testing.T) (*veinbox.OffsitePickupConsumer, *v
 func veOffsitePickupEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	t.Helper()
 
+	// 载荷照 TF 揽收登记意图今天的形状带 pickupVersion：本包的消费者不读它，但下面那条
+	// 「两本 Inbox 账分开」的用例要把同一份信封投给 PS 消费者，而 PS 自 ADR-0117 起把缺版本
+	// 的信封当毒丸拒收——夹具若少这一格，PS 那一侧的零次处理会被误读成账本共名。
 	payload, err := json.Marshal(map[string]string{
-		"tenantId": "tenant-a",
-		"object":   "parcel-1",
-		"attempt":  "attempt-1",
+		"tenantId":      "tenant-a",
+		"object":        "parcel-1",
+		"attempt":       "attempt-1",
+		"pickupVersion": "PRV-000000000001",
 	})
 	if err != nil {
 		t.Fatalf("载荷：%v", err)
