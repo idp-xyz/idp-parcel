@@ -22,6 +22,10 @@ import (
 // 缺席（缺席时交接 / 收寄照登、不立段），这份装配偏不让它缺席：进段那道门
 // （enterFulfillmentSegment）在生产上只从这三条编排走得到，装配点若把 Segments 留空，票 04
 // 接上的就只是来源保全那一半，CONTEXT 生命周期①②仍然没有任何路走到。
+//
+// **实际承运商判断登记册同理不让缺席**（票 tf-segment-lifecycle-closure/02）。首版只在段成立那一刻
+// 从进段那道门铸出，装配点若把 Judgments 留空，CONTEXT「实际履约段成立时即形成首个判断版本」在
+// 生产上就没有一条路走到，而三条编排的答案照样是成功——缺席被设计成不红，只有这里能补上它。
 
 type transactionalHandover struct {
 	transactor bentoapp.Transactor
@@ -132,13 +136,17 @@ type controlFactOrchestrations struct {
 // `/transport-fulfillment/handover-corrections`、`/transport-fulfillment/offsite-pickups` 与
 // `/transport-fulfillment/offsite-pickup-attempts` 背后的真编排。
 //
-// 缝全接真：交接登记册、揽收登记册、揽收尝试库、段登记册、结果版本签发（一只 ResultVersions
-// 担揽收与交付两个签发端口，按端口各自注入）、三条 Outbox 意图交付、时钟。本笔没有「显式未
-// 配置」缝：控制事实引用的都是本上下文自己的事实，没有等租户参数的实例半边。
+// 缝全接真：交接登记册、揽收登记册、揽收尝试库、段登记册、实际承运商判断登记册、结果版本签发
+// （一只 ResultVersions 担揽收与交付两个签发端口，按端口各自注入）、三条 Outbox 意图交付、时钟。
+// 本笔没有「显式未配置」缝：控制事实引用的都是本上下文自己的事实，没有等租户参数的实例半边。
 func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
 		return controlFactOrchestrations{}, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
+	}
+	judgments, err := tfpostgres.NewActualCarrierJudgments(db)
+	if err != nil {
+		return controlFactOrchestrations{}, fmt.Errorf("parcel-api: actual carrier judgments: %w", err)
 	}
 	versions, err := tfpostgres.NewResultVersions(db)
 	if err != nil {
@@ -188,6 +196,7 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 			inner: tfapp.NewRegisterTransportHandoverHandler(tfapp.RegisterTransportHandoverDeps{
 				Handovers:         handovers,
 				Segments:          segments,
+				Judgments:         judgments,
 				Downstream:        handoverDownstream,
 				Clock:             clock,
 				ParticipationEnds: participationEnds,
@@ -198,6 +207,7 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 			inner: tfapp.NewRegisterOffsitePickupHandler(tfapp.RegisterOffsitePickupDeps{
 				Pickups:    pickups,
 				Segments:   segments,
+				Judgments:  judgments,
 				Versions:   versions,
 				Downstream: pickupRegistrationDownstream,
 				Clock:      clock,
@@ -208,6 +218,7 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 			inner: tfapp.NewPerformOffsitePickupHandler(tfapp.PerformOffsitePickupDeps{
 				Attempts:   attempts,
 				Segments:   segments,
+				Judgments:  judgments,
 				Versions:   versions,
 				Downstream: pickupAttemptDownstream,
 				Clock:      clock,

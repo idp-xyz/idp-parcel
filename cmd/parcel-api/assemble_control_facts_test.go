@@ -71,6 +71,7 @@ func TestTheWiredControlFactsEnterTheSegmentAgainstARealDatabase(t *testing.T) {
 	}
 
 	assertParticipation(t, segments, segmentKey, "SYN-PARCEL-1", "SYN-PLANNED-1", tfdomain.EnteredByTransportHandover)
+	assertPendingFirstJudgment(t, db, segmentKey)
 
 	// 二、单对象收寄加入同一个段：走的是 Join 那条窄口，不是 Save。
 	pickupRegistered, err := orchestrations.pickupRegistration.Register(t.Context(), tfapp.RegisterOffsitePickupCommand{
@@ -193,6 +194,31 @@ func registerHandoverCommand(t *testing.T, object, segment, planned string) tfap
 		JudgedAt:          controlFactJudgedAt,
 		Segment:           segment,
 		PlannedSegment:    planned,
+	}
+}
+
+// assertPendingFirstJudgment 从真库读回段的实际承运商判断，核对首版已铸且值为`待确认（无合格证据）`
+// （票 tf-segment-lifecycle-closure/02）。这一条钉的是装配点：三条编排的 Judgments 都允许缺席，缺席时
+// 段照立、答案照成功、这里却什么都读不到——没有这一条，装配点漏接判断登记册不会有任何门禁红。
+func assertPendingFirstJudgment(t *testing.T, db *bentopg.DB, key tfports.FulfillmentSegmentKey) {
+	t.Helper()
+	judgments, err := tfpostgres.NewActualCarrierJudgments(db)
+	if err != nil {
+		t.Fatalf("判断登记册读面：%v", err)
+	}
+	record, found, err := judgments.FindByKey(t.Context(), tfports.ActualCarrierJudgmentKey{TenantID: key.TenantID, Segment: key.Segment})
+	if err != nil {
+		t.Fatalf("读回实际承运商判断：%v", err)
+	}
+	if !found {
+		t.Fatalf("段 %s 成立后没有实际承运商判断——判断登记册在生产装配上没接进进段那道门", key.Segment)
+	}
+	if got := len(record.Judgment.Versions()); got != 1 {
+		t.Fatalf("段成立时的判断版本数 = %d，want 1（只有首版）", got)
+	}
+	reason, pending := record.Judgment.Current().Verdict().Pending()
+	if !pending || reason != tfdomain.NoQualifiedCarrierEvidence {
+		t.Fatalf("首版判断值 = (pending=%v, reason=%v)，want 待确认·无合格证据——段成立时没有任何承运主体证据可依", pending, reason)
 	}
 }
 

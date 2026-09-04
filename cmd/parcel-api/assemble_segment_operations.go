@@ -131,12 +131,17 @@ type segmentOperations struct {
 // buildSegmentOperations 装配 `/transport-fulfillment-segment-closures`、`/transport-fulfillment-dispatch-task-registrations`、
 // `/transport-fulfillment-load-assignment-registrations` 与 `/transport-fulfillment-participation-terminations` 背后的真编排。
 //
-// 缝全接真：段登记册、派送任务登记册、装载分配登记册、交接登记册与交付登记库（终止那一路不读后两个，
-// 但 EndFulfillmentParticipationDeps 是一份，装配点不为一个口做半份 Deps）、时钟。
+// 缝全接真：段登记册、实际承运商判断登记册（终止编排「进下一段」立新段时同笔铸首版）、派送任务登记册、
+// 装载分配登记册、交接登记册与交付登记库（终止那一路不读后两个，但 EndFulfillmentParticipationDeps
+// 是一份，装配点不为一个口做半份 Deps）、时钟。
 func buildSegmentOperations(db *bentopg.DB) (segmentOperations, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
 		return segmentOperations{}, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
+	}
+	judgments, err := tfpostgres.NewActualCarrierJudgments(db)
+	if err != nil {
+		return segmentOperations{}, fmt.Errorf("parcel-api: actual carrier judgments: %w", err)
 	}
 	tasks, err := tfpostgres.NewDispatchTasks(db)
 	if err != nil {
@@ -173,6 +178,7 @@ func buildSegmentOperations(db *bentopg.DB) (segmentOperations, error) {
 			transactor: transactor,
 			inner: tfapp.NewEndFulfillmentParticipationHandler(tfapp.EndFulfillmentParticipationDeps{
 				Segments:   segments,
+				Judgments:  judgments,
 				Handovers:  handovers,
 				Deliveries: deliveries,
 				Clock:      clock,

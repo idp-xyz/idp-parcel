@@ -109,11 +109,17 @@ func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) 
 
 // buildParticipationEnder 装配结束参与那条编排，供交付与交接两条来源编排在各自事务里同步调用（票
 // tf-segment-lifecycle-closure/06 裁决 (i)）。它不包事务：调用它的编排已经在事务里，同一 ctx 带着同一笔。
-// 缝全接真——段登记册（按对象找段的读口也在这只上）、交接登记册、交付登记库、时钟。
+// 缝全接真——段登记册（按对象找段的读口也在这只上）、实际承运商判断登记册（「进下一段」立新段时
+// 同笔铸首版，理由见 assemble_control_facts.go 顶部）、交接登记册、交付登记库、时钟。判断登记册在
+// 这里自己再构造一只而不从调用方传入：适配器无状态，三个装配点各自持有，比把它穿过签名更少缝。
 func buildParticipationEnder(db *bentopg.DB, clock systemClock) (*tfapp.EndFulfillmentParticipationHandler, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
+	}
+	judgments, err := tfpostgres.NewActualCarrierJudgments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: actual carrier judgments: %w", err)
 	}
 	handovers, err := tfpostgres.NewTransportHandovers(db)
 	if err != nil {
@@ -125,6 +131,7 @@ func buildParticipationEnder(db *bentopg.DB, clock systemClock) (*tfapp.EndFulfi
 	}
 	return tfapp.NewEndFulfillmentParticipationHandler(tfapp.EndFulfillmentParticipationDeps{
 		Segments:   segments,
+		Judgments:  judgments,
 		Handovers:  handovers,
 		Deliveries: deliveries,
 		Clock:      clock,
