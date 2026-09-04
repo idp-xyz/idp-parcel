@@ -115,8 +115,9 @@ Blocked by: 无（04a 端点已在表上 `9035df7`；04b 已交可交的两件�
 
 - 2026-09-04 · MCP-5（重启后的新会话）：**转录上一条「已问 MCP-3 裁」的裁决，并记本票两笔落地。**
 
-  **裁决（MCP-3 2026-09-03，前一会话已实现进解码器但未转录进票面，原文见传输层
-  `reference_series_payload.go` 文件头）**：三处 `domain.VersionReference` 的 digest 槽装**声明令牌**
+  **裁决（MCP-3 2026-09-03，前一会话已实现进解码器但未转录进票面；出处是传输层
+  `reference_series_payload.go` 文件头，不是频道——MCP-3 重启后对该裁决无会话记忆，2026-09-04
+  于频道确认那句文件头是唯一可查的原文）**：三处 `domain.VersionReference` 的 digest 槽装**声明令牌**
   `declared:<kind>/<id>@<version>`，不是摘要；只在新铸引用时铸，载荷带来的（更正回指带目录透出的
   `referenceDigest`、口径带 PC 透出的 digest）照实用不重铸；预览与登记共用同一条铸法（决定四）。
   领域的 `NewVersionReference` 不为此改动。**领域改法另立票 [09](./09-version-reference-digest-has-no-source-on-the-operator-path.md)
