@@ -239,6 +239,7 @@ type financialControlFixture struct {
 	commercial *commercialBasisDouble
 	controller *financialControlDouble
 	requests   *judgmentRequestStore
+	repository *awaitingRequestStore
 	calls      []string
 }
 
@@ -256,10 +257,12 @@ func newFinancialControlFixture(t *testing.T) *financialControlFixture {
 	}
 	value.controller = &financialControlDouble{t: t, outcome: domain.FinancialControlHeld, record: record}
 	value.requests = &judgmentRequestStore{}
+	value.repository = &awaitingRequestStore{t: t}
 	value.handler = application.NewAdvanceFinancialControlJudgmentHandler(
 		value.commercial,
 		value.controller,
 		value.requests,
+		value.repository,
 		fixedClock{at: handlerClockAt},
 	)
 	return value

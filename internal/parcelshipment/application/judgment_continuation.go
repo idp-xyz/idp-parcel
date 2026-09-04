@@ -111,6 +111,14 @@ const (
 	WithdrawalAuthorityRulesNotConfigured
 	SourceDataAmendmentAuthorityRulesNotConfigured
 
+	// OperatorRegistrationWaitNotSaved 说的是`等待运营登记`那一停没能落库（ADR-0094 Decision 五）。
+	//
+	// 它与 *AsOfNotConfigured 分开，而且必须分开：那两格是消费门提交暂停的凭据，暂停没落库就交
+	// 它们，等待态会随本轮回滚蒸发而投递已被记为完毕，队列上从此没有这份委托。改交本格，消费门
+	// 照旧回滚重投，下一轮重新走到这里。它与 DecisionNotRecorded 同族不同格：那一格说的是决定，
+	// 这一格说的是决定之前的等待态；续办引用由原因派生，共用会让两种缺口拿到同一条引用。
+	OperatorRegistrationWaitNotSaved
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -274,6 +282,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "WITHDRAWAL_AUTHORITY_RULES_NOT_CONFIGURED"
 	case SourceDataAmendmentAuthorityRulesNotConfigured:
 		return "SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED"
+	case OperatorRegistrationWaitNotSaved:
+		return "OPERATOR_REGISTRATION_WAIT_NOT_SAVED"
 	default:
 		return ""
 	}
@@ -464,6 +474,49 @@ func formAdoptedBasis(
 	}
 
 	return adoptedBasis{snapshot: snapshot, asOf: formation.AsOf}, basisStall{}, nil
+}
+
+// awaitOperatorRegistration 在**决定形成之前**把委托停在`等待运营登记`并落库，再交回本轮该报的
+// 原因（ADR-0094 Decision 五）。
+//
+// 只对续办路径为`等待运营登记`的停顿动手，判据取自 ResumePath 而不是原因的名字：谁该落等待态
+// 是恢复动作那一层的知识，在这里按名字再列一遍就是第二处定义。其余未决要么由信封重投自然再驱
+// （内部重试）、要么由 Decide 看过校验后写下并各自落库（等待人工复核走 pauseForManualReview），
+// 这里不重做那份判断，也不多读一次聚合。
+//
+// 等待态没落库时**不**交回原停顿原因：那一格是消费门（Decision 四落地后）提交暂停的凭据，暂停
+// 没落库就交它，等待态会随本轮回滚蒸发而投递已被记为完毕，队列从此列不出这份委托。三种没落库
+// 的样子各交回自己那一格（委托查不到、保存没落库、版本被抢先），全部归内部重试，照旧回滚重投，
+// 下一轮重新走到这里——与 pauseForManualReview 对`等待人工复核`的处置同一判断。
+//
+// 转移被聚合拒绝（已越过决定边界、任务已停）时原因照交不改：那份委托已经不在`已提交`的判断路上，
+// 没有等待态要落，也没有队列条目要保；本轮真实停在哪一步仍由原因说出来。随后 recordAttempt 对
+// 已完成的任务同样会被拒，两处是同一道门。
+func awaitOperatorRegistration(
+	ctx context.Context,
+	requests ports.ShipmentRequestRepository,
+	identity domain.SourceIdentity,
+	stall JudgmentPendingReason,
+) (JudgmentPendingReason, error) {
+	if stall.resumePath() != domain.ResumeByOperatorRegistration {
+		return stall, nil
+	}
+	request, found, err := requests.FindBySourceIdentity(ctx, identity)
+	if err != nil || !found {
+		return ShipmentRequestUnavailable, nil
+	}
+	waiting, err := request.AwaitOperatorRegistration()
+	if err != nil {
+		return stall, nil
+	}
+	saved, err := requests.Save(ctx, identity, waiting)
+	if err != nil {
+		return OperatorRegistrationWaitNotSaved, nil
+	}
+	if saved != ports.ShipmentRequestSaved {
+		return saveStallReason(saved)
+	}
+	return stall, nil
 }
 
 // recordAttempt 把没能推进的这一轮追加到接受判断任务上。用例要求任务同时留下判断与处理

@@ -79,9 +79,9 @@ func newManualReviewLoopFixture(t *testing.T) *manualReviewLoopFixture {
 	})
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
-			commercial, synRReachabilityAuthority{t: t}, base.judgments, systemClock{}),
+			commercial, synRReachabilityAuthority{t: t}, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, synRFinancialAuthority{t: t}, base.judgments, systemClock{}),
+			commercial, synRFinancialAuthority{t: t}, base.judgments, base.requests, systemClock{}),
 		Decision: decision,
 	})
 	submittedGate, err := psinbox.NewShipmentRequestSubmittedConsumer(base.transactor, inboxStore, chain)

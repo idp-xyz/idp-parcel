@@ -842,9 +842,9 @@ func acceptanceChainConsumers(
 
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
-			commercial, reachability, judgments, clock),
+			commercial, reachability, judgments, requests, clock),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, control, judgments, clock),
+			commercial, control, judgments, requests, clock),
 		Decision: psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
 			Requests:     requests,
 			Commercial:   commercial,

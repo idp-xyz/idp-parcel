@@ -93,19 +93,25 @@ type AdvanceAcceptanceJudgmentHandler struct {
 	commercial   ports.CommercialBasisResolver
 	reachability ports.ReachabilityAssessor
 	recorder     ports.AcceptanceJudgmentRecorder
+	requests     ports.ShipmentRequestRepository
 	clock        ports.Clock
 }
 
+// requests 只在`判断时点未配置`那一停上用到：把`等待运营登记`的等待态在决定之前落库
+// （ADR-0094 Decision 五）。判断本身仍经 recorder 记到任务上，不经聚合——本步不形成决定，
+// 也不该为了记一条判断去重写整份委托。
 func NewAdvanceAcceptanceJudgmentHandler(
 	commercial ports.CommercialBasisResolver,
 	reachability ports.ReachabilityAssessor,
 	recorder ports.AcceptanceJudgmentRecorder,
+	requests ports.ShipmentRequestRepository,
 	clock ports.Clock,
 ) *AdvanceAcceptanceJudgmentHandler {
 	return &AdvanceAcceptanceJudgmentHandler{
 		commercial:   commercial,
 		reachability: reachability,
 		recorder:     recorder,
+		requests:     requests,
 		clock:        clock,
 	}
 }
@@ -142,7 +148,17 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		return AdvanceAcceptanceJudgmentResult{}, err
 	}
 	if stall.stopped() {
-		return handler.undecided(ctx, command, stall.reason, stall.scope...), nil
+		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall.reason)
+		if err != nil {
+			return AdvanceAcceptanceJudgmentResult{}, err
+		}
+		scope := stall.scope
+		if reason != stall.reason {
+			// 原因换成了保存那一格自己的，范围随之放下：续办引用由原因与范围共同派生，拿旧范围
+			// 拼新原因会造出一条谁也查不回来的引用。
+			scope = nil
+		}
+		return handler.undecided(ctx, command, reason, scope...), nil
 	}
 
 	assessment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{

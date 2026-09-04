@@ -378,10 +378,11 @@ func TestEveryResumePathLandsInTheAttemptTable(t *testing.T) {
 // TestTaskWaitingOnProjectionMirrorsEveryResumePath 证等待态投影列 task_waiting_on 的 CHECK
 // 与领域封闭集合逐格对得上、上界外仍被拒（0009 立的约束，0011 对齐到第四格）。
 //
-// 用裸写而不走 Save：领域今天没有一条路径把等待态写成`等待运营登记`——Decide 把未决一律折成
-// 内部续办或客户补充，第四格的等待态要等 ADR-0094 Decision 五那一片。所以这里钉的只是库面镜像：
-// 那一片落地那天 Save 写下 4，不该在这条约束上撞死；而它撞死的样子与快照一起整份落不了库，
-// 因为投影列与快照是同一条 SQL。
+// 用裸写而不走 Save：本条要逐格遍历整个封闭集合，而 Save 只写得出领域此刻愿意写的那几格
+// （Decide 按校验写前三格，AwaitOperatorRegistration 在决定之前写第四格），遍历不该依赖哪条
+// 领域路径今天开着。所以这里钉的只是库面镜像：Save 写下任何一格都不该在这条约束上撞死，而它
+// 撞死的样子与快照一起整份落不了库，因为投影列与快照是同一条 SQL。第四格经 Save 真落库那一条
+// 由 operator_registration_queue_test.go 证。
 func TestTaskWaitingOnProjectionMirrorsEveryResumePath(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()

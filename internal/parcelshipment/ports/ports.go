@@ -1305,6 +1305,36 @@ type AcceptanceReviewQueue interface {
 	) (ShipmentRequestDetailRecord, bool, error)
 }
 
+// OperatorRegistrationQueueRecord 是「等待运营登记」队列上的一行：一份在决定形成之前停在
+// `等待运营登记`的`已提交`委托，带的正是重驱接受判断链要的那几样（AdvanceAcceptanceChainCommand
+// 的输入）。它不是查阅读面：没有概要、没有处理记录——那些归 ShipmentRequestViews；这里只给续办
+// 消费门一份「该重驱谁」的名单（ADR-0094 Decision 四）。
+type OperatorRegistrationQueueRecord struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	DeclaredParcelIDs []domain.DeclaredParcelID
+	SubmittedAt       time.Time
+}
+
+// OperatorRegistrationQueue 按租户列出当前停在`等待运营登记`的`已提交`委托，老的在前，同刻按
+// 委托标识正序保证分页可重复（ADR-0094 Decision 五）。
+//
+// 以租户为键而不是授权查询作用域：调用方是「参数已登记」信封的消费门，它代表登记那一侧的运营
+// 企业，一次登记解开的是该租户下所有等这份参数的委托，不是某几个客户账户的。作用域读口
+// （AcceptanceReviewQueue）那套统一不可见纪律守的是跨作用域存在性泄露，而这一口不出进程。
+//
+// 队列的定义就是投影列上的 `waitingOn = OPERATOR_REGISTRATION` 且 `state = SUBMITTED`（迁移 0013
+// 的部分索引逐字吻合）。等待态由 AwaitOperatorRegistration 在决定之前写下，由 Decide 与各终态
+// 转移改写或清零；读口照登记过滤，不在读侧重推。Limit 必须为正，判据同 ShipmentRequestViews。
+type OperatorRegistrationQueue interface {
+	ListWaitingOnOperatorRegistration(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]OperatorRegistrationQueueRecord, error)
+}
+
 // LabelTransactionInsertOutcome 与 LabelTransactionSaveOutcome 是面单交易写入的两套代数，
 // 与委托那两套同形同理（ADR-0031）：`已存在`要回去按重放规则重答，`版本冲突`要重读再重放，
 // 两者的恢复动作不同，因此不共用一个集合，也都不译成 error。

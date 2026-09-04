@@ -71,21 +71,27 @@ type AdvanceFinancialControlJudgmentHandler struct {
 	commercial ports.CommercialBasisResolver
 	controller ports.PreAcceptanceFinancialController
 	recorder   ports.AcceptanceJudgmentRecorder
+	requests   ports.ShipmentRequestRepository
 	clock      ports.Clock
 }
 
 // 时钟只用于处理尝试的发生时间。它与判断时点分开：后者由规则包声明的策略形成，本地时钟
 // 顶替它就是用例禁止的「用一个全局时间代替不同判断」。
+//
+// requests 的用处与可达性那一支相同：只在`判断时点未配置`那一停上把`等待运营登记`落库
+// （ADR-0094 Decision 五），控制结果仍经 recorder 记到任务上。
 func NewAdvanceFinancialControlJudgmentHandler(
 	commercial ports.CommercialBasisResolver,
 	controller ports.PreAcceptanceFinancialController,
 	recorder ports.AcceptanceJudgmentRecorder,
+	requests ports.ShipmentRequestRepository,
 	clock ports.Clock,
 ) *AdvanceFinancialControlJudgmentHandler {
 	return &AdvanceFinancialControlJudgmentHandler{
 		commercial: commercial,
 		controller: controller,
 		recorder:   recorder,
+		requests:   requests,
 		clock:      clock,
 	}
 }
@@ -123,7 +129,16 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		return AdvanceFinancialControlJudgmentResult{}, err
 	}
 	if stall.stopped() {
-		return handler.undecided(ctx, command, stall.reason, stall.scope...), nil
+		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall.reason)
+		if err != nil {
+			return AdvanceFinancialControlJudgmentResult{}, err
+		}
+		scope := stall.scope
+		if reason != stall.reason {
+			// 理由同可达性那一支：原因换了，范围随之放下。
+			scope = nil
+		}
+		return handler.undecided(ctx, command, reason, scope...), nil
 	}
 
 	assessment, err := handler.controller.ApplyPreAcceptanceFinancialControl(ctx, ports.FinancialControlRequest{

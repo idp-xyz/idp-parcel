@@ -390,6 +390,7 @@ type judgmentFixture struct {
 	commercial   *commercialBasisDouble
 	reachability *reachabilityDouble
 	requests     *judgmentRequestStore
+	repository   *awaitingRequestStore
 	calls        []string
 }
 
@@ -407,10 +408,12 @@ func newJudgmentFixture(t *testing.T) *judgmentFixture {
 	}
 	value.reachability = &reachabilityDouble{t: t, value: domain.ReachabilityReachable, record: record}
 	value.requests = &judgmentRequestStore{}
+	value.repository = &awaitingRequestStore{t: t}
 	value.handler = application.NewAdvanceAcceptanceJudgmentHandler(
 		value.commercial,
 		value.reachability,
 		value.requests,
+		value.repository,
 		fixedClock{at: handlerClockAt},
 	)
 	return value
