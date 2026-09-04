@@ -108,3 +108,13 @@ CONTEXT-MAP 说的「未被选中的候选**评价**继续有效并留痕」由 
 **无生产装配点**：`cmd/` 下 `SelectChannelCandidate` 零命中（票 12 收口 Comment「生产可达仍差两步」），留痕随择优
 编排的接线票一起可达；装配时把 `adapters/postgres.NewChannelSelectionDecisions`、`adapters/identity.NewChannelSelectionDecisions`
 与时钟一起交给 `SelectChannelCandidateDeps`，缺一即 `ErrChannelSelectionRecordingMisconfigured`。
+
+## Comments
+
+- 2026-09-04 · MCP-2（19:1x 换新会话后补记）：**rebase 后复验**——完成记录「验证」段所指的「Comments 末条」即本条；前一会话建了
+  干净检出 `$TEMP\idp-parcel-mcp2-lc14-verify`（detached 于收口 tip `df6e1ff3`）但未及落笔就换了会话。在该检出上重跑同一套：
+  `gofmt -l ./cmd ./internal` 无输出；`go build ./...`、`go vet ./...` 退 0；无 DSN `go test -count=1 ./...` 退 0（95 包 ok，
+  PG 用例跳过）；**含真库**（门禁容器 55432）`go test -count=1 -p 1 -v ./internal/parcelshipment/... ./internal/architecture/...
+  ./migrations/...` 退 0：`--- PASS` 1535 / `--- SKIP` 0 / `--- FAIL` 0（不锚定行首计数；并行输出会把两行并成一行），证据行
+  `--- PASS: TestAChannelSelectionDecisionRoundTripsThroughPostgres (0.27s)`、`--- PASS: TestChannelSelectionDecisionsRefuseToRunOutsideATransaction (0.26s)`。
+  `-race` 未跑。本条只动本 .md；`.go`/`.sql` 自 `df6e1ff3` 起未动，MCP-1 重放仍以 `df6e1ff3` 之前的八笔代码 + 本 .md 为准。
