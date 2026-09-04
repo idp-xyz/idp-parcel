@@ -141,6 +141,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	credentialRegistration, err := buildExternalCarrierCredentialRegistration(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -322,6 +326,7 @@ func run(logger *slog.Logger) error {
 			segmentOps.opener,
 			segmentOps.assign,
 			segmentOps.enderOf,
+			credentialRegistration,
 			trackingViews,
 			projectionViews,
 			claims,

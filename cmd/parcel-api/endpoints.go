@@ -71,6 +71,7 @@ func assembleBusinessEndpoints(
 	dispatchTaskOpener tfhttp.DispatchTaskOpener,
 	loadAssigner tfhttp.LoadAssigner,
 	participationEnder tfhttp.ParticipationEnder,
+	credentialRegistration tfhttp.CredentialRegistrar,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -214,6 +215,13 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(tfhttp.UnconfiguredIntake{}, dispatchTaskOpener)},
 		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(tfhttp.UnconfiguredIntake{}, loadAssigner)},
 		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(tfhttp.UnconfiguredIntake{}, participationEnder)},
+		// 外部承运凭证登记两口（ADR-0085，票 label-channel/18）：登记一份凭证的首版，与对它此刻的当前版落
+		// 一次作废 / 失效 / 替代。它们是运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
+		// 改变口不叫 `-corrections`——作废、失效、替代改变的是适用关系而不是更正一个判断，原版本一字不动。
+		// 写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份凭证登进去就会被收编执行器用来把外部轨迹认到
+		// 某个载运对象上，这两行比查阅行更不能让隔离读开关换值。
+		{Pattern: "/transport-fulfillment-external-carrier-credential-registrations", Handler: tfhttp.NewRegisterExternalCarrierCredentialEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
+		{Pattern: "/transport-fulfillment-external-carrier-credential-applicability-changes", Handler: tfhttp.NewChangeExternalCarrierCredentialApplicabilityEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，

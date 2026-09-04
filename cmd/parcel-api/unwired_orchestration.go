@@ -217,6 +217,24 @@ func (unwiredParticipationEnder) End(
 	return tfapp.EndFulfillmentParticipationResult{}, errOrchestrationNotWired
 }
 
+// unwiredCredentialRegistration 一个类型顶两个端点：凭证首登与改变适用关系共用 CredentialRegistrar
+// （票 label-channel/18）。
+type unwiredCredentialRegistration struct{}
+
+func (unwiredCredentialRegistration) Register(
+	context.Context,
+	tfapp.RegisterExternalCarrierCredentialCommand,
+) (tfapp.RegisterExternalCarrierCredentialResult, error) {
+	return tfapp.RegisterExternalCarrierCredentialResult{}, errOrchestrationNotWired
+}
+
+func (unwiredCredentialRegistration) ChangeApplicability(
+	context.Context,
+	tfapp.ChangeCredentialApplicabilityCommand,
+) (tfapp.RegisterExternalCarrierCredentialResult, error) {
+	return tfapp.RegisterExternalCarrierCredentialResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

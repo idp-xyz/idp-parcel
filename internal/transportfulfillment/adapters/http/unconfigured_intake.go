@@ -44,6 +44,7 @@ var _ SegmentClosureIntake = UnconfiguredIntake{}
 var _ DispatchTaskIntake = UnconfiguredIntake{}
 var _ LoadAssignmentIntake = UnconfiguredIntake{}
 var _ ParticipationTerminationIntake = UnconfiguredIntake{}
+var _ CredentialIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -106,4 +107,14 @@ func (UnconfiguredIntake) IntakeLoadAssignment(context.Context, *http.Request) (
 
 func (UnconfiguredIntake) IntakeParticipationTermination(context.Context, *http.Request) (ParticipationTermination, error) {
 	return ParticipationTermination{}, ErrAccessChannelNotConfigured
+}
+
+// 凭证登记两口（label-channel/18）同堵：一份凭证登进去就会被收编执行器用来把外部轨迹认到某个
+// 载运对象上，渠道未就位前没有可采信的登记方身份，连命令都不构造。
+func (UnconfiguredIntake) IntakeCredentialRegistration(context.Context, *http.Request) (application.RegisterExternalCarrierCredentialCommand, error) {
+	return application.RegisterExternalCarrierCredentialCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeCredentialApplicabilityChange(context.Context, *http.Request) (application.ChangeCredentialApplicabilityCommand, error) {
+	return application.ChangeCredentialApplicabilityCommand{}, ErrAccessChannelNotConfigured
 }

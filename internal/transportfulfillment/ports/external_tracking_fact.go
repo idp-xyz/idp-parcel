@@ -122,6 +122,11 @@ type UnadoptedTrackingMaterialLedger interface {
 
 // CredentialResolution 是「这份外部承运凭证指向哪个载运对象」的答案格。`未配置`单列：没有凭证
 // 登记册时任何素材都认领不了，那是本上下文自己的缺口，不是源的缺陷，因此不留痕、只报未决。
+//
+// `未知`是「登记册此刻解析不到一个载运对象」而不只是「没登记过」：凭证从未登记、已作废/失效/
+// 替代、或它标识的是运输委托、订舱、班次、实际履约段而非载运对象（CONTEXT「不能全部解释为包裹
+// 的当前运单号」），都落这一格——四种情形的续办是同一个动作，去查凭证登记；把它们分开会让收编
+// 执行器替登记册解释凭证。登记册的实现见 adapters/postgres 的 ExternalCarrierCredentials。
 type CredentialResolution uint8
 
 const (
