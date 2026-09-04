@@ -393,6 +393,8 @@ const (
 	ArtifactRateTable       ArtifactKind = "rate-table"
 	ArtifactWeightPolicy    ArtifactKind = "weight-policy"
 	ArtifactReferenceSeries ArtifactKind = "reference-series"
+	// 计价参考目录的版本（ADR-0109）：与序列同族，评价清单里装的是它的某一版。
+	ArtifactReferenceCatalogue ArtifactKind = "reference-catalogue"
 	// 汇率的口径依据由商业价格政策版本声明。计价引用它，所有权在 party-commercial。
 	ArtifactCommercialPolicy ArtifactKind = "commercial-policy"
 	// 价格方向授权由 party-commercial 签发。价卡登记引用它作为 BUY/SELL 方向的

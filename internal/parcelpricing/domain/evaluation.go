@@ -259,6 +259,15 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("PLAN_STRUCTURES_NOT_EXECUTABLE", fmt.Sprintf("%s: %s", ErrPlanStructuresNotExecutable.Error(), reason)))
 	}
 
+	// 分区与偏远档位在一切判定之前先定下来（ADR-0109 Decision 四）：拒收条款与附加费条件可能读分区，
+	// 基础运费查表更离不开它。绑了目录的卡只认目录读数，没绑的卡读调用方给的分区；两边都没有即待判断。
+	categories, categoriesErr := request.plan.structures.resolveCatalogues(request.input)
+	if categoriesErr != nil {
+		return evaluation.withCalculationError(categoriesErr)
+	}
+	evaluation.explanation = append(evaluation.explanation, categories.explanations...)
+	zone := string(categories.zone)
+
 	// 特征在计价之前先派生。有两种声明这么早就需要它：条件最低计价重量由判定条件决定，
 	// 却会抬高读取基础档位所用的方案级计价重量；而拒收条款直接就定了结果。
 	var features PackageFeatures
@@ -270,7 +279,9 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			// 不是请求不合法。
 			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("PACKAGE_FEATURES_UNAVAILABLE", featuresErr.Error()))
 		}
-		features, haveFeatures = derived, true
+		// 类别量随解析结果填进特征：分区一定有；偏远档位只在卡绑了档位目录时有，没绑的卡该格缺席，
+		// 地址类型条件读到缺席照旧报特征不可用。
+		features, haveFeatures = derived.WithCategories(categories.zone, categories.tier), true
 	}
 
 	// 先定拒收，再谈任何缺口。缺一期序列取值是`待判断`，它等于告诉调用方补上就能得出
@@ -328,7 +339,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	evaluation.pricingWeight = &pricingWeight
 	evaluation.explanation = append(evaluation.explanation, pricingWeight.explanation)
 
-	matchedRate, err := request.plan.rateTable.Lookup(request.input.zone, pricingWeight.rounded)
+	matchedRate, err := request.plan.rateTable.Lookup(zone, pricingWeight.rounded)
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
@@ -392,7 +403,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if haveFeatures {
 		outcomes, resolveErr := request.plan.structures.resolveSurcharges(surchargeContext{
 			features:      features,
-			zone:          request.input.zone,
+			zone:          zone,
 			pricingWeight: pricingWeight.rounded,
 			series:        series,
 		})
@@ -484,7 +495,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		for _, outcome := range deferred {
 			amount, resolveErr := outcome.rule.calculation.resolve(surchargeContext{
 				features:      features,
-				zone:          request.input.zone,
+				zone:          zone,
 				pricingWeight: pricingWeight.rounded,
 				series:        series,
 			}, &basis)
@@ -821,11 +832,13 @@ func baseEvaluation(request EvaluationRequest) PricingEvaluation {
 // （ADR-0099 决定四）。方案清单不含序列版本——方案绑的是序列标识；哪一版是这次评价的
 // 结论，所以由评价冻结。序列取值缺席时清单就是方案清单，评价随后落待判断。
 func composeEvaluationManifest(plan PricingPlanVersion, input PricingInputSnapshot) VersionManifest {
-	series := input.boundSeriesReferences(plan.structures.referenceSeries)
-	if len(series) == 0 {
+	adopted := input.boundSeriesReferences(plan.structures.referenceSeries)
+	// 目录版本同理（ADR-0109 Decision 三）：卡绑的是目录标识，查的是哪一版由评价冻结。
+	adopted = append(adopted, input.boundCatalogueReferences(plan.structures.referenceCatalogues)...)
+	if len(adopted) == 0 {
 		return plan.manifest
 	}
-	manifest, err := NewVersionManifest(append(plan.manifest.References(), series...))
+	manifest, err := NewVersionManifest(append(plan.manifest.References(), adopted...))
 	if err != nil {
 		// 序列引用与方案清单撞键只会是「同一（种类、标识、版本）出现两次」，而方案清单
 		// 里没有序列种类；这里守的是不让一次坏输入把评价做成无清单。
@@ -840,6 +853,13 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("DIMENSIONS_REQUIRED", err.Error()))
 	case errors.Is(err, ErrNoMatchingRate):
 		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("RATE_NOT_FOUND", err.Error()))
+	// 分区 / 档位两格分开（ADR-0109 Decision 四）：前者影响基础运费查表，后者只影响一类附加费，续办不同。
+	case errors.Is(err, ErrZoneUnresolved):
+		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("ZONE_UNRESOLVED", err.Error()))
+	case errors.Is(err, ErrRemoteTierUnresolved):
+		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("REMOTE_TIER_UNRESOLVED", err.Error()))
+	case errors.Is(err, ErrReferenceCatalogueMismatch):
+		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("REFERENCE_CATALOGUE_MISMATCH", err.Error()))
 	case errors.Is(err, ErrWeightUnitMismatch):
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("WEIGHT_UNIT_MISMATCH", err.Error()))
 	case errors.Is(err, ErrLengthUnitMismatch):
@@ -879,8 +899,13 @@ func copyInputSnapshot(input PricingInputSnapshot) PricingInputSnapshot {
 		sides := *input.dimensions
 		copy.dimensions = &sides
 	}
+	if input.postal != nil {
+		route := *input.postal
+		copy.postal = &route
+	}
 	copy.factReferences = append([]VersionedFactReference(nil), input.factReferences...)
 	copy.seriesValues = append([]ReferenceSeriesValue(nil), input.seriesValues...)
+	copy.catalogueReadings = append([]ResolvedCatalogueValue(nil), input.catalogueReadings...)
 	return copy
 }
 

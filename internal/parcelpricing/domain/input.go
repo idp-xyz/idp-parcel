@@ -60,16 +60,63 @@ func (subject EvaluationSubject) valid() bool {
 // 自己版本化声明的体积系数派生，所以同一组尺寸只可能有一个体积重，而系数变化必定进入
 // 版本内容摘要。
 type PricingInputSnapshot struct {
-	tenantID       TenantID
-	scope          PricingScopeID
-	subject        EvaluationSubject
-	zone           string
-	actualWeight   Weight
-	dimensions     *Dimensions
-	businessAt     time.Time
-	factReferences []VersionedFactReference
-	seriesValues   []ReferenceSeriesValue
-	settlement     *Currency
+	tenantID TenantID
+	scope    PricingScopeID
+	subject  EvaluationSubject
+	// zone 是调用方直接给的分区，可缺（ADR-0109 Decision 四）：绑了目录的卡从 postal 解分区，这一格留空；
+	// 没绑的卡读这一格。两者至少一个在。
+	zone              string
+	postal            *PostalRoute
+	catalogueReadings []ResolvedCatalogueValue
+	actualWeight      Weight
+	dimensions        *Dimensions
+	businessAt        time.Time
+	factReferences    []VersionedFactReference
+	seriesValues      []ReferenceSeriesValue
+	settlement        *Currency
+}
+
+// NewPostalPricingInputSnapshot 立一份不带调用方分区、只带邮编路线的输入：分区与偏远档位由绑了目录的卡
+// 从目录解出（ADR-0109 Decision 四）。给到一张没绑目录的卡，评价落待判断——没有任何一方能产出分区。
+func NewPostalPricingInputSnapshot(
+	tenantID TenantID,
+	scope PricingScopeID,
+	subject EvaluationSubject,
+	route PostalRoute,
+	actualWeight Weight,
+	dimensions *Dimensions,
+	businessAt time.Time,
+	factReferences ...VersionedFactReference,
+) (PricingInputSnapshot, error) {
+	if !route.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	input, err := newPricingInputSnapshot(tenantID, scope, subject, "", actualWeight, dimensions, businessAt, factReferences)
+	if err != nil {
+		return PricingInputSnapshot{}, err
+	}
+	declared := route
+	input.postal = &declared
+	return input, nil
+}
+
+// WithPostalRoute 给一份带调用方分区的输入补上邮编路线：绑了档位目录而分区仍由调用方给的卡要两者都有。
+func (input PricingInputSnapshot) WithPostalRoute(route PostalRoute) (PricingInputSnapshot, error) {
+	if !input.valid() || !route.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	declared := route
+	updated.postal = &declared
+	return updated, nil
+}
+
+// PostalRoute 报出输入携带的邮编路线；只给了分区的输入第二个返回值为假。
+func (input PricingInputSnapshot) PostalRoute() (PostalRoute, bool) {
+	if input.postal == nil {
+		return PostalRoute{}, false
+	}
+	return *input.postal, true
 }
 
 // WithSettlementCurrency 记录合同的结算币种。ADR-0013 指出计价必须知道它，而
@@ -133,7 +180,24 @@ func NewPricingInputSnapshot(
 	businessAt time.Time,
 	factReferences ...VersionedFactReference,
 ) (PricingInputSnapshot, error) {
-	if !tenantID.valid() || !scope.valid() || !subject.valid() || strings.TrimSpace(zone) == "" || strings.TrimSpace(zone) != zone || !actualWeight.valid() || !validBusinessTime(businessAt) {
+	// 调用方给分区的路径：分区必备。不带分区的输入走 NewPostalPricingInputSnapshot。
+	if strings.TrimSpace(zone) == "" {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	return newPricingInputSnapshot(tenantID, scope, subject, zone, actualWeight, dimensions, businessAt, factReferences)
+}
+
+func newPricingInputSnapshot(
+	tenantID TenantID,
+	scope PricingScopeID,
+	subject EvaluationSubject,
+	zone string,
+	actualWeight Weight,
+	dimensions *Dimensions,
+	businessAt time.Time,
+	factReferences []VersionedFactReference,
+) (PricingInputSnapshot, error) {
+	if !tenantID.valid() || !scope.valid() || !subject.valid() || strings.TrimSpace(zone) != zone || !actualWeight.valid() || !validBusinessTime(businessAt) {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
 	}
 	if dimensions != nil && !dimensions.valid() {
@@ -209,8 +273,20 @@ func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 }
 
 func (input PricingInputSnapshot) valid() bool {
-	if !input.tenantID.valid() || !input.scope.valid() || !input.subject.valid() || strings.TrimSpace(input.zone) == "" || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
+	if !input.tenantID.valid() || !input.scope.valid() || !input.subject.valid() || strings.TrimSpace(input.zone) != input.zone || !input.actualWeight.valid() || !validBusinessTime(input.businessAt) {
 		return false
+	}
+	// 分区与邮编路线至少一个在：两个都没有，没有任何一条路径能得出分区。
+	if input.zone == "" && input.postal == nil {
+		return false
+	}
+	if input.postal != nil && !input.postal.valid() {
+		return false
+	}
+	for _, reading := range input.catalogueReadings {
+		if !reading.valid() {
+			return false
+		}
 	}
 	if input.dimensions != nil && !input.dimensions.valid() {
 		return false

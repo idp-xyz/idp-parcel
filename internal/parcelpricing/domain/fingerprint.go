@@ -653,6 +653,38 @@ type canonicalEvaluationInput struct {
 	// 快照不带任何序列取值时省略该字段，使得所有在计价参考序列出现之前记录的评价
 	// 规范化成相同的字节、摘要继续可比。
 	Series []canonicalSeriesValueDocument `json:"series,omitempty"`
+	// 邮编路线与目录读数（ADR-0109）同理省略：只给分区的评价字节不变。读数带「解出了 / 没解出」那一格，
+	// 查过同一版而没查到的待判断，重放要落在同一个摘要上。
+	Postal     *canonicalPostalRouteDocument       `json:"postal,omitempty"`
+	Catalogues []canonicalCatalogueReadingDocument `json:"catalogues,omitempty"`
+}
+
+type canonicalPostalRouteDocument struct {
+	Origin      string `json:"origin,omitempty"`
+	Destination string `json:"destination"`
+}
+
+type canonicalCatalogueReadingDocument struct {
+	Kind      string                    `json:"kind"`
+	Reference canonicalVersionReference `json:"reference"`
+	Value     string                    `json:"value,omitempty"`
+	Resolved  bool                      `json:"resolved"`
+}
+
+func canonicalCatalogueReadings(readings []ResolvedCatalogueValue) []canonicalCatalogueReadingDocument {
+	if len(readings) == 0 {
+		return nil
+	}
+	documents := make([]canonicalCatalogueReadingDocument, 0, len(readings))
+	for _, reading := range readings {
+		documents = append(documents, canonicalCatalogueReadingDocument{
+			Kind:      reading.kind.String(),
+			Reference: canonicalReference(reading.reference),
+			Value:     string(reading.value),
+			Resolved:  reading.resolved,
+		})
+	}
+	return documents
 }
 
 type canonicalSeriesValueDocument struct {
@@ -750,6 +782,10 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 		BusinessAt:  evaluation.input.businessAt.UTC().Format(time.RFC3339Nano),
 		Facts:       facts,
 		Series:      canonicalSeriesValues(evaluation.input.seriesValues),
+		Catalogues:  canonicalCatalogueReadings(evaluation.input.catalogueReadings),
+	}
+	if route, declared := evaluation.input.PostalRoute(); declared {
+		input.Postal = &canonicalPostalRouteDocument{Origin: route.origin, Destination: route.destination}
 	}
 	if sides, ok := evaluation.input.Dimensions(); ok {
 		declared := canonicalDimensionsValue(sides)

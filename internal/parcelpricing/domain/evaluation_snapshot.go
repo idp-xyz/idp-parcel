@@ -67,17 +67,31 @@ type seriesValueSnapshot struct {
 	QuoteBasis *versionReferenceSnapshot `json:"quoteBasis,omitempty"`
 }
 
+type postalRouteSnapshot struct {
+	Origin      string `json:"origin,omitempty"`
+	Destination string `json:"destination"`
+}
+
+type catalogueReadingSnapshot struct {
+	Kind      string                   `json:"kind"`
+	Reference versionReferenceSnapshot `json:"reference"`
+	Value     string                   `json:"value,omitempty"`
+	Resolved  bool                     `json:"resolved"`
+}
+
 type inputSnapshotDocument struct {
-	TenantID       string                     `json:"tenantId"`
-	Scope          string                     `json:"scope"`
-	Subject        subjectSnapshot            `json:"subject"`
-	Zone           string                     `json:"zone"`
-	ActualWeight   weightSnapshot             `json:"actualWeight"`
-	Dimensions     *dimensionsSnapshot        `json:"dimensions,omitempty"`
-	BusinessAt     time.Time                  `json:"businessAt"`
-	FactReferences []versionReferenceSnapshot `json:"factReferences"`
-	SeriesValues   []seriesValueSnapshot      `json:"seriesValues"`
-	Settlement     *string                    `json:"settlement,omitempty"`
+	TenantID          string                     `json:"tenantId"`
+	Scope             string                     `json:"scope"`
+	Subject           subjectSnapshot            `json:"subject"`
+	Zone              string                     `json:"zone"`
+	Postal            *postalRouteSnapshot       `json:"postal,omitempty"`
+	CatalogueReadings []catalogueReadingSnapshot `json:"catalogueReadings,omitempty"`
+	ActualWeight      weightSnapshot             `json:"actualWeight"`
+	Dimensions        *dimensionsSnapshot        `json:"dimensions,omitempty"`
+	BusinessAt        time.Time                  `json:"businessAt"`
+	FactReferences    []versionReferenceSnapshot `json:"factReferences"`
+	SeriesValues      []seriesValueSnapshot      `json:"seriesValues"`
+	Settlement        *string                    `json:"settlement,omitempty"`
 }
 
 type weightResultSnapshot struct {
@@ -407,6 +421,17 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 		settlement := input.settlement.code
 		document.Settlement = &settlement
 	}
+	if input.postal != nil {
+		document.Postal = &postalRouteSnapshot{Origin: input.postal.origin, Destination: input.postal.destination}
+	}
+	for _, reading := range input.catalogueReadings {
+		document.CatalogueReadings = append(document.CatalogueReadings, catalogueReadingSnapshot{
+			Kind:      string(reading.kind),
+			Reference: versionReferenceOf(reading.reference),
+			Value:     string(reading.value),
+			Resolved:  reading.resolved,
+		})
+	}
 	return document
 }
 
@@ -446,6 +471,17 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 	if document.Settlement != nil {
 		settlement := Currency{code: *document.Settlement}
 		input.settlement = &settlement
+	}
+	if document.Postal != nil {
+		input.postal = &PostalRoute{origin: document.Postal.Origin, destination: document.Postal.Destination}
+	}
+	for _, reading := range document.CatalogueReadings {
+		input.catalogueReadings = append(input.catalogueReadings, ResolvedCatalogueValue{
+			kind:      CatalogueKind(reading.Kind),
+			reference: versionReferenceFrom(reading.Reference),
+			value:     CategoryValue(reading.Value),
+			resolved:  reading.Resolved,
+		})
 	}
 	return input
 }
