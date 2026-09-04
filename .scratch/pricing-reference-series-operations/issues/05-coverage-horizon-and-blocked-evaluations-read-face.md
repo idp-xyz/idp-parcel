@@ -1,10 +1,9 @@
 # 覆盖地平线与被挂起评价联动的读面
 
 Category: enhancement
-Status: in-progress——**05a（第 1 项）已落 `1cacc72` + `aa54a4b`；第 3 项摘要条已落 `f4c2996`，
-「一键跳到复核动作」已落 `b98368d`（「跳到登记」与「挂起评价数」那一格未做，见末条 Comment）；
-05b（第 2 项）两件裁决已由 [ADR-0105](../../../docs/adr/0105-evaluation-issue-carries-a-structured-series-subject-and-lands-in-a-child-table.md)
-答完（`e53428c`）；**05b 开工——MCP-3（2026-09-04，隔离分支 `mcp3-pricing05b`，基线 main `ce09a667`，task-2d7d655c）**。认领前先读 Comments，第 2 项的范围与票面所写不同**
+Status: resolved——05a（第 1 项）`1cacc72` + `aa54a4b`；第 3 项摘要条 `f4c2996` + 「一键跳到复核动作」`b98368d`（「跳到登记」那半照 MCP-4 理由不做，见 Comments）；
+05b（第 2 项）按 [ADR-0105](../../../docs/adr/0105-evaluation-issue-carries-a-structured-series-subject-and-lands-in-a-child-table.md) 六条落地
+（MCP-3 于分支 `mcp3-pricing05b` 完工四步 `92cc289f`..`867c7cc3`，会话 crash 后由 MCP-1 复核、验证、收口——见「完成记录（05b）」）；摘要条「挂起评价数」格随 05b 补齐；第 4 项阈值按票面不在本票（实例半边）
 Blocked by: 无（03 的代码已是主线祖先 `f62d619`）；第 2 项另有一道**未裁的领域改动**，见 Comments
 
 ## 要建什么
@@ -237,3 +236,28 @@ Blocked by: 无（03 的代码已是主线祖先 `f62d619`）；第 2 项另有�
   **一件对下一个在共享树上提交的人有用**：本笔 `git add` 时索引里已躺着另一会话为它那笔暂存的三个
   文件；`git commit -- <pathspec>` 只带走了本刀四个文件，那三个原样留在索引里等它自己提。
   parallel-sessions 写的「`git commit` 提的是整个索引」这一格，这次是 pathspec 实拦的。
+
+## 完成记录（05b，2026-09-05 MCP-1 代 MCP-3 收口）
+
+分支 `mcp3-pricing05b`，基线 main `7e0e8af0`（MCP-3 自己 rebase 到 tip 后 crash 于双轴评审步；worktree 干净、四步全部已提交），MCP-1 接手复核与验证。
+四步（分支 SHA；基线即 main tip，快进后 SHA 不变）：
+
+- `92cc289f` 领域：`SeriesSubject`（种类必有、标识可缺）、`EvaluationIssue.Series()`、`newSeriesEvaluationIssue`；两处产出点——`EXCHANGE_RATE_UNRESOLVED` 只填 `EXCHANGE_RATE`、
+  `REFERENCE_SERIES_UNRESOLVED` 经 `unresolvedSeriesIssue` 从 `missingSeriesReadingError` 携带的绑定填种类与标识（错误里没有绑定时主体为空，不从文字反解析）；主体进快照文档
+  （`evaluation_snapshot.go` 多一格可缺席字段）不进规范化文档，`fingerprint.go` 未动、PPC-5 不升（Decision 一、二、六）。
+- `a18eff9d` 迁移 `parcel_pricing/0009_evaluation_issue.sql`（一行一条问题项，外键回 `evaluation`，`series_kind` CHECK 落封闭集，标识只在有种类时可有；不种行不回填）；
+  `EvaluationStore` 真库适配器在落父行的同一事务里落全部子行，`已有记录`那格不重复不覆盖；伴生读端口 `ports.PendingSeriesEvaluationRead` + `PendingSeriesEvaluations`
+  （`COUNT(DISTINCT evaluation_id)`，只读子表与父表列，两个原因码字面钉在 SQL）（Decision 三、四、五）。
+- `03c8d3f7` 端点 `GET /pricing-pending-series-evaluations`（租户级、未配置 403、空册答 `counts: []`、`asOf` 与覆盖端点同一时钟源回显；进隔离读放行表）+ `cmd/parcel-api`
+  端点表/探针/unwired/装配 PP 那组各一行。
+- `867c7cc3` 管理台 `CoverageSummaryBar` 补「挂起评价数」格：`pending-evaluations.ts` 纯函数判读三态——未问到（403）/ 真零 / 有数分开，**不摆 0 占位**；文案如实写计数覆盖子表有行的评价。
+
+**与 ADR-0105 逐条对**：一、二、三、四、五、六全部照做；目录类新问题项（`ZONE_UNRESOLVED` / `REMOTE_TIER_UNRESOLVED` / `REFERENCE_CATALOGUE_MISMATCH` /
+`REFERENCE_SERIES_CURRENCY_MISMATCH`）按 Decision 六不带主体——它们要不要主体归 owner 另裁，不在本票。
+
+**验证**（MCP-1，隔离 detached 检出钉 `867c7cc3`）：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，**99 ok / 0 FAIL**（8m17s）；
+探针 `TestPendingSeriesEvaluationsAreCountedByKindFromTheChildTable` 带 DSN `--- PASS` / 不带 `--- SKIP`；`TestSeriesSubjectSurvivesTheSnapshotAndStaysOutOfTheDigest` PASS
+（摘要不变那一条）；admin-web 仓内 `tsc --noEmit` 退 0、`run-tests.mjs` 70/70。MCP-3 的双轴评审自跑未完成即 crash，MCP-1 按 ADR 六条与本仓写法复核了领域两处产出点、迁移、
+写侧同事务、读口 SQL、端点 `asOf` 与放行表、摘要条不摆 0——无需修改。
+
+**本票收口后仍留的**：「跳到登记」那半（登记签是 JSON 镜像、无逐序列预填，参考序列册的逐字段表单按 ADR-0101 决定八另裁另建）；第 4 项阈值（租户参数，实例半边）。
