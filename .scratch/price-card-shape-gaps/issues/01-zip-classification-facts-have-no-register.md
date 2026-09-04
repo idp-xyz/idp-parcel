@@ -1,7 +1,7 @@
 # 邮编分类事实（分区表、偏远档位表）在仓内没有登记载体，计价的类别特征只有消费侧
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）；两件已裁（2026-09-04，通道 6，owner 授权）：归属取 1（`parcel-pricing` 自有「计价参考目录」），形状照票面第二问并落文 [ADR-0109](../../../docs/adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)，CONTEXT 已补词条「计价参考目录」并改口「地址分类」；本票转实施票，范围见「裁决」节末段
+Status: in-progress——MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；本会话余量将满，交接点见文末 Comments）；两件已裁（2026-09-04，通道 6，owner 授权）：归属取 1（`parcel-pricing` 自有「计价参考目录」），形状照票面第二问并落文 [ADR-0109](../../../docs/adr/0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)，CONTEXT 已补词条「计价参考目录」并改口「地址分类」；本票转实施票，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
@@ -51,3 +51,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对到第 15 项时发现触发侧齐、提供侧空。**只写票面，未动代码。**
+- 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：规范化号已在 `b8dfc9a8` 换成 PPC-5（`fingerprint.go` 的 `canonicalizationVersion` 注释预告本票的目录绑定落这一号，**不再换号**，规范化文档新增字段照 `amount_rounding` 那样 `omitempty` 即可）；版本引用是三元 + 可选指纹（`NewVersionReferenceIdentity`），目录版本引用冻进 `VersionManifest` 用它；`CatalogueBinding` 进 `PricingPlanStructures` 可照 `WithAmountRounding` 的 builder 写法（可缺的另一个轴，不改 `NewPricingPlanVersion` 签名）；迁移取 `parcel_pricing/0006`（本批占号广播已点名）；解析口与复核记录照 `0a67406` / ADR-0099 那套。

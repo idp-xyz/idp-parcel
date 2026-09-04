@@ -1,7 +1,7 @@
 # 02 价卡内容加「金额取整策略」并在评价里按声明点取整：ADR-0107 的实施票
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
+Status: in-progress——MCP-6（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一）：领域半边已落 `66a90dc4`，余项与交接点见文末「交接」；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
 Blocked by: 无
 
 ## 缺口
@@ -48,6 +48,21 @@ ADR-0107 裁定槽落价卡内容、与重量取整同形、进内容摘要、�
 ADR-0107；ADR-0014（规范化版本）；ADR-0105（问题项形状）；票 `01`；label-channel/13 的「不编币种小数位表」裁决；
 `internal/parcelpricing/domain/{decimal,evaluation,reference_series,weight_rounding,plan,plan_snapshot,fingerprint}.go`。
 
+## 交接（2026-09-04，通道 6，task-2b9edfe4 换号批；本会话余量将满，下一人接）
+
+**已落（分支 `mcp6-pp-renumber`，代码笔 `66a90dc4`，其上是 ADR-0108 那笔 `b8dfc9a8`）**——「做什么」第 1 项整项：
+
+- `RoundingMode` 加 `HALF_UP`（`roundsUp` 是两个取整内核共用的进位判据）；`AmountRoundingPolicy`（`amount_rounding.go`：模式 + 卡币种进位单位 + 应用点封闭集 `PER_LINE` / `AFTER_CONVERSION` / `TOTAL`，合计必声明，NONE 拒）；经 `PricingPlanStructures.WithAmountRounding` 进卡，`NewPricingPlanVersion` 判进位单位币种；快照 `amountRounding`、规范化 `amount_rounding`（`omitempty`，PPC-5 之内不再换号——换号已在 `b8dfc9a8` 一次做掉，理由在 `canonicalizationVersion` 注释）。
+- 评价：`roundLine` 是逐行那一点的唯一入口（基础运费、固定规则、附加费三处，先于百分比依据登记）；换算后与合计各一处；`AmountRoundingStep` 留痕进解释项、快照与语义摘要；`validCompletedCharges` 沿留痕重走费用行之和到合计；未声明 → `AMOUNT_PRECISION_UNDECLARED`（合计被收回时撤下）。
+- 用例在 `amount_rounding_test.go`：完成判据里「USD × 四位汇率 → 两位合计 + 留痕」「去掉声明 → 精确 + 问题项」「两格重放语义摘要不变」「`12.5` / `12.50` 同合计」都有；另有三点先后、摘要与快照往返、构造门、HALF_UP 内核。**Decimal 算术结果是规范形（去尾零）**，`12.50` 写成 `12.5`——消费方要的 scale 从取整留痕的进位单位取，不从合计的字面取。
+
+**未做（第 2–4 项），交接点**：
+
+- 第 2 项登记面：JSON 登记口走价卡快照，`amountRounding` 槽已随快照进来（`plan_snapshot.go` 的 `amountRoundingSnapshot`），解码器对集合外模式由领域门拒；**逐字段表单**（ADR-0101 决定八，`apps/admin-web/src/pages/pricing/` 的价卡表单若有）尚未加该槽——先核有没有价卡逐字段表单，有就照序列表单的做法加三格（模式下拉只列封闭集、进位单位一格、应用点多选且合计锁定）。
+- 第 3 项消费侧：`internal/settlementaccounting/adapters/parcelpricing/` **今天不存在**（`ports.BuyEvaluationView` 注释此前说「等取整槽落地」，本批已把那句改成「槽已到、适配器仍留空」）。写它时：`Total()` 的精度依据是 `AmountRounding()` 里 `TOTAL` 那步的进位单位；评价带 `AMOUNT_PRECISION_UNDECLARED` 时拒或原样保全十进制，不得补取整。`internal/parcelshipment/adapters/parcelpricing/estimation_amount.go` 核过：它按调用方声明的 `MinorDigits` 折最小币单位，**超位即拒不取整**，没有要去掉的假设。
+- 第 4 项 E2 转换工具：未动；转不出的取整条款如实列「未声明：等运营确认」。
+
 ## Comments
 
 - 2026-09-04 · 通道 6：立票。票 `01` 自定的 resolved 判据是「裁决引用在 CONTEXT」，故裁决与实施分票；本票承接实施。**只写票面，未动代码。**
+- 2026-09-04 · 通道 6：领域半边落 `66a90dc4`；余项见「交接」。

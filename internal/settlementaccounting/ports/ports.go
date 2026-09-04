@@ -208,9 +208,11 @@ type BuyEvaluationAdoption struct {
 // 缝的形状（mechanism-executor-triage/06 SA-c 裁定）：触发用提供方已发的
 // `parcel-pricing.evaluation.recorded`（指针载荷），内容按引用查回；适配器落在消费侧
 // internal/settlementaccounting/adapters/parcelpricing/（ADR-0025），读提供方的评价库翻译——
-// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。**适配器在提供方的金额取整槽
-// 落地前留空**：提供方今天的合计与换算不取整、scale 随价表与汇率漂，而本上下文存最小币单位，
-// 中间没有任何一步有依据把十进制折成整数（label-channel/13 已裁没有币种小数位表）；细节在票面。
+// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。**适配器仍留空，但等的那一格已到**：
+// 提供方的金额取整槽随 ADR-0107 落地——声明了策略的卡，合计已按卡上进位单位取整，进位单位的 scale
+// 就是最小币单位的依据（评价的取整留痕里带着它）；没声明的卡评价带 AMOUNT_PRECISION_UNDECLARED，
+// 适配器读到它只能拒或原样保全十进制交下游，**不得自己补一次取整**（label-channel/13 已裁没有币种
+// 小数位表）。适配器怎么写归票 pricing-amount-precision/02 的消费侧那一项。
 type BuyEvaluationView interface {
 	LoadBuyEvaluation(
 		ctx context.Context,

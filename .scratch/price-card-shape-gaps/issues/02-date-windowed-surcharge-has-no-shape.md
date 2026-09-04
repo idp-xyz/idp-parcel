@@ -1,7 +1,7 @@
 # 只在日期窗内生效、金额逐周变的附加费（PSS / 高峰附加费）没有形状
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
+Status: in-progress——MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；本会话余量将满，交接点见文末 Comments）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
@@ -50,3 +50,4 @@ ADR 接受后按所选改法另拆实施票；本票 `resolved` 的判据是 ADR
 ## Comments
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对第 16 项。**只写票面，未动代码。**
+- 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：PPC-5 已在 `b8dfc9a8` 换好、本票的规范化改动落同一号不再换（`fingerprint.go` 注释已预告）；序列登记快照族已是 PRS-2（同笔），期次取值若加「带币种金额」判别形状，新字段 `omitempty` 可留在 PRS-2 内，改既有字段含义才需 PRS-3；「窗外无期次」在解析口今天怎么答先核 `reference_series.go` 的期次解析路径（裁决能力边界点名未读）；`SurchargeCalculation` 的规范化写法在 `fingerprint.go` `canonicalSurchargeCalculationDocument`——加「取当期序列定额」方法与「窗外行为」两格时照 `series_kind` / `series_factor` 那样 `omitempty`。

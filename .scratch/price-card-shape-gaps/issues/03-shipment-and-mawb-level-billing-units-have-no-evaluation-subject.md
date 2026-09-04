@@ -1,7 +1,7 @@
 # 清关报价按票、按 MAWB 计费的项目没有评价主体：计价只逐包裹
 
 Category: enhancement
-Status: in-progress（票级，MCP-6 2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
+Status: in-progress（票级，MCP-6 领了未开工，2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；本会话余量将满，交接点见文末 Comments）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
 Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-master-document-register/01](../../tf-carrier-master-document-register/issues/01-carrier-master-document-register-does-not-exist.md)（draft，归 TF owner）；票级那一半无
 
 ## 为什么立
@@ -47,3 +47,4 @@ Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-mast
 ## Comments
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对第 17 项。**只写票面，未动代码。**
+- 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：PPC-5 已在 `b8dfc9a8` 换好，`AggregationMode` / `EvaluationSubjectKind` 扩格与快照成员清单落同一号不再换；能力边界里「委托主体引用的是委托身份还是某一提交版本」那一句，按 parcel-shipment CONTEXT 与 ADR-0045：**委托身份**（`ShipmentRequestID`）是主体，提交版本是那份委托当前待判断的版本、随 `PricingInputSnapshot` 的事实引用带（同一委托换代后成员清单可能变，主体不变）——这是本票实施时要与 PS owner 再确认一句的默认读法，不是裁决；`validCompletedCharges` 今天按逐包裹形状校验费用行（`ChargeScopePackage` 等硬写），扩聚合单位时那道校验要跟着按主体种类分支。
