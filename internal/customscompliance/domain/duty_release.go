@@ -161,6 +161,11 @@ func (verification DutyPaymentVerification) Funds() ExternalFundsFactReference {
 	return verification.funds
 }
 
+// Scope 是持久化重建的必需读口（判据同 ExternalResult 那三个读口）。
+func (verification DutyPaymentVerification) Scope() DecisionScopeReference {
+	return verification.scope
+}
+
 func (verification DutyPaymentVerification) Coverage() DutyCoverage {
 	return verification.coverage
 }

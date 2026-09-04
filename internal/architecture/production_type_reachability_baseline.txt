@@ -27,27 +27,20 @@
 
 # ---- customs-compliance ----
 
-# 一类：经 FormDutyCollaboration / VerifyDutyPayment 取得，两个工厂都在函数名棘轮基线里
-# （关税协作、税款核验两条执行器未接）。随各自工厂接线出名单；其中 *Reference 与 *ID 另有
-# New* 构造器，但生产不指名它们，随聚合走。
+# 一类在本组已清空（2026-09-04，票 mechanism-executor-triage/07 三笔）。留下三段流水账，让下一个
+# 往本组加条目的人看见它们是怎么出去的：
 # 监管凭证那一族（CredentialID / CredentialHolderReference / RegulatoryCredential）曾在这里，
-# 2026-09-04 随 mechanism-executor-triage/07 CC-a 剪掉：RegisterCredential 接上登记面后三者
-# 由它的签名入种子。**在 024cb5f 的干净内容上数得剪前 63、剪后 60**，只对该检出成立。
-# 放行那一对（CustomsReleaseOutcome / ReleaseKind）曾在这里，同日随同票 CC-b 剪掉：
-# receive_external_result.go 在放行层调 ReceiveReleaseOutcome，两者由它的签名入种子。**在 a3adb75
-# 的干净内容上数得剪前 56、剪后 54**，只对该检出成立。
-internal/customscompliance/domain AssessedDutyReference
-internal/customscompliance/domain DutyCollaborationSpec
-internal/customscompliance/domain DutyCoverage
-internal/customscompliance/domain DutyDelta
-internal/customscompliance/domain DutyFactValidity
-internal/customscompliance/domain DutyObligationKind
-internal/customscompliance/domain DutyPaymentCollaboration
-internal/customscompliance/domain DutyPaymentVerification
-internal/customscompliance/domain ExternalFundsFactReference
-internal/customscompliance/domain LegalObligorReference
-internal/customscompliance/domain PaymentRequirementSource
-internal/customscompliance/domain ResponsibilityTargetReference
+# 随 CC-a 剪掉：RegisterCredential 接上登记面后三者由它的签名入种子。**在 024cb5f 的干净内容
+# 上数得剪前 63、剪后 60**，只对该检出成立。
+# 放行那一对（CustomsReleaseOutcome / ReleaseKind）曾在这里，随 CC-b 剪掉：receive_external_result.go
+# 在放行层调 ReceiveReleaseOutcome，两者由它的签名入种子。**在 a3adb75 的干净内容上数得剪前 56、
+# 剪后 54**，只对该检出成立。
+# 税费协作与核对那一族（AssessedDutyReference / DutyCollaborationSpec / DutyCoverage / DutyDelta /
+# DutyFactValidity / DutyObligationKind / DutyPaymentCollaboration / DutyPaymentVerification /
+# ExternalFundsFactReference / LegalObligorReference / PaymentRequirementSource /
+# ResponsibilityTargetReference）曾在这里，随 CC-c 剪掉：reconcile_duty_payment.go 调
+# FormDutyCollaboration 与 VerifyDutyPayment，全族由两者的签名与规格入种子。**在 3f4a428 的干净
+# 内容上两法同得剪前 47、剪后 35**，只对该检出成立。
 
 # 三类，见文末「待改小写候选」一节：ComplianceJudgment 一族五条列在那里，不在这里。
 

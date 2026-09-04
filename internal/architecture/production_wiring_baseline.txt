@@ -292,7 +292,6 @@ internal/settlementaccounting/domain FormSupplierExpectedCost
 # / Command / Deps 是前缀名，门禁比的是精确相等不是子串（tf-unwired-seven/05 那段核过匹配码），
 # 是第二种。**在 024cb5f 的干净内容上（`git show` 取本文件）数得剪前 24、剪后 23**；两个数只对
 # 该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
-# 同票余两条（税费协作、税费核对）随 CC-c 出名单。
 #
 # ReceiveReleaseOutcome 曾在这里，2026-09-04 随同票 CC-b 剪掉：application/receive_external_result.go
 # 的 ReceiveExternalResultHandler.Handle 在放行层调它（UC-CC-006 步 5 的放行那一格）——读过
@@ -300,8 +299,20 @@ internal/settlementaccounting/domain FormSupplierExpectedCost
 # 不把放行语义解释进任何形状，所以这是接线不是二选一（票 03「没能确认的」第一条至此答完）。
 # 成因三分先分过：全仓该名字只有一处声明（domain/duty_release.go），是第二种。**在 a3adb75 的
 # 干净内容上数得剪前 22、剪后 21**，只对该检出成立。
-internal/customscompliance/domain FormDutyCollaboration
-internal/customscompliance/domain VerifyDutyPayment
+#
+# FormDutyCollaboration 与 VerifyDutyPayment 曾在这里，2026-09-04 随同票 CC-c 一笔剪掉：
+# application/reconcile_duty_payment.go 的 DutyPaymentReconciliationHandler 是两者的生产调用方
+# （FormCollaboration 接 UC-CC-009 步 4–5，VerifyPayment 接步 7；步 6 外部资金事实的入向缝以
+# 同文件 ReceiveFundsFact 为 CC 半边——SA 事实采用不发信封，取证于 b3d3343，SA 侧另立票）。
+# 成因三分先分过：两个名字在全仓各只有一处声明（domain/duty_collaboration.go、domain/duty_release.go），
+# 同笔新增的 FormDutyCollaborationCommand / VerifyDutyPaymentCommand 是前缀名，门禁比的是精确相等
+# （tf-unwired-seven/05 那段核过匹配码），是第二种。**在 3f4a428 的干净内容上两法同得剪前 19、
+# 剪后 17**，只对该检出成立。
+#
+# **customs-compliance 这一组至此清空**——本票（mechanism-executor-triage/07）开工时它有 4 条。
+# 与 TF 组清空时同一句告诫：本门禁只量导出工厂，「这一组空了」不等于「CC 都接上了」——
+# 凭证适用性的持久化门禁记录、放行层的代码映射、核对向 settlement-accounting 的步 8 交接都
+# 还没有执行器，它们在票面的完成记录里，不在这份名单上。
 
 
 # —— party-commercial ——

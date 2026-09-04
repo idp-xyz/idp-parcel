@@ -927,6 +927,83 @@ type CredentialView interface {
 	) (domain.RegulatoryCredential, bool, error)
 }
 
+// DutyCollaborationStore 保存税费付款协作事项并按（范围，税费引用）取回（UC-CC-009 步 4–5，
+// 票 mechanism-executor-triage/07 CC-c）。一个范围对一份税费义务依据至多一份协作事项：核定
+// 税费格按税费引用立键，明确无需付款格的税费引用为空——两格是两行，税费更正换税费引用
+// 自然换行，历史不覆盖。写入代数与其余登记册同（ADR-0031，不 UPSERT）：同键已在册交回
+// `已登记`，内容是否同一份由编排读回自己比。
+type DutyCollaborationStore interface {
+	FindCollaboration(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		duty domain.AssessedDutyReference,
+	) (domain.DutyPaymentCollaboration, bool, error)
+	SaveCollaboration(
+		ctx context.Context,
+		tenant domain.TenantID,
+		collaboration domain.DutyPaymentCollaboration,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// ExternalFundsFactRegistration 是外部资金事实到本上下文的入向登记内容（UC-CC-009 步 6 的
+// CC 半边）：稳定来源引用连同来源身份、付款人、金额、币种与业务时间。真实付款归银行/支付
+// 系统拥有，这里登的是**引用与其最低业务语义**，供步 7 关联核对读——不是资金所有权的
+// 副本，没有任何一列会被本上下文改写或推导。AmountMinor 按币种最小单位计，与 SA 侧
+// AdoptFundsFactCommand 同约定。
+type ExternalFundsFactRegistration struct {
+	Fact        domain.ExternalFundsFactReference
+	Source      string
+	Payer       string
+	Currency    string
+	AmountMinor int64
+	OccurredAt  time.Time
+}
+
+// ExternalFundsFactRegister 是外部资金事实入向登记册的两半。事实按引用幂等（同引用重登
+// 交回`已登记`，内容由编排读回比）；「待关联」不是列而是派生——没有任何核对引用它的
+// 事实就是待关联，所以这里没有状态推进的写口。这条缝的另一半（SA 在事实采用时发信封、
+// CC 以 inbox 消费者接进本口）今天不存在（取证于 b3d3343：AdoptFundsFact 不发信封），
+// 归 SA 另立票；本口先以应用层入口为缝。
+type ExternalFundsFactRegister interface {
+	RegisterFundsFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		registration ExternalFundsFactRegistration,
+	) (CaseConfigurationSaveOutcome, error)
+	LoadFundsFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.ExternalFundsFactReference,
+	) (ExternalFundsFactRegistration, bool, error)
+}
+
+// DutyVerificationKey 是税费付款核对的幂等键：核对身份三维（税费版本、资金事实、范围）加
+// 内容指纹——三轴或关联依据变了自然换指纹换版（迟到事实按新版本追加，不按到达顺序覆盖，
+// UC-CC-009 核对规则那句），同一内容重复核对不出第二版。
+type DutyVerificationKey struct {
+	TenantID domain.TenantID
+	Duty     domain.AssessedDutyReference
+	Funds    domain.ExternalFundsFactReference
+	Scope    domain.DecisionScopeReference
+	Digest   string
+}
+
+// DutyVerificationRecord 是一次核对越过提交边界留下的东西：领域核对对象加关联依据——依据
+// 不在领域对象里（它是「凭什么把这笔资金关联到这版税费」的证据引用，不是核对的三轴），
+// 却是 UC-CC-009「金额相等不能单独作为关联；无权威依据时待关联」那句要审计的东西。
+type DutyVerificationRecord struct {
+	Key          DutyVerificationKey
+	Verification domain.DutyPaymentVerification
+	Basis        string
+}
+
+// DutyVerificationStore 按幂等键找回并保存核对（写入代数同 ADR-0031）。
+type DutyVerificationStore interface {
+	FindVerification(ctx context.Context, key DutyVerificationKey) (DutyVerificationRecord, bool, error)
+	SaveVerification(ctx context.Context, record DutyVerificationRecord) (CaseConfigurationSaveOutcome, error)
+}
+
 // PortsPathsCatalogueRead 是两本目录的伴生列表读口（ADR-0077 Decision 一/五）：
 // 管理台 customs-ports-paths 页上列口岸目录与申报路径目录两册（票
 // admin-remainder-mechanism-batch/03）。查阅不触发判断、决定或披露——它接存储读面，
