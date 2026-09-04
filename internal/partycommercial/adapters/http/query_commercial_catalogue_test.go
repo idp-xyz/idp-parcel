@@ -86,6 +86,7 @@ type policyReaderDouble struct {
 	asOf        []ports.AsOfPolicyRow
 	authz       []ports.AuthorizationRuleRow
 	credits     []ports.CreditPolicyRow
+	serviceRule []ports.CustomerServiceRuleRow
 	calls       map[string]int
 	err         error
 }
@@ -186,6 +187,19 @@ func (double *policyReaderDouble) ListCreditPolicies(
 		return nil, nil
 	}
 	return double.credits, nil
+}
+
+func (double *policyReaderDouble) ListCustomerServiceRules(
+	_ context.Context, tenant domain.TenantID, _ int,
+) ([]ports.CustomerServiceRuleRow, error) {
+	double.record("serviceRules")
+	if double.err != nil {
+		return nil, double.err
+	}
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.serviceRule, nil
 }
 
 func decodeBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {
@@ -343,8 +357,8 @@ func TestServiceProductsEndpointAnswersReadFailureWith500(t *testing.T) {
 }
 
 // Covers: kind 封闭集是传输形状,先于 Intake——缺席或集外即 400,即便渠道未配置也
-// 不折成 403;客户服务规则版本没有独立正文册(票 party-commercial-context-gaps/05 未落),
-// 如实不在集合内。
+// 不折成 403;服务产品与客户合同是商业对象类别却不是**策略**册子(它们各有自己的目录端点),
+// 如实不在本集合内。客户服务规则版本曾是这里的集外例子,随 0023 正文册落库进了集合。
 func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
 	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(
 		commercialhttp.UnconfiguredIntake{},
@@ -352,7 +366,8 @@ func TestPoliciesEndpointRejectsMissingOrUnknownKindBeforeIntake(t *testing.T) {
 	)
 	for _, target := range []string{
 		"/commercial-policies",
-		"/commercial-policies?kind=CUSTOMER_SERVICE_RULE",
+		"/commercial-policies?kind=SERVICE_PRODUCT",
+		"/commercial-policies?kind=CUSTOMER_CONTRACT",
 	} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
@@ -381,6 +396,9 @@ func TestPoliciesEndpointAnswersUnconfiguredIntakeIdenticallyForEveryKind(t *tes
 		"PRICE_POLICY",
 		"SETTLEMENT_POLICY",
 		"AS_OF_POLICY",
+		"AUTHORIZATION_RULE",
+		"CREDIT_POLICY",
+		"CUSTOMER_SERVICE_RULE",
 	} {
 		recorder := httptest.NewRecorder()
 		target := "/commercial-policies?kind=" + kind
@@ -432,6 +450,9 @@ func TestPoliciesEndpointDispatchesEachKindToItsOwnList(t *testing.T) {
 		}},
 		{"CREDIT_POLICY", "credits", func(double *policyReaderDouble) {
 			double.credits = []ports.CreditPolicyRow{{ObjectID: "credit-1", HasAmount: true, LimitMinor: 500000}}
+		}},
+		{"CUSTOMER_SERVICE_RULE", "serviceRules", func(double *policyReaderDouble) {
+			double.serviceRule = []ports.CustomerServiceRuleRow{{ObjectID: "csr-1", VersionLabel: "v1"}}
 		}},
 	}
 	for _, testCase := range cases {
@@ -574,6 +595,114 @@ func TestPoliciesEndpointTranscribesCreditLimitAsExactlyOneKey(t *testing.T) {
 	}
 	if ratio["effectiveEndsAt"] == nil || ratio["chargeType"] != "charge-freight" {
 		t.Fatalf("其余字段没有照列:%v", ratio)
+	}
+}
+
+// Covers: 客户服务规则行体的转写（票 party-commercial-context-gaps/05，ADR-0104）——contentRegistered 说明
+// 这一版登没登正文：只有壳的版本 contentRegistered 为假且 content 键不在场（那正是 VE 点读答未登记的
+// 状态，目录不得让它消失）；登了正文的行 content 节在场，适用对象恰一键（serviceProduct / customerContract）、
+// 期限与材料两数组各自成形，无客户差异的那一项是空数组不是缺键。
+func TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered(t *testing.T) {
+	query := catalogueQuery(t)
+	reader := &policyReaderDouble{
+		tenant: query.Scope.Tenant(),
+		serviceRule: []ports.CustomerServiceRuleRow{
+			{ObjectID: "csr-bare", VersionLabel: "v1", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt},
+			{ObjectID: "csr-full", VersionLabel: "v2", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, EffectiveEndsAt: catBaseAt.Add(time.Hour), HasEffectiveEnd: true,
+				PublishedAt: catBaseAt,
+				HasContent:  true, CustomerContract: "contract-1", ResponsibleParty: "operator-1", RuleScope: "scope-1",
+				RegisteredAt: catBaseAt.Add(time.Minute),
+				ClaimDeadlines: []ports.ClaimDeadlineRow{
+					{Kind: "FIRST_CLAIM", StartEvent: "event-delivered", DurationDays: 30, Calendar: "calendar-cn"},
+				},
+				MinimumMaterials: []ports.MinimumMaterialsRow{
+					{ClaimKind: "claim-loss", Materials: []string{"material-invoice", "material-photo"}},
+				}},
+			{ObjectID: "csr-product", VersionLabel: "v1", Scope: "scope-1", Status: "EFFECTIVE",
+				EffectiveStartsAt: catBaseAt, PublishedAt: catBaseAt,
+				HasContent: true, ServiceProduct: "product-1", ResponsibleParty: "operator-1", RuleScope: "scope-1",
+				RegisteredAt:     catBaseAt,
+				MinimumMaterials: []ports.MinimumMaterialsRow{{ClaimKind: "claim-damage", Materials: []string{"material-photo"}}}},
+		},
+	}
+	endpoint := commercialhttp.NewQueryCommercialPoliciesEndpoint(intakeDouble{query: query}, reader)
+
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder,
+		httptest.NewRequest(http.MethodGet, "/commercial-policies?kind=CUSTOMER_SERVICE_RULE", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	body := decodeBody(t, recorder)
+	if body["kind"] != "CUSTOMER_SERVICE_RULE" {
+		t.Fatalf("kind = %v", body["kind"])
+	}
+	rows := body["policies"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("policies = %v", body["policies"])
+	}
+
+	bare := rows[0].(map[string]any)
+	if bare["contentRegistered"] != false {
+		t.Fatalf("只有壳的版本 contentRegistered = %v", bare["contentRegistered"])
+	}
+	if _, has := bare["content"]; has {
+		t.Fatal("没登正文的版本长出了 content 节")
+	}
+	if _, has := bare["effectiveEndsAt"]; has {
+		t.Fatal("开放结束的版本长出了 effectiveEndsAt 键")
+	}
+	if bare["objectId"] != "csr-bare" || bare["status"] != "EFFECTIVE" {
+		t.Fatalf("壳自身的字段没有照列:%v", bare)
+	}
+
+	full := rows[1].(map[string]any)
+	if full["contentRegistered"] != true || full["effectiveEndsAt"] == nil {
+		t.Fatalf("登了正文的版本 = %v", full)
+	}
+	content, ok := full["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("content 节缺席:%v", full)
+	}
+	if content["customerContract"] != "contract-1" || content["responsibleParty"] != "operator-1" ||
+		content["scope"] != "scope-1" || content["registeredAt"] == nil {
+		t.Fatalf("正文字段变形:%v", content)
+	}
+	if _, has := content["serviceProduct"]; has {
+		t.Fatal("按合同适用的正文长出了 serviceProduct 键")
+	}
+	deadlines, ok := content["claimDeadlines"].([]any)
+	if !ok || len(deadlines) != 1 {
+		t.Fatalf("claimDeadlines = %v", content["claimDeadlines"])
+	}
+	deadline := deadlines[0].(map[string]any)
+	if deadline["kind"] != "FIRST_CLAIM" || deadline["startEvent"] != "event-delivered" ||
+		deadline["durationDays"] != float64(30) || deadline["calendar"] != "calendar-cn" {
+		t.Fatalf("期限转写变形:%v", deadline)
+	}
+	materials, ok := content["minimumMaterials"].([]any)
+	if !ok || len(materials) != 1 {
+		t.Fatalf("minimumMaterials = %v", content["minimumMaterials"])
+	}
+	entry := materials[0].(map[string]any)
+	if entry["claimKind"] != "claim-loss" {
+		t.Fatalf("材料转写变形:%v", entry)
+	}
+	if list, ok := entry["materials"].([]any); !ok || len(list) != 2 || list[0] != "material-invoice" {
+		t.Fatalf("材料清单变形:%v", entry["materials"])
+	}
+
+	product := rows[2].(map[string]any)["content"].(map[string]any)
+	if product["serviceProduct"] != "product-1" {
+		t.Fatalf("按产品适用的正文没透出产品:%v", product)
+	}
+	if _, has := product["customerContract"]; has {
+		t.Fatal("按产品适用的正文长出了 customerContract 键")
+	}
+	if list, ok := product["claimDeadlines"].([]any); !ok || len(list) != 0 {
+		t.Fatalf("无期限差异的正文该是空数组而不是缺键:%v", product["claimDeadlines"])
 	}
 }
 

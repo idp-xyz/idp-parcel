@@ -31,6 +31,7 @@ type customerServiceRuleFixture struct {
 	contents   *adapter.CustomerServiceRuleContents
 	transactor bentoapp.Transactor
 	pool       *pgxpool.Pool
+	db         *bentopg.DB
 }
 
 func newCustomerServiceRuleFixture(t *testing.T) customerServiceRuleFixture {
@@ -53,6 +54,7 @@ func newCustomerServiceRuleFixture(t *testing.T) customerServiceRuleFixture {
 		contents:   contents,
 		transactor: db.Transactor(),
 		pool:       pool,
+		db:         db,
 	}
 }
 
@@ -482,6 +484,85 @@ func TestCustomerServiceRuleColumnsRejectShapesTheDomainRefuses(t *testing.T) {
 	}
 	if err := insertMaterial("claim-loss", "material-photo"); err == nil {
 		t.Fatal("同一清单里同一条目第二次进了最低材料表")
+	}
+}
+
+// Covers: 目录上列客户服务规则册（ports.CommercialPolicyCatalogueRead 注释「正文表落库时按封闭集扩方法」）
+// ——上列的是版本壳、正文左连接：登了正文的行 HasContent 为真且两项俱在，只有壳的行 HasContent 为假
+// 而不是从目录上消失（那正是 VE 点读答未登记的状态，必须可见）；他租户的不进本租户目录。
+func TestCustomerServiceRuleCatalogueListsShellsWithAndWithoutContent(t *testing.T) {
+	fixture := newCustomerServiceRuleFixture(t)
+	repository, transactor := fixture.repository, fixture.transactor
+	catalogue, err := adapter.NewOperationsCatalogue(fixture.db)
+	if err != nil {
+		t.Fatalf("构造目录读面：%v", err)
+	}
+	ctx := t.Context()
+	tenant := pcTenant(t, "tenant-1")
+
+	withContent := effectiveVersionOfKind(t, domain.CustomerServiceRuleObject, "csr-full", "v1", "digest-full")
+	bare := effectiveVersionOfKind(t, domain.CustomerServiceRuleObject, "csr-bare", "v1", "digest-bare")
+	theirs := policyVersionInTenant(t, "tenant-2", domain.CustomerServiceRuleObject, "csr-theirs", "v1", "digest-theirs")
+	for _, version := range []domain.CommercialVersion{withContent, bare, theirs} {
+		mustSaveVersion(t, transactor, ctx, repository, version)
+	}
+	mustSaveCustomerServiceRule(t, transactor, ctx, repository, customerServiceRuleOn(t, withContent,
+		domain.CustomerServiceRuleAppliesToCustomerContract(pcValue(t, domain.NewCommercialObjectID, "contract-1")),
+		[]domain.ClaimDeadlineRule{deadlineRule(t, domain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")},
+		[]domain.MinimumMaterialsRule{
+			materialsRule(t, "claim-loss", "material-photo", "material-invoice"),
+			materialsRule(t, "claim-damage", "material-photo"),
+		},
+	))
+	mustSaveCustomerServiceRule(t, transactor, ctx, repository, customerServiceRuleOn(t, theirs,
+		appliesToProduct(t, "product-1"),
+		[]domain.ClaimDeadlineRule{deadlineRule(t, domain.FirstClaimDeadline, "event-delivered", 1, "calendar-cn")},
+		nil,
+	))
+
+	rows, err := catalogue.ListCustomerServiceRules(ctx, tenant, 10)
+	if err != nil {
+		t.Fatalf("上列客户服务规则：%v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("上列 %d 行, want 2（他租户的不得进本租户目录）", len(rows))
+	}
+	byObject := map[string]ports.CustomerServiceRuleRow{}
+	for _, row := range rows {
+		byObject[row.ObjectID] = row
+	}
+
+	full := byObject["csr-full"]
+	if !full.HasContent || full.CustomerContract != "contract-1" || full.ServiceProduct != "" ||
+		full.ResponsibleParty != "operator-1" || full.RuleScope != "scope-1" || full.Status != "EFFECTIVE" {
+		t.Fatalf("登了正文的行 = %#v", full)
+	}
+	if len(full.ClaimDeadlines) != 1 || full.ClaimDeadlines[0].Kind != "FIRST_CLAIM" ||
+		full.ClaimDeadlines[0].DurationDays != 30 || full.ClaimDeadlines[0].StartEvent != "event-delivered" ||
+		full.ClaimDeadlines[0].Calendar != "calendar-cn" {
+		t.Fatalf("期限行 = %#v", full.ClaimDeadlines)
+	}
+	if len(full.MinimumMaterials) != 2 ||
+		full.MinimumMaterials[0].ClaimKind != "claim-damage" || len(full.MinimumMaterials[0].Materials) != 1 ||
+		full.MinimumMaterials[1].ClaimKind != "claim-loss" || len(full.MinimumMaterials[1].Materials) != 2 ||
+		full.MinimumMaterials[1].Materials[0] != "material-invoice" {
+		t.Fatalf("材料行 = %#v", full.MinimumMaterials)
+	}
+	if full.RegisteredAt.IsZero() {
+		t.Fatal("登了正文的行没有登记时刻")
+	}
+
+	empty := byObject["csr-bare"]
+	if empty.HasContent || empty.ServiceProduct != "" || empty.CustomerContract != "" ||
+		len(empty.ClaimDeadlines) != 0 || len(empty.MinimumMaterials) != 0 || !empty.RegisteredAt.IsZero() {
+		t.Fatalf("只有壳的行 = %#v，正文各格该全部缺席", empty)
+	}
+	if empty.Status != "EFFECTIVE" || empty.Scope != "scope-1" || empty.PublishedAt.IsZero() {
+		t.Fatalf("壳自身的列变形：%#v", empty)
+	}
+
+	if _, err := catalogue.ListCustomerServiceRules(ctx, tenant, 0); err == nil {
+		t.Fatal("limit 非正应被拒")
 	}
 }
 

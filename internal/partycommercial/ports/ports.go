@@ -1238,13 +1238,59 @@ type AuthorizationRuleRow struct {
 	CancellationAuthorities  []CancellationAuthorityRow
 }
 
+// ClaimDeadlineRow 是客户服务规则正文里一条索赔期限的上列转写：种类（封闭三值，0023 库上
+// CHECK）× 起算事件引用 × 整数天 × 日历引用。天数是租户登记的取值，目录照实转写。
+type ClaimDeadlineRow struct {
+	Kind         string
+	StartEvent   string
+	DurationDays int
+	Calendar     string
+}
+
+// MinimumMaterialsRow 是客户服务规则正文里一种索赔类型的最低材料清单的上列转写。清单至少
+// 一项由写入把守（0023 逐条成行，没有条目行就没有这一类），目录不重建领域对象、如实转写。
+type MinimumMaterialsRow struct {
+	ClaimKind string
+	Materials []string
+}
+
+// CustomerServiceRuleRow 是客户服务规则目录上列的一行：一份已入册的客户服务规则版本壳，
+// 连同它登记过的正文（0023，ADR-0104）。
+//
+// 上列对象是版本壳，判据同 AuthorizationRuleRow：壳可先入册，正文随发布登记，只列正文行会让
+// 未登正文的已发布规则版本从目录上消失——而「壳在、正文不在」恰是 visibility-exception 点读答
+// 未登记、两维停在未决的那个状态，目录必须让它可见（票 pc-gaps/05：本票漏了什么都不会红）。
+// HasContent 因此不能省，也不能拿任一正文字段的零值兼作它；正文各字段只在 HasContent 为真时
+// 有意义。ServiceProduct 与 CustomerContract 恰一在场（库上 CHECK 钉住），不设「两者皆无」的
+// 第三态，读回两空或两满即坏数据，由装载方上抛。两项清单可各自为空——「这一版对期限无客户
+// 差异」是正文说出的真话；两项合起来至少一项由写入把守，目录如实转写不判。
+type CustomerServiceRuleRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+
+	HasContent       bool
+	ServiceProduct   string
+	CustomerContract string
+	ResponsibleParty string
+	RuleScope        string
+	RegisteredAt     time.Time
+	ClaimDeadlines   []ClaimDeadlineRow
+	MinimumMaterials []MinimumMaterialsRow
+}
+
 // CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
 // commercial-policies 页的供数面,策略种类是封闭集,每种一个方法。
 //
 // 册子逐一列出:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
 // 结算政策(0011)、时点锚声明(0005)、授权规则与它的取消授权目录(0013)、信用政策正文
-// (0020)。没有正文册的对象类别不预留方法——预留一个空方法就是替租户拟一种它还没有的
-// 册子;正文表落库时按封闭集扩方法,不开通用口。
+// (0020)、客户服务规则版本与它的正文(0023)。没有正文册的对象类别不预留方法——预留一个
+// 空方法就是替租户拟一种它还没有的册子;正文表落库时按封闭集扩方法,不开通用口。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
@@ -1285,6 +1331,11 @@ type CommercialPolicyCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]CreditPolicyRow, error)
+	ListCustomerServiceRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CustomerServiceRuleRow, error)
 }
 
 // ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。

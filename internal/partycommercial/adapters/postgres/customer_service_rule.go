@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -489,6 +490,180 @@ func minimumMaterialsFromJSON(raw []byte) ([]domain.MinimumMaterialsRule, error)
 		return nil, err
 	}
 	return rules, nil
+}
+
+// ListCustomerServiceRules 上列客户服务规则版本壳，正文（0023）左连接。
+//
+// 装载方向与 ListAuthorizationRules 同派：版本侧驱动，正文左连接——壳可先入册、正文随发布登记，
+// 只列正文行会让未登正文的已发布规则版本从目录上消失，而那个状态正是 visibility-exception 点读答
+// 未登记的状态，目录必须让它可见。两张子表各由一个子查询聚成 json 数组，与父行同一条语句取回。
+//
+// 目录不重建领域对象、不形成判断：有父行而两张子表都空是坏数据（领域要求至少一项），拦它归内容
+// 读口 LoadCustomerServiceRule；这里照 ListAcceptanceRulePackages 的先例如实交回空集合。
+func (catalogue *OperationsCatalogue) ListCustomerServiceRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CustomerServiceRuleRow, error) {
+	if err := requirePositiveLimit("list customer service rules", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list customer service rules: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        content.service_product_id, content.customer_contract_id,
+		        content.responsible_party_id, content.scope_ref, content.registered_at,
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'kind',       deadline.deadline_kind,
+		                            'startEvent', deadline.start_event_ref,
+		                            'days',       deadline.duration_days,
+		                            'calendar',   deadline.calendar_ref
+		                        )
+		                        ORDER BY deadline.deadline_kind
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM party_commercial.customer_service_rule_claim_deadline AS deadline
+		          WHERE deadline.tenant_id     = version.tenant_id
+		            AND deadline.object_kind   = version.object_kind
+		            AND deadline.object_id     = version.object_id
+		            AND deadline.version_label = version.version_label),
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'claimKind', material.claim_kind_ref,
+		                            'material',  material.material_ref
+		                        )
+		                        ORDER BY material.claim_kind_ref, material.material_ref
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM party_commercial.customer_service_rule_minimum_material AS material
+		          WHERE material.tenant_id     = version.tenant_id
+		            AND material.object_kind   = version.object_kind
+		            AND material.object_id     = version.object_id
+		            AND material.version_label = version.version_label)
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.customer_service_rule AS content
+		          ON content.tenant_id     = version.tenant_id
+		         AND content.object_kind   = version.object_kind
+		         AND content.object_id     = version.object_id
+		         AND content.version_label = version.version_label
+		  WHERE version.tenant_id   = $1
+		    AND version.object_kind = $2
+		  ORDER BY version.published_at DESC, version.object_id, version.version_label
+		  LIMIT $3`,
+		tenant.String(),
+		uint8(domain.CustomerServiceRuleObject),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list customer service rules: %w", err)
+	}
+	defer rows.Close()
+
+	ruleRows := make([]ports.CustomerServiceRuleRow, 0, limit)
+	for rows.Next() {
+		var row ports.CustomerServiceRuleRow
+		var status int16
+		var endsAt, registeredAt *time.Time
+		var product, contract, responsible, ruleScope *string
+		var deadlinesJSON, materialsJSON []byte
+		if err := rows.Scan(
+			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&product, &contract, &responsible, &ruleScope, &registeredAt,
+			&deadlinesJSON, &materialsJSON,
+		); err != nil {
+			return nil, fmt.Errorf("list customer service rules: %w", err)
+		}
+		statusWord := domain.CommercialVersionStatus(status).String()
+		if statusWord == "" {
+			return nil, fmt.Errorf("list customer service rules: 版本状态 %d 不在封闭集内", status)
+		}
+		row.Status = statusWord
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		// registered_at 在正文父行上 NOT NULL，它的在场即正文的在场。
+		if registeredAt != nil {
+			row.HasContent = true
+			row.RegisteredAt = *registeredAt
+			switch {
+			case product != nil && contract == nil:
+				row.ServiceProduct = *product
+			case product == nil && contract != nil:
+				row.CustomerContract = *contract
+			default:
+				return nil, fmt.Errorf("list customer service rules: %s/%s 的适用声明既不是产品也不是合同",
+					row.ObjectID, row.VersionLabel)
+			}
+			row.ResponsibleParty = *responsible
+			row.RuleScope = *ruleScope
+		}
+		if row.ClaimDeadlines, err = claimDeadlineRowsFromJSON(deadlinesJSON); err != nil {
+			return nil, fmt.Errorf("list customer service rules: %w", err)
+		}
+		if row.MinimumMaterials, err = minimumMaterialsRowsFromJSON(materialsJSON); err != nil {
+			return nil, fmt.Errorf("list customer service rules: %w", err)
+		}
+		ruleRows = append(ruleRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list customer service rules: %w", err)
+	}
+	return ruleRows, nil
+}
+
+// claimDeadlineRowsFromJSON 只转写，不校验种类是否在封闭三值内——判据同 cancellationAuthorityRowsFromJSON：
+// 目录不重建领域对象，拦坏数据归内容读口。
+func claimDeadlineRowsFromJSON(raw []byte) ([]ports.ClaimDeadlineRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []claimDeadlineDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("claim deadlines are not this adapter's shape: %w", err)
+	}
+	deadlines := make([]ports.ClaimDeadlineRow, 0, len(documents))
+	for _, document := range documents {
+		deadlines = append(deadlines, ports.ClaimDeadlineRow{
+			Kind:         document.Kind,
+			StartEvent:   document.StartEvent,
+			DurationDays: document.Days,
+			Calendar:     document.Calendar,
+		})
+	}
+	return deadlines, nil
+}
+
+// minimumMaterialsRowsFromJSON 把逐条成行的材料条目按索赔类型归回清单（行已按类型、条目排序取回，
+// 同类型连续）。只转写不校验，判据同上。
+func minimumMaterialsRowsFromJSON(raw []byte) ([]ports.MinimumMaterialsRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []minimumMaterialDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("minimum materials are not this adapter's shape: %w", err)
+	}
+	rows := make([]ports.MinimumMaterialsRow, 0)
+	for _, document := range documents {
+		if len(rows) == 0 || rows[len(rows)-1].ClaimKind != document.ClaimKind {
+			rows = append(rows, ports.MinimumMaterialsRow{ClaimKind: document.ClaimKind})
+		}
+		last := &rows[len(rows)-1]
+		last.Materials = append(last.Materials, document.Material)
+	}
+	return rows, nil
 }
 
 // claimDeadlineKindFrom 只认三个取值，default 报错不吸收——库上 CHECK 已经钉死，读回集外取值即库与

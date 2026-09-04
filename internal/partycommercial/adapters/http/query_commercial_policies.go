@@ -45,6 +45,11 @@ type CommercialPolicyCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.CreditPolicyRow, error)
+	ListCustomerServiceRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.CustomerServiceRuleRow, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -56,12 +61,13 @@ const outcomeCommercialPoliciesListed = "COMMERCIAL_POLICIES_LISTED"
 
 // 策略种类的封闭集(票 master-data-wiring/05:?kind= 分派)。种类命名**册子**而不是
 // 商业对象类别:接受前财务控制声明挂在客户合同版本下、时点锚声明挂在接单规则包版本
-// 下,拿对象类别当种类名会指错拥有者。没有正文册的对象类别(如客户服务规则版本)不在
-// 集合里——预留一格就是替租户拟一种它还没有的册子。
+// 下,拿对象类别当种类名会指错拥有者。没有正文册的对象类别不在集合里——预留一格就是替
+// 租户拟一种它还没有的册子;正文册落库那天再扩(客户服务规则版本随 0023 进的正是这条路)。
 //
-// kindAuthorizationRule 与 kindCreditPolicy 的名字**恰好**是商业对象类别,不是上面那条
-// 的例外:它拦的是拥有者指错,而这两格上列的对象就是那类版本自己(取消授权目录挂在授权
-// 规则下、信用正文挂在信用政策下)——拥有者与被列者同一,与 kindAcceptanceRulePackage 同形。
+// kindAuthorizationRule、kindCreditPolicy 与 kindCustomerServiceRule 的名字**恰好**是商业对象
+// 类别,不是上面那条的例外:它拦的是拥有者指错,而这几格上列的对象就是那类版本自己(取消授权
+// 目录挂在授权规则下、信用正文挂在信用政策下、期限与材料挂在客户服务规则版本下)——拥有者与
+// 被列者同一,与 kindAcceptanceRulePackage 同形。
 const (
 	kindAcceptanceRulePackage = "ACCEPTANCE_RULE_PACKAGE"
 	kindPreAcceptanceControl  = "PRE_ACCEPTANCE_CONTROL"
@@ -70,6 +76,7 @@ const (
 	kindAsOfPolicy            = "AS_OF_POLICY"
 	kindAuthorizationRule     = "AUTHORIZATION_RULE"
 	kindCreditPolicy          = "CREDIT_POLICY"
+	kindCustomerServiceRule   = "CUSTOMER_SERVICE_RULE"
 )
 
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
@@ -93,7 +100,7 @@ func NewQueryCommercialPoliciesEndpoint(
 		switch kind {
 		case kindAcceptanceRulePackage, kindPreAcceptanceControl,
 			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy,
-			kindAuthorizationRule, kindCreditPolicy:
+			kindAuthorizationRule, kindCreditPolicy, kindCustomerServiceRule:
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -121,6 +128,8 @@ func NewQueryCommercialPoliciesEndpoint(
 			serveAuthorizationRules(response, request, reader, tenant, query.Limit)
 		case kindCreditPolicy:
 			serveCreditPolicies(response, request, reader, tenant, query.Limit)
+		case kindCustomerServiceRule:
+			serveCustomerServiceRules(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -312,6 +321,29 @@ func serveCreditPolicies(
 	writeJSON(response, http.StatusOK, creditPolicyListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindCreditPolicy,
+		Policies: bodies,
+	})
+}
+
+func serveCustomerServiceRules(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader CommercialPolicyCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListCustomerServiceRules(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]customerServiceRuleBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, customerServiceRuleBodyOf(row))
+	}
+	writeJSON(response, http.StatusOK, customerServiceRuleListResponse{
+		Outcome:  outcomeCommercialPoliciesListed,
+		Kind:     kindCustomerServiceRule,
 		Policies: bodies,
 	})
 }
@@ -624,5 +656,96 @@ func authorizationRuleBodyOf(row ports.AuthorizationRuleRow) authorizationRuleBo
 			RuleReference: authority.RuleReference,
 		})
 	}
+	return body
+}
+
+type customerServiceRuleListResponse struct {
+	Outcome  string                    `json:"outcome"`
+	Kind     string                    `json:"kind"`
+	Policies []customerServiceRuleBody `json:"policies"`
+}
+
+// customerServiceRuleBody 是客户服务规则版本壳加它登记过的正文（0023，ADR-0104）。
+//
+// contentRegistered 与 content 节成对，判据同 pricePolicyBody 的 caliberDeclared：壳可先入册、正文随
+// 发布登记，「壳在、正文不在」是合法状态——而且正是 visibility-exception 点读答未登记、两维停在未决的
+// 那个状态，布尔让调用方一眼分得开「这一版还没登正文」与「正文节缺了」。正文节里产品 / 合同恰一键在场
+// （omitempty 让另一键不长出来），期限与材料两数组一律在场——无客户差异的那一项是空数组，那是正文说出
+// 的真话；两项合起来至少一项由写入把守，这里如实转写。
+type customerServiceRuleBody struct {
+	ObjectID          string `json:"objectId"`
+	Version           string `json:"version"`
+	Scope             string `json:"scope"`
+	Status            string `json:"status"`
+	EffectiveStartsAt string `json:"effectiveStartsAt"`
+	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
+	PublishedAt       string `json:"publishedAt"`
+
+	ContentRegistered bool                            `json:"contentRegistered"`
+	Content           *customerServiceRuleContentBody `json:"content,omitempty"`
+}
+
+type customerServiceRuleContentBody struct {
+	ServiceProduct   string                 `json:"serviceProduct,omitempty"`
+	CustomerContract string                 `json:"customerContract,omitempty"`
+	ResponsibleParty string                 `json:"responsibleParty"`
+	Scope            string                 `json:"scope"`
+	RegisteredAt     string                 `json:"registeredAt"`
+	ClaimDeadlines   []claimDeadlineBody    `json:"claimDeadlines"`
+	MinimumMaterials []minimumMaterialsBody `json:"minimumMaterials"`
+}
+
+type claimDeadlineBody struct {
+	Kind         string `json:"kind"`
+	StartEvent   string `json:"startEvent"`
+	DurationDays int    `json:"durationDays"`
+	Calendar     string `json:"calendar"`
+}
+
+type minimumMaterialsBody struct {
+	ClaimKind string   `json:"claimKind"`
+	Materials []string `json:"materials"`
+}
+
+func customerServiceRuleBodyOf(row ports.CustomerServiceRuleRow) customerServiceRuleBody {
+	body := customerServiceRuleBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		Scope:             row.Scope,
+		Status:            row.Status,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		PublishedAt:       rfc3339(row.PublishedAt),
+		ContentRegistered: row.HasContent,
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	if !row.HasContent {
+		return body
+	}
+	content := &customerServiceRuleContentBody{
+		ServiceProduct:   row.ServiceProduct,
+		CustomerContract: row.CustomerContract,
+		ResponsibleParty: row.ResponsibleParty,
+		Scope:            row.RuleScope,
+		RegisteredAt:     rfc3339(row.RegisteredAt),
+		ClaimDeadlines:   make([]claimDeadlineBody, 0, len(row.ClaimDeadlines)),
+		MinimumMaterials: make([]minimumMaterialsBody, 0, len(row.MinimumMaterials)),
+	}
+	for _, deadline := range row.ClaimDeadlines {
+		content.ClaimDeadlines = append(content.ClaimDeadlines, claimDeadlineBody{
+			Kind:         deadline.Kind,
+			StartEvent:   deadline.StartEvent,
+			DurationDays: deadline.DurationDays,
+			Calendar:     deadline.Calendar,
+		})
+	}
+	for _, materials := range row.MinimumMaterials {
+		content.MinimumMaterials = append(content.MinimumMaterials, minimumMaterialsBody{
+			ClaimKind: materials.ClaimKind,
+			Materials: append([]string{}, materials.Materials...),
+		})
+	}
+	body.Content = content
 	return body
 }
