@@ -89,6 +89,11 @@ type EvaluatePricingDeps struct {
 	// 时保持既有行为——输入自带取值，或缺取值如实落待判断。只给一个是装配错误，构造时拒。
 	InForce        ports.ReferenceSeriesInForceResolver
 	SeriesVersions ports.ReferenceSeriesRegister
+	// CatalogueInForce 与 Catalogues 成对可选（ADR-0109 Decision 三、四）：形成评价前按卡的目录绑定解析
+	// 在用目录版本、按计价基准时点与输入的邮编路线解读数，补齐输入快照里缺席的读数。判据与序列那一对
+	// 相同：两者都为 nil 时输入自带读数或缺读数如实落待判断；只给一个是装配错误。
+	CatalogueInForce ports.ReferenceCatalogueInForceResolver
+	Catalogues       ports.ReferenceCatalogueRegister
 }
 
 type EvaluatePricingHandler struct {
@@ -99,6 +104,9 @@ type EvaluatePricingHandler struct {
 // 反过来，两种都会让评价在编排层静默退回「输入自带取值」的旧行为。构造器签名不改（装配
 // 点与替身都靠它），所以在受理时拒——一次评价都不会带着半套装配形成。
 var ErrSeriesResolutionHalfWired = errors.New("parcel pricing: InForce and SeriesVersions must be wired together")
+
+// ErrCatalogueResolutionHalfWired 是目录那一对的同形错误。
+var ErrCatalogueResolutionHalfWired = errors.New("parcel pricing: CatalogueInForce and Catalogues must be wired together")
 
 func NewEvaluatePricingHandler(deps EvaluatePricingDeps) *EvaluatePricingHandler {
 	return &EvaluatePricingHandler{deps: deps}
@@ -118,6 +126,9 @@ func (handler *EvaluatePricingHandler) Handle(
 	if (handler.deps.InForce == nil) != (handler.deps.SeriesVersions == nil) {
 		return EvaluatePricingResult{outcome: EvaluationUndecided}, ErrSeriesResolutionHalfWired
 	}
+	if (handler.deps.CatalogueInForce == nil) != (handler.deps.Catalogues == nil) {
+		return EvaluatePricingResult{outcome: EvaluationUndecided}, ErrCatalogueResolutionHalfWired
+	}
 
 	existing, found, err := handler.deps.Store.FindByID(ctx, command.Request.ID())
 	if err != nil {
@@ -131,6 +142,11 @@ func (handler *EvaluatePricingHandler) Handle(
 	if err != nil {
 		return EvaluatePricingResult{outcome: EvaluationUndecided}, nil
 	}
+	request, catalogueNotes, err := handler.completeCatalogueReadings(ctx, request)
+	if err != nil {
+		return EvaluatePricingResult{outcome: EvaluationUndecided}, nil
+	}
+	notes = append(notes, catalogueNotes...)
 	command.Request = request
 
 	evaluation := domain.EvaluatePricing(command.Request)
@@ -294,6 +310,95 @@ func (handler *EvaluatePricingHandler) completeSeriesReadings(
 	completed, err := withSeriesReadings(request, readings)
 	if err != nil {
 		return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved series readings: %w", err)
+	}
+	return completed.WithSeriesResolutionNotes(notes...), notes, nil
+}
+
+// missingCatalogueLinks 列出卡绑定了、而请求的输入快照里没有读数的目录。重放一律视为不缺（重放携带原读数）。
+func missingCatalogueLinks(request domain.EvaluationRequest) []domain.ReferenceCatalogueLink {
+	if _, replay := request.ReplayOf(); replay {
+		return nil
+	}
+	present := make(map[domain.CatalogueKind]struct{})
+	for _, reading := range request.Input().CatalogueReadings() {
+		present[reading.Kind()] = struct{}{}
+	}
+	missing := make([]domain.ReferenceCatalogueLink, 0)
+	for _, link := range request.Plan().Structures().ReferenceCatalogues() {
+		if _, found := present[link.Kind()]; !found {
+			missing = append(missing, link)
+		}
+	}
+	return missing
+}
+
+// completeCatalogueReadings 在形成评价前补齐输入快照里缺席的目录读数（ADR-0109 Decision 三、四）：按
+// （租户、种类、目录标识、评价形成时刻）解析在用版本——复核门照序列那一条（ADR-0099）——再按计价基准
+// 时点与输入的邮编路线在该版本内解读数；这一版在基准时点不生效同样是「没查到」。查过没查到的读数照样
+// 冻结进输入（值缺席、版本在），纯函数据以落 ZONE_UNRESOLVED / REMOTE_TIER_UNRESOLVED；没有在用版本时留
+// 说明，不编造。输入没带邮编路线的请求解不了，留说明交给纯函数按缺分区处置。
+func (handler *EvaluatePricingHandler) completeCatalogueReadings(
+	ctx context.Context,
+	request domain.EvaluationRequest,
+) (domain.EvaluationRequest, []string, error) {
+	if handler.deps.CatalogueInForce == nil {
+		return request, nil, nil
+	}
+	missing := missingCatalogueLinks(request)
+	if len(missing) == 0 {
+		return request, nil, nil
+	}
+	tenant := request.Input().TenantID()
+	formedAt := handler.deps.Clock.Now()
+	basisAt := request.Input().BusinessAt()
+	route, hasRoute := request.Input().PostalRoute()
+
+	readings := make([]domain.ResolvedCatalogueValue, 0, len(missing))
+	notes := make([]string, 0)
+	for _, link := range missing {
+		if !hasRoute {
+			notes = append(notes, fmt.Sprintf("catalogue %s (%s) cannot be consulted: the input carries no postal route", link.CatalogueID(), link.Kind()))
+			continue
+		}
+		reference, outcome, err := handler.deps.CatalogueInForce.ResolveInForce(ctx, tenant, link.Kind(), link.CatalogueID(), formedAt)
+		if err != nil {
+			return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve in-force catalogue version: %w", err)
+		}
+		switch outcome {
+		case ports.CatalogueVersionInForce:
+			reading, applicable, err := handler.deps.Catalogues.ResolveAt(ctx, tenant, reference, basisAt, route)
+			if err != nil {
+				return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve catalogue reading: %w", err)
+			}
+			if !applicable {
+				notes = append(notes, fmt.Sprintf("catalogue %s (%s) in-force version %s is not effective at pricing basis time %s",
+					link.CatalogueID(), link.Kind(), reference.Version(), basisAt.UTC().Format(time.RFC3339)))
+				continue
+			}
+			readings = append(readings, reading)
+		case ports.CatalogueHasNoRegisteredVersion:
+			notes = append(notes, fmt.Sprintf("catalogue %s (%s) has no registered version", link.CatalogueID(), link.Kind()))
+		case ports.CatalogueHasNoApprovedVersion:
+			notes = append(notes, fmt.Sprintf("catalogue %s (%s) has registered versions but none approved by review before %s",
+				link.CatalogueID(), link.Kind(), formedAt.UTC().Format(time.RFC3339)))
+		case ports.CatalogueKindDisagrees:
+			notes = append(notes, fmt.Sprintf("catalogue %s is registered under another kind than the plan's %s link",
+				link.CatalogueID(), link.Kind()))
+		default:
+			return domain.EvaluationRequest{}, nil, fmt.Errorf("%w: catalogue in-force outcome %d", ErrUnexpectedInForceOutcome, outcome)
+		}
+	}
+	completed := request
+	if len(readings) > 0 {
+		values := append(request.Input().CatalogueReadings(), readings...)
+		input, err := request.Input().WithReferenceCatalogues(values...)
+		if err != nil {
+			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
+		}
+		completed, err = domain.NewEvaluationRequest(request.ID(), request.Plan(), input, request.Evidence())
+		if err != nil {
+			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
+		}
 	}
 	return completed.WithSeriesResolutionNotes(notes...), notes, nil
 }
