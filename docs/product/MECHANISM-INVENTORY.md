@@ -9,18 +9,18 @@
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
-| customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
+| customscompliance | 72 | 73 | 15 | 33 | 9 | 8 |
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 53 | 55 | 4 | 8 | 1 | 10 |
-| parcelshipment | 118 | 116 | 16 | 21 | 7 | 11 |
+| parcelshipment | 119 | 118 | 16 | 22 | 7 | 11 |
 | partycommercial | 81 | 81 | 8 | 25 | 0 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 73 | 52 | 10 | 35 | 7 | 7 |
 | transportfulfillment | 100 | 89 | 19 | 30 | 10 | 16 |
 | visibilityexception | 89 | 86 | 9 | 26 | 8 | 10 |
-| **合计** | 725 | 675 | 95 | 211 | 49 | 93 |
+| **合计** | 729 | 682 | 97 | 213 | 49 | 93 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 42、测试 61。
 
@@ -45,21 +45,21 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 117 份 SQL
+## 迁移：11 个模块共 121 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | collection_remittance | 1 |
-| customs_compliance | 13 |
+| customs_compliance | 15 |
 | network_routing | 9 |
 | node_operations | 3 |
 | parcel_pricing | 4 |
-| parcel_shipment | 12 |
+| parcel_shipment | 13 |
 | party_commercial | 22 |
 | pilot_governance | 5 |
 | settlement_accounting | 15 |
 | transport_fulfillment | 12 |
-| visibility_exception | 21 |
+| visibility_exception | 22 |
 
 ## 接线面：接入面端点 89 个，消费适配器 24 个生产文件，直投路由表 15 条
 
@@ -98,7 +98,7 @@
 | visibilityexception | 8 |
 | **合计** | 15 |
 
-## 端口：声明 303 个；基线口径缺 12，精确口径缺 10
+## 端口：声明 307 个；基线口径缺 12，精确口径缺 10
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
