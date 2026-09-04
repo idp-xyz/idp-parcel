@@ -1,8 +1,8 @@
 # 02 其余登记册逐个接在线登记口与登记签：网络、关务、商业、VE、代收
 
 Category: enhancement
-Status: in-progress——形状已由 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
-与票 01 的切片 01a/01b 定死，本票只是逐上下文照做；四片实现已全部落主线（`1bd9e9d`），余共享件一格在途
+Status: resolved——形状已由 [ADR-0085](../../../docs/adr/0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)
+与票 01 的切片 01a/01b 定死，本票只是逐上下文照做；四片（02a..02d）实现全部落主线（各片 SHA 见「已落地实况」表与 MCP-1 接手那条 Comment 的表，`1bd9e9d` 只是票面注记不是实现提交），两处缺口由票 [03](./03-publication-write-face-blocked-by-two-misaligned-closed-sets.md)（`publication`）与 [04](./04-customer-account-register-has-no-read-face.md)（`customer-account`，已 resolved `0d4eb0d`）收走；完成判据里「`pnpm build` 绿」一格按 MCP-3 2026-09-02 已定记法如实记**「本机跑不了，以 `tsc --noEmit` 代替」**（成因见 MCP-6 与 MCP-4 两条 Comment，修法归共享工具链，不在本票）。状态由通道 2 于 2026-09-04 代簿记，取证见 [unresolved-review-20260904/report.md](../../unresolved-review-20260904/report.md) A 组
 Blocked by: 无
 
 ## 为什么是一张票而不是五张
@@ -542,7 +542,9 @@ ADR-0085 Decision 二的措辞是「有登记用例与 CLI 先例的**运营配�
   登记走受控 CLI，`snapshotHint` 里已写明「本册今天没有读面」。
 
   **六、商业片比网络与 VE 少一道锁：两口的快照译装不是同一份。** 网络片把译装下沉成
-  `internal/networkrouting/adapters/registrationjson`，VE 片随后照做（`8ebfcac`，见上面 MCP-6
+  `internal/networkrouting/adapters/registrationjson`（**更正，2026-09-04 通道 2 核于 `f25d692`：该目录不存在，
+  网络片并没有这一步；实有 `registrationjson` 包的是 `customscompliance` 与 `visibilityexception` 两个上下文，
+  见 report.md A 组顺带发现第 3 条**），VE 片随后照做（`8ebfcac`，见上面 MCP-6
   那条），于是受控 CLI 与在线登记口**共用同一份翻译**，形状漂移在编译期就红。商业片没有这一
   步：译装留在 `cmd/parcel-commercial` 的 `package main` 里，在线口够不着，两口只锁得到同一个
   登记用例。**因此「前端提示句里的键名与 CLI 真的同形」今天只有人工核对在守**——本次逐字核过

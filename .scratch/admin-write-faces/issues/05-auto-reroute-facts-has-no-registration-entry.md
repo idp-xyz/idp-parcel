@@ -1,7 +1,7 @@
 # 自动改路四条件事实登记有机制无入口：CLI 与在线登记口都没有，且这张票两头都被指过却从未立
 
 Category: enhancement
-Status: resolved（未提交）——owner 2026-09-03 裁 **A（只补 CLI）**、判据以 **ADR-0085 决定四**
+Status: resolved（CLI 第八族已提交 `6e40312`，`HEAD:cmd/parcel-network-register/main.go` 含 `auto-reroute-facts`；据 report.md A 组，随 MCP-1 2026-09-04 12:20 那次推送已在远端。「未提交」三字由通道 2 于 2026-09-04 代簿记去掉）——owner 2026-09-03 裁 **A（只补 CLI）**、判据以 **ADR-0085 决定四**
 为准；CLI 第八格已交付并验绿。种子那一格**撤销**（做不成，理由见「种子这一格做不成」一节），
 遗留一张 demo 运行时路径票未立，见文末 Comment
 Blocked by: 无
