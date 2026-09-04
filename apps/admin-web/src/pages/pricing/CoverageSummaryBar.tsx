@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { ApiResult } from '../catalogue-api';
 import {
+  countPendingSeriesEvaluations,
   listReferenceSeriesCoverage,
+  type PendingSeriesEvaluationsResponseBody,
   type ReferenceSeriesCoverageListResponseBody,
 } from './api';
 import { coverageNote, coverageRowOf, type CoverageRow } from './coverage-rows';
 import { sameSeries, type SeriesKey } from './catalogue-filter';
+import { pendingEvaluationsCellOf, pendingEvaluationsNote } from './pending-evaluations';
 import { labelOf, seriesKindLabels } from './presentation';
 
 interface CoverageSummaryBarProps {
@@ -44,11 +47,18 @@ export function CoverageSummaryBar({
 }: CoverageSummaryBarProps = {}) {
   const [answer, setAnswer] =
     useState<ApiResult<ReferenceSeriesCoverageListResponseBody> | null>(null);
+  const [pendingAnswer, setPendingAnswer] =
+    useState<ApiResult<PendingSeriesEvaluationsResponseBody> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void listReferenceSeriesCoverage().then((result) => {
       if (!cancelled) setAnswer(result);
+    });
+    // 挂起评价数走另一只读口（ADR-0105 Decision 五：伴生读端口，不拓宽覆盖读口）；两次请求各回各的
+    // asOf，摆在一起时各标各的时刻，不假装是同一刻。
+    void countPendingSeriesEvaluations().then((result) => {
+      if (!cancelled) setPendingAnswer(result);
     });
     return () => {
       cancelled = true;
@@ -65,6 +75,7 @@ export function CoverageSummaryBar({
         {answer.kind === 'unconfigured'
           ? '覆盖摘要未取到：接入渠道未配置（403）。这是诚实答案不是「本册无缺口」——今天没有问到。'
           : '覆盖摘要未取到；下方目录仍如实呈现各版本。'}
+        <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
     );
   }
@@ -75,6 +86,7 @@ export function CoverageSummaryBar({
     return (
       <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
         当前租户内尚无参考序列，覆盖摘要为空——空是正常业务答案，不是故障。
+        <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
     );
   }
@@ -117,10 +129,45 @@ export function CoverageSummaryBar({
           );
         })}
       </div>
+      <PendingEvaluationsCell answer={pendingAnswer} />
       <p className="mt-2 text-[11px] text-idpxyz-textMuted">
         告警阈值未配置（实例半边）：本条只把数摆出来，不判紧急、不标色——「剩余低于几天算
         告警」属租户治理参数，产品不替它定一个默认值。
       </p>
+    </div>
+  );
+}
+
+/**
+ * 「挂起评价数」那一格（ADR-0105 Decision 五；票 05 第 2 项）。判读在 `pending-evaluations.ts`，
+ * 这里只摆。**不摆 0 占位**：请求未回、403、故障三种形态都不显示数字，措辞明说「没问到」；只有服务端
+ * 作答且为空才说「没有」。
+ *
+ * 数的是问题项子表有行的评价——子表随 ADR-0105 落地且不回填，此前落册的待判断评价不在这个数里，
+ * 文案如实写出，不包装成「全部挂起评价」。**不做「跳到登记」**：一格数指不出该登记哪条序列的哪一版，
+ * 硬拼一个目标就是替人挑（理由同摘要条不直接开复核面板那条）。
+ */
+function PendingEvaluationsCell({
+  answer,
+}: {
+  answer: ApiResult<PendingSeriesEvaluationsResponseBody> | null;
+}) {
+  const cell = pendingEvaluationsCellOf(answer);
+  return (
+    <div className="mt-2 text-[11px] text-idpxyz-textMuted">
+      <span>{pendingEvaluationsNote(cell)}</span>
+      {cell.state === 'counted' && cell.byKind.length > 0 ? (
+        <span className="ml-1">
+          {cell.byKind.map((count) => (
+            <span key={count.kind} className="mr-2 font-mono">
+              {labelOf(seriesKindLabels, count.kind)} {count.evaluationCount}
+            </span>
+          ))}
+        </span>
+      ) : null}
+      {cell.state === 'counted' ? (
+        <span className="ml-1 font-mono">（asOf {cell.asOf}；只计 ADR-0105 子表落地后写入的评价，不回填）</span>
+      ) : null}
     </div>
   );
 }

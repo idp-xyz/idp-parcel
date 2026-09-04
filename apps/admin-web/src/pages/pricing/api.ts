@@ -394,6 +394,34 @@ export function listReferenceSeriesCoverage() {
   );
 }
 
+/**
+ * 被挂起评价联动（GET /pricing-pending-series-evaluations；ADR-0105 Decision 五；票 05 第 2 项）：
+ * 因序列未解析而待判断的评价数，按序列种类分组。
+ *
+ * **它数的是问题项子表有行的评价**：子表随 ADR-0105 才落地且不回填，此前落册的待判断评价不在
+ * 这个数里——页面文案要把这一点说出来，不把它包装成「全部挂起评价」。
+ *
+ * `asOf` 与覆盖端点同一时刻源；两次请求各回各的时刻，并排时以各自的 asOf 为准。
+ */
+export interface PendingSeriesEvaluationCount {
+  /** 序列种类原词：FUEL_RATE / EXCHANGE_RATE / PUBLISHED_AMOUNT。 */
+  kind: string;
+  evaluationCount: number;
+}
+
+export interface PendingSeriesEvaluationsResponseBody {
+  outcome: 'PENDING_SERIES_EVALUATIONS_COUNTED';
+  asOf: string;
+  /** 空数组是正常业务答案：租户内没有因序列未解析而待判断的评价。 */
+  counts: PendingSeriesEvaluationCount[];
+}
+
+export function countPendingSeriesEvaluations() {
+  return exchangeMasterData<PendingSeriesEvaluationsResponseBody>(
+    '/pricing-pending-series-evaluations',
+  );
+}
+
 // 评价登记册检索列面(GET /pricing-evaluations,票 admin-skeleton-closure-batch/03)。
 // 评价的语义细节(对象、方向、金额)住在快照内属详情读法,端点不透出,这里也不虚构。
 export interface PricingEvaluationRecord {
