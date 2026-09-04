@@ -177,6 +177,13 @@ func (register ContinuedAttemptRegister) standingClosure() (ContinuedAttemptDeci
 	return standing, found
 }
 
+// StandingClosure 交回当前仍然生效的那份受控关闭决定（若有）。它是 Judge 的`受控关闭`一格
+// 背后的那份决定本体——包裹终局的关闭路径要把它作为证据引用（JudgeLabelServiceFinal），
+// 只有判断值不够指。
+func (register ContinuedAttemptRegister) StandingClosure() (ContinuedAttemptDecision, bool) {
+	return register.standingClosure()
+}
+
 // Judge 现算`包裹级继续尝试判断`。
 //
 // 规则逐字取自 CONTEXT：「当前无有效终局且没有生效关闭时派生为开放，仍有生效关闭时保持受控

@@ -245,6 +245,36 @@ func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
 		satisfied.RuleVersion.String() != "PAR-COM-17/NETWORK_SERVICE_DELIVERED" {
 		t.Fatalf("judgment = %#v", satisfied)
 	}
+
+	// 面单渠道服务的两格在提供方词汇表里没有行：即便声明已配置，也如实答「未配置」——
+	// 不是「此产品下不形成终局」，也不硬译成某个网络格（票 label-channel/11）。
+	t.Run("label service outcomes are unconfigured until the provider declares them", func(t *testing.T) {
+		for _, kind := range []psdomain.ResponsibilityOutcomeKind{psdomain.LabelServiceOutcome, psdomain.LabelServiceFailure} {
+			labelOutcome, err := psdomain.NewResponsibilityOutcome(psdomain.ResponsibilityOutcomeSpec{
+				Kind:       kind,
+				Parcel:     value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+				Decision:   value(t, psdomain.NewResponsibilityDecisionReference, "LABEL-SERVICE-FINAL/parcel-1/FINAL_BY_FIRST_PICKUP/TF-7@v1"),
+				Execution:  value(t, psdomain.NewExecutionEvidenceReference, "TF-7@v1"),
+				Version:    value(t, psdomain.NewResponsibilityOutcomeVersion, "v1"),
+				OccurredAt: time.Date(2026, 8, 10, 15, 0, 0, 0, time.UTC),
+			})
+			if err != nil {
+				t.Fatalf("new label service outcome: %v", err)
+			}
+			judgment, configured, err := newStageRules(
+				intakeContentDouble{},
+				finalContentDouble{content: withDelivery, configured: true},
+				nil,
+				nil,
+			).JudgeFinalOutcome(context.Background(), stageIdentity(t), labelOutcome)
+			if err != nil {
+				t.Fatalf("%s: judge: %v", kind, err)
+			}
+			if configured || judgment.Satisfied {
+				t.Fatalf("%s: configured = %v judgment = %#v；提供方还说不出这个词，只能答未配置", kind, configured, judgment)
+			}
+		}
+	})
 }
 
 type cancellationContentDouble struct {

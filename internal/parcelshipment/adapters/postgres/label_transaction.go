@@ -35,7 +35,77 @@ func NewLabelTransactions(db *bentopg.DB) (*LabelTransactions, error) {
 	return &LabelTransactions{db: db}, nil
 }
 
-var _ ports.LabelTransactionRepository = (*LabelTransactions)(nil)
+// 同一个类型同时是仓储与按包裹的只读口：包裹终局的跨交易判断只该拿到后者。
+var (
+	_ ports.LabelTransactionRepository    = (*LabelTransactions)(nil)
+	_ ports.LabelTransactionsByParcelView = (*LabelTransactions)(nil)
+)
+
+// ListByCoveredParcel 按包裹取回其全部相关面单交易，按建立时间升序——那是「首笔 → 重试 →
+// 替代」的业务顺序。覆盖范围在快照文档的 coveredParcels 里，按 jsonb 包含查（迁移 0014 的
+// GIN 索引）；一笔不筛：边界后交易照样在（CONTEXT「任何已经实际形成且归属该包裹的面单结果
+// 都必须参与终局判断」）。空切片是诚实答案。
+func (repository *LabelTransactions) ListByCoveredParcel(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) ([]domain.LabelTransaction, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+	}
+
+	needle, err := json.Marshal([]string{parcel.String()})
+	if err != nil {
+		return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+	}
+	// 与迁移 0014 的 GIN 索引同一个表达式：(snapshot -> 'coveredParcels') @> '["<包裹>"]'。
+	rows, err := querier.Query(ctx,
+		`SELECT label_transaction_id, revision, state, snapshot
+		   FROM parcel_shipment.label_transaction
+		  WHERE tenant_id = $1
+		    AND (snapshot -> 'coveredParcels') @> $2::jsonb
+		  ORDER BY established_at, label_transaction_id`,
+		tenant.String(),
+		needle,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+	}
+	defer rows.Close()
+
+	transactions := []domain.LabelTransaction{}
+	for rows.Next() {
+		var id string
+		var revision int64
+		var state uint8
+		var raw []byte
+		if err := rows.Scan(&id, &revision, &state, &raw); err != nil {
+			return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+		}
+		transactionID, err := domain.NewLabelTransactionID(id)
+		if err != nil {
+			return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+		}
+		var document labelTransactionDocument
+		if err := json.Unmarshal(raw, &document); err != nil {
+			return nil, fmt.Errorf("list label transactions by parcel: 快照不是本适配器写下的形状：%w", err)
+		}
+		spec, err := document.rehydrationSpec(revision, tenant, transactionID, domain.LabelTransactionState(state))
+		if err != nil {
+			return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+		}
+		transaction, err := domain.RehydrateLabelTransaction(spec)
+		if err != nil {
+			return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+		}
+		transactions = append(transactions, transaction)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list label transactions by parcel: %w", err)
+	}
+	return transactions, nil
+}
 
 // FindByID 按（租户 + 交易标识）取回聚合。否定结果只回 false，不区分「不存在」与「属于
 // 另一个租户」——区分它们等于泄露其他租户下是否存在该交易号。

@@ -171,6 +171,13 @@ func (adapter *ServiceStageRulesAdapter) JudgeFinalOutcome(
 	if !configured {
 		return psports.FinalRuleJudgment{}, false, nil
 	}
+	if outcome.Kind().IsLabelService() {
+		// 面单渠道服务的两格（非取消终局结果 / 终局失败结果）在提供方的声明词汇表里今天没有行
+		// ——pcdomain.DeclaredResponsibilityOutcome 只有网络服务四行。如实答「终局规则未配置」：
+		// 这不是「此产品下不形成终局」（那是声明的话，而声明还说不出这个词），也不硬译成某个
+		// 网络格。提供方补词汇表那天这一格删掉、进下面的逐格翻译（票 label-channel/11 记着）。
+		return psports.FinalRuleJudgment{}, false, nil
+	}
 
 	declared, err := declaredOutcomeFor(outcome.Kind())
 	if err != nil {

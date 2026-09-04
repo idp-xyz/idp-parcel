@@ -13,9 +13,15 @@ var (
 )
 
 // ResponsibilityOutcomeKind 是可作为终局候选来源的责任结果封闭集合（UC-PS-004 终局
-// 来源责任矩阵的四行；取消不在此列——取消终局由 UC-PS-006 形成后直接进汇总）。班次
-// 完成、运输段关闭、POD 上传、外部状态码、异常案件与客户通知都没有格可落：它们不是
-// 责任结果，构造期就进不来（AT-PS-055/056/093 的类型面）。
+// 来源责任矩阵：网络服务四行，加面单渠道服务两行；取消不在此列——取消终局由 UC-PS-006
+// 形成后直接进汇总）。班次完成、运输段关闭、POD 上传、外部状态码、异常案件与客户通知都
+// 没有格可落：它们不是责任结果，构造期就进不来（AT-PS-055/056/093 的类型面）。
+//
+// 面单渠道服务的两格是 CONTEXT 生命周期节的两种产物：「面单渠道服务非取消终局结果」（实际
+// 承运商首次有效收寄，或受控关闭下成功结果均已作废/不可逆失效）与「终局失败结果」（受控
+// 关闭下全部相关面单交易均已定案为明确失败）。它们由 JudgeLabelServiceFinal 跨该包裹全部
+// 相关交易与收寄事实判出，再作为一份责任结果进同一条终局采用路径——两种服务形态的产物
+// 都叫「终局服务结果」，委托完成派生与取消核验只认一处当前有效终局。
 type ResponsibilityOutcomeKind uint8
 
 const (
@@ -24,12 +30,15 @@ const (
 	ReturnCompletedOutcome
 	ServiceTerminatedOutcome
 	RegulatoryDispositionExecuted
+	LabelServiceOutcome
+	LabelServiceFailure
 )
 
 func (kind ResponsibilityOutcomeKind) valid() bool {
 	switch kind {
 	case EffectiveDeliveryOutcome, ReturnCompletedOutcome,
-		ServiceTerminatedOutcome, RegulatoryDispositionExecuted:
+		ServiceTerminatedOutcome, RegulatoryDispositionExecuted,
+		LabelServiceOutcome, LabelServiceFailure:
 		return true
 	default:
 		return false
@@ -46,9 +55,19 @@ func (kind ResponsibilityOutcomeKind) String() string {
 		return "SERVICE_TERMINATED"
 	case RegulatoryDispositionExecuted:
 		return "REGULATORY_DISPOSITION_EXECUTED"
+	case LabelServiceOutcome:
+		return "LABEL_SERVICE_OUTCOME"
+	case LabelServiceFailure:
+		return "LABEL_SERVICE_FAILURE"
 	default:
 		return ""
 	}
+}
+
+// IsLabelService 说这一格属面单渠道服务那两行。终局规则的提供方（party-commercial 的声明
+// 词汇表）今天只有网络服务四行的词，消费侧适配器据此如实答「未配置」而不是硬译成某个网络格。
+func (kind ResponsibilityOutcomeKind) IsLabelService() bool {
+	return kind == LabelServiceOutcome || kind == LabelServiceFailure
 }
 
 // NewResponsibilityOutcomeKind 把 String() 的输出译回封闭枚举，与 String() 同处是
@@ -64,6 +83,8 @@ func NewResponsibilityOutcomeKind(raw string) (ResponsibilityOutcomeKind, error)
 		ReturnCompletedOutcome,
 		ServiceTerminatedOutcome,
 		RegulatoryDispositionExecuted,
+		LabelServiceOutcome,
+		LabelServiceFailure,
 	} {
 		if kind.String() == raw {
 			return kind, nil

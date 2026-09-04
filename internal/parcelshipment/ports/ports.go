@@ -1397,6 +1397,37 @@ type LabelTransactionRepository interface {
 	Save(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionSaveOutcome, error)
 }
 
+// LabelTransactionsByParcelView 按包裹取回其**全部**相关面单交易——首笔、重试、替代、换单，以及
+// 违反截断边界的边界后交易，一笔不筛（CONTEXT：「任何已经实际形成且归属该包裹的面单结果都必须
+// 参与终局判断」）。它是包裹终局跨交易判断（JudgeLabelServiceFinal）的读口：按交易标识取一笔的
+// FindByID 答不出「这个包裹还关联着哪些交易」。空切片是诚实答案——没有过任何交易。
+//
+// 与 LabelTransactionRepository 分名：读方拿到的是聚合本体（判断要读结果、定案与后续动作），但不
+// 该拿到 Insert/Save。
+type LabelTransactionsByParcelView interface {
+	ListByCoveredParcel(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) ([]domain.LabelTransaction, error)
+}
+
+// LabelValidityRuleView 按「接受时固定的有效期规则」判一笔交易上该包裹的成功面单结果是否已
+// 不可逆失效（CONTEXT：「自然失效必须来自渠道确认或接受时固定的有效期规则」；关闭路径的
+// 终局服务结果要求「已有成功结果均已成功作废或依据接受时固定的规则不可逆失效」）。
+//
+// 第二个返回值为 false 即规则未配置——那是实例半边：没有规则就没有失效，那笔成功照常阻止终局，
+// 不按墙钟推算过期。依赖调不通作为错误返回。
+type LabelValidityRuleView interface {
+	JudgeLabelLapsed(
+		ctx context.Context,
+		tenant domain.TenantID,
+		transaction domain.LabelTransaction,
+		parcel domain.DeclaredParcelID,
+		asOf time.Time,
+	) (bool, bool, error)
+}
+
 // LabelTransactionParcelRow 是读面上「交易 × 包裹」那一行（ADR-0084 决定七：页面行粒度在
 // 读侧由快照摊开）。每件覆盖包裹恒有一行，结果未回时也在——覆盖范围是建立即固定的事实，
 // 结果回来与否不改变「这笔交易覆盖了它」。
@@ -1591,4 +1622,14 @@ type ContinuedAttemptRegisterRepository interface {
 	) (domain.ContinuedAttemptRegister, bool, error)
 	Insert(ctx context.Context, register domain.ContinuedAttemptRegister) (ContinuedAttemptRegisterInsertOutcome, error)
 	Save(ctx context.Context, register domain.ContinuedAttemptRegister) (ContinuedAttemptRegisterSaveOutcome, error)
+}
+
+// ContinuedAttemptRegisterView 是登记册的只读半边：包裹终局的跨交易判断要读它派生`受控关闭`
+// 与作为证据的那份生效关闭，但不该拿到开册与追加的写口。同一个适配器两个接口都满足。
+type ContinuedAttemptRegisterView interface {
+	FindByParcel(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelID,
+	) (domain.ContinuedAttemptRegister, bool, error)
 }
