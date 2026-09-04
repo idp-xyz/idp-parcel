@@ -132,6 +132,10 @@ echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令�
 # 指令）清分进`应付客户`，进应付客户不得凭代收事实（第四条依据门）。SGD 分户账只
 # 开立不记账，让「已开立但当期无记账」与「未开立」分得开；回汇批次一笔不造——批次
 # 属实例半边，页面上那格要显式展示未配置。
+#
+# 已灌过的库上重放本节会在记账处以 UNDERFUNDED（退出码 4）中止：写口的重放判定排在
+# 余额守卫之后，来源位置被原记账清空后守卫先答余额不足，轮不到「已在册」（实测于
+# d340014 对演示库重放）。非干净库复灌一律走 --reset，别指望本节像前六步那样幂等。
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/01-subledger-account-01-cny.json"
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/02-subledger-account-01-sgd.json"
 "$BIN/parcel-collection-register" instruction -input "$SEEDS/collection/03-instruction-parcel-01.json"
