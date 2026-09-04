@@ -32,6 +32,7 @@ const (
 	StatementVoidedOutcome
 	StatementAlreadyVoided
 	LateChargeIncluded
+	AdjustmentIncluded
 	InclusionExistingResult
 	InclusionConflict
 	InclusionBackfillsOutcome
@@ -62,6 +63,8 @@ func (outcome StatementOutcome) String() string {
 		return "ALREADY_VOIDED"
 	case LateChargeIncluded:
 		return "LATE_CHARGE_INCLUDED"
+	case AdjustmentIncluded:
+		return "ADJUSTMENT_INCLUDED"
 	case InclusionExistingResult:
 		return "EXISTING_INCLUSION"
 	case InclusionConflict:
@@ -96,6 +99,7 @@ const (
 	StatementChargeStoreUnavailable
 	InclusionStoreUnavailable
 	DisputeStoreUnavailable
+	AdjustmentViewUnavailable
 )
 
 func (reason StatementUndecidedReason) String() string {
@@ -108,6 +112,8 @@ func (reason StatementUndecidedReason) String() string {
 		return "INCLUSION_STORE_UNAVAILABLE"
 	case DisputeStoreUnavailable:
 		return "DISPUTE_STORE_UNAVAILABLE"
+	case AdjustmentViewUnavailable:
+		return "ADJUSTMENT_VIEW_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -142,6 +148,18 @@ type IncludeLateChargeCommand struct {
 	Inclusion        string
 	Number           string
 	ChargeID         string
+	SubsequentPeriod string
+	IncludedAt       time.Time
+}
+
+// IncludeAdjustmentCommand 携带既有调整的后续账期纳入（UC-SA-003 步 7 的调整半边，
+// AT-SA-076/077）。命令只指名调整，不带金额、方向或原因——那些都在调整本体上，由它的
+// 唯一创建用例形成；本用例复述一份就是第二处口径。
+type IncludeAdjustmentCommand struct {
+	TenantID         domain.TenantID
+	Inclusion        string
+	Number           string
+	AdjustmentID     string
 	SubsequentPeriod string
 	IncludedAt       time.Time
 }
@@ -207,13 +225,17 @@ func (result StatementResult) StatementHandoffReference() string {
 	return result.handoff
 }
 
+// CutOffPublishStatementDeps 是截单编排的依赖。Adjustments 是只读口：本用例对调整只有
+// 纳入关系的所有权（CONTEXT「调整类型与唯一所有权」表），依赖上放不下写口，理由与
+// 那个只读接口分名的理由是同一条，写在 ports.ChargeAdjustmentView 上。
 type CutOffPublishStatementDeps struct {
-	Statements ports.PublishedStatementStore
-	Charges    ports.CustomerChargeStore
-	Inclusions ports.SubsequentInclusionStore
-	Disputes   ports.StatementDisputeStore
-	Downstream ports.StatementHandoff
-	Clock      ports.Clock
+	Statements  ports.PublishedStatementStore
+	Charges     ports.CustomerChargeStore
+	Adjustments ports.ChargeAdjustmentView
+	Inclusions  ports.SubsequentInclusionStore
+	Disputes    ports.StatementDisputeStore
+	Downstream  ports.StatementHandoff
+	Clock       ports.Clock
 }
 
 type CutOffPublishStatementHandler struct {
@@ -401,38 +423,124 @@ func (handler *CutOffPublishStatementHandler) IncludeLateCharge(
 		return StatementResult{outcome: StatementNotAccepted}, nil
 	}
 
-	key := ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef}
-	digest := inclusionDigest(command)
-	existing, alreadyIncluded, err := handler.deps.Inclusions.FindByKey(ctx, key)
+	return handler.commitInclusion(ctx, inclusionCommit{
+		key:       ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
+		digest:    inclusionDigest(command),
+		inclusion: inclusion,
+		subject:   command.Inclusion,
+		formed:    LateChargeIncluded,
+	})
+}
+
+// IncludeAdjustment 把既有调整纳入后续账期并关联原账单（UC-SA-003 步 7 的调整半边，
+// AT-SA-076/077）。调整从它的唯一创建用例的册里**读**回来——本编排拿到的只是读口，
+// 金额、方向与原因一律在调整本体上，这里不创建也不复述；调整挂在单外费用上 → 未受理
+// （别人的数不进这个账户）；纳入原周期 → INCLUSION_BACKFILLS_PERIOD 业务负向。
+func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
+	ctx context.Context,
+	command IncludeAdjustmentCommand,
+) (StatementResult, error) {
+	inclusionRef, err := domain.NewInclusionReference(command.Inclusion)
 	if err != nil {
-		return statementUndecided(InclusionStoreUnavailable, command.Inclusion), nil
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	number, err := domain.NewStatementNumber(command.Number)
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	adjustmentID, err := domain.NewChargeAdjustmentID(command.AdjustmentID)
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	period, err := domain.NewBillingPeriodReference(command.SubsequentPeriod)
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+
+	statementRecord, found, err := handler.deps.Statements.FindByKey(ctx,
+		ports.StatementKey{TenantID: command.TenantID, Number: number})
+	if err != nil {
+		return statementUndecided(StatementStoreUnavailable, command.Number), nil
+	}
+	if !found {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+	adjustmentRecord, adjustmentFound, err := handler.deps.Adjustments.FindByKey(ctx,
+		ports.ChargeAdjustmentKey{TenantID: command.TenantID, Adjustment: adjustmentID})
+	if err != nil {
+		return statementUndecided(AdjustmentViewUnavailable, command.AdjustmentID), nil
+	}
+	if !adjustmentFound {
+		// 指名了不存在的调整：提交矛盾，改单重来。调整还没形成不是「等」——形成它的是
+		// 另一个用例，本用例等不来它，也不替它形成（AT-SA-072）。
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+
+	inclusion, err := domain.IncludeAdjustmentInSubsequentPeriod(
+		statementRecord.Statement, adjustmentRecord.Adjustment, inclusionRef, period, command.IncludedAt)
+	if errors.Is(err, domain.ErrInclusionBackfillsPeriod) {
+		return StatementResult{outcome: InclusionBackfillsOutcome}, nil
+	}
+	if err != nil {
+		return StatementResult{outcome: StatementNotAccepted}, nil
+	}
+
+	return handler.commitInclusion(ctx, inclusionCommit{
+		key:       ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
+		digest:    adjustmentInclusionDigest(command),
+		inclusion: inclusion,
+		subject:   command.Inclusion,
+		formed:    AdjustmentIncluded,
+	})
+}
+
+// inclusionCommit 是两种纳入（迟到费用、既有调整）越过提交边界前共有的那几件：幂等键、
+// 内容指纹、纳入本体、续办主体与成功时的结果格。两条路在领域门之前各走各的，门之后
+// 的幂等/冲突/并发/意图纪律只有一份。
+type inclusionCommit struct {
+	key       ports.InclusionKey
+	digest    string
+	inclusion domain.SubsequentInclusion
+	subject   string
+	formed    StatementOutcome
+}
+
+// commitInclusion 提交一次纳入：同键重放按内容指纹分重放与冲突（同一纳入标识不得指向
+// 另一个周期或另一笔金额对象）；并发落败读回赢家；意图交下游，投递失败不翻结果。
+func (handler *CutOffPublishStatementHandler) commitInclusion(
+	ctx context.Context,
+	commit inclusionCommit,
+) (StatementResult, error) {
+	existing, alreadyIncluded, err := handler.deps.Inclusions.FindByKey(ctx, commit.key)
+	if err != nil {
+		return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
 	}
 	if alreadyIncluded {
-		if existing.ContentDigest != digest {
+		if existing.ContentDigest != commit.digest {
 			return StatementResult{outcome: InclusionConflict}, nil
 		}
 		result := StatementResult{outcome: InclusionExistingResult, inclusion: existing, hasRecord: true}
-		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: existing}, command.Inclusion)
+		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: existing}, commit.subject)
 		return result, nil
 	}
 
-	record := ports.InclusionRecord{Key: key, ContentDigest: digest, Inclusion: inclusion, RecordedAt: handler.deps.Clock.Now()}
+	record := ports.InclusionRecord{Key: commit.key, ContentDigest: commit.digest, Inclusion: commit.inclusion, RecordedAt: handler.deps.Clock.Now()}
 	saved, err := handler.deps.Inclusions.Save(ctx, record)
 	if err != nil {
-		return statementUndecided(InclusionStoreUnavailable, command.Inclusion), nil
+		return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
 	}
 	switch saved {
 	case ports.InclusionSaved:
-		result := StatementResult{outcome: LateChargeIncluded, inclusion: record, hasRecord: true}
-		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: record}, command.Inclusion)
+		result := StatementResult{outcome: commit.formed, inclusion: record, hasRecord: true}
+		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: record}, commit.subject)
 		return result, nil
 	case ports.InclusionAlreadyRecorded:
-		winner, found, err := handler.deps.Inclusions.FindByKey(ctx, key)
+		winner, found, err := handler.deps.Inclusions.FindByKey(ctx, commit.key)
 		if err != nil || !found {
-			return statementUndecided(InclusionStoreUnavailable, command.Inclusion), nil
+			return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
 		}
 		result := StatementResult{outcome: InclusionExistingResult, inclusion: winner, hasRecord: true}
-		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: winner}, command.Inclusion)
+		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: winner}, commit.subject)
 		return result, nil
 	default:
 		return StatementResult{}, fmt.Errorf("%w: %d", ErrUnexpectedStatementSave, saved)
@@ -630,6 +738,20 @@ func inclusionDigest(command IncludeLateChargeCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		command.Number,
 		command.ChargeID,
+		command.SubsequentPeriod,
+		command.IncludedAt.UTC().Format(time.RFC3339Nano),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// adjustmentInclusionDigest 与 inclusionDigest 分开算：两种纳入指向的金额对象不同类
+// （费用 / 调整），同一个纳入标识先纳费用再纳调整是冲突，不能因为两段字符串恰好相同而
+// 被读成重放。
+func adjustmentInclusionDigest(command IncludeAdjustmentCommand) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		"adjustment",
+		command.Number,
+		command.AdjustmentID,
 		command.SubsequentPeriod,
 		command.IncludedAt.UTC().Format(time.RFC3339Nano),
 	}, "\x00")))

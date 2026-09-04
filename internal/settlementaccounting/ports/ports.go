@@ -448,6 +448,20 @@ type ChargeAdjustmentStore interface {
 	Save(ctx context.Context, record ChargeAdjustmentRecord) (ChargeAdjustmentSaveOutcome, error)
 }
 
+// ChargeAdjustmentView 是调整册的只读半边：按标识取回一笔既有调整，供 UC-SA-003 把它纳入
+// 后续账期（步 7「接收发布后的……既有调整，校验其唯一创建用例和有效性，关联原账单并归入
+// 后续周期」）。
+//
+// 它与 ChargeAdjustmentStore 分成两个名字，理由在 CONTEXT「调整类型与唯一所有权」表：
+// 后续对账纳入「只拥有纳入关系，不创建任何……借项或贷项调整」，而 internal/architecture 的
+// TestOnlyTheOwningUseCaseReachesTheChargeAdjustmentRegister 按名字守着「编排包内只有唯一
+// 创建用例够得着 ChargeAdjustmentStore」。截单编排要读调整却不许拿到写口，只能给它一个
+// **没有 Save 的类型**——这不是绕那道门，是那道门要的形状：读与写在类型上分开，读方连
+// 能写的方法都拿不到。适配器同一个类型两个接口都实现，行模型只有一份。
+type ChargeAdjustmentView interface {
+	FindByKey(ctx context.Context, key ChargeAdjustmentKey) (ChargeAdjustmentRecord, bool, error)
+}
+
 // DisputeKey 是客户异议的幂等键。
 type DisputeKey struct {
 	TenantID domain.TenantID

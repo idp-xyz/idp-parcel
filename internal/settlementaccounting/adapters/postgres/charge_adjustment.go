@@ -26,7 +26,12 @@ func NewChargeAdjustments(db *bentopg.DB) (*ChargeAdjustments, error) {
 	return &ChargeAdjustments{db: db}, nil
 }
 
-var _ ports.ChargeAdjustmentStore = (*ChargeAdjustments)(nil)
+// 同一个类型同时是册（唯一创建用例的写口）与读口（截单编排的纳入读法）：行模型只有一份，
+// 读与写的分离落在 ports 的两个接口名上，不落在两份适配器上。
+var (
+	_ ports.ChargeAdjustmentStore = (*ChargeAdjustments)(nil)
+	_ ports.ChargeAdjustmentView  = (*ChargeAdjustments)(nil)
+)
 
 const chargeAdjustmentColumns = `charge_id, kind, direction, evaluation_ref, authorization_ref,
 	        original_currency, original_minor, settlement_currency, settlement_minor,

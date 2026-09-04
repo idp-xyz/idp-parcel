@@ -165,30 +165,33 @@ type statementClock struct{ at time.Time }
 func (clock statementClock) Now() time.Time { return clock.at }
 
 type statementFixture struct {
-	statements *statementStoreDouble
-	charges    *chargeStoreDouble
-	inclusions *inclusionStoreDouble
-	disputes   *disputeStoreDouble
-	handoff    *statementHandoffDouble
-	handler    *application.CutOffPublishStatementHandler
+	statements  *statementStoreDouble
+	charges     *chargeStoreDouble
+	adjustments *adjustmentViewDouble
+	inclusions  *inclusionStoreDouble
+	disputes    *disputeStoreDouble
+	handoff     *statementHandoffDouble
+	handler     *application.CutOffPublishStatementHandler
 }
 
 func newStatementFixture(t *testing.T) *statementFixture {
 	t.Helper()
 	fixture := &statementFixture{
-		statements: newStatementStore(),
-		charges:    newChargeStore(),
-		inclusions: newInclusionStore(),
-		disputes:   newDisputeStore(),
-		handoff:    &statementHandoffDouble{},
+		statements:  newStatementStore(),
+		charges:     newChargeStore(),
+		adjustments: newAdjustmentView(),
+		inclusions:  newInclusionStore(),
+		disputes:    newDisputeStore(),
+		handoff:     &statementHandoffDouble{},
 	}
 	fixture.handler = application.NewCutOffPublishStatementHandler(application.CutOffPublishStatementDeps{
-		Statements: fixture.statements,
-		Charges:    fixture.charges,
-		Inclusions: fixture.inclusions,
-		Disputes:   fixture.disputes,
-		Downstream: fixture.handoff,
-		Clock:      statementClock{at: statementNowAt},
+		Statements:  fixture.statements,
+		Charges:     fixture.charges,
+		Adjustments: fixture.adjustments,
+		Inclusions:  fixture.inclusions,
+		Disputes:    fixture.disputes,
+		Downstream:  fixture.handoff,
+		Clock:       statementClock{at: statementNowAt},
 	})
 	fixture.charges.charges["charge-A"] = confirmedStatementCharge(t, "charge-A", 12000)
 	fixture.charges.charges["charge-B"] = confirmedStatementCharge(t, "charge-B", 8000)
@@ -601,6 +604,7 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 		for _, reason := range []application.StatementUndecidedReason{
 			application.StatementStoreUnavailable, application.StatementChargeStoreUnavailable,
 			application.InclusionStoreUnavailable, application.DisputeStoreUnavailable,
+			application.AdjustmentViewUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -608,11 +612,11 @@ func TestStatementRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 5 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.StatementUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第五个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第六个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

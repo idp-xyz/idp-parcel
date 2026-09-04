@@ -145,6 +145,11 @@
 # 实测过一次：票 05 剪掉两行之后 `PerformOffsitePickupHandler` 仍不立段，而名单再不会为它红
 # （那件另立了票 08，已 resolved）。**名单清空只判名单清空。**
 #
+# 2026-09-04 随 mechanism-executor-triage/06 的 SA-b 剪掉 IncludeAdjustmentInSubsequentPeriod
+# （理由写在 settlement-accounting 组那一段）。量法同上几段：动手前 `git status -- internal/architecture/`
+# 为空，改完 `git diff HEAD -- 本文件` 只有本笔的 hunk；**父提交 `8ab9835` 上两法同得剪前 25、
+# 剪后 24**——两法是 UTF-8 逐行读后滤非空非注释，与字节层数行首非 `#`。两个数只对该检出成立。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -152,9 +157,11 @@
 # 几处组注释计数失配已就地改在各组注释里。
 #
 # 一件初版就该说清的事：这 33 条里 25 个**连 domain 包都没出过**——不只是没有生产调用点，
-# 而是没有应用层用例、没有适配器、没有端口，包外零引用。按本仓机制先行实例后到的顺序，切片
-# 还没开工的能力本来就该是这样。**所以这份名单不是一张缺陷清单，是一条基准线**；它里面有多
-# 少是「接过线后来烂了」、多少是「切片还没到」，本门禁分不出，也不打算分。
+# 而是没有应用层用例、没有适配器、没有端口，包外零引用。**所以这份名单不是一张缺陷清单，
+# 是一条基准线**；它里面有多少是「接过线后来烂了」、多少是「切片还没到」，本门禁分不出，也不
+# 打算分。这一段原有一句「按本仓机制先行实例后到的顺序，切片还没开工的能力本来就该是这样」，
+# 2026-09-04 按 mechanism-executor-triage/spec.md「处置裁决」第 5 条删去——八切片全数记为达标之后
+# 它不再成立（同目录票 01 已证），而 32 条逐条核过没有一条能归到「切片还没到」（同目录票 03）。
 
 
 # —— parcel-shipment ——
@@ -249,9 +256,14 @@ internal/visibilityexception/domain SubmitEvidence
 
 # —— settlement-accounting ——
 # 以下各条均产出带不变式校验的领域对象；除 FormSupplierExpectedCost（见其自注）外包外零引用。
+#
+# IncludeAdjustmentInSubsequentPeriod 曾在这里，2026-09-04 随 mechanism-executor-triage/06 的 SA-b
+# 剪掉：application/cut_off_publish_statement.go 的 CutOffPublishStatementHandler.IncludeAdjustment
+# 是它的生产调用方（UC-SA-003 步 7 的调整半边——费用半边早已由 IncludeLateCharge 接上，同一步
+# 此前只接了一半）。成因三分先分过：全仓该名字只有一处声明（domain/customer_statement.go），
+# 是第二种。
 internal/settlementaccounting/domain FormAuditedPayable
 internal/settlementaccounting/domain FormSupplierCreditNote
-internal/settlementaccounting/domain IncludeAdjustmentInSubsequentPeriod
 # 这一条与 DecideDisclosure 是全部 33 条里仅有的两个**已经走出 domain 层**的：适配器与应用层
 # 都在、两边都有测试，唯独没有生产调用路径。真烂会先烂在这两条上，别的都还没开始。
 internal/settlementaccounting/domain FormSupplierExpectedCost
