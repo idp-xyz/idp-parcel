@@ -1,7 +1,7 @@
 # 揽收登记的更正：新版本还是失效 + 替代
 
 Category: enhancement
-Status: in-progress——MCP-3（2026-09-04，基线 main `eba019a8`，分支 `mcp3-tf08`）；领域问题已裁（见「裁决」节，MCP-3 2026-09-04，owner 授权自决）：**A 新版本**，段侧参与关系重派生不在本票
+Status: resolved——MCP-3 2026-09-04，分支 `mcp3-tf08` 已验代码 tip `779f3c4b`（rebase 后基线 main `dc7d44e9`），见「完成记录」；领域问题已裁（见「裁决」节，MCP-3 2026-09-04，owner 授权自决）：**A 新版本**，段侧参与关系重派生另立票 [10](10-source-correction-rederives-participation.md)
 Blocked by: 无（不阻塞 04–07）
 
 ## 裁决（MCP-3，2026-09-04）
@@ -74,3 +74,52 @@ CONTEXT 生命周期⑧「来源证据被更正 → 保留原段、形成失效�
 ## 边界
 
 裁前不写代码。端点表照今天的样子不挂揽收更正口。
+
+## 完成记录（MCP-3，2026-09-04）
+
+分支 `mcp3-tf08`，开工基线 main `eba019a8`，收口前两次 rebase（`4cc1bc34` → `9e4e90bb` → `dc7d44e9`），零冲突。
+**已验代码 tip `779f3c4b`**；分支 tip `0c3470ad` 只多一笔机制清点重生成（推送方在 tip 重生成时可丢）。不推，交 MCP-1
+重放；分支 SHA 在重放后会换，票面留分支 SHA 作封存出处，main SHA 由推送方广播后对照。
+
+各笔（分支 SHA · 范围）：
+
+- `b29f9061` 票面认领。
+- `d251c151` 领域：`OffsitePickup.Correct(PickupCorrection)`、`Corrects`/`CorrectedAt`、`RehydrateOffsitePickup`（`domain/offsite_pickup.go`、
+  `domain/offsite_pickup_rehydration.go` + 两份测试）。
+- `117be7b8` 迁移 `transport_fulfillment/0015_offsite_pickup_version_chain.sql`（主键纳入 `pickup_version`、加 `corrects_version`/`corrected_at`、
+  链一致 CHECK、部分唯一索引 `offsite_pickup_one_first_registration` 与 `offsite_pickup_corrects_once`）+ `adapters/postgres/offsite_pickup_registry.go`
+  （`FindByKey` 按回指派生当前版、`Save` 写链、读回走重建门）+ 真库用例。
+- `e92208d4` 编排：`RegisterOffsitePickupHandler.Correct`、`CorrectOffsitePickupCommand`、`PickupCorrected`（`application/register_offsite_pickup.go`、
+  `correct_offsite_pickup_test.go`；首登测试替身改按键存版本链）。
+- `210b3cfc` `adapters/postgres/offsite_pickup_registration_handoff.go`：更正版本信封 ID 加版本段、载荷加 `pickupVersion`，首登 ID 与分区键不动。
+- `9e980842` 端点 `/transport-fulfillment/offsite-pickup-corrections`（`adapters/http/correct_offsite_pickup.go` + 测试）、`PickupCorrectionIntake`/
+  `PickupCorrectionHandler` 另立不动既有接口、`UnconfiguredIntake.IntakePickupCorrection`、`register_offsite_pickup.go` 加 `corrects` 响应格与更正 201。
+- `766d3418` `cmd/parcel-api/assemble_offsite_pickup_correction.go`（+真库装配用例）、`endpoints.go`/`endpoints_test.go`/`unwired_orchestration.go`/`main.go`
+  TF 那组各一处（MCP-6 释号后按 MCP-1 指令直接写）。
+- `e0f70463` 立 draft 票 label-channel/24 与本目录 10。
+- `779f3c4b` 双轴评审修复：登记册注释改按约束名引用不计数；真库装配用例补无前版 / 早于登记时刻 / 沿用版本号三格拒绝。
+
+**偏离裁决字面处，都写在代码注释里**：① 「读回前版」实施为「读回当前版并要求指名前版就是当前版」——登记册与 PS 都按键只读一个当前版，
+链必须线性（一版最多被更正一次，库内索引兜底）；指名已被更正过的版本，同内容答已有版本、异内容答冲突。② 「更正时刻不得早于被更正版本的
+登记时刻」在编排守（登记时刻是 `OffsitePickupRecord.RecordedAt`，不在领域对象上；不拿 `OccurredAt` 顶替——它是可更正的四格之一）。
+③ 「新版本走既有表」走不通：0005 主键不带版本，故立 0015（MCP-1 同意）。④ 首登与更正版本共用一种内容比对锚，首登被更正后原内容重放
+答冲突（`Register` 注释）。
+
+验证（隔离 worktree 干净检出，钉 `779f3c4b`，基 `dc7d44e9`）：`gofmt -l .` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN `go test -count=1 ./...`
+退 0、96 ok / 0 FAIL；含 DSN `go test -count=1 -v ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...`
+退 0，`--- PASS` 1429 / `--- SKIP` 0 / `--- FAIL` 0；探针一正一反：`TestAPickupCorrectionLandsAsANewVersionAndTheOriginalStays` 与
+`TestACorrectedPickupVersionIsHandedOffAsItsOwnIntent` 带 DSN 为 PASS、不带为 SKIP。含 DSN 全仓 `go test -p 1 -count=1 ./...` 在前一基线
+`9e4e90bb` 上的同内容 tip 跑过一次：95 ok / 0 FAIL（`dc7d44e9` 新进的是 VE 与 `cmd/parcel-api/assemble_claims*`，后者所在包已在上面含 DSN 重跑）。
+真库用例覆盖派单点名的五格：更正落新版本回指前版且原行不动、无前版未受理、沿用版本号库面拒（主键）、更正时刻早于登记时刻拒、
+重交意图带新版本（Outbox 第二份，ID 带版本段）。测试输入全为隔离合成，只记 `S`。
+
+## Comments
+
+- 2026-09-04 · MCP-3：**PS 采用口对同对象第二版本的处置，与裁决预期不同——今天不是「再判一次」。** 量到（main `4cc1bc34`）：
+  `psinbox.OffsitePickupConsumer` 不读 `pickupVersion`；`AdoptOnOffsitePickupAdapter.HandleRegisteredOffsitePickup` 按（租户+对象+尝试）
+  `FindByKey` 读到的是**当前版**（本票之后即链尾）；`AdoptNetworkIntakeHandler.Handle` 的采用键带版本，新版本不撞幂等，但随后
+  `FindResponsibilityStart`（`AT-PS-049`）命中首登版本，更正版本落 `SOURCE_NOT_ADOPTED`，依据 `RESPONSIBILITY_ALREADY_STARTED/OFFSITE_PICKUP/<首登版本>`。
+  `UC-PS-003`「一致性」节与 `AT-PS-050` 写的是「来源更正形成新的采用判断版本」，代码里没有分「同来源更正」与「另一来源竞争」的那一格。
+  按 MCP-1 指令：**不改 PS**，立 [label-channel/24](../../label-channel-service-first-release/issues/24-source-correction-version-refused-as-second-responsibility-start.md)
+  记事实不写方案。TF 侧照裁决落新版本并重交意图——链到 PS 采用口为止今天是断的，下一个人别以为已通。
+- 2026-09-04 · MCP-3：裁决附问的段侧那半边立 [10](10-source-correction-rederives-participation.md)（draft，覆盖交接与揽收两种来源）。
