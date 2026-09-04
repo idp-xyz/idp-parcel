@@ -1,7 +1,7 @@
 # 10 版本引用改为三元身份 + 可选指纹，过渡令牌退役：ADR-0108 的实施票
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）；裁决已落 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)；本票只做机制半边（通道 6 2026-09-04 立票，只写票面未动代码）
+Status: resolved——MCP-6（2026-09-04，隔离分支 `mcp6-pp-renumber` 代码笔 `b8dfc9a8`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；收缩步与机制清点见文末完成记录）；裁决已落 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)；本票只做机制半边（通道 6 2026-09-04 立票，只写票面未动代码）
 Blocked by: 无
 
 ## 缺口
@@ -46,6 +46,19 @@ Blocked by: 无
 
 ADR-0108；ADR-0014；ADR-0101 决定四；票 `08`、`09`；`pricing-amount-precision/02`（同期换号合并）。
 
+## 完成记录（2026-09-04，通道 6，task-2b9edfe4 换号批）
+
+分支 `mcp6-pp-renumber`，代码笔 `b8dfc9a8`（基线 main `4cc1bc34`；分支上还有同批其余票的笔，最终已验 tip 由完工报给）。
+
+- **领域**：`VersionReference` 身份三元 + 可选 `fingerprint`；`SameIdentity` / 清单去重 / 排序 / `VersionManifest.Equal` / 方案必含引用检查一律三元。新构造 `NewVersionReferenceIdentity`、`NewVersionReferenceWithFingerprint`；`NumericProfileV1Reference` 只带三元。
+- **换号**：`canonicalizationVersion` `PPC-4`→`PPC-5`（合并换号，注释记下同批 ADR-0107/0109/0110/0111 落同一号，以及为何换号在第一份改规范化的笔里：不换号的中间态会让同一版本号下存在两套字节）；序列登记 `seriesCanonicalization` `PRS-1`→`PRS-2`（三处引用只以三元入内容摘要，旧快照按版本门拒而不是按摘要不符拒）。
+- **快照**：`fingerprint,omitempty` 写、旧 `digest` 读回落进可选指纹（包内用例钉）。
+- **传输层**：`DeclaredReferenceToken` 与 `declared:` 前缀删除；自身引用只带三元，口径带载荷 digest 则进指纹否则留空，更正回指载荷键 `priorReferenceDigest`→`priorFingerprint`（= 前版 `contentDigest`）；admin-web 序列表单同步（`priorFingerprint: record.contentDigest`）。
+- **seedgen**：SYN 引用只带三元；六份 pricing 种子重生成为 PPC-5 / PRS-2。
+- **三步法未收缩的那一步**（按 MCP-1 派单约束，等 pricing/06 入 main 后另笔）：`NewVersionReference(kind,id,version,digest)` 与 `Digest()` 仍在，为薄包装；其余 SYN 测试夹具（`git grep -n 'NewVersionReference('` 可列）仍经它带 `sha256:syn-` 占位串——只进指纹，不进任何摘要、相等与排序。收缩时一并改用三元构造并删旧签名。
+- **验证**（本树，DSN 已设）：gofmt 空；go build / vet 0；go test -count=1 parcelpricing/... parcel-pricing-register parcel-api settlementaccounting/... PS adapters/parcelpricing 全 ok；admin-web tsc --noEmit 0、run-tests 61/61。既有 `CANONICALIZATION_VERSION_UNSUPPORTED` 用例仍绿。机制清点随本批最后一笔在干净检出上重生成。
+
 ## Comments
 
 - 2026-09-04 · 通道 6：立票。票 `09` 自定的 resolved 判据是「ADR 编号落进某一条并被引用」，故裁决与实施分票；本票承接实施。**只写票面，未动代码。**
+- 2026-09-04 · 通道 6：实施落地 `b8dfc9a8`，转 resolved；收缩步另笔（见完成记录）。
