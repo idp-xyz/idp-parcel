@@ -265,22 +265,21 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 	if err != nil {
 		t.Fatalf("构造目录写入方：%v", err)
 	}
+	var eligibilityOutcome veports.CatalogRegistrationOutcome
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-		outcome, registerErr := registrar.RegisterClaimEligibility(txCtx, command.TenantID,
+		var registerErr error
+		eligibilityOutcome, registerErr = registrar.RegisterClaimEligibility(txCtx, command.TenantID,
 			veports.ClaimEligibilityRegistration{
 				Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
 				Contract:     command.Contract,
 				CoveredKinds: []visibilitydomain.ClaimKindReference{command.Kind},
 			})
-		if registerErr != nil {
-			return registerErr
-		}
-		if outcome != veports.CatalogVersionRegistered {
-			t.Fatalf("登记索赔声明应成功，实得 %s", outcome)
-		}
-		return nil
+		return registerErr
 	}); err != nil {
 		t.Fatalf("事务内登记失败：%v", err)
+	}
+	if eligibilityOutcome != veports.CatalogVersionRegistered {
+		t.Fatalf("登记索赔声明应成功，实得 %s", eligibilityOutcome)
 	}
 
 	query := veports.EligibilityQuery{
@@ -298,18 +297,16 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 	readRules := func() veports.EligibilityRules {
 		t.Helper()
 		var answer veports.EligibilityRules
+		var declared bool
 		if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-			got, declared, readErr := rules.RulesForClaim(txCtx, query)
-			if readErr != nil {
-				return readErr
-			}
-			if !declared {
-				t.Fatal("声明已登记却答不在场")
-			}
-			answer = got
-			return nil
+			var readErr error
+			answer, declared, readErr = rules.RulesForClaim(txCtx, query)
+			return readErr
 		}); err != nil {
 			t.Fatalf("读资格规则：%v", err)
+		}
+		if !declared {
+			t.Fatal("声明已登记却答不在场")
 		}
 		return answer
 	}
@@ -347,24 +344,20 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 	if err != nil {
 		t.Fatalf("客户服务规则正文：%v", err)
 	}
+	var shellOutcome pcports.PublicationSaveOutcome
+	var contentOutcome pcports.CustomerServiceRuleSaveOutcome
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-		saved, saveErr := publications.SaveVersion(txCtx, version)
-		if saveErr != nil {
+		var saveErr error
+		if shellOutcome, saveErr = publications.SaveVersion(txCtx, version); saveErr != nil {
 			return saveErr
 		}
-		if saved != pcports.PublicationSaved {
-			t.Fatalf("发布版本壳应成功，实得 %s", saved)
-		}
-		registered, saveErr := publications.SaveCustomerServiceRule(txCtx, content)
-		if saveErr != nil {
-			return saveErr
-		}
-		if registered != pcports.CustomerServiceRuleSaved {
-			t.Fatalf("登记正文应成功，实得 %s", registered)
-		}
-		return nil
+		contentOutcome, saveErr = publications.SaveCustomerServiceRule(txCtx, content)
+		return saveErr
 	}); err != nil {
 		t.Fatalf("事务内发布客户服务规则失败：%v", err)
+	}
+	if shellOutcome != pcports.PublicationSaved || contentOutcome != pcports.CustomerServiceRuleSaved {
+		t.Fatalf("发布壳 = %s、登记正文 = %s，两步都应成功", shellOutcome, contentOutcome)
 	}
 
 	after := readRules()
