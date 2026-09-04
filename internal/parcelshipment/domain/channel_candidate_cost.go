@@ -177,6 +177,9 @@ type ChannelCandidateCost struct {
 	amount      ChannelCostAmount
 	currency    ChannelCostCurrency
 	unavailable ChannelCostUnavailability
+	// evaluation 是这份取值译自哪一份 `BUY` 评价，可缺席（没登记价卡的候选没经过评价）。它不参与
+	// 比较，只随取值带给决定记录（票 `14`）——留痕要能指回评价，而金额本身指不回去。
+	evaluation ChannelCostEvaluationReference
 }
 
 // PricedChannelCandidate 造一个成本已确立的候选。
@@ -237,13 +240,53 @@ func (cost ChannelCandidateCost) Unavailability() (ChannelCostUnavailability, bo
 	return cost.unavailable, true
 }
 
+// WithEvaluation 给取值带上它译自的那份 `BUY` 评价引用。已确立与未确立两格都可以带——出局
+// 的候选多半也经过了评价（价卡排除、冲突、未形成都是评价的结果），留痕同样要指得回去。
+func (cost ChannelCandidateCost) WithEvaluation(
+	evaluation ChannelCostEvaluationReference,
+) (ChannelCandidateCost, error) {
+	if !cost.candidate.valid() || !evaluation.valid() {
+		return ChannelCandidateCost{}, ErrInvalidChannelCandidateCost
+	}
+	cost.evaluation = evaluation
+	return cost, nil
+}
+
+// Evaluation 交出所用评价引用，第二个返回值为 false 即缺席。
+func (cost ChannelCandidateCost) Evaluation() (ChannelCostEvaluationReference, bool) {
+	return cost.evaluation, cost.evaluation.valid()
+}
+
 // SelectChannelCandidateByCost 按成本单维择优。`PAR-NET-16` 首发只按成本单维，其余维度
 // 保持未配置。四种出口：选出唯一一条、无人有资格参选（ErrNoQualifiedChannelCandidate）、
 // 最低价并列（ErrChannelCandidateCostTied）、币种不齐（ErrChannelCostCurrencyMismatch）。
 func SelectChannelCandidateByCost(costs []ChannelCandidateCost) (ChannelCandidateID, error) {
+	ranking, err := rankChannelCandidatesByCost(costs)
+	if err != nil {
+		return ChannelCandidateID{}, err
+	}
+	if !ranking.qualified {
+		return ChannelCandidateID{}, ErrNoQualifiedChannelCandidate
+	}
+	if ranking.tied {
+		return ChannelCandidateID{}, ErrChannelCandidateCostTied
+	}
+	return ranking.best.Candidate(), nil
+}
+
+// channelCostRanking 是一次排序的全部结论：最优者、有没有人参选、最低价上是否并列。它是
+// 择优（SelectChannelCandidateByCost）与决定记录（FormChannelSelectionDecision）共用的那一份
+// 口径——两处若各排一遍，迟早在某个边界上各说各话，而那种分叉在两边各自的测试下全绿。
+type channelCostRanking struct {
+	best      ChannelCandidateCost
+	qualified bool
+	tied      bool
+}
+
+// rankChannelCandidatesByCost 在同一币种内找成本最低者，并记下最低价那一格上是否并列。
+func rankChannelCandidatesByCost(costs []ChannelCandidateCost) (channelCostRanking, error) {
 	var (
-		best      ChannelCandidateCost
-		tied      bool
+		ranking   channelCostRanking
 		scale     ChannelCostCurrency
 		scaleSeen bool
 	)
@@ -259,23 +302,43 @@ func SelectChannelCandidateByCost(costs []ChannelCandidateCost) (ChannelCandidat
 		case !scaleSeen:
 			scale, scaleSeen = cost.currency, true
 		case cost.currency != scale:
-			return ChannelCandidateID{}, ErrChannelCostCurrencyMismatch
+			return channelCostRanking{}, ErrChannelCostCurrencyMismatch
 		}
-		bestValue, chosen := best.Amount()
+		bestValue, chosen := ranking.best.Amount()
 		switch {
 		case !chosen || value.Cmp(bestValue) < 0:
 			// 更便宜的候选出现即清掉并列：并列只在**最低价那一格**上才是冲突，
 			// 输家之间打平与择优无关。
-			best, tied = cost, false
+			ranking.best, ranking.tied, ranking.qualified = cost, false, true
 		case value.Cmp(bestValue) == 0:
-			tied = true
+			ranking.tied = true
 		}
 	}
-	if _, chosen := best.Amount(); !chosen {
-		return ChannelCandidateID{}, ErrNoQualifiedChannelCandidate
+	return ranking, nil
+}
+
+// outcomeOf 把一个**已确立**成本的候选归到四格里的一格：等于最低价即选中（或并列时的 TIED），
+// 其余是落选。出局那一格不经这里——它由取值自己的未确立格决定，与排序无关。
+func (ranking channelCostRanking) outcomeOf(cost ChannelCandidateCost) ChannelCandidateOutcome {
+	value, established := cost.Amount()
+	bestValue, chosen := ranking.best.Amount()
+	if !established || !chosen || value.Cmp(bestValue) != 0 {
+		return ChannelCandidateNotSelected
 	}
-	if tied {
-		return ChannelCandidateID{}, ErrChannelCandidateCostTied
+	if ranking.tied {
+		return ChannelCandidateTied
 	}
-	return best.Candidate(), nil
+	return ChannelCandidateSelected
+}
+
+// conclusion 把排序折成整条决定的结论，与 SelectChannelCandidateByCost 的三种非错误出口同序。
+func (ranking channelCostRanking) conclusion() ChannelSelectionConclusion {
+	switch {
+	case !ranking.qualified:
+		return ChannelSelectionConcludedNoneQualified
+	case ranking.tied:
+		return ChannelSelectionConcludedTied
+	default:
+		return ChannelSelectionConcludedSelected
+	}
 }
