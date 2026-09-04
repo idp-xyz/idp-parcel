@@ -26,7 +26,7 @@
 
 **上一段对价表族的排除已失效，因为它的前提被后续决定推翻。** 该排除依据的是「本设计只覆盖手上这张卡」，而 [`PAR-NET-16`](../product/PILOT-PARAMETER-REGISTER.md) 已确认供应商比价择优进入首发。比价一旦进入首发，判据里的「权威价卡」就不再是一张卡，而是候选集合——`FIRST_CONTINUE` 指不出这张卡上的哪一行，却指得出候选集合里的商业快递代理。判据本身不变，变的是它作用的范围。[`PAR-SET-03`](../product/PILOT-PARAMETER-REGISTER.md) 已按此把逐份价卡的价表族取证登记为 `PN-07` 准入门槛，与本节原文直接冲突；按仓库既定优先级（试点范围高于设计交接），以登记册为准，处置见下文[价表族与进位形状](#价表族与进位形状)。
 
-**失效只及于价表族一项，不波及本节其他排除。** 目的取值、逐包裹之外的聚合方式、任意脚本与动态函数的排除各有独立依据（脚本一项由 `CONTEXT` 直接确认不属首发价卡规则），都不以「只有一张卡」为前提，因此不因比价进入首发而重开。
+**失效只及于价表族一项，不波及本节其他排除。** 目的取值、逐包裹之外的聚合方式、任意脚本与动态函数的排除各有独立依据（脚本一项由 `CONTEXT` 直接确认不属首发价卡规则），都不以「只有一张卡」为前提，因此不因比价进入首发而重开；其中聚合方式一项后来由 [ADR-0111](../adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md) 按清关报价的按票、按 MAWB 计费单位另行放开，见下文[概念集合](#概念集合)。
 
 **判据本身已获替代，权威移出本文。** 本节判据把「指得出来」锚在这张卡的某一行上，同时承担着防止把产品建成第二套通用计费平台的职责；锚点失效后，那份职责不能一起失效。替代判据为「必须能指出一类真实存在的承运或渠道商业模式需要它，且该模式在目标客户群里是常规形态而非边缘情形」，连同目标客户群定义与「取值仍不得内置为常量」这条硬边界，一并记在[开发主线的能力范围判据](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)，那里是唯一权威。本节自此只保留推导过程，不再是判据的现行出处。
 
@@ -164,7 +164,7 @@
 | 互斥组 | 至多命中一条的规则集合，先按优先级取最高级、同级取金额最高 | 9、13 |
 | 地址分类 | 由邮编分类事实提供的偏远档位，与地址性质（商业/住宅）为两个独立维度 | 9 |
 
-价表族因此从一种变为两种：基础运费的 `WEIGHT_ZONE`，与附加费的分区分档表。聚合方式仍只有逐包裹。
+价表族因此从一种变为两种：基础运费的 `WEIGHT_ZONE`，与附加费的分区分档表。聚合方式今天代码上仍只有逐包裹（`AggregationMode` 唯一取值 `AggregationPerPackage`，`EvaluationSubjectKind` 只有已受理包裹与试算对象），但 [ADR-0111](../adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md) Decision 一已裁为价卡自己声明聚合单位——`AggregationMode` 加逐委托（每票）与逐主单（每承运总单），`EvaluationSubjectKind` 加委托与承运总单两种主体，费用行上标聚合单位；实施在票 [price-card-shape-gaps/03](../../.scratch/price-card-shape-gaps/issues/03-shipment-and-mawb-level-billing-units-have-no-evaluation-subject.md)。
 
 **「两种」只覆盖这张卡，不是首发的最终数目。** 比价进入首发后基础运费一侧还需另外两族，见下节；该数目在取得真实价卡前不结论。
 
