@@ -73,25 +73,54 @@ func (double *adoptionStoreDouble) FindByKey(
 	return record, found, nil
 }
 
+// FindResponsibilityStart 答链尾：adopted 且没有别的 adopted 行回指它（与真库读口同一条规则）。
 func (double *adoptionStoreDouble) FindResponsibilityStart(
 	_ context.Context,
 	tenant domain.TenantID,
 	parcel domain.DeclaredParcelID,
 ) (ports.IntakeAdoptionRecord, bool, error) {
 	for _, record := range double.byKey {
-		if record.Key.TenantID == tenant && record.Key.Parcel == parcel && record.Adopted {
+		if record.Key.TenantID != tenant || record.Key.Parcel != parcel || !record.Adopted {
+			continue
+		}
+		superseded := false
+		for _, other := range double.byKey {
+			supersedes, chained := other.Supersedes()
+			if other.Adopted && chained && other.Key.TenantID == tenant && other.Key.Parcel == parcel &&
+				other.Key.Kind == record.Key.Kind && supersedes == record.Key.Version {
+				superseded = true
+				break
+			}
+		}
+		if !superseded {
 			return record, true, nil
 		}
 	}
 	return ports.IntakeAdoptionRecord{}, false, nil
 }
 
+// Save 照真库的三处撞墙译`已有记录`：主键、第二个根、同一前版第二次被取代。
 func (double *adoptionStoreDouble) Save(
 	_ context.Context,
 	record ports.IntakeAdoptionRecord,
 ) (ports.IntakeAdoptionSaveOutcome, error) {
 	if _, exists := double.byKey[record.Key]; exists {
 		return ports.IntakeAdoptionAlreadyRecorded, nil
+	}
+	if record.Adopted {
+		supersedes, chained := record.Supersedes()
+		for _, other := range double.byKey {
+			if !other.Adopted || other.Key.TenantID != record.Key.TenantID || other.Key.Parcel != record.Key.Parcel {
+				continue
+			}
+			otherSupersedes, otherChained := other.Supersedes()
+			if !chained && !otherChained {
+				return ports.IntakeAdoptionAlreadyRecorded, nil
+			}
+			if chained && otherChained && other.Key.Kind == record.Key.Kind && otherSupersedes == supersedes {
+				return ports.IntakeAdoptionAlreadyRecorded, nil
+			}
+		}
 	}
 	double.byKey[record.Key] = record
 	double.saved++
@@ -306,6 +335,175 @@ func TestASecondSourceKindDoesNotStartASecondResponsibility(t *testing.T) {
 	}
 	if result.Basis().String() != "RESPONSIBILITY_ALREADY_STARTED/NODE_INTAKE/intake-result/v1" {
 		t.Fatalf("basis = %q; 不采用必须指名先到的责任起点", result.Basis())
+	}
+}
+
+// pickupCommand 组一份场外揽收来源；version 与 corrects 决定它是首登还是更正版本。
+func pickupCommand(t *testing.T, version, corrects string, occurredAt time.Time) application.AdoptNetworkIntakeCommand {
+	t.Helper()
+	command := adoptCommand(t)
+	command.Source.Kind = domain.OffsitePickupSource
+	command.Source.Object = mustValue(t, domain.NewSourceObjectReference, "parcel-1")
+	command.Source.Control = mustValue(t, domain.NewIntakeControlReference, "OFFSITE-PICKUP/TF-3")
+	command.Source.Version = mustValue(t, domain.NewSourceResultVersion, version)
+	command.Source.OccurredAt = occurredAt
+	if corrects != "" {
+		command.Source.Corrects = mustValue(t, domain.NewSourceResultVersion, corrects)
+	}
+	return command
+}
+
+// Covers: `AT-PS-050`「来源后来被更正——形成新采用判断和必要的承诺调整版本，不删除原历史」
+// （ADR-0117 决定一至三）：同种类来源自报更正当前采用的那一版，形成新的采用记录回指前版，
+// 承诺在前版上重述——新版本号、指回前版、原因点名被更正的来源版本、生效时间随更正后的发生
+// 时刻；根记录一字不动；两代各交一份意图。
+func TestASameSourceCorrectionSupersedesTheResponsibilityStart(t *testing.T) {
+	fixture := newIntakeFixture(t)
+	first, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v1", "", intakeHappenedAt))
+	if err != nil || first.Outcome() != application.IntakeCommitmentFormed {
+		t.Fatalf("first pickup: outcome = %q err = %v", first.Outcome(), err)
+	}
+	root, _ := first.Record()
+
+	correctedAt := intakeHappenedAt.Add(-20 * time.Minute)
+	result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v2", "pickup-result/v1", correctedAt))
+	if err != nil {
+		t.Fatalf("corrected pickup: %v", err)
+	}
+	if result.Outcome() != application.IntakeCommitmentFormed {
+		t.Fatalf("outcome = %q（依据 %q），想要 COMMITMENT_FORMED——同来源更正不是第二责任起点", result.Outcome(), result.Basis())
+	}
+	record, present := result.Record()
+	if !present || !record.Adopted {
+		t.Fatalf("record = %#v present = %v", record, present)
+	}
+	if supersedes, chained := record.Supersedes(); !chained || supersedes.String() != "pickup-result/v1" {
+		t.Fatalf("supersedes = %s chained = %v; 更正版没回指它取代的那一版", supersedes, chained)
+	}
+	if prior, restated := record.Commitment.PriorVersion(); !restated || prior != root.Commitment.Version() {
+		t.Fatalf("prior = %s restated = %v; 承诺没指回根采用的承诺版本", prior, restated)
+	}
+	if reason, _ := record.Commitment.AdjustmentReason(); reason.String() != "SOURCE_CORRECTED/OFFSITE_PICKUP/pickup-result/v1" {
+		t.Fatalf("reason = %q", reason)
+	}
+	if !record.Commitment.EffectiveAt().Equal(correctedAt) || !record.Intake.ResponsibilityStart().Equal(correctedAt) {
+		t.Fatalf("effective at = %s; 生效时间必须随更正后的发生时刻走", record.Commitment.EffectiveAt())
+	}
+	if record.Commitment.Version() == root.Commitment.Version() || record.Commitment.Expected() != root.Commitment.Expected() {
+		t.Fatal("承诺版本没换号，或预计承诺引用被换掉")
+	}
+
+	untouched, found, err := fixture.adoptions.FindByKey(context.Background(), root.Key)
+	if err != nil || !found || !untouched.Adopted || !untouched.Commitment.EffectiveAt().Equal(intakeHappenedAt) {
+		t.Fatalf("根记录被改写了：%#v found=%v err=%v", untouched, found, err)
+	}
+	if _, chained := untouched.Supersedes(); chained {
+		t.Fatal("根记录凭空长出了回指")
+	}
+	tail, _, _ := fixture.adoptions.FindResponsibilityStart(context.Background(), root.Key.TenantID, root.Key.Parcel)
+	if tail.Key.Version.String() != "pickup-result/v2" {
+		t.Fatalf("链尾 = %s，想要更正版", tail.Key.Version)
+	}
+	if len(fixture.downstream.intents) != 2 || fixture.adoptions.saved != 2 {
+		t.Fatalf("intents = %d saved = %d; 两代各一份记录与意图", len(fixture.downstream.intents), fixture.adoptions.saved)
+	}
+}
+
+// Covers: `AT-PS-049` 在链之后一字不动（ADR-0117 决定五）：责任起点已由更正版接续，另一来源
+// 种类照旧不采用，依据指名链尾那一版；同种类而不声明更正关系的新版本（同一对象的新一次尝试）
+// 同样是竞争，不是更正。
+func TestACompetingSourceIsStillRefusedAfterACorrection(t *testing.T) {
+	fixture := newIntakeFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v1", "", intakeHappenedAt)); err != nil {
+		t.Fatalf("first pickup: %v", err)
+	}
+	if _, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v2", "pickup-result/v1", intakeHappenedAt.Add(-time.Minute))); err != nil {
+		t.Fatalf("corrected pickup: %v", err)
+	}
+
+	node, err := fixture.handler.Handle(context.Background(), adoptCommand(t))
+	if err != nil {
+		t.Fatalf("node intake: %v", err)
+	}
+	if node.Outcome() != application.IntakeSourceNotAdopted || node.Basis().String() != "RESPONSIBILITY_ALREADY_STARTED/OFFSITE_PICKUP/pickup-result/v2" {
+		t.Fatalf("outcome = %q basis = %q; 另一来源种类必须照旧不采用且指名链尾", node.Outcome(), node.Basis())
+	}
+
+	attempt := pickupCommand(t, "pickup-result/v7", "", intakeHappenedAt.Add(time.Hour))
+	again, err := fixture.handler.Handle(context.Background(), attempt)
+	if err != nil {
+		t.Fatalf("second attempt: %v", err)
+	}
+	if again.Outcome() != application.IntakeSourceNotAdopted || again.Basis().String() != "RESPONSIBILITY_ALREADY_STARTED/OFFSITE_PICKUP/pickup-result/v2" {
+		t.Fatalf("outcome = %q basis = %q; 键相同而不声明更正不是更正", again.Outcome(), again.Basis())
+	}
+	if fixture.adoptions.saved != 4 {
+		t.Fatalf("saved = %d; 两份拒绝各自落记录", fixture.adoptions.saved)
+	}
+}
+
+// Covers: ADR-0117 决定五的两格例外——更正所指的前版尚无任何记录：未决不落库（重投会改变结果）；
+// 前版有记录但不是链尾（已被取代、或本就是不采用行）：不采用，依据点名链尾。
+func TestACorrectionMustPointAtTheCurrentResponsibilityStart(t *testing.T) {
+	fixture := newIntakeFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v1", "", intakeHappenedAt)); err != nil {
+		t.Fatalf("first pickup: %v", err)
+	}
+
+	early, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v3", "pickup-result/v2", intakeHappenedAt))
+	if err != nil {
+		t.Fatalf("out-of-order correction: %v", err)
+	}
+	if early.Outcome() != application.IntakeEligibilityUndecided || early.UndecidedReason() != application.IntakeCorrectionPredecessorUnjudged {
+		t.Fatalf("outcome = %q/%q; 前版还没判过的更正只能未决", early.Outcome(), early.UndecidedReason())
+	}
+	if fixture.adoptions.saved != 1 {
+		t.Fatal("未决落了库")
+	}
+
+	if _, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v2", "pickup-result/v1", intakeHappenedAt.Add(-time.Minute))); err != nil {
+		t.Fatalf("v2 correction: %v", err)
+	}
+	fork, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v4", "pickup-result/v1", intakeHappenedAt.Add(-2*time.Minute)))
+	if err != nil {
+		t.Fatalf("fork: %v", err)
+	}
+	if fork.Outcome() != application.IntakeSourceNotAdopted || fork.Basis().String() != "CORRECTION_TARGET_NOT_CURRENT/OFFSITE_PICKUP/pickup-result/v2" {
+		t.Fatalf("outcome = %q basis = %q; 更正已被取代的一版是分叉", fork.Outcome(), fork.Basis())
+	}
+
+	ontoRefusal, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v5", "pickup-result/v4", intakeHappenedAt))
+	if err != nil {
+		t.Fatalf("correction of a refusal: %v", err)
+	}
+	if ontoRefusal.Outcome() != application.IntakeSourceNotAdopted || ontoRefusal.Basis().String() != "CORRECTION_TARGET_NOT_CURRENT/OFFSITE_PICKUP/pickup-result/v2" {
+		t.Fatalf("outcome = %q basis = %q; 更正一份不采用行接不上链", ontoRefusal.Outcome(), ontoRefusal.Basis())
+	}
+}
+
+// Covers: ADR-0117 决定一的边界——没有责任起点时，更正声明不改变什么：更正版本按首登走，采用为根
+// （前版若曾被拒，它的拒绝行留着，链从更正版起头）。
+func TestACorrectionWithoutAResponsibilityStartAdoptsAsTheRoot(t *testing.T) {
+	fixture := newIntakeFixture(t)
+	fixture.eligibility.configured = false
+	if result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v1", "", intakeHappenedAt)); err != nil || result.Outcome() != application.IntakeEligibilityUndecided {
+		t.Fatalf("first pickup: outcome = %q err = %v", result.Outcome(), err)
+	}
+	fixture.eligibility.configured = true
+
+	result, err := fixture.handler.Handle(context.Background(), pickupCommand(t, "pickup-result/v2", "pickup-result/v1", intakeHappenedAt.Add(-time.Minute)))
+	if err != nil {
+		t.Fatalf("correction: %v", err)
+	}
+	if result.Outcome() != application.IntakeCommitmentFormed {
+		t.Fatalf("outcome = %q（%q）", result.Outcome(), result.Basis())
+	}
+	record, _ := result.Record()
+	if _, chained := record.Supersedes(); chained {
+		t.Fatal("没有前一版采用可接，却长出了回指")
+	}
+	if _, restated := record.Commitment.PriorVersion(); restated {
+		t.Fatal("根采用的承诺凭空带了前版")
 	}
 }
 

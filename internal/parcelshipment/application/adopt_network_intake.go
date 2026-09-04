@@ -65,6 +65,9 @@ const (
 	IntakeCommitmentIdentityUnavailable
 	IntakeCancellationViewUnavailable
 	IntakeCancellationOrderConflict
+	// IntakeCorrectionPredecessorUnjudged：来源自报更正的那一版在采用账上还没有任何记录——
+	// 先后两封乱序，或前版那封还没消费到。重投会改变结果，所以是未决不是拒（ADR-0117 决定五）。
+	IntakeCorrectionPredecessorUnjudged
 )
 
 func (reason IntakeUndecidedReason) String() string {
@@ -85,6 +88,8 @@ func (reason IntakeUndecidedReason) String() string {
 		return "CANCELLATION_VIEW_UNAVAILABLE"
 	case IntakeCancellationOrderConflict:
 		return "CANCELLATION_ORDER_CONFLICT"
+	case IntakeCorrectionPredecessorUnjudged:
+		return "CORRECTION_PREDECESSOR_UNJUDGED"
 	default:
 		return ""
 	}
@@ -158,7 +163,9 @@ func NewAdoptNetworkIntakeHandler(deps AdoptNetworkIntakeDeps) *AdoptNetworkInta
 
 // Handle 把一份物理来源推进到采用结论：受理（来源五件与委托指名）→ 幂等/冲突按内容
 // 指纹分界 → 取消边界按业务时间裁决 → 资格（未配置即未决，不默认通过）→ 责任起点
-// 唯一 → 采用提交与发布意图。物理事实全程只读——不采用与未决都不碰来源。
+// 唯一，或同来源更正接续链尾 → 采用提交与发布意图。物理事实全程只读——不采用与未决
+// 都不碰来源。更正版本把前面几道门重走一遍，用的是更正后的内容（tf/08 裁决说的「再判
+// 一次」）；被拒时链尾原样站着。
 func (handler *AdoptNetworkIntakeHandler) Handle(
 	ctx context.Context,
 	command AdoptNetworkIntakeCommand,
@@ -248,14 +255,36 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 			"parcel shipment: unhandled intake eligibility outcome %d", eligibility.Outcome)
 	}
 
-	// 责任起点唯一（AT-PS-049）：先合法形成者保留，本来源不采用为新责任起点。
+	// 责任起点唯一（AT-PS-049）与同来源更正（AT-PS-050）在这里分格（ADR-0117）：链尾在，
+	// 本来源要么是它的更正——同种类、自报更正的恰是链尾——要么就是想开第二个责任起点。
 	started, found, err := handler.deps.Adoptions.FindResponsibilityStart(ctx, key.TenantID, source.Parcel())
 	if err != nil {
 		return handler.undecided(command, source, IntakeAdoptionStoreUnavailable), nil
 	}
 	if found {
+		corrects, declared := source.Corrects()
+		if !declared || started.Key.Kind != source.Kind() {
+			reason, err := domain.NewCheckReason(
+				"RESPONSIBILITY_ALREADY_STARTED/" + started.Key.Kind.String() + "/" + started.Key.Version.String())
+			if err != nil {
+				return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
+			}
+			return handler.refuse(ctx, command, key, digest, reason)
+		}
+		if started.Key.Version == corrects {
+			return handler.supersede(ctx, command, key, digest, source, started)
+		}
+		// 更正的不是链尾：前版一条记录都没有，是先后两封乱序——等；有记录（已被取代，或本就
+		// 是不采用行）是分叉——要人看，不替人接。
+		predecessor := key
+		predecessor.Version = corrects
+		if _, judged, err := handler.deps.Adoptions.FindByKey(ctx, predecessor); err != nil {
+			return handler.undecided(command, source, IntakeAdoptionStoreUnavailable), nil
+		} else if !judged {
+			return handler.undecided(command, source, IntakeCorrectionPredecessorUnjudged), nil
+		}
 		reason, err := domain.NewCheckReason(
-			"RESPONSIBILITY_ALREADY_STARTED/" + started.Key.Kind.String() + "/" + started.Key.Version.String())
+			"CORRECTION_TARGET_NOT_CURRENT/" + started.Key.Kind.String() + "/" + started.Key.Version.String())
 		if err != nil {
 			return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
 		}
@@ -287,6 +316,52 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		Adopted:           true,
 		Intake:            intake,
 		Commitment:        commitment,
+		AdoptedAt:         handler.deps.Clock.Now(),
+	}
+	return handler.commit(ctx, record)
+}
+
+// supersede 以更正后的来源形成新的采用判断版本（AT-PS-050，ADR-0117 决定二、三）：新采用
+// 回指链尾那一版，承诺在链尾的承诺上重述——新版本号、指回前版、原因点名被更正的来源版本、
+// 生效时间随更正后的发生时刻。链尾那一行一字不动；新行落不下（并发第二个更正撞链线性索引）
+// 时由 commit 照旧译成未决，重试方读到新链尾后收敛。
+func (handler *AdoptNetworkIntakeHandler) supersede(
+	ctx context.Context,
+	command AdoptNetworkIntakeCommand,
+	key ports.IntakeAdoptionKey,
+	digest string,
+	source domain.IntakeSource,
+	current ports.IntakeAdoptionRecord,
+) (AdoptNetworkIntakeResult, error) {
+	intake, err := domain.AdoptNetworkIntake(source, command.SubmissionVersion)
+	if err != nil {
+		return AdoptNetworkIntakeResult{}, fmt.Errorf("adopt corrected network intake: %w", err)
+	}
+	version, err := handler.deps.Identities.NextCommitmentVersionID(ctx)
+	if err != nil {
+		return handler.undecided(command, source, IntakeCommitmentIdentityUnavailable), nil
+	}
+	reason, err := domain.NewCommitmentAdjustmentReason(
+		"SOURCE_CORRECTED/" + source.Kind().String() + "/" + current.Key.Version.String())
+	if err != nil {
+		return AdoptNetworkIntakeResult{}, fmt.Errorf("adjustment reason: %w", err)
+	}
+	commitment, err := current.Commitment.RestateOnCorrectedIntake(version, intake, reason)
+	if err != nil {
+		// 门在领域：同包裹、同接受基线、同来源种类。走到这里还立不住，说明链尾与本来源挂在
+		// 不同的接受基线上——那是拼坏的聚合，不是一种业务未决。
+		return AdoptNetworkIntakeResult{}, fmt.Errorf("restate formal commitment on corrected intake: %w", err)
+	}
+
+	record := ports.IntakeAdoptionRecord{
+		Key:               key,
+		CustomerAccountID: command.Identity.CustomerAccountID(),
+		ShipmentRequestID: command.ShipmentRequestID,
+		ContentDigest:     digest,
+		Adopted:           true,
+		Intake:            intake,
+		Commitment:        commitment,
+		SupersedesVersion: current.Key.Version,
 		AdoptedAt:         handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record)
@@ -482,13 +557,18 @@ func expectedCommitmentReference(request domain.ShipmentRequest) (domain.Expecte
 }
 
 // intakeContentDigest 是同一采用身份的内容比对锚：对象、地点、控制与业务时间任一不同
-// 即是另一份内容。
+// 即是另一份内容；更正版本还带上它自报更正的那一版——同一版本号两次到达却各说更正
+// 不同的前版，也是两份内容。首登不带这一段，首登的摘要因此与它以前的写法逐字相同。
 func intakeContentDigest(source domain.IntakeSource) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	parts := []string{
 		source.Object().String(),
 		source.Place().String(),
 		source.Control().String(),
 		source.OccurredAt().UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
+	}
+	if corrects, declared := source.Corrects(); declared {
+		parts = append(parts, "corrects:"+corrects.String())
+	}
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
