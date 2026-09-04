@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——23 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出；`22` 于 2026-09-04 随 `19` 收口立；`23` 于同日随 `14` 收口立）；`01`..`19`、`21` 已 resolved（`19`、`21` 自分支 `mcp5-lc19-21`、`14` 自分支 `mcp2-lc14`，均于 2026-09-04 进 main，远端 `19cf2ce5`）；`20`、`22`、`23` draft（`20`、`22` 等 `18` 之后的第一家真源，`22` 另阻塞于 `20`；`23` 读面形状待按 ADR-0077 通例裁，其阻塞项 `14` 已 resolved）。状态行由通道 2 于 2026-09-04 对票面重核后改写，`14`/`19`/`21`/`22`/`23` 五格由 MCP-1 于同日重放入 main 后对齐（此后**以各票文件 `Status:` 为准**）
+Status: in-progress——23 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出；`22` 于 2026-09-04 随 `19` 收口立；`23` 于同日随 `14` 收口立）；`01`..`19`、`21`、`23` 已 resolved（`19`、`21` 自分支 `mcp5-lc19-21`、`14` 自分支 `mcp2-lc14`，均于 2026-09-04 进 main，远端 `19cf2ce5`；`23` 自分支 `mcp2-lc23` 于同日重放入 main，`6ca3d6ec`..`a4014fc6`，接线 `4c466b0a`）；`20`、`22` draft（等 `18` 之后的第一家真源，`22` 另阻塞于 `20`）。状态行由通道 2 于 2026-09-04 对票面重核后改写，`14`/`19`/`21`/`22`/`23` 五格由 MCP-1 于同日重放入 main 后对齐，`23` 收口一格由通道 2 于 MCP-1 崩溃后自行对齐（此后**以各票文件 `Status:` 为准**）
 
 ## 这个 feature 是什么
 
@@ -69,7 +69,7 @@ Status: in-progress——23 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 | [`20` 轨迹拉取节拍](./issues/20-tracking-pull-beat.md) | `TrackingSource.Pull` → `Adopt` 的生产入口；随第一家真源的适配器立，节奏属 `PAR-INT-02` | `draft`｜`18` |
 | [`21` 有效时间显式判断的在线面](./issues/21-effective-time-judgment-online-face.md) | **已落地**：查阅读口 + `GET /transport-fulfillment-external-tracking-facts?source=&view=pending\|current` + `POST /transport-fulfillment-effective-time-judgments`（`UnconfiguredIntake{}` 起步）+ 管理台「外部轨迹有效时间判断」页 | `resolved` |
 | [`22` 按已登记规则批量重判待判断事实](./issues/22-rejudge-pending-facts-by-registered-rule.md) | 规则登记之后的回填入口：显式触发、不随登记自动发生、复用规则判断路径；随第一家真源一起立实施 | `draft`｜`20` |
-| [`23` 渠道择优决定的运营查阅面](./issues/23-channel-selection-decision-operations-read-face.md) | `14` 的留痕今天只有写口与按对象列历史的读口，没有运营面能看见并列冲突与出局因由；按 ADR-0077 通例读口另立、不拓宽登记册端口；并列冲突的人工裁决动作不进本票（先 `/domain-modeling`） | `draft`（`14` 已 resolved） |
+| [`23` 渠道择优决定的运营查阅面](./issues/23-channel-selection-decision-operations-read-face.md) | **已落地**：读端口另立二口（并列冲突列表按租户倒序可按对象收窄、按标识取一条）+ postgres 读口（登记册适配器兼两个契约）+ `GET /channel-selection-decisions`（列表 / 单份两分支，隔离读放行入格）+ cmd 装配 + 管理台「渠道择优决定」页落「委托受理」区；人工裁决动作不进本票（先 `/domain-modeling`）（`6ca3d6ec`..`a4014fc6`，接线 `4c466b0a`） | `resolved` |
 
 ### 盘点判为「无缺口」因而不立票的三段
 

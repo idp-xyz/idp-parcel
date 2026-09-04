@@ -86,6 +86,12 @@ ADR-0055 作答、管理台页面能列并列冲突并展开逐候选结果；`g
 **落点（分支 `mcp2-lc23`，起于 `eba019a8`、完工前 rebase 到 main `9e4e90bb`；SHA 为 rebase 后分支上的，重放入 main 后由
 MCP-1 对照新旧 SHA）**
 
+> 2026-09-04 21:3x 进 main 记录（MCP-1 21:04 重放并推出，随后崩溃，对照由通道 2 补记）：**分支 SHA → main SHA** `1fc3d859`→`6ca3d6ec`（ports +
+> postgres 读口）· `e9e24c1e`→`34083133`（票 in-progress）· `7283ce3d`→`e86ac973`（http 端点）· `687be091`→`2efa1997`（cmd 装配）·
+> `5c2d5d74`→`9138591e`（admin-web）· `96a220eb`→`e21ab765`（评审修补）· `43477086`→`a4014fc6`（票 resolved）；分支清点笔
+> `08635c74` 未重放，由 tip 上的 `3bbb1b08` 重生成兑底（同笔吸收 tf/08）。**共享接线六处由 MCP-1 落为 `4c466b0a`**（同目录
+> `lc23-integration-lines.patch` 即其内容），管理台路径门禁自此在 main 上绿。分支 `mcp2-lc23` 指针保留，worktree 由通道 2 自拆。
+
 | 层 | 文件 | SHA |
 |---|---|---|
 | ports | `internal/parcelshipment/ports/channel_selection_decision_read.go`：`ChannelSelectionDecisionRead`（`ListTiedChannelSelectionDecisions` + `FindChannelSelectionDecision`）、`TiedChannelSelectionFilter`（`EveryTiedChannelSelection` / `TiedChannelSelectionsOf`）；不动 `ChannelSelectionDecisionRegistry` | `1fc3d859` |
