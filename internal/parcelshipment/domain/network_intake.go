@@ -82,6 +82,10 @@ type IntakeSourceSpec struct {
 	Control    IntakeControlReference
 	Version    SourceResultVersion
 	OccurredAt time.Time
+	// Corrects 是来源自报的「本版本更正哪一版」（ADR-0117 决定一）。它只从来源所有者的
+	// 事实带出（揽收那一路是 OffsitePickup.Corrects()），消费方适配器只翻译不推断；缺席即
+	// 首登。同来源更正与另一来源竞争在采用口分格，靠的就是这一格，不靠键相同。
+	Corrects SourceResultVersion
 }
 
 // IntakeSource 是对一份节点收寄或场外揽收结果的只读引用（强类型来源联合）。对象、地点、
@@ -94,6 +98,7 @@ type IntakeSource struct {
 	control    IntakeControlReference
 	version    SourceResultVersion
 	occurredAt time.Time
+	corrects   SourceResultVersion
 }
 
 func NewIntakeSource(spec IntakeSourceSpec) (IntakeSource, error) {
@@ -106,6 +111,10 @@ func NewIntakeSource(spec IntakeSourceSpec) (IntakeSource, error) {
 		spec.OccurredAt.IsZero() {
 		return IntakeSource{}, ErrInvalidIntakeSource
 	}
+	// 自指的更正没有前版可接，也分不出它是首登还是更正。
+	if spec.Corrects.valid() && spec.Corrects == spec.Version {
+		return IntakeSource{}, ErrInvalidIntakeSource
+	}
 	return IntakeSource{
 		kind:       spec.Kind,
 		object:     spec.Object,
@@ -114,6 +123,7 @@ func NewIntakeSource(spec IntakeSourceSpec) (IntakeSource, error) {
 		control:    spec.Control,
 		version:    spec.Version,
 		occurredAt: spec.OccurredAt.UTC(),
+		corrects:   spec.Corrects,
 	}, nil
 }
 
@@ -145,6 +155,11 @@ func (source IntakeSource) Version() SourceResultVersion {
 // 时间与消息到达时间不能替代（UC-PS-003 硬句）。
 func (source IntakeSource) OccurredAt() time.Time {
 	return source.occurredAt
+}
+
+// Corrects 只在来源自报为更正版本时给出：它更正的那一版。首登来源答 false。
+func (source IntakeSource) Corrects() (SourceResultVersion, bool) {
+	return source.corrects, source.corrects.valid()
 }
 
 // EffectiveNetworkIntake 是 parcel-shipment 把合格物理来源统一解释成的网络服务有效收寄
@@ -279,6 +294,36 @@ func (commitment FormalCommitment) Adjust(
 	adjusted.priorVersion = commitment.version
 	adjusted.reason = reason
 	return adjusted, nil
+}
+
+// RestateOnCorrectedIntake 以更正后的有效网络收寄重述承诺（`AT-PS-050`，ADR-0117 决定三）：
+// 与 Adjust 同样换版本号、带原因、指回前版，不同的是收寄换成更正后的那一份，于是生效时间
+// 随更正后的发生时刻走——Adjust 写给的是不改收寄的调整（路由、ETA、现实履约），来源更正
+// 改的恰是收寄本身，用 Adjust 会把旧的发生时刻带进新版本。
+//
+// 更正后的收寄必须仍是这份承诺的收寄：同包裹、同接受基线、同来源种类。换了任何一样都是
+// 另一份采用，不是这份的更正——它得走自己的采用判断，不能借前版的承诺号接续。
+func (commitment FormalCommitment) RestateOnCorrectedIntake(
+	version CommitmentVersionID,
+	intake EffectiveNetworkIntake,
+	reason CommitmentAdjustmentReason,
+) (FormalCommitment, error) {
+	if !version.valid() || !reason.valid() || version == commitment.version ||
+		!intake.source.kind.valid() ||
+		intake.source.parcel != commitment.parcel ||
+		intake.baseline != commitment.intake.baseline ||
+		intake.source.kind != commitment.intake.source.kind {
+		return FormalCommitment{}, ErrInvalidFormalCommitment
+	}
+	return FormalCommitment{
+		version:      version,
+		parcel:       commitment.parcel,
+		intake:       intake,
+		expected:     commitment.expected,
+		effectiveAt:  intake.ResponsibilityStart(),
+		priorVersion: commitment.version,
+		reason:       reason,
+	}, nil
 }
 
 // QualificationRuleReference 是消费方对收寄硬资格引用的转写（ADR-0063）。它对应
