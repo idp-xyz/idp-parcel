@@ -55,6 +55,24 @@ type publicationRegistryDouble struct {
 
 	savedCaliber   []domain.PricePolicyCaliber
 	caliberOutcome ports.PricePolicyCaliberSaveOutcome
+
+	savedServiceRules  []domain.CustomerServiceRuleVersion
+	serviceRuleOutcome ports.CustomerServiceRuleSaveOutcome
+}
+
+func (double *publicationRegistryDouble) SaveCustomerServiceRule(
+	_ context.Context,
+	rule domain.CustomerServiceRuleVersion,
+) (ports.CustomerServiceRuleSaveOutcome, error) {
+	if double.declarationErr != nil {
+		return ports.CustomerServiceRuleSaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedServiceRules = append(double.savedServiceRules, rule)
+	double.declarationLog = append(double.declarationLog, "customer-service-rule-body")
+	if double.serviceRuleOutcome == ports.CustomerServiceRuleSaveOutcomeInvalid {
+		return ports.CustomerServiceRuleSaved, nil
+	}
+	return double.serviceRuleOutcome, nil
 }
 
 func (double *publicationRegistryDouble) SavePricePolicyCaliber(

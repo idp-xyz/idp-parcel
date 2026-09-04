@@ -985,6 +985,12 @@ func (stub stubPublicationRegistry) SavePricePolicyCaliber(
 	return ports.PricePolicyCaliberSaveOutcomeInvalid, errors.New("本片不用口径册")
 }
 
+func (stub stubPublicationRegistry) SaveCustomerServiceRule(
+	context.Context, domain.CustomerServiceRuleVersion,
+) (ports.CustomerServiceRuleSaveOutcome, error) {
+	return ports.CustomerServiceRuleSaveOutcomeInvalid, errors.New("本片不用客户服务规则册")
+}
+
 func (stub stubPublicationRegistry) SaveAsOfPolicies(
 	context.Context, domain.AsOfDeclaration,
 ) (ports.DeclarationSaveOutcome, error) {

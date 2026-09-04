@@ -152,6 +152,28 @@ type SupplierAgreementContentView interface {
 	) (domain.SupplierAgreement, bool, error)
 }
 
+// CustomerServiceRuleContentView 取已唯一选出的客户服务规则版本的正文：挂在哪个商业对象上、
+// 责任方、范围，以及首发两项——索赔期限与最低材料（ADR-0104）。
+//
+// 分界同 CreditPolicyContentView：解析走既有闭包选版本壳（CustomerServiceRuleObject 已在封闭集，
+// 一视同仁），正文不进整册与 ViewRevision，消费方按已选中的版本点读。ADR-0104 Decision 四点名
+// 的那一道核——「这一版挂的是不是我手上这份产品 / 合同」——放在本口里做，不放在解析里：壳上
+// 指名了正文所挂那一类的引用而两处不等，走 error（坏数据），不折成未登记。
+//
+// found=false = 正文未登记（无父行）。有父行而两张子表都空是坏数据（领域要求至少一项），
+// 走 error，不得折成 found=false——那会让消费方去催一份其实已经写坏的配置。读取失败同样走
+// error。**本口不提供任何默认期限或默认材料**：读不到就是租户没登记，visibility-exception 据以
+// 停在指名到维的未决；凑一份就是发明实例参数。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type CustomerServiceRuleContentView interface {
+	LoadCustomerServiceRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rule domain.CommercialVersion,
+	) (domain.CustomerServiceRuleVersion, bool, error)
+}
+
 // PricePolicyCaliberView 取已唯一选出的价格规则版本声明的计价口径：税务口径、体积口径与可缺的
 // 汇率口径。这是 parcel-pricing 在登记参考序列取值时按 quoteBasis 冻结口径正文要走的读口
 // （票 02 裁「登记时冻结，不走端口现取」——冻的是这里读回的正文，读一次、冻进序列，之后不再回来问）。
@@ -474,6 +496,34 @@ func (outcome SupplierAgreementSaveOutcome) String() string {
 	}
 }
 
+// CustomerServiceRuleSaveOutcome 是一次客户服务规则正文登记在持久化面的落点（ADR-0031 同款）：
+// `已登记`是重放，`内容冲突`是同一规则版本被登记成另一份正文（适用对象、责任方、范围、任一条
+// 期限或任一份材料清单不同）。两者都不是 error，绝不覆盖——改规则必须发新版本，这正是 VE 采用时
+// 只冻版本引用就够的依据（ADR-0104 Decision 五）。
+//
+// 不与 CreditPolicySaveOutcome 等共用：判据虽同，各册各自演进（判据同 ChannelAccountUseSaveOutcome）。
+type CustomerServiceRuleSaveOutcome uint8
+
+const (
+	CustomerServiceRuleSaveOutcomeInvalid CustomerServiceRuleSaveOutcome = iota
+	CustomerServiceRuleSaved
+	CustomerServiceRuleAlreadyRegistered
+	CustomerServiceRuleContentConflict
+)
+
+func (outcome CustomerServiceRuleSaveOutcome) String() string {
+	switch outcome {
+	case CustomerServiceRuleSaved:
+		return "SAVED"
+	case CustomerServiceRuleAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case CustomerServiceRuleContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // PricePolicyCaliberSaveOutcome 是一次价格政策口径登记在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份口径（税务、体积、汇率任一格
 // 不同，含汇率格从缺席变在场）。两者都不是 error，绝不覆盖。
@@ -549,8 +599,9 @@ type CommercialPublicationView interface {
 // 只需读的解析与权威视图依赖内嵌的只读口，不持有任何 Save。
 //
 // 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）、价格与
-// 结算政策册（ADR-0034/0044/0057），以及信用政策册与供应商协议册（票
-// party-commercial-context-gaps/03）。端口按具名 Save 扩展，不开通用口。
+// 结算政策册（ADR-0034/0044/0057）、信用政策册与供应商协议册（票
+// party-commercial-context-gaps/03），以及客户服务规则册（ADR-0104）。端口按具名 Save
+// 扩展，不开通用口。
 type PublicationRegistry interface {
 	CommercialPublicationView
 	SaveVersion(
@@ -606,6 +657,14 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		caliber domain.PricePolicyCaliber,
 	) (PricePolicyCaliberSaveOutcome, error)
+	// SaveCustomerServiceRule 登记一份客户服务规则版本的正文：适用对象、责任方、范围与首发两项
+	// （索赔期限、最低材料）。它不代替 SaveVersion；正文不进整册，消费方经
+	// CustomerServiceRuleContentView 点读（ADR-0104 Decision 四）。壳与正文适用声明的一致性
+	// 由发布编排在写入前核，本口只登记。
+	SaveCustomerServiceRule(
+		ctx context.Context,
+		rule domain.CustomerServiceRuleVersion,
+	) (CustomerServiceRuleSaveOutcome, error)
 
 	// 以下是六族声明表的具名 Save（syn-wall-door-audit 票 03 的写入半边）。声明正文
 	// 随其拥有版本的发布一并登记，键=拥有版本完整身份；按拥有对象挂、不合并
