@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`10`、`12`、`15`、`16`、`17` 已 resolved，其余实现票待做
+Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`13`、`15`..`18` 已 resolved；`14` ready-for-agent（2026-09-04 裁决落票面）；`19`、`21` ready-for-agent（本波 MCP-6 在做——接 MCP-5 崩溃现场，分支 `mcp5-lc19-21`，未入 main）；`20` draft（等 `18` 之后的第一家真源）。状态行由通道 2 于 2026-09-04 对票面重核后改写（代 MCP-3 簿记批，本波只改这一次，完工对齐归 MCP-1）
 
 ## 这个 feature 是什么
 
@@ -34,7 +34,7 @@ Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 
 ## 子票
 
-**清单已完整**，17 张。四张裁决票（`01`..`04`）不写实现，它们阻塞其后的实现票——不先裁，后面每张都会各自假设一个答案，而**重复或分叉的实现在 `go build` 与 `go test` 下全绿**，要到集成才看得见。
+清单 21 张（`18`–`21` 随 `16` 收口拆出）。**清单尚未闭合**：三处已收口票的 Answer 里埋着的后继今天没有子票承接——`12` 收口 Comment 留下的择优链组合根与调用入口、`11` 留下的 `JudgeLabelServiceFinalHandler` 三个调用方（TF 首次有效收寄事实到达、面单交易定案、受控关闭/重开决定生效）、PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行（取证见 [`unresolved-review-20260904/remaining-work-a3a4814.md`](../unresolved-review-20260904/remaining-work-a3a4814.md) 第五节）；`18`–`21` 全是轨迹侧，没有一张承接它们，立票归 owner。四张裁决票（`01`..`04`）不写实现，它们阻塞其后的实现票——不先裁，后面每张都会各自假设一个答案，而**重复或分叉的实现在 `go build` 与 `go test` 下全绿**，要到集成才看得见。
 
 ### 裁决票（四张均已 resolved，2026-09-02 由 MCP-4 经 owner 授权裁定）
 
@@ -56,15 +56,15 @@ Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 | [`07` 取面单出向端口形状](./issues/07-outbound-label-fetch-port-shape.md) | **已落地**：出向缝落 `internal/platform/outbound`（两条链共用），端口落 PS `ports`；四处差异各有类型落点；`确证未受理`过举证门（举不出实据即降级）；「不得重发」与「只能查询收口」两条纪律做进谓词而非留给人记住；另加一道出向缝不得看见传输层的门禁 | `resolved` |
 | [`10` 面单继续尝试决定登记册](./issues/10-continued-attempt-decision-registry.md) | **已落地**：登记册按（租户＋包裹）成册、决定只追加、判断由 Judge 现算不存列；读面那一格换真输入（登记册＋当前有效终局），并另交代决定历史在不在——「没有人作过决定」与「最近适用决定为重开」派生同一格，不加第三格 | `resolved` |
 | [`12` 候选装配](./issues/12-channel-candidate-assembly.md) | **已落地**：装配三片＋择优编排＋成本取数适配器，装配器接上择优端口（`cb86027`）；整条链的组合根与调用入口不在本票，待另立票 | `resolved` |
-| [`13` `BUY` 批量评价与成本分值桥](./issues/13-buy-evaluation-to-cost-score-bridge.md) | 逐候选各算各的计费重；出局判断落择优层，不得以零金额顶替 | `ready-for-agent` |
-| [`15` 轨迹源的拉取/接收端口](./issues/15-tracking-source-inbound-port.md) | 形态选择（拉取/回调）；`OccurredAt` 缺失要如实交出不得代补 | `ready-for-agent` |
+| [`13` `BUY` 批量评价与成本分值桥](./issues/13-buy-evaluation-to-cost-score-bridge.md) | **已落地**：三道缝（批量评价口、成本分值桥、择优比较器）`54ae107`，收口评审补刀 `5e9d688`；比较器由 `12` 的装配器接上（`cb86027`） | `resolved` |
+| [`15` 轨迹源的拉取/接收端口](./issues/15-tracking-source-inbound-port.md) | **已落地**：形态与端口形状裁于票面 Answer，端口与替身落 `7904003` | `resolved` |
 | [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | **已落地**：三条各有测试证据，`07` 的端口形状装得下、无一条需回；替身落测试专属包，「不进生产装配」由编译器守 | `resolved` |
 | [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | **已落地**：裁「只入引用」并落 [ADR-0092](../../docs/adr/0092-channel-label-payload-lands-as-a-reference-and-the-body-store-is-an-unconfigured-outbound-seam.md)——本体存放是未配置的出向缝；摘要必备、定位符可缺；载荷追加不可覆盖。**无新迁移**（引用是小值，走既有快照），真库实跑改证快照往返 | `resolved` |
-| [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | 与既有终局是不是同一个，要正面答 | `draft`（`06` 已 resolved，阻塞解除） |
-| [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 不复用 `RouteCandidate`（`01` 已裁），落 PS 侧 | `draft`｜`12` |
+| [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | **已落地**：与既有终局的关系正面作答，实现 `0e5a4ea`；三个调用方留作后继（见本节开头） | `resolved` |
+| [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 已裁（2026-09-04）：择优决定作为只追加的决定记录落 PS 侧，引用候选与四格出局因由、不拷内容 | `ready-for-agent`（`01`、`12` 均已 resolved） |
 | [`16` 外部轨迹的收编执行器](./issues/16-external-tracking-fact-adoption-executor.md) | **已落地**：落文 `2bb9300`（ADR-0102 ＋ TF CONTEXT 两词），TF 侧认领/判断/登记/outbox（`a3e28ff`）、VE 侧消费与译装＋路由表（`65b369f`）；一条外部轨迹走到投影。刻意留下三格拆成 `18`–`21` | `resolved` |
 | [`17` TF 两类事实补在线登记口](./issues/17-tf-handover-and-offsite-pickup-need-online-faces.md) | **已判定不做**——`03` 裁定走新立事实，这两个口无用例在守；缺口登记仍留在盘点里 | `resolved` |
-| [`18` 外部承运凭证登记册](./issues/18-external-carrier-credential-registry.md) | `ExternalCarrierCredentialResolver` 的生产实现：凭证 → 真实标识对象；无登记册时收编答`未决`不留痕 | `ready-for-agent` |
+| [`18` 外部承运凭证登记册](./issues/18-external-carrier-credential-registry.md) | **已落地**：登记册五件往返、作废/失效/替代各成新版本，解析口按适用状态×适用范围×标识对象类别作答（`024cb5f`，TF 迁移 `0012`） | `resolved` |
 | [`19` 轨迹源有效时间规则目录](./issues/19-tracking-source-effective-time-rule-catalogue.md) | `EffectiveTimeRules` 的生产实现：按源登记带版本的规则，无规则如实答`无`；**不得默认等于发生时间** | `ready-for-agent` |
 | [`20` 轨迹拉取节拍](./issues/20-tracking-pull-beat.md) | `TrackingSource.Pull` → `Adopt` 的生产入口；随第一家真源的适配器立，节奏属 `PAR-INT-02` | `draft`｜`18` |
 | [`21` 有效时间显式判断的在线面](./issues/21-effective-time-judgment-online-face.md) | `JudgeEffectiveTimeHandler` 的管理台写面；对象是待判断的事实 | `ready-for-agent` |

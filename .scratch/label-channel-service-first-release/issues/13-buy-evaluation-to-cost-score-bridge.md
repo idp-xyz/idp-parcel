@@ -1,7 +1,7 @@
 # 13 `BUY` 评价到成本准则分值之间没有桥，也没有逐候选批量评价口
 
 Category: enhancement
-Status: in-progress——MCP-4 认领后崩溃，MCP-6 接手；三道缝均已落地待评审，见文末 Comments
+Status: resolved——三道缝落 `54ae107`，收口评审补刀 `5e9d688`（「待评审」已发生）；比较器与批量口由票 `12` 的装配器接上（`cb86027`），`production_wiring_baseline.txt` 里为两个新导出工厂加的两条基线已随之剪掉；四条完成判据票面自证（文末 Comments）。状态由通道 2 于 2026-09-04 代簿记，取证见 [unresolved-review-20260904/report.md](../../unresolved-review-20260904/report.md) A 组「label-channel/13」条
 Blocked by: 01（已 resolved：出局判断落**渠道择优比较器**这一层，`parcelpricing` 只答算不算得出价）
 
 ## 缺口
