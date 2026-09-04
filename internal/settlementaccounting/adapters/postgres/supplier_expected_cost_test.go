@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证供应商预期成本的持久化行为：版本往返后金额与依据一字
@@ -235,19 +236,54 @@ func TestTheSameCostTripletFormsOnlyOneFirstVersion(t *testing.T) {
 	mustSaveExpectedCost(t, transactor, repository, tenant, formedExpectedCost(t, "cost-v1", "occurrence-1"))
 
 	duplicate := formedExpectedCost(t, "cost-v9", "occurrence-1")
-	var outcome adapter.ExpectedCostSaveOutcome
+	var outcome ports.ExpectedCostSaveOutcome
 	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
 		outcome, err = repository.Save(txCtx, tenant, duplicate, expectedCostRecordedAt)
 		return err
 	})
-	if outcome != adapter.ExpectedCostAlreadyRecorded {
+	if outcome != ports.ExpectedCostAlreadyRecorded {
 		t.Fatalf("outcome = %s, want ALREADY_RECORDED", outcome)
 	}
 
 	if _, found, err := repository.LoadExpectedCost(ctx, tenant, duplicate.Version()); err != nil || found {
 		t.Fatalf("第二份首版落库了：found=%v err=%v", found, err)
 	}
+
+	// 撞了三维的调用方不知道赢家的版本身份，登记面按三维把首版交回来（UC-SA-002 步 5 BUY
+	// 侧编排的`已形成过首版`一格靠它作答）；纠错版本共用同一三维却不是首版，不得被它答出。
+	t.Run("the first version is found by its triplet and a correction is not", func(t *testing.T) {
+		first := formedExpectedCost(t, "cost-v1", "occurrence-1")
+		corrected, err := first.AppendCorrection(domain.CostCorrectionSpec{
+			Version:          saValue(t, domain.NewSupplierCostVersionID, "cost-v2"),
+			Occurrence:       first.Occurrence(),
+			RuleVersion:      first.RuleVersion(),
+			Agreement:        first.Agreement(),
+			Evaluation:       saValue(t, domain.NewBuyEvaluationReference, "buy-eval-2"),
+			OriginalCurrency: saValue(t, domain.NewCurrencyCode, "USD"),
+			OriginalMinor:    4300,
+			SettlementMinor:  4300,
+			Reason:           saValue(t, domain.NewCostCorrectionReason, "rule-restated"),
+		})
+		if err != nil {
+			t.Fatalf("追加纠错：%v", err)
+		}
+		mustSaveExpectedCost(t, transactor, repository, tenant, corrected)
+
+		var registry ports.ExpectedCostRegistry = repository
+		found, present, err := registry.LoadFirstVersion(ctx, tenant,
+			first.Occurrence().ID(), first.FeeItem(), first.RuleVersion())
+		if err != nil || !present {
+			t.Fatalf("按三维取首版：present=%v err=%v", present, err)
+		}
+		if found.Version() != first.Version() {
+			t.Fatalf("按三维交回的是 %s，want %s（纠错版本不是首版）", found.Version(), first.Version())
+		}
+		if _, present, err := registry.LoadFirstVersion(ctx, tenant,
+			saValue(t, domain.NewChargeOccurrenceID, "occurrence-none"), first.FeeItem(), first.RuleVersion()); err != nil || present {
+			t.Fatalf("没形成过的三维答了首版：present=%v err=%v", present, err)
+		}
+	})
 }
 
 func TestSavingAnExpectedCostOutsideATransactionIsRefused(t *testing.T) {
@@ -291,7 +327,7 @@ func mustSaveExpectedCost(
 		if err != nil {
 			return err
 		}
-		if outcome != adapter.ExpectedCostSaved {
+		if outcome != ports.ExpectedCostSaved {
 			t.Errorf("登记 %s：outcome = %s, want SAVED", cost.Version(), outcome)
 		}
 		return nil

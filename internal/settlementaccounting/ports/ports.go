@@ -150,6 +150,117 @@ type ExpectedCostView interface {
 	) (domain.SupplierExpectedCost, bool, error)
 }
 
+// BuyEvaluationOutcome 是一份 BUY `PricingEvaluation` 在 SA 眼里的封闭五格：已完成，与提供方
+// 的四种非完成结果——待判断（缺事实/缺汇率序列）、不可计价（价卡明确排除）、冲突、未形成
+// （技术）。四格逐一保留不合并：它们在 UC-SA-002 里各有自己的结束格（待判断 / 计价明确排除
+// 已接收 / 冲突 / 未形成），续办完全不同（补事实 / 不重试 / 等裁决 / 重试），折成一格就答不出
+// 该等谁；折成零金额更是把「算不出」写成「不要钱」（AT-SA-175）。
+type BuyEvaluationOutcome uint8
+
+const (
+	BuyEvaluationOutcomeInvalid BuyEvaluationOutcome = iota
+	BuyEvaluationCompleted
+	BuyEvaluationPending
+	BuyEvaluationUnratable
+	BuyEvaluationConflict
+	BuyEvaluationNotFormed
+)
+
+func (outcome BuyEvaluationOutcome) String() string {
+	switch outcome {
+	case BuyEvaluationCompleted:
+		return "COMPLETED"
+	case BuyEvaluationPending:
+		return "PENDING"
+	case BuyEvaluationUnratable:
+		return "UNRATABLE"
+	case BuyEvaluationConflict:
+		return "CONFLICT"
+	case BuyEvaluationNotFormed:
+		return "NOT_FORMED"
+	default:
+		return ""
+	}
+}
+
+// BuyEvaluationAdoption 是 SA 从一份 BUY `PricingEvaluation` 采用的那几件（UC-SA-002 步 5
+// 「保存评价引用、结算采用快照……原币与合同结算币不同时，直接采用评价内的原币金额、汇率
+// 序列版本和换算步骤作为换算依据」）。金额已是本上下文的最小币单位；换算步骤只在跨币种
+// 且评价内已换算时在场——评价没算过的数这里不补（AT-SA-177 由领域形成门拒）。
+//
+// 计价基准时点（asOf）不在这里：它由评价固定在评价内，SA 以 Evaluation 引用回指，不复制
+// 第二份；发生项、费用项目与供应商协议也不在这里——它们归 TF/PC，随命令进入，与评价一起
+// 形成预期成本。RuleVersion 是评价命中的可执行价卡版本（GLOSSARY「价格规则版本」的 PP 半边）。
+type BuyEvaluationAdoption struct {
+	Evaluation         domain.BuyEvaluationReference
+	Outcome            BuyEvaluationOutcome
+	RuleVersion        domain.PurchaseRuleVersionReference
+	OriginalCurrency   domain.CurrencyCode
+	OriginalMinor      int64
+	SettlementCurrency domain.CurrencyCode
+	SettlementMinor    int64
+	Conversion         domain.ConversionStepReference
+}
+
+// BuyEvaluationView 是 BUY `PricingEvaluation` → SA 的入向缝在本上下文这一侧的形状：按评价
+// 引用查一份采用快照。found=false 表示该评价不存在——指错评价是提交矛盾，不是等谁。
+//
+// 缝的形状（mechanism-executor-triage/06 SA-c 裁定）：触发用提供方已发的
+// `parcel-pricing.evaluation.recorded`（指针载荷），内容按引用查回；适配器落在消费侧
+// internal/settlementaccounting/adapters/parcelpricing/（ADR-0025），读提供方的评价库翻译——
+// 方向/目的不是 BUY·SUPPLIER_COST 拒；四种非完成结果逐格译。**适配器在提供方的金额取整槽
+// 落地前留空**：提供方今天的合计与换算不取整、scale 随价表与汇率漂，而本上下文存最小币单位，
+// 中间没有任何一步有依据把十进制折成整数（label-channel/13 已裁没有币种小数位表）；细节在票面。
+type BuyEvaluationView interface {
+	LoadBuyEvaluation(
+		ctx context.Context,
+		tenant domain.TenantID,
+		evaluation domain.BuyEvaluationReference,
+	) (BuyEvaluationAdoption, bool, error)
+}
+
+// ExpectedCostSaveOutcome 是一份预期成本版本在持久化面的落点封闭代数（ADR-0031）：同
+// （租户+版本）已有行、或同（发生项+费用项目+规则版本）已有首版，都是`已登记`——绝不覆盖，
+// 纠错是新版本不是改写。
+type ExpectedCostSaveOutcome uint8
+
+const (
+	ExpectedCostSaveOutcomeInvalid ExpectedCostSaveOutcome = iota
+	ExpectedCostSaved
+	ExpectedCostAlreadyRecorded
+)
+
+func (outcome ExpectedCostSaveOutcome) String() string {
+	switch outcome {
+	case ExpectedCostSaved:
+		return "SAVED"
+	case ExpectedCostAlreadyRecorded:
+		return "ALREADY_RECORDED"
+	default:
+		return ""
+	}
+}
+
+// ExpectedCostRegistry 是供应商预期成本的登记面（UC-SA-002 步 5 BUY 侧形成、步 8 纠错追加）。
+// 与读取面 ExpectedCostView 分两个接口、同一个适配器实现：读方（UC-SA-004 逐行匹配）不该拿到
+// 写口。LoadFirstVersion 按幂等三维取首版——「同一发生项、费用项目和规则版本不得重复形成预期
+// 成本」撞上时，编排要读回先到的首版作答，而它的版本身份调用方不知道。
+type ExpectedCostRegistry interface {
+	Save(
+		ctx context.Context,
+		tenant domain.TenantID,
+		cost domain.SupplierExpectedCost,
+		recordedAt time.Time,
+	) (ExpectedCostSaveOutcome, error)
+	LoadFirstVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		occurrence domain.ChargeOccurrenceID,
+		feeItem domain.FeeItemReference,
+		ruleVersion domain.PurchaseRuleVersionReference,
+	) (domain.SupplierExpectedCost, bool, error)
+}
+
 // SupplierAuditAuthorityView 取该供应商/责任法人范围的审核授权配置。found=false 表示
 // 授权未配置——实例半边未提供时审核停在未决，不默认放行也不虚构授权人（UC-SA-004
 // 「无授权不得人工接受或拒绝」）。

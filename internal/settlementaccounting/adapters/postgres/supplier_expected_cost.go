@@ -13,36 +13,15 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// ExpectedCostSaveOutcome 是一份预期成本版本在持久化面的落点封闭代数（ADR-0031）：
-// 同（租户+版本）已有行是重放，绝不覆盖——纠错是新版本，不是改写旧版本。
-//
-// 它声明在适配器包而不在 ports：登记面今天还没有应用层调用方（UC-SA-002 的预期成本
-// 形成编排尚未落地），把一个没人消费的端口先摆进 ports 是预开空方法。读取面不同——
-// ports.ExpectedCostView 已有消费方，本类型实现的正是它。
-type ExpectedCostSaveOutcome uint8
-
-const (
-	ExpectedCostSaveOutcomeInvalid ExpectedCostSaveOutcome = iota
-	ExpectedCostSaved
-	ExpectedCostAlreadyRecorded
-)
-
-func (outcome ExpectedCostSaveOutcome) String() string {
-	switch outcome {
-	case ExpectedCostSaved:
-		return "SAVED"
-	case ExpectedCostAlreadyRecorded:
-		return "ALREADY_RECORDED"
-	default:
-		return ""
-	}
-}
-
-// SupplierExpectedCosts 实现 ports.ExpectedCostView，并承载同一张表的登记面。
+// SupplierExpectedCosts 实现 ports.ExpectedCostView（读取面）与 ports.ExpectedCostRegistry
+// （登记面），同一张表。
 //
 // 读写同表同行模型、放在一个类型里，理由与 parcel-shipment 的取消库一样：分开实现
 // 就是第二处定义。表是 settlement-accounting 自己的——CONTEXT 把供应商预期成本判给
 // 本上下文独立拥有，账单主张与审核应付是另外的对象，行上一列都不给它们。
+//
+// 登记面的落点代数曾声明在本包（那时它没有应用层调用方，不预开端口）；UC-SA-002 步 5 的
+// BUY 侧形成编排落地后它有了消费方，代数随之搬进 ports.ExpectedCostSaveOutcome。
 type SupplierExpectedCosts struct {
 	db *bentopg.DB
 }
@@ -54,7 +33,10 @@ func NewSupplierExpectedCosts(db *bentopg.DB) (*SupplierExpectedCosts, error) {
 	return &SupplierExpectedCosts{db: db}, nil
 }
 
-var _ ports.ExpectedCostView = (*SupplierExpectedCosts)(nil)
+var (
+	_ ports.ExpectedCostView     = (*SupplierExpectedCosts)(nil)
+	_ ports.ExpectedCostRegistry = (*SupplierExpectedCosts)(nil)
+)
 
 // LoadExpectedCost 按版本取回预期成本。found=false 是「这个版本不存在」——UC-SA-004
 // 逐行匹配指错版本是提交矛盾，不是等谁，所以它与读取失败分成两种答案。
@@ -66,12 +48,37 @@ func (repository *SupplierExpectedCosts) LoadExpectedCost(
 	tenant domain.TenantID,
 	version domain.SupplierCostVersionID,
 ) (domain.SupplierExpectedCost, bool, error) {
+	return repository.loadOne(ctx,
+		`WHERE tenant_id = $1 AND version = $2`, tenant.String(), version.String())
+}
+
+// LoadFirstVersion 按幂等三维取首版（prior_version IS NULL 那一行——部分唯一索引保证最多
+// 一条）。found=false 表示这三维还没形成过预期成本。
+func (repository *SupplierExpectedCosts) LoadFirstVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	occurrence domain.ChargeOccurrenceID,
+	feeItem domain.FeeItemReference,
+	ruleVersion domain.PurchaseRuleVersionReference,
+) (domain.SupplierExpectedCost, bool, error) {
+	return repository.loadOne(ctx,
+		`WHERE tenant_id = $1 AND occurrence_id = $2 AND fee_item = $3 AND purchase_rule_version = $4
+		   AND prior_version IS NULL`,
+		tenant.String(), occurrence.String(), feeItem.String(), ruleVersion.String())
+}
+
+func (repository *SupplierExpectedCosts) loadOne(
+	ctx context.Context,
+	where string,
+	args ...any,
+) (domain.SupplierExpectedCost, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return domain.SupplierExpectedCost{}, false, fmt.Errorf("load expected cost: %w", err)
 	}
 
 	var (
+		versionValue                                      string
 		occurrenceID, occurrenceReason, occurrenceVersion string
 		occurredAt                                        time.Time
 		feeItem, ruleVersion, agreement, evaluation       string
@@ -80,22 +87,23 @@ func (repository *SupplierExpectedCosts) LoadExpectedCost(
 		conversion, priorVersion, correctionReason        *string
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT occurrence_id, occurrence_reason, occurrence_version, occurred_at,
+		`SELECT version, occurrence_id, occurrence_reason, occurrence_version, occurred_at,
 		        fee_item, purchase_rule_version, agreement_ref, evaluation_ref,
 		        original_currency, original_minor, settlement_currency, settlement_minor,
 		        conversion_ref, prior_version, correction_reason
-		   FROM settlement_accounting.supplier_expected_cost
-		  WHERE tenant_id = $1
-		    AND version = $2`,
-		tenant.String(),
-		version.String(),
-	).Scan(&occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
+		   FROM settlement_accounting.supplier_expected_cost `+where,
+		args...,
+	).Scan(&versionValue, &occurrenceID, &occurrenceReason, &occurrenceVersion, &occurredAt,
 		&feeItem, &ruleVersion, &agreement, &evaluation,
 		&originalCurrency, &originalMinor, &settlementCurrency, &settlementMinor,
 		&conversion, &priorVersion, &correctionReason)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SupplierExpectedCost{}, false, nil
 	}
+	if err != nil {
+		return domain.SupplierExpectedCost{}, false, fmt.Errorf("load expected cost: %w", err)
+	}
+	version, err := domain.NewSupplierCostVersionID(versionValue)
 	if err != nil {
 		return domain.SupplierExpectedCost{}, false, fmt.Errorf("load expected cost: %w", err)
 	}
@@ -139,10 +147,10 @@ func (repository *SupplierExpectedCosts) Save(
 	tenant domain.TenantID,
 	cost domain.SupplierExpectedCost,
 	recordedAt time.Time,
-) (ExpectedCostSaveOutcome, error) {
+) (ports.ExpectedCostSaveOutcome, error) {
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)
+		return ports.ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)
 	}
 
 	originalCurrency, originalMinor := cost.OriginalAmount()
@@ -158,7 +166,7 @@ func (repository *SupplierExpectedCosts) Save(
 	reason, hasReason := cost.CorrectionReason()
 	if corrected != hasReason {
 		// 领域不变量：纠错版本回指与原因同在同缺。走到这里是领域或适配器的 bug。
-		return ExpectedCostSaveOutcomeInvalid, fmt.Errorf(
+		return ports.ExpectedCostSaveOutcomeInvalid, fmt.Errorf(
 			"save expected cost: 版本 %s 的纠错两件不成对", cost.Version())
 	}
 	if corrected {
@@ -195,12 +203,12 @@ func (repository *SupplierExpectedCosts) Save(
 		recordedAt.UTC(),
 	)
 	if err != nil {
-		return ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)
+		return ports.ExpectedCostSaveOutcomeInvalid, fmt.Errorf("save expected cost: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ExpectedCostAlreadyRecorded, nil
+		return ports.ExpectedCostAlreadyRecorded, nil
 	}
-	return ExpectedCostSaved, nil
+	return ports.ExpectedCostSaved, nil
 }
 
 // expectedCostColumns 是一行预期成本的原样取值。三个指针列对应库里的三个可空列：
