@@ -1,7 +1,7 @@
 # 来源连接器框架 + 首个连接器（CFETS 人民币中间价）；免复核声明格
 
 Category: enhancement
-Status: ready-for-agent——两问已裁（2026-09-04，通道 6，owner 授权；见「裁决」）：范围收窄为**连接器契约 + `FileConnector` + 免复核声明格 + `cmd/parcel-pricing-feed`**；CFETS 连接器那一段留 draft，随部署侧登记出网能力后另开工
+Status: in-progress——MCP-5（2026-09-04，接管重派 task-31a5aa4a；基线 `eba019a8`，隔离分支 `mcp5-pricing06`）。两问已裁（2026-09-04，通道 6，owner 授权；见「裁决」）：范围收窄为**连接器契约 + `FileConnector` + 免复核声明格 + `cmd/parcel-pricing-feed`**；CFETS 连接器那一段留 draft，随部署侧登记出网能力后另开工
 Blocked by: 无（`03` 已 resolved `f62d619`）
 
 ## 要建什么
