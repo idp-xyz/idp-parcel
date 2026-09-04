@@ -269,8 +269,14 @@ internal/visibilityexception/domain SubmitEvidence
 # 是它的生产调用方（UC-SA-003 步 7 的调整半边——费用半边早已由 IncludeLateCharge 接上，同一步
 # 此前只接了一半）。成因三分先分过：全仓该名字只有一处声明（domain/customer_statement.go），
 # 是第二种。
-internal/settlementaccounting/domain FormAuditedPayable
-internal/settlementaccounting/domain FormSupplierCreditNote
+#
+# FormAuditedPayable 与 FormSupplierCreditNote 曾在这里，2026-09-04 随同票 SA-a 一笔剪掉：
+# application/audit_supplier_bill.go 的 ReceiveSupplierBillHandler.Audit 与 .Credit 是它们的生产
+# 调用方（UC-SA-004 步 5–6，步 7 的两份发布并进 supplier_bill_handoff.go 同分区）。成因三分先
+# 分过：两个名字在全仓各只有一处声明（domain/supplier_bill.go），同笔新增的 AuditBillLineCommand
+# / FormSupplierCreditNoteCommand 是近名不是同名，门禁比的是精确相等（tf-unwired-seven/05 那段核过
+# 匹配码），是第二种。**在 e8ffe32 的干净内容上（`git show` 取本文件）两法同得剪前 21、剪后 19**；
+# 两个数只对该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
 # 这一条与 DecideDisclosure 是全部 33 条里仅有的两个**已经走出 domain 层**的：适配器与应用层
 # 都在、两边都有测试，唯独没有生产调用路径。真烂会先烂在这两条上，别的都还没开始。
 internal/settlementaccounting/domain FormSupplierExpectedCost

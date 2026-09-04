@@ -162,13 +162,102 @@ type SupplierAuditAuthorityView interface {
 	) (domain.AuditorReference, bool, error)
 }
 
-// SupplierBillHandoffIntent 把已提交的接收记录交给审核与对账消费。意图由幂等键认领，
-// 重放重发同一份（ADR-0043 同款纪律）。
-type SupplierBillHandoffIntent struct {
-	Record BillReceptionRecord
+// SupplierPayableAccountView 取该供应商/责任法人/币种的供应商审核应付所归集的结算账户
+// （`PAR-SET-01`「首发主伙伴供应商审核应付/费用贷项的结算账户、方向、币种和归集范围」）。
+// found=false 表示账户未登记——实例半边未提供时审核停在未决，不默认账户、不从供应商身份
+// 推导：CONTEXT「结算账户……不能由客户账户或当前组织临时推导」对供应商侧同样成立。
+//
+// 与 SupplierAuditAuthorityView 分两个读口：授权答「谁能审」，账户答「审过的应付归哪本账」，
+// 两者的未配置态等的东西不同，并成一格之后未决理由就说不出等的是哪一半。
+type SupplierPayableAccountView interface {
+	LoadSupplierPayableAccount(
+		ctx context.Context,
+		tenant domain.TenantID,
+		supplier domain.SupplierPartyReference,
+		legalEntity domain.LegalEntityReference,
+		currency domain.CurrencyCode,
+	) (domain.SettlementAccountID, bool, error)
 }
 
-// SupplierBillHandoff 把接收记录写入 Outbox（`OutboxSupplierBillHandoff`）。
+// AuditedPayableKey 是审核应付的幂等键：同一应付身份只形成一次。
+type AuditedPayableKey struct {
+	TenantID domain.TenantID
+	Payable  domain.PayableID
+}
+
+// AuditedPayableRecord 是一次审核越过提交边界留下的东西。这里刻意没有付款、收款或净额
+// 字段——审核应付不表示供应商已付款（UC-SA-004 结果契约），贷项也不净入它。
+type AuditedPayableRecord struct {
+	Key           AuditedPayableKey
+	ContentDigest string
+	Payable       domain.AuditedPayable
+	RecordedAt    time.Time
+}
+
+type AuditedPayableSaveOutcome uint8
+
+const (
+	AuditedPayableSaveOutcomeInvalid AuditedPayableSaveOutcome = iota
+	AuditedPayableSaved
+	AuditedPayableAlreadyRecorded
+)
+
+// AuditedPayableStore 按幂等键找回并保存审核应付（写入代数同 ADR-0031）。FindByLine 是第二
+// 个读法：一行主张只成立一份应付（AT-SA-089 的「其他范围保持原状态」反过来说就是通过的那一
+// 格不再第二次通过），撞上同一行的第二份应付时编排要读回先到的那份作答。
+type AuditedPayableStore interface {
+	FindByKey(ctx context.Context, key AuditedPayableKey) (AuditedPayableRecord, bool, error)
+	FindByLine(
+		ctx context.Context,
+		tenant domain.TenantID,
+		claim domain.BillClaimID,
+		line domain.BillLineReference,
+	) (AuditedPayableRecord, bool, error)
+	Save(ctx context.Context, record AuditedPayableRecord) (AuditedPayableSaveOutcome, error)
+}
+
+// SupplierCreditNoteKey 是供应商费用贷项的幂等键：同一贷项身份与版本只形成一次。
+type SupplierCreditNoteKey struct {
+	TenantID domain.TenantID
+	Note     domain.CreditNoteID
+	Version  domain.CreditNoteVersion
+}
+
+// SupplierCreditNoteRecord 是一次贷项形成越过提交边界留下的东西。
+type SupplierCreditNoteRecord struct {
+	Key           SupplierCreditNoteKey
+	ContentDigest string
+	Note          domain.SupplierCreditNote
+	RecordedAt    time.Time
+}
+
+type SupplierCreditNoteSaveOutcome uint8
+
+const (
+	SupplierCreditNoteSaveOutcomeInvalid SupplierCreditNoteSaveOutcome = iota
+	SupplierCreditNoteSaved
+	SupplierCreditNoteAlreadyRecorded
+)
+
+// SupplierCreditNoteStore 按幂等键找回并保存供应商费用贷项（写入代数同 ADR-0031）。只追加、
+// 无改写口：贷项回指原应付而不改它，贷项自己的更正是新版本。
+type SupplierCreditNoteStore interface {
+	FindByKey(ctx context.Context, key SupplierCreditNoteKey) (SupplierCreditNoteRecord, bool, error)
+	Save(ctx context.Context, record SupplierCreditNoteRecord) (SupplierCreditNoteSaveOutcome, error)
+}
+
+// SupplierBillHandoffIntent 把 UC-SA-004 越过提交边界的三种东西之一交给下游：接收记录
+// （审核与对账消费）、审核应付引用、供应商费用贷项引用（UC-SA-005 核销与 UC-SA-006 经营口径
+// 消费）。三者各携其记录，同一时刻只填一格，消费方自分；意图由各自幂等键认领，重放重发
+// 同一份（ADR-0043 同款纪律）。应付与贷项**分别发布**（UC-SA-004 步 7）：一方投递成功不推定
+// 另一方已发布（AT-SA-098）。
+type SupplierBillHandoffIntent struct {
+	Record     BillReceptionRecord
+	Payable    AuditedPayableRecord
+	CreditNote SupplierCreditNoteRecord
+}
+
+// SupplierBillHandoff 把接收记录、审核应付与贷项写入 Outbox（`OutboxSupplierBillHandoff`）。
 type SupplierBillHandoff interface {
 	HandOffSupplierBill(ctx context.Context, intent SupplierBillHandoffIntent) error
 }

@@ -101,15 +101,13 @@ internal/partycommercial/domain CustomerServiceRuleVersion
 
 # ---- settlement-accounting ----
 
-# 一类：经 FormAuditedPayable / FormSupplierCreditNote / FormSupplierExpectedCost 取得，三个工厂
-# 都在函数名棘轮基线里（应付审定、供应商贷项、供应商预计成本的执行器未接）。随各自工厂出名单。
-internal/settlementaccounting/domain AuditedPayable
-internal/settlementaccounting/domain CreditNoteID
-internal/settlementaccounting/domain CreditNoteVersion
-internal/settlementaccounting/domain CreditReasonReference
-internal/settlementaccounting/domain PayableID
-internal/settlementaccounting/domain SupplierCreditNote
-internal/settlementaccounting/domain SupplierCreditNoteSpec
+# 一类：经 FormSupplierExpectedCost 取得，它在函数名棘轮基线里（供应商预计成本的执行器未接）。
+# 随它出名单。
+# 审核应付与贷项那一族（AuditedPayable / PayableID / SupplierCreditNote / SupplierCreditNoteSpec /
+# CreditNoteID / CreditNoteVersion / CreditReasonReference）曾在这里，2026-09-04 随
+# mechanism-executor-triage/06 SA-a 剪掉：FormAuditedPayable / FormSupplierCreditNote 接进
+# application/audit_supplier_bill.go 后七者经命令、结果与登记记录入种子。**在 e8ffe32 的干净内容
+# 上两法同得剪前 54、剪后 47**，只对该检出成立。
 internal/settlementaccounting/domain SupplierExpectedCostSpec
 
 # ---- visibility-exception ----

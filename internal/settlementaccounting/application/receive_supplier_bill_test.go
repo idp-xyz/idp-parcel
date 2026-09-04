@@ -137,27 +137,36 @@ type billClock struct{ at time.Time }
 func (clock billClock) Now() time.Time { return clock.at }
 
 type billFixture struct {
-	store     *billStoreDouble
-	costs     *costViewDouble
-	authority *authorityViewDouble
-	handoff   *billHandoffDouble
-	handler   *application.ReceiveSupplierBillHandler
+	store       *billStoreDouble
+	costs       *costViewDouble
+	authority   *authorityViewDouble
+	accounts    *accountViewDouble
+	payables    *payableStoreDouble
+	creditNotes *creditNoteStoreDouble
+	handoff     *billHandoffDouble
+	handler     *application.ReceiveSupplierBillHandler
 }
 
 func newBillFixture(t *testing.T) *billFixture {
 	t.Helper()
 	fixture := &billFixture{
-		store:     newBillStore(),
-		costs:     &costViewDouble{costs: map[string]domain.SupplierExpectedCost{}},
-		authority: &authorityViewDouble{configured: true},
-		handoff:   &billHandoffDouble{},
+		store:       newBillStore(),
+		costs:       &costViewDouble{costs: map[string]domain.SupplierExpectedCost{}},
+		authority:   &authorityViewDouble{configured: true},
+		accounts:    &accountViewDouble{configured: true},
+		payables:    newPayableStore(),
+		creditNotes: newCreditNoteStore(),
+		handoff:     &billHandoffDouble{},
 	}
 	fixture.handler = application.NewReceiveSupplierBillHandler(application.ReceiveSupplierBillDeps{
-		Receptions: fixture.store,
-		Costs:      fixture.costs,
-		Authority:  fixture.authority,
-		Downstream: fixture.handoff,
-		Clock:      billClock{at: billRecordedAt},
+		Receptions:  fixture.store,
+		Costs:       fixture.costs,
+		Authority:   fixture.authority,
+		Accounts:    fixture.accounts,
+		Payables:    fixture.payables,
+		CreditNotes: fixture.creditNotes,
+		Downstream:  fixture.handoff,
+		Clock:       billClock{at: billRecordedAt},
 	})
 	fixture.costs.costs["cost/v1"] = fixtureExpectedCost(t, "cost/v1", 12000)
 	fixture.costs.costs["cost/v2"] = fixtureExpectedCost(t, "cost/v2", 2500)

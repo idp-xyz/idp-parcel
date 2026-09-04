@@ -15,6 +15,7 @@ import (
 var (
 	ErrInvalidRehydratedMatch     = errors.New("settlement accounting: rehydrated bill line match violates its invariants")
 	ErrInvalidRehydratedStatement = errors.New("settlement accounting: rehydrated statement violates its invariants")
+	ErrInvalidRehydratedPayable   = errors.New("settlement accounting: rehydrated audited payable violates its invariants")
 )
 
 // RehydrateBillLineMatchSpec 是从行数据重建一格匹配所需的全部字段。Expected 与
@@ -77,6 +78,49 @@ func RehydrateBillLineMatch(spec RehydrateBillLineMatchSpec) (BillLineMatch, err
 		currency:       spec.Currency,
 		basis:          spec.Basis,
 		matchedAt:      spec.MatchedAt.UTC(),
+	}, nil
+}
+
+// RehydrateAuditedPayableSpec 是应付行在库里的样子。FormAuditedPayable 要一份匹配本体才能
+// 拒非`已匹配`行——行里只有审核结果，那道门是写入时判过的；重建门复验的是结果自证的那
+// 几件：身份与依据齐备、预期成本在场（`已匹配`行必有它）、金额恒正、审核时点在场。
+type RehydrateAuditedPayableSpec struct {
+	Payable     PayableID
+	Claim       BillClaimID
+	Line        BillLineReference
+	Expected    SupplierCostVersionID
+	LegalEntity LegalEntityReference
+	Account     SettlementAccountID
+	Currency    CurrencyCode
+	AmountMinor int64
+	Auditor     AuditorReference
+	AuditedAt   time.Time
+}
+
+func RehydrateAuditedPayable(spec RehydrateAuditedPayableSpec) (AuditedPayable, error) {
+	if !spec.Payable.valid() ||
+		!spec.Claim.valid() ||
+		!spec.Line.valid() ||
+		!spec.Expected.valid() ||
+		!spec.LegalEntity.valid() ||
+		!spec.Account.valid() ||
+		!spec.Currency.valid() ||
+		spec.AmountMinor <= 0 ||
+		!spec.Auditor.valid() ||
+		spec.AuditedAt.IsZero() {
+		return AuditedPayable{}, ErrInvalidRehydratedPayable
+	}
+	return AuditedPayable{
+		payable:     spec.Payable,
+		claim:       spec.Claim,
+		line:        spec.Line,
+		expected:    spec.Expected,
+		legalEntity: spec.LegalEntity,
+		account:     spec.Account,
+		currency:    spec.Currency,
+		amountMinor: spec.AmountMinor,
+		auditor:     spec.Auditor,
+		auditedAt:   spec.AuditedAt.UTC(),
 	}, nil
 }
 

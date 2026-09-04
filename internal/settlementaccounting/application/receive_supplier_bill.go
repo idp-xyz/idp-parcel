@@ -1,5 +1,6 @@
 // receive_supplier_bill.go 编排 UC-SA-004 的接收半程：受理、幂等、逐行匹配提交与发布
-// 意图。审核通过形成应付是另一步——匹配完成不是应付，这里不铸应付。
+// 意图。审核通过形成应付是另一步——匹配完成不是应付，Handle 不铸应付；步 5–7 的审核、
+// 贷项与各自的发布在 audit_supplier_bill.go，同一个处理器、同一组依赖。
 package application
 
 import (
@@ -126,12 +127,17 @@ func (result ReceiveSupplierBillResult) AuditUndecided() bool {
 	return result.hasRecord && !result.record.AuditAuthorityConfigured
 }
 
+// ReceiveSupplierBillDeps 是 UC-SA-004 全程的依赖：接收半程用 Receptions/Costs/Authority，
+// 审核半程再用 Accounts/Payables，贷项用 CreditNotes；三种结果同走一个 Downstream 分别发布。
 type ReceiveSupplierBillDeps struct {
-	Receptions ports.BillReceptionStore
-	Costs      ports.ExpectedCostView
-	Authority  ports.SupplierAuditAuthorityView
-	Downstream ports.SupplierBillHandoff
-	Clock      ports.Clock
+	Receptions  ports.BillReceptionStore
+	Costs       ports.ExpectedCostView
+	Authority   ports.SupplierAuditAuthorityView
+	Accounts    ports.SupplierPayableAccountView
+	Payables    ports.AuditedPayableStore
+	CreditNotes ports.SupplierCreditNoteStore
+	Downstream  ports.SupplierBillHandoff
+	Clock       ports.Clock
 }
 
 type ReceiveSupplierBillHandler struct {
