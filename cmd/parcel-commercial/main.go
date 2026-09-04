@@ -21,6 +21,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
@@ -106,7 +107,19 @@ func runPublish(ctx context.Context, args []string, getenv func(string) string, 
 		fmt.Fprintf(errOut, "构造发布登记册：%v\n", err)
 		return exitTechnical
 	}
-	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, systemClock{})
+	// 受控批量口与在线口消费同一个发布用例，「参数已登记」续办信封（ADR-0094 决定四）也同样从这里
+	// 发：时点策略经 CLI 登记上去，停在`等待运营登记`的委托同样要有信来推。
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造 Outbox：%v\n", err)
+		return exitTechnical
+	}
+	registrationHandoff, err := pcpostgres.NewOutboxOperatorRegistrationCompletedHandoff(db, store, systemClock{})
+	if err != nil {
+		fmt.Fprintf(errOut, "构造参数已登记交接：%v\n", err)
+		return exitTechnical
+	}
+	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, systemClock{}, registrationHandoff)
 
 	// 批不是聚合（AT-PC-011）：逐项各起事务，前项已落库的不因后项失败被撤出；
 	// 后项装载的整册天然看得见前项，指名引用因此可以在一批内前后相依。

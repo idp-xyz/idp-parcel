@@ -52,6 +52,16 @@ type pcClock struct{ at time.Time }
 
 func (clock pcClock) Now() time.Time { return clock.at }
 
+// pcHandoffDouble 吞掉发布编排交出的「参数已登记」意图。传输层用例只看端点怎么转写用例
+// 答案，信封本身归 adapters/postgres 的真库用例证。
+type pcHandoffDouble struct{}
+
+func (pcHandoffDouble) HandOffOperatorRegistrationCompleted(
+	context.Context, ports.OperatorRegistrationCompletedIntent,
+) error {
+	return nil
+}
+
 // commercialIntakeDouble 交回测试预先备好的命令，对请求零读取。
 //
 // 八个方法长在同一个类型上，形照生产侧的 UnconfiguredIntake：八类的命令类型互不相同，
@@ -1060,7 +1070,7 @@ func pcPublishEndpoint(
 	registry stubPublicationRegistry,
 ) http.Handler {
 	t.Helper()
-	handler := application.NewPublishCommercialAuthorityHandler(registry, pcClock{at: pcNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, pcClock{at: pcNow}, pcHandoffDouble{})
 	return commercialhttp.NewPublishCommercialAuthorityEndpoint(
 		commercialIntakeDouble{publication: command}, handler)
 }

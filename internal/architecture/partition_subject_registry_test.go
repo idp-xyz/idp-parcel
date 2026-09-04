@@ -123,6 +123,12 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/parcelshipment/adapters/postgres/manual_review_completed_handoff.go": partitionSubjectPrefix + "租户/客户账户/委托",
 	"internal/parcelshipment/adapters/postgres/source_data_handoff.go":             partitionSubjectPrefix + "租户/来源请求键",
 
+	// —— party-commercial ——
+	// 「参数已登记」（ADR-0094 决定四的续办触发）按租户排队：消费门对该租户的重驱一轮接一轮，
+	// 不同租户互不阻塞；ID 带承载版本维管幂等，与分区键不同源。主体名只到租户，仓内其余口没有
+	// 同名主体，跨上下文那道裁段不适用。
+	"internal/partycommercial/adapters/postgres/operator_registration_completed_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）",
+
 	// —— pilot-governance ——
 	// 治理两形的键今天都不带租户段，如实转录；要不要补租户维归 PG 地盘，不在本表定。
 	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": partitionSubjectPrefix + "暂停标识（暂停与恢复同区）与接管三维（对象范围/能力/事实种类），两形皆无租户段",

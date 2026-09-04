@@ -321,7 +321,7 @@ func registeredEffective(t *testing.T, registry *domain.CommercialRegistry, spec
 // 停在`已发布`的行永远进不了解析，见处理器注释）。
 func TestPublishingAnOpenIntervalVersionTakesEffectAndSaves(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
@@ -365,7 +365,7 @@ func TestPublishingAnOpenIntervalVersionTakesEffectAndSaves(t *testing.T) {
 // `已发布`入册，不提前取效；提前用于生产解析由消费侧 AppliesAt 挡住。
 func TestAFutureIntervalStaysPlannedEffective(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	spec := publishSpec(t, domain.AcceptanceRulePackageObject, "rules-future", "v1")
 	future, err := domain.NewEffectiveInterval(pubNow.Add(30*24*time.Hour), time.Time{})
@@ -400,7 +400,7 @@ func TestAFutureIntervalStaysPlannedEffective(t *testing.T) {
 func TestUnconfirmedRoleAndUnpublishedReferenceStayPending(t *testing.T) {
 	t.Run("批准角色未确认", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
@@ -423,7 +423,7 @@ func TestUnconfirmedRoleAndUnpublishedReferenceStayPending(t *testing.T) {
 
 	t.Run("指名引用未发布", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 		spec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
 		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
@@ -454,7 +454,7 @@ func TestUnconfirmedRoleAndUnpublishedReferenceStayPending(t *testing.T) {
 			publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
 			publishApproval(t, "rules-1"))
 		registry := &publicationRegistryDouble{loaded: loaded}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 		spec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
 		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
@@ -482,7 +482,7 @@ func TestRepublishingTheSameContentIsAReplay(t *testing.T) {
 	approval := publishApproval(t, "rules-1")
 	registeredEffective(t, loaded, spec, approval)
 	registry := &publicationRegistryDouble{loaded: loaded, versionOutcome: ports.PublicationAlreadyRegistered}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         spec,
@@ -504,7 +504,7 @@ func TestRepublishingDifferentContentIsAConflict(t *testing.T) {
 	spec := publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1")
 	registeredEffective(t, loaded, spec, publishApproval(t, "rules-1"))
 	registry := &publicationRegistryDouble{loaded: loaded}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	changed := spec
 	changed.ContentDigest = pcValue(t, domain.NewCommercialContentDigest, "sha256:another-body")
@@ -542,7 +542,7 @@ func TestAConflictingItemDoesNotRetractAnEarlierSavedItem(t *testing.T) {
 	contractSpec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
 	registeredEffective(t, loaded, contractSpec, publishApproval(t, "contract-1"))
 	registry := &publicationRegistryDouble{loaded: loaded}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	// 第一项：全新对象，正常落库。
 	productSpec := publishSpec(t, domain.ServiceProductObject, "product-1", "v1")
@@ -587,7 +587,7 @@ func TestAConflictingItemDoesNotRetractAnEarlierSavedItem(t *testing.T) {
 // 每个通道的落点逐项入报告。
 func TestDeclarationsPublishWithTheirOwningVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	interval, err := domain.NewEffectiveInterval(pubStartsAt, pubStartsAt.Add(90*24*time.Hour))
 	if err != nil {
@@ -673,7 +673,7 @@ func TestDeclarationsPublishWithTheirOwningVersion(t *testing.T) {
 // 版本与声明都不写。
 func TestDeclarationsOnAPlannedVersionAreRefusedUpFront(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	spec := publishSpec(t, domain.AcceptanceRulePackageObject, "rules-future", "v1")
 	future, err := domain.NewEffectiveInterval(pubNow.Add(30*24*time.Hour), time.Time{})
@@ -707,7 +707,7 @@ func TestDeclarationsOnAPlannedVersionAreRefusedUpFront(t *testing.T) {
 // 资格挂在客户合同上是装配错误，整项拒绝且一行不写，不是静默丢弃那一条声明。
 func TestDeclarationsForTheWrongOwnerKindAreRejected(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
@@ -730,7 +730,7 @@ func TestDeclarationsForTheWrongOwnerKindAreRejected(t *testing.T) {
 // 相等，不等整项拒绝，不静默选一处。
 func TestContractContentMustAgreeWithTheShellReference(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	spec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
 	spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
@@ -795,7 +795,7 @@ func settlementApplicability(t *testing.T, chargeScope, currency string) domain.
 // 六维原样交给持久化面是本条的重点：发布通道不得代填、不得归并任何一维（ADR-0044）。
 func TestASettlementPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	applicability := settlementApplicability(t, "charge-prepaid", "CNY")
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
@@ -842,7 +842,7 @@ func TestASettlementPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 // 合同版本上是装配错误，整项拒绝且一行不写，与其余九路同一条纪律（ADR-0042/0058）。
 func TestASettlementPolicyBodyOnAnotherObjectKindIsRejected(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
@@ -867,7 +867,7 @@ func TestASettlementPolicyBodyOnAnotherObjectKindIsRejected(t *testing.T) {
 // （ADR-0031）；折的是落点，不是把两族正文说成同一种东西（见 declarationWrites 处注释）。
 func TestASettlementPolicyConflictLandsInTheReportNotInAnError(t *testing.T) {
 	registry := &publicationRegistryDouble{settlementOutcome: ports.SettlementPolicyContentConflict}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
@@ -909,7 +909,7 @@ func creditPolicyBody(t *testing.T, limit domain.CreditLimit) *application.Credi
 // 金额或比例哪一格在场由 CreditLimit 自己说，发布通道不代填、不换格。
 func TestACreditPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	ratio, err := domain.NewCreditRatioLimit(1500)
 	if err != nil {
 		t.Fatalf("比例额度：%v", err)
@@ -955,7 +955,7 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 
 	t.Run("another object kind is rejected before any write", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 			Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
 			Approval:     publishApproval(t, "settlement-1"),
@@ -971,7 +971,7 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 
 	t.Run("a content conflict lands in the report", func(t *testing.T) {
 		registry := &publicationRegistryDouble{creditOutcome: ports.CreditPolicyContentConflict}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 			Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
 			Approval:     publishApproval(t, "credit-1"),
@@ -993,7 +993,7 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 // settlement-accounting 问采购定价方案时什么也拿不到。
 func TestASupplierAgreementBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	interval, err := domain.NewEffectiveInterval(pubStartsAt, time.Time{})
 	if err != nil {
 		t.Fatalf("适用区间：%v", err)
@@ -1081,7 +1081,7 @@ func sellCaliber(t *testing.T, withFx bool) *application.PricePolicyCaliberDecla
 // （planDirection）与声明的转换按 ADR-0057 原样交给持久化面，不推断、不代填。
 func TestAPricePolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
@@ -1119,7 +1119,7 @@ func TestAPricePolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 // 发布面由 NewCommercialPricePolicy 把守，装载面再走一遍（ADR-0057）。
 func TestAPricePolicyBodyWithAnUndeclaredCrossDirectionBindingIsRejected(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.PriceRuleObject, "price-1", "v1"),
@@ -1140,7 +1140,7 @@ func TestAPricePolicyBodyWithAnUndeclaredCrossDirectionBindingIsRejected(t *test
 // 正文行先在）；汇率一格可缺，缺席按缺席落而不是零值。
 func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
 	body.Caliber = sellCaliber(t, true)
 
@@ -1177,7 +1177,7 @@ func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 
 	t.Run("without fx lands as absent", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		body := pricePolicyBody(t, domain.SellDirection, domain.SellDirection, domain.PlanBindingConversionNone)
 		body.Caliber = sellCaliber(t, false)
 		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
@@ -1198,7 +1198,7 @@ func TestAPricePolicyCaliberPublishesAfterItsBody(t *testing.T) {
 // 一行不写（正文也不写：两者是同一份声明的两半）。
 func TestAPricePolicyCaliberDisagreeingWithTheBodyDirectionIsRejected(t *testing.T) {
 	registry := &publicationRegistryDouble{}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	body := pricePolicyBody(t, domain.BuyDirection, domain.BuyDirection, domain.PlanBindingConversionNone)
 	body.Caliber = sellCaliber(t, false)
 
@@ -1219,7 +1219,7 @@ func TestAPricePolicyCaliberDisagreeingWithTheBodyDirectionIsRejected(t *testing
 // 用例把读失败折成空视图相反（那边表达`权威不可读`并停在未决）。
 func TestAnUnreadableRegistryBlocksPublication(t *testing.T) {
 	registry := &publicationRegistryDouble{loadErr: errors.New("库不可达")}
-	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow})
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
 	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 		Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),

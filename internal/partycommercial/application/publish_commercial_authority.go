@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
@@ -282,13 +283,18 @@ func (result PublishCommercialAuthorityResult) Declarations() []DeclarationRepor
 type PublishCommercialAuthorityHandler struct {
 	registry ports.PublicationRegistry
 	clock    ports.Clock
+	handoff  ports.OperatorRegistrationCompletedHandoff
 }
 
+// NewPublishCommercialAuthorityHandler 收交接口为必需依赖而不是可选项：ADR-0094 决定四要求
+// `等待运营登记`那一格与它的续办触发同笔落地，一个没接交接口的发布编排会让时点策略静静落库、
+// 停等的委托永远没有信来推——装配漏接必须在编译期就红，不能等到真租户上才发现。
 func NewPublishCommercialAuthorityHandler(
 	registry ports.PublicationRegistry,
 	clock ports.Clock,
+	handoff ports.OperatorRegistrationCompletedHandoff,
 ) *PublishCommercialAuthorityHandler {
-	return &PublishCommercialAuthorityHandler{registry: registry, clock: clock}
+	return &PublishCommercialAuthorityHandler{registry: registry, clock: clock, handoff: handoff}
 }
 
 // Handle 执行一次单对象发布（UC-PC-001 步骤 5–7 的机制半边）。批次不是聚合
@@ -402,7 +408,42 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 				"publish commercial authority: unexpected declaration outcome %q on %s", outcome, write.channel)
 		}
 	}
+
+	if err := handler.announceOperatorRegistrations(ctx, version, now, result.declarations); err != nil {
+		return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", err)
+	}
 	return result, nil
+}
+
+// announceOperatorRegistrations 对本次发布里属于运营登记参数的声明通道，各交一份「参数已登记」
+// 意图（ADR-0094 决定四；票 first-tenant-runway/07 D4）。这一族今天只有时点策略通道——
+// 授权规则那一半没有生产编排，见 ports.AuthorityGrantRegistered 的注释。
+//
+// 判据是落点不是通道在不在场：`已保存`与`已登记`都交（重放重发同一份，ADR-0043，认领由适配器按
+// 同一个 ID 去重）；`内容冲突`不交——冲突那一行没写进册，下游重驱只会再次撞见未配置。交接失败
+// 上抛而不是记进报告：信封与登记同一事务，入不了队就整项回滚，不留「登记了却没人知道」的半份。
+func (handler *PublishCommercialAuthorityHandler) announceOperatorRegistrations(
+	ctx context.Context,
+	version domain.CommercialVersion,
+	registeredAt time.Time,
+	reports []DeclarationReport,
+) error {
+	for _, report := range reports {
+		if report.Channel != AsOfPolicyChannel {
+			continue
+		}
+		if report.Outcome != ports.DeclarationSaved && report.Outcome != ports.DeclarationAlreadyRegistered {
+			continue
+		}
+		if err := handler.handoff.HandOffOperatorRegistrationCompleted(ctx, ports.OperatorRegistrationCompletedIntent{
+			Kind:         ports.AsOfPolicyRegistered,
+			Registration: version,
+			RegisteredAt: registeredAt,
+		}); err != nil {
+			return fmt.Errorf("announce %s registration: %w", ports.AsOfPolicyRegistered, err)
+		}
+	}
+	return nil
 }
 
 type declarationWrite struct {

@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
@@ -210,12 +211,23 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: channel account use authorization registry: %w", err)
 	}
+	// 「参数已登记」续办信封（ADR-0094 决定四，票 first-tenant-runway/07 D4）：发布编排在声明落库的
+	// 同一事务里经 Outbox 发出，parcel-shipment 的消费门凭它重驱停在`等待运营登记`的委托。挂在
+	// 发布处理器上而不是另立一层边界壳：时点策略是随发布同事务写的，交接跟着那一次写走。
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: commercial outbox store: %w", err)
+	}
+	registrationHandoff, err := pcpostgres.NewOutboxOperatorRegistrationCompletedHandoff(db, store, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: operator registration completed handoff: %w", err)
+	}
 
 	transactor := db.Transactor()
 	return commercialRegistrationOrchestration{
 		publication: transactionalCommercialPublication{
 			transactor: transactor,
-			inner:      commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}),
+			inner:      commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}, registrationHandoff),
 		},
 		partyIdentity: transactionalPartyIdentityRegistration{
 			transactor: transactor,

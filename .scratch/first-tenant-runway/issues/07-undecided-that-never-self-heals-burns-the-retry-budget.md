@@ -246,3 +246,54 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   `git diff` 为空，再在 `a3adb75` 上整跑一遍同样 95 包零 FAIL（488s，含 b3d3343/024cb5f/c3b4311/10adcb3 四笔他人
   提交），推 `a3adb75:main`。**漏了一件**：推前没在 tip 重生成机制清点，CI 那道比对在 `a3adb75` 会红，随下一笔
   （`efdbad7`，锚 `45c3eeb`）补齐。
+
+- 2026-09-04 · MCP-5（第二笔的 PC 半边，MCP-1 派；本条记跨上下文契约、今天谁发谁不发、以及一处要 MCP-1 在翻转前裁的口子）。
+
+  **跨上下文契约（PS 半边的消费门照此写，两侧各写各的字面，不导入对方常量）**：
+
+  | 格 | 取值 |
+  |---|---|
+  | 事件类型 `Type` | `party-commercial.commercial-authority.operator-registration-completed` |
+  | 来源 `Source` | `idp-parcel/party-commercial` |
+  | `Version` | `1` |
+  | `ID`（ADR-0043 认领） | `<tenantId>/<registrationKind>/<objectId>/<versionLabel>/operator-registration-completed`——租户 + 种类 + 承载登记的那一版商业对象；同一版重放重发同一封，同一对象发新版本再登记是另一封 |
+  | `Scope` | `<tenantId>` |
+  | `Subject` | `<commercialObjectKind>/<objectId>@<versionLabel>`（如 `ACCEPTANCE_RULE_PACKAGE/rules-1@v1`） |
+  | `PartitionKey` | `<tenantId>`——分区主体「租户（运营登记续办）」，已登记进 `partition_subject_registry_test.go`；与 ID 不同源，同一租户的登记信封一条队 |
+  | `OccurredAt` / `RecordedAt` | 登记（发布）时刻 / 入队时刻 |
+  | `Payload`（JSON） | **只有两键**：`{"tenantId": "<tenantId>", "registrationKind": "<AS_OF_POLICY \| AUTHORITY_GRANT>"}`，不带任何规则正文，承载版本只进 ID 与 Subject |
+
+  `registrationKind` 封闭集 `ports.OperatorRegistrationKind`：`AS_OF_POLICY`（时点策略声明，对应两个 `*AsOfNotConfigured`）、
+  `AUTHORITY_GRANT`（授权规则，对应三个 `*AuthorityRulesNotConfigured`）。**消费门不按它分派**（ADR-0094 决定四原话），
+  按 `tenantId` 取 `ListWaitingOnOperatorRegistration` 逐委托重驱即可；两种取值都要收，inbox 键（消费者名 + 来源 + 事件 ID）
+  天然去重。
+
+  **发送方与落点**：`PublishCommercialAuthorityHandler.Handle` 在声明写入之后、同一次 Handle 内对 `AsOfPolicyChannel` 落点为
+  `SAVED` / `ALREADY_REGISTERED` 的各交一份意图给 `ports.OperatorRegistrationCompletedHandoff`（`CONTENT_CONFLICT` 不交——冲突
+  那一行没写进册）；交接失败上抛，调用方事务整项回滚，不留「登记了却没人知道」的半份。唯一实现
+  `pcpostgres.OutboxOperatorRegistrationCompletedHandoff`（`outboxintent.EnqueueOnce`）——**派单里「PC 自己已有的 outbox
+  投递适配器」是误记**，取证时 party-commercial 的 `adapters/` 下没有任何 Outbox 口，本笔的是首个，`eventSource`
+  （`idp-parcel/party-commercial`）随之立。构造器把交接口收为**必需依赖**——
+  装配漏接编译期就红。两条生产路径都接上：`cmd/parcel-api` 的 `/commercial-publications`（`transactionalCommercialPublication`
+  事务内）与 `cmd/parcel-commercial publish`（逐项事务内）。
+
+  **今天谁发、谁不发（如实记，未造编排）**：
+
+  - `AS_OF_POLICY`：**发**。时点策略只经发布用例的 `AsOfPolicies` 通道登记（`SaveAsOfPolicies`），两条生产路径都走它。
+  - `AUTHORITY_GRANT`：**不发，因为没有登记路径**。三个 `*RulesNotConfigured` 在 PC 侧由 `AuthorityGrantStore.LoadEffectiveGrants`
+    读 `authorization_grant` 表、`domain.Authorize` 无有效授权时抛 `ErrAuthorityRulesNotConfigured`；而 `SaveGrant` 全仓只有测试调
+    （票 mechanism-executor-triage/03 那一族），`cmd/parcel-commercial` 没有登记授权的子命令，`AuthorizedAction` 封闭集也只有
+    `MANUAL_REVIEW` / `ACTIVE_REJECTION`——撤回与来源修订两个动作还没有（PS 适配器 `withdrawal_authorization.go` 文件头早写了这句）。
+    发布链能发的只是 `AUTHORIZATION_RULE` 的**版本壳**，壳落库不解 `Authorize` 的未配置，发一封只会让消费门白跑一轮，所以不发。
+    格留在封闭集里是为了契约一次写全。
+
+  **要 MCP-1 在翻转 `undecidedDisposition` 前裁的口子**：翻转后消费门对`等待运营登记`入账，而**三个 `*RulesNotConfigured` 今天没有
+  任何续办触发**——对它们翻转就是 ADR-0094 决定四原话里那个「更安静的永久停滞」，决定四明说「否则不许落地」。两条路：①翻转只对
+  `*AsOfNotConfigured` 那两格生效（`resumePath()` 把三格授权原因暂留在回滚重投那一支，等授权登记编排立起来再并入）；②先立授权
+  登记编排（PC 侧：`register-authority-grants` 子命令 / 在线口 + 编排同事务发 `AUTHORITY_GRANT`，且要先扩 `AuthorizedAction`，
+  按 AGENTS 先改 PC CONTEXT）。② 是一张新票，不在本笔；本笔的契约两格都留了位，②落地时只加发送方不改契约。
+
+  **验证（`mcp5-ftr07-d4-pc` worktree，SHA 见提交）**：应用层四条（交意图 / 无声明不交 / 重放交而冲突不交 / 交接失败上抛）；
+  postgres 真库六条（契约逐字段与载荷只两键 / 回滚同消失 / 重发同一份 / 同对象新版本另一封且同分区按序出队 / 无事务拒 /
+  缺件响亮）；`cmd/parcel-commercial` 真库两条（CLI 发布带时点策略 → Outbox 一封、重跑仍一封 / 不带则零封）；
+  `internal/architecture` 全绿（分区主体登记行、envelope 门禁、两道棘轮）。全仓 build/vet/test 结果记在提交信。
