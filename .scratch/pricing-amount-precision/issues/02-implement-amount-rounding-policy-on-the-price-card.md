@@ -1,7 +1,7 @@
 # 02 价卡内容加「金额取整策略」并在评价里按声明点取整：ADR-0107 的实施票
 
 Category: enhancement
-Status: in-progress——MCP-6（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一）：领域半边已落 `66a90dc4`，余项与交接点见文末「交接」；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
+Status: in-progress——MCP-3 接手余项（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一）；此前 MCP-6（隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4）：领域半边已落 `66a90dc4`（main 上为 `70dbf5a6`），余项与交接点见文末「交接」；裁决已落 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 词条「金额取整策略」已在；本票只做机制半边，不填任何模式取值与进位单位（通道 6 2026-09-04 立票，只写票面未动代码）
 Blocked by: 无
 
 ## 缺口

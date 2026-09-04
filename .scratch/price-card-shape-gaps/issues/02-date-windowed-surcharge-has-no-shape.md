@@ -1,7 +1,7 @@
 # 只在日期窗内生效、金额逐周变的附加费（PSS / 高峰附加费）没有形状
 
 Category: enhancement
-Status: in-progress——MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；本会话余量将满，交接点见文末 Comments）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
+Status: in-progress——MCP-3 接手实施（2026-09-04，隔离分支 `mcp3-pp-shapegaps`，基线 main `ae7b4c8a`，task-de0159af 换号批续作四票之一）；此前 MCP-6 领了未开工（2026-09-04，隔离分支 `mcp6-pp-renumber`，基线 main `4cc1bc34`，task-2b9edfe4 换号批五票之一；交接点见文末 Comments）；已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
