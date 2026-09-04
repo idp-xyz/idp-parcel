@@ -97,20 +97,20 @@ func newCorrectionFixture(t *testing.T) *correctionFixture {
 	}
 }
 
-// register 把一代揽收落进 TF 真登记库（首登与更正走同一个 Save）。
+// register 把一代揽收落进 TF 真登记库（首登与更正走同一个 Save）。事务回调只做 IO 回 error，
+// 断言在回调外——回调里 t.Fatalf 会 Goexit，提交与回滚两条路都走不到。
 func (fixture *correctionFixture) register(t *testing.T, record tfports.OffsitePickupRecord) {
 	t.Helper()
+	var outcome tfports.OffsitePickupSaveOutcome
 	if err := fixture.db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		outcome, err := fixture.pickups.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if outcome != tfports.OffsitePickupSaved {
-			t.Fatalf("save outcome = %d, want 已写入", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = fixture.pickups.Save(txCtx, record)
+		return err
 	}); err != nil {
 		t.Fatalf("登记揽收：%v", err)
+	}
+	if outcome != tfports.OffsitePickupSaved {
+		t.Fatalf("save outcome = %d, want 已写入", outcome)
 	}
 }
 
