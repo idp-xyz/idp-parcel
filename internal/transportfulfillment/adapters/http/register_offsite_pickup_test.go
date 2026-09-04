@@ -18,13 +18,15 @@ import (
 
 // ---- 应用编排的端口替身（真实 handler，非结果构造）----
 
+// pickupRegistryDouble 按键存一条版本链，代数同真库（迁移 0015）：一键一首登、一版一版本号、一版最多
+// 被更正一次，撞任一道译`已登记`；FindByKey 答链尾。更正口的用例要靶到真流程，替身不能比真库宽容。
 type pickupRegistryDouble struct {
-	records map[string]ports.OffsitePickupRecord
+	records map[string][]ports.OffsitePickupRecord
 	findErr error
 }
 
 func newPickupRegistry() *pickupRegistryDouble {
-	return &pickupRegistryDouble{records: map[string]ports.OffsitePickupRecord{}}
+	return &pickupRegistryDouble{records: map[string][]ports.OffsitePickupRecord{}}
 }
 
 func pickupRegistryKey(key ports.OffsitePickupKey) string {
@@ -38,18 +40,37 @@ func (double *pickupRegistryDouble) FindByKey(
 	if double.findErr != nil {
 		return ports.OffsitePickupRecord{}, false, double.findErr
 	}
-	record, found := double.records[pickupRegistryKey(key)]
-	return record, found, nil
+	chain := double.records[pickupRegistryKey(key)]
+	for _, candidate := range chain {
+		superseded := false
+		for _, other := range chain {
+			if predecessor, corrects := other.Pickup.Corrects(); corrects && predecessor == candidate.Pickup.Version() {
+				superseded = true
+				break
+			}
+		}
+		if !superseded {
+			return candidate, true, nil
+		}
+	}
+	return ports.OffsitePickupRecord{}, false, nil
 }
 
 func (double *pickupRegistryDouble) Save(
 	_ context.Context,
 	record ports.OffsitePickupRecord,
 ) (ports.OffsitePickupSaveOutcome, error) {
-	if _, exists := double.records[pickupRegistryKey(record.Key)]; exists {
-		return ports.OffsitePickupAlreadyRegistered, nil
+	chainKey := pickupRegistryKey(record.Key)
+	incomingPredecessor, incomingCorrects := record.Pickup.Corrects()
+	for _, existing := range double.records[chainKey] {
+		existingPredecessor, existingCorrects := existing.Pickup.Corrects()
+		if existing.Pickup.Version() == record.Pickup.Version() ||
+			(!incomingCorrects && !existingCorrects) ||
+			(incomingCorrects && existingCorrects && incomingPredecessor == existingPredecessor) {
+			return ports.OffsitePickupAlreadyRegistered, nil
+		}
 	}
-	double.records[pickupRegistryKey(record.Key)] = record
+	double.records[chainKey] = append(double.records[chainKey], record)
 	return ports.OffsitePickupSaved, nil
 }
 
@@ -128,6 +149,8 @@ type pickupRegistrationFixture struct {
 	registry *pickupRegistryDouble
 	versions *pickupVersionFactory
 	segments *segmentRegistryDouble
+	// handler 暴露给更正口的夹具：首登与更正是同一条编排的两个入口，共用一册。
+	handler  *application.RegisterOffsitePickupHandler
 	register http.Handler
 }
 
@@ -139,14 +162,14 @@ func newPickupRegistrationFixture(t *testing.T) *pickupRegistrationFixture {
 		versions: &pickupVersionFactory{},
 		segments: newSegmentRegistry(),
 	}
-	handler := application.NewRegisterOffsitePickupHandler(application.RegisterOffsitePickupDeps{
+	fixture.handler = application.NewRegisterOffsitePickupHandler(application.RegisterOffsitePickupDeps{
 		Pickups:    fixture.registry,
 		Segments:   fixture.segments,
 		Versions:   fixture.versions,
 		Downstream: pickupRegistrationHandoffDouble{},
 		Clock:      tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 	})
-	fixture.register = tfhttp.NewRegisterOffsitePickupEndpoint(fixture.intake, handler)
+	fixture.register = tfhttp.NewRegisterOffsitePickupEndpoint(fixture.intake, fixture.handler)
 	return fixture
 }
 

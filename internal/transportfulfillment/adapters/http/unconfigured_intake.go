@@ -38,6 +38,7 @@ var _ DeliveryIntake = UnconfiguredIntake{}
 var _ CatalogueQueryIntake = UnconfiguredIntake{}
 var _ HandoverIntake = UnconfiguredIntake{}
 var _ PickupRegistrationIntake = UnconfiguredIntake{}
+var _ PickupCorrectionIntake = UnconfiguredIntake{}
 var _ PickupAttemptIntake = UnconfiguredIntake{}
 var _ MovementFactIntake = UnconfiguredIntake{}
 var _ SegmentClosureIntake = UnconfiguredIntake{}
@@ -85,6 +86,12 @@ func (UnconfiguredIntake) IntakePickupRegistration(context.Context, *http.Reques
 
 func (UnconfiguredIntake) IntakePickupAttempt(context.Context, *http.Request) (application.PerformOffsitePickupCommand, error) {
 	return application.PerformOffsitePickupCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakePickupCorrection 堵住揽收更正口（票 tf-segment-lifecycle-closure/08），理由同揽收两口：一份穿过去
+// 的更正会在册上落一版新的控制事实并重交 parcel-shipment 采认。
+func (UnconfiguredIntake) IntakePickupCorrection(context.Context, *http.Request) (application.CorrectOffsitePickupCommand, error) {
+	return application.CorrectOffsitePickupCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeMovementFact 堵住移动事实口（票 05）。渠道未就位前「自营执行方」这个身份无从认定，所以

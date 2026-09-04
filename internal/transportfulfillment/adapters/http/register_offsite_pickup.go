@@ -16,8 +16,8 @@ type PickupRegistrationIntake interface {
 
 // PickupRegistrationHandler 是本适配器转交的应用编排。
 //
-// 只有 Register 没有 Correct：揽收登记的应用层今天没有更正编排（票 04「边界与未做」）。端点不
-// 替它造一个——更正是不是一格、走版本链还是走新尝试，是 TF application 的领域形状，不在传输层定。
+// 只有 Register：更正走 PickupCorrectionHandler（票 tf-segment-lifecycle-closure/08 裁了版本链之后另立的
+// 接口），不往这里加方法——加了会打断它的每个实现者。
 type PickupRegistrationHandler interface {
 	Register(
 		ctx context.Context,
@@ -37,8 +37,8 @@ func NewRegisterOffsitePickupEndpoint(intake PickupRegistrationIntake, handler P
 	}, writePickupRegistrationOutcome)
 }
 
-// pickupRegistrationResponse 是揽收登记口的封闭响应形状。三个引用格与 `segmentEntryRefusal` 各自
-// 透出，理由同 handoverResponse。
+// pickupRegistrationResponse 是揽收登记与揽收更正两口共用的封闭响应形状。三个引用格与
+// `segmentEntryRefusal` 各自透出，理由同 handoverResponse；`corrects` 是更正版本回指的前版，首登为空。
 type pickupRegistrationResponse struct {
 	Outcome                      string `json:"outcome"`
 	UndecidedReason              string `json:"undecidedReason,omitempty"`
@@ -46,6 +46,7 @@ type pickupRegistrationResponse struct {
 	Object                       string `json:"object,omitempty"`
 	Task                         string `json:"task,omitempty"`
 	Attempt                      string `json:"attempt,omitempty"`
+	Corrects                     string `json:"corrects,omitempty"`
 	ContinuationReference        string `json:"continuationReference,omitempty"`
 	HandoffReference             string `json:"handoffReference,omitempty"`
 	SegmentContinuationReference string `json:"segmentContinuationReference,omitempty"`
@@ -72,11 +73,16 @@ func writePickupRegistrationOutcome(response http.ResponseWriter, result applica
 		body.Object = record.Pickup.Object().String()
 		body.Task = record.Pickup.Task().String()
 		body.Attempt = record.Pickup.Attempt().String()
+		if predecessor, corrected := record.Pickup.Corrects(); corrected {
+			body.Corrects = predecessor.String()
+		}
 	}
 
-	// ADR-0022：只有首登新落一版用 201；重放、冲突、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：状态码只报有没有新落一版。首登与更正都持久化了新版本用 201；重放、冲突、未受理、
+	// 未决都是形成了的答案（200）。
 	status := http.StatusOK
-	if result.Outcome() == application.PickupRegistered {
+	if result.Outcome() == application.PickupRegistered ||
+		result.Outcome() == application.PickupCorrected {
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, body)
