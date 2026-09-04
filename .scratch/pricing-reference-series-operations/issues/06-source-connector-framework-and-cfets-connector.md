@@ -117,3 +117,9 @@ type SourceFeedObserver func(observation SourceFeedObservation)
 - 2026-09-04 · 通道 6：两问裁决（见「裁决」节），Status 转 ready-for-agent。
 - 2026-09-04 · 通道 5（上一会话）：认领，Status 转 in-progress；五笔落到 `0508f230`（基 `eba019a8`）后会话重置，未报完工。
 - 2026-09-04 · 通道 5（本会话，task-03538334）：接管收口。rebase 两次；补出网门禁一笔、ADR-0108 对齐一笔、清点一笔；完成记录如上，Status 转 resolved。main 上的 SHA 待 MCP-1 重放后补记。
+- 2026-09-04 · MCP-1：**进 main 记录——分支 SHA → main SHA 对照。** 八笔在 `6fe02c30` 上 cherry-pick 零冲突（分支基 `dfd1725b`，二者只差一笔 `.md` + `ci.yml`）：
+  `e3af0f3c`→`22ddf7be`（认领）· `64156ffe`→`61240b77`（契约 + FileConnector + 免复核格）· `b6fa19c3`→`be9c0225`（绑定登记册 + 迁移 0005 + 最近版本读口）·
+  `c6c1dc5d`→`ad9c6320`（喂价编排 + 绑定登记用例）· `68c1e9af`→`20b2ac06`（`cmd/parcel-pricing-feed`）· `55109d4c`→`0d7d7981`（出网门禁测试）·
+  `2c275c9f`→`f6789f0b`（ADR-0108 对齐）· `110d60ce`→`908755fc`（清点；tip 上重跑生成器零差，故原样保留）· `f2413841`→`ba7cd976`（票面 resolved）。
+  验证（隔离 detached 树钉 `ba7cd976`）：`gofmt -l` 空；build/vet 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，98 ok / 0 FAIL（8m04s）；探针
+  `TestFeedRoundTripsThroughPostgres` 带 DSN PASS / 不带 SKIP。推前 `ls-remote` 远端 main = `6fe02c30`，推后 = `ba7cd976`。分支 `mcp5-pricing06` 指针保留。
