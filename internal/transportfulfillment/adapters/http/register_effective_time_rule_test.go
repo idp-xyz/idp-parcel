@@ -245,6 +245,9 @@ func TestRegisterRuleRevisesAndReportsEveryOtherAnswerAsOK(t *testing.T) {
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
+			// 各格共用一只目录替身，而 map 遍历无序：「目录故障」那格置下的 findErr 若不在这里清掉，
+			// 排在它后面的格会全部答未决——首次全仓跑就撞上过一回。
+			fixture.registry.findErr = nil
 			body := testCase.arrange(fixture)
 			answer := postTo(t, fixture.register, "/x", body)
 			if answer.Code != http.StatusOK {
