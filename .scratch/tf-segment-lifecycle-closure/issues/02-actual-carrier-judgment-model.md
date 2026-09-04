@@ -1,7 +1,7 @@
 # 实际承运商判断：有语言无形状
 
 Category: enhancement
-Status: in-progress——MCP-2（2026-09-04，基线 `a17bfac`，隔离 worktree 分支 `mcp2-tf02`）。形状已裁（2026-09-03，MCP-3 过 `/domain-modeling`，owner 授权自决），落 [ADR-0103](../../../docs/adr/0103-actual-carrier-judgment-is-a-versioned-record-per-segment-with-pending-as-a-value.md) 与 TF `CONTEXT.md` 三处追加；四问答案与要做的见文末
+Status: resolved——MCP-2（2026-09-04，基线 `a17bfac`，分支 `mcp2-tf02`，已验 tip `6a3f190`；主线 SHA 待 MCP-1 重放后由集成广播给出，本行不代填）。形状已裁（2026-09-03，MCP-3 过 `/domain-modeling`，owner 授权自决），落 [ADR-0103](../../../docs/adr/0103-actual-carrier-judgment-is-a-versioned-record-per-segment-with-pending-as-a-value.md) 与 TF `CONTEXT.md` 三处追加；四问答案与要做的见文末；完成记录见文末
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -75,3 +75,45 @@ Blocked by: 无
   退 0、`go test -count=1 ./...` 绿并注明含不含真库。
 - 完成后在 mechanism-executor-triage spec「第四格」表追一行（该目录所有者），记「已裁形状进
   实现票」。
+
+## 完成记录（2026-09-04 · MCP-2 · 分支 `mcp2-tf02`，基线 `a17bfac`）
+
+按 `/implement`（内驱 `/tdd`，收口 `/code-review` 双轴）逐片提交，每片一笔：
+
+| 笔 | 内容 |
+|---|---|
+| `c2cc5ab` | 票面转 in-progress；ADR-0103 Consequences 迁移号句改为「实际落在 0013」 |
+| `5ec0abe` | 领域：`ActualCarrierJudgment` 聚合首片——`OpenActualCarrierJudgment` 段成立即铸首版（待确认·无合格证据），业务时间取段成立时刻；值类型 `CarrierSubject` 两支 / `PendingCarrierReason` 三原因 / `CarrierEvidenceSource` 四格 / `CarrierEvidence`（在册身份与名称素材恰居其一） |
+| `989ec48` | 领域：`Consider` 收合格依据追加版本；`deriveCarrierVerdict` 唯一算法；业务时间早于段成立即拒 |
+| `982723f` | 领域：相反证据 → 来源冲突并保留全部依据；同一份依据不成第二版 |
+| `dbe8630` | 领域：身份未登记留素材待确认；`RecogniseCarrierIdentity` 凭同一份证据补认成新版本，不追溯改写未登记期间 |
+| `dbf5e93` | 领域：`WithdrawEvidence` 撤回依据重新派生（保留原版本、不倒填）；封闭集 String/Parse 往返 |
+| `de28342` | 领域：`RehydrateActualCarrierJudgment` 重建门（ADR-0028：验形状与成对关系，不重走派生） |
+| `dafb2c0` | ports：`ActualCarrierJudgmentRegistry`（FindByKey 整份历史 / Open / AppendVersion，只插不改）与 `CarrierIdentityDirectory` |
+| `ff1832c` | 应用：`enterFulfillmentSegment` 段首登后同笔开判断首版；四条调用编排 Deps 各加可缺席的 `Judgments` |
+| `62266d9` | 应用：`FormActualCarrierJudgmentHandler`——收一条合格证据 + 承运主体引用或名称素材 → 查 PC 身份 → 追加版本；结果代数按恢复动作分格 |
+| `5076037` | 迁移 `0013_actual_carrier_judgment.sql`（头行 / 版本 / 依据三表，只插不改）+ `adapters/postgres.ActualCarrierJudgments` + 真库用例 |
+| `ccaadeb` | `adapters/partycommercial.CarrierIdentityDirectory`（ADR-0025 消费侧；只依赖 PC 两个窄读口） |
+| `b98d13b` | `effective_delivery.go` 挂点注释：实际承运商轴由判断按段作答，不复制到交付上 |
+| `ec28d9a` | `/code-review` Standards 轴修补四条（派生算法用真集合、注释去计数、主体两列摊法抽一处、撤回改直白过滤） |
+| `6a3f190` | 机制清点重生成（在本分支干净检出上跑） |
+
+**验收场景对照**（票面「验证」条）：同段冲突 `TestEvidenceNamingADifferentSubjectTurnsTheJudgmentIntoASourceConflict`；业务时间早于段成立被拒 `TestEvidenceOccurringBeforeTheSegmentWasEstablishedIsRefused`；身份未登记→登记后新版本 `TestAnUnregisteredCarrierNameLeavesTheJudgmentPendingUntilTheIdentityIsRecognised`（领域）与 `TestAnUnregisteredSubjectStaysPendingUntilTheDirectoryKnowsItThenTheSameEvidenceRecognisesIt`（应用）；已识别后相反证据→冲突 同第一条；真库证版本只追加 `TestVersionsAppendWithTheirOwnBasesAndNeverOverwrite`；挂点在真库上落首版 `TestRegisteringAPickupIntoANewSegmentOpensTheJudgmentInTheDatabase`。
+
+**验证**（钉在 `6a3f190`，本机 Windows）：`gofmt -l` 对改过的全部 `.go` 为空；`go build ./...` 与 `go vet ./...` 退 0；`go test -count=1 ./...` 未设 DSN 退 0（95 个包 `ok`，PG 用例跳过）；真库对触及包 `go test -count=1 -v ./internal/transportfulfillment/... ./internal/architecture/... ./migrations/...`（DSN 指向门禁容器 55432）退 0，`--- PASS` 1210 / `--- SKIP` 0 / `--- FAIL` 0；反向取证 `./internal/transportfulfillment/adapters/postgres/` 未设 DSN 时 `--- SKIP` 159 / `--- PASS` 0。`internal/architecture` 两份棘轮基线未改一行：新增的领域类型全部可达、领域工厂全部有生产调用点。`go test -race` 未在本机跑（Windows 无 cgo，见 workflow.md），由 CI 覆盖。
+
+**`/code-review` 双轴**（基线 `a17bfac`，两轴串行隔离——Task 子代理鉴权失败不可用）：Standards 轴 4 条判断题，均已在 `ec28d9a` 修掉，无硬违规；Spec 轴 0 条「实现看着不对」，下列三处为**有意留待后续**并在代码注释写明理由：
+
+1. 挂点只铸待确认首版，不收「成立事实随带的合格证据」（CONTEXT 生命周期首条的已识别分支）：今天立段的收寄事实里执行方是运输方引用不是承运主体身份、`已交接`交接的接收方可以是节点也可以是承运方，替它们推一步就是 CONTEXT 明禁的推断。证据从「形成实际承运商判断」用例进来。要让立段事实自带承运主体声明，得先给收寄/交接登记加一个显式的承运主体输入——那是另一票。
+2. 段结束后的「来源事实更正引起的重新派生」与「冲突由人裁为一次新的已识别版本」：领域门 `WithdrawEvidence` 已在；人裁没有领域门（票面「要做的」未列，且它要一个授权模型——谁能裁）。两者都没有应用入口：前者要从交接更正 / 轨迹源更正那两条链触发，后者要一个带授权的运营写面。各自另立票。
+3. 端口不单开「读当前版本」口：`FindByKey` 交回整份历史，当前版由聚合 `Current()` 派生——两条读路只会分叉。第一个消费方（VE 投影）到来时按其形状再议。
+
+**其余不在本票**：mechanism-executor-triage spec「第四格」表那一行归该目录所有者（ADR-0103 Consequences 原话「本记录不代改」）；`FormActualCarrierJudgmentHandler` 尚无 HTTP 面或内部触发，是否开在线面归 tf 系列下一票裁。
+
+**要 MCP-1 落的装配行**（`cmd/parcel-api`，本波归 MCP-5 独占，逐字如下）：
+
+- `assemble_control_facts.go` `buildControlFactOrchestrations`：在 `segments` 之后加
+  `judgments, err := tfpostgres.NewActualCarrierJudgments(db)`（err 照其余构造处包成 `parcel-api: actual carrier judgments: %w`），并在 `RegisterTransportHandoverDeps`、`RegisterOffsitePickupDeps`、`PerformOffsitePickupDeps` 三处字面量各加一行 `Judgments: judgments,`。
+- `buildParticipationEnder`（`EndFulfillmentParticipationDeps`）同样加 `Judgments: judgments,`（它现在在 `buildControlFactOrchestrations` 之前构造；要么把 `judgments` 的构造挪到它前面传进去，要么在它里面自己再 `NewActualCarrierJudgments(db)` 一次——两个实例无状态，都行）。
+- 不接这几行时行为不变（`Judgments` 可缺席，同 `Segments` 缺席那条），`assemble_control_facts_test.go` / `assemble_segment_operations_test.go` 里 `SegmentContinuationReference() == ""` 的断言照旧成立；接上之后建议补一条真库装配用例断言段成立后 `actual_carrier_judgment` 有头行——本包最近的一格是 `TestRegisteringAPickupIntoANewSegmentOpensTheJudgmentInTheDatabase`。
+- 「形成实际承运商判断」用例暂无装配点；届时身份读口装配为 `tfpartycommercial.NewCarrierIdentityDirectory(identities, identities)`，其中 `identities, _ := pcpostgres.NewPartyIdentityRegistrations(db)`（同一个登记册满足参与方册与法人册两个窄口，编译期已钉）。
