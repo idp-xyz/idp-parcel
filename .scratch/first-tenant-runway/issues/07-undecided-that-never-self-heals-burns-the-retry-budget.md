@@ -163,7 +163,48 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   ADR-0094 措辞才站得住，而 MCP-1 自己量到真租户上那是「更安静的永久停滞」。D4/D5 切片（登记动作发续办信封 +
   `Decide` 认第四格 + party-commercial 侧发信封）仍归 MCP-1，不动。
 
-  **落地**：`undecided_disposition.go` 把 `ResumeByOperatorRegistration` 从入账那一支拆出单独一格交回
+  **落地**：  `undecided_disposition.go` 把 `ResumeByOperatorRegistration` 从入账那一支拆出单独一格交回
   `ErrAcceptanceChainUndecided`，注释写明过渡态与解除条件；测试 `TestOperatorRegistrationRollsBackUntilIts
   ResumeTriggerLands` 单独钉它——**D4/D5 落地时该用例要反过来**，它单列正是为了让那一笔的人一眼看见该动哪一行。
   ADR-0094 Consequences 里「失败预算只花在真会自愈的依赖上」对这一格因此暂不成立，直到 D4/D5。
+
+- 2026-09-04 · MCP-1（D4/D5 切片的落点与顺序，取证于 `08e62ec`；本条只定切法，代码未动）。
+
+  **今天的形状（对上面 MCP-4 那条按 `08e62ec` 复核，三处已变）**：`ResumePath` 已有第四格且 `valid()`
+  上界随之改；`resumePath()` 已把五个 `*NotConfigured` 显式映到第四格；库面 0011 已放宽两条 CHECK。
+  **仍缺的正是 D4/D5 本体**：`AdvanceAcceptanceJudgmentHandler` 与 `AdvanceFinancialControlJudgmentHandler`
+  在 `formAdoptedBasis` 停于 `*AsOfNotConfigured` 时只 `recordAttempt` 就交回未决，**不碰聚合**——它们的
+  Deps 里根本没有委托仓储，所以 D5 那句「落此格前先 Save」今天没有落点；领域侧写 `waitingOn` 的只有 `Decide`
+  （三格）与三处清零，没有任何操作能在**决定之前**把任务写成`等待运营登记`。
+
+  **切法：两笔，PS 侧先、跨上下文后；两笔之间 `undecidedDisposition` 不动，第二笔才翻。**
+
+  **第一笔（PS 独占，D5）**：
+  1. 领域：`ShipmentRequest` 加一条不形成决定的转移（形照 `RecordProcessingAttempt`：要求任务 `running()`，
+     只写 `acceptanceTask.waitingOn = ResumeByOperatorRegistration`，不动 `revision`、不动 `state`）；
+     `Decide` 里未决那段折法认第四格（上一条已取证：一条带第四格的 `NewUndeterminedAcceptanceCheck` 进去
+     出来是 `INTERNAL_RETRY`）；重建门 `admitRehydratedState` 对`已提交`＋第四格放行（0011 的真库用例
+     `TestTaskWaitingOnProjectionMirrorsEveryResumePath` 今天是裸写绕过 `Save` 的，第一笔后改回走 `Save`）。
+  2. 应用：两个 as-of 编排在 `stall.reason.resumePath() == ResumeByOperatorRegistration` 时先取回聚合、
+     调上面那条转移、`Save`；`Save` 非 `Saved` 时照 ADR-0094 D5 改交 `saveStallReason(saved)` 那一格
+     （内部重试），照旧回滚重投。Deps 因此要加 `ports.ShipmentRequestRepository`——`cmd/parcel-dispatch/assemble.go`
+     与 `cmd/parcel-api` 两处装配跟上，装配测试会逼出来。
+  3. 端口＋读面：`FindWaitingOnOperatorRegistration(ctx, tenant)`（形照复核队列那口），postgres 上按
+     `shipment_request` 的 `task_waiting_on` 等于第四格编码值的行建部分索引（新迁移 `parcel_shipment/0013`，D5 原话
+     「到那时照 `shipment_request_manual_review_queue` 建部分索引」）。
+  4. 真库用例：as-of 未配置 → 聚合落库带第四格 → 队列读口列得出它；`Save` 版本冲突 → 交回保存那一格。
+
+  **第二笔（跨 PC/PS，D4，与 `undecidedDisposition` 翻转同笔）**：
+  1. 信封：新事件类型「参数已登记」，形照 `psinbox.ManualReviewCompletedEventType` /
+     `pspostgres.NewOutboxManualReviewCompletedHandoff`。**发的一侧在 party-commercial**：时点策略声明登记
+     （`PAR-COM-14`，对应两个 `*AsOfNotConfigured`）与三类授权规则登记（对应三个 `*RulesNotConfigured`）
+     的编排在落库同事务经 outbox 发出，载荷只带租户与登记种类，不带任何规则正文。**这一半在 MCP-2 地盘
+     （`internal/partycommercial`），开工前占号。**
+  2. 消费门：`psinbox.NewOperatorRegistrationCompletedConsumer`——按租户取 `FindWaitingOnOperatorRegistration`
+     逐委托重驱接受判断链（形照 `ManualReviewCompletedConsumer`，逐委托独立、一份失败不拖累其余）；
+     `cmd/parcel-dispatch/assemble.go` 路由表加一行；`manual_review_resume_loop_test.go` 同形的往返用例。
+  3. 翻转：`undecidedDisposition` 把 `ResumeByOperatorRegistration` 并回入账那一支，
+     `TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands` 反过来改名钉入账。
+  4. 票 [08](./08-undecided-stage-and-reason-are-invisible-on-a-real-process.md) 第一层随此笔收口。
+
+  **不做**：不加定时扫描重驱（ADR-0094 D4 原话）；不在消费门认原因名字；`等待受控补充`不动（归票 09）。
