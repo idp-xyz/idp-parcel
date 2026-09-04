@@ -356,13 +356,17 @@ const (
 	ChargeMethodTableLookup    ChargeMethod = "TABLE_LOOKUP"
 	ChargeMethodPercentOfBasis ChargeMethod = "PERCENT_OF_BASIS"
 	ChargeMethodGreaterOf      ChargeMethod = "GREATER_OF"
+	// ChargeMethodSeriesAmount 是「取当期序列定额」（ADR-0110 Decision 二）：按评价基准时点解出金额序列的那一期
+	// 金额作附加费金额。并列一种新计算而不是让定额的金额可来自序列——同一种计算两种来源要在规范化形状里多一个
+	// 判别字段（ADR-0110 Alternatives）。它是定额不是百分比，不带基数依赖。
+	ChargeMethodSeriesAmount ChargeMethod = "SERIES_AMOUNT"
 )
 
 func (method ChargeMethod) String() string { return string(method) }
 
 func (method ChargeMethod) valid() bool {
 	switch method {
-	case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf:
+	case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf, ChargeMethodSeriesAmount:
 		return true
 	default:
 		return false

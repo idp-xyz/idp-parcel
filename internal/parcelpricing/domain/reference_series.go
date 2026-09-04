@@ -12,6 +12,11 @@ type ReferenceSeriesValue struct {
 	reference  VersionReference
 	value      Decimal
 	quoteBasis *VersionReference
+	// currency 只在金额序列的取值上有（ADR-0110 Decision 一）：费率是裸小数，金额带币种。
+	currency *Currency
+	// absent 记「在用版本在计价基准时点没有期次」（ADR-0110 Decision 三「窗外无期次」）：版本引用在、取值缺席。
+	// 只对金额序列成立——费率序列没有「窗外」这一格，缺期次就是缺证据。
+	absent bool
 }
 
 func NewReferenceSeriesValue(kind ReferenceSeriesKind, reference VersionReference, value Decimal) (ReferenceSeriesValue, error) {
@@ -21,6 +26,37 @@ func NewReferenceSeriesValue(kind ReferenceSeriesKind, reference VersionReferenc
 	}
 	return resolved, nil
 }
+
+// NewPublishedAmountSeriesValue 是金额序列的一期取值：带币种的金额，币种是否与方案一致在评价里判。
+func NewPublishedAmountSeriesValue(reference VersionReference, amount Money) (ReferenceSeriesValue, error) {
+	currency := amount.currency
+	resolved := ReferenceSeriesValue{kind: ReferenceSeriesPublishedAmount, reference: reference, value: amount.amount, currency: &currency}
+	if !resolved.valid() {
+		return ReferenceSeriesValue{}, ErrInvalidReferenceSeries
+	}
+	return resolved, nil
+}
+
+// NewAbsentSeriesReading 记下「查过这一版金额序列、基准时点不在任何期次内」。它冻结进评价输入，让窗外行为
+// 在纯函数里按卡的声明分流，且重放能落在同一个结论上；根本没有在用版本时不造这条读数——那是缺口不是窗外。
+func NewAbsentSeriesReading(kind ReferenceSeriesKind, reference VersionReference) (ReferenceSeriesValue, error) {
+	resolved := ReferenceSeriesValue{kind: kind, reference: reference, absent: true}
+	if !resolved.valid() {
+		return ReferenceSeriesValue{}, ErrInvalidReferenceSeries
+	}
+	return resolved, nil
+}
+
+// Amount 只在金额序列的已解出取值上给出。
+func (resolved ReferenceSeriesValue) Amount() (Money, bool) {
+	if resolved.currency == nil || resolved.absent {
+		return Money{}, false
+	}
+	return Money{amount: resolved.value, currency: *resolved.currency}, true
+}
+
+// Absent 说明这条读数是「查过、无期次」。
+func (resolved ReferenceSeriesValue) Absent() bool { return resolved.absent }
 
 // NewQuotedReferenceSeriesValue 携带声明该取值口径的商业价格政策版本。CONTEXT：汇率
 // 口径——牌价类型、取值时点规则和加点规则——由商业价格政策版本化声明；不接受未声明口径
@@ -46,8 +82,21 @@ func (resolved ReferenceSeriesValue) QuoteBasis() (VersionReference, bool) {
 
 func (resolved ReferenceSeriesValue) valid() bool {
 	if !resolved.kind.valid() ||
-		resolved.reference.kind != ArtifactReferenceSeries || !resolved.reference.valid() ||
-		!resolved.value.valid() || resolved.value.IsNegative() {
+		resolved.reference.kind != ArtifactReferenceSeries || !resolved.reference.valid() {
+		return false
+	}
+	if resolved.absent {
+		// 缺席读数只对金额序列成立，且不带取值、币种与口径。
+		return resolved.kind.carriesAmount() && resolved.value == (Decimal{}) && resolved.currency == nil && resolved.quoteBasis == nil
+	}
+	if !resolved.value.valid() || resolved.value.IsNegative() {
+		return false
+	}
+	// 金额序列的取值带币种，费率序列的不带（ADR-0110 Decision 一）。
+	if resolved.kind.carriesAmount() != (resolved.currency != nil) {
+		return false
+	}
+	if resolved.currency != nil && !resolved.currency.valid() {
 		return false
 	}
 	if resolved.quoteBasis != nil {
@@ -68,34 +117,48 @@ func (resolved ReferenceSeriesValue) valid() bool {
 // 拿到的取值来自另一条序列则是分歧而不是缺口——按方案从未声明过的序列计价，会静默地
 // 用错误的费率收费——所以那是`冲突`。版本不在这里比：方案绑的是序列标识（ADR-0099），
 // 同一条序列的任何一版都可以是这次评价用的那一版，用了哪一版由评价清单冻结。
-func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBinding) (map[ReferenceSeriesKind]ReferenceSeriesValue, error) {
-	resolved := make(map[ReferenceSeriesKind]ReferenceSeriesValue, len(bindings))
+func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBinding) (map[ReferenceSeriesKind]ReferenceSeriesValue, map[string]ReferenceSeriesValue, error) {
+	rates := make(map[ReferenceSeriesKind]ReferenceSeriesValue, len(bindings))
+	amounts := make(map[string]ReferenceSeriesValue, len(bindings))
 	for _, binding := range bindings {
-		reading, found := input.seriesReading(binding.kind)
+		reading, found := input.boundReading(binding)
 		if !found {
-			return nil, fmt.Errorf("%w: no reading for %s", ErrMissingReferenceSeriesValue, binding.kind)
+			return nil, nil, fmt.Errorf("%w: no reading for %s %s", ErrMissingReferenceSeriesValue, binding.kind, binding.seriesID)
 		}
 		if reading.reference.ID() != binding.seriesID {
-			return nil, fmt.Errorf("%w: %s reading comes from series %s but the plan bound series %s",
+			return nil, nil, fmt.Errorf("%w: %s reading comes from series %s but the plan bound series %s",
 				ErrReferenceSeriesVersionConflict, binding.kind, reading.reference.ID(), binding.seriesID)
 		}
-		resolved[binding.kind] = reading
+		if binding.kind.carriesAmount() {
+			amounts[binding.seriesID] = reading
+			continue
+		}
+		rates[binding.kind] = reading
 	}
-	return resolved, nil
+	return rates, amounts, nil
 }
 
 // boundSeriesReferences 列出快照里落在方案绑定上的序列版本引用——这些是本次评价实际
 // 采用的版本，要进评价自己的清单。落在绑定之外的取值不进清单：方案没声明过的序列不
-// 参与计价，冻结它会让清单说了一件评价没做的事。
+// 参与计价，冻结它会让清单说了一件评价没做的事。窗外无期次的缺席读数照样进清单：查过就是采用过。
 func (input PricingInputSnapshot) boundSeriesReferences(bindings []ReferenceSeriesBinding) []VersionReference {
 	references := make([]VersionReference, 0, len(bindings))
 	for _, binding := range bindings {
-		reading, found := input.seriesReading(binding.kind)
+		reading, found := input.boundReading(binding)
 		if found && reading.reference.ID() == binding.seriesID {
 			references = append(references, reading.reference)
 		}
 	}
 	return references
+}
+
+// boundReading 交回落在某条绑定上的读数：费率序列按种类找（每种至多一条），金额序列按标识找（同种可多条）。
+// 费率种类下读数来自别的序列时照样交回，让调用方把「绑错了」报成冲突而不是缺口。
+func (input PricingInputSnapshot) boundReading(binding ReferenceSeriesBinding) (ReferenceSeriesValue, bool) {
+	if binding.kind.carriesAmount() {
+		return input.amountReading(binding.seriesID)
+	}
+	return input.seriesReading(binding.kind)
 }
 
 func (input PricingInputSnapshot) seriesReading(kind ReferenceSeriesKind) (ReferenceSeriesValue, bool) {
@@ -105,6 +168,24 @@ func (input PricingInputSnapshot) seriesReading(kind ReferenceSeriesKind) (Refer
 		}
 	}
 	return ReferenceSeriesValue{}, false
+}
+
+func (input PricingInputSnapshot) amountReading(seriesID string) (ReferenceSeriesValue, bool) {
+	for _, reading := range input.seriesValues {
+		if reading.kind.carriesAmount() && reading.reference.ID() == seriesID {
+			return reading, true
+		}
+	}
+	return ReferenceSeriesValue{}, false
+}
+
+// seriesReadingKey 是一条读数在快照里的去重键：费率序列按种类，金额序列按（种类，标识）——同一条金额序列
+// 两期取值会把选哪一个交给遍历顺序决定，而两条不同的金额序列各是各的。
+func (resolved ReferenceSeriesValue) seriesReadingKey() string {
+	if resolved.kind.carriesAmount() {
+		return resolved.kind.String() + "|" + resolved.reference.ID()
+	}
+	return resolved.kind.String()
 }
 
 // describeRate 分别写出来自序列的费率的两半。CONTEXT：燃油费率是承运商当周公布费率与
@@ -120,6 +201,18 @@ func (calculation SurchargeCalculation) describeRate(series map[ReferenceSeriesK
 	}
 	return fmt.Sprintf(" at published %s %s × card factor %s",
 		*calculation.seriesKind, reading.value.String(), calculation.seriesFactor.String())
+}
+
+// describeAmountSource 写出取当期序列定额的金额取自哪条序列哪一版（ADR-0110 Consequences）。其它计算交回空串。
+func (calculation SurchargeCalculation) describeAmountSource(amounts map[string]ReferenceSeriesValue) string {
+	if calculation.method != ChargeMethodSeriesAmount {
+		return ""
+	}
+	reading, found := amounts[calculation.seriesID]
+	if !found || reading.absent {
+		return ""
+	}
+	return fmt.Sprintf(" taken from published amount series %s@%s", reading.reference.ID(), reading.reference.Version())
 }
 
 // ConversionStep 记录把卡本币换算为合同结算币种的过程。CONTEXT 要求两侧都留下：换算

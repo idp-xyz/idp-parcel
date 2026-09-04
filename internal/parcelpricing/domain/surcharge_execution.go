@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 )
@@ -15,6 +16,8 @@ type surchargeOutcome struct {
 	deferred bool
 	amount   Money
 	note     string
+	// source 是金额的来源说明（取当期序列定额时为「取自序列 X@V」），随解释输出。
+	source string
 }
 
 // unexecutable 指出本构建无法计价的第一项已声明结构。
@@ -26,7 +29,7 @@ type surchargeOutcome struct {
 func (structures PricingPlanStructures) unexecutable() (string, bool) {
 	for _, rule := range structures.surchargeRules {
 		switch rule.calculation.method {
-		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf:
+		case ChargeMethodFixedAmount, ChargeMethodTableLookup, ChargeMethodPercentOfBasis, ChargeMethodGreaterOf, ChargeMethodSeriesAmount:
 		default:
 			return fmt.Sprintf("%s calculation on %s", rule.calculation.method, rule.id), true
 		}
@@ -82,7 +85,13 @@ type surchargeContext struct {
 	zone          string
 	pricingWeight Weight
 	series        map[ReferenceSeriesKind]ReferenceSeriesValue
+	// amounts 是金额序列的读数，按序列标识索引（ADR-0110）；窗外无期次的读数也在这里，值缺席。
+	amounts map[string]ReferenceSeriesValue
 }
+
+// errSeriesAmountOutOfWindow 在 resolve 内部标记「金额序列窗外且卡声明不计收」：这条规则不形成费用行，也不是
+// 任何一种失败。它不出 resolveSurcharges——那里把它译成未计收的结果并留痕。
+var errSeriesAmountOutOfWindow = errors.New("parcel pricing: series amount out of window, not charged")
 
 // resolveSurcharges 拿包裹特征逐条判定所有已声明规则，再施加卡上的相互作用规则。
 // 独立计收的规则全部收取；同一互斥组内的规则相互竞争，组内至多计收一条。
@@ -102,11 +111,18 @@ func (structures PricingPlanStructures) resolveSurcharges(reading surchargeConte
 				outcome.selected = true
 			} else {
 				amount, err := rule.calculation.resolve(reading, nil)
-				if err != nil {
+				switch {
+				case errors.Is(err, errSeriesAmountOutOfWindow):
+					// 窗外不计收（ADR-0110 Decision 三）：条件成立了，卡说这期不收——留痕但不成行、不进互斥竞争。
+					outcome.selected = false
+					outcome.note = fmt.Sprintf("series amount out of window; the card declares %s", OutOfWindowNotCharged)
+				case err != nil:
 					return nil, err
+				default:
+					outcome.amount = amount
+					outcome.selected = true
+					outcome.source = rule.calculation.describeAmountSource(reading.amounts)
 				}
-				outcome.amount = amount
-				outcome.selected = true
 			}
 		}
 		outcomes = append(outcomes, outcome)
@@ -161,16 +177,44 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis 
 			return Money{}, fmt.Errorf("%w: %s valued before its basis", ErrPlanStructuresNotExecutable, calculation.method)
 		}
 		return basis.share(calculation, reading.series)
+	case ChargeMethodSeriesAmount:
+		published, found := reading.amounts[calculation.seriesID]
+		if !found {
+			// 绑定门保证卡绑了这条序列，resolveSeries 保证有读数；到这里没有只可能是结构坏了。
+			return Money{}, fmt.Errorf("%w: amount series %s has no reading", ErrPlanStructuresNotExecutable, calculation.seriesID)
+		}
+		if published.absent {
+			switch calculation.outOfWindow {
+			case OutOfWindowNotCharged:
+				return Money{}, errSeriesAmountOutOfWindow
+			default:
+				return Money{}, fmt.Errorf("%w: amount series %s in-force version %s has no period at the pricing basis time and the card declares %s",
+					ErrMissingReferenceSeriesValue, calculation.seriesID, published.reference.Version(), calculation.outOfWindow)
+			}
+		}
+		amount, ok := published.Amount()
+		if !ok {
+			return Money{}, ErrInvalidSurchargeRule
+		}
+		return amount, nil
 	case ChargeMethodGreaterOf:
 		var best Money
-		for index, operand := range calculation.operands {
+		compared := false
+		for _, operand := range calculation.operands {
 			amount, err := operand.resolve(reading, basis)
+			// 窗外不计收的操作数不参与比较：卡说这期那一项不收，另一项照常成立；两项都不收才整条不收。
+			if errors.Is(err, errSeriesAmountOutOfWindow) {
+				continue
+			}
 			if err != nil {
 				return Money{}, err
 			}
-			if index == 0 || amount.amount.Cmp(best.amount) > 0 {
-				best = amount
+			if !compared || amount.amount.Cmp(best.amount) > 0 {
+				best, compared = amount, true
 			}
+		}
+		if !compared {
+			return Money{}, errSeriesAmountOutOfWindow
 		}
 		if !best.valid() {
 			return Money{}, ErrInvalidSurchargeRule
@@ -229,7 +273,8 @@ func preferSurcharge(incumbent, challenger surchargeOutcome) (bool, error) {
 	return comparison > 0, nil
 }
 
-// explain 为每条规则输出一行，命中与否都输出，使解释能对着卡逐条读下来。
+// explain 为每条规则输出一行，命中与否都输出，使解释能对着卡逐条读下来。取当期序列定额的规则写明金额取自
+// 哪条序列哪一版（ADR-0110 Consequences「取自序列 X 第 N 期」那一格）。
 func (outcome surchargeOutcome) explain() string {
 	switch {
 	case !outcome.matched:
@@ -238,7 +283,7 @@ func (outcome surchargeOutcome) explain() string {
 	case !outcome.selected:
 		return fmt.Sprintf("surcharge %s applied but was not collected: %s", outcome.rule.id, outcome.note)
 	default:
-		return fmt.Sprintf("surcharge %s applied for %s", outcome.rule.id, outcome.amount.amount.String())
+		return fmt.Sprintf("surcharge %s applied for %s%s", outcome.rule.id, outcome.amount.amount.String(), outcome.source)
 	}
 }
 

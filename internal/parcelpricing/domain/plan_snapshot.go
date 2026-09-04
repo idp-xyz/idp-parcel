@@ -117,6 +117,8 @@ type surchargeCalculationSnapshot struct {
 	SeriesFactor *decimalSnapshot               `json:"seriesFactor,omitempty"`
 	Basis        string                         `json:"basis,omitempty"`
 	Operands     []surchargeCalculationSnapshot `json:"operands,omitempty"`
+	SeriesID     string                         `json:"seriesId,omitempty"`
+	OutOfWindow  string                         `json:"outOfWindow,omitempty"`
 }
 
 type conditionalMinimumSnapshot struct {
@@ -544,8 +546,10 @@ func triggerFrom(document triggerConditionSnapshot) TriggerCondition {
 
 func surchargeCalculationDocumentOf(calculation SurchargeCalculation) surchargeCalculationSnapshot {
 	document := surchargeCalculationSnapshot{
-		Method: calculation.method.String(),
-		Basis:  calculation.basis,
+		Method:      calculation.method.String(),
+		Basis:       calculation.basis,
+		SeriesID:    calculation.seriesID,
+		OutOfWindow: calculation.outOfWindow.String(),
 	}
 	if calculation.amount != nil {
 		amount := moneyOf(*calculation.amount)
@@ -574,8 +578,10 @@ func surchargeCalculationDocumentOf(calculation SurchargeCalculation) surchargeC
 
 func surchargeCalculationFrom(document surchargeCalculationSnapshot) SurchargeCalculation {
 	calculation := SurchargeCalculation{
-		method: ChargeMethod(document.Method),
-		basis:  document.Basis,
+		method:      ChargeMethod(document.Method),
+		basis:       document.Basis,
+		seriesID:    document.SeriesID,
+		outOfWindow: OutOfWindowBehaviour(document.OutOfWindow),
 	}
 	if document.Amount != nil {
 		amount := moneyFrom(*document.Amount)

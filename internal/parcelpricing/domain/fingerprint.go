@@ -268,13 +268,18 @@ type canonicalSurchargeCalculationDocument struct {
 	// 折扣变化互相抵消而无人察觉。
 	SeriesKind   string `json:"series_kind,omitempty"`
 	SeriesFactor string `json:"series_factor,omitempty"`
+	// 取当期序列定额（ADR-0110）：序列标识与窗外行为两格都进摘要——只差窗外声明的两张卡收法不同。
+	SeriesID    string `json:"series_id,omitempty"`
+	OutOfWindow string `json:"out_of_window,omitempty"`
 }
 
 func canonicalSurchargeCalculationValue(calculation SurchargeCalculation) canonicalSurchargeCalculationDocument {
 	document := canonicalSurchargeCalculationDocument{
-		Method:   calculation.method.String(),
-		Basis:    calculation.basis,
-		Operands: make([]canonicalSurchargeCalculationDocument, 0, len(calculation.operands)),
+		Method:      calculation.method.String(),
+		Basis:       calculation.basis,
+		Operands:    make([]canonicalSurchargeCalculationDocument, 0, len(calculation.operands)),
+		SeriesID:    calculation.seriesID,
+		OutOfWindow: calculation.outOfWindow.String(),
 	}
 	if calculation.amount != nil {
 		amount := canonicalMoneyValue(*calculation.amount)
@@ -692,6 +697,9 @@ type canonicalSeriesValueDocument struct {
 	Reference  canonicalVersionReference  `json:"reference"`
 	Value      string                     `json:"value"`
 	QuoteBasis *canonicalVersionReference `json:"quote_basis,omitempty"`
+	// 金额序列的币种与「窗外无期次」两格（ADR-0110）；费率序列的读数字节不变。
+	Currency string `json:"currency,omitempty"`
+	Absent   bool   `json:"absent,omitempty"`
 }
 
 // canonicalConversionDocument 把一次换算的两侧都留在摘要里。只哈希换算后的数字，
@@ -722,6 +730,10 @@ func canonicalSeriesValues(values []ReferenceSeriesValue) []canonicalSeriesValue
 			Kind:      value.kind.String(),
 			Reference: canonicalReference(value.reference),
 			Value:     value.value.String(),
+			Absent:    value.absent,
+		}
+		if value.currency != nil {
+			document.Currency = value.currency.String()
 		}
 		if value.quoteBasis != nil {
 			basis := canonicalReference(*value.quoteBasis)

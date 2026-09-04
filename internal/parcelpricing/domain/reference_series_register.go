@@ -104,7 +104,9 @@ type ReferenceSeriesRegistrationSpec struct {
 	// QuoteBasis 是声明取值口径的商业价格政策版本（party-commercial 拥有）。汇率
 	// 必备——不接受未声明口径的裸汇率；燃油的折扣系数写在卡上，不需要口径。
 	QuoteBasis VersionReference
-	Periods    []SeriesPeriodValue
+	// Currency 只对金额序列声明（ADR-0110 Decision 一）：每期取值都是这个币种的金额，费率序列不许带。
+	Currency Currency
+	Periods  []SeriesPeriodValue
 	// PriorVersion 与 CorrectionBasis 成对声明更正关系：取值发现错误时形成新序列
 	// 版本，原版本一字不动（CONTEXT）。
 	PriorVersion    VersionReference
@@ -121,6 +123,7 @@ type ReferenceSeriesRegistration struct {
 	sourceIdentifier string
 	registrant       string
 	quoteBasis       *VersionReference
+	currency         *Currency
 	periods          []SeriesPeriodValue
 	priorVersion     *VersionReference
 	correctionBasis  string
@@ -139,6 +142,10 @@ func NewReferenceSeriesRegistration(spec ReferenceSeriesRegistrationSpec) (Refer
 	if spec.QuoteBasis != (VersionReference{}) {
 		basis := spec.QuoteBasis
 		registration.quoteBasis = &basis
+	}
+	if spec.Currency != (Currency{}) {
+		currency := spec.Currency
+		registration.currency = &currency
 	}
 	if spec.PriorVersion != (VersionReference{}) {
 		prior := spec.PriorVersion
@@ -170,6 +177,14 @@ func (registration ReferenceSeriesRegistration) QuoteBasis() (VersionReference, 
 
 func (registration ReferenceSeriesRegistration) Periods() []SeriesPeriodValue {
 	return append([]SeriesPeriodValue(nil), registration.periods...)
+}
+
+// Currency 只在金额序列上给出：每期取值都是它的金额。
+func (registration ReferenceSeriesRegistration) Currency() (Currency, bool) {
+	if registration.currency == nil {
+		return Currency{}, false
+	}
+	return *registration.currency, true
 }
 
 // Correction 只在更正版本上给出：指回被更正的版本与更正依据。
@@ -243,6 +258,13 @@ func (registration ReferenceSeriesRegistration) valid() bool {
 	if registration.kind == ReferenceSeriesExchangeRate && registration.quoteBasis == nil {
 		return false
 	}
+	// 金额序列必须声明币种，费率序列不许（ADR-0110 Decision 一）。
+	if registration.kind.carriesAmount() != (registration.currency != nil) {
+		return false
+	}
+	if registration.currency != nil && !registration.currency.valid() {
+		return false
+	}
 	if len(registration.periods) == 0 {
 		return false
 	}
@@ -302,10 +324,13 @@ func (registration ReferenceSeriesRegistration) ResolveAt(asOf time.Time) (Resol
 		}
 		var value ReferenceSeriesValue
 		var err error
-		if registration.quoteBasis != nil {
+		switch {
+		case registration.currency != nil:
+			value, err = NewPublishedAmountSeriesValue(registration.reference, Money{amount: period.value, currency: *registration.currency})
+		case registration.quoteBasis != nil:
 			value, err = NewQuotedReferenceSeriesValue(
 				registration.kind, registration.reference, period.value, *registration.quoteBasis)
-		} else {
+		default:
 			value, err = NewReferenceSeriesValue(registration.kind, registration.reference, period.value)
 		}
 		if err != nil {
@@ -331,10 +356,12 @@ type referenceSeriesRegistrationSnapshot struct {
 	SourceIdentifier string                    `json:"sourceIdentifier"`
 	Registrant       string                    `json:"registrant"`
 	QuoteBasis       *versionReferenceSnapshot `json:"quoteBasis,omitempty"`
-	Periods          []seriesPeriodSnapshot    `json:"periods"`
-	PriorVersion     *versionReferenceSnapshot `json:"priorVersion,omitempty"`
-	CorrectionBasis  string                    `json:"correctionBasis,omitempty"`
-	ContentDigest    string                    `json:"contentDigest"`
+	// Currency 只在金额序列上有（ADR-0110）；omitempty 让两种费率序列的快照字节不变，留在 PRS-2 内。
+	Currency        string                    `json:"currency,omitempty"`
+	Periods         []seriesPeriodSnapshot    `json:"periods"`
+	PriorVersion    *versionReferenceSnapshot `json:"priorVersion,omitempty"`
+	CorrectionBasis string                    `json:"correctionBasis,omitempty"`
+	ContentDigest   string                    `json:"contentDigest"`
 }
 
 // Canonicalization 报出本登记按哪套形状做规范化与摘要（PRS 族）。
@@ -373,6 +400,9 @@ func (registration ReferenceSeriesRegistration) snapshotDocument() referenceSeri
 	if registration.quoteBasis != nil {
 		basis := versionReferenceOf(*registration.quoteBasis)
 		document.QuoteBasis = &basis
+	}
+	if registration.currency != nil {
+		document.Currency = registration.currency.String()
 	}
 	if registration.priorVersion != nil {
 		prior := versionReferenceOf(*registration.priorVersion)
@@ -450,6 +480,10 @@ func RehydrateReferenceSeriesRegistration(raw []byte) (ReferenceSeriesRegistrati
 	if document.QuoteBasis != nil {
 		basis := versionReferenceFrom(*document.QuoteBasis)
 		registration.quoteBasis = &basis
+	}
+	if document.Currency != "" {
+		currency := Currency{code: document.Currency}
+		registration.currency = &currency
 	}
 	if document.PriorVersion != nil {
 		prior := versionReferenceFrom(*document.PriorVersion)

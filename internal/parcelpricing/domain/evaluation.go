@@ -302,7 +302,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 
 	// 已绑定的序列在计价之前先从快照解析：缺取值是这次评价没拿到的证据，
 	// 而拿到另一个版本的取值，是对「方案声明的是哪个费率」有分歧。
-	series, seriesErr := request.input.resolveSeries(request.plan.structures.referenceSeries)
+	series, amounts, seriesErr := request.input.resolveSeries(request.plan.structures.referenceSeries)
 	if seriesErr != nil {
 		switch {
 		case errors.Is(seriesErr, ErrMissingReferenceSeriesValue):
@@ -314,6 +314,22 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 	}
 	for _, binding := range request.plan.structures.referenceSeries {
+		if binding.kind.carriesAmount() {
+			reading := amounts[binding.seriesID]
+			if reading.absent {
+				evaluation.explanation = append(evaluation.explanation,
+					fmt.Sprintf("reference series %s (%s) in-force version %s has no period at the pricing basis time", binding.seriesID, binding.kind, reading.reference.Version()))
+				continue
+			}
+			// 金额币种须与方案币种一致（ADR-0110 Decision 二）：币种在读数解出时才可知，不一致是分歧不是缺口。
+			if *reading.currency != request.plan.rateTable.currency {
+				return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("REFERENCE_SERIES_CURRENCY_MISMATCH",
+					fmt.Sprintf("%s: series %s publishes %s amounts but the plan prices in %s", ErrCurrencyMismatch.Error(), binding.seriesID, reading.currency, request.plan.rateTable.currency)))
+			}
+			evaluation.explanation = append(evaluation.explanation,
+				fmt.Sprintf("reference series %s (%s) resolved to %s %s from %s@%s", binding.seriesID, binding.kind, reading.value.String(), reading.currency, reading.reference.ID(), reading.reference.Version()))
+			continue
+		}
 		reading := series[binding.kind]
 		evaluation.explanation = append(evaluation.explanation,
 			fmt.Sprintf("reference series %s resolved to %s from %s@%s", binding.kind, reading.value.String(), reading.reference.ID(), reading.reference.Version()))
@@ -406,6 +422,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			zone:          zone,
 			pricingWeight: pricingWeight.rounded,
 			series:        series,
+			amounts:       amounts,
 		})
 		if resolveErr != nil {
 			return evaluation.withCalculationError(resolveErr)
@@ -498,6 +515,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 				zone:          zone,
 				pricingWeight: pricingWeight.rounded,
 				series:        series,
+				amounts:       amounts,
 			}, &basis)
 			if resolveErr != nil {
 				return evaluation.withCalculationError(resolveErr)
@@ -868,6 +886,9 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("RATE_TABLE_CONFLICT", err.Error()))
 	case errors.Is(err, ErrNegativeChargeTotal):
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("NEGATIVE_TOTAL", err.Error()))
+	// 绑了金额序列的规则在窗外声明「待判断」（ADR-0110 Decision 三）：与缺一期取值同一格原因码。
+	case errors.Is(err, ErrMissingReferenceSeriesValue):
+		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", err.Error()))
 	default:
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CALCULATION_FAILED", err.Error()))
 	}

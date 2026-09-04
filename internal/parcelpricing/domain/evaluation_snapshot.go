@@ -65,6 +65,8 @@ type seriesValueSnapshot struct {
 	Reference  versionReferenceSnapshot  `json:"reference"`
 	Value      decimalSnapshot           `json:"value"`
 	QuoteBasis *versionReferenceSnapshot `json:"quoteBasis,omitempty"`
+	Currency   string                    `json:"currency,omitempty"`
+	Absent     bool                      `json:"absent,omitempty"`
 }
 
 type postalRouteSnapshot struct {
@@ -410,6 +412,10 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 			Kind:      string(value.kind),
 			Reference: versionReferenceOf(value.reference),
 			Value:     decimalOf(value.value),
+			Absent:    value.absent,
+		}
+		if value.currency != nil {
+			entry.Currency = value.currency.code
 		}
 		if value.quoteBasis != nil {
 			basis := versionReferenceOf(*value.quoteBasis)
@@ -461,6 +467,11 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 			kind:      ReferenceSeriesKind(value.Kind),
 			reference: versionReferenceFrom(value.Reference),
 			value:     decimalFrom(value.Value),
+			absent:    value.Absent,
+		}
+		if value.Currency != "" {
+			currency := Currency{code: value.Currency}
+			entry.currency = &currency
 		}
 		if value.QuoteBasis != nil {
 			basis := versionReferenceFrom(*value.QuoteBasis)

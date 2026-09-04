@@ -144,21 +144,21 @@ func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesV
 	if !input.valid() {
 		return PricingInputSnapshot{}, ErrPricingInputInvalid
 	}
-	seen := make(map[ReferenceSeriesKind]struct{}, len(values))
+	seen := make(map[string]struct{}, len(values))
 	copyOfValues := make([]ReferenceSeriesValue, 0, len(values))
 	for _, value := range values {
 		if !value.valid() {
 			return PricingInputSnapshot{}, ErrInvalidReferenceSeries
 		}
 		// 同一序列有两期取值，会把选哪一个交给遍历顺序决定。
-		if _, exists := seen[value.kind]; exists {
-			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.kind)
+		if _, exists := seen[value.seriesReadingKey()]; exists {
+			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.seriesReadingKey())
 		}
-		seen[value.kind] = struct{}{}
+		seen[value.seriesReadingKey()] = struct{}{}
 		copyOfValues = append(copyOfValues, value)
 	}
 	sort.SliceStable(copyOfValues, func(left, right int) bool {
-		return copyOfValues[left].kind < copyOfValues[right].kind
+		return copyOfValues[left].seriesReadingKey() < copyOfValues[right].seriesReadingKey()
 	})
 	updated := copyInputSnapshot(input)
 	updated.seriesValues = copyOfValues

@@ -17,6 +17,65 @@ type SurchargeCalculation struct {
 	percentage   *Decimal
 	basis        string
 	operands     []SurchargeCalculation
+	// seriesID 与 outOfWindow 只在「取当期序列定额」上有：金额序列按标识引用（一张卡可绑多条），窗外行为
+	// 由卡声明（ADR-0110 Decision 三）。
+	seriesID    string
+	outOfWindow OutOfWindowBehaviour
+}
+
+// OutOfWindowBehaviour 是绑了金额序列的附加费规则在卡上声明的窗外行为（ADR-0110 Decision 三），封闭两格：
+// 不计收——PSS 的常态，窗外就是不收，零是登记出来的答案；待判断——金额尚未公布、不能当零。未声明的卡不合法：
+// 机制不猜哪一格。
+type OutOfWindowBehaviour string
+
+const (
+	OutOfWindowNotCharged OutOfWindowBehaviour = "NOT_CHARGED"
+	OutOfWindowPending    OutOfWindowBehaviour = "PENDING"
+)
+
+func (behaviour OutOfWindowBehaviour) String() string { return string(behaviour) }
+
+func (behaviour OutOfWindowBehaviour) valid() bool {
+	switch behaviour {
+	case OutOfWindowNotCharged, OutOfWindowPending:
+		return true
+	default:
+		return false
+	}
+}
+
+// NewSeriesAmountSurcharge 声明「取当期序列定额」：金额来自标识为 seriesID 的金额序列在评价基准时点的那一期；
+// 窗外（该期次不存在）按 behaviour 分流。方案必须同时绑定这条序列，那一道在 NewPricingPlanStructures 上判。
+func NewSeriesAmountSurcharge(seriesID string, behaviour OutOfWindowBehaviour) (SurchargeCalculation, error) {
+	return validSurcharge(SurchargeCalculation{
+		method:      ChargeMethodSeriesAmount,
+		seriesID:    seriesID,
+		outOfWindow: behaviour,
+	})
+}
+
+// SeriesAmount 只在「取当期序列定额」上给出：序列标识与窗外行为。
+func (calculation SurchargeCalculation) SeriesAmount() (string, OutOfWindowBehaviour, bool) {
+	if calculation.method != ChargeMethodSeriesAmount {
+		return "", "", false
+	}
+	return calculation.seriesID, calculation.outOfWindow, true
+}
+
+// amountSeriesIDs 报出本计算引用的每一条金额序列的标识，包括藏在取较大值操作数里的。
+func (calculation SurchargeCalculation) amountSeriesIDs() []string {
+	switch calculation.method {
+	case ChargeMethodSeriesAmount:
+		return []string{calculation.seriesID}
+	case ChargeMethodGreaterOf:
+		var ids []string
+		for _, operand := range calculation.operands {
+			ids = append(ids, operand.amountSeriesIDs()...)
+		}
+		return ids
+	default:
+		return nil
+	}
 }
 
 func NewFixedAmountSurcharge(amount Money) (SurchargeCalculation, error) {
@@ -124,12 +183,14 @@ func (calculation SurchargeCalculation) valid() bool {
 	if (calculation.seriesKind != nil) != (calculation.seriesFactor != nil) {
 		return false
 	}
+	seriesAmount := calculation.seriesID != "" || calculation.outOfWindow != ""
 	populated := 0
 	for _, present := range []bool{
 		calculation.amount != nil,
 		calculation.table != nil,
 		calculation.percentage != nil || seriesRate,
 		len(calculation.operands) > 0,
+		seriesAmount,
 	} {
 		if present {
 			populated++
@@ -142,6 +203,8 @@ func (calculation SurchargeCalculation) valid() bool {
 		return false
 	}
 	switch calculation.method {
+	case ChargeMethodSeriesAmount:
+		return trimmed(calculation.seriesID) && calculation.outOfWindow.valid()
 	case ChargeMethodFixedAmount:
 		return calculation.amount != nil && calculation.amount.valid()
 	case ChargeMethodTableLookup:
@@ -496,17 +559,26 @@ type ReferenceSeriesKind string
 const (
 	ReferenceSeriesFuelRate     ReferenceSeriesKind = "FUEL_RATE"
 	ReferenceSeriesExchangeRate ReferenceSeriesKind = "EXCHANGE_RATE"
+	// ReferenceSeriesPublishedAmount 是第三种序列（ADR-0110 Decision 一）：承运商按期公布的**金额**（高峰 /
+	// 需求附加费一类），一期取值带币种。它与两种费率序列的差别不止取值类型：费率序列由计算按种类引用、一张
+	// 卡每种至多绑一条；金额序列由计算按序列标识引用，一张卡可绑多条（每分区一条，Decision 四）。
+	ReferenceSeriesPublishedAmount ReferenceSeriesKind = "PUBLISHED_AMOUNT"
 )
 
 func (kind ReferenceSeriesKind) String() string { return string(kind) }
 
 func (kind ReferenceSeriesKind) valid() bool {
 	switch kind {
-	case ReferenceSeriesFuelRate, ReferenceSeriesExchangeRate:
+	case ReferenceSeriesFuelRate, ReferenceSeriesExchangeRate, ReferenceSeriesPublishedAmount:
 		return true
 	default:
 		return false
 	}
+}
+
+// carriesAmount 报出该种序列的取值是不是带币种的金额；费率序列的取值是裸小数。
+func (kind ReferenceSeriesKind) carriesAmount() bool {
+	return kind == ReferenceSeriesPublishedAmount
 }
 
 // ReferenceSeriesBinding 把方案绑定到一条计价参考序列——按种类与序列标识，不按序列版本
@@ -623,10 +695,22 @@ func NewPricingPlanStructures(
 	for _, dependency := range copyOfDependencies {
 		declaredBases[dependency.id] = struct{}{}
 	}
+	boundAmountSeries := make(map[string]struct{}, len(copyOfSeries))
+	for _, binding := range copyOfSeries {
+		if binding.kind.carriesAmount() {
+			boundAmountSeries[binding.seriesID] = struct{}{}
+		}
+	}
 	for _, rule := range copyOfRules {
 		for _, basis := range rule.calculation.basisDependencyIDs() {
 			if _, declared := declaredBases[basis]; !declared {
 				return PricingPlanStructures{}, fmt.Errorf("%w: %s names undeclared basis %s", ErrInvalidChargeDependency, rule.id, basis)
+			}
+		}
+		// 取当期序列定额的规则必须指名一条已绑定的金额序列：绑定是评价解析读数的唯一入口，没绑就永远解不到。
+		for _, seriesID := range rule.calculation.amountSeriesIDs() {
+			if _, bound := boundAmountSeries[seriesID]; !bound {
+				return PricingPlanStructures{}, fmt.Errorf("%w: %s names unbound amount series %s", ErrInvalidReferenceSeries, rule.id, seriesID)
 			}
 		}
 	}
@@ -742,9 +826,20 @@ func (structures PricingPlanStructures) valid() bool {
 	for _, dependency := range structures.dependencies {
 		declaredBases[dependency.id] = struct{}{}
 	}
+	boundAmountSeries := make(map[string]struct{}, len(structures.referenceSeries))
+	for _, binding := range structures.referenceSeries {
+		if binding.kind.carriesAmount() {
+			boundAmountSeries[binding.seriesID] = struct{}{}
+		}
+	}
 	for _, rule := range structures.surchargeRules {
 		for _, basis := range rule.calculation.basisDependencyIDs() {
 			if _, declared := declaredBases[basis]; !declared {
+				return false
+			}
+		}
+		for _, seriesID := range rule.calculation.amountSeriesIDs() {
+			if _, bound := boundAmountSeries[seriesID]; !bound {
 				return false
 			}
 		}
@@ -756,6 +851,11 @@ func (structures PricingPlanStructures) valid() bool {
 		}
 		if index > 0 && compareSeriesBindings(structures.referenceSeries[index-1], binding) >= 0 {
 			return false
+		}
+		// 费率序列由计算按种类引用，每种至多一条；金额序列由计算按序列标识引用，同种可绑多条（每分区一条，
+		// ADR-0110 Decision 四），排序已保证（种类，标识）不重。
+		if binding.kind.carriesAmount() {
+			continue
 		}
 		if _, exists := seenKinds[binding.kind]; exists {
 			return false
