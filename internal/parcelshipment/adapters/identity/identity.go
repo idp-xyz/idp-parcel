@@ -1,13 +1,13 @@
-// Package identity 是 parcel-shipment 六个标识签发端口的生产实现。
+// Package identity 是 parcel-shipment 各标识签发端口的生产实现。
 //
 // 标识是机制半边：签发一个不重的不透明编号既不需要租户参数，也不需要任何商业规则，
-// 因此这里没有「等真实参数」的一格——六个端口今天就该有真实现，而不是测试替身。
+// 因此这里没有「等真实参数」的一格——每个签发端口今天就该有真实现，而不是测试替身。
 //
-// 六个工厂各自成型，不合并成一个全能签发器。端口注释已把理由写死：建单期、决定期、
-// 承诺期、终局期、修订期与取消期由不同用例触发，合并会让一个编排依赖它根本不签发的
-// 身份。共用内核（internal/platform/identity）不改变这一点——装配时每个类型仍只交得
-// 出它自己那一两个标识。取消工厂的端口住在 application（消费方是取消编排自己），其余
-// 五个住在 ports；住址不同不改变「各自成型」。
+// 各工厂各自成型，不合并成一个全能签发器。端口注释已把理由写死：建单期、决定期、
+// 承诺期、终局期、修订期、取消期与渠道择优期由不同用例触发，合并会让一个编排依赖它根本
+// 不签发的身份。共用内核（internal/platform/identity）不改变这一点——装配时每个类型仍
+// 只交得出它自己那一两个标识。取消工厂的端口住在 application（消费方是取消编排自己），
+// 其余住在 ports；住址不同不改变「各自成型」。
 package identity
 
 import (
@@ -22,13 +22,14 @@ import (
 // 各类标识的前缀。取值只是日志与工单里的可读性约定，不承载业务含义，也不参与任何判断：
 // 领域侧各 ID 已是互不相通的 Go 类型，张冠李戴在编译期就被拦住，前缀是给人看的那一份。
 const (
-	submissionVersionPrefix      = "SUBV"
-	acceptanceDecisionTaskPrefix = "ADTK"
-	acceptanceDecisionPrefix     = "ADEC"
-	commitmentVersionPrefix      = "CMTV"
-	finalOutcomeVersionPrefix    = "FINV"
-	sourceDataVersionPrefix      = "SDV"
-	parcelCancellationPrefix     = "PCXL"
+	submissionVersionPrefix        = "SUBV"
+	acceptanceDecisionTaskPrefix   = "ADTK"
+	acceptanceDecisionPrefix       = "ADEC"
+	commitmentVersionPrefix        = "CMTV"
+	finalOutcomeVersionPrefix      = "FINV"
+	sourceDataVersionPrefix        = "SDV"
+	parcelCancellationPrefix       = "PCXL"
+	channelSelectionDecisionPrefix = "CSDN"
 )
 
 // SubmissionIdentities 实现 ports.SubmissionIdentityFactory。它是五个工厂里唯一签发两个
@@ -199,4 +200,30 @@ func (factory *SourceDataVersions) NextSourceDataVersionID(
 		return domain.SourceDataVersionID{}, err
 	}
 	return domain.NewSourceDataVersionID(value)
+}
+
+// ChannelSelectionDecisions 实现 ports.ChannelSelectionDecisionIdentity（票 label-channel/14）。
+// 决定标识由它铸而不从内容派生：同一票、同一批候选重跑两次是两条记录，内容可以逐字相同。
+type ChannelSelectionDecisions struct {
+	minter platformidentity.Minter
+}
+
+func NewChannelSelectionDecisions(options ...platformidentity.Option) (*ChannelSelectionDecisions, error) {
+	minter, err := platformidentity.NewMinter(channelSelectionDecisionPrefix, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &ChannelSelectionDecisions{minter: minter}, nil
+}
+
+var _ ports.ChannelSelectionDecisionIdentity = (*ChannelSelectionDecisions)(nil)
+
+func (factory *ChannelSelectionDecisions) NextChannelSelectionDecisionID(
+	_ context.Context,
+) (domain.ChannelSelectionDecisionID, error) {
+	value, err := factory.minter.Next()
+	if err != nil {
+		return domain.ChannelSelectionDecisionID{}, err
+	}
+	return domain.NewChannelSelectionDecisionID(value)
 }

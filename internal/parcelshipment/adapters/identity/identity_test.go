@@ -9,7 +9,7 @@ import (
 	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
-// mintFunc 把七个返回类型各异的签发方法收成同一形状，好让下面两条对全部七个都跑一遍。
+// mintFunc 把各个返回类型各异的签发方法收成同一形状，好让下面几条对全部签发方法都跑一遍。
 // 各 ID 类型的 String() 由领域侧的 requiredValue 提升而来。
 type mintFunc func(context.Context) (string, error)
 
@@ -40,8 +40,16 @@ func allMinters(t *testing.T, options ...platformidentity.Option) map[string]min
 	if err != nil {
 		t.Fatalf("构造取消签发器：%v", err)
 	}
+	selectionDecisions, err := adapter.NewChannelSelectionDecisions(options...)
+	if err != nil {
+		t.Fatalf("构造渠道择优决定签发器：%v", err)
+	}
 
 	return map[string]mintFunc{
+		"CSDN": func(ctx context.Context) (string, error) {
+			minted, err := selectionDecisions.NextChannelSelectionDecisionID(ctx)
+			return minted.String(), err
+		},
 		"SUBV": func(ctx context.Context) (string, error) {
 			minted, err := submissions.NextSubmissionVersionID(ctx)
 			return minted.String(), err
