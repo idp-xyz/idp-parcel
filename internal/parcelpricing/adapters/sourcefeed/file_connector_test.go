@@ -17,8 +17,8 @@ import (
 
 // 本文件证以受控目录文件为源的连接器（票 06 裁决一）：Fetch 只读受控目录之内、字节在手那一刻算
 // 摘要、记读取时刻与文件定位符、读出来源声明的公布日期；文件缺失或解不开一律拒——不补数不沿用
-// 旧值；Transcribe 只从原文读观测，整版重述交给领域。仓内不得出现任何出网代码，本包一行 http 都
-// 没有，由 architecture 门禁之外的评审把守（本票红线）。
+// 旧值；Transcribe 只从原文读观测，整版重述交给领域。仓内不得出现任何出网代码（本票红线），
+// 由同包 TestNoOutboundNetworkCodeShipsWithTheFileConnector 把守。
 
 var fetchClockMoment = time.Date(2026, 9, 4, 1, 2, 3, 0, time.UTC)
 
