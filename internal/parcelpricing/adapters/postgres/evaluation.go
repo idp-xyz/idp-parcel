@@ -109,5 +109,24 @@ func (repository *Evaluations) Save(
 	if tag.RowsAffected() == 0 {
 		return ports.EvaluationAlreadyRecorded, nil
 	}
+	// 问题项落子表，与父行同一事务（ADR-0105 Decision 三）：子表是检索列面，权威内容仍在快照。只在父行真写
+	// 下时写——`已有记录`那一格的子行由先到的那次写入留下，这里不重复也不覆盖。
+	for ordinal, issue := range evaluation.Issues() {
+		var seriesKind, seriesID *string
+		if subject, ok := issue.Series(); ok {
+			kind := subject.Kind().String()
+			seriesKind = &kind
+			if id, declared := subject.SeriesID(); declared {
+				seriesID = &id
+			}
+		}
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO parcel_pricing.evaluation_issue (evaluation_id, ordinal, code, series_kind, series_id)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			evaluation.ID().String(), ordinal, issue.Code(), seriesKind, seriesID,
+		); err != nil {
+			return ports.EvaluationSaveOutcomeInvalid, fmt.Errorf("save evaluation issue %d: %w", ordinal, err)
+		}
+	}
 	return ports.EvaluationSaved, nil
 }
