@@ -47,6 +47,10 @@ ADR-0102 决定三与 Consequences；票 `16` 完成记录「刻意留下的三�
 
 ## 完成记录（2026-09-04，MCP-5 起笔、通道 6 收口；四笔均在分支 `mcp5-lc19-21`，待 MCP-1 重放进 main）
 
+> 通道 5 于 18:3x 按 MCP-1 广播把分支 rebase 到 main `d41f73da`，下表四个 SHA 因此改号：`7b84ab5`→`b3acc4d5`、
+> `d8e82ee`→`dd96456e`、`8793db1`→`2d7de00a`；`12a733c`（机制清点）对 main 成空笔已跳过，改在票 `21` 收尾的
+> `0be8b4fd` 一次重生成；评审补刀 `4b045ef7`→`0b34f3b9`。表内内容一字未改，只是坐标换了；重放进 main 后以 main SHA 为准。
+
 | 笔 | 内容 |
 |---|---|
 | `7b84ab5` | 领域：`EffectiveTimeRule` 一源一链、一版三件正文（`SourceTimeMeaning` ∈ {`EVENT_OCCURRENCE`, `SOURCE_PROCESSING`}、`EffectiveTimeAnchor` ∈ {`OCCURRED_AT`, `RECEIVED_AT`}、`Offset` 可零可负），换版回指前版、只追加；`ports.EffectiveTimeRuleRegistry`；postgres `EffectiveTimeRuleCatalogue` 兼 `ports.EffectiveTimeRules` 生产实现（无当前版答 `EffectiveTimeRuleAbsent`，有则 `EffectiveTimeRuleApplied` 带规则引用与版本）；`RegisterEffectiveTimeRuleHandler`（首登 / 换版 / 重放 / 内容冲突 / 未受理 / 未决六格）；迁移 `0014_effective_time_rule.sql` |
