@@ -18,7 +18,9 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证对象级揽收登记：往返、撞键译`已登记`且事务保持可用、
-// 控制依据必备入库内 CHECK、作用域隔离、键与本体不一致拒写、无事务拒、回滚无痕。
+// 控制依据必备入库内 CHECK、作用域隔离、键与本体不一致拒写、无事务拒、回滚无痕；以及更正
+// 走新版本那一半（票 tf-segment-lifecycle-closure/08）：新行回指前版、原行不动、按键读回当前版、
+// 一版最多被更正一次、链一致性入库内 CHECK。
 
 var pickedUpAtFixture = time.Date(2026, 9, 10, 8, 30, 0, 0, time.UTC)
 
@@ -163,7 +165,144 @@ func TestPickupRegistrationRollbackLeavesNothingBehind(t *testing.T) {
 	}
 }
 
+// TestAPickupCorrectionLandsAsANewVersionAndTheOriginalStays 证票 tf-segment-lifecycle-closure/08 裁决 A
+// 在库面的形状：更正是同键下的新行新版本，回指前版；原行一字不动；FindByKey 答的是当前版——链尾那一版，
+// 「当前」按回指派生，表上没有 current 列（同 0014 effective_time_rule 的取法）。
+func TestAPickupCorrectionLandsAsANewVersionAndTheOriginalStays(t *testing.T) {
+	repository, transactor, pool := newOffsitePickups(t)
+	ctx := t.Context()
+
+	original := pickupRecord(t, "control-1", "PRV-000000000001")
+	mustSavePickup(t, transactor, ctx, repository, original)
+	corrected := correctedPickupRecord(t, original, "control-2", "PRV-000000000002")
+	mustSavePickup(t, transactor, ctx, repository, corrected)
+
+	current, exists, err := repository.FindByKey(ctx, pickupKeyFixture(t, "tenant-1"))
+	if err != nil {
+		t.Fatalf("取回当前版：%v", err)
+	}
+	if !exists {
+		t.Fatal("更正后按键读不回任何版本")
+	}
+	if current.Pickup.Version().String() != "PRV-000000000002" || current.Pickup.Control().String() != "control-2" {
+		t.Fatalf("FindByKey 答的不是链尾：%+v", current.Pickup)
+	}
+	if predecessor, present := current.Pickup.Corrects(); !present || predecessor.String() != "PRV-000000000001" {
+		t.Fatalf("链读回来断了：corrects = %q present=%v", predecessor, present)
+	}
+	if at, present := current.Pickup.CorrectedAt(); !present || !at.Equal(correctedAtFixture) {
+		t.Fatalf("更正时刻读回来变形：%v present=%v", at, present)
+	}
+	if current.ContentDigest != corrected.ContentDigest {
+		t.Fatalf("content digest = %q, want %q", current.ContentDigest, corrected.ContentDigest)
+	}
+
+	var rows int
+	var originalControl string
+	var originalCorrects *string
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM transport_fulfillment.offsite_pickup
+		  WHERE tenant_id = 'tenant-1' AND object_ref = 'parcel-1' AND attempt_ref = 'attempt-1'`).Scan(&rows); err != nil {
+		t.Fatalf("数行：%v", err)
+	}
+	if rows != 2 {
+		t.Fatalf("同键行数 = %d, want 2——更正必须是新行，不是改写", rows)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT control_ref, corrects_version FROM transport_fulfillment.offsite_pickup
+		  WHERE tenant_id = 'tenant-1' AND object_ref = 'parcel-1' AND attempt_ref = 'attempt-1'
+		    AND pickup_version = 'PRV-000000000001'`).Scan(&originalControl, &originalCorrects); err != nil {
+		t.Fatalf("读原行：%v", err)
+	}
+	if originalControl != "control-1" || originalCorrects != nil {
+		t.Fatalf("原行被更正动了：control=%q corrects=%v", originalControl, originalCorrects)
+	}
+}
+
+// TestASecondCorrectionOfTheSameVersionKeepsTheFirst 证一版最多被更正一次（库内部分唯一索引）：并发
+// 第二次更正同一前版撞索引译`已登记`而不是 error，同事务立刻读回的当前版仍是先到的那一次更正——链因此
+// 保持线性，FindByKey 才答得出唯一的当前版。
+func TestASecondCorrectionOfTheSameVersionKeepsTheFirst(t *testing.T) {
+	repository, transactor, _ := newOffsitePickups(t)
+	ctx := t.Context()
+
+	original := pickupRecord(t, "control-1", "PRV-000000000001")
+	mustSavePickup(t, transactor, ctx, repository, original)
+	mustSavePickup(t, transactor, ctx, repository, correctedPickupRecord(t, original, "control-2", "PRV-000000000002"))
+
+	late := correctedPickupRecord(t, original, "control-3", "PRV-000000000003")
+	var outcome ports.OffsitePickupSaveOutcome
+	var winner ports.OffsitePickupRecord
+	var exists bool
+	mustWithinPickupTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		if outcome, err = repository.Save(txCtx, late); err != nil {
+			return err
+		}
+		winner, exists, err = repository.FindByKey(txCtx, pickupKeyFixture(t, "tenant-1"))
+		return err
+	})
+	if outcome != ports.OffsitePickupAlreadyRegistered {
+		t.Fatalf("outcome = %d, want ALREADY_REGISTERED——同一前版被更正了两次", outcome)
+	}
+	if !exists || winner.Pickup.Version().String() != "PRV-000000000002" {
+		t.Fatalf("撞索引后同事务读回的当前版 = %+v exists=%v, want v2", winner.Pickup, exists)
+	}
+}
+
+// TestTheDatabaseRefusesAHalfChain 证链一致性入库内 CHECK：前版引用与更正时间同缺席或同在场，且不自指
+// ——与领域 Correct / RehydrateOffsitePickup 立的门一一对应，绕过领域直插也进不去。
+func TestTheDatabaseRefusesAHalfChain(t *testing.T) {
+	_, _, pool := newOffsitePickups(t)
+	ctx := t.Context()
+
+	cases := map[string]string{
+		"predecessor without corrected at": `('PRV-000000000001', NULL)`,
+		"corrected at without predecessor": `(NULL, now())`,
+		"predecessor pointing at itself":   `('PRV-000000000002', now())`,
+	}
+	for name, chain := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := pool.Exec(ctx,
+				`INSERT INTO transport_fulfillment.offsite_pickup
+					(tenant_id, object_ref, attempt_ref, task_ref, place_ref, control_ref,
+					 executed_by, pickup_version, occurred_at, content_digest, recorded_at,
+					 corrects_version, corrected_at)
+				 SELECT 'tenant-x', 'parcel-x', 'attempt-x', 'task-1', 'dock-1', 'control-1',
+				        'courier-1', 'PRV-000000000002', now(), 'digest-x', now(), chain.*
+				   FROM (VALUES `+chain+`) AS chain(corrects_version, corrected_at)`)
+			if err == nil {
+				t.Fatal("一行半截版本链进了库")
+			}
+		})
+	}
+}
+
 // ---- 夹具 ----
+
+var correctedAtFixture = pickedUpAtFixture.Add(36 * time.Hour)
+
+// correctedPickupRecord 经领域 Correct 形成回指 original 的新版本记录；内容比对锚随新内容换。
+func correctedPickupRecord(t *testing.T, original ports.OffsitePickupRecord, control, version string) ports.OffsitePickupRecord {
+	t.Helper()
+	corrected, err := original.Pickup.Correct(domain.PickupCorrection{
+		Place:       pickupValue(t, domain.NewPickupPlaceReference, "dock-2"),
+		Control:     pickupValue(t, domain.NewTransportControlReference, control),
+		ExecutedBy:  pickupValue(t, domain.NewExecutingPartyReference, "courier-2"),
+		OccurredAt:  pickedUpAtFixture.Add(-time.Hour),
+		Version:     pickupValue(t, domain.NewPickupResultVersion, version),
+		CorrectedAt: correctedAtFixture,
+	})
+	if err != nil {
+		t.Fatalf("形成更正版本：%v", err)
+	}
+	return ports.OffsitePickupRecord{
+		Key:           original.Key,
+		ContentDigest: "digest-" + control,
+		Pickup:        corrected,
+		RecordedAt:    correctedAtFixture,
+	}
+}
 
 func newOffsitePickups(t *testing.T) (*adapter.OffsitePickupRegistrations, bentoapp.Transactor, *pgxpool.Pool) {
 	t.Helper()
