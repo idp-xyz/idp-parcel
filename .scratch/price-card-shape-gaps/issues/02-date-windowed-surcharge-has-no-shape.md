@@ -1,7 +1,7 @@
 # 只在日期窗内生效、金额逐周变的附加费（PSS / 高峰附加费）没有形状
 
 Category: enhancement
-Status: draft——需 owner 裁三条改法取哪一条；改判定谓词集合或序列种类都改规范化形状，需 ADR（MCP-1 2026-09-04 立票，只写票面未动代码）
+Status: ready-for-agent——已裁改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「计价参考序列」词条已改口；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足，按派单口径转为实施票承接，范围见「裁决」节末段
 Blocked by: 无
 
 ## 为什么立
@@ -29,6 +29,19 @@ Blocked by: 无
 - 不写任何真实 PSS 窗口与金额进仓；SYN 夹具只记 `S`。
 - 裁定前 E2 转换工具**不把 PSS 折进基础运费或写成常年附加费**，如实列「未转换：等本票」。
 - 若取 2 或 3，规范化版本按 ADR-0014 换号，旧评价按原版本重放。
+
+## 裁决（2026-09-04，通道 6，task-f530ad56 裁决批口径：owner 授权自决，写明能力边界）
+
+**取改法 2，落文 [ADR-0110](../../../docs/adr/0110-date-windowed-and-periodically-published-surcharge-amounts-are-a-third-reference-series-kind.md)。** PSS 的本质是承运商按期公布的外部数值，与燃油率同族只差取值是金额；1 把运营负担推回逐周重登（ADR-0099 已否过的形状），3 解决了窗口解决不了逐周金额、还把时点混进「包裹的可判定量」集合。ADR 五条：`ReferenceSeriesKind` 加「按期公布金额」，取值带币种、币种须与方案一致；附加费计算加「取当期序列定额」，定额不带基数依赖；窗口由期次表达、不加时点特征，**但绑金额序列的规则必须在卡上声明窗外行为（不计收 / 待判断）**——PSS 窗外是正当的零而不是数据缺口，零只在登记出来时才是零（label-channel/13 立场）；分区分档不新造形状，每分区一条规则各绑一条序列 + 既有 `FeatureZone`；规范化换号一次，与 ADR-0107 / 0108 / 0109 同期实施合并为一次。本裁决在票面三条改法之上**多加了一格**（窗外行为声明），理由写在 ADR 决定三与 Alternatives 末条。
+
+**能力边界**：读了本票与 `report.md` 第 16 项的取证、ADR-0099 全文、PP CONTEXT「计价参考序列」「特征」「判定条件」词条、`NewSeriesRateSurcharge` 与 `ReferenceSeriesBinding` 的符号面；**未读** `SurchargeCalculation` 各种类在 `fingerprint.go` 里的规范化写法与 `reference_series.go` 的期次解析路径——「窗外无期次」在解析口上今天怎么答，实施开工时先核；未打开任何客户 PSS 表。
+
+### 本票转实施票，范围
+
+1. 领域：`ReferenceSeriesKind` 加金额种类（期次取值改为「费率或带币种金额」的判别形状，构造门按种类拒错类型）；`SurchargeCalculation` 加「取当期序列定额」并带「窗外行为」两格封闭声明；规范化换号（同期合并）；评价解释项记「取自序列 X 第 N 期」；解析无期次时按窗外行为分流——不计收即该规则不形成费用行并在解释项留痕，待判断即 `REFERENCE_SERIES_UNRESOLVED`。
+2. 登记面：序列登记 spec / 逐字段表单 / JSON 口支持金额期次；卡的附加费规则表单加该计算种类与窗外行为。
+3. E2：客户 PSS 表转成金额序列登记快照 + 每分区一条附加费规则；裁定落地前如实列「未转换：等本票」。
+4. 领域封闭集与快照改动走三步法或单独 worktree，频道占号。
 
 ## 验证
 
