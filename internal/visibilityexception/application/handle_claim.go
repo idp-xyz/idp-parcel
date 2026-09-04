@@ -81,6 +81,12 @@ func (outcome HandleClaimOutcome) String() string {
 // 一个笼统的「资格未配置」：各维的恢复动作各不相同——时限维等租户登记起算事件与业务
 // 日历，授权维等查询补上申请人，重复关系维等一次领域裁断，材料维等证据归集接上。压
 // 成一格，看到未决的人就不知道该去做哪一件事。
+//
+// 时限一维再分两格：「规则未登记」与「规则已登记但截止算不出」。规则正文从
+// party-commercial 读回来之后（票 ve-claims-read-seams/03），版本、起算事件、日历都在而
+// 截止为零值是一种真实状态——截止要拿起算事实与日历派生，两样今天 VE 没有。折成
+// 「未登记」会把人支去 PC 补一版早就在的规则；补充截止那一格同理，零值不是一个过去的
+// 时刻，说成「窗口已关」会让人去查一份从未存在过的期限。
 type HandleClaimUndecidedReason uint8
 
 const (
@@ -89,6 +95,7 @@ const (
 	EligibilityRulesUnavailable
 	EligibilityCatalogueNotConfigured
 	EligibilityFilingDeadlineNotRegistered
+	EligibilityFilingDeadlineUnderivable
 	EligibilityAuthorizationNotRegistered
 	EligibilityApplicantNotCarried
 	EligibilityDuplicateUnresolved
@@ -96,6 +103,7 @@ const (
 	EligibilityEvidenceUnavailable
 	EligibilitySupplementIncomplete
 	EligibilitySupplementWindowClosed
+	EligibilitySupplementDeadlineUnderivable
 	RecoveryStoreUnavailable
 	RecoveryIdentityUnavailable
 )
@@ -110,6 +118,8 @@ func (reason HandleClaimUndecidedReason) String() string {
 		return "ELIGIBILITY_CATALOGUE_NOT_CONFIGURED"
 	case EligibilityFilingDeadlineNotRegistered:
 		return "ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED"
+	case EligibilityFilingDeadlineUnderivable:
+		return "ELIGIBILITY_FILING_DEADLINE_UNDERIVABLE"
 	case EligibilityAuthorizationNotRegistered:
 		return "ELIGIBILITY_AUTHORIZATION_NOT_REGISTERED"
 	case EligibilityApplicantNotCarried:
@@ -124,6 +134,8 @@ func (reason HandleClaimUndecidedReason) String() string {
 		return "ELIGIBILITY_SUPPLEMENT_INCOMPLETE"
 	case EligibilitySupplementWindowClosed:
 		return "ELIGIBILITY_SUPPLEMENT_WINDOW_CLOSED"
+	case EligibilitySupplementDeadlineUnderivable:
+		return "ELIGIBILITY_SUPPLEMENT_DEADLINE_UNDERIVABLE"
 	case RecoveryStoreUnavailable:
 		return "RECOVERY_STORE_UNAVAILABLE"
 	case RecoveryIdentityUnavailable:
@@ -352,6 +364,7 @@ const (
 	basisFilingDeadlineMet      = "FILING_DEADLINE_MET"
 	basisFilingDeadlineExceeded = "FILING_DEADLINE_EXCEEDED"
 	basisFilingDeadlineAbsent   = "FILING_DEADLINE_RULE_NOT_REGISTERED"
+	basisFilingDeadlineUnknown  = "FILING_DEADLINE_UNDERIVABLE"
 	basisAuthorizationAbsent    = "AUTHORIZATION_CATALOGUE_NOT_REGISTERED"
 	basisApplicantNotCarried    = "AUTHORIZATION_APPLICANT_NOT_CARRIED"
 	basisApplicantAuthorized    = "APPLICANT_AUTHORIZED"
@@ -510,6 +523,12 @@ func (handler *HandleClaimHandler) applyScreen(
 	}
 
 	if missing := collectMissingMaterials(verdicts); len(missing) > 0 {
+		// 零值截止不是一个过去的时刻：材料清单登了、补充截止算不出（起算事实与日历今天
+		// VE 没有，票 ve-claims-read-seams/03 留的格）。先于「不在未来」判，否则零值会
+		// 落进「窗口已关」——那会让人去查一份从未存在过的期限。
+		if rules.Materials.SupplementDeadline.IsZero() {
+			return HandleClaimOutcomeInvalid, EligibilitySupplementDeadlineUnderivable, nil
+		}
 		// 补充期限已经不在未来：CONTEXT 说补充期限届满只触发资格复核，规则未定或延期
 		// 待确认时保持待决定并升级，**不能默认拒赔**。所以这里停在未决等人来看，既不
 		// 拿一个过去的截止去立第三态，也不把它读成逾期未补。
@@ -549,14 +568,24 @@ func judgeContractScope(rules ports.EligibilityRules) dimensionVerdict {
 // judgeFilingDeadline 核首次索赔期限。规则未登记时如实答核不了——起算事件与业务日历
 // 是租户登记的实例参数（`PAR-VIS-08`），拿本方时钟凑一个默认时限，就把「还没登记」
 // 变成了一次有依据的超期拒赔，而那一格按 ADR-0051 永久成立、补不回来。
+//
+// 规则登了而截止算不出是另一格：版本、起算事件、日历都在，缺的是起算事实与按日历算日
+// 的能力（票 ve-claims-read-seams/03 留的格）。basis 带上这时候有的两样——版本与起算事件
+// ——读记录的人才知道缺的是事实不是规则；两格同为核不了，索赔项都一字不动。
 func judgeFilingDeadline(rules ports.EligibilityRules, claim *domain.ClaimItem) dimensionVerdict {
 	rule := rules.FilingDeadline
-	if !rule.Registered || rule.Deadline.IsZero() || rule.RuleVersion == "" ||
-		rule.StartEvent == "" || rule.Calendar == "" {
+	if !rule.Registered {
 		return dimensionVerdict{
 			outcome: dimensionUncheckable,
 			basis:   basisFilingDeadlineAbsent,
 			reason:  EligibilityFilingDeadlineNotRegistered,
+		}
+	}
+	if rule.Deadline.IsZero() || rule.RuleVersion == "" || rule.StartEvent == "" || rule.Calendar == "" {
+		return dimensionVerdict{
+			outcome: dimensionUncheckable,
+			basis:   basisFilingDeadlineUnknown + "/" + rule.RuleVersion + "/" + rule.StartEvent,
+			reason:  EligibilityFilingDeadlineUnderivable,
 		}
 	}
 	if claim.SubmittedAt().After(rule.Deadline) {

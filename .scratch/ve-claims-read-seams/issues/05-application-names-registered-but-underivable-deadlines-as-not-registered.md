@@ -1,7 +1,7 @@
 # 资格编排把「规则已登记但截止算不出」报成「规则未登记」/「补充窗口已关」——两格未决的名字对新状态不准
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-4（2026-09-04，基线 `mcp4-ve03@522ea43d`，隔离分支 `mcp4-ve05`）
 Blocked by: [03](./03-claim-deadline-and-materials-read-party-commercial-rule-content.md)（把两维接上 PC 之后这一状态才可达）
 
 ## 事实（钉在票 03 分支 `mcp4-ve03`，`internal/visibilityexception/application/handle_claim.go` 与 main 同）

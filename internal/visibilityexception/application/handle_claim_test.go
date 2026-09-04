@@ -596,6 +596,16 @@ func TestEachUncheckableDimensionStopsOnItsOwnReason(t *testing.T) {
 			want: application.EligibilityFilingDeadlineNotRegistered,
 		},
 		{
+			// 规则登了（版本、起算事件、日历、范围俱在）而截止算不出——起算事实源与业务日历
+			// 今天 VE 没有（票 ve-claims-read-seams/03「裁决」）。与「没登」分格：前者去 PC 登
+			// 一版规则，后者要等派生能力；看着 NOT_REGISTERED 去补规则的人会发现规则早就在。
+			name: "首次索赔期限规则已登记但截止算不出",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.FilingDeadline.Deadline = time.Time{}
+			},
+			want: application.EligibilityFilingDeadlineUnderivable,
+		},
+		{
 			name: "授权目录未登记",
 			arrange: func(fixture *claimFixture) {
 				fixture.eligibility.rules.Authorization = ports.AuthorizationCatalogue{}
@@ -877,6 +887,16 @@ func TestMaterialsShortWithoutTheFourLandingPointsStaysUndecided(t *testing.T) {
 				fixture.eligibility.rules.Materials.SupplementDeadline = claimSubmittedAt
 			},
 			want: application.EligibilitySupplementWindowClosed,
+		},
+		{
+			// 零值截止不是一个过去的时刻：材料清单登了、补充截止算不出（起算事实与日历今天
+			// VE 没有，票 ve-claims-read-seams/03「裁决」）。说成「窗口已关」会让人去查一份
+			// 从未存在过的期限；这一格要等派生能力，恢复动作与前一格不同。
+			name: "补充截止算不出",
+			arrange: func(fixture *claimFixture) {
+				fixture.eligibility.rules.Materials.SupplementDeadline = time.Time{}
+			},
+			want: application.EligibilitySupplementDeadlineUnderivable,
 		},
 	}
 
