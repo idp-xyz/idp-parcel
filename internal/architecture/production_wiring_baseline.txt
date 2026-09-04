@@ -352,13 +352,11 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 
 
 # —— party-commercial ——
-# 客户服务规则版本的两格适用声明（票 party-commercial-context-gaps/04 第二笔）。
-# **它们应该的调用方是票 05**：那一票要落正文表、解析口与 visibility-exception 的消费缝，
-# 而规则版本正是从那条路上被解析出来后才需要声明适用对象的。票 05 落地时两行一起出名单。
-# 现在不接不是排期问题——本笔有意只落领域类型（票 04 裁决拆两笔，理由是把 VE 那条缝并进来
-# 会把封闭集拓宽的变红窗口拉长），正文与解析属另一票的范围。
-internal/partycommercial/domain CustomerServiceRuleAppliesToCustomerContract
-internal/partycommercial/domain CustomerServiceRuleAppliesToServiceProduct
+# CustomerServiceRuleAppliesToCustomerContract / CustomerServiceRuleAppliesToServiceProduct 曾在这里
+# （票 party-commercial-context-gaps/04 第二笔落的两格适用声明，理由行明写「票 05 落地时两行一起
+# 出名单」），2026-09-04 随票 05 剪掉：客户服务规则正文进了 0023 与 `SaveCustomerServiceRule`，
+# 点读口 `CustomerServiceRuleContents` 按两列折回两格时调它们，批文口 `customerServiceRuleBodyFrom`
+# 同样调它们——两条都是生产路径。**在 cfc4858d 的干净内容上数得剪前 11、剪后 9**，只对该检出成立。
 # PublishChannelAccountUseAuthorization 曾在这里，2026-09-02 随 party-commercial-context-gaps/01
 # 剪掉：渠道账号使用授权补齐了执行器（0018 登记册、ports 登记面、application 写侧编排），
 # 发布门的生产调用方是 application/register_channel_account_use.go。

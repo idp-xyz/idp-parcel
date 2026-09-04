@@ -84,11 +84,11 @@ internal/parcelshipment/domain SubmissionBatchCandidate
 # 一类：经 ResolveCreditPolicy 取得，它在函数名棘轮基线里。随它出名单。
 internal/partycommercial/domain CreditBasis
 
-# 一类＋二类：CustomerServiceRuleApplicability 经两格适用声明（函数名基线已列）取得，
-# CustomerServiceRuleVersion 只由 NewCustomerServiceRuleVersion 交出。两条都等
-# party-commercial-context-gaps/05（正文两项 + 具名 Save + 点读口）落地——那是它们应该的调用方。
-internal/partycommercial/domain CustomerServiceRuleApplicability
-internal/partycommercial/domain CustomerServiceRuleVersion
+# CustomerServiceRuleApplicability / CustomerServiceRuleVersion 曾在这里（一类＋二类，理由行明写
+# 「等 party-commercial-context-gaps/05 落地」），2026-09-04 随票 05 剪掉：`SaveCustomerServiceRule`
+# 与 `CustomerServiceRuleContentView.LoadCustomerServiceRule` 的签名收发 CustomerServiceRuleVersion，
+# 发布编排的 `CustomerServiceRuleBodyDeclaration` 持 CustomerServiceRuleApplicability，两者由这些
+# 签名入种子。**在 cfc4858d 的干净内容上数得剪前 25、剪后 23**，只对该检出成立。
 
 # 三类，见文末「待改小写候选」一节：Resolution 列在那里，不在这里。
 
