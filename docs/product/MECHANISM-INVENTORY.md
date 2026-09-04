@@ -7,7 +7,7 @@
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
-| architecture（非业务） | 0 | 12 | 0 | 0 | 0 | 0 |
+| architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 69 | 68 | 13 | 32 | 9 | 8 |
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 73 | 50 | 10 | 35 | 7 | 7 |
 | transportfulfillment | 94 | 84 | 18 | 29 | 10 | 15 |
 | visibilityexception | 89 | 86 | 9 | 26 | 8 | 10 |
-| **合计** | 719 | 666 | 94 | 210 | 49 | 92 |
+| **合计** | 719 | 667 | 94 | 210 | 49 | 92 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 41、测试 60。
 
