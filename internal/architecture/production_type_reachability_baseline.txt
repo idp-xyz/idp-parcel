@@ -1,0 +1,152 @@
+# 类型可达性棘轮基线。每行「包 类型名」，`#` 起注释。
+#
+# 这里躺着的是**此刻容忍的**「生产代码顺着任何一条路都碰不到」的导出领域类型，不是「应当
+# 如此」的清单。冻结它是为了让门禁能判方向：名单变长要有人写一行理由，名单里的条目失效要
+# 有人剪掉。判据与量法见 production_type_reachability_ratchet_test.go 头注；它与函数名棘轮
+# （production_wiring_baseline.txt）各守一族，**两边互不改写**——那边按名字前缀排除的
+# `New*`、按包内裸标识符也算引用因而不响的工厂，正是这边要看见的东西。
+#
+# 加一条时把理由写在它上面：它经哪个导出入口才拿得到、那个入口在等谁。你在加的当下知道，
+# 三个月后来读的人不知道。
+#
+# 首版 63 条，2026-09-04 由 MCP-2 实测：在共享树上量得 63，动手前 `git status -- internal/architecture/`
+# 为空（本目录无他人在途改动），父提交 `37bea80`；提交后在 detached worktree 上检出复验的记录在
+# 票 .scratch/mechanism-executor-triage/issues/05 的 Comments。**这个 63 只对那个提交成立**，
+# 下一个改名单的人在自己那一刻的 HEAD 上重数，别拿这里的数加减。
+#
+# 首版没有一条是「零引用的死码」：63 条**全部**至少经一个导出入口可取得，只是那个入口本身零
+# 生产调用。所以每条理由行的形状都是「经 X 取得，X 在等谁」。它们分三类，先分清再读：
+#   一、X 在函数名棘轮基线里——同一个缺口的类型侧影子，随 X 接线自然出名单，理由行在那边。
+#   二、X 是 `New*`——函数名棘轮按前缀排除的那一格（票 mechanism-executor-triage/04 的论证），
+#       这边是它唯一被看见的地方，理由行要在这里写全。
+#   三、X 只有包内调用——函数名棘轮把包内裸标识符也算引用，所以那边不响；类型侧看它是包外
+#       从不经手。这一类里混着「该改小写」（票 04 点名的 Resolution）与「该接执行器」两种，
+#       **门禁不替它们分**，由各上下文所有者在自己的票里答。
+#
+# 与函数名基线同一条纪律：**理由行写「等谁、那一层何时落」，不写「切片还没到」。**
+
+# ---- customs-compliance ----
+
+# 一类：经 FormDutyCollaboration / VerifyDutyPayment / RegisterCredential / ReceiveReleaseOutcome
+# 取得，四个工厂都在函数名棘轮基线里（关税协作、税款核验、监管凭证、放行结果四条执行器未接）。
+# 随各自工厂接线出名单；其中 *Reference 与 *ID 另有 New* 构造器，但生产不指名它们，随聚合走。
+internal/customscompliance/domain AssessedDutyReference
+internal/customscompliance/domain CredentialHolderReference
+internal/customscompliance/domain CredentialID
+internal/customscompliance/domain CustomsReleaseOutcome
+internal/customscompliance/domain DutyCollaborationSpec
+internal/customscompliance/domain DutyCoverage
+internal/customscompliance/domain DutyDelta
+internal/customscompliance/domain DutyFactValidity
+internal/customscompliance/domain DutyObligationKind
+internal/customscompliance/domain DutyPaymentCollaboration
+internal/customscompliance/domain DutyPaymentVerification
+internal/customscompliance/domain ExternalFundsFactReference
+internal/customscompliance/domain LegalObligorReference
+internal/customscompliance/domain PaymentRequirementSource
+internal/customscompliance/domain RegulatoryCredential
+internal/customscompliance/domain ReleaseKind
+internal/customscompliance/domain ResponsibilityTargetReference
+
+# 三类，见文末「待改小写候选」一节：ComplianceJudgment 一族五条列在那里，不在这里。
+
+# ---- network-routing ----
+
+# 二类：只由 NewHardConstraintFinding / NewPathExecutability / NewRouteRequirement /
+# NewServiceAreaResolution / NewCriterionScore·NewCandidateScores 交出，五个构造器零生产调用，
+# 包外只有测试在用。它们是路由证据链（硬约束、路径可执行性、路由要求、服务区解析、评分）的
+# 输入规格——等 nr-route-evidence-views/01 与 first-tenant-runway/03 的执行器，两票都阻于 PAR-NET-14。
+internal/networkrouting/domain CriterionScore
+internal/networkrouting/domain HardConstraintFindingSpec
+internal/networkrouting/domain PathExecutabilitySpec
+internal/networkrouting/domain RouteRequirementSpec
+internal/networkrouting/domain ServiceAreaResolutionSpec
+
+# ---- parcel-pricing ----
+
+# 二类：只由 NewPricingPlanID / NewRateTableID / NewWeightPolicyID 交出，三个构造器零生产调用，
+# 连测试也没有。价卡、费率表、计重政策的版本仓储今天按别的键走（syn-wall-door-audit/07 已 resolved）。
+# parcel-pricing 所有者判：这三个标识是版本仓储该用的键（接线）还是早期骨架遗留（删）。
+internal/parcelpricing/domain PricingPlanID
+internal/parcelpricing/domain RateTableID
+internal/parcelpricing/domain WeightPolicyID
+
+# ---- parcel-shipment ----
+
+# 一类：经 AssessSafeHandoff 取得，它在函数名棘轮基线里（安全交接评估的执行器未接）。随它出名单。
+internal/parcelshipment/domain HandoffAttemptID
+internal/parcelshipment/domain HandoffObservation
+internal/parcelshipment/domain HandoffQueryReference
+internal/parcelshipment/domain HandoffUnresolvedReason
+internal/parcelshipment/domain SafeHandoffAssessment
+internal/parcelshipment/domain SafeHandoffAssessmentSpec
+internal/parcelshipment/domain SafeHandoffStatus
+
+# 二类：只由 NewSubmissionBatchCandidate 交出，零生产调用、零测试。PS 所有者判接线或删。
+internal/parcelshipment/domain SubmissionBatchCandidate
+
+# ---- party-commercial ----
+
+# 一类：经 ResolveCreditPolicy 取得，它在函数名棘轮基线里。随它出名单。
+internal/partycommercial/domain CreditBasis
+
+# 一类＋二类：CustomerServiceRuleApplicability 经两格适用声明（函数名基线已列）取得，
+# CustomerServiceRuleVersion 只由 NewCustomerServiceRuleVersion 交出。两条都等
+# party-commercial-context-gaps/05（正文两项 + 具名 Save + 点读口）落地——那是它们应该的调用方。
+internal/partycommercial/domain CustomerServiceRuleApplicability
+internal/partycommercial/domain CustomerServiceRuleVersion
+
+# 三类，见文末「待改小写候选」一节：Resolution 列在那里，不在这里。
+
+# ---- settlement-accounting ----
+
+# 一类：经 FormAuditedPayable / FormSupplierCreditNote / FormSupplierExpectedCost 取得，三个工厂
+# 都在函数名棘轮基线里（应付审定、供应商贷项、供应商预计成本的执行器未接）。随各自工厂出名单。
+internal/settlementaccounting/domain AuditedPayable
+internal/settlementaccounting/domain CreditNoteID
+internal/settlementaccounting/domain CreditNoteVersion
+internal/settlementaccounting/domain CreditReasonReference
+internal/settlementaccounting/domain PayableID
+internal/settlementaccounting/domain SupplierCreditNote
+internal/settlementaccounting/domain SupplierCreditNoteSpec
+internal/settlementaccounting/domain SupplierExpectedCostSpec
+
+# ---- visibility-exception ----
+
+# 一类：经 EstablishCase / RaiseConflictSignal / ResolveByBusinessTime / SubmitEvidence /
+# PrepareDisclosure 取得，五个工厂都在函数名棘轮基线里（异常案件、冲突信号、证据提交与披露的
+# 执行器未接）。随各自工厂出名单。
+internal/visibilityexception/domain CasePhase
+internal/visibilityexception/domain ConflictJudgment
+internal/visibilityexception/domain ConflictResolutionBasis
+internal/visibilityexception/domain EvidenceAppraisal
+internal/visibilityexception/domain EvidenceContentDigest
+internal/visibilityexception/domain EvidenceDisclosureVersion
+internal/visibilityexception/domain EvidenceItem
+internal/visibilityexception/domain EvidenceItemID
+internal/visibilityexception/domain EvidenceProviderReference
+internal/visibilityexception/domain ExceptionCase
+internal/visibilityexception/domain ExceptionSignal
+internal/visibilityexception/domain ImpactScopeReference
+internal/visibilityexception/domain ResponsibleTeamReference
+
+# ---- 待改小写候选（三类）----
+#
+# 这一节按票 mechanism-executor-triage/05 的要求单列：**不把它们与「等执行器」的条目混在一起
+# 冻进基线**。它们的共同形状是「导出了，但交出它的那个函数只有包内调用，包外从不经手」——
+# 函数名棘轮把包内裸标识符也算引用所以那边不响。要么改小写（各上下文地盘，逐个在频道占号，
+# 改完这一行自然出名单），要么由所有者确认它本该被包外拿到并立接线票——两种都是所有者的判断，
+# 门禁不替裁。改小写之后本门禁的 stale 用例会指名要剪的那一行。
+
+# 票 04 点名的那一个：只经 ResolveCommercialBasis（只有包内调用）与 ValidateBeforeDecision
+# （函数名基线已列）取得。PC 所有者裁。
+internal/partycommercial/domain Resolution
+
+# 同形的一族：经 FormComplianceJudgment 取得（两个 *Reference 另有 New* 构造器，生产同样不指名），
+# 而 FormComplianceJudgment 只有包内调用，包外无人形成「合规判断」。CC 所有者裁：改小写，还是
+# 它其实是缺一条「形成合规判断」的应用入口。
+internal/customscompliance/domain ComplianceJudgment
+internal/customscompliance/domain ComplianceJudgmentSpec
+internal/customscompliance/domain ComplianceRuleVersionReference
+internal/customscompliance/domain ComplianceTopicReference
+internal/customscompliance/domain JudgmentMode
