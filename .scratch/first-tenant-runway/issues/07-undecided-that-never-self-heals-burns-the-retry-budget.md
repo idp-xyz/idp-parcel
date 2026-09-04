@@ -1,7 +1,7 @@
 # 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱
 
 Category: bug
-Status: in-progress——MCP-1；[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) Decision 一/二/三 已落（`32d6a49`），库面镜像已对齐（`f8301e4`），入账那一层已按 MCP-3 裁决退回过渡态，Decision 五 已落（`a9e3440` 领域层 + `a3adb75` 编排/读口/迁移 0013，见文末两条 Comment）；**Decision 四 未落**——跨 PC/PS 的第二笔（登记动作发「参数已登记」信封 + PS 消费门重驱 + `undecidedDisposition` 翻转）是本票剩下的切片，PC 那半在 party-commercial 地盘，开工前占号
+Status: resolved——[ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 五条决定全部落地：一/二/三 `32d6a49`，库面镜像 `f8301e4`，五 `a9e3440` + `a3adb75`，四的 PC 半边 `542ebc3`（时点策略登记同事务发「参数已登记」）、PS 半边在分支 `mcp6-ftr07-d4-ps`（消费门 + 路由行 + `undecidedDisposition` 翻转，见文末 2026-09-04 MCP-6 那条；重放进 main 后 SHA 以 MCP-1 广播为准）。`AUTHORITY_GRANT` 那一格的登记编排另立票（见 MCP-5 那条），不阻断本票
 
 来源：2026-09-02 MCP-5 在真进程上验证隔离形态提交链路时撞见。取证锚 `c60ec2c`（工作树含同轮 ADR-0091 改动）。
 
@@ -297,3 +297,55 @@ ADR-0081 决定三、[ADR-0086](../../../docs/adr/0086-manual-review-wait-is-a-c
   postgres 真库六条（契约逐字段与载荷只两键 / 回滚同消失 / 重发同一份 / 同对象新版本另一封且同分区按序出队 / 无事务拒 /
   缺件响亮）；`cmd/parcel-commercial` 真库两条（CLI 发布带时点策略 → Outbox 一封、重跑仍一封 / 不带则零封）；
   `internal/architecture` 全绿（分区主体登记行、envelope 门禁、两道棘轮）。全仓 build/vet/test 结果记在提交信。
+
+- 2026-09-04 · MCP-6（第二笔的 PS 半边，MCP-1 派；**Decision 四至此落完，本票转 resolved**。分支 `mcp6-ftr07-d4-ps`，
+  基线 `main@0cb8163`（含 PC 半边 `542ebc3`）；两笔代码 `eff4668` / `9ecec4c`，重放进 main 后 SHA 以 MCP-1 广播为准）。
+
+  **事件类型常量**：`psinbox.OperatorRegistrationCompletedEventType = "party-commercial.commercial-authority.operator-registration-completed"`，
+  与 PC 侧 `operatorRegistrationCompletedEventType` 各写各的字面（不导入对方常量），`TestTheRegistrationGateAcceptsTheTypeThePublisherWrites`
+  钉住消费侧那一串；载荷两键由闭环用例用**真 PC 交接适配器**铸封穿真消费门守。
+
+  **消费门 `psinbox.NewOperatorRegistrationCompletedConsumer(transactor, inboxStore, queue, advancer, pageSize)`**：译出租户
+  去问 `ports.OperatorRegistrationQueue`，登记种类只核在场不解读（不在消费门认原因名字）。**事务形状与另两扇门不同，
+  是被平台逼出来的**：bento 的 inbox 行必须在同一笔里 PROCESSING→PROCESSED（已提交的 PROCESSING 行下次 Start 是一致性
+  失败），嵌套 `WithinTransaction` 又没有保存点——同一笔里一份委托的回滚会带翻其余已推进的。所以门只托住账本那一行，
+  重驱在门外：每份委托各开一笔**顶层**事务（用进事务之前的 ctx 开），落定各自提交、停在会自愈的依赖上各自回滚。整封按
+  各份汇总：有硬错误上抛（publish_failed）；有停住的交回未决哨兵——账本无痕、派发器按节奏重投同一封，下一轮只列出仍在等
+  的那几份（已决的不在队列里、已入账等待的各自续办），这封信因此就是那几份的重投驱动而不重做已提交的工作；全部落定
+  才入账。按页取（`operatorRegistrationRedrivePageSize = 200`，装配层常量、非租户参数），一页没有新面孔即止。
+
+  **翻转**：`undecidedDisposition` 把 `ResumeByOperatorRegistration` 并回入账那一支；
+  `TestOperatorRegistrationRollsBackUntilItsResumeTriggerLands` 反过来改名 `…IsCommittedNowThatItsResumeTriggerLands`，仍单列。
+  **ADR-0094 Consequences「失败预算从此只花在真会自愈的依赖上」自此成立**：五个 `*NotConfigured` 里经消费门走得到的两个
+  （`*AsOfNotConfigured`）入账不重投；另三个不经消费门（见下④）。
+
+  **路由**：`cmd/parcel-dispatch/assemble.go` 的 `acceptanceChainConsumers` 一次建三扇门，路由表加
+  `psinbox.OperatorRegistrationCompletedEventType: routedRegistration`（哨兵与另两扇同一份）；队列读口装同一个
+  `pspostgres.ShipmentRequests`。
+
+  **④ 三条命令口的 `*RulesNotConfigured` 要不要在拒绝／撤回／修订前写第四格等待态——判「不写」，理由四条：**
+  1. 它们不经消费门、不在 outbox 上，没有重投预算在烧：调用方拿到的是一次同步的`未决`答复，恢复动作是「登记授权规则后
+     重发同一条命令」，不需要也没有一条队列在等被驱。
+  2. `AwaitOperatorRegistration` 写的是**接受判断任务**的等待态，写了就进 `ListWaitingOnOperatorRegistration` 队列，而登记
+     消费门对队列上的每一份重驱的是**接受判断链**——对一份运营正试图拒绝的委托重跑接受链，可能把它接受掉；等待态写在
+     那里就是把「运营在等授权去拒绝」讲成「接受判断在等参数」，接错看着像接对。
+  3. `AUTHORITY_GRANT` 今天没有任何生产编排发信封（MCP-5 上条取证：`SaveGrant` 只有测试调、`AuthorizedAction` 无撤回与
+     修订两格），队列里多出的行没有任何信封会来驱，正是 Decision 四说的更安静的停滞。
+  4. 第四格的**标签**仍落在它们的处理尝试上（0011 已放宽 CHECK），ADR-0095 第一层要的「停在哪、等谁」在库里有；缺的只是
+     一条今天并不存在的自动续办，而那条续办的正确形状是「新登记编排 + `AUTHORITY_GRANT` 信封 + 对**原命令**的重放」，
+     不是复用接受链的重驱——那是 MCP-5 说的那张新票的事，本票不预判它。
+  因此 MCP-5 那处口子取①之外的第三条：`resumePath()` 不动（五个原因仍映第四格，ADR-0094 Decision 二原话），翻转对
+  三条命令口**无影响**——它们根本到不了 `undecidedDisposition`。取证：接受链里能交回第四格 `ResumePath` 的只有两条 as-of
+  编排的 `awaitOperatorRegistration`（D5 先 Save 再交回原因）；决定那一步的 `pendingReasonFor` 把第四格 `waitingOn` 反译成
+  `AcceptanceJudgmentIncomplete`（内部重试），今天链里也没有产生带第四格的 `NewUndeterminedAcceptanceCheck` 的路径——
+  若日后有，要先补 D5 那道护栏再入账，这里如实记下不预建。`internal/parcelshipment/application/**` 本笔零改动。
+
+  **验证**（分支 `9ecec4c`，隔离 worktree；全仓与清点见 report_task）：`gofmt -l` 空、`go build`/`go vet` 退 0；真库
+  `internal/parcelshipment/adapters/inbox` 40 PASS / 0 SKIP（本门七条：逐份独立且都被驱、硬错响亮不挡其余、空队列入账且
+  重投不再问队列、翻页终止、毒丸缺租户/缺种类拒收一次、异类型响亮、发布侧字面、页大小非正构造期拒）；
+  `cmd/parcel-dispatch` + `internal/platform/dispatch` 76 PASS / 0 SKIP，其中闭环
+  `TestAnOperatorRegistrationWaitIsResumedByTheRegistrationEnvelope`：提交门停成`判断时点未配置`→ D5 Save 等待态 → 入账
+  （inbox 1 行、SUBMITTED、`waitingOn=OPERATOR_REGISTRATION`、队列列出它、零接受信封）→ 拨通时点后经真 PC 适配器铸信封
+  → 第三扇门重驱 → ACCEPTED、决定 ID 同 SYN-V0、队列出列、恰好一封接受信封 → 重投账本跳过 → 同规则包新版本再登记是
+  另一封（ID 带版本维），空队列入账、接受仍一封；装配两条：毒丸穿路由表到本门、两键齐全没人等时在生产依赖图上入账定稿。
+  **真进程未跑**：本机没有可即刻起 parcel-api + dispatch 的窝，闭环由上面那条按真链、真 Outbox/Inbox、真 PC 适配器取证。

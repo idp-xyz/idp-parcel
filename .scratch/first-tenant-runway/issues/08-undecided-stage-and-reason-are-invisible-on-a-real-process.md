@@ -1,7 +1,7 @@
 # 未决停在哪一站、原因是什么，在真进程上没有任何人读得到
 
 Category: bug
-Status: in-progress——MCP-1；[ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md) 第二层（自愈那格的进程侧观察口）已落 `20d21f4`；第一层随票 07 的 Decision 四/五 切片收口，见文末 Comments 末条
+Status: resolved——[ADR-0095](../../../docs/adr/0095-undecided-stage-and-reason-surface-in-two-layers.md) 两层都落：第二层（自愈那格的进程侧观察口）`20d21f4`；第一层（不自愈那格靠入账留痕）随票 07 的 Decision 四/五 收口——D5 `a9e3440` + `a3adb75`，D4 PC 半边 `542ebc3`、PS 半边分支 `mcp6-ftr07-d4-ps`（见文末 2026-09-04 MCP-6 那条）
 
 来源：2026-09-02 MCP-1 接手 MCP-5 崩溃后的现场时取证。锚 `9d6063c`（工作树的未提交改动只有 `.md` 与 `.scratch/**`，不含任何 `internal/`）。
 
@@ -75,3 +75,17 @@ Status: in-progress——MCP-1；[ADR-0095](../../../docs/adr/0095-undecided-sta
   票面与 ADR-0095 的结论都不过期：`Dispatcher.DispatchOnce` 逐条 `Publish` 失败仍只把 `failureCodeFor(err)` 交给 `RecordFailure` 随即 `continue`，`err` 本体丢弃；`Loop.report` 仍只在 `DispatchOnce` 整拍返错时打 `dispatch beat failed`；`internal/platform/dispatch` 包内零 logger、零 `slog` 引用。
 
   与实现直接相关的两条现场事实：`NewDispatcher` 五个位置参数，调用点共九处且全在本会话地盘（`cmd/parcel-dispatch/assemble.go` 一处、`assemble_test.go` 五处、`internal/platform/dispatch/dispatcher_test.go` 两处、`fanout_failure_code_test.go` 一处）——加一个可选参数属「会让旧调用点对不上」那一类，但调用点少且不跨地盘，按 parallel-sessions 走单独 worktree 一次性应用。`wireDispatcher(db, settings)` 今天拿不到 logger（logger 停在 `run` → `NewLoop`），装配方要实现观察口就得把 logger 或观察口穿过 `assembleDispatcher` → `wireDispatcher`，那两个签名同在本地盘。
+
+- 2026-09-04 · MCP-6（**第一层随票 07 的 D4 收口，本票转 resolved**；分支 `mcp6-ftr07-d4-ps`，两笔 `eff4668` / `9ecec4c`，
+  重放进 main 后 SHA 以 MCP-1 广播为准）。
+
+  **第一层今天成立的形状**：不自愈那格（`等待运营登记`）的消费门处置由回滚重投改为入账（`undecidedDisposition` 翻转），
+  于是 `recordAttempt` 写下的原因、恢复路径与续办引用**随本份投递提交留在库里**，D5 落的等待态同笔留住、队列读口列得出
+  ——票面说的「未决原因落不到任何持久面上」对这一格不再成立。它靠的正是 ADR-0095 那条 Comment 预言的路：不另设机制，
+  ADR-0094 改成入账之后自动补上；而 D4 那条续办触发（PC 侧 `542ebc3` 发「参数已登记」+ PS 侧 `OperatorRegistrationCompletedConsumer`
+  按租户重驱）让入账不是更安静的停滞。取证在票 07 同日那条：真库闭环里提交门入账后 inbox 1 行、聚合
+  `waitingOn=OPERATOR_REGISTRATION`、`ListWaitingOnOperatorRegistration` 列出它——这三样在翻转前会随回滚一起蒸发。
+
+  **仍在回滚侧的两格**（`等待内部续办`、`等待受控补充`）留痕靠第二层的观察口，那是 ADR-0095 定好的分工，本票不动；
+  `等待受控补充`该不该自愈归票 09。**三条命令口的 `*RulesNotConfigured`** 不经消费门，它们的处理尝试本就随命令事务落库
+  （0011 放宽 CHECK 之后），第四格标签在库里可读，理由与「不给它们写等待态」的判断一并记在票 07 同日那条第④项。
