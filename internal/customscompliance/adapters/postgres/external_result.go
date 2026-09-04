@@ -96,6 +96,13 @@ func (repository *ExternalResults) FindByKey(
 			return ports.ExternalResultRecord{}, false, fmt.Errorf("find external result: %w", err)
 		}
 		record.Result = result
+		if result.Layer() == domain.ReleaseResultLayer {
+			release, err := loadReleaseOutcome(ctx, querier, key)
+			if err != nil {
+				return ports.ExternalResultRecord{}, false, fmt.Errorf("find external result: release outcome: %w", err)
+			}
+			record.Release = release
+		}
 	}
 	return record, true, nil
 }
@@ -149,7 +156,90 @@ func (repository *ExternalResults) Save(
 	if tag.RowsAffected() == 0 {
 		return ports.ExternalResultAlreadyRecorded, nil
 	}
+	if record.Release != nil {
+		// 放行事实与分层事实同键同事务落地（0015）。只在分层事实这一行真落了之后才写——
+		// 撞键的重放连分层事实都没重写，放行行更不该被后来者顶掉；两行的先后由外键钉住。
+		if err := insertReleaseOutcome(ctx, executor, record); err != nil {
+			return ports.ExternalResultSaveOutcomeInvalid, fmt.Errorf("save external result: %w", err)
+		}
+	}
 	return ports.ExternalResultSaved, nil
+}
+
+func insertReleaseOutcome(ctx context.Context, executor bentopg.Executor, record ports.ExternalResultRecord) error {
+	release := record.Release
+	kind := release.Kind().String()
+	if kind == "" {
+		return fmt.Errorf("release outcome: unknown release kind %d", release.Kind())
+	}
+	condition, _ := release.Condition()
+	_, err := executor.Exec(ctx,
+		`INSERT INTO customs_compliance.release_outcome
+			(tenant_id, source_id, kind, authority_ref, scope_ref, condition, received_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		record.Key.TenantID.String(),
+		record.Key.SourceID,
+		kind,
+		release.Authority().String(),
+		release.Scope().String(),
+		condition,
+		release.ReceivedAt().UTC(),
+	)
+	return err
+}
+
+// loadReleaseOutcome 读回同键的放行事实；没有即 nil——非放行层的记录本就没有这一面。
+func loadReleaseOutcome(
+	ctx context.Context,
+	querier bentopg.Querier,
+	key ports.ExternalResultKey,
+) (*domain.CustomsReleaseOutcome, error) {
+	var (
+		kind, authority, scope, condition string
+		receivedAt                        time.Time
+	)
+	err := querier.QueryRow(ctx,
+		`SELECT kind, authority_ref, scope_ref, condition, received_at
+		   FROM customs_compliance.release_outcome
+		  WHERE tenant_id = $1 AND source_id = $2`,
+		key.TenantID.String(), key.SourceID,
+	).Scan(&kind, &authority, &scope, &condition, &receivedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	releaseKind, err := releaseKindFrom(kind)
+	if err != nil {
+		return nil, err
+	}
+	authorityRef, err := domain.NewRegulatoryAuthorityReference(authority)
+	if err != nil {
+		return nil, err
+	}
+	scopeRef, err := domain.NewDecisionScopeReference(scope)
+	if err != nil {
+		return nil, err
+	}
+	release, err := domain.ReceiveReleaseOutcome(releaseKind, authorityRef, scopeRef, condition, receivedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &release, nil
+}
+
+func releaseKindFrom(raw string) (domain.ReleaseKind, error) {
+	for _, kind := range []domain.ReleaseKind{
+		domain.FullRelease,
+		domain.PartialRelease,
+		domain.ConditionalRelease,
+	} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown release kind %q", raw)
 }
 
 // LoadForSubmission 按（租户+提交版本）读回同一提交已保存的各层事实，供同层一致性

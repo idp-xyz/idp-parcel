@@ -38,6 +38,11 @@ type ExternalResultRecord struct {
 	ClaimedVersion string
 	LayerConflict  bool
 	RecordedAt     time.Time
+	// Release 只在放行层的可归属记录上非空：UC-CC-006 步 5 要求放行层在分层事实之外落成
+	// 范围与条件明确的放行事实（票 mechanism-executor-triage/07 CC-b）。它与 Result 同一
+	// 记录、同一事务——放行结果不是从分层事实推导出来的第二份东西，是同一次接收按来源
+	// 权威语义拆出的另一面；分开存只是因为它的形状（种类/机构/条件）不是每一层都有。
+	Release *domain.CustomsReleaseOutcome
 }
 
 type ExternalResultSaveOutcome uint8

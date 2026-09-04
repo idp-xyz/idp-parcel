@@ -68,6 +68,11 @@ const (
 	EvaluationInstantUntrusted
 	CaseChainUnavailable
 	JurisdictionUnresolved
+	// ReleaseSemanticsUninterpreted：放行层的来源响应没有被拆成放行三件（种类/机构/条件）。
+	// 这是 UC-CC-006「外部结果解释未决」在放行层的样子——业务结果目标已关联，层次语义
+	// 却无权威解释。真实代码映射（PAR-CUS-01/02）属实例半边，没有它接入侧拆不出种类；
+	// 编排不从原始文字猜「放行」是全部还是部分。
+	ReleaseSemanticsUninterpreted
 )
 
 func (reason ExternalResultUndecidedReason) String() string {
@@ -86,12 +91,29 @@ func (reason ExternalResultUndecidedReason) String() string {
 		return "CASE_CHAIN_UNAVAILABLE"
 	case JurisdictionUnresolved:
 		return "JURISDICTION_UNRESOLVED"
+	case ReleaseSemanticsUninterpreted:
+		return "RELEASE_SEMANTICS_UNINTERPRETED"
 	default:
 		return ""
 	}
 }
 
-// ReceiveExternalResultCommand 携带一条外部监管响应的全部来源。
+// ReleaseContent 是放行层响应按来源权威语义拆出的放行三件：种类（全部/部分/附条件）、
+// 作出放行的监管机构、条件说明（只附条件放行带）。范围不在这里——它就是结果范围
+// （Scope），放行结果与分层事实共用同一个明确范围，不另报一份。
+//
+// 由接入侧拆而不是编排从 RawSemantics 解析：代码到语义的映射是版本化的解释规则内容
+// （PAR-CUS-01/02，实例半边），编排今天只拿得到规则引用；与 VerifyDispositionCommand 交入
+// 已成型的 RegulatoryDecision 是同一个形状。
+type ReleaseContent struct {
+	Kind      domain.ReleaseKind
+	Authority domain.RegulatoryAuthorityReference
+	Condition string
+}
+
+// ReceiveExternalResultCommand 携带一条外部监管响应的全部来源。Release 只在放行层给出
+// （UC-CC-006 步 5 的放行层，票 mechanism-executor-triage/07 CC-b）：放行层缺它是解释未决，
+// 其他层带它是矛盾输入（把放行夹带进低层结果，硬句 185 禁的那种推导），不受理。
 type ReceiveExternalResultCommand struct {
 	TenantID       domain.TenantID
 	SourceID       string
@@ -103,6 +125,7 @@ type ReceiveExternalResultCommand struct {
 	Scope          string
 	OccurredAt     time.Time
 	ReceivedAt     time.Time
+	Release        *ReleaseContent
 }
 
 type ReceiveExternalResultResult struct {
@@ -158,8 +181,9 @@ func NewReceiveExternalResultHandler(deps ReceiveExternalResultDeps) *ReceiveExt
 
 // Handle 把一条外部监管响应推进到分层事实：幂等/冲突按内容指纹分界 → 关联原提交
 // （找不到→留存不猜）→ 评估时点与适用辖区（取不出→未决）→ 按时点与辖区解析解释
-// 规则版本（未配置→未决）→ 领域解释与同层一致性（冲突留存双方）→ 原子提交 →
-// 发布意图。意图投递失败不翻结果，重放重发同一份。
+// 规则版本（未配置→未决）→ 领域解释（放行层另落放行事实，拆不出放行三件→未决）与
+// 同层一致性（冲突留存双方）→ 原子提交 → 发布意图。意图投递失败不翻结果，重放重发
+// 同一份。
 func (handler *ReceiveExternalResultHandler) Handle(
 	ctx context.Context,
 	command ReceiveExternalResultCommand,
@@ -168,6 +192,11 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		strings.TrimSpace(command.SourceID) == "" ||
 		strings.TrimSpace(command.RawSemantics) == "" ||
 		strings.TrimSpace(command.ClaimedVersion) == "" {
+		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+	}
+	if command.Release != nil && command.Layer != domain.ReleaseResultLayer {
+		// 非放行层携带放行三件：把放行夹带进低层结果，正是硬句 185 禁的「前一层成功生成
+		// 后一层结果」。矛盾输入不进幂等比对——它构造不出任何一层的事实。
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 
@@ -280,6 +309,23 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 
+	// 放行层在分层事实之外还要落成放行事实（UC-CC-006 步 5「各层各范围分别形成」的放行
+	// 那一格）。拆不出放行三件是解释未决——不落记录：先记一条「放行」再等人补种类，等于
+	// 让一个说不出全部还是部分的放行进了库。
+	var release *domain.CustomsReleaseOutcome
+	if command.Layer == domain.ReleaseResultLayer {
+		if command.Release == nil {
+			return ReceiveExternalResultResult{outcome: ResultUndecided, reason: ReleaseSemanticsUninterpreted,
+				continuation: resultContinuation("RELEASE_SEMANTICS_UNINTERPRETED", command.SourceID)}, nil
+		}
+		received, err := domain.ReceiveReleaseOutcome(
+			command.Release.Kind, command.Release.Authority, scope, command.Release.Condition, command.ReceivedAt)
+		if err != nil {
+			return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
+		}
+		release = &received
+	}
+
 	layerFacts, err := handler.deps.Results.LoadForSubmission(ctx, command.TenantID, version)
 	if err != nil {
 		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: LayerFactsUnavailable,
@@ -289,6 +335,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		Key:           key,
 		ContentDigest: digest,
 		Result:        interpreted,
+		Release:       release,
 		RecordedAt:    handler.deps.Clock.Now(),
 	}
 	outcome := ResultRecorded
@@ -371,15 +418,24 @@ func resultContinuation(parts ...string) string {
 }
 
 // externalResultDigest 是同一来源响应身份的内容比对锚：层、原始语义、声称版本、尝试
-// 序号、范围与业务时间任一不同即是另一份内容。
+// 序号、范围与业务时间任一不同即是另一份内容；放行层再加放行三件——同一来源身份先说
+// 全部放行后说部分放行是来源响应冲突，不是重放。不带放行三件时指纹与此前一字不变，
+// 已入库的非放行层记录重放仍比得上。
 func externalResultDigest(command ReceiveExternalResultCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	parts := []string{
 		fmt.Sprintf("%d", command.Layer),
 		command.RawSemantics,
 		command.ClaimedVersion,
 		fmt.Sprintf("%d", command.Attempt),
 		command.Scope,
 		command.OccurredAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
+	}
+	if command.Release != nil {
+		parts = append(parts,
+			fmt.Sprintf("%d", command.Release.Kind),
+			command.Release.Authority.String(),
+			command.Release.Condition)
+	}
+	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

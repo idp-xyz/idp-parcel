@@ -424,7 +424,7 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 			application.ResultStoreUnavailable, application.SubmissionIndexUnavailable,
 			application.InterpretationRuleUnconfigured, application.LayerFactsUnavailable,
 			application.EvaluationInstantUntrusted, application.CaseChainUnavailable,
-			application.JurisdictionUnresolved,
+			application.JurisdictionUnresolved, application.ReleaseSemanticsUninterpreted,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -432,11 +432,11 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 7 {
+		if len(labels) != 8 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ExternalResultUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第八个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

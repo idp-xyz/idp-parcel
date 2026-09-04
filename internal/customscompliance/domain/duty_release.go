@@ -259,6 +259,11 @@ func (release CustomsReleaseOutcome) Condition() (string, bool) {
 	return release.condition, release.kind == ConditionalRelease
 }
 
+// ReceivedAt 是持久化重建的必需读口（判据同 ExternalResult 那三个读口）。
+func (release CustomsReleaseOutcome) ReceivedAt() time.Time {
+	return release.receivedAt
+}
+
 // GateConclusion 是放行门禁核对的封闭五值（CONTEXT「放行门禁核对」语言逐词）。
 type GateConclusion uint8
 
