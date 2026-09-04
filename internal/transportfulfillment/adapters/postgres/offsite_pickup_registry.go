@@ -37,8 +37,8 @@ var _ ports.OffsitePickupRegistry = (*OffsitePickupRegistrations)(nil)
 // 暴露，而不是变成一份看起来合法的有效收寄。
 //
 // 「当前版」按回指派生：同键下没有任何行回指它的那一版（0015：更正是新行新版本，表上没有
-// current 列）。两道部分唯一索引让链严格线性，所以这条子查询恰答一行——首登还没被更正时就是
-// 首登本身，与 0005 时期的读法同义。
+// current 列）。部分唯一索引 offsite_pickup_one_first_registration 与 offsite_pickup_corrects_once
+// 让链严格线性，所以这条子查询恰答一行——首登还没被更正时就是首登本身，与 0005 时期的读法同义。
 func (repository *OffsitePickupRegistrations) FindByKey(
 	ctx context.Context,
 	key ports.OffsitePickupKey,
@@ -92,8 +92,8 @@ func (repository *OffsitePickupRegistrations) FindByKey(
 
 // Save 落一份揽收登记——首登与更正版本都从这里进，一行一版，只插不改。撞键答`已登记`——业务
 // 答案不是 error（ADR-0031），编排拿到它还要在同一事务里读回赢家作答，所以用 ON CONFLICT DO
-// NOTHING 保事务可用。撞的可以是三道唯一约束里的任一道（同版本重放、同键第二次首登、同一前版
-// 第二次更正），译法相同：读回当前版就是答案。
+// NOTHING 保事务可用。撞的可以是主键（同版本重放）、offsite_pickup_one_first_registration（同键
+// 第二次首登）或 offsite_pickup_corrects_once（同一前版第二次更正），译法相同：读回当前版就是答案。
 func (repository *OffsitePickupRegistrations) Save(
 	ctx context.Context,
 	record ports.OffsitePickupRecord,

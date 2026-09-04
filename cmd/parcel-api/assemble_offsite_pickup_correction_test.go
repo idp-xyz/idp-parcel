@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -130,4 +132,63 @@ func TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase(t *testing
 	if got := replay.Outcome(); got != tfapp.PickupExistingVersion {
 		t.Fatalf("outcome = %v, want EXISTING_VERSION——重放没走已有版本，首笔事务没有提交", got)
 	}
+
+	// 裁决点名的拒绝格（无前版、早于被更正版本的登记时刻、沿用已有版本号）在真库装配上同样成立，且都不落行、不入队。
+	t.Run("a correction without a registered predecessor is not accepted", func(t *testing.T) {
+		orphan := command
+		orphan.Object = "SYN-PARCEL-NEVER-REGISTERED"
+		result, err := correction.Correct(t.Context(), orphan)
+		if err != nil {
+			t.Fatalf("更正无中生有：%v", err)
+		}
+		if got := result.Outcome(); got != tfapp.PickupRegistrationNotAccepted {
+			t.Fatalf("outcome = %v, want SOURCE_NOT_ACCEPTED（更正不出无中生有的揽收）", got)
+		}
+		if rows := pickupRowsFor(t, pool, tenant.String(), "SYN-PARCEL-NEVER-REGISTERED"); rows != 0 {
+			t.Fatalf("无中生有的更正落了 %d 行", rows)
+		}
+	})
+
+	t.Run("a correction dated before the registration it corrects is not accepted", func(t *testing.T) {
+		early := command
+		early.PredecessorVersion = record.Pickup.Version().String()
+		early.CorrectedAt = current.RecordedAt.Add(-time.Second)
+		result, err := correction.Correct(t.Context(), early)
+		if err != nil {
+			t.Fatalf("早于登记的更正：%v", err)
+		}
+		if got := result.Outcome(); got != tfapp.PickupRegistrationNotAccepted {
+			t.Fatalf("outcome = %v, want SOURCE_NOT_ACCEPTED（更正时刻不得早于被更正版本的登记时刻）", got)
+		}
+		if rows := pickupRowsFor(t, pool, tenant.String(), "SYN-PARCEL-8"); rows != 2 {
+			t.Fatalf("被拒的更正落了行：同键 %d 行, want 2", rows)
+		}
+	})
+
+	t.Run("reusing an existing version number under the same key is refused by the primary key", func(t *testing.T) {
+		duplicate := current
+		duplicate.ContentDigest = "SYN-DIGEST-DUPLICATE"
+		var outcome tfports.OffsitePickupSaveOutcome
+		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			var saveErr error
+			outcome, saveErr = registrations.Save(txCtx, duplicate)
+			return saveErr
+		}); err != nil {
+			t.Fatalf("重用版本号：%v", err)
+		}
+		if outcome != tfports.OffsitePickupAlreadyRegistered {
+			t.Fatalf("outcome = %v, want ALREADY_REGISTERED（沿用已有版本号即覆盖，库面拒）", outcome)
+		}
+	})
+}
+
+func pickupRowsFor(t *testing.T, pool *pgxpool.Pool, tenant, object string) int {
+	t.Helper()
+	var rows int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM transport_fulfillment.offsite_pickup WHERE tenant_id = $1 AND object_ref = $2`,
+		tenant, object).Scan(&rows); err != nil {
+		t.Fatalf("数版本行：%v", err)
+	}
+	return rows
 }
