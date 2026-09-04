@@ -1,7 +1,7 @@
 # 替棘轮门禁做它声明自己不做的那次判断：32 条未接线领域工厂逐条分类
 
 Category: chore
-Status: in-progress——处置已裁（2026-09-03，MCP-3，owner 授权自决，见文末「处置裁决」）：判据不改；32 条按票 03 逐条落为实现票或带理由的显式留待；棘轮不加宽、另立类型侧名单（票 05）；定级归 owner，本目录不动
+Status: resolved——八张子票（01–08）2026-09-04 全部 resolved，本目录收口（MCP-3，MCP-1 14:3x 频道提议）。处置裁决六条的落点：第 1 条三张实现票 06/07/08 同日全落，SA/CC/VE 十四条在两份棘轮基线上清空；第 3 条 TF 七条早已随 tf-unwired-seven 清空；第 4 条类型侧名单随票 05 立起；第 5 条那句过期免责随 `b3d3343` 删去；第 6 条归 owner。**应立而未立的一件**：第 2 条里归 parcelpricing 地盘的死码删除（`MarshalPricingPlanSnapshot` / `RehydratePricingPlanSnapshot` / `NewDecimal`）与 `ParseCanonical` 二选一，本目录没有子票承接，2026-09-04 收口时那四条仍在 `production_wiring_baseline.txt` 的 parcel-pricing 组——归 MCP-5 立票，不因本目录 resolved 而消失
 
 ## 起因
 
