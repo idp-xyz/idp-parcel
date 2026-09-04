@@ -1,8 +1,8 @@
 # 版本引用的 digest 在操作者路径上没有来源：声明令牌是过渡，领域改法要 ADR
 
 Category: enhancement
-Status: draft——需 ADR；待 owner 裁三条改法取哪一条（MCP-5 2026-09-04 立票，只写票面未动领域代码）
-Blocked by: 08（表单路径落地后才看得出令牌在册上长什么样）
+Status: resolved——已裁改法 3，落文 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)（2026-09-04，通道 6，owner 授权）；本票自定的 resolved 判据「ADR 编号落进某一条并被引用」已满足；实施另立 [`10`](./10-version-reference-identity-is-a-triple-and-fingerprint-is-optional.md)（ready-for-agent）
+Blocked by: 无（`08` 已 resolved `0a67406`）
 
 ## 为什么立
 
@@ -53,6 +53,14 @@ MCP-3 于 2026-09-03 裁了过渡做法、本票记的是**那条裁决没解决
 - 不改 `NewVersionReference` 的非空校验来「放行」空 digest——那是把问题从命名挪到数据里。
 - 预览与登记的铸法始终同一条（ADR-0101 决定四），无论过渡还是改法落地。
 - 不写任何真实政策或序列的 digest 进仓；SYN 夹具只记 `S`。
+
+## 裁决（2026-09-04，通道 6，task-f530ad56 裁决批口径：owner 授权自决，写明能力边界）
+
+**取改法 3，落文 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)。** 决定性的证据是领域自己的身份判断早就不含 digest：`NewVersionManifest` 的去重键 `referenceIdentity{kind, id, version}`（`value_objects.go`）——同一清单里两条只差 digest 的引用被当成重复而拒，也就是领域已认定 digest 不是身份，只是类型没跟上；而 `fingerprint.go` 的 `canonicalReference` 与 `compareCanonicalReferences` 却把它折进摘要、参与排序，与去重键相悖。加上「没有任何读法拿 `Digest()` 比对过内容」（重放比的是 `planContentDigest`，另一个字段）与域内本来就装着 `builtin:decimal-bigint-v1` 常量串这两条，改法 3 是把类型改成领域已经在用的定义，不是新发明。
+
+ADR 六条：身份三元；digest 改为可选「声明时附带的指纹」，进快照不进规范化文档、不参与相等；`NewVersionReference` 三元非空、指纹可空（红线「不改非空校验放行空 digest」的前提是 digest 仍在身份里，先拿出来非空校验就失去对象）；规范化换号一次（与 ADR-0107 同期实施合并为一次）；过渡令牌 `declared:` 退役，三处引用各归其位（自身引用与口径指纹留空，回指带前版内容摘要）；改法 1 只解一处不取，改法 2 是可选增强归 PC owner。
+
+**能力边界**：读了 `value_objects.go` 的 `VersionReference` / `NewVersionReference` / `NewVersionManifest` / `compareVersionReferences`、`fingerprint.go` 的 `canonicalReference` / `compareCanonicalReferences` / 语义摘要文档、`evaluation.go` 的重放校验字段、`reference_series_payload.go` 的令牌铸法，以及 ADR-0014 / 0099 / 0101；**未读** `reference_series_register.go` 快照文档的逐字段形状与 `plan_snapshot.go` / `evaluation_snapshot.go` 读回旧快照的路径——「旧形状里的 digest 读回后放进可选指纹」那格兼容读法由实施票钉测试；未数 `NewVersionReference` 的调用点总数（实施开工时重取，别引本票）。
 
 ## 验证
 
