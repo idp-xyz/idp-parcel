@@ -1,7 +1,7 @@
 # 来源更正 → 参与关系重派生：交接与揽收两种来源的更正今天都不进段
 
 Category: enhancement
-Status: draft——MCP-3 2026-09-04 随票 08 收口立票；票 08 裁决附问已答「同段、不是新段」，本票只承接那半边的机制，形状待裁
+Status: in-progress——MCP-5（2026-09-04，task-82fd973a；基线 main `2be1f7ee`，隔离分支 `mcp5-tf-batch`）。三问已裁（见「裁决」，落 [ADR-0112](../../../docs/adr/0112-source-correction-rederives-participation-as-a-superseding-version-on-the-same-segment.md)），按 /implement 落
 Blocked by: 无
 
 ## 缺口
@@ -40,6 +40,15 @@ CONTEXT 生命周期一句：「来源证据被更正或事件有效性变化 �
   （新版本、原参与）也全在 TF，但票 09 裁决③给过反例的判据，要对着再走一遍。
 - 段已关闭（`ActualFulfillmentSegment.CloseSegment` 之后）时更正来源的参与怎么办：CONTEXT「实际履约段结束 → 判断历史封存：不再接受
   新版本，除来源事实更正引起的重新派生」——这一句正是本票的例外格。
+
+## 裁决（2026-09-04，通道 5，task-82fd973a；owner 授权自决，理由与被否替代在 ADR-0112）
+
+1. **替代参与的形状**：参与关系上长链——新参与回指被替代参与的入场依据（来源版本引用），原参与一字不动；当前参与 = 链尾，`ParticipationFor` 答链尾，`ActiveParticipations` 只数链尾，被回指的版本在聚合内标已被替代（派生态不落列），`Active()` 为否。库面：主键换（租户+段+对象+入场依据），根唯一 + 每入场依据至多被替代一次两条部分唯一索引 + 自引用外键（迁移 0016）。与 ADR-0117 同形，理由同族（只插不改、当前派生）；不采「另立参与并标原参与被替代」（要 UPDATE 原行）。CONTEXT「履约参与关系」词条补一句替代参与版本。
+2. **同事务，派生一侧**：输入全在 TF（新版本 + 段上原参与），票 09 ③的「读三个外部上下文」判据不成立，票 06 的判据成立。失败不回滚更正：登记册故障留续办引用；领域正当拒绝单开答格（`NO_PARTICIPATION_TO_REDERIVE` / `CORRECTION_WITHDRAWS_CONTROL`）。两触点共用 `rederiveFulfillmentParticipation`；段由登记册按对象反查（新读口，含已离场的当前参与），更正命令不带段号。
+3. **段已关闭仍重派生**（CONTEXT 封存例外格）：替代版本照插，段不重开不再关；替代版本继承原参与的离场三件，更正后起点晚于继承终点即拒。
+4. **失效格**（更正撤回控制转移）：属同一条链的一格，形状为回指前版、标失效的版本；本票如实答 `CORRECTION_WITHDRAWS_CONTROL` 不实施，拆到 [11](./11-control-withdrawing-correction-voids-participation.md)。
+
+**能力边界**：读了 `actual_fulfillment_segment.go`、`segment_rehydration.go`、`fulfillment_segment.go`（端口）、`fulfillment_segment_registry.go`、`enter_fulfillment_segment.go`、两处 `Correct`、`transport_handover.go` 的 `Correct` / `TransferOutBasis`、迁移 0006、CONTEXT 相关句、ADR-0097/0103/0117；**未读** `end_fulfillment_participation.go` 全文（只确认它用 `ParticipationFor`）、`ActualCarrierJudgment` 的重派生口、NR/PS 对参与变化的消费。**越权风险点**：① 参与表主键换四元（0006 头注写「不需要版本维」，本裁决推翻它——依据是 CONTEXT 生命周期句的后半）；② `EndParticipation` / `FindActiveSegments` 的「在场」判据从 `ended_at IS NULL` 改为「且无人回指」；③ 段已关闭仍插替代版本。
 
 ## 红线
 
