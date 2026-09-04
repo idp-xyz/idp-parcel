@@ -1,7 +1,7 @@
 # 19 轨迹源有效时间规则目录：没有规则时事实只能待判断，而今天没有地方登记规则
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-5（2026-09-04，基线 `a17bfac`，隔离 worktree 分支 `mcp5-lc19-21`）
 Blocked by: 无（`16` 已 resolved）
 
 ## 缺口

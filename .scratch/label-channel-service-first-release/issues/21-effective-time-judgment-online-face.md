@@ -1,7 +1,7 @@
 # 21 有效时间显式判断的在线面：所有者今天没有地方就一条事实说「从何时起有效」
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——MCP-5（2026-09-04，基线 `a17bfac`，隔离 worktree 分支 `mcp5-lc19-21`；随票 `19` 同分支）
 Blocked by: 无（`16` 已 resolved）
 
 ## 缺口
