@@ -1,7 +1,7 @@
 # 05 把类型可达性探针做成第二道棘轮：自己的基线文件，探针退役
 
 Category: chore
-Status: ready-for-agent
+Status: resolved——`16fc63e`（MCP-2，2026-09-04）；首版基线 63 条、探针已退役，验证见文末 Comments
 Blocked by: 无（票 04 已裁）
 
 ## 要建什么
@@ -37,3 +37,41 @@ Blocked by: 无（票 04 已裁）
 ## 边界
 
 只加测试与基线文件，不接任何线、不改任何领域类型（改小写属各上下文自己的票）。
+
+## Comments
+
+- 2026-09-04 · MCP-2：**落于 `16fc63e`，转 resolved。** 实现基线 `37bea80`（认领时 HEAD），期间 HEAD 走到
+  `08e62ec`（MCP-1 的 label-channel/10 第三层），未碰本票地盘。
+
+  **做了什么。** `internal/architecture/production_type_reachability_ratchet_test.go` 三个用例（只许变短 /
+  基线不许烂 / 门禁真能红），`production_type_reachability_baseline.txt` 首版 **63 条**（在 `16fc63e` 的
+  detached 干净检出上以 `go test -run TypeReachability -count=1` 全绿并重数同得 63）。量法照探针，另多走
+  三格且都只让名单变短：生产范围含 `cmd/`（装配点是真消费者，探针只扫 `internal/`）、导出常量/变量的声明
+  类型算边（含 iota 组隐式继承）、未导出中间类型在图上。探针目录已删，`.scratch/domain-executor-audit/README.md`
+  指向本门禁。函数名棘轮的判据与基线一字未动（`git diff 37bea80 16fc63e -- internal/architecture/production_wiring_*`
+  为空）。
+
+  **去噪怎么做的。** 63 条没有一条是零引用死码——全部至少经一个导出入口可取得，只是那个入口本身零生产
+  调用。所以理由行统一写「经 X 取得，X 在等谁」，分三类：一类 X 在函数名基线（同一缺口的类型侧影子，
+  随 X 接线出名单）；二类 X 是 `New*`（函数名棘轮网外那一格，理由在这边写全）；三类 X 只有包内调用
+  （函数名棘轮按包内裸标识符也算引用所以不响）。**三类单列「待改小写候选」节**：票 04 点名的 `Resolution`
+  与同形的 `ComplianceJudgment` 一族五条；改小写还是立接线票归各上下文所有者，门禁不裁。
+
+  **票面「验证」三条各有证据。** (1) 干净检出全绿见上。(2) 在 detached worktree 里给
+  `internal/parcelpricing/domain/decimal.go` 追加 `type ZZProbeOrphan struct{}` → 只许变短那条红，报文点名
+  `internal/parcelpricing/domain ZZProbeOrphan`。(3) 给 `internal/partycommercial/application/register_party_identity.go`
+  追加 `var _ domain.Resolution` → 基线不许烂那条红，报文点名 `internal/partycommercial/domain Resolution`
+  并给「剪掉这一行，这是好消息」。两处改动均已复原，worktree `git status --untracked-files=all` 为空后拆除。
+
+  **一处失手要记下。** 第一次跑变异用例时用 `[System.IO.File]::WriteAllText` 配相对路径，.NET 按进程
+  工作目录解析而不按 `Push-Location`，**两处变异写进了共享树而不是 worktree**；随即用同一份原文写回，
+  `git diff --numstat` 为空、无残留字样（`register_party_identity.go` 的 ` M` 是此前就有的 CRLF-only）。
+  处方：.NET 文件 API 一律绝对路径。这一格与 workflow.md「本机环境」同族，值得补一条，归那份文档的下一次改动。
+
+  **两轴评审**（基线 `37bea80`，subagent 鉴权故障改为串行自评）：Standards 拿住基线分组标题里的同文件
+  内计数（剪条目会静默变错，已去掉）与 `readTypeReachabilityBaseline` 同形（不动旧门禁是红线，保留并注明）；
+  Spec 拿住「待改小写」未按票面单列成节（已改）与头注未写明比探针多走的三格（已补）。
+
+  **验证**：`gofmt -l internal/architecture/` 空、`go vet ./internal/architecture/` 退 0、
+  `go test ./internal/architecture/ -count=1` 绿（共享树与 `16fc63e` 干净检出各一遍）。**本笔不含 .sql、
+  不含 PG 用例、未跑 -race**——纯测试与文本文件，那两层无从验。
