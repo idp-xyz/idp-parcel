@@ -224,6 +224,10 @@ func rehydrateChannelSelectionDecision(
 	if err != nil {
 		return domain.ChannelSelectionDecision{}, err
 	}
+	rule, err := channelSelectionRuleFrom(head.rule)
+	if err != nil {
+		return domain.ChannelSelectionDecision{}, err
+	}
 
 	results := make([]domain.ChannelCandidateResultSpec, 0, len(candidates))
 	for _, row := range candidates {
@@ -258,11 +262,20 @@ func rehydrateChannelSelectionDecision(
 		Tenant:        tenant,
 		Subject:       subject,
 		AssembledAsOf: head.assembledAsOf,
-		Rule:          domain.ChannelSelectionRule(head.rule),
+		Rule:          rule,
 		DecidedAt:     head.decidedAt,
 		Conclusion:    conclusion,
 		Results:       results,
 	})
+}
+
+// 四个封闭集各自一个译码函数，认不出的取值在这里响而不是硬转成领域类型：硬转出来的值在重建门
+// 上也会被拒，但拒绝的理由会混进「跨字段不一致」那一族，运维分不出是列值坏了还是记录坏了。
+func channelSelectionRuleFrom(value string) (domain.ChannelSelectionRule, error) {
+	if domain.ChannelSelectionByCostOnly.String() == value {
+		return domain.ChannelSelectionByCostOnly, nil
+	}
+	return "", fmt.Errorf("parcel shipment postgres: unknown channel selection rule %q", value)
 }
 
 func channelSelectionConclusionFrom(value string) (domain.ChannelSelectionConclusion, error) {
