@@ -190,6 +190,95 @@ func TestEvidenceOccurringBeforeTheSegmentWasEstablishedIsRefused(t *testing.T) 
 	}
 }
 
+// Covers: CONTEXT「同一段内不同载运对象的证据指向不同承运主体时，不为各对象分别判断，也不挑一个——形成
+// 待确认（来源冲突）并保留全部依据」与生命周期「已识别或待确认 → 待确认（来源冲突）」；票面验收场景
+// 「同段冲突」「已识别后相反证据→冲突」。
+func TestEvidenceNamingADifferentSubjectTurnsTheJudgmentIntoASourceConflict(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	carrierY := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-y")
+	identified, err := mustOpenJudgment(t).Consider(
+		registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider X: %v", err)
+	}
+
+	// 同段另一对象的可信渠道回传指向 Y：不是「两个对象两个承运商」，是证据冲突（ADR-0103 Context 一）。
+	conflicting, err := identified.Consider(
+		registeredEvidence(t, domain.TrustedChannelCallback, "CALLBACK-B", judgmentEvidenceAt.Add(time.Hour), carrierY),
+		judgmentEvidenceAt.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("consider Y: %v", err)
+	}
+
+	current := conflicting.Current()
+	reason, pending := current.Verdict().Pending()
+	if !pending || reason != domain.CarrierEvidenceSourceConflict {
+		t.Fatalf("应为待确认（来源冲突），实得 pending=%v reason=%s", pending, reason)
+	}
+	if _, stillIdentified := current.Verdict().Identified(); stillIdentified {
+		t.Fatal("冲突之下不挑一个——不该仍识别出任何主体")
+	}
+	if len(current.Bases()) != 2 {
+		t.Fatalf("冲突版本要保留全部依据，实得 %d 条", len(current.Bases()))
+	}
+	// 已识别的那一版保留，未知期间不倒填。
+	versions := conflicting.Versions()
+	if subject, wasIdentified := versions[1].Verdict().Identified(); !wasIdentified || subject != carrierX {
+		t.Fatal("已识别版本被改写了")
+	}
+
+	// 冲突之中再来一条指向 X 的证据：仍是冲突——不由证据多少或到达先后自动裁，冲突由人裁。
+	stillConflicting, err := conflicting.Consider(
+		registeredEvidence(t, domain.CarrierReceiptVoucher, "RECEIPT-C", judgmentEvidenceAt.Add(3*time.Hour), carrierX),
+		judgmentEvidenceAt.Add(4*time.Hour))
+	if err != nil {
+		t.Fatalf("consider X again: %v", err)
+	}
+	if reason, pending := stillConflicting.Current().Verdict().Pending(); !pending || reason != domain.CarrierEvidenceSourceConflict {
+		t.Fatalf("多一条指向 X 的证据不该自动裁掉冲突，实得 pending=%v reason=%s", pending, reason)
+	}
+}
+
+// 两条依据指向同一在册主体：仍是已识别，且两条都在依据里——「同一个答案的多份证据」不是冲突。
+func TestConcurringEvidenceKeepsTheCarrierIdentified(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	first, err := mustOpenJudgment(t).Consider(
+		registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX),
+		judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider: %v", err)
+	}
+	second, err := first.Consider(
+		registeredEvidence(t, domain.HandedOverToCarrier, "HANDOVER-B", judgmentEvidenceAt.Add(time.Hour), carrierX),
+		judgmentEvidenceAt.Add(time.Hour+time.Minute))
+	if err != nil {
+		t.Fatalf("consider again: %v", err)
+	}
+	subject, identified := second.Current().Verdict().Identified()
+	if !identified || subject != carrierX || len(second.Current().Bases()) != 2 {
+		t.Fatalf("两条一致证据应仍识别为 X 且两条都保留：identified=%v bases=%d", identified, len(second.Current().Bases()))
+	}
+}
+
+// 同一份依据不形成第二个版本：重放是业务答案，判断不变，未知期间不凭空断成两截。
+func TestTheSameEvidenceIsNotConsideredTwice(t *testing.T) {
+	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")
+	evidence := registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt, carrierX)
+	once, err := mustOpenJudgment(t).Consider(evidence, judgmentEvidenceAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("consider: %v", err)
+	}
+	if _, err := once.Consider(evidence, judgmentEvidenceAt.Add(2*time.Minute)); !errors.Is(err, domain.ErrCarrierEvidenceAlreadyConsidered) {
+		t.Fatalf("error = %v, want ErrCarrierEvidenceAlreadyConsidered", err)
+	}
+	// 同引用异内容也算同一份依据：引用指名的是那条来源事实，事实本身变了走更正，不在这里悄悄换掉。
+	sameReferenceOtherTime := registeredEvidence(t, domain.CarrierDirectPickupScan, "SCAN-A", judgmentEvidenceAt.Add(time.Hour), carrierX)
+	if _, err := once.Consider(sameReferenceOtherTime, judgmentEvidenceAt.Add(2*time.Minute)); !errors.Is(err, domain.ErrCarrierEvidenceAlreadyConsidered) {
+		t.Fatalf("error = %v, want ErrCarrierEvidenceAlreadyConsidered", err)
+	}
+}
+
 func TestConsideringRequiresAValidEvidenceAndAFormationTime(t *testing.T) {
 	judgment := mustOpenJudgment(t)
 	carrierX := mustCarrierSubject(t, domain.ExternalCarrierParty, "party/carrier-x")

@@ -346,8 +346,21 @@ func (judgment ActualCarrierJudgment) Consider(
 		return ActualCarrierJudgment{}, ErrCarrierEvidencePrecedesSegment
 	}
 	bases := judgment.Current().Bases()
+	// 按引用判重，不按内容：引用指名的是那条来源事实，事实本身变了走更正重派生，不在这里悄悄换掉。
+	if _, present := indexOfBasis(bases, evidence.reference); present {
+		return ActualCarrierJudgment{}, ErrCarrierEvidenceAlreadyConsidered
+	}
 	bases = append(bases, evidence)
 	return judgment.appendVersion(bases, evidence.occurredAt, formedAt), nil
+}
+
+func indexOfBasis(bases []CarrierEvidence, reference CarrierEvidenceReference) (int, bool) {
+	for index, basis := range bases {
+		if basis.reference == reference {
+			return index, true
+		}
+	}
+	return -1, false
 }
 
 // appendVersion 由一组在场依据派生判断值并追加为新版。所有转换门都从这里出去——判断值只有一种算法，
