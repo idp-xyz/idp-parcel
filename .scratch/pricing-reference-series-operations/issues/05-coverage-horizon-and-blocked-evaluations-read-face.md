@@ -3,7 +3,8 @@
 Category: enhancement
 Status: in-progress——**05a（第 1 项）已落 `1cacc72` + `aa54a4b`；第 3 项摘要条已落 `f4c2996`，
 「一键跳到复核动作」已落 `b98368d`（「跳到登记」与「挂起评价数」那一格未做，见末条 Comment）；
-05b（第 2 项）等两件裁决。认领前先读 Comments，第 2 项的范围与票面所写不同**
+05b（第 2 项）两件裁决已由 [ADR-0105](../../../docs/adr/0105-evaluation-issue-carries-a-structured-series-subject-and-lands-in-a-child-table.md)
+答完（`e53428c`），可开工。认领前先读 Comments，第 2 项的范围与票面所写不同**
 Blocked by: 无（03 的代码已是主线祖先 `f62d619`）；第 2 项另有一道**未裁的领域改动**，见 Comments
 
 ## 要建什么
