@@ -437,7 +437,9 @@ var effectiveDeliveryUndecidedSentinels = []error{
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
 // 路由表登记这些事件：PS 委托已提交 → 接受判断链、PS 复核已完成 → 同一条接受判断
-// 链的续办门（ADR-0086；两扇门同一编排、各记各的 inbox 账）、
+// 链的续办门（ADR-0086；两扇门同一编排、各记各的 inbox 账）、PC 参数已登记 → 同一条链
+// 的第三扇门（ADR-0094 Decision 四：按信封里的租户取`等待运营登记`队列逐份重驱；本进程
+// 里唯一一封由 party-commercial 发、parcel-shipment 收的信）、
 // PS 接受决定 → FanOut（先 VE 客户归属确立补派生 UC-VE-008
 // AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → 路由复核
 // （UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
@@ -497,6 +499,12 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	routedResume, err := dispatch.WithUndecidedSentinels(chainGates.reviewCompleted, acceptanceChainUndecidedSentinels...)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: review resume undecided translation: %w", err)
+	}
+	// 登记续办门同一份哨兵，理由同上：它一封信驱多份委托，但每份走的仍是同一条链，停住的
+	// 那几份汇总成同一个哨兵交回（ADR-0094 Decision 四）。
+	routedRegistration, err := dispatch.WithUndecidedSentinels(chainGates.operatorRegistration, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: operator registration resume undecided translation: %w", err)
 	}
 
 	consumer, err := acceptanceConsumer(db, outboxStore, inboxStore, settings, clock)
@@ -696,6 +704,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		map[eventing.EventType]dispatch.Consumer{
 			psinbox.ShipmentRequestSubmittedEventType:      routedChain,
 			psinbox.ManualReviewCompletedEventType:         routedResume,
+			psinbox.OperatorRegistrationCompletedEventType: routedRegistration,
 			nrinbox.AcceptedDecisionEventType:              acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:          routedIntakes,
 			psinbox.NodeIntakeFormedEventType:              nodeIntakeFan,
@@ -755,18 +764,26 @@ func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
 	}
 }
 
-// acceptanceChainGates 是接受判断链的两扇消费门：同一个编排，两个触发时机（ADR-0086
-// ——「委托已提交」开局，「复核已完成」续办）。两扇门各占各的 inbox 名与事件类型，
-// 但依赖图必须同一份，所以由同一个装配函数一次建成。
+// acceptanceChainGates 是接受判断链的三扇消费门：同一个编排，三个触发时机（ADR-0086
+// ——「委托已提交」开局，「复核已完成」续办；ADR-0094 Decision 四——「参数已登记」按租户
+// 重驱）。三扇门各占各的 inbox 名与事件类型，但依赖图必须同一份，所以由同一个装配函数
+// 一次建成。
 type acceptanceChainGates struct {
-	submitted       dispatch.Consumer
-	reviewCompleted dispatch.Consumer
+	submitted            dispatch.Consumer
+	reviewCompleted      dispatch.Consumer
+	operatorRegistration dispatch.Consumer
 }
+
+// operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
+// 租户参数：队列按租户过滤，页只管一轮重驱分几次读，读口对页大小唯一的要求是正数。取一个
+// 让一个租户在无配置期积压的委托通常一页读完的数，翻页那条路由消费门自己的用例守。
+const operatorRegistrationRedrivePageSize = 200
 
 // acceptanceChainConsumers 接 UC-PS-001 步骤 8 那条线：PS「委托已提交」信封 → 消费门 →
 // 接受判断链（逐成员可达性 → 整份委托财务控制 → 形成决定）；外加 ADR-0086 的续办门：
 // PS「复核已完成」信封 → 同一条链再驱一拍（前两步读回已记录判断即过，形成决定读到已
-// 完成的复核即成决定）。
+// 完成的复核即成决定）；外加 ADR-0094 Decision 四的登记续办门：PC「参数已登记」信封 →
+// 按租户取回停在`等待运营登记`的委托逐份再驱（时点策略登记后两条 as-of 腿能形成时点了）。
 //
 // 它是本进程里**信封驱动本上下文自己**的链：发布侧是 parcel-shipment 的提交事务（续办
 // 那扇是 cmd/parcel-api 的复核完成事务），消费侧也是 parcel-shipment。之所以不做成 HTTP
@@ -866,7 +883,18 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: review resume consumer: %w", err)
 	}
-	return acceptanceChainGates{submitted: submitted, reviewCompleted: reviewCompleted}, nil
+	// 队列读口装同一个 ShipmentRequests：它列的是聚合投影列上的等待态（迁移 0013 的部分索引），
+	// 与链要 Save 的是同一张表，另建一个对象等于让两处各自决定读哪些列。
+	operatorRegistration, err := psinbox.NewOperatorRegistrationCompletedConsumer(
+		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: operator registration resume consumer: %w", err)
+	}
+	return acceptanceChainGates{
+		submitted:            submitted,
+		reviewCompleted:      reviewCompleted,
+		operatorRegistration: operatorRegistration,
+	}, nil
 }
 
 // acceptanceCommercialBasis 接商业依据三阶段（UC-PC-002）：解析闭包、按规则包声明形成

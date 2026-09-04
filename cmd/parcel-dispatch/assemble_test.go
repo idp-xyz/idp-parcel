@@ -330,6 +330,43 @@ func TestACompletedManualReviewReachesTheResumeGateThroughTheRouteTable(t *testi
 	}
 }
 
+// Covers: 路由表第三扇门——PC「参数已登记」投给接受判断链的登记续办门（ADR-0094
+// Decision 四）。手法同前几条：毒丸载荷（两键皆空）让消费门显式拒收入账并交回 nil，因此
+// 这一条会被定稿。漏挂的话，时点策略登记事务铸出的每一封都撞 dispatch.no_subscriber——
+// 停在`等待运营登记`的委托从此没人续办，正是 D4 说的那个更安静的永久停滞。
+func TestACompletedOperatorRegistrationReachesTheResumeGateThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "operator-registration-1", psinbox.OperatorRegistrationCompletedEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把参数已登记投给登记续办门",
+			published, recordedFailureCode(t, db, "operator-registration-1"))
+	}
+}
+
+// Covers: 登记续办门在**生产依赖图**上真的接得起来：一份两键齐全的载荷穿过译码去问真队列
+// 读口，该租户没有委托在等，本封按处理完毕入账并定稿。它比上一条重一格——上一条毒丸在
+// 译码处就被拦下，队列读口一步没走过；这里证的是 ShipmentRequests 那口按 0013 的谓词真能
+// 在生产图上答出「没有人等」。
+func TestACompletedOperatorRegistrationWithNobodyWaitingSettlesOnTheProductionGraph(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "operator-registration-2", psinbox.OperatorRegistrationCompletedEventType,
+		`{"tenantId":"SYN-TENANT-01","registrationKind":"AS_OF_POLICY"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——空队列的登记信封该入账定稿",
+			published, recordedFailureCode(t, db, "operator-registration-2"))
+	}
+}
+
 // Covers: 接受判断链在**生产依赖图**上真的接得起来，且实例半边空着时停成未决而不是报错。
 //
 // 这一条比前一条重得多。前一条只证路由表挂对了人：毒丸在译码处就被拦下，编排那一层
