@@ -46,6 +46,7 @@ const (
 type customerSupplementLoopFixture struct {
 	*synVerticalFixture
 	store            *outbox.Store
+	views            *pspostgres.ShipmentRequestViews
 	reachability     *synRPerVersionReachabilityAuthority
 	submittedGate    *psinbox.ShipmentRequestSubmittedConsumer
 	supplementGate   *psinbox.SubmissionVersionFormedConsumer
@@ -68,6 +69,10 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 	sources, err := pspostgres.NewSourceSubmissions(base.db)
 	if err != nil {
 		t.Fatalf("构造来源仓储：%v", err)
+	}
+	views, err := pspostgres.NewShipmentRequestViews(base.db)
+	if err != nil {
+		t.Fatalf("构造委托查阅读口：%v", err)
 	}
 	decisionHandoff, err := pspostgres.NewOutboxAcceptanceDecisionHandoff(base.db, store, systemClock{})
 	if err != nil {
@@ -126,6 +131,7 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 	return &customerSupplementLoopFixture{
 		synVerticalFixture: base,
 		store:              store,
+		views:              views,
 		reachability:       reachability,
 		submittedGate:      submittedGate,
 		supplementGate:     supplementGate,
@@ -171,6 +177,12 @@ func TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope(t *te
 	if !present || waiting != psdomain.ResumeByCustomerSupplement {
 		t.Fatalf("等待态 = %v（present=%v）, want CUSTOMER_SUPPLEMENT——暂停没落库，队列列不出它", waiting, present)
 	}
+
+	// 队列读面：真适配器按 0009 投影列（0016 部分索引）上列——ADR-0106 之前这一格在库里恒空。
+	queue := fixture.listSupplementQueue(t, ctx)
+	if len(queue) != 1 || queue[0].ShipmentRequestID != fixture.requestID {
+		t.Fatalf("等待受控补充队列 = %+v, want 恰好这一份委托", queue)
+	}
 	if n := fixture.countOutboxOfType(t, string(nrinbox.AcceptedDecisionEventType)); n != 0 {
 		t.Fatalf("暂停期间入队了 %d 封接受信封", n)
 	}
@@ -205,6 +217,9 @@ func TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope(t *te
 	}
 	if waiting, present := supplemented.AcceptanceDecisionTask().WaitingOn(); present {
 		t.Fatalf("新版本重建了任务，等待态却仍是 %v——换代没有清掉上一版的停顿", waiting)
+	}
+	if remaining := fixture.listSupplementQueue(t, ctx); len(remaining) != 0 {
+		t.Fatalf("新版本形成后队列仍列出 %d 行——出队靠事实不靠读侧折叠", len(remaining))
 	}
 
 	// 同一补充重放：编排答`已处理`，不形成第二个版本，也不铸第二封。
@@ -242,6 +257,9 @@ func TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope(t *te
 	}
 	if waiting, present := accepted.AcceptanceDecisionTask().WaitingOn(); present {
 		t.Fatalf("接受之后等待态仍是 %v——等待态没随决定清掉", waiting)
+	}
+	if remaining := fixture.listSupplementQueue(t, ctx); len(remaining) != 0 {
+		t.Fatalf("接受之后队列仍列出 %d 行", len(remaining))
 	}
 	if n := fixture.countOutboxOfType(t, string(nrinbox.AcceptedDecisionEventType)); n != 1 {
 		t.Fatalf("接受信封 = %d 封, want 恰好 1", n)
@@ -291,6 +309,27 @@ func (fixture *customerSupplementLoopFixture) supplementOn(
 		t.Fatalf("受控补充：%v", err)
 	}
 	return result
+}
+
+func (fixture *customerSupplementLoopFixture) listSupplementQueue(
+	t *testing.T,
+	ctx context.Context,
+) []psports.CustomerSupplementQueueRecord {
+	t.Helper()
+
+	scope, err := psdomain.NewAuthorizedQueryScope(
+		mustPS(t, psdomain.NewQueryScopeReference, "SYN-QS-01"),
+		fixture.identity.TenantID(),
+		[]psdomain.CustomerAccountID{fixture.identity.CustomerAccountID()},
+	)
+	if err != nil {
+		t.Fatalf("作用域：%v", err)
+	}
+	records, err := fixture.views.ListWaitingOnCustomerSupplement(ctx, scope, 10)
+	if err != nil {
+		t.Fatalf("列等待受控补充队列：%v", err)
+	}
+	return records
 }
 
 // claimDeliveryOfType / markPublished 与另两条闭环同一手法（喂给门的正是库里那一封，自己拼等于

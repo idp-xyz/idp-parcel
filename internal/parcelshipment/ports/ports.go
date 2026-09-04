@@ -1323,6 +1323,42 @@ type AcceptanceReviewQueue interface {
 	) (ShipmentRequestDetailRecord, bool, error)
 }
 
+// CustomerSupplementQueueRecord 是「等待受控补充」队列上的一行：一份当前停在`等待受控补充`
+// 的`已提交`委托（ADR-0106 Consequences「等客户补件的都有谁」）。概要之外只带最近一次没能
+// 推进的处理记录——这份委托此前卡在哪、续办引用是什么，是运营催客户补件时要看的东西。
+// 没有复核完成那组字段：这一格的续办方是客户，续办动作是新提交版本，形成之后任务换代、
+// 等待态随之清零，出队靠下一轮判断不靠读侧折叠（与复核队列同一条纪律）。
+type CustomerSupplementQueueRecord struct {
+	ShipmentRequestSummaryRecord
+	HasAttempt              bool
+	LastAttemptReason       string
+	LastAttemptContinuation string
+	LastAttemptedAt         time.Time
+}
+
+// CustomerSupplementQueue 是受控补充队列查阅的读口。队列的定义就是投影列上的
+// `waitingOn = CUSTOMER_SUPPLEMENT` 且 `state = SUBMITTED`——由 Decide 看过全部校验后写下、
+// 由形成新版本与各终态转移改写或清零，读口照登记过滤，不在读侧重推域判断。
+//
+// 以授权查询作用域为键而不是租户：这一口是查阅读面（客户或运营看「谁在等补件」），与复核
+// 队列同属 CONTEXT「授权查询作用域」管辖，作用域外的行答不出——登记续办门那种按租户整批
+// 重驱的口不在这里，受控补充的续办由每份委托自己的「新提交版本已形成」信封驱动，不需要
+// 扫队列。FindVisibleByID 与 ShipmentRequestViews 同签名，理由同 AcceptanceReviewQueue。
+//
+// 排序与列表读口相反：老的在前（先停的先催），同刻按委托标识正序保证分页可重复。
+type CustomerSupplementQueue interface {
+	ListWaitingOnCustomerSupplement(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		limit int,
+	) ([]CustomerSupplementQueueRecord, error)
+	FindVisibleByID(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		requestID domain.ShipmentRequestID,
+	) (ShipmentRequestDetailRecord, bool, error)
+}
+
 // OperatorRegistrationQueueRecord 是「等待运营登记」队列上的一行：一份在决定形成之前停在
 // `等待运营登记`的`已提交`委托，带的正是重驱接受判断链要的那几样（AdvanceAcceptanceChainCommand
 // 的输入）。它不是查阅读面：没有概要、没有处理记录——那些归 ShipmentRequestViews；这里只给续办
