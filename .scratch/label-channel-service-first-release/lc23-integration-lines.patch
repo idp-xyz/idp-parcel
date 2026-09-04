@@ -1,0 +1,205 @@
+diff --git a/cmd/parcel-api/assemble_isolated_read.go b/cmd/parcel-api/assemble_isolated_read.go
+index 12803cbc..d9319e45 100644
+--- a/cmd/parcel-api/assemble_isolated_read.go
++++ b/cmd/parcel-api/assemble_isolated_read.go
+@@ -44,18 +44,19 @@ const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
+ // （「分设只会让装配点看起来能只配一半」，与各包 Intake 注释同句）。nil 指针表示
+ // 未启用——assembleBusinessEndpoints 对 nil 的处理与 ADR-0078 之前逐字节同形。
+ type isolatedReadIntakes struct {
+-	shipmentRequestViews    shipmenthttp.ShipmentRequestViewsIntake
+-	labelTransactions       shipmenthttp.LabelTransactionQueryIntake
+-	nodeOperationsCatalogue nodeopshttp.CatalogueQueryIntake
+-	transportCatalogue      tfhttp.CatalogueQueryIntake
+-	trackingProjections     visibilityhttp.OperationsTrackingIntake
+-	pricingCatalogue        pricinghttp.PricingCatalogueIntake
+-	networkCatalog          networkhttp.CatalogueQueryIntake
+-	complianceRules         customshttp.CatalogueQueryIntake
+-	commercialCatalogue     commercialhttp.CommercialCatalogueIntake
+-	collectionCatalogue     collectionhttp.CatalogueQueryIntake
+-	settlementCatalogue     settlementhttp.CatalogueQueryIntake
+-	governanceRegisters     governancehttp.RegistryQueryIntake
++	shipmentRequestViews      shipmenthttp.ShipmentRequestViewsIntake
++	labelTransactions         shipmenthttp.LabelTransactionQueryIntake
++	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionQueryIntake
++	nodeOperationsCatalogue   nodeopshttp.CatalogueQueryIntake
++	transportCatalogue        tfhttp.CatalogueQueryIntake
++	trackingProjections       visibilityhttp.OperationsTrackingIntake
++	pricingCatalogue          pricinghttp.PricingCatalogueIntake
++	networkCatalog            networkhttp.CatalogueQueryIntake
++	complianceRules           customshttp.CatalogueQueryIntake
++	commercialCatalogue       commercialhttp.CommercialCatalogueIntake
++	collectionCatalogue       collectionhttp.CatalogueQueryIntake
++	settlementCatalogue       settlementhttp.CatalogueQueryIntake
++	governanceRegisters       governancehttp.RegistryQueryIntake
+ }
+ 
+ // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
+@@ -142,16 +143,18 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
+ 		// 面单交易查阅由同一个注入值服务，但走的是它的另一半接口
+ 		// （LabelTransactionQueryIntake，只交出租户维）：同一开关、同一装配点是
+ 		// ADR-0084 决定七要的，而两种查阅面收到的作用域形状不同是决定七同一句话的另一半。
+-		labelTransactions:       shipmentViews,
+-		nodeOperationsCatalogue: nodeOperationsCatalogue,
+-		transportCatalogue:      transportCatalogue,
+-		trackingProjections:     trackingProjections,
+-		pricingCatalogue:        pricingCatalogue,
+-		networkCatalog:          networkCatalog,
+-		complianceRules:         complianceRules,
+-		commercialCatalogue:     commercialCatalogue,
+-		collectionCatalogue:     collectionCatalogue,
+-		settlementCatalogue:     settlementCatalogue,
+-		governanceRegisters:     governanceRegisters,
++		labelTransactions: shipmentViews,
++		// 渠道择优决定查阅同理走它的第三半接口（ChannelSelectionDecisionQueryIntake，只交出租户维）。
++		channelSelectionDecisions: shipmentViews,
++		nodeOperationsCatalogue:   nodeOperationsCatalogue,
++		transportCatalogue:        transportCatalogue,
++		trackingProjections:       trackingProjections,
++		pricingCatalogue:          pricingCatalogue,
++		networkCatalog:            networkCatalog,
++		complianceRules:           complianceRules,
++		commercialCatalogue:       commercialCatalogue,
++		collectionCatalogue:       collectionCatalogue,
++		settlementCatalogue:       settlementCatalogue,
++		governanceRegisters:       governanceRegisters,
+ 	}, nil
+ }
+diff --git a/cmd/parcel-api/endpoints.go b/cmd/parcel-api/endpoints.go
+index f77a048c..259c2a6f 100644
+--- a/cmd/parcel-api/endpoints.go
++++ b/cmd/parcel-api/endpoints.go
+@@ -57,6 +57,7 @@ func assembleBusinessEndpoints(
+ 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
+ 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
+ 	labelTransactions shipmenthttp.LabelTransactionsReader,
++	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionsReader,
+ 	cancellation shipmenthttp.CancellationHandler,
+ 	reception nodeopshttp.ReceptionHandler,
+ 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
+@@ -138,6 +139,7 @@ func assembleBusinessEndpoints(
+ 	// 这句；剩下那几行的字面量纪律一字未松。
+ 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
+ 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
++	channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})
+ 	nodeOperationsCatalogueIntake := nodeopshttp.CatalogueQueryIntake(nodeopshttp.UnconfiguredIntake{})
+ 	transportCatalogueIntake := tfhttp.CatalogueQueryIntake(tfhttp.UnconfiguredIntake{})
+ 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
+@@ -151,6 +153,7 @@ func assembleBusinessEndpoints(
+ 	if isolatedRead != nil {
+ 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
+ 		labelTransactionIntake = isolatedRead.labelTransactions
++		channelSelectionDecisionIntake = isolatedRead.channelSelectionDecisions
+ 		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
+ 		transportCatalogueIntake = isolatedRead.transportCatalogue
+ 		trackingProjectionsIntake = isolatedRead.trackingProjections
+@@ -189,6 +192,10 @@ func assembleBusinessEndpoints(
+ 		// 账户维的作用域等于在类型上声称会按账户过滤而它不会。渠道墙未降前这一口读到的是
+ 		// 空册，那是设计：写入方是渠道适配器，首发不进生产。
+ 		{Pattern: "/label-transactions", Handler: shipmenthttp.NewQueryLabelTransactionsEndpoint(labelTransactionIntake, labelTransactions)},
++		// 渠道择优决定查阅（票 label-channel/23）：并列冲突列表与按标识取一条共用一个端点、按 decisionId 分派。
++		// 准入形同面单交易（只有租户维，本册没有账户维可分），自立 Intake 变量、随同一个隔离读开关换值；读口是
++		// 决定登记册本尊（两个契约一只适配器）。择优编排今天无生产装配点，接线前这一口读到的是空册，空册是如实答案。
++		{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},
+ 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
+ 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
+ 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，
+diff --git a/cmd/parcel-api/endpoints_test.go b/cmd/parcel-api/endpoints_test.go
+index 1272893e..7c6fd093 100644
+--- a/cmd/parcel-api/endpoints_test.go
++++ b/cmd/parcel-api/endpoints_test.go
+@@ -32,6 +32,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
+ 	"/acceptance-review-queue":                                                 {method: http.MethodGet, target: "/acceptance-review-queue"},
+ 	"/commercial-business-parties":                                             {method: http.MethodGet, target: "/commercial-business-parties"},
+ 	"/label-transactions":                                                      {method: http.MethodGet, target: "/label-transactions"},
++	"/channel-selection-decisions":                                             {method: http.MethodGet, target: "/channel-selection-decisions?view=tied"},
+ 	"/node-operations/receptions":                                              {method: http.MethodPost, target: "/node-operations/receptions"},
+ 	"/node-operations-records":                                                 {method: http.MethodGet, target: "/node-operations-records?registry=reception"},
+ 	"/transport-fulfillment/deliveries":                                        {method: http.MethodPost, target: "/transport-fulfillment/deliveries"},
+@@ -221,6 +222,7 @@ func assembleUnwiredBusinessEndpointsWith(
+ 		unwiredReviewQueue{},
+ 		unwiredReviewJudgments{},
+ 		unwiredLabelTransactions{},
++		unwiredChannelSelectionDecisions{},
+ 		unwiredCancellation{},
+ 		unwiredReception{},
+ 		unwiredNodeOperationsRecords{},
+diff --git a/cmd/parcel-api/isolated_read_test.go b/cmd/parcel-api/isolated_read_test.go
+index dcb38872..4d7bc105 100644
+--- a/cmd/parcel-api/isolated_read_test.go
++++ b/cmd/parcel-api/isolated_read_test.go
+@@ -51,7 +51,7 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
+ 	if intakes == nil {
+ 		t.Fatal("synthetic tenant yielded nil intakes")
+ 	}
+-	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil ||
++	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil || intakes.channelSelectionDecisions == nil ||
+ 		intakes.trackingProjections == nil ||
+ 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
+ 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
+@@ -127,6 +127,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
+ 	// 上列「该判哪几条」不触发判断，判断在另一条写行上，而写行挂的是字面量 UnconfiguredIntake{}，本
+ 	// 用例下面那半会证它仍答 403。单列在表尾的理由同上一行。
+ 	"/transport-fulfillment-external-tracking-facts": true,
++	// 渠道择优决定查阅（票 label-channel/23）随委托查阅的注入值一起放行（第三半接口，只交出租户维）。三条判据逐条
++	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
++	// 不在这一口。单列在表尾的理由同上两行。
++	"/channel-selection-decisions": true,
+ }
+ 
+ // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定
+diff --git a/cmd/parcel-api/main.go b/cmd/parcel-api/main.go
+index d6477722..48e2d223 100644
+--- a/cmd/parcel-api/main.go
++++ b/cmd/parcel-api/main.go
+@@ -117,6 +117,11 @@ func run(logger *slog.Logger) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	// 渠道择优决定查阅读的是决定登记册本尊（票 label-channel/23）：两个契约一只适配器，读面不是编排。
++	channelSelectionDecisions, err := buildChannelSelectionDecisionRead(db)
++	if err != nil {
++		return err
++	}
+ 	cancellation, err := buildCancellationOrchestration(db)
+ 	if err != nil {
+ 		return err
+@@ -331,6 +336,7 @@ func run(logger *slog.Logger) error {
+ 			requestViews,
+ 			reviewJudgments,
+ 			labelTransactions,
++			channelSelectionDecisions,
+ 			cancellation,
+ 			reception,
+ 			nodeOperationsRecords,
+diff --git a/cmd/parcel-api/unwired_orchestration.go b/cmd/parcel-api/unwired_orchestration.go
+index 81cdf20d..a356ed60 100644
+--- a/cmd/parcel-api/unwired_orchestration.go
++++ b/cmd/parcel-api/unwired_orchestration.go
+@@ -411,6 +411,27 @@ func (unwiredLabelTransactions) ListLabelTransactions(
+ 	return nil, errOrchestrationNotWired
+ }
+ 
++// unwiredChannelSelectionDecisions 是渠道择优决定查阅读口的占位（票 label-channel/23）；读不回交回稳定错误
++// 而不是空册，理由同 unwiredLabelTransactions。
++type unwiredChannelSelectionDecisions struct{}
++
++func (unwiredChannelSelectionDecisions) ListTiedChannelSelectionDecisions(
++	context.Context,
++	shipmentdomain.TenantID,
++	shipmentports.TiedChannelSelectionFilter,
++	int,
++) ([]shipmentdomain.ChannelSelectionDecision, error) {
++	return nil, errOrchestrationNotWired
++}
++
++func (unwiredChannelSelectionDecisions) FindChannelSelectionDecision(
++	context.Context,
++	shipmentdomain.TenantID,
++	shipmentdomain.ChannelSelectionDecisionID,
++) (shipmentdomain.ChannelSelectionDecision, bool, error) {
++	return shipmentdomain.ChannelSelectionDecision{}, false, errOrchestrationNotWired
++}
++
+ type unwiredReviewJudgments struct{}
+ 
+ func (unwiredReviewJudgments) LoadRecordedJudgments(

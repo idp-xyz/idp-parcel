@@ -1,7 +1,7 @@
 # 23 渠道择优决定的运营查阅面：留痕落库了，运营今天没有地方看它
 
 Category: enhancement
-Status: in-progress——MCP-2 2026-09-04 认领（基线 main `eba019a8`，分支 `mcp2-lc23`，task-7f3d6450）；MCP-1 同日代裁 draft → ready-for-agent：票面「做什么」四条与「先答再开工」两条的本票倾向即裁决（读端口另立二口、不拓宽登记册端口；postgres 读适配器只读列面、读回过重建门；人工裁决动作不进本票；不按时间隐式截断；端点命名照 PS 既有读面）。立票原句：随票 14 收口立票，只写票面未动代码
+Status: resolved——MCP-2 2026-09-04 落地于分支 `mcp2-lc23`（起于 `eba019a8`，完工前 rebase 到 main `9e4e90bb`；待 MCP-1 重放入 main，共享接线五件的整合行见文末「完成记录」与同目录 `lc23-integration-lines.patch`）：读端口二口 + postgres 读口（登记册适配器兼两个契约）+ 查阅端点 `GET /channel-selection-decisions`（列表 / 单份两分支）+ cmd 读口装配与真库装配用例 + 管理台「渠道择优决定」页；**端点表行、探针、隔离读放行行归 MCP-1 落**，落行前 `internal/architecture` 的管理台路径门禁在本分支如实红。认领记录：MCP-2 2026-09-04 认领（基线 main `eba019a8`，task-7f3d6450）；MCP-1 同日代裁 draft → ready-for-agent：票面「做什么」四条与「先答再开工」两条的本票倾向即裁决（读端口另立二口、不拓宽登记册端口；postgres 读适配器只读列面、读回过重建门；人工裁决动作不进本票；不按时间隐式截断；端点命名照 PS 既有读面）。立票原句：随票 14 收口立票，只写票面未动代码
 Blocked by: 无（14 已 resolved，八笔随 `19cf2ce5` 进 main）
 
 ## 缺口
@@ -74,3 +74,69 @@ ADR-0055 作答、管理台页面能列并列冲突并展开逐候选结果；`g
   记录摆进 PC 的目录页，一页两主责。对象引用两列以等宽文本原样透出，页头一句指明映射本体在渠道产品目录页；
   收窄入口收两个引用的字面（两个都给才收窄，服务端只给一半答 400）。导航 id `channel-selection-decisions`，
   `liveIds` 登记为已接线（页面对真实端点发请求；接入渠道未配置时如实渲染 403）。
+- 2026-09-04 · MCP-2：**双轴评审**（子代理认证失败，本会话串行隔离自评）。Standards 轴修三处（票面取证句去掉
+  别处计数并锚 SHA、装配注释去掉「零命中」计数、前端 `DecisionDetailState` 删永不产生的 `idle` 变体），两处留痕不改：
+  ① postgres 读口的头行扫描与子行装载与既有 `ListBySubject` 同形——那份文件归票 14 收口且本票「只加不改」，折回一套
+  helper 是后继小票；② 前端 `wordOf` 与 `operations/presentation.ts` 的 `labelOf`、面单交易页的 `wordOr` 同形——
+  各目录自持一份是既有先例，不在本票抬成共享模块。Spec 轴：「做什么」四条与「先答再开工」两条逐条对上，无越界；
+  `selectedCandidate` 与列表行携带逐候选结果是「整条决定」的一部分，不算加功能。
+
+## 完成记录（MCP-2，2026-09-04）
+
+**落点（分支 `mcp2-lc23`，起于 `eba019a8`、完工前 rebase 到 main `9e4e90bb`；SHA 为 rebase 后分支上的，重放入 main 后由
+MCP-1 对照新旧 SHA）**
+
+| 层 | 文件 | SHA |
+|---|---|---|
+| ports | `internal/parcelshipment/ports/channel_selection_decision_read.go`：`ChannelSelectionDecisionRead`（`ListTiedChannelSelectionDecisions` + `FindChannelSelectionDecision`）、`TiedChannelSelectionFilter`（`EveryTiedChannelSelection` / `TiedChannelSelectionsOf`）；不动 `ChannelSelectionDecisionRegistry` | `1fc3d859` |
+| postgres | `adapters/postgres/channel_selection_decision_read.go`：方法加在既有 `ChannelSelectionDecisions` 上（只加不改既有文件），`conclusion = 'TIED'` 字面取自领域封闭集 `String()`，倒序 + `LIMIT`，子行 `ANY($2)` 一次取回，读回照旧过 `rehydrateChannelSelectionDecision`；真库用例四条（倒序只列 TIED 且跨租户不可见、按对象收窄与截页、从未择优答空切片 + limit 非正拒、按标识只在本租户内取得到） | `1fc3d859` |
+| http | `adapters/http/query_channel_selection_decisions.go`：`GET /channel-selection-decisions`，`decisionId` 在场走单份分支（404 `CHANNEL_SELECTION_DECISION_NOT_VISIBLE`，不带 outcome），否则列表分支 `view=tied` 必备、`scope`/`mapping` 成对收窄（只给一半 400）；`ChannelSelectionDecisionQuery{Tenant, Limit}` 与 `ChannelSelectionDecisionQueryIntake` 另立（只有租户维，理由同面单交易）；`UnconfiguredIntake` 与 `IsolatedOperationsReadIntake` 的对应方法随端点放在本文件；传输层用例六条（含无金额断言、未配置两分支同答 403、隔离读只交注入租户） | `7283ce3d` |
+| cmd | `cmd/parcel-api/assemble_channel_selection_decisions.go`：`buildChannelSelectionDecisionRead(db)` 交回登记册本尊作读口；真库装配用例落一条 TIED 一条 SELECTED，经隔离读 Intake 列表只列 TIED 且逐候选四格与因由带回、按标识取回选中者、不存在 404、同一读口挂 `UnconfiguredIntake{}` 仍 403 | `687be091` |
+| admin-web | `apps/admin-web/src/pages/channel-selection/{api.ts, channel-selection-decisions.ts, channel-selection-decisions.test.ts, ChannelSelectionDecisionsPage.tsx, index.ts}`；`navigation.ts` 加导航项 / 图标 / `moduleInfoById` 三处、`page-registry.tsx` 加 `pageById` 与 `liveIds` 两行；落点取证见 Comments | `5c2d5d74` |
+| 评审修补 | 票面 / 装配注释 / `DecisionDetailState` 三处 | `96a220eb` |
+| 清点 | `docs/product/MECHANISM-INVENTORY.md` 在 `96a220eb` 干净检出上重生成（PS 生产 +3 / 测试 +2、端口文件 +1、http +1；cmd 生产 / 测试各 +1；端口声明 335→336，缺口两栏不变） | `08635c74` |
+
+**两端点路径与 outcome 词**：同一路径 `GET /channel-selection-decisions`——列表分支 `?view=tied[&scope=&mapping=]` →
+`TIED_CHANNEL_SELECTION_DECISIONS_LISTED` + `decisions[]`；单份分支 `?decisionId=` → `CHANNEL_SELECTION_DECISION` +
+`decision`；查不到 404 `CHANNEL_SELECTION_DECISION_NOT_VISIBLE`。决定体：`decisionId / scope / mapping / assembledAsOf /
+rule / decidedAt / conclusion / selectedCandidate?（只在有选中者时在场）/ candidates[]{candidate, evaluation?, outcome, exclusion?}`。
+**无金额、无评价内容列**（传输层用例断言体里不含 amount / currency / price）。
+
+**隔离读放行（ADR-0078）判入格，理由**：消费本上下文自己的存储读面且不触发判断、派生或披露（列并列冲突不裁决，人工
+裁决不在这一口）；零持久化；作用域是运营侧授权结果（只有租户维，由注入给定，`IsolatedOperationsReadIntake` 的对应方法
+不读请求任何授权输入）。与面单交易同款：同一个注入值的第三半接口。
+
+**要 MCP-1 落的共享接线（逐字，已在干净检出上套用验证；同目录 `lc23-integration-lines.patch` 可 `git apply`）**：
+① `cmd/parcel-api/endpoints.go`——`assembleBusinessEndpoints` 在 `labelTransactions shipmenthttp.LabelTransactionsReader,` 之后加参
+`channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionsReader,`；变量组加
+`channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})`；
+`if isolatedRead != nil` 块加 `channelSelectionDecisionIntake = isolatedRead.channelSelectionDecisions`；`/label-transactions` 行之后加
+`{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},`。
+② `cmd/parcel-api/assemble_isolated_read.go`——`isolatedReadIntakes` 加字段 `channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionQueryIntake`，
+字面量加 `channelSelectionDecisions: shipmentViews,`。③ `cmd/parcel-api/main.go`——`labelTransactions` 之后加
+`channelSelectionDecisions, err := buildChannelSelectionDecisionRead(db)`（错误即 `return err`），`assembleBusinessEndpoints(...)` 实参在
+`labelTransactions,` 之后加 `channelSelectionDecisions,`。④ `cmd/parcel-api/unwired_orchestration.go`——加
+`type unwiredChannelSelectionDecisions struct{}` 及两方法（`ListTiedChannelSelectionDecisions` 回 `nil, errOrchestrationNotWired`；
+`FindChannelSelectionDecision` 回零值、`false`、`errOrchestrationNotWired`）。⑤ `cmd/parcel-api/endpoints_test.go`——探针
+`"/channel-selection-decisions": {method: http.MethodGet, target: "/channel-selection-decisions?view=tied"},`；
+`assembleUnwiredBusinessEndpointsWith` 在 `unwiredLabelTransactions{},` 之后加 `unwiredChannelSelectionDecisions{},`。
+⑥ `cmd/parcel-api/isolated_read_test.go`——`isolatedReadAdmittedPatterns` 加 `"/channel-selection-decisions": true,`（表尾）；
+`TestBuildIsolatedReadIntakesGrantsAllContexts` 的 nil 检查加 `intakes.channelSelectionDecisions == nil`。
+
+**验证**（钉 `08635c74`，干净 detached 检出）：
+- 分支原样：`gofmt -l` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN `go test -count=1 ./...` **94 包 ok、唯一红是
+  `internal/architecture` 的 `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`**——管理台发向 `/channel-selection-decisions` 而端点表
+  无此行，红的正是等 MCP-1 落的那一行，这是门禁在守而不是缺陷。反向取证：无 DSN 下 PS postgres 四条新用例全 `--- SKIP`。
+- 套上上述整合行（`git apply` 同目录 patch）后：`gofmt -l` 空；build / vet 退 0；**含真库**（门禁容器 55432）`go test -count=1 -p 1 ./...`
+  退 0、95 包 ok / 0 FAIL；`-v ./internal/parcelshipment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...`
+  = **1611 PASS / 0 SKIP / 0 FAIL**（不锚定行首计数），证据行 `--- PASS: TestTiedDecisionsAreListedNewestFirstWithinTheTenant (0.30s)`、
+  `--- PASS: TestADecisionIsFoundByIdentityOnlyWithinItsTenant (0.29s)`、`--- PASS: TestTheWiredChannelSelectionDecisionReadAnswersHonestlyAgainstARealDatabase (0.29s)`、
+  `--- PASS: TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable (0.03s)`、`--- PASS: TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines (0.00s)`、
+  `--- PASS: TestEmbeddedMigrationAssetsCarryNoCarriageReturnOrBOM (0.00s)`。`-race` 未跑。
+- 前端（借主树 `node_modules`）：`tsc --noEmit` 退 0；`node scripts/run-tests.mjs` 66/66 过（新增五条）。
+- 两份棘轮基线零改动；无新迁移；`.go/.ts/.tsx/.md/.patch` 新文件逐份 CR=0 无 BOM。
+
+**有意留待后续**：① 并列冲突的人工裁决动作——形状要先过 /domain-modeling（裁决人与裁决规则属 `PAR-NET-16` 待提供）；
+② 「某个候选最近为何总是出局」「某笔映射下这一天做过几次择优」两种读法（票「缺口」节的动机句）——本票按「至少两口」
+落了 TIED 列表与按标识取一条，按候选 / 按日汇总的读口等有人要看时另立；③ postgres 读口与 `ListBySubject` 的头行扫描 /
+子行装载折成一套 helper（本票只加不改既有文件）。
