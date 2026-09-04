@@ -12,10 +12,10 @@ import (
 
 // 本文件证运营操作者面的序列登记载荷解码（票 pricing-reference-series-operations/08；ADR-0101
 // 决定一、四）：载荷只有内容没有身份（租户与登记责任方由调用方——将来是操作者信封——给），
-// 解出的登记对象与直接走领域构造器造出的逐格相同；三处版本引用的 digest 槽装的是**声明令牌**
-// （`declared:` 前缀，MCP-3 裁决），册上已有的引用照实回指不重铸；同一份载荷解成预览命令与
-// 登记命令得到同一个登记对象——摘要与三个引用逐字节相同，这是决定四那句硬句在解码这一层的
-// 落点；结构不对、领域构造门拒、多出的键，一律 ErrMalformedRequest。
+// 解出的登记对象与直接走领域构造器造出的逐格相同；三处版本引用只带三元，指纹按来源在场或缺席
+// （ADR-0108 Decision 五），本包不铸任何令牌；同一份载荷解成预览命令与登记命令得到同一个登记
+// 对象——摘要与三个引用逐字节相同，这是决定四那句硬句在解码这一层的落点；结构不对、领域构造门
+// 拒、多出的键，一律 ErrMalformedRequest。
 
 const seriesPayloadJSON = `{
   "seriesId": "SYN-PRC-FUEL-WEEKLY",
@@ -26,7 +26,7 @@ const seriesPayloadJSON = `{
     {"startsAt": "2026-08-03T00:00:00Z", "endsAt": "2026-08-10T00:00:00Z", "value": "0.23", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W32"},
     {"startsAt": "2026-08-10T00:00:00Z", "value": "0.240"}
   ],
-  "correction": {"priorVersion": "v1", "priorReferenceDigest": "sha256:syn-SYN-PRC-FUEL-WEEKLY-v1", "basis": "SYN-CORRECTION/fuel-w32-transcription"},
+  "correction": {"priorVersion": "v1", "priorFingerprint": "sha256:prior-content-v1", "basis": "SYN-CORRECTION/fuel-w32-transcription"},
   "compareWithVersion": "v1"
 }`
 
@@ -94,23 +94,21 @@ func TestSeriesPayloadTranslatesIntoTheDomainRegistration(t *testing.T) {
 	}
 }
 
-// TestSeriesPayloadMintsDeclaredTokensOnlyForNewReferences 证 digest 槽的规则（MCP-3 裁决四条之
-// 一、三）：新铸的引用装 `declared:` 令牌，形如 declared:<kind>/<id>@<version>；册上已有而载荷
-// 带来的引用 digest 照实回指不重铸；口径未带 digest 时同样铸令牌（PC 读口今天不透 digest）。
-func TestSeriesPayloadMintsDeclaredTokensOnlyForNewReferences(t *testing.T) {
+// TestSeriesPayloadCarriesFingerprintsOnlyWhereTheOperatorHasOne 证三处引用的指纹规则（ADR-0108
+// Decision 五）：自身引用只带三元、指纹留空；回指带前版内容摘要作指纹，载荷没带就留空；口径未带
+// digest 时留空（PC 读口今天不透 content_digest），带来就照实放进指纹。本包不再铸任何令牌——
+// 两条路（预览 / 登记）产出同一份引用，靠的是不铸而不是同一条铸法。
+func TestSeriesPayloadCarriesFingerprintsOnlyWhereTheOperatorHasOne(t *testing.T) {
 	registration, err := decodeSeriesPayload(t, seriesPayloadJSON).Registration(payloadTenant(t), "SYN-PRC-SERIES-REGISTRAR")
 	if err != nil {
 		t.Fatalf("翻成登记：%v", err)
 	}
-	if got := registration.Reference().Digest(); got != "declared:reference-series/SYN-PRC-FUEL-WEEKLY@v2" {
-		t.Fatalf("自身引用 digest = %q", got)
-	}
-	if got := pricinghttp.DeclaredReferenceToken(domain.ArtifactReferenceSeries, "SYN-PRC-FUEL-WEEKLY", "v2"); got != registration.Reference().Digest() {
-		t.Fatalf("令牌函数与解码器不是同一条规则：%q", got)
+	if registration.Reference().HasFingerprint() {
+		t.Fatalf("自身引用不该带指纹：%q", registration.Reference().Fingerprint())
 	}
 	prior, _, _ := registration.Correction()
-	if prior.Digest() != "sha256:syn-SYN-PRC-FUEL-WEEKLY-v1" {
-		t.Fatalf("册上已有的回指被重铸了：%q", prior.Digest())
+	if prior.Fingerprint() != "sha256:prior-content-v1" {
+		t.Fatalf("回指的指纹应照实取载荷带来的前版内容摘要：%q", prior.Fingerprint())
 	}
 
 	fxPayload := decodeSeriesPayload(t, `{
@@ -128,12 +126,12 @@ func TestSeriesPayloadMintsDeclaredTokensOnlyForNewReferences(t *testing.T) {
 	if !declared || basis.ID() != "SYN-PRC-FX-POLICY" || basis.Version() != "v3" {
 		t.Fatalf("口径变形：%v/%v", basis, declared)
 	}
-	if basis.Digest() != "declared:commercial-policy/SYN-PRC-FX-POLICY@v3" {
-		t.Fatalf("口径未带 digest 时应铸令牌：%q", basis.Digest())
+	if basis.HasFingerprint() {
+		t.Fatalf("口径未带 digest 时指纹应留空，实得 %q", basis.Fingerprint())
 	}
 	prior, _, _ = fx.Correction()
-	if prior.Digest() != "declared:reference-series/SYN-PRC-USD-CNY@v0" {
-		t.Fatalf("回指未带 digest 时应铸令牌：%q", prior.Digest())
+	if prior.HasFingerprint() || prior.Version() != "v0" {
+		t.Fatalf("回指未带前版摘要时指纹应留空且三元照实：%v", prior)
 	}
 
 	withDigest := decodeSeriesPayload(t, `{
@@ -146,9 +144,21 @@ func TestSeriesPayloadMintsDeclaredTokensOnlyForNewReferences(t *testing.T) {
 	if err != nil {
 		t.Fatalf("翻成带口径 digest 的登记：%v", err)
 	}
-	if basis, _ := fxWithDigest.QuoteBasis(); basis.Digest() != "sha256:pc-policy-v3" {
-		t.Fatalf("载荷带来的口径 digest 被重铸了：%q", basis.Digest())
+	if basis, _ := fxWithDigest.QuoteBasis(); basis.Fingerprint() != "sha256:pc-policy-v3" {
+		t.Fatalf("载荷带来的口径 digest 应照实进指纹：%q", basis.Fingerprint())
 	}
+	if fx.ContentDigest() == "" || fx.ContentDigest() != mustRegistration(t, fxPayload).ContentDigest() {
+		t.Fatal("同一份载荷解两次摘要必须相同")
+	}
+}
+
+func mustRegistration(t *testing.T, payload pricinghttp.ReferenceSeriesRegistrationPayload) domain.ReferenceSeriesRegistration {
+	t.Helper()
+	registration, err := payload.Registration(payloadTenant(t), "SYN-PRC-SERIES-REGISTRAR")
+	if err != nil {
+		t.Fatalf("翻成登记：%v", err)
+	}
+	return registration
 }
 
 // TestSeriesPayloadYieldsOneRegistrationForPreviewAndRegistration 是 ADR-0101 决定四那句硬句在

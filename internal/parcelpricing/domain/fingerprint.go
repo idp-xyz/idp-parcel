@@ -8,11 +8,12 @@ import (
 	"time"
 )
 
+// canonicalVersionReference 只带身份三元（ADR-0108 Decision 二）：声明时附带的指纹不进摘要，
+// 同一份引用带不带指纹，内容摘要与语义摘要逐字相同。
 type canonicalVersionReference struct {
 	Kind    string `json:"kind"`
 	ID      string `json:"id"`
 	Version string `json:"version"`
-	Digest  string `json:"digest"`
 }
 
 func canonicalReference(reference VersionReference) canonicalVersionReference {
@@ -20,7 +21,6 @@ func canonicalReference(reference VersionReference) canonicalVersionReference {
 		Kind:    string(reference.kind),
 		ID:      reference.id,
 		Version: reference.version,
-		Digest:  reference.digest,
 	}
 }
 
@@ -411,7 +411,14 @@ func canonicalReferenceSeriesValue(binding ReferenceSeriesBinding) canonicalRefe
 // PPC-4 把序列绑定从「序列版本引用」改成「序列标识」（ADR-0099）：绑定文档由
 // kind + reference 变为 kind + series_id，方案清单不再含序列版本引用。这不是拓宽而是
 // 换对象——旧字节里那个版本引用在新形状下没有落点，PPC-3 快照因此在重建门被拒。
-const canonicalizationVersion = "PPC-4"
+// PPC-5 是一次合并换号（ADR-0108 Decision 四援引 PPC-2 先例，同期实施的几份 ADR 只花一个
+// 版本）：版本引用去掉 digest 只剩三元（ADR-0108）——它出现在方案引用、价表引用、重量策略
+// 引用、清单与评价的事实引用、序列取值引用、换算步骤里，每一处的字节都变；随后同批落地的
+// 拓宽（ADR-0107 金额取整策略、ADR-0109 计价参考目录绑定、ADR-0110 金额序列与取当期定额、
+// ADR-0111 逐委托/逐主单聚合）都记在这一号下。换号发生在第一份改规范化文档的提交里而不是
+// 最后一笔：不换号的中间态会让同一个版本号下存在两套字节，PPC-4 快照重算出来的摘要既不等于
+// 原值又不会被版本门挡住。
+const canonicalizationVersion = "PPC-5"
 
 // CurrentCanonicalizationVersion 报出本构建按哪套形状做规范化。按其他取值记录的工件，
 // 在这里无法重新算出其摘要。
@@ -733,7 +740,6 @@ func compareCanonicalReferences(left, right canonicalVersionReference) int {
 		{left.Kind, right.Kind},
 		{left.ID, right.ID},
 		{left.Version, right.Version},
-		{left.Digest, right.Digest},
 	} {
 		if pair[0] < pair[1] {
 			return -1

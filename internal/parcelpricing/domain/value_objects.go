@@ -398,20 +398,34 @@ const (
 	ArtifactNumericProfile          ArtifactKind = "numeric-profile"
 )
 
+// NumericProfileV1Reference 是评价清单里内置的数值口径引用。只带三元（ADR-0108 Decision 五）：
+// 它不是从哪份工件算出来的，此前那个 `builtin:` 常量装在 digest 槽里只是占位。
 func NumericProfileV1Reference() VersionReference {
 	return VersionReference{
 		kind:    ArtifactNumericProfile,
 		id:      "decimal-bigint",
 		version: "v1",
-		digest:  "builtin:decimal-bigint-v1",
 	}
 }
 
-type VersionReference struct {
+// referenceIdentity 是版本引用的身份：（种类，标识，版本）三元（ADR-0108 Decision 一）。
+// 相等、清单去重、排序与规范化文档一律只看它——此前 NewVersionManifest 的去重键就是这三元，
+// 而类型自己却多比一格 digest，两处判据不一致；现在把去重键提成类型的定义。
+type referenceIdentity struct {
 	kind    ArtifactKind
 	id      string
 	version string
-	digest  string
+}
+
+// VersionReference 引用一份版本化工件：身份三元加一枚可选的「声明时附带的指纹」（ADR-0108
+// Decision 二）。指纹记的是引用方声明这条引用时手上有什么——有真摘要就带，没有就空；它随快照
+// 原样读回，**不进规范化文档，也不参与相等与排序**，同一份引用带不带指纹、带哪一种，内容摘要
+// 与语义摘要都不变。想按指纹校验被引对象没变，是另一条尚未立的读法，这里不预设。
+type VersionReference struct {
+	kind        ArtifactKind
+	id          string
+	version     string
+	fingerprint string
 }
 
 // EffectivePeriod 采用 [startsAt, endsAt) 区间。endsAt 为零值表示没有上界。
@@ -470,22 +484,57 @@ func (period EffectivePeriod) canonicalString() string {
 	return period.startsAt.Format(time.RFC3339Nano) + "|" + end
 }
 
-func NewVersionReference(kind ArtifactKind, id, version, digest string) (VersionReference, error) {
-	if kind == "" || strings.TrimSpace(id) == "" || strings.TrimSpace(id) != id || strings.TrimSpace(version) == "" || strings.TrimSpace(version) != version || strings.TrimSpace(digest) == "" || strings.TrimSpace(digest) != digest {
+// NewVersionReferenceIdentity 以三元构造一条不带指纹的引用。三元一格不许空、不许带首尾空白
+// （ADR-0108 Decision 三保留的那道校验）；指纹缺席不是缺陷，是「声明时手上没有摘要」的如实表达。
+func NewVersionReferenceIdentity(kind ArtifactKind, id, version string) (VersionReference, error) {
+	return NewVersionReferenceWithFingerprint(kind, id, version, "")
+}
+
+// NewVersionReferenceWithFingerprint 以三元加一枚可选指纹构造引用。指纹可空；带值时不许首尾空白
+// ——一枚带空白的指纹既比不上真摘要也比不上空，只会让「有没有指纹」这个问题多出第三种答案。
+func NewVersionReferenceWithFingerprint(kind ArtifactKind, id, version, fingerprint string) (VersionReference, error) {
+	if kind == "" || strings.TrimSpace(id) == "" || strings.TrimSpace(id) != id ||
+		strings.TrimSpace(version) == "" || strings.TrimSpace(version) != version ||
+		strings.TrimSpace(fingerprint) != fingerprint {
 		return VersionReference{}, ErrInvalidVersionReference
 	}
-	return VersionReference{kind: kind, id: id, version: version, digest: digest}, nil
+	return VersionReference{kind: kind, id: id, version: version, fingerprint: fingerprint}, nil
+}
+
+// NewVersionReference 是三步法留下的旧签名：第四参此前叫 digest 且要求非空，如今按 ADR-0108
+// 进可选指纹、允许为空。保留它只为让按今天 main 形状新增的调用点（pricing/06 的转录器）在
+// rebase 时不红；等 pricing/06 入 main 后收缩，调用点一律改用上面两条构造。
+func NewVersionReference(kind ArtifactKind, id, version, digest string) (VersionReference, error) {
+	return NewVersionReferenceWithFingerprint(kind, id, version, digest)
 }
 
 func (reference VersionReference) Kind() ArtifactKind { return reference.kind }
 func (reference VersionReference) ID() string         { return reference.id }
 func (reference VersionReference) Version() string    { return reference.version }
-func (reference VersionReference) Digest() string     { return reference.digest }
+
+// Fingerprint 交回声明时附带的指纹，空串即缺席。
+func (reference VersionReference) Fingerprint() string { return reference.fingerprint }
+
+// HasFingerprint 说明这条引用声明时手上有没有摘要。缺席不影响任何摘要、相等与排序。
+func (reference VersionReference) HasFingerprint() bool { return reference.fingerprint != "" }
+
+// Digest 是三步法留下的旧访问器，等价于 Fingerprint；等 pricing/06 入 main 后收缩。
+func (reference VersionReference) Digest() string { return reference.fingerprint }
+
+// SameIdentity 按三元比较两条引用（ADR-0108 Decision 一）。别用 `==`：结构体相等会把指纹也
+// 比进去，而两条只差指纹的引用指的是同一份工件。
+func (reference VersionReference) SameIdentity(other VersionReference) bool {
+	return reference.identity() == other.identity()
+}
+
+func (reference VersionReference) identity() referenceIdentity {
+	return referenceIdentity{kind: reference.kind, id: reference.id, version: reference.version}
+}
 
 func (reference VersionReference) valid() bool {
 	return strings.TrimSpace(string(reference.kind)) != "" && strings.TrimSpace(reference.id) != "" && strings.TrimSpace(reference.id) == reference.id &&
 		strings.TrimSpace(reference.version) != "" && strings.TrimSpace(reference.version) == reference.version &&
-		strings.TrimSpace(reference.digest) != "" && strings.TrimSpace(reference.digest) == reference.digest
+		strings.TrimSpace(reference.fingerprint) == reference.fingerprint
 }
 
 type VersionManifest struct {
@@ -497,17 +546,12 @@ func NewVersionManifest(references []VersionReference) (VersionManifest, error) 
 		return VersionManifest{}, ErrInvalidVersionReference
 	}
 	copyOfReferences := append([]VersionReference(nil), references...)
-	type referenceIdentity struct {
-		kind    ArtifactKind
-		id      string
-		version string
-	}
 	seen := make(map[referenceIdentity]struct{}, len(copyOfReferences))
 	for _, reference := range copyOfReferences {
 		if !reference.valid() {
 			return VersionManifest{}, ErrInvalidVersionReference
 		}
-		key := referenceIdentity{kind: reference.kind, id: reference.id, version: reference.version}
+		key := reference.identity()
 		if _, exists := seen[key]; exists {
 			return VersionManifest{}, ErrDuplicateVersionReference
 		}
@@ -519,12 +563,12 @@ func NewVersionManifest(references []VersionReference) (VersionManifest, error) 
 	return VersionManifest{references: copyOfReferences}, nil
 }
 
+// compareVersionReferences 只比三元（ADR-0108 Decision 一）：排序与去重、相等同一套判据。
 func compareVersionReferences(left, right VersionReference) int {
 	for _, pair := range [][2]string{
 		{string(left.kind), string(right.kind)},
 		{left.id, right.id},
 		{left.version, right.version},
-		{left.digest, right.digest},
 	} {
 		if pair[0] < pair[1] {
 			return -1
@@ -548,12 +592,14 @@ func (manifest VersionManifest) valid() bool {
 	return err == nil && manifest.Equal(normalized)
 }
 
+// Equal 按三元逐项比较两份清单（ADR-0108 Decision 一）：重放时组合出来的清单指纹可能与记录
+// 时不同（当时手上有没有摘要是声明方的事），指的却是同一批工件。
 func (manifest VersionManifest) Equal(other VersionManifest) bool {
 	if len(manifest.references) != len(other.references) {
 		return false
 	}
 	for index, reference := range manifest.references {
-		if reference != other.references[index] {
+		if !reference.SameIdentity(other.references[index]) {
 			return false
 		}
 	}

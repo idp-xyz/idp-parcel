@@ -29,8 +29,8 @@ export interface QuoteBasisDraft {
 
 export interface CorrectionDraft {
   priorVersion: string;
-  /** 目录行透出的登记时声明的引用 digest，原样带回；页面不显示它作「摘要」。 */
-  priorReferenceDigest: string;
+  /** 前版的内容摘要（目录行透出的 contentDigest），作回指的指纹带回（ADR-0108 Decision 五）。 */
+  priorFingerprint: string;
   basis: string;
 }
 
@@ -65,7 +65,7 @@ export function emptySeriesDraft(): SeriesDraft {
 
 /**
  * 「更正此版本」的预填：同一条序列、同一种类、同一来源与口径，**该版全部期次**照抄进草稿，更正
- * 回指自动带上（版本号 + 登记时声明的引用 digest），更正依据留空强制人填，新版本号留空强制人
+ * 回指自动带上（版本号 + 前版内容摘要作指纹），更正依据留空强制人填，新版本号留空强制人
  * 起——更正是新版本，不是改旧版本，页面上因此没有「编辑」。对照版本默认就是被更正的那一版。
  */
 export function correctionDraftOf(record: ReferenceSeriesRecord): SeriesDraft {
@@ -86,7 +86,7 @@ export function correctionDraftOf(record: ReferenceSeriesRecord): SeriesDraft {
     })),
     correction: {
       priorVersion: record.seriesVersion,
-      priorReferenceDigest: record.referenceDigest,
+      priorFingerprint: record.contentDigest,
       basis: '',
     },
     compareWithVersion: record.seriesVersion,
@@ -176,8 +176,8 @@ export function payloadOf(draft: SeriesDraft): SeriesRegistrationPayload {
       priorVersion: draft.correction.priorVersion.trim(),
       basis: draft.correction.basis.trim(),
     };
-    if (draft.correction.priorReferenceDigest !== '') {
-      payload.correction.priorReferenceDigest = draft.correction.priorReferenceDigest;
+    if (draft.correction.priorFingerprint !== '') {
+      payload.correction.priorFingerprint = draft.correction.priorFingerprint;
     }
   }
   if (draft.compareWithVersion.trim() !== '') {

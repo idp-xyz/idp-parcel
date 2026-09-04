@@ -256,7 +256,8 @@ func pricingScope() domain.PricingScopeID {
 }
 
 func reference(kind domain.ArtifactKind, id, version string) domain.VersionReference {
-	value, err := domain.NewVersionReference(kind, id, version, "sha256:syn-"+id+"-"+version)
+	// SYN 夹具只记 S，从来没有真摘要：引用只带三元，不再造 sha256:syn- 占位（ADR-0108）。
+	value, err := domain.NewVersionReferenceIdentity(kind, id, version)
 	must("版本引用 "+id, err)
 	return value
 }

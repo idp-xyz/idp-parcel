@@ -197,7 +197,7 @@ func TestPeekReferenceSeriesRegistrationReference(t *testing.T) {
 	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`{"canonicalization":"PRS-0","reference":{"kind":"reference-series","id":"s","version":"v1","digest":"d"}}`)); !errors.Is(err, domain.ErrCanonicalizationVersionUnsupported) {
 		t.Fatalf("别的形状被接受：%v", err)
 	}
-	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`{"canonicalization":"PRS-1","reference":{"kind":"pricing-plan","id":"s","version":"v1","digest":"d"}}`)); !errors.Is(err, domain.ErrReferenceSeriesRegistrationSnapshotInvalid) {
+	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`{"canonicalization":"PRS-2","reference":{"kind":"pricing-plan","id":"s","version":"v1"}}`)); !errors.Is(err, domain.ErrReferenceSeriesRegistrationSnapshotInvalid) {
 		t.Fatalf("非序列引用被接受：%v", err)
 	}
 	if _, err := domain.PeekReferenceSeriesRegistrationReference([]byte(`not json`)); !errors.Is(err, domain.ErrReferenceSeriesRegistrationSnapshotInvalid) {

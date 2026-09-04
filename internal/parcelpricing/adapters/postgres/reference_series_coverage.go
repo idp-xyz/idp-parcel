@@ -173,7 +173,8 @@ func (coverage *ReferenceSeriesCoverage) ListReferenceSeriesCoverage(
 			group.lastCall = *decision
 		}
 
-		reference, err := domain.NewVersionReference(domain.ArtifactReferenceSeries, seriesID, version, digest)
+		// 这条引用带的指纹是那一版登记的内容摘要（ADR-0108：有真摘要就带），不是身份的一部分。
+		reference, err := domain.NewVersionReferenceWithFingerprint(domain.ArtifactReferenceSeries, seriesID, version, digest)
 		if err != nil {
 			return nil, fmt.Errorf("list reference series coverage: %s/%s：%w", seriesID, version, err)
 		}

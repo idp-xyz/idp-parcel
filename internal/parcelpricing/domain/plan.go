@@ -329,7 +329,7 @@ func (plan PricingPlanVersion) valid() bool {
 	for _, required := range requiredReferences {
 		found := false
 		for _, reference := range plan.manifest.references {
-			if reference == required {
+			if reference.SameIdentity(required) {
 				found = true
 				break
 			}

@@ -158,9 +158,10 @@ export interface SeriesPeriodRecord {
  * - `periods`：该版全部期次，供「更正此版本」预填——不给就得让人重敲一遍，那正好制造更正要
  *   防的那类错误。
  *
- * `referenceDigest` 是登记时声明的**版本引用 digest**，与 `contentDigest`（PRS 内容摘要）是
- * 两回事：更正版本的回指要带它原样回去（服务端照实回指、不重铸）。页面上**不把它显示为
- * 「摘要」**，「内容摘要」一词只指 `contentDigest`。
+ * `referenceDigest` 是登记时声明的**版本引用指纹**（ADR-0108：可选、不进摘要、自身引用今天一律
+ * 留空），与 `contentDigest`（PRS 内容摘要）是两回事。更正版本的回指要带的是**前版的 `contentDigest`**
+ * 作指纹——那才是操作者手上有来源的东西。页面上**不把 `referenceDigest` 显示为「摘要」**，「内容
+ * 摘要」一词只指 `contentDigest`。
  */
 export interface ReferenceSeriesRecord {
   seriesId: string;
@@ -200,10 +201,13 @@ export interface ReferenceSeriesRecord {
 // 服务端答，页面只呈现。预览与登记收**同一份**载荷、走同一段解码，预览页上的内容摘要与登记册
 // 记下的逐字节相等（决定四）。
 
-/** 版本引用 digest 槽：更正回指带目录透出的 `referenceDigest`，缺则服务端铸声明令牌。 */
+/**
+ * 更正回指：`priorFingerprint` 带目录透出的前版 `contentDigest` 作指纹（ADR-0108 Decision 五），
+ * 缺则回指只带三元——服务端不再铸任何令牌顶替。
+ */
 export interface SeriesCorrectionPayload {
   priorVersion: string;
-  priorReferenceDigest?: string;
+  priorFingerprint?: string;
   basis: string;
 }
 

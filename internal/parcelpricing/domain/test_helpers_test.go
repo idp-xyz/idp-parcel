@@ -74,11 +74,24 @@ func money(t testing.TB, value string, currency domain.Currency) domain.Money {
 	return result
 }
 
+// versionReference 只带三元（ADR-0108）：SYN 夹具从来没有真摘要，此前那个 `sha256:syn-` 占位
+// 装在 digest 槽里假装是哈希，现在指纹如实留空。
 func versionReference(t testing.TB, kind domain.ArtifactKind, id, version string) domain.VersionReference {
 	t.Helper()
-	reference, err := domain.NewVersionReference(kind, id, version, "sha256:syn-"+id+"-"+version)
+	reference, err := domain.NewVersionReferenceIdentity(kind, id, version)
 	if err != nil {
 		t.Fatalf("version reference %s: %v", id, err)
+	}
+	return reference
+}
+
+// fingerprintedReference 是同一条引用带上一枚声明时附带的指纹的版本，给「带不带指纹摘要相同」
+// 那组用例用。
+func fingerprintedReference(t testing.TB, kind domain.ArtifactKind, id, version, fingerprint string) domain.VersionReference {
+	t.Helper()
+	reference, err := domain.NewVersionReferenceWithFingerprint(kind, id, version, fingerprint)
+	if err != nil {
+		t.Fatalf("fingerprinted version reference %s: %v", id, err)
 	}
 	return reference
 }

@@ -31,7 +31,7 @@ function record(over: Partial<ReferenceSeriesRecord> = {}): ReferenceSeriesRecor
     evidenceGrade: 'VERIFIABLE',
     canonicalization: 'c14n-1',
     contentDigest: 'sha256:content',
-    referenceDigest: 'declared:reference-series:SYN-FX-USD:v3',
+    referenceDigest: '',
     registeredAt: '2026-08-01T00:00:00Z',
     reviewCount: 1,
     approvedReviewCount: 1,
@@ -58,7 +58,7 @@ function completeDraft(over: Partial<SeriesDraft> = {}): SeriesDraft {
 }
 
 // Covers: 预填抄全部期次（缺席的 endsAt / evidenceRef 变成空串好让输入框绑定），更正回指带
-// 版本号与登记时声明的引用 digest，对照版本默认就是被更正的那一版；新版本号与依据留空。
+// 版本号与前版内容摘要作指纹（ADR-0108），对照版本默认就是被更正的那一版；新版本号与依据留空。
 test('更正预填抄该版全部期次并自动回指，新版本号与依据留空强制人填', () => {
   const draft = correctionDraftOf(record());
   equal(draft.seriesId, 'SYN-FX-USD');
@@ -72,7 +72,7 @@ test('更正预填抄该版全部期次并自动回指，新版本号与依据�
   ]);
   deepEqual(draft.correction, {
     priorVersion: 'v3',
-    priorReferenceDigest: 'declared:reference-series:SYN-FX-USD:v3',
+    priorFingerprint: 'sha256:content',
     basis: '',
   });
   equal(draft.compareWithVersion, 'v3');
@@ -124,12 +124,12 @@ test('取值拒指数记法与非数字，接受带符号与小数', () => {
 test('更正必须回指、写依据、且新版本号不同于被更正版本', () => {
   const draft = completeDraft({
     seriesVersion: 'v3',
-    correction: { priorVersion: 'v3', priorReferenceDigest: '', basis: '' },
+    correction: { priorVersion: 'v3', priorFingerprint: '', basis: '' },
   });
   const problems = draftProblems(draft);
   ok(problems.some((line) => line.startsWith('更正依据未填')));
   ok(problems.includes('新版本号不能与被更正的版本相同'));
-  const noPrior = completeDraft({ correction: { priorVersion: '', priorReferenceDigest: '', basis: 'x' } });
+  const noPrior = completeDraft({ correction: { priorVersion: '', priorFingerprint: '', basis: 'x' } });
   ok(draftProblems(noPrior).includes('更正必须回指被更正的版本'));
 });
 
@@ -168,9 +168,9 @@ test('草稿到载荷时可缺的键缺席而不是空串', () => {
   ok(!('evidenceRef' in payload.periods[0]));
 });
 
-// Covers: 更正载荷带回指与登记时声明的引用 digest（有则原样带回，服务端照实回指不重铸）；
+// Covers: 更正载荷带回指与前版内容摘要作指纹（有则原样带回，服务端不铸任何令牌顶替）；
 // 口径与对照版本按有无在场；各格两端空白去掉。
-test('更正载荷带回指与引用 digest，口径与对照版本按有无在场', () => {
+test('更正载荷带回指与前版摘要作指纹，口径与对照版本按有无在场', () => {
   const draft = correctionDraftOf(record());
   draft.seriesVersion = ' v4 ';
   draft.correction!.basis = ' 8 月 2 日那期抄错了 ';
@@ -179,15 +179,15 @@ test('更正载荷带回指与引用 digest，口径与对照版本按有无在�
   deepEqual(payload.quoteBasis, { policyId: 'PP-FX', policyVersion: '2' });
   deepEqual(payload.correction, {
     priorVersion: 'v3',
-    priorReferenceDigest: 'declared:reference-series:SYN-FX-USD:v3',
+    priorFingerprint: 'sha256:content',
     basis: '8 月 2 日那期抄错了',
   });
   equal(payload.compareWithVersion, 'v3');
 
   const noDigest = payloadOf(
-    completeDraft({ correction: { priorVersion: 'v1', priorReferenceDigest: '', basis: 'b' } }),
+    completeDraft({ correction: { priorVersion: 'v1', priorFingerprint: '', basis: 'b' } }),
   );
-  ok(!('priorReferenceDigest' in noDigest.correction!));
+  ok(!('priorFingerprint' in noDigest.correction!));
 });
 
 // Covers: 载荷键与键的书写顺序无关、与内容有关——预览之后改一格，键就变，登记按钮才收得回。

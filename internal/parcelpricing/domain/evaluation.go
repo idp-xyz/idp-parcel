@@ -784,7 +784,7 @@ func rateMaximumText(entry RateEntry) string {
 
 func manifestContains(manifest VersionManifest, expected VersionReference) bool {
 	for _, reference := range manifest.references {
-		if reference == expected {
+		if reference.SameIdentity(expected) {
 			return true
 		}
 	}

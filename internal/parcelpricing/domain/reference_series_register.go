@@ -19,7 +19,11 @@ var (
 // seriesCanonicalization 标识序列登记快照与其内容摘要所依据的文档形状。与 ADR-0014
 // 同一条纪律：摘要只在同一形状版本内可比，拓宽形状必须递增这个值，不就地改写既有形状。
 // 序列快照与价卡的 PPC 形状族各自演进，故各持一号。
-const seriesCanonicalization = "PRS-1"
+// PRS-2：版本引用的 digest 槽改为可选指纹且不进内容摘要（ADR-0108 Decision 二）。PRS-1 的
+// 摘要把自身引用、口径与回指上的 digest（真摘要、占位或 `declared:` 令牌）都算了进去，同一份
+// 登记在新算法下得出的摘要与快照里记的不等；不换号的话它会在重建门上被当成「快照被改过」，
+// 而实情是形状换了——所以按版本门拒，不按摘要不符拒。
+const seriesCanonicalization = "PRS-2"
 
 // SeriesPeriodValue 是一期序列取值：生效区间 [起, 止)，止点零值表示无上界（只许在
 // 最后一期）。取值凭证指可再次复核的公布记录或牌价记录本身（CONTEXT）；缺凭证的期次
@@ -339,10 +343,20 @@ func (registration ReferenceSeriesRegistration) Canonicalization() string {
 }
 
 // ContentDigest 是整版登记（含每期取值与凭证引用）的内容指纹，按 PRS 形状规范化后
-// 计算，只在同一形状版本内可比。
+// 计算，只在同一形状版本内可比。三处版本引用只以三元入摘要（ADR-0108 Decision 二）：
+// 自身引用、口径与回指上声明时附带的指纹是来源痕迹不是内容，带不带它摘要都得一样。
 func (registration ReferenceSeriesRegistration) ContentDigest() string {
 	document := registration.snapshotDocument()
 	document.ContentDigest = ""
+	document.Reference = document.Reference.identityOnly()
+	if document.QuoteBasis != nil {
+		basis := document.QuoteBasis.identityOnly()
+		document.QuoteBasis = &basis
+	}
+	if document.PriorVersion != nil {
+		prior := document.PriorVersion.identityOnly()
+		document.PriorVersion = &prior
+	}
 	return hashCanonical(document)
 }
 

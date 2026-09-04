@@ -32,11 +32,15 @@ type weightSnapshot struct {
 	Unit  string          `json:"unit"`
 }
 
+// versionReferenceSnapshot 是版本引用在各快照文档里的形状：三元必在，指纹可缺（ADR-0108）。
+// Digest 只为读回旧形状而留——ADR-0108 之前那一格装的是真摘要、占位或令牌，读回时一律放进
+// 可选指纹；本构建写出的快照不再写它。
 type versionReferenceSnapshot struct {
-	Kind    string `json:"kind"`
-	ID      string `json:"id"`
-	Version string `json:"version"`
-	Digest  string `json:"digest"`
+	Kind        string `json:"kind"`
+	ID          string `json:"id"`
+	Version     string `json:"version"`
+	Fingerprint string `json:"fingerprint,omitempty"`
+	Digest      string `json:"digest,omitempty"`
 }
 
 type periodSnapshot struct {
@@ -298,20 +302,32 @@ func weightFrom(snapshot weightSnapshot) Weight {
 
 func versionReferenceOf(reference VersionReference) versionReferenceSnapshot {
 	return versionReferenceSnapshot{
-		Kind:    string(reference.kind),
-		ID:      reference.id,
-		Version: reference.version,
-		Digest:  reference.digest,
+		Kind:        string(reference.kind),
+		ID:          reference.id,
+		Version:     reference.version,
+		Fingerprint: reference.fingerprint,
 	}
 }
 
+// versionReferenceFrom 读回一条引用。新形状带 fingerprint；旧形状只有 digest，读回时放进
+// 可选指纹（ADR-0108 Consequences 点名的那一格兼容读法）。两者都在时以新字段为准。
 func versionReferenceFrom(snapshot versionReferenceSnapshot) VersionReference {
-	return VersionReference{
-		kind:    ArtifactKind(snapshot.Kind),
-		id:      snapshot.ID,
-		version: snapshot.Version,
-		digest:  snapshot.Digest,
+	fingerprint := snapshot.Fingerprint
+	if fingerprint == "" {
+		fingerprint = snapshot.Digest
 	}
+	return VersionReference{
+		kind:        ArtifactKind(snapshot.Kind),
+		id:          snapshot.ID,
+		version:     snapshot.Version,
+		fingerprint: fingerprint,
+	}
+}
+
+// identityOnly 把一条引用快照抹去指纹，只剩三元——序列登记的内容摘要拿它当输入，指纹因此
+// 不进任何摘要（ADR-0108 Decision 二）。
+func (snapshot versionReferenceSnapshot) identityOnly() versionReferenceSnapshot {
+	return versionReferenceSnapshot{Kind: snapshot.Kind, ID: snapshot.ID, Version: snapshot.Version}
 }
 
 func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {

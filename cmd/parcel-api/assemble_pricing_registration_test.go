@@ -134,12 +134,11 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 	if rows[0].EvidenceGrade != previewed.EvidenceGrade.String() {
 		t.Fatalf("预览等级 %s 与登记册等级 %s 不同", previewed.EvidenceGrade, rows[0].EvidenceGrade)
 	}
-	if rows[0].ReferenceDigest != registerCommand.Registration.Reference().Digest() ||
-		rows[0].ReferenceDigest != "declared:reference-series/SYN-PRC-PREVIEW-FUEL@v1" {
-		t.Fatalf("册上的引用 digest = %q，想要解码器铸的声明令牌", rows[0].ReferenceDigest)
+	if rows[0].ReferenceDigest != "" || registerCommand.Registration.Reference().HasFingerprint() {
+		t.Fatalf("自身引用只带三元（ADR-0108 Decision 五），册上透出的引用指纹应为空，实得 %q", rows[0].ReferenceDigest)
 	}
 
-	// 更正版本：回指 v1 并带上册上透出的引用 digest，预览要取回 v1 逐期比对。
+	// 更正版本：回指 v1 并带上册上透出的前版内容摘要作指纹，预览要取回 v1 逐期比对。
 	correction := decodeSeriesPayload(t, `{
 	  "seriesId": "SYN-PRC-PREVIEW-FUEL", "seriesVersion": "v2", "kind": "FUEL_RATE",
 	  "sourceIdentifier": "SYN-CARRIER/fuel-weekly-bulletin",
@@ -147,7 +146,7 @@ func TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload(t *testing.T) {
 	    {"startsAt": "2026-08-03T00:00:00Z", "endsAt": "2026-08-10T00:00:00Z", "value": "0.23", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W32"},
 	    {"startsAt": "2026-08-10T00:00:00Z", "value": "0.24", "evidenceRef": "SYN-EVIDENCE/fuel-2026-W33"}
 	  ],
-	  "correction": {"priorVersion": "v1", "priorReferenceDigest": "`+rows[0].ReferenceDigest+`", "basis": "SYN-CORRECTION/fuel-w32-transcription"}
+	  "correction": {"priorVersion": "v1", "priorFingerprint": "`+rows[0].ContentDigest+`", "basis": "SYN-CORRECTION/fuel-w32-transcription"}
 	}`)
 	correctionPreview, err := correction.PreviewCommand(tenant, registrant)
 	if err != nil {
@@ -180,7 +179,7 @@ func decodeSeriesPayload(t *testing.T, raw string) pricinghttp.ReferenceSeriesRe
 
 func syntheticPricingReference(t *testing.T, artifact pricingdomain.ArtifactKind, id, version string) pricingdomain.VersionReference {
 	t.Helper()
-	reference, err := pricingdomain.NewVersionReference(artifact, id, version, "sha256:syn-"+id+"-"+version)
+	reference, err := pricingdomain.NewVersionReferenceIdentity(artifact, id, version)
 	if err != nil {
 		t.Fatalf("构造版本引用 %s/%s：%v", id, version, err)
 	}

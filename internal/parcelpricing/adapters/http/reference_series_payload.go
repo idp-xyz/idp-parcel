@@ -19,28 +19,17 @@ import (
 // 作为入参交进来；载荷里出现 tenant / registrant 之类的键一律按未知键拒——严格解码不是挑剔，是
 // 不让自报身份有地方落。
 //
-// **三处 domain.VersionReference 的 digest 槽装的是声明令牌，不是摘要**（MCP-3 2026-09-03 裁决）。
-// 领域要求引用的 digest 非空，却从不拿它比对任何内容——它只参与身份与指纹；而表单路径上没有任何
-// 一处能给出真正的摘要：自身引用不能装 PRS 内容摘要，因为快照文档把引用（连 digest）折进了内容
-// 摘要，装进去就自指循环；口径引用指向 party-commercial 的价格政策版本，其读口今天不透出
-// content_digest；更正回指的那一版册上有登记时声明的引用 digest，逐版本读面透出后照实回指即可。
-// 令牌用 `declared:` 前缀自报为声明——比一个长得像哈希而不是哈希的串诚实。**只在新铸引用时铸**：
-// 载荷带来的 digest（回指与口径）照实用，不重铸。领域的 NewVersionReference 不为此改动。
-// 这一格的领域改法（PRS-2 排除引用槽 / PC 读口透 digest / 把 digest 从引用身份里拿掉）立在票
-// pricing-reference-series-operations/09，需 ADR，不在本票。
+// **三处 domain.VersionReference 各归其位，本包不铸任何摘要或令牌**（ADR-0108 Decision 五）：
+// 版本引用的身份是三元，指纹是「声明时手上有什么」的可选痕迹。自身引用只带三元——登记的内容摘要
+// 是登记自己的字段，不再塞进自身引用；口径引用只带三元——party-commercial 的读口今天不透出
+// content_digest，日后透出可补进指纹，那是可选增强不是前提；更正回指带三元加前版登记的内容摘要
+// 作指纹（逐版本读面的 contentDigest，操作者手上有的就是它）。此前这里以 `declared:` 令牌填满
+// 领域要求非空的 digest 槽，ADR-0108 把 digest 从身份里拿掉后令牌失去对象，随之退役；预览与登记
+// 共用同一条构造（ADR-0101 决定四）因为不再铸任何东西而更简单。
 
 // ErrOperatorIdentityMissing 表示调用方没交来租户或登记责任方——那不是载荷的错（载荷本来就不该
 // 带它们），是 Intake 没拿到操作者信封就来翻译。与 ErrMalformedRequest 分开：前者改载荷没用。
 var ErrOperatorIdentityMissing = errors.New("parcel pricing http: operator identity (tenant, registrant) is required")
-
-// declaredTokenPrefix 是声明令牌的前缀，自报「这是声明不是哈希」。
-const declaredTokenPrefix = "declared:"
-
-// DeclaredReferenceToken 铸一个版本引用的声明令牌：declared:<kind>/<id>@<version>。它是预览与登记
-// 共用的唯一一条铸法——两口对同一份载荷铸出不同令牌，摘要就不同，ADR-0101 决定四那句硬句就破了。
-func DeclaredReferenceToken(kind domain.ArtifactKind, id, version string) string {
-	return declaredTokenPrefix + string(kind) + "/" + id + "@" + version
-}
 
 // ReferenceSeriesRegistrationPayload 是载荷的线格式。字段与 domain.ReferenceSeriesRegistrationSpec
 // 一一对应，只少身份两格；不引入领域里没有的概念。
@@ -57,7 +46,7 @@ type ReferenceSeriesRegistrationPayload struct {
 }
 
 // ReferenceSeriesQuoteBasisPayload 指一版商业价格政策（汇率必备，燃油不得有——由领域构造门判）。
-// Digest 可缺：缺则铸声明令牌；PC 读口透出 content_digest 之后表单带真值过来，这里照实用。
+// Digest 可缺：缺则指纹留空；PC 读口透出 content_digest 之后表单带真值过来，这里照实放进指纹。
 type ReferenceSeriesQuoteBasisPayload struct {
 	PolicyID      string `json:"policyId"`
 	PolicyVersion string `json:"policyVersion"`
@@ -73,12 +62,13 @@ type ReferenceSeriesPeriodPayload struct {
 	EvidenceRef string `json:"evidenceRef,omitempty"`
 }
 
-// ReferenceSeriesCorrectionPayload 声明更正关系：回指同序列的哪一版、凭什么。PriorReferenceDigest
-// 是那一版登记时声明的引用 digest（逐版本读面的 referenceDigest），带来就照实回指，缺则铸令牌。
+// ReferenceSeriesCorrectionPayload 声明更正关系：回指同序列的哪一版、凭什么。PriorFingerprint 是
+// 前版登记的内容摘要（逐版本读面的 contentDigest），作回指的指纹；操作者手上没有就留空，回指只带
+// 三元——不铸任何东西顶替（ADR-0108 Decision 五）。
 type ReferenceSeriesCorrectionPayload struct {
-	PriorVersion         string `json:"priorVersion"`
-	PriorReferenceDigest string `json:"priorReferenceDigest,omitempty"`
-	Basis                string `json:"basis"`
+	PriorVersion     string `json:"priorVersion"`
+	PriorFingerprint string `json:"priorFingerprint,omitempty"`
+	Basis            string `json:"basis"`
 }
 
 // DecodeReferenceSeriesRegistrationPayload 只做结构解码：JSON 合法、键都认识。字段值对不对留给
@@ -103,9 +93,7 @@ func (payload ReferenceSeriesRegistrationPayload) Registration(
 		return domain.ReferenceSeriesRegistration{}, ErrOperatorIdentityMissing
 	}
 
-	reference, err := domain.NewVersionReference(
-		domain.ArtifactReferenceSeries, payload.SeriesID, payload.SeriesVersion,
-		DeclaredReferenceToken(domain.ArtifactReferenceSeries, payload.SeriesID, payload.SeriesVersion))
+	reference, err := domain.NewVersionReferenceIdentity(domain.ArtifactReferenceSeries, payload.SeriesID, payload.SeriesVersion)
 	if err != nil {
 		return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: series reference: %v", ErrMalformedRequest, err)
 	}
@@ -119,11 +107,8 @@ func (payload ReferenceSeriesRegistrationPayload) Registration(
 	}
 
 	if payload.QuoteBasis != nil {
-		digest := payload.QuoteBasis.Digest
-		if digest == "" {
-			digest = DeclaredReferenceToken(domain.ArtifactCommercialPolicy, payload.QuoteBasis.PolicyID, payload.QuoteBasis.PolicyVersion)
-		}
-		basis, err := domain.NewVersionReference(domain.ArtifactCommercialPolicy, payload.QuoteBasis.PolicyID, payload.QuoteBasis.PolicyVersion, digest)
+		basis, err := domain.NewVersionReferenceWithFingerprint(
+			domain.ArtifactCommercialPolicy, payload.QuoteBasis.PolicyID, payload.QuoteBasis.PolicyVersion, payload.QuoteBasis.Digest)
 		if err != nil {
 			return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: quote basis: %v", ErrMalformedRequest, err)
 		}
@@ -140,11 +125,8 @@ func (payload ReferenceSeriesRegistrationPayload) Registration(
 	}
 
 	if payload.Correction != nil {
-		digest := payload.Correction.PriorReferenceDigest
-		if digest == "" {
-			digest = DeclaredReferenceToken(domain.ArtifactReferenceSeries, payload.SeriesID, payload.Correction.PriorVersion)
-		}
-		prior, err := domain.NewVersionReference(domain.ArtifactReferenceSeries, payload.SeriesID, payload.Correction.PriorVersion, digest)
+		prior, err := domain.NewVersionReferenceWithFingerprint(
+			domain.ArtifactReferenceSeries, payload.SeriesID, payload.Correction.PriorVersion, payload.Correction.PriorFingerprint)
 		if err != nil {
 			return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: correction prior version: %v", ErrMalformedRequest, err)
 		}
