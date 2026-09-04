@@ -1,7 +1,7 @@
 # 参考序列写面的主路径缺两件后端：逐版本读面的两组字段，与一个「先校验、回摘要、尚未登记」的草稿步骤
 
 Category: enhancement
-Status: in-progress——MCP-5（2026-09-03 按 MCP-3 派工认领；选形已由 MCP-3 裁、决定八声明见 Comments；04b 余下三件在本票合做）
+Status: in-progress——MCP-5（2026-09-03 按 MCP-3 派工认领；选形已由 MCP-3 裁、决定八声明见 Comments；04b 余下三件在本票合做；2026-09-04 后端三件与前端三件均已落在分支 `mcp5-pr08`，待 rebase 到 main 后按验过的 SHA 交推）
 Blocked by: 无（04a 端点已在表上 `9035df7`；04b 已交可交的两件）
 
 ## 为什么立
@@ -112,3 +112,37 @@ Blocked by: 无（04a 端点已在表上 `9035df7`；04b 已交可交的两件�
 
   **顺序**：先做不依赖那一裁的部分——逐版本读面两组字段、领域逐期差异纯函数、预览用例与
   端点、前端骨架；再按裁决补解码器与表单的引用格。
+
+- 2026-09-04 · MCP-5（重启后的新会话）：**转录上一条「已问 MCP-3 裁」的裁决，并记本票两笔落地。**
+
+  **裁决（MCP-3 2026-09-03，前一会话已实现进解码器但未转录进票面，原文见传输层
+  `reference_series_payload.go` 文件头）**：三处 `domain.VersionReference` 的 digest 槽装**声明令牌**
+  `declared:<kind>/<id>@<version>`，不是摘要；只在新铸引用时铸，载荷带来的（更正回指带目录透出的
+  `referenceDigest`、口径带 PC 透出的 digest）照实用不重铸；预览与登记共用同一条铸法（决定四）。
+  领域的 `NewVersionReference` 不为此改动。**领域改法另立票 [09](./09-version-reference-digest-has-no-source-on-the-operator-path.md)
+  需 ADR**——解码器注释原写「票 10」而票 10 不存在，本次改指 09。
+
+  **落地一：`5c30c9d`（封存笔，非集成候选；rebase 到 main 前为 `4ade587`）**——前一会话 09-03 19:56–20:18 的未提交现场，MCP-1
+  于 09-04 指令封存、原样入库一字未改。内容：逐版本读面两组字段（`ports.ReferenceSeriesCatalogueRow`
+  + postgres 转写 + http 行体）、领域逐期差异纯函数 `reference_series_diff.go`、预览用例
+  `application/preview_reference_series.go`、预览端点 + 产品定义载荷解码器 + `cmd/parcel-api` 装配
+  （挂 `UnconfiguredIntake{}`，今天诚实答 403）、前端 `api.ts` 类型与 `series-form.ts` 纯逻辑。
+  决定四那句硬句的钉：解码层 `TestSeriesPayloadYieldsOneRegistrationForPreviewAndRegistration`，
+  装配层真库用例 `TestThePreviewAndTheRegisterAgreeOnTheDigestForOnePayload`。
+
+  **落地二（本笔，SHA 见提交）**——前端三件：目录页「复核状态」列（`n/m 条通过` + 最近复核结论与时刻，
+  **不含在用**）；「登记序列」签 = 逐字段表单 + 预览，`SeriesRegistrationForm.tsx`，登记按钮只在
+  「预览过的就是眼前这一份」（`payloadKey` 相等）时可用；行动作「更正此版本」预填全部期次 + 自动回指
+  （版本号 + `referenceDigest`）+ 强制更正依据，更正模式锁定序列标识与种类，页面上没有「编辑」。
+  汇率口径选单只列声明了 fx 口径的政策版本，候选读口读不到时退回两格手填。另：`series-form.test.ts`
+  补上（此前文件头声称「node:test 钉着」却没有测试）；`catalogue-filter.test.ts` 夹具补新增必填键。
+
+  **一处诚实性修正**：`api.ts` 原写「两种形状在同一端点上由 Intake 分辨」是既成事实句，而今天只有
+  `UnconfiguredIntake{}`、分辨逻辑尚无代码；改成「接真 Intake 时的一条要求」。
+
+  **验证（于本笔）**：`go build ./...` 绿、`go vet` 绿、`go test -count=1 ./internal/parcelpricing/...
+  ./cmd/parcel-api/...` 绿**含 PG**（设 DSN，`adapters/postgres` 47 例 PASS 非 SKIP）；前端 `tsc --noEmit`
+  绿、`node scripts/run-tests.mjs` 47/47。未跑 `-race`（本机走 WSL，另计）。
+
+  **未做**：页面级冒烟（vite + 真 API）——今天两个端点都在未配置那堵墙前答 403，冒烟只能看见 403 格
+  的文案，那一格已由 http 单测钉。**分支落后 main 41 笔**（09-04 13:20 量），交推前要 rebase 并重验。

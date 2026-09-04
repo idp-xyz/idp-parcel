@@ -269,8 +269,10 @@ export function previewReferenceSeries(
 
 /**
  * 表单路径的登记：与「高级」JSON 口打同一个端点，送的是产品定义的载荷而不是领域折装快照。
- * 两种形状在同一端点上由 Intake 分辨（快照带 `canonicalization`/`contentDigest` 键，载荷没有）；
- * 今天两条路都在同一堵墙前答 403。
+ * 两种形状在同一端点上**要由真 Intake 分辨**（快照带 `canonicalization`/`contentDigest` 键，
+ * 载荷没有）——那是接真 Intake 时的一条要求，今天挂的是字面量 `UnconfiguredIntake{}`，两条路
+ * 都在同一堵墙前答 403，分辨逻辑尚无代码；服务端解码器（`ReferenceSeriesRegistrationPayload`）
+ * 与登记命令的翻译已在，接上即用。
  */
 export function registerReferenceSeriesPayload(
   payload: SeriesRegistrationPayload,

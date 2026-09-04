@@ -26,8 +26,8 @@ import (
 // content_digest；更正回指的那一版册上有登记时声明的引用 digest，逐版本读面透出后照实回指即可。
 // 令牌用 `declared:` 前缀自报为声明——比一个长得像哈希而不是哈希的串诚实。**只在新铸引用时铸**：
 // 载荷带来的 digest（回指与口径）照实用，不重铸。领域的 NewVersionReference 不为此改动。
-// 这一格的领域改法（PRS-2 排除引用槽 / PC 读口透 digest / 把 digest 从引用身份里拿掉）立在票 10，
-// 需 ADR，不在本票。
+// 这一格的领域改法（PRS-2 排除引用槽 / PC 读口透 digest / 把 digest 从引用身份里拿掉）立在票
+// pricing-reference-series-operations/09，需 ADR，不在本票。
 
 // ErrOperatorIdentityMissing 表示调用方没交来租户或登记责任方——那不是载荷的错（载荷本来就不该
 // 带它们），是 Intake 没拿到操作者信封就来翻译。与 ErrMalformedRequest 分开：前者改载荷没用。

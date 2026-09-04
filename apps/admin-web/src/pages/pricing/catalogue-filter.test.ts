@@ -18,7 +18,11 @@ function record(over: Partial<ReferenceSeriesRecord>): ReferenceSeriesRecord {
     evidenceGrade: 'S',
     canonicalization: 'c14n-1',
     contentDigest: 'digest',
+    referenceDigest: 'declared:reference-series:SYN-PRC-FUEL:v1',
     registeredAt: '2026-08-01T00:00:00Z',
+    reviewCount: 0,
+    approvedReviewCount: 0,
+    periods: [{ startsAt: '2026-08-01T00:00:00Z', value: '0.12' }],
     ...over,
   };
 }

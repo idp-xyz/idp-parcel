@@ -11,6 +11,7 @@ import {
   evidenceGradeLabels,
   labelOf,
   problemNote,
+  reviewDecisionLabels,
   seriesKindLabels,
 } from './presentation';
 import {
@@ -22,8 +23,10 @@ import {
   type ReferenceSeriesRecord,
 } from './api';
 import { SeriesReviewPanel, type SeriesReviewTarget } from './SeriesReviewPanel';
+import { SeriesRegistrationForm } from './SeriesRegistrationForm';
 import { CoverageSummaryBar } from './CoverageSummaryBar';
 import { visibleSeriesRows, type SeriesKey } from './catalogue-filter';
+import { correctionDraftOf, emptySeriesDraft } from './series-form';
 
 const info = moduleInfoById['reference-series'];
 
@@ -96,6 +99,29 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
       ),
   },
   {
+    id: 'review-status',
+    header: '复核状态',
+    className: 'w-[170px]',
+    // 只有事实，没有「在用」：在用是相对评价形成时刻派生的结论，目录页没有那个时刻，它归
+    // 覆盖摘要条（票 04 owner 裁决）。两计数总在场，无复核是 0 条不是缺格。
+    render: (row) =>
+      row.reviewCount === 0 ? (
+        <span className="text-idpxyz-textMuted">未复核</span>
+      ) : (
+        <div>
+          <div className="text-[12px]">
+            {row.approvedReviewCount}/{row.reviewCount} 条通过
+          </div>
+          {row.lastReviewDecision && row.lastReviewedAt ? (
+            <div className="text-[11px] text-idpxyz-textMuted">
+              最近：{labelOf(reviewDecisionLabels, row.lastReviewDecision)} ·{' '}
+              <span className="font-mono">{row.lastReviewedAt}</span>
+            </div>
+          ) : null}
+        </div>
+      ),
+  },
+  {
     id: 'canon',
     header: '规范化 / 摘要',
     render: (row) => (
@@ -119,29 +145,37 @@ const columns: ListColumn<ReferenceSeriesRecord>[] = [
 ];
 
 // 行动作列单独拼装：它要 setState，而上面那张表是模块级常量。
-function columnsWithReview(
+// 两个动作都不改原行：复核是追加在版本之旁的独立事实，更正是登记一个回指它的新版本。
+// 页面上因此没有「编辑」——登记册不可覆盖（ADR-0013）。
+function columnsWithActions(
   onReview: (target: SeriesReviewTarget) => void,
+  onCorrect: (row: ReferenceSeriesRecord) => void,
 ): ListColumn<ReferenceSeriesRecord>[] {
   return [
     ...columns,
     {
-      id: 'review',
-      header: '复核',
+      id: 'actions',
+      header: '动作',
       align: 'center',
-      className: 'w-[72px]',
+      className: 'w-[200px]',
       render: (row) => (
-        <Button
-          variant="outline"
-          onClick={() =>
-            onReview({
-              seriesId: row.seriesId,
-              seriesVersion: row.seriesVersion,
-              registrant: row.registrant,
-            })
-          }
-        >
-          复核
-        </Button>
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() =>
+              onReview({
+                seriesId: row.seriesId,
+                seriesVersion: row.seriesVersion,
+                registrant: row.registrant,
+              })
+            }
+          >
+            复核
+          </Button>
+          <Button variant="outline" onClick={() => onCorrect(row)}>
+            更正此版本
+          </Button>
+        </div>
       ),
     },
   ];
@@ -205,18 +239,28 @@ function viewStateOf(
 
 /**
  * 计价参考序列:已登记序列版本的查阅/复核面,外加登记签(ADR-0085,票
- * admin-write-faces/01 切片 01b)。
+ * admin-write-faces/01 切片 01b;逐字段表单与预览见票 pricing-reference-series-operations/08)。
  *
- * 登记签只有登记一个动作,没有行级修改或删除面:参考序列只登记不产生数值(ADR-0013),
- * 数值由外部来源产生;登记册本身不可覆盖。
+ * 行级动作只有「复核」与「更正此版本」,没有修改或删除面:参考序列只登记不产生数值
+ * (ADR-0013),数值由外部来源产生;登记册本身不可覆盖,更正是登记一个回指原版的新版本。
+ *
+ * `reloadToken` 由页面持有而不在本组件内:登记签与更正面板登记成功后目录要跟着刷新,而
+ * 登记签是本组件的兄弟不是子孙。
  */
-function ReferenceSeriesTable() {
+function ReferenceSeriesTable({
+  reloadToken,
+  requestReload,
+}: {
+  reloadToken: number;
+  requestReload: () => void;
+}) {
   const [keyword, setKeyword] = useState('');
   const [answer, setAnswer] = useState<ApiResult<ReferenceSeriesListResponseBody> | null>(
     null,
   );
-  const [reloadToken, setReloadToken] = useState(0);
+  // 复核面板与更正面板只开一个：两者都挂在目录之下，同时开着会让人把 A 的依据写到 B 里。
   const [reviewing, setReviewing] = useState<SeriesReviewTarget | null>(null);
+  const [correcting, setCorrecting] = useState<ReferenceSeriesRecord | null>(null);
   // 「只看这条序列」与搜索词是两种收窄，分开持有；判据在 catalogue-filter.ts。
   const [focus, setFocus] = useState<SeriesKey | null>(null);
 
@@ -231,9 +275,17 @@ function ReferenceSeriesTable() {
     };
   }, [reloadToken]);
 
-  const retry = () => setReloadToken((token) => token + 1);
+  const retry = requestReload;
   const rows = answer?.kind === 'outcome' ? answer.body.series : [];
   const visibleRows = visibleSeriesRows(rows, { focus, keyword });
+  const openReview = (target: SeriesReviewTarget) => {
+    setCorrecting(null);
+    setReviewing(target);
+  };
+  const openCorrection = (row: ReferenceSeriesRecord) => {
+    setReviewing(null);
+    setCorrecting(row);
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -255,7 +307,7 @@ function ReferenceSeriesTable() {
               : `共 ${visibleRows.length} 条`
             : undefined
         }
-        columns={columnsWithReview(setReviewing)}
+        columns={columnsWithActions(openReview, openCorrection)}
         rows={visibleRows}
         rowKey={(row) => `${row.seriesId}@${row.seriesVersion}`}
         viewState={viewStateOf(answer, rows.length, retry)}
@@ -268,28 +320,47 @@ function ReferenceSeriesTable() {
           onClose={() => setReviewing(null)}
         />
       ) : null}
+      {correcting ? (
+        <SeriesRegistrationForm
+          // 同一条理由：换一行更正时重建表单，预填与预览都是上一行的。
+          key={`${correcting.seriesId}@${correcting.seriesVersion}`}
+          initialDraft={correctionDraftOf(correcting)}
+          onRecorded={requestReload}
+          onClose={() => setCorrecting(null)}
+        />
+      ) : null}
     </div>
   );
 }
 
 export function ReferenceSeriesPage() {
+  const [reloadToken, setReloadToken] = useState(0);
+  const requestReload = () => setReloadToken((token) => token + 1);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">参考序列</TabsTrigger>
+          {/* 运营配置员的主路径：逐字段表单 + 提交前预览（ADR-0101 决定一；本册按决定八
+              自裁为「逐字段表单 + 无持久化校验预览」，理由见票 pricing-reference-series-operations/08）。 */}
+          <TabsTrigger value="form">登记序列</TabsTrigger>
           {/* 「高级」二字是 ADR-0101 决定一的落点，不是措辞偏好：JSON 快照口退为受控批量
-              口的在线镜像，**不是运营配置员的主路径**。主路径（逐字段表单 + 提交前预览）
-              要一个「先校验、回摘要与证据等级、尚未登记」的后端步骤，本册今天没有——同
-              ADR 决定三、四为价卡立的那套草稿/预览机制，参考序列册按决定八另裁另建。
-              在那之前这一签仍是唯一在线入口，所以它留着而不是藏起来。 */}
+              口的在线镜像，**不是运营配置员的主路径**。它留着而不是藏起来，因为 API 集成方
+              与批量登记仍走这一形，且两条路打的是同一个端点、同一段登记用例。 */}
           <TabsTrigger value="register">高级：JSON 登记口</TabsTrigger>
         </TabsList>
         <TabsContent
           value="catalog"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <ReferenceSeriesTable />
+          <ReferenceSeriesTable reloadToken={reloadToken} requestReload={requestReload} />
+        </TabsContent>
+        <TabsContent
+          value="form"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <SeriesRegistrationForm initialDraft={emptySeriesDraft()} onRecorded={requestReload} />
         </TabsContent>
         <TabsContent
           value="register"
@@ -299,7 +370,7 @@ export function ReferenceSeriesPage() {
             moduleId="reference-series"
             title="登记参考序列版本（高级：受控批量口的在线镜像）"
             endpoint="POST /pricing-reference-series-registrations"
-            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind reference-series -file 吃的同一份。这是受控批量口的在线镜像，供 API 集成方与批量登记用；运营配置员的主路径是逐字段表单加提交前预览（证据等级、内容摘要、与上一版逐期差异），那一路需要一个先校验、回摘要而尚未登记的后端步骤，本册今天还没有——ADR-0101 决定三、四已为价卡立了同构的草稿与预览机制，本册按决定八另裁另建。在那之前这一口仍是唯一在线入口。"
+            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind reference-series -file 吃的同一份。这是受控批量口的在线镜像，供 API 集成方与批量登记用；运营配置员的主路径是「登记序列」签的逐字段表单加提交前预览（证据等级、内容摘要、与对照版本逐期差异）。两条路打同一个端点、消费同一登记用例，答案代数一致。"
             submit={registerReferenceSeries}
             outcomeLabels={registrationOutcomeLabels}
             problemNote={problemNote}

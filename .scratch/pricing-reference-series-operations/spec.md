@@ -28,6 +28,8 @@ Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`）
 | [05](issues/05-coverage-horizon-and-blocked-evaluations-read-face.md) | 覆盖地平线与被挂起评价联动的读面 | ports + postgres + admin-web | 03 |
 | [06](issues/06-source-connector-framework-and-cfets-connector.md) | 来源连接器框架 + 首个连接器（CFETS 中间价）；免复核声明格 | adapters | 03；**draft**：出网方式待定 |
 | [07](issues/07-customs-valuation-rate-series-kind.md) | 海关计税汇率作为第三种序列种类？消费方是谁？ | 跨上下文 | **draft**：待裁 |
+| [08](issues/08-series-write-face-needs-a-draft-and-a-version-read-face.md) | 逐版本读面两组字段；无持久化校验预览端点；管理台复核状态列 / 逐字段表单 / 更正预填（04b 余件并入） | ports + postgres + http + admin-web | 04a |
+| [09](issues/09-version-reference-digest-has-no-source-on-the-operator-path.md) | 版本引用 digest 在操作者路径上没有来源：声明令牌是过渡，领域改法要 ADR | domain（跨 PC 读口） | 08；**draft**：需 ADR |
 
 ## 边界
 
