@@ -42,7 +42,7 @@ Date: 2026-09-03
 ## Consequences
 
 - `transport-fulfillment` `CONTEXT.md`：Language 增「实际承运商判断」词条，Rules 增「实际承运商判断」一节，Lifecycles 增同名一节，Boundaries 增一条身份边界句——均为追加，既有句一字不改。`GLOSSARY.md` 在「实际承运商」下增「实际承运商判断」条。
-- 票 tf-segment-lifecycle-closure/02 转 ready-for-agent，形状：`internal/transportfulfillment/domain` 新聚合（判断版本、判断值两支、待确认三原因、来源四格、业务时间不早于段成立的构造门、追加不覆盖）与重建门；`ports/` 新登记册端口；`application/` 一个「形成实际承运商判断」用例（收一条合格证据引用 + 它指名的承运主体引用或名称素材，查 PC 身份读口，形成新版本）与一个段成立时铸第一版的挂点（挂在 `enterFulfillmentSegment` 落库之后，与票 tf-segment/03 的内部触发同形）；`adapters/postgres/` 登记册 + 迁移（追加式版本表，`0012` 起按当时下一号）；`adapters/partycommercial/` 一份身份存在性读口的消费侧适配器（ADR-0025）。**不改** `actual_fulfillment_segment.go` 的任何导出签名。
+- 票 tf-segment-lifecycle-closure/02 转 ready-for-agent，形状：`internal/transportfulfillment/domain` 新聚合（判断版本、判断值两支、待确认三原因、来源四格、业务时间不早于段成立的构造门、追加不覆盖）与重建门；`ports/` 新登记册端口；`application/` 一个「形成实际承运商判断」用例（收一条合格证据引用 + 它指名的承运主体引用或名称素材，查 PC 身份读口，形成新版本）与一个段成立时铸第一版的挂点（挂在 `enterFulfillmentSegment` 落库之后，与票 tf-segment/03 的内部触发同形）；`adapters/postgres/` 登记册 + 迁移（追加式版本表，编号取实现落地时 TF 的下一号——写本记录时是 `0012`，实现票开工时 `0012` 已被 label-channel/18 用去，实际落在 `0013`）；`adapters/partycommercial/` 一份身份存在性读口的消费侧适配器（ADR-0025）。**不改** `actual_fulfillment_segment.go` 的任何导出签名。
 - 消费方：`visibility-exception` 的投影若要显示承运商，读的是判断的当前版本而不是段上的字段；`parcel-shipment` 面单渠道服务的终局判断（「实际承运商首次有效收寄即形成终局」）读的是收寄事实而不是判断——两条读路不合并，判断待确认不阻塞终局。
 - mechanism-executor-triage 「第四格」表里这一族的处置从「先裁形状、可能裁成留空」落为「已裁形状，进实现票」，由该目录所有者在其表内追一行；本记录不代改。
 - 承运商身份的登记面在 PC（参与方册），本记录不给 TF 开任何身份写口。

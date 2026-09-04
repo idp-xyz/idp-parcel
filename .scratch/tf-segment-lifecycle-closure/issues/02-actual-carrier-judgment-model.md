@@ -1,7 +1,7 @@
 # 实际承运商判断：有语言无形状
 
 Category: enhancement
-Status: ready-for-agent——形状已裁（2026-09-03，MCP-3 过 `/domain-modeling`，owner 授权自决），落 [ADR-0103](../../../docs/adr/0103-actual-carrier-judgment-is-a-versioned-record-per-segment-with-pending-as-a-value.md) 与 TF `CONTEXT.md` 三处追加；四问答案与要做的见文末
+Status: in-progress——MCP-2（2026-09-04，基线 `a17bfac`，隔离 worktree 分支 `mcp2-tf02`）。形状已裁（2026-09-03，MCP-3 过 `/domain-modeling`，owner 授权自决），落 [ADR-0103](../../../docs/adr/0103-actual-carrier-judgment-is-a-versioned-record-per-segment-with-pending-as-a-value.md) 与 TF `CONTEXT.md` 三处追加；四问答案与要做的见文末
 Blocked by: 无
 
 ## CONTEXT 要求什么
@@ -67,7 +67,7 @@ Blocked by: 无
 - `ports/`：判断登记册端口（按段读当前版本与全部版本、追加版本）；PC 身份存在性读口（消费侧）。
 - `application/`：「形成实际承运商判断」用例（收一条合格证据引用 + 承运主体引用或名称素材 →
   查身份 → 形成新版本）；段成立后铸第一版的挂点（挂在 `enterFulfillmentSegment` 落库之后，与
-  票 03 的内部触发同形；**票 03 拆出的 06 号票在动那一段，先在频道对一下顺序**）。
+  票 03 的内部触发同形；06 号票已 resolved（`8165c84`），那一段此刻无人在动）。
 - `adapters/postgres/`：追加式版本表迁移（编号取当时 TF 下一号）+ 登记册适配器 + 真库用例。
 - `adapters/partycommercial/`：身份存在性读口的消费侧适配器（ADR-0025）。
 - 验证：领域用例覆盖四问各一条场景（同段冲突、业务时间早于段成立被拒、身份未登记→登记后
