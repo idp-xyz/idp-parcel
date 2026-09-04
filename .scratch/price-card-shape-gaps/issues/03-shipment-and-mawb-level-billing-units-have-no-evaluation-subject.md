@@ -61,3 +61,4 @@ Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-mast
 
 - 2026-09-04 · MCP-1：立票。起因是 E1 核对第 17 项。**只写票面，未动代码。**
 - 2026-09-04 · 通道 6：换号批里领了本票，**一行未写**。交接点：PPC-5 已在 `b8dfc9a8` 换好，`AggregationMode` / `EvaluationSubjectKind` 扩格与快照成员清单落同一号不再换；能力边界里「委托主体引用的是委托身份还是某一提交版本」那一句，按 parcel-shipment CONTEXT 与 ADR-0045：**委托身份**（`ShipmentRequestID`）是主体，提交版本是那份委托当前待判断的版本、随 `PricingInputSnapshot` 的事实引用带（同一委托换代后成员清单可能变，主体不变）——这是本票实施时要与 PS owner 再确认一句的默认读法，不是裁决；`validCompletedCharges` 今天按逐包裹形状校验费用行（`ChargeScopePackage` 等硬写），扩聚合单位时那道校验要跟着按主体种类分支。
+- 2026-09-04 · MCP-1：**进 main 记录。** 本票两笔分支→main：`f4b42116`→`fc1a7573`（票级/主单级主体与聚合方式、成员清单进快照）· `2bef7c9e`→`5ed07e17`（SA 半边 `BuyEvaluationAdoption` 加 SubjectKind/MemberPackages，与 amount-precision/02 的 SA-c 适配器同笔）；四票公共笔与验证同票 01 的进 main 记录，远端 main = `732c1db3`。主单级仍 blocked 等 tf-carrier-master-document-register/01；「委托主体默认读法」待 PS owner 一句，与 label-channel/24（MCP-5 在做）相邻但不同票。
