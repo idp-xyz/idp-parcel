@@ -45,6 +45,7 @@ var _ DispatchTaskIntake = UnconfiguredIntake{}
 var _ LoadAssignmentIntake = UnconfiguredIntake{}
 var _ ParticipationTerminationIntake = UnconfiguredIntake{}
 var _ CredentialIntake = UnconfiguredIntake{}
+var _ EffectiveTimeRuleIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -117,4 +118,10 @@ func (UnconfiguredIntake) IntakeCredentialRegistration(context.Context, *http.Re
 
 func (UnconfiguredIntake) IntakeCredentialApplicabilityChange(context.Context, *http.Request) (application.ChangeCredentialApplicabilityCommand, error) {
 	return application.ChangeCredentialApplicabilityCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 有效时间规则登记口（label-channel/19）同堵：一版规则登进去就会让收编执行器替该源此后每一条素材形成
+// 有效时间，渠道未就位前没有可采信的登记方身份，连命令都不构造。
+func (UnconfiguredIntake) IntakeEffectiveTimeRuleRegistration(context.Context, *http.Request) (application.RegisterEffectiveTimeRuleCommand, error) {
+	return application.RegisterEffectiveTimeRuleCommand{}, ErrAccessChannelNotConfigured
 }
