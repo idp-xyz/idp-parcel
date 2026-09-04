@@ -1,7 +1,7 @@
 # 客户服务规则版本进了封闭集，但 `visibility-exception` 那条消费缝仍然是断的
 
 Category: chore
-Status: ready-for-agent——三处已由 MCP-3 裁（owner 2026-09-03 授权自决），裁决落 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；要做的形状见文末「裁决」节，**不动 VE**
+Status: in-progress——MCP-4（2026-09-04，基线 `299e143`，代码基线 `a17bfac`；隔离分支 `mcp4-pcgaps05`）。三处已由 MCP-3 裁（owner 2026-09-03 授权自决），裁决落 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；要做的形状见文末「裁决」节，**不动 VE**
 Blocked by: 04（封闭集拓宽已随 `85c1c7f` 落地，本票的前置已解除）
 
 ## 为什么单独一票
