@@ -1,7 +1,7 @@
 # 14 落选留痕挂在哪个对象上，不清楚
 
 Category: enhancement
-Status: resolved——MCP-2 2026-09-04 按「裁决」节落地于分支 `mcp2-lc14`（基线 `27ced913`，待 MCP-1 重放入 main；分支 SHA 见文末「完成记录」）：领域对象 + 重建门 + 只追加登记册端口 + postgres 头行/子行两表（迁移 `parcel_shipment/0015`）+ 择优编排落定后同事务写入 + 标识签发器；运营查阅面另立票 [22](./22-channel-selection-decision-operations-read-face.md)（draft）。留痕对象已裁（MCP-3 2026-09-04，owner 授权自决）：**是**，择优决定作为只追加的决定记录落 PS 侧，引用候选与出局因由、不拷内容
+Status: resolved——MCP-2 2026-09-04 按「裁决」节落地于分支 `mcp2-lc14`（起于 `27ced913`，完工前已 rebase 到 main `50726a18`，待 MCP-1 重放入 main；分支 SHA 见文末「完成记录」）：领域对象 + 重建门 + 只追加登记册端口 + postgres 头行/子行两表（迁移 `parcel_shipment/0015`）+ 择优编排落定后同事务写入 + 标识签发器；运营查阅面另立票 [23](./23-channel-selection-decision-operations-read-face.md)（draft；原拟号 22 已被 MCP-6 分支上的轨迹侧票占用，按 MCP-1 改口）。留痕对象已裁（MCP-3 2026-09-04，owner 授权自决）：**是**，择优决定作为只追加的决定记录落 PS 侧，引用候选与出局因由、不拷内容
 Blocked by: 无（01、12 均已 resolved）
 
 ## 裁决（MCP-3，2026-09-04）
@@ -73,17 +73,17 @@ CONTEXT-MAP 说的「未被选中的候选**评价**继续有效并留痕」由 
 
 ## 完成记录（MCP-2，2026-09-04）
 
-**落点（分支 `mcp2-lc14`，基线 `27ced913`；SHA 为分支上的，重放入 main 后由 MCP-1 在广播里对照新旧 SHA）**
+**落点（分支 `mcp2-lc14`，起于 `27ced913`、完工前 rebase 到 main `50726a18`；SHA 为 rebase 后分支上的，重放入 main 后由 MCP-1 在广播里对照新旧 SHA）**
 
 | 层 | 文件 | SHA |
 |---|---|---|
-| domain | `channel_selection_decision.go`（`ChannelSelectionDecision`、`FormChannelSelectionDecision`、四格 `ChannelCandidateOutcome`、结论三格、`ChannelSelectionSubject`、规则引用 `ChannelSelectionByCostOnly`）；`channel_candidate_cost.go` 只加：`ChannelCandidateCost.WithEvaluation/Evaluation`，`SelectChannelCandidateByCost` 的排序抽成包内 `rankChannelCandidatesByCost` 供记录复用，对外签名与四种出口不变 | `6832320` |
-| domain（重建门） | `channel_selection_decision_rehydration.go`（`RehydrateChannelSelectionDecision{,Spec}`，只校不重算）；`internal/architecture/rehydration_gate_test.go` 受限名单加两行 | `0187639` |
-| ports + postgres + 迁移 | `ports/channel_selection_decision.go`（`ChannelSelectionDecisionRegistry`：`Append` + `ListBySubject`，无 Update/Delete；`ChannelSelectionDecisionIdentity`）；`adapters/postgres/channel_selection_decisions.go`；`migrations/parcel_shipment/0015_channel_selection_decision.sql` | `55ba728`（规则列译码函数补于收口笔） |
-| 挂点 | `application/select_channel_candidate.go`：Deps 纯加法 `Decisions/DecisionIDs/Clock`，三件一起缺席行为不变、只到一半报 `ErrChannelSelectionRecordingMisconfigured`；选出/并列/无人参选各成一条，成本表对不上与币种不齐不成记录 | `44187b1` |
-| 桥 | `adapters/parcelpricing/cost_bridge.go`：译完成本后带上 `evaluation.ID()` 作评价引用（已确立与出局两格都带；没登记价卡的候选无评价，如实缺席） | `e255602` |
-| 标识 | `adapters/identity`：`ChannelSelectionDecisions`，前缀 `CSDN` | `fe46b5a` |
-| 清点 | `docs/product/MECHANISM-INVENTORY.md` 在 `fe46b5a` 干净检出上重生成 | `9e9fcbc` |
+| domain | `channel_selection_decision.go`（`ChannelSelectionDecision`、`FormChannelSelectionDecision`、四格 `ChannelCandidateOutcome`、结论三格、`ChannelSelectionSubject`、规则引用 `ChannelSelectionByCostOnly`）；`channel_candidate_cost.go` 只加：`ChannelCandidateCost.WithEvaluation/Evaluation`，`SelectChannelCandidateByCost` 的排序抽成包内 `rankChannelCandidatesByCost` 供记录复用，对外签名与四种出口不变 | `c0ddc4fb` |
+| domain（重建门） | `channel_selection_decision_rehydration.go`（`RehydrateChannelSelectionDecision{,Spec}`，只校不重算）；`internal/architecture/rehydration_gate_test.go` 受限名单加两行 | `87f9cc13` |
+| ports + postgres + 迁移 | `ports/channel_selection_decision.go`（`ChannelSelectionDecisionRegistry`：`Append` + `ListBySubject`，无 Update/Delete；`ChannelSelectionDecisionIdentity`）；`adapters/postgres/channel_selection_decisions.go`；`migrations/parcel_shipment/0015_channel_selection_decision.sql` | `6b351696`（规则列译码函数补于收口笔） |
+| 挂点 | `application/select_channel_candidate.go`：Deps 纯加法 `Decisions/DecisionIDs/Clock`，三件一起缺席行为不变、只到一半报 `ErrChannelSelectionRecordingMisconfigured`；选出/并列/无人参选各成一条，成本表对不上与币种不齐不成记录 | `9ad601c8` |
+| 桥 | `adapters/parcelpricing/cost_bridge.go`：译完成本后带上 `evaluation.ID()` 作评价引用（已确立与出局两格都带；没登记价卡的候选无评价，如实缺席） | `19331ff6` |
+| 标识 | `adapters/identity`：`ChannelSelectionDecisions`，前缀 `CSDN` | `0a77ce59` |
+| 清点 | `docs/product/MECHANISM-INVENTORY.md` 在 rebase 后的分支 tip 干净检出上重生成（rebase 前那一笔已丢弃，因与 main 上 `68868a12` 的重生成重叠） | 收口笔 |
 
 **决定记录的字段**：租户；决定标识（签发口铸）；被择优对象引用 =（商业范围引用 + 产品—渠道映射引用，照择优编排入参
 `ChannelSelectionQuery` 取——入参里今天没有面单交易/包裹引用，不凭空造）；候选装配时点（`query.At`）；规则引用
@@ -95,7 +95,7 @@ CONTEXT-MAP 说的「未被选中的候选**评价**继续有效并留痕」由 
 写成一条决定；② 被择优对象引用不含「装配时点」，时点单独成列——同一（范围 + 映射）在不同时点重跑是同一对象的择优历史，
 不是不同对象。
 
-**验证**（钉 `fe46b5a` 及其后两笔文档/译码笔）：`gofmt -l` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN 全仓
+**验证**（rebase 前钉 `87c6ab89`；rebase 后在收口 tip 的干净检出上重跑同一套，结果见本票 Comments 末条）：`gofmt -l` 空；`go build ./...`、`go vet ./...` 退 0；无 DSN 全仓
 `go test -count=1 ./...` 零 FAIL（PG 用例跳过）；**含真库** `go test -count=1 -p 1 -v ./internal/parcelshipment/...
 ./internal/architecture/... ./migrations/...`：1527 PASS / 0 SKIP / 0 FAIL，其中
 `TestAChannelSelectionDecisionRoundTripsThroughPostgres` 与 `TestChannelSelectionDecisionsRefuseToRunOutsideATransaction`
