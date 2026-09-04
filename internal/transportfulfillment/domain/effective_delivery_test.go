@@ -38,8 +38,8 @@ func deliveredResult(t *testing.T, attempt domain.FulfillmentAttempt, object str
 // Covers: `AT-TF-067`「安全投放方式被合同允许且证据完整 → 形成有效交付和收件方控制转移」
 // 与 CONTEXT「有效交付结果必须关联明确载运对象、履约尝试、实际承运商或待确认依据、业务
 // 时间、地点、交付方式、接收对象和符合当时规则的交付证明」——地点取自尝试、时间取自对象
-// 结果，各只有一个权威来源；实际承运商轴等承运商判断对象落地再挂（见类型注释），本用例
-// 不假装覆盖它。
+// 结果，各只有一个权威来源；实际承运商轴由 `ActualCarrierJudgment` 按段作答而不在本类型上
+// （见类型注释），本用例不假装覆盖它。
 func TestADeliveredObjectFormsAnEffectiveDeliveryWithItsPOD(t *testing.T) {
 	attempt := formedAttempt(t, "attempt-1")
 	result := deliveredResult(t, attempt, "parcel-1")

@@ -170,7 +170,10 @@ type EffectiveDeliverySpec struct {
 // 它同时构成该对象向收件方的控制转移并结束相应履约参与关系——不存在一个独立的
 // 「转移开关」字段，本类型成立即转移成立。
 //
-// 实际承运商轴（承运方或待确认依据）等实际承运商判断对象落地后再挂；这里不虚构。
+// 实际承运商轴（CONTEXT「有效交付结果必须关联……实际承运商或待确认依据」）不在本类型上：那是
+// `ActualCarrierJudgment` 的当前版本，按（租户，实际履约段）读——交付所在的段由该对象的履约参与关系
+// 给出。这里不复制一份承运方引用，理由与段、参与关系上不加承运商字段同一条（ADR-0103 决定二、八）：
+// 判断是独立聚合，复制过来的那一格会在判断追加新版本时静默过期。
 type EffectiveDelivery struct {
 	tenantID    TenantID
 	object      CarriedObjectReference
