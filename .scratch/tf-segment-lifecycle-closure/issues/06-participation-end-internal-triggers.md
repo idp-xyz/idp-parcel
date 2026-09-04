@@ -101,3 +101,24 @@ worktree 全绿、提交带 pathspec、向 MCP-3 报 SHA 与验证种类。
 各会话的隔离树，一次 panic 把整个测试进程连栈炸掉；而裁决 (i) 要的「漏接线看得见」由两处保证——那一格在结果里
 可观察，生产装配有没有交入由真库装配测试钉（它断言 ENDED / NO_ACTIVE，装配点漏掉就红）。「必填」因此从构造期
 硬门改为生产装配门 + 可观察格，`ErrParticipationEndsNotWired` 随之删除。
+
+2026-09-04 · MCP-3（owner 授权自决）：**补刀二——采。** 封存笔 `mcp4-tf03@44808f3`（worktree `D:/tops/idp-tf03`，tip 在 main 之外
+一笔，`95ea314` 已在 main）把 `ParticipationEnds` 缺席从「结果里具名格 `PARTICIPATION_END_NOT_WIRED`、登记照常成立」改为
+`ErrParticipationEndsNotWired` 整笔不落（交付 /`已交接`不形成答案，错误信息带具名格；拒收与待确认不经这道门照登）。**裁定采纳
+为票 06 补刀二**，理由：
+
+- 本票裁决 (i) 的原话是「同事务；结束参与失败则整笔不落，不要『交付落了参与没结』的半成品」。上一条补刀把 panic 撤成具名格
+  是对的（panic 会炸别人的测试进程），但**具名格让交付落库而参与没结**——那正是裁决 (i) 点名不要的半成品，只是多了一句自述。
+  缺席与 `End` 失败同格才与裁决一致：CONTEXT 交付节写的是有效交付**同时**结束参与，应用层不该能写出一份违反它的库面状态。
+- 「未配置即拒」是本仓对装配缺陷的通例（ADR-0055 的 Intake、ADR-0090 的出向缝）：未配置是一个**拒绝形成答案**的格，不是
+  「照常成立 + 备注」。具名格版本是仓里唯一一处「未接线即放行」，与通例相反。
+- 它同时守住撤 panic 的理由：error 只让调用该处理器的用例红，不炸进程；生产装配有没有交入仍由真库装配测试钉（它断言
+  ENDED / NO_ACTIVE），漏接线在结果、错误信息与装配测试三处都看得见。
+- 封存笔对拒收/待确认的处理（不经这道门、照登）是对的——它们不转出控制，本就不结束任何参与，缺席对它们不是失败。
+
+**只裁不合**：合归 MCP-1（需在 main 当前 tip 上重放 `44808f3` 那一笔——`register_effective_delivery.go` /
+`register_transport_handover.go` 自 `95ea314` 后是否又被别的票动过，重放前核一次；重放后 `ParticipationEndNotWired` 那一格在
+结果代数里只剩命名用途，注释已由封存笔改好）。分支与 worktree 不动，合入后按惯例保留分支指针。**能力边界**：读过封存笔全部
+diff（+65/−28）、本票裁决与两条补刀记录、`register_effective_delivery.go` 与 `register_transport_handover.go` 在 main 的
+`endParticipation` / `endPreviousParticipation`；未在本会话跑测试（封存笔自述在其 worktree 上 build/vet/test 绿，无 DSN），
+合入时由推送方在干净检出上验，含真库。
