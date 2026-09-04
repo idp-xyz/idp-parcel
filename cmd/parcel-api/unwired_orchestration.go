@@ -160,6 +160,17 @@ func (unwiredPickupRegistration) Register(
 	return tfapp.RegisterOffsitePickupResult{}, errOrchestrationNotWired
 }
 
+// unwiredPickupCorrection 是揽收更正口的编排占位（票 tf-segment-lifecycle-closure/08）。与首登占位分立，
+// 随传输层的两个接口：生产侧是同一条编排的两个入口、两格装配。
+type unwiredPickupCorrection struct{}
+
+func (unwiredPickupCorrection) Correct(
+	context.Context,
+	tfapp.CorrectOffsitePickupCommand,
+) (tfapp.RegisterOffsitePickupResult, error) {
+	return tfapp.RegisterOffsitePickupResult{}, errOrchestrationNotWired
+}
+
 type unwiredPickupAttempt struct{}
 
 func (unwiredPickupAttempt) Handle(

@@ -66,6 +66,7 @@ func assembleBusinessEndpoints(
 	handoverScopeSummary tfhttp.HandoverScopeSummarizer,
 	handover tfhttp.HandoverHandler,
 	pickupRegistration tfhttp.PickupRegistrationHandler,
+	pickupCorrection tfhttp.PickupCorrectionHandler,
 	pickupAttempt tfhttp.PickupAttemptHandler,
 	movementFact tfhttp.MovementFactHandler,
 	segmentCloser tfhttp.SegmentCloser,
@@ -203,15 +204,17 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
-		// 控制事实入口四口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
-		// （单对象登记 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
-		// 进段那道门（enterFulfillmentSegment）在生产上只从这四行走得到——接上之前它没有任何路。
-		// 命令面，同挂字面量 UnconfiguredIntake{}；命令里带着段引用，这四行比交付更不能让隔离读
+		// 控制事实入口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
+		// （单对象登记 + 更正 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
+		// 进段那道门（enterFulfillmentSegment）在生产上只从登记那几行走得到——接上之前它没有任何路。
+		// 命令面，同挂字面量 UnconfiguredIntake{}；命令里带着段引用，这几行比交付更不能让隔离读
 		// 开关换值：一条穿过去的请求会在段登记册上立出一个来源不明的实际履约段。
-		// 揽收更正口不在表上：应用层没有更正编排，端点表不替它造一个（票 04 未做项）。
+		// 揽收更正口（票 tf-segment-lifecycle-closure/08）落新版本回指前版、重交 PS 采认，不进段——段侧
+		// 重派生另立票；它接的是自己那一格装配（assemble_offsite_pickup_correction.go），与首登共用一册。
 		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
 		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
 		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupRegistration)},
+		{Pattern: "/transport-fulfillment/offsite-pickup-corrections", Handler: tfhttp.NewCorrectOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupCorrection)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupAttempt)},
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营

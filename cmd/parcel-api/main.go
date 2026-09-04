@@ -139,6 +139,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	pickupCorrection, err := buildOffsitePickupCorrectionOrchestration(db)
+	if err != nil {
+		return err
+	}
 	movementFact, err := buildMovementFactOrchestration(db)
 	if err != nil {
 		return err
@@ -346,6 +350,7 @@ func run(logger *slog.Logger) error {
 			handoverScopeSummary,
 			controlFacts.handover,
 			controlFacts.pickupRegistration,
+			pickupCorrection,
 			controlFacts.pickupAttempt,
 			movementFact,
 			segmentOps.closer,
