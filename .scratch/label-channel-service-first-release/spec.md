@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出）；`01`..`13`、`15`..`18` 已 resolved；`14` ready-for-agent（2026-09-04 裁决落票面）；`19`、`21` ready-for-agent（本波 MCP-6 在做——接 MCP-5 崩溃现场，分支 `mcp5-lc19-21`，未入 main）；`20` draft（等 `18` 之后的第一家真源）。状态行由通道 2 于 2026-09-04 对票面重核后改写（代 MCP-3 簿记批，本波只改这一次，完工对齐归 MCP-1）
+Status: in-progress——23 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出；`22` 于 2026-09-04 随 `19` 收口立；`23` 于同日随 `14` 收口立）；`01`..`19`、`21` 已 resolved（`19`、`21` 自分支 `mcp5-lc19-21`、`14` 自分支 `mcp2-lc14`，均于 2026-09-04 进 main，远端 `19cf2ce5`）；`20`、`22`、`23` draft（`20`、`22` 等 `18` 之后的第一家真源，`22` 另阻塞于 `20`；`23` 读面形状待按 ADR-0077 通例裁，其阻塞项 `14` 已 resolved）。状态行由通道 2 于 2026-09-04 对票面重核后改写，`14`/`19`/`21`/`22`/`23` 五格由 MCP-1 于同日重放入 main 后对齐（此后**以各票文件 `Status:` 为准**）
 
 ## 这个 feature 是什么
 
@@ -61,13 +61,15 @@ Status: in-progress——21 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 | [`08` 取面单合成替身](./issues/08-label-fetch-synthetic-double.md) | **已落地**：三条各有测试证据，`07` 的端口形状装得下、无一条需回；替身落测试专属包，「不进生产装配」由编译器守 | `resolved` |
 | [`09` 渠道返回载荷的落点](./issues/09-channel-label-payload-landing.md) | **已落地**：裁「只入引用」并落 [ADR-0092](../../docs/adr/0092-channel-label-payload-lands-as-a-reference-and-the-body-store-is-an-unconfigured-outbound-seam.md)——本体存放是未配置的出向缝；摘要必备、定位符可缺；载荷追加不可覆盖。**无新迁移**（引用是小值，走既有快照），真库实跑改证快照往返 | `resolved` |
 | [`11` 包裹终局的跨交易判断](./issues/11-parcel-final-across-transactions.md) | **已落地**：与既有终局的关系正面作答，实现 `0e5a4ea`；三个调用方留作后继（见本节开头） | `resolved` |
-| [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | 已裁（2026-09-04）：择优决定作为只追加的决定记录落 PS 侧，引用候选与四格出局因由、不拷内容 | `ready-for-agent`（`01`、`12` 均已 resolved） |
+| [`14` 落选留痕对象](./issues/14-rejected-candidate-trace-object.md) | **已落地**：渠道择优决定作为只追加的决定记录落 PS 侧——领域对象逐候选四格 + 重建门 + `ports.ChannelSelectionDecisionRegistry` + postgres 头行/子行两表（PS 迁移 `0015`）+ 择优编排落定后同事务写入（Deps 纯加法）+ 标识签发器 `CSDN`；只引用候选与 BUY 评价、不拷内容（`c0ddc4fb`..`f43c99ee`）。运营查阅面另立 `23` | `resolved` |
 | [`16` 外部轨迹的收编执行器](./issues/16-external-tracking-fact-adoption-executor.md) | **已落地**：落文 `2bb9300`（ADR-0102 ＋ TF CONTEXT 两词），TF 侧认领/判断/登记/outbox（`a3e28ff`）、VE 侧消费与译装＋路由表（`65b369f`）；一条外部轨迹走到投影。刻意留下三格拆成 `18`–`21` | `resolved` |
 | [`17` TF 两类事实补在线登记口](./issues/17-tf-handover-and-offsite-pickup-need-online-faces.md) | **已判定不做**——`03` 裁定走新立事实，这两个口无用例在守；缺口登记仍留在盘点里 | `resolved` |
 | [`18` 外部承运凭证登记册](./issues/18-external-carrier-credential-registry.md) | **已落地**：登记册五件往返、作废/失效/替代各成新版本，解析口按适用状态×适用范围×标识对象类别作答（`024cb5f`，TF 迁移 `0012`） | `resolved` |
-| [`19` 轨迹源有效时间规则目录](./issues/19-tracking-source-effective-time-rule-catalogue.md) | `EffectiveTimeRules` 的生产实现：按源登记带版本的规则，无规则如实答`无`；**不得默认等于发生时间** | `ready-for-agent` |
+| [`19` 轨迹源有效时间规则目录](./issues/19-tracking-source-effective-time-rule-catalogue.md) | **已落地**：一源一链带版本的规则目录 + postgres 登记册兼解析口 + 登记编排 + 在线登记口 `/transport-fulfillment-effective-time-rule-registrations`（TF 迁移 `0014`）；无规则如实答`无`，不默认等于发生时间；`EffectiveTimeRules` 从机制清点「缺」名单消失 | `resolved` |
 | [`20` 轨迹拉取节拍](./issues/20-tracking-pull-beat.md) | `TrackingSource.Pull` → `Adopt` 的生产入口；随第一家真源的适配器立，节奏属 `PAR-INT-02` | `draft`｜`18` |
-| [`21` 有效时间显式判断的在线面](./issues/21-effective-time-judgment-online-face.md) | `JudgeEffectiveTimeHandler` 的管理台写面；对象是待判断的事实 | `ready-for-agent` |
+| [`21` 有效时间显式判断的在线面](./issues/21-effective-time-judgment-online-face.md) | **已落地**：查阅读口 + `GET /transport-fulfillment-external-tracking-facts?source=&view=pending\|current` + `POST /transport-fulfillment-effective-time-judgments`（`UnconfiguredIntake{}` 起步）+ 管理台「外部轨迹有效时间判断」页 | `resolved` |
+| [`22` 按已登记规则批量重判待判断事实](./issues/22-rejudge-pending-facts-by-registered-rule.md) | 规则登记之后的回填入口：显式触发、不随登记自动发生、复用规则判断路径；随第一家真源一起立实施 | `draft`｜`20` |
+| [`23` 渠道择优决定的运营查阅面](./issues/23-channel-selection-decision-operations-read-face.md) | `14` 的留痕今天只有写口与按对象列历史的读口，没有运营面能看见并列冲突与出局因由；按 ADR-0077 通例读口另立、不拓宽登记册端口；并列冲突的人工裁决动作不进本票（先 `/domain-modeling`） | `draft`（`14` 已 resolved） |
 
 ### 盘点判为「无缺口」因而不立票的三段
 

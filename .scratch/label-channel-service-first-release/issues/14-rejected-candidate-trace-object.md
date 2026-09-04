@@ -75,6 +75,9 @@ CONTEXT-MAP 说的「未被选中的候选**评价**继续有效并留痕」由 
 
 **落点（分支 `mcp2-lc14`，起于 `27ced913`、完工前 rebase 到 main `50726a18`；SHA 为 rebase 后分支上的，重放入 main 后由 MCP-1 在广播里对照新旧 SHA）**
 
+> 2026-09-04 19:3x 通道 1 快进入 main（远端 `19cf2ce5`）：分支已在 `50726a18` 上，下表八笔 **SHA 原样进 main，不必改号**；
+> 分支清点笔 `df6e1ff3` 未重放，由 tip 上的 `19cf2ce5` 一次重生成兑底（同笔吸收 label-channel/19、/21 的重放）。
+
 | 层 | 文件 | SHA |
 |---|---|---|
 | domain | `channel_selection_decision.go`（`ChannelSelectionDecision`、`FormChannelSelectionDecision`、四格 `ChannelCandidateOutcome`、结论三格、`ChannelSelectionSubject`、规则引用 `ChannelSelectionByCostOnly`）；`channel_candidate_cost.go` 只加：`ChannelCandidateCost.WithEvaluation/Evaluation`，`SelectChannelCandidateByCost` 的排序抽成包内 `rankChannelCandidatesByCost` 供记录复用，对外签名与四种出口不变 | `c0ddc4fb` |

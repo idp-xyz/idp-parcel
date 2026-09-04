@@ -52,6 +52,10 @@ ADR-0102 决定三；票 `16` 完成记录「刻意留下的三格」第 3 条�
 
 ## 完成记录（2026-09-04，通道 5；六笔均在分支 `mcp5-lc19-21`，SHA 为 rebase 到 `d41f73da` 之后的分支 SHA，待 MCP-1 重放进 main 后另记 main SHA）
 
+> 2026-09-04 19:3x 通道 1 重放进 main（远端 `19cf2ce5`），**main SHA**：`bd44a0d0`→`afca5344`、`7ba40b04`→`1c5a7a19`、
+> `d2d270fa`→`09b77fa1`、`0a05dced`→`a29fb71c`、`e7076574`→`bd636419`；本记录那笔 `8f6d42cf`→`fab43802`。清点笔
+> `0be8b4fd` 未重放，由 tip 上的 `19cf2ce5` 一次重生成兑底（同笔吸收 label-channel/14）。下表内容一字未改，只是坐标换了。
+
 | 笔 | 内容 |
 |---|---|
 | `bd44a0d0` | `ports.ExternalTrackingFactReviewRead`（`ports/external_tracking_fact_review.go`，新文件，既有端口一格未动）：按（租户，轨迹源）上列**当前版**，`EffectiveTimeReviewFilter` 封闭两格 `PendingEffectiveTimeOnly` / `EveryCurrentVersion`；行是照实转写，待判断行 `EffectiveAt` 为 nil。postgres 实现挂在 `ExternalTrackingFacts` 上（`adapters/postgres/external_tracking_fact_review.go`），「当前」照 `FindCurrent` 的派生法；真库用例 2 条 |
