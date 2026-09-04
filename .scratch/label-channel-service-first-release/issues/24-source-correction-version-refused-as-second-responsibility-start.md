@@ -1,7 +1,7 @@
 # 同来源同对象的更正版本在 PS 采用口被当作第二责任起点：`AT-PS-050` 无代码实现
 
 Category: bug
-Status: resolved——MCP-5（2026-09-04，task-f9e0bd40；隔离分支 `mcp5-ps-lc24`，基线 main `6f9436f3`；代码 tip `61698e0e`、清点笔 `8a5846d1`，main 上的 SHA 由 MCP-1 重放后在 Comments 补）。五问裁决落 [ADR-0117](../../../docs/adr/0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)，实施见「完成记录」；`AT-PS-050` 自此有代码实现，`AT-PS-049` 一字不动
+Status: resolved——MCP-5（2026-09-04，task-f9e0bd40；隔离分支 `mcp5-ps-lc24`，基线 main `ce09a667`（开工基线 `6f9436f3`，收口前 rebase 一次）；代码 tip `af8a6510`、清点笔 `11ee57aa`，main 上的 SHA 由 MCP-1 重放后在 Comments 补）。五问裁决落 [ADR-0117](../../../docs/adr/0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)，实施见「完成记录」；`AT-PS-050` 自此有代码实现，`AT-PS-049` 一字不动
 Blocked by: 无
 
 ## 量到的事实（main `4cc1bc34` 上读得，逐符号名）
@@ -64,27 +64,27 @@ transport-fulfillment 自票 tf-segment-lifecycle-closure/08 起会对同一（�
 
 ## 完成记录（2026-09-04，通道 5，task-f9e0bd40）
 
-分支 `mcp5-ps-lc24`，基线 main `6f9436f3`。分支上的 SHA 作封存出处；main 上的 SHA 等 MCP-1 重放后补。
+分支 `mcp5-ps-lc24`，开工基线 main `6f9436f3`，收口前 rebase 到 `ce09a667`（只撞清点笔，已在新 tip 重生成）。分支上的 SHA 作封存出处；main 上的 SHA 等 MCP-1 重放后补。
 
 | 分支 SHA | 范围 |
 |---|---|
-| `9a22f19a` | ADR-0117 + README 一行 + 本票「裁决」节（Status 转 in-progress） |
-| `5c09787b` | 领域：`IntakeSourceSpec.Corrects` / `IntakeSource.Corrects()`（自指拒）；`FormalCommitment.RestateOnCorrectedIntake`（同包裹、同基线、同种类三道门；生效随更正后发生时刻；`Adjust` 原样留给不改收寄的调整） |
-| `b0e939ef` | 采用账链：迁移 `parcel_shipment/0017_intake_adoption_supersession_chain.sql`（三列同在同缺、责任起点索引改「adopted 且无回指」、加「同一前版至多被取代一次」）；`ports.IntakeAdoptionRecord.SupersedesVersion` / `Supersedes()`；`IntakeAdoptions.FindResponsibilityStart` 答链尾；`adoptionColumns` 两面（根首版 / 更正版带前版与原因）；读回按同一两面重建 |
-| `06384ef6` | 编排：`AdoptNetworkIntakeHandler.Handle` 责任起点那一步分三路（竞争照旧不采用 / `supersede` / 前版未判则未决、非链尾则不采用）；新未决原因 `IntakeCorrectionPredecessorUnjudged`；内容摘要对更正版本多带 `corrects:<前版>` |
-| `fca342b8` | TF：`OffsitePickupRegistrations.FindByKeyAndVersion`（**端口外读法**，不进 `ports.OffsitePickupRegistry`——理由在方法头注：拓宽会拆 TF 自己 http / application 两处替身，唯一调用方在 PS；与 `EffectiveDeliveries` 同形）+ 真库用例 |
-| `0b83b44d` | 消费方：`psinbox.OffsitePickupConsumer` 读 `pickupVersion`（缺即毒丸）；`AdoptOnOffsitePickupAdapter` 经 `OffsitePickupFinder.FindByKeyAndVersion` 取那一代并核版本；`pickupSourceFor` 把 `OffsitePickup.Corrects()` 译进 `Corrects` |
-| `3460e8c3` + `61698e0e` | 真库两向用例 `TestASameSourceCorrectionSupersedesAndACompetingSourceIsStillRefusedInTheDatabase`（TF 真登记库 → 真 Inbox 消费门 → 真编排 → 真采用账；后一笔把事务回调里的断言搬到回调外，architecture 门禁拓到的） |
-| `8a615270` | UC-PS-003 一致性节补一句「同来源更正以来源所有者声明的更正关系识别」，指向 ADR-0117；硬句不动 |
-| `617047e8` | 双轴评审修补：迁移 0017 加自引用外键（被取代版本必须是同租户同包裹同种类下登过的一版：链不跨种类、不悬空）；CHECK 用例补两格；ADR 去一处计数与一处无锚断言 |
-| `8a5846d1` | 机制清点在 `617047e8` 干净检出重生成（parcelshipment 测试 132→133；迁移 parcel_shipment 16→17；生产文件面与端口声明不变） |
-| `2ddce88f` | auto-reroute-demo-reachability/01 复核结论与拆票（票二，见该目录） |
+| `24d94c94` | ADR-0117 + README 一行 + 本票「裁决」节（Status 转 in-progress） |
+| `dca04f04` | 领域：`IntakeSourceSpec.Corrects` / `IntakeSource.Corrects()`（自指拒）；`FormalCommitment.RestateOnCorrectedIntake`（同包裹、同基线、同种类三道门；生效随更正后发生时刻；`Adjust` 原样留给不改收寄的调整） |
+| `09800f16` | 采用账链：迁移 `parcel_shipment/0017_intake_adoption_supersession_chain.sql`（三列同在同缺、责任起点索引改「adopted 且无回指」、加「同一前版至多被取代一次」）；`ports.IntakeAdoptionRecord.SupersedesVersion` / `Supersedes()`；`IntakeAdoptions.FindResponsibilityStart` 答链尾；`adoptionColumns` 两面（根首版 / 更正版带前版与原因）；读回按同一两面重建 |
+| `b6a0c8aa` | 编排：`AdoptNetworkIntakeHandler.Handle` 责任起点那一步分三路（竞争照旧不采用 / `supersede` / 前版未判则未决、非链尾则不采用）；新未决原因 `IntakeCorrectionPredecessorUnjudged`；内容摘要对更正版本多带 `corrects:<前版>` |
+| `45a45f93` | TF：`OffsitePickupRegistrations.FindByKeyAndVersion`（**端口外读法**，不进 `ports.OffsitePickupRegistry`——理由在方法头注：拓宽会拆 TF 自己 http / application 两处替身，唯一调用方在 PS；与 `EffectiveDeliveries` 同形）+ 真库用例 |
+| `a6046157` | 消费方：`psinbox.OffsitePickupConsumer` 读 `pickupVersion`（缺即毒丸）；`AdoptOnOffsitePickupAdapter` 经 `OffsitePickupFinder.FindByKeyAndVersion` 取那一代并核版本；`pickupSourceFor` 把 `OffsitePickup.Corrects()` 译进 `Corrects` |
+| `ecbaa92d` + `af8a6510` | 真库两向用例 `TestASameSourceCorrectionSupersedesAndACompetingSourceIsStillRefusedInTheDatabase`（TF 真登记库 → 真 Inbox 消费门 → 真编排 → 真采用账；后一笔把事务回调里的断言搬到回调外，architecture 门禁拓到的） |
+| `8c56abaf` | UC-PS-003 一致性节补一句「同来源更正以来源所有者声明的更正关系识别」，指向 ADR-0117；硬句不动 |
+| `b06a9dad` | 双轴评审修补：迁移 0017 加自引用外键（被取代版本必须是同租户同包裹同种类下登过的一版：链不跨种类、不悬空）；CHECK 用例补两格；ADR 去一处计数与一处无锚断言 |
+| `11ee57aa` | 机制清点在 `af8a6510` 干净检出重生成（parcelshipment 测试 132→133；迁移 parcel_shipment 16→17；生产文件面与端口声明不变） |
+| `f303d7b0` | auto-reroute-demo-reachability/01 复核结论与拆票（票二，见该目录） |
 
 **五问各答**（细节在「裁决」与 ADR-0117）：① 同来源更正 = 来源自报更正关系 + 种类相同 + 所指恰是链尾；② 采用账只插不改地长链，链尾按回指派生，根唯一 + 每版至多被取代一次两条部分唯一索引 + 自引用外键；③ 承诺调整版本与采用判断版本同笔，`RestateOnCorrectedIntake`；④ 消费方按信封版本读回，TF 加端口外读法；⑤ `AT-PS-049` 一字不动，依据版本从首登换成链尾；两格例外 `CORRECTION_PREDECESSOR_UNJUDGED`（未决）/ `CORRECTION_TARGET_NOT_CURRENT/<种类>/<链尾>`（不采用）。
 
 **与派单字面不同的一处**：派单写「UC-PS-003 验收表措辞若需对齐只改那一行」，实际改的是「一致性、幂等与并发」节的那一条（`AT-PS-050` 表行原句已经对，缺的是判据一句），一处一句。
 
-**验证**（干净 detached 检出 `2ddce88f`，本机 Windows；数字只作此刻取证）：`gofmt -l .` 空；`go build ./...` / `go vet ./...` 退 0；无 DSN `go test -count=1 ./...` 98 包 ok / 0 FAIL（PG 用例跳过）；含 DSN `go test -count=1 -v ./internal/parcelshipment/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` **1723 PASS / 0 SKIP / 0 FAIL**；探针 `TestASameSourceCorrectionSupersedesAndACompetingSourceIsStillRefusedInTheDatabase` 带 DSN `--- PASS` / 不带 `--- SKIP`；机制清点在同一检出重生成与提交件零差。`-race` 未在本轮跑（本机 Windows 无 cgo，WSL 够不到门禁容器；见 workflow.md 本机环境），由 CI 覆盖。
+**验证**（rebase 后在干净 detached 检出 `11ee57aa` 重跑，本机 Windows；数字只作此刻取证）：`gofmt -l .` 空；`go build ./...` / `go vet ./...` 退 0；无 DSN `go test -count=1 ./...` 99 包 ok / 0 FAIL（PG 用例跳过）；含 DSN `go test -count=1 -v ./internal/parcelshipment/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` **1723 PASS / 0 SKIP / 0 FAIL**；探针 `TestASameSourceCorrectionSupersedesAndACompetingSourceIsStillRefusedInTheDatabase` 带 DSN `--- PASS` / 不带 `--- SKIP`；机制清点在同一检出重生成与提交件零差。`-race` 未在本轮跑（本机 Windows 无 cgo，WSL 够不到门禁容器；见 workflow.md 本机环境），由 CI 覆盖。
 
 **越权风险点**（供用户复核，与「裁决」节同）：① 「同来源更正」的识别权判给来源所有者的更正声明；② 责任起点唯一索引从「adopted」改为「adopted 且无回指」；③ 更正版本在取消 / 基线 / 资格三道门被拒时根采用不动，PS 不替人裁。另：TF 适配器加了一个端口外的读法，理由见方法注释，不是忘了往端口里加。
 
