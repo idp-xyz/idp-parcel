@@ -119,11 +119,28 @@ func (candidate ReviewedSeriesVersion) Decision() SeriesReviewDecision { return 
 // 撤销已通过的复核（取值错误以更正版本处理）。没有候选时不给答案：评价据以挂起，不退到
 // 任何未复核版本。
 func SelectInForceSeriesVersion(candidates []ReviewedSeriesVersion, at time.Time) (VersionReference, bool) {
+	reviewed := make([]reviewedVersion, 0, len(candidates))
+	for _, candidate := range candidates {
+		reviewed = append(reviewed, reviewedVersion(candidate))
+	}
+	return selectInForceVersion(reviewed, at)
+}
+
+// reviewedVersion 是在用选择的最小载体，序列与目录共用同一条判定（ADR-0109 Decision 二「复核与在用的门
+// 照 ADR-0099 给序列立的那一套」）：两处各排一遍就是两处口径。
+type reviewedVersion struct {
+	reference    VersionReference
+	registeredAt time.Time
+	reviewedAt   time.Time
+	decision     SeriesReviewDecision
+}
+
+func selectInForceVersion(candidates []reviewedVersion, at time.Time) (VersionReference, bool) {
 	if at.IsZero() {
 		return VersionReference{}, false
 	}
 	moment := at.UTC()
-	eligible := make([]ReviewedSeriesVersion, 0, len(candidates))
+	eligible := make([]reviewedVersion, 0, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.decision != SeriesReviewApproved || candidate.reviewedAt.After(moment) {
 			continue
