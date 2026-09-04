@@ -120,6 +120,8 @@ type FixedChargeRule struct {
 	effect      ChargeEffect
 	amount      Money
 	order       int
+	// unit 是聚合主体上的计收单位（ADR-0111 Decision 二）：默认每主体一次，PerPiece 改为按件数乘定额。
+	unit ChargeUnit
 }
 
 func NewFixedChargeRule(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int) (FixedChargeRule, error) {
@@ -129,15 +131,25 @@ func NewFixedChargeRule(id string, code ChargeCode, description string, effect C
 	return FixedChargeRule{id: id, chargeCode: code, description: description, effect: effect, amount: amount, order: order}, nil
 }
 
+// PerPiece 把这条规则改为按件计收：金额乘成员数。只在逐委托 / 逐主单的卡上立得住，那一道在 NewAggregatePricingPlanVersion 上判。
+func (rule FixedChargeRule) PerPiece() (FixedChargeRule, error) {
+	if !rule.valid() {
+		return FixedChargeRule{}, ErrInvalidChargeRule
+	}
+	rule.unit = ChargeUnitPerPiece
+	return rule, nil
+}
+
 func (rule FixedChargeRule) ID() string           { return rule.id }
 func (rule FixedChargeRule) Code() ChargeCode     { return rule.chargeCode }
 func (rule FixedChargeRule) Description() string  { return rule.description }
 func (rule FixedChargeRule) Effect() ChargeEffect { return rule.effect }
 func (rule FixedChargeRule) Amount() Money        { return rule.amount }
 func (rule FixedChargeRule) Order() int           { return rule.order }
+func (rule FixedChargeRule) Unit() ChargeUnit     { return rule.unit }
 
 func (rule FixedChargeRule) valid() bool {
-	return strings.TrimSpace(rule.id) != "" && strings.TrimSpace(rule.id) == rule.id && rule.chargeCode.valid() && strings.TrimSpace(rule.description) != "" && strings.TrimSpace(rule.description) == rule.description && rule.effect.valid() && rule.amount.valid() && rule.order >= 1
+	return strings.TrimSpace(rule.id) != "" && strings.TrimSpace(rule.id) == rule.id && rule.chargeCode.valid() && strings.TrimSpace(rule.description) != "" && strings.TrimSpace(rule.description) == rule.description && rule.effect.valid() && rule.amount.valid() && rule.order >= 1 && rule.unit.valid()
 }
 
 type PricingPlanVersion struct {
@@ -157,6 +169,8 @@ type PricingPlanVersion struct {
 	contentDigest    string
 }
 
+// NewPricingPlanVersion 立一张逐包裹的定价方案版本。逐委托 / 逐主单的卡走 NewAggregatePricingPlanVersion；本签名
+// 不动，是因为它在别的上下文的适配器里被引用。
 func NewPricingPlanVersion(
 	reference VersionReference,
 	scope PricingScopeID,
@@ -170,8 +184,30 @@ func NewPricingPlanVersion(
 	structures PricingPlanStructures,
 	dependencies ...VersionReference,
 ) (PricingPlanVersion, error) {
-	if reference.kind != ArtifactPricingPlan || !reference.valid() || !scope.valid() || !direction.valid() || !purpose.valid() || !baseChargeCode.valid() || !period.valid() || !rateTable.valid() || !weight.valid() || !structures.valid() {
+	return NewAggregatePricingPlanVersion(AggregationPerPackage, reference, scope, direction, purpose, baseChargeCode, period, rateTable, weight, rules, structures, dependencies...)
+}
+
+// NewAggregatePricingPlanVersion 立一张按给定聚合方式评价的定价方案版本（ADR-0111 Decision 一）。按件计收的规则
+// 只在聚合主体上有意义：逐包裹的卡上「每件」与「每主体」是同一件事，声明它只会让两张行为相同的卡摘要不同。
+func NewAggregatePricingPlanVersion(
+	aggregation AggregationMode,
+	reference VersionReference,
+	scope PricingScopeID,
+	direction PricingDirection,
+	purpose PricingPurpose,
+	baseChargeCode ChargeCode,
+	period EffectivePeriod,
+	rateTable RateTableVersion,
+	weight PricingWeightPolicy,
+	rules []FixedChargeRule,
+	structures PricingPlanStructures,
+	dependencies ...VersionReference,
+) (PricingPlanVersion, error) {
+	if !aggregation.valid() || reference.kind != ArtifactPricingPlan || !reference.valid() || !scope.valid() || !direction.valid() || !purpose.valid() || !baseChargeCode.valid() || !period.valid() || !rateTable.valid() || !weight.valid() || !structures.valid() {
 		return PricingPlanVersion{}, ErrInvalidPricingPlan
+	}
+	if !aggregation.aggregate() && structures.declaresPerPiece(rules) {
+		return PricingPlanVersion{}, fmt.Errorf("%w: per-piece charge units only apply to per-shipment or per-master-document plans", ErrInvalidPricingPlan)
 	}
 	if purpose.pairedDirection() != direction {
 		return PricingPlanVersion{}, ErrDirectionPurposeMismatch
@@ -245,7 +281,7 @@ func NewPricingPlanVersion(
 		direction:        direction,
 		purpose:          purpose,
 		baseChargeCode:   baseChargeCode,
-		aggregation:      AggregationPerPackage,
+		aggregation:      aggregation,
 		period:           period,
 		rateTable:        rateTable,
 		weight:           weight,
@@ -279,10 +315,13 @@ func (plan PricingPlanVersion) ContentDigest() string             { return plan.
 func (plan PricingPlanVersion) CanonicalizationVersion() string { return plan.canonicalization }
 
 func (plan PricingPlanVersion) valid() bool {
-	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || plan.aggregation != AggregationPerPackage || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.structures.valid() || !plan.manifest.valid() || plan.canonicalization == "" || plan.contentDigest == "" {
+	if plan.reference.kind != ArtifactPricingPlan || !plan.reference.valid() || !plan.scope.valid() || !plan.direction.valid() || !plan.purpose.valid() || plan.purpose.pairedDirection() != plan.direction || !plan.baseChargeCode.valid() || !plan.aggregation.valid() || !plan.period.valid() || !plan.rateTable.valid() || !plan.weight.valid() || !plan.structures.valid() || !plan.manifest.valid() || plan.canonicalization == "" || plan.contentDigest == "" {
 		return false
 	}
 	if !plan.period.Within(plan.rateTable.period) || plan.weight.rounding.unit() != plan.rateTable.unit {
+		return false
+	}
+	if !plan.aggregation.aggregate() && plan.structures.declaresPerPiece(plan.rules) {
 		return false
 	}
 	seenRuleIDs := make(map[string]struct{}, len(plan.rules))

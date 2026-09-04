@@ -278,12 +278,73 @@ func (purpose PricingPurpose) String() string {
 	return string(purpose)
 }
 
+// AggregationMode 是定价方案的聚合方式：评价在什么主体上形成一次（ADR-0111 Decision 一）。逐委托（票级）
+// 与逐主单（主单级）随 ADR-0111 加入；主单级的形状已定而身份来源缺——承运总单登记册归 transport-fulfillment，
+// 今天不存在。
 type AggregationMode string
 
-const AggregationPerPackage AggregationMode = "PER_PACKAGE"
+const (
+	AggregationPerPackage        AggregationMode = "PER_PACKAGE"
+	AggregationPerShipment       AggregationMode = "PER_SHIPMENT"
+	AggregationPerMasterDocument AggregationMode = "PER_MASTER_DOCUMENT"
+)
+
+func (mode AggregationMode) String() string { return string(mode) }
 
 func (mode AggregationMode) valid() bool {
-	return mode == AggregationPerPackage
+	switch mode {
+	case AggregationPerPackage, AggregationPerShipment, AggregationPerMasterDocument:
+		return true
+	default:
+		return false
+	}
+}
+
+// aggregate 报出该聚合方式的评价主体是不是多个包裹的集合。
+func (mode AggregationMode) aggregate() bool {
+	return mode != AggregationPerPackage
+}
+
+// subjectScope 是这种聚合方式下「每主体一次」的费用行所标的聚合单位。
+func (mode AggregationMode) subjectScope() ChargeScope {
+	switch mode {
+	case AggregationPerShipment:
+		return ChargeScopeShipment
+	case AggregationPerMasterDocument:
+		return ChargeScopeMasterDocument
+	default:
+		return ChargeScopePackage
+	}
+}
+
+// admits 判该聚合方式接不接受这种评价主体（ADR-0111 Alternatives「主体不对，标签救不回来」）。
+func (mode AggregationMode) admits(kind EvaluationSubjectKind) bool {
+	switch mode {
+	case AggregationPerPackage:
+		return kind == SubjectAcceptedPackage || kind == SubjectEstimate
+	case AggregationPerShipment:
+		return kind == SubjectShipment
+	case AggregationPerMasterDocument:
+		return kind == SubjectMasterDocument
+	default:
+		return false
+	}
+}
+
+// ChargeUnit 是一条固定规则或附加费规则在聚合主体上的计收单位（ADR-0111 Decision 二「按件的行按件数乘定额，
+// 按票 / 按主单的行取定额一次」）。默认每主体一次；按件只在聚合方式为逐委托 / 逐主单的卡上有意义，逐包裹的卡
+// 上两者是同一件事，构造门拒。
+type ChargeUnit string
+
+const (
+	ChargeUnitPerSubject ChargeUnit = ""
+	ChargeUnitPerPiece   ChargeUnit = "PER_PIECE"
+)
+
+func (unit ChargeUnit) String() string { return string(unit) }
+
+func (unit ChargeUnit) valid() bool {
+	return unit == ChargeUnitPerSubject || unit == ChargeUnitPerPiece
 }
 
 type PricingWeightMethod string
@@ -327,12 +388,25 @@ func (effect ChargeEffect) valid() bool {
 	return effect == ChargeEffectAdd || effect == ChargeEffectDeduct
 }
 
+// ChargeScope 是费用行上标的聚合单位（ADR-0111 Decision 一「费用行上标聚合单位，读面据此知道一行金额是每包裹
+// 还是每票、每主单」）。按件计收的行在聚合主体上仍标 PACKAGE——金额是件数乘定额，解释里写着乘法。
 type ChargeScope string
 
-const ChargeScopePackage ChargeScope = "PACKAGE"
+const (
+	ChargeScopePackage        ChargeScope = "PACKAGE"
+	ChargeScopeShipment       ChargeScope = "SHIPMENT"
+	ChargeScopeMasterDocument ChargeScope = "MASTER_DOCUMENT"
+)
+
+func (scope ChargeScope) String() string { return string(scope) }
 
 func (scope ChargeScope) valid() bool {
-	return scope == ChargeScopePackage
+	switch scope {
+	case ChargeScopePackage, ChargeScopeShipment, ChargeScopeMasterDocument:
+		return true
+	default:
+		return false
+	}
 }
 
 type ChargeBasis string

@@ -81,6 +81,12 @@ type catalogueReadingSnapshot struct {
 	Resolved  bool                     `json:"resolved"`
 }
 
+type memberManifestSnapshot struct {
+	Members         []string        `json:"members"`
+	TotalActual     weightSnapshot  `json:"totalActual"`
+	TotalVolumetric *weightSnapshot `json:"totalVolumetric,omitempty"`
+}
+
 type inputSnapshotDocument struct {
 	TenantID          string                     `json:"tenantId"`
 	Scope             string                     `json:"scope"`
@@ -88,6 +94,7 @@ type inputSnapshotDocument struct {
 	Zone              string                     `json:"zone"`
 	Postal            *postalRouteSnapshot       `json:"postal,omitempty"`
 	CatalogueReadings []catalogueReadingSnapshot `json:"catalogueReadings,omitempty"`
+	Members           *memberManifestSnapshot    `json:"members,omitempty"`
 	ActualWeight      weightSnapshot             `json:"actualWeight"`
 	Dimensions        *dimensionsSnapshot        `json:"dimensions,omitempty"`
 	BusinessAt        time.Time                  `json:"businessAt"`
@@ -430,6 +437,17 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 	if input.postal != nil {
 		document.Postal = &postalRouteSnapshot{Origin: input.postal.origin, Destination: input.postal.destination}
 	}
+	if input.members != nil {
+		manifest := memberManifestSnapshot{TotalActual: weightOf(input.members.totalActual), Members: make([]string, 0, len(input.members.members))}
+		for _, member := range input.members.members {
+			manifest.Members = append(manifest.Members, member.String())
+		}
+		if input.members.totalVolumetric != nil {
+			volumetric := weightOf(*input.members.totalVolumetric)
+			manifest.TotalVolumetric = &volumetric
+		}
+		document.Members = &manifest
+	}
 	for _, reading := range input.catalogueReadings {
 		document.CatalogueReadings = append(document.CatalogueReadings, catalogueReadingSnapshot{
 			Kind:      string(reading.kind),
@@ -485,6 +503,17 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 	}
 	if document.Postal != nil {
 		input.postal = &PostalRoute{origin: document.Postal.Origin, destination: document.Postal.Destination}
+	}
+	if document.Members != nil {
+		manifest := MemberManifest{totalActual: weightFrom(document.Members.TotalActual)}
+		for _, member := range document.Members.Members {
+			manifest.members = append(manifest.members, PackageID{identifier{value: member}})
+		}
+		if document.Members.TotalVolumetric != nil {
+			volumetric := weightFrom(*document.Members.TotalVolumetric)
+			manifest.totalVolumetric = &volumetric
+		}
+		input.members = &manifest
 	}
 	for _, reading := range document.CatalogueReadings {
 		input.catalogueReadings = append(input.catalogueReadings, ResolvedCatalogueValue{

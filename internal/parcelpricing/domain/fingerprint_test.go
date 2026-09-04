@@ -71,7 +71,7 @@ func TestReplayPricingEvaluationDetectsChangedSemanticResult(t *testing.T) {
 	currency, _ := NewCurrency("USD")
 	extraAmount, _ := NewMoneyFromString("1", currency)
 	code, _ := NewChargeCode("LEGACY_RUNTIME")
-	extraLine, err := newFixedChargeLine("fixed:legacy-runtime", code, "Legacy runtime charge", ChargeEffectAdd, extraAmount, 1, "legacy-runtime")
+	extraLine, err := newFixedChargeLine("fixed:legacy-runtime", code, ChargeScopePackage, "Legacy runtime charge", ChargeEffectAdd, extraAmount, 1, "legacy-runtime")
 	if err != nil {
 		t.Fatalf("extra line: %v", err)
 	}

@@ -68,11 +68,11 @@ func newChargeLine(id string, kind ChargeLineKind, code ChargeCode, scope Charge
 	}
 	switch kind {
 	case ChargeLineBase:
-		if scope != ChargeScopePackage || basis != ChargeBasisRateEntry || method != ChargeMethodTableLookup || effect != ChargeEffectAdd || order != 0 {
+		if basis != ChargeBasisRateEntry || method != ChargeMethodTableLookup || effect != ChargeEffectAdd || order != 0 {
 			return ChargeLine{}, ErrInvalidChargeLine
 		}
 	case ChargeLineFixed, ChargeLineSurcharge:
-		if scope != ChargeScopePackage || basis != ChargeBasisFixedAmount || method != ChargeMethodFixedAmount || order < 1 {
+		if basis != ChargeBasisFixedAmount || method != ChargeMethodFixedAmount || order < 1 {
 			return ChargeLine{}, ErrInvalidChargeLine
 		}
 	default:
@@ -81,18 +81,40 @@ func newChargeLine(id string, kind ChargeLineKind, code ChargeCode, scope Charge
 	return ChargeLine{id: id, kind: kind, chargeCode: code, scope: scope, basis: basis, method: method, description: description, effect: effect, amount: amount, order: order, sourceRef: sourceRef}, nil
 }
 
-func newBaseChargeLine(id string, code ChargeCode, description string, amount Money, sourceRef string) (ChargeLine, error) {
-	return newChargeLine(id, ChargeLineBase, code, ChargeScopePackage, ChargeBasisRateEntry, ChargeMethodTableLookup, description, ChargeEffectAdd, amount, 0, sourceRef)
+// 费用行的聚合单位（ADR-0111 Decision 一）：基础运费与「每主体一次」的规则标方案的主体单位，按件计收的
+// 规则标 PACKAGE——金额是件数乘定额，解释里写着乘法。
+func newBaseChargeLine(id string, code ChargeCode, scope ChargeScope, description string, amount Money, sourceRef string) (ChargeLine, error) {
+	return newChargeLine(id, ChargeLineBase, code, scope, ChargeBasisRateEntry, ChargeMethodTableLookup, description, ChargeEffectAdd, amount, 0, sourceRef)
 }
 
-func newFixedChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
-	return newChargeLine(id, ChargeLineFixed, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
+func newFixedChargeLine(id string, code ChargeCode, scope ChargeScope, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
+	return newChargeLine(id, ChargeLineFixed, code, scope, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
 }
 
 // 附加费费用行和无条件固定规则一样是一个定额，但它单列一种类型，因为它由一个必须
 // 可重放的判定条件产生——它的来源是一条同样可能未命中的规则。
-func newSurchargeChargeLine(id string, code ChargeCode, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
-	return newChargeLine(id, ChargeLineSurcharge, code, ChargeScopePackage, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
+func newSurchargeChargeLine(id string, code ChargeCode, scope ChargeScope, description string, effect ChargeEffect, amount Money, order int, sourceRef string) (ChargeLine, error) {
+	return newChargeLine(id, ChargeLineSurcharge, code, scope, ChargeBasisFixedAmount, ChargeMethodFixedAmount, description, effect, amount, order, sourceRef)
+}
+
+// chargeScopeFor 定一条规则的费用行标哪种聚合单位；按件的行还交回乘数（成员数）。
+func chargeScopeFor(plan PricingPlanVersion, input PricingInputSnapshot, unit ChargeUnit) (ChargeScope, int) {
+	if unit == ChargeUnitPerPiece {
+		return ChargeScopePackage, input.memberCount()
+	}
+	return plan.aggregation.subjectScope(), 1
+}
+
+// multiplyByPieces 把一条按件计收的定额乘成员数（ADR-0111 Decision 二「按件的行按件数乘定额」）。
+func multiplyByPieces(amount Money, pieces int) (Money, error) {
+	if pieces == 1 {
+		return amount, nil
+	}
+	product, err := amount.amount.Mul(NewDecimalFromInt64(int64(pieces)))
+	if err != nil {
+		return Money{}, err
+	}
+	return NewMoney(product, amount.currency)
 }
 
 func (line ChargeLine) valid() bool {
@@ -250,6 +272,12 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if request.input.scope != request.plan.scope {
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("PRICING_SCOPE_MISMATCH", ErrPricingScopeMismatch.Error()))
 	}
+	// 聚合方式与主体种类必须一致（ADR-0111）：逐委托的卡拿到一个包裹，「每票」的金额会在每个包裹上各出现一次；
+	// 逐包裹的卡拿到一个委托，合计重量会被当成一件包裹查表。两边都是分歧，不是缺口。
+	if !request.plan.aggregation.admits(request.input.subject.kind) {
+		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("AGGREGATION_SUBJECT_MISMATCH",
+			fmt.Sprintf("plan aggregates %s but the evaluation subject is %s", request.plan.aggregation, request.input.subject.kind)))
+	}
 	if !request.plan.period.Contains(request.input.businessAt) || !request.plan.rateTable.period.Contains(request.input.businessAt) {
 		return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("VERSION_NOT_APPLICABLE", ErrPricingPeriodNotApplicable.Error()))
 	}
@@ -384,7 +412,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
-	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, "Base rate", baseAmount, matchedRate.id.String())
+	baseLine, err := newBaseChargeLine("base:"+matchedRate.id.String(), request.plan.baseChargeCode, request.plan.aggregation.subjectScope(), "Base rate", baseAmount, matchedRate.id.String())
 	if err != nil {
 		return evaluation.withCalculationError(err)
 	}
@@ -392,11 +420,19 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	runningAmount := baseAmount.amount
 
 	for _, rule := range request.plan.rules {
-		lineAmount, roundErr := roundLine("fixed:"+rule.id, rule.amount)
+		scope, pieces := chargeScopeFor(request.plan, request.input, rule.unit)
+		ruleAmount, multiplyErr := multiplyByPieces(rule.amount, pieces)
+		if multiplyErr != nil {
+			return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, multiplyErr))
+		}
+		if pieces != 1 {
+			evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("fixed rule %s charged per piece: %s %s × %d pieces", rule.id, rule.amount.amount.String(), rule.amount.currency, pieces))
+		}
+		lineAmount, roundErr := roundLine("fixed:"+rule.id, ruleAmount)
 		if roundErr != nil {
 			return evaluation.withCalculationError(roundErr)
 		}
-		line, lineErr := newFixedChargeLine("fixed:"+rule.id, rule.chargeCode, rule.description, rule.effect, lineAmount, rule.order, rule.id)
+		line, lineErr := newFixedChargeLine("fixed:"+rule.id, rule.chargeCode, scope, rule.description, rule.effect, lineAmount, rule.order, rule.id)
 		if lineErr != nil {
 			return evaluation.withCalculationError(lineErr)
 		}
@@ -463,14 +499,22 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 		}
 
 		collect := func(outcome *surchargeOutcome) error {
+			scope, pieces := chargeScopeFor(request.plan, request.input, outcome.rule.unit)
+			ruleAmount, multiplyErr := multiplyByPieces(outcome.amount, pieces)
+			if multiplyErr != nil {
+				return fmt.Errorf("%w: %v", ErrEvaluationArithmetic, multiplyErr)
+			}
+			if pieces != 1 {
+				evaluation.explanation = append(evaluation.explanation, fmt.Sprintf("surcharge %s charged per piece: %s %s × %d pieces", outcome.rule.id, outcome.amount.amount.String(), outcome.amount.currency, pieces))
+			}
 			// 逐行取整在费用行成形之前、在百分比依据登记之前：读这一行的百分比费用要读到的是卡上
 			// 那个金额，不是取整前的中间值。
-			lineAmount, roundErr := roundLine("surcharge:"+outcome.rule.id, outcome.amount)
+			lineAmount, roundErr := roundLine("surcharge:"+outcome.rule.id, ruleAmount)
 			if roundErr != nil {
 				return roundErr
 			}
 			outcome.amount = lineAmount
-			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
+			line, lineErr := newSurchargeChargeLine("surcharge:"+outcome.rule.id, outcome.rule.chargeCode, scope, outcome.rule.description, outcome.rule.effect, outcome.amount, order, outcome.rule.id)
 			if lineErr != nil {
 				return lineErr
 			}
@@ -742,8 +786,19 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 	running := NewDecimalFromInt64(0)
 	seenIDs := make(map[string]struct{}, len(evaluation.chargeLines))
 	seenCodes := make(map[string]struct{}, len(evaluation.chargeLines))
+	// 费用行的聚合单位只能是主体那一级或 PACKAGE（按件计收的行）；逐包裹主体上两者是同一格（ADR-0111 Decision 一）。
+	subjectScope := ChargeScopePackage
+	switch evaluation.input.subject.kind {
+	case SubjectShipment:
+		subjectScope = ChargeScopeShipment
+	case SubjectMasterDocument:
+		subjectScope = ChargeScopeMasterDocument
+	}
 	for index, line := range evaluation.chargeLines {
 		if line.amount.currency != currency {
+			return false
+		}
+		if line.scope != subjectScope && line.scope != ChargeScopePackage {
 			return false
 		}
 		if _, exists := seenIDs[line.id]; exists {
@@ -755,10 +810,10 @@ func (evaluation PricingEvaluation) validCompletedCharges() bool {
 		}
 		seenCodes[line.chargeCode.String()] = struct{}{}
 		if index == 0 {
-			if line.kind != ChargeLineBase || line.scope != ChargeScopePackage || line.basis != ChargeBasisRateEntry || line.method != ChargeMethodTableLookup || line.effect != ChargeEffectAdd || line.order != 0 {
+			if line.kind != ChargeLineBase || line.scope != subjectScope || line.basis != ChargeBasisRateEntry || line.method != ChargeMethodTableLookup || line.effect != ChargeEffectAdd || line.order != 0 {
 				return false
 			}
-		} else if (line.kind != ChargeLineFixed && line.kind != ChargeLineSurcharge) || line.scope != ChargeScopePackage || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
+		} else if (line.kind != ChargeLineFixed && line.kind != ChargeLineSurcharge) || line.basis != ChargeBasisFixedAmount || line.method != ChargeMethodFixedAmount || line.order < 1 {
 			return false
 		}
 		if index > 0 {
@@ -923,6 +978,15 @@ func copyInputSnapshot(input PricingInputSnapshot) PricingInputSnapshot {
 	if input.postal != nil {
 		route := *input.postal
 		copy.postal = &route
+	}
+	if input.members != nil {
+		manifest := *input.members
+		manifest.members = append([]PackageID(nil), input.members.members...)
+		if input.members.totalVolumetric != nil {
+			volumetric := *input.members.totalVolumetric
+			manifest.totalVolumetric = &volumetric
+		}
+		copy.members = &manifest
 	}
 	copy.factReferences = append([]VersionedFactReference(nil), input.factReferences...)
 	copy.seriesValues = append([]ReferenceSeriesValue(nil), input.seriesValues...)

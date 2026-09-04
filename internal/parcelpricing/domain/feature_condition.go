@@ -166,7 +166,13 @@ func (features PackageFeatures) WithCategories(
 }
 
 func (features PackageFeatures) valid() bool {
-	return features.dimensions.valid() && features.actualWeight.valid()
+	// 尺寸可缺：票级 / 主单级主体（ADR-0111）的特征只有重量与类别，几何条件读到缺席报特征不可用。
+	return features.actualWeight.valid() && (features.dimensions == (Dimensions{}) || features.dimensions.valid())
+}
+
+// hasDimensions 报出几何量在不在——聚合主体上没有。
+func (features PackageFeatures) hasDimensions() bool {
+	return features.dimensions.valid()
 }
 
 // weightOf 交回条件要读的重量特征；派生量缺席即特征不可用。
@@ -340,6 +346,9 @@ func (condition FeatureCondition) Matches(features PackageFeatures) (bool, error
 	var observed, threshold Decimal
 	switch condition.source.measure() {
 	case measureLength:
+		if !features.hasDimensions() {
+			return false, ErrFeatureUnavailable
+		}
 		value, err := features.length(condition.source)
 		if err != nil {
 			return false, err
@@ -349,6 +358,9 @@ func (condition FeatureCondition) Matches(features PackageFeatures) (bool, error
 		}
 		observed, threshold = value.value, condition.lengthThreshold.value
 	case measureVolume:
+		if !features.hasDimensions() {
+			return false, ErrFeatureUnavailable
+		}
 		value, err := features.dimensions.Volume()
 		if err != nil {
 			return false, err

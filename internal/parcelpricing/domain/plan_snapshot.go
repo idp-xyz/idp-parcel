@@ -106,6 +106,7 @@ type fixedChargeRuleSnapshot struct {
 	Effect      string        `json:"effect"`
 	Amount      moneySnapshot `json:"amount"`
 	Order       int           `json:"order"`
+	Unit        string        `json:"unit,omitempty"`
 }
 
 type surchargeCalculationSnapshot struct {
@@ -138,6 +139,7 @@ type surchargeRuleSnapshot struct {
 	ExclusivityGroup string                       `json:"exclusivityGroup,omitempty"`
 	Priority         int                          `json:"priority,omitempty"`
 	MinimumWeight    *conditionalMinimumSnapshot  `json:"conditionalMinimumWeight,omitempty"`
+	Unit             string                       `json:"unit,omitempty"`
 }
 
 type chargeDependencySnapshot struct {
@@ -254,7 +256,7 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 	for _, rule := range plan.rules {
 		document.Rules = append(document.Rules, fixedChargeRuleSnapshot{
 			ID: rule.id, Code: rule.chargeCode.String(), Description: rule.description,
-			Effect: string(rule.effect), Amount: moneyOf(rule.amount), Order: rule.order,
+			Effect: string(rule.effect), Amount: moneyOf(rule.amount), Order: rule.order, Unit: rule.unit.String(),
 		})
 	}
 	for _, rule := range plan.structures.surchargeRules {
@@ -305,7 +307,7 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 	for _, rule := range document.Rules {
 		plan.rules = append(plan.rules, FixedChargeRule{
 			id: rule.ID, chargeCode: ChargeCode{value: rule.Code}, description: rule.Description,
-			effect: ChargeEffect(rule.Effect), amount: moneyFrom(rule.Amount), order: rule.Order,
+			effect: ChargeEffect(rule.Effect), amount: moneyFrom(rule.Amount), order: rule.Order, unit: ChargeUnit(rule.Unit),
 		})
 	}
 	for _, rule := range document.SurchargeRules {
@@ -620,6 +622,7 @@ func surchargeRuleDocumentOf(rule SurchargeRule) surchargeRuleSnapshot {
 		Exclusivity:      rule.exclusivity.String(),
 		ExclusivityGroup: rule.exclusivityGroup,
 		Priority:         rule.priority,
+		Unit:             rule.unit.String(),
 	}
 	if rule.minimumWeight != nil {
 		minimum := conditionalMinimumSnapshot{
@@ -643,6 +646,7 @@ func surchargeRuleFrom(document surchargeRuleSnapshot) SurchargeRule {
 		exclusivity:      ExclusivityStance(document.Exclusivity),
 		exclusivityGroup: document.ExclusivityGroup,
 		priority:         document.Priority,
+		unit:             ChargeUnit(document.Unit),
 	}
 	if document.MinimumWeight != nil {
 		minimum := ConditionalMinimumWeight{

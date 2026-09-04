@@ -205,6 +205,8 @@ type canonicalChargeRuleDocument struct {
 	Effect      string         `json:"effect"`
 	Amount      canonicalMoney `json:"amount"`
 	Order       int            `json:"order"`
+	// 按件计收（ADR-0111）时才有；每主体一次的规则省略，逐包裹的卡字节不变。
+	Unit string `json:"unit,omitempty"`
 }
 
 func canonicalChargeRuleValue(rule FixedChargeRule) canonicalChargeRuleDocument {
@@ -215,6 +217,7 @@ func canonicalChargeRuleValue(rule FixedChargeRule) canonicalChargeRuleDocument 
 		Effect:      string(rule.effect),
 		Amount:      canonicalMoneyValue(rule.amount),
 		Order:       rule.order,
+		Unit:        rule.unit.String(),
 	}
 }
 
@@ -331,6 +334,7 @@ type canonicalSurchargeRuleDocument struct {
 	ExclusivityGroup string                                     `json:"exclusivity_group"`
 	Priority         int                                        `json:"priority"`
 	MinimumWeight    *canonicalConditionalMinimumWeightDocument `json:"conditional_minimum_weight"`
+	Unit             string                                     `json:"unit,omitempty"`
 }
 
 func canonicalSurchargeRuleValue(rule SurchargeRule) canonicalSurchargeRuleDocument {
@@ -344,6 +348,7 @@ func canonicalSurchargeRuleValue(rule SurchargeRule) canonicalSurchargeRuleDocum
 		Exclusivity:      rule.exclusivity.String(),
 		ExclusivityGroup: rule.exclusivityGroup,
 		Priority:         rule.priority,
+		Unit:             rule.unit.String(),
 	}
 	if rule.minimumWeight != nil {
 		minimum := canonicalConditionalMinimumWeightValue(*rule.minimumWeight)
@@ -662,6 +667,30 @@ type canonicalEvaluationInput struct {
 	// 查过同一版而没查到的待判断，重放要落在同一个摘要上。
 	Postal     *canonicalPostalRouteDocument       `json:"postal,omitempty"`
 	Catalogues []canonicalCatalogueReadingDocument `json:"catalogues,omitempty"`
+	// 成员清单（ADR-0111 Decision 二）进语义摘要：同一主单成员变了就是另一次评价。单包裹主体省略。
+	Members *canonicalMemberManifestDocument `json:"members,omitempty"`
+}
+
+type canonicalMemberManifestDocument struct {
+	Members         []string `json:"members"`
+	TotalActual     string   `json:"total_actual"`
+	TotalVolumetric string   `json:"total_volumetric,omitempty"`
+	Unit            string   `json:"unit"`
+}
+
+func canonicalMemberManifestValue(manifest MemberManifest) canonicalMemberManifestDocument {
+	document := canonicalMemberManifestDocument{
+		Members:     make([]string, 0, len(manifest.members)),
+		TotalActual: manifest.totalActual.value.String(),
+		Unit:        manifest.totalActual.unit.String(),
+	}
+	for _, member := range manifest.members {
+		document.Members = append(document.Members, member.String())
+	}
+	if manifest.totalVolumetric != nil {
+		document.TotalVolumetric = manifest.totalVolumetric.value.String()
+	}
+	return document
 }
 
 type canonicalPostalRouteDocument struct {
@@ -798,6 +827,10 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	}
 	if route, declared := evaluation.input.PostalRoute(); declared {
 		input.Postal = &canonicalPostalRouteDocument{Origin: route.origin, Destination: route.destination}
+	}
+	if manifest, declared := evaluation.input.Members(); declared {
+		members := canonicalMemberManifestValue(manifest)
+		input.Members = &members
 	}
 	if sides, ok := evaluation.input.Dimensions(); ok {
 		declared := canonicalDimensionsValue(sides)

@@ -284,6 +284,34 @@ type SurchargeRule struct {
 	exclusivityGroup string
 	priority         int
 	minimumWeight    *ConditionalMinimumWeight
+	// unit 是聚合主体上的计收单位（ADR-0111 Decision 二）：默认每主体一次，PerPiece 改为按件数乘定额。
+	unit ChargeUnit
+}
+
+// PerPiece 把这条附加费改为按件计收，判据同 FixedChargeRule.PerPiece。
+func (rule SurchargeRule) PerPiece() (SurchargeRule, error) {
+	rule.unit = ChargeUnitPerPiece
+	if !rule.valid() {
+		return SurchargeRule{}, ErrInvalidSurchargeRule
+	}
+	return rule, nil
+}
+
+func (rule SurchargeRule) Unit() ChargeUnit { return rule.unit }
+
+// declaresPerPiece 报出方案的任何一条固定规则或附加费规则是否按件计收。
+func (structures PricingPlanStructures) declaresPerPiece(rules []FixedChargeRule) bool {
+	for _, rule := range rules {
+		if rule.unit == ChargeUnitPerPiece {
+			return true
+		}
+	}
+	for _, rule := range structures.surchargeRules {
+		if rule.unit == ChargeUnitPerPiece {
+			return true
+		}
+	}
+	return false
 }
 
 func NewSurchargeRule(
@@ -421,7 +449,7 @@ func (calculation SurchargeCalculation) lookupWeightUnits() []WeightUnit {
 
 func (rule SurchargeRule) valid() bool {
 	if !trimmed(rule.id) || !trimmed(rule.description) || !rule.chargeCode.valid() ||
-		!rule.effect.valid() || !rule.condition.valid() || !rule.calculation.valid() {
+		!rule.effect.valid() || !rule.condition.valid() || !rule.calculation.valid() || !rule.unit.valid() {
 		return false
 	}
 	switch rule.exclusivity {

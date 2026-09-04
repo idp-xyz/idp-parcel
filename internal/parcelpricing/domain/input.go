@@ -15,17 +15,98 @@ type EvaluationSubjectKind string
 const (
 	SubjectAcceptedPackage EvaluationSubjectKind = "ACCEPTED_PACKAGE"
 	SubjectEstimate        EvaluationSubjectKind = "ESTIMATE"
+	// SubjectShipment（委托，票级）与 SubjectMasterDocument（承运总单，主单级）随 ADR-0111 加入（CONTEXT「评价对象」
+	// 四种）：服务按票、按主单计费的项目，输入带成员清单与合计量；金额向包裹的归因归 settlement-accounting。
+	SubjectShipment       EvaluationSubjectKind = "SHIPMENT"
+	SubjectMasterDocument EvaluationSubjectKind = "MASTER_DOCUMENT"
 )
 
 func (kind EvaluationSubjectKind) String() string { return string(kind) }
 
 func (kind EvaluationSubjectKind) valid() bool {
 	switch kind {
-	case SubjectAcceptedPackage, SubjectEstimate:
+	case SubjectAcceptedPackage, SubjectEstimate, SubjectShipment, SubjectMasterDocument:
 		return true
 	default:
 		return false
 	}
+}
+
+// aggregate 报出该主体是不是多个包裹的集合——那两种主体的输入带成员清单而不带尺寸。
+func (kind EvaluationSubjectKind) aggregate() bool {
+	return kind == SubjectShipment || kind == SubjectMasterDocument
+}
+
+// NewShipmentSubject 指名一个已受理的委托（ADR-0111 Decision 四）：身份由 parcel-shipment 拥有，本上下文不铸。
+// 按 parcel-shipment 的语言，委托身份是主体，某一提交版本随快照的事实引用带——同一委托换代后成员清单可能变，
+// 主体不变（票 price-card-shape-gaps/03 记的默认读法，待 PS owner 确认）。
+func NewShipmentSubject(reference string) (EvaluationSubject, error) {
+	if !trimmed(reference) {
+		return EvaluationSubject{}, ErrPricingInputInvalid
+	}
+	return EvaluationSubject{kind: SubjectShipment, id: reference}, nil
+}
+
+// NewMasterDocumentSubject 指名一份承运总单（ADR-0111 Decision 四）：身份与版本由 transport-fulfillment 拥有。
+// TF 今天没有承运总单登记册——这里只是形状，不造替身、不拿包裹或集运单元引用顶替；生产上形成一次主单级评价
+// 要等 TF 立册。
+func NewMasterDocumentSubject(reference string) (EvaluationSubject, error) {
+	if !trimmed(reference) {
+		return EvaluationSubject{}, ErrPricingInputInvalid
+	}
+	return EvaluationSubject{kind: SubjectMasterDocument, id: reference}, nil
+}
+
+// MemberManifest 是票级 / 主单级评价输入的成员清单（ADR-0111 Decision 二）：成员包裹引用、合计实重、可缺的合计
+// 体积重。件数就是成员数；合计计价重量是评价内按重量策略派生的中间结果，不在这里。它进语义摘要——同一主单
+// 成员变了就是另一次评价。
+type MemberManifest struct {
+	members         []PackageID
+	totalActual     Weight
+	totalVolumetric *Weight
+}
+
+// NewMemberManifest 立一份成员清单：至少一个成员、不重复；合计体积重可缺——缺了而卡按 MAX 计价时评价待判断，
+// 不退回实重（与逐包裹缺尺寸同一条 CONTEXT 规则）。
+func NewMemberManifest(members []PackageID, totalActual Weight, totalVolumetric *Weight) (MemberManifest, error) {
+	manifest := MemberManifest{members: append([]PackageID(nil), members...), totalActual: totalActual}
+	if totalVolumetric != nil {
+		declared := *totalVolumetric
+		manifest.totalVolumetric = &declared
+	}
+	sort.SliceStable(manifest.members, func(left, right int) bool {
+		return manifest.members[left].String() < manifest.members[right].String()
+	})
+	if !manifest.valid() {
+		return MemberManifest{}, ErrPricingInputInvalid
+	}
+	return manifest, nil
+}
+
+func (manifest MemberManifest) Members() []PackageID {
+	return append([]PackageID(nil), manifest.members...)
+}
+func (manifest MemberManifest) Count() int                { return len(manifest.members) }
+func (manifest MemberManifest) TotalActualWeight() Weight { return manifest.totalActual }
+
+// TotalVolumetricWeight 只在调用方声明了合计体积重时给出。
+func (manifest MemberManifest) TotalVolumetricWeight() (Weight, bool) {
+	if manifest.totalVolumetric == nil {
+		return Weight{}, false
+	}
+	return *manifest.totalVolumetric, true
+}
+
+func (manifest MemberManifest) valid() bool {
+	if len(manifest.members) == 0 || !manifest.totalActual.valid() {
+		return false
+	}
+	for index, member := range manifest.members {
+		if !member.valid() || (index > 0 && manifest.members[index-1].String() >= member.String()) {
+			return false
+		}
+	}
+	return manifest.totalVolumetric == nil || (manifest.totalVolumetric.valid() && manifest.totalVolumetric.unit == manifest.totalActual.unit)
 }
 
 type EvaluationSubject struct {
@@ -68,12 +149,54 @@ type PricingInputSnapshot struct {
 	zone              string
 	postal            *PostalRoute
 	catalogueReadings []ResolvedCatalogueValue
-	actualWeight      Weight
-	dimensions        *Dimensions
-	businessAt        time.Time
-	factReferences    []VersionedFactReference
-	seriesValues      []ReferenceSeriesValue
-	settlement        *Currency
+	// actualWeight 在逐包裹主体上是包裹实重，在票级 / 主单级主体上是成员清单的合计实重（ADR-0111 Decision 二）。
+	actualWeight Weight
+	dimensions   *Dimensions
+	// members 只在票级 / 主单级主体上有；包裹与试算主体不得带它，构造门按主体种类拒错配。
+	members        *MemberManifest
+	businessAt     time.Time
+	factReferences []VersionedFactReference
+	seriesValues   []ReferenceSeriesValue
+	settlement     *Currency
+}
+
+// NewAggregatePricingInputSnapshot 立一份票级 / 主单级评价输入（ADR-0111 Decision 二）：主体是委托或承运总单，
+// 重量来自成员清单的合计，尺寸不适用。分区走调用方给值这一格，绑了目录的卡再 WithPostalRoute 补邮编路线。
+func NewAggregatePricingInputSnapshot(
+	tenantID TenantID,
+	scope PricingScopeID,
+	subject EvaluationSubject,
+	zone string,
+	members MemberManifest,
+	businessAt time.Time,
+	factReferences ...VersionedFactReference,
+) (PricingInputSnapshot, error) {
+	if !subject.kind.aggregate() || !members.valid() || strings.TrimSpace(zone) == "" {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	input, err := newPricingInputSnapshot(tenantID, scope, subject, zone, members.totalActual, nil, businessAt, factReferences)
+	if err != nil {
+		return PricingInputSnapshot{}, err
+	}
+	declared := members
+	input.members = &declared
+	return input, nil
+}
+
+// Members 只在票级 / 主单级主体上给出成员清单。
+func (input PricingInputSnapshot) Members() (MemberManifest, bool) {
+	if input.members == nil {
+		return MemberManifest{}, false
+	}
+	return *input.members, true
+}
+
+// memberCount 是按件计收的乘数：聚合主体取成员数，单包裹主体恒为一。
+func (input PricingInputSnapshot) memberCount() int {
+	if input.members == nil {
+		return 1
+	}
+	return len(input.members.members)
 }
 
 // NewPostalPricingInputSnapshot 立一份不带调用方分区、只带邮编路线的输入：分区与偏远档位由绑了目录的卡
@@ -265,6 +388,10 @@ func (input PricingInputSnapshot) Features() (PackageFeatures, error) {
 	if !input.valid() {
 		return PackageFeatures{}, ErrPricingInputInvalid
 	}
+	// 聚合主体的特征只有重量与类别：几何量在多个包裹的集合上没有定义，读它们的条件报特征不可用。
+	if input.members != nil {
+		return PackageFeatures{actualWeight: input.actualWeight}, nil
+	}
 	sides, declared := input.Dimensions()
 	if !declared {
 		return PackageFeatures{}, ErrMissingDimensions
@@ -289,6 +416,13 @@ func (input PricingInputSnapshot) valid() bool {
 		}
 	}
 	if input.dimensions != nil && !input.dimensions.valid() {
+		return false
+	}
+	// 成员清单与主体种类成对：聚合主体必有且合计实重就是快照的实重，单包裹主体必无。
+	if input.subject.kind.aggregate() != (input.members != nil) {
+		return false
+	}
+	if input.members != nil && (!input.members.valid() || input.dimensions != nil || !input.members.totalActual.Equal(input.actualWeight)) {
 		return false
 	}
 	for _, reference := range input.factReferences {
@@ -412,6 +546,14 @@ func deriveVolumetricWeight(input PricingInputSnapshot, policy PricingWeightPoli
 	factor, declared := policy.VolumetricFactor()
 	if !declared {
 		return Weight{}, ErrInvalidRoundingPolicy
+	}
+	// 聚合主体没有一组尺寸可算：合计体积重由调用方随成员清单声明（ADR-0111 Decision 二），缺了就是缺事实。
+	if input.members != nil {
+		total, declared := input.members.TotalVolumetricWeight()
+		if !declared {
+			return Weight{}, ErrMissingDimensions
+		}
+		return total, nil
 	}
 	sides, measured := input.Dimensions()
 	if !measured {
