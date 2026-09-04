@@ -73,6 +73,8 @@ func assembleBusinessEndpoints(
 	participationEnder tfhttp.ParticipationEnder,
 	credentialRegistration tfhttp.CredentialRegistrar,
 	effectiveTimeRuleRegistration tfhttp.EffectiveTimeRuleRegistrar,
+	externalTrackingFactReview tfhttp.ExternalTrackingFactReviewReader,
+	effectiveTimeJudgment tfhttp.EffectiveTimeJudge,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -227,6 +229,13 @@ func assembleBusinessEndpoints(
 		// 有效时间规则登记（label-channel/19）与凭证两行同一格：一版规则登进去会让收编执行器替该源
 		// 此后每一条素材形成有效时间，登记方身份没有可采信的渠道前 Intake 恒堵。
 		{Pattern: "/transport-fulfillment-effective-time-rule-registrations", Handler: tfhttp.NewRegisterEffectiveTimeRuleEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeRuleRegistration)},
+		// 外部承运轨迹事实的有效时间判断面两口（ADR-0085，票 label-channel/21）。读口按（租户，轨迹源）上列当前版
+		// （待判断 / 全部），是判断人的「该判哪几条」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约
+		// 查阅同一个 Intake 变量——隔离读准入（ADR-0078）启用时随查阅行一起换值。写口是所有者的显式判断（ADR-0102
+		// 决定三第一种来源），一次判断就把事实交给 visibility-exception 进客户可见面，同挂字面量 UnconfiguredIntake{}：
+		// 读开关换不了它。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧动作，不是承运方回传口。
+		{Pattern: "/transport-fulfillment-external-tracking-facts", Handler: tfhttp.NewQueryExternalTrackingFactsEndpoint(transportCatalogueIntake, externalTrackingFactReview)},
+		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeJudgment)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，

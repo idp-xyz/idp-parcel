@@ -122,6 +122,11 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 单独列在表尾而不挨着 /transport-fulfillment-records：这个键比表里最长的还长，插进
 	// 那一段会让 gofmt 把整段的对齐列一起改掉，而这是一份几个会话都在往里加行的共享文件。
 	"/transport-fulfillment-handover-scope-summary": true,
+	// 外部承运轨迹事实当前版查阅（票 label-channel/21 读半边）同样共用运输履约查阅的 Intake 变量，启用态
+	// 随它一起放行。三条判据逐条满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——
+	// 上列「该判哪几条」不触发判断，判断在另一条写行上，而写行挂的是字面量 UnconfiguredIntake{}，本
+	// 用例下面那半会证它仍答 403。单列在表尾的理由同上一行。
+	"/transport-fulfillment-external-tracking-facts": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

@@ -149,6 +149,17 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 外部承运轨迹事实的判断面（票 label-channel/21）：读口取事实登记册本尊——它同时实现写侧的幂等存取与
+	// ports.ExternalTrackingFactReviewRead，两个契约一只适配器（判据同交接范围汇总那格）；写编排另建，事务边界
+	// 归装配点。
+	externalTrackingFactReview, err := tfpostgres.NewExternalTrackingFacts(db)
+	if err != nil {
+		return err
+	}
+	effectiveTimeJudgment, err := buildEffectiveTimeJudgment(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -336,6 +347,8 @@ func run(logger *slog.Logger) error {
 			segmentOps.enderOf,
 			credentialRegistration,
 			effectiveTimeRuleRegistration,
+			externalTrackingFactReview,
+			effectiveTimeJudgment,
 			trackingViews,
 			projectionViews,
 			claims,

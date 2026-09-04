@@ -245,6 +245,31 @@ func (unwiredEffectiveTimeRuleRegistration) Register(
 	return tfapp.RegisterEffectiveTimeRuleResult{}, errOrchestrationNotWired
 }
 
+// unwiredExternalTrackingFactReview 是外部承运轨迹事实当前版读口的占位（票 label-channel/21 读半边）。
+// 读不回交回稳定错误而不是空册：空册是「这家源此刻没有待判断的事实」这一真答案，一次读故障顶成它
+// 会让两态在页面上同形。
+type unwiredExternalTrackingFactReview struct{}
+
+func (unwiredExternalTrackingFactReview) ListCurrentExternalTrackingFacts(
+	context.Context,
+	tfdomain.TenantID,
+	tfdomain.TrackingSourceReference,
+	tfports.EffectiveTimeReviewFilter,
+	int,
+) ([]tfports.ExternalTrackingFactReviewRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredEffectiveTimeJudgment 是有效时间显式判断口的编排占位（票 label-channel/21 写半边）。
+type unwiredEffectiveTimeJudgment struct{}
+
+func (unwiredEffectiveTimeJudgment) Judge(
+	context.Context,
+	tfapp.JudgeEffectiveTimeCommand,
+) (tfapp.JudgeEffectiveTimeResult, error) {
+	return tfapp.JudgeEffectiveTimeResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}
