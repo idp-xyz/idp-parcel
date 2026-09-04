@@ -42,19 +42,20 @@ type approvalDocument struct {
 }
 
 type declarationsDocument struct {
-	AsOfPolicies          []asOfPolicyDocument           `json:"asOfPolicies,omitempty"`
-	AcceptanceContent     *acceptanceContentDocument     `json:"acceptanceContent,omitempty"`
-	PendingRoutingBasis   string                         `json:"pendingRoutingBasis,omitempty"`
-	PreAcceptanceControl  *preAcceptanceControlDocument  `json:"preAcceptanceControl,omitempty"`
-	ContractContent       *contractContentDocument       `json:"contractContent,omitempty"`
-	IntakeQualification   *intakeQualificationDocument   `json:"intakeQualification,omitempty"`
-	FinalRules            []finalRuleDocument            `json:"finalRules,omitempty"`
-	CancellationAuthority []cancellationRuleDocument     `json:"cancellationAuthority,omitempty"`
-	RulePackageBody       *rulePackageBodyDocument       `json:"rulePackageBody,omitempty"`
-	SettlementPolicyBody  *settlementPolicyBodyDocument  `json:"settlementPolicyBody,omitempty"`
-	CreditPolicyBody      *creditPolicyBodyDocument      `json:"creditPolicyBody,omitempty"`
-	SupplierAgreementBody *supplierAgreementBodyDocument `json:"supplierAgreementBody,omitempty"`
-	PricePolicyBody       *pricePolicyBodyDocument       `json:"pricePolicyBody,omitempty"`
+	AsOfPolicies            []asOfPolicyDocument             `json:"asOfPolicies,omitempty"`
+	AcceptanceContent       *acceptanceContentDocument       `json:"acceptanceContent,omitempty"`
+	PendingRoutingBasis     string                           `json:"pendingRoutingBasis,omitempty"`
+	PreAcceptanceControl    *preAcceptanceControlDocument    `json:"preAcceptanceControl,omitempty"`
+	ContractContent         *contractContentDocument         `json:"contractContent,omitempty"`
+	IntakeQualification     *intakeQualificationDocument     `json:"intakeQualification,omitempty"`
+	FinalRules              []finalRuleDocument              `json:"finalRules,omitempty"`
+	CancellationAuthority   []cancellationRuleDocument       `json:"cancellationAuthority,omitempty"`
+	RulePackageBody         *rulePackageBodyDocument         `json:"rulePackageBody,omitempty"`
+	SettlementPolicyBody    *settlementPolicyBodyDocument    `json:"settlementPolicyBody,omitempty"`
+	CreditPolicyBody        *creditPolicyBodyDocument        `json:"creditPolicyBody,omitempty"`
+	SupplierAgreementBody   *supplierAgreementBodyDocument   `json:"supplierAgreementBody,omitempty"`
+	PricePolicyBody         *pricePolicyBodyDocument         `json:"pricePolicyBody,omitempty"`
+	CustomerServiceRuleBody *customerServiceRuleBodyDocument `json:"customerServiceRuleBody,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -192,6 +193,41 @@ type fxCaliberDocument struct {
 	QuoteType         string `json:"quoteType"`
 	AsOfSemantics     string `json:"asOfSemantics"`
 	AsOfPolicyVersion string `json:"asOfPolicyVersion"`
+}
+
+// customerServiceRuleBodyDocument 是一份客户服务规则正文（票 party-commercial-context-gaps/05，ADR-0104）：
+// 挂在哪个商业对象上、责任方、范围，与首发两项——索赔期限、最低材料。
+//
+// 适用对象是两个键恰一在场：serviceProduct 或 customerContract。两个都给或都不给在这里就拒收，不交给
+// 库上的 CHECK 去以一条技术错误报出一件领域上早该拒绝的事（判据同 creditPolicyBodyDocument 的两格额度）。
+// 两项清单可各自缺席，「合起来至少一项」由领域构造门在发布用例里拒——翻译层不代判也不代填。
+//
+// 只有这两项，且不是漏掉：另四项（追踪披露、异常响应、客户更新、通知义务）按 ADR-0104 不进首发，批文里
+// 出现就是未知字段、由 DisallowUnknownFields 拒收；重启条件在该 ADR 的 Consequences。
+type customerServiceRuleBodyDocument struct {
+	ServiceProduct   string                     `json:"serviceProduct,omitempty"`
+	CustomerContract string                     `json:"customerContract,omitempty"`
+	Responsible      string                     `json:"responsible"`
+	Scope            string                     `json:"scope"`
+	ClaimDeadlines   []claimDeadlineDocument    `json:"claimDeadlines,omitempty"`
+	MinimumMaterials []minimumMaterialsDocument `json:"minimumMaterials,omitempty"`
+}
+
+// claimDeadlineDocument 是一条索赔期限：种类（封闭三值，镜像 pcdomain.ClaimDeadlineKind）× 起算事件引用 ×
+// 整数天 × 日历或时区引用。days 用普通整数而不是指针：零与缺席在这里同义——都不是一条算得出东西的
+// 期限，由 NewClaimDeadlineRule 拒。任何天数只在批文里出现，仓库不持有取值。
+type claimDeadlineDocument struct {
+	Kind       string `json:"kind"`
+	StartEvent string `json:"startEvent"`
+	Days       int    `json:"days"`
+	Calendar   string `json:"calendar"`
+}
+
+// minimumMaterialsDocument 是一种索赔类型的最低材料清单。空清单由 NewMinimumMaterialsRule 拒——「这一类
+// 不要材料」没有任何消费方读得出来，要说也该是不写这一行。
+type minimumMaterialsDocument struct {
+	ClaimKind string   `json:"claimKind"`
+	Materials []string `json:"materials"`
 }
 
 // contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
@@ -478,7 +514,101 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.PricePolicyBody = body
 	}
 
+	if document.CustomerServiceRuleBody != nil {
+		body, err := customerServiceRuleBodyFrom(*document.CustomerServiceRuleBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.CustomerServiceRuleBody = body
+	}
+
 	return declarations, nil
+}
+
+func customerServiceRuleBodyFrom(
+	document customerServiceRuleBodyDocument,
+) (*pcapplication.CustomerServiceRuleBodyDeclaration, error) {
+	applicability, err := customerServiceRuleApplicabilityFrom(document.ServiceProduct, document.CustomerContract)
+	if err != nil {
+		return nil, err
+	}
+	responsible, err := pcdomain.NewPartyID(document.Responsible)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := pcdomain.NewCommercialScopeReference(document.Scope)
+	if err != nil {
+		return nil, err
+	}
+	deadlines := make([]pcdomain.ClaimDeadlineRule, 0, len(document.ClaimDeadlines))
+	for _, deadline := range document.ClaimDeadlines {
+		kind, err := claimDeadlineKindFrom(deadline.Kind)
+		if err != nil {
+			return nil, err
+		}
+		startEvent, err := pcdomain.NewDeadlineStartEventReference(deadline.StartEvent)
+		if err != nil {
+			return nil, err
+		}
+		calendar, err := pcdomain.NewBusinessCalendarReference(deadline.Calendar)
+		if err != nil {
+			return nil, err
+		}
+		rule, err := pcdomain.NewClaimDeadlineRule(kind, startEvent, deadline.Days, calendar)
+		if err != nil {
+			return nil, fmt.Errorf("期限 %s（%d 天）：%w", deadline.Kind, deadline.Days, err)
+		}
+		deadlines = append(deadlines, rule)
+	}
+	materials := make([]pcdomain.MinimumMaterialsRule, 0, len(document.MinimumMaterials))
+	for _, entry := range document.MinimumMaterials {
+		claimKind, err := pcdomain.NewClaimKindReference(entry.ClaimKind)
+		if err != nil {
+			return nil, err
+		}
+		references := make([]pcdomain.MaterialRequirementReference, 0, len(entry.Materials))
+		for _, material := range entry.Materials {
+			reference, err := pcdomain.NewMaterialRequirementReference(material)
+			if err != nil {
+				return nil, err
+			}
+			references = append(references, reference)
+		}
+		rule, err := pcdomain.NewMinimumMaterialsRule(claimKind, references)
+		if err != nil {
+			return nil, fmt.Errorf("索赔类型 %q 的最低材料：%w", entry.ClaimKind, err)
+		}
+		materials = append(materials, rule)
+	}
+	return &pcapplication.CustomerServiceRuleBodyDeclaration{
+		Applicability: applicability,
+		Responsible:   responsible,
+		Scope:         scope,
+		Deadlines:     deadlines,
+		Materials:     materials,
+	}, nil
+}
+
+// customerServiceRuleApplicabilityFrom 只认恰一格在场。两格都给时不挑一格读——同一个标识串作产品与作
+// 合同是两件事，这里把它变成一次响亮的拒收（判据同 creditLimitFrom）。
+func customerServiceRuleApplicabilityFrom(product, contract string) (pcdomain.CustomerServiceRuleApplicability, error) {
+	switch {
+	case product != "" && contract == "":
+		id, err := pcdomain.NewCommercialObjectID(product)
+		if err != nil {
+			return pcdomain.CustomerServiceRuleApplicability{}, err
+		}
+		return pcdomain.CustomerServiceRuleAppliesToServiceProduct(id), nil
+	case product == "" && contract != "":
+		id, err := pcdomain.NewCommercialObjectID(contract)
+		if err != nil {
+			return pcdomain.CustomerServiceRuleApplicability{}, err
+		}
+		return pcdomain.CustomerServiceRuleAppliesToCustomerContract(id), nil
+	default:
+		return pcdomain.CustomerServiceRuleApplicability{},
+			fmt.Errorf("客户服务规则必须恰好给出 serviceProduct 或 customerContract 之一")
+	}
 }
 
 func pricePolicyBodyFrom(document pricePolicyBodyDocument) (*pcapplication.PricePolicyBodyDeclaration, error) {
@@ -849,12 +979,28 @@ func commercialKindFrom(name string) (pcdomain.CommercialObjectKind, error) {
 		pcdomain.SettlementPolicyObject,
 		pcdomain.CreditPolicyObject,
 		pcdomain.AuthorizationRuleObject,
+		pcdomain.CustomerServiceRuleObject,
 	} {
 		if kind.String() == name {
 			return kind, nil
 		}
 	}
 	return pcdomain.CommercialObjectKindInvalid, fmt.Errorf("集合外的商业对象类别 %q", name)
+}
+
+// claimDeadlineKindFrom 只认三个取值，逐字对应 visibility-exception CONTEXT「三个独立期限」。default
+// 报错不吸收——把打错的种类折进某一格，等于替租户改了它想登记的是哪一种期限。
+func claimDeadlineKindFrom(name string) (pcdomain.ClaimDeadlineKind, error) {
+	for _, kind := range []pcdomain.ClaimDeadlineKind{
+		pcdomain.FirstClaimDeadline,
+		pcdomain.MaterialSupplementDeadline,
+		pcdomain.ConclusionReviewDeadline,
+	} {
+		if kind.String() == name {
+			return kind, nil
+		}
+	}
+	return pcdomain.ClaimDeadlineKindInvalid, fmt.Errorf("集合外的索赔期限种类 %q", name)
 }
 
 func roleStandingFrom(name string) (pcdomain.ApprovalRoleStanding, error) {

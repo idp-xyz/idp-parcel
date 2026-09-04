@@ -271,6 +271,131 @@ func settlementKey(t *testing.T, contractVersion, chargeScope, currency string) 
 	return key
 }
 
+// customerServiceRuleBatchBody 先发一份服务产品壳，再发一份指名它的客户服务规则版本，正文挂在同一
+// 产品上。两项同批：后项装载的整册看得见前项，指名引用因此在一批内前后相依（AT-PC-011）。
+func customerServiceRuleBatchBody(appliesTo string) string {
+	return `{"items": [
+    {
+      "tenantId": "tenant-1",
+      "kind": "SERVICE_PRODUCT",
+      "objectId": "product-1",
+      "version": "v1",
+      "scope": "scope-1",
+      "contentDigest": "sha256:product-1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-product-1", "source": "source-product-1", "approvedAt": "2026-01-02T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED"
+    },
+    {
+      "tenantId": "tenant-1",
+      "kind": "CUSTOMER_SERVICE_RULE",
+      "objectId": "csr-1",
+      "version": "v1",
+      "scope": "scope-1",
+      "contentDigest": "sha256:csr-1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {"SERVICE_PRODUCT": "product-1"},
+      "approval": {"reference": "approval-csr-1", "source": "source-csr-1", "approvedAt": "2026-01-02T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "customerServiceRuleBody": {
+          "serviceProduct": "` + appliesTo + `",
+          "responsible": "operator-1",
+          "scope": "scope-1",
+          "claimDeadlines": [
+            {"kind": "FIRST_CLAIM", "startEvent": "event-delivered", "days": 30, "calendar": "calendar-cn"}
+          ],
+          "minimumMaterials": [
+            {"claimKind": "claim-loss", "materials": ["material-photo", "material-invoice"]}
+          ]
+        }
+      }
+    }
+  ]}`
+}
+
+// Covers: 票 party-commercial-context-gaps/05 端到端于真库——经进程口发出去的客户服务规则正文，
+// 消费方按闭包选中的版本壳经 CustomerServiceRuleContentView 点读得回来，两项俱在。
+//
+// 它补的是翻译用例与应用用例都拿不到的东西：那两条各自证「批文没变形」与「正文交到了持久化面」，
+// 证不了「写进库的三张表读回来还是那一版规则」。第二段证 ADR-0104 Decision 四写入半边在进程口
+// 也拦得住：壳指名 product-1 而正文说挂在别的产品上，那一项以技术失败停批、正文一行不落。
+func TestAPublishedCustomerServiceRuleIsReadBackByTheContentView(t *testing.T) {
+	dsn := freshMigratedDSN(t)
+	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, customerServiceRuleBatchBody("product-1"))); code != exitLanded {
+		t.Fatalf("客户服务规则批 exit = %d, want %d", code, exitLanded)
+	}
+
+	registry := loadScope(t, dsn, "tenant-1", "scope-1")
+	tenant, err := pcdomain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	objectID, err := pcdomain.NewCommercialObjectID("csr-1")
+	if err != nil {
+		t.Fatalf("对象：%v", err)
+	}
+	label, err := pcdomain.NewCommercialVersionLabel("v1")
+	if err != nil {
+		t.Fatalf("版本号：%v", err)
+	}
+	version, present := registry.Lookup(tenant, pcdomain.CustomerServiceRuleObject, objectID, label)
+	if !present {
+		t.Fatal("发出去的客户服务规则版本壳不在整册里")
+	}
+
+	rule, found, err := loadCustomerServiceRule(t, dsn, tenant, version)
+	if err != nil || !found {
+		t.Fatalf("点读：found=%v err=%v", found, err)
+	}
+	if deadline, ok := rule.ClaimDeadline(pcdomain.FirstClaimDeadline); !ok || deadline.DurationDays() != 30 {
+		t.Fatalf("首次索赔期限 = (%#v, %v)", deadline, ok)
+	}
+	claimKind, err := pcdomain.NewClaimKindReference("claim-loss")
+	if err != nil {
+		t.Fatalf("索赔类型：%v", err)
+	}
+	if materials, ok := rule.MinimumMaterialsFor(claimKind); !ok || len(materials.Materials()) != 2 {
+		t.Fatalf("最低材料 = (%#v, %v)", materials, ok)
+	}
+
+	t.Run("an applicability disagreeing with the shell stops the batch before any row lands", func(t *testing.T) {
+		other := freshMigratedDSN(t)
+		if code := runCLI(t, other, "publish", "-input", batchFile(t, customerServiceRuleBatchBody("product-OTHER"))); code != exitTechnical {
+			t.Fatalf("分歧批 exit = %d, want %d", code, exitTechnical)
+		}
+		if got := countVersions(t, other, "csr-1"); got != 0 {
+			t.Fatalf("分歧的规则版本壳落了 %d 行, want 0", got)
+		}
+		if got := countVersions(t, other, "product-1"); got != 1 {
+			t.Fatalf("前一项服务产品落了 %d 行, want 1——批不是聚合，前项不因后项失败被撤出", got)
+		}
+	})
+}
+
+func loadCustomerServiceRule(
+	t *testing.T,
+	dsn string,
+	tenant pcdomain.TenantID,
+	version pcdomain.CommercialVersion,
+) (pcdomain.CustomerServiceRuleVersion, bool, error) {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池点读：%v", err)
+	}
+	defer pool.Close()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("框架 DB：%v", err)
+	}
+	contents, err := pcpostgres.NewCustomerServiceRuleContents(db)
+	if err != nil {
+		t.Fatalf("构造客户服务规则读口：%v", err)
+	}
+	return contents.LoadCustomerServiceRule(t.Context(), tenant, version)
+}
+
 // Covers: 票 commercial-closure-settlement-key/02 的完成标准前两条，端到端于真库——
 // 经进程口发出去的结算政策正文真能被解析选中，且六维差一维就命不中。
 //

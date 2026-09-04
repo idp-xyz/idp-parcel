@@ -430,6 +430,95 @@ func supplierBatchJSON(body string) string {
 		"declarations": {"supplierAgreementBody": {` + body + `}}}]}`
 }
 
+// Covers: 客户服务规则正文（票 party-commercial-context-gaps/05，ADR-0104）：适用对象恰一（serviceProduct
+// 或 customerContract）、责任方、范围、期限按种类成行、材料按索赔类型成行带清单，逐项过构造门；
+// `CUSTOMER_SERVICE_RULE` 从此是批文认得的对象类别（85c1c7f 只拓宽领域封闭集，没接批文口）。另四项
+// （追踪披露、异常响应、客户更新、通知义务）不进首发，批文里出现就是未知字段、拒收。
+func TestACustomerServiceRuleBodyTranslatesBothItems(t *testing.T) {
+	commands, err := publishCommandsFromJSON([]byte(customerServiceRuleBatchJSON(`"serviceProduct": "product-1",
+		"responsible": "operator-1", "scope": "scope-1",
+		"claimDeadlines": [
+			{"kind": "FIRST_CLAIM", "startEvent": "event-delivered", "days": 30, "calendar": "calendar-cn"},
+			{"kind": "CONCLUSION_REVIEW", "startEvent": "event-conclusion-notified", "days": 15, "calendar": "calendar-cn"}
+		],
+		"minimumMaterials": [{"claimKind": "claim-loss", "materials": ["material-photo", "material-invoice"]}]`)))
+	if err != nil {
+		t.Fatalf("翻译客户服务规则批：%v", err)
+	}
+	if commands[0].Spec.Kind != pcdomain.CustomerServiceRuleObject {
+		t.Fatalf("kind = %s, want CUSTOMER_SERVICE_RULE", commands[0].Spec.Kind)
+	}
+	body := commands[0].Declarations.CustomerServiceRuleBody
+	if body == nil {
+		t.Fatal("客户服务规则正文没有翻过去")
+	}
+	if product, applies := body.Applicability.ServiceProduct(); !applies || product.String() != "product-1" {
+		t.Fatalf("适用声明变形：%#v", body.Applicability)
+	}
+	if body.Responsible.String() != "operator-1" || body.Scope.String() != "scope-1" {
+		t.Fatalf("责任方或范围变形：%+v", body)
+	}
+	if len(body.Deadlines) != 2 || body.Deadlines[0].Kind() != pcdomain.FirstClaimDeadline ||
+		body.Deadlines[0].DurationDays() != 30 || body.Deadlines[0].StartEvent().String() != "event-delivered" ||
+		body.Deadlines[1].Kind() != pcdomain.ConclusionReviewDeadline || body.Deadlines[1].DurationDays() != 15 {
+		t.Fatalf("期限变形：%+v", body.Deadlines)
+	}
+	if len(body.Materials) != 1 || body.Materials[0].ClaimKind().String() != "claim-loss" ||
+		len(body.Materials[0].Materials()) != 2 {
+		t.Fatalf("材料变形：%+v", body.Materials)
+	}
+
+	t.Run("contract applicability", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(customerServiceRuleBatchJSON(`"customerContract": "contract-1",
+			"responsible": "operator-1", "scope": "scope-1",
+			"minimumMaterials": [{"claimKind": "claim-damage", "materials": ["material-photo"]}]`)))
+		if err != nil {
+			t.Fatalf("翻译按合同适用的规则批：%v", err)
+		}
+		body := commands[0].Declarations.CustomerServiceRuleBody
+		if contract, applies := body.Applicability.CustomerContract(); !applies || contract.String() != "contract-1" {
+			t.Fatalf("适用声明变形：%#v", body.Applicability)
+		}
+		if _, applies := body.Applicability.ServiceProduct(); applies {
+			t.Fatal("按合同适用的规则翻出了一格产品")
+		}
+	})
+
+	deadline := `"claimDeadlines": [{"kind": "FIRST_CLAIM", "startEvent": "event-delivered", "days": 30, "calendar": "calendar-cn"}]`
+	refusals := map[string]string{
+		"产品与合同都给": customerServiceRuleBatchJSON(`"serviceProduct": "p", "customerContract": "c",
+			"responsible": "o", "scope": "s", ` + deadline),
+		"产品与合同都不给": customerServiceRuleBatchJSON(`"responsible": "o", "scope": "s", ` + deadline),
+		"集外的期限种类": customerServiceRuleBatchJSON(`"serviceProduct": "p", "responsible": "o", "scope": "s",
+			"claimDeadlines": [{"kind": "SOMETHING_ELSE", "startEvent": "e", "days": 30, "calendar": "c"}]`),
+		"零时长": customerServiceRuleBatchJSON(`"serviceProduct": "p", "responsible": "o", "scope": "s",
+			"claimDeadlines": [{"kind": "FIRST_CLAIM", "startEvent": "e", "days": 0, "calendar": "c"}]`),
+		"缺日历": customerServiceRuleBatchJSON(`"serviceProduct": "p", "responsible": "o", "scope": "s",
+			"claimDeadlines": [{"kind": "FIRST_CLAIM", "startEvent": "e", "days": 30}]`),
+		"空材料清单": customerServiceRuleBatchJSON(`"serviceProduct": "p", "responsible": "o", "scope": "s",
+			"minimumMaterials": [{"claimKind": "claim-loss", "materials": []}]`),
+		"另四项之一（通知义务）": customerServiceRuleBatchJSON(`"serviceProduct": "p", "responsible": "o", "scope": "s",
+			"notificationObligation": "policy-1", ` + deadline),
+		"缺责任方": customerServiceRuleBatchJSON(`"serviceProduct": "p", "scope": "s", ` + deadline),
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
+func customerServiceRuleBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "CUSTOMER_SERVICE_RULE", "objectId": "csr-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"customerServiceRuleBody": {` + body + `}}}]}`
+}
+
 // Covers: 价格政策正文（票 party-commercial-context-gaps/06）：方向、方案绑定、发布当时 parcel-pricing
 // 的答复（planDirection / conversion，ADR-0057，由写批文的人照价卡目录抄）、范围与区间逐项过构造门；
 // 口径嵌在正文里，税务两格与体积一格随方向耦合，汇率一节可缺——缺席翻成 nil 而不是零口径。
