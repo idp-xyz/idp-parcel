@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -150,6 +151,86 @@ func TestTwoSuccessfulPickupsOnOneObjectShareAPartition(t *testing.T) {
 	if got := partitionKeyOf(t, pool, second); got != want {
 		t.Fatalf("后段分区键 = %q, want %q——两段不同分区就没有先后可言", got, want)
 	}
+}
+
+// TestACorrectedPickupVersionIsHandedOffAsItsOwnIntent 证票 tf-segment-lifecycle-closure/08 的重交那一半：
+// 更正版本的意图必须是第二份而不是被首登那份吞掉。ID 由结果标识认领（ADR-0043），而更正的结果标识是
+// 新版本——首登 ID 不带版本段（下游用例与 cmd/parcel-dispatch 的对账都按它认，一字不动），更正版本在
+// 键后加版本段（形照 effective-delivery）；两份排同一条分区（同一对象控制链）；载荷带 pickupVersion 让
+// 下游分得出自己那一代。
+func TestACorrectedPickupVersionIsHandedOffAsItsOwnIntent(t *testing.T) {
+	handoff, db, pool := newPickupRegistrationHandoffFixture(t)
+	ctx := t.Context()
+
+	first := pickupRegistrationHandoffIntent(t, "parcel-1", "attempt-1")
+	corrected, err := first.Record.Pickup.Correct(domain.PickupCorrection{
+		Place:       deliveryValue(t, domain.NewPickupPlaceReference, "customer-warehouse-2"),
+		Control:     deliveryValue(t, domain.NewTransportControlReference, "TRANSPORT-CONTROL/TF-1-RECHECK"),
+		ExecutedBy:  deliveryValue(t, domain.NewExecutingPartyReference, "courier-2"),
+		OccurredAt:  time.Date(2026, 8, 13, 7, 15, 0, 0, time.UTC),
+		Version:     deliveryValue(t, domain.NewPickupResultVersion, "pickup-result/v2"),
+		CorrectedAt: time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("形成更正版本：%v", err)
+	}
+	second := first
+	second.Record.Pickup = corrected
+	second.Record.ContentDigest = "digest-parcel-1-v2"
+	second.Record.RecordedAt = time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
+
+	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := handoff.HandOffOffsitePickupRegistration(txCtx, first); err != nil {
+			return err
+		}
+		return handoff.HandOffOffsitePickupRegistration(txCtx, second)
+	}); err != nil {
+		t.Fatalf("首登与更正两份：%v", err)
+	}
+
+	const firstID = "tenant-a/parcel-1/attempt-1/offsite-pickup-registration"
+	const secondID = "tenant-a/parcel-1/attempt-1/pickup-result/v2/offsite-pickup-registration"
+	if count := countTFIntents(t, pool, firstID); count != 1 {
+		t.Fatalf("首登行数 = %d, want 1", count)
+	}
+	if count := countTFIntents(t, pool, secondID); count != 1 {
+		t.Fatalf("更正版本行数 = %d, want 1——更正的意图被首登那份吞掉了，PS 永远收不到新版本", count)
+	}
+	const wantPartition = "tenant-a/parcel-1/offsite-pickup-registration"
+	if got := partitionKeyOf(t, pool, secondID); got != wantPartition {
+		t.Fatalf("更正版本分区键 = %q, want %q——两代不同分区就没有先后可言", got, wantPartition)
+	}
+	if payload := pickupRegistrationPayloadOf(t, pool, secondID); payload.PickupVersion != "pickup-result/v2" ||
+		payload.TenantID != "tenant-a" || payload.Object != "parcel-1" || payload.Attempt != "attempt-1" {
+		t.Fatalf("更正版本载荷 = %+v", payload)
+	}
+	if payload := pickupRegistrationPayloadOf(t, pool, firstID); payload.PickupVersion != "pickup-result/v1" {
+		t.Fatalf("首登载荷没带版本：%+v", payload)
+	}
+}
+
+type pickupRegistrationEnvelopePayload struct {
+	TenantID      string `json:"tenantId"`
+	Object        string `json:"object"`
+	Attempt       string `json:"attempt"`
+	PickupVersion string `json:"pickupVersion"`
+}
+
+func pickupRegistrationPayloadOf(t *testing.T, pool *pgxpool.Pool, eventID string) pickupRegistrationEnvelopePayload {
+	t.Helper()
+
+	var raw []byte
+	if err := pool.QueryRow(t.Context(),
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
+		eventID,
+	).Scan(&raw); err != nil {
+		t.Fatalf("读取载荷：%v", err)
+	}
+	var payload pickupRegistrationEnvelopePayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("译载荷：%v", err)
+	}
+	return payload
 }
 
 func TestOffsitePickupRegistrationRefusesABlankKey(t *testing.T) {

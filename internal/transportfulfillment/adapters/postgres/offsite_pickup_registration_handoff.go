@@ -42,17 +42,30 @@ func NewOutboxOffsitePickupRegistrationHandoff(
 
 var _ ports.OffsitePickupRegistrationHandoff = (*OutboxOffsitePickupRegistrationHandoff)(nil)
 
+// offsitePickupRegistrationPayload 带键再带结果版本。载荷仍是指针式的——只带引用，揽收本体由下游按
+// 引用重新读。版本是引用维不是装饰：一次揽收在库里是一行一版本（0015），键只指到「这次尝试的揽收」，
+// 指不到「哪一代」；下游今天按键读当前版，有了这一格才分得出手里这封信说的是哪一代。
 type offsitePickupRegistrationPayload struct {
-	TenantID string `json:"tenantId"`
-	Object   string `json:"object"`
-	Attempt  string `json:"attempt"`
+	TenantID      string `json:"tenantId"`
+	Object        string `json:"object"`
+	Attempt       string `json:"attempt"`
+	PickupVersion string `json:"pickupVersion"`
 }
 
-func offsitePickupRegistrationEventID(key ports.OffsitePickupKey) string {
-	// 类型段把本口与已落地的交付生效（同为租户/对象/尝试、同一 source）错开，避免
-	// EnqueueOnce 把另一口的已入队当成「同一份」。
-	return key.TenantID.String() + "/" + key.Object.String() + "/" + key.Attempt.String() +
-		"/offsite-pickup-registration"
+// offsitePickupRegistrationEventID 取揽收登记键，**更正版本再加版本段**。
+//
+// ADR-0043 说意图由结果标识认领，而更正的结果标识是它的新版本：更正走的是同一个键，ID 少了版本两代
+// 就算出同一个字符串，outboxintent.EnqueueOnce 先查后插——第二份静默不入队，编排却收到「交接成功」
+// （effectiveDeliveryEventID 点名过的同一个洞）。首登 ID 不带版本段：它自 ADR-0043 起就是这个形状，
+// 下游消费者与 cmd/parcel-dispatch 的对账都按它认，首登与更正在 ID 上因此分得开、首登一字不动。
+// 类型段把本口与交付生效（同为租户/对象/尝试、同一 source）错开。
+func offsitePickupRegistrationEventID(record ports.OffsitePickupRecord) string {
+	key := record.Key
+	prefix := key.TenantID.String() + "/" + key.Object.String() + "/" + key.Attempt.String()
+	if _, corrected := record.Pickup.Corrects(); corrected {
+		prefix += "/" + record.Pickup.Version().String()
+	}
+	return prefix + "/offsite-pickup-registration"
 }
 
 // offsitePickupRegistrationPartitionKey 取（租户+载运对象+类型段），不取整个信封 ID。
@@ -74,9 +87,9 @@ func offsitePickupRegistrationPartitionKey(key ports.OffsitePickupKey) string {
 	return key.TenantID.String() + "/" + key.Object.String() + "/offsite-pickup-registration"
 }
 
-// HandOffOffsitePickupRegistration 把一份意图入队。信封 ID 取对象级揽收幂等键再加类型
-// 段——意图由（租户+对象+尝试）认领（ADR-0043），类型段与交付生效错开。键缺席是装配
-// 缺陷，响亮报错不入队。
+// HandOffOffsitePickupRegistration 把一份意图入队。信封 ID 取对象级揽收幂等键再加类型段——意图由
+// （租户+对象+尝试）认领（ADR-0043），更正版本再加版本段让两代各自入队；载荷带版本让下游读得回
+// 自己那一代。键或版本缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxOffsitePickupRegistrationHandoff) HandOffOffsitePickupRegistration(
 	ctx context.Context,
 	intent ports.OffsitePickupRegistrationIntent,
@@ -85,18 +98,24 @@ func (handoff *OutboxOffsitePickupRegistrationHandoff) HandOffOffsitePickupRegis
 	if key.TenantID.String() == "" || key.Object.String() == "" || key.Attempt.String() == "" {
 		return fmt.Errorf("hand off offsite pickup registration: pickup key is required")
 	}
+	version := intent.Record.Pickup.Version()
+	if version.String() == "" {
+		// 没有版本就分不出首登与更正：更正版本的 ID 会退化成首登那一串、第二份被静默吞掉。
+		return fmt.Errorf("hand off offsite pickup registration: pickup result version is required")
+	}
 
 	payload, err := json.Marshal(offsitePickupRegistrationPayload{
-		TenantID: key.TenantID.String(),
-		Object:   key.Object.String(),
-		Attempt:  key.Attempt.String(),
+		TenantID:      key.TenantID.String(),
+		Object:        key.Object.String(),
+		Attempt:       key.Attempt.String(),
+		PickupVersion: version.String(),
 	})
 	if err != nil {
 		return fmt.Errorf("hand off offsite pickup registration: %w", err)
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := offsitePickupRegistrationEventID(key)
+	eventID := offsitePickupRegistrationEventID(intent.Record)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(eventID),
