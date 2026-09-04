@@ -33,6 +33,10 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	// 灌一份进来就等于绕过追加式那条不变量。
 	"RehydrateContinuedAttemptRegister":     true,
 	"RehydrateContinuedAttemptRegisterSpec": true,
+	// 渠道择优决定记录（label-channel/14）。同类：记录只追加、四格由择优当场判出，重建门相信
+	// 行数据；从别处灌一份进来就等于替一次没发生过的择优写下结论。
+	"RehydrateChannelSelectionDecision":     true,
+	"RehydrateChannelSelectionDecisionSpec": true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。
