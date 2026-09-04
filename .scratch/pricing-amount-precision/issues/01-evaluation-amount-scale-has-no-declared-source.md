@@ -1,7 +1,7 @@
 # 评价金额的精度没有任何声明来源：CONTEXT 要求由版本化规则声明，代码只落了重量那半
 
 Category: enhancement
-Status: draft——需 owner 裁两件：金额取整槽落在哪（价卡内容 / 评价请求 / 留给 SA 的财务采用），以及是否进 ADR（settlement-accounting 是消费方）；MCP-5 2026-09-04 立票，只写票面未动代码
+Status: resolved——两件已裁（2026-09-04，通道 6，owner 授权）：①槽落**价卡内容**（销售方向落商业价格政策，与体积系数两侧归属同构）；②**进 ADR**，落文 [ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)，CONTEXT 补词条「金额取整策略」并引用它——本票自定的 resolved 判据「那条引用在」已满足；实施另立 [`02`](./02-implement-amount-rounding-policy-on-the-price-card.md)（ready-for-agent）
 Blocked by: 无
 
 ## 为什么立
@@ -55,6 +55,22 @@ SA-c（BUY `PricingEvaluation` → SA 入向缝）时问：**评价已完成时 
 - 既有评价不追溯改写；取整进内容摘要与规范化版本。
 - 裁决落地前，任何消费方**不得在评价之外取整**——SA-c 适配器照 label-channel/13 的立场原样保全十进制
   （coefficient+scale 或 `Decimal.String()`），或留空并把这一问写进票面。
+
+## 裁决（2026-09-04，通道 6，task-f530ad56 裁决批口径：owner 授权自决，写明能力边界）
+
+**一、槽落价卡内容——票面选项 1。** 理由三条：CONTEXT 现有两句（不变量「精度和取整顺序……由版本化规则声明」、`价格评价`「包含……精度、取整」）都指向评价自己带精度；重量取整与体积系数已立下「随工件版本化、不内置常量」的立场，金额取整没有理由例外；承运商价卡的取整条款本来就是卡的内容（「按 0.01 进位」写在卡上），挪到请求侧等于让调用方替卡声明内容。选项 3 之所以对计价重量成立而对金额不成立：计费重量确实是结算侧按合同另行采用的量，金额合计不是——合计就是评价要交出去的那个数。销售方向的对应物落商业价格政策，与体积系数两侧归属逐字同构。
+
+**二、进 ADR——[ADR-0107](../../../docs/adr/0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)。** 它改评价结果的形状（合计与换算后金额的 scale）与规范化形状，SA、报价面、成本分值桥都受影响，按 AGENTS 门槛属难逆转取舍。决定五条：槽落价卡内容；一条策略声明模式、进位单位、应用点（合计必声明，逐行与换算后可选，顺序属机制固定为逐行 → 换算后 → 合计）；进内容摘要与规范化版本（`canonicalization` 换号，旧评价按原版本重放）；未声明即不取整并带结构化问题项「金额精度未声明」（形照 ADR-0105），不给默认、首发不在发布门强制；消费方不得在评价之外取整。CONTEXT 同笔补词条「金额取整策略」（AGENTS「改文档」：改领域语言先改 CONTEXT）。
+
+**红线照旧全部成立**：不编币种小数位表（label-channel/13 裁决一字不改）；不给未声明的卡默认精度；既有评价不追溯改写；裁决落地前消费方原样保全十进制。
+
+### 实施
+
+按本票自定的判据，裁决落文即 resolved；实施范围拆到 [`02`](./02-implement-amount-rounding-policy-on-the-price-card.md)，不在此复述。
+
+### 能力边界
+
+读了 parcel-pricing CONTEXT 全部涉及精度 / 取整的词条与不变量、ADR-0013 / 0014 / 0105 的相关条、`decimal.go` / `evaluation.go` / `reference_series.go` / `weight_rounding.go` / `value_objects.go` 的取整与 scale 符号面（复核票面取证于 `512b419`，各条仍成立）；**未读** SA 侧 SA-c 适配器今天怎么保全十进制，也未读商业价格政策（`party-commercial`）现有内容形状——销售方向那一侧的槽怎么落归 PC owner 随实施对齐；未打开任何客户价卡文件。
 
 ## 验证
 
