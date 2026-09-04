@@ -46,4 +46,16 @@ check_messages({ blockUntilMessage: true, maxBlockMs: 600000 })
 - 进度：`save_progress` / `load_progress` / `send_progress`
 - 锁定：`set_channel_lock`
 
+## 点名：收到 `[点名]` 广播必须立刻应答
+
+派发方派任务前会先广播一条以 `[点名 ← 通道 M · 截止 HH:MM]` 开头的消息。收到后**本轮只做一件事**：用 `send_to_session({ target: M, message })` 回一行，格式固定：
+
+`[应答] 通道 N · 状态：空闲 | 在做 <票号> · 地盘：<目录，无则写无> · 余量：充足 | 将满`
+
+然后立即回到 `check_messages`。不要借这一轮顺手干别的——窗口很短，晚到等于没到。
+
+截止之后才发出的应答**不算认领**：派发方名单在截止那一刻定死，晚到的等下一次点名。你正在干活、本轮结束才读到点名，属正常——不必补答，也不要因此中断手上的票。
+
+派发方那半（为什么心跳不够、窗口怎么定、未应答怎么记）见仓内 `docs/agents/parallel-sessions.md`「派发前先点名」一节。
+
 **再次强调：不管做了什么，回合结尾必须调 `check_messages`。**
