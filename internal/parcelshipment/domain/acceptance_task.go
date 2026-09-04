@@ -247,3 +247,26 @@ func (attempt ProcessingAttempt) valid() bool {
 	return attempt.reason.valid() && attempt.resumePath.valid() &&
 		attempt.continuation.valid() && !attempt.attemptedAt.IsZero()
 }
+
+// AwaitOperatorRegistration 在**决定形成之前**把接受判断任务停在`等待运营登记`上。
+//
+// Decide 写等待态的前提是校验已经到场，而`判断时点未配置`那一族停在校验之前——时点都还没
+// 形成，没有任何一条校验可以进 Decide。ADR-0094 Decision 五要求落此格前先把带等待态的聚合
+// Save 落库（暂停没落库就不得交回该原因，否则等待态随本轮回滚蒸发而投递已被记为完毕，队列
+// 从此列不出这份委托），于是这一格需要一条不经校验的转移。它只写等待态：不动状态、不形成
+// 决定、不动版本，也不追加处理记录——那是 RecordProcessingAttempt 的事，两者由编排各调一次。
+//
+// 与 Decide 的两道门一致：已越过决定边界的委托说出真实原因，不再进入任何等待态。
+func (request ShipmentRequest) AwaitOperatorRegistration() (ShipmentRequest, error) {
+	if request.decisionFormed {
+		return ShipmentRequest{}, ErrDecisionAlreadyFormed
+	}
+	if request.state != ShipmentRequestSubmitted {
+		return ShipmentRequest{}, ErrInvalidShipmentRequest
+	}
+	if !request.acceptanceTask.running() {
+		return ShipmentRequest{}, ErrAcceptanceTaskComplete
+	}
+	request.acceptanceTask.waitingOn = ResumeByOperatorRegistration
+	return request, nil
+}

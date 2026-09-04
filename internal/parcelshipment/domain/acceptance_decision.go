@@ -328,11 +328,16 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 
 	// 权威结果没到齐之前不谈复核：对一份还缺判断的委托做人工复核没有意义，复核是最后一道门。
 	// 缺口同时存在客户侧与系统侧时报客户侧——只有那一条要通知外部并受补充期限约束，把它压在
-	// 内部重试后面等于让客户白等一轮。
+	// 内部重试后面等于让客户白等一轮。`等待运营登记`压过内部重试而让位于客户侧：重试产不出
+	// 一次登记（ADR-0094 Decision 二），把它折进内部重试就是对着一个从未登记的参数无休止重投；
+	// 而登记之后整轮重跑，内部那一格自会再得机会。
 	if classified.undetermined > 0 ||
 		!everyApplicableGroupJudged(spec.Basis.applicable, classified.judgedGroups) ||
 		!request.everyMemberJudged(classified.judgedMembers) {
 		request.acceptanceTask.waitingOn = ResumeByInternalRetry
+		if classified.awaitingRegistration {
+			request.acceptanceTask.waitingOn = ResumeByOperatorRegistration
+		}
 		if classified.awaitingSupplement {
 			request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
 		}
@@ -364,8 +369,11 @@ type acceptanceCheckClassification struct {
 	failed             int
 	undetermined       int
 	awaitingSupplement bool
-	judgedGroups       map[AcceptanceCheckGroup]struct{}
-	judgedMembers      map[DeclaredParcelID]struct{}
+	// awaitingRegistration 与 awaitingSupplement 并列而不合成一个 ResumePath：两者可同时为真，
+	// 先后次序由 Decide 决定，分类这一步只如实记录到场了哪几类缺口。
+	awaitingRegistration bool
+	judgedGroups         map[AcceptanceCheckGroup]struct{}
+	judgedMembers        map[DeclaredParcelID]struct{}
 }
 
 func classifyAcceptanceChecks(checks []AcceptanceCheck) (acceptanceCheckClassification, error) {
@@ -382,8 +390,11 @@ func classifyAcceptanceChecks(checks []AcceptanceCheck) (acceptanceCheckClassifi
 			classified.failed++
 		case CheckUndetermined:
 			classified.undetermined++
-			if check.resumePath == ResumeByCustomerSupplement {
+			switch check.resumePath {
+			case ResumeByCustomerSupplement:
 				classified.awaitingSupplement = true
+			case ResumeByOperatorRegistration:
+				classified.awaitingRegistration = true
 			}
 		}
 		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的

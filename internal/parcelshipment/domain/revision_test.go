@@ -49,6 +49,9 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 				internalAttempt(t, "COMMERCIAL_BASIS_UNAVAILABLE", firstAttemptAt),
 			)
 		},
+		"AwaitOperatorRegistration": func(_ *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			return request.AwaitOperatorRegistration()
+		},
 		// 资料修订只对`已接受`开放，所以这一条要先越过决定边界。中间那次 Decide 同样不许动
 		// 版本，链起来测反而比单测更接近真实调用序列。
 		"AmendCustomerSourceData": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
