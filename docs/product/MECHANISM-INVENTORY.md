@@ -13,14 +13,14 @@
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 57 | 60 | 5 | 8 | 1 | 12 |
-| parcelshipment | 119 | 118 | 16 | 22 | 7 | 11 |
+| parcelshipment | 121 | 121 | 17 | 22 | 7 | 11 |
 | partycommercial | 81 | 81 | 8 | 25 | 0 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 77 | 56 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 100 | 89 | 19 | 30 | 10 | 16 |
 | visibilityexception | 97 | 91 | 11 | 30 | 8 | 10 |
-| **合计** | 747 | 698 | 103 | 220 | 49 | 95 |
+| **合计** | 749 | 701 | 104 | 220 | 49 | 95 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 42、测试 61。
 
@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 127 份 SQL
+## 迁移：11 个模块共 128 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -54,7 +54,7 @@
 | network_routing | 9 |
 | node_operations | 3 |
 | parcel_pricing | 4 |
-| parcel_shipment | 13 |
+| parcel_shipment | 14 |
 | party_commercial | 22 |
 | pilot_governance | 5 |
 | settlement_accounting | 16 |
@@ -98,12 +98,14 @@
 | visibilityexception | 8 |
 | **合计** | 15 |
 
-## 端口：声明 322 个；基线口径缺 14，精确口径缺 12
+## 端口：声明 325 个；基线口径缺 16，精确口径缺 13
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
+- `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.LabelChannelGateway` 
+- `parcelshipment.LabelValidityRuleView` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
@@ -120,6 +122,7 @@
 精确口径缺（无具体类型完整实现）：
 
 - `parcelshipment.LabelChannelGateway` 
+- `parcelshipment.LabelValidityRuleView` 
 - `parcelshipment.SourceDataAmendmentAuthorizer` 
 - `parcelshipment.SourceDataRuleDeclaration` 
 - `settlementaccounting.BuyEvaluationView` 
