@@ -34,6 +34,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   SlidersHorizontal,
+  Split,
   Stamp,
   Ticket,
   TrendingUp,
@@ -91,6 +92,9 @@ export const navigationSections: NavigationSection[] = [
       { id: 'shipment-request-inquiry', label: '委托查阅', icon: 'shipment-request-inquiry' },
       { id: 'acceptance-review', label: '接受前人工复核', icon: 'acceptance-review' },
       { id: 'label-transactions', label: '面单交易', icon: 'label-transactions' },
+      // 择优决定是 parcel-shipment 形成的只追加判断记录（票 label-channel/14），读面随所有权落本区、挨着
+      // 消费它的面单交易；对象引用里的映射本体在主数据区的渠道产品目录页，这里只透引用。
+      { id: 'channel-selection-decisions', label: '渠道择优决定', icon: 'channel-selection-decisions' },
       { id: 'cancel-parcel', label: '取消与收寄后处置', icon: 'cancel-parcel' },
     ],
   },
@@ -168,6 +172,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
   'label-transactions': Ticket,
+  'channel-selection-decisions': Split,
   'cancel-parcel': PackageX,
   'party-contracts': Handshake,
   'service-products': Boxes,
@@ -242,6 +247,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     owner: '小包托运（parcel-shipment）',
     source:
       'docs/domain/parcel-shipment/CONTEXT.md 面单交易、交易级与包裹级渠道业务结果、面单交易定案、包裹级关闭或重开请求与决定、渠道角色与责任依据快照',
+  },
+  'channel-selection-decisions': {
+    title: '渠道择优决定',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/product/PILOT-PARAMETER-REGISTER.md PAR-NET-16 择优逐次留痕、并列冲突交人工裁决；docs/domain/CONTEXT-MAP.md「具体渠道选择」归 parcel-shipment；票 label-channel/14 裁决——择优决定作为只追加的决定记录落 PS 侧，引用候选与出局因由、不拷内容',
   },
   'cancel-parcel': {
     title: '取消与收寄后处置',

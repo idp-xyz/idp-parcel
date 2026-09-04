@@ -6,6 +6,7 @@ import {
   LabelTransactionsPage,
   AcceptanceReviewPage,
 } from './pages/shipment-request';
+import { ChannelSelectionDecisionsPage } from './pages/channel-selection';
 import { TemplatePreviewPage } from './pages/template-preview';
 import { StageAdmissionPage } from './pages/governance';
 import {
@@ -62,6 +63,7 @@ export const pageById: Record<string, ComponentType> = {
   'shipment-request': ShipmentRequestPage,
   'shipment-request-inquiry': ShipmentRequestListPage,
   'label-transactions': LabelTransactionsPage,
+  'channel-selection-decisions': ChannelSelectionDecisionsPage,
   'cancel-parcel': CancelParcelPage,
   'template-preview': TemplatePreviewPage,
   'acceptance-review': AcceptanceReviewPage,
@@ -144,6 +146,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'claims-recovery',
   'acceptance-review',
   'label-transactions',
+  'channel-selection-decisions',
 ]);
 
 /**
