@@ -1,8 +1,8 @@
 # 23 渠道择优决定的运营查阅面：留痕落库了，运营今天没有地方看它
 
 Category: enhancement
-Status: draft——读面形状待按 ADR-0077 读面通例裁（读口另立、不拓宽登记册端口）；MCP-2 2026-09-04 随票 14 收口立票，只写票面未动代码
-Blocked by: 14
+Status: in-progress——MCP-2 2026-09-04 认领（基线 main `eba019a8`，分支 `mcp2-lc23`，task-7f3d6450）；MCP-1 同日代裁 draft → ready-for-agent：票面「做什么」四条与「先答再开工」两条的本票倾向即裁决（读端口另立二口、不拓宽登记册端口；postgres 读适配器只读列面、读回过重建门；人工裁决动作不进本票；不按时间隐式截断；端点命名照 PS 既有读面）。立票原句：随票 14 收口立票，只写票面未动代码
+Blocked by: 无（14 已 resolved，八笔随 `19cf2ce5` 进 main）
 
 ## 缺口
 
