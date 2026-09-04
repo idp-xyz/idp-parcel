@@ -21,6 +21,7 @@ import {
 import {
   NodeOperationsReviewPage,
   TransportFulfillmentReviewPage,
+  EffectiveTimeJudgmentPage,
 } from './pages/operations';
 import {
   ChargesBillingPage,
@@ -76,6 +77,7 @@ export const pageById: Record<string, ComponentType> = {
   'route-plans': RoutePlansPage,
   'node-operations-review': NodeOperationsReviewPage,
   'transport-fulfillment-review': TransportFulfillmentReviewPage,
+  'effective-time-judgment': EffectiveTimeJudgmentPage,
   'charges-billing': ChargesBillingPage,
   'operating-metrics': OperatingMetricsPage,
   'cod-ledger': CodLedgerPage,
@@ -136,6 +138,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'stage-admission',
   'node-operations-review',
   'transport-fulfillment-review',
+  'effective-time-judgment',
   'exception-triage',
   'exception-cases',
   'claims-recovery',

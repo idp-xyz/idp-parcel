@@ -8,6 +8,7 @@ import {
   Boxes,
   Building2,
   Calculator,
+  CalendarClock,
   ClipboardCheck,
   Coins,
   Eye,
@@ -110,6 +111,9 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { id: 'node-operations-review', label: '节点作业查阅', icon: 'node-operations-review' },
       { id: 'transport-fulfillment-review', label: '运输履约查阅', icon: 'transport-fulfillment-review' },
+      // 唯一一个带写面的作业条目：它不是现场作业（ADR-0021），是所有者对外部承运轨迹事实的显式判断
+      // （ADR-0102 决定三），属治理动作，与查阅面同区。
+      { id: 'effective-time-judgment', label: '外部轨迹有效时间判断', icon: 'effective-time-judgment' },
     ],
   },
   {
@@ -178,6 +182,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'route-plans': Route,
   'node-operations-review': Warehouse,
   'transport-fulfillment-review': Truck,
+  'effective-time-judgment': CalendarClock,
   'customs-cases': Stamp,
   'compliance-rules': Library,
   'customs-ports-paths': Anchor,
@@ -316,6 +321,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '运输履约查阅',
     owner: '运输履约（transport-fulfillment）',
     source: 'docs/domain/transport-fulfillment/CONTEXT.md 班次、容量池、权威运输交接结果与交付证明',
+  },
+  'effective-time-judgment': {
+    title: '外部轨迹有效时间判断',
+    owner: '运输履约（transport-fulfillment）',
+    source:
+      'docs/domain/transport-fulfillment/CONTEXT.md 外部承运轨迹事实；ADR-0102 决定三——有效时间由所有者显式判断或按该源已登记规则形成，不得默默等于发生时间；本页是判断人的读写面，不解释状态词、不建议时间',
   },
 
   // —— 关务合规（customs-compliance）——
