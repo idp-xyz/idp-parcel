@@ -30,9 +30,9 @@ Status: in-progress
 | [03](./issues/03-network-resolution-layer.md) | 网络解析层——把目录折成逐候选事实（墙三） | — |
 | [04](./issues/04-mechanism-inventory-as-generated-report.md) | 「机制半边现状」改为生成物，停掉第二十八轮手工重盘 | — |
 | [05](./issues/05-product-monetization-and-customer-segments.md) | 产品自身收费模型与目标客户群分层 | — |
-| [06](./issues/06-declared-value-as-sellable-option.md) | 保价与声明价值作为可销售服务选项 | 01, 02, 03 |
+| [06](./issues/06-declared-value-as-sellable-option.md) | 保价与声明价值作为可销售服务选项 | —（原 01, 02, 03 为优先级依赖，2026-09-04 按票面规则解除） |
 
-状态：`01` 与 `03` 为 `ready-for-human`——两票各要一次裁决（`01` 要新 ADR 判隔离写面放行是否与 ADR-0055/0072 相容；`03` 要答三问，其中一问是 ADR-0068 的护栏怎么改），裁完才谈实现。`02`、`04`、`05` 为 `ready-for-agent`，`06` 为 `draft` 且被前三票阻塞。
+状态：`01` 与 `03` 为 `ready-for-human`——两票各要一次裁决（`01` 要新 ADR 判隔离写面放行是否与 ADR-0055/0072 相容；`03` 要答三问，其中一问是 ADR-0068 的护栏怎么改），裁完才谈实现。`02`、`04`、`05` 为 `ready-for-agent`，`06` 为 `draft` 且被前三票阻塞。（2026-09-04 补：`06` 形态半边已 `resolved`，落点另立实现票；其余各票以票面 Status 为准，本行未逐票重写。）
 
 建议顺序：`03` 最长先起（先裁三问），`01` 的裁决可并行，`02` 随后落地；`04` 与 `05` 跟前三票无交集，随时可插。**`01` 与 `02` 都动 `cmd/parcel-api` 装配点——占号，串行排，不要并行改同一处。**
 

@@ -1,8 +1,8 @@
 # 保价与声明价值作为可销售服务选项
 
 Category: enhancement
-Status: draft
-Blocked by: 01, 02, 03
+Status: resolved（形态半边，2026-09-04，MCP-3；形态四问答案见文末 `## Answer`，词条落 `parcel-shipment` / `party-commercial` 两份 `CONTEXT.md` 与 GLOSSARY，`UC-PS-001` 第 5、9A 步同笔更新。落点——接受判断里的结构化拒绝原因、服务选项进 `parcel-pricing` 特征、`settlement-accounting` 客户赔付读取规则引用——另立实现票，不在本票）
+Blocked by: 无（原 01、02、03 为优先级依赖；01、02 已 resolved，03 被 `PAR-NET-14` 硬阻断且本票不碰 `cmd/parcel-api` 与 `networkrouting`，按票面「做票人可提出解除阻塞边」于 2026-09-04 解除）
 
 取证基线 `c9835bf`。
 
@@ -48,3 +48,21 @@ Blocked by: 01, 02, 03
 ## 参照
 
 `docs/domain/party-commercial/CONTEXT.md`、`docs/domain/parcel-shipment/CONTEXT.md`、`docs/domain/visibility-exception/CONTEXT.md`（索赔与追偿）、`docs/domain/settlement-accounting/CONTEXT.md`（赔付与应追偿金额）；`internal/parcelpricing/domain/feature_condition.go`；`UC-VE-007`、`UC-SA-007`；台账 `S1`。
+
+## Answer
+
+两个 MCP-3 会话接力：前任（2026-09-03 19:01–20:29 的会话）在 20:28 把两条词条写进两份 `CONTEXT.md` 后会话结束、票面未动；本会话按存档核对其推理与落笔一致后接手收口。四问逐条：
+
+**一、声明价值是客户申报的事实，不是运营企业的判断。** 落为 `parcel-shipment` 词条**保价要求**：它是服务要求里的一项，含声明价值与币种，随客户原始资料版本演进；运营企业不采纳、不改写这个值，只判断能否受理。于是它的版本化与更正路径就是既有的 `UC-PS-002`（新资料版本），不另造一条。
+
+**二、赔付上限两层：服务产品版本给产品级条件，客户合同版本只能在其内收紧。** 落为 `party-commercial` 词条**保价条件**与一条不变量：是否可选、声明价值上限、可声明币种、赔付金额规则引用（免赔、比例、上限）四格；合同可更低上限、更窄币种、更严免赔，不得放宽；**两层都缺席时该产品不可保价，不默认可保也不默认上限**——这一句是红线「不写死为生产默认」在本题上的形状。
+
+**三、保价成立的时点是委托接受。** 接受时依适用的保价条件判断保价要求能否受理，并把要求与所依据的条件引用一并固定进委托接受基线（`UC-PS-001` 第 5、9A 步）。取消与处置分支下保费归属因此走既有的费用规则，不需要保价自己的时点。没有选正式承诺：责任起点那一格属服务责任阶段，而保价是客户购买的服务选项，它该与其他服务要求在同一个基线里被冻结。
+
+**四、出险时保价是赔付责任的依据之一，不是第四条金额链。** 保价条件只是「形状与规则引用」；赔付金额只由 `settlement-accounting` 在形成客户赔付时采用其规则形成，`party-commercial` 不形成任何赔付金额；保费属销售价格规则，按服务选项由 `parcel-pricing` 计价。保险追偿是运营企业向保险方或责任方主张的另一条链，归供应商商业协议与 `visibility-exception` 的追偿事项，词条里明写二者不能混。
+
+**没填任何取值**：上限、比例、免赔一律写成「租户登记的实例参数」。
+
+**未立 ADR 的理由**：四问答案全部落为两份 `CONTEXT.md` 的词条与不变量，不推翻任何既有 ADR，也不改任何已发布接口；接受判断结果集若要新增结构化拒绝原因（落点那一步），那是对 `UC-PS-001` 结果代数的扩展，到时按 [AGENTS.md「改文档」](../../../AGENTS.md) 判是否走 ADR。
+
+**构建判据**：本票两笔均只含 `.md`，`gofmt`/`go build`/`go test` 那三项对本笔没有可验对象，未跑；共享树上此刻有他人在途 `.go`，全仓跑出来的结果也不归本票。
