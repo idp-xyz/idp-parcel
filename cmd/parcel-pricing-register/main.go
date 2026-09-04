@@ -47,9 +47,11 @@ const (
 )
 
 const (
-	kindPriceCard             = "price-card"
-	kindReferenceSeries       = "reference-series"
-	kindReferenceSeriesReview = "reference-series-review"
+	kindPriceCard                = "price-card"
+	kindReferenceSeries          = "reference-series"
+	kindReferenceSeriesReview    = "reference-series-review"
+	kindReferenceCatalogue       = "reference-catalogue"
+	kindReferenceCatalogueReview = "reference-catalogue-review"
 )
 
 // priceCardRegistrar、referenceSeriesRegistrar 与 referenceSeriesReviewer 把三个用例
@@ -64,6 +66,56 @@ type referenceSeriesRegistrar interface {
 
 type referenceSeriesReviewer interface {
 	Handle(ctx context.Context, command application.ReviewReferenceSeriesCommand) (application.ReviewReferenceSeriesOutcome, error)
+}
+
+// catalogueRegistrars 是计价参考目录（ADR-0109）的登记与复核两个用例在本工具里的形状。第四、五种登记
+// 与序列那两种同形：目录输入是 MarshalReferenceCatalogueRegistration 的折装快照（万行级映射由受控管道
+// 从源表产出，不在这里逐字段组），复核输入是复核文档。
+type catalogueRegistrars struct {
+	register interface {
+		Handle(ctx context.Context, command application.RegisterReferenceCatalogueCommand) (application.RegisterReferenceCatalogueOutcome, error)
+	}
+	review interface {
+		Handle(ctx context.Context, command application.ReviewReferenceCatalogueCommand) (application.ReviewReferenceCatalogueOutcome, error)
+	}
+}
+
+// catalogueReviewDocument 是目录复核文档的线格式，与序列复核文档只差键名。
+type catalogueReviewDocument struct {
+	Tenant           string `json:"tenant"`
+	CatalogueID      string `json:"catalogueId"`
+	CatalogueVersion string `json:"catalogueVersion"`
+	Reviewer         string `json:"reviewer"`
+	Decision         string `json:"decision"`
+	Basis            string `json:"basis"`
+	ReviewedAt       string `json:"reviewedAt,omitempty"`
+}
+
+func parseCatalogueReviewDocument(raw []byte) (application.ReviewReferenceCatalogueCommand, error) {
+	var document catalogueReviewDocument
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return application.ReviewReferenceCatalogueCommand{}, fmt.Errorf("复核文档不是合法 JSON：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.Tenant)
+	if err != nil {
+		return application.ReviewReferenceCatalogueCommand{}, fmt.Errorf("复核文档 tenant：%w", err)
+	}
+	command := application.ReviewReferenceCatalogueCommand{
+		Tenant:           tenant,
+		CatalogueID:      document.CatalogueID,
+		CatalogueVersion: document.CatalogueVersion,
+		Reviewer:         document.Reviewer,
+		Decision:         domain.SeriesReviewDecision(document.Decision),
+		Basis:            document.Basis,
+	}
+	if document.ReviewedAt != "" {
+		reviewedAt, err := time.Parse(time.RFC3339, document.ReviewedAt)
+		if err != nil {
+			return application.ReviewReferenceCatalogueCommand{}, fmt.Errorf("复核文档 reviewedAt 须为 RFC 3339：%w", err)
+		}
+		command.ReviewedAt = reviewedAt
+	}
+	return command, nil
 }
 
 type systemClock struct{}
@@ -111,7 +163,7 @@ func parseReviewDocument(raw []byte) (application.ReviewReferenceSeriesCommand, 
 }
 
 func main() {
-	kind := flag.String("kind", "", "登记种类：price-card、reference-series 或 reference-series-review")
+	kind := flag.String("kind", "", "登记种类：price-card、reference-series、reference-series-review、reference-catalogue 或 reference-catalogue-review")
 	file := flag.String("file", "", "登记快照 JSON 路径")
 	flag.Parse()
 
@@ -157,6 +209,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "构造序列复核册：%v\n", err)
 		os.Exit(exitUndecided)
 	}
+	catalogues, err := adapter.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造目录登记册：%v\n", err)
+		os.Exit(exitUndecided)
+	}
+	catalogueReviews, err := adapter.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "构造目录复核册：%v\n", err)
+		os.Exit(exitUndecided)
+	}
 
 	message, code := execute(ctx, *kind, raw,
 		application.NewRegisterPriceCardHandler(application.RegisterPriceCardDeps{Catalog: cards}),
@@ -164,6 +226,12 @@ func main() {
 		application.NewReviewReferenceSeriesHandler(application.ReviewReferenceSeriesDeps{
 			Versions: series, Reviews: reviews, Clock: systemClock{},
 		}),
+		catalogueRegistrars{
+			register: application.NewRegisterReferenceCatalogueHandler(application.RegisterReferenceCatalogueDeps{Register: catalogues}),
+			review: application.NewReviewReferenceCatalogueHandler(application.ReviewReferenceCatalogueDeps{
+				Versions: catalogues, Reviews: catalogueReviews, Clock: systemClock{},
+			}),
+		},
 		db.Transactor(),
 	)
 	fmt.Println(message)
@@ -180,9 +248,40 @@ func execute(
 	cards priceCardRegistrar,
 	series referenceSeriesRegistrar,
 	reviewer referenceSeriesReviewer,
+	catalogues catalogueRegistrars,
 	transactor bentoapp.Transactor,
 ) (string, int) {
 	switch kind {
+	case kindReferenceCatalogue:
+		registration, err := domain.RehydrateReferenceCatalogueRegistration(raw)
+		if err != nil {
+			return fmt.Sprintf("reference-catalogue: 快照重建被拒：%v", err), exitUsage
+		}
+		var outcome application.RegisterReferenceCatalogueOutcome
+		err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			result, err := catalogues.register.Handle(txCtx, application.RegisterReferenceCatalogueCommand{Registration: registration})
+			outcome = result
+			return err
+		})
+		if err != nil {
+			return fmt.Sprintf("reference-catalogue: 未决：%v", err), exitUndecided
+		}
+		return "reference-catalogue: " + outcome.String(), referenceCatalogueExitCode(outcome)
+	case kindReferenceCatalogueReview:
+		command, err := parseCatalogueReviewDocument(raw)
+		if err != nil {
+			return fmt.Sprintf("reference-catalogue-review: %v", err), exitUsage
+		}
+		var outcome application.ReviewReferenceCatalogueOutcome
+		err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			result, err := catalogues.review.Handle(txCtx, command)
+			outcome = result
+			return err
+		})
+		if err != nil {
+			return fmt.Sprintf("reference-catalogue-review: 未决：%v", err), exitUndecided
+		}
+		return "reference-catalogue-review: " + outcome.String(), referenceCatalogueReviewExitCode(outcome)
 	case kindPriceCard:
 		registration, err := domain.RehydratePriceCardRegistration(raw)
 		if err != nil {
@@ -229,7 +328,34 @@ func execute(
 		}
 		return "reference-series-review: " + outcome.String(), referenceSeriesReviewExitCode(outcome)
 	default:
-		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s）", kind, kindPriceCard, kindReferenceSeries, kindReferenceSeriesReview), exitUsage
+		return fmt.Sprintf("未知登记种类 %q（支持 %s / %s / %s / %s / %s）", kind,
+			kindPriceCard, kindReferenceSeries, kindReferenceSeriesReview, kindReferenceCatalogue, kindReferenceCatalogueReview), exitUsage
+	}
+}
+
+func referenceCatalogueExitCode(outcome application.RegisterReferenceCatalogueOutcome) int {
+	switch outcome {
+	case application.ReferenceCatalogueRecorded, application.ReferenceCatalogueAlreadyOnRegister:
+		return exitRegistered
+	case application.ReferenceCatalogueRegistrationConflict, application.ReferenceCatalogueRegistrationIncomparable:
+		return exitGovernance
+	case application.ReferenceCatalogueRegistrationNotAccepted:
+		return exitUsage
+	default:
+		return exitUndecided
+	}
+}
+
+func referenceCatalogueReviewExitCode(outcome application.ReviewReferenceCatalogueOutcome) int {
+	switch outcome {
+	case application.CatalogueReviewRecorded, application.CatalogueReviewAlreadyOnRegister:
+		return exitRegistered
+	case application.CatalogueReviewConflict, application.CatalogueReviewVersionUnknown, application.CatalogueReviewNeedsAnotherReviewer:
+		return exitGovernance
+	case application.CatalogueReviewNotAccepted:
+		return exitUsage
+	default:
+		return exitUndecided
 	}
 }
 

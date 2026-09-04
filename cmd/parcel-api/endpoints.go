@@ -90,6 +90,7 @@ func assembleBusinessEndpoints(
 	referenceSeriesRegistration pricinghttp.ReferenceSeriesRegistrar,
 	referenceSeriesReview pricinghttp.ReferenceSeriesReviewer,
 	referenceSeriesPreview pricinghttp.ReferenceSeriesPreviewer,
+	referenceCatalogueRegistration pricinghttp.ReferenceCatalogueRegistrar,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -288,6 +289,9 @@ func assembleBusinessEndpoints(
 		// 但拟登本体要信封里的租户与登记责任方才立得住，等的与登记口是同一样东西，所以同挂
 		// 字面量 UnconfiguredIntake{}，不走查阅行的 Intake 变量——隔离读放行装不进它（编译期）。
 		{Pattern: "/pricing-reference-series-previews", Handler: pricinghttp.NewPreviewReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesPreview)},
+		// 计价参考目录登记写面（ADR-0109 Decision 二，票 price-card-shape-gaps/01）：模板导入的命令行，
+		// 同挂字面量 UnconfiguredIntake{}，判据同两个登记口。
+		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(pricinghttp.UnconfiguredIntake{}, referenceCatalogueRegistration)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令

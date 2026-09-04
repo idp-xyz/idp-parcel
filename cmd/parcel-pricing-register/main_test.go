@@ -81,7 +81,7 @@ const reviewJSON = `{"tenant":"tenant-1","seriesId":"SYN-PRC-FUEL-WEEKLY","serie
 // 译成 2；坏文档在入库前拒成 1。
 func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 	reviewer := &reviewerDouble{outcome: application.SeriesReviewRecorded}
-	message, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, passthroughTransactor{})
+	message, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, reviewer, catalogueRegistrars{}, passthroughTransactor{})
 	if code != exitRegistered || !strings.Contains(message, "RECORDED") {
 		t.Fatalf("message=%q code=%d, 想要 RECORDED/0", message, code)
 	}
@@ -91,7 +91,7 @@ func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 	}
 
 	without := &reviewerDouble{outcome: application.SeriesReviewRecorded}
-	execute(t.Context(), kindReferenceSeriesReview, []byte(`{"tenant":"tenant-1","seriesId":"s","seriesVersion":"v1","reviewer":"r","decision":"APPROVED","basis":"b"}`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, without, passthroughTransactor{})
+	execute(t.Context(), kindReferenceSeriesReview, []byte(`{"tenant":"tenant-1","seriesId":"s","seriesVersion":"v1","reviewer":"r","decision":"APPROVED","basis":"b"}`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, without, catalogueRegistrars{}, passthroughTransactor{})
 	if !without.last.ReviewedAt.IsZero() {
 		t.Fatal("缺 reviewedAt 时本工具自己填了时刻——那是用例取时钟的事")
 	}
@@ -101,17 +101,17 @@ func TestExecuteRoutesReviewDocumentToTheReviewer(t *testing.T) {
 		"四眼不满足": application.SeriesReviewNeedsAnotherReviewer,
 		"同键异内容": application.SeriesReviewConflict,
 	} {
-		_, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, &reviewerDouble{outcome: outcome}, passthroughTransactor{})
+		_, code := execute(t.Context(), kindReferenceSeriesReview, []byte(reviewJSON), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, &reviewerDouble{outcome: outcome}, catalogueRegistrars{}, passthroughTransactor{})
 		if code != exitGovernance {
 			t.Fatalf("%s: code = %d, 想要 %d", label, code, exitGovernance)
 		}
 	}
 
 	untouched := &reviewerDouble{outcome: application.SeriesReviewRecorded}
-	if _, code := execute(t.Context(), kindReferenceSeriesReview, []byte(`{"tenant":"tenant-1","reviewedAt":"yesterday"}`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, untouched, passthroughTransactor{}); code != exitUsage || untouched.calls != 0 {
+	if _, code := execute(t.Context(), kindReferenceSeriesReview, []byte(`{"tenant":"tenant-1","reviewedAt":"yesterday"}`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, untouched, catalogueRegistrars{}, passthroughTransactor{}); code != exitUsage || untouched.calls != 0 {
 		t.Fatalf("坏时刻 code = %d calls = %d, 想要 1 且不到达用例", code, untouched.calls)
 	}
-	if _, code := execute(t.Context(), kindReferenceSeriesReview, []byte(`not json`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, untouched, passthroughTransactor{}); code != exitUsage || untouched.calls != 0 {
+	if _, code := execute(t.Context(), kindReferenceSeriesReview, []byte(`not json`), &cardRegistrarDouble{}, &seriesRegistrarDouble{}, untouched, catalogueRegistrars{}, passthroughTransactor{}); code != exitUsage || untouched.calls != 0 {
 		t.Fatalf("坏 JSON code = %d calls = %d", code, untouched.calls)
 	}
 }
@@ -188,7 +188,7 @@ func TestExecuteRoutesReferenceSeriesToItsRegistrar(t *testing.T) {
 	series := &seriesRegistrarDouble{outcome: application.ReferenceSeriesRecorded}
 	cards := &cardRegistrarDouble{}
 
-	message, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), cards, series, &reviewerDouble{}, passthroughTransactor{})
+	message, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), cards, series, &reviewerDouble{}, catalogueRegistrars{}, passthroughTransactor{})
 	if code != exitRegistered || !strings.Contains(message, "RECORDED") {
 		t.Fatalf("message=%q code=%d, 想要 RECORDED/0", message, code)
 	}
@@ -205,7 +205,7 @@ func TestExecuteTranslatesGovernanceAnswers(t *testing.T) {
 		"形状不可比":  application.ReferenceSeriesRegistrationIncomparable,
 	} {
 		series := &seriesRegistrarDouble{outcome: outcome}
-		_, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), &cardRegistrarDouble{}, series, &reviewerDouble{}, passthroughTransactor{})
+		_, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), &cardRegistrarDouble{}, series, &reviewerDouble{}, catalogueRegistrars{}, passthroughTransactor{})
 		if code != exitGovernance {
 			t.Fatalf("%s: code = %d, 想要 %d", label, code, exitGovernance)
 		}
@@ -216,7 +216,7 @@ func TestExecuteTranslatesGovernanceAnswers(t *testing.T) {
 // 用例（价卡分支同规则——两条路由结构同形）。
 func TestExecuteRefusesAtTheRehydrationGate(t *testing.T) {
 	cards := &cardRegistrarDouble{outcome: application.PriceCardRecorded}
-	message, code := execute(t.Context(), kindPriceCard, []byte(`{"not":"a-card"}`), cards, &seriesRegistrarDouble{}, &reviewerDouble{}, passthroughTransactor{})
+	message, code := execute(t.Context(), kindPriceCard, []byte(`{"not":"a-card"}`), cards, &seriesRegistrarDouble{}, &reviewerDouble{}, catalogueRegistrars{}, passthroughTransactor{})
 	if code != exitUsage {
 		t.Fatalf("message=%q code=%d, 想要重建门拒绝/1", message, code)
 	}
@@ -224,7 +224,7 @@ func TestExecuteRefusesAtTheRehydrationGate(t *testing.T) {
 		t.Fatal("装不成登记的字节到达了用例")
 	}
 
-	if _, code := execute(t.Context(), "moon-phase", []byte(`{}`), cards, &seriesRegistrarDouble{}, &reviewerDouble{}, passthroughTransactor{}); code != exitUsage {
+	if _, code := execute(t.Context(), "moon-phase", []byte(`{}`), cards, &seriesRegistrarDouble{}, &reviewerDouble{}, catalogueRegistrars{}, passthroughTransactor{}); code != exitUsage {
 		t.Fatalf("未知种类 code = %d, 想要 %d", code, exitUsage)
 	}
 }
@@ -233,7 +233,7 @@ func TestExecuteRefusesAtTheRehydrationGate(t *testing.T) {
 func TestExecuteSurfacesUndecided(t *testing.T) {
 	boom := errors.New("register store is down")
 	series := &seriesRegistrarDouble{err: boom}
-	message, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), &cardRegistrarDouble{}, series, &reviewerDouble{}, passthroughTransactor{})
+	message, code := execute(t.Context(), kindReferenceSeries, seriesSnapshot(t), &cardRegistrarDouble{}, series, &reviewerDouble{}, catalogueRegistrars{}, passthroughTransactor{})
 	if code != exitUndecided || !strings.Contains(message, "register store is down") {
 		t.Fatalf("message=%q code=%d, 想要未决/3 且带成因", message, code)
 	}

@@ -588,6 +588,17 @@ func (unwiredReferenceSeriesPreview) Handle(
 	return pricingapp.ReferenceSeriesPreview{}, errOrchestrationNotWired
 }
 
+// unwiredReferenceCatalogueRegistration 是计价参考目录登记的命令占位（票 price-card-shape-gaps/01）。
+// 不与序列登记占位合并，判据同生产侧的事务包装。
+type unwiredReferenceCatalogueRegistration struct{}
+
+func (unwiredReferenceCatalogueRegistration) Handle(
+	context.Context,
+	pricingapp.RegisterReferenceCatalogueCommand,
+) (pricingapp.RegisterReferenceCatalogueOutcome, error) {
+	return pricingapp.RegisterReferenceCatalogueOutcomeInvalid, errOrchestrationNotWired
+}
+
 // 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
 // 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
 // 换不来第二道保障。

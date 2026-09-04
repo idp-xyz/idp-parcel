@@ -54,4 +54,20 @@ func TestPricingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := reviews.Record(ctx, domain.SeriesReview{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录序列复核应返回 ErrTransactionRequired，实得：%v", err)
 	}
+
+	catalogues, err := adapter.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		t.Fatalf("构造目录登记册：%v", err)
+	}
+	if _, err := catalogues.Register(ctx, domain.ReferenceCatalogueRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记参考目录应返回 ErrTransactionRequired，实得：%v", err)
+	}
+
+	catalogueReviews, err := adapter.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		t.Fatalf("构造目录复核册：%v", err)
+	}
+	if _, err := catalogueReviews.Record(ctx, domain.CatalogueReview{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务记录目录复核应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

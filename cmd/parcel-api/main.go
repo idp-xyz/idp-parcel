@@ -230,6 +230,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	referenceCatalogueRegistration, err := buildReferenceCatalogueRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -379,6 +383,7 @@ func run(logger *slog.Logger) error {
 			referenceSeriesRegistration,
 			referenceSeriesReview,
 			referenceSeriesPreview,
+			referenceCatalogueRegistration,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

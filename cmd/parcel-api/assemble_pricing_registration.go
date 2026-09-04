@@ -103,6 +103,43 @@ func (review transactionalReferenceSeriesReview) Handle(
 	return outcome, nil
 }
 
+// transactionalReferenceCatalogueRegistration 为计价参考目录登记包事务（ADR-0109 Decision 二），判据同上。
+type transactionalReferenceCatalogueRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *pricingapp.RegisterReferenceCatalogueHandler
+}
+
+var _ pricinghttp.ReferenceCatalogueRegistrar = transactionalReferenceCatalogueRegistration{}
+
+func (registration transactionalReferenceCatalogueRegistration) Handle(
+	ctx context.Context,
+	command pricingapp.RegisterReferenceCatalogueCommand,
+) (pricingapp.RegisterReferenceCatalogueOutcome, error) {
+	var outcome pricingapp.RegisterReferenceCatalogueOutcome
+	err := registration.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := registration.inner.Handle(txCtx, command)
+		if handleErr != nil {
+			return handleErr
+		}
+		outcome = handled
+		return nil
+	})
+	if err != nil {
+		return pricingapp.RegisterReferenceCatalogueOutcomeInvalid, err
+	}
+	return outcome, nil
+}
+
+// buildReferenceCatalogueRegistrationOrchestration 装配 `/pricing-reference-catalogue-registrations` 的真编排。
+func buildReferenceCatalogueRegistrationOrchestration(db *bentopg.DB) (transactionalReferenceCatalogueRegistration, error) {
+	register, err := pppostgres.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		return transactionalReferenceCatalogueRegistration{}, fmt.Errorf("parcel-api: reference catalogue register: %w", err)
+	}
+	handler := pricingapp.NewRegisterReferenceCatalogueHandler(pricingapp.RegisterReferenceCatalogueDeps{Register: register})
+	return transactionalReferenceCatalogueRegistration{transactor: db.Transactor(), inner: handler}, nil
+}
+
 // buildPriceCardRegistrationOrchestration 装配 `/pricing-price-card-registrations`
 // 的真编排（ADR-0085 首切片，票 admin-write-faces/01）。接真不等墙降：未配置 Intake
 // 拒在编排之前，接入渠道就位前编排一次也不会被调到——墙降那笔工作换的只是 Intake。

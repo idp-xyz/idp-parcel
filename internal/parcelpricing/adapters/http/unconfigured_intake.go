@@ -42,11 +42,18 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 // 登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
 // 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这两个接口，写行换不了。
 var (
-	_ PriceCardRegistrationIntake       = UnconfiguredIntake{}
-	_ ReferenceSeriesRegistrationIntake = UnconfiguredIntake{}
-	_ ReferenceSeriesReviewIntake       = UnconfiguredIntake{}
-	_ ReferenceSeriesPreviewIntake      = UnconfiguredIntake{}
+	_ PriceCardRegistrationIntake          = UnconfiguredIntake{}
+	_ ReferenceSeriesRegistrationIntake    = UnconfiguredIntake{}
+	_ ReferenceSeriesReviewIntake          = UnconfiguredIntake{}
+	_ ReferenceSeriesPreviewIntake         = UnconfiguredIntake{}
+	_ ReferenceCatalogueRegistrationIntake = UnconfiguredIntake{}
 )
+
+// IntakeReferenceCatalogueRegistration 不读请求，判据同登记口：等的是操作者信封接线（ADR-0100），
+// 载荷形状（模板导入）已在 DecodeReferenceCataloguePayload。
+func (UnconfiguredIntake) IntakeReferenceCatalogueRegistration(context.Context, *http.Request) (application.RegisterReferenceCatalogueCommand, error) {
+	return application.RegisterReferenceCatalogueCommand{}, ErrAccessChannelNotConfigured
+}
 
 // IntakePriceCardRegistration 不读请求，判据同上。
 func (UnconfiguredIntake) IntakePriceCardRegistration(context.Context, *http.Request) (application.RegisterPriceCardCommand, error) {
