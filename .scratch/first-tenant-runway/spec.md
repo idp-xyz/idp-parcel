@@ -31,8 +31,13 @@ Status: in-progress
 | [04](./issues/04-mechanism-inventory-as-generated-report.md) | 「机制半边现状」改为生成物，停掉第二十八轮手工重盘 | — |
 | [05](./issues/05-product-monetization-and-customer-segments.md) | 产品自身收费模型与目标客户群分层 | — |
 | [06](./issues/06-declared-value-as-sellable-option.md) | 保价与声明价值作为可销售服务选项 | —（原 01, 02, 03 为优先级依赖，2026-09-04 按票面规则解除） |
+| [07](./issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md) | 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱（bug，2026-09-02 追加） | — |
+| [08](./issues/08-undecided-stage-and-reason-are-invisible-on-a-real-process.md) | 未决停在哪一站、原因是什么，在真进程上没有任何人读得到（bug，2026-09-02 追加） | 第一层挂 `07` |
+| [09](./issues/09-does-waiting-for-a-customer-supplement-actually-self-heal.md) | 「等待受控补充」真的会自愈吗——ADR-0086 那条前提没人核过（bug，2026-09-02 追加） | — |
 
-状态：`01` 与 `03` 为 `ready-for-human`——两票各要一次裁决（`01` 要新 ADR 判隔离写面放行是否与 ADR-0055/0072 相容；`03` 要答三问，其中一问是 ADR-0068 的护栏怎么改），裁完才谈实现。`02`、`04`、`05` 为 `ready-for-agent`，`06` 为 `draft` 且被前三票阻塞。（2026-09-04 补：`06` 形态半边已 `resolved`，落点另立实现票；其余各票以票面 Status 为准，本行未逐票重写。）
+状态（2026-09-04 通道 2 逐票重核后重写，此后**以各票文件 `Status:` 为准**，本行只作当日快照）：`01`（ADR-0091）、`02`、`04`、`05` 已 `resolved`；`06` 形态半边已 `resolved`，三处落点（接受判断结构化拒绝原因、服务选项进 `parcel-pricing` 特征、`settlement-accounting` 客户赔付读取规则引用）另立实现票——**尚未立**，见 [remaining-work-a3a4814.md](../unresolved-review-20260904/remaining-work-a3a4814.md) 第五节；`03` `blocked`（`PAR-NET-14` 实例半边，`Blocked by:` 行已补）；`07`、`08` 在 main 上仍是 `in-progress`（ADR-0094 决定一/二/三/五已落，D4 PC 半边 `542ebc3` 已在 main），两票已在 MCP-6 分支 `mcp6-ftr07-d4-ps@574eb6c` 转 `resolved`（PS 半边 + `undecidedDisposition` 翻转），**待重放入 main，不是 main 事实**；`09` `needs-info`，本波裁决（A/B/C 三选项）由通道 6 在做。
+
+原状态句（立批时文字，留作对照）：`01` 与 `03` 为 `ready-for-human`——两票各要一次裁决（`01` 要新 ADR 判隔离写面放行是否与 ADR-0055/0072 相容；`03` 要答三问，其中一问是 ADR-0068 的护栏怎么改），裁完才谈实现。`02`、`04`、`05` 为 `ready-for-agent`，`06` 为 `draft` 且被前三票阻塞。
 
 建议顺序：`03` 最长先起（先裁三问），`01` 的裁决可并行，`02` 随后落地；`04` 与 `05` 跟前三票无交集，随时可插。**`01` 与 `02` 都动 `cmd/parcel-api` 装配点——占号，串行排，不要并行改同一处。**
 

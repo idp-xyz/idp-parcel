@@ -2,6 +2,7 @@
 
 Category: enhancement
 Status: blocked（2026-09-02 MCP-5 答完三问；结论是被 `PAR-NET-14` 硬阻断，**本票暂不拆实现票**。阻断解除前唯一可动的是一张前置票，见 `## Answer` 第四节）
+Blocked by: `PAR-NET-14`（实例半边——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md)仍「待提供」；不是本批任何一张票。本行由通道 2 于 2026-09-04 代簿记补上，让 tracker 能按字段过滤；`Status` 与 `## Answer` 一字未动）
 
 演示动线三堵墙的**墙三**，也是本批唯一一件真正在长的工程。取证基线 `c9835bf`。
 
