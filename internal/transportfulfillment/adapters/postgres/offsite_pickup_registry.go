@@ -90,6 +90,61 @@ func (repository *OffsitePickupRegistrations) FindByKey(
 	}, true, nil
 }
 
+// FindByKeyAndVersion 按（租户+对象+尝试+结果版本）取回指名的那一代，不问它是不是当前版。
+// 更正只加新行、原行不动（0015），所以任一代都读得回；读回同样经 RehydrateOffsitePickup，
+// 回指与更正时刻随行——下游沿链判「回指接不接得到已采用版本」时不必再读一次。不存在的
+// 版本与他租户都答 false 不报错，与 FindByKey 同纪律。
+//
+// 它不进 ports.OffsitePickupRegistry：拓宽那个接口会拆掉 TF 自己 http 与 application 两处的
+// 替身，而这一口的唯一调用方在 parcel-shipment——消费方每份信封代表一代，按当前版读会让
+// 更正之前入队的那一份也读成更正后那一代（票 label-channel/24，ADR-0117 决定四）。与
+// EffectiveDeliveries.FindByKeyAndVersion 同形；PS 侧自己的消费方接口声明它，本类型结构满足。
+func (repository *OffsitePickupRegistrations) FindByKeyAndVersion(
+	ctx context.Context,
+	key ports.OffsitePickupKey,
+	version domain.PickupResultVersion,
+) (ports.OffsitePickupRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.OffsitePickupRecord{}, false, fmt.Errorf("find offsite pickup by version: %w", err)
+	}
+
+	var task, place, control, executedBy, digest string
+	var occurredAt, recordedAt time.Time
+	var corrects *string
+	var correctedAt *time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT task_ref, place_ref, control_ref, executed_by, occurred_at, content_digest, recorded_at,
+		        corrects_version, corrected_at
+		   FROM transport_fulfillment.offsite_pickup
+		  WHERE tenant_id = $1
+		    AND object_ref = $2
+		    AND attempt_ref = $3
+		    AND pickup_version = $4`,
+		key.TenantID.String(),
+		key.Object.String(),
+		key.Attempt.String(),
+		version.String(),
+	).Scan(&task, &place, &control, &executedBy, &occurredAt, &digest, &recordedAt, &corrects, &correctedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.OffsitePickupRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.OffsitePickupRecord{}, false, fmt.Errorf("find offsite pickup by version: %w", err)
+	}
+
+	pickup, err := rebuildRegisteredPickup(key, task, place, control, executedBy, version.String(), occurredAt, corrects, correctedAt)
+	if err != nil {
+		return ports.OffsitePickupRecord{}, false, fmt.Errorf("find offsite pickup by version: %w", err)
+	}
+	return ports.OffsitePickupRecord{
+		Key:           key,
+		ContentDigest: digest,
+		Pickup:        pickup,
+		RecordedAt:    recordedAt.UTC(),
+	}, true, nil
+}
+
 // Save 落一份揽收登记——首登与更正版本都从这里进，一行一版，只插不改。撞键答`已登记`——业务
 // 答案不是 error（ADR-0031），编排拿到它还要在同一事务里读回赢家作答，所以用 ON CONFLICT DO
 // NOTHING 保事务可用。撞的可以是主键（同版本重放）、offsite_pickup_one_first_registration（同键

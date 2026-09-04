@@ -219,6 +219,49 @@ func TestAPickupCorrectionLandsAsANewVersionAndTheOriginalStays(t *testing.T) {
 	}
 }
 
+// TestFindByKeyAndVersionReadsBackAnyGenerationOfAPickup 证按（键+版本）取回指名的那一代，不问它是不是
+// 当前版（票 label-channel/24 的 PS 消费方按信封所指版本读回，ADR-0117 决定四）：更正后旧代仍读得回且
+// 不带回指、新代带回指与更正时刻——PS 靠这两格判「回指链能不能接到已采用版本」，不必再读一次；
+// 不存在的版本与他租户答无不报错，与 FindByKey 同纪律。
+func TestFindByKeyAndVersionReadsBackAnyGenerationOfAPickup(t *testing.T) {
+	repository, transactor, _ := newOffsitePickups(t)
+	ctx := t.Context()
+
+	original := pickupRecord(t, "control-1", "PRV-000000000001")
+	mustSavePickup(t, transactor, ctx, repository, original)
+	mustSavePickup(t, transactor, ctx, repository, correctedPickupRecord(t, original, "control-2", "PRV-000000000002"))
+
+	key := pickupKeyFixture(t, "tenant-1")
+	old, exists, err := repository.FindByKeyAndVersion(ctx, key, pickupValue(t, domain.NewPickupResultVersion, "PRV-000000000001"))
+	if err != nil || !exists {
+		t.Fatalf("旧代读回：exists=%v err=%v", exists, err)
+	}
+	if old.Pickup.Version().String() != "PRV-000000000001" || old.Pickup.Control().String() != "control-1" || old.Key != key {
+		t.Fatalf("按版本读回的不是那一代：%+v", old.Pickup)
+	}
+	if _, corrected := old.Pickup.Corrects(); corrected {
+		t.Fatal("首登那一代读回时长出了回指")
+	}
+
+	current, exists, err := repository.FindByKeyAndVersion(ctx, key, pickupValue(t, domain.NewPickupResultVersion, "PRV-000000000002"))
+	if err != nil || !exists {
+		t.Fatalf("新代读回：exists=%v err=%v", exists, err)
+	}
+	if predecessor, corrected := current.Pickup.Corrects(); !corrected || predecessor.String() != "PRV-000000000001" {
+		t.Fatalf("更正那一代读回时丢了回指：%v %v", predecessor, corrected)
+	}
+	if at, present := current.Pickup.CorrectedAt(); !present || !at.Equal(correctedAtFixture) {
+		t.Fatalf("更正时刻读回变形：%v present=%v", at, present)
+	}
+
+	if _, exists, err := repository.FindByKeyAndVersion(ctx, key, pickupValue(t, domain.NewPickupResultVersion, "PRV-000000000009")); err != nil || exists {
+		t.Fatalf("不存在的版本：exists=%v err=%v，想要 false 且不报错", exists, err)
+	}
+	if _, exists, err := repository.FindByKeyAndVersion(ctx, pickupKeyFixture(t, "tenant-2"), pickupValue(t, domain.NewPickupResultVersion, "PRV-000000000001")); err != nil || exists {
+		t.Fatalf("他租户按同键同版本读到了：exists=%v err=%v", exists, err)
+	}
+}
+
 // TestASecondCorrectionOfTheSameVersionKeepsTheFirst 证一版最多被更正一次（库内部分唯一索引）：并发
 // 第二次更正同一前版撞索引译`已登记`而不是 error，同事务立刻读回的当前版仍是先到的那一次更正——链因此
 // 保持线性，FindByKey 才答得出唯一的当前版。
