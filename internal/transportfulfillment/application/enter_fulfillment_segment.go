@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -72,9 +73,15 @@ type segmentEntryDoors struct {
 // 段内、段已关闭）是正当的业务结果，不留引用：留了会让调用方反复重试一件本就不该发生的事。
 // 只有登记册这一侧读不到或写不进才是欠账。领域拒绝里**只有段已关闭单开一格**答出去
 // （SegmentEntryRefusal），理由在那个类型上。
+//
+// **段首登之后同笔铸实际承运商判断的首版**（CONTEXT「实际履约段成立时即形成首个判断版本」；票
+// tf-segment-lifecycle-closure/02）。它挂在这里而不是各调用方，理由与进段本身相同：段只从这一道门
+// 成立，首版跟着段走。`judgments` 可缺席，判据同 `segments` 缺席——派生一侧缺席不让来源保全停摆；
+// 在场而写不进则是欠账，续办引用与段那一半同一格：没有首版的段在 CONTEXT 里不是一个完整成立的段。
 func enterFulfillmentSegment(
 	ctx context.Context,
 	segments ports.ActualFulfillmentSegmentRegistry,
+	judgments ports.ActualCarrierJudgmentRegistry,
 	clock ports.Clock,
 	tenant domain.TenantID,
 	segmentReference string,
@@ -118,7 +125,61 @@ func enterFulfillmentSegment(
 	if err != nil || saved == ports.SegmentSaveOutcomeInvalid {
 		return segmentEntry{continuation: owed("SEGMENT_NOT_ESTABLISHED", tenant, segmentReference, doors.object)}
 	}
+	// 只有本次真把段立起来的那一方开判断：并发下撞键的一方读回的是赢家的段，首版由赢家开。
+	if saved == ports.SegmentSaved {
+		return segmentEntry{continuation: openCarrierJudgment(ctx, judgments, clock, key, established, doors.object)}
+	}
 	return segmentEntry{}
+}
+
+// openCarrierJudgment 在段首登之后开判断历史：首版待确认（无合格证据），业务时间取段成立时刻——首个
+// 对象的控制起点（CONTEXT 生命周期「实际承运商判断」首条；ADR-0103 决定二）。交回续办引用，空串即无欠账。
+//
+// 成立事实随带的合格证据不在这里收：今天两条立段来源（收寄、`已交接`交接）都不携带「接收方就是承运
+// 主体」这一判断——收寄的执行方是运输方引用不是承运主体身份，交接的接收方可以是节点也可以是承运方——
+// 替它们推一步就是 CONTEXT 明禁的推断。证据从「形成实际承运商判断」用例进来。
+func openCarrierJudgment(
+	ctx context.Context,
+	judgments ports.ActualCarrierJudgmentRegistry,
+	clock ports.Clock,
+	key ports.FulfillmentSegmentKey,
+	established domain.ActualFulfillmentSegment,
+	object domain.CarriedObjectReference,
+) string {
+	if judgments == nil {
+		return ""
+	}
+	judgment, err := domain.OpenActualCarrierJudgment(domain.OpenActualCarrierJudgmentSpec{
+		TenantID:      key.TenantID,
+		Segment:       key.Segment,
+		EstablishedAt: segmentEstablishedAt(established),
+		FormedAt:      clock.Now(),
+	})
+	if err != nil {
+		return owed("CARRIER_JUDGMENT_NOT_OPENED", key.TenantID, key.Segment.String(), object)
+	}
+	outcome, err := judgments.Open(ctx, ports.ActualCarrierJudgmentRecord{
+		Key:        ports.ActualCarrierJudgmentKey{TenantID: key.TenantID, Segment: key.Segment},
+		Judgment:   judgment,
+		RecordedAt: clock.Now(),
+	})
+	if err != nil || outcome == ports.JudgmentOpenOutcomeInvalid {
+		return owed("CARRIER_JUDGMENT_NOT_OPENED", key.TenantID, key.Segment.String(), object)
+	}
+	return ""
+}
+
+// segmentEstablishedAt 是段成立的业务时刻：成员里最早的控制起点。段本身不存这个时刻——它由首个对象的
+// 控制事实派生（CONTEXT 生命周期①），这里按成员算回来，不给段聚合加一格（票面「不改 actual_fulfillment_
+// segment.go 任何导出签名」）。
+func segmentEstablishedAt(segment domain.ActualFulfillmentSegment) time.Time {
+	var earliest time.Time
+	for _, participation := range segment.Participations() {
+		if earliest.IsZero() || participation.EnteredAt().Before(earliest) {
+			earliest = participation.EnteredAt()
+		}
+	}
+	return earliest
 }
 
 // joinExistingSegment 让后续对象加入既有段并形成自己的参与起点，不动其他对象的起点。

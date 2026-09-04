@@ -132,7 +132,10 @@ func (result RegisterOffsitePickupResult) PickupHandoffReference() string {
 type RegisterOffsitePickupDeps struct {
 	Pickups ports.OffsitePickupRegistry
 	// Segments 可缺席：没有段登记册时收寄照登不误。派生一侧缺席不该让来源保全停摆。
-	Segments   ports.ActualFulfillmentSegmentRegistry
+	Segments ports.ActualFulfillmentSegmentRegistry
+	// Judgments 让段首登后同笔铸实际承运商判断的首版（票 tf-segment-lifecycle-closure/02）。可缺席，
+	// 判据同 Segments；在场而写不进是段那一半的欠账——理由在 enterFulfillmentSegment 的自注。
+	Judgments  ports.ActualCarrierJudgmentRegistry
 	Versions   ports.PickupIdentityFactory
 	Downstream ports.OffsitePickupRegistrationHandoff
 	Clock      ports.Clock
@@ -235,7 +238,7 @@ func (handler *RegisterOffsitePickupHandler) establishSegment(
 	pickup domain.OffsitePickup,
 ) segmentEntry {
 	return enterFulfillmentSegment(
-		ctx, handler.deps.Segments, handler.deps.Clock,
+		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,
 		segmentEntryDoors{
 			object: pickup.Object(),

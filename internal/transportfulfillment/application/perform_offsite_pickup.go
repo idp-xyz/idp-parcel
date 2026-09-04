@@ -174,7 +174,10 @@ func (result PerformOffsitePickupResult) SegmentEntryRefusal() SegmentEntryRefus
 type PerformOffsitePickupDeps struct {
 	Attempts ports.PickupAttemptStore
 	// Segments 可缺席：没有段登记册时到访照登不误。派生一侧缺席不该让来源保全停摆。
-	Segments   ports.ActualFulfillmentSegmentRegistry
+	Segments ports.ActualFulfillmentSegmentRegistry
+	// Judgments 让段首登后同笔铸实际承运商判断的首版（票 tf-segment-lifecycle-closure/02）。可缺席，
+	// 判据与形状同 RegisterOffsitePickupDeps.Judgments。
+	Judgments  ports.ActualCarrierJudgmentRegistry
 	Versions   ports.PickupIdentityFactory
 	Downstream ports.OffsitePickupHandoff
 	Clock      ports.Clock
@@ -401,7 +404,7 @@ func (handler *PerformOffsitePickupHandler) enterSegments(
 	refusal := SegmentEntryRefusalNone
 	for _, pickup := range record.Pickups {
 		entry := enterFulfillmentSegment(
-			ctx, handler.deps.Segments, handler.deps.Clock,
+			ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 			command.TenantID, command.Segment, planned[pickup.Object()],
 			segmentEntryDoors{
 				object: pickup.Object(),

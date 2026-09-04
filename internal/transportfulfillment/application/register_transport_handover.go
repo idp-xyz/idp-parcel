@@ -167,6 +167,9 @@ type RegisterTransportHandoverDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
 	Downstream ports.TransportHandoverRegistrationHandoff
 	Clock      ports.Clock
+	// Judgments 让段首登后同笔铸实际承运商判断的首版（票 tf-segment-lifecycle-closure/02）。可缺席，
+	// 判据与形状同 RegisterOffsitePickupDeps.Judgments。
+	Judgments ports.ActualCarrierJudgmentRegistry
 	// ParticipationEnds 让`已交接`落库后同事务结束该对象在前一段的参与（票 06 裁决 (i)）。**生产装配必须交入**
 	// ——结束参与是 UC-TF-005 步骤 7 本身。缺席时不 panic 也不静默：交接照登，结果答 ParticipationEndNotWired
 	// 那一格；装配点有没有交入由真库装配测试钉。
@@ -276,7 +279,7 @@ func (handler *RegisterTransportHandoverHandler) establishSegment(
 	handover domain.TransportHandover,
 ) segmentEntry {
 	return enterFulfillmentSegment(
-		ctx, handler.deps.Segments, handler.deps.Clock,
+		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,
 		segmentEntryDoors{
 			object: handover.Object(),

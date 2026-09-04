@@ -158,7 +158,10 @@ func (result EndFulfillmentParticipationResult) NextSegmentContinuationReference
 }
 
 type EndFulfillmentParticipationDeps struct {
-	Segments   ports.ActualFulfillmentSegmentRegistry
+	Segments ports.ActualFulfillmentSegmentRegistry
+	// Judgments 让「进下一段」那一半在立起新段时同笔铸实际承运商判断的首版（票 tf-segment-lifecycle-
+	// closure/02）。可缺席，判据与形状同 RegisterOffsitePickupDeps.Judgments。
+	Judgments  ports.ActualCarrierJudgmentRegistry
 	Handovers  ports.TransportHandoverRegistry
 	Deliveries ports.EffectiveDeliveryStore
 	Clock      ports.Clock
@@ -306,7 +309,7 @@ func enterNextSegmentEntry(
 	handover domain.TransportHandover,
 ) segmentEntry {
 	return enterFulfillmentSegment(
-		ctx, handler.deps.Segments, handler.deps.Clock,
+		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 		command.TenantID, command.NextSegment, command.NextPlannedSegment,
 		segmentEntryDoors{
 			object: handover.Object(),
