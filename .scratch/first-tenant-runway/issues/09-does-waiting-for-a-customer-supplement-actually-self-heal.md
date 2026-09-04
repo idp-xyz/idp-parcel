@@ -1,7 +1,7 @@
 # 「等待受控补充」真的会自愈吗——ADR-0086 那条前提没人核过
 
 Category: bug
-Status: ready-for-agent——已裁（2026-09-04，通道 6，owner 授权）：取第三种结论「自愈不成立」，选 A，落文 [ADR-0106](../../../docs/adr/0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)；本票转为实施票，范围见「裁决」节末段，处置翻转与续办信封同笔落地否则不许落地
+Status: in-progress——MCP-6（2026-09-04，隔离分支 `mcp6-ftr09`，基线 main `caca1c4a`）按 task-66cd286c 实施「裁决」节末段五条范围；此前已裁（2026-09-04，通道 6，owner 授权）：取第三种结论「自愈不成立」，选 A，落文 [ADR-0106](../../../docs/adr/0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md)；本票转为实施票，范围见「裁决」节末段，处置翻转与续办信封同笔落地否则不许落地
 Blocked by: 无
 
 来源：2026-09-02 MCP-1 裁 [ADR-0094](../../../docs/adr/0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md) 时撞见，当场因证据不足没有动它。锚 `ca7441f`。
