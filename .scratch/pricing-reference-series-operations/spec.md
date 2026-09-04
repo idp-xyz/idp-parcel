@@ -1,7 +1,7 @@
 # 计价参考序列（汇率 / 燃油）的运营形态：绑定标识、复核进在用、评价时解析
 
 Category: enhancement
-Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 resolved（`f62d619`；真库冒烟已于 2026-09-03 实跑通过，「形成一条 `S` 评价」改归 T2 票），04 resolved（04a `9035df7`，04b 两件 `121097d`，余三件并入 08），05 in-progress（05a 与第 3 项已落；05b 两件已由 ADR-0105 答完，可开工——见 `f25d692`），06 draft（出网与工件存放两问，本波裁决由通道 6 在做），07 resolved（裁 (c) 今天不做，不立 ADR），08 resolved（`0a67406`，随 `f148759` 发布），09 draft（需 ADR，本波由通道 6 裁）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，08/09 两格由 MCP-5 于 2026-09-04 追记，03/04/06/07 四格由通道 2 于 2026-09-04 对票面重核后对齐（此后**以各票文件 `Status:` 为准**）
+Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`），03 resolved（`f62d619`；真库冒烟已于 2026-09-03 实跑通过，「形成一条 `S` 评价」改归 T2 票），04 resolved（04a `9035df7`，04b 两件 `121097d`，余三件并入 08），05 in-progress（05a 与第 3 项已落；05b 两件已由 ADR-0105 答完，可开工——见 `f25d692`），06 ready-for-agent（`27ced913` 裁：无出网→只做契约 + `FileConnector` + 免复核格 + `parcel-pricing-feed`，CFETS 段留 draft；工件照 ADR-0092 出向缝形），07 resolved（裁 (c) 今天不做，不立 ADR），08 resolved（`0a67406`，随 `f148759` 发布），09 resolved（`147c7c06` 裁改法 3 落 ADR-0108，实施拆出 10），10 ready-for-agent（ADR-0108 实施：版本引用身份三元、digest 退出身份、规范化换号一次——与 ADR-0107/0109/0110/0111 的换号同期实施合并为一次）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，08/09 两格由 MCP-5 于 2026-09-04 追记，03/04/06/07 四格由通道 2 于 2026-09-04 对票面重核后对齐，06/09/10 三格由 MCP-1 于 2026-09-04 按通道 6 裁决对齐（此后**以各票文件 `Status:` 为准**）
 
 依据：[ADR-0099](../../docs/adr/0099-price-card-binds-series-identity-and-in-force-version-is-derived-from-review.md)；术语与生命周期已落 [parcel-pricing CONTEXT](../../docs/domain/parcel-pricing/CONTEXT.md)「计价参考序列 / 序列版本复核 / 在用序列版本」与「计价参考序列版本」。本目录只引用，不复述第二套口径。
 
@@ -26,10 +26,11 @@ Status: in-progress——01 resolved（`7042a38`），02 resolved（`1b09c2d`）
 | [03](issues/03-review-use-case-and-evaluation-resolves-in-force.md) | 复核用例；评价用例形成前解析在用版本补齐取值；CLI 增复核种类；seedgen 重跑 | application + cmd | 02 |
 | [04](issues/04-review-endpoint-and-admin-structured-form.md) | 复核端点（未配置格）；管理台复核动作 / 逐字段登记表单 / 更正动作 | http + admin-web | 03 |
 | [05](issues/05-coverage-horizon-and-blocked-evaluations-read-face.md) | 覆盖地平线与被挂起评价联动的读面 | ports + postgres + admin-web | 03 |
-| [06](issues/06-source-connector-framework-and-cfets-connector.md) | 来源连接器框架 + 首个连接器（CFETS 中间价）；免复核声明格 | adapters | 03；**draft**：出网方式待定 |
+| [06](issues/06-source-connector-framework-and-cfets-connector.md) | 来源连接器框架：契约 + `FileConnector` + 免复核声明格 + `parcel-pricing-feed`；CFETS 连接器段留 draft（无出网） | adapters + cmd | 无（03 已 resolved）；已裁 `27ced913` |
 | [07](issues/07-customs-valuation-rate-series-kind.md) | 海关计税汇率作为第三种序列种类？消费方是谁？ | 跨上下文 | **draft**：待裁 |
 | [08](issues/08-series-write-face-needs-a-draft-and-a-version-read-face.md) | 逐版本读面两组字段；无持久化校验预览端点；管理台复核状态列 / 逐字段表单 / 更正预填（04b 余件并入） | ports + postgres + http + admin-web | 04a |
-| [09](issues/09-version-reference-digest-has-no-source-on-the-operator-path.md) | 版本引用 digest 在操作者路径上没有来源：声明令牌是过渡，领域改法要 ADR | domain（跨 PC 读口） | 08；**draft**：需 ADR |
+| [09](issues/09-version-reference-digest-has-no-source-on-the-operator-path.md) | 版本引用 digest 在操作者路径上没有来源：已裁改法 3，落 ADR-0108；实施拆出 10 | domain（跨 PC 读口） | 已 resolved（`147c7c06`） |
+| [10](issues/10-version-reference-identity-is-a-triple-and-fingerprint-is-optional.md) | ADR-0108 实施：版本引用身份为（种类，标识，版本）三元，digest 退出身份成可选指纹；过渡令牌退役；规范化换号一次 | domain + ports + postgres + http | 无；换号与 ADR-0107/0109/0110/0111 同期实施合并为一次 |
 
 ## 边界
 
