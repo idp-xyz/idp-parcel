@@ -20,10 +20,12 @@ import (
 // 去读它们会把「规则是什么」和「事实是什么」揉成一个既是目录又能读业务数据的东西。
 // 编排拿走规则，自己去 ClaimStore 与证据侧逐维核对。
 //
-// 登记面今天有两角：合同责任范围承不承担这个索赔类型（0011），申请人授权目录
-// （0018，切块 (c)）。索赔时限要起算事件与业务日历、最低材料要一份清单，两样仍属
-// `PAR-VIS-08` 待登记实例参数且没有登记面。**凑一份就是发明实例参数**，所以那两维
-// 一律如实答未登记，由编排停在指名到维的未决；授权目录同理——没有目录行就答未登记，
+// 本册承载两角：合同责任范围承不承担这个索赔类型（0011），申请人授权目录（0018，
+// 切块 (c)）。索赔时限与最低材料两维**不在本册**：它们的登记面从 ADR-0104 起在
+// party-commercial 的客户服务规则册，由消费侧适配器 adapters/partycommercial 叠在本视图
+// 的答案上（票 ve-claims-read-seams/03）。本视图对那两维恒交零值——那是「本册不承载」，
+// 不是「已核过未登记」；单独装本视图（受控登记口）时两维因此如实答未登记。**凑一份就是
+// 发明实例参数**：这里不拿任何期限或清单顶位。授权目录同理——没有目录行就答未登记，
 // 不拿空名单冒充「无人获授权」。
 //
 // 特别提防一处同形陷阱：parcel-shipment 的收寄资格视图在证据取不到时如实答「未成立」
@@ -56,9 +58,11 @@ var _ ports.EligibilityRuleView = (*ClaimEligibilityRules)(nil)
 // 拒赔就是虚构。声明在场则一律交回规则，某一维尚未登记由那一维自己的 Registered 交代：
 // 「整份声明还没登记」与「只差材料清单」的补法不是一件事，折成同一格会让人去补错东西。
 //
-// 时限与材料两维的 Registered 恒为 false 不是占位：两样连登记面都还没有，给它们建
-// 空表也点不亮任何路径——四件落点里的当前截止靠资料补充期限，那同样是待登记的实例
-// 参数，所以先如实答未登记，等 `PAR-VIS-08` 连同登记面一起落地。
+// 时限与材料两维本视图恒交零值：登记面在 party-commercial 的客户服务规则册（ADR-0104），
+// 读它是跨上下文翻译，只能落在 adapters/partycommercial；本视图是持久化适配器，不该也
+// 不能去读另一个上下文的册。多租户入口由那边的 ClaimServiceRules 叠上两维；受控登记口
+// 单独装本视图，两维因此如实答未登记，不给它们建空表——四件落点里的当前截止靠资料
+// 补充期限派生，起算事实与日历今天 VE 也还没有。
 func (view *ClaimEligibilityRules) RulesForClaim(
 	ctx context.Context,
 	query ports.EligibilityQuery,
@@ -115,6 +119,8 @@ func claimRulesForTenant(
 		return ports.EligibilityRules{}, false, err
 	}
 
+	// 两维交候处：零值交给 adapters/partycommercial 的 ClaimServiceRules 去叠 PC 正文的答案；
+	// 本册不承载它们，也不在这里替它们答「已核过未登记」。
 	return ports.EligibilityRules{
 		RuleVersion:    ruleVersion,
 		KindCovered:    covered,
