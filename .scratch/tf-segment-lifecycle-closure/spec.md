@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01、03、04、05、06、07 resolved；02 ready-for-agent（ADR-0103）；08、09 draft 待 MCP-3 裁
+Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026-09-04 入 main：代码 tip `56d2a437`、票面 `fe5b3a35`、`cmd/parcel-api` 装配行 `9e8a9202`；ADR-0103）；08、09 ready-for-agent（裁决 `bca02e5` / `21ee4f0`）；06 「补刀二」裁「采」（`3f3a675`，封存笔 `mcp4-tf03@44808f3`）待 MCP-1 在当下 main 上重写合入
 
 ## 从哪里分出来
 
@@ -31,10 +31,10 @@ Status: in-progress——01、03、04、05、06、07 resolved；02 ready-for-age
 | [05](issues/05-movement-fact-endpoint.md) | 移动事实端点，只收自营执行方 | 无 |
 | [06](issues/06-participation-end-internal-triggers.md) | 结束参与的两处内部触发（交付后、交接后） | MCP-1 对动 TF application 的答复 |
 | [07](issues/07-admin-write-faces-segment-closure-dispatch-task-load-assignment.md) | admin 写面四格：关段、建派送任务、装载分配、明确终止参与 | 无 |
-| [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：新版本还是失效 + 替代（draft，领域问题先裁） | MCP-3 裁 |
-| [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：触发条件先裁（draft） | 05；MCP-3 裁 |
+| [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：已裁取 A 新版本（`Corrects` 回指，登记册只插不改） | 已裁（`bca02e5`），ready-for-agent |
+| [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：四问已裁，触发事实改为对象凭`已交接`进入派送段 | 已裁（`21ee4f0`），ready-for-agent；05 已 resolved 不再阻塞 |
 
-04、05、06、07 已 resolved（2026-09-03）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
+04、05、06、07 已 resolved（2026-09-03）；02 已 resolved（2026-09-04，MCP-2，ADR-0103）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
 ## 红线（沿 tf-unwired-seven，不复述其正文）
 
