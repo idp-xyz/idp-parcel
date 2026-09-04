@@ -51,7 +51,7 @@ func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
 	if intakes == nil {
 		t.Fatal("synthetic tenant yielded nil intakes")
 	}
-	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil ||
+	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil || intakes.channelSelectionDecisions == nil ||
 		intakes.trackingProjections == nil ||
 		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
 		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
@@ -127,6 +127,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 上列「该判哪几条」不触发判断，判断在另一条写行上，而写行挂的是字面量 UnconfiguredIntake{}，本
 	// 用例下面那半会证它仍答 403。单列在表尾的理由同上一行。
 	"/transport-fulfillment-external-tracking-facts": true,
+	// 渠道择优决定查阅（票 label-channel/23）随委托查阅的注入值一起放行（第三半接口，只交出租户维）。三条判据逐条
+	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
+	// 不在这一口。单列在表尾的理由同上两行。
+	"/channel-selection-decisions": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

@@ -58,6 +58,7 @@ func assembleBusinessEndpoints(
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
 	labelTransactions shipmenthttp.LabelTransactionsReader,
+	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionsReader,
 	cancellation shipmenthttp.CancellationHandler,
 	reception nodeopshttp.ReceptionHandler,
 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
@@ -140,6 +141,7 @@ func assembleBusinessEndpoints(
 	// 这句；剩下那几行的字面量纪律一字未松。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
+	channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	nodeOperationsCatalogueIntake := nodeopshttp.CatalogueQueryIntake(nodeopshttp.UnconfiguredIntake{})
 	transportCatalogueIntake := tfhttp.CatalogueQueryIntake(tfhttp.UnconfiguredIntake{})
 	trackingProjectionsIntake := visibilityhttp.OperationsTrackingIntake(visibilityhttp.UnconfiguredIntake{})
@@ -153,6 +155,7 @@ func assembleBusinessEndpoints(
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 		labelTransactionIntake = isolatedRead.labelTransactions
+		channelSelectionDecisionIntake = isolatedRead.channelSelectionDecisions
 		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
 		transportCatalogueIntake = isolatedRead.transportCatalogue
 		trackingProjectionsIntake = isolatedRead.trackingProjections
@@ -196,6 +199,10 @@ func assembleBusinessEndpoints(
 		// 账户维的作用域等于在类型上声称会按账户过滤而它不会。渠道墙未降前这一口读到的是
 		// 空册，那是设计：写入方是渠道适配器，首发不进生产。
 		{Pattern: "/label-transactions", Handler: shipmenthttp.NewQueryLabelTransactionsEndpoint(labelTransactionIntake, labelTransactions)},
+		// 渠道择优决定查阅（票 label-channel/23）：并列冲突列表与按标识取一条共用一个端点、按 decisionId 分派。
+		// 准入形同面单交易（只有租户维，本册没有账户维可分），自立 Intake 变量、随同一个隔离读开关换值；读口是
+		// 决定登记册本尊（两个契约一只适配器）。择优编排今天无生产装配点，接线前这一口读到的是空册，空册是如实答案。
+		{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，

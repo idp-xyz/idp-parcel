@@ -435,6 +435,27 @@ func (unwiredLabelTransactions) ListLabelTransactions(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredChannelSelectionDecisions 是渠道择优决定查阅读口的占位（票 label-channel/23）；读不回交回稳定错误
+// 而不是空册，理由同 unwiredLabelTransactions。
+type unwiredChannelSelectionDecisions struct{}
+
+func (unwiredChannelSelectionDecisions) ListTiedChannelSelectionDecisions(
+	context.Context,
+	shipmentdomain.TenantID,
+	shipmentports.TiedChannelSelectionFilter,
+	int,
+) ([]shipmentdomain.ChannelSelectionDecision, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredChannelSelectionDecisions) FindChannelSelectionDecision(
+	context.Context,
+	shipmentdomain.TenantID,
+	shipmentdomain.ChannelSelectionDecisionID,
+) (shipmentdomain.ChannelSelectionDecision, bool, error) {
+	return shipmentdomain.ChannelSelectionDecision{}, false, errOrchestrationNotWired
+}
+
 type unwiredReviewJudgments struct{}
 
 func (unwiredReviewJudgments) LoadRecordedJudgments(

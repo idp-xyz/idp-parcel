@@ -123,6 +123,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 渠道择优决定查阅读的是决定登记册本尊（票 label-channel/23）：两个契约一只适配器，读面不是编排。
+	channelSelectionDecisions, err := buildChannelSelectionDecisionRead(db)
+	if err != nil {
+		return err
+	}
 	cancellation, err := buildCancellationOrchestration(db)
 	if err != nil {
 		return err
@@ -342,6 +347,7 @@ func run(logger *slog.Logger) error {
 			requestViews,
 			reviewJudgments,
 			labelTransactions,
+			channelSelectionDecisions,
 			cancellation,
 			reception,
 			nodeOperationsRecords,

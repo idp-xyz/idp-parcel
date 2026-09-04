@@ -44,18 +44,19 @@ const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
 // （「分设只会让装配点看起来能只配一半」，与各包 Intake 注释同句）。nil 指针表示
 // 未启用——assembleBusinessEndpoints 对 nil 的处理与 ADR-0078 之前逐字节同形。
 type isolatedReadIntakes struct {
-	shipmentRequestViews    shipmenthttp.ShipmentRequestViewsIntake
-	labelTransactions       shipmenthttp.LabelTransactionQueryIntake
-	nodeOperationsCatalogue nodeopshttp.CatalogueQueryIntake
-	transportCatalogue      tfhttp.CatalogueQueryIntake
-	trackingProjections     visibilityhttp.OperationsTrackingIntake
-	pricingCatalogue        pricinghttp.PricingCatalogueIntake
-	networkCatalog          networkhttp.CatalogueQueryIntake
-	complianceRules         customshttp.CatalogueQueryIntake
-	commercialCatalogue     commercialhttp.CommercialCatalogueIntake
-	collectionCatalogue     collectionhttp.CatalogueQueryIntake
-	settlementCatalogue     settlementhttp.CatalogueQueryIntake
-	governanceRegisters     governancehttp.RegistryQueryIntake
+	shipmentRequestViews      shipmenthttp.ShipmentRequestViewsIntake
+	labelTransactions         shipmenthttp.LabelTransactionQueryIntake
+	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionQueryIntake
+	nodeOperationsCatalogue   nodeopshttp.CatalogueQueryIntake
+	transportCatalogue        tfhttp.CatalogueQueryIntake
+	trackingProjections       visibilityhttp.OperationsTrackingIntake
+	pricingCatalogue          pricinghttp.PricingCatalogueIntake
+	networkCatalog            networkhttp.CatalogueQueryIntake
+	complianceRules           customshttp.CatalogueQueryIntake
+	commercialCatalogue       commercialhttp.CommercialCatalogueIntake
+	collectionCatalogue       collectionhttp.CatalogueQueryIntake
+	settlementCatalogue       settlementhttp.CatalogueQueryIntake
+	governanceRegisters       governancehttp.RegistryQueryIntake
 }
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
@@ -142,16 +143,18 @@ func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes,
 		// 面单交易查阅由同一个注入值服务，但走的是它的另一半接口
 		// （LabelTransactionQueryIntake，只交出租户维）：同一开关、同一装配点是
 		// ADR-0084 决定七要的，而两种查阅面收到的作用域形状不同是决定七同一句话的另一半。
-		labelTransactions:       shipmentViews,
-		nodeOperationsCatalogue: nodeOperationsCatalogue,
-		transportCatalogue:      transportCatalogue,
-		trackingProjections:     trackingProjections,
-		pricingCatalogue:        pricingCatalogue,
-		networkCatalog:          networkCatalog,
-		complianceRules:         complianceRules,
-		commercialCatalogue:     commercialCatalogue,
-		collectionCatalogue:     collectionCatalogue,
-		settlementCatalogue:     settlementCatalogue,
-		governanceRegisters:     governanceRegisters,
+		labelTransactions: shipmentViews,
+		// 渠道择优决定查阅同理走它的第三半接口（ChannelSelectionDecisionQueryIntake，只交出租户维）。
+		channelSelectionDecisions: shipmentViews,
+		nodeOperationsCatalogue:   nodeOperationsCatalogue,
+		transportCatalogue:        transportCatalogue,
+		trackingProjections:       trackingProjections,
+		pricingCatalogue:          pricingCatalogue,
+		networkCatalog:            networkCatalog,
+		complianceRules:           complianceRules,
+		commercialCatalogue:       commercialCatalogue,
+		collectionCatalogue:       collectionCatalogue,
+		settlementCatalogue:       settlementCatalogue,
+		governanceRegisters:       governanceRegisters,
 	}, nil
 }
