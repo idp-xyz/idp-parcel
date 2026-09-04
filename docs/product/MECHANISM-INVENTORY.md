@@ -13,16 +13,16 @@
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
 | parcelpricing | 57 | 60 | 5 | 8 | 1 | 12 |
-| parcelshipment | 122 | 122 | 17 | 22 | 7 | 11 |
+| parcelshipment | 126 | 126 | 17 | 23 | 7 | 11 |
 | partycommercial | 83 | 83 | 8 | 26 | 1 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 77 | 56 | 12 | 37 | 7 | 7 |
-| transportfulfillment | 106 | 96 | 20 | 31 | 10 | 16 |
+| transportfulfillment | 116 | 103 | 21 | 33 | 10 | 19 |
 | visibilityexception | 97 | 91 | 11 | 30 | 8 | 10 |
-| **合计** | 758 | 711 | 105 | 222 | 50 | 95 |
+| **合计** | 772 | 722 | 106 | 225 | 50 | 98 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 46、测试 66。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 48、测试 68。
 
 ## 跨上下文消费缝：17 组，48 个生产文件
 
@@ -46,7 +46,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 129 份 SQL
+## 迁移：11 个模块共 131 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -55,14 +55,14 @@
 | network_routing | 9 |
 | node_operations | 3 |
 | parcel_pricing | 4 |
-| parcel_shipment | 14 |
+| parcel_shipment | 15 |
 | party_commercial | 22 |
 | pilot_governance | 5 |
 | settlement_accounting | 16 |
-| transport_fulfillment | 13 |
+| transport_fulfillment | 14 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 90 个，消费适配器 25 个生产文件，直投路由表 16 条
+## 接线面：接入面端点 93 个，消费适配器 25 个生产文件，直投路由表 16 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -77,9 +77,9 @@
 | partycommercial | 19 |
 | pilotgovernance | 1 |
 | settlementaccounting | 4 |
-| transportfulfillment | 15 |
+| transportfulfillment | 18 |
 | visibilityexception | 13 |
-| **合计** | 90 |
+| **合计** | 93 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -99,7 +99,7 @@
 | visibilityexception | 8 |
 | **合计** | 16 |
 
-## 端口：声明 328 个；基线口径缺 16，精确口径缺 13
+## 端口：声明 332 个；基线口径缺 15，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -116,7 +116,6 @@
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
-- `transportfulfillment.EffectiveTimeRules` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
 
@@ -132,6 +131,5 @@
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
-- `transportfulfillment.EffectiveTimeRules` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
