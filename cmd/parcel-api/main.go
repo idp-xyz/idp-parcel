@@ -145,6 +145,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	effectiveTimeRuleRegistration, err := buildEffectiveTimeRuleRegistration(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -331,6 +335,7 @@ func run(logger *slog.Logger) error {
 			segmentOps.assign,
 			segmentOps.enderOf,
 			credentialRegistration,
+			effectiveTimeRuleRegistration,
 			trackingViews,
 			projectionViews,
 			claims,

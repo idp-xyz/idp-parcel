@@ -235,6 +235,16 @@ func (unwiredCredentialRegistration) ChangeApplicability(
 	return tfapp.RegisterExternalCarrierCredentialResult{}, errOrchestrationNotWired
 }
 
+// unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
+type unwiredEffectiveTimeRuleRegistration struct{}
+
+func (unwiredEffectiveTimeRuleRegistration) Register(
+	context.Context,
+	tfapp.RegisterEffectiveTimeRuleCommand,
+) (tfapp.RegisterEffectiveTimeRuleResult, error) {
+	return tfapp.RegisterEffectiveTimeRuleResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

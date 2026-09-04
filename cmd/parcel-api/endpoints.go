@@ -72,6 +72,7 @@ func assembleBusinessEndpoints(
 	loadAssigner tfhttp.LoadAssigner,
 	participationEnder tfhttp.ParticipationEnder,
 	credentialRegistration tfhttp.CredentialRegistrar,
+	effectiveTimeRuleRegistration tfhttp.EffectiveTimeRuleRegistrar,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -223,6 +224,9 @@ func assembleBusinessEndpoints(
 		// 某个载运对象上，这两行比查阅行更不能让隔离读开关换值。
 		{Pattern: "/transport-fulfillment-external-carrier-credential-registrations", Handler: tfhttp.NewRegisterExternalCarrierCredentialEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
 		{Pattern: "/transport-fulfillment-external-carrier-credential-applicability-changes", Handler: tfhttp.NewChangeExternalCarrierCredentialApplicabilityEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
+		// 有效时间规则登记（label-channel/19）与凭证两行同一格：一版规则登进去会让收编执行器替该源
+		// 此后每一条素材形成有效时间，登记方身份没有可采信的渠道前 Intake 恒堵。
+		{Pattern: "/transport-fulfillment-effective-time-rule-registrations", Handler: tfhttp.NewRegisterEffectiveTimeRuleEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeRuleRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
