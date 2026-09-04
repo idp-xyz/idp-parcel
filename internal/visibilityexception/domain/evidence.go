@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -103,6 +104,57 @@ func (item EvidenceItem) Provider() EvidenceProviderReference {
 	return item.provider
 }
 
+// SubmittedAt 是材料被收到的时刻——「证据项保存……取得时间」（CONTEXT）；它不是材料
+// 所陈述事实的发生时间。
+func (item EvidenceItem) SubmittedAt() time.Time {
+	return item.submittedAt
+}
+
+// EvidenceItemSnapshot 是持久化层落与重建证据项所需的全量状态。评价与依据是已作出
+// 的判断，随快照携带，不由持久化层重演 Appraise。
+type EvidenceItemSnapshot struct {
+	ID             EvidenceItemID
+	Provider       EvidenceProviderReference
+	Digest         EvidenceContentDigest
+	SubmittedAt    time.Time
+	Appraisal      EvidenceAppraisal
+	AppraisalBasis string
+}
+
+// Snapshot 折出证据项的全量状态供持久化。
+func (item EvidenceItem) Snapshot() EvidenceItemSnapshot {
+	return EvidenceItemSnapshot{
+		ID:             item.id,
+		Provider:       item.provider,
+		Digest:         item.digest,
+		SubmittedAt:    item.submittedAt,
+		Appraisal:      item.appraisal,
+		AppraisalBasis: item.appraisalBasis,
+	}
+}
+
+// RehydrateEvidenceItem 从快照重建证据项。读回的东西同样要过一遍不变量——评价在封闭
+// 三值内、经调查的评价必带依据而`已收到`必不带——一次坏写入不得变成一个看起来合法的
+// 证据项。这扇门只对持久化适配器开放：它相信快照里的评价是当初经调查作出的，从别处
+// 灌一份进来就等于绕过「提交即采信在构造上不可能」那条。
+func RehydrateEvidenceItem(snapshot EvidenceItemSnapshot) (EvidenceItem, error) {
+	if !snapshot.ID.valid() || !snapshot.Provider.valid() || !snapshot.Digest.valid() ||
+		snapshot.SubmittedAt.IsZero() || !snapshot.Appraisal.valid() {
+		return EvidenceItem{}, ErrInvalidEvidence
+	}
+	if (snapshot.Appraisal == EvidenceReceived) != (snapshot.AppraisalBasis == "") {
+		return EvidenceItem{}, ErrInvalidEvidence
+	}
+	return EvidenceItem{
+		id:             snapshot.ID,
+		provider:       snapshot.Provider,
+		digest:         snapshot.Digest,
+		submittedAt:    snapshot.SubmittedAt.UTC(),
+		appraisal:      snapshot.Appraisal,
+		appraisalBasis: snapshot.AppraisalBasis,
+	}, nil
+}
+
 func (item EvidenceItem) Digest() EvidenceContentDigest {
 	return item.digest
 }
@@ -144,15 +196,15 @@ type EvidenceDisclosureVersion struct {
 	preparedAt time.Time
 }
 
-// PrepareDisclosure 形成一个披露版本：披露范围必备、脱敏指纹不得与原件指纹相同
-// （相同即原件外流，范围声明成了空话）。
+// PrepareDisclosure 形成一个披露版本：披露范围必备（空白同缺席，与 requiredValue 一个
+// 口径）、脱敏指纹不得与原件指纹相同（相同即原件外流，范围声明成了空话）。
 func PrepareDisclosure(
 	item EvidenceItem,
 	redacted EvidenceContentDigest,
 	scope string,
 	preparedAt time.Time,
 ) (EvidenceDisclosureVersion, error) {
-	if !item.id.valid() || !redacted.valid() || scope == "" || preparedAt.IsZero() {
+	if !item.id.valid() || !redacted.valid() || strings.TrimSpace(scope) == "" || preparedAt.IsZero() {
 		return EvidenceDisclosureVersion{}, ErrInvalidDisclosureVersion
 	}
 	if redacted == item.digest {
@@ -182,4 +234,10 @@ func (version EvidenceDisclosureVersion) Redacted() EvidenceContentDigest {
 
 func (version EvidenceDisclosureVersion) Scope() string {
 	return version.scope
+}
+
+// PreparedAt 是披露版本准备完成的时刻——准备完成不等于已对外提交（`AT-VE-132`），
+// 对外提交、送达与确认是追偿动作或通知那一侧分别记录的节点，不在证据版本上。
+func (version EvidenceDisclosureVersion) PreparedAt() time.Time {
+	return version.preparedAt
 }

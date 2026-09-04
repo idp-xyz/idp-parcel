@@ -89,12 +89,56 @@ func TestDisclosureVersionsAnchorTheOriginal(t *testing.T) {
 	); !errors.Is(err, domain.ErrInvalidDisclosureVersion) {
 		t.Fatalf("err = %v; 脱敏指纹与原件相同——原件外流", err)
 	}
-	if _, err := domain.PrepareDisclosure(
-		item,
-		mustValue(t, domain.NewEvidenceContentDigest, "sha256/redacted-1"),
-		"",
-		evidenceSubmittedAt.Add(time.Hour),
-	); !errors.Is(err, domain.ErrInvalidDisclosureVersion) {
-		t.Fatalf("err = %v; 说不出披露范围的版本被收下了", err)
+	for _, scope := range []string{"", "   "} {
+		if _, err := domain.PrepareDisclosure(
+			item,
+			mustValue(t, domain.NewEvidenceContentDigest, "sha256/redacted-1"),
+			scope,
+			evidenceSubmittedAt.Add(time.Hour),
+		); !errors.Is(err, domain.ErrInvalidDisclosureVersion) {
+			t.Fatalf("scope %q: err = %v; 说不出披露范围的版本被收下了（空白同缺席）", scope, err)
+		}
+	}
+	if !disclosure.PreparedAt().Equal(evidenceSubmittedAt.Add(time.Hour)) {
+		t.Fatal("准备完成时刻没固定")
+	}
+}
+
+// Covers: 重建门只对持久化开放且不相信半截快照——评价三值封闭、经调查的评价必带依据而
+// 已收到必不带，快照往返原样。
+func TestEvidenceItemRehydrationRevalidatesTheAppraisalPair(t *testing.T) {
+	item := submittedEvidence(t)
+	credited, err := item.Appraise(domain.EvidenceCredited, "matches carrier scan records", evidenceSubmittedAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("appraise: %v", err)
+	}
+
+	for name, snapshot := range map[string]domain.EvidenceItemSnapshot{
+		"received": item.Snapshot(),
+		"credited": credited.Snapshot(),
+	} {
+		rebuilt, err := domain.RehydrateEvidenceItem(snapshot)
+		if err != nil {
+			t.Fatalf("%s: rehydrate: %v", name, err)
+		}
+		if rebuilt.Snapshot() != snapshot {
+			t.Fatalf("%s: 快照往返走样：%+v", name, rebuilt.Snapshot())
+		}
+	}
+
+	orphanBasis := item.Snapshot()
+	orphanBasis.AppraisalBasis = "no one appraised this"
+	if _, err := domain.RehydrateEvidenceItem(orphanBasis); !errors.Is(err, domain.ErrInvalidEvidence) {
+		t.Fatalf("err = %v; 已收到却带依据的快照被重建了", err)
+	}
+	bareCredit := credited.Snapshot()
+	bareCredit.AppraisalBasis = ""
+	if _, err := domain.RehydrateEvidenceItem(bareCredit); !errors.Is(err, domain.ErrInvalidEvidence) {
+		t.Fatalf("err = %v; 没有依据的采信被重建了", err)
+	}
+	outOfSet := item.Snapshot()
+	outOfSet.Appraisal = domain.EvidenceAppraisal(99)
+	if _, err := domain.RehydrateEvidenceItem(outOfSet); !errors.Is(err, domain.ErrInvalidEvidence) {
+		t.Fatalf("err = %v; 三值之外的评价被重建了", err)
 	}
 }

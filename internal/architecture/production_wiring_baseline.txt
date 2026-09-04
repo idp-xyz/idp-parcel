@@ -226,10 +226,16 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 同笔新增的 DecideDisclosureHandler / Command / Deps / Result 是前缀名，门禁比的是精确相等不是
 # 子串，是第二种。**在 acb4975 的干净内容上（工作树对 HEAD 无差）数得剪前 16、剪后 15**，
 # 两法同得；只对该检出成立。
-internal/visibilityexception/domain PrepareDisclosure
+#
+# SubmitEvidence 与 PrepareDisclosure 曾在这里，2026-09-04 随同票 VE-c 一笔剪掉：新编排
+# application/manage_evidence.go 的 ManageEvidenceHandler.SubmitEvidence 与 .PrepareDisclosure
+# 是它们的生产调用方（UC-VE-007 步 2 证据到达与证据对外披露版本），adapters/postgres/evidence.go
+# 读回披露版本时再过一遍 PrepareDisclosure 那道门。成因三分先分过：两个名字在全仓各只有一处
+# 声明（domain/evidence.go），同笔新增的 SubmitEvidenceCommand / PrepareEvidenceDisclosureCommand
+# 是近名不是同名，门禁比的是精确相等不是子串，是第二种。**在 8468b53 的干净内容上（工作树对
+# HEAD 无差）数得剪前 15、剪后 13**，两法同得；只对该检出成立。
 internal/visibilityexception/domain RaiseConflictSignal
 internal/visibilityexception/domain ResolveByBusinessTime
-internal/visibilityexception/domain SubmitEvidence
 
 
 # —— transport-fulfillment ——

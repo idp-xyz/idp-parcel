@@ -113,14 +113,12 @@ internal/partycommercial/domain CustomerServiceRuleVersion
 # 这里，2026-09-04 随 mechanism-executor-triage/08 VE-b 剪掉：EstablishCase 接进信号编排后四者
 # 经 RaisedSignalRecord.Case 与 TriageAnswer.Team 入种子。**在 c3b4311 的干净内容上数得剪前 60、
 # 剪后 56**，只对该检出成立。
+# 证据那一族（EvidenceItem / EvidenceItemID / EvidenceProviderReference / EvidenceContentDigest /
+# EvidenceAppraisal / EvidenceDisclosureVersion）曾在这里，2026-09-04 随同票 VE-c 剪掉：
+# SubmitEvidence 与 PrepareDisclosure 接进证据编排后六者经 ports.EvidenceStore 与
+# ManageEvidenceResult 入种子。**在 8468b53 的干净内容上数得剪前 34、剪后 28**，只对该检出成立。
 internal/visibilityexception/domain ConflictJudgment
 internal/visibilityexception/domain ConflictResolutionBasis
-internal/visibilityexception/domain EvidenceAppraisal
-internal/visibilityexception/domain EvidenceContentDigest
-internal/visibilityexception/domain EvidenceDisclosureVersion
-internal/visibilityexception/domain EvidenceItem
-internal/visibilityexception/domain EvidenceItemID
-internal/visibilityexception/domain EvidenceProviderReference
 internal/visibilityexception/domain ExceptionSignal
 
 # ---- 待改小写候选（三类）----

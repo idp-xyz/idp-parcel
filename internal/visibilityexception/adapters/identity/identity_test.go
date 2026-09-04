@@ -85,6 +85,14 @@ func allFactories() []factory {
 			value, err := built.NextCaseID(context.Background())
 			return value.String(), err
 		}},
+		{"证据项", "EVD", func(options ...platformidentity.Option) (string, error) {
+			built, err := identity.NewEvidenceItems(options...)
+			if err != nil {
+				return "", err
+			}
+			value, err := built.NextEvidenceItemID(context.Background())
+			return value.String(), err
+		}},
 	}
 }
 

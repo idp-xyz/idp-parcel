@@ -32,6 +32,7 @@ const (
 	etaPrefix          = "ETA"
 	recoveryPrefix     = "RCV"
 	casePrefix         = "XCS"
+	evidencePrefix     = "EVD"
 )
 
 // ProjectionVersions 实现 ports.ProjectionIdentityFactory。
@@ -204,6 +205,29 @@ func (factory *ExceptionCases) NextCaseID(_ context.Context) (domain.CaseID, err
 		return domain.CaseID{}, err
 	}
 	return domain.NewCaseID(value)
+}
+
+// EvidenceItems 实现 ports.EvidenceIdentityFactory。
+type EvidenceItems struct {
+	minter platformidentity.Minter
+}
+
+func NewEvidenceItems(options ...platformidentity.Option) (*EvidenceItems, error) {
+	minter, err := platformidentity.NewMinter(evidencePrefix, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &EvidenceItems{minter: minter}, nil
+}
+
+var _ ports.EvidenceIdentityFactory = (*EvidenceItems)(nil)
+
+func (factory *EvidenceItems) NextEvidenceItemID(_ context.Context) (domain.EvidenceItemID, error) {
+	value, err := factory.minter.Next()
+	if err != nil {
+		return domain.EvidenceItemID{}, err
+	}
+	return domain.NewEvidenceItemID(value)
 }
 
 // RecoveryMatters 实现 ports.RecoveryIdentityFactory。
