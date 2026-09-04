@@ -12,7 +12,7 @@
 | customscompliance | 74 | 75 | 16 | 34 | 9 | 8 |
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 29 | 24 | 3 | 9 | 4 | 5 |
-| parcelpricing | 58 | 63 | 5 | 8 | 1 | 12 |
+| parcelpricing | 73 | 71 | 7 | 10 | 1 | 12 |
 | parcelshipment | 133 | 132 | 17 | 26 | 8 | 13 |
 | partycommercial | 84 | 84 | 8 | 27 | 1 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 77 | 56 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 118 | 106 | 21 | 33 | 10 | 20 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 784 | 736 | 106 | 229 | 51 | 101 |
+| **合计** | 799 | 744 | 108 | 231 | 51 | 101 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 51、测试 72。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 52、测试 74。
 
 ## 跨上下文消费缝：18 组，49 个生产文件
 
@@ -47,7 +47,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 134 份 SQL
+## 迁移：11 个模块共 135 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -55,7 +55,7 @@
 | customs_compliance | 16 |
 | network_routing | 9 |
 | node_operations | 3 |
-| parcel_pricing | 4 |
+| parcel_pricing | 5 |
 | parcel_shipment | 16 |
 | party_commercial | 23 |
 | pilot_governance | 5 |
@@ -100,7 +100,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 336 个；基线口径缺 15，精确口径缺 12
+## 端口：声明 342 个；基线口径缺 15，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
