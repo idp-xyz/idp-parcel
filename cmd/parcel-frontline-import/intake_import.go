@@ -7,48 +7,14 @@ import (
 	"strings"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	noidentity "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
-
-// rowDisposition 是一行导入的四格去向。它不是应用结果的别名——应用结果说的是业务判断
-// （收寄形成 / 待识别 / 未形成 / 待确认…），这里说的是「这一行要不要人再管」：落地与重放
-// 不用管，被拒要改文件，未决要重跑。
-type rowDisposition uint8
-
-const (
-	rowDispositionInvalid rowDisposition = iota
-	rowLanded
-	rowReplayed
-	rowRejected
-	rowUndecided
-)
-
-func (disposition rowDisposition) String() string {
-	switch disposition {
-	case rowLanded:
-		return "已落地"
-	case rowReplayed:
-		return "重放"
-	case rowRejected:
-		return "被拒"
-	case rowUndecided:
-		return "未决"
-	default:
-		return ""
-	}
-}
-
-// intakeRowResult 是一行的逐行结果：模板行号与行事实号给内勤对表，应用结果原名给
-// 运维对照 UC-NO-002 结果契约，去向决定退出码。
-type intakeRowResult struct {
-	Line        int
-	FactRef     string
-	Outcome     string
-	Disposition rowDisposition
-	Detail      string
-}
 
 // intakeImporter 是收寄子命令的全部依赖。事务由本层给出（收寄库写口无事务即拒），一行
 // 一笔——部分成功是本口的常态，整批一笔事务会让一行的冲突回滚掉其他行已合法形成的
@@ -61,10 +27,57 @@ type intakeImporter struct {
 	identityConfigured bool
 }
 
+// buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付走 NO
+// 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对缝由参数给出：
+// 生产传显式未配置替身，测试传能解析的替身证整条链会落库——也就是 PS 侧提供方到位后
+// 唯一要换的那一格。
+func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.ParcelIdentityView) (intakeImporter, error) {
+	receptions, err := nopostgres.NewReceptions(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("收寄库：%w", err)
+	}
+	versions, err := noidentity.NewIntakeResultVersions()
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("收寄结果版本签发：%w", err)
+	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("outbox 存储：%w", err)
+	}
+	downstream, err := nopostgres.NewOutboxNodeIntakeHandoff(db, store, clock)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("收寄意图交付：%w", err)
+	}
+	_, unconfigured := identity.(unconfiguredParcelIdentityView)
+	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
+		Identity:   identity,
+		Receptions: receptions,
+		Versions:   versions,
+		Downstream: downstream,
+		Clock:      clock,
+	})
+	return intakeImporter{
+		handler:            handler,
+		transactor:         db.Transactor(),
+		identityConfigured: !unconfigured,
+	}, nil
+}
+
+// executeIntake 开工前先把身份核对缝的状态说清，再逐行推进、打报告、算退出码。
+func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
+	if !importer.identityConfigured {
+		fmt.Fprintf(out, "注意：身份核对缝未配置（.scratch/ps-external-mark-relations/01）——%s 行将答 RECEPTION_UNDECIDED 且不落库；%s / %s 行不经身份核对，照常落库\n",
+			claimReceived, claimRefused, claimScanOnly)
+	}
+	results := importIntake(ctx, batch, importer)
+	writeImportReport(out, batch.BatchRef, intakeTemplateVersion, results)
+	return exitCodeFor(results)
+}
+
 // importIntake 逐行推进：一行一笔事务 → 交编排 → 应用结果译成去向。编排返回 Go 错误
 // 时整笔回滚，该行记未决；其他行照常继续。
-func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporter) []intakeRowResult {
-	results := make([]intakeRowResult, 0, len(batch.Rows))
+func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporter) []rowResult {
+	results := make([]rowResult, 0, len(batch.Rows))
 	for _, row := range batch.Rows {
 		var handled application.ReceiveDeliveredUnitResult
 		err := importer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -76,7 +89,7 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 			return nil
 		})
 		if err != nil {
-			results = append(results, intakeRowResult{
+			results = append(results, rowResult{
 				Line: row.Line, FactRef: row.FactRef,
 				Outcome:     "NO_ANSWER_FORMED",
 				Disposition: rowUndecided,
@@ -96,9 +109,9 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 //   - 待确认不带记录 → 未决：依赖故障或身份核对缝不通，什么都没落库，重跑续办；
 //   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；
 //   - 来源冲突 → 被拒：同一行事实号换了内容，绝不覆盖，人核对纸单再改文件。
-func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnitResult) intakeRowResult {
+func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnitResult) rowResult {
 	outcome := result.Outcome()
-	answer := intakeRowResult{Line: row.Line, FactRef: row.FactRef, Outcome: outcome.String()}
+	answer := rowResult{Line: row.Line, FactRef: row.FactRef, Outcome: outcome.String()}
 	record, hasRecord := result.Record()
 
 	switch outcome {
@@ -149,33 +162,4 @@ func describeReception(record ports.ReceptionRecord) string {
 		parts = append(parts, "拒收原因 "+record.RefusalReason)
 	}
 	return strings.Join(parts, "，")
-}
-
-// writeIntakeReport 打印逐行结果与汇总。逐行一行、汇总一行，格式稳定——运维拿它对
-// 纸单，不拿它做机器解析（要机器解析的下游今天不存在，不预建）。
-func writeIntakeReport(out io.Writer, batch intakeBatch, results []intakeRowResult) {
-	counts := map[rowDisposition]int{}
-	for _, result := range results {
-		counts[result.Disposition]++
-		fmt.Fprintf(out, "第 %d 行 factRef=%s → %s [%s] %s\n",
-			result.Line, result.FactRef, result.Outcome, result.Disposition, result.Detail)
-	}
-	fmt.Fprintf(out, "批次 %s（模板 %s）：%d 行，已落地 %d，重放 %d，被拒 %d，未决 %d\n",
-		batch.BatchRef, intakeTemplateVersion, len(results),
-		counts[rowLanded], counts[rowReplayed], counts[rowRejected], counts[rowUndecided])
-}
-
-// exitCodeFor 由去向汇总退出码。未决压过被拒：只要还有未决，「重跑同一文件」就仍然是
-// 必要动作（已落地的行重跑答重放，无副作用）；重跑收敛后剩下的被拒才轮到改文件。
-func exitCodeFor(results []intakeRowResult) int {
-	code := exitLanded
-	for _, result := range results {
-		switch result.Disposition {
-		case rowUndecided:
-			return exitUndecided
-		case rowRejected:
-			code = exitRejected
-		}
-	}
-	return code
 }

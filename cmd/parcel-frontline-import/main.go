@@ -47,11 +47,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
-	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
-	noidentity "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
-	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
-	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -157,7 +153,7 @@ func run(
 	}
 	// 模板整体先核，再碰数据库：不合格的文件不该消耗一次连接，也不该让内勤等到连库
 	// 之后才知道表头错了。
-	batch, err := decodeIntakeTemplate(tenant, raw)
+	job, err := planImport(command, tenant, raw, clock, out)
 	if err != nil {
 		fmt.Fprintln(errOut, err)
 		return exitUsage
@@ -179,13 +175,7 @@ func run(
 		fmt.Fprintf(errOut, "构造框架 DB：%v\n", err)
 		return exitUndecided
 	}
-	importer, err := buildIntakeImporter(db, clock, unconfiguredParcelIdentityView{})
-	if err != nil {
-		fmt.Fprintf(errOut, "装配导入口：%v\n", err)
-		return exitUndecided
-	}
-
-	return executeIntake(ctx, batch, importer, out)
+	return job(ctx, db, errOut)
 }
 
 func knownCommand(command string) bool {
@@ -197,49 +187,29 @@ func knownCommand(command string) bool {
 	return false
 }
 
-// executeIntake 开工前先把身份核对缝的状态说清，再逐行推进、打报告、算退出码。
-func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
-	if !importer.identityConfigured {
-		fmt.Fprintf(out, "注意：身份核对缝未配置（.scratch/ps-external-mark-relations/01）——%s 行将答 RECEPTION_UNDECIDED 且不落库；%s / %s 行不经身份核对，照常落库\n",
-			claimReceived, claimRefused, claimScanOnly)
-	}
-	results := importIntake(ctx, batch, importer)
-	writeIntakeReport(out, batch, results)
-	return exitCodeFor(results)
-}
+// importJob 是一份译装合格的模板等着连库之后做的那一步：装配该口的导入链并逐行推进。
+// 译装与连库分成两步，正是为了让不合格的文件不消耗一次连接；装配失败按未决退出——
+// 那是运维环境的事，改文件解决不了。
+type importJob func(ctx context.Context, db *bentopg.DB, errOut io.Writer) int
 
-// buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付走 NO
-// 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对缝由参数给出：
-// 生产传显式未配置替身，测试传能解析的替身证整条链会落库——也就是 PS 侧提供方到位后
-// 唯一要换的那一格。
-func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.ParcelIdentityView) (intakeImporter, error) {
-	receptions, err := nopostgres.NewReceptions(db)
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("收寄库：%w", err)
+// planImport 按子命令译装模板并交回连库后要做的那一步。每个子命令各自的模板与导入链
+// 都在各自的文件里，这里只分派。
+func planImport(command string, tenant domain.TenantID, raw []byte, clock ports.Clock, out io.Writer) (importJob, error) {
+	switch command {
+	case commandIntake:
+		batch, err := decodeIntakeTemplate(tenant, raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, db *bentopg.DB, errOut io.Writer) int {
+			importer, err := buildIntakeImporter(db, clock, unconfiguredParcelIdentityView{})
+			if err != nil {
+				fmt.Fprintf(errOut, "装配导入口：%v\n", err)
+				return exitUndecided
+			}
+			return executeIntake(ctx, batch, importer, out)
+		}, nil
+	default:
+		return nil, fmt.Errorf("未知导入命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
 	}
-	versions, err := noidentity.NewIntakeResultVersions()
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("收寄结果版本签发：%w", err)
-	}
-	store, err := outbox.NewStore(db)
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("outbox 存储：%w", err)
-	}
-	downstream, err := nopostgres.NewOutboxNodeIntakeHandoff(db, store, clock)
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("收寄意图交付：%w", err)
-	}
-	_, unconfigured := identity.(unconfiguredParcelIdentityView)
-	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:   identity,
-		Receptions: receptions,
-		Versions:   versions,
-		Downstream: downstream,
-		Clock:      clock,
-	})
-	return intakeImporter{
-		handler:            handler,
-		transactor:         db.Transactor(),
-		identityConfigured: !unconfigured,
-	}, nil
 }

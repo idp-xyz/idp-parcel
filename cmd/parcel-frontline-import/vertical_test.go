@@ -68,7 +68,7 @@ func verticalImporter(
 	return importer, receptions
 }
 
-func importTemplate(t *testing.T, importer intakeImporter, raw []byte) []intakeRowResult {
+func importTemplate(t *testing.T, importer intakeImporter, raw []byte) []rowResult {
 	t.Helper()
 	batch, err := decodeIntakeTemplate(synTenant(t), raw)
 	if err != nil {
@@ -77,7 +77,7 @@ func importTemplate(t *testing.T, importer intakeImporter, raw []byte) []intakeR
 	return importIntake(t.Context(), batch, importer)
 }
 
-func assertDisposition(t *testing.T, results []intakeRowResult, index int, want rowDisposition, wantOutcome string) {
+func assertDisposition(t *testing.T, results []rowResult, index int, want rowDisposition, wantOutcome string) {
 	t.Helper()
 	got := results[index]
 	if got.Disposition != want || got.Outcome != wantOutcome {
