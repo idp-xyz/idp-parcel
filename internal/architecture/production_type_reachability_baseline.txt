@@ -117,9 +117,11 @@ internal/partycommercial/domain CustomerServiceRuleVersion
 # EvidenceAppraisal / EvidenceDisclosureVersion）曾在这里，2026-09-04 随同票 VE-c 剪掉：
 # SubmitEvidence 与 PrepareDisclosure 接进证据编排后六者经 ports.EvidenceStore 与
 # ManageEvidenceResult 入种子。**在 8468b53 的干净内容上数得剪前 34、剪后 28**，只对该检出成立。
-internal/visibilityexception/domain ConflictJudgment
-internal/visibilityexception/domain ConflictResolutionBasis
-internal/visibilityexception/domain ExceptionSignal
+# 冲突那一族（ConflictJudgment / ConflictResolutionBasis / ExceptionSignal）曾在这里，2026-09-04
+# 随同票 VE-d 剪掉：ResolveByBusinessTime 与 RaiseConflictSignal 接进投影派生编排后三者经
+# application.FactConflict 入种子。**在 7058d92 的干净内容上数得剪前 28、剪后 25**，只对该检出成立。
+# visibility-exception 这一段至此清空（票 08 开工时 13 条）；段头留着是给下一个往这里加条目的人
+# 看的——理由行照旧写「经 X 取得，X 在等谁」。
 
 # ---- 待改小写候选（三类）----
 #

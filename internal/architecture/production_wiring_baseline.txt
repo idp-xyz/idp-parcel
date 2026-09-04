@@ -234,8 +234,19 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 声明（domain/evidence.go），同笔新增的 SubmitEvidenceCommand / PrepareEvidenceDisclosureCommand
 # 是近名不是同名，门禁比的是精确相等不是子串，是第二种。**在 8468b53 的干净内容上（工作树对
 # HEAD 无差）数得剪前 15、剪后 13**，两法同得；只对该检出成立。
-internal/visibilityexception/domain RaiseConflictSignal
-internal/visibilityexception/domain ResolveByBusinessTime
+#
+# ResolveByBusinessTime 与 RaiseConflictSignal 曾在这里，2026-09-04 随同票 VE-d 一笔剪掉：投影
+# 派生编排 application/derive_projection.go 的 judgeForks / raiseConflict 是它们的生产调用方——
+# 替代链分叉按业务时间裁决，裁不了的按已登记的冲突信号规则（0025）形成信号、直调
+# RaiseSignalHandler 进 UC-VE-004 分诊（derive_projection_test 里那句「接 RaiseConflictSignal 是
+# 另一张票」到此兑现）。成因三分先分过：两个名字在全仓各只有一处声明（domain/fact_conflict.go），
+# 同笔新增的 ConflictSignalRule* 一族与 SupersessionForks 都不与它们同名，门禁比的是精确相等，
+# 是第二种。**在 7058d92 的干净内容上（工作树对 HEAD 无差）数得剪前 13、剪后 11**，两法同得；
+# 只对该检出成立。
+#
+# **visibility-exception 这一组至此清空——票 mechanism-executor-triage/08 开工时它有 6 条。** 与 TF
+# 那组同一句提醒：名单清空只判名单清空，本门禁只量导出工厂；本组三个新登记面（异常披露规则、
+# 冲突信号规则各自的写入口，与分诊条目的团队维）的 CLI / 在线登记口尚未接，那件另立票。
 
 
 # —— transport-fulfillment ——

@@ -40,3 +40,41 @@ func CurrentlyEffective(facts []AcceptedSourceFact) []AcceptedSourceFact {
 	}
 	return effective
 }
+
+// SupersessionForks 交回替代链的各处分叉：同一（源上下文+事实引用）下同一前身被两份以上
+// 事实指名时，那些后继成一组。每组保持输入顺序，组序按各组首个后继在输入中的位置。
+//
+// 分叉是 CurrentlyEffective 那句「不择一」的另半边：留在场只解决了投影怎么摆，冲突怎么
+// 裁与要不要立信号（CONTEXT「分叉按冲突处理：保留各项事实及其关系，投影保持信息待确认
+// 并形成适用异常信号」）要先把分叉的各方指出来。这里只指出、不裁——裁决归 fact_conflict.go
+// 的各裁决函数，替代问答不进 ConflictResolutionBasis 的理由同上。
+//
+// 键同 CurrentlyEffective：跨源上下文或跨事实引用对同一版本号的指名不是替代，因而也不是
+// 分叉——那本来就是冲突，不用绕替代关系来发现。
+func SupersessionForks(facts []AcceptedSourceFact) [][]AcceptedSourceFact {
+	type supersessionScope struct {
+		source  SourceContext
+		fact    string
+		version string
+	}
+	successors := make(map[supersessionScope][]AcceptedSourceFact, len(facts))
+	var order []supersessionScope
+	for _, fact := range facts {
+		predecessor, given := fact.Supersedes()
+		if !given {
+			continue
+		}
+		key := supersessionScope{fact.source, fact.fact.String(), predecessor.String()}
+		if _, seen := successors[key]; !seen {
+			order = append(order, key)
+		}
+		successors[key] = append(successors[key], fact)
+	}
+	var forks [][]AcceptedSourceFact
+	for _, key := range order {
+		if group := successors[key]; len(group) >= 2 {
+			forks = append(forks, group)
+		}
+	}
+	return forks
+}

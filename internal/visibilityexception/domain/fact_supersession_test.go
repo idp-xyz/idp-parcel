@@ -136,3 +136,31 @@ func TestAForkedSupersessionChainKeepsAllSuccessors(t *testing.T) {
 		t.Fatalf("当前有效 = %v; 分叉两方必须都保留", effectiveVersions(effective))
 	}
 }
+
+// Covers: 同一条硬句的另半边「分叉按冲突处理……并形成适用异常信号」——要裁与要立信号得
+// 先把分叉各方指出来：同一前身被两份以上事实指名成一组，各组保持输入顺序；线性链（一份
+// 前身只被一份指名）与跨事实引用的指名都不是分叉。
+func TestSupersessionForksNameEachContestedPredecessorsSuccessors(t *testing.T) {
+	first := supersessionFact(t, "effective-delivery/parcel-1/attempt-1", "delivery/v1", "")
+	left := supersessionFact(t, "effective-delivery/parcel-1/attempt-1", "delivery/v2a", "delivery/v1")
+	right := supersessionFact(t, "effective-delivery/parcel-1/attempt-1", "delivery/v2b", "delivery/v1")
+	linear := supersessionFact(t, "effective-delivery/parcel-1/attempt-2", "delivery/v2", "delivery/v1")
+	otherFork := supersessionFact(t, "effective-delivery/parcel-1/attempt-3", "delivery/v3", "delivery/v2")
+	otherForkTwin := supersessionFact(t, "effective-delivery/parcel-1/attempt-3", "delivery/v3b", "delivery/v2")
+
+	forks := domain.SupersessionForks([]domain.AcceptedSourceFact{first, right, linear, otherFork, left, otherForkTwin})
+	if len(forks) != 2 {
+		t.Fatalf("forks = %d, want 2（attempt-1 的 v1 与 attempt-3 的 v2 各被两份指名）", len(forks))
+	}
+	if got := effectiveVersions(forks[0]); len(got) != 2 || got[0] != "effective-delivery/parcel-1/attempt-1@delivery/v2b" ||
+		got[1] != "effective-delivery/parcel-1/attempt-1@delivery/v2a" {
+		t.Fatalf("首组 = %v; 组内须按输入顺序保留指名同一前身的全部后继", got)
+	}
+	if got := effectiveVersions(forks[1]); len(got) != 2 || got[0] != "effective-delivery/parcel-1/attempt-3@delivery/v3" {
+		t.Fatalf("次组 = %v", got)
+	}
+
+	if forks := domain.SupersessionForks([]domain.AcceptedSourceFact{first, left, linear}); len(forks) != 0 {
+		t.Fatalf("线性链被读成了分叉：%d 组", len(forks))
+	}
+}

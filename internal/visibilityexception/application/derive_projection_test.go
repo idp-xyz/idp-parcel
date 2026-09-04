@@ -134,16 +134,39 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+type conflictRuleDouble struct {
+	rule       ports.ConflictSignalRule
+	configured bool
+	err        error
+}
+
+func (double *conflictRuleDouble) ConflictSignalRule(_ context.Context) (ports.ConflictSignalRule, bool, error) {
+	if double.err != nil {
+		return ports.ConflictSignalRule{}, false, double.err
+	}
+	return double.rule, double.configured, nil
+}
+
 type deriveFixture struct {
-	handler     *application.DeriveProjectionHandler
-	facts       *factStoreDouble
-	mapping     *mappingViewDouble
-	projections *projectionStoreDouble
-	downstream  *projectionDownstreamDouble
+	handler       *application.DeriveProjectionHandler
+	facts         *factStoreDouble
+	mapping       *mappingViewDouble
+	projections   *projectionStoreDouble
+	conflictRules *conflictRuleDouble
+	// signals 是真的 RaiseSignalHandler（UC-VE-004 入口）配替身端口：冲突信号进分诊
+	// 走的是同一段编排，不另造一个假入口——假入口绿了证明不了信号命令的形状对得上。
+	signals    *raiseFixture
+	downstream *projectionDownstreamDouble
 }
 
 func newDeriveFixture(t *testing.T) *deriveFixture {
 	t.Helper()
+	signals := newRaiseFixture(t)
+	// 冲突信号在这里只求进分诊：分诊规则答人工复核，免得每个分叉用例还要顺带建一个案件。
+	signals.triage.answer = ports.TriageAnswer{
+		Outcome: domain.ManualReviewRequired,
+		Rule:    mustValue(t, domain.NewSignalRuleVersionReference, "triage-rules/v2"),
+	}
 	fixture := &deriveFixture{
 		facts: newFactStore(),
 		mapping: &mappingViewDouble{
@@ -155,15 +178,26 @@ func newDeriveFixture(t *testing.T) *deriveFixture {
 			configured: true,
 		},
 		projections: &projectionStoreDouble{byKey: map[projectionKey]domain.TrackingProjection{}},
-		downstream:  &projectionDownstreamDouble{},
+		conflictRules: &conflictRuleDouble{
+			rule: ports.ConflictSignalRule{
+				Kind:       mustValue(t, domain.NewExceptionSignalKindReference, "FACT_CONFLICT_UNRESOLVED"),
+				Rule:       mustValue(t, domain.NewSignalRuleVersionReference, "signal-rules/v3"),
+				Confidence: mustValue(t, domain.NewConfidenceReference, "SOURCE_FORK"),
+			},
+			configured: true,
+		},
+		signals:    signals,
+		downstream: &projectionDownstreamDouble{},
 	}
 	fixture.handler = application.NewDeriveProjectionHandler(application.DeriveProjectionDeps{
-		Facts:       fixture.facts,
-		Mapping:     fixture.mapping,
-		Projections: fixture.projections,
-		Identities:  &projectionIdentityDouble{},
-		Downstream:  fixture.downstream,
-		Clock:       fixedClock{at: factOccurredAt.Add(2 * time.Hour)},
+		Facts:         fixture.facts,
+		Mapping:       fixture.mapping,
+		Projections:   fixture.projections,
+		Identities:    &projectionIdentityDouble{},
+		ConflictRules: fixture.conflictRules,
+		Signals:       signals.handler,
+		Downstream:    fixture.downstream,
+		Clock:         fixedClock{at: factOccurredAt.Add(2 * time.Hour)},
 	})
 	return fixture
 }
@@ -292,8 +326,10 @@ func TestASupersededFactStaysArchivedButLeavesTheEntries(t *testing.T) {
 
 // Covers: `AT-VE-043`「含同一前身被两份事实同时指名的替代链分叉→保留双方和冲突关系，
 // 不择一」——编排不替源上下文挑后继：两个后继都进条目，前身按已被替代出条目但留档；
-// 投影据此把各方摆在场、按信息待确认表达。适用异常信号走冲突机制，不在本编排（接
-// RaiseConflictSignal 是另一张票）。
+// 投影据此把各方摆在场、按信息待确认表达。分叉同时按业务时间裁决：两个后继同刻发生即
+// 无法裁决，形成适用异常信号进 `UC-VE-004` 分诊（CONTEXT「冲突仍无法裁决时……投影保持
+// 信息待确认并形成适用异常信号」）——信号携带全部保留事实、类型与规则版本取自已登记的
+// 冲突信号规则；裁决与信号都不使任何一方失效。
 func TestAForkedSupersessionKeepsBothSuccessorsInTheProjection(t *testing.T) {
 	fixture := newDeriveFixture(t)
 	if _, err := fixture.handler.Handle(context.Background(),
@@ -323,6 +359,138 @@ func TestAForkedSupersessionKeepsBothSuccessorsInTheProjection(t *testing.T) {
 	}
 	if len(fixture.facts.byKey) != 3 {
 		t.Fatalf("事实库 = %d 份, want 3；各方与关系必须都留档", len(fixture.facts.byKey))
+	}
+
+	conflicts := forked.Conflicts()
+	if len(conflicts) != 1 {
+		t.Fatalf("conflicts = %d, want 1；同刻的两个后继按业务时间裁不出先后", len(conflicts))
+	}
+	conflict := conflicts[0]
+	if conflict.Judgment().Resolved() || len(conflict.Judgment().Retained()) != 2 {
+		t.Fatalf("judgment = %+v; 未裁决的判断必须保留双方", conflict.Judgment())
+	}
+	signal, present := conflict.Signal()
+	if !present || signal.Kind().String() != "FACT_CONFLICT_UNRESOLVED" || signal.Parcel().String() != "parcel-1" {
+		t.Fatalf("signal = %+v present = %v; 信号类型取已登记的冲突信号规则", signal, present)
+	}
+	if len(signal.Facts()) != 2 {
+		t.Fatalf("signal facts = %d, want 2；信号携带全部保留事实引用", len(signal.Facts()))
+	}
+	if conflict.Disposition() != application.ConflictSignalRaised {
+		t.Fatalf("disposition = %s, want SIGNAL_RAISED", conflict.Disposition())
+	}
+	// 信号真的进了分诊：发作期按（租户+对象+类型）开启，规则版本与可信度是登记的那两样。
+	episode, found := fixture.signals.episodes.latest[episodeKey{
+		tenant: mustValue(t, domain.NewTenantID, "tenant-1"),
+		parcel: signal.Parcel(),
+		kind:   signal.Kind(),
+	}]
+	if !found || !episode.Active() {
+		t.Fatal("冲突信号没有在分诊侧开启发作期")
+	}
+	if snapshot := episode.Snapshot(); snapshot.Rule.String() != "signal-rules/v3" || snapshot.Confidence.String() != "SOURCE_FORK" {
+		t.Fatalf("episode = %+v; 规则版本与可信度必须来自登记的冲突信号规则", snapshot)
+	}
+	if !versions["handover/v2a"] || !versions["handover/v2b"] {
+		t.Fatal("信号形成后有一方被挤出了投影——信号不使任何源事实失效")
+	}
+}
+
+// Covers: 裁决半边——两个后继业务时间不同即按业务时间排得出全序（CONTEXT 允许的裁决维度
+// 之一），那不是异常：不进结果、不立信号、分诊侧无发作期；投影仍把双方留在场（裁决只给
+// 顺序，不使任何一方失效）。
+func TestAForkResolvableByBusinessTimeRaisesNoSignal(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommand(t, "TRANSPORT-HANDOVER/a", "handover/v1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2a", "handover/v1")); err != nil {
+		t.Fatalf("left successor handle: %v", err)
+	}
+	later := deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2b", "handover/v1")
+	later.Fact.OccurredAt = factOccurredAt.Add(30 * time.Minute)
+	later.Fact.EffectiveAt = later.Fact.OccurredAt
+
+	resolved, err := fixture.handler.Handle(context.Background(), later)
+	if err != nil {
+		t.Fatalf("right successor handle: %v", err)
+	}
+	if len(resolved.Conflicts()) != 0 {
+		t.Fatalf("conflicts = %d, want 0；业务时间排得出先后的分叉不是异常", len(resolved.Conflicts()))
+	}
+	if len(fixture.signals.episodes.latest) != 0 {
+		t.Fatal("可裁决的分叉仍进了分诊")
+	}
+	projection, _ := resolved.Projection()
+	if versions := entryVersions(projection); !versions["handover/v2a"] || !versions["handover/v2b"] {
+		t.Fatalf("entries = %v; 裁决只给顺序，双方仍留在场", versions)
+	}
+}
+
+// Covers: 「适用」二字——冲突信号的类型、规则版本与可信度属 `PAR-VIS-04` 待登记实例参数，
+// 未配置时如实记「无适用信号规则」：冲突仍进结果（保留双方的判断在），不虚构一种异常类型
+// 去分诊，投影照常派生。
+func TestAnUnresolvedForkWithoutAConflictSignalRuleIsRecordedNotInvented(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	fixture.conflictRules.configured = false
+	forkTwice(t, fixture)
+
+	forked, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2b", "handover/v1"))
+	if err != nil {
+		t.Fatalf("right successor handle: %v", err)
+	}
+	if forked.Outcome() != application.ProjectionDerived {
+		t.Fatalf("outcome = %q; 无信号规则不阻断派生", forked.Outcome())
+	}
+	conflicts := forked.Conflicts()
+	if len(conflicts) != 1 || conflicts[0].Disposition() != application.ConflictSignalRuleNotConfigured {
+		t.Fatalf("conflicts = %+v, want one SIGNAL_RULE_NOT_CONFIGURED", conflicts)
+	}
+	if _, present := conflicts[0].Signal(); present {
+		t.Fatal("没有规则却形成了信号——类型是编造的")
+	}
+	if len(fixture.signals.episodes.latest) != 0 {
+		t.Fatal("没有规则却有东西进了分诊")
+	}
+}
+
+// Covers: 搁置半边——分诊那一侧本轮停在未决（发作期库读不回）时，信号已形成但没进去，
+// 记为搁置留给重放；派生结果不因此推翻，投影已把双方留在场。
+func TestAConflictSignalTheTriageSideCannotTakeIsDeferredNotLost(t *testing.T) {
+	fixture := newDeriveFixture(t)
+	fixture.signals.episodes.findErr = errors.New("episode store unavailable")
+	forkTwice(t, fixture)
+
+	forked, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2b", "handover/v1"))
+	if err != nil {
+		t.Fatalf("right successor handle: %v", err)
+	}
+	if forked.Outcome() != application.ProjectionDerived {
+		t.Fatalf("outcome = %q", forked.Outcome())
+	}
+	conflicts := forked.Conflicts()
+	if len(conflicts) != 1 || conflicts[0].Disposition() != application.ConflictSignalDeferred {
+		t.Fatalf("conflicts = %+v, want one SIGNAL_DEFERRED", conflicts)
+	}
+	if _, present := conflicts[0].Signal(); !present {
+		t.Fatal("搁置的冲突必须仍带着已形成的信号")
+	}
+}
+
+// forkTwice 落前身与左后继，留右后继给用例自己派生——分叉在第三份到达那一轮才出现。
+func forkTwice(t *testing.T, fixture *deriveFixture) {
+	t.Helper()
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommand(t, "TRANSPORT-HANDOVER/a", "handover/v1")); err != nil {
+		t.Fatalf("first handle: %v", err)
+	}
+	if _, err := fixture.handler.Handle(context.Background(),
+		deriveCommandSuperseding(t, "TRANSPORT-HANDOVER/a", "handover/v2a", "handover/v1")); err != nil {
+		t.Fatalf("left successor handle: %v", err)
 	}
 }
 

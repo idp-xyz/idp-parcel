@@ -1625,13 +1625,35 @@ func newTenantBoundProjectionDerive(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: projection handoff: %w", err)
 	}
+	// 冲突信号进分诊（UC-VE-002 → UC-VE-004）那一支的租户无关半边：发作期库、发作期与
+	// 案件标识、分诊结论意图。分诊规则与冲突信号规则两份目录在构造期绑租户，随 Handle 现绑。
+	episodes, err := vepostgres.NewSignalEpisodes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: signal episodes: %w", err)
+	}
+	episodeIdentities, err := veidentity.NewSignalEpisodes()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: signal episode identities: %w", err)
+	}
+	caseIdentities, err := veidentity.NewExceptionCases()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: exception case identities: %w", err)
+	}
+	triageHandoff, err := vepostgres.NewOutboxTriageHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: triage handoff: %w", err)
+	}
 	return &tenantBoundProjectionDerive{
-		db:          db,
-		facts:       facts,
-		projections: projections,
-		identities:  identities,
-		downstream:  downstream,
-		clock:       clock,
+		db:                db,
+		facts:             facts,
+		projections:       projections,
+		identities:        identities,
+		episodes:          episodes,
+		episodeIdentities: episodeIdentities,
+		caseIdentities:    caseIdentities,
+		triageHandoff:     triageHandoff,
+		downstream:        downstream,
+		clock:             clock,
 	}, nil
 }
 
@@ -1639,13 +1661,20 @@ func newTenantBoundProjectionDerive(
 // MilestoneMappings 在构造期绑租户，ClassifyFact 签名没有租户；派发进程是多租户。
 // 禁止 NewMilestoneMappings(db, 空租户)——看起来接了库、永远读不到行。该租户目录空
 // → found=false → 编排 PROJECTION_DERIVED + 未归类（MAPPING_NOT_CONFIGURED）。
+//
+// 分诊规则（TriageRules）与冲突信号规则（ConflictSignalRules）同一纪律：都在构造期绑租户，
+// 都随 Handle 现绑；该租户目录空 → 冲突记为无适用信号规则 / 信号进人工复核格，不虚构。
 type tenantBoundProjectionDerive struct {
-	db          *bentopg.DB
-	facts       *vepostgres.AcceptedFacts
-	projections *vepostgres.Projections
-	identities  *veidentity.ProjectionVersions
-	downstream  *vepostgres.OutboxProjectionHandoff
-	clock       systemClock
+	db                *bentopg.DB
+	facts             *vepostgres.AcceptedFacts
+	projections       *vepostgres.Projections
+	identities        *veidentity.ProjectionVersions
+	episodes          *vepostgres.SignalEpisodes
+	episodeIdentities *veidentity.SignalEpisodes
+	caseIdentities    *veidentity.ExceptionCases
+	triageHandoff     *vepostgres.OutboxTriageHandoff
+	downstream        *vepostgres.OutboxProjectionHandoff
+	clock             systemClock
 }
 
 var (
@@ -1671,13 +1700,33 @@ func (derive *tenantBoundProjectionDerive) Handle(
 	if err != nil {
 		return veapplication.DeriveProjectionResult{}, err
 	}
+	conflictRules, err := vepostgres.NewConflictSignalRules(derive.db, command.TenantID)
+	if err != nil {
+		return veapplication.DeriveProjectionResult{}, err
+	}
+	triage, err := vepostgres.NewTriageRules(derive.db, command.TenantID)
+	if err != nil {
+		return veapplication.DeriveProjectionResult{}, err
+	}
+	// 冲突信号走真的信号编排进分诊：与派生同一事务（两边都按 RequireExecutor 落库），
+	// 分叉双方留在投影里的那一笔与它们的信号发作期同生共死。
+	signals := veapplication.NewRaiseSignalHandler(veapplication.RaiseSignalDeps{
+		Episodes:   derive.episodes,
+		Triage:     triage,
+		Identities: derive.episodeIdentities,
+		Cases:      derive.caseIdentities,
+		Downstream: derive.triageHandoff,
+		Clock:      derive.clock,
+	})
 	return veapplication.NewDeriveProjectionHandler(veapplication.DeriveProjectionDeps{
-		Facts:       derive.facts,
-		Mapping:     mapping,
-		Projections: derive.projections,
-		Identities:  derive.identities,
-		Downstream:  derive.downstream,
-		Clock:       derive.clock,
+		Facts:         derive.facts,
+		Mapping:       mapping,
+		Projections:   derive.projections,
+		Identities:    derive.identities,
+		ConflictRules: conflictRules,
+		Signals:       signals,
+		Downstream:    derive.downstream,
+		Clock:         derive.clock,
 	}).Handle(ctx, command)
 }
 
