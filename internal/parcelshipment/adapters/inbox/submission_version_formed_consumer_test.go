@@ -123,7 +123,7 @@ func TestAPoisonSupplementResumeEnvelopeIsRejectedOnceAndStaysRejected(t *testin
 	}
 }
 
-// Covers: 装配错误要响亮——三扇门转交同一条链，最容易的错接是把复核续办信封投进本门。
+// Covers: 装配错误要响亮——几扇门转交同一条链，最容易的错接是把复核续办信封投进本门。
 func TestAForeignTypeIsLoudOnTheSupplementResumeGate(t *testing.T) {
 	consumer, advancer := newSupplementResumeFixture(t)
 	foreign := supplementResumeEnvelope(t, "supplement-resume-foreign")

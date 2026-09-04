@@ -1343,7 +1343,8 @@ type CustomerSupplementQueueRecord struct {
 // 以授权查询作用域为键而不是租户：这一口是查阅读面（客户或运营看「谁在等补件」），与复核
 // 队列同属 CONTEXT「授权查询作用域」管辖，作用域外的行答不出——登记续办门那种按租户整批
 // 重驱的口不在这里，受控补充的续办由每份委托自己的「新提交版本已形成」信封驱动，不需要
-// 扫队列。FindVisibleByID 与 ShipmentRequestViews 同签名，理由同 AcceptanceReviewQueue。
+// 扫队列。只有列表一口：详情本就是委托查阅详情（ShipmentRequestViews.FindVisibleByID），
+// 接查阅端点的那笔工作要哪几口由它自己拼，这里不预先替它并进来。
 //
 // 排序与列表读口相反：老的在前（先停的先催），同刻按委托标识正序保证分页可重复。
 type CustomerSupplementQueue interface {
@@ -1352,11 +1353,6 @@ type CustomerSupplementQueue interface {
 		scope domain.AuthorizedQueryScope,
 		limit int,
 	) ([]CustomerSupplementQueueRecord, error)
-	FindVisibleByID(
-		ctx context.Context,
-		scope domain.AuthorizedQueryScope,
-		requestID domain.ShipmentRequestID,
-	) (ShipmentRequestDetailRecord, bool, error)
 }
 
 // OperatorRegistrationQueueRecord 是「等待运营登记」队列上的一行：一份在决定形成之前停在

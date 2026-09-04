@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -86,16 +87,16 @@ func (boundary supplementBoundary) Save(
 	return outcome, nil
 }
 
-// buildCustomerSupplementOrchestration 装配受控补充（ADR-0045 的编排半边，ADR-0106 Decision 四把它
-// 接进生产）的真编排。来源保全走 preservationBoundary（与首次提交同一层壳），新版本落库走
-// supplementBoundary 携 OutboxSubmissionVersionFormedHandoff，事件类型
+// buildCustomerSupplementOrchestration 装配 `/shipment-requests/supplements` 的真编排（ADR-0045 的
+// 编排半边，ADR-0106 Decision 四把它接进生产）。来源保全走 preservationBoundary（与首次提交同一层
+// 壳），新版本落库走 supplementBoundary 携 OutboxSubmissionVersionFormedHandoff，事件类型
 // `parcel-shipment.shipment-request.submission-version-formed`，消费门在 cmd/parcel-dispatch
 // （同一条接受判断链的第四扇门）。
 //
 // 客户渠道的采信身份属 `PAR-INT-01`（实例半边）：端点表那一行以 `UnconfiguredIntake{}` 起步，
 // 谁能替哪个客户账户补充由渠道认证答，编排收到的命令已带核验过的两份来源身份。本函数不带
 // 任何默认身份。
-func buildCustomerSupplementOrchestration(db *bentopg.DB) (*shipmentapp.FormNewSubmissionVersionHandler, error) {
+func buildCustomerSupplementOrchestration(db *bentopg.DB) (shipmenthttp.SupplementHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: source submissions: %w", err)

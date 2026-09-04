@@ -238,9 +238,10 @@ func TestAPendingManualReviewWaitsOnTheReviewerNotAnInternalRetry(t *testing.T) 
 }
 
 // Covers: ADR-0086 Decision 一前半——`等待人工复核`在交回之前先把带等待态的聚合落库，
-// 且委托仍是`已提交`。三个等待态里只有它落库：它的续办方是第三方，重投推不动（预算烧穿后
-// 信封停投，完成的复核再也没有投递来续办），不落库则队列读面结构上列不出「等复核的都有谁」。
-// 排队的委托与没人管的委托不能在库里长同一张脸。
+// 且委托仍是`已提交`。它是第一个落库的等待态（`等待运营登记`与`等待受控补充`随 ADR-0094、
+// ADR-0106 逐格并入同一形状）：续办方是第三方，重投推不动（预算烧穿后信封停投，完成的复核
+// 再也没有投递来续办），不落库则队列读面结构上列不出「等复核的都有谁」。排队的委托与没人管
+// 的委托不能在库里长同一张脸。
 func TestAPendingManualReviewPersistsThePauseItReports(t *testing.T) {
 	fixture := newDecisionFixture(t)
 	fixture.commercial.manualReview = domain.ManualReviewRequiredByRules

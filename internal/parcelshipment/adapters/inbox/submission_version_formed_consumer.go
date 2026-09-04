@@ -12,7 +12,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
-// supplementResumeConsumerName 是「新提交版本已形成」续办门在 inbox 键上的稳定名。四扇门转交
+// supplementResumeConsumerName 是「新提交版本已形成」续办门在 inbox 键上的稳定名。各扇门转交
 // 同一条链，但各收各的信；共名会让名册读起来像同一扇（理由同 manualReviewResumeConsumerName）。
 const supplementResumeConsumerName = "parcel-shipment/advance-acceptance-chain-on-submission-version-formed"
 
@@ -26,8 +26,8 @@ const SubmissionVersionFormedEventType eventing.EventType = "parcel-shipment.shi
 //
 // 它与提交门、复核续办门转交**同一个**编排、共用同一份译码与同一个折法。信封携带的是**新**
 // 提交版本：停在`等待受控补充`的那一版已随入账留在库里，链拿新版本的任务重跑，在受控补充那一步
-// 不再停；停在其它未决原因时照旧按恢复动作折——依赖抖动回滚重投，再次停在三个外部续办态之一
-// 即再暂停入账一次。
+// 不再停；停在其它未决原因时照旧按恢复动作折——依赖抖动回滚重投，再次停在续办方在进程之外的
+// 等待态即再暂停入账一次。
 //
 // 门里不判「新版本是不是真的比停住的那版新」：那是编排读聚合时的事（基准过期由
 // FormNewSubmissionVersionHandler 在形成版本那一步就拒了），在消费门里再判等于第二处持有版本
