@@ -188,8 +188,12 @@ func (calculation SurchargeCalculation) resolve(reading surchargeContext, basis 
 			case OutOfWindowNotCharged:
 				return Money{}, errSeriesAmountOutOfWindow
 			default:
-				return Money{}, fmt.Errorf("%w: amount series %s in-force version %s has no period at the pricing basis time and the card declares %s",
-					ErrMissingReferenceSeriesValue, calculation.seriesID, published.reference.Version(), calculation.outOfWindow)
+				// 带上绑定：问题项的「涉及序列」主体（ADR-0105）从这里取种类与标识。
+				return Money{}, &missingSeriesReadingError{
+					binding: ReferenceSeriesBinding{kind: ReferenceSeriesPublishedAmount, seriesID: calculation.seriesID},
+					message: fmt.Sprintf("%s: amount series %s in-force version %s has no period at the pricing basis time and the card declares %s",
+						ErrMissingReferenceSeriesValue.Error(), calculation.seriesID, published.reference.Version(), calculation.outOfWindow),
+				}
 			}
 		}
 		amount, ok := published.Amount()

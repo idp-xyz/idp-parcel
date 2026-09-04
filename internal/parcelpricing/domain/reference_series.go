@@ -123,7 +123,10 @@ func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBindin
 	for _, binding := range bindings {
 		reading, found := input.boundReading(binding)
 		if !found {
-			return nil, nil, fmt.Errorf("%w: no reading for %s %s", ErrMissingReferenceSeriesValue, binding.kind, binding.seriesID)
+			return nil, nil, &missingSeriesReadingError{
+				binding: binding,
+				message: fmt.Sprintf("%s: no reading for %s %s", ErrMissingReferenceSeriesValue.Error(), binding.kind, binding.seriesID),
+			}
 		}
 		if reading.reference.ID() != binding.seriesID {
 			return nil, nil, fmt.Errorf("%w: %s reading comes from series %s but the plan bound series %s",
@@ -136,6 +139,20 @@ func (input PricingInputSnapshot) resolveSeries(bindings []ReferenceSeriesBindin
 		rates[binding.kind] = reading
 	}
 	return rates, amounts, nil
+}
+
+// missingSeriesReadingError 是「缺一期序列取值」带着它缺的那条绑定（ADR-0105 Context 点名：resolveSeries 在
+// 失败那一刻手上有整条绑定，此前只把它格式化进了文字）。它 Is ErrMissingReferenceSeriesValue——既有的分流
+// 判据不变；问题项的主体从这里取，不从文字反解析。文字与此前逐字相同，因为它进规范化文档。
+type missingSeriesReadingError struct {
+	binding ReferenceSeriesBinding
+	message string
+}
+
+func (err *missingSeriesReadingError) Error() string { return err.message }
+
+func (err *missingSeriesReadingError) Is(target error) bool {
+	return target == ErrMissingReferenceSeriesValue
 }
 
 // boundSeriesReferences 列出快照里落在方案绑定上的序列版本引用——这些是本次评价实际

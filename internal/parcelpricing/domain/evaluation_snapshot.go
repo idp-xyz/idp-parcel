@@ -143,9 +143,30 @@ type conversionSnapshot struct {
 	Converted moneySnapshot            `json:"converted"`
 }
 
+// issueSnapshot 多两格可缺席的「涉及序列」主体（ADR-0105 Decision 二）：只进快照不进规范化文档，旧快照没有
+// 这两格照样读回、主体为空。
 type issueSnapshot struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	SeriesKind string `json:"seriesKind,omitempty"`
+	SeriesID   string `json:"seriesId,omitempty"`
+}
+
+func issueSnapshotOf(issue EvaluationIssue) issueSnapshot {
+	snapshot := issueSnapshot{Code: issue.code, Message: issue.message}
+	if issue.series != nil {
+		snapshot.SeriesKind = issue.series.kind.String()
+		snapshot.SeriesID = issue.series.seriesID
+	}
+	return snapshot
+}
+
+func issueFromSnapshot(snapshot issueSnapshot) EvaluationIssue {
+	issue := EvaluationIssue{code: snapshot.Code, message: snapshot.Message}
+	if snapshot.SeriesKind != "" {
+		issue.series = &SeriesSubject{kind: ReferenceSeriesKind(snapshot.SeriesKind), seriesID: snapshot.SeriesID}
+	}
+	return issue
 }
 
 // amountRoundingStepSnapshot 是一次金额取整留痕的快照形状（ADR-0107）。
@@ -264,7 +285,7 @@ func MarshalEvaluationSnapshot(evaluation PricingEvaluation) ([]byte, error) {
 		document.AmountRounding = append(document.AmountRounding, amountRoundingStepOf(step))
 	}
 	for _, issue := range evaluation.issues {
-		document.Issues = append(document.Issues, issueSnapshot{Code: issue.code, Message: issue.message})
+		document.Issues = append(document.Issues, issueSnapshotOf(issue))
 	}
 	return json.Marshal(document)
 }
@@ -329,7 +350,7 @@ func RehydrateEvaluationSnapshot(raw []byte) (PricingEvaluation, error) {
 		evaluation.conversion = &conversion
 	}
 	for _, issue := range document.Issues {
-		evaluation.issues = append(evaluation.issues, EvaluationIssue{code: issue.Code, message: issue.Message})
+		evaluation.issues = append(evaluation.issues, issueFromSnapshot(issue))
 	}
 
 	if !evaluation.valid() {

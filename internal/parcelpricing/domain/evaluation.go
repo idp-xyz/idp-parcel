@@ -28,17 +28,53 @@ func (status EvaluationStatus) valid() bool {
 	}
 }
 
+// SeriesSubject 是问题项「涉及序列」的结构化主体（ADR-0105 Decision 一）：序列种类必有、序列标识可缺——
+// 结算币种要汇率而方案没绑汇率序列时，只知道种类。它是 message 里已有信息的类型化重述，不是新的评价语义，
+// 所以进快照不进规范化文档（Decision 二）。
+type SeriesSubject struct {
+	kind     ReferenceSeriesKind
+	seriesID string
+}
+
+func (subject SeriesSubject) Kind() ReferenceSeriesKind { return subject.kind }
+
+// SeriesID 只在主体指得出具体序列时给出。
+func (subject SeriesSubject) SeriesID() (string, bool) {
+	return subject.seriesID, subject.seriesID != ""
+}
+
+func (subject SeriesSubject) valid() bool {
+	return subject.kind.valid() && (subject.seriesID == "" || trimmed(subject.seriesID))
+}
+
 type EvaluationIssue struct {
 	code    string
 	message string
+	// series 只在 REFERENCE_SERIES_UNRESOLVED 与 EXCHANGE_RATE_UNRESOLVED 两种问题项上有（ADR-0105 Decision 一、六）；
+	// 其余问题项的主体不是序列，这一格为空。
+	series *SeriesSubject
 }
 
 func newEvaluationIssue(code, message string) EvaluationIssue {
 	return EvaluationIssue{code: code, message: message}
 }
 
+// newSeriesEvaluationIssue 造一条带「涉及序列」主体的问题项；seriesID 可空。
+func newSeriesEvaluationIssue(code, message string, kind ReferenceSeriesKind, seriesID string) EvaluationIssue {
+	subject := SeriesSubject{kind: kind, seriesID: seriesID}
+	return EvaluationIssue{code: code, message: message, series: &subject}
+}
+
 func (issue EvaluationIssue) Code() string    { return issue.code }
 func (issue EvaluationIssue) Message() string { return issue.message }
+
+// Series 交回问题项涉及的序列；没有主体的问题项第二个返回值为假。
+func (issue EvaluationIssue) Series() (SeriesSubject, bool) {
+	if issue.series == nil {
+		return SeriesSubject{}, false
+	}
+	return *issue.series, true
+}
 
 type ChargeLineKind string
 
@@ -334,7 +370,7 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if seriesErr != nil {
 		switch {
 		case errors.Is(seriesErr, ErrMissingReferenceSeriesValue):
-			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", seriesErr.Error()))
+			return evaluation.withOutcome(EvaluationPending, unresolvedSeriesIssue(seriesErr))
 		case errors.Is(seriesErr, ErrReferenceSeriesVersionConflict):
 			return evaluation.withOutcome(EvaluationConflict, newEvaluationIssue("REFERENCE_SERIES_VERSION_MISMATCH", seriesErr.Error()))
 		default:
@@ -585,8 +621,10 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if settlement, declared := request.input.SettlementCurrency(); declared && settlement != total.currency {
 		reading, resolved := series[ReferenceSeriesExchangeRate]
 		if !resolved {
-			return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("EXCHANGE_RATE_UNRESOLVED",
-				fmt.Errorf("%w: settling in %s needs an exchange rate", ErrMissingReferenceSeriesValue, settlement).Error()))
+			// 主体只有种类（ADR-0105 Decision 一）：结算币种要汇率，而方案未必声明过汇率绑定，没有标识可指。
+			return evaluation.withOutcome(EvaluationPending, newSeriesEvaluationIssue("EXCHANGE_RATE_UNRESOLVED",
+				fmt.Errorf("%w: settling in %s needs an exchange rate", ErrMissingReferenceSeriesValue, settlement).Error(),
+				ReferenceSeriesExchangeRate, ""))
 		}
 		step, conversionErr := convertAmount(total, reading, settlement)
 		if conversionErr != nil {
@@ -743,6 +781,11 @@ func (evaluation PricingEvaluation) valid() bool {
 	}
 	for _, line := range evaluation.chargeLines {
 		if !line.valid() {
+			return false
+		}
+	}
+	for _, issue := range evaluation.issues {
+		if issue.series != nil && !issue.series.valid() {
 			return false
 		}
 	}
@@ -943,10 +986,21 @@ func (evaluation PricingEvaluation) withCalculationError(err error) PricingEvalu
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("NEGATIVE_TOTAL", err.Error()))
 	// 绑了金额序列的规则在窗外声明「待判断」（ADR-0110 Decision 三）：与缺一期取值同一格原因码。
 	case errors.Is(err, ErrMissingReferenceSeriesValue):
-		return evaluation.withOutcome(EvaluationPending, newEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", err.Error()))
+		return evaluation.withOutcome(EvaluationPending, unresolvedSeriesIssue(err))
 	default:
 		return evaluation.withOutcome(EvaluationFailed, newEvaluationIssue("CALCULATION_FAILED", err.Error()))
 	}
+}
+
+// unresolvedSeriesIssue 把「缺一期序列取值」译成带主体的问题项（ADR-0105 Decision 一）：错误里带着绑定时填
+// 种类与标识；错误里没有绑定（结构上不该发生）时只留文字，主体为空——不从文字反解析。code 与 message 与
+// 此前逐字相同，主体不进规范化文档。
+func unresolvedSeriesIssue(err error) EvaluationIssue {
+	var missing *missingSeriesReadingError
+	if errors.As(err, &missing) {
+		return newSeriesEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", err.Error(), missing.binding.kind, missing.binding.seriesID)
+	}
+	return newEvaluationIssue("REFERENCE_SERIES_UNRESOLVED", err.Error())
 }
 
 func (evaluation PricingEvaluation) withOutcome(status EvaluationStatus, issue EvaluationIssue) PricingEvaluation {
