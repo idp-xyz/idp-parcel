@@ -893,6 +893,35 @@ type PortsPathsView interface {
 	) (DeclarationPathEntry, bool, error)
 }
 
+// CredentialRegistry 是监管凭证登记册的写口半边（票 mechanism-executor-triage/07 CC-a）。
+// 凭证实例（真实签发机构、持有人、程序、期限、额度）属实例半边（PAR-CUS-04 待提供），
+// 但放进库里的那条受控路径属机制半边——判据同 ReadinessRegistry 那句：没有它，租户
+// 上线时这本册子没处配，UC-CC-003 步 7「核验监管凭证」也没有可读的对象。
+//
+// 键是（租户，凭证身份）：RegulatoryCredential 是「不可变版本」，一身份一版——换期限
+// 或换额度是另一张凭证（另一个身份），不是覆盖。次数额度的占用/释放/核销另有生命周期
+// （UC-CC-005 步 7/9、UC-CC-006 步 7），不在本册：这里登的是凭证本身，不是余额。写入
+// 代数与其余登记册同（ADR-0031，不 UPSERT）：同键已在册交回`已登记`，内容是否同一份由
+// 编排读回自己比。
+type CredentialRegistry interface {
+	RegisterCredential(
+		ctx context.Context,
+		tenant domain.TenantID,
+		credential domain.RegulatoryCredential,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// CredentialView 按凭证身份取回在册版本。found=false 即该凭证未登记——实例半边未提供
+// 时，消费侧（凭证适用性判断）停在「凭证未登记」，不把它读成「不适用」：前者等登记，
+// 后者是判断结论，续办动作不同。
+type CredentialView interface {
+	LoadCredential(
+		ctx context.Context,
+		tenant domain.TenantID,
+		credential domain.CredentialID,
+	) (domain.RegulatoryCredential, bool, error)
+}
+
 // PortsPathsCatalogueRead 是两本目录的伴生列表读口（ADR-0077 Decision 一/五）：
 // 管理台 customs-ports-paths 页上列口岸目录与申报路径目录两册（票
 // admin-remainder-mechanism-batch/03）。查阅不触发判断、决定或披露——它接存储读面，

@@ -27,12 +27,13 @@
 
 # ---- customs-compliance ----
 
-# 一类：经 FormDutyCollaboration / VerifyDutyPayment / RegisterCredential / ReceiveReleaseOutcome
-# 取得，四个工厂都在函数名棘轮基线里（关税协作、税款核验、监管凭证、放行结果四条执行器未接）。
-# 随各自工厂接线出名单；其中 *Reference 与 *ID 另有 New* 构造器，但生产不指名它们，随聚合走。
+# 一类：经 FormDutyCollaboration / VerifyDutyPayment / ReceiveReleaseOutcome 取得，三个工厂都在
+# 函数名棘轮基线里（关税协作、税款核验、放行结果三条执行器未接）。随各自工厂接线出名单；
+# 其中 *Reference 与 *ID 另有 New* 构造器，但生产不指名它们，随聚合走。
+# 监管凭证那一族（CredentialID / CredentialHolderReference / RegulatoryCredential）曾在这里，
+# 2026-09-04 随 mechanism-executor-triage/07 CC-a 剪掉：RegisterCredential 接上登记面后三者
+# 由它的签名入种子。**在 024cb5f 的干净内容上数得剪前 63、剪后 60**，只对该检出成立。
 internal/customscompliance/domain AssessedDutyReference
-internal/customscompliance/domain CredentialHolderReference
-internal/customscompliance/domain CredentialID
 internal/customscompliance/domain CustomsReleaseOutcome
 internal/customscompliance/domain DutyCollaborationSpec
 internal/customscompliance/domain DutyCoverage
@@ -44,7 +45,6 @@ internal/customscompliance/domain DutyPaymentVerification
 internal/customscompliance/domain ExternalFundsFactReference
 internal/customscompliance/domain LegalObligorReference
 internal/customscompliance/domain PaymentRequirementSource
-internal/customscompliance/domain RegulatoryCredential
 internal/customscompliance/domain ReleaseKind
 internal/customscompliance/domain ResponsibilityTargetReference
 

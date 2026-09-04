@@ -218,6 +218,26 @@ func (credential RegulatoryCredential) Holder() CredentialHolderReference {
 	return credential.holder
 }
 
+// Procedure、ValidFrom、ValidTo 与 Uses 是持久化重建的必需读口——不可变版本七件里这
+// 四件此前没有出口，登记册适配器连原样写回都做不到（判据同 ExternalResult 那三个读口）。
+func (credential RegulatoryCredential) Procedure() CustomsProcedureReference {
+	return credential.procedure
+}
+
+func (credential RegulatoryCredential) ValidFrom() time.Time {
+	return credential.validFrom
+}
+
+func (credential RegulatoryCredential) ValidTo() time.Time {
+	return credential.validTo
+}
+
+// Uses 交回次数额度与「来源是否提供了它」：零在构造期约定为未提供，读口把这层约定
+// 翻成显式的第二个返回值，免得消费方把「未提供」读成「额度已用尽」。
+func (credential RegulatoryCredential) Uses() (int, bool) {
+	return credential.uses, credential.uses > 0
+}
+
 // JudgeApplicability 判断凭证对给定程序、持有人与时点是否适用：程序相符、持有人
 // 相符、时点在有效期内三者齐备才适用——同名附件在别的程序上用不了，过期凭证谁拿着
 // 都不适用。答案带依据（哪一维不符）。

@@ -271,9 +271,17 @@ internal/settlementaccounting/domain FormSupplierExpectedCost
 
 # —— customs-compliance ——
 # 以下各条均产出带不变式校验的领域对象，包外零引用。
+#
+# RegisterCredential 曾在这里，2026-09-04 随 mechanism-executor-triage/07 CC-a 剪掉：监管凭证
+# 登记面（application/register_credential.go）是它的生产调用方，读它的第一个判断是同笔的
+# application/judge_credential_applicability.go（UC-CC-003 步 7 的判断半边）。成因三分先分过：
+# 全仓该名字只有一处声明（domain/compliance_judgment.go），同笔新增的 RegisterCredentialHandler
+# / Command / Deps 是前缀名，门禁比的是精确相等不是子串（tf-unwired-seven/05 那段核过匹配码），
+# 是第二种。**在 024cb5f 的干净内容上（`git show` 取本文件）数得剪前 24、剪后 23**；两个数只对
+# 该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
+# 同票余三条（放行结果、税费协作、税费核对）随 CC-b / CC-c 各自出名单。
 internal/customscompliance/domain FormDutyCollaboration
 internal/customscompliance/domain ReceiveReleaseOutcome
-internal/customscompliance/domain RegisterCredential
 internal/customscompliance/domain VerifyDutyPayment
 
 
