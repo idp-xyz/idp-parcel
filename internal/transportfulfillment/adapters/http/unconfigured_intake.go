@@ -46,6 +46,7 @@ var _ LoadAssignmentIntake = UnconfiguredIntake{}
 var _ ParticipationTerminationIntake = UnconfiguredIntake{}
 var _ CredentialIntake = UnconfiguredIntake{}
 var _ EffectiveTimeRuleIntake = UnconfiguredIntake{}
+var _ EffectiveTimeJudgmentIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -124,4 +125,10 @@ func (UnconfiguredIntake) IntakeCredentialApplicabilityChange(context.Context, *
 // 有效时间，渠道未就位前没有可采信的登记方身份，连命令都不构造。
 func (UnconfiguredIntake) IntakeEffectiveTimeRuleRegistration(context.Context, *http.Request) (application.RegisterEffectiveTimeRuleCommand, error) {
 	return application.RegisterEffectiveTimeRuleCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 有效时间显式判断口（label-channel/21）同堵：一次判断就把一条事实交给 visibility-exception 进客户可见面，
+// 渠道未就位前没有可采信的所有者身份，连命令都不构造。
+func (UnconfiguredIntake) IntakeEffectiveTimeJudgment(context.Context, *http.Request) (application.JudgeEffectiveTimeCommand, error) {
+	return application.JudgeEffectiveTimeCommand{}, ErrAccessChannelNotConfigured
 }
