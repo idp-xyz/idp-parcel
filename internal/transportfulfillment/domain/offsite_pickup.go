@@ -120,15 +120,17 @@ type OffsitePickupSpec struct {
 // 才建立履约参与关系」）。控制依据必备——失败结果不制造实际履约段，分界就在这份依据上。
 // 逐对象成立：整批揽收结论只能由对象级结果派生。
 type OffsitePickup struct {
-	tenantID   TenantID
-	object     CarriedObjectReference
-	task       PickupTaskReference
-	attempt    AttemptReference
-	place      PickupPlaceReference
-	control    TransportControlReference
-	executedBy ExecutingPartyReference
-	version    PickupResultVersion
-	occurredAt time.Time
+	tenantID    TenantID
+	object      CarriedObjectReference
+	task        PickupTaskReference
+	attempt     AttemptReference
+	place       PickupPlaceReference
+	control     TransportControlReference
+	executedBy  ExecutingPartyReference
+	version     PickupResultVersion
+	occurredAt  time.Time
+	corrects    PickupResultVersion
+	correctedAt time.Time
 }
 
 func FormOffsitePickup(spec OffsitePickupSpec) (OffsitePickup, error) {
@@ -192,4 +194,71 @@ func (pickup OffsitePickup) Version() PickupResultVersion {
 // 锚在它上，消息与处理时间不能替代。
 func (pickup OffsitePickup) OccurredAt() time.Time {
 	return pickup.occurredAt
+}
+
+// Corrects 交回本版本更正的前一版本（若本版本由更正产生）。被回指的那一版留在册上，但不再是
+// 这个对象在这次尝试上的结果——「失效」在版本链里就由被回指表达，不需要一个可改写的失效位。
+func (pickup OffsitePickup) Corrects() (PickupResultVersion, bool) {
+	if !pickup.corrects.valid() {
+		return PickupResultVersion{}, false
+	}
+	return pickup.corrects, true
+}
+
+func (pickup OffsitePickup) CorrectedAt() (time.Time, bool) {
+	if pickup.correctedAt.IsZero() {
+		return time.Time{}, false
+	}
+	return pickup.correctedAt, true
+}
+
+// PickupCorrection 携带一次更正给出的「证据说了什么」：地点、控制依据、执行方、发生时刻四格，
+// 加新版本号与更正时刻。对象、任务、尝试不在其中——它们说的是「这是哪一次揽收」，改了它们就是
+// 另一次揽收而不是更正（票 tf-segment-lifecycle-closure/08 裁决，取法同 HandoverCorrection）。
+type PickupCorrection struct {
+	Place       PickupPlaceReference
+	Control     TransportControlReference
+	ExecutedBy  ExecutingPartyReference
+	OccurredAt  time.Time
+	Version     PickupResultVersion
+	CorrectedAt time.Time
+}
+
+// Correct 依据更正证据形成新版本：保留原事实与原结果（值语义，接收者不动），新版本回指被更正
+// 版本（CONTEXT「来源证据被更正时，保留原事实和原判断，形成失效、替代及重新派生结果」）。
+// 每格完备性同首登——控制依据仍必备：更正不能把一次揽收更正成一次失败到访，那是另一种事实，
+// 走别的口。沿用原版本号即覆盖，构造期拒绝。
+//
+// 更正时刻不得早于被更正版本的**登记时刻**，而登记时刻是登记册的事实（ports.OffsitePickupRecord
+// 的 RecordedAt），不在本类型上，那道先后由编排在读回前版时守；这里只守「更正时刻在场」。不拿
+// OccurredAt 顶替下界：发生时刻本身是可更正的四格之一，被更正的那一版可能恰恰把它记晚了，以它
+// 为下界会把一次正当的更正拒掉——交接与交付两侧能拿业务时间当下界，是因为它们的业务时间不在
+// 更正范围内。
+func (pickup OffsitePickup) Correct(correction PickupCorrection) (OffsitePickup, error) {
+	if !pickup.version.valid() {
+		return OffsitePickup{}, ErrInvalidOffsitePickup
+	}
+	if !correction.Version.valid() || correction.CorrectedAt.IsZero() {
+		return OffsitePickup{}, ErrInvalidOffsitePickup
+	}
+	if correction.Version == pickup.version {
+		return OffsitePickup{}, ErrInvalidOffsitePickup
+	}
+	corrected, err := FormOffsitePickup(OffsitePickupSpec{
+		TenantID:   pickup.tenantID,
+		Object:     pickup.object,
+		Task:       pickup.task,
+		Attempt:    pickup.attempt,
+		Place:      correction.Place,
+		Control:    correction.Control,
+		ExecutedBy: correction.ExecutedBy,
+		Version:    correction.Version,
+		OccurredAt: correction.OccurredAt,
+	})
+	if err != nil {
+		return OffsitePickup{}, err
+	}
+	corrected.corrects = pickup.version
+	corrected.correctedAt = correction.CorrectedAt.UTC()
+	return corrected, nil
 }
