@@ -1,7 +1,7 @@
 # 10 版本引用改为三元身份 + 可选指纹，过渡令牌退役：ADR-0108 的实施票
 
 Category: enhancement
-Status: ready-for-agent——裁决已落 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)；本票只做机制半边（通道 6 2026-09-04 立票，只写票面未动代码）
+Status: in-progress——MCP-6（2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）；裁决已落 [ADR-0108](../../../docs/adr/0108-version-reference-identity-is-kind-id-version-and-digest-becomes-an-optional-declared-fingerprint.md)；本票只做机制半边（通道 6 2026-09-04 立票，只写票面未动代码）
 Blocked by: 无
 
 ## 缺口

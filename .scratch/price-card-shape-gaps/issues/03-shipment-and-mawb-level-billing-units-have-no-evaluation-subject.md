@@ -1,7 +1,7 @@
 # 清关报价按票、按 MAWB 计费的项目没有评价主体：计价只逐包裹
 
 Category: enhancement
-Status: ready-for-agent（票级）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
+Status: in-progress（票级，MCP-6 2026-09-04，隔离分支 mcp6-pp-renumber，基线 main 4cc1bc34，task-2b9edfe4 换号批五票之一）／ blocked（主单级，等 `transport-fulfillment` 立承运总单登记册——应立而未立，归 TF owner）——已裁选项 1 + SA 既有分摊（即选项 3），落文 [ADR-0111](../../../docs/adr/0111-shipment-and-mawb-level-billing-units-are-evaluation-subjects-in-parcel-pricing-and-settlement-allocates.md)（2026-09-04，通道 6，owner 授权）；CONTEXT「评价对象」硬句已改口为四种；本票转实施票，范围见「裁决」节末段
 Blocked by: 主单级那一半等 TF 承运总单登记册——[tf-carrier-master-document-register/01](../../tf-carrier-master-document-register/issues/01-carrier-master-document-register-does-not-exist.md)（draft，归 TF owner）；票级那一半无
 
 ## 为什么立
