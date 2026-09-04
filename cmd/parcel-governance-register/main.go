@@ -55,10 +55,12 @@ const (
 	exitUndecided  = 3
 )
 
-const (
-	commandAuthorityInterval = "authority-interval"
-	commandSuspend           = "suspend"
-	commandResume            = "resume"
+// 子命令词就是领域封闭集 domain.ChannelCommand 的字面拼法（票 pilot-governance-context-gaps/01）：
+// 入口在这里按词认命令，留痕按枚举落——两边同一个来源，集合不再靠本文件的常量单独封闭。
+var (
+	commandAuthorityInterval = domain.ChannelCommandAuthorityInterval.String()
+	commandSuspend           = domain.ChannelCommandSuspend.String()
+	commandResume            = domain.ChannelCommandResume.String()
 )
 
 type systemClock struct{}
@@ -112,9 +114,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		return exitUsage
 	}
 	command := args[0]
-	switch command {
-	case commandAuthorityInterval, commandSuspend, commandResume:
-	default:
+	if _, known := domain.ParseChannelCommand(command); !known {
 		fmt.Fprintf(errOut, "未知登记种类 %q；首批只开 %s、%s、%s（阶段评审与接管第二批）\n",
 			command, commandAuthorityInterval, commandSuspend, commandResume)
 		return exitUsage
@@ -233,8 +233,12 @@ func execute(
 	identity channelIdentity,
 	regs registrars,
 ) (string, int) {
-	switch command {
-	case commandAuthorityInterval:
+	channelCommand, known := domain.ParseChannelCommand(command)
+	if !known {
+		return fmt.Sprintf("未知登记种类 %q", command), exitUsage
+	}
+	switch channelCommand {
+	case domain.ChannelCommandAuthorityInterval:
 		interval, err := authorityIntervalFromJSON(raw)
 		if err != nil {
 			return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
@@ -246,7 +250,7 @@ func execute(
 				return err
 			}
 			result = handled
-			return traceExecution(txCtx, regs, command, intervalReference(interval), identity,
+			return traceExecution(txCtx, regs, channelCommand, intervalReference(interval), identity,
 				result.Outcome() == application.IntervalRegistered ||
 					result.Outcome() == application.IntervalAlreadyRegistered,
 				result.Outcome().String())
@@ -255,7 +259,7 @@ func execute(
 			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 		}
 		return intervalAnswer(result.Outcome(), result.Conflicts())
-	case commandSuspend:
+	case domain.ChannelCommandSuspend:
 		spec, err := suspensionSpecFromJSON(raw)
 		if err != nil {
 			return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
@@ -267,14 +271,14 @@ func execute(
 				return err
 			}
 			result = handled
-			return traceExecution(txCtx, regs, command, spec.ID.String(), identity,
+			return traceExecution(txCtx, regs, channelCommand, spec.ID.String(), identity,
 				tracedIncidentOutcome(result.Outcome()), result.Outcome().String())
 		})
 		if err != nil {
 			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 		}
 		return incidentAnswer(command, result.Outcome(), result.HandoffReference())
-	case commandResume:
+	case domain.ChannelCommandResume:
 		spec, err := resumptionSpecFromJSON(raw)
 		if err != nil {
 			return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
@@ -286,7 +290,7 @@ func execute(
 				return err
 			}
 			result = handled
-			return traceExecution(txCtx, regs, command, spec.Suspension.String(), identity,
+			return traceExecution(txCtx, regs, channelCommand, spec.Suspension.String(), identity,
 				tracedIncidentOutcome(result.Outcome()), result.Outcome().String())
 		})
 		if err != nil {
@@ -294,7 +298,8 @@ func execute(
 		}
 		return incidentAnswer(command, result.Outcome(), result.HandoffReference())
 	default:
-		return fmt.Sprintf("未知登记种类 %q", command), exitUsage
+		// ParseChannelCommand 只交回集合内的取值；这一支留给编译器之外的那种「集合加了格、这里没跟」。
+		return fmt.Sprintf("登记种类 %q 尚无执行路径", command), exitUsage
 	}
 }
 
@@ -313,7 +318,8 @@ func tracedIncidentOutcome(outcome application.GovernIncidentOutcome) bool {
 func traceExecution(
 	ctx context.Context,
 	regs registrars,
-	command, reference string,
+	command domain.ChannelCommand,
+	reference string,
 	identity channelIdentity,
 	landed bool,
 	outcome string,

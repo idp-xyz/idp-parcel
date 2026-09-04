@@ -1,7 +1,7 @@
 # `channel_execution.command` 是自由文本——受控通道的命令集合只在 CLI 的字符串常量里封闭，库与领域都没有那个集合
 
 Category: enhancement
-Status: draft
+Status: resolved
 Blocked by: 无
 
 本票**只写量到的事实与要裁的**，不写代码、不选形状。
@@ -87,3 +87,14 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-04 MCP-4：立票（draft），按 MCP-1 派单 task-62e8e262 只读取证。
+- 2026-09-05 MCP-1：接手崩溃现场并完成本票。裁定命令集合属产品机制半边，不归租户扩；首批三个
+  `parcel-governance-register` 子命令由 `pilotgovernance/domain.ChannelCommand` 封闭枚举拥有，CLI
+  只从该集合解析，`channel_execution.command` 再由迁移 0006 加同值 `CHECK` 作库内第二道镜像。
+  `outcome` 继续保持文本，因为它承载应用层多个结果枚举，不随命令集合一一对应。两份同形留痕表不合并：
+  `visibility-exception` 的命令集合由其自己的登记入口拥有，留待该上下文单独裁定。
+- 实施落点：新增 `internal/pilotgovernance/domain/channel_command.go` 及领域测试；将治理留痕适配器和
+  CLI 改用 `ChannelCommand`；补齐 CLI/事务守卫测试调用面；新增
+  `migrations/pilot_governance/0006_channel_execution_command_closed.sql`，并加入适配器旁路写入的双侧
+  封闭测试。
+- 验证：`gofmt`、`go vet ./...`、`go test -p 1 -count=1 ./...` 均通过；本机未设置
+  `IDP_PARCEL_POSTGRES_DSN`，所有 PostgreSQL 集成用例按既有约定跳过，未将其记为真实库证据。

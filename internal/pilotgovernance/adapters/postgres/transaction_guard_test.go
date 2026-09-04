@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -28,7 +29,7 @@ func TestChannelExecutionWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("构造留痕库：%v", err)
 	}
 	trace := adapter.ChannelExecution{
-		Command:         "register-authority-interval",
+		Command:         domain.ChannelCommandAuthorityInterval,
 		RecordReference: "interval-ntx",
 		OSUser:          "operator",
 		Hostname:        "workstation",

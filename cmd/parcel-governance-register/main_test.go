@@ -223,8 +223,8 @@ func TestExecuteSuspendLandsAndTracesTheChannelIdentity(t *testing.T) {
 	if trace.OSUser == "declared-duty-officer" {
 		t.Fatalf("第②轨（executedBy）冒充了第①轨（通道身份）")
 	}
-	if trace.Command != commandSuspend || trace.RecordReference != "suspension-9" {
-		t.Fatalf("留痕指名 = %s/%s，要 suspend/suspension-9", trace.Command, trace.RecordReference)
+	if trace.Command != domain.ChannelCommandSuspend || trace.RecordReference != "suspension-9" {
+		t.Fatalf("留痕指名 = %s/%s，要 suspend/suspension-9", trace.Command.String(), trace.RecordReference)
 	}
 	if trace.Outcome != "SUSPENSION_RECORDED" {
 		t.Fatalf("留痕答案 = %q", trace.Outcome)

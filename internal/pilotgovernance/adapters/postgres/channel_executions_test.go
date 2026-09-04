@@ -8,13 +8,15 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件对真实 PostgreSQL 16 证受控通道执行留痕（票 12 身份双轨的第①轨）：留痕
-// 只追加、事务纪律（无事务拒写、回滚不留行）、留白拒绝。验收面就是表本身——留痕
-// 的消费方是审计查询，没有产品侧读口，断言直接问表。
+// 只追加、事务纪律（无事务拒写、回滚不留行）、留白拒绝、命令封闭集在库内也守着一道
+// （票 pilot-governance-context-gaps/01）。验收面就是表本身——留痕的消费方是审计查询，
+// 没有产品侧读口，断言直接问表。
 
 var executionAt = time.Date(2026, 8, 24, 3, 0, 0, 0, time.UTC)
 
@@ -39,7 +41,7 @@ func newExecutionFixture(t *testing.T) *executionFixture {
 
 func channelExecution(reference string) adapter.ChannelExecution {
 	return adapter.ChannelExecution{
-		Command:         "suspend",
+		Command:         domain.ChannelCommandSuspend,
 		RecordReference: reference,
 		OSUser:          "OPSHOST\\operator-a",
 		Hostname:        "ops-host-01",
@@ -165,5 +167,45 @@ func TestChannelExecutionRejectsBlankIdentity(t *testing.T) {
 	}
 	if count := fixture.countTraces(t, ctx, "blank-identity-trace"); count != 0 {
 		t.Fatalf("留痕行数 = %d，要 0", count)
+	}
+}
+
+// TestChannelExecutionCommandIsClosedOnBothSides 证命令封闭集两道都在：领域侧无效取值到不了
+// SQL（适配器按 String() 为空拒），库侧绕过适配器直接写一个集合外的词被 CHECK 拦下——第二道
+// 镜像防的正是「换一个写入方、或直接写表」。
+func TestChannelExecutionCommandIsClosedOnBothSides(t *testing.T) {
+	fixture := newExecutionFixture(t)
+	ctx := t.Context()
+
+	invalid := channelExecution("invalid-command-trace")
+	invalid.Command = domain.ChannelCommandInvalid
+	if err := fixture.db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		return fixture.executions.Append(txCtx, invalid)
+	}); err == nil {
+		t.Fatalf("集合外命令在适配器被接受了")
+	}
+
+	rawInsert := func(command string) error {
+		return fixture.db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			executor, err := fixture.db.RequireExecutor(txCtx)
+			if err != nil {
+				return err
+			}
+			_, err = executor.Exec(txCtx,
+				`INSERT INTO pilot_governance.channel_execution
+					(command, record_reference, os_user, hostname, outcome, executed_at)
+				 VALUES ($1, 'raw-command-trace', 'OPSHOST\operator-a', 'ops-host-01', 'SUSPENSION_RECORDED', $2)`,
+				command, executionAt)
+			return err
+		})
+	}
+	if err := rawInsert("takeover"); err == nil {
+		t.Fatalf("集合外命令绕过适配器直接写表被接受了；迁移 0006 的 CHECK 应拦下")
+	}
+	if err := rawInsert(domain.ChannelCommandResume.String()); err != nil {
+		t.Fatalf("集合内命令直接写表被拒：%v", err)
+	}
+	if count := fixture.countTraces(t, ctx, "raw-command-trace"); count != 1 {
+		t.Fatalf("留痕行数 = %d，要 1（只有集合内那次落行）", count)
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 )
 
 // ChannelExecution 是受控通道一次执行的留痕（票 12 身份双轨的第①轨）。OSUser 与
@@ -14,8 +16,12 @@ import (
 // （暂停/恢复用暂停标识，权威区间用四维身份加生效起点），Outcome 是登记册当时的
 // 答案。它不是治理记录——治理记录的内容轨（第②轨）在各自表上，这里一个内容字段
 // 都没有。
+//
+// Command 取领域封闭集而不是自由文本：集合归产品定，写入方换一个也造不出集合外的行
+// （票 pilot-governance-context-gaps/01）。Outcome 仍是文本——它的取值来自应用层各结果枚举的
+// String()，那个集合在应用层已封闭，且每加一种答案都不该牵动留痕表。
 type ChannelExecution struct {
-	Command         string
+	Command         domain.ChannelCommand
 	RecordReference string
 	OSUser          string
 	Hostname        string
@@ -24,7 +30,7 @@ type ChannelExecution struct {
 }
 
 func (execution ChannelExecution) complete() bool {
-	return strings.TrimSpace(execution.Command) != "" &&
+	return execution.Command.String() != "" &&
 		strings.TrimSpace(execution.RecordReference) != "" &&
 		strings.TrimSpace(execution.OSUser) != "" &&
 		strings.TrimSpace(execution.Hostname) != "" &&
@@ -61,7 +67,7 @@ func (repository *ChannelExecutions) Append(ctx context.Context, execution Chann
 		`INSERT INTO pilot_governance.channel_execution
 			(command, record_reference, os_user, hostname, outcome, executed_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		execution.Command,
+		execution.Command.String(),
 		execution.RecordReference,
 		execution.OSUser,
 		execution.Hostname,
