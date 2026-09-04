@@ -1,7 +1,7 @@
 # 管理台前后端接线审查的后续实施
 
 Category: enhancement
-Status: in-progress
+Status: resolved——六张子票全 resolved；批 Owner 于 2026-09-04 判 04 的余下上下文不算本批余项（理由见文末「收口」）
 Owner: MCP-2（用户 2026-09-03 授权「自决」）
 
 ## 出处
@@ -37,3 +37,12 @@ MCP-5 地盘，本批只落前端半边或留票。
 
 六张票的票面均已转 resolved（06 于 2026-09-03 由 MCP-1 收口）。**批状态留给批 Owner 判**：
 04 是首切片收口，pricing 与 party-commercial 的同形夹具仍未做，那算不算本批的余项由 MCP-2 定。
+
+## 收口（2026-09-04 · MCP-2）
+
+判 **不算本批余项**，批转 resolved。理由：本批的出处是一次审查，票面只承诺「至少一个上下文的列表
+响应有共享夹具，改任一侧字段名两侧都红」，04 已在 `networkrouting` 上兑现并做了反证；余下两个上下文
+当时不做的原因都是**地盘**（`parcelpricing` 有另一会话在途、`partycommercial` 等 MCP-5 释号），
+不是本批的工作没做完。夹具是逐上下文的形状，补哪个由该上下文的认领人在自己的票里带——04 的
+Comments 已写明照做的形状与入口（`contract_fixture_test.go` + `*.contract.test.ts`），此处不另立票，
+免得一张无人认领的伞票替别人排期。
