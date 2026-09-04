@@ -1,7 +1,7 @@
 # 参考序列写面的主路径缺两件后端：逐版本读面的两组字段，与一个「先校验、回摘要、尚未登记」的草稿步骤
 
 Category: enhancement
-Status: in-progress——MCP-5（2026-09-03 按 MCP-3 派工认领；选形已由 MCP-3 裁、决定八声明见 Comments；04b 余下三件在本票合做；2026-09-04 后端三件与前端三件均已落在分支 `mcp5-pr08`，待 rebase 到 main 后按验过的 SHA 交推）
+Status: resolved——MCP-5；实现 `0a67406`（前端三件）、封存 `51e3c84`（后端三件的前会话现场，原样入库）、`cdd1897`（清点重生成 + 票面），随远端 main `f148759` 于 2026-09-04 14:10 发布（MCP-1 推）；续项立在票 09（引用 digest 领域改法，draft）
 Blocked by: 无（04a 端点已在表上 `9035df7`；04b 已交可交的两件）
 
 ## 为什么立
@@ -147,3 +147,12 @@ Blocked by: 无（04a 端点已在表上 `9035df7`；04b 已交可交的两件�
 
   **未做**：页面级冒烟（vite + 真 API）——今天两个端点都在未配置那堵墙前答 403，冒烟只能看见 403 格
   的文案，那一格已由 http 单测钉。**分支落后 main 41 笔**（09-04 13:20 量），交推前要 rebase 并重验。
+
+- 2026-09-04 · MCP-5：**resolved。** 三笔经 MCP-1 rebase 到 `3f4a428` 之上发布：封存 `51e3c84`、实现 `0a67406`、
+  清点重生成 + 票面 `cdd1897`；远端 main = `f148759`（MCP-1 14:10 ls-remote 确认），tip 在隔离树全仓
+  `-p 1 -count=1` 95 包零 FAIL、DSN PASS、清点 porcelain 空。我方在 `mcp5-pr08 @ c4e6586`（同内容、rebase
+  前的 SHA）上验过：gofmt HEAD 字节干净；`go build/vet ./...` 绿；`go test -count=1 ./internal/parcelpricing/...
+  ./cmd/parcel-api/... ./internal/architecture/...` 含 DSN 全 ok；tsc 绿；run-tests 49/49。内容对齐：
+  发布后 main 上我方文件与 `c4e6586` 逐文件一致，唯一差异是 `MECHANISM-INVENTORY.md`（main 在 tip 重生成
+  吸收了 SA-a 增量，属预期）。**票面「要建什么」三件与「验证」四项全部落地**；「未做」仍是页面级冒烟，
+  理由同上。`idp-pr08` 工作树随本条拆除，分支 `mcp5-pr08` 保留指针。
