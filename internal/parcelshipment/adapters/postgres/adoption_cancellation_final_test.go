@@ -102,6 +102,121 @@ func TestOneParcelCannotStartResponsibilityTwice(t *testing.T) {
 	}
 }
 
+// TestASameSourceCorrectionChainsOntoTheResponsibilityStart 证 AT-PS-050 的库面（ADR-0117
+// 决定二）：更正形成的采用行回指前版、带前版承诺与原因，整行往返；根行一字不动；
+// FindResponsibilityStart 答链尾而不是根；第二个根照旧撞责任起点索引（AT-PS-049 仍在）；
+// 同一前版第二次被取代撞链线性索引；不采用行不占链。
+func TestASameSourceCorrectionChainsOntoTheResponsibilityStart(t *testing.T) {
+	adoptions, _, _, transactor, _ := newJudgmentStores(t)
+	ctx := t.Context()
+	tenant := psTenant(t, "tenant-1")
+
+	root := adoptedRecord(t, "tenant-1", "parcel-1", "SRV-1", "digest-1")
+	mustSaveAdoption(t, transactor, ctx, adoptions, root)
+
+	corrected := supersedingAdoption(t, root, "SRV-2", "digest-2", intakeOccurredAt.Add(-15*time.Minute))
+	mustSaveAdoption(t, transactor, ctx, adoptions, corrected)
+
+	found, present, err := adoptions.FindByKey(ctx, corrected.Key)
+	if err != nil || !present {
+		t.Fatalf("按键读回更正版：present=%v err=%v", present, err)
+	}
+	if supersedes, chained := found.Supersedes(); !chained || supersedes.String() != "SRV-1" {
+		t.Fatalf("更正版没带回它取代的版本：%v %v", supersedes, chained)
+	}
+	if prior, restated := found.Commitment.PriorVersion(); !restated || prior.String() != "CMT-0001" {
+		t.Fatalf("更正版的承诺没指回前版：%v %v", prior, restated)
+	}
+	if reason, present := found.Commitment.AdjustmentReason(); !present || reason.String() != "SOURCE_CORRECTED/NODE_INTAKE/SRV-1" {
+		t.Fatalf("更正版的承诺原因往返变形：%v %v", reason, present)
+	}
+	if !found.Commitment.EffectiveAt().Equal(intakeOccurredAt.Add(-15*time.Minute)) ||
+		!found.Intake.ResponsibilityStart().Equal(intakeOccurredAt.Add(-15*time.Minute)) {
+		t.Fatal("更正版的生效时间没随更正后的发生时刻走")
+	}
+
+	original, present, err := adoptions.FindByKey(ctx, root.Key)
+	if err != nil || !present {
+		t.Fatalf("根行读回：present=%v err=%v", present, err)
+	}
+	if _, chained := original.Supersedes(); chained || !original.Commitment.EffectiveAt().Equal(intakeOccurredAt) {
+		t.Fatal("根行被改写了——历史只插不改")
+	}
+
+	tail, started, err := adoptions.FindResponsibilityStart(ctx, tenant, root.Key.Parcel)
+	if err != nil || !started {
+		t.Fatalf("责任起点读口：started=%v err=%v", started, err)
+	}
+	if tail.Key.Version.String() != "SRV-2" {
+		t.Fatalf("责任起点读口答 %s，想要链尾 SRV-2", tail.Key.Version)
+	}
+
+	// 第二个根（另一来源种类）撞责任起点索引：AT-PS-049 的库面没有因为链而松动。
+	rival := adoptedRecord(t, "tenant-1", "parcel-1", "PKP-1", "digest-3")
+	rival.Key.Kind = domain.OffsitePickupSource
+	rival = reshapeAdoptedSource(t, rival)
+	if outcome := saveAdoption(t, transactor, ctx, adoptions, rival); outcome != ports.IntakeAdoptionAlreadyRecorded {
+		t.Fatalf("第二个根 outcome = %d，想要 ALREADY_RECORDED", outcome)
+	}
+
+	// 同一前版第二次被取代撞链线性索引：并发第二个更正在这里撞墙。
+	fork := supersedingAdoption(t, root, "SRV-3", "digest-4", intakeOccurredAt.Add(-5*time.Minute))
+	if outcome := saveAdoption(t, transactor, ctx, adoptions, fork); outcome != ports.IntakeAdoptionAlreadyRecorded {
+		t.Fatalf("分叉更正 outcome = %d，想要 ALREADY_RECORDED", outcome)
+	}
+	if _, present, err := adoptions.FindByKey(ctx, fork.Key); err != nil || present {
+		t.Fatalf("分叉更正落库了：present=%v err=%v", present, err)
+	}
+
+	// 链尾再被更正一次：链线性地长下去，链尾随之。
+	third := supersedingAdoption(t, corrected, "SRV-4", "digest-5", intakeOccurredAt.Add(-20*time.Minute))
+	mustSaveAdoption(t, transactor, ctx, adoptions, third)
+	tail, _, err = adoptions.FindResponsibilityStart(ctx, tenant, root.Key.Parcel)
+	if err != nil || tail.Key.Version.String() != "SRV-4" {
+		t.Fatalf("链尾 = %s err=%v，想要 SRV-4", tail.Key.Version, err)
+	}
+
+	// 不采用行不占链：拒绝之后链尾不变。
+	mustSaveAdoption(t, transactor, ctx, adoptions, refusedAdoption(t, "tenant-1", "parcel-1", "SRV-9", "digest-9"))
+	tail, _, err = adoptions.FindResponsibilityStart(ctx, tenant, root.Key.Parcel)
+	if err != nil || tail.Key.Version.String() != "SRV-4" {
+		t.Fatalf("不采用行动了链尾：%s err=%v", tail.Key.Version, err)
+	}
+}
+
+// TestSupersessionColumnsMustAgreeWithEachOther 证库内 CHECK 钉住三列同在同缺：只带被取代
+// 版本不带承诺前版、不采用行带被取代版本、更正版自指、承诺前版等于自身版本都进不去。
+func TestSupersessionColumnsMustAgreeWithEachOther(t *testing.T) {
+	_, _, _, _, pool := newJudgmentStores(t)
+	ctx := t.Context()
+
+	const insert = `INSERT INTO parcel_shipment.intake_adoption
+		(tenant_id, parcel_id, source_kind, source_version, customer_account_id, shipment_request_id,
+		 content_digest, adopted, source_object, source_place, source_control, occurred_at,
+		 baseline_version, commitment_version, expected_commitment, refusal_basis, adopted_at,
+		 supersedes_source_version, commitment_prior_version, commitment_adjustment_reason)
+	 VALUES ('tenant-x', $1, 'NODE_INTAKE', $2, 'customer-a', 'REQ-1', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now(), $13, $14, $15)`
+
+	adoptedArgs := func(parcel, version, digest string, supersedes, prior, reason any) []any {
+		return []any{parcel, version, digest, true, "obj", "place", "ctl", intakeOccurredAt, "SUB-V1", "CMT-" + version, "exp", nil, supersedes, prior, reason}
+	}
+	cases := map[string][]any{
+		"只带被取代版本":    adoptedArgs("p-bad-1", "V2", "d1", "V1", nil, nil),
+		"只带承诺前版":     adoptedArgs("p-bad-2", "V2", "d2", nil, "CMT-V1", nil),
+		"更正版自指":      adoptedArgs("p-bad-3", "V2", "d3", "V2", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V2"),
+		"承诺前版等于自身":   adoptedArgs("p-bad-4", "V2", "d4", "V1", "CMT-V2", "SOURCE_CORRECTED/NODE_INTAKE/V1"),
+		"不采用行带被取代版本": {"p-bad-5", "V2", "d5", false, nil, nil, nil, nil, nil, nil, nil, "REFUSED/x", "V1", nil, nil},
+	}
+	for label, args := range cases {
+		if _, err := pool.Exec(ctx, insert, args...); err == nil {
+			t.Fatalf("一行「%s」溜进了采用账", label)
+		}
+	}
+	if _, err := pool.Exec(ctx, insert, adoptedArgs("p-ok", "V2", "d-ok", "V1", "CMT-V1", "SOURCE_CORRECTED/NODE_INTAKE/V1")...); err != nil {
+		t.Fatalf("三列齐全的更正行被拒：%v", err)
+	}
+}
+
 func TestAdoptionScopesAreInvisibleToEachOther(t *testing.T) {
 	adoptions, _, _, transactor, _ := newJudgmentStores(t)
 	ctx := t.Context()
@@ -562,6 +677,68 @@ func fillAdoptedSource(t *testing.T, record ports.IntakeAdoptionRecord) ports.In
 func reshapeAdoptedSource(t *testing.T, record ports.IntakeAdoptionRecord) ports.IntakeAdoptionRecord {
 	t.Helper()
 	return fillAdoptedSource(t, record)
+}
+
+// supersedingAdoption 组一份更正形成的采用记录：同键其余维、新版本、回指前版；收寄换成更正后
+// 的（发生时刻换成 occurredAt），承诺经 RestateOnCorrectedIntake 在前版承诺上重述。
+func supersedingAdoption(
+	t *testing.T,
+	prior ports.IntakeAdoptionRecord,
+	version, digest string,
+	occurredAt time.Time,
+) ports.IntakeAdoptionRecord {
+	t.Helper()
+
+	record := prior
+	record.Key.Version = mustBuild(t, domain.NewSourceResultVersion, version)
+	record.ContentDigest = digest
+	record.SupersedesVersion = prior.Key.Version
+	source, err := domain.NewIntakeSource(domain.IntakeSourceSpec{
+		Kind:       record.Key.Kind,
+		Object:     prior.Intake.Source().Object(),
+		Parcel:     record.Key.Parcel,
+		Place:      prior.Intake.Source().Place(),
+		Control:    prior.Intake.Source().Control(),
+		Version:    record.Key.Version,
+		OccurredAt: occurredAt,
+		Corrects:   prior.Key.Version,
+	})
+	if err != nil {
+		t.Fatalf("构造更正来源：%v", err)
+	}
+	intake, err := domain.AdoptNetworkIntake(source, prior.Intake.Baseline())
+	if err != nil {
+		t.Fatalf("采用更正来源：%v", err)
+	}
+	commitment, err := prior.Commitment.RestateOnCorrectedIntake(
+		mustBuild(t, domain.NewCommitmentVersionID, "CMT-"+version),
+		intake,
+		mustBuild(t, domain.NewCommitmentAdjustmentReason, "SOURCE_CORRECTED/"+record.Key.Kind.String()+"/"+prior.Key.Version.String()),
+	)
+	if err != nil {
+		t.Fatalf("重述承诺：%v", err)
+	}
+	record.Intake = intake
+	record.Commitment = commitment
+	return record
+}
+
+// saveAdoption 事务内写一份采用记录，交回写入代数（撞墙是业务答案，不是失败）。
+func saveAdoption(
+	t *testing.T,
+	transactor bentoapp.Transactor,
+	ctx context.Context,
+	adoptions *adapter.IntakeAdoptions,
+	record ports.IntakeAdoptionRecord,
+) ports.IntakeAdoptionSaveOutcome {
+	t.Helper()
+	var outcome ports.IntakeAdoptionSaveOutcome
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = adoptions.Save(txCtx, record)
+		return err
+	})
+	return outcome
 }
 
 func refusedAdoption(t *testing.T, tenant, parcel, version, digest string) ports.IntakeAdoptionRecord {

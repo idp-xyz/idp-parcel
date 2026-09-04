@@ -339,6 +339,11 @@ type IntakeAdoptionKey struct {
 //
 // 客户与委托维度随记录带出：审计要求采用结果关联到接受决定与委托，下游（路由复核）的
 // 触发键也要这两维——只有幂等键上的包裹身份，触发挂不回明确委托。
+//
+// SupersedesVersion 只在「同来源更正形成的新采用判断版本」上给出（ADR-0117 决定二）：它
+// 指回本记录取代的那一版同种类来源，采用行由此成一条链——根（缺席）是先合法形成的责任
+// 起点，此后每一版更正回指前一版；「当前责任起点」是链尾，按回指派生，不存列。带它的
+// 记录其承诺必带前版与原因（RestateOnCorrectedIntake 的产物），不带它的承诺必是首版。
 type IntakeAdoptionRecord struct {
 	Key               IntakeAdoptionKey
 	CustomerAccountID domain.CustomerAccountID
@@ -347,8 +352,14 @@ type IntakeAdoptionRecord struct {
 	Adopted           bool
 	Intake            domain.EffectiveNetworkIntake
 	Commitment        domain.FormalCommitment
+	SupersedesVersion domain.SourceResultVersion
 	RefusalBasis      domain.CheckReason
 	AdoptedAt         time.Time
+}
+
+// Supersedes 只在更正形成的采用记录上给出：被取代的那一版来源版本。
+func (record IntakeAdoptionRecord) Supersedes() (domain.SourceResultVersion, bool) {
+	return record.SupersedesVersion, record.SupersedesVersion.String() != ""
 }
 
 // IntakeAdoptionSaveOutcome 与其余判断库同一套写入代数（ADR-0031）。
@@ -361,8 +372,10 @@ const (
 )
 
 // IntakeAdoptionStore 按幂等键找回并保存采用结果；FindResponsibilityStart 按包裹找回
-// 先合法形成的责任起点——「客户送站与场外揽收都指向同一包裹时不能形成两个责任起点，
-// 先合法形成者保留」（`AT-PS-049`）。
+// 责任起点**当前所在的那一版**——采用链的链尾（没有任何行回指它的那一行 adopted）。
+// 链只有一个根（「客户送站与场外揽收都指向同一包裹时不能形成两个责任起点，先合法形成者
+// 保留」，`AT-PS-049`），同来源更正在根之后逐版回指（`AT-PS-050`，ADR-0117 决定二）；
+// 采用编排拿链尾核对更正关系、写拒绝依据。
 type IntakeAdoptionStore interface {
 	FindByKey(ctx context.Context, key IntakeAdoptionKey) (IntakeAdoptionRecord, bool, error)
 	FindResponsibilityStart(
