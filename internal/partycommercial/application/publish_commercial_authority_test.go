@@ -1233,6 +1233,131 @@ func TestAPricePolicyCaliberDisagreeingWithTheBodyDirectionIsRejected(t *testing
 	}
 }
 
+func customerServiceRuleBody(t *testing.T, product string, days int) *application.CustomerServiceRuleBodyDeclaration {
+	t.Helper()
+	deadline, err := domain.NewClaimDeadlineRule(
+		domain.FirstClaimDeadline,
+		pcValue(t, domain.NewDeadlineStartEventReference, "event-delivered"),
+		days,
+		pcValue(t, domain.NewBusinessCalendarReference, "calendar-cn"),
+	)
+	if err != nil {
+		t.Fatalf("索赔期限规则：%v", err)
+	}
+	return &application.CustomerServiceRuleBodyDeclaration{
+		Applicability: domain.CustomerServiceRuleAppliesToServiceProduct(pcValue(t, domain.NewCommercialObjectID, product)),
+		Responsible:   pcValue(t, domain.NewPartyID, "operator-1"),
+		Scope:         pcValue(t, domain.NewCommercialScopeReference, "scope-1"),
+		Deadlines:     []domain.ClaimDeadlineRule{deadline},
+	}
+}
+
+// Covers: 票 party-commercial-context-gaps/05——客户服务规则正文随它自己那一版发布登记（ADR-0104）。
+// 在这一路接上之前，规则版本壳能入册、能被闭包选中，选中之后 visibility-exception 点读什么也拿不到，
+// 两维 `Registered` 恒假。期限与材料原样交给持久化面，发布通道不代填任何一项。
+func TestACustomerServiceRuleBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		Approval:     publishApproval(t, "csr-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+	if len(registry.savedServiceRules) != 1 {
+		t.Fatalf("客户服务规则册收到 %d 份, want 1", len(registry.savedServiceRules))
+	}
+	saved := registry.savedServiceRules[0]
+	if saved.Version().Status() != domain.CommercialVersionEffective {
+		t.Fatalf("拥有版本 = %q, want EFFECTIVE", saved.Version().Status())
+	}
+	if deadline, found := saved.ClaimDeadline(domain.FirstClaimDeadline); !found || deadline.DurationDays() != 30 {
+		t.Fatalf("期限 = (%#v, %v)，没有原样到达持久化面", deadline, found)
+	}
+	if product, applies := saved.Applicability().ServiceProduct(); !applies || product.String() != "product-1" {
+		t.Fatalf("适用声明变形：%#v", saved.Applicability())
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.CustomerServiceRuleBodyChannel ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want CUSTOMER_SERVICE_RULE_BODY=SAVED 一条", reports)
+	}
+}
+
+// Covers: 客户服务规则正文的三道门与其余通道同一条纪律——拥有对象类别由 domain.NewCustomerServiceRuleVersion
+// 把守（挂在别的版本上整项拒绝且一行不写）；壳上指名的产品与正文适用声明不等时整项拒绝
+// （ADR-0104 Decision 四，写入前那一次核）；册的`内容冲突`折进报告而不是 error（ADR-0031）。
+func TestACustomerServiceRuleBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
+	t.Run("another object kind is rejected before any write", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AuthorizationRuleObject, "auth-1", "v1"),
+			Approval:     publishApproval(t, "auth-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
+		}); !errors.Is(err, domain.ErrInvalidCustomerServiceRuleVersion) {
+			t.Fatalf("err = %v, want ErrInvalidCustomerServiceRuleVersion", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedServiceRules) != 0 {
+			t.Fatal("挂错拥有对象的客户服务规则正文写了库")
+		}
+	})
+
+	t.Run("an applicability disagreeing with the shell reference is rejected before any write", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+
+		spec := publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1")
+		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
+			domain.ServiceProductObject: pcValue(t, domain.NewCommercialObjectID, "product-1"),
+		}
+		loaded := domain.NewCommercialRegistry()
+		registeredEffective(t, loaded,
+			publishSpec(t, domain.ServiceProductObject, "product-1", "v1"),
+			publishApproval(t, "product-1"))
+		registry.loaded = loaded
+
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         spec,
+			Approval:     publishApproval(t, "csr-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-OTHER", 30)},
+		}); !errors.Is(err, domain.ErrCustomerServiceRuleApplicabilityMismatch) {
+			t.Fatalf("err = %v, want ErrCustomerServiceRuleApplicabilityMismatch", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedServiceRules) != 0 {
+			t.Fatal("分歧的正文写了库")
+		}
+	})
+
+	t.Run("a content conflict lands in the report", func(t *testing.T) {
+		registry := &publicationRegistryDouble{serviceRuleOutcome: ports.CustomerServiceRuleContentConflict}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+			Approval:     publishApproval(t, "csr-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——内容冲突不是 error", err)
+		}
+		reports := result.Declarations()
+		if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want CUSTOMER_SERVICE_RULE_BODY=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}
+
 // Covers: 发布是写权威的动作——整册读不回时不得闭眼登记，照原样上抛等重试；这与解析
 // 用例把读失败折成空视图相反（那边表达`权威不可读`并停在未决）。
 func TestAnUnreadableRegistryBlocksPublication(t *testing.T) {

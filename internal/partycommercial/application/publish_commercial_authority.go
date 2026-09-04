@@ -61,19 +61,20 @@ type PublishCommercialAuthorityCommand struct {
 // 声明只能随发布登记：正文随发布固定（内容摘要盖住它），事后补声明等于改一份已固定
 // 的正文，那要发新版本。
 type CommercialDeclarations struct {
-	AsOfPolicies          []domain.AsOfPolicy
-	AcceptanceContent     *AcceptanceContentDeclaration
-	PendingRoutingBasis   *domain.PendingRoutingBasisReference
-	PreAcceptanceControl  *PreAcceptanceControlInstruction
-	ContractContent       *ContractContentDeclaration
-	IntakeQualification   *IntakeQualificationDeclaration
-	FinalRules            []domain.FinalizationDeclaration
-	CancellationAuthority []domain.CancellationAuthorityDeclaration
-	RulePackageBody       *RulePackageBodyDeclaration
-	SettlementPolicyBody  *SettlementPolicyBodyDeclaration
-	CreditPolicyBody      *CreditPolicyBodyDeclaration
-	SupplierAgreementBody *SupplierAgreementBodyDeclaration
-	PricePolicyBody       *PricePolicyBodyDeclaration
+	AsOfPolicies            []domain.AsOfPolicy
+	AcceptanceContent       *AcceptanceContentDeclaration
+	PendingRoutingBasis     *domain.PendingRoutingBasisReference
+	PreAcceptanceControl    *PreAcceptanceControlInstruction
+	ContractContent         *ContractContentDeclaration
+	IntakeQualification     *IntakeQualificationDeclaration
+	FinalRules              []domain.FinalizationDeclaration
+	CancellationAuthority   []domain.CancellationAuthorityDeclaration
+	RulePackageBody         *RulePackageBodyDeclaration
+	SettlementPolicyBody    *SettlementPolicyBodyDeclaration
+	CreditPolicyBody        *CreditPolicyBodyDeclaration
+	SupplierAgreementBody   *SupplierAgreementBodyDeclaration
+	PricePolicyBody         *PricePolicyBodyDeclaration
+	CustomerServiceRuleBody *CustomerServiceRuleBodyDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -89,7 +90,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.SettlementPolicyBody == nil &&
 		declarations.CreditPolicyBody == nil &&
 		declarations.SupplierAgreementBody == nil &&
-		declarations.PricePolicyBody == nil
+		declarations.PricePolicyBody == nil &&
+		declarations.CustomerServiceRuleBody == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -188,6 +190,20 @@ type PricePolicyCaliberDeclaration struct {
 	Fx         *domain.FxCaliber
 }
 
+// CustomerServiceRuleBodyDeclaration 是客户服务规则版本的正文输入（票 party-commercial-context-gaps/05，
+// ADR-0104）：挂在哪个商业对象上、责任方、范围，与首发两项——索赔期限、最低材料。
+//
+// Applicability 直接收领域的两格封闭而不是摊成「产品、合同、哪一格」：产品或合同恰一在场那条判据
+// 只能有一处（判据同 CreditPolicyBodyDeclaration 收 CreditLimit）。两项清单可各自为空，但合起来至少
+// 一行由 NewCustomerServiceRuleVersion 把守——「对首发两项都无客户差异」不是一版规则，是不登记。
+type CustomerServiceRuleBodyDeclaration struct {
+	Applicability domain.CustomerServiceRuleApplicability
+	Responsible   domain.PartyID
+	Scope         domain.CommercialScopeReference
+	Deadlines     []domain.ClaimDeadlineRule
+	Materials     []domain.MinimumMaterialsRule
+}
+
 // DeclarationChannel 点名一次发布里的一个声明通道，供报告与进程口展示落点。
 type DeclarationChannel uint8
 
@@ -207,6 +223,7 @@ const (
 	SupplierAgreementBodyChannel
 	PricePolicyBodyChannel
 	PricePolicyCaliberChannel
+	CustomerServiceRuleBodyChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -239,6 +256,8 @@ func (channel DeclarationChannel) String() string {
 		return "PRICE_POLICY_BODY"
 	case PricePolicyCaliberChannel:
 		return "PRICE_POLICY_CALIBER"
+	case CustomerServiceRuleBodyChannel:
+		return "CUSTOMER_SERVICE_RULE_BODY"
 	default:
 		return ""
 	}
@@ -684,7 +703,49 @@ func declarationWrites(
 		}
 	}
 
+	if declarations.CustomerServiceRuleBody != nil {
+		body := declarations.CustomerServiceRuleBody
+		// ADR-0104 Decision 四：壳上指名了正文所挂那一类（产品 / 合同）的引用时两处必须相等，
+		// 不等整项拒绝，不静默选一处——读侧同一道核对在点读时还会再走一遍。
+		if err := domain.ConsistentCustomerServiceRuleApplicability(version, body.Applicability); err != nil {
+			return nil, err
+		}
+		rule, err := domain.NewCustomerServiceRuleVersion(
+			version, body.Applicability, body.Responsible, body.Scope, body.Deadlines, body.Materials)
+		if err != nil {
+			return nil, fmt.Errorf("customer service rule body: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: CustomerServiceRuleBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SaveCustomerServiceRule(ctx, rule)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfCustomerServiceRule(outcome)
+			},
+		})
+	}
+
 	return writes, nil
+}
+
+// declarationOutcomeOfCustomerServiceRule 把客户服务规则册的落点折成声明通道的落点，判据同
+// declarationOutcomeOfSettlementPolicy：折的是「落在哪一格」，逐值折不做数值转换。
+func declarationOutcomeOfCustomerServiceRule(
+	outcome ports.CustomerServiceRuleSaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.CustomerServiceRuleSaved:
+		return ports.DeclarationSaved, nil
+	case ports.CustomerServiceRuleAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.CustomerServiceRuleContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("customer service rule body: 集合外的客户服务规则落点 %q", outcome)
+	}
 }
 
 // pricePolicyCaliberOf 按汇率格在不在场选构造门：nil 是合法缺席，走不带 Fx 的那条；零值 Fx 只会
