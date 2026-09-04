@@ -1,5 +1,7 @@
 # 合成纵向闭环设计（SYN-*）
 
+> **本表止于 `1fff679`（2026-08-18），此后不维护。** 下文推进表里 `CONS-INTAKE` / `CONS-DELIVERY` / `CONS-INTAKE-REASSESS` 三行的「依赖」栏所指今天都已落进 `cmd/parcel-dispatch/assemble.go`（取证见 [unresolved-review-20260904/report.md](../unresolved-review-20260904/report.md) A 组「auto-reroute-demo-reachability/01」条，核于 `08e62ec`），「0. 先说结论」那六条写于同一时点、同受此限，逐条现状本行不重核。**不要再把本表当排期用**；现行缺口以各票面为准（`auto-reroute-demo-reachability/01` 与 `remaining-work-a3a4814.md`）。本行由通道 2 于 2026-09-04 代簿记加，正文一字未动。
+
 - 证据点：`origin/main` **`1fff679`**（`test(pc): disambiguate rule-package fixtures after B6/B7 integration`）
 - 性质：只读设计。本文件之外未改生产代码、未改 `docs/adr`、未更新开发主线。
 - 目的：给出一条**可执行、证据诚实**的合成纵向测试路径：委托 → 路由 → 收寄 → 履约 → 追踪 → 计价结算。所有实例值标 **S**，不冒充真实租户、不升级为 `R`/`P`。

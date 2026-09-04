@@ -1,8 +1,8 @@
 # 最小产品版本正文及持久化 · 设计
 
 Category: feature
-Status: **机制半边已落** origin/main `1fff679`（2026-08-18）。五项裁定均已落地；实例半边仍空，
-不宣称真实可配置完成。裁定原文与逐项落法见
+Status: resolved——**机制半边已落** origin/main `1fff679`（2026-08-18）。五项裁定均已落地；实例半边仍空，
+不宣称真实可配置完成（状态词由通道 2 于 2026-09-04 统一为 tracker 词表里的 `resolved`，正文一字未动）。裁定原文与逐项落法见
 [open-decisions.md](./open-decisions.md)；落地清点见 §8。
 
 ## 进度

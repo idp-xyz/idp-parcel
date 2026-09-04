@@ -1,7 +1,7 @@
 # 评审 #7「最小产品版本正文及持久化」设计输入包
 
 Category: chore（只读备料）
-Status: 取证快照，不随实施改写。落地清点见 [design.md §8](./design.md)（取证 `1fff679`）。
+Status: resolved——取证快照，不随实施改写。落地清点见 [design.md §8](./design.md)（取证 `1fff679`）。（状态词由通道 2 于 2026-09-04 统一为 `resolved`，与同目录另两份一致；正文一字未动）
 
 承 MCP-1 派包（task-b7bd03b6）。**取证于 HEAD `2fbe405`**；当时树上另有 MCP-2 在途未提交内容
 （`internal/partycommercial/ports/ports.go` 修改、`internal/partycommercial/domain/pre_acceptance_control.go`、
