@@ -567,6 +567,9 @@ type PricingPlanStructures struct {
 	// 条款：它是可缺的另一个轴，多数 SYN 卡不声明；「与重量取整同形」说的是声明的形状（模式 + 进位
 	// 单位），不是构造参数的位置。
 	amountRounding *AmountRoundingPolicy
+	// referenceCatalogues 是卡声明的目录绑定（ADR-0109），可缺：没绑目录的卡保留调用方给分区的路径，
+	// 两条路径由这一格是否为空在内容摘要里分开。
+	referenceCatalogues []ReferenceCatalogueLink
 }
 
 func NewPricingPlanStructures(
@@ -704,7 +707,8 @@ func (structures PricingPlanStructures) AmountRounding() (AmountRoundingPolicy, 
 // Declared 报出方案是否声明了任何结构，使得求值器必须先执行它才能产出完整金额。
 func (structures PricingPlanStructures) Declared() bool {
 	return len(structures.surchargeRules) > 0 || len(structures.dependencies) > 0 ||
-		len(structures.referenceSeries) > 0 || len(structures.exclusions) > 0
+		len(structures.referenceSeries) > 0 || len(structures.exclusions) > 0 ||
+		len(structures.referenceCatalogues) > 0
 }
 
 func (structures PricingPlanStructures) valid() bool {
@@ -769,7 +773,7 @@ func (structures PricingPlanStructures) valid() bool {
 	if structures.amountRounding != nil && !structures.amountRounding.valid() {
 		return false
 	}
-	return true
+	return validCatalogueLinks(structures.referenceCatalogues)
 }
 
 func trimmed(value string) bool {

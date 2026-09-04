@@ -446,6 +446,18 @@ type canonicalPricingPlan struct {
 	// 金额取整策略是价卡内容（ADR-0107 Decision 三），进内容摘要；未声明时省略——两张只差
 	// 「声明了 / 没声明」的卡摘要必须不同，而没声明的卡彼此之间不该因这一格多出差异。
 	AmountRounding *canonicalAmountRoundingDocument `json:"amount_rounding,omitempty"`
+	// 目录绑定（ADR-0109 Decision 三、四）：绑了目录的卡与保留调用方给分区的卡在这一格分开；没绑的
+	// 卡省略，理由同上一格。
+	ReferenceCatalogues []canonicalReferenceCatalogueDocument `json:"reference_catalogues,omitempty"`
+}
+
+type canonicalReferenceCatalogueDocument struct {
+	Kind        string `json:"kind"`
+	CatalogueID string `json:"catalogue_id"`
+}
+
+func canonicalReferenceCatalogueValue(link ReferenceCatalogueLink) canonicalReferenceCatalogueDocument {
+	return canonicalReferenceCatalogueDocument{Kind: link.kind.String(), CatalogueID: link.catalogueID}
 }
 
 type canonicalAmountRoundingDocument struct {
@@ -525,10 +537,15 @@ func calculatePricingPlanContentDigest(plan PricingPlanVersion) string {
 		rounding := canonicalAmountRoundingValue(*plan.structures.amountRounding)
 		amountRounding = &rounding
 	}
+	var catalogues []canonicalReferenceCatalogueDocument
+	for _, link := range plan.structures.referenceCatalogues {
+		catalogues = append(catalogues, canonicalReferenceCatalogueValue(link))
+	}
 	document := canonicalPricingPlan{
-		Canonicalization: canonicalizationVersion,
-		Exclusions:       exclusions,
-		AmountRounding:   amountRounding,
+		Canonicalization:    canonicalizationVersion,
+		Exclusions:          exclusions,
+		AmountRounding:      amountRounding,
+		ReferenceCatalogues: catalogues,
 		Reference:        canonicalReference(plan.reference),
 		Scope:            plan.scope.String(),
 		Direction:        plan.direction.String(),

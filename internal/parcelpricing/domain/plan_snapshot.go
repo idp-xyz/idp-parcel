@@ -157,6 +157,11 @@ type exclusionRuleSnapshot struct {
 	Condition triggerConditionSnapshot `json:"condition"`
 }
 
+type referenceCatalogueLinkSnapshot struct {
+	Kind        string `json:"kind"`
+	CatalogueID string `json:"catalogueId"`
+}
+
 // amountRoundingSnapshot 是金额取整策略在快照里的形状（ADR-0107）：模式、进位单位（带币种）、应用点。
 type amountRoundingSnapshot struct {
 	Mode      string        `json:"mode"`
@@ -197,6 +202,7 @@ type pricingPlanSnapshot struct {
 	ReferenceSeries  []referenceSeriesBindingSnapshot `json:"referenceSeries,omitempty"`
 	Exclusions       []exclusionRuleSnapshot          `json:"exclusions,omitempty"`
 	AmountRounding   *amountRoundingSnapshot          `json:"amountRounding,omitempty"`
+	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
 	Manifest         []versionReferenceSnapshot       `json:"manifest"`
 	ContentDigest    string                           `json:"contentDigest"`
 }
@@ -269,6 +275,11 @@ func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {
 		rounding := amountRoundingDocumentOf(*plan.structures.amountRounding)
 		document.AmountRounding = &rounding
 	}
+	for _, link := range plan.structures.referenceCatalogues {
+		document.Catalogues = append(document.Catalogues, referenceCatalogueLinkSnapshot{
+			Kind: link.kind.String(), CatalogueID: link.catalogueID,
+		})
+	}
 	for _, reference := range plan.manifest.references {
 		document.Manifest = append(document.Manifest, versionReferenceOf(reference))
 	}
@@ -314,6 +325,11 @@ func pricingPlanFrom(document pricingPlanSnapshot) PricingPlanVersion {
 	if document.AmountRounding != nil {
 		rounding := amountRoundingFrom(*document.AmountRounding)
 		plan.structures.amountRounding = &rounding
+	}
+	for _, link := range document.Catalogues {
+		plan.structures.referenceCatalogues = append(plan.structures.referenceCatalogues, ReferenceCatalogueLink{
+			kind: CatalogueKind(link.Kind), catalogueID: link.CatalogueID,
+		})
 	}
 	references := make([]VersionReference, 0, len(document.Manifest))
 	for _, reference := range document.Manifest {
