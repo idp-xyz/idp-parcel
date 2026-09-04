@@ -1,8 +1,8 @@
 # 一线作业过渡的受控批量导入 CLI——模板 → 既有命令用例，硬期限守卫，来源标记
 
 Category: enhancement
-Status: in-progress——本轮范围（收寄子命令、期限守卫、模板与说明、真库往返用例）已全部落主线；余下的是被别处阻断的两格，见下
-Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立票，见「阻断在别处的两格」）
+Status: in-progress——收寄子命令、期限守卫、模板与说明、真库往返用例已落主线；集运子命令 2026-09-04 落分支 `mcp6-fti-consolidation` 待 MCP-1 重放进 main（见 Comments）；余下一格（`RECEIVED` 行的身份核对缝）阻断在 PS 侧，见下
+Blocked by: 无（本票自身不被阻断；余下那一处**内容缺口**有独立票，见「阻断在别处的两格」）
 
 [ADR-0089](../../../docs/adr/0089-frontline-transition-controlled-import-with-structural-sunset.md) 的机制半边。
 决定归 ADR，本票只记实现与验证；四类现场事实的逐格判定归
@@ -10,7 +10,9 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
 
 ## 已落主线
 
-`cmd/parcel-frontline-import`，子命令今天只有 `intake`（收寄）。
+`cmd/parcel-frontline-import`，子命令 `intake`（收寄）已在主线；`consolidation`（集运）在分支上
+待合入，形状与下面各条同源（模板骨架、四格去向、退出码、来源标记都是同一套实现），细节见
+Comments 2026-09-04 MCP-6。
 
 - **期限守卫** `guardStructuralSunset`：期限写成源码常量 `structuralSunsetLiteral`，守卫是 `run`
   的第一条语句，时钟经参数注入。三个用例钉住它——期限时刻本身放行、晚一纳秒即拒、同一
@@ -46,18 +48,19 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
    这一点打印出来。`REFUSED` / `SCAN_ONLY` 两支不经身份核对，照常落库。恢复动作在 PS 侧，
    见 `.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md`；
    本口要换的只有 `buildIntakeImporter` 的 `identity` 参数那一格。
-2. ~~**集运子命令本期不建。**~~ **已解阻（2026-09-02）**：
+2. ~~**集运子命令本期不建。**~~ ~~**已解阻（2026-09-02）**~~ **已落（2026-09-04）**：
    [no-consolidation-fact-provenance/01](../../no-consolidation-fact-provenance/issues/01-consolidation-commands-carry-no-source-executor-evidence-or-business-time.md)
-   已落主线，集运六口现在收 `domain.WorkFactSource`（来源身份、执行方、证据、业务发生时间），
-   来源身份兼幂等键，业务时间不再取 `Clock.Now()`。本票加子命令的前提已备齐，备料仍在
-   映射表「集运：输入逐格」节。
+   于 2026-09-02 落主线后集运六口收 `domain.WorkFactSource`；本票据此加了 `consolidation`
+   子命令（模板 `CONSOLIDATION-1`，六种动作对六口），来源标记落在 `WorkFactSource` 的来源身份
+   与证据引用上，见 Comments 2026-09-04 MCP-6。映射表「集运：输入逐格」节仍是 `98e1752` 之前
+   的签名与「无落点」判定，已过期，不在本票地盘，待映射表所有者改口。
 
 换单与称重两类无既有用例可接，按 ADR-0089 细则⑤ 如实记缺口、不造用例，见映射表。
 
 ## 未办
 
-本票本轮范围已清。余下两件都不在本票地盘，各自解阻后再回来加子命令，见上「阻断在别处
-的两格」。
+本票本轮范围已清。余下一件（`RECEIVED` 行的身份核对缝）不在本票地盘，PS 侧解阻后只换
+`buildIntakeImporter` 的 `identity` 参数那一格，见上「阻断在别处的两格」第 1 格。
 
 ## 完成判据
 
@@ -81,3 +84,38 @@ Blocked by: 无（本票自身不被阻断；两处**内容缺口**各有独立�
   模板那几列不必另谈一套词。要注意的是导入来源标记落点：收寄口走的是 `SourceID` 加证据引用，
   集运口同样由 `WorkFactSource` 的来源身份承担，节点作业查阅页的「开启来源」「封装来源」两列
   已能把导入与扫描两条路分开显示——这正是本票当初报出边界 B 的那个诉求。
+- 2026-09-04 MCP-6：**加集运子命令 `consolidation`**，分支 `mcp6-fti-consolidation`（基线
+  `main@299e143`，代码基线同 `a17bfac`）三笔 + 文档一笔：`3c57aab` 把两份模板共用的骨架从收寄口
+  抽出（`decodeTemplate` / `rowResult` / `exitCodeFor` / `importMarker`，零行为变化，`intakeSourceID`
+  与 `intakeEvidence` 保留原名因 ADR-0089 决定④ 点名）；`ac0a536` 模板 `CONSOLIDATION-1` 译装；
+  `6c4eef5` 导入链、子命令与真库往返；本笔文档。重放进 main 后 SHA 会换，以 MCP-1 广播的对照
+  为准。
+  - **模板列与六口对照**：`action` 直接用领域 `ConsolidationActionKind` 的字面名（`OPEN_UNIT` /
+    `ADD_MEMBER` / `REMOVE_MEMBER` / `SEAL_UNIT` / `UNSEAL_UNIT` / `CLOSE_UNIT`），模板、报告与
+    `consolidation_fact.action` 三处同词；`unitRef`→`Unit`，`assetRef`→`Open.Asset`，`memberUnit`→
+    `AddMember/RemoveMember.Member`，`sealRef`→`Seal.Seal`，`basisRef`→`Seal/Unseal.Basis` 与
+    `Close.Disposition`（关闭格可选）；每种动作的必填/禁填是一张表 `actionShapes`，禁填有值拒不
+    忽略。来源四格：来源身份 `FTI/CONSOLIDATION-1/<batchRef>/<factRef>`（与录入者无关，兼幂等键）、
+    证据 `FTI/CONSOLIDATION-1/<operator>/<evidenceRef>`、执行方取新增列 `performedBy`（现场动手的
+    人，与录入内勤分立——`PerformingPartyReference` 的定义就是这个），业务时间取 `occurredAt`，
+    记录时刻取时钟。
+  - **去向译码**：六格落地；`EXISTING_RESULT` / `EXISTING` / `MEMBER_ALREADY_CONTAINED` 答重放
+    （后两格是别的来源先做了同一件事，本行不留来源事实，重跑答同一句）；`MEMBER_ELSEWHERE_CONTAINED`
+    （报出对方单元）/ `UNIT_NOT_FOUND` / `NOT_ACCEPTED` / `SOURCE_CONFLICT` 答被拒——都是重跑不会变
+    的答案；`UNDECIDED` 与编排 Go 错误答未决。退出码照收寄口，未决压过被拒。行按模板顺序推进，
+    不按 `occurredAt` 重排。
+  - **验证**（`6c4eef5`，隔离 worktree）：`gofmt -l` 空、`go build` / `go vet` 退 0；包内用例
+    **DSN 未设：11 PASS / 4 SKIP；DSN 已设（门禁容器 55432）：15 PASS / 0 SKIP**，其中
+    `TestFrontlineConsolidationImportVerticalOnRealPostgres`（九行全落地退 0、两版快照、封装时刻取
+    模板业务时间、登记带执行方与两处标记、重跑全重放、封装行换时间答冲突退 2 且原登记原快照不动）
+    与 `TestFrontlineConsolidationImportRejectsWithoutRecording`（四种被拒一条来源事实都不留、单元状态
+    不动、别的来源再开同一单元答重放）各 PASS。反向那次真的数出 4 个 SKIP。
+  - **发现的 nodeoperations 侧缺口**（如实记，不在 CLI 侧绕）：① 六口命令都**没有节点/位置一格**
+    ——UC-NO-003 结果契约「作业事实已形成」要保存`位置`，`ConsolidationFactRecord` 与六个命令
+    类型里都没有它；模板因此没有 `node` 列（收寄模板有）。导入的装箱封签事实说不出在哪个场站
+    发生，这是六口形状本身的缺口，不是模板漏列。② 编排把领域拒绝（封装态 / 未封装 / 空单元 /
+    成员未清空 / 重复移入）全部压成 `NOT_ACCEPTED`，CLI 分不出哪一种，报文只能列举可能原因；
+    对现场纠错是一格损耗，不阻断。③ 映射表「集运：输入逐格」节仍写着 `98e1752` 之前的三口签名
+    与「无落点」判定，已过期；不在本票地盘。
+  - `template.md` 补「集运模板（`CONSOLIDATION-1`）」一节（逐列、六种动作各自填什么、集运行多
+    出的几种被拒），示例全合成值；「导入之后」改成两份模板通用。
