@@ -1,8 +1,8 @@
 # 索赔期限与最低材料两维改经消费侧适配器读 `party-commercial` 客户服务规则正文——今天恒答未登记
 
 Category: enhancement
-Status: in-progress——MCP-4（2026-09-04，基线 `mcp4-pcgaps05@34d8ad90`，隔离分支 `mcp4-ve03`；05 入 main 后 rebase）
-Blocked by: [party-commercial-context-gaps/05](../../party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md)（正文册、点读口与批文口，分支 `mcp4-pcgaps05`，待重放进 main；MCP-1 派单 task-10b1e66b 代裁「05 已完、由 MCP-1 重放，本票据以开工」）
+Status: resolved（2026-09-04 MCP-4，分支 `mcp4-ve03`，已验 tip `91967a6b`，基线 main `9e4e90bb`；见 Comments 完成记录）
+Blocked by: [party-commercial-context-gaps/05](../../party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md)（已入 main：九笔重放，`SaveCustomerServiceRule` / `CustomerServiceRuleContentView` 在 `05992ce2`，票面转 resolved 在 `469bb9ba`；本票开工时阻塞已解除）
 
 由 [ADR-0104](../../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)
 Consequences「VE 侧另立一票」与票 pc-gaps/05「另立而不在本票」一句立票。本票是 VE 地盘，
@@ -141,3 +141,31 @@ pc-gaps/05 落地前 **VE 行为一字不变**（ADR-0104 Consequences 原句）
   `SaveCustomerServiceRule`、`CustomerServiceRuleContentView`、发布通道、批文一节、目录读面一格；
   待 MCP-1 重放进 main 后本票的 Blocked by 才算解除。「未决」四条里前两条（起算事实源、业务日历）
   决定本票能不能一次做完——建议开工前先经 `/grill-with-docs` 对 VE CONTEXT 索赔一节过一遍。
+- 2026-09-04 MCP-4：**resolved**。分支 `mcp4-ve03`（隔离 worktree，先基 `mcp4-pcgaps05@34d8ad90`，05 入
+  main 后两次 rebase，最终基线 main `9e4e90bb`），**已验 tip `91967a6b`**，不推、交 MCP-1 重放。六笔：
+  - `4baadba8` 票面转 in-progress，四条未决过 `/grill-with-docs` 写进「裁决」节；
+  - `555461fc` 新包 `internal/visibilityexception/adapters/partycommercial`：`ClaimServiceRules`（装饰
+    `EligibilityRuleView`）、`RuleResolutionKeySource`（实例半边协作者接口，留包内）、两个哨兵
+    `ErrUntranslatableAnswer` / `ErrCustomerServiceRuleUnresolved`；测试对着真 PC 编排解闭包，只替身
+    权威读口、解析库、正文读口与 VE 自己的册（七个用例，含全函数分派与构造期守卫）；
+  - `99200610` `claim_eligibility.go` 头注改口（完成标准第三条）与两维交候处注释，只动注释；
+  - `8d9cc4ee` `cmd/parcel-api/assemble_claims.go`：`buildClaimEligibilityRules` 把适配器叠在多租户读
+    适配器上，PC 闭包编排 + 解析库 + 点读口接真，Keys 传 nil；`buildClaimsOrchestration` 经
+    `buildClaimsOrchestrationWith(db, nil)`；装配测试 `TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial`
+    对真库钉两态 + 生产装配不变那一格；
+  - `e44a2e0b` 立票 04（解析键登记面，draft）与 05（编排改名两格，ready-for-agent）；
+  - `fd49465f` 装配测试的事务回调只做 IO（`TestNoTransactionClosureCarriesAGoexitAssertion` 点名的三处）；
+  - `91967a6b` 机制清点在 `fd49465f` 干净树上重生成（VE 生产/测试各 +1、跨上下文消费缝 +1 组）。
+  **四条未决各自的去向**：`Registered` 粒度——自裁（各维按 PC 那一项有没有行），已落代码与用例；
+  起算事实源、业务日历——留格（`Deadline` 零值，编排既有守卫停在未决），能力归谁未裁，报 MCP-1；
+  `Notice` 来源——留格（零值），PC 放宽 vs VE 自建索赔通知依据册要 owner 裁，报 MCP-1；顺带发现的
+  `SupplementDeadline`——留格，与起算事实源同因。留格的编排后果（两格未决命名不准）已立票 05。
+  **VE 词到 PC 键的翻译**立缝不代拟，生产装配 Keys=nil、行为与本票之前一字不变；登记面立票 04。
+  **验证（`91967a6b` 干净树）**：`gofmt -l` 空；`go build` / `go vet` 退 0；无 DSN `go test -count=1 ./...`
+  96 包 ok / 0 FAIL；带 DSN `-p 1 -count=1 -v` VE + parcel-api + architecture + migrations
+  **1020 PASS / 0 SKIP / 0 FAIL**（17 包 ok），探针 `TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial`
+  带 DSN PASS、无 DSN SKIP；`tools/mechanism-inventory` vet/test 退 0。测试输入是隔离合成，只记 `S`。
+  **完成标准逐条**：已登记正文的租户两维 `Registered` 为真、`RuleVersion` = `SYN-TENANT-1/SYN-CSR-1/v1`、
+  `Required` 与 PC 条目逐项相等（装配测试钉）；未登记照旧未登记、编排停的格不变（同一测试态一 +
+  生产装配那一格）；两态对真库钉住、VE 全包与 `cmd/parcel-api` 真库套件绿；头注改口已落。**无新端点、
+  无迁移、无基线改动**，MCP-1 无需落装配行。
