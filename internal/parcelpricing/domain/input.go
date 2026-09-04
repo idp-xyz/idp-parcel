@@ -274,14 +274,14 @@ func (input PricingInputSnapshot) WithReferenceSeries(values ...ReferenceSeriesV
 			return PricingInputSnapshot{}, ErrInvalidReferenceSeries
 		}
 		// 同一序列有两期取值，会把选哪一个交给遍历顺序决定。
-		if _, exists := seen[value.seriesReadingKey()]; exists {
-			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.seriesReadingKey())
+		if _, exists := seen[value.ReadingKey()]; exists {
+			return PricingInputSnapshot{}, fmt.Errorf("%w: duplicate reading for %s", ErrInvalidReferenceSeries, value.ReadingKey())
 		}
-		seen[value.seriesReadingKey()] = struct{}{}
+		seen[value.ReadingKey()] = struct{}{}
 		copyOfValues = append(copyOfValues, value)
 	}
 	sort.SliceStable(copyOfValues, func(left, right int) bool {
-		return copyOfValues[left].seriesReadingKey() < copyOfValues[right].seriesReadingKey()
+		return copyOfValues[left].ReadingKey() < copyOfValues[right].ReadingKey()
 	})
 	updated := copyInputSnapshot(input)
 	updated.seriesValues = copyOfValues

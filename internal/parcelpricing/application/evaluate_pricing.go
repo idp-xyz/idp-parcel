@@ -212,24 +212,15 @@ func missingSeriesBindings(request domain.EvaluationRequest) []domain.ReferenceS
 	}
 	present := make(map[string]struct{})
 	for _, value := range request.Input().ReferenceSeriesValues() {
-		present[readingKey(value.Kind(), value.Reference().ID())] = struct{}{}
+		present[value.ReadingKey()] = struct{}{}
 	}
 	missing := make([]domain.ReferenceSeriesBinding, 0)
 	for _, binding := range request.Plan().Structures().ReferenceSeries() {
-		if _, found := present[readingKey(binding.Kind(), binding.SeriesID())]; !found {
+		if _, found := present[binding.ReadingKey()]; !found {
 			missing = append(missing, binding)
 		}
 	}
 	return missing
-}
-
-// readingKey 是绑定与读数对上的键：费率序列按种类（一张卡每种一条），金额序列按（种类，标识）——同种可绑多条
-// （ADR-0110 Decision 四）。
-func readingKey(kind domain.ReferenceSeriesKind, seriesID string) string {
-	if kind == domain.ReferenceSeriesPublishedAmount {
-		return kind.String() + "|" + seriesID
-	}
-	return kind.String()
 }
 
 // withSeriesReadings 把补齐的取值装回请求。评价请求的其余部分（标识、方案、证据层级）
@@ -254,11 +245,11 @@ func borrowSeriesReadings(request domain.EvaluationRequest, existing domain.Pric
 	}
 	frozen := make(map[string]domain.ReferenceSeriesValue)
 	for _, value := range existing.Input().ReferenceSeriesValues() {
-		frozen[readingKey(value.Kind(), value.Reference().ID())] = value
+		frozen[value.ReadingKey()] = value
 	}
 	readings := make([]domain.ReferenceSeriesValue, 0, len(missing))
 	for _, binding := range missing {
-		if value, found := frozen[readingKey(binding.Kind(), binding.SeriesID())]; found && value.Reference().ID() == binding.SeriesID() {
+		if value, found := frozen[binding.ReadingKey()]; found && value.Reference().ID() == binding.SeriesID() {
 			readings = append(readings, value)
 		}
 	}

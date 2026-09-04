@@ -179,13 +179,23 @@ func (input PricingInputSnapshot) amountReading(seriesID string) (ReferenceSerie
 	return ReferenceSeriesValue{}, false
 }
 
-// seriesReadingKey 是一条读数在快照里的去重键：费率序列按种类，金额序列按（种类，标识）——同一条金额序列
-// 两期取值会把选哪一个交给遍历顺序决定，而两条不同的金额序列各是各的。
-func (resolved ReferenceSeriesValue) seriesReadingKey() string {
-	if resolved.kind.carriesAmount() {
-		return resolved.kind.String() + "|" + resolved.reference.ID()
+// ReadingKey 是一条读数在快照里的去重键，也是它与方案绑定对上的键：费率序列按种类（一张卡每种一条），金额
+// 序列按（种类，标识）——同一条金额序列两期取值会把选哪一个交给遍历顺序决定，而两条不同的金额序列各是各的。
+// 编排层补齐读数时用同一个键，规则只在这里定一次。
+func (resolved ReferenceSeriesValue) ReadingKey() string {
+	return seriesReadingKey(resolved.kind, resolved.reference.ID())
+}
+
+// ReadingKey 是这条绑定要对上的读数键，与 ReferenceSeriesValue.ReadingKey 同一条规则。
+func (binding ReferenceSeriesBinding) ReadingKey() string {
+	return seriesReadingKey(binding.kind, binding.seriesID)
+}
+
+func seriesReadingKey(kind ReferenceSeriesKind, seriesID string) string {
+	if kind.carriesAmount() {
+		return kind.String() + "|" + seriesID
 	}
-	return resolved.kind.String()
+	return kind.String()
 }
 
 // describeRate 分别写出来自序列的费率的两半。CONTEXT：燃油费率是承运商当周公布费率与
