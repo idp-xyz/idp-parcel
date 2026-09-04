@@ -94,14 +94,16 @@ internal/partycommercial/domain CustomerServiceRuleVersion
 
 # ---- settlement-accounting ----
 
-# 一类：经 FormSupplierExpectedCost 取得，它在函数名棘轮基线里（供应商预计成本的执行器未接）。
-# 随它出名单。
+# 本段开工时八条都是一类（经 FormAuditedPayable / FormSupplierCreditNote / FormSupplierExpectedCost
+# 取得，三个工厂都在函数名棘轮基线里），2026-09-04 随 mechanism-executor-triage/06 两笔全部剪掉，
+# 现在没有条目可指——留着这一段是为了让下一个往本段加条目的人看见这段历史。
 # 审核应付与贷项那一族（AuditedPayable / PayableID / SupplierCreditNote / SupplierCreditNoteSpec /
-# CreditNoteID / CreditNoteVersion / CreditReasonReference）曾在这里，2026-09-04 随
-# mechanism-executor-triage/06 SA-a 剪掉：FormAuditedPayable / FormSupplierCreditNote 接进
-# application/audit_supplier_bill.go 后七者经命令、结果与登记记录入种子。**在 e8ffe32 的干净内容
-# 上两法同得剪前 54、剪后 47**，只对该检出成立。
-internal/settlementaccounting/domain SupplierExpectedCostSpec
+# CreditNoteID / CreditNoteVersion / CreditReasonReference）随 SA-a 剪掉：FormAuditedPayable /
+# FormSupplierCreditNote 接进 application/audit_supplier_bill.go 后七者经命令、结果与登记记录入种子。
+# **在 e8ffe32 的干净内容上两法同得剪前 54、剪后 47**，只对该检出成立。
+# SupplierExpectedCostSpec 随 SA-c 剪掉：FormSupplierExpectedCost 接进
+# application/form_supplier_expected_cost.go 后它经形成编排入种子。**在 42f584a 的干净内容上两法
+# 同得剪前 35、剪后 34**，只对该检出成立（这一剪本该随 1ea2597 同笔，落成了下一笔）。
 
 # ---- visibility-exception ----
 

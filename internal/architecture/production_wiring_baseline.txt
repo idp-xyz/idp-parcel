@@ -262,7 +262,9 @@ internal/visibilityexception/domain SubmitEvidence
 
 
 # —— settlement-accounting ——
-# 以下各条均产出带不变式校验的领域对象；除 FormSupplierExpectedCost（见其自注）外包外零引用。
+# 本组开工时四条均产出带不变式校验的领域对象、除 FormSupplierExpectedCost 外包外零引用；2026-09-04
+# 随 mechanism-executor-triage/06 三笔全部剪掉，现在没有条目可指——留着这一段是为了让下一个往本组
+# 加条目的人看见这段历史。
 #
 # IncludeAdjustmentInSubsequentPeriod 曾在这里，2026-09-04 随 mechanism-executor-triage/06 的 SA-b
 # 剪掉：application/cut_off_publish_statement.go 的 CutOffPublishStatementHandler.IncludeAdjustment
@@ -277,9 +279,18 @@ internal/visibilityexception/domain SubmitEvidence
 # / FormSupplierCreditNoteCommand 是近名不是同名，门禁比的是精确相等（tf-unwired-seven/05 那段核过
 # 匹配码），是第二种。**在 e8ffe32 的干净内容上（`git show` 取本文件）两法同得剪前 21、剪后 19**；
 # 两个数只对该检出成立，下一个改名单的人在自己那一刻的 HEAD 上重取。
-# 这一条与 DecideDisclosure 是全部 33 条里仅有的两个**已经走出 domain 层**的：适配器与应用层
-# 都在、两边都有测试，唯独没有生产调用路径。真烂会先烂在这两条上，别的都还没开始。
-internal/settlementaccounting/domain FormSupplierExpectedCost
+#
+# FormSupplierExpectedCost 曾在这里，2026-09-04 随同票 SA-c 剪掉：application/form_supplier_expected_cost.go
+# 的 FormSupplierExpectedCostHandler.Handle 是它的生产调用方（UC-SA-002 步 5 的 BUY 方向）。它与
+# DecideDisclosure 曾是全部条目里仅有的两个**已经走出 domain 层**的（适配器与应用层都在、两边都有
+# 测试、唯独没有生产调用路径，基线预言「真烂会先烂在这两条上」）——这一条今天接上了；BUY 评价到
+# 本上下文的入向缝在 SA 侧只落了端口与编排，消费侧适配器等提供方的金额取整槽（票面记着）。成因
+# 三分先分过：全仓该名字只有一处声明（domain/supplier_expected_cost.go），同笔新增的
+# FormSupplierExpectedCostHandler / Command / Deps 是前缀名不是同名，是第二种。**在 42f584a 的干净内容
+# 上两法同得剪前 17、剪后 16**，只对该检出成立（这一剪本该随 1ea2597 同笔，落成了下一笔——那笔的
+# 说明里「已随 616646d 入库」是误判，成因见本笔提交信）。**至此 settlement-accounting 这一组清空**——本票
+# （mechanism-executor-triage/06）开工时它有 4 条。名单清空只判名单清空：本门禁只量导出工厂，
+# UC-SA-002 步 2「结算提交主要范围…请求评价」那条编排今天仍不存在，它不是工厂，这里量不到。
 
 
 # —— customs-compliance ——
