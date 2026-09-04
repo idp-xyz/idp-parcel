@@ -397,13 +397,16 @@ func (judgment ActualCarrierJudgment) WithdrawEvidence(
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
 	}
 	bases := judgment.Current().Bases()
-	index, present := indexOfBasis(bases, reference)
-	if !present {
+	if _, present := indexOfBasis(bases, reference); !present {
 		return ActualCarrierJudgment{}, ErrCarrierEvidenceNotConsidered
 	}
-	remaining := append(bases[:index:index], bases[index+1:]...)
+	remaining := make([]CarrierEvidence, 0, len(bases)-1)
 	businessTime := judgment.establishedAt
-	for _, basis := range remaining {
+	for _, basis := range bases {
+		if basis.reference == reference {
+			continue
+		}
+		remaining = append(remaining, basis)
 		if basis.occurredAt.After(businessTime) {
 			businessTime = basis.occurredAt
 		}
@@ -447,8 +450,8 @@ func (judgment ActualCarrierJudgment) appendVersion(
 //   - 恰一个在册主体 → 已识别；
 //   - 一条依据都没有 → 待确认（无合格证据）。
 func deriveCarrierVerdict(bases []CarrierEvidence) CarrierVerdict {
+	subjects := map[CarrierSubject]struct{}{}
 	var identified CarrierSubject
-	distinct := 0
 	unregistered := false
 	for _, basis := range bases {
 		subject, registered := basis.Subject()
@@ -456,17 +459,15 @@ func deriveCarrierVerdict(bases []CarrierEvidence) CarrierVerdict {
 			unregistered = true
 			continue
 		}
-		if distinct == 0 || subject != identified {
-			distinct++
-			identified = subject
-		}
+		subjects[subject] = struct{}{}
+		identified = subject
 	}
 	switch {
-	case distinct >= 2:
+	case len(subjects) >= 2:
 		return CarrierVerdict{pending: CarrierEvidenceSourceConflict}
 	case unregistered:
 		return CarrierVerdict{pending: CarrierIdentityNotRegistered}
-	case distinct == 1:
+	case len(subjects) == 1:
 		return CarrierVerdict{subject: identified}
 	default:
 		return CarrierVerdict{pending: NoQualifiedCarrierEvidence}

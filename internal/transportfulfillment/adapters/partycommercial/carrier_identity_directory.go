@@ -22,8 +22,8 @@ var ErrUntranslatableAnswer = errors.New("transport fulfillment partycommercial 
 
 // BusinessPartySource 是参与方册的最新修订读口，按 PC 的 PartyIdentityRegistry 原形取。
 //
-// 只取这一个方法而不依赖整个 PartyIdentityRegistry：那个口带着四组 Save，消费侧拿到它就拿到了往 PC 册子
-// 里写身份的能力，而「本上下文不铸身份」正是要在类型上就表达出来的那句话。
+// 只取这一个方法而不依赖整个 PartyIdentityRegistry：那个口带着写口，消费侧拿到它就拿到了往 PC 册子里写
+// 身份的能力，而「本上下文不铸身份」正是要在类型上就表达出来的那句话。
 type BusinessPartySource interface {
 	LoadLatestBusinessParty(
 		ctx context.Context,

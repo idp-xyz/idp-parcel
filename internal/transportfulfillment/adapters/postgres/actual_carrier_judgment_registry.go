@@ -220,11 +220,8 @@ func insertJudgmentVersion(
 	version domain.ActualCarrierJudgmentVersion,
 	recordedAt time.Time,
 ) (int64, error) {
-	var subjectKind, subjectRef, pendingReason *string
-	if subject, identified := version.Verdict().Identified(); identified {
-		kind, reference := subject.Kind().String(), subject.Reference()
-		subjectKind, subjectRef = &kind, &reference
-	}
+	var pendingReason *string
+	subjectKind, subjectRef := carrierSubjectColumns(version.Verdict().Identified())
 	if reason, pending := version.Verdict().Pending(); pending {
 		name := reason.String()
 		pendingReason = &name
@@ -254,11 +251,9 @@ func insertJudgmentVersion(
 	}
 
 	for _, basis := range version.Bases() {
-		var basisSubjectKind, basisSubjectRef, material *string
-		if subject, registered := basis.Subject(); registered {
-			kind, reference := subject.Kind().String(), subject.Reference()
-			basisSubjectKind, basisSubjectRef = &kind, &reference
-		} else {
+		var material *string
+		basisSubjectKind, basisSubjectRef := carrierSubjectColumns(basis.Subject())
+		if basisSubjectKind == nil {
 			text := basis.Material()
 			material = &text
 		}
@@ -281,6 +276,16 @@ func insertJudgmentVersion(
 		}
 	}
 	return tag.RowsAffected(), nil
+}
+
+// carrierSubjectColumns 把一个在册承运主体摊成库面两列；主体缺席时两列都是 NULL。版本行与依据行共用同一个
+// 摊法——两处各写一遍，加列那天就会有一处漏。
+func carrierSubjectColumns(subject domain.CarrierSubject, present bool) (*string, *string) {
+	if !present {
+		return nil, nil
+	}
+	kind, reference := subject.Kind().String(), subject.Reference()
+	return &kind, &reference
 }
 
 // judgmentVersionSpecFrom 逐列走各自的构造门装回一版，不按列直接拼结构体——构造门是坏行的第一道拦截，
