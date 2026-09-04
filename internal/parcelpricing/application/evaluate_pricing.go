@@ -210,17 +210,26 @@ func missingSeriesBindings(request domain.EvaluationRequest) []domain.ReferenceS
 	if _, replay := request.ReplayOf(); replay {
 		return nil
 	}
-	present := make(map[domain.ReferenceSeriesKind]struct{})
+	present := make(map[string]struct{})
 	for _, value := range request.Input().ReferenceSeriesValues() {
-		present[value.Kind()] = struct{}{}
+		present[readingKey(value.Kind(), value.Reference().ID())] = struct{}{}
 	}
 	missing := make([]domain.ReferenceSeriesBinding, 0)
 	for _, binding := range request.Plan().Structures().ReferenceSeries() {
-		if _, found := present[binding.Kind()]; !found {
+		if _, found := present[readingKey(binding.Kind(), binding.SeriesID())]; !found {
 			missing = append(missing, binding)
 		}
 	}
 	return missing
+}
+
+// readingKey 是绑定与读数对上的键：费率序列按种类（一张卡每种一条），金额序列按（种类，标识）——同种可绑多条
+// （ADR-0110 Decision 四）。
+func readingKey(kind domain.ReferenceSeriesKind, seriesID string) string {
+	if kind == domain.ReferenceSeriesPublishedAmount {
+		return kind.String() + "|" + seriesID
+	}
+	return kind.String()
 }
 
 // withSeriesReadings 把补齐的取值装回请求。评价请求的其余部分（标识、方案、证据层级）
@@ -243,13 +252,13 @@ func borrowSeriesReadings(request domain.EvaluationRequest, existing domain.Pric
 	if len(missing) == 0 {
 		return request, nil
 	}
-	frozen := make(map[domain.ReferenceSeriesKind]domain.ReferenceSeriesValue)
+	frozen := make(map[string]domain.ReferenceSeriesValue)
 	for _, value := range existing.Input().ReferenceSeriesValues() {
-		frozen[value.Kind()] = value
+		frozen[readingKey(value.Kind(), value.Reference().ID())] = value
 	}
 	readings := make([]domain.ReferenceSeriesValue, 0, len(missing))
 	for _, binding := range missing {
-		if value, found := frozen[binding.Kind()]; found && value.Reference().ID() == binding.SeriesID() {
+		if value, found := frozen[readingKey(binding.Kind(), binding.SeriesID())]; found && value.Reference().ID() == binding.SeriesID() {
 			readings = append(readings, value)
 		}
 	}
@@ -292,6 +301,15 @@ func (handler *EvaluatePricingHandler) completeSeriesReadings(
 			if !found {
 				notes = append(notes, fmt.Sprintf("series %s (%s) in-force version %s has no period covering pricing basis time %s",
 					binding.SeriesID(), binding.Kind(), reference.Version(), basisAt.UTC().Format(time.RFC3339)))
+				// 金额序列的「窗外无期次」是卡声明过的那一格（ADR-0110 Decision 三），不是缺证据：把「查过这一版、
+				// 无期次」冻结进输入，纯函数按卡上的窗外行为分流；费率序列没有窗外，缺期次照旧只留说明。
+				if binding.Kind() == domain.ReferenceSeriesPublishedAmount {
+					absent, err := domain.NewAbsentSeriesReading(binding.Kind(), reference)
+					if err != nil {
+						return domain.EvaluationRequest{}, nil, fmt.Errorf("freeze absent series reading: %w", err)
+					}
+					readings = append(readings, absent)
+				}
 				continue
 			}
 			readings = append(readings, reading.Value())

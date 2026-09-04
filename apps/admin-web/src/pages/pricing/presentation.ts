@@ -15,6 +15,7 @@ export const purposeLabels: Record<string, string> = {
 export const seriesKindLabels: Record<string, string> = {
   FUEL_RATE: '燃油费率',
   EXCHANGE_RATE: '汇率',
+  PUBLISHED_AMOUNT: '按期公布金额',
 };
 
 // 键取 domain.SeriesEvidenceGrade 原词（库上 CHECK 同一组）。此前这里写的是 ASSERTION，与服务端

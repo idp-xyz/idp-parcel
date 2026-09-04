@@ -164,7 +164,11 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
               value={draft.kind}
               locked={correcting}
               onChange={(kind) =>
-                patch({ kind, quoteBasis: kind === 'EXCHANGE_RATE' ? draft.quoteBasis : null })
+                patch({
+                  kind,
+                  quoteBasis: kind === 'EXCHANGE_RATE' ? draft.quoteBasis : null,
+                  currency: kind === 'PUBLISHED_AMOUNT' ? draft.currency : '',
+                })
               }
             />
           </div>
@@ -184,6 +188,18 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             value={draft.quoteBasis}
             onChange={(quoteBasis) => patch({ quoteBasis })}
           />
+        ) : null}
+
+        {draft.kind === 'PUBLISHED_AMOUNT' ? (
+          <label className="block max-w-xs">
+            <span className={fieldLabel}>金额币种 *</span>
+            <Input
+              value={draft.currency}
+              className="font-mono text-[13px]"
+              placeholder="三位大写代码；须与引用它的定价方案一致（ADR-0110）"
+              onChange={(event) => patch({ currency: event.target.value.toUpperCase() })}
+            />
+          </label>
         ) : null}
 
         <PeriodsEditor
@@ -270,7 +286,7 @@ function KindPicker({
   locked: boolean;
   onChange: (kind: SeriesKindDraft) => void;
 }) {
-  const kinds: Exclude<SeriesKindDraft, ''>[] = ['FUEL_RATE', 'EXCHANGE_RATE'];
+  const kinds: Exclude<SeriesKindDraft, ''>[] = ['FUEL_RATE', 'EXCHANGE_RATE', 'PUBLISHED_AMOUNT'];
   return (
     <div className="flex items-center gap-2">
       {kinds.map((kind) => (

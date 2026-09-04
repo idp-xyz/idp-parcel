@@ -13,7 +13,13 @@ import type {
   SeriesRegistrationPayload,
 } from './api';
 
-export type SeriesKindDraft = '' | 'FUEL_RATE' | 'EXCHANGE_RATE';
+export type SeriesKindDraft = '' | 'FUEL_RATE' | 'EXCHANGE_RATE' | 'PUBLISHED_AMOUNT';
+
+const seriesKinds: ReadonlyArray<Exclude<SeriesKindDraft, ''>> = ['FUEL_RATE', 'EXCHANGE_RATE', 'PUBLISHED_AMOUNT'];
+
+function seriesKindOf(raw: string): SeriesKindDraft {
+  return (seriesKinds as ReadonlyArray<string>).includes(raw) ? (raw as SeriesKindDraft) : '';
+}
 
 export interface PeriodDraft {
   startsAt: string;
@@ -40,6 +46,8 @@ export interface SeriesDraft {
   kind: SeriesKindDraft;
   sourceIdentifier: string;
   quoteBasis: QuoteBasisDraft | null;
+  /** 只对 PUBLISHED_AMOUNT 有意义：每期金额的币种（三位大写代码），由领域构造门判与方案一致。 */
+  currency: string;
   periods: PeriodDraft[];
   correction: CorrectionDraft | null;
   /** 预览时指名的对照版本；空即不指名（更正版本由服务端默认对它回指的那一版）。 */
@@ -57,6 +65,7 @@ export function emptySeriesDraft(): SeriesDraft {
     kind: '',
     sourceIdentifier: '',
     quoteBasis: null,
+    currency: '',
     periods: [emptyPeriodDraft()],
     correction: null,
     compareWithVersion: '',
@@ -72,12 +81,14 @@ export function correctionDraftOf(record: ReferenceSeriesRecord): SeriesDraft {
   return {
     seriesId: record.seriesId,
     seriesVersion: '',
-    kind: record.kind === 'FUEL_RATE' || record.kind === 'EXCHANGE_RATE' ? record.kind : '',
+    kind: seriesKindOf(record.kind),
     sourceIdentifier: record.sourceIdentifier,
     quoteBasis:
       record.quoteBasisId && record.quoteBasisVersion
         ? { policyId: record.quoteBasisId, policyVersion: record.quoteBasisVersion }
         : null,
+    // 目录行今天不透出币种，金额序列的更正草稿这一格留空强制人填——留空会被 draftProblems 拦住，不会静默送空。
+    currency: '',
     periods: record.periods.map((period) => ({
       startsAt: period.startsAt,
       endsAt: period.endsAt ?? '',
@@ -96,6 +107,8 @@ export function correctionDraftOf(record: ReferenceSeriesRecord): SeriesDraft {
 // 取值只认十进制文本，不认指数记法——与服务端 ParseDecimal 的入口一致（那边会拒 1e3）。
 const decimalText = /^[+-]?(\d+(\.\d+)?|\.\d+)$/;
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
+// 与服务端 NewCurrency 的形状一致：三位大写字母；只拦形状，币种是否与方案一致由领域判。
+const currencyCode = /^[A-Z]{3}$/;
 
 /** 日期只填到天时补成当天零点 UTC 的 RFC 3339；其余原样交给服务端解。 */
 export function normalizeMoment(raw: string): string {
@@ -120,6 +133,9 @@ export function draftProblems(draft: SeriesDraft): string[] {
   if (draft.sourceIdentifier.trim() === '') problems.push('来源标识未填');
   if (draft.kind === 'EXCHANGE_RATE' && draft.quoteBasis === null) {
     problems.push('汇率必须选一版声明了口径的商业价格政策（不接受未声明口径的裸汇率）');
+  }
+  if (draft.kind === 'PUBLISHED_AMOUNT' && !currencyCode.test(draft.currency.trim())) {
+    problems.push('按期公布金额的序列必须填币种（三位大写代码，与引用它的定价方案一致）');
   }
   if (draft.periods.length === 0) problems.push('至少要一期取值');
   draft.periods.forEach((period, index) => {
@@ -170,6 +186,9 @@ export function payloadOf(draft: SeriesDraft): SeriesRegistrationPayload {
       policyId: draft.quoteBasis.policyId,
       policyVersion: draft.quoteBasis.policyVersion,
     };
+  }
+  if (draft.kind === 'PUBLISHED_AMOUNT' && draft.currency.trim() !== '') {
+    payload.currency = draft.currency.trim();
   }
   if (draft.correction !== null) {
     payload.correction = {

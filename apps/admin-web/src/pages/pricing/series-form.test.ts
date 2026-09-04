@@ -50,12 +50,25 @@ function completeDraft(over: Partial<SeriesDraft> = {}): SeriesDraft {
     kind: 'FUEL_RATE',
     sourceIdentifier: 'src-a',
     quoteBasis: null,
+    currency: '',
     periods: [{ startsAt: '2026-08-01', endsAt: '', value: '0.12', evidenceRef: '' }],
     correction: null,
     compareWithVersion: '',
     ...over,
   };
 }
+
+// Covers: ADR-0110 Decision 一——按期公布金额的序列必须带币种；币种只在这一种上进载荷，费率序列不带。
+test('published amount series carries a currency and only then', () => {
+  ok(draftProblems(completeDraft({ kind: 'PUBLISHED_AMOUNT' })).some((line) => line.includes('币种')));
+  ok(draftProblems(completeDraft({ kind: 'PUBLISHED_AMOUNT', currency: 'usd' })).some((line) => line.includes('币种')));
+  deepEqual(draftProblems(completeDraft({ kind: 'PUBLISHED_AMOUNT', currency: 'USD' })), []);
+
+  const payload = payloadOf(completeDraft({ kind: 'PUBLISHED_AMOUNT', currency: ' USD ' }));
+  equal(payload.currency, 'USD');
+  equal(payloadOf(completeDraft({ kind: 'FUEL_RATE', currency: 'USD' })).currency, undefined);
+  equal(correctionDraftOf(record({ kind: 'PUBLISHED_AMOUNT' })).kind, 'PUBLISHED_AMOUNT');
+});
 
 // Covers: 预填抄全部期次（缺席的 endsAt / evidenceRef 变成空串好让输入框绑定），更正回指带
 // 版本号与前版内容摘要作指纹（ADR-0108），对照版本默认就是被更正的那一版；新版本号与依据留空。

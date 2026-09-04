@@ -231,6 +231,8 @@ export interface SeriesRegistrationPayload {
   kind: string;
   sourceIdentifier: string;
   quoteBasis?: SeriesQuoteBasisPayload;
+  /** 只对按期公布金额的序列（PUBLISHED_AMOUNT，ADR-0110）在场：每期取值都是这个币种的金额。 */
+  currency?: string;
   periods: SeriesPeriodPayload[];
   correction?: SeriesCorrectionPayload;
   /** 只对预览有意义：指名对照版本。登记忽略它。 */

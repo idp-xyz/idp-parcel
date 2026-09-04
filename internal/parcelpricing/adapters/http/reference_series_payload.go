@@ -39,8 +39,10 @@ type ReferenceSeriesRegistrationPayload struct {
 	Kind             string                            `json:"kind"`
 	SourceIdentifier string                            `json:"sourceIdentifier"`
 	QuoteBasis       *ReferenceSeriesQuoteBasisPayload `json:"quoteBasis,omitempty"`
-	Periods          []ReferenceSeriesPeriodPayload    `json:"periods"`
-	Correction       *ReferenceSeriesCorrectionPayload `json:"correction,omitempty"`
+	// Currency 只对金额序列（PUBLISHED_AMOUNT，ADR-0110）声明；费率序列带它由领域构造门拒。
+	Currency   string                            `json:"currency,omitempty"`
+	Periods    []ReferenceSeriesPeriodPayload    `json:"periods"`
+	Correction *ReferenceSeriesCorrectionPayload `json:"correction,omitempty"`
 	// CompareWithVersion 只对预览有意义：指名对照版本。登记命令不带它。
 	CompareWithVersion string `json:"compareWithVersion,omitempty"`
 }
@@ -113,6 +115,13 @@ func (payload ReferenceSeriesRegistrationPayload) Registration(
 			return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: quote basis: %v", ErrMalformedRequest, err)
 		}
 		spec.QuoteBasis = basis
+	}
+	if payload.Currency != "" {
+		currency, err := domain.NewCurrency(payload.Currency)
+		if err != nil {
+			return domain.ReferenceSeriesRegistration{}, fmt.Errorf("%w: currency: %v", ErrMalformedRequest, err)
+		}
+		spec.Currency = currency
 	}
 
 	spec.Periods = make([]domain.SeriesPeriodValue, 0, len(payload.Periods))
