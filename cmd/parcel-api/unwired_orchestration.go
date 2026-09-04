@@ -1030,6 +1030,14 @@ func (unwiredCommercialCatalogue) ListCreditPolicies(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredCommercialCatalogue) ListCustomerServiceRules(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.CustomerServiceRuleRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // 货主客户账户册（票 admin-write-faces/04）：方法表与 commercialhttp.CustomerAccountCatalogueReader
 // 对上。它与身份另两册同挂在本占位上，因为生产装配交入的也是同一只商业目录适配器。
 func (unwiredCommercialCatalogue) ListCustomerAccounts(
