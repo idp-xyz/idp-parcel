@@ -10,17 +10,20 @@
 //   - **结构性拆除期限在 run 的第一行**（见 guardStructuralSunset）。过期即启动拒绝、退出
 //     非零，没有环境变量或参数可绕过；延长只能经 supersede ADR-0089 改源码发版。时钟经
 //     run 注入，测试把钟拨到期限后证明拒绝。
-//   - **导入事实与设备事实可区分**：来源身份与证据引用都带 `FTI/<模板版本>/…` 标记（见
-//     intakeSourceID / intakeEvidence），录入操作者在证据引用里。ADR-0023 把作业事实的身份
-//     与发生时间的签发权判给设备；本口是那条规则之外带期限的例外，标记是例外的印记，
-//     让派生与取证任何时候都能把这批事实单独挑出来。
-//   - **只灌既有用例、不造用例、不改 domain**。四类现场事实里今天只有收寄对得上且有落
-//     点，其余的判定与缺口写在 .scratch/frontline-transition-import/fact-to-usecase-mapping.md，
+//   - **导入事实与设备事实可区分**：来源身份与证据引用都带 `FTI/<模板版本>/…` 标记（收寄
+//     见 intakeSourceID / intakeEvidence，集运见 consolidationSourceID / consolidationEvidence），
+//     录入操作者在证据引用里。ADR-0023 把作业事实的身份与发生时间的签发权判给设备；本口
+//     是那条规则之外带期限的例外，标记是例外的印记，让派生与取证任何时候都能把这批事实
+//     单独挑出来。
+//   - **只灌既有用例、不造用例、不改 domain**。四类现场事实里收寄与装箱封签两类对得上且
+//     有落点（集运六口收 domain.WorkFactSource 之后，来源标记才有了落点），换单与称重仍无
+//     用例；判定与缺口写在 .scratch/frontline-transition-import/fact-to-usecase-mapping.md，
 //     不在这里复述第二份。
 //
 // 收寄子命令今天接的身份核对缝是显式未配置替身（同 parcel-api 的处置，见
 // unconfiguredParcelIdentityView）：`RECEIVED` 行必然答未决且不落库，本口开工前把这一点
-// 打印出来。不是缺参数，是 PS 侧机制未建，恢复动作在那一侧。
+// 打印出来。不是缺参数，是 PS 侧机制未建，恢复动作在那一侧。集运子命令没有这条缝：成员是
+// 作业实物号，不经 PS 侧解析，模板行按顺序推进六口即可。
 //
 // 输入是一份 CSV 模板（-file），租户由 -tenant 给出（ADR-0003：租户是最高隔离边界，由受控
 // 运维给出，不让文件自报）。模板整体不合格整批不开工；合格后一行一笔事务，部分成功是
@@ -29,8 +32,9 @@
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
 // 退出码：0 = 全部行已落地或重放；1 = 用法或模板不合格（整批未开工）；2 = 有行被拒
-// （来源冲突——改文件，重跑同一份不会变）；3 = 有行未决或装配失败（重跑同一文件续办，
-// 已落地的行答重放）；4 = 已过结构性拆除期限（启动拒绝）。
+// （来源冲突，集运口还有单元不在册、成员在别处、三相不允许——都要改文件，重跑同一份不会
+// 变）；3 = 有行未决或装配失败（重跑同一文件续办，已落地的行答重放）；4 = 已过结构性拆除
+// 期限（启动拒绝）。
 package main
 
 import (
@@ -63,11 +67,14 @@ const (
 	exitSunset    = 4
 )
 
-// 子命令按事实类型分。今天只有收寄：装箱封签的来源标记无落点、换单与称重无用例，
-// 判定见映射表。
-const commandIntake = "intake"
+// 子命令按事实类型分：收寄与装箱封签两类有既有用例可接；换单与称重无用例，按 ADR-0089
+// 细则⑤ 如实记缺口不造，判定见映射表。
+const (
+	commandIntake        = "intake"
+	commandConsolidation = "consolidation"
+)
 
-var allCommands = []string{commandIntake}
+var allCommands = []string{commandIntake, commandConsolidation}
 
 // systemClock 是 Clock 端口的生产实现：要的是真实时钟，`time.Now()` 就是它。期限守卫
 // 与收寄记录的系统接收时间都从这一个钟读。
@@ -208,6 +215,19 @@ func planImport(command string, tenant domain.TenantID, raw []byte, clock ports.
 				return exitUndecided
 			}
 			return executeIntake(ctx, batch, importer, out)
+		}, nil
+	case commandConsolidation:
+		batch, err := decodeConsolidationTemplate(tenant, raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, db *bentopg.DB, errOut io.Writer) int {
+			importer, err := buildConsolidationImporter(db, clock)
+			if err != nil {
+				fmt.Fprintf(errOut, "装配导入口：%v\n", err)
+				return exitUndecided
+			}
+			return executeConsolidation(ctx, batch, importer, out)
 		}, nil
 	default:
 		return nil, fmt.Errorf("未知导入命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))
