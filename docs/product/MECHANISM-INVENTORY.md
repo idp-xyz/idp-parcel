@@ -17,10 +17,10 @@
 | partycommercial | 81 | 81 | 8 | 25 | 0 | 14 |
 | pilotgovernance | 19 | 17 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 73 | 52 | 10 | 35 | 7 | 7 |
+| settlementaccounting | 76 | 55 | 11 | 37 | 7 | 7 |
 | transportfulfillment | 100 | 89 | 19 | 30 | 10 | 16 |
 | visibilityexception | 89 | 86 | 9 | 26 | 8 | 10 |
-| **合计** | 733 | 687 | 98 | 213 | 49 | 95 |
+| **合计** | 736 | 690 | 99 | 215 | 49 | 95 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 42、测试 61。
 
@@ -45,7 +45,7 @@
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 121 份 SQL
+## 迁移：11 个模块共 122 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -57,7 +57,7 @@
 | parcel_shipment | 13 |
 | party_commercial | 22 |
 | pilot_governance | 5 |
-| settlement_accounting | 15 |
+| settlement_accounting | 16 |
 | transport_fulfillment | 12 |
 | visibility_exception | 22 |
 
@@ -98,7 +98,7 @@
 | visibilityexception | 8 |
 | **合计** | 15 |
 
-## 端口：声明 307 个；基线口径缺 12，精确口径缺 10
+## 端口：声明 310 个；基线口径缺 13，精确口径缺 11
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -111,6 +111,7 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.EffectiveTimeRules` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
@@ -124,6 +125,7 @@
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
+- `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.EffectiveTimeRules` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
