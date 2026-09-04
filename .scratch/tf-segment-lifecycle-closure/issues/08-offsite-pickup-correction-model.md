@@ -1,7 +1,7 @@
 # 揽收登记的更正：新版本还是失效 + 替代
 
 Category: enhancement
-Status: ready-for-agent——领域问题已裁（见「裁决」节，MCP-3 2026-09-04，owner 授权自决）：**A 新版本**，段侧参与关系重派生不在本票
+Status: in-progress——MCP-3（2026-09-04，基线 main `eba019a8`，分支 `mcp3-tf08`）；领域问题已裁（见「裁决」节，MCP-3 2026-09-04，owner 授权自决）：**A 新版本**，段侧参与关系重派生不在本票
 Blocked by: 无（不阻塞 04–07）
 
 ## 裁决（MCP-3，2026-09-04）
