@@ -1012,3 +1012,11 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 1. **拆等点头的六棵树**（各自 `status --short --untracked-files=all` 零行、无 reparse point、不带 `--force`）：`idp-parcel-mcp1-sa02`、`idp-parcel-mcp2-psr05`、`idp-parcel-mcp2-wbr06`（三支分支按下面量法全 ABSORBED / main 只多加行）、`idp-replay-psr05-tf01`、`idp-replay-wave`、`idp-replay-wave2`（三棵 detached 都在 main 祖先上）。`worktree list` 现只剩主树 + 三棵在途（`mcp4-ci-p1` / `mcp5-pcgaps08-record` / `mcp6-pcgaps10`）+ `idp-tf03`。
 2. **91 条分支指针改名**（`git branch -m`，一个不删）：量法——分支自 merge-base 起改过的每份非簿记文件，其 tip blob 是否在 `main` 该文件历史里出现过（`git log main -- <file>` 逐笔比 blob）；全出现过 → `merged/`；只差 `unwired_orchestration.go` / 票面 .md 且 `git diff <分支> main` 只加不减 → 也 `merged/`；老分支按 `unmerged-branch-inventory/spec.md` 的终裁归类。结果 **`merged/` 79、`salvage/` 12**（`mcp5-tf-cmdr`、`mcp6-pcgaps09-precut`、`mcp6-pcgaps08`、`mcp5-pcgaps08`、`mcp5-reg-tabs-salvage`、`mcp2-awf02a`、`mcp4-awf02d`、`mcp3-pcgaps07`（07 已进、8dc99b9f 封存半边不进）、`mcp6-inventories-v2`、`t12-governance-register`（#6 进 #5 裁不合）、`bento-gate-reeval`、`syn-wall-door-audit`），未加前缀只剩 `main` + 三条在途 + `mcp4-tf03`。远端只有 `main` 与 MCP-4 取数用的 `mcp4-ci-p1`，未动。
 3. 规矩两条写进 `docs/agents/parallel-sessions.md`：「派发前先点名」节末加**派单第 0 步查地盘分支有无半成品**（取数命令 + 派单必须写「接着做」还是「另起」）；「拆工作树」节加 **`merged/` / `salvage/` 前缀约定与量法**，集成方拆树时顺手改名。
+
+### 23:2x：用户问「各分支自己 commit、push 是否更可靠」→ 评估后用户「同意」
+
+**评估要点**（全文在 23:1x 回复）：单一推送方今日代价——通道 1 换会话 5 次、每次完工报躺 30–60 分钟；8 次集成各重跑 9.5 分钟全仓；cherry-pick 改写 SHA 让 `--merged` / `git cherry` 失效。买到的是串行与合体验证（09-05 VE inbox 那次是集成方全仓跑出来的）。**裁定**：① 分支每笔提交后推 origin，立刻生效；② 落 main 改为作者自落：rebase 到 origin/main → PR → CI 绿即「验的就是这个 SHA」→ merge commit（SHA 原样进 main）→ 一次一人（`set_channel_lock` / 落地令）；**切换条件：`82bc2586` 的 `-p 1` 落地后 main 连绿三次**，未到之前仍走推送方重放；③ 通道 1 缩成仲裁与簿记。
+
+**做不到的一格**：仓私有 + 免费档，分支保护 / rulesets 接口 `403 Upgrade to GitHub Pro or make this repository public`（23:2x 实测，`gh api` 权限 admin=true 也不行）。替代：所有 worktree 共用 `.git`，切换日装 `.git/hooks/pre-push`（目标 main 且 `.git/landing.lock` 记的 SHA 不等于要推的就拒），源码放 `scripts/git-hooks/`。真正的机器强制归用户：升级套餐或转公开仓。
+
+两条都已写进 `docs/agents/parallel-sessions.md`「推送」节下（「分支每笔提交后推到 origin」「落 main 的下一形态」），①已广播全通道。
