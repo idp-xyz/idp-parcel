@@ -14,3 +14,6 @@
 # 语法错，不是「行尾不对」。取证脚本坏在这上面尤其难认：WSL 里 Edge 取回的是
 # Chromium 自己的错误页，看起来跟「页面没接上」一模一样。
 *.sh text eol=lf
+
+# git 钩子无扩展名，text=auto 在 Windows 检出会给 CRLF，复制进 .git/hooks 后 sh 读 #!/bin/sh\r 就死——与上面 *.sh 同一条病。
+scripts/git-hooks/* text eol=lf
