@@ -89,10 +89,10 @@ func TestReplayReproducesTheOriginalUnderANewReferenceAndHandsNothingOff(t *test
 	if err != nil {
 		t.Fatalf("replay: %v", err)
 	}
-	if result.Outcome() != application.ReplayRecorded {
-		t.Fatalf("outcome = %s, want RECORDED", result.Outcome())
+	if result.Outcome != application.ReplayRecorded {
+		t.Fatalf("outcome = %s, want RECORDED", result.Outcome)
 	}
-	replayed, ok := result.Evaluation()
+	replayed, ok := result.Evaluation, result.HasEvaluation
 	if !ok {
 		t.Fatal("已入册的回放没交回评价")
 	}
@@ -113,10 +113,10 @@ func TestReplayReproducesTheOriginalUnderANewReferenceAndHandsNothingOff(t *test
 	if err != nil {
 		t.Fatalf("repeat replay: %v", err)
 	}
-	if again.Outcome() != application.ReplayExistingResult || fixture.store.saved != 1 {
-		t.Fatalf("重复请求 outcome=%s saved=%d；同回放引用第二次到达该返原记录不重入册", again.Outcome(), fixture.store.saved)
+	if again.Outcome != application.ReplayExistingResult || fixture.store.saved != 1 {
+		t.Fatalf("重复请求 outcome=%s saved=%d；同回放引用第二次到达该返原记录不重入册", again.Outcome, fixture.store.saved)
 	}
-	returned, _ := again.Evaluation()
+	returned := again.Evaluation
 	if returned.ID() != replayed.ID() {
 		t.Fatalf("返回的不是在册那份回放：%s", returned.ID())
 	}
@@ -126,8 +126,8 @@ func TestReplayReproducesTheOriginalUnderANewReferenceAndHandsNothingOff(t *test
 	if err != nil {
 		t.Fatalf("impostor replay: %v", err)
 	}
-	if impostor.Outcome() != application.ReplayIdentityConflict || fixture.store.saved != 1 {
-		t.Fatalf("同回放引用装另一份原评价 outcome=%s saved=%d；必须是冲突且不顶替", impostor.Outcome(), fixture.store.saved)
+	if impostor.Outcome != application.ReplayIdentityConflict || fixture.store.saved != 1 {
+		t.Fatalf("同回放引用装另一份原评价 outcome=%s saved=%d；必须是冲突且不顶替", impostor.Outcome, fixture.store.saved)
 	}
 
 	handoff := reflect.TypeOf((*ports.EvaluationHandoff)(nil)).Elem()
@@ -147,8 +147,8 @@ func TestReplayAnswersStructuralImpossibilityWithoutFormingAnEvaluation(t *testi
 	fixture := newReplayFixture(t)
 
 	missing, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-nowhere", "eval-replay-x", domain.EvidenceSynthetic))
-	if err != nil || missing.Outcome() != application.ReplayOriginalNotFound {
-		t.Fatalf("原评价不在册：outcome=%s err=%v", missing.Outcome(), err)
+	if err != nil || missing.Outcome != application.ReplayOriginalNotFound {
+		t.Fatalf("原评价不在册：outcome=%s err=%v", missing.Outcome, err)
 	}
 	if fixture.plans.calls != 0 {
 		t.Fatalf("原评价都没有还去读了方案：calls=%d", fixture.plans.calls)
@@ -156,23 +156,23 @@ func TestReplayAnswersStructuralImpossibilityWithoutFormingAnEvaluation(t *testi
 
 	fixture.recordOriginal(t, "eval-original", minimalPlan(t), "Z1")
 	stranger, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-9", "eval-original", "eval-replay-x", domain.EvidenceSynthetic))
-	if err != nil || stranger.Outcome() != application.ReplayOriginalNotFound {
-		t.Fatalf("别人租户的评价：outcome=%s err=%v，想要 ORIGINAL_NOT_FOUND（越权探针与真不存在同答）", stranger.Outcome(), err)
+	if err != nil || stranger.Outcome != application.ReplayOriginalNotFound {
+		t.Fatalf("别人租户的评价：outcome=%s err=%v，想要 ORIGINAL_NOT_FOUND（越权探针与真不存在同答）", stranger.Outcome, err)
 	}
 
 	delete(fixture.plans.byReference, "plan-1@v1")
 	unregistered, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-x", domain.EvidenceSynthetic))
-	if err != nil || unregistered.Outcome() != application.ReplayPlanVersionNotOnRegister {
-		t.Fatalf("原方案版本不在册：outcome=%s err=%v", unregistered.Outcome(), err)
+	if err != nil || unregistered.Outcome != application.ReplayPlanVersionNotOnRegister {
+		t.Fatalf("原方案版本不在册：outcome=%s err=%v", unregistered.Outcome, err)
 	}
-	if _, formed := unregistered.Evaluation(); formed || fixture.store.saved != 0 {
+	if formed := unregistered.HasEvaluation; formed || fixture.store.saved != 0 {
 		t.Fatalf("结构上重放不了却形成了评价：formed=%t saved=%d", formed, fixture.store.saved)
 	}
 
 	fixture.plans.err = fmt.Errorf("find price card version: %w", domain.ErrCanonicalizationVersionUnsupported)
 	unsupported, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-x", domain.EvidenceSynthetic))
-	if err != nil || unsupported.Outcome() != application.ReplayPlanCanonicalizationUnsupported {
-		t.Fatalf("原方案快照重建不了：outcome=%s err=%v", unsupported.Outcome(), err)
+	if err != nil || unsupported.Outcome != application.ReplayPlanCanonicalizationUnsupported {
+		t.Fatalf("原方案快照重建不了：outcome=%s err=%v", unsupported.Outcome, err)
 	}
 	if fixture.store.saved != 0 {
 		t.Fatalf("规范化不支持却入册了：saved=%d", fixture.store.saved)
@@ -180,8 +180,8 @@ func TestReplayAnswersStructuralImpossibilityWithoutFormingAnEvaluation(t *testi
 
 	fixture.plans.err = errors.New("register unreachable")
 	stalled, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-x", domain.EvidenceSynthetic))
-	if err == nil || stalled.Outcome() != application.ReplayUndecided {
-		t.Fatalf("读口故障：outcome=%s err=%v，想要 UNDECIDED 且带成因", stalled.Outcome(), err)
+	if err == nil || stalled.Outcome != application.ReplayUndecided {
+		t.Fatalf("读口故障：outcome=%s err=%v，想要 UNDECIDED 且带成因", stalled.Outcome, err)
 	}
 }
 
@@ -192,20 +192,20 @@ func TestReplayRefusesReferenceReuseEvidenceUpgradeAndBlankCommands(t *testing.T
 	fixture.recordOriginal(t, "eval-original", minimalPlan(t), "Z1")
 
 	reused, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-original", domain.EvidenceSynthetic))
-	if err != nil || reused.Outcome() != application.ReplayNotAccepted {
-		t.Fatalf("复用原引用：outcome=%s err=%v", reused.Outcome(), err)
+	if err != nil || reused.Outcome != application.ReplayNotAccepted {
+		t.Fatalf("复用原引用：outcome=%s err=%v", reused.Outcome, err)
 	}
 
 	upgraded, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-r", domain.EvidenceReplay))
-	if err != nil || upgraded.Outcome() != application.ReplayNotAccepted {
-		t.Fatalf("S 重放成 R：outcome=%s err=%v", upgraded.Outcome(), err)
+	if err != nil || upgraded.Outcome != application.ReplayNotAccepted {
+		t.Fatalf("S 重放成 R：outcome=%s err=%v", upgraded.Outcome, err)
 	}
 
 	blank := replayCommand(t, "tenant-1", "eval-original", "eval-replay-b", domain.EvidenceSynthetic)
 	blank.Tenant = domain.TenantID{}
 	unaddressed, err := fixture.handler.Handle(context.Background(), blank)
-	if err != nil || unaddressed.Outcome() != application.ReplayNotAccepted {
-		t.Fatalf("缺租户：outcome=%s err=%v", unaddressed.Outcome(), err)
+	if err != nil || unaddressed.Outcome != application.ReplayNotAccepted {
+		t.Fatalf("缺租户：outcome=%s err=%v", unaddressed.Outcome, err)
 	}
 	if fixture.store.saved != 0 {
 		t.Fatalf("被拒的请求入册了：saved=%d", fixture.store.saved)
@@ -225,10 +225,10 @@ func TestReplayAgainstChangedPlanContentRecordsAConflictNotASuccess(t *testing.T
 	fixture.plans.byReference["plan-1@v1"] = changed
 
 	result, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-c", domain.EvidenceSynthetic))
-	if err != nil || result.Outcome() != application.ReplayRecorded {
-		t.Fatalf("outcome=%s err=%v", result.Outcome(), err)
+	if err != nil || result.Outcome != application.ReplayRecorded {
+		t.Fatalf("outcome=%s err=%v", result.Outcome, err)
 	}
-	replayed, _ := result.Evaluation()
+	replayed := result.Evaluation
 	if replayed.Status() != domain.EvaluationConflict {
 		t.Fatalf("status = %s, want CONFLICT", replayed.Status())
 	}
@@ -241,7 +241,7 @@ func TestReplayAgainstChangedPlanContentRecordsAConflictNotASuccess(t *testing.T
 
 	fixture.store.err = errors.New("store unreachable")
 	stalled, err := fixture.handler.Handle(context.Background(), replayCommand(t, "tenant-1", "eval-original", "eval-replay-d", domain.EvidenceSynthetic))
-	if err == nil || stalled.Outcome() != application.ReplayUndecided {
-		t.Fatalf("评价册故障：outcome=%s err=%v", stalled.Outcome(), err)
+	if err == nil || stalled.Outcome != application.ReplayUndecided {
+		t.Fatalf("评价册故障：outcome=%s err=%v", stalled.Outcome, err)
 	}
 }

@@ -76,19 +76,14 @@ type ReplayPricingEvaluationCommand struct {
 	Evidence domain.EvidenceKind
 }
 
+// ReplayPricingEvaluationResult 是回放的答复。字段导出、不设访问器，形状随 ReferenceSeriesPreview：
+// 传输层要把它逐字透出，测试要能造出任一格。
 type ReplayPricingEvaluationResult struct {
-	outcome    ReplayPricingEvaluationOutcome
-	evaluation domain.PricingEvaluation
-	hasRecord  bool
-}
-
-func (result ReplayPricingEvaluationResult) Outcome() ReplayPricingEvaluationOutcome {
-	return result.outcome
-}
-
-// Evaluation 交回回放评价（已入册那一份或在册的原记录）。没形成评价的结果第二个返回值为假。
-func (result ReplayPricingEvaluationResult) Evaluation() (domain.PricingEvaluation, bool) {
-	return result.evaluation, result.hasRecord
+	Outcome ReplayPricingEvaluationOutcome
+	// Evaluation 是回放评价——刚入册那一份，或同引用在册返回的原记录；HasEvaluation 为假时它是零值：
+	// 没形成评价的答案（原评价不在册、原方案版本不在册……）没有评价可交。
+	Evaluation    domain.PricingEvaluation
+	HasEvaluation bool
 }
 
 // ReplayPricingEvaluationDeps 是回放编排的依赖。
@@ -129,59 +124,59 @@ func (handler *ReplayPricingEvaluationHandler) Handle(
 	command ReplayPricingEvaluationCommand,
 ) (ReplayPricingEvaluationResult, error) {
 	if command.Tenant.String() == "" || command.Original.String() == "" || command.ReplayID.String() == "" {
-		return ReplayPricingEvaluationResult{outcome: ReplayNotAccepted}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayNotAccepted}, nil
 	}
 
 	original, found, err := handler.deps.Store.FindByID(ctx, command.Original)
 	if err != nil {
-		return ReplayPricingEvaluationResult{outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: find original: %w", err)
+		return ReplayPricingEvaluationResult{Outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: find original: %w", err)
 	}
 	// 评价标识全局唯一，读口不按租户过滤；租户在这里核——别人租户的评价对本租户就是不存在
 	//（ADR-0003 隔离；越权探针与真不存在同答，ADR-0029）。
 	if !found || original.Input().TenantID() != command.Tenant {
-		return ReplayPricingEvaluationResult{outcome: ReplayOriginalNotFound}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayOriginalNotFound}, nil
 	}
 
 	plan, onRegister, err := handler.deps.Plans.FindByReference(ctx, command.Tenant, original.PlanReference())
 	switch {
 	case errors.Is(err, domain.ErrCanonicalizationVersionUnsupported):
-		return ReplayPricingEvaluationResult{outcome: ReplayPlanCanonicalizationUnsupported}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayPlanCanonicalizationUnsupported}, nil
 	case err != nil:
-		return ReplayPricingEvaluationResult{outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: find original plan: %w", err)
+		return ReplayPricingEvaluationResult{Outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: find original plan: %w", err)
 	case !onRegister:
-		return ReplayPricingEvaluationResult{outcome: ReplayPlanVersionNotOnRegister}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayPlanVersionNotOnRegister}, nil
 	}
 
 	replayed, err := domain.ReplayPricingEvaluation(command.ReplayID, original, plan, command.Evidence)
 	if err != nil {
 		// 只有两种：新引用等于原引用、请求不合法（含 `S` 升级）。两种恢复动作都是改请求。
-		return ReplayPricingEvaluationResult{outcome: ReplayNotAccepted}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayNotAccepted}, nil
 	}
 
 	saved, err := handler.deps.Store.Save(ctx, replayed)
 	if err != nil {
-		return ReplayPricingEvaluationResult{outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: save: %w", err)
+		return ReplayPricingEvaluationResult{Outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: save: %w", err)
 	}
 	switch saved {
 	case ports.EvaluationSaved:
-		return ReplayPricingEvaluationResult{outcome: ReplayRecorded, evaluation: replayed, hasRecord: true}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayRecorded, Evaluation: replayed, HasEvaluation: true}, nil
 	case ports.EvaluationAlreadyRecorded:
 		existing, found, err := handler.deps.Store.FindByID(ctx, command.ReplayID)
 		if err != nil {
-			return ReplayPricingEvaluationResult{outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: read back existing replay: %w", err)
+			return ReplayPricingEvaluationResult{Outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: read back existing replay: %w", err)
 		}
 		if !found {
 			// 写时说在、读时说不在——评价行只增不改，这一格在正常运行里到不了；照实答未决，不折成成功。
-			return ReplayPricingEvaluationResult{outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: %s was reported recorded but cannot be read back", command.ReplayID)
+			return ReplayPricingEvaluationResult{Outcome: ReplayUndecided}, fmt.Errorf("replay pricing evaluation: %s was reported recorded but cannot be read back", command.ReplayID)
 		}
 		// 同引用在册：回放的是同一份原评价、同一证据层级、且语义摘要相同才是重复请求；否则是同标识
 		// 装了别的东西。语义摘要刻意不含 replayOf 与证据层级（重现与否要靠它与原评价逐字相等），所以
 		// 那两格在这里单独比。
 		if existingOf, isReplay := existing.ReplayOf(); !isReplay || existingOf != command.Original ||
 			existing.Evidence() != replayed.Evidence() || existing.SemanticDigest() != replayed.SemanticDigest() {
-			return ReplayPricingEvaluationResult{outcome: ReplayIdentityConflict}, nil
+			return ReplayPricingEvaluationResult{Outcome: ReplayIdentityConflict}, nil
 		}
-		return ReplayPricingEvaluationResult{outcome: ReplayExistingResult, evaluation: existing, hasRecord: true}, nil
+		return ReplayPricingEvaluationResult{Outcome: ReplayExistingResult, Evaluation: existing, HasEvaluation: true}, nil
 	default:
 		return ReplayPricingEvaluationResult{}, fmt.Errorf("%w: %d", ErrUnexpectedEvaluationSave, saved)
 	}

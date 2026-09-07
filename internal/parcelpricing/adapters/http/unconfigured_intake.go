@@ -47,7 +47,15 @@ var (
 	_ ReferenceSeriesReviewIntake          = UnconfiguredIntake{}
 	_ ReferenceSeriesPreviewIntake         = UnconfiguredIntake{}
 	_ ReferenceCatalogueRegistrationIntake = UnconfiguredIntake{}
+	_ EvaluationReplayIntake               = UnconfiguredIntake{}
 )
+
+// IntakeEvaluationReplay 不读请求，判据同复核口：等的是操作者信封接线（ADR-0100），载荷形状已在
+// DecodeEvaluationReplayPayload。**从请求里铸一个触发者、或替它填一个证据层级**，都是这一口
+// 不能有的「开发用」版本——前者是自报身份，后者是把 `S` 写成默认（ADR-0124 决定三）。
+func (UnconfiguredIntake) IntakeEvaluationReplay(context.Context, *http.Request) (application.ReplayPricingEvaluationCommand, error) {
+	return application.ReplayPricingEvaluationCommand{}, ErrAccessChannelNotConfigured
+}
 
 // IntakeReferenceCatalogueRegistration 不读请求，判据同登记口：等的是操作者信封接线（ADR-0100），
 // 载荷形状（模板导入）已在 DecodeReferenceCataloguePayload。
