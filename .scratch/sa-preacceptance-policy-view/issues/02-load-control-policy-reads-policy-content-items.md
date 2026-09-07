@@ -1,8 +1,8 @@
 # SA `LoadControlPolicy` 的`要求`格仍从结算政策取方式，不读策略正文的控制项——ADR-0115 Decision 五预告的 SA 侧后继
 
 Category: enhancement
-Status: draft——MCP-3 2026-09-07 立票（收口 [party-commercial-context-gaps/07](../../party-commercial-context-gaps/issues/07-pre-acceptance-financial-control-policy-has-no-content-table.md) 时按 ADR-0115 Consequences「SA 侧另立一票」立）；只写票面不动代码；SA 地盘，认领者按开工那刻的 tip 重核下面的事实链
-Blocked by: 无——前置 pc-gaps/07 已在分支 `mcp3-pcgaps07` 落地并 resolved，等 MCP-1 重放进 main；开工前先确认 `migrations/party_commercial/0024` 与 `ports.PreAcceptanceFinancialControlPolicyContentView` 已在 main 上
+Status: resolved——五问由通道 1 按 owner 授权自决口径裁并落 [ADR-0122](../../../docs/adr/0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md)（2026-09-07），实施见文末「完成记录」；PS 域逐项结果的表达拆到 [03](./03-parcel-shipment-expresses-per-item-control-results.md)（draft）
+Blocked by: 无（前置 pc-gaps/07 已进 main `eb09c1ed`：`migrations/party_commercial/0024` 与 `ports.PreAcceptanceFinancialControlPolicyContentView` 都在）
 
 ## 从哪里来
 
@@ -66,6 +66,43 @@ SA 侧结果形状 `sadomain.PreAcceptanceControlPolicy`：`Requirement`（要�
 
 `要求`格的控制项来自策略正文而不是结算政策的派生；正文未登记停 `CONTROL_POLICY_NOT_CONFIGURED`（与调不通格分开，
 ADR-0054 / 0029 维持）；真库一正一反（一版多行正文可读回、缺正文 found=false、坏回指 error）；全仓含 DSN 绿并注明。
+
+## 裁决（通道 1，2026-09-07，owner 授权自决；理由与备选见 ADR-0122）
+
+1. **SA 结果形状**：`PreAcceptanceControlPolicy` 的`要求`形状从「一种方式 + 一份政策」长成「控制项集合（种类 × 判断顺序）+ 共同通过
+   条件 + 采用的控制策略版本」，结算方式与结算政策引用**保留**在答复与结果上（CONTEXT 要冻结与暴露保存它们）但不再选路。编排按判断
+   顺序逐项执行、控制种类决定走哪本账，**各项各自成结果**；共同通过条件原样交回，SA 不据它汇总——CONTEXT 明写那一步归 PS。「全部通过」
+   之下第一处`业务限制`即停后续项、已执行项不回滚（账本对请求身份幂等）。
+2. **信用政策版本**：本票不取。`CREDIT_CHECK` 照旧对 `CreditStandingView` 执行，哪一版信用政策决定额度是那一口提供方（SA→PC 信用缝，
+   未接）的事；不在控制项上带一个没人读的引用。ADR-0115 留的两条路到接那条缝时再选。
+3. **费用范围**：取闭包里已采用结算政策的 `Applicability().ChargeScope()`，不在 SA 命令上加格、不改 PS→SA 缝——资金作用域本就派生自
+   那份结算政策，两处同源；正文里挂在别的范围上的项不进答复，本范围一项都没有时答`未配置`。
+4. **`0007` 说要求而正文 found=false**：停 `CONTROL_POLICY_NOT_CONFIGURED`（恢复动作是租户补正文），**不留**「沿用结算政策推方式」的
+   过渡——那正是 pn-02-w03 禁的推导。闭包未采用控制策略同格。
+5. **失败处置与责任**：不随 SA 答复走。SA 结果只带执行控制所需的；委托去向归 PS，PS 要用时经自己的 PC 缝读。多项结果怎么合起来看，
+   由 PS 在自己的消费适配器按共同通过条件折成今天的一个 `FinancialControlResult`；PS 域逐项结果的表达拆到票 03。
+
+**越权风险点（供用户复核，不认可走 supersede）**：① 决定二「第一处限制即停后续项」是执行顺序规则，本会话判它不构成「汇总成接受/拒绝
+决定」——若 owner 认为组合策略下每一项都必须执行到底（例如为了给客户完整的限制清单），应改；② 决定四让 PS 消费适配器在 PS 域建模之前
+先折叠，折叠丢掉了「哪几项执行了」——票 03 是补它的地方，若 owner 要先建模再放行，应把本票的 PS 适配器改动回退到只支持单项。
+
+## 完成记录（分支 `mcp1-sa02`，基 `80641ddc`；进 main 的 SHA 由推送方广播后补记）
+
+| 笔 | 内容 |
+|---|---|
+| `f850108c` | SA 领域：`ControlKind` / `ControlItem` / `JointPassCondition` / `ControlPolicyReference`；`NewRequiredControlPolicy` 收控制项并核至少一项、种类唯一、顺序唯一，按判断顺序交回 |
+| `75394a6a` | SA 编排：逐项执行、种类选路、一次请求一个控制时刻、「全部通过」下第一处限制即停、停下不回滚；结果加 `ExecutedControls` / `JointPassCondition` / `ControlPolicy`；释放两本账各认领 |
+| `c5d3a711` | SA→PC 适配器改读正文（三半装配）、`parcel-dispatch` 接 `NewPreAcceptanceFinancialControlPolicyContents`、PS→SA 适配器按共同通过条件折叠；真库用例五向 |
+| 本笔 | ADR-0122 + README 行、票 03 draft、本票收口 |
+
+**验收对照**：`要求`格的控制项来自策略正文——适配器 `requiredPolicyFrom` 只经 `PreAcceptanceFinancialControlPolicyContentView` 取项，`policyFrom`
+从结算方式推方式的那段已删；正文未登记停 `CONTROL_POLICY_NOT_CONFIGURED`——适配器答 found=false，编排既有分格不变（与调不通格分开，ADR-0054 / 0029
+维持）；真库一正一反——一版多行正文可读回并按序（`TestATermsClosureCarriesEveryControlItemThePolicyContentRequires`）、缺正文 found=false 与闭包未采用
+两向（`TestARequiredDeclarationWithoutPolicyContentIsNotConfiguredNotDerived`）、坏回指 error（既有 `TestABadResolutionReferenceIsAnErrorNotAnUnconfiguredGrade`
+仍绿）；有父无子走 error 由提供方那口承重，本票不重证。
+
+**验证强度**：见完工报（干净检出含 DSN 全仓 `-p 1 -count=1`、探针 `internal/settlementaccounting/adapters/partycommercial` 无 DSN SKIP / 含 DSN PASS、
+清点重生成单独成笔）。
 
 ## Comments
 
