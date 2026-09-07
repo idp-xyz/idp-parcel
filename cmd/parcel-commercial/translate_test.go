@@ -232,6 +232,79 @@ func TestTranslationRefusesUnknownFieldsAndOutOfSetValues(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0120 Decision 六——批文 `sourceDataAmendment{closed, rules[]}`：closed 必填不给默认（缺席整项拒，
+// 不是「默认转复核」）；rules 在 closed=true 时可省；allowance 只收 ALLOWED / DISALLOWED，NOT_DECLARED 是缺格的
+// 读法不是一格的取值；阶段与意图取 parcel-shipment 原词、集外拒；dataGroup 开放引用只查非空；未知键拒。
+func TestSourceDataAmendmentTranslatesExactlyTheDeclaredShape(t *testing.T) {
+	item := func(declarations string) string {
+		return `{"items": [{"tenantId": "t", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "r", "version": "v1",
+			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED",
+			"declarations": {"sourceDataAmendment": ` + declarations + `}}]}`
+	}
+
+	t.Run("未封闭带格逐格翻过去", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(item(`{"closed": false, "rules": [
+			{"dataGroup": "consignee.address", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "ALLOWED"},
+			{"dataGroup": "consignee.address", "stage": "CUSTOMS_SUBMITTED", "intent": "EXPLICIT_CLEAR", "allowance": "DISALLOWED"}]}`)))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		declared := commands[0].Declarations.SourceDataAmendment
+		if declared == nil || declared.Closed || len(declared.Rules) != 2 {
+			t.Fatalf("声明 = %+v，want closed=false 两格", declared)
+		}
+		if declared.Rules[1].DataGroup.String() != "consignee.address" ||
+			declared.Rules[1].Stage != pcdomain.DeclaredCustomsSubmitted ||
+			declared.Rules[1].Intent != pcdomain.DeclaredExplicitClearIntent ||
+			declared.Rules[1].Allowance != pcdomain.AmendmentDisallowed {
+			t.Fatalf("第二格变形：%+v", declared.Rules[1])
+		}
+	})
+
+	t.Run("封闭可以不带格", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(item(`{"closed": true}`)))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		declared := commands[0].Declarations.SourceDataAmendment
+		if declared == nil || !declared.Closed || len(declared.Rules) != 0 {
+			t.Fatalf("声明 = %+v，want closed=true 零格", declared)
+		}
+	})
+
+	t.Run("缺键就是没这一节", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(`{"items": [{"tenantId": "t", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "r", "version": "v1",
+			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED"}]}`))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		if commands[0].Declarations.SourceDataAmendment != nil {
+			t.Fatal("没给这一节却翻出了一份声明")
+		}
+	})
+
+	refusals := map[string]string{
+		"closed 缺席":         `{"rules": [{"dataGroup": "g", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "ALLOWED"}]}`,
+		"NOT_DECLARED 登成一格": `{"closed": false, "rules": [{"dataGroup": "g", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "NOT_DECLARED"}]}`,
+		"集合外的允许性":           `{"closed": false, "rules": [{"dataGroup": "g", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "MAYBE"}]}`,
+		"集合外的阶段":            `{"closed": false, "rules": [{"dataGroup": "g", "stage": "IN_TRANSIT", "intent": "CORRECTION", "allowance": "ALLOWED"}]}`,
+		"集合外的意图":            `{"closed": false, "rules": [{"dataGroup": "g", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "REVOKE", "allowance": "ALLOWED"}]}`,
+		"资料组为空":             `{"closed": false, "rules": [{"dataGroup": "  ", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "ALLOWED"}]}`,
+		"格里的未知键":            `{"closed": false, "rules": [{"dataGroup": "g", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "ALLOWED", "reason": "x"}]}`,
+	}
+	for name, declarations := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(item(declarations))); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
 // Covers: ADR-0119 Decision 五——批文时长只认 ISO-8601 的 `P[nD][T[nH][nM][nS]]` 子集：整数、按序至多一次、
 // 至少一段；年 / 月 / 周 / 小数 / 逆序 / 重复 / 空 T 都拒。零时长由领域拒，不在本表。
 func TestISODurationSubsetParsesExactlyTheDeclaredShape(t *testing.T) {

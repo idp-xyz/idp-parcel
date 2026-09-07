@@ -497,6 +497,99 @@ func TestPublishedContractDelegationsAreReadBackByBothViews(t *testing.T) {
 	}
 }
 
+// sourceDataAmendmentBatchBody 两份接单规则包：rules-open 未封闭带两格，rules-closed 封闭零格。
+func sourceDataAmendmentBatchBody() string {
+	return `{"items": [
+    {
+      "tenantId": "tenant-1", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "rules-open", "version": "v1",
+      "scope": "scope-1", "contentDigest": "sha256:rules-open", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-open", "source": "source-open", "approvedAt": "2026-01-02T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {"sourceDataAmendment": {"closed": false, "rules": [
+        {"dataGroup": "consignee.address", "stage": "ACCEPTED_NOT_YET_RECEIVED", "intent": "CORRECTION", "allowance": "ALLOWED"},
+        {"dataGroup": "consignee.address", "stage": "CUSTOMS_SUBMITTED", "intent": "CORRECTION", "allowance": "DISALLOWED"}
+      ]}}
+    },
+    {
+      "tenantId": "tenant-1", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "rules-closed", "version": "v1",
+      "scope": "scope-1", "contentDigest": "sha256:rules-closed", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-closed", "source": "source-closed", "approvedAt": "2026-01-02T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {"sourceDataAmendment": {"closed": true}}
+    }
+  ]}`
+}
+
+// Covers: 票 pc-gaps/10 真库端到端——受控批文 `sourceDataAmendment` 一节经进程口发布，写进 0027 两表，再经 PS 消费
+// 适配器将来读的那个口（StageContentDeclarations.LoadSourceDataAmendmentAllowance）读回：未封闭的逐格与缺格读法、
+// 封闭零格的「一律不允许」都从生产读口算出来（ADR-0120 Decision 三、四、六）。
+func TestAPublishedSourceDataAmendmentAllowanceIsReadBackByTheContentView(t *testing.T) {
+	dsn := freshMigratedDSN(t)
+	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, sourceDataAmendmentBatchBody())); code != exitLanded {
+		t.Fatalf("规则包批 exit = %d, want %d", code, exitLanded)
+	}
+
+	registry := loadScope(t, dsn, "tenant-1", "scope-1")
+	tenant, err := pcdomain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	lookup := func(objectID string) pcdomain.CommercialVersion {
+		t.Helper()
+		id, err := pcdomain.NewCommercialObjectID(objectID)
+		if err != nil {
+			t.Fatalf("对象：%v", err)
+		}
+		label, err := pcdomain.NewCommercialVersionLabel("v1")
+		if err != nil {
+			t.Fatalf("版本号：%v", err)
+		}
+		version, present := registry.Lookup(tenant, pcdomain.AcceptanceRulePackageObject, id, label)
+		if !present {
+			t.Fatalf("发出去的规则包 %s 不在整册里", objectID)
+		}
+		return version
+	}
+
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池点读：%v", err)
+	}
+	defer pool.Close()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("框架 DB：%v", err)
+	}
+	reader, err := pcpostgres.NewStageContentDeclarations(db)
+	if err != nil {
+		t.Fatalf("构造阶段内容读口：%v", err)
+	}
+	address, err := pcdomain.NewSourceDataGroupReference("consignee.address")
+	if err != nil {
+		t.Fatalf("资料组：%v", err)
+	}
+
+	open, found, err := reader.LoadSourceDataAmendmentAllowance(t.Context(), tenant, lookup("rules-open"))
+	if err != nil || !found {
+		t.Fatalf("点读 rules-open：found=%v err=%v", found, err)
+	}
+	if open.Closed() || len(open.Rules()) != 2 ||
+		open.AllowanceFor(address, pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent) != pcdomain.AmendmentAllowed ||
+		open.AllowanceFor(address, pcdomain.DeclaredCustomsSubmitted, pcdomain.DeclaredCorrectionIntent) != pcdomain.AmendmentDisallowed ||
+		open.AllowanceFor(address, pcdomain.DeclaredReceivedOrMeasured, pcdomain.DeclaredCorrectionIntent) != pcdomain.AmendmentAllowanceNotDeclared {
+		t.Fatalf("rules-open 读回变形：closed=%v rules=%#v", open.Closed(), open.Rules())
+	}
+
+	closed, found, err := reader.LoadSourceDataAmendmentAllowance(t.Context(), tenant, lookup("rules-closed"))
+	if err != nil || !found {
+		t.Fatalf("点读 rules-closed：found=%v err=%v", found, err)
+	}
+	if !closed.Closed() || len(closed.Rules()) != 0 ||
+		closed.AllowanceFor(address, pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredSupplementIntent) != pcdomain.AmendmentDisallowed {
+		t.Fatalf("rules-closed 读回变形：closed=%v rules=%d", closed.Closed(), len(closed.Rules()))
+	}
+}
+
 func TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, controlPolicyBatchBody())); code != exitLanded {

@@ -86,6 +86,10 @@ type CommercialDeclarations struct {
 	// 的实际决定权交给持某一等级的运营角色。它与 ContractContent 是同一份合同的两种话——那一节答
 	// 「采用哪个规则包、哪些范围怎么控」，本节答「谁能替谁决定」；同键两条与空清单由领域构造门拒。
 	ContractDelegations []domain.ContractDelegationDeclaration
+	// SourceDataAmendment 挂在接单规则包版本上（ADR-0120）：接受后客户原始资料按（资料组 × 阶段 × 意图）能不能改，
+	// 外加一格「封闭」说缺格怎么读。是指针不是切片：「封闭 + 零格」是一份合法声明，len 表达不了在不在场。
+	// 未封闭却零格、某格立不住、同格两行由领域构造门拒。
+	SourceDataAmendment *SourceDataAmendmentDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -105,7 +109,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.PricePolicyBody == nil &&
 		declarations.CustomerServiceRuleBody == nil &&
 		declarations.PreAcceptanceFinancialControlPolicyBody == nil &&
-		len(declarations.ContractDelegations) == 0
+		len(declarations.ContractDelegations) == 0 &&
+		declarations.SourceDataAmendment == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -133,6 +138,14 @@ type ContractContentDeclaration struct {
 type IntakeQualificationDeclaration struct {
 	Sources        []domain.DeclaredIntakeSource
 	Qualifications []domain.RuleReference
+}
+
+// SourceDataAmendmentDeclaration 是接单规则包的资料修订允许声明输入（PAR-COM-13，ADR-0120）：Closed 说缺格
+// 怎么读（false 未声明 / true 不允许），Rules 是逐格的允许 / 不允许。Closed 没有默认——它是这一节正文的一部分，
+// 由调用方显式给出；Rules 在 Closed=true 时可为空清单（这一版什么都不许改），Closed=false 时至少一格由领域把守。
+type SourceDataAmendmentDeclaration struct {
+	Closed bool
+	Rules  []domain.SourceDataAmendmentRule
 }
 
 // RulePackageBodyDeclaration 是接单规则包版本的正文输入（open-decisions D-3）：五维
@@ -251,6 +264,7 @@ const (
 	CustomerServiceRuleBodyChannel
 	PreAcceptanceFinancialControlPolicyBodyChannel
 	ContractDelegationChannel
+	SourceDataAmendmentChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -289,6 +303,8 @@ func (channel DeclarationChannel) String() string {
 		return "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY"
 	case ContractDelegationChannel:
 		return "CONTRACT_DELEGATION"
+	case SourceDataAmendmentChannel:
+		return "SOURCE_DATA_AMENDMENT"
 	default:
 		return ""
 	}
@@ -796,6 +812,21 @@ func declarationWrites(
 			channel: ContractDelegationChannel,
 			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
 				return registry.SaveContractDelegations(ctx, content)
+			},
+		})
+	}
+
+	if declarations.SourceDataAmendment != nil {
+		// 归属由领域构造门把守：挂在合同或授权规则上会被拒（ADR-0120 Decision 一），不静默丢弃。
+		content, err := domain.NewSourceDataAmendmentAllowanceContent(
+			version, declarations.SourceDataAmendment.Closed, declarations.SourceDataAmendment.Rules)
+		if err != nil {
+			return nil, fmt.Errorf("source data amendment allowance: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: SourceDataAmendmentChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				return registry.SaveSourceDataAmendmentAllowance(ctx, content)
 			},
 		})
 	}

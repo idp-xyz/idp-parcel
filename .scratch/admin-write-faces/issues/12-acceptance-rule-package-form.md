@@ -13,8 +13,12 @@ policyVersion}]`（0005 时点锚）、`acceptanceContent{applicableGroups[], ma
 （0013 终局规则）。pc-gaps/09 **已落地**（ADR-0119，迁移 0026）：终局规则节多一格 `finalRuleValidity{anchor, duration}`——`anchor`
 是封闭集下拉（首发只有 `CHANNEL_RESULT_OBSERVED`，由服务端词表读口供）、`duration` 收 ISO-8601 子集 `P[nD][T[nH][nM][nS]]`
 （年 / 月 / 周不收），整格留空 = 未声明有效期（不失效），表单不给默认时长；它仍随 `FinalRuleChannel` 同一通道、**不是**新通道，
-且只填这一格不填 `finalRules` 行服务端整项拒。pc-gaps/10（资料修订允许声明——0013 两族之外的第三族阶段内容声明，新通道）落地后
-多一节。
+且只填这一格不填 `finalRules` 行服务端整项拒。pc-gaps/10 **已落地**（ADR-0120，迁移 0027，新通道 `SOURCE_DATA_AMENDMENT`）：
+多一节 `sourceDataAmendment{closed, rules[{dataGroup, stage, intent, allowance}]}`——`closed` 是必填的一格布尔（false = 缺格转复核、
+true = 缺格即不允许，表单不给默认、不预选）；`rules` 是一张几行的表，`stage` 六格与 `intent` 三格由服务端词表读口供下拉（词是
+`parcel-shipment` 原词，表单不内置）、`allowance` 只有 `ALLOWED` / `DISALLOWED` 两值（没有「未声明」这一项——那是缺格的读法，
+不是一行能选的值）、`dataGroup` 是开放串；`closed=true` 时表可以留空（这一版什么都不许改），`closed=false` 时零行服务端整项拒；
+整节留空 = 未声明本族。
 
 ## 选形与理由（ADR-0101 决定八）
 

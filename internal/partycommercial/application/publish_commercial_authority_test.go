@@ -1777,3 +1777,149 @@ func TestFinalRuleValidityPublishesInsideTheFinalRuleContent(t *testing.T) {
 		}
 	})
 }
+
+func amendmentRuleOf(t *testing.T, group string, stage domain.DeclaredAmendmentStage, intent domain.DeclaredAmendmentIntent, allowance domain.AmendmentAllowance) domain.SourceDataAmendmentRule {
+	t.Helper()
+	return domain.SourceDataAmendmentRule{
+		DataGroup: pcValue(t, domain.NewSourceDataGroupReference, group),
+		Stage:     stage,
+		Intent:    intent,
+		Allowance: allowance,
+	}
+}
+
+// Covers: ADR-0120 Decision 六——资料修订允许声明随接单规则包版本发布、走自己的 SOURCE_DATA_AMENDMENT 通道；
+// 封闭标记与逐格原样到达持久化面，通道不代填任何一格；「封闭 + 零格」是合法正文；缺键（nil）就是没这一节。
+func TestSourceDataAmendmentAllowancePublishesWithItsRulePackageVersion(t *testing.T) {
+	t.Run("未封闭带格", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SourceDataAmendment: &application.SourceDataAmendmentDeclaration{
+				Closed: false,
+				Rules: []domain.SourceDataAmendmentRule{
+					amendmentRuleOf(t, "consignee.address", domain.DeclaredAcceptedNotYetReceived, domain.DeclaredCorrectionIntent, domain.AmendmentAllowed),
+					amendmentRuleOf(t, "consignee.address", domain.DeclaredCustomsSubmitted, domain.DeclaredCorrectionIntent, domain.AmendmentDisallowed),
+				},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if result.Outcome() != application.CommercialVersionPublishedEffective {
+			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+		}
+		if len(registry.savedSourceDataAmendments) != 1 {
+			t.Fatalf("允许声明册收到 %d 份, want 1", len(registry.savedSourceDataAmendments))
+		}
+		saved := registry.savedSourceDataAmendments[0]
+		if saved.Closed() || len(saved.Rules()) != 2 || saved.Owner().ObjectID().String() != "rules-1" || saved.Owner().Status() != domain.CommercialVersionEffective {
+			t.Fatalf("声明没有原样到达持久化面：closed=%v rules=%d owner=%s/%q", saved.Closed(), len(saved.Rules()), saved.Owner().ObjectID(), saved.Owner().Status())
+		}
+		address := pcValue(t, domain.NewSourceDataGroupReference, "consignee.address")
+		if saved.AllowanceFor(address, domain.DeclaredCustomsSubmitted, domain.DeclaredCorrectionIntent) != domain.AmendmentDisallowed ||
+			saved.AllowanceFor(address, domain.DeclaredReceivedOrMeasured, domain.DeclaredCorrectionIntent) != domain.AmendmentAllowanceNotDeclared {
+			t.Fatal("到达持久化面的格或缺格读法变了")
+		}
+		reports := result.Declarations()
+		if len(reports) != 1 ||
+			reports[0].Channel != application.SourceDataAmendmentChannel ||
+			reports[0].Channel.String() != "SOURCE_DATA_AMENDMENT" ||
+			reports[0].Outcome != ports.DeclarationSaved {
+			t.Fatalf("报告 = %#v, want SOURCE_DATA_AMENDMENT=SAVED 一条", reports)
+		}
+	})
+
+	t.Run("封闭零格是一份合法正文", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SourceDataAmendment: &application.SourceDataAmendmentDeclaration{Closed: true}},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if len(registry.savedSourceDataAmendments) != 1 || !registry.savedSourceDataAmendments[0].Closed() {
+			t.Fatalf("封闭零格没有作为一份正文到达持久化面：%d", len(registry.savedSourceDataAmendments))
+		}
+		if reports := result.Declarations(); len(reports) != 1 || reports[0].Channel != application.SourceDataAmendmentChannel {
+			t.Fatalf("报告 = %#v, want SOURCE_DATA_AMENDMENT 一条", reports)
+		}
+	})
+
+	t.Run("缺键就是没这一节", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if len(registry.savedSourceDataAmendments) != 0 || len(result.Declarations()) != 0 {
+			t.Fatal("没给这一节却登了一份声明")
+		}
+	})
+}
+
+// Covers: 通道的门与其余通道同一条纪律——未封闭零格 / 同格两行 / 挂错拥有对象都由领域构造门在触碰持久化面之前
+// 整项拒且一行不写；册的`内容冲突`折进报告而不是 error（ADR-0031）。
+func TestSourceDataAmendmentAllowanceIsGuardedLikeTheOtherChannels(t *testing.T) {
+	allowed := amendmentRuleOf(t, "consignee.address", domain.DeclaredAcceptedNotYetReceived, domain.DeclaredCorrectionIntent, domain.AmendmentAllowed)
+
+	for name, tc := range map[string]struct {
+		kind        domain.CommercialObjectKind
+		declaration application.SourceDataAmendmentDeclaration
+		want        error
+	}{
+		"未封闭零格是缺件": {domain.AcceptanceRulePackageObject, application.SourceDataAmendmentDeclaration{Closed: false}, domain.ErrSourceDataAmendmentNotConfigured},
+		"未声明登成一格": {domain.AcceptanceRulePackageObject, application.SourceDataAmendmentDeclaration{Rules: []domain.SourceDataAmendmentRule{
+			amendmentRuleOf(t, "consignee.address", domain.DeclaredAcceptedNotYetReceived, domain.DeclaredCorrectionIntent, domain.AmendmentAllowanceNotDeclared),
+		}}, domain.ErrSourceDataAmendmentNotConfigured},
+		"同格两行":    {domain.AcceptanceRulePackageObject, application.SourceDataAmendmentDeclaration{Rules: []domain.SourceDataAmendmentRule{allowed, allowed}}, domain.ErrConflictingSourceDataAmendment},
+		"挂在客户合同上": {domain.CustomerContractObject, application.SourceDataAmendmentDeclaration{Rules: []domain.SourceDataAmendmentRule{allowed}}, domain.ErrUnusableRulePackage},
+		"挂在授权规则上": {domain.AuthorizationRuleObject, application.SourceDataAmendmentDeclaration{Rules: []domain.SourceDataAmendmentRule{allowed}}, domain.ErrUnusableRulePackage},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry := &publicationRegistryDouble{}
+			handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+			declaration := tc.declaration
+			if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+				Spec:         publishSpec(t, tc.kind, "owner-1", "v1"),
+				Approval:     publishApproval(t, "owner-1"),
+				RoleStanding: domain.ApprovalRoleConfirmed,
+				Declarations: application.CommercialDeclarations{SourceDataAmendment: &declaration},
+			}); !errors.Is(err, tc.want) {
+				t.Fatalf("err = %v, want %v", err, tc.want)
+			}
+			if len(registry.savedVersions) != 0 || len(registry.savedSourceDataAmendments) != 0 {
+				t.Fatal("拒收的发布写了库")
+			}
+		})
+	}
+
+	t.Run("内容冲突落在报告里", func(t *testing.T) {
+		registry := &publicationRegistryDouble{declarationOutcome: ports.DeclarationContentConflict}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SourceDataAmendment: &application.SourceDataAmendmentDeclaration{Rules: []domain.SourceDataAmendmentRule{allowed}}},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——内容冲突不是 error", err)
+		}
+		if reports := result.Declarations(); len(reports) != 1 || reports[0].Channel != application.SourceDataAmendmentChannel || reports[0].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want SOURCE_DATA_AMENDMENT=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}

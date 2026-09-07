@@ -67,6 +67,28 @@ type declarationsDocument struct {
 	// contractDelegations 挂在客户合同版本上（ADR-0116 Decision 二）：谁把哪一动作在哪一范围的实际决定权
 	// 委派给持哪一等级的运营角色、在哪段期间。
 	ContractDelegations []contractDelegationDocument `json:"contractDelegations,omitempty"`
+	// sourceDataAmendment 挂在接单规则包版本上（ADR-0120）：接受后客户原始资料按（资料组 × 阶段 × 意图）能不能改，
+	// 外加 closed 说缺格怎么读。缺键 = 整节没声明；键在则 closed 必填不给默认。
+	SourceDataAmendment *sourceDataAmendmentDocument `json:"sourceDataAmendment,omitempty"`
+}
+
+// sourceDataAmendmentDocument 是资料修订允许声明（票 party-commercial-context-gaps/10，ADR-0120 Decision 六）。
+//
+// closed 是 *bool：JSON 的 false 与缺席分不开，而它是这一节正文的一部分——false 是「缺格转复核」、true 是「缺格
+// 即不允许」，两句话都要登记方自己说，翻译层不替它选一句。rules 在 closed=true 时可省（这一版什么都不许改）；
+// closed=false 时至少一格由领域拒。allowance 只收 ALLOWED / DISALLOWED：NOT_DECLARED 是缺格的读法，不是一格的
+// 取值，写进来拒收。阶段与意图的词取 parcel-shipment 原词（镜像 pcdomain.DeclaredAmendmentStage / Intent），
+// 集外拒收；dataGroup 是开放引用，只查非空。
+type sourceDataAmendmentDocument struct {
+	Closed *bool                             `json:"closed"`
+	Rules  []sourceDataAmendmentRuleDocument `json:"rules,omitempty"`
+}
+
+type sourceDataAmendmentRuleDocument struct {
+	DataGroup string `json:"dataGroup"`
+	Stage     string `json:"stage"`
+	Intent    string `json:"intent"`
+	Allowance string `json:"allowance"`
 }
 
 type asOfPolicyDocument struct {
@@ -610,7 +632,89 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.ContractDelegations = append(declarations.ContractDelegations, declared)
 	}
 
+	if document.SourceDataAmendment != nil {
+		declared, err := sourceDataAmendmentFrom(*document.SourceDataAmendment)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.SourceDataAmendment = declared
+	}
+
 	return declarations, nil
+}
+
+// sourceDataAmendmentFrom 把批文一节译成发布用例的声明输入。closed 缺席即拒——它不是可省的旁注；归属与格的
+// 立不立得住（未封闭零格、同格两行）留给领域构造门，这里只做名字到封闭集的映射与非空。
+func sourceDataAmendmentFrom(document sourceDataAmendmentDocument) (*pcapplication.SourceDataAmendmentDeclaration, error) {
+	if document.Closed == nil {
+		return nil, fmt.Errorf("资料修订允许声明缺 closed：缺格读「未声明」还是「不允许」要登记方自己说，不给默认")
+	}
+	rules := make([]pcdomain.SourceDataAmendmentRule, 0, len(document.Rules))
+	for _, rule := range document.Rules {
+		group, err := pcdomain.NewSourceDataGroupReference(rule.DataGroup)
+		if err != nil {
+			return nil, fmt.Errorf("资料修订允许声明的一格：%w", err)
+		}
+		stage, err := amendmentStageFrom(rule.Stage)
+		if err != nil {
+			return nil, err
+		}
+		intent, err := amendmentIntentFrom(rule.Intent)
+		if err != nil {
+			return nil, err
+		}
+		allowance, err := amendmentAllowanceFrom(rule.Allowance)
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, pcdomain.SourceDataAmendmentRule{DataGroup: group, Stage: stage, Intent: intent, Allowance: allowance})
+	}
+	return &pcapplication.SourceDataAmendmentDeclaration{Closed: *document.Closed, Rules: rules}, nil
+}
+
+// amendmentStageFrom 是 pcdomain.DeclaredAmendmentStage 的名字镜像，六格原词属 parcel-shipment；集外拒收，不折成
+// 最近的一格——把打错的阶段折进某一格，等于替租户改了规则管哪一段。
+func amendmentStageFrom(name string) (pcdomain.DeclaredAmendmentStage, error) {
+	for _, stage := range []pcdomain.DeclaredAmendmentStage{
+		pcdomain.DeclaredAcceptedNotYetReceived,
+		pcdomain.DeclaredReceivedOrMeasured,
+		pcdomain.DeclaredLabelledOrBagged,
+		pcdomain.DeclaredCustomsDataFormingNotSubmitted,
+		pcdomain.DeclaredCustomsSubmitted,
+		pcdomain.DeclaredCaseClosedOrServiceCompleted,
+	} {
+		if stage.String() == name {
+			return stage, nil
+		}
+	}
+	return pcdomain.DeclaredAmendmentStageInvalid, fmt.Errorf("集合外的资料修订阶段 %q", name)
+}
+
+func amendmentIntentFrom(name string) (pcdomain.DeclaredAmendmentIntent, error) {
+	for _, intent := range []pcdomain.DeclaredAmendmentIntent{
+		pcdomain.DeclaredSupplementIntent,
+		pcdomain.DeclaredCorrectionIntent,
+		pcdomain.DeclaredExplicitClearIntent,
+	} {
+		if intent.String() == name {
+			return intent, nil
+		}
+	}
+	return pcdomain.DeclaredAmendmentIntentInvalid, fmt.Errorf("集合外的修订意图 %q", name)
+}
+
+// amendmentAllowanceFrom 只认两值。NOT_DECLARED 单独点名拒：它是缺格的读法，写成一格就是把「没说」登成了「说了」。
+func amendmentAllowanceFrom(name string) (pcdomain.AmendmentAllowance, error) {
+	switch name {
+	case pcdomain.AmendmentAllowed.String():
+		return pcdomain.AmendmentAllowed, nil
+	case pcdomain.AmendmentDisallowed.String():
+		return pcdomain.AmendmentDisallowed, nil
+	case pcdomain.AmendmentAllowanceNotDeclared.String():
+		return pcdomain.AmendmentAllowanceNotDeclared, fmt.Errorf("允许性 %q 不是一格的取值：缺格的读法由 closed 决定，不要写进 rules", name)
+	default:
+		return pcdomain.AmendmentAllowanceNotDeclared, fmt.Errorf("集合外的允许性 %q", name)
+	}
 }
 
 func contractDelegationFrom(document contractDelegationDocument) (pcdomain.ContractDelegationDeclaration, error) {
