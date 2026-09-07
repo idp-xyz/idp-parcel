@@ -1049,7 +1049,12 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control declarations: %w", err)
 	}
-	policy, err := sapartycommercial.NewPreAcceptanceControlPolicy(resolutions, declarations)
+	// 控制项从策略正文点读（ADR-0122）：声明答「要不要」，正文答「要执行哪些控制」。
+	contents, err := pcpostgres.NewPreAcceptanceFinancialControlPolicyContents(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance financial control policy contents: %w", err)
+	}
+	policy, err := sapartycommercial.NewPreAcceptanceControlPolicy(resolutions, declarations, contents)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control policy: %w", err)
 	}

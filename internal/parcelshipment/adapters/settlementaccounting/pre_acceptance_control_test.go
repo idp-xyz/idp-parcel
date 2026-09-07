@@ -202,6 +202,31 @@ func settlementScope(t *testing.T) sadomain.SettlementScope {
 	return scope
 }
 
+// requiredPolicy 造一份`要求`控制的策略答复（ADR-0122 形状）：控制项按给定种类各一项、按给定次序
+// 排，共同通过条件取首发唯一值；结算方式与两份采用依据按夹具固定。
+func requiredPolicy(t *testing.T, method sadomain.SettlementMethod, kinds ...sadomain.ControlKind) sadomain.PreAcceptanceControlPolicy {
+	t.Helper()
+	items := make([]sadomain.ControlItem, 0, len(kinds))
+	for index, kind := range kinds {
+		item, err := sadomain.NewControlItem(kind, uint32(index+1))
+		if err != nil {
+			t.Fatalf("new control item: %v", err)
+		}
+		items = append(items, item)
+	}
+	policy, err := sadomain.NewRequiredControlPolicy(
+		items,
+		sadomain.AllControlsPass,
+		value(t, sadomain.NewControlPolicyReference, "PC-CONTROL-POLICY/v1"),
+		method,
+		value(t, sadomain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
+	)
+	if err != nil {
+		t.Fatalf("new required control policy: %v", err)
+	}
+	return policy
+}
+
 // controlScope 把资金作用域与商业解析回指装成 ControlScopeSource 交回的那一件。回指用
 // 与 scope_source_test 同一个字面量，两处夹具因此说的是同一次解析。
 func controlScope(t *testing.T, settlement sadomain.SettlementScope) adapter.ControlScope {
@@ -216,13 +241,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 	t.Helper()
 
 	scope := settlementScope(t)
-	policy, err := sadomain.NewRequiredControlPolicy(
-		sadomain.PrepaidSettlement,
-		value(t, sadomain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
-	)
-	if err != nil {
-		t.Fatalf("new control policy: %v", err)
-	}
+	policy := requiredPolicy(t, sadomain.PrepaidSettlement, sadomain.PrepaidFreezeControl)
 	balance, err := sadomain.NewOperationalBalance(scope, 10_000, 0, 0, 0)
 	if err != nil {
 		t.Fatalf("new operational balance: %v", err)
@@ -405,14 +424,7 @@ func TestAnExplicitNoControlCarriesItsCommercialBasis(t *testing.T) {
 func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixture {
 	t.Helper()
 	fixture := newControlFixture(t)
-	policy, err := sadomain.NewRequiredControlPolicy(
-		sadomain.TermsSettlement,
-		value(t, sadomain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
-	)
-	if err != nil {
-		t.Fatalf("new terms policy: %v", err)
-	}
-	fixture.policy.policy = policy
+	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
@@ -429,6 +441,55 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 		Amounts: fixture.amounts,
 	})
 	return fixture
+}
+
+// combinedFixture 把夹具切到组合策略：同一份策略先预付冻结、后信用校验（ADR-0115 允许、ADR-0122
+// 执行的组合），两本账都真在。
+func combinedFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixture {
+	t.Helper()
+	fixture := termsFixture(t, standing)
+	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement,
+		sadomain.PrepaidFreezeControl, sadomain.CreditCheckControl)
+	return fixture
+}
+
+// Covers: CONTEXT「由 parcel-shipment 按策略的共同通过条件形成接受判断」在适配器上的落法（ADR-0122
+// 决定四）——组合策略两项都成立时折成 `HELD`（资金确已占用，暴露留在提供方账本由同一身份释放）；
+// 排在后面的一项形成`业务限制`时折成带原因的 `RESTRICTED`，不因前一项成立而放行。
+func TestACombinedControlFoldsByTheJointPassCondition(t *testing.T) {
+	scope := settlementScope(t)
+	roomy, err := sadomain.NewCreditStanding(scope, 10_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	fixture := combinedFixture(t, roomy)
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+	if assessment.Outcome != psports.PreAcceptanceControlFormed ||
+		assessment.Result.Outcome() != psdomain.FinancialControlHeld {
+		t.Fatalf("outcome = %q / %q, want FORMED / HELD", assessment.Outcome, assessment.Result.Outcome())
+	}
+
+	tight, err := sadomain.NewCreditStanding(scope, 1_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	restricted := combinedFixture(t, tight)
+	assessment, err = restricted.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), restricted.request(t))
+	if err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+	if assessment.Result.Outcome() != psdomain.FinancialControlRestricted {
+		t.Fatalf("control outcome = %q, want RESTRICTED——第一项冻结成立不能放行第二项的超额", assessment.Result.Outcome())
+	}
+	if assessment.Result.Basis().String() != "AVAILABLE_CREDIT_INSUFFICIENT" {
+		t.Fatalf("reason = %q, want the restricting item's own reason", assessment.Result.Basis())
+	}
+	if restricted.ledger.ledger.HeldMinor() != 4_000 {
+		t.Fatalf("held = %d; 第一项占下的资金留在账本上等释放，不因第二项受限而消失", restricted.ledger.ledger.HeldMinor())
+	}
 }
 
 // Covers: ADR-0047 决策三经适配器落地——账期控制通过译成 `CREDIT_EXPOSED` 而不冒用

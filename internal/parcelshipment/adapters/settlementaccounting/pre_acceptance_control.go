@@ -259,16 +259,7 @@ func assessmentFor(
 ) (psports.PreAcceptanceControlAssessment, error) {
 	switch answer.Outcome() {
 	case saapplication.ControlApplied:
-		// `已执行`按方式携带冻结或暴露之一（ADR-0047）：预付占资金、账期占额度。
-		// 两个都不带的`已执行`是阶段契约被打破。
-		if freeze, present := answer.Freeze(); present {
-			return appliedAssessment(request, answer, freeze)
-		}
-		if exposure, present := answer.Exposure(); present {
-			return exposedAssessment(request, answer, exposure)
-		}
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
-			"%w: applied control carries neither a freeze nor an exposure", ErrUntranslatableAnswer)
+		return appliedControlAssessment(request, answer)
 	case saapplication.ControlNotApplicable:
 		result, err := controlResultFor(
 			psdomain.FinancialControlResultID{},
@@ -293,6 +284,41 @@ func assessmentFor(
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control outcome %d",
 			ErrUntranslatableAnswer, answer.Outcome())
 	}
+}
+
+// appliedControlAssessment 把`已执行`译回本上下文的一个控制结果。提供方自 ADR-0122 起按策略正文
+// 逐项执行，冻结与暴露**可以同时在场**；本上下文的 FinancialControlResult 今天仍是一个请求一个
+// 结果，多项怎么合起来看由本上下文按策略的共同通过条件判——CONTEXT 把这一步明确判给了
+// parcel-shipment（「由 parcel-shipment 按策略的共同通过条件形成接受判断」），所以折叠在这里、
+// 不在提供方。
+//
+// 「全部通过」之下：任一项形成`业务限制`即译成 `RESTRICTED`（提供方在第一处限制就停手，所以
+// 至多一项受限）；全部成立时有冻结译 `HELD`、只有暴露译 `CREDIT_EXPOSED`——两者并存时以资金
+// 已被占用那一句为准，暴露那一项仍留在提供方账本上、由同一请求身份释放。逐项结果在本上下文的
+// 表达归后继票（sa-preacceptance-policy-view/03），本函数不替它发明第二种结果形状。
+//
+// 共同通过条件集外报错不吸收（ADR-0025）：一个本上下文还不会算的组合子若静默按「全部通过」折，
+// 就是替租户决定了怎么合并控制结果。两个都不带的`已执行`是阶段契约被打破。
+func appliedControlAssessment(
+	request psports.FinancialControlRequest,
+	answer saapplication.ApplyPreAcceptanceControlResult,
+) (psports.PreAcceptanceControlAssessment, error) {
+	freeze, hasFreeze := answer.Freeze()
+	exposure, hasExposure := answer.Exposure()
+	if !hasFreeze && !hasExposure {
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
+			"%w: applied control carries neither a freeze nor an exposure", ErrUntranslatableAnswer)
+	}
+	switch answer.JointPassCondition() {
+	case sadomain.AllControlsPass:
+	default:
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
+			"%w: joint pass condition %d", ErrUntranslatableAnswer, uint8(answer.JointPassCondition()))
+	}
+	if hasExposure && (!hasFreeze || exposure.Status() == sadomain.ExposureRestricted) {
+		return exposedAssessment(request, answer, exposure)
+	}
+	return appliedAssessment(request, answer, freeze)
 }
 
 // appliedAssessment 译`已执行`的两种冻结状态。`已释放`不在施加答复的封闭集合里——刚执行
