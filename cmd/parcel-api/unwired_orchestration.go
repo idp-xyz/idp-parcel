@@ -401,6 +401,18 @@ func (unwiredSupplement) Handle(
 	return shipmentapp.FormNewSubmissionVersionResult{}, errOrchestrationNotWired
 }
 
+// unwiredAmendment 是资料修订命令口的编排占位（票 ps-port-remainder/04）。填法同其余命令占位：不交回
+// 零值业务答案——AmendCustomerSourceDataResult 的零值 outcome 是 Invalid，端点会把它判成 UNNAMED_OUTCOME，
+// 那条路径本是用来抓「应用层漏了一格没具名」的；稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
+type unwiredAmendment struct{}
+
+func (unwiredAmendment) Handle(
+	context.Context,
+	shipmentapp.AmendCustomerSourceDataCommand,
+) (shipmentapp.AmendCustomerSourceDataResult, error) {
+	return shipmentapp.AmendCustomerSourceDataResult{}, errOrchestrationNotWired
+}
+
 // unwiredReviewQueue 是复核队列读口的占位（票 09）。生产装配交入的是委托查阅适配器
 // 本尊（同表同作用域纪律）；这里独立成形，装配测试才盖得住「队列口接错适配器」。
 type unwiredReviewQueue struct{}

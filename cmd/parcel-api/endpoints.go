@@ -55,6 +55,7 @@ func assembleBusinessEndpoints(
 	manualReview shipmenthttp.ManualReviewCompletionHandler,
 	rejection shipmenthttp.ActiveRejectionHandler,
 	supplement shipmenthttp.SupplementHandler,
+	amendment shipmenthttp.AmendmentHandler,
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
 	labelTransactions shipmenthttp.LabelTransactionsReader,
@@ -191,6 +192,11 @@ func assembleBusinessEndpoints(
 		// 渠道的写行，同挂字面量 UnconfiguredIntake{}；谁能替哪个客户账户补充、基准版本怎么译，属
 		// `PAR-INT-01` 接入契约（实例半边），隔离读准入与隔离提交放行都换不了这一行。
 		{Pattern: "/shipment-requests/supplements", Handler: shipmenthttp.NewFormNewSubmissionVersionEndpoint(shipmenthttp.UnconfiguredIntake{}, supplement)},
+		// 资料修订命令口（UC-PS-002；票 ps-port-remainder/04）：客户或其授权代表在`已接受`委托上形成客户原始
+		// 资料新版本。客户渠道的写行，同挂字面量 UnconfiguredIntake{}；请求方与实际决定方怎么采信属
+		// `BD-PS-009` / `PAR-INT-01`（实例半边），隔离读准入与隔离提交放行都换不了这一行。编排接的是
+		// 未配置的授权与矩阵答复，越过 Intake 后如实停在授权未决——停点从「没有入口」变成「说得出停在哪」。
+		{Pattern: "/shipment-requests/source-data-amendments", Handler: shipmenthttp.NewAmendCustomerSourceDataEndpoint(shipmenthttp.UnconfiguredIntake{}, amendment)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
 		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
 		// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。

@@ -39,6 +39,7 @@ var (
 	_ ManualReviewCompletionIntake = UnconfiguredIntake{}
 	_ ActiveRejectionIntake        = UnconfiguredIntake{}
 	_ SupplementIntake             = UnconfiguredIntake{}
+	_ SourceDataAmendmentIntake    = UnconfiguredIntake{}
 )
 
 // IntakeSubmission 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -71,6 +72,12 @@ func (UnconfiguredIntake) IntakeActiveRejection(context.Context, *http.Request) 
 // 让任何调用方替任何客户换掉一份委托的当前版本。
 func (UnconfiguredIntake) IntakeSupplement(context.Context, *http.Request) (application.FormNewSubmissionVersionCommand, error) {
 	return application.FormNewSubmissionVersionCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeSourceDataAmendment 同上：修订请求的来源身份、目标范围、请求方与意图整组来自认证结果与
+// 接入契约，采信自报的请求方等于让任何调用方替任何客户改一份已接受委托的资料。
+func (UnconfiguredIntake) IntakeSourceDataAmendment(context.Context, *http.Request) (application.AmendCustomerSourceDataCommand, error) {
+	return application.AmendCustomerSourceDataCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeListQuery 同上：查阅的作用域整组来自认证与授权结果，渠道未配置就无从铸造。
