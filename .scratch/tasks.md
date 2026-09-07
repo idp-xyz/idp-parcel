@@ -1054,4 +1054,19 @@ MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb
 5. **机器把门的替代**：`scripts/git-hooks/pre-push` 写好（推 main 前核 `.git/landing.lock` 里的 SHA），**未安装**，切换日装。
 6. 单机单库吞吐与文档拆层：未动——前者随 PR/CI 落地自然缓解；后者（`parallel-sessions.md` 500+ 行拆「现行规矩 / 历史复盘」两层）需要一次整篇重排，留给白天有余量时做，先记在这里。
 
+### 01:2x–01:4x：用户「你来安排派发」→ 点名后四单派满，MCP-6 余量将满不派
+
+- MCP-4 补报：第五笔 `eac8c948`（纯注释：数以 tmpfs 为前提）cherry-pick 进 main 为 `d1e6c094`，**已推**（推前 ls-remote = 6c465c53）；「tmpfs 不带 -p 1」取数 run 34138585558：四片 176/232/215/288s，比带 -p 1 快 20–70%，但逐包仍互相拖（customs 两包 200/181 对 126/113）——**-p 1 留**（最重片 45–46% 在六成线内，逐包耗时不再取决于邻包）。`82bc2586` 收口。
+- 01:3x 点名（截止 01:38）：MCP-2/3/5 空闲·充足，MCP-6 空闲·**将满**，MCP-4 补报里自报转空闲。第 0 步 `scripts/branch-state.ps1`：PS / PC / TF 地盘均无在途分支、无未提交现场。基线一律 `d1e6c094`。号：ADR-0121（tf/11 备）、0126/0127（awf/08）；迁移 TF 0019、PC 0028（awf/08）/ 0029（wbr 若需）、PS 0019。
+
+| 通道 | 单号 | 内容 | 独占地盘 |
+|---|---|---|---|
+| MCP-2 | `5307fbdc` | ps-port-remainder/02 余段（PS 消费适配器读 PC 资料修订允许声明 + 跨侧词比对测试 + 接真装配）→ wbr/01 → wbr/02 | PS、parcel-api PS 组、基线 PS 段 |
+| MCP-3 | `5f716c71` | wiring-baseline-remainder/03（PC→SA 信用依据缝）→ 04 → 05：接线或剪 | PC ports/postgres 三票点名的符号、SA adapters/partycommercial（仅 03）、基线 PC 段 |
+| MCP-5 | `cc7313e8` | admin-write-faces/08：三问建模 → ADR-0126（备 0127）→ 服务端按册规范化 + 摘要（首例信用政策）→ 待批准载体 + 批准动作（PC 0028）→ 预览口进端点表；解阻 09–17 | PC domain/application/http/translate、parcel-api PC 组（endpoints.go 本波只有它动）、PC CONTEXT |
+| MCP-4 | `c2003926` | tf/11 撤回控制的更正让参与关系失效（ADR-0112 决定四；需则 ADR-0121、TF 0019） | TF、parcel-api TF 组 |
+| MCP-6 | — | 不派：余量将满。`save_progress` 后待命做本波第一个独立评审；换会话后接 tf/12–14 三条输入缝建模 | — |
+
+**形状差别**：每张派单都带「合入前独立评审」——完工报后由 MCP-1 点一个非作者通道 20 分钟内评（阻断/非阻断/无发现），无阻断才重放；作者可能被点名评别人的票，优先于自己下一票。MCP-3 与 MCP-5 同在 PC，按文件分界并对 `ports.go` 占号；`endpoints.go` 本波只给 MCP-5。评审配对预案：MCP-2↔MCP-3、MCP-4↔MCP-5，MCP-6 余量允许时接第一个小的。
+
 **本节五数**（21:2x 接手 → 01:1x）：CI main 绿/总 7/9（2 红均为 tmpfs 修复前 customs-transport 真库包撞 go test 10 分上限：`f69b35b9`、`b2cb71fc`；5 次 concurrency 顶替的 cancelled 不计；`ade810bd` 在跑）· 集成时延中位数 65 分（3 票：sa/03 37 / pc-gaps/10 65 / CI 75——后两票的等待大半是推送方在答用户问）· 重放笔数 14（另 cherry-pick 3 笔纯 .md 票面记录）· 重复开发 1 次（pc-gaps/09）· 会话重置 3 次（通道 1 21:2x、MCP-6 21:2x、MCP-3 21:5x）。
