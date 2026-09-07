@@ -453,10 +453,11 @@ func combinedFixture(t *testing.T, standing sadomain.CreditStanding) *controlFix
 	return fixture
 }
 
-// Covers: CONTEXT「由 parcel-shipment 按策略的共同通过条件形成接受判断」在适配器上的落法（ADR-0122
-// 决定四）——组合策略两项都成立时折成 `HELD`（资金确已占用，暴露留在提供方账本由同一身份释放）；
-// 排在后面的一项形成`业务限制`时折成带原因的 `RESTRICTED`，不因前一项成立而放行。
-func TestACombinedControlFoldsByTheJointPassCondition(t *testing.T) {
+// Covers: ADR-0125 决定三——适配器把 SA 的 `ExecutedControls` 与 `JointPassCondition` 全函数译成本上下文
+// 的逐项结果与条件，结论由领域按条件推出：组合策略两项都成立时 `HELD`（暴露留在提供方账本由同一身份
+// 释放），逐项两项都在、按判断顺序排；排在后面的一项形成`业务限制`时 `RESTRICTED`、依据是那一项自己
+// 的原因，而第一项占下的资金仍算形成了占用（`OccupationFormed`），不因结论受限而消失。
+func TestACombinedControlCarriesEveryItemAndTheJointPassCondition(t *testing.T) {
 	scope := settlementScope(t)
 	roomy, err := sadomain.NewCreditStanding(scope, 10_000, 0, false)
 	if err != nil {
@@ -470,6 +471,15 @@ func TestACombinedControlFoldsByTheJointPassCondition(t *testing.T) {
 	if assessment.Outcome != psports.PreAcceptanceControlFormed ||
 		assessment.Result.Outcome() != psdomain.FinancialControlHeld {
 		t.Fatalf("outcome = %q / %q, want FORMED / HELD", assessment.Outcome, assessment.Result.Outcome())
+	}
+	if assessment.Result.JointPassCondition() != psdomain.AllControlsPass {
+		t.Fatalf("joint pass condition = %q, want ALL_CONTROLS_PASS", assessment.Result.JointPassCondition())
+	}
+	items := assessment.Result.Items()
+	if len(items) != 2 ||
+		items[0].Kind() != psdomain.PrepaidFreezeControlItem || items[0].Order() != 1 || !items[0].Satisfied() ||
+		items[1].Kind() != psdomain.CreditCheckControlItem || items[1].Order() != 2 || !items[1].Satisfied() {
+		t.Fatalf("items = %+v; 两项都成立时逐项两项都要在、按判断顺序排", items)
 	}
 
 	tight, err := sadomain.NewCreditStanding(scope, 1_000, 0, false)
@@ -486,6 +496,14 @@ func TestACombinedControlFoldsByTheJointPassCondition(t *testing.T) {
 	}
 	if assessment.Result.Basis().String() != "AVAILABLE_CREDIT_INSUFFICIENT" {
 		t.Fatalf("reason = %q, want the restricting item's own reason", assessment.Result.Basis())
+	}
+	items = assessment.Result.Items()
+	if len(items) != 2 || !items[0].Satisfied() || items[1].Satisfied() ||
+		items[1].Basis().String() != "AVAILABLE_CREDIT_INSUFFICIENT" {
+		t.Fatalf("items = %+v; 第一项成立、第二项带原因受限，两项都要原样在场", items)
+	}
+	if !assessment.Result.OccupationFormed() {
+		t.Fatal("结论受限就报没有占用——第一项占下的 4000 会成孤儿")
 	}
 	if restricted.ledger.ledger.HeldMinor() != 4_000 {
 		t.Fatalf("held = %d; 第一项占下的资金留在账本上等释放，不因第二项受限而消失", restricted.ledger.ledger.HeldMinor())

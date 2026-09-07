@@ -283,15 +283,7 @@ func (fixture *synVerticalFixture) recordPassingJudgments(t *testing.T, ctx cont
 		t.Fatalf("可达性判断：%v", err)
 	}
 	controlAsOf := synJudgmentAsOf(t, psdomain.FinancialControlJudgmentKind, time.Now().UTC().Add(-time.Minute))
-	held, err := psdomain.NewFinancialControlResult(
-		mustPS(t, psdomain.NewFinancialControlResultID, "SYN-SAC-01"),
-		psdomain.FinancialControlHeld,
-		psdomain.ControlBasisReference{},
-		controlAsOf,
-	)
-	if err != nil {
-		t.Fatalf("财务控制：%v", err)
-	}
+	held := synHeldControl(t, "SYN-SAC-01", controlAsOf)
 
 	// 判断记在当前提交版本上：形成决定按版本读判断（ADR-0045 的版本维），记错版本等于没记。
 	version := fixture.mustLoadRequest(t, ctx).CurrentSubmissionVersion().VersionID()
@@ -493,6 +485,26 @@ func synJudgmentAsOf(t *testing.T, kind psdomain.JudgmentKind, at time.Time) psd
 		t.Fatalf("判断时点：%v", err)
 	}
 	return asOf
+}
+
+// synHeldControl 造一份「一项预付冻结成立」的采用结果——结论 HELD 只能由逐项推出（ADR-0125）。
+func synHeldControl(t *testing.T, resultID string, asOf psdomain.JudgmentAsOf) psdomain.FinancialControlResult {
+	t.Helper()
+	item, err := psdomain.NewControlItemResult(
+		psdomain.PrepaidFreezeControlItem, 1, psdomain.ControlItemSatisfied, psdomain.ControlBasisReference{})
+	if err != nil {
+		t.Fatalf("控制项结果：%v", err)
+	}
+	held, err := psdomain.NewExecutedFinancialControlResult(psdomain.ExecutedFinancialControlSpec{
+		ResultID:  mustPS(t, psdomain.NewFinancialControlResultID, resultID),
+		Items:     []psdomain.ControlItemResult{item},
+		JointPass: psdomain.AllControlsPass,
+		AsOf:      asOf,
+	})
+	if err != nil {
+		t.Fatalf("财务控制：%v", err)
+	}
+	return held
 }
 
 func mustPS[T any](t *testing.T, construct func(string) (T, error), raw string) T {

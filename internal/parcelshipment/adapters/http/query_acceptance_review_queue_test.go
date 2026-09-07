@@ -96,12 +96,24 @@ func recordedJudgmentsFixture(t *testing.T) ports.RecordedJudgments {
 	if err != nil {
 		t.Fatalf("控制时点：%v", err)
 	}
-	control, err := domain.NewFinancialControlResult(
-		mustValue(t, domain.NewFinancialControlResultID, "CTRL-1"),
-		domain.FinancialControlHeld,
-		domain.ControlBasisReference{},
-		controlAsOf,
-	)
+	// 组合策略：冻结成立、信用受限——结论 RESTRICTED，逐项两项都要透出（ADR-0125）。
+	freezeItem, err := domain.NewControlItemResult(
+		domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, domain.ControlBasisReference{})
+	if err != nil {
+		t.Fatalf("冻结项：%v", err)
+	}
+	creditItem, err := domain.NewControlItemResult(
+		domain.CreditCheckControlItem, 2, domain.ControlItemRestricted,
+		mustValue(t, domain.NewControlBasisReference, "AVAILABLE_CREDIT_INSUFFICIENT"))
+	if err != nil {
+		t.Fatalf("信用项：%v", err)
+	}
+	control, err := domain.NewExecutedFinancialControlResult(domain.ExecutedFinancialControlSpec{
+		ResultID:  mustValue(t, domain.NewFinancialControlResultID, "CTRL-1"),
+		Items:     []domain.ControlItemResult{freezeItem, creditItem},
+		JointPass: domain.AllControlsPass,
+		AsOf:      controlAsOf,
+	})
 	if err != nil {
 		t.Fatalf("财务控制结果：%v", err)
 	}
@@ -300,10 +312,18 @@ func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 				AsOfAt     string `json:"asOfAt"`
 			} `json:"reachability"`
 			FinancialControl *struct {
-				Outcome  string `json:"outcome"`
-				ResultID string `json:"resultId"`
-				Basis    string `json:"basis"`
-				AsOfAt   string `json:"asOfAt"`
+				Outcome            string `json:"outcome"`
+				ResultID           string `json:"resultId"`
+				Basis              string `json:"basis"`
+				AsOfAt             string `json:"asOfAt"`
+				JointPassCondition string `json:"jointPassCondition"`
+				OccupationFormed   bool   `json:"occupationFormed"`
+				Items              []struct {
+					Kind       string `json:"kind"`
+					Order      uint32 `json:"order"`
+					Conclusion string `json:"conclusion"`
+					Basis      string `json:"basis"`
+				} `json:"items"`
 			} `json:"financialControl"`
 			AdoptedResolutionID string `json:"adoptedResolutionId"`
 		} `json:"recordedJudgments"`
@@ -335,12 +355,24 @@ func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 		notApplicable.JudgmentID != "" || notApplicable.Basis != "NO-NETWORK-DUTY-7" {
 		t.Fatalf("不适用判断变形：%+v", notApplicable)
 	}
-	if body.Judgments.FinancialControl == nil ||
-		body.Judgments.FinancialControl.Outcome != "HELD" ||
-		body.Judgments.FinancialControl.ResultID != "CTRL-1" ||
-		body.Judgments.FinancialControl.Basis != "" ||
-		body.Judgments.FinancialControl.AsOfAt != "2026-09-06T12:35:00Z" {
-		t.Fatalf("财务控制变形：%+v", body.Judgments.FinancialControl)
+	// 结论、条件与逐项一起透出（ADR-0125）：事后看接受判断的人要看得见「同一请求还记了什么」，而不是
+	// 只见一个 RESTRICTED；OccupationFormed 让读的人知道结论受限时第一项仍占着钱。
+	control := body.Judgments.FinancialControl
+	if control == nil ||
+		control.Outcome != "RESTRICTED" ||
+		control.ResultID != "CTRL-1" ||
+		control.Basis != "AVAILABLE_CREDIT_INSUFFICIENT" ||
+		control.AsOfAt != "2026-09-06T12:35:00Z" ||
+		control.JointPassCondition != "ALL_CONTROLS_PASS" ||
+		!control.OccupationFormed {
+		t.Fatalf("财务控制变形：%+v", control)
+	}
+	if len(control.Items) != 2 ||
+		control.Items[0].Kind != "PREPAID_FREEZE" || control.Items[0].Order != 1 ||
+		control.Items[0].Conclusion != "SATISFIED" || control.Items[0].Basis != "" ||
+		control.Items[1].Kind != "CREDIT_CHECK" || control.Items[1].Order != 2 ||
+		control.Items[1].Conclusion != "RESTRICTED" || control.Items[1].Basis != "AVAILABLE_CREDIT_INSUFFICIENT" {
+		t.Fatalf("逐项变形：%+v", control.Items)
 	}
 	if body.Judgments.AdoptedResolutionID != "RES-1" {
 		t.Fatalf("采用解析 = %q", body.Judgments.AdoptedResolutionID)

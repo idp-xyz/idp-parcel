@@ -261,14 +261,17 @@ func assessmentFor(
 	case saapplication.ControlApplied:
 		return appliedControlAssessment(request, answer)
 	case saapplication.ControlNotApplicable:
-		result, err := controlResultFor(
-			psdomain.FinancialControlResultID{},
-			psdomain.FinancialControlNotApplicable,
-			answer.ControlBasis().String(),
-			answer.AsOf(),
-		)
+		asOf, err := judgmentAsOfFor(answer.AsOf())
 		if err != nil {
 			return psports.PreAcceptanceControlAssessment{}, err
+		}
+		basis, err := psdomain.NewControlBasisReference(answer.ControlBasis().String())
+		if err != nil {
+			return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control basis: %v", ErrUntranslatableAnswer, err)
+		}
+		result, err := psdomain.NewInapplicableFinancialControlResult(basis, asOf)
+		if err != nil {
+			return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: financial control result: %v", ErrUntranslatableAnswer, err)
 		}
 		return psports.PreAcceptanceControlAssessment{
 			Outcome: psports.PreAcceptanceControlFormed,
@@ -286,150 +289,165 @@ func assessmentFor(
 	}
 }
 
-// appliedControlAssessment 把`已执行`译回本上下文的一个控制结果。提供方自 ADR-0122 起按策略正文
-// 逐项执行，冻结与暴露**可以同时在场**；本上下文的 FinancialControlResult 今天仍是一个请求一个
-// 结果，多项怎么合起来看由本上下文按策略的共同通过条件判——CONTEXT 把这一步明确判给了
-// parcel-shipment（「由 parcel-shipment 按策略的共同通过条件形成接受判断」），所以折叠在这里、
-// 不在提供方。
+// appliedControlAssessment 把`已执行`译回本上下文的采用结果。提供方自 ADR-0122 起按策略正文逐项
+// 执行，冻结与暴露**可以同时在场**；本函数只翻译——每项已执行的控制译成一项 ControlItemResult、
+// 共同通过条件译成本上下文的封闭集——多项怎么合起来看由领域构造期按条件推出（ADR-0125 决定三：
+// CONTEXT 把这一步判给 parcel-shipment，判的是接受语言，所以住在领域层而不在适配器里）。
 //
-// 「全部通过」之下：任一项形成`业务限制`即译成 `RESTRICTED`（提供方在第一处限制就停手，所以
-// 至多一项受限）；全部成立时有冻结译 `HELD`、只有暴露译 `CREDIT_EXPOSED`——两者并存时以资金
-// 已被占用那一句为准，暴露那一项仍留在提供方账本上、由同一请求身份释放。逐项结果在本上下文的
-// 表达归后继票（sa-preacceptance-policy-view/03），本函数不替它发明第二种结果形状。
-//
-// 共同通过条件集外报错不吸收（ADR-0025）：一个本上下文还不会算的组合子若静默按「全部通过」折，
-// 就是替租户决定了怎么合并控制结果。两个都不带的`已执行`是阶段契约被打破。
+// 一项都没执行的`已执行`是阶段契约被打破；条件集外由领域拒绝，这里不先替它折。
 func appliedControlAssessment(
 	request psports.FinancialControlRequest,
 	answer saapplication.ApplyPreAcceptanceControlResult,
 ) (psports.PreAcceptanceControlAssessment, error) {
-	freeze, hasFreeze := answer.Freeze()
-	exposure, hasExposure := answer.Exposure()
-	if !hasFreeze && !hasExposure {
+	executed := answer.ExecutedControls()
+	if len(executed) == 0 {
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
-			"%w: applied control carries neither a freeze nor an exposure", ErrUntranslatableAnswer)
+			"%w: applied control executed no control item", ErrUntranslatableAnswer)
 	}
-	switch answer.JointPassCondition() {
+	items := make([]psdomain.ControlItemResult, 0, len(executed))
+	for _, control := range executed {
+		item, err := controlItemFor(control, answer)
+		if err != nil {
+			return psports.PreAcceptanceControlAssessment{}, err
+		}
+		items = append(items, item)
+	}
+	jointPass, err := jointPassConditionFor(answer.JointPassCondition())
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, err
+	}
+	asOf, err := judgmentAsOfFor(answer.AsOf())
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, err
+	}
+	resultID, err := psdomain.NewFinancialControlResultID(
+		controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion))
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control result ID: %v",
+			ErrUntranslatableAnswer, err)
+	}
+	result, err := psdomain.NewExecutedFinancialControlResult(psdomain.ExecutedFinancialControlSpec{
+		ResultID:  resultID,
+		Items:     items,
+		JointPass: jointPass,
+		AsOf:      asOf,
+	})
+	if err != nil {
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: financial control result: %v",
+			ErrUntranslatableAnswer, err)
+	}
+	return psports.PreAcceptanceControlAssessment{
+		Outcome: psports.PreAcceptanceControlFormed,
+		Result:  result,
+	}, nil
+}
+
+// controlItemFor 把一项已执行的控制译成本上下文的控制项结果。受限原因不在 ExecutedControl 上，
+// 要按种类回同一答复的 Freeze / Exposure 取；那一格的状态与 ExecutedControl.Restricted 必须互相
+// 印证——种类对应的占用不在场、状态与受限标记矛盾、或刚执行的控制已释放，都是阶段契约被打破。
+func controlItemFor(
+	control saapplication.ExecutedControl,
+	answer saapplication.ApplyPreAcceptanceControlResult,
+) (psdomain.ControlItemResult, error) {
+	var (
+		kind       psdomain.ControlItemKind
+		restricted bool
+		reason     string
+	)
+	switch control.Kind() {
+	case sadomain.PrepaidFreezeControl:
+		freeze, present := answer.Freeze()
+		if !present {
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: an executed prepaid freeze carries no freeze", ErrUntranslatableAnswer)
+		}
+		kind = psdomain.PrepaidFreezeControlItem
+		switch freeze.Status() {
+		case sadomain.FreezeHeld:
+		case sadomain.FreezeRestricted:
+			restricted, reason = true, freeze.Reason().String()
+		case sadomain.FreezeReleased:
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: an applied control came back released", ErrUntranslatableAnswer)
+		default:
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: freeze status %d", ErrUntranslatableAnswer, freeze.Status())
+		}
+	case sadomain.CreditCheckControl:
+		exposure, present := answer.Exposure()
+		if !present {
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: an executed credit check carries no exposure", ErrUntranslatableAnswer)
+		}
+		kind = psdomain.CreditCheckControlItem
+		switch exposure.Status() {
+		case sadomain.ExposureRecorded:
+		case sadomain.ExposureRestricted:
+			restricted, reason = true, exposure.Reason().String()
+		case sadomain.ExposureReleased:
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: an applied control came back released", ErrUntranslatableAnswer)
+		default:
+			return psdomain.ControlItemResult{}, fmt.Errorf(
+				"%w: exposure status %d", ErrUntranslatableAnswer, exposure.Status())
+		}
+	default:
+		return psdomain.ControlItemResult{}, fmt.Errorf(
+			"%w: control kind %d", ErrUntranslatableAnswer, uint8(control.Kind()))
+	}
+	if restricted != control.Restricted() {
+		return psdomain.ControlItemResult{}, fmt.Errorf(
+			"%w: executed control %s reports restricted=%t while its ledger record says otherwise",
+			ErrUntranslatableAnswer, control.Kind(), control.Restricted())
+	}
+
+	conclusion, basis := psdomain.ControlItemSatisfied, psdomain.ControlBasisReference{}
+	if restricted {
+		formed, err := psdomain.NewControlBasisReference(reason)
+		if err != nil {
+			return psdomain.ControlItemResult{}, fmt.Errorf("%w: restriction reason: %v", ErrUntranslatableAnswer, err)
+		}
+		conclusion, basis = psdomain.ControlItemRestricted, formed
+	}
+	item, err := psdomain.NewControlItemResult(kind, control.Order(), conclusion, basis)
+	if err != nil {
+		return psdomain.ControlItemResult{}, fmt.Errorf("%w: control item result: %v", ErrUntranslatableAnswer, err)
+	}
+	return item, nil
+}
+
+// jointPassConditionFor 是两侧封闭集之间的全函数。首发两侧都只有「全部通过」一值；提供方放宽出第二种
+// 组合子时这里先炸，而不是让一个本上下文还不会算的组合子静默落成全部通过（ADR-0025）。
+func jointPassConditionFor(condition sadomain.JointPassCondition) (psdomain.JointPassCondition, error) {
+	switch condition {
 	case sadomain.AllControlsPass:
+		return psdomain.AllControlsPass, nil
 	default:
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf(
-			"%w: joint pass condition %d", ErrUntranslatableAnswer, uint8(answer.JointPassCondition()))
+		return psdomain.JointPassConditionInvalid, fmt.Errorf(
+			"%w: joint pass condition %d", ErrUntranslatableAnswer, uint8(condition))
 	}
-	if hasExposure && (!hasFreeze || exposure.Status() == sadomain.ExposureRestricted) {
-		return exposedAssessment(request, answer, exposure)
-	}
-	return appliedAssessment(request, answer, freeze)
 }
 
-// appliedAssessment 译`已执行`的两种冻结状态。`已释放`不在施加答复的封闭集合里——刚执行
-// 的控制不可能已经释放，走到那格是阶段契约被打破。
-func appliedAssessment(
-	request psports.FinancialControlRequest,
-	answer saapplication.ApplyPreAcceptanceControlResult,
-	freeze sadomain.FundsFreeze,
-) (psports.PreAcceptanceControlAssessment, error) {
-	identity := controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion)
-	resultID, err := psdomain.NewFinancialControlResultID(identity)
-	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control result ID: %v",
-			ErrUntranslatableAnswer, err)
-	}
-
-	var result psdomain.FinancialControlResult
-	switch freeze.Status() {
-	case sadomain.FreezeHeld:
-		result, err = controlResultFor(resultID, psdomain.FinancialControlHeld, "", answer.AsOf())
-	case sadomain.FreezeRestricted:
-		result, err = controlResultFor(resultID, psdomain.FinancialControlRestricted, freeze.Reason().String(), answer.AsOf())
-	case sadomain.FreezeReleased:
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: an applied control came back released",
-			ErrUntranslatableAnswer)
-	default:
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: freeze status %d",
-			ErrUntranslatableAnswer, freeze.Status())
-	}
-	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, err
-	}
-	return psports.PreAcceptanceControlAssessment{
-		Outcome: psports.PreAcceptanceControlFormed,
-		Result:  result,
-	}, nil
-}
-
-// exposedAssessment 译账期分支`已执行`的两种暴露状态（ADR-0047）：`已记录`译
-// `信用暴露已记录`——不冒用`已冻结`，没有资金被冻结；`业务限制`与预付分支同格。
-func exposedAssessment(
-	request psports.FinancialControlRequest,
-	answer saapplication.ApplyPreAcceptanceControlResult,
-	exposure sadomain.CreditExposure,
-) (psports.PreAcceptanceControlAssessment, error) {
-	identity := controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion)
-	resultID, err := psdomain.NewFinancialControlResultID(identity)
-	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control result ID: %v",
-			ErrUntranslatableAnswer, err)
-	}
-
-	var result psdomain.FinancialControlResult
-	switch exposure.Status() {
-	case sadomain.ExposureRecorded:
-		result, err = controlResultFor(resultID, psdomain.FinancialControlCreditExposed, "", answer.AsOf())
-	case sadomain.ExposureRestricted:
-		result, err = controlResultFor(resultID, psdomain.FinancialControlRestricted, exposure.Reason().String(), answer.AsOf())
-	case sadomain.ExposureReleased:
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: an applied control came back released",
-			ErrUntranslatableAnswer)
-	default:
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: exposure status %d",
-			ErrUntranslatableAnswer, exposure.Status())
-	}
-	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, err
-	}
-	return psports.PreAcceptanceControlAssessment{
-		Outcome: psports.PreAcceptanceControlFormed,
-		Result:  result,
-	}, nil
-}
-
-// controlResultFor 从提供方回显的时点构造本上下文的控制结果。回显取自答复而不是转手请求
-// ——与 partycommercial 适配器的回显纪律同一条。
-func controlResultFor(
-	resultID psdomain.FinancialControlResultID,
-	outcome psdomain.FinancialControlOutcome,
-	basisReference string,
-	echoed sadomain.ControlAsOf,
-) (psdomain.FinancialControlResult, error) {
+// judgmentAsOfFor 从提供方回显的时点重建本上下文的判断时点。回显取自答复而不是转手请求——与
+// partycommercial 适配器的回显纪律同一条。
+func judgmentAsOfFor(echoed sadomain.ControlAsOf) (psdomain.JudgmentAsOf, error) {
 	semantics, err := psdomain.NewAsOfSemanticsReference(echoed.Semantic().String())
 	if err != nil {
-		return psdomain.FinancialControlResult{}, fmt.Errorf("%w: echoed semantics: %v", ErrUntranslatableAnswer, err)
+		return psdomain.JudgmentAsOf{}, fmt.Errorf("%w: echoed semantics: %v", ErrUntranslatableAnswer, err)
 	}
 	policyVersion, err := psdomain.NewAsOfPolicyVersion(echoed.StrategyVersion().String())
 	if err != nil {
-		return psdomain.FinancialControlResult{}, fmt.Errorf("%w: echoed strategy version: %v", ErrUntranslatableAnswer, err)
+		return psdomain.JudgmentAsOf{}, fmt.Errorf("%w: echoed strategy version: %v", ErrUntranslatableAnswer, err)
 	}
 	policy, err := psdomain.NewEchoedAsOfPolicy(psdomain.FinancialControlJudgmentKind, semantics, policyVersion)
 	if err != nil {
-		return psdomain.FinancialControlResult{}, fmt.Errorf("%w: echoed policy: %v", ErrUntranslatableAnswer, err)
+		return psdomain.JudgmentAsOf{}, fmt.Errorf("%w: echoed policy: %v", ErrUntranslatableAnswer, err)
 	}
 	asOf, err := psdomain.NewJudgmentAsOf(echoed.At(), policy)
 	if err != nil {
-		return psdomain.FinancialControlResult{}, fmt.Errorf("%w: judgment as-of: %v", ErrUntranslatableAnswer, err)
+		return psdomain.JudgmentAsOf{}, fmt.Errorf("%w: judgment as-of: %v", ErrUntranslatableAnswer, err)
 	}
-
-	basis := psdomain.ControlBasisReference{}
-	if basisReference != "" {
-		basis, err = psdomain.NewControlBasisReference(basisReference)
-		if err != nil {
-			return psdomain.FinancialControlResult{}, fmt.Errorf("%w: control basis: %v", ErrUntranslatableAnswer, err)
-		}
-	}
-	result, err := psdomain.NewFinancialControlResult(resultID, outcome, basis, asOf)
-	if err != nil {
-		return psdomain.FinancialControlResult{}, fmt.Errorf("%w: financial control result: %v", ErrUntranslatableAnswer, err)
-	}
-	return result, nil
+	return asOf, nil
 }
 
 func notFormed(label string) (psports.PreAcceptanceControlAssessment, error) {

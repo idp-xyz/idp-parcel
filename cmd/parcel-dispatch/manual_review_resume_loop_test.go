@@ -463,15 +463,7 @@ func (double synRFinancialAuthority) ApplyPreAcceptanceFinancialControl(
 	request psports.FinancialControlRequest,
 ) (psports.PreAcceptanceControlAssessment, error) {
 	double.t.Helper()
-	result, err := psdomain.NewFinancialControlResult(
-		mustPS(double.t, psdomain.NewFinancialControlResultID, "SYN-SAC-R1"),
-		psdomain.FinancialControlHeld,
-		psdomain.ControlBasisReference{},
-		request.AsOf,
-	)
-	if err != nil {
-		double.t.Fatalf("财务控制结果：%v", err)
-	}
+	result := synHeldControl(double.t, "SYN-SAC-R1", request.AsOf)
 	return psports.PreAcceptanceControlAssessment{
 		Outcome: psports.PreAcceptanceControlFormed,
 		Result:  result,

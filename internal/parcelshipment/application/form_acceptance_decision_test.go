@@ -1016,20 +1016,8 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 	}
 
 	if double.controlOutcome != domain.FinancialControlOutcomeInvalid {
-		basis := domain.ControlBasisReference{}
-		if double.controlOutcome != domain.FinancialControlHeld {
-			basis = mustValue(double.t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1")
-		}
-		control, err := domain.NewFinancialControlResult(
-			mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1"),
-			double.controlOutcome,
-			basis,
-			formedAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf),
-		)
-		if err != nil {
-			double.t.Fatalf("new financial control result: %v", err)
-		}
-		recorded.FinancialControl = control
+		recorded.FinancialControl = financialControlOf(double.t, double.controlOutcome, "SAC-1",
+			formedAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf))
 	}
 	return recorded, nil
 }

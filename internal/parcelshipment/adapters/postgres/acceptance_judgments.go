@@ -96,9 +96,9 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 	_, err = executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_financial_control
 			(tenant_id, shipment_request_id, submission_version, as_of_at,
-			 result_id, control_outcome, basis_ref,
+			 result_id, control_outcome, basis_ref, joint_pass_condition,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
@@ -107,12 +107,36 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 		nullableText(result.ResultID().String()),
 		result.Outcome().String(),
 		nullableText(result.Basis().String()),
+		nullableText(result.JointPassCondition().String()),
 		asOf.Kind().String(),
 		asOf.Semantics().String(),
 		asOf.PolicyVersion().String(),
 	)
 	if err != nil {
 		return fmt.Errorf("record financial control result: %w", err)
+	}
+
+	// 逐项与父行同一事务、同一时点键：同一次控制的重放在父行撞 ON CONFLICT DO NOTHING，项也照样
+	// 不重写。`明确无控制`没有项，这个循环不转。
+	for _, item := range result.Items() {
+		_, err = executor.Exec(ctx,
+			`INSERT INTO parcel_shipment.acceptance_financial_control_item
+				(tenant_id, shipment_request_id, submission_version, as_of_at,
+				 control_kind, evaluation_order, item_conclusion, basis_ref)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 ON CONFLICT DO NOTHING`,
+			tenant.String(),
+			requestID.String(),
+			version.String(),
+			asOf.At().UTC(),
+			item.Kind().String(),
+			int32(item.Order()),
+			item.Conclusion().String(),
+			nullableText(item.Basis().String()),
+		)
+		if err != nil {
+			return fmt.Errorf("record financial control item: %w", err)
+		}
 	}
 	return nil
 }
@@ -294,12 +318,12 @@ func loadFinancialControl(
 ) (domain.FinancialControlResult, error) {
 	var (
 		outcomeRaw                    string
-		resultID, basisRef            *string
+		resultID, basisRef, jointPass *string
 		asOfAt                        time.Time
 		kindRaw, semantics, policyRaw string
 	)
 	err := querier.QueryRow(ctx,
-		`SELECT result_id, control_outcome, basis_ref,
+		`SELECT result_id, control_outcome, basis_ref, joint_pass_condition,
 		        as_of_at, as_of_kind, as_of_semantics, as_of_policy
 		   FROM parcel_shipment.acceptance_financial_control
 		  WHERE tenant_id = $1
@@ -310,7 +334,7 @@ func loadFinancialControl(
 		tenant.String(),
 		requestID.String(),
 		version.String(),
-	).Scan(&resultID, &outcomeRaw, &basisRef, &asOfAt, &kindRaw, &semantics, &policyRaw)
+	).Scan(&resultID, &outcomeRaw, &basisRef, &jointPass, &asOfAt, &kindRaw, &semantics, &policyRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.FinancialControlResult{}, nil
 	}
@@ -318,16 +342,65 @@ func loadFinancialControl(
 		return domain.FinancialControlResult{}, fmt.Errorf("load financial control result: %w", err)
 	}
 
+	// 项按父行的时点键取：读的是这一次控制自己的项，不是这一版所有控制的项。
+	items, err := loadFinancialControlItems(ctx, querier, tenant, requestID, version, asOfAt)
+	if err != nil {
+		return domain.FinancialControlResult{}, err
+	}
+
 	result, err := rebuildFinancialControl(financialControlRow{
-		resultID: resultID,
-		outcome:  outcomeRaw,
-		basis:    basisRef,
-		asOf:     asOfRow{at: asOfAt, kind: kindRaw, semantics: semantics, policy: policyRaw},
+		resultID:  resultID,
+		outcome:   outcomeRaw,
+		basis:     basisRef,
+		jointPass: jointPass,
+		asOf:      asOfRow{at: asOfAt, kind: kindRaw, semantics: semantics, policy: policyRaw},
+		items:     items,
 	})
 	if err != nil {
 		return domain.FinancialControlResult{}, fmt.Errorf("load financial control result: %w", err)
 	}
 	return result, nil
+}
+
+// loadFinancialControlItems 交回一次控制的逐项，按判断顺序排。
+func loadFinancialControlItems(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
+	asOfAt time.Time,
+) ([]controlItemRow, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT control_kind, evaluation_order, item_conclusion, basis_ref
+		   FROM parcel_shipment.acceptance_financial_control_item
+		  WHERE tenant_id = $1
+		    AND shipment_request_id = $2
+		    AND submission_version = $3
+		    AND as_of_at = $4
+		  ORDER BY evaluation_order`,
+		tenant.String(),
+		requestID.String(),
+		version.String(),
+		asOfAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load financial control items: %w", err)
+	}
+	defer rows.Close()
+
+	var items []controlItemRow
+	for rows.Next() {
+		var row controlItemRow
+		if err := rows.Scan(&row.kind, &row.order, &row.conclusion, &row.basis); err != nil {
+			return nil, fmt.Errorf("load financial control items: %w", err)
+		}
+		items = append(items, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load financial control items: %w", err)
+	}
+	return items, nil
 }
 
 func loadAdoptedResolution(
@@ -377,10 +450,19 @@ type reachabilityRow struct {
 }
 
 type financialControlRow struct {
-	resultID *string
-	outcome  string
-	basis    *string
-	asOf     asOfRow
+	resultID  *string
+	outcome   string
+	basis     *string
+	jointPass *string
+	asOf      asOfRow
+	items     []controlItemRow
+}
+
+type controlItemRow struct {
+	kind       string
+	order      int32
+	conclusion string
+	basis      *string
 }
 
 // rebuildReachabilityJudgment 逐字段过领域构造门，`不适用`带依据、其余三值带标识由
@@ -414,6 +496,9 @@ func rebuildReachabilityJudgment(row reachabilityRow) (domain.ReachabilityJudgme
 	return domain.NewReachabilityJudgment(spec)
 }
 
+// rebuildFinancialControl 走重建门 RehydrateFinancialControlResult（ADR-0028 / ADR-0125 决定二）：库里
+// 记的结论当数据收下，只校它与逐项在所记条件下一致——一行坏数据在门上暴露，不会变成一份看起来合法
+// 的采用结果。逐项各自先过 NewControlItemResult 的构造门。
 func rebuildFinancialControl(row financialControlRow) (domain.FinancialControlResult, error) {
 	outcome, err := financialControlOutcomeFrom(row.outcome)
 	if err != nil {
@@ -424,19 +509,51 @@ func rebuildFinancialControl(row financialControlRow) (domain.FinancialControlRe
 		return domain.FinancialControlResult{}, err
 	}
 
-	var resultID domain.FinancialControlResultID
+	spec := domain.RehydrateFinancialControlResultSpec{Outcome: outcome, AsOf: asOf}
 	if row.resultID != nil {
-		if resultID, err = domain.NewFinancialControlResultID(*row.resultID); err != nil {
+		if spec.ResultID, err = domain.NewFinancialControlResultID(*row.resultID); err != nil {
 			return domain.FinancialControlResult{}, err
 		}
+	}
+	if row.basis != nil {
+		if spec.Basis, err = domain.NewControlBasisReference(*row.basis); err != nil {
+			return domain.FinancialControlResult{}, err
+		}
+	}
+	if row.jointPass != nil {
+		if spec.JointPass, err = jointPassConditionFrom(*row.jointPass); err != nil {
+			return domain.FinancialControlResult{}, err
+		}
+	}
+	for _, itemRow := range row.items {
+		item, err := rebuildControlItem(itemRow)
+		if err != nil {
+			return domain.FinancialControlResult{}, err
+		}
+		spec.Items = append(spec.Items, item)
+	}
+	return domain.RehydrateFinancialControlResult(spec)
+}
+
+func rebuildControlItem(row controlItemRow) (domain.ControlItemResult, error) {
+	kind, err := controlItemKindFrom(row.kind)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	conclusion, err := controlItemConclusionFrom(row.conclusion)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	if row.order <= 0 {
+		return domain.ControlItemResult{}, fmt.Errorf("control item order %d is not a position", row.order)
 	}
 	var basis domain.ControlBasisReference
 	if row.basis != nil {
 		if basis, err = domain.NewControlBasisReference(*row.basis); err != nil {
-			return domain.FinancialControlResult{}, err
+			return domain.ControlItemResult{}, err
 		}
 	}
-	return domain.NewFinancialControlResult(resultID, outcome, basis, asOf)
+	return domain.NewControlItemResult(kind, uint32(row.order), conclusion, basis)
 }
 
 // judgmentAsOf 从行重建时点。走 NewEchoedAsOfPolicy 是唯一的路：NewJudgmentAsOf 收不下
@@ -488,6 +605,39 @@ func financialControlOutcomeFrom(raw string) (domain.FinancialControlOutcome, er
 		return domain.FinancialControlCreditExposed, nil
 	default:
 		return domain.FinancialControlOutcomeInvalid, fmt.Errorf("unknown financial control outcome %q", raw)
+	}
+}
+
+// 下面三张字面量表与迁移 0019 的 CHECK 同源；领域再加一格而这里没跟时，读回报未知取值而不是静默
+// 落进某一格（与 financialControlOutcomeFrom 同一条纪律）。
+func jointPassConditionFrom(raw string) (domain.JointPassCondition, error) {
+	switch raw {
+	case domain.AllControlsPass.String():
+		return domain.AllControlsPass, nil
+	default:
+		return domain.JointPassConditionInvalid, fmt.Errorf("unknown joint pass condition %q", raw)
+	}
+}
+
+func controlItemKindFrom(raw string) (domain.ControlItemKind, error) {
+	switch raw {
+	case domain.PrepaidFreezeControlItem.String():
+		return domain.PrepaidFreezeControlItem, nil
+	case domain.CreditCheckControlItem.String():
+		return domain.CreditCheckControlItem, nil
+	default:
+		return domain.ControlItemKindInvalid, fmt.Errorf("unknown control item kind %q", raw)
+	}
+}
+
+func controlItemConclusionFrom(raw string) (domain.ControlItemConclusion, error) {
+	switch raw {
+	case domain.ControlItemSatisfied.String():
+		return domain.ControlItemSatisfied, nil
+	case domain.ControlItemRestricted.String():
+		return domain.ControlItemRestricted, nil
+	default:
+		return domain.ControlItemConclusionInvalid, fmt.Errorf("unknown control item conclusion %q", raw)
 	}
 }
 

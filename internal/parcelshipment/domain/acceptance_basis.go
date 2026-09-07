@@ -433,7 +433,7 @@ type CommercialBasisSnapshot struct {
 // 位置构造器入参最多 4 个，不靠「一共几个」那种会过期且变红不了的计数（MCP-2 `C2`，实测于
 // `337e02b` 时原句写「七个」却至少漏了同文件的 `NewDeclaredAsOf` / `NewEchoedAsOfPolicy` /
 // `NewJudgmentAsOf` 与 `NewOwnershipValidityInterval`）。举例：`NewSourceIdentity`、
-// `NewSubmissionCandidate`、`NewAcceptanceCheck`、`NewFinancialControlResult`、
+// `NewSubmissionCandidate`、`NewAcceptanceCheck`、`NewControlItemResult`、
 // `NewSourceSubmissionFingerprint` 皆为 4，`NewSubmissionBatchCandidate` 与前三个 AsOf 类为
 // 3，`NewAdmissionScope` / `NewJudgmentAsOf` / `NewOwnershipValidityInterval` 为 2。
 // `ReachabilityJudgmentSpec` 正是越线后改过来的：`不适用`要携带依据，入参从 4 涨到 5。
@@ -694,105 +694,5 @@ func (judgment ReachabilityJudgment) valid() bool {
 	return judgment.judgmentID.valid()
 }
 
-type FinancialControlResultID struct{ requiredValue }
-
-func NewFinancialControlResultID(value string) (FinancialControlResultID, error) {
-	required, err := newRequiredValue("financial control result ID", value)
-	return FinancialControlResultID{required}, err
-}
-
-// ControlBasisReference 是一次非通过的接受前财务控制所依据的事实：业务限制的原因，或者
-// 合同明确无控制的商业不适用依据。用例把后者的保存责任判给本上下文，但依据本身来自
-// party-commercial，这里只记引用。
-type ControlBasisReference struct{ requiredValue }
-
-func NewControlBasisReference(value string) (ControlBasisReference, error) {
-	required, err := newRequiredValue("control basis reference", value)
-	return ControlBasisReference{required}, err
-}
-
-// FinancialControlOutcome 以采用引用的形式镜像 settlement-accounting 的接受前控制结果。
-// 取值没有一个是接受决定，也刻意没有「视同通过」——用例对本步的要求是不得默认放行，而
-// 一个表示「没控制成但先过」的取值正是默认放行的载体。控制没能形成时，编排保持判断任务
-// 未决，不在这里凑一个结果。
-//
-// `信用暴露已记录`与`已冻结`分立（ADR-0047）：冻结说资金已占用、暴露说额度已占用，两者
-// 的释放对象不同，压成一格会让释放编排拿着暴露去找冻结账本。`AT-PS-035` 也把信用校验与
-// 预付冻结列为并列的控制种类。
-type FinancialControlOutcome uint8
-
-const (
-	FinancialControlOutcomeInvalid FinancialControlOutcome = iota
-	FinancialControlHeld
-	FinancialControlRestricted
-	FinancialControlNotApplicable
-	FinancialControlCreditExposed
-)
-
-func (outcome FinancialControlOutcome) valid() bool {
-	return outcome >= FinancialControlHeld && outcome <= FinancialControlCreditExposed
-}
-
-func (outcome FinancialControlOutcome) String() string {
-	switch outcome {
-	case FinancialControlHeld:
-		return "HELD"
-	case FinancialControlRestricted:
-		return "RESTRICTED"
-	case FinancialControlNotApplicable:
-		return "NOT_APPLICABLE"
-	case FinancialControlCreditExposed:
-		return "CREDIT_EXPOSED"
-	default:
-		return ""
-	}
-}
-
-// FinancialControlResult 是本上下文对一次接受前财务控制所保留的引用。
-//
-// 除`已冻结`外的结果都必须携带依据，与 RouteCandidate 要求非合格候选必须带淘汰原因同理：
-// 没有依据的`业务限制`说不出限制什么，没有依据的`明确无控制`则与「默认信用通过」无从分辨，
-// 而用例明禁后者。
-type FinancialControlResult struct {
-	resultID FinancialControlResultID
-	outcome  FinancialControlOutcome
-	basis    ControlBasisReference
-	asOf     JudgmentAsOf
-}
-
-func NewFinancialControlResult(
-	resultID FinancialControlResultID,
-	outcome FinancialControlOutcome,
-	basis ControlBasisReference,
-	asOf JudgmentAsOf,
-) (FinancialControlResult, error) {
-	if !outcome.valid() || !asOf.valid() {
-		return FinancialControlResult{}, ErrInvalidFinancialControlResult
-	}
-	// `已冻结`与`信用暴露已记录`是两种执行通过，依据在占用记录本身；其余结果必须携带依据。
-	if outcome != FinancialControlHeld && outcome != FinancialControlCreditExposed && !basis.valid() {
-		return FinancialControlResult{}, ErrInvalidFinancialControlResult
-	}
-	// `明确无控制`不要求标识：那一支下 settlement-accounting 不形成冻结，也就没有签发结果
-	// 标识可引用。与可达性`不适用`同一条理由——强行要一个，只能由适配器发明。
-	if outcome != FinancialControlNotApplicable && !resultID.valid() {
-		return FinancialControlResult{}, ErrInvalidFinancialControlResult
-	}
-	return FinancialControlResult{resultID: resultID, outcome: outcome, basis: basis, asOf: asOf}, nil
-}
-
-func (result FinancialControlResult) ResultID() FinancialControlResultID {
-	return result.resultID
-}
-
-func (result FinancialControlResult) Outcome() FinancialControlOutcome {
-	return result.outcome
-}
-
-func (result FinancialControlResult) Basis() ControlBasisReference {
-	return result.basis
-}
-
-func (result FinancialControlResult) AsOf() JudgmentAsOf {
-	return result.asOf
-}
+// 接受前财务控制采用结果（FinancialControlResult 及其逐项）住在 financial_control_result.go：
+// 它自 ADR-0125 起长成逐项结果 + 共同通过条件 + 推导出的结论，体量与本文件其余引用类型不同。

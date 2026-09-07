@@ -221,30 +221,61 @@ func TestOnlyAFormedReachabilityJudgmentCarriesAnAuthorityIdentifier(t *testing.
 	}
 }
 
+// financialControlResult 造一份结论为 outcome 的采用结果。结论只能由逐项推出（ADR-0125），所以
+// 夹具反过来按结论挑逐项：`HELD` 一项冻结成立、`CREDIT_EXPOSED` 一项信用成立、`RESTRICTED` 一项
+// 冻结受限、`NOT_APPLICABLE` 走无控制入口。
 func financialControlResult(t *testing.T, outcome domain.FinancialControlOutcome) domain.FinancialControlResult {
 	t.Helper()
-	basis := domain.ControlBasisReference{}
-	if outcome != domain.FinancialControlHeld {
-		basis = mustValue(t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1")
+	if outcome == domain.FinancialControlNotApplicable {
+		result, err := domain.NewInapplicableFinancialControlResult(
+			mustValue(t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1"),
+			financialControlAsOf(t),
+		)
+		if err != nil {
+			t.Fatalf("new inapplicable financial control result: %v", err)
+		}
+		return result
 	}
-	result, err := domain.NewFinancialControlResult(
-		mustValue(t, domain.NewFinancialControlResultID, "SAC-1"),
-		outcome,
-		basis,
-		financialControlAsOf(t),
-	)
+
+	var item domain.ControlItemResult
+	var err error
+	switch outcome {
+	case domain.FinancialControlHeld:
+		item, err = domain.NewControlItemResult(
+			domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, domain.ControlBasisReference{})
+	case domain.FinancialControlCreditExposed:
+		item, err = domain.NewControlItemResult(
+			domain.CreditCheckControlItem, 1, domain.ControlItemSatisfied, domain.ControlBasisReference{})
+	case domain.FinancialControlRestricted:
+		item, err = domain.NewControlItemResult(
+			domain.PrepaidFreezeControlItem, 1, domain.ControlItemRestricted,
+			mustValue(t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1"))
+	default:
+		t.Fatalf("no fixture for outcome %q", outcome)
+	}
 	if err != nil {
-		t.Fatalf("new financial control result: %v", err)
+		t.Fatalf("new control item result: %v", err)
+	}
+	result, err := domain.NewExecutedFinancialControlResult(domain.ExecutedFinancialControlSpec{
+		ResultID:  mustValue(t, domain.NewFinancialControlResultID, "SAC-1"),
+		Items:     []domain.ControlItemResult{item},
+		JointPass: domain.AllControlsPass,
+		AsOf:      financialControlAsOf(t),
+	})
+	if err != nil {
+		t.Fatalf("new executed financial control result: %v", err)
 	}
 	return result
 }
 
-// Covers: UC-PS-001 接受条件矩阵`接受前财务控制`「任一必需控制不通过时按策略拒绝」—
-// `已冻结`通过、`业务限制`失败。`明确无控制`也通过，但它凭的是合同声明的商业不适用依据：
-// 构造期已经强制它携带依据，所以这一条通过与「默认信用通过」分得开。
+// Covers: UC-PS-001 接受条件矩阵`接受前财务控制`「按策略的共同通过条件判定不成立时按策略拒绝」—
+// 结论成立（`已冻结`与`信用暴露已记录`两种拼法）通过、`业务限制`失败。`明确无控制`也通过，但它
+// 凭的是合同声明的商业不适用依据：构造期已经强制它携带依据，所以这一条通过与「默认信用通过」
+// 分得开。
 func TestFinancialControlOutcomesTranslateToChecks(t *testing.T) {
 	expected := map[domain.FinancialControlOutcome]domain.CheckOutcome{
 		domain.FinancialControlHeld:          domain.CheckPassed,
+		domain.FinancialControlCreditExposed: domain.CheckPassed,
 		domain.FinancialControlNotApplicable: domain.CheckPassed,
 		domain.FinancialControlRestricted:    domain.CheckFailed,
 	}

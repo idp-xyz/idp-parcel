@@ -310,22 +310,10 @@ func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
 		}, nil
 	}
 
-	basis := domain.ControlBasisReference{}
-	resultID := mustValue(double.t, domain.NewFinancialControlResultID, "SAC-1")
-	if double.outcome != domain.FinancialControlHeld {
-		basis = mustValue(double.t, domain.NewControlBasisReference, "PC-CONTROL-BASIS-1")
-	}
-	if double.outcome == domain.FinancialControlNotApplicable {
-		// `明确无控制`下提供方不形成冻结，也就没有结果标识可交回。
-		resultID = domain.FinancialControlResultID{}
-	}
-	result, err := domain.NewFinancialControlResult(resultID, double.outcome, basis, request.AsOf)
-	if err != nil {
-		double.t.Fatalf("new financial control result: %v", err)
-	}
+	// `明确无控制`下提供方不形成冻结，也就没有结果标识可交回；夹具按结论挑逐项（financialControlOf）。
 	return ports.PreAcceptanceControlAssessment{
 		Outcome: ports.PreAcceptanceControlFormed,
-		Result:  result,
+		Result:  financialControlOf(double.t, double.outcome, "SAC-1", request.AsOf),
 	}, nil
 }
 

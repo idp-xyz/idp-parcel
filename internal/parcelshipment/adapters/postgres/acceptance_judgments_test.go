@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -72,11 +73,76 @@ func TestAdoptedJudgmentsRoundTripThroughTheTask(t *testing.T) {
 		recorded.Reachability[1].Basis().String() != "LABEL_ONLY_CHANNEL_SERVICE" {
 		t.Fatal("`不适用`读回时被补了一个没人签发过的标识，或丢了依据")
 	}
-	if recorded.FinancialControl != held {
+	if !reflect.DeepEqual(recorded.FinancialControl, held) {
 		t.Fatalf("财务控制结果往返变形：%+v", recorded.FinancialControl)
 	}
 	if recorded.AdoptedCommercialResolution != resolution {
 		t.Fatalf("所采用解析往返变形：%q", recorded.AdoptedCommercialResolution.String())
+	}
+}
+
+// TestACombinedControlRoundTripsEveryItemAndTheJointPassCondition 证逐项与共同通过条件随父行往返
+// （ADR-0125，迁移 0019）：第一项冻结成立、第二项信用受限的结果读回后两项都在、按判断顺序排、受限项
+// 带自己的原因、条件在场，结论 `RESTRICTED` 而 `OccupationFormed` 仍为真——释放该看的正是这一格。
+func TestACombinedControlRoundTripsEveryItemAndTheJointPassCondition(t *testing.T) {
+	judgments, transactor, _ := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	combined := executedControlResult(t, "REQ-1/VER-1", taskAsOfFirst,
+		controlItem(t, domain.CreditCheckControlItem, 2, domain.ControlItemRestricted, "AVAILABLE_CREDIT_INSUFFICIENT"),
+		controlItem(t, domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, ""),
+	)
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), combined)
+	})
+
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
+	if err != nil {
+		t.Fatalf("读回已采用判断：%v", err)
+	}
+	if !reflect.DeepEqual(recorded.FinancialControl, combined) {
+		t.Fatalf("组合控制结果往返变形：%+v", recorded.FinancialControl)
+	}
+	items := recorded.FinancialControl.Items()
+	if len(items) != 2 || items[0].Kind() != domain.PrepaidFreezeControlItem || !items[0].Satisfied() ||
+		items[1].Kind() != domain.CreditCheckControlItem || items[1].Basis().String() != "AVAILABLE_CREDIT_INSUFFICIENT" {
+		t.Fatalf("逐项读回 %+v；两项都要在、按判断顺序排、受限项带自己的原因", items)
+	}
+	if recorded.FinancialControl.Outcome() != domain.FinancialControlRestricted ||
+		recorded.FinancialControl.JointPassCondition() != domain.AllControlsPass ||
+		!recorded.FinancialControl.OccupationFormed() {
+		t.Fatalf("outcome = %q condition = %q occupation = %t",
+			recorded.FinancialControl.Outcome(), recorded.FinancialControl.JointPassCondition(),
+			recorded.FinancialControl.OccupationFormed())
+	}
+}
+
+// TestAStoredConclusionThatContradictsItsItemsIsRefusedOnRead 证重建门只校验不重算（ADR-0028）：把库里
+// 记的结论改成与逐项对不上的 HELD，读回不是静默按今天的推导改成 CREDIT_EXPOSED，而是拒绝——那一行不
+// 可能是本上下文判出来的，读的人要去查那一行。
+func TestAStoredConclusionThatContradictsItsItemsIsRefusedOnRead(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	exposed := executedControlResult(t, "REQ-1/VER-1", taskAsOfFirst,
+		controlItem(t, domain.CreditCheckControlItem, 1, domain.ControlItemSatisfied, ""))
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), exposed)
+	})
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.acceptance_financial_control
+		    SET control_outcome = 'HELD'
+		  WHERE tenant_id = $1 AND shipment_request_id = $2`,
+		"tenant-1", "REQ-1"); err != nil {
+		t.Fatalf("改写结论：%v", err)
+	}
+
+	if _, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1")); !errors.Is(
+		err, domain.ErrInvalidRehydratedFinancialControlResult,
+	) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedFinancialControlResult——结论与逐项对不上却读成了一份合法结果", err)
 	}
 }
 
@@ -142,7 +208,7 @@ func TestARejudgedMemberDecidesByItsLatestJudgment(t *testing.T) {
 	if recorded.Reachability[0] != rejudged {
 		t.Fatalf("读回的不是重判后的那一份：%+v", recorded.Reachability[0])
 	}
-	if recorded.FinancialControl != laterControl {
+	if !reflect.DeepEqual(recorded.FinancialControl, laterControl) {
 		t.Fatalf("读回的不是最新那次控制结果：%+v", recorded.FinancialControl)
 	}
 	if rows := countTaskRows(t, pool,
@@ -191,7 +257,7 @@ func TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor(t *testing.T) {
 	if len(current.Reachability) != 1 || current.Reachability[0] != reachable {
 		t.Fatalf("新版本读回 %+v，want 恰好它自己那份`可达`——同时点的重判被当成旧版的重放吞掉了", current.Reachability)
 	}
-	if current.FinancialControl != laterControl {
+	if !reflect.DeepEqual(current.FinancialControl, laterControl) {
 		t.Fatalf("新版本读回的控制结果 %+v，want 本版那次", current.FinancialControl)
 	}
 
@@ -202,7 +268,7 @@ func TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor(t *testing.T) {
 	if len(history.Reachability) != 1 || history.Reachability[0] != insufficient {
 		t.Fatalf("旧版本读回 %+v，want 它自己那份`证据不足`——历史没有留住", history.Reachability)
 	}
-	if history.FinancialControl != firstControl {
+	if !reflect.DeepEqual(history.FinancialControl, firstControl) {
 		t.Fatalf("旧版本读回的控制结果 %+v，want 首版那次", history.FinancialControl)
 	}
 
@@ -431,6 +497,82 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 		t.Error("一次不属于任何提交版本的控制结果溜进了控制库")
 	}
 
+	// 迁移 0019：已执行的结论必带共同通过条件、`明确无控制`必不带；条件只认封闭集。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 result_id, control_outcome, basis_ref, joint_pass_condition,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', now(),
+		         'SAC-z', 'HELD', NULL, NULL,
+		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`); err == nil {
+		t.Error("一次说不出按哪个条件判的`已冻结`溜进了控制库")
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 result_id, control_outcome, basis_ref, joint_pass_condition,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', now(),
+		         NULL, 'NOT_APPLICABLE', 'PC-NO-CONTROL', 'ALL_CONTROLS_PASS',
+		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`); err == nil {
+		t.Error("一次带着共同通过条件的`明确无控制`溜进了控制库——没执行过任何一项，哪来的条件")
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 result_id, control_outcome, basis_ref, joint_pass_condition,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', now(),
+		         'SAC-w', 'HELD', NULL, 'ANY_CONTROL_PASSES',
+		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`); err == nil {
+		t.Error("一个本上下文还不会算的组合子溜进了控制库")
+	}
+
+	// 子表：项必须挂在父行上；受限必带原因、成立必不带；种类与结论只认封闭集；顺序从 1 起。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control_item
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 control_kind, evaluation_order, item_conclusion, basis_ref)
+		 VALUES ('tenant-1', 'REQ-orphan', 'VER-x', now(),
+		         'PREPAID_FREEZE', 1, 'SATISFIED', NULL)`); err == nil {
+		t.Error("一项没有父行的控制项结果溜进了控制库——读口按父行取，它永远读不到")
+	}
+	parentAt := time.Date(2026, 10, 12, 8, 0, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 result_id, control_outcome, basis_ref, joint_pass_condition,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-parent', 'VER-x', $1,
+		         'SAC-p', 'HELD', NULL, 'ALL_CONTROLS_PASS',
+		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`, parentAt); err != nil {
+		t.Fatalf("写父行：%v", err)
+	}
+	for name, values := range map[string]string{
+		"受限无原因": "'PREPAID_FREEZE', 1, 'RESTRICTED', NULL",
+		"成立带原因": "'PREPAID_FREEZE', 1, 'SATISFIED', 'SOME_REASON'",
+		"种类集外":  "'MANUAL_GUARANTEE', 1, 'SATISFIED', NULL",
+		"结论集外":  "'PREPAID_FREEZE', 1, 'PENDING', NULL",
+		"顺序为零":  "'PREPAID_FREEZE', 0, 'SATISFIED', NULL",
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO parcel_shipment.acceptance_financial_control_item
+				(tenant_id, shipment_request_id, submission_version, as_of_at,
+				 control_kind, evaluation_order, item_conclusion, basis_ref)
+			 VALUES ('tenant-1', 'REQ-parent', 'VER-x', $1, `+values+`)`, parentAt); err == nil {
+			t.Errorf("%s 的控制项结果溜进了控制库", name)
+		}
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control_item
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 control_kind, evaluation_order, item_conclusion, basis_ref)
+		 VALUES ('tenant-1', 'REQ-parent', 'VER-x', $1, 'PREPAID_FREEZE', 1, 'SATISFIED', NULL),
+		        ('tenant-1', 'REQ-parent', 'VER-x', $1, 'CREDIT_CHECK', 1, 'SATISFIED', NULL)`, parentAt); err == nil {
+		t.Error("两项抢同一个判断顺序溜进了控制库——答不出该按哪条")
+	}
+
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_processing_attempt
 			(tenant_id, shipment_request_id, continuation_ref, attempted_at,
@@ -640,6 +782,8 @@ func reachabilityJudgment(
 	return judgment
 }
 
+// financialControlResult 造一份结论为 outcome 的采用结果。结论只能由逐项推出（ADR-0125），夹具反过来
+// 按结论挑逐项：`HELD` 一项预付冻结成立、`NOT_APPLICABLE` 走无控制入口带 basis；其余结论本文件不用。
 func financialControlResult(
 	t *testing.T,
 	outcome domain.FinancialControlOutcome,
@@ -647,18 +791,58 @@ func financialControlResult(
 	at time.Time,
 ) domain.FinancialControlResult {
 	t.Helper()
-	var identifier domain.FinancialControlResultID
-	if resultID != "" {
-		identifier = mustBuild(t, domain.NewFinancialControlResultID, resultID)
+	asOf := taskJudgmentAsOf(t, domain.FinancialControlJudgmentKind, at)
+	switch outcome {
+	case domain.FinancialControlNotApplicable:
+		result, err := domain.NewInapplicableFinancialControlResult(
+			mustBuild(t, domain.NewControlBasisReference, basis), asOf)
+		if err != nil {
+			t.Fatalf("形成明确无控制结果：%v", err)
+		}
+		return result
+	case domain.FinancialControlHeld:
+		return executedControlResult(t, resultID, at,
+			controlItem(t, domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, ""))
+	default:
+		t.Fatalf("本文件没有 %q 的夹具", outcome)
+		return domain.FinancialControlResult{}
 	}
+}
+
+func controlItem(
+	t *testing.T,
+	kind domain.ControlItemKind,
+	order uint32,
+	conclusion domain.ControlItemConclusion,
+	basis string,
+) domain.ControlItemResult {
+	t.Helper()
 	var reference domain.ControlBasisReference
 	if basis != "" {
 		reference = mustBuild(t, domain.NewControlBasisReference, basis)
 	}
-	result, err := domain.NewFinancialControlResult(identifier, outcome, reference,
-		taskJudgmentAsOf(t, domain.FinancialControlJudgmentKind, at))
+	item, err := domain.NewControlItemResult(kind, order, conclusion, reference)
 	if err != nil {
-		t.Fatalf("形成财务控制结果：%v", err)
+		t.Fatalf("形成控制项结果：%v", err)
+	}
+	return item
+}
+
+func executedControlResult(
+	t *testing.T,
+	resultID string,
+	at time.Time,
+	items ...domain.ControlItemResult,
+) domain.FinancialControlResult {
+	t.Helper()
+	result, err := domain.NewExecutedFinancialControlResult(domain.ExecutedFinancialControlSpec{
+		ResultID:  mustBuild(t, domain.NewFinancialControlResultID, resultID),
+		Items:     items,
+		JointPass: domain.AllControlsPass,
+		AsOf:      taskJudgmentAsOf(t, domain.FinancialControlJudgmentKind, at),
+	})
+	if err != nil {
+		t.Fatalf("形成已执行财务控制结果：%v", err)
 	}
 	return result
 }

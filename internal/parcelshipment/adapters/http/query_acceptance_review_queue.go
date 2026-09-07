@@ -207,13 +207,27 @@ type reviewReachabilityBody struct {
 	AsOfPolicy    string `json:"asOfPolicyVersion,omitempty"`
 }
 
+// reviewFinancialControlBody 透出接受前财务控制采用结果的三层（ADR-0125）：接受侧结论、按哪个共同通过
+// 条件推出的、逐项控制项结果。逐项是空数组而不是 null（判据同 reachability）；`明确无控制`没有条件
+// 也没有项，两格照实缺席 / 为空。OccupationFormed 单独透出，因为它不能从 outcome 读出来——结论受限时
+// 第一项仍可能占着钱，看队列的人要知道拒绝后有一笔要释放。
 type reviewFinancialControlBody struct {
-	Outcome       string `json:"outcome"`
-	ResultID      string `json:"resultId,omitempty"`
-	Basis         string `json:"basis,omitempty"`
-	AsOfAt        string `json:"asOfAt,omitempty"`
-	AsOfSemantics string `json:"asOfSemantics,omitempty"`
-	AsOfPolicy    string `json:"asOfPolicyVersion,omitempty"`
+	Outcome            string                  `json:"outcome"`
+	ResultID           string                  `json:"resultId,omitempty"`
+	Basis              string                  `json:"basis,omitempty"`
+	AsOfAt             string                  `json:"asOfAt,omitempty"`
+	AsOfSemantics      string                  `json:"asOfSemantics,omitempty"`
+	AsOfPolicy         string                  `json:"asOfPolicyVersion,omitempty"`
+	JointPassCondition string                  `json:"jointPassCondition,omitempty"`
+	OccupationFormed   bool                    `json:"occupationFormed"`
+	Items              []reviewControlItemBody `json:"items"`
+}
+
+type reviewControlItemBody struct {
+	Kind       string `json:"kind"`
+	Order      uint32 `json:"order"`
+	Conclusion string `json:"conclusion"`
+	Basis      string `json:"basis,omitempty"`
 }
 
 func reviewQueueEntryBodyOf(record ports.AcceptanceReviewQueueRecord) reviewQueueEntryBody {
@@ -268,10 +282,22 @@ func recordedJudgmentsBodyOf(recorded ports.RecordedJudgments) recordedJudgments
 		body.Reachability = append(body.Reachability, row)
 	}
 	if recorded.FinancialControl.Outcome().String() != "" {
+		items := recorded.FinancialControl.Items()
 		control := &reviewFinancialControlBody{
-			Outcome:  recorded.FinancialControl.Outcome().String(),
-			ResultID: recorded.FinancialControl.ResultID().String(),
-			Basis:    recorded.FinancialControl.Basis().String(),
+			Outcome:            recorded.FinancialControl.Outcome().String(),
+			ResultID:           recorded.FinancialControl.ResultID().String(),
+			Basis:              recorded.FinancialControl.Basis().String(),
+			JointPassCondition: recorded.FinancialControl.JointPassCondition().String(),
+			OccupationFormed:   recorded.FinancialControl.OccupationFormed(),
+			Items:              make([]reviewControlItemBody, 0, len(items)),
+		}
+		for _, item := range items {
+			control.Items = append(control.Items, reviewControlItemBody{
+				Kind:       item.Kind().String(),
+				Order:      item.Order(),
+				Conclusion: item.Conclusion().String(),
+				Basis:      item.Basis().String(),
+			})
 		}
 		if asOf := recorded.FinancialControl.AsOf(); !asOf.At().IsZero() {
 			control.AsOfAt = asOf.At().UTC().Format(time.RFC3339Nano)
