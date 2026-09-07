@@ -47,3 +47,4 @@ Date: 2026-08-18
 - [ADR-0025：跨上下文适配器落在消费方](./0025-cross-context-adapters-live-on-the-consumer-side.md)
 - [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)：补第三条没写的回指路径；禁止从身份发明仍有效
 - [ADR-0063：收寄硬资格证明由消费侧窄口取证](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)：声明列出之后如何取证；本记录只管声明归属
+- [ADR-0120：资料修订允许声明是接单规则包版本下的第三族阶段内容声明](./0120-source-data-amendment-allowance-is-a-third-stage-content-family-on-the-rule-package-version.md)：第四件按决定一的同一条纪律归规则包版本；本表不改，那里记形状与缺格语义

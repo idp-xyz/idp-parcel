@@ -1,7 +1,7 @@
 # 资料修订允许矩阵是接单规则包版本下的第三族阶段内容声明——PC 今天没有这一族，PS 的 `SourceDataRuleDeclaration` 因此只有替身
 
 Category: enhancement
-Status: draft——PC 半边（第三族阶段内容声明「资料修订允许声明」表族 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
+Status: in-progress——七问由 [ADR-0120](../../../docs/adr/0120-source-data-amendment-allowance-is-a-third-stage-content-family-on-the-rule-package-version.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-390c4f53「owner 授权自决口径」裁，越权风险点四条单列在 ADR 里供 owner 复核），PC CONTEXT 新词条「资料修订允许声明」+ Boundaries 一句、ADR-0058 Links 一行已随 ADR 同笔落；实施（迁移 `0027` → 领域 → 端口 / PG → 发布用例通道 / 批文 → 真库端到端）按下面「要建什么」逐笔接。开工前置已核：PS `domain.AmendmentStage` 在 main `9379c716`（`internal/parcelshipment/domain/amendment_stage.go`），以它为准，不再看分支。此前 draft：PC 半边（第三族阶段内容声明「资料修订允许声明」表族 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
 [ps-port-remainder/02](../../ps-port-remainder/issues/02-source-data-amendment-allowance-is-a-third-stage-content-declaration.md) 裁决节与 Comments，取证时该目录只在分支 `mcp2-ps-ports` 上、尚未进 main；PS 不依赖 PC 的那段已在该分支落地，含 ADR-0118）；本票是那一族在 PC 侧的建模票，待 `/domain-modeling` 答完下面「要你答的问题」再转 ready-for-agent。ADR 号 **0120** 由 MCP-1 预留（task-aafca372）——ps-port-remainder/02 裁 ④ 写「归属不要 ADR，ADR-0058 决定一的表加一行即可，PC owner 落地时在 ADR-0058 Consequences 或新 ADR 记一句由其自裁」，预留号是给那个「或」用的；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
 Blocked by: 无。**但一件顺序要守**：阶段六格原词的权威是 PS CONTEXT 词条「资料修订阶段」与 `domain.AmendmentStage`，两者在 `mcp2-ps-ports` 上（`7ec02162`）、尚未进 main；本票开工前先确认它们已进 main，没进就以那条分支为准并在完工报点名
 
@@ -102,3 +102,11 @@ ADR-0058（归属与三格语义）、ADR-0042、ADR-0063（声明与取证分�
   `stage_content_declarations.go` 全文——问题 4「三值在哪一侧算出」的倾向是按 ADR-0063 分工推的，建模时以两侧代码为准。
 - 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
   → main `52001f02`（远端 main = `e374b1ea`）。对照全表在 `admin-write-faces/07` 的同时刻 Comment。
+- 2026-09-07 23:0x · MCP-6（task-390c4f53，21:2x 新绑会话；分支 `mcp6-pcgaps10` 基 `9379c716`）：**裁决落 ADR-0120**，七问按「要你答的问题」
+  逐条答：①父行 + 逐格子行（`source_data_amendment_content` / `source_data_amendment_allowance`，子表名与倾向 `_rule` 不同——这一族没有
+  规则引用列）；②两个封闭集在 PC 立 `DeclaredAmendmentStage` / `DeclaredAmendmentIntent` 镜像（与倾向 `*Key` 不同——贴本族既有
+  `Declared*` 三个镜像），原词由 PS 消费侧测试钉住、PC 领域测试按字面钉；③同意：缺格 + 未封闭 = 未声明、缺格 + 封闭 = 不允许、子行永不登
+  「未声明」、`closed=true` 零行合法、`closed=false` 零行拒；④三值在 PC `AllowanceFor` 算出，PS 一对一译；⑤读口 / 写口 / 通道
+  `SOURCE_DATA_AMENDMENT` / 批文 `sourceDataAmendment{closed, rules[]}`，`closed` 必填；⑥同意开放引用；⑦立 ADR-0120（形状 + 缺格语义 +
+  镜像纪律三条取舍够格），ADR-0058 决定一那张表不动、只在 Links 回指。PC CONTEXT 新词条 + Boundaries 一句、README 一行。同笔只有文档；
+  代码从下一笔起。能力边界写在 ADR 头部（未读 PS 消费适配器全文与 intake 的 PG 读写实现）。
