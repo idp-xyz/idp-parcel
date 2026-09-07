@@ -80,11 +80,10 @@ func ParseDecimal(raw string) (Decimal, error) {
 // 这里曾有一个只收 String 输出那种规范写法的 ParseCanonical，注释说它「用在序列化边界上」。
 // 它从没接到过任何边界：本包的文本入口（金额、重量、HTTP 载荷、来源转录）收的都是外部写法，
 // 必须宽收再规范化；而快照存的是 (coefficient, scale) 两个字段不是文本，那道门上要拦的是
-// 非规范的字段组合，一个字符串解析器管不到。2026-09-07 删去。**规范写法这件事没有随它消失**：
-// 同一个数的两种字段写法（"100"/2 与 "1"/0）都过 valid()、String() 却不同，进摘要就是两个串，
-// 而生产上 percentShare 那处按字段移位真会产出前一种——现状与后果钉在
-// decimal_canonical_rebuild_test.go，收紧与否要连语义摘要的可比性一起裁，票在
-// .scratch/wiring-baseline-remainder/ 下。
+// 非规范的字段组合，一个字符串解析器管不到。2026-09-07 删去。**规范写法这件事没有随它消失**，
+// 同日按 ADR-0123 落在了该落的地方：它是 valid() 的一部分（见下面 valid() 里那段注释），于是
+// 按字段构造出来的第二种写法在 NewMoney 与各重建门上都立不住，不需要任何一个解析器去守它。
+// 收紧后的形状钉在 decimal_canonical_rebuild_test.go。
 func NewDecimalFromInt64(value int64) Decimal {
 	if value == 0 {
 		return Decimal{coefficient: "0"}
@@ -107,6 +106,17 @@ func (value Decimal) valid() bool {
 		return false
 	}
 	if coefficient == "0" && value.scale != 0 {
+		return false
+	}
+	// 规范写法（ADR-0123 Decision 一）：同一个数在字段层只有一种写法。前两条（无前导零、零无标度）一直在；
+	// 下面两条补齐它——标度大于零时系数不得以零结尾（{"100", 2} 与 {"1", 0} 是同一个数），零不带负号。
+	// 语义摘要与内容摘要都按 String() 取值，放过第二种写法就是让同一个数在摘要里出两个串。ParseDecimal 与
+	// decimalFromBig 本就不产出这些写法；这里拦的是按字段构造的那些——重建边界 decimalFrom 收回的快照，以及
+	// 任何「系数照抄、标度改一下」的算术。
+	if value.scale > 0 && strings.HasSuffix(coefficient, "0") {
+		return false
+	}
+	if value.coefficient == "-0" {
 		return false
 	}
 	return true

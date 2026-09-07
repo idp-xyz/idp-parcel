@@ -1,92 +1,176 @@
 package domain
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
 
-// 本文件钉住一件事实：Decimal 的规范写法只在文本入口（`ParseDecimal`）处被规范化，而重建边界
-// `decimalFrom` 直接按字段构造、不解析也不校验，那道后置门（`evaluation.valid()` 的语义摘要自校）
-// 拦不住非规范写法。
+// 本文件钉住 ADR-0123 落地后的形状：Decimal 的规范写法是 valid() 的一部分，同一个数在字段层只有一种
+// 写法；算术一律经 decimalFromBig 落成规范写法；重建边界 decimalFrom 按字段原样构造、由 valid() 判写法，
+// 非规范写法随整图重验一起被拒。
 //
-// 起因是曾有一个自称「用在序列化边界上」的 `ParseCanonical`——一个只收规范文本的解析器——而
-// 这里的四格证明它守不到那道边界：快照存的是字段不是文本。它已按此删去（见 decimal.go 里留的
-// 那段注释）；这四格留着，是因为它们讲的缺口不随那个函数消失，要不要收紧归另一张票裁。
+// 它的前身钉的是缺口——valid() 不拒尾随零、两种写法进摘要是两个串、decimalFrom 原样收回、percentShare
+// 真会产出——那四格在票 wiring-baseline-remainder/07 里逐条取证过，缺口补上那天前提失效，按它们自己
+// 写明的「若此处变红说明 valid() 已收紧，本测试的前提要重写」改成现在这样。
 
-// TestNonCanonicalPairSurvivesValid 钉住第一格：`valid()` 不是规范性检查。
+// TestValidRejectsEverySecondSpellingOfTheSameNumber 钉住第一格：valid() 是规范性检查。
 //
-// 它拒绝前导零、拒绝「系数为零而标度非零」，唯独不拒绝**标度大于零时的尾随零**——而那恰恰是
-// `ParseDecimal` 会规范掉的那一种。于是同一个数存在两种都能通过 `valid()` 的内部表示。
-func TestNonCanonicalPairSurvivesValid(t *testing.T) {
-	canonical, err := ParseDecimal("1")
-	if err != nil {
-		t.Fatalf("解析规范写法失败：%v", err)
+// 无前导零、零无标度两条原本就在；ADR-0123 补上「标度大于零时系数不以零结尾」与「零不带负号」。标度为零
+// 时系数末位的零是数字本身的一部分（100 就是 100），不在此列。
+func TestValidRejectsEverySecondSpellingOfTheSameNumber(t *testing.T) {
+	for _, spelling := range []Decimal{
+		{coefficient: "1"},
+		{coefficient: "100"},
+		{coefficient: "15", scale: 1},
+		{coefficient: "-15", scale: 1},
+		{coefficient: "0"},
+		{coefficient: "1", scale: DecimalMaxScale},
+	} {
+		if !spelling.valid() {
+			t.Fatalf("规范写法 coefficient=%q scale=%d 本应通过 valid()", spelling.coefficient, spelling.scale)
+		}
 	}
-	nonCanonical := Decimal{coefficient: "100", scale: 2}
-
-	if !nonCanonical.valid() {
-		t.Fatalf("非规范写法本应通过 valid()，实际被拒——若此处变红说明 valid() 已收紧，本测试的前提要重写")
-	}
-	if canonical.Cmp(nonCanonical) != 0 {
-		t.Fatalf("两者应当是同一个数：%q 与 %q", canonical.String(), nonCanonical.String())
+	for _, spelling := range []Decimal{
+		{coefficient: "100", scale: 2},
+		{coefficient: "150", scale: 2},
+		{coefficient: "-150", scale: 2},
+		{coefficient: "10", scale: 1},
+		{coefficient: "-0"},
+		{coefficient: "0", scale: 1},
+		{coefficient: "01"},
+	} {
+		if spelling.valid() {
+			t.Fatalf("非规范写法 coefficient=%q scale=%d 竟通过了 valid()", spelling.coefficient, spelling.scale)
+		}
+		if spelling.String() != "" {
+			t.Fatalf("立不住的写法 String() 应为空，实际 %q", spelling.String())
+		}
 	}
 }
 
-// TestSameNumberTwoSpellingsHashDifferently 钉住第二格，也是要害：**同一个数的两种写法进摘要
-// 得到不同的串**。
-//
-// 语义摘要按 `String()` 取值（见 fingerprint.go 里评价输入各维的取法），而两种写法的 `String()`
-// 本就不同。所以后置门那道自校**守不住这一格**：它比对的是「摘要与本图是否自洽」，不是「本图
-// 的数是不是规范写法」。一份非规范但自洽的快照能整套通过。
-func TestSameNumberTwoSpellingsHashDifferently(t *testing.T) {
-	canonical, err := ParseDecimal("1")
-	if err != nil {
-		t.Fatalf("解析规范写法失败：%v", err)
+// TestSameNumberArrivesAtOneSpellingFromEveryPath 钉住第二格，也是要害：不同路径算出同一个数，字段写法
+// 逐字相同，于是 String() 相同——语义摘要按 String() 取值，同一个数只可能是一个串。
+func TestSameNumberArrivesAtOneSpellingFromEveryPath(t *testing.T) {
+	paths := map[string]func() (Decimal, error){
+		"文本入口宽收 1.50": func() (Decimal, error) { return ParseDecimal("1.50") },
+		"文本入口宽收 01.5": func() (Decimal, error) { return ParseDecimal("01.5") },
+		"percentShare(150)": func() (Decimal, error) {
+			product, err := ParseDecimal("150")
+			if err != nil {
+				return Decimal{}, err
+			}
+			return percentShare(product)
+		},
+		"15 × 0.1": func() (Decimal, error) {
+			left, err := ParseDecimal("15")
+			if err != nil {
+				return Decimal{}, err
+			}
+			right, err := ParseDecimal("0.1")
+			if err != nil {
+				return Decimal{}, err
+			}
+			return left.Mul(right)
+		},
+		"0.75 + 0.750": func() (Decimal, error) {
+			left, err := ParseDecimal("0.75")
+			if err != nil {
+				return Decimal{}, err
+			}
+			right, err := ParseDecimal("0.750")
+			if err != nil {
+				return Decimal{}, err
+			}
+			return left.Add(right)
+		},
+		"3.00 − 1.5": func() (Decimal, error) {
+			left, err := ParseDecimal("3.00")
+			if err != nil {
+				return Decimal{}, err
+			}
+			right, err := ParseDecimal("1.5")
+			if err != nil {
+				return Decimal{}, err
+			}
+			return left.Sub(right)
+		},
 	}
-	nonCanonical := Decimal{coefficient: "100", scale: 2}
-
-	if canonical.String() == nonCanonical.String() {
-		t.Fatalf("两种写法的 String() 竟相同，本测试的前提不成立：%q", canonical.String())
-	}
-	if canonical.Cmp(nonCanonical) != 0 {
-		t.Fatalf("前提不成立：两者不是同一个数")
+	for name, path := range paths {
+		value, err := path()
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if value.coefficient != "15" || value.scale != 1 {
+			t.Fatalf("%s 落成 coefficient=%q scale=%d，想要唯一的规范写法 15/1", name, value.coefficient, value.scale)
+		}
+		if value.String() != "1.5" {
+			t.Fatalf("%s 的 String() = %q，想要 1.5", name, value.String())
+		}
 	}
 }
 
-// TestDecimalFromRebuildsWithoutNormalising 钉住第三格：重建边界原样接收那两个字段。
-//
-// `decimalFrom` 不解析也不规范化，因此上面那种写法只要进了快照就会原样回到内存里。它自己
-// 不是缺陷——缺陷取决于有没有东西在别处产出非规范写法。
-func TestDecimalFromRebuildsWithoutNormalising(t *testing.T) {
+// TestDecimalFromKeepsTheFieldsAndLetsValidJudgeTheSpelling 钉住第三格：重建边界仍按字段原样构造、不规范化，
+// 写法由 valid() 判。非规范写法重建出来的是一个立不住的 Decimal，整图重验时随整份快照一起被拒——不是被
+// 悄悄改成规范写法（那会把新出现的非规范产出者藏到第一次重放才露头）。
+func TestDecimalFromKeepsTheFieldsAndLetsValidJudgeTheSpelling(t *testing.T) {
+	canonical := decimalFrom(decimalSnapshot{Coefficient: "1"})
+	if !canonical.valid() || canonical.String() != "1" {
+		t.Fatalf("规范写法重建后应立得住且为 1，实际 valid=%v String=%q", canonical.valid(), canonical.String())
+	}
+
 	rebuilt := decimalFrom(decimalSnapshot{Coefficient: "100", Scale: 2})
-
 	if rebuilt.coefficient != "100" || rebuilt.scale != 2 {
-		t.Fatalf("重建应当原样接收，实际得到 coefficient=%q scale=%d", rebuilt.coefficient, rebuilt.scale)
+		t.Fatalf("重建应当原样接收字段，实际 coefficient=%q scale=%d", rebuilt.coefficient, rebuilt.scale)
 	}
-	if rebuilt.String() != "1.00" {
-		t.Fatalf("重建后的写法应为 1.00，实际 %q", rebuilt.String())
+	if rebuilt.valid() {
+		t.Fatal("非规范写法重建后竟立得住——valid() 没有在判写法")
+	}
+	if _, err := NewMoney(rebuilt, Currency{code: "USD"}); !errors.Is(err, ErrInvalidMoney) {
+		t.Fatalf("非规范写法进 NewMoney 应被拒，实际 err = %v", err)
 	}
 }
 
-// TestScaleShiftProducesNonCanonicalPair 钉住第四格，也是把前三格从「理论上可构造」变成
-// 「生产路径上真的会产出」的那一格。
-//
-// `charge_dependency_execution.go` 里那处按字段直接构造（系数照抄、标度加二）不走任何规范化。
-// 系数末位为零时，它产出的正是尾随零那种非规范写法。
-func TestScaleShiftProducesNonCanonicalPair(t *testing.T) {
-	product, err := ParseDecimal("100")
-	if err != nil {
-		t.Fatalf("解析失败：%v", err)
+// TestPercentShareProducesTheCanonicalSpelling 钉住第四格：生产路径上曾经唯一按字段移位的产出者改走
+// decimalFromBig，系数末位为零时不再产出尾随零那种写法；除以一百仍只是小数点移位，数一个都没变。
+func TestPercentShareProducesTheCanonicalSpelling(t *testing.T) {
+	for _, tc := range []struct {
+		product, want string
+	}{
+		{"100", "1"},
+		{"150", "1.5"},
+		{"12345", "123.45"},
+		{"0.5", "0.005"},
+		{"-200", "-2"},
+		{"0", "0"},
+	} {
+		product, err := ParseDecimal(tc.product)
+		if err != nil {
+			t.Fatalf("解析 %s：%v", tc.product, err)
+		}
+		share, err := percentShare(product)
+		if err != nil {
+			t.Fatalf("percentShare(%s)：%v", tc.product, err)
+		}
+		if share.String() != tc.want {
+			t.Fatalf("percentShare(%s) = %q，想要 %s", tc.product, share.String(), tc.want)
+		}
+		expected, err := ParseDecimal(tc.want)
+		if err != nil {
+			t.Fatalf("解析 %s：%v", tc.want, err)
+		}
+		if share.coefficient != expected.coefficient || share.scale != expected.scale {
+			t.Fatalf("percentShare(%s) 的字段 = %q/%d，与文本入口给出的规范写法 %q/%d 不同",
+				tc.product, share.coefficient, share.scale, expected.coefficient, expected.scale)
+		}
 	}
 
-	shifted := Decimal{coefficient: product.coefficient, scale: product.scale + 2}
-
-	if !shifted.valid() {
-		t.Fatalf("移位结果本应通过 valid()")
-	}
-	canonical, err := ParseDecimal(shifted.String())
+	// 标度上限守在同一处：移位后越界仍是精度越界，不是别的错。
+	deep, err := ParseDecimal("0." + strings.Repeat("0", DecimalMaxScale-2) + "1")
 	if err != nil {
-		t.Fatalf("按其字面重解失败：%v", err)
+		t.Fatalf("解析标度 %d 的数：%v", DecimalMaxScale-1, err)
 	}
-	if canonical.coefficient == shifted.coefficient && canonical.scale == shifted.scale {
-		t.Fatalf("移位结果竟已是规范写法，本测试的前提要重写：coefficient=%q scale=%d",
-			shifted.coefficient, shifted.scale)
+	if _, err := percentShare(deep); !errors.Is(err, ErrDecimalPrecisionExceeded) {
+		t.Fatalf("移位越过标度上限应报 ErrDecimalPrecisionExceeded，实际 %v", err)
 	}
 }

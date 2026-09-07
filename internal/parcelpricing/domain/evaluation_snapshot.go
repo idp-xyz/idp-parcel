@@ -363,6 +363,10 @@ func decimalOf(value Decimal) decimalSnapshot {
 	return decimalSnapshot{Coefficient: value.coefficient, Scale: value.scale}
 }
 
+// decimalFrom 按字段原样构造，不解析也不规范化。写法是否规范由 Decimal.valid() 判（ADR-0123 Decision 一），
+// 三条重建门整图重验时把不规范的写法连同整份快照一起拒掉（Decision 三）。这里不能「先规范化再交摘要自校」：
+// 一个在读回时悄悄把 1.00 改成 1 的门，会把生产路径上新出现的非规范产出者藏到第一次重放才露头，而那时报
+// 的是摘要不符，与真正的内容冲突长同一张脸。
 func decimalFrom(snapshot decimalSnapshot) Decimal {
 	return Decimal{coefficient: snapshot.Coefficient, scale: snapshot.Scale}
 }

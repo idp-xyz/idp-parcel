@@ -86,18 +86,15 @@ func (basis dependencyBasis) sum(dependency ChargeDependency) (Money, error) {
 // percentShare 把「基数乘百分比」的乘积除以 100。除以十的幂只是小数点移位，因此结果
 // 精确、无需声明精度——这一点要紧，因为卡只给出燃油费率，并没有说施加它之后的乘积
 // 该怎么取整。
+//
+// 移位经 decimalFromBig 落成规范写法（ADR-0123 Decision 二）：这里曾是「系数照抄、标度加二」，
+// 系数末位为零时产出的就是尾随零那种写法——同一个数的第二种写法，语义摘要按 String() 取值时
+// 就是第二个串，费用行的写法因此取决于卡有没有声明逐行取整。
 func percentShare(product Decimal) (Decimal, error) {
 	if !product.valid() {
 		return Decimal{}, ErrInvalidDecimal
 	}
-	if product.IsZero() {
-		return product, nil
-	}
-	shifted := Decimal{coefficient: product.coefficient, scale: product.scale + 2}
-	if !shifted.valid() {
-		return Decimal{}, ErrDecimalPrecisionExceeded
-	}
-	return shifted, nil
+	return decimalFromBig(product.bigCoefficient(), product.scale+2)
 }
 
 // share 拿到目前为止收集的费用池，为一次`按基数百分比`计算定值。

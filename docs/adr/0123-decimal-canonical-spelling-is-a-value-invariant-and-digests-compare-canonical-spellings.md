@@ -19,7 +19,7 @@ Date: 2026-09-07
 
 ## Decision
 
-**一、规范写法是 `Decimal` 的值不变量，写在 `valid()` 里。** 一个 `Decimal` 立得住，当且仅当系数无前导零、系数为零时标度为零、**标度大于零时系数无尾随零**。这样同一个数在字段层只有一种写法，`String()` 与字段一一对应。它是值对象的不变量而不是某道边界的纪律：`NewMoney`、`ChargeLine.valid()`、`Weight.valid()`、`ConversionStep.valid()` 以及三条重建门的整图重验都经 `valid()`，一处收紧、处处继承，不必在每道门上各写一遍。
+**一、规范写法是 `Decimal` 的值不变量，写在 `valid()` 里。** 一个 `Decimal` 立得住，当且仅当系数无前导零、系数为零时标度为零且不带负号、**标度大于零时系数无尾随零**。这样同一个数在字段层只有一种写法，`String()` 与字段一一对应。它是值对象的不变量而不是某道边界的纪律：`NewMoney`、`ChargeLine.valid()`、`Weight.valid()`、`ConversionStep.valid()` 以及三条重建门的整图重验都经 `valid()`，一处收紧、处处继承，不必在每道门上各写一遍。
 
 **二、产出 `Decimal` 的算术一律经 `decimalFromBig` 或 `ParseDecimal`，不按字段构造。** `percentShare` 改走 `decimalFromBig`（它去尾随零）；除以十的幂仍只是小数点移位，结果仍精确、仍无需声明精度——变的只是写法，不是数。本包内再出现「系数照抄、标度改一下」的写法，`valid()` 会在它进 `NewMoney` 时就拒掉，不必等到重放。
 
