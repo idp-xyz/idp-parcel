@@ -14,8 +14,9 @@ import (
 
 // FulfillmentSegmentKey 是实际履约段的幂等键。
 //
-// 段没有版本维：CONTEXT「已经成立的实际履约段及履约参与关系不能被取消、删除或回写为未发生」，
-// 更正走的是**新的段**而不是同一个段的新版本——「再次进入是新的段」这条在领域 join 上就守着。
+// 段没有版本维：CONTEXT「已经成立的实际履约段及履约参与关系不能被取消、删除或回写为未发生」。
+// 承运责任变了是**新的段**（ADR-0103 主体判据）——「再次进入是新的段」这条在领域 join 上就守着；
+// 来源更正不改变谁在控制，它在**同段**的参与关系上长替代版本（ADR-0112），段仍是这一把键。
 type FulfillmentSegmentKey struct {
 	TenantID domain.TenantID
 	Segment  domain.FulfillmentSegmentReference
@@ -68,15 +69,25 @@ const (
 	SegmentAlreadyClosed
 )
 
-// ActualFulfillmentSegmentRegistry 按幂等键找回并保存实际履约段，并按动作开三个窄写口
-// （ADR-0097）。写入代数同 ADR-0031：撞键是业务答案不是错误。
+// ParticipationSupersedeOutcome 是替代参与版本插进段的结果（ADR-0112 决定一）。`已替代`是业务答案：
+// 同一版更正重放、或另一方先把同一前版替代掉了（一版至多被替代一次），编排读回链尾作答。
+type ParticipationSupersedeOutcome uint8
+
+const (
+	ParticipationSupersedeOutcomeInvalid ParticipationSupersedeOutcome = iota
+	ParticipationSuperseded
+	ParticipationAlreadySuperseded
+)
+
+// ActualFulfillmentSegmentRegistry 按幂等键找回并保存实际履约段，并按动作开窄写口
+// （ADR-0097；替代参与那一口由 ADR-0112 加）。写入代数同 ADR-0031：撞键是业务答案不是错误。
 //
 // **没有通用 Update，这是本口最要紧的一条。** 价值不在"窄"，在于 CONTEXT 禁的那些操作在
 // 这个口上**表达不出来**：
 //
-//   - `Join` 只插不改，`EndParticipation` 与 `CloseSegment` 各自只填自己那几列且带前置
-//     条件，**没有任何一条路径能把已发生的写回未发生**——不是不该，是没有那个入参。
-//   - 三个口没有一个接受「整段成员集合」，因此「整段结果覆盖成员差异」也表达不出来。
+//   - `Join` 与 `Supersede` 只插不改，`EndParticipation` 与 `CloseSegment` 各自只填自己那几列
+//     且带前置条件，**没有任何一条路径能把已发生的写回未发生**——不是不该，是没有那个入参。
+//   - 窄口没有一个接受「整段成员集合」，因此「整段结果覆盖成员差异」也表达不出来。
 //
 // 整段重写口做不到这些：`Save(segment)` 能表达任何状态**包括倒退**，挡住倒退的只有调用方
 // 碰巧传了一个向前演进过的聚合；它并发下还会静默丢成员（两个加入各基于一份旧快照重写，
@@ -100,6 +111,13 @@ type ActualFulfillmentSegmentRegistry interface {
 	// 由编排响亮报错。
 	FindActiveSegments(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) ([]FulfillmentSegmentKey, error)
 
+	// FindSegmentsForObject 答「这个对象在哪些段里有参与」，在场或已离场都算（ADR-0112 决定二）。
+	//
+	// 它为来源更正的重派生开：被更正的对象可能早已离场，`FindActiveSegments` 找不到它；更正命令
+	// 不带段号——更正的输入是「证据说了什么」，段是派生知道的事。多于一个是正常的（对象一程走几段），
+	// 哪一段的参与指着被更正的版本由领域门判，本口不替它挑。
+	FindSegmentsForObject(ctx context.Context, tenant domain.TenantID, object domain.CarriedObjectReference) ([]FulfillmentSegmentKey, error)
+
 	// Join 把一个对象的参与关系插进既有段。参与关系整体由调用方从领域取出——本口不拆解它，
 	// 拆解就等于让适配器重新组装一遍领域已经判完的东西。
 	Join(
@@ -109,7 +127,18 @@ type ActualFulfillmentSegmentRegistry interface {
 		recordedAt time.Time,
 	) (SegmentJoinOutcome, error)
 
-	// EndParticipation 只填离场三列，且只作用于仍在场的那一条。已离场的不被改写。
+	// Supersede 把一条替代参与版本插进段（ADR-0112 决定一）：只插不改，与 `Join` 同形。参与关系带着
+	// 它回指的被替代入场依据，由调用方从领域的重派生门取出；原参与那一行一字不动，「被替代」是读回时
+	// 按回指派生的。段已关闭照样插——CONTEXT 封存例外格「除来源事实更正引起的重新派生」。
+	Supersede(
+		ctx context.Context,
+		key FulfillmentSegmentKey,
+		participation domain.FulfillmentParticipation,
+		recordedAt time.Time,
+	) (ParticipationSupersedeOutcome, error)
+
+	// EndParticipation 只填离场三列，且只作用于仍在场的那一条——在场即 `ended_at` 空且无人回指
+	// （被替代的版本不再是当前控制，不会被结束）。已离场的不被改写。
 	EndParticipation(
 		ctx context.Context,
 		key FulfillmentSegmentKey,

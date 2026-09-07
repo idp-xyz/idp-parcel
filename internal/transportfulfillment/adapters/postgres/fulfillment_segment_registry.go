@@ -58,13 +58,13 @@ func (repository *FulfillmentSegments) FindByKey(
 		return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
 	}
 
-	// 成员按入场时刻再按对象排序：顺序不进任何判断，但让读回稳定，比对夹具时不必先排一遍。
+	// 成员按入场时刻再按对象、入场依据排序：顺序不进任何判断，但让读回稳定，比对夹具时不必先排一遍。
 	rows, err := querier.Query(ctx,
 		`SELECT object_ref, planned_ref, entry_kind, entry_basis, entered_at,
-		        end_kind, end_basis, ended_at
+		        end_kind, end_basis, ended_at, supersedes_entry_basis
 		   FROM transport_fulfillment.fulfillment_participation
 		  WHERE tenant_id = $1 AND segment_ref = $2
-		  ORDER BY entered_at, object_ref`,
+		  ORDER BY entered_at, object_ref, entry_basis`,
 		key.TenantID.String(), key.Segment.String(),
 	)
 	if err != nil {
@@ -82,11 +82,11 @@ func (repository *FulfillmentSegments) FindByKey(
 	}
 	for rows.Next() {
 		var objectRef, entryKind, entryBasis string
-		var plannedRef, endKind, endBasis *string
+		var plannedRef, endKind, endBasis, supersedes *string
 		var enteredAt time.Time
 		var endedAt *time.Time
 		if err := rows.Scan(&objectRef, &plannedRef, &entryKind, &entryBasis, &enteredAt,
-			&endKind, &endBasis, &endedAt); err != nil {
+			&endKind, &endBasis, &endedAt, &supersedes); err != nil {
 			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
 		}
 		member, err := participationSpecFrom(participationRow{
@@ -98,6 +98,7 @@ func (repository *FulfillmentSegments) FindByKey(
 			endKind:    endKind,
 			endBasis:   endBasis,
 			endedAt:    endedAt,
+			supersedes: supersedes,
 		})
 		if err != nil {
 			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
@@ -162,8 +163,8 @@ func (repository *FulfillmentSegments) Save(
 	return ports.SegmentSaved, nil
 }
 
-// Join 把一个对象插进既有段（ADR-0097 第一个窄口）。**只插不改**：撞主键即「该对象已在
-// 段内」，是业务答案不是错误。
+// Join 把一个对象插进既有段（ADR-0097 第一个窄口）。**只插不改**：撞键即「该对象已在
+// 段内」，是业务答案不是错误——首次入场撞的是「每对象一个首登」那道部分唯一索引。
 //
 // 不校验段是否已关闭——那由外键之外的领域判断负责（`join` 在段已关闭时拒）。本口若替它判，
 // 就成了第二个口径。
@@ -177,6 +178,10 @@ func (repository *FulfillmentSegments) Join(
 	if err != nil {
 		return ports.SegmentJoinOutcomeInvalid, fmt.Errorf("join fulfillment segment: %w", err)
 	}
+	if _, chained := participation.Supersedes(); chained {
+		return ports.SegmentJoinOutcomeInvalid,
+			errors.New("join fulfillment segment: a superseding participation enters through Supersede")
+	}
 	tag, err := insertParticipationRow(ctx, executor, key, participation, recordedAt, true)
 	if err != nil {
 		return ports.SegmentJoinOutcomeInvalid, fmt.Errorf("join fulfillment segment: %w", err)
@@ -187,28 +192,96 @@ func (repository *FulfillmentSegments) Join(
 	return ports.ObjectJoined, nil
 }
 
+// Supersede 把一条替代参与版本插进段（ADR-0112 决定一）。**只插不改**，与 Join 同一段 INSERT：
+// 撞主键是同一更正的重放，撞「一版至多被替代一次」那道索引是另一方先替代了同一前版——两者都答
+// `已替代`，编排读回链尾作答。自引用外键让回指一个不存在的前版在这里就失败。
+//
+// 不校验段是否已关闭：段已关闭照样长替代版本，那是 CONTEXT 封存例外格，领域门也不拒。
+func (repository *FulfillmentSegments) Supersede(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+	recordedAt time.Time,
+) (ports.ParticipationSupersedeOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ParticipationSupersedeOutcomeInvalid, fmt.Errorf("supersede participation: %w", err)
+	}
+	if _, chained := participation.Supersedes(); !chained {
+		return ports.ParticipationSupersedeOutcomeInvalid,
+			errors.New("supersede participation: the participation supersedes nothing")
+	}
+	tag, err := insertParticipationRow(ctx, executor, key, participation, recordedAt, true)
+	if err != nil {
+		return ports.ParticipationSupersedeOutcomeInvalid, fmt.Errorf("supersede participation: %w", err)
+	}
+	if tag == 0 {
+		return ports.ParticipationAlreadySuperseded, nil
+	}
+	return ports.ParticipationSuperseded, nil
+}
+
+// currentParticipationPredicate 是「这一行是该对象在段内的当前参与（链尾）」在 SQL 上的写法：没有任何
+// 一版回指它。「被替代」不落列（ADR-0112 决定一），读写两侧对它的定义因此只有这一处；
+// FindActiveSegments 与 EndParticipation 都拿它与 `ended_at IS NULL` 合成「在场」。调用方要给外层表起
+// 别名 `participation`。
+const currentParticipationPredicate = `NOT EXISTS (
+		    SELECT 1
+		      FROM transport_fulfillment.fulfillment_participation successor
+		     WHERE successor.tenant_id = participation.tenant_id
+		       AND successor.segment_ref = participation.segment_ref
+		       AND successor.object_ref = participation.object_ref
+		       AND successor.supersedes_entry_basis = participation.entry_basis)`
+
 // FindActiveSegments 按（租户 + 对象）找回该对象仍在场的全部段键。
 //
-// 只看 `ended_at IS NULL`——与 EndParticipation 那个窄口用的是同一个判据，读写两侧对「在场」的
-// 定义因此只有一处。按入场时刻排序只为读回稳定，不进任何判断。
+// 「在场」= `ended_at IS NULL` 且是链尾——与 EndParticipation 那个窄口用的是同一个判据，读写两侧对
+// 「在场」的定义因此只有一处。按入场时刻排序只为读回稳定，不进任何判断。
 func (repository *FulfillmentSegments) FindActiveSegments(
 	ctx context.Context,
 	tenant domain.TenantID,
 	object domain.CarriedObjectReference,
 ) ([]ports.FulfillmentSegmentKey, error) {
+	return repository.findSegmentKeys(ctx, "find active segments",
+		`SELECT participation.segment_ref
+		   FROM transport_fulfillment.fulfillment_participation participation
+		  WHERE participation.tenant_id = $1 AND participation.object_ref = $2
+		    AND participation.ended_at IS NULL
+		    AND `+currentParticipationPredicate+`
+		  ORDER BY participation.entered_at, participation.segment_ref`,
+		tenant, object)
+}
+
+// FindSegmentsForObject 按（租户 + 对象）找回该对象有参与的全部段键，在场或已离场都算（ADR-0112 决定二）。
+// 一段只报一次：链上几版都在同一段里。
+func (repository *FulfillmentSegments) FindSegmentsForObject(
+	ctx context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
+	return repository.findSegmentKeys(ctx, "find segments for object",
+		`SELECT participation.segment_ref
+		   FROM transport_fulfillment.fulfillment_participation participation
+		  WHERE participation.tenant_id = $1 AND participation.object_ref = $2
+		  GROUP BY participation.segment_ref
+		  ORDER BY min(participation.entered_at), participation.segment_ref`,
+		tenant, object)
+}
+
+func (repository *FulfillmentSegments) findSegmentKeys(
+	ctx context.Context,
+	operation string,
+	query string,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("find active segments: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
-	rows, err := querier.Query(ctx,
-		`SELECT segment_ref
-		   FROM transport_fulfillment.fulfillment_participation
-		  WHERE tenant_id = $1 AND object_ref = $2 AND ended_at IS NULL
-		  ORDER BY entered_at, segment_ref`,
-		tenant.String(), object.String(),
-	)
+	rows, err := querier.Query(ctx, query, tenant.String(), object.String())
 	if err != nil {
-		return nil, fmt.Errorf("find active segments: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	defer rows.Close()
 
@@ -216,23 +289,24 @@ func (repository *FulfillmentSegments) FindActiveSegments(
 	for rows.Next() {
 		var segmentRef string
 		if err := rows.Scan(&segmentRef); err != nil {
-			return nil, fmt.Errorf("find active segments: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		segment, err := domain.NewFulfillmentSegmentReference(segmentRef)
 		if err != nil {
-			return nil, fmt.Errorf("find active segments: %w", err)
+			return nil, fmt.Errorf("%s: %w", operation, err)
 		}
 		keys = append(keys, ports.FulfillmentSegmentKey{TenantID: tenant, Segment: segment})
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("find active segments: %w", err)
+		return nil, fmt.Errorf("%s: %w", operation, err)
 	}
 	return keys, nil
 }
 
 // EndParticipation 填离场三列（ADR-0097 第二个窄口）。
 //
-// `WHERE ended_at IS NULL` 是这个口的全部要害：**它让"改写一条已离场的参与"表达不出来**。
+// `WHERE ended_at IS NULL` 加链尾谓词是这个口的全部要害：**它让"改写一条已离场的参与"与"结束一条已被
+// 替代的参与"都表达不出来**。行按入场依据指名——那是参与在链上的身份，调用方交来的就是领域判定的链尾。
 // 没有匹配行时答`已离场`，而不是报错——已结束的参与不重复结束也不改写，那是业务答案。
 func (repository *FulfillmentSegments) EndParticipation(
 	ctx context.Context,
@@ -250,12 +324,15 @@ func (repository *FulfillmentSegments) EndParticipation(
 	}
 
 	tag, err := executor.Exec(ctx,
-		`UPDATE transport_fulfillment.fulfillment_participation
+		`UPDATE transport_fulfillment.fulfillment_participation participation
 		    SET end_kind = $1, end_basis = $2, ended_at = $3
-		  WHERE tenant_id = $4 AND segment_ref = $5 AND object_ref = $6
-		    AND ended_at IS NULL`,
+		  WHERE participation.tenant_id = $4 AND participation.segment_ref = $5
+		    AND participation.object_ref = $6 AND participation.entry_basis = $7
+		    AND participation.ended_at IS NULL
+		    AND `+currentParticipationPredicate,
 		kind.String(), basis.String(), endedAt.UTC(),
 		key.TenantID.String(), key.Segment.String(), participation.Object().String(),
+		participation.EntryBasis().String(),
 	)
 	if err != nil {
 		return ports.ParticipationEndOutcomeInvalid, fmt.Errorf("end participation: %w", err)
@@ -295,10 +372,10 @@ func (repository *FulfillmentSegments) CloseSegment(
 	return ports.SegmentClosed, nil
 }
 
-// insertParticipationRow 落一条参与关系。`ignoreConflict` 区分两个调用方：首登时撞键说明
-// 记录本身有问题（同一段里同一对象两条），应当报错；`Join` 时撞键是业务答案。
+// insertParticipationRow 落一条参与关系。`ignoreConflict` 区分调用方：首登时撞键说明
+// 记录本身有问题（同一段里同一对象两条不成链），应当报错；`Join` 与 `Supersede` 时撞键是业务答案。
 //
-// 两个调用方共用同一段 INSERT 而不是各写一遍：列一多，两份就会在下一次加列时分叉，而分叉
+// 三个调用方共用同一段 INSERT 而不是各写一遍：列一多，几份就会在下一次加列时分叉，而分叉
 // 处正是「首登写得对、加入写漏一列」这种不可能靠测试穷尽的错。
 func insertParticipationRow(
 	ctx context.Context,
@@ -321,10 +398,16 @@ func insertParticipationRow(
 		endKind, endBasis, endedAt = &kindName, &basisValue, &endMoment
 	}
 
+	var supersedes *string
+	if replaced, chained := participation.Supersedes(); chained {
+		value := replaced.String()
+		supersedes = &value
+	}
+
 	statement := `INSERT INTO transport_fulfillment.fulfillment_participation
 		     (tenant_id, segment_ref, object_ref, planned_ref, entry_kind, entry_basis,
-		      entered_at, end_kind, end_basis, ended_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		      entered_at, end_kind, end_basis, ended_at, recorded_at, supersedes_entry_basis)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	if ignoreConflict {
 		statement += ` ON CONFLICT DO NOTHING`
 	}
@@ -341,6 +424,7 @@ func insertParticipationRow(
 		endBasis,
 		endedAt,
 		recordedAt.UTC(),
+		supersedes,
 	)
 	if err != nil {
 		return 0, err
@@ -358,6 +442,7 @@ type participationRow struct {
 	endKind    *string
 	endBasis   *string
 	endedAt    *time.Time
+	supersedes *string
 }
 
 // participationSpecFrom 逐列走各自的构造门装回，不按列直接拼结构体——构造门是坏行的
@@ -391,6 +476,11 @@ func participationSpecFrom(row participationRow) (domain.RehydrateParticipationS
 	}
 	if row.endBasis != nil {
 		if spec.EndBasis, err = domain.NewParticipationBasisReference(*row.endBasis); err != nil {
+			return domain.RehydrateParticipationSpec{}, err
+		}
+	}
+	if row.supersedes != nil {
+		if spec.Supersedes, err = domain.NewParticipationBasisReference(*row.supersedes); err != nil {
 			return domain.RehydrateParticipationSpec{}, err
 		}
 	}

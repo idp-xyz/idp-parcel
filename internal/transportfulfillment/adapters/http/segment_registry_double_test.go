@@ -53,7 +53,20 @@ func participationSpecOf(participation domain.FulfillmentParticipation) domain.R
 	if endKind, endBasis, endedAt, ended := participation.End(); ended {
 		spec.EndKind, spec.EndBasis, spec.EndedAt = endKind, endBasis, endedAt
 	}
+	if supersedes, chained := participation.Supersedes(); chained {
+		spec.Supersedes = supersedes
+	}
 	return spec
+}
+
+// superseded 报告某行是否已被同对象的另一版回指——与真库同一个派生判据：「被替代」不落列。
+func (rows *segmentRowsDouble) superseded(row domain.RehydrateParticipationSpec) bool {
+	for _, other := range rows.participations {
+		if other.Object == row.Object && other.Supersedes == row.EntryBasis {
+			return true
+		}
+	}
+	return false
 }
 
 func (double *segmentRegistryDouble) FindByKey(
@@ -94,12 +107,62 @@ func (double *segmentRegistryDouble) FindActiveSegments(
 			continue
 		}
 		for _, participation := range rows.participations {
-			if participation.Object == object && participation.EndedAt.IsZero() {
+			if participation.Object == object && participation.EndedAt.IsZero() && !rows.superseded(participation) {
 				keys = append(keys, rows.key)
 			}
 		}
 	}
 	return keys, nil
+}
+
+func (double *segmentRegistryDouble) FindSegmentsForObject(
+	_ context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.FulfillmentSegmentKey, error) {
+	if double.findErr != nil {
+		return nil, double.findErr
+	}
+	var keys []ports.FulfillmentSegmentKey
+	for _, rows := range double.rows {
+		if rows.key.TenantID != tenant {
+			continue
+		}
+		for _, participation := range rows.participations {
+			if participation.Object == object {
+				keys = append(keys, rows.key)
+				break
+			}
+		}
+	}
+	return keys, nil
+}
+
+func (double *segmentRegistryDouble) Supersede(
+	_ context.Context,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+	recordedAt time.Time,
+) (ports.ParticipationSupersedeOutcome, error) {
+	rows, found := double.rows[segmentRegistryKey(key)]
+	if !found {
+		return ports.ParticipationSupersedeOutcomeInvalid, nil
+	}
+	supersedes, chained := participation.Supersedes()
+	if !chained {
+		return ports.ParticipationSupersedeOutcomeInvalid, nil
+	}
+	for _, existing := range rows.participations {
+		if existing.Object != participation.Object() {
+			continue
+		}
+		if existing.EntryBasis == participation.EntryBasis() || existing.Supersedes == supersedes {
+			return ports.ParticipationAlreadySuperseded, nil
+		}
+	}
+	rows.participations = append(rows.participations, participationSpecOf(participation))
+	rows.recordedAt = recordedAt
+	return ports.ParticipationSuperseded, nil
 }
 
 func (double *segmentRegistryDouble) Save(
@@ -151,7 +214,7 @@ func (double *segmentRegistryDouble) EndParticipation(
 	}
 	for index := range rows.participations {
 		row := &rows.participations[index]
-		if row.Object != participation.Object() {
+		if row.Object != participation.Object() || rows.superseded(*row) {
 			continue
 		}
 		if !row.EndedAt.IsZero() {
