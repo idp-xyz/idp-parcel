@@ -976,3 +976,21 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 验证钉 `7bc47ec9`（隔离 detached 树 `idp-replay-tf09`，验后已拆）：gofmt 空；build/vet 退 0；清点工具 vet/test 退 0；清点门零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（595s）；探针 `transportfulfillment/adapters/postgres -run ServiceAction` 无 DSN SKIP / 有 DSN PASS；改动 `.go`/`.sql` 15 件全 `i/lf w/lf`。票 09 补「进 main 记录」（随本笔）；tf/11 未开、TF 地盘已由 MCP-4 释出。拆 `idp-parcel-mcp4-tf09`（`git cherry main` 八笔全 `-`、status 零行、不带 `--force`），指针 `mcp4-tf09@3b1ee383` / `mcp4-tf09-precut@5be2686e` / `mcp5-tf-cmdr@502a6856` 保留。ADR-0114 四条 + 执行器三条越权风险点归用户复核。
 
 **在途（20:0x）**：MCP-2 `269d98b6`、MCP-3 `0ec68b23`、MCP-5 `0d116e60`、MCP-6 `390c4f53`；MCP-4 空闲。**可派**：tf/11（ADR-0121、迁移 0019；TF 地盘空）。CI 为 `7bc47ec9` 在跑。
+
+## 2026-09-07 21:2x 通道 1 新会话接续（接手时 `main = origin/main = fc90622a`）
+
+用户只交代「监听队列、正常回复、保持循环」。上一节末（20:0x）到接手之间按 git log 补一行，本会话未经历、验证强度以各提交信为准：`6ff95211` 之上 pc-gaps/08 四笔（`0cfe3571` / `31903cc5` / `02ff5205` / `44bcac4d`，分支 `mcp5-pcgaps08`，`git cherry main` 四笔 `-`）与 wbr/06 六笔（`ab191bba` / `1a3c37ea` / `a896b1d0` / `db023b4f` / `deca2a3d` / `de9635e6`，分支 `mcp2-wbr06`）已重放进 main，`d98d17be` 基线头注补推送方一段，清点 `fc90622a`（20:09 推）；两票在 main 上的 SHA 对照未见补记（票 06 完成记录写「main 上的 SHA 待重放后补记」），待补。接手时共享树 70 处 ` M` 全为 CRLF 幻影（`--ignore-cr-at-eol` 零行），无未跟踪、无 stash。
+
+### 21:4x：MCP-5 拆树两棵，MCP-1 复核后记账
+
+用户 21:4x 在通道 5 面板批「拆吧，但需要审查原来的代码」，MCP-5 21:5x 报 MCP-1 记账；MCP-1 在 `fc90622a` 上复跑同得：
+
+- `idp-parcel-mcp4-verify`（detached @ `305402f5`）与 `idp-parcel-mcp4-wbr07`（`mcp6-wbr07` @ `b0fd8c52`）已 `git worktree remove`，不带 `--force`；两树拆前 `status --short --untracked-files=all` 均零行、无 ignored 文件。指针 `mcp4-wbr07@305402f5` / `mcp6-wbr07@b0fd8c52` 保留（复核：`worktree list` 两棵已无，两指针仍解析到原 SHA）。
+- 拆前比内容：wbr/07 五笔（`1b1a2980` / `f1b21c47` / `223d6145` / `305402f5` / `b0fd8c52`）触及 10 件，`git diff b0fd8c52 main -- <10 件>` 只剩 3 件有差且全是 main 后续前进——`docs/adr/README.md` +6/−0；`production_wiring_baseline.txt` +41/−8（MCP-5 核：−8 是 wbr/06 `deca2a3d` 剪掉的评价重放门那段，`223d6145` 自己那句注释在 main 上）；`MECHANISM-INVENTORY.md` 为重生成差。ADR-0123、票 07 md、`decimal.go` / `evaluation_snapshot.go` / `charge_dependency_execution.go` 及两份测试与 main 逐字节相同。`git cherry main b0fd8c52`：`f1b21c47` / `223d6145` / `b0fd8c52` 为 `-`；`1b1a2980` 为 `+` 只因 README 上下文（ADR-0123 文件本身 diff 空）；`305402f5` 是分支清点笔，已被后续重生成盖过。
+- 未动 main、未推。`idp-parcel-mcp5-pcgaps08`（`85a90a1b`）未拆：`git cherry main` 08 四笔 `-`、其后三笔 `+`（`a96f7356` / `74332508` / `85a90a1b`，MCP-5 报为 09/10 内容，与 MCP-6 `mcp6-pcgaps09` 重叠），处置待定。
+
+### 21:5x 取证：main 顶端 `fc90622a` 的 CI 因分片超时被掐（run 34121403815）
+
+`Test (rest)` 15m18s 撞 `timeout-minutes: 15` 被 cancel，其余三片与 Static 绿；这是今天第二次——`b24ccccf`（run 34115373617，19:11）的 `Test (network-visibility)` 同样 15m18s 被掐，而它与下一笔成功的 `250e5a43` 之间只差 tasks.md 一件。**成因是快慢差不是某个用例挂死**：同一片近乎同一代码，`rest` 在 `b24ccccf` 7m27s、`250e5a43` 13m33s、`6ff95211` 6m58s、`fc90622a` >15m；被掐那次逐包看，`cmd/parcel-api` 144s（`6ff95211` 上 49s）、`cmd/parcel-dispatch` 414s（104s），20:30:06 印到 `partycommercial/adapters/http` 后再无一包印出，被掐时还活着的是 `outbound.test` 与 `migrations.test`——按 3–4 倍放慢，`partycommercial/adapters/postgres`（健康时 200s）一包就吃掉剩余全部。12:5x 那节定的「最重片 ≤ 15 分的六成」线，按 `250e5a43` 的 13m33s（90%）已破。ci.yml `go test -race -count=1 $packages` 不带 `-p 1`，本机验证口径是 `-p 1`；其上注释量的是本机不带 `-race` 的 116–132 秒，CI 上带 `-race` 健康日已是 6–7 分。**处置归 CI 地盘（MCP-4）与用户**：抬 `timeout-minutes` 或再拆片，本会话不动 ci.yml；本笔纯 .md 推出后会再起一跑，同代码再量一次。远端最近一次绿是 `6ff95211`（run 34119509220）。
+
+**在途（21:5x，按台账与树况）**：MCP-3 `0ec68b23` sa/03（`mcp3-sa03` @ `e7c44522` + `mcp3-verify`）；MCP-6 `390c4f53` pc-gaps/09→10（`mcp6-pcgaps09` @ `246135ae` + `mcp6-verify09`）；MCP-2 `269d98b6` wbr/06 已进 main、树 `mcp2-wbr06` 未拆；MCP-5 `0d116e60` 08 已进 main、树 `mcp5-pcgaps08` 待定（见上）；MCP-4 空闲。树：`idp-parcel-mcp1-sa02`、`idp-parcel-mcp2-psr05`、`idp-replay-psr05-tf01`、`idp-replay-wave`、`idp-replay-wave2`（内容都在 main）仍等用户点头；`idp-tf03` 归用户。**可派**：tf/11（TF 地盘空）；wbr/06 与 pc-gaps/08 两票「进 main 记录」待补。
