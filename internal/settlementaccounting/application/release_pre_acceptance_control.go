@@ -79,8 +79,8 @@ func (result ReleasePreAcceptanceControlResult) Freeze() (domain.FundsFreeze, bo
 	return result.freeze, result.hasFreeze
 }
 
-// Exposure 只在释放的是一笔信用暴露时给出（ADR-0047）。同一原关联不会两本账都认领到：
-// 一次控制按方式只走了一条路。
+// Exposure 只在释放的是一笔信用暴露时给出（ADR-0047）。它与 Freeze **可以同时在场**：组合策略
+// 让同一原关联在两本账上各有一笔占用（ADR-0122），释放两本都认领、两个都交回。
 func (result ReleasePreAcceptanceControlResult) Exposure() (domain.CreditExposure, bool) {
 	return result.exposure, result.hasExposure
 }
