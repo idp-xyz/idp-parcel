@@ -37,6 +37,11 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	// 行数据；从别处灌一份进来就等于替一次没发生过的择优写下结论。
 	"RehydrateChannelSelectionDecision":     true,
 	"RehydrateChannelSelectionDecisionSpec": true,
+	// 接受前财务控制采用结果（ADR-0125 决定二）。同类：结论是当时按共同通过条件推出的产物，重建门
+	// 把它当数据收下、只校它与逐项一致；对其余调用方开放，就等于让业务代码交入一个与逐项对不上
+	// 的结论——那正是移除四参构造器要堵的入口。
+	"RehydrateFinancialControlResult":     true,
+	"RehydrateFinancialControlResultSpec": true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。
