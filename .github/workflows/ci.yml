@@ -185,4 +185,4 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           packages="$(bash scripts/ci/test-shards.sh list "$SHARD")"
-          go test -race -count=1 -p 1 $packages
+          go test -race -count=1 $packages
