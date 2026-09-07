@@ -1,7 +1,7 @@
 # 判断账没有提交版本维：受控补充后续办重判可能被旧判断压住，链再次停在`等待受控补充`
 
 Category: bug
-Status: in-progress——通道 2 于 2026-09-07 受用户当轮授权（「继续」，即逐票代裁并实施）裁**甲**并开工，裁决见下「裁决」节；实施在隔离 worktree 分支 `mcp2-ftr10` 上，基线本地 main `b2a78a2e`（含 MCP-1 未推的 `2fcc9378`/`b621cb43`）；此前 draft（通道 6 于 ftr/09 实施中量到，只写事实与两条形状）
+Status: resolved——通道 2 于 2026-09-07 受用户当轮授权（「继续」，即逐票代裁并实施）裁**甲**（见「裁决」节）并实施完成：分支 `mcp2-ftr10` 代码笔 `6d325ca7` + 机制清点笔 `c0ced2ec`，基线本地 main `3b411556`；**main 上的 SHA 待 MCP-1 重放后在 Comments 对照**（重放前本票的 resolved 以分支为封存出处）。完成记录见文末。此前 draft（通道 6 于 ftr/09 实施中量到，只写事实与两条形状）
 Blocked by: 无
 
 ## 量到的事实（锚 `mcp6-ftr09` 分支已验 tip `90260aae`，读的都是 main 上早已有的代码）
@@ -46,3 +46,23 @@ ADR-0045、ADR-0106、迁移 0005 头注、`internal/parcelshipment/adapters/pos
 
 - 2026-09-04 · 通道 6：立票（draft）。起因是 ftr/09 闭环用例要靠替身把时点推后才能走到接受，回头量出判断账没有版本维。**只写票面，未动代码。**
 - 2026-09-07 · 通道 2：裁甲并领票（见「裁决」节），实施于分支 `mcp2-ftr10`；完成记录随分支交付补在文末。
+
+## 完成记录（通道 2，2026-09-07，分支 `mcp2-ftr10`，已验 tip `c0ced2ec`）
+
+**落点（代码笔 `6d325ca7`）**
+
+- 迁移 `migrations/parcel_shipment/0018_acceptance_judgment_submission_version.sql`：`acceptance_reachability_judgment` 与 `acceptance_financial_control` 各加 `submission_version text NOT NULL`（无默认，照 VE `0003`/`0014`）+ 非空白 CHECK，主键重建为（租户+委托+**版本**+[成员]+时点）。头注写明为什么版本进键、为什么不代填、为什么另两表不动。
+- `ports.AcceptanceJudgmentRecorder.RecordReachabilityJudgment` / `RecordFinancialControlResult` 与 `ports.RecordedJudgmentReader.LoadRecordedJudgments` 各加 `version domain.SubmissionVersionID`；两处端口注释写下「为什么读本版不读跨版本最新」。
+- `pspostgres.AcceptanceJudgments`：写口带版本列，读口 `WHERE … AND submission_version = $3`（可达性仍 `DISTINCT ON (parcel_id) … ORDER BY as_of_at DESC`，财务控制仍取最新，都在本版内）。
+- 五处调用点传各自手里的版本：`AdvanceAcceptanceJudgmentHandler` / `AdvanceFinancialControlJudgmentHandler` 传 `command.SubmissionVersion`；`FormAcceptanceDecisionHandler` 读 `command.SubmissionVersion`；`WithdrawShipmentRequestHandler.releaseFreeze` / `RejectShipmentRequestHandler.releaseFreeze` 读 `command.SubmissionVersion`（与 `ControlReleaseRequest` 同版）；`serveReviewCase` 读 `record.SubmissionVersionID`。`cmd/parcel-api/unwired_orchestration.go` 的桩跟签名。
+- **不动**：处理尝试表、采用解析表、`ON CONFLICT DO NOTHING` 语义、迁移 `0005` 头注（已施加不改写；它那句「没有 submission_version 列」自此是历史陈述）。
+
+**验证形状（TDD，两条 red 先后见红再转绿）**
+
+- 进程级 red：`cmd/parcel-dispatch/customer_supplement_resume_loop_test.go` 去掉替身「新版本时点推后一小时」（`synRPerVersionAsOfCommercialBasis` 整个删除，两版都答 `synRAsOfAnchor`），加断言「可达性判断行数 = 2」——落版本维前实跑 **FAIL：`可达性判断行数 = 1, want 2`**（票面事实 5 在真库上复现）；落后 PASS 到接受。文件头那段「时点随版本推移」的解释改写为现状。
+- 适配器级 red→green：`TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor`——两版同成员**同时点**各成一行；按新版读只回新版的`可达`与本版控制；按旧版读回旧版的`证据不足`与首版控制（历史留住）；从未判过的版本读回零值；同表两行。`TestAcceptanceJudgmentShapesArePinnedInTheDatabase` 加两支：空白版本的判断与控制被 CHECK 拒。
+- 应用层 seam：`TestAcceptanceJudgmentResolvesBasisThenFormsAsOfThenAssesses` 钉「判断记在命令的版本上」，`TestAllAdoptedJudgmentsPassingFormsAnAcceptance` 钉「决定读命令的版本」；HTTP `TestReviewCaseAnswersDetailWithJudgments` 钉「复核详情按详情记录的版本读」。替身各加一个收版本的槛。
+
+**验证强度（隔离 worktree，`c0ced2ec`）**：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；`go test -count=1 ./...` **未设 DSN 全绿**（PG 用例跳过；期间 `TestEmbeddedMigrationAssetsCarryNoCarriageReturnOrBOM` 曾红一次——新迁移文件带 CRLF，已改 LF 无 BOM）；**DSN 指向门禁容器 55432**：`./internal/parcelshipment/... ./cmd/parcel-dispatch/... ./cmd/parcel-api/... ./migrations/...` 全绿（postgres 包 44s、dispatch 27s，真连了库），`TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor` 与 `TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope` 为 **PASS 非 SKIP**。未带 DSN 跑全仓（推送方在 tip 上兑底）。机制清点笔 `c0ced2ec` 在 `6d325ca7` 干净检出上重生成（迁移 parcel_shipment 17→18，合计 141→142——只作此刻取证）。
+
+**顺带量到、不在本票**：前一版本已形成的 `HELD` 在新版本形成时怎么处置（是否随新版本重控、旧冻结谁释放）——见「裁决」第 5 条；今天与改前行为一致（都只释放当前读到的那一份），未变差，也未解决。归受控补充编排 / SA 的下一票，要不要立归 PS owner。
