@@ -32,3 +32,15 @@ Status: in-progress——PP 四条已在本目录第一笔处置（三删一留�
 - 本目录对 PS/PC 五条**只读取证、不改代码、不改基线**：PS 地盘此刻是 MCP-2（ftr/10），PC 地盘是 MCP-3（pc-gaps/07）。票面写清应该的调用方、UC 步、缺哪一层、能否归已认可留待；先接哪张归 MCP-1 派。
 - PP 四条的代码与基线改动在隔离分支上，不碰共享树；重放进 main 时基线文件按「共享文件：占号、逐块核」纪律。
 - 「已认可留待」指 r27 交用户认可的那份清单（SA 三口目录读口 + PS `PAR-COM-13`、`BD-PS-009`、VE 真实渠道凭证、外部标识关系子域、NR `PAR-NET-14`）。五条 PS/PC 里没有一条能整条归进去——每一条缺的都是缝或执行器，不是实例值。
+
+## Comments
+
+**2026-09-07 接管复核与验证记录（MCP-6 新会话，task-f31a5650；原会话在 `28ea268b` 之后中断，未留完工报）。**
+
+分支 `mcp6-pp-ratchet`（基于 main `0f84c0ec`；`0f84c0ec..08f54867` 纯 `.md`，未 rebase）：`1d13d510` PP 三删一留 → `28ea268b` 本目录立票 → `2837718d` 接管复核（票 02 补 UC 步、票 07 补判定、基线头注 PP 段补 `08f54867` 重量）→ 本笔（只此评论）。
+
+- 基线计数两法同得（UTF-8 逐行滤非空非注释 / 字节层数行首非 `#`）：`0f84c0ec` 9、`08f54867` 9（该文件 blob 与 `0f84c0ec` 逐字节同）、`1d13d510` 6、`28ea268b` 6、`2837718d` 6。
+- 门禁：`TestWiringBaselineHasNoStaleEntry` 在分支上 PASS。
+- 全仓验证（detached 干净检出 `2837718d`，含 DSN）：`gofmt -l` 无输出、`go build` / `go vet` 退 0、`go test -p 1 -count=1 ./...` 退 0，`FAIL` 裸子串零命中。探针一正一反：`internal/parcelpricing/adapters/postgres` DSN 已设 `--- PASS` 58 / `--- SKIP` 0（17.8s），DSN 未设 `--- PASS` 0 / `--- SKIP` 58（0.016s），两次退出码都是 0、包行都是 `ok`；`internal/architecture` 两种设置下 `--- PASS` 157 / `--- SKIP` 0。
+- 机制清点：在 `2837718d` 干净检出上重跑生成器，`docs/product/MECHANISM-INVENTORY.md` 零差异（生成器数的是端点、消费适配器与路由表，本分支没动那些面），**不另成笔**。
+- 1d13d510 九个测试文件的复核结论见 `2837718d` 提交信；票 07 的「真缺陷非留待」判定见票面。
