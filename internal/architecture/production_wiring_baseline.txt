@@ -181,6 +181,12 @@
 # 之后在隔离 detached 检出 `de9635e6` 上两法同得实测 **7**（parcel-shipment 2 + party-commercial 5）。
 # 只对该检出成立；本笔只加这段注释，名单一行未动。
 #
+# 2026-09-08 随 wiring-baseline-remainder/05 剪掉 ValidateBeforeDecision（PC 组）。成因三分是**第一种**：
+# 它被删了——UC-PC-002 步 8 提交前重解的单依据第一版，闭包形态 ValidateClosureBeforeDecision 落地后
+# 再无调用方（application/validate_commercial_basis.go 只走闭包），全仓该名字此前只此一处声明，剪前先核过
+# 别处无同名声明。**本笔单独作用于其父提交 `4524cfd4` 上，两法（PowerShell 与 git-bash grep 各数
+# `^internal/` 行）同得剪前 7、剪后 6**（party-commercial 5→4）。只对该检出成立。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -394,11 +400,12 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # **剪之前按本门禁的提示逐条分过成因**：这个名字在全仓只有一处声明（domain/
 # channel_account_use_authorization.go），不存在「别处同名声明造成误判」那一种，因此是第二种。
 internal/partycommercial/domain ResolveCreditPolicy
-# 下面两条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词，
-# ValidateBeforeDecision 返回同型 Resolution 是变换不是构造。**留着不排除是有意的**——
-# 留在名单里的代价只是两行，漏掉一个工厂的代价是它永远隐形。两边代价不对称，够了。
+# 下面一条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词。**留着不排除是有意的**——
+# 留在名单里的代价只是一行，漏掉一个工厂的代价是它永远隐形。两边代价不对称，够了。
+# （曾与它并列的 ValidateBeforeDecision「返回同型 Resolution 是变换不是构造」2026-09-08 随
+# wiring-baseline-remainder/05 删去——它是 UC-PC-002 步 8 提交前重解的单依据第一版，闭包形态
+# ValidateClosureBeforeDecision 落地后再无调用方；成因三分是第一种「已被删」，不是接上了。）
 internal/partycommercial/domain ManualReviewRequirementFor
-internal/partycommercial/domain ValidateBeforeDecision
 # 授权请求方的两扇门（票 party-commercial-context-gaps/08，ADR-0116 Decision 三）：客户账户自己 / 运营
 # 角色代某客户账户。它们造的是 NewAuthorizationRequestBy 的入参，而带请求方的请求今天只有资料修订
 # 那一格需要——PS 侧那只适配器（ps-port-remainder/03 的 source_data_amendment_authorization.go，

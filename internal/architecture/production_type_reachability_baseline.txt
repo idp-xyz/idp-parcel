@@ -131,8 +131,8 @@ internal/partycommercial/domain CreditBasis
 # 改完这一行自然出名单），要么由所有者确认它本该被包外拿到并立接线票——两种都是所有者的判断，
 # 门禁不替裁。改小写之后本门禁的 stale 用例会指名要剪的那一行。
 
-# 票 04 点名的那一个：只经 ResolveCommercialBasis（只有包内调用）与 ValidateBeforeDecision
-# （函数名基线已列）取得。PC 所有者裁。
+# 票 04 点名的那一个：只经 ResolveCommercialBasis（只有包内调用）取得；曾经的另一条路
+# ValidateBeforeDecision 2026-09-08 随 wiring-baseline-remainder/05 删去（被闭包形态取代）。PC 所有者裁。
 internal/partycommercial/domain Resolution
 
 # 同形的一族：经 FormComplianceJudgment 取得（两个 *Reference 另有 New* 构造器，生产同样不指名），

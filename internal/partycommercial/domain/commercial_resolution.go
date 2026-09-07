@@ -492,52 +492,6 @@ func resolveSettlementPolicyBasis(registry *CommercialRegistry, key ResolutionKe
 	}
 }
 
-// ValidateBeforeDecision 在调用方提交决定之前重跑第一阶段。它按原查询重解，而不是只
-// 检查已采用对象自身：同范围新增一个竞争候选时，那个对象一个字节都没变，解析却已经
-// 不再唯一，只有重解看得见。
-//
-// 原本就不是唯一解析的结果原样返回——不存在「采用依据是否仍有效」这个问题。
-func ValidateBeforeDecision(
-	registry *CommercialRegistry,
-	prior Resolution,
-	standingOf PricingPlanStandingLookup,
-) Resolution {
-	if prior.outcome != UniquelyResolved {
-		return prior
-	}
-	// 权威读不到时，原结果既不能被确认也不能被断言失效，因此保持`解析未决`且可续办。
-	if registry == nil {
-		stalled := prior
-		stalled.outcome = ResolutionPending
-		stalled.adopted = CommercialVersion{}
-		stalled.hasAdopted = false
-		stalled.pricePolicy = CommercialPricePolicy{}
-		stalled.hasPricePolicy = false
-		stalled.settlementPolicy = SettlementPolicy{}
-		stalled.hasSettlementPolicy = false
-		stalled.reason = AuthorityUnreadable
-		stalled.continuation = continuationFor(prior.key.fingerprint(), prior.resolutionID, AuthorityUnreadable)
-		return stalled
-	}
-
-	current := ResolveCommercialBasis(registry, prior.key, standingOf)
-	if current.outcome == UniquelyResolved && current.resolutionID == prior.resolutionID {
-		return prior
-	}
-
-	stale := Resolution{
-		outcome:        ResolutionStale,
-		resolutionID:   prior.resolutionID,
-		key:            prior.key,
-		anchor:         prior.anchor,
-		viewRevision:   current.viewRevision,
-		candidateCount: current.candidateCount,
-		reason:         CurrentResolutionChanged,
-		continuation:   continuationFor(prior.key.fingerprint(), prior.resolutionID, CurrentResolutionChanged),
-	}
-	return stale
-}
-
 // pending 构造所有未决答案共用的那一种形状。让它们全部走这里，是为了不让一个结果的
 // 可用性取决于它由哪条路径产生：在此之前，提交前校验产生的未决可续办，而首次解析产生
 // 的未决不可续办。
