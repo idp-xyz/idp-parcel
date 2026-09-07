@@ -1020,3 +1020,9 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 **做不到的一格**：仓私有 + 免费档，分支保护 / rulesets 接口 `403 Upgrade to GitHub Pro or make this repository public`（23:2x 实测，`gh api` 权限 admin=true 也不行）。替代：所有 worktree 共用 `.git`，切换日装 `.git/hooks/pre-push`（目标 main 且 `.git/landing.lock` 记的 SHA 不等于要推的就拒），源码放 `scripts/git-hooks/`。真正的机器强制归用户：升级套餐或转公开仓。
 
 两条都已写进 `docs/agents/parallel-sessions.md`「推送」节下（「分支每笔提交后推到 origin」「落 main 的下一形态」），①已广播全通道。
+
+### 23:4x–00:0x：用户连问「TEMP 里是不是有大量代码没进 idp-parcel / MCP-6 crash 会不会丢 / 原来是不是很多代码都没进」→ 全量审计（钉 `d6d4cd46`）
+
+- **TEMP**：登记在册只剩 `mcp4-ci-p1`（一行 ci.yml）与 `mcp6-pcgaps10`（在途，5 笔、树干净）；8 个 `idp*` 残留目录无 `.git`、无代码。工作树与主树共用 `.git`，提交过的一律在 `d:\tops\idp-parcel\.git`（2112 个可达提交、117 MB）。`mcp6-pcgaps10@ac6b5241` 由 MCP-1 代推 origin 备份并知会。
+- **分支上只存在于分支、main 上从未有过的代码文件**（95 条分支逐条查 `--diff-filter=A` 的代码文件对 `main:` 路径）：6 条——`mcp6-pcgaps10`（在途 5 件 1109 行）；`merged/cons-proj-tf-b` 1 件（清单 #4：断言拆成两用例进 main）；`merged/cr04-backend` 1 件（#12：main 有更严的同等守卫 `eol_guard_test.go`）；`merged/mcp2-ps-ports` 4 件（两只 `Unconnected*` 占位，曾进 main、后被 psr/05 换成真读法而删）；`salvage/mcp5-pcgaps08` 1 件（第二份 0026）；`salvage/t12-governance-register` 3 件（#5 裁「不合」那半）。无一是丢失。
+- **游离提交**（`git fsck --unreachable --no-reflogs`）398 笔：按 patch-id 对全部 ref（1869 个 patch-id）+ 逐文件 blob 对 main 历史两级核——273 笔有等价补丁或同 blob、113 笔只动 .md/簿记、**12 笔"未对上"逐条看**：08-12 一笔是 `docs/agents.rar` + 客户 xlsx（有意不进）；08-18 三笔与 08-21 两笔只差共享 `ports.go`（换基座重放后的合并变体）；08-21 `a4f48bfd` 含 t12 #5 那半；08-31 `seed.sh` 那笔（#13 按原文补注释进 main `cd21e68c`）；09-04 三笔与 09-07 一笔全是 `unwired_orchestration.go` / `endpoints.go` 共享接线文件的封存快照或合并变体，完成版都在 main。**结论：截至 `d6d4cd46` 没有丢失的代码；不在 main 的只有 MCP-6 在途一票与有意排除的几处。**量法脚本在 `%TEMP%`（`classify-branches.ps1` / `code-only-on-branches.ps1` / `unreachable-audit.ps1`），若要长期用应进 `scripts/`，待用户定。
