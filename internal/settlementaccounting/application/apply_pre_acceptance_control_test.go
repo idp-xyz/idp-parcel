@@ -173,9 +173,25 @@ func requiredPolicy(t *testing.T) *policyDouble {
 	return &policyDouble{policy: methodPolicy(t, domain.PrepaidSettlement)}
 }
 
+// methodPolicy 造一份只有一项控制的策略，控制种类与结算方式同向（预付 → 预付冻结、账期 →
+// 信用校验）。既有用例写于「方式即选路」的年代；ADR-0122 之后选路的是控制种类，这个夹具让那些
+// 用例继续测它们原本要测的那条账本路径，而组合与顺序另有用例。
 func methodPolicy(t *testing.T, method domain.SettlementMethod) domain.PreAcceptanceControlPolicy {
 	t.Helper()
+	kind := domain.PrepaidFreezeControl
+	if method == domain.TermsSettlement {
+		kind = domain.CreditCheckControl
+	}
+	return itemsPolicy(t, method, controlItem(t, kind, 1))
+}
+
+// itemsPolicy 造一份带指定控制项的策略；结算方式与两份采用依据按夹具固定。
+func itemsPolicy(t *testing.T, method domain.SettlementMethod, items ...domain.ControlItem) domain.PreAcceptanceControlPolicy {
+	t.Helper()
 	policy, err := domain.NewRequiredControlPolicy(
+		items,
+		domain.AllControlsPass,
+		value(t, domain.NewControlPolicyReference, "PC-CONTROL-POLICY/v1"),
 		method,
 		value(t, domain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3"),
 	)
@@ -183,6 +199,15 @@ func methodPolicy(t *testing.T, method domain.SettlementMethod) domain.PreAccept
 		t.Fatalf("new required control policy: %v", err)
 	}
 	return policy
+}
+
+func controlItem(t *testing.T, kind domain.ControlKind, order uint32) domain.ControlItem {
+	t.Helper()
+	item, err := domain.NewControlItem(kind, order)
+	if err != nil {
+		t.Fatalf("new control item %s/%d: %v", kind, order, err)
+	}
+	return item
 }
 
 type creditDouble struct {
@@ -672,6 +697,139 @@ func TestTermsExposureReplayConflictAndUnavailableStanding(t *testing.T) {
 		result.NotFormedReason() != application.CreditStandingUnavailable {
 		t.Fatalf("outcome/reason = %q/%q, want CONTROL_NOT_FORMED/CREDIT_STANDING_UNAVAILABLE",
 			result.Outcome(), result.NotFormedReason())
+	}
+}
+
+// Covers: ADR-0122 决定二与 CONTEXT「合同明确组合多项接受前控制时，每项结果必须保持独立依据和
+// 有效性」——一份账期合同同时要求预付保证金冻结与信用校验（ADR-0115 允许、旧形装不下的组合）：
+// 两项按判断顺序各走各的账本，冻结与暴露**同时在场**，各自独立，结果带回控制策略版本与共同通过
+// 条件供 parcel-shipment 判；结算方式与结算政策仍如实保存但不再选路。
+func TestACombinedPolicyExecutesEachControlOnItsOwnLedgerInOrder(t *testing.T) {
+	policy := &policyDouble{policy: itemsPolicy(t, domain.TermsSettlement,
+		controlItem(t, domain.CreditCheckControl, 2),
+		controlItem(t, domain.PrepaidFreezeControl, 1))}
+	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
+	freezes := &ledgerDouble{ledger: domain.NewFreezeLedger()}
+	credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
+	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy: policy, Balance: balance, Freezes: freezes,
+		Credit: credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+	})
+
+	result, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q, want CONTROL_APPLIED", result.Outcome())
+	}
+	freeze, held := result.Freeze()
+	exposure, exposed := result.Exposure()
+	if !held || freeze.Status() != domain.FreezeHeld || !exposed || exposure.Status() != domain.ExposureRecorded {
+		t.Fatalf("freeze/exposure = %#v / %#v; 两项控制各自要在自己的账本上成立", freeze, exposure)
+	}
+	if freezes.saved != 1 || exposures.saved != 1 {
+		t.Fatalf("saved freeze/exposure ledgers %d/%d times, want 1/1", freezes.saved, exposures.saved)
+	}
+	executed := result.ExecutedControls()
+	if len(executed) != 2 ||
+		executed[0].Kind() != domain.PrepaidFreezeControl || executed[0].Order() != 1 ||
+		executed[1].Kind() != domain.CreditCheckControl || executed[1].Order() != 2 {
+		t.Fatalf("executed = %#v; 控制项必须按判断顺序执行，而不是按交进来的次序", executed)
+	}
+	if executed[0].Restricted() || executed[1].Restricted() {
+		t.Fatalf("executed = %#v; 两项都成立却记成了业务限制", executed)
+	}
+	if result.JointPassCondition() != domain.AllControlsPass || result.ControlPolicy().String() != "PC-CONTROL-POLICY/v1" {
+		t.Fatalf("joint/control policy = %q/%q; 共同通过条件与采用的控制策略没有随结果带回",
+			result.JointPassCondition(), result.ControlPolicy())
+	}
+	if result.Method() != domain.TermsSettlement || result.AdoptedPolicy().String() != "PC-SETTLEMENT-POLICY-V3" {
+		t.Fatalf("method/policy = %v/%q; 结算方式与结算政策仍要保存", result.Method(), result.AdoptedPolicy())
+	}
+}
+
+// Covers: ADR-0122 决定二「全部通过之下，一项形成业务限制后后续项不再执行」——预付冻结排第一
+// 且余额不足时，信用校验不该再去占额度：那是为一笔多半不会接受的委托多占一份、多留一处要释放。
+// 已执行的那一项原样交回，`业务限制`是它自己的结论。
+func TestARestrictionStopsTheRemainingControlsUnderAllControlsPass(t *testing.T) {
+	policy := &policyDouble{policy: itemsPolicy(t, domain.TermsSettlement,
+		controlItem(t, domain.PrepaidFreezeControl, 1),
+		controlItem(t, domain.CreditCheckControl, 2))}
+	credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
+	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
+	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 1_000)},
+		Freezes: &ledgerDouble{ledger: domain.NewFreezeLedger()},
+		Credit:  credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+	})
+
+	result, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q, want CONTROL_APPLIED——限制也是一次已执行的控制", result.Outcome())
+	}
+	freeze, held := result.Freeze()
+	if !held || freeze.Status() != domain.FreezeRestricted {
+		t.Fatalf("freeze = %#v, want RESTRICTED", freeze)
+	}
+	if _, exposed := result.Exposure(); exposed {
+		t.Fatal("第一项已形成业务限制，信用校验仍去占了额度")
+	}
+	if credit.loaded != 0 || exposures.saved != 0 {
+		t.Fatalf("credit loaded %d / exposures saved %d; 后续项不该再碰它的账本", credit.loaded, exposures.saved)
+	}
+	executed := result.ExecutedControls()
+	if len(executed) != 1 || executed[0].Kind() != domain.PrepaidFreezeControl || !executed[0].Restricted() {
+		t.Fatalf("executed = %#v; 只执行了一项且它是业务限制", executed)
+	}
+}
+
+// Covers: 组合策略里第二项的依赖调不通时整个请求停在那一步，第一项已占的资金留在账本里、
+// 由账本对同一请求身份的幂等承接续办——重放不会二次占用（ADR-0122 决定二的续办纪律）。
+func TestAHaltOnTheSecondControlLeavesTheFirstReplayableNotDoubled(t *testing.T) {
+	policy := &policyDouble{policy: itemsPolicy(t, domain.TermsSettlement,
+		controlItem(t, domain.PrepaidFreezeControl, 1),
+		controlItem(t, domain.CreditCheckControl, 2))}
+	freezeLedger := domain.NewFreezeLedger()
+	credit := &creditDouble{err: errors.New("credit view down")}
+	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 10_000)},
+		Freezes: &ledgerDouble{ledger: freezeLedger},
+		Credit:  credit, Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+		Clock: fixedClock{at: controlAt},
+	})
+
+	halted, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if halted.Outcome() != application.ControlNotFormed || halted.NotFormedReason() != application.CreditStandingUnavailable {
+		t.Fatalf("outcome/reason = %q/%q, want CONTROL_NOT_FORMED/CREDIT_STANDING_UNAVAILABLE",
+			halted.Outcome(), halted.NotFormedReason())
+	}
+	if freezeLedger.HeldMinor() != 4_000 {
+		t.Fatalf("held = %d, want 4000——第一项已落账的冻结不回滚", freezeLedger.HeldMinor())
+	}
+
+	credit.err = nil
+	credit.standing = standingWith(t, 10_000, 0, false)
+	resumed, err := handler.Handle(context.Background(), command(t, 4_000))
+	if err != nil {
+		t.Fatalf("handle resumed: %v", err)
+	}
+	if resumed.Outcome() != application.ControlApplied {
+		t.Fatalf("outcome = %q, want CONTROL_APPLIED after the dependency recovered", resumed.Outcome())
+	}
+	if freezeLedger.HeldMinor() != 4_000 || freezeLedger.HeldCount() != 1 {
+		t.Fatalf("held = %d in %d freezes, want 4000 in exactly one——续办不得二次冻结",
+			freezeLedger.HeldMinor(), freezeLedger.HeldCount())
+	}
+	if _, exposed := resumed.Exposure(); !exposed {
+		t.Fatal("续办后第二项仍未执行")
 	}
 }
 

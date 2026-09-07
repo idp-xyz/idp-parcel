@@ -128,6 +128,9 @@ type ApplyPreAcceptanceControlResult struct {
 	hasFreeze     bool
 	exposure      domain.CreditExposure
 	hasExposure   bool
+	executed      []ExecutedControl
+	jointPass     domain.JointPassCondition
+	controlPolicy domain.ControlPolicyReference
 	method        domain.SettlementMethod
 	adoptedPolicy domain.AdoptedPolicyReference
 	controlledAt  time.Time
@@ -137,24 +140,63 @@ type ApplyPreAcceptanceControlResult struct {
 	continuation  ContinuationReference
 }
 
+// ExecutedControl 记策略正文里一项已经执行过的控制：哪一种、排第几、有没有形成`业务限制`。
+// 它是执行记录不是判决：`业务限制`是这一项自己的结论（余额不足 / 超额 / 逾期），多项合起来
+// 算不算通过由 parcel-shipment 按共同通过条件判（CONTEXT）。
+type ExecutedControl struct {
+	kind       domain.ControlKind
+	order      uint32
+	restricted bool
+}
+
+func (executed ExecutedControl) Kind() domain.ControlKind {
+	return executed.kind
+}
+
+func (executed ExecutedControl) Order() uint32 {
+	return executed.order
+}
+
+func (executed ExecutedControl) Restricted() bool {
+	return executed.restricted
+}
+
 func (result ApplyPreAcceptanceControlResult) Outcome() ControlOutcome {
 	return result.outcome
 }
 
-// Freeze 只在预付控制实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。交回一个
-// 零值冻结，正是 CONTEXT 禁止的「用虚假冻结冒充控制」。
+// Freeze 只在 PREPAID_FREEZE 那一项实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。
+// 交回一个零值冻结，正是 CONTEXT 禁止的「用虚假冻结冒充控制」。同一版策略内一种控制至多一项
+// （领域构造期守住），所以这里至多一个冻结。
 func (result ApplyPreAcceptanceControlResult) Freeze() (domain.FundsFreeze, bool) {
 	return result.freeze, result.hasFreeze
 }
 
-// Exposure 只在账期控制实际执行过时给出（ADR-0047）。冻结与暴露不会同时在场：一次控制
-// 请求按解析出的方式走且只走一条路。
+// Exposure 只在 CREDIT_CHECK 那一项实际执行过时给出。它与冻结**可以同时在场**：一份策略可以
+// 同时要求预付冻结与信用校验（ADR-0115 允许的组合），调用方要两个都看，不能看到一个就停。
 func (result ApplyPreAcceptanceControlResult) Exposure() (domain.CreditExposure, bool) {
 	return result.exposure, result.hasExposure
 }
 
-// Method 与 AdoptedPolicy 在控制执行过时携带实际采用的方式与结算政策引用——CONTEXT 要求
-// 每项冻结与信用暴露都保存它们。
+// ExecutedControls 按判断顺序交回已经执行过的控制项。它可能短于策略的控制项：一项形成
+// `业务限制`之后，共同通过条件为「全部通过」时后续项不再执行（见 Handle）。
+func (result ApplyPreAcceptanceControlResult) ExecutedControls() []ExecutedControl {
+	return append([]ExecutedControl(nil), result.executed...)
+}
+
+// JointPassCondition 原样带回策略的共同通过条件，供 parcel-shipment 据以形成接受判断；本
+// 上下文不据它汇总。
+func (result ApplyPreAcceptanceControlResult) JointPassCondition() domain.JointPassCondition {
+	return result.jointPass
+}
+
+// ControlPolicy 是本次控制项所出自的接受前财务控制策略版本；Method 与 AdoptedPolicy 是实际
+// 采用的结算方式与结算政策引用——CONTEXT 要求每项冻结与信用暴露都保存后两者，前者让事后能
+// 回答「这几项控制凭哪一版策略执行」。
+func (result ApplyPreAcceptanceControlResult) ControlPolicy() domain.ControlPolicyReference {
+	return result.controlPolicy
+}
+
 func (result ApplyPreAcceptanceControlResult) Method() domain.SettlementMethod {
 	return result.method
 }
@@ -248,35 +290,97 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 		}, nil
 	}
 
-	// 按解析出的结算方式分支（ADR-0047）：预付占资金、账期占额度，两本账互不借用。
-	// 方式在政策构造期已保证有效，落到 default 只能是新增取值没接分支——编程错误上抛。
-	switch policy.Method() {
-	case domain.PrepaidSettlement:
-		return handler.applyPrepaidFreeze(ctx, command, policy)
-	case domain.TermsSettlement:
-		return handler.applyTermsExposure(ctx, command, policy)
+	// 共同通过条件先穷举再执行（ADR-0025 全函数）：一个本上下文还不认识的组合子若等到出现
+	// `业务限制`那一刻才发现，前面的项已经占了资金。条件在策略构造期已保证有效，落到 default
+	// 只能是新增取值没接分支——编程错误上抛。
+	switch policy.JointPassCondition() {
+	case domain.AllControlsPass:
 	default:
 		return ApplyPreAcceptanceControlResult{}, fmt.Errorf(
-			"pre-acceptance control: unhandled settlement method %d", uint8(policy.Method()))
+			"pre-acceptance control: unhandled joint pass condition %d", uint8(policy.JointPassCondition()))
 	}
+
+	// 一次请求的所有控制项共用一个控制时刻：它们是同一次接受前控制的几步，不是几次控制。
+	controlledAt := handler.clock.Now()
+	result := ApplyPreAcceptanceControlResult{
+		outcome:       ControlApplied,
+		jointPass:     policy.JointPassCondition(),
+		controlPolicy: policy.ControlPolicy(),
+		method:        policy.Method(),
+		adoptedPolicy: policy.AdoptedPolicy(),
+		controlledAt:  controlledAt,
+		asOf:          command.AsOf,
+	}
+
+	// 按策略正文的判断顺序逐项执行（ADR-0122 决定二）。控制种类决定走哪本账：预付冻结占资金、
+	// 信用校验占额度，两本账互不借用（ADR-0047 的两本账，选路开关从结算方式换成了控制种类）。
+	// 种类在策略构造期已保证有效，落到 default 只能是新增取值没接分支——编程错误上抛。
+	for _, item := range policy.Items() {
+		var step controlStep
+		var halted *ApplyPreAcceptanceControlResult
+		var err error
+		switch item.Kind() {
+		case domain.PrepaidFreezeControl:
+			step, halted, err = handler.freezeFunds(ctx, command, controlledAt)
+		case domain.CreditCheckControl:
+			step, halted, err = handler.exposeCredit(ctx, command, controlledAt)
+		default:
+			return ApplyPreAcceptanceControlResult{}, fmt.Errorf(
+				"pre-acceptance control: unhandled control kind %d", uint8(item.Kind()))
+		}
+		if err != nil {
+			return ApplyPreAcceptanceControlResult{}, err
+		}
+		if halted != nil {
+			// 依赖不可用、请求冲突、未受理：整个请求停在这一步。前面已经执行的项留在各自账本
+			// 里——账本对同一请求身份幂等（重放交回原冻结 / 原暴露），续办时从头重走一遍不会
+			// 二次占用，也就不需要在这里回滚。
+			return *halted, nil
+		}
+		result.executed = append(result.executed, ExecutedControl{
+			kind: item.Kind(), order: item.Order(), restricted: step.restricted,
+		})
+		switch item.Kind() {
+		case domain.PrepaidFreezeControl:
+			result.freeze, result.hasFreeze = step.freeze, true
+		case domain.CreditCheckControl:
+			result.exposure, result.hasExposure = step.exposure, true
+		}
+		if step.restricted {
+			// 「全部通过」之下，一项已形成`业务限制`，后面的项无论结果如何都改不了共同通过条件
+			// 的答案；继续执行只会为一笔多半不会接受的委托占更多资金、给释放路径多一处要认领。
+			// 这是判断顺序存在的意义，不是本上下文在汇总——每一项已执行的结果都原样交回。
+			// 将来放宽出第二种组合子时，这一格要按那个组合子另判（上面的穷举会先炸出来）。
+			return result, nil
+		}
+	}
+	return result, nil
 }
 
-func (handler *ApplyPreAcceptanceControlHandler) applyPrepaidFreeze(
+// controlStep 是一项控制执行完的产出：冻结或暴露之一，以及它有没有形成`业务限制`。
+type controlStep struct {
+	freeze     domain.FundsFreeze
+	exposure   domain.CreditExposure
+	restricted bool
+}
+
+// freezeFunds 执行 PREPAID_FREEZE 一项：读运营余额、在冻结账本上占用金额。第二个返回值非 nil
+// 表示整个请求要停在这一步（待判断 / 冲突 / 未受理），调用方原样交回。
+func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	ctx context.Context,
 	command ApplyPreAcceptanceControlCommand,
-	policy domain.PreAcceptanceControlPolicy,
-) (ApplyPreAcceptanceControlResult, error) {
+	controlledAt time.Time,
+) (controlStep, *ApplyPreAcceptanceControlResult, error) {
 	balance, err := handler.balance.LoadBalance(ctx, command.TenantID, command.Scope)
 	if err != nil {
-		return handler.notFormed(command, BalanceUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, BalanceUnavailable), nil
 	}
 
 	ledger, err := handler.ledger.LoadForScope(ctx, command.TenantID, command.Scope)
 	if err != nil || ledger == nil {
-		return handler.notFormed(command, FreezeLedgerUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, FreezeLedgerUnavailable), nil
 	}
 
-	controlledAt := handler.clock.Now()
 	request, err := domain.NewFreezeRequest(
 		command.RequestID,
 		command.Scope,
@@ -285,7 +389,7 @@ func (handler *ApplyPreAcceptanceControlHandler) applyPrepaidFreeze(
 		controlledAt,
 	)
 	if err != nil {
-		return ApplyPreAcceptanceControlResult{outcome: ControlRequestNotAccepted}, nil
+		return controlStep{}, &ApplyPreAcceptanceControlResult{outcome: ControlRequestNotAccepted}, nil
 	}
 
 	freeze, err := ledger.Freeze(request, balance)
@@ -293,45 +397,36 @@ func (handler *ApplyPreAcceptanceControlHandler) applyPrepaidFreeze(
 		// 请求冲突是业务答案而非技术故障：调用方必须能据以纠正，而不是当作故障重试。
 		// 作用域错配则是编程错误，它意味着取回的余额根本不属于这个请求，必须上抛。
 		if errors.Is(err, domain.ErrControlRequestConflict) {
-			return ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
+			return controlStep{}, &ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
 		}
-		return ApplyPreAcceptanceControlResult{}, fmt.Errorf("freeze funds: %w", err)
+		return controlStep{}, nil, fmt.Errorf("freeze funds: %w", err)
 	}
 
 	if err := handler.ledger.Save(ctx, command.TenantID, command.Scope, ledger); err != nil {
 		// 控制没能落库就不算执行过。交回一个未落库的冻结，下游会引用一笔查不回来的占用。
-		return handler.notFormed(command, FreezeLedgerUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, FreezeLedgerUnavailable), nil
 	}
 
-	return ApplyPreAcceptanceControlResult{
-		outcome:       ControlApplied,
-		freeze:        freeze,
-		hasFreeze:     true,
-		method:        policy.Method(),
-		adoptedPolicy: policy.AdoptedPolicy(),
-		controlledAt:  controlledAt,
-		asOf:          command.AsOf,
-	}, nil
+	return controlStep{freeze: freeze, restricted: freeze.Status() == domain.FreezeRestricted}, nil, nil
 }
 
-// applyTermsExposure 是账期分支：读信用状况、在暴露账本上占用额度。逾期与超额形成
-// `业务限制`装在暴露的状态里，与预付分支的余额不足同构。
-func (handler *ApplyPreAcceptanceControlHandler) applyTermsExposure(
+// exposeCredit 执行 CREDIT_CHECK 一项：读信用状况、在暴露账本上占用额度。逾期与超额形成
+// `业务限制`装在暴露的状态里，与预付冻结的余额不足同构。
+func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 	ctx context.Context,
 	command ApplyPreAcceptanceControlCommand,
-	policy domain.PreAcceptanceControlPolicy,
-) (ApplyPreAcceptanceControlResult, error) {
+	controlledAt time.Time,
+) (controlStep, *ApplyPreAcceptanceControlResult, error) {
 	standing, err := handler.credit.LoadCreditStanding(ctx, command.TenantID, command.Scope)
 	if err != nil {
-		return handler.notFormed(command, CreditStandingUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, CreditStandingUnavailable), nil
 	}
 
 	ledger, err := handler.exposures.LoadForScope(ctx, command.TenantID, command.Scope)
 	if err != nil || ledger == nil {
-		return handler.notFormed(command, ExposureLedgerUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, ExposureLedgerUnavailable), nil
 	}
 
-	controlledAt := handler.clock.Now()
 	request, err := domain.NewExposureRequest(
 		command.RequestID,
 		command.Scope,
@@ -340,30 +435,30 @@ func (handler *ApplyPreAcceptanceControlHandler) applyTermsExposure(
 		controlledAt,
 	)
 	if err != nil {
-		return ApplyPreAcceptanceControlResult{outcome: ControlRequestNotAccepted}, nil
+		return controlStep{}, &ApplyPreAcceptanceControlResult{outcome: ControlRequestNotAccepted}, nil
 	}
 
 	exposure, err := ledger.Expose(request, standing)
 	if err != nil {
 		if errors.Is(err, domain.ErrControlRequestConflict) {
-			return ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
+			return controlStep{}, &ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
 		}
-		return ApplyPreAcceptanceControlResult{}, fmt.Errorf("expose credit: %w", err)
+		return controlStep{}, nil, fmt.Errorf("expose credit: %w", err)
 	}
 
 	if err := handler.exposures.Save(ctx, command.TenantID, command.Scope, ledger); err != nil {
-		return handler.notFormed(command, ExposureLedgerUnavailable), nil
+		return controlStep{}, handler.haltNotFormed(command, ExposureLedgerUnavailable), nil
 	}
 
-	return ApplyPreAcceptanceControlResult{
-		outcome:       ControlApplied,
-		exposure:      exposure,
-		hasExposure:   true,
-		method:        policy.Method(),
-		adoptedPolicy: policy.AdoptedPolicy(),
-		controlledAt:  controlledAt,
-		asOf:          command.AsOf,
-	}, nil
+	return controlStep{exposure: exposure, restricted: exposure.Status() == domain.ExposureRestricted}, nil, nil
+}
+
+func (handler *ApplyPreAcceptanceControlHandler) haltNotFormed(
+	command ApplyPreAcceptanceControlCommand,
+	reason NotFormedReason,
+) *ApplyPreAcceptanceControlResult {
+	halted := handler.notFormed(command, reason)
+	return &halted
 }
 
 // notFormed 构造所有待判断共用的那一种形状，让它们全部带上原因与续办引用：一次停下的控制

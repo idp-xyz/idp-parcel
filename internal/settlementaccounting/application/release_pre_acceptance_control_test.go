@@ -185,8 +185,56 @@ func TestAnUnreachableLedgerKeepsTheReleaseUnformed(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0047「释放按原关联双账本认领」——账期控制留下的暴露由同一释放编排放开，
-// 幂等同款；冻结账本认领不到才去暴露账本，两本都没有仍是`无可释放`。
+// Covers: ADR-0122 决定三——一份策略同时要求预付冻结与信用校验时，同一请求身份在两本账上各有
+// 占用，释放必须两本都认领：只放一本，另一本上的占用会成为永远释放不掉的孤儿。
+func TestACombinedControlIsReleasedOnBothLedgers(t *testing.T) {
+	freezeLedger, frozen := heldLedger(t)
+	scope := releaseScope(t)
+	standing, err := domain.NewCreditStanding(scope, 10_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	request, err := domain.NewExposureRequest(
+		value(t, domain.NewControlRequestID, "ctrl-req-1"),
+		scope,
+		4_000,
+		value(t, domain.NewBusinessAssociationReference, "request-1/version-1"),
+		controlAt,
+	)
+	if err != nil {
+		t.Fatalf("new exposure request: %v", err)
+	}
+	exposureLedger := domain.NewCreditExposureLedger()
+	recorded, err := exposureLedger.Expose(request, standing)
+	if err != nil {
+		t.Fatalf("expose: %v", err)
+	}
+	freezes := &ledgerDouble{ledger: freezeLedger}
+	exposures := &exposureLedgerDouble{ledger: exposureLedger}
+	handler := application.NewReleasePreAcceptanceControlHandler(freezes, exposures, fixedClock{at: releasedAtClock})
+
+	result, err := handler.Handle(context.Background(), releaseCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ControlReleased {
+		t.Fatalf("outcome = %q, want CONTROL_RELEASED", result.Outcome())
+	}
+	releasedFreeze, hasFreeze := result.Freeze()
+	releasedExposure, hasExposure := result.Exposure()
+	if !hasFreeze || releasedFreeze.FreezeID() != frozen.FreezeID() || releasedFreeze.Status() != domain.FreezeReleased {
+		t.Fatalf("freeze = %#v present = %v, want the original RELEASED", releasedFreeze, hasFreeze)
+	}
+	if !hasExposure || releasedExposure.ExposureID() != recorded.ExposureID() || releasedExposure.Status() != domain.ExposureReleased {
+		t.Fatalf("exposure = %#v present = %v, want the original RELEASED", releasedExposure, hasExposure)
+	}
+	if freezes.saved != 1 || exposures.saved != 1 {
+		t.Fatalf("saved freezes/exposures %d/%d times, want 1/1", freezes.saved, exposures.saved)
+	}
+}
+
+// Covers: ADR-0047 / ADR-0122「释放按原关联双账本认领」——账期控制留下的暴露由同一释放编排
+// 放开，幂等同款；冻结账本上没有它不影响暴露那本的认领，两本都没有仍是`无可释放`。
 func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
 	scope := releaseScope(t)
 	standing, err := domain.NewCreditStanding(scope, 10_000, 0, false)

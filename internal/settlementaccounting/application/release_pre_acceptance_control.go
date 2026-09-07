@@ -107,9 +107,10 @@ func NewReleasePreAcceptanceControlHandler(
 	return &ReleasePreAcceptanceControlHandler{ledger: ledger, exposures: exposures, clock: clock}
 }
 
-// Handle 按原关联释放一次接受前财务控制。先在冻结账本认领、再在暴露账本认领（ADR-0047）：
-// 一次控制按方式只走了一条路，两本都没有才是`无可释放`。重复释放返回与首次相同的答案
-// （含原释放时间），幂等由领域账本承担，本编排不换答案。
+// Handle 按原关联释放一次接受前财务控制。在冻结账本与暴露账本**各**认领一次（ADR-0122）：
+// 一份策略可以同时要求预付冻结与信用校验，同一请求身份在两本账上都可能有占用，认领到一本
+// 就停会把另一本上的占用留成永远释放不掉的孤儿；两本都没有才是`无可释放`。重复释放返回与
+// 首次相同的答案（含原释放时间），幂等由领域账本承担，本编排不换答案。
 func (handler *ReleasePreAcceptanceControlHandler) Handle(
 	ctx context.Context,
 	command ReleasePreAcceptanceControlCommand,
@@ -120,11 +121,12 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 		return ReleasePreAcceptanceControlResult{outcome: ReleaseRequestNotAccepted}, nil
 	}
 
+	result := ReleasePreAcceptanceControlResult{outcome: NothingToRelease}
+
 	ledger, err := handler.ledger.LoadForScope(ctx, command.TenantID, command.Scope)
 	if err != nil || ledger == nil {
 		return handler.notFormed(command, FreezeLedgerUnavailable), nil
 	}
-
 	if freeze, found := ledger.FindByRequest(command.RequestID); found {
 		released, err := ledger.Release(freeze.FreezeID(), handler.clock.Now())
 		if err != nil {
@@ -136,35 +138,26 @@ func (handler *ReleasePreAcceptanceControlHandler) Handle(
 			// 释放没落库就不算释放。交回`已释放`，对账会按一笔其实还占着的资金收口。
 			return handler.notFormed(command, FreezeLedgerUnavailable), nil
 		}
-		return ReleasePreAcceptanceControlResult{
-			outcome:   ControlReleased,
-			freeze:    released,
-			hasFreeze: true,
-		}, nil
+		result.outcome, result.freeze, result.hasFreeze = ControlReleased, released, true
 	}
 
+	// 冻结那本已经落库的释放在这里不会被撤回：暴露账本读不回时交回待判断，续办重放同一请求，
+	// 冻结账本按幂等交回原释放答案，暴露账本再认领一次——两本各自收口，不必同事务。
 	exposureLedger, err := handler.exposures.LoadForScope(ctx, command.TenantID, command.Scope)
 	if err != nil || exposureLedger == nil {
 		return handler.notFormed(command, ExposureLedgerUnavailable), nil
 	}
-
-	exposure, found := exposureLedger.FindByRequest(command.RequestID)
-	if !found {
-		return ReleasePreAcceptanceControlResult{outcome: NothingToRelease}, nil
+	if exposure, found := exposureLedger.FindByRequest(command.RequestID); found {
+		released, err := exposureLedger.Release(exposure.ExposureID(), handler.clock.Now())
+		if err != nil {
+			return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release exposure: %w", err)
+		}
+		if err := handler.exposures.Save(ctx, command.TenantID, command.Scope, exposureLedger); err != nil {
+			return handler.notFormed(command, ExposureLedgerUnavailable), nil
+		}
+		result.outcome, result.exposure, result.hasExposure = ControlReleased, released, true
 	}
-
-	released, err := exposureLedger.Release(exposure.ExposureID(), handler.clock.Now())
-	if err != nil {
-		return ReleasePreAcceptanceControlResult{}, fmt.Errorf("release exposure: %w", err)
-	}
-	if err := handler.exposures.Save(ctx, command.TenantID, command.Scope, exposureLedger); err != nil {
-		return handler.notFormed(command, ExposureLedgerUnavailable), nil
-	}
-	return ReleasePreAcceptanceControlResult{
-		outcome:     ControlReleased,
-		exposure:    released,
-		hasExposure: true,
-	}, nil
+	return result, nil
 }
 
 func (handler *ReleasePreAcceptanceControlHandler) notFormed(
