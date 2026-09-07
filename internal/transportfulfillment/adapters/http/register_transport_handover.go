@@ -68,8 +68,9 @@ func NewCorrectTransportHandoverEndpoint(intake HandoverIntake, handler Handover
 // 进段那一半还欠着。编排把它们与 outcome 分开交回，正因为来源保全成立而派生一侧欠着时，
 // 调用方要做的事不同——传输层吞掉任何一格，调用方就没法续办那一半。
 //
-// `segmentEntryRefusal` 是第四格（票 03 裁决 3）：段那一半被领域正当拒绝——今天只有 `SEGMENT_CLOSED`，
-// 含义是「去另立新段」，与欠账那格恰相反（一个说别重试、一个说等恢复重试）。
+// `segmentEntryRefusal` 是第四格（票 03 裁决 3）：段那一半被领域正当拒绝——首登进段答 `SEGMENT_CLOSED`
+// （「去另立新段」），更正口答重派生那一半的各格（ADR-0112：无可替代、撤回控制、起点晚于继承的终点），
+// 与欠账那格恰相反（一个说别重试、一个说等恢复重试）。取值以 application.SegmentEntryRefusal 为准。
 type handoverResponse struct {
 	Outcome                      string `json:"outcome"`
 	UndecidedReason              string `json:"undecidedReason,omitempty"`

@@ -163,7 +163,8 @@ func (result PerformOffsitePickupResult) SegmentEntries() []ObjectSegmentEntry {
 	return append([]ObjectSegmentEntry(nil), result.segments...)
 }
 
-// SegmentEntryRefusal 非空说明到访已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格）。
+// SegmentEntryRefusal 非空说明到访已登记、段那一半被领域正当拒绝。到访只走首登进段那一路，所以这里
+// 答得出的只有`段已关闭`；重派生那一半的各格属更正口，到访不会答出。
 // **整次一格而不是逐对象**：段是整次到访共用的一个，它关了就对这次到访的每个成功对象都关了，
 // 逐对象重复同一句话说不出更多东西——与逐对象的欠账（SegmentEntries）恰相反，那边每个对象可以
 // 各自成败。

@@ -375,7 +375,7 @@ func (repository *FulfillmentSegments) CloseSegment(
 // insertParticipationRow 落一条参与关系。`ignoreConflict` 区分调用方：首登时撞键说明
 // 记录本身有问题（同一段里同一对象两条不成链），应当报错；`Join` 与 `Supersede` 时撞键是业务答案。
 //
-// 三个调用方共用同一段 INSERT 而不是各写一遍：列一多，几份就会在下一次加列时分叉，而分叉
+// 各调用方共用同一段 INSERT 而不是各写一遍：列一多，几份就会在下一次加列时分叉，而分叉
 // 处正是「首登写得对、加入写漏一列」这种不可能靠测试穷尽的错。
 func insertParticipationRow(
 	ctx context.Context,
