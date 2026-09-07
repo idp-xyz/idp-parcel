@@ -1,7 +1,7 @@
 # PS 端口余口：三口的机制半边各能立什么
 
 Category: chore
-Status: in-progress——十问已由 MCP-1 代裁（owner 授权，2026-09-07，逐票 Comments）：01、03 转 blocked 等 PC 半边（pc-gaps 批，MCP-3）；04（资料修订生产入口机制半边）已 resolved（通道 2，分支 `mcp2-ps-ports`：`38c2aa82` + `a1a1d16f` + `baff5fdd`）；02 的 PS 半边中不依赖 PC 的那段已由通道 2 按 task-d5558bc6（接管 task-b77525c9）在同一分支落地（`7ec02162` + `3da37e07` + 文档笔，ADR-0118 已取号）；02 余下两段分别 Blocked by PC 半边与新立的 05（CC/NO 读面缺口，draft）。此前 draft（通道 2 于 2026-09-07 按 task-0c472fed 立三票：每口一次 `/domain-modeling`，机制半边的头一半都在 PC，PS 单方面无可落代码）
+Status: in-progress——十问已由 MCP-1 代裁（owner 授权，2026-09-07，逐票 Comments）：01、03 转 blocked 等 PC 半边（pc-gaps 批，MCP-3）；04（资料修订生产入口机制半边）已 resolved（通道 2，分支 `mcp2-ps-ports`：`38c2aa82` + `a1a1d16f` + `baff5fdd`）；02 的 PS 半边中不依赖 PC 的那段已由通道 2 按 task-d5558bc6（接管 task-b77525c9）在同一分支落地（`7ec02162` + `3da37e07` + 文档笔，ADR-0118 已取号）；**05（CC/NO 按包裹键读面 + PS 接线）已 resolved**（通道 2 按 task-2f035050，分支 `mcp2-psr05`：`13f3ba65` + `72b77de0` + `f91100c2`），02 的读面接线段随之落地，02 余下消费适配器那段仍 Blocked by PC 半边。此前 draft（通道 2 于 2026-09-07 按 task-0c472fed 立三票：每口一次 `/domain-modeling`，机制半边的头一半都在 PC，PS 单方面无可落代码）
 
 ## 从哪里来
 
@@ -15,7 +15,7 @@ Status: in-progress——十问已由 MCP-1 代裁（owner 授权，2026-09-07�
 | [02](issues/02-source-data-amendment-allowance-is-a-third-stage-content-declaration.md) | `SourceDataRuleDeclaration` | 允许矩阵是接单规则包版本下的**第三族阶段内容声明**（照 ADR-0058：归拥有规则对象，产品与合同只采用）；PS 要先长出「资料修订阶段」这个词并把阶段带进查询 | PC：声明表族 + 读口；PS：阶段词条与阶段判断 |
 | [03](issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) | `SourceDataAmendmentAuthorizer` | PC 授权动作封闭集没有「资料修订」这一格、裁定结果不带实际决定方（合同委派无执行器）；PS 适配器照撤回/主动拒绝那两只 | PC：动作格 + 委派→实际决定方；实例半边 `BD-PS-009` |
 | [04](issues/04-amendment-production-entry-mechanism-half.md) | （入口，不是端口） | 资料修订编排的生产入口机制半边：端点 + `UnconfiguredIntake{}` + 两层边界壳，接上后编排如实停在授权未决 / 矩阵未登记 | PS（已 resolved，通道 2；清点里两口出缺口名单是未配置适配器被计为实现，PC 半边仍开） |
-| [05](issues/05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md) | `CustomsStageView` / `ConsolidationStageView`（PS 消费侧读口） | ADR-0118 决定四拆出：关务与节点作业各缺一个按正式包裹键的阶段事实读面，PS 两只未接适配器答`不知道`等它们 | CC owner / NO owner（draft，待认领） |
+| [05](issues/05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md) | `CustomsStageView` / `ConsolidationStageView`（PS 消费侧读口） | ADR-0118 决定四拆出：关务与节点作业各立一个按正式包裹键的阶段事实读面（CC `ParcelDeclarationFactsView` 三件独立事实、NO `ParcelContainmentView` 封闭三值），PS 两只适配器接真、`Unconnected*` 退场 | CC / NO / PS（已 resolved，通道 2 一次落齐；owner 授权自决口径，裁决记票内 Comments） |
 
 ## 共同结论
 

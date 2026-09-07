@@ -1,8 +1,8 @@
 # `SourceDataRuleDeclaration`：允许矩阵是接单规则包版本下的第三族阶段内容声明；PS 要先长出「资料修订阶段」
 
 Category: enhancement
-Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边不依赖 PC 的那段已落地**（通道 2，分支 `mcp2-ps-ports`：词条进 CONTEXT、`AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + 两只未接适配器、ADR-0118；见 Comments 完成记录）；**余下两段各有阻塞**：消费适配器读 PC 声明 Blocked by PC 半边；CC/NO 读面接线 Blocked by [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md)
-Blocked by: 消费适配器那段 Blocked by PC 半边；读面接线那段 Blocked by 05；其余已落
+Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边不依赖 PC 的那段已落地**（通道 2，分支 `mcp2-ps-ports`：词条进 CONTEXT、`AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + 两只未接适配器、ADR-0118；见 Comments 完成记录）；**CC/NO 读面接线那段已随 [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md) 落地**（通道 2，分支 `mcp2-psr05`，两只未接适配器换成真读法）；**余下一段仍阻塞**：消费适配器读 PC 声明 Blocked by PC 半边
+Blocked by: 消费适配器那段 Blocked by PC 半边；其余已落
 
 ## 端口今天说什么
 
@@ -66,3 +66,4 @@ Blocked by: 消费适配器那段 Blocked by PC 半边；读面接线那段 Bloc
   - **今天生产的停点**：授权过了之后停在`判不出阶段`（两只未接适配器），不默认最早阶段；阶段已知时才停在矩阵未登记（装配用例以已知事实替身证之）。
   - 验证见完工报（含 DSN 全仓 `-p 1 -count=1`、清点重生成单独成笔）。
 - 2026-09-07 16:1x · 通道 1（推送方）**进 main 记录**：PS 半边三笔分支→main 对照 `7ec02162`→`d4bc4785`、`3da37e07`→`45ed2d04`、`8430ae09`→`9091f539`（ADR-0118 + README 行自动合并）；分支清点笔 `71b8817b` 未重放，清点在 tip 重生成 `61344989`（parcelshipment 生产 133→139、消费缝新增 PS→CC 1 文件、PS→NO 3→4、端口声明 348→352）。隔离树钉 `61344989` 含 DSN 全仓 100 ok / 0 FAIL。远端 main = `61344989`。依赖 PC 的那段仍 Blocked by pc-gaps 批（MCP-6 `aafca372` 在立 08–10）。
+- 2026-09-07 · 通道 2（task-2f035050）：**读面接线段完成**——随 05 落地（分支 `mcp2-psr05`，`f91100c2`）：CC / NO 各立按包裹键的读面，PS 两只未接适配器换成真读法，装配点接真；生产停点从「授权过了停在判不出阶段」后移为「授权过了阶段按事实判出、停在矩阵未登记」，装配用例②照此改写（阶段由记录壳从矩阵查询取出证三步）。裁决全文在 05 Comments。本票余下只剩消费适配器读 PC 声明那段，仍等 PC 半边。
