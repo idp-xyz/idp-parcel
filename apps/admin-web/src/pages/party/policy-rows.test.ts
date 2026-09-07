@@ -83,6 +83,103 @@ test('发布签的提示句把九个对象类别词与「两条分类轴」都�
   ok(!hint.includes('PAR-INT-01'));
 });
 
+// 票 admin-write-faces/06（ADR-0115）：接受前财务控制策略版本从此有册可看。钉三件：chip 词表与列集都有它；
+// 「谁喂它」那一句把两本近名的册互相点名（策略册 ← PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本，声明册 ←
+// 挂 CUSTOMER_CONTRACT 版本的声明），且票 03 那句「今天没有册可看」从提示句与声明册那一句里都退场了。
+test('接受前财务控制策略册：chip 词表、列集与「谁喂它」都有它，「没有册可看」退场', () => {
+  ok(commercialPolicyKinds.includes('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY'));
+  equal(policyKindLabels.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY, '接受前财务控制策略');
+  deepEqual(
+    kindColumns.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.map((column) => column.header),
+    [
+      '策略对象 / 版本',
+      '适用范围',
+      '生命周期状态',
+      '正文',
+      '共同通过条件',
+      '控制项(顺序. 种类@费用范围 → 失败处置;责任)',
+      '有效区间',
+      '发布时间',
+    ],
+  );
+  ok(policyKindSources.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.includes('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY'));
+  ok(policyKindSources.PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY.includes('接受前财务控制」册'));
+  ok(policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('接受前财务控制策略」册'));
+  ok(!policyKindSources.PRE_ACCEPTANCE_CONTROL.includes('没有册可看'));
+  ok(!registrationSnapshotHints.publication.includes('没有册可看'));
+  ok(registrationSnapshotHints.publication.includes('接受前财务控制策略册'));
+});
+
+// 输入照后端 query_commercial_catalogue_test.go 里
+// TestPoliciesEndpointTranscribesControlPolicyContentOnlyWhenRegistered 钉住的两行：只有壳、带两项组合正文。
+const controlPolicies: CommercialPolicyListResponseBody = {
+  outcome: 'COMMERCIAL_POLICIES_LISTED',
+  kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY',
+  policies: [
+    {
+      objectId: 'fcp-bare',
+      version: 'v1',
+      scope: 'scope-1',
+      status: 'EFFECTIVE',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      publishedAt: '2026-01-01T00:00:00Z',
+      contentRegistered: false,
+    },
+    {
+      objectId: 'fcp-full',
+      version: 'v2',
+      scope: 'scope-1',
+      status: 'EFFECTIVE',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      effectiveEndsAt: '2026-01-01T01:00:00Z',
+      publishedAt: '2026-01-01T00:00:00Z',
+      contentRegistered: true,
+      content: {
+        jointPassCondition: 'ALL_CONTROLS_PASS',
+        registeredAt: '2026-01-01T00:01:00Z',
+        controls: [
+          { control: 'PREPAID_FREEZE', chargeScope: 'charge-scope-a', order: 1, onFailure: 'REJECT', responsibility: 'customer-1' },
+          { control: 'CREDIT_CHECK', chargeScope: 'charge-scope-a', order: 2, onFailure: 'AUTHORIZED_DISPOSITION', responsibility: 'operator-legal-1' },
+        ],
+      },
+    },
+  ],
+};
+
+test('只有壳的策略版本照列为「未登记」，不从目录上消失', () => {
+  const [bare] = rowsOf(controlPolicies);
+
+  equal(bare.key, 'control-policy:fcp-bare@v1');
+  equal(bare.values.identity, 'fcp-bare@v1');
+  equal(bare.values.status, '已生效');
+  equal(bare.values.contentRegistered, '未登记');
+  equal(bare.values.jointPassCondition, '—');
+  equal(bare.values.controls, '未登记正文');
+  equal(bare.values.effective, '2026-01-01 00:00:00 UTC → 持续有效');
+});
+
+test('登了正文的策略按判断顺序逐项列出控制项，共同通过条件配中文', () => {
+  const [, full] = rowsOf(controlPolicies);
+
+  equal(full.values.contentRegistered, '已登记(2026-01-01 00:01:00 UTC)');
+  equal(full.values.jointPassCondition, '全部控制通过');
+  equal(
+    full.values.controls,
+    '1. 预付冻结@charge-scope-a → 拒绝;责任:customer-1 | 2. 信用校验@charge-scope-a → 进入授权处置;责任:operator-legal-1',
+  );
+  equal(full.values.effective, '2026-01-01 00:00:00 UTC → 2026-01-01 01:00:00 UTC');
+});
+
+test('布尔说已登记而正文节缺了是响应不合契约，如实点名而不是显示成空', () => {
+  const [odd] = rowsOf({
+    ...controlPolicies,
+    policies: [{ ...controlPolicies.policies[0], objectId: 'fcp-odd', contentRegistered: true }],
+  } as CommercialPolicyListResponseBody);
+
+  equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
+  equal(odd.values.controls, '正文缺失(响应不合契约)');
+});
+
 test('零金额额度上列为金额 0，不是「未声明」也不是缺席', () => {
   const [zero] = rowsOf(creditPolicies);
 

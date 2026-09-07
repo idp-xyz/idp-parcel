@@ -8,13 +8,17 @@ import type {
   CommercialPolicyKind,
   CommercialPolicyListResponseBody,
   CreditPolicyRecord,
+  PreAcceptanceFinancialControlPolicyRecord,
 } from './api';
 import {
   commercialDirectionLabels,
   commercialStatusLabels,
+  controlFailureDispositionLabels,
+  controlKindLabels,
   controlRequirementLabels,
   finalOutcomeLabels,
   intakeSourceLabels,
+  jointPassConditionLabels,
   labelOf,
   settlementMethodLabels,
 } from './presentation';
@@ -33,9 +37,9 @@ function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
   };
 }
 
-// 按 kind 换列(MCP-3 裁决⑦):七种册子的行形状互不相同,列向各随其册。种类命名
-// 册子而非商业对象类别;授权规则与信用政策两格的名字恰好也是对象类别,不是例外——
-// 那两册上列的对象就是那类版本自己(后端 kind 封闭集注释同一句)。
+// 按 kind 换列(MCP-3 裁决⑦):各册子的行形状互不相同,列向各随其册。种类命名
+// 册子而非商业对象类别;授权规则、信用政策与接受前财务控制策略几格的名字恰好也是对象类别,
+// 不是例外——那几册上列的对象就是那类版本自己(后端 kind 封闭集注释同一句)。
 export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
   ACCEPTANCE_RULE_PACKAGE: [
     col('identity', '规则包 / 版本', true),
@@ -107,7 +111,43 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('effective', '有效区间', true),
     col('registeredAt', '登记时间', true),
   ],
+  // 控制项合成一栏而不是按种类拆列:一版策略里同一种控制可以在多个费用范围上各成一行,
+  // 拆成「预付冻结 / 信用校验」两列会把范围与顺序压扁;顺序是正文的一部分,合栏里逐项带上。
+  PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: [
+    col('identity', '策略对象 / 版本', true),
+    col('scope', '适用范围', true),
+    col('status', '生命周期状态'),
+    col('contentRegistered', '正文'),
+    col('jointPassCondition', '共同通过条件'),
+    col('controls', '控制项(顺序. 种类@费用范围 → 失败处置;责任)', true),
+    col('effective', '有效区间', true),
+    col('publishedAt', '发布时间', true),
+  ],
 };
+
+// 正文在场与否由服务端的显式布尔说,页面不拿 content 的有无去推:布尔为真而 content 节缺了是响应
+// 不合契约,点名而不是折成「—」——那会让一次坏响应长得像一格正常的空(判据同 creditLimitCell)。
+function contentRegisteredCell(record: PreAcceptanceFinancialControlPolicyRecord): string {
+  if (!record.contentRegistered) return '未登记';
+  if (!record.content) return '正文缺失(响应不合契约)';
+  return `已登记(${formatInstant(record.content.registeredAt)})`;
+}
+
+// 控制项三态:未登记 / 已登记且至少一项 / 已登记却零项。第三态按领域规矩不该出现(有父行而零子行
+// 是坏数据,内容读口会拒),所以那句写成「已登记,正文为空」而不是一句无害的空话——它是一份坏数据
+// 的如实呈现,不该读起来像正常态。未登记那态正是票 admin-write-faces/06 立票时看不见的那一格。
+function controlsCell(record: PreAcceptanceFinancialControlPolicyRecord): string {
+  if (!record.contentRegistered) return '未登记正文';
+  if (!record.content) return '正文缺失(响应不合契约)';
+  if (record.content.controls.length === 0) return '已登记,正文为空';
+  return record.content.controls
+    .map(
+      (item) =>
+        `${item.order}. ${labelOf(controlKindLabels, item.control)}@${item.chargeScope} → ` +
+        `${labelOf(controlFailureDispositionLabels, item.onFailure)};责任:${item.responsibility}`,
+    )
+    .join(' | ');
+}
 
 // 额度三态:金额(含 0)、比例、两键都缺。零金额是登记方说出的「授予零信用」,与缺席相反;
 // 两键都缺按契约不该出现,点名而不是折成「—」——那会让一次坏响应长得像一格正常的空。
@@ -252,6 +292,22 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           limit: creditLimitCell(record),
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           registeredAt: formatInstant(record.registeredAt),
+        },
+      }));
+    case 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY':
+      return body.policies.map((record) => ({
+        key: `control-policy:${record.objectId}@${record.version}`,
+        values: {
+          identity: `${record.objectId}@${record.version}`,
+          scope: record.scope,
+          status: labelOf(commercialStatusLabels, record.status),
+          contentRegistered: contentRegisteredCell(record),
+          jointPassCondition: record.content
+            ? labelOf(jointPassConditionLabels, record.content.jointPassCondition)
+            : '—',
+          controls: controlsCell(record),
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          publishedAt: formatInstant(record.publishedAt),
         },
       }));
   }

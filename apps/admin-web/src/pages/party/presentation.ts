@@ -30,11 +30,15 @@ export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   AS_OF_POLICY: '时点锚声明',
   AUTHORIZATION_RULE: '授权规则',
   CREDIT_POLICY: '信用政策',
+  // 与「接受前财务控制」是两本册不是一本的两个名字：那一本列合同的「要不要」声明，这一本列策略
+  // 版本自己的「控制怎么做」正文（ADR-0115）。中文里把「策略」点出来，让两个 chip 在同一屏分得开。
+  PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: '接受前财务控制策略',
 };
 
 export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'ACCEPTANCE_RULE_PACKAGE',
   'PRE_ACCEPTANCE_CONTROL',
+  'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY',
   'PRICE_POLICY',
   'SETTLEMENT_POLICY',
   'AS_OF_POLICY',
@@ -57,7 +61,9 @@ export const policyKindSources: Record<CommercialPolicyKind, string> = {
   ACCEPTANCE_RULE_PACKAGE:
     '列接单规则包版本及其正文；由发布口对象类别 ACCEPTANCE_RULE_PACKAGE 喂入，正文经声明通道 RULE_PACKAGE_BODY 随发布登记。',
   PRE_ACCEPTANCE_CONTROL:
-    '列「这份合同要不要接受前财务控制」的声明；它挂在 CUSTOMER_CONTRACT 版本下、经声明通道 PRE_ACCEPTANCE_CONTROL 随合同发布登记——不是 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本本身（那一类版本今天没有册可看）。',
+    '列「这份合同要不要接受前财务控制」的声明；它挂在 CUSTOMER_CONTRACT 版本下、经声明通道 PRE_ACCEPTANCE_CONTROL 随合同发布登记——不是 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本本身（那一类版本的正文在「接受前财务控制策略」册）。',
+  PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY:
+    '列接受前财务控制策略版本及其正文（要执行的控制项与共同通过条件）；由发布口对象类别 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 喂入，正文经声明通道 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY 随发布登记。「明确无控制」不在这里——它是合同的声明，看「接受前财务控制」册。',
   PRICE_POLICY:
     '列商业价格政策正文（方向 × 定价方案绑定）；它挂在发布口对象类别 PRICE_RULE 的版本下，经声明通道 PRICE_POLICY_BODY 随发布登记。',
   SETTLEMENT_POLICY:
@@ -88,6 +94,22 @@ export const settlementMethodLabels: Record<string, string> = {
 export const controlRequirementLabels: Record<string, string> = {
   REQUIRED: '要求',
   NOT_APPLICABLE: '不适用',
+};
+
+// 策略正文的三个封闭集（domain PreAcceptanceControlKind / ControlFailureDisposition / JointPassCondition，
+// ADR-0115）。控制种类里没有「无控制」不是漏配词：那一句由合同声明，正文表上 CHECK 就进不去。
+export const controlKindLabels: Record<string, string> = {
+  PREPAID_FREEZE: '预付冻结',
+  CREDIT_CHECK: '信用校验',
+};
+
+export const controlFailureDispositionLabels: Record<string, string> = {
+  REJECT: '拒绝',
+  AUTHORIZED_DISPOSITION: '进入授权处置',
+};
+
+export const jointPassConditionLabels: Record<string, string> = {
+  ALL_CONTROLS_PASS: '全部控制通过',
 };
 
 // 收寄来源封闭二值(domain DeclaredIntakeSource),对应 parcel-shipment 来源联合的两格。
@@ -220,7 +242,8 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
       'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY / PRICE_RULE / SETTLEMENT_POLICY / ' +
       'CREDIT_POLICY / AUTHORIZATION_RULE。**它与本台各页的册名是两条分类轴,不逐字对应**:' +
       '前三类各显示在服务产品、客户与合同、供应商协议三页;后六类的版本与正文显示在「商业规则与策略」' +
-      '页对应的册里(PRICE_RULE → 商业价格政策册,PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY 版本今天没有册可看)。' +
+      '页对应的册里(PRICE_RULE → 商业价格政策册,PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY → 接受前财务控制策略册——' +
+      '与「接受前财务控制」册是两本:后者列的是挂在 CUSTOMER_CONTRACT 版本下的声明)。' +
       '本页不代填也不校验 kind。declarations 里的通道(AS_OF_POLICY、PRE_ACCEPTANCE_CONTROL、' +
       'RULE_PACKAGE_BODY、PRICE_POLICY_BODY 等)不是 kind:它们没有自己的版本,随所属版本一并发布,' +
       '各自显示在册名旁写着的那本册。声明只能随发布登记:正文随发布固定,事后补声明等于改一份' +

@@ -67,7 +67,7 @@ function PolicyRegisters() {
   return (
     <ListPageTemplate<PolicyRow>
       title={info.title}
-      description={`${info.owner}——七本政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明,授权规则一栏按请求方逐格列出取消授权,信用政策一栏的额度按金额或比例恰一上列`}
+      description={`${info.owner}——各本政策册分别查阅,重叠候选仍是适用冲突而非「同时生效」。接单规则包一栏另列挂在同一版本上的收寄资格与终局规则声明,授权规则一栏按请求方逐格列出取消授权,信用政策一栏的额度按金额或比例恰一上列;「接受前财务控制」与「接受前财务控制策略」是两本册:前者列合同的「要不要」声明,后者列策略版本的「控制怎么做」正文`}
       search={{
         value: search,
         onChange: setSearch,
@@ -107,7 +107,7 @@ function PolicyRegisters() {
 }
 
 /**
- * 商业规则与策略（party-commercial）：七本政策册，外加发布口的受控镜像签。
+ * 商业规则与策略（party-commercial）：各本政策册，外加发布口的受控镜像签。
  *
  * 发布签摆在这里而不摆在别处、也不另开专页，是票 admin-write-faces/03 的裁决：九类发布
  * 对象里六类的结果显示在本页的册里，本页是「写签跟着读签走」能走到的最大一页；专页

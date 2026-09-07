@@ -30,7 +30,8 @@ export type CommercialPolicyKind =
   | 'SETTLEMENT_POLICY'
   | 'AS_OF_POLICY'
   | 'AUTHORIZATION_RULE'
-  | 'CREDIT_POLICY';
+  | 'CREDIT_POLICY'
+  | 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
 
 export interface AssembledRuleRecord {
   category: string;
@@ -145,7 +146,35 @@ export interface CreditPolicyRecord {
   registeredAt: string;
 }
 
-// 响应体按 kind 判别:七种册子的行形状互不相同(传输层注释原话),合成一个字段并集
+// 接受前财务控制策略册（0024，ADR-0115）。上列的是策略**版本壳**，正文左连接：contentRegistered
+// 与合同页同款显式布尔——「壳在、正文不在」是合法状态（发布得出来、正文还没登），正是票
+// admin-write-faces/06 立票时管理台看不见的那一格，页面不拿 content 的有无去推它。正文里的
+// controls 一律在场且按判断顺序排列，至少一项由写入把守；控制项键名与受控 CLI 批文同名。
+export interface PreAcceptanceControlItemRecord {
+  control: string;
+  chargeScope: string;
+  order: number;
+  onFailure: string;
+  responsibility: string;
+}
+
+export interface PreAcceptanceFinancialControlPolicyRecord {
+  objectId: string;
+  version: string;
+  scope: string;
+  status: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  publishedAt: string;
+  contentRegistered: boolean;
+  content?: {
+    jointPassCondition: string;
+    registeredAt: string;
+    controls: PreAcceptanceControlItemRecord[];
+  };
+}
+
+// 响应体按 kind 判别:各册子的行形状互不相同(传输层注释原话),合成一个字段并集
 // 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
 export type CommercialPolicyListResponseBody =
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'ACCEPTANCE_RULE_PACKAGE'; policies: RulePackageRecord[] }
@@ -154,7 +183,12 @@ export type CommercialPolicyListResponseBody =
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'SETTLEMENT_POLICY'; policies: SettlementPolicyRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AS_OF_POLICY'; policies: AsOfPolicyRecord[] }
   | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'AUTHORIZATION_RULE'; policies: AuthorizationRuleRecord[] }
-  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CREDIT_POLICY'; policies: CreditPolicyRecord[] };
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CREDIT_POLICY'; policies: CreditPolicyRecord[] }
+  | {
+      outcome: 'COMMERCIAL_POLICIES_LISTED';
+      kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
+      policies: PreAcceptanceFinancialControlPolicyRecord[];
+    };
 
 export interface ControlBindingRecord {
   chargeScope: string;
