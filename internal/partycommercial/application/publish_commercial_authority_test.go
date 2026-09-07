@@ -1521,6 +1521,137 @@ func TestAPreAcceptanceFinancialControlPolicyBodyIsGuardedLikeTheOtherChannels(t
 	})
 }
 
+func delegationDeclarationOf(t *testing.T, delegator domain.Delegator, level, scope string) domain.ContractDelegationDeclaration {
+	t.Helper()
+	interval, err := domain.NewEffectiveInterval(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+	)
+	if err != nil {
+		t.Fatalf("interval: %v", err)
+	}
+	return domain.ContractDelegationDeclaration{
+		Delegator: delegator,
+		Action:    domain.SourceDataAmendmentAction,
+		Scope:     pcValue(t, domain.NewCommercialScopeReference, scope),
+		Level:     pcValue(t, domain.NewAuthorityLevel, level),
+		Effective: interval,
+	}
+}
+
+func accountDelegatorOf(t *testing.T, account string) domain.Delegator {
+	t.Helper()
+	delegator, err := domain.DelegatedByCustomerAccount(pcValue(t, domain.NewCustomerAccountID, account))
+	if err != nil {
+		t.Fatalf("delegator: %v", err)
+	}
+	return delegator
+}
+
+// Covers: 票 party-commercial-context-gaps/08——合同委派随客户合同版本发布登记（ADR-0116 Decision 二「声明只能
+// 随发布」）。在这一路接上之前，委派表在库上而租户无处登：运营角色代录的资料修订永远解不出决定方。
+// 委派逐条原样交给持久化面，发布通道不代填任何一条。
+func TestContractDelegationsPublishWithTheirContractVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+		Approval:     publishApproval(t, "contract-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
+			delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
+			delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-clerk", "scope-a"),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+	if len(registry.savedDelegations) != 1 {
+		t.Fatalf("委派册收到 %d 份, want 1", len(registry.savedDelegations))
+	}
+	saved := registry.savedDelegations[0]
+	if saved.Contract().Status() != domain.CommercialVersionEffective || saved.Contract().ObjectID().String() != "contract-1" {
+		t.Fatalf("拥有版本 = %s/%q, want contract-1 EFFECTIVE", saved.Contract().ObjectID(), saved.Contract().Status())
+	}
+	delegations := saved.Delegations()
+	if len(delegations) != 2 || delegations[0].Level().String() != "level-clerk" || delegations[1].Level().String() != "level-commercial" ||
+		delegations[0].Delegator().Reference() != "account-1" || delegations[0].Action() != domain.SourceDataAmendmentAction {
+		t.Fatalf("委派 = %#v，没有原样到达持久化面", delegations)
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.ContractDelegationChannel ||
+		reports[0].Channel.String() != "CONTRACT_DELEGATION" ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want CONTRACT_DELEGATION=SAVED 一条", reports)
+	}
+}
+
+// Covers: 委派通道的门与其余通道同一条纪律——拥有对象类别由 domain.NewContractDelegation 把守（挂在接单规则包
+// 版本上整项拒绝且一行不写）；同键两条拒绝；册的`内容冲突`折进报告而不是 error（ADR-0031）。
+func TestContractDelegationsAreGuardedLikeTheOtherChannels(t *testing.T) {
+	t.Run("a rule package version cannot carry contract delegations", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
+				delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
+			}},
+		}); !errors.Is(err, domain.ErrInvalidContractDelegation) {
+			t.Fatalf("err = %v, want ErrInvalidContractDelegation", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedDelegations) != 0 {
+			t.Fatal("挂错拥有对象的委派写了库")
+		}
+	})
+
+	t.Run("the same key twice is rejected before any write", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+			Approval:     publishApproval(t, "contract-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
+				delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
+				delegationDeclarationOf(t, accountDelegatorOf(t, "account-2"), "level-commercial", "scope-a"),
+			}},
+		}); !errors.Is(err, domain.ErrDuplicateContractDelegation) {
+			t.Fatalf("err = %v, want ErrDuplicateContractDelegation", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedDelegations) != 0 {
+			t.Fatal("同键两条的委派写了库")
+		}
+	})
+
+	t.Run("a content conflict lands in the report", func(t *testing.T) {
+		registry := &publicationRegistryDouble{declarationOutcome: ports.DeclarationContentConflict}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+			Approval:     publishApproval(t, "contract-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
+				delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——内容冲突不是 error", err)
+		}
+		reports := result.Declarations()
+		if len(reports) != 1 || reports[0].Channel != application.ContractDelegationChannel || reports[0].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want CONTRACT_DELEGATION=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}
+
 // Covers: 发布是写权威的动作——整册读不回时不得闭眼登记，照原样上抛等重试；这与解析
 // 用例把读失败折成空视图相反（那边表达`权威不可读`并停在未决）。
 func TestAnUnreadableRegistryBlocksPublication(t *testing.T) {

@@ -578,6 +578,67 @@ func TestAPreAcceptanceFinancialControlPolicyBodyTranslatesItsControls(t *testin
 	}
 }
 
+// Covers: 合同委派（票 party-commercial-context-gaps/08，ADR-0116 Decision 二）：委派方（种类 × 引用）、动作、范围、
+// 等级、区间逐条过构造门；两个封闭集集外拒收——委派方种类只认客户账户 / 责任法人，动作在翻译层只认授权动作
+// 封闭集的名字，「客户委派不了的动作」（人工复核、主动拒绝）由发布用例里的构造门拒，翻译层不代判。
+func TestContractDelegationsTranslateTheirFiveDimensions(t *testing.T) {
+	commands, err := publishCommandsFromJSON([]byte(contractDelegationBatchJSON(`
+		{"delegatorKind": "LEGAL_ENTITY", "delegator": "legal-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk",
+		 "effectiveStartsAt": "2026-01-01T00:00:00Z", "effectiveEndsAt": "2026-07-01T00:00:00Z"},
+		{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-commercial",
+		 "effectiveStartsAt": "2026-01-01T00:00:00Z"}`)))
+	if err != nil {
+		t.Fatalf("翻译合同委派批：%v", err)
+	}
+	if commands[0].Spec.Kind != pcdomain.CustomerContractObject {
+		t.Fatalf("kind = %s, want CUSTOMER_CONTRACT", commands[0].Spec.Kind)
+	}
+	delegations := commands[0].Declarations.ContractDelegations
+	if len(delegations) != 2 {
+		t.Fatalf("委派 %d 条, want 2", len(delegations))
+	}
+	// 翻译层保留批文顺序，按键归档是构造门的事。
+	first := delegations[0]
+	if first.Delegator.Kind() != pcdomain.LegalEntityDelegator || first.Delegator.Reference() != "legal-1" ||
+		first.Action != pcdomain.SourceDataAmendmentAction || first.Scope.String() != "scope-1" || first.Level.String() != "level-clerk" {
+		t.Fatalf("第一条变形：%#v", first)
+	}
+	if ends, bounded := first.Effective.EndsAt(); !bounded || !ends.Equal(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("第一条区间终点变形：%v %v", ends, bounded)
+	}
+	second := delegations[1]
+	if second.Delegator.Kind() != pcdomain.CustomerAccountDelegator || second.Delegator.Reference() != "account-1" ||
+		second.Level.String() != "level-commercial" {
+		t.Fatalf("第二条变形：%#v", second)
+	}
+	if _, bounded := second.Effective.EndsAt(); bounded {
+		t.Fatal("没给终点的区间翻成了有界")
+	}
+
+	for name, body := range map[string]string{
+		"a delegator kind outside the closed set": `{"delegatorKind": "OPERATOR_ROLE", "delegator": "operator-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
+		"an action outside the closed set":        `{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "WITHDRAWAL", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
+		"a blank delegator":                       `{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": " ", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
+		"a missing start":                         `{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk"}`,
+		"an unknown field":                        `{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk", "dataGroup": "consignee", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(contractDelegationBatchJSON(body))); err == nil {
+				t.Fatal("立不住的合同委派批被翻过去了")
+			}
+		})
+	}
+}
+
+func contractDelegationBatchJSON(rows string) string {
+	return `{"items": [{"tenantId": "t", "kind": "CUSTOMER_CONTRACT", "objectId": "contract-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"contractDelegations": [` + rows + `]}}]}`
+}
+
 func controlPolicyBatchJSON(body string) string {
 	return `{"items": [{"tenantId": "t", "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", "objectId": "fcp-1",
 		"version": "v1", "scope": "s", "contentDigest": "d",

@@ -78,6 +78,10 @@ type CommercialDeclarations struct {
 	// PreAcceptanceFinancialControlPolicyBody 与 PreAcceptanceControl 是两层不同的声明：后者挂在客户
 	// 合同版本上答「要不要」（0007），前者挂在策略版本上答「控制怎么做」（0024，ADR-0115）。
 	PreAcceptanceFinancialControlPolicyBody *PreAcceptanceFinancialControlPolicyBodyDeclaration
+	// ContractDelegations 挂在客户合同版本上（ADR-0116 Decision 二）：委派方把某一授权动作在某一范围内
+	// 的实际决定权交给持某一等级的运营角色。它与 ContractContent 是同一份合同的两种话——那一节答
+	// 「采用哪个规则包、哪些范围怎么控」，本节答「谁能替谁决定」；同键两条与空清单由领域构造门拒。
+	ContractDelegations []domain.ContractDelegationDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -95,7 +99,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.SupplierAgreementBody == nil &&
 		declarations.PricePolicyBody == nil &&
 		declarations.CustomerServiceRuleBody == nil &&
-		declarations.PreAcceptanceFinancialControlPolicyBody == nil
+		declarations.PreAcceptanceFinancialControlPolicyBody == nil &&
+		len(declarations.ContractDelegations) == 0
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -240,6 +245,7 @@ const (
 	PricePolicyCaliberChannel
 	CustomerServiceRuleBodyChannel
 	PreAcceptanceFinancialControlPolicyBodyChannel
+	ContractDelegationChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -276,6 +282,8 @@ func (channel DeclarationChannel) String() string {
 		return "CUSTOMER_SERVICE_RULE_BODY"
 	case PreAcceptanceFinancialControlPolicyBodyChannel:
 		return "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY"
+	case ContractDelegationChannel:
+		return "CONTRACT_DELEGATION"
 	default:
 		return ""
 	}
@@ -759,6 +767,19 @@ func declarationWrites(
 					return ports.DeclarationSaveOutcomeInvalid, err
 				}
 				return declarationOutcomeOfPreAcceptanceFinancialControlPolicy(outcome)
+			},
+		})
+	}
+
+	if len(declarations.ContractDelegations) > 0 {
+		content, err := domain.NewContractDelegationContent(version, declarations.ContractDelegations)
+		if err != nil {
+			return nil, fmt.Errorf("contract delegations: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: ContractDelegationChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				return registry.SaveContractDelegations(ctx, content)
 			},
 		})
 	}

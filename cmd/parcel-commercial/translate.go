@@ -59,6 +59,9 @@ type declarationsDocument struct {
 	// preAcceptanceFinancialControlPolicyBody 与 preAcceptanceControl 是两层不同的声明：后者挂在客户合同
 	// 版本上答「要不要」，前者挂在策略版本上答「控制怎么做」（ADR-0115）。
 	PreAcceptanceFinancialControlPolicyBody *preAcceptanceFinancialControlPolicyBodyDocument `json:"preAcceptanceFinancialControlPolicyBody,omitempty"`
+	// contractDelegations 挂在客户合同版本上（ADR-0116 Decision 二）：谁把哪一动作在哪一范围的实际决定权
+	// 委派给持哪一等级的运营角色、在哪段期间。
+	ContractDelegations []contractDelegationDocument `json:"contractDelegations,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -254,6 +257,24 @@ type preAcceptanceControlItemDocument struct {
 	Order          int    `json:"order"`
 	OnFailure      string `json:"onFailure"`
 	Responsibility string `json:"responsibility"`
+}
+
+// contractDelegationDocument 是一条合同委派（票 party-commercial-context-gaps/08，ADR-0116 Decision 二）：
+// 委派方（种类封闭两值，镜像 pcdomain.DelegatorKind × 引用串）× 动作（镜像 pcdomain.AuthorizedAction 的名字）×
+// 商业范围引用 × 受托权限等级 × 有效区间。
+//
+// 受托方是权限等级而不是操作者：批文里出现 operator 之类就是未知字段、拒收（ADR-0100 Decision 二，PC 不存
+// 操作者）。没有资料组键，且不是漏掉：委派答「谁能替谁提」，允许矿阵是票 pc-gaps/10 那一族。动作在这一层
+// 只认封闭集的名字；人工复核与主动拒绝是客户委派不了的动作，由发布用例里的 NewContractDelegation 拒——翻译层
+// 不代判。effectiveStartsAt 缺席即零时刻，由 NewEffectiveInterval 拒，不折成「自合同生效起」。
+type contractDelegationDocument struct {
+	DelegatorKind     string     `json:"delegatorKind"`
+	Delegator         string     `json:"delegator"`
+	Action            string     `json:"action"`
+	Scope             string     `json:"scope"`
+	Level             string     `json:"level"`
+	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
 }
 
 // contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
@@ -556,7 +577,85 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.PreAcceptanceFinancialControlPolicyBody = body
 	}
 
+	for _, delegation := range document.ContractDelegations {
+		declared, err := contractDelegationFrom(delegation)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.ContractDelegations = append(declarations.ContractDelegations, declared)
+	}
+
 	return declarations, nil
+}
+
+func contractDelegationFrom(document contractDelegationDocument) (pcdomain.ContractDelegationDeclaration, error) {
+	none := pcdomain.ContractDelegationDeclaration{}
+	delegator, err := delegatorFrom(document.DelegatorKind, document.Delegator)
+	if err != nil {
+		return none, err
+	}
+	action, err := authorizedActionFrom(document.Action)
+	if err != nil {
+		return none, err
+	}
+	scope, err := pcdomain.NewCommercialScopeReference(document.Scope)
+	if err != nil {
+		return none, err
+	}
+	level, err := pcdomain.NewAuthorityLevel(document.Level)
+	if err != nil {
+		return none, err
+	}
+	endsAt := time.Time{}
+	if document.EffectiveEndsAt != nil {
+		endsAt = *document.EffectiveEndsAt
+	}
+	interval, err := pcdomain.NewEffectiveInterval(document.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return none, fmt.Errorf("委派 %s@%s/%s 的区间：%w", document.Action, document.Scope, document.Level, err)
+	}
+	return pcdomain.ContractDelegationDeclaration{
+		Delegator: delegator,
+		Action:    action,
+		Scope:     scope,
+		Level:     level,
+		Effective: interval,
+	}, nil
+}
+
+// delegatorFrom 只认恰两种委派方。default 报错不吸收——把打错的种类折进某一格，等于替租户改了是谁在委派。
+func delegatorFrom(kind, reference string) (pcdomain.Delegator, error) {
+	switch kind {
+	case pcdomain.CustomerAccountDelegator.String():
+		account, err := pcdomain.NewCustomerAccountID(reference)
+		if err != nil {
+			return pcdomain.Delegator{}, err
+		}
+		return pcdomain.DelegatedByCustomerAccount(account)
+	case pcdomain.LegalEntityDelegator.String():
+		entity, err := pcdomain.NewLegalEntityReference(reference)
+		if err != nil {
+			return pcdomain.Delegator{}, err
+		}
+		return pcdomain.DelegatedByLegalEntity(entity)
+	default:
+		return pcdomain.Delegator{}, fmt.Errorf("集合外的委派方种类 %q", kind)
+	}
+}
+
+// authorizedActionFrom 是 pcdomain.AuthorizedAction 的名字镜像。这里认全部三格而不只认可委派的那一格：哪些动作
+// 客户委派得了是领域的判据（NewContractDelegation），翻译层只做名字到封闭集的映射，不复制第二套口径。
+func authorizedActionFrom(name string) (pcdomain.AuthorizedAction, error) {
+	for _, action := range []pcdomain.AuthorizedAction{
+		pcdomain.ManualReviewAction,
+		pcdomain.ActiveRejectionAction,
+		pcdomain.SourceDataAmendmentAction,
+	} {
+		if action.String() == name {
+			return action, nil
+		}
+	}
+	return pcdomain.AuthorizedActionInvalid, fmt.Errorf("集合外的授权动作 %q", name)
 }
 
 func preAcceptanceFinancialControlPolicyBodyFrom(

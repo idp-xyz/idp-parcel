@@ -405,6 +405,98 @@ func controlPolicyBatchBody() string {
 //
 // 它补的是翻译用例与应用用例都拿不到的东西：那两条各自证「批文没变形」与「正文交到了持久化面」，证不了
 // 「写进库的两张表读回来还是那一版策略」。
+// contractDelegationBatchBody 发一份客户合同版本，随行两条合同委派：客户账户委派资料修订给商务等级、
+// 责任法人委派给文员等级。合同不指名规则包也能发——委派是这份合同说的话，不依赖合同其它正文。
+func contractDelegationBatchBody() string {
+	return `{"items": [
+    {
+      "tenantId": "tenant-1",
+      "kind": "CUSTOMER_CONTRACT",
+      "objectId": "contract-1",
+      "version": "v1",
+      "scope": "scope-1",
+      "contentDigest": "sha256:contract-1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-contract-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "contractDelegations": [
+          {"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "SOURCE_DATA_AMENDMENT",
+           "scope": "scope-1", "level": "level-commercial", "effectiveStartsAt": "2026-01-01T00:00:00Z"},
+          {"delegatorKind": "LEGAL_ENTITY", "delegator": "legal-1", "action": "SOURCE_DATA_AMENDMENT",
+           "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z", "effectiveEndsAt": "2026-03-01T00:00:00Z"}
+        ]
+      }
+    }
+  ]}`
+}
+
+// Covers: 票 party-commercial-context-gaps/08 端到端于真库——经进程口随合同版本发出去的合同委派，按合同版本
+// 点读得回两条，按（范围 + 时点）装载只得当时有效的那些（ADR-0116 Decision 二 / 三）。
+//
+// 它补的是翻译用例与应用用例都拿不到的东西：那两条各自证「批文没变形」与「声明交到了持久化面」，证不了
+// 「写进库的两张表读回来还是那一版合同的委派」。
+func TestPublishedContractDelegationsAreReadBackByBothViews(t *testing.T) {
+	dsn := freshMigratedDSN(t)
+	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, contractDelegationBatchBody())); code != exitLanded {
+		t.Fatalf("合同批 exit = %d, want %d", code, exitLanded)
+	}
+
+	registry := loadScope(t, dsn, "tenant-1", "scope-1")
+	tenant, err := pcdomain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	objectID, err := pcdomain.NewCommercialObjectID("contract-1")
+	if err != nil {
+		t.Fatalf("对象：%v", err)
+	}
+	label, err := pcdomain.NewCommercialVersionLabel("v1")
+	if err != nil {
+		t.Fatalf("版本号：%v", err)
+	}
+	contract, present := registry.Lookup(tenant, pcdomain.CustomerContractObject, objectID, label)
+	if !present {
+		t.Fatal("发出去的合同版本壳不在整册里")
+	}
+
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池点读：%v", err)
+	}
+	defer pool.Close()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("框架 DB：%v", err)
+	}
+	delegations, err := pcpostgres.NewContractDelegations(db)
+	if err != nil {
+		t.Fatalf("构造合同委派读口：%v", err)
+	}
+
+	content, found, err := delegations.LoadContractDelegations(t.Context(), tenant, contract)
+	if err != nil || !found {
+		t.Fatalf("点读：found=%v err=%v", found, err)
+	}
+	rows := content.Delegations()
+	if len(rows) != 2 || rows[0].Level().String() != "level-clerk" || rows[0].Delegator().Kind() != pcdomain.LegalEntityDelegator ||
+		rows[1].Level().String() != "level-commercial" || rows[1].Delegator().Reference() != "account-1" {
+		t.Fatalf("委派 = %#v", rows)
+	}
+
+	scope, err := pcdomain.NewCommercialScopeReference("scope-1")
+	if err != nil {
+		t.Fatalf("范围：%v", err)
+	}
+	effective, err := delegations.LoadEffectiveDelegations(t.Context(), tenant, scope, time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("按范围时点装载：%v", err)
+	}
+	if len(effective) != 1 || effective[0].Level().String() != "level-commercial" || !effective[0].Contract().SameVersionAs(contract) {
+		t.Fatalf("2026-06 仍有效的委派 = %#v, want 只剩客户账户那条（法人那条 03-01 到期）", effective)
+	}
+}
+
 func TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, controlPolicyBatchBody())); code != exitLanded {
