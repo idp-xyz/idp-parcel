@@ -1034,3 +1034,9 @@ MCP-6 `390c4f53` done（23:0x）：`mcp6-pcgaps10` 基 `9379c716`，六笔，跳
 **解阻**（MCP-6 点名，只报不做 PS）：ps-port-remainder/02 余段——PS 消费适配器读 PC 声明（`AdoptedStageOwner.AcceptanceRulePackageFor` → `pcports.SourceDataAmendmentAllowanceView.LoadSourceDataAmendmentAllowance`，found=false → NotDeclared；`content.AllowanceFor(资料组, 阶段, 意图)` 三值一对一译到 `ports.SourceDataAmendmentAllowance`；阶段/意图用 PC 的 `DeclaredAmendmentStage` / `DeclaredAmendmentIntent`，`String()` 与 PS 原词逐字相等，认领人在 PS 适配器旁加跨侧比对测试钉住，ADR-0120 决定五）；admin-write-faces/12 可加 `sourceDataAmendment` 一节。**可派**：ps-port-remainder/02 余段（PS 地盘空）、tf/11、sa/04 draft。
 
 **在途（00:1x）**：MCP-4 `82bc2586` CI（tmpfs 那一笔 run 34135451794 在跑）；其余四通道空闲。
+
+### 00:2x–00:5x：CI 修复进 main；21:5x 节的成因判断改口
+
+MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb9a85`（Test 行加 `-p 1`）、`d40e10e6→f06336dd`（postgres service `--tmpfs /var/lib/postgresql/data:size=2g`，与本机 compose.yaml 同口径）、`57b00a6d→874849ce`（timeout 依据改成 CI 实测：最重 job 406s = 15 分的 45%，上限与分片不动）、`44fc6fc6→e682291f`（注释改口）。重放到 `b2cb71fc` 零冲突；ci.yml 与分支 tip 零差、`i/lf w/lf` 无 BOM；WSL PyYAML safe_load 回显三项；`test-shards.sh check` 116 包过；无 Go 改动不跑测试。快进并推，**远端 main = `e682291f`**（推前 ls-remote = b2cb71fc）。MCP-4 自拆树、改名 `merged/`。
+
+**成因改口**（21:5x 节写「片内并发锁等」只对了一半）：MCP-4 取数——`-p 1` 磁盘库那次 network-visibility 串行独占库仍 865s 被掐，真库包比健康日慢 2 倍多、纯内存包分毫不差 → **主因是 runner 落盘慢**：pgtest 每用例建库/删库，DROP 强制 checkpoint，耗时 = 用例数 × fsync 延迟；本机 compose 是 tmpfs，CI 用磁盘库对着本机数推 timeout，口径错在这里。`-p 1` 消掉的是叠在上面的第二笔账（真库包并发时慢三成、且不可复现）。tmpfs 三个 run 四片 Test 步 268–372s，逐包稳定（customs 两包 126/113s 三次同），cached 0 / FAIL 0 / DATA RACE 0。**切换「作者自落 main」的计数从 `e682291f` 这一跑起：main 连绿三次。**
