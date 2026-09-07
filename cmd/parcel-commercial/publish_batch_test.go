@@ -373,6 +373,91 @@ func TestAPublishedCustomerServiceRuleIsReadBackByTheContentView(t *testing.T) {
 	})
 }
 
+// controlPolicyBatchBody 发一份接受前财务控制策略版本，正文是两项组合控制。策略不指名任何对象——合同 → 策略
+// 那层关系由客户合同正文的绑定拥有（ADR-0115 Decision 四），策略自己不必先等谁发布。
+func controlPolicyBatchBody() string {
+	return `{"items": [
+    {
+      "tenantId": "tenant-1",
+      "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY",
+      "objectId": "fcp-1",
+      "version": "v1",
+      "scope": "scope-1",
+      "contentDigest": "sha256:fcp-1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-fcp-1", "source": "source-fcp-1", "approvedAt": "2026-01-02T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "preAcceptanceFinancialControlPolicyBody": {
+          "jointPassCondition": "ALL_CONTROLS_PASS",
+          "controls": [
+            {"control": "CREDIT_CHECK", "chargeScope": "charge-scope-a", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"},
+            {"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}
+          ]
+        }
+      }
+    }
+  ]}`
+}
+
+// Covers: 票 party-commercial-context-gaps/07 端到端于真库——经进程口发出去的接受前财务控制策略正文，消费方
+// 按闭包选中的版本壳经 PreAcceptanceFinancialControlPolicyContentView 点读得回来，两项按判断顺序俱在。
+//
+// 它补的是翻译用例与应用用例都拿不到的东西：那两条各自证「批文没变形」与「正文交到了持久化面」，证不了
+// 「写进库的两张表读回来还是那一版策略」。
+func TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView(t *testing.T) {
+	dsn := freshMigratedDSN(t)
+	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, controlPolicyBatchBody())); code != exitLanded {
+		t.Fatalf("策略批 exit = %d, want %d", code, exitLanded)
+	}
+
+	registry := loadScope(t, dsn, "tenant-1", "scope-1")
+	tenant, err := pcdomain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	objectID, err := pcdomain.NewCommercialObjectID("fcp-1")
+	if err != nil {
+		t.Fatalf("对象：%v", err)
+	}
+	label, err := pcdomain.NewCommercialVersionLabel("v1")
+	if err != nil {
+		t.Fatalf("版本号：%v", err)
+	}
+	version, present := registry.Lookup(tenant, pcdomain.PreAcceptanceFinancialControlPolicyObject, objectID, label)
+	if !present {
+		t.Fatal("发出去的策略版本壳不在整册里")
+	}
+
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池点读：%v", err)
+	}
+	defer pool.Close()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("框架 DB：%v", err)
+	}
+	contents, err := pcpostgres.NewPreAcceptanceFinancialControlPolicyContents(db)
+	if err != nil {
+		t.Fatalf("构造策略正文读口：%v", err)
+	}
+	policy, found, err := contents.LoadPreAcceptanceFinancialControlPolicy(t.Context(), tenant, version)
+	if err != nil || !found {
+		t.Fatalf("点读：found=%v err=%v", found, err)
+	}
+	if policy.JointPassCondition() != pcdomain.AllControlsPass {
+		t.Fatalf("共同通过条件 = %v", policy.JointPassCondition())
+	}
+	items := policy.Items()
+	if len(items) != 2 || items[0].Kind() != pcdomain.PrepaidFreezeControl || items[0].EvaluationOrder() != 1 ||
+		items[1].Kind() != pcdomain.CreditCheckControl || items[1].EvaluationOrder() != 2 ||
+		items[1].FailureDisposition() != pcdomain.AuthorizedDispositionOnControlFailure ||
+		items[1].Responsibility().String() != "operator-legal-1" {
+		t.Fatalf("控制项 = %#v", items)
+	}
+}
+
 func loadCustomerServiceRule(
 	t *testing.T,
 	dsn string,

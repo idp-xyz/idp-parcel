@@ -1376,6 +1376,139 @@ func TestACustomerServiceRuleBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 	})
 }
 
+func controlPolicyBody(t *testing.T, items ...domain.PreAcceptanceControlItem) *application.PreAcceptanceFinancialControlPolicyBodyDeclaration {
+	t.Helper()
+	return &application.PreAcceptanceFinancialControlPolicyBodyDeclaration{
+		JointPass: domain.AllControlsPass,
+		Items:     items,
+	}
+}
+
+func controlItemOf(
+	t *testing.T,
+	kind domain.PreAcceptanceControlKind,
+	scope string,
+	order int,
+	disposition domain.ControlFailureDisposition,
+) domain.PreAcceptanceControlItem {
+	t.Helper()
+	item, err := domain.NewPreAcceptanceControlItem(
+		kind,
+		pcValue(t, domain.NewChargeScopeReference, scope),
+		order,
+		disposition,
+		pcValue(t, domain.NewControlResponsibilityReference, "customer-1"),
+	)
+	if err != nil {
+		t.Fatalf("控制项：%v", err)
+	}
+	return item
+}
+
+// Covers: 票 party-commercial-context-gaps/07——接受前财务控制策略正文随它自己那一版发布登记（ADR-0115）。
+// 在这一路接上之前，第 5 类版本壳能入册、能被客户合同引用，「控制怎么做」却无处可落。控制项与共同通过
+// 条件原样交给持久化面，发布通道不代填任何一项。
+func TestAPreAcceptanceFinancialControlPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
+	registry := &publicationRegistryDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
+		Approval:     publishApproval(t, "fcp-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t,
+			controlItemOf(t, domain.CreditCheckControl, "charge-scope-a", 2, domain.AuthorizedDispositionOnControlFailure),
+			controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
+		)},
+	})
+	if err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if result.Outcome() != application.CommercialVersionPublishedEffective {
+		t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+	}
+	if len(registry.savedControlPolicies) != 1 {
+		t.Fatalf("策略册收到 %d 份, want 1", len(registry.savedControlPolicies))
+	}
+	saved := registry.savedControlPolicies[0]
+	if saved.Version().Status() != domain.CommercialVersionEffective {
+		t.Fatalf("拥有版本 = %q, want EFFECTIVE", saved.Version().Status())
+	}
+	if saved.JointPassCondition() != domain.AllControlsPass {
+		t.Fatalf("共同通过条件 = %v，没有原样到达持久化面", saved.JointPassCondition())
+	}
+	items := saved.Items()
+	if len(items) != 2 || items[0].Kind() != domain.PrepaidFreezeControl || items[1].Kind() != domain.CreditCheckControl ||
+		items[1].FailureDisposition() != domain.AuthorizedDispositionOnControlFailure {
+		t.Fatalf("控制项 = %#v，没有按判断顺序原样到达持久化面", items)
+	}
+	reports := result.Declarations()
+	if len(reports) != 1 ||
+		reports[0].Channel != application.PreAcceptanceFinancialControlPolicyBodyChannel ||
+		reports[0].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY=SAVED 一条", reports)
+	}
+}
+
+// Covers: 策略正文的门与其余通道同一条纪律——拥有对象类别由 domain.NewPreAcceptanceFinancialControlPolicy
+// 把守（挂在客户合同版本上整项拒绝且一行不写：合同层的声明走 PreAcceptanceControl 通道，不走本通道）；
+// 零项拒绝（「显式无控制」由合同声明，不是零项正文）；册的`内容冲突`折进报告而不是 error（ADR-0031）。
+func TestAPreAcceptanceFinancialControlPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
+	t.Run("a customer contract version cannot carry the policy body", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+			Approval:     publishApproval(t, "contract-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t,
+				controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
+			)},
+		}); !errors.Is(err, domain.ErrInvalidPreAcceptanceFinancialControlPolicy) {
+			t.Fatalf("err = %v, want ErrInvalidPreAcceptanceFinancialControlPolicy", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedControlPolicies) != 0 {
+			t.Fatal("挂错拥有对象的策略正文写了库")
+		}
+	})
+
+	t.Run("a body without any control is rejected before any write", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
+			Approval:     publishApproval(t, "fcp-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t)},
+		}); !errors.Is(err, domain.ErrInvalidPreAcceptanceFinancialControlPolicy) {
+			t.Fatalf("err = %v, want ErrInvalidPreAcceptanceFinancialControlPolicy", err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedControlPolicies) != 0 {
+			t.Fatal("零项的策略正文写了库")
+		}
+	})
+
+	t.Run("a content conflict lands in the report", func(t *testing.T) {
+		registry := &publicationRegistryDouble{controlPolicyOutcome: ports.PreAcceptanceFinancialControlPolicyContentConflict}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
+			Approval:     publishApproval(t, "fcp-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t,
+				controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
+			)},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——内容冲突不是 error", err)
+		}
+		reports := result.Declarations()
+		if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}
+
 // Covers: 发布是写权威的动作——整册读不回时不得闭眼登记，照原样上抛等重试；这与解析
 // 用例把读失败折成空视图相反（那边表达`权威不可读`并停在未决）。
 func TestAnUnreadableRegistryBlocksPublication(t *testing.T) {

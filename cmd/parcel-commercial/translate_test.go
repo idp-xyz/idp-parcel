@@ -519,6 +519,74 @@ func customerServiceRuleBatchJSON(body string) string {
 		"declarations": {"customerServiceRuleBody": {` + body + `}}}]}`
 }
 
+// Covers: 接受前财务控制策略正文（票 party-commercial-context-gaps/07，ADR-0115）：共同通过条件、控制项按
+// 种类 × 范围 × 顺序 × 处置 × 责任逐项过构造门；三个封闭集集外拒收，尤其是 NO_CONTROL——「无控制」由
+// 客户合同声明，不是策略正文的一项；零项由发布用例里的构造门拒，翻译层不代判。
+func TestAPreAcceptanceFinancialControlPolicyBodyTranslatesItsControls(t *testing.T) {
+	commands, err := publishCommandsFromJSON([]byte(controlPolicyBatchJSON(`"jointPassCondition": "ALL_CONTROLS_PASS",
+		"controls": [
+			{"control": "CREDIT_CHECK", "chargeScope": "charge-scope-a", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"},
+			{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}
+		]`)))
+	if err != nil {
+		t.Fatalf("翻译策略正文批：%v", err)
+	}
+	if commands[0].Spec.Kind != pcdomain.PreAcceptanceFinancialControlPolicyObject {
+		t.Fatalf("kind = %s, want PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", commands[0].Spec.Kind)
+	}
+	body := commands[0].Declarations.PreAcceptanceFinancialControlPolicyBody
+	if body == nil {
+		t.Fatal("策略正文没有翻过去")
+	}
+	if body.JointPass != pcdomain.AllControlsPass {
+		t.Fatalf("共同通过条件 = %v", body.JointPass)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("控制项 %d 项, want 2", len(body.Items))
+	}
+	// 翻译层保留批文顺序，按判断顺序归档是构造门的事。
+	if body.Items[0].Kind() != pcdomain.CreditCheckControl || body.Items[0].EvaluationOrder() != 2 ||
+		body.Items[0].FailureDisposition() != pcdomain.AuthorizedDispositionOnControlFailure ||
+		body.Items[0].Responsibility().String() != "operator-legal-1" || body.Items[0].Scope().String() != "charge-scope-a" {
+		t.Fatalf("第一项变形：%#v", body.Items[0])
+	}
+	if body.Items[1].Kind() != pcdomain.PrepaidFreezeControl || body.Items[1].EvaluationOrder() != 1 ||
+		body.Items[1].FailureDisposition() != pcdomain.RejectOnControlFailure {
+		t.Fatalf("第二项变形：%#v", body.Items[1])
+	}
+
+	for name, body := range map[string]string{
+		"no-control is not a control kind": `"jointPassCondition": "ALL_CONTROLS_PASS",
+			"controls": [{"control": "NO_CONTROL", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}]`,
+		"a disposition outside the closed set": `"jointPassCondition": "ALL_CONTROLS_PASS",
+			"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "ALLOW", "responsibility": "customer-1"}]`,
+		"a joint pass condition outside the closed set": `"jointPassCondition": "ANY_CONTROL_PASSES",
+			"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}]`,
+		"a missing joint pass condition is not defaulted": `"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}]`,
+		"a zero order": `"jointPassCondition": "ALL_CONTROLS_PASS",
+			"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "onFailure": "REJECT", "responsibility": "customer-1"}]`,
+		"a blank responsibility": `"jointPassCondition": "ALL_CONTROLS_PASS",
+			"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": " "}]`,
+		"an unknown field": `"jointPassCondition": "ALL_CONTROLS_PASS", "creditPolicy": "credit-1",
+			"controls": [{"control": "PREPAID_FREEZE", "chargeScope": "charge-scope-a", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(controlPolicyBatchJSON(body))); err == nil {
+				t.Fatal("立不住的策略正文批被翻过去了")
+			}
+		})
+	}
+}
+
+func controlPolicyBatchJSON(body string) string {
+	return `{"items": [{"tenantId": "t", "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", "objectId": "fcp-1",
+		"version": "v1", "scope": "s", "contentDigest": "d",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z",
+		"approval": {"reference": "a", "source": "s", "approvedAt": "2025-12-15T00:00:00Z"},
+		"approvalRoleStanding": "CONFIRMED",
+		"declarations": {"preAcceptanceFinancialControlPolicyBody": {` + body + `}}}]}`
+}
+
 // Covers: 价格政策正文（票 party-commercial-context-gaps/06）：方向、方案绑定、发布当时 parcel-pricing
 // 的答复（planDirection / conversion，ADR-0057，由写批文的人照价卡目录抄）、范围与区间逐项过构造门；
 // 口径嵌在正文里，税务两格与体积一格随方向耦合，汇率一节可缺——缺席翻成 nil 而不是零口径。

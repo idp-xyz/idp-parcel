@@ -56,6 +56,9 @@ type declarationsDocument struct {
 	SupplierAgreementBody   *supplierAgreementBodyDocument   `json:"supplierAgreementBody,omitempty"`
 	PricePolicyBody         *pricePolicyBodyDocument         `json:"pricePolicyBody,omitempty"`
 	CustomerServiceRuleBody *customerServiceRuleBodyDocument `json:"customerServiceRuleBody,omitempty"`
+	// preAcceptanceFinancialControlPolicyBody 与 preAcceptanceControl 是两层不同的声明：后者挂在客户合同
+	// 版本上答「要不要」，前者挂在策略版本上答「控制怎么做」（ADR-0115）。
+	PreAcceptanceFinancialControlPolicyBody *preAcceptanceFinancialControlPolicyBodyDocument `json:"preAcceptanceFinancialControlPolicyBody,omitempty"`
 }
 
 type asOfPolicyDocument struct {
@@ -228,6 +231,29 @@ type claimDeadlineDocument struct {
 type minimumMaterialsDocument struct {
 	ClaimKind string   `json:"claimKind"`
 	Materials []string `json:"materials"`
+}
+
+// preAcceptanceFinancialControlPolicyBodyDocument 是一份接受前财务控制策略正文（票 party-commercial-context-gaps/07，
+// ADR-0115）：共同通过条件与要执行的控制项。
+//
+// jointPassCondition 必填且首发只认 ALL_CONTROLS_PASS：缺席不折成「全部通过」——CONTEXT 要求策略明确它，
+// 没写就是没写。controls 至少一项由领域构造门在发布用例里拒；零项不是「显式无控制」，那一句由客户合同的
+// preAcceptanceControl 与 contractContent.bindings 声明，本节说不了它——批文里出现 NO_CONTROL 之类的控制
+// 种类就是集外取值、拒收。
+type preAcceptanceFinancialControlPolicyBodyDocument struct {
+	JointPassCondition string                             `json:"jointPassCondition"`
+	Controls           []preAcceptanceControlItemDocument `json:"controls"`
+}
+
+// preAcceptanceControlItemDocument 是一项控制：种类（封闭两值，镜像 pcdomain.PreAcceptanceControlKind）×
+// 费用范围引用 × 判断顺序 × 失败处置（封闭两值，镜像 pcdomain.ControlFailureDisposition）× 责任引用。
+// order 用普通整数而不是指针：零与缺席在这里同义——都不是「排第几」的答案，由 NewPreAcceptanceControlItem 拒。
+type preAcceptanceControlItemDocument struct {
+	Control        string `json:"control"`
+	ChargeScope    string `json:"chargeScope"`
+	Order          int    `json:"order"`
+	OnFailure      string `json:"onFailure"`
+	Responsibility string `json:"responsibility"`
 }
 
 // contractVersionDocument 分两段收「本约定属于哪一版客户合同」，不收一个已经拼好的串。
@@ -522,7 +548,52 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.CustomerServiceRuleBody = body
 	}
 
+	if document.PreAcceptanceFinancialControlPolicyBody != nil {
+		body, err := preAcceptanceFinancialControlPolicyBodyFrom(*document.PreAcceptanceFinancialControlPolicyBody)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.PreAcceptanceFinancialControlPolicyBody = body
+	}
+
 	return declarations, nil
+}
+
+func preAcceptanceFinancialControlPolicyBodyFrom(
+	document preAcceptanceFinancialControlPolicyBodyDocument,
+) (*pcapplication.PreAcceptanceFinancialControlPolicyBodyDeclaration, error) {
+	jointPass, err := jointPassConditionFrom(document.JointPassCondition)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]pcdomain.PreAcceptanceControlItem, 0, len(document.Controls))
+	for _, control := range document.Controls {
+		kind, err := preAcceptanceControlKindFrom(control.Control)
+		if err != nil {
+			return nil, err
+		}
+		scope, err := pcdomain.NewChargeScopeReference(control.ChargeScope)
+		if err != nil {
+			return nil, err
+		}
+		disposition, err := controlFailureDispositionFrom(control.OnFailure)
+		if err != nil {
+			return nil, err
+		}
+		responsibility, err := pcdomain.NewControlResponsibilityReference(control.Responsibility)
+		if err != nil {
+			return nil, err
+		}
+		item, err := pcdomain.NewPreAcceptanceControlItem(kind, scope, control.Order, disposition, responsibility)
+		if err != nil {
+			return nil, fmt.Errorf("控制项 %s@%s（顺序 %d）：%w", control.Control, control.ChargeScope, control.Order, err)
+		}
+		items = append(items, item)
+	}
+	return &pcapplication.PreAcceptanceFinancialControlPolicyBodyDeclaration{
+		JointPass: jointPass,
+		Items:     items,
+	}, nil
 }
 
 func customerServiceRuleBodyFrom(
@@ -1001,6 +1072,43 @@ func claimDeadlineKindFrom(name string) (pcdomain.ClaimDeadlineKind, error) {
 		}
 	}
 	return pcdomain.ClaimDeadlineKindInvalid, fmt.Errorf("集合外的索赔期限种类 %q", name)
+}
+
+// preAcceptanceControlKindFrom 只认两个取值。集合里没有「无控制」不是漏掉：那一句由客户合同声明并带依据
+// （ADR-0115 Decision 一），批文里写 NO_CONTROL 就是集外取值。
+func preAcceptanceControlKindFrom(name string) (pcdomain.PreAcceptanceControlKind, error) {
+	for _, kind := range []pcdomain.PreAcceptanceControlKind{
+		pcdomain.PrepaidFreezeControl,
+		pcdomain.CreditCheckControl,
+	} {
+		if kind.String() == name {
+			return kind, nil
+		}
+	}
+	return pcdomain.PreAcceptanceControlKindInvalid, fmt.Errorf("集合外的控制种类 %q", name)
+}
+
+// controlFailureDispositionFrom 只认两个取值，逐字对应 UC-PS-001「按策略拒绝或进入授权处置」。default 报错
+// 不吸收——把打错的处置折进某一格，等于替租户改了失败时委托的去向。
+func controlFailureDispositionFrom(name string) (pcdomain.ControlFailureDisposition, error) {
+	for _, disposition := range []pcdomain.ControlFailureDisposition{
+		pcdomain.RejectOnControlFailure,
+		pcdomain.AuthorizedDispositionOnControlFailure,
+	} {
+		if disposition.String() == name {
+			return disposition, nil
+		}
+	}
+	return pcdomain.ControlFailureDispositionInvalid, fmt.Errorf("集合外的失败处置 %q", name)
+}
+
+// jointPassConditionFrom 首发只认一个取值。缺席不折成它：CONTEXT 要求策略明确共同通过条件，批文口这一层
+// 先要求写出来；「任一通过」今天不在集合里（pn-02-w03 禁推导、无消费形状），写了就是集外取值。
+func jointPassConditionFrom(name string) (pcdomain.JointPassCondition, error) {
+	if name == pcdomain.AllControlsPass.String() {
+		return pcdomain.AllControlsPass, nil
+	}
+	return pcdomain.JointPassConditionInvalid, fmt.Errorf("集合外的共同通过条件 %q", name)
 }
 
 func roleStandingFrom(name string) (pcdomain.ApprovalRoleStanding, error) {
