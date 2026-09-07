@@ -37,21 +37,29 @@ prefixes_of() {
   esac
 }
 
-# 全部包只算一次；`go list` 要解析模块图，重复调用在 CI 上是几秒一次的开销。
-all_packages() {
-  if [ -z "${ALL_PACKAGES:-}" ]; then
-    ALL_PACKAGES="$(go list ./... | LC_ALL=C sort)"
+# 全部包只在主 shell 里算一次，子 shell 继承算好的值。`go list ./...` 要解析模块图，是
+# 几秒一次的开销；而下面的函数体几乎都跑在 `$(…)`、`<(…)` 与管道的子 shell 里，那里的
+# 赋值回不到父 shell——惰性缓存若写在 all_packages 内部，每个子 shell 都各自重算一遍
+# （`6f70c8d7` 上实测 `check` 一趟十六次）。所以由 list / check 的入口在主 shell 里先取；
+# `matrix` 不经这里，它的 job 不装 Go。
+load_all_packages() {
+  if [ -n "${ALL_PACKAGES:-}" ] && [ -n "${MODULE_PATH:-}" ]; then
+    return 0
   fi
+  ALL_PACKAGES="$(go list ./... | LC_ALL=C sort)"
+  MODULE_PATH="$(go list -m)"
+}
+
+all_packages() {
   printf '%s\n' "$ALL_PACKAGES"
 }
 
 # 按前缀过滤导入路径。匹配「等于前缀」或「前缀/…」两种，不匹配只是同名开头的目录
 # （internal/parcelshipment 不能把 internal/parcelshipmentx 也捎上）。
 filter_prefixes() {
-  local module rel pkg prefix
-  module="$(go list -m)"
+  local rel pkg prefix
   while IFS= read -r pkg; do
-    rel="${pkg#"$module"/}"
+    rel="${pkg#"$MODULE_PATH"/}"
     for prefix in "$@"; do
       if [[ "$rel" == "$prefix" || "$rel" == "$prefix"/* ]]; then
         printf '%s\n' "$pkg"
@@ -104,6 +112,7 @@ cmd_list() {
     echo "未知片名：$1（可用：${EXPLICIT_SHARDS[*]} rest）" >&2
     exit 2
   fi
+  load_all_packages
   packages="$(list_shard "$1")"
   if [ -z "$packages" ]; then
     # 空清单展开给 `go test` 就是对当前目录跑测试——静默跑错对象比红更糟。
@@ -115,6 +124,7 @@ cmd_list() {
 
 cmd_check() {
   local shard union count
+  load_all_packages
   # 并集故意不去重：两片重叠会以「> 多出一行」露出来，去重就把它抹平了。
   union="$(for shard in "${EXPLICIT_SHARDS[@]}" rest; do list_shard "$shard"; done | LC_ALL=C sort)"
   if ! diff <(all_packages) <(printf '%s\n' "$union"); then
