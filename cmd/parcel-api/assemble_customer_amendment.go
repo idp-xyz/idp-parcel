@@ -8,6 +8,8 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	pscustoms "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/customscompliance"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
@@ -117,21 +119,50 @@ func (boundary sourceDataHandoffBoundary) HandOffSourceDataVersion(
 // 那一行以 `UnconfiguredIntake{}` 起步，本函数不带任何默认身份。
 //
 // 「资料修订阶段」判断（ADR-0118）读五个口：本上下文自有的收寄采用、面单交易、包裹终局三本登记册
-// 接真库；关务三格与装袋一格今天接的是**未接**答复（CC/NO 尚无按包裹键的读面）——授权过了之后编排
-// 停在`判不出阶段`，不默认最早阶段去问矩阵。读面立起来时同样只换这里。
+// 接真库；关务三格与装袋一格经消费侧适配器接 customs-compliance 与 node-operations 各自按包裹键的
+// 读面（票 ps-port-remainder/05：CC 的 ParcelDeclarationFactsView、NO 的 ParcelContainmentView）——
+// 读面读的是同一个库里那两个上下文自己的表，适配器只翻译不判断。此前这两口接的是一律答`不知道`的
+// 未接答复，授权过了之后编排必然停在`判不出阶段`；接真之后阶段按事实判出，停点后移到矩阵那一格。
 func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.AmendmentHandler, error) {
+	customs, consolidation, err := buildAmendmentStageFactViews(db)
+	if err != nil {
+		return nil, err
+	}
 	return assembleCustomerAmendmentOrchestration(
 		db,
 		pspartycommercial.UnconfiguredSourceDataAmendmentAuthorizer{},
 		pspartycommercial.UnconfiguredSourceDataRuleDeclaration{},
-		pscustoms.UnconnectedCustomsStageView{},
-		psnode.UnconnectedConsolidationStageView{},
+		customs,
+		consolidation,
 	)
 }
 
+// buildAmendmentStageFactViews 装两只跨上下文阶段事实适配器：各自套在提供方的 postgres 读面上。
+// 单独成函数是为了让装配用例也能接真读面（「接真后停点从判不出阶段变成按事实答」那一格要证的正是
+// 这两只而不是替身），而不必复制这段接线。
+func buildAmendmentStageFactViews(db *bentopg.DB) (ports.CustomsStageView, ports.ConsolidationStageView, error) {
+	declarationFacts, err := ccpostgres.NewParcelDeclarationFactsView(db)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parcel-api: parcel declaration facts view: %w", err)
+	}
+	customs, err := pscustoms.NewCustomsStageView(declarationFacts)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parcel-api: customs stage view: %w", err)
+	}
+	containment, err := nopostgres.NewParcelContainmentView(db)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parcel-api: parcel containment view: %w", err)
+	}
+	consolidation, err := psnode.NewConsolidationStageView(containment)
+	if err != nil {
+		return nil, nil, fmt.Errorf("parcel-api: consolidation stage view: %w", err)
+	}
+	return customs, consolidation, nil
+}
+
 // assembleCustomerAmendmentOrchestration 是 buildCustomerAmendmentOrchestration 的形状半边：两个提供方口与
-// 两个邻接上下文读口由调用方给，生产给未配置 / 未接答复，装配用例给放行替身与已知事实以证「授权过了
-// 之后停在判不出阶段」「阶段判出后停在矩阵未登记」那两个更深的诚实停点——生产装配自己走不到它们。
+// 两个邻接上下文读口由调用方给，生产给未配置答复与真读面，装配用例给放行替身以证「授权过了之后阶段按
+// 真读面判出、停在矩阵未登记」那个更深的诚实停点——生产装配自己走不到它（授权先停）。
 func assembleCustomerAmendmentOrchestration(
 	db *bentopg.DB,
 	authorizer ports.SourceDataAmendmentAuthorizer,

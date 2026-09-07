@@ -10,12 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
-	pscustoms "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/customscompliance"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
-	psnode "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -27,8 +26,8 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证资料修订编排的装配（票 ps-port-remainder/04，形照 ADR-0106 决定四）：
 // 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（提供方授权那半
-// 未立，票 03），授权过了停在判不出阶段（关务与装袋读面未接，ADR-0118），阶段判出后停在矩阵未登记
-// （提供方矩阵那半未立，票 02）；三处都不形成版本、不入队「资料版本已形成」意图。另一条钉住交接壳：
+// 未立，票 03），授权过了阶段按关务与装袋两面真读面判出（ADR-0118；票 05 接线前这里停在判不出阶段），
+// 再停在矩阵未登记（提供方矩阵那半未立，票 02）；两处都不形成版本、不入队「资料版本已形成」意图。另一条钉住交接壳：
 // 意图在自己的事务里入队恰好一封、重放不翻倍——版本与意图不同事务是编排今天的形状，壳只负责把
 // RequireExecutor 那一格接对。最后一条把第一个停点推到 HTTP 面上：端点用例里带业务结果的字段未导出、
 // 逐格映射说好由本包经真编排补，补在这里。
@@ -283,11 +282,102 @@ func acceptedOnRealAssembly(t *testing.T, db *bentopg.DB) {
 	}
 }
 
-// Covers: 票 04 装配用例②（02 票 PS 半边落地后改写）——授权过了（放行替身），生产的关务与装袋
-// 读口是**未接**答复，编排停在`判不出阶段`的未决（`SourceDataAmendmentStageUndetermined`），不默认
-// 最早阶段去问矩阵；不形成版本、不入队意图。生产装配自己走不到这一格（授权先停），由形状半边注入
-// 放行替身来证。
-func TestTheAmendmentAssemblyStopsAtUndeterminedStageOnceAuthorized(t *testing.T) {
+// recordingAmendmentRules 是生产矩阵答复外面的一层记录壳（隔离合成 `S`）：把编排交来的查询记下再原样
+// 转给 UnconfiguredSourceDataRuleDeclaration。它只为让用例看见「编排问矩阵时带的是哪个阶段」——结果
+// 仍是生产那只的待复核，阶段这一维在结果上本就不可见，只有查询能证它判对了。
+type recordingAmendmentRules struct {
+	inner   ports.SourceDataRuleDeclaration
+	queries []ports.SourceDataAmendmentQuery
+}
+
+func (rules *recordingAmendmentRules) DeclareSourceDataAmendment(
+	ctx context.Context,
+	query ports.SourceDataAmendmentQuery,
+) (ports.SourceDataAmendmentAllowance, error) {
+	rules.queries = append(rules.queries, query)
+	return rules.inner.DeclareSourceDataAmendment(ctx, query)
+}
+
+// lastStageAskedOfTheRules 交回编排最近一次问矩阵时带的阶段；没问过即失败——问都没问到矩阵，
+// 说明停点比预期更早。
+func (rules *recordingAmendmentRules) lastStageAskedOfTheRules(t *testing.T) domain.AmendmentStage {
+	t.Helper()
+	if len(rules.queries) == 0 {
+		t.Fatal("编排没有问到矩阵——阶段判断在它之前就停了")
+	}
+	return rules.queries[len(rules.queries)-1].Stage
+}
+
+// seedCustomsUnitFor 在关务自己的表里为该包裹落一个尚无提交版本的申报单元（案件先于单元存在，
+// 外键要它在）。播种走显式 SQL 而不借道关务的写口：装配用例证的是「PS 经读面读到了关务的事实」，
+// 关务写口自己的往返在它自己的包里证。
+func seedCustomsUnitFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel string) {
+	t.Helper()
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO customs_compliance.customs_case
+			(tenant_id, jurisdiction_ref, direction, procedure_ref, obligation_ref, case_id, parcels, roles, established_at)
+		 VALUES ($1, 'CN', 'EXPORT', 'SYN-PROC-1', 'SYN-OBL-1', 'SYN-CASE-1',
+		         jsonb_build_array(jsonb_build_object('parcel', $2::text, 'customer', 'SYN-CUST-1', 'sourceRef', 'SYN-SRC-1')),
+		         '[]'::jsonb, $3)`,
+		tenant, parcel, time.Date(2026, 8, 21, 11, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("播种关务案件：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO customs_compliance.declaration_unit
+			(tenant_id, unit_id, case_id, procedure_ref, members, formed_at)
+		 VALUES ($1, 'SYN-UNIT-1', 'SYN-CASE-1', 'SYN-PROC-1', jsonb_build_array($2::text), $3)`,
+		tenant, parcel, time.Date(2026, 8, 21, 11, 5, 0, 0, time.UTC)); err != nil {
+		t.Fatalf("播种申报单元：%v", err)
+	}
+}
+
+// seedBaggedIntakeFor 在节点作业自己的表里落一次识别成功的收寄（版本化关联指向该包裹）并把那件
+// 作业实物移入一个开放的集运单元：容纳索引里的一行就是「此刻在袋里」。
+func seedBaggedIntakeFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel string) {
+	t.Helper()
+	ctx := t.Context()
+	receivedAt := time.Date(2026, 8, 21, 10, 45, 0, 0, time.UTC)
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO node_operations.reception
+			(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict, service_markers, recorded_at)
+		 VALUES ($1, 'SYN-SCAN-1', 'syn-digest-1', 'INTAKE_FORMED',
+		         jsonb_build_object('unit', 'SYN-HU-1', 'node', 'SYN-NODE-1', 'deliveredBy', 'SYN-COURIER-1',
+		                            'evidence', 'SYN-EVIDENCE-1', 'version', 'SYN-INTAKE-V1',
+		                            'association', $2::text, 'receivedAt', $3::timestamptz),
+		         jsonb_build_object('unit', 'SYN-HU-1', 'node', 'SYN-NODE-1', 'kind', 'NODE_INTAKE',
+		                            'basis', 'SYN-INTAKE-V1', 'establishedAt', $3::timestamptz),
+		         '[]'::jsonb, false, '[]'::jsonb, $3)`,
+		tenant, parcel, receivedAt); err != nil {
+		t.Fatalf("播种节点收寄：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO node_operations.consolidation_unit
+			(tenant_id, unit_id, asset_ref, phase, members, snapshots, opened_source)
+		 VALUES ($1, 'SYN-BAG-1', 'SYN-ASSET-1', 'OPEN', '["SYN-HU-1"]'::jsonb, '[]'::jsonb,
+		         jsonb_build_object('sourceId', 'SYN-OPEN-1', 'performedBy', 'SYN-PACKER-1',
+		                            'evidence', 'SYN-WORK-1', 'occurredAt', $2::timestamptz))`,
+		tenant, receivedAt.Add(10*time.Minute)); err != nil {
+		t.Fatalf("播种集运单元：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO node_operations.containment_current (tenant_id, member_id, unit_id)
+		 VALUES ($1, 'SYN-HU-1', 'SYN-BAG-1')`,
+		tenant); err != nil {
+		t.Fatalf("播种容纳索引：%v", err)
+	}
+}
+
+// Covers: 票 04 装配用例②（票 05 接线后改写）——授权过了（放行替身），关务与装袋两口接的是**真读面**
+// （生产装配用的同两只适配器，套在同一个库里 CC/NO 自己的表上），阶段按事实判出、编排走到矩阵，停在
+// 生产矩阵答复的**待复核**（`AWAITING_REVIEW`：「还没人说这处资料能不能改」）；不形成版本、不入队意图。
+// 接真之前这一格停在`判不出阶段`，接真之后停点后移一格——这正是票 05 的意义，用例钉的就是这次后移。
+//
+// 阶段在结果上不可见，由记录壳从矩阵查询里取出来证三步：CC/NO 空册 → 已接受尚未收寄（读面答`不在`，
+// 不是`不知道`，阶段才判得出）；节点作业落一次识别成功的收寄并装袋 → 已制签或已装袋；关务再为它形成
+// 一个尚无提交版本的申报单元 → 关务资料形成中、尚未提交（靠后的格压过靠前的）。三步各是一次新的修订
+// 请求身份——停在未决的请求也保全了来源身份，同一身份重放读回的是上一次的答案。
+func TestTheAmendmentAssemblyJudgesTheStageFromTheRealReadFacesOnceAuthorized(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -295,80 +385,47 @@ func TestTheAmendmentAssemblyStopsAtUndeterminedStageOnceAuthorized(t *testing.T
 	}
 	acceptedOnRealAssembly(t, db)
 
+	customs, consolidation, err := buildAmendmentStageFactViews(db)
+	if err != nil {
+		t.Fatalf("装配阶段事实读口：%v", err)
+	}
+	rules := &recordingAmendmentRules{inner: pspartycommercial.UnconfiguredSourceDataRuleDeclaration{}}
 	amendment, err := assembleCustomerAmendmentOrchestration(db,
 		grantingAmendmentAuthorizer{t: t},
-		productionAmendmentRules(),
-		pscustoms.UnconnectedCustomsStageView{},
-		psnode.UnconnectedConsolidationStageView{},
+		rules,
+		customs,
+		consolidation,
 	)
 	if err != nil {
 		t.Fatalf("装配资料修订编排：%v", err)
 	}
-	result, err := amendment.Handle(t.Context(), amendmentCommand(t, "SYN-KEY-1-AMENDMENT"))
-	if err != nil {
-		t.Fatalf("资料修订：%v", err)
-	}
-	if got := result.Outcome(); got != shipmentapp.AmendmentUndecided {
-		t.Fatalf("outcome = %q, want UNDECIDED——读面未接判不出阶段，不猜最早阶段去问矩阵", got)
-	}
-	if got := result.PendingReason(); got != shipmentapp.SourceDataAmendmentStageUndetermined {
-		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED", got)
-	}
-	assertNoSourceDataVersionFormed(t, db)
-}
 
-// knownStageFacts 是关务与装袋两个读口的已知答复替身（隔离合成 `S`）：关务三格与装袋都`不在`。
-// 与真库上空着的三本本上下文登记册合起来，就是「已接受、尚未收寄」的完整证据。
-type knownStageFacts struct{}
-
-func (knownStageFacts) LoadCustomsStageFacts(
-	context.Context,
-	domain.TenantID,
-	domain.DeclaredParcelID,
-) (ports.CustomsStageFacts, error) {
-	return ports.CustomsStageFacts{
-		DataForming: domain.StageFactAbsent,
-		Submitted:   domain.StageFactAbsent,
-		CaseClosed:  domain.StageFactAbsent,
-	}, nil
-}
-
-func (knownStageFacts) LoadBaggingFact(
-	context.Context,
-	domain.TenantID,
-	domain.DeclaredParcelID,
-) (domain.StageFact, error) {
-	return domain.StageFactAbsent, nil
-}
-
-// Covers: 票 04 装配用例②的原判据——阶段判出之后，矩阵仍是生产的未配置答复 → 停在**待复核**
-// （`AWAITING_REVIEW`：「还没人说这处资料能不能改」），不是业务拒绝；同样不形成版本、不入队意图。
-// 本上下文自有的三本登记册在真库上按空册答`不在`，这一格顺带证了它们接在阶段判断上。
-func TestTheAmendmentAssemblyStopsAtUndeclaredRulesOnceTheStageIsKnown(t *testing.T) {
-	pool := pgtest.Pool(t)
-	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
-	if err != nil {
-		t.Fatalf("构造框架 DB：%v", err)
+	amend := func(key string, wantStage domain.AmendmentStage) {
+		t.Helper()
+		result, err := amendment.Handle(t.Context(), amendmentCommand(t, key))
+		if err != nil {
+			t.Fatalf("%s：资料修订：%v", key, err)
+		}
+		if got := result.Outcome(); got != shipmentapp.AmendmentAwaitingReview {
+			t.Fatalf("%s：outcome = %q（未决原因 %q）, want AWAITING_REVIEW——阶段已按真读面判出，停点该在矩阵未登记，不在判不出阶段",
+				key, got, result.PendingReason())
+		}
+		if got := rules.lastStageAskedOfTheRules(t); got != wantStage {
+			t.Fatalf("%s：问矩阵时带的阶段 = %v, want %v", key, got, wantStage)
+		}
+		assertNoSourceDataVersionFormed(t, db)
 	}
-	acceptedOnRealAssembly(t, db)
 
-	amendment, err := assembleCustomerAmendmentOrchestration(db,
-		grantingAmendmentAuthorizer{t: t},
-		productionAmendmentRules(),
-		knownStageFacts{},
-		knownStageFacts{},
-	)
-	if err != nil {
-		t.Fatalf("装配资料修订编排：%v", err)
-	}
-	result, err := amendment.Handle(t.Context(), amendmentCommand(t, "SYN-KEY-1-AMENDMENT"))
-	if err != nil {
-		t.Fatalf("资料修订：%v", err)
-	}
-	if got := result.Outcome(); got != shipmentapp.AmendmentAwaitingReview {
-		t.Fatalf("outcome = %q（未决原因 %q）, want AWAITING_REVIEW——矩阵未登记是待复核，不是拒绝也不是放行", got, result.PendingReason())
-	}
-	assertNoSourceDataVersionFormed(t, db)
+	tenant := submissionCommand(t).Identity.TenantID().String()
+	const parcel = "syn-parcel-1"
+
+	amend("SYN-KEY-1-AMENDMENT", domain.StageAcceptedNotYetReceived)
+
+	seedBaggedIntakeFor(t, pool, tenant, parcel)
+	amend("SYN-KEY-2-AMENDMENT", domain.StageLabelledOrBagged)
+
+	seedCustomsUnitFor(t, pool, tenant, parcel)
+	amend("SYN-KEY-3-AMENDMENT", domain.StageCustomsDataFormingNotSubmitted)
 }
 
 // Covers: 票 04 装配用例③——交接壳在自己的事务里把资料版本意图入队恰好一封；同一版本再交一次
@@ -410,12 +467,6 @@ func TestTheSourceDataHandoffBoundaryEnqueuesOnceWithinItsOwnTransaction(t *test
 	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
 		t.Fatalf("重交后意图 = %d 封——同一版本的意图至多一份", got)
 	}
-}
-
-// productionAmendmentRules 交回生产装配用的那只矩阵答复，与 buildCustomerAmendmentOrchestration 接的
-// 是同一个类型——用例②要证的正是「生产的矩阵答复让编排停在待复核」。
-func productionAmendmentRules() ports.SourceDataRuleDeclaration {
-	return pspartycommercial.UnconfiguredSourceDataRuleDeclaration{}
 }
 
 // grantingAmendmentAuthorizer 是放行的授权替身（隔离合成 `S`）：只为让编排走到矩阵那一步。带一份
