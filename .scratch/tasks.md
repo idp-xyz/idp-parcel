@@ -918,3 +918,24 @@ SA 0017 起、PP 0010 起、CC 0017 起、NO 0004 起、PS 0019 起。端点表�
 
 **在途**：MCP-2 `2f035050`、MCP-4 `d3c3a7ac`、MCP-5 `895fbabf`、MCP-6 `aafca372`；MCP-1 自办 sa-preacceptance-policy-view/02。**归用户不变**：needs-info 四张、
 ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 三份。CI 为 `61344989` 在跑。
+
+## 2026-09-07 17:4x 通道 1 新会话接续（接手时 `main = origin/main = e4fa61d7`）
+
+用户只交代「监听队列、正常回复、保持循环」。接手时通道 1 队列里三件：17:1x 一条「原通道 2 会话按用户指令绑到 idp-mcp-1 接管集成」的广播回声、MCP-6 两条 awf/07 完工报（17:1x）——三件到 17:45 都没人消费。盘上（17:47 量得）：`idp-replay-psr05-tf01` 停在 `e33f2076`（17:18:50 提交，此后树内无新文件、无 go test 进程）；`ls-remote` 仍 `e4fa61d7`。按「截至 17:47 未响应」处置：17:49 广播接管（若那个接管会话仍在请回声即停手），无人回声；MCP-2 / 5 / 6 的回声都自报为新会话、无在途记忆、无异议。
+
+### 16:1x–16:5x（上一会话做了没记，按 git log 补；本会话未经历，验证强度以各提交信与 CI 为准）
+
+`80641ddc..e4fa61d7` 十笔：wiring-baseline-remainder/07 四笔（`ef1a8315` ADR-0123 / `8bbb43c4` Decimal 规范写法进 `valid()` / `008721d8` 基线留言 / `d01d103a` 票 07 resolved；提交信记的是 MCP-4 分支 `1b1a2980 / f1b21c47 / 223d6145` 的重放，清点笔 `305402f5` 未重放）；sa-preacceptance-policy-view/02 五笔（`c5fe75bc` 域 / `59b8a70a` 编排 / `316fe903` 适配器 / `d835c8b9` ADR-0122 + 票 02 resolved + 新立 03 draft / `3855f64b` 双轴评审修补；分支 `mcp1-sa02@f96e74dc`）；清点 `e4fa61d7`（16:50 推）。
+
+### 17:1x–18:0x：三支分支进 main
+
+| SHA | 内容 |
+|---|---|
+| `3b1afabe`..`cbfaf436` | `mcp2-psr05` 四笔（13f3ba65→3b1afabe、72b77de0→7b8aeecf、f91100c2→79f82432、6ab8ddc2→cbfaf436；ps-port-remainder/05 resolved）。**17:1x 接管会话所重放**，本会话 `range-diff` 复核全 `=`（cbfaf436 仅上下文行差：main 上票 02 多一段 16:1x「进 main 记录」）。分支清点笔 `31b8306a` 未重放 |
+| `c0363e12`..`603abcec` | `mcp5-tf-cmdr` 十二笔（bb863b1e→c0363e12、ac408e78→2e394faa、3130afa8→7491bae2、096f8a70→8c867069、2f844832→89f23d92、c40a8e41→700ba33b、e7186dec→18760165、9fb6fdf1→820c68be、badd2627→f56f6107、ee6078c5→9787577e、d8d2a592→509c66f0、9163c3b9→603abcec；tf-carrier-master-document-register/01 resolved）。同为接管会话所重放，`range-diff` 全 `=`（2e394faa 仅 README 上下文行差）。分支清点笔 `c0d92fcc` 与 tf/09 在途三笔 `d11d45c4 / a5e9ba31 / 8f079e66` 未重放 |
+| `e33f2076` | 清点在 `603abcec` 干净检出重生成（接管会话所作：CC 生产 74→75、NO 29→30、TF 生产 119→125、接入面端点 99→101、迁移 144→147、端口声明 352→355） |
+| `e52c71b6`..`e374b1ea` | `mcp6-awf07` 五笔本会话重放（42224e35→e52c71b6、e9452c15→9f60058b、8c1e6ed5→52001f02、2417b7bb→d1a03e00、c9ec35d7→e374b1ea；awf/07 收伞 + pc-gaps/08–10 draft + ADR-0116 + PC CONTEXT「合同委派」+ 票 08 in-progress）。cherry-pick 零冲突，README 自动合并、0116 行落在 0115/0117 之间；tip 重生成清点零差，无清点笔。**已推**（推前 ls-remote = e4fa61d7；18:04:16 ls-remote = e374b1ea） |
+
+验证钉 `e374b1ea`（隔离 detached 树 `idp-replay-mcp1-awf07`，验后已拆）：gofmt 空；build/vet 退 0；清点工具 vet/test 退 0；清点门零差；WSL `test-shards.sh check` 31/30/14/41 = 116 包无重叠无遗漏无空片；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试**（544s）；探针 `pilotgovernance/adapters/postgres` 含 DSN PASS 47 / SKIP 0、无 DSN SKIP 38 / PASS 0。未跑 `-race`（CI 四片各带）。共享 main 由 `e4fa61d7` 快进到 `e374b1ea`——ff 前 status 零行：MCP-6 18:01 已把共享树 65 处 CRLF 幻影逐个 `git diff --quiet` 为 0 后 `git restore --worktree`（其广播记 mtime 全为 09-04 21:42:23 同一秒）。
+
+**在途 / 待办（归用户）**：tf/09 三笔在 `mcp5-tf-cmdr` 分支上（tf-segment-lifecycle-closure/09 ①–④，未 resolved），tf/11 未开；pc-gaps/08 代码半边（迁移 0025 → 域 → PG → 用例；跨地盘签名点见票 08「签名纪律」）与 09 / 10 未开，MCP-6 建议派新会话；sa-preacceptance-policy-view/03 draft。台账 working 四单（`2f035050` / `895fbabf` / `aafca372` / `d3c3a7ac`）的承接会话都已换人，结不结、怎么派归用户；MCP-2 / 5 / 6 自报空闲可接票。树：`idp-replay-psr05-tf01`、`idp-replay-wave`（接管会话的）、`idp-parcel-mcp2-psr05`、`idp-parcel-mcp5-tf-cmdr`、`idp-parcel-mcp4-wbr07`[mcp6-wbr07]、`idp-parcel-mcp4-verify`、`idp-parcel-mcp1-sa02` 未拆，等用户点头；`idp-parcel-mcp6-awf06` 已由 MCP-6 拆（18:0x 后 `worktree list` 已无）；`idp-tf03` 归用户。CI 为 `e374b1ea` 在跑。
