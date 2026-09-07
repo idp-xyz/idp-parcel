@@ -44,3 +44,5 @@ Status: in-progress——PP 四条已在本目录第一笔处置（三删一留�
 - 全仓验证（detached 干净检出 `2837718d`，含 DSN）：`gofmt -l` 无输出、`go build` / `go vet` 退 0、`go test -p 1 -count=1 ./...` 退 0，`FAIL` 裸子串零命中。探针一正一反：`internal/parcelpricing/adapters/postgres` DSN 已设 `--- PASS` 58 / `--- SKIP` 0（17.8s），DSN 未设 `--- PASS` 0 / `--- SKIP` 58（0.016s），两次退出码都是 0、包行都是 `ok`；`internal/architecture` 两种设置下 `--- PASS` 157 / `--- SKIP` 0。
 - 机制清点：在 `2837718d` 干净检出上重跑生成器，`docs/product/MECHANISM-INVENTORY.md` 零差异（生成器数的是端点、消费适配器与路由表，本分支没动那些面），**不另成笔**。
 - 1d13d510 九个测试文件的复核结论见 `2837718d` 提交信；票 07 的「真缺陷非留待」判定见票面。
+
+**同日 MCP-1 对现场报告的三句裁定及落法：** ① PS/PC 五行理由行不合规但不在 MCP-6 地盘——「该写成什么」逐行写进 01–05 各票的「完成判据」，落地那笔连理由行一起剪或改；② 票 07 转 `ready-for-agent`、不并入 task-f31a5650，作 MCP-6 下一单；③ 1d13d510 两处测试偏离逐条点名（用例、原断言、现断言、为何不丢覆盖）写进完工报前那笔的提交信，不只留在测试注释里。

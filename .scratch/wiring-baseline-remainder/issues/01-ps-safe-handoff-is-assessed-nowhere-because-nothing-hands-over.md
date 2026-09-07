@@ -42,6 +42,16 @@ Blocked by: 本票「要先裁的一格」——治理接管记录与运行时�
 
 治理接管记录（停写证据，今天的路）与运行时交接确认（`AssessSafeHandoff` 建模的路）是**两种证据**。UC 3B 与 `AT-PS-010` 读起来是「已明确其他权威」（归属）**且**「可安全交接」（交接）两件，缺一都不许交；但接管记录先于投递还是投递确认可替代接管记录，CONTEXT 没有硬句。建议 `/domain-modeling` 一格先定：两者的先后、缺任一格时落哪种未决原因、决定记录上各占哪一格。可能落 ADR（预留号已尽，向 MCP-1 取号）。
 
+## 完成判据（落地那笔连理由行一起改；MCP-1 2026-09-07 裁）
+
+1. `ports/` 有面向他方生产权威的出向端口，答复落 `HandoffObservation` 五格；生产装配放未配置适配器，未配置即答 `HandoffObservationQueryUnavailable`（不冒充成功）。
+2. 提交编排的 `ProductionAuthorityOther` 分支真调 `AssessSafeHandoff`：已确认答「非本产品归属结束」并返渠道中立关联，未决落「生产归属未决」带 `ContinuationRef`。
+3. `ProductionOwnershipDecision` 上有评估结果与续办引用的落点，与 `HandoffRef`（停写证据）分格。
+4. 剪基线行：先按头注三分成因（全仓 `AssessSafeHandoff` 只此一处声明才是第二种），在自己那笔的干净检出上两法同得记数、钉 SHA。
+5. **若 1–3 之前先要改理由行**（今天那句「测试里调 9 次，包外零引用」既无调用方又带计数），改成：
+
+   > 安全交接评估门，UC-PS-001 步 3B「其他权威时安全交接并返回渠道中立关联」与 `AT-PS-010` 的领域半边。**调用方是提交编排在生产归属决定为 `ProductionAuthorityOther` 之后的交接步**（投递范围 → 观察确认 → 形成评估）；那一层今天缺出向端口、编排步与决定记录落点三件，三件同票（wiring-baseline-remainder/01）落地那天这一条出名单。别把 `ProductionOwnershipDecision.HandoffRef` 读成它——那是治理接管的停写证据，不是一次交接的确认。
+
 ## 边界
 
 - 本票不改代码、不改基线。基线行剪掉的时刻是编排步真调 `AssessSafeHandoff` 那一笔，剪时按头注纪律记数。

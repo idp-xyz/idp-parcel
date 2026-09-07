@@ -1,8 +1,8 @@
 # Decimal 重建门收非规范写法，`percentShare` 真会产出它：同一个数两种写法进语义摘要是两个串
 
 Category: bug
-Status: draft——MCP-6 2026-09-07 立票，随 `ParseCanonical` 删除（分支 `mcp6-pp-ratchet` 的 `1d13d510`）；这是那个函数自称要守、而从没守到的那件事
-Blocked by: 本票「要先裁的一格」（收紧与语义摘要可比性一起裁；可能落 ADR，预留号已尽向 MCP-1 取号）
+Status: ready-for-agent——MCP-6 2026-09-07 立票，随 `ParseCanonical` 删除（分支 `mcp6-pp-ratchet` 的 `1d13d510`）；同日接管会话只读复核判为真缺陷，MCP-1 12:2x 裁「转 ready、不并入 task-f31a5650、作 MCP-6 下一单（PP 地盘不换人）」
+Blocked by: 无外部票。「要先裁的一格」在本票内先裁（`/domain-modeling`，收紧与语义摘要可比性一起；落 ADR 时预留号已尽，向 MCP-1 取号）
 
 ## 现状（四格钉在 `internal/parcelpricing/domain/decimal_canonical_rebuild_test.go`，锚 `2efef58e`）
 

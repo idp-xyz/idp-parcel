@@ -33,6 +33,13 @@ Blocked by: 无（纯删，PC 地盘内）
 
 不适用：它不缺调用方，它被替代了。
 
+## 完成判据（落地那笔连基线一起改；MCP-1 2026-09-07 裁）
+
+1. `ValidateBeforeDecision` 及只为它写的测试删去；`ValidateClosureBeforeDecision` 的注释改成历史注（曾有单依据形态，已删；闭包形态是唯一生产路径），不再指向一个不存在的名字。
+2. 剪基线行，头注记一句成因第一种（已删，被闭包形态取代）；在自己那笔的干净检出上两法同得记数、钉 SHA。
+3. PC 组那句「下面两条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词，ValidateBeforeDecision 返回同型 Resolution 是变换不是构造」改成只指 `ManualReviewRequirementFor` 一条（票 04 落地时再由它改写成理由行）——否则它在删掉之后指着一个不在名单上的名字，而 `TestWiringBaselineHasNoStaleEntry` 不读注释，不会为此红。
+4. 顺带核一遍单依据 `Resolution` 族里有没有同样只剩闭包内部在用的导出函数，有就在本票 Comments 记名，不在本票删。
+
 ## 边界
 
 本票不改代码、不改基线。

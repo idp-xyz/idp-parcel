@@ -45,6 +45,15 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
 
 不能。SA 三口目录读口在认可留待，但那是登记面形状等实例证据；本条缺的是缝与执行器。
 
+## 完成判据（落地那笔连理由行一起改；MCP-1 2026-09-07 裁）
+
+1. 「要先裁的一格」有裁决（一版一行→并入闭包的 `covers` 校验，或一版多行→`ResolveCreditPolicy` 作选择器），与 `party-commercial-context-gaps/07` 同轮；落 ADR 时向 MCP-1 取号。
+2. PC 侧有向 SA 供 `CreditBasis` 的提供方口（用例或端口），按裁决调 `ResolveCreditPolicy` 或经闭包读 `LoadCreditPolicy`；SA 消费侧适配器在 UC-SA-002 步 7 账期分支真索取它，形成信用暴露 / 限制结果时有出自政策版本的额度依据可比（`AT-SA-171` / `AT-SA-172`）。
+3. 剪基线行：先按头注三分成因（全仓 `ResolveCreditPolicy` 只此一处声明才是第二种；若裁决把它并入闭包而删掉，则是第一种、头注记一句），在自己那笔的干净检出上两法同得记数、钉 SHA。
+4. **若 1–2 之前先要补理由行**（今天这条**没有**理由行，PC 组注释只讲了另两条的族界），在条目上方加：
+
+   > 信用政策选择门，`CreditBasis` 是本上下文交给 settlement-accounting 的授信依据。**调用方是 PC 侧向 SA 供授信额度的提供方口**（UC-SA-002 步 7 账期分支的消费侧适配器索取它），那条 PC→SA 缝今天不存在：缺提供方口、缺 SA 消费侧适配器，且「四维选择在哪一层还有多候选」那格未裁（与 party-commercial-context-gaps/07 同轮）。三件落地（wiring-baseline-remainder/03）那天这一条出名单。
+
 ## 边界
 
 本票不改代码、不改基线。基线行剪掉的时刻是 PC 提供方口真调 `ResolveCreditPolicy` 那一笔。
