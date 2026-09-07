@@ -92,13 +92,21 @@ func (stub unreachableReviewCatalogue) ListEffectiveDeliveries(
 	return nil, nil
 }
 
-// stubReviewCatalogue 是四本册子的读口替身，记下读口收到的键。
+func (stub unreachableReviewCatalogue) ListCarrierMasterDocuments(
+	context.Context, domain.TenantID, int,
+) ([]ports.CarrierMasterDocumentCatalogueRow, error) {
+	stub.refuse("carrier master document")
+	return nil, nil
+}
+
+// stubReviewCatalogue 是五本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
-	schedules  []ports.TransportScheduleCatalogueRow
-	pools      []ports.CapacityPoolCatalogueRow
-	handovers  []ports.TransportHandoverCatalogueRow
-	deliveries []ports.EffectiveDeliveryCatalogueRow
-	err        error
+	schedules       []ports.TransportScheduleCatalogueRow
+	pools           []ports.CapacityPoolCatalogueRow
+	handovers       []ports.TransportHandoverCatalogueRow
+	deliveries      []ports.EffectiveDeliveryCatalogueRow
+	masterDocuments []ports.CarrierMasterDocumentCatalogueRow
+	err             error
 
 	gotTenant string
 	gotLimit  int
@@ -132,6 +140,13 @@ func (stub *stubReviewCatalogue) ListEffectiveDeliveries(
 	return stub.deliveries, stub.err
 }
 
+func (stub *stubReviewCatalogue) ListCarrierMasterDocuments(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.CarrierMasterDocumentCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.masterDocuments, stub.err
+}
+
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
 	return tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), register)
 }
@@ -159,7 +174,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 }
 
 var fulfillmentRegistries = []string{
-	"transport-schedule", "capacity-pool", "transport-handover", "effective-delivery",
+	"transport-schedule", "capacity-pool", "transport-handover", "effective-delivery", "carrier-master-document",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -201,13 +216,14 @@ func TestUnconfiguredIntakeRefusesEveryTransportFulfillmentRecordsRequest(t *tes
 	}
 }
 
-// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400），读口不被触到。承运
-// 总单与运输舱单一区在存储上没有登记册，它的名字也在封闭集之外：没有表就没有读法。
+// Covers: 分派参数的封闭集 — 未知册名、空册名都是坏请求（400），读口不被触到。运输
+// 舱单在存储上没有登记册，它的名字在封闭集之外：没有表就没有读法；总单立册之前用过
+// 的泛名 `transport-document` 也不是册名——册名指一本表，不指一个页面分区。
 func TestTransportFulfillmentRecordsQueryRejectsUnknownRegistries(t *testing.T) {
 	endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
 		grantedIntake(), unreachableReviewCatalogue{t: t},
 	)
-	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=transport-schedules", "?registry=transport-document"} {
+	for _, registry := range []string{"", "?registry=", "?registry=unknown", "?registry=transport-schedules", "?registry=transport-document", "?registry=transport-manifest"} {
 		t.Run(registry, func(t *testing.T) {
 			response := serveGet(endpoint, "/transport-fulfillment-records"+registry)
 			if response.Code != http.StatusBadRequest {
@@ -480,14 +496,99 @@ func TestEffectiveDeliveryRegistryTranscribesRows(t *testing.T) {
 	}
 }
 
+// Covers: 逐格转写 — 总单册（ADR-0113 决定六）：一行一版本；首版不带回指两键与替代者；
+// 关联重述版仍 IN_FORCE 且回指前版；已替代版带 replacedBy；可缺引用缺席即不带键；关联数
+// 是十进制计数串。
+func TestCarrierMasterDocumentRegistryTranscribesVersionChain(t *testing.T) {
+	changedAt := catalogueBaseAt.Add(2 * time.Hour)
+	register := &stubReviewCatalogue{
+		masterDocuments: []ports.CarrierMasterDocumentCatalogueRow{
+			{
+				Document: "SYN-MAWB-1", Version: "MDV-3", Issuer: "party/carrier-x", Scope: "SYN-LANE-1",
+				Standing: "SUPERSEDED", Supersedes: "MDV-2", ReplacedBy: "SYN-MAWB-1B",
+				AssociationCount: 2, ChangedAt: &changedAt,
+				RecordedAt: catalogueBaseAt.Add(3 * time.Hour),
+			},
+			{
+				Document: "SYN-MAWB-1", Version: "MDV-2", Issuer: "party/carrier-x", Scope: "SYN-LANE-1",
+				Commission: "COMM-1", Booking: "BOOK-1",
+				Standing: "IN_FORCE", Supersedes: "MDV-1",
+				AssociationCount: 2, ChangedAt: &changedAt,
+				RecordedAt: catalogueBaseAt.Add(2 * time.Hour),
+			},
+			{
+				Document: "SYN-MAWB-1", Version: "MDV-1", Issuer: "party/carrier-x", Scope: "SYN-LANE-1",
+				Standing: "IN_FORCE", AssociationCount: 0,
+				RecordedAt: catalogueBaseAt,
+			},
+		},
+	}
+	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=carrier-master-document")
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d", register.gotTenant, register.gotLimit)
+	}
+	var body struct {
+		Outcome         string                       `json:"outcome"`
+		MasterDocuments []map[string]json.RawMessage `json:"masterDocuments"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Outcome != "CARRIER_MASTER_DOCUMENTS_LISTED" || len(body.MasterDocuments) != 3 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	superseded := body.MasterDocuments[0]
+	if string(superseded["document"]) != `"SYN-MAWB-1"` ||
+		string(superseded["version"]) != `"MDV-3"` ||
+		string(superseded["issuer"]) != `"party/carrier-x"` ||
+		string(superseded["scope"]) != `"SYN-LANE-1"` ||
+		string(superseded["standing"]) != `"SUPERSEDED"` ||
+		string(superseded["supersedes"]) != `"MDV-2"` ||
+		string(superseded["replacedBy"]) != `"SYN-MAWB-1B"` ||
+		string(superseded["associationCount"]) != `"2"` ||
+		string(superseded["changedAt"]) != `"`+changedAt.Format(time.RFC3339Nano)+`"` {
+		t.Fatalf("已替代版转写走样：%s", response.Body.String())
+	}
+	for _, key := range []string{"commission", "booking"} {
+		if _, present := superseded[key]; present {
+			t.Fatalf("没登的可缺引用不该带 %q 键：%s", key, response.Body.String())
+		}
+	}
+	restated := body.MasterDocuments[1]
+	if string(restated["standing"]) != `"IN_FORCE"` ||
+		string(restated["supersedes"]) != `"MDV-1"` ||
+		string(restated["commission"]) != `"COMM-1"` ||
+		string(restated["booking"]) != `"BOOK-1"` {
+		t.Fatalf("关联重述版转写走样：%s", response.Body.String())
+	}
+	if _, present := restated["replacedBy"]; present {
+		t.Fatalf("仍有效的版本不该带 replacedBy 键：%s", response.Body.String())
+	}
+	first := body.MasterDocuments[2]
+	if string(first["associationCount"]) != `"0"` {
+		t.Fatalf("零关联应转写成 \"0\"：%s", response.Body.String())
+	}
+	for _, key := range []string{"supersedes", "changedAt", "replacedBy"} {
+		if _, present := first[key]; present {
+			t.Fatalf("首版不该带 %q 键：%s", key, response.Body.String())
+		}
+	}
+}
+
 // Covers: ADR-0077 Decision 四 — 空登记册是内容不是错误：200 + 空数组（不是 null），
-// 四本册子一致。写入方是交付命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
+// 五本册子一致。写入方是各命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
+// 总单一格自 ADR-0113 立册起属这一族：空册说的是「登记册为空」，不再是「无处可登」。
 func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
-		"transport-schedule": "schedules",
-		"capacity-pool":      "pools",
-		"transport-handover": "handovers",
-		"effective-delivery": "deliveries",
+		"transport-schedule":      "schedules",
+		"capacity-pool":           "pools",
+		"transport-handover":      "handovers",
+		"effective-delivery":      "deliveries",
+		"carrier-master-document": "masterDocuments",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}

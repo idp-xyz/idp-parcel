@@ -9,8 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// ReviewCatalogueReader 是本端点消费的读口：班次册、容量池册、权威交接判断册与
-// 有效交付结果册四本册子的列表读面（管理台 transport-fulfillment-review 页）。
+// ReviewCatalogueReader 是本端点消费的读口：班次册、容量池册、权威交接判断册、
+// 有效交付结果册与总单册五本册子的列表读面（管理台 transport-fulfillment-review 页）。
 type ReviewCatalogueReader interface {
 	ListTransportSchedules(
 		ctx context.Context,
@@ -32,32 +32,41 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.EffectiveDeliveryCatalogueRow, error)
+	ListCarrierMasterDocuments(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.CarrierMasterDocumentCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ ReviewCatalogueReader = ports.ReviewCatalogueRead(nil)
 
 const (
-	outcomeTransportSchedulesListed  = "TRANSPORT_SCHEDULES_LISTED"
-	outcomeCapacityPoolsListed       = "CAPACITY_POOLS_LISTED"
-	outcomeTransportHandoversListed  = "TRANSPORT_HANDOVERS_LISTED"
-	outcomeEffectiveDeliveriesListed = "EFFECTIVE_DELIVERIES_LISTED"
+	outcomeTransportSchedulesListed     = "TRANSPORT_SCHEDULES_LISTED"
+	outcomeCapacityPoolsListed          = "CAPACITY_POOLS_LISTED"
+	outcomeTransportHandoversListed     = "TRANSPORT_HANDOVERS_LISTED"
+	outcomeEffectiveDeliveriesListed    = "EFFECTIVE_DELIVERIES_LISTED"
+	outcomeCarrierMasterDocumentsListed = "CARRIER_MASTER_DOCUMENTS_LISTED"
 )
 
 const (
-	registryTransportSchedule = "transport-schedule"
-	registryCapacityPool      = "capacity-pool"
-	registryTransportHandover = "transport-handover"
-	registryEffectiveDelivery = "effective-delivery"
+	registryTransportSchedule     = "transport-schedule"
+	registryCapacityPool          = "capacity-pool"
+	registryTransportHandover     = "transport-handover"
+	registryEffectiveDelivery     = "effective-delivery"
+	registryCarrierMasterDocument = "carrier-master-document"
 )
 
-// NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页四本册子的 HTTP
-// 入口（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05）。
+// NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页五本册子的 HTTP
+// 入口（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05；总单一格
+// 由 ADR-0113 决定六补入）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，
-// 本端点零登记零编辑动作，只上列已登记的履约判断与事实。页面五区里承运总单与运输
-// 舱单一区在存储上还没有登记册，本端点的册名封闭集刻意没有那一格——没有表就没有
-// 读法，答一份恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
+// 本端点零登记零编辑动作，只上列已登记的履约判断与事实。册名封闭集只有有表的册：
+// 总单在 ADR-0113 立册之后进了封闭集，空册从此是「登记册为空」（ADR-0077 决定四）；
+// 运输舱单在存储上仍没有登记册，它的名字仍不在集合内——没有表就没有读法，答一份
+// 恒空的册子会把「无处可登」演成「登记册为空」（票 05 Comments 记明）。
 //
 // **不下推交接改判或交付更正参数**：权威交接结果与有效交付的更正各有命令用例，
 // 查阅面收下这些参数就等于让目录读口长出第二种「处置」语义。
@@ -73,7 +82,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		if registry != registryTransportSchedule &&
 			registry != registryCapacityPool &&
 			registry != registryTransportHandover &&
-			registry != registryEffectiveDelivery {
+			registry != registryEffectiveDelivery &&
+			registry != registryCarrierMasterDocument {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -92,6 +102,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveTransportHandovers(response, request, reader, tenant, query.Limit)
 		case registryEffectiveDelivery:
 			serveEffectiveDeliveries(response, request, reader, tenant, query.Limit)
+		case registryCarrierMasterDocument:
+			serveCarrierMasterDocuments(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -222,6 +234,41 @@ func serveEffectiveDeliveries(
 	})
 }
 
+func serveCarrierMasterDocuments(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListCarrierMasterDocuments(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]carrierMasterDocumentBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, carrierMasterDocumentBody{
+			Document:         row.Document,
+			Version:          row.Version,
+			Issuer:           row.Issuer,
+			Scope:            row.Scope,
+			Commission:       row.Commission,
+			Booking:          row.Booking,
+			Standing:         row.Standing,
+			Supersedes:       row.Supersedes,
+			ReplacedBy:       row.ReplacedBy,
+			AssociationCount: quantity(row.AssociationCount),
+			ChangedAt:        optionalInstant(row.ChangedAt),
+			RecordedAt:       rfc3339(row.RecordedAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, carrierMasterDocumentListResponse{
+		Outcome:         outcomeCarrierMasterDocumentsListed,
+		MasterDocuments: bodies,
+	})
+}
+
 // quantity 把容量数量转写成十进制计数串：int64 直投 JSON number 在 2^53 以上的取值
 // 会被 JS 读者悄悄取整——串是照实转写，数才是替读者做的算术承诺（判据同
 // settlementhttp minorAmount）。
@@ -315,4 +362,31 @@ type effectiveDeliveryBody struct {
 	CorrectedAt     string `json:"correctedAt,omitempty"`
 	OccurredAt      string `json:"occurredAt"`
 	RecordedAt      string `json:"recordedAt"`
+}
+
+type carrierMasterDocumentListResponse struct {
+	Outcome         string                      `json:"outcome"`
+	MasterDocuments []carrierMasterDocumentBody `json:"masterDocuments"`
+}
+
+// carrierMasterDocumentBody 逐字段透出一行总单版本（ADR-0113）。
+//
+// standing 是三值封闭词（IN_FORCE / REVOKED / SUPERSEDED），原样透出不折并；supersedes 与
+// changedAt 成对缺席表示首版——一行一版本，撤销、替代、关联重述都是新行回指前版，原
+// 版本在册面上继续可见；replacedBy 只在已替代上在场。commission 与 booking 是可缺引用，
+// 缺席即不带键。associationCount 是关联子表的行数（十进制计数串，理由同容量四量）——
+// 关联本体不在列面展开，哪些集运单元、包裹、段列入了这一版按键与版本走登记册读口。
+type carrierMasterDocumentBody struct {
+	Document         string `json:"document"`
+	Version          string `json:"version"`
+	Issuer           string `json:"issuer"`
+	Scope            string `json:"scope"`
+	Commission       string `json:"commission,omitempty"`
+	Booking          string `json:"booking,omitempty"`
+	Standing         string `json:"standing"`
+	Supersedes       string `json:"supersedes,omitempty"`
+	ReplacedBy       string `json:"replacedBy,omitempty"`
+	AssociationCount string `json:"associationCount"`
+	ChangedAt        string `json:"changedAt,omitempty"`
+	RecordedAt       string `json:"recordedAt"`
 }

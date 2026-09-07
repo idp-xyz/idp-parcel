@@ -27,6 +27,8 @@ type reviewCatalogueStores struct {
 	handovers  *adapter.TransportHandovers
 	deliveries *adapter.EffectiveDeliveries
 	transactor bentoapp.Transactor
+	// db 留给总单册用例自建写方：总单登记册不在本结构的常驻成员里，那一册只有一个用例读它。
+	db *bentopg.DB
 }
 
 func newReviewCatalogueStores(t *testing.T) reviewCatalogueStores {
@@ -64,6 +66,7 @@ func newReviewCatalogueStores(t *testing.T) reviewCatalogueStores {
 		handovers:  handovers,
 		deliveries: deliveries,
 		transactor: db.Transactor(),
+		db:         db,
 	}
 }
 
@@ -362,6 +365,74 @@ func TestReviewCatalogueListsOnlyCurrentEffectiveDeliveries(t *testing.T) {
 	}
 }
 
+// TestReviewCatalogueListsEveryCarrierMasterDocumentVersionWithItsAssociationCount 证总单册
+// （ADR-0113 决定六）一行一版本、版本链完整可见、新近登记在前；关联数按子表逐版计数
+// （首版一条、重述版两条）；可缺引用缺席转写为空串；另一个租户的总单不可见。写方是
+// 总单登记册本尊，读方与它共用同一个测试库。
+func TestReviewCatalogueListsEveryCarrierMasterDocumentVersionWithItsAssociationCount(t *testing.T) {
+	stores := newReviewCatalogueStores(t)
+	ctx := t.Context()
+	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
+	documents, err := adapter.NewMasterDocuments(stores.db)
+	if err != nil {
+		t.Fatalf("构造总单登记册：%v", err)
+	}
+
+	first := masterDocumentRecord(t, masterDocumentFixtureOptions{
+		document: "SYN-MAWB-100", version: "MDV-1", commission: "COMM-1",
+		associations: []domain.MasterDocumentAssociation{masterDocumentAssociation(t, domain.AssociatesConsolidationUnit, "CU-1")},
+	})
+	mustSaveMasterDocument(t, stores.transactor, ctx, documents, first)
+	restated, err := first.Document.RestateAssociations(masterDocumentChangedAt, []domain.MasterDocumentAssociation{
+		masterDocumentAssociation(t, domain.AssociatesConsolidationUnit, "CU-1"),
+		masterDocumentAssociation(t, domain.AssociatesParcel, "PCL-1"),
+	}, segmentRef(t, domain.NewMasterDocumentVersion, "MDV-2"))
+	if err != nil {
+		t.Fatalf("关联重述：%v", err)
+	}
+	mustSaveMasterDocument(t, stores.transactor, ctx, documents, masterDocumentRecordOf(restated, masterDocumentRecordedAt.Add(time.Hour)))
+
+	other := masterDocumentRecord(t, masterDocumentFixtureOptions{document: "SYN-MAWB-900", version: "MDV-1"})
+	other.Key.TenantID = segmentRef(t, domain.NewTenantID, "tenant-2")
+	otherSpec := domain.MasterDocumentSpec{
+		TenantID: other.Key.TenantID,
+		Document: other.Key.Document,
+		Version:  other.Key.Version,
+		Issuer:   other.Document.Issuer(),
+		Scope:    other.Document.Scope(),
+	}
+	otherDocument, err := domain.RegisterMasterDocument(otherSpec)
+	if err != nil {
+		t.Fatalf("另一租户的总单夹具：%v", err)
+	}
+	mustSaveMasterDocument(t, stores.transactor, ctx, documents, masterDocumentRecordOf(otherDocument, masterDocumentRecordedAt))
+
+	rows, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 10)
+	if err != nil {
+		t.Fatalf("上列总单册：%v", err)
+	}
+	if len(rows) != 2 || rows[0].Version != "MDV-2" || rows[1].Version != "MDV-1" {
+		t.Fatalf("册面应两版、新近在前：%+v", rows)
+	}
+	second := rows[0]
+	if second.Document != "SYN-MAWB-100" ||
+		second.Issuer != "party/carrier-x" ||
+		second.Scope != "SYN-LANE-1" ||
+		second.Commission != "COMM-1" ||
+		second.Booking != "" ||
+		second.Standing != "IN_FORCE" ||
+		second.Supersedes != "MDV-1" ||
+		second.ReplacedBy != "" ||
+		second.AssociationCount != 2 ||
+		second.ChangedAt == nil ||
+		!second.ChangedAt.Equal(masterDocumentChangedAt) {
+		t.Errorf("重述版转写变形：%+v", second)
+	}
+	if head := rows[1]; head.Supersedes != "" || head.ChangedAt != nil || head.AssociationCount != 1 || head.Standing != "IN_FORCE" {
+		t.Errorf("首版转写变形：%+v", head)
+	}
+}
+
 // TestFulfillmentReviewCatalogueRejectsNonPositiveLimitAndAnswersEmptyHonestly 证读口
 // 只拒绝无意义的页大小；空登记册如实交回空列表——空册是内容，不是错误
 // （ADR-0077 Decision 四）。
@@ -369,6 +440,14 @@ func TestFulfillmentReviewCatalogueRejectsNonPositiveLimitAndAnswersEmptyHonestl
 	stores := newReviewCatalogueStores(t)
 	ctx := t.Context()
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
+
+	if _, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 0); err == nil {
+		t.Error("零页大小的总单上列没有被拒")
+	}
+	masterDocuments, err := stores.catalogue.ListCarrierMasterDocuments(ctx, tenant, 5)
+	if err != nil || len(masterDocuments) != 0 {
+		t.Errorf("空总单册：rows=%+v err=%v", masterDocuments, err)
+	}
 
 	if _, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 0); err == nil {
 		t.Error("零页大小的班次上列没有被拒")

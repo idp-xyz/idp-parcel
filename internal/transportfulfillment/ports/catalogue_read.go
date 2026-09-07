@@ -12,11 +12,12 @@ import (
 // 共接口——扩写侧接口会拆全部写侧测试替身，伴生读端口另立（判据同 collectionremittance
 // CodSubledgerCatalogueRow 那句）。
 //
-// 上列的是**检索列面**的照实转写：班次、容量池、权威交接判断与有效交付各照登记行
-// 转写，容量四量按预占子表求和派生——派生是求和不是判断（判据同代收分户账六位置
-// 余额）。页面五区里承运总单与运输舱单一区在存储上还没有登记册，本端口刻意没有那
-// 个方法——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
-// （票 05 Comments 记明）。
+// 上列的是**检索列面**的照实转写：班次、容量池、权威交接判断、有效交付与总单各照
+// 登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——派生是
+// 求和与计数不是判断（判据同代收分户账六位置余额）。总单一格在 ADR-0113 立册之前
+// 刻意没有——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
+// （票 05 Comments 记明）；立册之后它是第五本册，空册从此是「登记册为空」。运输舱单
+// 仍无册，本端口仍然没有它的方法，理由同上。
 //
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
 // 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
@@ -96,6 +97,29 @@ type EffectiveDeliveryCatalogueRow struct {
 	RecordedAt      time.Time
 }
 
+// CarrierMasterDocumentCatalogueRow 是总单登记册上列的一行：一行一版本——撤销、替代、
+// 关联重述都是新版本新行，原行不删，版本链因此在册面上完整可见；Supersedes 与
+// ChangedAt 成对缺席表示首版。
+//
+// Standing 是三值封闭词（IN_FORCE / REVOKED / SUPERSEDED，domain.MasterDocumentStanding）；
+// ReplacedBy 只在已替代上在场，缺席即空串。Commission 与 Booking 是可缺引用，缺席即
+// 空串。AssociationCount 是这一版关联子表的行数——计数是派生不是判断，关联本体（哪些
+// 集运单元、包裹、段）按键与版本走登记册的读口，不在列面展开。
+type CarrierMasterDocumentCatalogueRow struct {
+	Document         string
+	Version          string
+	Issuer           string
+	Scope            string
+	Commission       string
+	Booking          string
+	Standing         string
+	Supersedes       string
+	ReplacedBy       string
+	AssociationCount int64
+	ChangedAt        *time.Time
+	RecordedAt       time.Time
+}
+
 // ReviewCatalogueRead 是运输履约查阅页的伴生列表读端口。
 type ReviewCatalogueRead interface {
 	ListTransportSchedules(
@@ -118,4 +142,9 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]EffectiveDeliveryCatalogueRow, error)
+	ListCarrierMasterDocuments(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CarrierMasterDocumentCatalogueRow, error)
 }

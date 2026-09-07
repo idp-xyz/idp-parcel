@@ -254,3 +254,74 @@ func (catalogue *ReviewCatalogue) ListEffectiveDeliveries(
 	}
 	return list, nil
 }
+
+// ListCarrierMasterDocuments 上列总单登记册（ADR-0113 决定六）：一行一版本、版本链完整
+// 可见，新近登记在前，同刻按（总单，版本）稳定排序。关联数按关联子表逐版计数——计数是
+// 派生不是判断，与容量四量的求和同一条纪律；关联本体不在列面展开。
+func (catalogue *ReviewCatalogue) ListCarrierMasterDocuments(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.CarrierMasterDocumentCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list carrier master documents: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list carrier master documents: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT d.master_document_ref, d.version, d.issuer_ref, d.scope_ref,
+		        COALESCE(d.commission_ref, ''), COALESCE(d.booking_ref, ''),
+		        d.standing,
+		        COALESCE(d.supersedes_version, ''), COALESCE(d.replaced_by_document, ''),
+		        COUNT(a.associated_ref)::bigint,
+		        d.changed_at, d.recorded_at
+		   FROM transport_fulfillment.carrier_master_document d
+		   LEFT JOIN transport_fulfillment.carrier_master_document_association a
+		     ON a.tenant_id = d.tenant_id
+		    AND a.master_document_ref = d.master_document_ref
+		    AND a.version = d.version
+		  WHERE d.tenant_id = $1
+		  GROUP BY d.tenant_id, d.master_document_ref, d.version, d.issuer_ref, d.scope_ref,
+		           d.commission_ref, d.booking_ref, d.standing, d.supersedes_version,
+		           d.replaced_by_document, d.changed_at, d.recorded_at
+		  ORDER BY d.recorded_at DESC, d.master_document_ref, d.version
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list carrier master documents: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.CarrierMasterDocumentCatalogueRow, 0, limit)
+	for rows.Next() {
+		var (
+			row       ports.CarrierMasterDocumentCatalogueRow
+			changedAt *time.Time
+		)
+		if err := rows.Scan(
+			&row.Document, &row.Version, &row.Issuer, &row.Scope,
+			&row.Commission, &row.Booking,
+			&row.Standing,
+			&row.Supersedes, &row.ReplacedBy,
+			&row.AssociationCount,
+			&changedAt, &row.RecordedAt,
+		); err != nil {
+			return nil, fmt.Errorf("list carrier master documents: %w", err)
+		}
+		if changedAt != nil {
+			utc := changedAt.UTC()
+			row.ChangedAt = &utc
+		}
+		row.RecordedAt = row.RecordedAt.UTC()
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list carrier master documents: %w", err)
+	}
+	return list, nil
+}
