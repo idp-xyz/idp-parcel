@@ -1,7 +1,7 @@
 # 人工复核谓词：「要不要」已由接单规则正文答，「谁有权」这一问的消费方（复核完成授权）尚无端口
 
 Category: enhancement
-Status: draft——只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Status: blocked——2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格「改名为『谁有权』形态或拆成两问」是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁（见 Comments 末条）；判据 2（PS 侧端口 + PC 裁定用例，PS 地盘不在本单）与 3（剪行）等裁决后另笔接。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
 Blocked by: UC-PC-003「四、人工复核那一格的措辞与分工对不齐」那条裁决（改名为「谁有权」形态，或拆成两问）
 
 ## 条目
@@ -44,3 +44,17 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
 ## 边界
 
 本票不改代码、不改基线。裁决落地（改名 / 拆分）时理由行同步改写；剪基线行的时刻是 UC-PC-003 第二切的裁定用例真调它那一笔。
+（立票时的边界；落地笔见 Comments。）
+
+## Comments
+
+- 2026-09-08 02:3x · MCP-6（task 5f716c71；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：**补理由行，停下报 MCP-1。** 基线
+  `ManualReviewRequirementFor` 条目上方按完成判据 4 加了理由行（ADR-0042 的读法是「谁有权」、「要不要」已由 `ManualReviewDirective`
+  经 PS 接通、调用方是 UC-PC-003 第二切的裁定用例、缺端口与用例、前置一格命名 / 分工裁决），族界那句改成只指本条并照留在后面
+  （票 05 的括注接在其后），名单一行未动。**现状复核**（锚 `4524cfd4`）：函数注释仍写「回答某个范围是否要求人工复核。沉默意味着
+  不要求」——与 ADR-0042 的归类相反，与 UC-PC-003 第四项点破的并格一字不差；PS `application/complete_manual_review.go` 的
+  `ManualReviewCompletion` 三项引用仍由 Intake 整组注入，PS 侧没有与 `ActiveRejectionAuthorizer` 同形的复核授权端口。**为何不
+  顺手改名**：改名 / 拆两问是 UC-PC-003 的措辞与分工裁决（改的是「这个函数答哪一问」，即语义），派单纪律写明这类改口先停下报
+  MCP-1；且判据 2 的 PS 侧端口在 PS 地盘（MCP-2），本单不碰。**待 MCP-1**：裁 UC-PC-003 第四项（改名为「谁有权」形态，建议名
+  `ManualReviewAuthorityFor` / 或拆成 `ManualReviewAuthorized` + 保留「要不要」交给规则正文），裁后由 PC 侧改名 + 基线条目名同笔改
+  （门禁按名找声明，不同笔会红）+ UC-PC-003 第二切裁定用例，PS 侧端口另派。

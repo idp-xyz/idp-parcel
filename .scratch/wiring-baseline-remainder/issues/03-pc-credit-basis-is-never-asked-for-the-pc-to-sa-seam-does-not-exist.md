@@ -1,7 +1,7 @@
 # 信用政策正文已入册、`CreditBasis` 无人索取：PC→SA 的授信额度缝不存在
 
 Category: enhancement
-Status: draft——只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Status: blocked——2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方七行），判据 1 那格「四维选择在哪一层还有多候选」经取证是**解析语义的改口、要 ADR**，按派单纪律停下报 MCP-1 裁（见 Comments 末条）；判据 2（提供方口 + SA 消费适配器）与 3（剪行）等裁决后另笔接。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
 Blocked by: 本票「要先裁的一格」（与 `party-commercial-context-gaps/07` 同一轮 `/domain-modeling`）
 
 ## 条目
@@ -56,4 +56,22 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
 
 ## 边界
 
-本票不改代码、不改基线。基线行剪掉的时刻是 PC 提供方口真调 `ResolveCreditPolicy` 那一笔。
+本票不改代码、不改基线。基线行剪掉的时刻是 PC 提供方口真调 `ResolveCreditPolicy` 那一笔。（立票时的边界；落地笔见 Comments。）
+
+## Comments
+
+- 2026-09-08 02:3x · MCP-6（task 5f716c71；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：**补理由行 + 取证「要先裁的一格」，停下报 MCP-1。**
+  基线 `ResolveCreditPolicy` 条目上方按完成判据 4 加了理由行（调用方是谁、缝缺哪两半、未裁的一格是什么、哪天出名单），名单一行
+  未动（两法同得 6 / PC 4，与 05 剪后同）。**取证**（锚 `4524cfd4`）：`0020_credit_policy.sql` 的 `credit_policy` 主键是四元组
+  （tenant, object_kind, object_id, version_label），**一版一行**；`domain.CreditPolicy` 一行带（法人, 等级, 费用类型, 额度），
+  `ResolveCreditPolicy(policies, query)` 对一组行按 `covers` 选唯一 / 报冲突 / 报无依据。所以「多候选」不可能来自同一版本的多行，
+  只能来自**同一范围内多个信用政策对象各自的生效版本**——这与结算政策同形：`commercial_resolution.go` 的 `resolveSettlementPolicyBasis`
+  已经在闭包解析里按六维选结算政策（零候选`无适用依据`、多候选`适用冲突`），信用政策今天却没有对应的 `resolveCreditPolicyBasis`
+  一步，闭包只把 `CreditPolicyObject` 当版本壳按范围选。**两条路**：(甲) 照结算政策的形，在闭包解析里加一步、`ResolveCreditPolicy`
+  作四维选择器、`CreditBasis` 随闭包交出——`ports.go` 自注这是「解析语义的改动，不是登记正文的连带」，要 ADR；(乙) 闭包只认唯一
+  版本壳、`ResolveCreditPolicy` 退化成对已选版本正文的 `covers` 校验——同样改解析语义（对不上答`无适用依据`），也要 ADR，且
+  多法人 / 多等级的租户只能把每一格拆成不同范围。我的倾向是甲（与结算政策一致、不逼租户拆范围），但这是难逆转的解析语义取舍，
+  派单纪律写明「先停下报 MCP-1，不在实施票里顺手定」，故本笔不裁、不建缝。SA 侧的形已看过：`settlementaccounting/adapters/
+  partycommercial/pre_acceptance_control_policy.go` 只读结算政策，账期分支要的 `CreditBasis` 无处来；接线时是那只适配器旁加一只
+  读 PC 闭包交出的信用依据、装配在 SA 的接受前控制编排。**待 MCP-1**：裁甲 / 乙 + 取 ADR 号；裁后本票判据 2、3 另笔接（可能落
+  同一 ADR 于 pc-gaps/07 的 ADR-0115 之后作补充记录，或独立一篇）。

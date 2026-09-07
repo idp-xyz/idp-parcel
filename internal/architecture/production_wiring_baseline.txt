@@ -399,12 +399,24 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 发布门的生产调用方是 application/register_channel_account_use.go。
 # **剪之前按本门禁的提示逐条分过成因**：这个名字在全仓只有一处声明（domain/
 # channel_account_use_authorization.go），不存在「别处同名声明造成误判」那一种，因此是第二种。
+# 信用政策选择门，CreditBasis 是本上下文交给 settlement-accounting 的授信依据。**调用方是 PC 侧向 SA 供
+# 授信额度的提供方口**（UC-SA-002 步 7 账期分支的消费侧适配器索取它，AT-SA-171 / AT-SA-172），那条 PC→SA 缝
+# 今天不存在：缺提供方口、缺 SA 消费侧适配器（settlementaccounting/adapters/partycommercial 只读结算政策），
+# 且「四维选择在哪一层还有多候选」那格未裁——0020 的 credit_policy 一版一行，所以多候选只能来自同一范围内
+# 多个信用政策对象，那是闭包该像 resolveSettlementPolicyBasis 那样在解析里选（本函数作选择器），还是闭包
+# 只认唯一版本壳、本函数退化成 covers 校验，是解析语义的改口，要 ADR（2026-09-08 已报 MCP-1 待裁）。三件
+# 落地（wiring-baseline-remainder/03）那天这一条出名单。
 internal/partycommercial/domain ResolveCreditPolicy
-# 下面一条落在网里但不是工厂：ManualReviewRequirementFor 返回 bool 是个谓词。**留着不排除是有意的**——
-# 留在名单里的代价只是一行，漏掉一个工厂的代价是它永远隐形。两边代价不对称，够了。
-# （曾与它并列的 ValidateBeforeDecision「返回同型 Resolution 是变换不是构造」2026-09-08 随
-# wiring-baseline-remainder/05 删去——它是 UC-PC-002 步 8 提交前重解的单依据第一版，闭包形态
-# ValidateClosureBeforeDecision 落地后再无调用方；成因三分是第一种「已被删」，不是接上了。）
+# 人工复核授权谓词。按 ADR-0042 它答的是「谁有权复核」，不是「要不要复核」——后者已由接单规则正文
+# ManualReviewDirective 经 PS form_acceptance_decision 接通，别把它读成那条路的第二写法。**调用方是
+# UC-PC-003 第二切「复核完成授权」的裁定用例**（PS complete_manual_review.go 的复核授权引用今天由 Intake
+# 整组注入，没人向 PC 问）；那一层缺端口与用例，且前置一格命名 / 分工裁决（UC-PC-003 第四项：改名为「谁
+# 有权」形态或拆成两问；2026-09-08 已报 MCP-1 待裁）。裁决改名那笔同步改这句与条目名，用例真调它那天出
+# 名单（wiring-baseline-remainder/04）。
+# 族界一句照留：它落在网里但不是工厂——返回 bool 是个谓词。**留着不排除是有意的**：留在名单里的代价只是
+# 一行，漏掉一个工厂的代价是它永远隐形。（曾与它并列的 ValidateBeforeDecision「返回同型 Resolution 是变换
+# 不是构造」2026-09-08 随 wiring-baseline-remainder/05 删去——UC-PC-002 步 8 提交前重解的单依据第一版，
+# 闭包形态 ValidateClosureBeforeDecision 落地后再无调用方；成因三分是第一种「已被删」，不是接上了。）
 internal/partycommercial/domain ManualReviewRequirementFor
 # 授权请求方的两扇门（票 party-commercial-context-gaps/08，ADR-0116 Decision 三）：客户账户自己 / 运营
 # 角色代某客户账户。它们造的是 NewAuthorizationRequestBy 的入参，而带请求方的请求今天只有资料修订
