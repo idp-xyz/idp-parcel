@@ -991,6 +991,12 @@ func (stub stubPublicationRegistry) SaveCustomerServiceRule(
 	return ports.CustomerServiceRuleSaveOutcomeInvalid, errors.New("本片不用客户服务规则册")
 }
 
+func (stub stubPublicationRegistry) SavePreAcceptanceFinancialControlPolicy(
+	context.Context, domain.PreAcceptanceFinancialControlPolicy,
+) (ports.PreAcceptanceFinancialControlPolicySaveOutcome, error) {
+	return ports.PreAcceptanceFinancialControlPolicySaveOutcomeInvalid, errors.New("本片不用接受前财务控制策略册")
+}
+
 func (stub stubPublicationRegistry) SaveAsOfPolicies(
 	context.Context, domain.AsOfDeclaration,
 ) (ports.DeclarationSaveOutcome, error) {

@@ -174,6 +174,29 @@ type CustomerServiceRuleContentView interface {
 	) (domain.CustomerServiceRuleVersion, bool, error)
 }
 
+// PreAcceptanceFinancialControlPolicyContentView 取已唯一选出的接受前财务控制策略版本的正文：
+// 要执行的控制项与共同通过条件（ADR-0115）。
+//
+// 分界同 CreditPolicyContentView：解析走既有闭包选版本壳（PreAcceptanceFinancialControlPolicyObject
+// 早在封闭集里），正文不进整册与 ViewRevision，消费方按已选中的版本点读。它与
+// PreAcceptanceControlDeclarationView 分开也与 CustomerContractContentView 分开：那两口答的是合同层
+// 「要不要」与「哪个范围用哪份策略 / 显式不适用」，本口答策略层「控制怎么做」——三层各有拥有对象，
+// 合一口就是让合同拥有策略正文。
+//
+// found=false = 正文未登记（无父行）。有父行而零子行是坏数据（领域要求至少一项），走 error，不得
+// 折成 found=false——那会让消费方去催一份其实已经写坏的配置。读取失败同样走 error。**本口不提供任何
+// 默认控制**：读不到就是租户没登记，settlement-accounting 据以停在 ADR-0054 的`未配置`格；凑一份就是
+// 发明实例参数。settlement-accounting 今天的 LoadControlPolicy 尚不读本口，改读另立票。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type PreAcceptanceFinancialControlPolicyContentView interface {
+	LoadPreAcceptanceFinancialControlPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		policy domain.CommercialVersion,
+	) (domain.PreAcceptanceFinancialControlPolicy, bool, error)
+}
+
 // PricePolicyCaliberView 取已唯一选出的价格规则版本声明的计价口径：税务口径、体积口径与可缺的
 // 汇率口径。这是 parcel-pricing 在登记参考序列取值时按 quoteBasis 冻结口径正文要走的读口
 // （票 02 裁「登记时冻结，不走端口现取」——冻的是这里读回的正文，读一次、冻进序列，之后不再回来问）。
@@ -524,6 +547,34 @@ func (outcome CustomerServiceRuleSaveOutcome) String() string {
 	}
 }
 
+// PreAcceptanceFinancialControlPolicySaveOutcome 是一次接受前财务控制策略正文登记在持久化面的落点
+// （ADR-0031 同款）：`已登记`是重放，`内容冲突`是同一策略版本被登记成另一份正文（共同通过条件、任一
+// 控制项的种类、范围、顺序、失败处置或责任不同，或多一行少一行）。两者都不是 error，绝不覆盖——
+// 改控制项必须发新版本。
+//
+// 不与 CustomerServiceRuleSaveOutcome 等共用：判据虽同，各册各自演进（判据同 ChannelAccountUseSaveOutcome）。
+type PreAcceptanceFinancialControlPolicySaveOutcome uint8
+
+const (
+	PreAcceptanceFinancialControlPolicySaveOutcomeInvalid PreAcceptanceFinancialControlPolicySaveOutcome = iota
+	PreAcceptanceFinancialControlPolicySaved
+	PreAcceptanceFinancialControlPolicyAlreadyRegistered
+	PreAcceptanceFinancialControlPolicyContentConflict
+)
+
+func (outcome PreAcceptanceFinancialControlPolicySaveOutcome) String() string {
+	switch outcome {
+	case PreAcceptanceFinancialControlPolicySaved:
+		return "SAVED"
+	case PreAcceptanceFinancialControlPolicyAlreadyRegistered:
+		return "ALREADY_REGISTERED"
+	case PreAcceptanceFinancialControlPolicyContentConflict:
+		return "CONTENT_CONFLICT"
+	default:
+		return ""
+	}
+}
+
 // PricePolicyCaliberSaveOutcome 是一次价格政策口径登记在持久化面的落点（ADR-0031 同款）：
 // `已登记`是重放，`内容冲突`是同一价格规则版本被登记成另一份口径（税务、体积、汇率任一格
 // 不同，含汇率格从缺席变在场）。两者都不是 error，绝不覆盖。
@@ -600,8 +651,8 @@ type CommercialPublicationView interface {
 //
 // 本口今天承载版本册、服务产品形态册（ADR-0050）、有效性更正册（ADR-0038）、价格与
 // 结算政策册（ADR-0034/0044/0057）、信用政策册与供应商协议册（票
-// party-commercial-context-gaps/03），以及客户服务规则册（ADR-0104）。端口按具名 Save
-// 扩展，不开通用口。
+// party-commercial-context-gaps/03）、客户服务规则册（ADR-0104），以及接受前财务控制策略册
+// （ADR-0115）。端口按具名 Save 扩展，不开通用口。
 type PublicationRegistry interface {
 	CommercialPublicationView
 	SaveVersion(
@@ -665,6 +716,14 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		rule domain.CustomerServiceRuleVersion,
 	) (CustomerServiceRuleSaveOutcome, error)
+	// SavePreAcceptanceFinancialControlPolicy 登记一份接受前财务控制策略版本的正文：共同通过条件
+	// 与要执行的控制项（ADR-0115）。它不代替 SaveVersion；正文不进整册，消费方经
+	// PreAcceptanceFinancialControlPolicyContentView 点读。它与 SavePreAcceptanceControl 不是一回事：
+	// 那一口登的是客户合同版本级「要不要」的声明（0007），本口登的是策略版本的「控制怎么做」。
+	SavePreAcceptanceFinancialControlPolicy(
+		ctx context.Context,
+		policy domain.PreAcceptanceFinancialControlPolicy,
+	) (PreAcceptanceFinancialControlPolicySaveOutcome, error)
 
 	// 以下是六族声明表的具名 Save（syn-wall-door-audit 票 03 的写入半边）。声明正文
 	// 随其拥有版本的发布一并登记，键=拥有版本完整身份；按拥有对象挂、不合并

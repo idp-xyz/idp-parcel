@@ -75,6 +75,9 @@ type CommercialDeclarations struct {
 	SupplierAgreementBody   *SupplierAgreementBodyDeclaration
 	PricePolicyBody         *PricePolicyBodyDeclaration
 	CustomerServiceRuleBody *CustomerServiceRuleBodyDeclaration
+	// PreAcceptanceFinancialControlPolicyBody 与 PreAcceptanceControl 是两层不同的声明：后者挂在客户
+	// 合同版本上答「要不要」（0007），前者挂在策略版本上答「控制怎么做」（0024，ADR-0115）。
+	PreAcceptanceFinancialControlPolicyBody *PreAcceptanceFinancialControlPolicyBodyDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -91,7 +94,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.CreditPolicyBody == nil &&
 		declarations.SupplierAgreementBody == nil &&
 		declarations.PricePolicyBody == nil &&
-		declarations.CustomerServiceRuleBody == nil
+		declarations.CustomerServiceRuleBody == nil &&
+		declarations.PreAcceptanceFinancialControlPolicyBody == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -204,6 +208,17 @@ type CustomerServiceRuleBodyDeclaration struct {
 	Materials     []domain.MinimumMaterialsRule
 }
 
+// PreAcceptanceFinancialControlPolicyBodyDeclaration 是接受前财务控制策略版本的正文输入（票
+// party-commercial-context-gaps/07，ADR-0115）：共同通过条件与要执行的控制项。
+//
+// Items 直接收领域的控制项而不是摊成「种类、范围、顺序、处置、责任」五列：每项的形状只校一次，在
+// NewPreAcceptanceControlItem；至少一项、顺序唯一、（种类 × 范围）唯一由 NewPreAcceptanceFinancialControlPolicy
+// 把守——零项不是「显式无控制」，那一句由客户合同声明，本通道说不了它。
+type PreAcceptanceFinancialControlPolicyBodyDeclaration struct {
+	JointPass domain.JointPassCondition
+	Items     []domain.PreAcceptanceControlItem
+}
+
 // DeclarationChannel 点名一次发布里的一个声明通道，供报告与进程口展示落点。
 type DeclarationChannel uint8
 
@@ -224,6 +239,7 @@ const (
 	PricePolicyBodyChannel
 	PricePolicyCaliberChannel
 	CustomerServiceRuleBodyChannel
+	PreAcceptanceFinancialControlPolicyBodyChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -258,6 +274,8 @@ func (channel DeclarationChannel) String() string {
 		return "PRICE_POLICY_CALIBER"
 	case CustomerServiceRuleBodyChannel:
 		return "CUSTOMER_SERVICE_RULE_BODY"
+	case PreAcceptanceFinancialControlPolicyBodyChannel:
+		return "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY_BODY"
 	default:
 		return ""
 	}
@@ -727,7 +745,43 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.PreAcceptanceFinancialControlPolicyBody != nil {
+		body := declarations.PreAcceptanceFinancialControlPolicyBody
+		policy, err := domain.NewPreAcceptanceFinancialControlPolicy(version, body.JointPass, body.Items)
+		if err != nil {
+			return nil, fmt.Errorf("pre-acceptance financial control policy body: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: PreAcceptanceFinancialControlPolicyBodyChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				outcome, err := registry.SavePreAcceptanceFinancialControlPolicy(ctx, policy)
+				if err != nil {
+					return ports.DeclarationSaveOutcomeInvalid, err
+				}
+				return declarationOutcomeOfPreAcceptanceFinancialControlPolicy(outcome)
+			},
+		})
+	}
+
 	return writes, nil
+}
+
+// declarationOutcomeOfPreAcceptanceFinancialControlPolicy 把策略正文册的落点折成声明通道的落点，判据同
+// declarationOutcomeOfSettlementPolicy：折的是「落在哪一格」，逐值折不做数值转换。
+func declarationOutcomeOfPreAcceptanceFinancialControlPolicy(
+	outcome ports.PreAcceptanceFinancialControlPolicySaveOutcome,
+) (ports.DeclarationSaveOutcome, error) {
+	switch outcome {
+	case ports.PreAcceptanceFinancialControlPolicySaved:
+		return ports.DeclarationSaved, nil
+	case ports.PreAcceptanceFinancialControlPolicyAlreadyRegistered:
+		return ports.DeclarationAlreadyRegistered, nil
+	case ports.PreAcceptanceFinancialControlPolicyContentConflict:
+		return ports.DeclarationContentConflict, nil
+	default:
+		return ports.DeclarationSaveOutcomeInvalid,
+			fmt.Errorf("pre-acceptance financial control policy body: 集合外的策略正文落点 %q", outcome)
+	}
 }
 
 // declarationOutcomeOfCustomerServiceRule 把客户服务规则册的落点折成声明通道的落点，判据同

@@ -58,6 +58,24 @@ type publicationRegistryDouble struct {
 
 	savedServiceRules  []domain.CustomerServiceRuleVersion
 	serviceRuleOutcome ports.CustomerServiceRuleSaveOutcome
+
+	savedControlPolicies []domain.PreAcceptanceFinancialControlPolicy
+	controlPolicyOutcome ports.PreAcceptanceFinancialControlPolicySaveOutcome
+}
+
+func (double *publicationRegistryDouble) SavePreAcceptanceFinancialControlPolicy(
+	_ context.Context,
+	policy domain.PreAcceptanceFinancialControlPolicy,
+) (ports.PreAcceptanceFinancialControlPolicySaveOutcome, error) {
+	if double.declarationErr != nil {
+		return ports.PreAcceptanceFinancialControlPolicySaveOutcomeInvalid, double.declarationErr
+	}
+	double.savedControlPolicies = append(double.savedControlPolicies, policy)
+	double.declarationLog = append(double.declarationLog, "pre-acceptance-financial-control-policy-body")
+	if double.controlPolicyOutcome == ports.PreAcceptanceFinancialControlPolicySaveOutcomeInvalid {
+		return ports.PreAcceptanceFinancialControlPolicySaved, nil
+	}
+	return double.controlPolicyOutcome, nil
 }
 
 func (double *publicationRegistryDouble) SaveCustomerServiceRule(

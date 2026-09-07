@@ -51,4 +51,7 @@ func TestDeclarationContentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := publications.SaveCustomerServiceRule(ctx, domain.CustomerServiceRuleVersion{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记客户服务规则正文应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := publications.SavePreAcceptanceFinancialControlPolicy(ctx, domain.PreAcceptanceFinancialControlPolicy{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记接受前财务控制策略正文应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
