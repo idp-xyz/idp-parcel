@@ -13,6 +13,7 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // ---- 请求体与 intake 替身 ----
@@ -128,7 +129,8 @@ func decodePickupCorrection(t *testing.T, recorder *httptest.ResponseRecorder) p
 }
 
 // Covers: 票 tf-segment-lifecycle-closure/08 的端点面——更正落新版本用 201（ADR-0022：首登与更正都持久化了新
-// 版本），响应透出新版本号与 `corrects` 回指；对象、任务、尝试沿用被更正版本；更正不进段，段两格为空。
+// 版本），响应透出新版本号与 `corrects` 回指；对象、任务、尝试沿用被更正版本。首登没进段，更正也不另立段：
+// 段那一半如实透出 NO_PARTICIPATION_TO_REDERIVE（ADR-0112 决定二的反格），不是欠账。
 func TestCorrectOffsitePickupReportsCreatedWithTheNewVersionAndItsPredecessor(t *testing.T) {
 	fixture := newPickupCorrectionFixture(t)
 	fixture.seedRegistration(t)
@@ -145,11 +147,55 @@ func TestCorrectOffsitePickupReportsCreatedWithTheNewVersionAndItsPredecessor(t 
 	if view.Object != "parcel-1" || view.Task != "pickup-task-1" || view.Attempt != "attempt-1" {
 		t.Fatalf("view = %+v（对象、任务、尝试沿用被更正版本）", view)
 	}
-	if view.SegmentContinuationReference != "" || view.SegmentEntryRefusal != "" {
-		t.Fatalf("view = %+v（更正不进段）", view)
+	if view.SegmentContinuationReference != "" || view.SegmentEntryRefusal != "NO_PARTICIPATION_TO_REDERIVE" {
+		t.Fatalf("view = %+v（从未进段的对象：段那一半答无可替代、不欠账）", view)
 	}
 	if len(fixture.segments.rows) != 0 {
-		t.Fatalf("更正动了段登记册：%d 段", len(fixture.segments.rows))
+		t.Fatalf("更正另立了段：%d 段", len(fixture.segments.rows))
+	}
+}
+
+// Covers: ADR-0112 决定一、二穿过端点面——首登带段进了段，更正在同段替代该对象的参与：链尾凭新版本入场、回指
+// 前版、起点随更正后的发生时刻；段两格为空（既没被拒也不欠账）。端点测试只证 Intake 交出的更正真的走到了
+// 重派生门，链的规则由领域与真库用例守。
+func TestCorrectOffsitePickupRederivesTheParticipationOnTheSegmentTheObjectEntered(t *testing.T) {
+	fixture := newPickupCorrectionFixture(t)
+	seedBody := defaultPickupRegistrationBody()
+	seedBody.Segment = "segment-1"
+	if seed := postTo(t, fixture.register, "/transport-fulfillment/offsite-pickups", seedBody); seed.Code != http.StatusCreated {
+		t.Fatalf("seed status = %d body = %s", seed.Code, seed.Body.String())
+	}
+
+	response := postTo(t, fixture.correct, "/transport-fulfillment/offsite-pickup-corrections", defaultPickupCorrectionBody())
+
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", response.Code, response.Body.String())
+	}
+	view := decodePickupCorrection(t, response)
+	if view.Outcome != "PICKUP_CORRECTED" || view.SegmentContinuationReference != "" || view.SegmentEntryRefusal != "" {
+		t.Fatalf("view = %+v（重派生成功：段两格为空）", view)
+	}
+	key := ports.FulfillmentSegmentKey{
+		TenantID: httpValue(t, domain.NewTenantID, "tenant-1"),
+		Segment:  httpValue(t, domain.NewFulfillmentSegmentReference, "segment-1"),
+	}
+	record, found, err := fixture.segments.FindByKey(context.Background(), key)
+	if err != nil || !found {
+		t.Fatalf("段装不回来：err=%v found=%v", err, found)
+	}
+	object := httpValue(t, domain.NewCarriedObjectReference, "parcel-1")
+	current, present := record.Segment.ParticipationFor(object)
+	if !present || current.EntryBasis().String() != "OFFSITE-PICKUP/pickup-result/v2" {
+		t.Fatalf("当前参与不是替代版本：present=%v basis=%s", present, current.EntryBasis())
+	}
+	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "OFFSITE-PICKUP/pickup-result/v1" {
+		t.Fatalf("替代版本没有回指首登：chained=%v supersedes=%s", chained, supersedes)
+	}
+	if !current.EnteredAt().Equal(time.Date(2026, 9, 5, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("起点没有随更正后的发生时刻：%v", current.EnteredAt())
+	}
+	if history := record.Segment.ParticipationHistory(object); len(history) != 2 || !history[0].Superseded() {
+		t.Fatalf("链形不对：len=%d", len(history))
 	}
 }
 
