@@ -151,9 +151,21 @@ jobs:
       # 的纪律本来就是 -count=1，CI 不该比本机松。它只关测试结果缓存，编译缓存照旧命中，
       # 代价是用例执行时间，不是全冷编译。写在 go test 行上而不是 GOFLAGS：与 -race 并排，
       # 这一片怎么跑在同一处看全，也不会捎带 static 那边清点工具的 go test。
+      #
+      # -p 1 让片内的包一个接一个跑。不带它时 go test 按 GOMAXPROCS 同时起多个包的测试二进制，
+      # 而一片只有一只 service、一个库，各包真库用例的 TRUNCATE / DDL / 事务在同一个库里互相
+      # 锁等，快慢差 2–10 倍且不可复现。2026-09-07 三次红成因同一：run 34115373617（b24ccccf）
+      # network-visibility 与 run 34121403815（fc90622a）rest 各 15m18s 撞上限——后者同一片同一份
+      # 代码四次 run 7m27s / 13m33s / 6m58s / >15m；run 34130024505（f69b35b9）customs-transport
+      # 里 customscompliance 与 transportfulfillment 两个 postgres 包各自 `panic: test timed out
+      # after 10m0s`（go test 单个二进制的默认上限），goroutine 全停在 pgx Commit/Rollback 等
+      # 服务端回包、当前用例才跑 6s / 0s——不是哪个用例挂死，是每个用例都在排队。本机验证口径
+      # 一直是 `-p 1`（AGENTS / parallel-sessions），CI 不该比本机并发。-p 也管编译动作的并发，
+      # 但编译缓存是热的（run 34129503260 四片首个结果在第 3–70 秒印出），串行编译的代价有限；
+      # 包内 t.Parallel 不受影响。
       - name: Test
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           packages="$(bash scripts/ci/test-shards.sh list "$SHARD")"
-          go test -race -count=1 $packages
+          go test -race -count=1 -p 1 $packages
