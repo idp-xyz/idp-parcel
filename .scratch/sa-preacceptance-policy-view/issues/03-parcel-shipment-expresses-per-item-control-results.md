@@ -82,7 +82,23 @@ ADR-0122 起，`settlement-accounting` 对一次接受前控制请求按策略�
 
 **验证**（隔离 detached 树 `idp-parcel-mcp3-verify` 钉 `e7c44522`，验后拆）：`gofmt -l .` 空；`go build ./...`、`go vet ./...` 退 0；`tools/mechanism-inventory` vet/test 退 0、在 tip 重生成零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（548s，21:36:37–21:45:45，接续会话跑，见 Comments 末条）——上一会话在 `af7dd29a` 上跑得 99 ok / 1 FAIL，红的只有 `internal/architecture` 重建面门禁登记那一处，`e7c44522` 补登后本次重跑绿；探针 `internal/parcelshipment/adapters/postgres -run 'ACombinedControlRoundTrips|AStoredConclusionThatContradicts|AcceptanceJudgmentShapesArePinned'`：无 DSN exit 0 SKIP 3 / PASS 0，含 DSN exit 0 SKIP 0 / PASS 3（两会话各跑一次同数）。未跑 `-race`（本机 Windows 无 cgo，CI 四片各带）。
 
-**要 MCP-1 落的共享行**：`docs/adr/README.md` 的 0125 一行（与 main 上他人后落的行相邻，重放时按行合并）；`docs/product/MECHANISM-INVENTORY.md` 分支清点笔 `af7dd29a` 不必重放，由推送方在 tip 重生成兑底。`migrations/parcel_shipment/0019` 在 `fc90622a` 的 main 上仍空号（21:2x `git ls-tree` 量得，只作此刻取证）。进 main 后的 SHA 由 MCP-1 广播后补记。
+**要 MCP-1 落的共享行**：`docs/adr/README.md` 的 0125 一行（与 main 上他人后落的行相邻，重放时按行合并）；`docs/product/MECHANISM-INVENTORY.md` 分支清点笔 `af7dd29a` 不必重放，由推送方在 tip 重生成兑底。`migrations/parcel_shipment/0019` 在 `fc90622a` 的 main 上仍空号（21:2x `git ls-tree` 量得，只作此刻取证）。进 main 后的 SHA 见下节。
+
+## 进 main 记录
+
+2026-09-07 22:3x，MCP-1 重放到 `f69b35b9` 之上（cherry-pick 零冲突；`docs/adr/README.md` 0125 行自动合并落 0124 之后），远端 `main = 9379c716`（推前 `ls-remote = f69b35b9`）。分支上的 SHA 作封存出处，与 main 上的并列：
+
+| 分支 `mcp3-sa03` | main | 内容 |
+|---|---|---|
+| `63dce12a` | `0ca996d6` | ADR-0125 + README 行；票 03 裁决节；PS CONTEXT 两词条；立票 04 draft |
+| `a0153884` | `096f1eae` | 领域 / PS→SA 适配器 / 迁移 `parcel_shipment/0019` / PG 读写 / HTTP 读面 / dispatch 夹具 |
+| `d1a878aa` | `0848a3f0` | 三处释放改按 `OccupationFormed`；UC-PS-001 与 AT-PS-035 改口 |
+| `af7dd29a` | —— | 分支清点笔，不重放（量的是 `b24ccccf` 上的数） |
+| `e7c44522` | `2e582020` | 重建面门禁登记两个受限入口 |
+| `5ffdd3f3` | `d93dfddf` | 票 03 转 resolved + 完成记录 |
+| —— | `9379c716` | 清点在 `d93dfddf` 干净检出重生成（parcelshipment 生产 139→140 / 测试 138→139；迁移 `parcel_shipment` 18→19，合计 150→151；端口声明、端点数不变） |
+
+MCP-1 钉 `9379c716` 的验证（隔离 detached 树）：gofmt 空；build/vet 退 0；清点门零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，100 ok / 0 FAIL / 16 无测试 / 0 cached（552s）；探针 `parcelshipment/adapters/postgres` 三用例无 DSN SKIP 3 / 含 DSN PASS 3；改动 `.go` / `.sql` 全 `i/lf w/lf`。通道 3 侧比对（22:3x，`origin/main = 9379c716`）：分支自 `b24ccccf` 起触及的 28 件（除 README 与清点）`git diff origin/main mcp3-sa03 -- <files>` 为空，`git cherry` 只剩 `63dce12a`（README 合并改了 patch-id）与 `af7dd29a`（清点笔）两个 `+`，内容零差。`parcel_shipment` 迁移下一号 `0020`。
 
 ## Comments
 
