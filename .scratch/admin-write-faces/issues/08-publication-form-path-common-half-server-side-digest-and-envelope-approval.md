@@ -1,8 +1,8 @@
 # 08 商业发布表单路径的公共半边：内容摘要改由服务端按册规范化算出、批准从操作者信封来、预览与发布同一路径
 
 Category: enhancement
-Status: ready-for-agent——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出的第一张，其余各册子票全部 Blocked by 本票（MCP-6 2026-09-07 立，锚 `95182b9d`）
-Blocked by: 无
+Status: draft——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出的第一张，其余各册子票全部 Blocked by 本票（MCP-6 2026-09-07 立，锚 `95182b9d`）。**不转 ready-for-agent 的理由**：下面「要裁的」三问都是新裁决（摘要由谁算与受控批文那一半走甲还是乙、要不要待批准载体、预览口形状），伞票收口纪律是「形状裁清且不需要新裁决才转 ready」。**等什么**：(1) MCP-1 给 ADR 取号；(2) 三问由 owner 裁，或 owner 授权认领人经 `/domain-modeling` 自决——授权到了，认领人把三问裁决落进本票「裁决」节与 ADR，再转 in-progress 开工（裁与做可同人同票，但裁决先于代码）。接管会话 2026-09-07 于 `92579b0a` 逐句核过票面取证（`translate.go` 的 `contentDigest` / `approval` / `approvalRoleStanding` 三格、`NewCommercialContentDigest` 只查非空、`/commercial-publications` 挂 `UnconfiguredIntake{}`），见伞票 Comments
+Blocked by: 无（等的是裁决与 ADR 号，不是别的票）
 
 ## 为什么每册子票都先卡在这里
 
@@ -11,7 +11,8 @@ Blocked by: 无
 
 - 受控批文（`cmd/parcel-commercial/translate.go` 的 `publicationItemDocument`）每一项带 `contentDigest`，域上
   `NewCommercialContentDigest` 只查非空，**不从正文算、也不与正文对**；`application/publish_commercial_authority.go`
-  里没有一处提到摘要。今天「同键异内容答`内容冲突`」（ADR-0031）比的是调用方声明的那个串。
+  里没有一处算或比对摘要（仅「声明只能随发布登记」那句注释提到正文由内容摘要盖住——盖住的是调用方声明的那个串）。
+  今天「同键异内容答`内容冲突`」（ADR-0031）比的也是它。
 - 批准是载荷里的三格字符串 `approval{reference, source, approvedAt}` + `approvalRoleStanding`，谁填的、凭什么填，
   登记册答不上来——ADR-0101 Context 对价卡说的那句在这里逐字成立。
 - `/commercial-publications` 挂的是 `UnconfiguredIntake{}`，操作者身份（ADR-0100 `OperatorEnvelope`）还没有到这个端点。

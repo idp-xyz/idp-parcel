@@ -1,7 +1,7 @@
 # 09 `SERVICE_PRODUCT` 版本的运营主路径：逐字段表单（版本壳 + 引用）
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；等公共半边
+Status: ready-for-agent——形状已裁清（逐字段表单，本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -19,7 +19,7 @@ references{}`，`declarations` 里没有为它开的正文通道（`translate.go
 
 ## 硬句
 
-伞票四条逐字适用；另一条本册特有：**表单不得替操作者拟引用键**——`references` 是开放词汇，键名从哪来、指向什么
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；另一条本册特有：**表单不得替操作者拟引用键**——`references` 是开放词汇，键名从哪来、指向什么
 由发布用例与领域答，表单给的是「加一行」不是「从这几个里挑」，除非服务端提供了词表读口。
 
 ## 完成判据

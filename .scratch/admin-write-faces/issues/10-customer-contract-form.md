@@ -1,7 +1,7 @@
 # 10 `CUSTOMER_CONTRACT` 版本的运营主路径：逐字段表单（正文 + 按费用范围的控制约定可加行 + 合同级控制声明）
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；等公共半边
+Status: ready-for-agent——形状已裁清（逐字段表单 + 绑定表可加行，两层声明分两节；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -21,7 +21,7 @@ policy | inapplicabilityBasis}]}`（0012 正文：指名接单规则包；按费
 
 ## 硬句
 
-伞票四条逐字适用；另两条本册特有：「明确无控制」只能经合同两层声明表达（ADR-0115 Decision 一），表单不得在
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；另两条本册特有：「明确无控制」只能经合同两层声明表达（ADR-0115 Decision 一），表单不得在
 策略侧给出「无控制」选项；`preAcceptanceControl` 与 `contractContent.bindings` 是两层（合同级「要不要」与按范围
 「用哪份 / 不适用」），表单分两节、不合并。
 

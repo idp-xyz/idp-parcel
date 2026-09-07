@@ -1,7 +1,7 @@
 # 17 `AUTHORIZATION_RULE` 版本的运营主路径：逐字段表单（取消授权按请求方逐格可加行）
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；等公共半边
+Status: ready-for-agent——形状已裁清（逐字段表单 + 取消授权按请求方可加行；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -18,7 +18,7 @@ Blocked by: 08
 
 ## 硬句
 
-伞票四条逐字适用。
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；本册无特有硬句——「pc-gaps/08 加的授权动作格与这里的请求方二值无关」已写在上面「选形与理由」里，不重复。
 
 ## 完成判据
 

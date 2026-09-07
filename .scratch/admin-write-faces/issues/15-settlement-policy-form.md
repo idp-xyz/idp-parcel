@@ -1,7 +1,7 @@
 # 15 `SETTLEMENT_POLICY` 版本的运营主路径：逐字段表单（方式 + 法人 / 对手方 / 合同引用 + 范围 + 币种）
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；等公共半边
+Status: ready-for-agent——形状已裁清（逐字段表单，合同引用对象 + 版本一起选；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -17,7 +17,7 @@ version}, chargeScope, currency, effective…}`（0011 正文）。`method` 是�
 
 ## 硬句
 
-伞票四条逐字适用；另一条本册特有：结算政策答的是「怎么结」，不答「要不要接受前控制」——那是 0007 / 0024 两层
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；另一条本册特有：结算政策答的是「怎么结」，不答「要不要接受前控制」——那是 0007 / 0024 两层
 （pc-gaps/07 完成记录里 SA 今天从结算方式**推**控制方式那条是 SA 侧另一票的事），表单不在这里长出控制字段。
 
 ## 完成判据

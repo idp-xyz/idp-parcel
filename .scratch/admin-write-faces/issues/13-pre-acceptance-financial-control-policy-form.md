@@ -1,7 +1,7 @@
 # 13 `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 版本的运营主路径：逐字段表单（共同通过条件 + 控制项可加行）
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；读面已随票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 落地，只等公共半边
+Status: ready-for-agent——形状已裁清（逐字段表单 + 控制项可加行；本票无待裁问题），读面已随票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 进 main（`a1890506` / `ea2293e5`），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -19,7 +19,7 @@ jointPassCondition, controls[{control, chargeScope, order, onFailure, responsibi
 
 ## 硬句
 
-伞票四条逐字适用；另一条本册特有：责任引用与费用范围引用是开放引用（0024 头注），表单收串不校验存在性。
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；另一条本册特有：责任引用与费用范围引用是开放引用（0024 头注），表单收串不校验存在性。
 
 ## 完成判据
 

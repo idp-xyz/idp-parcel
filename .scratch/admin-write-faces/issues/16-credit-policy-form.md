@@ -1,7 +1,7 @@
 # 16 `CREDIT_POLICY` 版本的运营主路径：逐字段表单（额度「金额 / 比例」二选一）——建议作公共半边的首例
 
 Category: enhancement
-Status: blocked——伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`）；等公共半边，且票 08 建议拿本册做规范化摘要的首例——那样两票同批落
+Status: ready-for-agent——形状已裁清（逐字段表单 + 额度二选一控件，恰一由服务端裁；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；票 08 建议拿本册做规范化摘要的首例——若采纳则两票同批落、由 08 的认领人一并认领本票；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
@@ -19,7 +19,7 @@ limitMinor | limitRatioBasisPoints, effective…}`（0020 正文）：额度两�
 
 ## 硬句
 
-伞票四条逐字适用；另一条本册特有：`CreditBasis` 的消费缝今天不存在（wiring-baseline-remainder/03），本票只管发布，
+伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md)「硬句」一节逐字适用（不在此复述，那一节是唯一口径）；另一条本册特有：`CreditBasis` 的消费缝今天不存在（wiring-baseline-remainder/03），本票只管发布，
 不替 SA 接。
 
 ## 完成判据
