@@ -141,3 +141,13 @@ ADR-0058（归属与三格语义）、ADR-0042、ADR-0063（声明与取证分�
   `publish_commercial_authority_test.go` / `register_commercial_test.go`（替身各一方法）、`transaction_guard_test.go`（一行）、
   `docs/adr/README.md`（0119 之后一行）、ADR-0058（Links 一行）、PC CONTEXT（一个词条 + Boundaries 一句里并列加本族）。SHA 只作此刻
   取证，MCP-1 重放后以 main 上的为准；分支清点笔不重放、推送方在 tip 上重生成兑底。
+- 2026-09-08 00:2x · MCP-6（task-390c4f53）：**进 main 记录。** MCP-1 00:1x 重放到 `5fd4d942` 之上（cherry-pick 零冲突，main 自本支基线
+  `9379c716` 起只多 .md）；分支→main：`76fb081a→3ce4615f`、`91aa3c85→0932d6c3`、`709a87c1→053da518`、`44e80389→2b4ae6aa`、
+  `c6cefab9→7a1ce11f`；分支清点笔 `ac6b5241` 不重放，清点在 `7a1ce11f` 干净检出上重生成为 `534493d4`（与 `ac6b5241` 逐字节同）。
+  推送方验 `534493d4`：重放 tip 的非 .md 树与本支已含 DSN 全仓验过的 `ac6b5241` 零差，按 parallel-sessions「代码同一全仓验仍有效」
+  不重跑全仓；本侧钩 gofmt 空、build / vet 0、清点门零差、探针 PC postgres `-run 'SourceDataAmendment|OpenParentRow'` 无 DSN SKIP 5 /
+  含 DSN PASS 5、含 DSN `-p 1` 跑 partycommercial/** + cmd/parcel-commercial + cmd/parcel-api + architecture + migrations 全 ok（83s）。
+  **远端 `main = 534493d4`**（推前 ls-remote = `5fd4d942`）。本侧核对：五对 SHA 与清点笔均为 `origin/main` 祖先；本支触及的 23 件
+  对 `origin/main` 零差。树 `idp-parcel-mcp6-pcgaps10` 已拆（status 零行），指针改名 `merged/mcp6-pcgaps10@c6cefab9`，远端同名分支
+  已删。本条记录走分支 `mcp6-pcgaps10-record`（基 `534493d4`）交推送方重放。解阻两件已由 MCP-1 记入台账：ps-port-remainder/02 余段、
+  admin-write-faces/12 一节。PC 迁移下一号 `0028`。
