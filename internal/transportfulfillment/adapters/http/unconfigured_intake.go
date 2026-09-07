@@ -48,6 +48,7 @@ var _ ParticipationTerminationIntake = UnconfiguredIntake{}
 var _ CredentialIntake = UnconfiguredIntake{}
 var _ EffectiveTimeRuleIntake = UnconfiguredIntake{}
 var _ EffectiveTimeJudgmentIntake = UnconfiguredIntake{}
+var _ MasterDocumentIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -138,4 +139,14 @@ func (UnconfiguredIntake) IntakeEffectiveTimeRuleRegistration(context.Context, *
 // 渠道未就位前没有可采信的所有者身份，连命令都不构造。
 func (UnconfiguredIntake) IntakeEffectiveTimeJudgment(context.Context, *http.Request) (application.JudgeEffectiveTimeCommand, error) {
 	return application.JudgeEffectiveTimeCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 总单登记两口（ADR-0113 决定五）同堵：一份总单登进去就成了 parcel-pricing 主单级评价可引的身份（ADR-0111），
+// 渠道未就位前没有可采信的登记方身份，连命令都不构造。
+func (UnconfiguredIntake) IntakeMasterDocumentRegistration(context.Context, *http.Request) (application.RegisterMasterDocumentCommand, error) {
+	return application.RegisterMasterDocumentCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeMasterDocumentRevision(context.Context, *http.Request) (application.ReviseMasterDocumentCommand, error) {
+	return application.ReviseMasterDocumentCommand{}, ErrAccessChannelNotConfigured
 }
