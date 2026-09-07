@@ -18,9 +18,9 @@
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 78 | 57 | 12 | 37 | 7 | 7 |
-| transportfulfillment | 125 | 113 | 23 | 34 | 10 | 21 |
+| transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 830 | 778 | 111 | 238 | 51 | 106 |
+| **合计** | 833 | 782 | 112 | 238 | 51 | 106 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 54、测试 76。
 
@@ -49,7 +49,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 147 份 SQL
+## 迁移：11 个模块共 148 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -62,7 +62,7 @@
 | party_commercial | 24 |
 | pilot_governance | 6 |
 | settlement_accounting | 16 |
-| transport_fulfillment | 17 |
+| transport_fulfillment | 18 |
 | visibility_exception | 26 |
 
 ## 接线面：接入面端点 101 个，消费适配器 26 个生产文件，直投路由表 17 条
@@ -102,7 +102,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 355 个；基线口径缺 14，精确口径缺 9
+## 端口：声明 358 个；基线口径缺 17，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -118,6 +118,9 @@
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
+- `transportfulfillment.DeliveryConditionSource` 
+- `transportfulfillment.DeliveryPlaceSource` 
+- `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
 
@@ -130,5 +133,8 @@
 - `settlementaccounting.ContractResponsibilityView` 
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
+- `transportfulfillment.DeliveryConditionSource` 
+- `transportfulfillment.DeliveryPlaceSource` 
+- `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
