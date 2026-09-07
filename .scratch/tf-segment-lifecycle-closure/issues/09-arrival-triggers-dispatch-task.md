@@ -1,8 +1,28 @@
 # 到达事实触发建立派送任务：触发条件先裁
 
 Category: enhancement
-Status: draft——四问已裁（见「裁决」节，MCP-3 2026-09-04，owner 授权自决）；**票面前提改了：移动事实不是本票输入**。裁后不直接转 ready-for-agent：开工前置是一次 `/domain-modeling`（「派送段」由登记方声明）与三条消费侧输入缝，各自成票后本票作父票或转 superseded
-Blocked by: 无（05 已 resolved `4c48bac`；且经裁决①，`RecordMovementFact` 的 `ARRIVAL` 不是本票的输入，那条阻塞边从一开始就不该有）
+Status: in-progress——**转父票**（2026-09-07，通道 4，task-79675845）。四条裁决里 ①②③ 已落（派送段声明建模、ADR-0114、段服务动作、触发执行器，见「完成记录」）；④ 的三条输入缝各自成票 [12](12-delivery-place-reference-seam-parcel-shipment.md)、[13](13-delivery-window-seam-network-routing.md)、[14](14-delivery-condition-reference-seam-party-commercial.md)（均 draft，等各所有者裁），按 issue-tracker「Complete a parent」——子票全 resolved 本票才 resolved。此前状态行写的「开工前置一次 `/domain-modeling` 与三条缝各自成票」两件都已做
+Blocked by: 12, 13, 14（父票阻塞边；本票自身不再有代码可做——执行器已落，缝接上一条它就往下走一格，不必回本票改代码）
+
+## 完成记录（分支 `mcp4-tf09`，基 `origin/main` = `299f2a2e`；进 main 后的 SHA 由 MCP-1 重放时补记）
+
+| 裁决 | 落在哪 | 分支 SHA | 触及文件 |
+|---|---|---|---|
+| ①「到达」= 对象凭`已交接`进入派送段；「尾程」由登记方声明 | `/domain-modeling`：TF CONTEXT 立「段服务动作」「派送要求」词条 + 生命周期①末句；UC-TF-006 触发行改口 | `8cf3b8f3` | `docs/domain/transport-fulfillment/CONTEXT.md`、`docs/application/transport-fulfillment/UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md` |
+| ①②③ 成文 | ADR-0114（决定一至四、越权风险点四条）+ README 目录行 | `85956673` | `docs/adr/0114-*.md`、`docs/adr/README.md`（只加一行） |
+| ① 声明落代码 | `SegmentServiceAction` 三格封闭、`DeclareServiceAction` 只在成立那一刻开门、`IsDeliverySegment`；迁移 `0018` 段表可空 `service_action` + CHECK；两条登记命令带 `SegmentServiceAction`；`SEGMENT_SERVICE_ACTION_UNKNOWN` / `CONFLICT` 两格 | `54b7ab04` | `internal/transportfulfillment/domain/segment_service_action.go`（+测试）、`actual_fulfillment_segment.go`、`segment_rehydration.go`、`application/enter_fulfillment_segment.go`、`register_transport_handover.go`、`register_offsite_pickup.go`（+测试）、`adapters/postgres/fulfillment_segment_registry.go`（+测试）、`migrations/transport_fulfillment/0018_segment_service_action.sql` |
+| ③④ 三条缝的 TF 侧形状 | `DeliveryPlaceSource` / `DeliveryWindowSource` / `DeliveryConditionSource`，`RequirementResolution` 封闭二格；头注写明今天一条都没接 | `9634b635` | `internal/transportfulfillment/ports/delivery_requirement.go` |
+| ③ 触发执行器 | `TriggerDeliveryDispatchHandler`：唯一触发事实、异步一拍、一对象一任务、调既有 `OpenDispatchTask`（签名不动）、缝未接答未决点名缝、所有者答「没有」任务待形成、任务引用按（段，对象，入场依据）铸、对段只读 | `e4e63503` | `internal/transportfulfillment/application/trigger_delivery_dispatch.go`（+测试） |
+| ④ 三条缝各立票 | 12 / 13 / 14 | `e5a79302` | 本目录 `issues/12-*`、`13-*`、`14-*` |
+
+**验证强度**（分支 tip 上，通道 4 量得）：`gofmt -l` 空；`go build ./...` 与 `go vet` 0；`internal/architecture` 门禁全过；全仓 `go test -p 1 -count=1 ./...`（含 DSN，PG 用例 PASS 非 SKIP）结果记在完工报与 spec 状态行——本票面不复述计数。
+
+**不在本票、已另立**：三条缝的适配器（12–14）；执行器的生产入口与拍频（随第一条接上线的缝的票，ADR-0114 决定二末句）；多对象合并成一任务的政策（不立票，运营政策）；参与失效格（票 [11](11-control-withdrawing-correction-voids-participation.md)）。
+
+**越权风险点（供 owner 复核，实现票不顺手定）**：
+1. **凭有效收寄进入派送段的对象不触发**（`ENTRY_NOT_BY_HANDOVER`）——按 CONTEXT 硬句「内部触发只有一种事实：凭`已交接`进入」字面落；若 owner 认为揽收即派送的段（同城直送）也该触发，要先改硬句再改执行器一处判据。
+2. **任务引用含入场依据**——照 ADR-0114 决定二字面铸（段，对象，入场依据）；来源更正后的替代参与换了入场依据，同对象同段会铸出第二个任务引用。是否该按（段，对象）铸以免更正后重开任务，owner 定；改法是 `deliveryDispatchTaskReference` 一处。
+3. **成立时间取这一拍的业务时间**（命令携带 `OccurredAt`），不取对象进段时刻——依据 CONTEXT「任务在下一拍形成」；若 owner 认为成立时间该锚在触发事实上，改执行器一处。
 
 ## 裁决（MCP-3，2026-09-04）
 
@@ -82,3 +102,8 @@ UC-TF-006 的触发句「尾程实际履约段到达派送范围」里有两个�
 裁前不写代码；不改 `RecordMovementFact` 与 `OpenDispatchTask` 的既有签名。派送任务的工作范围七件
 （`OpenDispatchTaskCommand`）从哪里来——对象集、地点、时间窗、条件——也在裁的范围内：到达事实
 自己给不出时间窗。
+
+## Comments
+
+- 2026-09-07 · 通道 5（task-895fbabf → 04ffe457，旧会话）：落 `/domain-modeling` 词条、ADR-0114、段服务动作三笔；触发执行器与端口写到一半，会话失去响应，三件现场由该会话封存（`mcp5-tf-cmdr@502a6856`）。
+- 2026-09-07 · 通道 4（task-79675845）：接手。按镜像测试纪律先写自己的 red 再读封存件交叉验证（判据全对上，四处不同各有取舍，记在 `e4e63503` 提交信）；封存笔按意图重切为端口一笔 + 执行器一笔，`chore(salvage)` 不进 main，证据句移进端口那一笔；立 12–14；本票转父票。分支 SHA 见「完成记录」，进 main 后由 MCP-1 补记。

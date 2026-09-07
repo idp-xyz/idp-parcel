@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026-09-04 入 main：代码 tip `56d2a437`、票面 `fe5b3a35`、`cmd/parcel-api` 装配行 `9e8a9202`；ADR-0103）；08 resolved（裁决 `bca02e5`；MCP-3 2026-09-04 于分支 `mcp3-tf08` 完工，MCP-1 重放入 main `91fab19d`..`27116c52`，TF 迁移 `0015` 换 `offsite_pickup` 主键纳入版本、更正版 handoff ID 加版本段、端点 `/transport-fulfillment/offsite-pickup-corrections`；PS 采用口把更正版当第二责任起点的缺口立 `label-channel/24`，段侧重派生立本目录 `10`，均 draft）；09 draft（裁决 `21ee4f0` 把它拆成派送段声明建模 + 三条输入缝 + 触发执行器，开工前置一次 `/domain-modeling`——票面为准，此前状态行写的 ready-for-agent 过期）；10 draft（来源更正 → 参与关系重派生，覆盖交接与揽收两种来源）；06 「补刀二」裁「采」（`3f3a675`，封存笔 `mcp4-tf03@44808f3`）已由 MCP-1 于 2026-09-04 在 main 上重放为 `4cbe5266`（与 tf/02 的 `enterFulfillmentSegment` 挂点自动合并无冲突）
+Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026-09-04 入 main：代码 tip `56d2a437`、票面 `fe5b3a35`、`cmd/parcel-api` 装配行 `9e8a9202`；ADR-0103）；08 resolved（裁决 `bca02e5`；MCP-3 2026-09-04 于分支 `mcp3-tf08` 完工，MCP-1 重放入 main `91fab19d`..`27116c52`，TF 迁移 `0015` 换 `offsite_pickup` 主键纳入版本、更正版 handoff ID 加版本段、端点 `/transport-fulfillment/offsite-pickup-corrections`；PS 采用口把更正版当第二责任起点的缺口立 `label-channel/24`，段侧重派生立本目录 `10`，均 draft）；09 **in-progress 父票**（2026-09-07 通道 4：建模、ADR-0114、段服务动作、三条端口、触发执行器已落于分支 `mcp4-tf09`，三条缝立 12–14 draft，子票全 resolved 才 resolved）；10 draft（来源更正 → 参与关系重派生，覆盖交接与揽收两种来源）；06 「补刀二」裁「采」（`3f3a675`，封存笔 `mcp4-tf03@44808f3`）已由 MCP-1 于 2026-09-04 在 main 上重放为 `4cbe5266`（与 tf/02 的 `enterFulfillmentSegment` 挂点自动合并无冲突）
 
 ## 从哪里分出来
 
@@ -32,7 +32,17 @@ Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026
 | [06](issues/06-participation-end-internal-triggers.md) | 结束参与的两处内部触发（交付后、交接后） | MCP-1 对动 TF application 的答复 |
 | [07](issues/07-admin-write-faces-segment-closure-dispatch-task-load-assignment.md) | admin 写面四格：关段、建派送任务、装载分配、明确终止参与 | 无 |
 | [08](issues/08-offsite-pickup-correction-model.md) | 揽收登记的更正：已裁取 A 新版本（`Corrects` 回指，登记册只插不改） | 已裁（`bca02e5`）；已 resolved（2026-09-04，MCP-3，main `91fab19d`..`27116c52`） |
-| [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：四问已裁，触发事实改为对象凭`已交接`进入派送段 | 已裁（`21ee4f0`），ready-for-agent；05 已 resolved 不再阻塞 |
+| [09](issues/09-arrival-triggers-dispatch-task.md) | 到达事实触发建立派送任务：四问已裁，触发事实改为对象凭`已交接`进入派送段 | 已裁（`21ee4f0`）；2026-09-07 落词条 / ADR-0114 / 段服务动作 / 三条派送要求端口 / 触发执行器（分支 `mcp4-tf09`，进 main 后 SHA 由 MCP-1 补记），**转父票 in-progress**，Blocked by 12、13、14 |
+
+### 09 裁后拆出的三条派送要求缝（2026-09-07，通道 4 立票；ADR-0114 决定四）
+
+| 票 | 内容 | 开工前置 |
+|---|---|---|
+| [12](issues/12-delivery-place-reference-seam-parcel-shipment.md) | 收件地点引用缝（`parcel-shipment`）：`DeliveryPlaceSource` 的消费侧适配器 | PS owner 裁「地点引用是什么身份、从哪个读面取、地址修订后引用怎么动」 |
+| [13](issues/13-delivery-window-seam-network-routing.md) | 计划履约段时间窗口缝（`network-routing`）：`DeliveryWindowSource` 的消费侧适配器 | NR owner 裁「按什么键取、哪一版计划、无计划段的对象怎么答」 |
+| [14](issues/14-delivery-condition-reference-seam-party-commercial.md) | 交付条件引用缝（`party-commercial`）：`DeliveryConditionSource` 的消费侧适配器 | PC owner 裁「条件引用指哪一版、对象怎么走到合同（要 PS owner 一起）、合同委派怎么读」 |
+
+三票互不阻塞；执行器的生产入口随第一条接上线的缝的票立。三票 draft，今天执行器在生产装配里停在 `DELIVERY_PLACE_SOURCE_NOT_WIRED`——那是诚实停点不是缺陷。
 
 04、05、06、07 已 resolved（2026-09-03）；02 已 resolved（2026-09-04，MCP-2，ADR-0103）；08 已 resolved（2026-09-04，MCP-3 于分支 `mcp3-tf08` 完工、MCP-1 重放入 main `91fab19d`..`27116c52`，分支→main 对照见票面 Comments）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
