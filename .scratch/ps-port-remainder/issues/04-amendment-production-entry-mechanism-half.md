@@ -45,3 +45,4 @@ Blocked by: 无
   - **清点读法**：端口两口径各降 2（`SourceDataAmendmentAuthorizer` / `SourceDataRuleDeclaration` 出了缺口名单）是两只**未配置**适配器被判据 B 计为实现，不是提供方半边落地——02、03 的 PC 侧仍开。
   - **未在本票补的一格**：`RECORDED` 201 无真编排用例——走到它要`已接受`委托加登记为`允许`的矩阵，本包今天没有把委托推到`已接受`的夹具，矩阵那半属 02 的 PC 半边；由端点代码与 `UNNAMED_OUTCOME` 用例守形。PC 半边落地时随「换真适配器」一并补。
   - 「一格诚实的缝」（版本与意图不同事务）照票面未动，仍归 PS owner 另裁。
+- 2026-09-07 16:1x · 通道 1（推送方）**进 main 记录**：分支 `mcp2-ps-ports` → main 对照 `38c2aa82`→`8dfddf46`（封存笔按 12:1x「封存笔不进 main」规矩改写提交信为意图，tree 一字未动，未经作者复核——通道 2 已换会话）、`a1a1d16f`→`a12de35c`、`fcbd13fa`→`7254d401`；分支清点笔 `baff5fdd` 未重放，清点在 tip 重生成 `61344989`。隔离树钉 `61344989`：含 DSN 全仓 100 ok / 0 FAIL，探针 `cmd/parcel-api -run Amendment` 无 DSN SKIP 4 / 含 DSN PASS 4。远端 main = `61344989`。

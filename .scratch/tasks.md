@@ -864,3 +864,57 @@ MCP-3 `65d86426` 第 2 步完工报（12:2x）：分支 `mcp3-pcgaps07` 四笔 +
 拆树：`idp-replay-tf10`、`idp-parcel-mcp4-ci-count1`（内容 = main）不带 `--force` 拆除。`idp-parcel-mcp3-pcgaps07`（status 零行；`git cherry main` 只剩封存笔 `8dc99b9f` 一个 `+`，留在指针上）`git worktree remove` 退 255 `Directory not empty`——**树里 `apps/admin-web/node_modules` 是指向主树的 junction**（parallel-sessions 那条「不能 `Remove-Item -Recurse`」这次是真撞上了）：登记已摘、`.git` 链接已删，先 `cmd /c rmdir` 只拆链接（主树 node_modules 前后各 15 项），复核无其它 reparse point 后再清壳。指针 `mcp4-ci-shard@6279adcd`、`mcp4-ci-count1@9f8e4c94`、`mcp3-pcgaps07@7acf6859` 保留。
 
 **在途**：MCP-2 `d5558bc6` 第 3 段（ADR-0118；CONTEXT-MAP 与 README 各一小 hunk 已在分支 `8430ae09`，13:1x 释号）；MCP-5 `edb0a8c9` 第 3 步承运总单册 01（建在 `1bc1ccba` 之上，重放只取其后的笔）；MCP-6 `faee318d` awf/06。**归用户不变**。CI 为 `915c0d55` 在跑。
+
+### 13:3x（上一会话做了没记，本节补）：awf/06 快进入 main
+
+MCP-6 `faee318d` 第 1 步完工报后，上一会话把 `mcp6-awf06` 三笔原样快进（`a1890506` 后端第九册 / `ea2293e5` 管理台 / `ce83eaf9` 票 06 resolved），
+清点在 `ce83eaf9` 干净检出重生成 `92579b0a`（partycommercial 测试 86→88；分支清点笔 `d6d35bee` 量的是 `95182b9d` 上的数，未重放），**已推**，
+远端 CI success（run 34086803851，6m52s）。上一会话随后开始重放 `mcp6-pp-ratchet`（`idp-replay-pp-ratchet@16712373` 基旧 main、
+`idp-replay-ppr@0fcbed6e` 基 `92579b0a`，13:29），**重放完了、验证 / 快进 / 推没做**，会话在这一步结束。
+
+## 2026-09-07 15:3x 通道 1 新会话接续（接手时 `main = origin/main = 92579b0a`）
+
+用户只交代「监听队列、正常回复、保持循环」，随后「检查工作树和 tasks.md」→「可以并行开工了吗，mcp-2/3/4/5/6 空闲」。
+
+### 15:3x 只读盘点（钉 `92579b0a`）
+
+- 共享树 67 处 ` M` 全为 CRLF 幻影（`--ignore-cr-at-eol` numstat 零行），无未跟踪、无 stash。
+- 两支分支 `git cherry main` 全 `+`：`mcp2-ps-ports@71b8817b`（8 笔，ps-port-remainder/04 resolved + 02 PS 半边 + ADR-0118 + 新立 05，含封存笔 `38c2aa82`）；
+  `mcp6-pp-ratchet@980e6316`（5 笔，PP 剪三条死码 + wiring-baseline-remainder/01–07）。
+- 台账 working 两单的真实现场：MCP-6 `faee318d` ② awf/07 拆票停在**未提交现场**（`idp-parcel-mcp6-awf06` 树上 11 个 `??`，issues/08–18，mtime 13:13–13:16，伞票 07 未改）；
+  MCP-5 `edb0a8c9` 第 3 步零进展（树 detached 在 `6fe2c6b9`——12:44 它自己重切封存笔的一笔——干净，另留 `mcp5-tf-batch-before-recut`）。五路 `list_sessions` 全
+  running/idle，最后活动 12:29–13:15。
+- 票务：未 resolved 17——draft 8（lc/20、lc/22、tf/09、tf/11、tf-carrier-master-document-register/01、awf/07、ve-claims/04、sa-preacceptance-policy-view/02）、
+  blocked 4（ps-port-remainder/01、/03 等 PC 半边；ftr/03；auto-reroute/02）、in-progress 1（ps-port-remainder/02）、needs-info 4。
+
+### 15:38 点名 → 15:4x 五单派满（截止 15:43，五路全部应答空闲、无地盘、新会话无在途记忆）
+
+旧两单结 failed「承接方换人（会话重启）」。ADR 预留：TF 0113/0114/0121，PC 0116/0119/0120，SA 0122，PP 0123，CC/NO 0124；迁移：TF 0017 起、PC 0025 起、
+SA 0017 起、PP 0010 起、CC 0017 起、NO 0004 起、PS 0019 起。端点表各在自己分支只改本上下文那一组行，重放顺序由 MCP-1 定。
+
+| 通道 | 单号 | 内容 | 独占地盘 | 基线 |
+|---|---|---|---|---|
+| MCP-5 | `895fbabf` | 【接管重派③】TF 批：tf-carrier-master-document-register/01（ADR-0113、0017）→ tf/09（ADR-0114、0018；三条输入缝只立票）→ tf/11 | TF + TF 组接线行 + TF CONTEXT/GLOSSARY「总单」 | `92579b0a` |
+| MCP-6 | `aafca372` | 【接管重派】PC 批余量：封存 11 张子票 → 收伞票 07 → 立 pc-gaps/08–10 draft → 余量够接 08/09/10 | PC + `.scratch/admin-write-faces` + `party-commercial-context-gaps` | `92579b0a`（在原树 `git checkout -b mcp6-awf07`，封存 `4871236d`） |
+| ~~MCP-3~~ | ~~`13f5a087`~~ | sa-preacceptance-policy-view/02（五问 → ADR-0122 → 实施） | SA | 用户 16:0x 报 MCP-3 **收到前已 crash**，单结 failed「派工错位」，**MCP-1 自办**（分支 `mcp1-sa02`），通道 3 队列留作废令 |
+| MCP-4 | `d3c3a7ac` | wiring-baseline-remainder/07（Decimal 重建边界；票内裁甲/乙/丙，ADR 0123）→ 06 若 ready | PP + `production_wiring_baseline.txt` PP 段 | 等 pp-ratchet 进 main（16:00 广播 `0fcbed6e`） |
+| MCP-2 | `2f035050` | ps-port-remainder/05：CC/NO 各一面按正式包裹引用读阶段事实 → PS 两只 Unconnected* 换真读法 + 装配接真 | CC/NO ports+postgres、PS adapters/{customscompliance,nodeoperations}、`assemble_customer_amendment` | 等 ps-ports 进 main（16:12 广播 `61344989`） |
+
+### 15:5x–16:1x 推送方作业：两路重放入 main
+
+| SHA | 内容 |
+|---|---|
+| `7cef122f`..`0fcbed6e` | `mcp6-pp-ratchet` 五笔（上一会话的重放件原样采用：1d13d510→7cef122f、28ea268b→8c85e731、2837718d→77ff8eb8、33ddafff→2ea716ba、980e6316→0fcbed6e）。**已推**（推前 ls-remote = 92579b0a），CI success 7m48s |
+| `8dfddf46`..`9091f539` | `mcp2-ps-ports` 六笔重放（38c2aa82→8dfddf46、a1a1d16f→a12de35c、fcbd13fa→7254d401、7ec02162→d4bc4785、3da37e07→45ed2d04、8430ae09→9091f539；README 自动合并）。封存笔 `38c2aa82` 按 12:1x 规矩改写提交信为意图（tree 一字未动，与首次 cherry-pick 结果 tree 相同），未经作者复核——通道 2 已换会话 |
+| `61344989` | 清点在 `9091f539` 干净检出重生成（parcelshipment 生产 133→139 / 测试 133→138 / http 13→14；cmd/ 生产 52→53；接入面端点 98→99；消费缝 19→20 组，新增 PS→CC；端口声明 348→352）；分支两笔清点 `baff5fdd` / `71b8817b` 未重放。**已推**（推前 ls-remote = 0fcbed6e） |
+
+验证（各自隔离 detached 树）：`0fcbed6e`——gofmt 空、build/vet 0、清点门零差、含 DSN `go test -p 1 -count=1 ./...` **99 ok / 0 FAIL**（513s）；
+`61344989`——gofmt 空、build/vet 0、含 DSN **100 ok / 0 FAIL**（534s，新包 `parcelshipment/adapters/customscompliance`），探针 `cmd/parcel-api -run Amendment`
+无 DSN SKIP 4 / 含 DSN PASS 4；改动 `.go` 全 `i/lf w/lf`。
+
+拆树（均 status 零行、不带 `--force`）：`idp-parcel-mcp5-tf-batch`（detached `6fe2c6b9` 先补指针 `mcp5-tf-batch-recut`）、`idp-parcel-mcp6-awf06-verify`、
+`idp-replay-pp-ratchet`、`idp-replay-ppr`、`idp-parcel-mcp6-pp-ratchet`（`git cherry` 五笔全 `-`）、`idp-parcel-mcp2-ps-ports`（`git cherry` 只剩两笔清点与 README
+自动合并那一笔 `+`，内容都在 main）、`idp-replay-psports`。`mcp6-awf06` 树交 MCP-6 续用（已切 `mcp6-awf07`）。`idp-tf03` 归用户不动。
+
+**在途**：MCP-2 `2f035050`、MCP-4 `d3c3a7ac`、MCP-5 `895fbabf`、MCP-6 `aafca372`；MCP-1 自办 sa-preacceptance-policy-view/02。**归用户不变**：needs-info 四张、
+ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 三份。CI 为 `61344989` 在跑。
