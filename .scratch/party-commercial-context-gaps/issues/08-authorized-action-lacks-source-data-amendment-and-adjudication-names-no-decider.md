@@ -1,7 +1,7 @@
 # 授权动作没有「资料修订」这一格、裁定结果不带实际决定方、合同委派只有语言没有执行器——PS 资料修订授权那口因此接不上
 
 Category: enhancement
-Status: in-progress——六问由 [ADR-0116](../../../docs/adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-aafca372「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT 新词条「合同委派」+ Rules 加一句已随 ADR 同笔落；实施（迁移 → 领域 → 端口 / PG → 发布用例 / 批文 → 真库端到端）按下面「要建什么」逐笔接，每笔完工报。此前 draft：PC 半边的三件由 MCP-1 2026-09-07 代裁归 PC 批（原文在 [ps-port-remainder/03](../../ps-port-remainder/issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) Comments，立票时该目录只在分支 `mcp2-ps-ports` 上，16:12 随 `61344989` 进 main）；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
+Status: resolved——2026-09-07，MCP-5（task-0d116e60，分支 `mcp5-pcgaps08` 基 `299f2a2e`）：代码半边四笔由 MCP-1 重放进 main（`1e182860`→`0cfe3571` / `6b43484c`→`31903cc5` / `df923d16`→`02ff5205` / `70a478f8`→`44bcac4d`），清点由 `fc90622a` 兑底，远端 main 21:2x = `fc90622a`；进 main 记录见 Comments 末条。PS 两只适配器与 `cmd/parcel-api` 两处装配仍走旧构造器（三步法 expand 已做、migrate / contract 未做），归 ps-port-remainder/03 或一张 PS 侧票。此前 in-progress：六问由 [ADR-0116](../../../docs/adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-aafca372「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT 新词条「合同委派」+ Rules 加一句已随 ADR 同笔落；实施（迁移 → 领域 → 端口 / PG → 发布用例 / 批文 → 真库端到端）按下面「要建什么」逐笔接，每笔完工报。此前 draft：PC 半边的三件由 MCP-1 2026-09-07 代裁归 PC 批（原文在 [ps-port-remainder/03](../../ps-port-remainder/issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) Comments，立票时该目录只在分支 `mcp2-ps-ports` 上，16:12 随 `61344989` 进 main）；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
 Blocked by: 无（PC CONTEXT 「授权动作」那句先改再动代码，是本票内部顺序，不是阻塞边）
 
 ## 从哪里来
@@ -129,3 +129,20 @@ PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条�
   `cmd/parcel-api` 两处装配（仍走旧构造器，三步法的迁移与删旧归 ps-port-remainder/03 或一张 PS 侧票）；`docs/product/MECHANISM-INVENTORY.md`
   （推送方在 tip 上重生成兑底）。**能力边界**：没读 `AuthorityGrants` 之外任何消费方对 `Authorization` 的读法，`Decider` 的 PS 侧翻译按
   ADR-0116 Decision 四留给 ps-port-remainder/03。票面 Status 待 MCP-1 重放进 main、广播远端 SHA 后转 resolved（新旧 SHA 对照记在那一条）。
+- 2026-09-07 22:5x · MCP-5（21:2x 新绑会话，接上一条之后的收口；本条在 `origin/main` `98d837a6` 上单笔纯 .md 落分支 `mcp5-pcgaps08-record`，
+  MCP-1 cherry-pick 推）：**进 main 记录，本票转 resolved。**
+  - 分支 → main 四对（MCP-1 重放到 `6ff95211` 之上，与 MCP-2 wbr/06 六笔同批，cherry-pick 零冲突）：`1e182860`→`0cfe3571`（领域 + 端口 +
+    新构造器 + 迁移 0025）/ `6b43484c`→`31903cc5`（合同委派册落库）/ `df923d16`→`02ff5205`（发布通道 + 批文 + 真库端到端）/
+    `70a478f8`→`44bcac4d`（基线两条 + 票面）。`production_wiring_baseline.txt` 头注由推送方补一段 `d98d17be`（tip 上两法同得 7）；清点在
+    `d98d17be` 干净 detached 检出重生成为 `fc90622a`（分支未带清点笔，以此兑底）。远端 main 21:2x = `fc90622a`。
+  - 验证强度（MCP-1 隔离树钉 `fc90622a`）：gofmt 空；build / vet 退 0；清点门零差；architecture 接线门禁 ok；含 DSN
+    `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 0 cached**（605s）；探针 `internal/partycommercial/adapters/postgres -run Delegation`
+    无 DSN SKIP 7 / 含 DSN PASS 7。
+  - 拆树前比对（22:4x，对 `origin/main` `98d837a6`）：08 四笔触及 21 件，16 件与 main 逐字节相同；其余 5 件之差全是 main 后续前进——
+    `translate.go` / `publish_commercial_authority.go` 及其测试是 pc-gaps/09 `d06192ed` 落在同一结构体上引起的 gofmt 重对齐与
+    `NewFinalRuleContent` 构造改形，`translate_test.go` 只有新增，`production_wiring_baseline.txt` 少的 8 行是 wbr/06 `deca2a3d` 剪掉的
+    评价重放门那段；无 08 内容丢失。树 `idp-parcel-mcp5-pcgaps08` 已拆（status 零行、不带 `--force`），指针 `mcp5-pcgaps08@85a90a1b` 保留。
+  - **孤儿三笔，不重放**：分支上 08 之后的 `a96f7356`（ADR-0119，文件名 `…-anchored-at-channel-result-time.md`）/ `74332508`（迁移
+    `0026_final_rule_validity_declaration.sql` + 面单有效期）/ `85a90a1b`（票 10 开工前置取证）是 19:4x 分工（09→10 归 MCP-6）前后落下的
+    重复实现，与 main 上 MCP-6 版同号不同名同题；pc-gaps/09 以 main 上 MCP-6 版为准（`838b283e` / `d06192ed` / `d58ceecc`，清点 `ab0fe0f0`，
+    进 main 记录 `f69b35b9`），票 10 的取证 `git show 85a90a1b` 可自取。MCP-1 已记 tasks.md `98d837a6`。
