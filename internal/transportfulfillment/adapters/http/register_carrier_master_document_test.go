@@ -165,7 +165,13 @@ func (intake *masterDocumentIntakeDouble) IntakeMasterDocumentRevision(
 	if err != nil {
 		return application.ReviseMasterDocumentCommand{}, fmt.Errorf("%w: %v", tfhttp.ErrMalformedRequest, err)
 	}
-	revision, _ := domain.ParseMasterDocumentRevision(body.Revision)
+	// 真渠道 Intake 就位前，把请求体里的改变词认回封闭集合是替身自己的事；词不在集合内留零值，让编排答未受理。
+	revision := domain.MasterDocumentRevisionInvalid
+	for _, candidate := range []domain.MasterDocumentRevision{domain.MasterDocumentRevocation, domain.MasterDocumentSupersession, domain.MasterDocumentAssociationRestatement} {
+		if candidate.String() == body.Revision {
+			revision = candidate
+		}
+	}
 	return application.ReviseMasterDocumentCommand{
 		TenantID:     intake.tenant,
 		Document:     body.Document,

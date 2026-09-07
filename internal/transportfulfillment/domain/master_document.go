@@ -192,7 +192,9 @@ func ParseMasterDocumentStanding(raw string) (MasterDocumentStanding, error) {
 }
 
 // MasterDocumentRevision 是一份总单形成新版本的三种方式，封闭（CONTEXT 规则节与 ADR-0113 决定三）。
-// 它是登记输入里的词，不是状态：撤销与替代落成状态，关联重述只换关联集。
+// 它是登记输入里的词，不是状态：撤销与替代落成状态，关联重述只换关联集。它不落库，所以这里没有
+// Parse——把请求体里的词认回封闭集合是真渠道 Intake 的事，那一格随 Intake 一起来，不预留无人调用的门
+// （production_wiring_ratchet 的判据）。
 type MasterDocumentRevision uint8
 
 const (
@@ -213,16 +215,6 @@ func (revision MasterDocumentRevision) String() string {
 	default:
 		return ""
 	}
-}
-
-// ParseMasterDocumentRevision 把登记输入里的改变词认回封闭集合。
-func ParseMasterDocumentRevision(raw string) (MasterDocumentRevision, error) {
-	for revision := MasterDocumentRevocation; revision <= MasterDocumentAssociationRestatement; revision++ {
-		if revision.String() == raw {
-			return revision, nil
-		}
-	}
-	return MasterDocumentRevisionInvalid, fmt.Errorf("%w: unknown master document revision %q", ErrInvalidMasterDocument, raw)
 }
 
 // MasterDocumentSpec 是登记一份总单首版所需的全部输入：CONTEXT 词条点名的签发方、主运输凭证范围、

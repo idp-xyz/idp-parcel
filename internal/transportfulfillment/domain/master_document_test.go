@@ -306,14 +306,15 @@ func TestClosedWordSetsRoundTrip(t *testing.T) {
 	if _, err := domain.ParseMasterDocumentStanding("ACTIVE"); !errors.Is(err, domain.ErrInvalidMasterDocument) {
 		t.Fatalf("状态词不在集合内应拒：%v", err)
 	}
+	words := map[string]bool{}
 	for _, revision := range []domain.MasterDocumentRevision{domain.MasterDocumentRevocation, domain.MasterDocumentSupersession, domain.MasterDocumentAssociationRestatement} {
-		parsed, err := domain.ParseMasterDocumentRevision(revision.String())
-		if err != nil || parsed != revision {
-			t.Fatalf("%s 应能往返：%v %s", revision, err, parsed)
+		if revision.String() == "" || words[revision.String()] {
+			t.Fatalf("改变词 %d 没有唯一的封闭词：%q", revision, revision.String())
 		}
+		words[revision.String()] = true
 	}
-	if _, err := domain.ParseMasterDocumentRevision("AMEND"); !errors.Is(err, domain.ErrInvalidMasterDocument) {
-		t.Fatalf("改变词不在集合内应拒：%v", err)
+	if domain.MasterDocumentRevisionInvalid.String() != "" {
+		t.Fatal("零值改变词不该有名字")
 	}
 }
 
