@@ -194,16 +194,16 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		state:        rejected.State(),
 		decision:     decision,
 		hasDecision:  true,
-		compensation: handler.releaseFreeze(ctx, command),
+		compensation: handler.releaseOccupation(ctx, command),
 	}, nil
 }
 
-// releaseFreeze 在主动拒绝越过提交边界后按原关联解除资金控制。主动拒绝同样是「接受确定未
+// releaseOccupation 在主动拒绝越过提交边界后按原关联解除资金控制。主动拒绝同样是「接受确定未
 // 成立」，冻结不能因为拒绝出自运营之手就留在原处占着货主的钱。
 //
 // 读不回已记录的判断时不发释放：不知道关联就发，settlement-accounting 无从认领哪一笔。这一
 // 轮交回补偿续办引用，由续办去补。
-func (handler *RejectShipmentRequestHandler) releaseFreeze(
+func (handler *RejectShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command RejectShipmentRequestCommand,
 ) domain.OwnershipContinuationReference {
@@ -213,7 +213,8 @@ func (handler *RejectShipmentRequestHandler) releaseFreeze(
 	if err != nil {
 		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
 	}
-	if recorded.FinancialControl.Outcome() != domain.FinancialControlHeld {
+	// 按「有没有成立的项」发而不按结论，理由同 FormAcceptanceDecisionHandler.releaseIfRejected。
+	if !recorded.FinancialControl.OccupationFormed() {
 		return domain.OwnershipContinuationReference{}
 	}
 

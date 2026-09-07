@@ -238,7 +238,7 @@ func (handler *WithdrawShipmentRequestHandler) Handle(
 		state:         withdrawn.State(),
 		withdrawal:    record,
 		hasWithdrawal: true,
-		compensation:  handler.releaseFreeze(ctx, command),
+		compensation:  handler.releaseOccupation(ctx, command),
 	}, nil
 }
 
@@ -298,7 +298,7 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 
 	compensation := domain.OwnershipContinuationReference{}
 	if hasWithdrawal {
-		compensation = handler.releaseFreeze(ctx, command)
+		compensation = handler.releaseOccupation(ctx, command)
 	}
 
 	return WithdrawShipmentRequestResult{
@@ -312,7 +312,7 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 	}
 }
 
-// releaseFreeze 在撤回越过提交边界后按原关联解除资金控制。撤回同样是「接受确定未成立」，
+// releaseOccupation 在撤回越过提交边界后按原关联解除资金控制。撤回同样是「接受确定未成立」，
 // 冻结不能因为终止请求出自客户之手就留在原处占着他的钱。
 //
 // 释放失败不回滚撤回：`UC-PS-005` 要求「撤回提交成功后不等待财务释放才生效」，且不得为了保持
@@ -321,7 +321,7 @@ func (handler *WithdrawShipmentRequestHandler) existing(
 // 读不回已记录的判断时不发释放：不知道关联就发，settlement-accounting 无从认领哪一笔。
 // 从未形成过冻结时既不发释放也不留补偿引用——`AT-PS-074` 要的是撤回成立并保存财务补偿不适用
 // 依据，凭空造一个待续补偿会让对账去追一笔不存在的释放。
-func (handler *WithdrawShipmentRequestHandler) releaseFreeze(
+func (handler *WithdrawShipmentRequestHandler) releaseOccupation(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 ) domain.OwnershipContinuationReference {
@@ -331,7 +331,8 @@ func (handler *WithdrawShipmentRequestHandler) releaseFreeze(
 	if err != nil {
 		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
 	}
-	if recorded.FinancialControl.Outcome() != domain.FinancialControlHeld {
+	// 按「有没有成立的项」发而不按结论，理由同 FormAcceptanceDecisionHandler.releaseIfRejected。
+	if !recorded.FinancialControl.OccupationFormed() {
 		return domain.OwnershipContinuationReference{}
 	}
 

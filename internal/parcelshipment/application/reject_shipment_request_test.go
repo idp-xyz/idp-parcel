@@ -84,6 +84,35 @@ func TestAnActiveRejectionReleasesTheFreeze(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 AT-PS-035「已成立的项不因另一项失败或接受侧结论而免释放」在主动拒绝这条路上
+// （ADR-0125 决定四）——释放看「有没有成立的项」：账期额度占用同样释放；先成立后受限的组合结果也释放。
+func TestAnActiveRejectionReleasesEveryOccupationRegardlessOfTheConclusion(t *testing.T) {
+	t.Run("credit exposure", func(t *testing.T) {
+		fixture := newRejectionFixture(t)
+		fixture.judgments.controlOutcome = domain.FinancialControlCreditExposed
+
+		if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 账期额度占用在主动拒绝后成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+
+	t.Run("satisfied item before the restricting one", func(t *testing.T) {
+		fixture := newRejectionFixture(t)
+		control := heldThenRestrictedControl(t)
+		fixture.judgments.control = &control
+
+		if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 第一项占下的资金随受限结论成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+}
+
 // Covers: CONTEXT「接受或拒绝提交后，另一方只能读取既有结果，不能追加相反决定」— 撞上一个
 // 已成立的接受时交回那一个，不报错也不覆盖。
 func TestAnActiveRejectionAgainstADecidedVersionReadsTheExistingDecision(t *testing.T) {

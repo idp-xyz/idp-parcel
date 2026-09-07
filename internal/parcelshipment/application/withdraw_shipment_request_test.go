@@ -169,6 +169,36 @@ func TestAWithdrawalReleasesTheFreezeByItsOriginalAssociation(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 AT-PS-035「已成立的项不因另一项失败或接受侧结论而免释放」在撤回这条路上（ADR-0125
+// 决定四）——撤回同样是接受确定未成立：账期额度占用要释放；先成立后受限的组合结果里第一项占下的资金
+// 也要释放。
+func TestAWithdrawalReleasesEveryOccupationRegardlessOfTheConclusion(t *testing.T) {
+	t.Run("credit exposure", func(t *testing.T) {
+		fixture := newWithdrawalFixture(t)
+		fixture.judgments.controlOutcome = domain.FinancialControlCreditExposed
+
+		if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 账期额度占用在撤回后成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+
+	t.Run("satisfied item before the restricting one", func(t *testing.T) {
+		fixture := newWithdrawalFixture(t)
+		control := heldThenRestrictedControl(t)
+		fixture.judgments.control = &control
+
+		if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 第一项占下的资金随受限结论成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+}
+
 // Covers: UC-PS-005 `AT-PS-073`「撤回成立但冻结释放暂时失败 → 撤回保持有效，只续办原释放请求」
 // 与「不得为了保持表面原子性…把委托改回`已提交`」。
 func TestAFailedReleaseKeepsTheWithdrawalAndLeavesCompensationPending(t *testing.T) {

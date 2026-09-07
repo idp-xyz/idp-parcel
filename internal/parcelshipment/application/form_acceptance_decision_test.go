@@ -184,6 +184,62 @@ func TestARejectionReleasesTheFreezeByItsOriginalAssociation(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 AT-PS-035「按原关联释放已成立各项形成的占用（冻结与信用暴露），已成立的项不因另一项
+// 失败或接受侧结论而免释放」（ADR-0125 决定四）——释放看的是「有没有成立的项」，不是结论：账期额度占用
+// 在拒绝后同样要释放；组合策略下第一项冻结成立、第二项受限，结论 `RESTRICTED` 本身就是拒因，而第一项
+// 占下的资金不能因此留成孤儿。只有一项受限、什么都没占下时不发释放。
+func TestARejectionReleasesEveryOccupationRegardlessOfTheConclusion(t *testing.T) {
+	t.Run("credit exposure is released too", func(t *testing.T) {
+		fixture := newDecisionFixture(t)
+		fixture.judgments.controlOutcome = domain.FinancialControlCreditExposed
+		fixture.judgments.reachability["parcel-2"] = domain.ReachabilityUnreachable
+
+		result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.State() != domain.ShipmentRequestRejected {
+			t.Fatalf("state = %q, want REJECTED", result.State())
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 账期额度占用在拒绝后成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+
+	t.Run("a satisfied item before the restricting one is released", func(t *testing.T) {
+		fixture := newDecisionFixture(t)
+		control := heldThenRestrictedControl(t)
+		fixture.judgments.control = &control
+
+		result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.State() != domain.ShipmentRequestRejected {
+			t.Fatalf("state = %q, want REJECTED——受限结论是确定性不通过", result.State())
+		}
+		if fixture.release.calls != 1 || fixture.release.controlResultID != "SAC-1" {
+			t.Fatalf("release calls = %d id = %q; 第一项占下的资金随受限结论成了孤儿", fixture.release.calls, fixture.release.controlResultID)
+		}
+	})
+
+	t.Run("nothing occupied sends no release", func(t *testing.T) {
+		fixture := newDecisionFixture(t)
+		fixture.judgments.controlOutcome = domain.FinancialControlRestricted
+
+		result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+		if err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+		if result.State() != domain.ShipmentRequestRejected {
+			t.Fatalf("state = %q, want REJECTED", result.State())
+		}
+		if fixture.release.calls != 0 {
+			t.Fatal("唯一一项受限、限制不入账本，却对着一笔不存在的占用发了释放")
+		}
+	})
+}
+
 // Covers: UC-PS-001:112「客户可补充缺口与系统依赖重试必须使用不同原因和续办路径」、AT-PS-006
 // 「资料不足…不映射为不可达」与 CONTEXT 接受判断任务「客户可补充缺口 → 等待受控补充」——
 // 权威已经把话说完了，说的正是声明资料不够判，所以这一轮等的是客户而不是本方重试。
@@ -966,7 +1022,10 @@ type recordedJudgmentsDouble struct {
 	t              *testing.T
 	reachability   map[string]domain.ReachabilityValue
 	controlOutcome domain.FinancialControlOutcome
-	err            error
+	// control 在场时原样交回，压过 controlOutcome：一格结论造不出「第一项成立、第二项受限」那种
+	// 逐项形状，而释放该看的正是逐项（ADR-0125 决定四）。
+	control *domain.FinancialControlResult
+	err     error
 	// noAdoptedResolution 表示还没有任何一轮采用过商业依据。默认相反，因为多数用例是在
 	// 判断推进过之后才形成决定的。
 	noAdoptedResolution bool
@@ -1015,11 +1074,41 @@ func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 		recorded.Reachability = append(recorded.Reachability, judgment)
 	}
 
-	if double.controlOutcome != domain.FinancialControlOutcomeInvalid {
+	switch {
+	case double.control != nil:
+		recorded.FinancialControl = *double.control
+	case double.controlOutcome != domain.FinancialControlOutcomeInvalid:
 		recorded.FinancialControl = financialControlOf(double.t, double.controlOutcome, "SAC-1",
 			formedAsOfFor(double.t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf))
 	}
 	return recorded, nil
+}
+
+// heldThenRestrictedControl 造组合策略下「第一项预付冻结成立、第二项信用校验受限」的采用结果：结论
+// `RESTRICTED`，但第一项占下的资金确在提供方账本上——释放看的是这一格，不是结论。
+func heldThenRestrictedControl(t *testing.T) domain.FinancialControlResult {
+	t.Helper()
+	freeze, err := domain.NewControlItemResult(
+		domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, domain.ControlBasisReference{})
+	if err != nil {
+		t.Fatalf("new control item result: %v", err)
+	}
+	credit, err := domain.NewControlItemResult(
+		domain.CreditCheckControlItem, 2, domain.ControlItemRestricted,
+		mustValue(t, domain.NewControlBasisReference, "AVAILABLE_CREDIT_INSUFFICIENT"))
+	if err != nil {
+		t.Fatalf("new control item result: %v", err)
+	}
+	result, err := domain.NewExecutedFinancialControlResult(domain.ExecutedFinancialControlSpec{
+		ResultID:  mustValue(t, domain.NewFinancialControlResultID, "SAC-1"),
+		Items:     []domain.ControlItemResult{freeze, credit},
+		JointPass: domain.AllControlsPass,
+		AsOf:      formedAsOfFor(t, domain.FinancialControlJudgmentKind, controlPolicyFormedAsOf),
+	})
+	if err != nil {
+		t.Fatalf("new executed financial control result: %v", err)
+	}
+	return result
 }
 
 // decidableRequestStore 交回一份已提交、含两个声明成员的委托，并留住被决定后保存的那一份。

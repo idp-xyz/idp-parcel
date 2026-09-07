@@ -476,9 +476,11 @@ func (handler *FormAcceptanceDecisionHandler) releaseIfRejected(
 	if decided.State() != domain.ShipmentRequestRejected {
 		return domain.OwnershipContinuationReference{}
 	}
-	// 没有形成过控制就没有可释放的关联。凭空发一次释放会让 settlement-accounting 去认领
-	// 一笔不存在的冻结。
-	if control.Outcome() != domain.FinancialControlHeld {
+	// 释放看「有没有成立的项」，不看接受侧结论（ADR-0125 决定四）：账期额度占用与「第一项冻结成立、
+	// 第二项受限」那笔冻结都在提供方账本上，按结论只放 `HELD` 会把它们留成孤儿。反过来，什么都没
+	// 占下（从未形成控制、明确无控制、唯一一项受限）就没有可释放的关联——凭空发一次释放会让
+	// settlement-accounting 去认领一笔不存在的占用。
+	if !control.OccupationFormed() {
 		return domain.OwnershipContinuationReference{}
 	}
 
