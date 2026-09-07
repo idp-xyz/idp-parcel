@@ -649,6 +649,17 @@ func (unwiredReferenceCatalogueRegistration) Handle(
 	return pricingapp.RegisterReferenceCatalogueOutcomeInvalid, errOrchestrationNotWired
 }
 
+// unwiredEvaluationReplay 是评价回放的命令占位（ADR-0124，票 wiring-baseline-remainder/06）。
+// 判据同上：不交回零值答复，稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
+type unwiredEvaluationReplay struct{}
+
+func (unwiredEvaluationReplay) Handle(
+	context.Context,
+	pricingapp.ReplayPricingEvaluationCommand,
+) (pricingapp.ReplayPricingEvaluationResult, error) {
+	return pricingapp.ReplayPricingEvaluationResult{}, errOrchestrationNotWired
+}
+
 // 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
 // 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
 // 换不来第二道保障。

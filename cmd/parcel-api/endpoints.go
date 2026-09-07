@@ -94,6 +94,7 @@ func assembleBusinessEndpoints(
 	referenceSeriesReview pricinghttp.ReferenceSeriesReviewer,
 	referenceSeriesPreview pricinghttp.ReferenceSeriesPreviewer,
 	referenceCatalogueRegistration pricinghttp.ReferenceCatalogueRegistrar,
+	evaluationReplay pricinghttp.EvaluationReplayer,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -309,6 +310,11 @@ func assembleBusinessEndpoints(
 		// 计价参考目录登记写面（ADR-0109 Decision 二，票 price-card-shape-gaps/01）：模板导入的命令行，
 		// 同挂字面量 UnconfiguredIntake{}，判据同两个登记口。
 		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(pricinghttp.UnconfiguredIntake{}, referenceCatalogueRegistration)},
+		// 评价回放的治理触发面（ADR-0124 决定一，票 wiring-baseline-remainder/06）：治理动作也是命令行，
+		// 同挂字面量 UnconfiguredIntake{}——触发者来自操作者信封，任何采信自报身份或替它填证据层级的
+		// Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。回放结果不交结算，
+		// 编排的依赖结构上就没有交付口。
+		{Pattern: "/pricing-evaluation-replays", Handler: pricinghttp.NewReplayEvaluationEndpoint(pricinghttp.UnconfiguredIntake{}, evaluationReplay)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令

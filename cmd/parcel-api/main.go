@@ -249,6 +249,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 评价回放编排（ADR-0124，票 wiring-baseline-remainder/06）：接真不等操作者 Intake——未配置
+	// Intake 拒在编排之前，换真那笔工作在装配点换的只是 Intake。
+	evaluationReplay, err := buildEvaluationReplayOrchestration(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -402,6 +408,7 @@ func run(logger *slog.Logger) error {
 			referenceSeriesReview,
 			referenceSeriesPreview,
 			referenceCatalogueRegistration,
+			evaluationReplay,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,
