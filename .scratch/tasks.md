@@ -844,3 +844,23 @@ MCP-4 `479aefee` done（12:2x）：`6f70c8d7` + 补笔 `6279adcd`（缓存挪到
 ### 12:3x–12:4x：pc-gaps/07 进 main
 
 MCP-3 `65d86426` 第 2 步完工报（12:2x）：分支 `mcp3-pcgaps07` 四笔 + 收口笔 `7acf6859`（纯 .md：票 07 resolved + 完成记录；SA 后继票 `sa-preacceptance-policy-view/02` draft），跳过封存笔 `8dc99b9f`。重放：隔离 detached 树基 `77e993e3` cherry-pick 零冲突——`359b10bd→6dc3db12`、`4e5fc6a6→ec0e2284`、`d2d375ac→eb09c1ed`、`7acf6859→265da8d8`；与分支代码 tip `2939d2d9` 除清点/.scratch/CI 外 diff 空；新/改 `.go`/`.sql` 全 `i/lf w/lf`。清点在 `265da8d8` 干净检出重生成 `2ced791a`（PC 生产 84→86 / 测试 84→86、端口 27→28；迁移 party_commercial 23→24，合计 142→143；端口声明 347→348），与分支清点笔 `2939d2d9` 内容零差，分支清点笔不重放。验证钉 `2ced791a`：gofmt 空；build/vet 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，**99 ok / 0 FAIL**（541s）；探针 `-run ControlPolicy`（PC postgres 包）无 DSN SKIP 6 / 含 DSN PASS 6。未跑 `-race`（CI 四片各带）。共享 main 由 `77e993e3` 快进到 `2ced791a`；本笔之后推。MCP-3 转第 3 步 awf/06（建在 `8dc99b9f` 之上，完工报前重切）。
+
+## 2026-09-07 12:5x 通道 1 换人：通道 4 的会话接管（接手时 `main = origin/main = 95182b9d`）
+
+原通道 1 会话 12:5x crash（最后一笔台账 `95182b9d` 12:4x）；MCP-3 亦于 12:4x crash（awf/06 停在「先写 red 再读封存现场」）。用户在通道 4 面板指示该会话改用 `idp-mcp-1` 接通道 1，在通道 6 面板指示 MCP-6 接 MCP-3 余量。接手时通道 1 队列里三件：MCP-5 tf/10 完工报、MCP-6 接管报、MCP-4（即本会话）`-count=1` 完工报。`load_progress` 的存档停在 09-04 17:48，不作依据；现场按 `query_tasks` 与各分支实量。
+
+| SHA | 内容 |
+|---|---|
+| `9f8e4c94` | MCP-4 CI 四片钉 `-count=1`（`mcp4-ci-count1` 基 `95182b9d`，一笔纯 ci.yml，快进推）。取证：run 34083174177 四片各 4/20/12/9 = 45 包 `(cached)`，旧形基线 run 34081438431 同为 45/99——setup-go `cache:true` 还原的 go-build 缓存带测试结果，那些包在 CI 上没重跑。**已推**（推前 ls-remote = 95182b9d） |
+| `64332437`..`366c8c13` | MCP-5 tf/10 十笔重放（分支→main 对照见 13:3x 广播）。README 索引与 main 的 0115 行冲突，两行都留、按号排。**两笔封存笔 `7e7f0e25`/`114d2b30` 按 12:1x 规矩不以 chore(salvage) 进 main：改写提交信为意图（`f7e3e5ad`/`4785566d`），tree 一字未动**——请作者回两段提交信，十分钟未回，推送方按 diff 所见符号与文件自写，提交信末尾注明原 SHA 与「未经作者复核」 |
+| `915c0d55` | 清点在 `366c8c13` 干净检出重生成（TF 生产 118→119 / 测试 106→109；迁移 transport_fulfillment 15→16，合计 143→144）；分支清点笔 `968b0fa1` 量的是基线 `2efef58e` 上的数，不重放。**已推**（推前 ls-remote = 9f8e4c94） |
+
+验证（隔离 detached 树 `idp-replay-tf10`：先在改写提交信之前的 `d9bcfbb9` 验，改写后 tip `915c0d55` 的 tree 与之相同 `59bdb11d`）：gofmt 空；build/vet 退 0；清点工具 vet/test 退 0；清点门在 tip 零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，**99 ok / 0 FAIL**（550s）；探针 `TestAPickupCorrectionSupersedesTheParticipationInTheDatabaseWhileTheRootRowStays` 无 DSN SKIP / 有 DSN PASS。改动 `.go`/`.sql` 全 `i/lf w/lf`。
+
+**新 CI 形态两个 run 的数**：`77e993e3` run 34083174177 success 6m23s，四片 Test 步 284–325s——但 45 包 `(cached)`，且旧形基线同为 45/99，所以「20m25s → ≤325s」是同缓存态同代码的对比；`9f8e4c94` run 34084625114（`-count=1`）success 8m21s，Test 步 rest 294s / main-chain 313s / network-visibility 305s / customs-transport 441s，**cached 全 0**、FAIL / DATA RACE / DSN 缺失三零。最重 customs-transport job 487s = 15 分的 54%，未过 `23733b74` 定的六成线，timeout 与分片边界不动。仍未量：go.sum 变动后编译缓存也冷的 run。
+
+台账清账：`65d86426`（MCP-3）结 failed「承接方换人（crash）」，余量派 MCP-6 `faee318d`（13:1x 已转 working：awf/06 先自写两片 red 再读 `8dc99b9f` 交叉，判据全对上，沿用其实现）；`479aefee`、`23733b74`（MCP-4）done；09-04 旧单 `82fd973a` 结 failed「已被接管重派取代」。
+
+拆树：`idp-replay-tf10`、`idp-parcel-mcp4-ci-count1`（内容 = main）不带 `--force` 拆除。`idp-parcel-mcp3-pcgaps07`（status 零行；`git cherry main` 只剩封存笔 `8dc99b9f` 一个 `+`，留在指针上）`git worktree remove` 退 255 `Directory not empty`——**树里 `apps/admin-web/node_modules` 是指向主树的 junction**（parallel-sessions 那条「不能 `Remove-Item -Recurse`」这次是真撞上了）：登记已摘、`.git` 链接已删，先 `cmd /c rmdir` 只拆链接（主树 node_modules 前后各 15 项），复核无其它 reparse point 后再清壳。指针 `mcp4-ci-shard@6279adcd`、`mcp4-ci-count1@9f8e4c94`、`mcp3-pcgaps07@7acf6859` 保留。
+
+**在途**：MCP-2 `d5558bc6` 第 3 段（ADR-0118；CONTEXT-MAP 与 README 各一小 hunk 已在分支 `8430ae09`，13:1x 释号）；MCP-5 `edb0a8c9` 第 3 步承运总单册 01（建在 `1bc1ccba` 之上，重放只取其后的笔）；MCP-6 `faee318d` awf/06。**归用户不变**。CI 为 `915c0d55` 在跑。
