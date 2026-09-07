@@ -1232,6 +1232,57 @@ func TestPublicationWithoutDeclarationsOmitsTheLandingList(t *testing.T) {
 	}
 }
 
+// TestPublicationNotAcceptedCarriesBothDigests 钉住对账门那一格（ADR-0126 Decision 二）：已接进
+// 规范化的册，声明的摘要与算出的不等答`未受理`，走 200（答案形成了，内容是「这一份输入对不上自己」），
+// `cause` 与两个串都在场——抄 `computedDigest` 就是恢复动作；`pendingCause` 不在场，它是另一格的话。
+func TestPublicationNotAcceptedCarriesBothDigests(t *testing.T) {
+	interval, err := domain.NewEffectiveInterval(pcPublishStart, time.Time{})
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	limit, err := domain.NewCreditAmountLimit(500000)
+	if err != nil {
+		t.Fatalf("额度：%v", err)
+	}
+	command := application.PublishCommercialAuthorityCommand{
+		Spec: domain.CommercialVersionSpec{
+			TenantID:      pcNew(t, domain.NewTenantID, pcTenant),
+			Kind:          domain.CreditPolicyObject,
+			ObjectID:      pcNew(t, domain.NewCommercialObjectID, "SYN-CREDIT-1"),
+			Version:       pcNew(t, domain.NewCommercialVersionLabel, "v1"),
+			Scope:         pcNew(t, domain.NewCommercialScopeReference, pcScope),
+			ContentDigest: pcNew(t, domain.NewCommercialContentDigest, "sha256:SYN-CREDIT-1-v1"),
+			Effective:     interval,
+		},
+		Approval:     pcApproval(t, "SYN-CREDIT-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{CreditPolicyBody: &application.CreditPolicyBodyDeclaration{
+			LegalEntity: pcNew(t, domain.NewLegalEntityReference, "legal-1"),
+			Level:       pcNew(t, domain.NewAuthorityLevel, "level-commercial"),
+			ChargeType:  pcNew(t, domain.NewChargeTypeReference, "charge-freight"),
+			Limit:       limit,
+			Effective:   interval,
+		}},
+	}
+	endpoint := pcPublishEndpoint(t, command, stubPublicationRegistry{})
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/probe", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("未受理答 %d，want 200（body %s）", recorder.Code, recorder.Body)
+	}
+	answer := publicationAnswerOf(t, recorder)
+	if answer.Outcome != "NOT_ACCEPTED" {
+		t.Fatalf("outcome = %q，want NOT_ACCEPTED", answer.Outcome)
+	}
+	if answer.Cause == "" || answer.PendingCause != "" {
+		t.Fatalf("未受理要带 cause、不带 pendingCause：%s", recorder.Body)
+	}
+	if answer.DeclaredDigest != "sha256:SYN-CREDIT-1-v1" || !strings.HasPrefix(answer.ComputedDigest, "PCC-1:") {
+		t.Fatalf("两个串要都在场：declared %q computed %q", answer.DeclaredDigest, answer.ComputedDigest)
+	}
+}
+
 // ---- 解码助手 ----
 
 // 用具名结构而不是 map：字段名若与响应对不上，map 那种写法会静默拿到空串并通过，而
@@ -1242,9 +1293,12 @@ type registrationAnswerBody struct {
 }
 
 type publicationAnswerBody struct {
-	Outcome      string `json:"outcome"`
-	PendingCause string `json:"pendingCause"`
-	Declarations []struct {
+	Outcome        string `json:"outcome"`
+	PendingCause   string `json:"pendingCause"`
+	Cause          string `json:"cause"`
+	DeclaredDigest string `json:"declaredDigest"`
+	ComputedDigest string `json:"computedDigest"`
+	Declarations   []struct {
 		Channel string `json:"channel"`
 		Outcome string `json:"outcome"`
 	} `json:"declarations"`

@@ -14,7 +14,8 @@ import (
 // 半边）。`已发布已生效`与`已计划生效`分格，因为后者不得用于生产解析（AppliesAt 只认
 // `已生效`）；`重复`按 AT-PC-002 返回原结果不造第二版本；`冲突`要商业责任方修正、绝不
 // 覆盖（ADR-0031）；`发布未决`（AT-PC-005/010）等待批准角色或被引对象，不默认发布也
-// 不默认拒绝。
+// 不默认拒绝；`未受理`（ADR-0126 Decision 二）是这一份输入内部不自洽——声明的内容摘要与
+// 服务端按正文算出的不相等——恢复动作是改批文，与`冲突`（换版本号）是两格，一个字节不写。
 type PublishCommercialAuthorityOutcome uint8
 
 const (
@@ -24,6 +25,7 @@ const (
 	CommercialPublicationReplayed
 	CommercialPublicationConflicted
 	CommercialPublicationPending
+	CommercialPublicationNotAccepted
 )
 
 func (outcome PublishCommercialAuthorityOutcome) String() string {
@@ -38,6 +40,8 @@ func (outcome PublishCommercialAuthorityOutcome) String() string {
 		return "CONTENT_CONFLICT"
 	case CommercialPublicationPending:
 		return "PENDING"
+	case CommercialPublicationNotAccepted:
+		return "NOT_ACCEPTED"
 	default:
 		return ""
 	}
@@ -323,6 +327,11 @@ type PublishCommercialAuthorityResult struct {
 	hasVersion   bool
 	pendingCause error
 	declarations []DeclarationReport
+	// refusalCause 与两个摘要串只在`未受理`时在场（ADR-0126 Decision 二）：调用方要的不是「不等」
+	// 这一个字，是两个串——抄算出的那一个就是恢复动作。
+	refusalCause   error
+	declaredDigest string
+	computedDigest string
 }
 
 func (result PublishCommercialAuthorityResult) Outcome() PublishCommercialAuthorityOutcome {
@@ -344,6 +353,18 @@ func (result PublishCommercialAuthorityResult) PendingCause() error {
 // Declarations 交回各声明通道的写入落点（副本），顺序与通道枚举一致。
 func (result PublishCommercialAuthorityResult) Declarations() []DeclarationReport {
 	return append([]DeclarationReport(nil), result.declarations...)
+}
+
+// RefusalCause 只在`未受理`时非空：声明的摘要与算出的不等、声明的串带本构建不认识的规范化版本、
+// 或正文折不成规范化文档，三种成因恢复动作不同，随结果交回。
+func (result PublishCommercialAuthorityResult) RefusalCause() error {
+	return result.refusalCause
+}
+
+// DigestReconciliation 交回对账门比过的两个串：声明的与算出的。只在`未受理`且确实比过时 ok——
+// 正文折不成文档时没有算出的串，ok 为假，成因在 RefusalCause。
+func (result PublishCommercialAuthorityResult) DigestReconciliation() (declared, computed string, ok bool) {
+	return result.declaredDigest, result.computedDigest, result.computedDigest != ""
 }
 
 type PublishCommercialAuthorityHandler struct {
@@ -370,6 +391,13 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 	ctx context.Context,
 	command PublishCommercialAuthorityCommand,
 ) (PublishCommercialAuthorityResult, error) {
+	// 对账门先于一切（ADR-0126 Decision 二）：已接进服务端规范化的册，声明的摘要必须与按正文算出的
+	// 逐字节相等，不等即`未受理`、一个字节不写。放在草稿构造之前，是因为这一格说的是输入自己不自洽，
+	// 与册上有什么无关——读整册是为了判重放与冲突，输入都立不住时那一次读没有意义。
+	if refused, refusal := reconcileDeclaredDigest(command); refused {
+		return refusal, nil
+	}
+
 	draft, err := domain.NewCommercialDraft(command.Spec)
 	if err != nil {
 		return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", err)
@@ -510,6 +538,64 @@ func (handler *PublishCommercialAuthorityHandler) announceOperatorRegistrations(
 		}
 	}
 	return nil
+}
+
+// reconcileDeclaredDigest 是受控批文那一半的对账门（ADR-0126 Decision 二）。只对已接进规范化的册
+// 开门；已接的册正文缺席时没有可比对象，按今天的样子放行声明的串（那种版本没有正文可读，摘要盖住的
+// 是空；预览与表单路径永远带正文）。正文折不成文档（零值、册与类别不符）与两串不等同归`未受理`，成因
+// 各自随结果交回——它们都是输入自己的问题，与册上的任何一版无关。
+func reconcileDeclaredDigest(command PublishCommercialAuthorityCommand) (bool, PublishCommercialAuthorityResult) {
+	if !domain.IsRegisterCanonicalized(command.Spec.Kind) {
+		return false, PublishCommercialAuthorityResult{}
+	}
+	content, present := publicationContentOf(command.Spec.Kind, command.Declarations)
+	if !present {
+		return false, PublishCommercialAuthorityResult{}
+	}
+	canonical, err := domain.CanonicalizePublicationContent(content)
+	if err != nil {
+		return true, PublishCommercialAuthorityResult{
+			outcome:        CommercialPublicationNotAccepted,
+			refusalCause:   fmt.Errorf("canonicalize declared content: %w", err),
+			declaredDigest: command.Spec.ContentDigest.String(),
+		}
+	}
+	if err := domain.ReconcileDeclaredDigest(command.Spec.ContentDigest, canonical); err != nil {
+		return true, PublishCommercialAuthorityResult{
+			outcome:        CommercialPublicationNotAccepted,
+			refusalCause:   err,
+			declaredDigest: command.Spec.ContentDigest.String(),
+			computedDigest: canonical.Digest().String(),
+		}
+	}
+	return false, PublishCommercialAuthorityResult{}
+}
+
+// publicationContentOf 把命令里属于该册的声明正文折成领域的正文输入面。今天只有信用政策一格；各册
+// 由子票在此加一分支。第二个返回值答「正文在不在场」——不在场是合法的（壳可以单独发布），交给
+// 调用方决定要不要对账。
+func publicationContentOf(
+	kind domain.CommercialObjectKind,
+	declarations CommercialDeclarations,
+) (domain.PublicationContent, bool) {
+	content := domain.PublicationContent{Kind: kind}
+	switch kind {
+	case domain.CreditPolicyObject:
+		if declarations.CreditPolicyBody == nil {
+			return content, false
+		}
+		body := declarations.CreditPolicyBody
+		content.CreditPolicy = &domain.CreditPolicyBody{
+			LegalEntity: body.LegalEntity,
+			Level:       body.Level,
+			ChargeType:  body.ChargeType,
+			Limit:       body.Limit,
+			Effective:   body.Effective,
+		}
+		return content, true
+	default:
+		return content, false
+	}
 }
 
 type declarationWrite struct {

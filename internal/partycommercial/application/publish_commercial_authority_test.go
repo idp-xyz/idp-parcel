@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,8 @@ var (
 type publicationRegistryDouble struct {
 	loaded  *domain.CommercialRegistry
 	loadErr error
+	// loads 数整册被读了几次：对账门在读整册之前就该把不自洽的输入拦下（ADR-0126 Decision 二）。
+	loads int
 
 	versionOutcome ports.PublicationSaveOutcome
 	versionErr     error
@@ -246,6 +249,7 @@ func (double *publicationRegistryDouble) LoadForScope(
 	_ domain.TenantID,
 	_ domain.CommercialScopeReference,
 ) (*domain.CommercialRegistry, error) {
+	double.loads++
 	if double.loadErr != nil {
 		return nil, double.loadErr
 	}
@@ -966,6 +970,28 @@ func creditPolicyBody(t *testing.T, limit domain.CreditLimit) *application.Credi
 	}
 }
 
+// creditPolicySpec 给信用政策版本壳配上**算出的**内容摘要：信用政策是首例接进服务端规范化的册
+// （ADR-0126 Decision 一），对账门要求声明的串与算出的逐字节相等，测试里的壳因此不能再随手写一个。
+func creditPolicySpec(t *testing.T, objectID, label string, body *application.CreditPolicyBodyDeclaration) domain.CommercialVersionSpec {
+	t.Helper()
+	spec := publishSpec(t, domain.CreditPolicyObject, objectID, label)
+	canonical, err := domain.CanonicalizePublicationContent(domain.PublicationContent{
+		Kind: domain.CreditPolicyObject,
+		CreditPolicy: &domain.CreditPolicyBody{
+			LegalEntity: body.LegalEntity,
+			Level:       body.Level,
+			ChargeType:  body.ChargeType,
+			Limit:       body.Limit,
+			Effective:   body.Effective,
+		},
+	})
+	if err != nil {
+		t.Fatalf("规范化信用政策正文：%v", err)
+	}
+	spec.ContentDigest = canonical.Digest()
+	return spec
+}
+
 // Covers: 票 party-commercial-context-gaps/03——信用政策正文随它自己那一版发布登记。在这一路
 // 接上之前，信用政策版本壳能入册、能被选中，选中之后额度无处可取。额度原样交给持久化面：
 // 金额或比例哪一格在场由 CreditLimit 自己说，发布通道不代填、不换格。
@@ -976,12 +1002,13 @@ func TestACreditPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("比例额度：%v", err)
 	}
+	body := creditPolicyBody(t, ratio)
 
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+		Spec:         creditPolicySpec(t, "credit-1", "v1", body),
 		Approval:     publishApproval(t, "credit-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{CreditPolicyBody: creditPolicyBody(t, ratio)},
+		Declarations: application.CommercialDeclarations{CreditPolicyBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
@@ -1034,11 +1061,12 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 	t.Run("a content conflict lands in the report", func(t *testing.T) {
 		registry := &publicationRegistryDouble{creditOutcome: ports.CreditPolicyContentConflict}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		body := creditPolicyBody(t, amount)
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+			Spec:         creditPolicySpec(t, "credit-1", "v1", body),
 			Approval:     publishApproval(t, "credit-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{CreditPolicyBody: creditPolicyBody(t, amount)},
+			Declarations: application.CommercialDeclarations{CreditPolicyBody: body},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v——内容冲突不是 error", err)
@@ -1046,6 +1074,105 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 		reports := result.Declarations()
 		if len(reports) != 1 || reports[0].Outcome != ports.DeclarationContentConflict {
 			t.Fatalf("报告 = %#v, want CREDIT_POLICY_BODY=CONTENT_CONFLICT 一条", reports)
+		}
+	})
+}
+
+// Covers: ADR-0126 Decision 二 — 受控批文那一半的对账门。已接进规范化的册，声明的摘要与算出的不等
+// 即`未受理`：一个字节不写（整册也不读），结果带出两个串；旧式无版本的声明串同样不等。声明的串带本构建
+// 不认识的规范化版本是「不支持」而不是不等。壳单独发布（正文缺席）没有可比对象，照旧登记；没接的册
+// 不开门。
+func TestDeclaredDigestIsReconciledAgainstTheCanonicalOne(t *testing.T) {
+	amount, err := domain.NewCreditAmountLimit(500000)
+	if err != nil {
+		t.Fatalf("金额额度：%v", err)
+	}
+	body := creditPolicyBody(t, amount)
+
+	t.Run("a mismatching declared digest is not accepted and nothing is written or read", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+			Approval:     publishApproval(t, "credit-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CreditPolicyBody: body},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——未受理不是 error", err)
+		}
+		if result.Outcome() != application.CommercialPublicationNotAccepted {
+			t.Fatalf("outcome = %q, want NOT_ACCEPTED", result.Outcome())
+		}
+		if !errors.Is(result.RefusalCause(), domain.ErrDeclaredDigestMismatch) {
+			t.Fatalf("RefusalCause = %v, want ErrDeclaredDigestMismatch", result.RefusalCause())
+		}
+		declared, computed, ok := result.DigestReconciliation()
+		if !ok || declared != "sha256:credit-1-v1" || !strings.HasPrefix(computed, "PCC-1:") || declared == computed {
+			t.Fatalf("DigestReconciliation = (%q, %q, %v)：两个串都要在场且不同", declared, computed, ok)
+		}
+		if _, hasVersion := result.Version(); hasVersion {
+			t.Fatal("未受理不该交回版本")
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedCredit) != 0 || registry.loads != 0 {
+			t.Fatalf("未受理写了 %d 版本 / %d 正文、读了 %d 次整册；应一个字节不写、整册不读",
+				len(registry.savedVersions), len(registry.savedCredit), registry.loads)
+		}
+	})
+
+	t.Run("an unsupported canonicalization version is refused as unsupported, not as a mismatch", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		spec := publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1")
+		spec.ContentDigest = pcValue(t, domain.NewCommercialContentDigest, "PCC-9:"+strings.Repeat("f", 64))
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         spec,
+			Approval:     publishApproval(t, "credit-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{CreditPolicyBody: body},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if result.Outcome() != application.CommercialPublicationNotAccepted ||
+			!errors.Is(result.RefusalCause(), domain.ErrCanonicalizationUnsupported) {
+			t.Fatalf("outcome = %q, cause = %v; want NOT_ACCEPTED / ErrCanonicalizationUnsupported", result.Outcome(), result.RefusalCause())
+		}
+	})
+
+	t.Run("a shell without its body has nothing to reconcile and still publishes", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CreditPolicyObject, "credit-1", "v1"),
+			Approval:     publishApproval(t, "credit-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if result.Outcome() != application.CommercialVersionPublishedEffective {
+			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+		}
+	})
+
+	t.Run("a register that is not canonicalized keeps accepting the declared digest", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+			Approval:     publishApproval(t, "settlement-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
+				Method:        domain.PrepaidMethod,
+				Applicability: settlementApplicability(t, "charge-prepaid", "CNY"),
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if result.Outcome() != application.CommercialVersionPublishedEffective {
+			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
 		}
 	})
 }

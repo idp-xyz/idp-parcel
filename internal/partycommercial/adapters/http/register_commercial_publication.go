@@ -73,10 +73,17 @@ func NewPublishCommercialAuthorityEndpoint(
 // 落库，某个通道撞上同键异内容时版本仍可能是`已发布已生效`——把声明落点省掉，一次
 // 半数声明没进去的发布在调用侧看起来与全都落定的发布一模一样，而受控 CLI 恰恰按这一格
 // 抬退出码要商业责任方去看（publish 的 attention 判定）。
+//
+// `cause` 与两个摘要串只随`未受理`在场（ADR-0126 Decision 二）：这一格与身份族的`未受理`同名同物
+// ——输入自己不自洽，改载荷才会好——所以字段名照那边叫 `cause`，与 `pendingCause` 分开。
+// `computedDigest` 是恢复动作本身：调用方抄它就对上了；正文折不成文档时没有算出的串，只有 `cause`。
 type publicationAnswer struct {
-	Outcome      string              `json:"outcome"`
-	PendingCause string              `json:"pendingCause,omitempty"`
-	Declarations []declarationAnswer `json:"declarations,omitempty"`
+	Outcome        string              `json:"outcome"`
+	PendingCause   string              `json:"pendingCause,omitempty"`
+	Cause          string              `json:"cause,omitempty"`
+	DeclaredDigest string              `json:"declaredDigest,omitempty"`
+	ComputedDigest string              `json:"computedDigest,omitempty"`
+	Declarations   []declarationAnswer `json:"declarations,omitempty"`
 }
 
 // declarationAnswer 是一个声明通道的落点。通道名与落点名都取应用枚举原名，不改名也
@@ -116,6 +123,16 @@ func writePublicationAnswer(
 	answer := publicationAnswer{Outcome: name}
 	if cause := result.PendingCause(); cause != nil {
 		answer.PendingCause = cause.Error()
+	}
+	if cause := result.RefusalCause(); cause != nil {
+		// `未受理`走 200 的判据同重放与冲突：答案形成了（ADR-0022），内容是「这一份输入对不上自己」，
+		// 续办是改载荷——4xx 会让调用侧把它与「请求畸形」混在一起，而后者连解码都没过。
+		answer.Cause = cause.Error()
+		declared, computed, reconciled := result.DigestReconciliation()
+		answer.DeclaredDigest = declared
+		if reconciled {
+			answer.ComputedDigest = computed
+		}
 	}
 	for _, report := range result.Declarations() {
 		channel := report.Channel.String()

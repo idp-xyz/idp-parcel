@@ -141,7 +141,11 @@ func runPublish(ctx context.Context, args []string, getenv func(string) string, 
 		}
 		fmt.Fprintf(out, "%s：%s%s\n", label, result.Outcome(), publishDetail(result))
 		switch result.Outcome() {
-		case pcapplication.CommercialPublicationPending, pcapplication.CommercialPublicationConflicted:
+		case pcapplication.CommercialPublicationPending,
+			pcapplication.CommercialPublicationConflicted,
+			pcapplication.CommercialPublicationNotAccepted:
+			// `未受理`（ADR-0126 Decision 二）：这一项一个字节没写，批文里声明的摘要与算出的对不上——
+			// 要人改批文，与未决、冲突同抬 attention；退 0 会让一批里没进去的那一项静静消失。
 			attention = true
 		}
 		for _, report := range result.Declarations() {
@@ -160,6 +164,13 @@ func publishDetail(result pcapplication.PublishCommercialAuthorityResult) string
 	detail := ""
 	if cause := result.PendingCause(); cause != nil {
 		detail += fmt.Sprintf("（原因：%v）", cause)
+	}
+	if cause := result.RefusalCause(); cause != nil {
+		// 两个串都打出来：抄算出的那一个就是恢复动作（ADR-0126 Decision 二）。
+		detail += fmt.Sprintf("（原因：%v）", cause)
+		if declared, computed, reconciled := result.DigestReconciliation(); reconciled {
+			detail += fmt.Sprintf("；声明的摘要 %s，算出的摘要 %s", declared, computed)
+		}
 	}
 	reports := result.Declarations()
 	if len(reports) > 0 {
