@@ -252,14 +252,7 @@ func TestAmountRoundingEntersTheDigestAndRoundTripsThroughSnapshots(t *testing.T
 		t.Fatal("声明了金额取整策略的卡与没声明的卡内容摘要相同——策略没进摘要")
 	}
 
-	raw, err := domain.MarshalPricingPlanSnapshot(declared)
-	if err != nil {
-		t.Fatalf("折装价卡：%v", err)
-	}
-	rebuilt, err := domain.RehydratePricingPlanSnapshot(raw)
-	if err != nil {
-		t.Fatalf("重建价卡：%v", err)
-	}
+	_, rebuilt := planSnapshotRoundTrip(t, declared)
 	rebuiltPolicy, present := rebuilt.Structures().AmountRounding()
 	if !present || rebuiltPolicy.Mode() != domain.RoundingHalfUp || rebuiltPolicy.Increment().Amount().String() != "0.01" || len(rebuiltPolicy.Points()) != 1 {
 		t.Fatalf("重建后的策略 = %#v present=%v", rebuiltPolicy, present)

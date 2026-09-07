@@ -2,10 +2,13 @@ package domain
 
 import "testing"
 
-// 本文件回答一个取证问题：`ParseCanonical` 的注释说它用在序列化边界上，「那里不允许同一个数
-// 的不同写法产生不同的内容摘要」，而重建边界 `decimalFrom` 直接按字段构造、不解析也不校验。
-// 那道后置门（`evaluation.valid()` 的语义摘要自校）拦不拦得住非规范写法，决定这是一处真缺口
-// 还是一句该改的注释。
+// 本文件钉住一件事实：Decimal 的规范写法只在文本入口（`ParseDecimal`）处被规范化，而重建边界
+// `decimalFrom` 直接按字段构造、不解析也不校验，那道后置门（`evaluation.valid()` 的语义摘要自校）
+// 拦不住非规范写法。
+//
+// 起因是曾有一个自称「用在序列化边界上」的 `ParseCanonical`——一个只收规范文本的解析器——而
+// 这里的四格证明它守不到那道边界：快照存的是字段不是文本。它已按此删去（见 decimal.go 里留的
+// 那段注释）；这四格留着，是因为它们讲的缺口不随那个函数消失，要不要收紧归另一张票裁。
 
 // TestNonCanonicalPairSurvivesValid 钉住第一格：`valid()` 不是规范性检查。
 //

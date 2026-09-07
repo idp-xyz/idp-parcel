@@ -275,6 +275,44 @@ func syntheticInputAt(t testing.TB, actual, zone string, businessAt time.Time) d
 	return input
 }
 
+// registrationOf 把一张价卡装进合成的价卡登记：源文件身份、方向授权引用与批准责任方全是 SYN
+// 夹具常量。生产上方案只随登记一起持久化（见 plan_snapshot.go 头注），要把方案折装重建就得先
+// 把它装进登记。
+func registrationOf(t testing.TB, plan domain.PricingPlanVersion) domain.PriceCardRegistration {
+	t.Helper()
+	source, err := domain.NewSourceFileIdentity("SYN-PRC-CARD-260820.xlsx", synSourceSHA)
+	if err != nil {
+		t.Fatalf("构造源文件身份：%v", err)
+	}
+	registration, err := domain.NewPriceCardRegistration(
+		mustValue(t, domain.NewTenantID, "tenant-1"),
+		plan,
+		source,
+		versionReference(t, domain.ArtifactCommercialAuthorization, "SYN-PRC-BUY-GRANT", "v1"),
+		"SYN-PRC-PRICING-GOVERNANCE",
+	)
+	if err != nil {
+		t.Fatalf("构造价卡登记：%v", err)
+	}
+	return registration
+}
+
+// planSnapshotRoundTrip 把一张价卡经生产唯一的持久化门——价卡登记快照——折装再重建，交回登记
+// 快照字节与重建后的方案。方案层曾有一对导出的快照函数，只有测试调它们而生产走登记层那一对；
+// 测试改经同一道门，证的才是生产真走的那条路径。
+func planSnapshotRoundTrip(t testing.TB, plan domain.PricingPlanVersion) ([]byte, domain.PricingPlanVersion) {
+	t.Helper()
+	raw, err := domain.MarshalPriceCardRegistration(registrationOf(t, plan))
+	if err != nil {
+		t.Fatalf("折装价卡登记快照：%v", err)
+	}
+	rebuilt, err := domain.RehydratePriceCardRegistration(raw)
+	if err != nil {
+		t.Fatalf("重建价卡登记：%v", err)
+	}
+	return raw, rebuilt.Plan()
+}
+
 func evaluate(t testing.TB, id string, plan domain.PricingPlanVersion, input domain.PricingInputSnapshot) domain.PricingEvaluation {
 	t.Helper()
 	request, err := domain.NewEvaluationRequest(

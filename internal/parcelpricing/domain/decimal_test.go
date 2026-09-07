@@ -17,20 +17,22 @@ func TestDecimalUsesExactBase10Arithmetic(t *testing.T) {
 		t.Fatalf("0.1 + 0.2 = %s", result.String())
 	}
 
+	// 文本入口宽收各种写法，落成的都是同一个规范写法——这一条以前由一个只收规范文本的
+	// ParseCanonical 从反面钉着，它删去后改由正面钉：几种写法解析后 String() 全部同答。
 	canonical := decimal(t, "12.500")
 	if canonical.CanonicalString() != "12.5" {
 		t.Fatalf("canonical = %q", canonical.CanonicalString())
 	}
-	if _, err := domain.ParseCanonical("12.500"); !errors.Is(err, domain.ErrInvalidDecimal) {
-		t.Fatalf("non-canonical parse error = %v", err)
-	}
-	if _, err := domain.ParseCanonical("12.5"); err != nil {
-		t.Fatalf("canonical parse: %v", err)
-	}
-	for _, raw := range []string{" 12.5", "12.5 ", "+12.5", ".5", "01"} {
-		if _, err := domain.ParseCanonical(raw); !errors.Is(err, domain.ErrInvalidDecimal) {
-			t.Fatalf("non-canonical %q error = %v", raw, err)
+	for _, raw := range []string{" 12.5", "12.5 ", "+12.5", "12.50", "012.5"} {
+		if got := decimal(t, raw).String(); got != "12.5" {
+			t.Fatalf("%q parsed to %q, want the canonical 12.5", raw, got)
 		}
+	}
+	if got := decimal(t, ".5").String(); got != "0.5" {
+		t.Fatalf(".5 parsed to %q, want 0.5", got)
+	}
+	if got := decimal(t, "01").String(); got != "1" {
+		t.Fatalf("01 parsed to %q, want 1", got)
 	}
 }
 

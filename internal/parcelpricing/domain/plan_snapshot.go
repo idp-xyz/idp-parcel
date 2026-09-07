@@ -1,25 +1,23 @@
 package domain
 
-import (
-	"encoding/json"
-	"errors"
-	"fmt"
-)
-
-// ErrPricingPlanSnapshotInvalid 表示快照解不出一张立得住的价卡——坏写入在重建处
-// 暴露，而不是变成一个看起来合法的可执行工件。
-var ErrPricingPlanSnapshotInvalid = errors.New("parcel pricing: invalid pricing plan snapshot")
-
-// 本文件是价卡（定价方案版本）的持久化快照口，与评价快照同一条纪律：序列化形状留在
-// 领域而不是适配器——方案是几十个值对象组成的闭合规则工件，字段全部未导出，在适配器
-// 里复刻整张图等于为同一形状立第二个口径。重建后必过 plan.valid()：它逐层重验价表
-// 区间、币种/单位一致、结构件有序性，并按当前规范化版本重算内容摘要自校，这正是
-// CONTEXT「版本引用相同、规范化版本也相同而内容摘要不同，视为版本内容冲突」在读回
-// 门上的落点。
+// 本文件是价卡（定价方案版本）的持久化快照**文档**，与评价快照同一条纪律：序列化形状
+// 留在领域而不是适配器——方案是几十个值对象组成的闭合规则工件，字段全部未导出，在适配
+// 器里复刻整张图等于为同一形状立第二个口径。
 //
-// 快照携带产生它的规范化版本。规范化版本不是当前构建支持的那一个时，重算摘要在结构
-// 上不可能（ADR-0014），重建拒绝而不是硬算——那是「结构上算不出来」，不是版本内容
-// 冲突。
+// 它没有自己的导出门。生产上方案只随价卡登记一起持久化，折装与重建的门是
+// registered_price_card.go 的 MarshalPriceCardRegistration / RehydratePriceCardRegistration
+// ——方案文档嵌在登记文档里，重建后经 registration.valid() 连带 plan.valid() 整图重验：
+// 逐层重验价表区间、币种/单位一致、结构件有序性，并按当前规范化版本重算内容摘要自校，
+// 这正是 CONTEXT「版本引用相同、规范化版本也相同而内容摘要不同，视为版本内容冲突」在
+// 读回门上的落点。规范化版本不是当前构建支持的那一个时，重算摘要在结构上不可能
+// （ADR-0014），登记门拒绝重建而不是硬算——那是「结构上算不出来」，不是版本内容冲突。
+//
+// 这里曾并列过一对方案层的导出门 MarshalPricingPlanSnapshot / RehydratePricingPlanSnapshot。
+// 登记层那对落地时绕过了它们、直接用下面的 pricingPlanDocumentOf / pricingPlanFrom，于是
+// 方案层那对成了同一形状的平行第二个公开写法：全仓只有测试调它们，生产一处不用。2026-09-07
+// 按 mechanism-executor-triage 的处置裁决删去。**再要一扇方案级的门时，先问它与登记门是不是
+// 同一条持久化路径**——是就用登记门，不是才有理由另开；两扇门各自守一遍同一张图，漂开只是
+// 时间问题。
 
 type lengthThresholdSnapshot struct {
 	Value decimalSnapshot `json:"value"`
@@ -209,33 +207,6 @@ type pricingPlanSnapshot struct {
 	Catalogues       []referenceCatalogueLinkSnapshot `json:"referenceCatalogues,omitempty"`
 	Manifest         []versionReferenceSnapshot       `json:"manifest"`
 	ContentDigest    string                           `json:"contentDigest"`
-}
-
-// MarshalPricingPlanSnapshot 把一张价卡折成持久化快照。只接受立得住的价卡——写入前
-// 的门与读回的门是同一道。
-func MarshalPricingPlanSnapshot(plan PricingPlanVersion) ([]byte, error) {
-	if !plan.valid() {
-		return nil, ErrPricingPlanSnapshotInvalid
-	}
-	return json.Marshal(pricingPlanDocumentOf(plan))
-}
-
-// RehydratePricingPlanSnapshot 从快照重建价卡并整图重验。快照的规范化版本不是当前
-// 构建支持的那一个时拒绝重建——按别的形状重算摘要在结构上不可能（ADR-0014）。
-func RehydratePricingPlanSnapshot(raw []byte) (PricingPlanVersion, error) {
-	var document pricingPlanSnapshot
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return PricingPlanVersion{}, fmt.Errorf("%w: %v", ErrPricingPlanSnapshotInvalid, err)
-	}
-	if document.Canonicalization != canonicalizationVersion {
-		return PricingPlanVersion{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q",
-			ErrCanonicalizationVersionUnsupported, document.Canonicalization, canonicalizationVersion)
-	}
-	plan := pricingPlanFrom(document)
-	if !plan.valid() {
-		return PricingPlanVersion{}, ErrPricingPlanSnapshotInvalid
-	}
-	return plan, nil
 }
 
 func pricingPlanDocumentOf(plan PricingPlanVersion) pricingPlanSnapshot {

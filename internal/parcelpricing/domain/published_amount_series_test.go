@@ -269,13 +269,9 @@ func TestSeriesAmountShapesSurviveSnapshotsWithinPPC5(t *testing.T) {
 	if plan.ContentDigest() == other.ContentDigest() {
 		t.Fatal("two cards differing only in the out-of-window declaration share a digest")
 	}
-	raw, err := domain.MarshalPricingPlanSnapshot(plan)
-	if err != nil {
-		t.Fatalf("marshal plan: %v", err)
-	}
-	restored, err := domain.RehydratePricingPlanSnapshot(raw)
-	if err != nil || restored.ContentDigest() != plan.ContentDigest() {
-		t.Fatalf("plan round trip: %v", err)
+	_, restored := planSnapshotRoundTrip(t, plan)
+	if restored.ContentDigest() != plan.ContentDigest() {
+		t.Fatalf("plan round trip changed the digest: %s → %s", plan.ContentDigest(), restored.ContentDigest())
 	}
 	calculation := restored.Structures().SurchargeRules()[0].Calculation()
 	seriesID, behaviour, ok := calculation.SeriesAmount()

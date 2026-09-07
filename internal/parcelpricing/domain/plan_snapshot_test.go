@@ -284,21 +284,15 @@ func categoryCondition(t *testing.T, source domain.FeatureSource, expected strin
 	return condition
 }
 
-// TestPlanSnapshotRoundTripsFullyDeclaredPlan 证全结构价卡折装快照后原样重建：快照
-// 逐字节同答、内容摘要与规范化版本原值保留、结构件一件不少。
+// TestPlanSnapshotRoundTripsFullyDeclaredPlan 证全结构价卡经登记快照折装后原样重建：快照
+// 逐字节同答、内容摘要与规范化版本原值保留、结构件一件不少。方案文档没有自己的门，走的是
+// 生产同一道登记门（见 plan_snapshot.go 头注）。
 func TestPlanSnapshotRoundTripsFullyDeclaredPlan(t *testing.T) {
 	plan := fullyDeclaredSyntheticPlan(t)
 
-	raw, err := domain.MarshalPricingPlanSnapshot(plan)
-	if err != nil {
-		t.Fatalf("折装快照：%v", err)
-	}
-	rebuilt, err := domain.RehydratePricingPlanSnapshot(raw)
-	if err != nil {
-		t.Fatalf("重建价卡：%v", err)
-	}
+	raw, rebuilt := planSnapshotRoundTrip(t, plan)
 
-	again, err := domain.MarshalPricingPlanSnapshot(rebuilt)
+	again, err := domain.MarshalPriceCardRegistration(registrationOf(t, rebuilt))
 	if err != nil {
 		t.Fatalf("重建后再折装：%v", err)
 	}
@@ -325,54 +319,35 @@ func TestPlanSnapshotRoundTripsFullyDeclaredPlan(t *testing.T) {
 	}
 }
 
-// TestPlanSnapshotRefusesUnsupportedCanonicalization 证按别的规范化版本记录的快照
-// 拒绝重建：那是结构上算不出来（ADR-0014），不是版本内容冲突，也不能装作重建成功。
-func TestPlanSnapshotRefusesUnsupportedCanonicalization(t *testing.T) {
-	raw, err := domain.MarshalPricingPlanSnapshot(fullyDeclaredSyntheticPlan(t))
-	if err != nil {
-		t.Fatalf("折装快照：%v", err)
-	}
-	var document map[string]any
-	if err := json.Unmarshal(raw, &document); err != nil {
-		t.Fatalf("解开快照：%v", err)
-	}
-	document["canonicalization"] = "PPC-2"
-	tampered, err := json.Marshal(document)
-	if err != nil {
-		t.Fatalf("重封快照：%v", err)
-	}
-
-	if _, err := domain.RehydratePricingPlanSnapshot(tampered); !errors.Is(err, domain.ErrCanonicalizationVersionUnsupported) {
-		t.Fatalf("err = %v, 想要 ErrCanonicalizationVersionUnsupported", err)
-	}
-}
-
-// TestPlanSnapshotExposesTampering 证内容被改的快照重建即失败：摘要自校在重建门上，
-// 坏写入不会变成一个看起来合法的价卡。
+// TestPlanSnapshotExposesTampering 证方案内容被改的快照重建即失败：摘要自校在重建门上，
+// 坏写入不会变成一个看起来合法的价卡。改的是嵌在登记文档里的方案文档那一格——登记元数据
+// 被改的那一格由 registered_price_card_test.go 钉，规范化版本不合的那一格也在那里。
 func TestPlanSnapshotExposesTampering(t *testing.T) {
-	raw, err := domain.MarshalPricingPlanSnapshot(fullyDeclaredSyntheticPlan(t))
-	if err != nil {
-		t.Fatalf("折装快照：%v", err)
-	}
+	raw, _ := planSnapshotRoundTrip(t, fullyDeclaredSyntheticPlan(t))
 	var document map[string]any
 	if err := json.Unmarshal(raw, &document); err != nil {
 		t.Fatalf("解开快照：%v", err)
 	}
-	document["baseChargeCode"] = "TAMPERED_CODE"
+	plan, ok := document["plan"].(map[string]any)
+	if !ok {
+		t.Fatalf("登记快照缺方案文档")
+	}
+	plan["baseChargeCode"] = "TAMPERED_CODE"
 	tampered, err := json.Marshal(document)
 	if err != nil {
 		t.Fatalf("重封快照：%v", err)
 	}
 
-	if _, err := domain.RehydratePricingPlanSnapshot(tampered); !errors.Is(err, domain.ErrPricingPlanSnapshotInvalid) {
-		t.Fatalf("err = %v, 想要 ErrPricingPlanSnapshotInvalid", err)
+	if _, err := domain.RehydratePriceCardRegistration(tampered); !errors.Is(err, domain.ErrPriceCardRegistrationSnapshotInvalid) {
+		t.Fatalf("err = %v, 想要 ErrPriceCardRegistrationSnapshotInvalid", err)
 	}
 }
 
-// TestPlanSnapshotRefusesInvalidPlan 证折装门与重建门是同一道：立不住的价卡折不出
-// 快照。
+// TestPlanSnapshotRefusesInvalidPlan 证折装门与重建门是同一道：装着立不住的价卡的登记折不出
+// 快照。登记构造器本就不收零值方案（registered_price_card_test.go 钉过），这里钉的是绕过构造器
+// 直接折装同样被拒。
 func TestPlanSnapshotRefusesInvalidPlan(t *testing.T) {
-	if _, err := domain.MarshalPricingPlanSnapshot(domain.PricingPlanVersion{}); !errors.Is(err, domain.ErrPricingPlanSnapshotInvalid) {
-		t.Fatalf("err = %v, 想要 ErrPricingPlanSnapshotInvalid", err)
+	if _, err := domain.MarshalPriceCardRegistration(domain.PriceCardRegistration{}); !errors.Is(err, domain.ErrPriceCardRegistrationSnapshotInvalid) {
+		t.Fatalf("err = %v, 想要 ErrPriceCardRegistrationSnapshotInvalid", err)
 	}
 }

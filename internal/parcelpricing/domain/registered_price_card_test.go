@@ -18,21 +18,7 @@ const synSourceSHA = "9edaf27ef93004e00f73a65471897f2cf7064d5d4df05014934ef7ac58
 
 func syntheticRegistration(t *testing.T) domain.PriceCardRegistration {
 	t.Helper()
-	source, err := domain.NewSourceFileIdentity("SYN-PRC-CARD-260820.xlsx", synSourceSHA)
-	if err != nil {
-		t.Fatalf("构造源文件身份：%v", err)
-	}
-	registration, err := domain.NewPriceCardRegistration(
-		mustValue(t, domain.NewTenantID, "tenant-1"),
-		fullyDeclaredSyntheticPlan(t),
-		source,
-		versionReference(t, domain.ArtifactCommercialAuthorization, "SYN-PRC-BUY-GRANT", "v1"),
-		"SYN-PRC-PRICING-GOVERNANCE",
-	)
-	if err != nil {
-		t.Fatalf("构造价卡登记：%v", err)
-	}
-	return registration
+	return registrationOf(t, fullyDeclaredSyntheticPlan(t))
 }
 
 // TestPriceCardRegistrationCarriesGovernanceReferences 证登记聚合把治理引用原样带

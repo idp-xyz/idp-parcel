@@ -77,16 +77,14 @@ func ParseDecimal(raw string) (Decimal, error) {
 	return Decimal{coefficient: digits, scale: scale}, nil
 }
 
-// ParseCanonical 只接受 String 输出的那种规范十进制表示。它用在序列化边界上——
-// 那里不允许同一个数的不同写法产生不同的内容摘要。
-func ParseCanonical(raw string) (Decimal, error) {
-	value, err := ParseDecimal(raw)
-	if err != nil || value.String() != raw {
-		return Decimal{}, ErrInvalidDecimal
-	}
-	return value, nil
-}
-
+// 这里曾有一个只收 String 输出那种规范写法的 ParseCanonical，注释说它「用在序列化边界上」。
+// 它从没接到过任何边界：本包的文本入口（金额、重量、HTTP 载荷、来源转录）收的都是外部写法，
+// 必须宽收再规范化；而快照存的是 (coefficient, scale) 两个字段不是文本，那道门上要拦的是
+// 非规范的字段组合，一个字符串解析器管不到。2026-09-07 删去。**规范写法这件事没有随它消失**：
+// 同一个数的两种字段写法（"100"/2 与 "1"/0）都过 valid()、String() 却不同，进摘要就是两个串，
+// 而生产上 percentShare 那处按字段移位真会产出前一种——现状与后果钉在
+// decimal_canonical_rebuild_test.go，收紧与否要连语义摘要的可比性一起裁，票在
+// .scratch/wiring-baseline-remainder/ 下。
 func NewDecimalFromInt64(value int64) Decimal {
 	if value == 0 {
 		return Decimal{coefficient: "0"}

@@ -172,9 +172,11 @@ func registerCard(t *testing.T, catalog *adapter.PriceCards, transactor bentoapp
 	return outcome
 }
 
+// planSnapshotBytes 把方案装进一份元数据固定的登记再折装：方案层没有自己的快照门（生产只在登记层
+// 持久化，见 domain/plan_snapshot.go 头注），两份方案同答与否就看两份登记快照的字节。
 func planSnapshotBytes(t *testing.T, plan domain.PricingPlanVersion) []byte {
 	t.Helper()
-	raw, err := domain.MarshalPricingPlanSnapshot(plan)
+	raw, err := domain.MarshalPriceCardRegistration(cardRegistration(t, "tenant-snapshot", plan))
 	if err != nil {
 		t.Fatalf("折装方案快照：%v", err)
 	}

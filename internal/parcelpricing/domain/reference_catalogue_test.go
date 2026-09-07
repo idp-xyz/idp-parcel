@@ -311,14 +311,7 @@ func TestCatalogueLinkEntersTheContentDigestAndSurvivesTheSnapshot(t *testing.T)
 		t.Fatalf("canonicalization = %q, want the current version (PPC-5 already absorbed this widening)", bound.CanonicalizationVersion())
 	}
 
-	raw, err := domain.MarshalPricingPlanSnapshot(bound)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	restored, err := domain.RehydratePricingPlanSnapshot(raw)
-	if err != nil {
-		t.Fatalf("rehydrate: %v", err)
-	}
+	_, restored := planSnapshotRoundTrip(t, bound)
 	links := restored.Structures().ReferenceCatalogues()
 	if len(links) != 1 || links[0].Kind() != domain.CatalogueKindZone || links[0].CatalogueID() != "carrier-zone-chart" {
 		t.Fatalf("catalogue link did not survive the snapshot: %#v", links)

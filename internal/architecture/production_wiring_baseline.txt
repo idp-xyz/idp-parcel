@@ -150,6 +150,16 @@
 # 为空，改完 `git diff HEAD -- 本文件` 只有本笔的 hunk；**父提交 `8ab9835` 上两法同得剪前 25、
 # 剪后 24**——两法是 UTF-8 逐行读后滤非空非注释，与字节层数行首非 `#`。两个数只对该检出成立。
 #
+# 2026-09-07 随 wiring-baseline-remainder（MCP-6）剪掉 parcel-pricing 组三条：MarshalPricingPlanSnapshot、
+# RehydratePricingPlanSnapshot、ParseCanonical，**三条都是成因第一种（已删）**，不是接上——理由与
+# 出处写在该组那两段。同笔把 ReplayPricingEvaluation 的理由行改写成「谁是调用方、那一层何时落」。
+# 量在一棵隔离 worktree 上（分支基于 `0f84c0ec`，不含任何人的在途改动，动手前
+# `git status -- internal/architecture/` 为空）：`git show` 取该父提交的本文件两法同得剪前 **9**，
+# 本笔单独作用于其上剪后 **6**。两个数只对该检出成立；本笔重放进 main 时父提交若不是 0f84c0ec，
+# 下一个改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。**这一段自己就改过一次 SHA**：
+# 先在 `2efef58e` 上量得同样的 9→6，随后 main 前进四笔、本分支重放到 `0f84c0ec` 之上，于是在新
+# 父提交上重量一遍再改这句——两次相等是量出来的，不是因为"中间没人改过"就推出来的。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -380,13 +390,35 @@ internal/partycommercial/domain ValidateBeforeDecision
 # 的父提交若不是 2a9a76a，请在自己那一刻的 HEAD 上重取，别拿这两个数加减）。
 # 同一票的 NewSeriesReview / NewReviewedSeriesVersion / PeekReferenceSeriesRegistrationReference
 # 不在名单上：前两个按名字被门禁跳过（`New` 前缀），第三个由同一适配器调用。
+#
+# 评价重放门（CONTEXT「重放必须使用新的评价引用……重算结果与原评价不一致时，结果为冲突」那几条
+# 的执行器）。**调用方是 PN-08 W02「历史回放」的执行编排**：取回原评价与它记录的原方案版本、
+# 按原输入快照与原版本清单重算、结果记 `R`——EvidenceKind 里那格 EvidenceReplay 就是为它留的；
+# CONTEXT 点名的「争议复核」走同一扇门。**那一层今天缺三件，三件同票落地那天这一条出名单**：
+# 按版本引用取回原方案的读口（PriceCardCatalog 只有按方向+范围+时点的 LoadApplicable，重放要的
+# 是「原评价用的那一版」而不是「此刻适用的那一版」）、应用编排（回放结果不交结算：它不是新费用）、
+# 治理触发面。票在 .scratch/wiring-baseline-remainder/issues/06-pp-replay-pricing-evaluation-has-no-executor.md。
+# 别把 application/evaluate_pricing.go 的 settleAgainstExisting 读成它：那是同标识重复请求的
+# 冒名比对，纯函数重算后比摘要、不铸新评价引用，与本条守的规则是两件事。
 internal/parcelpricing/domain ReplayPricingEvaluation
-# 快照序列化与重建是**同一条未接线路径的两端**：适配器 price_card_catalog.go 正文没用它们，
-# 只有它的测试用了。修的是那段路径，不是这两个函数——一次修好会同时去掉两行。
-internal/parcelpricing/domain MarshalPricingPlanSnapshot
-internal/parcelpricing/domain RehydratePricingPlanSnapshot
-# 值与解析助手，造的是值对象不是领域对象。同上：不写排除规则，留两行更便宜。
-internal/parcelpricing/domain ParseCanonical
+# MarshalPricingPlanSnapshot 与 RehydratePricingPlanSnapshot 曾在这里，理由行写着「快照序列化与
+# 重建是同一条未接线路径的两端：适配器 price_card_catalog.go 正文没用它们……一次修好会同时去掉
+# 两行」。**那句预言没兑现，成因在预言自己**：适配器正文后来确实在存取快照，走的却是登记层那一对
+# （registered_price_card.go 的 MarshalPriceCardRegistration / RehydratePriceCardRegistration），
+# 它们直接用未导出的 pricingPlanDocumentOf / pricingPlanFrom——路径接上了而这两行没跟着消失，
+# 因为修路径的人绕过了它们，方案层那对成了同一形状的平行第二个公开写法（mechanism-executor-triage/
+# spec.md「parcel-pricing（4）」一节 2026-09-02 核出）。2026-09-07 按该 spec 处置裁决第 2 条**删去**
+# （wiring-baseline-remainder，MCP-6）：全仓非测试引用为零、测试引用改经登记门（证的才是生产真走的
+# 路径）。成因三分：是**第一种**（已删），删前全仓各只有一处声明，不存在同名误判。
+#
+# ParseCanonical 曾在这里，理由行写着「值与解析助手，造的是值对象不是领域对象……留两行更便宜」。
+# 它的函数注释说「用在序列化边界上——那里不允许同一个数的不同写法产生不同的内容摘要」，而它从没
+# 接到过任何边界：本包所有文本入口收的是外部写法、必须宽收再规范化；快照存的是 (coefficient, scale)
+# 两个字段不是文本，那道门要拦的是非规范的字段组合，字符串解析器管不到（domain/
+# decimal_canonical_rebuild_test.go 四格钉住）。同日**删去**，成因三分同上是第一种。**它自称要守
+# 的那件事没随它消失**——percentShare 按字段移位真会产出非规范写法、重建门原样收回、语义摘要
+# 因此对同一个数可能出两个串；收紧与否要连摘要可比性一起裁，票在同目录
+# 07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md。
 # 批量评价口 EvaluatePricingAcrossPlans 曾在这里（票 `label-channel/13` 缝一）。它比 PS 侧
 # 那条择优比较器晚一步出名单，因为两者缺的调用方本就不是同一个：比较器缺编排，而它缺的是
 # 把编排接到自己身上的那个适配器（`application` 不得导入 `parcel-pricing`，编排只能经
