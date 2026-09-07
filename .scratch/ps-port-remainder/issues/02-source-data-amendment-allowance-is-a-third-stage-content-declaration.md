@@ -1,8 +1,8 @@
 # `SourceDataRuleDeclaration`：允许矩阵是接单规则包版本下的第三族阶段内容声明；PS 要先长出「资料修订阶段」
 
 Category: enhancement
-Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边拆两段**：不依赖 PC 的那段（词条「资料修订阶段」进 CONTEXT、领域 `AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + ADR-0118）由通道 2 按 task-b77525c9 ③ 在分支 `mcp2-ps-ports` 实施中；依赖 PC 的那段（消费适配器读声明）Blocked by PC 半边
-Blocked by: 消费适配器那段 Blocked by PC 半边；其余不阻
+Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边不依赖 PC 的那段已落地**（通道 2，分支 `mcp2-ps-ports`：词条进 CONTEXT、`AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + 两只未接适配器、ADR-0118；见 Comments 完成记录）；**余下两段各有阻塞**：消费适配器读 PC 声明 Blocked by PC 半边；CC/NO 读面接线 Blocked by [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md)
+Blocked by: 消费适配器那段 Blocked by PC 半边；读面接线那段 Blocked by 05；其余已落
 
 ## 端口今天说什么
 
@@ -58,3 +58,10 @@ Blocked by: 消费适配器那段 Blocked by PC 半边；其余不阻
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码，未改 CONTEXT。** 能力边界：读过端口与编排、PS 领域两型、PC 0013 表名与 `DeclaredStageContent`、ADR-0058 全文、UC-PS-002 全文、PC CONTEXT 相关句；**没读** CC/NO 侧今天有哪些能答「阶段」的读口——问题 4 因此留给建模那一步。
 - 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 同意——矩阵正文归 PC 作第三族阶段内容声明，阶段判断归 PS；**Q2** 阶段封闭集照 UC-PS-002 六格原词，不拆；**Q3** 缺格默认 `NotDeclared`，父行带「封闭」标记时缺格读 `Disallowed`；**Q4** CC/NO 阶段事实进 PS **取消费侧读口（ADR-0025 形）**——阶段是修订请求到达那一刻同步要问的，不是事件便车能保证齐全的；PS 立 `ports.*StageView` 一类读口，适配器读 CC/NO 已有读面，读面不存在或未接就是「判不出阶段 → 未决」；它给 CONTEXT-MAP 加 CC→PS、NO→PS 两条消费箭头，**要 ADR，取预留号 0118**；建模时以 CC/NO 代码为准，若发现既有信封已携带阶段事实且同步性不成问题，可在 ADR 里改选并写理由。上面「提议的 PS CONTEXT 词条」按 Q2 进 CONTEXT。Status 由 draft 改 in-progress（PS 不依赖 PC 的那段开工）。
+- 2026-09-07 · 通道 2（task-d5558bc6）：**PS 半边不依赖 PC 的那段完成记录**（分支 `mcp2-ps-ports`，基线 `08f54867`）。
+  - `7ec02162` 领域：`AmendmentStage` 六格原词（零值判不出，进 enum 门禁）、`StageFact` 三态、`EitherStageFact` 并格、`JudgeAmendmentStage`（靠后压过靠前，途中`不知道`即判不出）、`FurthestAmendmentStage`（委托级取成员最远）。
+  - `3da37e07` 端口 / 编排 / 适配器 / 装配：`SourceDataAmendmentQuery.Stage`；`ResponsibilityStartView` / `CurrentFinalView` 窄读口 + `CustomsStageView` / `ConsolidationStageView` 两个消费侧读口；编排在基线核验之后、问矩阵之前 `judgeStage`，两格新未决原因 `SourceDataAmendmentStageUndetermined` / `SourceDataAmendmentStageFactUnavailable`；`UnconnectedCustomsStageView`（新目录 `adapters/customscompliance`）与 `UnconnectedConsolidationStageView` 一律答`不知道`；`cmd/parcel-api` 装配接三本真登记册 + 两只未接适配器。`sourceDataRuleDouble` 收到零值阶段即报错（跟查询形状）。
+  - 文档：PS CONTEXT 词条「资料修订阶段」；ADR-0118 + README 一行；CONTEXT-MAP 两条关系约束 + 两条既有边标签各补一句；新立 05（CC/NO 按包裹键读面缺口，draft）。
+  - **建模结论落到 ADR-0118 而不是改选事件便车**：取证 CC/NO 今天既没有按包裹键的读面、也没有同步携带阶段事实的信封可用；02-Q4 留的「若既有信封已携带且同步性不成问题可改选」那一格没有成立的证据。
+  - **今天生产的停点**：授权过了之后停在`判不出阶段`（两只未接适配器），不默认最早阶段；阶段已知时才停在矩阵未登记（装配用例以已知事实替身证之）。
+  - 验证见完工报（含 DSN 全仓 `-p 1 -count=1`、清点重生成单独成笔）。
