@@ -898,6 +898,48 @@ type PortsPathsView interface {
 	) (DeclarationPathEntry, bool, error)
 }
 
+// ParcelDeclarationFacts 是本上下文按正式包裹引用交出的三件独立事实（读面为 parcel-shipment
+// 的「资料修订阶段」判断而立，ADR-0118 决定四拆出的票 ps-port-remainder/05）：该包裹此刻是不是
+// 某个尚无提交版本的申报单元的成员、有没有已固定的提交版本把它写进组成快照、它所在的案件
+// 有没有当前已关闭的。三格各答各的，不折成一个「关务阶段」——哪一格压过哪一格是消费方的
+// 判断，本上下文只说自己册子里有什么。
+//
+// 没有`不知道`那一格：三本册子都是本上下文自己的，读回来了就是知道；一个包裹不在任何单元、
+// 任何版本、任何案件里，三格皆否是如实答案，不是「答不出」。「读面未接」那一格归消费方的
+// 适配器说，本口不替它说。
+//
+// 「已关闭」按生命周期读：有关闭决定且没有受控重开记录。重开后案件处于「重新打开」，再次
+// 关闭要重新盘点、形成新的关闭决定（CONTEXT 生命周期「重新打开 → 已关闭」那一句）；今天一案
+// 一份关闭记录装不下第二个关闭期，重开过的案件在本读面上因此读作未关闭，模型长出第二个
+// 关闭期时本格随之改。「所在案件」取两路之并：案件建立时的直接包裹关联（CaseParcelAssociation），
+// 以及经该包裹当前所在申报单元的案件维——两路都是本上下文自己写下的关联，漏掉任一路都会把
+// 一个已关闭的案件读成没关。
+//
+// 「尚无提交版本的申报单元」不算被替代的单元：原申报单元不能继续使用（CONTEXT「替代申报
+// 单元」），它的形成中不再是这个包裹的形成中。已固定的提交版本按组成快照反查、永久保留，
+// 不随单元被替代而消失——交出去的那一份就是交出去了，替代改变的是后续怎么办，不是它有没有
+// 发生。
+type ParcelDeclarationFacts struct {
+	// MemberOfUnsubmittedUnit 该包裹是至少一个尚无提交版本、且未被替代的申报单元的成员。
+	MemberOfUnsubmittedUnit bool
+	// InFixedSubmissionVersion 至少一个已固定的提交版本的组成快照含该包裹。
+	InFixedSubmissionVersion bool
+	// InClosedCase 该包裹所在的案件里至少一个当前已关闭（有关闭决定、无重开）。
+	InClosedCase bool
+}
+
+// ParcelDeclarationFactsView 按（租户 + 正式包裹引用）读 ParcelDeclarationFacts。依赖调不通作为
+// 错误返回；空册三格皆否。它不拓宽 DeclarationUnitStore / DeclarationSubmissionStore /
+// CaseClosureStore 三个按键的点读口：点读伺候提交链与关闭编排，本口伺候另一个上下文按包裹
+// 键的一次同步询问，扩点读签名会拆全部编排侧替身（判据同 ADR-0077 Decision 五）。
+type ParcelDeclarationFactsView interface {
+	LoadParcelDeclarationFacts(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.DeclaredParcelReference,
+	) (ParcelDeclarationFacts, error)
+}
+
 // CredentialRegistry 是监管凭证登记册的写口半边（票 mechanism-executor-triage/07 CC-a）。
 // 凭证实例（真实签发机构、持有人、程序、期限、额度）属实例半边（PAR-CUS-04 待提供），
 // 但放进库里的那条受控路径属机制半边——判据同 ReadinessRegistry 那句：没有它，租户
