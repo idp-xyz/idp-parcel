@@ -10,8 +10,11 @@ Blocked by: 08
 contract, legalEntity, scope, effective…, rules[{category, reference}]}`（0014 正文）、`asOfPolicies[{judgment, semantics,
 policyVersion}]`（0005 时点锚）、`acceptanceContent{applicableGroups[], manualReview}`（接单规则正文声明）、
 `pendingRoutingBasis`、`intakeQualification{sources[], qualifications[]}`（0013 收寄资格）、`finalRules[{outcome, finalKind}]`
-（0013 终局规则）。pc-gaps/09（终局规则上的有效期声明——随 `FinalRuleChannel` 同一通道多一项正文，**不是**新通道）落地后
-`finalRules` 一节多一格；pc-gaps/10（资料修订允许声明——0013 两族之外的第三族阶段内容声明，新通道）落地后多一节。
+（0013 终局规则）。pc-gaps/09 **已落地**（ADR-0119，迁移 0026）：终局规则节多一格 `finalRuleValidity{anchor, duration}`——`anchor`
+是封闭集下拉（首发只有 `CHANNEL_RESULT_OBSERVED`，由服务端词表读口供）、`duration` 收 ISO-8601 子集 `P[nD][T[nH][nM][nS]]`
+（年 / 月 / 周不收），整格留空 = 未声明有效期（不失效），表单不给默认时长；它仍随 `FinalRuleChannel` 同一通道、**不是**新通道，
+且只填这一格不填 `finalRules` 行服务端整项拒。pc-gaps/10（资料修订允许声明——0013 两族之外的第三族阶段内容声明，新通道）落地后
+多一节。
 
 ## 选形与理由（ADR-0101 决定八）
 

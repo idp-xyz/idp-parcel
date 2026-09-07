@@ -1,7 +1,7 @@
 # 终局规则声明没有「有效期」这一格——「接受时固定的有效期规则」在 PC 无处登记，PS 的面单失效判断因此永远答未配置
 
 Category: enhancement
-Status: in-progress——六问由 [ADR-0119](../../../docs/adr/0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-390c4f53「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT「面单服务终局规则」词条补段已随 ADR 同笔落；实施（迁移 0026 → 领域 → PG 读写 → 发布用例 → 批文 → 真库往返）按下面「要建什么」逐笔接。此前 draft：PC 半边（`FinalRuleContent` 长一格有效期声明 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
+Status: resolved——2026-09-07，MCP-6（task-390c4f53，分支 `mcp6-pcgaps09` 基 `250e5a43`）：ADR-0119 六问一次答完（越权风险点三条单列在 ADR 里供 owner 复核）、PC CONTEXT「面单服务终局规则」词条补段、迁移 0026、领域 / PG / 发布用例 / 批文全部落地，真库往返 PASS；完成记录见 Comments 末条。此前 in-progress：六问由 [ADR-0119](../../../docs/adr/0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-390c4f53「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT「面单服务终局规则」词条补段已随 ADR 同笔落；实施（迁移 0026 → 领域 → PG 读写 → 发布用例 → 批文 → 真库往返）按下面「要建什么」逐笔接。此前 draft：PC 半边（`FinalRuleContent` 长一格有效期声明 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 裁决节与 Comments，取证时该目录只在分支 `mcp2-ps-ports` 上、尚未进 main）；本票是那一格在 PC 侧的建模票，待 `/domain-modeling` 答完下面「要你答的问题」再转 ready-for-agent。ADR 号 **0119** 由 MCP-1 预留（task-aafca372）——ps-port-remainder/01 裁 ④ 写「不要 ADR，PC owner 落地时若认为改了 `FinalRuleContent` 的领域形状要记则自裁」，预留号是给那个「若」用的，建模那一步定写不写；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
 Blocked by: 无
 
@@ -96,3 +96,19 @@ ADR-0062（回指）；`PAR-COM-17`；PS `ports.LabelValidityRuleView` 头注与
 - 2026-09-07 20:3x · MCP-6（task-390c4f53，分支 `mcp6-pcgaps09` 基 `250e5a43`）：**裁决落 ADR-0119**，六问按上面「裁决」节取
   （问题 4 与倾向不同：分立构造器而非可选入参，理由在 ADR Decision 三）；PC CONTEXT「面单服务终局规则」词条补段，本票转
   in-progress。同笔只有文档；代码从下一笔起。能力边界写在 ADR 头部。
+- 2026-09-07 20:5x · MCP-6（task-390c4f53，分支 `mcp6-pcgaps09`）：**完成记录，转 resolved。** 逐笔：`e078a508` docs（ADR-0119 +
+  README 一行 + CONTEXT 词条补段 + 本票 in-progress）；`7ea33e60` feat（迁移 `0026_final_rule_label_validity.sql`——`final_rule_content`
+  加 `validity_anchor` / `validity_duration`，同在同缺 / 时长为正 / 种类封闭三条 CHECK；领域 `ValidityAnchorKind`、
+  `LabelValidityDeclaration`、`FinalRuleContent.Validity()`、`NewFinalRuleContentWithValidity`；postgres `LoadFinalRule` 读回按在不在场选
+  构造门、`SaveFinalRule` 写入且重放 / 冲突判据含有效期，helper 在 `final_rule_validity.go`；发布用例
+  `CommercialDeclarations.FinalRuleValidity` 折进同一 `FinalRuleChannel`，只给有效期不给终局规则行整项拒；批文
+  `declarations.finalRuleValidity{anchor, duration}` 兄弟键 + `parseISODurationSubset`）；票 12 一句。**六问对号**：①父行两列 ②封闭集类型
+  ③`interval` ↔ `time.Duration` ④分立构造器（与倾向不同，理由 ADR Decision 三）⑤兄弟键 + ISO-8601 子集 ⑥票 12 一句。
+  **验收**：真库（DSN 指向门禁容器，`-v` 下 PASS）——带有效期按时刻精度往返（84h30m）、未声明读回即没有、同行同有效期重放 /
+  换时长冲突 / 去掉有效期也冲突且原行不动、CHECK 拒半缺 / 零 / 负 / 集外种类、两列皆空的既有形状仍放行；应用层四格（同通道登记 /
+  缺键即没有 / 只给有效期拒 / 挂错拥有对象拒）；翻译层子集一正一反各一表。**不做的**：PS 适配器 `label_validity_rule.go`
+  （ps-port-remainder/01 PS 半边，据此解阻）；`AcceptanceRulePackageRow` 目录不加格（随 admin-write-faces/12）；起算时刻不加格。
+  **共享接线文件各加了哪一段**：`publish_commercial_authority.go`（`CommercialDeclarations` 一格 + `declarationWrites` 终局规则分支，
+  gofmt 重对齐前七字段属纯格式）、`declaration_publication.go`（`SaveFinalRule` 一函数）、`stage_content_declaration.go`
+  （`LoadFinalRule` 一函数 + pgtype 导入）、`translate.go`（`declarationsDocument` 一键 + 三个函数 + strconv 导入）、
+  `docs/adr/README.md`（0118 与 0122 之间一行）、PC CONTEXT（一个词条末尾一段）。SHA 只作此刻取证，MCP-1 重放后以 main 上的为准。
