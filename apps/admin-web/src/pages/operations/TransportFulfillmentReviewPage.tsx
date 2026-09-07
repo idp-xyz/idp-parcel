@@ -25,10 +25,12 @@ const info = moduleInfoById['transport-fulfillment-review'];
  * 运输履约的治理查阅面。各区栏目取 transport-fulfillment CONTEXT.md 原词。本页只
  * 查阅履约判断与事实，不建班次、不订舱、不改交接结果、不更正交付。
  *
- * 四区接册面（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05）：
- * 班次、容量池、权威交接结果、交付证明。承运总单与运输舱单一区在存储上还没有
- * 登记册——服务端的册名封闭集刻意不含那一格（没有表就没有读法，票 05 Comments），
- * 该区不发请求、如实呈现「无登记册」，不把「无处可登」演成「登记册为空」。
+ * 五区接册面（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05；
+ * 总单一格由 ADR-0113 立册后补入）：班次、容量池、权威交接结果、交付证明、总单。
+ * 运输舱单一区在存储上仍没有登记册——服务端的册名封闭集刻意不含那一格（没有表就
+ * 没有读法，票 05 Comments），该区不发请求、如实呈现「无登记册」，不把「无处可登」
+ * 演成「登记册为空」。总单立册前它与舱单同属一区，立册后拆开：一个有册一个没有，
+ * 共用一份空态措辞会把两种空混成一种。
  *
  * 交接范围汇总一区走另一条读路（GET /transport-fulfillment-handover-scope-summary，
  * 票 admin-web-audit-followups/06）：它不整册上列，是按范围问一次的派生答案，因此有
@@ -79,7 +81,8 @@ type SectionId =
   | 'handover-results'
   | 'handover-scope-summary'
   | 'delivery-proofs'
-  | 'transport-documents';
+  | 'master-documents'
+  | 'transport-manifests';
 
 interface ReviewSection {
   id: SectionId;
@@ -180,26 +183,55 @@ const sections: ReviewSection[] = [
     ],
   },
   {
-    id: 'transport-documents',
-    word: '承运总单与运输舱单',
-    // 本上下文拥有承运总单、运输舱单及外部承运凭证的身份和版本(CONTEXT-MAP)。
-    // 与监管舱单分界:首发出口/进口监管舱单由承运商在外部形成并提交,关务经
-    // UC-CC-012 只接受引用——监管舱单不在本区,本区是运输侧单证。
+    id: 'master-documents',
+    word: '总单',
+    registry: 'carrier-master-document',
+    // 总单是运营企业与外部运输服务提供方之间针对明确运输范围形成的主运输凭证
+    // (CONTEXT)；跨上下文文本里的「承运总单」是它的别名。一行一版本：撤销、替代、
+    // 关联重述都是新行回指前版(回指前版列)，原版本在册面上继续可见；关联数是关联
+    // 子表的计数，关联本体(哪些集运单元、包裹、段)不在列面展开——列入总单不证明
+    // 装载、交接或运输，本区不派生任何控制状态词。与监管舱单分界:监管舱单由承运商
+    // 在外部形成并提交，关务经 UC-CC-012 只接受引用，不在本页。
     columns: [
-      col('documentKind', '单证类别'),
-      col('documentId', '单证标识', { mono: true }),
+      col('document', '总单引用', { mono: true }),
+      col('version', '版本', { mono: true }),
+      col('issuer', '签发方', { mono: true }),
+      col('scope', '主运输凭证范围', { mono: true }),
+      col('standing', '适用状态', { className: 'w-[104px]' }),
+      col('associationCount', '关联数', { align: 'right', mono: true, className: 'w-[72px]' }),
+      col('references', '运输委托 / 订舱', { mono: true }),
+      col('supersedes', '回指前版', { mono: true }),
+      col('replacedBy', '替代者', { mono: true }),
+      col('changedAt', '改变时间', { mono: true }),
+    ],
+  },
+  {
+    id: 'transport-manifests',
+    word: '运输舱单',
+    // 运输舱单表达某次运输计划或申报的载运内容，与总单具有不同业务身份(CONTEXT)。
+    // 它在存储上仍没有登记册；总单立册(ADR-0113)后本区单独成格，不再与总单共用
+    // 一份「无登记册」文案。
+    columns: [
+      col('manifestId', '舱单标识', { mono: true }),
       col('version', '版本', { align: 'right', className: 'w-[72px]' }),
       col('relatedScope', '关联班次 / 实际履约段', { mono: true }),
       col('businessTime', '业务时间', { mono: true }),
     ],
     absence: {
-      title: '承运总单与运输舱单在存储上还没有登记册',
+      title: '运输舱单在存储上还没有登记册',
       description:
-        'transport-fulfillment 目前没有运输侧单证登记表，查询端点的册名封闭集刻意不含本区——没有表就没有读法，答一份恒空的册子会把「无处可登」演成「登记册为空」（票 admin-skeleton-closure-batch/05 Comments）。',
-      unlock: '运输侧单证登记表落地后随查询契约扩册接线；本区不发请求、不含合成数据。',
+        'transport-fulfillment 目前没有运输舱单登记表，查询端点的册名封闭集刻意不含本区——没有表就没有读法，答一份恒空的册子会把「无处可登」演成「登记册为空」（票 admin-skeleton-closure-batch/05 Comments）。总单已另立登记册（ADR-0113），见「总单」区。',
+      unlock: '运输舱单登记表落地后随查询契约扩册接线；本区不发请求、不含合成数据。',
     },
   },
 ];
+
+// 总单适用状态的三值封闭词按 CONTEXT 原词示文；词不在集合内原样示文，不猜。
+const masterDocumentStandingLabels: Record<string, string> = {
+  IN_FORCE: '有效',
+  REVOKED: '已撤销',
+  SUPERSEDED: '已替代',
+};
 
 const chipClass = (active: boolean) =>
   `px-2.5 py-1 text-[12px] rounded border ${
@@ -262,6 +294,23 @@ function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
           corrects: record.correctsVersion
             ? `${record.correctsVersion}${record.correctedAt ? ` · ${formatInstant(record.correctedAt)}` : ''}`
             : '',
+        },
+      }));
+    case 'CARRIER_MASTER_DOCUMENTS_LISTED':
+      return body.masterDocuments.map((record) => ({
+        key: `master-document:${record.document}:${record.version}`,
+        values: {
+          document: record.document,
+          version: record.version,
+          issuer: record.issuer,
+          scope: record.scope,
+          standing: labelOf(masterDocumentStandingLabels, record.standing),
+          associationCount: record.associationCount,
+          // 两个可缺引用并成一格是呈现的事；缺席的那一半不代填。
+          references: [record.commission, record.booking].filter(Boolean).join(' / '),
+          supersedes: record.supersedes ?? '',
+          replacedBy: record.replacedBy ?? '',
+          changedAt: record.changedAt ? formatInstant(record.changedAt) : '',
         },
       }));
   }

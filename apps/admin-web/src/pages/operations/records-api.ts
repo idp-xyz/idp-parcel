@@ -108,13 +108,14 @@ export function listNodeOperationsRecords<Registry extends NodeOperationsRegistr
   );
 }
 
-// ---- 运输履约四册（transport-fulfillment-review 页） ----
+// ---- 运输履约五册（transport-fulfillment-review 页） ----
 
 export type TransportFulfillmentRegistry =
   | 'transport-schedule'
   | 'capacity-pool'
   | 'transport-handover'
-  | 'effective-delivery';
+  | 'effective-delivery'
+  | 'carrier-master-document';
 
 /**
  * 一个具体班次。没有执行准备键、也没有实际执行键——那两组在存储上没有登记格
@@ -181,11 +182,36 @@ export interface EffectiveDeliveryRecord {
   recordedAt: string;
 }
 
+/**
+ * 一行总单版本（ADR-0113）。standing 三值封闭词（IN_FORCE / REVOKED / SUPERSEDED）；
+ * supersedes 与 changedAt 成对缺席即首版——一行一版本，撤销、替代、关联重述都是新行
+ * 回指前版；replacedBy 只在已替代上在场；commission / booking 是可缺引用；
+ * associationCount 是关联子表的行数（十进制计数串），关联本体不在列面展开。
+ */
+export interface CarrierMasterDocumentRecord {
+  document: string;
+  version: string;
+  issuer: string;
+  scope: string;
+  commission?: string;
+  booking?: string;
+  standing: string;
+  supersedes?: string;
+  replacedBy?: string;
+  associationCount: string;
+  changedAt?: string;
+  recordedAt: string;
+}
+
 export type TransportFulfillmentListResponseBody =
   | { outcome: 'TRANSPORT_SCHEDULES_LISTED'; schedules: TransportScheduleRecord[] }
   | { outcome: 'CAPACITY_POOLS_LISTED'; pools: CapacityPoolRecord[] }
   | { outcome: 'TRANSPORT_HANDOVERS_LISTED'; handovers: TransportHandoverRecord[] }
-  | { outcome: 'EFFECTIVE_DELIVERIES_LISTED'; deliveries: EffectiveDeliveryRecord[] };
+  | { outcome: 'EFFECTIVE_DELIVERIES_LISTED'; deliveries: EffectiveDeliveryRecord[] }
+  | {
+      outcome: 'CARRIER_MASTER_DOCUMENTS_LISTED';
+      masterDocuments: CarrierMasterDocumentRecord[];
+    };
 
 interface TransportBodyByRegistry {
   'transport-schedule': Extract<
@@ -203,6 +229,10 @@ interface TransportBodyByRegistry {
   'effective-delivery': Extract<
     TransportFulfillmentListResponseBody,
     { outcome: 'EFFECTIVE_DELIVERIES_LISTED' }
+  >;
+  'carrier-master-document': Extract<
+    TransportFulfillmentListResponseBody,
+    { outcome: 'CARRIER_MASTER_DOCUMENTS_LISTED' }
   >;
 }
 
