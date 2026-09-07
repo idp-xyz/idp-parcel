@@ -1,7 +1,7 @@
 # 一线作业过渡的受控批量导入 CLI——模板 → 既有命令用例，硬期限守卫，来源标记
 
 Category: enhancement
-Status: in-progress——收寄子命令、期限守卫、模板与说明、真库往返用例已落主线；集运子命令 2026-09-04 落分支 `mcp6-fti-consolidation` 待 MCP-1 重放进 main（见 Comments）；余下一格（`RECEIVED` 行的身份核对缝）阻断在 PS 侧，见下
+Status: resolved——收寄与集运两个子命令、期限守卫、两份模板与说明、真库往返用例全部在 main（集运三笔已由 MCP-1 重放为 `351d3029` / `dadcaa21` / `a4740b16`，均为远端 main `ce47b89f` 的祖先；分支 `mcp6-fti-consolidation` 上的 `3c57aab` / `ac0a536` / `6c4eef5` 作封存出处）；票面完成判据四条逐条已达，取证见文末 2026-09-07 条。`RECEIVED` 行的身份核对缝不在本票地盘（PS 侧 `ps-external-mark-relations/01`），不阻本票收口。状态由通道 2 于 2026-09-07 代簿记
 Blocked by: 无（本票自身不被阻断；余下那一处**内容缺口**有独立票，见「阻断在别处的两格」）
 
 [ADR-0089](../../../docs/adr/0089-frontline-transition-controlled-import-with-structural-sunset.md) 的机制半边。
@@ -10,9 +10,8 @@ Blocked by: 无（本票自身不被阻断；余下那一处**内容缺口**有�
 
 ## 已落主线
 
-`cmd/parcel-frontline-import`，子命令 `intake`（收寄）已在主线；`consolidation`（集运）在分支上
-待合入，形状与下面各条同源（模板骨架、四格去向、退出码、来源标记都是同一套实现），细节见
-Comments 2026-09-04 MCP-6。
+`cmd/parcel-frontline-import`，子命令 `intake`（收寄）与 `consolidation`（集运）都在主线；两者
+形状同源（模板骨架、四格去向、退出码、来源标记都是同一套实现），集运细节见 Comments 2026-09-04 MCP-6。
 
 - **期限守卫** `guardStructuralSunset`：期限写成源码常量 `structuralSunsetLiteral`，守卫是 `run`
   的第一条语句，时钟经参数注入。三个用例钉住它——期限时刻本身放行、晚一纳秒即拒、同一
@@ -59,8 +58,8 @@ Comments 2026-09-04 MCP-6。
 
 ## 未办
 
-本票本轮范围已清。余下一件（`RECEIVED` 行的身份核对缝）不在本票地盘，PS 侧解阻后只换
-`buildIntakeImporter` 的 `identity` 参数那一格，见上「阻断在别处的两格」第 1 格。
+本票范围已清，无余项。`RECEIVED` 行的身份核对缝不在本票地盘，PS 侧解阻后只换
+`buildIntakeImporter` 的 `identity` 参数那一格，见上「阻断在别处的两格」第 1 格——届时是一张新票，不重开本票。
 
 ## 完成判据
 
@@ -119,3 +118,15 @@ Comments 2026-09-04 MCP-6。
     与「无落点」判定，已过期；不在本票地盘。
   - `template.md` 补「集运模板（`CONSOLIDATION-1`）」一节（逐列、六种动作各自填什么、集运行多
     出的几种被拒），示例全合成值；「导入之后」改成两份模板通用。
+- 2026-09-07 · 通道 2（代簿记，未动代码）：**转 resolved。** 起因是用户要求盘点 `.scratch` 未收口票；
+  本票状态行仍写「集运子命令在分支待重放」，而 `git log -- cmd/parcel-frontline-import/` 已见 MCP-6 三笔
+  在 main 上重放为 `351d3029` / `dadcaa21` / `a4740b16`（`git merge-base --is-ancestor a4740b16 ce47b89f`
+  退 0，即已在远端 main）；`template.md` 集运一节随 `310ee917` 在。完成判据逐条对：① 钉在本地 main
+  `2fcc9378` 上包内用例——**未设 DSN：11 PASS / 4 SKIP；DSN 指向门禁容器 55432：15 PASS / 0 SKIP**，
+  `TestFrontlineImportVerticalOnRealPostgres`、`TestFrontlineImportLandsReceivedRowOnceIdentityResolves`、
+  `TestFrontlineConsolidationImportVerticalOnRealPostgres`、`TestFrontlineConsolidationImportRejectsWithoutRecording`
+  四条各 PASS（反向那次真的数出 4 个 SKIP，所以「连了库」是验过的）；② 期限守卫拨钟用例
+  `TestRunRefusesToStartAfterSunset` / `TestRunSunsetGuardPrecedesUsage` PASS；③ 真库往返 PASS 见①；
+  ④ `template.md` 在、示例全 `SYN-`/合成值。只跑了本包，未跑全仓——本笔无 `.go`/`.sql` 改动，全仓状态
+  以推送方在 tip 上的兑底为准。集运那格发现的 nodeoperations 三处缺口（无节点/位置格、拒绝原因压平、
+  映射表过期）照 MCP-6 原记，不在本票地盘、不随本票收口立票——要不要立归 NO owner 与映射表所有者。
