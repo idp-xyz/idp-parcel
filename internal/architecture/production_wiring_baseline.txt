@@ -420,7 +420,10 @@ internal/parcelpricing/domain ReplayPricingEvaluation
 # decimal_canonical_rebuild_test.go 四格钉住）。同日**删去**，成因三分同上是第一种。**它自称要守
 # 的那件事没随它消失**——percentShare 按字段移位真会产出非规范写法、重建门原样收回、语义摘要
 # 因此对同一个数可能出两个串；收紧与否要连摘要可比性一起裁，票在同目录
-# 07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md。
+# 07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md。**同日票 07 裁甲落地
+# （ADR-0123，MCP-4）**：规范写法进了 Decimal.valid()、percentShare 改走 decimalFromBig、重建门对非规范
+# 写法与坏写入同格拒绝——上一句里的三个「真会 / 原样 / 可能」自此是历史。它守的那件事落在了值对象
+# 上，不落在任何一条名单行上，所以这一段不改名单、不动条目数。
 # 批量评价口 EvaluatePricingAcrossPlans 曾在这里（票 `label-channel/13` 缝一）。它比 PS 侧
 # 那条择优比较器晚一步出名单，因为两者缺的调用方本就不是同一个：比较器缺编排，而它缺的是
 # 把编排接到自己身上的那个适配器（`application` 不得导入 `parcel-pricing`，编排只能经
