@@ -1,7 +1,7 @@
 # 终局规则声明没有「有效期」这一格——「接受时固定的有效期规则」在 PC 无处登记，PS 的面单失效判断因此永远答未配置
 
 Category: enhancement
-Status: draft——PC 半边（`FinalRuleContent` 长一格有效期声明 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
+Status: in-progress——六问由 [ADR-0119](../../../docs/adr/0119-label-validity-is-a-declaration-slot-on-the-final-rule-content.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-390c4f53「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT「面单服务终局规则」词条补段已随 ADR 同笔落；实施（迁移 0026 → 领域 → PG 读写 → 发布用例 → 批文 → 真库往返）按下面「要建什么」逐笔接。此前 draft：PC 半边（`FinalRuleContent` 长一格有效期声明 + 读口 + 发布通道）由 MCP-1 2026-09-07 代裁归 PC 批（原文在
 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 裁决节与 Comments，取证时该目录只在分支 `mcp2-ps-ports` 上、尚未进 main）；本票是那一格在 PC 侧的建模票，待 `/domain-modeling` 答完下面「要你答的问题」再转 ready-for-agent。ADR 号 **0119** 由 MCP-1 预留（task-aafca372）——ps-port-remainder/01 裁 ④ 写「不要 ADR，PC owner 落地时若认为改了 `FinalRuleContent` 的领域形状要记则自裁」，预留号是给那个「若」用的，建模那一步定写不写；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
 Blocked by: 无
 
@@ -49,7 +49,11 @@ PS 的 `ports.LabelValidityRuleView.JudgeLabelLapsed` 要按「接受时固定�
    还是 PostgreSQL interval 串？倾向 ISO-8601（`PT72H` / `P3D`），解析在批文翻译层，集外拒收。
 6. **admin-write-faces/12 的表单**随之在终局规则节多一格——本票落地时只改票 12 的一句，不建表单。
 
-## 要建什么（裁完之后，本票不实施——「只立票」）
+## 裁决（2026-09-07，MCP-6；正文在 ADR-0119，此处只对号）
+
+① 父行加两列（起算时刻种类 + 时长），同在同缺 CHECK，新迁移 `0026` `ALTER TABLE`，不改 `0013`，不开 1:1 子表（Decision 四）；② 起算时刻种类做成封闭集类型 `ValidityAnchorKind`，首发一值 `CHANNEL_RESULT_OBSERVED`（Decision 二）；③ 时长取 (a)：PostgreSQL `interval` ↔ Go `time.Duration`，CHECK 严格为正，不预设日粒度（Decision 二）；④ `FinalRuleContent.Validity() (LabelValidityDeclaration, bool)`，**不用可选入参**——新构造门 `NewFinalRuleContentWithValidity` 与既有 `NewFinalRuleContent` 分立表达缺席，既有判据一字不动（Decision 三，与倾向不同：零时长与没声明要人做的事相反，一个入参装不下）；⑤ 批文加兄弟键 `finalRuleValidity{anchor, duration}`，翻译层折进同一份 `FinalRuleContent`、同一 `FinalRuleChannel`；`duration` 取 ISO-8601 子集 `P[nD][T[nH][nM][nS]]`，禁年 / 月 / 周，只给有效期不给终局规则行整项拒；冲突判据把有效期算进去（Decision 五）；⑥ admin-write-faces/12 终局规则节加一格，本票只改票 12 一句（Consequences）。**越权风险点三条**（时长按时刻精度而非整数天 / 一版至多一条落父行 / 批文子集排除年月周）单列在 ADR-0119，等 owner 复核。
+
+## 要建什么（裁决已落，逐笔实施；每笔 pathspec 提交）
 
 PC CONTEXT 词条补一句 →（若写）ADR-0119 → 迁移（父表加两列 + 同在同缺 CHECK + 正时长 CHECK）→ 领域（`ValidityAnchorKind`、
 `LabelValidityDeclaration`、`FinalRuleContent.Validity`）→ postgres 读写口跟随（`LoadFinalRule` 读回、`SaveFinalRule` 写入，同内容重放 /
@@ -89,3 +93,6 @@ ADR-0062（回指）；`PAR-COM-17`；PS `ports.LabelValidityRuleView` 头注与
   里的分支细节与 postgres `SaveFinalRule` 的同内容判据实现——问题 5「冲突判据把有效期算进去」怎么落，开工时以代码为准。
 - 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
   → main `52001f02`（远端 main = `e374b1ea`）。对照全表在 `admin-write-faces/07` 的同时刻 Comment。
+- 2026-09-07 20:3x · MCP-6（task-390c4f53，分支 `mcp6-pcgaps09` 基 `250e5a43`）：**裁决落 ADR-0119**，六问按上面「裁决」节取
+  （问题 4 与倾向不同：分立构造器而非可选入参，理由在 ADR Decision 三）；PC CONTEXT「面单服务终局规则」词条补段，本票转
+  in-progress。同笔只有文档；代码从下一笔起。能力边界写在 ADR 头部。
