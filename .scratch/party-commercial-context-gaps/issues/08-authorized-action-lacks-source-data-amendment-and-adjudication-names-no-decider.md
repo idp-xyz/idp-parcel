@@ -1,7 +1,7 @@
 # 授权动作没有「资料修订」这一格、裁定结果不带实际决定方、合同委派只有语言没有执行器——PS 资料修订授权那口因此接不上
 
 Category: enhancement
-Status: draft——PC 半边的三件（`AuthorizedAction` 加「资料修订」格 / 合同委派执行器 / 裁定结果带实际决定方）由 MCP-1 2026-09-07 代裁归 PC 批（原文在 [ps-port-remainder/03](../../ps-port-remainder/issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) Comments，取证时该目录只在分支 `mcp2-ps-ports` 上、尚未进 main）；本票是那三件在 PC 侧的建模票，待 `/domain-modeling` 一次答完下面「要你答的问题」再转 ready-for-agent。ADR 号 **0116** 由 MCP-1 预留（task-aafca372）；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
+Status: in-progress——六问由 [ADR-0116](../../../docs/adr/0116-source-data-amendment-is-an-authorized-action-and-contract-delegation-resolves-the-actual-decider.md) 一次答完（2026-09-07，MCP-6 按 MCP-1 派单 task-aafca372「owner 授权自决口径」裁，越权风险点三条单列在 ADR 里供 owner 复核），PC CONTEXT 新词条「合同委派」+ Rules 加一句已随 ADR 同笔落；实施（迁移 → 领域 → 端口 / PG → 发布用例 / 批文 → 真库端到端）按下面「要建什么」逐笔接，每笔完工报。此前 draft：PC 半边的三件由 MCP-1 2026-09-07 代裁归 PC 批（原文在 [ps-port-remainder/03](../../ps-port-remainder/issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) Comments，立票时该目录只在分支 `mcp2-ps-ports` 上，16:12 随 `61344989` 进 main）；迁移号以开工那刻 `party_commercial` 最大序号 + 1 重取（立票时最大 `0024`）
 Blocked by: 无（PC CONTEXT 「授权动作」那句先改再动代码，是本票内部顺序，不是阻塞边）
 
 ## 从哪里来
@@ -57,12 +57,18 @@ Blocked by: 无（PC CONTEXT 「授权动作」那句先改再动代码，是本
 6. **要不要 ADR。** `AuthorizedAction` 加格不要（封闭集扩一格是 CONTEXT 改动，与 0003 头注的预告一致）；委派 → 实际决定方**要**——
    PC 授权模型多一维（谁替谁），且撤回那口日后复用。MCP-1 已预留 0116。
 
-## 要建什么（裁完之后，本票不实施——「只立票」）
+## 裁决（2026-09-07，MCP-6；正文在 ADR-0116，此处只对号）
+
+① 受托方 = `AuthorityLevel`（权限等级），不存操作者（Decision 二）；② 委派挂 `CUSTOMER_CONTRACT` 版本下作声明通道，形照 `0007` / `0012`，不新开对象类别（Decision 二）；③ 委派格 = 委派方（客户账户 | 责任法人，恰一）× 动作（首发只开资料修订）× 商业范围 × 受托等级 × 有效区间，（动作 × 范围 × 等级）版本内唯一，**不按资料组细分**（Decision 二）；④ `AuthorizationRequest` 带请求方主体 + 种类 + 代录时所代客户账户，`Authorization.Decider`：客户自己 → 请求方；运营角色 → 有效委派解出委派方；grant 在场而委派缺席 → `ErrNotAuthorized`，grant 缺席照旧未配置（Decision 三）；⑤ 既有两格也带 `Decider`（无委派 = 请求方），四格代数不改，撤回格不加（Decision 一、三、五）；⑥ 要 ADR，即 0116。**越权风险点三条**（委派缺席归拒绝而非未配置 / 请求方进请求与头注「不携带参与方角色」的读法 / 受托方 = 权限等级的解释）单列在 ADR-0116，等 owner 复核；任一条被推翻都是一处改动，ADR 相应改一句。
+
+## 要建什么（裁决已落，逐笔实施；每笔 pathspec 提交）
 
 PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条补形状）→ ADR-0116 → 迁移（重建 `authorization_grant` 的动作 CHECK；
 新表 合同委派 父子行，`object_kind = 2`，形照 `0012`）→ 领域（`SourceDataAmendmentAction`；`ContractDelegation`；`Authorization.Decider`；
 `Authorize` 长委派解析）→ 端口（委派读口 + 发布用例 `ContractDelegationChannel`）→ postgres → `cmd/parcel-commercial` 批文一节 →
 真库端到端（形照 pc-gaps/07 四笔 `6dc3db12..265da8d8` 进 main 的那一组）。PS 适配器不在本票。
+
+**签名纪律（实施前读）**：`domain.NewAuthorizationRequest` 与 `Authorization` 在 PS 地盘有调用点（`internal/parcelshipment/adapters/partycommercial/withdrawal_authorization.go`、`active_rejection.go` 及其测试）。给请求带请求方走**三步法**——先加带请求方的新构造器、旧构造器原样保留（旧路裁出的 `Decider` 为空且只对既有两格动作成立），PS 侧迁完调用点后再删旧的；或与 MCP-1 约一个「全仓可能编不过」的窗口一次改完。**不在 PC 分支上直接改 PS 文件**（parallel-sessions「会让旧调用点对不上」那一类）。
 
 ## 在等本票的
 
@@ -92,3 +98,5 @@ PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条�
   `ps-port-remainder/03` 的裁决与 Comments（`git show mcp2-ps-ports:…`），PC 侧事实在 `92579b0a` 上逐条重取（`authority_grant.go`
   全文、`0003` 全文、裁定编排全文、CONTEXT 两句、`git grep 委派`）。能力边界：**没读** `AuthorityGrantStore` 的 postgres 实现与
   三处 `PublicationRegistry` 替身——委派表的 Save 形状开工时以代码为准。「要你答的问题」里的倾向是本会话的建模意见，不是裁决。
+- 2026-09-07 · MCP-6（同一会话，稍后）：**裁决落 ADR-0116**，六问按上面「倾向」取（能力边界与越权风险点写在 ADR 头部与文末），
+  PC CONTEXT 新词条「合同委派」+ Rules 加一句，本票转 in-progress。同笔只有文档；代码从下一笔起。
