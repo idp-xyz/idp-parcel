@@ -169,6 +169,32 @@ func TestTwoMatchingGrantsReturnTheFirstInStableOrder(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0116 Decision 一 —— 「资料修订」进 0003 动作 CHECK 的三值重建（0025），登记后按范围时点读回
+// 仍是同一格；旧的两格不受影响。
+func TestASourceDataAmendmentGrantRoundTripsThroughTheBook(t *testing.T) {
+	grants, transactor, _ := newAuthorityGrants(t)
+	mustSaveGrant(t, transactor, t.Context(), grants,
+		persistedGrant(t, "tenant-1", "auth-amend", domain.SourceDataAmendmentAction, "level-commercial", "scope-a"))
+
+	loaded, err := grants.LoadEffectiveGrants(t.Context(),
+		pcTenant(t, "tenant-1"),
+		pcValue(t, domain.NewCommercialScopeReference, "scope-a"),
+		grantJudgedAt)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(loaded) != 1 || loaded[0].Action() != domain.SourceDataAmendmentAction {
+		t.Fatalf("loaded = %+v, want one SOURCE_DATA_AMENDMENT grant", loaded)
+	}
+
+	// 同范围只有资料修订授权时，主动拒绝落`不允许`而不是`未配置`：范围已被表过态。
+	handler := application.NewAdjudicateCommercialAuthorizationHandler(grants)
+	_, err = handler.Handle(t.Context(), pcTenant(t, "tenant-1"), grantRejectionRequest(t, "scope-a", grantJudgedAt))
+	if !errors.Is(err, domain.ErrNotAuthorized) {
+		t.Fatalf("error = %v, want ErrNotAuthorized", err)
+	}
+}
+
 func newAuthorityGrants(t *testing.T) (*adapter.AuthorityGrants, bentoapp.Transactor, *pgxpool.Pool) {
 	t.Helper()
 	pool := pgtest.Pool(t)

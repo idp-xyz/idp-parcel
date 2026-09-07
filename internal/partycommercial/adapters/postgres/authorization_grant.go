@@ -214,13 +214,17 @@ func grantFromSnapshot(raw []byte) (domain.AuthorityGrant, error) {
 	return domain.NewAuthorityGrant(version, action, legalEntity, level, scope, effective)
 }
 
+// authorizedActionFrom 是 domain.AuthorizedAction 的名字镜像，default 报错不吸收——库上 CHECK 已经
+// 钉死三值，读回集外取值即库与领域分叉。
 func authorizedActionFrom(raw string) (domain.AuthorizedAction, error) {
-	switch raw {
-	case domain.ManualReviewAction.String():
-		return domain.ManualReviewAction, nil
-	case domain.ActiveRejectionAction.String():
-		return domain.ActiveRejectionAction, nil
-	default:
-		return domain.AuthorizedActionInvalid, fmt.Errorf("unknown authorized action %q", raw)
+	for _, action := range []domain.AuthorizedAction{
+		domain.ManualReviewAction,
+		domain.ActiveRejectionAction,
+		domain.SourceDataAmendmentAction,
+	} {
+		if action.String() == raw {
+			return action, nil
+		}
 	}
+	return domain.AuthorizedActionInvalid, fmt.Errorf("unknown authorized action %q", raw)
 }

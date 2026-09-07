@@ -1068,6 +1068,25 @@ func (outcome GrantSaveOutcome) String() string {
 	}
 }
 
+// EffectiveContractDelegationView 按（租户+范围+业务时点）取回当时有效的合同委派，是裁定编排
+// 解实际决定方的内部协作者（ADR-0116 Decision 三）。
+//
+// 它与 AuthorityGrantStore 分开：授权规则答「许不许」，委派答「谁替谁」，两问各有拥有对象
+// （授权规则版本 / 客户合同版本），合成一口会让「客户没委派」与「租户没登记规则」在装载
+// 面上撞成同一个空切片。空切片不是错误：交给 domain.Authorize 译 ErrDelegationAbsent。读取
+// 失败上抛，不得折成空切片——那会把一次该重试的故障说成「客户没委派」。
+//
+// 委派方、动作与等级不在本口的键上：一次装载交回该范围该时点的全部有效委派，五维匹配由
+// 领域做——判据只能有一处，与 LoadEffectiveGrants 把动作、法人、等级留给 Authorize 同理。
+type EffectiveContractDelegationView interface {
+	LoadEffectiveDelegations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.CommercialScopeReference,
+		at time.Time,
+	) ([]domain.ContractDelegation, error)
+}
+
 // AuthorityGrantStore 是授权治理册的持久化面，也是裁定编排的内部协作者。
 //
 // LoadEffectiveGrants 按（租户+范围+业务时点）装载当时管得着的授权。空切片交给

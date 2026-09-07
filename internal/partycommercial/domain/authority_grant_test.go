@@ -57,7 +57,7 @@ func TestActiveRejectionNeedsAMatchingVersionedGrant(t *testing.T) {
 		authorityGrant(t, "auth-reject", domain.ActiveRejectionAction, "level-commercial", "scope-a"),
 	}
 
-	authorized, err := domain.Authorize(grants, rejectionRequest(t, "level-commercial", "scope-a"))
+	authorized, err := domain.Authorize(grants, nil, rejectionRequest(t, "level-commercial", "scope-a"))
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestHoldingAPartyRoleGrantsNoAuthority(t *testing.T) {
 
 	// 根本不存在任何授权；一段生效中的承运代理关系不得顶替它。这里等的是`未配置`而不是
 	// `不允许`：一条规则都没登记时，本上下文还答不了「许不许」——而关系角色照样什么都不带来。
-	if _, err := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+	if _, err := domain.Authorize(nil, nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
 		t.Fatalf("error = %v, want ErrAuthorityRulesNotConfigured", err)
 	}
 
@@ -103,14 +103,14 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 	}
 
 	t.Run("another authority level is not authorized", func(t *testing.T) {
-		if _, err := domain.Authorize(grants, rejectionRequest(t, "level-clerk", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+		if _, err := domain.Authorize(grants, nil, rejectionRequest(t, "level-clerk", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
 			t.Fatalf("error = %v; a different authority level was accepted", err)
 		}
 	})
 
 	t.Run("another scope with no rules of its own is unconfigured", func(t *testing.T) {
 		// scope-a 的授权不为 scope-b 作答；而 scope-b 一条规则都没有，所以答案是`未配置`。
-		if _, err := domain.Authorize(grants, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+		if _, err := domain.Authorize(grants, nil, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
 			t.Fatalf("error = %v; a grant answered outside its scope", err)
 		}
 	})
@@ -122,7 +122,7 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 		crossScope := append([]domain.AuthorityGrant{}, grants...)
 		crossScope = append(crossScope, authorityGrant(t, "auth-review-b", domain.ManualReviewAction, "level-commercial", "scope-b"))
 
-		if _, err := domain.Authorize(crossScope, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrNotAuthorized) {
+		if _, err := domain.Authorize(crossScope, nil, rejectionRequest(t, "level-commercial", "scope-b")); !errors.Is(err, domain.ErrNotAuthorized) {
 			t.Fatalf("error = %v; scope-a 的主动拒绝授权为 scope-b 作了答", err)
 		}
 	})
@@ -131,7 +131,7 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 		reviewGrants := []domain.AuthorityGrant{
 			authorityGrant(t, "auth-review", domain.ManualReviewAction, "level-commercial", "scope-a"),
 		}
-		if _, err := domain.Authorize(reviewGrants, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+		if _, err := domain.Authorize(reviewGrants, nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
 			t.Fatalf("error = %v; a manual-review grant authorized an active rejection", err)
 		}
 	})
@@ -151,7 +151,7 @@ func TestEveryAuthorityDimensionDiscriminates(t *testing.T) {
 		}
 		// 过期与从未登记同落`未配置`：在请求那个时刻，这个范围没有一条管得着的规则，两者要做
 		// 的事同为「让一条现行规则存在」。它绝不能是`不允许`——那会把一次续期疏忽说成业务拒绝。
-		if _, err := domain.Authorize(grants, late); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+		if _, err := domain.Authorize(grants, nil, late); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
 			t.Fatalf("error = %v; an expired grant still authorized", err)
 		}
 	})
@@ -171,13 +171,13 @@ func TestUnconfiguredAuthorityIsNotABusinessRefusal(t *testing.T) {
 	}
 
 	// 规则在，只是请求的等级不在其内：权威已经就这个范围表过态，这是业务拒绝。
-	_, refused := domain.Authorize(configured, rejectionRequest(t, "level-clerk", "scope-a"))
+	_, refused := domain.Authorize(configured, nil, rejectionRequest(t, "level-clerk", "scope-a"))
 	if !errors.Is(refused, domain.ErrNotAuthorized) {
 		t.Fatalf("error = %v, want ErrNotAuthorized", refused)
 	}
 
 	// 这个范围一条规则都没有：还没配置，不是拒绝。
-	_, unconfigured := domain.Authorize(nil, rejectionRequest(t, "level-commercial", "scope-a"))
+	_, unconfigured := domain.Authorize(nil, nil, rejectionRequest(t, "level-commercial", "scope-a"))
 	if !errors.Is(unconfigured, domain.ErrAuthorityRulesNotConfigured) {
 		t.Fatalf("error = %v, want ErrAuthorityRulesNotConfigured", unconfigured)
 	}
