@@ -766,6 +766,14 @@ type PublicationRegistry interface {
 		ctx context.Context,
 		pack domain.AcceptanceRulePackage,
 	) (DeclarationSaveOutcome, error)
+	// SaveContractDelegations 登记一个客户合同版本声明的全部合同委派（ADR-0116 Decision 二，0025）。
+	// 它不代替 SaveVersion，且只能跟在它后面：0025 以外键把委派钉在已入册的合同版本上。判据同其余
+	// 声明表：同拥有版本同一份委派是重放，换委派方、多一条少一条是内容冲突，绝不覆盖也绝不并写
+	// ——改委派发新合同版本。读口在 ContractDelegationContentView / EffectiveContractDelegationView。
+	SaveContractDelegations(
+		ctx context.Context,
+		content domain.ContractDelegationContent,
+	) (DeclarationSaveOutcome, error)
 }
 
 type Clock interface {
@@ -1066,6 +1074,25 @@ func (outcome GrantSaveOutcome) String() string {
 	default:
 		return ""
 	}
+}
+
+// ContractDelegationContentView 取已唯一选出的客户合同版本声明的全部合同委派（ADR-0116 Decision 二）。
+//
+// 分界同 CustomerContractContentView：委派是这份合同说的话，按拥有对象点读，不进整册与 ViewRevision
+// ——一次与选择无关的委派改动不该把该范围全部在途解析判成已失效。found=false = 未声明（无父行）；
+// 父行在场而零子行是坏声明（NewContractDelegationContent 拒零行），走 error，不得折成 found=false
+// ——那会让消费方去催一份其实已经写坏的配置。读取失败同样走 error。本口不提供任何默认委派。
+//
+// 裁定不走本口：它按合同点读，而运营角色代录时请求上没有合同，只有所代客户、范围与时点——那一格
+// 走 EffectiveContractDelegationView。本口服务的是读回核对与日后管理台按合同看委派。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type ContractDelegationContentView interface {
+	LoadContractDelegations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		contract domain.CommercialVersion,
+	) (domain.ContractDelegationContent, bool, error)
 }
 
 // EffectiveContractDelegationView 按（租户+范围+业务时点）取回当时有效的合同委派，是裁定编排
