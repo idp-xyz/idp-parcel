@@ -27,20 +27,5 @@ func (UnconfiguredSourceDataAmendmentAuthorizer) AuthorizeSourceDataAmendment(
 	return psports.SourceDataAmendmentAuthorization{Outcome: psports.AuthorizationRulesNotConfigured}, nil
 }
 
-// UnconfiguredSourceDataRuleDeclaration 是资料修订允许矩阵在提供方那半还没立起来之前的如实答复：
-// 一律答 `NotDeclared`——「还没人说这处资料能不能改」。
-//
-// 矩阵正文归 party-commercial 作接单规则包版本下的阶段内容声明（票 ps-port-remainder/02，照 ADR-0058），
-// 那张表族今天不在。`NotDeclared` 本就是端口的零值与最保守格，编排据以停在`待复核`；本类型存在只是
-// 让装配点上摆着一个说得出理由的答复而不是 nil。不读范围、阶段与意图：读了再答同一个值，会让人以为
-// 它判过什么。
-type UnconfiguredSourceDataRuleDeclaration struct{}
-
-var _ psports.SourceDataRuleDeclaration = UnconfiguredSourceDataRuleDeclaration{}
-
-func (UnconfiguredSourceDataRuleDeclaration) DeclareSourceDataAmendment(
-	context.Context,
-	psports.SourceDataAmendmentQuery,
-) (psports.SourceDataAmendmentAllowance, error) {
-	return psports.SourceDataAmendmentNotDeclared, nil
-}
+// 矩阵那一口原先与本文件同居的 UnconfiguredSourceDataRuleDeclaration（一律答 NotDeclared）已随提供方
+// 声明读口立起退场，换成 DeclaredSourceDataAmendmentAllowance（票 ps-port-remainder/02 余段，ADR-0120）。

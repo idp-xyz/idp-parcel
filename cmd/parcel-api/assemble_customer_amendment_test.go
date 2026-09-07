@@ -15,11 +15,13 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
-	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -27,10 +29,11 @@ import (
 // 本文件对真实 PostgreSQL 16 证资料修订编排的装配（票 ps-port-remainder/04，形照 ADR-0106 决定四）：
 // 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（提供方授权那半
 // 未立，票 03），授权过了阶段按关务与装袋两面真读面判出（ADR-0118；票 05 接线前这里停在判不出阶段），
-// 再停在矩阵未登记（提供方矩阵那半未立，票 02）；两处都不形成版本、不入队「资料版本已形成」意图。另一条钉住交接壳：
-// 意图在自己的事务里入队恰好一封、重放不翻倍——版本与意图不同事务是编排今天的形状，壳只负责把
-// RequireExecutor 那一格接对。最后一条把第一个停点推到 HTTP 面上：端点用例里带业务结果的字段未导出、
-// 逐格映射说好由本包经真编排补，补在这里。
+// 再问矩阵：矩阵那一口已接 party-commercial 的资料修订允许声明（票 02 余段，ADR-0120）——闭包不在或
+// 声明未登记停在待复核，登了声明就按声明答（允许则形成版本并入队意图、不允许是业务拒绝、封闭声明的
+// 缺格读不允许）。另一条钉住交接壳：意图在自己的事务里入队恰好一封、重放不翻倍——版本与意图不同事务
+// 是编排今天的形状，壳只负责把 RequireExecutor 那一格接对。再一条把第一个停点推到 HTTP 面上：端点用例
+// 里带业务结果的字段未导出、逐格映射说好由本包经真编排补，补在这里。
 
 // sourceDataVersionEnvelopeType 与发布侧适配器的类型常量同字面（手抄，理由同 submittedEnvelopeType）。
 const sourceDataVersionEnvelopeType = "parcel-shipment.source-data-version.formed"
@@ -38,6 +41,17 @@ const sourceDataVersionEnvelopeType = "parcel-shipment.source-data-version.forme
 // amendmentCommand 是对 submissionCommand 那份委托的一次资料修订：修订请求有自己的来源身份与载荷
 // 摘要，范围取整份委托的一个资料组，意图为补充，基准为接受基线。
 func amendmentCommand(t *testing.T, amendmentKey string) shipmentapp.AmendCustomerSourceDataCommand {
+	t.Helper()
+	return amendmentCommandFor(t, amendmentKey, "SYN-GROUP-CONSIGNEE", domain.SupplementIntent)
+}
+
+// amendmentCommandFor 让资料组与意图可变：矩阵按（资料组 × 阶段 × 意图）答，证「按声明答」要能问到
+// 声明里不同的格。基准仍是接受基线——意图与基准的配合是形成版本那一步的事，矩阵之前问不到它。
+func amendmentCommandFor(
+	t *testing.T,
+	amendmentKey, dataGroup string,
+	intent domain.AmendmentIntent,
+) shipmentapp.AmendCustomerSourceDataCommand {
 	t.Helper()
 	original := submissionCommand(t)
 	amendmentIdentity, err := domain.NewSourceIdentity(
@@ -51,7 +65,7 @@ func amendmentCommand(t *testing.T, amendmentKey string) shipmentapp.AmendCustom
 	}
 	scope, err := domain.NewShipmentScopedSourceData(
 		original.ShipmentRequestID,
-		mustValue(t, domain.NewSourceDataGroupReference, "SYN-GROUP-CONSIGNEE"),
+		mustValue(t, domain.NewSourceDataGroupReference, dataGroup),
 	)
 	if err != nil {
 		t.Fatalf("new source data scope: %v", err)
@@ -64,7 +78,7 @@ func amendmentCommand(t *testing.T, amendmentKey string) shipmentapp.AmendCustom
 		ReceivedAt:        time.Date(2026, 8, 21, 12, 0, 1, 0, time.UTC),
 		Scope:             scope,
 		Basis:             domain.NewSupplementOnAcceptanceBaseline(),
-		Intent:            domain.SupplementIntent,
+		Intent:            intent,
 		Reason:            mustValue(t, domain.NewAmendmentReasonReference, "SYN-REASON-SUPPLEMENT"),
 		Requester:         mustValue(t, domain.NewRequesterReference, "SYN-CUSTOMER-REQUESTER"),
 	}
@@ -282,9 +296,9 @@ func acceptedOnRealAssembly(t *testing.T, db *bentopg.DB) {
 	}
 }
 
-// recordingAmendmentRules 是生产矩阵答复外面的一层记录壳（隔离合成 `S`）：把编排交来的查询记下再原样
-// 转给 UnconfiguredSourceDataRuleDeclaration。它只为让用例看见「编排问矩阵时带的是哪个阶段」——结果
-// 仍是生产那只的待复核，阶段这一维在结果上本就不可见，只有查询能证它判对了。
+// recordingAmendmentRules 是生产矩阵读法外面的一层记录壳（隔离合成 `S`）：把编排交来的查询记下再原样
+// 转给内层（生产装配用的同一只真读法）。它只为让用例看见「编排问矩阵时带的是哪个阶段」——阶段这一维
+// 在结果上本就不可见，只有查询能证它判对了。
 type recordingAmendmentRules struct {
 	inner   ports.SourceDataRuleDeclaration
 	queries []ports.SourceDataAmendmentQuery
@@ -368,9 +382,10 @@ func seedBaggedIntakeFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel string
 	}
 }
 
-// Covers: 票 04 装配用例②（票 05 接线后改写）——授权过了（放行替身），关务与装袋两口接的是**真读面**
-// （生产装配用的同两只适配器，套在同一个库里 CC/NO 自己的表上），阶段按事实判出、编排走到矩阵，停在
-// 生产矩阵答复的**待复核**（`AWAITING_REVIEW`：「还没人说这处资料能不能改」）；不形成版本、不入队意图。
+// Covers: 票 04 装配用例②（票 05 接线后改写，票 02 余段接真后矩阵那只换成生产读法）——授权过了（放行
+// 替身），关务与装袋两口接的是**真读面**（生产装配用的同两只适配器，套在同一个库里 CC/NO 自己的表上），
+// 阶段按事实判出、编排走到矩阵，停在生产矩阵读法的**待复核**（`AWAITING_REVIEW`：这份委托接受时引用的
+// 解析 `SYN-RES-1` 在 PC 解析库里没有闭包——「还没人说这处资料能不能改」）；不形成版本、不入队意图。
 // 接真之前这一格停在`判不出阶段`，接真之后停点后移一格——这正是票 05 的意义，用例钉的就是这次后移。
 //
 // 阶段在结果上不可见，由记录壳从矩阵查询里取出来证三步：CC/NO 空册 → 已接受尚未收寄（读面答`不在`，
@@ -389,7 +404,11 @@ func TestTheAmendmentAssemblyJudgesTheStageFromTheRealReadFacesOnceAuthorized(t 
 	if err != nil {
 		t.Fatalf("装配阶段事实读口：%v", err)
 	}
-	rules := &recordingAmendmentRules{inner: pspartycommercial.UnconfiguredSourceDataRuleDeclaration{}}
+	production, err := buildSourceDataAmendmentAllowance(db)
+	if err != nil {
+		t.Fatalf("装配矩阵读法：%v", err)
+	}
+	rules := &recordingAmendmentRules{inner: production}
 	amendment, err := assembleCustomerAmendmentOrchestration(db,
 		grantingAmendmentAuthorizer{t: t},
 		rules,
@@ -467,6 +486,261 @@ func TestTheSourceDataHandoffBoundaryEnqueuesOnceWithinItsOwnTransaction(t *test
 	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
 		t.Fatalf("重交后意图 = %d 封——同一版本的意图至多一份", got)
 	}
+}
+
+// synAdoptedRulePackage 是 acceptedOnRealAssembly 那份决定引用的接单规则包版本（快照写的
+// `SYN-RULES-1/v1`），以 PC 领域的重建门造成一份已生效版本。权威在闭包的 AdoptedFor，不在快照串
+// （ResolvedAdoptedStageOwner 头注）——所以种子要把这一版真的放进闭包，而不是指望谁去拆那个串。
+func synAdoptedRulePackage(t *testing.T) pcdomain.CommercialVersion {
+	t.Helper()
+	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	approval, err := pcdomain.NewApprovalBasis(
+		mustValue(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-RULES-1"),
+		mustValue(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-RULES-1"),
+		approvedAt,
+	)
+	if err != nil {
+		t.Fatalf("批准依据：%v", err)
+	}
+	live, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
+		TenantID:      mustValue(t, pcdomain.NewTenantID, submissionCommand(t).Identity.TenantID().String()),
+		Kind:          pcdomain.AcceptanceRulePackageObject,
+		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, "SYN-RULES-1"),
+		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, "v1"),
+		Scope:         mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-PC-SCOPE-1"),
+		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-RULES-1"),
+		Effective:     interval,
+		Status:        pcdomain.CommercialVersionEffective,
+		Approval:      approval,
+		PublishedAt:   approvedAt,
+		EffectiveAt:   approvedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("重建已生效接单规则包：%v", err)
+	}
+	return live
+}
+
+// seedAdoptedClosure 给已接受委托引用的解析 `SYN-RES-1` 配上一份真的 PC 闭包，采用 synAdoptedRulePackage
+// 那一版（形照 parcel-dispatch 的 SYN-PC-SEED 夹具，只取本用例要的接单规则包一项）。生产路径上闭包由
+// 接受链固定（ADR-0027 / ADR-0062）；本包没有走完整接受链的夹具，直接落闭包是取证捷径，不是生产路径。
+func seedAdoptedClosure(t *testing.T, db *bentopg.DB, rules pcdomain.CommercialVersion) {
+	t.Helper()
+	identity := submissionCommand(t).Identity
+	anchorAt := time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC)
+	anchor, err := pcdomain.NewSelectionAnchor(anchorAt, mustValue(t, pcdomain.NewAnchorPolicyVersion, "SYN-ANCHOR-POLICY-1"))
+	if err != nil {
+		t.Fatalf("选用锚点：%v", err)
+	}
+	closure, err := pcdomain.RehydrateCommercialClosure(pcdomain.RehydrateCommercialClosureSpec{
+		Outcome:      pcdomain.UniquelyResolved,
+		ResolutionID: mustValue(t, pcdomain.NewResolutionID, "SYN-RES-1"),
+		Key: pcdomain.ClosureResolutionKey{
+			TenantID:             mustValue(t, pcdomain.NewTenantID, identity.TenantID().String()),
+			CustomerAccountID:    mustValue(t, pcdomain.NewCustomerAccountID, identity.CustomerAccountID().String()),
+			LegalEntityCandidate: mustValue(t, pcdomain.NewLegalEntityReference, "SYN-LEGAL-1"),
+			Scope:                mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-PC-SCOPE-1"),
+			Purpose:              pcdomain.AcceptanceControlPurpose,
+			Anchor:               anchor,
+			RequiredBases:        []pcdomain.CommercialObjectKind{pcdomain.AcceptanceRulePackageObject},
+		},
+		Anchor:       anchor,
+		ViewRevision: mustValue(t, pcdomain.NewAuthorityViewRevision, "SYN-VIEW-1"),
+		Adopted:      []pcdomain.RehydrateAdoptedBasisSpec{{Kind: pcdomain.AcceptanceRulePackageObject, Version: rules}},
+	})
+	if err != nil {
+		t.Fatalf("重建唯一已解析闭包：%v", err)
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		t.Fatalf("构造解析库：%v", err)
+	}
+	var outcome pcports.ResolutionSaveOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		var saveErr error
+		outcome, saveErr = resolutions.Save(txCtx, closure)
+		return saveErr
+	}); err != nil {
+		t.Fatalf("落闭包：%v", err)
+	}
+	if outcome != pcports.ResolutionSaved {
+		t.Fatalf("闭包 save outcome = %s, want 已写入", outcome)
+	}
+}
+
+// declareAmendmentAllowance 经 PC 自己的写口登记一份资料修订允许声明——用真写口而不是裸 SQL，是让种子
+// 也过一遍提供方的构造门（未封闭零格、集外格在这里就会被拒），装配用例证的才是「PS 读到了一份 PC 认可
+// 的声明」。
+func declareAmendmentAllowance(
+	t *testing.T,
+	db *bentopg.DB,
+	rules pcdomain.CommercialVersion,
+	closed bool,
+	cells ...pcdomain.SourceDataAmendmentRule,
+) {
+	t.Helper()
+	content, err := pcdomain.NewSourceDataAmendmentAllowanceContent(rules, closed, cells)
+	if err != nil {
+		t.Fatalf("资料修订允许声明：%v", err)
+	}
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		t.Fatalf("构造商业发布登记册：%v", err)
+	}
+	var outcome pcports.DeclarationSaveOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		var saveErr error
+		outcome, saveErr = publications.SaveSourceDataAmendmentAllowance(txCtx, content)
+		return saveErr
+	}); err != nil {
+		t.Fatalf("登记资料修订允许声明：%v", err)
+	}
+	if outcome != pcports.DeclarationSaved {
+		t.Fatalf("声明 save outcome = %s, want 已写入", outcome)
+	}
+}
+
+func amendmentCell(
+	t *testing.T,
+	group string,
+	stage pcdomain.DeclaredAmendmentStage,
+	intent pcdomain.DeclaredAmendmentIntent,
+	allowance pcdomain.AmendmentAllowance,
+) pcdomain.SourceDataAmendmentRule {
+	t.Helper()
+	return pcdomain.SourceDataAmendmentRule{
+		DataGroup: mustValue(t, pcdomain.NewSourceDataGroupReference, group),
+		Stage:     stage,
+		Intent:    intent,
+		Allowance: allowance,
+	}
+}
+
+// authorizedAmendmentAssembly 装一份「授权放行、其余全真」的编排：矩阵读法、阶段事实读面、仓储、意图交接都是
+// 生产那几只。证矩阵那一格的用例都从这里起——生产装配停在授权未决，走不到矩阵。
+func authorizedAmendmentAssembly(t *testing.T, db *bentopg.DB) shipmenthttp.AmendmentHandler {
+	t.Helper()
+	customs, consolidation, err := buildAmendmentStageFactViews(db)
+	if err != nil {
+		t.Fatalf("装配阶段事实读口：%v", err)
+	}
+	rules, err := buildSourceDataAmendmentAllowance(db)
+	if err != nil {
+		t.Fatalf("装配矩阵读法：%v", err)
+	}
+	amendment, err := assembleCustomerAmendmentOrchestration(db, grantingAmendmentAuthorizer{t: t}, rules, customs, consolidation)
+	if err != nil {
+		t.Fatalf("装配资料修订编排：%v", err)
+	}
+	return amendment
+}
+
+// Covers: 票 ps-port-remainder/02 余段的装配判据——「登了声明则按声明答、未登则 NotDeclared」，在真库上经
+// 生产装配用的同一只读法证四格：闭包在而声明未登记 → 待复核（未声明）；登了（收件人资料组 × 已接受尚未
+// 收寄 × 补充）= 允许 → 形成版本、入队恰好一封「资料版本已形成」意图（RECORDED）；同格 × 更正 = 不允许
+// → 业务拒绝（DISALLOWED，不是未决，复核翻不了案）、版本与意图都不多；未封闭声明里没登的资料组 → 待复核。
+// 四次各是一次新的修订请求身份。声明经 PC 自己的写口登记，闭包按 ADR-0062 回指到接受时固定的那一版。
+func TestTheAmendmentAssemblyAnswersFromTheRegisteredAllowanceDeclaration(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	acceptedOnRealAssembly(t, db)
+	rules := synAdoptedRulePackage(t)
+	seedAdoptedClosure(t, db, rules)
+	amendment := authorizedAmendmentAssembly(t, db)
+
+	amend := func(key, group string, intent domain.AmendmentIntent) shipmentapp.AmendCustomerSourceDataResult {
+		t.Helper()
+		result, err := amendment.Handle(t.Context(), amendmentCommandFor(t, key, group, intent))
+		if err != nil {
+			t.Fatalf("%s：资料修订：%v", key, err)
+		}
+		return result
+	}
+
+	undeclared := amend("SYN-KEY-A-AMENDMENT", "SYN-GROUP-CONSIGNEE", domain.SupplementIntent)
+	if got := undeclared.Outcome(); got != shipmentapp.AmendmentAwaitingReview {
+		t.Fatalf("闭包在、声明未登记：outcome = %q（未决原因 %q）, want AWAITING_REVIEW", got, undeclared.PendingReason())
+	}
+	assertNoSourceDataVersionFormed(t, db)
+
+	declareAmendmentAllowance(t, db, rules, false,
+		amendmentCell(t, "SYN-GROUP-CONSIGNEE", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredSupplementIntent, pcdomain.AmendmentAllowed),
+		amendmentCell(t, "SYN-GROUP-CONSIGNEE", pcdomain.DeclaredAcceptedNotYetReceived, pcdomain.DeclaredCorrectionIntent, pcdomain.AmendmentDisallowed),
+	)
+
+	allowed := amend("SYN-KEY-B-AMENDMENT", "SYN-GROUP-CONSIGNEE", domain.SupplementIntent)
+	if got := allowed.Outcome(); got != shipmentapp.AmendmentRecorded {
+		t.Fatalf("登了允许：outcome = %q（未决原因 %q）, want RECORDED——声明说了能改，编排就该形成版本", got, allowed.PendingReason())
+	}
+	version, formed := allowed.Version()
+	if !formed || version.VersionID().String() == "" {
+		t.Fatal("RECORDED 却没带回形成的版本")
+	}
+	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
+		t.Fatalf("「资料版本已形成」意图 = %d 封, want 恰好 1", got)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), submissionCommand(t).Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	if versions := request.CustomerSourceDataVersions(); len(versions) != 1 || versions[0].VersionID() != version.VersionID() {
+		t.Fatalf("委托上的资料版本 = %d 份, want 恰好刚形成的那一份", len(versions))
+	}
+
+	disallowed := amend("SYN-KEY-C-AMENDMENT", "SYN-GROUP-CONSIGNEE", domain.CorrectionIntent)
+	if got := disallowed.Outcome(); got != shipmentapp.AmendmentDisallowed {
+		t.Fatalf("登了不允许：outcome = %q（未决原因 %q）, want DISALLOWED——那是确定的业务拒绝，不是等复核", got, disallowed.PendingReason())
+	}
+	unlisted := amend("SYN-KEY-D-AMENDMENT", "SYN-GROUP-SHIPPER", domain.SupplementIntent)
+	if got := unlisted.Outcome(); got != shipmentapp.AmendmentAwaitingReview {
+		t.Fatalf("未封闭声明里没登的资料组：outcome = %q（未决原因 %q）, want AWAITING_REVIEW", got, unlisted.PendingReason())
+	}
+	if got := envelopeCountOfType(t, db, sourceDataVersionEnvelopeType); got != 1 {
+		t.Fatalf("拒绝与待复核之后意图 = %d 封, want 仍是 1——两格都不形成版本", got)
+	}
+	request, _, err = requests.FindBySourceIdentity(t.Context(), submissionCommand(t).Identity)
+	if err != nil {
+		t.Fatalf("读回委托：%v", err)
+	}
+	if versions := request.CustomerSourceDataVersions(); len(versions) != 1 {
+		t.Fatalf("拒绝与待复核之后委托上的资料版本 = %d 份, want 仍是 1", len(versions))
+	}
+}
+
+// Covers: ADR-0120 Decision 三在消费端到端的样子——封闭且零格的声明是一句显式的话「这一版什么都不许改」，
+// PS 问任何一格都读到不允许（DISALLOWED，业务拒绝），不是未声明（那会转复核）。封闭的读法由 PC 的
+// AllowanceFor 算出，本适配器只翻译；这里证的是它确实原样到了编排的结果上。
+func TestTheAmendmentAssemblyReadsAClosedDeclarationAsDisallowingEveryUndeclaredCell(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	acceptedOnRealAssembly(t, db)
+	rules := synAdoptedRulePackage(t)
+	seedAdoptedClosure(t, db, rules)
+	declareAmendmentAllowance(t, db, rules, true)
+	amendment := authorizedAmendmentAssembly(t, db)
+
+	result, err := amendment.Handle(t.Context(), amendmentCommand(t, "SYN-KEY-1-AMENDMENT"))
+	if err != nil {
+		t.Fatalf("资料修订：%v", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.AmendmentDisallowed {
+		t.Fatalf("封闭零格声明：outcome = %q（未决原因 %q）, want DISALLOWED——登记方显式说了其余都不许", got, result.PendingReason())
+	}
+	assertNoSourceDataVersionFormed(t, db)
 }
 
 // grantingAmendmentAuthorizer 是放行的授权替身（隔离合成 `S`）：只为让编排走到矩阵那一步。带一份

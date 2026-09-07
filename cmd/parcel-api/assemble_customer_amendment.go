@@ -19,6 +19,7 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 )
 
 // amendmentBoundary 是资料修订编排里委托落库那一层的事务壳：Save 切一个事务，不发信封。
@@ -112,11 +113,16 @@ func (boundary sourceDataHandoffBoundary) HandOffSourceDataVersion(
 // 经 sourceDataHandoffBoundary 携 OutboxSourceDataHandoff 入队，事件类型
 // `parcel-shipment.source-data-version.formed`。
 //
-// 授权与允许矩阵两个提供方口今天接的是**未配置**答复（party-commercial 那两半尚未立，票
-// ps-port-remainder/02、03）：编排会如实停在授权未决（`SourceDataAmendmentAuthorityRulesNotConfigured`）
-// ——那正是接上这条入口的意义：停点从「没有入口」变成「有入口、说得出停在哪」。PC 半边落地时在
-// 这里换成真适配器，端点、壳与编排都不动。客户渠道的采信身份属 `PAR-INT-01` / `BD-PS-009`：端点表
-// 那一行以 `UnconfiguredIntake{}` 起步，本函数不带任何默认身份。
+// 授权那一口今天接的仍是**未配置**答复（party-commercial 授权那半尚未立，票 ps-port-remainder/03）：
+// 编排会如实停在授权未决（`SourceDataAmendmentAuthorityRulesNotConfigured`）——那正是接上这条入口的
+// 意义：停点从「没有入口」变成「有入口、说得出停在哪」。PC 半边落地时在这里换成真适配器，端点、壳与
+// 编排都不动。客户渠道的采信身份属 `PAR-INT-01` / `BD-PS-009`：端点表那一行以 `UnconfiguredIntake{}`
+// 起步，本函数不带任何默认身份。
+//
+// 允许矩阵那一口已接真（票 ps-port-remainder/02 余段，ADR-0120）：经 buildSourceDataAmendmentAllowance
+// 回指接受时固定的接单规则包版本、读 party-commercial 的资料修订允许声明、按（资料组 × 阶段 × 意图）
+// 查格译三值。闭包不在或声明无父行时答`未声明`，编排停在待复核——与此前的未配置答复在停点上同形，
+// 差别在从此登了声明就按声明答。
 //
 // 「资料修订阶段」判断（ADR-0118）读五个口：本上下文自有的收寄采用、面单交易、包裹终局三本登记册
 // 接真库；关务三格与装袋一格经消费侧适配器接 customs-compliance 与 node-operations 各自按包裹键的
@@ -128,13 +134,45 @@ func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.Amendment
 	if err != nil {
 		return nil, err
 	}
+	rules, err := buildSourceDataAmendmentAllowance(db)
+	if err != nil {
+		return nil, err
+	}
 	return assembleCustomerAmendmentOrchestration(
 		db,
 		pspartycommercial.UnconfiguredSourceDataAmendmentAuthorizer{},
-		pspartycommercial.UnconfiguredSourceDataRuleDeclaration{},
+		rules,
 		customs,
 		consolidation,
 	)
+}
+
+// buildSourceDataAmendmentAllowance 装资料修订允许矩阵那一口的真读法：委托仓储 + PC 解析库回指采用的接单
+// 规则包（ResolvedAdoptedStageOwner，ADR-0062），PC 阶段内容读口取声明，消费适配器译三值。回指走的是
+// 与 parcel-dispatch 装收寄资格 / 终局规则同一条路径——采用哪一版是接受时固定闭包的事，不在查询上。
+// 单独成函数是为了让装配用例能拿同一只真读法套记录壳（阶段这一维只在查询上可见），而不必复制这段接线。
+func buildSourceDataAmendmentAllowance(db *bentopg.DB) (ports.SourceDataRuleDeclaration, error) {
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial resolutions: %w", err)
+	}
+	owners, err := pspartycommercial.NewResolvedAdoptedStageOwner(requests, resolutions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: adopted stage owner: %w", err)
+	}
+	declarations, err := pcpostgres.NewStageContentDeclarations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: stage content declarations: %w", err)
+	}
+	rules, err := pspartycommercial.NewDeclaredSourceDataAmendmentAllowance(owners, declarations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: source data amendment allowance: %w", err)
+	}
+	return rules, nil
 }
 
 // buildAmendmentStageFactViews 装两只跨上下文阶段事实适配器：各自套在提供方的 postgres 读面上。
@@ -161,8 +199,8 @@ func buildAmendmentStageFactViews(db *bentopg.DB) (ports.CustomsStageView, ports
 }
 
 // assembleCustomerAmendmentOrchestration 是 buildCustomerAmendmentOrchestration 的形状半边：两个提供方口与
-// 两个邻接上下文读口由调用方给，生产给未配置答复与真读面，装配用例给放行替身以证「授权过了之后阶段按
-// 真读面判出、停在矩阵未登记」那个更深的诚实停点——生产装配自己走不到它（授权先停）。
+// 两个邻接上下文读口由调用方给，生产给未配置的授权答复、真矩阵读法与真读面，装配用例给放行的授权替身以证
+// 「授权过了之后阶段按真读面判出、矩阵按真声明答」那几个更深的格——生产装配自己走不到它们（授权先停）。
 func assembleCustomerAmendmentOrchestration(
 	db *bentopg.DB,
 	authorizer ports.SourceDataAmendmentAuthorizer,
