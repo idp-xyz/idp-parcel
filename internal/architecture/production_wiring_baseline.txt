@@ -162,6 +162,10 @@
 # 同日接管会话为重放再量一次：main `08f54867` 上本文件的 blob 与 `0f84c0ec` 逐字节相同，两法同得
 # 剪前仍 **9**；分支 tip `28ea268b` 两法同得 **6**。这两个数同样只对这两个检出成立。
 #
+# 2026-09-07 随 party-commercial-context-gaps/08 **新增**两条 RequestedByCustomerAccount /
+# RequestedByOperatorRole（理由写在那两行上方）。**在 detached 检出 `df923d16`（分支 mcp5-pcgaps08，
+# 不含任何人的在途改动）上 `git show` 取本文件，两法同得加前 6、加后 8**；两个数只对该检出成立。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -380,6 +384,17 @@ internal/partycommercial/domain ResolveCreditPolicy
 # 留在名单里的代价只是两行，漏掉一个工厂的代价是它永远隐形。两边代价不对称，够了。
 internal/partycommercial/domain ManualReviewRequirementFor
 internal/partycommercial/domain ValidateBeforeDecision
+# 授权请求方的两扇门（票 party-commercial-context-gaps/08，ADR-0116 Decision 三）：客户账户自己 / 运营
+# 角色代某客户账户。它们造的是 NewAuthorizationRequestBy 的入参，而带请求方的请求今天只有资料修订
+# 那一格需要——PS 侧那只适配器（ps-port-remainder/03 的 source_data_amendment_authorization.go，
+# 照撤回那只、Decider 取 PC 交回）落地那天这两行一起出名单；PS 两只既有适配器仍走不带请求方的
+# 旧构造器（三步法，迁完删旧）。成因三分先分过：全仓这两个名字各只有一处声明（domain/
+# contract_delegation.go），非测试调用点为零，是第三种「切片还没到」——消费适配器在 PS 地盘，本票
+# 不动它。同票的 NewAuthorizationRequestBy / NewContractDelegation / NewContractDelegationContent /
+# NewOperatorRoleReference 按名字被门禁跳过（`New` 前缀）；DelegatedByCustomerAccount /
+# DelegatedByLegalEntity 由受控批文 cmd/parcel-commercial/translate.go 与 postgres 读适配器调用，是生产路径。
+internal/partycommercial/domain RequestedByCustomerAccount
+internal/partycommercial/domain RequestedByOperatorRole
 
 
 # —— parcel-pricing ——

@@ -103,3 +103,29 @@ PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条�
 - 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
   → main `52001f02`；ADR-0116 与本票转 in-progress 那一笔 `c9ec35d7` → main `e374b1ea`（远端 main，MCP-1 `git ls-remote` 18:04:16）。
   分支指针留着，树已拆；对照全表在 `admin-write-faces/07` 的同时刻 Comment。
+- 2026-09-07 20:0x · MCP-5（18:59 新绑会话，接 18:5x 旧会话对 task-48e13cf1 的接管；分支 `mcp5-pcgaps08`，基线 `299f2a2e`）：
+  **代码半边三笔落分支，未进 main。** 「要建什么」逐项对号：
+  - `1e182860`：领域——`AuthorizedAction` 加 `SourceDataAmendmentAction`；`NewAuthorizationRequestBy` 带请求方（`RequestedByCustomerAccount` /
+    `RequestedByOperatorRole(operator, onBehalfOf)`），旧 `NewAuthorizationRequest` 原样保留、拒资料修订（`ErrAuthorizationRequesterRequired`）；
+    `Delegator`（客户账户 | 责任法人，两构造器分立）、`Decider`（客户账户 | 责任法人 | 运营角色，只由 `Authorize` 解出、无公开构造器）、
+    `ContractDelegation` / `ContractDelegationContent`（版本内（动作 × 范围 × 等级）唯一、至少一条）；`Authorize(grants, delegations, request)`
+    ——客户自己 → 决定方 = 请求方；运营角色请求既有两格 → 决定方 = 运营角色；运营角色代录资料修订 → 有效委派解出委派方；grant 在场而
+    委派缺席 → `ErrDelegationAbsent`（Is `ErrNotAuthorized`）；grant 缺席照旧未配置。端口 `EffectiveContractDelegationView`。编排
+    `NewAdjudicateCommercialAuthorizationHandlerWithDelegations`，只在运营角色代录资料修订时装载委派；旧构造器装配的编排走到那一格报错、
+    不装成空切片。postgres `authorizedActionFrom` 认第三值。迁移 **0025**：`authorization_grant_action_closed` DROP + ADD 三值（不改 0003）；
+    `contract_delegation_content` / `contract_delegation` 父子表，`object_kind = 2`，外键回 `commercial_version`，子表主键含
+    （action × scope_ref × authority_level），action CHECK 首发只 `SOURCE_DATA_AMENDMENT`，委派方「种类 + 引用」两列。
+  - `6b43484c`：端口 `ContractDelegationContentView.LoadContractDelegations` + `PublicationRegistry.SaveContractDelegations`；postgres
+    `CommercialPublications.SaveContractDelegations`（先读后写，重放 / 冲突一行不写）+ `ContractDelegations` 读适配器（点读 + 按范围时点装载，
+    联 `commercial_version` 快照重建合同版本）；两处 `PublicationRegistry` 替身 + transaction_guard 一行；真库七组含裁定端到端。
+  - `df923d16`：发布用例 `CommercialDeclarations.ContractDelegations` + `ContractDelegationChannel`（`CONTRACT_DELEGATION`）；受控 CLI 批文
+    `declarations.contractDelegations[] { delegatorKind, delegator, action, scope, level, effectiveStartsAt, effectiveEndsAt? }`；真库端到端两读口读回。
+  **验证强度**：每笔 gofmt 空 / build 0 / vet 0；`go test -count=1` PC 全部包 + PS-PC 适配器 + SA-PC 适配器 + migrations + cmd/parcel-commercial
+  全 ok，DSN 已设、PG 用例 `-v` 下 PASS 非 SKIP；`df923d16` 另在 detached 树 `idp-parcel-mcp5-verify-08` 跑全仓 `go test -p 1 -count=1 ./...`
+  （含 DSN）：99 ok / 16 无测试 / 0 SKIP / **1 FAIL**——`internal/architecture` 的 `TestNoNewProductionFactoryGoesUnwired` 点名
+  `RequestedByCustomerAccount` / `RequestedByOperatorRole` 无生产调用点且不在基线里。第四笔把两条加进 `production_wiring_baseline.txt`
+  并写明为什么现在不接（消费适配器在 PS 地盘，ps-port-remainder/03 落地那天出名单），detached 检出上两法同得 6 → 8；该笔只动 `.txt` 与本
+  `.md`，无 `.go` / `.sql`，全仓结果沿用 `df923d16` 那一跑 + `go test ./internal/architecture/` ok。**一字未动**：PS 两只适配器及其测试、
+  `cmd/parcel-api` 两处装配（仍走旧构造器，三步法的迁移与删旧归 ps-port-remainder/03 或一张 PS 侧票）；`docs/product/MECHANISM-INVENTORY.md`
+  （推送方在 tip 上重生成兑底）。**能力边界**：没读 `AuthorityGrants` 之外任何消费方对 `Authorization` 的读法，`Decider` 的 PS 侧翻译按
+  ADR-0116 Decision 四留给 ps-port-remainder/03。票面 Status 待 MCP-1 重放进 main、广播远端 SHA 后转 resolved（新旧 SHA 对照记在那一条）。
