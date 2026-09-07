@@ -143,9 +143,17 @@ jobs:
 
       # 包清单由脚本给出。先赋值再展开，不走管道：默认 shell 没开 pipefail，管道里脚本
       # 红了 go test 照样会拿着空参数对仓库根跑一遍，报的是「没有 Go 文件」而不是真因。
+      #
+      # -count=1 关掉测试结果缓存。setup-go 的 cache:true 还原的是整个 go-build 缓存，上一次
+      # run 的测试结果跟着一起回来；而 Go 判「可复用」只看文件与环境变量，不知道这一次的库
+      # 是新起的——命中的包在本次 run 里一个用例都没跑，含真库的包也没碰过这个 service。
+      # CI 要证明的是这一笔在干净库上过，缓存命中等于把证明记在了另一次 run 名下；本机验证
+      # 的纪律本来就是 -count=1，CI 不该比本机松。它只关测试结果缓存，编译缓存照旧命中，
+      # 代价是用例执行时间，不是全冷编译。写在 go test 行上而不是 GOFLAGS：与 -race 并排，
+      # 这一片怎么跑在同一处看全，也不会捎带 static 那边清点工具的 go test。
       - name: Test
         env:
           SHARD: ${{ matrix.shard }}
         run: |
           packages="$(bash scripts/ci/test-shards.sh list "$SHARD")"
-          go test -race $packages
+          go test -race -count=1 $packages
