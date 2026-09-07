@@ -118,14 +118,14 @@ func (result RegisterOffsitePickupResult) Outcome() PickupRegistrationOutcome {
 	return result.outcome
 }
 
-// SegmentContinuationReference 非空说明收寄已登记、段那一半还欠着。它只在段登记册故障时
-// 给出——领域拒绝（对象已在段内、段已关闭）是正当结果不是欠账。
+// SegmentContinuationReference 非空说明收寄（或更正）已登记、段那一半还欠着。它只在段登记册故障时
+// 给出——领域拒绝（对象已在段内、段已关闭、无可替代的参与）是正当结果不是欠账。
 func (result RegisterOffsitePickupResult) SegmentContinuationReference() string {
 	return result.segment
 }
 
-// SegmentEntryRefusal 非空说明收寄已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格），
-// 与 SegmentContinuationReference 不会同时非空——理由同交接那一侧。
+// SegmentEntryRefusal 非空说明收寄（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
+// 更正重派生答`无可替代的参与`；与 SegmentContinuationReference 不会同时非空——理由同交接那一侧。
 func (result RegisterOffsitePickupResult) SegmentEntryRefusal() SegmentEntryRefusal {
 	return result.segmentRefusal
 }
@@ -280,8 +280,9 @@ func (handler *RegisterOffsitePickupHandler) establishSegment(
 
 // Correct 对已登记的揽收落更正版本（票 tf-segment-lifecycle-closure/08 裁决 A）：读回当前版 → 指名的
 // 前版必须就是当前版 → 更正时刻不早于其登记时刻 → 签发新版本 → 领域 Correct（四格完备性同首登、
-// 回指前版）→ 以新版本落新行 → 意图重新交 parcel-shipment 采认。**不进段**：段侧「来源更正 → 参与
-// 关系重派生」对交接更正同样没有，另立一票覆盖两种来源；本编排照交接那一侧的现状。
+// 回指前版）→ 以新版本落新行 → 意图重新交 parcel-shipment 采认 → 同事务在段上重派生该对象的参与
+// （ADR-0112 决定二：替代版本回指前版、起点随更正后的发生时刻；段由登记册按对象反查，命令不带段号；
+// 这一半失败不翻更正，答法与首登进段那一半同一格）。
 //
 // 前版核对为什么钉在「当前版」而不是「链上任一版」：登记册按键只答一个当前版（下游 parcel-shipment
 // 也按键读），链因此必须线性——一版最多被更正一次。指名一个已被更正过的版本时，同内容是这份更正
@@ -345,6 +346,8 @@ func (handler *RegisterOffsitePickupHandler) Correct(
 	case ports.OffsitePickupSaved:
 		result := RegisterOffsitePickupResult{outcome: PickupCorrected, record: record, hasRecord: true}
 		result.handoff = handler.handOff(ctx, record)
+		entry := handler.rederiveParticipation(ctx, command.TenantID, corrected)
+		result.segment, result.segmentRefusal = entry.continuation, entry.refusal
 		return result, nil
 	case ports.OffsitePickupAlreadyRegistered:
 		// 另一方先把同一前版更正掉了（一版最多被更正一次）：读回赢家作答。
@@ -356,6 +359,23 @@ func (handler *RegisterOffsitePickupHandler) Correct(
 	default:
 		return RegisterOffsitePickupResult{}, fmt.Errorf("%w: %d", ErrUnexpectedPickupRegistrySave, saved)
 	}
+}
+
+// rederiveParticipation 让更正后的揽收在段上替代该对象凭前版入场的参与（ADR-0112 决定一至三）。
+//
+// 本编排只提供收寄那一侧的领域门；段在哪、失败算不算欠账、领域拒绝哪几格答出去，与交接那一侧逐字相同，
+// 收在 rederiveFulfillmentParticipation 里——与两条来源共用 enterFulfillmentSegment 同形。
+func (handler *RegisterOffsitePickupHandler) rederiveParticipation(
+	ctx context.Context,
+	tenant domain.TenantID,
+	corrected domain.OffsitePickup,
+) segmentEntry {
+	return rederiveFulfillmentParticipation(
+		ctx, handler.deps.Segments, handler.deps.Clock, tenant, corrected.Object(),
+		func(segment domain.ActualFulfillmentSegment) (domain.ActualFulfillmentSegment, error) {
+			return segment.RederiveParticipationWithPickup(corrected)
+		},
+	)
 }
 
 func pickupCorrectionKey(command CorrectOffsitePickupCommand) (ports.OffsitePickupKey, domain.PickupResultVersion, bool) {

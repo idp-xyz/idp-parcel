@@ -374,18 +374,25 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithPickup(pickup O
 // RederiveParticipationWithHandover 以更正后的`已交接`交接在同段内形成替代参与版本。更正若撤回了
 // 控制转移（改成拒收或待确认），没有入场依据可立——那是失效格（ADR-0112 决定四），本方法如实拒，
 // 不猜也不把它当替代。
+//
+// 「有没有可替代的参与」先于「更正撤回了控制」判：失效格说的是**这个段里该对象凭前版入场的那条参与**
+// 失去了依据——对象不在本段、或本段的当前参与不是凭被更正的那一版入场，本段就没有东西可失效，答的是
+// 无可替代。编排按对象反查到几个段逐个来问，两格若倒过来，每个无关的段都会答成失效。
 func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handover TransportHandover) (ActualFulfillmentSegment, error) {
 	corrects, corrected := handover.Corrects()
 	if !corrected {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	reference, transfers := handover.TransferOutBasis()
-	if !transfers {
-		return ActualFulfillmentSegment{}, ErrCorrectionWithdrawsControl
-	}
 	replaced, err := NewParticipationBasisReference("TRANSPORT-HANDOVER/" + corrects.String())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	if _, present := segment.currentParticipationEnteredBy(handover.Object(), EnteredByTransportHandover, replaced); !present {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	reference, transfers := handover.TransferOutBasis()
+	if !transfers {
+		return ActualFulfillmentSegment{}, ErrCorrectionWithdrawsControl
 	}
 	basis, err := NewParticipationBasisReference(reference)
 	if err != nil {
@@ -409,8 +416,8 @@ func (segment ActualFulfillmentSegment) rederive(
 	if !segment.segment.valid() || !segment.tenantID.valid() || tenant != segment.tenantID || enteredAt.IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	current, present := segment.ParticipationFor(object)
-	if !present || current.entryKind != kind || current.entryBasis != replaced {
+	current, present := segment.currentParticipationEnteredBy(object, kind, replaced)
+	if !present {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
 	replacement := FulfillmentParticipation{
@@ -436,6 +443,21 @@ func (segment ActualFulfillmentSegment) rederive(
 	}
 	rederived.participations = append(rederived.participations, replacement)
 	return rederived, nil
+}
+
+// currentParticipationEnteredBy 答该对象在段内的当前参与，且只在它恰是凭指名的来源种类与入场依据入场时
+// 给出——这是「这条更正替代的是哪条参与」的全部判据（ADR-0112 决定一）：更正一个已被替代的前版是分叉，
+// 更正别的来源种类是另一件事，对象不在段里则无物可替。
+func (segment ActualFulfillmentSegment) currentParticipationEnteredBy(
+	object CarriedObjectReference,
+	kind ParticipationEntryKind,
+	basis ParticipationBasisReference,
+) (FulfillmentParticipation, bool) {
+	current, present := segment.ParticipationFor(object)
+	if !present || current.entryKind != kind || current.entryBasis != basis {
+		return FulfillmentParticipation{}, false
+	}
+	return current, true
 }
 
 // EndParticipationWithDelivery 以有效交付结束该对象的参与（CONTEXT 生命周期③；有效

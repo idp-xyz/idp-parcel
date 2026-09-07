@@ -453,6 +453,11 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 	if _, err := withHandover.RederiveParticipationWithHandover(refused); !errors.Is(err, domain.ErrCorrectionWithdrawsControl) {
 		t.Fatalf("撤回控制的更正：err = %v", err)
 	}
+	// 失效格只对「本段里凭前版入场的那条参与」成立：同一撤回控制的更正拿到一个没有该对象的段上问，
+	// 答的是无可替代——编排按对象反查到几个段逐个问，无关的段不得答成失效。
+	if _, err := segment.RederiveParticipationWithHandover(refused); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("对象不在段里的撤回控制更正：err = %v, want ErrNoParticipationToRederive", err)
+	}
 	stillHanded, err := handover.Correct(domain.HandoverCorrection{
 		Verdict:           domain.ObjectHandedOver,
 		ReleasingEvidence: releasing,

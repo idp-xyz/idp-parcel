@@ -155,8 +155,9 @@ func (result RegisterTransportHandoverResult) SegmentContinuationReference() str
 	return result.segment
 }
 
-// SegmentEntryRefusal 非空说明交接已登记、段那一半被领域正当拒绝（今天只有`段已关闭`一格）。
-// 它与 SegmentContinuationReference 不会同时非空：一个说去另立新段，一个说等登记册恢复重试。
+// SegmentEntryRefusal 非空说明交接（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
+// 更正重派生答`无可替代的参与`或`更正撤回了控制`。它与 SegmentContinuationReference 不会同时非空：
+// 一个说这一半不会因重试而变，一个说等登记册恢复重试。
 func (result RegisterTransportHandoverResult) SegmentEntryRefusal() SegmentEntryRefusal {
 	return result.segmentRefusal
 }
@@ -301,7 +302,9 @@ func (handler *RegisterTransportHandoverHandler) establishSegment(
 }
 
 // Correct 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性
-// 同首次裁决、同版本号拒）→ 以新版本键登记 → 意图重新交付下游。
+// 同首次裁决、同版本号拒）→ 以新版本键登记 → 意图重新交付下游 → 同事务在段上重派生该对象的参与
+// （ADR-0112 决定二）。仍`已交接`的更正形成替代参与版本；被更正为拒收或待确认的如实答
+// `更正撤回了控制`（决定四，失效格另票），原参与不动。这一半失败不翻更正，答法与首登进段同一格。
 func (handler *RegisterTransportHandoverHandler) Correct(
 	ctx context.Context,
 	command CorrectTransportHandoverCommand,
@@ -328,7 +331,7 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
 	}
 
-	return handler.commit(ctx, ports.TransportHandoverRecord{
+	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
 		Key: ports.TransportHandoverKey{
 			TenantID: command.TenantID,
 			Object:   corrected.Object(),
@@ -339,6 +342,30 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 		Handover:      corrected,
 		RecordedAt:    handler.deps.Clock.Now(),
 	}, HandoverCorrected)
+	if err != nil || result.outcome != HandoverCorrected {
+		// 并发落败读回赢家、或登记未决：段那一半由真把版本落下去的那一方重派生。
+		return result, err
+	}
+	entry := handler.rederiveParticipation(ctx, command.TenantID, corrected)
+	result.segment, result.segmentRefusal = entry.continuation, entry.refusal
+	return result, nil
+}
+
+// rederiveParticipation 让更正后的交接在段上替代该对象凭前版入场的参与（ADR-0112 决定一至四）。
+//
+// 本编排只提供交接那一侧的领域门：仍`已交接`的更正替代，撤回控制的更正在那道门上答失效格。段在哪、
+// 失败算不算欠账、哪几格答出去，与收寄那一侧逐字相同，收在 rederiveFulfillmentParticipation 里。
+func (handler *RegisterTransportHandoverHandler) rederiveParticipation(
+	ctx context.Context,
+	tenant domain.TenantID,
+	corrected domain.TransportHandover,
+) segmentEntry {
+	return rederiveFulfillmentParticipation(
+		ctx, handler.deps.Segments, handler.deps.Clock, tenant, corrected.Object(),
+		func(segment domain.ActualFulfillmentSegment) (domain.ActualFulfillmentSegment, error) {
+			return segment.RederiveParticipationWithHandover(corrected)
+		},
+	)
 }
 
 // commit 提交记录并交发布意图；并发下另一方先提交时读回赢家。

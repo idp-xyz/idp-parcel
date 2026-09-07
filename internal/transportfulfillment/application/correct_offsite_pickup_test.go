@@ -365,9 +365,9 @@ func TestPickupCorrectionRecoveryDiscipline(t *testing.T) {
 	})
 }
 
-// Covers: 裁决附问——段侧「来源更正 → 参与关系重派生」不在本票；更正编排照交接那一侧的现状，落新版本 +
-// 重交意图，不碰段登记册（段登记册在场也不碰）。
-func TestAPickupCorrectionLeavesTheSegmentRegistryAlone(t *testing.T) {
+// Covers: 裁决附问的另一半在 ADR-0112 落地——更正在段上重派生参与，但**不另立段、不另 Join**：段那一半
+// 走的是替代窄口。重派生本身的行为（替代版本的形状、拒绝格、欠账）在 rederive_participation_on_correction_test.go。
+func TestAPickupCorrectionNeitherEstablishesNorJoinsASegment(t *testing.T) {
 	fixture := newPickupSegmentFixture(t)
 	command := pickupRegistrationCommand(t)
 	command.Segment = "segment-1"
@@ -384,9 +384,6 @@ func TestAPickupCorrectionLeavesTheSegmentRegistryAlone(t *testing.T) {
 		t.Fatalf("outcome = %q, want PICKUP_CORRECTED", result.Outcome())
 	}
 	if fixture.segments.saves != savesBefore || fixture.segments.joins != joinsBefore {
-		t.Fatalf("更正动了段登记册：saves %d→%d joins %d→%d", savesBefore, fixture.segments.saves, joinsBefore, fixture.segments.joins)
-	}
-	if result.SegmentContinuationReference() != "" || result.SegmentEntryRefusal() != application.SegmentEntryRefusalNone {
-		t.Fatalf("更正答了段那一半：%q %q", result.SegmentContinuationReference(), result.SegmentEntryRefusal())
+		t.Fatalf("更正另立了段或另 Join 了：saves %d→%d joins %d→%d", savesBefore, fixture.segments.saves, joinsBefore, fixture.segments.joins)
 	}
 }

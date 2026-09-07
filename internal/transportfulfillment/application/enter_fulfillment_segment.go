@@ -19,19 +19,32 @@ import (
 // 说「段不收了，重试一万次都一样，去另立新段」。此前段已关闭后新对象凭正当控制事实来到同段，
 // 可观察结果只有「交接在册、段里没它」，与正常入段在调用方眼里同形——这一格就是为了让两者分开。
 //
-// 封闭集合而且今天只有一格：领域的其余拒绝（对象已在段内、拒收与待确认不转出控制）各有自己的
-// 可观察形状，不在这里另开格；要加格是一次产品判断，不是补枚举。
+// 封闭集合：进段那一半一格（段已关闭），重派生那一半两格（ADR-0112 决定二）——无可替代的参与、更正撤回了
+// 控制转移。三格共用一个类型，因为它们答的是同一个问题「段那一半为什么没动」，且都与续办引用互斥。领域的
+// 其余拒绝（对象已在段内、拒收与待确认不转出控制、更正后的起点晚于继承的终点）各有自己的可观察形状或尚无
+// 裁决，不在这里另开格；要加格是一次产品判断，不是补枚举。
 type SegmentEntryRefusal uint8
 
 const (
 	SegmentEntryRefusalNone SegmentEntryRefusal = iota
 	SegmentEntryRefusedSegmentClosed
+	// SegmentEntryRefusedNoParticipationToRederive：来源更正落了，但该对象没有任何段里的当前参与是凭被更正的
+	// 那一版入场的——从未进段、或前版早已被替代（分叉）。重试一万次都一样，所以不是欠账。
+	SegmentEntryRefusedNoParticipationToRederive
+	// SegmentEntryRefusedCorrectionWithdrawsControl：`已交接`被更正为拒收或待确认，参与凭以入场的控制事实
+	// 没有了，却没有入场依据可立替代版本。那是参与失效格（ADR-0112 决定四），落地另票；这里如实答出，
+	// 不猜也不静默——原参与在这一格里照旧站着，调用方要知道这一点。
+	SegmentEntryRefusedCorrectionWithdrawsControl
 )
 
 func (refusal SegmentEntryRefusal) String() string {
 	switch refusal {
 	case SegmentEntryRefusedSegmentClosed:
 		return "SEGMENT_CLOSED"
+	case SegmentEntryRefusedNoParticipationToRederive:
+		return "NO_PARTICIPATION_TO_REDERIVE"
+	case SegmentEntryRefusedCorrectionWithdrawsControl:
+		return "CORRECTION_WITHDRAWS_CONTROL"
 	default:
 		return ""
 	}
