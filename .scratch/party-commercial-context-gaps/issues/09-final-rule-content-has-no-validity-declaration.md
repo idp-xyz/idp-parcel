@@ -112,3 +112,17 @@ ADR-0062（回指）；`PAR-COM-17`；PS `ports.LabelValidityRuleView` 头注与
   gofmt 重对齐前七字段属纯格式）、`declaration_publication.go`（`SaveFinalRule` 一函数）、`stage_content_declaration.go`
   （`LoadFinalRule` 一函数 + pgtype 导入）、`translate.go`（`declarationsDocument` 一键 + 三个函数 + strconv 导入）、
   `docs/adr/README.md`（0118 与 0122 之间一行）、PC CONTEXT（一个词条末尾一段）。SHA 只作此刻取证，MCP-1 重放后以 main 上的为准。
+- 2026-09-07 21:5x · MCP-6（21:2x 新绑会话，接 20:5x 旧会话崩溃后留下的现场）：**进 main 记录。** 旧会话崩在把本分支 rebase 到
+  `fc90622a` 的中途——四笔重放了一笔，停在 `7ea33e60`，唯一冲突是 `cmd/parcel-commercial/translate.go` 的 `declarationsFrom` 之后：
+  main 侧 pc-gaps/08 加的 `contractDelegationFrom` / `delegatorFrom` / `authorizedActionFrom` 与本支加的 `finalRuleValidityFrom` /
+  `validityAnchorKindFrom` / `parseISODurationSubset` 落在同一处，解法是两组函数并列保留、两侧各自一行未改。首轮落在 `fc90622a` 之上
+  （`dcb0eb6e` / `d4e24151` / `a5c9a111`，清点笔 `246135ae`），隔离树钉 `246135ae` 验：`gofmt -l` 空、build / vet 0、清点工具 vet + test ok、
+  清点门零差、`scripts/ci/test-shards.sh check` 116 包无重叠无遗漏、含 DSN `go test -p 1 -count=1 ./...` 100 ok / 0 FAIL / 16 无用例，
+  9m27s；探针 `-run Validity` postgres 包无 DSN 8 SKIP ↔ 含 DSN 8 PASS。快进前 main 已前进一笔 `e10a3b5e`（纯 `.scratch/tasks.md`，
+  与本组零重叠），按 parallel-sessions「无重叠直接重放」在新 tip 上重来；分支→main：`e078a508→838b283e`、`7ea33e60→d06192ed`、
+  `ded10f61→d58ceecc`；分支清点笔 `5cf30921` 不重放，清点在 `d58ceecc` 干净检出上重生成为 `ab0fe0f0`（产物与 `246135ae` 的逐字节同）。
+  `ab0fe0f0` 与 `246135ae` 逐树比对只差 `.scratch/tasks.md`；`ab0fe0f0` 上复跑 gofmt / build / vet / 清点门，及含 DSN 的
+  `cmd/parcel-commercial`、`internal/partycommercial/...`、`internal/platform/migrate`、`migrations` 全 ok。共享 `main` 快进到 `ab0fe0f0`，
+  推前 ls-remote = `e10a3b5e`、推后 = `ab0fe0f0`（21:5x 查）。**远端 `main = ab0fe0f0`。** 指针：`mcp6-pcgaps09@ab0fe0f0`（已重放），
+  `mcp6-pcgaps09-precut@5cf30921`（原分支 tip 封存）；树 `idp-parcel-mcp6-pcgaps09`（在重放后的分支上）与 `idp-parcel-mcp6-verify09`
+  （detached `5cf30921`，旧会话的验证检出）都还在，未拆。tasks.md 台账那一行留给 MCP-1，本笔不碰。
