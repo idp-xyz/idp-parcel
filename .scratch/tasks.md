@@ -979,7 +979,7 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 
 ## 2026-09-07 21:2x 通道 1 新会话接续（接手时 `main = origin/main = fc90622a`）
 
-用户只交代「监听队列、正常回复、保持循环」。上一节末（20:0x）到接手之间按 git log 补一行，本会话未经历、验证强度以各提交信为准：`6ff95211` 之上 pc-gaps/08 四笔（`0cfe3571` / `31903cc5` / `02ff5205` / `44bcac4d`，分支 `mcp5-pcgaps08`，`git cherry main` 四笔 `-`）与 wbr/06 六笔（`ab191bba` / `1a3c37ea` / `a896b1d0` / `db023b4f` / `deca2a3d` / `de9635e6`，分支 `mcp2-wbr06`）已重放进 main，`d98d17be` 基线头注补推送方一段，清点 `fc90622a`（20:09 推）；两票在 main 上的 SHA 对照未见补记（票 06 完成记录写「main 上的 SHA 待重放后补记」），待补。接手时共享树 70 处 ` M` 全为 CRLF 幻影（`--ignore-cr-at-eol` 零行），无未跟踪、无 stash。
+用户只交代「监听队列、正常回复、保持循环」。**时钟**：本节内各通道消息自报的时刻比本机快约 1.5–2 小时（它们写 02:0x 时本机 `Get-Date` 是 00:0x，git 提交时间也印证本机），本节小节标题与叙述已按本机时钟校正（00:1x 一次性改回），引用它们原话时保留其自报值；此后派单要求报时刻用 `Get-Date`。上一节末（20:0x）到接手之间按 git log 补一行，本会话未经历、验证强度以各提交信为准：`6ff95211` 之上 pc-gaps/08 四笔（`0cfe3571` / `31903cc5` / `02ff5205` / `44bcac4d`，分支 `mcp5-pcgaps08`，`git cherry main` 四笔 `-`）与 wbr/06 六笔（`ab191bba` / `1a3c37ea` / `a896b1d0` / `db023b4f` / `deca2a3d` / `de9635e6`，分支 `mcp2-wbr06`）已重放进 main，`d98d17be` 基线头注补推送方一段，清点 `fc90622a`（20:09 推）；两票在 main 上的 SHA 对照未见补记（票 06 完成记录写「main 上的 SHA 待重放后补记」），待补。接手时共享树 70 处 ` M` 全为 CRLF 幻影（`--ignore-cr-at-eol` 零行），无未跟踪、无 stash。
 
 ### 21:4x：MCP-5 拆树两棵，MCP-1 复核后记账
 
@@ -1003,9 +1003,9 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 
 **在途（22:3x）**：MCP-2 `269d98b6`（wbr/06 已进 main，台账未结）、MCP-5 `0d116e60`（08 已进 main，台账未结）、MCP-6 `390c4f53`（09 已进 main，10 未见完工报）、MCP-4 `82bc2586` CI；MCP-3 空闲。树：`mcp2-wbr06`、`mcp5-pcgaps08`、`mcp6-pcgaps09` + `mcp6-verify09` 各归其主；`idp-parcel-mcp1-sa02`、`mcp2-psr05`、`idp-replay-psr05-tf01`、`idp-replay-wave`、`idp-replay-wave2` 仍等用户点头；`idp-tf03` 归用户。**可派**：tf/11；sa-preacceptance-policy-view/04 draft（MCP-3 随 03 立）。
 
-- 22:4x 补两条：① 票 03「进 main 记录」MCP-3 落在 `mcp3-sa03-record@a1229e39`（父 `9379c716`，纯 .md），cherry-pick 进 main 为 `31c1fb1c`，随本笔推。② MCP-3 取证（MCP-1 复核同得）：`mcp5-pcgaps08` 在 08 四笔之后还带 **第二份 pc-gaps/09**——`a96f7356`（ADR-0119，文件名 `…-anchored-at-channel-result-time.md`）+ `74332508`（迁移 `0026_final_rule_validity_declaration.sql`，同改 `translate.go` / `publish_commercial_authority.go` / `service_stage_content.go` / `declaration_publication.go`）+ `85a90a1b`（pc-gaps/10 开工前置取证 .md），20:18–20:20 提交，晚于 19:4x「08 归 MCP-5、09/10 归 MCP-6」的分工；与 main 上 MCP-6 的 0119 / 0026 **同号不同名同题**。**三笔是孤儿，不重放**：MCP-5 `0d116e60` 的范围（08）已全在 main，可结 done；`mcp5-pcgaps08` 树拆前别把这三笔当待集成，10 的取证 .md 归 MCP-6 自取。
+- 22:2x 补两条：① 票 03「进 main 记录」MCP-3 落在 `mcp3-sa03-record@a1229e39`（父 `9379c716`，纯 .md），cherry-pick 进 main 为 `31c1fb1c`，随本笔推。② MCP-3 取证（MCP-1 复核同得）：`mcp5-pcgaps08` 在 08 四笔之后还带 **第二份 pc-gaps/09**——`a96f7356`（ADR-0119，文件名 `…-anchored-at-channel-result-time.md`）+ `74332508`（迁移 `0026_final_rule_validity_declaration.sql`，同改 `translate.go` / `publish_commercial_authority.go` / `service_stage_content.go` / `declaration_publication.go`）+ `85a90a1b`（pc-gaps/10 开工前置取证 .md），20:18–20:20 提交，晚于 19:4x「08 归 MCP-5、09/10 归 MCP-6」的分工；与 main 上 MCP-6 的 0119 / 0026 **同号不同名同题**。**三笔是孤儿，不重放**：MCP-5 `0d116e60` 的范围（08）已全在 main，可结 done；`mcp5-pcgaps08` 树拆前别把这三笔当待集成，10 的取证 .md 归 MCP-6 自取。
 
-### 22:5x–23:1x：用户问「工作树都合回 main 了吗，会不会重复开发」→ 答后授权自决，做了两件
+### 22:3x：用户问「工作树都合回 main 了吗，会不会重复开发」→ 答后授权自决，做了两件
 
 **答**：合，走推送方 cherry-pick 重放不走 merge，所以 `git cherry` / `--merged` 看不出；重复开发发生过（上条 mcp5 第二份 09）。**自决的两件**：
 
@@ -1013,29 +1013,29 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 2. **91 条分支指针改名**（`git branch -m`，一个不删）：量法——分支自 merge-base 起改过的每份非簿记文件，其 tip blob 是否在 `main` 该文件历史里出现过（`git log main -- <file>` 逐笔比 blob）；全出现过 → `merged/`；只差 `unwired_orchestration.go` / 票面 .md 且 `git diff <分支> main` 只加不减 → 也 `merged/`；老分支按 `unmerged-branch-inventory/spec.md` 的终裁归类。结果 **`merged/` 79、`salvage/` 12**（`mcp5-tf-cmdr`、`mcp6-pcgaps09-precut`、`mcp6-pcgaps08`、`mcp5-pcgaps08`、`mcp5-reg-tabs-salvage`、`mcp2-awf02a`、`mcp4-awf02d`、`mcp3-pcgaps07`（07 已进、8dc99b9f 封存半边不进）、`mcp6-inventories-v2`、`t12-governance-register`（#6 进 #5 裁不合）、`bento-gate-reeval`、`syn-wall-door-audit`），未加前缀只剩 `main` + 三条在途 + `mcp4-tf03`。远端只有 `main` 与 MCP-4 取数用的 `mcp4-ci-p1`，未动。
 3. 规矩两条写进 `docs/agents/parallel-sessions.md`：「派发前先点名」节末加**派单第 0 步查地盘分支有无半成品**（取数命令 + 派单必须写「接着做」还是「另起」）；「拆工作树」节加 **`merged/` / `salvage/` 前缀约定与量法**，集成方拆树时顺手改名。
 
-### 23:2x：用户问「各分支自己 commit、push 是否更可靠」→ 评估后用户「同意」
+### 22:4x：用户问「各分支自己 commit、push 是否更可靠」→ 评估后用户「同意」
 
-**评估要点**（全文在 23:1x 回复）：单一推送方今日代价——通道 1 换会话 5 次、每次完工报躺 30–60 分钟；8 次集成各重跑 9.5 分钟全仓；cherry-pick 改写 SHA 让 `--merged` / `git cherry` 失效。买到的是串行与合体验证（09-05 VE inbox 那次是集成方全仓跑出来的）。**裁定**：① 分支每笔提交后推 origin，立刻生效；② 落 main 改为作者自落：rebase 到 origin/main → PR → CI 绿即「验的就是这个 SHA」→ merge commit（SHA 原样进 main）→ 一次一人（`set_channel_lock` / 落地令）；**切换条件：`82bc2586` 的 `-p 1` 落地后 main 连绿三次**，未到之前仍走推送方重放；③ 通道 1 缩成仲裁与簿记。
+**评估要点**（全文在 22:4x 回复）：单一推送方今日代价——通道 1 换会话 5 次、每次完工报躺 30–60 分钟；8 次集成各重跑 9.5 分钟全仓；cherry-pick 改写 SHA 让 `--merged` / `git cherry` 失效。买到的是串行与合体验证（09-05 VE inbox 那次是集成方全仓跑出来的）。**裁定**：① 分支每笔提交后推 origin，立刻生效；② 落 main 改为作者自落：rebase 到 origin/main → PR → CI 绿即「验的就是这个 SHA」→ merge commit（SHA 原样进 main）→ 一次一人（`set_channel_lock` / 落地令）；**切换条件：`82bc2586` 的 `-p 1` 落地后 main 连绿三次**，未到之前仍走推送方重放；③ 通道 1 缩成仲裁与簿记。
 
-**做不到的一格**：仓私有 + 免费档，分支保护 / rulesets 接口 `403 Upgrade to GitHub Pro or make this repository public`（23:2x 实测，`gh api` 权限 admin=true 也不行）。替代：所有 worktree 共用 `.git`，切换日装 `.git/hooks/pre-push`（目标 main 且 `.git/landing.lock` 记的 SHA 不等于要推的就拒），源码放 `scripts/git-hooks/`。真正的机器强制归用户：升级套餐或转公开仓。
+**做不到的一格**：仓私有 + 免费档，分支保护 / rulesets 接口 `403 Upgrade to GitHub Pro or make this repository public`（22:4x 实测，`gh api` 权限 admin=true 也不行）。替代：所有 worktree 共用 `.git`，切换日装 `.git/hooks/pre-push`（目标 main 且 `.git/landing.lock` 记的 SHA 不等于要推的就拒），源码放 `scripts/git-hooks/`。真正的机器强制归用户：升级套餐或转公开仓。
 
 两条都已写进 `docs/agents/parallel-sessions.md`「推送」节下（「分支每笔提交后推到 origin」「落 main 的下一形态」），①已广播全通道。
 
-### 23:4x–00:0x：用户连问「TEMP 里是不是有大量代码没进 idp-parcel / MCP-6 crash 会不会丢 / 原来是不是很多代码都没进」→ 全量审计（钉 `d6d4cd46`）
+### 22:5x–23:0x：用户连问「TEMP 里是不是有大量代码没进 idp-parcel / MCP-6 crash 会不会丢 / 原来是不是很多代码都没进」→ 全量审计（钉 `d6d4cd46`）
 
 - **TEMP**：登记在册只剩 `mcp4-ci-p1`（一行 ci.yml）与 `mcp6-pcgaps10`（在途，5 笔、树干净）；8 个 `idp*` 残留目录无 `.git`、无代码。工作树与主树共用 `.git`，提交过的一律在 `d:\tops\idp-parcel\.git`（2112 个可达提交、117 MB）。`mcp6-pcgaps10@ac6b5241` 由 MCP-1 代推 origin 备份并知会。
 - **分支上只存在于分支、main 上从未有过的代码文件**（95 条分支逐条查 `--diff-filter=A` 的代码文件对 `main:` 路径）：6 条——`mcp6-pcgaps10`（在途 5 件 1109 行）；`merged/cons-proj-tf-b` 1 件（清单 #4：断言拆成两用例进 main）；`merged/cr04-backend` 1 件（#12：main 有更严的同等守卫 `eol_guard_test.go`）；`merged/mcp2-ps-ports` 4 件（两只 `Unconnected*` 占位，曾进 main、后被 psr/05 换成真读法而删）；`salvage/mcp5-pcgaps08` 1 件（第二份 0026）；`salvage/t12-governance-register` 3 件（#5 裁「不合」那半）。无一是丢失。
 - **游离提交**（`git fsck --unreachable --no-reflogs`）398 笔：按 patch-id 对全部 ref（1869 个 patch-id）+ 逐文件 blob 对 main 历史两级核——273 笔有等价补丁或同 blob、113 笔只动 .md/簿记、**12 笔"未对上"逐条看**：08-12 一笔是 `docs/agents.rar` + 客户 xlsx（有意不进）；08-18 三笔与 08-21 两笔只差共享 `ports.go`（换基座重放后的合并变体）；08-21 `a4f48bfd` 含 t12 #5 那半；08-31 `seed.sh` 那笔（#13 按原文补注释进 main `cd21e68c`）；09-04 三笔与 09-07 一笔全是 `unwired_orchestration.go` / `endpoints.go` 共享接线文件的封存快照或合并变体，完成版都在 main。**结论：截至 `d6d4cd46` 没有丢失的代码；不在 main 的只有 MCP-6 在途一票与有意排除的几处。**量法脚本在 `%TEMP%`（`classify-branches.ps1` / `code-only-on-branches.ps1` / `unreachable-audit.ps1`），若要长期用应进 `scripts/`，待用户定。
 
-### 00:0x–00:1x：pc-gaps/10 进 main
+### 23:1x：pc-gaps/10 进 main
 
 MCP-6 `390c4f53` done（23:0x）：`mcp6-pcgaps10` 基 `9379c716`，六笔，跳过清点笔 `ac6b5241`。main 自其基线起只多 .md（`git diff --name-only 9379c716 main` 无非 .md），与分支零重叠，重放到 `5fd4d942` 零冲突：`76fb081a→3ce4615f`、`91aa3c85→0932d6c3`、`709a87c1→053da518`、`44e80389→2b4ae6aa`、`c6cefab9→7a1ce11f`；清点在 `7a1ce11f` 重生成 `534493d4`（partycommercial 90→92 / 92→94 / 端口 30→31，合计 841→843 / 789→791；迁移 PC 26→27，合计 151→152；端口声明 361→362），**与 `ac6b5241` 逐字节同**。验证：重放 tip 的非 .md 树对 MCP-6 已含 DSN 全仓验过（100 ok / 0 FAIL，9m33s）的 `ac6b5241` 零差 → 按「代码同一全仓验仍有效」不重跑全仓；本侧钉 `534493d4`：gofmt 空、build/vet 0、清点门零差、探针 PC postgres `-run 'SourceDataAmendment|OpenParentRow'` 无 DSN SKIP 5 / 含 DSN PASS 5、含 DSN `-p 1` 跑 partycommercial/** + cmd/parcel-commercial + cmd/parcel-api + architecture + migrations 全 ok（83s）。共享 main 由 `5fd4d942` 快进到 `534493d4`，**已推**（推前 ls-remote = 5fd4d942）。MCP-6 树（status 零行、23 件对 main 零差）交它自拆并改名 `merged/`；远端 `mcp6-pcgaps10` 由它删。**PC 批（07→08→09→10）至此全部进 main**；pc-gaps 目录待 MCP-6 补票 10「进 main 记录」与 spec 对齐。
 
 **解阻**（MCP-6 点名，只报不做 PS）：ps-port-remainder/02 余段——PS 消费适配器读 PC 声明（`AdoptedStageOwner.AcceptanceRulePackageFor` → `pcports.SourceDataAmendmentAllowanceView.LoadSourceDataAmendmentAllowance`，found=false → NotDeclared；`content.AllowanceFor(资料组, 阶段, 意图)` 三值一对一译到 `ports.SourceDataAmendmentAllowance`；阶段/意图用 PC 的 `DeclaredAmendmentStage` / `DeclaredAmendmentIntent`，`String()` 与 PS 原词逐字相等，认领人在 PS 适配器旁加跨侧比对测试钉住，ADR-0120 决定五）；admin-write-faces/12 可加 `sourceDataAmendment` 一节。**可派**：ps-port-remainder/02 余段（PS 地盘空）、tf/11、sa/04 draft。
 
-**在途（00:1x）**：MCP-4 `82bc2586` CI（tmpfs 那一笔 run 34135451794 在跑）；其余四通道空闲。
+**在途（23:1x）**：MCP-4 `82bc2586` CI（tmpfs 那一笔 run 34135451794 在跑）；其余四通道空闲。
 
-### 00:2x–00:5x：CI 修复进 main；21:5x 节的成因判断改口
+### 23:2x：CI 修复进 main；21:5x 节的成因判断改口
 
 MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb9a85`（Test 行加 `-p 1`）、`d40e10e6→f06336dd`（postgres service `--tmpfs /var/lib/postgresql/data:size=2g`，与本机 compose.yaml 同口径）、`57b00a6d→874849ce`（timeout 依据改成 CI 实测：最重 job 406s = 15 分的 45%，上限与分片不动）、`44fc6fc6→e682291f`（注释改口）。重放到 `b2cb71fc` 零冲突；ci.yml 与分支 tip 零差、`i/lf w/lf` 无 BOM；WSL PyYAML safe_load 回显三项；`test-shards.sh check` 116 包过；无 Go 改动不跑测试。快进并推，**远端 main = `e682291f`**（推前 ls-remote = b2cb71fc）。MCP-4 自拆树、改名 `merged/`。
 
@@ -1043,7 +1043,7 @@ MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb
 
 顺带记：`b2cb71fc`（pc-gaps/10 代码 + 两笔 .md，ci.yml 还是磁盘库那版）的 run 34137392455 又红在 customs-transport——`customscompliance/adapters/postgres` 撞 go test 10 分默认上限，与 `f69b35b9` 那次同形，代码与本机验过的 `534493d4` 同一；这是 tmpfs 修复之前最后一次红的样本。MCP-4 补第五笔（注释：数以 tmpfs 为前提）`eac8c948` 与取数分支 `mcp4-ci-tmpfs-nop1`（PR #2，不进 main）在途。
 
-### 00:5x–01:1x：用户「你看看如何调整」→ 弱项逐条落地（用户已授权自决）
+### 23:3x–23:4x：用户「你看看如何调整」→ 弱项逐条落地（用户已授权自决）
 
 按 23:5x 审查的六条弱项，能今晚落的都落了，全部可逆：
 
@@ -1054,10 +1054,10 @@ MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb
 5. **机器把门的替代**：`scripts/git-hooks/pre-push` 写好（推 main 前核 `.git/landing.lock` 里的 SHA），**未安装**，切换日装。
 6. 单机单库吞吐与文档拆层：未动——前者随 PR/CI 落地自然缓解；后者（`parallel-sessions.md` 500+ 行拆「现行规矩 / 历史复盘」两层）需要一次整篇重排，留给白天有余量时做，先记在这里。
 
-### 01:2x–01:4x：用户「你来安排派发」→ 点名后四单派满，MCP-6 余量将满不派
+### 23:4x–23:5x：用户「你来安排派发」→ 点名后四单派满，MCP-6 余量将满不派
 
 - MCP-4 补报：第五笔 `eac8c948`（纯注释：数以 tmpfs 为前提）cherry-pick 进 main 为 `d1e6c094`，**已推**（推前 ls-remote = 6c465c53）；「tmpfs 不带 -p 1」取数 run 34138585558：四片 176/232/215/288s，比带 -p 1 快 20–70%，但逐包仍互相拖（customs 两包 200/181 对 126/113）——**-p 1 留**（最重片 45–46% 在六成线内，逐包耗时不再取决于邻包）。`82bc2586` 收口。
-- 01:3x 点名（截止 01:38）：MCP-2/3/5 空闲·充足，MCP-6 空闲·**将满**，MCP-4 补报里自报转空闲。第 0 步 `scripts/branch-state.ps1`：PS / PC / TF 地盘均无在途分支、无未提交现场。基线一律 `d1e6c094`。号：ADR-0121（tf/11 备）、0126/0127（awf/08）；迁移 TF 0019、PC 0028（awf/08）/ 0029（wbr 若需）、PS 0019。
+- 23:4x 点名（广播里写的「截止 01:38」沿用了各通道自报的时钟，本机实际 23:48）：MCP-2/3/5 空闲·充足，MCP-6 空闲·**将满**，MCP-4 补报里自报转空闲。第 0 步 `scripts/branch-state.ps1`：PS / PC / TF 地盘均无在途分支、无未提交现场。基线一律 `d1e6c094`。号：ADR-0121（tf/11 备）、0126/0127（awf/08）；迁移 TF 0019、PC 0028（awf/08）/ 0029（wbr 若需）、PS 0019。
 
 | 通道 | 单号 | 内容 | 独占地盘 |
 |---|---|---|---|
@@ -1069,6 +1069,10 @@ MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb
 
 **形状差别**：每张派单都带「合入前独立评审」——完工报后由 MCP-1 点一个非作者通道 20 分钟内评（阻断/非阻断/无发现），无阻断才重放；作者可能被点名评别人的票，优先于自己下一票。MCP-3 与 MCP-5 同在 PC，按文件分界并对 `ports.go` 占号；`endpoints.go` 本波只给 MCP-5。评审配对预案：MCP-2↔MCP-3、MCP-4↔MCP-5，MCP-6 余量允许时接第一个小的。
 
-- 01:5x **投递错位一次**：`5f716c71`（toChannel=3）同时落进通道 6 队列，MCP-6 报了 working、建了空分支，但**动代码前先问归属**（09 那次之后要的形）；裁定归 3，MCP-6 零代码退出、树与分支删。02:0x 用户报 **MCP-3 crash、手动改指 MCP-6**：`5f716c71` 结 failed「承接方换人」，重派 **`4c5a1215`**（通道 6，原文一字不改，分支名 `mcp6-wbr03-05`，余量将满则逐票交、每票 save_progress）。MCP-1 首跑取数：`ade810bd` run 34138109343 四片 296/304/274/362s 绿——「作者自落 main」连绿三次的第 1 次；`b2cb71fc`（旧 ci.yml）run 34137392455 是今日第四红（customs 608s），与新 ci.yml 首绿成一组前后对照。
+- 23:5x **投递错位一次**：`5f716c71`（toChannel=3）同时落进通道 6 队列，MCP-6 报了 working、建了空分支，但**动代码前先问归属**（09 那次之后要的形）；裁定归 3，MCP-6 零代码退出、树与分支删。00:0x 用户报 **MCP-3 crash、手动改指 MCP-6**：`5f716c71` 结 failed「承接方换人」，重派 **`4c5a1215`**（通道 6，原文一字不改，分支名 `mcp6-wbr03-05`，余量将满则逐票交、每票 save_progress）。MCP-1 首跑取数：`ade810bd` run 34138109343 四片 296/304/274/362s 绿——「作者自落 main」连绿三次的第 1 次；`b2cb71fc`（旧 ci.yml）run 34137392455 是今日第四红（customs 608s），与新 ci.yml 首绿成一组前后对照。
 
-**本节五数**（21:2x 接手 → 01:1x）：CI main 绿/总 7/9（2 红均为 tmpfs 修复前 customs-transport 真库包撞 go test 10 分上限：`f69b35b9`、`b2cb71fc`；5 次 concurrency 顶替的 cancelled 不计；`ade810bd` 在跑）· 集成时延中位数 65 分（3 票：sa/03 37 / pc-gaps/10 65 / CI 75——后两票的等待大半是推送方在答用户问）· 重放笔数 14（另 cherry-pick 3 笔纯 .md 票面记录）· 重复开发 1 次（pc-gaps/09）· 会话重置 3 次（通道 1 21:2x、MCP-6 21:2x、MCP-3 21:5x）。
+### 00:0x–00:1x：MCP-4 crash，tf/11 现场封存，接管单预派通道 4
+
+用户 00:0x 报 MCP-4 crash（截图：todo 停在「逐条定要定的」已完、正在改领域 red 测试）。量现场：`mcp4-tf11@503dfcc6`（票面裁「要定的」四条——失效版本是链上带 voided 标的一版、失效后当前有效控制为无、继承离场三件、在场与关段都不数它；**不立 ADR-0121，号释回**）已推 origin；树内未提交只有 `actual_fulfillment_segment_test.go` +7/−18（mtime 00:02:49）。推送方代封存为 `chore(salvage)` **`6e5c8a0c`** 并推 origin（非集成候选，接手人重切）。`c2003926` 结 failed「承接方换人」；接管单 **`a8e6a834`** 预派通道 4（从 `mcp4-tf11` 接着做、第 1 步先读封存 diff 报 ≤10 行、封存笔不进 main），用户重启通道 4 即接；若改指别的通道，我改派。本波在途：MCP-2 psr/02 余段、MCP-5 awf/08（ADR-0126 已落，0127 释回）、MCP-6 wbr/03–05；通道 3/4 空（crash）。评审配对改为 MCP-2↔MCP-6、MCP-5↔（4 回来后）。
+
+**本节五数**（21:2x 接手 → 23:4x）：CI main 绿/总 7/9（2 红均为 tmpfs 修复前 customs-transport 真库包撞 go test 10 分上限：`f69b35b9`、`b2cb71fc`；5 次 concurrency 顶替的 cancelled 不计；`ade810bd` 在跑）· 集成时延中位数 65 分（3 票：sa/03 37 / pc-gaps/10 65 / CI 75——后两票的等待大半是推送方在答用户问）· 重放笔数 14（另 cherry-pick 3 笔纯 .md 票面记录）· 重复开发 1 次（pc-gaps/09）· 会话重置 3 次（通道 1 21:2x、MCP-6 21:2x、MCP-3 21:5x）。
