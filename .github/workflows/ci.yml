@@ -9,22 +9,111 @@ on:
 permissions:
   contents: read
 
+# main 上的推送不再互相顶掉。2026-09-04 一天里四次 run 被后续推送取消、没有一次跑完，
+# 绿只在推送间隔 ≥ 25 分时出得来（tasks.md 09-04 23:2x）。拆片把单 run 压到十分钟上下，
+# 缩的是窗口，机制还在——推送方的节奏本来就是重放几笔、清点一笔、台账一笔连着推，
+# 间隔常在十分以内。关掉取消之后 GitHub 仍只保留一个排队中的 run（更新的顶掉排队的），
+# 同组最多一跑一排，代价有界；换来的是每个正在跑的 SHA 一定出结论。PR 照旧取消：
+# 旧 head 一旦被覆盖，它的结论没人要。
 concurrency:
   group: parcel-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Verify
+  static:
+    name: Static checks
     runs-on: ubuntu-24.04
-    # 全仓 `go test -race` 带真库门禁已经跑不进 10 分钟：2026-09-04 run 33883842149 在
-    # 10m20s 被掐（本机不带 -race、-p 1 就要将近 8 分）。上限只是防挂死，不是节奏目标——
-    # 再超就该拆 job，不是再加。
-    timeout-minutes: 30
+    # 不含测试。拆片前的单 job 里，Test 之外的全部步骤（检出、装 Go、gofmt、vet、build、
+    # 清点工具、清点门）合计约两分半——run 33887034470 Verify 23m25s 减 Test 21m06s。
+    # 上限取四倍余量；上限只防挂死，不是节奏目标。
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: 1.26.5
+          cache: true
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      # 清点工具自成一个模块（它要 golang.org/x/tools，而主模块的直接依赖只有三个，
+      # 且那件事本身被开发主线当作「参数显式未配置」的佐证在引用）。因此根目录的
+      # go vet / go test 扫不到它，要单列一步。
+      - name: Vet and test the inventory tool
+        working-directory: tools/mechanism-inventory
+        run: |
+          go vet ./...
+          go test ./...
+
+      # 与 gofmt 那一步同形：重新生成，与提交进来的那份不一致就红。清点报告因此不可能
+      # 落后于代码——手工重盘二十七轮之后每一轮都带假，靠的正是没有这道门。
+      - name: Mechanism inventory is current
+        run: |
+          (cd tools/mechanism-inventory && go run . -dir "$GITHUB_WORKSPACE" -out "$GITHUB_WORKSPACE/docs/product/MECHANISM-INVENTORY.md")
+          # 用 status 不用 diff：diff 看不见未跟踪文件，报告一旦被删就会静默通过。
+          test -z "$(git status --porcelain -- docs/product/MECHANISM-INVENTORY.md)"
+
+      # 分片并集必须恰好等于 go list ./...：少一个包就是一块没人跑的测试而 CI 照样绿，
+      # 多一个就是同一块跑两遍。兑底片按「全部 − 显式片」现算，新包天然落进去；这一步
+      # 守的是显式片之间不重叠、没有哪一片被写空。
+      - name: Test shards cover every package
+        run: bash scripts/ci/test-shards.sh check
+
+  shards:
+    name: Enumerate test shards
+    runs-on: ubuntu-24.04
+    # 只检出、只打印片名，不装 Go 也不解析模块图。
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.names.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      # 矩阵从脚本里读，不在这份文件里再抄一份片名：抄的那份在加片、并片时不会有任何
+      # 门禁提醒它过期——脚本里新加的片若不进矩阵，那一片就再没人跑，而 check 看不见
+      # 矩阵，只能靠这里把两者钉在同一处。先赋值再写出：脚本失败时让这一步自己红，
+      # 不把空串写进输出、留给下游 fromJSON 去报一个不相干的错。
+      - name: Read shard names
+        id: names
+        run: |
+          matrix="$(bash scripts/ci/test-shards.sh matrix)"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test (${{ matrix.shard }})
+    needs: shards
+    runs-on: ubuntu-24.04
+    strategy:
+      # 一片红不掐其余片：读的人要的是「哪几个上下文红了」，掐掉之后只剩「有一片红」，
+      # 还得再跑一遍才知道别的片绿不绿。
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.shards.outputs.matrix) }}
+    # 依据：2026-09-07 在 ffa6bd0e 上本机 -p 1 含 DSN 不带 -race 实测，各片 116–132 秒；
+    # CI 全量 -race（run 33887034470 的 Test 21m06s）对本机同口径全量 8m57s 是 2.4 倍，
+    # 按此各片 Test 约 5 分；再加检出、装 Go、起库约 1 分半，以及各片自己那份 -race 编译
+    # ——setup-go 的缓存键只看 go.sum，同键只由最先跑完的 job 存一次，各片的 -race 产物
+    # 因此多半进不了缓存，冷编译按 2–3 分计——一片约 8–10 分。上限取一倍半余量。它只防
+    # 挂死，不是节奏目标——哪一片再超就把那一片的上下文拆开，不是再加。
+    timeout-minutes: 15
     env:
       GOTOOLCHAIN: local
       # 集成门禁的连接串。GitHub Actions 自动设置 CI=true，因此这一项一旦缺失，
-      # PostgreSQL 用例会失败而不是静默跳过。
+      # PostgreSQL 用例会失败而不是静默跳过。每一片都带库：哪一片缺了它，那一片里的
+      # 真库用例就整片 Fatal——不是跳过，所以不会有「拆片之后真库门禁悄悄没了」这种事。
       IDP_PARCEL_POSTGRES_DSN: postgres://parcel:parcel@127.0.0.1:5432/postgres?sslmode=disable
     services:
       postgres:
@@ -52,31 +141,11 @@ jobs:
           go-version: 1.26.5
           cache: true
 
-      - name: Check formatting
-        run: test -z "$(gofmt -l .)"
-
-      - name: Vet
-        run: go vet ./...
-
+      # 包清单由脚本给出。先赋值再展开，不走管道：默认 shell 没开 pipefail，管道里脚本
+      # 红了 go test 照样会拿着空参数对仓库根跑一遍，报的是「没有 Go 文件」而不是真因。
       - name: Test
-        run: go test -race ./...
-
-      - name: Build
-        run: go build ./...
-
-      # 清点工具自成一个模块（它要 golang.org/x/tools，而主模块的直接依赖只有三个，
-      # 且那件事本身被开发主线当作「参数显式未配置」的佐证在引用）。因此根目录的
-      # go vet / go test 扫不到它，要单列一步。
-      - name: Vet and test the inventory tool
-        working-directory: tools/mechanism-inventory
+        env:
+          SHARD: ${{ matrix.shard }}
         run: |
-          go vet ./...
-          go test ./...
-
-      # 与 gofmt 那一步同形：重新生成，与提交进来的那份不一致就红。清点报告因此不可能
-      # 落后于代码——手工重盘二十七轮之后每一轮都带假，靠的正是没有这道门。
-      - name: Mechanism inventory is current
-        run: |
-          (cd tools/mechanism-inventory && go run . -dir "$GITHUB_WORKSPACE" -out "$GITHUB_WORKSPACE/docs/product/MECHANISM-INVENTORY.md")
-          # 用 status 不用 diff：diff 看不见未跟踪文件，报告一旦被删就会静默通过。
-          test -z "$(git status --porcelain -- docs/product/MECHANISM-INVENTORY.md)"
+          packages="$(bash scripts/ci/test-shards.sh list "$SHARD")"
+          go test -race $packages
