@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -122,6 +123,8 @@ func (repository *StageContentDeclarations) LoadFinalRule(
 	}
 
 	var declarationsJSON []byte
+	var validityAnchor *string
+	var validityDuration pgtype.Interval
 	err = querier.QueryRow(ctx,
 		`SELECT COALESCE(
 		            json_agg(
@@ -132,7 +135,9 @@ func (repository *StageContentDeclarations) LoadFinalRule(
 		                ORDER BY child.outcome
 		            ) FILTER (WHERE child.outcome IS NOT NULL),
 		            '[]'::json
-		        )
+		        ),
+		        parent.validity_anchor,
+		        parent.validity_duration
 		   FROM party_commercial.final_rule_content AS parent
 		   LEFT JOIN party_commercial.final_rule_declaration AS child
 		          ON child.tenant_id     = parent.tenant_id
@@ -144,12 +149,12 @@ func (repository *StageContentDeclarations) LoadFinalRule(
 		    AND parent.object_id     = $3
 		    AND parent.version_label = $4
 		  GROUP BY parent.tenant_id, parent.object_kind, parent.object_id,
-		           parent.version_label`,
+		           parent.version_label, parent.validity_anchor, parent.validity_duration`,
 		tenant.String(),
 		uint8(domain.AcceptanceRulePackageObject),
 		rulePackage.ObjectID().String(),
 		rulePackage.Version().String(),
-	).Scan(&declarationsJSON)
+	).Scan(&declarationsJSON, &validityAnchor, &validityDuration)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -161,7 +166,18 @@ func (repository *StageContentDeclarations) LoadFinalRule(
 	if err != nil {
 		return none, false, fmt.Errorf("load final rule: %w", err)
 	}
-	content, err := domain.NewFinalRuleContent(rulePackage, declarations)
+	// 有效期那一格按在不在场选构造门（ADR-0119 Decision 三）：两列皆 NULL 走不带有效期的那条，
+	// 缺席在这里就与坏声明分开——半缺与集外取值都在 labelValidityFromColumns 报错。
+	validity, declared, err := labelValidityFromColumns(validityAnchor, validityDuration)
+	if err != nil {
+		return none, false, fmt.Errorf("load final rule: %w", err)
+	}
+	var content domain.FinalRuleContent
+	if declared {
+		content, err = domain.NewFinalRuleContentWithValidity(rulePackage, declarations, validity)
+	} else {
+		content, err = domain.NewFinalRuleContent(rulePackage, declarations)
+	}
 	if err != nil {
 		return none, false, fmt.Errorf("load final rule: %w", err)
 	}

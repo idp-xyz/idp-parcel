@@ -167,6 +167,10 @@ type FinalizationDeclaration struct {
 type FinalRuleContent struct {
 	owner        CommercialVersion
 	declarations map[DeclaredResponsibilityOutcome]RuleReference
+	// validity 只在 hasValidity 为真时有意义：一版至多一条面单有效期（ADR-0119），缺席由
+	// NewFinalRuleContent 与 NewFinalRuleContentWithValidity 两个构造门分立表达，不拿零时长兼作。
+	validity    LabelValidityDeclaration
+	hasValidity bool
 }
 
 // NewFinalRuleContent 组装声明。拥有对象必须是当前可用的接单规则包；至少一行（一行
@@ -206,6 +210,13 @@ func (content FinalRuleContent) Owner() CommercialVersion {
 func (content FinalRuleContent) FinalKindFor(outcome DeclaredResponsibilityOutcome) (RuleReference, bool) {
 	kind, declared := content.declarations[outcome]
 	return kind, declared
+}
+
+// Validity 报出这一版终局规则声明的面单有效期。第二个返回值为 false 即「没有这一格」——那是
+// 声明的真话：成功面单结果不失效、不按墙钟推算，消费方据以答规则未配置（ADR-0119 Decision 一）；
+// 不得因为终局规则其它行在场就把有效期当成已配置。
+func (content FinalRuleContent) Validity() (LabelValidityDeclaration, bool) {
+	return content.validity, content.hasValidity
 }
 
 // Declarations 按责任结果的稳定顺序交回全部终局声明（副本）。发布写入面按整份声明

@@ -34,6 +34,7 @@ type publicationRegistryDouble struct {
 	declarationLog     []string
 	savedAsOf          []domain.AsOfDeclaration
 	savedContract      []domain.CustomerContract
+	savedFinalRules    []domain.FinalRuleContent
 	savedIntake        []domain.IntakeQualificationContent
 	savedSettlement    []domain.SettlementPolicy
 
@@ -208,8 +209,9 @@ func (double *publicationRegistryDouble) SaveIntakeQualification(
 
 func (double *publicationRegistryDouble) SaveFinalRule(
 	_ context.Context,
-	_ domain.FinalRuleContent,
+	content domain.FinalRuleContent,
 ) (ports.DeclarationSaveOutcome, error) {
+	double.savedFinalRules = append(double.savedFinalRules, content)
 	return double.declarationAnswer("final-rule")
 }
 
@@ -1668,4 +1670,98 @@ func TestAnUnreadableRegistryBlocksPublication(t *testing.T) {
 	if len(registry.savedVersions) != 0 {
 		t.Fatal("读失败后仍写了库")
 	}
+}
+
+// Covers: ADR-0119 Decision 五——面单有效期与终局规则行折进同一份正文、同一 FINAL_RULE 通道；缺键就是没有
+// 这一格（不失效）；只给有效期不给终局规则行在触碰持久化面之前整项拒。
+func TestFinalRuleValidityPublishesInsideTheFinalRuleContent(t *testing.T) {
+	validity, err := domain.NewLabelValidityDeclaration(domain.ChannelResultObservedAnchor, 72*time.Hour)
+	if err != nil {
+		t.Fatalf("label validity: %v", err)
+	}
+	finalRules := []domain.FinalizationDeclaration{{
+		Outcome:   domain.DeclaredEffectiveDelivery,
+		FinalKind: pcValue(t, domain.NewRuleReference, "FINAL/effective-delivery"),
+	}}
+
+	t.Run("随终局规则同一通道登记", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{
+				FinalRules:        finalRules,
+				FinalRuleValidity: &validity,
+			},
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if len(registry.declarationLog) != 1 || registry.declarationLog[0] != "final-rule" {
+			t.Fatalf("声明写入 = %v, want [final-rule]——有效期不是另一条通道", registry.declarationLog)
+		}
+		if len(registry.savedFinalRules) != 1 {
+			t.Fatalf("终局规则写入 %d 份，want 1", len(registry.savedFinalRules))
+		}
+		saved, declared := registry.savedFinalRules[0].Validity()
+		if !declared || saved != validity {
+			t.Fatalf("交给持久化面的有效期 = %+v declared=%v", saved, declared)
+		}
+		if _, ok := registry.savedFinalRules[0].FinalKindFor(domain.DeclaredEffectiveDelivery); !ok {
+			t.Fatal("终局规则行没有随同一份正文写入")
+		}
+		if reports := result.Declarations(); len(reports) != 1 || reports[0].Channel != application.FinalRuleChannel {
+			t.Fatalf("报告 = %#v, want FINAL_RULE 一条", reports)
+		}
+	})
+
+	t.Run("缺键就是没有这一格", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{FinalRules: finalRules},
+		}); err != nil {
+			t.Fatalf("Handle：%v", err)
+		}
+		if _, declared := registry.savedFinalRules[0].Validity(); declared {
+			t.Fatal("没给有效期却写进了一条——那是产品替租户拟的默认")
+		}
+	})
+
+	t.Run("只给有效期不给终局规则行整项拒", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+			Approval:     publishApproval(t, "rules-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{FinalRuleValidity: &validity},
+		}); err == nil {
+			t.Fatal("没有拥有对象的有效期被收下了")
+		}
+		if len(registry.savedVersions) != 0 || len(registry.declarationLog) != 0 {
+			t.Fatal("拒收的发布写了库")
+		}
+	})
+
+	t.Run("挂在合同版本上的终局规则连有效期一起拒", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+			Approval:     publishApproval(t, "contract-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{FinalRules: finalRules, FinalRuleValidity: &validity},
+		}); err == nil {
+			t.Fatal("挂错拥有对象的声明被收下了")
+		}
+		if len(registry.savedVersions) != 0 || len(registry.declarationLog) != 0 {
+			t.Fatal("拒收的发布写了库")
+		}
+	})
 }

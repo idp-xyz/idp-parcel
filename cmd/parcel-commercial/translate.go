@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
@@ -42,13 +43,17 @@ type approvalDocument struct {
 }
 
 type declarationsDocument struct {
-	AsOfPolicies            []asOfPolicyDocument             `json:"asOfPolicies,omitempty"`
-	AcceptanceContent       *acceptanceContentDocument       `json:"acceptanceContent,omitempty"`
-	PendingRoutingBasis     string                           `json:"pendingRoutingBasis,omitempty"`
-	PreAcceptanceControl    *preAcceptanceControlDocument    `json:"preAcceptanceControl,omitempty"`
-	ContractContent         *contractContentDocument         `json:"contractContent,omitempty"`
-	IntakeQualification     *intakeQualificationDocument     `json:"intakeQualification,omitempty"`
-	FinalRules              []finalRuleDocument              `json:"finalRules,omitempty"`
+	AsOfPolicies         []asOfPolicyDocument          `json:"asOfPolicies,omitempty"`
+	AcceptanceContent    *acceptanceContentDocument    `json:"acceptanceContent,omitempty"`
+	PendingRoutingBasis  string                        `json:"pendingRoutingBasis,omitempty"`
+	PreAcceptanceControl *preAcceptanceControlDocument `json:"preAcceptanceControl,omitempty"`
+	ContractContent      *contractContentDocument      `json:"contractContent,omitempty"`
+	IntakeQualification  *intakeQualificationDocument  `json:"intakeQualification,omitempty"`
+	FinalRules           []finalRuleDocument           `json:"finalRules,omitempty"`
+	// finalRuleValidity 是 finalRules 的兄弟键（ADR-0119 Decision 五）：有效期是终局规则声明父行上的一格，
+	// 与 finalRules 折进同一份正文、同一发布通道；缺键 = 未声明有效期，既有批文一字不改。只给本键不给
+	// finalRules 由发布用例整项拒——翻译层不代判也不代填。
+	FinalRuleValidity       *finalRuleValidityDocument       `json:"finalRuleValidity,omitempty"`
 	CancellationAuthority   []cancellationRuleDocument       `json:"cancellationAuthority,omitempty"`
 	RulePackageBody         *rulePackageBodyDocument         `json:"rulePackageBody,omitempty"`
 	SettlementPolicyBody    *settlementPolicyBodyDocument    `json:"settlementPolicyBody,omitempty"`
@@ -99,6 +104,18 @@ type intakeQualificationDocument struct {
 type finalRuleDocument struct {
 	Outcome   string `json:"outcome"`
 	FinalKind string `json:"finalKind"`
+}
+
+// finalRuleValidityDocument 是终局规则声明的面单有效期（票 party-commercial-context-gaps/09，ADR-0119）：
+// 起算时刻种类（封闭集，首发一值，镜像 pcdomain.ValidityAnchorKind）× 时长。
+//
+// duration 取 ISO-8601 时长的一个子集 `P[nD][T[nH][nM][nS]]`：至少一项、整数、不接受年 / 月 / 周——年与月
+// 不是固定时长（与库上 interval 的微秒段无损往返不了），周只是天的别写，子集最小。写成 PostgreSQL 的
+// interval 串是持久化面的方言，写批文的人不该学库的语法；在这里解析、集外拒收，任何时长只在批文里出现，
+// 仓库不持有取值。
+type finalRuleValidityDocument struct {
+	Anchor   string `json:"anchor"`
+	Duration string `json:"duration"`
 }
 
 type cancellationRuleDocument struct {
@@ -508,6 +525,14 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		})
 	}
 
+	if document.FinalRuleValidity != nil {
+		validity, err := finalRuleValidityFrom(*document.FinalRuleValidity)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.FinalRuleValidity = &validity
+	}
+
 	for _, rule := range document.CancellationAuthority {
 		party, err := cancellationPartyFrom(rule.Party)
 		if err != nil {
@@ -656,6 +681,92 @@ func authorizedActionFrom(name string) (pcdomain.AuthorizedAction, error) {
 		}
 	}
 	return pcdomain.AuthorizedActionInvalid, fmt.Errorf("集合外的授权动作 %q", name)
+}
+
+func finalRuleValidityFrom(document finalRuleValidityDocument) (pcdomain.LabelValidityDeclaration, error) {
+	anchor, err := validityAnchorKindFrom(document.Anchor)
+	if err != nil {
+		return pcdomain.LabelValidityDeclaration{}, err
+	}
+	duration, err := parseISODurationSubset(document.Duration)
+	if err != nil {
+		return pcdomain.LabelValidityDeclaration{}, fmt.Errorf("面单有效期时长 %q：%w", document.Duration, err)
+	}
+	declaration, err := pcdomain.NewLabelValidityDeclaration(anchor, duration)
+	if err != nil {
+		return pcdomain.LabelValidityDeclaration{}, fmt.Errorf("面单有效期 %s / %s：%w", document.Anchor, document.Duration, err)
+	}
+	return declaration, nil
+}
+
+// validityAnchorKindFrom 首发只认一个取值（MCP-1 代裁 Q1）。缺席不折成它：起算时刻是声明说出来的，不是产品
+// 替它选的；加格是新一版声明的事，写了集外的种类就是拒收。
+func validityAnchorKindFrom(name string) (pcdomain.ValidityAnchorKind, error) {
+	if name == pcdomain.ChannelResultObservedAnchor.String() {
+		return pcdomain.ChannelResultObservedAnchor, nil
+	}
+	return pcdomain.ValidityAnchorKindInvalid, fmt.Errorf("集合外的起算时刻种类 %q", name)
+}
+
+// parseISODurationSubset 解析 `P[nD][T[nH][nM][nS]]`：各段整数、按序至多一次、至少一段；`T` 之后必须有段。
+// 年、月、周与小数段一律拒——不是「没实现」，是子集有意排除（理由在 finalRuleValidityDocument 头注）。
+// 零时长在这里放行、由 pcdomain.NewLabelValidityDeclaration 拒：「P0D 立不住」是领域的话，翻译层只认形状。
+func parseISODurationSubset(raw string) (time.Duration, error) {
+	if len(raw) < 2 || raw[0] != 'P' {
+		return 0, fmt.Errorf("不是 P 开头的 ISO-8601 时长")
+	}
+	rest := raw[1:]
+	var total time.Duration
+	segments := 0
+	inTime := false
+	// 各段只许按 D → T → H → M → S 的顺序出现一次；order 记录上一段的位置，逆序或重复即拒。
+	order := 0
+	position := map[byte]int{'D': 1, 'H': 3, 'M': 4, 'S': 5}
+	unit := map[byte]time.Duration{'D': 24 * time.Hour, 'H': time.Hour, 'M': time.Minute, 'S': time.Second}
+	for len(rest) > 0 {
+		if rest[0] == 'T' {
+			if inTime || order > 1 {
+				return 0, fmt.Errorf("T 只能出现一次且在日段之后")
+			}
+			inTime = true
+			order = 2
+			rest = rest[1:]
+			if len(rest) == 0 {
+				return 0, fmt.Errorf("T 之后没有任何时间段")
+			}
+			continue
+		}
+		digits := 0
+		for digits < len(rest) && rest[digits] >= '0' && rest[digits] <= '9' {
+			digits++
+		}
+		if digits == 0 || digits == len(rest) {
+			return 0, fmt.Errorf("段 %q 不是「整数 + 单位」", rest)
+		}
+		designator := rest[digits]
+		segmentOrder, known := position[designator]
+		if !known {
+			return 0, fmt.Errorf("不接受的单位 %q（年 / 月 / 周与小数都不在子集内）", string(designator))
+		}
+		if designator == 'D' && inTime || designator != 'D' && !inTime {
+			return 0, fmt.Errorf("单位 %q 放错了 T 的哪一侧", string(designator))
+		}
+		if segmentOrder <= order {
+			return 0, fmt.Errorf("段 %q 逆序或重复", string(designator))
+		}
+		value, err := strconv.ParseInt(rest[:digits], 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("段 %q 的数字读不出来：%w", rest[:digits+1], err)
+		}
+		total += time.Duration(value) * unit[designator]
+		order = segmentOrder
+		segments++
+		rest = rest[digits+1:]
+	}
+	if segments == 0 {
+		return 0, fmt.Errorf("没有任何段")
+	}
+	return total, nil
 }
 
 func preAcceptanceFinancialControlPolicyBodyFrom(

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -464,7 +465,9 @@ func (repository *CommercialPublications) SaveIntakeQualification(
 }
 
 // SaveFinalRule 登记一份规则包的终局规则声明（PAR-COM-17）：哪些责任结果形成终局、
-// 形成哪种。缺行是真话（不形成终局），由读侧如实交回。
+// 形成哪种，以及父行上那一格可缺的面单有效期（ADR-0119）。缺行是真话（不形成终局），
+// 由读侧如实交回；有效期缺席同样是真话（不失效），重放 / 冲突判据把它算进去——同行集合而
+// 有效期不同即冲突。
 func (repository *CommercialPublications) SaveFinalRule(
 	ctx context.Context,
 	content domain.FinalRuleContent,
@@ -475,16 +478,37 @@ func (repository *CommercialPublications) SaveFinalRule(
 	}
 	tenant, kind, objectID, label := ownerColumns(content.Owner())
 
-	present, err := parentRowPresent(ctx, executor,
-		`SELECT 1
+	rows, err := executor.Query(ctx,
+		`SELECT validity_anchor, validity_duration
 		   FROM party_commercial.final_rule_content
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
 		tenant, kind, objectID, label)
 	if err != nil {
 		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save final rule: %w", err)
 	}
+	var existingAnchor *string
+	var existingDuration pgtype.Interval
+	present := false
+	for rows.Next() {
+		if err := rows.Scan(&existingAnchor, &existingDuration); err != nil {
+			rows.Close()
+			return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save final rule: %w", err)
+		}
+		present = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save final rule: %w", err)
+	}
 	incoming := content.Declarations()
 	if present {
+		sameValidity, err := sameLabelValidity(existingAnchor, existingDuration, content)
+		if err != nil {
+			return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save final rule: %w", err)
+		}
+		if !sameValidity {
+			return ports.DeclarationContentConflict, nil
+		}
 		existing, err := scanTextPairs(ctx, executor,
 			`SELECT outcome, final_kind
 			   FROM party_commercial.final_rule_declaration
@@ -504,11 +528,12 @@ func (repository *CommercialPublications) SaveFinalRule(
 		return ports.DeclarationAlreadyRegistered, nil
 	}
 
+	validityAnchor, validityDuration := labelValidityColumns(content)
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO party_commercial.final_rule_content
-			(tenant_id, object_kind, object_id, version_label)
-		 VALUES ($1, $2, $3, $4)`,
-		tenant, kind, objectID, label,
+			(tenant_id, object_kind, object_id, version_label, validity_anchor, validity_duration)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenant, kind, objectID, label, validityAnchor, validityDuration,
 	); err != nil {
 		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save final rule: %w", err)
 	}

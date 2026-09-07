@@ -61,13 +61,17 @@ type PublishCommercialAuthorityCommand struct {
 // 声明只能随发布登记：正文随发布固定（内容摘要盖住它），事后补声明等于改一份已固定
 // 的正文，那要发新版本。
 type CommercialDeclarations struct {
-	AsOfPolicies            []domain.AsOfPolicy
-	AcceptanceContent       *AcceptanceContentDeclaration
-	PendingRoutingBasis     *domain.PendingRoutingBasisReference
-	PreAcceptanceControl    *PreAcceptanceControlInstruction
-	ContractContent         *ContractContentDeclaration
-	IntakeQualification     *IntakeQualificationDeclaration
-	FinalRules              []domain.FinalizationDeclaration
+	AsOfPolicies         []domain.AsOfPolicy
+	AcceptanceContent    *AcceptanceContentDeclaration
+	PendingRoutingBasis  *domain.PendingRoutingBasisReference
+	PreAcceptanceControl *PreAcceptanceControlInstruction
+	ContractContent      *ContractContentDeclaration
+	IntakeQualification  *IntakeQualificationDeclaration
+	FinalRules           []domain.FinalizationDeclaration
+	// FinalRuleValidity 是终局规则声明父行上那一格面单有效期（ADR-0119）。它不是另一条通道：与 FinalRules
+	// 折进同一份 FinalRuleContent、走同一 FinalRuleChannel——有效期没有独立的拥有对象，单独给出（FinalRules
+	// 为空）整项拒。nil 就是「没有这一格」，不失效。
+	FinalRuleValidity       *domain.LabelValidityDeclaration
 	CancellationAuthority   []domain.CancellationAuthorityDeclaration
 	RulePackageBody         *RulePackageBodyDeclaration
 	SettlementPolicyBody    *SettlementPolicyBodyDeclaration
@@ -92,6 +96,7 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.ContractContent == nil &&
 		declarations.IntakeQualification == nil &&
 		len(declarations.FinalRules) == 0 &&
+		declarations.FinalRuleValidity == nil &&
 		len(declarations.CancellationAuthority) == 0 &&
 		declarations.RulePackageBody == nil &&
 		declarations.SettlementPolicyBody == nil &&
@@ -591,8 +596,19 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.FinalRuleValidity != nil && len(declarations.FinalRules) == 0 {
+		// 有效期是终局规则声明上的一格，没有独立的拥有对象：只给有效期不给终局规则行，登进去也没有
+		// 任何读口读得到它，这里整项拒（ADR-0119 Decision 五）。
+		return nil, fmt.Errorf("final rule content: a label validity declaration needs the final rule declarations it belongs to")
+	}
 	if len(declarations.FinalRules) > 0 {
-		content, err := domain.NewFinalRuleContent(version, declarations.FinalRules)
+		var content domain.FinalRuleContent
+		var err error
+		if declarations.FinalRuleValidity != nil {
+			content, err = domain.NewFinalRuleContentWithValidity(version, declarations.FinalRules, *declarations.FinalRuleValidity)
+		} else {
+			content, err = domain.NewFinalRuleContent(version, declarations.FinalRules)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("final rule content: %w", err)
 		}
