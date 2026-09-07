@@ -176,6 +176,11 @@
 # 见上一段）。与 TF / VE / SA / CC 各组清空时同一句：名单清空只判名单清空，本门禁只量导出工厂——
 # 回放的治理触发面是端点不是工厂，接没接进端点表这里量不到，那件在同票后续笔与 ADR-0124。
 #
+# 2026-09-07 推送方重放：上面两笔（pc-gaps/08 加两条、wbr/06 剪一条）先后进 main，各自钉的是自己
+# 父提交上的数（6→8、6→5），**两个数相加减不出 tip 的真值**——它们量的是两棵不同的树。两笔都进
+# 之后在隔离 detached 检出 `de9635e6` 上两法同得实测 **7**（parcel-shipment 2 + party-commercial 5）。
+# 只对该检出成立；本笔只加这段注释，名单一行未动。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
