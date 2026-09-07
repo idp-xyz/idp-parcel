@@ -264,6 +264,56 @@ type ContainmentIndex interface {
 	) (domain.ConsolidationUnitID, bool, error)
 }
 
+// ParcelContainment 是按正式包裹的版本化关联答「此刻在不在某个未关闭集运单元里」的封闭
+// 三值（读面为 parcel-shipment 的「资料修订阶段」判断而立，ADR-0118 决定四拆出的票
+// ps-port-remainder/05）。ContainmentIndex 按作业实物答直接父级；正式包裹与作业实物之间是
+// 识别成功后建立的版本化关联，本口经那条关联把问题从包裹搬到实物，再问容纳索引。
+//
+// 三值的分界是本上下文对自己事实的解释，消费方只翻译不判断：
+//
+//   - `在`：至少一件已关联该包裹的作业实物此刻被某个未关闭单元直接包含。
+//   - `不可归属`：没有已关联实物在单元里，但有一件仍待识别的实物，其候选关联里列着该包裹，
+//     且那件实物此刻在某个单元里。候选不是归属（CONTEXT「候选尚未确认时不得据此执行方向性
+//     作业」），本上下文说不出那件在袋里的东西是不是它——既不能答`在`（那是拿候选冒充关联），
+//     也不能答`不在`（那会让一个身份冲突尚未处置的包裹被读成「没装袋」）。
+//   - `不在`：其余情形，含本上下文从未把任何作业实物关联到该包裹。没有关联就没有可归属于
+//     它的装袋事实，这是对本上下文自己册子的如实回答，不是「不知道」——把它答成不知道，
+//     会让每一个尚未到站的包裹都判不出阶段。
+//
+// 零值是坏值，与本包其余封闭集同形（ReceptionRecordKindInvalid）；消费方翻译时对零值上抛。
+type ParcelContainment uint8
+
+const (
+	ParcelContainmentInvalid ParcelContainment = iota
+	ParcelNotContained
+	ParcelContained
+	ParcelContainmentUnattributable
+)
+
+func (containment ParcelContainment) String() string {
+	switch containment {
+	case ParcelNotContained:
+		return "NOT_CONTAINED"
+	case ParcelContained:
+		return "CONTAINED"
+	case ParcelContainmentUnattributable:
+		return "UNATTRIBUTABLE"
+	default:
+		return ""
+	}
+}
+
+// ParcelContainmentView 按（租户 + 正式包裹的版本化关联引用）答 ParcelContainment。依赖调不通
+// 作为错误返回。它不拓宽 ContainmentIndex：那一口按作业实物伺候加入前的跨单元核对，本口按
+// 包裹伺候另一个上下文的一次同步询问，两个调用面各答各的问题。
+type ParcelContainmentView interface {
+	LoadParcelContainment(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.ParcelAssociationReference,
+	) (ParcelContainment, error)
+}
+
 // SealedSnapshotHandoffIntent 把封装快照交给适用下游（装载与交接按封装快照对货）。
 type SealedSnapshotHandoffIntent struct {
 	TenantID domain.TenantID
