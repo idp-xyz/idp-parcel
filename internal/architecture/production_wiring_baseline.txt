@@ -166,6 +166,16 @@
 # RequestedByOperatorRole（理由写在那两行上方）。**在 detached 检出 `df923d16`（分支 mcp5-pcgaps08，
 # 不含任何人的在途改动）上 `git show` 取本文件，两法同得加前 6、加后 8**；两个数只对该检出成立。
 #
+# 2026-09-07 随 wiring-baseline-remainder/06（MCP-2）剪掉 parcel-pricing 组最后一条 ReplayPricingEvaluation
+# ——成因第二种（真接上：application/replay_pricing_evaluation.go 是它的生产调用方），理由与出处写在该组
+# 那一段。量在隔离 worktree 上（分支 mcp2-wbr06，不含任何人的在途改动，动手前 `git status --
+# internal/architecture/` 为空）：`git show` 取父提交 `2532d97b` 的本文件两法同得剪前 **6**，本笔单独作用于
+# 其上剪后 **5**——两法是 UTF-8 逐行读后滤非空非注释，与字节层数行首非 `#`。两个数只对该检出成立；本笔
+# 重放进 main 时父提交若不是 2532d97b，下一个改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。
+# **parcel-pricing 这一组至此清空**——本票（wiring-baseline-remainder）开工时它有 9 条（MCP-6 同日删三条，
+# 见上一段）。与 TF / VE / SA / CC 各组清空时同一句：名单清空只判名单清空，本门禁只量导出工厂——
+# 回放的治理触发面是端点不是工厂，接没接进端点表这里量不到，那件在同票后续笔与 ADR-0124。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -408,16 +418,19 @@ internal/partycommercial/domain RequestedByOperatorRole
 # 同一票的 NewSeriesReview / NewReviewedSeriesVersion / PeekReferenceSeriesRegistrationReference
 # 不在名单上：前两个按名字被门禁跳过（`New` 前缀），第三个由同一适配器调用。
 #
-# 评价重放门（CONTEXT「重放必须使用新的评价引用……重算结果与原评价不一致时，结果为冲突」那几条
-# 的执行器）。**调用方是 PN-08 W02「历史回放」的执行编排**：取回原评价与它记录的原方案版本、
-# 按原输入快照与原版本清单重算、结果记 `R`——EvidenceKind 里那格 EvidenceReplay 就是为它留的；
-# CONTEXT 点名的「争议复核」走同一扇门。**那一层今天缺三件，三件同票落地那天这一条出名单**：
-# 按版本引用取回原方案的读口（PriceCardCatalog 只有按方向+范围+时点的 LoadApplicable，重放要的
-# 是「原评价用的那一版」而不是「此刻适用的那一版」）、应用编排（回放结果不交结算：它不是新费用）、
-# 治理触发面。票在 .scratch/wiring-baseline-remainder/issues/06-pp-replay-pricing-evaluation-has-no-executor.md。
+# 评价重放门 ReplayPricingEvaluation（CONTEXT「重放必须使用新的评价引用……重算结果与原评价不一致时，
+# 结果为冲突」那几条的执行器）曾在这里，理由行写着「那一层今天缺三件，三件同票落地那天这一条出
+# 名单」：按版本引用取回原方案的读口、应用编排、治理触发面。2026-09-07 随 wiring-baseline-remainder/06
+# （MCP-2）剪掉：读口是 ports.PriceCardVersionLoader.FindByReference（PG PriceCards 兼实现，读的是
+# 「原评价用的那一版」不是「此刻适用的那一版」），生产调用方是 application/replay_pricing_evaluation.go
+# 的 ReplayPricingEvaluationHandler.Handle——它取原评价、按原评价记录的方案版本引用取原方案、纯函数
+# 重算后入册，**不交 EvaluationHandoff**（依赖结构上没有那一格：回放结果不是新费用，一份带新引用的
+# 回放交出去就是一笔重复的费用采用）；治理触发面按 ADR-0124 落 parcel-api 端点表带未配置格，同票
+# 后续笔。成因三分先分过：全仓该名字只有一处声明（domain/evaluation.go），同笔新增的
+# ReplayPricingEvaluationHandler / Command / Result / Deps / Outcome 都是前缀名，门禁比的是精确相等
+# 不是子串（tf-unwired-seven/05 那段核过匹配码），是第二种。
 # 别把 application/evaluate_pricing.go 的 settleAgainstExisting 读成它：那是同标识重复请求的
 # 冒名比对，纯函数重算后比摘要、不铸新评价引用，与本条守的规则是两件事。
-internal/parcelpricing/domain ReplayPricingEvaluation
 # MarshalPricingPlanSnapshot 与 RehydratePricingPlanSnapshot 曾在这里，理由行写着「快照序列化与
 # 重建是同一条未接线路径的两端：适配器 price_card_catalog.go 正文没用它们……一次修好会同时去掉
 # 两行」。**那句预言没兑现，成因在预言自己**：适配器正文后来确实在存取快照，走的却是登记层那一对

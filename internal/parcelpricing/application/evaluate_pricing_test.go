@@ -95,8 +95,15 @@ func newEvaluateFixture(t *testing.T) *evaluateFixture {
 // minimalPlan 造一张最小可评价的合成价卡：单分区重量段费率表 + 实重策略。
 func minimalPlan(t *testing.T) domain.PricingPlanVersion {
 	t.Helper()
+	return minimalPlanPriced(t, "10")
+}
+
+// minimalPlanPriced 是 minimalPlan 的可变金额版本：版本引用一字不改、只换费率金额，造的是「同版本
+// 引用背后内容变了」那一格——回放用例要它。
+func minimalPlanPriced(t *testing.T, rate string) domain.PricingPlanVersion {
+	t.Helper()
 	currency := mustValue(t, domain.NewCurrency, "USD")
-	amount, err := domain.NewMoneyFromString("10", currency)
+	amount, err := domain.NewMoneyFromString(rate, currency)
 	if err != nil {
 		t.Fatalf("money: %v", err)
 	}
