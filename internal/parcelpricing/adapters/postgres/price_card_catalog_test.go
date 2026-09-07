@@ -353,6 +353,139 @@ func TestPriceCardMultipleCandidatesAllReturned(t *testing.T) {
 	}
 }
 
+// TestPriceCardFindByReferenceReturnsTheVersionTheEvaluationUsedNotTheOneInForce 证按引用读回的是
+// 「原评价用的那一版」（票 wiring-baseline-remainder/06 件①）：同一方案身份 v1 已被 v2 替代
+// （v1 适用期已闭合、v2 自此刻起适用），LoadApplicable 只答 v2，FindByReference(v1) 仍原样交回
+// v1——读回经领域整图重验，快照逐字节同答；v2 也各自读得回，两版互不顶替。
+func TestPriceCardFindByReferenceReturnsTheVersionTheEvaluationUsedNotTheOneInForce(t *testing.T) {
+	catalog, transactor := newPriceCards(t)
+	ctx := t.Context()
+
+	superseded := catalogPlanWithPeriod(t, "plan-succession", "v1", domain.PricingDirectionSell, "10",
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC))
+	current := catalogPlanWithPeriod(t, "plan-succession", "v2", domain.PricingDirectionSell, "12",
+		time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+	registerCard(t, catalog, transactor, ctx, cardRegistration(t, "tenant-a", superseded))
+	registerCard(t, catalog, transactor, ctx, cardRegistration(t, "tenant-a", current))
+
+	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
+	applicable, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	if err != nil || len(applicable) != 1 || applicable[0].Reference().Version() != "v2" {
+		t.Fatalf("此刻适用的该只有 v2：n=%d err=%v", len(applicable), err)
+	}
+
+	found, ok, err := catalog.FindByReference(ctx, tenant, superseded.Reference())
+	if err != nil || !ok {
+		t.Fatalf("按引用读回 v1：ok=%v err=%v", ok, err)
+	}
+	if !bytes.Equal(planSnapshotBytes(t, found), planSnapshotBytes(t, superseded)) {
+		t.Fatalf("按引用读回的 v1 与登记的 v1 不同答——读口退回了别的版本")
+	}
+	if found.ContentDigest() == current.ContentDigest() {
+		t.Fatalf("按引用读回 v1 却拿到了在用版 v2 的内容")
+	}
+	latest, ok, err := catalog.FindByReference(ctx, tenant, current.Reference())
+	if err != nil || !ok || latest.ContentDigest() != current.ContentDigest() {
+		t.Fatalf("按引用读回 v2：ok=%v err=%v", ok, err)
+	}
+}
+
+// TestPriceCardFindByReferenceAnswersAbsenceHonestly 证「那一版不在册」如实答 false 不答 error、
+// 也不退回任何在用版本：未登过的版本号、别的租户（越权探针与真不存在同答，ADR-0029）都是 false。
+// 引用种类不是 pricing-plan 是调用方拿错了引用，答 error 不答 false。
+func TestPriceCardFindByReferenceAnswersAbsenceHonestly(t *testing.T) {
+	catalog, transactor := newPriceCards(t)
+	ctx := t.Context()
+
+	plan := catalogPlan(t, "plan-lookup", "v1", domain.PricingDirectionSell, "10")
+	registerCard(t, catalog, transactor, ctx, cardRegistration(t, "tenant-a", plan))
+
+	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
+	unregistered, err := domain.NewVersionReferenceIdentity(domain.ArtifactPricingPlan, "plan-lookup", "v9")
+	if err != nil {
+		t.Fatalf("构造引用：%v", err)
+	}
+	if _, ok, err := catalog.FindByReference(ctx, tenant, unregistered); err != nil || ok {
+		t.Fatalf("未登过的版本号：ok=%v err=%v，想要 false / nil", ok, err)
+	}
+
+	stranger := evaluationValue(t, domain.NewTenantID, "tenant-b")
+	if _, ok, err := catalog.FindByReference(ctx, stranger, plan.Reference()); err != nil || ok {
+		t.Fatalf("别的租户读同一引用：ok=%v err=%v，想要 false / nil", ok, err)
+	}
+
+	wrongKind, err := domain.NewVersionReferenceIdentity(domain.ArtifactRateTable, "plan-lookup", "v1")
+	if err != nil {
+		t.Fatalf("构造引用：%v", err)
+	}
+	if _, _, err := catalog.FindByReference(ctx, tenant, wrongKind); err == nil {
+		t.Fatalf("价表种类的引用被当成方案引用读了")
+	}
+}
+
+// catalogPlanWithPeriod 是 catalogPlan 的带适用期版本：同一方案身份要造出前后两版，适用期得分得开。
+func catalogPlanWithPeriod(t *testing.T, planID, planVersion string, direction domain.PricingDirection, amount string, from, to time.Time) domain.PricingPlanVersion {
+	t.Helper()
+	currency := evaluationValue(t, domain.NewCurrency, "USD")
+	entry, err := domain.NewRateEntry(
+		evaluationValue(t, domain.NewRateEntryID, "entry-"+planID+"-"+planVersion),
+		"Z1",
+		catalogWeight(t, "0"),
+		catalogWeight(t, "10"),
+		catalogMoney(t, amount, currency),
+	)
+	if err != nil {
+		t.Fatalf("构造费率段：%v", err)
+	}
+	period, err := domain.NewEffectivePeriod(from, to)
+	if err != nil {
+		t.Fatalf("构造适用期：%v", err)
+	}
+	tableRef, err := domain.NewVersionReferenceIdentity(domain.ArtifactRateTable, "table-"+planID, planVersion)
+	if err != nil {
+		t.Fatalf("构造价表引用：%v", err)
+	}
+	table, err := domain.NewRateTableVersion(
+		tableRef, domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram,
+		period, []domain.RateEntry{entry})
+	if err != nil {
+		t.Fatalf("构造价表：%v", err)
+	}
+	rounding, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, catalogWeight(t, "0.5"))
+	if err != nil {
+		t.Fatalf("构造取整策略：%v", err)
+	}
+	weightRef, err := domain.NewVersionReferenceIdentity(domain.ArtifactWeightPolicy, "weight-"+planID, planVersion)
+	if err != nil {
+		t.Fatalf("构造计价重引用：%v", err)
+	}
+	weightPolicy, err := domain.NewPricingWeightPolicy(weightRef, domain.PricingWeightActualOnly, rounding, nil)
+	if err != nil {
+		t.Fatalf("构造计价重策略：%v", err)
+	}
+	planRef, err := domain.NewVersionReferenceIdentity(domain.ArtifactPricingPlan, planID, planVersion)
+	if err != nil {
+		t.Fatalf("构造方案引用：%v", err)
+	}
+	plan, err := domain.NewPricingPlanVersion(
+		planRef,
+		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
+		direction,
+		domain.PricingPurposeCustomerCharge,
+		evaluationValue(t, domain.NewChargeCode, "BASE_FREIGHT"),
+		period,
+		table,
+		weightPolicy,
+		nil,
+		domain.PricingPlanStructures{},
+	)
+	if err != nil {
+		t.Fatalf("构造价卡：%v", err)
+	}
+	return plan
+}
+
 // TestPriceCardRegisterOutsideTransactionRejected 证事务纪律：登记必须在事务内。
 func TestPriceCardRegisterOutsideTransactionRejected(t *testing.T) {
 	catalog, _ := newPriceCards(t)
