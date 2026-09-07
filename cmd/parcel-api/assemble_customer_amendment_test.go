@@ -2,12 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -21,7 +26,8 @@ import (
 // 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（提供方授权那半
 // 未立，票 03），授权过了停在矩阵未登记（提供方矩阵那半未立，票 02）；两处都不形成版本、不入队
 // 「资料版本已形成」意图。第三条钉住交接壳：意图在自己的事务里入队恰好一封、重放不翻倍——版本与
-// 意图不同事务是编排今天的形状，壳只负责把 RequireExecutor 那一格接对。
+// 意图不同事务是编排今天的形状，壳只负责把 RequireExecutor 那一格接对。第四条把第一个停点推到
+// HTTP 面上：端点用例里带业务结果的字段未导出、逐格映射说好由本包经真编排补，补在这里。
 
 // sourceDataVersionEnvelopeType 与发布侧适配器的类型常量同字面（手抄，理由同 submittedEnvelopeType）。
 const sourceDataVersionEnvelopeType = "parcel-shipment.source-data-version.formed"
@@ -93,9 +99,31 @@ func assertNoSourceDataVersionFormed(t *testing.T, db *bentopg.DB) {
 	}
 }
 
+// preservedSourceRows 数某个来源身份在来源保全表里的行数。停点不抹掉「请求到达过」：编排在问授权
+// 之前先保全修订请求自己的来源身份（AmendCustomerSourceDataHandler.Handle 头几步），停在未决之后
+// 这一行仍在，重放同一身份才认得出是重放。
+func preservedSourceRows(t *testing.T, db *bentopg.DB, identity domain.SourceIdentity) int {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var count int
+	err = querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM parcel_shipment.source_submission
+		  WHERE tenant_id = $1 AND customer_account_id = $2 AND source = $3 AND source_request_key = $4`,
+		identity.TenantID().String(), identity.CustomerAccountID().String(),
+		identity.Source().String(), identity.RequestKey().String(),
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("统计来源保全行数：%v", err)
+	}
+	return count
+}
+
 // Covers: 票 04 装配用例①——生产装配下修订请求越过 Intake 后停在**授权未决**，原因是
-// `SourceDataAmendmentAuthorityRulesNotConfigured`（提供方那半未立），带续办引用；不形成版本、不入队意图。
-// 这一格与「客户越权」（NOT_AUTHORIZED）必须分得开：没有规则不是有人被拒。
+// `SourceDataAmendmentAuthorityRulesNotConfigured`（提供方那半未立），带续办引用；不形成版本、不入队意图；
+// 停点之前来源保全已留痕。这一格与「客户越权」（NOT_AUTHORIZED）必须分得开：没有规则不是有人被拒。
 func TestTheProductionAmendmentAssemblyStopsAtUnconfiguredAuthorization(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -108,7 +136,8 @@ func TestTheProductionAmendmentAssemblyStopsAtUnconfiguredAuthorization(t *testi
 	if err != nil {
 		t.Fatalf("装配资料修订编排：%v", err)
 	}
-	result, err := amendment.Handle(t.Context(), amendmentCommand(t, "SYN-KEY-1-AMENDMENT"))
+	command := amendmentCommand(t, "SYN-KEY-1-AMENDMENT")
+	result, err := amendment.Handle(t.Context(), command)
 	if err != nil {
 		t.Fatalf("资料修订：%v", err)
 	}
@@ -120,6 +149,66 @@ func TestTheProductionAmendmentAssemblyStopsAtUnconfiguredAuthorization(t *testi
 	}
 	if result.ContinuationReference().String() == "" {
 		t.Fatal("未决没有带续办引用")
+	}
+	assertNoSourceDataVersionFormed(t, db)
+	if got := preservedSourceRows(t, db, command.AmendmentIdentity); got != 1 {
+		t.Fatalf("修订请求的来源保全行数 = %d, want 1——停点不抹掉「请求到达过」", got)
+	}
+}
+
+// fixedAmendmentIntake 把任何请求都译成同一条命令（隔离合成 `S`，不进生产装配）：它只为让请求越过
+// Intake 到达真编排，采信身份那半仍是 `PAR-INT-01` / `BD-PS-009` 待提供，本替身不读请求。
+type fixedAmendmentIntake struct {
+	command shipmentapp.AmendCustomerSourceDataCommand
+}
+
+func (intake fixedAmendmentIntake) IntakeSourceDataAmendment(
+	context.Context,
+	*http.Request,
+) (shipmentapp.AmendCustomerSourceDataCommand, error) {
+	return intake.command, nil
+}
+
+// Covers: 票 04 装配用例④——第一个诚实停点在 HTTP 面上看得见：生产编排接在真端点后面，请求越过
+// Intake 后答 200，`outcome` 是 UNDECIDED、带封闭原因与续办引用、不带版本号。接上入口的意义正是
+// 「停点从没有入口变成说得出停在哪」，说得出要在线上说；端点用例只能证传输失败分流，这一格由这里补。
+func TestTheHonestStopIsObservableAtTheAmendmentEndpoint(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	submittedOnRealAssembly(t, db)
+
+	amendment, err := buildCustomerAmendmentOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配资料修订编排：%v", err)
+	}
+	endpoint := shipmenthttp.NewAmendCustomerSourceDataEndpoint(
+		fixedAmendmentIntake{command: amendmentCommand(t, "SYN-KEY-1-AMENDMENT")},
+		amendment,
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost, "/shipment-requests/source-data-amendments", strings.NewReader("{}"),
+	))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s；未决是已形成的业务答案，不是 5xx", response.Code, response.Body)
+	}
+	var body struct {
+		Outcome               string `json:"outcome"`
+		SourceDataVersionID   string `json:"sourceDataVersionId"`
+		PendingReason         string `json:"pendingReason"`
+		ContinuationReference string `json:"continuationReference"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body, err)
+	}
+	if body.Outcome != "UNDECIDED" || body.PendingReason != "SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED" {
+		t.Fatalf("线上没说出停在哪：%s", response.Body)
+	}
+	if body.ContinuationReference == "" || body.SourceDataVersionID != "" {
+		t.Fatalf("未决要带续办引用、不带版本号：%s", response.Body)
 	}
 	assertNoSourceDataVersionFormed(t, db)
 }
