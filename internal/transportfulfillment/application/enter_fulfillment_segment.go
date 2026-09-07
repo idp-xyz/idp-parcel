@@ -19,10 +19,11 @@ import (
 // 说「段不收了，重试一万次都一样，去另立新段」。此前段已关闭后新对象凭正当控制事实来到同段，
 // 可观察结果只有「交接在册、段里没它」，与正常入段在调用方眼里同形——这一格就是为了让两者分开。
 //
-// 封闭集合：进段那一半一格（段已关闭），重派生那一半两格（ADR-0112 决定二）——无可替代的参与、更正撤回了
-// 控制转移。三格共用一个类型，因为它们答的是同一个问题「段那一半为什么没动」，且都与续办引用互斥。领域的
-// 其余拒绝（对象已在段内、拒收与待确认不转出控制、更正后的起点晚于继承的终点）各有自己的可观察形状或尚无
-// 裁决，不在这里另开格；要加格是一次产品判断，不是补枚举。
+// 封闭集合：进段那一半一格（段已关闭），重派生那一半三格——无可替代的参与、更正撤回了控制转移（ADR-0112
+// 决定二点名的两格），以及更正后的起点晚于继承的终点（决定三说它是领域正当拒绝，按决定二「正当拒绝单开答格」
+// 同一条规则给格，票 tf-segment-lifecycle-closure/10 裁决 5）。四格共用一个类型，因为它们答的是同一个问题
+// 「段那一半为什么没动」，且都与续办引用互斥。领域的其余拒绝（对象已在段内、拒收与待确认不转出控制）各有
+// 自己的可观察形状，不在这里另开格；要加格是一次产品判断，不是补枚举。
 type SegmentEntryRefusal uint8
 
 const (
@@ -35,6 +36,10 @@ const (
 	// 没有了，却没有入场依据可立替代版本。那是参与失效格（ADR-0112 决定四），落地另票；这里如实答出，
 	// 不猜也不静默——原参与在这一格里照旧站着，调用方要知道这一点。
 	SegmentEntryRefusedCorrectionWithdrawsControl
+	// SegmentEntryRefusedCorrectedStartAfterInheritedEnd：原参与已离场，更正把起点改到了它的终点之后——替代版本
+	// 继承终点（对象的控制终点是它自己的事实），先结束再进入立不起来。更正在册、链尾不动；重试不会变，
+	// 所以不是欠账。静默会让它与「重派生成功」在调用方眼里同形，那正是本类型要分开的两种状态。
+	SegmentEntryRefusedCorrectedStartAfterInheritedEnd
 )
 
 func (refusal SegmentEntryRefusal) String() string {
@@ -45,6 +50,8 @@ func (refusal SegmentEntryRefusal) String() string {
 		return "NO_PARTICIPATION_TO_REDERIVE"
 	case SegmentEntryRefusedCorrectionWithdrawsControl:
 		return "CORRECTION_WITHDRAWS_CONTROL"
+	case SegmentEntryRefusedCorrectedStartAfterInheritedEnd:
+		return "CORRECTED_START_AFTER_INHERITED_END"
 	default:
 		return ""
 	}

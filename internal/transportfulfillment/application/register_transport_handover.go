@@ -156,8 +156,8 @@ func (result RegisterTransportHandoverResult) SegmentContinuationReference() str
 }
 
 // SegmentEntryRefusal 非空说明交接（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
-// 更正重派生答`无可替代的参与`或`更正撤回了控制`。它与 SegmentContinuationReference 不会同时非空：
-// 一个说这一半不会因重试而变，一个说等登记册恢复重试。
+// 更正重派生答`无可替代的参与`、`更正撤回了控制`或`更正后的起点晚于继承的终点`。它与
+// SegmentContinuationReference 不会同时非空：一个说这一半不会因重试而变，一个说等登记册恢复重试。
 func (result RegisterTransportHandoverResult) SegmentEntryRefusal() SegmentEntryRefusal {
 	return result.segmentRefusal
 }

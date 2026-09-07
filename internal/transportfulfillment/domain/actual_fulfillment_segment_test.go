@@ -427,8 +427,9 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("correct v3: %v", err)
 	}
-	if _, err := delivered.RederiveParticipationWithPickup(v3); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
-		t.Fatalf("起点晚于终点被收下了：err = %v", err)
+	// 它有自己的名字：编排要把这一格答给调用方（更正落了、段那一半为什么没动），与其它无效输入分开。
+	if _, err := delivered.RederiveParticipationWithPickup(v3); !errors.Is(err, domain.ErrCorrectedStartAfterInheritedEnd) || !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+		t.Fatalf("起点晚于终点被收下了或没有具名：err = %v", err)
 	}
 
 	// 交接那一路：撤回控制的更正是失效格，另票。

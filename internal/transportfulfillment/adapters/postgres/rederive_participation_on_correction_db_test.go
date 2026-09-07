@@ -452,3 +452,47 @@ func TestAPickupCorrectionRederivesIntoAClosedSegmentInTheDatabaseWithoutReopeni
 		t.Fatalf("链形不对：len=%d", len(history))
 	}
 }
+
+// Covers: ADR-0112 决定三的拒绝格——更正后的起点晚于继承的终点是先结束再进入：更正照样落新版本，段那一半答
+// CORRECTED_START_AFTER_INHERITED_END（领域正当拒绝单开答格，与决定二那两格同一条规则），链尾不动、不欠账。
+func TestAPickupCorrectionWhoseStartFallsAfterTheInheritedEndAnswersTheRefusalInTheDatabase(t *testing.T) {
+	registries := newRederivationRegistries(t)
+	ctx := t.Context()
+	object := segmentRef(t, domain.NewCarriedObjectReference, "parcel-6")
+	endedAt := rederivationEnteredAt.Add(3 * time.Hour)
+
+	first := registries.registerPickup(t, ctx, "parcel-6", "SEG-RD-6")
+	var ended application.EndFulfillmentParticipationResult
+	mustWithinSegmentTransaction(t, registries.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		ended, err = registries.ender.End(txCtx, application.EndFulfillmentParticipationCommand{
+			TenantID: registries.tenant,
+			Segment:  "SEG-RD-6",
+			Object:   "parcel-6",
+			Source:   application.ParticipationEndedByTermination,
+			Basis:    "CONTROL-TERMINATION/parcel-6",
+			EndedAt:  endedAt,
+		})
+		return err
+	})
+	if ended.Outcome() != application.ParticipationEndedNow {
+		t.Fatalf("终止参与：outcome=%s", ended.Outcome())
+	}
+
+	late := registries.correctPickup(t, ctx, "parcel-6", pickupVersionOf(t, first), endedAt.Add(time.Hour), endedAt.Add(2*time.Hour))
+	if late.SegmentEntryRefusal() != application.SegmentEntryRefusedCorrectedStartAfterInheritedEnd {
+		t.Fatalf("refusal = %s, want CORRECTED_START_AFTER_INHERITED_END", late.SegmentEntryRefusal())
+	}
+	if late.SegmentEntryRefusal().String() != "CORRECTED_START_AFTER_INHERITED_END" || late.SegmentContinuationReference() != "" {
+		t.Fatalf("答格标签或欠账不对：label=%q debt=%q", late.SegmentEntryRefusal().String(), late.SegmentContinuationReference())
+	}
+
+	segment := registries.readSegment(t, ctx, "SEG-RD-6")
+	current, present := segment.ParticipationFor(object)
+	if !present || current.EntryBasis().String() != "OFFSITE-PICKUP/"+pickupVersionOf(t, first) {
+		t.Fatalf("链尾被动了：present=%v basis=%s", present, current.EntryBasis())
+	}
+	if rows := registries.participationRows(t, ctx, "SEG-RD-6", "parcel-6"); rows != 1 {
+		t.Fatalf("库里参与行 = %d，want 1（拒绝格不落行）", rows)
+	}
+}

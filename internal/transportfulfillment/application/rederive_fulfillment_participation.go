@@ -22,8 +22,8 @@ import (
 // 只会是一个段里一条参与的入场依据。全部跳过才是 NO_PARTICIPATION_TO_REDERIVE。
 //
 // **重派生是派生的一侧，它的失败不得回滚来源更正。** 与进段同一条纪律：登记册读不到或写不进只留续办引用；
-// 领域正当拒绝里只有两格答出去（无可替代、撤回控制），其余（更正后的起点晚于继承的终点）照旧不出声——
-// 那一格今天没有裁决，票 tf-segment-lifecycle-closure/10 如实记为未决。
+// 领域正当拒绝三格各自答出去（无可替代、撤回控制、更正后的起点晚于继承的终点），其余领域错误（租户不符
+// 之类本编排自己造不出的输入）不出声。
 //
 // `segments` 缺席时不重派生也不算失败——派生一侧缺席不让来源保全停摆，判据同 enterFulfillmentSegment。
 func rederiveFulfillmentParticipation(
@@ -55,6 +55,8 @@ func rederiveFulfillmentParticipation(
 			continue
 		case errors.Is(err, domain.ErrCorrectionWithdrawsControl):
 			return segmentEntry{refusal: SegmentEntryRefusedCorrectionWithdrawsControl}
+		case errors.Is(err, domain.ErrCorrectedStartAfterInheritedEnd):
+			return segmentEntry{refusal: SegmentEntryRefusedCorrectedStartAfterInheritedEnd}
 		case err != nil:
 			return segmentEntry{}
 		}

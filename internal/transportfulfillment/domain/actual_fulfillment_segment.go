@@ -2,11 +2,16 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
 var (
 	ErrInvalidFulfillmentSegment = errors.New("transport fulfillment: invalid fulfillment segment")
+	// ErrCorrectedStartAfterInheritedEnd：替代版本继承原参与的终点，更正后的起点却晚于它——先结束再进入
+	// （ADR-0112 决定三）。它包着 ErrInvalidFulfillmentSegment 因为它就是一种无效的段形状；单独具名是因为
+	// 编排要把这一格答给调用方——来源更正已落，段那一半为什么没动，不能与别的无效输入混成一声不吭。
+	ErrCorrectedStartAfterInheritedEnd = fmt.Errorf("%w: the corrected start falls after the inherited end of the participation", ErrInvalidFulfillmentSegment)
 	// ErrSegmentNeedsAControlFact：段与参与只由有效收寄或`已交接`的权威交接成立/结束。
 	// 拒收、待确认、计划、委托、订舱、分配或尝试都不是控制事实——没有该事实时它们各自
 	// 存在，但立不起段（CONTEXT 生命周期节）。
@@ -430,7 +435,7 @@ func (segment ActualFulfillmentSegment) rederive(
 	}
 	if endKind, endBasis, endedAt, ended := current.End(); ended {
 		if enteredAt.After(endedAt) {
-			return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+			return ActualFulfillmentSegment{}, ErrCorrectedStartAfterInheritedEnd
 		}
 		replacement.endKind, replacement.endBasis, replacement.endedAt = endKind, endBasis, endedAt
 	}

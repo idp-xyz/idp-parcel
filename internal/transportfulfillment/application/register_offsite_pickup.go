@@ -125,7 +125,8 @@ func (result RegisterOffsitePickupResult) SegmentContinuationReference() string 
 }
 
 // SegmentEntryRefusal 非空说明收寄（或更正）已登记、段那一半被领域正当拒绝——首登进段答`段已关闭`，
-// 更正重派生答`无可替代的参与`；与 SegmentContinuationReference 不会同时非空——理由同交接那一侧。
+// 更正重派生答`无可替代的参与`或`更正后的起点晚于继承的终点`；与 SegmentContinuationReference 不会同时非空
+// ——理由同交接那一侧。
 func (result RegisterOffsitePickupResult) SegmentEntryRefusal() SegmentEntryRefusal {
 	return result.segmentRefusal
 }
