@@ -1,8 +1,8 @@
 # `SourceDataRuleDeclaration`：允许矩阵是接单规则包版本下的第三族阶段内容声明；PS 要先长出「资料修订阶段」
 
 Category: enhancement
-Status: draft——通道 2 于 2026-09-07 按 task-0c472fed 做完一次 `/domain-modeling`（见「裁决」）；归属裁给 party-commercial（照 ADR-0058），PS 侧要补一个词条、一个阶段判断与一只消费适配器，三件都等 PC 声明表族先立；「要你答的问题」答完后拆两半各转 ready-for-agent
-Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
+Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边拆两段**：不依赖 PC 的那段（词条「资料修订阶段」进 CONTEXT、领域 `AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + ADR-0118）由通道 2 按 task-b77525c9 ③ 在分支 `mcp2-ps-ports` 实施中；依赖 PC 的那段（消费适配器读声明）Blocked by PC 半边
+Blocked by: 消费适配器那段 Blocked by PC 半边；其余不阻
 
 ## 端口今天说什么
 
@@ -57,3 +57,4 @@ Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
 ## Comments
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码，未改 CONTEXT。** 能力边界：读过端口与编排、PS 领域两型、PC 0013 表名与 `DeclaredStageContent`、ADR-0058 全文、UC-PS-002 全文、PC CONTEXT 相关句；**没读** CC/NO 侧今天有哪些能答「阶段」的读口——问题 4 因此留给建模那一步。
+- 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 同意——矩阵正文归 PC 作第三族阶段内容声明，阶段判断归 PS；**Q2** 阶段封闭集照 UC-PS-002 六格原词，不拆；**Q3** 缺格默认 `NotDeclared`，父行带「封闭」标记时缺格读 `Disallowed`；**Q4** CC/NO 阶段事实进 PS **取消费侧读口（ADR-0025 形）**——阶段是修订请求到达那一刻同步要问的，不是事件便车能保证齐全的；PS 立 `ports.*StageView` 一类读口，适配器读 CC/NO 已有读面，读面不存在或未接就是「判不出阶段 → 未决」；它给 CONTEXT-MAP 加 CC→PS、NO→PS 两条消费箭头，**要 ADR，取预留号 0118**；建模时以 CC/NO 代码为准，若发现既有信封已携带阶段事实且同步性不成问题，可在 ADR 里改选并写理由。上面「提议的 PS CONTEXT 词条」按 Q2 进 CONTEXT。Status 由 draft 改 in-progress（PS 不依赖 PC 的那段开工）。

@@ -1,8 +1,8 @@
 # `SourceDataAmendmentAuthorizer`：PC 授权动作没有「资料修订」这一格、裁定结果不带实际决定方；PS 适配器照撤回那只
 
 Category: enhancement
-Status: draft——通道 2 于 2026-09-07 按 task-0c472fed 做完一次 `/domain-modeling`（见「裁决」）；机制半边的头一半在 party-commercial（`AuthorizedAction` 加格 + 合同委派→实际决定方），PS 侧适配器形状已有先例、等 PC 先立；`BD-PS-009` 那半（生产入口、请求方）是实例半边，本票不裁；「要你答的问题」答完后拆两半各转 ready-for-agent
-Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
+Status: blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（`AuthorizedAction` 加「资料修订」格 + 合同委派执行器 + 裁定结果带实际决定方）等 pc-gaps 批（MCP-3，pc-gaps/08 起）**；**PS 半边（适配器照撤回那只）Blocked by PC 半边**；「顺带量到」的生产入口机制半边已按代裁拆到 [04](./04-amendment-production-entry-mechanism-half.md) 承接
+Blocked by: PC 半边（pc-gaps 批，由 MCP-3 立票承接；本目录不替 PC 立票）
 
 ## 端口今天说什么
 
@@ -50,3 +50,4 @@ Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
 ## Comments
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码。** 能力边界：读过端口、编排授权段、PS 两个引用类型、PC `authority_grant.go` 全文、两只先例适配器全文、UC-PS-002 全文；**没读** `AdjudicateCommercialAuthorizationHandler` 的编排细节与 PC 有没有任何委派相关的表——「委派无执行器」是按 `party-commercial-context-gaps` 四票清单与 PC 迁移目录名反推的，PC owner 开工时以代码为准。
+- 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 实际决定方 = 委派方；**Q2** PC 现在立合同委派执行器——是，并入 PC 批队列（MCP-3 当前批后，pc-gaps/08 起），MCP-1 已知会 MCP-3；**Q3** 生产入口现在接——是，拆为本目录 04 票由通道 2 实施。Status 由 draft 改 blocked（等 PC 半边）。

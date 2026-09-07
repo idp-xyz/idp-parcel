@@ -1,8 +1,8 @@
 # `LabelValidityRuleView`：「接受时固定的有效期规则」是终局规则上的一格有效期声明，PS 只消费
 
 Category: enhancement
-Status: draft——通道 2 于 2026-09-07 按 task-0c472fed 做完一次 `/domain-modeling`（见「裁决」）；机制半边的头一半在 party-commercial（`FinalRuleContent` 长一格有效期声明 + 读口），PS 侧的消费适配器等它先立；本票列出的「要你答的问题」答完后拆两半各转 ready-for-agent
-Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
+Status: blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments），裁决与本票「裁决」节一致；**PC 半边等 pc-gaps 批（MCP-3）**：`FinalRuleContent` 长一格有效期声明 + 读口 + 发布通道；**PS 半边（消费适配器 `label_validity_rule.go`）Blocked by PC 半边**，PC 落地后转 ready-for-agent，通道 2 可接
+Blocked by: PC 半边（pc-gaps 批，由 MCP-3 立票承接；本目录不替 PC 立票）
 
 ## 端口今天说什么
 
@@ -47,3 +47,5 @@ Blocked by: 无（裁决前不动代码；PC 半边由 PC owner 认领）
 ## Comments
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码。** 能力边界：读过端口头注、消费编排、`LabelTransaction` 的结果时间、PC 0013 迁移的表名与 `FinalRuleContentView` 声明、ADR-0058 全文、两处 CONTEXT 的相关句；**没读** `FinalRuleContent` 领域类型全文与 `publish_commercial_authority.go` 的 `FinalRuleChannel` 分支细节——「加一格」在那两处怎么落归 PC owner。
+- 2026-09-07 · 通道 2（task-b77525c9 ④ 取证）：**`NewJudgeLabelServiceFinalHandler` 无生产入口是 label-channel/11 有意留的，不是本口欠的。** 该票 Answer「不在本票」节明写三个触发点（TF 首次有效收寄事实到达的 PS 侧 inbox 消费者、面单交易定案那一拍、受控关闭/重开决定生效）「各自一张接线票」且「`cmd/parcel-api` / `cmd/parcel-dispatch` 无装配：与上面第一条同落」。**但那三张接线票至今没立**——`unresolved-review-20260904/remaining-work-a3a4814.md`「面单渠道链」第 2 条已记为余工并指出 label-channel spec 没有一张子票承接；本目录不替那边立票（地盘归 label-channel 目录持有者 / MCP-1 派单）。另：lc/11 把有效期规则读口记为「实例登记面，无 PAR 编号，随首个面单渠道产品的实例登记一起立」，本票裁决把它归到终局规则的声明（`PAR-COM-17`），以本票为准——两处口径不同，读到 lc/11 那句的人以这里为新。
+- 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 起算时刻种类首发只开「渠道结果业务时间」一格；**Q2** 按 CONTEXT 字面归终局规则（接受时固定），不落映射侧——若日后真规则按渠道走，那是新一版声明不是改归属；**Q3** 不在本批，归 `label-channel-service-first-release/20`（第一家真源）。PC 半边并入 PC 批队列（MCP-3 当前批后），PS 半边 Blocked by 它。Status 由 draft 改 blocked。
