@@ -85,3 +85,5 @@ Blocked by: `PAR-NET-14`（实例半边——[参数登记册](../../../docs/pro
 `internal/networkrouting/adapters/postgres/network_catalog.go` 与 `network_definition.go`；`internal/networkrouting/application/` 的三个证据消费点；迁移 `0007_network_definition`、`0008_network_catalog`；ADR-0068、[ADR-0053](../../../docs/adr/0053-network-fact-families-are-derived-not-registrable.md)、[ADR-0052](../../../docs/adr/0052-network-evidence-catalogue-has-an-unconfigured-grade.md)、[ADR-0029](../../../docs/adr/0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)；`PAR-NET-14`、`PAR-NET-16`；`.scratch/syn-wall-door-audit/issues/04` 与票 05。
 
 **跨批依赖**：`label-channel-service-first-release` 的票 `13`（`BUY` 评价到成本准则分值的桥）与票 `01`（平局裁决）。本票产出候选、那两票给候选算分与定序，端到端出计划三件缺一不可。开工时按当时状态与那一批对齐，不重复立票。
+
+**在等本票的**（2026-09-07 通道 2 补记）：[auto-reroute-demo-reachability/02](../../auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md)——让 `rerouteAfterLapse` 被真键走到，前置是初始路由能形成计划，而 `NetworkDefinitions` 对已登记范围只会上抛 `ErrNetworkDefinitionUnresolvable`；本票完成判据第一句到位那天它才能开工，取证见其「裁决」节。
