@@ -34,6 +34,9 @@ Status: in-progress
 | [07](./issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md) | 不会自愈的「未决」照样烧重投预算，烧完落 ABANDONED 且无人重驱（bug，2026-09-02 追加） | — |
 | [08](./issues/08-undecided-stage-and-reason-are-invisible-on-a-real-process.md) | 未决停在哪一站、原因是什么，在真进程上没有任何人读得到（bug，2026-09-02 追加） | 第一层挂 `07` |
 | [09](./issues/09-does-waiting-for-a-customer-supplement-actually-self-heal.md) | 「等待受控补充」真的会自愈吗——ADR-0086 那条前提没人核过（bug，2026-09-02 追加） | — |
+| [10](./issues/10-judgment-ledger-has-no-submission-version-dimension.md) | 判断账没有提交版本维：受控补充后续办重判可能被旧判断压住（bug，2026-09-04 由 `09` 完工报的发现立） | — |
+
+`10` 于 2026-09-07 由通道 2 裁甲并实施（分支 `mcp2-ftr10`，`6d325ca7` + `c0ced2ec`，main 上的 SHA 待重放对照）转 `resolved`；本批此后未收口的只剩 `03`（`PAR-NET-14` 实例半边）与 `06` 的三处落点票（尚未立）。
 
 状态（2026-09-04 通道 2 逐票重核后重写，此后**以各票文件 `Status:` 为准**，本行只作当日快照）：`01`（ADR-0091）、`02`、`04`、`05` 已 `resolved`；`06` 形态半边已 `resolved`，三处落点（接受判断结构化拒绝原因、服务选项进 `parcel-pricing` 特征、`settlement-accounting` 客户赔付读取规则引用）另立实现票——**尚未立**，见 [remaining-work-a3a4814.md](../unresolved-review-20260904/remaining-work-a3a4814.md) 第五节；`03` `blocked`（`PAR-NET-14` 实例半边，`Blocked by:` 行已补）；`07`、`08` 已 `resolved`（ADR-0094 决定四两半都在 main：PC 半边 `542ebc3`，PS 半边 `e6920d3b` 续办门 + `88694d14` 路由行，票面 `53567700`；2026-09-04 由 MCP-1 自 `mcp6-ftr07-d4-ps@574eb6c` 重放入 main）；`09` 已裁 A（ADR-0106，`d8285d5f`）并于 2026-09-04 由 MCP-6 实施完成、MCP-1 自 `mcp6-ftr09@6aadef60` 重放入 main（`84787373`..`aa78b2e5`，翻转+信封+路由同笔 `61e5fb69`，迁移 `parcel_shipment/0016`，端点 `/shipment-requests/supplements` 挂 `UnconfiguredIntake{}`）转 `resolved`——等待受控补充改为入账暂停、由「新提交版本已形成」信封驱动续办；完工报附带一条不在票内的发现（判断账 `acceptance_reachability_judgment` 以（成员+时点）为键无提交版本维，同时点重跑会被 ON CONFLICT 吞掉），已要 MCP-6 在本目录立 draft 票。
 
