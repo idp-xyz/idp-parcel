@@ -1,7 +1,7 @@
 # Decimal 重建门收非规范写法，`percentShare` 真会产出它：同一个数两种写法进语义摘要是两个串
 
 Category: bug
-Status: ready-for-agent——MCP-6 2026-09-07 立票，随 `ParseCanonical` 删除（分支 `mcp6-pp-ratchet` 的 `1d13d510`）；同日接管会话只读复核判为真缺陷，MCP-1 12:2x 裁「转 ready、不并入 task-f31a5650、作 MCP-6 下一单（PP 地盘不换人）」
+Status: in-progress——MCP-6 2026-09-07 立票，随 `ParseCanonical` 删除（分支 `mcp6-pp-ratchet` 的 `1d13d510`，main 上为 `7cef122f`）；同日接管会话只读复核判为真缺陷，MCP-1 12:2x 裁「转 ready、不并入 task-f31a5650、作下一单」；MCP-1 15:4x 派给 MCP-4（task-d3c3a7ac，分支 `mcp4-wbr07` 基 main `0fcbed6e`），16:0x 认领
 Blocked by: 无外部票。「要先裁的一格」在本票内先裁（`/domain-modeling`，收紧与语义摘要可比性一起；落 ADR 时预留号已尽，向 MCP-1 取号）
 
 ## 现状（四格钉在 `internal/parcelpricing/domain/decimal_canonical_rebuild_test.go`，锚 `2efef58e`）
@@ -50,3 +50,27 @@ Blocked by: 无外部票。「要先裁的一格」在本票内先裁（`/domain
 ## 边界
 
 不动 `ParseDecimal` 的宽收语义；不动金额取整策略（ADR-0107）——取整是业务声明，规范写法是表示层纪律，两件事。
+
+## 裁决（MCP-4 2026-09-07，task-d3c3a7ac；按 MCP-1 派单「owner 授权自决口径」）
+
+按 `/domain-modeling` 走过：边界是 `parcel-pricing` 一个上下文内的表示层，不跨上下文；术语用 CONTEXT 原词——「语义摘要」「版本内容摘要」「规范化版本」「重放」「冲突」；没有新词要进 CONTEXT。
+
+**裁甲，且把「规范写法」收进 `Decimal.valid()` 本身，而不是只在 `decimalFrom` 加一道门。** 三条理由：
+
+1. **它守的是值对象的不变量，不是某一道边界的纪律。** 「同一个数只有一种字段写法」要对 `Decimal` 的每个持有者都成立才有用：`NewMoney` 是 `percentShare` 产出物进费用行的那道门，`ChargeLine.valid()`、`Weight.valid()`、`ConversionStep.valid()` 是整图重验时逐个决定的门，评价快照、价卡登记快照、序列登记快照三条重建门最后都落在整图 `valid()` 上。规范性写进 `valid()`，这些门一个都不必改就全部继承拒绝；只改 `decimalFrom`，`NewMoney` 那道门对非规范写法仍然开着，下一个按字段构造的生产路径照样能进费用行——上面第四格讲的正是这种路径已经存在过一次。
+2. **代价此刻为零，且只有此刻为零。** ADR-0014 Consequences「代价在此刻支付最低……晚于形成第一条真实评价再引入，就要同时处理存量摘要的归属版本」在这里逐字成立：仓内无租户、无生产评价；`internal/parcelpricing` 下没有持久化的快照夹具（无 `testdata`）；本机门禁库是一次性容器。乙那层版本分支要长期维护，为一个今天不存在的存量付这个价不值。
+3. **丙留着的那道口子正是缺陷本体。** 丙只改 `percentShare`，重建门继续原样收回非规范写法——等于承认快照里可以躺着一个 `valid()` 通过、`String()` 却不是规范写法的数；而语义摘要按 `String()` 取值，这格一开摘要的可比性就没有保证。
+
+**不换规范化版本（`PPC-5` 不动）。** ADR-0014 说换号「必须来自规范化结构的变化」：本裁决不动 `fingerprint.go` 里任何文档形状，每一个规范写法的 `Decimal` 在改前改后映射成逐字节相同的规范化文档；唯一会变的是「快照里带着非规范写法的评价」——它们在新门下**重建被拒**（与 `ErrEvaluationSnapshotInvalid` 同格），不是被按另一种形状重算出另一个摘要。这属票面说的「一次性重算窗口」，不是形状换号。
+
+**`decimalFrom` 不规范化。** 「落地」第 2 条给了两种写法：校验拒绝，或先规范化再靠摘要自校兜底。取前者（经 `valid()`）：重建门的职责是「坏写入在重建处暴露」（`evaluation_snapshot.go` 头注原句）；一个在读回时悄悄把 `1.00` 改成 `1` 的门，会把生产路径上新出现的非规范产出者藏到第一次重放才露头，而且露头时报的是摘要不符，与真正的内容冲突长同一张脸。
+
+**CONTEXT 不改。** 「版本内容摘要」词条已写「按稳定结构生成」；规范写法是让那句在数字这一格成立的实现纪律，不是新的领域语言，本裁决没有引入或改写任何术语、不变量或生命周期。
+
+**ADR 取 0123**（MCP-1 预留号）：记「规范写法是 `Decimal` 值不变量；语义摘要与内容摘要按规范写法比；重建门拒绝而不规范化；不换 `PPC` 号；一次性窗口在无生产评价的今天支付」这五件的取舍，与被否的乙、丙。
+
+### 越权风险点（单列，供 MCP-1 / owner 复核）
+
+- **收紧的是 `valid()` 而不是只收 `decimalFrom`。** 派单与票面写的都是「`decimalFrom` 校验」，我把门往里推到了值对象——影响面是整个 `internal/parcelpricing/domain` 的 `Decimal` 持有者，不只重建边界。理由在上面第 1 条；若 owner 认为值对象不变量的变更该另走一轮，退回「只在 `decimalFrom` 拒绝」是一处改动，ADR-0123 Decision 一相应改一句。
+- **「不换 `PPC` 号」是对 ADR-0014「规范化结构的变化」的一次解释。** 我读作「文档形状」，不含「值域收窄」。若 owner 读法不同，换号是 `canonicalizationVersion` 那一行加版本门的几处测试，ADR-0123 Decision 四要改。
+- **「今天无存量非规范快照」是前提不是取证。** 仓内查得的是无 `testdata`、无租户；本机门禁库是一次性容器；任何部署环境的库我没有、也没法查。ADR-0123 里把它写成「本记录成立的前提」而不是事实陈述。
