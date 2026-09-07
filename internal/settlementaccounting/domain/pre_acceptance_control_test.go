@@ -35,28 +35,101 @@ func TestDeclaringNoPreAcceptanceControlDemandsAnExplicitBasis(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0047「`要求`必带方式与采用的政策引用」——方式决定走资金冻结还是信用暴露，
-// 政策引用让控制结果保存得下 CONTEXT 要求的「实际采用的结算政策」。缺任何一样构造即死。
-func TestARequiredControlPolicyCarriesItsMethodAndAdoptedPolicy(t *testing.T) {
-	adopted, err := domain.NewAdoptedPolicyReference("PC-SETTLEMENT-POLICY-V3")
-	if err != nil {
-		t.Fatalf("new adopted policy reference: %v", err)
+// Covers: ADR-0122 决定一——`要求`带的是策略正文里**要执行的控制项**（种类 × 判断顺序）、共同
+// 通过条件与采用的控制策略版本；结算方式与结算政策仍随答复带回，因为 CONTEXT 要求每项冻结与
+// 信用暴露保存「实际采用的结算政策、预付/账期方式」，只是它们不再决定走哪条控制路。缺任何
+// 一样构造即死。
+func TestARequiredControlPolicyCarriesItsItemsJointConditionAndAdoptedBases(t *testing.T) {
+	adopted := controlValue(t, domain.NewAdoptedPolicyReference, "PC-SETTLEMENT-POLICY-V3")
+	controlPolicy := controlValue(t, domain.NewControlPolicyReference, "PC-CONTROL-POLICY/v1")
+	freeze := controlItem(t, domain.PrepaidFreezeControl, 1)
+	credit := controlItem(t, domain.CreditCheckControl, 2)
+
+	cases := map[string]func() (domain.PreAcceptanceControlPolicy, error){
+		"没有控制项的要求什么也执行不了": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy(nil, domain.AllControlsPass, controlPolicy, domain.TermsSettlement, adopted)
+		},
+		"共同通过条件缺席就说不出多项怎么合起来看": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze}, domain.JointPassConditionInvalid, controlPolicy, domain.TermsSettlement, adopted)
+		},
+		"没有控制策略引用的结果保存不下按哪一版策略执行": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze}, domain.AllControlsPass, domain.ControlPolicyReference{}, domain.TermsSettlement, adopted)
+		},
+		"没有方式的结果保存不下预付/账期方式": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze}, domain.AllControlsPass, controlPolicy, domain.SettlementMethodInvalid, adopted)
+		},
+		"没有结算政策引用的结果保存不下采用依据": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze}, domain.AllControlsPass, controlPolicy, domain.TermsSettlement, domain.AdoptedPolicyReference{})
+		},
+		"同一种控制两行答不出该按哪条": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze, controlItem(t, domain.PrepaidFreezeControl, 2)}, domain.AllControlsPass, controlPolicy, domain.TermsSettlement, adopted)
+		},
+		"两行抢同一个判断顺序就没有顺序": func() (domain.PreAcceptanceControlPolicy, error) {
+			return domain.NewRequiredControlPolicy([]domain.ControlItem{freeze, controlItem(t, domain.CreditCheckControl, 1)}, domain.AllControlsPass, controlPolicy, domain.TermsSettlement, adopted)
+		},
+	}
+	for name, construct := range cases {
+		if _, err := construct(); !errors.Is(err, domain.ErrInvalidControlPolicy) {
+			t.Fatalf("%s：err = %v, want ErrInvalidControlPolicy", name, err)
+		}
 	}
 
-	if _, err := domain.NewRequiredControlPolicy(domain.SettlementMethodInvalid, adopted); !errors.Is(err, domain.ErrInvalidControlPolicy) {
-		t.Fatalf("err = %v, want ErrInvalidControlPolicy——没有方式的要求分不了支", err)
-	}
-	if _, err := domain.NewRequiredControlPolicy(domain.TermsSettlement, domain.AdoptedPolicyReference{}); !errors.Is(err, domain.ErrInvalidControlPolicy) {
-		t.Fatalf("err = %v, want ErrInvalidControlPolicy——没有政策引用的控制保存不下采用依据", err)
-	}
-
-	policy, err := domain.NewRequiredControlPolicy(domain.TermsSettlement, adopted)
+	// 交进去的顺序是乱的，读回来必须按判断顺序：执行方就是照这个次序走的。
+	policy, err := domain.NewRequiredControlPolicy(
+		[]domain.ControlItem{credit, freeze}, domain.AllControlsPass, controlPolicy, domain.TermsSettlement, adopted)
 	if err != nil {
 		t.Fatalf("new required control policy: %v", err)
 	}
 	if !policy.ControlRequired() || policy.Method() != domain.TermsSettlement || policy.AdoptedPolicy() != adopted {
 		t.Fatalf("policy = %v/%v; 方式与采用政策没有随答复带回", policy.Method(), policy.AdoptedPolicy())
 	}
+	if policy.ControlPolicy() != controlPolicy || policy.JointPassCondition() != domain.AllControlsPass {
+		t.Fatalf("control policy/joint = %q/%q; 采用的控制策略与共同通过条件没有随答复带回",
+			policy.ControlPolicy(), policy.JointPassCondition())
+	}
+	items := policy.Items()
+	if len(items) != 2 || items[0].Kind() != domain.PrepaidFreezeControl || items[1].Kind() != domain.CreditCheckControl {
+		t.Fatalf("items = %v; 控制项没有按判断顺序交回", items)
+	}
+	if items[0].Order() != 1 || items[1].Order() != 2 {
+		t.Fatalf("orders = %d/%d, want 1/2", items[0].Order(), items[1].Order())
+	}
+}
+
+// Covers: 一项控制立不住的两种情形——种类集外、判断顺序不是正整数。零值种类不是任何一条
+// 控制路，接受它就是让执行方在 switch 里落进 default。
+func TestAControlItemNeedsAKnownKindAndAPositiveOrder(t *testing.T) {
+	if _, err := domain.NewControlItem(domain.ControlKindInvalid, 1); !errors.Is(err, domain.ErrInvalidControlPolicy) {
+		t.Fatalf("err = %v, want ErrInvalidControlPolicy for an unknown kind", err)
+	}
+	if _, err := domain.NewControlItem(domain.PrepaidFreezeControl, 0); !errors.Is(err, domain.ErrInvalidControlPolicy) {
+		t.Fatalf("err = %v, want ErrInvalidControlPolicy for order 0", err)
+	}
+	if domain.PrepaidFreezeControl.String() != "PREPAID_FREEZE" || domain.CreditCheckControl.String() != "CREDIT_CHECK" {
+		t.Fatalf("kind names = %q/%q; 与 party-commercial 的正文词汇不同名，翻译就要多一层对照表",
+			domain.PrepaidFreezeControl, domain.CreditCheckControl)
+	}
+	if domain.AllControlsPass.String() != "ALL_CONTROLS_PASS" {
+		t.Fatalf("joint pass = %q, want ALL_CONTROLS_PASS", domain.AllControlsPass)
+	}
+}
+
+func controlItem(t *testing.T, kind domain.ControlKind, order uint32) domain.ControlItem {
+	t.Helper()
+	item, err := domain.NewControlItem(kind, order)
+	if err != nil {
+		t.Fatalf("new control item %s/%d: %v", kind, order, err)
+	}
+	return item
+}
+
+func controlValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+	t.Helper()
+	built, err := construct(raw)
+	if err != nil {
+		t.Fatalf("construct %q: %v", raw, err)
+	}
+	return built
 }
 
 // Covers: 零值不得被读成一个回答。端口没答话时应用层拿到的是零值，若它报告「不要求控制」，

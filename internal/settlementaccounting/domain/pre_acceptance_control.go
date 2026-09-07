@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"sort"
 	"time"
 )
 
@@ -153,19 +154,110 @@ func NewAdoptedPolicyReference(value string) (AdoptedPolicyReference, error) {
 	return AdoptedPolicyReference{required}, err
 }
 
-// PreAcceptanceControlPolicy 是商业侧对「这个范围要不要接受前财务控制、按哪种结算方式」
+// ControlPolicyReference 指名本次控制实际采用的接受前财务控制策略版本——控制项从它的正文
+// 里来（ADR-0115 / ADR-0122）。它与 AdoptedPolicyReference 是两份不同的采用依据：结算政策
+// 说这个范围按预付还是账期结算，控制策略说接受前要执行哪些控制；两者都要保存，哪一份都
+// 替不了另一份。
+type ControlPolicyReference struct{ requiredValue }
+
+func NewControlPolicyReference(value string) (ControlPolicyReference, error) {
+	required, err := newRequiredValue("control policy reference", value)
+	return ControlPolicyReference{required}, err
+}
+
+// ControlKind 是策略正文里一项控制的种类，本上下文自有词汇（与 party-commercial 的正文词汇
+// 同名但不 import，纪律同 SettlementMethod）。封闭集里刻意没有「明确无控制」：那由合同声明
+// 并带不适用依据（ADR-0115 决定一），进了这里就是给「默认通过」开一条路。
+type ControlKind uint8
+
+const (
+	ControlKindInvalid ControlKind = iota
+	// PrepaidFreezeControl 在运营结算余额上占用明确金额——走冻结账本。
+	PrepaidFreezeControl
+	// CreditCheckControl 在信用暴露账本上占用额度——走暴露账本。
+	CreditCheckControl
+)
+
+func (kind ControlKind) valid() bool {
+	return kind >= PrepaidFreezeControl && kind <= CreditCheckControl
+}
+
+func (kind ControlKind) String() string {
+	switch kind {
+	case PrepaidFreezeControl:
+		return "PREPAID_FREEZE"
+	case CreditCheckControl:
+		return "CREDIT_CHECK"
+	default:
+		return ""
+	}
+}
+
+// JointPassCondition 是一版策略的共同通过条件，封闭集，首发一值。它随答复带回给执行方与
+// 调用方读，本上下文**不据它汇总**：CONTEXT 写死「由 `parcel-shipment` 按策略的共同通过条件
+// 形成接受判断」，本上下文只让每项结果各自成立。集外取值报错不吸收（ADR-0025）。
+type JointPassCondition uint8
+
+const (
+	JointPassConditionInvalid JointPassCondition = iota
+	AllControlsPass
+)
+
+func (condition JointPassCondition) valid() bool {
+	return condition == AllControlsPass
+}
+
+func (condition JointPassCondition) String() string {
+	switch condition {
+	case AllControlsPass:
+		return "ALL_CONTROLS_PASS"
+	default:
+		return ""
+	}
+}
+
+// ControlItem 是策略正文里要执行的一项控制：种类 × 判断顺序。失败处置与责任不在其中——
+// 它们答的是委托去向，归 parcel-shipment 经自己的商业缝读，本上下文执行控制不需要它们
+// （ADR-0122 决定四）。
+type ControlItem struct {
+	kind  ControlKind
+	order uint32
+}
+
+// NewControlItem 造一项控制。顺序必须是正整数：零值顺序在 SQL 与领域里都不是一个位置。
+func NewControlItem(kind ControlKind, order uint32) (ControlItem, error) {
+	if !kind.valid() || order == 0 {
+		return ControlItem{}, ErrInvalidControlPolicy
+	}
+	return ControlItem{kind: kind, order: order}, nil
+}
+
+func (item ControlItem) Kind() ControlKind {
+	return item.kind
+}
+
+func (item ControlItem) Order() uint32 {
+	return item.order
+}
+
+// PreAcceptanceControlPolicy 是商业侧对「这个范围要不要接受前财务控制、要执行哪些控制项」
 // 的回答。
 //
 // `不要求`必须携带依据。CONTEXT 明写不得用一次虚假零金额冻结或默认信用通过冒充无控制，
 // 而没有依据的`不要求`正是「默认信用通过」的做法——它让一次未执行的控制看起来像通过了。
 // 零金额那条路已经被 `NewFreezeRequest` 在构造期堵死，这里堵的是另一条。
 //
-// `要求`必须携带方式与采用的政策引用（ADR-0047）：方式决定走资金冻结还是信用暴露，
-// 政策引用让控制结果保存得下「实际采用的结算政策」。两种形状经各自的构造函数进来，
-// 混搭（要求带不适用依据、不要求带方式）没有入口。
+// `要求`必须携带控制项集合、共同通过条件与采用的控制策略版本（ADR-0122）：控制项决定
+// 走哪几条控制路、按什么顺序；此外仍带结算方式与采用的结算政策引用，因为 CONTEXT 要求每项
+// 冻结与信用暴露保存「实际采用的结算政策、预付/账期方式」——方式从此只是结果上要保存的
+// 一格，不再是选路的开关（ADR-0047 那条派生正是 pn-02-w03 禁的）。两种形状经各自的构造函数
+// 进来，混搭（要求带不适用依据、不要求带控制项）没有入口。
 type PreAcceptanceControlPolicy struct {
 	requirement   ControlRequirement
 	basis         ControlBasisReference
+	items         []ControlItem
+	jointPass     JointPassCondition
+	controlPolicy ControlPolicyReference
 	method        SettlementMethod
 	adoptedPolicy AdoptedPolicyReference
 }
@@ -178,16 +270,43 @@ func NewNoControlPolicy(basis ControlBasisReference) (PreAcceptanceControlPolicy
 	return PreAcceptanceControlPolicy{requirement: ControlNotRequired, basis: basis}, nil
 }
 
-// NewRequiredControlPolicy 造「本范围要求接受前财务控制」的回答，方式与采用政策必备。
+// NewRequiredControlPolicy 造「本范围要求接受前财务控制」的回答。至少一项控制；同一种控制
+// 不得两行、两行不得抢同一个判断顺序（与 party-commercial 正文的行级约束同形，ADR-0115
+// 决定二）——违反任一条都答不出「该按哪条执行」。交回的控制项按判断顺序排好，执行方照序走。
 func NewRequiredControlPolicy(
+	items []ControlItem,
+	jointPass JointPassCondition,
+	controlPolicy ControlPolicyReference,
 	method SettlementMethod,
 	adoptedPolicy AdoptedPolicyReference,
 ) (PreAcceptanceControlPolicy, error) {
-	if !method.valid() || !adoptedPolicy.valid() {
+	if len(items) == 0 || !jointPass.valid() || !controlPolicy.valid() ||
+		!method.valid() || !adoptedPolicy.valid() {
 		return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
 	}
+	kinds := make(map[ControlKind]struct{}, len(items))
+	orders := make(map[uint32]struct{}, len(items))
+	ordered := make([]ControlItem, 0, len(items))
+	for _, item := range items {
+		if !item.kind.valid() || item.order == 0 {
+			return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
+		}
+		if _, seen := kinds[item.kind]; seen {
+			return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
+		}
+		if _, seen := orders[item.order]; seen {
+			return PreAcceptanceControlPolicy{}, ErrInvalidControlPolicy
+		}
+		kinds[item.kind] = struct{}{}
+		orders[item.order] = struct{}{}
+		ordered = append(ordered, item)
+	}
+	sort.Slice(ordered, func(left, right int) bool { return ordered[left].order < ordered[right].order })
 	return PreAcceptanceControlPolicy{
 		requirement:   ControlRequired,
+		items:         ordered,
+		jointPass:     jointPass,
+		controlPolicy: controlPolicy,
 		method:        method,
 		adoptedPolicy: adoptedPolicy,
 	}, nil
@@ -199,6 +318,19 @@ func (policy PreAcceptanceControlPolicy) Requirement() ControlRequirement {
 
 func (policy PreAcceptanceControlPolicy) Basis() ControlBasisReference {
 	return policy.basis
+}
+
+// Items 按判断顺序交回要执行的控制项。交回副本：调用方改它改不到策略。
+func (policy PreAcceptanceControlPolicy) Items() []ControlItem {
+	return append([]ControlItem(nil), policy.items...)
+}
+
+func (policy PreAcceptanceControlPolicy) JointPassCondition() JointPassCondition {
+	return policy.jointPass
+}
+
+func (policy PreAcceptanceControlPolicy) ControlPolicy() ControlPolicyReference {
+	return policy.controlPolicy
 }
 
 func (policy PreAcceptanceControlPolicy) Method() SettlementMethod {
