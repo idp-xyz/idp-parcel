@@ -603,6 +603,7 @@ type amendmentFixture struct {
 	rules      *sourceDataRuleDouble
 	identities *sourceDataIdentityFactory
 	downstream *sourceDataHandoffDouble
+	stage      *stageFactsDouble
 	steps      []string
 }
 
@@ -614,12 +615,14 @@ func newAmendmentFixture(t *testing.T) *amendmentFixture {
 		rules:      &sourceDataRuleDouble{allowance: ports.SourceDataAmendmentAllowed},
 		identities: &sourceDataIdentityFactory{t: t},
 		downstream: &sourceDataHandoffDouble{},
+		stage:      newStageFactsDouble(),
 	}
 	value.sources = &sourceRepositoryDouble{
 		records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{},
 		record:  func(step string) { value.steps = append(value.steps, step) },
 	}
 	value.authorizer.record = func(step string) { value.steps = append(value.steps, step) }
+	value.stage.record = func(step string) { value.steps = append(value.steps, step) }
 	value.handler = application.NewAmendCustomerSourceDataHandler(application.AmendCustomerSourceDataDeps{
 		Sources:    value.sources,
 		Requests:   value.requests,
@@ -627,9 +630,118 @@ func newAmendmentFixture(t *testing.T) *amendmentFixture {
 		Rules:      value.rules,
 		Identities: value.identities,
 		Downstream: value.downstream,
-		Clock:      fixedClock{at: handlerClockAt},
+		Stage: application.AmendmentStageDeps{
+			ResponsibilityStarts: value.stage,
+			LabelTransactions:    value.stage,
+			Finals:               value.stage,
+			Customs:              value.stage,
+			Consolidation:        value.stage,
+		},
+		Clock: fixedClock{at: handlerClockAt},
 	})
 	return value
+}
+
+// stageFactsDouble 一只顶五个阶段事实读口，按包裹登记答复。默认每格都是已知`不在`——那是
+// 「已接受、尚未收寄」的证据，让既有用例照旧走到矩阵；要停在阶段那一步的用例自己把某格改成
+// `不知道`或`在`。它记下问过哪些包裹：委托级范围要逐成员问，包裹级范围只问那一件。
+type stageFactsDouble struct {
+	received map[string]bool
+	finals   map[string]bool
+	bagged   map[string]domain.StageFact
+	customs  map[string]ports.CustomsStageFacts
+	err      error
+	asked    []string
+	record   func(string)
+}
+
+func newStageFactsDouble() *stageFactsDouble {
+	return &stageFactsDouble{
+		received: map[string]bool{},
+		finals:   map[string]bool{},
+		bagged:   map[string]domain.StageFact{},
+		customs:  map[string]ports.CustomsStageFacts{},
+	}
+}
+
+func (double *stageFactsDouble) note(parcel domain.DeclaredParcelID) {
+	double.asked = append(double.asked, parcel.String())
+	if double.record != nil {
+		double.record("judge-stage")
+	}
+}
+
+func (double *stageFactsDouble) FindResponsibilityStart(
+	_ context.Context,
+	_ domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (ports.IntakeAdoptionRecord, bool, error) {
+	double.note(parcel)
+	if double.err != nil {
+		return ports.IntakeAdoptionRecord{}, false, double.err
+	}
+	return ports.IntakeAdoptionRecord{}, double.received[parcel.String()], nil
+}
+
+func (double *stageFactsDouble) ListByCoveredParcel(
+	context.Context,
+	domain.TenantID,
+	domain.DeclaredParcelID,
+) ([]domain.LabelTransaction, error) {
+	return nil, double.err
+}
+
+func (double *stageFactsDouble) FindCurrentFinal(
+	_ context.Context,
+	_ domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (ports.FinalOutcomeRecord, bool, error) {
+	if double.err != nil {
+		return ports.FinalOutcomeRecord{}, false, double.err
+	}
+	return ports.FinalOutcomeRecord{}, double.finals[parcel.String()], nil
+}
+
+func (double *stageFactsDouble) LoadBaggingFact(
+	_ context.Context,
+	_ domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (domain.StageFact, error) {
+	if double.err != nil {
+		return domain.StageFactUnknown, double.err
+	}
+	if fact, set := double.bagged[parcel.String()]; set {
+		return fact, nil
+	}
+	return domain.StageFactAbsent, nil
+}
+
+func (double *stageFactsDouble) LoadCustomsStageFacts(
+	_ context.Context,
+	_ domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (ports.CustomsStageFacts, error) {
+	if double.err != nil {
+		return ports.CustomsStageFacts{}, double.err
+	}
+	if facts, set := double.customs[parcel.String()]; set {
+		return facts, nil
+	}
+	return ports.CustomsStageFacts{
+		DataForming: domain.StageFactAbsent,
+		Submitted:   domain.StageFactAbsent,
+		CaseClosed:  domain.StageFactAbsent,
+	}, nil
+}
+
+// unconnectedCustoms 是关务读面未接时的答复：三格`不知道`（与 adapters/customscompliance 的
+// UnconnectedCustomsStageView 同值，这里不引它——本包用例不依赖适配器包）。
+func unconnectedCustoms() ports.CustomsStageFacts {
+	return ports.CustomsStageFacts{
+		DataForming: domain.StageFactUnknown,
+		Submitted:   domain.StageFactUnknown,
+		CaseClosed:  domain.StageFactUnknown,
+	}
 }
 
 // amendmentSourceIdentity 是修订请求自己的来源身份，与产生委托的那一次提交分开：同一个客户
@@ -909,8 +1021,10 @@ func (double *amendmentAuthorizerDouble) AuthorizeSourceDataAmendment(
 	}, nil
 }
 
-// sourceDataRuleDouble 留住每一次矩阵查询：允许性按「哪一处、哪个动作」登记，矩阵收没收到
-// 意图只有在它实际收到的参数上才验得出来（AT-PS-020）。
+// sourceDataRuleDouble 留住每一次矩阵查询：允许性按「哪一处、哪个动作、哪个阶段」登记，矩阵
+// 收没收到意图与阶段只有在它实际收到的参数上才验得出来（AT-PS-020；PS CONTEXT「资料修订阶段」）。
+// 收到零值阶段即报错而不是照答：端口头注要求实现方拒答没判出阶段的查询，替身跟着这个形状，
+// 编排若漏判阶段就会在这里红，而不是绿着像接上了。
 type sourceDataRuleDouble struct {
 	allowance ports.SourceDataAmendmentAllowance
 	err       error
@@ -926,6 +1040,9 @@ func (double *sourceDataRuleDouble) DeclareSourceDataAmendment(
 	double.asked = append(double.asked, query)
 	if double.err != nil {
 		return ports.SourceDataAmendmentNotDeclared, double.err
+	}
+	if !query.Stage.Determined() {
+		return ports.SourceDataAmendmentNotDeclared, errors.New("source data rule double: asked without a determined stage")
 	}
 	return double.allowance, nil
 }
@@ -968,4 +1085,172 @@ var (
 	_ ports.SourceDataAmendmentAuthorizer = (*amendmentAuthorizerDouble)(nil)
 	_ ports.SourceDataRuleDeclaration     = (*sourceDataRuleDouble)(nil)
 	_ ports.SourceDataVersionIdentity     = (*sourceDataIdentityFactory)(nil)
+	_ ports.ResponsibilityStartView       = (*stageFactsDouble)(nil)
+	_ ports.LabelTransactionsByParcelView = (*stageFactsDouble)(nil)
+	_ ports.CurrentFinalView              = (*stageFactsDouble)(nil)
+	_ ports.CustomsStageView              = (*stageFactsDouble)(nil)
+	_ ports.ConsolidationStageView        = (*stageFactsDouble)(nil)
 )
+
+// Covers: UC-PS-002 步骤 6「按字段、范围、阶段和规则判断」——阶段先于矩阵判出并随查询进矩阵
+// （PS CONTEXT「资料修订阶段」；`BD-PS-010` 版本化阶段矩阵）。委托级范围按接受基线逐成员问、
+// 取最靠后的一格：一个成员已收寄，改整份委托的收件人就按「已收寄或已测量」那一行问。
+func TestTheStageIsJudgedBeforeTheMatrixAndTravelsWithTheQuery(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.received["parcel-2"] = true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AmendmentRecorded {
+		t.Fatalf("outcome = %q, want RECORDED（未决原因 %q）", result.Outcome(), result.PendingReason())
+	}
+	if len(fixture.rules.asked) != 1 || fixture.rules.asked[0].Stage != domain.StageReceivedOrMeasured {
+		t.Fatalf("matrix queries = %#v; 阶段没有随查询进矩阵，或没取成员中最靠后的一格", fixture.rules.asked)
+	}
+	if len(fixture.stage.asked) != 2 {
+		t.Fatalf("问了 %v；委托级范围要按接受基线逐成员问", fixture.stage.asked)
+	}
+	if !stepPrecedes(fixture.steps, "authorize-amendment", "judge-stage") {
+		t.Fatalf("steps = %v; 阶段判断跑到授权前面去了——授权未决时不该去读邻接上下文", fixture.steps)
+	}
+}
+
+// stepPrecedes 报告 first 是否在 second 之前出现过。
+func stepPrecedes(steps []string, first, second string) bool {
+	seenFirst := false
+	for _, step := range steps {
+		switch step {
+		case first:
+			seenFirst = true
+		case second:
+			return seenFirst
+		}
+	}
+	return false
+}
+
+// Covers: 包裹级范围只判那一件包裹的阶段，不被同委托其他成员的进度拖后：parcel-2 已提交关务，
+// 改 parcel-1 的货物描述仍按 parcel-1 自己的阶段问矩阵。
+func TestAParcelScopedAmendmentIsJudgedOnThatParcelAlone(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.customs["parcel-2"] = ports.CustomsStageFacts{
+		DataForming: domain.StageFactPresent,
+		Submitted:   domain.StageFactPresent,
+		CaseClosed:  domain.StageFactAbsent,
+	}
+	command := fixture.command(t)
+	scope, err := domain.NewParcelScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+		mustValue(t, domain.NewSourceDataGroupReference, "GOODS_DESCRIPTION"),
+	)
+	if err != nil {
+		t.Fatalf("new parcel scoped source data: %v", err)
+	}
+	command.Scope = scope
+
+	if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(fixture.stage.asked) != 1 || fixture.stage.asked[0] != "parcel-1" {
+		t.Fatalf("问了 %v，want 只问 parcel-1", fixture.stage.asked)
+	}
+	if len(fixture.rules.asked) != 1 || fixture.rules.asked[0].Stage != domain.StageAcceptedNotYetReceived {
+		t.Fatalf("matrix queries = %#v; 包裹级范围的阶段被别的成员拖后了", fixture.rules.asked)
+	}
+}
+
+// Covers: 「判不出阶段则未决，不得默认为最早阶段」（02 票代裁；PS CONTEXT 词条）——关务读面
+// 未接时三格`不知道`，编排停在未决、带封闭原因与续办引用，不问矩阵、不签发身份、不形成版本。
+// 判成「已接受、尚未收寄」去问矩阵是本用例要抓的错：一个没接读面的关务会让每次修订都按最早
+// 阶段放行。
+func TestAnUndeterminedStageStallsBeforeTheMatrixInsteadOfDefaultingToTheEarliest(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.customs["parcel-1"] = unconnectedCustoms()
+	fixture.stage.customs["parcel-2"] = unconnectedCustoms()
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.SourceDataAmendmentStageUndetermined {
+		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED", result.PendingReason())
+	}
+	if result.ContinuationReference().String() == "" {
+		t.Fatal("未决没有带续办引用")
+	}
+	if fixture.rules.calls != 0 {
+		t.Fatalf("矩阵被问了 %d 次；判不出阶段就不该带一个猜出来的阶段去问", fixture.rules.calls)
+	}
+	if fixture.identities.issued != 0 || fixture.requests.saved != nil {
+		t.Fatal("一次停在阶段判断的修订签发了身份或保存了委托")
+	}
+}
+
+// Covers: 一半成员判得出、一半判不出时委托级仍判不出——已知成员的阶段替不了不知道的那一个，
+// 而「取最靠后」正需要每个成员都已知。
+func TestOneUndeterminedMemberLeavesTheShipmentStageUndetermined(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.received["parcel-1"] = true
+	fixture.stage.bagged["parcel-2"] = domain.StageFactUnknown
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AmendmentUndecided ||
+		result.PendingReason() != application.SourceDataAmendmentStageUndetermined {
+		t.Fatalf("outcome = %q reason = %q, want UNDECIDED / STAGE_UNDETERMINED", result.Outcome(), result.PendingReason())
+	}
+}
+
+// Covers: 事实读不回与事实答「不知道」分开——某个读口调不通停在`阶段事实读不回`（等依赖恢复），
+// 不与`判不出`（等读面接上）共用一格；续办引用随原因不同而不同。
+func TestAStageFactSourceOutageIsNotReportedAsAnUndeterminedStage(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.err = errors.New("adoption register unreachable")
+
+	outage, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if outage.Outcome() != application.AmendmentUndecided ||
+		outage.PendingReason() != application.SourceDataAmendmentStageFactUnavailable {
+		t.Fatalf("outcome = %q reason = %q, want UNDECIDED / STAGE_FACT_UNAVAILABLE", outage.Outcome(), outage.PendingReason())
+	}
+
+	undetermined := newAmendmentFixture(t)
+	undetermined.stage.customs["parcel-1"] = unconnectedCustoms()
+	stalled, err := undetermined.handler.Handle(context.Background(), undetermined.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if stalled.ContinuationReference() == outage.ContinuationReference() {
+		t.Fatalf("两种停下原因派生了同一条续办引用 %q", outage.ContinuationReference())
+	}
+}
+
+// Covers: 六格里靠后的格压过靠前的格，在编排读回的真实事实上成立：包裹已有当前有效终局，即便
+// 收寄与关务事实都在，问矩阵的阶段是「案件已关闭或服务已完成」。
+func TestACompletedParcelIsJudgedAtTheLastStageWhateverElseIsPresent(t *testing.T) {
+	fixture := newAmendmentFixture(t)
+	fixture.stage.received["parcel-1"] = true
+	fixture.stage.customs["parcel-1"] = ports.CustomsStageFacts{
+		DataForming: domain.StageFactPresent,
+		Submitted:   domain.StageFactPresent,
+		CaseClosed:  domain.StageFactAbsent,
+	}
+	fixture.stage.finals["parcel-1"] = true
+
+	if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(fixture.rules.asked) != 1 || fixture.rules.asked[0].Stage != domain.StageCaseClosedOrServiceCompleted {
+		t.Fatalf("matrix queries = %#v; want 阶段 CASE_CLOSED_OR_SERVICE_COMPLETED", fixture.rules.asked)
+	}
+}

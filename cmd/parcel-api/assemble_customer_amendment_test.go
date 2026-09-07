@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,9 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	pscustoms "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/customscompliance"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	psnode "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -24,10 +27,11 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证资料修订编排的装配（票 ps-port-remainder/04，形照 ADR-0106 决定四）：
 // 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（提供方授权那半
-// 未立，票 03），授权过了停在矩阵未登记（提供方矩阵那半未立，票 02）；两处都不形成版本、不入队
-// 「资料版本已形成」意图。第三条钉住交接壳：意图在自己的事务里入队恰好一封、重放不翻倍——版本与
-// 意图不同事务是编排今天的形状，壳只负责把 RequireExecutor 那一格接对。第四条把第一个停点推到
-// HTTP 面上：端点用例里带业务结果的字段未导出、逐格映射说好由本包经真编排补，补在这里。
+// 未立，票 03），授权过了停在判不出阶段（关务与装袋读面未接，ADR-0118），阶段判出后停在矩阵未登记
+// （提供方矩阵那半未立，票 02）；三处都不形成版本、不入队「资料版本已形成」意图。另一条钉住交接壳：
+// 意图在自己的事务里入队恰好一封、重放不翻倍——版本与意图不同事务是编排今天的形状，壳只负责把
+// RequireExecutor 那一格接对。最后一条把第一个停点推到 HTTP 面上：端点用例里带业务结果的字段未导出、
+// 逐格映射说好由本包经真编排补，补在这里。
 
 // sourceDataVersionEnvelopeType 与发布侧适配器的类型常量同字面（手抄，理由同 submittedEnvelopeType）。
 const sourceDataVersionEnvelopeType = "parcel-shipment.source-data-version.formed"
@@ -213,20 +217,146 @@ func TestTheHonestStopIsObservableAtTheAmendmentEndpoint(t *testing.T) {
 	assertNoSourceDataVersionFormed(t, db)
 }
 
-// Covers: 票 04 装配用例②——授权过了（放行替身），矩阵仍是生产的未配置答复 → 停在**待复核**
-// （`AWAITING_REVIEW`：「还没人说这处资料能不能改」），不是业务拒绝；同样不形成版本、不入队意图。
-// 生产装配自己走不到这一格（授权先停），所以由形状半边注入替身来证。
-func TestTheAmendmentAssemblyStopsAtUndeclaredRulesOnceAuthorized(t *testing.T) {
+// acceptedOnRealAssembly 在 submittedOnRealAssembly 之上把委托推到`已接受`并落库：读回真提交的聚合，
+// 经领域 Decide（形照 application 包用例的 acceptedRequest：一条已通过的可达性校验、一份合成商业
+// 依据快照）再经真仓储 Save。阶段判断与矩阵两个停点都在`已接受`之后（判阶段先核状态），要证它们
+// 就得有一份已接受委托在库里；本包没有走完整接受链的夹具，直接落决定是取证捷径，不是生产路径。
+func acceptedOnRealAssembly(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	submittedOnRealAssembly(t, db)
+
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	command := submissionCommand(t)
+	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	applicable, err := domain.NewApplicableCheckGroups(domain.NetworkReachabilityCheck)
+	if err != nil {
+		t.Fatalf("new applicable check groups: %v", err)
+	}
+	basis, err := domain.NewCommercialBasisSnapshot(domain.CommercialBasisSnapshotSpec{
+		ResolutionID: mustValue(t, domain.NewCommercialResolutionID, "SYN-RES-1"),
+		RulePackage:  mustValue(t, domain.NewRulePackageReference, "SYN-RULES-1/v1"),
+		ViewRevision: mustValue(t, domain.NewCommercialViewRevision, "SYN-VIEW-1"),
+		Applicable:   applicable,
+		ManualReview: domain.ManualReviewNotRequiredByRules,
+	})
+	if err != nil {
+		t.Fatalf("new commercial basis snapshot: %v", err)
+	}
+	checks := make([]domain.AcceptanceCheck, 0, len(command.DeclaredParcelIDs))
+	for _, parcel := range command.DeclaredParcelIDs {
+		check, err := domain.NewAcceptanceCheck(domain.NetworkReachabilityCheck, parcel, domain.CheckPassed, domain.CheckReason{})
+		if err != nil {
+			t.Fatalf("new acceptance check: %v", err)
+		}
+		checks = append(checks, check)
+	}
+	accepted, err := request.Decide(domain.AcceptanceDecisionSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-1"),
+		Checks:     checks,
+		Basis:      basis,
+		DecidedAt:  time.Date(2026, 8, 21, 10, 30, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("decide: %v", err)
+	}
+	if accepted.State() != domain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED", accepted.State())
+	}
+	err = db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		saved, err := requests.Save(txCtx, command.Identity, accepted)
+		if err != nil {
+			return err
+		}
+		if saved != ports.ShipmentRequestSaved {
+			return fmt.Errorf("save outcome = %v", saved)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("落已接受委托：%v", err)
+	}
+}
+
+// Covers: 票 04 装配用例②（02 票 PS 半边落地后改写）——授权过了（放行替身），生产的关务与装袋
+// 读口是**未接**答复，编排停在`判不出阶段`的未决（`SourceDataAmendmentStageUndetermined`），不默认
+// 最早阶段去问矩阵；不形成版本、不入队意图。生产装配自己走不到这一格（授权先停），由形状半边注入
+// 放行替身来证。
+func TestTheAmendmentAssemblyStopsAtUndeterminedStageOnceAuthorized(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	submittedOnRealAssembly(t, db)
+	acceptedOnRealAssembly(t, db)
 
 	amendment, err := assembleCustomerAmendmentOrchestration(db,
 		grantingAmendmentAuthorizer{t: t},
 		productionAmendmentRules(),
+		pscustoms.UnconnectedCustomsStageView{},
+		psnode.UnconnectedConsolidationStageView{},
+	)
+	if err != nil {
+		t.Fatalf("装配资料修订编排：%v", err)
+	}
+	result, err := amendment.Handle(t.Context(), amendmentCommand(t, "SYN-KEY-1-AMENDMENT"))
+	if err != nil {
+		t.Fatalf("资料修订：%v", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.AmendmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED——读面未接判不出阶段，不猜最早阶段去问矩阵", got)
+	}
+	if got := result.PendingReason(); got != shipmentapp.SourceDataAmendmentStageUndetermined {
+		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED", got)
+	}
+	assertNoSourceDataVersionFormed(t, db)
+}
+
+// knownStageFacts 是关务与装袋两个读口的已知答复替身（隔离合成 `S`）：关务三格与装袋都`不在`。
+// 与真库上空着的三本本上下文登记册合起来，就是「已接受、尚未收寄」的完整证据。
+type knownStageFacts struct{}
+
+func (knownStageFacts) LoadCustomsStageFacts(
+	context.Context,
+	domain.TenantID,
+	domain.DeclaredParcelID,
+) (ports.CustomsStageFacts, error) {
+	return ports.CustomsStageFacts{
+		DataForming: domain.StageFactAbsent,
+		Submitted:   domain.StageFactAbsent,
+		CaseClosed:  domain.StageFactAbsent,
+	}, nil
+}
+
+func (knownStageFacts) LoadBaggingFact(
+	context.Context,
+	domain.TenantID,
+	domain.DeclaredParcelID,
+) (domain.StageFact, error) {
+	return domain.StageFactAbsent, nil
+}
+
+// Covers: 票 04 装配用例②的原判据——阶段判出之后，矩阵仍是生产的未配置答复 → 停在**待复核**
+// （`AWAITING_REVIEW`：「还没人说这处资料能不能改」），不是业务拒绝；同样不形成版本、不入队意图。
+// 本上下文自有的三本登记册在真库上按空册答`不在`，这一格顺带证了它们接在阶段判断上。
+func TestTheAmendmentAssemblyStopsAtUndeclaredRulesOnceTheStageIsKnown(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	acceptedOnRealAssembly(t, db)
+
+	amendment, err := assembleCustomerAmendmentOrchestration(db,
+		grantingAmendmentAuthorizer{t: t},
+		productionAmendmentRules(),
+		knownStageFacts{},
+		knownStageFacts{},
 	)
 	if err != nil {
 		t.Fatalf("装配资料修订编排：%v", err)
@@ -236,7 +366,7 @@ func TestTheAmendmentAssemblyStopsAtUndeclaredRulesOnceAuthorized(t *testing.T) 
 		t.Fatalf("资料修订：%v", err)
 	}
 	if got := result.Outcome(); got != shipmentapp.AmendmentAwaitingReview {
-		t.Fatalf("outcome = %q, want AWAITING_REVIEW——矩阵未登记是待复核，不是拒绝也不是放行", got)
+		t.Fatalf("outcome = %q（未决原因 %q）, want AWAITING_REVIEW——矩阵未登记是待复核，不是拒绝也不是放行", got, result.PendingReason())
 	}
 	assertNoSourceDataVersionFormed(t, db)
 }

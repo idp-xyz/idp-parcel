@@ -119,6 +119,15 @@ const (
 	// 这一格说的是决定之前的等待态；续办引用由原因派生，共用会让两种缺口拿到同一条引用。
 	OperatorRegistrationWaitNotSaved
 
+	// 资料修订问矩阵之前先判「资料修订阶段」（PS CONTEXT 词条；ADR-0118），那一步的两格。
+	//
+	// `判不出`是六格事实里有`不知道`——今天是关务与装袋两处读面未接（消费侧适配器如实答不知道），
+	// 等的是读面接上，不是等某个权威恢复，也不是等租户登记；`事实读不回`是某个口调不通，等它恢复。
+	// 两格分开的理由与矩阵那两格（SourceDataRuleUnavailable 对 NotDeclared）一字不差：合成一格，
+	// 续办方就不知道该重试还是该去接线。两格都只有本方推得动，落在下面 resumePath 的 default 上。
+	SourceDataAmendmentStageUndetermined
+	SourceDataAmendmentStageFactUnavailable
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -284,6 +293,10 @@ func (reason JudgmentPendingReason) String() string {
 		return "SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED"
 	case OperatorRegistrationWaitNotSaved:
 		return "OPERATOR_REGISTRATION_WAIT_NOT_SAVED"
+	case SourceDataAmendmentStageUndetermined:
+		return "SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED"
+	case SourceDataAmendmentStageFactUnavailable:
+		return "SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE"
 	default:
 		return ""
 	}

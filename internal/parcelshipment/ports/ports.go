@@ -1097,11 +1097,17 @@ const (
 //
 // Intent 随查询进矩阵：允许性按「哪一处、哪个动作」登记，`AT-PS-020` 的显式清空与改成
 // 新值在同一阶段的允许性可以相反，矩阵收不到意图就登记不了那种规则。
+//
+// Stage 同样随查询进矩阵，且由本上下文判出后才发问：矩阵按（资料组 × 阶段 × 意图）登记
+// （`UC-PS-002` 阶段表六行、`BD-PS-010`「版本化阶段矩阵」），「此刻在哪个阶段」是 PS 对自己
+// 对象生命周期位置的判断，规则包只声明「在某阶段允许什么」。判不出阶段的查询不该发出——
+// 编排在那之前就停在未决；实现方收到零值 Stage 应当拒答而不是当最早阶段查。
 type SourceDataAmendmentQuery struct {
 	Identity domain.SourceIdentity
 	Scope    domain.SourceDataScope
 	Intent   domain.AmendmentIntent
 	Reason   domain.AmendmentReasonReference
+	Stage    domain.AmendmentStage
 }
 
 // SourceDataRuleDeclaration 回答已登记规则是否允许这次修订。

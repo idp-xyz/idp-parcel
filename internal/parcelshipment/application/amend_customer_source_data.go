@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -106,7 +107,20 @@ type AmendCustomerSourceDataDeps struct {
 	Rules      ports.SourceDataRuleDeclaration
 	Identities ports.SourceDataVersionIdentity
 	Downstream ports.SourceDataVersionHandoff
+	Stage      AmendmentStageDeps
 	Clock      ports.Clock
+}
+
+// AmendmentStageDeps 是判「资料修订阶段」要读的五个口（PS CONTEXT 词条；ADR-0118）。六格事实
+// 三处出：本上下文自有的收寄采用、面单交易结果、包裹终局走既有登记册的读半边；关务三格与装袋
+// 一格是跨上下文输入，走消费侧读口。它们单独成组而不是平铺进上面那份 deps：阶段判断是矩阵查询
+// 之前的一整步，五个口只为它服务，装配点上一眼能看出哪几样是「判阶段用的」。
+type AmendmentStageDeps struct {
+	ResponsibilityStarts ports.ResponsibilityStartView
+	LabelTransactions    ports.LabelTransactionsByParcelView
+	Finals               ports.CurrentFinalView
+	Customs              ports.CustomsStageView
+	Consolidation        ports.ConsolidationStageView
 }
 
 type AmendCustomerSourceDataHandler struct {
@@ -198,11 +212,31 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		return AmendCustomerSourceDataResult{outcome: AmendmentDisallowed}, nil
 	}
 
+	// 步骤 6 的前半：先判阶段，再问矩阵。矩阵按（资料组 × 阶段 × 意图）登记，阶段是本上下文对
+	// 自己对象生命周期位置的判断，规则包只声明「在某阶段允许什么」；判不出就停在未决，不猜一个
+	// 阶段去问——最早那一格尤其不能当默认值，那是 `BD-PS-010`「未登记的字段和阶段不默认允许」
+	// 在阶段这一维上的同一句话。
+	stage, err := handler.judgeStage(ctx, command.Identity.TenantID(), request, command.Scope)
+	if err != nil {
+		if errors.Is(err, domain.ErrShipmentRequestNotAccepted) {
+			// 委托没接受，本用例根本不成立（UC-PS-002 从已接受委托开始）。上抛而不形成未决：
+			// 那是调用方对世界的判断错了，续办等不来一份接受；接 HTTP 时归`没形成答案`那一格。
+			return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", err)
+		}
+		// 事实读不回与事实答「不知道」分开：前者等依赖恢复，后者等读面接上——合成一格，续办方
+		// 就分不清该重试还是该去接线。
+		return handler.undecided(command, SourceDataAmendmentStageFactUnavailable), nil
+	}
+	if !stage.Determined() {
+		return handler.undecided(command, SourceDataAmendmentStageUndetermined), nil
+	}
+
 	allowance, err := handler.deps.Rules.DeclareSourceDataAmendment(ctx, ports.SourceDataAmendmentQuery{
 		Identity: command.Identity,
 		Scope:    command.Scope,
 		Intent:   command.Intent,
 		Reason:   command.Reason,
+		Stage:    stage,
 	})
 	if err != nil {
 		// 矩阵读不回与矩阵答「没有这条」分开：后者等的是有人去 `PAR-COM-13` 登记，前者等的
@@ -409,4 +443,95 @@ func (handler *AmendCustomerSourceDataHandler) existing(
 		}
 	}
 	return AmendCustomerSourceDataResult{outcome: AmendmentAlreadyHandled}
+}
+
+// judgeStage 判出这次修订所处的「资料修订阶段」。
+//
+// 逐包裹判：范围指名了包裹就判那一件；作用于整份委托的范围（寄收件一类）没有自己的包裹，按接受
+// 基线的全部成员各判一次再取最靠后的一格（domain.FurthestAmendmentStage 头注写了为什么是最靠后）。
+// 成员集合取接受基线而不取当前有效包裹：修订的范围本就以接受基线为界（步骤 5 刚核过），被拆合
+// 替代的成员仍以它们此刻的阶段说话——一个已被拆分的成员若已提交关务，改整份委托的寄件人仍然动到
+// 那份申报。
+//
+// 委托没接受时上抛 ErrShipmentRequestNotAccepted 而不是判「不知道」：没接受不是事实缺席，是本
+// 用例的起点不成立，与后面 AmendCustomerSourceData 那一道门同一个答案，只是早说。
+func (handler *AmendCustomerSourceDataHandler) judgeStage(
+	ctx context.Context,
+	tenant domain.TenantID,
+	request domain.ShipmentRequest,
+	scope domain.SourceDataScope,
+) (domain.AmendmentStage, error) {
+	baseline, fixed := request.AcceptanceBaseline()
+	if request.State() != domain.ShipmentRequestAccepted || !fixed {
+		return domain.AmendmentStageUndetermined, domain.ErrShipmentRequestNotAccepted
+	}
+	members := baseline.DeclaredParcelIDs()
+	if parcel, named := scope.DeclaredParcelID(); named {
+		members = []domain.DeclaredParcelID{parcel}
+	}
+	stages := make([]domain.AmendmentStage, 0, len(members))
+	for _, parcel := range members {
+		evidence, err := handler.stageEvidence(ctx, tenant, parcel)
+		if err != nil {
+			return domain.AmendmentStageUndetermined, err
+		}
+		stages = append(stages, domain.JudgeAmendmentStage(evidence))
+	}
+	return domain.FurthestAmendmentStage(stages...), nil
+}
+
+// stageEvidence 为一个包裹收齐六格事实。本上下文自有的三项读既有登记册：责任起点在即已收寄，
+// 某笔覆盖该包裹的面单交易对它的包裹结果为已受理即已制签，当前有效终局在即服务已完成；装袋与
+// 关务三格各问其消费侧读口，读口答什么就记什么——它们的`不知道`原样进证据，由 JudgeAmendmentStage
+// 决定它挡不挡得住判断。任一读口调不通即整体报错：一半事实读回、一半读不回，凑出来的阶段不可信。
+func (handler *AmendCustomerSourceDataHandler) stageEvidence(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (domain.AmendmentStageEvidence, error) {
+	deps := handler.deps.Stage
+	_, received, err := deps.ResponsibilityStarts.FindResponsibilityStart(ctx, tenant, parcel)
+	if err != nil {
+		return domain.AmendmentStageEvidence{}, fmt.Errorf("read responsibility start: %w", err)
+	}
+	transactions, err := deps.LabelTransactions.ListByCoveredParcel(ctx, tenant, parcel)
+	if err != nil {
+		return domain.AmendmentStageEvidence{}, fmt.Errorf("read label transactions: %w", err)
+	}
+	labelled := false
+	for _, transaction := range transactions {
+		if result, found := transaction.ParcelResult(parcel); found && result.Accepted() {
+			labelled = true
+			break
+		}
+	}
+	bagged, err := deps.Consolidation.LoadBaggingFact(ctx, tenant, parcel)
+	if err != nil {
+		return domain.AmendmentStageEvidence{}, fmt.Errorf("read bagging fact: %w", err)
+	}
+	customs, err := deps.Customs.LoadCustomsStageFacts(ctx, tenant, parcel)
+	if err != nil {
+		return domain.AmendmentStageEvidence{}, fmt.Errorf("read customs stage facts: %w", err)
+	}
+	_, completed, err := deps.Finals.FindCurrentFinal(ctx, tenant, parcel)
+	if err != nil {
+		return domain.AmendmentStageEvidence{}, fmt.Errorf("read current final: %w", err)
+	}
+	return domain.AmendmentStageEvidence{
+		Accepted:                     domain.StageFactPresent,
+		Received:                     stageFactOf(received),
+		LabelledOrBagged:             domain.EitherStageFact(stageFactOf(labelled), bagged),
+		CustomsDataForming:           customs.DataForming,
+		CustomsSubmitted:             customs.Submitted,
+		CaseClosedOrServiceCompleted: domain.EitherStageFact(customs.CaseClosed, stageFactOf(completed)),
+	}, nil
+}
+
+// stageFactOf 把本上下文自己登记册上的「有没有」译成三态：自己的册子读回来了就是知道，没有
+// `不知道`这一格——`不知道`只属于读面还没接上的邻接上下文。
+func stageFactOf(present bool) domain.StageFact {
+	if present {
+		return domain.StageFactPresent
+	}
+	return domain.StageFactAbsent
 }
