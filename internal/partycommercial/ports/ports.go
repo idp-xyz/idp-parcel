@@ -186,7 +186,7 @@ type CustomerServiceRuleContentView interface {
 // found=false = 正文未登记（无父行）。有父行而零子行是坏数据（领域要求至少一项），走 error，不得
 // 折成 found=false——那会让消费方去催一份其实已经写坏的配置。读取失败同样走 error。**本口不提供任何
 // 默认控制**：读不到就是租户没登记，settlement-accounting 据以停在 ADR-0054 的`未配置`格；凑一份就是
-// 发明实例参数。settlement-accounting 今天的 LoadControlPolicy 尚不读本口，改读另立票。
+// 发明实例参数。settlement-accounting 的 LoadControlPolicy 经本口取控制项（ADR-0122）。
 //
 // 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
 type PreAcceptanceFinancialControlPolicyContentView interface {
