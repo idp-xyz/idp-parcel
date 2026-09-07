@@ -246,6 +246,24 @@ func (unwiredCredentialRegistration) ChangeApplicability(
 	return tfapp.RegisterExternalCarrierCredentialResult{}, errOrchestrationNotWired
 }
 
+// unwiredMasterDocumentRegistration 一个类型顶两个端点：总单首登与形成新版本共用 MasterDocumentRegistrar
+// （ADR-0113 决定五）。
+type unwiredMasterDocumentRegistration struct{}
+
+func (unwiredMasterDocumentRegistration) Register(
+	context.Context,
+	tfapp.RegisterMasterDocumentCommand,
+) (tfapp.RegisterMasterDocumentResult, error) {
+	return tfapp.RegisterMasterDocumentResult{}, errOrchestrationNotWired
+}
+
+func (unwiredMasterDocumentRegistration) Revise(
+	context.Context,
+	tfapp.ReviseMasterDocumentCommand,
+) (tfapp.RegisterMasterDocumentResult, error) {
+	return tfapp.RegisterMasterDocumentResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 

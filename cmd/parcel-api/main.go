@@ -166,6 +166,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	masterDocumentRegistration, err := buildMasterDocumentRegistration(db)
+	if err != nil {
+		return err
+	}
 	effectiveTimeRuleRegistration, err := buildEffectiveTimeRuleRegistration(db)
 	if err != nil {
 		return err
@@ -383,6 +387,7 @@ func run(logger *slog.Logger) error {
 			effectiveTimeRuleRegistration,
 			externalTrackingFactReview,
 			effectiveTimeJudgment,
+			masterDocumentRegistration,
 			trackingViews,
 			projectionViews,
 			claims,
