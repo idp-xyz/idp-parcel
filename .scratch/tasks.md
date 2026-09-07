@@ -1040,3 +1040,18 @@ MCP-6 `390c4f53` done（23:0x）：`mcp6-pcgaps10` 基 `9379c716`，六笔，跳
 MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb9a85`（Test 行加 `-p 1`）、`d40e10e6→f06336dd`（postgres service `--tmpfs /var/lib/postgresql/data:size=2g`，与本机 compose.yaml 同口径）、`57b00a6d→874849ce`（timeout 依据改成 CI 实测：最重 job 406s = 15 分的 45%，上限与分片不动）、`44fc6fc6→e682291f`（注释改口）。重放到 `b2cb71fc` 零冲突；ci.yml 与分支 tip 零差、`i/lf w/lf` 无 BOM；WSL PyYAML safe_load 回显三项；`test-shards.sh check` 116 包过；无 Go 改动不跑测试。快进并推，**远端 main = `e682291f`**（推前 ls-remote = b2cb71fc）。MCP-4 自拆树、改名 `merged/`。
 
 **成因改口**（21:5x 节写「片内并发锁等」只对了一半）：MCP-4 取数——`-p 1` 磁盘库那次 network-visibility 串行独占库仍 865s 被掐，真库包比健康日慢 2 倍多、纯内存包分毫不差 → **主因是 runner 落盘慢**：pgtest 每用例建库/删库，DROP 强制 checkpoint，耗时 = 用例数 × fsync 延迟；本机 compose 是 tmpfs，CI 用磁盘库对着本机数推 timeout，口径错在这里。`-p 1` 消掉的是叠在上面的第二笔账（真库包并发时慢三成、且不可复现）。tmpfs 三个 run 四片 Test 步 268–372s，逐包稳定（customs 两包 126/113s 三次同），cached 0 / FAIL 0 / DATA RACE 0。**切换「作者自落 main」的计数从 `e682291f` 这一跑起：main 连绿三次。**
+
+顺带记：`b2cb71fc`（pc-gaps/10 代码 + 两笔 .md，ci.yml 还是磁盘库那版）的 run 34137392455 又红在 customs-transport——`customscompliance/adapters/postgres` 撞 go test 10 分默认上限，与 `f69b35b9` 那次同形，代码与本机验过的 `534493d4` 同一；这是 tmpfs 修复之前最后一次红的样本。MCP-4 补第五笔（注释：数以 tmpfs 为前提）`eac8c948` 与取数分支 `mcp4-ci-tmpfs-nop1`（PR #2，不进 main）在途。
+
+### 00:5x–01:1x：用户「你看看如何调整」→ 弱项逐条落地（用户已授权自决）
+
+按 23:5x 审查的六条弱项，能今晚落的都落了，全部可逆：
+
+1. **合入前独立评审**：写进 `parallel-sessions.md`「合入前独立评审（2026-09-08 起）」——非作者、空闲通道评；隔离检出跑 `/code-review <基线>` 两轴（Standards / Spec）；写进票面 Comments「阻断 / 非阻断 / 无发现」三格，每条锚文件 + 符号，20 分钟时限；推送方只在「无阻断」时重放；纯 .md / 清点 / 封存笔 / 一行 ci.yml 自审。**从下一张代码票起执行。**
+2. **度量**：同文件「度量：tasks.md 每节末尾五个数」——CI main 绿/总、集成时延中位数、重放笔数、重复开发次数、会话重置次数，量法逐条写明；本节末尾第一次落数（见下）。
+3. **状态从 git 算**：新增 `scripts/branch-state.ps1`（状态页：main 与 origin、各树未提交、在途分支及推没推 origin、`-Path` 查地盘半成品、`-Classify` 判 ABSORBED、`-Audit` 游离提交两级核）与 `scripts/owner-review-queue.ps1`（把 ADR / 票面里的越权风险点与 needs-info / blocked 票汇成一页）。两份都只读；`.ps1` 带 BOM（PS 5.1 读中文要它，先例 `.scratch/admin-remainder-mechanism-batch/t2-census.ps1`）。AGENTS.md「Parallel sessions」加一句：多会话开工第一眼看它算出的状态页，不读自报；`parallel-sessions.md` 派单第 0 步与拆树节改为调它。
+4. **owner 复核队列**：`scripts/owner-review-queue.ps1 -Out .scratch/owner-review-queue.md` 首次生成（钉 `ade810bd`）：11 篇 ADR 含越权风险点（0027 / 0029 / 0055 / 0113 / 0114 / 0116 / 0119 / 0120 / 0123 / 0124 / 0125）、8 张 needs-info / blocked 票、13 张票面提到越权点。owner 复核完在原文旁写「owner 复核 YYYY-MM-DD 认可」，下次生成会标出。
+5. **机器把门的替代**：`scripts/git-hooks/pre-push` 写好（推 main 前核 `.git/landing.lock` 里的 SHA），**未安装**，切换日装。
+6. 单机单库吞吐与文档拆层：未动——前者随 PR/CI 落地自然缓解；后者（`parallel-sessions.md` 500+ 行拆「现行规矩 / 历史复盘」两层）需要一次整篇重排，留给白天有余量时做，先记在这里。
+
+**本节五数**（21:2x 接手 → 01:1x）：CI main 绿/总 7/9（2 红均为 tmpfs 修复前 customs-transport 真库包撞 go test 10 分上限：`f69b35b9`、`b2cb71fc`；5 次 concurrency 顶替的 cancelled 不计；`ade810bd` 在跑）· 集成时延中位数 65 分（3 票：sa/03 37 / pc-gaps/10 65 / CI 75——后两票的等待大半是推送方在答用户问）· 重放笔数 14（另 cherry-pick 3 笔纯 .md 票面记录）· 重复开发 1 次（pc-gaps/09）· 会话重置 3 次（通道 1 21:2x、MCP-6 21:2x、MCP-3 21:5x）。
