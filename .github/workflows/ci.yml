@@ -126,11 +126,23 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
+        # 数据目录落 tmpfs，与本机 compose.yaml 同口径（那边写明「数据落在内存里」，且不关
+        # fsync）。夹具为每个用例建一个物理库再 DROP DATABASE（internal/platform/pgtest），
+        # DROP 强制一次 checkpoint、迁移与事务提交各等一次 WAL 落盘——用例数乘以磁盘 fsync 的
+        # 延迟就是真库包的耗时，而 runner 的磁盘快慢不由我们定。同一份代码同一片，run
+        # 34115373617（b24ccccf）network-visibility 四个真库包 87 / 253 / 251 / 520 秒，对健康日
+        # run 34084625114 的 21 / 74 / 62 / 166 秒一律慢 4 倍，1 秒档的纯内存包分毫不差——不是哪个
+        # 包、哪个用例，是那台机器的落盘慢。加了 -p 1 之后（run 34133273333）这一片反而撞了
+        # 15 分：包不再重叠，慢盘上的每一秒都直接进总时长；同一 run 另外三片的真库包比并发时
+        # 快三成，说明锁等与落盘两笔账都在。本机 -p 1 各片 116–132 秒量的是 tmpfs 库，CI 拿磁盘
+        # 库对着这个数推 timeout，口径从这里就错了。tmpfs 不改 PostgreSQL 任何参数，事务可见性
+        # 与回滚语义照旧；这只库本来就是 job 结束即弃。size 与 compose.yaml 同为 2g。
         options: >-
           --health-cmd "pg_isready -U parcel -d postgres"
           --health-interval 3s
           --health-timeout 3s
           --health-retries 20
+          --tmpfs /var/lib/postgresql/data:size=2g
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
