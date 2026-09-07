@@ -962,3 +962,17 @@ ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 �
 - MCP-2 19:3x 报剪 `production_wiring_baseline.txt` PP 段 `ReplayPricingEvaluation` 一行（成因第二种：真接上），该文件无他人在途，重放时按新父提交重量。
 
 **在途（19:4x）**：MCP-2 `269d98b6` wbr/06（PP，`mcp2-wbr06`）；MCP-3 `0ec68b23` sa/03（PS，`mcp3-sa03`）；MCP-4 `79675845` tf/09（TF，`mcp4-tf09`，待完工报）；MCP-5 `0d116e60` pc-gaps/08（`mcp5-pcgaps08`）；MCP-6 `390c4f53` pc-gaps/09→10（`mcp6-pcgaps09`）。五路满。
+
+### 19:5x–20:0x：MCP-6 误开作废单一次纠回；tf/09 进 main
+
+- 19:5x MCP-6 读到旧队列里 19:3x 的 `ce26f498` 就开了工（建 `mcp6-pcgaps08`、cherry-pick MCP-5 的 `1e182860`，要往下做 08 余步），与 MCP-5 正写的第二笔正面撞——19:4x 的三条（同意分工、新单 `390c4f53`、地盘更正）都在它队列里只是还没读到。紧急纠正后它 20:0x 前已切到 `mcp6-pcgaps09`、拆掉误建的树；`ce26f498` 在台账仍 failed（它对终态单的 working 报没翻状态）。**教训一句**：换承接方几分钟内改口两次，接收方读到哪一条取决于它什么时候排队列——同一收件人的连续改令，后一条要点名作废前一条的单号，本次做了，仍晚了一轮。
+- MCP-5 票 08 第一笔 `1e182860`（领域 + 读口 + 新构造器三步法 + 迁移 0025）、第二笔 `6b43484c`（合同委派册落库 + 点读口 + 替身，真库七组 PASS）完工报已收，第三笔发布通道 + 批文进行中。MCP-3 三问已裁、不碰 PS `adapters/partycommercial`（另立 draft 04）、`cmd/parcel-dispatch` 两件测试跟签名；MCP-2 两笔已成、README 0124 行 + endpoints.go PP 组行改前报已收。
+
+| SHA | 内容 |
+|---|---|
+| `081cfc56`..`2346c96e` | MCP-4 `79675845` tf/09 七笔重放到 `250e5a43`（`8cf3b8f3→081cfc56`、`85956673→dd757ef7`、`54b7ab04→d6c118b2`、`9634b635→d9d112d5`、`e4e63503→9f6ac00e`、`e5a79302→6ebc2aec`、`a155e11d→2346c96e`；cherry-pick 零冲突，七对逐笔树比对除 tasks.md 外零差）。分支清点笔 `3b1ee383` 不重放 |
+| `7bc47ec9` | 清点在 `2346c96e` 干净检出重生成，与 `3b1ee383` 逐字节同。**已推**（推前 ls-remote = 250e5a43） |
+
+验证钉 `7bc47ec9`（隔离 detached 树 `idp-replay-tf09`，验后已拆）：gofmt 空；build/vet 退 0；清点工具 vet/test 退 0；清点门零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（595s）；探针 `transportfulfillment/adapters/postgres -run ServiceAction` 无 DSN SKIP / 有 DSN PASS；改动 `.go`/`.sql` 15 件全 `i/lf w/lf`。票 09 补「进 main 记录」（随本笔）；tf/11 未开、TF 地盘已由 MCP-4 释出。拆 `idp-parcel-mcp4-tf09`（`git cherry main` 八笔全 `-`、status 零行、不带 `--force`），指针 `mcp4-tf09@3b1ee383` / `mcp4-tf09-precut@5be2686e` / `mcp5-tf-cmdr@502a6856` 保留。ADR-0114 四条 + 执行器三条越权风险点归用户复核。
+
+**在途（20:0x）**：MCP-2 `269d98b6`、MCP-3 `0ec68b23`、MCP-5 `0d116e60`、MCP-6 `390c4f53`；MCP-4 空闲。**可派**：tf/11（ADR-0121、迁移 0019；TF 地盘空）。CI 为 `7bc47ec9` 在跑。

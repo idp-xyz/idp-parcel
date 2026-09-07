@@ -17,6 +17,8 @@ Blocked by: 12, 13, 14（父票阻塞边；本票自身不再有代码可做—�
 
 **验证强度**（分支 tip 上，通道 4 量得）：`gofmt -l` 空；`go build ./...` 与 `go vet` 0；`internal/architecture` 门禁全过；全仓 `go test -p 1 -count=1 ./...`（含 DSN，PG 用例 PASS 非 SKIP）结果记在完工报与 spec 状态行——本票面不复述计数。
 
+**进 main 记录**（2026-09-07 20:0x，MCP-1 重放到 `250e5a43` 之上；分支 → main）：`8cf3b8f3→081cfc56`、`85956673→dd757ef7`、`54b7ab04→d6c118b2`、`9634b635→d9d112d5`、`e4e63503→9f6ac00e`、`e5a79302→6ebc2aec`、`a155e11d→2346c96e`；分支清点笔 `3b1ee383` 不重放，清点在 `2346c96e` 干净检出上重生成为 `7bc47ec9`（与 `3b1ee383` 逐字节同）。七对逐笔树比对除 `.scratch/tasks.md` 外零差。隔离 detached 树钉 `7bc47ec9`：`gofmt -l` 空、build/vet 0、清点门零差、含 DSN `go test -p 1 -count=1 ./...` 100 ok / 0 FAIL / 0 cached、探针 `-run ServiceAction` 无 DSN SKIP / 有 DSN PASS。远端 `main = 7bc47ec9`（推前 ls-remote = `250e5a43`）。树 `idp-parcel-mcp4-tf09` 已拆（`git cherry main` 八笔全 `-`），指针 `mcp4-tf09@3b1ee383`、`mcp4-tf09-precut@5be2686e`、`mcp5-tf-cmdr@502a6856` 保留。
+
 **不在本票、已另立**：三条缝的适配器（12–14）；执行器的生产入口与拍频（随第一条接上线的缝的票，ADR-0114 决定二末句）；多对象合并成一任务的政策（不立票，运营政策）；参与失效格（票 [11](11-control-withdrawing-correction-voids-participation.md)）。
 
 **越权风险点（供 owner 复核，实现票不顺手定）**：
