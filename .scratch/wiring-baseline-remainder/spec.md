@@ -1,7 +1,7 @@
 # 生产接线棘轮基线余项：九条零调用点导出工厂的逐条处置
 
 Category: chore
-Status: in-progress——PP 四条已在本目录第一笔处置（三删一留，分支 `mcp6-pp-ratchet` 的 `1d13d510`，重放进 main 后此处补 main 上的 SHA）；PS 二条、PC 三条只读取证立票 01–05 交 MCP-1 派；PP 两张后继票 06/07 记的是删与留各自留下的那件事
+Status: in-progress——PP 四条已在本目录第一笔处置（三删一留，分支 `mcp6-pp-ratchet` 的 `1d13d510`，进 main 为 `7cef122f`，2026-09-07 16:00）；PS 二条、PC 三条只读取证立票 01–05 交 MCP-1 派；PP 两张后继票：07 已 resolved（ADR-0123，MCP-4 四笔 + MCP-6 收口，2026-09-07），06 记的是留待留下的那件事
 
 ## 来源
 
@@ -25,7 +25,7 @@ Status: in-progress——PP 四条已在本目录第一笔处置（三删一留�
 | `ValidateBeforeDecision` | PC | 死码（被闭包形态取代） | 只读取证，PC 地盘 MCP-3 | [05](./issues/05-pc-single-basis-revalidation-was-superseded-by-the-closure-form.md) |
 | `ReplayPricingEvaluation` | PP | 有意留待（调用方 PN-08 W02，三件缺口） | 理由行已改写；执行器另立 | [06](./issues/06-pp-replay-pricing-evaluation-has-no-executor.md) |
 | `MarshalPricingPlanSnapshot` / `RehydratePricingPlanSnapshot` | PP | 死码（平行第二写法），已删 | `1d13d510` | — |
-| `ParseCanonical` | PP | 死码（守卫接不到它自称的边界），已删 | `1d13d510`；它自称要守的事另立 | [07](./issues/07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md) |
+| `ParseCanonical` | PP | 死码（守卫接不到它自称的边界），已删 | `1d13d510`；它自称要守的事已在 07 落地（规范写法进 `valid()`，ADR-0123） | [07](./issues/07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md)（resolved） |
 
 ## 边界
 
