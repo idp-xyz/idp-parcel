@@ -259,6 +259,21 @@ type CancellationAuthorityContentView interface {
 	) (domain.CancellationAuthorityContent, bool, error)
 }
 
+// SourceDataAmendmentAllowanceView 取已唯一选出的接单规则包版本的资料修订允许声明（第三族阶段内容
+// 声明，ADR-0120；`PAR-COM-13` 的提供方半边）：接受后客户原始资料按（资料组 × 阶段 × 意图）能不能改。
+//
+// 分界、三格含义与 IntakeQualificationView 相同：无父行 = 未配置（found=false，消费方译作「未声明」）；
+// 父行在场而正文立不住（未封闭却零格、某格集外）是坏声明，走 error，不得折成未配置。产品与合同是
+// 采用方，不作为本口的键（ADR-0058 决定一的同一条纪律）。三值由交回内容的 AllowanceFor 算出（含父行
+// 「封闭」标记对缺格的读法），消费方只做一对一翻译，不自己解释封闭。本上下文不提供默认矩阵。
+type SourceDataAmendmentAllowanceView interface {
+	LoadSourceDataAmendmentAllowance(
+		ctx context.Context,
+		tenant domain.TenantID,
+		rulePackage domain.CommercialVersion,
+	) (domain.SourceDataAmendmentAllowanceContent, bool, error)
+}
+
 // AcceptanceRulePackageContentView 取已唯一选出的接单规则包版本的正文：五维适用性
 // 与按分类归档的规则引用。
 //
@@ -773,6 +788,14 @@ type PublicationRegistry interface {
 	SaveContractDelegations(
 		ctx context.Context,
 		content domain.ContractDelegationContent,
+	) (DeclarationSaveOutcome, error)
+	// SaveSourceDataAmendmentAllowance 登记一份接单规则包版本的资料修订允许声明（ADR-0120，0027）。判据
+	// 同其余声明表：同拥有版本、同「封闭」标记、同一份格集合是重放；封闭标记不同、格多一条少一条、同格
+	// 不同值都是内容冲突，绝不覆盖也绝不并写——改矩阵发新规则包版本。封闭且零格是合法的一份正文。读口
+	// 在 SourceDataAmendmentAllowanceView。
+	SaveSourceDataAmendmentAllowance(
+		ctx context.Context,
+		content domain.SourceDataAmendmentAllowanceContent,
 	) (DeclarationSaveOutcome, error)
 }
 

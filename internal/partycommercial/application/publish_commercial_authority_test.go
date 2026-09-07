@@ -64,6 +64,8 @@ type publicationRegistryDouble struct {
 	controlPolicyOutcome ports.PreAcceptanceFinancialControlPolicySaveOutcome
 
 	savedDelegations []domain.ContractDelegationContent
+
+	savedSourceDataAmendments []domain.SourceDataAmendmentAllowanceContent
 }
 
 func (double *publicationRegistryDouble) SaveContractDelegations(
@@ -74,6 +76,16 @@ func (double *publicationRegistryDouble) SaveContractDelegations(
 		double.savedDelegations = append(double.savedDelegations, content)
 	}
 	return double.declarationAnswer("contract-delegations")
+}
+
+func (double *publicationRegistryDouble) SaveSourceDataAmendmentAllowance(
+	_ context.Context,
+	content domain.SourceDataAmendmentAllowanceContent,
+) (ports.DeclarationSaveOutcome, error) {
+	if double.declarationErr == nil {
+		double.savedSourceDataAmendments = append(double.savedSourceDataAmendments, content)
+	}
+	return double.declarationAnswer("source-data-amendment")
 }
 
 func (double *publicationRegistryDouble) SavePreAcceptanceFinancialControlPolicy(

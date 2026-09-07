@@ -1009,6 +1009,12 @@ func (stub stubPublicationRegistry) SaveContractDelegations(
 	return stub.declaration()
 }
 
+func (stub stubPublicationRegistry) SaveSourceDataAmendmentAllowance(
+	context.Context, domain.SourceDataAmendmentAllowanceContent,
+) (ports.DeclarationSaveOutcome, error) {
+	return stub.declaration()
+}
+
 func (stub stubPublicationRegistry) SaveAcceptanceRuleContent(
 	context.Context, domain.AcceptanceRuleContent,
 ) (ports.DeclarationSaveOutcome, error) {
