@@ -1,7 +1,7 @@
 # `parcel-shipment` 的 `FinancialControlResult` 一个请求只装一个结果——组合控制的逐项结果与共同通过条件在 PS 域里无处表达，今天靠消费适配器折叠
 
 Category: enhancement
-Status: in-progress——由 [ADR-0122](../../../docs/adr/0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定四拆出（2026-09-07，通道 1，票 02 落地时）；PS 地盘，认领者按开工那刻的 tip 重核事实链。2026-09-07 通道 3 认领（task-0ec68b23，基线 `b24ccccf`），三问裁决见下
+Status: resolved——由 [ADR-0122](../../../docs/adr/0122-pre-acceptance-control-executes-the-policy-content-items-and-parcel-shipment-folds-by-the-joint-pass-condition.md) 决定四拆出（2026-09-07，通道 1，票 02 落地时）；PS 地盘。2026-09-07 通道 3 认领并落地（task-0ec68b23，基线 `b24ccccf`，分支 `mcp3-sa03`），三问裁决与完成记录见下；第 2 问的后继在票 [04](./04-authorized-disposition-flow-and-failure-disposition-read.md)
 Blocked by: 无（SA 侧已逐项交回，见票 [02](./02-load-control-policy-reads-policy-content-items.md)）
 
 ## 缺口
@@ -64,8 +64,29 @@ ADR-0122 起，`settlement-accounting` 对一次接受前控制请求按策略�
 4. 释放改按 `OccupationFormed` 发，依据是 SA 释放对同一请求身份两本账幂等各认领、限制不入账本（ADR-0122 决定三）——「有成立项就发」不会对着一笔不存在的占用重试；SA 改账本语义时要回头看这一格。
 5. 过渡状态「`RESTRICTED` 一律拒绝」等于替租户按 `REJECT` 处置；票 04 落地前无租户，风险停在纸面。
 
+## 完成记录
+
+2026-09-07，通道 3，分支 `mcp3-sa03`（隔离树，基 `origin/main = b24ccccf`）。逐笔：
+
+| SHA | 内容 |
+|---|---|
+| `63dce12a` | docs(adr)：ADR-0125 + README 一行；本票「裁决」节、转 in-progress；PS CONTEXT 词条「接受前财务控制采用结果」「控制项结果」；立票 04 draft |
+| `a0153884` | feat(parcel-shipment)：领域 `ControlItemResult` / `ControlItemKind` / `ControlItemConclusion` / `JointPassCondition`，`FinancialControlResult` 三入口（`NewExecutedFinancialControlResult` 推导结论、`NewInapplicableFinancialControlResult`、重建门 `RehydrateFinancialControlResult`），旧四参构造器移除，`OccupationFormed`；PS→SA 适配器 `appliedControlAssessment` 改全函数翻译；迁移 `0019`（父表 `joint_pass_condition` + 子表 `acceptance_financial_control_item`）与 `AcceptanceJudgments` 读写；HTTP 读面 `financialControl` 加 `jointPassCondition` / `occupationFormed` / `items`；PS domain / application / http / postgres 与 `cmd/parcel-dispatch` 两件测试夹具跟随 |
+| `d1a878aa` | fix(parcel-shipment)：三处释放改按 `OccupationFormed`（`releaseIfRejected`、两处 `releaseOccupation`）；UC-PS-001 校验组行与 `AT-PS-035` 改口 |
+| `af7dd29a` | docs(product)：清点在 `d1a878aa` 干净检出重生成（parcelshipment 生产 139→140 / 测试 138→139；迁移 147→148，parcel_shipment 18→19） |
+| `e7c44522` | test(architecture)：重建面门禁登记两个新入口为受限（只对 `internal/parcelshipment/adapters/postgres` 开放） |
+
+**三问的答**见「裁决」节与 ADR-0125；第 2 问只裁未建，读口与授权处置流程同票 04。
+
+**触及文件**（除票面与 ADR）：`internal/parcelshipment/domain/{financial_control_result.go,acceptance_basis.go}`、`adapters/settlementaccounting/pre_acceptance_control.go`、`adapters/postgres/acceptance_judgments.go`、`adapters/http/query_acceptance_review_queue.go`、`application/{form_acceptance_decision.go,reject_shipment_request.go,withdraw_shipment_request.go}`、`migrations/parcel_shipment/0019_acceptance_financial_control_items.sql`、`internal/architecture/rehydration_gate_test.go`（门禁登记）、`cmd/parcel-dispatch/{synthetic_v0_test.go,manual_review_resume_loop_test.go}`（纯夹具签名跟随）、`docs/domain/parcel-shipment/CONTEXT.md`、`docs/application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md`、`docs/product/MECHANISM-INVENTORY.md`。**不动**：SA 任何一格、`internal/parcelshipment/adapters/partycommercial`、`cmd/parcel-api`（装配未变——端口签名未变，适配器构造签名未变）。
+
+**验证**（隔离 detached 树 `idp-parcel-mcp3-verify` 钉 `e7c44522`，验后拆）：`gofmt -l .` 空；`go build ./...`、`go vet ./...` 退 0；`tools/mechanism-inventory` vet/test 退 0、在 tip 重生成零差；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（548s，21:36:37–21:45:45，接续会话跑，见 Comments 末条）——上一会话在 `af7dd29a` 上跑得 99 ok / 1 FAIL，红的只有 `internal/architecture` 重建面门禁登记那一处，`e7c44522` 补登后本次重跑绿；探针 `internal/parcelshipment/adapters/postgres -run 'ACombinedControlRoundTrips|AStoredConclusionThatContradicts|AcceptanceJudgmentShapesArePinned'`：无 DSN exit 0 SKIP 3 / PASS 0，含 DSN exit 0 SKIP 0 / PASS 3（两会话各跑一次同数）。未跑 `-race`（本机 Windows 无 cgo，CI 四片各带）。
+
+**要 MCP-1 落的共享行**：`docs/adr/README.md` 的 0125 一行（与 main 上他人后落的行相邻，重放时按行合并）；`docs/product/MECHANISM-INVENTORY.md` 分支清点笔 `af7dd29a` 不必重放，由推送方在 tip 重生成兑底。`migrations/parcel_shipment/0019` 在 `fc90622a` 的 main 上仍空号（21:2x `git ls-tree` 量得，只作此刻取证）。进 main 后的 SHA 由 MCP-1 广播后补记。
+
 ## Comments
 
 - 2026-09-07 · 通道 1：由 ADR-0122 决定四拆出立票，只写票面，未动 PS 代码。能力边界：读过 PS 消费适配器全文与 SA 侧全部改动；
   **没读** PS 接受编排读取 `FinancialControlResult` 的那一段与 UC-PS-001 全文——第 1 问的措辞据 CONTEXT 与适配器代码写，开工者以代码为准。
-- 2026-09-07 · 通道 3：认领，三问裁决落「裁决」节与 ADR-0125；票面第 1 问猜的「AT-PS-* 引用 HELD / CREDIT_EXPOSED」按代码与 UC 全文核过不存在，改口范围缩到 UC-PS-001 校验组一行与 `AT-PS-035` 半句。取证到的两处释放孤儿（`CREDIT_EXPOSED` 从不释放、`RESTRICTED` 前的成立项不释放）随本票一并修，不另立票——它们就是「压成一格」的直接后果。
+- 2026-09-07 · 通道 3：认领，三问裁决落「裁决」节与 ADR-0125；票面第 1 问猜的「AT-PS-* 引用 HELD / CREDIT_EXPOSED」按代码与 UC 全文核过不存在，改口范围缩到 UC-PS-001 校验组一行与 `AT-PS-035` 半句。  取证到的两处释放孤儿（`CREDIT_EXPOSED` 从不释放、`RESTRICTED` 前的成立项不释放）随本票一并修，不另立票——它们就是「压成一格」的直接后果。
+- 2026-09-07 · 通道 3（接续会话，21:2x）：上一会话在 `e7c44522` 上跑完 gofmt / build / vet / 清点零差 / 探针后崩溃（用户 21:2x 在队列报；台账 `0ec68b23` 停在 19:14 的 working 报，无完工报），本票完成记录写到一半未提交、含 DSN 全仓那一格没落字。本会话在同一 detached 树 `idp-parcel-mcp3-verify`（仍钉 `e7c44522`，`status --untracked-files=all` 零行）重跑含 DSN 全仓与探针，结果写进「验证」段；分支五笔一字未动，只补本 .md。`git cherry origin/main mcp3-sa03`（`origin/main = fc90622a`，21:2x fetch 后量得）五笔全 `+`，尚未进 main。
