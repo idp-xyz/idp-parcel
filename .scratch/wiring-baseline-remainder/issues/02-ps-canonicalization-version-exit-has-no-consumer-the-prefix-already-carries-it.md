@@ -1,0 +1,40 @@
+# 规范化版本报出口零消费者：版本已随摘要前缀同行，真渠道 Intake 也不需要它
+
+Category: chore
+Status: draft——只读取证（MCP-6，锚 `2efef58e`），PS 地盘归 MCP-2；交 MCP-1 派
+Blocked by: 无（二选一都是 PS 地盘内的小改，不等任何上游）
+
+## 条目
+
+`internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion`（`payload_canonicalization.go`）。基线理由行：「版本报出口留在名单上：至今零生产调用点，接它的仍是真渠道那笔工作」。
+
+## 它是什么
+
+`CurrentPayloadCanonicalizationVersion()` 返回常量 `payloadCanonicalizationVersion`（此刻 `PSC-1`），注释「按其他取值记录的摘要，本构建无法重算」。同文件 `CanonicalizeSubmissionPayload` 产出的摘要串**自带版本前缀**（`PSC-1:<sha256>`），其注释写明「前缀让版本随既有存储同行，零迁移」，并把「跨版本的比较纪律（版本不同不是冲突、回放按原版本重新规范化）」留给「引入 PSC-2 的那笔工作按前缀取版本再分支」。
+
+## 今天的样子
+
+- 摘要函数已接：隔离 Intake（`adapters/http/isolated_write_intake.go`）调 `CanonicalizeSubmissionPayload`；ADR-0091 把摘要函数剪出了名单。
+- 版本出口全仓非测试零引用。`PayloadDigest` 上没有按前缀取版本的方法；没有任何比较两枚摘要的代码按版本分支——今天只有一个版本，那条分支没有代码可走。
+- **基线那句「接它的仍是真渠道那笔工作」取证不支持**：真渠道 Intake 与隔离 Intake 走同一个 `CanonicalizeSubmissionPayload`，版本已经在摘要串里，Intake 没有理由再单独问一次版本。PAR-INT-01 供的是渠道字段词表，与版本出口无关。
+
+## 该有的调用方
+
+**引入 PSC-2 那笔工作里的重放分类分支**：比较存量摘要与新算摘要之前先按前缀取版本，版本不同即「不是冲突、按原版本重新规范化」（ADR-0014），那一步要问「本构建支持哪一版 / 能不能按记录的那一版重算」——这才是这个出口的用处。另一个可能的消费方是治理读面（报出当前规范化版本供核对），今天没有这样的读面。
+
+## 三分
+
+两选一，交 PS 地盘裁，**不建议维持现状那句「等真渠道」**：
+
+- **(b) 删**：函数体一行，PSC-2 落地时随分支一起回来；基线少一条，`payloadCanonicalizationVersion` 常量留在包内继续被 `CanonicalizeSubmissionPayload` 用。代价：PSC-2 那天要记得重新导出——那笔工作本来就要读这个文件，漏掉的概率低。
+- **(c) 留待**：理由行改写为「调用方是引入 PSC-2 时的重放分类分支（按前缀取版本再分支，ADR-0014），那一层随 PSC-2 落；真渠道 Intake 不是它的调用方」。代价：一条明知今天没有分支可走的条目继续躺在名单里。
+
+两边都比现状诚实。若取 (b)，`decimal.go` 那段「同文件已有正主时别再开只做转发的构造器」的教训在这里不适用——它不是转发，是零消费者。
+
+## 能不能归到已认可的留待
+
+不能，也不需要：它缺的不是实例值，是第二个规范化版本。
+
+## 边界
+
+本票不改代码、不改基线；PSC-2 何时引入不归本票（寄收件范围与服务要求拿到自己的领域模型那天，见 `payloadCanonicalizationVersion` 的注释）。

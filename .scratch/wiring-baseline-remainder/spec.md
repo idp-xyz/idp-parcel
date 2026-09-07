@@ -1,0 +1,34 @@
+# 生产接线棘轮基线余项：九条零调用点导出工厂的逐条处置
+
+Category: chore
+Status: in-progress——PP 四条已在本目录第一笔处置（三删一留，分支 `mcp6-pp-ratchet` 的 `1d13d510`，重放进 main 后此处补 main 上的 SHA）；PS 二条、PC 三条只读取证立票 01–05 交 MCP-1 派；PP 两张后继票 06/07 记的是删与留各自留下的那件事
+
+## 来源
+
+- [`completion-assessment-2026-09-04`](../completion-assessment-2026-09-04.md) 剩余机制缺口第 2 项：棘轮基线九条零生产调用点的导出工厂（PS 2、PC 3、PP 4）。
+- [`mechanism-executor-triage/spec.md`](../mechanism-executor-triage/spec.md)「处置裁决」第 2 条余项：PP 平行第二写法删、`ParseCanonical` 二选一——该目录 resolved 时自注「应立而未立」。
+- 2026-09-02 那次裁决把「零生产调用点的导出领域工厂」计入机制差量；`internal/architecture/production_wiring_baseline.txt` 头注是纪律（剪一条前三分成因、记数钉 SHA 两法同得、理由行写「谁是调用方、那一层何时落」）。
+- MCP-1 2026-09-07 派单（task `2fd68c18`），owner 授权自决口径。
+
+## 取证锚
+
+`2efef58e`（远端 main tip；与派单写的 `ffa6bd0e` 只差一笔 `tasks.md`）。基线在该检出上两法同得 **9** 条。下表的「今天」都指这一刻；名单是活的，读表前先看条目还在不在基线里。
+
+## 逐条
+
+| 条目 | 上下文 | 三分 | 落点 | 票 |
+|---|---|---|---|---|
+| `AssessSafeHandoff` | PS | 支路未接（缺出向缝 + 编排步） | 只读取证，PS 地盘 MCP-2 | [01](./issues/01-ps-safe-handoff-is-assessed-nowhere-because-nothing-hands-over.md) |
+| `CurrentPayloadCanonicalizationVersion` | PS | 二选一：删，或理由行改指 PSC-2 | 只读取证，PS 地盘 MCP-2 | [02](./issues/02-ps-canonicalization-version-exit-has-no-consumer-the-prefix-already-carries-it.md) |
+| `ResolveCreditPolicy` | PC | 支路未接（缺 PC→SA 授信额度缝） | 只读取证，PC 地盘 MCP-3 | [03](./issues/03-pc-credit-basis-is-never-asked-for-the-pc-to-sa-seam-does-not-exist.md) |
+| `ManualReviewRequirementFor` | PC | 支路未接，先裁「谁有权」命名 | 只读取证，PC 地盘 MCP-3 | [04](./issues/04-pc-manual-review-predicate-answers-who-may-not-whether-and-nobody-asks-either.md) |
+| `ValidateBeforeDecision` | PC | 死码（被闭包形态取代） | 只读取证，PC 地盘 MCP-3 | [05](./issues/05-pc-single-basis-revalidation-was-superseded-by-the-closure-form.md) |
+| `ReplayPricingEvaluation` | PP | 有意留待（调用方 PN-08 W02，三件缺口） | 理由行已改写；执行器另立 | [06](./issues/06-pp-replay-pricing-evaluation-has-no-executor.md) |
+| `MarshalPricingPlanSnapshot` / `RehydratePricingPlanSnapshot` | PP | 死码（平行第二写法），已删 | `1d13d510` | — |
+| `ParseCanonical` | PP | 死码（守卫接不到它自称的边界），已删 | `1d13d510`；它自称要守的事另立 | [07](./issues/07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md) |
+
+## 边界
+
+- 本目录对 PS/PC 五条**只读取证、不改代码、不改基线**：PS 地盘此刻是 MCP-2（ftr/10），PC 地盘是 MCP-3（pc-gaps/07）。票面写清应该的调用方、UC 步、缺哪一层、能否归已认可留待；先接哪张归 MCP-1 派。
+- PP 四条的代码与基线改动在隔离分支上，不碰共享树；重放进 main 时基线文件按「共享文件：占号、逐块核」纪律。
+- 「已认可留待」指 r27 交用户认可的那份清单（SA 三口目录读口 + PS `PAR-COM-13`、`BD-PS-009`、VE 真实渠道凭证、外部标识关系子域、NR `PAR-NET-14`）。五条 PS/PC 里没有一条能整条归进去——每一条缺的都是缝或执行器，不是实例值。
