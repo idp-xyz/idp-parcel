@@ -1,7 +1,7 @@
 # 资料修订的生产入口（机制半边）：端点 + `UnconfiguredIntake{}` + 两层边界壳，接上 `AmendCustomerSourceDataHandler`
 
 Category: enhancement
-Status: in-progress——MCP-1 代裁（owner 授权，2026-09-07，03 票 Q3「生产入口现在接」）拆出，通道 2 按 task-b77525c9 ② 在分支 `mcp2-ps-ports`（基线远端 main `0f84c0ec`）实施
+Status: resolved——2026-09-07 通道 2 在分支 `mcp2-ps-ports`（基线 `08f54867`）完成：封存笔 `38c2aa82`（旧会话在途产出原样入库）+ 交叉验证补格 `a1a1d16f` + 清点 `baff5fdd`；完成记录见 Comments。此前 in-progress——MCP-1 代裁（owner 授权，2026-09-07，03 票 Q3「生产入口现在接」）拆出，通道 2 按 task-b77525c9 ② 实施
 Blocked by: 无
 
 ## 缺口
@@ -37,3 +37,11 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-07 · 通道 2：按 MCP-1 代裁立票并开工（in-progress）。
+- 2026-09-07 · 通道 2（新会话，task-d5558bc6 接管）：**完成记录。**
+  - **落点**（分支 `mcp2-ps-ports`，基线 `08f54867`）：`38c2aa82` 封存旧会话在途十二件（一字未改；封存依据只记 mtime 11:39–11:45、分支 tip、12:03 点名自报）；`a1a1d16f` 交叉验证补两格；`baff5fdd` 机制清点重生成。
+  - **做什么 1–5 逐条**：1 端点文件（`SourceDataAmendmentIntake` / `AmendmentHandler` / `NewAmendCustomerSourceDataEndpoint`，`UnconfiguredIntake.IntakeSourceDataAmendment` 一律 `ErrAccessChannelNotConfigured`，响应形状封闭）、2 两只未配置适配器、3 `amendmentBoundary` + `sourceDataHandoffBoundary` + `buildCustomerAmendmentOrchestration(db)`、4 端点行 / `main.go` / `unwiredAmendment` / 探针行、5 三条真库用例——全部在封存笔里，形状与票面一致。
+  - **交叉验证**（parallel-sessions「先写自己第一片 red 再读对方代码」）：只从本票判据与编排头注另写两条真库用例，对着封存那份实现首跑即绿，判据与装配用例①②逐条对得上，算一次独立印证，副本不留。对不上的两格补进 `assemble_customer_amendment_test.go`：①加「停点之后修订请求的来源保全行仍在」；新增④ `TestTheHonestStopIsObservableAtTheAmendmentEndpoint`——生产编排接在真端点后面答 200、`outcome=UNDECIDED`、`pendingReason=SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED`、带 `continuationReference`、不带 `sourceDataVersionId`（端点用例头注说好逐格映射由本包经真编排补，此前没人补）。
+  - **完成判据**：端点在探针表且未配置态 403 `ACCESS_CHANNEL_NOT_CONFIGURED`（`TestEveryAssembledEndpointAnswersUnconfigured` 与 `TestUnconfiguredIntakeRefusesWithoutReadingTheBody/amendment`）；四条装配用例含 DSN PASS 非 SKIP；`gofmt -l` 空、`go build` / `go vet` 退 0；含 DSN 全仓 `go test -p 1 -count=1 -v ./...` 于 `baff5fdd` 退 0：`--- FAIL` 0、`--- SKIP` 0（真库门禁全部实跑）、`--- PASS` 6922（下界）、99 个包 `ok`；`gofmt -l .` 空、`go vet ./...` 退 0；清点端点 98→99。
+  - **清点读法**：端口两口径各降 2（`SourceDataAmendmentAuthorizer` / `SourceDataRuleDeclaration` 出了缺口名单）是两只**未配置**适配器被判据 B 计为实现，不是提供方半边落地——02、03 的 PC 侧仍开。
+  - **未在本票补的一格**：`RECORDED` 201 无真编排用例——走到它要`已接受`委托加登记为`允许`的矩阵，本包今天没有把委托推到`已接受`的夹具，矩阵那半属 02 的 PC 半边；由端点代码与 `UNNAMED_OUTCOME` 用例守形。PC 半边落地时随「换真适配器」一并补。
+  - 「一格诚实的缝」（版本与意图不同事务）照票面未动，仍归 PS owner 另裁。
