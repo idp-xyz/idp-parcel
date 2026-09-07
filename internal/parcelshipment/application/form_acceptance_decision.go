@@ -144,8 +144,9 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	// 判断先读回来，因为它带着这些判断所采用的那次解析——提交决定前该走重解还是首次解析，
 	// 由它决定。依据不再适用时也要读：先前可能已经形成过冻结（`AT-PC-026` 的提交前失效），
 	// 而拒绝要按原关联把它解除。资金不会因为解析结论变了就自己回来。
+	// 只读本命令指名的提交版本：决定针对当前版本形成，旧版的判断不进它（ADR-0045）。
 	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID)
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion)
 	if err != nil {
 		return handler.undecided(ctx, command, RecordedJudgmentsUnavailable, request.State()), nil
 	}

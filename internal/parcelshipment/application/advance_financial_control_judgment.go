@@ -161,7 +161,7 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
 	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID, control); err != nil {
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion, control); err != nil {
 		return handler.undecided(ctx, command, JudgmentNotRecorded), nil
 	}
 

@@ -64,6 +64,11 @@ func TestAcceptanceJudgmentResolvesBasisThenFormsAsOfThenAssesses(t *testing.T) 
 	if !judgement.AsOf().At().Equal(policyFormedAsOf) {
 		t.Fatal("the provider did not echo the asOf it judged under")
 	}
+	// 判断记在命令指名的提交版本上（ADR-0045 的版本维）：记错版本在替身上不会报错，只会在真库里
+	// 让新版本的重判被旧版那份吞成重放。
+	if got := fixture.requests.recordedVersions; len(got) != 1 || got[0] != fixture.command(t).SubmissionVersion {
+		t.Fatalf("judgement recorded under versions %v, want exactly the command's %s", got, fixture.command(t).SubmissionVersion)
+	}
 }
 
 // Covers: UC-NR-002「任何实现不得把不可达直接写成委托已拒绝」— 三值判断被记录，委托
@@ -673,6 +678,9 @@ type judgmentRequestStore struct {
 	// recordedTenants 收下每次记录时编排给出的租户。它存在是为了让「编排确实把租户传下去了」
 	// 可被断言——租户漏传在替身上不会报错，只会在真库里变成一次跨租户读写。
 	recordedTenants []domain.TenantID
+	// recordedVersions 收下两类判断记录时编排给出的提交版本，理由同上：版本传错在替身上不会
+	// 报错，只会在真库里让一份判断记到它从未判过的那一版（ADR-0045 的版本维）。
+	recordedVersions []domain.SubmissionVersionID
 }
 
 // RecordAdoptedCommercialResolution 用自己的错误开关，不共用 err：记不下所采用的解析与
@@ -695,9 +703,11 @@ func (store *judgmentRequestStore) RecordReachabilityJudgment(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	_ domain.ReachabilityJudgment,
 ) error {
 	store.recordedTenants = append(store.recordedTenants, tenant)
+	store.recordedVersions = append(store.recordedVersions, version)
 	return store.err
 }
 
@@ -705,9 +715,11 @@ func (store *judgmentRequestStore) RecordFinancialControlResult(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	result domain.FinancialControlResult,
 ) error {
 	store.recordedTenants = append(store.recordedTenants, tenant)
+	store.recordedVersions = append(store.recordedVersions, version)
 	if store.err != nil {
 		return store.err
 	}

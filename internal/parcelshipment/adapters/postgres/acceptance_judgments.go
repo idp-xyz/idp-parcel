@@ -36,12 +36,14 @@ func NewAcceptanceJudgments(db *bentopg.DB) (*AcceptanceJudgments, error) {
 
 // RecordReachabilityJudgment 把一个已采用的可达性判断追加到任务上。
 //
-// 同一成员的重判各占一行，键上带时点：重判必须以新时点发起（`AT-PS-037`），同成员同时点
-// 再来一次是权威重放既有判断，保留先到者。
+// 同一成员的重判各占一行，键上带提交版本与时点：重判必须以新时点发起（`AT-PS-037`），同版本
+// 同成员同时点再来一次是权威重放既有判断，保留先到者。版本在键里是为了让新版本的判断在时点
+// 策略把两版钉在同一时点时仍成为自己那一版的行，而不是被旧版那份吞成重放（迁移 0018）。
 func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 	ctx context.Context,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	judgment domain.ReachabilityJudgment,
 ) error {
 	executor, err := repository.db.RequireExecutor(ctx)
@@ -52,13 +54,14 @@ func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 	asOf := judgment.AsOf()
 	_, err = executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
-			(tenant_id, shipment_request_id, parcel_id, as_of_at,
+			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
+		version.String(),
 		judgment.DeclaredParcelID().String(),
 		asOf.At().UTC(),
 		nullableText(judgment.JudgmentID().String()),
@@ -76,11 +79,12 @@ func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 
 // RecordFinancialControlResult 把一次已采用的接受前财务控制结果追加到任务上。
 //
-// 不按成员分行：控制作用在整份委托上。键上同样带时点，理由与可达性一致。
+// 不按成员分行：控制作用在整份委托上。键上同样带提交版本与时点，理由与可达性一致。
 func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 	ctx context.Context,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 	result domain.FinancialControlResult,
 ) error {
 	executor, err := repository.db.RequireExecutor(ctx)
@@ -91,13 +95,14 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 	asOf := result.AsOf()
 	_, err = executor.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_financial_control
-			(tenant_id, shipment_request_id, as_of_at,
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
 			 result_id, control_outcome, basis_ref,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
+		version.String(),
 		asOf.At().UTC(),
 		nullableText(result.ResultID().String()),
 		result.Outcome().String(),
@@ -178,26 +183,30 @@ func (repository *AcceptanceJudgments) RecordAdoptedCommercialResolution(
 	return nil
 }
 
-// LoadRecordedJudgments 取回这份委托当前采用的全部权威判断。
+// LoadRecordedJudgments 取回这份委托在这一提交版本上当前采用的全部权威判断。
 //
 // 三样各自缺席时一律留零值，不凑：财务控制的零值按端口约定就是「尚未形成」，翻译函数据零值
 // 形成`无法判定`；采用解析的零值是「还没有任何一轮采用过依据」，编排据它走首次解析而不是
 // 重解。在这里造一个空壳结果，等于把一次没执行的控制写成通过。
+//
+// 两类判断只读本版的行：旧版本的判断是对旧内容作出的，留在库里作历史，不进当前版本的决定
+// （端口注释与迁移 0018 头注）。采用解析每份委托一行，不分版本。
 func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 	ctx context.Context,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 ) (ports.RecordedJudgments, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.RecordedJudgments{}, fmt.Errorf("load recorded judgments: %w", err)
 	}
 
-	reachability, err := loadReachabilityJudgments(ctx, querier, tenant, requestID)
+	reachability, err := loadReachabilityJudgments(ctx, querier, tenant, requestID, version)
 	if err != nil {
 		return ports.RecordedJudgments{}, err
 	}
-	control, err := loadFinancialControl(ctx, querier, tenant, requestID)
+	control, err := loadFinancialControl(ctx, querier, tenant, requestID, version)
 	if err != nil {
 		return ports.RecordedJudgments{}, err
 	}
@@ -212,7 +221,7 @@ func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 	}, nil
 }
 
-// loadReachabilityJudgments 逐成员只交回当前采用的那一份：按时点取最新。
+// loadReachabilityJudgments 在本版内逐成员只交回当前采用的那一份：按时点取最新。
 //
 // 一个成员交回两份是不行的——形成决定那一步逐条译成校验结果，一份被推翻的`不可达`会连同
 // 重判后的`可达`一起进 Decide，而任何一项确定性失败都拒绝整份版本。`AT-PS-037` 要的正是
@@ -224,6 +233,7 @@ func loadReachabilityJudgments(
 	querier bentopg.Querier,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 ) ([]domain.ReachabilityJudgment, error) {
 	rows, err := querier.Query(ctx,
 		`SELECT DISTINCT ON (parcel_id)
@@ -232,9 +242,11 @@ func loadReachabilityJudgments(
 		   FROM parcel_shipment.acceptance_reachability_judgment
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
+		    AND submission_version = $3
 		  ORDER BY parcel_id, as_of_at DESC`,
 		tenant.String(),
 		requestID.String(),
+		version.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load reachability judgments: %w", err)
@@ -271,13 +283,14 @@ func loadReachabilityJudgments(
 	return judgments, nil
 }
 
-// loadFinancialControl 交回当前采用的那一次控制结果，同样按时点取最新。没有行时交回零值：
+// loadFinancialControl 交回本版当前采用的那一次控制结果，同样按时点取最新。没有行时交回零值：
 // 「从未形成控制」与「形成了一次通不过的控制」在读的人眼里必须不同。
 func loadFinancialControl(
 	ctx context.Context,
 	querier bentopg.Querier,
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 ) (domain.FinancialControlResult, error) {
 	var (
 		outcomeRaw                    string
@@ -291,10 +304,12 @@ func loadFinancialControl(
 		   FROM parcel_shipment.acceptance_financial_control
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
+		    AND submission_version = $3
 		  ORDER BY as_of_at DESC
 		  LIMIT 1`,
 		tenant.String(),
 		requestID.String(),
+		version.String(),
 	).Scan(&resultID, &outcomeRaw, &basisRef, &asOfAt, &kindRaw, &semantics, &policyRaw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.FinancialControlResult{}, nil

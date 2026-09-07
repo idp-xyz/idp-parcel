@@ -462,6 +462,7 @@ func (unwiredReviewJudgments) LoadRecordedJudgments(
 	context.Context,
 	shipmentdomain.TenantID,
 	shipmentdomain.ShipmentRequestID,
+	shipmentdomain.SubmissionVersionID,
 ) (shipmentports.RecordedJudgments, error) {
 	return shipmentports.RecordedJudgments{}, errOrchestrationNotWired
 }

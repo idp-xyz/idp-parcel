@@ -325,8 +325,9 @@ func (handler *WithdrawShipmentRequestHandler) releaseFreeze(
 	ctx context.Context,
 	command WithdrawShipmentRequestCommand,
 ) domain.OwnershipContinuationReference {
+	// 释放的是本版形成的那次冻结：ControlReleaseRequest 本就按提交版本关联，读判断也按同一版。
 	recorded, err := handler.deps.Judgments.LoadRecordedJudgments(
-		ctx, command.Identity.TenantID(), command.ShipmentRequestID)
+		ctx, command.Identity.TenantID(), command.ShipmentRequestID, command.SubmissionVersion)
 	if err != nil {
 		return handler.compensationReference(command, RecordedJudgmentsUnavailable)
 	}

@@ -38,12 +38,13 @@ var _ AcceptanceReviewQueueReader = ports.AcceptanceReviewQueue(nil)
 
 // RecordedJudgmentsReader 是详情分支消费的判断读口：复核角色审的正是「已记录的权威
 // 判断都说了什么」，可达性、财务控制与采用解析三样照登记转写，与形成决定那一步读的
-// 是同一批判断行。
+// 是同一批判断行——也按同一个提交版本读（详情里的当前版本），复核看的是当前版本的判断。
 type RecordedJudgmentsReader interface {
 	LoadRecordedJudgments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 	) (ports.RecordedJudgments, error)
 }
 
@@ -129,7 +130,8 @@ func serveReviewCase(
 		writeProblem(response, http.StatusNotFound, codeRequestNotVisible)
 		return
 	}
-	recorded, err := judgments.LoadRecordedJudgments(request.Context(), query.Scope.TenantID(), query.RequestID)
+	recorded, err := judgments.LoadRecordedJudgments(
+		request.Context(), query.Scope.TenantID(), query.RequestID, record.SubmissionVersionID)
 	if err != nil {
 		// 判断读不回同样是答案未形成：详情缺了判断三组就不是复核要看的那份详情，
 		// 砍半作答会让复核对着不完整的事实拍板。

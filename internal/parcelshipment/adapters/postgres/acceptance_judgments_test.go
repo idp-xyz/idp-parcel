@@ -41,19 +41,19 @@ func TestAdoptedJudgmentsRoundTripThroughTheTask(t *testing.T) {
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
 
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, reachable); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), reachable); err != nil {
 			return err
 		}
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, notApplicable); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), notApplicable); err != nil {
 			return err
 		}
-		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, held); err != nil {
+		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), held); err != nil {
 			return err
 		}
 		return judgments.RecordAdoptedCommercialResolution(txCtx, tenant, requestID, resolution)
 	})
 
-	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID)
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("读回已采用判断：%v", err)
 	}
@@ -89,7 +89,7 @@ func TestAnUnjudgedTaskReadsBackAsNotYetFormed(t *testing.T) {
 	judgments, _, _ := newAcceptanceJudgments(t)
 
 	recorded, err := judgments.LoadRecordedJudgments(t.Context(),
-		psTenant(t, "tenant-1"), taskRequestID(t, "REQ-NEVER-JUDGED"))
+		psTenant(t, "tenant-1"), taskRequestID(t, "REQ-NEVER-JUDGED"), taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("读回已采用判断：%v", err)
 	}
@@ -120,19 +120,19 @@ func TestARejudgedMemberDecidesByItsLatestJudgment(t *testing.T) {
 	laterControl := financialControlResult(t, domain.FinancialControlHeld, "SAC-2", "", taskAsOfSecond)
 
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, superseded); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), superseded); err != nil {
 			return err
 		}
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, rejudged); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), rejudged); err != nil {
 			return err
 		}
-		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, firstControl); err != nil {
+		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), firstControl); err != nil {
 			return err
 		}
-		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, laterControl)
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), laterControl)
 	})
 
-	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID)
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("读回已采用判断：%v", err)
 	}
@@ -153,7 +153,76 @@ func TestARejudgedMemberDecidesByItsLatestJudgment(t *testing.T) {
 	}
 }
 
-// TestRecordingTheSameJudgmentTwiceKeepsTheFirst 证同成员同时点重复到达是重放：保留先到
+// TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor 证判断账的版本维（ADR-0045
+// Consequences 预告的后续项，票 first-tenant-runway/10）：受控补充形成新版本后，同一成员在
+// **同一时点**的重判是新版本自己的行，不是旧版本那份的重放；按版本读只交回本版，旧版的判断留在
+// 库里作历史；从未判过的版本读回零值——旧版的`可达`不得替新版本通过接受。
+//
+// 两版同时点不是巧合而是要守的那格：时点由规则包声明的策略形成（`PAR-COM-14`），「以首次提交
+// 时刻为时点」是合法声明，判断账不能靠时点变化才认出新版本。
+func TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+	first, supplemented, unjudged := taskVersion(t, "VER-1"), taskVersion(t, "VER-2"), taskVersion(t, "VER-3")
+
+	insufficient := reachabilityJudgment(t, "parcel-1", domain.ReachabilityInsufficientEvidence, "NRJ-1", "", taskAsOfFirst)
+	reachable := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-2", "", taskAsOfFirst)
+	firstControl := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
+	laterControl := financialControlResult(t, domain.FinancialControlNotApplicable, "", "PC-NO-CONTROL-2", taskAsOfFirst)
+
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, first, insufficient); err != nil {
+			return err
+		}
+		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, first, firstControl); err != nil {
+			return err
+		}
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, supplemented, reachable); err != nil {
+			return err
+		}
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, supplemented, laterControl)
+	})
+
+	current, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, supplemented)
+	if err != nil {
+		t.Fatalf("读回新版本的判断：%v", err)
+	}
+	if len(current.Reachability) != 1 || current.Reachability[0] != reachable {
+		t.Fatalf("新版本读回 %+v，want 恰好它自己那份`可达`——同时点的重判被当成旧版的重放吞掉了", current.Reachability)
+	}
+	if current.FinancialControl != laterControl {
+		t.Fatalf("新版本读回的控制结果 %+v，want 本版那次", current.FinancialControl)
+	}
+
+	history, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, first)
+	if err != nil {
+		t.Fatalf("读回旧版本的判断：%v", err)
+	}
+	if len(history.Reachability) != 1 || history.Reachability[0] != insufficient {
+		t.Fatalf("旧版本读回 %+v，want 它自己那份`证据不足`——历史没有留住", history.Reachability)
+	}
+	if history.FinancialControl != firstControl {
+		t.Fatalf("旧版本读回的控制结果 %+v，want 首版那次", history.FinancialControl)
+	}
+
+	never, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, unjudged)
+	if err != nil {
+		t.Fatalf("读回未判版本：%v", err)
+	}
+	if len(never.Reachability) != 0 || never.FinancialControl.Outcome() != domain.FinancialControlOutcomeInvalid {
+		t.Fatalf("从未判过的版本读回了别的版本的判断：%+v", never)
+	}
+
+	if rows := countTaskRows(t, pool,
+		`SELECT count(*) FROM parcel_shipment.acceptance_reachability_judgment
+		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND parcel_id = 'parcel-1'`,
+		"tenant-1", "REQ-1"); rows != 2 {
+		t.Fatalf("库里 %d 行判断，want 2——两版同时点各占一行", rows)
+	}
+}
+
+// TestRecordingTheSameJudgmentTwiceKeepsTheFirst 证同版本同成员同时点重复到达是重放：保留先到
 // 者，且撞键后事务仍可用（编排还要在同一事务里继续办事）。
 func TestRecordingTheSameJudgmentTwiceKeepsTheFirst(t *testing.T) {
 	judgments, transactor, pool := newAcceptanceJudgments(t)
@@ -164,17 +233,17 @@ func TestRecordingTheSameJudgmentTwiceKeepsTheFirst(t *testing.T) {
 	// 同一时点上的另一份答复：权威对同一业务时刻只该有一个答案，第二份是重放而不是新判断。
 	second := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-2", "", taskAsOfFirst)
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		return judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, first)
+		return judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), first)
 	})
 
 	// 闭包只做 IO 并把结果带出来：t.Fatal 系走 runtime.Goexit，回调因而永不返回，
 	// WithinTransaction 的提交与回滚两条分支都会被跳过。
 	var replayed []domain.ReachabilityJudgment
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, second); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), second); err != nil {
 			return err
 		}
-		recorded, err := judgments.LoadRecordedJudgments(txCtx, tenant, requestID)
+		recorded, err := judgments.LoadRecordedJudgments(txCtx, tenant, requestID, taskVersion(t, "VER-1"))
 		replayed = recorded.Reachability
 		return err
 	})
@@ -209,7 +278,7 @@ func TestTheAdoptedResolutionIsReplacedByTheLaterOne(t *testing.T) {
 		return judgments.RecordAdoptedCommercialResolution(txCtx, tenant, requestID, revalidated)
 	})
 
-	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID)
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("读回已采用判断：%v", err)
 	}
@@ -274,17 +343,17 @@ func TestAnotherTenantReadsNoneOfTheseJudgments(t *testing.T) {
 	control := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordReachabilityJudgment(txCtx, owner, requestID, judgment); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, owner, requestID, taskVersion(t, "VER-1"), judgment); err != nil {
 			return err
 		}
-		if err := judgments.RecordFinancialControlResult(txCtx, owner, requestID, control); err != nil {
+		if err := judgments.RecordFinancialControlResult(txCtx, owner, requestID, taskVersion(t, "VER-1"), control); err != nil {
 			return err
 		}
 		return judgments.RecordAdoptedCommercialResolution(txCtx, owner, requestID, resolution)
 	})
 
 	// 同一个委托号，另一个租户：租户漏传时这一支会整份读到本租户的判断。
-	elsewhere, err := judgments.LoadRecordedJudgments(ctx, psTenant(t, "tenant-b"), requestID)
+	elsewhere, err := judgments.LoadRecordedJudgments(ctx, psTenant(t, "tenant-b"), requestID, taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("他租户查询出错：%v", err)
 	}
@@ -307,10 +376,10 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
-			(tenant_id, shipment_request_id, parcel_id, as_of_at,
+			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ('tenant-1', 'REQ-x', 'parcel-x', now(),
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-x', now(),
 		         NULL, 'NOT_APPLICABLE', NULL,
 		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
 		t.Error("一次没有依据的`不适用`按 NULL 溜进了判断库——它与一次悄悄放行分不开")
@@ -318,24 +387,48 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
-			(tenant_id, shipment_request_id, parcel_id, as_of_at,
+			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ('tenant-1', 'REQ-x', 'parcel-y', now(),
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-y', now(),
 		         NULL, 'REACHABLE', NULL,
 		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
 		t.Error("一份没有权威标识的`可达`按 NULL 溜进了判断库")
 	}
 
+	// 版本是键的一维，不是可空的备注列：一行不知道属于哪一版的判断，读口按版本取时永远取不到，
+	// 与没记过分不开。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
+			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
+			 judgment_id, judgment_value, basis_ref,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-x', '  ', 'parcel-z', now(),
+		         'NRJ-z', 'REACHABLE', NULL,
+		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
+		t.Error("一份不属于任何提交版本的判断溜进了判断库")
+	}
+
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_financial_control
-			(tenant_id, shipment_request_id, as_of_at,
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
 			 result_id, control_outcome, basis_ref,
 			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ('tenant-1', 'REQ-x', now(),
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', now(),
 		         'SAC-x', 'NOT_APPLICABLE', NULL,
 		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`); err == nil {
 		t.Error("一次没有依据的`明确无控制`溜进了控制库——它与「默认信用通过」分不开")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_financial_control
+			(tenant_id, shipment_request_id, submission_version, as_of_at,
+			 result_id, control_outcome, basis_ref,
+			 as_of_kind, as_of_semantics, as_of_policy)
+		 VALUES ('tenant-1', 'REQ-x', '', now(),
+		         'SAC-y', 'HELD', NULL,
+		         'FINANCIAL_CONTROL', 'sem-1', 'policy-1')`); err == nil {
+		t.Error("一次不属于任何提交版本的控制结果溜进了控制库")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -412,12 +505,12 @@ func TestAcceptanceJudgmentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	ctx := t.Context()
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	if err := judgments.RecordReachabilityJudgment(ctx, tenant, requestID,
+	if err := judgments.RecordReachabilityJudgment(ctx, tenant, requestID, taskVersion(t, "VER-1"),
 		reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录可达性判断应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if err := judgments.RecordFinancialControlResult(ctx, tenant, requestID,
+	if err := judgments.RecordFinancialControlResult(ctx, tenant, requestID, taskVersion(t, "VER-1"),
 		financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录控制结果应返回 ErrTransactionRequired，实得：%v", err)
@@ -445,10 +538,10 @@ func TestAcceptanceJudgmentRollbackLeavesNothingBehind(t *testing.T) {
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
 	attempt := taskAttempt(t, "JUDGMENT_NOT_RECORDED", domain.ResumeByInternalRetry, "CONT-a1b2", taskAttemptedAt)
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, judgment); err != nil {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), judgment); err != nil {
 			return err
 		}
-		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, control); err != nil {
+		if err := judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), control); err != nil {
 			return err
 		}
 		if err := judgments.RecordAdoptedCommercialResolution(txCtx, tenant, requestID, resolution); err != nil {
@@ -462,7 +555,7 @@ func TestAcceptanceJudgmentRollbackLeavesNothingBehind(t *testing.T) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
 
-	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID)
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
 	if err != nil {
 		t.Fatalf("读回已采用判断：%v", err)
 	}
@@ -493,6 +586,11 @@ func newAcceptanceJudgments(t *testing.T) (*adapter.AcceptanceJudgments, bentoap
 func taskRequestID(t *testing.T, raw string) domain.ShipmentRequestID {
 	t.Helper()
 	return mustBuild(t, domain.NewShipmentRequestID, raw)
+}
+
+func taskVersion(t *testing.T, raw string) domain.SubmissionVersionID {
+	t.Helper()
+	return mustBuild(t, domain.NewSubmissionVersionID, raw)
 }
 
 // taskJudgmentAsOf 造一份已由 party-commercial 校验回显的时点。回显政策必须另行构造——把

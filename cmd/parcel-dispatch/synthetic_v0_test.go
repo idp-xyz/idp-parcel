@@ -293,13 +293,15 @@ func (fixture *synVerticalFixture) recordPassingJudgments(t *testing.T, ctx cont
 		t.Fatalf("财务控制：%v", err)
 	}
 
+	// 判断记在当前提交版本上：形成决定按版本读判断（ADR-0045 的版本维），记错版本等于没记。
+	version := fixture.mustLoadRequest(t, ctx).CurrentSubmissionVersion().VersionID()
 	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
 		if err := fixture.judgments.RecordReachabilityJudgment(
-			txCtx, fixture.identity.TenantID(), fixture.requestID, reachable); err != nil {
+			txCtx, fixture.identity.TenantID(), fixture.requestID, version, reachable); err != nil {
 			return err
 		}
 		return fixture.judgments.RecordFinancialControlResult(
-			txCtx, fixture.identity.TenantID(), fixture.requestID, held)
+			txCtx, fixture.identity.TenantID(), fixture.requestID, version, held)
 	})
 }
 

@@ -31,11 +31,11 @@ import (
 // 权威口换成替身；受控补充的两层事务壳形状照 cmd/parcel-api 的 preservationBoundary /
 // supplementBoundary——生产壳在装配包里不可导入，由那边的装配用例取证。
 //
-// 权威替身按**提交版本**答：首版`证据不足`、新版本`可达`；判断时点也随版本推移一小时。后者不是
-// 为了让用例好过——判断账以（成员 + 时点）为键、读口按时点取最新且没有版本维（迁移 0005 头注写明这
-// 是 ADR-0045 的已知后续项），一条声明「时点随版本」的策略下新判断才成为新行；策略把两版钉在同一
-// 时点时，新判断会被 ON CONFLICT DO NOTHING 吞掉、决定仍读到旧的`证据不足`——那一格属判断账的版本
-// 维度，不在本票范围，见票 09 完工记录。
+// 可达性权威替身按**提交版本**答：首版`证据不足`、新版本`可达`。判断时点**两版相同**（synRAsOfAnchor）
+// ——这是刻意的：一份「以首次提交时刻为判断时点」的策略是规则包的合法声明，判断账不能靠时点变化才
+// 认出新版本。判断账以（成员 + 提交版本 + 时点）为键、读口按当前版本取（票 first-tenant-runway/10，
+// ADR-0045 Consequences 预告的版本维），新版本的`可达`因此成为自己那一版的行，决定读的也是这一版；
+// 没有版本维时它会被同键的 ON CONFLICT DO NOTHING 吞掉、决定仍读到旧的`证据不足`、链再次停等补充。
 
 const (
 	customerSupplementResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-submission-version-formed"
@@ -79,10 +79,8 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		t.Fatalf("构造接受决定交接：%v", err)
 	}
 	firstVersion := mustPS(t, psdomain.NewSubmissionVersionID, "SYN-VER-01")
-	commercial := &synRPerVersionAsOfCommercialBasis{
-		inner:        &synRSwitchableAsOfCommercialBasis{inner: &synRCommercialBasis{t: t}, t: t, configured: true},
-		firstVersion: firstVersion,
-	}
+	// 两版同一时点（见文件头）：时点策略对哪一版都答 synRAsOfAnchor。
+	commercial := &synRSwitchableAsOfCommercialBasis{inner: &synRCommercialBasis{t: t}, t: t, configured: true}
 	reachability := &synRPerVersionReachabilityAuthority{t: t, firstVersion: firstVersion}
 	decision := psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
 		Requests:     base.requests,
@@ -246,6 +244,10 @@ func TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope(t *te
 	}
 	if got := fixture.reachability.lastVersion.String(); got != synRSupplementVersionID {
 		t.Fatalf("续办一拍问权威用的版本 = %q, want 新版本 %s", got, synRSupplementVersionID)
+	}
+	// 两版同时点，判断账里仍是两行：新版本的`可达`是自己那一版的行，不是被同键吞掉的重放。
+	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.acceptance_reachability_judgment`); n != 2 {
+		t.Fatalf("可达性判断行数 = %d, want 2——新版本同时点的判断被当成旧版的重放吞掉了（ADR-0045 后续项）", n)
 	}
 
 	accepted := fixture.mustLoadRequest(t, ctx)
@@ -469,43 +471,6 @@ func (synRSupplementIdentities) NextAcceptanceDecisionTaskID(_ context.Context) 
 	return psdomain.NewAcceptanceDecisionTaskID(synRSupplementTaskID)
 }
 
-// synRPerVersionAsOfCommercialBasis 是商业依据替身（隔离合成 `S`）：解析、重校与规则声明照
-// synRSwitchableAsOfCommercialBasis（不要求人工复核、时点已配置），只把判断时点做成「随提交版本
-// 推移」——首版取锚点，之后每一版取锚点后一小时。理由见文件头：判断账没有版本维，只有新时点
-// 才让新版本的判断成为新行。
-type synRPerVersionAsOfCommercialBasis struct {
-	inner        *synRSwitchableAsOfCommercialBasis
-	firstVersion psdomain.SubmissionVersionID
-}
-
-func (double *synRPerVersionAsOfCommercialBasis) ResolveCommercialBasis(
-	ctx context.Context,
-	query psports.CommercialBasisQuery,
-) (psports.CommercialBasisResolution, error) {
-	return double.inner.ResolveCommercialBasis(ctx, query)
-}
-
-func (double *synRPerVersionAsOfCommercialBasis) FormJudgmentAsOf(
-	_ context.Context,
-	query psports.JudgmentAsOfQuery,
-) (psports.JudgmentAsOfFormation, error) {
-	at := synRAsOfAnchor
-	if query.SubmissionVersion != double.firstVersion {
-		at = at.Add(time.Hour)
-	}
-	return psports.JudgmentAsOfFormation{
-		Outcome: psports.JudgmentAsOfFormed,
-		AsOf:    synJudgmentAsOf(double.inner.t, query.Declared.Kind(), at),
-	}, nil
-}
-
-func (double *synRPerVersionAsOfCommercialBasis) RevalidateCommercialBasis(
-	ctx context.Context,
-	query psports.CommercialRevalidationQuery,
-) (psports.CommercialRevalidation, error) {
-	return double.inner.RevalidateCommercialBasis(ctx, query)
-}
-
 // synRPerVersionReachabilityAuthority 是 network-routing 权威替身（隔离合成 `S`）：对首版答
 // `证据不足`——正是要证的那格停顿；对之后的版本答`可达`，模拟客户补足了证据。判断标识按
 // （成员 + 版本）派生，时点原样回签。记下被问次数与最近一次的版本，用例据此证「重投不再问、
@@ -546,7 +511,6 @@ func (double *synRPerVersionReachabilityAuthority) AssessParcelReachability(
 }
 
 var (
-	_ psports.CommercialBasisResolver   = (*synRPerVersionAsOfCommercialBasis)(nil)
 	_ psports.ReachabilityAssessor      = (*synRPerVersionReachabilityAuthority)(nil)
 	_ psports.SubmissionIdentityFactory = synRSupplementIdentities{}
 )

@@ -37,6 +37,10 @@ func TestAllAdoptedJudgmentsPassingFormsAnAcceptance(t *testing.T) {
 	if fixture.requests.saved.State() != domain.ShipmentRequestAccepted {
 		t.Fatalf("saved state = %q, want ACCEPTED", fixture.requests.saved.State())
 	}
+	// 决定读的是命令指名那一版的判断（ADR-0045 的版本维）：读错版本会把旧版的判断用在新版本上。
+	if got := fixture.judgments.loadedVersions; len(got) != 1 || got[0] != fixture.command(t).SubmissionVersion {
+		t.Fatalf("judgments loaded for versions %v, want exactly the command's %s", got, fixture.command(t).SubmissionVersion)
+	}
 }
 
 // Covers: UC-PS-001 接受条件`接受前财务控制`「不得默认放行」— 控制从未形成时接受不成立。
@@ -968,14 +972,18 @@ type recordedJudgmentsDouble struct {
 	noAdoptedResolution bool
 	// loadedTenants 收下每次读取时编排给出的租户，供断言「租户确实传下去了」。
 	loadedTenants []domain.TenantID
+	// loadedVersions 收下每次读取时编排给出的提交版本，供断言「决定读的是命令指名那一版的判断」。
+	loadedVersions []domain.SubmissionVersionID
 }
 
 func (double *recordedJudgmentsDouble) LoadRecordedJudgments(
 	_ context.Context,
 	tenant domain.TenantID,
 	_ domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 ) (ports.RecordedJudgments, error) {
 	double.loadedTenants = append(double.loadedTenants, tenant)
+	double.loadedVersions = append(double.loadedVersions, version)
 	double.t.Helper()
 	if double.err != nil {
 		return ports.RecordedJudgments{}, double.err

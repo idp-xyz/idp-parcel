@@ -234,11 +234,17 @@ type RecordedJudgments struct {
 // 上的 `shipment_request_id_unique` 是（租户 + 委托标识）而不是单列唯一，所以两个租户各有
 // 一份同号委托不违反任何约束。只凭委托标识定不到一份委托，跨租户同号的两份就会读到彼此的
 // 判断。按 ADR-0003 租户是最高数据隔离边界，跨越它必须在签名上看得见。
+//
+// 提交版本同样在签名上：可达性与财务控制只交回**这一版**的判断（ADR-0045 Consequences 预告的
+// 版本维）。旧版本的判断是对旧内容作出的，受控补充正因内容变了才形成新版本——读跨版本最新会让
+// 新版本尚未重判时拿旧版的`可达`去接受，不读版本会让同时点的新判断被旧判断压住；两个方向都是
+// 把一版的判断用在另一版上。采用解析不分版本：每轮重解、后写覆盖，读回的恒是本轮那次。
 type RecordedJudgmentReader interface {
 	LoadRecordedJudgments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 	) (RecordedJudgments, error)
 }
 
@@ -1585,17 +1591,23 @@ type LabelTransactionViews interface {
 // RecordProcessingAttempt 记的是没能推进的那一轮。用例要求任务「追加判断与处理尝试」两样
 // 都留：只留成功的判断，一份卡了十轮的委托看起来会和刚建单的一模一样。
 // 四个方法都收租户，理由与 RecordedJudgmentReader 同一条：委托标识的唯一性按租户圈定。
+//
+// 两类判断还收提交版本：判断是对某一版内容作出的，任务随版本重立（ADR-0045），记下它属于哪一版，
+// 读口才能只把当前版本的判断交给形成决定那一步。处理尝试与采用解析不收——尝试不参与决定，续办
+// 引用的派生已含版本；采用解析每轮按版本重解、后写覆盖。
 type AcceptanceJudgmentRecorder interface {
 	RecordReachabilityJudgment(
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 		judgment domain.ReachabilityJudgment,
 	) error
 	RecordFinancialControlResult(
 		ctx context.Context,
 		tenant domain.TenantID,
 		requestID domain.ShipmentRequestID,
+		version domain.SubmissionVersionID,
 		result domain.FinancialControlResult,
 	) error
 	RecordProcessingAttempt(

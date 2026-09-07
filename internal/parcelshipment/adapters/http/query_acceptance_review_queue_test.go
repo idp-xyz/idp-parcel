@@ -146,13 +146,17 @@ func (double *reviewQueueReaderDouble) FindVisibleByID(
 type judgmentsReaderDouble struct {
 	recorded ports.RecordedJudgments
 	err      error
+	// loadedVersion 收下详情分支读判断时给出的提交版本：复核看的必须是详情里那一版的判断。
+	loadedVersion domain.SubmissionVersionID
 }
 
 func (double *judgmentsReaderDouble) LoadRecordedJudgments(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
 ) (ports.RecordedJudgments, error) {
+	double.loadedVersion = version
 	if double.err != nil {
 		return ports.RecordedJudgments{}, double.err
 	}
@@ -253,9 +257,10 @@ func TestReviewQueueListTranscribesEntries(t *testing.T) {
 // 标识、财务控制`已冻结`带标识不带依据、采用解析原样）。
 func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 	intake := &viewsIntakeDouble{scope: viewsScope(t)}
+	judgments := &judgmentsReaderDouble{recorded: recordedJudgmentsFixture(t)}
 	response := getReviewQueue(t, intake,
 		&reviewQueueReaderDouble{detail: reviewCaseDetail(t), found: true},
-		&judgmentsReaderDouble{recorded: recordedJudgmentsFixture(t)},
+		judgments,
 		http.MethodGet, "/acceptance-review-queue?shipmentRequestId=REQ-1")
 
 	if response.Code != http.StatusOK {
@@ -263,6 +268,10 @@ func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 	}
 	if !intake.detailCalled || intake.listCalled {
 		t.Fatal("带标识参数的请求该走详情分支")
+	}
+	// 复核看的是详情里当前版本的判断：读判断按详情记录的提交版本，不按别的版本、也不跨版本。
+	if want := reviewCaseDetail(t).SubmissionVersionID; judgments.loadedVersion != want {
+		t.Fatalf("judgments loaded for version %q, want the detail's %q", judgments.loadedVersion, want)
 	}
 	var body struct {
 		Outcome string `json:"outcome"`
