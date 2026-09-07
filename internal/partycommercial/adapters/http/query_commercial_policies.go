@@ -50,6 +50,11 @@ type CommercialPolicyCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.CustomerServiceRuleRow, error)
+	ListPreAcceptanceFinancialControlPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.PreAcceptanceFinancialControlPolicyRow, error)
 }
 
 // 编译期锁缝:读口形状与端口保持一致。
@@ -64,19 +69,25 @@ const outcomeCommercialPoliciesListed = "COMMERCIAL_POLICIES_LISTED"
 // 下,拿对象类别当种类名会指错拥有者。没有正文册的对象类别不在集合里——预留一格就是替
 // 租户拟一种它还没有的册子;正文册落库那天再扩(客户服务规则版本随 0023 进的正是这条路)。
 //
-// kindAuthorizationRule、kindCreditPolicy 与 kindCustomerServiceRule 的名字**恰好**是商业对象
-// 类别,不是上面那条的例外:它拦的是拥有者指错,而这几格上列的对象就是那类版本自己(取消授权
-// 目录挂在授权规则下、信用正文挂在信用政策下、期限与材料挂在客户服务规则版本下)——拥有者与
-// 被列者同一,与 kindAcceptanceRulePackage 同形。
+// kindAuthorizationRule、kindCreditPolicy、kindCustomerServiceRule 与 kindPreAcceptanceFinancialControlPolicy
+// 的名字**恰好**是商业对象类别,不是上面那条的例外:它拦的是拥有者指错,而这几格上列的对象就是那类
+// 版本自己(取消授权目录挂在授权规则下、信用正文挂在信用政策下、期限与材料挂在客户服务规则版本下、
+// 控制项挂在策略版本下)——拥有者与被列者同一,与 kindAcceptanceRulePackage 同形。
+//
+// kindPreAcceptanceControl 与 kindPreAcceptanceFinancialControlPolicy 是两本册不是一本的两个名字:
+// 前者列挂在客户合同版本下的声明(0007,答「这份合同要不要」),后者列策略版本自己的正文(0024,答
+// 「控制怎么做」,ADR-0115)。票 admin-write-faces/06 立票时后者「发布得出来、管理台看不见」,补的
+// 就是这一格。
 const (
-	kindAcceptanceRulePackage = "ACCEPTANCE_RULE_PACKAGE"
-	kindPreAcceptanceControl  = "PRE_ACCEPTANCE_CONTROL"
-	kindPricePolicy           = "PRICE_POLICY"
-	kindSettlementPolicy      = "SETTLEMENT_POLICY"
-	kindAsOfPolicy            = "AS_OF_POLICY"
-	kindAuthorizationRule     = "AUTHORIZATION_RULE"
-	kindCreditPolicy          = "CREDIT_POLICY"
-	kindCustomerServiceRule   = "CUSTOMER_SERVICE_RULE"
+	kindAcceptanceRulePackage               = "ACCEPTANCE_RULE_PACKAGE"
+	kindPreAcceptanceControl                = "PRE_ACCEPTANCE_CONTROL"
+	kindPricePolicy                         = "PRICE_POLICY"
+	kindSettlementPolicy                    = "SETTLEMENT_POLICY"
+	kindAsOfPolicy                          = "AS_OF_POLICY"
+	kindAuthorizationRule                   = "AUTHORIZATION_RULE"
+	kindCreditPolicy                        = "CREDIT_POLICY"
+	kindCustomerServiceRule                 = "CUSTOMER_SERVICE_RULE"
+	kindPreAcceptanceFinancialControlPolicy = "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY"
 )
 
 // NewQueryCommercialPoliciesEndpoint 交回商业策略目录查阅的 HTTP 入口
@@ -100,7 +111,8 @@ func NewQueryCommercialPoliciesEndpoint(
 		switch kind {
 		case kindAcceptanceRulePackage, kindPreAcceptanceControl,
 			kindPricePolicy, kindSettlementPolicy, kindAsOfPolicy,
-			kindAuthorizationRule, kindCreditPolicy, kindCustomerServiceRule:
+			kindAuthorizationRule, kindCreditPolicy, kindCustomerServiceRule,
+			kindPreAcceptanceFinancialControlPolicy:
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -130,6 +142,8 @@ func NewQueryCommercialPoliciesEndpoint(
 			serveCreditPolicies(response, request, reader, tenant, query.Limit)
 		case kindCustomerServiceRule:
 			serveCustomerServiceRules(response, request, reader, tenant, query.Limit)
+		case kindPreAcceptanceFinancialControlPolicy:
+			servePreAcceptanceFinancialControlPolicies(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -344,6 +358,29 @@ func serveCustomerServiceRules(
 	writeJSON(response, http.StatusOK, customerServiceRuleListResponse{
 		Outcome:  outcomeCommercialPoliciesListed,
 		Kind:     kindCustomerServiceRule,
+		Policies: bodies,
+	})
+}
+
+func servePreAcceptanceFinancialControlPolicies(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader CommercialPolicyCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListPreAcceptanceFinancialControlPolicies(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]preAcceptanceFinancialControlPolicyBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, preAcceptanceFinancialControlPolicyBodyOf(row))
+	}
+	writeJSON(response, http.StatusOK, preAcceptanceFinancialControlPolicyListResponse{
+		Outcome:  outcomeCommercialPoliciesListed,
+		Kind:     kindPreAcceptanceFinancialControlPolicy,
 		Policies: bodies,
 	})
 }
@@ -744,6 +781,81 @@ func customerServiceRuleBodyOf(row ports.CustomerServiceRuleRow) customerService
 		content.MinimumMaterials = append(content.MinimumMaterials, minimumMaterialsBody{
 			ClaimKind: materials.ClaimKind,
 			Materials: append([]string{}, materials.Materials...),
+		})
+	}
+	body.Content = content
+	return body
+}
+
+type preAcceptanceFinancialControlPolicyListResponse struct {
+	Outcome  string                                    `json:"outcome"`
+	Kind     string                                    `json:"kind"`
+	Policies []preAcceptanceFinancialControlPolicyBody `json:"policies"`
+}
+
+// preAcceptanceFinancialControlPolicyBody 是策略版本壳加它登记过的正文（0024，ADR-0115）。
+//
+// contentRegistered 与 content 节成对，判据同 customerServiceRuleBody：壳可先入册、正文随发布登记，
+// 「壳在、正文不在」是合法状态——正是票 admin-write-faces/06 立票时「发布成功后管理台找不到它」的
+// 那个状态，也是 settlement-accounting 点读答`未配置`的状态，布尔让调用方一眼分得开「这一版还没登
+// 正文」与「正文节缺了」。正文节里 controls 一律在场且按判断顺序排列；至少一项由写入把守，这里如实
+// 转写。控制项的键名与受控 CLI 批文里的同名（control / chargeScope / order / onFailure / responsibility），
+// 操作者对照批文与读面时不必换词。
+type preAcceptanceFinancialControlPolicyBody struct {
+	ObjectID          string `json:"objectId"`
+	Version           string `json:"version"`
+	Scope             string `json:"scope"`
+	Status            string `json:"status"`
+	EffectiveStartsAt string `json:"effectiveStartsAt"`
+	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
+	PublishedAt       string `json:"publishedAt"`
+
+	ContentRegistered bool                                            `json:"contentRegistered"`
+	Content           *preAcceptanceFinancialControlPolicyContentBody `json:"content,omitempty"`
+}
+
+type preAcceptanceFinancialControlPolicyContentBody struct {
+	JointPassCondition string                         `json:"jointPassCondition"`
+	RegisteredAt       string                         `json:"registeredAt"`
+	Controls           []preAcceptanceControlItemBody `json:"controls"`
+}
+
+type preAcceptanceControlItemBody struct {
+	Control        string `json:"control"`
+	ChargeScope    string `json:"chargeScope"`
+	Order          int    `json:"order"`
+	OnFailure      string `json:"onFailure"`
+	Responsibility string `json:"responsibility"`
+}
+
+func preAcceptanceFinancialControlPolicyBodyOf(row ports.PreAcceptanceFinancialControlPolicyRow) preAcceptanceFinancialControlPolicyBody {
+	body := preAcceptanceFinancialControlPolicyBody{
+		ObjectID:          row.ObjectID,
+		Version:           row.VersionLabel,
+		Scope:             row.Scope,
+		Status:            row.Status,
+		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
+		PublishedAt:       rfc3339(row.PublishedAt),
+		ContentRegistered: row.HasContent,
+	}
+	if row.HasEffectiveEnd {
+		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
+	}
+	if !row.HasContent {
+		return body
+	}
+	content := &preAcceptanceFinancialControlPolicyContentBody{
+		JointPassCondition: row.JointPassCondition,
+		RegisteredAt:       rfc3339(row.RegisteredAt),
+		Controls:           make([]preAcceptanceControlItemBody, 0, len(row.Controls)),
+	}
+	for _, item := range row.Controls {
+		content.Controls = append(content.Controls, preAcceptanceControlItemBody{
+			Control:        item.Kind,
+			ChargeScope:    item.ChargeScope,
+			Order:          item.EvaluationOrder,
+			OnFailure:      item.FailureDisposition,
+			Responsibility: item.Responsibility,
 		})
 	}
 	body.Content = content

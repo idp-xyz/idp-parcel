@@ -87,8 +87,22 @@ type policyReaderDouble struct {
 	authz       []ports.AuthorizationRuleRow
 	credits     []ports.CreditPolicyRow
 	serviceRule []ports.CustomerServiceRuleRow
+	controlPols []ports.PreAcceptanceFinancialControlPolicyRow
 	calls       map[string]int
 	err         error
+}
+
+func (double *policyReaderDouble) ListPreAcceptanceFinancialControlPolicies(
+	_ context.Context, tenant domain.TenantID, _ int,
+) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
+	double.record("controlPolicies")
+	if double.err != nil {
+		return nil, double.err
+	}
+	if tenant != double.tenant {
+		return nil, nil
+	}
+	return double.controlPols, nil
 }
 
 func (double *policyReaderDouble) record(method string) {
@@ -453,6 +467,9 @@ func TestPoliciesEndpointDispatchesEachKindToItsOwnList(t *testing.T) {
 		}},
 		{"CUSTOMER_SERVICE_RULE", "serviceRules", func(double *policyReaderDouble) {
 			double.serviceRule = []ports.CustomerServiceRuleRow{{ObjectID: "csr-1", VersionLabel: "v1"}}
+		}},
+		{"PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY", "controlPolicies", func(double *policyReaderDouble) {
+			double.controlPols = []ports.PreAcceptanceFinancialControlPolicyRow{{ObjectID: "fcp-1", VersionLabel: "v1"}}
 		}},
 	}
 	for _, testCase := range cases {

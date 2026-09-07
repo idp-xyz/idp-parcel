@@ -1343,13 +1343,52 @@ type CustomerServiceRuleRow struct {
 	MinimumMaterials []MinimumMaterialsRow
 }
 
+// PreAcceptanceControlItemRow 是接受前财务控制策略正文里一项控制的上列转写：种类与失败处置
+// （各是封闭集，0024 库上 CHECK）× 费用范围引用 × 判断顺序 × 责任引用。目录不重建领域对象，
+// 照实转写；行已按判断顺序取回。字段名照 domain.PreAcceptanceControlItem 的访问器（Kind /
+// FailureDisposition），与 ClaimDeadlineRow 同一取法；受控批文与读面 JSON 用的那套词
+// （control / onFailure）留在传输层。
+type PreAcceptanceControlItemRow struct {
+	Kind               string
+	ChargeScope        string
+	EvaluationOrder    int
+	FailureDisposition string
+	Responsibility     string
+}
+
+// PreAcceptanceFinancialControlPolicyRow 是接受前财务控制策略目录上列的一行：一份已入册的策略
+// 版本壳，连同它登记过的正文（0024，ADR-0115）。
+//
+// 上列对象是版本壳，判据同 CustomerServiceRuleRow：壳可先入册、正文随发布登记，只列正文行会让
+// 未登正文的已发布策略版本从目录上消失——而「壳在、正文不在」恰是 settlement-accounting 点读答
+// `未配置`的那个状态，也是票 admin-write-faces/06 立票时「发布成功后管理台找不到它」的那个状态，
+// 目录必须让它可见。HasContent 因此不能省，也不能拿 Controls 为空兼作它：领域要求至少一项，
+// 有父行而零子行是坏数据，拦它归内容读口，目录如实转写不判。正文各字段只在 HasContent 为真时
+// 有意义。
+type PreAcceptanceFinancialControlPolicyRow struct {
+	ObjectID          string
+	VersionLabel      string
+	Scope             string
+	Status            string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	PublishedAt       time.Time
+
+	HasContent         bool
+	JointPassCondition string
+	RegisteredAt       time.Time
+	Controls           []PreAcceptanceControlItemRow
+}
+
 // CommercialPolicyCatalogueRead 是商业策略目录的伴生列表读端口(ADR-0077):管理台
 // commercial-policies 页的供数面,策略种类是封闭集,每种一个方法。
 //
 // 册子逐一列出:接单规则包正文(0014)、接受前财务控制声明(0007)、商业价格政策(0010)、
 // 结算政策(0011)、时点锚声明(0005)、授权规则与它的取消授权目录(0013)、信用政策正文
-// (0020)、客户服务规则版本与它的正文(0023)。没有正文册的对象类别不预留方法——预留一个
-// 空方法就是替租户拟一种它还没有的册子;正文表落库时按封闭集扩方法,不开通用口。
+// (0020)、客户服务规则版本与它的正文(0023)、接受前财务控制策略版本与它的正文(0024)。
+// 没有正文册的对象类别不预留方法——预留一个空方法就是替租户拟一种它还没有的册子;正文表
+// 落库时按封闭集扩方法,不开通用口。
 //
 // 租户在签名上、Limit 非正拒、空册答空列表,判据同 ServiceProductCatalogueRead。
 // 各册行内自带的对象/版本标识只是引用转写,读口不跨表拼接版本壳——策略种类间不串,
@@ -1395,6 +1434,11 @@ type CommercialPolicyCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]CustomerServiceRuleRow, error)
+	ListPreAcceptanceFinancialControlPolicies(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]PreAcceptanceFinancialControlPolicyRow, error)
 }
 
 // ControlBindingRow 是一份客户合同正文里对某个费用范围的财务控制约定的上列转写。

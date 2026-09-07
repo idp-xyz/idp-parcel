@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -324,6 +325,133 @@ func controlItemsFromJSON(raw []byte) ([]domain.PreAcceptanceControlItem, error)
 			return nil, err
 		}
 		items = append(items, item)
+	}
+	return items, nil
+}
+
+// ListPreAcceptanceFinancialControlPolicies 上列接受前财务控制策略版本壳，正文（0024）左连接
+// （票 admin-write-faces/06）。
+//
+// 装载方向与 ListCustomerServiceRules 同派：版本侧驱动，正文左连接——壳可先入册、正文随发布登记，
+// 只列正文行会让未登正文的已发布策略版本从目录上消失，而那个状态正是票 06 立票时「发布成功后管理台
+// 找不到它」的状态，目录必须让它可见。子表由一个子查询聚成 json 数组，与父行同一条语句取回。
+//
+// 目录不重建领域对象、不形成判断：有父行而零子行是坏数据（领域要求至少一项），拦它归内容读口
+// LoadPreAcceptanceFinancialControlPolicy；这里照 ListCustomerServiceRules 的先例如实交回空集合。
+func (catalogue *OperationsCatalogue) ListPreAcceptanceFinancialControlPolicies(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.PreAcceptanceFinancialControlPolicyRow, error) {
+	if err := requirePositiveLimit("list pre-acceptance financial control policies", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
+		        version.effective_starts_at, version.effective_ends_at, version.published_at,
+		        content.joint_pass_condition, content.registered_at,
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'control',        item.control_kind,
+		                            'chargeScope',    item.charge_scope_ref,
+		                            'order',          item.evaluation_order,
+		                            'onFailure',      item.failure_disposition,
+		                            'responsibility', item.responsibility_ref
+		                        )
+		                        ORDER BY item.evaluation_order
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM party_commercial.pre_acceptance_financial_control_item AS item
+		          WHERE item.tenant_id     = version.tenant_id
+		            AND item.object_kind   = version.object_kind
+		            AND item.object_id     = version.object_id
+		            AND item.version_label = version.version_label)
+		   FROM party_commercial.commercial_version AS version
+		   LEFT JOIN party_commercial.pre_acceptance_financial_control_policy AS content
+		          ON content.tenant_id     = version.tenant_id
+		         AND content.object_kind   = version.object_kind
+		         AND content.object_id     = version.object_id
+		         AND content.version_label = version.version_label
+		  WHERE version.tenant_id   = $1
+		    AND version.object_kind = $2
+		  ORDER BY version.published_at DESC, version.object_id, version.version_label
+		  LIMIT $3`,
+		tenant.String(),
+		uint8(domain.PreAcceptanceFinancialControlPolicyObject),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+	}
+	defer rows.Close()
+
+	policyRows := make([]ports.PreAcceptanceFinancialControlPolicyRow, 0, limit)
+	for rows.Next() {
+		var row ports.PreAcceptanceFinancialControlPolicyRow
+		var status int16
+		var endsAt, registeredAt *time.Time
+		var jointPass *string
+		var itemsJSON []byte
+		if err := rows.Scan(
+			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
+			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
+			&jointPass, &registeredAt,
+			&itemsJSON,
+		); err != nil {
+			return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+		}
+		statusWord := domain.CommercialVersionStatus(status).String()
+		if statusWord == "" {
+			return nil, fmt.Errorf("list pre-acceptance financial control policies: 版本状态 %d 不在封闭集内", status)
+		}
+		row.Status = statusWord
+		if endsAt != nil {
+			row.EffectiveEndsAt = *endsAt
+			row.HasEffectiveEnd = true
+		}
+		// registered_at 在正文父行上 NOT NULL，它的在场即正文的在场。
+		if registeredAt != nil {
+			row.HasContent = true
+			row.RegisteredAt = *registeredAt
+			row.JointPassCondition = *jointPass
+		}
+		if row.Controls, err = controlItemRowsFromJSON(itemsJSON); err != nil {
+			return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+		}
+		policyRows = append(policyRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list pre-acceptance financial control policies: %w", err)
+	}
+	return policyRows, nil
+}
+
+// controlItemRowsFromJSON 只转写，不校验种类与处置是否在封闭集内——判据同 claimDeadlineRowsFromJSON：
+// 目录不重建领域对象，拦坏数据归内容读口。
+func controlItemRowsFromJSON(raw []byte) ([]ports.PreAcceptanceControlItemRow, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var documents []controlItemDocument
+	if err := json.Unmarshal(raw, &documents); err != nil {
+		return nil, fmt.Errorf("control items are not this adapter's shape: %w", err)
+	}
+	items := make([]ports.PreAcceptanceControlItemRow, 0, len(documents))
+	for _, document := range documents {
+		items = append(items, ports.PreAcceptanceControlItemRow{
+			Kind:               document.Control,
+			ChargeScope:        document.ChargeScope,
+			EvaluationOrder:    document.Order,
+			FailureDisposition: document.OnFailure,
+			Responsibility:     document.Responsibility,
+		})
 	}
 	return items, nil
 }
