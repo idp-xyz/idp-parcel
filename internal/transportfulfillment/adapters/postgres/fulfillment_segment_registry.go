@@ -45,12 +45,13 @@ func (repository *FulfillmentSegments) FindByKey(
 	var closed bool
 	var closedAt *time.Time
 	var recordedAt time.Time
+	var serviceAction *string
 	err = querier.QueryRow(ctx,
-		`SELECT closed, closed_at, recorded_at
+		`SELECT closed, closed_at, recorded_at, service_action
 		   FROM transport_fulfillment.actual_fulfillment_segment
 		  WHERE tenant_id = $1 AND segment_ref = $2`,
 		key.TenantID.String(), key.Segment.String(),
-	).Scan(&closed, &closedAt, &recordedAt)
+	).Scan(&closed, &closedAt, &recordedAt, &serviceAction)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FulfillmentSegmentRecord{}, false, nil
 	}
@@ -79,6 +80,12 @@ func (repository *FulfillmentSegments) FindByKey(
 	}
 	if closedAt != nil {
 		spec.ClosedAt = closedAt.UTC()
+	}
+	// NULL 就是未声明（ADR-0114 决定一）；非空的词经封闭集合认回，词不在集合内是坏行，在这里响亮。
+	if serviceAction != nil {
+		if spec.ServiceAction, err = domain.ParseSegmentServiceAction(*serviceAction); err != nil {
+			return ports.FulfillmentSegmentRecord{}, false, fmt.Errorf("find fulfillment segment: %w", err)
+		}
 	}
 	for rows.Next() {
 		var objectRef, entryKind, entryBasis string
@@ -134,16 +141,23 @@ func (repository *FulfillmentSegments) Save(
 	}
 
 	closedAt, closed := record.Segment.ClosedAt()
+	// 段服务动作只在首登这一行写入（ADR-0114 决定一）：未声明落 NULL，不给默认。
+	var serviceAction *string
+	if action, declared := record.Segment.ServiceAction(); declared {
+		word := action.String()
+		serviceAction = &word
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.actual_fulfillment_segment
-		     (tenant_id, segment_ref, closed, closed_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5)
+		     (tenant_id, segment_ref, closed, closed_at, recorded_at, service_action)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Segment.String(),
 		closed,
 		nullableTime(closedAt, closed),
 		record.RecordedAt.UTC(),
+		serviceAction,
 	)
 	if err != nil {
 		return ports.SegmentSaveOutcomeInvalid, fmt.Errorf("save fulfillment segment: %w", err)

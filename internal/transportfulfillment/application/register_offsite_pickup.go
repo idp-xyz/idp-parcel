@@ -85,6 +85,9 @@ type RegisterOffsitePickupCommand struct {
 	// enterFulfillmentSegment 的自注。
 	Segment        string
 	PlannedSegment string
+	// SegmentServiceAction 是登记方对该段服务动作的声明，可缺席；形与理由同 RegisterTransportHandoverCommand
+	// 的同名字段（ADR-0114 决定一）。收寄也能声明，因为段由两种控制事实任一成立。
+	SegmentServiceAction string
 }
 
 // CorrectOffsitePickupCommand 携带更正入口的全部输入：指名被更正的前版（租户+对象+尝试+前版版本号），
@@ -262,7 +265,8 @@ func (handler *RegisterOffsitePickupHandler) establishSegment(
 		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,
 		segmentEntryDoors{
-			object: pickup.Object(),
+			object:        pickup.Object(),
+			serviceAction: command.SegmentServiceAction,
 			establish: func(
 				segment domain.FulfillmentSegmentReference,
 				planned domain.PlannedSegmentReference,

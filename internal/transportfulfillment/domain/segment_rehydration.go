@@ -42,6 +42,9 @@ type RehydrateActualFulfillmentSegmentSpec struct {
 	Closed         bool
 	ClosedAt       time.Time
 	Participations []RehydrateParticipationSpec
+	// ServiceAction 零值即库面 NULL（未声明）；非零必须在封闭集合内——词由适配器经 ParseSegmentServiceAction
+	// 认回，这里只挡一个越过它的坏值。
+	ServiceAction SegmentServiceAction
 }
 
 // RehydrateActualFulfillmentSegment 从库面重建一个实际履约段。
@@ -56,12 +59,16 @@ func RehydrateActualFulfillmentSegment(spec RehydrateActualFulfillmentSegmentSpe
 	if spec.Closed != !spec.ClosedAt.IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
+	if spec.ServiceAction != SegmentServiceActionUndeclared && !spec.ServiceAction.Declared() {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
 
 	segment := ActualFulfillmentSegment{
 		tenantID:       spec.TenantID,
 		segment:        spec.Segment,
 		closed:         spec.Closed,
 		participations: make([]FulfillmentParticipation, 0, len(spec.Participations)),
+		serviceAction:  spec.ServiceAction,
 	}
 	if spec.Closed {
 		segment.closedAt = spec.ClosedAt.UTC()

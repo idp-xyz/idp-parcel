@@ -87,6 +87,10 @@ type RegisterTransportHandoverCommand struct {
 	Segment string
 	// PlannedSegment 是该对象自己关联的计划履约段，可缺席（待路由产品此刻还没有计划段）。
 	PlannedSegment string
+	// SegmentServiceAction 是登记方对该段服务动作的声明（ADR-0114 决定一；domain.SegmentServiceAction 的封闭词
+	// OFFSITE_PICKUP / LINEHAUL / FINAL_DELIVERY），可缺席。段由这次交接成立时随之固定；加入既有段时只核对。
+	// 声明为 FINAL_DELIVERY 的段是派送段——末端派送任务的内部触发只认「对象凭已交接进入派送段」。
+	SegmentServiceAction string
 }
 
 // CorrectTransportHandoverCommand 携带更正入口的全部输入：指名被更正的前版，更正走
@@ -284,7 +288,8 @@ func (handler *RegisterTransportHandoverHandler) establishSegment(
 		ctx, handler.deps.Segments, handler.deps.Judgments, handler.deps.Clock,
 		command.TenantID, command.Segment, command.PlannedSegment,
 		segmentEntryDoors{
-			object: handover.Object(),
+			object:        handover.Object(),
+			serviceAction: command.SegmentServiceAction,
 			establish: func(
 				segment domain.FulfillmentSegmentReference,
 				planned domain.PlannedSegmentReference,

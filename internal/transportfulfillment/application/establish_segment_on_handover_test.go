@@ -38,6 +38,8 @@ type segmentRowsDouble struct {
 	recordedAt     time.Time
 	closed         bool
 	closedAt       time.Time
+	// serviceAction 与真库同一格：首登那一行写入、之后不改（ADR-0114 决定一）。
+	serviceAction domain.SegmentServiceAction
 }
 
 func newSegmentRegistry() *segmentRegistryDouble {
@@ -96,6 +98,7 @@ func (double *segmentRegistryDouble) FindByKey(
 		Participations: rows.participations,
 		Closed:         rows.closed,
 		ClosedAt:       rows.closedAt,
+		ServiceAction:  rows.serviceAction,
 	})
 	if err != nil {
 		return ports.FulfillmentSegmentRecord{}, false, err
@@ -196,6 +199,9 @@ func (double *segmentRegistryDouble) Save(
 		return ports.SegmentAlreadyRegistered, nil
 	}
 	rows := &segmentRowsDouble{key: record.Key, recordedAt: record.RecordedAt}
+	if action, declared := record.Segment.ServiceAction(); declared {
+		rows.serviceAction = action
+	}
 	for _, participation := range record.Segment.Participations() {
 		rows.participations = append(rows.participations, participationSpecOf(participation))
 	}

@@ -40,10 +40,20 @@ const (
 	// 继承终点（对象的控制终点是它自己的事实），先结束再进入立不起来。更正在册、链尾不动；重试不会变，
 	// 所以不是欠账。静默会让它与「重派生成功」在调用方眼里同形，那正是本类型要分开的两种状态。
 	SegmentEntryRefusedCorrectedStartAfterInheritedEnd
+	// SegmentEntryRefusedServiceActionUnknown：登记方声明的段服务动作不在封闭三格里（ADR-0114 决定一）。控制
+	// 事实照登，段这一半不动——改词再来是登记方的事，重试不会变，所以不是欠账。
+	SegmentEntryRefusedServiceActionUnknown
+	// SegmentEntryRefusedServiceActionConflict：加入既有段时给出的声明与段成立时固定的不一致（含段成立时
+	// 未声明而此刻要声明——声明只在成立那一刻开门）。CONTEXT 生命周期①末句；续办是另立新段，不是重试。
+	SegmentEntryRefusedServiceActionConflict
 )
 
 func (refusal SegmentEntryRefusal) String() string {
 	switch refusal {
+	case SegmentEntryRefusedServiceActionUnknown:
+		return "SEGMENT_SERVICE_ACTION_UNKNOWN"
+	case SegmentEntryRefusedServiceActionConflict:
+		return "SEGMENT_SERVICE_ACTION_CONFLICT"
 	case SegmentEntryRefusedSegmentClosed:
 		return "SEGMENT_CLOSED"
 	case SegmentEntryRefusedNoParticipationToRederive:
@@ -73,6 +83,9 @@ type segmentEntryDoors struct {
 	object    domain.CarriedObjectReference
 	establish func(domain.FulfillmentSegmentReference, domain.PlannedSegmentReference) (domain.ActualFulfillmentSegment, error)
 	join      func(domain.ActualFulfillmentSegment, domain.PlannedSegmentReference) (domain.ActualFulfillmentSegment, error)
+	// serviceAction 是登记方对段服务动作的声明（ADR-0114 决定一），可缺席。段由本次控制事实成立时随之固定；
+	// 加入既有段时只核对不改写。不声明的调用方留空即可。
+	serviceAction string
 }
 
 // enterFulfillmentSegment 让一次控制事实的对象进入实际履约段，交回进段那一半的回答：续办引用
@@ -121,6 +134,13 @@ func enterFulfillmentSegment(
 			return segmentEntry{}
 		}
 	}
+	// 声明的词先认回封闭集合：不在集合内是登记方的输入错误，控制事实照登、段这一半不动。
+	declaredAction := domain.SegmentServiceActionUndeclared
+	if strings.TrimSpace(doors.serviceAction) != "" {
+		if declaredAction, err = domain.ParseSegmentServiceAction(strings.TrimSpace(doors.serviceAction)); err != nil {
+			return segmentEntry{refusal: SegmentEntryRefusedServiceActionUnknown}
+		}
+	}
 
 	// 「这个段是否已成立」每次都问登记册。编排自己记住就是一次竞态：两个对象并发到达时，
 	// 各自那份缓存都会说「还没成立」，于是同一个段被立两回。
@@ -130,12 +150,23 @@ func enterFulfillmentSegment(
 		return segmentEntry{continuation: owed("SEGMENT_REGISTRY_UNAVAILABLE", tenant, segmentReference, doors.object)}
 	}
 	if found {
+		// 段成立时固定的服务动作此后不改：声明与之不一致（含段未声明而此刻要声明）是领域拒绝，不是欠账。
+		if declaredAction.Declared() {
+			if fixed, _ := existing.Segment.ServiceAction(); fixed != declaredAction {
+				return segmentEntry{refusal: SegmentEntryRefusedServiceActionConflict}
+			}
+		}
 		return joinExistingSegment(ctx, segments, clock, key, existing, planned, doors)
 	}
 
 	established, err := doors.establish(segment, planned)
 	if err != nil {
 		return segmentEntry{}
+	}
+	if declaredAction.Declared() {
+		if established, err = established.DeclareServiceAction(declaredAction); err != nil {
+			return segmentEntry{}
+		}
 	}
 	saved, err := segments.Save(ctx, ports.FulfillmentSegmentRecord{
 		Key:        key,

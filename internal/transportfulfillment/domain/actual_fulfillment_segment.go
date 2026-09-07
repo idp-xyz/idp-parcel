@@ -179,6 +179,9 @@ type ActualFulfillmentSegment struct {
 	closed         bool
 	closedAt       time.Time
 	participations []FulfillmentParticipation
+	// serviceAction 是登记方在段成立时声明的段服务动作（ADR-0114 决定一）；零值即未声明——那是
+	// 一种答案不是缺陷，所以这里没有默认值。声明门与读法在 segment_service_action.go。
+	serviceAction SegmentServiceAction
 }
 
 // EstablishSegmentWithPickup 由首个对象的有效收寄成立段（CONTEXT 生命周期①）。
