@@ -1,7 +1,7 @@
 # 接受前财务控制策略版本：能发布、能被合同引用，正文表未建——「控制怎么做」今天无处落
 
 Category: enhancement
-Status: draft——先 `/domain-modeling`：正文形状要从 PC CONTEXT 词条与 `PAR-COM-15` 的机制半边推出来，很可能要一篇 ADR（形同 ADR-0104 对客户服务规则正文的裁法）；MCP-3 2026-09-04 立票，只写票面不动代码
+Status: in-progress——四问已由 [ADR-0115](../../../docs/adr/0115-pre-acceptance-financial-control-policy-content-is-a-row-per-control-and-no-control-stays-with-the-contract.md) 一次答完（2026-09-07，MCP-3，owner 经通道 1 派工授权自决）；正文表 + 领域对象 + 登记口在分支 `mcp3-pcgaps07` 上落地中
 Blocked by: 无
 
 ## 从哪里来
