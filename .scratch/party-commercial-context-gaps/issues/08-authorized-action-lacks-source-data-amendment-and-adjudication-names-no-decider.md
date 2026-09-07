@@ -100,3 +100,6 @@ PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条�
   三处 `PublicationRegistry` 替身——委派表的 Save 形状开工时以代码为准。「要你答的问题」里的倾向是本会话的建模意见，不是裁决。
 - 2026-09-07 · MCP-6（同一会话，稍后）：**裁决落 ADR-0116**，六问按上面「倾向」取（能力边界与越权风险点写在 ADR 头部与文末），
   PC CONTEXT 新词条「合同委派」+ Rules 加一句，本票转 in-progress。同笔只有文档；代码从下一笔起。
+- 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
+  → main `52001f02`；ADR-0116 与本票转 in-progress 那一笔 `c9ec35d7` → main `e374b1ea`（远端 main，MCP-1 `git ls-remote` 18:04:16）。
+  分支指针留着，树已拆；对照全表在 `admin-write-faces/07` 的同时刻 Comment。

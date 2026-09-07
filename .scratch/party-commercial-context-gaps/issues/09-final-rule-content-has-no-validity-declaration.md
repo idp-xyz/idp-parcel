@@ -87,3 +87,5 @@ ADR-0062（回指）；`PAR-COM-17`；PS `ports.LabelValidityRuleView` 头注与
   （`service_stage_content.go` 的 `FinalRuleContent` 段、`0013` 全文、`ports.go` 的 `FinalRuleContentView` 段、`DeclarationChannel`
   封闭集、`translate.go` 的 `finalRuleDocument`）。能力边界：**没读** `FinalRuleChannel` 在 `PublishCommercialAuthorityHandler.Handle`
   里的分支细节与 postgres `SaveFinalRule` 的同内容判据实现——问题 5「冲突判据把有效期算进去」怎么落，开工时以代码为准。
+- 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
+  → main `52001f02`（远端 main = `e374b1ea`）。对照全表在 `admin-write-faces/07` 的同时刻 Comment。

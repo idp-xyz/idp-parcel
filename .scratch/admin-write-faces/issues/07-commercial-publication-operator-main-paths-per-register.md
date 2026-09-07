@@ -87,3 +87,10 @@ ADR-0101 Alternatives 第二条否决逐字段表单只针对上百格的价卡�
   - Status：原各写 `blocked`，triage-labels 无此格；按「形状裁清且不需要新裁决才转 ready」改口——
     09–17 转 ready-for-agent，08（三问都是新裁决）与 18（等读面票要不要立）留 draft 并写清等什么。
   - **未做**：不替 08 裁三问，不取 ADR 号，不立管理台客户服务规则册读面票（归 MCP-1）。
+- 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，无上一会话记忆，按 MCP-1 18:05 广播补记）：**封存出处。** 分支 `mcp6-awf07`
+  （基 `92579b0a`）五笔由 MCP-1 在隔离树重放进 main，远端 main = `e374b1ea`（MCP-1 `git ls-remote` 18:04:16）。分支 → main
+  对照：拆子票 `42224e35`→`e52c71b6`、收伞票 `e9452c15`→`9f60058b`、立 pc-gaps/08–10 `8c1e6ed5`→`52001f02`、
+  `ports.go` 头注改口 `2417b7bb`→`d1a03e00`、ADR-0116 `c9ec35d7`→`e374b1ea`。拆树前核 `git diff c9ec35d7 e374b1ea -- <本批 19 件>`：
+  只 `docs/adr/README.md` 多四行（0113 / 0118 / 0122 / 0123，他人条目自动合并进来的），0116 那一行两侧一致，本批内容原样在 main。
+  树 `idp-parcel-mcp6-awf06` 已拆（status 两问零行；`worktree remove` 退 255 卡在 `node_modules` 长路径，三样核对后按
+  parallel-sessions 配方清壳），分支指针 `mcp6-awf07` 留着作事后比对凭据。

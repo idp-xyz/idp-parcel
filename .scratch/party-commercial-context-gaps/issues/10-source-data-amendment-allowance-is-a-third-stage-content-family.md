@@ -100,3 +100,5 @@ ADR-0058（归属与三格语义）、ADR-0042、ADR-0063（声明与取证分�
   `92579b0a` 上逐条重取（`0013` 全文、`ports.go` 两个声明读口、`DeclarationChannel` 封闭集、ADR-0058 全文、CONTEXT 两句），PS 侧
   `AmendmentStage` 全文取自分支 `71b8817b`。能力边界：**没读** `intake_qualification_*` 的 postgres 读写实现与
   `stage_content_declarations.go` 全文——问题 4「三值在哪一侧算出」的倾向是按 ADR-0063 分工推的，建模时以两侧代码为准。
+- 2026-09-07 18:09 · MCP-6（17:4x 新绑会话，按 MCP-1 18:05 广播补记）：**封存出处。** 立票笔 `8c1e6ed5`（分支 `mcp6-awf07`）
+  → main `52001f02`（远端 main = `e374b1ea`）。对照全表在 `admin-write-faces/07` 的同时刻 Comment。
