@@ -1107,3 +1107,18 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - 树：`idp-replay-psr02` 推后拆；`idp-replay-wbr05`（预验用，内容已在链上）拆；`idp-parcel-mcp2-psr02` / `idp-verify-psr02` / `idp-parcel-mcp6-wbr03-05` 各归其主自拆并改名 `merged/`（wbr 分支上 03/04 后续笔基新 tip 另起）。
 
 **在途（11:2x）**：MCP-5 awf/08（待批准载体 + 批准动作 + 预览口）；MCP-6 落 03/04 裁决 → ADR-0127 + 03 判据 2–3（余量将满，可能只交裁决落票）；MCP-2 空闲——**可派**：wbr/04 PS 侧复核授权端口（与 `ActiveRejectionAuthorizer` 同形，PS 地盘）、wbr/01→02（原 `5307fbdc` 后两段）；tf/11 等通道 4。**归用户**：是否切「作者自落 main」（main 连绿 6 次）。
+
+## 2026-09-08 11:1x 通道 1 新会话（接管时 `main = origin/main = a107ff60`）
+
+- 前会话推完 `a107ff60` 后未发新 main SHA 对照——11:17 查各通道 `messages.json`，`a107ff60` 全零命中；本节首条广播补发。前节五数前会话未量，不代记。
+- 接管时队列里 MCP-6 两条：wbr/03–05 落裁决与评审 `857acf78`（纯 .md 四件）+ `790f4b70`（staleness 测试头注一行）已于 11:0x 推到 origin `mcp6-wbr03-05`——在冻结通知之后到、不在重放链里；并交单（余量尽，`save_progress` 已存）。问 (a) 推送方顺手重放 / (b) 广播新 tip 后由它另起分支。
+
+### 11:1x–11:2x：wbr 分支后两笔按 (a) 重放，远端 main = `f742a261`
+
+- 选 (a)：两笔纯簿记，MCP-6 已交单，(b) 要等通道 6 下一会话再绕一圈。
+- 隔离 detached 树 `idp-replay-wbr0304docs` 基 `a107ff60`，cherry-pick 零冲突：`857acf78→4dd653f8`、`790f4b70→f742a261`；两笔所动五件对分支 tip `git diff 790f4b70 f742a261 -- <五件>` 为空。
+- 验证钉 `f742a261`：gofmt 空；`go build ./...` 退 0；`go vet ./internal/partycommercial/...` 退 0；`go test -count=1 ./internal/partycommercial/...` 四包 ok（无 DSN，postgres 包跳过——本笔只改注释）；清点在该树重生成、porcelain 空；改动 .go `i/lf w/lf`。按 09-08 规矩纯簿记自审、未重跑全仓，CI 由 push 兑底。
+- 共享 main 由 `a107ff60` **快进**；推前 ls-remote = `a107ff60`，`push f742a261:main`，推后 ls-remote = `f742a261`。树推后拆（porcelain 空、`.git` 链接与 `worktree list` 登记均无）。
+- 11:2x 广播 SHA 对照（含前会话那条链）并解冻：`mcp2-psr02-tail@46ada017` / `mcp6-wbr03-05@790f4b70` 内容已全在 main，各归其主自拆、指针改 `merged/`；新分支基 `f742a261`。
+
+**在途（11:2x）**：MCP-5 awf/08；wbr/03 下一段（ADR-0127 + 判据 2–3，跨 PC/SA）待派，接手者先 `load_progress` 通道 6 存档；wbr/04 PS 侧复核授权端口待派（PS 地盘）；tf/11 等通道 4。**归用户**：是否切「作者自落 main」。
