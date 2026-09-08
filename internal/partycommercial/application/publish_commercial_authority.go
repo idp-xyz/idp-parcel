@@ -623,6 +623,15 @@ func publicationContentOf(
 			}
 		}
 		return content, true
+	case domain.AuthorizationRuleObject:
+		// 本册的正文就是取消授权目录（票 admin-write-faces/17）：零行是「壳单独发布」——没有可比对象，照今天登记声明的串。
+		if len(declarations.CancellationAuthority) == 0 {
+			return content, false
+		}
+		content.AuthorizationRule = &domain.AuthorizationRuleBody{
+			CancellationAuthority: append([]domain.CancellationAuthorityDeclaration(nil), declarations.CancellationAuthority...),
+		}
+		return content, true
 	default:
 		return content, false
 	}
