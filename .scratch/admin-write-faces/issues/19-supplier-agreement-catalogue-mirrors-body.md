@@ -1,7 +1,7 @@
 # 19 供应商协议目录读面镜像后端已透的正文：`contentRegistered` 显式布尔 + 0021 各键上列，「没有正文表可读」那几句退场
 
 Category: enhancement
-Status: in-progress——2026-09-08 16:5x MCP-6 完工，待通道 1 重放进 main 与非作者评审后转 resolved（分支 `mcp6-awf19` 代码 tip `a21ef0c3`，逐笔、完成判据逐项与验证强度见文末「完成记录」；tsc 退 0 / run-tests 116/116，过期话 `git grep` 零命中且 main 上阳性对照命中）。此前 in-progress——16:4x MCP-6 认领（用户经通道 6 队列派发；分支 `mcp6-awf19`，先并入 main `dc1f0c07` 成 `d572e554` 再动手，票 10 那几笔因此在场）。此前 ready-for-agent——形状已裁清（后端读口已透的键逐一镜像、显式布尔照合同页同款、行转写抽纯函数；本票无待裁问题）。由票 [11](./11-supplier-agreement-form.md) 的非作者评审 Spec 非阻断 (1) 拆出（MCP-6 2026-09-08 15:1x，通道 1 指派；锚 main `83970dcf`）。不是伞票 07 的子票——07 管的是各册的发布主路径，本票是读面
+Status: resolved——2026-09-08 17:0x 进 main（通道 1 重放；非作者评审 MCP-5 两轴阻断 0，见 Comments）；分支→main 逐笔与验证见文末「进 main 记录」。此前 in-progress——16:5x MCP-6 完工，待通道 1 重放进 main 与非作者评审后转 resolved（分支 `mcp6-awf19` 代码 tip `a21ef0c3`，逐笔、完成判据逐项与验证强度见文末「完成记录」；tsc 退 0 / run-tests 116/116，过期话 `git grep` 零命中且 main 上阳性对照命中）。此前 in-progress——16:4x MCP-6 认领（用户经通道 6 队列派发；分支 `mcp6-awf19`，先并入 main `dc1f0c07` 成 `d572e554` 再动手，票 10 那几笔因此在场）。此前 ready-for-agent——形状已裁清（后端读口已透的键逐一镜像、显式布尔照合同页同款、行转写抽纯函数；本票无待裁问题）。由票 [11](./11-supplier-agreement-form.md) 的非作者评审 Spec 非阻断 (1) 拆出（MCP-6 2026-09-08 15:1x，通道 1 指派；锚 main `83970dcf`）。不是伞票 07 的子票——07 管的是各册的发布主路径，本票是读面
 Blocked by: 无（11 已进 main `83970dcf`，写签在场）
 
 ## 缺什么
@@ -47,7 +47,7 @@ run-tests 绿。
 
 | 分支 SHA | 内容 |
 |---|---|
-| `8a9856f9` | 立票（基 `83970dcf`，只此一件 .md）——**不在 main 上**，重放时要带 |
+| `8a9856f9` | 立票（基 `83970dcf`，只此一件 .md）——= main `06d918ea`，早已在（分支从它长出；作者原写「不在 main 上」是三点 diff 量错，通道 1 重放时改正，重放不带） |
 | `d572e554` | merge main `dc1f0c07`——只为对着当前 tip 编译与测试，重放时跳过 |
 | `b470bfe6` | 票面认领转 in-progress |
 | `d6fdeacc` | `party/api.ts`：`SupplierAgreementRecord` 逐键镜像后端 `supplierAgreementBody`（`contentRegistered` 必在，正文各键可缺，与 Go 侧 omitempty 同形），过期头注换成合同页同款判据；新文件 `supplier-agreement-rows.ts`（列集 + `supplierAgreementRowsOf`，正文三态）与 `supplier-agreement-rows.test.ts`（票面三例 + 列集 + 协议区间无上界）。本笔单独可编译——页面此时仍用旧列，stash 页面改动后 tsc 退 0 实测 |
@@ -113,3 +113,11 @@ run-tests 绿。
 未在浏览器对真后端实看（作者已如实记，本机 `pnpm build` 不可用），证据层级 S 与票面一致；评审不抬这一级。
 
 **结论**：Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 0（判断题六条皆接受，一处行为变化备案）。可进 main；进 main 后 Status 转 resolved 由通道 1 重放时办。本节写在分支 `mcp5-awf19-review`（基 origin/main `62bf6504`，只动本文件），与 `3d31f910` 那笔的「完成记录」同在文末追加，合并时完成记录在前、本节在后。
+
+## 进 main 记录（2026-09-08 17:0x，通道 1 重放）
+
+- **分支→main 逐笔**（`git cherry-pick` 于 `62bf6504` 之上，隔离 detached 树 `idp-replay-awf19`）：`b470bfe6→d8e713e0`、`d6fdeacc→cc86a911`、`a21ef0c3→e73d4963`、`3d31f910→797b52a2`（四笔零冲突）；评审 `db42a887→84033830`（与完成记录同在文末追加，EOF 撞一次，手工并成完成记录在前、Comments 在后，评审段 41 行逐行在场）；本笔 Status 转 resolved + 逐笔表 `8a9856f9` 行改正 + 本节。
+- **跳过**：`8a9856f9`（= main `06d918ea`，早已在）、`d572e554`（merge main，只为编译）。
+- **树等价**：`git diff --name-only 3d31f910 797b52a2 -- . ':!.scratch/tasks.md'` 只剩票 tf/11 那份 .md（main 在 `dc1f0c07` 之后另有 `bd5ccb9e` / `2c0008c3` 改它），代码文件零差。
+- **验证钉 `797b52a2`**（之后只多 .md）：admin-web `tsc --noEmit` 退 0；`node scripts/run-tests.mjs` 116/116；`git grep -e 正文表可读 -e 正文册可读 -- apps/admin-web/src` 零命中。`.go` / `.sql` 零变动，故未跑 Go 门禁与机制清点重生成（同 awf/16 先例）。
+- **非阻断两条**（Standards ①②，见 Comments）随票记，不另开票；作者判断题六条评审皆接受，搜索改搜译文那一处备案在 Comments。
