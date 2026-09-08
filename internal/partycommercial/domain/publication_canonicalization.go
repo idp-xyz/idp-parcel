@@ -33,7 +33,7 @@ var (
 // 理由是一册从「没接」到「接了」不改任何已算出的字节。见 ADR-0014。
 //
 // PCC-1：信用政策正文（责任法人 × 权限等级 × 费用类型 × 额度恰一格 × 区间）。
-// PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）。
+// PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）；服务产品无正文，文档只有两格。
 const publicationCanonicalizationVersion = "PCC-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
@@ -157,6 +157,11 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.SupplierAgreement = &body
 		return content, nil
 	}
+	if registerHasNoBody(kind) {
+		// 无正文的册没有「缺席」可判：两格文档就是它的全部（票 admin-write-faces/09）。文档若夹带别册的正文，
+		// 折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
+		return content, nil
+	}
 	if content.CreditPolicy == nil {
 		return none, ErrPublicationContentAbsent
 	}
@@ -209,6 +214,8 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		})
 	case SupplierAgreementObject:
 		return canonicalizeSupplierAgreement(content)
+	case ServiceProductObject:
+		return canonicalServiceProductContent()
 	default:
 		return none, ErrRegisterNotCanonicalized
 	}
@@ -217,10 +224,16 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 // IsRegisterCanonicalized 答某一册今天接没接进服务端规范化。对账门（ADR-0126 Decision 二）用它分辨
 // 「声明的串与算出的不等」与「这一册无从对账」。
 func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
-	if kind == SupplierAgreementObject {
+	switch kind {
+	case CreditPolicyObject:
 		return true
+	case SupplierAgreementObject:
+		return true
+	case ServiceProductObject:
+		return true
+	default:
+		return false
 	}
-	return kind == CreditPolicyObject
 }
 
 // canonicalPublicationDocument 是 PCC-1 的文档形状。字段顺序由结构体钉死——json.Marshal 按声明顺序
