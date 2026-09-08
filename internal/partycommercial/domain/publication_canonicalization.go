@@ -33,6 +33,7 @@ var (
 // 理由是一册从「没接」到「接了」不改任何已算出的字节。见 ADR-0014。
 //
 // PCC-1：信用政策正文（责任法人 × 权限等级 × 费用类型 × 额度恰一格 × 区间）。
+// PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）。
 const publicationCanonicalizationVersion = "PCC-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
@@ -91,6 +92,8 @@ func (body CreditPolicyBody) valid() bool {
 type PublicationContent struct {
 	Kind         CommercialObjectKind
 	CreditPolicy *CreditPolicyBody
+	// SupplierAgreement 是供应商协议册的正文（票 admin-write-faces/11）。
+	SupplierAgreement *SupplierAgreementBody
 }
 
 // CanonicalPublicationContent 是规范化的结果：版本、摘要串与被摘要盖住的那份文档。摘要串已带版本前缀，
@@ -146,6 +149,14 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		}
 		content.CreditPolicy = &body
 	}
+	if decoded.SupplierAgreement != nil {
+		body, err := decoded.SupplierAgreement.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: supplier agreement: %w", err)
+		}
+		content.SupplierAgreement = &body
+		return content, nil
+	}
 	if content.CreditPolicy == nil {
 		return none, ErrPublicationContentAbsent
 	}
@@ -180,6 +191,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 	if content.CreditPolicy != nil && content.Kind != CreditPolicyObject {
 		return none, ErrPublicationContentKindMismatch
 	}
+	if content.SupplierAgreement != nil && content.Kind != SupplierAgreementObject {
+		return none, ErrPublicationContentKindMismatch
+	}
 	switch content.Kind {
 	case CreditPolicyObject:
 		if content.CreditPolicy == nil {
@@ -193,6 +207,8 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 			Kind:             content.Kind.String(),
 			CreditPolicy:     canonicalCreditPolicyBodyOf(*content.CreditPolicy),
 		})
+	case SupplierAgreementObject:
+		return canonicalizeSupplierAgreement(content)
 	default:
 		return none, ErrRegisterNotCanonicalized
 	}
@@ -201,6 +217,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 // IsRegisterCanonicalized 答某一册今天接没接进服务端规范化。对账门（ADR-0126 Decision 二）用它分辨
 // 「声明的串与算出的不等」与「这一册无从对账」。
 func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
+	if kind == SupplierAgreementObject {
+		return true
+	}
 	return kind == CreditPolicyObject
 }
 
@@ -211,6 +230,8 @@ type canonicalPublicationDocument struct {
 	Canonicalization string                     `json:"canonicalization"`
 	Kind             string                     `json:"kind"`
 	CreditPolicy     *canonicalCreditPolicyBody `json:"creditPolicy,omitempty"`
+	// 供应商协议一节；键名镜像批文 supplierAgreementBody（节内形状见 canonicalSupplierAgreementBody）。
+	SupplierAgreement *canonicalSupplierAgreementBody `json:"supplierAgreement,omitempty"`
 }
 
 // canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺。
