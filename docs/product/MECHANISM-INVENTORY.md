@@ -14,13 +14,13 @@
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
 | parcelshipment | 141 | 140 | 17 | 26 | 8 | 14 |
-| partycommercial | 92 | 94 | 8 | 31 | 1 | 14 |
+| partycommercial | 100 | 99 | 9 | 32 | 1 | 17 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 78 | 57 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 844 | 792 | 113 | 241 | 51 | 107 |
+| **合计** | 852 | 797 | 114 | 242 | 51 | 110 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 55、测试 77。
 
@@ -49,7 +49,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 152 份 SQL
+## 迁移：11 个模块共 153 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -59,13 +59,13 @@
 | node_operations | 4 |
 | parcel_pricing | 9 |
 | parcel_shipment | 19 |
-| party_commercial | 27 |
+| party_commercial | 28 |
 | pilot_governance | 6 |
 | settlement_accounting | 16 |
 | transport_fulfillment | 18 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 102 个，消费适配器 26 个生产文件，直投路由表 17 条
+## 接线面：接入面端点 106 个，消费适配器 26 个生产文件，直投路由表 17 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -77,12 +77,12 @@
 | nodeoperations | 2 |
 | parcelpricing | 11 |
 | parcelshipment | 11 |
-| partycommercial | 19 |
+| partycommercial | 23 |
 | pilotgovernance | 1 |
 | settlementaccounting | 4 |
 | transportfulfillment | 21 |
 | visibilityexception | 13 |
-| **合计** | 102 |
+| **合计** | 106 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -102,7 +102,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 362 个；基线口径缺 17，精确口径缺 12
+## 端口：声明 365 个；基线口径缺 18，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -112,6 +112,7 @@
 - `parcelshipment.LabelChannelGateway` 
 - `parcelshipment.LabelValidityRuleView` 
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
+- `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
