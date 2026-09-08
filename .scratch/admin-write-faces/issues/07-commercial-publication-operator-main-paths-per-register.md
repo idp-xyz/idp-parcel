@@ -48,6 +48,7 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例；**连带前端公共半边**（`party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`） | **resolved**（2026-09-08 MCP-5，分支 `mcp5-awf16`；进 main 见票 Status） | 08（已 resolved） |
 | [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | ready-for-agent | 08 |
 | [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——等管理台读面票要不要立（MCP-1） | 08；管理台客户服务规则册读面票（未立） |
+| [20](./20-publication-vocabulary-read-face.md) | （公共半边，不是一册）| 词表读口：一口按 kind 答各册正文封闭集的码，表单不内置枚举——第 2 波 12/13/15/17 的前置 | ready-for-agent（2026-09-08 18:3x 通道 1 代裁立票） | 08、16（均已进 main） |
 
 **Status 口径**：ready-for-agent 只给「形状裁清且票面无待裁问题」的子票，Blocked by 边另记、不混进
 Status——一张 ready 的票在其阻塞边 resolved 之前不在前沿，这是 issue-tracker 的既有语义，不另造
@@ -103,3 +104,9 @@ ADR-0101 Alternatives 第二条否决逐字段表单只针对上百格的价卡�
   （`39a6f0cd`，`mcp4-awf10`）、11 → MCP-6（`662822ef`，`mcp6-awf11`），Go 先做、流程组件等 16 落点广播；**第 2 波**
   12/13/14/15/17 等 16 进 main 与词表读口裁决后再点名派。基线 `0ef63897`；不加迁移、不动 `ports.go` / `endpoints.go`；
   九张都不碰 `party/api.ts`。本波各票 Status 行由认领人自己转 in-progress，本表「状态」列随各票 resolved 时更新。
+- 2026-09-08 18:3x · 通道 1（用户「你自决」授权，代裁第 2 波前置）：**词表读口取「一口按 kind 答」**，立票 [20](./20-publication-vocabulary-read-face.md)
+  作公共半边——`GET /commercial-publication-vocabularies?kind=` 答该册正文所有封闭集的**码**（不答中文，中文留 admin-web 各页词表，集外原样示出），
+  集合从 PC 领域既有枚举列出、测试双向钉住与规范化器同词，`endpoints.go` 只加一行。理由：五步路径已是一套载荷带 kind 分册（ADR-0126），
+  词表跟同一条分派是同一形；一册一口要四张票四个人改 `endpoints.go`，是第 1 波刻意避开的撞点。**派单顺序**：20 + 14（14 不要词表）先开；
+  20 落点广播后 12/13/15/17 点名派——四张同写 `CommercialPoliciesPage.tsx`，各自只加一个签 + 一个 import（纯加行，推送方解撞），
+  表单本体各进新文件；Go 两共享文件照第 1 波「改前占号、只加自己一格」。子票表加 20 一行；12/13/15/17 的阻塞边加 20。

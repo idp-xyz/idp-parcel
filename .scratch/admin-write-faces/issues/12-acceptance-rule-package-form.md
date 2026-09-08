@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent——形状已裁清（分节逐字段表单，空节即未声明；伞票点名的「先答声明随发布怎么在表单里表达」在本票「选形与理由」答，无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面并改正 pc-gaps/09、10 两票落地后各加什么，见伞票 Comments）
-Blocked by: 08
+Blocked by: 08（已进 main）；[20](./20-publication-vocabulary-read-face.md)（词表读口公共半边，2026-09-08 通道 1 代裁立票；落点广播前表单里的下拉先按票面写成占位、不内置枚举）
 
 ## 册与载荷
 
