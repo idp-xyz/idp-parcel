@@ -96,11 +96,15 @@ type PublicationContent struct {
 	CreditPolicy *CreditPolicyBody
 }
 
-// CanonicalPublicationContent 是规范化的结果：版本与摘要串。摘要串已带版本前缀，可直接作
-// CommercialVersionSpec.ContentDigest。
+// CanonicalPublicationContent 是规范化的结果：版本、摘要串与被摘要盖住的那份文档。摘要串已带版本前缀，
+// 可直接作 CommercialVersionSpec.ContentDigest。
+//
+// 文档随结果交出，是因为待批准发布（ADR-0126 Decision 三）要存一份正文快照：存的就是这份文档——它恰是
+// 摘要盖住的那些字节，快照与摘要因此是一样东西的两面，重建时折回正文再算一遍就能对上列里的摘要。
 type CanonicalPublicationContent struct {
 	canonicalization string
 	digest           CommercialContentDigest
+	document         []byte
 }
 
 func (canonical CanonicalPublicationContent) Canonicalization() string {
@@ -109,6 +113,56 @@ func (canonical CanonicalPublicationContent) Canonicalization() string {
 
 func (canonical CanonicalPublicationContent) Digest() CommercialContentDigest {
 	return canonical.digest
+}
+
+// Document 交回规范化文档的字节（副本）：JSON，字段顺序由结构体钉死，键名镜像批文。
+func (canonical CanonicalPublicationContent) Document() []byte {
+	return append([]byte(nil), canonical.document...)
+}
+
+// RehydratePublicationContent 把一份存下来的规范化文档折回正文输入面。只认本构建自己的规范化版本：
+// 别的版本既折不回也不该猜，答 ErrCanonicalizationUnsupported（ADR-0014）。折回的每一格都过领域构造门——
+// 快照是数据，但正文立不立得住仍由构造门说；文档里没有任何一册的正文时答 ErrPublicationContentAbsent。
+func RehydratePublicationContent(canonicalization string, document []byte) (PublicationContent, error) {
+	none := PublicationContent{}
+	if canonicalization != publicationCanonicalizationVersion {
+		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s",
+			ErrCanonicalizationUnsupported, canonicalization, publicationCanonicalizationVersion)
+	}
+	var decoded canonicalPublicationDocument
+	if err := json.Unmarshal(document, &decoded); err != nil {
+		return none, fmt.Errorf("rehydrate publication content: %w", err)
+	}
+	if decoded.Canonicalization != canonicalization {
+		return none, fmt.Errorf("%w: document says %q, column says %q",
+			ErrCanonicalizationUnsupported, decoded.Canonicalization, canonicalization)
+	}
+	kind, known := commercialObjectKindNamed(decoded.Kind)
+	if !known {
+		return none, fmt.Errorf("rehydrate publication content: %w: kind %q", ErrInvalidCommercialVersion, decoded.Kind)
+	}
+	content := PublicationContent{Kind: kind}
+	if decoded.CreditPolicy != nil {
+		body, err := decoded.CreditPolicy.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: credit policy: %w", err)
+		}
+		content.CreditPolicy = &body
+	}
+	if content.CreditPolicy == nil {
+		return none, ErrPublicationContentAbsent
+	}
+	return content, nil
+}
+
+// commercialObjectKindNamed 按 String() 的原词反查类别：文档里的 kind 就是那一个词。
+func commercialObjectKindNamed(name string) (CommercialObjectKind, bool) {
+	for kind := ServiceProductObject; kind.valid(); kind++ {
+		if kind.String() == name {
+			return kind, true
+		}
+	}
+	return CommercialObjectKindInvalid, false
 }
 
 // CanonicalizePublicationContent 按册把正文折成规范化文档并算出内容摘要（ADR-0126 Decision 一）。
@@ -192,6 +246,59 @@ func canonicalCreditPolicyBodyOf(body CreditPolicyBody) *canonicalCreditPolicyBo
 	return document
 }
 
+// body 把文档里的一节折回领域正文。额度两键恰一在场由 creditLimitOf 判；时刻按写出时同一格式读回。
+func (document canonicalCreditPolicyBody) body() (CreditPolicyBody, error) {
+	legalEntity, err := NewLegalEntityReference(document.LegalEntity)
+	if err != nil {
+		return CreditPolicyBody{}, err
+	}
+	level, err := NewAuthorityLevel(document.AuthorityLevel)
+	if err != nil {
+		return CreditPolicyBody{}, err
+	}
+	chargeType, err := NewChargeTypeReference(document.ChargeType)
+	if err != nil {
+		return CreditPolicyBody{}, err
+	}
+	limit, err := creditLimitOf(document.LimitMinor, document.LimitRatioBasisPoints)
+	if err != nil {
+		return CreditPolicyBody{}, err
+	}
+	startsAt, err := time.Parse(time.RFC3339Nano, document.EffectiveStartsAt)
+	if err != nil {
+		return CreditPolicyBody{}, fmt.Errorf("effectiveStartsAt: %w", err)
+	}
+	var endsAt time.Time
+	if document.EffectiveEndsAt != "" {
+		if endsAt, err = time.Parse(time.RFC3339Nano, document.EffectiveEndsAt); err != nil {
+			return CreditPolicyBody{}, fmt.Errorf("effectiveEndsAt: %w", err)
+		}
+	}
+	effective, err := NewEffectiveInterval(startsAt, endsAt)
+	if err != nil {
+		return CreditPolicyBody{}, err
+	}
+	return CreditPolicyBody{
+		LegalEntity: legalEntity,
+		Level:       level,
+		ChargeType:  chargeType,
+		Limit:       limit,
+		Effective:   effective,
+	}, nil
+}
+
+// creditLimitOf 把文档里并存的两键折回两格封闭的额度：恰一在场才立得住，两空或两满是文档与领域分叉。
+func creditLimitOf(minor, basisPoints *int64) (CreditLimit, error) {
+	switch {
+	case minor != nil && basisPoints == nil:
+		return NewCreditAmountLimit(*minor)
+	case minor == nil && basisPoints != nil:
+		return NewCreditRatioLimit(*basisPoints)
+	default:
+		return CreditLimit{}, ErrInvalidCreditLimit
+	}
+}
+
 func canonicalTime(at time.Time) string {
 	return at.UTC().Format(time.RFC3339Nano)
 }
@@ -210,7 +317,7 @@ func canonicalDigestOf(document canonicalPublicationDocument) (CanonicalPublicat
 	if err != nil {
 		return CanonicalPublicationContent{}, err
 	}
-	return CanonicalPublicationContent{canonicalization: document.Canonicalization, digest: digest}, nil
+	return CanonicalPublicationContent{canonicalization: document.Canonicalization, digest: digest, document: encoded}, nil
 }
 
 // ReconcileDeclaredDigest 是受控批文那一半的对账门（ADR-0126 Decision 二）：声明的摘要串与算出的
