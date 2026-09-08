@@ -73,6 +73,8 @@ type CommercialPublicationPayload struct {
 	References map[string]string `json:"references,omitempty"`
 	// CreditPolicy 是信用政策册的正文（首例）；其余各册由子票在此各加一格。
 	CreditPolicy *CreditPolicyBodyPayload `json:"creditPolicy,omitempty"`
+	// SupplierAgreement 是供应商协议册的正文（票 admin-write-faces/11；形状见 SupplierAgreementBodyPayload）。
+	SupplierAgreement *SupplierAgreementBodyPayload `json:"supplierAgreement,omitempty"`
 }
 
 // CreditPolicyBodyPayload 镜像受控批文 creditPolicyBodyDocument 与规范化文档的键名：额度两键恰一在场（由领域
@@ -160,6 +162,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.CreditPolicy != nil {
 		body := payload.CreditPolicy.body(problems)
 		content.CreditPolicy = &body
+	}
+	if payload.SupplierAgreement != nil {
+		body := payload.SupplierAgreement.body(problems)
+		content.SupplierAgreement = &body
 	}
 
 	if problems.any() {
