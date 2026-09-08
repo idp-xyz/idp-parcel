@@ -107,6 +107,16 @@ Blocked by: 无（等的是裁决与 ADR 号，不是别的票）
 规范化文档与 seed 摘要换算（各子票）；旧式 `sha256:` 声明串何时开始拒收（伞票收口时裁）。ADR-0126 的越权风险点四条仍待 owner
 复核（`scripts/owner-review-queue.ps1` 会列出）。
 
+**补评后修补（2026-09-08 14:4x，MCP-1；分支 `mcp1-awf08-fix@c84230ce` 基 `d795307c`，main 上的 SHA 见「进 main 记录」）**：按下面通道 2
+评审的 Standards 非阻断三条——(1) `PublicationDrafts.AdvanceDraft` 的 UPDATE 由只钉 `status + content_digest` 改为再钉 `submitter_ref` /
+`submitted_at` / `scope_ref` / `effective_starts_at` / `effective_ends_at`（`IS NOT DISTINCT FROM`）/ `declared_references` 六列，与 `SubmitDraft`
+的 ON CONFLICT 修订谓词同一组列：推进只落在批准者读到的那一次录入上；真库用例 `TestApprovalLandsOnlyOnTheSubmissionTheApproverRead`
+在旧代码下实测答 `ADVANCED`（漏洞实证），修后 `SUPERSEDED` 且行不动。(3) 不改已施加的 0028（migrate 有校验和漂移门），改为在
+`publication_draft.go` 文件头写明 `content_document` 是 jsonb、列上是归一化形状不是摘要所盖原字节、两面一致靠重建门折回重算；0028
+头注那一句以此为准。(2) 不改 ADR-0126：Decision 三「`已批准`之后换内容是`内容已固定`」里的「换内容」按本记录「同一次录入 = 摘要 + 壳」读——
+同一次录入再录是重放（幂等，答案带载体状态），摘要或壳任一不同才是`内容已固定`；这一句是读法不是新裁决，伞票收口若要钉进 ADR 另 supersede。
+验证（修补树，含 DSN）：gofmt 空；build / vet 退 0；`go test -p 1 -count=1` PC 四包 + parcel-api + parcel-commercial + architecture 全 ok。
+
 ## Comments
 
 ### 评审 ← 通道 2 · 钉 `5b04c874` · 14:33
