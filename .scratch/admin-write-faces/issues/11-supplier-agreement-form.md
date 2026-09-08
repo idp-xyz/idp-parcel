@@ -59,3 +59,56 @@ tsc / run-tests 绿；Go 侧只加本册规范化一格。
 **自审（`/code-review` 两轴，基线 `0ef63897`；子代理不可用改串行自跑）**：无阻断。判断类三条留给伞票收口、不在本票动：(1) `canonicalSupplierAgreementBody.body()` 与信用政策那一节的时刻解析同形，可抽成领域内一个区间折回助手——今天不动信用政策那段是为守共享文件纯加行；(2) `IsRegisterCanonicalized` 逐册 `if` 累到几册后宜改 switch；(3) `normalizeMoment` 从 `pricing/series-form.ts` 跨页导入，各册表单都要它，宜挪到共享处。非作者评审由通道 1 派，结论写「进 main 记录」。
 
 **未做（各归其票）**：目录读面不显示 0021 正文列（读面票，本票只加写签）；五步状态机与各口答案中文归公共半边（票 16）；四口点亮归 `PAR-INT-01`（实例半边）。
+
+## Comments
+
+- 评审 ← 通道 5 · 钉 `a2a44679`（分支 `mcp6-awf11`，基 `0ef63897`；末笔 `4fe52a35` 只动票面）· 15:0x。非作者，隔离检出
+  `%TEMP%\idp-review-awf11`，只读，未跑全仓；`f94c13a2` 并入的 `283aa7d3` 三件是评审者自己的，跳过不评。两轴按
+  parallel-sessions「合入前独立评审」。
+
+  **Standards · 阻断：无。**
+
+  **Standards · 非阻断（三条，都是判断题）**：
+  1. `domain/publication_canonicalization.go` 的 `IsRegisterCanonicalized` 现为「`if kind == SupplierAgreementObject { return true }` +
+     原句 `return kind == CreditPolicyObject`」，`RehydratePublicationContent` 里供应商一支 `return content, nil` 提前返回、绕过下面
+     只认信用政策的 `content.CreditPolicy == nil → ErrPublicationContentAbsent`——两处都是「纯加行不动邻行」纪律下的形状，
+     语义今天对（Rehydrate 读的是 Canonicalize 自己写的文档，kind 已在 `CommercialObjectKindNamed` 处核过）；第三册接进时
+     应改成按 kind 的 switch / 集合，否则每册再加一支 if 与一个提前 return（Fowler「Repeated Switches」，判断题）。
+  2. `apps/admin-web/src/pages/party/supplier-agreement-form.ts` 从 `../pricing/series-form` 导入 `normalizeMoment`、从 `../pricing/api`
+     导入 `PriceCardRecord` / `listPriceCards`：读价卡目录本就是票面「从价卡目录选」要求的，导入读口正当；但 `normalizeMoment` 是
+     pricing 页表单的私有助手，party 页据此依赖 pricing 页的所有权——先例 `pricing/api.ts` 对 party 类型「另立窄类型不去改那份」
+     走的是反方向。两页共用的时刻归一化若要共用，该抬到 `pages/` 共享层，不该一页借另一页。判断题，不挡合入。
+  3. 票面簿记：`4fe52a35` 把 Status 转 **resolved** 早于进 main。parallel-sessions「推送方重放」步骤五写的是推送方广播「远端 main =
+     某 SHA」后作者据此转 resolved；08 的先例也是进 main 后转。建议进 main 前留 in-progress + 完成记录。
+
+  核过无发现的点：ADR-0126 Decision 一——同号 `PCC-1` 不换；`canonicalizeSupplierAgreement` 的文档只盖正文（`canonicalPublicationDocument`
+  的 `Kind` + `SupplierAgreement` 节），壳四元与壳范围 / 区间不进；`canonicalSupplierAgreementBody` 各键与
+  `cmd/parcel-commercial/translate.go` 的 `supplierAgreementBodyDocument` 逐键同名、无方向键；时刻走 `canonicalTime`（与信用政策同一
+  格式）。Decision 二甲路——`publish_commercial_authority_test.go` 只改 `TestASupplierAgreementBodyPublishesWithItsOwnVersion` 一例改配算出摘要
+  （`supplierAgreementSpec` 经 `CanonicalizePublicationContent`），其余不动；seed `publish-batch.json` 两项 `SYN-SUPPLIER-*` 无 `declarations`，
+  `reconcileDeclaredDigest` 在 `publicationContentOf` 答不在场时直接放行，作者「seed 不动」属实。领域正文类型 `SupplierAgreementBody` 各格
+  全用既有构造门（`NewPartyID` / `NewLegalEntityReference` / `NewCommercialScopeReference` / `NewPricingPlanReference` / `NewEffectiveInterval`）
+  不另造校验；新域文件只导入 `fmt` / `time`。共享 Go 文件各处（`PublicationContent` 一格、`Canonicalize` 一句 + 一支、`IsRegisterCanonicalized`、
+  `canonicalPublicationDocument` 一格、`Rehydrate` 一支；`publication_draft_payload.go` 一格 + 一段；`publicationContentOf` 一 case；
+  `declarationsOfContent` 一支）全纯加行。前端：只用公共半边既有 props，未动 `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`；
+  `publication-draft-api.ts` 只加 `SupplierAgreementBodyPayload` 一型 + `supplierAgreement?` 一格，键名与 Go `SupplierAgreementBodyPayload`
+  json 标签逐字同；不给 `localProblems`（全文本格，无编不进类型的格）；载荷无身份、无摘要、无方向；`ReferencePicker` 不按状态过滤、
+  读面 403 退回手填。中文注释无行号无跨文件计数。
+
+  **Spec · 阻断：无。**
+
+  **Spec · 非阻断（两条）**：
+  1. 完成判据「结果在同页目录读面立刻可见」——**版本行**可见（`SupplierAgreementsPage` 以 `reloadToken` 重读目录，发布落定即刷），
+     **正文列不可见**：后端读口 `adapters/http/query_commercial_relations.go` 的 `supplierAgreementBody` 已透 `contentRegistered` 与
+     `supplier` / `legalEntity` / `purchasePlan` / `agreementScope` / `agreementEffective*` / `registeredAt`，而前端 `party/api.ts` 的
+     `SupplierAgreementRecord` 止于 `publishedAt`，其头注「服务端没有正文表可读」已过期。判**非阻断**：票面判据写的是「结果…可见」
+     未点名正文列（对照票 16 点名了「额度列」），且派单红线不动 `party/api.ts`；作者已如实列入未做。建议另立票：镜像后端各键、目录加
+     正文列（`contentRegistered` 显式布尔照合同页同款），顺手改掉那句过期头注。
+  2. 边界「采购方案的方向与绑定换算…不在这里出现」——载荷与草稿里都没有方向，成立；`ReferencePicker` 的价卡选项标签把
+     `card.direction` 显给人看（作者注明「只是显给人看，不按方向过滤」）。判**非阻断**：方向没进载荷、没被表单裁；但选项里显方向
+     与「不在这里出现」字面有张力，作者与推送方任选：留（帮人挑 BUY 方案）或去（字面守边界）。
+
+  核过无发现的点：供应商协议页多一签「发布协议版本」（`SupplierAgreementsPage` 两签，`SupplierAgreementPublicationForm` 挂
+  `PublicationDraftFlow kind="SUPPLIER_AGREEMENT"`）；`purchasePlan` 从价卡目录选、只传 `planId@planVersion` 引用串（`planReferenceOf`），
+  供应商 / 法人从业务参与方册、集团法人册选；Go 侧只加本册规范化一格（无迁移、不动 0021、不动 `ports.go` / `endpoints.go`）；
+  伞票 07 硬句在场；`supplier-agreement-form.test.ts` 钉认领路径 ↔ 载荷键一一对应。
