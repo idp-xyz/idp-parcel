@@ -1,59 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
-import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { catalogueViewState } from '../catalogue-view';
+import { listSupplierAgreements, type SupplierAgreementListResponseBody } from './api';
 import {
-  listSupplierAgreements,
-  type SupplierAgreementListResponseBody,
-  type SupplierAgreementRecord,
-} from './api';
-import { commercialStatusLabels, labelOf } from './presentation';
+  supplierAgreementColumns,
+  supplierAgreementRowsOf,
+  type SupplierAgreementRow,
+} from './supplier-agreement-rows';
 import { SupplierAgreementPublicationForm } from './SupplierAgreementPublicationForm';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['supplier-agreements'];
 
-// 只列版本壳。骨架期这里还列过供应商、采购服务范围、采购价格条件与结算条件——领域的
-// SupplierAgreement 确实携这些，但今天没有对应的正文表可读（后端
-// ports.SupplierAgreementCatalogueRow 记着这条），因此四列都不上：缺的是登记面，
-// 不是转写。正文表落库后在读面上扩字段，那时才谈得上列它们。
-const columns: ListColumn<SupplierAgreementRecord>[] = [
-  {
-    id: 'agreement',
-    header: '协议 / 版本',
-    render: (row) => (
-      <div className="min-w-48">
-        <p className="font-mono font-medium text-idpxyz-text">{row.objectId}</p>
-        <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.version}</p>
-      </div>
-    ),
-  },
-  {
-    id: 'scope',
-    header: '适用范围',
-    className: 'font-mono text-xs',
-    render: (row) => row.scope,
-  },
-  {
-    id: 'status',
-    header: '生命周期状态',
-    render: (row) => labelOf(commercialStatusLabels, row.status),
-  },
-  {
-    id: 'effective',
-    header: '有效区间',
-    className: 'min-w-64 font-mono text-xs',
-    render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
-  },
-  {
-    id: 'published-at',
-    header: '发布时间',
-    className: 'min-w-44 font-mono text-xs',
-    render: (row) => formatInstant(row.publishedAt),
-  },
-];
+// 列与行转写在 supplier-agreement-rows.ts（票 admin-write-faces/19）：版本壳之外，0021 正文逐键上列，正文在不在由
+// 服务端的 contentRegistered 说，不拿正文键的有无去推。壳在正文缺是合法状态——壳可先入册，正文随「发布协议版本」
+// 签登记——目录里两态各有各的样子（「未登记」/「已登记」），布尔为真而键缺则如实点名为响应不合契约。
+// 骨架期这里列过的结算条件仍不上：0021 正文里没有它（结算方式归「商业规则与策略」页的结算政策册），读口没有透，
+// 不是转写漏了；采购价格条件在正文里是采购定价方案的引用串，按引用上列、不读方案内容。
 
 // 目录读面。reloadToken 由页面在发布签落定后递增，让同页目录立刻刷新可见（票 admin-write-faces/11 完成判据）；
 // 自己的「重试」另有一把键，两把任一变都重取。
@@ -73,36 +39,35 @@ function SupplierAgreementCatalogue({ reloadToken }: { reloadToken: number }) {
     };
   }, [reloadKey, reloadToken]);
 
-  const agreements = answer?.kind === 'outcome' ? answer.body.agreements : [];
+  const rows = answer?.kind === 'outcome' ? supplierAgreementRowsOf(answer.body) : [];
   const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleAgreements = needle
-    ? agreements.filter((row) =>
-        [row.objectId, row.version, row.scope, row.status].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
+  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。搜的是转写后的各格，
+  // 正文列（供应商、方案引用）因此也搜得到。
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
       )
-    : agreements;
+    : rows;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<SupplierAgreementRecord>
+    <ListPageTemplate<SupplierAgreementRow>
       title={info.title}
-      description={`${info.owner}——当前读面只展示协议版本壳，供应商、采购价格条件与结算条件尚无正文册可读，不上列`}
+      description={`${info.owner}——行对象是供应商协议版本壳与已登记正文（供应商、责任法人、采购方案引用、协议范围与区间）；壳可先入册、正文随发布登记，只有壳的行正文列显「未登记」`}
       search={{
         value: search,
         onChange: setSearch,
-        placeholder: '搜索协议、版本或适用范围',
+        placeholder: '搜索协议、版本、范围、供应商或方案引用',
       }}
       filterSummary={
         // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 份」会与状态区
-        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome' ? `当前返回 ${agreements.length} 份协议版本` : undefined
+        // 「这不是目录为空」直接矛盾（README 列表页上列通则「计数摘要必须带 outcome 守卫」）。
+        answer?.kind === 'outcome' ? `当前返回 ${rows.length} 份协议版本` : undefined
       }
-      columns={columns}
-      rows={visibleAgreements}
-      rowKey={(row) => `${row.objectId}@${row.version}`}
-      viewState={catalogueViewState(answer, agreements.length, retry, {
+      columns={supplierAgreementColumns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /commercial-supplier-agreements',
         emptyTitle: '当前租户尚无供应商协议版本',
