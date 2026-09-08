@@ -137,7 +137,7 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		return none, fmt.Errorf("%w: document says %q, column says %q",
 			ErrCanonicalizationUnsupported, decoded.Canonicalization, canonicalization)
 	}
-	kind, known := commercialObjectKindNamed(decoded.Kind)
+	kind, known := CommercialObjectKindNamed(decoded.Kind)
 	if !known {
 		return none, fmt.Errorf("rehydrate publication content: %w: kind %q", ErrInvalidCommercialVersion, decoded.Kind)
 	}
@@ -155,8 +155,9 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 	return content, nil
 }
 
-// commercialObjectKindNamed 按 String() 的原词反查类别：文档里的 kind 就是那一个词。
-func commercialObjectKindNamed(name string) (CommercialObjectKind, bool) {
+// CommercialObjectKindNamed 按 String() 的原词反查类别：规范化文档里的 kind、运营操作者面载荷里的 kind 都是那一个词，
+// 两处不各自抄一份名单——名单在 String() 一处，这里只是反查。集合外答 false。
+func CommercialObjectKindNamed(name string) (CommercialObjectKind, bool) {
 	for kind := ServiceProductObject; kind.valid(); kind++ {
 		if kind.String() == name {
 			return kind, true

@@ -2,6 +2,7 @@ package commercialhttp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
@@ -113,11 +114,30 @@ func writePublicationAnswer(
 	response http.ResponseWriter,
 	result application.PublishCommercialAuthorityResult,
 ) {
-	outcome := result.Outcome()
-	name := outcome.String()
-	if name == "" {
+	answer, err := publicationAnswerOf(result)
+	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 		return
+	}
+
+	status := http.StatusOK
+	switch result.Outcome() {
+	case application.CommercialVersionPublishedEffective,
+		application.CommercialVersionPlannedEffective:
+		status = http.StatusCreated
+	}
+	writeJSON(response, status, answer)
+}
+
+// errUnnamedPublicationOutcome 是 publicationAnswerOf 对没有名字的结果或落点的答复：编程错误，不是业务答案。
+var errUnnamedPublicationOutcome = errors.New("party commercial http: publication outcome or declaration landing has no name")
+
+// publicationAnswerOf 把发布用例的答案逐名转写成响应体。单立出来是因为载体发布口（ADR-0126 Decision 三）要把
+// 同一个用例的答案嵌进自己的响应——同一个用例的答案在两口不换形，转写只能有一处。
+func publicationAnswerOf(result application.PublishCommercialAuthorityResult) (publicationAnswer, error) {
+	name := result.Outcome().String()
+	if name == "" {
+		return publicationAnswer{}, errUnnamedPublicationOutcome
 	}
 
 	answer := publicationAnswer{Outcome: name}
@@ -138,20 +158,12 @@ func writePublicationAnswer(
 		channel := report.Channel.String()
 		landing := report.Outcome.String()
 		if channel == "" || landing == "" {
-			writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
-			return
+			return publicationAnswer{}, errUnnamedPublicationOutcome
 		}
 		answer.Declarations = append(answer.Declarations, declarationAnswer{
 			Channel: channel,
 			Outcome: landing,
 		})
 	}
-
-	status := http.StatusOK
-	switch outcome {
-	case application.CommercialVersionPublishedEffective,
-		application.CommercialVersionPlannedEffective:
-		status = http.StatusCreated
-	}
-	writeJSON(response, status, answer)
+	return answer, nil
 }

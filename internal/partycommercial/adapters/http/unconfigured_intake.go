@@ -47,6 +47,10 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 // 那个数，而漏改不会有任何东西变红——本仓已因同形的计数吃过几次亏。
 var (
 	_ CommercialPublicationIntake             = UnconfiguredIntake{}
+	_ CommercialPublicationPreviewIntake      = UnconfiguredIntake{}
+	_ PublicationDraftSubmissionIntake        = UnconfiguredIntake{}
+	_ PublicationDraftApprovalIntake          = UnconfiguredIntake{}
+	_ PublicationDraftPublicationIntake       = UnconfiguredIntake{}
 	_ BusinessPartyRegistrationIntake         = UnconfiguredIntake{}
 	_ LegalEntityRegistrationIntake           = UnconfiguredIntake{}
 	_ CustomerAccountRegistrationIntake       = UnconfiguredIntake{}
@@ -65,6 +69,32 @@ func (UnconfiguredIntake) IntakeCommercialPublication(
 	context.Context, *http.Request,
 ) (application.PublishCommercialAuthorityCommand, error) {
 	return application.PublishCommercialAuthorityCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 运营操作者面发布路径的四口（ADR-0126 Decision 三、四）：预览虽不落库，拟录的壳也要信封里的租户才立得住，
+// 与三个命令口同一分界。
+func (UnconfiguredIntake) IntakeCommercialPublicationPreview(
+	context.Context, *http.Request,
+) (application.PreviewCommercialPublicationCommand, error) {
+	return application.PreviewCommercialPublicationCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePublicationDraftSubmission(
+	context.Context, *http.Request,
+) (application.SubmitPublicationDraftCommand, error) {
+	return application.SubmitPublicationDraftCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePublicationDraftApproval(
+	context.Context, *http.Request,
+) (application.ApprovePublicationDraftCommand, error) {
+	return application.ApprovePublicationDraftCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakePublicationDraftPublication(
+	context.Context, *http.Request,
+) (application.PublishPublicationDraftCommand, error) {
+	return application.PublishPublicationDraftCommand{}, ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeBusinessPartyRegistration(

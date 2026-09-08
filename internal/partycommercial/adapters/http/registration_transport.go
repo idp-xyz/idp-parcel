@@ -57,11 +57,30 @@ func writeRegistrationIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 		return
 	}
+	// 解码收齐的逐格问题（运营操作者面载荷，ADR-0126 Decision 四）仍是「请求畸形」——改载荷才会好——只是多告诉
+	// 调用方哪几格；与光秃秃的 400 走同一格、同一个码，响应体多一节 problems。
+	var problems *PublicationPayloadProblems
+	if errors.As(err, &problems) {
+		writeJSON(response, http.StatusBadRequest, problemWithFieldsResponse{Error: problemWithFields{
+			Code:     codeMalformedRequest,
+			Problems: payloadProblemAnswersOf(problems),
+		}})
+		return
+	}
 	if errors.Is(err, ErrMalformedRequest) {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return
 	}
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+}
+
+type problemWithFieldsResponse struct {
+	Error problemWithFields `json:"error"`
+}
+
+type problemWithFields struct {
+	Code     string                 `json:"code"`
+	Problems []payloadProblemAnswer `json:"problems,omitempty"`
 }
 
 // registrationAnswer 是参与方身份族与产品渠道族共用的封闭响应形状。`outcome` 取应用
