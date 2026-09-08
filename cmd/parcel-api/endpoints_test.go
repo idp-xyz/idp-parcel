@@ -105,6 +105,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/commercial-publication-drafts":                                           {method: http.MethodPost, target: "/commercial-publication-drafts"},
 	"/commercial-publication-draft-approvals":                                  {method: http.MethodPost, target: "/commercial-publication-draft-approvals"},
 	"/commercial-publication-draft-publications":                               {method: http.MethodPost, target: "/commercial-publication-draft-publications"},
+	"/commercial-publication-vocabularies":                                     {method: http.MethodGet, target: "/commercial-publication-vocabularies?kind=ACCEPTANCE_RULE_PACKAGE"},
 	"/commercial-business-party-registrations":                                 {method: http.MethodPost, target: "/commercial-business-party-registrations"},
 	"/commercial-legal-entity-registrations":                                   {method: http.MethodPost, target: "/commercial-legal-entity-registrations"},
 	"/commercial-customer-account-registrations":                               {method: http.MethodPost, target: "/commercial-customer-account-registrations"},
