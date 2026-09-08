@@ -1,7 +1,7 @@
 # 人工复核谓词：「要不要」已由接单规则正文答，「谁有权」这一问的消费方（复核完成授权）尚无端口
 
 Category: enhancement
-Status: ready-for-agent——2026-09-08 11:0x，MCP-1 代裁（owner 授权自决口径，见 Comments 末条）：取「谁有权」形态、不拆两问，**不改名而是并入 `Authorize`**——PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调 UC-PC-003 既有裁定用例带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因第一种）。判据 1 已裁并记进 UC-PC-003 第四项；判据 2、3 的 PC 半边与 PS 侧端口**同笔**落地、单独改不了，PS 侧另派 MCP-2，故转 ready-for-agent 等派。不立新 ADR。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Status: in-progress——2026-09-08 16:5x，MCP-2（task 449f4e64；分支 `mcp2-wbr04` 基 origin/main `62bf6504`）：派单第 ① 步消费点已量（`CompleteManualReviewHandler.Handle` 一处，PS 不变式不动，见 Comments 末条），判据 2、3 施工中。此前 ready-for-agent——2026-09-08 11:0x，MCP-1 代裁（owner 授权自决口径，见 Comments 倒数第二条）：取「谁有权」形态、不拆两问，**不改名而是并入 `Authorize`**——PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调 UC-PC-003 既有裁定用例带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因第一种）。判据 1 已裁并记进 UC-PC-003 第四项；判据 2、3 的 PC 半边与 PS 侧端口**同笔**落地、单独改不了，PS 侧另派 MCP-2，故转 ready-for-agent 等派。不立新 ADR。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
 Blocked by: 无（UC-PC-003 第四项已由 MCP-1 2026-09-08 裁；PC 半边与 PS 侧端口同笔落地，PS 侧另派 MCP-2，MCP-6 不碰 PS 地盘）
 
 ## 条目
@@ -70,3 +70,31 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
   带 `ManualReviewAction`」；判据 3 的三分成因从第二种改为第一种（删）。**不立新 ADR**：ADR-0042 已定归类，这是应用不是新取舍；
   UC-PC-003 第四项那段记裁决（改行为→改 UC，不动 ADR 历史）。PS 侧端口在 PS 地盘，另派 MCP-2，MCP-6 不碰。Status
   blocked→ready-for-agent（PC 半边等 PS 端口同笔，单独改不了）。
+- 2026-09-08 16:5x · MCP-2（task 449f4e64；分支 `mcp2-wbr04` 基 origin/main `62bf6504`，与派单写的 `2c0008c3` 只差一笔
+  tasks.md）：**派单第 ① 步——量 PS 侧谁需要「复核授权」，先写这里再动代码。** 取证钉 `62bf6504`。
+  - **消费点只有一处**：`internal/parcelshipment/application/complete_manual_review.go` 的 `CompleteManualReviewHandler.Handle`
+    ——生产代码里唯一构造 `domain.ManualReviewCompletion` 的地方，三项引用（授权、复核人、证据）此刻整组来自
+    `CompleteManualReviewCommand`，而命令的唯一生产来源是 `adapters/http/unconfigured_intake.go`（交回零值 +
+    `ErrAccessChannelNotConfigured`；`cmd/parcel-api/endpoints.go` 接的就是 `UnconfiguredIntake{}`）。其余构造
+    `CompleteManualReviewCommand{` 的三处全是测试（application 用例、`cmd/parcel-api/assemble_review_test.go`、
+    `cmd/parcel-dispatch/manual_review_resume_loop_test.go`）。`cmd/parcel-dispatch` 的生产装配不建复核完成编排，
+    派单写的「dispatch PS 组那几行」量下来是零行——只有 `cmd/parcel-api/assemble_review.go` 的
+    `buildManualReviewOrchestration` 一处生产装配。
+  - **用例依据**：UC-PS-001 步骤 8 与 `AT-PS-034`「前者只由规则授权的角色按证据完成复核」；CONTEXT 接受判断任务
+    「等待人工复核：由适用规则授权的角色按证据完成复核」。「规则授权的角色」的规则属 `PAR-COM-14`（`BD-PS-002`），
+    权威是 PC 的授权治理册——即 UC-PC-003 带 `ManualReviewAction` 的裁定。今天没人问它：`acceptance_task.go` 自注
+    「授权规则属 party-commercial，本上下文保存所采用的授权引用」，而引用实际是调用方自报的。
+  - **样本对照**：`RejectShipmentRequestHandler` 找到委托后、任何写动作前先问 `ActiveRejectionAuthorizer`；命令
+    「不带授权引用：那由 party-commercial 签发，本编排去问，不由调用方声明」；三值落点——已授权带 PC 签发的引用继续、
+    不允许答 `ActiveRejectionNotAuthorized`、未配置停未决、错误停未决。
+  - **PS 不变式是否要改：不要。** `domain.NewManualReviewCompletion` 仍要求授权、复核人、证据三项必填，一字不动；
+    变的只是授权引用的**来源**——从命令（调用方自报）换成 PC 裁定用例交回的所采用授权规则版本。这是应用层接线，
+    不是领域规则改口，按派单不必停下。
+  - **落地形状（照样本）**：`CompleteManualReviewCommand` 去掉 `Authority`（自带一个等于自己给自己签字）；
+    `CompleteManualReviewDeps` 加 `Authorizer ports.ManualReviewAuthorizer`；编排在找到委托后先问授权，再做版本核对与
+    领域动作。三值落点：已授权→以 PC 交回的引用构造完成留痕继续；不允许→新增 `ManualReviewNotAuthorized`（确定的业务
+    答案，不落库）；未配置→新增 `ManualReviewAuthorityRulesNotConfigured`（UC-PC-003 结果表：保持未决等租户登记，不落库，
+    不压成不允许）；权威答不出→error（未形成，HTTP 与本编排其余未形成答案一并 5xx `NO_ANSWER_FORMED`）。
+    查询携带身份、委托、提交版本、复核人与证据引用——PC 的 `AuthorizationRequest` 要证据，PS 手上正好有；结构化原因 PS
+    没有，由实例半边的请求映射（`ManualReviewAuthorizationRequestSource`，生产留 nil）给。适配器另加一道守卫：映射折出的
+    请求动作不是 `ManualReviewAction` 即拒（`ErrUntranslatableAnswer`），「带 `ManualReviewAction`」这句做进结构而不只写注释。
