@@ -155,3 +155,11 @@ Blocked by: 无（10 已 resolved，替代链在 main）
   越权 ①③ 在裁决字面内（① 走的是 ADR-0112 决定三对替代格的同一条分支；③ 退格与决定四「实施另票」相合），归 owner 复核。
 
   **结论**：两轴无阻断，可重放。清点笔 `21ee3af0` 由推送方在 tip 重生成。
+
+## 进 main 记录（2026-09-08 17:4x，通道 1 重放）
+
+- **分支→main 逐笔**（`git cherry-pick` 于 `a69c16f0` 之上，隔离 detached 树 `idp-replay-tf11`）：`3559f5d5→290299e3`、`59b0bb1e→383e65f2`、`244ad85d→090f64cd`（三笔零冲突）、`2d77d7de→5e8eb710`（本票 Status 行与 Comments 末各撞一次——main 上通道 1 16:4x 那笔改过 Status、加过一条 Comment——取分支侧，撞后本票对分支 tip 零差）；评审 `7e4e5fc5→c02ccbe2`（Comments 末与作者 17:15 那行同一 hunk，两者都留，评审段 47 行逐行在场）；本笔只加本节。
+- **不带**：`503dfcc6`（= main `bd5ccb9e`，16:4x 已进）；`21ee3af0` 清点笔——它基 `d1e6c094` 缺 PC 0028，数字只对该检出成立；在重放 tip 干净检出重生成为 `80b4b41f`（transport_fulfillment 迁移 18→19、合计 153→154，对 main 只差这两处）。封存笔 `6e5c8a0c` 作者已重切，不在分支上。
+- **树等价**：TF 地盘（`internal/transportfulfillment`、`migrations/transport_fulfillment`、`docs/domain/transport-fulfillment`、`.scratch/tf-segment-lifecycle-closure`）`git diff --name-only 21ee3af0 <tip>` 为空；分支触及文件里对 tip 仍有差的只有 `MECHANISM-INVENTORY.md`（即上一条）。
+- **验证钉 `80b4b41f`**（之后只多 .md）：gofmt -l 空；go build / go vet 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（17:35:10→17:45:12，`transportfulfillment/adapters/postgres` 64s 非缓存）；日志 `%TEMP%\mcp1-tf11-fulltest.log`。
+- **评审非阻断**（Standards 3 / Spec 2，见 Comments）随票记：中间笔 `3559f5d5` 单独不可编——按原样重放不并笔，历史如实；跨文件计数那几处与替身重复留待下次触及同文件时顺手改。**归 owner 复核**：越权风险点 ①–④（④ 在 ADR-0114 决定二字面内，但「被替代或已离场」两种已成三种、ADR-0114 正文没跟）；② 已写进 TF CONTEXT「履约参与关系」词条，复核时连那句一起看。
