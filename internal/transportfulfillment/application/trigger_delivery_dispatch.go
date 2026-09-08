@@ -259,7 +259,9 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 		return deliveryDispatchRefused(DeliveryTriggerRefusedSegmentNotDelivery), nil
 	}
 	participation, present := record.Segment.ParticipationFor(object)
-	if !present {
+	// 链尾失效即该对象在本段当前无有效参与（票 tf-segment-lifecycle-closure/11 裁决 4）——它从未离场，「来晚了」
+	// 那一格说的不是它。
+	if !present || participation.Voided() {
 		return deliveryDispatchRefused(DeliveryTriggerRefusedObjectNotInSegment), nil
 	}
 	if !participation.Active() {

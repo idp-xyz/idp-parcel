@@ -67,6 +67,7 @@ func participationSpecOf(participation domain.FulfillmentParticipation) domain.R
 	if supersedes, chained := participation.Supersedes(); chained {
 		spec.Supersedes = supersedes
 	}
+	spec.Voided = participation.Voided()
 	return spec
 }
 
@@ -79,6 +80,12 @@ func (rows *segmentRowsDouble) superseded(row domain.RehydrateParticipationSpec)
 		}
 	}
 	return false
+}
+
+// active 是「在场」在替身上的写法，与真库 SQL 谓词三条同一：未离场、无人回指、未失效
+// （票 tf-segment-lifecycle-closure/11 裁决 4）。
+func (rows *segmentRowsDouble) active(row domain.RehydrateParticipationSpec) bool {
+	return row.EndedAt.IsZero() && !rows.superseded(row) && !row.Voided
 }
 
 func (double *segmentRegistryDouble) FindByKey(
@@ -106,7 +113,7 @@ func (double *segmentRegistryDouble) FindByKey(
 	return ports.FulfillmentSegmentRecord{Key: key, Segment: segment, RecordedAt: rows.recordedAt}, true, nil
 }
 
-// FindActiveSegments 与真库同一个判据：EndedAt 为零值且无人回指即在场。替身不挑一个、不去重——多于一个时
+// FindActiveSegments 与真库同一个判据：未离场、无人回指、未失效即在场。替身不挑一个、不去重——多于一个时
 // 编排要响亮报错，替身若替它挑了，那一格就永远测不出来。
 func (double *segmentRegistryDouble) FindActiveSegments(
 	_ context.Context,
@@ -122,7 +129,7 @@ func (double *segmentRegistryDouble) FindActiveSegments(
 			continue
 		}
 		for _, participation := range rows.participations {
-			if participation.Object == object && participation.EndedAt.IsZero() && !rows.superseded(participation) {
+			if participation.Object == object && rows.active(participation) {
 				keys = append(keys, rows.key)
 			}
 		}
@@ -255,7 +262,8 @@ func (double *segmentRegistryDouble) EndParticipation(
 		if row.Object != participation.Object() || rows.superseded(*row) {
 			continue
 		}
-		if !row.EndedAt.IsZero() {
+		// 已离场与已失效都答`已离场`：与真库窄口同一个 WHERE——失效链尾不在场，没有东西可结束。
+		if !row.EndedAt.IsZero() || row.Voided {
 			return ports.ParticipationAlreadyEnded, nil
 		}
 		endKind, endBasis, endedAt, ended := participation.End()

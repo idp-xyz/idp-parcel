@@ -315,6 +315,33 @@ func TestAnObjectThatAlreadyLeftTheSegmentDoesNotTrigger(t *testing.T) {
 	}
 }
 
+// Covers: 票 tf-segment-lifecycle-closure/11 裁决 4 在派送触发一路——对象凭以进段的`已交接`被更正为拒收，链尾是失效版本：
+// 对象在本段当前无有效参与，答的是 OBJECT_NOT_IN_SEGMENT 而不是 PARTICIPATION_NOT_ACTIVE——后者说的是「已离场、这一拍
+// 来晚了」，而失效的参与从未离场，也没有一个终点在册。
+func TestAnObjectWhoseEntryWasWithdrawnDoesNotTrigger(t *testing.T) {
+	fixture := newDispatchTriggerFixture(t)
+	fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+	withdrawing := correctHandoverStillHandedOver(t, "handover-result/parcel-1/v1", "handover-result/parcel-1/v2")
+	withdrawing.Verdict = domain.HandoverRefused
+	withdrawing.ReleasingEvidence, withdrawing.ReceivingEvidence, withdrawing.Rule = "", "", ""
+	withdrawing.Basis = "handover-basis/withdrawn-1"
+	corrected, err := fixture.handovers.handler.Correct(t.Context(), withdrawing)
+	if err != nil || corrected.Outcome() != application.HandoverCorrected || corrected.SegmentEntryRefusal() != application.SegmentEntryRefusalNone {
+		t.Fatalf("撤回控制的更正：%v %q %s", err, corrected.Outcome(), corrected.SegmentEntryRefusal())
+	}
+
+	result, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("触发：%v", err)
+	}
+	if result.Outcome() != application.DeliveryDispatchNotTriggered || result.Refusal() != application.DeliveryTriggerRefusedObjectNotInSegment {
+		t.Fatalf("outcome = %q refusal = %s, want NOT_A_DELIVERY_TRIGGER / OBJECT_NOT_IN_SEGMENT", result.Outcome(), result.Refusal())
+	}
+	if fixture.tasks.saves != 0 {
+		t.Fatalf("已失效的参与开了派送任务：saves=%d", fixture.tasks.saves)
+	}
+}
+
 // 段不在册、对象不在段里：两格都是形成了的答案（重试不会变），各自单开一格而不并成「找不到」——续办动作不同：
 // 一个去查段有没有立起来，一个去查对象进没进段。
 func TestAMissingSegmentOrObjectIsRefusedNotUndecided(t *testing.T) {

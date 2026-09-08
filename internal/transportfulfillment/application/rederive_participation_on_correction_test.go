@@ -277,9 +277,11 @@ func TestAHandoverCorrectionThatStillTransfersControlRederivesTheParticipation(t
 	}
 }
 
-// Covers: ADR-0112 决定四——`已交接`被更正为拒收/待确认是失效格，本记录只如实答 CORRECTION_WITHDRAWS_CONTROL：
-// 更正照落，段登记册一字不动（原参与仍在场、仍是当前），不留续办引用。
-func TestAHandoverCorrectionThatWithdrawsControlAnswersTheRefusalAndLeavesTheParticipation(t *testing.T) {
+// Covers: ADR-0112 决定四与票 tf-segment-lifecycle-closure/11 裁决 1、2、5 在编排一侧——`已交接`被更正为拒收/待确认
+// 走的是同一道重派生门：更正照落，段里凭前版入场的参与经 `Supersede` 长出失效版本（回指前版、Voided 为是、不在场），
+// 原参与一字不动；成功时两格都空，与替代版本同形——CORRECTION_WITHDRAWS_CONTROL 那一格已退场，撤回控制不再是段
+// 那一半的拒绝。此后该对象在本段当前无有效参与：在场计数为零，按对象反查在场也找不到它。
+func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipation(t *testing.T) {
 	for _, verdict := range []domain.HandoverVerdict{domain.HandoverRefused, domain.HandoverPendingConfirmation} {
 		t.Run(verdict.String(), func(t *testing.T) {
 			fixture := newHandoverSegmentFixture(t)
@@ -300,19 +302,40 @@ func TestAHandoverCorrectionThatWithdrawsControlAnswersTheRefusalAndLeavesThePar
 			if result.Outcome() != application.HandoverCorrected {
 				t.Fatalf("outcome = %q, want HANDOVER_CORRECTED", result.Outcome())
 			}
-			if result.SegmentEntryRefusal() != application.SegmentEntryRefusedCorrectionWithdrawsControl || result.SegmentEntryRefusal().String() != "CORRECTION_WITHDRAWS_CONTROL" {
-				t.Fatalf("refusal = %q, want CORRECTION_WITHDRAWS_CONTROL", result.SegmentEntryRefusal())
+			if result.SegmentContinuationReference() != "" || result.SegmentEntryRefusal() != application.SegmentEntryRefusalNone {
+				t.Fatalf("失效版本落地成功却答了欠账或拒绝：%q %q", result.SegmentContinuationReference(), result.SegmentEntryRefusal())
 			}
-			if result.SegmentContinuationReference() != "" {
-				t.Fatal("失效格不是欠账，不该留续办引用")
+			if fixture.segments.supersedes != 1 || fixture.segments.saves != 1 || fixture.segments.joins != 0 {
+				t.Fatalf("窄口调用走样：supersedes=%d saves=%d joins=%d", fixture.segments.supersedes, fixture.segments.saves, fixture.segments.joins)
 			}
-			if fixture.segments.supersedes != 0 {
-				t.Fatal("撤回控制的更正调了替代窄口")
-			}
+
+			parcel := objectRef(t, "parcel-1")
 			record := fixture.segments.saved(t, "tenant-1", "segment-1")
-			current, _ := record.Segment.ParticipationFor(objectRef(t, "parcel-1"))
-			if current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" || !current.Active() || len(record.Segment.ParticipationHistory(objectRef(t, "parcel-1"))) != 1 {
-				t.Fatalf("原参与被动了：%+v", current)
+			tail, present := record.Segment.ParticipationFor(parcel)
+			if !present || !tail.Voided() || tail.Active() {
+				t.Fatalf("链尾不是失效版本：present=%v voided=%v active=%v", present, tail.Voided(), tail.Active())
+			}
+			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
+				t.Fatalf("失效版本的入场依据或种类走样：%+v", tail)
+			}
+			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" {
+				t.Fatalf("失效版本没回指原参与：%v %v", supersedes, chained)
+			}
+			if !tail.EnteredAt().Equal(handoverJudgedTime) {
+				t.Fatalf("失效版本的起点该沿用被失效那一版 %s，得到 %s", handoverJudgedTime, tail.EnteredAt())
+			}
+			history := record.Segment.ParticipationHistory(parcel)
+			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" ||
+				!history[0].Superseded() || history[0].Voided() || !history[0].EnteredAt().Equal(handoverJudgedTime) {
+				t.Fatalf("原参与被动了或没被标为已被替代：%+v", history)
+			}
+			if record.Segment.ActiveParticipations() != 0 {
+				t.Fatalf("在场参与 = %d，失效版本不算在场", record.Segment.ActiveParticipations())
+			}
+			tenant, _ := domain.NewTenantID("tenant-1")
+			active, err := fixture.segments.FindActiveSegments(context.Background(), tenant, parcel)
+			if err != nil || len(active) != 0 {
+				t.Fatalf("按对象反查在场仍找得到已失效的参与：%v err=%v", active, err)
 			}
 		})
 	}

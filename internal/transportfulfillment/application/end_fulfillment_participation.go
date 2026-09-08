@@ -219,7 +219,9 @@ func (handler *EndFulfillmentParticipationHandler) End(
 		return EndFulfillmentParticipationResult{outcome: ParticipationSegmentNotFound}, nil
 	}
 	current, joined := record.Segment.ParticipationFor(object)
-	if !joined {
+	// 链尾失效即该对象在本段当前无有效参与（票 tf-segment-lifecycle-closure/11 裁决 4）：它从未离场，答`已离场`
+	// 会让调用方以为册上有一个终点；`对象不在段内`说的正是「此刻没有有效参与可结束」。
+	if !joined || current.Voided() {
 		return EndFulfillmentParticipationResult{outcome: ParticipationObjectNotInSegment}, nil
 	}
 	if !current.Active() {
