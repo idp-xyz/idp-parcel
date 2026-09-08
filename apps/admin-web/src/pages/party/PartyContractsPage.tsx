@@ -4,6 +4,7 @@ import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
+import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   commercialRegistrationEndpoints,
@@ -117,9 +118,10 @@ function ControlBindings({ row }: { row: CustomerContractRecord }) {
 
 /**
  * 客户合同版本册：合同版本到期或被后续版本替代，不改变已经接受委托所保存的合同依据。
- * 查阅面，不设登记与发布动作——商业版本的草稿与发布生命周期归受控登记通道。
+ * 查阅面本身不设动作；发布走本页「发布合同版本」签（票 admin-write-faces/10），那一签的载体到达发布那一步时
+ * 由页面把 `publishedKey` 拨一格，本表随之重读——结果在同页目录（含绑定列）立刻可见。
  */
-function CustomerContractsTable() {
+function CustomerContractsTable({ publishedKey }: { publishedKey: number }) {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<CustomerContractListResponseBody> | null>(null);
@@ -133,7 +135,7 @@ function CustomerContractsTable() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, publishedKey]);
 
   const contracts = answer?.kind === 'outcome' ? answer.body.contracts : [];
   const needle = search.trim().toLowerCase();
@@ -311,19 +313,23 @@ function CustomerAccountsTable() {
  * 生效→停用），两套状态代数并进一张表，同一个「已生效」会在两种含义间相互冒充。
  *
  * 登记签只装账户一册（ADR-0085；票 admin-write-faces/02 把它记为「无读面故不摆」的缺口，
- * 本页读面落地即摆）。合同不在这里登：合同版本走发布口，那一签的落点归票 admin-write-faces/03
- * 裁。停用也不摆这里——它是一个命令带三种身份，读得最全的业务参与方页收下它（同法人页那条
- * 理由）；本页身份状态格把停用两件都渲染出来，只是为了让走那一签停掉的账户在这里看得见结果。
+ * 本页读面落地即摆）。合同版本的运营主路径是「发布合同版本」签（票 admin-write-faces/10：逐字段表单 →
+ * 预览摘要 → 存为待批准 → 批准 → 发布，ADR-0126）；受控 JSON 镜像口留作高级口（票 03）。停用不摆这里——它是
+ * 一个命令带三种身份，读得最全的业务参与方页收下它（同法人页那条理由）；本页身份状态格把停用两件都渲染
+ * 出来，只是为了让走那一签停掉的账户在这里看得见结果。
  *
- * 墙降之前登记必然答 403「接入渠道未配置」，那是诚实答案；墙降当天在装配点换真 Intake
+ * 墙降之前登记与发布四口必然答 403「接入渠道未配置」，那是诚实答案；墙降当天在装配点换真 Intake
  * 即点亮，本页一行不用改。
  */
 export function PartyContractsPage() {
+  // 发布签的载体到达「发布」那一步时拨一格，合同表随之重读（含绑定列）。
+  const [publishedKey, setPublishedKey] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="contracts" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="contracts">客户合同</TabsTrigger>
+          <TabsTrigger value="publish-contract">发布合同版本</TabsTrigger>
           <TabsTrigger value="accounts">客户账户</TabsTrigger>
           <TabsTrigger value="register">登记账户</TabsTrigger>
         </TabsList>
@@ -331,7 +337,13 @@ export function PartyContractsPage() {
           value="contracts"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <CustomerContractsTable />
+          <CustomerContractsTable publishedKey={publishedKey} />
+        </TabsContent>
+        <TabsContent
+          value="publish-contract"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <CustomerContractPublicationForm onPublished={() => setPublishedKey((value) => value + 1)} />
         </TabsContent>
         <TabsContent
           value="accounts"

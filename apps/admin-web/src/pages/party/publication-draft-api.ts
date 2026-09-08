@@ -77,6 +77,35 @@ export interface CommercialPublicationPayload {
   references?: Partial<Record<CommercialObjectKindName, string>>;
   creditPolicy?: CreditPolicyBodyPayload;
   supplierAgreement?: SupplierAgreementBodyPayload;
+  customerContract?: CustomerContractBodyPayload;
+}
+
+/**
+ * 客户合同册正文（Go `CustomerContractBodyPayload`，票 admin-write-faces/10）：一格两层，键名镜像受控批文
+ * declarations 下的 `contractContent`（0012 正文：规则包 + 按费用范围的约定表）与 `preAcceptanceControl`
+ * （0007 合同级「要不要」声明）。约定行两格**恰一在场**、`不适用`必带依据都由服务端裁——两格都空或都填照样
+ * 送上去，答回来的是那一行 / 那一节的拒绝，表单不代判也不静默补齐。策略侧没有「无控制」取值（ADR-0115
+ * Decision 一）：「明确无控制」只能写成 `inapplicabilityBasis` 或合同级 `NOT_APPLICABLE` + 依据。
+ */
+export interface CustomerContractBodyPayload {
+  contractContent: ContractContentPayload;
+  preAcceptanceControl?: PreAcceptanceControlPayload;
+}
+
+export interface ContractContentPayload {
+  rulePackage: string;
+  bindings?: ControlBindingPayload[];
+}
+
+export interface ControlBindingPayload {
+  chargeScope: string;
+  policy?: string;
+  inapplicabilityBasis?: string;
+}
+
+export interface PreAcceptanceControlPayload {
+  requirement: string;
+  notApplicableBasis?: string;
 }
 
 /** 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：只指名哪一版载体，身份从信封来。 */
