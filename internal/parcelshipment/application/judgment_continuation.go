@@ -95,18 +95,19 @@ const (
 	// 先落了一步。它与`决定没落库`分开，因为两者的运维含义相反——一个可能是库坏了，一个是
 	// 正常竞争，而续办引用由原因派生，压成一格会让两种缺口共用同一条引用。
 	//
-	// 四个保存调用点共用它，不按调用点拆：引用由原因**与范围**共同派生，而四处的范围本就
+	// 各保存调用点共用它，不按调用点拆：引用由原因**与范围**共同派生，而各处的范围本就
 	// 不同（资料修订那一处取的是修订请求自己的身份加资料范围）。拆开不会让引用更可分，只会
 	// 让未决统计多几行说同一件事。
 	StaleShipmentRequestRevision
 
-	// 三个授权端口各自的`授权规则未配置`。它与同一支上的 *AuthorityUnavailable 分开：后者
-	// 是授权服务答不出、等它恢复，前者是这个范围此刻一条现行规则都没有、等租户把
-	// `PAR-COM-14` 登记上。压成一格会对着一个没配置的租户参数无休止内部重试，而重试永远
-	// 等不到一次登记——`ReachabilityAsOfNotConfigured` 早为同一个参数写过这句话。
+	// 各授权端口自己的`授权规则未配置`（下面逐格具名；复核授权那一支的同名格在它自己的结果
+	// 集合里，不进本枚举）。它与同一支上的 *AuthorityUnavailable 分开：后者是授权服务答不出、
+	// 等它恢复，前者是这个范围此刻一条现行规则都没有、等租户把 `PAR-COM-14` 登记上。压成一格
+	// 会对着一个没配置的租户参数无休止内部重试，而重试永远等不到一次登记——
+	// `ReachabilityAsOfNotConfigured` 早为同一个参数写过这句话。
 	//
-	// 三处不共用一格：续办引用由原因**与范围**共同派生，而这三支催的是三份不同的授权规则
-	// （运营侧拒绝权、客户撤回权、资料修订权），共用会让运维拿一条引用查回来另一种缺口。
+	// 各格不共用：续办引用由原因**与范围**共同派生，而每一支催的是不同的授权规则（运营侧
+	// 拒绝权、客户撤回权、资料修订权），共用会让运维拿一条引用查回来另一种缺口。
 	RejectionAuthorityRulesNotConfigured
 	WithdrawalAuthorityRulesNotConfigured
 	SourceDataAmendmentAuthorityRulesNotConfigured
@@ -121,7 +122,7 @@ const (
 
 	// 资料修订问矩阵之前先判「资料修订阶段」（PS CONTEXT 词条；ADR-0118），那一步的两格。
 	//
-	// `判不出`是六格事实里有`不知道`——今天是关务与装袋两处读面未接（消费侧适配器如实答不知道），
+	// `判不出`是六格事实里有`不知道`——今天是关务与装袋的读面未接（消费侧适配器如实答不知道），
 	// 等的是读面接上，不是等某个权威恢复，也不是等租户登记；`事实读不回`是某个口调不通，等它恢复。
 	// 两格分开的理由与矩阵那两格（SourceDataRuleUnavailable 对 NotDeclared）一字不差：合成一格，
 	// 续办方就不知道该重试还是该去接线。两格都只有本方推得动，落在下面 resumePath 的 default 上。
@@ -170,7 +171,7 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		// 阶段重解，而重解由本方发起；`输入未受理`是本方连身份或标识都立不起来，更只有本方
 		// 改得动。客户补件与人工复核对这两者都无能为力。
 		//
-		// `聚合版本已过期`同样是有意落在这里。它的恢复动作是重读再重放，而四个保存调用点
+		// `聚合版本已过期`同样是有意落在这里。它的恢复动作是重读再重放，而每个保存调用点
 		// 所在的编排**都以 FindBySourceIdentity 开头**，因此一次内部续办重入天然就重读了
 		// 一遍；客户补不出一份被别人抢先写掉的版本，复核角色也补不出（ADR-0031）。
 		return domain.ResumeByInternalRetry
@@ -317,8 +318,11 @@ var ErrUnexpectedRevalidationOutcome = errors.New("parcel shipment: unexpected c
 // ErrUnexpectedSaveOutcome 同上，说的是委托聚合的写入那一步。
 var ErrUnexpectedSaveOutcome = errors.New("parcel shipment: unexpected shipment request save outcome")
 
-// ErrUnexpectedAuthorizationOutcome 同上，说的是三个授权端口。三处共用一个哨兵，因为它们
-// 共用同一个封闭集合：日后多一种答复，三个调用点会一起报错，而不是各自静默归入某一格。
+// ErrUnexpectedAuthorizationOutcome 同上，说的是各授权端口（拒绝权、撤回权、资料修订权、复核授权，
+// 以及日后同形的任何一支）。凡是把一个授权端口的答复逐取值分派、而端口交回了封闭集合以外的东西的
+// 编排，都该上抛这一个哨兵而不是各造一个：它们共用同一个封闭集合，日后多一种答复，所有调用点会
+// 一起报错，而不是各自静默归入某一格。不在这里数端口也不数调用点——那两个数都在别的文件里长，
+// 写在这里只会变旧（AGENTS.md「计数与行号同构」）。
 var ErrUnexpectedAuthorizationOutcome = errors.New("parcel shipment: unexpected authorization outcome")
 
 // saveStallReason 把一次没能落库的写入结果译成本层的未决原因。
@@ -391,7 +395,7 @@ func (reasons asOfPendingReasons) forOutcome(outcome ports.JudgmentAsOfOutcome) 
 	}
 }
 
-// commercialBasisScope 是两个判断编排共有的那部分范围。可达性那一支还带声明包裹，但前半段
+// commercialBasisScope 是各判断编排共有的那部分范围。可达性那一支还带声明包裹，但前半段
 // 用不到它——商业依据与逐项时点都按提交版本取，不按成员取。
 type commercialBasisScope struct {
 	Identity          domain.SourceIdentity
@@ -415,10 +419,10 @@ type adoptedBasis struct {
 	asOf     domain.JudgmentAsOf
 }
 
-// formAdoptedBasis 走完两个判断编排共有的前半段：解析商业依据、记下所采用的那一次、取得本类
+// formAdoptedBasis 走完各判断编排共有的前半段：解析商业依据、记下所采用的那一次、取得本类
 // 判断的时点声明，再由第二阶段形成经回显的时点。
 //
-// 两个编排共用它而不是各留一份：这一段每一步的顺序都有理由——先记标识再形成时点，否则提交
+// 各编排共用它而不是各留一份：这一段每一步的顺序都有理由——先记标识再形成时点，否则提交
 // 决定前无从按原依据重解；值不在编排里形成，否则就是拿本地时钟顶替声明的语义。复制一份等于
 // 把这些理由也复制一份，而下一次只会有一份被改。
 //
