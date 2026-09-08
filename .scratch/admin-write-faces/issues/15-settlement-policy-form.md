@@ -1,8 +1,8 @@
 # 15 `SETTLEMENT_POLICY` 版本的运营主路径：逐字段表单（方式 + 法人 / 对手方 / 合同引用 + 范围 + 币种）
 
 Category: enhancement
-Status: ready-for-agent——形状已裁清（逐字段表单，合同引用对象 + 版本一起选；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
-Blocked by: 08（已进 main）；[20](./20-publication-vocabulary-read-face.md)（词表读口公共半边，2026-09-08 通道 1 代裁立票；落点广播前表单里的下拉先按票面写成占位、不内置枚举）
+Status: in-progress——2026-09-08 20:0x 通道 6 认领（通道 1 派单 task-70599fbd；分支 `mcp6-awf15`，基 main `c135049b`，树 `D:/tops/idp-parcel-mcp6-awf15`）。此前 ready-for-agent——形状已裁清（逐字段表单，合同引用对象 + 版本一起选；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
+Blocked by: 08（已进 main）；[20](./20-publication-vocabulary-read-face.md)（词表读口公共半边，2026-09-08 通道 1 代裁立票；落点已于 2026-09-08 19:5x 广播，前端半边在 `mcp4-awf20@17a962a5`，本票 cherry-pick 它接下拉）
 
 ## 册与载荷
 
