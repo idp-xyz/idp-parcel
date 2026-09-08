@@ -188,6 +188,11 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
   - **结论**：Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 1。**可进 main**；建议重放时顺手把 `judgment_continuation.go` 那句
     计数改成不计数写法（纯注释）。本条写在分支 `mcp5-wbr04-review`（基 origin/main `a69c16f0`，只动本文件），与作者分支上的
     `67ca20d5` / `04472784` 两笔票面同在 Comments 末追加，合并时作者两条在前、本条在后。
+- 2026-09-08 18:2x · 通道 4（task-7befa278，代 MCP-2——原派 1d7276ee 于 18:1x crash 未开工）：**非阻断 (1) 已修，笔 `8ee10be2`（通道 4 代 MCP-2）**，
+  分支 `mcp4-wbr04-followup` 基 origin/main `bfde8108`。`judgment_continuation.go` 的 `ErrUnexpectedAuthorizationOutcome` 头注改为说哨兵
+  语义与谁该用它，不数端口也不数调用点；同文件顺手去掉同类计数（`StaleShipmentRequestRevision` 与 `*AuthorityRulesNotConfigured` 注释、
+  `resumePath`、`commercialBasisScope` / `formAdoptedBasis`、资料修订阶段那格），保留数封闭集合自身的「六格事实」「三个等待态」。
+  纯注释：gofmt / build / vet 0，diff 无非注释行。代码逻辑与其它文件未动。
 
 ## 进 main 记录（2026-09-08 18:0x，通道 1 重放）
 
