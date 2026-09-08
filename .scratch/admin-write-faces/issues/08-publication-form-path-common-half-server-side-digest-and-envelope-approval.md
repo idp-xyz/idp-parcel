@@ -106,3 +106,42 @@ Blocked by: 无（等的是裁决与 ADR 号，不是别的票）
 **未做（各归其票）**：逐册表单页与草稿签（09–17）；审批职责规则的登记入口（治理写面那一族，ADR-0085 决定四另裁）；其余九册的
 规范化文档与 seed 摘要换算（各子票）；旧式 `sha256:` 声明串何时开始拒收（伞票收口时裁）。ADR-0126 的越权风险点四条仍待 owner
 复核（`scripts/owner-review-queue.ps1` 会列出）。
+
+## Comments
+
+### 评审 ← 通道 2 · 钉 `5b04c874` · 14:33
+
+非作者补评（九笔已在 main）。基 `5aedbb0f`，隔离 detached 检出 `%TEMP%\idp-review-awf08`，只读，两轴各一遍；`d2b131e1` / `5b04c874`
+簿记不评。
+
+**Standards 轴**
+
+- **阻断**：无。
+- **非阻断**：
+  1. `adapters/postgres/publication_draft.go` `PublicationDrafts.AdvanceDraft`：UPDATE 只钉 `status + content_digest`；而 `SubmitDraft` 的
+     ON CONFLICT 修订会重写 `scope_ref / effective_* / declared_references / submitter_ref / submitted_at` 且摘要不变，领域 `SameSubmissionAs`
+     明写「壳变了正文没变也是一次修订」。批准者读到写回的窗口内录入者换壳或换人重录，批准落在批准者没看过的壳上、自批门对旧录入者判——
+     「已被替换」漏掉了它自己定义里的一类替换（ADR-0126 Decision 三「后到的重读再来」）。竞态窗口，非合入即错。**作者（通道 1）另笔修在
+     main**：WHERE 加读到的 `submitter_ref + submitted_at`（每次修订都重写它，壳列由此一并钉住），补真库用例「读后换范围重录，批准写回答已被替换」。
+  2. 同文件 `SubmitDraft` 零行命中：`已批准`后同内容同壳再录答 `DRAFT_REPLAYED`；ADR-0126 Decision 三字面「`已批准`之后内容固定、再录答
+     `内容已固定`」可两读，代码取幂等读法，答案带载体状态所以不误导。建议 ADR 或票面补一句钉死。
+  3. 迁移 0028 `content_document jsonb`：jsonb 归一化键序与空白，列上字节不再是摘要盖住的那份；`RehydratePublicationDraft` 折回正文重算而非
+     对列字节哈希，所以今天成立。迁移头注「就是……的字节」与此不符，日后谁在 SQL 侧直接哈希列会对不上——改注释或改 `bytea`。
+- **无发现**：领域包 import 仅 `crypto/sha256`、`encoding/hex`、`encoding/json`、`strings`、`time`（Decision 一明写 `json.Marshal`）；注释全中文、跨文件
+  引用无行号；`PublishPublicationDraftHandler` 收具体 `*PublishCommercialAuthorityHandler` 有据（Decision 三「发布 = 交既有用例」）；审批职责规则
+  未登记答 `NOT_CONFIGURED` 不带默认（红线一）；0028 三格痕迹 CHECK 与重建门镜像一致。
+
+**Spec 轴**
+
+- **阻断**：无。
+- **非阻断**：无（Standards 1/2 的语义归属已述）。
+- **无发现**：完成判据四条各有落点——ADR-0126 / CONTEXT 两词条一句 / `PAR-COM-18`；`CanonicalizePublicationContent` 首例信用政策，
+  `reconcileDeclaredDigest` 先于草稿构造、`NOT_ACCEPTED` 与 `CONTENT_CONFLICT` 分格、结果带两串；`ApprovePublicationDraftHandler` 先读规则未配置即拒，
+  再 `Approve` 分自批 / 不持授予；`PublishPublicationDraftHandler` 只接`已批准`、`RoleStanding = ApprovalRoleConfirmed`、`ApprovalBasis` 三格取自载体、
+  落定含重放才推进；四行挂字面量 `UnconfiguredIntake{}`。「实施中量到的两处」与代码一致：`DRAFT_AWAITS_EFFECTIVE_START` 是
+  `PublishPublicationDraftOutcome` 一格答案；`SameSubmissionAs` 比摘要 + 范围 + 区间 + 指名引用，身份四元不比。`decodeStrict`
+  DisallowUnknownFields + 尾随拒，测试点名 `tenantId / submitter / contentDigest / approval / roleStanding`。`ReconcileDeclaredDigest` 对 `sha256:`
+  旧串答 `ErrDeclaredDigestMismatch`（已接册逐字节比，Decision 二）、异版 `PCC-n` 答 `ErrCanonicalizationUnsupported`，与 Decision 五「不裁何时开始
+  拒收」不冲突（那句管没接的册）。「未做」四项反查未做进去；`CurrentPublicationCanonicalizationVersion` 删除票面已记。
+
+**结论**：Standards 3 条非阻断（最重：AdvanceDraft 钉不住批准者读到的那一行，作者另笔修）；Spec 0 条。**无阻断**，可作「进 main 记录」的评审结论。
