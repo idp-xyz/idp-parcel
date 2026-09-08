@@ -79,6 +79,8 @@ type CommercialPublicationPayload struct {
 	CustomerContract *CustomerContractBodyPayload `json:"customerContract,omitempty"`
 	// AuthorizationRule 是授权规则册的正文：取消授权目录一节，见 publication_draft_payload_authorization_rule.go。
 	AuthorizationRule *AuthorizationRuleBodyPayload `json:"authorizationRule,omitempty"`
+	// SettlementPolicy 是结算政策册的正文（票 admin-write-faces/15；形状见 SettlementPolicyBodyPayload，合同维收对象 + 版本两格）。
+	SettlementPolicy *SettlementPolicyBodyPayload `json:"settlementPolicy,omitempty"`
 	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
 }
 
@@ -179,6 +181,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.AuthorizationRule != nil {
 		body := payload.AuthorizationRule.body(problems)
 		content.AuthorizationRule = &body
+	}
+	if payload.SettlementPolicy != nil {
+		body := payload.SettlementPolicy.body(problems)
+		content.SettlementPolicy = &body
 	}
 
 	if problems.any() {
