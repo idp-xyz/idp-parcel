@@ -1,7 +1,7 @@
 # `SourceDataRuleDeclaration`：允许矩阵是接单规则包版本下的第三族阶段内容声明；PS 要先长出「资料修订阶段」
 
 Category: enhancement
-Status: resolved——四段全落：**PC 半边**随 pc-gaps/10 进 main（ADR-0120，`9379c716`）；**PS 不依赖 PC 的那段**（分支 `mcp2-ps-ports` → main `d4bc4785` / `45ed2d04` / `9091f539`，ADR-0118）；**CC/NO 读面接线**随 [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md)（分支 `mcp2-psr05`）；**余段「消费适配器读 PC 声明 + 跨侧词比对 + 接真装配」2026-09-08 完工**（通道 2，分支 `mcp2-psr02-tail`：`2e085cad` / `5e5e2c05` / 清点 `e2a51ba8`，基 main `d1e6c094`；含 DSN 全仓 100 ok / 0 FAIL；**待合入前独立评审与推送方重放，main 上的 SHA 由进 main 记录补**）。四问裁决与各段完成记录见 Comments。此前 in-progress，余段曾 Blocked by PC 半边
+Status: resolved——四段全落：**PC 半边**随 pc-gaps/10 进 main（ADR-0120，`9379c716`）；**PS 不依赖 PC 的那段**（分支 `mcp2-ps-ports` → main `d4bc4785` / `45ed2d04` / `9091f539`，ADR-0118）；**CC/NO 读面接线**随 [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md)（分支 `mcp2-psr05`）；**余段「消费适配器读 PC 声明 + 跨侧词比对 + 接真装配」2026-09-08 完工**（通道 2，分支 `mcp2-psr02-tail`：`2e085cad` / `5e5e2c05` / 清点 `e2a51ba8`，基 main `d1e6c094`；含 DSN 全仓 100 ok / 0 FAIL；**已评审（通道 6，两轴无阻断）并于 2026-09-08 11:2x 重放进 main，SHA 对照见 Comments 末「进 main 记录」**）。四问裁决与各段完成记录见 Comments。此前 in-progress，余段曾 Blocked by PC 半边
 Blocked by: —
 
 ## 端口今天说什么
@@ -136,3 +136,9 @@ Blocked by: —
   - **结论**：Standards 0 阻断 / 4 非阻断；Spec 0 阻断 / 2 非阻断。**无阻断，可重放。**
   - 通道 2 处置（代录时记）：六条非阻断均随票记、不挡合入，本分支不再动 `.go`（推送方已在重放）。Standards (1) 两句变更说明注释与 (2) 哨兵
     分格，留待下一次碰这两个文件时顺手，不另立票；(3)(4) 判断项记分歧；Spec (1) 一格足证透传，认同「可补不必补」；Spec (2) 已由 `80f11fa2` 补齐。
+- 2026-09-08 11:2x · 通道 1（推送方）**进 main 记录**（余段；19:4x 补记——重放当时只落在 tasks.md 同刻那节，票面漏写）：隔离 detached 树
+  `idp-replay-psr02` 基 `04198347`，cherry-pick 零冲突 `2e085cad`→`0e46a9a0`、`5e5e2c05`→`a936509c`；分支清点笔 `e2a51ba8` 不重放，清点在
+  `a936509c` 干净检出重生成 `230366c4`（parcelshipment 生产 140→141 / 测试 139→140、消费缝 PS→PC 12→13，与分支清点笔逐字节同）；票面
+  `80f11fa2`→`7a6762f4`、`46ada017`→`115cd44e`。与 wbr/05 两笔同链，验证钉链尾 `5df16244`：gofmt 空、build/vet 退 0、清点门零差、含 DSN
+  `go test -p 1 -count=1 ./...` 100 ok / 0 FAIL / 16 无测试；探针 `cmd/parcel-api -run Amendment` 含 DSN PASS 5。共享 main 由 `04198347` 快进；
+  分支 `mcp2-psr02-tail` 改名 `merged/`。
