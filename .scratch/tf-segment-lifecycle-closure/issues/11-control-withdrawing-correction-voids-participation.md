@@ -101,3 +101,57 @@ Blocked by: 无（10 已 resolved，替代链在 main）
 - 2026-09-08 · 通道 4（task-c2003926）：接票。先裁「要定的」四条（全部落在 ADR-0112 决定四的字面内，不立 ADR-0121），再按裁决实施；本笔只动票面。
 - 2026-09-08 16:4x · 通道 1：全通道 crash 后清点，裁决笔只在分支上、main 上本票仍是 draft——为防重裁，把 `503dfcc6` 重放进 main（`bd5ccb9e`）并改 Status 点明现场位置；封存笔 `6e5c8a0c` 按规矩不进 main。ADR-0121 号已释回（`docs/adr/` 无 0121，README 无行）。
 - 2026-09-08 17:15 · 通道 4（task-a8e6a834）：接管。先读封存 diff 报现场分析（改口对、用；辅助与专用用例未写完，`domain_test` 包红），再按 /tdd 三层各红一次绿一次：领域 → 编排 → 迁移 0019 + PG。封存笔重切进领域笔，原指针留 `salvage/mcp4-tf11-red`。完成记录见上。
+- 评审 ← 通道 6 · 钉 `21ee3af0`（分支 `mcp4-tf11`，基 `d1e6c094`；评 `503dfcc6..21ee3af0` 五笔）· 17:4x。非作者，隔离
+  检出 `%TEMP%\idp-review-tf11`，只读，未跑全仓。自跑（该检出）：`gofmt -l` 空；`go build` / `go vet` 退 0；含 DSN
+  `go test -count=1 ./internal/transportfulfillment/...` 六包 ok（postgres 68.6s，非缓存）；探针
+  `TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDatabase` 有 DSN **PASS** / 无 DSN **SKIP**；
+  `go test ./migrations/` ok（0019 过 CRLF/BOM 哨兵）。两轴按 parallel-sessions「合入前独立评审」。
+
+  **Standards · 阻断：无。**
+
+  **Standards · 非阻断（三条）**：
+  1. 跨文件计数：`application/rederive_fulfillment_participation.go` 头注「领域正当拒绝**两格**各自答出去」数的是
+     `enter_fulfillment_segment.go` 里 `SegmentEntryRefusal` 的格数——本票自己就把它从「三格」改成「两格」，正是
+     AGENTS.md「写代码注释」那条说的会无声变错的形状；括号里已逐格点名，数字删掉不损信息。同族的「与真库 SQL 谓词
+     **三条**同一」（两份替身 `active()`、`activeParticipationPredicate`、`Active()` 注释、0019 尾注）数的是别处
+     `Active()` 的条件数，判断题：第四条条件加进来时五处都要跟。
+  2. Duplicated Code（判断题）：`application/establish_segment_on_handover_test.go` 与 `adapters/http/segment_registry_double_test.go`
+     两份 `segmentRegistryDouble` 各长一个同形 `active()`。重复是既有的（两份替身本就逐函数同形），本票只是照旧各补一处；
+     真正的单一口径在 `activeParticipationPredicate` 与 `Active()`，替身跟着走，可接受。
+  3. 中间笔不单独可编：`3559f5d5` 删 `ErrCorrectionWithdrawsControl`，`59b0bb1e` 才退编排那一支，前者单独检出 `go build`
+     必红。CI 只跑 push tip，不挡合入；代价是 `git bisect` 在这一格失效。判断题：推送方重放时保持原样即可，或把两笔并成
+     一笔——领域与编排本就是同一条纪律的两半（同 parallel-sessions「同笔提交」对迁移四件的理由）。
+
+  核过无发现：领域包只导 `errors` / `fmt` / `time`；注释一律中文、跨文件引用用符号名（`Supersede` / `Active()` /
+  `activeParticipationPredicate` / `rederive`）与「裁决 N」「决定四」这类稿内编号，无行号；`Covers:` 注释引票面原句
+  （「链尾失效即该对象在本段当前无有效参与」「成功时两格都空，与替代版本同形」）；两份替身 `participationSpecOf` 都
+  学了 `Voided`；`participationSpecFrom` 仍逐列走构造门、`Voided` 作原值搬运合理（布尔无构造门）；`insertParticipationRow`
+  单一 INSERT 供 `Join` / `Supersede` 共用，`voided` 只多一列；`CORRECTION_WITHDRAWS_CONTROL` 在非文档代码里零引用（只剩
+  两处解释其退场的注释）。
+
+  **Spec · 阻断：无。**
+
+  **Spec · 非阻断（两条）**：
+  1. 越权风险点 ④——`trigger_delivery_dispatch.go` 对失效链尾答 `OBJECT_NOT_IN_SEGMENT`，不答 `PARTICIPATION_NOT_ACTIVE`。
+     ADR-0114 决定二的字面只要求「对象必须是在场参与——凭链尾判……不触发」，不定拒绝格的词；失效链尾不在场→不触发，
+     **在字面内**。用 `OBJECT_NOT_IN_SEGMENT` 与本票裁决 4 对 `EndFulfillmentParticipationHandler` 的选词同一句（「对象在
+     本段当前无有效参与」），两处一致。留给 owner 的只有一件：决定二那句「被替代或已离场的参与不触发」列的两种今天成了
+     三种，ADR-0114 正文没跟（本票边界只说 ADR-0112 正文不改），要不要补一句归 owner。
+  2. 越权风险点 ②进了 CONTEXT：`docs/domain/transport-fulfillment/CONTEXT.md`「履约参与关系」补的那句含「再次进入本段只能
+     经更正回`已交接`从失效版本长出替代版本」，正是裁决 2 后半按「已结束不重开」类推、票面自记为 CONTEXT 没有逐字写的那
+     一格。owner 授权自决之下写进权威文档在授权内，且 AGENTS.md「改生命周期→改 CONTEXT」要求它落在这里；但 owner 复核 ② 时
+     要连这句一起看——它已从「裁决」升成了「领域规则」。只补不改：原句一字未动，句末追加。
+
+  逐句核过无发现：裁决 1（`RederiveParticipationWithHandover`：入场依据 `TRANSPORT-HANDOVER/<新版本>`、种类照前版、起点取
+  `current.enteredAt`、`voided` 为是、经共用 `rederive` 回指前版）；裁决 2（`Active()` 加未失效、`ParticipationFor` 仍答链尾、
+  不回退；v3 更正 v2 重新在场由领域与真库用例各证）；裁决 3（继承离场三件走 `rederive` 既有分支；起点沿用前版故「起点晚于
+  终点」不可能；`Supersede` 不查段关闭；`TestAVoidedParticipationInheritsTheEndAndLeavesAClosedSegmentClosed`）；裁决 4
+  （`Active()`、`activeParticipationPredicate`、两份替身 `active()` 同一条；`End` 对失效链尾答 `OBJECT_NOT_IN_SEGMENT`；
+  `FindActiveSegments` 用同一谓词；`CloseSegment` 与重建门经 `ActiveParticipations()` 数、`closesBeforeAParticipationEnded`
+  未动）；裁决 5（枚举、`String()`、`ErrCorrectionWithdrawsControl`、编排 `switch` 一支同退；`docs/adr/0112` 零变动）；裁决 6
+  （`internal/parcelshipment/**` 零变动）。迁移 0019：`voided boolean NOT NULL DEFAULT false` + CHECK
+  `NOT voided OR (supersedes_entry_basis IS NOT NULL AND entry_kind = 'TRANSPORT_HANDOVER')`，重建门 `rehydrateParticipation`
+  同形；红线：无 UPDATE 原参与（`EndParticipation` 的 WHERE 反而更窄）、不自动关段、`ActualCarrierJudgment` 未动。
+  越权 ①③ 在裁决字面内（① 走的是 ADR-0112 决定三对替代格的同一条分支；③ 退格与决定四「实施另票」相合），归 owner 复核。
+
+  **结论**：两轴无阻断，可重放。清点笔 `21ee3af0` 由推送方在 tip 重生成。
