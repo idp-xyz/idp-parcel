@@ -118,3 +118,55 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
   本票面此前一字未改。接手只做三件：清掉残留空壳 `idp-verify-wbr03`（`.git` 链接已无、worktree 登记已无、目录空），在隔离检出独立重验
   `eed205aa`（见「完成记录·验证」），写本完成记录并发完工报。未改任何代码——「先写自己的 red 再读对方代码」那条适用于接手在途实现，
   这里实现已完、验证已绿，接手的是簿记；语义评审留给非作者通道。
+
+- 2026-09-08 18:2x · MCP-5 **非作者合入前评审**（改派自 MCP-6；`/code-review` 两轴，钉 `mcp3-wbr03` 代码 tip `eed205aa`，票面 tip
+  `05e0e80f`，评审基线 merge-base `2c0008c3`；隔离 detached 检出 `%TEMP%\idp-review-wbr03`，验后拆，不带 `--force`）。两轴串行自跑、
+  分开记、不合并排序；逐行读了 `2c0008c3..eed205aa` 全部代码 diff。**自跑**（含 DSN）：`gofmt -l ./cmd ./internal` 空；
+  `go build ./...` / `go vet ./...` 退 0；`go test -count=1 ./internal/architecture/...` ok；
+  `go test -count=1 ./internal/partycommercial/... ./internal/settlementaccounting/... ./cmd/parcel-dispatch/...` 全 `ok`
+  （PC postgres 68.8s、SA postgres 41.4s、parcel-dispatch 30.2s——真 PG 跑过）。基线两数我在 `84191cb7` / `84b9a313` / `eed205aa`
+  三个检出上用 `git grep -E '^[^#[:space:]]'` 复核：wiring 6 / 5 / 5（PC 段 4 / 3 / 3）、type reachability 23 / 22 / 22，与头注一致。
+  照「全量只跑一次」不跑全仓。
+  - **Standards · 阻断：无。非阻断 1**：
+    1. **装配点无探针**——`cmd/parcel-dispatch/assemble.go` 的 `acceptanceFinancialControl` 接 `sapartycommercial.NewCreditBasis` 那三行，
+       `cmd/parcel-dispatch` 的测试里零处断言（`NewCreditBasis` / `CreditBasis:` 在 cmd 测试零命中）；「生产装配已接真适配器」今天只由
+       读代码与编译作证，与 wbr/04 在 `parcel-api` 装配层种真 grant 的三格相比少一层。非阻断：三行、编译过、`Deps` 字段名与端口类型
+       都由编译器守；但 `Deps.CreditBasis` 为 nil 是合法的（见 Spec 越权点 ②），漏接不会红——这正是需要一枚探针的场合。建议随 SA
+       contract 段那笔一起补（contract 收了之后漏接会在构造期红，探针可省）。
+    - 其余核过：领域包无 HTTP / pgx 依赖（PC / SA `domain` 只新增值对象与解析函数；`internal/architecture` 边界门禁绿）；
+      `resolveCreditPolicyBasis` 与 `resolveSettlementPolicyBasis` 逐段同形（收窄 → `NewXxxQuery` 失败即`输入未受理` → 选唯一 /
+      `ApplicabilityConflict` / `NoApplicableBasis`），`CreditSelector` 的 `declared` / `empty` / `fingerprint` 与 `SettlementSelector`
+      同纪律；SA `CreditStanding.WithAuthorizedLimit` 只加不改（副本返回、原值不动），`LimitMinor` 只加读口；SA 适配器 `credit_basis.go`
+      与 `pre_acceptance_control_policy.go` 并列同形（回指换闭包 → 取成员 → 三格；`scope` 收下不问、理由同一条）；`creditBasisFrom`
+      是两格封闭之间的全函数、两空走 error 不吸收；重建门拒「额度不挂在 `CreditPolicyObject`」与「零值额度」（ADR-0028）。注释全中文；
+      跨文件引用皆符号名或 ADR 号；基线头注「6→5 / 4→3 / 23→22 钉父 `84191cb7`」是「数本身是论点」的合规写法；ADR-0127 Context
+      钉 `2c0008c3` 不写行号；加了第三个政策选择器后 `commercial_registry.go` 头注已从两类改三类，全仓未搜到残留的「两个政策」类计数。
+      测试覆盖：PC 域选唯一 / 冲突 / 无依据（裸版本、他范围）/ 选择器必填必缺 / 闭包携带与冲突 / `ViewRevision` 变化 / 重建门收与拒；
+      SA 适配器命中 / 未配置 / 坏回指 / nil 拒装；SA 编排额度取政策非登记、已占用仍取自家账本、三格各停在读状况之前、nil 沿旧路不带
+      政策；真库 PC 快照往返与 `0020` 进册两路。
+  - **Spec · 阻断：无。非阻断 0。** 对 11:0x 裁决甲逐句：镜像 `resolveSettlementPolicyBasis` ✓（候选先按版本租户与范围收窄，再由
+    `ResolveCreditPolicy` 按法人 / 等级 / 费用类型 / 时点选唯一 / `适用冲突` / `无适用依据`；法人取 `LegalEntityCandidate`、时点取锚点，
+    键上不重复携带）；`CreditBasis` 随 Resolution 交出 ✓（`Resolution.AdoptedCreditBasis` → 闭包 `AdoptedBasis.CreditBasis` →
+    `creditBasisDocument` 两格入快照 → `RehydrateAdoptedBasisSpec.CreditLimit / HasCreditBasis` 读回，出处即本项 `Version` 不另存）；
+    SA 侧那只适配器旁加一只且装配进接受前控制编排 ✓（`credit_basis.go` 与 `acceptanceFinancialControl`）；剪行按第二种 ✓（复核见上）；
+    ADR-0127 独立一篇不作 0115 补充 ✓，Context 钉 SHA ✓。完成判据 1–4 逐项在场（1 裁甲入 ADR；2 提供方口 = `resolveCreditPolicyBasis`
+    经闭包交出、SA `exposeCredit` 先索取依据再读状况、额度经 `WithAuthorizedLimit` 换上、结果带 `CreditPolicy()`；3 剪行钉 SHA；
+    4 理由行改写为历史）。未确认参数：`CreditSelector` 两维由键（租户实例）给、无默认；比例额度基数未裁停 `CREDIT_RATIO_BASE_UNDECIDED`
+    不折算 ✓；`Deps.CreditBasis` nil 沿旧路——旧路取的是登记状况 `limit_minor`（一条登记事实，非写死常量），生产装配已接真适配器，
+    所以不构成「未确认参数写死为生产默认」，属机制半边的过渡格（见下 ②）。`AT-SA-171` 政策半边在形成时成立、账本行持久化归 SA 后续
+    并已在 ADR Consequences 点名——判据 2 原话是「形成……时有出自政策版本的额度依据可比」，满足。
+    - **四条越权点，各一句「是否在裁决字面内」**：
+      ① 解析身份换代（`RES-` / `CLO-` / `CONT-` 指纹含 `CreditSelector`）——**在字面内**：裁决要「镜像 `resolveSettlementPolicyBasis`」，
+        选择器进键即进指纹是 ADR-0044 先例的必然后果，ADR-0127 决定二如实记了；无租户无生产固定解析，不需迁移。
+      ② `Deps.CreditBasis` nil 沿旧路——**字面外、不相悖**：裁决只说「旁加一只且装配进编排」，没说依赖强弱；作者为不碰 PS 夹具留 expand
+        段并在 ADR 决定五写明 contract 何时收，取舍合三步法。风险在「漏接不红」（见 Standards 1），SA contract 段是该收的那一格。
+      ③ `NotFormedReason` 新增三格——**字面外、合红线**：三格照 `PreAcceptanceControlPolicyView`（ADR-0054）的三格形状译过来，
+        `CREDIT_RATIO_BASE_UNDECIDED` 正是「未确认参数显式未决、不写死」那条红线在代码上的样子；值追加在 iota 尾部不改既有序。产品是否
+        要另裁这三格的措辞归 owner，评审只判它不与裁决相悖。
+      ④ 冲突格 `candidateCount` 固定记 2——**在字面内**：镜像的就是 `resolveSettlementPolicyBasis` / `resolvePriceRuleBasis` 的既有写法，
+        三份以上候选时数字不准是三处共有的沿用取舍，不由本票新开；要改应三处一起、另立票。
+    - 备案（作者已记的未落三件，同意归各自地盘）：PS 登记面不承载信用二维 → PS 另立票；SA contract 段 + 账本行政策引用 → SA 后续；
+      比例额度基数 → `BD-*`。
+  - **结论**：Standards 阻断 0 / 非阻断 1；Spec 阻断 0 / 非阻断 0；越权点四条皆不与裁决相悖（两条在字面内、两条字面外但合红线 / 三步法）。
+    **可进 main**。本条写在分支 `mcp5-wbr03-review`（基 origin/main `140bce84`，只动本文件），与作者分支上的 `94eda949` / `05e0e80f`
+    两笔票面同在文末追加，合并时作者两笔在前、本条在后。
