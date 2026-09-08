@@ -132,7 +132,7 @@ export function PreAcceptanceFinancialControlPolicyPublicationForm({
           <section className="flex flex-col gap-3">
             <h3 className="text-[13px] font-medium text-idpxyz-text">策略正文（0024）</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
-              正文是一格共同通过条件加一张控制项表：每行在哪个费用范围上做哪一种控制、排第几、不通过时委托去哪、谁负责。
+              正文是一格共同通过条件加一张控制项表：每行在哪个费用范围上做哪一种控制、判断顺序排第几、失败处置委托去哪、失败或补偿责任归谁。
               判断顺序从 1 起、版本内唯一；同一范围上同一种控制至多一行；至少一项——三条都由服务端构造门答，这里只提示。
               <strong>「无控制」不在这里</strong>：那是客户合同按范围的声明（要带不适用依据），控制种类下拉里没有它。
             </p>
@@ -256,7 +256,7 @@ function ControlRow({
           />
         </Field>
         <VocabularySelect
-          label="不通过时 *"
+          label="失败处置 *"
           path={`${rowPath}.onFailure`}
           setName="onFailure"
           codes={onFailureCodes}
@@ -267,7 +267,7 @@ function ControlRow({
           locked={locked}
           onChange={(onFailure) => onChange({ onFailure })}
         />
-        <Field label="责任方 *" path={`${rowPath}.responsibility`} problems={problems}>
+        <Field label="失败或补偿责任方 *" path={`${rowPath}.responsibility`} problems={problems}>
           <Input
             value={row.responsibility}
             disabled={locked}

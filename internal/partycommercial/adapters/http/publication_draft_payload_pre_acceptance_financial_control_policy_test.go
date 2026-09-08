@@ -16,7 +16,14 @@ import (
 // 路径收齐且控制项逐行点名、跨行的门（顺序撞了、同键两行、零项）由领域在预览上答成`未受理`带成因而不是解码问题、
 // 正文缺席与挂错类别同归`未受理`。
 
-const controlPolicyPayload = `{
+const (
+	creditCheckRow   = `{"control": "CREDIT_CHECK", "chargeScope": "charge-terms", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"}`
+	prepaidFreezeRow = `{"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}`
+)
+
+// controlPolicyPayloadWith 把给定的控制项行装进同一份壳与共同通过条件里；行之间用逗号接。
+func controlPolicyPayloadWith(rows ...string) string {
+	return `{
   "kind": "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY",
   "objectId": "fcp-1",
   "version": "v1",
@@ -24,12 +31,13 @@ const controlPolicyPayload = `{
   "effectiveStartsAt": "2026-08-01T00:00:00Z",
   "preAcceptanceFinancialControlPolicy": {
     "jointPassCondition": "ALL_CONTROLS_PASS",
-    "controls": [
-      {"control": "CREDIT_CHECK", "chargeScope": "charge-terms", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"},
-      {"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}
-    ]
+    "controls": [` + strings.Join(rows, ", ") + `]
   }
 }`
+}
+
+// 判断顺序 2 的行写在前面：文档按判断顺序归一，载荷里的行序不是正文。
+var controlPolicyPayload = controlPolicyPayloadWith(creditCheckRow, prepaidFreezeRow)
 
 // 只有壳没有正文：策略版本壳单独发布是合法的（受控批文那一半今天就这么做），但运营主路径要的是正文，预览对它答正文缺席。
 const controlPolicyShellOnly = `{
@@ -100,15 +108,7 @@ func TestControlPolicyPreviewAndSubmissionShareTheDigest(t *testing.T) {
 		t.Fatalf("second item = %#v", second)
 	}
 
-	swapped := strings.Replace(strings.Replace(strings.Replace(controlPolicyPayload,
-		`{"control": "CREDIT_CHECK", "chargeScope": "charge-terms", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"}`, "@second", 1),
-		`{"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}`,
-		`{"control": "CREDIT_CHECK", "chargeScope": "charge-terms", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"}`, 1),
-		"@second", `{"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}`, 1)
-	if swapped == controlPolicyPayload {
-		t.Fatal("the swapped payload must differ textually from the original")
-	}
-	reordered := previewControlPolicy(t, swapped)
+	reordered := previewControlPolicy(t, controlPolicyPayloadWith(prepaidFreezeRow, creditCheckRow))
 	if reordered.Outcome() != application.CommercialPublicationPreviewed {
 		t.Fatalf("swapped preview = %q (cause %v)", reordered.Outcome(), reordered.RefusalCause())
 	}
@@ -189,20 +189,14 @@ func TestControlPolicyPreviewAnswersTheCrossRowGatesAndTheKind(t *testing.T) {
 		}
 	}
 
-	sameOrder := strings.Replace(controlPolicyPayload, `"order": 2`, `"order": 1`, 1)
+	sameOrder := controlPolicyPayloadWith(creditCheckRow, strings.Replace(prepaidFreezeRow, `"order": 1`, `"order": 2`, 1))
 	refused(t, sameOrder, domain.ErrDuplicatePreAcceptanceControlItem)
 
-	sameKey := strings.Replace(controlPolicyPayload, `"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid"`, `"control": "CREDIT_CHECK", "chargeScope": "charge-terms"`, 1)
+	sameKey := controlPolicyPayloadWith(creditCheckRow,
+		strings.Replace(prepaidFreezeRow, `"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid"`, `"control": "CREDIT_CHECK", "chargeScope": "charge-terms"`, 1))
 	refused(t, sameKey, domain.ErrDuplicatePreAcceptanceControlItem)
 
-	noRows := strings.Replace(strings.Replace(strings.Replace(controlPolicyPayload,
-		`{"control": "CREDIT_CHECK", "chargeScope": "charge-terms", "order": 2, "onFailure": "AUTHORIZED_DISPOSITION", "responsibility": "operator-legal-1"},`, "", 1),
-		`{"control": "PREPAID_FREEZE", "chargeScope": "charge-prepaid", "order": 1, "onFailure": "REJECT", "responsibility": "customer-1"}`, "", 1),
-		"\n      \n    ", "", 1)
-	if !strings.Contains(noRows, `"controls": [`) || strings.Contains(noRows, `"control":`) {
-		t.Fatalf("noRows payload not shaped as intended:\n%s", noRows)
-	}
-	refused(t, noRows, domain.ErrInvalidPreAcceptanceFinancialControlPolicy)
+	refused(t, controlPolicyPayloadWith(), domain.ErrInvalidPreAcceptanceFinancialControlPolicy)
 
 	refused(t, controlPolicyShellOnly, domain.ErrPublicationContentAbsent)
 
