@@ -188,3 +188,11 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
   - **结论**：Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 1。**可进 main**；建议重放时顺手把 `judgment_continuation.go` 那句
     计数改成不计数写法（纯注释）。本条写在分支 `mcp5-wbr04-review`（基 origin/main `a69c16f0`，只动本文件），与作者分支上的
     `67ca20d5` / `04472784` 两笔票面同在 Comments 末追加，合并时作者两条在前、本条在后。
+
+## 进 main 记录（2026-09-08 18:0x，通道 1 重放）
+
+- **分支→main 逐笔**（`git cherry-pick` 于 `6ae24ae2` 之上，隔离 detached 树 `idp-replay-wbr04`）：`67ca20d5→0a426d8b`、`f4e9a9e2→aed6d756`、`80d100a2→9d93f74f`、`04472784→9fd38552`（四笔零冲突——tf/11 先进 main 与本票零文件重叠）；评审 `90795093→f68afec3`（Comments 末与作者两条同 hunk，作者在前、评审在后，作者 73 行 / 评审 45 行逐行在场）；本笔只加本节。
+- **不带**：`8e52f413` 清点笔——它基 `62bf6504` 缺 TF 0019，数字只对该检出成立；在重放 tip 干净检出重生成为 `cd1a1fdb`（parcelshipment 生产 141→142 / 测试 140→141、PS→PC 消费缝 13→14、端口 365→366、合计 857→858 / 806→807，与分支清点笔只差 TF 迁移段那两处）。
+- **树等价**：分支触及文件里对 tip 仍有差的只有 `MECHANISM-INVENTORY.md`（即上一条）；`production_wiring_baseline.txt` 对分支 tip 零差（wbr/03 尚未进，撞在它那边解）。
+- **验证钉 `cd1a1fdb`**（之后只多 .md）：gofmt -l 空；go build / go vet 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（17:48:58→17:58:49，`parcelshipment/adapters/postgres` 47s、`cmd/parcel-api` 14s 非缓存）；日志 `%TEMP%\mcp1-wbr04-fulltest.log`。
+- **评审非阻断**（Standards 2 / Spec 1，见 Comments）随票记：`judgment_continuation.go` 的 `ErrUnexpectedAuthorizationOutcome` 头注计数变旧（「三个授权端口 / 三处 / 三个调用点」，本票成第四个）——纯注释，交作者另笔 `mcp2-wbr04-followup` 改成不计数写法，不改写已进 main 的 SHA；`ErrUntranslatableAnswer` 名义错位接受；UC-PC-003 第四项「将来时」与首切「二值」过期句归 docs 收口同趟改。spec 状态行等 wbr/03 进 main 后改一次。
