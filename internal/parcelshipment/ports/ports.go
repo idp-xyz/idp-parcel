@@ -959,10 +959,10 @@ type PreAcceptanceControlRelease interface {
 	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
 }
 
-// AuthorizationOutcome 是三个授权端口共用的封闭答复集合。端口分开而答案集合共用：授权来源、
-// 有效期间与原因目录三者各不相同（那是端口分开的理由），但「答得出什么」只有这三种，且分格
+// AuthorizationOutcome 是各授权端口共用的封闭答复集合。端口分开而答案集合共用：授权来源、
+// 有效期间与原因目录各不相同（那是端口分开的理由），但「答得出什么」只有这三种，且分格
 // 维度相同——按消费方的恢复动作分（ADR-0029）。共用一个集合还有一层强制力：日后多一种答复，
-// 三处译函数会一起报错，而不是各自静默归入某一格。
+// 每一处译函数会一起报错，而不是各自静默归入某一格。
 //
 // `未配置`与`不允许`必须分开，这是本类型存在的全部理由：前者要租户先把 `PAR-COM-14` 的授权
 // 规则登记上，后者是权威已经答过的业务拒绝，再登记也不会变。压成一格，**没有租户的首发期
@@ -1020,6 +1020,44 @@ type ActiveRejectionAuthorization struct {
 // 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回，包括拒绝。
 type ActiveRejectionAuthorizer interface {
 	AuthorizeActiveRejection(ctx context.Context, query ActiveRejectionAuthorizationQuery) (ActiveRejectionAuthorization, error)
+}
+
+// ManualReviewAuthorizationQuery 说明谁要凭什么证据为哪一份提交版本完成人工复核。与主动拒绝
+// 那一支同样不带授权引用：调用方自带一个，就等于自己给自己签字——而复核完成的授权引用此前
+// 恰恰是由 Intake 整组注入的，没有人问过 party-commercial（票 wiring-baseline-remainder/04）。
+//
+// 它答的是「谁有权复核」，不是「要不要复核」。后者的单一权威是接单规则包正文的
+// `ManualReviewDirective`，经商业依据快照进 Decide；两问并格是 ADR-0042 明拦的事，本查询
+// 因此不携带任何关于复核该不该发生的内容。
+//
+// 证据引用随查询进提供方：PC 的授权请求要求每个动作都带证据，而复核「按证据完成」（UC-PS-001
+// `AT-PS-034`），PS 手上正好有这一份。结构化原因 PS 没有——复核完成不是一次带原因的决定——
+// 由实例半边的请求映射给出，不在这里造一个。
+type ManualReviewAuthorizationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Reviewer          domain.ReviewerReference
+	Evidence          domain.ReviewEvidenceReference
+}
+
+// ManualReviewAuthorization 只在`已授权`时携带授权引用，其余取值一律不带：交回一个零值引用，
+// 编排会把一次没拿到的授权签进复核留痕。
+type ManualReviewAuthorization struct {
+	Outcome   AuthorizationOutcome
+	Authority domain.ReviewAuthorityReference
+}
+
+// ManualReviewAuthorizer 回答 party-commercial 是否授权这位复核人为这份提交版本完成复核。
+// 授权引用由那边签发（所采用的授权规则版本），parcel-shipment 只把它记进复核留痕——角色目录
+// 与权限等级都不属本上下文（`BD-PS-002`、`PAR-COM-14`）。
+//
+// 它与 ActiveRejectionAuthorizer 分开：获准复核不等于获准直接拒掉这单业务（PC CONTEXT 把两者
+// 定为互不蕴含的两个动作），合成一个端口会让一份只授复核权的规则被读成拒绝权。
+//
+// 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回，包括拒绝。
+type ManualReviewAuthorizer interface {
+	AuthorizeManualReview(ctx context.Context, query ManualReviewAuthorizationQuery) (ManualReviewAuthorization, error)
 }
 
 // WithdrawalAuthorizationQuery 说明谁要以什么原因撤回哪一份待决委托。与主动拒绝那一支同样
