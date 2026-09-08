@@ -92,9 +92,11 @@ func TestCanonicalDigestDistinguishesContentButNotSpelling(t *testing.T) {
 func TestCanonicalizeAnswersThreeDistinctRefusals(t *testing.T) {
 	body := creditPolicyBody(t, "freight", creditAmount(t, 100), time.Time{})
 
-	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.SettlementPolicyObject})
+	// 「没接的册」的样本取客户服务规则：那一册的表单票（admin-write-faces/18）仍是 draft，是今天还没接进规范化的册里
+	// 最不会被下一张子票顺手接走的一个。
+	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CustomerServiceRuleObject})
 	if !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
-		t.Fatalf("settlement policy: err = %v, want ErrRegisterNotCanonicalized", err)
+		t.Fatalf("customer service rule: err = %v, want ErrRegisterNotCanonicalized", err)
 	}
 	_, err = domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CreditPolicyObject})
 	if !errors.Is(err, domain.ErrPublicationContentAbsent) {
@@ -114,8 +116,8 @@ func TestCanonicalizeAnswersThreeDistinctRefusals(t *testing.T) {
 	if !errors.Is(err, domain.ErrInvalidCreditPolicy) {
 		t.Fatalf("zero body: err = %v, want ErrInvalidCreditPolicy", err)
 	}
-	if domain.IsRegisterCanonicalized(domain.SettlementPolicyObject) || !domain.IsRegisterCanonicalized(domain.CreditPolicyObject) {
-		t.Fatalf("IsRegisterCanonicalized: first release covers credit policy only")
+	if domain.IsRegisterCanonicalized(domain.CustomerServiceRuleObject) || !domain.IsRegisterCanonicalized(domain.CreditPolicyObject) {
+		t.Fatalf("IsRegisterCanonicalized: credit policy is canonicalized, customer service rule is not")
 	}
 }
 

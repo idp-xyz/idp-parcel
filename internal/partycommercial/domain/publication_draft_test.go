@@ -123,12 +123,13 @@ func TestSubmittingADraftComputesTheDigestAndStartsPendingApproval(t *testing.T)
 func TestSubmittingADraftIsGuardedByTheCanonicalizationAndShellGates(t *testing.T) {
 	submitter := commercialValue(t, domain.NewOperatorSubjectReference, "op-submitter")
 
+	// 「没接的册」的样本取客户服务规则（判据同 TestCanonicalizeAnswersThreeDistinctRefusals）。
 	_, err := domain.SubmitPublicationDraft(
-		draftShell(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
-		domain.PublicationContent{Kind: domain.SettlementPolicyObject},
+		draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		domain.PublicationContent{Kind: domain.CustomerServiceRuleObject},
 		submitter, draftSubmittedAt)
 	if !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
-		t.Fatalf("settlement policy draft: err = %v, want ErrRegisterNotCanonicalized", err)
+		t.Fatalf("customer service rule draft: err = %v, want ErrRegisterNotCanonicalized", err)
 	}
 
 	mismatched := creditContent(t, 1)
@@ -281,8 +282,8 @@ func TestPreviewWalksTheSameGateAsSubmission(t *testing.T) {
 	if _, err := domain.PreviewPublication(blankScope, content); !errors.Is(err, domain.ErrInvalidCommercialVersion) {
 		t.Fatalf("preview of a blank scope: err = %v", err)
 	}
-	if _, err := domain.PreviewPublication(draftShell(t, domain.SettlementPolicyObject, "s-1", "v1"),
-		domain.PublicationContent{Kind: domain.SettlementPolicyObject}); !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
+	if _, err := domain.PreviewPublication(draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		domain.PublicationContent{Kind: domain.CustomerServiceRuleObject}); !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
 		t.Fatalf("preview of a register not yet canonicalized: err = %v", err)
 	}
 }
