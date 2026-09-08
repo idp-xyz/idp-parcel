@@ -15,6 +15,7 @@ import {
   type CommercialPolicyListResponseBody,
 } from './api';
 import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
+import { AuthorizationRulePublicationForm } from './AuthorizationRulePublicationForm';
 import { kindColumns, rowsOf, type PolicyRow } from './policy-rows';
 import {
   commercialPolicyKinds,
@@ -150,6 +151,7 @@ export function CommercialPoliciesPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="registers">政策册</TabsTrigger>
           <TabsTrigger value="publish-credit-policy">发布信用政策版本</TabsTrigger>
+          <TabsTrigger value="publish-authorization-rule">发布授权规则版本</TabsTrigger>
           <TabsTrigger value="publish">受控发布（JSON 镜像）</TabsTrigger>
         </TabsList>
         <TabsContent
@@ -163,6 +165,12 @@ export function CommercialPoliciesPage() {
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
           <CreditPolicyPublicationForm onPublished={() => notePublished('CREDIT_POLICY')} />
+        </TabsContent>
+        <TabsContent
+          value="publish-authorization-rule"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <AuthorizationRulePublicationForm onPublished={() => notePublished('AUTHORIZATION_RULE')} />
         </TabsContent>
         <TabsContent
           value="publish"

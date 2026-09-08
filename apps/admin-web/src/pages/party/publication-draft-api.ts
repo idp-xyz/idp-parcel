@@ -78,6 +78,21 @@ export interface CommercialPublicationPayload {
   creditPolicy?: CreditPolicyBodyPayload;
   supplierAgreement?: SupplierAgreementBodyPayload;
   customerContract?: CustomerContractBodyPayload;
+  authorizationRule?: AuthorizationRuleBodyPayload;
+}
+
+/**
+ * 授权规则册正文（Go `AuthorizationRuleBodyPayload`，票 admin-write-faces/17）：只有取消授权目录一节——请求方 × 规则引用
+ * 的几行。`party` 是封闭二值的原词，由服务端词表读口供下拉（`fetchPublicationVocabulary('AUTHORIZATION_RULE')` 的 `party`
+ * 集），表单不内置；同一请求方第二行、零行都由服务端在预览上答`未受理`带成因。授权授予册不经这条发布路，载荷里没有它的键。
+ */
+export interface AuthorizationRuleBodyPayload {
+  cancellationAuthority: CancellationAuthorityRulePayload[];
+}
+
+export interface CancellationAuthorityRulePayload {
+  party: string;
+  rule: string;
 }
 
 /**
