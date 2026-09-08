@@ -1076,3 +1076,24 @@ MCP-4 `82bc2586` done：`mcp4-ci-p1` 四笔只动 `ci.yml`——`9814569f→f5bb
 用户 00:0x 报 MCP-4 crash（截图：todo 停在「逐条定要定的」已完、正在改领域 red 测试）。量现场：`mcp4-tf11@503dfcc6`（票面裁「要定的」四条——失效版本是链上带 voided 标的一版、失效后当前有效控制为无、继承离场三件、在场与关段都不数它；**不立 ADR-0121，号释回**）已推 origin；树内未提交只有 `actual_fulfillment_segment_test.go` +7/−18（mtime 00:02:49）。推送方代封存为 `chore(salvage)` **`6e5c8a0c`** 并推 origin（非集成候选，接手人重切）。`c2003926` 结 failed「承接方换人」；接管单 **`a8e6a834`** 预派通道 4（从 `mcp4-tf11` 接着做、第 1 步先读封存 diff 报 ≤10 行、封存笔不进 main），用户重启通道 4 即接；若改指别的通道，我改派。本波在途：MCP-2 psr/02 余段、MCP-5 awf/08（ADR-0126 已落，0127 释回）、MCP-6 wbr/03–05；通道 3/4 空（crash）。评审配对改为 MCP-2↔MCP-6、MCP-5↔（4 回来后）。
 
 **本节五数**（21:2x 接手 → 23:4x）：CI main 绿/总 7/9（2 红均为 tmpfs 修复前 customs-transport 真库包撞 go test 10 分上限：`f69b35b9`、`b2cb71fc`；5 次 concurrency 顶替的 cancelled 不计；`ade810bd` 在跑）· 集成时延中位数 65 分（3 票：sa/03 37 / pc-gaps/10 65 / CI 75——后两票的等待大半是推送方在答用户问）· 重放笔数 14（另 cherry-pick 3 笔纯 .md 票面记录）· 重复开发 1 次（pc-gaps/09）· 会话重置 3 次（通道 1 21:2x、MCP-6 21:2x、MCP-3 21:5x）。
+
+## 2026-09-08 10:2x 通道 1 新会话接续（接手时 `main = origin/main = 96558acd`）
+
+用户只交代「监听队列、正常回复、保持循环」，随后问「工作树干净吗 / temp 里有没有 replay / 需要 Replay 吗」。上一节末（00:1x）到接手之间 main 无提交；队列里无未消费的完工报。
+
+### 10:3x 只读盘点（钉 `96558acd`）
+
+- 共享树干净（status 零行，无 CRLF 幻影，无 stash）。`worktree list` 七棵：主树 + `idp-parcel-mcp2-psr02`[mcp2-psr02-tail] / `idp-verify-psr02`（detached，同 SHA，MCP-2 自验树）/ `idp-parcel-mcp4-tf11` / `idp-parcel-mcp5-awf08` / `idp-parcel-mcp6-wbr03-05` / `idp-tf03`，全部干净。
+- 四支在途分支对 main 的 `.go/.sql` 零重叠（main 自各自基线起只多 tasks.md 两笔）：
+  - `mcp2-psr02-tail@e2a51ba8`：psr/02 余段两笔代码（`2e085cad` PS 消费适配器 `DeclaredSourceDataAmendmentAllowance`、`5e5e2c05` parcel-api 装配接真）+ 分支清点笔。MCP-2 自验含 DSN 全仓 **100 ok / 0 FAIL / 16 无测试 / 0 cached**（`%TEMP%\psr02-fulltest.log`，00:17）。票 02 面在分支上仍 in-progress、无完成记录；独立评审未做。
+  - `mcp6-wbr03-05@c1dcbd90`：`db723eb1` 剪 `ValidateBeforeDecision`（PC domain 纯删 −217 + 基线）→ 05 resolved；`c1dcbd90` 03/04 补理由行并转 **blocked**，各卡一格等 MCP-1 裁（03 多候选选择器是解析语义改口、要 ADR，MCP-6 倾向甲；04 UC-PC-003 第四项改名或拆两问）。独立评审未做。
+  - `mcp5-awf08@c003c845`：ADR-0126 + 首例信用政策规范化/摘要已落，待批准载体 + 批准动作（PC 0028）→ 预览口未做，在途。
+  - `mcp4-tf11@6e5c8a0c`：只有封存笔 + 票面裁决，不进 main，等接管单 `a8e6a834`。
+- **远端 CI 自 `e682291f` 起 main 连绿 6 次**（`ade810bd` run 34138109343 起，cancelled 不计）——22:4x 定的「作者自落 main：PR + CI」切换条件已满足，切不切归用户；未切之前仍走重放。
+- `scripts/branch-state.ps1` 在 PS 5.1 下「在途分支」段被 `git cat-file -e` 的 NativeCommandError 打断，`-Classify` 输出为空（`2>$null` 拦不住 stderr 转异常）；本节候选判断为手算。修法归脚本地盘，未动。
+
+### 10:4x：acceptance-review-read-face/01 收口快进入 main
+
+MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该目录为空）→ 核准（钉 `96558acd`：文件仍 handed-off、`df51ce0` 是 main 祖先、四支在途分支对该目录 diff 为 0）→ 10:42 完工报 `mcp2-arrf01-close@a4f31eeb`（父 = `96558acd`，1 件 +25/−2，无 `.go/.sql`，已推 origin）。纯 .md 簿记按 09-08 规矩自审、不点评审人、不走隔离树验；共享 main **快进**到 `a4f31eeb`（SHA 原样），本笔 tasks.md 之后一并推（推前 ls-remote = 96558acd）。MCP-2 树 `idp-parcel-mcp2-arrf01` 由它自拆、指针改 `merged/`。
+
+**在途（10:4x）**：MCP-2 psr/02 余段（等它答「算不算完工」再点 MCP-6 评）、MCP-5 awf/08、MCP-6 wbr/03–05（05 待评审，03/04 等 MCP-1 裁两格）；通道 3/4 空。**归用户**：是否切「作者自落 main」；needs-info 四张、ftr/03、ve-claims/04 三问、ADR-0109/0111 复核、tenant-implementation-01 三份不变。
