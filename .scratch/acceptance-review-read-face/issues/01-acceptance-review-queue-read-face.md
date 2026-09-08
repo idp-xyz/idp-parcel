@@ -1,8 +1,9 @@
 # 复核队列查阅面：/acceptance-review-queue 与页 acceptance-review 接真
 
 Category: feature
-Status: handed-off——移交 admin-skeleton-closure-batch/09（MCP-5，2026-08-31）；半成品
-清单与状态见 Comments 末条
+Status: resolved——由 admin-skeleton-closure-batch/09 兑现（随 `df51ce0` 入库，MCP-5 于
+`e35d898` 核过范围七步）；本票 2026-09-08 由通道 2 按用户指示做簿记收口，核对见 Comments 末条。
+此前为 handed-off——移交 09（MCP-5，2026-08-31），半成品清单见移交注记
 Blocked by: —
 
 ## 要做什么
@@ -87,3 +88,25 @@ parcel-shipment 上开复核队列查阅面（读，不带决定），页 `accep
 
 未动装配四件与页面。若不吸收，`git checkout -- <三个已跟踪文件>` + 删四个新文件即可
 回到 `4b35815` 基线。
+
+### 收口（通道 2，2026-09-08）
+
+用户指示「先收口」。本票自 `1665fdb` 起一直挂 handed-off，而移交目标
+admin-skeleton-closure-batch/09 早已 resolved（随 `df51ce0` 入库；MCP-5 2026-09-01 在
+`e35d898` 上逐项核过其范围七步）。翻状态前在 main `96558acd` 上按**本票自己的**「要做什么」
+与移交清单重核了一遍，不拿 09 的票面当证据：
+
+- 移交清单里的四个未跟踪文件（`query_acceptance_review_queue.go` 及其测试、
+  `acceptance_review_queue.go` 及其测试）全部被 09 吸收，`git ls-files` 四件都在 main。
+- `GET /acceptance-review-queue` 挂在 `cmd/parcel-api/endpoints.go` 端点表
+  （`NewQueryAcceptanceReviewQueueEndpoint(shipmentViewsIntake, reviewQueue, reviewJudgments)`），
+  探针表 `endpoints_test.go` 与隔离读放行表 `isolated_read_test.go` 各有一行。
+- 页面：`apps/admin-web/src/pages/shipment-request/AcceptanceReviewPage.tsx` 接该端点的列表
+  与单份两支；`page-registry.tsx` 的 `liveIds` 收有 `acceptance-review`。
+- 本票范围之外的两个命令口（复核完成、主动拒绝）属票 02 并入 09 的那半，本票不据此收口，
+  只记它们也在。
+
+「完成判据」里的真库/处理器/装配三层测试与提交态验证由 09 入库时跑过（见其 Comments
+2026-09-01 两条），本票不重跑、不另立证据等级。无一行代码改动，只翻本文件 `Status:` 并追加
+本条；父 spec 已是 superseded，不动。取证时 `git log --all --not main -- .scratch/acceptance-review-read-face/`
+为空，无在途分支碰过本目录。
