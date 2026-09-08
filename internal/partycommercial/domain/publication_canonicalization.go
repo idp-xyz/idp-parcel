@@ -40,9 +40,6 @@ const publicationCanonicalizationVersion = "PCC-1"
 // 不给版本册加列——一列会让没版本的旧串与有版本的新串在库上长成同一种东西。
 const canonicalDigestSeparator = ":"
 
-// CurrentPublicationCanonicalizationVersion 报出本构建按哪套形状规范化商业发布正文。
-func CurrentPublicationCanonicalizationVersion() string { return publicationCanonicalizationVersion }
-
 // Canonicalization 报出本摘要串携带的规范化版本。没带版本的串（今天册上 `sha256:syn-…` 那类声明串）
 // 答 false：按 ADR-0014 它们是不完整的摘要，与算出的串不可比——调用方据此分辨「能对账」与「无从对账」，
 // 而不是拿一个空版本去比。

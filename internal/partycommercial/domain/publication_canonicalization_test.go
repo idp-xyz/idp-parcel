@@ -45,8 +45,9 @@ func TestCanonicalDigestCarriesVersionAndIsStable(t *testing.T) {
 	if first.Digest() != second.Digest() {
 		t.Fatalf("same body canonicalized twice: %s vs %s", first.Digest(), second.Digest())
 	}
-	if first.Canonicalization() != domain.CurrentPublicationCanonicalizationVersion() {
-		t.Fatalf("canonicalization = %q, want %q", first.Canonicalization(), domain.CurrentPublicationCanonicalizationVersion())
+	// 版本号按 ADR-0126 Decision 一的原文写死：拿代码里的常量来比是同义反复，形状变了测试也不会响。
+	if first.Canonicalization() != "PCC-1" {
+		t.Fatalf("canonicalization = %q, want PCC-1", first.Canonicalization())
 	}
 	if !strings.HasPrefix(first.Digest().String(), "PCC-1:") {
 		t.Fatalf("digest %q does not carry its canonicalization version", first.Digest())

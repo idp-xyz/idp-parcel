@@ -15,7 +15,8 @@ import (
 
 // 商业上下文八类配置登记的生产装配（ADR-0085，票 admin-write-faces/02 切片 02c）。
 // 三族各一个包装类型，与传输层的三个 Registrar 契约一一对应：发布族、参与方身份族
-// （四类登记加停用）、产品渠道族（形态与映射）。
+// （四类登记加停用）、产品渠道族（形态与映射）。运营操作者面发布路径（预览 + 载体三口，
+// ADR-0126，票 admin-write-faces/08）是第五族，形同前四族。
 //
 // 一族一个包装而不是一格一个：同族的方法各自具名（不是同名 `Handle`），一个类型装得下
 // 全族，且传输层本就按族收一个 Registrar——拆成八个只会把同一段事务壳抄八遍。这与关务
@@ -182,11 +183,56 @@ func (registration transactionalChannelAccountUse) Revoke(
 		})
 }
 
+// transactionalPublicationDrafts 是运营操作者面发布路径三口的事务壳（ADR-0126 Decision 三）：录入、批准各一笔；
+// 发布那一笔把载体用例与它转交的受控发布用例包在同一事务里——版本、声明与载体状态同笔落库，不留「版本发了、
+// 载体还写着已批准」的半份。三个用例各自具名，一个类型装得下全族，与 PublicationDraftOperator 契约一一对应。
+type transactionalPublicationDrafts struct {
+	transactor bentoapp.Transactor
+	submit     *commercialapp.SubmitPublicationDraftHandler
+	approve    *commercialapp.ApprovePublicationDraftHandler
+	publish    *commercialapp.PublishPublicationDraftHandler
+}
+
+var _ commercialhttp.PublicationDraftOperator = transactionalPublicationDrafts{}
+
+func (drafts transactionalPublicationDrafts) Submit(
+	ctx context.Context,
+	command commercialapp.SubmitPublicationDraftCommand,
+) (commercialapp.SubmitPublicationDraftResult, error) {
+	return commercialInTransaction(ctx, drafts.transactor,
+		func(txCtx context.Context) (commercialapp.SubmitPublicationDraftResult, error) {
+			return drafts.submit.Handle(txCtx, command)
+		})
+}
+
+func (drafts transactionalPublicationDrafts) Approve(
+	ctx context.Context,
+	command commercialapp.ApprovePublicationDraftCommand,
+) (commercialapp.ApprovePublicationDraftResult, error) {
+	return commercialInTransaction(ctx, drafts.transactor,
+		func(txCtx context.Context) (commercialapp.ApprovePublicationDraftResult, error) {
+			return drafts.approve.Handle(txCtx, command)
+		})
+}
+
+func (drafts transactionalPublicationDrafts) Publish(
+	ctx context.Context,
+	command commercialapp.PublishPublicationDraftCommand,
+) (commercialapp.PublishPublicationDraftResult, error) {
+	return commercialInTransaction(ctx, drafts.transactor,
+		func(txCtx context.Context) (commercialapp.PublishPublicationDraftResult, error) {
+			return drafts.publish.Handle(txCtx, command)
+		})
+}
+
 type commercialRegistrationOrchestration struct {
 	publication       transactionalCommercialPublication
 	partyIdentity     transactionalPartyIdentityRegistration
 	productChannel    transactionalProductChannelRegistration
 	channelAccountUse transactionalChannelAccountUse
+	// publicationPreview 没有事务壳：预览不读也不写（ADR-0126 Decision 四）。
+	publicationPreview *commercialapp.PreviewCommercialPublicationHandler
+	publicationDrafts  transactionalPublicationDrafts
 }
 
 // buildCommercialRegistrationOrchestration 装配八个 `/commercial-*` 写面的真编排。
@@ -223,11 +269,30 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		return none, fmt.Errorf("parcel-api: operator registration completed handoff: %w", err)
 	}
 
+	// 运营操作者面发布路径（ADR-0126 Decision 三、四）：载体册与审批职责规则册各一只适配器；发布用例是**同一个**
+	// PublishCommercialAuthorityHandler 实例——受控批文口与载体发布口消费的是同一份编排，不各造一份。
+	drafts, err := pcpostgres.NewPublicationDrafts(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: publication draft registry: %w", err)
+	}
+	approvalDutyRules, err := pcpostgres.NewApprovalDutyRules(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: approval duty rule registry: %w", err)
+	}
+
 	transactor := db.Transactor()
+	publisher := commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}, registrationHandoff)
 	return commercialRegistrationOrchestration{
 		publication: transactionalCommercialPublication{
 			transactor: transactor,
-			inner:      commercialapp.NewPublishCommercialAuthorityHandler(publications, systemClock{}, registrationHandoff),
+			inner:      publisher,
+		},
+		publicationPreview: commercialapp.NewPreviewCommercialPublicationHandler(),
+		publicationDrafts: transactionalPublicationDrafts{
+			transactor: transactor,
+			submit:     commercialapp.NewSubmitPublicationDraftHandler(drafts, systemClock{}),
+			approve:    commercialapp.NewApprovePublicationDraftHandler(drafts, approvalDutyRules, systemClock{}),
+			publish:    commercialapp.NewPublishPublicationDraftHandler(drafts, publisher, systemClock{}),
 		},
 		partyIdentity: transactionalPartyIdentityRegistration{
 			transactor: transactor,

@@ -829,6 +829,41 @@ func (unwiredCommercialPublication) Handle(
 	return commercialapp.PublishCommercialAuthorityResult{}, errOrchestrationNotWired
 }
 
+// unwiredCommercialPublicationPreview 与 unwiredPublicationDrafts 是运营操作者面发布路径的占位（ADR-0126，票
+// admin-write-faces/08）：预览一格，载体三口一族。判据同 PP 预览占位：不交回零值答复，稳定错误让「越过了 Intake」
+// 可观察为 NO_ANSWER_FORMED。
+type unwiredCommercialPublicationPreview struct{}
+
+func (unwiredCommercialPublicationPreview) Handle(
+	context.Context,
+	commercialapp.PreviewCommercialPublicationCommand,
+) (commercialapp.CommercialPublicationPreview, error) {
+	return commercialapp.CommercialPublicationPreview{}, errOrchestrationNotWired
+}
+
+type unwiredPublicationDrafts struct{}
+
+func (unwiredPublicationDrafts) Submit(
+	context.Context,
+	commercialapp.SubmitPublicationDraftCommand,
+) (commercialapp.SubmitPublicationDraftResult, error) {
+	return commercialapp.SubmitPublicationDraftResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPublicationDrafts) Approve(
+	context.Context,
+	commercialapp.ApprovePublicationDraftCommand,
+) (commercialapp.ApprovePublicationDraftResult, error) {
+	return commercialapp.ApprovePublicationDraftResult{}, errOrchestrationNotWired
+}
+
+func (unwiredPublicationDrafts) Publish(
+	context.Context,
+	commercialapp.PublishPublicationDraftCommand,
+) (commercialapp.PublishPublicationDraftResult, error) {
+	return commercialapp.PublishPublicationDraftResult{}, errOrchestrationNotWired
+}
+
 type unwiredPartyIdentityRegistration struct{}
 
 func (unwiredPartyIdentityRegistration) RegisterBusinessParty(

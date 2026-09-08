@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -133,6 +134,23 @@ func loadDraft(t *testing.T, ctx context.Context, drafts *adapter.PublicationDra
 		t.Fatalf("读载体：%v", err)
 	}
 	return draft, found
+}
+
+// Covers: PBC-08 行为面负向证据——载体册与规则册的三个写口在无事务上下文必须被 RequireExecutor 拒绝。拒绝先于任何
+// 入参解读；载体写口里 SubmitDraft 与 AdvanceDraft 各自在拒绝之后才看状态，所以零值载体也能证到这一格。
+func TestPublicationDraftWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	drafts, rules, _, _ := newDraftRegistry(t)
+	ctx := t.Context()
+
+	if _, err := drafts.SubmitDraft(ctx, domain.PublicationDraft{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务录入载体应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := drafts.AdvanceDraft(ctx, domain.PublicationDraft{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务推进载体应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := rules.SaveApprovalDutyRule(ctx, domain.ApprovalDutyRule{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记审批职责规则应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
 
 // Covers: ADR-0126 Decision 三 — 录入往返经重建门：壳（含指名引用）、正文、算出的摘要、录入者与状态原样读回。

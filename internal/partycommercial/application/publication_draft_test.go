@@ -222,7 +222,7 @@ func TestPreviewComputesTheDigestWithoutTouchingTheRegister(t *testing.T) {
 		t.Fatalf("outcome = %q, want PREVIEWED", preview.Outcome())
 	}
 	canonical, ok := preview.Canonical()
-	if !ok || canonical.Canonicalization() != domain.CurrentPublicationCanonicalizationVersion() {
+	if !ok || canonical.Canonicalization() != "PCC-1" {
 		t.Fatalf("canonical = %#v, %v", canonical, ok)
 	}
 

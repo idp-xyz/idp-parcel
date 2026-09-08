@@ -428,6 +428,8 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			commercialRegistration.publication,
+			commercialRegistration.publicationPreview,
+			commercialRegistration.publicationDrafts,
 			commercialRegistration.partyIdentity,
 			commercialRegistration.productChannel,
 			commercialRegistration.channelAccountUse,

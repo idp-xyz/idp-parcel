@@ -114,6 +114,8 @@ func assembleBusinessEndpoints(
 	customerAccounts commercialhttp.CustomerAccountCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	commercialPublication commercialhttp.CommercialAuthorityPublisher,
+	commercialPublicationPreview commercialhttp.CommercialPublicationPreviewer,
+	commercialPublicationDrafts commercialhttp.PublicationDraftOperator,
 	partyIdentityRegistration commercialhttp.PartyIdentityRegistrar,
 	productChannelRegistration commercialhttp.ProductChannelRegistrar,
 	channelAccountUseRegistration commercialhttp.ChannelAccountUseRegistrar,
@@ -398,6 +400,15 @@ func assembleBusinessEndpoints(
 		// 状态推进，不是登记一个新身份。名字照实说，是因为「登记」与「停用」在这本册上的
 		// 续办动作不同，路径是登记方看见的第一样东西。
 		{Pattern: "/commercial-publications", Handler: commercialhttp.NewPublishCommercialAuthorityEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublication)},
+		// 运营操作者面发布路径四口（ADR-0126 Decision 三、四；票 admin-write-faces/08）：预览 + 载体录入 / 批准 / 发布。
+		// 预览不落库，但拟录的壳要信封里的租户才立得住，等的与三个命令口是同一样东西，所以同挂字面量
+		// UnconfiguredIntake{}、不走查阅行的 Intake 变量——隔离读放行装不进它（编译期，同 PP 预览口）。**批准那一口
+		// 比其余更不能松**：批准者是审批职责规则的一半，任何采信自报身份的 Intake 都等于把那道门拆了。发布口不并进
+		// `/commercial-publications`：那一口收受控批文（声明摘要 + 批准三格），这一口收载体引用，两口消费的用例不同。
+		{Pattern: "/commercial-publication-previews", Handler: commercialhttp.NewPreviewCommercialPublicationEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationPreview)},
+		{Pattern: "/commercial-publication-drafts", Handler: commercialhttp.NewSubmitPublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
+		{Pattern: "/commercial-publication-draft-approvals", Handler: commercialhttp.NewApprovePublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
+		{Pattern: "/commercial-publication-draft-publications", Handler: commercialhttp.NewPublishPublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},

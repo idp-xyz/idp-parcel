@@ -99,8 +99,8 @@ func TestSubmittingADraftComputesTheDigestAndStartsPendingApproval(t *testing.T)
 	if draft.Canonical().Digest() != expected.Digest() {
 		t.Fatalf("digest = %s, want the canonical digest %s", draft.Canonical().Digest(), expected.Digest())
 	}
-	if draft.Canonical().Canonicalization() != domain.CurrentPublicationCanonicalizationVersion() {
-		t.Fatalf("canonicalization = %q", draft.Canonical().Canonicalization())
+	if draft.Canonical().Canonicalization() != "PCC-1" {
+		t.Fatalf("canonicalization = %q, want PCC-1", draft.Canonical().Canonicalization())
 	}
 	if draft.Submitter().String() != "op-submitter" || !draft.SubmittedAt().Equal(draftSubmittedAt) {
 		t.Fatalf("submitter = %s at %s", draft.Submitter(), draft.SubmittedAt())
