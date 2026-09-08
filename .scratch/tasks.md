@@ -1122,3 +1122,24 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - 11:2x 广播 SHA 对照（含前会话那条链）并解冻：`mcp2-psr02-tail@46ada017` / `mcp6-wbr03-05@790f4b70` 内容已全在 main，各归其主自拆、指针改 `merged/`；新分支基 `f742a261`。
 
 **在途（11:2x）**：MCP-5 awf/08；wbr/03 下一段（ADR-0127 + 判据 2–3，跨 PC/SA）待派，接手者先 `load_progress` 通道 6 存档；wbr/04 PS 侧复核授权端口待派（PS 地盘）；tf/11 等通道 4。**归用户**：是否切「作者自落 main」。
+
+## 2026-09-08 12:3x 通道 1 新会话（接手时 `main = origin/main = 5aedbb0f`）
+
+用户先问「ready-for-agent 9 张全在 admin-write-faces 属实吗」——核 `Status:` 首值：10 张，多出 wiring-baseline-remainder/04（11:0x 转 ready，唯一不受 08 阻塞）；admin-write-faces 09–17 九张全 Blocked by 08（draft）、无一在前沿。用户随即裁「先解决 08，全部你自己干，不要派工」。
+
+### 12:4x–13:5x：awf/08 由通道 1 自办，接 MCP-5 半成品
+
+- 第 0 步查地盘：`mcp5-awf08@c003c845`（基 `d1e6c094`，两笔：ADR-0126 + 首例信用政策规范化/摘要 + NOT_ACCEPTED 对账门）00:12 后无提交、树干净；`task-cc7313e8` 结 failed「承接方换人（用户指示 MCP-1 自办）」并广播占号（PC 地盘 + parcel-api PC 组 + PC 0028）。`d1e6c094..5aedbb0f` 与那两笔无 `.go/.sql` 重叠，cherry-pick 到 `mcp1-awf08`（基 `5aedbb0f`）零冲突：`db9a05ac→6152b9f5`、`c003c845→5baf3348`；MCP-5 指针留作封存出处。
+- 余步按 `/implement` › `/tdd` 逐片红绿，每片一笔即推 origin：`e8045f6b` 领域（`PublicationDraft` 三格只向前、`ApprovalDutyRule` 批准门、`OperatorSubject`、快照文档往返、重建门）→ `81b9a622` 端口新文件 + 四用例（发布用例收具体 `*PublishCommercialAuthorityHandler`）→ `c55127c0` PC 迁移 0028 + 两只适配器 + 真库六组 → `9e23eb3f` 传输面（一份载荷两口同段解码、逐格问题、预览口、载体三口）→ `ed61d8e3` parcel-api 四行 + 第五族装配 + 真库装配用例；门禁跟进：PBC-08 补三个写口负向证据、`CurrentPublicationCanonicalizationVersion`（MCP-5 导出、全仓无生产调用点）删 → `d2b131e1` 清点重生成 → `5b04c874` 票 08 resolved + 伞票 07 表。
+- 实施中量到两处、记进票 08 完成记录：区间未开的载体发布答 `DRAFT_AWAITS_EFFECTIVE_START`（发布用例对挂在已计划生效版本上的声明整项拒，载体永远带正文）；「同一次录入」= 摘要 + 壳（换范围再录是修订，否则新范围静默丢）。
+- 验证钉 `ed61d8e3`（隔离 detached 树）：gofmt 空、build/vet 0、architecture 全绿；含 DSN `go test -p 1 -count=1 ./...` **100 ok / 0 FAIL / 16 无测试 / 0 cached**（565s）；探针 `TestTheWiredPublicationDraftPath` 无 DSN SKIP / 含 DSN PASS。
+- 合入前独立评审：用户指示不派工，按 09-08 规矩「没有空闲通道时推送方自己用 /code-review 的隔离子代理跑」——两个隔离子代理各跑一轴（Standards / Spec），检出 `idp-review-awf08@5b04c874`、基线 `5aedbb0f`，13:47 起跑。
+
+### 14:0x：用户「replay」→ 评审未回先落 main，远端 main = `5b04c874`
+
+- 用户 13:5x 问「replay 了吗」、14:0x 裁「replay」——评审两轴尚未交报告，按用户指示先落。**这一次没有重放**：main 本地 = 远端 = `5aedbb0f` 正是分支基线，共享树只有本文件未提交，`git merge --ff-only 5b04c874` 快进，SHA 与分支逐笔相同。推前 ls-remote = `5aedbb0f`，`push 5b04c874:main`，推后 ls-remote = `5b04c874`。
+- 验证凭据：分支 tip 前两笔（清点、票面）是纯 .md，代码 tip `ed61d8e3` 的隔离检出含 DSN 全仓 100 ok / 0 FAIL（见上节）；`5b04c874` 对 `ed61d8e3` 只差 `MECHANISM-INVENTORY.md` 与两张票面。
+- 评审结果到后追记进票 08 Comments：非阻断随票记；若有阻断，在 main 上另笔修（不改写已推的 SHA）。
+- 广播 SHA 对照与地盘释出；`mcp5-awf08` 内容已全在 main（两笔 cherry-pick 内容逐字节同），指针改名 `merged/mcp5-awf08`；树 `idp-parcel-mcp5-awf08` 归通道 5 自拆。`idp-parcel-mcp1-awf08` 与 `idp-review-awf08` 待评审收口后拆。
+
+**在途（14:0x）**：wbr/03 下一段（ADR-0127 + 判据 2–3，跨 PC/SA）待派；wbr/04 PS 侧复核授权端口待派；tf/11 等通道 4；admin-write-faces 09–17 九张进入前沿、可派（同在 PC + admin-web，按册分文件；`endpoints.go` 若加读面行要占号）。**归用户**：是否切「作者自落 main」（连绿次数见 CI）；ADR-0126 越权风险点四条复核。
