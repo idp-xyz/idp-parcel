@@ -1,7 +1,7 @@
 # 人工复核谓词：「要不要」已由接单规则正文答，「谁有权」这一问的消费方（复核完成授权）尚无端口
 
 Category: enhancement
-Status: in-progress——2026-09-08 16:5x，MCP-2（task 449f4e64；分支 `mcp2-wbr04` 基 origin/main `62bf6504`）：派单第 ① 步消费点已量（`CompleteManualReviewHandler.Handle` 一处，PS 不变式不动，见 Comments 末条），判据 2、3 施工中。此前 ready-for-agent——2026-09-08 11:0x，MCP-1 代裁（owner 授权自决口径，见 Comments 倒数第二条）：取「谁有权」形态、不拆两问，**不改名而是并入 `Authorize`**——PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调 UC-PC-003 既有裁定用例带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因第一种）。判据 1 已裁并记进 UC-PC-003 第四项；判据 2、3 的 PC 半边与 PS 侧端口**同笔**落地、单独改不了，PS 侧另派 MCP-2，故转 ready-for-agent 等派。不立新 ADR。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Status: resolved——2026-09-08 17:3x，MCP-2（task 449f4e64；分支 `mcp2-wbr04` 基 origin/main `62bf6504`，已验 tip `8e52f413`）：判据 2、3 落地——PS 侧 `ports.ManualReviewAuthorizer`（三值）+ `ManualReviewAuthorizationAdapter` 调 `AdjudicateCommercialAuthorizationHandler` 带 `ManualReviewAction`，`CompleteManualReviewHandler` 先问授权、命令去掉 `Authority`，`cmd/parcel-api` 装配接真；同笔删 `ManualReviewRequirementFor` 与其用例、基线条目剪掉（成因第一种，两法同得 6→5 钉 `f4e9a9e2`）。完成记录见 Comments 末条；待非作者评审与推送方重放，进 main 记录由推送方补。此前 in-progress——2026-09-08 16:5x：派单第 ① 步消费点已量（`CompleteManualReviewHandler.Handle` 一处，PS 不变式不动）。此前 ready-for-agent——2026-09-08 11:0x，MCP-1 代裁（owner 授权自决口径，见 Comments 倒数第二条）：取「谁有权」形态、不拆两问，**不改名而是并入 `Authorize`**——PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调 UC-PC-003 既有裁定用例带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因第一种）。判据 1 已裁并记进 UC-PC-003 第四项；判据 2、3 的 PC 半边与 PS 侧端口**同笔**落地、单独改不了，PS 侧另派 MCP-2，故转 ready-for-agent 等派。不立新 ADR。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
 Blocked by: 无（UC-PC-003 第四项已由 MCP-1 2026-09-08 裁；PC 半边与 PS 侧端口同笔落地，PS 侧另派 MCP-2，MCP-6 不碰 PS 地盘）
 
 ## 条目
@@ -98,3 +98,47 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
     查询携带身份、委托、提交版本、复核人与证据引用——PC 的 `AuthorizationRequest` 要证据，PS 手上正好有；结构化原因 PS
     没有，由实例半边的请求映射（`ManualReviewAuthorizationRequestSource`，生产留 nil）给。适配器另加一道守卫：映射折出的
     请求动作不是 `ManualReviewAction` 即拒（`ErrUntranslatableAnswer`），「带 `ManualReviewAction`」这句做进结构而不只写注释。
+- 2026-09-08 17:3x · MCP-2 **完成记录**（task 449f4e64；分支 `mcp2-wbr04`，已验 tip `8e52f413`；分支上的 SHA 作封存出处，进 main
+  的 SHA 由推送方重放后补）。
+  - **逐笔**：`67ca20d5` 票面第 ① 步（消费点量法）→ `f4e9a9e2` PS 端口 `ManualReviewAuthorizer` + 适配器
+    `ManualReviewAuthorizationAdapter` + 七格适配器用例 → `80d100a2` 消费点接真 + `cmd/parcel-api` 装配 + **同笔** PC 半边删
+    `ManualReviewRequirementFor` / 用例 / `acceptance_content.go` 引用 / 基线条目 → `8e52f413` 机制清点重生成（单独成笔）→ 本笔票面。
+  - **消费点**：`internal/parcelshipment/application/complete_manual_review.go` `CompleteManualReviewHandler.Handle`——找到委托后、
+    版本核对与一切写动作之前先问 `ports.ManualReviewAuthorizer`；`CompleteManualReviewCommand` 去掉 `Authority`，留痕里的授权引用
+    自此是 PC 所采用的授权规则版本（`objectID/version`）。三值落点：已授权继续；不允许→`ManualReviewNotAuthorized`（不落库）；
+    未配置→`ManualReviewAuthorityRulesNotConfigured`（不落库、不压成不允许）；权威答不出→error（未形成，HTTP 5xx
+    `NO_ANSWER_FORMED`）。生产装配 `cmd/parcel-api/assemble_review.go` 的 `buildManualReviewOrchestration` 经
+    `manualReviewOrchestrationWith(db, nil)` 接 `ManualReviewAuthorizationAdapter` + `NewAdjudicateCommercialAuthorizationHandler`
+    （真授权册）；请求映射留 nil（`PAR-COM-14` 实例半边），与拒绝授权那只同款。`cmd/parcel-dispatch` 生产装配不建此编排（量得零行），
+    只有 `manual_review_resume_loop_test.go` 的 fixture 多一个 `synRReviewAuthorizer` 替身。
+  - **完成判据逐项**：① 裁决已由 MCP-1 记进 UC-PC-003 第四项（本单不动 UC/ADR；UC-PC-003 那段的将来时「在 PS 端口接真那一笔删去」
+    今天兑现，改口归推送方 / 伞票，本单不碰 docs）。② PS 侧端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调既有
+    `AdjudicateCommercialAuthorizationHandler` 带 `ManualReviewAction`（按 MCP-1 裁决读法，不是「改名后真调它」），
+    `complete_manual_review.go` 的复核授权引用不再由 Intake 注入——命令里已无那一格。③ 基线 PC 段条目剪掉，成因**第一种**
+    （并入 `Authorize`，不是改名也不是接上）；剪前核过全仓该名字只此一处声明；**在隔离 worktree 上 `git show` 取父提交
+    `f4e9a9e2` 的本文件两法同得剪前 6，本笔单独作用于其上剪后 5**（PC 4→3；两法：UTF-8 逐行滤非空非注释 / 字节层数行首非 `#`），
+    只对该检出成立——同波 wbr/03 在同段剪 `ResolveCreditPolicy`，两笔谁先进 main 都让另一笔的「剪前」不是 tip 真值，头注写明。
+    族界那句随条目退场。④ MCP-6 补的理由行改写成历史注（调用方那句以「PS 端口 + 消费适配器」形状兑现，而不是谓词接上）。
+  - **触及文件**：`internal/parcelshipment/ports/ports.go`（加端口；`AuthorizationOutcome` 头注两处「三个 / 三处」计数改不计数写法）、
+    `internal/parcelshipment/adapters/partycommercial/manual_review_authorization.go` + `_test.go`（新）、
+    `internal/parcelshipment/application/complete_manual_review.go` + `_test.go`、`cmd/parcel-api/assemble_review.go` +
+    `assemble_review_test.go`、`cmd/parcel-dispatch/manual_review_resume_loop_test.go`、`internal/partycommercial/domain/authority_grant.go`
+    （删谓词；`Authorize` 注释补一句为何不另立按范围谓词）+ `authority_grant_test.go`（删 `TestManualReviewIsNotRequiredUnlessDeclared`）
+    + `acceptance_content.go`（分格注释改指 `Authorize` 带 `ManualReviewAction`）、`internal/architecture/production_wiring_baseline.txt`
+    （PC 段 + 头注）、`docs/product/MECHANISM-INVENTORY.md`（重生成）。不碰：`commercial_resolution.go` / `credit_policy.go` / SA / TF /
+    admin-web / PC http / PC `ports.go`；迁移不需；不立 ADR。
+  - **验证强度**（detached 干净检出 `8e52f413`，含 DSN）：`gofmt -l .` 无输出；`go build ./...` / `go vet ./...` 退 0；
+    `go test -p 1 -count=1 ./...` **100 ok / 0 FAIL / 16 no test files / 0 cached**（`FAIL` 裸 ASCII 子串零命中）。DSN 探针一正一反
+    （`cmd/parcel-api -run Review -v`）：DSN 已设 `--- PASS` 3 / `--- SKIP` 0（1.06s），未设 `--- PASS` 0 / `--- SKIP` 3（0.016s），
+    两次退 0、包行都 `ok`——复核装配三格真跑在 PG 上。端口三值探针各一（适配器）：`TestManualReviewIsGrantedWhenAMatchingRuleExists`
+    / `TestManualReviewIsRefusedWhenTheScopeOnlyGrantsRejection` / `TestManualReviewReportsRulesNotConfiguredWhenTheBookIsEmpty` PASS，
+    另三格：读失败上抛、映射折不出 / 未配置不问提供方、映射折出别的动作被拒。编排层六格（问的是命令里的复核人 / 证据 / 版本、不允许
+    不落库、未配置不压不允许、未形成上抛、授权先于版本核对、留痕授权 = PC 交回那一版）PASS。装配层真 PG 三格：种一条 grant 后留痕
+    授权 = `SYN-REVIEW-RULE-1/v1` 且恰好一封续办信封；空册答 `AUTHORITY_RULES_NOT_CONFIGURED` 零信封零留痕；生产装配（映射 nil）
+    error 零信封零留痕。`internal/architecture` 全绿（`TestWiringBaselineHasNoStaleEntry` / `TestNoNewProductionFactoryGoesUnwired`
+    / 事务闭包门禁——后者在草稿里抓过一次 `t.Fatalf` 进事务回调，已改）。**评审 ← 待推送方指定非作者通道。**
+  - **量到但不在本单地盘的两件**（非阻断，另记）：a) `apps/admin-web/src/pages/shipment-request/api.ts` 的
+    `ManualReviewCompletionOutcome` 联合类型少了本笔新增的 `NOT_AUTHORIZED` / `AUTHORITY_RULES_NOT_CONFIGURED`，且此前已与服务端
+    对不齐（`TASK_CONCLUDED` vs 服务端 `TASK_ALREADY_CLOSED`，缺 `REVISION_CONFLICT`）——admin-web 归 MCP-6 awf 伞票，本单不碰；
+    b) UC-PC-003「首切范围」一节仍写「`AuthorizedAction` 今天是封闭二值」，ADR-0116 之后已是三值——文档陈述过期，与本票无关，记给
+    docs 收口的人。
