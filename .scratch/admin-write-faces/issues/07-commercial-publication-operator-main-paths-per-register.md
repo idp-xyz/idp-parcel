@@ -40,7 +40,7 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) | 公共半边（不对应某一册）：服务端按册规范化算摘要、批准从 `OperatorEnvelope` 来、预览与发布同一路径 | 机制，不是表单 | **resolved**（2026-09-08，ADR-0126；PC 迁移 0028；四口进端点表） | 无；其余十张的 Blocked by 已解除 |
 | [09](./09-service-product-version-form.md) | `SERVICE_PRODUCT` | 逐字段表单（版本壳 + 引用可加行） | ready-for-agent | 08 |
 | [10](./10-customer-contract-form.md) | `CUSTOMER_CONTRACT` | 逐字段表单（正文 + 绑定表可加行 + 合同级控制声明，两层分两节） | ready-for-agent | 08 |
-| [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | ready-for-agent | 08 |
+| [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | **resolved**（2026-09-08 MCP-6，分支 `mcp6-awf11@a2a44679`；进 main 待重放） | 08（已 resolved） |
 | [12](./12-acceptance-rule-package-form.md) | `ACCEPTANCE_RULE_PACKAGE` | 分节逐字段表单，空节即未声明；pc-gaps/09 落地加一格、pc-gaps/10 落地加一节 | ready-for-agent | 08 |
 | [13](./13-pre-acceptance-financial-control-policy-form.md) | `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` | 逐字段表单（共同通过条件 + 控制项可加行） | ready-for-agent | 08 |
 | [14](./14-price-rule-form.md) | `PRICE_RULE` | 逐字段表单（方案从价卡目录选 + 口径条件节） | ready-for-agent | 08 |
