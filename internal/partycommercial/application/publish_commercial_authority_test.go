@@ -1598,14 +1598,16 @@ func TestAPreAcceptanceFinancialControlPolicyBodyPublishesWithItsOwnVersion(t *t
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
+	// 本册已接进服务端规范化（票 admin-write-faces/13）：壳上的摘要必须是算出的那一个，随手写的串会被对账门拒。
+	body := controlPolicyBody(t,
+		controlItemOf(t, domain.CreditCheckControl, "charge-scope-a", 2, domain.AuthorizedDispositionOnControlFailure),
+		controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
+	)
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
+		Spec:         controlPolicySpec(t, "fcp-1", "v1", body),
 		Approval:     publishApproval(t, "fcp-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t,
-			controlItemOf(t, domain.CreditCheckControl, "charge-scope-a", 2, domain.AuthorizedDispositionOnControlFailure),
-			controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
-		)},
+		Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
@@ -1659,31 +1661,36 @@ func TestAPreAcceptanceFinancialControlPolicyBodyIsGuardedLikeTheOtherChannels(t
 	})
 
 	t.Run("a body without any control is rejected before any write", func(t *testing.T) {
+		// 本册接进服务端规范化后（票 admin-write-faces/13），零项在对账门那一步就折不成文档：答的是`未受理`带成因，
+		// 不再是 error——一个字节不写、整册不读这一半不变。
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
-		if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 			Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
 			Approval:     publishApproval(t, "fcp-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
 			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t)},
-		}); !errors.Is(err, domain.ErrInvalidPreAcceptanceFinancialControlPolicy) {
-			t.Fatalf("err = %v, want ErrInvalidPreAcceptanceFinancialControlPolicy", err)
+		})
+		if err != nil {
+			t.Fatalf("Handle：%v——未受理不是 error", err)
 		}
-		if len(registry.savedVersions) != 0 || len(registry.savedControlPolicies) != 0 {
-			t.Fatal("零项的策略正文写了库")
+		if result.Outcome() != application.CommercialPublicationNotAccepted || !errors.Is(result.RefusalCause(), domain.ErrInvalidPreAcceptanceFinancialControlPolicy) {
+			t.Fatalf("outcome = %q, cause = %v; want NOT_ACCEPTED / ErrInvalidPreAcceptanceFinancialControlPolicy", result.Outcome(), result.RefusalCause())
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedControlPolicies) != 0 || registry.loads != 0 {
+			t.Fatal("零项的策略正文写了库或读了整册")
 		}
 	})
 
 	t.Run("a content conflict lands in the report", func(t *testing.T) {
 		registry := &publicationRegistryDouble{controlPolicyOutcome: ports.PreAcceptanceFinancialControlPolicyContentConflict}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		body := controlPolicyBody(t, controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure))
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.PreAcceptanceFinancialControlPolicyObject, "fcp-1", "v1"),
+			Spec:         controlPolicySpec(t, "fcp-1", "v1", body),
 			Approval:     publishApproval(t, "fcp-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlPolicyBody(t,
-				controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure),
-			)},
+			Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: body},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v——内容冲突不是 error", err)

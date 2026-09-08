@@ -673,6 +673,17 @@ func publicationContentOf(
 		}
 		content.AcceptanceRulePackage = acceptanceRulePackageBodyOf(declarations)
 		return content, true
+	case domain.PreAcceptanceFinancialControlPolicyObject:
+		// 正文在不在场看 0024 那一层（preAcceptanceFinancialControlPolicyBody）——它与合同级的 PreAcceptanceControl 是两层
+		// 不同的声明（ADR-0115），后者挂在合同版本上，不在本册的正文里。
+		if declarations.PreAcceptanceFinancialControlPolicyBody == nil {
+			return content, false
+		}
+		content.PreAcceptanceFinancialControlPolicy = &domain.PreAcceptanceFinancialControlPolicyBody{
+			JointPass: declarations.PreAcceptanceFinancialControlPolicyBody.JointPass,
+			Items:     declarations.PreAcceptanceFinancialControlPolicyBody.Items,
+		}
+		return content, true
 	default:
 		return content, false
 	}

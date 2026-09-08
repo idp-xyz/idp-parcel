@@ -543,5 +543,11 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			}
 		}
 	}
+	if content.PreAcceptanceFinancialControlPolicy != nil {
+		declarations.PreAcceptanceFinancialControlPolicyBody = &PreAcceptanceFinancialControlPolicyBodyDeclaration{
+			JointPass: content.PreAcceptanceFinancialControlPolicy.JointPass,
+			Items:     content.PreAcceptanceFinancialControlPolicy.Items,
+		}
+	}
 	return declarations
 }
