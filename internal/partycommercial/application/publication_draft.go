@@ -498,5 +498,24 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			Applicability: content.SettlementPolicy.Applicability,
 		}
 	}
+	if content.PricePolicy != nil {
+		body := content.PricePolicy
+		declarations.PricePolicyBody = &PricePolicyBodyDeclaration{
+			Direction:     body.Direction,
+			PricingPlan:   body.PricingPlan,
+			PlanDirection: body.PlanDirection,
+			Conversion:    body.Conversion,
+			Scope:         body.Scope,
+			Effective:     body.Effective,
+		}
+		// 口径随正文同一份声明交回、由发布用例紧跟正文写进 0022：载体上口径缺席就不交，发布用例不替它补一份。
+		if body.Caliber != nil {
+			declarations.PricePolicyBody.Caliber = &PricePolicyCaliberDeclaration{
+				Tax:        body.Caliber.Tax,
+				Volumetric: body.Caliber.Volumetric,
+				Fx:         body.Caliber.Fx,
+			}
+		}
+	}
 	return declarations
 }

@@ -642,6 +642,28 @@ func publicationContentOf(
 			Applicability: declarations.SettlementPolicyBody.Applicability,
 		}
 		return content, true
+	case domain.PriceRuleObject:
+		if declarations.PricePolicyBody == nil {
+			return content, false
+		}
+		body := declarations.PricePolicyBody
+		content.PricePolicy = &domain.PricePolicyBody{
+			Direction:     body.Direction,
+			PricingPlan:   body.PricingPlan,
+			PlanDirection: body.PlanDirection,
+			Conversion:    body.Conversion,
+			Scope:         body.Scope,
+			Effective:     body.Effective,
+		}
+		// 口径是同一份正文的一部分（PricePolicyBodyDeclaration.Caliber 嵌在正文里），随正文一起进摘要；缺席不折进文档。
+		if body.Caliber != nil {
+			content.PricePolicy.Caliber = &domain.PricePolicyCaliberBody{
+				Tax:        body.Caliber.Tax,
+				Volumetric: body.Caliber.Volumetric,
+				Fx:         body.Caliber.Fx,
+			}
+		}
+		return content, true
 	default:
 		return content, false
 	}
