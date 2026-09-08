@@ -79,6 +79,7 @@ export interface CommercialPublicationPayload {
   supplierAgreement?: SupplierAgreementBodyPayload;
   customerContract?: CustomerContractBodyPayload;
   authorizationRule?: AuthorizationRuleBodyPayload;
+  settlementPolicy?: SettlementPolicyBodyPayload;
 }
 
 /**
@@ -93,6 +94,31 @@ export interface AuthorizationRuleBodyPayload {
 export interface CancellationAuthorityRulePayload {
   party: string;
   rule: string;
+}
+
+/**
+ * 结算政策册正文（Go `SettlementPolicyBodyPayload`，票 admin-write-faces/15）：一种结算方式与它覆盖的六维适用范围
+ * （0011），键名镜像受控批文 settlementPolicyBody。`method` 只收 String() 原词（PREPAID / TERMS）——码由词表读口供
+ * （fetchPublicationVocabulary('SETTLEMENT_POLICY') 的 `method` 一集），表单不内置枚举；第三个取值「客户级默认」是
+ * 本上下文明禁的，载荷层不替它开口。`contract` 是客户合同版本的**二维引用**（对象 + 版本两格，与批文的
+ * contractVersionDocument 同形）：两段式「对象/版本」串只许领域 NewQualifiedVersionLabel 一处拼，载荷里写成串或
+ * `contractLabel` 键都会被服务端按形状 / 未知键拒。六维一维不少（ADR-0044）；区间上界可缺。
+ */
+export interface SettlementPolicyBodyPayload {
+  method: string;
+  legalEntity: string;
+  counterparty: string;
+  contract: ContractVersionReferencePayload;
+  chargeScope: string;
+  currency: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+}
+
+/** 客户合同版本的二维引用（Go `ContractVersionReferencePayload`）：哪个合同对象、哪一版。 */
+export interface ContractVersionReferencePayload {
+  objectId: string;
+  version: string;
 }
 
 /**
