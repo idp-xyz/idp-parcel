@@ -282,20 +282,32 @@ func NewCancellationAuthorityContent(
 		owner.status != CommercialVersionEffective {
 		return CancellationAuthorityContent{}, ErrUnusableAuthorizationRule
 	}
+	byParty, err := declaredCancellationAuthorityByParty(declarations)
+	if err != nil {
+		return CancellationAuthorityContent{}, err
+	}
+	return CancellationAuthorityContent{owner: owner, declarations: byParty}, nil
+}
+
+// declaredCancellationAuthorityByParty 是目录行的那道门，抽成一处让发布前的正文输入面（AuthorizationRuleBody）与
+// 绑定到版本上的目录过同一道：至少一行；每行请求方在集内、规则引用非空；同一请求方两行是冲突。
+func declaredCancellationAuthorityByParty(
+	declarations []CancellationAuthorityDeclaration,
+) (map[DeclaredCancellationParty]RuleReference, error) {
 	if len(declarations) == 0 {
-		return CancellationAuthorityContent{}, ErrCancellationAuthorityNotConfigured
+		return nil, ErrCancellationAuthorityNotConfigured
 	}
 	byParty := make(map[DeclaredCancellationParty]RuleReference, len(declarations))
 	for _, declaration := range declarations {
 		if !declaration.Party.valid() || !declaration.Rule.valid() {
-			return CancellationAuthorityContent{}, ErrCancellationAuthorityNotConfigured
+			return nil, ErrCancellationAuthorityNotConfigured
 		}
 		if _, exists := byParty[declaration.Party]; exists {
-			return CancellationAuthorityContent{}, ErrConflictingCancellationAuthority
+			return nil, ErrConflictingCancellationAuthority
 		}
 		byParty[declaration.Party] = declaration.Rule
 	}
-	return CancellationAuthorityContent{owner: owner, declarations: byParty}, nil
+	return byParty, nil
 }
 
 func (content CancellationAuthorityContent) Owner() CommercialVersion {
