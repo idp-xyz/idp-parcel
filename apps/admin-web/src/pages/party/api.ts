@@ -218,8 +218,12 @@ export interface CustomerContractListResponseBody {
   contracts: CustomerContractRecord[];
 }
 
-// 供应商协议只有版本壳:供应商、采购价格条件与结算条件在领域对象上,但服务端没有
-// 正文表可读(见后端 supplierAgreementBody 注释),因此这里也没有对应字段。
+// 供应商协议册（0021 正文；读口逐键透出见后端 supplierAgreementBody 注释，票 admin-write-faces/19 在这里镜像）。
+// 上列的是协议**版本壳**，正文左连接：contentRegistered 与合同页同款显式布尔——壳在正文缺是合法状态（壳可先
+// 入册，正文随发布登记），页面不拿正文键的有无去推它：**没登记正文**与**登记了正文但某键为空**都可能表现为
+// 键缺席，恢复动作相反（前者去发布正文，后者是响应不合契约、要查写侧），页面必须先看布尔。正文各键只在布尔
+// 为真时在场（与 Go 侧 omitempty 同形）；agreementEffectiveEndsAt 在正文在场时也可缺，协议区间无上界是合法声明。
+// 方向不在这里：领域恒为 BUY、库上不成列，后端刻意不透，前端转写一个常量等于为同一件事立第二个口径。
 export interface SupplierAgreementRecord {
   objectId: string;
   version: string;
@@ -228,6 +232,14 @@ export interface SupplierAgreementRecord {
   effectiveStartsAt: string;
   effectiveEndsAt?: string;
   publishedAt: string;
+  contentRegistered: boolean;
+  supplier?: string;
+  legalEntity?: string;
+  purchasePlan?: string;
+  agreementScope?: string;
+  agreementEffectiveStartsAt?: string;
+  agreementEffectiveEndsAt?: string;
+  registeredAt?: string;
 }
 
 export interface SupplierAgreementListResponseBody {
