@@ -17,8 +17,12 @@ import (
 // 待批准发布载体与审批职责规则的持久化面（0028；ADR-0126 Decision 三）。
 //
 // 载体表是本上下文唯一一张就地更新的表：`待批准`期间的修订替换行，批准与发布推进状态。每一次写都带条件——
-// 修订只在库上仍是`待批准`且这次录入与库上那份不同时落，推进只在库上仍是前一格状态且摘要相同时落——
-// 条件不满足时零行命中，读回既有行把它翻成一格答案（重放 / 内容已固定 / 已被替换），不盖过去。
+// 修订只在库上仍是`待批准`且这次录入与库上那份不同时落，推进只在库上仍是前一格状态、且行与推进所依据的那一次
+// 录入逐列相同时落——条件不满足时零行命中，读回既有行把它翻成一格答案（重放 / 内容已固定 / 已被替换），不盖过去。
+//
+// content_document 列是 jsonb：库上存的是归一化后的形状，不是摘要盖住的那份原字节。摘要与快照仍是一样东西的两面，
+// 靠的是重建门（domain.RehydratePublicationDraft）把文档折回正文再算一遍与列上摘要比，而不是靠字节相等。0028 头注
+// 写的「就是……的字节」以此处为准；已施加的迁移不改，改了会让 migrate 的校验和漂移门把它挡下。
 
 // PublicationDrafts 实现 ports.PublicationDraftRegistry。
 type PublicationDrafts struct {
@@ -158,8 +162,11 @@ func (repository *PublicationDrafts) LoadDraft(
 	return draft, true, nil
 }
 
-// AdvanceDraft 写回一份已在领域推进过状态的载体。UPDATE 带前态与摘要条件：`已批准`要求库上是`待批准`，`已发布`
-// 要求库上是`已批准`；零行命中时读回分「不在」与「已被替换」。
+// AdvanceDraft 写回一份已在领域推进过状态的载体。UPDATE 带前态条件——`已批准`要求库上是`待批准`，`已发布`要求库上
+// 是`已批准`——并要求行与这份载体所依据的那一次录入**逐列相同**：摘要、壳（范围、区间、指名引用）、录入者、录入时刻，
+// 即 SubmitDraft 的修订会重写的每一列。只钉摘要不够：领域把换壳不换正文也定为修订（SameSubmissionAs），批准者读到与
+// 写回之间录入者换范围重录，批准就会落在批准者没看过的壳上，自批门也是对旧录入者判的。零行命中时读回分「不在」与
+// 「已被替换」。
 func (repository *PublicationDrafts) AdvanceDraft(
 	ctx context.Context,
 	draft domain.PublicationDraft,
@@ -184,15 +191,26 @@ func (repository *PublicationDrafts) AdvanceDraft(
 		utc := at.UTC()
 		publishedAt = &utc
 	}
+	references, err := json.Marshal(referenceDocumentsOf(draft.DeclaredReferences()))
+	if err != nil {
+		return ports.PublicationDraftAdvanceOutcomeInvalid, fmt.Errorf("advance publication draft: %w", err)
+	}
+	startsAt, endsAt := intervalColumns(draft.Effective())
 
 	tag, err := executor.Exec(ctx,
 		`UPDATE party_commercial.publication_draft
 		    SET status = $5, approver_ref = $6, approved_at = $7, published_at = $8
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4
-		    AND status = $9 AND content_digest = $10`,
+		    AND status = $9 AND content_digest = $10
+		    AND submitter_ref = $11 AND submitted_at = $12
+		    AND scope_ref = $13 AND effective_starts_at = $14
+		    AND effective_ends_at IS NOT DISTINCT FROM $15
+		    AND declared_references = $16::jsonb`,
 		draft.Tenant().String(), uint8(draft.Kind()), draft.ObjectID().String(), draft.Version().String(),
 		uint8(draft.Status()), approver.String(), approvedAt.UTC(), publishedAt,
 		uint8(prior), draft.Canonical().Digest().String(),
+		draft.Submitter().String(), draft.SubmittedAt().UTC(),
+		draft.Scope().String(), startsAt, endsAt, references,
 	)
 	if err != nil {
 		return ports.PublicationDraftAdvanceOutcomeInvalid, fmt.Errorf("advance publication draft: %w", err)

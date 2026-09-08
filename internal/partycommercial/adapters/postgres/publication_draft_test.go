@@ -282,6 +282,43 @@ func TestAdvancingADraftRequiresThePriorStateItWasBasedOn(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0126 Decision 三 — 批准只落在批准者读到的那一次录入上。批准者读到之后录入者换范围重录（正文与摘要
+// 不变、壳变了），基于旧壳的批准写回答`已被替换`，行上的壳与`待批准`都不动；基于重录后那份的批准才落得下。只钉摘要
+// 分不出这两份——摘要一样，壳不一样。
+func TestApprovalLandsOnlyOnTheSubmissionTheApproverRead(t *testing.T) {
+	drafts, _, transactor, _ := newDraftRegistry(t)
+	ctx := t.Context()
+	shell := draftShellIn(t, "tenant-1", "scope-1", "credit-1", "v1")
+	mustSubmitDraft(t, transactor, ctx, drafts, pendingDraft(t, shell, 500_000, "op-submitter"))
+	read, found := loadDraft(t, ctx, drafts, "tenant-1", shell)
+	if !found {
+		t.Fatal("批准者读不到刚录入的载体")
+	}
+
+	rescoped := pendingDraft(t, draftShellIn(t, "tenant-1", "scope-2", "credit-1", "v1"), 500_000, "op-submitter")
+	if outcome := mustSubmitDraft(t, transactor, ctx, drafts, rescoped); outcome != ports.PublicationDraftRevised {
+		t.Fatalf("rescope outcome = %s, want REVISED", outcome)
+	}
+	if rescoped.Canonical().Digest() != read.Canonical().Digest() {
+		t.Fatalf("换范围不该换摘要：%s ≠ %s", rescoped.Canonical().Digest(), read.Canonical().Digest())
+	}
+
+	if outcome := mustAdvanceDraft(t, transactor, ctx, drafts, approveDraft(t, read, "op-approver")); outcome != ports.PublicationDraftAdvanceSuperseded {
+		t.Fatalf("approving the shell the approver never read = %s, want SUPERSEDED", outcome)
+	}
+	stored, _ := loadDraft(t, ctx, drafts, "tenant-1", shell)
+	if stored.Status() != domain.PublicationDraftPendingApproval || stored.Scope().String() != "scope-2" {
+		t.Fatalf("基于旧壳的批准改动了行：status=%s scope=%s", stored.Status(), stored.Scope())
+	}
+	if _, approved := stored.Approver(); approved {
+		t.Fatal("基于旧壳的批准留下了批准者")
+	}
+
+	if outcome := mustAdvanceDraft(t, transactor, ctx, drafts, approveDraft(t, stored, "op-approver")); outcome != ports.PublicationDraftAdvanced {
+		t.Fatalf("approving the submission actually read = %s, want ADVANCED", outcome)
+	}
+}
+
 // Covers: ADR-0003 — 租户是身份不是过滤器：他租户读不到本租户的载体，两租户同号版本各自一行。
 func TestDraftsAreBoundToTheirTenant(t *testing.T) {
 	drafts, _, transactor, _ := newDraftRegistry(t)
