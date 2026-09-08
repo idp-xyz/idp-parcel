@@ -681,28 +681,30 @@ func TestDeclarationsPublishWithTheirOwningVersion(t *testing.T) {
 		t.Fatalf("时点锚：%v", err)
 	}
 
+	declarations := application.CommercialDeclarations{
+		AsOfPolicies: []domain.AsOfPolicy{reachAsOf},
+		AcceptanceContent: &application.AcceptanceContentDeclaration{
+			ApplicableGroups: []domain.AcceptanceCheckGroupType{domain.RequiredDocumentCheckGroup},
+			ManualReview:     domain.ManualReviewRequired,
+		},
+		IntakeQualification: &application.IntakeQualificationDeclaration{
+			Sources: []domain.DeclaredIntakeSource{domain.DeclaredNodeIntake},
+		},
+		FinalRules: []domain.FinalizationDeclaration{{
+			Outcome:   domain.DeclaredEffectiveDelivery,
+			FinalKind: pcValue(t, domain.NewRuleReference, "FINAL/effective-delivery"),
+		}},
+		RulePackageBody: &application.RulePackageBodyDeclaration{
+			Applicability: applicability,
+			Rules:         []domain.AssembledRule{ingressRule},
+		},
+	}
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.AcceptanceRulePackageObject, "rules-1", "v1"),
+		// 本册接进服务端规范化后（票 admin-write-faces/12），带正文的项要声明算出的摘要——对账门对它开门。
+		Spec:         acceptanceRulePackageSpec(t, "rules-1", "v1", declarations),
 		Approval:     publishApproval(t, "rules-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{
-			AsOfPolicies: []domain.AsOfPolicy{reachAsOf},
-			AcceptanceContent: &application.AcceptanceContentDeclaration{
-				ApplicableGroups: []domain.AcceptanceCheckGroupType{domain.RequiredDocumentCheckGroup},
-				ManualReview:     domain.ManualReviewRequired,
-			},
-			IntakeQualification: &application.IntakeQualificationDeclaration{
-				Sources: []domain.DeclaredIntakeSource{domain.DeclaredNodeIntake},
-			},
-			FinalRules: []domain.FinalizationDeclaration{{
-				Outcome:   domain.DeclaredEffectiveDelivery,
-				FinalKind: pcValue(t, domain.NewRuleReference, "FINAL/effective-delivery"),
-			}},
-			RulePackageBody: &application.RulePackageBodyDeclaration{
-				Applicability: applicability,
-				Rules:         []domain.AssembledRule{ingressRule},
-			},
-		},
+		Declarations: declarations,
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)

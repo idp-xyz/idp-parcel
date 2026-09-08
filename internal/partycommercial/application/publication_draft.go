@@ -517,5 +517,31 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			}
 		}
 	}
+	if content.AcceptanceRulePackage != nil {
+		// 各声明节缺席就不交那一通道：整节留空 = 该通道未声明（票 admin-write-faces/12），发布用例不替它补一句。
+		body := content.AcceptanceRulePackage
+		declarations.RulePackageBody = &RulePackageBodyDeclaration{Applicability: body.Applicability, Rules: body.Rules}
+		declarations.AsOfPolicies = body.AsOfPolicies
+		declarations.FinalRules = body.FinalRules
+		declarations.FinalRuleValidity = body.FinalRuleValidity
+		if body.AcceptanceContent != nil {
+			declarations.AcceptanceContent = &AcceptanceContentDeclaration{
+				ApplicableGroups: body.AcceptanceContent.ApplicableGroups,
+				ManualReview:     body.AcceptanceContent.ManualReview,
+			}
+		}
+		if body.IntakeQualification != nil {
+			declarations.IntakeQualification = &IntakeQualificationDeclaration{
+				Sources:        body.IntakeQualification.Sources,
+				Qualifications: body.IntakeQualification.Qualifications,
+			}
+		}
+		if body.SourceDataAmendment != nil {
+			declarations.SourceDataAmendment = &SourceDataAmendmentDeclaration{
+				Closed: body.SourceDataAmendment.Closed,
+				Rules:  body.SourceDataAmendment.Rules,
+			}
+		}
+	}
 	return declarations
 }

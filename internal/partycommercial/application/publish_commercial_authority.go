@@ -664,9 +664,49 @@ func publicationContentOf(
 			}
 		}
 		return content, true
+	case domain.AcceptanceRulePackageObject:
+		// 正文在不在场看 0014 那一层（rulePackageBody）：只带声明（时点锚、资料修订……）不带正文的项没有可比对象，照今天
+		// 登记声明的串——批文里各键各自可缺是既有语义（ADR-0126 边界，判据同客户合同那一支）。正文在场时全部声明节一并
+		// 折进同一个摘要（票 admin-write-faces/12「正文与全部声明在同一份载荷里、同一个摘要下」）。
+		if declarations.RulePackageBody == nil {
+			return content, false
+		}
+		content.AcceptanceRulePackage = acceptanceRulePackageBodyOf(declarations)
+		return content, true
 	default:
 		return content, false
 	}
+}
+
+// acceptanceRulePackageBodyOf 把命令里归接单规则包册的各键折成本册的正文输入面；declarationsOfContent 是它的反向，
+// 两处的键一一对应、同笔改。待路由许可不在其中——它挂在服务产品版本上（DeclarePendingRoutingPermission）。
+func acceptanceRulePackageBodyOf(declarations CommercialDeclarations) *domain.AcceptanceRulePackageBody {
+	body := &domain.AcceptanceRulePackageBody{
+		Applicability:     declarations.RulePackageBody.Applicability,
+		Rules:             declarations.RulePackageBody.Rules,
+		AsOfPolicies:      declarations.AsOfPolicies,
+		FinalRules:        declarations.FinalRules,
+		FinalRuleValidity: declarations.FinalRuleValidity,
+	}
+	if declarations.AcceptanceContent != nil {
+		body.AcceptanceContent = &domain.AcceptanceContentBody{
+			ApplicableGroups: declarations.AcceptanceContent.ApplicableGroups,
+			ManualReview:     declarations.AcceptanceContent.ManualReview,
+		}
+	}
+	if declarations.IntakeQualification != nil {
+		body.IntakeQualification = &domain.IntakeQualificationBody{
+			Sources:        declarations.IntakeQualification.Sources,
+			Qualifications: declarations.IntakeQualification.Qualifications,
+		}
+	}
+	if declarations.SourceDataAmendment != nil {
+		body.SourceDataAmendment = &domain.SourceDataAmendmentBody{
+			Closed: declarations.SourceDataAmendment.Closed,
+			Rules:  declarations.SourceDataAmendment.Rules,
+		}
+	}
+	return body
 }
 
 type declarationWrite struct {
