@@ -150,7 +150,7 @@
       "objectId": "SYN-SETTLEMENT-PREPAID-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-SETTLEMENT-PREPAID-01-v1",
+      "contentDigest": "PCC-1:7d13e3ef0f09096155b5ad7364c9df5126a3d9c175a280cf9188b4ae02ba5755",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "CUSTOMER_CONTRACT": "SYN-CONTRACT-01"
