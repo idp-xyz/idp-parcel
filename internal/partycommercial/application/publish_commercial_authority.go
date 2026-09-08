@@ -632,6 +632,16 @@ func publicationContentOf(
 			CancellationAuthority: append([]domain.CancellationAuthorityDeclaration(nil), declarations.CancellationAuthority...),
 		}
 		return content, true
+	case domain.SettlementPolicyObject:
+		if declarations.SettlementPolicyBody == nil {
+			return content, false
+		}
+		// 六维整体过去，不逐维摊平——「六维齐不齐」只在 NewSettlementApplicability 一处判（声明类型处的注释）。
+		content.SettlementPolicy = &domain.SettlementPolicyBody{
+			Method:        declarations.SettlementPolicyBody.Method,
+			Applicability: declarations.SettlementPolicyBody.Applicability,
+		}
+		return content, true
 	default:
 		return content, false
 	}

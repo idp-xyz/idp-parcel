@@ -492,5 +492,11 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 		// 授权规则的正文就是取消授权目录一通道（票 admin-write-faces/17）；行照载体上的原样交给发布用例，目录门在那里再过一遍。
 		declarations.CancellationAuthority = append([]domain.CancellationAuthorityDeclaration(nil), content.AuthorizationRule.CancellationAuthority...)
 	}
+	if content.SettlementPolicy != nil {
+		declarations.SettlementPolicyBody = &SettlementPolicyBodyDeclaration{
+			Method:        content.SettlementPolicy.Method,
+			Applicability: content.SettlementPolicy.Applicability,
+		}
+	}
 	return declarations
 }

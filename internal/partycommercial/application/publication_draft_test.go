@@ -233,9 +233,10 @@ func TestPreviewComputesTheDigestWithoutTouchingTheRegister(t *testing.T) {
 		t.Fatalf("预览摘要 %s ≠ 录入摘要 %s", canonical.Digest(), draft.Canonical().Digest())
 	}
 
+	// 「没接的册」的样本取客户服务规则（表单票 admin-write-faces/18 仍 draft）；结算政策自票 15 起已接，不再是样本。
 	refused, err := previewer.Handle(context.Background(), application.PreviewCommercialPublicationCommand{
-		Shell:   draftShell(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
-		Content: domain.PublicationContent{Kind: domain.SettlementPolicyObject},
+		Shell:   draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		Content: domain.PublicationContent{Kind: domain.CustomerServiceRuleObject},
 	})
 	if err != nil {
 		t.Fatalf("预览未接的册：%v——未受理不是 error", err)
@@ -274,8 +275,8 @@ func TestSubmittingADraftTranslatesTheRegisterOutcomes(t *testing.T) {
 
 	handler := application.NewSubmitPublicationDraftHandler(drafts, fixedClock{at: draftSubmittedAt})
 	refused, err := handler.Handle(context.Background(), application.SubmitPublicationDraftCommand{
-		Shell:     draftShell(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
-		Content:   domain.PublicationContent{Kind: domain.SettlementPolicyObject},
+		Shell:     draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		Content:   domain.PublicationContent{Kind: domain.CustomerServiceRuleObject},
 		Submitter: pcValue(t, domain.NewOperatorSubjectReference, "op-submitter"),
 	})
 	if err != nil {

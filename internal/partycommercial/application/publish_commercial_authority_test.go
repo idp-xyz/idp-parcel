@@ -866,16 +866,13 @@ func TestASettlementPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 	applicability := settlementApplicability(t, "charge-prepaid", "CNY")
 
+	// 本册已接进服务端规范化（票 admin-write-faces/15）：壳上的摘要必须是算出的那一个，随手写的串会被对账门拒。
+	body := &application.SettlementPolicyBodyDeclaration{Method: domain.PrepaidMethod, Applicability: applicability}
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+		Spec:         settlementPolicySpec(t, "settlement-1", "v1", body),
 		Approval:     publishApproval(t, "settlement-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{
-			SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
-				Method:        domain.PrepaidMethod,
-				Applicability: applicability,
-			},
-		},
+		Declarations: application.CommercialDeclarations{SettlementPolicyBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
@@ -937,16 +934,15 @@ func TestASettlementPolicyConflictLandsInTheReportNotInAnError(t *testing.T) {
 	registry := &publicationRegistryDouble{settlementOutcome: ports.SettlementPolicyContentConflict}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
+	body := &application.SettlementPolicyBodyDeclaration{
+		Method:        domain.TermsMethod,
+		Applicability: settlementApplicability(t, "charge-terms", "CNY"),
+	}
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
+		Spec:         settlementPolicySpec(t, "settlement-1", "v1", body),
 		Approval:     publishApproval(t, "settlement-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{
-			SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
-				Method:        domain.TermsMethod,
-				Applicability: settlementApplicability(t, "charge-terms", "CNY"),
-			},
-		},
+		Declarations: application.CommercialDeclarations{SettlementPolicyBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v——内容冲突不是 error", err)
@@ -1159,16 +1155,15 @@ func TestDeclaredDigestIsReconciledAgainstTheCanonicalOne(t *testing.T) {
 	})
 
 	t.Run("a register that is not canonicalized keeps accepting the declared digest", func(t *testing.T) {
+		// 样本取客户服务规则：那册的表单票（admin-write-faces/18）仍 draft，是今天没接进规范化的册里最不会被下一张
+		// 子票顺手接走的一个；结算政策自票 15 起已接，不再是样本。
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.SettlementPolicyObject, "settlement-1", "v1"),
-			Approval:     publishApproval(t, "settlement-1"),
+			Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+			Approval:     publishApproval(t, "csr-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{SettlementPolicyBody: &application.SettlementPolicyBodyDeclaration{
-				Method:        domain.PrepaidMethod,
-				Applicability: settlementApplicability(t, "charge-prepaid", "CNY"),
-			}},
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v", err)
