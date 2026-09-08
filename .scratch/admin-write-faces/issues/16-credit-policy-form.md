@@ -53,3 +53,47 @@ limitMinor | limitRatioBasisPoints, effective…}`（0020 正文）：额度两�
 **评审**：`/code-review` 两轴隔离子代理未能起（harness 鉴权错），改由作者按 skill 正文串行自查——Standards 轴修了三处（`封闭十格` / `三格` 两处跨文件计数改成不带数的写法；组件里自写的 `label()` 换成 presentation 既有的 `labelOf`；删掉 api 文件里未用的 `ApiResult` 再导出），保留两处判断题：`payloadKey` / `normalizeMoment` 与 pricing/series-form.ts 同形不共用（跨页导入会让 party 页依赖 pricing 页的所有权，先例是 pricing/api.ts 对 party 类型「另立窄类型不去改那份」）；`FlowAnswerNote` 与 SeriesRegistrationForm 私有的 `AnswerNote` 同形（那份未导出，且各页 unconfigured 提示句不同）。Spec 轴无缺项；做了 spec 没点名的一件：「正文区间抄壳区间」按钮（省一次手填，不是默认，按钮旁写明）。非作者评审按 parallel-sessions「合入前独立评审」由通道 1 另派。
 
 **未做（各归其票）**：其余九册的表单与正文格（09–17 各接 `CommercialPublicationPayload` 一格 + 自己的 `<册>-form.ts` / `<册>PublicationForm.tsx`）；壳上 `references` 的输入格（本册壳不要引用，服务端点名时落在「未认领」列）；`CreditBasis` 消费缝（wiring-baseline-remainder/03）；录入口若 400 带 `problems`（同一段解码在预览已拦，主路径走不到）`postMasterData` 只透错误码不透逐格——真渠道点亮后若要透，归 catalogue-api 一格另裁。
+
+## Comments
+
+### 评审 ← 通道 2 · 钉 `7d204fd5` · 14:53
+
+非作者合入前评审。基 `0ef63897`，隔离 detached 检出 `%TEMP%\idp-review-awf16`，只读，两轴各一遍；三笔 `283aa7d3` / `5e2aa3d1` / `7d204fd5`
+纯 `apps/admin-web/src/pages/party/` + 本票 .md，Go 零变动。outcome 原词与 JSON 键逐字对过 Go 侧 `publication_draft.go` / `preview_commercial_publication.go`
+/ `register_commercial_publication.go` 的 answer 结构体与 `application/publication_draft.go` 四个 Outcome 的 `String()`：全对，无自造。
+
+**Standards 轴**
+
+- **阻断**：无。
+- **非阻断**：
+  1. `PublicationDraftFlow.tsx` `unconfiguredNote`：写「登记接入渠道认证参数（PAR-INT-01，实例半边）后……即放行」。登记册 `PAR-INT-01` 是**客户生产委托
+     接入渠道**；四口的 Intake 是 ADR-0100 操作者身份那一族（ADR-0126 Decision 五「Intake 到位那天把信封译成它」），同分支 `publication-draft-api.ts`
+     头注自己也写「它不是客户渠道载荷，那一半照旧等 PAR-INT-01」——同一笔里两处口径相反。文案抄自 visibility 页，那里指客户渠道是对的，这里错指。
+     改指 ADR-0100 操作者接入渠道（登记册无条目则写「机制半边待接线」）。
+  2. `publication-draft-api.ts` `submitOutcomeLabels.DRAFT_SUBMITTED`：「等一位不是录入者的批准者」把「须不同主体」写成定论；ADR-0126 Decision 三
+     「不写死双人也不写死单人」，能否自批由租户 `PAR-COM-18` 说。文案改成「等批准（能否自批由租户审批职责规则说）」；`NEEDS_ANOTHER_APPROVER` 那句
+     不动——那一格本身就是规则要求不同主体时的答复。
+  3. `PublicationDraftFlow.tsx` `fieldPaths: readonly string[]` 是静态精确匹配：子票 10 的可加行子表路径带下标（`…items.2.x`），行数事先不知，无法
+     预先认领，会同时出现在格旁与「未认领」列。装 09（只壳 + `references.<KIND>`，可枚举）与 12（多节静态）没问题。建议放宽为前缀或 `claims(path)`
+     谓词；不阻 16 合入，10 接时再改 props 属追加不属改写。
+  4. 判断题（作者已自报）：`payloadKey` / `normalizeMoment` 与 `pricing/series-form.ts` 同形不共用、`FlowAnswerNote` 与 `AnswerNote` 同形——
+     Duplicated Code；作者的所有权理由成立，记录即可。
+- **无发现**：硬句四条——`payloadKey` 不是摘要（注释与测试都钉住）、`creditPolicyLocalProblems` 只拦编不进 JSON 整数的文本（测试「空字段不在本地拦」
+  「两格都填照发、都空照发」「零金额照发 0」钉住），预览与录入送同一个 `payload` 常量、批准与发布只送 `draftReferenceOf` 身份三元，载荷类型无
+  tenant / submitter / contentDigest / approval 键；`unconfigured` 一格如实显 403（ADR-0085）；注释中文，跨文件计数已去；`normalizeMoment` 补零点 UTC
+  有 pricing 先例且占位符写明，是输入格式归一不是领域默认。
+
+**Spec 轴**
+
+- **阻断**：无。
+- **非阻断**：无。
+- **无发现**：完成判据逐条——一签「发布信用政策版本」在册签之后镜像签之前；五步由 `reachedStep` 按 outcome 原词分派，放行边（`DRAFT_REPLAYED` /
+  `DRAFT_REVISED` 放行、`CONTENT_FIXED` 停、批准口 `DRAFT_ALREADY_PUBLISHED` 越到发布、`DRAFT_AWAITS_EFFECTIVE_START` 停在批准并显票 08 点名的那一格）
+  与 Go 语义一致且测试逐格钉；发布落定 `onPublished` 按键去重 → 页面 `PublishedNotice` 切册并重读，读面一行未改、额度列沿用 `creditLimitCell`。
+  「五步走通只由状态机测试 + tsc 证」：四口挂 `UnconfiguredIntake{}` 是机制半边既定事实，前端拿不到真答复，S 级证据到此为止是诚实的；「同一份
+  载荷过预览与录入」由 `run` 里同一个 `payload` 常量在结构上保证，读码可核。「正文区间抄壳区间」：显式点击才复制操作者自己填的壳区间、按钮旁写明
+  「不是默认」、锁定时禁用——不是代填也不是默认值，红线不触。「未做」四项反查：`references` 无输入格（类型留着、表单不设）、`CreditBasis` 未碰、
+  其余九册未动、录入口 400 逐格未透（`postMasterData` 只透码）——都真没做进去。
+
+**结论**：Standards 4 条非阻断（最重：`unconfiguredNote` 错指 `PAR-INT-01`，与同笔 api 头注相反，一行文案）；Spec 0 条。**无阻断**，可重放；
+非阻断 1/2 一行文案量级，可由作者追一笔或随 09/10/11 接时带走。
