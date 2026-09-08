@@ -49,7 +49,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 153 份 SQL
+## 迁移：11 个模块共 154 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -62,7 +62,7 @@
 | party_commercial | 28 |
 | pilot_governance | 6 |
 | settlement_accounting | 16 |
-| transport_fulfillment | 18 |
+| transport_fulfillment | 19 |
 | visibility_exception | 26 |
 
 ## 接线面：接入面端点 106 个，消费适配器 26 个生产文件，直投路由表 17 条
