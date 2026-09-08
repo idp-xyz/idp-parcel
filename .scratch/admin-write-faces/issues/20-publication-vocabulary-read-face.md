@@ -108,3 +108,48 @@ REQUIRED / NOT_APPLICABLE），本票按裁决三「客户合同答空列表」�
 - 2026-09-08 20:0x · 通道 4：落点已 broadcast（`[落点 awf/20]`，函数名 / 类型名 / 端点 / 各册集合名与码），供 12/13/15/17 写消费端。
 - 2026-09-08 20:0x · 通道 1 → 通道 4：占号准、`unconfigured_intake.go` 地盘外同包改动准；Intake 挂字面量的理由须写真（非预览口那条），
   票面列「判断点：隔离读态不放行」归 owner 复核；`fetchPublicationVocabulary` 遇 403 交出可辨的未配置、不内置码回退——均已照办（见完成记录）。
+
+### 评审 ← 通道 1（非作者；隔离子代理起不来——鉴权错，推送方按 `/code-review` 正文串行自查）· 钉 `802ae400` · 20:5x
+
+基 `5a209f70`，隔离 detached 检出 `%TEMP%\idp-review-awf20`，只读；票面笔 `509b67ce` / `802ae400` 与清点笔 `b0667d3b` 不评代码。
+
+**Standards 轴**
+
+- **阻断**：无。
+- **非阻断**：
+  1. `party/publication-draft-api.ts` import 行由 `{ postMasterData, … }` 改为 `{ exchangeMasterData, postMasterData, … }`——共享文件上**改了一行**而非纯加行
+     （numstat +55/−1）。加一个名字别无写法，记录即可；12/13/15/17 在同文件加行时以 main 上这一行为准。
+  2. `domain/publication_vocabulary.go` `PublicationVocabulary` 是按 kind 的 switch，与 `CanonicalizePublicationContent` / `IsRegisterCanonicalized` 同一
+     类型上的第三处 switch（Repeated Switches，判断题）——三处各答不同问题（能否规范化 / 有没有词），合成一张表反而把「已接」再叠一义（票 09 评审
+     已记「已接」两义），不改。
+  3. `closedCodes` 扫整个 uint8 值域而非首末常量：作者注释写明理由（不另抄边界）；代价是每次请求 256 次判据调用 × 集合数，对一个低频读口可忽略，记下免得
+     日后有人当性能问题改成常量表——那正是它要避免的第二份名单。
+- **无发现**：领域文件只导入 `math`，无 HTTP / pgx；集合从既有枚举的接受判据（`valid` / `declarable` / `Declared`）与 `String()` 逐值列出、不另写常量表，
+  `manualReview` / `allowance` 不列「未声明」（ADR-0120 Decision 三）；测试以导出构造门为预言机双向钉住码与序（`codesAccepted` 扫值域喂构造门），
+  另钉票 12 / 15 / 17 点名的字面；`endpoints.go` 一行挂字面量 `UnconfiguredIntake{}`，行上注释写的是真理由（唯一消费者是四口喂的表单；不读存储读面不满足
+  ADR-0078 入格判据；挂 `commercialCatalogueIntake` 会让 `TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines` 二分多一形态），不是「同预览口」；
+  `PublicationVocabularyIntake` 单独成接口，隔离读 Intake 编译期装不进；kind 解析先于 Intake，判据同 `/commercial-policies`（未配置对全部类别同答 403）；
+  `vocabularyOptions` 词表没收录的码原样示出、不给默认选中、不补占位；注释中文、无行号、无跨文件计数（「理由两条」数的是自己下面两个 bullet）。
+
+**Spec 轴**
+
+- **阻断**：无。
+- **非阻断**：
+  1. 票 20 裁决三只点名 12/13/15/17 四册有集；`PRICE_RULE` 正文其实也有三个封闭集（`PriceDirection` / `PlanBindingConversion` / `TaxDisposition`，
+     票 14 表单今天按本页词表自持、不经词表口），本口对它答 `sets: []`。按票面属正确实现；若日后要让 14 的表单也经词表口，在 `PublicationVocabulary`
+     加一支 case 即可（作者注释已写「不换形」），归伞票收口一并看，不阻。
+  2. 「`endpoints.go` 只多一行」：条目只多一行，行上另有几行注释——作者已在完成记录写明出入，且是通道 1 20:0x 要求的。
+- **无发现**：完成判据逐条——`GET /commercial-publication-vocabularies?kind=` 答 `{outcome: PUBLICATION_VOCABULARY_LISTED, kind, sets:[{name, codes}]}`；
+  kind 集合外 / 缺席 400 `MALFORMED_REQUEST` 带 `problems[{field:"kind"}]`（`TestVocabularyEndpointRefusesAnUnknownKindWithAFieldProblem`）；kind 合法
+  没词 200 + `sets: []` 不是 404（`…AnswersAnEmptyListForRegistersWithoutClosedSets`）；未配置 403 不带 outcome（`…KeepsTheUnconfiguredAndMethodGates`）；
+  各册集合名 = 载荷键名、码按枚举序；TS 四件只加在文件末尾，`fetchPublicationVocabulary` 走 `exchangeMasterData` 把 403 交成 `unconfigured` 一格；
+  判断点「隔离读态不放行」单列归 owner。边界：不改任何表单、不动 `ports.go`、无迁移。
+
+**结论**：Standards 3 条非阻断（最重：共享 TS 文件改了一行 import）；Spec 2 条非阻断。**无阻断**，可重放。自跑（隔离检出，未设 DSN）：
+`go test -count=1 ./internal/partycommercial/domain/ ./internal/partycommercial/adapters/http/ ./cmd/parcel-api/ ./internal/architecture/` 四包 ok。
+
+- 进 main 记录（2026-09-08 20:5x，通道 1）：在 `0f9eaa1e` 上六笔重放零冲突 `509b67ce→fa1f249a`、`0fb66cd8→fdb3043a`、`d894751a→00a122d0`、
+  `4eb2492f→2acf6107`、`17a962a5→794ec2dc`、`802ae400→c29b50d2`；清点笔 `b0667d3b` 不带，tip 重生成 `c05ee34d`（PC 生产 105→107 / 测试 109→111、
+  端点 106→107）。验证钉 `c05ee34d`：gofmt 空；build / vet 退 0；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**
+  （20:44→20:54）；admin-web tsc 0、run-tests 123/123；探针 `TestPublicationDraftWritesRefuseToRunOutsideATransaction` 含 DSN **PASS**。本笔（票面 + 伞票 07
+  子票表 + tasks.md）只动 .md。
