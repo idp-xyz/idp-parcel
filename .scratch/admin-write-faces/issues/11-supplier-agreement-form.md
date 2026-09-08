@@ -1,7 +1,7 @@
 # 11 `SUPPLIER_AGREEMENT` 版本的运营主路径：逐字段表单（正文四格 + 采购方案从价卡目录选）
 
 Category: enhancement
-Status: ready-for-agent——形状已裁清（逐字段表单，采购方案从价卡目录选；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
+Status: in-progress——2026-09-08 14:2x MCP-6 认领（task-662822ef；分支 `mcp6-awf11`，基 main `0ef63897`；08 已 resolved，阻塞边解除）。此前 ready-for-agent——形状已裁清（逐字段表单，采购方案从价卡目录选；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷
