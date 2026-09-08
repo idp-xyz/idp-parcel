@@ -593,6 +593,19 @@ func publicationContentOf(
 			Effective:   body.Effective,
 		}
 		return content, true
+	case domain.SupplierAgreementObject:
+		if declarations.SupplierAgreementBody == nil {
+			return content, false
+		}
+		body := declarations.SupplierAgreementBody
+		content.SupplierAgreement = &domain.SupplierAgreementBody{
+			Supplier:     body.Supplier,
+			LegalEntity:  body.LegalEntity,
+			Scope:        body.Scope,
+			PurchasePlan: body.PurchasePlan,
+			Effective:    body.Effective,
+		}
+		return content, true
 	default:
 		return content, false
 	}

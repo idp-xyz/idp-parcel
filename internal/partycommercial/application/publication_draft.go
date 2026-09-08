@@ -467,5 +467,15 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			Effective:   body.Effective,
 		}
 	}
+	if content.SupplierAgreement != nil {
+		body := content.SupplierAgreement
+		declarations.SupplierAgreementBody = &SupplierAgreementBodyDeclaration{
+			Supplier:     body.Supplier,
+			LegalEntity:  body.LegalEntity,
+			Scope:        body.Scope,
+			PurchasePlan: body.PurchasePlan,
+			Effective:    body.Effective,
+		}
+	}
 	return declarations
 }

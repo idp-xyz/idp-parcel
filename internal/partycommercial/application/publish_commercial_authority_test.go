@@ -1188,19 +1188,19 @@ func TestASupplierAgreementBodyPublishesWithItsOwnVersion(t *testing.T) {
 		t.Fatalf("适用区间：%v", err)
 	}
 
+	// 本册已接进服务端规范化（票 admin-write-faces/11）：壳上的摘要必须是算出的那一个，随手写的串会被对账门拒。
+	body := &application.SupplierAgreementBodyDeclaration{
+		Supplier:     pcValue(t, domain.NewPartyID, "supplier-1"),
+		LegalEntity:  pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:        pcValue(t, domain.NewCommercialScopeReference, "scope-procurement"),
+		PurchasePlan: pcValue(t, domain.NewPricingPlanReference, "plan-buy-1"),
+		Effective:    interval,
+	}
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.SupplierAgreementObject, "agreement-1", "v1"),
+		Spec:         supplierAgreementSpec(t, "agreement-1", "v1", body),
 		Approval:     publishApproval(t, "agreement-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{
-			SupplierAgreementBody: &application.SupplierAgreementBodyDeclaration{
-				Supplier:     pcValue(t, domain.NewPartyID, "supplier-1"),
-				LegalEntity:  pcValue(t, domain.NewLegalEntityReference, "legal-1"),
-				Scope:        pcValue(t, domain.NewCommercialScopeReference, "scope-procurement"),
-				PurchasePlan: pcValue(t, domain.NewPricingPlanReference, "plan-buy-1"),
-				Effective:    interval,
-			},
-		},
+		Declarations: application.CommercialDeclarations{SupplierAgreementBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
