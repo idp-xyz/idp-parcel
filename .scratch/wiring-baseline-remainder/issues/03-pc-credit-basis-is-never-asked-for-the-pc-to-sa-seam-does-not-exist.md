@@ -170,3 +170,11 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
   - **结论**：Standards 阻断 0 / 非阻断 1；Spec 阻断 0 / 非阻断 0；越权点四条皆不与裁决相悖（两条在字面内、两条字面外但合红线 / 三步法）。
     **可进 main**。本条写在分支 `mcp5-wbr03-review`（基 origin/main `140bce84`，只动本文件），与作者分支上的 `94eda949` / `05e0e80f`
     两笔票面同在文末追加，合并时作者两笔在前、本条在后。
+
+## 进 main 记录（2026-09-08 18:3x，通道 1 重放）
+
+- **分支→main 逐笔**（`git cherry-pick` 于 `140bce84` 之上，隔离 detached 树 `idp-replay-wbr03`，随后 rebase 到 `bfde8108`——中间 main 只多一笔 `scripts/branch-state.ps1` 修复，不碰 Go）：`95193261`（ADR-0127 立篇）、`85c4209f`、`f0caf25a`、`fdf6819e`、`a532b500`、`4162b421`、`84191cb7` 七笔零冲突；`84b9a313` 在 `production_wiring_baseline.txt` 与已进 main 的 wbr/04（`d41862bd`）相撞——头注两段各留（04 在前、03 在后）并加一段推送方重放注钉父提交，PC 段两条目都出名单（`ResolveCreditPolicy` 与 `ManualReviewRequirementFor` 各自的「曾在这里」注都留），`production_type_reachability_baseline.txt` 干净落下；`94eda949`、`05e0e80f` 票面两笔零冲突；评审 `e53bd152`（Comments 末与作者两笔同 hunk，作者在前、评审在后，作者 27 行 / 评审 51 行逐行在场）；本笔只加本节 + spec 状态行。代码接手方 MCP-4 交的逐笔漏了 `95193261` 与 `05e0e80f`，重放按 `2c0008c3..05e0e80f` 全列补齐。
+- **不带**：`eed205aa` 清点笔——它基 `2c0008c3` 缺 TF 0019 与 wbr/04，数字只对该检出成立；在重放 tip 干净检出重生成（settlementaccounting 生产 78→80 / 测试 57→60、partycommercial 测试 108→109、SA→PC 消费缝 1→2、端口 366→367、合计 858→860 / 807→811）。
+- **树等价**：分支触及文件里对 tip 仍有差的只有 `MECHANISM-INVENTORY.md`（上一条）与 `production_wiring_baseline.txt`（只差 wbr/04 那半：`ManualReviewRequirementFor` 条目已出名单 + 04 的头注与「曾在这里」注 + 推送方注），其余零差。
+- **验证钉 `075c71eb`**（rebase 前的 tip；之后只多 `.ps1` 与 .md）：gofmt -l 空；go build / go vet 退 0；`internal/architecture` 门禁 ok（并后基线两条目都出名单、门禁仍绿）；含 DSN `go test -p 1 -count=1 ./...` 退 0，**100 ok / 0 FAIL / 16 无测试 / 0 cached**（18:11:33→18:21:16，`partycommercial/adapters/postgres` 62s、`cmd/parcel-dispatch` 26s 非缓存）；日志 `%TEMP%\mcp1-wbr03-fulltest.log`。
+- **评审非阻断**（Standards 1 / Spec 0，见 Comments）随票记：`cmd/parcel-dispatch` 接 `NewCreditBasis` 那几行在 cmd 测试零断言、Deps.CreditBasis nil 合法故漏接不红——随 SA contract 段一起收。**归 owner 复核**：越权风险点 ①–④（评审判 ① ④ 在字面内，② ③ 字面外不相悖）。spec 状态行本笔改：PC 三条 03/04/05 全部进 main，PS 二条 01/02 仍 draft 待派。
