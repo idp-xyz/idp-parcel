@@ -95,19 +95,29 @@ func NewCustomerContract(
 		return CustomerContract{}, ErrInvalidCustomerContract
 	}
 
+	declared, err := declaredBindingsByScope(bindings)
+	if err != nil {
+		return CustomerContract{}, err
+	}
+	return CustomerContract{version: version, rulePackage: rulePackage, bindings: declared}, nil
+}
+
+// declaredBindingsByScope 是约定表的那两道判：每条都经过了构造门（declared 且范围非零）、同一范围只约定一次。
+// 抽成一处是让发布前的正文输入面（CustomerContractBody）与已生效版本的正文过同一道门——规则只在这里。
+func declaredBindingsByScope(bindings []FinancialControlBinding) (map[ChargeScopeReference]FinancialControlBinding, error) {
 	declared := make(map[ChargeScopeReference]FinancialControlBinding, len(bindings))
 	for _, binding := range bindings {
 		if !binding.declared || !binding.scope.valid() {
-			return CustomerContract{}, ErrInvalidFinancialControlBinding
+			return nil, ErrInvalidFinancialControlBinding
 		}
 		// 同一范围被两种方式各约定一次，会让两种读法都说得通，而其中一种允许在
 		// 没有控制结果的情况下接受。
 		if _, exists := declared[binding.scope]; exists {
-			return CustomerContract{}, ErrConflictingFinancialControlBinding
+			return nil, ErrConflictingFinancialControlBinding
 		}
 		declared[binding.scope] = binding
 	}
-	return CustomerContract{version: version, rulePackage: rulePackage, bindings: declared}, nil
+	return declared, nil
 }
 
 func (contract CustomerContract) Version() CommercialVersion {

@@ -76,23 +76,43 @@ func DeclarePreAcceptanceControl(
 		contract.status != CommercialVersionEffective {
 		return PreAcceptanceControlDeclaration{}, ErrUnusableContract
 	}
-	switch requirement {
-	case PreAcceptanceControlRequired:
-		if basis.valid() {
-			return PreAcceptanceControlDeclaration{}, ErrPreAcceptanceControlNotDeclared
-		}
-	case PreAcceptanceControlNotApplicable:
-		if !basis.valid() {
-			return PreAcceptanceControlDeclaration{}, ErrPreAcceptanceControlNotDeclared
-		}
-	default:
-		return PreAcceptanceControlDeclaration{}, ErrPreAcceptanceControlNotDeclared
+	if err := preAcceptanceControlDeclared(requirement, basis); err != nil {
+		return PreAcceptanceControlDeclaration{}, err
 	}
 	return PreAcceptanceControlDeclaration{
 		contract:    contract,
 		requirement: requirement,
 		basis:       basis,
 	}, nil
+}
+
+// preAcceptanceControlDeclared 是按取值分片的那道判，抽成一处让发布前的正文输入面（PreAcceptanceControlBody）
+// 与绑定到版本上的声明过同一道门。
+func preAcceptanceControlDeclared(requirement PreAcceptanceControlRequirement, basis ControlNotApplicableBasis) error {
+	switch requirement {
+	case PreAcceptanceControlRequired:
+		if basis.valid() {
+			return ErrPreAcceptanceControlNotDeclared
+		}
+	case PreAcceptanceControlNotApplicable:
+		if !basis.valid() {
+			return ErrPreAcceptanceControlNotDeclared
+		}
+	default:
+		return ErrPreAcceptanceControlNotDeclared
+	}
+	return nil
+}
+
+// PreAcceptanceControlRequirementNamed 按 String() 的原词反查要求：规范化文档与运营操作者面载荷里的
+// requirement 都是那一个词，名单只在 String() 一处。集合外（含空串——「未声明」不是一格取值）答 false。
+func PreAcceptanceControlRequirementNamed(name string) (PreAcceptanceControlRequirement, bool) {
+	for _, requirement := range []PreAcceptanceControlRequirement{PreAcceptanceControlRequired, PreAcceptanceControlNotApplicable} {
+		if requirement.String() == name {
+			return requirement, true
+		}
+	}
+	return PreAcceptanceControlUndeclared, false
 }
 
 func (declaration PreAcceptanceControlDeclaration) Contract() CommercialVersion {

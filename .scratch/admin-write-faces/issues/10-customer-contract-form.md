@@ -1,7 +1,7 @@
 # 10 `CUSTOMER_CONTRACT` 版本的运营主路径：逐字段表单（正文 + 按费用范围的控制约定可加行 + 合同级控制声明）
 
 Category: enhancement
-Status: ready-for-agent——形状已裁清（逐字段表单 + 绑定表可加行，两层声明分两节；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
+Status: in-progress——2026-09-08 14:3x 通道 4（MCP-4，task-39a6f0cd）认领，分支 `mcp4-awf10` 基 main `0ef63897`，隔离树；Go 先做（本册规范化一格 + 载荷一格），表单本体做成纯函数，流程组件等通道 5 的「[公共半边落点]」广播再接。此前 ready-for-agent——形状已裁清（逐字段表单 + 绑定表可加行，两层声明分两节；本票无待裁问题），Blocked by 08 已于 2026-09-08 resolved；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷

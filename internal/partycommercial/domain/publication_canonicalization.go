@@ -34,6 +34,7 @@ var (
 //
 // PCC-1：信用政策正文（责任法人 × 权限等级 × 费用类型 × 额度恰一格 × 区间）。
 // PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）；服务产品无正文，文档只有两格。
+// PCC-1 同号另接：客户合同正文（规则包 × 按费用范围的约定表 × 合同级接受前控制声明可缺），见 publication_canonicalization_customer_contract.go。
 const publicationCanonicalizationVersion = "PCC-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
@@ -94,6 +95,7 @@ type PublicationContent struct {
 	CreditPolicy *CreditPolicyBody
 	// SupplierAgreement 是供应商协议册的正文（票 admin-write-faces/11）。
 	SupplierAgreement *SupplierAgreementBody
+	CustomerContract  *CustomerContractBody
 }
 
 // CanonicalPublicationContent 是规范化的结果：版本、摘要串与被摘要盖住的那份文档。摘要串已带版本前缀，
@@ -157,6 +159,14 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.SupplierAgreement = &body
 		return content, nil
 	}
+	if decoded.CustomerContract != nil {
+		body, err := decoded.CustomerContract.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: customer contract: %w", err)
+		}
+		content.CustomerContract = &body
+		return content, nil
+	}
 	if registerHasNoBody(kind) {
 		// 无正文的册没有「缺席」可判：两格文档就是它的全部（票 admin-write-faces/09）。文档若夹带别册的正文，
 		// 折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
@@ -199,6 +209,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 	if content.SupplierAgreement != nil && content.Kind != SupplierAgreementObject {
 		return none, ErrPublicationContentKindMismatch
 	}
+	if content.CustomerContract != nil && content.Kind != CustomerContractObject {
+		return none, ErrPublicationContentKindMismatch
+	}
 	switch content.Kind {
 	case CreditPolicyObject:
 		if content.CreditPolicy == nil {
@@ -216,6 +229,18 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		return canonicalizeSupplierAgreement(content)
 	case ServiceProductObject:
 		return canonicalServiceProductContent()
+	case CustomerContractObject:
+		if content.CustomerContract == nil {
+			return none, ErrPublicationContentAbsent
+		}
+		if err := content.CustomerContract.validate(); err != nil {
+			return none, err
+		}
+		return canonicalDigestOf(canonicalPublicationDocument{
+			Canonicalization: publicationCanonicalizationVersion,
+			Kind:             content.Kind.String(),
+			CustomerContract: canonicalCustomerContractBodyOf(*content.CustomerContract),
+		})
 	default:
 		return none, ErrRegisterNotCanonicalized
 	}
@@ -231,6 +256,8 @@ func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
 		return true
 	case ServiceProductObject:
 		return true
+	case CustomerContractObject:
+		return true
 	default:
 		return false
 	}
@@ -245,6 +272,7 @@ type canonicalPublicationDocument struct {
 	CreditPolicy     *canonicalCreditPolicyBody `json:"creditPolicy,omitempty"`
 	// 供应商协议一节；键名镜像批文 supplierAgreementBody（节内形状见 canonicalSupplierAgreementBody）。
 	SupplierAgreement *canonicalSupplierAgreementBody `json:"supplierAgreement,omitempty"`
+	CustomerContract  *canonicalCustomerContractBody  `json:"customerContract,omitempty"`
 }
 
 // canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺。
