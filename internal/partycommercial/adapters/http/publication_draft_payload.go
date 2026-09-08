@@ -75,6 +75,7 @@ type CommercialPublicationPayload struct {
 	CreditPolicy *CreditPolicyBodyPayload `json:"creditPolicy,omitempty"`
 	// SupplierAgreement 是供应商协议册的正文（票 admin-write-faces/11；形状见 SupplierAgreementBodyPayload）。
 	SupplierAgreement *SupplierAgreementBodyPayload `json:"supplierAgreement,omitempty"`
+	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
 }
 
 // CreditPolicyBodyPayload 镜像受控批文 creditPolicyBodyDocument 与规范化文档的键名：额度两键恰一在场（由领域
