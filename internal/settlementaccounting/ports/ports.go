@@ -87,6 +87,33 @@ type CreditStandingView interface {
 	) (domain.CreditStanding, error)
 }
 
+// CreditBasisView 取商业侧对「这个账期范围授权多少额度」的回答——闭包里已采用的信用政策版本
+// 与它授权的额度（ADR-0127）。
+//
+// 本上下文只消费它，绝不自行推导：信用政策的版本生命周期与选择归 `party-commercial`，额度由那边
+// 按（法人、等级、费用类型、时点）在闭包解析里选出。在这里按作用域猜一个额度、或拿登记状况里
+// 的 limit 当政策额度，都是第二处定义。
+//
+// 三格照 PreAcceptanceControlPolicyView（ADR-0054）：
+//
+//   - found=true + basis：闭包采用了信用政策，额度与出处在 basis 里。
+//   - found=false：**未配置**——闭包没采用信用政策：租户登记的解析键没要求这一项，或该范围没有
+//     生效的信用政策正文。消费方停在自己的未决格，不得当成「无限信用」或「零额度」——两者都是
+//     CONTEXT 禁止本上下文替商业侧说的话。
+//   - error：坏回指 / 闭包读不回 / 闭包不是唯一已解析 / 闭包采用了信用政策却没带额度。都不是
+//     「没人登记过」，答成 found=false 会把租户支去补一份其实已经存在的东西。
+//
+// 键形同 PreAcceptanceControlPolicyView：作用域是资金维，商业侧的额度按闭包键入，回指由调用方从
+// 同一次解析回显带来；空回指下没有任何诚实答案，命令在编排的受理判断处就该停住。
+type CreditBasisView interface {
+	LoadCreditBasis(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.SettlementScope,
+		resolution domain.CommercialResolutionReference,
+	) (domain.CreditBasis, bool, error)
+}
+
 // CreditExposureLedgerRepository 按结算作用域取回只增不删的信用暴露登记册。整册取回的
 // 理由与冻结登记册一字不差；它是另一本账，与冻结账本互不借用。
 type CreditExposureLedgerRepository interface {

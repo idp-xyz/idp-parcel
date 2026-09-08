@@ -62,6 +62,12 @@ const (
 	FreezeLedgerUnavailable
 	CreditStandingUnavailable
 	ExposureLedgerUnavailable
+	// CreditBasisUnavailable / CreditBasisNotConfigured 是授信依据那一口的两格（ADR-0127）：调不通
+	// 等重试，未配置等租户把解析键与信用政策正文补齐。CreditRatioBaseUndecided 是第三格：政策授的是
+	// 比例额度，而比例相对于什么基数本上下文今天未裁——不折成金额、不默认，停在这里等那道裁决。
+	CreditBasisUnavailable
+	CreditBasisNotConfigured
+	CreditRatioBaseUndecided
 )
 
 func (reason NotFormedReason) String() string {
@@ -78,6 +84,12 @@ func (reason NotFormedReason) String() string {
 		return "CREDIT_STANDING_UNAVAILABLE"
 	case ExposureLedgerUnavailable:
 		return "EXPOSURE_LEDGER_UNAVAILABLE"
+	case CreditBasisUnavailable:
+		return "CREDIT_BASIS_UNAVAILABLE"
+	case CreditBasisNotConfigured:
+		return "CREDIT_BASIS_NOT_CONFIGURED"
+	case CreditRatioBaseUndecided:
+		return "CREDIT_RATIO_BASE_UNDECIDED"
 	default:
 		return ""
 	}
@@ -133,6 +145,7 @@ type ApplyPreAcceptanceControlResult struct {
 	controlPolicy domain.ControlPolicyReference
 	method        domain.SettlementMethod
 	adoptedPolicy domain.AdoptedPolicyReference
+	creditPolicy  domain.CreditPolicyReference
 	controlledAt  time.Time
 	asOf          domain.ControlAsOf
 	basis         domain.ControlBasisReference
@@ -205,6 +218,14 @@ func (result ApplyPreAcceptanceControlResult) AdoptedPolicy() domain.AdoptedPoli
 	return result.adoptedPolicy
 }
 
+// CreditPolicy 是 CREDIT_CHECK 那一项据以判额度的信用政策版本（ADR-0127）：额度出自它，暴露与
+// 限制结果因此有一份出自政策版本的额度依据可比（AT-SA-171 的「分别保存政策」）。只在信用校验
+// 实际执行过、且额度来自商业侧授信依据时给出；依赖未接（三步法 expand 段）时缺席——缺席本身就是
+// 「这份额度没有政策出处」的证据。
+func (result ApplyPreAcceptanceControlResult) CreditPolicy() domain.CreditPolicyReference {
+	return result.creditPolicy
+}
+
 // ControlledAt 是本次控制作出的时间，与 AsOf 分开：`asOf` 决定按哪一版策略判断，控制时间
 // 说明资金何时被占用。压成一个会让重放看起来像一次新的控制。
 func (result ApplyPreAcceptanceControlResult) ControlledAt() time.Time {
@@ -230,31 +251,38 @@ func (result ApplyPreAcceptanceControlResult) ContinuationReference() Continuati
 }
 
 type ApplyPreAcceptanceControlHandler struct {
-	policy    ports.PreAcceptanceControlPolicyView
-	balance   ports.OperationalBalanceView
-	ledger    ports.FreezeLedgerRepository
-	credit    ports.CreditStandingView
-	exposures ports.CreditExposureLedgerRepository
-	clock     ports.Clock
+	policy      ports.PreAcceptanceControlPolicyView
+	balance     ports.OperationalBalanceView
+	ledger      ports.FreezeLedgerRepository
+	credit      ports.CreditStandingView
+	creditBasis ports.CreditBasisView
+	exposures   ports.CreditExposureLedgerRepository
+	clock       ports.Clock
 }
 
 type ApplyPreAcceptanceControlDeps struct {
-	Policy    ports.PreAcceptanceControlPolicyView
-	Balance   ports.OperationalBalanceView
-	Freezes   ports.FreezeLedgerRepository
-	Credit    ports.CreditStandingView
-	Exposures ports.CreditExposureLedgerRepository
-	Clock     ports.Clock
+	Policy  ports.PreAcceptanceControlPolicyView
+	Balance ports.OperationalBalanceView
+	Freezes ports.FreezeLedgerRepository
+	Credit  ports.CreditStandingView
+	// CreditBasis 是账期分支的授信额度来源（ADR-0127 决定四）。**为 nil 时 exposeCredit 沿旧路**
+	// ——额度取登记状况、结果不带政策引用——这是三步法的 expand 段而不是容忍装配疏漏：另一个
+	// 上下文的测试夹具（parcel-shipment 的 SA 适配器测试）直接构造本结构，mandatory 化会让它的
+	// 树编不过。生产装配已接真适配器；contract 段（nil 在构造期拒）随那份夹具补上替身的那笔收。
+	CreditBasis ports.CreditBasisView
+	Exposures   ports.CreditExposureLedgerRepository
+	Clock       ports.Clock
 }
 
 func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) *ApplyPreAcceptanceControlHandler {
 	return &ApplyPreAcceptanceControlHandler{
-		policy:    deps.Policy,
-		balance:   deps.Balance,
-		ledger:    deps.Freezes,
-		credit:    deps.Credit,
-		exposures: deps.Exposures,
-		clock:     deps.Clock,
+		policy:      deps.Policy,
+		balance:     deps.Balance,
+		ledger:      deps.Freezes,
+		credit:      deps.Credit,
+		creditBasis: deps.CreditBasis,
+		exposures:   deps.Exposures,
+		clock:       deps.Clock,
 	}
 }
 
@@ -345,6 +373,7 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 			result.freeze, result.hasFreeze = step.freeze, true
 		case domain.CreditCheckControl:
 			result.exposure, result.hasExposure = step.exposure, true
+			result.creditPolicy = step.creditPolicy
 		}
 		if step.restricted {
 			// 「全部通过」之下，一项已形成`业务限制`，后面的项无论结果如何都改不了共同通过条件
@@ -357,11 +386,13 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 	return result, nil
 }
 
-// controlStep 是一项控制执行完的产出：冻结或暴露之一，以及它有没有形成`业务限制`。
+// controlStep 是一项控制执行完的产出：冻结或暴露之一，以及它有没有形成`业务限制`；信用校验
+// 一项还带上额度出自哪一版信用政策。
 type controlStep struct {
-	freeze     domain.FundsFreeze
-	exposure   domain.CreditExposure
-	restricted bool
+	freeze       domain.FundsFreeze
+	exposure     domain.CreditExposure
+	creditPolicy domain.CreditPolicyReference
+	restricted   bool
 }
 
 // freezeFunds 执行 PREPAID_FREEZE 一项：读运营余额、在冻结账本上占用金额。第二个返回值非 nil
@@ -410,16 +441,49 @@ func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	return controlStep{freeze: freeze, restricted: freeze.Status() == domain.FreezeRestricted}, nil, nil
 }
 
-// exposeCredit 执行 CREDIT_CHECK 一项：读信用状况、在暴露账本上占用额度。逾期与超额形成
-// `业务限制`装在暴露的状态里，与预付冻结的余额不足同构。
+// exposeCredit 执行 CREDIT_CHECK 一项：先向商业侧索取授信依据、再读信用状况，在暴露账本上占用
+// 额度。逾期与超额形成`业务限制`装在暴露的状态里，与预付冻结的余额不足同构。
+//
+// 授信依据先于信用状况（ADR-0127 决定四）：额度出自闭包采用的信用政策版本，已占用暴露与逾期
+// 才是本上下文自己的事实；闭包没采用信用政策时连读状况都不该发生——那次读取既是白做的，也已
+// 经取了这个客户的信用状况。这与「控制策略先于余额」是同一条顺序纪律。
 func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 	ctx context.Context,
 	command ApplyPreAcceptanceControlCommand,
 	controlledAt time.Time,
 ) (controlStep, *ApplyPreAcceptanceControlResult, error) {
+	var creditPolicy domain.CreditPolicyReference
+	var authorizedMinor int64
+	basisTaken := false
+	if handler.creditBasis != nil {
+		basis, configured, err := handler.creditBasis.LoadCreditBasis(
+			ctx, command.TenantID, command.Scope, command.Resolution)
+		if err != nil {
+			// 商业侧调不通形成待判断，不读成「有额度」或「零额度」——两者都是 CONTEXT 禁止本上下文
+			// 替商业侧说的话。
+			return controlStep{}, handler.haltNotFormed(command, CreditBasisUnavailable), nil
+		}
+		if !configured {
+			return controlStep{}, handler.haltNotFormed(command, CreditBasisNotConfigured), nil
+		}
+		amount, isAmount := basis.AmountMinor()
+		if !isAmount {
+			// 比例额度的基数今天未裁：折成金额就是替 owner 拍板一个 BD-*，停在这里等那道裁决。
+			return controlStep{}, handler.haltNotFormed(command, CreditRatioBaseUndecided), nil
+		}
+		creditPolicy, authorizedMinor, basisTaken = basis.Policy(), amount, true
+	}
+
 	standing, err := handler.credit.LoadCreditStanding(ctx, command.TenantID, command.Scope)
 	if err != nil {
 		return controlStep{}, handler.haltNotFormed(command, CreditStandingUnavailable), nil
+	}
+	if basisTaken {
+		standing, err = standing.WithAuthorizedLimit(authorizedMinor)
+		if err != nil {
+			// 作用域不合法或额度为负都进不了各自的构造门，走到这里是编程错误，上抛。
+			return controlStep{}, nil, fmt.Errorf("expose credit: authorized limit: %w", err)
+		}
 	}
 
 	ledger, err := handler.exposures.LoadForScope(ctx, command.TenantID, command.Scope)
@@ -450,7 +514,11 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 		return controlStep{}, handler.haltNotFormed(command, ExposureLedgerUnavailable), nil
 	}
 
-	return controlStep{exposure: exposure, restricted: exposure.Status() == domain.ExposureRestricted}, nil, nil
+	return controlStep{
+		exposure:     exposure,
+		creditPolicy: creditPolicy,
+		restricted:   exposure.Status() == domain.ExposureRestricted,
+	}, nil, nil
 }
 
 func (handler *ApplyPreAcceptanceControlHandler) haltNotFormed(

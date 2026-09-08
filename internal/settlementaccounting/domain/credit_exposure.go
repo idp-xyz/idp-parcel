@@ -43,6 +43,22 @@ func (standing CreditStanding) Scope() SettlementScope {
 	return standing.scope
 }
 
+// WithAuthorizedLimit 交回一份把当前有效额度换成商业侧授权额度的副本（ADR-0127）：额度出自
+// 闭包交出的信用政策，已占用暴露与逾期仍是本上下文自己的账本与状况登记——两边各拥有自己
+// 那一半，合在这一份快照上判。原值不改：状况快照是读回来的事实，不就地改写。
+func (standing CreditStanding) WithAuthorizedLimit(limitMinor int64) (CreditStanding, error) {
+	if !standing.scope.valid() || limitMinor < 0 {
+		return CreditStanding{}, ErrInvalidCreditStanding
+	}
+	standing.limitMinor = limitMinor
+	return standing, nil
+}
+
+// LimitMinor 是本作用域当前有效的授信额度。
+func (standing CreditStanding) LimitMinor() int64 {
+	return standing.limitMinor
+}
+
 // Headroom 是本作用域还可占用的额度。
 func (standing CreditStanding) Headroom() int64 {
 	return standing.limitMinor - standing.exposedMinor
