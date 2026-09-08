@@ -54,7 +54,7 @@ func (double *publicationDraftRegistryDouble) SubmitDraft(_ context.Context, dra
 	case !present:
 		double.rows[key] = draft
 		return ports.PublicationDraftSaved, nil
-	case existing.SameContentAs(draft):
+	case existing.SameSubmissionAs(draft):
 		return ports.PublicationDraftReplayed, nil
 	case existing.Status() == domain.PublicationDraftPendingApproval:
 		double.rows[key] = draft

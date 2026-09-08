@@ -330,9 +330,23 @@ func (draft PublicationDraft) Reference() CommercialSourceReference {
 	return source
 }
 
-// SameContentAs 答两份载体的正文是不是同一份：只看算出的摘要。登记册据此分「重放」与「修订」。
+// SameContentAs 答两份载体的正文是不是同一份：只看算出的摘要。
 func (draft PublicationDraft) SameContentAs(other PublicationDraft) bool {
 	return draft.canonical.digest == other.canonical.digest
+}
+
+// SameSubmissionAs 答两次录入是不是同一份：正文同（摘要）且壳同（范围、区间、指名引用）。登记册据此分「重放」
+// 与「修订」——壳变了正文没变也是一次修订，否则换范围再录会被读成重放而静默丢掉新范围。身份四元不比：它是键，
+// 键不同的两份根本不会撞在一起。
+func (draft PublicationDraft) SameSubmissionAs(other PublicationDraft) bool {
+	leftEnd, leftBounded := draft.shell.effective.EndsAt()
+	rightEnd, rightBounded := other.shell.effective.EndsAt()
+	return draft.SameContentAs(other) &&
+		draft.shell.scope == other.shell.scope &&
+		draft.shell.effective.StartsAt().Equal(other.shell.effective.StartsAt()) &&
+		leftBounded == rightBounded &&
+		(!leftBounded || leftEnd.Equal(rightEnd)) &&
+		sameDeclaredReferences(draft.shell, other.shell)
 }
 
 func (draft PublicationDraft) Tenant() TenantID                { return draft.shell.tenant }

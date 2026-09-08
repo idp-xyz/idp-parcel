@@ -297,6 +297,21 @@ func TestSameContentIsJudgedByTheCanonicalDigest(t *testing.T) {
 	if left.SameContentAs(pendingCreditDraft(t, 1)) {
 		t.Fatal("a different limit must not be the same content")
 	}
+
+	// 同一次录入还要壳同：换范围再录是修订不是重放，否则新范围会被静默丢掉。
+	if !left.SameSubmissionAs(pendingCreditDraft(t, 500_000)) {
+		t.Fatal("same shell and body must be the same submission")
+	}
+	otherScope := draftShell(t, domain.CreditPolicyObject, "credit-1", "v1")
+	otherScope.Scope = commercialValue(t, domain.NewCommercialScopeReference, "scope-2")
+	rescoped, err := domain.SubmitPublicationDraft(otherScope, creditContent(t, 500_000),
+		commercialValue(t, domain.NewOperatorSubjectReference, "op-submitter"), draftSubmittedAt)
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if !left.SameContentAs(rescoped) || left.SameSubmissionAs(rescoped) {
+		t.Fatal("a rescoped draft has the same content but is not the same submission")
+	}
 }
 
 // Covers: ADR-0126 Decision 三 — 载体的正文快照就是规范化文档：文档能折回正文，折回再算得到同一个摘要；
