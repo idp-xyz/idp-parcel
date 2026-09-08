@@ -194,9 +194,12 @@ export const previewOutcomeLabels: Record<string, string> = {
  *
  * `CONTENT_FIXED` 不是失败也不是放行：这一版载体已过批准，正文固定，眼前这份与它不同——改内容要换
  * 版本号，不是改这一版。`DRAFT_REVISED` 是待批准期间的修订，载体就地更新、仍待批准。
+ *
+ * `DRAFT_SUBMITTED` 那句不写「等一位不是录入者的批准者」：能否自批由租户的审批职责规则（`PAR-COM-18`）说，
+ * ADR-0126 Decision 三不写死双人也不写死单人；规则真要求换人时，答的是批准口的 `NEEDS_ANOTHER_APPROVER`。
  */
 export const submitOutcomeLabels: Record<string, string> = {
-  DRAFT_SUBMITTED: '已存为待批准（载体本次落册，等一位不是录入者的批准者）',
+  DRAFT_SUBMITTED: '已存为待批准（载体本次落册，等批准；能否自批由租户审批职责规则说）',
   DRAFT_REPLAYED: '同一份重放（载体已在册且内容相同，本次没有造第二份）',
   DRAFT_REVISED: '待批准期间已修订（载体就地更新为眼前这份，仍待批准）',
   CONTENT_FIXED: '内容已固定（这一版载体已批准，正文不再收改动；改内容要发新版本号）',
