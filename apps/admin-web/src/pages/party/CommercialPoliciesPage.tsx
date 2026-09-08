@@ -14,6 +14,7 @@ import {
   type CommercialPolicyKind,
   type CommercialPolicyListResponseBody,
 } from './api';
+import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
 import { kindColumns, rowsOf, type PolicyRow } from './policy-rows';
 import {
   commercialPolicyKinds,
@@ -26,6 +27,15 @@ import {
 
 const info = moduleInfoById['commercial-policies'];
 
+/**
+ * 发布签发布落定后对读面的一次通知：切到那一册并重读。`token` 每次递增，同一册连发两次也各刷一次；
+ * 为 null 即从未发布过。
+ */
+interface PublishedNotice {
+  token: number;
+  kind: CommercialPolicyKind;
+}
+
 const chipClass = (active: boolean) =>
   `px-2.5 py-1 text-[12px] rounded border ${
     active
@@ -35,7 +45,7 @@ const chipClass = (active: boolean) =>
 
 // 各政策册独立请求、独立列形;同页切换不把各类对象折成一份「大配置」。行与列的转写在
 // policy-rows.ts,本文件只管取数、切册与渲染。
-function PolicyRegisters() {
+function PolicyRegisters({ published }: { published: PublishedNotice | null }) {
   const [kind, setKind] = useState<CommercialPolicyKind>('ACCEPTANCE_RULE_PACKAGE');
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -43,6 +53,13 @@ function PolicyRegisters() {
     kind: CommercialPolicyKind;
     answer: ApiResult<CommercialPolicyListResponseBody>;
   } | null>(null);
+
+  // 发布签落定一版，读面切到那一册并重读：完成判据是「结果在同册立刻可见」，不让操作者自己去点刷新。
+  useEffect(() => {
+    if (published === null) return;
+    setKind(published.kind);
+    setReloadKey((value) => value + 1);
+  }, [published]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,20 +134,35 @@ function PolicyRegisters() {
  *
  * 这一签按 ADR-0101 决定一是受控批量口的在线镜像，不是运营配置员的主路径，所以列在
  * 最后一签而不是首签；各册的逐字段表单按决定八逐册另裁另建。
+ *
+ * 「发布信用政策版本」是决定八下本页第一张逐字段表单签（票 admin-write-faces/16，公共半边的首例）：
+ * 表单 → 预览摘要 → 存为待批准 → 批准 → 发布，结果在信用政策册立刻可见——发布落定后读面切到那一册
+ * 并重读。摆在册签之后、镜像签之前：它是主路径，镜像签是高级口。其余各册的签由各自子票逐册接。
  */
 export function CommercialPoliciesPage() {
+  const [published, setPublished] = useState<PublishedNotice | null>(null);
+  const notePublished = (kind: CommercialPolicyKind) =>
+    setPublished((current) => ({ token: (current?.token ?? 0) + 1, kind }));
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="registers" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="registers">政策册</TabsTrigger>
+          <TabsTrigger value="publish-credit-policy">发布信用政策版本</TabsTrigger>
           <TabsTrigger value="publish">受控发布（JSON 镜像）</TabsTrigger>
         </TabsList>
         <TabsContent
           value="registers"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PolicyRegisters />
+          <PolicyRegisters published={published} />
+        </TabsContent>
+        <TabsContent
+          value="publish-credit-policy"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <CreditPolicyPublicationForm onPublished={() => notePublished('CREDIT_POLICY')} />
         </TabsContent>
         <TabsContent
           value="publish"
