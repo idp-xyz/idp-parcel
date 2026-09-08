@@ -76,7 +76,10 @@ foreach ($b in $inflight) {
     $mb = G merge-base main $b
     $onlyHere = @()
     foreach ($f in (G diff --name-only --diff-filter=A $mb $b | Where-Object { $_ -match $codeRe })) {
-        & git -C $repo cat-file -e "main:$f" 2>$null
+        # 不用 cat-file -e：文件不在 main 时它往 stderr 写 fatal，在 $ErrorActionPreference = 'Stop' 下
+        # 即使 2>$null 也会被 PowerShell 5.1 当成终止错误，整节中断、在途分支一行不印（09-08 MCP-5 实测）。
+        # rev-parse -q --verify 同一问、不出声，与下方两处同一写法。
+        $null = & git -C $repo rev-parse -q --verify "main:$f" 2>$null
         if ($LASTEXITCODE -ne 0) { $onlyHere += $f }
     }
     $pushed = if ($remoteHeads.ContainsKey($b)) { if ($remoteHeads[$b].StartsWith((G rev-parse $b))) { '已推 origin（同 SHA）' } else { "origin 落后（远端 $($remoteHeads[$b].Substring(0,8))）" } } else { '**未推 origin**' }
