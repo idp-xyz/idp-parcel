@@ -1208,4 +1208,22 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 | `mcp4-tf03` | 已被吸收，留指针不留名 | 改名 `salvage/mcp4-tf03` 并推 origin（此前只在本机）；树 `D:/tops/idp-tf03` 归用户拆 |
 | `mcp2-psr02-tail` | 内容全在 main | 改名 `merged/mcp2-psr02-tail`；树 `idp-parcel-mcp2-psr02`、`idp-verify-psr02` 待拆 |
 
-票 19 由 MCP-6 16:3x 起做（地盘 `apps/admin-web/src/pages/party/`，基线 `dc1f0c07`，与 tf/11 不相交）。**待拆树**（全干净、内容全在 main，各归其主或用户点头后由通道 1 拆）：`idp-parcel-mcp3-awf09`、`mcp4-awf10`、`mcp6-awf19`、`mcp5-awf16-followup`、`mcp2-awf09rv`、`mcp3-awf10-review`、`idp-review-awf09`、`idp-replay-wave1`、`idp-verify-psr02`、`idp-parcel-mcp2-psr02`、`idp-parcel-mcp5-awf08`[merged/]、`idp-parcel-mcp6-wbr03-05`[merged/]。**待改名 merged/**：`mcp3-awf09`、`mcp4-awf10`、`mcp5-awf16-followup`、`mcp6-awf19`、`mcp2-awf09-review`、`mcp3-awf10-review`。
+票 19 由 MCP-6 16:3x 起做（地盘 `apps/admin-web/src/pages/party/`，基线 `dc1f0c07`，与 tf/11 不相交）。远端 main `dc1f0c07 → 2c0008c3`（`bd5ccb9e` + 本笔，纯 .md），已广播 2–6。
+
+### 16:46 点名 → 16:48 四应答 → 三单派满、一单代结；merged 树统一拆
+
+用户「crash / in-progress 的能不能 dispatch 继续收工」。在途清单：`Status: in-progress` 的票四张——awf/07（伞票，第 2 波 12–17 仍卡「词表读口形状」归用户）、tf/09（父票，子票 12/13 另计）、tf/11（crash 现场）、wbr/03（11:0x 裁甲后判据 2–3 待做）；wbr/04 `ready-for-agent`（11:0x 裁「并入 Authorize」，PS 端口与 PC 半边同笔）。`query_tasks pending` 两单：`a8e6a834`（tf/11 接管，00:0x 预派通道 4，从未开工）、`4c5a1215`（wbr/03→05，MCP-6，已实际做完 05 与 03/04 理由行）。
+
+- 16:46 广播 `[点名 ← 通道 1 · 截止 16:50]`，同条问「正在用哪棵 merged 树」；16:48 前 MCP-3 / 5 / 2 / 4 均答空闲·无地盘·充足，且都答「列出的树未在用、可拆」；MCP-6 截至 16:50 未应答（在做 awf/19，正常形态）。
+- `git diff --stat d1e6c094 main -- internal/transportfulfillment migrations/transport_fulfillment` 为空：tf/11 分支不必 rebase。
+
+| 通道 | 单号 | 票 | 分支 | 独占地盘 |
+|---|---|---|---|---|
+| MCP-4 | `a8e6a834`（原单，催认领） | tf/11 接管，从 `mcp4-tf11@6e5c8a0c` 接着做，第 1 步读封存 diff 报 ≤10 行 | `mcp4-tf11`（树在） | `internal/transportfulfillment/**`、TF 迁移 0019 |
+| MCP-3 | `5031a8a1` | wbr/03 下一段：ADR-0127 + 判据 2（闭包解析 `resolveCreditPolicyBasis`、`CreditBasis` 随 Resolution、SA 消费适配器）+ 判据 3（基线剪行第二种） | `mcp3-wbr03` 基 `2c0008c3` | PC domain `commercial_resolution.go` / `credit_policy.go`、`settlementaccounting/adapters/partycommercial/**` + SA 装配、`docs/adr/0127` |
+| MCP-2 | `449f4e64` | wbr/04 判据 2–3：PS 复核授权端口（三值）+ 适配器调 `AdjudicateCommercialAuthorizationHandler` 带 `ManualReviewAction`，同笔删 `ManualReviewRequirementFor` 与基线条目 | `mcp2-wbr04` 基 `2c0008c3` | PS ports / `adapters/partycommercial` / 消费点、PC domain `authority_grant.go` / `acceptance_content.go`（仅该符号）、`cmd/*` PS 装配行 |
+| MCP-5 | — | 本轮非作者评审待命 | — | — |
+
+**共享点**：`production_wiring_baseline.txt` PC 段 MCP-3 与 MCP-2 各删一行（纯删行，改前广播，冲突推送方解）；两家都在 `internal/partycommercial/domain/` 但不同文件，派单里互列「不碰」。`4c5a1215` 由推送方代结 done（结果写明已进 main 的三笔与两张新单）。spec 状态行三票都完后推送方改一次。
+
+**树与分支**：拆 `idp-parcel-mcp2-awf09rv` / `mcp2-psr02` / `mcp3-awf09` / `mcp3-awf10-review` / `mcp4-awf10` / `mcp5-awf08` / `mcp5-awf16-followup` / `mcp6-wbr03-05` / `idp-replay-wave1` / `idp-review-awf09` / `idp-verify-psr02` 共 11 棵（拆前逐棵 `status --porcelain --untracked-files=all` 零行、不带 `--force`；`mcp4-awf10` 与 `mcp5-awf16-followup` 两棵 git 注销后目录删不净——.git 文件已去、只剩干净检出的副本——`Remove-Item -Recurse -Force` 补删）；改名 merged/：`mcp2-awf09-review`、`mcp3-awf09`、`mcp3-awf10-review`、`mcp4-awf10`、`mcp5-awf16-followup`。**不动**：`idp-parcel-mcp6-awf19`[`mcp6-awf19` 已长到 `a21ef0c3`，MCP-6 在用]、`idp-parcel-mcp4-tf11`（接管现场）、`D:/tops/idp-tf03`（归用户）。剩余在途分支只剩 `mcp3-wbr03` / `mcp4-tf11` / `mcp6-awf19`（+ MCP-2 待建 `mcp2-wbr04`）。远端旧名（`origin/mcp1-awf08*`、`mcp2-awf08-review`、`mcp2-awf16-review`、`mcp5-awf11-review`、`mcp5-awf08`、`mcp5-awf16`、`mcp6-awf11`、`mcp6-wbr03-05` 等）未删，只是指针。
