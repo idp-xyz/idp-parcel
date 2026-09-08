@@ -82,6 +82,7 @@ export interface CommercialPublicationPayload {
   settlementPolicy?: SettlementPolicyBodyPayload;
   pricePolicy?: PricePolicyBodyPayload;
   acceptanceRulePackage?: AcceptanceRulePackageBodyPayload;
+  preAcceptanceFinancialControlPolicy?: PreAcceptanceFinancialControlPolicyBodyPayload;
 }
 
 /**
@@ -234,6 +235,32 @@ export interface SourceDataAmendmentRulePayload {
   stage: string;
   intent: string;
   allowance: string;
+}
+
+/**
+ * 接受前财务控制策略册正文（Go `PreAcceptanceFinancialControlPolicyBodyPayload`，票 admin-write-faces/13）：父行一格共同
+ * 通过条件加子表逐行的控制项（0024，ADR-0115 Decision 二），键名镜像受控批文 preAcceptanceFinancialControlPolicyBody。
+ * 三个封闭集（jointPassCondition / control / onFailure）只收 String() 原词——码由词表读口供
+ * （fetchPublicationVocabulary('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY') 的同名三集），表单不内置枚举；控制种类里没有
+ * 「无控制」（ADR-0115 Decision 一：那一句由客户合同声明），载荷层不替它开口。至少一项、判断顺序唯一、（种类 × 范围）
+ * 唯一是跨行的门，由服务端在预览上答成成因，不在这里判。
+ */
+export interface PreAcceptanceFinancialControlPolicyBodyPayload {
+  jointPassCondition: string;
+  controls: PreAcceptanceControlItemPayload[];
+}
+
+/**
+ * 一行控制项（Go `PreAcceptanceControlItemPayload`）：种类 × 费用范围引用 × 判断顺序 × 失败处置 × 责任引用。范围与
+ * 责任是开放引用（0024 头注），只查非空不校验存在性。`order` 在 Go 侧是普通整数（零与缺席同义——都不是「排第几」
+ * 的答案），这里写成可缺：表单留空即不送键，服务端点名 `.order`，不由表单替它填 0。
+ */
+export interface PreAcceptanceControlItemPayload {
+  control: string;
+  chargeScope: string;
+  order?: number;
+  onFailure: string;
+  responsibility: string;
 }
 
 /**
