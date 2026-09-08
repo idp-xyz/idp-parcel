@@ -39,6 +39,7 @@ var (
 // PCC-1 同号另接：结算政策正文（方式 × 六维适用范围，合同维写两段式指称串），见 publication_canonicalization_settlement_policy.go。
 // PCC-1 同号另接：价格政策正文（方向 × 方案绑定含发布期 planDirection / conversion × 范围 × 区间，口径节可缺），见 publication_canonicalization_price_policy.go。
 // PCC-1 同号另接：接单规则包正文（五维适用性 × 规则表 × 各声明节各自可缺），见 publication_canonicalization_acceptance_rule_package.go。
+// PCC-1 同号另接：接受前财务控制策略正文（共同通过条件 × 按判断顺序的控制项表），见 publication_canonicalization_pre_acceptance_financial_control_policy.go。
 const publicationCanonicalizationVersion = "PCC-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
@@ -108,6 +109,8 @@ type PublicationContent struct {
 	PricePolicy *PricePolicyBody
 	// AcceptanceRulePackage 是接单规则包册的正文：0014 正文加各声明节（票 admin-write-faces/12）。
 	AcceptanceRulePackage *AcceptanceRulePackageBody
+	// PreAcceptanceFinancialControlPolicy 是接受前财务控制策略册的正文（票 admin-write-faces/13）。
+	PreAcceptanceFinancialControlPolicy *PreAcceptanceFinancialControlPolicyBody
 }
 
 // CanonicalPublicationContent 是规范化的结果：版本、摘要串与被摘要盖住的那份文档。摘要串已带版本前缀，
@@ -211,6 +214,14 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.AcceptanceRulePackage = &body
 		return content, nil
 	}
+	if decoded.PreAcceptanceFinancialControlPolicy != nil {
+		body, err := decoded.PreAcceptanceFinancialControlPolicy.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: pre-acceptance financial control policy: %w", err)
+		}
+		content.PreAcceptanceFinancialControlPolicy = &body
+		return content, nil
+	}
 	if registerHasNoBody(kind) {
 		// 无正文的册没有「缺席」可判：两格文档就是它的全部（票 admin-write-faces/09）。文档若夹带别册的正文，
 		// 折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
@@ -268,6 +279,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 	if content.AcceptanceRulePackage != nil && content.Kind != AcceptanceRulePackageObject {
 		return none, ErrPublicationContentKindMismatch
 	}
+	if content.PreAcceptanceFinancialControlPolicy != nil && content.Kind != PreAcceptanceFinancialControlPolicyObject {
+		return none, ErrPublicationContentKindMismatch
+	}
 	switch content.Kind {
 	case CreditPolicyObject:
 		if content.CreditPolicy == nil {
@@ -305,6 +319,8 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		return canonicalizePricePolicy(content)
 	case AcceptanceRulePackageObject:
 		return canonicalizeAcceptanceRulePackage(content)
+	case PreAcceptanceFinancialControlPolicyObject:
+		return canonicalizePreAcceptanceFinancialControlPolicy(content)
 	default:
 		return none, ErrRegisterNotCanonicalized
 	}
@@ -330,6 +346,8 @@ func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
 		return true
 	case AcceptanceRulePackageObject:
 		return true
+	case PreAcceptanceFinancialControlPolicyObject:
+		return true
 	default:
 		return false
 	}
@@ -353,6 +371,8 @@ type canonicalPublicationDocument struct {
 	PricePolicy *canonicalPricePolicyBody `json:"pricePolicy,omitempty"`
 	// 接单规则包一节；键名镜像批文 declarations 下归本册的各键（节内形状见 canonicalAcceptanceRulePackageBody）。
 	AcceptanceRulePackage *canonicalAcceptanceRulePackageBody `json:"acceptanceRulePackage,omitempty"`
+	// 接受前财务控制策略一节；键名镜像批文 preAcceptanceFinancialControlPolicyBody（节内形状见 canonicalPreAcceptanceFinancialControlPolicyBody）。
+	PreAcceptanceFinancialControlPolicy *canonicalPreAcceptanceFinancialControlPolicyBody `json:"preAcceptanceFinancialControlPolicy,omitempty"`
 }
 
 // canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺。

@@ -195,10 +195,29 @@ func NewPreAcceptanceFinancialControlPolicy(
 	items []PreAcceptanceControlItem,
 ) (PreAcceptanceFinancialControlPolicy, error) {
 	if version.kind != PreAcceptanceFinancialControlPolicyObject ||
-		version.status != CommercialVersionEffective ||
-		!jointPass.valid() ||
-		len(items) == 0 {
+		version.status != CommercialVersionEffective {
 		return PreAcceptanceFinancialControlPolicy{}, ErrInvalidPreAcceptanceFinancialControlPolicy
+	}
+	filed, err := filedPreAcceptanceControlItems(jointPass, items)
+	if err != nil {
+		return PreAcceptanceFinancialControlPolicy{}, err
+	}
+
+	return PreAcceptanceFinancialControlPolicy{
+		version:   version,
+		jointPass: jointPass,
+		items:     filed,
+	}, nil
+}
+
+// filedPreAcceptanceControlItems 是策略正文自己那一半的门：共同通过条件在集内、至少一项、每项立得住、
+// （种类 × 范围）唯一、判断顺序唯一；过了门按判断顺序交回副本。
+//
+// 单独成函数是因为同一条规则要在两个时刻答：发布时（NewPreAcceptanceFinancialControlPolicy，拥有版本已生效）
+// 与预览 / 录入时（服务端规范化，那时还没有版本可挂）。两处各写一份就是同一条 CONTEXT 规则两处定义，漂了无人报。
+func filedPreAcceptanceControlItems(jointPass JointPassCondition, items []PreAcceptanceControlItem) ([]PreAcceptanceControlItem, error) {
+	if !jointPass.valid() || len(items) == 0 {
+		return nil, ErrInvalidPreAcceptanceFinancialControlPolicy
 	}
 
 	type itemKey struct {
@@ -210,14 +229,14 @@ func NewPreAcceptanceFinancialControlPolicy(
 	filed := make([]PreAcceptanceControlItem, 0, len(items))
 	for _, item := range items {
 		if !item.valid() {
-			return PreAcceptanceFinancialControlPolicy{}, ErrInvalidPreAcceptanceControlItem
+			return nil, ErrInvalidPreAcceptanceControlItem
 		}
 		key := itemKey{kind: item.kind, scope: item.scope}
 		if _, duplicate := seenKeys[key]; duplicate {
-			return PreAcceptanceFinancialControlPolicy{}, ErrDuplicatePreAcceptanceControlItem
+			return nil, ErrDuplicatePreAcceptanceControlItem
 		}
 		if _, duplicate := seenOrders[item.order]; duplicate {
-			return PreAcceptanceFinancialControlPolicy{}, ErrDuplicatePreAcceptanceControlItem
+			return nil, ErrDuplicatePreAcceptanceControlItem
 		}
 		seenKeys[key] = struct{}{}
 		seenOrders[item.order] = struct{}{}
@@ -226,12 +245,7 @@ func NewPreAcceptanceFinancialControlPolicy(
 	sort.Slice(filed, func(left, right int) bool {
 		return filed[left].order < filed[right].order
 	})
-
-	return PreAcceptanceFinancialControlPolicy{
-		version:   version,
-		jointPass: jointPass,
-		items:     filed,
-	}, nil
+	return filed, nil
 }
 
 func (policy PreAcceptanceFinancialControlPolicy) Version() CommercialVersion {
