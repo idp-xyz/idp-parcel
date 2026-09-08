@@ -44,6 +44,12 @@ Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026
 
 三票互不阻塞；执行器的生产入口随第一条接上线的缝的票立。三票 draft，今天执行器在生产装配里停在 `DELIVERY_PLACE_SOURCE_NOT_WIRED`——那是诚实停点不是缺陷。
 
+### 10 裁后拆出的失效格（2026-09-04，通道 5 立票；ADR-0112 决定四）
+
+| 票 | 内容 | 开工前置 |
+|---|---|---|
+| [11](issues/11-control-withdrawing-correction-voids-participation.md) | 撤回控制转移的更正让参与关系失效：链上带 `voided` 标的一版、当前有效控制为无、继承离场三件、在场与关段都不数它、`CORRECTION_WITHDRAWS_CONTROL` 退场 | 已裁（`503dfcc6`，不立 ADR-0121）；2026-09-08 通道 4 落领域 / 迁移 TF 0019 / PG 登记册 / 编排（分支 `mcp4-tf11`，进 main 后 SHA 由 MCP-1 补记），**resolved** |
+
 04、05、06、07 已 resolved（2026-09-03）；02 已 resolved（2026-09-04，MCP-2，ADR-0103）；08 已 resolved（2026-09-04，MCP-3 于分支 `mcp3-tf08` 完工、MCP-1 重放入 main `91fab19d`..`27116c52`，分支→main 对照见票面 Comments）。01 的编排（`CloseFulfillmentSegment`）随 07 挂上，正是上面那条先后偏好说的便宜路。
 
 ## 红线（沿 tf-unwired-seven，不复述其正文）

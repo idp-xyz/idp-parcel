@@ -1,7 +1,7 @@
 # 撤回控制转移的更正让参与关系失效：链上的失效版本怎么落、对关段与在场判据的影响
 
 Category: enhancement
-Status: in-progress——由票 10 裁决 4 / ADR-0112 决定四拆出（2026-09-04，通道 5，task-82fd973a）；2026-09-08 通道 4（task-c2003926）在分支 `mcp4-tf11`（基 `d1e6c094`）逐条裁定「要定的」（见「裁决」）后会话 crash，c2003926 结 failed。**实施现场在 `mcp4-tf11@6e5c8a0c`（origin 有）**：`503dfcc6` 是本裁决，`6e5c8a0c` 是封存的 red 阶段中途改动（`actual_fulfillment_segment_test.go` +7/−18，未写完）。接管从该分支接着做、不从 main 重开，第 1 步先读封存 diff；接管单 a8e6a834 预派通道 4，尚未开工
+Status: resolved——由票 10 裁决 4 / ADR-0112 决定四拆出（2026-09-04，通道 5，task-82fd973a）；2026-09-08 通道 4（task-c2003926）在分支 `mcp4-tf11`（基 `d1e6c094`）逐条裁定「要定的」（见「裁决」）后会话 crash；同日通道 4 新会话（task-a8e6a834）接管，从封存现场重切后按裁决实施完（见「完成记录」），分支 `mcp4-tf11`；进 main 的 SHA 由推送方重放后另记
 Blocked by: 无（10 已 resolved，替代链在 main）
 
 ## 缺口
@@ -73,8 +73,31 @@ Blocked by: 无（10 已 resolved，替代链在 main）
 - 原参与、原段只插不改；不自动关段；不改承运主体判断现有版本。
 - 不从计划推事实。
 
+## 完成记录
+
+分支 `mcp4-tf11`，基 `d1e6c094`（main 此后只多 `.md`，TF 地盘 `git diff --stat d1e6c094 main -- internal/transportfulfillment migrations/transport_fulfillment` 为空，未 rebase）。
+封存笔 `6e5c8a0c`（推送方代封存的 red 中途现场）按 parallel-sessions「未提交现场」节重切：其改口并入领域笔，原指针留作本地 `salvage/mcp4-tf11-red`，不进 main。分支上的 SHA 作封存出处；进 main 的 SHA 由推送方重放后广播，届时并列补记。
+
+| 分支 SHA | 内容 |
+|---|---|
+| `503dfcc6` | docs(scratch)：本票「裁决」六条（已由通道 1 重放进 main `bd5ccb9e`） |
+| `3559f5d5` | feat(tf/domain)：`FulfillmentParticipation.Voided()`；`Active()` 加「未失效」；`RederiveParticipationWithHandover` 对撤回控制的更正经共用 `rederive` 门插失效版本（回指前版、入场依据 `TRANSPORT-HANDOVER/<新版本>`、种类照前版、起点沿用前版、继承离场三件）；`ErrCorrectionWithdrawsControl` 退场；重建门 `RehydrateParticipationSpec.Voided` + 守「失效必回指前版 ∧ 种类为 TRANSPORT_HANDOVER」；用例四个新增、一个改口 |
+| `59b0bb1e` | feat(tf/application)：`rederiveFulfillmentParticipation` 退撤回控制那一格，失效版本经 `Supersede` 落库、两格都空；`SegmentEntryRefusal` 退 `CORRECTION_WITHDRAWS_CONTROL`；`EndFulfillmentParticipationHandler` 与 `TriggerDeliveryDispatchHandler` 对失效链尾答 `OBJECT_NOT_IN_SEGMENT`；两份段登记册替身学 `Voided`、「在场」收成 `active()` 一处；用例改口一个、新增一个 |
+| `244ad85d` | feat(tf/postgres)：迁移 `0019_fulfillment_participation_voided_version.sql`（`voided boolean NOT NULL DEFAULT false` + CHECK 回指前版 ∧ `TRANSPORT_HANDOVER`）；登记册写读 `voided`；`activeParticipationPredicate`（未离场 ∧ 未失效 ∧ 链尾）供 `FindActiveSegments` 与 `EndParticipation` 共用；真库用例走通拒收→失效版本→反查/结束→更正回`已交接`重新在场 |
+| （本笔） | docs：本票 Status/完成记录；tf spec 票一览 11 行；TF CONTEXT「履约参与关系」词条补失效参与版本一句 |
+| （随后） | chore(inventory)：机制清点在干净检出重生成 |
+
+**逐条对裁决**：1 失效版本的列 → 领域 `rederive(voided=true)` + 迁移 0019 + 重建门；2 当前有效控制为无、不回退、再进本段只经更正回`已交接` → `Active()` / `ParticipationFor` 答链尾 / `join` 照旧答`已在段内` / 领域与真库用例各证一遍 v3 更正 v2 重新在场；3 继承离场三件、段已关闭照长 → 共用 `rederive` 的继承分支 + `TestAVoidedParticipationInheritsTheEndAndLeavesAClosedSegmentClosed`；4 在场与关段判据三处同一条 → 领域 `Active()`、SQL `activeParticipationPredicate`、两份替身 `active()`；结束参与与派送触发对失效链尾答 `OBJECT_NOT_IN_SEGMENT`，按对象反查两路经 `FindActiveSegments` 答 `NO_ACTIVE_PARTICIPATION`；5 `CORRECTION_WITHDRAWS_CONTROL` 退场 → 编排枚举与领域错误同退，ADR-0112 正文不改；6 PS 采用口不在本票 → 未碰 `internal/parcelshipment/**`。
+
+**验证**：见完工报（干净 detached 检出 tip 上 gofmt / build / vet / 含 DSN `go test -p 1 -count=1 ./...` 计数、探针一正一反）。
+
+**红线自查**：原参与与原段无任何 UPDATE（`EndParticipation` 仍只填离场三列且只作用于在场链尾；失效版本只经 `Supersede` INSERT）；不自动关段（`CloseSegment` 仍是声明）；`ActualCarrierJudgment` 一字未动；`internal/parcelshipment/**` 未碰；领域包只导 std；夹具全为合成（S）。
+
+**能力边界**（接管会话）：读了本票裁决与票 10 完成记录、ADR-0112、TF CONTEXT 词条与生命周期句、领域替代链与重建门、`rederive_fulfillment_participation.go` / `enter_fulfillment_segment.go` / `end_fulfillment_participation.go` / `trigger_delivery_dispatch.go`、PG 段登记册与迁移 0016、两份替身、既有编排与真库用例；**未读** `ActualCarrierJudgment` 的重派生口、NR / PS / NO 对交接更正意图的消费、HTTP 端点对 `SegmentEntryRefusal` 的透出位置（grep 无 `CORRECTION_WITHDRAWS_CONTROL` 引用，未逐文件读）。**越权风险点**在「裁决」末段三条之外多一条：④ 派送触发对失效链尾改答 `OBJECT_NOT_IN_SEGMENT`（票 09 / ADR-0114 决定二写的是「被替代或已离场的参与不触发」，本票把失效格并入「对象不在段内」而非「参与已不在场」）。
+
 ## Comments
 
 - 2026-09-04 · 通道 5：由票 10 拆出立票，只写票面，未动代码。
 - 2026-09-08 · 通道 4（task-c2003926）：接票。先裁「要定的」四条（全部落在 ADR-0112 决定四的字面内，不立 ADR-0121），再按裁决实施；本笔只动票面。
 - 2026-09-08 16:4x · 通道 1：全通道 crash 后清点，裁决笔只在分支上、main 上本票仍是 draft——为防重裁，把 `503dfcc6` 重放进 main（`bd5ccb9e`）并改 Status 点明现场位置；封存笔 `6e5c8a0c` 按规矩不进 main。ADR-0121 号已释回（`docs/adr/` 无 0121，README 无行）。
+- 2026-09-08 17:15 · 通道 4（task-a8e6a834）：接管。先读封存 diff 报现场分析（改口对、用；辅助与专用用例未写完，`domain_test` 包红），再按 /tdd 三层各红一次绿一次：领域 → 编排 → 迁移 0019 + PG。封存笔重切进领域笔，原指针留 `salvage/mcp4-tf11-red`。完成记录见上。
