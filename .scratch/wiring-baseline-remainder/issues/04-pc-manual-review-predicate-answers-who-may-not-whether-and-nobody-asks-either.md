@@ -142,3 +142,49 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
     对不齐（`TASK_CONCLUDED` vs 服务端 `TASK_ALREADY_CLOSED`，缺 `REVISION_CONFLICT`）——admin-web 归 MCP-6 awf 伞票，本单不碰；
     b) UC-PC-003「首切范围」一节仍写「`AuthorizedAction` 今天是封闭二值」，ADR-0116 之后已是三值——文档陈述过期，与本票无关，记给
     docs 收口的人。
+
+- 2026-09-08 17:5x · MCP-5 **非作者合入前评审**（`/code-review` 两轴；钉 `mcp2-wbr04` 代码 tip `8e52f413`，评审基线 main
+  `62bf6504`；隔离 detached 检出 `%TEMP%\idp-review-wbr04`，验后拆，不带 `--force`）。两轴串行自跑、分开记、不合并排序。
+  **自跑**（含 DSN，容器 idp-parcel-postgres-gate）：`gofmt -l ./cmd ./internal` 无输出；`go build ./...` / `go vet ./...` 退 0；
+  `go test -count=1 ./internal/parcelshipment/... ./internal/partycommercial/domain/... ./cmd/parcel-api/...` 全 `ok`
+  （`cmd/parcel-api` 16.4s、PS `adapters/postgres` 51.4s——真 PG 跑过，不是 SKIP）。基线头注的数我在 `f4e9a9e2` / `80d100a2` /
+  `8e52f413` 三个检出上用 `git grep -E '^[^#[:space:]]'` 复核：全文 6 / 5 / 5，PC 段 4 / 3 / 3，与头注一致。
+  - **Standards · 阻断：无。非阻断 2**：
+    1. `internal/parcelshipment/application/judgment_continuation.go` 的 `ErrUnexpectedAuthorizationOutcome` 注释仍写「说的是三个
+       授权端口。三处共用一个哨兵……三个调用点会一起报错」——本笔让 `CompleteManualReviewHandler.Handle` 成了第四个调用点，这句
+       计数变旧（AGENTS.md「计数与行号同构」那条）。作者在 `ports.go` 的 `AuthorizationOutcome` 头注已把同类计数改成不计数写法，
+       这一处漏了。纯注释、不改行为；建议推送方重放时顺手改成「各授权端口共用一个哨兵……每一处调用点」，或另起一笔。
+    2. `ManualReviewAuthorizationAdapter.AuthorizeManualReview` 的动作守卫复用 `ErrUntranslatableAnswer`：该哨兵在本包
+       （`judgment_as_of.go`）的语义是「提供方答复译不出」，而这里译不出的是消费方自己的映射折出的**请求**（输入侧），测试注释也
+       承认「这是词汇表之外的输入」。复用保住了一套错误词汇，代价是名字与所指略错位。判断题，接受，不必改。
+    - 观察（不在本票地盘）：`ActiveRejectionAdapter` 没有对称的动作守卫——「一份映射若折出别的动作」的论证对拒绝那只同样成立
+      （折出 `ManualReviewAction` 会把复核权读成拒绝权）。记给 PS 端口余项，不算本票缺陷。
+    - 其余核过：领域包无 HTTP / pgx 新依赖（PC domain 只删函数加注释；适配器依赖 `pcapplication` / `pcdomain`，与主动拒绝那只同形，
+      ADR-0025）；注释全中文；跨文件引用皆符号名（`RejectShipmentRequestHandler`、`AT-PS-034`、UC-PC-003 第四项、ADR-0042 / 0029）；
+      基线头注「两法同得 6→5」钉父 `f4e9a9e2`，是「数本身是论点」那条例外的合规写法；留痕授权引用形 `objectID/version` 与
+      `ActiveRejectionAdapter` 的 `NewRejectionAuthorityReference` 同形；`synRReviewAuthorizer` 合 dispatch 测试替身 `synR*` 命名；
+      dispatch 测试只删 `Authority` 一格、加 `Authorizer` 依赖与替身，属签名跟随。覆盖：适配器七格（三值 + 读失败 + 折不出 +
+      映射 nil + 折出别的动作）、编排六格、装配真 PG 三格，三值与错误路都有各自的钉。
+  - **Spec · 阻断：无。非阻断 1**。对 11:0x 裁决逐句：取「谁有权」形态不拆两问 ✓（`ManualReviewAuthorizationQuery` 注释明写不携带
+    「要不要」的内容，ADR-0042）；不改名而并入 `Authorize` ✓（`ManualReviewRequirementFor` 删，`Authorize` 注释补一句为何不另立按
+    范围谓词）；端口与 `ActiveRejectionAuthorizer` 同形三值 ✓（共用 `AuthorizationOutcome`）；适配器调既有
+    `AdjudicateCommercialAuthorizationHandler` 带 `ManualReviewAction`、不新建 PC 用例 ✓（diff 无 PC application 改动）；
+    `ManualReviewRequirementFor` 及只为它写的用例同笔删 ✓（`80d100a2` 同笔含 `authority_grant.go` / `_test.go` /
+    `acceptance_content.go` / 基线 / PS 接真）；基线条目同笔消、成因第一种 ✓；不立 ADR ✓（无 `docs/adr` 改动）。判据 2：PS 端口在场，
+    `complete_manual_review.go` 的授权引用来自 PC（命令已无 `Authority` 格）✓；判据 3：剪行 + 钉 SHA ✓。映射留 nil 不写死 ✓
+    （`buildManualReviewOrchestration` → `manualReviewOrchestrationWith(db, nil)`，装配测试第三格证 nil 停在 error、不落库不铸信封）。
+    三值落点：不允许→`ManualReviewNotAuthorized`、未配置→`ManualReviewAuthorityRulesNotConfigured`，皆不落库；HTTP 端点
+    `writeManualReviewCompletionOutcome` 按 `Outcome().String()` 泛写，新两值以 200 + `NOT_AUTHORIZED` / `AUTHORITY_RULES_NOT_CONFIGURED`
+    出口，http 适配器无需改 ✓。授权先于版本核对 ✓（`FindBySourceIdentity` → `AuthorizeManualReview` → 版本核对，同
+    `RejectShipmentRequestHandler` 顺序，有测试钉）。
+    - **守卫判定（派单点名）**：「映射折出别的动作即 `ErrUntranslatableAnswer`」在裁决字面内——裁决说「适配器调本用例带
+      `ManualReviewAction`」，而适配器与主动拒绝同形、动作由映射折出，这道守卫是让「带 `ManualReviewAction`」成为结构而不只是
+      注释的唯一手段；它走 error（未形成）一路、不问提供方，端口仍是三值，不是第四态。备选形态（映射只给坐标、适配器自置动作）
+      更强，但会让 `ManualReviewAuthorizationRequestSource` 与 `ActiveRejectionRequestSource` 分叉。接受。
+    - 非阻断 1：UC-PC-003 第四项裁决段仍是将来时「`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去」，本笔
+      兑现后该句成了历史；作者已声明本单不动 docs，归推送方 / docs 收口，与作者自识的「首切范围二值」过期句同一趟改。
+    - 备案（作者自识、地盘外，同意非阻断）：admin-web `ManualReviewCompletionOutcome` 联合少新两值且此前已与服务端对不齐；
+      UC-PC-003「首切范围」二值陈述过期。
+  - **结论**：Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 1。**可进 main**；建议重放时顺手把 `judgment_continuation.go` 那句
+    计数改成不计数写法（纯注释）。本条写在分支 `mcp5-wbr04-review`（基 origin/main `a69c16f0`，只动本文件），与作者分支上的
+    `67ca20d5` / `04472784` 两笔票面同在 Comments 末追加，合并时作者两条在前、本条在后。
