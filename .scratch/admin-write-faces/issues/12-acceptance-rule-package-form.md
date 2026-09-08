@@ -1,7 +1,7 @@
 # 12 `ACCEPTANCE_RULE_PACKAGE` 版本的运营主路径：分节表单——正文一节、每条声明通道各一节，空节即未声明
 
 Category: enhancement
-Status: in-progress——2026-09-08 20:0x 通道 3 认领（通道 1 派单 task-8325f4ee；分支 `mcp3-awf12`，隔离树 `D:/tops/idp-parcel-mcp3-awf12`，基 main `c135049b`；20 的落点已广播，Go 先做、表单等通道 4 推出 `publication-draft-api.ts` 词表那一笔后借入）。此前 ready-for-agent——形状已裁清（分节逐字段表单，空节即未声明；伞票点名的「先答声明随发布怎么在表单里表达」在本票「选形与理由」答，无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面并改正 pc-gaps/09、10 两票落地后各加什么，见伞票 Comments）
+Status: resolved——通道 2 于 2026-09-08 21:3x 从 `mcp3-awf12@febfcd2e` 接手（通道 3 会话 crash，通道 1 派单 task-2b69f06d「接着做，不另起」）、21:5x 完工，分支 `mcp2-awf12`（树 `D:/tops/idp-parcel-mcp2-awf12`，基 origin/main `f722d9f0`；通道 3 的五笔原样 rebase 到其上，新旧 SHA 见「完成记录」），逐笔 SHA 见「完成记录」，进 main 记录待推送方广播后补入。此前 in-progress——2026-09-08 20:0x 通道 3 认领（通道 1 派单 task-8325f4ee；分支 `mcp3-awf12`，隔离树 `D:/tops/idp-parcel-mcp3-awf12`，基 main `c135049b`；20 的落点已广播，Go 先做、表单等通道 4 推出 `publication-draft-api.ts` 词表那一笔后借入）。此前 ready-for-agent——形状已裁清（分节逐字段表单，空节即未声明；伞票点名的「先答声明随发布怎么在表单里表达」在本票「选形与理由」答，无待裁问题），Blocked by 08 未 resolved 前不在前沿；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面并改正 pc-gaps/09、10 两票落地后各加什么，见伞票 Comments）
 Blocked by: 08（已进 main）；[20](./20-publication-vocabulary-read-face.md)（词表读口公共半边，2026-09-08 通道 1 代裁立票；落点广播前表单里的下拉先按票面写成占位、不内置枚举）
 
 ## 册与载荷
@@ -44,3 +44,48 @@ true = 缺格即不允许，表单不给默认、不预选）；`rules` 是一�
 ## 边界
 
 不动任何声明表；不改「声明只能随发布」；pc-gaps/09 的新格与 pc-gaps/10 的新节在那两票落地后由它们自己加。
+
+## 完成记录（通道 2 接续通道 3，2026-09-08，分支 `mcp2-awf12` 基 origin/main `f722d9f0`）
+
+接手方式：通道 3 会话 crash 时分支 `mcp3-awf12` 停在 `febfcd2e`（树干净、零现场），通道 1 派单「从 `febfcd2e` 接着做，不另起」。
+为借入 awf/20 的 `fetchPublicationVocabulary`，通道 3 的五笔原样 rebase 到 origin/main `f722d9f0` 之上（与 main 新进的笔零文件重叠、
+无冲突；只改本分支的 SHA，`mcp3-awf12` 指针原样留作封存出处）。
+
+逐笔（分支上的 SHA；进 main 后由推送方广播新旧对照）：
+
+- 通道 3 的五笔，rebase 前 → 后：`6de32983`→`3c339029` 票面 in-progress；`b1043265`→`94df574c` 领域（新文件
+  `publication_canonicalization_acceptance_rule_package.go` +_test：0014 正文 + 六节声明折进同一个 PCC-1、键名镜像批文，十个导出
+  `*Named` 反查与 ISO-8601 时长子集解析）；`3f80aea9`→`d8ba1669` 应用（对账门对带正文的项开门、载体正文折回各声明通道）；
+  `00c640ca`→`3f07466c` http（新文件 `publication_draft_payload_acceptance_rule_package.go` +_test：一格分节、逐格问题带下标）；
+  `febfcd2e`→`b439a3a0` **地盘外** seed（SYN-RULEPKG-01 `contentDigest` 改为算出的 PCC-1）。
+- `9a473cf0` admin-web（通道 2）：新文件 `party/acceptance-rule-package-form.ts`（+.test.ts，十例）与
+  `party/AcceptanceRulePackagePublicationForm.tsx`；`publication-draft-api.ts` 只加 `AcceptanceRulePackageBodyPayload` 一族型 + 载荷上
+  `acceptanceRulePackage?` 一格（键名以 http 那笔的 Go json 标签为准）；`CommercialPoliciesPage.tsx` 只加一签「发布规则包版本」+ 一个 import。
+  - **空节即未声明**落成 `sectionDeclared`：某一节里没有任何一格有字、任何一行，载荷就不带那一节；节里有任何东西整节原样送
+    （空行、没选的码都不代判、不补默认）。空草稿六节全留空、正文带一行空规则等人填；每节标题旁写着此刻「留空 → 未声明」还是
+    「将随发布登记」（从草稿算出的事实），可「清空本节」回到未声明。
+  - 封闭集十集（`category` / `judgment` / `applicableGroups` / `manualReview` / `sources` / `outcome` / `anchor` / `stage` / `intent` /
+    `allowance`）一口从 `fetchPublicationVocabulary('ACCEPTANCE_RULE_PACKAGE')` 取；下拉首项「未选」、多选无一格默认勾上；读口 403
+    显占位、不内置码。码 → 本页中文的表放在 form.ts（收寄来源、责任结果沿用 `presentation.ts` 既有两表；其余八集今天只有本表单在用，
+    读面要用时再抬进 `presentation.ts`——本票没占那份文件）。
+  - `sourceDataAmendment.closed` 三态按钮，没选就不送这一格（服务端答「须在场」）；`finalRuleValidity` 作终局规则节内一格，整格留空 =
+    未声明有效期，不给默认时长；`manualReview` 下拉标签「要求 / 不要求人工复核」，说明句点明不是「谁有权」。
+  - 认领的每条 JSON 路径组件都渲染了问题（awf/17 评审点名的「认领节根不渲染」在这里避掉）；草稿更新一律函数式。
+- `9c7e6da6` 机制清点在 `9a473cf0` 干净检出上重生成——PC 生产 +2 / 测试 +3 / adapters/http 生产文件 +1（数的是通道 3 那三笔 Go，
+  端点表本票一行未加）。只作取证，推送方在 tip 上重生成兑底。
+
+自验（`9a473cf0` 的 detached 检出 `%TEMP%\idp-verify-awf12`，未设 DSN——本票无 postgres 改动）：`gofmt -l .` 列出 0；`go build ./...`
+退 0；`go vet ./...` 退 0；`go test -count=1` PC 领域的 14 个反向依赖包（`go list` 反查，含三个 `cmd/`）+ `./internal/architecture/...`
+全部 `ok`；admin-web `tsc --noEmit` 退 0、`run-tests` 133/133（本票 10 例在内）。
+
+对照票面：分节表单 → 预览摘要 → 待批准 → 批准 → 发布由公共半边走；「结果在同册立刻可见、各节声明在册上各自的列里可见」靠
+`onPublished` 刷读面（`policy-rows.ts` 未动，列是既有的）；「Go 侧只加本册规范化一格（覆盖正文与全部声明通道）」是通道 3 那笔领域
+改动；边界「不动任何声明表；不改『声明只能随发布』」——声明表与迁移一行未动，表单是一次提交。
+
+## Comments
+
+- 2026-09-08 21:3x · 通道 1 → 通道 2：通道 3 会话 crash，派「从 `mcp3-awf12@febfcd2e` 接着做，不另起」（task-2b69f06d，与 awf/17 评审同一单）。
+- 2026-09-08 21:5x · 通道 2：完工报已发通道 1，评审待通道 1 另派；本票 `publication-draft-api.ts` / `CommercialPoliciesPage.tsx` 两处
+  共享文件改动与第 2 波各票各自加的一格落在同一段落，撞了由推送方按「纯加行」解。**留给评审 / 后续的判断项**：八集中文表放在
+  form.ts 而非 `presentation.ts`（避免碰未占号的共享文件）；`Field` / `Problems` / `RowFrame` 与兄弟表单同形复制，第 2 波落齐后可
+  单开一票抽到 `PublicationDraftFlow` 旁。
