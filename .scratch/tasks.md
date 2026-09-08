@@ -1191,3 +1191,21 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 **四票共同量到、归伞票 07 收口的**：(a) 无正文册「已接」与「开门」拆开 + 旧式 `sha256:` 串何时拒收（09 后果：跨路重发答 `CONTENT_CONFLICT` 而非带两串）；(b) `RehydratePublicationContent` 的「正文缺席」判散在各册早返回里，宜按 kind 分派；(c) 各册可缺声明节「留空 = 不作声明」还是「永远送」要一致（10）；(d) `normalizeMoment` 等表单助手跨页导入的所有权（11/16）。**第 2 波前置**仍是词表读口形状（归用户）。
 
 树：`idp-parcel-mcp5-awf16` / `idp-parcel-mcp6-awf11` 已由作者拆并改名 merged/；`idp-parcel-mcp3-awf09`、`idp-parcel-mcp4-awf10`、`idp-parcel-mcp6-awf19`、`idp-parcel-mcp5-awf16-followup`、`idp-parcel-mcp2-awf08rv` 与四棵 review 树等本笔广播后各归其主拆；`idp-replay-wave1` 推后拆。分支 `mcp3-awf09` / `mcp4-awf10` / `mcp5-awf16-followup` / `mcp6-awf19` / 五条 `*-review` 待改名 merged/（内容全在 main）。
+
+## 2026-09-08 16:2x 通道 1 新会话（接手时 `main = origin/main = dc1f0c07`；前会话与各通道 15:5x 后全部 crash）
+
+用户问「工作树干净吗、都回放了吗」。`branch-state.ps1`：共享树 0 行未提交，15 棵树全干净。逐条在途分支核两样——`git cherry main <分支>`，加「分支每笔新增行是否都在 main 同文件里」（`cherry` 的 `+` 不等于内容不在，见 09-07 findings）：
+
+- **全在 main**：`mcp3-awf09`（8 笔）、`mcp4-awf10`（6 笔）——`+` 的五笔只是 patch-id 变了，main 缺的行全是被 awf/10、awf/11 手工并或 `8ddfbcef` 重构改写的注释 / 结构体对齐行；`mcp2-awf09-review`（41/41 行）、`mcp3-awf10-review`（36/36 行）；`mcp5-awf16-followup`、`mcp6-awf19`（全 `-`）；`mcp2-psr02-tail`（5 笔全 `-`，只差 `MECHANISM-INVENTORY.md` 后来三次重生成）。
+- **不在 main、按规矩不进**：`mcp4-tf11@6e5c8a0c` 封存笔；`mcp4-tf03@44808f31`（`D:/tops/idp-tf03`，未推）封存笔——加的行全在 main、删的行也已从 main 消失（只剩 `if err != nil {` 一类通行句），即被后续工作整体吸收。
+- **不在 main、该进而漏了**：`mcp4-tf11@503dfcc6` 票 11 裁决（Status → in-progress + 六条裁决 + 0121 释回）。main 上票 11 仍 `draft` / `Blocked by: 10`，谁读 main 都会重裁一遍。
+
+### 16:4x 用户「你帮我决策，怕丢了又重复开发」→ 三条各一句
+
+| 分支 | 裁 | 动作 |
+|---|---|---|
+| `mcp4-tf11` | 裁决进 main，现场留分支 | `503dfcc6 → bd5ccb9e` cherry-pick 干净（票 11 自 `d1e6c094` 起 main 未动）；本笔改 Status 点明「实施现场在 `mcp4-tf11@6e5c8a0c`，接管从分支接着做、不从 main 重开」并补 Comment。分支、树 `idp-parcel-mcp4-tf11` 不动，等接管单 `a8e6a834` |
+| `mcp4-tf03` | 已被吸收，留指针不留名 | 改名 `salvage/mcp4-tf03` 并推 origin（此前只在本机）；树 `D:/tops/idp-tf03` 归用户拆 |
+| `mcp2-psr02-tail` | 内容全在 main | 改名 `merged/mcp2-psr02-tail`；树 `idp-parcel-mcp2-psr02`、`idp-verify-psr02` 待拆 |
+
+票 19 由 MCP-6 16:3x 起做（地盘 `apps/admin-web/src/pages/party/`，基线 `dc1f0c07`，与 tf/11 不相交）。**待拆树**（全干净、内容全在 main，各归其主或用户点头后由通道 1 拆）：`idp-parcel-mcp3-awf09`、`mcp4-awf10`、`mcp6-awf19`、`mcp5-awf16-followup`、`mcp2-awf09rv`、`mcp3-awf10-review`、`idp-review-awf09`、`idp-replay-wave1`、`idp-verify-psr02`、`idp-parcel-mcp2-psr02`、`idp-parcel-mcp5-awf08`[merged/]、`idp-parcel-mcp6-wbr03-05`[merged/]。**待改名 merged/**：`mcp3-awf09`、`mcp4-awf10`、`mcp5-awf16-followup`、`mcp6-awf19`、`mcp2-awf09-review`、`mcp3-awf10-review`。

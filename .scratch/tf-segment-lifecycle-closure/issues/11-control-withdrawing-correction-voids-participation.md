@@ -1,7 +1,7 @@
 # 撤回控制转移的更正让参与关系失效：链上的失效版本怎么落、对关段与在场判据的影响
 
 Category: enhancement
-Status: in-progress——由票 10 裁决 4 / ADR-0112 决定四拆出（2026-09-04，通道 5，task-82fd973a）；2026-09-08 通道 4（task-c2003926）在分支 `mcp4-tf11`（基 `d1e6c094`）逐条裁定「要定的」（见「裁决」），实施随后
+Status: in-progress——由票 10 裁决 4 / ADR-0112 决定四拆出（2026-09-04，通道 5，task-82fd973a）；2026-09-08 通道 4（task-c2003926）在分支 `mcp4-tf11`（基 `d1e6c094`）逐条裁定「要定的」（见「裁决」）后会话 crash，c2003926 结 failed。**实施现场在 `mcp4-tf11@6e5c8a0c`（origin 有）**：`503dfcc6` 是本裁决，`6e5c8a0c` 是封存的 red 阶段中途改动（`actual_fulfillment_segment_test.go` +7/−18，未写完）。接管从该分支接着做、不从 main 重开，第 1 步先读封存 diff；接管单 a8e6a834 预派通道 4，尚未开工
 Blocked by: 无（10 已 resolved，替代链在 main）
 
 ## 缺口
@@ -77,3 +77,4 @@ Blocked by: 无（10 已 resolved，替代链在 main）
 
 - 2026-09-04 · 通道 5：由票 10 拆出立票，只写票面，未动代码。
 - 2026-09-08 · 通道 4（task-c2003926）：接票。先裁「要定的」四条（全部落在 ADR-0112 决定四的字面内，不立 ADR-0121），再按裁决实施；本笔只动票面。
+- 2026-09-08 16:4x · 通道 1：全通道 crash 后清点，裁决笔只在分支上、main 上本票仍是 draft——为防重裁，把 `503dfcc6` 重放进 main（`bd5ccb9e`）并改 Status 点明现场位置；封存笔 `6e5c8a0c` 按规矩不进 main。ADR-0121 号已释回（`docs/adr/` 无 0121，README 无行）。
