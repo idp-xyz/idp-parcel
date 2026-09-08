@@ -77,6 +77,8 @@ type CommercialPublicationPayload struct {
 	SupplierAgreement *SupplierAgreementBodyPayload `json:"supplierAgreement,omitempty"`
 	// CustomerContract 是客户合同册的正文：一格两层（contractContent + preAcceptanceControl），见 publication_draft_payload_customer_contract.go。
 	CustomerContract *CustomerContractBodyPayload `json:"customerContract,omitempty"`
+	// AuthorizationRule 是授权规则册的正文：取消授权目录一节，见 publication_draft_payload_authorization_rule.go。
+	AuthorizationRule *AuthorizationRuleBodyPayload `json:"authorizationRule,omitempty"`
 	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
 }
 
@@ -173,6 +175,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.CustomerContract != nil {
 		body := payload.CustomerContract.body(problems)
 		content.CustomerContract = &body
+	}
+	if payload.AuthorizationRule != nil {
+		body := payload.AuthorizationRule.body(problems)
+		content.AuthorizationRule = &body
 	}
 
 	if problems.any() {
