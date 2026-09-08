@@ -477,5 +477,16 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			Effective:    body.Effective,
 		}
 	}
+	if content.CustomerContract != nil {
+		body := content.CustomerContract
+		declarations.ContractContent = &ContractContentDeclaration{RulePackage: body.RulePackage, Bindings: body.Bindings}
+		// 合同级声明缺席就不交这一通道：载体上没说「要不要」，发布用例也不替它说。
+		if body.Control != nil {
+			declarations.PreAcceptanceControl = &PreAcceptanceControlInstruction{
+				Requirement: body.Control.Requirement,
+				Basis:       body.Control.Basis,
+			}
+		}
+	}
 	return declarations
 }

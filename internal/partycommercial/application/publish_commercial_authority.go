@@ -606,6 +606,23 @@ func publicationContentOf(
 			Effective:    body.Effective,
 		}
 		return content, true
+	case domain.CustomerContractObject:
+		// 正文在不在场看 0012 那一层（contractContent）：只带合同级声明不带正文的项没有可比对象，照今天登记声明的
+		// 串——批文里两键各自可缺是既有语义（ADR-0126 边界：不改受控批文既有字段语义）。
+		if declarations.ContractContent == nil {
+			return content, false
+		}
+		content.CustomerContract = &domain.CustomerContractBody{
+			RulePackage: declarations.ContractContent.RulePackage,
+			Bindings:    declarations.ContractContent.Bindings,
+		}
+		if declarations.PreAcceptanceControl != nil {
+			content.CustomerContract.Control = &domain.PreAcceptanceControlBody{
+				Requirement: declarations.PreAcceptanceControl.Requirement,
+				Basis:       declarations.PreAcceptanceControl.Basis,
+			}
+		}
+		return content, true
 	default:
 		return content, false
 	}

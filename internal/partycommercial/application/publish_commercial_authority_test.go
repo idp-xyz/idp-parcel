@@ -798,7 +798,13 @@ func TestContractContentMustAgreeWithTheShellReference(t *testing.T) {
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
-	spec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
+	// 客户合同已接进服务端规范化（票 admin-write-faces/10）：壳上的摘要要是按正文算出的那一个，对账门才放它走到本条要证的那一判。
+	declarations := application.CommercialDeclarations{
+		ContractContent: &application.ContractContentDeclaration{
+			RulePackage: pcValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
+		},
+	}
+	spec := customerContractSpec(t, "contract-1", "v1", declarations)
 	spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
 		domain.AcceptanceRulePackageObject: pcValue(t, domain.NewCommercialObjectID, "rules-1"),
 	}
@@ -812,11 +818,7 @@ func TestContractContentMustAgreeWithTheShellReference(t *testing.T) {
 		Spec:         spec,
 		Approval:     publishApproval(t, "contract-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{
-			ContractContent: &application.ContractContentDeclaration{
-				RulePackage: pcValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
-			},
-		},
+		Declarations: declarations,
 	}); !errors.Is(err, domain.ErrRulePackageReferenceMismatch) {
 		t.Fatalf("err = %v, want ErrRulePackageReferenceMismatch", err)
 	}

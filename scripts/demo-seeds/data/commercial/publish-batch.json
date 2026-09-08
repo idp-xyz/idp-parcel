@@ -120,7 +120,7 @@
       "objectId": "SYN-CONTRACT-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-CONTRACT-01-v1",
+      "contentDigest": "PCC-1:06de9a9c70b492c182b6668876f484861f75467c3c82c0285ddbc3deb38f4feb",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
