@@ -1,7 +1,7 @@
 # 20 商业发布词表读口：一口按 kind 答各册正文的封闭集，表单不内置枚举
 
 Category: enhancement
-Status: in-progress——通道 4 于 2026-09-08 19:5x 认领，分支 `mcp4-awf20`（树 `D:/tops/idp-parcel-mcp4-awf20`，基 `5a209f70`）；形状由通道 1 代裁（用户 2026-09-08 18:3x「你自决」授权，见伞票 07 Comments 同刻那条）：**一个通用读口按 kind 答**，不是一册一口；只答码不答中文；集合的唯一权威在 PC 领域枚举。本票是第 2 波 12/13/15/17 的前置公共半边，与 16 之于第 1 波同一角色
+Status: resolved——通道 4 于 2026-09-08 19:5x 认领、20:0x 完工，分支 `mcp4-awf20`（树 `D:/tops/idp-parcel-mcp4-awf20`，基 `5a209f70`），逐笔 SHA 见「完成记录」；进 main 记录待推送方重放后由其广播补入；形状由通道 1 代裁（用户 2026-09-08 18:3x「你自决」授权，见伞票 07 Comments 同刻那条）：**一个通用读口按 kind 答**，不是一册一口；只答码不答中文；集合的唯一权威在 PC 领域枚举。本票是第 2 波 12/13/15/17 的前置公共半边，与 16 之于第 1 波同一角色
 Blocked by: 无（08 与 16 已进 main：五步路径四口与前端公共半边都在场）
 
 ## 缺什么
@@ -52,7 +52,59 @@ Blocked by: 无（08 与 16 已进 main：五步路径四口与前端公共半�
 答空列表；坏 kind 答问题格；领域测试双向钉住集合与规范化器同词；admin-web tsc / run-tests 绿；`endpoints.go` 只多一行；
 含 DSN 全仓由推送方重放后跑一次（本票不带 DSN 也应全绿：无 postgres 改动）。
 
+## 完成记录（通道 4，2026-09-08，分支 `mcp4-awf20` 基 `5a209f70`）
+
+逐笔（分支上的 SHA；进 main 后由推送方广播新旧对照）：
+
+- `509b67ce` 票面 Status 转 in-progress。
+- `0fb66cd8` 领域：`internal/partycommercial/domain/publication_vocabulary.go` + `_test.go`——`PublicationVocabulary(kind) ([]VocabularySet, error)`、
+  `VocabularySet{Name, Codes}`。集合从既有枚举的接受判据（`valid` / `declarable` / `Declared`）与 `String()` 逐值列出（`closedCodes` 扫整个
+  uint8 值域），不另写常量表；其余合法 kind 答空非 nil 列表，坏 kind 答 `ErrInvalidCommercialVersion`。测试以导出构造门为预言机双向钉住
+  （每个词被构造门接受 / 构造门接受的每个词都在集合里 / 码序同枚举），另钉票 12 / 15 / 17 点名的字面；变异自查：把 `allowance` 的判据换成
+  恒真，测试当场红（多出 NOT_DECLARED）。
+- `d894751a` http：`internal/partycommercial/adapters/http/publication_vocabulary.go` + `_test.go`——`NewQueryPublicationVocabularyEndpoint(intake
+  PublicationVocabularyIntake)`；答 `{outcome: "PUBLICATION_VOCABULARY_LISTED", kind, sets:[{name, codes}]}`。**地盘外同包一处**（占号广播已点名、
+  通道 1 已准）：`unconfigured_intake.go` 加 `_ PublicationVocabularyIntake = UnconfiguredIntake{}` 一行与 `IntakePublicationVocabularyQuery` 一法。
+- `4eb2492f` 装配：`cmd/parcel-api/endpoints.go` 加一行 `/commercial-publication-vocabularies`（PC 组紧跟四口之后，挂字面量 `UnconfiguredIntake{}`）
+  + 行上注释写准入理由；`endpoints_test.go` 探针表跟一行。同笔改写 `PublicationVocabularyIntake` 注释（通道 1 指正：理由不是预览口那条）。
+- `17a962a5` admin-web：`party/publication-draft-api.ts` 文件末尾追加 `VocabularySetRecord` / `PublicationVocabularyResponseBody` /
+  `publicationVocabularyEndpoint` / `fetchPublicationVocabulary(kind)` / `VocabularyOption` / `vocabularyOptions(codes, labels)`，import 行多引
+  `exchangeMasterData`；新文件 `party/publication-vocabulary.test.ts`。不改任何表单。
+- `b0667d3b` 机制清点在 `17a962a5` 的干净检出上重生成（PC 端点 +1、生产 / 测试文件各 +2），只作本笔取证，推送方在 tip 上重生成兑底。
+
+各册集合（= 载荷键名，码按枚举顺序）：
+
+- `ACCEPTANCE_RULE_PACKAGE`：`category`、`judgment`、`applicableGroups`、`manualReview`（NOT_REQUIRED / REQUIRED）、`sources`、`outcome`、`anchor`
+  （CHANNEL_RESULT_OBSERVED）、`stage`、`intent`、`allowance`（ALLOWED / DISALLOWED）。票 12 载荷里的 `semantics` / `policyVersion` / `qualifications` /
+  `finalKind` / `dataGroup` / `pendingRoutingBasis` 是开放引用，不成集合；票 12 措辞里的「终局种类」在领域里是开放引用 `FinalKind`，封闭的是
+  `outcome`（责任结果），按领域答。
+- `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY`：`jointPassCondition`、`control`、`onFailure`（键名与读面 `query_commercial_policies.go` 的控制项同名）。
+- `SETTLEMENT_POLICY`：`method`。`AUTHORIZATION_RULE`：`party`。其余 kind：`sets: []`。
+
+自验（`17a962a5` 的 detached 检出 `%TEMP%\idp-verify-awf20`，未设 DSN——本票无 postgres 改动）：`gofmt -l .` 列出 0；`go build ./...` 退 0；
+`go vet ./...` 退 0；`go test -count=1` 动过的三包及其反向依赖（`go list` 反查得 14 个，含三个 `cmd/`）+ `./internal/architecture/...` 全部 `ok`；
+admin-web `tsc --noEmit` 退 0、`run-tests` 123/123（本票 7 例在内）。工作树上 `go test` 领域 7 例、http 4 例各 PASS。
+
+与票面的两处出入，写明便于评审：
+
+- 「`endpoints.go` 只多一行」：端点表**条目**只多一行；行上另有几行注释写准入理由，是通道 1 20:0x 消息要求的（「那行的注释要写真理由」）。
+- 坏 kind 的答复取 400 + `MALFORMED_REQUEST` + `error.problems[{field: "kind", problem}]`（与命令口的逐格问题同形、与 `/commercial-policies`
+  坏 kind 同码），不是预览口那种 200 + NOT_ACCEPTED：一个 GET 带集合外的 kind 是调用方式问题，重发同样内容不会好；`PayloadProblemRecord`
+  那一格的形状（`{field, problem}`）与预览口相同。答复多带一格 `outcome`（`PUBLICATION_VOCABULARY_LISTED`），沿本仓读口「业务判别走 outcome」
+  的通例，`{kind, sets}` 两格照票面。
+
+**判断点（归 owner 复核）：词表读口在隔离读态不放行。** 它与四口同挂字面量 `UnconfiguredIntake{}`，隔离读开关（ADR-0078）换不了它。理由：
+它唯一的消费者是四口喂的表单，四口开不了时它单独开只让一张提交不了的表单多几行下拉；且它不读任何存储读面，不满足 ADR-0078 入格判据
+「消费本上下文自己的存储读面」。**解锁条件**：要在隔离读态放它，得给 `TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines` 的二分
+（放行 → 500 / 不放 → 403）加第三桶（放行且不经读口 → 200）并改 ADR-0078 判据措辞，另立票。
+
+顺带一格（不在本票范围，记下免得丢）：客户合同正文的 `preAcceptanceControl.requirement` 在领域里也是封闭集（`PreAcceptanceControlRequirement`：
+REQUIRED / NOT_APPLICABLE），本票按裁决三「客户合同答空列表」处理；票 10 表单（已进 main）今天怎么供这一格，由该票或后续票自决。
+
 ## Comments
 
 - 2026-09-08 18:3x · 通道 1：立票并代裁形状（用户「你自决」授权）。第 2 波派单顺序：本票 + 14（14 不依赖词表）先开；本票落点广播后
   12/13/15/17 再点名派。
+- 2026-09-08 20:0x · 通道 4：落点已 broadcast（`[落点 awf/20]`，函数名 / 类型名 / 端点 / 各册集合名与码），供 12/13/15/17 写消费端。
+- 2026-09-08 20:0x · 通道 1 → 通道 4：占号准、`unconfigured_intake.go` 地盘外同包改动准；Intake 挂字面量的理由须写真（非预览口那条），
+  票面列「判断点：隔离读态不放行」归 owner 复核；`fetchPublicationVocabulary` 遇 403 交出可辨的未配置、不内置码回退——均已照办（见完成记录）。
