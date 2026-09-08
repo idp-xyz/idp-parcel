@@ -187,13 +187,37 @@ func SubmitPublicationDraft(
 	if !submitter.valid() || submittedAt.IsZero() {
 		return PublicationDraft{}, fmt.Errorf("%w: submitter and submission time are required", ErrInvalidPublicationDraft)
 	}
+	version, canonical, err := constructPublication(shell, content)
+	if err != nil {
+		return PublicationDraft{}, err
+	}
+	return PublicationDraft{
+		shell:       version,
+		content:     content,
+		canonical:   canonical,
+		submitter:   submitter,
+		submittedAt: submittedAt.UTC(),
+		status:      PublicationDraftPendingApproval,
+	}, nil
+}
+
+// PreviewPublication 把一份拟录入的壳与正文过一遍构造门，交回规范化结果，不形成载体（ADR-0126 Decision 四）。
+// 它与 SubmitPublicationDraft 走的是同一个 constructPublication：同一份输入过预览与过录入得到逐字节相同的
+// 摘要，靠的是结构不是约定——两条路径上没有第二处算摘要或判壳的代码。
+func PreviewPublication(shell PublicationDraftShell, content PublicationContent) (CanonicalPublicationContent, error) {
+	_, canonical, err := constructPublication(shell, content)
+	return canonical, err
+}
+
+// constructPublication 是预览与录入共用的那一道门：壳与正文类别一致 → 正文规范化 → 壳经 NewCommercialDraft。
+func constructPublication(shell PublicationDraftShell, content PublicationContent) (CommercialVersion, CanonicalPublicationContent, error) {
 	if content.Kind != shell.Kind {
-		return PublicationDraft{}, fmt.Errorf("%w: content is %s while the shell declares %s",
+		return CommercialVersion{}, CanonicalPublicationContent{}, fmt.Errorf("%w: content is %s while the shell declares %s",
 			ErrInvalidPublicationDraft, content.Kind, shell.Kind)
 	}
 	canonical, err := CanonicalizePublicationContent(content)
 	if err != nil {
-		return PublicationDraft{}, err
+		return CommercialVersion{}, CanonicalPublicationContent{}, err
 	}
 	version, err := NewCommercialDraft(CommercialVersionSpec{
 		TenantID:      shell.TenantID,
@@ -206,16 +230,9 @@ func SubmitPublicationDraft(
 		References:    shell.References,
 	})
 	if err != nil {
-		return PublicationDraft{}, err
+		return CommercialVersion{}, CanonicalPublicationContent{}, err
 	}
-	return PublicationDraft{
-		shell:       version,
-		content:     content,
-		canonical:   canonical,
-		submitter:   submitter,
-		submittedAt: submittedAt.UTC(),
-		status:      PublicationDraftPendingApproval,
-	}, nil
+	return version, canonical, nil
 }
 
 // Approve 由另一个操作者动作把`待批准`推进到`已批准`。规则逐格裁：要求不同主体时批准者不得是录入者；要求

@@ -257,6 +257,36 @@ func TestDraftStatusMovesForwardOnly(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0126 Decision 四 — 预览与录入同一道门：同一份壳与正文过预览与过录入得到逐字节相同的摘要；
+// 录入会拒的输入预览同样拒（同一格答案），预览不形成载体。
+func TestPreviewWalksTheSameGateAsSubmission(t *testing.T) {
+	shell := draftShell(t, domain.CreditPolicyObject, "credit-1", "v1")
+	content := creditContent(t, 500_000)
+
+	preview, err := domain.PreviewPublication(shell, content)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if preview.Digest() != pendingCreditDraft(t, 500_000).Canonical().Digest() {
+		t.Fatalf("preview digest %s ≠ submitted digest", preview.Digest())
+	}
+
+	mismatched := content
+	mismatched.Kind = domain.SettlementPolicyObject
+	if _, err := domain.PreviewPublication(shell, mismatched); !errors.Is(err, domain.ErrInvalidPublicationDraft) {
+		t.Fatalf("preview of a mismatched kind: err = %v", err)
+	}
+	blankScope := shell
+	blankScope.Scope = domain.CommercialScopeReference{}
+	if _, err := domain.PreviewPublication(blankScope, content); !errors.Is(err, domain.ErrInvalidCommercialVersion) {
+		t.Fatalf("preview of a blank scope: err = %v", err)
+	}
+	if _, err := domain.PreviewPublication(draftShell(t, domain.SettlementPolicyObject, "s-1", "v1"),
+		domain.PublicationContent{Kind: domain.SettlementPolicyObject}); !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
+		t.Fatalf("preview of a register not yet canonicalized: err = %v", err)
+	}
+}
+
 // Covers: ADR-0126 Decision 三「同版本同内容再录是重放，换内容是修订」的判据在领域一处：内容同不同只看
 // 算出的摘要。
 func TestSameContentIsJudgedByTheCanonicalDigest(t *testing.T) {
