@@ -197,6 +197,21 @@
 # 的 HEAD 上重取，别拿这两个数加减——同波 wbr/03 正在同一段剪 ResolveCreditPolicy，两笔谁先进 main 都会让
 # 另一笔的「剪前」不再是 tip 的真值。
 #
+# 2026-09-08 随 wiring-baseline-remainder/03 剪掉 ResolveCreditPolicy（PC 组）。成因三分是**第二种**：
+# 真接上了——ADR-0127 裁甲，闭包解析加了 resolveCreditPolicyBasis 一步（domain/commercial_resolution.go），
+# 它经 ResolveCommercialBasis ← ResolveCommercialClosure ← application/resolve_commercial_basis.go 落在生产
+# 调用路径上，并在 ResolveCreditPolicy 之间选唯一 / 适用冲突 / 无适用依据。剪前先核过：全仓该名字只有一处
+# 声明（domain/credit_policy.go），同笔新增的 resolveCreditPolicyBasis 是另一个名字，本门禁比的是精确相等
+# 不是子串（tf-unwired-seven/05 那段核过匹配码），不存在第三种。量在隔离 worktree 上（分支 mcp3-wbr03，
+# 动手前 `git status -- internal/architecture/` 为空）：`git show` 取父提交 `84191cb7` 的本文件两法同得
+# 剪前 **6**，本笔单独作用于其上剪后 **5**（party-commercial 4→3）——两法是 UTF-8 逐行读后滤非空非注释，
+# 与字节层数行首非 `#`。两个数只对该检出成立；本笔重放进 main 时父提交若不是 84191cb7，下一个改名单的人
+# 在自己那一刻的 HEAD 上重取，别拿这两个数加减。同笔 production_type_reachability_baseline.txt 的 CreditBasis
+# 一行随它出名单（那边 23→22），出处写在那边。
+#
+# 推送方 2026-09-08 重放注：上两段各钉自己的父提交，04 先进 main（d41862bd）、03 后进；03 那笔重放到 02918e11 之上时
+# 两法同得剪前 5（04 已剪）、剪后 4（party-commercial 3→2），只对该检出成立——下一个改名单的人照旧在自己那一刻的 HEAD 上重取。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -409,14 +424,17 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 发布门的生产调用方是 application/register_channel_account_use.go。
 # **剪之前按本门禁的提示逐条分过成因**：这个名字在全仓只有一处声明（domain/
 # channel_account_use_authorization.go），不存在「别处同名声明造成误判」那一种，因此是第二种。
-# 信用政策选择门，CreditBasis 是本上下文交给 settlement-accounting 的授信依据。**调用方是 PC 侧向 SA 供
-# 授信额度的提供方口**（UC-SA-002 步 7 账期分支的消费侧适配器索取它，AT-SA-171 / AT-SA-172），那条 PC→SA 缝
-# 今天不存在：缺提供方口、缺 SA 消费侧适配器（settlementaccounting/adapters/partycommercial 只读结算政策），
-# 且「四维选择在哪一层还有多候选」那格未裁——0020 的 credit_policy 一版一行，所以多候选只能来自同一范围内
-# 多个信用政策对象，那是闭包该像 resolveSettlementPolicyBasis 那样在解析里选（本函数作选择器），还是闭包
-# 只认唯一版本壳、本函数退化成 covers 校验，是解析语义的改口，要 ADR（2026-09-08 已报 MCP-1 待裁）。三件
-# 落地（wiring-baseline-remainder/03）那天这一条出名单。
-internal/partycommercial/domain ResolveCreditPolicy
+# ResolveCreditPolicy（信用政策选择门，CreditBasis 是本上下文交给 settlement-accounting 的授信依据）曾在这里，
+# 理由行写着「调用方是 PC 侧向 SA 供授信额度的提供方口……那条 PC→SA 缝今天不存在：缺提供方口、缺 SA 消费侧
+# 适配器，且『四维选择在哪一层还有多候选』那格未裁……三件落地那天这一条出名单」。2026-09-08 三件随
+# wiring-baseline-remainder/03 落地，按上句剪掉：那格由 ADR-0127 裁甲（闭包解析里选，本函数作四维选择器），
+# 提供方口是 domain/commercial_resolution.go 的 resolveCreditPolicyBasis（CreditBasis 随 Resolution / 闭包交出、
+# 进快照），SA 消费侧适配器是 settlementaccounting/adapters/partycommercial/credit_basis.go（凭回指从闭包取额度，
+# 装配在 cmd/parcel-dispatch 的接受前控制编排）。成因三分先分过：全仓该名字只有一处声明
+# （domain/credit_policy.go），同笔新增的 resolveCreditPolicyBasis 是另一个名字，门禁比的是精确相等，是第二种。
+# **它出名单不等于那条缝全部闭合**：PS 登记面（parcelshipment/adapters/partycommercial/commercial_resolution_keys.go）
+# 今天不承载信用二维、含 CreditPolicyObject 的登记行会形成一个立不起来的键，SA 编排的 CreditBasis 依赖为 nil
+# 时沿旧路——两件都在 ADR-0127 的 Consequences 里点名、归各自地盘另立票；本门禁只量导出工厂，那两件量不到。
 # ManualReviewRequirementFor 曾在这里，2026-09-08 随 wiring-baseline-remainder/04 删去——成因三分是
 # **第一种（已删）**，且删法是「并入 Authorize」而不是改名：UC-PC-003 第四项裁决（MCP-1 代裁）认定
 # `Authorize(grants, delegations, request)` 带 ManualReviewAction 已是「谁有权复核」的裁定，而这个按范围加

@@ -81,8 +81,13 @@ internal/parcelshipment/domain SubmissionBatchCandidate
 
 # ---- party-commercial ----
 
-# 一类：经 ResolveCreditPolicy 取得，它在函数名棘轮基线里。随它出名单。
-internal/partycommercial/domain CreditBasis
+# CreditBasis 曾在这里（一类，理由行明写「经 ResolveCreditPolicy 取得，它在函数名棘轮基线里。随它出
+# 名单」），2026-09-08 随 wiring-baseline-remainder/03 剪掉：ADR-0127 让闭包解析经 resolveCreditPolicyBasis
+# 调 ResolveCreditPolicy，CreditBasis 由 Resolution.AdoptedCreditBasis / AdoptedBasis.CreditBasis 交出，
+# settlementaccounting/adapters/partycommercial/credit_basis.go 在包外拿到它并译成 SA 自己的 CreditBasis。
+# **在父提交 `84191cb7` 的干净内容上（`git show` 取本文件）两法同得剪前 23、剪后 22**——两法是 UTF-8 逐行
+# 读后滤非空非注释，与字节层数行首非 `#`；只对该检出成立。函数名棘轮那边 ResolveCreditPolicy 同笔出名单，
+# 出处写在那边。
 
 # CustomerServiceRuleApplicability / CustomerServiceRuleVersion 曾在这里（一类＋二类，理由行明写
 # 「等 party-commercial-context-gaps/05 落地」），2026-09-04 随票 05 剪掉：`SaveCustomerServiceRule`
