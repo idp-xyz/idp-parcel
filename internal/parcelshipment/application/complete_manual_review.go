@@ -15,6 +15,11 @@ import (
 // 后者是决定已越过提交边界（或任务已随撤回停止），复核没有可补录的对象——CONTEXT 明写补录
 // 等于让复核去追认一个已经形成的结果。`版本已换代`单列：操作员复核的是某一份提交版本，新版本
 // 到达后那份复核对象已不存在，把完成记到新任务上就是把 A 版的判断签到 B 版头上。
+//
+// `未获授权`与`授权规则未配置`是 party-commercial 答复的两格落点（UC-PC-003 结果表），照主动拒绝
+// 那一步的分法：前者是确定的业务答案，续办也补不出授权来；后者是租户还没把 `PAR-COM-14` 的授权
+// 规则登记上——首发期没有租户，每一次询问都落在这一格，压成前者等于对一个尚未配置的产品说
+// 「你无权复核」。两格都什么也不落库。
 type ManualReviewCompletionOutcome uint8
 
 const (
@@ -24,6 +29,8 @@ const (
 	ManualReviewTaskAlreadyClosed
 	ManualReviewVersionSuperseded
 	ManualReviewCompletionConflict
+	ManualReviewNotAuthorized
+	ManualReviewAuthorityRulesNotConfigured
 )
 
 func (outcome ManualReviewCompletionOutcome) String() string {
@@ -38,19 +45,26 @@ func (outcome ManualReviewCompletionOutcome) String() string {
 		return "VERSION_SUPERSEDED"
 	case ManualReviewCompletionConflict:
 		return "REVISION_CONFLICT"
+	case ManualReviewNotAuthorized:
+		return "NOT_AUTHORIZED"
+	case ManualReviewAuthorityRulesNotConfigured:
+		return "AUTHORITY_RULES_NOT_CONFIGURED"
 	default:
 		return ""
 	}
 }
 
-// CompleteManualReviewCommand 说明谁、凭什么授权与证据，为哪一份提交版本完成了复核。
-// 三个引用必填由领域构造函数把守；版本必填是本层的门——复核完成挂在版本的判断任务上，
+// CompleteManualReviewCommand 说明谁、凭什么证据，为哪一份提交版本完成了复核。
+//
+// 它不带授权引用：那由 party-commercial 签发（所采用的授权规则版本），本编排去问，不由调用方
+// 声明——与 RejectShipmentRequestCommand 同一条理由，自带一个就等于自己给自己签字。此前这一格由
+// Intake 整组注入、没人向 PC 问过，票 wiring-baseline-remainder/04 接的就是这条。
+// 复核人与证据必填由领域构造函数把守；版本必填是本层的门——复核完成挂在版本的判断任务上，
 // 不指名版本的完成无从判断它签给了谁。
 type CompleteManualReviewCommand struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
 	SubmissionVersion domain.SubmissionVersionID
-	Authority         domain.ReviewAuthorityReference
 	Reviewer          domain.ReviewerReference
 	Evidence          domain.ReviewEvidenceReference
 }
@@ -91,8 +105,9 @@ func (result CompleteManualReviewResult) CurrentVersion() domain.SubmissionVersi
 }
 
 type CompleteManualReviewDeps struct {
-	Requests ports.ShipmentRequestRepository
-	Clock    ports.Clock
+	Requests   ports.ShipmentRequestRepository
+	Authorizer ports.ManualReviewAuthorizer
+	Clock      ports.Clock
 }
 
 type CompleteManualReviewHandler struct {
@@ -104,6 +119,11 @@ func NewCompleteManualReviewHandler(deps CompleteManualReviewDeps) *CompleteManu
 }
 
 // Handle 把一次已完成的人工复核记到目标提交版本的接受判断任务上。
+//
+// 授权先于一切写动作，也先于版本核对与领域判断（顺序同 RejectShipmentRequestHandler）：
+// 「只由规则授权的角色按证据完成复核」（UC-PS-001 `AT-PS-034`）里的「规则」属 party-commercial，
+// 编排拿到委托就去问它，未获授权时不碰聚合；`版本已换代`那类续办提示是给有权复核的人重读队列
+// 用的，不该先于授权答给任何人。
 //
 // 它只记录完成，不驱动判断：CONTEXT 明写「复核完成本身不形成决定，决定仍由判断任务按适用
 // 规则形成」，而判断的推进属派发一拍（ADR-0081）——完成落库的同一事务交出「复核已完成」
@@ -123,6 +143,34 @@ func (handler *CompleteManualReviewHandler) Handle(
 		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: %w", domain.ErrInvalidShipmentRequest)
 	}
 
+	authority, err := handler.deps.Authorizer.AuthorizeManualReview(ctx, ports.ManualReviewAuthorizationQuery{
+		Identity:          command.Identity,
+		ShipmentRequestID: command.ShipmentRequestID,
+		SubmissionVersion: command.SubmissionVersion,
+		Reviewer:          command.Reviewer,
+		Evidence:          command.Evidence,
+	})
+	if err != nil {
+		// 权威答不出是未形成，不冒充不允许或未配置（UC-PC-003 结果表）；与本编排其余
+		// 未形成答案一并上抛，HTTP 侧 5xx。
+		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: review authority: %w", err)
+	}
+	switch authority.Outcome {
+	case ports.AuthorizationGranted:
+	case ports.AuthorizationRefused:
+		return CompleteManualReviewResult{
+			outcome: ManualReviewNotAuthorized,
+			state:   request.State(),
+		}, nil
+	case ports.AuthorizationRulesNotConfigured:
+		return CompleteManualReviewResult{
+			outcome: ManualReviewAuthorityRulesNotConfigured,
+			state:   request.State(),
+		}, nil
+	default:
+		return CompleteManualReviewResult{}, ErrUnexpectedAuthorizationOutcome
+	}
+
 	task := request.AcceptanceDecisionTask()
 	current := task.SubmissionVersionID()
 	if current != command.SubmissionVersion {
@@ -136,13 +184,14 @@ func (handler *CompleteManualReviewHandler) Handle(
 	}
 
 	completion, err := domain.NewManualReviewCompletion(domain.ManualReviewCompletionSpec{
-		Authority:   command.Authority,
+		Authority:   authority.Authority,
 		Reviewer:    command.Reviewer,
 		Evidence:    command.Evidence,
 		CompletedAt: handler.deps.Clock.Now(),
 	})
 	if err != nil {
-		// 引用的必填由 Intake 在构造领域值时把守，走到这里还缺就是装配或编程错误。
+		// 复核人与证据的必填由 Intake 在构造领域值时把守，授权引用由端口契约保证`已授权`时必带；
+		// 走到这里还缺就是装配或编程错误。
 		return CompleteManualReviewResult{}, fmt.Errorf("complete manual review: %w", err)
 	}
 

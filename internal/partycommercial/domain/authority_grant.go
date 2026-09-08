@@ -327,6 +327,10 @@ func (authorization Authorization) Decider() (Decider, bool) {
 // 授权命中之后再解实际决定方（ADR-0116 Decision 三）。委派只回答「谁替谁」，顶替不了「许不许」：
 // 规则缺席时不看委派照旧`未配置`；规则在场而运营角色代录的决定权归客户的动作没有有效委派，
 // 是 ErrDelegationAbsent——它 Is ErrNotAuthorized，因为缺的是客户把决定权交出来，不是租户的规则。
+//
+// 「谁有权复核」同样走这里，带 ManualReviewAction，不另立一个按范围加时刻的谓词：那种谓词没有
+// 主体、没有等级、没有三值，答不了「谁有权」，也不该答「要不要」——后者的单一权威是接单规则
+// 正文的 ManualReviewDirective（ADR-0042），两问并格正是它要拦的事（UC-PC-003 第四项裁决）。
 func Authorize(
 	grants []AuthorityGrant,
 	delegations []ContractDelegation,
@@ -375,21 +379,4 @@ func resolveDecider(delegations []ContractDelegation, request AuthorizationReque
 		}
 	}
 	return Decider{}, ErrDelegationAbsent
-}
-
-// ManualReviewRequirementFor 回答某个范围是否要求人工复核。沉默意味着不要求：
-// 本上下文规定人工复核不是默认步骤，因此没有声明绝不能被读成需要复核。
-func ManualReviewRequirementFor(
-	grants []AuthorityGrant,
-	scope CommercialScopeReference,
-	at time.Time,
-) bool {
-	for _, grant := range grants {
-		if grant.action == ManualReviewAction &&
-			grant.scope == scope &&
-			grant.effective.Contains(at) {
-			return true
-		}
-	}
-	return false
 }

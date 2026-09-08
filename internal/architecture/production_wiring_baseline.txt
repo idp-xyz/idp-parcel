@@ -187,6 +187,16 @@
 # 别处无同名声明。**本笔单独作用于其父提交 `4524cfd4` 上，两法（PowerShell 与 git-bash grep 各数
 # `^internal/` 行）同得剪前 7、剪后 6**（party-commercial 5→4）。只对该检出成立。
 #
+# 2026-09-08 随 wiring-baseline-remainder/04（MCP-2）剪掉 ManualReviewRequirementFor（PC 组）。成因三分是
+# **第一种**：它被删了——按 UC-PC-003 第四项裁决并入 Authorize 带 ManualReviewAction，不是改名也不是接上；
+# 「谁有权复核」这一问以 PS 侧端口 + 消费适配器的形状落地（理由与出处写在 PC 组那一段）。全仓该名字此前
+# 只此一处声明，剪前先核过别处无同名声明。**量在隔离 worktree 上（分支 mcp2-wbr04，不含任何人的在途改动，
+# 动手前 `git status -- internal/architecture/` 为空）：`git show` 取父提交 `f4e9a9e2` 的本文件两法同得剪前
+# 6，本笔单独作用于其上剪后 5**（party-commercial 4→3）——两法是 UTF-8 逐行读后滤非空非注释，与字节层数
+# 行首非 `#`。两个数只对该检出成立；本笔重放进 main 时父提交若不是 f4e9a9e2，下一个改名单的人在自己那一刻
+# 的 HEAD 上重取，别拿这两个数加减——同波 wbr/03 正在同一段剪 ResolveCreditPolicy，两笔谁先进 main 都会让
+# 另一笔的「剪前」不再是 tip 的真值。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -407,17 +417,19 @@ internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
 # 只认唯一版本壳、本函数退化成 covers 校验，是解析语义的改口，要 ADR（2026-09-08 已报 MCP-1 待裁）。三件
 # 落地（wiring-baseline-remainder/03）那天这一条出名单。
 internal/partycommercial/domain ResolveCreditPolicy
-# 人工复核授权谓词。按 ADR-0042 它答的是「谁有权复核」，不是「要不要复核」——后者已由接单规则正文
-# ManualReviewDirective 经 PS form_acceptance_decision 接通，别把它读成那条路的第二写法。**调用方是
-# UC-PC-003 第二切「复核完成授权」的裁定用例**（PS complete_manual_review.go 的复核授权引用今天由 Intake
-# 整组注入，没人向 PC 问）；那一层缺端口与用例，且前置一格命名 / 分工裁决（UC-PC-003 第四项：改名为「谁
-# 有权」形态或拆成两问；2026-09-08 已报 MCP-1 待裁）。裁决改名那笔同步改这句与条目名，用例真调它那天出
-# 名单（wiring-baseline-remainder/04）。
-# 族界一句照留：它落在网里但不是工厂——返回 bool 是个谓词。**留着不排除是有意的**：留在名单里的代价只是
-# 一行，漏掉一个工厂的代价是它永远隐形。（曾与它并列的 ValidateBeforeDecision「返回同型 Resolution 是变换
-# 不是构造」2026-09-08 随 wiring-baseline-remainder/05 删去——UC-PC-002 步 8 提交前重解的单依据第一版，
-# 闭包形态 ValidateClosureBeforeDecision 落地后再无调用方；成因三分是第一种「已被删」，不是接上了。）
-internal/partycommercial/domain ManualReviewRequirementFor
+# ManualReviewRequirementFor 曾在这里，2026-09-08 随 wiring-baseline-remainder/04 删去——成因三分是
+# **第一种（已删）**，且删法是「并入 Authorize」而不是改名：UC-PC-003 第四项裁决（MCP-1 代裁）认定
+# `Authorize(grants, delegations, request)` 带 ManualReviewAction 已是「谁有权复核」的裁定，而这个按范围加
+# 时刻的 bool 谓词无主体、无等级、无三值，答不了「谁有权」，也不该答「要不要」（后者单一权威在接单规则正文
+# ManualReviewDirective，ADR-0042）——改名后仍是 Authorize 的无主体退化副本，即 ADR-0042 要拦的并格。
+# 它当初理由行里写的调用方（「UC-PC-003 第二切『复核完成授权』的裁定用例」）今天以另一形状落地：PS 侧
+# ports.ManualReviewAuthorizer（三值，同 ActiveRejectionAuthorizer 形）经 parcelshipment/adapters/partycommercial
+# 的 ManualReviewAuthorizationAdapter 调既有 AdjudicateCommercialAuthorizationHandler，消费点是
+# parcelshipment/application/complete_manual_review.go——复核留痕里的授权引用自此由 PC 签发，不再由 Intake
+# 整组注入。删前核过：全仓该名字只此一处声明，非测试调用点为零，只为它写的用例一同删去。
+# 族界那句（「它落在网里但不是工厂——返回 bool 是个谓词。留着不排除是有意的」）随条目一起退场；它并列过的
+# ValidateBeforeDecision 早一步在同日随 wiring-baseline-remainder/05 删去（成因同为第一种）。这一组由 MCP-6
+# 补的「谁是调用方、那一层何时落」理由行到此兑现，兑现的方式是那一层今天落了，而不是那个谓词接上了。
 # 授权请求方的两扇门（票 party-commercial-context-gaps/08，ADR-0116 Decision 三）：客户账户自己 / 运营
 # 角色代某客户账户。它们造的是 NewAuthorizationRequestBy 的入参，而带请求方的请求今天只有资料修订
 # 那一格需要——PS 侧那只适配器（ps-port-remainder/03 的 source_data_amendment_authorization.go，

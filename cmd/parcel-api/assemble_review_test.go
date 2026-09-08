@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -11,9 +12,14 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -23,17 +29,122 @@ import (
 // 已完成」信封接上了——完成落库即恰好一封，重复完成不铸第二封；且生产发布侧铸的那一封
 // 生产续办门真的译得出。整链闭环（暂停→队列→续办→接受）由 cmd/parcel-dispatch 的
 // manual_review_resume_loop_test 在链形状上取证，这里钉的是本包装配点自己的壳。
+//
+// 票 wiring-baseline-remainder/04 之后多钉一件：复核授权真的去问了 party-commercial 的授权册
+// ——留痕里的授权引用是那边所采用的授权规则版本，不是命令自报的；空册答`授权规则未配置`；
+// 生产装配（映射留 nil）停在未形成。四样里只有请求映射是合成 S 替身（实例半边），其余全是
+// 生产实现。
 
 // resumeEnvelopeType 与发布侧适配器的类型常量同字面（手抄，理由同 submittedEnvelopeType）。
 const resumeEnvelopeType = "parcel-shipment.shipment-request.manual-review-completed"
 
-// completedReviewOnRealAssembly 先经真提交装出一份`已提交`委托（归属用放行替身，理由
-// 见 envelopeMintingSubmission），再经 buildManualReviewOrchestration 的生产编排完成
-// 复核。交回读回的当前提交版本与复核完成的处理结果。
-func completedReviewOnRealAssembly(
-	t *testing.T,
-	db *bentopg.DB,
-) (domain.SubmissionVersionID, shipmentapp.CompleteManualReviewResult) {
+// 复核授权的合成坐标（`PAR-COM-14` 实例半边）：法人、权限等级、商业范围与业务时点。只出现在
+// 本文件，不进生产装配；名字带 SYN 前缀是为了让它们与任何真实登记一眼分得开。
+const (
+	synReviewLegalEntity = "SYN-LEGAL-1"
+	synReviewLevel       = "SYN-LEVEL-REVIEW"
+	synReviewScope       = "SYN-SCOPE-REVIEW-1"
+	synReviewRuleObject  = "SYN-REVIEW-RULE-1"
+	synReviewRuleVersion = "v1"
+)
+
+var synReviewAt = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+
+// synRReviewRequestSource 把复核授权询问折成一份 PC 授权请求。动作固定为人工复核；证据取询问
+// 自带的那一份（PS 手上有），结构化原因是原因目录里的合成条目——PS 没有它，正是映射该补的那格。
+type synRReviewRequestSource struct{ t *testing.T }
+
+func (source synRReviewRequestSource) FormAuthorizationRequest(
+	_ context.Context,
+	query psports.ManualReviewAuthorizationQuery,
+) (pcdomain.AuthorizationRequest, bool, error) {
+	source.t.Helper()
+	request, err := pcdomain.NewAuthorizationRequest(
+		pcdomain.ManualReviewAction,
+		mustValue(source.t, pcdomain.NewLegalEntityReference, synReviewLegalEntity),
+		mustValue(source.t, pcdomain.NewAuthorityLevel, synReviewLevel),
+		mustValue(source.t, pcdomain.NewCommercialScopeReference, synReviewScope),
+		mustValue(source.t, pcdomain.NewStructuredReason, "SYN-MANUAL-REVIEW-COMPLETION"),
+		mustValue(source.t, pcdomain.NewEvidenceReference, query.Evidence.String()),
+		synReviewAt,
+	)
+	if err != nil {
+		return pcdomain.AuthorizationRequest{}, false, err
+	}
+	return request, true, nil
+}
+
+var _ psparty.ManualReviewAuthorizationRequestSource = synRReviewRequestSource{}
+
+// seedSYNReviewGrant 往真授权册里登记一条覆盖合成坐标的人工复核授权，租户取提交命令那一份
+// 来源身份的租户——跨上下文只靠这个字面对上。经 PC 领域的重建门与 SaveGrant 走生产写口。
+func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+
+	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	approval, err := pcdomain.NewApprovalBasis(
+		mustValue(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-REVIEW-RULE-1"),
+		mustValue(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-REVIEW-RULE-1"),
+		approvedAt,
+	)
+	if err != nil {
+		t.Fatalf("批准依据：%v", err)
+	}
+	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
+		TenantID:      mustValue(t, pcdomain.NewTenantID, submissionCommand(t).Identity.TenantID().String()),
+		Kind:          pcdomain.AuthorizationRuleObject,
+		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, synReviewRuleObject),
+		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, synReviewRuleVersion),
+		Scope:         mustValue(t, pcdomain.NewCommercialScopeReference, synReviewScope),
+		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-REVIEW-RULE-1"),
+		Effective:     interval,
+		Status:        pcdomain.CommercialVersionEffective,
+		Approval:      approval,
+		PublishedAt:   approvedAt,
+		EffectiveAt:   approvedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("重建已生效授权规则版本：%v", err)
+	}
+	grant, err := pcdomain.NewAuthorityGrant(
+		version,
+		pcdomain.ManualReviewAction,
+		mustValue(t, pcdomain.NewLegalEntityReference, synReviewLegalEntity),
+		mustValue(t, pcdomain.NewAuthorityLevel, synReviewLevel),
+		mustValue(t, pcdomain.NewCommercialScopeReference, synReviewScope),
+		interval,
+	)
+	if err != nil {
+		t.Fatalf("授权授予：%v", err)
+	}
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		t.Fatalf("构造授权册：%v", err)
+	}
+	var saved pcports.GrantSaveOutcome
+	err = db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		outcome, err := grants.SaveGrant(txCtx, grant)
+		if err != nil {
+			return err
+		}
+		saved = outcome
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("登记合成复核授权：%v", err)
+	}
+	if saved != pcports.GrantSaved {
+		t.Fatalf("登记授权 = %v, want SAVED", saved)
+	}
+}
+
+// submittedRequestOnRealAssembly 经真提交装出一份`已提交`委托（归属用放行替身，理由见
+// envelopeMintingSubmission），交回读回的当前提交版本。
+func submittedRequestOnRealAssembly(t *testing.T, db *bentopg.DB) domain.SubmissionVersionID {
 	t.Helper()
 
 	submission, _ := envelopeMintingSubmission(t, db)
@@ -54,20 +165,38 @@ func completedReviewOnRealAssembly(
 	if err != nil || !found {
 		t.Fatalf("读回委托：err=%v found=%v", err, found)
 	}
-	version := request.CurrentSubmissionVersion().VersionID()
+	return request.CurrentSubmissionVersion().VersionID()
+}
 
-	review, err := buildManualReviewOrchestration(db)
-	if err != nil {
-		t.Fatalf("装配复核完成编排：%v", err)
-	}
-	result, err := review.Handle(t.Context(), shipmentapp.CompleteManualReviewCommand{
+func reviewCompletionCommand(t *testing.T, version domain.SubmissionVersionID, suffix string) shipmentapp.CompleteManualReviewCommand {
+	t.Helper()
+	command := submissionCommand(t)
+	return shipmentapp.CompleteManualReviewCommand{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: version,
-		Authority:         mustValue(t, domain.NewReviewAuthorityReference, "syn-review-authority-1"),
-		Reviewer:          mustValue(t, domain.NewReviewerReference, "syn-reviewer-1"),
-		Evidence:          mustValue(t, domain.NewReviewEvidenceReference, "syn-review-evidence-1"),
-	})
+		Reviewer:          mustValue(t, domain.NewReviewerReference, "syn-reviewer-"+suffix),
+		Evidence:          mustValue(t, domain.NewReviewEvidenceReference, "syn-review-evidence-"+suffix),
+	}
+}
+
+// completedReviewOnRealAssembly 先装出一份`已提交`委托，往真授权册种一条复核授权，再经
+// manualReviewOrchestrationWith 的生产编排（只有请求映射是合成替身）完成复核。交回读回的
+// 当前提交版本与复核完成的处理结果。
+func completedReviewOnRealAssembly(
+	t *testing.T,
+	db *bentopg.DB,
+) (domain.SubmissionVersionID, shipmentapp.CompleteManualReviewResult) {
+	t.Helper()
+
+	version := submittedRequestOnRealAssembly(t, db)
+	seedSYNReviewGrant(t, db)
+
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+	result, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "1"))
 	if err != nil {
 		t.Fatalf("完成复核：%v", err)
 	}
@@ -78,6 +207,9 @@ func completedReviewOnRealAssembly(
 // 完成落库即恰好一封「复核已完成」信封；同一版本重复完成答`已有完成`且不铸第二封。
 // 完成落了库而信封没入队，停等复核的委托就再也没有投递来续办——谁改坏本包的
 // reviewCompletionBoundary，psinbox 与适配器各自的用例不会红，这里会。
+//
+// 同时钉 UC-PS-001 `AT-PS-034`「只由规则授权的角色按证据完成复核」的接线证据：留痕里的授权
+// 引用是真授权册里那条 grant 的 objectID/version，命令没有任何一格能把它写成别的。
 func TestACompletedReviewHandsOffExactlyOneResumeEnvelope(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -89,23 +221,22 @@ func TestACompletedReviewHandsOffExactlyOneResumeEnvelope(t *testing.T) {
 	if got := first.Outcome(); got != shipmentapp.ManualReviewCompletionRecorded {
 		t.Fatalf("outcome = %q, want RECORDED", got)
 	}
+	completion, present := first.Completion()
+	if !present {
+		t.Fatal("已记录的完成没带留痕")
+	}
+	if got, want := completion.Authority().String(), synReviewRuleObject+"/"+synReviewRuleVersion; got != want {
+		t.Fatalf("authority = %q, want %q——授权引用必须是 party-commercial 所采用的授权规则版本", got, want)
+	}
 	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 1 {
 		t.Fatalf("完成落库后「复核已完成」信封 = %d 封, want 恰好 1", got)
 	}
 
-	review, err := buildManualReviewOrchestration(db)
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
 	if err != nil {
 		t.Fatalf("装配复核完成编排：%v", err)
 	}
-	command := submissionCommand(t)
-	replay, err := review.Handle(t.Context(), shipmentapp.CompleteManualReviewCommand{
-		Identity:          command.Identity,
-		ShipmentRequestID: command.ShipmentRequestID,
-		SubmissionVersion: version,
-		Authority:         mustValue(t, domain.NewReviewAuthorityReference, "syn-review-authority-2"),
-		Reviewer:          mustValue(t, domain.NewReviewerReference, "syn-reviewer-2"),
-		Evidence:          mustValue(t, domain.NewReviewEvidenceReference, "syn-review-evidence-2"),
-	})
+	replay, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "2"))
 	if err != nil {
 		t.Fatalf("重复完成：%v", err)
 	}
@@ -114,6 +245,76 @@ func TestACompletedReviewHandsOffExactlyOneResumeEnvelope(t *testing.T) {
 	}
 	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 1 {
 		t.Fatalf("重复完成后信封 = %d 封——补签不得再驱一拍", got)
+	}
+}
+
+// Covers: UC-PC-003「没有租户就没有任何授权规则，每一次询问都落在`授权规则未配置`——那是本
+// 用例唯一走得到的真实成功路径」：映射在、真授权册为空，编排答未配置，不落库、不铸信封，也
+// 不把它说成「你无权复核」。
+func TestAReviewAgainstAnEmptyAuthorityBookStaysUndecided(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+
+	version := submittedRequestOnRealAssembly(t, db)
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+
+	result, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "1"))
+	if err != nil {
+		t.Fatalf("完成复核：%v", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.ManualReviewAuthorityRulesNotConfigured {
+		t.Fatalf("outcome = %q, want AUTHORITY_RULES_NOT_CONFIGURED", got)
+	}
+	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 0 {
+		t.Fatalf("未配置时信封 = %d 封, want 0", got)
+	}
+	assertNoReviewCompletionRecorded(t, db)
+}
+
+// Covers: 生产装配的实例半边形状——复核授权的请求映射留 nil（`PAR-COM-14` 待提供），编排停在
+// 未形成：不落库、不铸信封，也不冒充`授权规则未配置`或`不允许`。与 buildRejectionOrchestration
+// 对拒绝授权映射的处置同款；谁把这里的 nil 换成一份「开发用」坐标，这条会先红。
+func TestTheProductionReviewAssemblyStopsWithoutAnAuthorityMapping(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+
+	version := submittedRequestOnRealAssembly(t, db)
+	seedSYNReviewGrant(t, db)
+	review, err := buildManualReviewOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+
+	if _, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "1")); err == nil {
+		t.Fatal("映射未配置时编排仍形成了答案——实例半边被默认掉了")
+	}
+	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 0 {
+		t.Fatalf("未形成时信封 = %d 封, want 0", got)
+	}
+	assertNoReviewCompletionRecorded(t, db)
+}
+
+func assertNoReviewCompletionRecorded(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), submissionCommand(t).Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	if _, done := request.AcceptanceDecisionTask().ManualReviewCompletion(); done {
+		t.Fatal("没拿到授权的复核完成落了库")
 	}
 }
 

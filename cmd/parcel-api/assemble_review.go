@@ -103,10 +103,26 @@ func (boundary reviewCompletionBoundary) Save(
 // `parcel-shipment.shipment-request.manual-review-completed`，消费门在 cmd/parcel-dispatch
 // （同一条接受判断链的第二扇门）。
 //
-// 复核人授权在 Intake 半边（PAR-INT-01 实例参数）：谁有权签复核属渠道认证与授权结果，
-// 编排收到的命令已带核验过的引用。这与主动拒绝不同——拒绝权是商业授权，编排去问
-// party-commercial；复核完成的「谁在复核」是接入身份，两者的权威不同源。
+// 「谁在复核」与「谁有权复核」两问的权威不同源，各归各口：前者是接入身份，由 Intake 半边
+// （PAR-INT-01 实例参数）核验后随命令交来复核人与证据引用；后者是商业授权，编排拿到委托就去问
+// party-commercial（UC-PC-003 带 ManualReviewAction，票 wiring-baseline-remainder/04），授权引用
+// 由那边签发进复核留痕——与主动拒绝同一条路。此前授权引用也由 Intake 整组注入，等于采信自报。
+//
+// 复核授权的请求映射（法人/权限等级/商业范围/结构化原因/时点，`PAR-COM-14`）是实例半边，生产
+// 装配留 nil——适配器答未形成，编排如实停在 error（HTTP 5xx NO_ANSWER_FORMED），不代拟坐标也不
+// 冒充`授权规则未配置`；与拒绝授权那只适配器的处置同款。
 func buildManualReviewOrchestration(db *bentopg.DB) (shipmenthttp.ManualReviewCompletionHandler, error) {
+	return manualReviewOrchestrationWith(db, nil)
+}
+
+// manualReviewOrchestrationWith 是 buildManualReviewOrchestration 的全部实现，请求映射作入参：
+// 装配测试要在真授权册上证「已授权时留痕里的授权引用是 PC 签发的那一版」，只能从这一格把合成
+// 映射递进来——映射之外的每一件（委托仓储、边界壳、Outbox 交接、PC 裁定编排与真授权册）都是
+// 生产实现。生产入口只传 nil。
+func manualReviewOrchestrationWith(
+	db *bentopg.DB,
+	reviewRequests psparty.ManualReviewAuthorizationRequestSource,
+) (shipmenthttp.ManualReviewCompletionHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
@@ -114,6 +130,10 @@ func buildManualReviewOrchestration(db *bentopg.DB) (shipmenthttp.ManualReviewCo
 	store, err := outbox.NewStore(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: outbox store: %w", err)
+	}
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: authority grants: %w", err)
 	}
 	clock := systemClock{}
 	handoff, err := pspostgres.NewOutboxManualReviewCompletedHandoff(db, store, clock)
@@ -126,6 +146,10 @@ func buildManualReviewOrchestration(db *bentopg.DB) (shipmenthttp.ManualReviewCo
 			inner:      requests,
 			handoff:    handoff,
 		},
+		Authorizer: psparty.NewManualReviewAuthorizationAdapter(
+			pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
+			reviewRequests,
+		),
 		Clock: clock,
 	}), nil
 }

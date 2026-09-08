@@ -106,7 +106,8 @@ func newManualReviewLoopFixture(t *testing.T) *manualReviewLoopFixture {
 			inner:      base.requests,
 			handoff:    completionHandoff,
 		},
-		Clock: systemClock{},
+		Authorizer: synRReviewAuthorizer{t: t},
+		Clock:      systemClock{},
 	})
 	return &manualReviewLoopFixture{
 		synVerticalFixture: base,
@@ -235,7 +236,6 @@ func (fixture *manualReviewLoopFixture) completeReview(
 		Identity:          fixture.identity,
 		ShipmentRequestID: fixture.requestID,
 		SubmissionVersion: request.CurrentSubmissionVersion().VersionID(),
-		Authority:         mustPS(t, psdomain.NewReviewAuthorityReference, "SYN-REV-AUTH-01"),
 		Reviewer:          mustPS(t, psdomain.NewReviewerReference, "SYN-REVIEWER-01"),
 		Evidence:          mustPS(t, psdomain.NewReviewEvidenceReference, "SYN-REV-EVIDENCE-01"),
 	})
@@ -244,6 +244,25 @@ func (fixture *manualReviewLoopFixture) completeReview(
 	}
 	return result
 }
+
+// synRReviewAuthorizer 是第四个换成替身的权威口：复核授权一律答`已授权`并交回一个合成的授权规则
+// 版本引用。本文件取证的是暂停→续办→接受这条链的形状，「谁有权复核」真接到 PC 授权册的证据在
+// cmd/parcel-api 的 assemble_review_test（那里种真 grant、走生产适配器）。只出现在本文件，不进
+// 生产装配。
+type synRReviewAuthorizer struct{ t *testing.T }
+
+func (authorizer synRReviewAuthorizer) AuthorizeManualReview(
+	_ context.Context,
+	_ psports.ManualReviewAuthorizationQuery,
+) (psports.ManualReviewAuthorization, error) {
+	authorizer.t.Helper()
+	return psports.ManualReviewAuthorization{
+		Outcome:   psports.AuthorizationGranted,
+		Authority: mustPS(authorizer.t, psdomain.NewReviewAuthorityReference, "SYN-REV-AUTH-01"),
+	}, nil
+}
+
+var _ psports.ManualReviewAuthorizer = synRReviewAuthorizer{}
 
 func (fixture *manualReviewLoopFixture) listReviewQueue(
 	t *testing.T,

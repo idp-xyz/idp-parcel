@@ -52,7 +52,7 @@ func (group AcceptanceCheckGroupType) String() string {
 }
 
 // ManualReviewDirective 是规则包对「这类委托要不要人工业务复核」的声明。零值 = 未声明。
-// 它与授权治理的 ManualReviewRequirementFor 分格：授权答「谁有权复核」，这里答「要不要」。
+// 它与授权治理分格（ADR-0042）：Authorize 带 ManualReviewAction 答「谁有权复核」，这里答「要不要」。
 // 复核做没做完属消费方的任务状态，本上下文不声明它。
 type ManualReviewDirective uint8
 

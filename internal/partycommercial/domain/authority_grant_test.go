@@ -215,25 +215,6 @@ func TestActiveRejectionRequiresStructuredReasonAndEvidence(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「人工复核不是默认步骤」— 未被规则显式要求时就是不需要，缺省不得读成
-// 需要复核。
-func TestManualReviewIsNotRequiredUnlessDeclared(t *testing.T) {
-	silent := domain.ManualReviewRequirementFor(nil, commercialValue(t, domain.NewCommercialScopeReference, "scope-a"), authorityAt)
-	if silent {
-		t.Fatal("an undeclared manual review defaulted to required")
-	}
-
-	declared := []domain.AuthorityGrant{
-		authorityGrant(t, "auth-review", domain.ManualReviewAction, "level-commercial", "scope-a"),
-	}
-	if !domain.ManualReviewRequirementFor(declared, commercialValue(t, domain.NewCommercialScopeReference, "scope-a"), authorityAt) {
-		t.Fatal("an explicitly declared manual review was not reported as required")
-	}
-	if domain.ManualReviewRequirementFor(declared, commercialValue(t, domain.NewCommercialScopeReference, "scope-b"), authorityAt) {
-		t.Fatal("a manual review requirement leaked into another scope")
-	}
-}
-
 // Covers: CONTEXT 商业版本共同不变量 — 授权挂在一个当前可用的授权规则版本上。
 func TestAuthorityGrantNeedsAUsableAuthorizationRuleVersion(t *testing.T) {
 	t.Run("refuses a draft", func(t *testing.T) {
