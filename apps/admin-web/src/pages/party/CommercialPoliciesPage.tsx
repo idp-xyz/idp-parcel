@@ -18,6 +18,7 @@ import { CreditPolicyPublicationForm } from './CreditPolicyPublicationForm';
 import { AuthorizationRulePublicationForm } from './AuthorizationRulePublicationForm';
 import { SettlementPolicyPublicationForm } from './SettlementPolicyPublicationForm';
 import { PricePolicyPublicationForm } from './PricePolicyPublicationForm';
+import { AcceptanceRulePackagePublicationForm } from './AcceptanceRulePackagePublicationForm';
 import { kindColumns, rowsOf, type PolicyRow } from './policy-rows';
 import {
   commercialPolicyKinds,
@@ -156,6 +157,7 @@ export function CommercialPoliciesPage() {
           <TabsTrigger value="publish-authorization-rule">发布授权规则版本</TabsTrigger>
           <TabsTrigger value="publish-settlement-policy">发布结算政策版本</TabsTrigger>
           <TabsTrigger value="publish-price-policy">发布价格政策版本</TabsTrigger>
+          <TabsTrigger value="publish-acceptance-rule-package">发布规则包版本</TabsTrigger>
           <TabsTrigger value="publish">受控发布（JSON 镜像）</TabsTrigger>
         </TabsList>
         <TabsContent
@@ -188,6 +190,12 @@ export function CommercialPoliciesPage() {
         >
           {/* 票 admin-write-faces/14：发布类别 PRICE_RULE 的结果显示在册名 PRICE_POLICY 那本册（两条分类轴），落定后切到它并重读。 */}
           <PricePolicyPublicationForm onPublished={() => notePublished('PRICE_POLICY')} />
+        </TabsContent>
+        <TabsContent
+          value="publish-acceptance-rule-package"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <AcceptanceRulePackagePublicationForm onPublished={() => notePublished('ACCEPTANCE_RULE_PACKAGE')} />
         </TabsContent>
         <TabsContent
           value="publish"

@@ -81,6 +81,7 @@ export interface CommercialPublicationPayload {
   authorizationRule?: AuthorizationRuleBodyPayload;
   settlementPolicy?: SettlementPolicyBodyPayload;
   pricePolicy?: PricePolicyBodyPayload;
+  acceptanceRulePackage?: AcceptanceRulePackageBodyPayload;
 }
 
 /**
@@ -155,6 +156,84 @@ export interface FxCaliberPayload {
   quoteType: string;
   asOfSemantics: string;
   asOfPolicyVersion: string;
+}
+
+/**
+ * 接单规则包册正文（Go `AcceptanceRulePackageBodyPayload`，票 admin-write-faces/12）：一格分节，键名镜像受控批文
+ * `declarations` 下的同名键——0014 的正文 `rulePackageBody` 不可缺，其余每条声明通道各一节，**整节缺席 = 该通道
+ * 未声明**（表单把留空的节整节不送，不把「留空」写成「无」）。各节里的封闭集（规则分类、判断类型、校验组、
+ * 人工复核、收寄来源、责任结果、起算时刻种类、修订阶段 / 意图 / 允许性）由服务端词表读口供下拉
+ * （`fetchPublicationVocabulary('ACCEPTANCE_RULE_PACKAGE')`），表单不内置；跨格的判（同一判断两条时点锚、空组、
+ * 只有有效期没有终局行、未封闭零格）由领域在预览上答`未受理`带成因。待路由许可挂在服务产品版本上，不在本册。
+ */
+export interface AcceptanceRulePackageBodyPayload {
+  rulePackageBody: RulePackageBodyPayload;
+  asOfPolicies?: AsOfPolicyPayload[];
+  acceptanceContent?: AcceptanceContentPayload;
+  intakeQualification?: IntakeQualificationPayload;
+  finalRules?: FinalRulePayload[];
+  finalRuleValidity?: FinalRuleValidityPayload;
+  sourceDataAmendment?: SourceDataAmendmentPayload;
+}
+
+/** 0014 正文：五维适用性（区间上界可缺）与按分类归档的规则引用表。 */
+export interface RulePackageBodyPayload {
+  serviceProduct: string;
+  contract: string;
+  legalEntity: string;
+  scope: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  rules?: AssembledRulePayload[];
+}
+
+export interface AssembledRulePayload {
+  category: string;
+  reference: string;
+}
+
+export interface AsOfPolicyPayload {
+  judgment: string;
+  semantics: string;
+  policyVersion: string;
+}
+
+/** `manualReview` 答的是「要不要人工复核」（接单规则正文），不是「谁有权」——表单只收前者（票 12 硬句）。 */
+export interface AcceptanceContentPayload {
+  applicableGroups?: string[];
+  manualReview: string;
+}
+
+export interface IntakeQualificationPayload {
+  sources?: string[];
+  qualifications?: string[];
+}
+
+export interface FinalRulePayload {
+  outcome: string;
+  finalKind: string;
+}
+
+/** 面单有效期（ADR-0119）：随终局规则同一通道的一格，`duration` 是 ISO-8601 子集 `P[nD][T[nH][nM][nS]]`。 */
+export interface FinalRuleValidityPayload {
+  anchor: string;
+  duration: string;
+}
+
+/**
+ * 资料修订允许（ADR-0120）。`closed` 可缺是为了让「没选」原样到达服务端（它答「须在场」）——false 是「缺格转复核」、
+ * true 是「缺格即不允许」，两句都要登记方自己说，表单不给默认。
+ */
+export interface SourceDataAmendmentPayload {
+  closed?: boolean;
+  rules?: SourceDataAmendmentRulePayload[];
+}
+
+export interface SourceDataAmendmentRulePayload {
+  dataGroup: string;
+  stage: string;
+  intent: string;
+  allowance: string;
 }
 
 /**
