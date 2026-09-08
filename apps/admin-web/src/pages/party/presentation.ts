@@ -84,6 +84,20 @@ export const commercialDirectionLabels: Record<string, string> = {
   INTERNAL: '内部',
 };
 
+// 税务口径封闭三格（domain TaxDisposition，CONTEXT「必须声明含税、未税或税务不适用」）。没有第四格：缺席是「未声明」，
+// 由服务端点名，不折成不适用。
+export const taxDispositionLabels: Record<string, string> = {
+  TAX_INCLUSIVE: '含税',
+  TAX_EXCLUSIVE: '未税',
+  TAX_NOT_APPLICABLE: '税务不适用',
+};
+
+// 方案绑定转换封闭两格（domain PlanBindingConversion，ADR-0057）。NONE 是「明说不转换」，与「没写」是两回事——表单不预选。
+export const planBindingConversionLabels: Record<string, string> = {
+  NONE: '不转换（政策方向与方案方向一致）',
+  FROZEN_BUY_EVALUATION: '引用一次已冻结的采购评价（只许 SELL 政策绑 BUY 方案）',
+};
+
 // 结算方式封闭两格(domain SettlementMethod)。
 export const settlementMethodLabels: Record<string, string> = {
   PREPAID: '预付',
