@@ -263,7 +263,7 @@
       "objectId": "SYN-AUTH-CANCEL-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-AUTH-CANCEL-01-v1",
+      "contentDigest": "PCC-1:c2ae5729f508aca948e62f2b80ad14a1570ebd9d0c1cbbc303270850343007ad",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-008",
