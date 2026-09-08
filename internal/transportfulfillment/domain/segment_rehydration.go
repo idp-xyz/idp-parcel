@@ -23,6 +23,10 @@ import "time"
 //
 // `Supersedes` 只在替代参与版本上带值（ADR-0112 决定一）：回指同对象在同段内被替代那一版的
 // 入场依据。它是行上的事实；「被替代」那一侧不落列，重建时按回指关系派生。
+//
+// `Voided` 是失效版本那一列（ADR-0112 决定四；迁移 TF 0019）：为真时本版本回指的前版被撤回了控制，
+// 该对象在本段自此无有效参与。它必须回指前版——首登不能失效，对象从未进段就没有东西可失效——且入场
+// 种类为 TRANSPORT_HANDOVER，只有交接更正走得到这一格；两条与库面 CHECK 同形，重建门再守一遍。
 type RehydrateParticipationSpec struct {
 	Object     CarriedObjectReference
 	Planned    PlannedSegmentReference
@@ -33,6 +37,7 @@ type RehydrateParticipationSpec struct {
 	EndBasis   ParticipationBasisReference
 	EndedAt    time.Time
 	Supersedes ParticipationBasisReference
+	Voided     bool
 }
 
 // RehydrateActualFulfillmentSegmentSpec 是一个段连同它全部成员在库面的样子。
@@ -116,6 +121,10 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 	if row.Supersedes.valid() && row.Supersedes == row.EntryBasis {
 		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
 	}
+	// 失效版本必回指前版且只出自交接更正——与迁移 0019 的 CHECK 同一形，行上就看得出。
+	if row.Voided && (!row.Supersedes.valid() || row.EntryKind != EnteredByTransportHandover) {
+		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
+	}
 
 	participation := FulfillmentParticipation{
 		object:     row.Object,
@@ -124,6 +133,7 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 		entryBasis: row.EntryBasis,
 		enteredAt:  row.EnteredAt.UTC(),
 		supersedes: row.Supersedes,
+		voided:     row.Voided,
 	}
 	if ended {
 		participation.endKind = row.EndKind

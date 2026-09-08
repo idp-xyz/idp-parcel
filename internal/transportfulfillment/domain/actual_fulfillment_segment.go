@@ -26,9 +26,6 @@ var (
 	// 必须恰是当前参与的入场依据（ADR-0112 决定二）。不是更正、更正的是前前版、或对象根本不在
 	// 段内，都没有可替代的东西。
 	ErrNoParticipationToRederive = errors.New("transport fulfillment: no current participation matches the corrected source version")
-	// ErrCorrectionWithdrawsControl：更正后的来源不再表达控制转移（交接改判拒收/待确认），没有
-	// 入场依据可立替代版本——那是参与失效，不是替代（ADR-0112 决定四，机制另票）。
-	ErrCorrectionWithdrawsControl = errors.New("transport fulfillment: the correction withdraws the control fact and cannot rederive a participation")
 )
 
 // FulfillmentSegmentReference 指名一个实际履约段。
@@ -109,6 +106,11 @@ func (kind ParticipationEndKind) String() string {
 // 来源更正引起的重派生在同段内形成替代参与版本（ADR-0112 决定一）：新版本以 supersedes
 // 回指被替代参与的入场依据，原参与一字不动；同一对象在一段内的参与由此成一条链。superseded
 // 是派生态不落列——聚合在重派生与重建时按回指关系标出，被回指的版本不再表达当前控制。
+//
+// 撤回控制转移的更正（`已交接`改判拒收/待确认）在同一条链上长的是**失效版本**（ADR-0112 决定四）：
+// 同样回指前版，但 voided 为是——它记的是「凭前版入场的那条参与失去了依据」，不是一个新的控制起点。
+// 链尾失效即该对象在本段当前无有效参与；不回退到前一仍转出控制的版本，那一版已被回指，回到它就是把
+// 已被更正的判断重新当成当前（CONTEXT「不能简单回填为早期原控制方」）。
 type FulfillmentParticipation struct {
 	object     CarriedObjectReference
 	planned    PlannedSegmentReference
@@ -120,6 +122,7 @@ type FulfillmentParticipation struct {
 	endedAt    time.Time
 	supersedes ParticipationBasisReference
 	superseded bool
+	voided     bool
 }
 
 // Supersedes 只在替代参与版本上给出：被替代参与的入场依据。首次入场答 false。
@@ -130,6 +133,12 @@ func (participation FulfillmentParticipation) Supersedes() (ParticipationBasisRe
 // Superseded 报告本版本是否已被后一版替代——它保留在历史里，但不再是该对象在段内的当前参与。
 func (participation FulfillmentParticipation) Superseded() bool {
 	return participation.superseded
+}
+
+// Voided 报告本版本是否是失效版本：凭前版入场的控制事实被更正撤回，本版本回指它并宣告该对象在本段
+// 当前无有效参与。它与 End() 各说各的——原参与若已离场，失效版本照样继承终点，Voided 只说入场被撤回。
+func (participation FulfillmentParticipation) Voided() bool {
+	return participation.voided
 }
 
 func (participation FulfillmentParticipation) Object() CarriedObjectReference {
@@ -156,9 +165,10 @@ func (participation FulfillmentParticipation) EnteredAt() time.Time {
 	return participation.enteredAt
 }
 
-// Active 报告本参与是否仍表达当前控制：没有离场，也没有被后一版替代。
+// Active 报告本参与是否仍表达当前控制：没有离场、没有被后一版替代、也不是失效版本。三条与登记册
+// 「在场」谓词是同一条判据（票 tf-segment-lifecycle-closure/11 裁决 4）。
 func (participation FulfillmentParticipation) Active() bool {
-	return participation.endedAt.IsZero() && !participation.superseded
+	return participation.endedAt.IsZero() && !participation.superseded && !participation.voided
 }
 
 // End 报告终点三件（种类、依据、时刻），只在已结束的参与上给出。被替代而未离场的版本不算
@@ -376,16 +386,23 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithPickup(pickup O
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	return segment.rederive(pickup.TenantID(), pickup.Object(), EnteredByOffsitePickup, replaced, basis, pickup.OccurredAt())
+	return segment.rederive(pickup.TenantID(), pickup.Object(), EnteredByOffsitePickup, replaced, basis, pickup.OccurredAt(), false)
 }
 
-// RederiveParticipationWithHandover 以更正后的`已交接`交接在同段内形成替代参与版本。更正若撤回了
-// 控制转移（改成拒收或待确认），没有入场依据可立——那是失效格（ADR-0112 决定四），本方法如实拒，
-// 不猜也不把它当替代。
+// RederiveParticipationWithHandover 以更正后的交接在同段内形成下一版参与。更正仍`已交接`时是替代版本
+// （ADR-0112 决定一）；更正撤回了控制转移（改成拒收或待确认）时是**失效版本**（决定四，票
+// tf-segment-lifecycle-closure/11 裁决 1）：同一条链、同一道门，回指前版，入场依据取撤回控制那一版的引用
+// `TRANSPORT-HANDOVER/<新版本>`——TransferOutBasis 对它不给，但版本引用本身是有的，它是「这一版判断说了
+// 什么」的身份；入场种类照前版；起点沿用被失效那一版——失效版本没有控制起点，它记的是「起于 T 的那条
+// 参与失效了」，T 是它回指的事实，沿用不引入第二个时刻。
 //
 // 「有没有可替代的参与」先于「更正撤回了控制」判：失效格说的是**这个段里该对象凭前版入场的那条参与**
 // 失去了依据——对象不在本段、或本段的当前参与不是凭被更正的那一版入场，本段就没有东西可失效，答的是
 // 无可替代。编排按对象反查到几个段逐个来问，两格若倒过来，每个无关的段都会答成失效。
+//
+// 失效版本之上再更正（v3 更正 v2）走的仍是这一道门：裁决回到`已交接`就从失效版本长出替代版本，参与重新
+// 在场；仍不转出控制就再长一版失效——来源链上每一版在参与链上都有一版对应，后面的更正才找得到它要回指
+// 的那一版。
 func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handover TransportHandover) (ActualFulfillmentSegment, error) {
 	corrects, corrected := handover.Corrects()
 	if !corrected {
@@ -395,24 +412,28 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handov
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	if _, present := segment.currentParticipationEnteredBy(handover.Object(), EnteredByTransportHandover, replaced); !present {
+	current, present := segment.currentParticipationEnteredBy(handover.Object(), EnteredByTransportHandover, replaced)
+	if !present {
 		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
 	}
-	reference, transfers := handover.TransferOutBasis()
-	if !transfers {
-		return ActualFulfillmentSegment{}, ErrCorrectionWithdrawsControl
+	if reference, transfers := handover.TransferOutBasis(); transfers {
+		basis, err := NewParticipationBasisReference(reference)
+		if err != nil {
+			return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+		}
+		return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt(), false)
 	}
-	basis, err := NewParticipationBasisReference(reference)
+	basis, err := NewParticipationBasisReference("TRANSPORT-HANDOVER/" + handover.Version().String())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, handover.JudgedAt())
+	return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, current.enteredAt, true)
 }
 
-// rederive 是两种来源共用的替代门。被替代的必须是该对象**当前**参与（链尾）且入场依据恰是被更正的
-// 那一版——更正一个已被替代的前版是分叉，更正别的来源种类是另一件事，都拒。替代版本继承原参与的
-// 离场三件：对象的控制终点是它自己的事实，更正入场不改它；更正后的起点晚于继承的终点即先结束再
-// 进入，拒。
+// rederive 是两种来源共用的替代门，失效版本也从这里进（voided 为是）。被替代的必须是该对象**当前**参与
+// （链尾）且入场依据恰是被更正的那一版——更正一个已被替代的前版是分叉，更正别的来源种类是另一件事，都拒。
+// 新版本继承原参与的离场三件：对象的控制终点是它自己的事实，更正入场不改它；更正后的起点晚于继承的终点
+// 即先结束再进入，拒——失效版本的起点沿用前版，这一格在它身上不可能发生。
 func (segment ActualFulfillmentSegment) rederive(
 	tenant TenantID,
 	object CarriedObjectReference,
@@ -420,6 +441,7 @@ func (segment ActualFulfillmentSegment) rederive(
 	replaced ParticipationBasisReference,
 	basis ParticipationBasisReference,
 	enteredAt time.Time,
+	voided bool,
 ) (ActualFulfillmentSegment, error) {
 	if !segment.segment.valid() || !segment.tenantID.valid() || tenant != segment.tenantID || enteredAt.IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
@@ -435,6 +457,7 @@ func (segment ActualFulfillmentSegment) rederive(
 		entryBasis: basis,
 		enteredAt:  enteredAt.UTC(),
 		supersedes: current.entryBasis,
+		voided:     voided,
 	}
 	if endKind, endBasis, endedAt, ended := current.End(); ended {
 		if enteredAt.After(endedAt) {

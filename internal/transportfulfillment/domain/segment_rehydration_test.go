@@ -269,6 +269,81 @@ func TestRehydrationRefusesAMalformedSupersessionChain(t *testing.T) {
 	})
 }
 
+// handoverParticipationSpec 是一条凭`已交接`入场、仍在场的参与关系。
+func handoverParticipationSpec(t *testing.T, object, version string) domain.RehydrateParticipationSpec {
+	t.Helper()
+	spec := activeParticipationSpec(t, object)
+	spec.EntryKind = domain.EnteredByTransportHandover
+	spec.EntryBasis = segmentValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/"+version+"-"+object)
+	return spec
+}
+
+// voidedParticipationSpec 是一条失效版本（票 tf-segment-lifecycle-closure/11 裁决 1）：回指同对象另一版的入场依据、
+// 入场种类照前版为 TRANSPORT_HANDOVER、起点沿用前版、Voided 为是。
+func voidedParticipationSpec(t *testing.T, object, version, supersedes string) domain.RehydrateParticipationSpec {
+	t.Helper()
+	spec := handoverParticipationSpec(t, object, version)
+	spec.Supersedes = segmentValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/"+supersedes+"-"+object)
+	spec.Voided = true
+	return spec
+}
+
+// Covers: 票 tf-segment-lifecycle-closure/11 裁决 2、4 在重建门——失效版本是链上的一版：重建按回指标出被失效的前版，
+// 链尾是失效版本时 ParticipationFor 仍答它、Voided() 为是、Active() 为否、在场不数它；一个只剩失效链尾的段已关闭
+// 是一致的（没有人在控制中），不得被当成「已关闭且仍有在场参与」拒掉。
+func TestRehydrationRebuildsAVoidedTail(t *testing.T) {
+	spec := segmentSpec(t,
+		handoverParticipationSpec(t, "parcel-1", "v1"),
+		voidedParticipationSpec(t, "parcel-1", "v2", "v1"),
+	)
+	rebuilt, err := domain.RehydrateActualFulfillmentSegment(spec)
+	if err != nil {
+		t.Fatalf("重建失效链尾：%v", err)
+	}
+	object := segmentValue(t, domain.NewCarriedObjectReference, "parcel-1")
+	tail, present := rebuilt.ParticipationFor(object)
+	if !present || tail.EntryBasis().String() != "TRANSPORT-HANDOVER/v2-parcel-1" {
+		t.Fatalf("链尾不是失效版本：%+v present=%v", tail, present)
+	}
+	if !tail.Voided() || tail.Active() || tail.Superseded() {
+		t.Fatalf("失效链尾 voided=%v active=%v superseded=%v", tail.Voided(), tail.Active(), tail.Superseded())
+	}
+	history := rebuilt.ParticipationHistory(object)
+	if len(history) != 2 || !history[0].Superseded() || history[0].Voided() || history[0].Active() {
+		t.Fatalf("被失效的前版标记走样：%+v", history)
+	}
+	if rebuilt.ActiveParticipations() != 0 {
+		t.Fatalf("在场参与 = %d，失效版本不算在场", rebuilt.ActiveParticipations())
+	}
+
+	t.Run("a closed segment whose only member is voided is consistent", func(t *testing.T) {
+		closed := spec
+		closed.Closed, closed.ClosedAt = true, segmentClosedAt
+		if _, err := domain.RehydrateActualFulfillmentSegment(closed); err != nil {
+			t.Fatalf("只剩失效链尾的已关闭段应当收得下：%v", err)
+		}
+	})
+}
+
+// Covers: 迁移 TF 0019 那条 CHECK 在领域重建门的同形——失效版本必回指前版（首登不能失效：对象从未进段就没有东西
+// 可失效）且入场种类为 TRANSPORT_HANDOVER（只有交接更正走得到这一格）。
+func TestRehydrationRefusesAMalformedVoidedVersion(t *testing.T) {
+	t.Run("首登不能失效", func(t *testing.T) {
+		root := handoverParticipationSpec(t, "parcel-1", "v1")
+		root.Voided = true
+		if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t, root)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+			t.Fatalf("err = %v, want ErrInvalidFulfillmentSegment", err)
+		}
+	})
+	t.Run("揽收来源没有失效格", func(t *testing.T) {
+		voided := supersedingParticipationSpec(t, "parcel-1", "v2", "v1")
+		voided.Voided = true
+		if _, err := domain.RehydrateActualFulfillmentSegment(segmentSpec(t, activeParticipationSpec(t, "parcel-1"), voided)); !errors.Is(err, domain.ErrInvalidFulfillmentSegment) {
+			t.Fatalf("err = %v, want ErrInvalidFulfillmentSegment", err)
+		}
+	})
+}
+
 // Covers: 段由首个对象的控制事实成立（CONTEXT 生命周期①）。一个没有任何参与关系的段
 // 从来不曾成立过，它不是「空段」而是坏行。
 func TestRehydrationRefusesASegmentWithNoParticipation(t *testing.T) {

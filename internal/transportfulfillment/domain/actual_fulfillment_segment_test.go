@@ -382,9 +382,10 @@ func TestASourceCorrectionRederivesTheParticipationOnTheSameSegment(t *testing.T
 	}
 }
 
-// Covers: ADR-0112 决定一的判据与决定四——更正的不是链尾（前版已被替代、或对象不在段里、或版本不是
-// 更正版）答 ErrNoParticipationToRederive；更正后的起点晚于继承的终点是先结束再进入，拒；撤回控制转移
-// 的交接更正答 ErrCorrectionWithdrawsControl（失效格，另票）；替代版本入场种类必须与原参与相同。
+// Covers: ADR-0112 决定一的判据——更正的不是链尾（前版已被替代、或对象不在段里、或版本不是更正版）答
+// ErrNoParticipationToRederive；更正后的起点晚于继承的终点是先结束再进入，拒；撤回控制转移的交接更正在无关的段上
+// 同样答无可替代（失效格只对本段里凭前版入场的那条参与成立，见 TestAControlWithdrawingCorrectionVoidsTheParticipation）；
+// 替代版本入场种类必须与原参与相同。
 func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 	pickup := formedPickup(t, "parcel-1", "attempt-1")
 	segment, err := domain.EstablishSegmentWithPickup(
@@ -432,7 +433,8 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 		t.Fatalf("起点晚于终点被收下了或没有具名：err = %v", err)
 	}
 
-	// 交接那一路：撤回控制的更正是失效格，另票。
+	// 交接那一路：撤回控制的更正拿到一个没有该对象的段上问，答的是无可替代——编排按对象反查到几个段逐个问，
+	// 无关的段不得答成失效（失效格本身见 TestAControlWithdrawingCorrectionVoidsTheParticipation）。
 	handover := formedHandover(t, "parcel-2", domain.ObjectHandedOver)
 	withHandover, err := domain.EstablishSegmentWithHandover(
 		mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-2"), handover, domain.PlannedSegmentReference{})
@@ -442,20 +444,7 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 	releasing, _ := handover.ReleasingEvidence()
 	receiving, _ := handover.ReceivingEvidence()
 	rule, _ := handover.Rule()
-	refused, err := handover.Correct(domain.HandoverCorrection{
-		Verdict:     domain.HandoverRefused,
-		Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-parcel-2-refused"),
-		Version:     mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-2/v2"),
-		CorrectedAt: handoverJudgedAt.Add(time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("correct handover to refused: %v", err)
-	}
-	if _, err := withHandover.RederiveParticipationWithHandover(refused); !errors.Is(err, domain.ErrCorrectionWithdrawsControl) {
-		t.Fatalf("撤回控制的更正：err = %v", err)
-	}
-	// 失效格只对「本段里凭前版入场的那条参与」成立：同一撤回控制的更正拿到一个没有该对象的段上问，
-	// 答的是无可替代——编排按对象反查到几个段逐个问，无关的段不得答成失效。
+	refused := withdrawingCorrection(t, handover, domain.HandoverRefused, "handover-result/parcel-2/v2")
 	if _, err := segment.RederiveParticipationWithHandover(refused); !errors.Is(err, domain.ErrNoParticipationToRederive) {
 		t.Fatalf("对象不在段里的撤回控制更正：err = %v, want ErrNoParticipationToRederive", err)
 	}
@@ -477,5 +466,185 @@ func TestARederivationOnlyAttachesToTheCurrentParticipation(t *testing.T) {
 	current, _ := rederivedHandover.ParticipationFor(handover.Object())
 	if current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-2/v2" || current.EntryKind() != domain.EnteredByTransportHandover {
 		t.Fatalf("交接更正的替代版本走样：%+v", current)
+	}
+}
+
+// withdrawingCorrection 把一条`已交接`更正成拒收或待确认——新版本不再转出控制（TransferOutBasis 不给），
+// 段那一侧走的是失效格而不是替代格。
+func withdrawingCorrection(t *testing.T, handover domain.TransportHandover, verdict domain.HandoverVerdict, version string) domain.TransportHandover {
+	t.Helper()
+	corrected, err := handover.Correct(domain.HandoverCorrection{
+		Verdict:     verdict,
+		Basis:       mustValue(t, domain.NewHandoverBasisReference, "basis-"+version),
+		Version:     mustValue(t, domain.NewHandoverResultVersion, version),
+		CorrectedAt: handoverJudgedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("correct handover to %s: %v", verdict, err)
+	}
+	return corrected
+}
+
+// Covers: ADR-0112 决定四与票 tf-segment-lifecycle-closure/11 裁决 1、2、4——`已交接`被更正为拒收/待确认时，段里凭
+// 前版入场的参与在同一条链上长出一条**失效版本**：回指被失效那一版的入场依据、入场依据取撤回控制那一版的引用、
+// 入场种类照前版、起点沿用被失效那一版的起点、Voided() 为是；原参与一字不动。链尾失效即该对象在本段当前无有效
+// 参与：ParticipationFor 仍答链尾，Active() 为否，ActiveParticipations 不数它，不回退到前一仍转出控制的版本；结束它
+// 答 ErrObjectNotParticipating；段可以关（没有人在控制中），且段仍算成立过；凭新控制事实再进本段仍答`已在段内`。
+// 再次进入只有一条路：更正撤回控制的那一版、裁决回到`已交接`——链尾从失效版本长出替代版本，参与重新在场。
+func TestAControlWithdrawingCorrectionVoidsTheParticipation(t *testing.T) {
+	for _, verdict := range []domain.HandoverVerdict{domain.HandoverRefused, domain.HandoverPendingConfirmation} {
+		t.Run(verdict.String(), func(t *testing.T) {
+			handover := formedHandover(t, "parcel-1", domain.ObjectHandedOver)
+			segment, err := domain.EstablishSegmentWithHandover(
+				mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), handover,
+				mustValue(t, domain.NewPlannedSegmentReference, "PLAN-1"))
+			if err != nil {
+				t.Fatalf("establish: %v", err)
+			}
+			object := handover.Object()
+
+			withdrawn := withdrawingCorrection(t, handover, verdict, "handover-result/parcel-1/v2")
+			voided, err := segment.RederiveParticipationWithHandover(withdrawn)
+			if err != nil {
+				t.Fatalf("撤回控制的更正被拒了：%v", err)
+			}
+
+			// 裁决 1：失效版本的列。
+			tail, present := voided.ParticipationFor(object)
+			if !present {
+				t.Fatal("链尾失效后 ParticipationFor 不答链尾了")
+			}
+			if !tail.Voided() || tail.Active() {
+				t.Fatalf("失效版本 voided=%v active=%v", tail.Voided(), tail.Active())
+			}
+			if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" {
+				t.Fatalf("失效版本的入场依据 = %s，want 撤回控制那一版的引用", tail.EntryBasis())
+			}
+			if tail.EntryKind() != domain.EnteredByTransportHandover {
+				t.Fatalf("失效版本的入场种类 = %s，want 照前版 TRANSPORT_HANDOVER", tail.EntryKind())
+			}
+			if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" {
+				t.Fatalf("失效版本没回指被失效那一版：%v %v", supersedes, chained)
+			}
+			if !tail.EnteredAt().Equal(handoverJudgedAt) {
+				t.Fatalf("失效版本的起点 = %s，want 沿用被失效那一版的起点 %s", tail.EnteredAt(), handoverJudgedAt)
+			}
+			if planned, has := tail.PlannedSegment(); !has || planned.String() != "PLAN-1" {
+				t.Fatal("失效版本没沿用计划段")
+			}
+			if _, _, _, ended := tail.End(); ended {
+				t.Fatal("未离场的参与失效后凭空长出了终点")
+			}
+
+			// 原参与一字不动，只是不再是当前；值语义下原聚合也不动。
+			history := voided.ParticipationHistory(object)
+			if len(history) != 2 || history[0].EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v1" ||
+				!history[0].Superseded() || history[0].Voided() || history[0].Active() {
+				t.Fatalf("原参与不在历史里、没被标为已被替代、或被改成失效：%+v", history)
+			}
+			if original, _ := segment.ParticipationFor(object); !original.Active() || original.Voided() {
+				t.Fatal("值语义：原聚合被改了")
+			}
+
+			// 裁决 2、4：当前有效控制为无——不数、不结束、可关、不重进。
+			if voided.ActiveParticipations() != 0 {
+				t.Fatalf("在场参与 = %d，失效版本不算在场", voided.ActiveParticipations())
+			}
+			termination := mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/parcel-1")
+			if _, err := voided.EndParticipationWithTermination(object, termination, handoverJudgedAt.Add(2*time.Hour)); !errors.Is(err, domain.ErrObjectNotParticipating) {
+				t.Fatalf("结束一条已失效的参与：err = %v，want ErrObjectNotParticipating", err)
+			}
+			closed, err := voided.CloseSegment(handoverJudgedAt.Add(2 * time.Hour))
+			if err != nil {
+				t.Fatalf("段里唯一对象已失效，段该关得上：%v", err)
+			}
+			if !closed.Closed() || !closed.Established() {
+				t.Fatal("段没关上，或成立过的段被回写成未成立")
+			}
+			fresh := handoverSpec(t, "parcel-1", domain.ObjectHandedOver)
+			fresh.Version = mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/next")
+			fresh.JudgedAt = handoverJudgedAt.Add(3 * time.Hour)
+			next, err := domain.FormTransportHandover(fresh)
+			if err != nil {
+				t.Fatalf("form next handover: %v", err)
+			}
+			if _, err := voided.JoinWithHandover(next, domain.PlannedSegmentReference{}); !errors.Is(err, domain.ErrObjectAlreadyParticipating) {
+				t.Fatalf("凭新控制事实再进已失效的段：err = %v，want ErrObjectAlreadyParticipating（再次进入是新的段）", err)
+			}
+
+			// 裁决 2 后半：再次进入本段只有一条路——更正撤回控制的那一版、裁决回到`已交接`。
+			releasing, _ := handover.ReleasingEvidence()
+			receiving, _ := handover.ReceivingEvidence()
+			rule, _ := handover.Rule()
+			restored, err := withdrawn.Correct(domain.HandoverCorrection{
+				Verdict:           domain.ObjectHandedOver,
+				ReleasingEvidence: releasing,
+				ReceivingEvidence: receiving,
+				Rule:              rule,
+				Version:           mustValue(t, domain.NewHandoverResultVersion, "handover-result/parcel-1/v3"),
+				CorrectedAt:       handoverJudgedAt.Add(2 * time.Hour),
+			})
+			if err != nil {
+				t.Fatalf("correct back to handed over: %v", err)
+			}
+			revived, err := voided.RederiveParticipationWithHandover(restored)
+			if err != nil {
+				t.Fatalf("从失效版本长出替代版本：%v", err)
+			}
+			current, _ := revived.ParticipationFor(object)
+			if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v3" {
+				t.Fatalf("参与没重新在场：%+v", current)
+			}
+			if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-1/v2" {
+				t.Fatalf("替代版本没回指失效版本：%v", supersedes)
+			}
+			if revived.ActiveParticipations() != 1 || len(revived.ParticipationHistory(object)) != 3 {
+				t.Fatal("链或在场计数走样")
+			}
+		})
+	}
+}
+
+// Covers: 票 tf-segment-lifecycle-closure/11 裁决 3——原参与已按明确控制终止离场、随后更正撤回入场控制：失效版本继承
+// 原参与的离场三件（终点事实没有被更正撤销，CONTEXT「后续事实不得被删除或倒退」），Voided() 与 End() 各说各的；
+// 段已关闭照样长失效版本，段不重开、关闭时刻不动；关段判据照旧比全部已离场版本的终点，失效版本继承的终点与原参与
+// 同刻，不引入新约束。
+func TestAVoidedParticipationInheritsTheEndAndLeavesAClosedSegmentClosed(t *testing.T) {
+	handover := formedHandover(t, "parcel-1", domain.ObjectHandedOver)
+	segment, err := domain.EstablishSegmentWithHandover(
+		mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), handover, domain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	object := handover.Object()
+	endedAt := handoverJudgedAt.Add(4 * time.Hour)
+	termination := mustValue(t, domain.NewParticipationBasisReference, "CONTROL-TERMINATION/parcel-1")
+	ended, err := segment.EndParticipationWithTermination(object, termination, endedAt)
+	if err != nil {
+		t.Fatalf("end: %v", err)
+	}
+	closed, err := ended.CloseSegment(endedAt)
+	if err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	withdrawn := withdrawingCorrection(t, handover, domain.HandoverRefused, "handover-result/parcel-1/v2")
+	voided, err := closed.RederiveParticipationWithHandover(withdrawn)
+	if err != nil {
+		t.Fatalf("已关闭段上的失效被拒：%v", err)
+	}
+	if !voided.Closed() {
+		t.Fatal("失效把段重开了")
+	}
+	if at, _ := voided.ClosedAt(); !at.Equal(endedAt) {
+		t.Fatalf("关闭时刻被动了：%v", at)
+	}
+	tail, _ := voided.ParticipationFor(object)
+	kind, basis, at, done := tail.End()
+	if !tail.Voided() || !done || kind != domain.EndedByControlTermination || basis != termination || !at.Equal(endedAt) {
+		t.Fatalf("失效版本没继承离场三件：voided=%v done=%v kind=%v basis=%v at=%v", tail.Voided(), done, kind, basis, at)
+	}
+	if voided.ActiveParticipations() != 0 || len(voided.ParticipationHistory(object)) != 2 {
+		t.Fatal("链或在场计数走样")
 	}
 }
