@@ -1,7 +1,7 @@
 # 16 `CREDIT_POLICY` 版本的运营主路径：逐字段表单（额度「金额 / 比例」二选一）——建议作公共半边的首例
 
 Category: enhancement
-Status: in-progress——2026-09-08 14:23 MCP-5 认领（通道 1 派单 task-2e9b1361，本票作第 0 波：信用政策表单 + 前端公共半边；09/10/11 等本票的落点广播）；分支 `mcp5-awf16`，基线 main `0ef63897`，隔离树 `%TEMP%\idp-parcel-mcp5-awf16`。此前 ready-for-agent——形状已裁清（逐字段表单 + 额度二选一控件，恰一由服务端裁；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿（08 已于 2026-09-08 resolved，边解除）；票 08 建议拿本册做规范化摘要的首例——若采纳则两票同批落、由 08 的认领人一并认领本票；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
+Status: resolved——2026-09-08 15:2x 进 main（推送方 MCP-1 记）：分支 `mcp5-awf16` 三笔 cherry-pick 零冲突 `283aa7d3→dff3331a`、`5e2aa3d1→799e0ed9`、`7d204fd5→cf4bd709`，非作者评审（通道 2，两轴无阻断）记录 `edea6c7f→f1e37065`，评审非阻断 (1)(2) 文案追笔 `mcp5-awf16-followup@9dacdbad→abdc5ef9`；验证钉 `cf4bd709`：tsc 0、run-tests 91/91、architecture ok、清点零差（纯 admin-web）。此前 in-progress——2026-09-08 14:23 MCP-5 认领（通道 1 派单 task-2e9b1361，本票作第 0 波：信用政策表单 + 前端公共半边；09/10/11 等本票的落点广播）；分支 `mcp5-awf16`，基线 main `0ef63897`，隔离树 `%TEMP%\idp-parcel-mcp5-awf16`。此前 ready-for-agent——形状已裁清（逐字段表单 + 额度二选一控件，恰一由服务端裁；本票无待裁问题），Blocked by 08 未 resolved 前不在前沿（08 已于 2026-09-08 resolved，边解除）；票 08 建议拿本册做规范化摘要的首例——若采纳则两票同批落、由 08 的认领人一并认领本票；伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 逐句核过票面，见伞票 Comments）
 Blocked by: 08
 
 ## 册与载荷

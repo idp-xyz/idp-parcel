@@ -106,3 +106,5 @@ policy | inapplicabilityBasis}]}`（0012 正文：指名接单规则包；按费
   未做反查：`translate.go` 与领域两份反查（见 Standards 2）、旧式串何时拒收、四口 403——都在票面「未做」或归伞票 ✔。
 
   **结论**：两轴无阻断，可重放；非阻断五条各归其处（1、2 归伞票收口的共享文件整理，3 归作者顺手，Spec 1、2 归伞票裁句）。
+
+- 进 main 记录（2026-09-08 15:5x，MCP-1）：跳过借来的 `1e7b9f41`，五笔重放 `fe8a522f→2aab84c4`、`ab771dec→e81dd49e`、`4e9d0970→54391c9c`、`3f4d4b53→19f01f33`、`7377bd23→0d03ae86`；共享文件与 09/11 的改动由推送方手工并（`PublicationContent` / `canonicalPublicationDocument` / `CommercialPublicationPayload` 各加一格；`RehydratePublicationContent` 客户合同块早返回排在 `registerHasNoBody` 之前；`IsRegisterCanonicalized` switch 四册四 case；`publicationContentOf` / `declarationsOfContent` 各并一支；`publication-draft-api.ts` 一格）；清点 `b25942a5`；评审记录 `76c09410→dc32c314`。验证钉 `b25942a5` 见 tasks.md 15:5x 节。

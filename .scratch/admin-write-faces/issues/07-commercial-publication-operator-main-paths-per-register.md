@@ -38,14 +38,14 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | 号 | 册（发布类别） | 选形 | 状态 | 阻塞边 |
 |---|---|---|---|---|
 | [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) | 公共半边（不对应某一册）：服务端按册规范化算摘要、批准从 `OperatorEnvelope` 来、预览与发布同一路径 | 机制，不是表单 | **resolved**（2026-09-08，ADR-0126；PC 迁移 0028；四口进端点表） | 无；其余十张的 Blocked by 已解除 |
-| [09](./09-service-product-version-form.md) | `SERVICE_PRODUCT` | 逐字段表单（版本壳 + 引用可加行） | ready-for-agent | 08 |
-| [10](./10-customer-contract-form.md) | `CUSTOMER_CONTRACT` | 逐字段表单（正文 + 绑定表可加行 + 合同级控制声明，两层分两节） | ready-for-agent | 08 |
-| [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | **resolved**（2026-09-08 MCP-6，分支 `mcp6-awf11@a2a44679`；进 main 待重放） | 08（已 resolved） |
+| [09](./09-service-product-version-form.md) | `SERVICE_PRODUCT` | 逐字段表单（版本壳 + 引用可加行；本册无正文，文档只盖 kind） | **resolved**（2026-09-08 MCP-3，分支 `mcp3-awf09`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
+| [10](./10-customer-contract-form.md) | `CUSTOMER_CONTRACT` | 逐字段表单（正文 + 绑定表可加行 + 合同级控制声明，两层分两节） | **resolved**（2026-09-08 MCP-4，分支 `mcp4-awf10`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
+| [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | **resolved**（2026-09-08 MCP-6，分支 `mcp6-awf11@a2a44679`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
 | [12](./12-acceptance-rule-package-form.md) | `ACCEPTANCE_RULE_PACKAGE` | 分节逐字段表单，空节即未声明；pc-gaps/09 落地加一格、pc-gaps/10 落地加一节 | ready-for-agent | 08 |
 | [13](./13-pre-acceptance-financial-control-policy-form.md) | `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` | 逐字段表单（共同通过条件 + 控制项可加行） | ready-for-agent | 08 |
 | [14](./14-price-rule-form.md) | `PRICE_RULE` | 逐字段表单（方案从价卡目录选 + 口径条件节） | ready-for-agent | 08 |
 | [15](./15-settlement-policy-form.md) | `SETTLEMENT_POLICY` | 逐字段表单（合同引用对象 + 版本一起选） | ready-for-agent | 08 |
-| [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例 | ready-for-agent | 08 |
+| [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例；**连带前端公共半边**（`party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`） | **resolved**（2026-09-08 MCP-5，分支 `mcp5-awf16`；进 main 见票 Status） | 08（已 resolved） |
 | [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | ready-for-agent | 08 |
 | [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——等管理台读面票要不要立（MCP-1） | 08；管理台客户服务规则册读面票（未立） |
 

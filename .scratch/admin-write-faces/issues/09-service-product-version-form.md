@@ -176,3 +176,5 @@ Decision 五明写留给伞票收口的「何时开始拒收没版本的串」�
 
 **结论**：Standards 2 条非阻断（最重：`IsRegisterCanonicalized` 头注对无正文册失真，一句注释）；Spec 0 条。关键判断 (a) **非阻断、不改 ADR**，
 但伞票 07 收口时须把「无正文册的已接与对账门开门拆开」连同「何时拒收旧串」一起裁。**无阻断，可重放。**
+
+- 进 main 记录（2026-09-08 15:5x，MCP-1）：七笔重放 `69cc885e→5d455fbe`、`9fad4185→7cb76512`、`3f43525e→e0a56d36`、`063b0c22→c68f039f`、`07d7b5da→8ddfbcef`、`6d5dea48→3954ed00`、`f4be0bc9→f7652e7f`；共享文件三处与 11 已进 main 的改动由推送方手工并（版本注释两句并列；`RehydratePublicationContent` 供应商块早返回之后接 `registerHasNoBody`；`IsRegisterCanonicalized` 并成一个 switch 每册一 case）；清点 `af22c9a1`；评审记录 `e408d8d6→d371ba6e`。验证钉第 1 波 tip `b25942a5`（含 09/10/11/16），见 tasks.md 15:5x 节。

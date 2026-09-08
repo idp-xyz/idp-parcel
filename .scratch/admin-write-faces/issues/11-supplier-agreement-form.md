@@ -112,3 +112,5 @@ tsc / run-tests 绿；Go 侧只加本册规范化一格。
   `PublicationDraftFlow kind="SUPPLIER_AGREEMENT"`）；`purchasePlan` 从价卡目录选、只传 `planId@planVersion` 引用串（`planReferenceOf`），
   供应商 / 法人从业务参与方册、集团法人册选；Go 侧只加本册规范化一格（无迁移、不动 0021、不动 `ports.go` / `endpoints.go`）；
   伞票 07 硬句在场；`supplier-agreement-form.test.ts` 钉认领路径 ↔ 载荷键一一对应。
+
+- 进 main 记录（2026-09-08 15:3x，MCP-1）：跳过 merge 笔 `f94c13a2`，七笔重放 `c6028a2e→934e8916`、`eadac23d→7b817cb9`、`33bda25f→4e51c75b`、`c4ca7004→78a002bf`、`d756dd1e→bf419f4d`、`a2a44679→2c7bee12`、`4fe52a35→61d994d6`；清点 `dccffb80`；评审记录 `a1401b84→83970dcf`；远端 main = `83970dcf`（15:3x）。验证钉 `dccffb80` 含 DSN：PC 四包 + parcel-api + parcel-commercial + architecture 全 ok、tsc 0、run-tests 98/98。
