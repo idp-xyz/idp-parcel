@@ -14,7 +14,7 @@
 // 403 ACCESS_CHANNEL_NOT_CONFIGURED——那是诚实答案不是接线缺陷（ADR-0085 两阶段），装配点换真 Intake 即
 // 点亮，本文件一行不用改。
 
-import { postMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
 
 /**
  * 发布轴的商业对象类别（domain.CommercialObjectKind 的 String() 原词，封闭集；Go 那边加一格这里跟着加）。
@@ -275,3 +275,57 @@ export const draftStatusLabels: Record<string, string> = {
   APPROVED: '已批准',
   PUBLISHED: '已发布',
 };
+
+// ——商业发布词表读口（票 admin-write-faces/20，通道 1 代裁）：一口按 kind 答该册正文里各封闭集的码，表单据此供
+// 下拉、不内置枚举——ADR-0126 之后正文由服务端按册规范化，表单自带一份枚举就是同一封闭集的第二份写法，漂了无人报。
+// 服务端只给码不给中文：中文在各页自己的词表里，下拉选项 = 服务端码 × 本页词表（vocabularyOptions）。这里没有任何
+// 一份内置的码作回退：读不到就是读不到（未配置 / 调用方问题 / 未形成答案各归五格结果代数的一格），表单据格写占位。
+// 各表单票只消费 fetchPublicationVocabulary，不各写 fetch。
+
+/** 一个封闭集（Go `vocabularySetAnswer`）：`name` 是载荷里那格的键名（如接单规则包的 `stage`），`codes` 按领域枚举顺序。 */
+export interface VocabularySetRecord {
+  name: string;
+  codes: string[];
+}
+
+/**
+ * 词表答复（Go `publicationVocabularyAnswer`）。kind 合法而正文没有枚举格（服务产品、客户合同……）时 `sets` 是
+ * 空数组——不是缺键、不是 404；kind 集合外服务端答 400 + MALFORMED_REQUEST（问题落在 `kind` 那一格），走 `callerProblem`。
+ */
+export interface PublicationVocabularyResponseBody {
+  outcome: string;
+  kind: CommercialObjectKindName;
+  sets: VocabularySetRecord[];
+}
+
+export const publicationVocabularyEndpoint = '/commercial-publication-vocabularies';
+
+/**
+ * 读一册的词表。走查阅那半的 exchangeMasterData：403 ACCESS_CHANNEL_NOT_CONFIGURED 交回 `unconfigured` 一格而不是抛错
+ * ——它与四口同挂未配置 Intake（理由在 Go 端点注释），表单拿这一格写「词表未就绪」的占位，不拿任何内置码顶替。
+ */
+export function fetchPublicationVocabulary(
+  kind: CommercialObjectKindName,
+): Promise<ApiResult<PublicationVocabularyResponseBody>> {
+  return exchangeMasterData<PublicationVocabularyResponseBody>(
+    `${publicationVocabularyEndpoint}?kind=${encodeURIComponent(kind)}`,
+  );
+}
+
+/** 一个下拉选项：`value` 是送回服务端的码，`label` 是给操作者看的字。 */
+export interface VocabularyOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * 码 × 本页中文词表 → 下拉选项，顺序照服务端（领域枚举顺序）。词表没收录的码原样示出、不猜格——判据沿
+ * channel-selection-decisions.ts 的 wordOf：某天服务端多一格，页面宁可显示英文原名，也不让它冒充既有一格。
+ * 不给默认选中，也不补「请选择」占位项：「表单不给默认、不预选」是伞票 07 的硬句，归表单票落。
+ */
+export function vocabularyOptions(
+  codes: readonly string[],
+  labels: Record<string, string>,
+): VocabularyOption[] {
+  return codes.map((code) => ({ value: code, label: labels[code] ?? code }));
+}
