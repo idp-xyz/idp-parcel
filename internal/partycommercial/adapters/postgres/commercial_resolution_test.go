@@ -481,6 +481,104 @@ func uniqueClosureWithSettlementPolicy(
 	return closure
 }
 
+// Covers: ADR-0127 决定三——采用了信用政策的闭包必须读得回来：键上的信用选择器与采用项上的额度
+// 都随快照往返，额度整份留存不回册重读；金额与比例两格各自往返，读回的那一格就是写下的那一格。
+// 少了选择器，读回的键最小身份立不起来、整份闭包被重建门拒；少了额度，SA 拿到的又只是一份裸版本。
+func TestResolutionRoundTripsTheAdoptedCreditBasis(t *testing.T) {
+	limits := map[string]domain.CreditLimit{
+		"amount": creditAmountLimit(t, 500000),
+		"ratio":  creditRatioLimit(t, 2500),
+	}
+	for name, limit := range limits {
+		t.Run(name, func(t *testing.T) {
+			repository, transactor, _ := newResolutions(t)
+			ctx := t.Context()
+			closure := uniqueClosureWithCreditBasis(t, limit)
+
+			mustSaveResolution(t, transactor, ctx, repository, closure)
+
+			found, ok, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+			if err != nil {
+				t.Fatalf("按标识取回：%v", err)
+			}
+			if !ok {
+				t.Fatal("写入后 found=false")
+			}
+
+			selector := found.ResolutionKey().Credit
+			if selector.Level.String() != "level-commercial" || selector.ChargeType.String() != "charge-freight" {
+				t.Fatalf("读回的解析键丢了或改了信用选择器：%#v", selector)
+			}
+			adopted, present := found.AdoptedFor(domain.CreditPolicyObject)
+			if !present {
+				t.Fatal("读回的闭包丢了信用政策依据")
+			}
+			basis, observable := adopted.CreditBasis()
+			if !observable || !basis.Applicable() {
+				t.Fatal("额度没有随闭包读回——SA 拿到的又只是一份裸版本")
+			}
+			if basis.AuthorizedLimit() != limit {
+				t.Fatalf("limit = %#v, want %#v——读回的那一格必须就是写下的那一格", basis.AuthorizedLimit(), limit)
+			}
+			if !basis.PolicyVersion().SameVersionAs(adopted.Version()) {
+				t.Fatal("读回的额度出处与采用版本不是同一版")
+			}
+			if found.ResolutionID() != closure.ResolutionID() {
+				t.Fatalf("resolution ID = %q, want %q", found.ResolutionID(), closure.ResolutionID())
+			}
+		})
+	}
+}
+
+// uniqueClosureWithCreditBasis 造一份含客户合同、接单规则包与信用政策的唯一已解析闭包，信用政策
+// 正文按给定额度登记；键上的信用选择器与正文逐维对齐（ADR-0127）。
+func uniqueClosureWithCreditBasis(t *testing.T, limit domain.CreditLimit) domain.CommercialClosure {
+	t.Helper()
+
+	registry := domain.NewCommercialRegistry()
+	for _, version := range []domain.CommercialVersion{
+		effectiveContract(t, "contract-1", "v1", "digest-1"),
+		effectiveRules(t, "rules-1", "v1", "digest-r1"),
+	} {
+		if _, err := registry.Register(version); err != nil {
+			t.Fatalf("登记 %s：%v", version.ObjectID(), err)
+		}
+	}
+	creditVersion := effectiveVersionOfKind(t, domain.CreditPolicyObject, "credit-1", "v1", "digest-cr1")
+	if _, err := registry.Register(creditVersion); err != nil {
+		t.Fatalf("登记信用政策版本：%v", err)
+	}
+	registry.RegisterCreditPolicy(creditPolicyOn(t, creditVersion, "charge-freight", limit))
+
+	anchor, err := domain.NewSelectionAnchor(effectiveAtRow.Add(24*time.Hour),
+		pcValue(t, domain.NewAnchorPolicyVersion, "anchor-policy-v1"))
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	closure := domain.ResolveCommercialClosure(registry, domain.ClosureResolutionKey{
+		TenantID:             pcTenant(t, "tenant-1"),
+		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:                pcScope(t),
+		Purpose:              domain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		Credit: domain.CreditSelector{
+			Level:      pcValue(t, domain.NewAuthorityLevel, "level-commercial"),
+			ChargeType: pcValue(t, domain.NewChargeTypeReference, "charge-freight"),
+		},
+		RequiredBases: []domain.CommercialObjectKind{
+			domain.CustomerContractObject,
+			domain.AcceptanceRulePackageObject,
+			domain.CreditPolicyObject,
+		},
+	}, nil)
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（reason=%q, unresolved=%v）",
+			closure.Outcome(), closure.Reason(), closure.UnresolvedBases())
+	}
+	return closure
+}
+
 func effectiveServiceProductVersion(t *testing.T, objectID, label, digest string) domain.CommercialVersion {
 	t.Helper()
 

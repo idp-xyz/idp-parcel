@@ -14,8 +14,10 @@ import (
 )
 
 // 信用政策册的持久化面（票 party-commercial-context-gaps/03，0020 迁移）。写口挂在
-// CommercialPublications 上与其余正文册同笔登记；读口是独立的 CreditPolicyContents——正文
-// 不进整册装载（LoadForScope），理由见 ports.CreditPolicyContentView。
+// CommercialPublications 上与其余正文册同笔登记；点读口是独立的 CreditPolicyContents。正文自
+// ADR-0127 起**也进整册装载**（LoadForScope 左连接本表、registerCreditPolicy 进册）：闭包解析在
+// 信用政策之间选，正文不进册它就选不出额度。0020 头注里「本表不进整册装载」那句是立表时的
+// 状态，迁移文件按 checksum 守着不能改，以本注释与 ADR-0127 为准。
 
 // SaveCreditPolicy 登记一份信用政策版本的正文。撞键不覆盖：同内容是重放，异内容（含额度换格）
 // 是需要商业责任方修正的冲突。
@@ -101,6 +103,60 @@ type scannedCreditPolicy struct {
 	limitBps    *int64
 	startsAt    time.Time
 	endsAt      *time.Time
+}
+
+// joinedCreditPolicy 是整册装载时左连接回来的那几列：版本没有正文时全空。与
+// scannedSettlementPolicy 同形，present / complete 两问分开——「没有正文」是合法缺席，
+// 「有一半正文」是库与领域分叉的坏数据。
+type joinedCreditPolicy struct {
+	legalEntity *string
+	level       *string
+	chargeType  *string
+	limitMinor  *int64
+	limitBps    *int64
+	startsAt    *time.Time
+	endsAt      *time.Time
+}
+
+func (row joinedCreditPolicy) present() bool {
+	return row.legalEntity != nil
+}
+
+func (row joinedCreditPolicy) complete() bool {
+	return row.legalEntity != nil && row.level != nil && row.chargeType != nil && row.startsAt != nil
+}
+
+// registerCreditPolicy 把左连接回来的正文过 NewCreditPolicy 进册（ADR-0127）。版本未生效的正文
+// 不进册，与 registerSettlementPolicy 同一纪律：解析只在生效版本之间选，NewCreditPolicy 也只收
+// 生效版本。额度两列恰一非空由 creditLimitFrom 兼库上 CHECK 守。
+func registerCreditPolicy(
+	registry *domain.CommercialRegistry,
+	version domain.CommercialVersion,
+	row joinedCreditPolicy,
+) error {
+	if !row.present() {
+		return nil
+	}
+	if !row.complete() {
+		return fmt.Errorf("credit policy row is incomplete")
+	}
+	if version.Status() != domain.CommercialVersionEffective {
+		return nil
+	}
+	policy, err := creditPolicyFrom(version, scannedCreditPolicy{
+		legalEntity: *row.legalEntity,
+		level:       *row.level,
+		chargeType:  *row.chargeType,
+		limitMinor:  row.limitMinor,
+		limitBps:    row.limitBps,
+		startsAt:    *row.startsAt,
+		endsAt:      row.endsAt,
+	})
+	if err != nil {
+		return err
+	}
+	registry.RegisterCreditPolicy(policy)
+	return nil
 }
 
 // creditLimitColumns 把两格封闭的额度摊成两列，恰一非空——列上 CHECK 是这一条的镜像。

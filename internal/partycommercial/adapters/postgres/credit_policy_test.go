@@ -299,3 +299,55 @@ func TestCreditPolicyCatalogueListsBothLimitForms(t *testing.T) {
 		t.Fatal("limit 非正应被拒")
 	}
 }
+
+// Covers: ADR-0127 决定三——信用政策正文进整册装载：LoadForScope 把 0020 的行过 NewCreditPolicy 进
+// 登记册，闭包解析才选得出额度；登记推动范围的 ViewRevision；光有版本没有正文是合法缺席；他租户
+// 的正文不进本租户的册。
+func TestCreditPolicyEntersTheScopeRegistryAndMovesItsViewRevision(t *testing.T) {
+	repository, transactor, _ := newPublications(t)
+	ctx := t.Context()
+	tenant, scope := pcTenant(t, "tenant-1"), pcScope(t)
+
+	version := effectiveVersionOfKind(t, domain.CreditPolicyObject, "credit-1", "v1", "digest-c1")
+	theirs := policyVersionInTenant(t, "tenant-2", domain.CreditPolicyObject, "credit-1", "v1", "digest-theirs")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	mustSaveVersion(t, transactor, ctx, repository, theirs)
+	mustSaveCreditPolicy(t, transactor, ctx, repository,
+		creditPolicyOn(t, theirs, "charge-freight", creditAmountLimit(t, 1)))
+
+	bare, err := repository.LoadForScope(ctx, tenant, scope)
+	if err != nil {
+		t.Fatalf("登记正文前读回：%v", err)
+	}
+	if bare.Count() != 1 {
+		t.Fatalf("版本数 = %d, want 1", bare.Count())
+	}
+	if policies := bare.CreditPolicies(); len(policies) != 0 {
+		t.Fatalf("没登记正文（或只有他租户登记）却读回 %d 份信用政策", len(policies))
+	}
+	before := bare.ViewRevision(tenant, scope)
+
+	mustSaveCreditPolicy(t, transactor, ctx, repository,
+		creditPolicyOn(t, version, "charge-freight", creditRatioLimit(t, 2500)))
+
+	loaded, err := repository.LoadForScope(ctx, tenant, scope)
+	if err != nil {
+		t.Fatalf("登记正文后读回：%v", err)
+	}
+	policies := loaded.CreditPolicies()
+	if len(policies) != 1 {
+		t.Fatalf("读回 %d 份信用政策，want 1", len(policies))
+	}
+	if bps, ok := policies[0].AuthorizedLimit().RatioBasisPoints(); !ok || bps != 2500 {
+		t.Fatalf("limit = %#v, want 2500 bps", policies[0].AuthorizedLimit())
+	}
+	if policies[0].ChargeType().String() != "charge-freight" || policies[0].Level().String() != "level-commercial" {
+		t.Fatalf("正文读回后变了形：%#v", policies[0])
+	}
+	if !policies[0].Version().SameVersionAs(version) {
+		t.Fatal("正文挂回了另一个版本")
+	}
+	if loaded.ViewRevision(tenant, scope) == before {
+		t.Fatal("信用政策从缺席变为在场，范围修订却没动——先前解析的失效检测看不见它")
+	}
+}

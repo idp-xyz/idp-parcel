@@ -150,9 +150,18 @@ type closureDocument struct {
 	// Settlement 只在必需依据含结算政策时出现（ADR-0044 的「含则必填、不含则必缺」）。
 	// 它必须原样写下来：解析键的最小身份把选择器算在内，落库时丢掉，读回的键就立不起来，
 	// 于是一份写得进去的闭包永远读不回来——写成功、读失败，两侧都不报错。
-	Settlement   *settlementSelectorDocument `json:"settlement,omitempty"`
-	ViewRevision string                      `json:"viewRevision"`
-	Adopted      []adoptedDocument           `json:"adopted"`
+	Settlement *settlementSelectorDocument `json:"settlement,omitempty"`
+	// Credit 只在必需依据含信用政策时出现（ADR-0127，同一条「含则必填、不含则必缺」）；不写
+	// 下来读回的键同样立不起来。
+	Credit       *creditSelectorDocument `json:"credit,omitempty"`
+	ViewRevision string                  `json:"viewRevision"`
+	Adopted      []adoptedDocument       `json:"adopted"`
+}
+
+// creditSelectorDocument 两维齐全：信用政策没有由闭包解出的那一维，键上给的就是全部。
+type creditSelectorDocument struct {
+	Level      string `json:"level"`
+	ChargeType string `json:"chargeType"`
 }
 
 // settlementSelectorDocument 只有三维：闭包解析键上的选择器按定义不带合同，那一维是本次
@@ -174,6 +183,17 @@ type adoptedDocument struct {
 	// 快照里，不回登记册按版本重读：登记册那份正文改一次，一次已固定的解析就会改口说自己
 	// 当初采用的是别的方式，而快照的全部意义就是不许它改口（ADR-0028）。
 	SettlementPolicy *settlementPolicyDocument `json:"settlementPolicy,omitempty"`
+	// CreditBasis 只在采用了信用政策时出现（ADR-0127）。额度整份留在快照里，不回登记册按版本
+	// 重读，理由与结算政策同一条：正文改一次，已固定的解析就会改口说自己当初授权的是别的额度。
+	// 出处不另写——它就是本项的 Version。
+	CreditBasis *creditBasisDocument `json:"creditBasis,omitempty"`
+}
+
+// creditBasisDocument 镜像 domain.CreditLimit 的两格封闭：恰一在场。两格分列而不是「一个数加
+// 一列标记」，与 0020 同一条理由——值落在哪一格本身就是判别式。
+type creditBasisDocument struct {
+	AmountMinor      *int64 `json:"amountMinor,omitempty"`
+	RatioBasisPoints *int64 `json:"ratioBasisPoints,omitempty"`
 }
 
 type settlementPolicyDocument struct {
@@ -208,6 +228,12 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 			Currency:     key.Settlement.Currency.String(),
 		}
 	}
+	if !key.Credit.Empty() {
+		document.Credit = &creditSelectorDocument{
+			Level:      key.Credit.Level.String(),
+			ChargeType: key.Credit.ChargeType.String(),
+		}
+	}
 	if revision, ok := closure.ViewRevision(); ok {
 		document.ViewRevision = revision.String()
 	}
@@ -222,9 +248,17 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 		if policy, ok := adopted.SettlementPolicy(); ok {
 			item.SettlementPolicy = documentOfSettlementPolicy(policy)
 		}
+		if credit, ok := adopted.CreditBasis(); ok {
+			item.CreditBasis = documentOfCreditBasis(credit)
+		}
 		document.Adopted = append(document.Adopted, item)
 	}
 	return document
+}
+
+func documentOfCreditBasis(basis domain.CreditBasis) *creditBasisDocument {
+	minor, bps := creditLimitColumns(basis.AuthorizedLimit())
+	return &creditBasisDocument{AmountMinor: minor, RatioBasisPoints: bps}
 }
 
 func documentOfSettlementPolicy(policy domain.SettlementPolicy) *settlementPolicyDocument {
@@ -287,6 +321,11 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			return domain.CommercialClosure{}, err
 		}
 	}
+	if document.Credit != nil {
+		if key.Credit, err = document.Credit.selector(); err != nil {
+			return domain.CommercialClosure{}, err
+		}
+	}
 
 	adopted := make([]domain.RehydrateAdoptedBasisSpec, 0, len(document.Adopted))
 	bases := make([]domain.CommercialObjectKind, 0, len(document.Adopted))
@@ -312,6 +351,15 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			}
 			spec.SettlementPolicy = policy
 			spec.HasSettlementPolicy = true
+		}
+		if item.CreditBasis != nil {
+			// 两格折回领域构造门；两空 / 两满是本适配器绝不会写出的形状，报错不吸收。
+			limit, err := creditLimitFrom(item.CreditBasis.AmountMinor, item.CreditBasis.RatioBasisPoints)
+			if err != nil {
+				return domain.CommercialClosure{}, fmt.Errorf("load commercial resolution: %w", err)
+			}
+			spec.CreditLimit = limit
+			spec.HasCreditBasis = true
 		}
 		adopted = append(adopted, spec)
 		bases = append(bases, kind)
@@ -339,6 +387,18 @@ func (document settlementSelectorDocument) selector() (domain.SettlementSelector
 	}
 	if selector.Currency, err = domain.NewCurrencyCode(document.Currency); err != nil {
 		return domain.SettlementSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	return selector, nil
+}
+
+func (document creditSelectorDocument) selector() (domain.CreditSelector, error) {
+	var selector domain.CreditSelector
+	var err error
+	if selector.Level, err = domain.NewAuthorityLevel(document.Level); err != nil {
+		return domain.CreditSelector{}, fmt.Errorf("load commercial resolution: %w", err)
+	}
+	if selector.ChargeType, err = domain.NewChargeTypeReference(document.ChargeType); err != nil {
+		return domain.CreditSelector{}, fmt.Errorf("load commercial resolution: %w", err)
 	}
 	return selector, nil
 }

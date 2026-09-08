@@ -45,8 +45,9 @@ var _ ports.CommercialPublicationView = (*CommercialPublications)(nil)
 // 共同派生，分两次读之间若有写入落地，派生出的修订会对应一个从未存在过的中间状态；
 // ReadExecutor 不保证两条语句同处一个快照，而一条语句保证。
 //
-// 形态行与价格/结算政策行都以版本四元组为主键、与版本一一对应，左连接后仍是每个版本
-// 一行。区间更正按 D-5 只增多条，直接左连接会放大结果集、把其余正文件登记重复进册。
+// 形态行与价格/结算/信用政策行都以版本四元组为主键、与版本一一对应，左连接后仍是每个版本
+// 一行（信用政策自 ADR-0127 起进整册：闭包解析在信用政策之间选，正文不进册它就选不出额度）。
+// 区间更正按 D-5 只增多条，直接左连接会放大结果集、把其余正文件登记重复进册。
 // 因此更正以 LATERAL 聚成 JSON 数组挂在版本行上，登记顺序随 registration_id 保留。
 func (repository *CommercialPublications) LoadForScope(
 	ctx context.Context,
@@ -64,7 +65,10 @@ func (repository *CommercialPublications) LoadForScope(
 		        price.policy_scope_ref, price.effective_starts_at, price.effective_ends_at,
 		        settlement.method, settlement.legal_entity_ref, settlement.counterparty_ref,
 		        settlement.contract_label, settlement.charge_scope_ref, settlement.currency_code,
-		        settlement.effective_starts_at, settlement.effective_ends_at
+		        settlement.effective_starts_at, settlement.effective_ends_at,
+		        credit.legal_entity_ref, credit.authority_level_ref, credit.charge_type_ref,
+		        credit.limit_minor, credit.limit_ratio_bps,
+		        credit.effective_starts_at, credit.effective_ends_at
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
 		          ON product.tenant_id     = version.tenant_id
@@ -81,6 +85,11 @@ func (repository *CommercialPublications) LoadForScope(
 		         AND settlement.object_kind   = version.object_kind
 		         AND settlement.object_id     = version.object_id
 		         AND settlement.version_label = version.version_label
+		   LEFT JOIN party_commercial.credit_policy AS credit
+		          ON credit.tenant_id     = version.tenant_id
+		         AND credit.object_kind   = version.object_kind
+		         AND credit.object_id     = version.object_id
+		         AND credit.version_label = version.version_label
 		   LEFT JOIN LATERAL (
 		        SELECT COALESCE(
 		                   json_agg(
@@ -118,6 +127,7 @@ func (repository *CommercialPublications) LoadForScope(
 		var rawCorrections []byte
 		var price scannedPricePolicy
 		var settlement scannedSettlementPolicy
+		var credit joinedCreditPolicy
 		if err := rows.Scan(
 			&raw, &rawForm, &rawCorrections,
 			&price.direction, &price.planRef, &price.planDirection, &price.conversion,
@@ -125,6 +135,8 @@ func (repository *CommercialPublications) LoadForScope(
 			&settlement.method, &settlement.legalEntity, &settlement.counterparty,
 			&settlement.contract, &settlement.chargeScope, &settlement.currency,
 			&settlement.startsAt, &settlement.endsAt,
+			&credit.legalEntity, &credit.level, &credit.chargeType,
+			&credit.limitMinor, &credit.limitBps, &credit.startsAt, &credit.endsAt,
 		); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
@@ -151,6 +163,9 @@ func (repository *CommercialPublications) LoadForScope(
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 		if err := registerSettlementPolicy(registry, version, settlement); err != nil {
+			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		if err := registerCreditPolicy(registry, version, credit); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 	}
