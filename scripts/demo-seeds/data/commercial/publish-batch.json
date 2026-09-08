@@ -54,7 +54,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-RULEPKG-01-v1",
+      "contentDigest": "PCC-1:ae5abada5241c2427b6138a50b765804800033be973556de6d0ad6c29760295d",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
