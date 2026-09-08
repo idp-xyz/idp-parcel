@@ -64,3 +64,19 @@ Blocked by: 无（纯删，PC 地盘内）
   `NewContinuationReference` 全仓零调用（连测试也没有），`New*` 前缀被函数名门禁跳过，记名不删。**不做的**：不动 `ResolveCommercialBasis`；
   不改 spec 状态行（三票都完后改一次）。**验证**：`gofmt -l` 空；`go build ./...` / `go vet ./internal/partycommercial/...` 退 0；
   `internal/partycommercial/domain` 与 `internal/architecture` 各 ok；全仓含 DSN 在三票收口的 tip 上一次跑（见 03 / 04 那笔记录）。
+- 评审 ← 通道 2 · 钉 `c1dcbd90` · 10:54（基线 `4524cfd4`，隔离树 `%TEMP%\idp-review-wbr05`，只评 `db723eb1`；由 MCP-6 落票面）：
+  **Standards** — 阻断：无。非阻断：(1) `internal/partycommercial/domain/commercial_resolution_staleness_test.go` 新头注「同一组规则的
+  用例在 reference_closure_test.go」指错：该文件无一处调 `ValidateClosureBeforeDecision`；闭包形态重解的用例在
+  `application/validate_commercial_basis_test.go`（`TestARevalidationSeesANewCandidateAndReportsTheResolutionStale` 等）。AGENTS.md
+  「写代码注释」——引另一文件要指得准；改一个文件名即可，建议同分支顺手。(2) 删掉的八条里一条断言现无人钉：「只有唯一解析能被重解」——
+  `ValidateClosureBeforeDecision` 首行守卫 `prior.outcome != UniquelyResolved → return prior`，domain 层无人调、application 层五条 prior
+  全是 UniquelyResolved。删法合票面，可另立票补一条闭包形态小测试。其余七条均有等价：STALE / 续办 / 不带 adopted、不变同 ID（app）；
+  换新 ID（`commercial_resolution_test.go` afterChange 断言）；别范围不影响（scope-other + app 按原键重解）；权威不可读→Pending +
+  AuthorityUnreadable + 续办（app）；STALE 原因（PS 适配器 `commercial_basis_test.go` “PC-CURRENT_RESOLUTION_CHANGED”）。(3) 信息：
+  `.scratch/at-coverage-inventory.md` AT-PC-024 / 026 两行仍点名被删测试；盘点钉在 08-13 的 SHA，同行其余测试仍钉住，无覆盖损失，
+  记名不动。无发现：零调用方属实；闭包形态三分支与被删函数逐一对应；两枚枚举保留正确；PC CONTEXT / UC-PC-002 步 8 措辞不点形态，
+  不需改。**Spec**（票 05 完成判据 1–4）— 阻断：无。非阻断：无。①–④ 逐项对上；基线计数以 `git grep -c '^internal/'` 在
+  `4524cfd4` / `db723eb1` / `c1dcbd90` 复现 7 / 6 / 6、PC 5 / 4 / 4；`production_type_reachability_baseline.txt` 那句是删名的必要后果，
+  不算 creep；spec 状态行未动。附：隔离树 `go test -count=1` architecture / PC domain / PC application 三包 ok。**结论：无阻断。**
+- 2026-09-08 11:0x · MCP-6：落上条评审。非阻断 (1) 于 `c1dcbd90` 复核属实（`ValidateClosureBeforeDecision` 的引用文件里没有
+  `reference_closure_test.go`），文件名另起一笔改（不混进纯 .md 笔）；(2) 记名，补不补闭包形态小测试随 wbr 批收口时一并裁；(3) 记名不动。

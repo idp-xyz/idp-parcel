@@ -1,8 +1,8 @@
 # 人工复核谓词：「要不要」已由接单规则正文答，「谁有权」这一问的消费方（复核完成授权）尚无端口
 
 Category: enhancement
-Status: blocked——2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格「改名为『谁有权』形态或拆成两问」是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁（见 Comments 末条）；判据 2（PS 侧端口 + PC 裁定用例，PS 地盘不在本单）与 3（剪行）等裁决后另笔接。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
-Blocked by: UC-PC-003「四、人工复核那一格的措辞与分工对不齐」那条裁决（改名为「谁有权」形态，或拆成两问）
+Status: ready-for-agent——2026-09-08 11:0x，MCP-1 代裁（owner 授权自决口径，见 Comments 末条）：取「谁有权」形态、不拆两问，**不改名而是并入 `Authorize`**——PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调 UC-PC-003 既有裁定用例带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因第一种）。判据 1 已裁并记进 UC-PC-003 第四项；判据 2、3 的 PC 半边与 PS 侧端口**同笔**落地、单独改不了，PS 侧另派 MCP-2，故转 ready-for-agent 等派。不立新 ADR。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方六行，族界那句照留在后面并接下票 05 的括注）；判据 1 那格是 UC-PC-003 第四项的语义改口，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Blocked by: 无（UC-PC-003 第四项已由 MCP-1 2026-09-08 裁；PC 半边与 PS 侧端口同笔落地，PS 侧另派 MCP-2，MCP-6 不碰 PS 地盘）
 
 ## 条目
 
@@ -58,3 +58,15 @@ UC-PC-003 的第二切——复核**完成**的授权裁定。PS `application/co
   MCP-1；且判据 2 的 PS 侧端口在 PS 地盘（MCP-2），本单不碰。**待 MCP-1**：裁 UC-PC-003 第四项（改名为「谁有权」形态，建议名
   `ManualReviewAuthorityFor` / 或拆成 `ManualReviewAuthorized` + 保留「要不要」交给规则正文），裁后由 PC 侧改名 + 基线条目名同笔改
   （门禁按名找声明，不同笔会红）+ UC-PC-003 第二切裁定用例，PS 侧端口另派。
+- 2026-09-08 11:0x · MCP-1 代裁（owner 授权自决口径；取证钉 `96558acd`；由 MCP-6 落票面）：**取「谁有权」形态、不拆两问，且
+  不改名而是并入 `Authorize`。** 取证：`domain.Authorize(grants, delegations, request)` 已是动作无关的「谁有权」裁定，
+  `AuthorizedAction` 里 `ManualReviewAction` 与主动拒绝同走一条路（`permits` 按动作 + 法人 + 等级 + 范围 + 时刻，三值：命中 /
+  `ErrNotAuthorized` / `ErrAuthorityRulesNotConfigured`，ADR-0029），`AdjudicateCommercialAuthorizationHandler` 就是 UC-PC-003 的
+  裁定用例。而 `ManualReviewRequirementFor(grants, scope, at) bool` 只按范围 + 时刻、无法人无等级无三值：答不了「谁有权」（无主体），
+  也不该答「要不要」（单一权威在接单规则正文 `ManualReviewDirective`，CONTEXT 硬句）——改名后仍是 `Authorize` 的无主体退化副本，
+  第二写法就是 ADR-0042 要拦的并格。**落地**：PS 侧复核授权端口与 `ActiveRejectionAuthorizer` 同形（三值），适配器调同一裁定用例
+  带 `ManualReviewAction`；`ManualReviewRequirementFor` 及只为它写的用例在 PS 端口接真那一笔删去（基线条目同笔消，成因记「第一种：
+  并入 Authorize」）。**判据按裁决读**：判据 2 的「PC 裁定用例真调它（改名后）」改为「适配器调既有 `AdjudicateCommercialAuthorizationHandler`
+  带 `ManualReviewAction`」；判据 3 的三分成因从第二种改为第一种（删）。**不立新 ADR**：ADR-0042 已定归类，这是应用不是新取舍；
+  UC-PC-003 第四项那段记裁决（改行为→改 UC，不动 ADR 历史）。PS 侧端口在 PS 地盘，另派 MCP-2，MCP-6 不碰。Status
+  blocked→ready-for-agent（PC 半边等 PS 端口同笔，单独改不了）。

@@ -1,8 +1,8 @@
 # 信用政策正文已入册、`CreditBasis` 无人索取：PC→SA 的授信额度缝不存在
 
 Category: enhancement
-Status: blocked——2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方七行），判据 1 那格「四维选择在哪一层还有多候选」经取证是**解析语义的改口、要 ADR**，按派单纪律停下报 MCP-1 裁（见 Comments 末条）；判据 2（提供方口 + SA 消费适配器）与 3（剪行）等裁决后另笔接。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
-Blocked by: 本票「要先裁的一格」（与 `party-commercial-context-gaps/07` 同一轮 `/domain-modeling`）
+Status: in-progress——2026-09-08 11:0x，MCP-1 代裁**甲**（owner 授权自决口径，见 Comments 末条）：闭包解析加 `resolveCreditPolicyBasis` 一步、`ResolveCreditPolicy` 作四维选择器、`CreditBasis` 随 Resolution 交出，独立一篇 **ADR-0127**；判据 1 已裁，判据 2（提供方口 + SA 消费适配器，可碰 `settlementaccounting/adapters/partycommercial`）与 3（剪行按第二种）由 MCP-6 在 `mcp6-wbr03-05` 接。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方七行），判据 1 那格「四维选择在哪一层还有多候选」经取证是**解析语义的改口、要 ADR**，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Blocked by: 无（「要先裁的一格」已由 MCP-1 2026-09-08 裁甲；与 `party-commercial-context-gaps/07` 的 ADR-0115 分立，独立 ADR-0127）
 
 ## 条目
 
@@ -75,3 +75,11 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
   partycommercial/pre_acceptance_control_policy.go` 只读结算政策，账期分支要的 `CreditBasis` 无处来；接线时是那只适配器旁加一只
   读 PC 闭包交出的信用依据、装配在 SA 的接受前控制编排。**待 MCP-1**：裁甲 / 乙 + 取 ADR 号；裁后本票判据 2、3 另笔接（可能落
   同一 ADR 于 pc-gaps/07 的 ADR-0115 之后作补充记录，或独立一篇）。
+- 2026-09-08 11:0x · MCP-1 代裁（owner 授权自决口径；由 MCP-6 落票面）：**裁甲。** 照结算政策的形，在闭包解析里加
+  `resolveCreditPolicyBasis` 一步（镜像 `resolveSettlementPolicyBasis`：候选先按版本的租户与范围收窄，再由 `ResolveCreditPolicy`
+  按（法人、等级、费用类型、时点）选唯一 / `适用冲突` / `无适用依据`），`CreditBasis` 随 Resolution 交出。理由：价格规则与结算
+  政策两个政策类对象已在同一闭包里用类别专属选择器解析（ADR-0044 镜像 `resolvePriceRuleBasis`），信用政策是第三个；乙会让同一
+  闭包里两套解析语义并存、且逼租户把（法人、等级）拆成范围——正是 `ports.go` 自注那句要拦的。**号 ADR-0127**（0126 在
+  `mcp5-awf08`，0127 全 ref 无文件，MCP-1 10:5x 查），独立一篇、不作 ADR-0115 补充；Context 里写「此前 `ResolveCreditPolicy`
+  零生产调用」时钉 SHA 不写行号。判据 2 的 SA 消费侧适配器在 SA 地盘，本单可碰 `settlementaccounting/adapters/partycommercial`；
+  判据 3 剪行按**第二种**（真接上）。Status blocked→in-progress，Blocked by 清；ADR-0127 + 判据 2–3 由 MCP-6 接着做，每小步提交并推。
