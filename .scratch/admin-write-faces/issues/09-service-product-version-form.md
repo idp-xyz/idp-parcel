@@ -54,8 +54,11 @@ Decision 一说规范化文档「只盖正文不盖壳」，而本册**没有正
    读）；但 `cmd/parcel-commercial/publish_batch_test.go` 与 `cmd/parcel-dispatch/syn_pc_seed_test.go` 都以 `sha256:…` 旧串发
    `SERVICE_PRODUCT`，门不开所以照绿——若日后开门，seed 那两项与这两处一并换串。这一格是**有意留的**：逼 CLI 对无正文册也
    声明 `PCC-1:<常量>`，属「何时开始拒收无版本旧串」那一问（Decision 五归伞票收口时裁），不在本票自裁。
-   同一对象先经 CLI 以 `sha256:syn-…` 发布、再经表单以 `PCC-1:…` 发布同一版本号，落到登记册答`内容冲突`——两个声明串
-   不同，本来就是冲突，与其余各册一致。
+   **后果（只记不裁，通道 1 2026-09-08 复核时点名）**：同一版从表单路发布得 `PCC-1:<sha256 of {canonicalization, kind}>`；
+   从批文路重发同一版本号带 `sha256:syn-…`，登记册答 `CONTENT_CONFLICT`（ADR-0031 比的是串）而**不是** `NOT_ACCEPTED` 带两串——
+   对账门对本册不开，操作者从批文路拿不到算出的那一个串，只知道「与册上那版不同」。反向亦然：先批文后表单，表单路答
+   `PUBLICATION_NOT_LANDED` 嵌 `CONTENT_CONFLICT`。这与「旧式 `sha256:` 声明串何时开始拒收」是同一件事（ADR-0126 Decision 五、
+   票 08 完成记录「未做」），伞票 07 收口时一起裁；本票只记录，不裁。
 
 **给通道 1 复核的一点**：第 4 条把「已接的册」与「CLI 必须声明算出的串」拆开了——对有正文的册两者同时成立，对本册只有前者。
 若通道 1 认为接进规范化就该同时对 CLI 开门（seed 两行随之换串），那是 `publicationContentOf` 加一支 + seed 两行，本票可接，
