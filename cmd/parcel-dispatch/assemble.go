@@ -1058,14 +1058,21 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance control policy: %w", err)
 	}
+	// 账期分支的授信额度从同一份闭包采用的信用政策取（ADR-0127）：与控制策略视图共用同一只
+	// 解析库、同一条回指，额度出处随结果带回；不接它，编排会沿旧路拿登记状况里的 limit 当额度。
+	creditBasis, err := sapartycommercial.NewCreditBasis(resolutions)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: credit basis view: %w", err)
+	}
 	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
-			Policy:    policy,
-			Balance:   balances,
-			Freezes:   freezes,
-			Credit:    standings,
-			Exposures: exposures,
-			Clock:     clock,
+			Policy:      policy,
+			Balance:     balances,
+			Freezes:     freezes,
+			Credit:      standings,
+			CreditBasis: creditBasis,
+			Exposures:   exposures,
+			Clock:       clock,
 		}),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
