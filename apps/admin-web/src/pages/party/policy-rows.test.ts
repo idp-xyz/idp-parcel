@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal, ok } from 'node:assert/strict';
 import type { CommercialPolicyListResponseBody } from './api';
-import { cancellationCell, kindColumns, rowsOf } from './policy-rows';
+import { cancellationCell, kindColumns, pricePolicyCaliberCell, rowsOf } from './policy-rows';
 import {
   commercialPolicyKinds,
   policyKindLabels,
@@ -207,6 +207,74 @@ test('额度两键都缺是响应不合契约，如实点名而不是显示成�
   });
 
   equal(row.values.limit, '额度缺失（响应不合契约）');
+});
+
+// 输入照后端 query_commercial_catalogue_test.go 里价格政策册那三行的形状（票 admin-write-faces/14「结果在同册立刻可见（含口径列）」）：
+// 带汇率的销售口径、不涉外币且税务不适用的采购口径、只有正文没有口径的行。三处可缺的键缺席即「没有」，不是空串。
+const pricePolicies: CommercialPolicyListResponseBody = {
+  outcome: 'COMMERCIAL_POLICIES_LISTED',
+  kind: 'PRICE_POLICY',
+  policies: [
+    {
+      objectId: 'price-fx',
+      version: 'v1',
+      direction: 'SELL',
+      planRef: 'PLAN-CN-SG-SELL@v1',
+      planDirection: 'BUY',
+      bindingConversion: 'FROZEN_BUY_EVALUATION',
+      policyScope: 'pricing-scope-1',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      registeredAt: '2026-01-01T00:00:00Z',
+      caliberDeclared: true,
+      caliber: {
+        taxDisposition: 'TAX_EXCLUSIVE',
+        taxClassification: 'vat-standard',
+        volumetricFactor: 'sell-divisor-5000-cm',
+        fx: { quoteType: 'boc-cash-selling', asOfSemantics: 'AT_ORDER_DATE', asOfPolicyVersion: 'asof-policy/v3' },
+        registeredAt: '2026-01-01T00:00:00Z',
+      },
+    },
+    {
+      objectId: 'price-plain',
+      version: 'v1',
+      direction: 'BUY',
+      planRef: 'PLAN-CN-SG-COST@v1',
+      planDirection: 'BUY',
+      bindingConversion: 'NONE',
+      policyScope: 'pricing-scope-1',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      registeredAt: '2026-01-01T00:00:00Z',
+      caliberDeclared: true,
+      caliber: { taxDisposition: 'TAX_NOT_APPLICABLE', registeredAt: '2026-01-01T00:00:00Z' },
+    },
+    {
+      objectId: 'price-bare',
+      version: 'v1',
+      direction: 'SELL',
+      planRef: 'PLAN-CN-SG-SELL@v1',
+      planDirection: 'SELL',
+      bindingConversion: 'NONE',
+      policyScope: 'pricing-scope-1',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      registeredAt: '2026-01-01T00:00:00Z',
+      caliberDeclared: false,
+    },
+  ],
+};
+
+test('商业价格政策册多一列口径：三段各显自己的真话，没口径的行列为「未登记」而不是空', () => {
+  deepEqual(
+    kindColumns.PRICE_POLICY.map((column) => column.header),
+    ['政策对象 / 版本', '政策方向', '定价方案引用', '方案方向', '绑定转换', '适用范围', '计价口径（税务;体积;汇率）', '有效区间', '登记时间'],
+  );
+  const [withFx, plain, bare] = rowsOf(pricePolicies);
+  equal(withFx.key, 'price:price-fx@v1');
+  equal(withFx.values.direction, '卖价');
+  equal(withFx.values.planDirection, '买价');
+  equal(withFx.values.caliber, '税务 未税@vat-standard;体积 sell-divisor-5000-cm;汇率 boc-cash-selling/AT_ORDER_DATE/asof-policy/v3');
+  equal(plain.values.caliber, '税务 税务不适用;体积 无系数（非销售方向）;汇率 未声明');
+  equal(bare.values.caliber, '未登记');
+  equal(pricePolicyCaliberCell({ ...pricePolicies.policies[0], caliber: undefined }), '口径缺失（响应不合契约）');
 });
 
 // 抽出行转写时顺带钉住取消授权的三态：这三句是页面替目录说的话，抽出来之后不能变。

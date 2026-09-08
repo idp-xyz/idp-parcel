@@ -9,6 +9,7 @@ import type {
   CommercialPolicyListResponseBody,
   CreditPolicyRecord,
   PreAcceptanceFinancialControlPolicyRecord,
+  PricePolicyRecord,
 } from './api';
 import {
   commercialDirectionLabels,
@@ -21,6 +22,7 @@ import {
   jointPassConditionLabels,
   labelOf,
   settlementMethodLabels,
+  taxDispositionLabels,
 } from './presentation';
 
 export interface PolicyRow {
@@ -67,6 +69,7 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('planDirection', '方案方向'),
     col('bindingConversion', '绑定转换', true),
     col('policyScope', '适用范围', true),
+    col('caliber', '计价口径（税务;体积;汇率）', true),
     col('effective', '有效区间', true),
     col('registeredAt', '登记时间', true),
   ],
@@ -159,6 +162,21 @@ function creditLimitCell(record: CreditPolicyRecord): string {
   return '额度缺失（响应不合契约）';
 }
 
+// 口径三态:未登记(0010 早于 0022,只有正文没有口径的行是合法状态)/ 已登记 / 布尔说已登记而节缺了(响应不合契约,
+// 点名而不是折成「—」,判据同 creditLimitCell)。已登记时三段各显自己的真话:分类缺席是「不适用因而没有」、系数缺席
+// 是「采购或法人间方向因而没有」、汇率缺席是「未声明(不涉外币)」——三处都不是空白,不显成「—」让人去补。
+export function pricePolicyCaliberCell(record: PricePolicyRecord): string {
+  if (!record.caliberDeclared) return '未登记';
+  const caliber = record.caliber;
+  if (!caliber) return '口径缺失（响应不合契约）';
+  const tax = caliber.taxClassification
+    ? `${labelOf(taxDispositionLabels, caliber.taxDisposition)}@${caliber.taxClassification}`
+    : labelOf(taxDispositionLabels, caliber.taxDisposition);
+  const volumetric = caliber.volumetricFactor ?? '无系数（非销售方向）';
+  const fx = caliber.fx ? `${caliber.fx.quoteType}/${caliber.fx.asOfSemantics}/${caliber.fx.asOfPolicyVersion}` : '未声明';
+  return `税务 ${tax};体积 ${volumetric};汇率 ${fx}`;
+}
+
 // 两族阶段内容声明的三栏各有自己的「空」。「未声明」与「声明了但为空」在数组长度上
 // 撞成同一签名,靠服务端给的 *Declared 布尔分——两者的恢复动作相反(前者去登记声明,
 // 后者无事可做)。
@@ -238,6 +256,7 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
           planDirection: labelOf(commercialDirectionLabels, record.planDirection),
           bindingConversion: record.bindingConversion,
           policyScope: record.policyScope,
+          caliber: pricePolicyCaliberCell(record),
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           registeredAt: formatInstant(record.registeredAt),
         },
