@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { publicationOutcomeLabels } from './api';
-import { problemNote } from './presentation';
+import { labelOf, problemNote } from './presentation';
 import {
   approveOutcomeLabels,
   approvePublicationDraft,
@@ -267,7 +267,7 @@ function PreviewNote({ answer }: { answer: ApiResult<PublicationPreviewResponseB
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            预览答复：<span className="font-mono">{body.outcome}</span> —— {label(previewOutcomeLabels, body.outcome)}
+            预览答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(previewOutcomeLabels, body.outcome)}
           </p>
           {body.outcome === 'PREVIEWED' ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
           {body.cause ? <p>成因：{body.cause}</p> : null}
@@ -291,11 +291,11 @@ function DraftNote({
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            {what}答复：<span className="font-mono">{body.outcome}</span> —— {label(labels, body.outcome)}
+            {what}答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(labels, body.outcome)}
           </p>
           {body.status ? (
             <p>
-              载体状态：<span className="font-mono">{body.status}</span> —— {label(draftStatusLabels, body.status)}
+              载体状态：<span className="font-mono">{body.status}</span> —— {labelOf(draftStatusLabels, body.status)}
             </p>
           ) : null}
           {body.contentDigest ? <DigestLine canonicalization={body.canonicalization} digest={body.contentDigest} /> : null}
@@ -312,7 +312,7 @@ function PublicationNote({ answer }: { answer: ApiResult<PublicationDraftPublica
       {(body) => (
         <div className="text-xs text-idpxyz-textMuted flex flex-col gap-1">
           <p>
-            发布答复：<span className="font-mono">{body.outcome}</span> —— {label(publishOutcomeLabels, body.outcome)}
+            发布答复：<span className="font-mono">{body.outcome}</span> —— {labelOf(publishOutcomeLabels, body.outcome)}
           </p>
           {body.publication ? <EmbeddedPublication publication={body.publication} /> : null}
         </div>
@@ -328,7 +328,7 @@ function EmbeddedPublication({ publication }: { publication: CommercialPublicati
     <div className="ml-4 flex flex-col gap-1">
       <p>
         受控发布用例：<span className="font-mono">{publication.outcome}</span> ——{' '}
-        {label(publicationOutcomeLabels, publication.outcome)}
+        {labelOf(publicationOutcomeLabels, publication.outcome)}
       </p>
       {publication.pendingCause ? <p>未决成因：{publication.pendingCause}</p> : null}
       {publication.cause ? <p>成因：{publication.cause}</p> : null}
@@ -358,10 +358,6 @@ function DigestLine({ canonicalization, digest }: { canonicalization?: string; d
       规范化 {canonicalization ?? '—'} · 内容摘要 {digest ?? '—'}
     </p>
   );
-}
-
-function label(table: Record<string, string>, code: string): string {
-  return table[code] ?? code;
 }
 
 /**

@@ -16,11 +16,9 @@
 
 import { postMasterData, type ApiResult } from '../catalogue-api';
 
-export type { ApiResult } from '../catalogue-api';
-
 /**
- * 发布轴的商业对象类别（domain.CommercialObjectKind 的 String() 原词，封闭十格）。它与
- * api.ts 的 CommercialPolicyKind（政策册的 `?kind=`）是两条分类轴，不逐字对应（见 presentation.ts
+ * 发布轴的商业对象类别（domain.CommercialObjectKind 的 String() 原词，封闭集；Go 那边加一格这里跟着加）。
+ * 它与 api.ts 的 CommercialPolicyKind（政策册的 `?kind=`）是两条分类轴，不逐字对应（见 presentation.ts
  * 的 policyKindSources）。
  */
 export type CommercialObjectKindName =
@@ -224,7 +222,7 @@ export const publishOutcomeLabels: Record<string, string> = {
   PUBLICATION_NOT_LANDED: '发布未落定（受控发布用例答了未决 / 冲突 / 不受理之一，载体留在已批准；用例答案见下）',
 };
 
-/** 载体状态（`domain.PublicationDraftStatus` 原名），三格只向前。 */
+/** 载体状态（`domain.PublicationDraftStatus` 原名），只向前：待批准 → 已批准 → 已发布。 */
 export const draftStatusLabels: Record<string, string> = {
   PENDING_APPROVAL: '待批准',
   APPROVED: '已批准',
