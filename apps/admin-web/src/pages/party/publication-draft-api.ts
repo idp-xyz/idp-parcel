@@ -49,6 +49,20 @@ export interface CreditPolicyBodyPayload {
 }
 
 /**
+ * 供应商协议册正文（Go `SupplierAgreementBodyPayload`，票 admin-write-faces/11）。六格无子表：供应商与责任法人是
+ * 主数据读面上的引用、采购方案是 parcel-pricing 方案版本的引用串（从价卡目录选，表单不读方案内容）、协议自己的
+ * 适用范围与区间。**没有方向键**——领域把供应商协议钉死为采购（BUY），载荷里出现 direction 按未知键拒。
+ */
+export interface SupplierAgreementBodyPayload {
+  supplier: string;
+  legalEntity: string;
+  scope: string;
+  purchasePlan: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+}
+
+/**
  * 载荷线格式（Go `CommercialPublicationPayload`）：版本壳（少了身份里的租户与摘要）加各册正文一格。
  * 各册子票在这里各加自己那一格正文类型，与 Go 侧同笔加；正文格的键名就是 Go 结构体上的 json 标签。
  */
@@ -62,6 +76,7 @@ export interface CommercialPublicationPayload {
   /** 壳上的指名引用：被引对象类别（原词）→ 对象标识。 */
   references?: Partial<Record<CommercialObjectKindName, string>>;
   creditPolicy?: CreditPolicyBodyPayload;
+  supplierAgreement?: SupplierAgreementBodyPayload;
 }
 
 /** 批准口与发布口的载荷（Go `PublicationDraftReferencePayload`）：只指名哪一版载体，身份从信封来。 */
