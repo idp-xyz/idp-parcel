@@ -21,6 +21,7 @@ import {
   registrationTitles,
   serviceFormLabels,
 } from './presentation';
+import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
 
 const info = moduleInfoById['service-products'];
 
@@ -70,7 +71,9 @@ const columns: ListColumn<ServiceProductRecord>[] = [
 // 渠道账号授权不在本端点体内，页面不以空列伪装该类读取已经实现；产品—渠道映射自
 // 票 admin-remainder-mechanism-batch/02 起有自己的页（channel-product-catalog）与
 // 端点，不并进本页——那边上列登记册信封，这边上列版本壳，行形状与修订轴不同。
-function ServiceProductVersionsTable() {
+//
+// `refreshKey` 由页面递增：「发布版本」签的载体到达发布那一步时刷本读面，让新版本在同页立刻可见。
+function ServiceProductVersionsTable({ refreshKey }: { refreshKey: number }) {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ServiceProductListResponseBody> | null>(null);
@@ -84,7 +87,7 @@ function ServiceProductVersionsTable() {
     return () => {
       cancelled = true;
     };
-  }, [reloadKey]);
+  }, [reloadKey, refreshKey]);
 
   const products = answer?.kind === 'outcome' ? answer.body.products : [];
   const needle = search.trim().toLowerCase();
@@ -118,38 +121,49 @@ function ServiceProductVersionsTable() {
         endpoint: 'GET /commercial-service-products',
         emptyTitle: '当前租户尚无服务产品版本',
         emptyDescription:
-          '读取入口已配置,但目录为空;页面不会预置服务产品或渠道映射。本页「登记服务形态」签补的是既有版本的形态,不产生版本本身——版本来自发布口。',
+          '读取入口已配置,但目录为空;页面不会预置服务产品或渠道映射。版本从本页「发布版本」签走五步发出;「登记服务形态」签补的是既有版本的形态,不产生版本本身。',
       })}
     />
   );
 }
 
 /**
- * 服务产品：查阅版本壳，外加登记签（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ * 服务产品：查阅版本壳，外加发布签与登记签（ADR-0085，票 admin-write-faces/02 切片 02c、09）。
  *
- * 登记签只装服务形态一册。**服务产品版本本身不在本签**：版本由发布口产生（发布快照的对象
+ * **「发布版本」签是本册的运营主路径**（票 09，ADR-0101 决定八逐字段表单）：版本壳四格 + 有效起止 +
+ * 引用表，五步「表单 → 预览摘要 → 存为待批准 → 批准 → 发布」由公共半边的流程组件走；发布落定后本页
+ * 目录读面刷新，新版本立刻可见。JSON 镜像签留在商业规则与策略页作高级口，不因主路径落地而删。
+ *
+ * 登记签只装服务形态一册。**服务产品版本本身不在登记签**：版本由发布口产生（发布快照的对象
  * 类别取 SERVICE_PRODUCT），那是另一个用例、另一套答案代数（已发布已生效 / 已计划生效 /
  * 发布未决），而形态是挂在一个已在册且已生效的版本上的内容。签名写死「登记服务形态」而不是
- * 「登记服务产品」，为的是让这一半的缺席在签上看得见——否则下一个人会以为产品版本也能从
- * 这里发。
+ * 「登记服务产品」，为的是让两条路的分工在签上看得见——版本从「发布版本」签来，形态从这里补。
  *
  * 形态钉在产品版本上：同一版本换个形态撞的是内容冲突，改形态要发新版本。所以本签只有登记
  * 一个动作，没有行级编辑或删除面。墙降之前它必然答 403「接入渠道未配置」，那是诚实答案；
  * 墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
  */
 export function ServiceProductsPage() {
+  const [refreshKey, setRefreshKey] = useState(0);
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="versions" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="versions">服务产品</TabsTrigger>
+          <TabsTrigger value="publish">发布版本</TabsTrigger>
           <TabsTrigger value="register">登记服务形态</TabsTrigger>
         </TabsList>
         <TabsContent
           value="versions"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <ServiceProductVersionsTable />
+          <ServiceProductVersionsTable refreshKey={refreshKey} />
+        </TabsContent>
+        <TabsContent
+          value="publish"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <ServiceProductPublicationForm onPublished={() => setRefreshKey((value) => value + 1)} />
         </TabsContent>
         <TabsContent
           value="register"
