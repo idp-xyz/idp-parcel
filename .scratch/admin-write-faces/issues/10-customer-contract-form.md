@@ -65,3 +65,44 @@ policy | inapplicabilityBasis}]}`（0012 正文：指名接单规则包；按费
 - **合同级声明一节在表单上永远送**：「本版不作声明」在批文里是合法缺键，但运营主路径上不由表单替人默认，没选就送空要求让服务端答「集合外的控制要求」。
 
 **未做（各归其票）**：`cmd/parcel-commercial/translate.go` 的 `controlRequirementFrom` / `controlBindingFrom` 与领域新加的 `PreAcceptanceControlRequirementNamed` / `financialControlBindingOf` 是同一条规则的两份（批文翻译层不在本票地盘，合并归 CLI 侧收口）；旧式 `sha256:` 声明串何时开始拒收（伞票收口时裁）；接入渠道未配置前四口答 403，点亮归装配（PAR-INT-01）。
+
+## Comments
+
+- 2026-09-08 15:4x · **评审 ← 通道 3 · 钉 `mcp4-awf10@3f4d4b53`（代码 tip；`7377bd23` 只动票面）· 基 `0ef63897`，非作者**（task-ba0d66f1；
+  隔离 detached 检出 `%TEMP%\idp-review-awf10`，只读；借来的 `1e7b9f41`=`283aa7d3` 三件已在 main，跳过）。两轴各三格：
+
+  **Standards — 阻断：无。非阻断：**
+  1. `internal/partycommercial/domain/publication_canonicalization.go` `RehydratePublicationContent`：本册用「分支内 `return content, nil`」
+     绕过末尾 `content.CreditPolicy == nil → ErrPublicationContentAbsent` 那一判；三册之后那一判只替信用政策说话，每接一册都要再加一支
+     早返回（09 的 `registerHasNoBody` 早返回与它同位插入，重放时两块并存即可、先后无关）。「正文缺席」的判据由此散在两处，与 AGENTS
+     「单一权威」有张力；建议伞票收口时把它改成按 kind 分派或 `PublicationContent` 上一个「有没有正文」的方法。
+  2. `domain/pre_acceptance_control.go` `PreAcceptanceControlRequirementNamed`：名单是手写切片 `{Required, NotApplicable}`，注释说「名单只在
+     `String()` 一处」，实际这里是第二份枚举（`CommercialObjectKindNamed` 用 `valid()` 迭代避开了这一点）；`cmd/parcel-commercial/translate.go`
+     的 `controlRequirementFrom` 是同一规则的第三份（派单已列为未做反查）。判断题（Duplicated Code）。
+  3. `apps/admin-web/src/pages/party/customer-contract-form.ts` `payloadOf`：`payload.customerContract!.contractContent.bindings = …` 的非空断言
+     紧跟着自己刚构造的对象——先建 `customerContract` 常量再挂进载荷就不需要 `!`。判断题。
+  **Standards — 核过无发现：** 共享文件 `publication_canonicalization.go` 除 `IsRegisterCanonicalized` 单行改 switch（与 09 的 switch 各一 case，
+  并集即可直接叠）外均纯加行，两处 struct 对齐是 gofmt 重排不是改邻行；`publication_draft_payload.go` 纯加行；`PublicationDraftFlow.tsx` /
+  `publication-draft-flow.ts` 与 `283aa7d3` 逐字节同（`git diff --stat` 空），props 零改动；`publication-draft-api.ts` 只加本册正文类型。
+  **seed 换串取证**：隔离树里写临时探针（未提交、已删）读 `publish-batch.json` → `publishCommandsFromJSON` → 按 `publicationContentOf` 同形折成
+  `CustomerContractBody` → `CanonicalizePublicationContent` → `ReconcileDeclaredDigest` 放行，算出串 = `PCC-1:06de9a9c…` 与 seed 逐字节同，文档里
+  约定表按 chargeScope 排序（COD 在 PREPAID 前）；「老演示库重放本项答 `CONTENT_CONFLICT`、要重建再 seed」提交信 `ab771dec` 与票面「量到的」都写了。
+  `cmd/parcel-commercial/publish_batch_test.go` 里两处 `CUSTOMER_CONTRACT` 项都不带 `contractContent`，对账门不开、照绿，与「正文在不在场看
+  contractContent 那一层」一致。领域重构 `declaredBindingsByScope` / `preAcceptanceControlDeclared` 是纯抽取（同判据同哨兵），既有用例未改，
+  `publish_commercial_authority_test.go` 只改 `TestContractContentMustAgreeWithTheShellReference` 的规格构造（断言不变）；未碰 0007 / 0012 / 闭包解析；
+  canonical 文档键名与 `translate.go` 的 `contractContentDocument` / `preAcceptanceControlDocument` 逐键同；领域新文件只 import `fmt` / `sort`；
+  注释中文、无行号无计数；fieldPaths 带 `bindings[i]` 下标及三格（MCP-2 对 16 的非阻断 (3) 在本册是这样落的）。
+
+  **Spec — 阻断：无。非阻断：**
+  1. 「合同级声明一节永远送」（票面「量到的」自记为有意）：运营主路径因此表达不了「本版不作合同级声明」——它在批文里是合法缺键，且本票自己的
+     Go 载荷注释写着「`preAcceptanceControl` 可缺——本版不声明『要不要』是合法输入，表单不代填一格」。表单不代填 ≠ 表单不给「不声明」这一选项。
+     建议伞票 07 收口时裁一句「可缺节在表单上怎么表达」（各册一致），或在票面写清主路径为何收窄。
+  2. F-3（壳引用 vs 正文 `rulePackage` 相等，`ConsistentAcceptanceRulePackage`）只在发布用例 `declarationWrites` 里核且以 error 上抛——表单路径到
+     发布那一步会是 HTTP 5xx `NO_ANSWER_FORMED`，预览不点名。本表单用同一格填两处（`payloadOf` 把 `rulePackage` 同时写进 `references` 与正文），
+     从表单触发不了；JSON 镜像口或改过的载荷会撞。属 08 公共路径的既有形状不是本票新引入，记给伞票：预览应把它答成逐格问题。
+  **Spec — 完成判据逐项：** 客户与合同页一签「发布合同版本」五步走公共半边、`publishedKey` 刷合同表（含 `ControlBindings` 绑定列）✔；tsc 0 /
+  run-tests 92 为作者自报（按评审规矩未复跑）✔；Go 侧本册一格 + 两处领域纯抽取 ✔；两层分两节不合并 ✔；策略侧无「无控制」选项（`BindingModePicker`
+  两格、`requirements` 两格）✔；规则包与策略候选走既有 `listCommercialPolicies` 不新开口、读不到退回手填 ✔；恰一与「不适用必带依据」不在表单判 ✔。
+  未做反查：`translate.go` 与领域两份反查（见 Standards 2）、旧式串何时拒收、四口 403——都在票面「未做」或归伞票 ✔。
+
+  **结论**：两轴无阻断，可重放；非阻断五条各归其处（1、2 归伞票收口的共享文件整理，3 归作者顺手，Spec 1、2 归伞票裁句）。
