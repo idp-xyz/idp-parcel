@@ -91,3 +91,48 @@ Blocked by: —
     没登仍是待复核。`NotDeclared` 零值与「判不出阶段不猜」两条红线未动，矩阵一格都没内置。
   - 至此本票四段全落，Status 转 resolved；**main 上的 SHA 待推送方重放后由进 main 记录补**，合入前独立评审按
     2026-09-08 规矩由推送方指派，有阻断回本分支修。
+- 2026-09-08 10:56 · **评审 ← 通道 6 · 钉 `e2a51ba8`**（基线 `d1e6c094`；评 `2e085cad` + `5e5e2c05`；隔离树只读，未跑测试；
+  两轴串行独立过）。原文由通道 2 代录：
+  - **Standards** · 阻断：无。非阻断：
+    1. `internal/parcelshipment/adapters/partycommercial/unconfigured_source_data_amendment.go` 文件末尾游离注释「矩阵那一口原先与本文件
+       同居的 UnconfiguredSourceDataRuleDeclaration…已…退场」——AGENTS.md「写代码注释：不写变更说明」；不挂任何声明、只叙述一次删除，
+       git log 已记。同类：`unconfigured_source_data_amendment_test.go` Covers 末句「矩阵那只未配置适配器原先也在这里证，已随票 02 余段
+       接真退场」。删掉不改语义。
+    2. `source_data_amendment_allowance.go`：`declaredStageOf` / `declaredIntentOf` / 资料组译不过去与 `allowanceOf` 集外共用
+       `ErrUntranslatableAnswer`（`judgment_as_of.go` 定义为「untranslatable answer」）。前三处标**查询**侧译不过去（恢复：改编排），后者标
+       **答复**侧封闭集分叉（恢复：查两侧词表）；同一哨兵让 `errors.Is` 的读者分不出。判断项；今天编排把所有 error 折成
+       `SourceDataRuleUnavailable`，实际不受影响。
+    3. `cmd/parcel-api/assemble_customer_amendment.go` `buildSourceDataAmendmentAllowance`：`requests + resolutions → NewResolvedAdoptedStageOwner`
+       + `NewStageContentDeclarations` 与 `cmd/parcel-dispatch/assemble.go` 同形两处（现三处）；且 `pspostgres.NewShipmentRequests(db)` 在本函数与
+       `assembleCustomerAmendmentOrchestration` 各建一只。Duplicated Code 判断项；跨二进制无处共享，无副作用。
+    4. 同包构造门口径不一：`NewDeclaredSourceDataAmendmentAllowance` 对 nil 协作者返 error（用例给了理由），`NewDeclaredStageContent` 对 nil
+       owners 换 `UnconfiguredAdoptedStageOwner`。新写法更诚实，只记分歧。
+
+    无发现：红线「只实现已确认规则」——不含任何矩阵格 / 默认资料组或阶段，`NotDeclared` 仍零值；「证据层级诚实」——替身标 `S`，
+    `seedAdoptedClosure` 写明「取证捷径，不是生产路径」；「所有权清晰」——PS 适配器只 import `pcdomain`/`pcports` 只读，
+    `internal/partycommercial/` 零改动；注释全中文、跨文件引用无行号，「六格/三格」是 CONTEXT 封闭集本身且有测试钉住。PS CONTEXT
+    「不得默认为最早阶段」——`declaredStageOf` 零值与集外一律上抛。ADR-0120 决定四——`allowanceOf` 只做 PC→PS 三值一对一，`closed` 未在
+    PS 侧解释；决定五——`TestTheAdapterMirrorsParcelShipmentStageAndIntentWordsCellByCell` 钉 6+3 对 `String()` 逐字相等、无第七格/第四格，
+    并以「只登一格」对 6×3 全查证 switch 译到正确格。ADR-0062——回指经 `NewResolvedAdoptedStageOwner(requests, resolutions)`，形参
+    `CommercialResolutionView` 只读口，与 parcel-dispatch 同路径。
+  - **Spec**（票 02 完成判据 + MCP-1 代裁 Q1–Q4 + 评审令点名五项）· 阻断：无。非阻断：
+    1. 「封闭零格声明任一格 DISALLOWED」PS 侧只钉一格：`cmd/parcel-api` `TestTheAmendmentAssemblyReadsAClosedDeclarationAsDisallowingEveryUndeclaredCell`
+       封闭零格只问（收件人 × 已接受尚未收寄 × 补充）；适配器单测 `TestTheAdapterTranslatesTheThreeValuesOneToOneAndLeavesTheClosedReadingToTheProvider`
+       的封闭用例带一格声明而非零格。因适配器无逐格逻辑、`closed` 语义在 PC `AllowanceFor` 且 PC 领域测试已钉，一格足证透传；可补不必补。
+    2. 票 02 Status/Comments 完成记录不在这两笔（落地时写），只记未见。
+
+    无发现：裁决 (c) 路径——`DeclareSourceDataAmendment` 按 `AcceptanceRulePackageFor` → `LoadSourceDataAmendmentAllowance(tenant, owner)` →
+    `AllowanceFor(group, stage, intent)` → 译三值逐步照做，租户与版本来源由 `TestTheAdapterReadsTheDeclarationOfTheAdoptedRulePackageForTheQueryingTenant`
+    钉住。闭包不在 / 无父行答 NotDeclared、读不回原样上抛——两处 `!found → none, nil`，两处 error `%w` 包原错；
+    `TestTheAdapterAnswersNotDeclaredWhenNobodyHasSaidAnything`（含闭包不在时 view.calls==0）与
+    `TestTheAdapterSurfacesProviderFailuresInsteadOfFoldingThemIntoNotDeclared` 钉住。判不出阶段 / 未声明意图在读任何东西之前拒答——三项翻译都在
+    `AcceptanceRulePackageFor` 之前，测试钉 `owner.calls==0 && view.calls==0`；编排侧核过 `amend_customer_source_data.go` 问矩阵前已
+    `!command.Intent.Declared()` 上抛、`!stage.Determined()` 停未决，适配器注释属实。Q3 缺格语义——适配器单测三格 + 真库
+    `TestTheAmendmentAssemblyAnswersFromTheRegisteredAllowanceDeclaration` 四格（未登→待复核；允许→RECORDED 形成版本且意图恰好一封；
+    不允许→DISALLOWED 版本意图不多；未登资料组→待复核），声明经 PC 写口 `SaveSourceDataAmendmentAllowance` 登记。授权那只未动——
+    `buildCustomerAmendmentOrchestration` 仍传 `UnconfiguredSourceDataAmendmentAuthorizer{}`，该类型与其用例原样在，票 03 地盘未碰。票 02 红线——
+    未触 `AT-PS-020` / UC-PS-002 / PS CONTEXT。既有用例②停点语义如实改写为「`SYN-RES-1` 在 PC 解析库无闭包」。无多做——`amendmentCommandFor`
+    仅让资料组与意图可变。
+  - **结论**：Standards 0 阻断 / 4 非阻断；Spec 0 阻断 / 2 非阻断。**无阻断，可重放。**
+  - 通道 2 处置（代录时记）：六条非阻断均随票记、不挡合入，本分支不再动 `.go`（推送方已在重放）。Standards (1) 两句变更说明注释与 (2) 哨兵
+    分格，留待下一次碰这两个文件时顺手，不另立票；(3)(4) 判断项记分歧；Spec (1) 一格足证透传，认同「可补不必补」；Spec (2) 已由 `80f11fa2` 补齐。
