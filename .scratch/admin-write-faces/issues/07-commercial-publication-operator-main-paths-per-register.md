@@ -1,7 +1,7 @@
 # 07 商业发布各类的运营主路径：按 ADR-0101 决定八逐册裁形
 
 Category: enhancement
-Status: in-progress——伞票；已拆十一张子票 [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md)–[18](./18-customer-service-rule-form.md)（表见「子票」节）。子票 09–17 形状已裁清、无待裁问题，转 ready-for-agent（全部 Blocked by 08，08 未 resolved 前不在前沿）；08 与 18 留 draft，各等什么写在各自 Status 行与下表。本票转 resolved 的判据照 issue-tracker「Complete a parent」：十一张全 resolved
+Status: in-progress——伞票；已拆十一张子票 [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md)–[18](./18-customer-service-rule-form.md)（表见「子票」节）。**08 已 resolved（2026-09-08，MCP-1 接 MCP-5 续做完，分支 `mcp1-awf08`）：公共半边落地，子票 09–17 的 Blocked by 解除、进入前沿**；接表单时各票要用的东西见 08「完成记录」（载荷线格式 `CommercialPublicationPayload`、预览口与载体三口路径、`DRAFT_AWAITS_EFFECTIVE_START` 那一格）。18 留 draft，等什么写在它的 Status 行与下表。本票转 resolved 的判据照 issue-tracker「Complete a parent」：十一张全 resolved
 Blocked by: 无（票 03 已落 JSON 镜像签）
 
 ## 缺什么
@@ -37,7 +37,7 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 
 | 号 | 册（发布类别） | 选形 | 状态 | 阻塞边 |
 |---|---|---|---|---|
-| [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) | 公共半边（不对应某一册）：服务端按册规范化算摘要、批准从 `OperatorEnvelope` 来、预览与发布同一路径 | 机制，不是表单 | draft——等三问裁决 + ADR 取号（详见其 Status 行） | 无；其余十张全 Blocked by 它 |
+| [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) | 公共半边（不对应某一册）：服务端按册规范化算摘要、批准从 `OperatorEnvelope` 来、预览与发布同一路径 | 机制，不是表单 | **resolved**（2026-09-08，ADR-0126；PC 迁移 0028；四口进端点表） | 无；其余十张的 Blocked by 已解除 |
 | [09](./09-service-product-version-form.md) | `SERVICE_PRODUCT` | 逐字段表单（版本壳 + 引用可加行） | ready-for-agent | 08 |
 | [10](./10-customer-contract-form.md) | `CUSTOMER_CONTRACT` | 逐字段表单（正文 + 绑定表可加行 + 合同级控制声明，两层分两节） | ready-for-agent | 08 |
 | [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | ready-for-agent | 08 |
