@@ -51,6 +51,7 @@ var (
 	_ PublicationDraftSubmissionIntake        = UnconfiguredIntake{}
 	_ PublicationDraftApprovalIntake          = UnconfiguredIntake{}
 	_ PublicationDraftPublicationIntake       = UnconfiguredIntake{}
+	_ PublicationVocabularyIntake             = UnconfiguredIntake{}
 	_ BusinessPartyRegistrationIntake         = UnconfiguredIntake{}
 	_ LegalEntityRegistrationIntake           = UnconfiguredIntake{}
 	_ CustomerAccountRegistrationIntake       = UnconfiguredIntake{}
@@ -95,6 +96,12 @@ func (UnconfiguredIntake) IntakePublicationDraftPublication(
 	context.Context, *http.Request,
 ) (application.PublishPublicationDraftCommand, error) {
 	return application.PublishPublicationDraftCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 词表读口（票 admin-write-faces/20）只答准入、不交出作用域，未配置时同样一律拒；它跟着四口而不跟着查阅行的
+// 理由在 PublicationVocabularyIntake 的注释。
+func (UnconfiguredIntake) IntakePublicationVocabularyQuery(context.Context, *http.Request) error {
+	return ErrAccessChannelNotConfigured
 }
 
 func (UnconfiguredIntake) IntakeBusinessPartyRegistration(
