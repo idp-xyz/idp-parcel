@@ -126,3 +126,53 @@ tsc / run-tests 绿；Go 侧只在 08 落的机制上加本册的规范化一格
 seed 两项换串（归伞票「何时开始拒收无版本旧串」）；既有测试 `TestCanonicalizeAnswersThreeDistinctRefusals` 的失败信息「first release covers
 credit policy only」已过时（邻行未动，伞票收口时统一改）；时刻在本地不补零点不换时区（pricing 的 `normalizeMoment` 是另一种便利，09–17
 表单要不要统一归伞票）；浏览器端到端在接入渠道未配置前答 403，走通的证据在服务端测试。
+
+## Comments
+
+### 评审 ← 通道 2 · 钉 `07d7b5da` · 15:06
+
+非作者合入前评审。基 `283aa7d3`（16 公共半边，不属本票），隔离 detached 检出 `%TEMP%\idp-review-awf09`（@ `f4be0bc9`），只读，两轴各一遍；
+代码 tip `07d7b5da`，`6d5dea48` / `f4be0bc9` 簿记不评。
+
+**关键判断——「本册规范化判断」选 (a) 与 ADR-0126 是否自洽：非阻断，不需改 ADR 一句。** 依据：(1) 文档形状 = `{canonicalization, kind}` 落在
+Decision 一「文档只盖正文不盖壳」与 ADR「裁决方的能力边界」明写下放给子票的「各册自己的规范化文档形状……同号加册」之内；`references` 与范围、
+区间同为壳的一格，已由 `sameReleasedContent` / `SameSubmissionAs` 逐项比，盖进摘要正撞 Alternatives 否决「摘要盖住版本壳」的那条理由。(2) 对账门对
+本册不开：Decision 二首句「已接的册声明摘要必须与算出的相等」字面上会开门（本册算得出、是一个常量串）；但对无正文册，「开门」与
+Decision 五明写留给伞票收口的「何时开始拒收没版本的串」是**同一个动作**——本册没有正文可对，门一开拦下的只会是旧串本身。作者把它归伞票
+收口而不在票内自裁，与 Decision 五一致，且未动 `publish_commercial_authority.go`。**「接了」确被用成两个意思**：`IsRegisterCanonicalized` 现在
+答的是「表单路算得出」，对账门实际用的是它 **且** `publicationContentOf` 在场——两个词在有正文册重合、在无正文册分开。这不是本票新造的
+机制（08 的门就是这两段），是本票让它第一次可见；应在伞票 07 收口时把「无正文册的已接 = 表单路可算，对账门另按有无声明通道」写进
+那一句的裁决，届时若开门再改 ADR/seed。**后果**（作者已记）跨路重发答 `CONTENT_CONFLICT` 不是 `NOT_ACCEPTED` 带两串——两串确实不同，
+答案不假，只是少了「算出的那一个」的可见性，属诊断性缺口不属不变式。
+
+**Standards 轴**
+
+- **阻断**：无。
+- **非阻断**：
+  1. `domain/publication_canonicalization.go` `IsRegisterCanonicalized` 头注「对账门用它分辨『声明的串与算出的不等』与『这一册无从对账』」——
+     对本册已不成立（本册它答真而门不开）。改注释一句：门 = 本函数 ∧ 批文有该册正文通道；否则下一个读 08 门的人会以为服务产品
+     批文已被对账。
+  2. 同文件 `RehydratePublicationContent` 的 `registerHasNoBody` 早返回只对 `ServiceProductObject` 开，且放在信用政策一节解码之后——
+     夹带别册正文的快照仍走到再规范化的 kind 不符（测试 `TestServiceProductSnapshotRehydratesWithoutABody` 伪造节钉住）。语义对；
+     只记一句：10/11 若也是无正文册要加进 `registerHasNoBody`，那是它们的一格。
+- **无发现**：`CanonicalizePublicationContent` 加一支、`IsRegisterCanonicalized` 单行改 switch 语义不变（信用政策仍真、默认仍假），两 `case`
+  分行是为 10/11 纯加行；领域包 import 未增；注释中文、符号引用无行号、`07d7b5da` 已去计数与「第 N 条」。前端：只用
+  `PublicationDraftFlow` 既有 props、公共三件未动；`serviceProductLocalProblems` 只报「同键两行」——`references` 线格式是 JSON 对象，
+  同名键放不下、静默留一行就是丢输入，属编码层不属领域校验（空键、集合外键、空值都照送，测试与注释都钉住）；引用键自填无候选，
+  不内置词表（票 09 硬句）；载荷无身份/摘要键；`serviceProductFieldPaths(draft)` 按行动态生成再交给 `fieldPaths`，是对 16 评审
+  非阻断 (3)「静态路径装不下可加行」的现成解法，10 可照抄。
+
+**Spec 轴**
+
+- **阻断**：无。
+- **非阻断**：无。
+- **无发现**：完成判据三条——服务产品页「发布版本」签在册签之后登记签之前，五步由公共流程走，`onPublished` → `refreshKey` 递增 →
+  `ServiceProductVersionsTable` 重读；tsc / run-tests 作者已跑；Go 侧只加本册一格（`PublicationContent` / `canonicalPublicationDocument` /
+  `CommercialPublicationPayload` 都未加格，与「无正文槽位」自洽）。边界：`register_products` 与目录读面未动（读面只多 `refreshKey` 入参与
+  空态文案）。「未做」四项反查：词表读口无（自填）；对账门未开、seed 与 `cmd/parcel-commercial` 未动、`publish_commercial_authority.go`
+  未动；旧测试信息「credit policy only」邻行未动；时刻不补零点（与 16 的 `normalizeMoment` 不一致，作者已记归伞票统一）。服务端五步走通
+  由 `TestServiceProductWalksTheFiveStepsWithoutDeclarations`（零声明通道、嵌 `PUBLISHED_EFFECTIVE`）与真库
+  `TestAServiceProductDraftRoundTripsWithoutABody` 证，S 级诚实。
+
+**结论**：Standards 2 条非阻断（最重：`IsRegisterCanonicalized` 头注对无正文册失真，一句注释）；Spec 0 条。关键判断 (a) **非阻断、不改 ADR**，
+但伞票 07 收口时须把「无正文册的已接与对账门开门拆开」连同「何时拒收旧串」一起裁。**无阻断，可重放。**
