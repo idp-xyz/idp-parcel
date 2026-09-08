@@ -1288,3 +1288,20 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **awf/20 进 main**：`ls-remote` 核 `0f9eaa1e` 未动 → `git push origin 3ca75da6:main` → 远端 `3ca75da6`，共享树 ff。推的是前一任验过的链（代码 tip `c05ee34d` 含 DSN 100 ok；`3ca75da6` 只多 .md），`git diff 802ae400 3ca75da6 -- internal cmd apps` 为空。两棵遗留树：`idp-replay-awf20`（`3ca75da6`，已进 main，可拆）、`idp-replay-awf2014`（`cae4c98d`，20 的另一套 SHA + 14，作废——20 已按另一链进 main，14 评审后从 main tip 重建）。
 - 派单：**awf/17 评审 → 通道 2**（非作者，20 分钟，报告发通道 1 由推送方写票面），完成后**接 awf/12**（从 `mcp3-awf12@febfcd2e` 接着做，树自己开 `mcp2-awf12`）（`2b69f06d`）。**awf/14 / awf/15 评审**起两个隔离子代理（本会话对两票都非作者；前一任的子代理鉴权错，本次起成了），报告回来写进票面。
 - **接下来**：评审无阻断者按 main tip 重放（17 / 15 取 `802ae400..tip`，14 取 `5a209f70..44f2b79d`），tip 重生成清点，含 DSN 全量一次，`<sha>:main`。**归用户**（不变）：tf/11 越权 ①–④；wbr/03 越权 ①–④ 与「未落三件」；PS 二条 wbr/01/02 待派；pgtest 模板库是否开票；远端旧名分支未删；awf/20 判断点「词表读口隔离读态不放行」。
+
+## 2026-09-08 21:2x 通道 1 新会话接续（接手时 `main = origin/main = f722d9f0`；用户报「所有通道都 crash 了，现在恢复了」）
+
+用户先要一次自带 `ask_question` 调用，随后「监听队列」→「看看各通道工作树的现场，如何继续，需要回放吗」。前一节（通道 4 窗口）断在派单之后，14 / 15 的两个隔离评审子代理随之死亡、未交报告；五数未写。接手时队列一条：MCP-5 新会话自报空闲、不再碰 `mcp5-awf13`。
+
+### 21:2x 只读盘点（`scripts/branch-state.ps1` 钉 `f722d9f0`）
+
+- main = origin = `f722d9f0`；共享树 0 行未提交；9 棵树全干净。唯一动静：`%TEMP%\idp-review-awf17`（detached `9799785a`）21:21 有一个未跟踪探针 `zz_review_seed_digest_test.go`、21:27 已消失——通道 2 新会话在做 17 的评审（树 21:19 建），不动。
+- 六支在途分支全部推到 origin；`mcp4-awf12@febfcd2e` 与 `mcp3-awf12` 同 SHA、零独有提交、未推——来历不明的空树，可拆。
+- 票况：20 已进 main；**17 / 15 / 14 三张 resolved、等非作者评审后回放**（14 与 main 只在 `publication-draft-api.ts` 同文件，前任试过零冲突；15 / 17 基 `802ae400`）；**12 in-progress**（`mcp3-awf12@febfcd2e` Go 四笔 + seed；admin-web 与完成记录未做；台账 `8325f4ee`（通道 3）与 `2b69f06d` 第二件（通道 2）两张单都指向它）；**13 in-progress**（`mcp6-awf13@86b55e86`：封存通道 5 现场 + 应用层一笔；admin-web、清点、完成记录未做；台账 `e7836296` 仍 pending 在通道 5，通道 6 是新会话无记忆）。
+- 答用户「需要回放吗」：要，但此刻不能——14 / 15 / 17 卡在评审门，12 / 13 未完工；没有一笔代码丢失。
+
+### 21:28–21:4x：awf/17 评审到（通道 2，无阻断）→ 重放 → 进 main；12 承接方定为通道 2
+
+- 21:28 通道 2 交 17 评审（钉 `9799785a`）：Standards 0 阻断 / 5 非阻断（最重：`authorizationRuleFieldPaths` 认领节根不渲染其 `Problems`）、Spec 0 阻断 / 1 非阻断（tsc/run-tests 评审树未复跑）；四问全成立，seed 摘要独立算得同值。全文落票 17 Comments。通道 2 随即按 `2b69f06d` 第二件从 `febfcd2e` 开 `mcp2-awf12` 接 awf/12——**12 归通道 2 就此定死**，`8325f4ee`（通道 3）结 failed「承接方换人」，另给通道 3 一条「勿认领、勿碰 mcp3-awf12 树」。
+- **17 重放**（隔离 detached 树 `idp-replay-awf17` 基 `f722d9f0`）：跳清点笔 `e9ffa685`，八笔零冲突 `3264f362→6148548e`、`8c89f282→3b15236c`、`e2302ecf→9660a360`、`d756e2d9→a895f003`、`a0c126e4→772c9339`、`f5fc7117→a954ac0f`、`fcf3d703→ec6289f7`、`9799785a→a9d1af33`；代码树对分支 tip 零差。清点在 tip 重生成 `1d6ac983`（PC 生产 107→109 / 测试 111→114、声明面 20→21），与 `e9ffa685` 逐字节同。验证钉 `1d6ac983`：gofmt 空、build/vet 0、含 DSN `go test -p 1 -count=1 ./...` **100 ok / 0 FAIL / 16 无测试 / 0 cached**（587s）、探针 PC http `-run AuthorizationRule` PASS 2、admin-web tsc 0 / run-tests 131/131。本笔：票 17 Comments 评审 + 进 main 记录、伞票 07 子票表 17 行 resolved、本节；`--ff-only` 进 main，推前 `ls-remote` 核 `f722d9f0`。
+- **接下来**：点名后派 **15 → 3/4/5 之一**（不能 6）、**14 → 3/4/5/6 之一**（不能 2）各 20 分钟评审；**13 → 通道 6** 从 `mcp6-awf13@86b55e86` 接着做（`e7836296` 结 failed「换人」、`mcp5-awf13` 改名 `salvage/`）；评审无阻断者按到达先后重放（15 取 `802ae400..d79093d4` 跳清点笔 `23a4ad59`；14 取 `5a209f70..44f2b79d` 跳清点笔 `c7635837`），共享 Go 文件与 `CommercialPoliciesPage.tsx` 相邻行冲突按第 1 波手工并；拆 `mcp4-awf12` 空树；`mcp4-awf17` 改名 `merged/`。**归用户**（不变）：tf/11 越权 ①–④；wbr/03 越权 ①–④ 与「未落三件」；PS 二条 wbr/01/02 待派；pgtest 模板库是否开票；远端旧名分支未删；awf/20 判断点；17 非阻断 (1) 是否要作者另笔修。

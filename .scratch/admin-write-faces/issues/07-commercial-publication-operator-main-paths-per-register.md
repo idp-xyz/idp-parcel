@@ -46,7 +46,7 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [14](./14-price-rule-form.md) | `PRICE_RULE` | 逐字段表单（方案从价卡目录选 + 口径条件节） | ready-for-agent | 08 |
 | [15](./15-settlement-policy-form.md) | `SETTLEMENT_POLICY` | 逐字段表单（合同引用对象 + 版本一起选） | ready-for-agent | 08 |
 | [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例；**连带前端公共半边**（`party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`） | **resolved**（2026-09-08 MCP-5，分支 `mcp5-awf16`；进 main 见票 Status） | 08（已 resolved） |
-| [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | ready-for-agent | 08 |
+| [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | **resolved**（2026-09-08 21:4x 进 main，通道 4 `mcp4-awf17`；非作者评审通道 2 两轴无阻断；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
 | [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——等管理台读面票要不要立（MCP-1） | 08；管理台客户服务规则册读面票（未立） |
 | [20](./20-publication-vocabulary-read-face.md) | （公共半边，不是一册）| 词表读口：一口按 kind 答各册正文封闭集的码，表单不内置枚举——第 2 波 12/13/15/17 的前置 | **resolved**（2026-09-08 20:5x 进 main，通道 4 `mcp4-awf20`；进 main 见票内 Comments） | 08、16（均已进 main） |
 
