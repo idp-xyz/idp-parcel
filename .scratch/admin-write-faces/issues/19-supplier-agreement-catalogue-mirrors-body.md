@@ -72,3 +72,44 @@ run-tests 绿。
 **未做（各归其处）**：浏览器实看（无真后端、`pnpm build` 本机不可用）；非作者评审由通道 1 派；进 main 后 Status 转 resolved。
 
 **拆树提醒**：worktree `%TEMP%\idp-parcel-mcp6-awf19\apps\admin-web\node_modules` 是指向主树 `node_modules` 的目录联接（为跑 tsc 建的，被 `.gitignore` 忽略、不入库）；拆树前先 `cmd /c rmdir` 掉那个联接再 `git worktree remove`，别让递归删除顺着它走。
+
+## Comments
+
+### 非作者合入前评审（2026-09-08 17:0x，MCP-5；`/code-review` 两轴，钉 `mcp6-awf19@3d31f910`，评审基线 main `dc1f0c07`）
+
+隔离检出 `%TEMP%\idp-review-awf19`（detached `3d31f910`；`apps/admin-web/node_modules` 是指向主树的目录联接，验后先 `rmdir` 联接再拆树）。两轴串行自跑、分开记、不合并排序。自跑核数：`node node_modules/typescript/bin/tsc --noEmit -p .` 退 0；`node scripts/run-tests.mjs` 116 / 116；`git grep -e '正文表可读' -e '正文册可读' -- apps/admin-web/src` 在 `3d31f910` 零命中、在基线 `dc1f0c07` 命中 3 行作阳性对照（同一 shell 同一针，先阳性再报零）；`git diff --name-only dc1f0c07 3d31f910 -- '*.go' '*.sql'` 为空。有效变更只在 `apps/admin-web/src/pages/party/`（`api.ts` 的 `SupplierAgreementRecord` 一段、`SupplierAgreementsPage.tsx`、新文件 `supplier-agreement-rows.ts` / `.test.ts`）与本票面。
+
+#### Standards
+
+阻断：无。
+
+非阻断：
+
+1. **Duplicated Code（判断题，作者 Standards (1)）** — `supplier-agreement-rows.ts` 的 `col` 与 `SupplierAgreementRow`，同 `policy-rows.ts` 的 `col` 与 `PolicyRow` 逐字同形（连 `Readonly<Record<string, string>>` 都一样）：两处 Row 不是「类型不同」，是同一形状起了两个名。作者判「等第三个消费者出现再抬」可接受——本仓无成文规则要求现在合，抬到共享层只是搬家；但下一张字符串行表的页面接进时应把 `col` 与行类型一并抬走，不要再抄第三份。
+2. **测试内重复钉列名（nit）** — `supplier-agreement-rows.test.ts` 「只有壳的行照列为未登记」一例手写正文格 id 列表循环断言不在场，与 `supplierAgreementColumns` 的正文段各自维护；新增正文列时这一例不会替新列作证。可从 `supplierAgreementColumns` 取 `'contentRegistered'` 之后的 id 派生，非必须。
+
+其余核过：注释全中文；跨文件引用皆用符号名（`policy-rows.ts` 的 `contentRegisteredCell`、`SupplierAgreementPublicationForm` 版本壳一节、后端 `TestSupplierAgreementsEndpointTranscribesContentOnlyWhenRegistered`），未见行号或跨文件计数，`SupplierAgreementsPage.tsx` 把「通则第六条」改成引用条目原题，合 AGENTS.md「引另一个文件……不用计数」。`orMissing` 以真值判空而不是 `??`：Go 侧 `omitempty` 下空串与缺席同形，坏行落成空串时也该点名，取舍正确。
+
+#### Spec
+
+阻断：无。
+
+「要做的」「边界」「完成判据」逐项在场：
+
+- `api.ts` `SupplierAgreementRecord`：`contentRegistered: boolean` 必在；正文各键可缺，与后端 `supplierAgreementBody` 带 `omitempty` 的字段集逐一对上（`supplier` / `legalEntity` / `purchasePlan` / `agreementScope` / `agreementEffectiveStartsAt` / `agreementEffectiveEndsAt` / `registeredAt`）；头注按本文件 `CustomerContractRecord` 那段的判据写。
+- `supplier-agreement-rows.ts` `requiredBodyKeys` 与后端 `supplierAgreementBodyOf` 在 `HasContent` 分支必写的键一致；`agreementEffectiveEndsAt` 另受 `HasAgreementEffectiveEnd` 把守、不在其列——「协议区间不带结束是合法声明」那条测试钉住了这一点。
+- 壳在正文缺 → 正文格「未登记」；布尔为真键缺 → 「正文缺失(响应不合契约)」且缺哪键点名哪格；三态与 `policy-rows.ts` `contentRegisteredCell` 同判据。
+- 边界：`.go` / `.sql` 零改动；端点串与 `catalogueViewState` 调用未动（只换了计数实参）；过滤仍在已取回数据上做；无方向列；`SupplierAgreementPublicationForm.tsx` 不在 diff。
+
+非阻断 / 判断题（作者六条逐一答复）：
+
+1. （作者 Standards (2)）「协议 / 版本」由两行 JSX 变 `id@version` 单串——README「展示层合成允许」点名 `id@version`，与 `CommercialPoliciesPage` 同款；同页系 `PartyContractsPage.tsx` 仍是两行 JSX，页系内两种呈现并存是既成事实、不是本票造成。接受。
+2. （作者 Standards (3)）列头加「版本」前缀——两对同名列并列后不加前缀分不开，词取 `SupplierAgreementPublicationForm` 的格名「版本适用范围」「协议适用范围」，与写签一致。接受。
+3. （作者 Spec (a)）只有壳的行正文各格显「—」而非每格「未登记」——票面「照合同页『未登记』如实显示」两读皆通；`PartyContractsPage.tsx` 正文只有两格所以逐格写得起，这里逐格重复是噪音，且 `policy-rows.ts` `jointPassCondition` 已有先例。接受；一处提醒：「—」是模板对缺值的兜底，它读成「未登记」只靠同行「正文」格撑着，若日后正文列增多到需横向滚动、「正文」格滚出视野，这一读法要重估。
+4. （作者 Spec (b)）搜索扩到转写后全部格——票面未要，但在「过滤只在已取回数据上做」之内、`CommercialPoliciesPage` 同款，占位文案同步改了。接受。附带一处**行为变化备案**：原实现搜的是 `status` 原码（如 `EFFECTIVE`），现搜的是词表译文（如「已生效」），搜英文原码不再命中；搜屏上所见属改对，记在此不算缺陷。
+5. （作者 Spec (c)）测试比票面点名的三例多两条（列集、无上界）——同一模块的钉，不是别的行为。接受。
+6. 作者 Standards (1) 见上方 Standards 非阻断 1。
+
+未在浏览器对真后端实看（作者已如实记，本机 `pnpm build` 不可用），证据层级 S 与票面一致；评审不抬这一级。
+
+**结论**：Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 0（判断题六条皆接受，一处行为变化备案）。可进 main；进 main 后 Status 转 resolved 由通道 1 重放时办。本节写在分支 `mcp5-awf19-review`（基 origin/main `62bf6504`，只动本文件），与 `3d31f910` 那笔的「完成记录」同在文末追加，合并时完成记录在前、本节在后。
