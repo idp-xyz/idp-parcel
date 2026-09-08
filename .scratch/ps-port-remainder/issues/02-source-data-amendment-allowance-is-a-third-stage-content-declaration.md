@@ -1,8 +1,8 @@
 # `SourceDataRuleDeclaration`：允许矩阵是接单规则包版本下的第三族阶段内容声明；PS 要先长出「资料修订阶段」
 
 Category: enhancement
-Status: in-progress——四问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（第三族阶段内容声明表族 + 读口）等 pc-gaps 批（MCP-3）**；**PS 半边不依赖 PC 的那段已落地**（通道 2，分支 `mcp2-ps-ports`：词条进 CONTEXT、`AmendmentStage`、`SourceDataAmendmentQuery.Stage`、编排问矩阵前先判阶段、CC/NO 消费侧读口 + 两只未接适配器、ADR-0118；见 Comments 完成记录）；**CC/NO 读面接线那段已随 [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md) 落地**（通道 2，分支 `mcp2-psr05`，两只未接适配器换成真读法）；**余下一段仍阻塞**：消费适配器读 PC 声明 Blocked by PC 半边
-Blocked by: 消费适配器那段 Blocked by PC 半边；其余已落
+Status: resolved——四段全落：**PC 半边**随 pc-gaps/10 进 main（ADR-0120，`9379c716`）；**PS 不依赖 PC 的那段**（分支 `mcp2-ps-ports` → main `d4bc4785` / `45ed2d04` / `9091f539`，ADR-0118）；**CC/NO 读面接线**随 [05](05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md)（分支 `mcp2-psr05`）；**余段「消费适配器读 PC 声明 + 跨侧词比对 + 接真装配」2026-09-08 完工**（通道 2，分支 `mcp2-psr02-tail`：`2e085cad` / `5e5e2c05` / 清点 `e2a51ba8`，基 main `d1e6c094`；含 DSN 全仓 100 ok / 0 FAIL；**待合入前独立评审与推送方重放，main 上的 SHA 由进 main 记录补**）。四问裁决与各段完成记录见 Comments。此前 in-progress，余段曾 Blocked by PC 半边
+Blocked by: —
 
 ## 端口今天说什么
 
@@ -67,3 +67,27 @@ Blocked by: 消费适配器那段 Blocked by PC 半边；其余已落
   - 验证见完工报（含 DSN 全仓 `-p 1 -count=1`、清点重生成单独成笔）。
 - 2026-09-07 16:1x · 通道 1（推送方）**进 main 记录**：PS 半边三笔分支→main 对照 `7ec02162`→`d4bc4785`、`3da37e07`→`45ed2d04`、`8430ae09`→`9091f539`（ADR-0118 + README 行自动合并）；分支清点笔 `71b8817b` 未重放，清点在 tip 重生成 `61344989`（parcelshipment 生产 133→139、消费缝新增 PS→CC 1 文件、PS→NO 3→4、端口声明 348→352）。隔离树钉 `61344989` 含 DSN 全仓 100 ok / 0 FAIL。远端 main = `61344989`。依赖 PC 的那段仍 Blocked by pc-gaps 批（MCP-6 `aafca372` 在立 08–10）。
 - 2026-09-07 · 通道 2（task-2f035050）：**读面接线段完成**——随 05 落地（分支 `mcp2-psr05`，`f91100c2`）：CC / NO 各立按包裹键的读面，PS 两只未接适配器换成真读法，装配点接真；生产停点从「授权过了停在判不出阶段」后移为「授权过了阶段按事实判出、停在矩阵未登记」，装配用例②照此改写（阶段由记录壳从矩阵查询取出证三步）。裁决全文在 05 Comments。本票余下只剩消费适配器读 PC 声明那段，仍等 PC 半边。
+- 2026-09-08 · 通道 2（task-5307fbdc；新会话接续、无在途记忆，以下全按 git 与日志重取）：**余段完成记录**——
+  消费适配器读 PC 声明 + 跨侧词比对测试 + 接真装配（分支 `mcp2-psr02-tail`，merge-base main `d1e6c094`，已推 origin）。
+  - `2e085cad` `adapters/partycommercial/source_data_amendment_allowance.go`：`DeclaredSourceDataAmendmentAllowance`
+    实现 `ports.SourceDataRuleDeclaration`——`AdoptedStageOwner.AcceptanceRulePackageFor` 回指接受时固定的接单规则包
+    版本 → `pcports.SourceDataAmendmentAllowanceView.LoadSourceDataAmendmentAllowance` → `content.AllowanceFor(资料组,
+    阶段, 意图)` → PC 三值一对一译 PS 三值（ADR-0120 决定四、五）。闭包不在与无父行都答 `NotDeclared`；读不回与声明
+    立不住原样上抛；零值阶段 / 未声明意图在读任何东西之前拒答；阶段六格、意图三格逐格显式 switch，不按 `String()`
+    对字译。测试七条，其中 `TestTheAdapterMirrorsParcelShipmentStageAndIntentWordsCellByCell` 钉两侧 `String()` 逐字
+    相等、无第七格 / 第四格，并以「只登一格」对全部 6×3 查询证译到的正是那一格。
+  - `5e5e2c05` `cmd/parcel-api/assemble_customer_amendment.go`：`buildSourceDataAmendmentAllowance` 装委托仓储 + PC
+    解析库（`ResolvedAdoptedStageOwner`，与 parcel-dispatch 装收寄资格 / 终局规则同一条回指路径）+ `StageContentDeclarations`
+    读口；生产装配换下 `UnconfiguredSourceDataRuleDeclaration`，该类型与其用例退场（授权那只未配置答复不动，归票 03）。
+    装配用例：既有用例②改套生产读法；新增真库 `TestTheAmendmentAssemblyAnswersFromTheRegisteredAllowanceDeclaration`
+    （未登记 → 待复核；登允许 → RECORDED 且形成版本、入队恰一封；登不允许 → DISALLOWED；未封闭声明缺格 → 待复核）与
+    `TestTheAmendmentAssemblyReadsAClosedDeclarationAsDisallowingEveryUndeclaredCell`（封闭零格声明问任何一格都 DISALLOWED）。
+  - `e2a51ba8` 机制清点在 `5e5e2c05` 干净检出上重生成（parcelshipment 生产 140→141 / 测试 139→140，退一进一；
+    PS→PC 消费缝 12→13 文件；端口声明与端点数不变）。
+  - **验证**：隔离树 `idp-verify-psr02` 钉 `e2a51ba8`，含 DSN 全仓 `go test ./...`，按日志 `^ok ` / `^FAIL` 计
+    100 ok / 0 FAIL / 16 无测试（`%TEMP%\psr02-fulltest.log`，2026-09-08 00:17；真库包实跑——`visibilityexception/adapters/postgres`
+    54.5s，非 SKIP 形态）。日志未留命令行，`-p 1 -count=1` 以推送方隔离树重跑为准。
+  - **生产停点**自此后移：授权仍停在未配置（票 03）；授权过了之后阶段按事实判出、矩阵按登记的声明答——登了才按声明，
+    没登仍是待复核。`NotDeclared` 零值与「判不出阶段不猜」两条红线未动，矩阵一格都没内置。
+  - 至此本票四段全落，Status 转 resolved；**main 上的 SHA 待推送方重放后由进 main 记录补**，合入前独立评审按
+    2026-09-08 规矩由推送方指派，有阻断回本分支修。
