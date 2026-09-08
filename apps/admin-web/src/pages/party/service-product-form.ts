@@ -87,15 +87,15 @@ export function serviceProductPayloadOf(draft: ServiceProductDraft): CommercialP
   if (draft.effectiveEndsAt !== '') payload.effectiveEndsAt = draft.effectiveEndsAt;
 
   const references: Record<string, string> = {};
-  let any = false;
+  let hasRows = false;
   for (const row of draft.references) {
     if (isBlankReferenceRow(row)) continue;
     references[row.kind] = row.objectId;
-    any = true;
+    hasRows = true;
   }
-  if (any) {
-    // 线格式把键收窄到封闭十词；表单按硬句不替操作者挑词，键原样送、集合外由服务端在 `references.<键>`
-    // 上逐格答。这里只是把开放词汇的对象放进收窄了的槽位，不是断言键一定在集合内。
+  if (hasRows) {
+    // 线格式把键收窄到 CommercialObjectKindName 那个封闭集；表单按硬句不替操作者挑词，键原样送、集合外由
+    // 服务端在 `references.<键>` 上逐格答。这里只是把开放词汇的对象放进收窄了的槽位，不是断言键一定在集合内。
     payload.references = references as CommercialPublicationPayload['references'];
   }
   return payload;

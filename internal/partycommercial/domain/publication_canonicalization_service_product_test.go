@@ -39,8 +39,8 @@ func serviceProductShell(t *testing.T, scope string, references map[domain.Comme
 	}
 }
 
-// Covers: 票 09「本册规范化判断」第 2、3 条 — 无正文册接进同一个 PCC-1 不换号；文档恰是 {canonicalization, kind}
-// 两格，摘要串带版本；两次算逐字节同串。
+// Covers: 票 09「本册规范化判断」——「不换号」与「文档只剩规范化版本与 kind 两格」：无正文册接进同一个 PCC-1；
+// 文档恰是 {canonicalization, kind}，摘要串带版本；两次算逐字节同串。
 func TestServiceProductCanonicalizesToTheTwoFieldDocument(t *testing.T) {
 	first := canonicalServiceProduct(t)
 	second := canonicalServiceProduct(t)
@@ -64,8 +64,8 @@ func TestServiceProductCanonicalizesToTheTwoFieldDocument(t *testing.T) {
 	}
 }
 
-// Covers: 票 09「本册规范化判断」第 1 条 — 壳上的指名引用不进文档：换引用不换串。信用政策的正文冒服务产品的名
-// 仍答 kind 不符（既有那一格对本册照旧成立）。
+// Covers: 票 09「本册规范化判断」——「references 是壳的一格，不是正文」：换引用不换串。信用政策的正文冒服务
+// 产品的名仍答 kind 不符（既有那一格对本册照旧成立）。
 func TestServiceProductDigestIgnoresTheShellAndRefusesForeignBodies(t *testing.T) {
 	bare := canonicalServiceProduct(t)
 	withReference, err := domain.PreviewPublication(serviceProductShell(t, "scope-1", map[domain.CommercialObjectKind]domain.CommercialObjectID{
@@ -85,8 +85,8 @@ func TestServiceProductDigestIgnoresTheShellAndRefusesForeignBodies(t *testing.T
 	}
 }
 
-// Covers: 票 09「本册规范化判断」第 2 条 — 同键重发（壳同）是重放；换范围或换引用是修订而不是重放：摘要同串，
-// 分辨靠 SameSubmissionAs 比壳，本册没有另一套判据。
+// Covers: 票 09「本册规范化判断」——「同键重发是重放、换范围 / 区间 / 引用是修订」：摘要同串，分辨靠
+// SameSubmissionAs 比壳，本册没有另一套判据。
 func TestServiceProductDraftsReplayOnSameShellAndReviseOnShellChange(t *testing.T) {
 	submitter := commercialValue(t, domain.NewOperatorSubjectReference, "op-1")
 	at := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
