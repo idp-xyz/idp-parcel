@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -104,6 +105,38 @@ func NewCreditPolicyQuery(
 		return CreditPolicyQuery{}, ErrInvalidCreditPolicyQuery
 	}
 	return CreditPolicyQuery{legalEntity: legalEntity, level: level, chargeType: chargeType, at: at.UTC()}, nil
+}
+
+// CreditSelector 是解析键上请求信用依据时的信用专属维度（ADR-0127，镜像 SettlementSelector
+// 与 PriceDirection 的纪律：请求信用依据必填，其余请求必缺）：商业权限等级与费用类型。法人与
+// 时点不在其中——键上已有 LegalEntityCandidate 与锚点，重复携带就允许两者不一致。
+//
+// 它没有结算选择器那样「合同维由闭包解出」的一格：信用政策不引用同一闭包正在解的别的成员，
+// 两维都是租户登记的实例参数，由调用方给全。
+type CreditSelector struct {
+	Level      AuthorityLevel
+	ChargeType ChargeTypeReference
+}
+
+func (selector CreditSelector) declared() bool {
+	return selector.Level.valid() && selector.ChargeType.valid()
+}
+
+// Empty 让持久化面判断该不该把选择器写进快照。它转调 empty 而不另立判据，理由与
+// SettlementSelector.Empty 同一条：「选择器有没有内容」在本上下文只能有一处定义。
+func (selector CreditSelector) Empty() bool {
+	return selector.empty()
+}
+
+func (selector CreditSelector) empty() bool {
+	return !selector.Level.valid() && !selector.ChargeType.valid()
+}
+
+func (selector CreditSelector) fingerprint() string {
+	return strings.Join([]string{
+		selector.Level.String(),
+		selector.ChargeType.String(),
+	}, "\x00")
 }
 
 // CreditBasis 是本上下文交给 settlement-accounting 的东西：一份政策授权的额度，

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -50,8 +51,8 @@ type commercialVersionKey struct {
 // 而不是替换它们，已登记版本的内容也绝不被改写。
 //
 // 商业价格政策与版本分开登记：版本回答「有没有这份价格规则对象」，政策回答「哪个方向
-// 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。结算政策、服务产品同一分工
-// （ADR-0044 / ADR-0050）。
+// 绑了哪份定价方案」。计价闭包要的是后者（ADR-0034）。结算政策、服务产品、信用政策同一
+// 分工（ADR-0044 / ADR-0050 / ADR-0127）。
 //
 // 有效性更正另册保存（ADR-0038）：改的是选用区间，不是版本键下的正文。同一版本可有多条
 // 更正，按登记顺序只增；选用区间取最后一条。覆盖那一次是缺陷，已随这条纪律修掉。
@@ -60,6 +61,7 @@ type CommercialRegistry struct {
 	corrections        map[commercialVersionKey][]ValidityCorrection
 	policies           []CommercialPricePolicy
 	settlementPolicies []SettlementPolicy
+	creditPolicies     []CreditPolicy
 	products           []ServiceProduct
 }
 
@@ -118,6 +120,18 @@ func (registry *CommercialRegistry) RegisterSettlementPolicy(policy SettlementPo
 // SettlementPolicies 交回当前已登记的结算政策切片副本，供解析与测试观察。
 func (registry *CommercialRegistry) SettlementPolicies() []SettlementPolicy {
 	return append([]SettlementPolicy(nil), registry.settlementPolicies...)
+}
+
+// RegisterCreditPolicy 接纳一份已构造的信用政策正文（ADR-0127）。与结算政策同一分工：
+// 版本回答「有没有这份信用政策对象」，正文回答「为哪个法人、等级、费用类型授权多少额度」。
+// 解析采用要的是后者，光有版本产不出额度——而缺政策既不是无限信用也不是零额度。
+func (registry *CommercialRegistry) RegisterCreditPolicy(policy CreditPolicy) {
+	registry.creditPolicies = append(registry.creditPolicies, policy)
+}
+
+// CreditPolicies 交回当前已登记的信用政策切片副本，供解析与测试观察。
+func (registry *CommercialRegistry) CreditPolicies() []CreditPolicy {
+	return append([]CreditPolicy(nil), registry.creditPolicies...)
 }
 
 // RegisterServiceProduct 接纳一份已构造的服务产品（ADR-0050）。与价格/结算政策同一
@@ -342,6 +356,32 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			endPart,
 		}, "\x1f"))
 	}
+	for _, policy := range registry.creditPolicies {
+		if policy.version.tenant != tenant || policy.version.scope != scope {
+			continue
+		}
+		// 与结算政策同理（ADR-0127）：只改额度或四维、不动版本正文时，解析身份仍须变。额度按
+		// 两格分别写入——金额 100 与比例 100 是两份不同的正文，摘要里不能长成同一个数。
+		end, bounded := policy.effective.EndsAt()
+		endPart := ""
+		if bounded {
+			endPart = end.UTC().Format(time.RFC3339Nano)
+		}
+		amountMinor, isAmount := policy.limit.AmountMinor()
+		ratioBps, isRatio := policy.limit.RatioBasisPoints()
+		parts = append(parts, strings.Join([]string{
+			"CREDIT_POLICY",
+			policy.version.objectID.String(),
+			policy.version.version.String(),
+			policy.legalEntity.String(),
+			policy.level.String(),
+			policy.chargeType.String(),
+			creditLimitPart("AMOUNT", amountMinor, isAmount),
+			creditLimitPart("RATIO", ratioBps, isRatio),
+			policy.effective.StartsAt().UTC().Format(time.RFC3339Nano),
+			endPart,
+		}, "\x1f"))
+	}
 	for _, product := range registry.products {
 		if product.version.tenant != tenant || product.version.scope != scope {
 			continue
@@ -359,4 +399,13 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x1e")))
 	return AuthorityViewRevision{requiredValue{value: "VIEW-" + hex.EncodeToString(digest[:8])}}
+}
+
+// creditLimitPart 把额度的一格写进视图修订：不在场的那格写空，在场的那格带值——两格各占一位，
+// 「金额 0」与「比例缺席」才不会在摘要里撞成同一串。
+func creditLimitPart(label string, value int64, present bool) string {
+	if !present {
+		return ""
+	}
+	return label + ":" + strconv.FormatInt(value, 10)
 }

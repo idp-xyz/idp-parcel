@@ -73,6 +73,9 @@ func resolutionKey(t *testing.T, scope string, basis domain.CommercialObjectKind
 	if basis == domain.SettlementPolicyObject {
 		key.Settlement = settlementSelector(t)
 	}
+	if basis == domain.CreditPolicyObject {
+		key.Credit = creditSelector(t)
+	}
 	return key
 }
 

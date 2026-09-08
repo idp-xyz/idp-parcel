@@ -161,7 +161,9 @@ type ResolutionKey struct {
 	// Settlement 只在请求结算政策依据时有意义，纪律与 PriceDirection 同（ADR-0044）：
 	// 结算必填、其余必缺，部分给出即输入未受理。
 	Settlement SettlementSelector
-	Anchor     SelectionAnchor
+	// Credit 只在请求信用政策依据时有意义，纪律同上（ADR-0127）。
+	Credit CreditSelector
+	Anchor SelectionAnchor
 }
 
 func (key ResolutionKey) minimumIdentityEstablished() bool {
@@ -180,6 +182,13 @@ func (key ResolutionKey) minimumIdentityEstablished() bool {
 	} else if !key.Settlement.empty() {
 		return false
 	}
+	if key.RequiredBasis == CreditPolicyObject {
+		if !key.Credit.declared() {
+			return false
+		}
+	} else if !key.Credit.empty() {
+		return false
+	}
 	if key.Purpose == PricingPurpose {
 		return key.PriceDirection.valid()
 	}
@@ -196,6 +205,7 @@ func (key ResolutionKey) fingerprint() string {
 		key.Purpose.String(),
 		key.PriceDirection.String(),
 		key.Settlement.fingerprint(),
+		key.Credit.fingerprint(),
 		key.Anchor.PolicyVersion().String(),
 		key.Anchor.At().Format(time.RFC3339Nano),
 	}, "\x00")
@@ -294,6 +304,8 @@ type Resolution struct {
 	hasPricePolicy      bool
 	settlementPolicy    SettlementPolicy
 	hasSettlementPolicy bool
+	creditBasis         CreditBasis
+	hasCreditBasis      bool
 	viewRevision        AuthorityViewRevision
 	reason              ResolutionReason
 	continuation        ContinuationReference
@@ -325,6 +337,12 @@ func (resolution Resolution) AdoptedPricePolicy() (CommercialPricePolicy, bool) 
 // 范围因此可观察（ADR-0044）；其他依据缺席。
 func (resolution Resolution) AdoptedSettlementPolicy() (SettlementPolicy, bool) {
 	return resolution.settlementPolicy, resolution.hasSettlementPolicy
+}
+
+// AdoptedCreditBasis 在采用信用政策依据时交回出自哪一版政策、授权多少额度（ADR-0127）；
+// 其他依据缺席。缺席与「授予零额度」由 CreditBasis.Applicable 分开，这里不替它折叠。
+func (resolution Resolution) AdoptedCreditBasis() (CreditBasis, bool) {
+	return resolution.creditBasis, resolution.hasCreditBasis
 }
 
 // CandidateCount 报告权威侧持有多少个适用版本。输入未受理时恒为零：去数候选本身就
@@ -377,6 +395,9 @@ func ResolveCommercialBasis(
 	}
 	if key.RequiredBasis == SettlementPolicyObject {
 		return resolveSettlementPolicyBasis(registry, key)
+	}
+	if key.RequiredBasis == CreditPolicyObject {
+		return resolveCreditPolicyBasis(registry, key)
 	}
 
 	candidates := registry.applicable(key)
@@ -487,6 +508,55 @@ func resolveSettlementPolicyBasis(registry *CommercialRegistry, key ResolutionKe
 	default:
 		// ResolveSettlementPolicy 只有冲突与零候选两种失败；这里就是零候选。光有已登记
 		// 版本没有政策也落在这一格：通用版本解析产不出方式与范围。
+		result.outcome = NoApplicableBasis
+		return result
+	}
+}
+
+// resolveCreditPolicyBasis 经信用政策选用信用依据，把额度与出处一并带回（ADR-0127，镜像
+// resolveSettlementPolicyBasis）。候选先按政策版本的租户与范围收窄，再由 ResolveCreditPolicy
+// 按（法人、等级、费用类型、时点）裁决：不同费用类型互不冲突，同一格多候选是适用冲突。
+// 信用政策没有「按哪一版合同选」那样的前提，所以这里不像结算政策那样等别的成员先解出来。
+func resolveCreditPolicyBasis(registry *CommercialRegistry, key ResolutionKey) Resolution {
+	result := Resolution{
+		key:          key,
+		anchor:       key.Anchor,
+		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
+	}
+	query, err := NewCreditPolicyQuery(
+		key.LegalEntityCandidate,
+		key.Credit.Level,
+		key.Credit.ChargeType,
+		key.Anchor.At(),
+	)
+	if err != nil {
+		return Resolution{outcome: InputNotAccepted}
+	}
+	inScope := make([]CreditPolicy, 0, len(registry.creditPolicies))
+	for _, policy := range registry.creditPolicies {
+		if policy.version.tenant != key.TenantID || policy.version.scope != key.Scope {
+			continue
+		}
+		inScope = append(inScope, policy)
+	}
+	basis, err := ResolveCreditPolicy(inScope, query)
+	switch {
+	case err == nil:
+		result.outcome = UniquelyResolved
+		result.adopted = basis.PolicyVersion()
+		result.hasAdopted = true
+		result.creditBasis = basis
+		result.hasCreditBasis = true
+		result.candidateCount = 1
+		result.resolutionID = resolutionIdentity(key, result.viewRevision, basis.PolicyVersion())
+		return result
+	case errors.Is(err, ErrCreditPolicyConflict):
+		result.outcome = ApplicabilityConflict
+		result.candidateCount = 2
+		return result
+	default:
+		// ResolveCreditPolicy 只有冲突与零候选两种失败；这里就是零候选。光有已登记版本没有
+		// 正文也落在这一格：通用版本解析产不出额度，而缺政策既不是无限信用也不是零额度。
 		result.outcome = NoApplicableBasis
 		return result
 	}

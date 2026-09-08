@@ -22,7 +22,10 @@ type ClosureResolutionKey struct {
 	//
 	// 与单依据键的差别只有一处：闭包键上它**只带三维，合同维必须缺席**。合同在闭包里是
 	// 结论不是输入，由本闭包解出后填（ADR-0080）。
-	Settlement    SettlementSelector
+	Settlement SettlementSelector
+	// Credit 只在必需依据含信用政策时有意义（ADR-0127）：含则两维必填、不含则必缺。它与
+	// 单依据键上的形状相同——信用政策没有由本闭包解出的那一维。
+	Credit        CreditSelector
 	Anchor        SelectionAnchor
 	RequiredBases []CommercialObjectKind
 }
@@ -38,6 +41,10 @@ func (key ClosureResolutionKey) requires(kind CommercialObjectKind) bool {
 
 func (key ClosureResolutionKey) requiresSettlementBasis() bool {
 	return key.requires(SettlementPolicyObject)
+}
+
+func (key ClosureResolutionKey) requiresCreditBasis() bool {
+	return key.requires(CreditPolicyObject)
 }
 
 func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
@@ -66,6 +73,13 @@ func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
 			return false
 		}
 	} else if !key.Settlement.empty() {
+		return false
+	}
+	if key.requiresCreditBasis() {
+		if !key.Credit.declared() {
+			return false
+		}
+	} else if !key.Credit.empty() {
 		return false
 	}
 
@@ -100,12 +114,14 @@ func (key ClosureResolutionKey) fingerprint() string {
 	return strings.Join(append([]string{
 		key.singleBasisKey(CommercialObjectKindInvalid).fingerprint(),
 		key.Settlement.fingerprint(),
+		key.Credit.fingerprint(),
 	}, bases...), "\x00")
 }
 
-// singleBasisKey 一律不携带选择器：单依据键要求结算之外的成员选择器缺席，无差别透传会
-// 让整个闭包被误判输入未受理。结算政策那一项走 settlementBasisKey，它要等合同解出来才形
-// 得成——本方法给不出那一维，因此这里不为它开口子（ADR-0080）。
+// singleBasisKey 一律不携带选择器：单依据键要求结算与信用之外的成员选择器缺席，无差别透传
+// 会让整个闭包被误判输入未受理。结算政策那一项走 settlementBasisKey，它要等合同解出来才形
+// 得成——本方法给不出那一维，因此这里不为它开口子（ADR-0080）；信用政策那一项走
+// creditBasisKey（ADR-0127）。
 func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) ResolutionKey {
 	return ResolutionKey{
 		TenantID:             key.TenantID,
@@ -127,6 +143,14 @@ func (key ClosureResolutionKey) settlementBasisKey(contract CommercialVersionLab
 	return single
 }
 
+// creditBasisKey 形成信用政策那一项的单依据键：闭包键上的两维原样带过去（ADR-0127）。信用
+// 政策不引用同一闭包正在解的别的成员，所以这里没有结算那样要等前提解出来才能补的一维。
+func (key ClosureResolutionKey) creditBasisKey() ResolutionKey {
+	single := key.singleBasisKey(CreditPolicyObject)
+	single.Credit = key.Credit
+	return single
+}
+
 // AdoptedBasis 把一项必需依据与其采用的版本配成一对。闭包保存这样的成对结构而不是
 // 具名字段，是为了让并非由商业版本支撑的依据——比如参与方关系——能够加入，而不必
 // 改造闭包的形状。
@@ -141,6 +165,8 @@ type AdoptedBasis struct {
 	hasPricePolicy      bool
 	settlementPolicy    SettlementPolicy
 	hasSettlementPolicy bool
+	creditBasis         CreditBasis
+	hasCreditBasis      bool
 	serviceProduct      ServiceProduct
 	hasServiceProduct   bool
 }
@@ -162,6 +188,12 @@ func (adopted AdoptedBasis) PricePolicy() (CommercialPricePolicy, bool) {
 // （ADR-0044）；其他依据缺席。
 func (adopted AdoptedBasis) SettlementPolicy() (SettlementPolicy, bool) {
 	return adopted.settlementPolicy, adopted.hasSettlementPolicy
+}
+
+// CreditBasis 在采用了信用政策时交回——出自哪一版、授权多少额度随闭包可观察（ADR-0127），
+// settlement-accounting 的账期分支从这里取授信额度；其他依据缺席。
+func (adopted AdoptedBasis) CreditBasis() (CreditBasis, bool) {
+	return adopted.creditBasis, adopted.hasCreditBasis
 }
 
 // ServiceProduct 在采用了服务产品时交回整个产品（ADR-0050），形态因此可观察；其他
@@ -314,6 +346,9 @@ func ResolveCommercialClosure(
 			}
 			single = key.settlementBasisKey(contract)
 		}
+		if kind == CreditPolicyObject {
+			single = key.creditBasisKey()
+		}
 		result := ResolveCommercialBasis(registry, single, standingOf)
 		switch result.Outcome() {
 		case UniquelyResolved:
@@ -326,6 +361,10 @@ func ResolveCommercialClosure(
 			if policy, ok := result.AdoptedSettlementPolicy(); ok {
 				basis.settlementPolicy = policy
 				basis.hasSettlementPolicy = true
+			}
+			if credit, ok := result.AdoptedCreditBasis(); ok {
+				basis.creditBasis = credit
+				basis.hasCreditBasis = true
 			}
 			if product, ok := registry.serviceProductOf(version); ok {
 				basis.serviceProduct = product

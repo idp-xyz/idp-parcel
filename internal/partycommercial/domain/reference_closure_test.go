@@ -23,6 +23,9 @@ func closureKey(t *testing.T, scope string, required ...domain.CommercialObjectK
 		if kind == domain.SettlementPolicyObject {
 			key.Settlement = closureSettlementSelector(t)
 		}
+		if kind == domain.CreditPolicyObject {
+			key.Credit = creditSelector(t)
+		}
 	}
 	return key
 }
@@ -82,6 +85,11 @@ func seedClosure(t *testing.T, registry *domain.CommercialRegistry, scope string
 		if kind == domain.SettlementPolicyObject {
 			// 结算依据经政策采用（ADR-0044）：光登记版本闭包看不见，政策一并登记。
 			registerSettlementPolicyIn(t, registry, scope, "object-"+kind.String(), domain.PrepaidMethod)
+			continue
+		}
+		if kind == domain.CreditPolicyObject {
+			// 信用依据同理（ADR-0127）：正文一并登记，额度与 creditSelector 指名的费用类型对齐。
+			registerCreditPolicyIn(t, registry, scope, "object-"+kind.String(), "charge-freight", creditAmount(t, 500000))
 			continue
 		}
 		objectID := "object-" + kind.String()

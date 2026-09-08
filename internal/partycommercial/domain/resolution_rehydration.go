@@ -11,12 +11,16 @@ import (
 var ErrInvalidRehydratedResolution = errors.New("party commercial: invalid rehydrated commercial resolution")
 
 // RehydrateAdoptedBasisSpec 是闭包里一项已采用依据在库里的样子。版本身份始终固定；
-// 服务产品（ADR-0050）与结算政策（ADR-0044）快照在场时一并重建。
+// 服务产品（ADR-0050）、结算政策（ADR-0044）与信用依据（ADR-0127）快照在场时一并重建。
 //
 // 价格政策不在其中：`NewCommercialPricePolicy` 要方案方向与跨向转换两个入参才立得起来，
 // 而 `CommercialPricePolicy` 并不留存它们——照本形状重建就得跳过那道绑定校验，或者在
 // 快照里再存一份只为过校验的输入。两条路都要先决定「已固定的价格政策还要不要重验绑定」，
 // 那是一道决定，不是一段代码，留给它自己的票。
+//
+// 信用依据只收额度，不收整份 CreditBasis：CreditBasis 是 ResolveCreditPolicy 的产物，产物
+// 没有构造函数（判断的输入有构造函数、产物没有）；出处就是本项采用的版本，快照里再存一份
+// 就是给同一件事留两个可以互相打架的记录。
 type RehydrateAdoptedBasisSpec struct {
 	Kind                CommercialObjectKind
 	Version             CommercialVersion
@@ -24,6 +28,8 @@ type RehydrateAdoptedBasisSpec struct {
 	HasServiceProduct   bool
 	SettlementPolicy    SettlementPolicy
 	HasSettlementPolicy bool
+	CreditLimit         CreditLimit
+	HasCreditBasis      bool
 }
 
 // RehydrateCommercialClosureSpec 是一次已固定解析在库里的样子。字段一律当数据收下，
@@ -85,6 +91,19 @@ func RehydrateCommercialClosure(spec RehydrateCommercialClosureSpec) (Commercial
 			}
 			basis.settlementPolicy = item.SettlementPolicy
 			basis.hasSettlementPolicy = true
+		}
+		if item.HasCreditBasis {
+			// 额度必须挂在信用政策这一格、且已声明。零值额度过不了 NewCreditPolicy，快照里出现它
+			// 只能是绕开构造门写进去的；照收就会让「授予零信用」与「没有额度」读成同一个样子。
+			if item.Kind != CreditPolicyObject || !item.CreditLimit.valid() {
+				return CommercialClosure{}, rehydratedResolutionRefusal("信用依据快照与采用版本对不上")
+			}
+			basis.creditBasis = CreditBasis{
+				policyVersion: item.Version,
+				limit:         item.CreditLimit,
+				applicable:    true,
+			}
+			basis.hasCreditBasis = true
 		}
 		adopted = append(adopted, basis)
 	}

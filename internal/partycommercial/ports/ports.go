@@ -121,9 +121,11 @@ type CustomerContractContentView interface {
 // 费用类型授权多少额度（金额或比例）。
 //
 // 它与 CommercialAuthorityView 分开，分界同 CustomerContractContentView：前者回答「这个
-// 范围有几个适用候选」，本口回答已选出版本的正文。正文不进整册与 ViewRevision——今天没有
-// 解析在信用政策之间选（ResolveCreditPolicy 零生产调用点），让它进闭包是解析语义的改动，
-// 不是登记正文的连带（票 party-commercial-context-gaps/03）。
+// 范围有几个适用候选」，本口回答已选出版本的正文。正文自 ADR-0127 起**进整册与 ViewRevision**：
+// 闭包解析在信用政策之间选（resolveCreditPolicyBasis 经 ResolveCreditPolicy 按法人、等级、费用类型、
+// 时点裁决），选出的额度随闭包的 AdoptedBasis.CreditBasis 交出——settlement-accounting 从那里取
+// 授信额度，不经本口。本口留作按已选出版本点读正文的口；此前「正文不进整册」那句是票
+// party-commercial-context-gaps/03 立正文表时的状态，解析语义的改口已由 ADR-0127 裁。
 //
 // found=false = 正文未登记（无行）。读取失败与坏数据（含额度两列同空/同满、版本壳与正文
 // 类别不符）走 error，不得折成 found=false——那会把一份损坏的正文伪装成从未登记。本口不
