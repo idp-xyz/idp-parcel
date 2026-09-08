@@ -1,7 +1,7 @@
 # 信用政策正文已入册、`CreditBasis` 无人索取：PC→SA 的授信额度缝不存在
 
 Category: enhancement
-Status: in-progress——2026-09-08 11:0x，MCP-1 代裁**甲**（owner 授权自决口径，见 Comments 末条）：闭包解析加 `resolveCreditPolicyBasis` 一步、`ResolveCreditPolicy` 作四维选择器、`CreditBasis` 随 Resolution 交出，独立一篇 **ADR-0127**；判据 1 已裁，判据 2（提供方口 + SA 消费适配器，可碰 `settlementaccounting/adapters/partycommercial`）与 3（剪行按第二种）由 MCP-6 在 `mcp6-wbr03-05` 接。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方七行），判据 1 那格「四维选择在哪一层还有多候选」经取证是**解析语义的改口、要 ADR**，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
+Status: resolved——2026-09-08 MCP-3（task-5031a8a1，分支 `mcp3-wbr03` 基 `2c0008c3`）落 ADR-0127 并实施判据 1–4 全部，自验 tip `eed205aa` 后在拆验证树那一步 crash（用户 17:4x 报）；通道 4 接手只做簿记（本完成记录 + 完工报）并在隔离检出独立重验 `eed205aa`，未改代码。进 main 的 SHA 由推送方重放后另记。此前 in-progress：2026-09-08 11:0x，MCP-1 代裁**甲**（owner 授权自决口径，见 Comments）：闭包解析加 `resolveCreditPolicyBasis` 一步、`ResolveCreditPolicy` 作四维选择器、`CreditBasis` 随 Resolution 交出，独立一篇 **ADR-0127**；判据 1 已裁，判据 2（提供方口 + SA 消费适配器，可碰 `settlementaccounting/adapters/partycommercial`）与 3（剪行按第二种）由 MCP-6 在 `mcp6-wbr03-05` 接。此前 blocked：2026-09-08，MCP-6（task 5f716c71，用户 02:0x 自 MCP-3 改派；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：完成判据 4 的理由行已补进基线（条目上方七行），判据 1 那格「四维选择在哪一层还有多候选」经取证是**解析语义的改口、要 ADR**，按派单纪律停下报 MCP-1 裁。此前 draft：只读取证（MCP-6，锚 `2efef58e`），PC 地盘归 MCP-3；交 MCP-1 派
 Blocked by: 无（「要先裁的一格」已由 MCP-1 2026-09-08 裁甲；与 `party-commercial-context-gaps/07` 的 ADR-0115 分立，独立 ADR-0127）
 
 ## 条目
@@ -58,6 +58,34 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
 
 本票不改代码、不改基线。基线行剪掉的时刻是 PC 提供方口真调 `ResolveCreditPolicy` 那一笔。（立票时的边界；落地笔见 Comments。）
 
+## 完成记录
+
+分支 `mcp3-wbr03`，merge-base `2c0008c3`（main 此后到 `a69c16f0` 只多 `.md` 与 `apps/admin-web`，与本分支唯一重叠文件是 `docs/product/MECHANISM-INVENTORY.md`——生成物，推送方在 tip 重生成兑底；未 rebase）。作者 MCP-3；下表 SHA 为分支上的，作封存出处；进 main 的 SHA 由推送方重放后广播、届时并列补记。
+
+| 分支 SHA | 内容 |
+|---|---|
+| `85c4209f` | feat(partycommercial)：闭包解析加 `resolveCreditPolicyBasis`（候选按版本租户+范围收窄，再由 `ResolveCreditPolicy` 选唯一 / `适用冲突` / `无适用依据`；光有版本没正文 = 无适用依据）；键上新增 `CreditSelector`（等级 × 费用类型，含则必填不含则必缺）、解析身份换代；`CreditBasis` 随 `Resolution.AdoptedCreditBasis` / `AdoptedBasis.CreditBasis` 交出；信用政策进 `CommercialRegistry` 与 `ViewRevision`；重建门收额度。`credit_basis_resolution_test.go` 九例 |
+| `f0caf25a` | feat(partycommercial/postgres)：`LoadForScope` LEFT JOIN `0020`（一版一行不放大）、`registerCreditPolicy` 进册；闭包快照带 `credit` 选择器与 `creditBasis` 额度两格（金额 / 比例恰一）；`0020` 头注那句改以 `credit_policy.go` 头注与 ADR-0127 为准（迁移按 checksum 不动）。真库两例 |
+| `fdf6819e` | docs(adr)：ADR-0127 决定三改一句（`0020` 头注守 checksum 不改） |
+| `a532b500` | feat(settlementaccounting)：新端口 `CreditBasisView.LoadCreditBasis`（三格照 ADR-0054）；领域 `CreditBasis` / `CreditPolicyReference` / `CreditStanding.WithAuthorizedLimit`；`exposeCredit` 先索取依据再读状况、额度换政策授权金额、结果带 `CreditPolicy()`；比例额度停 `CREDIT_RATIO_BASE_UNDECIDED`；`NotFormedReason` 加三格；`Deps.CreditBasis` nil 沿旧路（三步法 expand 段，理由 ADR-0127 决定五）。应用层四例、领域两例 |
+| `4162b421` | feat(settlementaccounting/partycommercial)：SA→PC 消费侧适配器 `CreditBasis`——凭回指从已固定闭包快照取额度与出处，不点读 `0020`；三格分明。真库四例 |
+| `84191cb7` | feat(parcel-dispatch)：接受前财务控制装配接上 SA→PC 授信依据适配器（与控制策略视图共用同一只解析库、同一条回指） |
+| `84b9a313` | chore(architecture)：剪 `production_wiring_baseline.txt` PC 段 `ResolveCreditPolicy`（成因第二种，理由行改写为历史并写明「出名单不等于缝全部闭合」的两件）与 `production_type_reachability_baseline.txt` 的 `CreditBasis`；两法同得 wiring 6→5（PC 4→3）、type reachability 23→22，钉父提交 `84191cb7`，只对该检出成立 |
+| `eed205aa` | docs(product)：机制清点在 `84b9a313` 干净树上重生成（SA→PC 消费缝 1→2、SA 生产文件 78→80、测试 57→60，PC 测试 108→109，端口声明 365→366） |
+| （本笔） | docs(scratch)：本票 Status → resolved + 本完成记录（通道 4 接手簿记） |
+
+**逐条对完成判据**：1 「要先裁的一格」→ MCP-1 裁甲，ADR-0127 独立一篇（Accepted，Status 里写明代裁口径与落文时读过 / 未读的范围）；2 提供方口 = `resolveCreditPolicyBasis`（闭包交出 `CreditBasis`），SA 消费侧适配器 `settlementaccounting/adapters/partycommercial/credit_basis.go` 在 `exposeCredit` 账期分支真索取，结果带政策引用（`AT-SA-171` 政策半边成立；`AT-SA-172` 模式冲突仍由既有策略读口答）；3 剪行按第二种，两法同得、钉 SHA，见 `84b9a313`；4 理由行此前已由 MCP-6 补（`5df16244`），本轮剪掉时改写为历史。
+
+**验证**：
+- 作者 MCP-3（据用户提供的崩溃前终端截图，钉 `eed205aa` detached 检出）：gofmt 空、build / vet 0；全仓 `go test -p 1 -count=1` 17:31:45→17:42:01 exit 0，ok=100 / FAIL 0 / no-test 16；探针 SA→PC 适配器包无 DSN PASS=3 SKIP=10。拆验证树一步退 255 后 crash。
+- 通道 4 独立重验（干净 detached 检出 `eed205aa`，`$env:TEMP\idp-verify-wbr03-mcp4`，已拆、不带 `--force`）：gofmt -l 空；`go build` / `go vet ./...` 退 0；含 DSN `go test -p 1 -count=1 -v ./...` **7548 PASS / 0 FAIL / 0 SKIP，100 包 ok / 0 FAIL / 16 无测试**，17:48:07→17:58:01；探针 `internal/settlementaccounting/adapters/partycommercial` 无 DSN PASS 3 / SKIP 14、有 DSN PASS 23 / SKIP 0；同检出重跑清点生成器零差。`-race` 本机无 cgo 未跑。
+
+**红线自查**（据提交信与 diff 文件面，通道 4 未逐行读代码）：触及 `internal/partycommercial/{domain,ports,adapters/postgres}`、`internal/settlementaccounting/{domain,ports,application,adapters/partycommercial}`、`cmd/parcel-dispatch/assemble.go`、两份 architecture 基线、ADR-0127 + README 一行、清点；**未碰** `internal/parcelshipment/**`、`migrations/**`（`0020` 不动）、`authority_grant.go` / `acceptance_content.go` / PC http；实例值（等级、费用类型、额度）全由夹具给、无默认；比例额度基数未裁 → 停格不折算。
+
+**未落 / 拆出**（ADR-0127 Consequences 点名，归各自地盘）：① PS 登记面 `commercial_resolution_keys.go` 不承载信用二维，含 `CreditPolicyObject` 的登记行会形成立不起来的键——PS 另立票；② SA contract 段（`Deps.CreditBasis` mandatory 化）与暴露账本行持久化政策引用（要 SA 迁移）——SA 后续项，随 PS 夹具补 `CreditBasisView` 替身那笔一起落；③ 比例额度的基数——`BD-*` 一类，等自己的裁决。
+
+**越权风险点**（供评审）：① 解析身份换代（`RES-` / `CLO-` / `CONT-` 指纹含 `CreditSelector`）——无租户故无迁移，但这是键形变化；② expand 段留 nil 沿旧路一格——ADR-0127 决定五写明 contract 何时收；③ `NotFormedReason` 新增三格未经产品判断单独裁；④ 接手方通道 4 未逐行审语义，只核了提交信、ADR、基线 diff 与全仓验证——语义评审仍靠非作者通道的 `/code-review`。
+
 ## Comments
 
 - 2026-09-08 02:3x · MCP-6（task 5f716c71；分支 `mcp6-wbr03-05` 基 `4524cfd4`）：**补理由行 + 取证「要先裁的一格」，停下报 MCP-1。**
@@ -83,3 +111,8 @@ UC-SA-002 步 7「按已唯一解析的结算政策范围和商业策略形成�
   `mcp5-awf08`，0127 全 ref 无文件，MCP-1 10:5x 查），独立一篇、不作 ADR-0115 补充；Context 里写「此前 `ResolveCreditPolicy`
   零生产调用」时钉 SHA 不写行号。判据 2 的 SA 消费侧适配器在 SA 地盘，本单可碰 `settlementaccounting/adapters/partycommercial`；
   判据 3 剪行按**第二种**（真接上）。Status blocked→in-progress，Blocked by 清；ADR-0127 + 判据 2–3 由 MCP-6 接着做，每小步提交并推。
+- 2026-09-08 17:5x · 通道 4（接手 MCP-3 task-5031a8a1；用户 17:4x 报通道 3 crash 并指令接手，已知会 MCP-1）：MCP-3 已在分支
+  `mcp3-wbr03` 落齐 ADR-0127 与判据 1–4（八笔到 `eed205aa`，树 status 零行、与 origin 同步），崩溃前自验全绿、停在拆验证树那一步；
+  本票面此前一字未改。接手只做三件：清掉残留空壳 `idp-verify-wbr03`（`.git` 链接已无、worktree 登记已无、目录空），在隔离检出独立重验
+  `eed205aa`（见「完成记录·验证」），写本完成记录并发完工报。未改任何代码——「先写自己的 red 再读对方代码」那条适用于接手在途实现，
+  这里实现已完、验证已绿，接手的是簿记；语义评审留给非作者通道。
