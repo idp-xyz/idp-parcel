@@ -19,6 +19,7 @@ import { AuthorizationRulePublicationForm } from './AuthorizationRulePublication
 import { SettlementPolicyPublicationForm } from './SettlementPolicyPublicationForm';
 import { PricePolicyPublicationForm } from './PricePolicyPublicationForm';
 import { AcceptanceRulePackagePublicationForm } from './AcceptanceRulePackagePublicationForm';
+import { PreAcceptanceFinancialControlPolicyPublicationForm } from './PreAcceptanceFinancialControlPolicyPublicationForm';
 import { kindColumns, rowsOf, type PolicyRow } from './policy-rows';
 import {
   commercialPolicyKinds,
@@ -158,6 +159,7 @@ export function CommercialPoliciesPage() {
           <TabsTrigger value="publish-settlement-policy">发布结算政策版本</TabsTrigger>
           <TabsTrigger value="publish-price-policy">发布价格政策版本</TabsTrigger>
           <TabsTrigger value="publish-acceptance-rule-package">发布规则包版本</TabsTrigger>
+          <TabsTrigger value="publish-pre-acceptance-financial-control-policy">发布接受前财务控制策略版本</TabsTrigger>
           <TabsTrigger value="publish">受控发布（JSON 镜像）</TabsTrigger>
         </TabsList>
         <TabsContent
@@ -196,6 +198,14 @@ export function CommercialPoliciesPage() {
           className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
         >
           <AcceptanceRulePackagePublicationForm onPublished={() => notePublished('ACCEPTANCE_RULE_PACKAGE')} />
+        </TabsContent>
+        <TabsContent
+          value="publish-pre-acceptance-financial-control-policy"
+          className="flex-1 flex flex-col overflow-auto data-[state=inactive]:hidden"
+        >
+          <PreAcceptanceFinancialControlPolicyPublicationForm
+            onPublished={() => notePublished('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY')}
+          />
         </TabsContent>
         <TabsContent
           value="publish"
