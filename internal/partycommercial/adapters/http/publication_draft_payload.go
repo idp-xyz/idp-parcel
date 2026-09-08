@@ -83,6 +83,8 @@ type CommercialPublicationPayload struct {
 	SettlementPolicy *SettlementPolicyBodyPayload `json:"settlementPolicy,omitempty"`
 	// PricePolicy 是价格规则册的正文：0010 正文连同可缺的 0022 口径节嵌在同一格（票 admin-write-faces/14），见 publication_draft_payload_price_policy.go。
 	PricePolicy *PricePolicyBodyPayload `json:"pricePolicy,omitempty"`
+	// AcceptanceRulePackage 是接单规则包册的正文：一格分节（正文 + 各声明通道各一节），见 publication_draft_payload_acceptance_rule_package.go。
+	AcceptanceRulePackage *AcceptanceRulePackageBodyPayload `json:"acceptanceRulePackage,omitempty"`
 	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
 }
 
@@ -191,6 +193,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.PricePolicy != nil {
 		body := payload.PricePolicy.body(problems)
 		content.PricePolicy = &body
+	}
+	if payload.AcceptanceRulePackage != nil {
+		body := payload.AcceptanceRulePackage.body(problems)
+		content.AcceptanceRulePackage = &body
 	}
 
 	if problems.any() {
