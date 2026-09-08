@@ -13,18 +13,18 @@
 | networkrouting | 52 | 48 | 6 | 13 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 140 | 139 | 17 | 26 | 8 | 14 |
+| parcelshipment | 141 | 140 | 17 | 26 | 8 | 14 |
 | partycommercial | 92 | 94 | 8 | 31 | 1 | 14 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 78 | 57 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 843 | 791 | 113 | 241 | 51 | 107 |
+| **合计** | 844 | 792 | 113 | 241 | 51 | 107 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 55、测试 77。
 
-## 跨上下文消费缝：20 组，53 个生产文件
+## 跨上下文消费缝：20 组，54 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -35,7 +35,7 @@
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 4 |
 | parcelshipment | parcelpricing | 3 |
-| parcelshipment | partycommercial | 12 |
+| parcelshipment | partycommercial | 13 |
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 2 |
 | parcelshipment | transportfulfillment | 4 |
