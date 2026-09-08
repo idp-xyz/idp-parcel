@@ -1143,3 +1143,27 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - 广播 SHA 对照与地盘释出；`mcp5-awf08` 内容已全在 main（两笔 cherry-pick 内容逐字节同），指针改名 `merged/mcp5-awf08`；树 `idp-parcel-mcp5-awf08` 归通道 5 自拆。`idp-parcel-mcp1-awf08` 与 `idp-review-awf08` 待评审收口后拆。
 
 **在途（14:0x）**：wbr/03 下一段（ADR-0127 + 判据 2–3，跨 PC/SA）待派；wbr/04 PS 侧复核授权端口待派；tf/11 等通道 4；admin-write-faces 09–17 九张进入前沿、可派（同在 PC + admin-web，按册分文件；`endpoints.go` 若加读面行要占号）。**归用户**：是否切「作者自落 main」（连绿次数见 CI）；ADR-0126 越权风险点四条复核。
+
+## 2026-09-08 14:0x 通道 1 新会话（接手时 `main = origin/main = 0ef63897`）
+
+用户先要一次自带 `ask_question` 的调用测试，随后「监听队列、正常回复、保持循环」。接手时队列一条：前会话 14:0x 的 main 前进广播回声（`5b04c874`，awf/08 落地）。前会话 13:47 起跑的 awf/08 两轴隔离评审随会话结束**未交报告**——票 08 Comments 里没有评审条目，`5b04c874` 已在 main；补评归待办（非作者通道空出后派，或推送方再起隔离子代理）。
+
+### 14:0x 用户「08 解决了，09–17 九张能不能并行开干」→ 答：能并行，但不是九张独立开
+
+钉 `0ef63897` 核票面与代码，四处共享面：① 前端公共半边不存在——`apps/admin-web/src` 里四个新端点零命中，九张票完成判据都是同一条五步流程，08「未做」把它归给子票但没指定谁；② Go 两文件九张共改相邻行——`domain/publication_canonicalization.go`（`PublicationContent` 一格、`CanonicalizePublicationContent` kind 不符一句 + switch 一支、`IsRegisterCanonicalized`、`canonicalPublicationDocument` 一格、`RehydratePublicationContent` 一支）与 `adapters/http/publication_draft_payload.go`（`CommercialPublicationPayload` 一格、`Publication()` 一段）；③ 页面归属——09/10/11 各独占一页，12–17 六张全在 `CommercialPoliciesPage.tsx`，`party/api.ts` 九张共写；④ 词表读口不存在且是新裁决——12/13/15/17 写「下拉由服务端词表读口供」，`endpoints.go` 无词表端点，「一册一口还是一个通用口」按伞票口径该先裁。容量：六通道里 1 是推送方、2/4/6 各有在途分支。**建议三波**：第 0 波 16（信用政策，08 首例，Go 已接）连带前端公共半边先落 + 裁词表读口；第 1 波 09/10/11 三张并行（页面独占，不依赖词表读口）；第 2 波 12/13/14/15/17 按空闲通道 2–3 张一批（共写政策页，每册表单独立成文件、页面只加一行挂载）。用户 14:1x「按你的建议开工」。
+
+### 14:1x 点名 → 14:1x 四单派满
+
+- 第 0 步 `branch-state.ps1 -Path internal/partycommercial` / `-Path apps/admin-web/src/pages/party`：两块地盘上无 09–17 半成品、无未提交现场；PC 地盘上唯一「main 尚无」的两笔是 `mcp6-wbr03-05` 的 `db723eb1` / `790f4b70`，`git cherry main` 四笔全 `-`（已按 (a) 重放，见 11:1x 节），前会话写「归其主改名」未做，本会话 `git branch -m` → `merged/mcp6-wbr03-05`。
+- 14:13 广播 `[点名 ← 通道 1 · 截止 14:18]`；14:15 前 MCP-3/4/5/6 应答空闲·无地盘·充足；MCP-2 截至 14:16 未应答（`mcp2-psr02-tail` 内容已在 main，树干净）。四张票四个应答，不等截止即派。基线一律 `0ef63897`；不加迁移（PC 0029 未占）、不动 `ports.go` / `endpoints.go`。
+
+| 通道 | 单号 | 票 | 独占地盘 | 分支 |
+|---|---|---|---|---|
+| MCP-5 | `2e9b1361` | awf/16 信用政策表单 + **前端公共半边**（约定落点 `party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`，骨架一出即广播） | `apps/admin-web/src/pages/party/` 新文件三件 + `CommercialPoliciesPage.tsx`；预期不动 Go | `mcp5-awf16` |
+| MCP-3 | `7fc5a960` | awf/09 服务产品版本表单（本册无正文，先在票面补「本册规范化判断」再写代码） | Go 两共享文件各一格 + 新文件 `*_service_product.go`；`ServiceProductsPage.tsx` + 新表单文件 | `mcp3-awf09` |
+| MCP-4 | `39a6f0cd` | awf/10 客户合同表单（两层分两节） | 同上模式 `*_customer_contract.go`；`PartyContractsPage.tsx` + 新表单文件 | `mcp4-awf10` |
+| MCP-6 | `662822ef` | awf/11 供应商协议表单 | 同上模式 `*_supplier_agreement.go`；`SupplierAgreementsPage.tsx` + 新表单文件 | `mcp6-awf11` |
+
+**形状**：09/10/11 先 Go 再表单本体（组载荷的纯函数 + 测试），流程组件等 MCP-5 的落点广播后接；三张共改 Go 两文件相邻行，改前占号、只加自己一格、本册正文 / 文档 / 载荷节全放新文件，重放按完工先后、纯加行冲突推送方解；九张都不碰 `party/api.ts`。每张带合入前独立评审（完工报后点非作者通道 20 分钟）。
+
+**待派**：第 2 波 12/13/14/15/17（等 16 的公共半边进 main + 词表读口裁决——形状候选：一个通用读口按 kind 答词表 vs 一册一口，归 owner 或授权自决，未裁）；18 留 draft 等读面票；wbr/03 下一段、wbr/04、tf/11 不变。**待办**：awf/08 补评。**归用户**：是否切「作者自落 main」；ADR-0126 越权风险点四条复核。

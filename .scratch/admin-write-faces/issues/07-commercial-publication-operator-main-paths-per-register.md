@@ -94,3 +94,12 @@ ADR-0101 Alternatives 第二条否决逐字段表单只针对上百格的价卡�
   只 `docs/adr/README.md` 多四行（0113 / 0118 / 0122 / 0123，他人条目自动合并进来的），0116 那一行两侧一致，本批内容原样在 main。
   树 `idp-parcel-mcp6-awf06` 已拆（status 两问零行；`worktree remove` 退 255 卡在 `node_modules` 长路径，三样核对后按
   parallel-sessions 配方清壳），分支指针 `mcp6-awf07` 留着作事后比对凭据。
+- 2026-09-08 14:1x · MCP-1（派发记录，钉 main `0ef63897`）：**09–17 分三波，不九张齐开。** 理由四处共享面：前端公共半边
+  （四口客户端 + 五步流程组件）在 `apps/admin-web/src` 零命中、无人做；Go `domain/publication_canonicalization.go` 与
+  `adapters/http/publication_draft_payload.go` 九张各加一格于相邻行；12–17 六张同写 `CommercialPoliciesPage.tsx`；
+  12/13/15/17 要的「服务端词表读口」在 `endpoints.go` 不存在且是新裁决。14:13 点名，MCP-3/4/5/6 应答，MCP-2 截至 14:16 未应答。
+  **第 0 波** 16 → MCP-5（`2e9b1361`，`mcp5-awf16`，连带前端公共半边，约定落点 `party/publication-draft-api.ts` /
+  `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`）；**第 1 波** 09 → MCP-3（`7fc5a960`，`mcp3-awf09`）、10 → MCP-4
+  （`39a6f0cd`，`mcp4-awf10`）、11 → MCP-6（`662822ef`，`mcp6-awf11`），Go 先做、流程组件等 16 落点广播；**第 2 波**
+  12/13/14/15/17 等 16 进 main 与词表读口裁决后再点名派。基线 `0ef63897`；不加迁移、不动 `ports.go` / `endpoints.go`；
+  九张都不碰 `party/api.ts`。本波各票 Status 行由认领人自己转 in-progress，本表「状态」列随各票 resolved 时更新。
