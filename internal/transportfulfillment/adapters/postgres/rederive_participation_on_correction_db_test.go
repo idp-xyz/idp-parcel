@@ -181,6 +181,15 @@ func (registries rederivationRegistries) correctHandover(
 	t *testing.T, ctx context.Context, object string, verdict domain.HandoverVerdict, basis string,
 ) application.RegisterTransportHandoverResult {
 	t.Helper()
+	return registries.correctHandoverVersion(t, ctx, object, "v1", "v2", verdict, basis, rederivationCorrectedAt)
+}
+
+// correctHandoverVersion 把 <predecessor> 更正成 <next>；仍`已交接`时给双方证据与规则，拒收/待确认时给依据——
+// 领域对两格的完备性要求不同，夹具照它的形。
+func (registries rederivationRegistries) correctHandoverVersion(
+	t *testing.T, ctx context.Context, object, predecessor, next string, verdict domain.HandoverVerdict, basis string, correctedAt time.Time,
+) application.RegisterTransportHandoverResult {
+	t.Helper()
 	var result application.RegisterTransportHandoverResult
 	mustWithinSegmentTransaction(t, registries.transactor, ctx, func(txCtx context.Context) error {
 		var err error
@@ -188,19 +197,19 @@ func (registries rederivationRegistries) correctHandover(
 			TenantID:           registries.tenant,
 			Object:             object,
 			Scope:              "scope-" + object,
-			PredecessorVersion: "handover-result/" + object + "/v1",
+			PredecessorVersion: "handover-result/" + object + "/" + predecessor,
 			Verdict:            verdict,
-			ReleasingEvidence:  "release/" + object + "/2",
-			ReceivingEvidence:  "receive/" + object + "/2",
+			ReleasingEvidence:  "release/" + object + "/" + next,
+			ReceivingEvidence:  "receive/" + object + "/" + next,
 			Rule:               "handover-rule/v1",
 			Basis:              basis,
-			NewVersion:         "handover-result/" + object + "/v2",
-			CorrectedAt:        rederivationCorrectedAt,
+			NewVersion:         "handover-result/" + object + "/" + next,
+			CorrectedAt:        correctedAt,
 		})
 		return err
 	})
 	if result.Outcome() != application.HandoverCorrected {
-		t.Fatalf("交接更正：outcome=%s reason=%s", result.Outcome(), result.UndecidedReason())
+		t.Fatalf("交接更正 %s→%s：outcome=%s reason=%s", predecessor, next, result.Outcome(), result.UndecidedReason())
 	}
 	return result
 }
@@ -346,8 +355,8 @@ func TestAHandoverCorrectionThatStillHandsOverSupersedesTheParticipationInTheDat
 	if supersedes, chained := current.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-3/v1" {
 		t.Fatalf("替代版本没有回指首登：chained=%v supersedes=%s", chained, supersedes)
 	}
-	if !current.EnteredAt().Equal(rederivationEnteredAt) || current.EntryKind() != domain.EnteredByTransportHandover || !current.Active() {
-		t.Fatalf("替代版本的起点、种类或在场不对：enteredAt=%v kind=%v active=%v", current.EnteredAt(), current.EntryKind(), current.Active())
+	if !current.EnteredAt().Equal(rederivationEnteredAt) || current.EntryKind() != domain.EnteredByTransportHandover || !current.Active() || current.Voided() {
+		t.Fatalf("替代版本的起点、种类或在场不对：enteredAt=%v kind=%v active=%v voided=%v", current.EnteredAt(), current.EntryKind(), current.Active(), current.Voided())
 	}
 	if history := segment.ParticipationHistory(object); len(history) != 2 || !history[0].Superseded() {
 		t.Fatalf("链形不对：len=%d", len(history))
@@ -357,29 +366,111 @@ func TestAHandoverCorrectionThatStillHandsOverSupersedesTheParticipationInTheDat
 	}
 }
 
-// Covers: ADR-0112 决定四——`已交接`被更正为拒收：更正落新版本，段那一半答 CORRECTION_WITHDRAWS_CONTROL，
-// 原参与照旧站着（失效格另票 tf/11 落地前不猜也不静默）。
-func TestAHandoverCorrectionThatWithdrawsControlLeavesTheParticipationInTheDatabase(t *testing.T) {
+// Covers: ADR-0112 决定四与票 tf-segment-lifecycle-closure/11 裁决 1、2、4、5 走通真库——`已交接`被更正为拒收：更正
+// 落新版本，同事务在同段经 `Supersede` 插一条失效版本（voided 列为真、回指首登、入场依据取新版本引用、起点沿用
+// 首登），首登那一行一字不动；段那一半两格都空。此后该对象在本段当前无有效参与：在场计数为零、FindActiveSegments
+// 的 SQL 谓词找不到它、指名段结束它答 OBJECT_NOT_IN_SEGMENT；FindSegmentsForObject 仍找得到这一段。再更正回
+// `已交接`（v3 更正 v2）则从失效版本长出替代版本，参与重新在场——迁移 0019 的 CHECK 与两道部分唯一索引都收得下这条链。
+func TestAHandoverCorrectionThatWithdrawsControlVoidsTheParticipationInTheDatabase(t *testing.T) {
 	registries := newRederivationRegistries(t)
 	ctx := t.Context()
 	object := segmentRef(t, domain.NewCarriedObjectReference, "parcel-4")
+	key := segmentKeyFixture(t, "tenant-1", "SEG-RD-4")
 
 	registries.registerHandover(t, ctx, "parcel-4", "SEG-RD-4")
 	corrected := registries.correctHandover(t, ctx, "parcel-4", domain.HandoverRefused, "refusal/damaged-seal")
-	if corrected.SegmentEntryRefusal() != application.SegmentEntryRefusedCorrectionWithdrawsControl {
-		t.Fatalf("refusal = %s, want CORRECTION_WITHDRAWS_CONTROL", corrected.SegmentEntryRefusal())
-	}
-	if corrected.SegmentContinuationReference() != "" {
-		t.Fatalf("撤回控制不是欠账：debt=%q", corrected.SegmentContinuationReference())
+	if corrected.SegmentEntryRefusal() != application.SegmentEntryRefusalNone || corrected.SegmentContinuationReference() != "" {
+		t.Fatalf("失效版本落地成功却答了拒绝或欠账：refusal=%s debt=%q", corrected.SegmentEntryRefusal(), corrected.SegmentContinuationReference())
 	}
 
 	segment := registries.readSegment(t, ctx, "SEG-RD-4")
-	current, present := segment.ParticipationFor(object)
-	if !present || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v1" || !current.Active() {
-		t.Fatalf("原参与被动了：present=%v basis=%s active=%v", present, current.EntryBasis(), current.Active())
+	tail, present := segment.ParticipationFor(object)
+	if !present || !tail.Voided() || tail.Active() {
+		t.Fatalf("链尾不是失效版本：present=%v voided=%v active=%v", present, tail.Voided(), tail.Active())
 	}
-	if rows := registries.participationRows(t, ctx, "SEG-RD-4", "parcel-4"); rows != 1 {
-		t.Fatalf("库里参与行 = %d，want 1", rows)
+	if tail.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v2" || tail.EntryKind() != domain.EnteredByTransportHandover {
+		t.Fatalf("失效版本的入场依据或种类走样：basis=%s kind=%v", tail.EntryBasis(), tail.EntryKind())
+	}
+	if supersedes, chained := tail.Supersedes(); !chained || supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v1" {
+		t.Fatalf("失效版本没有回指首登：chained=%v supersedes=%s", chained, supersedes)
+	}
+	if !tail.EnteredAt().Equal(rederivationEnteredAt) {
+		t.Fatalf("失效版本的起点该沿用首登 %v，得到 %v", rederivationEnteredAt, tail.EnteredAt())
+	}
+	history := segment.ParticipationHistory(object)
+	if len(history) != 2 || !history[0].Superseded() || history[0].Voided() || history[0].Active() {
+		t.Fatalf("首登没被标为已被替代、或被改成失效：len=%d", len(history))
+	}
+	if segment.ActiveParticipations() != 0 {
+		t.Fatalf("在场计数 = %d，失效版本不算在场", segment.ActiveParticipations())
+	}
+	if rows := registries.participationRows(t, ctx, "SEG-RD-4", "parcel-4"); rows != 2 {
+		t.Fatalf("库里参与行 = %d，want 2（只插不改）", rows)
+	}
+	var rootVoided, tailVoided bool
+	var rootSupersedes *string
+	if err := registries.pool.QueryRow(ctx,
+		`SELECT voided, supersedes_entry_basis FROM transport_fulfillment.fulfillment_participation
+		  WHERE tenant_id = 'tenant-1' AND segment_ref = 'SEG-RD-4' AND object_ref = 'parcel-4'
+		    AND entry_basis = 'TRANSPORT-HANDOVER/handover-result/parcel-4/v1'`,
+	).Scan(&rootVoided, &rootSupersedes); err != nil {
+		t.Fatalf("读首登行：%v", err)
+	}
+	if rootVoided || rootSupersedes != nil {
+		t.Fatalf("首登行被动过：voided=%v supersedes=%v", rootVoided, rootSupersedes)
+	}
+	if err := registries.pool.QueryRow(ctx,
+		`SELECT voided FROM transport_fulfillment.fulfillment_participation
+		  WHERE tenant_id = 'tenant-1' AND segment_ref = 'SEG-RD-4' AND object_ref = 'parcel-4'
+		    AND entry_basis = 'TRANSPORT-HANDOVER/handover-result/parcel-4/v2'`,
+	).Scan(&tailVoided); err != nil || !tailVoided {
+		t.Fatalf("失效版本那一行 voided 列不为真：voided=%v err=%v", tailVoided, err)
+	}
+
+	// 裁决 4：在场判据三处同一条——SQL 谓词、领域 Active()、结束参与那个窄口。
+	active, err := registries.segments.FindActiveSegments(ctx, registries.tenant, object)
+	if err != nil || len(active) != 0 {
+		t.Fatalf("按对象反查在场仍找得到已失效的参与：%v err=%v", active, err)
+	}
+	all, err := registries.segments.FindSegmentsForObject(ctx, registries.tenant, object)
+	if err != nil || len(all) != 1 || all[0] != key {
+		t.Fatalf("按对象反查全部段该仍找得到本段：%v err=%v", all, err)
+	}
+	var ended application.EndFulfillmentParticipationResult
+	mustWithinSegmentTransaction(t, registries.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		ended, err = registries.ender.End(txCtx, application.EndFulfillmentParticipationCommand{
+			TenantID: registries.tenant,
+			Segment:  "SEG-RD-4",
+			Object:   "parcel-4",
+			Source:   application.ParticipationEndedByTermination,
+			Basis:    "CONTROL-TERMINATION/parcel-4",
+			EndedAt:  rederivationCorrectedAt.Add(time.Hour),
+		})
+		return err
+	})
+	if ended.Outcome() != application.ParticipationObjectNotInSegment {
+		t.Fatalf("结束一条已失效的参与：outcome=%s, want OBJECT_NOT_IN_SEGMENT", ended.Outcome())
+	}
+
+	// 裁决 2 后半：再次进入本段只有一条路——更正撤回控制的那一版、裁决回到`已交接`。
+	restored := registries.correctHandoverVersion(t, ctx, "parcel-4", "v2", "v3", domain.ObjectHandedOver, "", rederivationCorrectedAt.Add(time.Hour))
+	if restored.SegmentEntryRefusal() != application.SegmentEntryRefusalNone || restored.SegmentContinuationReference() != "" {
+		t.Fatalf("从失效版本长替代版本被拒或欠账：refusal=%s debt=%q", restored.SegmentEntryRefusal(), restored.SegmentContinuationReference())
+	}
+	revived := registries.readSegment(t, ctx, "SEG-RD-4")
+	current, _ := revived.ParticipationFor(object)
+	if current.Voided() || !current.Active() || current.EntryBasis().String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v3" {
+		t.Fatalf("参与没重新在场：voided=%v active=%v basis=%s", current.Voided(), current.Active(), current.EntryBasis())
+	}
+	if supersedes, _ := current.Supersedes(); supersedes.String() != "TRANSPORT-HANDOVER/handover-result/parcel-4/v2" {
+		t.Fatalf("替代版本没回指失效版本：%s", supersedes)
+	}
+	if revived.ActiveParticipations() != 1 || len(revived.ParticipationHistory(object)) != 3 {
+		t.Fatalf("链或在场计数走样：active=%d len=%d", revived.ActiveParticipations(), len(revived.ParticipationHistory(object)))
+	}
+	if active, err := registries.segments.FindActiveSegments(ctx, registries.tenant, object); err != nil || len(active) != 1 {
+		t.Fatalf("重新在场后按对象反查在场该找到本段：%v err=%v", active, err)
 	}
 }
 
