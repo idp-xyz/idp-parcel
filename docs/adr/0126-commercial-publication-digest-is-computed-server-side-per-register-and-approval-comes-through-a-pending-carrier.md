@@ -61,3 +61,7 @@ Date: 2026-09-08
 - 票 [admin-write-faces/08](../../.scratch/admin-write-faces/issues/08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) 与伞票 [07](../../.scratch/admin-write-faces/issues/07-commercial-publication-operator-main-paths-per-register.md)：三问与硬句的出处
 - [PC CONTEXT](../domain/party-commercial/CONTEXT.md)：「商业版本」「发布规范化版本」「待批准发布」词条
 - `internal/parcelpricing/domain/fingerprint.go`、`internal/parcelshipment/domain/payload_canonicalization.go`：规范化与摘要串形的先例
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，四条逐条）：1. 「文档只盖正文不盖壳」——伞票 07 子票 09–17 逐册接进后核过：把范围 / 区间当正文一部分的册（结算政策六维、价格政策七格）都在**自己的正文**里带着它们，文档盖的仍是正文，没有一册要把壳折进文档；2. `ApprovalBasis` 批准引用 = 批准者主体、来源 = 载体引用——既有三格的解释，来源指外部批准文件那天改折装一处；3. `待批准`期间就地替换——载体是草稿不是版本，「只插不改」守的是版本，张力可接受；4. 正文缺席的已接册按声明串登记——壳单独发布是合法形态（服务产品无正文；结算政策 seed 也曾只带壳），对账门对壳不比对是 ADR-0126 决定二的既有语义。票 admin-write-faces/08 的两处越权点即此。

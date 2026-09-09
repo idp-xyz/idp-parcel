@@ -76,3 +76,7 @@ Date: 2026-09-07
 - `internal/partycommercial/domain/authority_grant.go`：`AuthorizedAction` / `AuthorityGrant.permits` / `Authorize` / `Authorization`——本记录在其上加一格、一份委派输入与一格决定方，不改既有判据
 - `migrations/party_commercial/0003_authorization_grant.sql`：动作 CHECK 的预告句，本记录兑现其中「资料修订」那一半
 - `UC-PS-002` 步骤 4 与 `BD-PS-009`、`PAR-COM-13` / `PAR-COM-14`：硬句与实例半边的出处
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，三条逐条）：1. 委派缺席答 `ErrNotAuthorized` 不答未配置——按恢复动作分格，缺的是客户的委派（业务事实）不是租户的规则（配置），把它折成未配置会让 ADR-0055 那一格失去「产品能力表面」的含义；2. 请求方作主体引用进 `AuthorizationRequest`——主体引用不是角色，端口头注「有意不携带参与方角色」不被违反；3. 受托方 = 权限等级——CONTEXT「版本化角色权限等级」与「合同委派」并列那一行的直接读法，PC 不存操作者（ADR-0100 分工）。票 pc-gaps/08 的三处越权点即此三条。

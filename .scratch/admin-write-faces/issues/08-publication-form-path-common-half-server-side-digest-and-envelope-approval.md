@@ -155,3 +155,4 @@ Blocked by: 无（等的是裁决与 ADR 号，不是别的票）
   拒收」不冲突（那句管没接的册）。「未做」四项反查未做进去；`CurrentPublicationCanonicalizationVersion` 删除票面已记。
 
 **结论**：Standards 3 条非阻断（最重：AdvanceDraft 钉不住批准者读到的那一行，作者另笔修）；Spec 0 条。**无阻断**，可作「进 main 记录」的评审结论。
+- **owner 复核 2026-09-09 认可**（用户经 IDP 队列通道 1 授权代裁）：越权点即 ADR-0126 四条，逐条认可（第 1 条已按子票 09–17 逐册接进后的现实核过），理由在 ADR-0126「owner 复核记录」。

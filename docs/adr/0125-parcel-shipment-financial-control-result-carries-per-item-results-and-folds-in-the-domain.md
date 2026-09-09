@@ -58,3 +58,7 @@ ADR-0122 起 `settlement-accounting` 对一次接受前控制请求按策略正�
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：校验组「接受前财务控制」行与 `AT-PS-035`——本记录改口的两处
 - `internal/parcelshipment/domain/acceptance_basis.go`、`domain/judgment_translation.go`、`application/form_acceptance_decision.go`、`application/reject_shipment_request.go`、`application/withdraw_shipment_request.go`、`adapters/settlementaccounting/pre_acceptance_control.go`、`adapters/postgres/acceptance_judgments.go`、`adapters/http/query_acceptance_review_queue.go`、`migrations/parcel_shipment/0019_acceptance_financial_control_items.sql`：决定一至四的落点
 - 来源：IDP 队列通道 1 的授权（2026-09-07）
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，票 sa-preacceptance-policy-view/03「越权风险点」五条逐条）：1. ADR-0047 两格降为投影而保留、不 supersede——合成一格是 ADR-0047 自己的改动，今天冗余已无第二来源，不急；2. ADR-0122 决定四「折叠在 PS 的 adapters/settlementaccounting」字面过时——归属未变（仍 PS 折），已在 ADR-0122 加复核记录一条说明搬进领域，正文不改；3. 「未执行可算」依赖 SA 停在首个受限项——SA 改为继续执行时结论不变；4. 释放按 `OccupationFormed` 发——依据 ADR-0122 决定三两本账幂等各认领，SA 改账本语义时回看；5. 过渡态「`RESTRICTED` 一律拒绝」——票 04（授权处置流程）落地前无租户，风险停在纸面，认可为过渡。

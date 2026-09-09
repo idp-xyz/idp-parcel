@@ -59,3 +59,7 @@ ADR-0115 让接受前财务控制策略版本有了正文——控制项逐行�
 - [`pn-02-w03`](../design/pn-02-w03-acceptance-rules-and-financial-control-evidence-request.md)：「结算模式不等于接受前财务控制策略」——本记录 Consequences 第二条所指
 - `internal/settlementaccounting/domain/pre_acceptance_control.go`、`application/apply_pre_acceptance_control.go`、`application/release_pre_acceptance_control.go`、`adapters/partycommercial/pre_acceptance_control_policy.go`、`internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control.go`：决定一至四的落点
 - 来源：IDP 队列通道 1 的授权（2026-09-07）
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 记录（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁）：决定四写的折叠位置「PS 的 `adapters/settlementaccounting`」自 ADR-0125 起搬进 PS 领域（`acceptance_basis.go` 一带），归属未变、仍是 PS 按共同通过条件折；字面不改，以本条与 ADR-0125 为准。

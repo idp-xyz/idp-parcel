@@ -126,3 +126,4 @@ ADR-0062（回指）；`PAR-COM-17`；PS `ports.LabelValidityRuleView` 头注与
   推前 ls-remote = `e10a3b5e`、推后 = `ab0fe0f0`（21:5x 查）。**远端 `main = ab0fe0f0`。** 指针：`mcp6-pcgaps09@ab0fe0f0`（已重放），
   `mcp6-pcgaps09-precut@5cf30921`（原分支 tip 封存）；树 `idp-parcel-mcp6-pcgaps09`（在重放后的分支上）与 `idp-parcel-mcp6-verify09`
   （detached `5cf30921`，旧会话的验证检出）都还在，未拆。tasks.md 台账那一行留给 MCP-1，本笔不碰。
+- **owner 复核 2026-09-09 认可**（用户经 IDP 队列通道 1 授权代裁）：越权点即 ADR-0119 三条，逐条认可，理由在 ADR-0119「owner 复核记录」。

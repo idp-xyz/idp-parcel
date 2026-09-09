@@ -71,3 +71,7 @@ Date: 2026-09-07
 - [ADR-0113](./0113-carrier-master-document-is-an-independent-register-keyed-by-declared-reference-and-version.md)：「登记口沿 `parcel-api` 端点不开 CLI」的先例
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)：`AT-SA-173`——决定五的依据
 - [PN-08 交接](../design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)、[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)、[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：W02 交付、机制 / 实例划分、`PAR-GOV-01`
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，两条逐条）：1. 决定五「回放不交结算」——理由不用改口：`internal/settlementaccounting` 全文 `replayOf` 零命中（09-09 grep），SA 今天没有任何按回放引用跳过的处置，交出去就是第二笔费用；即便日后 SA 加了，不交仍更安全；2. 证据层级由触发方声明——机制不替 PN-08 治理与 `PAR-GOV-01` 默认「算不算 R」，声明缺席即不是 R。票 wiring-baseline-remainder/06 的两处越权点即此。

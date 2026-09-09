@@ -106,3 +106,4 @@ MCP-1 钉 `9379c716` 的验证（隔离 detached 树）：gofmt 空；build/vet 
   **没读** PS 接受编排读取 `FinancialControlResult` 的那一段与 UC-PS-001 全文——第 1 问的措辞据 CONTEXT 与适配器代码写，开工者以代码为准。
 - 2026-09-07 · 通道 3：认领，三问裁决落「裁决」节与 ADR-0125；票面第 1 问猜的「AT-PS-* 引用 HELD / CREDIT_EXPOSED」按代码与 UC 全文核过不存在，改口范围缩到 UC-PS-001 校验组一行与 `AT-PS-035` 半句。  取证到的两处释放孤儿（`CREDIT_EXPOSED` 从不释放、`RESTRICTED` 前的成立项不释放）随本票一并修，不另立票——它们就是「压成一格」的直接后果。
 - 2026-09-07 · 通道 3（接续会话，21:2x）：上一会话在 `e7c44522` 上跑完 gofmt / build / vet / 清点零差 / 探针后崩溃（用户 21:2x 在队列报；台账 `0ec68b23` 停在 19:14 的 working 报，无完工报），本票完成记录写到一半未提交、含 DSN 全仓那一格没落字。本会话在同一 detached 树 `idp-parcel-mcp3-verify`（仍钉 `e7c44522`，`status --untracked-files=all` 零行）重跑含 DSN 全仓与探针，结果写进「验证」段；分支五笔一字未动，只补本 .md。`git cherry origin/main mcp3-sa03`（`origin/main = fc90622a`，21:2x fetch 后量得）五笔全 `+`，尚未进 main。
+- **owner 复核 2026-09-09 认可**（用户经 IDP 队列通道 1 授权代裁）：越权风险点五条逐条认可（第 5 条认可为票 04 落地前的过渡态），理由写在 ADR-0125「owner 复核记录」；第 2 条已在 ADR-0122 加复核记录说明折叠位置搬进 PS 领域。

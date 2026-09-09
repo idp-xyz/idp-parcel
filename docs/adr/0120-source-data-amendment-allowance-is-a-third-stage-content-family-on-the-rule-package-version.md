@@ -83,3 +83,7 @@ Date: 2026-09-07
 - `internal/partycommercial/domain/service_stage_content.go`：三族既有构造门与两值读法——本记录在其旁加第四族
 - `migrations/party_commercial/0013_stage_content_declarations.sql`：两族表形先例——`0027` 形照它
 - `PAR-COM-13` / `BD-PS-010`：实例半边的出处
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，四条逐条）：1. `closed` 是父行一格布尔——PS 端口问的是一格，按资料组封闭没有消费形状；2. `closed = true` 下允许零行——「这一版什么都不许改」是一句合法的显式话，要求至少一行等于逼登记方编一行假的，违「不给默认」；`closed` 本身可缺且服务端点名（票 awf/12），误写的风险由「须在场」那道门挡；3. 命名贴本族——形不变名可改，不挡；4. 意图三格镜像 PS——镜像纪律的已知代价，PS 加第四格那天 PC 同步一格 + CHECK + 迁移。票 pc-gaps/10 的一处越权点即此。

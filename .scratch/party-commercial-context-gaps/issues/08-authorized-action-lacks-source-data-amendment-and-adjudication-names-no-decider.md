@@ -146,3 +146,4 @@ PC CONTEXT（授权动作那句加「资料修订」；「合同委派」词条�
     `0026_final_rule_validity_declaration.sql` + 面单有效期）/ `85a90a1b`（票 10 开工前置取证）是 19:4x 分工（09→10 归 MCP-6）前后落下的
     重复实现，与 main 上 MCP-6 版同号不同名同题；pc-gaps/09 以 main 上 MCP-6 版为准（`838b283e` / `d06192ed` / `d58ceecc`，清点 `ab0fe0f0`，
     进 main 记录 `f69b35b9`），票 10 的取证 `git show 85a90a1b` 可自取。MCP-1 已记 tasks.md `98d837a6`。
+- **owner 复核 2026-09-09 认可**（用户经 IDP 队列通道 1 授权代裁）：三处越权点即 ADR-0116 三条，逐条认可，理由在 ADR-0116「owner 复核记录」。

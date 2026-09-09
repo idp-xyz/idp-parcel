@@ -54,3 +54,7 @@ Date: 2026-09-07
 - [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)：换号的判据（「规范化结构的变化」）与「代价在此刻支付最低」那句
 - [ADR-0107](./0107-evaluation-amount-rounding-is-declared-by-the-price-card-like-weight-rounding.md)：金额取整策略不受本记录影响；`RoundToIncrement` 经 `decimalFromBig` 的去尾随零是本记录之前唯一顺手规范掉写法的路径
 - [parcel-pricing CONTEXT](../domain/parcel-pricing/CONTEXT.md)：「版本内容摘要」「规范化版本」词条与重放不变量——本记录让它们在数字写法这一格成立，不改写它们
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，票 wiring-baseline-remainder/07「裁决」节三条逐条）：1. 收紧的是 `Decimal.valid()` 而不是只收 `decimalFrom`——规范写法是值不变量，放在值对象里是「单一权威」，放在某一道边界上是让别的持有者各守一份；2. 不换 `PPC` 号——ADR-0014「规范化结构的变化」读作文档形状，值域收窄不改任何已成立摘要的字节；3. 「今天无存量非规范快照」是前提——无租户、门禁库一次性，记录里写成前提而非事实陈述是对的。

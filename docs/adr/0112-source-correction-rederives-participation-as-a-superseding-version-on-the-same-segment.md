@@ -48,3 +48,7 @@ Date: 2026-09-04
 - [ADR-0117](./0117-same-source-correction-forms-a-superseding-adoption-version-chained-to-the-current-responsibility-start.md)：PS 采用账的同形链与选形理由
 - [票 tf-segment-lifecycle-closure/08](../../.scratch/tf-segment-lifecycle-closure/issues/08-offsite-pickup-correction-model.md)：「同段不是新段」的裁决附问
 - [票 tf-segment-lifecycle-closure/10](../../.scratch/tf-segment-lifecycle-closure/issues/10-source-correction-rederives-participation.md)：本记录的实施
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁）：随 tf/10、tf/11 进 main 复核——决定三「替代版本继承离场三件」自 tf/11 起同样适用于**失效**版本（失效与替代同是链上一个版本，规则说的是版本不是替代）；`SegmentEntryRefusal` 自 tf/10 起多出本记录未点名的第三格 `CORRECTED_START_AFTER_INHERITED_END`（更正后的起点晚于继承的终点），与决定五同族；决定正文字面不改，以本条为准。tf/11 退掉的 `CORRECTION_WITHDRAWS_CONTROL` 一格同认可（撤控制的更正自 tf/11 起使参与失效而非被拒，那一格没有对象了）。

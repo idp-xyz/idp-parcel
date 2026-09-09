@@ -151,3 +151,4 @@ ADR-0058（归属与三格语义）、ADR-0042、ADR-0063（声明与取证分�
   对 `origin/main` 零差。树 `idp-parcel-mcp6-pcgaps10` 已拆（status 零行），指针改名 `merged/mcp6-pcgaps10@c6cefab9`，远端同名分支
   已删。本条记录走分支 `mcp6-pcgaps10-record`（基 `534493d4`）交推送方重放。解阻两件已由 MCP-1 记入台账：ps-port-remainder/02 余段、
   admin-write-faces/12 一节。PC 迁移下一号 `0028`。
+- **owner 复核 2026-09-09 认可**（用户经 IDP 队列通道 1 授权代裁）：越权点即 ADR-0120 四条，逐条认可，理由在 ADR-0120「owner 复核记录」。

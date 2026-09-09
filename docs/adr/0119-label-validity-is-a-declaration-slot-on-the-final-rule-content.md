@@ -68,3 +68,7 @@ Date: 2026-09-07
 - `migrations/party_commercial/0022_price_policy_caliber.sql`：同在同缺 CHECK 的写法先例
 - PS `ports.LabelValidityRuleView` 头注与 `application/judge_label_service_final.go` 的 `lapsedTransactions`：消费方对缺席的读法（`configured=false` 不失效）
 - `PAR-COM-17`：实例半边的出处
+
+## owner 复核记录
+
+- owner 复核 2026-09-09 认可（用户 2026-09-09 12:3x 经 IDP 队列通道 1 授权「你自决，目标是全部解决」，通道 1 代裁，三条逐条）：1. 时长用 `interval` / `time.Duration`——锚是带时刻精度的业务时间，时长同精度；商业上若只以日计，收窄批文子集到 `PnD` + CHECK 整日即可，类型不换；2. 有效期落父行、一版至多一条——PS 端口只问「这一笔成功结果」，按责任结果分给有效期没有消费形状；3. 批文子集排除年 / 月 / 周——只收固定时长才能与 `interval` 无损往返，「自然月失效」是另一种规则，有租户提出再裁。票 pc-gaps/09 的两处越权点即此。

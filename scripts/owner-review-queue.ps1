@@ -20,14 +20,14 @@ Add ''
 Add '由 `scripts/owner-review-queue.ps1` 生成；只有摘录，判断看原文。复核完一条：认可就在原文旁写一句「owner 复核 YYYY-MM-DD 认可」，不认可走 supersede。'
 Add ''
 
-# 一、ADR 里的越权风险点：取含「越权」的行，连同其后到空行为止的列表项。
+# 一、ADR 里的越权风险点：取含「越权风险点」或「越权点」的行，连同其后到空行为止的列表项。只匹配「越权」会把 ADR-0027 / 0029 / 0055 里的领域词「越权探测 / 越权探针」也收进来（2026-09-09 实测三篇误收）。
 Add '## 一、ADR 里的越权风险点'
 Add ''
 $adrs = Get-ChildItem (Join-Path $repo 'docs\adr') -Filter '0*.md' | Sort-Object Name
 $n = 0
 foreach ($f in $adrs) {
     $text = Get-Content $f.FullName -Encoding UTF8
-    $idx = @(); for ($i = 0; $i -lt $text.Count; $i++) { if ($text[$i] -match '越权') { $idx += $i } }
+    $idx = @(); for ($i = 0; $i -lt $text.Count; $i++) { if ($text[$i] -match '越权风险点|越权点') { $idx += $i } }
     if ($idx.Count -eq 0) { continue }
     $n++
     $reviewed = ($text | Where-Object { $_ -match 'owner 复核 \d{4}-\d{2}-\d{2} 认可' }).Count -gt 0
@@ -69,7 +69,7 @@ Add '## 三、票面里提到越权风险点的票'
 Add ''
 $k = 0
 foreach ($f in $issues) {
-    $hits = @(Get-Content $f.FullName -Encoding UTF8 | Where-Object { $_ -match '越权' })
+    $hits = @(Get-Content $f.FullName -Encoding UTF8 | Where-Object { $_ -match '越权风险点|越权点' })
     if ($hits.Count -eq 0) { continue }
     $k++
     $rel = $f.FullName.Replace($repo + '\', '') -replace '\\', '/'
