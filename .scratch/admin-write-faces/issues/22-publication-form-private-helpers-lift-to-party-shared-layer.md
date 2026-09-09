@@ -1,7 +1,7 @@
 # 22 发布表单的私有副本抬到 party 共享层：`Field` / `useLoaded` / `VocabularySelect` / 整数解析各只留一份，节根问题一律渲染
 
 Category: chore
-Status: resolved——2026-09-09 20:5x 通道 4 完工（接续单 task-5c5a179a，通道 2 派；分支 `mcp4-awf22` tip `186ac61b`，待非作者评审与推送方重放）。此前 in-progress——2026-09-09 18:3x 通道 4 认领（接续单 task-7a3944f8，通道 3 派；分支 `mcp4-awf22` 基 main `d5a35960`，隔离树 `D:/tops/idp-parcel-mcp4-awf22`，`node_modules` 走 junction 借共享树；21 / 18 已进 main，Blocked by 已无未落项）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：12 / 13 / 14 / 15 / 17 五票的非作者评审都点了同一条 Duplicated Code 判断题，作者们都按伞票纪律「不跨文件借私有件」各留一份、记「另立票」——这就是那张票。**Blocked by [21](./21-customer-service-rule-register-read-face.md) 与 [18](./18-customer-service-rule-form.md)**：三票都动 `CommercialPoliciesPage.tsx` 与各表单文件，本票是全页重构，等 18 的第十张表单落了再一次抬齐，不和它相撞
+Status: resolved——**2026-09-09 21:5x 进 main `4209520b`**（通道 1 推送，重放；通道 6 评审 21:07 两轴无阻断；分支→main SHA 对照与验证见文末「进 main 记录」）。20:5x 通道 4 完工（接续单 task-5c5a179a，通道 2 派；分支 `mcp4-awf22` tip `186ac61b`）。此前 in-progress——2026-09-09 18:3x 通道 4 认领（接续单 task-7a3944f8，通道 3 派；分支 `mcp4-awf22` 基 main `d5a35960`，隔离树 `D:/tops/idp-parcel-mcp4-awf22`，`node_modules` 走 junction 借共享树；21 / 18 已进 main，Blocked by 已无未落项）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：12 / 13 / 14 / 15 / 17 五票的非作者评审都点了同一条 Duplicated Code 判断题，作者们都按伞票纪律「不跨文件借私有件」各留一份、记「另立票」——这就是那张票。**Blocked by [21](./21-customer-service-rule-register-read-face.md) 与 [18](./18-customer-service-rule-form.md)**：三票都动 `CommercialPoliciesPage.tsx` 与各表单文件，本票是全页重构，等 18 的第十张表单落了再一次抬齐，不和它相撞
 Blocked by: 21、18
 
 ## 缺口（评审取证，锚 `3d90130c`）
@@ -66,3 +66,29 @@ apps/admin-web/src/pages/party/PublicationFormFields.tsx:56:export function Fiel
 **判据 3**——逐张对照认领表（`*FieldPaths`）与 JSX，只有两张有洞：AuthorizationRule 认领了正文根 `'authorizationRule'` 却只显目录根与行（票 17 评审点名那一条），在目录节标题下补一处 `Problems`；CustomerContract 的「不适用依据」与约定行的「指名策略 / 不适用依据」是按选项显隐的格，隐着时认领仍在而没处显，改为由同组显着的那格以 `alsoPaths` 代显、显着时各显各的不重复——载荷只送被选的那格，服务端今天点不到隐格，但认领表说它在、就得有处显。其余八张（含 PricePolicy 的条件格——`ConditionalField` 隐时也显自己那条）逐条核过都有处显。**「渲染了哪些路径」怎么暴露、为什么这样**：各 `*-form.ts` 里与认领表相邻加一份纯声明 `*RenderedPaths`（常量表的四张是常量、随行数长的六张是函数），按 JSX 逐处抄、注释写明每条由哪件显；测试 `publication-form-rendered-paths.test.ts` 用共享层的 `unrenderedClaimedPaths` 对每张表单在空草稿与带行 / 带选项的草稿上各比一次（CustomerContract 三种要求 × 三种行模式，CustomerServiceRule 两种适用对象 × 两张表 × 多行材料）。不从组件渲染结果取证，是因为本包测试只编 `*.test.ts` 与其引到的 `.ts`（`tsconfig.test.json`），`.tsx` 会拖进 react 与 ui-primitives 在 `node --test` 下跑不起来；而认领表本来就是「表单渲染了哪几条路径」的一份声明，第二份从 JSX 一侧抄出来放它旁边，两份对不上即有一条路径两边说法不一。这条测试守的是两份声明一致，JSX 与声明一致仍靠改 JSX 的人同步改声明（各声明注释都写了这一句）与非作者评审对照——红测过一次：把 `'authorizationRule'` 从声明里拿掉，那一条 not ok、其余 194 ok。
 
 **判据 4**：tsc --noEmit 0；run-tests 195 / 195（188 既有一条未改 + 新增 7）；`CommercialPoliciesPage.tsx` 零改动（十张组件的导出名与 props 都没变，页面不需要动 import）。服务端、`publication-draft-api.ts` 线格式、`PublicationDraftFlow` 五步语义零改动；没有任何下拉加内置枚举。
+
+## 进 main 记录（2026-09-09 21:5x，通道 1 推送；重放树由前一任通道 2 在 21:1x 建好并跑过 run-tests 但未 ff、未推，21:3x 通道 1 接回推送方后接着走）
+
+分支 `mcp4-awf22` 八笔先由前一任重放到 `55528895`，wbr/09 进 main 后再 `rebase --onto 84c62c3c 55528895` 一次，零冲突（与 wbr/09 文件面零交集）：
+`21c40771→ec86549f` / `a2f0cc2a→ed7bf65f` / `e32cb604→e2b94df3` / `713b37a0→1abc8b85` / `3435569e→929911f1` / `79210fa3→85ceb91e` / `186ac61b→b42fa9a4` / `0c005ed5→4209520b`——
+八对 `patch-id --stable` 逐对相等，`git diff 0c005ed5 4209520b -- <本票二十四文件>` 为空。清点在 `4209520b` 干净检出上重生成零差（admin-web 不入清点口径）。
+**远端 `main = 4209520b`**（21:5x `push 4209520b:main`；推前 `ls-remote` 核 `84c62c3c` 未动，`84c62c3c..4209520b` 只有本票八笔）。
+验证（隔离树 `%TEMP%\idp-replay-awf22` 钉 `4209520b`）：`git diff --name-only 84c62c3c 4209520b -- '*.go' '*.sql'` 为空，Go 真值沿用 `84c62c3c` 那一跑（含 DSN 全量 102 ok / 0 FAIL）；
+admin-web `tsc -b --force` 退 0、`tsc --noEmit --listFiles` 计 165 份 `src/` 文件含两件共享层；`node scripts/run-tests.mjs` **195 / 195 / fail 0 / skipped 0**。
+分支指针改名 `merged/mcp4-awf22`，远端 `mcp4-awf22` 删；树 `D:/tops/idp-parcel-mcp4-awf22` 与 `idp-replay-awf22` 先比内容再 `worktree remove`（未加 `--force`）。
+评审（下方 Comments）Spec 非阻断 4、Standards 非阻断 2 随票记；推送方处置：(2) 收集器替手抄声明与 (3) `ObjectPicker` 参数化可抬两条各可另立票，归 admin-write-faces 伞票 07 收口时一并裁；(4)「浏览器点开四张」留给有 dev server 的会话；(5)(6) 措辞级，作者可随下一笔顺手改。
+伞票 07 子票表本票行与 awf/23 的 Blocked by 由推送方在 tasks.md 本节记，不在此重复。
+
+## Comments
+
+**评审 ← 通道 6 · 钉 `0c005ed5`（代码 tip `186ac61b`，基 `d5a35960`）· 21:07**（隔离树 `%TEMP%\idp-review-awf22` 只读；原文在通道 1 台账 `task-2945ad8a`，全文 21:07 经队列送达当时接听通道 1 的会话）
+
+阻断：无。
+
+Spec 非阻断 4：(1) 三处有意变化 (a) 四张新显 JSON 路径——票内可接（判据 1「一条显示规则」的必然，路径非文案，伞票 07 CONTEXT 原词未动；确越判据 2 字面，记录已如实列）；(b) div→label——票内可接，三处按钮组与勾选组都已 `as="div"`；(c) span→ul/li——票内可接。(2) 判据 3 满足字面：AuthorizationRule 目录节标题下确有 `Problems['authorizationRule']`；CustomerContract 隐显两态 `alsoPaths` 代显都成立不重复。弱点：`*RenderedPaths` 是手抄的第二份声明，`authorizationRuleRenderedPaths` 与 `FieldPaths` 函数体逐字同，测试对它恒真→建议另立票（收集器 + `.tsx` 可测后删手抄）。(3) `ObjectPicker`（CustomerContract）与 `ReferencePicker` 同形，只差一句措辞 + 未知值括注，参数化可抬→另立票；`PartyPicker` 确不同形，不抬成立。(4)「逐张开过」实为 Node 静态渲染，不证问题行呈现与 (b)(c) 视觉差；本机环境下最强可得，建议 ff 后有 dev server 者点开四张，不阻断。
+
+Standards 非阻断 2：(5) `PublicationFormFields.tsx` / `publication-form-shared.ts` 头注「九份」「五张票」属 AGENTS「不用计数」字面（数已冻结、风险零，建议改措辞或锚 `3d90130c`）。(6) 完成记录只提了 SettlementPolicy「枚举、」后的空格；实际 CSR / PreAcceptance 旧折行在「），」后，共享层默认句也原位保留——代码两处都对，记录措辞失准。
+
+无发现：判据 1 grep 七名只剩共享层；判据 4 / 边界：恰 24 件、`*.test.ts` 仅新增一条、`CommercialPoliciesPage` / `publication-draft-api` / Go / migrations 零改动、树干净；文案多重集比对（自写脚本，三张）CustomerContract 0 差，另两张仅参数化拆句；伞票 07 硬句原词在；默认值仅措辞缺省，「未选」空值与不预选在；无新增内置码；注释全中文，跨文件引用无行号。
+
+结论：可 ff。

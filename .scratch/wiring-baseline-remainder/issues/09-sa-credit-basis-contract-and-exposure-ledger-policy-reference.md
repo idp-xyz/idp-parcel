@@ -1,8 +1,7 @@
 # SA 收 ADR-0127 的 contract 段：`Deps.CreditBasis` mandatory、暴露账本行持久化政策引用；PS 夹具先补 `CreditBasisView` 替身
 
 Category: enhancement
-Status: resolved——2026-09-09 20:3x 通道 3（分支 `mcp3-wbr09` 基 `d5a35960`，三笔 `5bead280` / `d45a7a34` / `d23956d7` 已推 origin；完成记录见文末，
-进 main 记录归推送方）。此前：19:4x 通道 3 接续（接续单 task-de74738a-f485-422e-8e85-7a78d474d1ad；前一任 18:4x 自领后 18:5x 中断，树上留一份未提交的 PS 夹具
+Status: resolved——**2026-09-09 21:4x 进 main `84c62c3c`**（通道 1 推送，重放；分支→main SHA 对照与验证见文末「进 main 记录」）。20:3x 通道 3 完工（分支 `mcp3-wbr09` 基 `d5a35960`，三笔 `5bead280` / `d45a7a34` / `d23956d7` 已推 origin；完成记录见文末）。此前：19:4x 通道 3 接续（接续单 task-de74738a-f485-422e-8e85-7a78d474d1ad；前一任 18:4x 自领后 18:5x 中断，树上留一份未提交的 PS 夹具
 测试 +62/−19、mtime 18:47:46）。接手对照：先自列第 1 步判据（三格替身 / 接口断言 / 三处 `Deps` 构造全接 / 账期夹具额度与状况
 同值以保住既有用例的读法 / 不改既有断言），再读 diff——逐条对上，PS 包 build/vet/test/gofmt 绿，原样接着用。第 2 步起由 20:08 接手的新会话做
 （通道 1 20:08 回执核过构造点 11 处、迁移号 0017、验证范围改口）。
@@ -62,6 +61,20 @@ Blocked by: 无
 
 **父 spec**：`wiring-baseline-remainder/spec.md` 状态行不由本票改。
 
+## 进 main 记录（2026-09-09 21:4x，通道 1 推送；重放树由前一任通道 2 在 20:4x 建好但未 ff、未推，21:3x 通道 1 接回推送方后接着走）
+
+分支 `mcp3-wbr09` 五笔在隔离树 `%TEMP%\idp-replay-2055` 重放到 `55528895`（main tip，= `d5a35960` + wbr/11 四笔 + 三笔 tasks.md 簿记）之后零冲突：
+`5bead280→8c44f8c6` / `d45a7a34→adac0a46` / `d23956d7→688d0437` / `d3c41b77→3ff50af8` / `512ada47→84c62c3c`——五对 `patch-id --stable` 逐对相等，
+`git diff 512ada47 84c62c3c -- <本票十六文件>` 为空；全树差只有 main 上多的 wbr/11 那四文件与 tasks.md。与 wbr/11 / awf/22 文件面零交集，不必让作者重验。
+清点在 `84c62c3c` 干净检出上重生成零差（③ 那笔已随分支重生成，main 中间几笔不改文件面），不需清点笔。
+**远端 `main = 84c62c3c`**（21:4x `push 84c62c3c:main`；推前 `ls-remote` 核 `55528895` 未动，`55528895..84c62c3c` 只有本票五笔）。
+验证（同一棵干净检出钉 `84c62c3c`）：gofmt -l 空、`go build ./...` / `go vet ./...` 退 0、含 DSN `go test -p 1 -count=1 ./...` **102 ok / 0 FAIL / 15 无测试 / 0 cached，105 s**；
+探针 `TestCreditExposureLedgerRoundTripsSeparately` `-v` 带 DSN PASS / 不带 SKIP。日志 `%TEMP%\verify-wbr09-84c62c3c.log`。
+分支指针改名 `merged/mcp3-wbr09`，远端 `mcp3-wbr09` 删；树 `D:/tops/idp-parcel-mcp3-wbr09` 与 `idp-replay-2055` 先比内容再 `worktree remove`（未加 `--force`）。
+**评审状态如实记**：非作者评审单先派通道 5（task-4f833b6f，20:41），21:09 记「截至 21:10 未响应」改派通道 6（task-66a3fe55，21:16）；推送时用户口述「5 / 6 评审已过」，
+台账里 66a3fe55 仍 pending、通道 1 队列里没有 wbr/09 的评审原文——推送方据用户口述推，评审按**合入后补评**处理（21:5x 已致通道 6），结论到达后落下方 Comments；有阻断在 main 上往前修，不回滚。
+
 ## Comments
 
 - 2026-09-09 20:3x · 通道 3：三笔齐，完工报发通道 1；评审留通道 5 或 6（作者是通道 3，含前一任会话）。
+- 2026-09-09 21:5x · 通道 1：判断题 ④「要不要给 `cmd/parcel-dispatch` 单独一条装配探针」归推送方判——不加：`cmd/parcel-dispatch` 含 DSN 用例在全量里走到了装配函数（漏接会在 `ErrNilDependency` 处红），单独一条只是把同一件事再说一遍；wbr/03 评审那条非阻断照原样留着。

@@ -4,8 +4,9 @@ Category: enhancement
 Status: ready-for-agent——2026-09-09 通道 1 代裁（用户授权自决）票 [15](./15-settlement-policy-form.md) 评审留下的两条判断题，裁决已写进
 `docs/domain/party-commercial/CONTEXT.md` 结算方式那条规则末尾（客户相对方 = 业务参与方，不是货主客户账户；六维里的合同版本同时作壳引用交出）；
 本票是它的落地。**Blocked by [22](./22-publication-form-private-helpers-lift-to-party-shared-layer.md)**：22 重构 `SettlementPolicyPublicationForm.tsx`
-的私有件，本票改同一张表单的两格，等它抬完再改，不相撞
-Blocked by: 22
+的私有件，本票改同一张表单的两格，等它抬完再改，不相撞。**2026-09-09 21:5x：22 已进 main `4209520b`，阻塞边解除**——本票现在改的是接了共享层之后的
+`SettlementPolicyPublicationForm.tsx`（`Field` / `useLoaded` 从 `PublicationFormFields` 导入；`ContractPicker` 仍留在本册）
+Blocked by: 22（已进 main）
 
 ## 两条裁决与理由
 
