@@ -244,6 +244,12 @@ type ProductionOwnershipDecision struct {
 	validity          OwnershipValidityInterval
 	revision          ProductionOwnershipRevision
 	decisionAt        time.Time
+	// safeHandoff 是`其他权威`决定之后那一次交接尝试的评估（ADR-0128 决定四）。它与 handoffRef
+	// 分格：handoffRef 是治理侧登记的停写证据，回答「前任停笔了没有」；这一格回答「这一笔范围
+	// 交过去、对方确认了没有」。合并会让「有停写证据但交接失败」与「无停写证据」在记录上不可分。
+	// 不进 Spec：形成决定的一方（治理读口的适配器）拿不到它，它在决定成立之后由编排的交接步记上。
+	safeHandoff    SafeHandoffAssessment
+	hasSafeHandoff bool
 }
 
 func NewProductionOwnershipDecision(spec ProductionOwnershipDecisionSpec) (ProductionOwnershipDecision, error) {
@@ -344,6 +350,35 @@ func (decision ProductionOwnershipDecision) UnresolvedDetails() (OwnershipUnreso
 	return decision.unresolvedReason, decision.continuationRef, true
 }
 
+// WithSafeHandoff 把一次交接尝试的评估记到`其他权威`决定上，交回新的决定值；原值不动。
+//
+// 只有`其他权威`有这一格：本产品自己承接的范围没有交接可言，权威未决的范围连交给谁都不知道
+// （ADR-0128 决定二：归属先凭接管记录成立，成立之后才进入交接步）。评估必须是对这份决定的
+// 范围、向这份决定指名的权威做的那一次——拿别的范围或别的对方的确认来给这份决定作数，与
+// 没有确认一样。一次决定只记一次：交接尝试的身份由决定派生，第二次记上去的不可能是同一次。
+func (decision ProductionOwnershipDecision) WithSafeHandoff(assessment SafeHandoffAssessment) (ProductionOwnershipDecision, error) {
+	if !decision.valid() ||
+		decision.hasSafeHandoff ||
+		decision.authority != ProductionAuthorityOther ||
+		!assessment.valid() ||
+		assessment.scope != decision.scope ||
+		assessment.targetAuthority != decision.otherAuthorityRef {
+		return ProductionOwnershipDecision{}, ErrInvalidProductionOwnershipDecision
+	}
+	decision.safeHandoff = assessment
+	decision.hasSafeHandoff = true
+	return decision, nil
+}
+
+// SafeHandoff 交回记在这份决定上的交接评估；没记过即第二个返回值为假。它与 HandoffReference
+// 各答各的问题，调用方不得拿其中一格去推另一格。
+func (decision ProductionOwnershipDecision) SafeHandoff() (SafeHandoffAssessment, bool) {
+	if !decision.hasSafeHandoff {
+		return SafeHandoffAssessment{}, false
+	}
+	return decision.safeHandoff, true
+}
+
 func (decision ProductionOwnershipDecision) AdmissionControl() AdmissionControl {
 	return decision.admissionControl
 }
@@ -404,7 +439,19 @@ func (decision ProductionOwnershipDecision) valid() bool {
 		Revision:          decision.revision,
 		DecisionAt:        decision.decisionAt,
 	}
-	return validAuthorityDetails(spec) && validAdmissionDetails(spec)
+	if !validAuthorityDetails(spec) || !validAdmissionDetails(spec) {
+		return false
+	}
+	// 交接评估那一格若在场，必须与它所附的决定说的是同一次交接：同一范围、同一对方、且只挂在
+	// `其他权威`上。WithSafeHandoff 在记入时守过这三条，这里再守一次是为了让一份决定值无论怎么
+	// 拿到都能自证，而不是只在记入那一刻成立。
+	if decision.hasSafeHandoff {
+		return decision.authority == ProductionAuthorityOther &&
+			decision.safeHandoff.valid() &&
+			decision.safeHandoff.scope == decision.scope &&
+			decision.safeHandoff.targetAuthority == decision.otherAuthorityRef
+	}
+	return true
 }
 
 type FutureSubmissionDisposition uint8

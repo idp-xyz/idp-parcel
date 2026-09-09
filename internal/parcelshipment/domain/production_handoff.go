@@ -28,6 +28,12 @@ func NewHandoffQueryReference(value string) (HandoffQueryReference, error) {
 	return HandoffQueryReference{required}, err
 }
 
+// HandoffObservation 是一次交接尝试观察到的结果。
+//
+// `通道未配置`自成一格（ADR-0128 决定三）而不充作`查询不可用`：后者的证据形要求对方已经给过
+// 确认引用与范围摘要、只是查不到确认状态，而通往他方权威的出向通道还没配置时什么都没投递出去，
+// 手上不可能有任何对方给的引用。往那一格里塞，要么放宽证据规则把「重查确认」与「去配置通道」两种
+// 恢复动作折进一格，要么编造一个引用——ADR-0055 那族「未配置自成一格」拦的正是这两条。
 type HandoffObservation uint8
 
 const (
@@ -37,10 +43,11 @@ const (
 	HandoffObservationTimedOut
 	HandoffObservationQueryUnavailable
 	HandoffObservationFailed
+	HandoffObservationChannelUnconfigured
 )
 
 func (observation HandoffObservation) valid() bool {
-	return observation >= HandoffObservationCompleteConfirmation && observation <= HandoffObservationFailed
+	return observation >= HandoffObservationCompleteConfirmation && observation <= HandoffObservationChannelUnconfigured
 }
 
 func (observation HandoffObservation) String() string {
@@ -55,6 +62,8 @@ func (observation HandoffObservation) String() string {
 		return "QUERY_UNAVAILABLE"
 	case HandoffObservationFailed:
 		return "FAILED"
+	case HandoffObservationChannelUnconfigured:
+		return "CHANNEL_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -88,6 +97,7 @@ const (
 	HandoffUnresolvedTimedOut
 	HandoffUnresolvedQueryUnavailable
 	HandoffUnresolvedTargetFailure
+	HandoffUnresolvedChannelUnconfigured
 )
 
 func (reason HandoffUnresolvedReason) String() string {
@@ -102,6 +112,8 @@ func (reason HandoffUnresolvedReason) String() string {
 		return "QUERY_UNAVAILABLE"
 	case HandoffUnresolvedTargetFailure:
 		return "TARGET_FAILURE"
+	case HandoffUnresolvedChannelUnconfigured:
+		return "CHANNEL_NOT_CONFIGURED"
 	default:
 		return ""
 	}
@@ -191,7 +203,7 @@ func validHandoffEvidence(spec SafeHandoffAssessmentSpec) bool {
 			spec.ConfirmationRef.valid() &&
 			!spec.QueryRef.valid() &&
 			spec.EffectiveAt.IsZero()
-	case HandoffObservationTimedOut, HandoffObservationFailed:
+	case HandoffObservationTimedOut, HandoffObservationFailed, HandoffObservationChannelUnconfigured:
 		return !spec.ConfirmedScopeDigest.valid() &&
 			!spec.ConfirmationRef.valid() &&
 			!spec.QueryRef.valid() &&
@@ -211,6 +223,8 @@ func unresolvedReasonFor(observation HandoffObservation) HandoffUnresolvedReason
 		return HandoffUnresolvedQueryUnavailable
 	case HandoffObservationFailed:
 		return HandoffUnresolvedTargetFailure
+	case HandoffObservationChannelUnconfigured:
+		return HandoffUnresolvedChannelUnconfigured
 	default:
 		return HandoffUnresolvedReasonInvalid
 	}
@@ -282,4 +296,16 @@ func (assessment SafeHandoffAssessment) UnresolvedReason() (HandoffUnresolvedRea
 		return HandoffUnresolvedReasonInvalid, false
 	}
 	return assessment.unresolvedReason, true
+}
+
+// valid 只认经 AssessSafeHandoff 形成的评估：零值的状态格是 SafeHandoffStatusInvalid，而两个
+// 合法状态之外没有第三种形成路径。其余字段的相互约束在形成时已由 validHandoffEvidence 守过，
+// 字段不可导出，此后无从被改。
+func (assessment SafeHandoffAssessment) valid() bool {
+	return (assessment.status == SafeHandoffConfirmed || assessment.status == SafeHandoffUnresolved) &&
+		assessment.attemptID.valid() &&
+		assessment.scope.valid() &&
+		assessment.targetAuthority.valid() &&
+		assessment.observation.valid() &&
+		!assessment.assessedAt.IsZero()
 }
