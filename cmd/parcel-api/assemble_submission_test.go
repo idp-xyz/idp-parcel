@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,12 +16,14 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	pgdomain "go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -358,6 +364,64 @@ func secondIdentity(t *testing.T) domain.SourceIdentity {
 	return identity
 }
 
+// Covers: wbr/11 完成判据 2——生产装配下 `其他权威` 决定的 HTTP 答复带续办引用。真实治理桥在目录
+// 未配置时答的是`权威未确定`，走不到 Other，所以归属权威换成「答其他权威、带停写证据」的替身
+// （隔离合成 `S`，不进生产装配）；除这一读口外，仓储、边界壳、出向通道（生产装配同款的未配置
+// 适配器）、标识工厂与端点全是生产实现。它钉的是 `UC-PS-001` 结果行「生产归属未决」要带
+// 「安全续办引用」这一句在线上成立：编排写进决定记录的续办引用与原因，经真端点落到响应体。
+func TestAnOtherAuthorityDecisionReachesTheEndpointWithItsHandoffContinuation(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	submission, _ := submissionAssembledWith(t, db, otherAuthorityOwnership{anchor: envelopeProofAnchor})
+	endpoint := shipmenthttp.NewSubmitShipmentRequestEndpoint(
+		fixedSubmissionIntake{command: submissionCommand(t)},
+		submission,
+	)
+
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, httptest.NewRequest(
+		http.MethodPost, "/shipment-requests", strings.NewReader("{}"),
+	))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s；归属未决是已形成的业务答案，不是 5xx", response.Code, response.Body)
+	}
+	var body struct {
+		Outcome             string `json:"outcome"`
+		ShipmentRequestID   string `json:"shipmentRequestId"`
+		ProductionOwnership struct {
+			Authority                    string `json:"authority"`
+			OtherAuthority               string `json:"otherAuthority"`
+			HandoffReference             string `json:"handoffReference"`
+			UnresolvedReason             string `json:"unresolvedReason"`
+			ContinuationReference        string `json:"continuationReference"`
+			HandoffConfirmationReference string `json:"handoffConfirmationReference"`
+		} `json:"productionOwnership"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body, err)
+	}
+	if body.Outcome != "OWNERSHIP_UNRESOLVED" || body.ShipmentRequestID != "" {
+		t.Fatalf("outcome = %q / requestId = %q, want OWNERSHIP_UNRESOLVED 且不建单：%s", body.Outcome, body.ShipmentRequestID, response.Body)
+	}
+	ownership := body.ProductionOwnership
+	if ownership.Authority != "OTHER" || ownership.OtherAuthority != "SYN-OTHER-AUTHORITY-1" || ownership.HandoffReference != "SYN-STOP-EVIDENCE-1" {
+		t.Fatalf("归属决定仍应是其他权威并带停写证据：%s", response.Body)
+	}
+	if ownership.UnresolvedReason != "CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("unresolvedReason = %q, want CHANNEL_NOT_CONFIGURED——生产装配放的是未配置适配器", ownership.UnresolvedReason)
+	}
+	if ownership.ContinuationReference != "CONT-PS-HANDOFF/PS-HANDOFF/SYN-OWN-DEC-OTHER-1" {
+		t.Fatalf("continuationReference = %q, want the one derived from the decision", ownership.ContinuationReference)
+	}
+	if ownership.HandoffConfirmationReference != "" {
+		t.Fatalf("未配置的通道不可能给出确认引用：%s", response.Body)
+	}
+}
+
 // envelopeMintingSubmission 装配「会真发信封」的提交编排：仓储、边界壳、Outbox Store、
 // 意图适配器与标识工厂全是生产实现，只有归属权威换成放行替身（隔离合成 `S`，不进生产
 // 装配）——真实治理桥在目录未配置时把提交停在 OWNERSHIP_UNRESOLVED，建单一段走不到，
@@ -365,6 +429,17 @@ func secondIdentity(t *testing.T) domain.SourceIdentity {
 func envelopeMintingSubmission(
 	t *testing.T,
 	db *bentopg.DB,
+) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
+	t.Helper()
+	return submissionAssembledWith(t, db, permittingOwnership{anchor: envelopeProofAnchor})
+}
+
+// submissionAssembledWith 是 envelopeMintingSubmission 与 Other 一路共用的装配：除归属读口由调用方
+// 给替身外，其余全是生产件——出向通道放生产装配同款的未配置适配器，替身答 Other 时它如实答`通道未配置`。
+func submissionAssembledWith(
+	t *testing.T,
+	db *bentopg.DB,
+	ownership ports.ProductionOwnershipAuthority,
 ) (*shipmentapp.SubmitShipmentRequestHandler, *outbox.Store) {
 	t.Helper()
 
@@ -392,11 +467,24 @@ func envelopeMintingSubmission(
 	return shipmentapp.NewSubmitShipmentRequestHandler(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
-		permittingOwnership{anchor: envelopeProofAnchor},
+		ownership,
 		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
 	), store
+}
+
+// fixedSubmissionIntake 把固定的一条提交命令交给端点：接入契约（`PAR-INT-01`）未到位，真 Intake 没有
+// 实现，而这里要证的是端点之后那一段。
+type fixedSubmissionIntake struct {
+	command shipmentapp.SubmitShipmentRequestCommand
+}
+
+func (intake fixedSubmissionIntake) IntakeSubmission(
+	context.Context,
+	*http.Request,
+) (shipmentapp.SubmitShipmentRequestCommand, error) {
+	return intake.command, nil
 }
 
 // claimSubmittedEnvelope 按派发一拍的同一条认领路径把信封取回来。走 Claim 而不是自己
@@ -485,6 +573,56 @@ func (authority permittingOwnership) DecideProductionOwnership(
 		Validity:         interval,
 		Revision:         revision,
 		DecisionAt:       authority.anchor.Add(-time.Minute),
+	})
+}
+
+// otherAuthorityOwnership 是「答其他权威、带停写证据」的归属权威替身（只记 `S`，不进生产装配）：
+// 归属凭接管记录成立这半边由它替，交接那半边留给生产的出向通道去答（ADR-0128 决定二的先后）。
+type otherAuthorityOwnership struct{ anchor time.Time }
+
+func (authority otherAuthorityOwnership) DecideProductionOwnership(
+	_ context.Context,
+	scope domain.AdmissionScope,
+) (domain.ProductionOwnershipDecision, error) {
+	interval, err := domain.NewOwnershipValidityInterval(
+		authority.anchor.Add(-time.Hour),
+		authority.anchor.Add(24*time.Hour),
+	)
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	decisionID, err := domain.NewProductionOwnershipDecisionID("SYN-OWN-DEC-OTHER-1")
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	ruleVersion, err := domain.NewProductionOwnershipRuleVersion("SYN-OWN-RULE-1")
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	revision, err := domain.NewProductionOwnershipRevision("syn-rev-1")
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	otherAuthority, err := domain.NewProductionAuthorityReference("SYN-OTHER-AUTHORITY-1")
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	stopEvidence, err := domain.NewHandoffConfirmationReference("SYN-STOP-EVIDENCE-1")
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, err
+	}
+	return domain.NewProductionOwnershipDecision(domain.ProductionOwnershipDecisionSpec{
+		DecisionID:        decisionID,
+		Scope:             scope,
+		Authority:         domain.ProductionAuthorityOther,
+		OtherAuthorityRef: otherAuthority,
+		HandoffRef:        stopEvidence,
+		AdmissionControl:  domain.AdmissionControlOpen,
+		RuleVersion:       ruleVersion,
+		AsOf:              authority.anchor.Add(-time.Minute),
+		Validity:          interval,
+		Revision:          revision,
+		DecisionAt:        authority.anchor.Add(-time.Minute),
 	})
 }
 
