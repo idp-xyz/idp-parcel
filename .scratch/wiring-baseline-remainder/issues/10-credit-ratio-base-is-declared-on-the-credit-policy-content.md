@@ -1,7 +1,7 @@
 # 比例额度的基数由信用政策正文自己声明：封闭集、不给默认、缺席在构造门拒
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户经 IDP 队列授权「你自决，目标是全部解决」）：wbr/03「未落三件」之③、ADR-0127 决定四「比例额度的基数今天未裁……
+Status: in-progress——2026-09-09 22:2x 通道 3 认领，分支 `mcp3-wbr10` 基 `90c025ca`，单 task-519de030-3eec-46c4-9468-f190e8926899。此前：2026-09-09 通道 1 代裁立票（用户经 IDP 队列授权「你自决，目标是全部解决」）：wbr/03「未落三件」之③、ADR-0127 决定四「比例额度的基数今天未裁……
 那是 `BD-*` 一类，等它自己的裁决」。裁决方向见下；封闭集的成员表交本票 `/domain-modeling` 一格定、落 ADR-0129（号由通道 1 给）
 Blocked by: 无（PC 半边与 SA 半边同票；SA 半边的 contract 段是 [09](./09-sa-credit-basis-contract-and-exposure-ledger-policy-reference.md)，本票不依赖它——`CREDIT_RATIO_BASE_UNDECIDED` 那格今天就在，本票是让它不再被走到）
 
