@@ -377,6 +377,8 @@ func TestAPublishedCustomerServiceRuleIsReadBackByTheContentView(t *testing.T) {
 
 // controlPolicyBatchBody 发一份接受前财务控制策略版本，正文是两项组合控制。策略不指名任何对象——合同 → 策略
 // 那层关系由客户合同正文的绑定拥有（ADR-0115 Decision 四），策略自己不必先等谁发布。
+// 壳上的摘要是 CanonicalizePublicationContent 对这份正文算出的那一个：本册已接进服务端规范化（票 admin-write-faces/13），
+// 对账门会拿声明的串与算出的比，随手写的串会被拒；改正文任一格都要重算这一串。
 func controlPolicyBatchBody() string {
 	return `{"items": [
     {
@@ -385,7 +387,7 @@ func controlPolicyBatchBody() string {
       "objectId": "fcp-1",
       "version": "v1",
       "scope": "scope-1",
-      "contentDigest": "sha256:fcp-1",
+      "contentDigest": "PCC-1:07cd1a96103b19f524b8472a906f16afba5f96d1c7fecfdcf09c9bfa9e9a809c",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {"reference": "approval-fcp-1", "source": "source-fcp-1", "approvedAt": "2026-01-02T00:00:00Z"},
       "approvalRoleStanding": "CONFIRMED",
