@@ -1,7 +1,7 @@
 # SA 收 ADR-0127 的 contract 段：`Deps.CreditBasis` mandatory、暴露账本行持久化政策引用；PS 夹具先补 `CreditBasisView` 替身
 
 Category: enhancement
-Status: resolved——2026-09-09 20:5x 通道 3（分支 `mcp3-wbr09` 基 `d5a35960`，三笔 `5bead280` / `d45a7a34` / `d23956d7` 已推 origin；完成记录见文末，
+Status: resolved——2026-09-09 20:3x 通道 3（分支 `mcp3-wbr09` 基 `d5a35960`，三笔 `5bead280` / `d45a7a34` / `d23956d7` 已推 origin；完成记录见文末，
 进 main 记录归推送方）。此前：19:4x 通道 3 接续（接续单 task-de74738a-f485-422e-8e85-7a78d474d1ad；前一任 18:4x 自领后 18:5x 中断，树上留一份未提交的 PS 夹具
 测试 +62/−19、mtime 18:47:46）。接手对照：先自列第 1 步判据（三格替身 / 接口断言 / 三处 `Deps` 构造全接 / 账期夹具额度与状况
 同值以保住既有用例的读法 / 不改既有断言），再读 diff——逐条对上，PS 包 build/vet/test/gofmt 绿，原样接着用。第 2 步起由 20:08 接手的新会话做
@@ -38,7 +38,7 @@ Blocked by: 无
 
 不动 PC；不动比例额度基数（那是 [10](./10-credit-ratio-base-is-declared-on-the-credit-policy-content.md)）；PS 侧只动那份夹具；不改 ADR-0127 正文。
 
-## 完成记录（2026-09-09 20:5x，通道 3；分支 `mcp3-wbr09` 基 `d5a35960`，每笔已推 origin 同 SHA——推送方重放进 main）
+## 完成记录（2026-09-09 20:3x，通道 3；分支 `mcp3-wbr09` 基 `d5a35960`，每笔已推 origin 同 SHA——推送方重放进 main）
 
 | 笔 | SHA | 内容 |
 |---|---|---|
@@ -64,4 +64,4 @@ Blocked by: 无
 
 ## Comments
 
-- 2026-09-09 20:5x · 通道 3：三笔齐，完工报发通道 1；评审留通道 5 或 6（作者是通道 3，含前一任会话）。
+- 2026-09-09 20:3x · 通道 3：三笔齐，完工报发通道 1；评审留通道 5 或 6（作者是通道 3，含前一任会话）。
