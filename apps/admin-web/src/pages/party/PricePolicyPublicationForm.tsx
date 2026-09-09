@@ -1,9 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import type { ApiResult } from '../catalogue-api';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
-import { planReferenceOf } from './supplier-agreement-form';
+import { Field, Problems, ReferencePicker, fieldLabel, momentPlaceholder, selectClass } from './PublicationFormFields';
+import { planReferenceOf } from './publication-form-shared';
 import {
   declaresFx,
   emptyPricePolicyDraft,
@@ -42,13 +42,8 @@ export interface PricePolicyPublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
 const groupTitle = 'text-[13px] font-medium text-idpxyz-text';
 const noteClass = 'text-[11px] text-idpxyz-textMuted';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
-const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）';
 
 export function PricePolicyPublicationForm({ onPublished }: PricePolicyPublicationFormProps) {
   const [draft, setDraft] = useState<PricePolicyDraft>(emptyPricePolicyDraft());
@@ -121,7 +116,7 @@ function PricePolicyFields({
           壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项），与下面政策正文自己的范围与区间是两样；区间上界
           留空即持续有效。结果显示在政策页的<strong>商业价格政策册</strong>（册名 PRICE_POLICY，发布类别 PRICE_RULE——两条分类轴）。
         </p>
-        <ProblemLines lines={problems['kind']} />
+        <Problems lines={problems['kind']} />
         <div className="grid grid-cols-2 gap-3">
           {text('objectId', '价格规则对象标识 *', 'objectId')}
           {text('version', '版本号 *', 'version')}
@@ -147,13 +142,27 @@ function PricePolicyFields({
         </p>
         <div className="grid grid-cols-2 gap-3">
           {closedSet('pricePolicy.direction', '政策方向 *', 'direction', priceDirectionOptions)}
-          <PriceCardPicker
+          {/* 从价卡目录选一份方案版本：每行显方案引用、方向、用途、范围，**不按方向过滤**（表单不裁，方案方向由操作者照这里
+              看到的如实填进「方案方向」那格，表单不替他填）；选出来的只是引用串，在不在册、方向对不对仍由服务端判。 */}
+          <ReferencePicker
             label="定价方案（价卡目录）*"
             path="pricePolicy.pricingPlan"
             problems={problems}
             value={draft.pricingPlan}
             locked={locked}
             onChange={(pricingPlan) => patch({ pricingPlan })}
+            load={listPriceCards}
+            optionsOf={(body: PriceCardListResponseBody) =>
+              body.cards.map((card) => ({
+                value: planReferenceOf(card),
+                label: `${planReferenceOf(card)} · ${card.direction} · ${card.purpose} · ${card.scope}`,
+              }))
+            }
+            emptyNote="价卡目录为空；先登记价卡，再发布价格政策。"
+            optionsNote="目录行上的方向是 parcel-pricing 的答复，照它填「方案方向」；表单不从选中的方案反推。"
+            unknownNote="手填，不在目录上"
+            manualPlaceholder="planId@planVersion（目录不可用时手填）"
+            readFace="价卡目录"
           />
           {closedSet('pricePolicy.planDirection', '方案方向（parcel-pricing 发布当时的答复）*', 'planDirection', priceDirectionOptions)}
           {closedSet('pricePolicy.conversion', '绑定转换 *', 'conversion', planBindingConversionOptions)}
@@ -207,33 +216,10 @@ function PricePolicyFields({
             {text('pricePolicy.caliber.fx.asOfSemantics', '取值时点语义引用', 'fxAsOfSemantics')}
             {text('pricePolicy.caliber.fx.asOfPolicyVersion', '时点政策版本', 'fxAsOfPolicyVersion')}
           </div>
-          <ProblemLines lines={problems['pricePolicy.caliber.fx']} />
+          <Problems lines={problems['pricePolicy.caliber.fx']} />
         </div>
       </section>
     </div>
-  );
-}
-
-// 一格：标签、控件、服务端点名到这条路径的问题（构造门原话，可多条）。
-function Field({
-  label,
-  path,
-  problems,
-  children,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  children: ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
-      {children}
-      <ProblemLines lines={problems[path]} />
-    </label>
   );
 }
 
@@ -292,97 +278,7 @@ function ConditionalField({
           </Button>
         </div>
       )}
-      <ProblemLines lines={problems[path]} />
+      <Problems lines={problems[path]} />
     </div>
-  );
-}
-
-// 服务端点名的那一格的问题，逐条挂在格下；原话原样显示，不改写。
-function ProblemLines({ lines }: { lines?: string[] }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * 从价卡目录选一份方案版本。目录答了业务答案就给选单——每行显方案引用、方向、用途、范围，**不按方向过滤**（表单不裁，
- * 方案方向由操作者照这里看到的如实填进「方案方向」那格，表单不替他填）；目录在未配置那堵墙前或读不到时退回手填并说明
- * 原因。选出来的只是引用串，在不在册、方向对不对仍由服务端判。手填时若当前值不在候选里，选单照样保留它作一项。
- * 形状与 SupplierAgreementPublicationForm 的 ReferencePicker 同，那一份是它文件的私有件、这里不跨文件借。
- */
-function PriceCardPicker({
-  label,
-  path,
-  problems,
-  value,
-  locked,
-  onChange,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  value: string;
-  locked: boolean;
-  onChange: (value: string) => void;
-}) {
-  const [answer, setAnswer] = useState<ApiResult<PriceCardListResponseBody> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void listPriceCards().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (answer?.kind === 'outcome') {
-    const options = answer.body.cards.map((card) => ({
-      value: planReferenceOf(card),
-      label: `${planReferenceOf(card)} · ${card.direction} · ${card.purpose} · ${card.scope}`,
-    }));
-    const known = options.some((option) => option.value === value);
-    return (
-      <Field label={label} path={path} problems={problems}>
-        <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
-          <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（手填，不在目录上）</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <span className={`${noteClass} block mt-1`}>
-          {options.length === 0
-            ? '价卡目录为空；先登记价卡，再发布价格政策。'
-            : '目录行上的方向是 parcel-pricing 的答复，照它填「方案方向」；表单不从选中的方案反推。'}
-        </span>
-      </Field>
-    );
-  }
-
-  return (
-    <Field label={label} path={path} problems={problems}>
-      <Input
-        value={value}
-        disabled={locked}
-        className="font-mono text-[13px]"
-        placeholder="planId@planVersion（目录不可用时手填）"
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <span className={`${noteClass} block mt-1`}>
-        {answer === null
-          ? '正在读价卡目录…'
-          : answer.kind === 'unconfigured'
-            ? '价卡目录读口在接入渠道未配置那堵墙前（403），先手填；引用在不在册由服务端发布时判。'
-            : '价卡目录读不到，先手填；引用在不在册由服务端发布时判。'}
-      </span>
-    </Field>
   );
 }

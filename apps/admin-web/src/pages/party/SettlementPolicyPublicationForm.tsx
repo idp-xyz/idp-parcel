@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import {
@@ -6,16 +6,21 @@ import {
   listCustomerContracts,
   listGroupLegalEntities,
   type CustomerAccountListResponseBody,
-  type CustomerContractListResponseBody,
   type GroupLegalEntityListResponseBody,
 } from './api';
 import { settlementMethodLabels } from './presentation';
-import {
-  fetchPublicationVocabulary,
-  vocabularyOptions,
-  type PublicationVocabularyResponseBody,
-} from './publication-draft-api';
+import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import {
+  Field,
+  PathProblems,
+  ReferencePicker,
+  VocabularySelect,
+  fieldLabel,
+  momentPlaceholder,
+  selectClass,
+  useLoaded,
+} from './PublicationFormFields';
 import {
   contractChoiceKey,
   contractChoiceOf,
@@ -50,15 +55,15 @@ export interface SettlementPolicyPublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
-const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）';
+const kind = 'SETTLEMENT_POLICY';
 
 export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolicyPublicationFormProps) {
   const [draft, setDraft] = useState<SettlementPolicyDraft>(emptySettlementPolicyDraft());
   const patch = (change: Partial<SettlementPolicyDraft>) => setDraft((current) => ({ ...current, ...change }));
+  // 结算方式的封闭集只从服务端词表读口取（票 20，`kind=SETTLEMENT_POLICY` 的 `method` 一集）；本表单不内置 PREPAID / TERMS，
+  // 内置一份就是同一封闭集的第二份写法（票 20 立票理由）。
+  const vocabulary = useLoaded(loadSettlementVocabulary);
+  const methodCodes = vocabulary?.kind === 'outcome' ? methodCodesOf(vocabulary.body.sets) : null;
 
   return (
     <PublicationDraftFlow
@@ -136,12 +141,20 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
               接受前财务控制策略两册，本表单没有控制字段。
             </p>
             <div className="grid grid-cols-2 gap-3">
-              <MethodSelect
+              <VocabularySelect
+                label="结算方式 *"
                 path="settlementPolicy.method"
+                setName="method"
+                kind={kind}
+                codes={methodCodes}
+                vocabulary={vocabulary}
+                labels={settlementMethodLabels}
                 problems={problems}
                 value={draft.method}
                 locked={locked}
                 onChange={(method) => patch({ method })}
+                // 句中「枚举、」后那个半角空格是此前本表单里 JSX 折行留下的渲染结果，照原样保留——本票不改一字显示文案。
+                unavailableNote="方式的码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=SETTLEMENT_POLICY），表单不内置枚举、 不自造码；词表就绪前这一格选不了，送预览会由服务端点名。"
               />
               <ReferencePicker
                 label="责任法人（集团法人）*"
@@ -228,123 +241,9 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
   );
 }
 
-// 一格：标签、控件、服务端点名到这条路径的问题（构造门原话，可多条）。
-function Field({
-  label,
-  path,
-  problems,
-  children,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  children: ReactNode;
-}) {
-  const lines = problems[path] ?? [];
-  return (
-    <label className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
-      {children}
-      {lines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-          {line}
-        </span>
-      ))}
-    </label>
-  );
-}
-
-// 读一次、只读一次：读面与词表都是目录，表单打开时取一份，不随每次击键重取。
-function useLoaded<Body>(load: () => Promise<ApiResult<Body>>): ApiResult<Body> | null {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void load().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-  return answer;
-}
-
-/**
- * 结算方式下拉：选项 = 服务端词表（票 20，`kind=SETTLEMENT_POLICY` 的 `method` 一集）× 本页中文词表；词表没收录的码原样示出。
- * 词表在未配置那堵墙前（403）、调用方问题、未形成答案、没到达时都**显占位不显码**——本表单不内置 PREPAID / TERMS，
- * 内置一份就是同一封闭集的第二份写法（票 20 立票理由）。不预选：「未选」是一个空值状态，不是默认值。
- */
-function MethodSelect({
-  path,
-  problems,
-  value,
-  locked,
-  onChange,
-}: {
-  path: string;
-  problems: Record<string, string[]>;
-  value: string;
-  locked: boolean;
-  onChange: (value: string) => void;
-}) {
-  const answer = useLoaded(loadSettlementVocabulary);
-  const codes = answer?.kind === 'outcome' ? methodCodesOf(answer.body.sets) : null;
-
-  if (codes !== null) {
-    const options = vocabularyOptions(codes, settlementMethodLabels);
-    const known = options.some((option) => option.value === value);
-    return (
-      <Field label="结算方式 *" path={path} problems={problems}>
-        <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
-          <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（不在词表上）</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label} · {option.value}
-            </option>
-          ))}
-        </select>
-        {options.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">服务端词表 method 一集今天没有码；表单不自造。</span>
-        ) : null}
-      </Field>
-    );
-  }
-
-  return (
-    <Field label="结算方式 *" path={path} problems={problems}>
-      <select className={selectClass} value="" disabled>
-        <option value="">{vocabularyPlaceholder(answer)}</option>
-      </select>
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-        方式的码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=SETTLEMENT_POLICY），表单不内置枚举、
-        不自造码；词表就绪前这一格选不了，送预览会由服务端点名。
-      </span>
-    </Field>
-  );
-}
-
 // 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。
 function loadSettlementVocabulary(): Promise<ApiResult<PublicationVocabularyResponseBody>> {
   return fetchPublicationVocabulary('SETTLEMENT_POLICY');
-}
-
-function vocabularyPlaceholder(answer: ApiResult<PublicationVocabularyResponseBody> | null): string {
-  if (answer === null) return '正在读词表…';
-  switch (answer.kind) {
-    case 'outcome':
-      return '词表未就绪（服务端没有 method 一集）';
-    case 'unconfigured':
-      return '词表未就绪（接入渠道未配置，403）';
-    case 'callerProblem':
-      return `词表未就绪（调用方式问题，HTTP ${answer.status}）`;
-    case 'noAnswer':
-      return `词表未就绪（服务端未形成答案，HTTP ${answer.status}）`;
-    case 'transport':
-      return '词表未就绪（请求未到达 parcel-api）';
-  }
 }
 
 /**
@@ -409,7 +308,7 @@ function ContractPicker({
             当前租户尚无客户合同版本；先发布客户合同，再发布挂在它上面的结算政策。
           </span>
         ) : null}
-        <ProblemLines problems={problems} paths={[objectPath, versionPath]} />
+        <PathProblems problems={problems} paths={[objectPath, versionPath]} />
       </label>
     );
   }
@@ -442,101 +341,5 @@ function ContractPicker({
             : '客户与合同目录读不到，先分两格手填；合同在不在册由服务端发布时判。'}
       </span>
     </div>
-  );
-}
-
-// 合同选单一格下面挂两条路径的问题：服务端把对象与版本各自点名，选单虽是一格，问题仍按各自的路径显。
-function ProblemLines({ problems, paths }: { problems: Record<string, string[]>; paths: readonly string[] }) {
-  return (
-    <>
-      {paths.flatMap((path) =>
-        (problems[path] ?? []).map((line) => (
-          <span key={`${path}:${line}`} className="block text-[11px] text-idpxyz-danger mt-1">
-            <span className="font-mono">{path}</span>：{line}
-          </span>
-        )),
-      )}
-    </>
-  );
-}
-
-interface PickerOption {
-  value: string;
-  label: string;
-}
-
-/**
- * 从读面选一条引用。读面答了业务答案就给选单（不按状态过滤——表单不裁，状态显在选项里由人看）；读面在
- * 未配置那堵墙前或读不到时退回手填并说明原因。选出来的只是引用串，在不在册、立不立得住仍由服务端判。
- * 手填时若当前值不在候选里，选单照样保留它作一项，免得读面刷新把人填好的东西静默清掉。
- */
-function ReferencePicker<Body>({
-  label,
-  path,
-  problems,
-  value,
-  locked,
-  onChange,
-  load,
-  optionsOf,
-  emptyNote,
-  readFace,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  value: string;
-  locked: boolean;
-  onChange: (value: string) => void;
-  load: () => Promise<ApiResult<Body>>;
-  optionsOf: (body: Body) => PickerOption[];
-  emptyNote: string;
-  readFace: string;
-}) {
-  const answer = useLoaded(load);
-
-  if (answer?.kind === 'outcome') {
-    const options = optionsOf(answer.body);
-    const known = options.some((option) => option.value === value);
-    return (
-      <Field label={label} path={path} problems={problems}>
-        <select
-          className={selectClass}
-          value={value}
-          disabled={locked}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（手填，不在读面上）</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {options.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">{emptyNote}</span>
-        ) : null}
-      </Field>
-    );
-  }
-
-  return (
-    <Field label={label} path={path} problems={problems}>
-      <Input
-        value={value}
-        disabled={locked}
-        className="font-mono text-[13px]"
-        placeholder="引用串（读面不可用时手填）"
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-        {answer === null
-          ? `正在读${readFace}…`
-          : answer.kind === 'unconfigured'
-            ? `${readFace}读口在接入渠道未配置那堵墙前（403），先手填；引用在不在册由服务端发布时判。`
-            : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
-      </span>
-    </Field>
   );
 }

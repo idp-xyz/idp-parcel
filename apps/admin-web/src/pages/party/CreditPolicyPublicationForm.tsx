@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { Field, Problems, fieldLabel } from './PublicationFormFields';
 import {
   creditPolicyFieldPaths,
   creditPolicyLocalProblems,
@@ -35,7 +36,6 @@ export function CreditPolicyPublicationForm({ onPublished }: { onPublished?: () 
   );
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
 const groupTitle = 'text-[12px] font-medium text-idpxyz-text';
 
 function CreditPolicyFields({
@@ -48,15 +48,25 @@ function CreditPolicyFields({
   form: PublicationFormContext;
 }) {
   const { problems, locked } = form;
-  const field = (path: string, label: string, key: keyof CreditPolicyDraft, placeholder?: string) => (
-    <Field
-      label={label}
-      value={draft[key]}
-      problems={problems[path]}
-      locked={locked}
-      placeholder={placeholder}
-      onChange={(value) => patch({ [key]: value } as Partial<CreditPolicyDraft>)}
-    />
+  // 本册的格全是文本框：一格 = 共享 Field + Input。被点名的格连输入框边框一起变红是本册此前就有的提示，抬共享层时照留
+  // ——共享 Field 只管标签与问题行，框怎么显归各册自己的控件。
+  const field = (
+    path: string,
+    label: string,
+    key: keyof CreditPolicyDraft,
+    placeholder?: string,
+    inputMode?: 'numeric',
+  ) => (
+    <Field label={label} path={path} problems={problems}>
+      <Input
+        value={draft[key]}
+        readOnly={locked}
+        inputMode={inputMode}
+        className={`font-mono text-[13px] ${(problems[path] ?? []).length > 0 ? 'border-idpxyz-danger' : ''}`}
+        placeholder={placeholder}
+        onChange={(event) => patch({ [key]: event.target.value } as Partial<CreditPolicyDraft>)}
+      />
+    </Field>
   );
 
   return (
@@ -65,7 +75,7 @@ function CreditPolicyFields({
         <p className={groupTitle}>
           版本壳 <span className="font-mono text-idpxyz-textMuted">kind = CREDIT_POLICY</span>
         </p>
-        <ProblemLines lines={problems['kind']} />
+        <Problems lines={problems['kind']} />
         <div className="grid grid-cols-2 gap-3">
           {field('objectId', '政策对象标识 *', 'objectId')}
           {field('version', '版本号 *', 'version')}
@@ -87,26 +97,10 @@ function CreditPolicyFields({
         <div>
           <span className={fieldLabel}>额度（金额 / 比例，恰一）*</span>
           <div className="grid grid-cols-2 gap-3">
-            <Field
-              label="金额（最小货币单位）"
-              value={draft.limitMinor}
-              problems={problems['creditPolicy.limitMinor']}
-              locked={locked}
-              placeholder="整数；0 是「授予零信用」"
-              inputMode="numeric"
-              onChange={(value) => patch({ limitMinor: value })}
-            />
-            <Field
-              label="比例（基点，1% = 100）"
-              value={draft.limitRatioBasisPoints}
-              problems={problems['creditPolicy.limitRatioBasisPoints']}
-              locked={locked}
-              placeholder="整数"
-              inputMode="numeric"
-              onChange={(value) => patch({ limitRatioBasisPoints: value })}
-            />
+            {field('creditPolicy.limitMinor', '金额（最小货币单位）', 'limitMinor', '整数；0 是「授予零信用」', 'numeric')}
+            {field('creditPolicy.limitRatioBasisPoints', '比例（基点，1% = 100）', 'limitRatioBasisPoints', '整数', 'numeric')}
           </div>
-          <ProblemLines lines={problems['creditPolicy.limit']} />
+          <Problems lines={problems['creditPolicy.limit']} />
           <p className="text-[11px] text-idpxyz-textMuted mt-1">
             恰一填写。两格都填或都空照样送预览，由服务端构造门裁、答在这一组上；表单不替它挑。
           </p>
@@ -130,50 +124,5 @@ function CreditPolicyFields({
         </div>
       </section>
     </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  problems,
-  locked,
-  placeholder,
-  inputMode,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  problems?: string[];
-  locked: boolean;
-  placeholder?: string;
-  inputMode?: 'numeric';
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className={fieldLabel}>{label}</span>
-      <Input
-        value={value}
-        readOnly={locked}
-        inputMode={inputMode}
-        className={`font-mono text-[13px] ${problems && problems.length > 0 ? 'border-idpxyz-danger' : ''}`}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <ProblemLines lines={problems} />
-    </label>
-  );
-}
-
-// 服务端（或本地编不进类型）点名的那一格的问题，逐条挂在格下；原话原样显示，不改写。
-function ProblemLines({ lines }: { lines?: string[] }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
   );
 }

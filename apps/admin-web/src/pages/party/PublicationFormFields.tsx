@@ -144,6 +144,10 @@ export interface PickerOption {
  * 从读面选一条引用。读面答了业务答案就给选单（不按状态过滤——表单不裁，状态显在选项里由人看）；读面在
  * 未配置那堵墙前或读不到时退回手填并说明原因。选出来的只是引用串，在不在册、立不立得住仍由服务端判。
  * 手填时若当前值不在候选里，选单照样保留它作一项，免得读面刷新把人填好的东西静默清掉。
+ *
+ * 三处可选的整句顶替（`manualPlaceholder` / `optionsNote` / `unknownNote`）只为价卡目录那一格：它的引用串有固定形状
+ * （`planId@planVersion`）、候选非空时还要提醒「照目录行上的方向填」、把读面叫「目录」——都是措辞不是形状，抬共享层
+ * 不改一字显示文案，所以给句子留口而不另留一份 Picker。
  */
 export function ReferencePicker<Body>({
   label,
@@ -156,6 +160,9 @@ export function ReferencePicker<Body>({
   optionsOf,
   emptyNote,
   readFace,
+  manualPlaceholder = '引用串（读面不可用时手填）',
+  optionsNote,
+  unknownNote = '手填，不在读面上',
 }: {
   label: string;
   path: string;
@@ -167,24 +174,35 @@ export function ReferencePicker<Body>({
   optionsOf: (body: Body) => PickerOption[];
   emptyNote: string;
   readFace: string;
+  /** 读面不可用时手填框的占位。 */
+  manualPlaceholder?: string;
+  /** 候选非空时挂在选单下的一句；不给就不占位。 */
+  optionsNote?: string;
+  /** 当前值不在候选里时那一项的括注。 */
+  unknownNote?: string;
 }) {
   const answer = useLoaded(load);
 
   if (answer?.kind === 'outcome') {
     const options = optionsOf(answer.body);
     const known = options.some((option) => option.value === value);
+    const note = options.length === 0 ? emptyNote : optionsNote;
     return (
       <Field label={label} path={path} problems={problems}>
         <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
           <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（手填，不在读面上）</option> : null}
+          {!known && value !== '' ? (
+            <option value={value}>
+              {value}（{unknownNote}）
+            </option>
+          ) : null}
           {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </select>
-        {options.length === 0 ? <span className="block text-[11px] text-idpxyz-textMuted mt-1">{emptyNote}</span> : null}
+        {note !== undefined ? <span className="block text-[11px] text-idpxyz-textMuted mt-1">{note}</span> : null}
       </Field>
     );
   }
@@ -195,7 +213,7 @@ export function ReferencePicker<Body>({
         value={value}
         disabled={locked}
         className="font-mono text-[13px]"
-        placeholder="引用串（读面不可用时手填）"
+        placeholder={manualPlaceholder}
         onChange={(event) => onChange(event.target.value)}
       />
       <span className="block text-[11px] text-idpxyz-textMuted mt-1">
