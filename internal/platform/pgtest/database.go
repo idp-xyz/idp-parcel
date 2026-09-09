@@ -115,15 +115,20 @@ func Pool(t *testing.T) *pgxpool.Pool {
 	ctx := t.Context()
 	name := uniqueDatabaseName(t)
 
+	var timing phases
+	started := time.Now()
+
 	if err := createDatabase(adminDSN, name); err != nil {
 		t.Fatalf("创建测试库失败：%v", err)
 	}
+	timing.create = time.Since(started)
 
 	testDSN, err := withDatabase(adminDSN, name)
 	if err != nil {
 		t.Fatalf("构造测试库连接串失败：%v", err)
 	}
 
+	migrateStarted := time.Now()
 	migrateConn, err := pgx.Connect(ctx, testDSN)
 	if err != nil {
 		t.Fatalf("连接测试库失败：%v", err)
@@ -135,6 +140,7 @@ func Pool(t *testing.T) *pgxpool.Pool {
 	if err := migrateConn.Close(ctx); err != nil {
 		t.Fatalf("关闭迁移连接失败：%v", err)
 	}
+	timing.migrate = time.Since(migrateStarted)
 
 	// pgxpool 默认按 CPU 数开连接，测试用例的并发度用不满它，尖峰时却成倍放大
 	// TIME_WAIT。封顶 2 保留「一条在事务里、一条旁路观察」的余量；真需要更高
@@ -144,9 +150,14 @@ func Pool(t *testing.T) *pgxpool.Pool {
 		t.Fatalf("打开连接池失败：%v", err)
 	}
 
+	bodyStarted := time.Now()
 	t.Cleanup(func() {
+		timing.body = time.Since(bodyStarted)
+		dropStarted := time.Now()
 		pool.Close()
 		dropDatabase(t, adminDSN, name)
+		timing.drop = time.Since(dropStarted)
+		recordTiming(t, timing)
 	})
 	return pool
 }
