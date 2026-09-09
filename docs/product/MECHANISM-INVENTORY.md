@@ -16,11 +16,11 @@
 | parcelshipment | 143 | 142 | 17 | 26 | 8 | 14 |
 | partycommercial | 117 | 127 | 9 | 32 | 1 | 25 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
-| platform（非业务） | 15 | 15 | 0 | 0 | 0 | 0 |
+| platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 80 | 60 | 12 | 37 | 7 | 7 |
 | transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 873 | 830 | 114 | 242 | 51 | 118 |
+| **合计** | 875 | 831 | 114 | 242 | 51 | 118 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 55、测试 77。
 
