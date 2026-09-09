@@ -17,15 +17,19 @@ Blocked by: 无（裁决已落；ADR-0128 由本票实施者按「裁决」节�
    权威凭一次应答成为权威，那是 ADR-0027 那族「解析标识 / 应答不得成为能力凭证」的反面。
 3. **缺格落哪种未决**：接管记录取不到 → 仍是今天的 `OwnershipUnresolvedHandoffIncomplete` / `HandoffUnavailable`（归属未决，不投递）；接管记录在、
    交接观察不是完整确认 → 归属决定仍是 `Other`，结果行落「生产归属未决」，未决原因取 `SafeHandoffAssessment` 的原因格（部分确认 / 超时 /
-   查询不可用 / 失败），续办引用取评估的 `ContinuationRef`；出向端口未配置 → 观察答 `HandoffObservationQueryUnavailable` → 同一条未决路，不冒充成功
-   （ADR-0055 同形）。
+   查询不可用 / 失败 / 通道未配置），续办引用取评估的 `ContinuationRef`；出向端口未配置 → 观察答 `HandoffObservationChannelUnconfigured`（自成一格）→
+   同一条未决路，不冒充成功（ADR-0055 同形）。**此句 2026-09-09 14:18 由通道 1 改裁 B**：原句「观察答 `HandoffObservationQueryUnavailable`」与代码相悖——
+   `validHandoffEvidence` 对`查询不可用`要求 `ConfirmedScopeDigest` + `ConfirmationRef` 在场，语义是「对方已确认但确认无法查询」；未配置根本没投递，塞进去
+   要么放宽证据规则折叠两种恢复动作、要么编造引用，两条都不许 → 未配置自成一格，其余五格一字不改（ADR-0128 决定三，越权风险点 ③）。
 4. **决定记录分格**：`ProductionOwnershipDecision` 上 `HandoffRef`（停写证据）保持原义不改名；新加评估结果一格（已确认带确认引用 + 生效时刻；未决带原因 +
    续办引用）。两格不合并——它们是两种证据，合并会让「有停写证据但交接失败」与「无停写证据」在记录上不可分。
 5. **ADR-0128 落文**：本裁决是跨 PS 与 pilotgovernance 读口的协议取舍，且改结果行的形，按 AGENTS「难逆转技术或产品取舍 → 新 ADR」落
    `docs/adr/0128-*.md`（Status 行照 0126 / 0127 的「owner 授权自决」写法，越权风险点单列），README 加一行。
 
 **越权风险点（单列，供 owner 复核）**：① 「接管记录在前」是从 `PAR-GOV-05..07` 防双写的目的推的，UC 3B 字面只写「且」没写先后；② 未决原因直接
-沿用 `SafeHandoffAssessment` 的观察代数五格作为结果行的原因词，没有另立结果词表——若 UC 结果行要求的「安全续办引用」之外还要区分原因，那是另一格。
+沿用 `SafeHandoffAssessment` 的观察代数作为结果行的原因词，没有另立结果词表——若 UC 结果行要求的「安全续办引用」之外还要区分原因，那是另一格；
+③ 观察代数五格改六格：实施时发现裁决 3「未配置 → `QueryUnavailable`」与代码的证据规则相悖，通道 1 改裁为未配置自成一格（`HandoffObservationChannelUnconfigured` /
+`HandoffUnresolvedChannelUnconfigured`）；owner 若认为`查询不可用`该放宽到覆盖未配置，改的是 ADR-0128 决定三与 `validHandoffEvidence` 一处，其余不动。
 
 **能力边界**：读过本票全文、票内引的 UC 3B / `AT-PS-010` / `BD-PS-004` 句、ADR-0027 / 0055 的相关决定；**未读** `production_handoff.go` 与
 `production_ownership.go` 全文——裁的是「两件是否都要、先后、缺格落点、记录分格」四问，不裁端口方法签名与观察代数的字段。
@@ -56,7 +60,7 @@ Blocked by: 无（裁决已落；ADR-0128 由本票实施者按「裁决」节�
 
 **支路未接**。缺三层：
 
-1. **出向端口**（`ports/`）：向他方权威投递范围、取回确认或查询结果，答复落 `HandoffObservation` 五格；生产装配里放未配置适配器（未配置即答 `HandoffObservationQueryUnavailable` → 归属未决 `HandoffUnavailable`，与 ADR-0055 那套「未配置即拒」同形，不冒充成功）。
+1. **出向端口**（`ports/`）：向他方权威投递范围、取回确认或查询结果，答复落 `HandoffObservation` 六格（原五格 + 裁决 B 加的`通道未配置`）；生产装配里放未配置适配器（未配置即答 `HandoffObservationChannelUnconfigured` → 评估未决 `CHANNEL_NOT_CONFIGURED` → 结果行「生产归属未决」带续办引用，与 ADR-0055 那套「未配置即拒」同形，不冒充成功。原句写的是答 `HandoffObservationQueryUnavailable` → 归属未决 `HandoffUnavailable`，两处都按 B 改：那一格的证据形要求对方已给确认引用，未配置时没有；`HandoffUnavailable` 说的是接管**读口**没装，与出向**通道**没配置是两件事）。
 2. **编排步**（`application/submit_shipment_request.go` 的 `Other` 分支，或拆成独立用例）：投递 → 观察 → `AssessSafeHandoff` → 已确认答「非本产品归属结束」返渠道中立关联；未决落「生产归属未决」带 `ContinuationRef`。
 3. **决定记录**：UC 结果行要求携带安全交接结果 / 安全续办引用；今天 `ProductionOwnershipDecision` 只有 `HandoffRef` 一格（装的是停写证据），评估结果没有落点。
 
@@ -70,7 +74,7 @@ Blocked by: 无（裁决已落；ADR-0128 由本票实施者按「裁决」节�
 
 ## 完成判据（落地那笔连理由行一起改；MCP-1 2026-09-07 裁）
 
-1. `ports/` 有面向他方生产权威的出向端口，答复落 `HandoffObservation` 五格；生产装配放未配置适配器，未配置即答 `HandoffObservationQueryUnavailable`（不冒充成功）。
+1. `ports/` 有面向他方生产权威的出向端口，答复落 `HandoffObservation` 六格；生产装配放未配置适配器，未配置即答 `HandoffObservationChannelUnconfigured`（不冒充成功；原句「答 `HandoffObservationQueryUnavailable`」按 2026-09-09 14:18 通道 1 改裁 B 改口，理由见「裁决」3）。
 2. 提交编排的 `ProductionAuthorityOther` 分支真调 `AssessSafeHandoff`：已确认答「非本产品归属结束」并返渠道中立关联，未决落「生产归属未决」带 `ContinuationRef`。
 3. `ProductionOwnershipDecision` 上有评估结果与续办引用的落点，与 `HandoffRef`（停写证据）分格。
 4. 剪基线行：先按头注三分成因（全仓 `AssessSafeHandoff` 只此一处声明才是第二种），在自己那笔的干净检出上两法同得记数、钉 SHA。
