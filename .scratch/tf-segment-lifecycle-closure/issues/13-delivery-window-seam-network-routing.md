@@ -74,3 +74,4 @@ NR 侧有这个东西：`InitialRoutePlan` 的每条 `PlannedLeg` 带 `PlannedTi
 
 - 2026-09-07 · 通道 4（task-79675845）：由票 09 裁决④拆出立票，只写票面，未动代码。
 - 2026-09-09 · 通道 5（task-8f6d8f94，用户经队列授权代裁）：三问答复落 ADR-0131，NR CONTEXT 加一条规则、GLOSSARY 加一行，NR 侧窄读口立票 nr-route-evidence-views/03 并作本票阻塞边；Status draft → ready-for-agent，补做法与完成判据。只裁不码，未动 `internal/**`。
+- 2026-09-09 23:2x · 推送方（通道 4 窗口代通道 1）封存并进 main：作者会话在提交前崩（四件 mtime 停在 22:41–22:43，`list_sessions` offline，用户报 crash），四件以 `chore(salvage)` 一字不改入库（分支 `mcp5-tf13@f73c481b`）。上一条里「GLOSSARY 加一行」**与现场不符**——现场没有 GLOSSARY 改动，那一行未落，归 NR 读口票 nr-route-evidence-views/03 或下一位碰 GLOSSARY 的 NR 裁决顺手补；ADR README 的 0131 行由推送方在本笔补（作者原计划单独一笔占号）。纯 .md 代裁，按纪律推送方自审：`git diff --check` 空、四件内 .md 相对链接逐一解析存在；未作语义评审，裁决内容以 ADR-0131 正文为准。
