@@ -1,7 +1,7 @@
 # HTTP 归属视图对「其他权威」决定不渲染未决原因、续办引用与确认引用：生产上唯一走得到的 Other 路在接入面缺格
 
 Category: bug
-Status: resolved——2026-09-09 18:5x 通道 3 完成（18:4x 认领），分支 `mcp3-wbr11` 基 main `d5a35960`，代码 tip `52b53ddb`；判据 1–4 全部，完成记录见文末 Comments；进 main 的 SHA 由重放方另记。此前 in-progress——2026-09-09 18:4x 通道 3 认领（用户 18:2x 经 IDP 队列指示由通道 3/4 自派；通道 3 18:29 点名后自领，分支 `mcp3-wbr11`，树 `D:/tops/idp-parcel-mcp3-wbr11`，基 main `d5a35960`；01 已进 main `8a1c403b`，阻断解除）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/01 评审（通道 3，钉 `a5bff461`）Spec 非阻断 1 点名「拆出物无票」；
+Status: resolved——2026-09-09 18:5x 通道 3 完成（18:4x 认领），分支 `mcp3-wbr11` 基 main `d5a35960`，代码 tip `52b53ddb`；判据 1–4 全部，完成记录见文末 Comments；**19:54 进 main `94893c35`**（重放，非作者评审 ← 通道 2 无阻断；进 main 记录见文末）。此前 in-progress——2026-09-09 18:4x 通道 3 认领（用户 18:2x 经 IDP 队列指示由通道 3/4 自派；通道 3 18:29 点名后自领，分支 `mcp3-wbr11`，树 `D:/tops/idp-parcel-mcp3-wbr11`，基 main `d5a35960`；01 已进 main `8a1c403b`，阻断解除）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/01 评审（通道 3，钉 `a5bff461`）Spec 非阻断 1 点名「拆出物无票」；
 作者完成记录「未落 ①」写「归 PS 另立票」，这就是那张票。**Blocked by [01](./01-ps-safe-handoff-is-assessed-nowhere-because-nothing-hands-over.md) 进 main**：本票改的
 `newOwnershipView` 读的是 wbr/01 那五笔给 `ProductionOwnershipDecision` 加的评估格，01 未进 main 之前无处可接。PS 地盘。
 Blocked by: 01
@@ -40,6 +40,16 @@ JSON 契约两问：① Other + 交接未决 的原因与续办引用，是复�
 
 通往他方权威的真通道（`PAR-GOV-05..07` 实例半边）不归本票；决定记录落库（wbr/01「未落 ③」）不归本票；wbr/01 评审 Spec 非阻断 3
 （`assessedAt` 取投递之前的 `decidedAt`，评估时刻系统性早于确认生效时刻）是作者记下的已知取舍，真通道接上时再看，不在此改。
+
+## 进 main 记录（2026-09-09 19:54，通道 1 推送；本节由 20:0x 的接手会话据 git 现场与通道 1 队列补记——推送那一任 19:55 中断，只改了 Status 一行没写这里）
+
+分支 `mcp3-wbr11` 四笔在隔离树 `%TEMP%\idp-replay-1950` 重放到 `efcdeabc`（= `d5a35960` + tasks.md 19:3x 簿记一笔）之后，零冲突：
+`07f99781→d9958e1f` / `1c10b9b6→411d89f4` / `52b53ddb→f6268470` / `a0b3339f→94893c35`——四对 `patch-id --stable` 逐对相等，
+`git diff a0b3339f 94893c35 -- <本票四文件>` 为空，全树差只有 main 上多的那一份 tasks.md（20:2x 复核）。清点在 `94893c35` 干净检出上重生成零差，不需清点笔（20:1x 实测）。
+**远端 `main = 94893c35`**（19:54 推；20:03 `ls-remote` 同 SHA）。推前那一任有没有跑含 DSN 全量没留下记录，20:14–20:18 接手会话在同一棵干净检出补跑一次：
+gofmt -l 空、`go build ./...` / `go vet ./...` 退 0、含 DSN `go test -p 1 -count=1 ./...` **102 ok / 0 FAIL / 15 无测试 / 0 cached，101 s**；探针 `TestFreezeScopesAreInvisibleToEachOther` `-v` PASS（非 SKIP）。
+分支指针改名 `merged/mcp3-wbr11`，远端 `mcp3-wbr11` 删；树 `D:/tops/idp-parcel-mcp3-wbr11` 与 `idp-replay-1950` 先比内容再 `worktree remove`（未加 `--force`）。
+评审 Spec 非阻断 1、Standards 非阻断 2 随票记不另立；未落 ① admin-web `handoffConfirmationReference` 一格归 awf/22 之后的 shipment-request 页面票。
 
 ## Comments
 
@@ -81,3 +91,12 @@ gofmt -l 空。
 **判断题**（供评审）：① 复用 `unresolvedReason` 而非另立 `handoffUnresolvedReason`——同一结果行一处渲染 vs. 两套词表进一格；② `handoffConfirmationReference` 不带
 `effectiveAt`——票面未要求，加了就是替调用方决定它要不要；③ 装配测试用替身答 Other 而不是往治理登记册里登一条他方权威区间——后者是隔离形态（ADR-0091）的路，
 要合成坐标与接管记录写侧，本票只证「决定到响应体」这一段。
+
+**评审 ← 通道 2 · 钉 `a0b3339f` · 19:49**（基 `d5a35960`，隔离树 `%TEMP%\idp-review-wbr11` 只读；原文在通道 1 台账 `task-68149649`，全文 19:48 经队列送达通道 1）
+
+- **范围核**：`git diff --stat d5a35960..a0b3339f` 恰四文件（票面 +42/−1、`cmd/parcel-api/assemble_submission_test.go` +139/−1、PS http `submit_shipment_request.go` +35/−10、`_test.go` +83/−6）；domain / application / ports / UC / ADR-0128 零改动（判据 3 ✓）。
+- **验证**：`go build ./...` 0 · `go vet ./...` 0（含编译 `cmd/parcel-api` 测试文件）· `go test -count=1` PS `adapters/http`、`application`、`internal/architecture` 三包 ok · gofmt -l 两目录空。`cmd/parcel-api` 带 DSN 那例评审处未跑（无 DSN、55432 让给通道 3），作者自报 PASS 98 未复核——推送方 20:1x 在 `94893c35` 含 DSN 全量 102 ok 覆盖（见进 main 记录）。
+- **Spec**：阻断 0。非阻断 ① `TestAnOtherAuthorityDecisionReachesTheEndpointWithItsHandoffContinuation`「不建单」只由响应体 `shipmentRequestId == ""` 钉，`submissionAssembledWith` 交回的 `outbox.Store` 被 `_` 丢弃——UC-PS-001 结果行「不得建立接受或拒绝决定、不得同时投递」是持久化层不变式，同文件 `claimSubmittedEnvelope` 已有取信封的路，补一句「outbox 零信封」即可把「不建单」钉到库里而不只钉到 JSON。无发现：① `newOwnershipView` Other + 未决走 `UnresolvedReason()` / `ContinuationReference()` 复用既有两格、只在评估未决时写，Other + 已确认走 `ConfirmationReference()`，新格与 `handoffReference` 分列、无 `effectiveAt`；Authority = Unresolved 那条 `UnresolvedDetails()` 路字面未动；两分支互斥由 `WithSafeHandoff` 拒非 Other 决定守住。② http 两例是加不是替（`newFixture` 仍交完整确认替身，表驱动 `OTHER_PRODUCTION_AUTHORITY` 格未动；`newFixtureHandingOffThrough` 只换一参，去掉的 `handoff` 字段原本无人读）。③ `submissionAssembledWith` 纯抽取；`fixedSubmissionIntake` 替的是生产 `endpoints.go` 也放 `UnconfiguredIntake{}` 的那一口，其余皆生产件。④ 两套原因词表（`OwnershipUnresolvedReason` 四值 / `HandoffUnresolvedReason` 六值）实核无交集；admin-web `api.ts` 既有三名与 JSON 同字。
+- **Standards**：阻断 0。非阻断（皆判断题级）① Duplicated Code——`otherAuthorityOwnership.DecideProductionOwnership` 与 `permittingOwnership.DecideProductionOwnership` 六处逐字相同、只差四格，可抽 `syntheticOwnershipSpec(anchor, decisionID)`；② `newOwnershipView` 未决分支 `ContinuationReference()` 的 `present == false` 不可达（domain 在 `AssessSafeHandoff` 构造期已拒无续办引用的未决，ADR-0128 决定二），若某天可达会零信号，属防御性写法非错。无发现：注释全中文、只写取舍与所引规则；跨文件引用皆符号名 / 编号，无行号无计数；生产文件未新增 import；适配器只读决定上编排已记的格、不造值；http 测试引 `adapters/productionhandoff` 为的是票面点名的「生产同款未配置适配器」，architecture 包 ok。
+- **判断题三道**均同意作者裁定：① 复用 `unresolvedReason`——结果行同为「生产归属未决 + 安全续办引用」，词表无交集、`authority` 格已分身份、admin-web 零改动即渲染；② 不带 `effectiveAt`——票面与 UC 3B 只要渠道中立关联，真通道要问时加一格是加不是改；③ 替身答 Other 而不登治理登记册——切在 ADR-0128 决定四那条缝上，走 ADR-0091 隔离形态是 wbr/01 未落 ③ 的地盘。
+- **结论**：两轴无阻断，可进 main。推送方处置：三条非阻断随票记，不另立票（Spec ① 作者可选补、Standards ①② 备注）。
