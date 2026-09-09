@@ -1,7 +1,7 @@
 # 21 客户服务规则版本发布得出来、管理台看不见：管理台补第八册读面
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户 12:3x 经 IDP 队列授权「你自决，目标是全部解决」）：票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 完成记录末尾「顺带量到」的那件——后端第八册（pc-gaps/05，0023，ADR-0104）已落，`apps/admin-web/src` 里 `CUSTOMER_SERVICE_RULE` 零命中——**立票，取与 06 的 B 笔同形的读面**；票 [18](./18-customer-service-rule-form.md) 的写签等它
+Status: in-progress——2026-09-09 13:0x 通道 3 认领（task-2306e16d，分支 `mcp3-awf21`，基 `74ef0da8`；接着同分支做票 18）；此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户 12:3x 经 IDP 队列授权「你自决，目标是全部解决」）：票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 完成记录末尾「顺带量到」的那件——后端第八册（pc-gaps/05，0023，ADR-0104）已落，`apps/admin-web/src` 里 `CUSTOMER_SERVICE_RULE` 零命中——**立票，取与 06 的 B 笔同形的读面**；票 [18](./18-customer-service-rule-form.md) 的写签等它
 Blocked by: 无（后端 `?kind=CUSTOMER_SERVICE_RULE` 已在 main；本票只动管理台）
 
 ## 缺口
