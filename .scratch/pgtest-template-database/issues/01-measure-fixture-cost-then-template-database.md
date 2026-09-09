@@ -1,7 +1,7 @@
 # `internal/platform/pgtest` 改模板库：先量四段各占多少，再让每用例 `CREATE DATABASE … TEMPLATE …`
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：MCP-5 09-08 提议、parallel-sessions「验证」节已把解法与不许走的路写死（模板库；不关 `fsync`、
+Status: in-progress——2026-09-09 12:0x 通道 5 认领，分支 `mcp5-pgtest01`，基 `74ef0da8`。立票经过：2026-09-09 通道 1 代裁立票（用户授权自决）：MCP-5 09-08 提议、parallel-sessions「验证」节已把解法与不许走的路写死（模板库；不关 `fsync`、
 不用事务回滚包裹），本票是那一段的票。**先量再改**，量不出「时间几乎全在夹具」就停下报数、不改
 Blocked by: 无
 
