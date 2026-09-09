@@ -1,7 +1,7 @@
 # 24 各册封闭集的 `*Named` 反查合一到 awf/12 的泛型 `closedCodeNamed`
 
 Category: chore
-Status: resolved——2026-09-09 14:4x 通道 6 交付（接续单 task-bb38aeda，原单 task-057b6dc3；分支 `mcp6-awf24`，代码 tip `60cdca52`，基 `74ef0da8`，逐笔 SHA 与验证强度见文末「完成记录」；main 上的 SHA 与非作者评审结论待通道 1 重放后补「进 main 记录」）。完成判据四条：九个 `*Named` 换成一行委托、导出名不变；一张表驱动测试盖二十个集的往返与集外拒收（重构前先绿）；PC 包组 + 反向依赖 + architecture 全 ok、vet 0；改了什么见完成记录。**一处按地盘留下**：`CommercialObjectKindNamed` 在 `publication_canonicalization.go`（通道 3 awf/18 在途地盘），函数体本票不换，行为已进表。此前 in-progress——2026-09-09 通道 6 认领（分支 `mcp6-awf24`，基 `74ef0da8`）。原 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：票 13 两份评审（通道 4、通道 3）与票 15 评审都点名同一条——`domain` 包里
+Status: resolved——2026-09-09 14:4x 通道 6 交付（接续单 task-bb38aeda，原单 task-057b6dc3；分支 `mcp6-awf24`，代码 tip `60cdca52`，基 `74ef0da8`，逐笔 SHA 与验证强度见文末「完成记录」；main 上的 SHA 与非作者评审结论见文末「进 main 记录」与 Comments——2026-09-09 15:57 远端 main = `56ed4111`）。完成判据四条：九个 `*Named` 换成一行委托、导出名不变；一张表驱动测试盖二十个集的往返与集外拒收（重构前先绿）；PC 包组 + 反向依赖 + architecture 全 ok、vet 0；改了什么见完成记录。**一处按地盘留下**：`CommercialObjectKindNamed` 在 `publication_canonicalization.go`（通道 3 awf/18 在途地盘），函数体本票不换，行为已进表。此前 in-progress——2026-09-09 通道 6 认领（分支 `mcp6-awf24`，基 `74ef0da8`）。原 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：票 13 两份评审（通道 4、通道 3）与票 15 评审都点名同一条——`domain` 包里
 每个封闭集各写一份「从 `String()` 原词反查码」的循环，一字同形；awf/12 已写了泛型 `closedCodeNamed[Code ~uint8]`（`publication_canonicalization_acceptance_rule_package.go`
 一带），十个 `*Named` 共用它。12 / 13 / 15 都进 main 了，可以合一
 Blocked by: 无
@@ -58,3 +58,13 @@ Blocked by: 无
 **验证强度（钉 `60cdca52`，在分支树 `D:/tops/idp-parcel-mcp6-awf24` 上跑；树干净、无未提交改动，等价于干净检出）**：`gofmt -l internal/partycommercial/` 空；`go build ./...` / `go vet ./...` 退 0；`go test -count=1 ./internal/partycommercial/... ./internal/architecture/...` 全 ok；反向依赖（`go list` 反查 `internal/partycommercial/domain`：`cmd/parcel-api` / `parcel-commercial` / `parcel-dispatch`、PS postgres、PC postgres、NR / PS / SA / TF / VE 各自的 partycommercial 适配器）**带 DSN `-p 1 -count=1` 全 ok**（PC postgres 61.6s、PS postgres 45.2s——真跑不是跳过；`cmd/parcel-commercial` 的 `TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView` 单跑 `-v` 是 PASS 不是 SKIP）。通道 5 的量数窗口 14:16–14:21 已关（14:18 广播）后才跑带 DSN 的包。领域包无 HTTP / pgx 导入进入（`go vet` 与 architecture 门禁未报）。证据层级 **S**（纯重构，无实例参数）。
 
 **未做（不在本票）**：`CommercialObjectKindNamed` 的一行委托（理由见上）；`NewTaxCaliber` 的 default 分支改成调 `valid()`（那里的判连着分类，改它是另一件事）。
+
+## 进 main 记录（2026-09-09 15:57，通道 1 推送）
+
+- 分支 → main 三对 SHA：`363544ef→550b89c9`（表驱动测试）/ `60cdca52→8eefc6ac`（一行委托）/ `ff442245→e609d8a4`（本票面）；认领笔 `cc22b9b0` 未重放（票面终态与分支逐字同）。清点重生成 `56ed4111`（partycommercial 测试文件 126→127、合计 828→829）。远端 main = `56ed4111`（`ls-remote` 核过）。
+- 推送方验证（隔离树 `%TEMP%\idp-replay-2124` @ `56ed4111`）：gofmt 空、build/vet 0、含 DSN `go test -p 1 -count=1 ./...` **100 ok / 0 FAIL / 16 无测试**，9.5 分钟；PC postgres 62.9s、PS postgres 45.6s（真跑不是跳过）。与 awf/21 三笔同链一跑。
+- 拆树前比对：`git diff ff442245 main -- internal/partycommercial/domain/ <本票面>` 为空；树 `D:/tops/idp-parcel-mcp6-awf24` 干净后拆，指针改名 `merged/mcp6-awf24`，远端 `mcp6-awf24` 保留到通道 6 下次收拾。
+
+## Comments
+
+- 2026-09-09 15:1x · 评审 ← 通道 1（非作者；`Task` 子代理认证失败，按 skill 退到串行两遍，隔离检出 `%TEMP%\idp-review-awf24` @ `ff442245`，基线 `cc22b9b0`）：**两轴无阻断，可重放。** Standards 阻断 0 / 非阻断 1——`pricing_caliber.go` 新加的 `TaxDisposition.valid` 与 `NewTaxCaliber` 的 default 分支是同一道边界判写在两处，作者「未做」已留待，不另立票。Spec 阻断 0 / 非阻断 2——(1) `CommercialObjectKindNamed` 按地盘留旧循环，交下一个动 `publication_canonicalization.go` 的人（通道 3 awf/18，派单已写）；(2) `closed_set_named_test.go` 的成员表是手写快照，某集加成员时表不会自己变红，靠 `String()` 空串守集外那半。核过：九集接受判据逐一与旧循环等价；二十个 `*Named` 全进表，`-v` 二十子测试 PASS；vet 0。

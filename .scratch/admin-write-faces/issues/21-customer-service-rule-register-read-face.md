@@ -1,7 +1,7 @@
 # 21 客户服务规则版本发布得出来、管理台看不见：管理台补第八册读面
 
 Category: enhancement
-Status: resolved——读面落地：`?kind=CUSTOMER_SERVICE_RULE` 第十格（分支 `mcp3-awf21`，基 `74ef0da8`：`4f956057` 管理台一笔；2026-09-09 14:2x，通道 3 接续会话接 13:0x 全通道中断前的同通道现场续做；完成记录在文末；main 上的 SHA 待通道 1 重放后对照）。此前 in-progress——2026-09-09 13:0x 通道 3 认领（task-2306e16d，分支 `mcp3-awf21`，基 `74ef0da8`；接着同分支做票 18）；此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户 12:3x 经 IDP 队列授权「你自决，目标是全部解决」）：票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 完成记录末尾「顺带量到」的那件——后端第八册（pc-gaps/05，0023，ADR-0104）已落，`apps/admin-web/src` 里 `CUSTOMER_SERVICE_RULE` 零命中——**立票，取与 06 的 B 笔同形的读面**；票 [18](./18-customer-service-rule-form.md) 的写签等它
+Status: resolved——读面落地：`?kind=CUSTOMER_SERVICE_RULE` 第十格（分支 `mcp3-awf21`，基 `74ef0da8`：`4f956057` 管理台一笔；2026-09-09 14:2x，通道 3 接续会话接 13:0x 全通道中断前的同通道现场续做；完成记录在文末；main 上的 SHA 见文末「进 main 记录」——2026-09-09 15:57 远端 main = `56ed4111`，代码笔 `4f956057→4dab1d46`）。此前 in-progress——2026-09-09 13:0x 通道 3 认领（task-2306e16d，分支 `mcp3-awf21`，基 `74ef0da8`；接着同分支做票 18）；此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户 12:3x 经 IDP 队列授权「你自决，目标是全部解决」）：票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 完成记录末尾「顺带量到」的那件——后端第八册（pc-gaps/05，0023，ADR-0104）已落，`apps/admin-web/src` 里 `CUSTOMER_SERVICE_RULE` 零命中——**立票，取与 06 的 B 笔同形的读面**；票 [18](./18-customer-service-rule-form.md) 的写签等它
 Blocked by: 无（后端 `?kind=CUSTOMER_SERVICE_RULE` 已在 main；本票只动管理台）
 
 ## 缺口
@@ -57,6 +57,13 @@ admin-web 只跑 tsc + run-tests；Go 侧零改动不跑。共享文件（`polic
 
 **要通道 1 落的装配行**：无。
 
+## 进 main 记录（2026-09-09 15:57，通道 1 推送）
+
+- 分支 → main 三对 SHA：`1d4a308c→35bddd70`（认领）/ `4f956057→4dab1d46`（管理台一笔）/ `4de2d30a→e8566de7`（本票面 + 票 18 转 in-progress）。清点不因本票变（只动 admin-web）；同链前三笔是 awf/24，链尾清点重生成 `56ed4111`。远端 main = `56ed4111`（`ls-remote` 核过）。
+- 推送方验证（隔离树 `%TEMP%\idp-replay-2124` @ `56ed4111`）：gofmt 空、build/vet 0、含 DSN `go test -p 1 -count=1 ./...` **100 ok / 0 FAIL / 16 无测试**，9.5 分钟；admin-web 侧以通道 6 评审在隔离树复核的 tsc 0 / run-tests 177 为据，推送方未重跑。
+- 分支 `mcp3-awf21` **仍在途**（通道 3 在同分支往上做票 18），树不拆、指针不改名；18 完工时只重放 `4de2d30a` 之后的笔。
+
 ## Comments
 
 - 2026-09-09 14:2x · 通道 3（接续会话）：收口。一笔 A；票 18 同笔转 in-progress。
+- 2026-09-09 15:13 · 评审 ← 通道 6（非作者）· 钉 `mcp3-awf21@4de2d30a`（代码 `4f956057`）· 基线 `1d4a308c`：**两轴无阻断，可合入。** 复核：隔离树 `%TEMP%\idp-review-awf21` @ `4de2d30a`，junction 借主树 node_modules，tsc 退 0、run-tests 177 pass / 0 fail（作者数字属实）；五文件 +285/−11，Go 侧零改动。Standards 阻断 0 / 非阻断 2——(1) `policy-rows.test.ts` 夹具头注「钉住的三行」是跨文件计数（AGENTS 计数条），且夹具非照抄（`csr-full` 两条 claimDeadlines vs Go 一条）；(2) `api.ts` `CustomerServiceRuleRecord` 头注逐字列 `ClaimDeadlineKind` 三值，今天对，建议改符号名（判断题）。Spec 阻断 0 / 非阻断 1——票面「缺口」写 days、HTTP 行体是 `durationDays`，代码按判据 1 取后者对，票面措辞松。判据 1–5 全 ✓：三个 Record 与 `customerServiceRuleBody` / `ContentBody` / `claimDeadlineBody` / `minimumMaterialsBody` 逐键对上；适用对象恰一栏显「服务产品:」/「客户合同:」；两张子表合栏顺序与 postgres `ORDER BY` 一致；无期限种类词表故原词直显；来源句同 06 B 笔且通道名 `CUSTOMER_SERVICE_RULE_BODY` 存在；「没有册可看」已退场 n/a；五条测试覆盖三态 + 两键皆无 / 皆有 + 空数组；票 18 转态落在票面笔。契约兜底：后端两数组一律在场；0023 CHECK 撑住恰一。无越界改动。隔离树已拆，作者分支未碰。

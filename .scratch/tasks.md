@@ -1371,3 +1371,37 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - 本笔：上段 23 份文件 + 本节，pathspec 提交进 main；推前 `ls-remote` 核 `74ef0da8`。纯 .md / .ps1，不跑 Go 门禁；`owner-review-queue.ps1` 改后跑过一遍能生成、0027 / 0029 / 0055 不再命中。
 - **接下来**：五张完工报到后各派非作者评审（20 分钟）→ 无阻断者重放进 main（PS 两票 wbr/01 与 wbr/08 都动 PS，迁移 0020 / 0021 两号已分开，先到先进）；awf/21 进 main 后通道 3 接 18；pgtest/01 若转 needs-info 报数就停。**归用户**（不变）：CI 计费（`idp-xyz` 组织 Actions 付款 / spending limit，仓外动作）；其余 ADR 越权点预审派法（上节「未复核」那段，本节已由前一任直接写了认可行——十篇 ADR + 十二张票，owner 若不认可走 supersede）；`d_tasks.txt` 留仓根还是删。
 - **本节五数**：CI main 绿/总 未量（计费未解，run 不起）· 集成时延中位数 —（本节 0 票进 main）· 重放笔数 0 · 重复开发 0 次 · 会话重置 **6 次**（13:0x 通道 1–6 同时中断，含通道 1 自己）
+
+## 2026-09-09 15:0x 通道 1 新会话接续（接手时 `main = origin/main = 8f020eff`；用户先要一次自带 `ask_question`，再「监听队列」→「各通道原来的工作全部中断，如何继续，是否重派」）
+
+### 14:2x–14:4x（本段由 15:0x 的接手会话据现场补记，前一任断在 14:21 之后、这一段它自己没写下）
+
+- 14:21 前一任收 awf/21 完工报（`mcp3-awf21@4de2d30a`，代码 `4f956057`），裁了通道 2 的 wbr/01 相悖报取 **B**（观察代数加第六格 `HandoffObservationChannelUnconfigured` → 未决原因 `CHANNEL_NOT_CONFIGURED`，其余五格不动；ADR-0055 同形；通道 2 14:19 已读），14:22 建了 `%TEMP%\idp-review-awf21`（detached @ `4de2d30a`，未用）。此后无记录。
+- 各通道在 14:2x 继续：通道 6 `363544ef`（14:16）/ `60cdca52`（14:23）/ `ff442245`（14:26，awf/24 resolved），**完工报未发出**；通道 4 `920bab06`（14:19，wbr/08 第一层）+ 第二层未提交（mtime 至 14:24，含新文件迁移 0020）；通道 5 `8a81aa28`（14:19，pgtest/01 取证：迁移 93.6%，停下条件不触发）；通道 2 域层落 B（`production_handoff.go` mtime 14:21）+ 端口 / 编排改到一半（`NewSubmitShipmentRequestHandler` 加参，`cmd/parcel-api/assemble_submission.go` 与 PS http 测试两处调用点未跟上，build 红），六份未提交 +637/−13；通道 3 在 `4de2d30a` 把 18 转 in-progress 后一行未写。
+- **14:48:57 全部会话中断**——共享树 70 份文件与 `mcp2-wbr01` 树上三份同一秒被重写成 CRLF（内容零差），Docker Desktop 同时掉了；`list_sessions` 对 2–6 显 `running / idle`、lastActivity 停 14:10–14:25，这一格照旧不可信。
+
+### 15:0x 只读盘点 → 点名 → 五张接续单（第二张）+ 一张评审
+
+- `branch-state.ps1` 钉 `8f020eff`：main = origin；五支在途分支全部已推 origin（同 SHA）；**没有一行代码丢失**。共享树 70 个 CRLF ` M` 内容零差（`--ignore-cr-at-eol` 0 件）→ `git checkout --` 复原，状态零行（`d_tasks.txt`、`docs/api/` 两件 untracked 归用户）。Docker Desktop 15:01 拉起、`compose up -d`，`idp-parcel-postgres-gate` healthy。
+- 15:00 点名（截止 15:04），15:00:53–15:01:02 **5 个应答全到**（2–6 均空闲 · 无地盘 · 余量充足）。第一轮接续单五张各结 failed（现场 SHA 写进 result）；awf/24 的 `bb38aeda` 据分支结 **done**。
+- 15:07–15:08 派：**wbr/01 → 2**（`cf833fc9`，从 `a9566d7b` + 六份未提交，裁决 B 全文写进单里，先补两处调用点、绿了分层提交）· **wbr/08 → 4**（`c608979f`，从 `920bab06` + 第二层未提交 + 迁移 0020，带 DSN 跑 PS postgres + migrations 绿了同一笔提）· **pgtest/01 → 5**（`0864c5d3`，从 `8a81aa28`，做法第 2 步模板库起）· **awf/18 → 3**（`5985bf37`，同分支 `mcp3-awf21@4de2d30a` 往上做，新 `*Named` 直接用 `closedCodeNamed`）· **awf/21 评审 → 6**（`e40acaa0`，非作者，钉 `4de2d30a` 代码 `4f956057` 基线 `1d4a308c`，复用 `idp-review-awf21`，20 分钟）。全部写明「不 worktree add、不另起分支、不再提认领笔、不许 checkout/stash 抓掉现场」。
+- **awf/24 评审由通道 1 自己跑**（`Task` 子代理认证失败 → 按 skill 退到串行两遍，检出 `%TEMP%\idp-review-awf24` @ `ff442245`）：Standards 0 阻断 / 1 非阻断（`TaxDisposition.valid` 与 `NewTaxCaliber` default 同一道边界判，作者已留待）；Spec 0 阻断 / 2 非阻断（`CommercialObjectKindNamed` 按地盘留旧循环、交下一个动 `publication_canonicalization.go` 的人；表驱动测试成员表是手写快照）。九集接受判据逐一与旧循环等价核过；20 个 `*Named` 全进表，`-v` 20 子测试 PASS，vet 0。**可重放。**
+- **24 重放上链** `%TEMP%\idp-replay-2124`（基 `8f020eff`）：`363544ef→550b89c9`、`60cdca52→8eefc6ac`、`ff442245→e609d8a4`（票面 Status 行与 main 上未认领的原句撞一次，取分支版；认领笔 `cc22b9b0` 未重放，票面终态与分支逐字同）。链上 gofmt 空、build/vet 0、PC 四包 + architecture ok（无 DSN）。**含 DSN 全量与推送等 21 评审到后一并做**——两票一跑，省一次占实例 10 分钟。
+- **接下来**：21 评审到 → 无阻断则 `1d4a308c / 4f956057 / 4de2d30a` 重放到链上 → tip 重生成清点 → 广播占实例 → 含 DSN `-p 1 -count=1 ./...` 一次 → `push <sha>:main` → 广播 → 24 / 21 票面补「进 main 记录」+ 评审 Comments，`mcp6-awf24` 改名 `merged/`（`mcp3-awf21` 还在途，18 在同分支）。其余四单完工报到后各派非作者评审。**归用户**（不变）：CI 计费；`d_tasks.txt` / `docs/api/` 两件 untracked；14:48:57 那次「整批 CRLF 重写 + 全会话中断 + Docker 掉线」的成因（本机层面，仓内查不出）。
+- **本节五数**：CI main 绿/总 未量（计费未解）· 集成时延中位数 —（本节尚 0 票进 main）· 重放笔数 3（未推）· 重复开发 0 次 · 会话重置 **6 次**（14:48 通道 1–6 同时中断，含通道 1 自己）
+
+## 2026-09-09 15:3x 通道 1 新会话接续（接手时 `main = origin/main = 8f020eff`；用户先要一次自带 `ask_question`，再「监听队列」→ 截图 →「各通道原来的工作全部中断，如何继续，是否重派」）
+
+### 15:1x–15:25（本段由 15:3x 的接手会话据现场补记，前一任断在 21 上链之后、这一段它自己没写下；上节末两条「接下来」与「五数」是它 15:16 写的，未提交，本笔一并入库）
+
+- 15:13 通道 6 报 awf/21 评审（`e40acaa0` 结 done，全文在台账 result）：两轴无阻断；Standards 非阻断 2（`policy-rows.test.ts` 夹具头注跨文件计数；`api.ts` 头注逐字列 `ClaimDeadlineKind` 三值）、Spec 非阻断 1（票面「缺口」写 days、HTTP 行体是 `durationDays`）；隔离树复核 tsc 0 / run-tests 177。前一任据此把 `mcp3-awf21` 三笔重放到链上：`1d4a308c→35bddd70`、`4f956057→4dab1d46`、`4de2d30a→e8566de7`，链 tip `e8566de7`（基 `8f020eff`，前三笔是 24）。未做：清点重生成、含 DSN 全量、推。
+- 各通道 15:1x 继续：通道 2 落未配置适配器 `adapters/productionhandoff/unconfigured_channel.go`(+_test)（mtime 15:17–15:18）、补 `cmd/parcel-api/assemble_submission.go` 一处调用点（15:18:49），九份未提交；通道 3 抽 `domain/customer_service_rule.go` 帮助函数（+48/−19，15:18:03），一份未提交；通道 4 **15:14 提第二层 `821282dc`**（迁移 0020 + store + `creditSelectorFromRow`）并推，树干净；通道 5 写模板库 `pgtest/template.go`（新）+ `database.go`（36/36，15:19:02），两份未提交。
+- **约 15:19 全部会话第三次中断**（各树最后 mtime 15:18:04–15:19:02）。15:25:57–58 共享树同一批 70 份文件再次被重写成 CRLF（内容零差；`git diff --name-only` 只列 `tasks.md`，` M` 全靠 `status` 才看得见）——这个时刻是 Cursor 重开工作区的时刻，不是崩的时刻；与 14:48:57 那次同一批文件、同一形态。
+
+### 15:3x 只读盘点 → 复原 → 点名 → 接续单第三张 + adle/02 → 24 / 21 上链
+
+- `branch-state.ps1` 钉 `8f020eff`：main = origin；五支在途分支全部已推 origin（同 SHA）；**没有一行代码丢失**。70 份 CRLF 幻影 `git checkout --` 复原（取列表用 `status --porcelain`，`diff --name-only` 看不见它们），共享树只剩 `tasks.md`（前一任 18 行）与两件归用户的 untracked。Docker 门禁 healthy（未掉）。
+- 旧接续单四张各结 failed（result 写 15:3x 现场：分支 tip、未提交文件 numstat 与 mtime）。15:40 点名（截止 15:44），15:41–15:43 **5 个应答全到**：2 / 4 / 5 / 6 空闲无地盘；通道 3 新会话已自行按 `5985bf37` 接上 awf/18（现场核对一致，`customer_service_rule.go` 是它自己的在途）。
+- 15:45–15:48 派：**wbr/01 → 2**（`1eef363a`，从 `a9566d7b` + 九份未提交，第二张 `cf833fc9` 的裁决 B 全文指回去读）· **awf/18 → 3**（`47ef95d8`，只换台账号，三条差异：新 id / 55432 窗口 / 写到可提就提）· **wbr/08 → 4**（`18658c56`，从 `821282dc` 树干净：对判据自列第三层缺什么、验证、完成记录）· **pgtest/01 → 5**（`171e3119`，从 `8a81aa28` + 两份未提交：先自列模板库该钉什么再读 diff，pgtest 自测绿先提一笔）· **adle/02 → 6**（`8fef2107`，`branch-state.ps1 -Classify` 换判据，新树 `mcp6-adle02` 基 `8f020eff`，零交集；预告可能被 wbr/08 评审打断一次）。五单都写「不 worktree add、不另起分支、不再提认领笔、不许 checkout/stash 抓掉现场、**写到可提的点就先提**」。
+- 24 / 21 上链续做：链 tip `e8566de7` 上重生成清点 → `56ed4111`（partycommercial 测试文件 126→127、合计 828→829；21 只动 admin-web 不入清点口径）。15:47 广播「窗口开」占 55432，隔离树 `%TEMP%\idp-replay-2124` 上 gofmt 空、build/vet 0、含 DSN `go test -p 1 -count=1 ./...` 一次——结果与推送见下一条。
+- **归用户**：CI 计费（不变）；`d_tasks.txt` / `docs/api/` 两件 untracked（不变）；**全会话中断的成因本机层面**，本节多两条取证：(a) 三次中断 13:09 / 14:48 / 15:19 各间隔 100 / 31 分钟，六个通道同秒停，是 Cursor 进程级不是会话级；(b) 70 份 CRLF 重写发生在**重开工作区**那一秒（15:25:57–58），git 不是写入者（`.gitattributes` 对 `*.go/*.md/*.sql` 是 `eol=lf`，git 写盘只会写 LF），且两次都是同一批 70 份——它们更像「Cursor 重开时恢复的编辑器标签」而不是随机文件。可核一件：重开后编辑器里开着的标签是不是就是这 70 份；若是，工作区设置 `"files.eol": "\n"` 能让恢复时不再写成 CRLF。仓内不改（`.vscode/` 归用户）。
