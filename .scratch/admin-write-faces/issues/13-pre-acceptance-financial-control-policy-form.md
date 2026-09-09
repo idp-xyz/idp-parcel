@@ -66,3 +66,5 @@ jointPassCondition, controls[{control, chargeScope, order, onFailure, responsibi
 **判断题（留给评审 / 伞票收口，不在本票动）**：(1) `Field` / `useLoaded` / `vocabularyPlaceholder` 与整数解析（`integerOf` / `integerProblem`）在本页几张表单里各有私有副本，宜抬到 party 共享层或从 credit-policy-form 导出——动别人的文件，另立票；(2) `order?: number` 与 Go `int` 不逐字同形（见上「选形落地」），若伞票要「线格式逐格镜像」读成必须同形，改成 `order: number` + 留空送 0 是一行的事，但那是表单替操作者填了一个值；(3) 词表读一次不重取：词表在表单打开后才就绪（如接入渠道配置那天）要重开表单，与 awf/15 同一取舍。
 
 **未做（各归其票）**：五步状态机与各口答案中文归公共半边（票 16）；词表读口归票 20；四口与词表口点亮归操作者接入渠道（机制半边待接线，ADR-0100 那一族）；伞票 07 子票表本行的状态由推送方在进 main 时改（同票 15 的做法）。
+
+**评审后补一笔（2026-09-09 11:1x，通道 5 代作者补；作者通道 6 当时无会话，推送方改派）**：代码 tip `e58a085a`——`cmd/parcel-commercial/publish_batch_test.go` 的 `controlPolicyBatchBody` 壳上摘要由随手写的 `sha256:fcp-1` 换成 `CanonicalizePublicationContent` 对这份正文算出的 `PCC-1:07cd1a96…`，头注补一句「改正文任一格要重算」。为何：本册在 `86b55e86` 接进服务端规范化后对账门对它开门，两串不等答 NOT_ACCEPTED，`TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView` 在含 DSN 时红（CI 有 DSN，合入即红）；上面「验证强度」自述未设 DSN，正是漏掉它的原因。只改夹具一串，不动对账门、不动其他夹具；带 DSN 跑 `./cmd/parcel-commercial/` ok。非作者评审全文由推送方在重放时写进 Comments。
