@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: draft——形状已裁清（逐字段表单 + 两张子表可加行），但**等一件裁决**：管理台要不要先立并落客户服务规则册（读面），票 [06](./06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) 完成记录末尾已交 MCP-1 定；那张读面票立了且 resolved、本票补上它的编号进 Blocked by 之后，才转 ready-for-agent。伞票 [07](./07-commercial-publication-operator-main-paths-per-register.md) 拆出（MCP-6 2026-09-07，锚 `95182b9d`；接管会话 2026-09-07 于 `92579b0a` 复核：`apps/admin-web/src` 里 `CUSTOMER_SERVICE_RULE` 仍零命中）。伞票原写九类，`CommercialObjectKind` 在 `95182b9d` 上已是十类（pc-gaps/04 把客户服务规则版本纳入封闭集），本票补第十册
-Blocked by: 08；管理台客户服务规则册读面票（未立——后端第八册 pc-gaps/05 已落，管理台没有这本册；要不要立归 MCP-1）
+Blocked by: 08（已进 main）；[21](./21-customer-service-rule-register-read-face.md)（管理台客户服务规则册读面，2026-09-09 通道 1 代裁立票——用户授权自决；21 resolved 后本票转 ready-for-agent，由 21 的作者同笔改）；[20](./20-publication-vocabulary-read-face.md)（词表读口，已进 main）
 
 ## 册与载荷
 

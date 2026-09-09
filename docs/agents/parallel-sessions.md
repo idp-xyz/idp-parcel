@@ -300,7 +300,11 @@ git push origin <已验 SHA>:main
 
 - **作者**：`go build ./...` 与 `go vet ./...` 仍是全仓——几秒钟，签名改坏了谁都在这两步露出来；`go test -count=1` 只跑**动过的包及其反向依赖**，
   外加 `./internal/architecture/...`（接线基线、可达性、事务闭包这些门禁扫的是全仓，但本身很快）。动了 `adapters/postgres` 或
-  `migrations/` 才带 DSN。反向依赖用命令反查，不靠记忆：
+  `migrations/` 才带 DSN——**但反向依赖里的 `cmd/*` 包一律带 DSN 跑**（2026-09-09 用户授权通道 1 代裁）：那些包的真库用例无 DSN 时 `t.Skip`，
+  是仓里唯一一处「跑过了、绿了、其实一条没跑」的地方。实测：awf/13 与 awf/15 把一册接进服务端规范化，对账门随之对该册开门，
+  `cmd/parcel-commercial` 夹具里随手写的 `sha256:…` 摘要在含 DSN 时红——作者自验与两份非作者评审都只跑了 PC 包组 + `cmd/parcel-api`、
+  无 DSN，三处全绿，红到推送方全量才露出来。判据不是「我动了 postgres 没有」，是「我改的东西会不会改变一条真库用例的答案」，
+  而后者作者事先答不出，所以规矩定在包上不定在判断上。反向依赖用命令反查，不靠记忆：
 
   ```powershell
   # 谁（生产构建）依赖 P：列出 ImportPath 与其传递依赖，筛出含 P 的那些（实测于 6ae24ae2：PS ports 反查出 21 个包，含三个 cmd）

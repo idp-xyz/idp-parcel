@@ -47,8 +47,15 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [15](./15-settlement-policy-form.md) | `SETTLEMENT_POLICY` | 逐字段表单（合同引用对象 + 版本一起选） | **resolved**（2026-09-09 进 main，通道 6 `mcp6-awf15` + 补笔；非作者评审通道 3 两轴无阻断（通道 2 重复评审同结论）；推送方含 DSN 全量补出一处夹具，见票内；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
 | [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例；**连带前端公共半边**（`party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`） | **resolved**（2026-09-08 MCP-5，分支 `mcp5-awf16`；进 main 见票 Status） | 08（已 resolved） |
 | [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | **resolved**（2026-09-08 21:4x 进 main，通道 4 `mcp4-awf17`；非作者评审通道 2 两轴无阻断；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
-| [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——等管理台读面票要不要立（MCP-1） | 08；管理台客户服务规则册读面票（未立） |
+| [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——读面票 21 已立（2026-09-09 通道 1 代裁，用户授权自决）；21 resolved 后由其作者同笔转 ready-for-agent | 08、20（均已进 main）；21 |
 | [20](./20-publication-vocabulary-read-face.md) | （公共半边，不是一册）| 词表读口：一口按 kind 答各册正文封闭集的码，表单不内置枚举——第 2 波 12/13/15/17 的前置 | **resolved**（2026-09-08 20:5x 进 main，通道 4 `mcp4-awf20`；进 main 见票内 Comments） | 08、16（均已进 main） |
+| [21](./21-customer-service-rule-register-read-face.md) | `CUSTOMER_SERVICE_RULE` 的**读面**（18 的前置，与 06 同形） | 管理台第八册读面：`CommercialPolicyKind` 加格 + 列向 + 标签 | ready-for-agent（2026-09-09 立） | 无 |
+| [22](./22-publication-form-private-helpers-lift-to-party-shared-layer.md) | （收口票，不是一册）| 九张表单私有 `Field` / `useLoaded` / 词表下拉 / 整数解析抬到 party 共享层；顺带 17 非阻断 (1) 节根问题渲染 | ready-for-agent（2026-09-09 立）| 21、18 |
+| [23](./23-settlement-policy-counterparty-register-and-contract-shell-reference.md) | `SETTLEMENT_POLICY` 的两条裁决落地 | 相对方从业务参与方册选、六维合同镜像成壳引用（裁决在 PC CONTEXT） | ready-for-agent（2026-09-09 立）| 22 |
+| [24](./24-closed-set-named-lookups-unify-on-closed-code-named.md) | （收口票，Go 领域）| 各册 `*Named` 反查合一到 `closedCodeNamed` | ready-for-agent（2026-09-09 立）| 无 |
+
+**本票转 resolved 的判据不变**：08–18 十一张全 resolved（21 是 18 的前置，随 18 算）。22 / 23 / 24 是评审判断题收成的**收口票**，列在这里
+只为让人在同一张表看见它们的去向，它们 resolved 与否不挡本票收口。
 
 **Status 口径**：ready-for-agent 只给「形状裁清且票面无待裁问题」的子票，Blocked by 边另记、不混进
 Status——一张 ready 的票在其阻塞边 resolved 之前不在前沿，这是 issue-tracker 的既有语义，不另造
