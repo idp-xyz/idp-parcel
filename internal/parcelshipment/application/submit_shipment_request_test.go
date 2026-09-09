@@ -270,6 +270,210 @@ func TestSubmitFormsNoRequestWhenThisProductLacksAuthority(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 步骤 3B「其他权威时安全交接并返回渠道中立关联」与 `AT-PS-010`「已明确其他当前
+// 权威且可安全交接时交给该权威」——ADR-0128 决定二：归属凭接管记录判为`其他权威`之后，编排把完整
+// 拟受理范围投递给那个权威、观察确认、经 AssessSafeHandoff 形成评估并记到决定上；完整且范围相符的
+// 确认才答「非本产品归属结束」，确认引用就是返回给调用方的渠道中立关联。委托照旧不建。
+func TestSubmitHandsTheScopeToTheOtherAuthorityAndReturnsItsConfirmation(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.ownership.authority = domain.ProductionAuthorityOther
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.OutcomeOtherProductionAuthority {
+		t.Fatalf("outcome = %q, want OTHER_PRODUCTION_AUTHORITY", result.Outcome())
+	}
+	if got, want := fixture.calls, []string{"preserve-source", "decide-ownership", "deliver-handoff"}; !slices.Equal(got, want) {
+		t.Fatalf("call order = %v, want %v", got, want)
+	}
+	if fixture.requests.insertCount != 0 {
+		t.Fatalf("a request was built for a scope another authority owns: %d inserts", fixture.requests.insertCount)
+	}
+
+	if len(fixture.handoff.deliveries) != 1 {
+		t.Fatalf("deliveries = %d, want exactly one", len(fixture.handoff.deliveries))
+	}
+	delivery := fixture.handoff.deliveries[0]
+	if delivery.Scope != fixture.command(t).AdmissionScope {
+		t.Fatalf("delivered scope = %v; the handoff must carry the complete admission scope", delivery.Scope)
+	}
+	if delivery.TargetAuthority.String() != "other-authority-1" {
+		t.Fatalf("delivered to %q, want the authority the decision named", delivery.TargetAuthority)
+	}
+	if delivery.AttemptID.String() == "" {
+		t.Fatal("the delivery carried no attempt identity")
+	}
+
+	decision, present := result.OwnershipDecision()
+	if !present || decision.Authority() != domain.ProductionAuthorityOther {
+		t.Fatal("the result did not carry the other-authority decision")
+	}
+	assessment, recorded := decision.SafeHandoff()
+	if !recorded || assessment.Status() != domain.SafeHandoffConfirmed {
+		t.Fatalf("safe handoff = %#v, %t; want a confirmed assessment on the decision", assessment, recorded)
+	}
+	if confirmation, ok := assessment.ConfirmationReference(); !ok || confirmation.String() != "confirmation-1" {
+		t.Fatalf("confirmation reference = %v, %t; want the channel-neutral link the other authority issued", confirmation, ok)
+	}
+	if stop, ok := decision.HandoffReference(); !ok || stop.String() != "handoff-1" {
+		t.Fatalf("stop evidence = %v, %t; the handoff step must not touch HandoffRef", stop, ok)
+	}
+	if assessment.AttemptID() != delivery.AttemptID {
+		t.Fatal("the assessment was formed for a different attempt than the one delivered")
+	}
+}
+
+// Covers: UC-PS-001 步骤 3B「权威或交接无法确定时保持生产归属未决」与结果行「生产归属未决」要携带
+// 「安全续办引用」——ADR-0128 决定三：接管记录在、但交接观察不是完整且范围相符的确认，归属决定仍是
+// `其他权威`，结果落「生产归属未决」，未决原因取评估的原因格、续办引用取评估的续办引用；出向通道
+// 未配置走同一条路、自成一格，不冒充成功。
+func TestSubmitKeepsOwnershipUnresolvedWhenTheHandoffIsNotConfirmed(t *testing.T) {
+	confirmation := mustValue(t, domain.NewHandoffConfirmationReference, "confirmation-1")
+	cases := map[string]struct {
+		observe    func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation
+		wantReason domain.HandoffUnresolvedReason
+	}{
+		"partial confirmation": {
+			observe: func(delivery ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{
+					Observation:          domain.HandoffObservationPartialConfirmation,
+					ConfirmedScopeDigest: mustValue(t, domain.NewAdmissionScopeDigest, "half-of-scope-1"),
+					ConfirmationRef:      confirmation,
+				}
+			},
+			wantReason: domain.HandoffUnresolvedPartialConfirmation,
+		},
+		"timed out": {
+			observe: func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{Observation: domain.HandoffObservationTimedOut}
+			},
+			wantReason: domain.HandoffUnresolvedTimedOut,
+		},
+		"confirmation cannot be queried": {
+			observe: func(delivery ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{
+					Observation:          domain.HandoffObservationQueryUnavailable,
+					ConfirmedScopeDigest: delivery.Scope.Digest(),
+					ConfirmationRef:      confirmation,
+				}
+			},
+			wantReason: domain.HandoffUnresolvedQueryUnavailable,
+		},
+		"target failure": {
+			observe: func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{Observation: domain.HandoffObservationFailed}
+			},
+			wantReason: domain.HandoffUnresolvedTargetFailure,
+		},
+		"channel unconfigured": {
+			observe: func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{Observation: domain.HandoffObservationChannelUnconfigured}
+			},
+			wantReason: domain.HandoffUnresolvedChannelUnconfigured,
+		},
+		"complete confirmation of a different scope": {
+			observe: func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation {
+				return ports.ProductionHandoffObservation{
+					Observation:          domain.HandoffObservationCompleteConfirmation,
+					ConfirmedScopeDigest: mustValue(t, domain.NewAdmissionScopeDigest, "scope-9"),
+					ConfirmationRef:      confirmation,
+					QueryRef:             mustValue(t, domain.NewHandoffQueryReference, "query-1"),
+					EffectiveAt:          time.Date(2026, 8, 7, 11, 30, 0, 0, time.UTC),
+				}
+			},
+			wantReason: domain.HandoffUnresolvedScopeMismatch,
+		},
+	}
+
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFixture(t)
+			fixture.ownership.authority = domain.ProductionAuthorityOther
+			fixture.handoff.observe = testCase.observe
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.OutcomeOwnershipUnresolved {
+				t.Fatalf("outcome = %q, want OWNERSHIP_UNRESOLVED", result.Outcome())
+			}
+			if fixture.requests.insertCount != 0 {
+				t.Fatalf("a request was built while the handoff stayed unresolved: %d inserts", fixture.requests.insertCount)
+			}
+			decision, present := result.OwnershipDecision()
+			if !present || decision.Authority() != domain.ProductionAuthorityOther {
+				t.Fatal("an unconfirmed handoff rewrote the ownership decision away from OTHER")
+			}
+			assessment, recorded := decision.SafeHandoff()
+			if !recorded || assessment.Status() != domain.SafeHandoffUnresolved {
+				t.Fatalf("safe handoff = %#v, %t; want an unresolved assessment on the decision", assessment, recorded)
+			}
+			if reason, ok := assessment.UnresolvedReason(); !ok || reason != testCase.wantReason {
+				t.Fatalf("unresolved reason = %s, %t; want %s", reason, ok, testCase.wantReason)
+			}
+			if continuation, ok := assessment.ContinuationReference(); !ok || continuation.String() == "" {
+				t.Fatal("an unresolved handoff carried no continuation reference")
+			}
+			if _, ok := assessment.ConfirmationReference(); ok {
+				t.Fatal("an unresolved handoff exposed a confirmation reference as if it had succeeded")
+			}
+			if !slices.Contains(result.GateBlockReasons(), domain.FutureSubmissionOtherAuthority) {
+				t.Fatalf("gate block reasons = %v, want OTHER_AUTHORITY among them", result.GateBlockReasons())
+			}
+		})
+	}
+}
+
+// Covers: 交接只发生在归属已判为`其他权威`之后（ADR-0128 决定二「接管记录在前」）——本产品自己承接、
+// 权威未决、以及本产品暂停准入三种决定都不投递：投递是对外动作、不可撤，没有对方可交或对方是谁都
+// 不知道时发出去的是一笔两边都可能写的范围。
+func TestSubmitDeliversNothingUnlessAnotherAuthorityOwnsTheScope(t *testing.T) {
+	cases := map[string]struct {
+		authority domain.ProductionAuthorityKind
+		control   domain.AdmissionControl
+	}{
+		"this product":     {domain.ProductionAuthorityIDPParcel, domain.AdmissionControlOpen},
+		"unresolved":       {domain.ProductionAuthorityUnresolved, domain.AdmissionControlOpen},
+		"admission paused": {domain.ProductionAuthorityIDPParcel, domain.AdmissionControlPaused},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFixture(t)
+			fixture.ownership.authority = testCase.authority
+			fixture.ownership.control = testCase.control
+
+			if _, err := fixture.handler.Handle(context.Background(), fixture.command(t)); err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if len(fixture.handoff.deliveries) != 0 {
+				t.Fatalf("deliveries = %d; nothing may be handed over without an established other authority", len(fixture.handoff.deliveries))
+			}
+		})
+	}
+}
+
+// Covers: 依赖调不通不折成任何一格观察——出向通道自身坏了（对方应答译不进词表、本方调用失败）是
+// 错误上抛；把它读成`超时`或`失败`会让一次本方故障看起来像对方的交接答复（ADR-0029 的分界）。
+func TestSubmitSurfacesAHandoffChannelFailureRatherThanObservingIt(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.ownership.authority = domain.ProductionAuthorityOther
+	failure := errors.New("handoff channel unavailable")
+	fixture.handoff.err = failure
+
+	_, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if !errors.Is(err, failure) {
+		t.Fatalf("error = %v, want the channel failure", err)
+	}
+	if fixture.requests.insertCount != 0 {
+		t.Fatal("a request was built after the handoff channel failed")
+	}
+}
+
 // Covers: UC-PS-001 步骤 3A 先于 3B — 立不起最小委托身份的输入不产生占位委托，也没有值得
 // 拿去问权威的准入范围。
 func TestSubmitWithoutDeclaredParcelsIsNotAccepted(t *testing.T) {
@@ -342,6 +546,7 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
+	handoff   *handoffChannelDouble
 	calls     []string
 }
 
@@ -358,10 +563,12 @@ func newFixture(t *testing.T) *fixture {
 		control:   domain.AdmissionControlOpen,
 		record:    record,
 	}
+	value.handoff = &handoffChannelDouble{t: t, record: record}
 	value.handler = application.NewSubmitShipmentRequestHandler(
 		value.sources,
 		value.requests,
 		value.ownership,
+		value.handoff,
 		&identityFactoryDouble{},
 		fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
 	)
@@ -709,6 +916,39 @@ func (double *ownershipAuthorityDouble) DecideProductionOwnership(
 	return decision, nil
 }
 
+// handoffChannelDouble 扮演通往他方生产权威的出向通道。缺省对投递来的范围给出完整、范围相符、
+// 可查询的确认——那是`其他权威`分支唯一能答「非本产品归属结束」的观察；要走未决路的用例自己换
+// observe。它记下每一次投递，好让用例核对交出去的是不是完整拟受理范围、以及有没有多投。
+type handoffChannelDouble struct {
+	t          *testing.T
+	record     func(string)
+	observe    func(ports.ProductionHandoffDelivery) ports.ProductionHandoffObservation
+	err        error
+	deliveries []ports.ProductionHandoffDelivery
+}
+
+func (double *handoffChannelDouble) DeliverAdmissionScope(
+	_ context.Context,
+	delivery ports.ProductionHandoffDelivery,
+) (ports.ProductionHandoffObservation, error) {
+	double.t.Helper()
+	double.record("deliver-handoff")
+	double.deliveries = append(double.deliveries, delivery)
+	if double.err != nil {
+		return ports.ProductionHandoffObservation{}, double.err
+	}
+	if double.observe != nil {
+		return double.observe(delivery), nil
+	}
+	return ports.ProductionHandoffObservation{
+		Observation:          domain.HandoffObservationCompleteConfirmation,
+		ConfirmedScopeDigest: delivery.Scope.Digest(),
+		ConfirmationRef:      mustValue(double.t, domain.NewHandoffConfirmationReference, "confirmation-1"),
+		QueryRef:             mustValue(double.t, domain.NewHandoffQueryReference, "query-1"),
+		EffectiveAt:          time.Date(2026, 8, 7, 11, 30, 0, 0, time.UTC),
+	}, nil
+}
+
 type identityFactoryDouble struct {
 	versions int
 	tasks    int
@@ -729,9 +969,10 @@ type fixedClock struct{ at time.Time }
 func (clock fixedClock) Now() time.Time { return clock.at }
 
 var (
-	_ ports.SourceSubmissionRepository   = (*sourceRepositoryDouble)(nil)
-	_ ports.ShipmentRequestRepository    = (*shipmentRequestRepositoryDouble)(nil)
-	_ ports.ProductionOwnershipAuthority = (*ownershipAuthorityDouble)(nil)
-	_ ports.SubmissionIdentityFactory    = (*identityFactoryDouble)(nil)
-	_ ports.Clock                        = fixedClock{}
+	_ ports.SourceSubmissionRepository      = (*sourceRepositoryDouble)(nil)
+	_ ports.ShipmentRequestRepository       = (*shipmentRequestRepositoryDouble)(nil)
+	_ ports.ProductionOwnershipAuthority    = (*ownershipAuthorityDouble)(nil)
+	_ ports.OtherProductionAuthorityChannel = (*handoffChannelDouble)(nil)
+	_ ports.SubmissionIdentityFactory       = (*identityFactoryDouble)(nil)
+	_ ports.Clock                           = fixedClock{}
 )

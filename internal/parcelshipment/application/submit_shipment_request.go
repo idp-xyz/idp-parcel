@@ -136,6 +136,7 @@ type SubmitShipmentRequestHandler struct {
 	sources    ports.SourceSubmissionRepository
 	requests   ports.ShipmentRequestRepository
 	ownership  ports.ProductionOwnershipAuthority
+	handoff    ports.OtherProductionAuthorityChannel
 	identities ports.SubmissionIdentityFactory
 	clock      ports.Clock
 }
@@ -144,6 +145,7 @@ func NewSubmitShipmentRequestHandler(
 	sources ports.SourceSubmissionRepository,
 	requests ports.ShipmentRequestRepository,
 	ownership ports.ProductionOwnershipAuthority,
+	handoff ports.OtherProductionAuthorityChannel,
 	identities ports.SubmissionIdentityFactory,
 	clock ports.Clock,
 ) *SubmitShipmentRequestHandler {
@@ -151,13 +153,14 @@ func NewSubmitShipmentRequestHandler(
 		sources:    sources,
 		requests:   requests,
 		ownership:  ownership,
+		handoff:    handoff,
 		identities: identities,
 		clock:      clock,
 	}
 }
 
-// Handle 先保全来源，再为完整拟受理范围取得生产归属，之后才建立`已提交`委托。它不形成
-// 接受、拒绝、可达性或财务控制结果。
+// Handle 先保全来源，再为完整拟受理范围取得生产归属——判为`其他权威`时把范围交给那个权威并
+// 评估交接——之后才建立`已提交`委托。它不形成接受、拒绝、可达性或财务控制结果。
 func (handler *SubmitShipmentRequestHandler) Handle(
 	ctx context.Context,
 	command SubmitShipmentRequestCommand,
@@ -209,9 +212,16 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 		return SubmitShipmentRequestResult{}, fmt.Errorf("decide production ownership: %w", err)
 	}
 
-	// 门禁评估与建单共用一次时钟读数，这样委托的提交时刻绝不会落在其门禁所评估的
-	// 时刻之外。
+	// 交接评估、门禁评估与建单共用一次时钟读数，这样委托的提交时刻绝不会落在其门禁所评估的
+	// 时刻之外，交接评估的时刻也不会晚于据它形成的门禁。
 	decidedAt := handler.clock.Now()
+	if decision.Authority() == domain.ProductionAuthorityOther {
+		decision, err = handler.handOverToOtherAuthority(ctx, decision, decidedAt)
+		if err != nil {
+			return SubmitShipmentRequestResult{}, err
+		}
+	}
+
 	gate, err := domain.EvaluateFutureSubmissionGate(
 		decision,
 		command.AdmissionScope.Digest(),
@@ -393,12 +403,80 @@ func (handler *SubmitShipmentRequestHandler) resolvePriorClaim(
 	return link, nil, nil
 }
 
+// handOverToOtherAuthority 是 UC-PS-001 步骤 3B「其他权威时安全交接」那一步（ADR-0128 决定二）：
+// 归属已凭治理接管记录判为`其他权威`之后，把完整拟受理范围投递给那个权威、观察确认、经
+// AssessSafeHandoff 形成评估并记到决定上。先后固定——归属先定、交接后验：投递是对外动作、不可撤，
+// 只在归属已定时做；反过来拿一次应答当归属证据，会让没有停写证据的一方凭应答成为权威。
+//
+// 尝试身份与续办引用都由决定派生而不签发：本上下文不持久化交接尝试，同一份决定重复走到这里必须
+// 得到同一次尝试，对方才能据以认领重放。续办引用不看观察结果就形成——它说的是「从这一次尝试续办」，
+// 原因由评估自己带；按观察结果决定给不给，等于在这里复刻一遍领域的判定条件。
+//
+// 出向通道自身失败原样上抛，不折成任何一格观察：那些格说的是对方的答复，不是本方的故障。
+func (handler *SubmitShipmentRequestHandler) handOverToOtherAuthority(
+	ctx context.Context,
+	decision domain.ProductionOwnershipDecision,
+	assessedAt time.Time,
+) (domain.ProductionOwnershipDecision, error) {
+	target, present := decision.OtherAuthorityReference()
+	if !present {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("hand over to other authority: decision names no other authority")
+	}
+	attemptID, err := domain.NewHandoffAttemptID("PS-HANDOFF/" + decision.DecisionID().String())
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("hand over to other authority: attempt ID: %w", err)
+	}
+	continuationRef, err := domain.NewOwnershipContinuationReference("CONT-PS-HANDOFF/" + attemptID.String())
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("hand over to other authority: continuation reference: %w", err)
+	}
+
+	observed, err := handler.handoff.DeliverAdmissionScope(ctx, ports.ProductionHandoffDelivery{
+		AttemptID:       attemptID,
+		Scope:           decision.Scope(),
+		TargetAuthority: target,
+	})
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("deliver admission scope to other authority: %w", err)
+	}
+
+	assessment, err := domain.AssessSafeHandoff(domain.SafeHandoffAssessmentSpec{
+		AttemptID:            attemptID,
+		Scope:                decision.Scope(),
+		TargetAuthority:      target,
+		Observation:          observed.Observation,
+		ConfirmedScopeDigest: observed.ConfirmedScopeDigest,
+		ConfirmationRef:      observed.ConfirmationRef,
+		QueryRef:             observed.QueryRef,
+		ContinuationRef:      continuationRef,
+		EffectiveAt:          observed.EffectiveAt,
+		AssessedAt:           assessedAt,
+	})
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("assess safe handoff: %w", err)
+	}
+	withHandoff, err := decision.WithSafeHandoff(assessment)
+	if err != nil {
+		return domain.ProductionOwnershipDecision{}, fmt.Errorf("record safe handoff on ownership decision: %w", err)
+	}
+	return withHandoff, nil
+}
+
 // blockedOutcome 让三种拒绝各自成立。其他权威承接该范围、权威无法确定、以及本产品暂停
 // 新准入，是对不同问题的不同回答；其中暂停既不是第四种权威身份，也不是客户业务拒绝。
+//
+// `其他权威`只在交接评估**已确认**时才是「非本产品归属结束」（ADR-0128 决定三）：接管记录与交接
+// 确认是两种证据，缺一不许交。评估未决——部分确认、超时、查询不可用、失败、通道未配置、范围不符——
+// 归属决定仍是`其他权威`，结果却落「生产归属未决」，续办引用由评估带出。没记评估的`其他权威`决定
+// 走不到这里（编排在 Other 分支一律先交接），但若走到，也只能按未决答：宣布交出去了而没有确认，
+// 与没有停写证据一样是替对方宣布交接完成。
 func blockedOutcome(decision domain.ProductionOwnershipDecision) SubmitOutcome {
 	switch decision.Authority() {
 	case domain.ProductionAuthorityOther:
-		return OutcomeOtherProductionAuthority
+		if assessment, recorded := decision.SafeHandoff(); recorded && assessment.Status() == domain.SafeHandoffConfirmed {
+			return OutcomeOtherProductionAuthority
+		}
+		return OutcomeOwnershipUnresolved
 	case domain.ProductionAuthorityUnresolved:
 		return OutcomeOwnershipUnresolved
 	}

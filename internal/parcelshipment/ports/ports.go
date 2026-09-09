@@ -202,6 +202,45 @@ type ProductionOwnershipAuthority interface {
 	DecideProductionOwnership(ctx context.Context, scope domain.AdmissionScope) (domain.ProductionOwnershipDecision, error)
 }
 
+// ProductionHandoffDelivery 是向已判为当前权威的他方投递完整拟受理范围的那一次尝试。
+//
+// 它只携带范围与对方是谁，不携带治理侧的停写证据：那份证据回答的是「前任停笔了没有」，是本方
+// 判归属用的，对方要确认的是「这一笔范围」——把它一起发出去，等于让对方拿本方的归属依据当交接
+// 依据。尝试身份由本上下文派生（同一份决定对应同一次尝试），对方据它认领重放。
+type ProductionHandoffDelivery struct {
+	AttemptID       domain.HandoffAttemptID
+	Scope           domain.AdmissionScope
+	TargetAuthority domain.ProductionAuthorityReference
+}
+
+// ProductionHandoffObservation 是他方对一次投递的应答在本上下文的落点，取值照 domain.HandoffObservation
+// 的封闭集合，证据格随取值该有还是不该有由 AssessSafeHandoff 校验，本口不预判。
+//
+// `通道未配置`是其中一格（ADR-0128 决定三，与 ADR-0055 那族同形）：通往他方权威的协议、身份与
+// 交接证据是 `PAR-GOV-05..07` 的实例半边，没有租户就没有通道；未配置的适配器如实答这一格、不带
+// 任何引用，编排据以落「生产归属未决」并给出续办引用，不冒充成功。它不充作`查询不可用`——那一格的
+// 证据形要求对方已经给过确认引用，而未配置时根本没投递。
+//
+// 依赖调不通仍作为错误返回，不折成`超时`或`失败`：那两格说的是对方的交接答复，本方通道自己坏了
+// （对方应答译不进词表、本方调用失败）是另一件事，恢复动作不同（ADR-0029）。
+type ProductionHandoffObservation struct {
+	Observation          domain.HandoffObservation
+	ConfirmedScopeDigest domain.AdmissionScopeDigest
+	ConfirmationRef      domain.HandoffConfirmationReference
+	QueryRef             domain.HandoffQueryReference
+	EffectiveAt          time.Time
+}
+
+// OtherProductionAuthorityChannel 是面向他方生产权威的出向端口：投递范围、取回确认或查询结果。
+//
+// 它与 ProductionOwnershipAuthority 分开（ADR-0128 决定一）：那一口读治理登记册答「归谁」，这一口
+// 对着那个「谁」交范围——两种证据、两个对方，合成一个端口会让治理读口的适配器被迫实现一个它根本
+// 答不了的方法。它只在归属决定已判为`其他权威`之后被调用（决定二「接管记录在前」）：投递是对外动作、
+// 不可撤，只在归属已定时做。
+type OtherProductionAuthorityChannel interface {
+	DeliverAdmissionScope(ctx context.Context, delivery ProductionHandoffDelivery) (ProductionHandoffObservation, error)
+}
+
 // SubmissionIdentityFactory 签发 parcel-shipment 自己拥有的内部身份。刻意不从调用方
 // 接收：客户参考号不得变成内部标识。
 type SubmissionIdentityFactory interface {

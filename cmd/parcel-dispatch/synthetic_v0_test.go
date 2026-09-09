@@ -13,6 +13,7 @@ import (
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -234,6 +235,7 @@ func newSYNVerticalFixture(t *testing.T) *synVerticalFixture {
 		sources,
 		requests,
 		&synSProductionOwnership{t: t},
+		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&synSSubmissionIdentities{},
 		systemClock{},
 	)

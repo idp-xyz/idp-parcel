@@ -15,6 +15,7 @@ import (
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	pgpostgres "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
@@ -392,6 +393,7 @@ func envelopeMintingSubmission(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: handoff},
 		permittingOwnership{anchor: envelopeProofAnchor},
+		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
 	), store

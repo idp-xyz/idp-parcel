@@ -13,6 +13,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	psadapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -256,6 +257,7 @@ func newSubmitFlowFixture(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: submits, inner: requests, handoff: handoff},
 		contractProductionOwnership{anchor: submitFlowSubmittedAt},
+		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		&contractSubmissionIdentities{},
 		fixedContractClock{at: submitFlowSubmittedAt},
 	)

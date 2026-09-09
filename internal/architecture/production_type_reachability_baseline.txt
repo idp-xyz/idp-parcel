@@ -67,14 +67,12 @@ internal/parcelpricing/domain WeightPolicyID
 
 # ---- parcel-shipment ----
 
-# 一类：经 AssessSafeHandoff 取得，它在函数名棘轮基线里（安全交接评估的执行器未接）。随它出名单。
-internal/parcelshipment/domain HandoffAttemptID
-internal/parcelshipment/domain HandoffObservation
-internal/parcelshipment/domain HandoffQueryReference
-internal/parcelshipment/domain HandoffUnresolvedReason
-internal/parcelshipment/domain SafeHandoffAssessment
-internal/parcelshipment/domain SafeHandoffAssessmentSpec
-internal/parcelshipment/domain SafeHandoffStatus
+# 一类「经 AssessSafeHandoff 取得」那七条（HandoffAttemptID / HandoffObservation / HandoffQueryReference /
+# HandoffUnresolvedReason / SafeHandoffAssessment / SafeHandoffAssessmentSpec / SafeHandoffStatus）曾在这里，
+# 2026-09-09 随 wiring-baseline-remainder/01（MCP-2）剪掉：AssessSafeHandoff 接上生产调用路径
+# （application/submit_shipment_request.go 的 handOverToOtherAuthority），七者由它的规格与评估值、以及出向端口
+# ports.ProductionHandoffDelivery / ProductionHandoffObservation 的签名入种子。**在父提交 `6a80a6da` 的干净内容上
+# 两法同得剪前 22，本笔单独作用于其上剪后 15**（parcel-shipment 8→1），只对该检出成立。
 
 # 二类：只由 NewSubmissionBatchCandidate 交出，零生产调用、零测试。PS 所有者判接线或删。
 internal/parcelshipment/domain SubmissionBatchCandidate

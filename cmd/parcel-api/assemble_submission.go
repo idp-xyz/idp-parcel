@@ -14,6 +14,7 @@ import (
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -202,6 +203,10 @@ func (boundary submissionBoundary) Save(
 // `isolated` 为 nil 即生产形态，那两格照旧留空，整份装配与 ADR-0091 之前逐字节同形；
 // 非 nil 时按隔离形态注入合成坐标与合成权威串（ADR-0091 决定二、五），恢复动作这才
 // 变成「往登记册里登一条匹配的区间」——注入的只是坐标，归属仍要读册后才有答案。
+//
+// 面向他方生产权威的出向通道同属实例半边（`PAR-GOV-05..07`），两种形态都放未配置适配器：
+// 归属判为`其他权威`时它如实答`通道未配置`，编排据以落 OWNERSHIP_UNRESOLVED 并给出续办引用
+// （ADR-0128 决定三）；恢复动作是「接一条真通道」，不是登记，也不是重试。
 func buildSubmissionOrchestration(
 	db *bentopg.DB,
 	isolated *isolatedWriteAdmission,
@@ -235,6 +240,7 @@ func buildSubmissionOrchestration(
 		preservationBoundary{transactor: db.Transactor(), inner: sources},
 		submissionBoundary{transactor: db.Transactor(), inner: requests, handoff: downstream},
 		ownership,
+		pshandoff.UnconfiguredOtherProductionAuthorityChannel{},
 		identities,
 		clock,
 	)

@@ -236,6 +236,7 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
+	handoff   *handoffChannelDouble
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -244,6 +245,7 @@ func newFixture(t *testing.T) *fixture {
 		sources:   &sourceRepositoryDouble{records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{}},
 		requests:  &shipmentRequestRepositoryDouble{records: map[domain.SourceIdentity]domain.ShipmentRequest{}},
 		ownership: &ownershipAuthorityDouble{t: t, authority: domain.ProductionAuthorityIDPParcel, control: domain.AdmissionControlOpen},
+		handoff:   &handoffChannelDouble{t: t},
 	}
 	value.intake = &intakeDouble{commands: []application.SubmitShipmentRequestCommand{value.command(t)}}
 	value.handler = shipmenthttp.NewSubmitShipmentRequestEndpoint(
@@ -252,6 +254,7 @@ func newFixture(t *testing.T) *fixture {
 			value.sources,
 			value.requests,
 			value.ownership,
+			value.handoff,
 			&identityFactoryDouble{},
 			fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
 		),
@@ -447,6 +450,26 @@ func (double *ownershipAuthorityDouble) DecideProductionOwnership(
 	return decision, nil
 }
 
+// handoffChannelDouble 替面向他方权威的出向通道：对投递的范围一律给完整且范围相符的确认。
+// 归属判为`其他权威`后编排必先交接（ADR-0128 决定二），只有确认才答 OTHER_PRODUCTION_AUTHORITY；
+// 交接各种未决怎么落是应用层测试钉的事，本文件只钉答案怎么落到响应体，所以这里只给能走到
+// 那一格的答复。
+type handoffChannelDouble struct{ t *testing.T }
+
+func (double *handoffChannelDouble) DeliverAdmissionScope(
+	_ context.Context,
+	delivery ports.ProductionHandoffDelivery,
+) (ports.ProductionHandoffObservation, error) {
+	double.t.Helper()
+	return ports.ProductionHandoffObservation{
+		Observation:          domain.HandoffObservationCompleteConfirmation,
+		ConfirmedScopeDigest: delivery.Scope.Digest(),
+		ConfirmationRef:      mustValue(double.t, domain.NewHandoffConfirmationReference, "confirmation-1"),
+		QueryRef:             mustValue(double.t, domain.NewHandoffQueryReference, "query-1"),
+		EffectiveAt:          time.Date(2026, 8, 7, 11, 30, 0, 0, time.UTC),
+	}, nil
+}
+
 type identityFactoryDouble struct {
 	versions int
 	tasks    int
@@ -492,10 +515,11 @@ func validity(t *testing.T) domain.OwnershipValidityInterval {
 }
 
 var (
-	_ shipmenthttp.SubmissionIntake      = (*intakeDouble)(nil)
-	_ ports.SourceSubmissionRepository   = (*sourceRepositoryDouble)(nil)
-	_ ports.ShipmentRequestRepository    = (*shipmentRequestRepositoryDouble)(nil)
-	_ ports.ProductionOwnershipAuthority = (*ownershipAuthorityDouble)(nil)
-	_ ports.SubmissionIdentityFactory    = (*identityFactoryDouble)(nil)
-	_ ports.Clock                        = fixedClock{}
+	_ shipmenthttp.SubmissionIntake         = (*intakeDouble)(nil)
+	_ ports.SourceSubmissionRepository      = (*sourceRepositoryDouble)(nil)
+	_ ports.ShipmentRequestRepository       = (*shipmentRequestRepositoryDouble)(nil)
+	_ ports.ProductionOwnershipAuthority    = (*ownershipAuthorityDouble)(nil)
+	_ ports.OtherProductionAuthorityChannel = (*handoffChannelDouble)(nil)
+	_ ports.SubmissionIdentityFactory       = (*identityFactoryDouble)(nil)
+	_ ports.Clock                           = fixedClock{}
 )

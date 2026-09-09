@@ -212,6 +212,17 @@
 # 推送方 2026-09-08 重放注：上两段各钉自己的父提交，04 先进 main（d41862bd）、03 后进；03 那笔重放到 02918e11 之上时
 # 两法同得剪前 5（04 已剪）、剪后 4（party-commercial 3→2），只对该检出成立——下一个改名单的人照旧在自己那一刻的 HEAD 上重取。
 #
+# 2026-09-09 随 wiring-baseline-remainder/01（MCP-2）剪掉 AssessSafeHandoff（PS 组）。成因三分是**第二种**：
+# 真接上了——application/submit_shipment_request.go 的 handOverToOtherAuthority 是它的生产调用方（归属凭接管记录
+# 判为`其他权威`之后投递范围 → 观察 → 评估 → 记到决定上，ADR-0128 决定二）。剪前先核过：全仓该名字只有一处声明
+# （domain/production_handoff.go），同笔新增的 WithSafeHandoff / SafeHandoff / handOverToOtherAuthority 是别的名字，
+# 本门禁比的是精确相等不是子串（tf-unwired-seven/05 那段核过匹配码），不存在第三种。量在隔离 worktree 上（分支
+# mcp2-wbr01，动手前 `git status -- internal/architecture/` 为空）：`git show` 取父提交 `6a80a6da` 的本文件两法同得
+# 剪前 **4**，本笔单独作用于其上剪后 **3**（parcel-shipment 2→1）——两法是 UTF-8 逐行读后滤非空非注释，与
+# `git grep -c '^internal/'` 在字节层数行首。两个数只对该检出成立；本笔重放进 main 时父提交若不是 6a80a6da，下一个
+# 改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。同笔 production_type_reachability_baseline.txt 里
+# 「经 AssessSafeHandoff 取得」那一类七条随它出名单（那边 22→15），出处写在那边。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -227,8 +238,10 @@
 
 
 # —— parcel-shipment ——
-# 产出带校验的安全交接评估，测试里调 9 次，包外零引用。
-internal/parcelshipment/domain AssessSafeHandoff
+# 安全交接评估门 AssessSafeHandoff 曾在这里，理由行写的是「测试里调 9 次，包外零引用」——既无调用方又带计数，
+# 票 wiring-baseline-remainder/01 判据 5 已指出那句该改；2026-09-09 随该票剪掉（见头部当日那段）：调用方是提交
+# 编排在归属判为`其他权威`之后的交接步（投递范围 → 观察确认 → 形成评估），出向端口、编排步与决定记录落点三件
+# 同票落地。别把 ProductionOwnershipDecision.HandoffRef 读成它——那是治理接管的停写证据，不是一次交接的确认。
 # 审计票 14 的规范化摘要机制件：按 ADR-0014 版本化形状（PSC-1）产出 PayloadDigest。
 #
 # 这里原有两条——摘要函数 CanonicalizeSubmissionPayload 与它的版本报出口——并预言「同一条
