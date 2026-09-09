@@ -1,5 +1,8 @@
 // Package pgtest 为 Parcel 的集成测试准备彼此隔离的 PostgreSQL 数据库。它跑的是
 // 真实迁移计划，因此测试证的是随产品发出的那份 SQL，而不是一份手写的夹具 schema。
+//
+// 迁移计划每个测试进程只施加一次，落在一个模板库上；每个用例拿到的是模板库的一份
+// 物理拷贝（CREATE DATABASE … TEMPLATE），用完删掉。模板库的生命周期与回收见 template.go。
 package pgtest
 
 import (
@@ -7,8 +10,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -18,8 +19,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
 // DSNVariable 携带管理连接串。只从环境读取，且从不写进日志。
@@ -31,9 +30,9 @@ var databaseSequence atomic.Uint64
 //
 // 动机不是省时间而是省端口：Windows 把主动关闭的 TCP 连接压在 TIME_WAIT 里占用
 // 动态端口，逐用例新建管理连接时单包实测就产出六百余条指向 :55432 的 TIME_WAIT，
-// 多包并行足以耗尽端口预算（WSAEADDRINUSE）。四类连接里只有管理连接可以跨用例
-// 复用而不破坏「每测试一个物理库」的隔离语义——它只跑 CREATE/DROP DATABASE，
-// 不携带任何测试库内状态。
+// 多包并行足以耗尽端口预算（WSAEADDRINUSE）。能跨用例存活而不破坏「每测试一个物理库」
+// 隔离语义的，只有管理连接与模板库的主人连接（见 template.go）：前者只跑
+// CREATE/DROP DATABASE，后者只握一把锁，都不携带任何测试库内状态。
 var (
 	adminMu   sync.Mutex
 	adminConn *pgx.Conn
@@ -80,6 +79,16 @@ func createDatabase(adminDSN, name string) error {
 	})
 }
 
+// cloneDatabase 从模板库拷一个库出来。不写 ENCODING：拷贝必须与模板同编码，而模板
+// 建时已定 UTF8，再写一遍只是给两处口径留下分叉的机会。
+func cloneDatabase(adminDSN, name, template string) error {
+	return runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx,
+			`CREATE DATABASE `+quoteIdentifier(name)+` TEMPLATE `+quoteIdentifier(template))
+		return err
+	})
+}
+
 // uniqueDatabaseName 造一个在整个 PostgreSQL 实例里唯一的库名。
 //
 // 只用「时间戳 + 进程内计数器」不够：Go 为每个包单独起一个测试进程，计数器因而
@@ -89,12 +98,19 @@ func createDatabase(adminDSN, name string) error {
 func uniqueDatabaseName(t *testing.T) string {
 	t.Helper()
 
-	suffix := make([]byte, 6)
-	if _, err := rand.Read(suffix); err != nil {
+	suffix, err := randomSuffix()
+	if err != nil {
 		t.Fatalf("生成测试库名随机后缀：%v", err)
 	}
-	return fmt.Sprintf("parcel_test_%d_%d_%s",
-		os.Getpid(), databaseSequence.Add(1), hex.EncodeToString(suffix))
+	return fmt.Sprintf("parcel_test_%d_%d_%s", os.Getpid(), databaseSequence.Add(1), suffix)
+}
+
+func randomSuffix() (string, error) {
+	suffix := make([]byte, 6)
+	if _, err := rand.Read(suffix); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(suffix), nil
 }
 
 // Pool 返回一个连向全新数据库的连接池，该库已施加真实迁移计划，测试结束时删除。
@@ -104,43 +120,27 @@ func uniqueDatabaseName(t *testing.T) string {
 func Pool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	adminDSN := os.Getenv(DSNVariable)
-	if adminDSN == "" {
-		if os.Getenv("CI") != "" {
-			t.Fatalf("CI 中必须设置 %s；PostgreSQL 门禁不得跳过", DSNVariable)
-		}
-		t.Skipf("未设置 %s，跳过 PostgreSQL 集成门禁", DSNVariable)
-	}
-
+	adminDSN := AdminDSN(t)
 	ctx := t.Context()
 	name := uniqueDatabaseName(t)
 
+	// 「迁移」一段量的是本用例为模板库等的时间：只有触发建模板的那个用例真付，
+	// 其余用例这里只是拿一次锁、读一个名字。
 	var timing phases
-	started := time.Now()
+	templateStarted := time.Now()
+	template := templateDatabase(t, adminDSN)
+	timing.migrate = time.Since(templateStarted)
 
-	if err := createDatabase(adminDSN, name); err != nil {
-		t.Fatalf("创建测试库失败：%v", err)
+	createStarted := time.Now()
+	if err := cloneDatabase(adminDSN, name, template); err != nil {
+		t.Fatalf("从模板库克隆测试库失败：%v", err)
 	}
-	timing.create = time.Since(started)
+	timing.create = time.Since(createStarted)
 
 	testDSN, err := withDatabase(adminDSN, name)
 	if err != nil {
 		t.Fatalf("构造测试库连接串失败：%v", err)
 	}
-
-	migrateStarted := time.Now()
-	migrateConn, err := pgx.Connect(ctx, testDSN)
-	if err != nil {
-		t.Fatalf("连接测试库失败：%v", err)
-	}
-	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := migrate.Run(ctx, migrateConn, quiet); err != nil {
-		t.Fatalf("施加迁移计划失败：%v", err)
-	}
-	if err := migrateConn.Close(ctx); err != nil {
-		t.Fatalf("关闭迁移连接失败：%v", err)
-	}
-	timing.migrate = time.Since(migrateStarted)
 
 	// pgxpool 默认按 CPU 数开连接，测试用例的并发度用不满它，尖峰时却成倍放大
 	// TIME_WAIT。封顶 2 保留「一条在事务里、一条旁路观察」的余量；真需要更高
