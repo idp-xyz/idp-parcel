@@ -16,6 +16,7 @@ Status: in-progress——十问已由 MCP-1 代裁（owner 授权，2026-09-07�
 | [03](issues/03-source-data-amendment-authorization-needs-a-pc-action-kind-and-a-decider.md) | `SourceDataAmendmentAuthorizer` | PC 授权动作封闭集没有「资料修订」这一格、裁定结果不带实际决定方（合同委派无执行器）；PS 适配器照撤回/主动拒绝那两只 | PC：动作格 + 委派→实际决定方；实例半边 `BD-PS-009` |
 | [04](issues/04-amendment-production-entry-mechanism-half.md) | （入口，不是端口） | 资料修订编排的生产入口机制半边：端点 + `UnconfiguredIntake{}` + 两层边界壳，接上后编排如实停在授权未决 / 矩阵未登记 | PS（已 resolved，通道 2；清点里两口出缺口名单是未配置适配器被计为实现，PC 半边仍开） |
 | [05](issues/05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md) | `CustomsStageView` / `ConsolidationStageView`（PS 消费侧读口） | ADR-0118 决定四拆出：关务与节点作业各立一个按正式包裹键的阶段事实读面（CC `ParcelDeclarationFactsView` 三件独立事实、NO `ParcelContainmentView` 封闭三值），PS 两只适配器接真、`Unconnected*` 退场 | CC / NO / PS（已 resolved，通道 2 一次落齐；owner 授权自决口径，裁决记票内 Comments） |
+| [06](issues/06-delivery-place-reference-read-face.md) | `DeliveryPlaceReferenceView`（PS 提供侧读口，名可议） | ADR-0130 拆出：按（租户，包裹身份）答「收件地点引用」封闭四格（基线锚 / 已采用版本锚 / `待复核`不给引用 / 不属任何已接受委托答没有）；值对象四段带形状版本，地址内容不进串 | PS（ready-for-agent，2026-09-09 通道 2 立；tf/12 的 TF 适配器 Blocked by 它） |
 
 ## 共同结论
 
