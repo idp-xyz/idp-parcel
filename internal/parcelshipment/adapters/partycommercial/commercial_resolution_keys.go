@@ -104,6 +104,12 @@ type ResolutionKeyRegistration struct {
 	SettlementCounterparty pcdomain.CounterpartyReference
 	SettlementChargeScope  pcdomain.ChargeScopeReference
 	SettlementCurrency     pcdomain.CurrencyCode
+	// 信用二维只在必需依据含信用政策时给出，否则必须全缺（ADR-0127 决定二：请求信用依据必填、
+	// 其余请求必缺）。逐维列出而不收一个 `pcdomain.CreditSelector`，只是与上面结算三维同形：
+	// 信用政策没有合同那样由闭包解出的一维，两维都是租户登记的实例参数，这里不是被迫拆的。
+	// 法人与时点不在其中——键上已有法人候选与锚点，重复携带就允许两者不一致。
+	CreditLevel      pcdomain.AuthorityLevel
+	CreditChargeType pcdomain.ChargeTypeReference
 }
 
 // Register 登记一行解析键参数。集合与默认值的判读全在触库前做完——库内 CHECK 是同一
@@ -153,8 +159,8 @@ func (registration ResolutionKeyRegistration) validate() error {
 			return fmt.Errorf("必需依据种类含集合外取值")
 		}
 		// 价格规则要求键携带价格方向（ADR-0034 含则必填），本登记面没有那一维——放行
-		// 等于登记一个永远立不起来的键。结算政策已随 ADR-0080 放行（见下方三维校验）。
-		// 库内 CHECK 同拦。
+		// 等于登记一个永远立不起来的键。结算政策已随 ADR-0080 放行（见下方三维校验），
+		// 信用政策随 ADR-0127 承载两维（见 validateCredit）。库内 CHECK 同拦。
 		if kind == pcdomain.PriceRuleObject {
 			return fmt.Errorf("%s 需要键携带额外选择维度，本登记面不承载", kind)
 		}
@@ -163,8 +169,11 @@ func (registration ResolutionKeyRegistration) validate() error {
 		}
 		seen[kind] = true
 	}
-	return registration.validateSettlement(seen[pcdomain.SettlementPolicyObject],
-		seen[pcdomain.CustomerContractObject])
+	if err := registration.validateSettlement(seen[pcdomain.SettlementPolicyObject],
+		seen[pcdomain.CustomerContractObject]); err != nil {
+		return err
+	}
+	return registration.validateCredit(seen[pcdomain.CreditPolicyObject])
 }
 
 // validateSettlement 是 ADR-0044「含则必填、不含则必缺」加 ADR-0080「要结算就要合同」在
@@ -192,6 +201,33 @@ func (registration ResolutionKeyRegistration) validateSettlement(needsSettlement
 	// 合同维由闭包解出的合同来填；不请求合同就永远没人填得上（ADR-0080）。
 	if !needsContract {
 		return fmt.Errorf("要结算依据就必须一并要客户合同——结算政策按哪一版合同选，由本闭包解出")
+	}
+	return nil
+}
+
+// validateCredit 是 ADR-0127 决定二「请求信用依据必填、其余请求必缺」在登记面的一道。库内
+// `..._credit_paired` 是同一判据的第二道镜像，不是唯一一道。
+//
+// 与 validateSettlement 只差一条：这里没有「要信用就要合同」。信用政策不引用同一闭包正在解的
+// 别的成员，两维都由登记方给全，没有要等闭包填的一格——所以两维齐了就是齐了。
+func (registration ResolutionKeyRegistration) validateCredit(needsCredit bool) error {
+	given := 0
+	for _, dimension := range []string{
+		registration.CreditLevel.String(),
+		registration.CreditChargeType.String(),
+	} {
+		if dimension != "" {
+			given++
+		}
+	}
+	if !needsCredit {
+		if given > 0 {
+			return fmt.Errorf("不要信用依据的登记不得携带信用维度")
+		}
+		return nil
+	}
+	if given < 2 {
+		return fmt.Errorf("要信用依据就必须登记商业权限等级与费用类型两维")
 	}
 	return nil
 }

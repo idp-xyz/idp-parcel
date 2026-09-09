@@ -113,6 +113,18 @@ func settlementKeyRegistration(t *testing.T, tenant, customer, scope string) ada
 	return registration
 }
 
+// creditKeyRegistration 是同一行登记再加上信用依据与它的两维（ADR-0127 决定二）。法人与时点
+// 不在其中：键上已有法人候选与锚点，重复携带就允许两者不一致。两维的取值与
+// registerCreditPolicy 登记的政策正文逐维对齐，闭包往返那条用例靠这一点命中。
+func creditKeyRegistration(t *testing.T, tenant, customer, scope string) adapter.ResolutionKeyRegistration {
+	t.Helper()
+	registration := keyRegistration(t, tenant, customer, scope)
+	registration.RequiredBases = append(registration.RequiredBases, pcdomain.CreditPolicyObject)
+	registration.CreditLevel = value(t, pcdomain.NewAuthorityLevel, "level-commercial")
+	registration.CreditChargeType = value(t, pcdomain.NewChargeTypeReference, "charge-freight")
+	return registration
+}
+
 func basisQuery(t *testing.T, tenant, customer string) psports.CommercialBasisQuery {
 	t.Helper()
 	return psports.CommercialBasisQuery{
@@ -415,6 +427,45 @@ func TestKeyRegistrationRefusesDefaultsAndBareCalls(t *testing.T) {
 		})
 		if registerErr == nil {
 			t.Fatal("要结算却不要合同的登记过了——合同维永远没人填得上（ADR-0080）")
+		}
+	})
+
+	t.Run("信用政策要两维", func(t *testing.T) {
+		broken := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.RequiredBases = append(broken.RequiredBases, pcdomain.CreditPolicyObject)
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("信用政策进了不带两维的登记——那个键在闭包解析处一律答`输入未受理`（ADR-0127 决定二）")
+		}
+	})
+
+	t.Run("两维缺一", func(t *testing.T) {
+		broken := creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.CreditChargeType = pcdomain.ChargeTypeReference{}
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("部分给出的信用维度被登记了")
+		}
+	})
+
+	t.Run("不要信用却带维度", func(t *testing.T) {
+		broken := creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+		broken.RequiredBases = keyRegistration(t, "tenant-1", "customer-1", "scope-1").RequiredBases
+		var registerErr error
+		mustWithinKeyTransaction(t, transactor, t.Context(), func(txCtx context.Context) error {
+			_, registerErr = keys.Register(txCtx, broken)
+			return nil
+		})
+		if registerErr == nil {
+			t.Fatal("不要信用依据的登记带上了信用维度——「不含则必缺」破了")
 		}
 	})
 
