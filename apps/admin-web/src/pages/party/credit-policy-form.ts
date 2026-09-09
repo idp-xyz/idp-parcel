@@ -8,7 +8,7 @@
 // 编不进 JSON 整数的文本——那不是替服务端判断，是根本组不出那份载荷。空字段、区间先后、引用是否在册一律
 // 送上去让服务端逐格点名。
 
-import type { CommercialPublicationPayload, CreditPolicyBodyPayload } from './publication-draft-api';
+import type { CommercialPublicationPayload, CreditPolicyBodyPayload, VocabularySetRecord } from './publication-draft-api';
 import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
 
 // 时点归一曾定义在本文件、被兄弟表单借用（票 22 抬到共享层）；这里保留导出只为既有调用点与测试不改一字，定义只在共享层。
@@ -27,6 +27,11 @@ export interface CreditPolicyDraft {
   /** 额度两格的文本；空即该格缺席。恰一由服务端裁，本地不挑。 */
   limitMinor: string;
   limitRatioBasisPoints: string;
+  /**
+   * 比例额度声明的基数（ADR-0129），词表读口 `ratioBase` 一集的码；空即缺席（「未选」是空值状态，不是默认值）。
+   * 比例在场而它缺席、金额在场而它在场都照发，由服务端点名 `creditPolicy.ratioBase`；表单不替登记方挑分母。
+   */
+  ratioBase: string;
   /** 正文自己的有效区间（0020 正文列），与壳区间是两回事，各自送。 */
   bodyEffectiveStartsAt: string;
   bodyEffectiveEndsAt: string;
@@ -44,9 +49,16 @@ export function emptyCreditPolicyDraft(): CreditPolicyDraft {
     chargeType: '',
     limitMinor: '',
     limitRatioBasisPoints: '',
+    ratioBase: '',
     bodyEffectiveStartsAt: '',
     bodyEffectiveEndsAt: '',
   };
+}
+
+/** 词表读口答复里 `ratioBase` 一集的码；答复里没有这一集即 null（缺席与空数组分开：空数组是有这一集但今天没给码）。 */
+export function ratioBaseCodesOf(sets: readonly VocabularySetRecord[]): string[] | null {
+  const set = sets.find((candidate) => candidate.name === 'ratioBase');
+  return set ? [...set.codes] : null;
 }
 
 /**
@@ -66,14 +78,15 @@ export const creditPolicyFieldPaths = [
   'creditPolicy.limit',
   'creditPolicy.limitMinor',
   'creditPolicy.limitRatioBasisPoints',
+  'creditPolicy.ratioBase',
   'creditPolicy.effectiveStartsAt',
   'creditPolicy.effectiveEndsAt',
 ] as const;
 
 /**
  * 组件里显 Problems 的路径表（票 22 判据 3），按 CreditPolicyPublicationForm 的 JSX 逐处抄：`kind` 一处 Problems 挂在版本壳
- * 标题下，`creditPolicy.limit` 一处 Problems 挂在额度两格下，其余各一 Field。与上面的认领表由
- * publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ * 标题下，`creditPolicy.limit` 一处 Problems 挂在额度两格下，`creditPolicy.ratioBase` 是基数下拉那一格（VocabularySelect
+ * 自带 Field），其余各一 Field。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
  */
 export const creditPolicyRenderedPaths: readonly string[] = [
   'kind',
@@ -87,6 +100,7 @@ export const creditPolicyRenderedPaths: readonly string[] = [
   'creditPolicy.chargeType',
   'creditPolicy.limitMinor',
   'creditPolicy.limitRatioBasisPoints',
+  'creditPolicy.ratioBase',
   'creditPolicy.limit',
   'creditPolicy.effectiveStartsAt',
   'creditPolicy.effectiveEndsAt',
@@ -106,8 +120,9 @@ export function creditPolicyLocalProblems(draft: CreditPolicyDraft): Record<stri
 }
 
 /**
- * 草稿 → 产品定义的载荷。可缺的键（两个区间上界、两个额度格）缺席而不是空串：服务端按键在场与否分辨
- * 「没有」，空串会被当成填了空的值送进构造门；额度格是数值，`0` 照发。必填的键空着也送——预览会逐格点名，
+ * 草稿 → 产品定义的载荷。可缺的键（两个区间上界、两个额度格、基数）缺席而不是空串：服务端按键在场与否分辨
+ * 「没有」，空串会被当成填了空的值送进构造门；额度格是数值，`0` 照发。基数选了就发，不看比例格填没填——金额带
+ * 基数是服务端要点名的一格问题，表单静默丢掉它反而把那格问题吞了。必填的键空着也送——预览会逐格点名，
  * 表单据此挂到格旁。**载荷里没有身份、没有摘要**：租户与录入者由接入渠道的操作者信封给。
  */
 export function creditPolicyPayloadOf(draft: CreditPolicyDraft): CommercialPublicationPayload {
@@ -121,6 +136,7 @@ export function creditPolicyPayloadOf(draft: CreditPolicyDraft): CommercialPubli
   if (limitMinor !== undefined) body.limitMinor = limitMinor;
   const limitRatioBasisPoints = integerOf(draft.limitRatioBasisPoints);
   if (limitRatioBasisPoints !== undefined) body.limitRatioBasisPoints = limitRatioBasisPoints;
+  if (draft.ratioBase.trim() !== '') body.ratioBase = draft.ratioBase.trim();
   if (draft.bodyEffectiveEndsAt.trim() !== '') body.effectiveEndsAt = normalizeMoment(draft.bodyEffectiveEndsAt);
 
   const payload: CommercialPublicationPayload = {

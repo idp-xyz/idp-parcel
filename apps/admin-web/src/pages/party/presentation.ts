@@ -110,6 +110,13 @@ export const settlementMethodLabels: Record<string, string> = {
   TERMS: '账期',
 };
 
+// 比例额度的基数封闭两格(domain CreditRatioBase, ADR-0129)。只是中文装饰：码从词表读口来，表单不内置枚举；
+// 词表没收录的码原样示出。
+export const creditRatioBaseLabels: Record<string, string> = {
+  POSTED_BALANCE: '入账余额',
+  PRIOR_PERIOD_CONFIRMED_CHARGES: '上一结算周期已确认费用合计',
+};
+
 // 接受前财务控制要求封闭两格(domain PreAcceptanceControl)。
 export const controlRequirementLabels: Record<string, string> = {
   REQUIRED: '要求',

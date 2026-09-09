@@ -6,6 +6,7 @@ import {
   creditPolicyPayloadOf,
   emptyCreditPolicyDraft,
   normalizeMoment,
+  ratioBaseCodesOf,
   type CreditPolicyDraft,
 } from './credit-policy-form';
 
@@ -13,6 +14,7 @@ import {
 //   1. 额度两格**都照发**：零金额是「授予零信用」不折成缺席；两格都填、都空也照发，恰一由服务端裁；
 //   2. 本地只拦「编不进 JSON 类型」的格（整数格填了非整数），空字段、区间先后一律送上去让服务端答；
 //   3. 草稿 → 载荷时可缺的键**缺席而不是空串**，必填的键空着也送（服务端逐格点名，表单只呈现）。
+// 加一条（ADR-0129）：比例的基数选了就发、不看比例格，缺了不补——比例缺基数 / 金额带基数都是服务端点名的格。
 
 function draft(over: Partial<CreditPolicyDraft> = {}): CreditPolicyDraft {
   return {
@@ -26,11 +28,43 @@ function draft(over: Partial<CreditPolicyDraft> = {}): CreditPolicyDraft {
     chargeType: 'FREIGHT',
     limitMinor: '',
     limitRatioBasisPoints: '',
+    ratioBase: '',
     bodyEffectiveStartsAt: '2026-09-01',
     bodyEffectiveEndsAt: '',
     ...over,
   };
 }
+
+// Covers: ADR-0129——基数随草稿照发：选了就进载荷（去空白），空即缺席；比例填了而基数空着不补默认，金额填了而基数
+// 选了也照发（服务端点名 creditPolicy.ratioBase），表单不替登记方挑分母；基数不是本地能拦的格。
+test('比例基数选了照发、空着缺席，不看比例格、不补默认', () => {
+  const declared = creditPolicyPayloadOf(draft({ limitRatioBasisPoints: '2500', ratioBase: ' POSTED_BALANCE ' }));
+  equal(declared.creditPolicy?.limitRatioBasisPoints, 2500);
+  equal(declared.creditPolicy?.ratioBase, 'POSTED_BALANCE');
+
+  const missing = creditPolicyPayloadOf(draft({ limitRatioBasisPoints: '2500' }));
+  ok(!('ratioBase' in missing.creditPolicy!));
+  deepEqual(creditPolicyLocalProblems(draft({ limitRatioBasisPoints: '2500' })), {});
+
+  const amountWithBase = creditPolicyPayloadOf(draft({ limitMinor: '100', ratioBase: 'PRIOR_PERIOD_CONFIRMED_CHARGES' }));
+  equal(amountWithBase.creditPolicy?.limitMinor, 100);
+  equal(amountWithBase.creditPolicy?.ratioBase, 'PRIOR_PERIOD_CONFIRMED_CHARGES');
+  deepEqual(creditPolicyLocalProblems(draft({ limitMinor: '100', ratioBase: 'PRIOR_PERIOD_CONFIRMED_CHARGES' })), {});
+});
+
+// Covers: 词表读口答复里的 ratioBase 一集原样取码；答复里没有这一集是 null（与空数组分开），表单据以显占位不显码。
+test('ratioBaseCodesOf 只取词表里 ratioBase 那一集，缺席答 null', () => {
+  deepEqual(
+    ratioBaseCodesOf([
+      { name: 'method', codes: ['PREPAID', 'TERMS'] },
+      { name: 'ratioBase', codes: ['POSTED_BALANCE', 'PRIOR_PERIOD_CONFIRMED_CHARGES'] },
+    ]),
+    ['POSTED_BALANCE', 'PRIOR_PERIOD_CONFIRMED_CHARGES'],
+  );
+  deepEqual(ratioBaseCodesOf([{ name: 'ratioBase', codes: [] }]), []);
+  equal(ratioBaseCodesOf([{ name: 'method', codes: ['PREPAID'] }]), null);
+  equal(ratioBaseCodesOf([]), null);
+});
 
 // Covers: 零金额进载荷是 0 不是缺席（读面 creditLimitCell 同一判据）；比例格空着即缺席。
 test('零金额照发为 0，不折成缺席', () => {
@@ -128,6 +162,7 @@ test('认领路径覆盖载荷全部键与 creditPolicy.limit', () => {
     'creditPolicy.limit',
     'creditPolicy.limitMinor',
     'creditPolicy.limitRatioBasisPoints',
+    'creditPolicy.ratioBase',
     'creditPolicy.effectiveStartsAt',
     'creditPolicy.effectiveEndsAt',
   ]) {

@@ -36,7 +36,9 @@ export type CommercialObjectKindName =
 /**
  * 信用政策册正文（Go `CreditPolicyBodyPayload`）。额度两键**恰一在场**由领域构造门判——两格都填或都空
  * 照样送上去，答回来的是 `creditPolicy.limit` 那一格的拒绝；零金额是「授予零信用」，不折成缺席，所以
- * 这里是数值而不是可空字符串。
+ * 这里是数值而不是可空字符串。`ratioBase` 是比例额度声明的基数（ADR-0129），只收 String() 原词——码由词表读口供
+ * （fetchPublicationVocabulary('CREDIT_POLICY') 的 `ratioBase` 一集），表单不内置枚举、不预选；比例在场而基数缺席、
+ * 金额在场而基数在场都由服务端点名 `creditPolicy.ratioBase` 那一格，表单照发不挑。
  */
 export interface CreditPolicyBodyPayload {
   legalEntity: string;
@@ -44,6 +46,7 @@ export interface CreditPolicyBodyPayload {
   chargeType: string;
   limitMinor?: number;
   limitRatioBasisPoints?: number;
+  ratioBase?: string;
   effectiveStartsAt: string;
   effectiveEndsAt?: string;
 }

@@ -18,6 +18,7 @@ import {
   controlFailureDispositionLabels,
   controlKindLabels,
   controlRequirementLabels,
+  creditRatioBaseLabels,
   finalOutcomeLabels,
   intakeSourceLabels,
   jointPassConditionLabels,
@@ -215,10 +216,13 @@ export function serviceRuleMinimumMaterialsCell(record: CustomerServiceRuleRecor
 
 // 额度三态:金额(含 0)、比例、两键都缺。零金额是登记方说出的「授予零信用」,与缺席相反;
 // 两键都缺按契约不该出现,点名而不是折成「—」——那会让一次坏响应长得像一格正常的空。
+// 比例行带基数(ADR-0129):一个比例不说相对什么不是业务判断依据,所以基数与百分比同显一格;存量比例行没有基数,
+// 如实示「基数未声明」——那是结算侧折不出额度、停在待判断的那批,不显成空白让人以为没事。词表没收录的码原样示出。
 function creditLimitCell(record: CreditPolicyRecord): string {
   if (record.limitMinor !== undefined) return `金额 ${record.limitMinor}（最小货币单位）`;
   if (record.limitRatioBasisPoints !== undefined) {
-    return `比例 ${record.limitRatioBasisPoints / 100}%`;
+    const base = record.ratioBase ? `基数 ${labelOf(creditRatioBaseLabels, record.ratioBase)}` : '基数未声明';
+    return `比例 ${record.limitRatioBasisPoints / 100}% · ${base}`;
   }
   return '额度缺失（响应不合契约）';
 }

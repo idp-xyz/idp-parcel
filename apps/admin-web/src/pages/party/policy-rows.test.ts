@@ -33,6 +33,7 @@ const creditPolicies: CommercialPolicyListResponseBody = {
       authorityLevel: 'level-commercial',
       chargeType: 'charge-freight',
       limitRatioBasisPoints: 1500,
+      ratioBase: 'POSTED_BALANCE',
       effectiveStartsAt: '2026-01-01T00:00:00Z',
       effectiveEndsAt: '2026-01-01T01:00:00Z',
       registeredAt: '2026-01-01T00:00:00Z',
@@ -341,12 +342,25 @@ test('零金额额度上列为金额 0，不是「未声明」也不是缺席', 
   equal(zero.values.effective, '2026-01-01 00:00:00 UTC → 持续有效');
 });
 
-test('比例额度按基点换算成百分比，并带上结束时点', () => {
+// ADR-0129：比例与它相对的基数同显一格；存量比例行没有基数如实示「基数未声明」，词表没收录的码原样示出。
+test('比例额度按基点换算成百分比、带上基数，并带上结束时点', () => {
   const [, ratio] = rowsOf(creditPolicies);
 
-  equal(ratio.values.limit, '比例 15%');
+  equal(ratio.values.limit, '比例 15% · 基数 入账余额');
   equal(ratio.values.effective, '2026-01-01 00:00:00 UTC → 2026-01-01 01:00:00 UTC');
   equal(ratio.values.registeredAt, '2026-01-01 00:00:00 UTC');
+
+  const [, legacy] = rowsOf({
+    ...creditPolicies,
+    policies: [creditPolicies.policies[0], { ...creditPolicies.policies[1], ratioBase: undefined }],
+  });
+  equal(legacy.values.limit, '比例 15% · 基数未声明');
+
+  const [, unknown] = rowsOf({
+    ...creditPolicies,
+    policies: [creditPolicies.policies[0], { ...creditPolicies.policies[1], ratioBase: 'NEW_BASE' }],
+  });
+  equal(unknown.values.limit, '比例 15% · 基数 NEW_BASE');
 });
 
 test('额度两键都缺是响应不合契约，如实点名而不是显示成零或空', () => {

@@ -148,6 +148,7 @@ export interface AuthorizationRuleRecord {
 // 信用政策册（0020_credit_policy.sql）。额度两键**恰一在场**：金额行只有 limitMinor（最小货币
 // 单位），比例行只有 limitRatioBasisPoints（基点）。后端用指针而不用 omitempty 的整数，是因为
 // 零额度是合法声明（「授予零信用」）——前端同样不得拿 0 当缺席；两键都缺才是响应不合契约。
+// 比例行带 ratioBase（ADR-0129，0029 一列）；0029 之前登进去的存量比例行没有它，读面如实示为「未声明」。
 // 授权层级与费用类型是开放引用集，按原词展示。
 export interface CreditPolicyRecord {
   objectId: string;
@@ -157,6 +158,7 @@ export interface CreditPolicyRecord {
   chargeType: string;
   limitMinor?: number;
   limitRatioBasisPoints?: number;
+  ratioBase?: string;
   effectiveStartsAt: string;
   effectiveEndsAt?: string;
   registeredAt: string;
