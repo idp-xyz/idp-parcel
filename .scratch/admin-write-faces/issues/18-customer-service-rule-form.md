@@ -116,3 +116,36 @@ PC 四包 ok；`e33aa81e` 无 DSN PC 四包 + `cmd/parcel-api` + `internal/archi
 
 **未做（各归其票）**：五步状态机归公共半边（票 16）；词表读口归票 20；四口与词表口点亮归操作者接入渠道（ADR-0100 那一族）；
 VE 侧两本册与本册正文的归属走 ADR（pc-gaps/05）；伞票 07 子票表本行的状态由推送方在进 main 时改；非作者评审由通道 1 派。
+
+## 进 main 记录（2026-09-09 18:2x，通道 1 推送）
+
+分支 `mcp3-awf21` 的 `4de2d30a..ed842637` 六笔在隔离树重放到 `506bbfd2` 之后，零冲突、内容与分支逐文件零差：`e8958fce→918ef3e0` /
+`e33aa81e→76710c17` / `fc51e407→6f3c76df` / `c31f3fda→e7a7d784` / `dbd16d10→81285be0` / `ed842637→83c6d81d`（`4de2d30a` 及之前三笔是票 21，早已进 main）。
+清点在链 tip 重生成 `c2a965c9`（partycommercial 生产 117→119 / 测试 127→130、http 适配器 25→26；合计 877 / 834）。推送方在 `c2a965c9` 干净检出含 DSN
+`go test -p 1 -count=1 ./...` 一次：**102 ok / 0 FAIL / 15 无测试，117 s**（`cmd/parcel-commercial` 含 DSN ok 3.6 s——13 / 15 都在这里红过的那格本票绿）；
+admin-web 在 main 树上 `tsc --noEmit` 0、`run-tests` 188 / 188。**远端 `main = c2a965c9`**。伞票 07 子票表本行同笔转 resolved。分支指针改名 `merged/mcp3-awf21`。
+评审两轴五条非阻断随票记（下），不另立票：Spec ① 判据口径归伞票 07 收口；Spec ② 原句改口与 Standards ① 父行门抽取、Spec ③ 文案，作者可随伞票收口
+或 awf/22（全页重构）顺手改。
+
+## Comments
+
+**评审 ← 通道 5 · 钉 `ed842637` · 17:5x**（基 `4de2d30a`，隔离树 `%TEMP%\idp-review-awf18`；改派自通道 6（其会话 17:40 crash，分析已做报告未发）；原文在通道 1 台账 `task-b0b1b481`；先发了一条半成品）
+
+- **Standards**：阻断 0。非阻断 ① `domain/customer_service_rule.go` `NewCustomerServiceRuleVersion` 与 `domain/publication_canonicalization_customer_service_rule.go`
+  `CustomerServiceRuleBody.filed`：父行三格门（applicability / responsible / scope.valid → `ErrInvalidCustomerServiceRuleVersion`）各写一份——跨行门抽成
+  `filedCustomerServiceRuleItems` 的理由对父行门同样成立；样板 13 的 `filedPreAcceptanceControlItems` 把 JointPass 一起收了（Duplicated Code，判断题）。
+  ② 三处把「今天只有信用政策一格」改口「首例是信用政策一格」（`publication_canonicalization.go` / `publication_draft.go` / `publish_commercial_authority.go`）：
+  改的是过时陈述，无害，但属地盘外且完成记录未列。无发现：注释全中文；无行号式引用；domain 新文件只 import fmt；tsx 无 defaultValue / selected，每个 select
+  首项 value="" 未选，`emptyServiceRuleDraft` 两键空两表零行；`serviceRuleLocalProblems` 只拦编不进 JSON 整数的时长文本；载荷无 contentDigest / approval；
+  共享文件只加不改邻册且排 13 之后；`ClaimDeadlineKindNamed` / `CommercialObjectKindNamed` 都走 `closedCodeNamed`；`IsRegisterCanonicalized` 十格全真与
+  `ErrRegisterNotCanonicalized` 新注释自洽。验：gofmt 空；build 0；vet PC + cmd/parcel-commercial 0；`go test -count=1` PC 四包 + architecture 无 DSN 全 ok；
+  补跑 `cmd/parcel-commercial` 含 DSN：PASS 123 / FAIL 0 / SKIP 0（通道 6 报 129 是计数口径不同，零红零跳一致）。
+- **Spec**：阻断 0。非阻断 ① 判据「Go 侧只加本册规范化一格」字面写窄：实际含应用两向 + 载荷一格 + cmd 换串与地盘外两改，完成记录逐条披露且读法同 13 / 15——
+  不是越界，是判据口径该改「接进 PCC-1 同号所需的机制半边」，归伞票。② 「选形与理由」原句「期限种类与起算事件的封闭集由词表供」仍在，只加括注；本册词表只答 kind，
+  起算事件是 `DeadlineStartEventReference` 开放引用——不矛盾但原句半错，作者判断题 (1) 已自报，收口时直接改。③ `ClaimDeadlineRulePayload.rule`：表单时长留空不送
+  days，Go 收 0，文案「收到 0」——操作者看到的不是「没填」；不用指针是与 13 `order` 同一取舍，只是文案。无发现（重点七条）：排序稳（两表各以键排、重键已在 filed 拒）、
+  空表 `[]` 非 null、与 13 六件同形、跨行门抽取前后错误值与顺序一字不变；词表只 kind、`serviceRuleCodesOf` 缺集回 null 无回退；`reconcileDeclaredDigest` 对旧
+  `sha256:` 串答 NotAccepted 带 declared / computed 两串、壳无正文不对账仍合法；Go / TS 三键（startEvent / claimKind / customerServiceRule）两侧逐字同；判断题三条
+  各一句判（空表零行对、材料多行文本对、词表不重取可接受）；九份共享文件 numstat 与作者一致、减行全是旧循环与过时注释；`closedCodeNamed` 与旧循环在连续集上语义相等，
+  main 上 `closed_set_named_test.go` 十成员往返直接盖到。边界：无 migrations/、无 visibilityexception/。
+- **结论**：两轴无阻断，可进 main。推送方处置：五条非阻断随票记；Spec ① 归伞票 07 收口时改判据口径；其余作者随伞票收口或 awf/22 顺手改。
