@@ -1,6 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
-import type { ApiResult } from '../catalogue-api';
 import { listPriceCards, type PriceCardListResponseBody } from '../pricing/api';
 import {
   listBusinessParties,
@@ -9,9 +8,10 @@ import {
   type GroupLegalEntityListResponseBody,
 } from './api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { Field, ReferencePicker, momentPlaceholder } from './PublicationFormFields';
+import { planReferenceOf } from './publication-form-shared';
 import {
   emptySupplierAgreementDraft,
-  planReferenceOf,
   supplierAgreementFieldPaths,
   supplierAgreementPayloadOf,
   withShellCopiedIntoAgreement,
@@ -38,12 +38,6 @@ export interface SupplierAgreementPublicationFormProps {
   /** 载体到达「发布」那一步时回调，供应商协议页借它刷同页目录读面。 */
   onPublished?: () => void;
 }
-
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
-const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）';
 
 export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreementPublicationFormProps) {
   const [draft, setDraft] = useState<SupplierAgreementDraft>(emptySupplierAgreementDraft());
@@ -206,123 +200,5 @@ export function SupplierAgreementPublicationForm({ onPublished }: SupplierAgreem
         </div>
       )}
     </PublicationDraftFlow>
-  );
-}
-
-// 一格：标签、控件、服务端点名到这条路径的问题（构造门原话，可多条）。
-function Field({
-  label,
-  path,
-  problems,
-  children,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  children: ReactNode;
-}) {
-  const lines = problems[path] ?? [];
-  return (
-    <label className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
-      {children}
-      {lines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-          {line}
-        </span>
-      ))}
-    </label>
-  );
-}
-
-interface PickerOption {
-  value: string;
-  label: string;
-}
-
-/**
- * 从读面选一条引用。读面答了业务答案就给选单（不按状态过滤——表单不裁，状态显在选项里由人看）；读面在
- * 未配置那堵墙前或读不到时退回手填并说明原因。选出来的只是引用串，在不在册、立不立得住仍由服务端判。
- * 手填时若当前值不在候选里，选单照样保留它作一项，免得读面刷新把人填好的东西静默清掉。
- */
-function ReferencePicker<Body>({
-  label,
-  path,
-  problems,
-  value,
-  locked,
-  onChange,
-  load,
-  optionsOf,
-  emptyNote,
-  readFace,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  value: string;
-  locked: boolean;
-  onChange: (value: string) => void;
-  load: () => Promise<ApiResult<Body>>;
-  optionsOf: (body: Body) => PickerOption[];
-  emptyNote: string;
-  readFace: string;
-}) {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void load().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  if (answer?.kind === 'outcome') {
-    const options = optionsOf(answer.body);
-    const known = options.some((option) => option.value === value);
-    return (
-      <Field label={label} path={path} problems={problems}>
-        <select
-          className={selectClass}
-          value={value}
-          disabled={locked}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（手填，不在读面上）</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {options.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">{emptyNote}</span>
-        ) : null}
-      </Field>
-    );
-  }
-
-  return (
-    <Field label={label} path={path} problems={problems}>
-      <Input
-        value={value}
-        disabled={locked}
-        className="font-mono text-[13px]"
-        placeholder="引用串（读面不可用时手填）"
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-        {answer === null
-          ? `正在读${readFace}…`
-          : answer.kind === 'unconfigured'
-            ? `${readFace}读口在接入渠道未配置那堵墙前（403），先手填；引用在不在册由服务端发布时判。`
-            : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
-      </span>
-    </Field>
   );
 }

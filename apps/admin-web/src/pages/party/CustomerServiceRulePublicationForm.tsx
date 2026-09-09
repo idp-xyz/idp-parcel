@@ -1,13 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { claimDeadlineKindLabels } from './presentation';
-import {
-  fetchPublicationVocabulary,
-  vocabularyOptions,
-  type PublicationVocabularyResponseBody,
-} from './publication-draft-api';
+import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { Field, VocabularySelect, momentPlaceholder, selectClass, useLoaded } from './PublicationFormFields';
 import {
   emptyServiceRuleDraft,
   serviceRuleCodesOf,
@@ -53,13 +50,9 @@ export interface CustomerServiceRulePublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
 const textareaClass = `${selectClass} font-mono min-h-[72px]`;
-const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当天零点 UTC）';
 const bodyPath = 'customerServiceRule';
+const kind = 'CUSTOMER_SERVICE_RULE';
 
 // 二选一控件的两格：取值就是载荷键名原词，与 customer-service-rule-form 的 ServiceRuleAppliesTo 同一套词。这是表单
 // 自己的形状（正文两键之一），不是领域封闭集，所以不经词表。
@@ -299,6 +292,7 @@ function ClaimDeadlineRow({
           label="期限种类 *"
           path={`${rowPath}.kind`}
           setName="kind"
+          kind={kind}
           codes={kindCodes}
           vocabulary={vocabulary}
           labels={claimDeadlineKindLabels}
@@ -410,128 +404,7 @@ function MinimumMaterialsRow({
   );
 }
 
-// 一格：标签、控件、服务端点名到这条路径的问题（构造门原话，可多条）。
-function Field({
-  label,
-  path,
-  problems,
-  children,
-}: {
-  label: string;
-  path: string;
-  problems: Record<string, string[]>;
-  children: ReactNode;
-}) {
-  const lines = problems[path] ?? [];
-  return (
-    <label className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
-      {children}
-      {lines.map((line) => (
-        <span key={line} className="block text-[11px] text-idpxyz-danger mt-1">
-          {line}
-        </span>
-      ))}
-    </label>
-  );
-}
-
-// 读一次、只读一次：词表是目录，表单打开时取一份，不随每次击键重取。
-function useLoaded<Body>(load: () => Promise<ApiResult<Body>>): ApiResult<Body> | null {
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void load().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-  return answer;
-}
-
-/**
- * 封闭集下拉：选项 = 服务端词表（票 20）那一集的码 × 本页中文词表；词表没收录的码原样示出。词表在未配置那堵墙前
- * （403）、调用方问题、未形成答案、没到达、或答复里没有这一集时都**显占位不显码**——表单不内置任何一格，内置一份
- * 就是同一封闭集的第二份写法。不预选：「未选」是一个空值状态，不是默认值。
- */
-function VocabularySelect({
-  label,
-  path,
-  setName,
-  codes,
-  vocabulary,
-  labels,
-  problems,
-  value,
-  locked,
-  onChange,
-}: {
-  label: string;
-  path: string;
-  setName: string;
-  codes: string[] | null;
-  vocabulary: ApiResult<PublicationVocabularyResponseBody> | null;
-  labels: Record<string, string>;
-  problems: Record<string, string[]>;
-  value: string;
-  locked: boolean;
-  onChange: (value: string) => void;
-}) {
-  if (codes !== null) {
-    const options = vocabularyOptions(codes, labels);
-    const known = options.some((option) => option.value === value);
-    return (
-      <Field label={label} path={path} problems={problems}>
-        <select className={selectClass} value={value} disabled={locked} onChange={(event) => onChange(event.target.value)}>
-          <option value="">未选</option>
-          {!known && value !== '' ? <option value={value}>{value}（不在词表上）</option> : null}
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label} · {option.value}
-            </option>
-          ))}
-        </select>
-        {options.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">服务端词表 {setName} 一集今天没有码；表单不自造。</span>
-        ) : null}
-      </Field>
-    );
-  }
-
-  return (
-    <Field label={label} path={path} problems={problems}>
-      <select className={selectClass} value="" disabled>
-        <option value="">{vocabularyPlaceholder(vocabulary, setName)}</option>
-      </select>
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-        码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=CUSTOMER_SERVICE_RULE），
-        表单不内置枚举、不自造码；词表就绪前这一格选不了，送预览会由服务端点名。
-      </span>
-    </Field>
-  );
-}
-
 // 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。
 function loadServiceRuleVocabulary(): Promise<ApiResult<PublicationVocabularyResponseBody>> {
   return fetchPublicationVocabulary('CUSTOMER_SERVICE_RULE');
-}
-
-function vocabularyPlaceholder(answer: ApiResult<PublicationVocabularyResponseBody> | null, setName: string): string {
-  if (answer === null) return '正在读词表…';
-  switch (answer.kind) {
-    case 'outcome':
-      return `词表未就绪（服务端没有 ${setName} 一集）`;
-    case 'unconfigured':
-      return '词表未就绪（接入渠道未配置，403）';
-    case 'callerProblem':
-      return `词表未就绪（调用方式问题，HTTP ${answer.status}）`;
-    case 'noAnswer':
-      return `词表未就绪（服务端未形成答案，HTTP ${answer.status}）`;
-    case 'transport':
-      return '词表未就绪（请求未到达 parcel-api）';
-  }
 }
