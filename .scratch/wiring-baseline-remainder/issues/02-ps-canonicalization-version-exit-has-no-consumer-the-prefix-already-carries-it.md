@@ -74,7 +74,7 @@ Blocked by: 无（二选一都是 PS 地盘内的小改，不等任何上游）
   即跳过、只作编译证）+ `internal/architecture/...` 全 ok；反向依赖里 `cmd/parcel-api` / `cmd/parcel-commercial` / `cmd/parcel-dispatch`
   带 DSN `-p 1 -count=1 -v`：284 PASS / 0 SKIP / 0 FAIL（13.9 s / 3.8 s / 27.3 s），跑在通道 1 17:3x 关窗之后。
 
-## 进 main 记录（2026-09-09 18:1x，通道 1 推送）
+## 进 main 记录（2026-09-09 17:4x，通道 1 推送）
 
 分支 `mcp6-wbr02` 三笔在隔离树重放到 `135af96b` 之后：`e38bc18d→4ba719c8` / `eecd05d4→8c38f27c` / `58c409a9→903fda7a`。**`eecd05d4` 那笔在
 `production_wiring_baseline.txt` 头注处与 main 上 wbr/01 那一剪冲突**（两笔各在头注末尾加了一段），推送方按意图并：两段头注都留（01 在前、02 在后），
