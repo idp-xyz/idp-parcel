@@ -1,7 +1,7 @@
 # `branch-state.ps1 -Classify` 认不出被重放过的分支：blob 相等判不了「加行都在 main 里」
 
 Category: bug
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：另一会话 09-09 实测 `-Classify` 对 12 / 13 / 14 / 15 的分支误判（报 `ABSORBED`）且误报未推 origin，
+Status: in-progress——2026-09-09 15:4x 通道 6 领票，分支 `mcp6-adle02` 基 `8f020eff`，树 `D:/tops/idp-parcel-mcp6-adle02`。立票说明（通道 1 代裁，用户授权自决）：另一会话 09-09 实测 `-Classify` 对 12 / 13 / 14 / 15 的分支误判（报 `ABSORBED`）且误报未推 origin，
 「直接比较文件历史和本地 / 远端 SHA 后均不成立，当前分类输出不能作为回放依据」。分类是推送方改名 `merged/` 前的门，门不准就只能靠人肉 range-diff
 Blocked by: 无
 
