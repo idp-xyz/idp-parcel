@@ -34,15 +34,10 @@ func (body SettlementPolicyBody) valid() bool {
 }
 
 // SettlementMethodNamed 按 String() 的原词反查结算方式：规范化文档里的 method、运营操作者面载荷里的 method 都是
-// 那一个词，名单只在 String() 一处，这里只是反查（判据同 CommercialObjectKindNamed）。集合外答 false——第三个取值
-// （客户级默认）是本上下文明禁的，反查不替它开口。
+// 那一个词，名单只在 String() 一处，这里只是反查。集合外答 false——第三个取值（客户级默认）是本上下文明禁的，
+// 反查不替它开口。
 func SettlementMethodNamed(name string) (SettlementMethod, bool) {
-	for method := PrepaidMethod; method.valid(); method++ {
-		if method.String() == name {
-			return method, true
-		}
-	}
-	return SettlementMethodInvalid, false
+	return closedCodeNamed(SettlementMethod.valid, SettlementMethod.String, name)
 }
 
 // canonicalizeSettlementPolicy 是 CanonicalizePublicationContent 里结算政策那一支：正文缺席与立不住的正文各答

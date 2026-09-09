@@ -123,35 +123,20 @@ func (row canonicalPreAcceptanceControlItem) item() (PreAcceptanceControlItem, e
 }
 
 // PreAcceptanceControlKindNamed 按 String() 的原词反查控制种类：规范化文档里的、运营操作者面载荷里的都是那一个词，
-// 名单只在 String() 一处，这里只是反查（判据同 CommercialObjectKindNamed）。集合外答 false——含空串，也含「无控制」
-// 那类词：它不在集合里不是漏，是 ADR-0115 Decision 一。
+// 名单只在 String() 一处，这里只是反查。集合外答 false——含空串，也含「无控制」那类词：它不在集合里不是漏，
+// 是 ADR-0115 Decision 一。
 func PreAcceptanceControlKindNamed(name string) (PreAcceptanceControlKind, bool) {
-	for kind := PrepaidFreezeControl; kind.valid(); kind++ {
-		if kind.String() == name {
-			return kind, true
-		}
-	}
-	return PreAcceptanceControlKindInvalid, false
+	return closedCodeNamed(PreAcceptanceControlKind.valid, PreAcceptanceControlKind.String, name)
 }
 
-// ControlFailureDispositionNamed 按 String() 的原词反查失败处置，判据同上。集合外答 false——把打错的处置折进某一格，
+// ControlFailureDispositionNamed 按 String() 的原词反查失败处置。集合外答 false——把打错的处置折进某一格，
 // 等于替租户改了失败时委托的去向。
 func ControlFailureDispositionNamed(name string) (ControlFailureDisposition, bool) {
-	for disposition := RejectOnControlFailure; disposition.valid(); disposition++ {
-		if disposition.String() == name {
-			return disposition, true
-		}
-	}
-	return ControlFailureDispositionInvalid, false
+	return closedCodeNamed(ControlFailureDisposition.valid, ControlFailureDisposition.String, name)
 }
 
-// JointPassConditionNamed 按 String() 的原词反查共同通过条件，判据同上。首发只有一值，空串仍答 false：CONTEXT 要求
+// JointPassConditionNamed 按 String() 的原词反查共同通过条件。首发只有一值，空串仍答 false：CONTEXT 要求
 // 策略明确它，缺席不折成「全部通过」（ADR-0115 Decision 三）。
 func JointPassConditionNamed(name string) (JointPassCondition, bool) {
-	for condition := AllControlsPass; condition.valid(); condition++ {
-		if condition.String() == name {
-			return condition, true
-		}
-	}
-	return JointPassConditionInvalid, false
+	return closedCodeNamed(JointPassCondition.valid, JointPassCondition.String, name)
 }

@@ -105,14 +105,10 @@ func preAcceptanceControlDeclared(requirement PreAcceptanceControlRequirement, b
 }
 
 // PreAcceptanceControlRequirementNamed 按 String() 的原词反查要求：规范化文档与运营操作者面载荷里的
-// requirement 都是那一个词，名单只在 String() 一处。集合外（含空串——「未声明」不是一格取值）答 false。
+// requirement 都是那一个词，名单只在 String() 一处。集合外（含空串——「未声明」不是一格取值，所以接受判据
+// 是 Declared 而不是「零值也算」）答 false。
 func PreAcceptanceControlRequirementNamed(name string) (PreAcceptanceControlRequirement, bool) {
-	for _, requirement := range []PreAcceptanceControlRequirement{PreAcceptanceControlRequired, PreAcceptanceControlNotApplicable} {
-		if requirement.String() == name {
-			return requirement, true
-		}
-	}
-	return PreAcceptanceControlUndeclared, false
+	return closedCodeNamed(PreAcceptanceControlRequirement.Declared, PreAcceptanceControlRequirement.String, name)
 }
 
 func (declaration PreAcceptanceControlDeclaration) Contract() CommercialVersion {

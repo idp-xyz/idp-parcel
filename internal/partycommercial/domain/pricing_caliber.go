@@ -27,6 +27,12 @@ const (
 	TaxNotApplicable
 )
 
+// valid 是三值声明的边界：零值哨兵在外。NewTaxCaliber 的 default 分支答的是同一道判，那里连着分类一起判所以
+// 没有改成调这里；反查（TaxDispositionNamed）扫值域时用的就是这一条边界。
+func (disposition TaxDisposition) valid() bool {
+	return disposition >= TaxInclusive && disposition <= TaxNotApplicable
+}
+
 func (disposition TaxDisposition) String() string {
 	switch disposition {
 	case TaxInclusive:

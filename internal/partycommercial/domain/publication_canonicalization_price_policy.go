@@ -256,35 +256,20 @@ func (document canonicalPricePolicyCaliber) body(direction PriceDirection) (Pric
 }
 
 // PriceDirectionNamed 按 String() 的原词反查价格方向：规范化文档里的 direction / planDirection、运营操作者面载荷里的
-// 同两格都是那一个词，名单在 String() 一处，这里只是反查（判据同 CommercialObjectKindNamed）。集合外含空串答 false。
+// 同两格都是那一个词，名单在 String() 一处，这里只是反查。集合外含空串答 false。
 func PriceDirectionNamed(name string) (PriceDirection, bool) {
-	for direction := BuyDirection; direction.valid(); direction++ {
-		if direction.String() == name {
-			return direction, true
-		}
-	}
-	return PriceDirectionInvalid, false
+	return closedCodeNamed(PriceDirection.valid, PriceDirection.String, name)
 }
 
 // PlanBindingConversionNamed 按 String() 原词反查方案绑定转换。空串答 false 而不折成 NONE：SELL 政策绑 BUY 方案而没写
 // 转换该由 checkPlanBinding 报出`适用冲突`，代填 NONE 会把「没写」与「明说不转换」混在一起（判据同受控批文的
-// planBindingConversionFrom）。
+// planBindingConversionFrom）。落空时第一个返回值恰是 NONE 的零值，分辨靠第二个返回值。
 func PlanBindingConversionNamed(name string) (PlanBindingConversion, bool) {
-	for conversion := PlanBindingConversionNone; conversion.valid(); conversion++ {
-		if conversion.String() == name {
-			return conversion, true
-		}
-	}
-	return PlanBindingConversionNone, false
+	return closedCodeNamed(PlanBindingConversion.valid, PlanBindingConversion.String, name)
 }
 
 // TaxDispositionNamed 按 String() 原词反查税务口径。零值哨兵不落进「不适用」，与领域同判据：缺席与已判定为不适用
 // 要人做的事不同，前者去补声明。
 func TaxDispositionNamed(name string) (TaxDisposition, bool) {
-	for disposition := TaxInclusive; disposition <= TaxNotApplicable; disposition++ {
-		if disposition.String() == name {
-			return disposition, true
-		}
-	}
-	return TaxDispositionInvalid, false
+	return closedCodeNamed(TaxDisposition.valid, TaxDisposition.String, name)
 }

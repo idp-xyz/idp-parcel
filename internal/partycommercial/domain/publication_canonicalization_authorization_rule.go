@@ -2,7 +2,6 @@ package domain
 
 import (
 	"fmt"
-	"math"
 	"sort"
 )
 
@@ -26,15 +25,9 @@ func (body AuthorizationRuleBody) validate() error {
 }
 
 // DeclaredCancellationPartyNamed 按 String() 的原词反查请求方：规范化文档与运营操作者面载荷里的 party 都是
-// 那一个词，名单只在 String() 一处——这里扫值域按 valid() 认，不另抄一份常量表。集合外（含空串）答 false。
+// 那一个词，名单只在 String() 一处，这里只是反查。集合外（含空串）答 false。
 func DeclaredCancellationPartyNamed(name string) (DeclaredCancellationParty, bool) {
-	for raw := 0; raw <= math.MaxUint8; raw++ {
-		party := DeclaredCancellationParty(raw)
-		if party.valid() && party.String() == name {
-			return party, true
-		}
-	}
-	return DeclaredCancellationPartyInvalid, false
+	return closedCodeNamed(DeclaredCancellationParty.valid, DeclaredCancellationParty.String, name)
 }
 
 // canonicalizeAuthorizationRule 是 CanonicalizePublicationContent 里授权规则那一支：正文缺席与立不住的目录各答
