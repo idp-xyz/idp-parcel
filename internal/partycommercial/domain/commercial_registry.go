@@ -361,7 +361,9 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			continue
 		}
 		// 与结算政策同理（ADR-0127）：只改额度或四维、不动版本正文时，解析身份仍须变。额度按
-		// 两格分别写入——金额 100 与比例 100 是两份不同的正文，摘要里不能长成同一个数。
+		// 两格分别写入——金额 100 与比例 100 是两份不同的正文，摘要里不能长成同一个数。比例格连
+		// 基数一起写（ADR-0129）：同一个 30% 相对入账余额与相对上期费用是两份不同的授权；金额格
+		// 那一段一字不变，登记了金额额度的范围解析身份不因本记录换值。
 		end, bounded := policy.effective.EndsAt()
 		endPart := ""
 		if bounded {
@@ -369,6 +371,10 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 		}
 		amountMinor, isAmount := policy.limit.AmountMinor()
 		ratioBps, isRatio := policy.limit.RatioBasisPoints()
+		ratioPart := creditLimitPart("RATIO", ratioBps, isRatio)
+		if base, declared := policy.limit.RatioBase(); declared {
+			ratioPart += "@" + base.String()
+		}
 		parts = append(parts, strings.Join([]string{
 			"CREDIT_POLICY",
 			policy.version.objectID.String(),
@@ -377,7 +383,7 @@ func (registry *CommercialRegistry) ViewRevision(tenant TenantID, scope Commerci
 			policy.level.String(),
 			policy.chargeType.String(),
 			creditLimitPart("AMOUNT", amountMinor, isAmount),
-			creditLimitPart("RATIO", ratioBps, isRatio),
+			ratioPart,
 			policy.effective.StartsAt().UTC().Format(time.RFC3339Nano),
 			endPart,
 		}, "\x1f"))

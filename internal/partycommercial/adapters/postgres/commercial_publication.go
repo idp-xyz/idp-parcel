@@ -67,7 +67,7 @@ func (repository *CommercialPublications) LoadForScope(
 		        settlement.contract_label, settlement.charge_scope_ref, settlement.currency_code,
 		        settlement.effective_starts_at, settlement.effective_ends_at,
 		        credit.legal_entity_ref, credit.authority_level_ref, credit.charge_type_ref,
-		        credit.limit_minor, credit.limit_ratio_bps,
+		        credit.limit_minor, credit.limit_ratio_bps, credit.ratio_base,
 		        credit.effective_starts_at, credit.effective_ends_at
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
@@ -136,7 +136,7 @@ func (repository *CommercialPublications) LoadForScope(
 			&settlement.contract, &settlement.chargeScope, &settlement.currency,
 			&settlement.startsAt, &settlement.endsAt,
 			&credit.legalEntity, &credit.level, &credit.chargeType,
-			&credit.limitMinor, &credit.limitBps, &credit.startsAt, &credit.endsAt,
+			&credit.limitMinor, &credit.limitBps, &credit.ratioBase, &credit.startsAt, &credit.endsAt,
 		); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}

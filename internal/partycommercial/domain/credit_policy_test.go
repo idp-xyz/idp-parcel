@@ -172,7 +172,7 @@ func TestCreditPolicyNeedsAUsableVersionAndADeclaredLimit(t *testing.T) {
 	})
 
 	t.Run("carries a ratio limit as readily as an amount", func(t *testing.T) {
-		ratio, err := domain.NewCreditRatioLimit(2500)
+		ratio, err := domain.NewCreditRatioLimit(2500, domain.PostedBalanceBase)
 		if err != nil {
 			t.Fatalf("new ratio limit: %v", err)
 		}

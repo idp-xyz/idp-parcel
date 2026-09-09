@@ -242,6 +242,22 @@ func TestCustomerServiceRuleVocabularyMatchesItsConstructorGate(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0129 决定五——信用政策册的 `ratioBase` 一集从 NewCreditRatioLimit 的接受判据逐值列出，一字不多不少：
+// 「未声明」不在（它是重建门的读法，不是一行能选的取值），票面候选名 DEPOSIT_BALANCE 不在。
+func TestCreditPolicyVocabularyMatchesTheRatioLimitGate(t *testing.T) {
+	assertSetsMatchGates(t, vocabularyOf(t, domain.CreditPolicyObject),
+		[]string{"ratioBase"},
+		map[string][]string{
+			"ratioBase": codesAccepted(func(raw uint8) bool {
+				_, err := domain.NewCreditRatioLimit(1, domain.CreditRatioBase(raw))
+				return err == nil
+			}, func(raw uint8) string { return domain.CreditRatioBase(raw).String() }),
+		})
+	if got := strings.Join(vocabularyOf(t, domain.CreditPolicyObject)[0].Codes, ","); got != "POSTED_BALANCE,PRIOR_PERIOD_CONFIRMED_CHARGES" {
+		t.Fatalf("ratioBase = %q", got)
+	}
+}
+
 // Covers: 票 20 裁决三「某册没有封闭集就答空集合列表，不答 404」——每个合法 kind 都答得出来；正文里没有封闭集的册
 // 一律是空列表（非 nil：线上是 `[]` 不是 `null`），服务产品与客户合同点名在内。
 func TestRegistersWithoutClosedSetsAnswerAnEmptyList(t *testing.T) {
@@ -251,6 +267,8 @@ func TestRegistersWithoutClosedSetsAnswerAnEmptyList(t *testing.T) {
 		domain.SettlementPolicyObject:                    true,
 		domain.AuthorizationRuleObject:                   true,
 		domain.CustomerServiceRuleObject:                 true,
+		// ADR-0129：信用政策册自此有一集（比例基数）。
+		domain.CreditPolicyObject: true,
 	}
 	answered := 0
 	for raw := 0; raw <= math.MaxUint8; raw++ {

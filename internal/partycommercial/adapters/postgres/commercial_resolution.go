@@ -190,10 +190,12 @@ type adoptedDocument struct {
 }
 
 // creditBasisDocument 镜像 domain.CreditLimit 的两格封闭：恰一在场。两格分列而不是「一个数加
-// 一列标记」，与 0020 同一条理由——值落在哪一格本身就是判别式。
+// 一列标记」，与 0020 同一条理由——值落在哪一格本身就是判别式。比例格自 ADR-0129 起带基数一键；
+// 缺键的存量快照读回为未声明（重建门如实读回，ADR-0028），不补默认。
 type creditBasisDocument struct {
-	AmountMinor      *int64 `json:"amountMinor,omitempty"`
-	RatioBasisPoints *int64 `json:"ratioBasisPoints,omitempty"`
+	AmountMinor      *int64  `json:"amountMinor,omitempty"`
+	RatioBasisPoints *int64  `json:"ratioBasisPoints,omitempty"`
+	RatioBase        *string `json:"ratioBase,omitempty"`
 }
 
 type settlementPolicyDocument struct {
@@ -257,8 +259,8 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 }
 
 func documentOfCreditBasis(basis domain.CreditBasis) *creditBasisDocument {
-	minor, bps := creditLimitColumns(basis.AuthorizedLimit())
-	return &creditBasisDocument{AmountMinor: minor, RatioBasisPoints: bps}
+	minor, bps, ratioBase := creditLimitColumns(basis.AuthorizedLimit())
+	return &creditBasisDocument{AmountMinor: minor, RatioBasisPoints: bps, RatioBase: ratioBase}
 }
 
 func documentOfSettlementPolicy(policy domain.SettlementPolicy) *settlementPolicyDocument {
@@ -353,8 +355,9 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 			spec.HasSettlementPolicy = true
 		}
 		if item.CreditBasis != nil {
-			// 两格折回领域构造门；两空 / 两满是本适配器绝不会写出的形状，报错不吸收。
-			limit, err := creditLimitFrom(item.CreditBasis.AmountMinor, item.CreditBasis.RatioBasisPoints)
+			// 两格折回领域；两空 / 两满是本适配器绝不会写出的形状，报错不吸收。比例格走重建门：ADR-0129 之前
+			// 固定的快照没有基数键，如实读回为未声明——快照的全部意义就是不许它改口，这里不替它补一个基数。
+			limit, err := creditLimitFrom(item.CreditBasis.AmountMinor, item.CreditBasis.RatioBasisPoints, item.CreditBasis.RatioBase)
 			if err != nil {
 				return domain.CommercialClosure{}, fmt.Errorf("load commercial resolution: %w", err)
 			}

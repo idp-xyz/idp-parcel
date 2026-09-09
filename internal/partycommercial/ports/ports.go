@@ -1318,10 +1318,12 @@ type CreditPolicyRow struct {
 	HasAmount             bool
 	LimitMinor            int64
 	LimitRatioBasisPoints int64
-	EffectiveStartsAt     time.Time
-	EffectiveEndsAt       time.Time
-	HasEffectiveEnd       bool
-	RegisteredAt          time.Time
+	// RatioBase 是比例行声明的基数原词（ADR-0129）；金额行与 0029 之前登进去的未声明存量比例行为空串。
+	RatioBase         string
+	EffectiveStartsAt time.Time
+	EffectiveEndsAt   time.Time
+	HasEffectiveEnd   bool
+	RegisteredAt      time.Time
 }
 
 // AsOfPolicyRow 是时点锚声明册上列的一行:某接单规则包版本为某类下游判断声明的

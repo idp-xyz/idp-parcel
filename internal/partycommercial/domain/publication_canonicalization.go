@@ -392,7 +392,8 @@ type canonicalPublicationDocument struct {
 	CustomerServiceRule *canonicalCustomerServiceRuleBody `json:"customerServiceRule,omitempty"`
 }
 
-// canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺。
+// canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺；比例在场时
+// 基数一键随行（ADR-0129，PCC-1 加键不换号——金额正文的文档一字不变，既有摘要不动）。
 // 时刻一律 UTC RFC 3339 纳秒——同一时刻在两个时区写出两个串，摘要就成了两个。
 type canonicalCreditPolicyBody struct {
 	LegalEntity           string `json:"legalEntity"`
@@ -400,6 +401,7 @@ type canonicalCreditPolicyBody struct {
 	ChargeType            string `json:"chargeType"`
 	LimitMinor            *int64 `json:"limitMinor,omitempty"`
 	LimitRatioBasisPoints *int64 `json:"limitRatioBasisPoints,omitempty"`
+	RatioBase             string `json:"ratioBase,omitempty"`
 	EffectiveStartsAt     string `json:"effectiveStartsAt"`
 	EffectiveEndsAt       string `json:"effectiveEndsAt,omitempty"`
 }
@@ -416,6 +418,9 @@ func canonicalCreditPolicyBodyOf(body CreditPolicyBody) *canonicalCreditPolicyBo
 	}
 	if basisPoints, isRatio := body.Limit.RatioBasisPoints(); isRatio {
 		document.LimitRatioBasisPoints = &basisPoints
+	}
+	if base, declared := body.Limit.RatioBase(); declared {
+		document.RatioBase = base.String()
 	}
 	if endsAt, bounded := body.Effective.EndsAt(); bounded {
 		document.EffectiveEndsAt = canonicalTime(endsAt)
@@ -437,7 +442,7 @@ func (document canonicalCreditPolicyBody) body() (CreditPolicyBody, error) {
 	if err != nil {
 		return CreditPolicyBody{}, err
 	}
-	limit, err := creditLimitOf(document.LimitMinor, document.LimitRatioBasisPoints)
+	limit, err := creditLimitOf(document.LimitMinor, document.LimitRatioBasisPoints, document.RatioBase)
 	if err != nil {
 		return CreditPolicyBody{}, err
 	}
@@ -464,13 +469,19 @@ func (document canonicalCreditPolicyBody) body() (CreditPolicyBody, error) {
 	}, nil
 }
 
-// creditLimitOf 把文档里并存的两键折回两格封闭的额度：恰一在场才立得住，两空或两满是文档与领域分叉。
-func creditLimitOf(minor, basisPoints *int64) (CreditLimit, error) {
+// creditLimitOf 把文档里并存的两键折回两格封闭的额度：恰一在场才立得住，两空或两满是文档与领域分叉。基数只跟
+// 比例走（ADR-0129）：金额键带着基数是文档与领域分叉，比例键缺基数或基数集外由构造门拒——这里是规范化文档的
+// 读回，不是重建门，存量无基数的正文不从这条路来。
+func creditLimitOf(minor, basisPoints *int64, ratioBase string) (CreditLimit, error) {
 	switch {
-	case minor != nil && basisPoints == nil:
+	case minor != nil && basisPoints == nil && ratioBase == "":
 		return NewCreditAmountLimit(*minor)
 	case minor == nil && basisPoints != nil:
-		return NewCreditRatioLimit(*basisPoints)
+		base, known := CreditRatioBaseNamed(ratioBase)
+		if !known {
+			return CreditLimit{}, ErrInvalidCreditLimit
+		}
+		return NewCreditRatioLimit(*basisPoints, base)
 	default:
 		return CreditLimit{}, ErrInvalidCreditLimit
 	}

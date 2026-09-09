@@ -25,15 +25,21 @@ func TestCreditLimitIsEitherAnAmountOrARatioNeverBoth(t *testing.T) {
 		if _, ok := limit.RatioBasisPoints(); ok {
 			t.Fatal("一份金额额度交回了比例")
 		}
+		if _, ok := limit.RatioBase(); ok {
+			t.Fatal("一份金额额度交回了基数")
+		}
 	})
 
 	t.Run("ratio", func(t *testing.T) {
-		limit, err := domain.NewCreditRatioLimit(1500)
+		limit, err := domain.NewCreditRatioLimit(1500, domain.PostedBalanceBase)
 		if err != nil {
 			t.Fatalf("new ratio limit: %v", err)
 		}
 		if bps, ok := limit.RatioBasisPoints(); !ok || bps != 1500 {
 			t.Fatalf("ratio = (%d, %v)", bps, ok)
+		}
+		if base, ok := limit.RatioBase(); !ok || base != domain.PostedBalanceBase {
+			t.Fatalf("ratio base = (%s, %v)", base, ok)
 		}
 		if _, ok := limit.AmountMinor(); ok {
 			t.Fatal("一份比例额度交回了金额")
@@ -46,13 +52,13 @@ func TestCreditLimitIsEitherAnAmountOrARatioNeverBoth(t *testing.T) {
 		if _, err := domain.NewCreditAmountLimit(0); err != nil {
 			t.Fatalf("零金额额度立不住：%v", err)
 		}
-		if _, err := domain.NewCreditRatioLimit(0); err != nil {
+		if _, err := domain.NewCreditRatioLimit(0, domain.PriorPeriodConfirmedChargesBase); err != nil {
 			t.Fatalf("零比例额度立不住：%v", err)
 		}
 		if _, err := domain.NewCreditAmountLimit(-1); !errors.Is(err, domain.ErrInvalidCreditLimit) {
 			t.Fatalf("error = %v；负金额额度立住了", err)
 		}
-		if _, err := domain.NewCreditRatioLimit(-1); !errors.Is(err, domain.ErrInvalidCreditLimit) {
+		if _, err := domain.NewCreditRatioLimit(-1, domain.PostedBalanceBase); !errors.Is(err, domain.ErrInvalidCreditLimit) {
 			t.Fatalf("error = %v；负比例额度立住了", err)
 		}
 	})
@@ -66,5 +72,73 @@ func TestCreditLimitIsEitherAnAmountOrARatioNeverBoth(t *testing.T) {
 		if _, ok := limit.RatioBasisPoints(); ok {
 			t.Fatal("零值额度读成了比例")
 		}
+		if _, ok := limit.RatioBase(); ok {
+			t.Fatal("零值额度读成了带基数的比例")
+		}
 	})
+}
+
+// Covers: ADR-0129 决定一 — 比例在场基数必在场：一个「30%」没有分母不是业务判断依据，本上下文不替登记方挑一个。
+// 构造门对缺席与集外同答 ErrInvalidCreditLimit；重建门只为存量放行「未声明」，集外照拒。
+func TestCreditRatioLimitDeclaresItsBaseAtConstruction(t *testing.T) {
+	if _, err := domain.NewCreditRatioLimit(2500, domain.CreditRatioBaseUndeclared); !errors.Is(err, domain.ErrInvalidCreditLimit) {
+		t.Fatalf("error = %v；没有基数的比例额度过了构造门", err)
+	}
+	if _, err := domain.NewCreditRatioLimit(2500, domain.CreditRatioBase(250)); !errors.Is(err, domain.ErrInvalidCreditLimit) {
+		t.Fatalf("error = %v；集外基数过了构造门", err)
+	}
+
+	t.Run("rehydration door reads legacy ratio rows back as undeclared", func(t *testing.T) {
+		limit, err := domain.RehydrateCreditRatioLimit(2500, domain.CreditRatioBaseUndeclared)
+		if err != nil {
+			t.Fatalf("rehydrate: %v", err)
+		}
+		if bps, ok := limit.RatioBasisPoints(); !ok || bps != 2500 {
+			t.Fatalf("ratio = (%d, %v)", bps, ok)
+		}
+		if base, ok := limit.RatioBase(); ok {
+			t.Fatalf("未声明的存量比例读出了基数 %s", base)
+		}
+		if _, err := domain.RehydrateCreditRatioLimit(2500, domain.CreditRatioBase(250)); !errors.Is(err, domain.ErrInvalidCreditLimit) {
+			t.Fatalf("error = %v；重建门放行了集外基数", err)
+		}
+		if _, err := domain.RehydrateCreditRatioLimit(-1, domain.PostedBalanceBase); !errors.Is(err, domain.ErrInvalidCreditLimit) {
+			t.Fatalf("error = %v；重建门放行了负比例", err)
+		}
+		declared, err := domain.RehydrateCreditRatioLimit(2500, domain.PostedBalanceBase)
+		if err != nil {
+			t.Fatalf("rehydrate with base: %v", err)
+		}
+		if base, ok := declared.RatioBase(); !ok || base != domain.PostedBalanceBase {
+			t.Fatalf("ratio base = (%s, %v)", base, ok)
+		}
+	})
+}
+
+// Covers: ADR-0129 决定二 — 封闭集两格与原词一一对应；空串按「缺席」不按「填错」答，集外与零值都写不出原词。
+func TestCreditRatioBaseIsAClosedSetWithOneSpellingEach(t *testing.T) {
+	for _, base := range []domain.CreditRatioBase{domain.PostedBalanceBase, domain.PriorPeriodConfirmedChargesBase} {
+		named, known := domain.CreditRatioBaseNamed(base.String())
+		if !known || named != base {
+			t.Fatalf("%s: round trip = (%s, %v)", base, named, known)
+		}
+	}
+	if word := domain.PostedBalanceBase.String(); word != "POSTED_BALANCE" {
+		t.Fatalf("PostedBalanceBase spells %q", word)
+	}
+	if word := domain.PriorPeriodConfirmedChargesBase.String(); word != "PRIOR_PERIOD_CONFIRMED_CHARGES" {
+		t.Fatalf("PriorPeriodConfirmedChargesBase spells %q", word)
+	}
+	if word := domain.CreditRatioBaseUndeclared.String(); word != "" {
+		t.Fatalf("undeclared spells %q, want empty", word)
+	}
+	if word := domain.CreditRatioBase(250).String(); word != "" {
+		t.Fatalf("out-of-set spells %q, want empty", word)
+	}
+	if _, known := domain.CreditRatioBaseNamed(""); known {
+		t.Fatal("空串被认成了一格基数")
+	}
+	if _, known := domain.CreditRatioBaseNamed("DEPOSIT_BALANCE"); known {
+		t.Fatal("票面候选名 DEPOSIT_BALANCE 不是集合成员，却被认了")
+	}
 }

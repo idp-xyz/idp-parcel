@@ -180,12 +180,16 @@ type settlementPolicyBodyDocument struct {
 // 是指针，因为 `0` 是一句合法的商业声明（授予零额度）而不是「没给」——用普通整数就分不出
 // 这两件事，而它们要人做的事相反。两个都给或都不给在这里就拒收，不交给库上的 CHECK 去以一条
 // 技术错误报出一件领域上早该拒绝的事。
+//
+// ratioBase 只随 limitRatioBasisPoints 在场（ADR-0129）：比例没有分母不是业务判断依据，缺席在
+// 触库前拒收；金额额度带着它同样拒收。取值是领域封闭集的原词，批文不另定语义。
 type creditPolicyBodyDocument struct {
 	LegalEntity           string     `json:"legalEntity"`
 	AuthorityLevel        string     `json:"authorityLevel"`
 	ChargeType            string     `json:"chargeType"`
 	LimitMinor            *int64     `json:"limitMinor,omitempty"`
 	LimitRatioBasisPoints *int64     `json:"limitRatioBasisPoints,omitempty"`
+	RatioBase             string     `json:"ratioBase,omitempty"`
 	EffectiveStartsAt     time.Time  `json:"effectiveStartsAt"`
 	EffectiveEndsAt       *time.Time `json:"effectiveEndsAt,omitempty"`
 }
@@ -1109,7 +1113,7 @@ func creditPolicyBodyFrom(document creditPolicyBodyDocument) (*pcapplication.Cre
 	if err != nil {
 		return nil, err
 	}
-	limit, err := creditLimitFrom(document.LimitMinor, document.LimitRatioBasisPoints)
+	limit, err := creditLimitFrom(document.LimitMinor, document.LimitRatioBasisPoints, document.RatioBase)
 	if err != nil {
 		return nil, err
 	}
@@ -1131,13 +1135,24 @@ func creditPolicyBodyFrom(document creditPolicyBodyDocument) (*pcapplication.Cre
 }
 
 // creditLimitFrom 只认恰一格在场。两格都给时不挑一格读——那正是「一个数加一列标记」那种表形
-// 会静默犯的错，这里把它变成一次响亮的拒收。
-func creditLimitFrom(limitMinor, limitBps *int64) (pcdomain.CreditLimit, error) {
+// 会静默犯的错，这里把它变成一次响亮的拒收。基数只跟比例走（ADR-0129）：比例缺基数、基数集外、
+// 金额带基数，各自一句拒收，不交给构造门的同一个哨兵去混成一句。
+func creditLimitFrom(limitMinor, limitBps *int64, ratioBase string) (pcdomain.CreditLimit, error) {
 	switch {
 	case limitMinor != nil && limitBps == nil:
+		if ratioBase != "" {
+			return pcdomain.CreditLimit{}, fmt.Errorf("金额额度不带基数：ratioBase 只随 limitRatioBasisPoints 在场")
+		}
 		return pcdomain.NewCreditAmountLimit(*limitMinor)
 	case limitMinor == nil && limitBps != nil:
-		return pcdomain.NewCreditRatioLimit(*limitBps)
+		if ratioBase == "" {
+			return pcdomain.CreditLimit{}, fmt.Errorf("比例额度必须声明其基数 ratioBase")
+		}
+		base, known := pcdomain.CreditRatioBaseNamed(ratioBase)
+		if !known {
+			return pcdomain.CreditLimit{}, fmt.Errorf("集合外的比例基数 %q", ratioBase)
+		}
+		return pcdomain.NewCreditRatioLimit(*limitBps, base)
 	default:
 		return pcdomain.CreditLimit{}, fmt.Errorf("信用额度必须恰好给出 limitMinor 或 limitRatioBasisPoints 之一")
 	}

@@ -471,15 +471,20 @@ func TestACreditPolicyBodyTranslatesExactlyOneLimitForm(t *testing.T) {
 		}
 	})
 
+	// 比例随基数（ADR-0129）：ratioBase 是领域封闭集的原词，批文照译不另定语义。
 	t.Run("ratio", func(t *testing.T) {
 		commands, err := publishCommandsFromJSON([]byte(creditBatchJSON(`"legalEntity": "legal-1",
 			"authorityLevel": "level-commercial", "chargeType": "charge-freight",
-			"limitRatioBasisPoints": 1500, "effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
+			"limitRatioBasisPoints": 1500, "ratioBase": "PRIOR_PERIOD_CONFIRMED_CHARGES",
+			"effectiveStartsAt": "2026-01-01T00:00:00Z"`)))
 		if err != nil {
 			t.Fatalf("翻译信用政策批：%v", err)
 		}
 		if bps, ok := commands[0].Declarations.CreditPolicyBody.Limit.RatioBasisPoints(); !ok || bps != 1500 {
 			t.Fatalf("额度 = (%d, %v), want 1500 bps", bps, ok)
+		}
+		if base, ok := commands[0].Declarations.CreditPolicyBody.Limit.RatioBase(); !ok || base != pcdomain.PriorPeriodConfirmedChargesBase {
+			t.Fatalf("基数 = (%s, %v), want PRIOR_PERIOD_CONFIRMED_CHARGES", base, ok)
 		}
 	})
 
@@ -492,6 +497,12 @@ func TestACreditPolicyBodyTranslatesExactlyOneLimitForm(t *testing.T) {
 			"limitMinor": -1, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
 		"缺费用类型": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a",
 			"limitMinor": 1, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"比例缺基数": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"limitRatioBasisPoints": 1500, "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"比例基数集外": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"limitRatioBasisPoints": 1500, "ratioBase": "DEPOSIT_BALANCE", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
+		"金额带基数": creditBatchJSON(`"legalEntity": "l", "authorityLevel": "a", "chargeType": "c",
+			"limitMinor": 100, "ratioBase": "POSTED_BALANCE", "effectiveStartsAt": "2026-01-01T00:00:00Z"`),
 	}
 	for name, raw := range refusals {
 		t.Run(name, func(t *testing.T) {

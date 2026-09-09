@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
 // 本文件对真实 PostgreSQL 16 证信用政策册（票 party-commercial-context-gaps/03）：金额与比例
@@ -61,7 +63,7 @@ func creditAmountLimit(t *testing.T, minor int64) domain.CreditLimit {
 
 func creditRatioLimit(t *testing.T, bps int64) domain.CreditLimit {
 	t.Helper()
-	limit, err := domain.NewCreditRatioLimit(bps)
+	limit, err := domain.NewCreditRatioLimit(bps, domain.PostedBalanceBase)
 	if err != nil {
 		t.Fatalf("比例额度：%v", err)
 	}
@@ -132,9 +134,120 @@ func TestCreditPolicyRoundTripsInEitherLimitForm(t *testing.T) {
 		if bps, ok := policy.AuthorizedLimit().RatioBasisPoints(); !ok || bps != 1500 {
 			t.Fatalf("额度 = (%d, %v), want 1500 bps", bps, ok)
 		}
+		if base, ok := policy.AuthorizedLimit().RatioBase(); !ok || base != domain.PostedBalanceBase {
+			t.Fatalf("基数 = (%s, %v), want POSTED_BALANCE（ADR-0129：基数随比例往返）", base, ok)
+		}
 		if _, ok := policy.AuthorizedLimit().AmountMinor(); ok {
 			t.Fatal("比例额度读回来多了一格金额")
 		}
+	})
+}
+
+// Covers: ADR-0129 决定五——`ratio_base` 可空只为存量行：0029 之前登进去的比例行读回为「未声明」（重建门如实读回，
+// ADR-0028），点读口与整册装载同答；同键再登一份带基数的正文是`内容冲突`（基数是正文的一格），不是重放。
+func TestALegacyRatioRowWithoutABaseReadsBackAsUndeclared(t *testing.T) {
+	repository, transactor, pool := newPublications(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	contents, err := adapter.NewCreditPolicyContents(db)
+	if err != nil {
+		t.Fatalf("构造信用政策读口：%v", err)
+	}
+	ctx := t.Context()
+	tenant, scope := pcTenant(t, "tenant-1"), pcScope(t)
+
+	version := effectiveVersionOfKind(t, domain.CreditPolicyObject, "credit-legacy", "v1", "digest-cl")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+	// 绕开写口直插一行没有基数的比例正文——写口自 ADR-0129 起不放行这种形，只有存量行长这样。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO party_commercial.credit_policy
+			(tenant_id, object_kind, object_id, version_label,
+			 legal_entity_ref, authority_level_ref, charge_type_ref,
+			 limit_minor, limit_ratio_bps, ratio_base, effective_starts_at)
+		 VALUES ('tenant-1', 8, 'credit-legacy', 'v1',
+		         'legal-1', 'level-commercial', 'charge-freight',
+		         NULL, 2500, NULL, $1)`,
+		version.Effective().StartsAt()); err != nil {
+		t.Fatalf("直插存量比例行：%v", err)
+	}
+
+	policy, found, err := contents.LoadCreditPolicy(ctx, tenant, version)
+	if err != nil || !found {
+		t.Fatalf("点读：found=%v err=%v", found, err)
+	}
+	if bps, ok := policy.AuthorizedLimit().RatioBasisPoints(); !ok || bps != 2500 {
+		t.Fatalf("额度 = (%d, %v), want 2500 bps", bps, ok)
+	}
+	if base, ok := policy.AuthorizedLimit().RatioBase(); ok {
+		t.Fatalf("存量行读出了一个它没有的基数 %s", base)
+	}
+
+	registry, err := repository.LoadForScope(ctx, tenant, scope)
+	if err != nil {
+		t.Fatalf("整册装载：%v", err)
+	}
+	policies := registry.CreditPolicies()
+	if len(policies) != 1 {
+		t.Fatalf("整册读回 %d 份信用政策，want 1", len(policies))
+	}
+	if _, ok := policies[0].AuthorizedLimit().RatioBase(); ok {
+		t.Fatal("整册装载替存量行补了一个基数")
+	}
+
+	mustWithinPublicationTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		outcome, err := repository.SaveCreditPolicy(txCtx,
+			creditPolicyOn(t, version, "charge-freight", creditRatioLimit(t, 2500)))
+		if err != nil {
+			return err
+		}
+		if outcome != ports.CreditPolicyContentConflict {
+			t.Fatalf("同键补基数的写入 outcome = %q, want CONTENT_CONFLICT（基数是正文的一格）", outcome)
+		}
+		return nil
+	})
+}
+
+// Covers: ADR-0129 决定五——库上 CHECK 是「含则必填、不含则必缺」的镜像：金额行带基数、集外基数都进不来；
+// 比例行 NULL 基数放行（只为存量）。写口对重建门造出的无基数比例额度拒在 INSERT 前。
+func TestRatioBaseColumnFollowsTheRatioColumn(t *testing.T) {
+	repository, transactor, pool := newPublications(t)
+	ctx := t.Context()
+	version := effectiveVersionOfKind(t, domain.CreditPolicyObject, "credit-1", "v1", "digest-c1")
+	mustSaveVersion(t, transactor, ctx, repository, version)
+
+	insert := func(limitMinor, limitBps, ratioBase string) error {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO party_commercial.credit_policy
+				(tenant_id, object_kind, object_id, version_label,
+				 legal_entity_ref, authority_level_ref, charge_type_ref,
+				 limit_minor, limit_ratio_bps, ratio_base, effective_starts_at)
+			 VALUES ('tenant-1', 8, 'credit-1', 'v1',
+			         'legal-1', 'level-commercial', 'charge-freight',
+			         `+limitMinor+`, `+limitBps+`, `+ratioBase+`, now())`)
+		return err
+	}
+	if err := insert("100", "NULL", "'POSTED_BALANCE'"); err == nil {
+		t.Fatal("金额行带着基数进了信用政策册")
+	}
+	if err := insert("NULL", "100", "'DEPOSIT_BALANCE'"); err == nil {
+		t.Fatal("集外基数进了信用政策册")
+	}
+	if err := insert("NULL", "100", "''"); err == nil {
+		t.Fatal("空白基数进了信用政策册")
+	}
+
+	undeclared, err := domain.RehydrateCreditRatioLimit(100, domain.CreditRatioBaseUndeclared)
+	if err != nil {
+		t.Fatalf("重建无基数比例：%v", err)
+	}
+	mustWithinPublicationTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		outcome, err := repository.SaveCreditPolicy(txCtx, creditPolicyOn(t, version, "charge-freight", undeclared))
+		if err == nil {
+			t.Fatalf("重建门造出的无基数比例额度经写口登了进去：outcome=%q", outcome)
+		}
+		return nil
 	})
 }
 

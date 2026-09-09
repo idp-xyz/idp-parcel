@@ -603,6 +603,7 @@ type creditPolicyListResponse struct {
 // creditPolicyBody 的额度是两个指针键恰一在场:金额行只长 limitMinor、比例行只长
 // limitRatioBasisPoints。用指针而不是 omitempty 的整数——零额度是合法的商业声明
 // （「授予零信用」），omitempty 会把它抹成「没声明」，而那两件事要人做的事相反。
+// 比例行带 ratioBase（ADR-0129）；0029 之前登进去的未声明存量比例行没有这一键，读面照实缺席不补。
 type creditPolicyBody struct {
 	ObjectID              string `json:"objectId"`
 	Version               string `json:"version"`
@@ -611,6 +612,7 @@ type creditPolicyBody struct {
 	ChargeType            string `json:"chargeType"`
 	LimitMinor            *int64 `json:"limitMinor,omitempty"`
 	LimitRatioBasisPoints *int64 `json:"limitRatioBasisPoints,omitempty"`
+	RatioBase             string `json:"ratioBase,omitempty"`
 	EffectiveStartsAt     string `json:"effectiveStartsAt"`
 	EffectiveEndsAt       string `json:"effectiveEndsAt,omitempty"`
 	RegisteredAt          string `json:"registeredAt"`
@@ -632,6 +634,7 @@ func creditPolicyBodyOf(row ports.CreditPolicyRow) creditPolicyBody {
 	} else {
 		bps := row.LimitRatioBasisPoints
 		body.LimitRatioBasisPoints = &bps
+		body.RatioBase = row.RatioBase
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)

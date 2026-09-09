@@ -31,11 +31,16 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 	}
 
 	version := policy.Version()
-	limitMinor, limitBps := creditLimitColumns(policy.AuthorizedLimit())
+	limitMinor, limitBps, ratioBase := creditLimitColumns(policy.AuthorizedLimit())
 	if limitMinor == nil && limitBps == nil {
 		// 零值 CreditLimit 过不了 NewCreditPolicy，走到这里只可能是绕开构造门的零值政策。
 		// 拦在 INSERT 前，否则 CHECK 会以一条技术错误报出一件领域上早该拒绝的事。
 		return ports.CreditPolicySaveOutcomeInvalid, fmt.Errorf("save credit policy: %w", domain.ErrInvalidCreditPolicy)
+	}
+	if limitBps != nil && ratioBase == nil {
+		// 没有基数的比例额度只有重建门造得出来（ADR-0129：存量行如实读回），构造门不放行；一份重建回来的
+		// 存量正文被再次拿来登记是编排的错，不该借 INSERT 把「未声明」写成一行新正文。
+		return ports.CreditPolicySaveOutcomeInvalid, fmt.Errorf("save credit policy: %w: ratio limit without a base", domain.ErrInvalidCreditPolicy)
 	}
 	startsAt, endsAt := intervalColumns(policy.Effective())
 
@@ -43,8 +48,8 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 		`INSERT INTO party_commercial.credit_policy
 			(tenant_id, object_kind, object_id, version_label,
 			 legal_entity_ref, authority_level_ref, charge_type_ref,
-			 limit_minor, limit_ratio_bps, effective_starts_at, effective_ends_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 limit_minor, limit_ratio_bps, ratio_base, effective_starts_at, effective_ends_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		version.Tenant().String(),
 		uint8(version.Kind()),
@@ -55,6 +60,7 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 		policy.ChargeType().String(),
 		limitMinor,
 		limitBps,
+		ratioBase,
 		startsAt,
 		endsAt,
 	)
@@ -68,7 +74,7 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 	var existing scannedCreditPolicy
 	err = executor.QueryRow(ctx,
 		`SELECT legal_entity_ref, authority_level_ref, charge_type_ref,
-		        limit_minor, limit_ratio_bps, effective_starts_at, effective_ends_at
+		        limit_minor, limit_ratio_bps, ratio_base, effective_starts_at, effective_ends_at
 		   FROM party_commercial.credit_policy
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
 		version.Tenant().String(),
@@ -76,7 +82,7 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 		version.ObjectID().String(),
 		version.Version().String(),
 	).Scan(&existing.legalEntity, &existing.level, &existing.chargeType,
-		&existing.limitMinor, &existing.limitBps, &existing.startsAt, &existing.endsAt)
+		&existing.limitMinor, &existing.limitBps, &existing.ratioBase, &existing.startsAt, &existing.endsAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.CreditPolicySaveOutcomeInvalid, fmt.Errorf("save credit policy: 撞键后读不回既有行")
 	}
@@ -88,6 +94,7 @@ func (repository *CommercialPublications) SaveCreditPolicy(
 		existing.chargeType == policy.ChargeType().String() &&
 		sameOptionalInt64(existing.limitMinor, limitMinor) &&
 		sameOptionalInt64(existing.limitBps, limitBps) &&
+		sameOptionalString(existing.ratioBase, ratioBase) &&
 		existing.startsAt.Equal(startsAt) &&
 		sameOptionalTime(existing.endsAt, endsAt) {
 		return ports.CreditPolicyAlreadyRegistered, nil
@@ -101,6 +108,7 @@ type scannedCreditPolicy struct {
 	chargeType  string
 	limitMinor  *int64
 	limitBps    *int64
+	ratioBase   *string
 	startsAt    time.Time
 	endsAt      *time.Time
 }
@@ -114,6 +122,7 @@ type joinedCreditPolicy struct {
 	chargeType  *string
 	limitMinor  *int64
 	limitBps    *int64
+	ratioBase   *string
 	startsAt    *time.Time
 	endsAt      *time.Time
 }
@@ -149,6 +158,7 @@ func registerCreditPolicy(
 		chargeType:  *row.chargeType,
 		limitMinor:  row.limitMinor,
 		limitBps:    row.limitBps,
+		ratioBase:   row.ratioBase,
 		startsAt:    *row.startsAt,
 		endsAt:      row.endsAt,
 	})
@@ -159,25 +169,40 @@ func registerCreditPolicy(
 	return nil
 }
 
-// creditLimitColumns 把两格封闭的额度摊成两列，恰一非空——列上 CHECK 是这一条的镜像。
-func creditLimitColumns(limit domain.CreditLimit) (*int64, *int64) {
+// creditLimitColumns 把两格封闭的额度摊成三列：金额 / 比例恰一非空——列上 CHECK 是这一条的镜像；基数只跟
+// 比例走（ADR-0129），金额行为 NULL，重建门读回的未声明存量比例也为 NULL（写口在 INSERT 前另拦，它到不了这里）。
+func creditLimitColumns(limit domain.CreditLimit) (*int64, *int64, *string) {
 	if minor, ok := limit.AmountMinor(); ok {
-		return &minor, nil
+		return &minor, nil, nil
 	}
 	if bps, ok := limit.RatioBasisPoints(); ok {
-		return nil, &bps
+		var ratioBase *string
+		if base, declared := limit.RatioBase(); declared {
+			word := base.String()
+			ratioBase = &word
+		}
+		return nil, &bps, ratioBase
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
-// creditLimitFrom 把两列折回领域构造门。CHECK 保证恰一列在场，走到两空/两满说明库与领域
-// 已经分叉，报错不吸收。
-func creditLimitFrom(limitMinor, limitBps *int64) (domain.CreditLimit, error) {
+// creditLimitFrom 把三列折回领域。金额 / 比例恰一列在场由 CHECK 保证，走到两空/两满说明库与领域已经分叉，
+// 报错不吸收。比例行走**重建门**而不是构造门（ADR-0028 / ADR-0129）：`ratio_base` 为 NULL 的存量比例行如实
+// 读回为未声明——由 settlement-accounting 停在它自己的 CREDIT_RATIO_BASE_UNDECIDED，不在这里替它补一个基数；
+// 非空而集外仍是坏数据（CHECK 守着，走到只能是绕过 CHECK 改写）。金额行带着基数同样是分叉。
+func creditLimitFrom(limitMinor, limitBps *int64, ratioBase *string) (domain.CreditLimit, error) {
 	switch {
-	case limitMinor != nil && limitBps == nil:
+	case limitMinor != nil && limitBps == nil && ratioBase == nil:
 		return domain.NewCreditAmountLimit(*limitMinor)
 	case limitMinor == nil && limitBps != nil:
-		return domain.NewCreditRatioLimit(*limitBps)
+		base := domain.CreditRatioBaseUndeclared
+		if ratioBase != nil {
+			known := false
+			if base, known = domain.CreditRatioBaseNamed(*ratioBase); !known {
+				return domain.CreditLimit{}, fmt.Errorf("credit limit row carries ratio base %q outside the closed set", *ratioBase)
+			}
+		}
+		return domain.RehydrateCreditRatioLimit(*limitBps, base)
 	default:
 		return domain.CreditLimit{}, fmt.Errorf("credit limit row is neither an amount nor a ratio")
 	}
@@ -248,7 +273,7 @@ func (repository *CreditPolicyContents) LoadCreditPolicy(
 	var row scannedCreditPolicy
 	err = querier.QueryRow(ctx,
 		`SELECT legal_entity_ref, authority_level_ref, charge_type_ref,
-		        limit_minor, limit_ratio_bps, effective_starts_at, effective_ends_at
+		        limit_minor, limit_ratio_bps, ratio_base, effective_starts_at, effective_ends_at
 		   FROM party_commercial.credit_policy
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
 		tenant.String(),
@@ -256,7 +281,7 @@ func (repository *CreditPolicyContents) LoadCreditPolicy(
 		policy.ObjectID().String(),
 		policy.Version().String(),
 	).Scan(&row.legalEntity, &row.level, &row.chargeType,
-		&row.limitMinor, &row.limitBps, &row.startsAt, &row.endsAt)
+		&row.limitMinor, &row.limitBps, &row.ratioBase, &row.startsAt, &row.endsAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -284,7 +309,7 @@ func creditPolicyFrom(version domain.CommercialVersion, row scannedCreditPolicy)
 	if err != nil {
 		return domain.CreditPolicy{}, err
 	}
-	limit, err := creditLimitFrom(row.limitMinor, row.limitBps)
+	limit, err := creditLimitFrom(row.limitMinor, row.limitBps, row.ratioBase)
 	if err != nil {
 		return domain.CreditPolicy{}, err
 	}
@@ -296,7 +321,8 @@ func creditPolicyFrom(version domain.CommercialVersion, row scannedCreditPolicy)
 }
 
 // ListCreditPolicies 上列信用政策册。额度两列照列转写，HasAmount 说明哪一列在场；两空/两满
-// 是库与领域分叉的坏数据，上抛不吸收。
+// 是库与领域分叉的坏数据，上抛不吸收。比例行的基数照列转写（ADR-0129），存量 NULL 转写为空串
+// ——目录只上列不重算，「未声明」由读面如实示出。
 func (catalogue *OperationsCatalogue) ListCreditPolicies(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -312,7 +338,7 @@ func (catalogue *OperationsCatalogue) ListCreditPolicies(
 
 	rows, err := querier.Query(ctx,
 		`SELECT object_id, version_label, legal_entity_ref, authority_level_ref, charge_type_ref,
-		        limit_minor, limit_ratio_bps,
+		        limit_minor, limit_ratio_bps, ratio_base,
 		        effective_starts_at, effective_ends_at, registered_at
 		   FROM party_commercial.credit_policy
 		  WHERE tenant_id = $1
@@ -330,20 +356,24 @@ func (catalogue *OperationsCatalogue) ListCreditPolicies(
 	for rows.Next() {
 		var row ports.CreditPolicyRow
 		var limitMinor, limitBps *int64
+		var ratioBase *string
 		var endsAt *time.Time
 		if err := rows.Scan(
 			&row.ObjectID, &row.VersionLabel, &row.LegalEntity, &row.AuthorityLevel, &row.ChargeType,
-			&limitMinor, &limitBps,
+			&limitMinor, &limitBps, &ratioBase,
 			&row.EffectiveStartsAt, &endsAt, &row.RegisteredAt,
 		); err != nil {
 			return nil, fmt.Errorf("list credit policies: %w", err)
 		}
 		switch {
-		case limitMinor != nil && limitBps == nil:
+		case limitMinor != nil && limitBps == nil && ratioBase == nil:
 			row.HasAmount = true
 			row.LimitMinor = *limitMinor
 		case limitMinor == nil && limitBps != nil:
 			row.LimitRatioBasisPoints = *limitBps
+			if ratioBase != nil {
+				row.RatioBase = *ratioBase
+			}
 		default:
 			return nil, fmt.Errorf("list credit policies: %s/%s 的额度既不是金额也不是比例",
 				row.ObjectID, row.VersionLabel)

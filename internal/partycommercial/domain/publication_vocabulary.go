@@ -77,6 +77,12 @@ func PublicationVocabulary(kind CommercialObjectKind) ([]VocabularySet, error) {
 		return []VocabularySet{
 			{Name: "kind", Codes: closedCodes(ClaimDeadlineKind.valid, ClaimDeadlineKind.String)},
 		}, nil
+	case CreditPolicyObject:
+		// ADR-0129：creditPolicy.ratioBase 是本册正文里唯一的封闭集（比例额度的基数）。责任法人、权限等级与费用类型
+		// 都是开放引用；额度两格是数值。「未声明」是重建门读回存量的读法，不是一行能选的取值，valid 不收它。
+		return []VocabularySet{
+			{Name: "ratioBase", Codes: closedCodes(CreditRatioBase.valid, CreditRatioBase.String)},
+		}, nil
 	default:
 		return []VocabularySet{}, nil
 	}

@@ -998,7 +998,7 @@ func creditPolicySpec(t *testing.T, objectID, label string, body *application.Cr
 func TestACreditPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
-	ratio, err := domain.NewCreditRatioLimit(1500)
+	ratio, err := domain.NewCreditRatioLimit(1500, domain.PostedBalanceBase)
 	if err != nil {
 		t.Fatalf("比例额度：%v", err)
 	}
@@ -1025,6 +1025,9 @@ func TestACreditPolicyBodyPublishesWithItsOwnVersion(t *testing.T) {
 	}
 	if bps, ok := saved.AuthorizedLimit().RatioBasisPoints(); !ok || bps != 1500 {
 		t.Fatalf("额度 = (%d, %v)，比例格没有原样到达持久化面", bps, ok)
+	}
+	if base, ok := saved.AuthorizedLimit().RatioBase(); !ok || base != domain.PostedBalanceBase {
+		t.Fatalf("基数 = (%s, %v)，比例格的基数没有原样到达持久化面（ADR-0129）", base, ok)
 	}
 	reports := result.Declarations()
 	if len(reports) != 1 ||

@@ -485,9 +485,16 @@ func uniqueClosureWithSettlementPolicy(
 // 都随快照往返，额度整份留存不回册重读；金额与比例两格各自往返，读回的那一格就是写下的那一格。
 // 少了选择器，读回的键最小身份立不起来、整份闭包被重建门拒；少了额度，SA 拿到的又只是一份裸版本。
 func TestResolutionRoundTripsTheAdoptedCreditBasis(t *testing.T) {
+	// 第三格是 ADR-0129 之前固定的快照长的样子：比例在场、基数缺键。重建门如实读回为未声明，不补默认——
+	// 快照的全部意义就是不许它改口。
+	undeclared, err := domain.RehydrateCreditRatioLimit(2500, domain.CreditRatioBaseUndeclared)
+	if err != nil {
+		t.Fatalf("重建无基数比例：%v", err)
+	}
 	limits := map[string]domain.CreditLimit{
-		"amount": creditAmountLimit(t, 500000),
-		"ratio":  creditRatioLimit(t, 2500),
+		"amount":                    creditAmountLimit(t, 500000),
+		"ratio":                     creditRatioLimit(t, 2500),
+		"legacy ratio without base": undeclared,
 	}
 	for name, limit := range limits {
 		t.Run(name, func(t *testing.T) {
@@ -519,6 +526,10 @@ func TestResolutionRoundTripsTheAdoptedCreditBasis(t *testing.T) {
 			}
 			if basis.AuthorizedLimit() != limit {
 				t.Fatalf("limit = %#v, want %#v——读回的那一格必须就是写下的那一格", basis.AuthorizedLimit(), limit)
+			}
+			wantBase, wantDeclared := limit.RatioBase()
+			if base, declared := basis.AuthorizedLimit().RatioBase(); declared != wantDeclared || base != wantBase {
+				t.Fatalf("ratio base = (%s, %v), want (%s, %v)——基数随比例往返，缺席的不补", base, declared, wantBase, wantDeclared)
 			}
 			if !basis.PolicyVersion().SameVersionAs(adopted.Version()) {
 				t.Fatal("读回的额度出处与采用版本不是同一版")

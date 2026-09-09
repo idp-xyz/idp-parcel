@@ -93,13 +93,15 @@ type CommercialPublicationPayload struct {
 }
 
 // CreditPolicyBodyPayload 镜像受控批文 creditPolicyBodyDocument 与规范化文档的键名：额度两键恰一在场（由领域
-// 构造门判），区间上界可缺。
+// 构造门判），区间上界可缺。比例在场时 ratioBase 必在场（ADR-0129）：缺席由服务端点名 `creditPolicy.ratioBase`，
+// 金额格带了同样点名那一格——表单不挑、不预选，码只从词表读口来。
 type CreditPolicyBodyPayload struct {
 	LegalEntity           string `json:"legalEntity"`
 	AuthorityLevel        string `json:"authorityLevel"`
 	ChargeType            string `json:"chargeType"`
 	LimitMinor            *int64 `json:"limitMinor,omitempty"`
 	LimitRatioBasisPoints *int64 `json:"limitRatioBasisPoints,omitempty"`
+	RatioBase             string `json:"ratioBase,omitempty"`
 	EffectiveStartsAt     string `json:"effectiveStartsAt"`
 	EffectiveEndsAt       string `json:"effectiveEndsAt,omitempty"`
 }
@@ -286,6 +288,8 @@ func (payload PublicationDraftReferencePayload) identity() (domain.CommercialObj
 }
 
 // body 把信用政策正文逐格过领域构造门。额度两键恰一在场：两空与两满都是一格问题（落在 limit 上），不由这里挑一个。
+// 基数只跟比例走（ADR-0129）：比例在场而 ratioBase 缺席或集外、金额在场而 ratioBase 在场，都点名 `creditPolicy.ratioBase`
+// 那一格——它们是基数那一格的问题，不是额度选形的问题；缺席与集外分两句，要人做的事不同（填 / 改）。
 func (payload CreditPolicyBodyPayload) body(problems *PublicationPayloadProblems) domain.CreditPolicyBody {
 	body := domain.CreditPolicyBody{
 		LegalEntity: requireField(problems, "creditPolicy.legalEntity", domain.NewLegalEntityReference, payload.LegalEntity),
@@ -300,10 +304,21 @@ func (payload CreditPolicyBodyPayload) body(problems *PublicationPayloadProblems
 		if err != nil {
 			problems.add("creditPolicy.limitMinor", err)
 		}
+		if payload.RatioBase != "" {
+			problems.add("creditPolicy.ratioBase", fmt.Errorf("金额额度不带基数；ratioBase 只随 limitRatioBasisPoints 在场"))
+		}
 		body.Limit = limit
 	case payload.LimitMinor == nil && payload.LimitRatioBasisPoints != nil:
-		limit, err := domain.NewCreditRatioLimit(*payload.LimitRatioBasisPoints)
-		if err != nil {
+		base, known := domain.CreditRatioBaseNamed(payload.RatioBase)
+		switch {
+		case payload.RatioBase == "":
+			problems.add("creditPolicy.ratioBase", fmt.Errorf("比例额度须声明其基数 ratioBase：一个比例没有分母不是业务判断依据"))
+		case !known:
+			problems.add("creditPolicy.ratioBase", fmt.Errorf("集合外的比例基数 %q", payload.RatioBase))
+		}
+		limit, err := domain.NewCreditRatioLimit(*payload.LimitRatioBasisPoints, base)
+		if err != nil && *payload.LimitRatioBasisPoints < 0 {
+			// 构造门对负比例与缺基数同答一个哨兵；基数那一格已在上面点过名，这里只补比例自己那一格。
 			problems.add("creditPolicy.limitRatioBasisPoints", err)
 		}
 		body.Limit = limit

@@ -114,6 +114,55 @@ func TestPublicationPayloadCollectsEveryFieldProblem(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0129 决定一 — 比例在场基数必在场、金额格必缺：缺席、集外、金额带基数三种都点名 `creditPolicy.ratioBase`
+// 那一格（不是 `creditPolicy.limit`，那格答的是额度选形）；带对基数的比例正文过门并把基数交到领域正文上。
+func TestCreditPolicyPayloadNamesTheRatioBaseField(t *testing.T) {
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+	creditPayload := func(limit string) string {
+		return `{"kind":"CREDIT_POLICY","objectId":"credit-1","version":"v1","scope":"scope-1",
+		  "effectiveStartsAt":"2026-01-03T00:00:00Z",
+		  "creditPolicy":{"legalEntity":"legal-1","authorityLevel":"level-commercial","chargeType":"charge-freight",
+		    ` + limit + `,"effectiveStartsAt":"2026-01-03T00:00:00Z"}}`
+	}
+	fieldsOf := func(t *testing.T, raw string) map[string]bool {
+		t.Helper()
+		_, _, err := decodePublication(t, raw).Publication(tenant)
+		var problems *commercialhttp.PublicationPayloadProblems
+		if !errors.As(err, &problems) {
+			t.Fatalf("err = %v (%T), want *PublicationPayloadProblems", err, err)
+		}
+		fields := map[string]bool{}
+		for _, problem := range problems.Problems {
+			fields[problem.Field] = true
+		}
+		return fields
+	}
+
+	for name, limit := range map[string]string{
+		"ratio without base":      `"limitRatioBasisPoints":2500`,
+		"ratio with base outside": `"limitRatioBasisPoints":2500,"ratioBase":"DEPOSIT_BALANCE"`,
+		"amount carrying a base":  `"limitMinor":100,"ratioBase":"POSTED_BALANCE"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			fields := fieldsOf(t, creditPayload(limit))
+			if !fields["creditPolicy.ratioBase"] {
+				t.Fatalf("ratioBase 那一格没被点名：%v", fields)
+			}
+			if fields["creditPolicy.limit"] || fields["creditPolicy.limitRatioBasisPoints"] || fields["creditPolicy.limitMinor"] {
+				t.Fatalf("基数的问题被记到了额度的格上：%v", fields)
+			}
+		})
+	}
+
+	_, content, err := decodePublication(t, creditPayload(`"limitRatioBasisPoints":2500,"ratioBase":"POSTED_BALANCE"`)).Publication(tenant)
+	if err != nil {
+		t.Fatalf("带基数的比例正文被拒：%v", err)
+	}
+	if base, ok := content.CreditPolicy.Limit.RatioBase(); !ok || base != domain.PostedBalanceBase {
+		t.Fatalf("ratio base = (%s, %v), want POSTED_BALANCE", base, ok)
+	}
+}
+
 // Covers: ADR-0126 Decision 四 — 同一份载荷过预览与过录入逐字节同摘要：两条路径都从 Publication 出发，摘要只在
 // 领域一处算。
 func TestPreviewAndSubmissionOfTheSamePayloadShareTheDigest(t *testing.T) {

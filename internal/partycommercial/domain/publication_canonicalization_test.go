@@ -65,13 +65,26 @@ func TestCanonicalDigestCarriesVersionAndIsStable(t *testing.T) {
 // 写法不产生第二个串（UTC 归一）。
 func TestCanonicalDigestDistinguishesContentButNotSpelling(t *testing.T) {
 	amount := canonicalCreditPolicy(t, creditPolicyBody(t, "freight", creditAmount(t, 100), time.Time{}))
-	ratio, err := domain.NewCreditRatioLimit(100)
+	ratio, err := domain.NewCreditRatioLimit(100, domain.PostedBalanceBase)
 	if err != nil {
 		t.Fatalf("new ratio limit: %v", err)
 	}
 	asRatio := canonicalCreditPolicy(t, creditPolicyBody(t, "freight", ratio, time.Time{}))
 	if amount.Digest() == asRatio.Digest() {
 		t.Fatalf("amount 100 and ratio 100 must not share a digest")
+	}
+	// ADR-0129：同一个比例相对不同基数是两份不同的授权，摘要必须分开；基数键随比例进 PCC-1 而不换号。
+	onPriorPeriod, err := domain.NewCreditRatioLimit(100, domain.PriorPeriodConfirmedChargesBase)
+	if err != nil {
+		t.Fatalf("new ratio limit: %v", err)
+	}
+	asRatioOnPriorPeriod := canonicalCreditPolicy(t, creditPolicyBody(t, "freight", onPriorPeriod, time.Time{}))
+	if asRatio.Digest() == asRatioOnPriorPeriod.Digest() {
+		t.Fatalf("ratio 100 on POSTED_BALANCE and on PRIOR_PERIOD_CONFIRMED_CHARGES must not share a digest")
+	}
+	if asRatio.Canonicalization() != "PCC-1" || asRatioOnPriorPeriod.Canonicalization() != "PCC-1" {
+		t.Fatalf("ratio base joined the document under a new canonicalization version: %s / %s",
+			asRatio.Canonicalization(), asRatioOnPriorPeriod.Canonicalization())
 	}
 	otherCharge := canonicalCreditPolicy(t, creditPolicyBody(t, "surcharge", creditAmount(t, 100), time.Time{}))
 	if amount.Digest() == otherCharge.Digest() {
