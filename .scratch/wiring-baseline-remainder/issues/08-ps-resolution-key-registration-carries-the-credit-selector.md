@@ -1,7 +1,7 @@
 # PS 登记面补信用二维：含 `CreditPolicyObject` 的登记行要能形成立得起来的键
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：ADR-0127 Consequences 点名「PS 登记面欠一格」，二选一（像 `PriceRuleObject` 那样在
+Status: in-progress——2026-09-09 12:0x 通道 4 认领（task-6eb31b85，分支 `mcp4-wbr08`，基 main `74ef0da8`；PS 迁移号取 0020，0021 已预给 wbr/01）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：ADR-0127 Consequences 点名「PS 登记面欠一格」，二选一（像 `PriceRuleObject` 那样在
 登记面拒 / 补两维）**取补两维**。理由：ADR-0127 决定四把 SA 账期分支的授信额度改为从闭包交出的信用依据取，「found=false = 闭包没采用信用政策——租户登记的解析键
 没要求这一项，恢复动作是补解析键与正文」——若登记面拒绝 `CreditPolicyObject`，没有任何租户能把这一项登进解析键，ADR-0127 整条路就没有入口；拒是把
 机制半边的缺口写成长期事实。PS 地盘（历史归通道 2）
