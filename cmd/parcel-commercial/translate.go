@@ -1291,12 +1291,20 @@ type resolutionKeyDocument struct {
 	// Settlement 只在必需依据含 SETTLEMENT_POLICY 时给出，且只有三维——合同维由闭包解出
 	// 的客户合同来填，登记面结构上就没有它（ADR-0080）。
 	Settlement *settlementSelectorDocument `json:"settlement,omitempty"`
+	// Credit 只在必需依据含 CREDIT_POLICY 时给出，且只有两维——法人与时点不在其中，键上已有
+	// 法人候选与锚点，重复携带就允许两者不一致（ADR-0127 决定二）。
+	Credit *creditSelectorDocument `json:"credit,omitempty"`
 }
 
 type settlementSelectorDocument struct {
 	Counterparty string `json:"counterparty"`
 	ChargeScope  string `json:"chargeScope"`
 	Currency     string `json:"currency"`
+}
+
+type creditSelectorDocument struct {
+	Level      string `json:"level"`
+	ChargeType string `json:"chargeType"`
 }
 
 func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistration, error) {
@@ -1345,6 +1353,19 @@ func keyRegistrationFromJSON(raw []byte) (pspartycommercial.ResolutionKeyRegistr
 		}
 		if registration.SettlementCurrency, err = pcdomain.NewCurrencyCode(
 			document.Settlement.Currency); err != nil {
+			return none, err
+		}
+	}
+	// 信用两维同一纪律：缺席整节即两维全缺，给了节却少一维在这里响亮失败。两维都走非空引用值
+	// 的构造门而没有集外判读——商业权限等级是租户的版本化业务授权，party-commercial 不预设它
+	// 有哪几档，费用类型同理。
+	if document.Credit != nil {
+		if registration.CreditLevel, err = pcdomain.NewAuthorityLevel(
+			document.Credit.Level); err != nil {
+			return none, err
+		}
+		if registration.CreditChargeType, err = pcdomain.NewChargeTypeReference(
+			document.Credit.ChargeType); err != nil {
 			return none, err
 		}
 	}

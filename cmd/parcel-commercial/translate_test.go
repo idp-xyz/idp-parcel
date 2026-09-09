@@ -995,3 +995,58 @@ func TestSettlementSelectorTranslatesWithoutAContractDimension(t *testing.T) {
 		})
 	}
 }
+
+// Covers: ADR-0127 决定二 —— 登记 JSON 的信用节只有两维（商业权限等级 × 费用类型）。法人与时点
+// 在这一层无从表达：键上已有法人候选与锚点，信用节里再写一个 legalEntity 是未知字段，
+// DisallowUnknownFields 当场拒；两维给一半同样拒，不折成缺席。
+//
+// 这一节是 ADR-0127 那条路在进程口的入口：登记面 validateCredit 要求含 CREDIT_POLICY 就两维必填，
+// 而 register-resolution-key 是唯一构造 ResolutionKeyRegistration 的生产入口——文档面没有这一节，
+// 登记面放行了也没有任何租户能把两维送进去。
+func TestCreditSelectorTranslatesAsTwoDimensions(t *testing.T) {
+	registration, err := keyRegistrationFromJSON([]byte(`{
+		"tenantId": "tenant-1",
+		"customerAccountId": "customer-1",
+		"scope": "scope-1",
+		"legalEntity": "legal-1",
+		"anchorPolicyVersion": "anchor-policy/v1",
+		"anchorAt": "2026-07-01T00:00:00Z",
+		"requiredBases": ["CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE", "CREDIT_POLICY"],
+		"credit": {"level": "level-commercial", "chargeType": "charge-freight"}
+	}`))
+	if err != nil {
+		t.Fatalf("翻译带信用两维的登记：%v", err)
+	}
+	if registration.CreditLevel.String() != "level-commercial" ||
+		registration.CreditChargeType.String() != "charge-freight" {
+		t.Fatalf("信用两维变形：%+v", registration)
+	}
+	// 结算三维不得被顺手带上：本文档没有结算节。
+	if registration.SettlementCounterparty.String() != "" ||
+		registration.SettlementChargeScope.String() != "" ||
+		registration.SettlementCurrency.String() != "" {
+		t.Fatalf("没有结算节的登记带上了结算维度：%+v", registration)
+	}
+
+	refusals := map[string]string{
+		"带法人维": `{"tenantId": "t", "customerAccountId": "c", "scope": "s", "legalEntity": "l",
+			"anchorPolicyVersion": "a", "anchorAt": "2026-07-01T00:00:00Z",
+			"requiredBases": ["CUSTOMER_CONTRACT", "CREDIT_POLICY"],
+			"credit": {"level": "level-commercial", "chargeType": "charge-freight", "legalEntity": "l"}}`,
+		"两维缺一": `{"tenantId": "t", "customerAccountId": "c", "scope": "s", "legalEntity": "l",
+			"anchorPolicyVersion": "a", "anchorAt": "2026-07-01T00:00:00Z",
+			"requiredBases": ["CUSTOMER_CONTRACT", "CREDIT_POLICY"],
+			"credit": {"level": "level-commercial"}}`,
+		"两维写成空串": `{"tenantId": "t", "customerAccountId": "c", "scope": "s", "legalEntity": "l",
+			"anchorPolicyVersion": "a", "anchorAt": "2026-07-01T00:00:00Z",
+			"requiredBases": ["CUSTOMER_CONTRACT", "CREDIT_POLICY"],
+			"credit": {"level": "", "chargeType": ""}}`,
+	}
+	for name, raw := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := keyRegistrationFromJSON([]byte(raw)); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
