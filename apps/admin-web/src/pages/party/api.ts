@@ -31,7 +31,8 @@ export type CommercialPolicyKind =
   | 'AS_OF_POLICY'
   | 'AUTHORIZATION_RULE'
   | 'CREDIT_POLICY'
-  | 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
+  | 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY'
+  | 'CUSTOMER_SERVICE_RULE';
 
 export interface AssembledRuleRecord {
   category: string;
@@ -189,6 +190,45 @@ export interface PreAcceptanceFinancialControlPolicyRecord {
   };
 }
 
+// 客户服务规则册（0023，ADR-0104）。上列的是规则**版本壳**，正文左连接：contentRegistered 与接受前财务
+// 控制策略册同款显式布尔——「壳在、正文不在」是合法状态，且正是 visibility-exception 点读答未登记、两维
+// 停在未决的那个状态，页面不拿 content 的有无去推它。正文里 serviceProduct / customerContract **恰一在场**
+// （后端 omitempty 让另一键不长出来）：同一个标识串作产品与作合同是两件事，前端不得把两键折成一格「对象」；
+// 两键皆无或皆有是响应不合契约。两张子表一律在场——无客户差异的那一项是空数组，那是正文说出的真话，不是
+// 缺键；两项合起来至少一项由写入把守。期限种类是封闭集（FIRST_CLAIM / MATERIAL_SUPPLEMENT / CONCLUSION_REVIEW），
+// 起算事件、日历、索赔类型与材料条目都是引用（目录归 visibility-exception），按原词展示。
+export interface ClaimDeadlineRecord {
+  kind: string;
+  startEvent: string;
+  durationDays: number;
+  calendar: string;
+}
+
+export interface MinimumMaterialsRecord {
+  claimKind: string;
+  materials: string[];
+}
+
+export interface CustomerServiceRuleRecord {
+  objectId: string;
+  version: string;
+  scope: string;
+  status: string;
+  effectiveStartsAt: string;
+  effectiveEndsAt?: string;
+  publishedAt: string;
+  contentRegistered: boolean;
+  content?: {
+    serviceProduct?: string;
+    customerContract?: string;
+    responsibleParty: string;
+    scope: string;
+    registeredAt: string;
+    claimDeadlines: ClaimDeadlineRecord[];
+    minimumMaterials: MinimumMaterialsRecord[];
+  };
+}
+
 // 响应体按 kind 判别:各册子的行形状互不相同(传输层注释原话),合成一个字段并集
 // 会让页面在错误的形状上「读得通」。kind 由服务端随响应回显,这里以它作判别子。
 export type CommercialPolicyListResponseBody =
@@ -203,7 +243,8 @@ export type CommercialPolicyListResponseBody =
       outcome: 'COMMERCIAL_POLICIES_LISTED';
       kind: 'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY';
       policies: PreAcceptanceFinancialControlPolicyRecord[];
-    };
+    }
+  | { outcome: 'COMMERCIAL_POLICIES_LISTED'; kind: 'CUSTOMER_SERVICE_RULE'; policies: CustomerServiceRuleRecord[] };
 
 export interface ControlBindingRecord {
   chargeScope: string;

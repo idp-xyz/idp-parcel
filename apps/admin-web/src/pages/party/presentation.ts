@@ -33,6 +33,9 @@ export const policyKindLabels: Record<CommercialPolicyKind, string> = {
   // 与「接受前财务控制」是两本册不是一本的两个名字：那一本列合同的「要不要」声明，这一本列策略
   // 版本自己的「控制怎么做」正文（ADR-0115）。中文里把「策略」点出来，让两个 chip 在同一屏分得开。
   PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY: '接受前财务控制策略',
+  // PC CONTEXT 原词。VE 那侧的通知义务、索赔类型覆盖两本册与本册正文归谁,pc-gaps/05 记着要走 ADR;这里只列
+  // PC 这一侧的正文(适用对象、责任方、索赔期限、最低材料),册名不带「VE」也不带「索赔」,不替那个所有权裁决开口。
+  CUSTOMER_SERVICE_RULE: '客户服务规则',
 };
 
 export const commercialPolicyKinds: CommercialPolicyKind[] = [
@@ -44,6 +47,7 @@ export const commercialPolicyKinds: CommercialPolicyKind[] = [
   'AS_OF_POLICY',
   'AUTHORIZATION_RULE',
   'CREDIT_POLICY',
+  'CUSTOMER_SERVICE_RULE',
 ];
 
 /**
@@ -74,6 +78,8 @@ export const policyKindSources: Record<CommercialPolicyKind, string> = {
     '列授权规则版本及按请求方逐格的取消授权；由发布口对象类别 AUTHORIZATION_RULE 喂入，取消授权经声明通道 CANCELLATION_AUTHORITY 随发布登记。',
   CREDIT_POLICY:
     '列信用政策正文；由发布口对象类别 CREDIT_POLICY 喂入，正文经声明通道 CREDIT_POLICY_BODY 随发布登记。',
+  CUSTOMER_SERVICE_RULE:
+    '列客户服务规则版本及其正文（挂在哪个服务产品或客户合同上、责任方、索赔期限与最低材料）；由发布口对象类别 CUSTOMER_SERVICE_RULE 喂入，正文经声明通道 CUSTOMER_SERVICE_RULE_BODY 随发布登记。只列 PC 这一侧的正文；索赔类型与材料目录、起算事件的解释归可见性与异常那侧，这里按引用原词展示。',
 };
 
 // 商业方向封闭三格(domain CommercialDirection),中文与计价方向同词——同一个方向
@@ -251,13 +257,13 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
     'publish',
     '一项的键为 tenantId / kind / objectId / version / scope / contentDigest / ' +
       'effectiveStartsAt / approval{reference,source,approvedAt} / approvalRoleStanding,' +
-      '可选 effectiveEndsAt / references / declarations。kind 是**发布轴的对象类别**,封闭九词:' +
+      '可选 effectiveEndsAt / references / declarations。kind 是**发布轴的对象类别**,封闭十词:' +
       'SERVICE_PRODUCT / CUSTOMER_CONTRACT / SUPPLIER_AGREEMENT / ACCEPTANCE_RULE_PACKAGE / ' +
       'PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY / PRICE_RULE / SETTLEMENT_POLICY / ' +
-      'CREDIT_POLICY / AUTHORIZATION_RULE。**它与本台各页的册名是两条分类轴,不逐字对应**:' +
-      '前三类各显示在服务产品、客户与合同、供应商协议三页;后六类的版本与正文显示在「商业规则与策略」' +
+      'CREDIT_POLICY / AUTHORIZATION_RULE / CUSTOMER_SERVICE_RULE。**它与本台各页的册名是两条分类轴,不逐字对应**:' +
+      '前三类各显示在服务产品、客户与合同、供应商协议三页;后七类的版本与正文显示在「商业规则与策略」' +
       '页对应的册里(PRICE_RULE → 商业价格政策册,PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY → 接受前财务控制策略册——' +
-      '与「接受前财务控制」册是两本:后者列的是挂在 CUSTOMER_CONTRACT 版本下的声明)。' +
+      '与「接受前财务控制」册是两本:后者列的是挂在 CUSTOMER_CONTRACT 版本下的声明;CUSTOMER_SERVICE_RULE → 客户服务规则册)。' +
       '本页不代填也不校验 kind。declarations 里的通道(AS_OF_POLICY、PRE_ACCEPTANCE_CONTROL、' +
       'RULE_PACKAGE_BODY、PRICE_POLICY_BODY 等)不是 kind:它们没有自己的版本,随所属版本一并发布,' +
       '各自显示在册名旁写着的那本册。声明只能随发布登记:正文随发布固定,事后补声明等于改一份' +

@@ -8,6 +8,7 @@ import type {
   CommercialPolicyKind,
   CommercialPolicyListResponseBody,
   CreditPolicyRecord,
+  CustomerServiceRuleRecord,
   PreAcceptanceFinancialControlPolicyRecord,
   PricePolicyRecord,
 } from './api';
@@ -40,8 +41,8 @@ function col(id: string, header: string, mono = false): ListColumn<PolicyRow> {
 }
 
 // 按 kind 换列(MCP-3 裁决⑦):各册子的行形状互不相同,列向各随其册。种类命名
-// 册子而非商业对象类别;授权规则、信用政策与接受前财务控制策略几格的名字恰好也是对象类别,
-// 不是例外——那几册上列的对象就是那类版本自己(后端 kind 封闭集注释同一句)。
+// 册子而非商业对象类别;授权规则、信用政策、接受前财务控制策略与客户服务规则几格的名字恰好也是
+// 对象类别,不是例外——那几册上列的对象就是那类版本自己(后端 kind 封闭集注释同一句)。
 export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> = {
   ACCEPTANCE_RULE_PACKAGE: [
     col('identity', '规则包 / 版本', true),
@@ -126,11 +127,33 @@ export const kindColumns: Record<CommercialPolicyKind, ListColumn<PolicyRow>[]> 
     col('effective', '有效区间', true),
     col('publishedAt', '发布时间', true),
   ],
+  // 适用对象一栏而不是「服务产品 / 客户合同」两列:后端契约是两键恰一在场,分成两列会让每行必有一格空着,
+  // 读的人分不出那是「这一格不适用」还是「缺了」(判据同信用政策的额度栏);合栏里显哪个就是哪个,不折成
+  // 一个「对象」词——同一个标识串作产品与作合同是两件事。两张子表各合成一栏,期限逐项带种类、起算事件、
+  // 天数与日历,材料按索赔类型带清单,顺序照后端给的(期限按种类序、材料按索赔类型序)。「适用范围」是
+  // 版本壳上的,「规则范围」是正文上的(0023 父行 scope_ref),两处都上列、不抄成一处。
+  CUSTOMER_SERVICE_RULE: [
+    col('identity', '规则对象 / 版本', true),
+    col('scope', '适用范围', true),
+    col('status', '生命周期状态'),
+    col('contentRegistered', '正文'),
+    col('appliesTo', '适用对象(服务产品 / 客户合同恰一)', true),
+    col('responsibleParty', '责任方', true),
+    col('ruleScope', '规则范围', true),
+    col('claimDeadlines', '索赔期限(种类 · 起算事件 · 天数 · 日历)', true),
+    col('minimumMaterials', '最低材料(索赔类型:材料清单)', true),
+    col('effective', '有效区间', true),
+    col('publishedAt', '发布时间', true),
+  ],
 };
 
 // 正文在场与否由服务端的显式布尔说,页面不拿 content 的有无去推:布尔为真而 content 节缺了是响应
 // 不合契约,点名而不是折成「—」——那会让一次坏响应长得像一格正常的空(判据同 creditLimitCell)。
-function contentRegisteredCell(record: PreAcceptanceFinancialControlPolicyRecord): string {
+// 接受前财务控制策略册与客户服务规则册的「壳 + 正文左连接」同形,这一格两册共用;只读两键,不认册。
+function contentRegisteredCell(record: {
+  contentRegistered: boolean;
+  content?: { registeredAt: string };
+}): string {
   if (!record.contentRegistered) return '未登记';
   if (!record.content) return '正文缺失(响应不合契约)';
   return `已登记(${formatInstant(record.content.registeredAt)})`;
@@ -149,6 +172,44 @@ function controlsCell(record: PreAcceptanceFinancialControlPolicyRecord): string
         `${item.order}. ${labelOf(controlKindLabels, item.control)}@${item.chargeScope} → ` +
         `${labelOf(controlFailureDispositionLabels, item.onFailure)};责任:${item.responsibility}`,
     )
+    .join(' | ');
+}
+
+// 适用对象四态:未登记正文(壳)、恰一键在场(显哪个就是哪个)、两键皆无、两键皆有。后两态按 0023 的
+// CHECK 根本进不了库,读到就是响应不合契约,各自点名——「缺失」与「并存」的续办不同(前者查写侧,后者
+// 查读侧转写),不折成同一句。恰一在场时把「服务产品」「客户合同」的名字带上,不合成一个「对象」词:
+// 同一个标识串作产品与作合同是两件事,只显标识串会让两类在这一列里长得一模一样。
+export function serviceRuleAppliesToCell(record: CustomerServiceRuleRecord): string {
+  if (!record.contentRegistered) return '—';
+  if (!record.content) return '正文缺失(响应不合契约)';
+  const { serviceProduct, customerContract } = record.content;
+  if (serviceProduct !== undefined && customerContract !== undefined) {
+    return '适用对象两键并存(响应不合契约)';
+  }
+  if (serviceProduct !== undefined) return `服务产品:${serviceProduct}`;
+  if (customerContract !== undefined) return `客户合同:${customerContract}`;
+  return '适用对象缺失(响应不合契约)';
+}
+
+// 两张子表各自三态:未登记正文 / 已登记且有行 / 已登记而空数组。第三态与控制项那一栏相反,**不是坏
+// 数据**:0023 两张子表可各自为空,「这一版对期限无客户差异」是正文说出的真话(两项合起来至少一项由
+// 写入把守,那一条在这里判不出、也不该判),所以那句写成「无客户差异」而不是点名。期限种类没有词表,
+// 原词直显、不自造译法(票 admin-write-faces/21 判据 1);起算事件、日历、索赔类型与材料都是引用,同样原词。
+export function serviceRuleClaimDeadlinesCell(record: CustomerServiceRuleRecord): string {
+  if (!record.contentRegistered) return '未登记正文';
+  if (!record.content) return '正文缺失(响应不合契约)';
+  if (record.content.claimDeadlines.length === 0) return '无客户差异';
+  return record.content.claimDeadlines
+    .map((item) => `${item.kind} · ${item.startEvent} · ${item.durationDays} 天 · ${item.calendar}`)
+    .join(' | ');
+}
+
+export function serviceRuleMinimumMaterialsCell(record: CustomerServiceRuleRecord): string {
+  if (!record.contentRegistered) return '未登记正文';
+  if (!record.content) return '正文缺失(响应不合契约)';
+  if (record.content.minimumMaterials.length === 0) return '无客户差异';
+  return record.content.minimumMaterials
+    .map((item) => `${item.claimKind}:${item.materials.join('、')}`)
     .join(' | ');
 }
 
@@ -325,6 +386,23 @@ export function rowsOf(body: CommercialPolicyListResponseBody): PolicyRow[] {
             ? labelOf(jointPassConditionLabels, record.content.jointPassCondition)
             : '—',
           controls: controlsCell(record),
+          effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
+          publishedAt: formatInstant(record.publishedAt),
+        },
+      }));
+    case 'CUSTOMER_SERVICE_RULE':
+      return body.policies.map((record) => ({
+        key: `service-rule:${record.objectId}@${record.version}`,
+        values: {
+          identity: `${record.objectId}@${record.version}`,
+          scope: record.scope,
+          status: labelOf(commercialStatusLabels, record.status),
+          contentRegistered: contentRegisteredCell(record),
+          appliesTo: serviceRuleAppliesToCell(record),
+          responsibleParty: record.content?.responsibleParty ?? '—',
+          ruleScope: record.content?.scope ?? '—',
+          claimDeadlines: serviceRuleClaimDeadlinesCell(record),
+          minimumMaterials: serviceRuleMinimumMaterialsCell(record),
           effective: formatRange(record.effectiveStartsAt, record.effectiveEndsAt),
           publishedAt: formatInstant(record.publishedAt),
         },

@@ -62,7 +62,7 @@ test('每本册都写明由发布口的哪一类版本或哪个声明通道喂�
   ok(policyKindSources.AS_OF_POLICY.includes('ACCEPTANCE_RULE_PACKAGE'));
 });
 
-test('发布签的提示句把九个对象类别词与「两条分类轴」都说出来', () => {
+test('发布签的提示句把十个对象类别词与「两条分类轴」都说出来', () => {
   const hint = registrationSnapshotHints.publication;
   for (const word of [
     'SERVICE_PRODUCT',
@@ -74,6 +74,7 @@ test('发布签的提示句把九个对象类别词与「两条分类轴」都�
     'SETTLEMENT_POLICY',
     'CREDIT_POLICY',
     'AUTHORIZATION_RULE',
+    'CUSTOMER_SERVICE_RULE',
   ]) {
     ok(hint.includes(word), `提示句缺对象类别 ${word}`);
   }
@@ -178,6 +179,154 @@ test('布尔说已登记而正文节缺了是响应不合契约，如实点名�
 
   equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
   equal(odd.values.controls, '正文缺失(响应不合契约)');
+});
+
+// 票 admin-write-faces/21（后端第八册 0023，ADR-0104）：客户服务规则版本从此有册可看。钉三件：chip 词表与列集
+// 都有它；「谁喂它」那一句点名了发布口对象类别 CUSTOMER_SERVICE_RULE 与正文通道；发布签的提示句把第十类对象
+// 类别词与它落在哪一册都说出来。
+test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，发布签提示句点名第十类', () => {
+  ok(commercialPolicyKinds.includes('CUSTOMER_SERVICE_RULE'));
+  equal(policyKindLabels.CUSTOMER_SERVICE_RULE, '客户服务规则');
+  deepEqual(
+    kindColumns.CUSTOMER_SERVICE_RULE.map((column) => column.header),
+    [
+      '规则对象 / 版本',
+      '适用范围',
+      '生命周期状态',
+      '正文',
+      '适用对象(服务产品 / 客户合同恰一)',
+      '责任方',
+      '规则范围',
+      '索赔期限(种类 · 起算事件 · 天数 · 日历)',
+      '最低材料(索赔类型:材料清单)',
+      '有效区间',
+      '发布时间',
+    ],
+  );
+  ok(policyKindSources.CUSTOMER_SERVICE_RULE.includes('CUSTOMER_SERVICE_RULE'));
+  ok(policyKindSources.CUSTOMER_SERVICE_RULE.includes('CUSTOMER_SERVICE_RULE_BODY'));
+  ok(registrationSnapshotHints.publication.includes('CUSTOMER_SERVICE_RULE'));
+  ok(registrationSnapshotHints.publication.includes('客户服务规则册'));
+});
+
+// 输入照后端 query_commercial_catalogue_test.go 里
+// TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered 钉住的三行：只有壳、按合同适用且两张
+// 子表都有内容、按产品适用且期限表为空。适用对象恰一键在场；无客户差异的子表是空数组不是缺键。
+const customerServiceRules: CommercialPolicyListResponseBody = {
+  outcome: 'COMMERCIAL_POLICIES_LISTED',
+  kind: 'CUSTOMER_SERVICE_RULE',
+  policies: [
+    {
+      objectId: 'csr-bare',
+      version: 'v1',
+      scope: 'scope-1',
+      status: 'EFFECTIVE',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      publishedAt: '2026-01-01T00:00:00Z',
+      contentRegistered: false,
+    },
+    {
+      objectId: 'csr-full',
+      version: 'v2',
+      scope: 'scope-1',
+      status: 'EFFECTIVE',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      effectiveEndsAt: '2026-01-01T01:00:00Z',
+      publishedAt: '2026-01-01T00:00:00Z',
+      contentRegistered: true,
+      content: {
+        customerContract: 'contract-1',
+        responsibleParty: 'operator-1',
+        scope: 'scope-1',
+        registeredAt: '2026-01-01T00:01:00Z',
+        claimDeadlines: [
+          { kind: 'FIRST_CLAIM', startEvent: 'event-delivered', durationDays: 30, calendar: 'calendar-cn' },
+          { kind: 'MATERIAL_SUPPLEMENT', startEvent: 'event-claim-filed', durationDays: 7, calendar: 'calendar-cn' },
+        ],
+        minimumMaterials: [{ claimKind: 'claim-loss', materials: ['material-invoice', 'material-photo'] }],
+      },
+    },
+    {
+      objectId: 'csr-product',
+      version: 'v1',
+      scope: 'scope-1',
+      status: 'EFFECTIVE',
+      effectiveStartsAt: '2026-01-01T00:00:00Z',
+      publishedAt: '2026-01-01T00:00:00Z',
+      contentRegistered: true,
+      content: {
+        serviceProduct: 'product-1',
+        responsibleParty: 'operator-1',
+        scope: 'scope-1',
+        registeredAt: '2026-01-01T00:00:00Z',
+        claimDeadlines: [],
+        minimumMaterials: [{ claimKind: 'claim-damage', materials: ['material-photo'] }],
+      },
+    },
+  ],
+};
+
+test('只有壳的客户服务规则版本照列为「未登记」，不从目录上消失', () => {
+  const [bare] = rowsOf(customerServiceRules);
+
+  equal(bare.key, 'service-rule:csr-bare@v1');
+  equal(bare.values.identity, 'csr-bare@v1');
+  equal(bare.values.status, '已生效');
+  equal(bare.values.contentRegistered, '未登记');
+  equal(bare.values.appliesTo, '—');
+  equal(bare.values.responsibleParty, '—');
+  equal(bare.values.ruleScope, '—');
+  equal(bare.values.claimDeadlines, '未登记正文');
+  equal(bare.values.minimumMaterials, '未登记正文');
+  equal(bare.values.effective, '2026-01-01 00:00:00 UTC → 持续有效');
+});
+
+test('登了正文的客户服务规则按后端顺序逐项列出期限与材料，适用对象显哪个就是哪个', () => {
+  const [, full, product] = rowsOf(customerServiceRules);
+
+  equal(full.values.contentRegistered, '已登记(2026-01-01 00:01:00 UTC)');
+  equal(full.values.appliesTo, '客户合同:contract-1');
+  equal(full.values.responsibleParty, 'operator-1');
+  equal(full.values.ruleScope, 'scope-1');
+  // 期限种类没有词表，原词直显、不自造译法（票 21 判据 1）。
+  equal(
+    full.values.claimDeadlines,
+    'FIRST_CLAIM · event-delivered · 30 天 · calendar-cn | MATERIAL_SUPPLEMENT · event-claim-filed · 7 天 · calendar-cn',
+  );
+  equal(full.values.minimumMaterials, 'claim-loss:material-invoice、material-photo');
+  equal(full.values.effective, '2026-01-01 00:00:00 UTC → 2026-01-01 01:00:00 UTC');
+
+  equal(product.values.appliesTo, '服务产品:product-1');
+  // 空数组是正文说出的真话（这一版对期限无客户差异），不是坏数据，也不是「未登记」。
+  equal(product.values.claimDeadlines, '无客户差异');
+  equal(product.values.minimumMaterials, 'claim-damage:material-photo');
+});
+
+test('客户服务规则布尔说已登记而正文节缺了是响应不合契约，如实点名而不是显示成空', () => {
+  const [odd] = rowsOf({
+    ...customerServiceRules,
+    policies: [{ ...customerServiceRules.policies[0], objectId: 'csr-odd', contentRegistered: true }],
+  } as CommercialPolicyListResponseBody);
+
+  equal(odd.values.contentRegistered, '正文缺失(响应不合契约)');
+  equal(odd.values.appliesTo, '正文缺失(响应不合契约)');
+  equal(odd.values.claimDeadlines, '正文缺失(响应不合契约)');
+  equal(odd.values.minimumMaterials, '正文缺失(响应不合契约)');
+});
+
+test('客户服务规则正文两键皆无或皆有的适用对象是响应不合契约，如实点名', () => {
+  const full = customerServiceRules.policies[1];
+  if (!('content' in full) || !full.content || !('customerContract' in full.content)) throw new Error('夹具变形');
+  const [neither, both] = rowsOf({
+    ...customerServiceRules,
+    policies: [
+      { ...full, objectId: 'csr-neither', content: { ...full.content, customerContract: undefined } },
+      { ...full, objectId: 'csr-both', content: { ...full.content, serviceProduct: 'product-1' } },
+    ],
+  } as CommercialPolicyListResponseBody);
+
+  equal(neither.values.appliesTo, '适用对象缺失(响应不合契约)');
+  equal(both.values.appliesTo, '适用对象两键并存(响应不合契约)');
 });
 
 test('零金额额度上列为金额 0，不是「未声明」也不是缺席', () => {
