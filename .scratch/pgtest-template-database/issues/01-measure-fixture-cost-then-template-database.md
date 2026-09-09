@@ -158,6 +158,12 @@ ALLOW_CONNECTIONS false`，「模板库不被任何用例写」从约定变成�
   是标准写法。实测（带 DSN，55432 零客户端）：3 PASS / 1 SKIP 0.888 s；跑前孤儿 `parcel_tpl_36996_…` 被回收，跑后余本进程一个，`parcel_test_*` 零，advisory 锁零。
 - **结论**：可推；Spec ① 一行加固建议作者随手补或推送时记为尾巴。推送方处置：① ② 合成一张收尾小票派回作者通道（见进 main 记录）。
 
+**收尾进 main（2026-09-09 18:4x，通道 1 推送）**：分支 `mcp5-pgtest01-tail@2e576218`（基 `506bbfd2`，一笔）重放到 `158791dc` 之后 → `15611900`，零冲突、
+内容零差；清点无变动。非作者核 ← 通道 3 18:33（钉 `2e576218`）：两轴 0 阻断；Standards 1 判断题（`dropDatabaseOn` 头注列了三处调用点，再加一处会无声变旧，
+可只留「本包凡删库都经这一句」）；Spec 无发现——`forbidConnections` 失败与迁移失败同走 `discard`、新测钉 SQLSTATE 55000 不钉文案、DROP 只拼在一处、锁层次
+（`forbidConnections` / `discard` 各经 runAsAdmin，`dropDatabaseOn` 三处调用全在回调内不重入）；带 DSN 两遍 4 PASS / 1 SKIP，allowconn=false 的孤儿能被后来者
+DROP 由评审独立复现。推送方含 DSN 全量一次 102 ok / 0 FAIL / 15 无测试，115 s。**远端 `main = 15611900`**。分支指针改名 `merged/mcp5-pgtest01-tail`。
+
 ### 2026-09-09 18:0x 通道 5 · 收尾（评审 Spec ① ② + Standards ①；分支 `mcp5-pgtest01-tail`，基 `506bbfd2`；本笔一次提）
 
 - **Spec ① 加固**：`template.go` `buildTemplate` 在 `migrateTemplate` 迁完断开之后加一步 `forbidConnections`——`ALTER DATABASE <tpl> ALLOW_CONNECTIONS false`
