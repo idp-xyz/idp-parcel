@@ -193,6 +193,7 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.SettlementPolicy != nil {
 		body := payload.SettlementPolicy.body(problems)
 		content.SettlementPolicy = &body
+		payload.SettlementPolicy.reconcileShellReference(problems, payload.References)
 	}
 	if payload.PricePolicy != nil {
 		body := payload.PricePolicy.body(problems)

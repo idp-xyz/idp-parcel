@@ -67,3 +67,22 @@ func (payload SettlementPolicyBodyPayload) body(problems *PublicationPayloadProb
 	}
 	return domain.SettlementPolicyBody{Method: method, Applicability: applicability}
 }
+
+// reconcileShellReference 核壳上的指名引用 references.CUSTOMER_CONTRACT 与六维里的 contract.objectId（CONTEXT 结算方式那条
+// 规则末句：六维里的合同版本同时作壳上的指名引用交出；票 admin-write-faces/23 裁决二）。两处都在场且不同 → 问题落在
+// references.CUSTOMER_CONTRACT：表单是从六维那一格镜像出壳引用的，壳是派生的一侧，点名它才对得上操作者眼前的格。
+//
+// 壳上缺席不补——旧载荷与受控批文照发；缺了它，被引合同未发布时的排序门（`发布未决`）对这一份不成立，那是领域按壳上
+// 有没有引用答的，载荷层不替表单补一格。壳引用为空串或六维那格为空时也不比：前者已由 Publication 在 references.CUSTOMER_CONTRACT
+// 上报过，后者已由 body 在 settlementPolicy.contract.objectId 上报过，再比一次是第二处说同一件事。
+//
+// 它不并进 body：body 只看得见正文一格，壳引用在 CommercialPublicationPayload 上，由 Publication 在正文过门之后调它。
+func (payload SettlementPolicyBodyPayload) reconcileShellReference(problems *PublicationPayloadProblems, references map[string]string) {
+	name := domain.CustomerContractObject.String()
+	declared, present := references[name]
+	if !present || declared == "" || payload.Contract.ObjectID == "" || declared == payload.Contract.ObjectID {
+		return
+	}
+	problems.add("references."+name,
+		fmt.Errorf("壳上的客户合同引用 %q 与六维里的合同对象 %q 不同；壳引用从六维镜像而来，两处须同值", declared, payload.Contract.ObjectID))
+}

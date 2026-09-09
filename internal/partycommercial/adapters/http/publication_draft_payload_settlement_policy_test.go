@@ -140,6 +140,56 @@ func TestSettlementPolicyPayloadCollectsEveryFieldProblem(t *testing.T) {
 	}
 }
 
+// Covers: CONTEXT 结算方式那条规则末句（票 admin-write-faces/23 裁决二）——六维里的合同版本同时作壳上的指名引用交出。
+// 载荷层核两处：壳 references.CUSTOMER_CONTRACT 与六维 contract.objectId 都在场且不同，问题落在 references.CUSTOMER_CONTRACT
+// 一格（表单从六维镜像出壳引用，壳是派生的一侧），六维那两格不被连带点名；相同则壳引用照常进 PublicationDraftShell；壳上
+// 缺席不补——旧载荷与受控批文照发，排序门那半由领域按壳上有没有引用答。
+func TestSettlementPolicyShellReferenceMustAgreeWithTheSixDimensionContract(t *testing.T) {
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+	agreeing := strings.Replace(settlementPolicyPayload, `"effectiveStartsAt": "2026-08-01T00:00:00Z",
+  "settlementPolicy"`, `"effectiveStartsAt": "2026-08-01T00:00:00Z",
+  "references": { "CUSTOMER_CONTRACT": "contract-1" },
+  "settlementPolicy"`, 1)
+	if agreeing == settlementPolicyPayload {
+		t.Fatal("fixture did not take the shell reference; the anchor text moved")
+	}
+
+	shell, _, err := decodePublication(t, agreeing).Publication(tenant)
+	if err != nil {
+		t.Fatalf("payload whose shell reference agrees with the six-dimension contract: %v", err)
+	}
+	if got, present := shell.References[domain.CustomerContractObject]; !present || got.String() != "contract-1" {
+		t.Fatalf("shell reference = %q (present %v), want contract-1", got, present)
+	}
+
+	disagreeing := strings.Replace(agreeing, `"CUSTOMER_CONTRACT": "contract-1"`, `"CUSTOMER_CONTRACT": "contract-2"`, 1)
+	_, _, err = decodePublication(t, disagreeing).Publication(tenant)
+	var problems *commercialhttp.PublicationPayloadProblems
+	if !errors.As(err, &problems) || !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+		t.Fatalf("err = %v (%T), want *PublicationPayloadProblems", err, err)
+	}
+	fields := map[string]bool{}
+	for _, problem := range problems.Problems {
+		fields[problem.Field] = true
+	}
+	if !fields["references.CUSTOMER_CONTRACT"] {
+		t.Fatalf("disagreement not reported on references.CUSTOMER_CONTRACT: %v", problems.Problems)
+	}
+	for _, valid := range []string{"settlementPolicy.contract.objectId", "settlementPolicy.contract.version", "settlementPolicy.contract"} {
+		if fields[valid] {
+			t.Fatalf("the six-dimension contract %q was blamed for the shell's disagreement: %v", valid, problems.Problems)
+		}
+	}
+
+	shell, _, err = decodePublication(t, settlementPolicyPayload).Publication(tenant)
+	if err != nil {
+		t.Fatalf("payload without a shell reference must still translate: %v", err)
+	}
+	if fabricated, present := shell.References[domain.CustomerContractObject]; present {
+		t.Fatalf("a shell reference %q was fabricated from the six-dimension contract", fabricated)
+	}
+}
+
 // Covers: 合同维只收对象 + 版本两格，不收现成的「对象/版本」串——手拼的串在分隔符变化那天静静失配（QualifiedLabel 的
 // 注释）；载荷里 contract 写成字符串按 JSON 形状拒，与受控批文 contractVersionDocument 同一条规矩。方式与类别不符时
 // 预览口答`未受理`带成因。
