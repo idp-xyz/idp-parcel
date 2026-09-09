@@ -12,7 +12,7 @@
     "SETTLEMENT_POLICY"
   ],
   "settlement": {
-    "counterparty": "SYN-ACCOUNT-01",
+    "counterparty": "SYN-PARTY-SHIPPER-01",
     "chargeScope": "SYN-CHARGE-PREPAID",
     "currency": "CNY"
   }

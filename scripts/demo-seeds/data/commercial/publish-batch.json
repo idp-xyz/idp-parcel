@@ -150,7 +150,7 @@
       "objectId": "SYN-SETTLEMENT-PREPAID-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:7d13e3ef0f09096155b5ad7364c9df5126a3d9c175a280cf9188b4ae02ba5755",
+      "contentDigest": "PCC-1:c4cbd2ee81639a26ca49e8070ff27950ad04c5636ec29c20fd1887f00a2759aa",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "CUSTOMER_CONTRACT": "SYN-CONTRACT-01"
@@ -165,7 +165,7 @@
         "settlementPolicyBody": {
           "method": "PREPAID",
           "legalEntity": "SYN-LE-01",
-          "counterparty": "SYN-ACCOUNT-01",
+          "counterparty": "SYN-PARTY-SHIPPER-01",
           "contract": { "objectId": "SYN-CONTRACT-01", "version": "v1" },
           "chargeScope": "SYN-CHARGE-PREPAID",
           "currency": "CNY",
