@@ -24,7 +24,8 @@ const filled: SettlementPolicyDraft = {
   effectiveEndsAt: '',
   method: 'PREPAID',
   legalEntity: 'SYN-LE-01 ',
-  counterparty: 'SYN-ACCOUNT-01',
+  // 相对方是业务参与方标识，不是货主客户账户标识（票 23 裁决一，CONTEXT 结算方式那条规则末句）。
+  counterparty: 'SYN-PARTY-SHIPPER-01',
   contractObjectId: 'SYN-CONTRACT-01',
   contractVersion: ' v1',
   chargeScope: 'SYN-CHARGE-PREPAID',
@@ -33,17 +34,18 @@ const filled: SettlementPolicyDraft = {
   policyEffectiveEndsAt: '2026-12-31',
 };
 
-test('草稿组成载荷：kind 固定 SETTLEMENT_POLICY，各格去首尾空白，合同维是对象 + 版本两格，只到天的日期补成当天零点 UTC', () => {
+test('草稿组成载荷：kind 固定 SETTLEMENT_POLICY，各格去首尾空白，合同维是对象 + 版本两格并镜像成壳引用，只到天的日期补成当天零点 UTC', () => {
   deepEqual(settlementPolicyPayloadOf(filled), {
     kind: 'SETTLEMENT_POLICY',
     objectId: 'SYN-SETTLEMENT-PREPAID-01',
     version: 'v2',
     scope: 'SYN-SCOPE-01',
     effectiveStartsAt: '2026-10-01T00:00:00Z',
+    references: { CUSTOMER_CONTRACT: 'SYN-CONTRACT-01' },
     settlementPolicy: {
       method: 'PREPAID',
       legalEntity: 'SYN-LE-01',
-      counterparty: 'SYN-ACCOUNT-01',
+      counterparty: 'SYN-PARTY-SHIPPER-01',
       contract: { objectId: 'SYN-CONTRACT-01', version: 'v1' },
       chargeScope: 'SYN-CHARGE-PREPAID',
       currency: 'cny',
@@ -62,14 +64,26 @@ test('币种原样送、方式原样送：未选方式是空串而不是缺键�
 });
 
 // 服务端按键在场与否分辨「没有上界」，空串会被当成一个填了空的时刻送进构造门；壳与正文两级同一条规矩。
-test('区间上界留空即键缺席，不送空串；壳上不带指名引用', () => {
+test('区间上界留空即键缺席，不送空串', () => {
   const payload = settlementPolicyPayloadOf({ ...filled, policyEffectiveEndsAt: '  ' });
   ok(!('effectiveEndsAt' in payload));
   ok(!('effectiveEndsAt' in payload.settlementPolicy!));
-  ok(!('references' in payload));
 
   const bounded = settlementPolicyPayloadOf({ ...filled, effectiveEndsAt: '2027-01-01' });
   equal(bounded.effectiveEndsAt, '2027-01-01T00:00:00Z');
+});
+
+// CONTEXT 结算方式那条规则末句（票 23 裁决二）：六维里的合同版本同时作版本壳上的指名引用交出，让「被引合同未发布 →
+// 发布未决」那道排序门对本册成立。同一个选择、两个落点——表单不给第二个输入格，是载荷生成把 contract.objectId 镜像进
+// references.CUSTOMER_CONTRACT；没选合同时壳上没有这个键，不送空串（空串会被服务端当成一个填了空的引用点名）。
+test('六维里选出的合同同时作壳引用 references.CUSTOMER_CONTRACT；没选合同则壳无该键', () => {
+  const payload = settlementPolicyPayloadOf(filled);
+  deepEqual(payload.references, { CUSTOMER_CONTRACT: 'SYN-CONTRACT-01' });
+  equal(payload.references!.CUSTOMER_CONTRACT, payload.settlementPolicy!.contract.objectId);
+
+  const unselected = settlementPolicyPayloadOf({ ...filled, contractObjectId: '  ', contractVersion: '' });
+  ok(!('references' in unselected));
+  equal(unselected.settlementPolicy!.contract.objectId, '');
 });
 
 // 伞票 07 硬句：表单不算摘要、不收也不送批准人；租户与录入者由操作者信封给。载荷里出现这些键会被服务端

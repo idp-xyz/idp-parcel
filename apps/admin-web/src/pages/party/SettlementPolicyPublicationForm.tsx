@@ -42,7 +42,9 @@ import {
  *
  * **三样从读面选、一样从词表选、两样手填**：责任法人从集团法人册选，客户相对方从货主客户账户册选（结算按账户归集
  * ——ADR-0003 三级边界的第三级；seed 里那一格也是账户标识），合同从客户与合同目录选且**对象 + 版本两格一起落**
- * （不让操作者手拼版本号；两段式串只许领域拼）；结算方式下拉只吃服务端词表读口（票 20）答的码 × 本页中文词表，
+ * （不让操作者手拼版本号；两段式串只许领域拼），选出的合同对象同时镜像成壳引用 references.CUSTOMER_CONTRACT
+ * （CONTEXT 结算方式那条规则末句，票 23 裁决二——没有它，被引合同未发布时的排序门对本册不成立；镜像在
+ * settlementPolicyPayloadOf 做，不给操作者第二个合同格）；结算方式下拉只吃服务端词表读口（票 20）答的码 × 本页中文词表，
  * 表单不内置 PREPAID / TERMS，词表读不到就显占位、不自造码、不预选；费用范围与币种是引用串手填，币种收 ISO 代码串、
  * 存不存在由服务端构造门答。读面在接入渠道未配置那堵墙前（403）或读不到时退回手填，表单不因此变死。
  *
@@ -79,7 +81,7 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
             <h3 className="text-[13px] font-medium text-idpxyz-text">版本壳</h3>
             <p className="text-[11px] text-idpxyz-textMuted">
               壳上的适用范围与区间是<strong>版本</strong>的（登记册逐列比对的项），与下面政策正文自己的适用区间是两样；
-              区间上界留空即持续有效。壳上不带指名引用——政策约定的合同在正文六维里。
+              区间上界留空即持续有效。壳上的指名引用不另填——正文六维里选出的合同同时作壳引用交出。
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Field label="政策对象标识 *" path="objectId" problems={problems}>
@@ -250,6 +252,8 @@ function loadSettlementVocabulary(): Promise<ApiResult<PublicationVocabularyResp
  * 合同从客户与合同目录选，**对象 + 版本两格一起落**：每一版合同一项，选中即把两格同时写进草稿，操作者不手拼版本号
  * （两段式串只许领域 NewQualifiedVersionLabel 一处拼）。目录读不到时退回两个手填格——仍是两格，不是一格串。
  * 不按状态过滤（表单不裁，状态显在选项里由人看）；选出来的只是引用，在不在册、版本对不对仍由服务端判。
+ * 这一格同时是壳引用 references.CUSTOMER_CONTRACT 的唯一来源（票 23 裁决二）：镜像在 settlementPolicyPayloadOf 做，
+ * 这里不多一格；壳引用那条路径的问题也显在这一格下。
  */
 function ContractPicker({
   problems,
@@ -267,6 +271,9 @@ function ContractPicker({
   const answer = useLoaded(listCustomerContracts);
   const objectPath = 'settlementPolicy.contract.objectId';
   const versionPath = 'settlementPolicy.contract.version';
+  // 壳上的指名引用是从这一格镜像出去的（settlementPolicyPayloadOf），没有第二个输入格；服务端核出壳引用与六维合同
+  // 不一致时点名的是壳引用那条路径，那条问题只能显在这里——两种形态都带上它，认领表才不多出一条没处显的路径。
+  const shellReferencePath = 'references.CUSTOMER_CONTRACT';
   const current: ContractVersionChoice = { objectId, version };
   const currentKey = objectId === '' && version === '' ? '' : contractChoiceKey(current);
 
@@ -308,14 +315,14 @@ function ContractPicker({
             当前租户尚无客户合同版本；先发布客户合同，再发布挂在它上面的结算政策。
           </span>
         ) : null}
-        <PathProblems problems={problems} paths={[objectPath, versionPath]} />
+        <PathProblems problems={problems} paths={[objectPath, versionPath, shellReferencePath]} />
       </label>
     );
   }
 
   return (
     <div className="flex flex-col gap-2">
-      <Field label="客户合同对象 *" path={objectPath} problems={problems}>
+      <Field label="客户合同对象 *" path={objectPath} alsoPaths={[shellReferencePath]} problems={problems}>
         <Input
           value={objectId}
           disabled={locked}

@@ -57,7 +57,9 @@ export function emptySettlementPolicyDraft(): SettlementPolicyDraft {
 /**
  * 表单渲染的 JSON 路径（载荷键名原词）。公共半边拿它分「本表单的格」与「未认领的路径」：服务端点名的路径不在
  * 这张表里就单列出来，不静默丢。合同维展开到两格——服务端逐格问题落在 settlementPolicy.contract.objectId /
- * .version 上，不落在 contract 本身。这张表与 settlementPolicyPayloadOf 能产出的键一一对应，测试钉着。
+ * .version 上，不落在 contract 本身；壳上镜像出来的 references.CUSTOMER_CONTRACT 也归合同那一格认领（同一个选择、
+ * 两个落点，服务端核出两处不一致时点名的是壳引用那条路径）。这张表与 settlementPolicyPayloadOf 能产出的键一一对应，
+ * 测试钉着。
  */
 export const settlementPolicyFieldPaths: readonly string[] = [
   'objectId',
@@ -65,6 +67,7 @@ export const settlementPolicyFieldPaths: readonly string[] = [
   'scope',
   'effectiveStartsAt',
   'effectiveEndsAt',
+  'references.CUSTOMER_CONTRACT',
   'settlementPolicy.method',
   'settlementPolicy.legalEntity',
   'settlementPolicy.counterparty',
@@ -78,9 +81,10 @@ export const settlementPolicyFieldPaths: readonly string[] = [
 
 /**
  * 组件里显 Problems 的路径表（票 22 判据 3），按 SettlementPolicyPublicationForm 的 JSX 逐处抄：合同两格由 ContractPicker
- * 显——目录可用时一格选单下以 PathProblems 合显两条路径，目录不可用时退回两格各一 Field，两种形态都显这两条；其余各一
- * Field（方式经 VocabularySelect、法人与相对方经 ReferencePicker 也是一 Field）。与上面的认领表由
- * publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ * 显——目录可用时一格选单下以 PathProblems 合显合同两条路径连同壳引用 references.CUSTOMER_CONTRACT，目录不可用时退回两格
+ * 各一 Field、壳引用作对象格的 alsoPaths，两种形态都显这三条；其余各一 Field（方式经 VocabularySelect、法人与相对方经
+ * ReferencePicker 也是一 Field）。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要
+ * 同步改这里。
  */
 export const settlementPolicyRenderedPaths: readonly string[] = [
   'objectId',
@@ -88,6 +92,7 @@ export const settlementPolicyRenderedPaths: readonly string[] = [
   'scope',
   'effectiveStartsAt',
   'effectiveEndsAt',
+  'references.CUSTOMER_CONTRACT',
   'settlementPolicy.method',
   'settlementPolicy.legalEntity',
   'settlementPolicy.counterparty',
@@ -102,15 +107,20 @@ export const settlementPolicyRenderedPaths: readonly string[] = [
 /**
  * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。方式与币种原样送（只去
  * 首尾空白）：集内不集内、存在不存在由服务端答，改大小写或查表就是本地在裁。合同维是对象 + 版本两格——两段式
- * 指称串只许领域 NewQualifiedVersionLabel 一处拼，表单不拼版本号。壳上不带指名引用。**载荷里没有身份也没有摘要**：
- * 租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
+ * 指称串只许领域 NewQualifiedVersionLabel 一处拼，表单不拼版本号。
+ *
+ * 六维里选出的合同对象**同时**作壳上的指名引用 references.CUSTOMER_CONTRACT 交出（CONTEXT 结算方式那条规则末句；
+ * 票 23 裁决二）：没有它，被引合同未发布时的排序门（`发布未决`）对本册不成立。同一个选择、两个落点——表单不给第二个
+ * 输入格，镜像在这里做；没选合同时壳上不长这个键（空串会被服务端当成一个填了空的引用点名，那是第二处报同一件事）。
+ * **载荷里没有身份也没有摘要**：租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。
  */
 export function settlementPolicyPayloadOf(draft: SettlementPolicyDraft): CommercialPublicationPayload {
+  const contractObjectId = draft.contractObjectId.trim();
   const body: SettlementPolicyBodyPayload = {
     method: draft.method.trim(),
     legalEntity: draft.legalEntity.trim(),
     counterparty: draft.counterparty.trim(),
-    contract: { objectId: draft.contractObjectId.trim(), version: draft.contractVersion.trim() },
+    contract: { objectId: contractObjectId, version: draft.contractVersion.trim() },
     chargeScope: draft.chargeScope.trim(),
     currency: draft.currency.trim(),
     effectiveStartsAt: normalizeMoment(draft.policyEffectiveStartsAt),
@@ -128,6 +138,9 @@ export function settlementPolicyPayloadOf(draft: SettlementPolicyDraft): Commerc
   };
   if (draft.effectiveEndsAt.trim() !== '') {
     payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
+  }
+  if (contractObjectId !== '') {
+    payload.references = { CUSTOMER_CONTRACT: contractObjectId };
   }
   return payload;
 }
