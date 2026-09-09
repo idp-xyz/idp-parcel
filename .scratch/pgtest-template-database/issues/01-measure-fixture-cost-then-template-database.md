@@ -1,7 +1,7 @@
 # `internal/platform/pgtest` 改模板库：先量四段各占多少，再让每用例 `CREATE DATABASE … TEMPLATE …`
 
 Category: enhancement
-Status: in-progress——2026-09-09 12:0x 通道 5 认领，分支 `mcp5-pgtest01`，基 `74ef0da8`。立票经过：2026-09-09 通道 1 代裁立票（用户授权自决）：MCP-5 09-08 提议、parallel-sessions「验证」节已把解法与不许走的路写死（模板库；不关 `fsync`、
+Status: resolved——2026-09-09 17:1x 通道 5 完成（12:0x 认领），分支 `mcp5-pgtest01`，基 `74ef0da8`，main SHA 由推送方补；完成记录见文末 Comments。立票经过：2026-09-09 通道 1 代裁立票（用户授权自决）：MCP-5 09-08 提议、parallel-sessions「验证」节已把解法与不许走的路写死（模板库；不关 `fsync`、
 不用事务回滚包裹），本票是那一段的票。**先量再改**，量不出「时间几乎全在夹具」就停下报数、不改
 Blocked by: 无
 
@@ -86,3 +86,39 @@ Blocked by: 无
 ## 边界
 
 不动任何迁移文件；不动 `compose.yaml`；不动 CI 分片。
+
+## Comments
+
+### 2026-09-09 17:1x 通道 5 · 完成记录（分支 `mcp5-pgtest01`，基 `74ef0da8`）
+
+**逐笔**
+
+- `f321b9c9` 认领，票面转 in-progress。
+- `788e226c` 打点：`IDP_PARCEL_PGTEST_TIMING` 四段 TSV（`timing.go`），未设变量零行为变化。
+- `8a81aa28` 取证：改前四段——迁移占 93.6%，停下条件不触发。
+- `fc2b473b` 模板库：`template.go` 新、`template_test.go` 新、`database.go` 改；`Pool(t)` 签名不动。
+- `db66ea02` 再量：改后四段与改前并列进「取证」节。
+- 本笔：完成记录、全仓同码用时、模板库残留，Status → resolved。
+
+**判据逐项**（验于 `fc2b473b` 的代码，17:01–17:10，实例 `idp-parcel-postgres-gate` 127.0.0.1:55432，两段量数窗口都先广播、后广播「窗口关」）
+
+| 判据 | 结果 | 证据 |
+|---|---|---|
+| 四段耗时两组数字在票面 | ✓ | 「取证」节改前（量于 `788e226c`）/ 改后（量于 `fc2b473b`）两表并列 |
+| 模板库落地且 `Pool(t)` 签名不变 | ✓ | `func Pool(t *testing.T) *pgxpool.Pool` 未动；`git diff --stat 74ef0da8..HEAD` 只有本票面与 `internal/platform/pgtest/` 下四个文件，调用方零改动 |
+| 模板库只建一次 | ✓ | `TestTemplateIsBuiltOncePerProcessAndClonesCarryTheShippedPlan` PASS：两次 `Pool` 后本进程前缀的模板库恰一个；克隆库 `applied_migration` 与 `migrate.Plan()` 逐条同 ID 同校验和 |
+| 每用例库独立 | ✓ | `TestEachPoolIsAnIndependentCopyOfTheTemplate` PASS：第一个库写下的表在第二个库不可见 |
+| 进程退出模板库删掉 | ✓，有保留（见下） | `TestTemplateOfAnExitedProcessIsReapedByTheNext` PASS：子进程建模板后退出，父进程回收器删掉它、不删主人仍在的 |
+| 含 DSN 全仓 `go test -p 1 -count=1 ./...` 与改前同码 | ✓ | 101 ok / 0 FAIL / 15 无测试，用时 118 s（17:07:22–17:09:20）。改前口径 100 / 0 / 16 量于 main `56ed4111`；差的那一个是 `internal/platform/pgtest` 自己——本支给它加了测试，从「无测试」变 ok，包总数同为 116 |
+| 不动迁移文件 / `compose.yaml` / CI 分片 | ✓ | 同上 `diff --stat`，五个文件之外无改动 |
+| 不关 `fsync`、不用事务回滚包裹 | ✓ | `internal/platform/pgtest/` 下无 `fsync`、无 `BEGIN`/`ROLLBACK`；每用例仍是自己的物理库，用完 `DROP … WITH (FORCE)` |
+
+`pgtest` 自测（`go test -count=1 -v ./internal/platform/pgtest/`，带 DSN）：3 PASS / 1 SKIP。SKIP 的是 `TestHelperTemplateOwnerProcess`，它只作为子进程被驱动，直接跑时按设计跳过，不是一条独立判据。
+
+**「进程退出模板库删掉」的保留**：Go 测试二进制在 `m.Run` 返回后直接 `os.Exit`，本包又不能要求每个调用方补 `TestMain`，所以没有「退出那一刻删」的钩子；`fc2b473b` 的解法是「主人以会话级咨询锁示活、后来者回收」——模板库在**下一个建模板的进程**启动时被删。于是实例上稳态**恒有一个**孤儿模板（最后一个进程的），直到下一次任何带 DSN 的 `pgtest` 进程起来。这是机制的形状，不是漏；票面判据字面是「进程退出时删」，若评审认为必须是退出那一刻，另立票，本票按现状记。
+
+**模板库残留（做法第 4 步）**：全仓跑完 `psql` 查 `pg_database`——`parcel_test_*` 零个；`parcel_tpl_*` 一个（`parcel_tpl_36996_eb24c4d9d592`，17 MB），即最后一个建模板的包进程留下的那一个，原因见上；前面每个包的模板都被下一个包的进程回收了（`-p 1` 串行，同一时刻最多一个活模板）。窗口前实例上的 `parcel_tpl_6648_…`（前一任 16:0x 中断遗留、主人进程已不在）已在本次第一个建模板的进程里被回收——回收器在一个真孤儿上也验过一次。
+
+**`-p 1` 只记数不裁**：全仓 118 s 墙钟，其中 `ok` 各包自报用时合计 84 s（其余是串行编译链接）；带真库的包最慢 8.4 s（`customscompliance/adapters/postgres`），PS `adapters/postgres` 5.6 s（parallel-sessions「验证」节记的改前实测 51 s）。放不放 `-p 1` 以 `ci.yml` 带 run 号的实测为据，另立票。
+
+**尾巴**：无。
