@@ -72,9 +72,25 @@ Blocked by: 无
 探针 `TestCreditExposureLedgerRoundTripsSeparately` `-v` 带 DSN PASS / 不带 SKIP。日志 `%TEMP%\verify-wbr09-84c62c3c.log`。
 分支指针改名 `merged/mcp3-wbr09`，远端 `mcp3-wbr09` 删；树 `D:/tops/idp-parcel-mcp3-wbr09` 与 `idp-replay-2055` 先比内容再 `worktree remove`（未加 `--force`）。
 **评审状态如实记**：非作者评审单先派通道 5（task-4f833b6f，20:41），21:09 记「截至 21:10 未响应」改派通道 6（task-66a3fe55，21:16）；推送时用户口述「5 / 6 评审已过」，
-台账里 66a3fe55 仍 pending、通道 1 队列里没有 wbr/09 的评审原文——推送方据用户口述推，评审按**合入后补评**处理（21:5x 已致通道 6），结论到达后落下方 Comments；有阻断在 main 上往前修，不回滚。
+台账里 66a3fe55 仍 pending、通道 1 队列里没有 wbr/09 的评审原文（通道 5 21:4x 自证从未评过，不是丢在队列里）——推送方据用户口述推，评审按**合入后补评**处理（21:5x 致通道 6）。
+**补评 21:56 到：通道 6 钉 main `84c62c3c`，两轴无阻断，main 不动**（全文见下方 Comments；Spec 非阻断 1 / Standards 非阻断 3 随票记）。
 
 ## Comments
 
 - 2026-09-09 20:3x · 通道 3：三笔齐，完工报发通道 1；评审留通道 5 或 6（作者是通道 3，含前一任会话）。
 - 2026-09-09 21:5x · 通道 1：判断题 ④「要不要给 `cmd/parcel-dispatch` 单独一条装配探针」归推送方判——不加：`cmd/parcel-dispatch` 含 DSN 用例在全量里走到了装配函数（漏接会在 `ErrNilDependency` 处红），单独一条只是把同一件事再说一遍；wbr/03 评审那条非阻断照原样留着。
+
+**评审 ← 通道 6 · 合入后补评 · 钉 main `84c62c3c`（基 `55528895`；代码 patch-id 排 .scratch 后与分支 `d5a35960..512ada47` 相等）· 21:56**（隔离树只读、已收；原文经队列送达通道 1，台账 `task-66a3fe55` done）
+
+【阻断】无。不需要在 main 上往前修任何一项。
+
+【非阻断】
+Spec 轴：(1) 票面第 3 步「对象 + 版本两格」与同句「与 `CreditBasis` 里的政策版本引用同形」自相矛盾，代码取一列是对的（判断题 1 接受）。取证：`CreditPolicyReference struct{ requiredValue }` 单值；SA→PC 适配器 `credit_basis.go` 用 `versionReference` 拼「对象/版本」后交来一枚不透明标识，与 `ControlPolicyReference` / `AdoptedPolicyReference` 同一造法；SA 迁移里全部 `*_ref` 列都是单列 text。拆两格等于让 SA 按 `/` 拆提供方的标识。建议 owner 把票面那半句改掉——票面措辞，代码不动。
+Standards 轴：(2) 零值判法三处直写：`WithAuthorizedLimit` `policy.String() == ""`、`Expose` `standing.policy.String() == ""`、postgres `Save` `reference != ""`，测试里问「有没有出处」也用同一写法；`requiredValue` 与各 Reference 类型都没有 `IsZero()`。Duplicated Code / Primitive Obsession 判断题：给 `CreditPolicyReference`（或 `requiredValue`）一只 `IsZero()`，三处问的同一个问题就有一个名字。(3) `ApplyPreAcceptanceControlDeps` 头注后半是变更史（「它曾经允许为 nil（三步法的 expand 段…）决定五写明的 contract 段已随那份夹具补上替身一并收」）——AGENTS「注释不写变更说明」；前半（装配时不知道租户登记哪一种、缺件在第一笔命中那条路时才 panic，所以七件全 mandatory）是该留的理由，后半归 git log。(4) `CreditStanding.Policy()` 生产零调用（`Expose` 直接读字段，只有测试用它断言）；架构棘轮只管工厂不报；作为字段的对称读法可留，点一下让 owner 知道。
+
+【无发现】判断题 2（`Expose` 拒未授权状况）：接受，且不算替 owner 加不变量——CONTEXT「每项信用暴露保存实际采用的政策」本就是领域不变量，守在账本上是放回该在的层；置于重放判之前与作用域错配同列，一致；生产路径 `exposeCredit` 恒经 `WithAuthorizedLimit`。判断题 3（七件门）：接受；`NewReleasePreAcceptanceControlHandler` 不返 error 在票面边界外。判断题 4（cmd 零断言）：归推送方；`cmd/parcel-dispatch` 无 DSN 也 ok，装配函数在既有用例里走到。做法第 2 步「cmd 零改动应能编过」实改 12 行：因「同一错误形状」把构造器改成 `(handler, error)`，装配处必须接 error——「零改动」的前提（签名不变）与「同一错误形状」不能同时成立，作者取后者、完成记录 ② 写明 ✓。第 3 步 `operational_position.go`：核 `CreditStandings.LoadCreditStanding` 只经 `LoadForScope` 求和，前件不成立、未动正确 ✓。第 5 步 `AT-SA-171` 落在票面自己的验收对照第 5 条；`.scratch/at-coverage-inventory.md` 是钉 SHA 的盘点、记名不动 ✓。完成判据四句：nil 构造期拒 ✓（`TestAnyNilDependencyIsRefusedAtConstruction` 七件逐一抽掉各得 `ErrNilDependency`）；落库带政策引用可读回 ✓（`TestACreditExposureRoundTripsTheAdoptedCreditPolicy`：往返 + 存量行 NULL 读回为空 + 混册再保存不动政策列）；领域 `TestAnExposureKeepsTheCreditPolicyItWasJudgedAgainst` 覆盖登记状况直接 Expose 得 `ErrStandingNotAuthorized`、受限也带出处、重放不改口 ✓；gofmt / vet 0 ✓。迁移 0017：`ADD COLUMN credit_policy_ref text` + CHECK `IS NULL OR btrim(...) <> ''`，可空只为存量行、不追溯 ✓；头注中文、引 ADR-0127 Consequences 与 CONTEXT 原句无行号 ✓；LF 无 BOM ✓。postgres：SELECT / INSERT 带列，ON CONFLICT SET 仍只 status / released_at / saved_at ✓（存量行释放时 `$13` 写 NULL 且 SET 不碰该列 → 保持 NULL，「混册再保存」那段盖住）；NULL → 零值，非 NULL 过 `NewCreditPolicyReference` 构造门 ✓。重建门 `RehydrateCreditExposureLedger` 对存量 NULL 如实读回零值、不补不拒，与 ADR-0028「只校验不重算」相容 ✓。PS 夹具 diff 里删的只有三处 `Deps` 内联构造（换 `mustApplyHandler` + `authorizedBasis`）与 `termsFixture` 一行注释，新增断言只在两只新 helper 里，既有断言零改 ✓。领域包无新 import（无 HTTP / pgx）✓；注释全中文；跨文件引用用 ADR 编号 + 决定序号 / CONTEXT 引文，无行号；「七件」数的是本结构自己的字段不是别处 ✓。边界：PC 零改动、PS 只动那份夹具、ADR-0127 正文与比例额度基数未动 ✓。机制清点 155→156 / 16→17 与新迁移一致 ✓。
+本评审验证（`84c62c3c` 隔离树）：gofmt 空；`go build ./...` 0；`go vet` SA / PS 适配器 / cmd/parcel-dispatch 0；无 DSN `go test -count=1 ./internal/settlementaccounting/... ./internal/parcelshipment/adapters/settlementaccounting/... ./internal/architecture/... ./cmd/parcel-dispatch/...` 9 ok / 1 无测试；DSN 半边沿用推送方在 `84c62c3c` 的 102 ok，未再占 55432。
+
+结论：评审过、无阻断，main 不动。两轴各 0 阻断；Spec 非阻断 1（票面措辞）、Standards 非阻断 3（判断题）。
+
+- 2026-09-09 22:0x · 通道 1（推送方处置）：(1) 票面第 3 步那半句**不改**——票已 resolved，完成记录判断题 ① 与本评审都记了取一列的理由，改历史文本会让那道判断题失去对照物；后继票若再写政策引用，照「单值不透明标识」写。(2) `IsZero()` 与 (3) 头注后半删变更史、(4) `Policy()` 读法——三条都落在 SA 地盘，随 [10](./10-credit-ratio-base-is-declared-on-the-credit-policy-content.md)（同动 SA）顺手收，不另立票；wbr/10 派单时点名。
