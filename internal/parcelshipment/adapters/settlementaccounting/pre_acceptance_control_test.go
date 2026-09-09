@@ -114,6 +114,42 @@ func (double *creditDouble) LoadCreditStanding(
 	return double.standing, nil
 }
 
+// creditBasisDouble 替商业侧的授信依据口（ADR-0127 决定四），照 policyDouble 的写法三格可配：
+// 零值答「闭包采用了信用政策、带 basis」，unconfigured 答未配置，err 答调不通。它进本夹具是为 SA
+// contract 段铺路——那一段要把 `Deps.CreditBasis` 收成 mandatory，而本文件是全仓唯一一处在 SA 之外
+// 直接构造那份 Deps 的地方。
+type creditBasisDouble struct {
+	basis        sadomain.CreditBasis
+	unconfigured bool
+	err          error
+}
+
+func (double *creditBasisDouble) LoadCreditBasis(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+	_ sadomain.CommercialResolutionReference,
+) (sadomain.CreditBasis, bool, error) {
+	if double.err != nil {
+		return sadomain.CreditBasis{}, false, double.err
+	}
+	if double.unconfigured {
+		return sadomain.CreditBasis{}, false, nil
+	}
+	return double.basis, true, nil
+}
+
+// authorizedBasis 造一份金额额度的授信依据：额度出自哪一版信用政策由字面量固定，金额由用例给。
+func authorizedBasis(t *testing.T, amountMinor int64) *creditBasisDouble {
+	t.Helper()
+	basis, err := sadomain.NewCreditAmountBasis(
+		value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1"), amountMinor)
+	if err != nil {
+		t.Fatalf("new credit amount basis: %v", err)
+	}
+	return &creditBasisDouble{basis: basis}
+}
+
 type exposureLedgerDouble struct {
 	ledger  *sadomain.CreditExposureLedger
 	loadErr error
@@ -149,6 +185,7 @@ var (
 	_ saports.OperationalBalanceView         = (*balanceDouble)(nil)
 	_ saports.FreezeLedgerRepository         = (*ledgerDouble)(nil)
 	_ saports.CreditStandingView             = (*creditDouble)(nil)
+	_ saports.CreditBasisView                = (*creditBasisDouble)(nil)
 	_ saports.CreditExposureLedgerRepository = (*exposureLedgerDouble)(nil)
 )
 
@@ -257,12 +294,14 @@ func newControlFixture(t *testing.T) *controlFixture {
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
-			Policy:    fixture.policy,
-			Balance:   fixture.balance,
-			Freezes:   fixture.ledger,
-			Credit:    &creditDouble{},
-			Exposures: exposures,
-			Clock:     fixedClock{at: controlledAt},
+			Policy:  fixture.policy,
+			Balance: fixture.balance,
+			Freezes: fixture.ledger,
+			// 预付路不读信用；两份信用依赖给零值 / 任意额度只为装配齐全，不是本夹具要证的东西。
+			Credit:      &creditDouble{},
+			CreditBasis: authorizedBasis(t, 10_000),
+			Exposures:   exposures,
+			Clock:       fixedClock{at: controlledAt},
 		}),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
 			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
@@ -420,7 +459,9 @@ func TestAnExplicitNoControlCarriesItsCommercialBasis(t *testing.T) {
 	}
 }
 
-// termsFixture 把夹具切到账期分支：TERMS 政策 + 信用状况，预付那本账留空。
+// termsFixture 把夹具切到账期分支：TERMS 政策 + 信用状况，预付那本账留空。授信依据的额度取状况里
+// 登记的那一格同值：额度自 ADR-0127 起出自政策而不出自登记状况，两处给同一个数，用例读起来仍是
+// 「额度 10_000 / 1_000」，钉的是译回，不是额度来源——那是 SA 应用层测试的事。
 func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixture {
 	t.Helper()
 	fixture := newControlFixture(t)
@@ -428,12 +469,13 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
-			Policy:    fixture.policy,
-			Balance:   fixture.balance,
-			Freezes:   fixture.ledger,
-			Credit:    &creditDouble{standing: standing},
-			Exposures: exposures,
-			Clock:     fixedClock{at: controlledAt},
+			Policy:      fixture.policy,
+			Balance:     fixture.balance,
+			Freezes:     fixture.ledger,
+			Credit:      &creditDouble{standing: standing},
+			CreditBasis: authorizedBasis(t, standing.LimitMinor()),
+			Exposures:   exposures,
+			Clock:       fixedClock{at: controlledAt},
 		}),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
 			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
@@ -562,12 +604,13 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 					Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
-						Policy:    fixture.policy,
-						Balance:   fixture.balance,
-						Freezes:   fixture.ledger,
-						Credit:    &creditDouble{},
-						Exposures: &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()},
-						Clock:     fixedClock{at: controlledAt},
+						Policy:      fixture.policy,
+						Balance:     fixture.balance,
+						Freezes:     fixture.ledger,
+						Credit:      &creditDouble{},
+						CreditBasis: authorizedBasis(t, 10_000),
+						Exposures:   &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()},
+						Clock:       fixedClock{at: controlledAt},
 					}),
 					Amounts: fixture.amounts,
 				})

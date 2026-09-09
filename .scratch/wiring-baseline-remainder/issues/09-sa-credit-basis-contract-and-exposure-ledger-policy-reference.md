@@ -1,7 +1,10 @@
 # SA 收 ADR-0127 的 contract 段：`Deps.CreditBasis` mandatory、暴露账本行持久化政策引用；PS 夹具先补 `CreditBasisView` 替身
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/03 完成记录「未落三件」之②，ADR-0127 决定五写明「contract 段——依赖 mandatory、
+Status: in-progress——19:4x 通道 3 接续（接续单 task-de74738a-f485-422e-8e85-7a78d474d1ad；前一任 18:4x 自领后 18:5x 中断，树上留一份未提交的 PS 夹具
+测试 +62/−19、mtime 18:47:46），分支 mcp3-wbr09 基 d5a35960。接手对照：先自列第 1 步判据（三格替身 / 接口断言 / 三处 `Deps` 构造全接 / 账期夹具额度与状况
+同值以保住既有用例的读法 / 不改既有断言），再读 diff——逐条对上，PS 包 build/vet/test/gofmt 绿，原样接着用。
+2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/03 完成记录「未落三件」之②，ADR-0127 决定五写明「contract 段——依赖 mandatory、
 nil 在构造期拒——随 PS 那份夹具补上 `CreditBasisView` 替身的那笔一起落，票面记为 SA 后续项」；Consequences 写明「暴露账本行上不持久化政策引用（要 SA 迁移，
 随 contract 段另立）」。两半同票、先 PS 夹具后 SA contract，一个通道做完，PS 那份测试文件改前占号
 Blocked by: 无
