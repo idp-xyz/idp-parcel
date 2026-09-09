@@ -275,7 +275,19 @@ func settlementKey(t *testing.T, contractVersion, chargeScope, currency string) 
 
 // customerServiceRuleBatchBody 先发一份服务产品壳，再发一份指名它的客户服务规则版本，正文挂在同一
 // 产品上。两项同批：后项装载的整册看得见前项，指名引用因此在一批内前后相依（AT-PC-011）。
+//
+// 规则壳上的摘要是 CanonicalizePublicationContent 对下面这份正文算出的串：本册接进服务端规范化后（票
+// admin-write-faces/18）对账门对它开门，两串不等答`未受理`，一行不落。正文挂在哪个产品上是正文的一格，
+// 两个变体各有各的串——分歧批要先过对账门才走得到壳与正文的适用一致那一道。改正文任一格要重算。
 func customerServiceRuleBatchBody(appliesTo string) string {
+	digests := map[string]string{
+		"product-1":     "PCC-1:e1a2024f67825ec5a36924011eb6d6f2340dca18b890fe68f87595b3e1d6b948",
+		"product-OTHER": "PCC-1:296c55d825ab4f729ccac6dd80c4093f7bc68803e5a5231a89fe01253b445125",
+	}
+	digest, known := digests[appliesTo]
+	if !known {
+		panic("customerServiceRuleBatchBody: 没有为 " + appliesTo + " 这一变体算过摘要")
+	}
 	return `{"items": [
     {
       "tenantId": "tenant-1",
@@ -294,7 +306,7 @@ func customerServiceRuleBatchBody(appliesTo string) string {
       "objectId": "csr-1",
       "version": "v1",
       "scope": "scope-1",
-      "contentDigest": "sha256:csr-1",
+      "contentDigest": "` + digest + `",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {"SERVICE_PRODUCT": "product-1"},
       "approval": {"reference": "approval-csr-1", "source": "source-csr-1", "approvedAt": "2026-01-02T00:00:00Z"},
