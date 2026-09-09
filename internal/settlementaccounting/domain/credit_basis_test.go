@@ -35,25 +35,95 @@ func TestCreditBasisIsEitherAnAmountOrARatioWithAPolicyBehindIt(t *testing.T) {
 		t.Fatal("依据丢了政策出处")
 	}
 
-	ratio, err := domain.NewCreditRatioBasis(policy, 2500)
+	ratio, err := domain.NewCreditRatioBasis(policy, 2500, domain.PostedBalanceBase)
 	if err != nil {
 		t.Fatalf("new ratio basis: %v", err)
 	}
 	if bps, ok := ratio.RatioBasisPoints(); !ok || bps != 2500 {
 		t.Fatalf("ratio = (%d, %v), want (2500, true)", bps, ok)
 	}
+	if base, ok := ratio.RatioBase(); !ok || base != domain.PostedBalanceBase {
+		t.Fatalf("ratio base = (%s, %v), want (POSTED_BALANCE, true)", base, ok)
+	}
 	if _, ok := ratio.AmountMinor(); ok {
 		t.Fatal("比例额度答出了金额在场")
+	}
+	if _, ok := amount.RatioBase(); ok {
+		t.Fatal("金额额度答出了基数在场")
 	}
 
 	if _, err := domain.NewCreditAmountBasis(policy, -1); !errors.Is(err, domain.ErrInvalidCreditBasis) {
 		t.Fatalf("负金额：err = %v, want ErrInvalidCreditBasis", err)
 	}
-	if _, err := domain.NewCreditRatioBasis(policy, -1); !errors.Is(err, domain.ErrInvalidCreditBasis) {
+	if _, err := domain.NewCreditRatioBasis(policy, -1, domain.PostedBalanceBase); !errors.Is(err, domain.ErrInvalidCreditBasis) {
 		t.Fatalf("负比例：err = %v, want ErrInvalidCreditBasis", err)
+	}
+	if _, err := domain.NewCreditRatioBasis(policy, 2500, domain.CreditRatioBaseUndeclared); !errors.Is(err, domain.ErrInvalidCreditBasis) {
+		t.Fatalf("新依据缺基数：err = %v, want ErrInvalidCreditBasis——没有基数的比例只有存量正文一条来路", err)
+	}
+	if _, err := domain.NewCreditRatioBasis(policy, 2500, domain.CreditRatioBase(250)); !errors.Is(err, domain.ErrInvalidCreditBasis) {
+		t.Fatalf("集外基数：err = %v, want ErrInvalidCreditBasis", err)
 	}
 	if _, err := domain.NewCreditAmountBasis(domain.CreditPolicyReference{}, 100); !errors.Is(err, domain.ErrInvalidCreditBasis) {
 		t.Fatalf("无出处：err = %v, want ErrInvalidCreditBasis——没有政策出处的额度就是本上下文自己发明的额度", err)
+	}
+	if !(domain.CreditPolicyReference{}).IsZero() || policy.IsZero() {
+		t.Fatal("IsZero 答反了：零值引用没有出处，构造出来的有")
+	}
+}
+
+// Covers: ADR-0129 决定三——比例额度按基数取值折成金额：⌊基数 × 万分比 ÷ 10000⌋ 向下取整；基数为负或为零折 0
+// （账上没有可放大的资金，不是替缺席补零）；金额额度与未声明基数的存量比例都折不得，各答自己的哨兵；
+// 乘不进 int64 的额度报溢出而不是绕回。
+func TestARatioBasisFoldsOntoItsBaseByFlooring(t *testing.T) {
+	policy := creditPolicyReference(t, "credit-1/v1")
+	ratio, err := domain.NewCreditRatioBasis(policy, 2500, domain.PriorPeriodConfirmedChargesBase)
+	if err != nil {
+		t.Fatalf("new ratio basis: %v", err)
+	}
+	for name, tc := range map[string]struct {
+		base int64
+		want int64
+	}{
+		"quarter of 100000":         {base: 100_000, want: 25_000},
+		"floors, never rounds up":   {base: 3, want: 0},
+		"floors below one unit":     {base: 39, want: 9},
+		"zero base is zero limit":   {base: 0, want: 0},
+		"negative base is zero too": {base: -500_000, want: 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := ratio.LimitOnBase(tc.base)
+			if err != nil || got != tc.want {
+				t.Fatalf("LimitOnBase(%d) = (%d, %v), want (%d, nil)", tc.base, got, err, tc.want)
+			}
+		})
+	}
+
+	amount, err := domain.NewCreditAmountBasis(policy, 100)
+	if err != nil {
+		t.Fatalf("new amount basis: %v", err)
+	}
+	if _, err := amount.LimitOnBase(1_000); !errors.Is(err, domain.ErrCreditBasisNotRatio) {
+		t.Fatalf("金额额度折算：err = %v, want ErrCreditBasisNotRatio", err)
+	}
+
+	undeclared, err := domain.NewUndeclaredCreditRatioBasis(policy, 2500)
+	if err != nil {
+		t.Fatalf("new undeclared ratio basis: %v", err)
+	}
+	if _, ok := undeclared.RatioBase(); ok {
+		t.Fatal("未声明基数的存量比例答出了基数在场")
+	}
+	if _, err := undeclared.LimitOnBase(1_000); !errors.Is(err, domain.ErrCreditRatioBaseUndeclared) {
+		t.Fatalf("未声明基数折算：err = %v, want ErrCreditRatioBaseUndeclared", err)
+	}
+
+	huge, err := domain.NewCreditRatioBasis(policy, 1<<62, domain.PostedBalanceBase)
+	if err != nil {
+		t.Fatalf("new huge ratio basis: %v", err)
+	}
+	if _, err := huge.LimitOnBase(1 << 62); !errors.Is(err, domain.ErrCreditLimitOverflow) {
+		t.Fatalf("溢出：err = %v, want ErrCreditLimitOverflow", err)
 	}
 }
 

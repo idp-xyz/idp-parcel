@@ -272,6 +272,12 @@ func standingWith(t *testing.T, limitMinor, exposedMinor int64, overdue bool) do
 
 func command(t *testing.T, amountMinor int64) application.ApplyPreAcceptanceControlCommand {
 	t.Helper()
+	return commandFor(t, "control-request-1", amountMinor)
+}
+
+// commandFor 给请求身份留一格：同一本账本上第二笔请求要另一个身份，否则账本按幂等交回第一笔。
+func commandFor(t *testing.T, requestID string, amountMinor int64) application.ApplyPreAcceptanceControlCommand {
+	t.Helper()
 	asOf, err := domain.NewControlAsOf(
 		value(t, domain.NewAsOfSemantic, "CONTROL_EVALUATION_AT"),
 		asOfAt,
@@ -282,7 +288,7 @@ func command(t *testing.T, amountMinor int64) application.ApplyPreAcceptanceCont
 	}
 	return application.ApplyPreAcceptanceControlCommand{
 		TenantID:    value(t, domain.NewTenantID, "tenant-1"),
-		RequestID:   value(t, domain.NewControlRequestID, "control-request-1"),
+		RequestID:   value(t, domain.NewControlRequestID, requestID),
 		Scope:       settlementScope(t),
 		AmountMinor: amountMinor,
 		Association: value(t, domain.NewBusinessAssociationReference, "submission-1"),
@@ -322,6 +328,7 @@ func newHandler(
 		// 预付路径不读信用；零值替身只为满足装配，被读到即是测试该失败的信号。
 		Credit:      &creditDouble{},
 		CreditBasis: &creditBasisDouble{},
+		RatioBases:  &ratioBaseDouble{},
 		Exposures:   &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
 		Clock:       fixedClock{at: controlAt},
 	})
@@ -341,6 +348,7 @@ func newTermsHandler(
 		Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
 		Credit:      credit,
 		CreditBasis: basis,
+		RatioBases:  &ratioBaseDouble{},
 		Exposures:   exposures,
 		Clock:       fixedClock{at: controlAt},
 	})
@@ -609,7 +617,7 @@ func TestATermsContractRecordsACreditExposureWithoutTouchingTheBalance(t *testin
 	freezes := &ledgerDouble{ledger: domain.NewFreezeLedger()}
 	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: balance, Freezes: freezes,
-		Credit: credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit: credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{}, Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -738,7 +746,7 @@ func TestACombinedPolicyExecutesEachControlOnItsOwnLedgerInOrder(t *testing.T) {
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
 	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: balance, Freezes: freezes,
-		Credit: credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit: credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{}, Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -786,7 +794,7 @@ func TestARestrictionStopsTheRemainingControlsUnderAllControlsPass(t *testing.T)
 	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 1_000)},
 		Freezes: &ledgerDouble{ledger: domain.NewFreezeLedger()},
-		Credit:  credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit:  credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{}, Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -823,7 +831,7 @@ func TestAHaltOnTheSecondControlLeavesTheFirstReplayableNotDoubled(t *testing.T)
 	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 10_000)},
 		Freezes: &ledgerDouble{ledger: freezeLedger},
-		Credit:  credit, CreditBasis: authorized(t, 10_000),
+		Credit:  credit, CreditBasis: authorized(t, 10_000), RatioBases: &ratioBaseDouble{},
 		Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
 		Clock:     fixedClock{at: controlAt},
 	})

@@ -59,7 +59,7 @@ func (standing CreditStanding) Scope() SettlementScope {
 // 额度必须带着出处进来：没有政策出处的授权额度就是本上下文自己发明的额度（与 CreditBasis
 // 构造门同一条理由），拒在这里而不是等落库时发现政策列为空。
 func (standing CreditStanding) WithAuthorizedLimit(limitMinor int64, policy CreditPolicyReference) (CreditStanding, error) {
-	if !standing.scope.valid() || limitMinor < 0 || policy.String() == "" {
+	if !standing.scope.valid() || limitMinor < 0 || policy.IsZero() {
 		return CreditStanding{}, ErrInvalidCreditStanding
 	}
 	standing.limitMinor = limitMinor
@@ -232,7 +232,7 @@ func (ledger *CreditExposureLedger) Expose(request ExposureRequest, standing Cre
 	if request.scope != standing.scope {
 		return CreditExposure{}, ErrSettlementScopeMismatch
 	}
-	if standing.policy.String() == "" {
+	if standing.Policy().IsZero() {
 		return CreditExposure{}, ErrStandingNotAuthorized
 	}
 

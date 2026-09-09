@@ -93,8 +93,9 @@ func (adapter *CreditBasis) LoadCreditBasis(
 	return creditBasisFrom(basis)
 }
 
-// creditBasisFrom 是两侧两格封闭额度之间的全函数（ADR-0025）：金额译金额、比例译比例，两格都不在场
-// 走 error 不吸收——那是 CreditLimit 构造门不会放出的形状。
+// creditBasisFrom 是两侧两格封闭额度之间的全函数（ADR-0025）：金额译金额、比例译比例连基数，两格都不在场
+// 走 error 不吸收——那是 CreditLimit 构造门不会放出的形状。没有基数的比例（ADR-0129 之前固定的存量快照）
+// 译成本侧的「未声明」形，如实带过去让编排停在 CREDIT_RATIO_BASE_UNDECIDED；这里不替它补一个。
 func creditBasisFrom(basis pcdomain.CreditBasis) (sadomain.CreditBasis, bool, error) {
 	policy, err := sadomain.NewCreditPolicyReference(versionReference(basis.PolicyVersion()))
 	if err != nil {
@@ -108,7 +109,19 @@ func creditBasisFrom(basis pcdomain.CreditBasis) (sadomain.CreditBasis, bool, er
 		return translated, true, nil
 	}
 	if bps, ok := basis.AuthorizedLimit().RatioBasisPoints(); ok {
-		translated, err := sadomain.NewCreditRatioBasis(policy, bps)
+		pcBase, declared := basis.AuthorizedLimit().RatioBase()
+		if !declared {
+			translated, err := sadomain.NewUndeclaredCreditRatioBasis(policy, bps)
+			if err != nil {
+				return sadomain.CreditBasis{}, false, fmt.Errorf("%w: credit ratio basis: %v", ErrUntranslatableAnswer, err)
+			}
+			return translated, true, nil
+		}
+		base, err := creditRatioBaseFrom(pcBase)
+		if err != nil {
+			return sadomain.CreditBasis{}, false, err
+		}
+		translated, err := sadomain.NewCreditRatioBasis(policy, bps, base)
 		if err != nil {
 			return sadomain.CreditBasis{}, false, fmt.Errorf("%w: credit ratio basis: %v", ErrUntranslatableAnswer, err)
 		}
@@ -116,4 +129,18 @@ func creditBasisFrom(basis pcdomain.CreditBasis) (sadomain.CreditBasis, bool, er
 	}
 	return sadomain.CreditBasis{}, false, fmt.Errorf(
 		"%w: credit limit of %s is neither an amount nor a ratio", ErrUntranslatableAnswer, policy)
+}
+
+// creditRatioBaseFrom 是两侧封闭集之间的全函数：逐格译，集外走 error 不吸收——提供方加一格成员而本侧没接时，
+// 要在这里响亮，而不是让一份新基数悄悄折成某个已有的分母。
+func creditRatioBaseFrom(base pcdomain.CreditRatioBase) (sadomain.CreditRatioBase, error) {
+	switch base {
+	case pcdomain.PostedBalanceBase:
+		return sadomain.PostedBalanceBase, nil
+	case pcdomain.PriorPeriodConfirmedChargesBase:
+		return sadomain.PriorPeriodConfirmedChargesBase, nil
+	default:
+		return sadomain.CreditRatioBaseUndeclared, fmt.Errorf(
+			"%w: credit ratio base %q is outside the set this side translates", ErrUntranslatableAnswer, base)
+	}
 }

@@ -150,6 +150,19 @@ func authorizedBasis(t *testing.T, amountMinor int64) *creditBasisDouble {
 	return &creditBasisDouble{basis: basis}
 }
 
+// ratioBaseDouble 替 SA 基数取值那一口（ADR-0129 决定三）。本夹具只给金额额度，这一口不会被问到；它在这里
+// 只为装配齐全——`Deps.RatioBases` 与其余依赖同一道构造门，缺了门就拒。
+type ratioBaseDouble struct{}
+
+func (ratioBaseDouble) LoadCreditRatioBase(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+	_ sadomain.CreditRatioBase,
+) (int64, bool, error) {
+	return 0, false, nil
+}
+
 type exposureLedgerDouble struct {
 	ledger  *sadomain.CreditExposureLedger
 	loadErr error
@@ -300,6 +313,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 			// 预付路不读信用；两份信用依赖给零值 / 任意额度只为装配齐全，不是本夹具要证的东西。
 			Credit:      &creditDouble{},
 			CreditBasis: authorizedBasis(t, 10_000),
+			RatioBases:  ratioBaseDouble{},
 			Exposures:   exposures,
 			Clock:       fixedClock{at: controlledAt},
 		}),
@@ -484,6 +498,7 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 			Freezes:     fixture.ledger,
 			Credit:      &creditDouble{standing: standing},
 			CreditBasis: authorizedBasis(t, standing.LimitMinor()),
+			RatioBases:  ratioBaseDouble{},
 			Exposures:   exposures,
 			Clock:       fixedClock{at: controlledAt},
 		}),
@@ -619,6 +634,7 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 						Freezes:     fixture.ledger,
 						Credit:      &creditDouble{},
 						CreditBasis: authorizedBasis(t, 10_000),
+						RatioBases:  ratioBaseDouble{},
 						Exposures:   &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()},
 						Clock:       fixedClock{at: controlledAt},
 					}),

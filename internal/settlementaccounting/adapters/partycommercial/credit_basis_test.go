@@ -118,7 +118,7 @@ func pcAmountLimit(t *testing.T, minor int64) pcdomain.CreditLimit {
 
 func pcRatioLimit(t *testing.T, bps int64) pcdomain.CreditLimit {
 	t.Helper()
-	limit, err := pcdomain.NewCreditRatioLimit(bps)
+	limit, err := pcdomain.NewCreditRatioLimit(bps, pcdomain.PriorPeriodConfirmedChargesBase)
 	if err != nil {
 		t.Fatalf("比例额度：%v", err)
 	}
@@ -157,8 +157,32 @@ func TestTheAdoptedCreditPolicyBecomesACreditBasisWithItsLimitAndVersion(t *test
 		if bps, ok := basis.RatioBasisPoints(); !ok || bps != 2500 {
 			t.Fatalf("ratio = (%d, %v), want (2500, true)——比例原样携带，不在这里折成金额", bps, ok)
 		}
+		if base, ok := basis.RatioBase(); !ok || base != sadomain.PriorPeriodConfirmedChargesBase {
+			t.Fatalf("ratio base = (%s, %v), want (PRIOR_PERIOD_CONFIRMED_CHARGES, true)——基数逐格译过来（ADR-0129）", base, ok)
+		}
 		if _, ok := basis.AmountMinor(); ok {
 			t.Fatal("比例额度译出了金额在场")
+		}
+	})
+
+	// ADR-0129 之前固定的快照：比例在场、基数缺席。适配器如实译成本侧的「未声明」形，不补一个基数——
+	// 编排据它停在 CREDIT_RATIO_BASE_UNDECIDED。
+	t.Run("legacy ratio without a base", func(t *testing.T) {
+		legacy, err := pcdomain.RehydrateCreditRatioLimit(2500, pcdomain.CreditRatioBaseUndeclared)
+		if err != nil {
+			t.Fatalf("重建无基数比例：%v", err)
+		}
+		fixture := newCreditFixture(t, creditClosure(t, true, legacy))
+
+		basis, found, err := fixture.load(t)
+		if err != nil || !found {
+			t.Fatalf("读回授信依据：found=%v err=%v", found, err)
+		}
+		if bps, ok := basis.RatioBasisPoints(); !ok || bps != 2500 {
+			t.Fatalf("ratio = (%d, %v), want (2500, true)", bps, ok)
+		}
+		if base, ok := basis.RatioBase(); ok {
+			t.Fatalf("存量比例译出了一个它没有的基数 %s", base)
 		}
 	})
 }

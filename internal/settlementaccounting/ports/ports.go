@@ -114,6 +114,30 @@ type CreditBasisView interface {
 	) (domain.CreditBasis, bool, error)
 }
 
+// CreditRatioBaseView 取比例额度声明的基数在本上下文账本里的当前取值（ADR-0129 决定三）：入账余额读
+// 运营余额登记，上一结算周期已确认费用合计读最近一张已发布对账单的费用行——都是本上下文自己写下的事实，
+// 不问任何人；基数**是什么**由商业侧的政策正文声明，这里只答**它现在是多少**。
+//
+// 三格照 PreAcceptanceControlPolicyView（ADR-0054）：
+//
+//   - found=true + 取值：基数在本作用域有事实。取值可为负（入账余额为负是账户欠款），折不折成额度、
+//     折成多少由领域 CreditBasis.LimitOnBase 说，这里只如实交数。
+//   - found=false：**尚无事实**——该作用域未登记运营余额，或本账户从未发布过对账单 / 最近一张已作废且
+//     尚无替代。消费方停在自己的未决格，不得当成 0（那会让「没登记余额」与「余额为零」同形）也不得当成
+//     无限；恢复动作是等事实出现（登记余额、发布首张对账单），不是重试，也不是补配置。
+//   - error：读不回，等重试。
+//
+// 键取控制请求的结算作用域全部四维：作用域不是过滤器而是身份的一部分，少一维就可能拿另一个作用域的钱
+// 当分母。基数取当前值、不按 asOf 回溯，与已占用暴露、逾期同一读法（ADR-0127 决定四）。
+type CreditRatioBaseView interface {
+	LoadCreditRatioBase(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.SettlementScope,
+		base domain.CreditRatioBase,
+	) (int64, bool, error)
+}
+
 // CreditExposureLedgerRepository 按结算作用域取回只增不删的信用暴露登记册。整册取回的
 // 理由与冻结登记册一字不差；它是另一本账，与冻结账本互不借用。
 type CreditExposureLedgerRepository interface {

@@ -325,7 +325,8 @@ func (repository *CreditExposureLedgers) Save(
 		// 零值出处只属于重建回来的存量行，原样写回 NULL；新形成的暴露一律带出处（Expose 不收没换上
 		// 授权额度的状况，领域门保证）。
 		var policyRef *string
-		if reference := exposure.Policy().String(); reference != "" {
+		if !exposure.Policy().IsZero() {
+			reference := exposure.Policy().String()
 			policyRef = &reference
 		}
 		if _, err := executor.Exec(ctx,

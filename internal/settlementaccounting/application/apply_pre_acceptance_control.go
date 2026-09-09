@@ -64,10 +64,16 @@ const (
 	ExposureLedgerUnavailable
 	// CreditBasisUnavailable / CreditBasisNotConfigured 是授信依据那一口的两格（ADR-0127）：调不通
 	// 等重试，未配置等租户把解析键与信用政策正文补齐。CreditRatioBaseUndecided 是第三格：政策授的是
-	// 比例额度，而比例相对于什么基数本上下文今天未裁——不折成金额、不默认，停在这里等那道裁决。
+	// 比例额度而正文没有声明基数——自 ADR-0129 起构造门不再放出这种正文，它只剩一条来路：重建门读回的、
+	// 那之前登进去的存量正文；不折成金额、不默认，要用得上只能发新版本。
 	CreditBasisUnavailable
 	CreditBasisNotConfigured
 	CreditRatioBaseUndecided
+	// CreditRatioBaseUnavailable / CreditRatioBaseNotEstablished 是基数取值那一口的两格（ADR-0129 决定三）：
+	// 读不回等重试；尚无事实（未登记运营余额 / 尚无有效对账单）等事实出现——不是补配置，也不折 0 不折无限。
+	// 两格不并成一格：并了就答不出该等谁。
+	CreditRatioBaseUnavailable
+	CreditRatioBaseNotEstablished
 )
 
 func (reason NotFormedReason) String() string {
@@ -90,6 +96,10 @@ func (reason NotFormedReason) String() string {
 		return "CREDIT_BASIS_NOT_CONFIGURED"
 	case CreditRatioBaseUndecided:
 		return "CREDIT_RATIO_BASE_UNDECIDED"
+	case CreditRatioBaseUnavailable:
+		return "CREDIT_RATIO_BASE_UNAVAILABLE"
+	case CreditRatioBaseNotEstablished:
+		return "CREDIT_RATIO_BASE_NOT_ESTABLISHED"
 	default:
 		return ""
 	}
@@ -255,21 +265,23 @@ type ApplyPreAcceptanceControlHandler struct {
 	ledger      ports.FreezeLedgerRepository
 	credit      ports.CreditStandingView
 	creditBasis ports.CreditBasisView
+	ratioBases  ports.CreditRatioBaseView
 	exposures   ports.CreditExposureLedgerRepository
 	clock       ports.Clock
 }
 
-// ApplyPreAcceptanceControlDeps 的七件全是 mandatory：预付路与账期路各读各的账，但一份策略可以同时
+// ApplyPreAcceptanceControlDeps 的每一件都是 mandatory：预付路与账期路各读各的账，但一份策略可以同时
 // 要求两项控制（ADR-0115 允许的组合），装配时不知道租户会登记哪一种，缺任何一件都会在第一笔命中
-// 那条路的委托到达时 panic。CreditBasis 是账期分支的授信额度来源（ADR-0127 决定四）；它曾经允许
-// 为 nil（三步法的 expand 段，理由是另一个上下文的测试夹具直接构造本结构），决定五写明的 contract
-// 段已随那份夹具补上替身一并收：nil 在构造期拒，编排里不再有「额度取登记状况」的旧路。
+// 那条路的委托到达时 panic。CreditBasis 是账期分支的授信额度来源（ADR-0127 决定四）；RatioBases 是
+// 比例额度的基数在本上下文账本里的取值（ADR-0129 决定三）——额度是比例时没有它折不出金额，与别的
+// 依赖同一道构造门。
 type ApplyPreAcceptanceControlDeps struct {
 	Policy      ports.PreAcceptanceControlPolicyView
 	Balance     ports.OperationalBalanceView
 	Freezes     ports.FreezeLedgerRepository
 	Credit      ports.CreditStandingView
 	CreditBasis ports.CreditBasisView
+	RatioBases  ports.CreditRatioBaseView
 	Exposures   ports.CreditExposureLedgerRepository
 	Clock       ports.Clock
 }
@@ -289,6 +301,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		{"freeze ledger repository", deps.Freezes == nil},
 		{"credit standing view", deps.Credit == nil},
 		{"credit basis view", deps.CreditBasis == nil},
+		{"credit ratio base view", deps.RatioBases == nil},
 		{"credit exposure ledger repository", deps.Exposures == nil},
 		{"clock", deps.Clock == nil},
 	} {
@@ -302,6 +315,7 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		ledger:      deps.Freezes,
 		credit:      deps.Credit,
 		creditBasis: deps.CreditBasis,
+		ratioBases:  deps.RatioBases,
 		exposures:   deps.Exposures,
 		clock:       deps.Clock,
 	}, nil
@@ -462,8 +476,9 @@ func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	return controlStep{freeze: freeze, restricted: freeze.Status() == domain.FreezeRestricted}, nil, nil
 }
 
-// exposeCredit 执行 CREDIT_CHECK 一项：先向商业侧索取授信依据、再读信用状况，在暴露账本上占用
-// 额度。逾期与超额形成`业务限制`装在暴露的状态里，与预付冻结的余额不足同构。
+// exposeCredit 执行 CREDIT_CHECK 一项：先向商业侧索取授信依据、比例额度再按声明的基数取本上下文自己的数
+// 折成金额（authorizedMinorOf）、再读信用状况，在暴露账本上占用额度。逾期与超额形成`业务限制`装在暴露的
+// 状态里，与预付冻结的余额不足同构。
 //
 // 授信依据先于信用状况（ADR-0127 决定四）：额度出自闭包采用的信用政策版本，已占用暴露与逾期
 // 才是本上下文自己的事实；闭包没采用信用政策时连读状况都不该发生——那次读取既是白做的，也已
@@ -483,10 +498,9 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 	if !configured {
 		return controlStep{}, handler.haltNotFormed(command, CreditBasisNotConfigured), nil
 	}
-	authorizedMinor, isAmount := basis.AmountMinor()
-	if !isAmount {
-		// 比例额度的基数今天未裁：折成金额就是替 owner 拍板一个 BD-*，停在这里等那道裁决。
-		return controlStep{}, handler.haltNotFormed(command, CreditRatioBaseUndecided), nil
+	authorizedMinor, halted, err := handler.authorizedMinorOf(ctx, command, basis)
+	if err != nil || halted != nil {
+		return controlStep{}, halted, err
 	}
 
 	standing, err := handler.credit.LoadCreditStanding(ctx, command.TenantID, command.Scope)
@@ -534,6 +548,39 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 		creditPolicy: basis.Policy(),
 		restricted:   exposure.Status() == domain.ExposureRestricted,
 	}, nil, nil
+}
+
+// authorizedMinorOf 把授信依据折成一个金额：金额额度原样取；比例额度按声明的基数向本上下文自己的账本取值、
+// 交领域折算（ADR-0129 决定三）。第二个返回值非 nil 表示整个请求停在这一步。
+//
+// 基数在授信依据之后、信用状况之前取：没有基数折不出额度，连读状况都不该发生——与「授信依据先于信用状况」
+// 是同一条顺序纪律。三格照端口：读不回停 CREDIT_RATIO_BASE_UNAVAILABLE（等重试）；尚无事实停
+// CREDIT_RATIO_BASE_NOT_ESTABLISHED（等事实出现，不折 0 不折无限）。基数未声明的比例只剩存量正文一条来路，
+// 停在 CREDIT_RATIO_BASE_UNDECIDED；折算本身报错（溢出 / 领域门拒）是编程错误，上抛。
+func (handler *ApplyPreAcceptanceControlHandler) authorizedMinorOf(
+	ctx context.Context,
+	command ApplyPreAcceptanceControlCommand,
+	basis domain.CreditBasis,
+) (int64, *ApplyPreAcceptanceControlResult, error) {
+	if minor, isAmount := basis.AmountMinor(); isAmount {
+		return minor, nil, nil
+	}
+	base, declared := basis.RatioBase()
+	if !declared {
+		return 0, handler.haltNotFormed(command, CreditRatioBaseUndecided), nil
+	}
+	baseMinor, established, err := handler.ratioBases.LoadCreditRatioBase(ctx, command.TenantID, command.Scope, base)
+	if err != nil {
+		return 0, handler.haltNotFormed(command, CreditRatioBaseUnavailable), nil
+	}
+	if !established {
+		return 0, handler.haltNotFormed(command, CreditRatioBaseNotEstablished), nil
+	}
+	minor, err := basis.LimitOnBase(baseMinor)
+	if err != nil {
+		return 0, nil, fmt.Errorf("expose credit: ratio limit on %s: %w", base, err)
+	}
+	return minor, nil, nil
 }
 
 func (handler *ApplyPreAcceptanceControlHandler) haltNotFormed(

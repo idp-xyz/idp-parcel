@@ -1064,12 +1064,19 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: credit basis view: %w", err)
 	}
+	// 比例额度的基数取 SA 自己的账本（ADR-0129 决定三）：入账余额读运营余额登记、上一周期费用读已发布对账单，
+	// 都在同一只 db 上；不接它，比例额度折不出金额，编排会停在自己的`待判断`。
+	ratioBases, err := sapostgres.NewCreditRatioBases(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: credit ratio bases: %w", err)
+	}
 	apply, err := saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
 		Policy:      policy,
 		Balance:     balances,
 		Freezes:     freezes,
 		Credit:      standings,
 		CreditBasis: creditBasis,
+		RatioBases:  ratioBases,
 		Exposures:   exposures,
 		Clock:       clock,
 	})
