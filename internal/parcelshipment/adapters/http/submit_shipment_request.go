@@ -102,17 +102,28 @@ type submitResponse struct {
 // ownershipView 交回归属决定本身而不只是一个结论字符串。`UC-PS-001` 的结果语义要求非本产品
 // 归属报出当前权威方与安全交接结果、归属未决报出当前缺口与安全续办引用；少了它们，调用方
 // 只知道被挡了，不知道该找治理还是找客户。
+//
+// 决定上的两种交接证据各占一格、不合并（ADR-0128 决定四）：`handoffReference` 是治理接管记录里的
+// 停写证据，答「前任停笔了没有」；`handoffConfirmationReference` 是这一笔范围交过去之后对方给的确认
+// 引用，即 `UC-PS-001` 步 3B 要返回的渠道中立关联，答「对方确认了没有」。合成一格，读的人就分不出
+// 「有停写证据但交接没确认」与「交接已确认」。
+//
+// `unresolvedReason` 与 `continuationReference` 两格由归属本身未决与交接未决共用：结果行都是
+// 「生产归属未决 + 安全续办引用」，管理台按这两个名字读，分两套名字只会让同一个结果行在页面上有
+// 两个位置。两套原因词表（归属未决的 `OwnershipUnresolvedReason`、交接未决的 `HandoffUnresolvedReason`）
+// 没有同名项，且 `authority` 一格已经说明是哪一种未决。
 type ownershipView struct {
-	DecisionID            string `json:"decisionId"`
-	Authority             string `json:"authority"`
-	AdmissionControl      string `json:"admissionControl"`
-	RuleVersion           string `json:"ruleVersion"`
-	Revision              string `json:"revision"`
-	OtherAuthority        string `json:"otherAuthority,omitempty"`
-	HandoffReference      string `json:"handoffReference,omitempty"`
-	UnresolvedReason      string `json:"unresolvedReason,omitempty"`
-	ContinuationReference string `json:"continuationReference,omitempty"`
-	SuspensionReference   string `json:"suspensionReference,omitempty"`
+	DecisionID                   string `json:"decisionId"`
+	Authority                    string `json:"authority"`
+	AdmissionControl             string `json:"admissionControl"`
+	RuleVersion                  string `json:"ruleVersion"`
+	Revision                     string `json:"revision"`
+	OtherAuthority               string `json:"otherAuthority,omitempty"`
+	HandoffReference             string `json:"handoffReference,omitempty"`
+	UnresolvedReason             string `json:"unresolvedReason,omitempty"`
+	ContinuationReference        string `json:"continuationReference,omitempty"`
+	HandoffConfirmationReference string `json:"handoffConfirmationReference,omitempty"`
+	SuspensionReference          string `json:"suspensionReference,omitempty"`
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、客户账户或线路的存在性，
@@ -170,6 +181,20 @@ func newOwnershipView(decision domain.ProductionOwnershipDecision) *ownershipVie
 	if reason, continuation, present := decision.UnresolvedDetails(); present {
 		view.UnresolvedReason = reason.String()
 		view.ContinuationReference = continuation.String()
+	}
+	// 交接评估只记在`其他权威`决定上（WithSafeHandoff 守的），而 UnresolvedDetails 只对归属本身未决的
+	// 决定作答，两个分支不会同时写同一格。已确认与未决由评估的状态格判，不看观察格：观察是对方说了
+	// 什么，评估才是本方认不认（范围不符的完整确认在评估里是未决）。
+	if assessment, recorded := decision.SafeHandoff(); recorded {
+		if reason, unresolved := assessment.UnresolvedReason(); unresolved {
+			view.UnresolvedReason = reason.String()
+			if continuation, present := assessment.ContinuationReference(); present {
+				view.ContinuationReference = continuation.String()
+			}
+		}
+		if confirmation, confirmed := assessment.ConfirmationReference(); confirmed {
+			view.HandoffConfirmationReference = confirmation.String()
+		}
 	}
 	if suspension, present := decision.SuspensionReference(); present {
 		view.SuspensionReference = suspension.String()

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	pshandoff "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/productionhandoff"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -146,6 +147,66 @@ func TestSubmitCarriesTheGateBlockReasonsBehindARefusal(t *testing.T) {
 	}
 }
 
+// Covers: UC-PS-001 结果行「生产归属未决」要带「安全续办引用」；ADR-0128 决定三——归属凭接管记录
+// 判为`其他权威`、交接却未决时，结果落归属未决，原因与续办引用取决定上交接评估那一格。通道放的是
+// 生产装配同款的未配置适配器：今天生产上每一个 Other 决定都走这条路，它是 HTTP 面上唯一走得到的
+// Other 形，此前没有任何一层测试钉过它的响应体。
+func TestSubmitCarriesTheHandoffContinuationWhenTheChannelToTheOtherAuthorityIsUnconfigured(t *testing.T) {
+	fixture := newFixtureHandingOffThrough(t, pshandoff.UnconfiguredOtherProductionAuthorityChannel{})
+	fixture.ownership.authority = domain.ProductionAuthorityOther
+
+	body := decodeBody(t, fixture.post(t))
+
+	if body.Outcome != "OWNERSHIP_UNRESOLVED" {
+		t.Fatalf("outcome = %q, want OWNERSHIP_UNRESOLVED", body.Outcome)
+	}
+	ownership := body.ProductionOwnership
+	if ownership == nil {
+		t.Fatal("an unresolved handoff reported no ownership decision")
+	}
+	if ownership.Authority != "OTHER" || ownership.OtherAuthority != "other-authority-1" {
+		t.Fatalf("authority = %q / %q, want OTHER / other-authority-1——归属决定仍是其他权威", ownership.Authority, ownership.OtherAuthority)
+	}
+	if ownership.HandoffReference != "handoff-1" {
+		t.Fatalf("handoffReference = %q, want the stop evidence handoff-1", ownership.HandoffReference)
+	}
+	if ownership.UnresolvedReason != "CHANNEL_NOT_CONFIGURED" {
+		t.Fatalf("unresolvedReason = %q, want CHANNEL_NOT_CONFIGURED", ownership.UnresolvedReason)
+	}
+	if ownership.ContinuationReference != "CONT-PS-HANDOFF/PS-HANDOFF/decision-1" {
+		t.Fatalf("continuationReference = %q, want the one derived from the decision", ownership.ContinuationReference)
+	}
+	if ownership.HandoffConfirmationReference != "" {
+		t.Fatalf("an unconfirmed handoff carried a confirmation reference %q", ownership.HandoffConfirmationReference)
+	}
+}
+
+// Covers: UC-PS-001 步 3B「其他权威时安全交接并返回渠道中立关联」与结果行「非本产品生产归属」要带
+// 「安全交接结果」；ADR-0128 决定四——确认引用与停写证据两格并列、各答各的问题，未决那两格此时为空。
+func TestSubmitCarriesTheHandoffConfirmationBesideTheStopEvidenceForAnotherAuthority(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.ownership.authority = domain.ProductionAuthorityOther
+
+	body := decodeBody(t, fixture.post(t))
+
+	if body.Outcome != "OTHER_PRODUCTION_AUTHORITY" {
+		t.Fatalf("outcome = %q, want OTHER_PRODUCTION_AUTHORITY", body.Outcome)
+	}
+	ownership := body.ProductionOwnership
+	if ownership == nil {
+		t.Fatal("a confirmed handoff reported no ownership decision")
+	}
+	if ownership.HandoffConfirmationReference != "confirmation-1" {
+		t.Fatalf("handoffConfirmationReference = %q, want confirmation-1——渠道中立关联", ownership.HandoffConfirmationReference)
+	}
+	if ownership.HandoffReference != "handoff-1" {
+		t.Fatalf("handoffReference = %q, want the stop evidence handoff-1 untouched", ownership.HandoffReference)
+	}
+	if ownership.UnresolvedReason != "" || ownership.ContinuationReference != "" {
+		t.Fatalf("a confirmed handoff carried unresolved cells %q / %q", ownership.UnresolvedReason, ownership.ContinuationReference)
+	}
+}
+
 // Covers: ADR-0022 「4xx 与 5xx 响应不得携带 outcome 字段」 — 该字段的存在本身表示应用层
 // 答过了，让它出现在没有答案的响应里，客户端就会把一次失败记成一个业务结果。
 func TestSubmitReportsBadRequestWithoutAnOutcome(t *testing.T) {
@@ -202,9 +263,20 @@ func TestSubmitRejectsOtherMethods(t *testing.T) {
 }
 
 type responseBody struct {
-	Outcome           string   `json:"outcome"`
-	ShipmentRequestID string   `json:"shipmentRequestId"`
-	GateBlockReasons  []string `json:"gateBlockReasons"`
+	Outcome             string         `json:"outcome"`
+	ShipmentRequestID   string         `json:"shipmentRequestId"`
+	GateBlockReasons    []string       `json:"gateBlockReasons"`
+	ProductionOwnership *ownershipBody `json:"productionOwnership"`
+}
+
+// ownershipBody 逐字钉响应体里归属决定那一节的字段名：它是 JSON 契约，管理台按名读。
+type ownershipBody struct {
+	Authority                    string `json:"authority"`
+	OtherAuthority               string `json:"otherAuthority"`
+	HandoffReference             string `json:"handoffReference"`
+	UnresolvedReason             string `json:"unresolvedReason"`
+	ContinuationReference        string `json:"continuationReference"`
+	HandoffConfirmationReference string `json:"handoffConfirmationReference"`
 }
 
 func decodeBody(t *testing.T, response *httptest.ResponseRecorder) responseBody {
@@ -236,16 +308,21 @@ type fixture struct {
 	sources   *sourceRepositoryDouble
 	requests  *shipmentRequestRepositoryDouble
 	ownership *ownershipAuthorityDouble
-	handoff   *handoffChannelDouble
 }
 
+// newFixture 的出向通道给完整确认（handoffChannelDouble）：表驱动那格 OTHER_PRODUCTION_AUTHORITY
+// 只有确认才走得到。要看别的交接答复怎么落到响应体，用 newFixtureHandingOffThrough 换通道。
 func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	return newFixtureHandingOffThrough(t, &handoffChannelDouble{t: t})
+}
+
+func newFixtureHandingOffThrough(t *testing.T, handoff ports.OtherProductionAuthorityChannel) *fixture {
 	t.Helper()
 	value := &fixture{
 		sources:   &sourceRepositoryDouble{records: map[domain.SourceIdentity]domain.SourceSubmissionFingerprint{}},
 		requests:  &shipmentRequestRepositoryDouble{records: map[domain.SourceIdentity]domain.ShipmentRequest{}},
 		ownership: &ownershipAuthorityDouble{t: t, authority: domain.ProductionAuthorityIDPParcel, control: domain.AdmissionControlOpen},
-		handoff:   &handoffChannelDouble{t: t},
 	}
 	value.intake = &intakeDouble{commands: []application.SubmitShipmentRequestCommand{value.command(t)}}
 	value.handler = shipmenthttp.NewSubmitShipmentRequestEndpoint(
@@ -254,7 +331,7 @@ func newFixture(t *testing.T) *fixture {
 			value.sources,
 			value.requests,
 			value.ownership,
-			value.handoff,
+			handoff,
 			&identityFactoryDouble{},
 			fixedClock{at: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)},
 		),
