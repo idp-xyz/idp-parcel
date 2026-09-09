@@ -51,7 +51,7 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [20](./20-publication-vocabulary-read-face.md) | （公共半边，不是一册）| 词表读口：一口按 kind 答各册正文封闭集的码，表单不内置枚举——第 2 波 12/13/15/17 的前置 | **resolved**（2026-09-08 20:5x 进 main，通道 4 `mcp4-awf20`；进 main 见票内 Comments） | 08、16（均已进 main） |
 | [21](./21-customer-service-rule-register-read-face.md) | `CUSTOMER_SERVICE_RULE` 的**读面**（18 的前置，与 06 同形） | 管理台第八册读面：`CommercialPolicyKind` 加格 + 列向 + 标签 | **resolved**（2026-09-09 15:57 进 main `56ed4111`，通道 3 `mcp3-awf21`；非作者评审通道 6 两轴无阻断；进 main 见票内「进 main 记录」） | 无 |
 | [22](./22-publication-form-private-helpers-lift-to-party-shared-layer.md) | （收口票，不是一册）| 九张表单私有 `Field` / `useLoaded` / 词表下拉 / 整数解析抬到 party 共享层；顺带 17 非阻断 (1) 节根问题渲染 | **resolved**（2026-09-09 21:5x 进 main `4209520b`，通道 4 三任会话 `mcp4-awf22`；非作者评审通道 6 两轴无阻断；进 main 见票内「进 main 记录」）| 21、18（均已进 main） |
-| [23](./23-settlement-policy-counterparty-register-and-contract-shell-reference.md) | `SETTLEMENT_POLICY` 的两条裁决落地 | 相对方从业务参与方册选、六维合同镜像成壳引用（裁决在 PC CONTEXT） | ready-for-agent（2026-09-09 立；21:5x 起阻塞边解除，进入前沿）| 22（已进 main） |
+| [23](./23-settlement-policy-counterparty-register-and-contract-shell-reference.md) | `SETTLEMENT_POLICY` 的两条裁决落地 | 相对方从业务参与方册选、六维合同镜像成壳引用（裁决在 PC CONTEXT） | **resolved**（2026-09-09 23:0x 进 main `f8fa0398`，通道 4 `mcp4-awf23`；非作者评审通道 2 两轴无阻断；进 main 见票内「进 main 记录」）| 22（已进 main） |
 | [24](./24-closed-set-named-lookups-unify-on-closed-code-named.md) | （收口票，Go 领域）| 各册 `*Named` 反查合一到 `closedCodeNamed` | **resolved**（2026-09-09 15:57 进 main `56ed4111`，通道 6 `mcp6-awf24`；非作者评审通道 1 两轴无阻断；进 main 见票内「进 main 记录」——本行 22:2x 由推送方补改，此前漏转）| 无 |
 
 **本票转 resolved 的判据不变**：08–18 十一张全 resolved（21 是 18 的前置，随 18 算）。22 / 23 / 24 是评审判断题收成的**收口票**，列在这里

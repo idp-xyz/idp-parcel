@@ -1,7 +1,7 @@
 # 23 结算政策表单两条裁决落地：客户相对方从业务参与方册选、六维里的合同镜像成壳引用
 
 Category: enhancement
-Status: resolved——2026-09-09 22:3x 通道 4 交活，分支 `mcp4-awf23` tip 见下「完成记录」；进 main 的 SHA 由推送方重放后补记。此前：in-progress——22:19 通道 4 认领，分支 `mcp4-awf23` 基 `90c025ca`（= origin/main），单 task-23fabd10-e67d-4415-91fa-3847a309d9f9；ready-for-agent——2026-09-09 通道 1 代裁（用户授权自决）票 [15](./15-settlement-policy-form.md) 评审留下的两条判断题，裁决已写进
+Status: resolved——**2026-09-09 23:0x 进 main `f8fa0398`**（通道 4 窗口按用户指令代通道 1 推送方重放；通道 2 评审 22:5x 两轴无阻断；分支→main SHA 对照与验证见文末「进 main 记录」）。22:3x 通道 4 交活，分支 `mcp4-awf23` tip `10851199`，见下「完成记录」。此前：in-progress——22:19 通道 4 认领，分支 `mcp4-awf23` 基 `90c025ca`（= origin/main），单 task-23fabd10-e67d-4415-91fa-3847a309d9f9；ready-for-agent——2026-09-09 通道 1 代裁（用户授权自决）票 [15](./15-settlement-policy-form.md) 评审留下的两条判断题，裁决已写进
 `docs/domain/party-commercial/CONTEXT.md` 结算方式那条规则末尾（客户相对方 = 业务参与方，不是货主客户账户；六维里的合同版本同时作壳引用交出）；
 本票是它的落地。**Blocked by [22](./22-publication-form-private-helpers-lift-to-party-shared-layer.md)**：22 重构 `SettlementPolicyPublicationForm.tsx`
 的私有件，本票改同一张表单的两格，等它抬完再改，不相撞。**2026-09-09 21:5x：22 已进 main `4209520b`，阻塞边解除**——本票现在改的是接了共享层之后的
@@ -78,3 +78,26 @@ Blocked by: 22（已进 main）
 - `seed.sh` 里「SYN-LE-01 与 SYN-ACCOUNT-01 在此获得身份册登记，与上面发布批里的同名引用同指一物」那句注释：发布批里现在不再出现 `SYN-ACCOUNT-01`（它只在上一行的解析键 `customerAccountId` 里），句子松了半格但不假，`seed.sh` 不在地盘，未动。
 - 领域 `CounterpartyReference` 仍是未绑定册的 `requiredValue`，存在性不由构造门查——票面明写不加，未动。
 - 工作树 `D:/tops/idp-parcel-mcp4-awf23` 与其 `apps/admin-web/node_modules` **目录联接**留给推送方：拆树前先 `cmd /c rmdir D:\tops\idp-parcel-mcp4-awf23\apps\admin-web\node_modules` 摘掉联接再 `git worktree remove`（不加 `--force`）。
+
+## 进 main 记录（2026-09-09 23:0x；通道 1 会话 22:4x 崩在「重放完、含 DSN 全量在跑」那一步，用户指令通道 4 窗口接听通道 1 队列并代推送方——**推送方与作者是同一会话**，所以非作者评审派给了通道 2，推送方自己没评）
+
+分支 `mcp4-awf23` 六笔由前一任通道 1 重放到 `8cc79b3d`（tip `f8fa0398`），本任重核：
+`a9d7ef7b→5d504401` / `e906e012→125e9fd3` / `7cd71479→f2d65463` / `08af0cf1→00ed2fce` / `9216dfff→295c66a2` / `10851199→f8fa0398`——
+六对 `patch-id --stable` 逐对相等。前一任那一跑的结果随会话丢失，本任在 `%TEMP%\idp-replay-awf23`（干净，钉 `f8fa0398`）重跑：含 DSN `go test -p 1 -count=1 ./...` **exit 0 · 103 s · 102 ok / 0 FAIL / 15 无测试 / 0 cached**；探针 `TestFreezeScopesAreInvisibleToEachOther` 带 DSN PASS。
+评审（下方 Comments）Spec 非阻断 (1) 要推送方在 tip 上独立复算 seed 摘要：临时探针（未提交、已删）读 tip 上的 `publish-batch.json` → `publishCommandsFromJSON` → `CanonicalizePublicationContent` → `ReconcileDeclaredDigest` **答 nil**，算出 `PCC-1:c4cbd2ee…` 与声明逐字节同。
+其后 tf/12 三笔（`89d2326f→b2feccd0` / `290280d9→3fb5e30c` / `c14511a4→9efb33d1`）与 sa/04 三笔（`d85711ea→6995afe7` / `cf8a3c4a→79d1662b` / `543a9ac1→f53c1a06`）重放在它之上，全是 `.md`，`.go`/`.sql` 零变动，Go 真值沿用 `f8fa0398` 那一跑；清点在 tip 干净检出重生成零差。
+**远端 `main`** 的 SHA 与推送时刻见 `.scratch/tasks.md` 22:47 节（推前 `ls-remote` 核 `8cc79b3d` 未动）。
+推送方处置评审非阻断：Standards (1) `reconcileShellReference` 的空白口径应与 `requireField` 一致用 `strings.TrimSpace`——纯空格的壳引用今天会被报两次，是头注自己说要避的第二处；不挡合入，**随下一张碰本册文件的票顺手改**（一行）。Standards (2) 字面四处重复接受现状（两张表有测试钉）。Spec (2)–(5) 评审已判站得住，无处置。
+分支指针改名 `merged/mcp4-awf23`、拆树与摘 junction 归下一任推送方顺手做（本任是作者会话，树上还有自己的东西，不在这一笔里拆）。
+
+## Comments
+
+**评审 ← 通道 2 · 钉 `10851199`（基 `90c025ca`）· 22:5x**（隔离树 `%TEMP%\idp-review-awf23` 只读未改、未跑测试；原文在通道 1 台账 `task-08584691`，全文经队列送达代听通道 1 的通道 4 窗口）
+
+九文件逐 hunk 读完；另核 `Publication` 对 `references` 的既有报法（`requireField` 在 `references.<name>` 上报空白）、`newRequiredValue` 不裁空白只拒空白、共享 `Field` 的 `alsoPaths` 已在、`presentation.ts` / `policy-rows.ts` 无按册解名机制（grep 零命中，判据 4 成立）。
+
+Standards——阻断：无。非阻断 3：(1) `reconcileShellReference` 空值口径用 `== ""`，而 `requireField` / `newRequiredValue` 的「空白」是 `TrimSpace == ""`；纯空格的壳引用会先被 `requireField` 报空白、再被这里报不一致——正是头注自己说要避的「第二处说同一件事」；改用 `strings.TrimSpace` 一致即可（可随后续票）。(2) `'references.CUSTOMER_CONTRACT'` 字面在 `settlement-policy-form.ts` 三处 + tsx `shellReferencePath` 一处，与同文件其余路径写法一致且两张表有测试钉，接受现状。(3) 注释全中文、写为何、引 CONTEXT / 票面不用行号，符合 AGENTS.md。无发现：领域构造门 / 0011 / SA 读路径 / `PublicationDraftFlow` 未动；壳引用名用 `domain.CustomerContractObject.String()` 不写字面；无存在性校验（票面边界）。
+
+Spec——阻断：无。非阻断 5：(1) 判据 5 的 `contentDigest` 只有提交信描述（探针已删），评审未能复算，建议推送方在 tip 上跑一次探针再推（ADR-0126：声明摘要与算出不等即`未受理`）。(2) 判据 1「名称 + 标识」→ 实现「标识 · 名称 · 状态」：两样都在，与同格旁法人选单一致的理由站得住，接受。(3) 地盘外两处均站得住：`publication_draft_payload.go` 一行是判据 3「壳解码处，作者定、写理由」的合法落点（`body` 拿不到壳，头注已写）；`resolution-key-syn-account-01.json` 一格是六维精确选择器的必然同改，不改则演示库闭包退回`无适用依据`，`customerAccountId` 仍 `SYN-ACCOUNT-01` 恰好把账户与相对方分开。(4) 版本壳说明那句文案改动：旧句在第 1 步后为假，改是对的，删 `ok(!('references' in payload))` 断言也对，不算越纲。(5) 空值不比与判据 3「缺席不补」一致，测试第三段钉了壳上不长出引用；空串已在 `references.CUSTOMER_CONTRACT` 上被报，守住。无发现：判据 1–4 与 6 逐项对得上；裁决二「同一选择两个落点、不给第二格」在 `payloadOf` 与 `ContractPicker` 两形态都守住；边界四条未碰；三条未落如实列出。
+
+结论：可合入。
