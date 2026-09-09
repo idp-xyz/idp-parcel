@@ -65,3 +65,47 @@ taxClassification?, volumetricFactor?, fx?{quoteType, asOfSemantics, asOfPolicyV
 **未做（各归其票）**：`bindingConversion` 读面列仍显原词（`planBindingConversionLabels` 已有，读面套词表归读面票）；`ReferencePicker` 与 `normalizeMoment` 抬到共享层（票 11 / 16 评审已记的判断题，本票各自就地复用：`planReferenceOf` 从票 11 文件导入、`normalizeMoment` 从票 16 文件导入、价卡选单自写一份 `PriceCardPicker`）；四口点亮归 ADR-0100 操作者接入渠道（机制半边待接线）；旧式 `sha256:` 声明串何时开始拒收（伞票收口时裁）。
 
 **自审（`/code-review` 两轴，基线 `5a209f70`；子代理未起，作者串行自查）**：无阻断。Standards 轴核过：领域包新文件只导入 `fmt` / `time`；注释中文、跨文件引用无行号无计数；不给默认（封闭集不预选、`conversion` 不代填、fx 不代填）；`PriceDirectionNamed` 三个反查名单仍在 `String()` 一处。Spec 轴核过：完成判据三条各有落点；边界两条守住（0010 / 0022 未动、方案内容未读——只传引用串）。非作者评审由通道 1 派，结论写「进 main 记录」。
+
+## Comments
+
+- **评审 ← 通道 5 · 钉 `44f2b79d` · 21:52**（非作者；基线 `5a209f70`，只评 `b0942646..6bfd2f1b` 五笔代码；隔离 detached 检出验后已拆，junction 先 rmdir。）
+  - **Standards · 阻断：无。非阻断 2**：(1) `party/policy-rows.test.ts` `pricePolicies` 夹具头注「照后端 query_commercial_catalogue_test.go 里价格政策册**那三行**的形状」
+    是跨文件计数（AGENTS「写代码注释」：不用行号也不用计数），Go 侧那份夹具增减一行此句无声变旧；去掉数字即可。(2) 判断题：`PricePolicyPublicationForm.tsx`
+    `PriceCardPicker` 与 `SupplierAgreementPublicationForm` 的 `ReferencePicker` 同形（作者头注已写明不跨文件借私有件）；`price-policy-form.ts` 从
+    `credit-policy-form.ts` 借 `normalizeMoment`、组件从 `supplier-agreement-form.ts` 借 `planReferenceOf`——完成记录已列「抬到共享层」归后续（票 11/16 评审同记），不挡。
+    **无发现**：领域新文件只导入 fmt/time；共享六件 + 地盘外三件（`api.ts` / `policy-rows.ts` / `presentation.ts`）逐 hunk 纯加行、无既有行被改；
+    `publish_commercial_authority_test.go` 两条反向用例由 `errors.Is(err)` 改为 `Outcome()==NOT_ACCEPTED && errors.Is(RefusalCause())` 同一成因，「registry 一行不写」
+    断言保留未削弱；注释中文、无行号；封闭集不预选、`PlanBindingConversionNamed` 空串答 false 不代填 NONE、fx 不代填。
+  - **Spec · 阻断：无。非阻断 1**：`price-policy-form.ts` `withShellCopiedIntoPolicy` + 组件「范围与区间从版本壳带入」按钮——票面未要（scope creep 一格）；但它是显式
+    动作抄文本、非默认，服务端仍逐格判，与票 11 `withShellCopiedIntoAgreement` 同形，记录即可。**无发现**：完成判据三条各有落点——`CommercialPoliciesPage.tsx` 一签 →
+    `PublicationDraftFlow kind="PRICE_RULE"` → `notePublished('PRICE_POLICY')` 切册重读；口径列 `pricePolicyCaliberCell` 三态；Go 三层 `canonicalizePricePolicy` /
+    `publicationContentOf` case / `PricePolicyBodyPayload.body`。硬句：`price-policy-form.test.ts`「载荷里没有身份也没有摘要」钉 tenant/submitter/approver/contentDigest/
+    approval/canonicalization 全缺席，无 localProblems。①显隐是呈现：`pricePolicyPayloadOf` 不读 `shows*`，隐格有值照送；`ConditionalField` 隐且有值显值 +「清空」+ 服务端问题；
+    服务端 `PricePolicyCaliberPayload.body` 把在场规则答在条件格 `taxClassification` / `volumetricFactor`。②`canonicalPricePolicyBody` 结构体钉字段序、UTC RFC3339；
+    `PricePolicyBody.validate` 过 `checkPlanBinding` + 口径方向一致，预览答 `NOT_ACCEPTED` 带成因；`body()` 折回再 validate。③方案来源 `listPriceCards()`（pricing 目录读口），
+    只传 `planReferenceOf` 引用串，不按方向过滤、不预选，403 退手填。⑤自验数字逐件对上 `diff --stat`；口径同笔：`caliber` 永随正文，fx 按 `declaresFx` 全空缺席 / 任一非空整节送。
+    边界：无迁移文件，0010 / 0022 未动。评审树自跑 `go test -count=1` PC 四包 + `cmd/parcel-api` + architecture 全 ok（无 DSN）；tsc 0；run-tests 127/127。
+  - **汇总**：两轴无阻断；Standards 非阻断 2、Spec 非阻断 1。可重放。
+- **评审（第二份，重复派单）← 通道 4 · 钉 `44f2b79d` · 2026-09-09 11:06**：09-09 接手的推送方先读分支票面、没读回放树里未提交的上一条，误判本票无评审
+  而再派；撤回令到时通道 4 已完工，报告有效、与通道 5 同 tip 同结论。**Standards · 阻断无，非阻断 2**：(1) Duplicated Code——`PricePolicyBody.validate`
+  逐条重写 `NewCommercialPricePolicy` 的逐格 valid() 与 `checkPlanBinding`，`PricePolicyCaliberBody.validate` 同样重写 `NewPricePolicyCaliber` +
+  `ConsistentWithDirection` 的判据；缺拥有版本因而不能直接调构造门，理由成立，但两份名单今后各改各的会静默分叉，可抽一个无版本的
+  `validatePricePolicyBody` 供两处共用，另立票；(2) `publication_draft_payload_price_policy.go`、`publication-draft-api.ts`、`price-policy-form.ts` 三处
+  写「0010 正文七格」，数的是 0010 的列（AGENTS「不用计数」），改「0010 正文各格」即可。**Spec · 阻断无**；票面点名的领域取舍——与 ADR-0057 Decision 二
+  一致、非绕过：Decision 二禁的是「绕过绑定校验的重建门」，`validate` 跑的正是同一个 `checkPlanBinding`，快照折回 `canonicalPricePolicyBody.body()` 末尾
+  再过一遍 `validate`（`corruptedBinding` / `corruptedCaliber` 钉住），装载面 `SavePricePolicy` / `NewCommercialPricePolicy` 一行未动；两条反向用例
+  error → `未受理` 是既有对账门契约作用到新册，仍断言零写入、成因不变。非阻断 1：外层结果词 `未受理` vs 词表 `适用冲突`，与信用册同形，归伞票收口。
+
+## 进 main 记录（推送方通道 1；重放 2026-09-08 22:0x，验证与推送 2026-09-09——前一任会话断在提交簿记之前；与 awf/15、awf/12 同一条链、同一次全量验证）
+
+- 重放：隔离 detached 树 `%TEMP%\idp-replay-awf1514` 基 main `6b1e0d63`（awf/17 已在），先重放 awf/15 八笔再重放本票 `5a209f70..44f2b79d` 跳清点笔 `c7635837`
+  后七笔：`c3695d2a→7eb53cd3`、`b0942646→b8b257be`、`57341038→2c6acacc`、`3c451050→9b753d84`、`c22218b4→e41b2185`、`6bfd2f1b→6af8fad1`、`44f2b79d→44008e42`。
+  五份共享文件（`publication_canonicalization.go`、`publish_commercial_authority.go`、`publication_draft.go`、`publication_draft_payload.go`、`publication-draft-api.ts`）
+  与 `CommercialPoliciesPage.tsx` 各撞一次 17 + 15 的相邻加行，**逐 hunk 手工并**（各册的 `if` / `case` 各自闭合，不用 union 拼接——那样会把后一册的 `if` 套进前一册的块里，
+  能编过但语义错），每份并完核过「= HEAD + 本票自己的加行、零删行、加行多重集与分支上那笔逐行相等」；重放 tip 对分支 tip 的代码差恰为 17 + 15 + 20 三票的文件集，无多无少。
+- 清点在链 tip 重生成 `ef6cb914`（PC 生产 109→113 / 测试 114→120、声明面 21→23，两票合计）；分支清点笔 `c7635837` 量的是 `5a209f70` 上的数，不重放。
+  09-09 接手会话用 `git range-diff 5a209f70..44f2b79d 6de76d44..44008e42` 复核前任的重放：非共享文件各笔 `=`，共享文件各笔 `!` 且差异全在上下文行，加行逐字相等。
+- 09-09 复验钉 `ef6cb914`：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；admin-web `tsc --noEmit` 退 0、`run-tests` 151/151；含 DSN `go test -p 1 -count=1 ./...`
+  **99 ok / 1 FAIL / 16 无测试 / 0 cached**（555s）——红的一条属 awf/15（`cmd/parcel-commercial` 夹具旧式摘要，见票 15「进 main 记录」），本票无关。
+  之后 awf/12 七笔续在同一条链上（见票 12「进 main 记录」）；三票共一次含 DSN 全量钉最终代码 tip，结果见 tasks.md 2026-09-09 本节。
+- 本笔（票面 + 伞票 07 子票表 + tasks.md）之后 `--ff-only` 进共享 main。分支 `mcp2-awf14` 内容已全在 main，指针改名 `merged/`，树 `D:/tops/idp-parcel-mcp2-awf14` 归通道 2 自拆。

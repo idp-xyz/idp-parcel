@@ -67,3 +67,60 @@ tsc / run-tests 绿；Go 侧只加本册规范化一格。
 **判断题（留给评审 / 伞票收口，不在本票动）**：(1) `Field` / `ReferencePicker` 在本页四张表单里各有一份私有副本（本票第四份），宜抬到 party 共享层——动别人的文件，另立票；(2) 壳上的指名引用 `references.CUSTOMER_CONTRACT` 本票不给输入格（seed 的结算政策壳带着它；带了发布会在被引合同未发布时答`发布未决`，是操作者的选择），服务端点名时落在「未认领」列，与 16 / 11 同一处置；(3) 客户相对方从货主客户账户册取而不是业务参与方册：CONTEXT 说「客户相对方」、seed 用账户标识，两读都通，选单退回手填所以不锁死。非作者评审由通道 1 派，结论写「进 main 记录」。
 
 **未做（各归其票）**：目录读面不显示正文以外的东西（读面已有 0011 各列，本票只加写签）；五步状态机与各口答案中文归公共半边（票 16）；词表读口归票 20；四口与词表口点亮归操作者接入渠道（机制半边待接线，ADR-0100 那一族）。
+
+## Comments
+
+- **评审 ← 通道 3 · 钉 `d79093d4` · 21:56**（非作者；基线 `802ae400`，六笔 `90b7fc45…ace9611f`；隔离 detached 检出只读，验后已拆。）
+  - **Standards · 阻断：无。非阻断 2**：(1) `SettlementPolicyPublicationForm.tsx` 的 `Field` / `useLoaded` / `ReferencePicker` 与 `CreditPolicyPublicationForm.tsx` 等私有副本
+    同形（Duplicated Code，判断题 (1) 作者已自报）——不挡，归伞票抬 party 共享层。(2) 同文件头注「决定一那三条的直接读数」数了 ADR-0101 里的条目（AGENTS「不用计数」）；
+    伞票自己叫它「三问」，判断题级，改成那个名字即可。**无发现**：注释全中文、无行号；新领域文件只 import fmt/time；六份共享生产文件纯加行（numstat +20/+10/+6/+6/+26/+8，−0，
+    与完成记录同），`RehydratePublicationContent` 新支紧接客户合同支、位置与邻册一致；`endpoints.go` / `ports.go` / postgres / cmd 零改动；`SettlementPolicyBody.valid()`
+    把六维送回 `NewSettlementApplicability` 不另写一份；`SettlementMethodNamed` 只反查 `String()`，不给第三取值开口；载荷 `body()` 逐格收齐问题后才合成，问题路径
+    `settlementPolicy.contract.objectId/.version` 各自点名。
+  - **Spec · 阻断：无。非阻断 1**：票面「选形与理由」写「币种…存在性由构造门答」、表单占位写「存不存在由服务端答」，但今天 `NewCurrencyCode`（`settlement_policy.go`）
+    只查非空，`' cny '` 原样进册（`settlement-policy-form.test.ts` 钉的正是此行为）。边界「不动 0011」所以不是本票的漏，但文案把不存在的门说成已有——建议文案改
+    「非空由服务端答，ISO 存在性今天不查」，或伞票收口登一行。**无发现（派单五项逐核）**：① 文档字段序由 `canonicalSettlementPolicyBody` 结构体钉死，整份字节钉在
+    `TestSettlementPolicyCanonicalizesIntoTheSameVersionMirroringTheBatchDocument`；时区异写同摘要、换方式/币种/合同版本异摘要（`…DistinguishesContentButNotSpelling`）；
+    坏正文三格分开答（`…CanonicalizationRefusals`），载荷层逐格问题（`TestSettlementPolicyPayloadCollectsEveryFieldProblem`），批量口 `NOT_ACCEPTED` 带两串
+    （`TestASettlementPolicyDeclaredDigestIsReconciled`）。② `ContractPicker` 选单键 = JSON 数组（`contractChoiceKey`，不用「/」），`""` = 未选不预选，目录 403 / 读不到退两个
+    手填格；服务端拒串与 `contractLabel` 键（`…TakesTheContractAsTwoFieldsAndMustMatchItsKind`）。`MethodSelect` 只吃 `fetchPublicationVocabulary('SETTLEMENT_POLICY')` 的
+    `method` 一集，缺席 `methodCodesOf`→null→占位，403 显「接入渠道未配置，403」，无内置码、无预选。③ 四份旧测试改动全是「没接的册」样本 SETTLEMENT_POLICY→CUSTOMER_SERVICE_RULE
+    与两处壳改配算出摘要（`settlementPolicySpec`），断言强度不减、无删。④ 仓外 `-overlay` 程序调 `CanonicalizePublicationContent` 独立算得
+    `PCC-1:7d13e3ef0f09096155b5ad7364c9df5126a3d9c175a280cf9188b4ae02ba5755`，与 seed 逐字节同（文档 contract 格为 `SYN-CONTRACT-01/v1`）；本册接进后旧 `sha256:syn-…`
+    必 `NOT_ACCEPTED`，此改必要。⑤ 「地盘外」三条与判断题三条与 diff 对上。硬句：载荷无 tenant/submitter/approver/contentDigest、无 `localProblems`、无控制字段。
+    评审树自跑 `go test -count=1` PC 四包 + `cmd/parcel-api` + `internal/architecture` 全 ok（无 DSN）；tsc 退 0；run-tests 132/132。
+  - **汇总**：两轴无阻断；Standards 非阻断 2、Spec 非阻断 1，均随票记或归伞票。
+- **评审（第二份，重复派单）← 通道 2 · 钉 `d79093d4` · 2026-09-09 11:05**：09-09 接手的推送方误判本票无评审而再派（缘由见票 14 同条）；撤回令到时已完工，
+  报告有效、与通道 3 同 tip 同结论。**Standards · 阻断无，非阻断 3**：(1) `SettlementPolicyPublicationForm.tsx` 头注「正文七格无子表——决定一那三条的直接读数」
+  是跨文件计数（AGENTS），与 `SupplierAgreementPublicationForm.tsx` 同句照抄，随伞票 07 一并改；(2) `Field` / `useLoaded` / `ReferencePicker` 第四份私有副本，
+  另立票抬 party 共享层；(3) `canonicalSettlementPolicyBody` 注释说「镜像批文 settlementPolicyBodyDocument 的键名」，但 `contract` 一格写两段式串、批文是两格——
+  键名镜像、形状不镜像；理由已在同一注释、字节有 `TestSettlementPolicyCanonicalizesIntoTheSameVersionMirroringTheBatchDocument` 钉住，记一句即可。
+  **Spec · 阻断无，非阻断 4**：(1) 地盘外 `publish-batch.json` 摘要换 PCC-1 后，已用旧串施加的演示库重放会答 CONTENT_CONFLICT——合入后重建演示库；
+  (2) 判断题 (2)：seed 的壳带 `references.CUSTOMER_CONTRACT` 而表单不给输入格，domain 里没有按 kind 强制指名引用的规则，不缺完成判据；但
+  `CustomerContractPublicationForm` 有 `alsoPaths=['references.ACCEPTANCE_RULE_PACKAGE',…]` 先例，且不带引用就失去「被引合同未发布 → 发布未决」那道排序门——
+  要伞票 07 裁「结算政策要不要把六维里的合同同时镜像成壳引用」；(3) 判断题 (3)：**不完全一致**——GLOSSARY「货主客户账户」写「一个货主客户账户可以按
+  责任法人、相对方、方向、币种和结算政策拥有多个结算账户」，相对方是账户之下细分结算账户的键，与账户不是同一对象；CONTEXT「按责任法人、客户相对方、
+  合同版本…唯一解析」没指定解析到哪个册；domain `CounterpartyReference` 是未绑定册的 requiredValue、seed 用账户标识、选单退回手填，所以不锁死、不阻断，
+  但需要 CONTEXT 或伞票落一句「客户相对方引用解析到哪个册」，否则读面与解析各用一套；(4) 判断题 (1) 同意另立票。
+- **推送方含 DSN 全量发现（2026-09-09，两份评审与作者自验都没跑到）**：`cmd/parcel-commercial` `TestAPublishedSettlementPolicyIsAdoptedOnlyOnTheExactSixDimensions`
+  在 `d79093d4` 上带 DSN 红——`settlementBatchBody` 的 SETTLEMENT_POLICY 项带 `settlementPolicyBody` 正文却声明 `sha256:settlement-1`，本册接进 PCC-1 后
+  `reconcileDeclaredDigest` 对它开门，答 NOT_ACCEPTED（算出 `PCC-1:cab5c83b…`）。与本票已改的 demo seed 是同一件事，只是这份夹具在 `cmd/` 下；该包的用例
+  无 DSN 时 `t.Skip`，所以自验（「未设 DSN」）与两份评审（只跑 PC 包组 + `cmd/parcel-api`）都绿。属作者：已派通道 6 在 `mcp6-awf15` 补一笔改夹具摘要
+  （task-14915d93）。下次同形票（把一册接进 PCC-1）应把「带 DSN 跑 `cmd/parcel-commercial` 的发布用例」写进完成判据。
+
+## 进 main 记录（推送方通道 1；重放 2026-09-08 22:0x，验证与推送 2026-09-09——前一任会话断在提交簿记之前；与 awf/14、awf/12 同一条链、同一次全量验证）
+
+- 重放：隔离 detached 树 `%TEMP%\idp-replay-awf1514` 基 main `6b1e0d63`（awf/17 已在；awf/20 的 main 版 `c05ee34d` 与分支基 `802ae400` 代码同字节），本票
+  `802ae400..d79093d4` 跳清点笔 `23a4ad59` 后八笔：`d13a6dad→43351f13`、`90b7fc45→3f317336`、`82c8caa3→234ca624`、`7d086085→97dd05e1`、`502395f4→7e2e2d8f`、
+  `b47c5461→6d620a33`、`ace9611f→3bca780d`、`d79093d4→6de76d44`。五份共享文件（`publication_canonicalization.go`、`publish_commercial_authority.go`、
+  `publication_draft.go`、`publication_draft_payload.go`、`publication-draft-api.ts`）与 `CommercialPoliciesPage.tsx` 各撞一次 17 的相邻加行，**逐 hunk 手工并**（各册的
+  `if` / `case` 各自闭合；先试过 `git merge-file --union` 拼接，它会把结算政策的 `if` 套进授权规则的块里、`IsRegisterCanonicalized` 两个 `case` 标签并成一个空 case——
+  能编过但语义错，作废重做），每份并完核过「= HEAD + 本票自己的加行、零删行、加行多重集与分支上那笔逐行相等」；本票八笔重放完时，重放 tip 对分支 tip 的代码差恰为 17 的文件集。
+  之后 awf/14 七笔续在同一条链上（见票 14「进 main 记录」）。
+- 清点在链 tip 重生成 `ef6cb914`（PC 生产 109→113 / 测试 114→120、声明面 21→23，两票合计）；分支清点笔 `23a4ad59` 量的是 `802ae400` 上的数，不重放。
+  09-09 接手会话用 `git range-diff 802ae400..d79093d4 6b1e0d63..6de76d44` 复核前任的重放：非共享文件各笔 `=`，共享文件各笔 `!` 且差异全在上下文行，加行逐字相等。
+- 09-09 复验钉 `ef6cb914`：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；admin-web `tsc --noEmit` 退 0、`run-tests` 151/151；含 DSN `go test -p 1 -count=1 ./...`
+  **99 ok / 1 FAIL**——红的一条是上面 Comments 末条那个夹具。作者通道 6 已无会话，补笔由**通道 4 代作者**在 `mcp6-awf15` 上做：`60494959`
+  （`cmd/parcel-commercial/publish_batch_test.go` +3/−1，只换那一格摘要 + 头注两行；带 DSN 该包 ok、`-v` 核 SKIP = 0），已推 origin；链上 `60494959→a67a2419`。
+  之后 awf/12 七笔续在同一条链上（见票 12「进 main 记录」）；三票共一次含 DSN 全量钉最终代码 tip `a67a2419`，结果见 tasks.md 2026-09-09 本节。
+- 本笔之后 `--ff-only` 进共享 main。分支 `mcp6-awf15` 内容已全在 main，指针改名 `merged/`，树 `D:/tops/idp-parcel-mcp6-awf15` 归通道 6 自拆。

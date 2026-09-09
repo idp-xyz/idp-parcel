@@ -41,10 +41,10 @@ Blocked by: 无（票 03 已落 JSON 镜像签）
 | [09](./09-service-product-version-form.md) | `SERVICE_PRODUCT` | 逐字段表单（版本壳 + 引用可加行；本册无正文，文档只盖 kind） | **resolved**（2026-09-08 MCP-3，分支 `mcp3-awf09`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
 | [10](./10-customer-contract-form.md) | `CUSTOMER_CONTRACT` | 逐字段表单（正文 + 绑定表可加行 + 合同级控制声明，两层分两节） | **resolved**（2026-09-08 MCP-4，分支 `mcp4-awf10`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
 | [11](./11-supplier-agreement-form.md) | `SUPPLIER_AGREEMENT` | 逐字段表单（采购方案从价卡目录选） | **resolved**（2026-09-08 MCP-6，分支 `mcp6-awf11@a2a44679`；进 main 见票内「进 main 记录」） | 08（已 resolved） |
-| [12](./12-acceptance-rule-package-form.md) | `ACCEPTANCE_RULE_PACKAGE` | 分节逐字段表单，空节即未声明；pc-gaps/09 落地加一格、pc-gaps/10 落地加一节 | ready-for-agent | 08 |
-| [13](./13-pre-acceptance-financial-control-policy-form.md) | `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` | 逐字段表单（共同通过条件 + 控制项可加行） | ready-for-agent | 08 |
-| [14](./14-price-rule-form.md) | `PRICE_RULE` | 逐字段表单（方案从价卡目录选 + 口径条件节） | ready-for-agent | 08 |
-| [15](./15-settlement-policy-form.md) | `SETTLEMENT_POLICY` | 逐字段表单（合同引用对象 + 版本一起选） | ready-for-agent | 08 |
+| [12](./12-acceptance-rule-package-form.md) | `ACCEPTANCE_RULE_PACKAGE` | 分节逐字段表单，空节即未声明；pc-gaps/09 落地加一格、pc-gaps/10 落地加一节 | **resolved**（2026-09-09 进 main，通道 3 起 / 通道 2 接手 `mcp2-awf12`；非作者评审通道 3 两轴无阻断；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
+| [13](./13-pre-acceptance-financial-control-policy-form.md) | `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` | 逐字段表单（共同通过条件 + 控制项可加行） | resolved 于分支 `mcp6-awf13`，**未进 main**——非作者评审通道 5（2026-09-09）Spec 一轴 1 阻断：`cmd/parcel-commercial` 夹具旧式摘要含 DSN 红，回作者补笔 | 08、20（均已进 main） |
+| [14](./14-price-rule-form.md) | `PRICE_RULE` | 逐字段表单（方案从价卡目录选 + 口径条件节） | **resolved**（2026-09-09 进 main，通道 2 `mcp2-awf14`；非作者评审通道 5 两轴无阻断（通道 4 重复评审同结论）；进 main 见票内「进 main 记录」） | 08（已进 main） |
+| [15](./15-settlement-policy-form.md) | `SETTLEMENT_POLICY` | 逐字段表单（合同引用对象 + 版本一起选） | **resolved**（2026-09-09 进 main，通道 6 `mcp6-awf15` + 补笔；非作者评审通道 3 两轴无阻断（通道 2 重复评审同结论）；推送方含 DSN 全量补出一处夹具，见票内；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
 | [16](./16-credit-policy-form.md) | `CREDIT_POLICY` | 逐字段表单（额度二选一）——08 建议的首例；**连带前端公共半边**（`party/publication-draft-api.ts` / `publication-draft-flow.ts` / `PublicationDraftFlow.tsx`） | **resolved**（2026-09-08 MCP-5，分支 `mcp5-awf16`；进 main 见票 Status） | 08（已 resolved） |
 | [17](./17-authorization-rule-form.md) | `AUTHORIZATION_RULE` | 逐字段表单（取消授权按请求方可加行） | **resolved**（2026-09-08 21:4x 进 main，通道 4 `mcp4-awf17`；非作者评审通道 2 两轴无阻断；进 main 见票内「进 main 记录」） | 08、20（均已进 main） |
 | [18](./18-customer-service-rule-form.md) | `CUSTOMER_SERVICE_RULE` | 逐字段表单（适用对象恰一 + 两张子表） | draft——等管理台读面票要不要立（MCP-1） | 08；管理台客户服务规则册读面票（未立） |

@@ -89,3 +89,41 @@ true = 缺格即不允许，表单不给默认、不预选）；`rules` 是一�
   共享文件改动与第 2 波各票各自加的一格落在同一段落，撞了由推送方按「纯加行」解。**留给评审 / 后续的判断项**：八集中文表放在
   form.ts 而非 `presentation.ts`（避免碰未占号的共享文件）；`Field` / `Problems` / `RowFrame` 与兄弟表单同形复制，第 2 波落齐后可
   单开一票抽到 `PublicationDraftFlow` 旁。
+- **评审 ← 通道 3 · 钉 `76c35c4a` · 2026-09-09 11:03**（非作者；基线 `f722d9f0` = merge-base main；隔离树 `%TEMP%\idp-review-awf12` 只读；
+  评 `94df574c` / `d8ba1669` / `3f07466c` / `9a473cf0` + 地盘外 `b439a3a0`，三笔纯 .md 未评。两轴隔离子代理时限内未返回，报告为直读；三份 `_test.go` 与
+  TSX / HTTP 适配器全文未逐行。）
+  - **Standards · 阻断：无。** 直读 `publication_canonicalization_acceptance_rule_package.go`（`declare` / `canonicalAcceptanceRulePackageBodyOf`）、
+    `publish_commercial_authority.go`（`publicationContentOf` 新支 / `acceptanceRulePackageBodyOf`）、`publication_draft.go`（`declarationsOfContent`）、
+    `publication_draft_payload*.go`、form.ts 全文、TSX 关键节、api / page diff：注释全中文、只写取舍；跨文件引用用符号名 / 引文，未见行号或计数；
+    无默认值（`closed *bool` 缺格拒「须在场」、`CodeSelect` 首项「未选」、多选无预勾、`emptyAcceptanceRulePackageDraft` 六节全空）；封闭集码全部来自
+    `fetchPublicationVocabulary`（Go `PublicationVocabulary` 十集同名已在 main），form.ts 只有码 → 中文表；规范化文档排序确定（`closedCodesOf` 序 +
+    引用 / 组排序）；构造门复用 `canonicalizationOwner` 占位、不抄规则；对账门与客户合同支同判据（正文缺席放行 = ADR-0126 既有语义，非本票引入）。
+    判断项：Duplicated Code——`acceptanceRulePackageBodyOf` 与 `declarationsOfContent` 互为镜像（作者注释已认「同笔改」）；TSX `Field` / `Problems` /
+    `RowFrame` 与兄弟表单同形。
+  - **Spec · 阻断：无。非阻断 3**：(1) 语义疑——form.ts `declarationSections` / `sectionDeclared('finalRuleValidity')` 与 TSX `FinalRuleFields` /
+    `DeclarationSectionFrame` 的 `clear`：票面「多一格不是多一节」「仍随 FinalRuleChannel 同一通道」，纯逻辑却把有效期立为独立 DeclarationSection；
+    终局规则节「清空本节」只清 `finalRules` 不清有效期格 → 节头显「留空 → 未声明」而载荷仍带 `finalRuleValidity` → 服务端 `declare` 整项拒。不变式由
+    服务端守住故非阻断；可改：清空同清有效期、节头 declared 含有效期格。(2) 票面错——「册与载荷」把 `pendingRoutingBasis` 列进归本册声明，与领域
+    `DeclarePendingRoutingPermission`「规则包声明不了它」相反；代码（`acceptanceRulePackageBodyOf` 注释、`publication-draft-api.ts`）正确排除。改票面
+    文字，非代码问题。(3) 未验——`b439a3a0` seed SYN-RULEPKG-01 的 `contentDigest` 串未由评审跑 Go 核与 `CanonicalizePublicationContent` 算出一致，
+    由推送方全仓测试兑底。
+  - **作者判断项结论**：八集中文表放 form.ts——放行（票面已定「码 → 本页中文的表放在 form.ts」，`presentation.ts` 未占号）；`Field` / `Problems` /
+    `RowFrame` 同形复制——放行、另立票（第 2 波落齐后抽到 `PublicationDraftFlow` 旁）。
+  - **汇总**：两轴无阻断；Spec 非阻断 3。可重放。
+- 2026-09-09 · 推送方核评审非阻断 (2)：票面「册与载荷」那句「`pendingRoutingBasis`」列错了归属，代码正确；票面文字留给伞票 07 收口时一并改，本票不再动
+  正文（正文是通道 3 / 通道 2 写的口径，推送方只加簿记）。推送方替 (3) 兑底：重放 tip 上 `cmd/parcel-commercial` 带 DSN `ok`（seed 的 SYN-RULEPKG-01
+  在真库发布用例里过对账门）。
+
+## 进 main 记录（推送方通道 1，2026-09-09；与 awf/15 + awf/14 同一条链、同一次全量验证）
+
+- 重放：隔离 detached 树 `%TEMP%\idp-replay-awf1514`，链上先是 15 八笔 + 14 七笔（基 main `6b1e0d63`，见那两票「进 main 记录」）与清点笔 `ef6cb914`，
+  本票 `f722d9f0..76c35c4a` 跳清点笔 `9c7e6da6` 后七笔续在其后：`3c339029→2c05a8a4`、`94df574c→2cb23a35`、`d8ba1669→768ca5cc`、`3f07466c→233ac1b1`、
+  `b439a3a0→36cd0b18`、`9a473cf0→85d8efdd`、`76c35c4a→2c823378`。六份共享文件（`publication_canonicalization.go`、`publication_draft.go`、
+  `publish_commercial_authority.go`、`publication_draft_payload.go`、`publication-draft-api.ts`、`CommercialPoliciesPage.tsx`）各撞一次 17 / 15 / 14 的
+  相邻加行，**逐 hunk 手工并**（各册的 `if` / `case` / `<TabsContent>` 各自闭合；`publication-draft-api.ts` 上本票的接口块落在 14 的 `FxCaliberPayload`
+  之后，纯加块换位），每份并完核过「零删行、加行多重集与分支上那笔逐行相等」（`Compare-Object` 空）；重放完时链 tip 对分支 tip 的代码差恰为
+  17 / 15 / 14 / 20 的文件集加 `publish_commercial_authority_test.go`（那几票改配的「没接的册」样例）与 `publish-batch.json`（15 / 17 的 seed 摘要），无多无少。
+- 清点在链 tip 重生成 `6edabc5c`（PC 生产 113→115 / 测试 120→123、http 适配器 23→24）；分支清点笔 `9c7e6da6` 量的是 `f722d9f0` 上的数，不重放。
+- 验证：见 tasks.md 2026-09-09 本节（三票共一次含 DSN 全量，钉最终代码 tip）。
+- 本笔之后 `--ff-only` 进共享 main。分支 `mcp2-awf12` 内容已全在 main，指针改名 `merged/`，树 `D:/tops/idp-parcel-mcp2-awf12` 归通道 2 自拆；
+  `mcp3-awf12` 是被接手的旧来源（与 `salvage/mcp4-awf12` 同 SHA `febfcd2e`），改名 `salvage/`。
