@@ -1,7 +1,7 @@
 # 规范化版本报出口零消费者：版本已随摘要前缀同行，真渠道 Intake 也不需要它
 
 Category: chore
-Status: in-progress——2026-09-09 17:1x，MCP-6（task 2a4dfaba，通道 1 派；分支 `mcp6-wbr02` 基 origin/main `3c9a41bd`）按「取 (b) 删」落地。此前 ready-for-agent——二选一由通道 1 代裁（2026-09-09，用户授权自决）：**取 (b) 删**。理由：基线名单是「有生产代码、无生产调用方」的清单，一个明知
+Status: resolved——2026-09-09 17:4x，MCP-6（task 2a4dfaba，通道 1 派；分支 `mcp6-wbr02` 基 origin/main `3c9a41bd`，笔 `e38bc18d` / `eecd05d4`）：`CurrentPayloadCanonicalizationVersion` 删去，唯一测试引用改钉 `PSC-1:` 字面量（没有只为它写的测试），`CanonicalizeSubmissionPayload` 注释记「届时重新导出版本出口」，基线行剪掉、PS 组理由行改历史注、头注记成因第一种并钉 SHA 两法同得 4→3；完成记录见 Comments；main 上的 SHA 由推送方补。此前 in-progress（17:1x 认领）；此前 ready-for-agent——二选一由通道 1 代裁（2026-09-09，用户授权自决）：**取 (b) 删**。理由：基线名单是「有生产代码、无生产调用方」的清单，一个明知
 今天没有分支可走的导出函数留在名单上，等于让名单替它记「将来会有人用」——那是注释的活，不是名单的活；PSC-2 那笔工作本来就要读这个文件，
 `payload_canonicalization.go` 里那句「届时重新导出版本出口」就是提醒。完成判据照下「取 (b) 删」一条逐字做。此前 draft——只读取证（MCP-6，锚 `2efef58e`），PS 地盘归 MCP-2
 Blocked by: 无（二选一都是 PS 地盘内的小改，不等任何上游）
@@ -50,4 +50,26 @@ Blocked by: 无（二选一都是 PS 地盘内的小改，不等任何上游）
 
 ## 边界
 
-本票不改代码、不改基线；PSC-2 何时引入不归本票（寄收件范围与服务要求拿到自己的领域模型那天，见 `payloadCanonicalizationVersion` 的注释）。
+本票不改代码、不改基线；PSC-2 何时引入不归本票（寄收件范围与服务要求拿到自己的领域模型那天，见 `payloadCanonicalizationVersion` 的注释）。（立票时的边界；落地笔见 Comments。）
+
+## Comments
+
+- 2026-09-09 17:4x · MCP-6（task 2a4dfaba，通道 1 派；分支 `mcp6-wbr02` 基 origin/main `3c9a41bd`）：
+  **完成记录，转 resolved（取 (b) 删，成因第一种）。** 逐笔：`e38bc18d` 认领（只改票面 Status）；`eecd05d4` 删函数 + 钉测试 + 剪基线。
+  完成判据「取 (b) 删」逐项：① 删 `domain.CurrentPayloadCanonicalizationVersion` 与其注释（`payload_canonicalization.go`）；
+  `payloadCanonicalizationVersion` 常量留在包内，`CanonicalizeSubmissionPayload` 继续用它。**没有只为它写的测试**：全仓唯一测试引用是
+  `TestCanonicalizeSubmissionPayloadIsStableAndCarriesItsVersion` 用它取前缀，那条证的是「摘要携带产生它的规范化版本」（ADR-0014），
+  属摘要函数不属出口，所以不删、改钉 `PSC-1:` 字面量并注明理由（版本一换这里就该红，是引入 PSC-2 那笔要看见的信号，不是要绕开的耦合）。
+  ② `CanonicalizeSubmissionPayload` 注释「引入 PSC-2 的那笔工作按前缀取版本再分支」旁加「届时重新导出版本出口」，并写明为什么今天不留
+  一个只等将来的导出（无行号无计数）。③ 剪基线行；PS 组理由行改成历史注，「接它的仍是真渠道那笔工作」那句按票面要求不再保留；头注记
+  成因第一种。**取证两法**：`git grep` 全仓非测试 `.go` 只此一处声明、零调用；删后 `go build ./...` 与 `go vet ./...` 退 0（vet 连测试
+  一起编）。**记数带「在哪量的」**：量在隔离 worktree（动手前 `git status -- internal/architecture/` 为空），本笔单独作用于父提交
+  `e38bc18d`（其基线 blob `49aaff84` 与 `3c9a41bd` 的逐字节相同）上，两法（UTF-8 逐行滤非空非注释；字节层数行首非 `#`）同得剪前 4、
+  剪后 3（parcel-shipment 2→1），`git grep -c '^internal/'` 在 `e38bc18d` / `eecd05d4` 上同得 4 / 3；只对该检出成立——main 于 17:3x
+  已含 wbr/01 那一剪（`62e19b1b`，同法数得 3），本笔重放到它之后的数由推送方在链 tip 重数，这里不写。剪前
+  `TestWiringBaselineHasNoStaleEntry` 按预期红并点名此条，剪后 `internal/architecture` 绿。**不动的**：`source_submission.go` /
+  `ClassifySourceSubmission`、PSC-2、ADR-0091 那句「仍无调用点，留在名单上」（已接受 ADR 的历史陈述，不改写）、spec.md 状态行（批收口时
+  改一次）；`.scratch` 下其它引用此名的旧票面与盘点是历史取证，不动。**验证（作者层，隔离 worktree）**：`gofmt -l .` 空；`go build ./...`
+  / `go vet ./...` 退 0；`go test -count=1` PS domain + `go list` 反查的 22 个反向依赖（非 cmd 19 个无 DSN 跑，`adapters/postgres` 无 DSN
+  即跳过、只作编译证）+ `internal/architecture/...` 全 ok；反向依赖里 `cmd/parcel-api` / `cmd/parcel-commercial` / `cmd/parcel-dispatch`
+  带 DSN `-p 1 -count=1 -v`：284 PASS / 0 SKIP / 0 FAIL（13.9 s / 3.8 s / 27.3 s），跑在通道 1 17:3x 关窗之后。
