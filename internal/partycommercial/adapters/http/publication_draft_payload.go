@@ -87,6 +87,8 @@ type CommercialPublicationPayload struct {
 	AcceptanceRulePackage *AcceptanceRulePackageBodyPayload `json:"acceptanceRulePackage,omitempty"`
 	// PreAcceptanceFinancialControlPolicy 是接受前财务控制策略册的正文：共同通过条件 + 控制项表，见 publication_draft_payload_pre_acceptance_financial_control_policy.go。
 	PreAcceptanceFinancialControlPolicy *PreAcceptanceFinancialControlPolicyBodyPayload `json:"preAcceptanceFinancialControlPolicy,omitempty"`
+	// CustomerServiceRule 是客户服务规则册的正文：适用对象恰一 + 责任方 + 范围 + 期限表 + 材料表，见 publication_draft_payload_customer_service_rule.go。
+	CustomerServiceRule *CustomerServiceRuleBodyPayload `json:"customerServiceRule,omitempty"`
 	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
 }
 
@@ -203,6 +205,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.PreAcceptanceFinancialControlPolicy != nil {
 		body := payload.PreAcceptanceFinancialControlPolicy.body(problems)
 		content.PreAcceptanceFinancialControlPolicy = &body
+	}
+	if payload.CustomerServiceRule != nil {
+		body := payload.CustomerServiceRule.body(problems)
+		content.CustomerServiceRule = &body
 	}
 
 	if problems.any() {

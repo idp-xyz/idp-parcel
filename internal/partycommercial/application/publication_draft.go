@@ -453,8 +453,8 @@ func (handler *PublishPublicationDraftHandler) Handle(
 	return result, nil
 }
 
-// declarationsOfContent 把载体上的正文折成发布用例的声明输入面——publicationContentOf 的反向。今天只有信用
-// 政策一格；各册子票在此加一分支时，两个方向要同笔加。
+// declarationsOfContent 把载体上的正文折成发布用例的声明输入面——publicationContentOf 的反向。首例是信用
+// 政策一格，其余各册由各自的子票在此加一分支；两个方向要同笔加。
 func declarationsOfContent(content domain.PublicationContent) CommercialDeclarations {
 	var declarations CommercialDeclarations
 	if content.CreditPolicy != nil {
@@ -547,6 +547,18 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 		declarations.PreAcceptanceFinancialControlPolicyBody = &PreAcceptanceFinancialControlPolicyBodyDeclaration{
 			JointPass: content.PreAcceptanceFinancialControlPolicy.JointPass,
 			Items:     content.PreAcceptanceFinancialControlPolicy.Items,
+		}
+	}
+	if content.CustomerServiceRule != nil {
+		// 两张子表照载体上的原样交给发布用例：跨行的门在 NewCustomerServiceRuleVersion 再过一遍，壳与正文的适用一致在
+		// declarationWrites 核；载体上没有的那张表交空，发布用例不替它补一行。
+		body := content.CustomerServiceRule
+		declarations.CustomerServiceRuleBody = &CustomerServiceRuleBodyDeclaration{
+			Applicability: body.Applicability,
+			Responsible:   body.Responsible,
+			Scope:         body.Scope,
+			Deadlines:     body.Deadlines,
+			Materials:     body.Materials,
 		}
 	}
 	return declarations

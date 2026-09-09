@@ -1080,8 +1080,9 @@ func TestACreditPolicyBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 
 // Covers: ADR-0126 Decision 二 — 受控批文那一半的对账门。已接进规范化的册，声明的摘要与算出的不等
 // 即`未受理`：一个字节不写（整册也不读），结果带出两个串；旧式无版本的声明串同样不等。声明的串带本构建
-// 不认识的规范化版本是「不支持」而不是不等。壳单独发布（正文缺席）没有可比对象，照旧登记；没接的册
-// 不开门。
+// 不认识的规范化版本是「不支持」而不是不等。壳单独发布（正文缺席）没有可比对象，照旧登记。「没接的册
+// 不开门」那一格自票 admin-write-faces/18 起没有样本——封闭集里的每一册都接进了规范化（领域侧
+// TestCanonicalizeAnswersThreeDistinctRefusals 钉「全接」），这里不再演一个不存在的册。
 func TestDeclaredDigestIsReconciledAgainstTheCanonicalOne(t *testing.T) {
 	amount, err := domain.NewCreditAmountLimit(500000)
 	if err != nil {
@@ -1156,24 +1157,6 @@ func TestDeclaredDigestIsReconciledAgainstTheCanonicalOne(t *testing.T) {
 		}
 	})
 
-	t.Run("a register that is not canonicalized keeps accepting the declared digest", func(t *testing.T) {
-		// 样本取客户服务规则：那册的表单票（admin-write-faces/18）仍 draft，是今天没接进规范化的册里最不会被下一张
-		// 子票顺手接走的一个；结算政策自票 15 起已接，不再是样本。
-		registry := &publicationRegistryDouble{}
-		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
-		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
-			Approval:     publishApproval(t, "csr-1"),
-			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
-		})
-		if err != nil {
-			t.Fatalf("Handle：%v", err)
-		}
-		if result.Outcome() != application.CommercialVersionPublishedEffective {
-			t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
-		}
-	})
 }
 
 // Covers: 票 party-commercial-context-gaps/03——供应商商业协议正文随它自己那一版发布登记。
@@ -1456,6 +1439,19 @@ func customerServiceRuleBody(t *testing.T, product string, days int) *applicatio
 	}
 }
 
+// customerServiceRuleSpec 给规则版本壳配上**算出的**内容摘要：本册接进服务端规范化后（票 admin-write-faces/18），对账门要求
+// 声明的串与算出的逐字节相等，测试里的壳因此不能再随手写一个（判据同 creditPolicySpec）。
+func customerServiceRuleSpec(t *testing.T, objectID, label string, body *application.CustomerServiceRuleBodyDeclaration) domain.CommercialVersionSpec {
+	t.Helper()
+	spec := publishSpec(t, domain.CustomerServiceRuleObject, objectID, label)
+	canonical, err := domain.CanonicalizePublicationContent(customerServiceRuleContent(t, body))
+	if err != nil {
+		t.Fatalf("规范化客户服务规则正文：%v", err)
+	}
+	spec.ContentDigest = canonical.Digest()
+	return spec
+}
+
 // Covers: 票 party-commercial-context-gaps/05——客户服务规则正文随它自己那一版发布登记（ADR-0104）。
 // 在这一路接上之前，规则版本壳能入册、能被闭包选中，选中之后 visibility-exception 点读什么也拿不到，
 // 两维 `Registered` 恒假。期限与材料原样交给持久化面，发布通道不代填任何一项。
@@ -1463,11 +1459,12 @@ func TestACustomerServiceRuleBodyPublishesWithItsOwnVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
+	body := customerServiceRuleBody(t, "product-1", 30)
 	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+		Spec:         customerServiceRuleSpec(t, "csr-1", "v1", body),
 		Approval:     publishApproval(t, "csr-1"),
 		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
+		Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: body},
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
@@ -1520,7 +1517,9 @@ func TestACustomerServiceRuleBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
-		spec := publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1")
+		// 壳上的摘要配的是正文（挂在 product-OTHER 上）算出的那一个：对账门先于一切，串对得上才走到壳与正文的适用一致那一道。
+		disagreeing := customerServiceRuleBody(t, "product-OTHER", 30)
+		spec := customerServiceRuleSpec(t, "csr-1", "v1", disagreeing)
 		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
 			domain.ServiceProductObject: pcValue(t, domain.NewCommercialObjectID, "product-1"),
 		}
@@ -1534,7 +1533,7 @@ func TestACustomerServiceRuleBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 			Spec:         spec,
 			Approval:     publishApproval(t, "csr-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-OTHER", 30)},
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: disagreeing},
 		}); !errors.Is(err, domain.ErrCustomerServiceRuleApplicabilityMismatch) {
 			t.Fatalf("err = %v, want ErrCustomerServiceRuleApplicabilityMismatch", err)
 		}
@@ -1546,11 +1545,12 @@ func TestACustomerServiceRuleBodyIsGuardedLikeTheOtherChannels(t *testing.T) {
 	t.Run("a content conflict lands in the report", func(t *testing.T) {
 		registry := &publicationRegistryDouble{serviceRuleOutcome: ports.CustomerServiceRuleContentConflict}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		body := customerServiceRuleBody(t, "product-1", 30)
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
+			Spec:         customerServiceRuleSpec(t, "csr-1", "v1", body),
 			Approval:     publishApproval(t, "csr-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: customerServiceRuleBody(t, "product-1", 30)},
+			Declarations: application.CommercialDeclarations{CustomerServiceRuleBody: body},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v——内容冲突不是 error", err)

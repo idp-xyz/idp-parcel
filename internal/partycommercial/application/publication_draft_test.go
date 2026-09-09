@@ -233,15 +233,16 @@ func TestPreviewComputesTheDigestWithoutTouchingTheRegister(t *testing.T) {
 		t.Fatalf("预览摘要 %s ≠ 录入摘要 %s", canonical.Digest(), draft.Canonical().Digest())
 	}
 
-	// 「没接的册」的样本取客户服务规则（表单票 admin-write-faces/18 仍 draft）；结算政策自票 15 起已接，不再是样本。
+	// `未受理`的样本取客户服务规则只有壳没有正文：本册自票 admin-write-faces/18 起已接进规范化，答的是「正文缺席」那一格
+	// （「没接的册」自此没有样本，见领域侧 TestCanonicalizeAnswersThreeDistinctRefusals）——构造门拒仍是答案不是 error。
 	refused, err := previewer.Handle(context.Background(), application.PreviewCommercialPublicationCommand{
 		Shell:   draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
 		Content: domain.PublicationContent{Kind: domain.CustomerServiceRuleObject},
 	})
 	if err != nil {
-		t.Fatalf("预览未接的册：%v——未受理不是 error", err)
+		t.Fatalf("预览没有正文的壳：%v——未受理不是 error", err)
 	}
-	if refused.Outcome() != application.CommercialPublicationPreviewNotAccepted || !errors.Is(refused.RefusalCause(), domain.ErrRegisterNotCanonicalized) {
+	if refused.Outcome() != application.CommercialPublicationPreviewNotAccepted || !errors.Is(refused.RefusalCause(), domain.ErrPublicationContentAbsent) {
 		t.Fatalf("outcome = %q, cause = %v", refused.Outcome(), refused.RefusalCause())
 	}
 	if _, ok := refused.Canonical(); ok {
@@ -280,9 +281,9 @@ func TestSubmittingADraftTranslatesTheRegisterOutcomes(t *testing.T) {
 		Submitter: pcValue(t, domain.NewOperatorSubjectReference, "op-submitter"),
 	})
 	if err != nil {
-		t.Fatalf("录入未接的册：%v——未受理不是 error", err)
+		t.Fatalf("录入没有正文的壳：%v——未受理不是 error", err)
 	}
-	if refused.Outcome() != application.PublicationDraftNotAccepted || !errors.Is(refused.RefusalCause(), domain.ErrRegisterNotCanonicalized) {
+	if refused.Outcome() != application.PublicationDraftNotAccepted || !errors.Is(refused.RefusalCause(), domain.ErrPublicationContentAbsent) {
 		t.Fatalf("outcome = %q, cause = %v", refused.Outcome(), refused.RefusalCause())
 	}
 	if drafts.submits != 3 {

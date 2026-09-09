@@ -571,9 +571,9 @@ func reconcileDeclaredDigest(command PublishCommercialAuthorityCommand) (bool, P
 	return false, PublishCommercialAuthorityResult{}
 }
 
-// publicationContentOf 把命令里属于该册的声明正文折成领域的正文输入面。今天只有信用政策一格；各册
-// 由子票在此加一分支。第二个返回值答「正文在不在场」——不在场是合法的（壳可以单独发布），交给
-// 调用方决定要不要对账。
+// publicationContentOf 把命令里属于该册的声明正文折成领域的正文输入面。首例是信用政策一格，其余各册
+// 由各自的子票在此加一分支；declarationsOfContent 是它的反向，两处同笔改。第二个返回值答「正文在不在场」
+// ——不在场是合法的（壳可以单独发布），交给调用方决定要不要对账。
 func publicationContentOf(
 	kind domain.CommercialObjectKind,
 	declarations CommercialDeclarations,
@@ -682,6 +682,22 @@ func publicationContentOf(
 		content.PreAcceptanceFinancialControlPolicy = &domain.PreAcceptanceFinancialControlPolicyBody{
 			JointPass: declarations.PreAcceptanceFinancialControlPolicyBody.JointPass,
 			Items:     declarations.PreAcceptanceFinancialControlPolicyBody.Items,
+		}
+		return content, true
+	case domain.CustomerServiceRuleObject:
+		// 正文在不在场看 0023 那一层（customerServiceRuleBody）。适用对象整格过去、不摊成产品 / 合同两键——恰一在场只在
+		// CustomerServiceRuleApplicability 一处判（声明类型处的注释）；壳与正文的适用一致（ADR-0104 Decision 四）不在这里核，
+		// 那是 declarationWrites 写入前的那一道，对账门只管声明的串与算出的串等不等。
+		if declarations.CustomerServiceRuleBody == nil {
+			return content, false
+		}
+		body := declarations.CustomerServiceRuleBody
+		content.CustomerServiceRule = &domain.CustomerServiceRuleBody{
+			Applicability: body.Applicability,
+			Responsible:   body.Responsible,
+			Scope:         body.Scope,
+			Deadlines:     body.Deadlines,
+			Materials:     body.Materials,
 		}
 		return content, true
 	default:
