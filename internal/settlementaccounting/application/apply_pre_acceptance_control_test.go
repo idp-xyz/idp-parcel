@@ -55,7 +55,7 @@ func (double *policyDouble) LoadControlPolicy(
 // 禁止的默认信用通过。
 func TestAnUnconfiguredControlPolicyIsNotFormedNotNoControl(t *testing.T) {
 	balance := &balanceDouble{}
-	handler := newHandler(&policyDouble{unconfigured: true}, balance, &ledgerDouble{})
+	handler := newHandler(t, &policyDouble{unconfigured: true}, balance, &ledgerDouble{})
 
 	result, err := handler.Handle(context.Background(), command(t, 1_000))
 	if err != nil {
@@ -291,34 +291,58 @@ func command(t *testing.T, amountMinor int64) application.ApplyPreAcceptanceCont
 	}
 }
 
+// mustHandler 走构造门；本文件的用例证的是编排行为，不是装配门，门拒了就是夹具没配齐。
+func mustHandler(t *testing.T, deps application.ApplyPreAcceptanceControlDeps) *application.ApplyPreAcceptanceControlHandler {
+	t.Helper()
+	handler, err := application.NewApplyPreAcceptanceControlHandler(deps)
+	if err != nil {
+		t.Fatalf("new apply pre-acceptance control handler: %v", err)
+	}
+	return handler
+}
+
+// authorized 造一份金额额度的授信依据替身：政策出处由字面量固定，额度由用例给。账期用例把它与状况里
+// 登记的额度给成同一个数，读起来仍是「额度 N」——钉的是译回不是额度来源，额度来源另有用例证。
+func authorized(t *testing.T, amountMinor int64) *creditBasisDouble {
+	t.Helper()
+	return &creditBasisDouble{basis: amountBasis(t, "credit-1/v1", amountMinor)}
+}
+
 func newHandler(
+	t *testing.T,
 	policy ports.PreAcceptanceControlPolicyView,
 	balance ports.OperationalBalanceView,
 	ledger ports.FreezeLedgerRepository,
 ) *application.ApplyPreAcceptanceControlHandler {
-	return application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	t.Helper()
+	return mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy:  policy,
 		Balance: balance,
 		Freezes: ledger,
 		// 预付路径不读信用；零值替身只为满足装配，被读到即是测试该失败的信号。
-		Credit:    &creditDouble{},
-		Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
-		Clock:     fixedClock{at: controlAt},
+		Credit:      &creditDouble{},
+		CreditBasis: &creditBasisDouble{},
+		Exposures:   &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+		Clock:       fixedClock{at: controlAt},
 	})
 }
 
 func newTermsHandler(
+	t *testing.T,
 	policy ports.PreAcceptanceControlPolicyView,
+	basis ports.CreditBasisView,
 	credit ports.CreditStandingView,
 	exposures ports.CreditExposureLedgerRepository,
 ) *application.ApplyPreAcceptanceControlHandler {
-	return application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
-		Policy:    policy,
-		Balance:   &balanceDouble{},
-		Freezes:   &ledgerDouble{ledger: domain.NewFreezeLedger()},
-		Credit:    credit,
-		Exposures: exposures,
-		Clock:     fixedClock{at: controlAt},
+	t.Helper()
+	return mustHandler(t, application.ApplyPreAcceptanceControlDeps{
+		Policy:      policy,
+		Balance:     &balanceDouble{},
+		Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
+		Credit:      credit,
+		CreditBasis: basis,
+		Exposures:   exposures,
+		Clock:       fixedClock{at: controlAt},
 	})
 }
 
@@ -326,7 +350,7 @@ func newTermsHandler(
 // 控制策略」，以及 CONTEXT 要求控制结果保存判断时间与实际采用的 `asOf`——两者是两回事。
 func TestSufficientBalanceHoldsFundsAndRecordsBothAsOfAndControlTime(t *testing.T) {
 	ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, ledger)
+	handler := newHandler(t, requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, ledger)
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -363,7 +387,7 @@ func TestSufficientBalanceHoldsFundsAndRecordsBothAsOfAndControlTime(t *testing.
 // Covers: UC-SA-002「余额不足」——这是本上下文报告的业务限制，不是错误，也不是接受判决。
 func TestInsufficientBalanceIsARestrictedControlResultNotAnError(t *testing.T) {
 	ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 1_000)}, ledger)
+	handler := newHandler(t, requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 1_000)}, ledger)
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -392,7 +416,7 @@ func TestContractWithoutPreAcceptanceControlIsNotApplicable(t *testing.T) {
 	}
 	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
 	ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(&policyDouble{policy: notRequired}, balance, ledger)
+	handler := newHandler(t, &policyDouble{policy: notRequired}, balance, ledger)
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -420,7 +444,7 @@ func TestContractWithoutPreAcceptanceControlIsNotApplicable(t *testing.T) {
 func TestUnavailableControlPolicyIsNotFormedRatherThanNotApplicable(t *testing.T) {
 	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
 	ledger := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(&policyDouble{err: errors.New("control policy view unavailable")}, balance, ledger)
+	handler := newHandler(t, &policyDouble{err: errors.New("control policy view unavailable")}, balance, ledger)
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -448,7 +472,7 @@ func TestUnavailableControlPolicyIsNotFormedRatherThanNotApplicable(t *testing.T
 func TestSameRequestIdentityWithADifferentAmountIsAConflict(t *testing.T) {
 	ledger := domain.NewFreezeLedger()
 	repository := &ledgerDouble{ledger: ledger}
-	handler := newHandler(requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, repository)
+	handler := newHandler(t, requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, repository)
 
 	first, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -477,7 +501,7 @@ func TestSameRequestIdentityWithADifferentAmountIsAConflict(t *testing.T) {
 func TestSameRequestReplayReturnsTheOriginalFreeze(t *testing.T) {
 	ledger := domain.NewFreezeLedger()
 	repository := &ledgerDouble{ledger: ledger}
-	handler := newHandler(requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, repository)
+	handler := newHandler(t, requiredPolicy(t), &balanceDouble{balance: balanceWith(t, 10_000)}, repository)
 
 	first, err := handler.Handle(context.Background(), command(t, 4_000))
 	if err != nil {
@@ -503,7 +527,7 @@ func TestIncompleteRequestIsRefusedWithoutReadingAnyAuthority(t *testing.T) {
 	policy := requiredPolicy(t)
 	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
 	repository := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(policy, balance, repository)
+	handler := newHandler(t, policy, balance, repository)
 
 	incomplete := command(t, 4_000)
 	incomplete.TenantID = domain.TenantID{}
@@ -531,7 +555,7 @@ func TestAControlRequestWithoutACommercialResolutionIsRefusedBeforeAsking(t *tes
 	policy := requiredPolicy(t)
 	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
 	repository := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(policy, balance, repository)
+	handler := newHandler(t, policy, balance, repository)
 
 	unreferenced := command(t, 4_000)
 	unreferenced.Resolution = domain.CommercialResolutionReference{}
@@ -559,7 +583,7 @@ func TestAControlRequestWithoutACommercialResolutionIsRefusedBeforeAsking(t *tes
 // 编排不得在这里挑、改或补一个回指：它自己不认识商业侧的键，能做的只有转交。
 func TestTheCommercialResolutionReachesThePolicyViewVerbatim(t *testing.T) {
 	policy := requiredPolicy(t)
-	handler := newHandler(policy, &balanceDouble{balance: balanceWith(t, 10_000)},
+	handler := newHandler(t, policy, &balanceDouble{balance: balanceWith(t, 10_000)},
 		&ledgerDouble{ledger: domain.NewFreezeLedger()})
 
 	referenced := command(t, 4_000)
@@ -583,9 +607,9 @@ func TestATermsContractRecordsACreditExposureWithoutTouchingTheBalance(t *testin
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
 	balance := &balanceDouble{}
 	freezes := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: balance, Freezes: freezes,
-		Credit: credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit: credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -628,7 +652,7 @@ func TestCreditShortfallAndOverdueEachFormARestriction(t *testing.T) {
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			policy := &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}
-			handler := newTermsHandler(policy,
+			handler := newTermsHandler(t, policy, authorized(t, testCase.standing.LimitMinor()),
 				&creditDouble{standing: testCase.standing},
 				&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
 
@@ -656,7 +680,7 @@ func TestCreditShortfallAndOverdueEachFormARestriction(t *testing.T) {
 func TestTermsExposureReplayConflictAndUnavailableStanding(t *testing.T) {
 	policy := &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)}
 	ledger := domain.NewCreditExposureLedger()
-	handler := newTermsHandler(policy,
+	handler := newTermsHandler(t, policy, authorized(t, 10_000),
 		&creditDouble{standing: standingWith(t, 10_000, 0, false)},
 		&exposureLedgerDouble{ledger: ledger})
 
@@ -686,7 +710,7 @@ func TestTermsExposureReplayConflictAndUnavailableStanding(t *testing.T) {
 		t.Fatalf("原暴露被覆盖为 %#v，应保持 4000", kept)
 	}
 
-	unavailable := newTermsHandler(policy,
+	unavailable := newTermsHandler(t, policy, authorized(t, 10_000),
 		&creditDouble{err: errors.New("credit view down")},
 		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
 	result, err := unavailable.Handle(context.Background(), command(t, 4_000))
@@ -712,9 +736,9 @@ func TestACombinedPolicyExecutesEachControlOnItsOwnLedgerInOrder(t *testing.T) {
 	freezes := &ledgerDouble{ledger: domain.NewFreezeLedger()}
 	credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
-	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: balance, Freezes: freezes,
-		Credit: credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit: credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -759,10 +783,10 @@ func TestARestrictionStopsTheRemainingControlsUnderAllControlsPass(t *testing.T)
 		controlItem(t, domain.CreditCheckControl, 2))}
 	credit := &creditDouble{standing: standingWith(t, 10_000, 0, false)}
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
-	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 1_000)},
 		Freezes: &ledgerDouble{ledger: domain.NewFreezeLedger()},
-		Credit:  credit, Exposures: exposures, Clock: fixedClock{at: controlAt},
+		Credit:  credit, CreditBasis: authorized(t, 10_000), Exposures: exposures, Clock: fixedClock{at: controlAt},
 	})
 
 	result, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -796,11 +820,12 @@ func TestAHaltOnTheSecondControlLeavesTheFirstReplayableNotDoubled(t *testing.T)
 		controlItem(t, domain.CreditCheckControl, 2))}
 	freezeLedger := domain.NewFreezeLedger()
 	credit := &creditDouble{err: errors.New("credit view down")}
-	handler := application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	handler := mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy: policy, Balance: &balanceDouble{balance: balanceWith(t, 10_000)},
 		Freezes: &ledgerDouble{ledger: freezeLedger},
-		Credit:  credit, Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
-		Clock: fixedClock{at: controlAt},
+		Credit:  credit, CreditBasis: authorized(t, 10_000),
+		Exposures: &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+		Clock:     fixedClock{at: controlAt},
 	})
 
 	halted, err := handler.Handle(context.Background(), command(t, 4_000))
@@ -839,7 +864,7 @@ func TestNonPositiveAmountIsRefusedBeforeReadingTheBalance(t *testing.T) {
 	policy := requiredPolicy(t)
 	balance := &balanceDouble{balance: balanceWith(t, 10_000)}
 	repository := &ledgerDouble{ledger: domain.NewFreezeLedger()}
-	handler := newHandler(policy, balance, repository)
+	handler := newHandler(t, policy, balance, repository)
 
 	result, err := handler.Handle(context.Background(), command(t, 0))
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 )
 
 // 本文件证账期分支的授信额度来源（ADR-0127 决定四与五）：额度出自闭包交出的信用政策版本而不是
-// 登记状况；授信依据那一口的三格各是一格待判断；依赖为 nil 时沿旧路且结果不带政策出处。
+// 登记状况；授信依据那一口的三格各是一格待判断；任一依赖为 nil 在构造期拒（contract 段）。
 
 // unconfigured 取反向默认，理由同 policyDouble：零值继续表示「闭包采用了信用政策」。
 type creditBasisDouble struct {
@@ -55,7 +55,7 @@ func newCreditBasisHandler(
 	exposures ports.CreditExposureLedgerRepository,
 ) *application.ApplyPreAcceptanceControlHandler {
 	t.Helper()
-	return application.NewApplyPreAcceptanceControlHandler(application.ApplyPreAcceptanceControlDeps{
+	return mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy:      &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)},
 		Balance:     &balanceDouble{},
 		Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
@@ -178,26 +178,47 @@ func TestCreditBasisGradesEachHaltBeforeReadingTheStanding(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0127 决定五——三步法的 expand 段：CreditBasis 依赖为 nil 时账期分支沿旧路（额度取登记
-// 状况），结果不带政策引用。缺席的政策引用就是「这份额度没有政策出处」的证据，不是被吞掉的一格。
-// contract 段随 parcel-shipment 那份夹具补上替身的那笔收，届时本例改成「nil 在构造期拒」。
-func TestANilCreditBasisViewKeepsTheOldPathAndCarriesNoPolicy(t *testing.T) {
-	handler := newTermsHandler(
-		&policyDouble{policy: methodPolicy(t, domain.TermsSettlement)},
-		&creditDouble{standing: standingWith(t, 10_000, 0, false)},
-		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
+// Covers: ADR-0127 决定五的 contract 段——`Deps.CreditBasis` 与其它依赖一样 mandatory，nil 在构造期拒，
+// 「沿旧路、额度取登记状况」那一格不再存在。expand 段留它只因 parcel-shipment 那份夹具直接构造这份
+// Deps；夹具补上替身之后，nil 只可能是装配疏漏，而装配疏漏要在启动时炸出来，不能等第一笔账期委托到达
+// 时静默拿登记额度当政策额度。七件依赖同一道门、同一个哨兵：缺哪一件都不该造出一个会在运行期 panic
+// 的编排。
+func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
+	complete := func() application.ApplyPreAcceptanceControlDeps {
+		return application.ApplyPreAcceptanceControlDeps{
+			Policy:      &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)},
+			Balance:     &balanceDouble{},
+			Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
+			Credit:      &creditDouble{standing: standingWith(t, 10_000, 0, false)},
+			CreditBasis: &creditBasisDouble{basis: amountBasis(t, "credit-1/v1", 10_000)},
+			Exposures:   &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()},
+			Clock:       fixedClock{at: controlAt},
+		}
+	}
+	strip := map[string]func(*application.ApplyPreAcceptanceControlDeps){
+		"policy":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Policy = nil },
+		"balance":      func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Balance = nil },
+		"freezes":      func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Freezes = nil },
+		"credit":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Credit = nil },
+		"credit basis": func(deps *application.ApplyPreAcceptanceControlDeps) { deps.CreditBasis = nil },
+		"exposures":    func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Exposures = nil },
+		"clock":        func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Clock = nil },
+	}
+	for name, missing := range strip {
+		t.Run(name, func(t *testing.T) {
+			deps := complete()
+			missing(&deps)
+			handler, err := application.NewApplyPreAcceptanceControlHandler(deps)
+			if !errors.Is(err, application.ErrNilDependency) {
+				t.Fatalf("err = %v, want ErrNilDependency——缺 %s 造出了一个会在运行期 panic 的编排", err, name)
+			}
+			if handler != nil {
+				t.Fatal("拒了还交回了编排")
+			}
+		})
+	}
 
-	result, err := handler.Handle(context.Background(), command(t, 4_000))
-	if err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	if result.Outcome() != application.ControlApplied {
-		t.Fatalf("outcome = %q, want CONTROL_APPLIED", result.Outcome())
-	}
-	if exposure, present := result.Exposure(); !present || exposure.Status() != domain.ExposureRecorded {
-		t.Fatalf("exposure = %#v, want RECORDED", exposure)
-	}
-	if result.CreditPolicy().String() != "" {
-		t.Fatalf("credit policy = %q；没有授信依据却带出了一份政策出处", result.CreditPolicy())
+	if _, err := application.NewApplyPreAcceptanceControlHandler(complete()); err != nil {
+		t.Fatalf("七件齐全仍被拒：%v", err)
 	}
 }

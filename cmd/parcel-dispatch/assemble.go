@@ -1064,16 +1064,20 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: credit basis view: %w", err)
 	}
+	apply, err := saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+		Policy:      policy,
+		Balance:     balances,
+		Freezes:     freezes,
+		Credit:      standings,
+		CreditBasis: creditBasis,
+		Exposures:   exposures,
+		Clock:       clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: apply pre-acceptance control: %w", err)
+	}
 	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
-		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
-			Policy:      policy,
-			Balance:     balances,
-			Freezes:     freezes,
-			Credit:      standings,
-			CreditBasis: creditBasis,
-			Exposures:   exposures,
-			Clock:       clock,
-		}),
+		Apply:   apply,
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
 			commercial,

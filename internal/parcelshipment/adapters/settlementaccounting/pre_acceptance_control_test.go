@@ -293,7 +293,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 	}
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:  fixture.policy,
 			Balance: fixture.balance,
 			Freezes: fixture.ledger,
@@ -309,6 +309,16 @@ func newControlFixture(t *testing.T) *controlFixture {
 		Amounts: fixture.amounts,
 	})
 	return fixture
+}
+
+// mustApplyHandler 走 SA 的构造门。本夹具证的是适配器的译法，不是那道门；门拒了就是夹具没配齐。
+func mustApplyHandler(t *testing.T, deps saapplication.ApplyPreAcceptanceControlDeps) *saapplication.ApplyPreAcceptanceControlHandler {
+	t.Helper()
+	handler, err := saapplication.NewApplyPreAcceptanceControlHandler(deps)
+	if err != nil {
+		t.Fatalf("new apply pre-acceptance control handler: %v", err)
+	}
+	return handler
 }
 
 func (fixture *controlFixture) request(t *testing.T) psports.FinancialControlRequest {
@@ -468,7 +478,7 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:      fixture.policy,
 			Balance:     fixture.balance,
 			Freezes:     fixture.ledger,
@@ -603,7 +613,7 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 		"no scope source": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-					Apply: saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+					Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
 						Policy:      fixture.policy,
 						Balance:     fixture.balance,
 						Freezes:     fixture.ledger,
