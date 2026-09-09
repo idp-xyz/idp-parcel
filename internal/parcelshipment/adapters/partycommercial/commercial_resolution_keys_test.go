@@ -3,9 +3,11 @@ package partycommercial_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -299,6 +301,178 @@ func TestTheDatabaseMirrorsTheSettlementPairingRule(t *testing.T) {
 			t.Fatalf("齐备的一行被挡了：%v", err)
 		}
 	})
+}
+
+// Covers: ADR-0127 决定二在登记面的正向——登记面放行 CREDIT_POLICY 并携两维，折出的键最小身份
+// 成立、两维读回不变形、必需依据里有信用政策。这是 ADR-0127 决定四那条路的入口：租户登记的解析键
+// 不要求信用政策，SA 账期分支就永远停在 CREDIT_BASIS_NOT_CONFIGURED；此前登记面放行它却不承载两维，
+// 形成的键在闭包解析处答`输入未受理`——一个登记得进去、永远立不起来的键。
+func TestARegisteredCreditBasisFormsATwoDimensionSelector(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	mustRegisterKey(t, transactor, keys,
+		creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1"), adapter.ResolutionKeySaved)
+
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil || !formed {
+		t.Fatalf("formed=%v err=%v", formed, err)
+	}
+	if !key.MinimumIdentityEstablished() {
+		t.Fatalf("带信用依据的键最小身份不成立：%#v", key.Credit)
+	}
+	if key.Credit.Level.String() != "level-commercial" || key.Credit.ChargeType.String() != "charge-freight" {
+		t.Fatalf("信用两维读回后变了形：%#v", key.Credit)
+	}
+	if !slices.Contains(key.RequiredBases, pcdomain.CreditPolicyObject) {
+		t.Fatalf("必需依据里没有信用政策：%v", key.RequiredBases)
+	}
+	// 结算维度不得被顺手带上：本行没要结算依据（validateSettlement 的「不含则必缺」在读回一侧同样成立）。
+	if !key.Settlement.Empty() {
+		t.Fatalf("不要结算依据的键读回时带上了结算维度：%#v", key.Settlement)
+	}
+}
+
+// Covers: 换一维信用维度是换一套解析口径——与换结算维度、换范围、换锚点同级，判`内容冲突`且原登记
+// 一行不动。漏比它，一次改维会被答成`已登记`而库里留着旧维。
+func TestChangingACreditDimensionIsAContentConflict(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	original := creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+	mustRegisterKey(t, transactor, keys, original, adapter.ResolutionKeySaved)
+	mustRegisterKey(t, transactor, keys, original, adapter.ResolutionKeyAlreadyRegistered)
+
+	changed := creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1")
+	changed.CreditChargeType = value(t, pcdomain.NewChargeTypeReference, "charge-surcharge")
+	mustRegisterKey(t, transactor, keys, changed, adapter.ResolutionKeyContentConflict)
+
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil || !formed {
+		t.Fatalf("formed=%v err=%v", formed, err)
+	}
+	if key.Credit.ChargeType.String() != "charge-freight" {
+		t.Fatalf("冲突写入改动了原登记：%q", key.Credit.ChargeType)
+	}
+}
+
+// Covers: 库内 `..._credit_paired` / `..._credit_not_blank` 是登记面 validateCredit 同一判据的第二道
+// 镜像。绕开登记面直插，登记面拒过的每一种组合仍然进不去，且拒它的必须是这两条约束之一——
+// 换成任何别的错（比如列不存在）都算没守住：那种「拒」在迁移落地前也成立，证不了镜像在。
+func TestTheDatabaseMirrorsTheCreditPairingRule(t *testing.T) {
+	_, _, pool := newResolutionKeysOnPool(t)
+	ctx := t.Context()
+
+	insert := func(t *testing.T, customer string, bases []string, level, chargeType *string) error {
+		t.Helper()
+		_, err := pool.Exec(ctx,
+			`INSERT INTO parcel_shipment.commercial_resolution_key_registration
+				(tenant_id, customer_account_id, scope_ref, legal_entity_ref,
+				 anchor_policy_version, anchor_at, required_bases,
+				 credit_level, credit_charge_type)
+			 VALUES ('tenant-1', $1, 'scope-1', 'legal-1', 'anchor-policy/v1', $2, $3, $4, $5)`,
+			customer, resolutionKeyAnchorAt, bases, level, chargeType)
+		return err
+	}
+	refusedBy := func(t *testing.T, err error, complaint, constraint string) {
+		t.Helper()
+		if err == nil {
+			t.Fatal(complaint)
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.ConstraintName != constraint {
+			t.Fatalf("被拒了，但不是 %s 拒的：%v", constraint, err)
+		}
+	}
+	text := func(value string) *string { return &value }
+	withCredit := []string{"CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE", "CREDIT_POLICY"}
+	withoutCredit := []string{"CUSTOMER_CONTRACT", "ACCEPTANCE_RULE_PACKAGE"}
+	const paired = "commercial_resolution_key_registration_credit_paired"
+	const notBlank = "commercial_resolution_key_registration_credit_not_blank"
+
+	t.Run("要信用却两维缺一", func(t *testing.T) {
+		refusedBy(t, insert(t, "c-1", withCredit, text("level-commercial"), nil),
+			"部分给出的信用维度直插进去了", paired)
+	})
+	t.Run("要信用却两维全缺", func(t *testing.T) {
+		refusedBy(t, insert(t, "c-2", withCredit, nil, nil),
+			"要信用依据却不带两维的行直插进去了——那个键永远立不起来", paired)
+	})
+	t.Run("不要信用却带维度", func(t *testing.T) {
+		refusedBy(t, insert(t, "c-3", withoutCredit, text("level-commercial"), text("charge-freight")),
+			"不要信用依据的行带上了信用维度", paired)
+	})
+	t.Run("维度写成空串", func(t *testing.T) {
+		refusedBy(t, insert(t, "c-4", withCredit, text("level-commercial"), text("")),
+			"空串冒充了在场的维度", notBlank)
+	})
+	t.Run("齐备则放行", func(t *testing.T) {
+		if err := insert(t, "c-5", withCredit, text("level-commercial"), text("charge-freight")); err != nil {
+			t.Fatalf("齐备的一行被挡了：%v", err)
+		}
+	})
+}
+
+// registerCreditPolicy 把一份信用政策正文放进登记册：与 creditKeyRegistration 的两维逐维对齐，
+// 法人对齐键上的法人候选，有效区间盖住登记的锚点。夹具形状照抄 party-commercial 自己的领域测试
+// （那份在 _test.go 里，此处不可 import，只能重建）。
+func registerCreditPolicy(t *testing.T, registry *pcdomain.CommercialRegistry, scope string, minor int64) {
+	t.Helper()
+	version := effectiveIn(t, registry, pcdomain.CreditPolicyObject, "credit-1", "v1", "sha256:credit-1", scope)
+	limit, err := pcdomain.NewCreditAmountLimit(minor)
+	if err != nil {
+		t.Fatalf("new credit amount limit: %v", err)
+	}
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("new effective interval: %v", err)
+	}
+	policy, err := pcdomain.NewCreditPolicy(
+		version,
+		value(t, pcdomain.NewLegalEntityReference, "legal-1"),
+		value(t, pcdomain.NewAuthorityLevel, "level-commercial"),
+		value(t, pcdomain.NewChargeTypeReference, "charge-freight"),
+		limit,
+		interval,
+	)
+	if err != nil {
+		t.Fatalf("new credit policy: %v", err)
+	}
+	registry.RegisterCreditPolicy(policy)
+}
+
+// Covers: 闭包键往返——登记面形成的键送 party-commercial 的真实闭包解析，请求信用依据时不再答
+// `输入未受理`，而是唯一解出并交回出自哪一版政策、授权多少额度（ADR-0127 决定一与三）。
+//
+// 这一条证的是两个上下文对「信用二维」的读法一致：登记面写进去的等级与费用类型，正是闭包解析拿去
+// 命中政策正文的那两格。只在本包断言键的形状，证不了这一点——形状对了而 PC 换了判据，键照样立不起来。
+func TestACreditKeyResolvesAgainstTheClosure(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	mustRegisterKey(t, transactor, keys,
+		creditKeyRegistration(t, "tenant-1", "customer-1", "scope-1"), adapter.ResolutionKeySaved)
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil || !formed {
+		t.Fatalf("formed=%v err=%v", formed, err)
+	}
+
+	registry := pcdomain.NewCommercialRegistry()
+	effectiveIn(t, registry, pcdomain.CustomerContractObject, "contract-1", "v1", "sha256:c1", "scope-1")
+	effectiveIn(t, registry, pcdomain.AcceptanceRulePackageObject, "rules-1", "v1", "sha256:r1", "scope-1")
+	effectiveIn(t, registry, pcdomain.ServiceProductObject, "product-1", "v1", "sha256:p1", "scope-1")
+	registerCreditPolicy(t, registry, "scope-1", 500000)
+
+	closure := pcdomain.ResolveCommercialClosure(registry, key, nil)
+	if closure.Outcome() != pcdomain.UniquelyResolved {
+		t.Fatalf("outcome = %q（reason=%q unresolved=%v）, want UNIQUELY_RESOLVED——登记面形成的键在闭包解析处立不起来",
+			closure.Outcome(), closure.Reason(), closure.UnresolvedBases())
+	}
+	adopted, present := closure.AdoptedFor(pcdomain.CreditPolicyObject)
+	if !present {
+		t.Fatal("闭包没有采用信用依据")
+	}
+	credit, ok := adopted.CreditBasis()
+	if !ok || !credit.Applicable() {
+		t.Fatal("闭包采用了信用依据却没有额度——键上两维没有命中政策正文")
+	}
+	if minor, ok := credit.AuthorizedLimit().AmountMinor(); !ok || minor != 500000 {
+		t.Fatalf("limit = (%d, %v), want 500000", minor, ok)
+	}
 }
 
 // Covers: 「今天 nil 即显式未配置」的登记面版本——无行交回 formed=false 且无错误，

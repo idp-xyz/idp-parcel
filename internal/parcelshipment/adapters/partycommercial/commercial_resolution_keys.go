@@ -31,6 +31,9 @@ type ResolutionKeyRow struct {
 	SettlementCounterparty string
 	SettlementChargeScope  string
 	SettlementCurrency     string
+	// 信用二维只在必需依据含信用政策时在场，空串表示缺席（ADR-0127）。
+	CreditLevel      string
+	CreditChargeType string
 }
 
 // ResolutionKeySaveOutcome 是一次登记在持久化面的落点（ADR-0031 同款）：`已登记`是
@@ -136,6 +139,8 @@ func (adapter *CommercialResolutionKeys) Register(
 		SettlementCounterparty: registration.SettlementCounterparty.String(),
 		SettlementChargeScope:  registration.SettlementChargeScope.String(),
 		SettlementCurrency:     registration.SettlementCurrency.String(),
+		CreditLevel:            registration.CreditLevel.String(),
+		CreditChargeType:       registration.CreditChargeType.String(),
 	})
 }
 
@@ -291,6 +296,9 @@ func (adapter *CommercialResolutionKeys) FormResolutionKey(
 	if key.Settlement, err = settlementSelectorFromRow(row); err != nil {
 		return none, false, fmt.Errorf("form resolution key: %w", err)
 	}
+	if key.Credit, err = creditSelectorFromRow(row); err != nil {
+		return none, false, fmt.Errorf("form resolution key: %w", err)
+	}
 	return key, true, nil
 }
 
@@ -313,6 +321,28 @@ func settlementSelectorFromRow(row ResolutionKeyRow) (pcdomain.SettlementSelecto
 		return none, err
 	}
 	if selector.Currency, err = pcdomain.NewCurrencyCode(row.SettlementCurrency); err != nil {
+		return none, err
+	}
+	return selector, nil
+}
+
+// creditSelectorFromRow 把登记行上的两维折成闭包键上的信用选择器。两维全缺时交回零值，那是
+// 「本次不要信用依据」的正常形状（ADR-0127 决定二）。
+//
+// 两维都走非空引用值的构造门，没有 commercialKindFrom 那样的集外判读：商业权限等级是租户的
+// 版本化业务授权，party-commercial 不预设它有哪几档，费用类型同理——库内 `..._credit_not_blank`
+// 与这里各拦一道「空串冒充在场」，别的它们无从判。与结算不同，这里没有一维要留给闭包填。
+func creditSelectorFromRow(row ResolutionKeyRow) (pcdomain.CreditSelector, error) {
+	none := pcdomain.CreditSelector{}
+	if row.CreditLevel == "" && row.CreditChargeType == "" {
+		return none, nil
+	}
+	var selector pcdomain.CreditSelector
+	var err error
+	if selector.Level, err = pcdomain.NewAuthorityLevel(row.CreditLevel); err != nil {
+		return none, err
+	}
+	if selector.ChargeType, err = pcdomain.NewChargeTypeReference(row.CreditChargeType); err != nil {
 		return none, err
 	}
 	return selector, nil
