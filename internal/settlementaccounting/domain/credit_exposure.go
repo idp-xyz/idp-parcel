@@ -11,16 +11,25 @@ var (
 	ErrInvalidCreditStanding  = errors.New("settlement accounting: invalid credit standing")
 	ErrInvalidExposureRequest = errors.New("settlement accounting: invalid exposure request")
 	ErrExposureNotFound       = errors.New("settlement accounting: credit exposure not found")
+	// ErrStandingNotAuthorized 拒绝拿一份没换上授权额度的登记状况去判暴露：登记状况里的 limit 只是
+	// 一列登记值（ADR-0127 决定四），据它占额度就是拿本上下文自己的数当政策额度，且形成的暴露答不出
+	// 出处。它是编程错误不是业务答案——编排少调了一步 WithAuthorizedLimit。
+	ErrStandingNotAuthorized = errors.New("settlement accounting: credit standing carries no authorized limit")
 )
 
 // CreditStanding 是一个账期作用域当前的信用状况快照：当前有效额度、已占用暴露与是否
 // 逾期。它与运营余额分开取——SET-03 明写预付冻结不与同一客户账期范围共用余额、额度，
 // 合成一个对象会让两本账在实现里合流（ADR-0047）。
+//
+// policy 是当前有效额度的出处：登记状况自己没有（零值），经 WithAuthorizedLimit 换上商业侧
+// 授权额度时随额度一起进来。额度与出处绑在同一份快照上，暴露据它判额度时才答得出「按哪一版
+// 信用政策判的」——CONTEXT 要每项信用暴露保存实际采用的政策，这一格就是它的来路。
 type CreditStanding struct {
 	scope        SettlementScope
 	limitMinor   int64
 	exposedMinor int64
 	overdue      bool
+	policy       CreditPolicyReference
 }
 
 func NewCreditStanding(
@@ -46,17 +55,26 @@ func (standing CreditStanding) Scope() SettlementScope {
 // WithAuthorizedLimit 交回一份把当前有效额度换成商业侧授权额度的副本（ADR-0127）：额度出自
 // 闭包交出的信用政策，已占用暴露与逾期仍是本上下文自己的账本与状况登记——两边各拥有自己
 // 那一半，合在这一份快照上判。原值不改：状况快照是读回来的事实，不就地改写。
-func (standing CreditStanding) WithAuthorizedLimit(limitMinor int64) (CreditStanding, error) {
-	if !standing.scope.valid() || limitMinor < 0 {
+//
+// 额度必须带着出处进来：没有政策出处的授权额度就是本上下文自己发明的额度（与 CreditBasis
+// 构造门同一条理由），拒在这里而不是等落库时发现政策列为空。
+func (standing CreditStanding) WithAuthorizedLimit(limitMinor int64, policy CreditPolicyReference) (CreditStanding, error) {
+	if !standing.scope.valid() || limitMinor < 0 || policy.String() == "" {
 		return CreditStanding{}, ErrInvalidCreditStanding
 	}
 	standing.limitMinor = limitMinor
+	standing.policy = policy
 	return standing, nil
 }
 
 // LimitMinor 是本作用域当前有效的授信额度。
 func (standing CreditStanding) LimitMinor() int64 {
 	return standing.limitMinor
+}
+
+// Policy 是当前有效额度出自哪一版信用政策；登记状况没有换上授权额度时为零值。
+func (standing CreditStanding) Policy() CreditPolicyReference {
+	return standing.policy
 }
 
 // Headroom 是本作用域还可占用的额度。
@@ -135,7 +153,8 @@ func (status ExposureStatus) String() string {
 }
 
 // CreditExposure 是账期方式下一次接受前控制留下的暴露记录。它不是费用也不是应收：
-// 金额责任由费用对象拥有，暴露只回答「这次控制占了多少额度」。
+// 金额责任由费用对象拥有，暴露只回答「这次控制占了多少额度」，以及按哪一版信用政策的
+// 额度判的（policy，CONTEXT「每项信用暴露保存实际采用的政策」的信用政策那一份）。
 type CreditExposure struct {
 	exposureID  ExposureID
 	requestID   ControlRequestID
@@ -146,6 +165,7 @@ type CreditExposure struct {
 	exposedAt   time.Time
 	releasedAt  time.Time
 	reason      RestrictionReason
+	policy      CreditPolicyReference
 }
 
 func (exposure CreditExposure) ExposureID() ExposureID {
@@ -176,6 +196,13 @@ func (exposure CreditExposure) Reason() RestrictionReason {
 	return exposure.reason
 }
 
+// Policy 是这次暴露据以判额度的信用政策版本。它取自形成时那份状况快照，重放交回原暴露时
+// 随原暴露走。只有政策引用列落地之前入库的存量行读回为零值——新形成的暴露一律有出处：Expose
+// 不收没换上授权额度的状况，而授权额度进不了没有出处的 WithAuthorizedLimit。
+func (exposure CreditExposure) Policy() CreditPolicyReference {
+	return exposure.policy
+}
+
 // CreditExposureLedger 只增不删地记录信用暴露，代数与冻结账本一致（幂等重放、同身份
 // 异内容冲突、显式释放）——但它是另一本账：占的是额度不是资金，两本互不借用。
 type CreditExposureLedger struct {
@@ -196,9 +223,17 @@ func NewCreditExposureLedger() *CreditExposureLedger {
 // Expose 为一次账期控制请求占用额度。逾期先于额度判：账户已逾期时这个作用域整体不该
 // 再扩大暴露，答案与本笔金额无关；额度不足与余额不足同理是业务答案不是错误。`业务限制`
 // 的记录不入账本——那次控制没有占用额度，也就没有可释放的东西（与冻结账本同一条纪律）。
+//
+// 状况必须已换上授权额度（带政策出处）才能来判：CONTEXT 要每项信用暴露保存实际采用的政策，
+// 这条不变量守在这里而不是留给编排——守在编排里，少调一步的那条路会形成一份没有出处的暴露，
+// 与存量行读起来一样。与作用域错配同列为前置错误，先于重放判：重放交回的是原暴露，但拿一份
+// 不合格的状况来问本身已经是编程错误。
 func (ledger *CreditExposureLedger) Expose(request ExposureRequest, standing CreditStanding) (CreditExposure, error) {
 	if request.scope != standing.scope {
 		return CreditExposure{}, ErrSettlementScopeMismatch
+	}
+	if standing.policy.String() == "" {
+		return CreditExposure{}, ErrStandingNotAuthorized
 	}
 
 	digest := exposureDigest(request)
@@ -210,10 +245,10 @@ func (ledger *CreditExposureLedger) Expose(request ExposureRequest, standing Cre
 	}
 
 	if standing.overdue {
-		return ledger.restricted(request, "ACCOUNT_OVERDUE")
+		return ledger.restricted(request, standing, "ACCOUNT_OVERDUE")
 	}
 	if request.amountMinor > standing.Headroom() {
-		return ledger.restricted(request, "AVAILABLE_CREDIT_INSUFFICIENT")
+		return ledger.restricted(request, standing, "AVAILABLE_CREDIT_INSUFFICIENT")
 	}
 
 	ledger.nextID++
@@ -225,6 +260,7 @@ func (ledger *CreditExposureLedger) Expose(request ExposureRequest, standing Cre
 		association: request.association,
 		status:      ExposureRecorded,
 		exposedAt:   request.requestedAt,
+		policy:      standing.policy,
 	}
 	ledger.byRequest[request.requestID] = exposure.exposureID
 	ledger.byExposure[exposure.exposureID] = exposure
@@ -232,8 +268,11 @@ func (ledger *CreditExposureLedger) Expose(request ExposureRequest, standing Cre
 	return exposure, nil
 }
 
+// restricted 形成不入账本的`业务限制`结果。它同样带政策出处：受限也要答得出「按哪一版额度判的」，
+// 否则调用方拿到一份限制却不知道是按哪份政策限的。
 func (ledger *CreditExposureLedger) restricted(
 	request ExposureRequest,
+	standing CreditStanding,
 	reasonValue string,
 ) (CreditExposure, error) {
 	reason, err := NewRestrictionReason(reasonValue)
@@ -247,6 +286,7 @@ func (ledger *CreditExposureLedger) restricted(
 		association: request.association,
 		status:      ExposureRestricted,
 		reason:      reason,
+		policy:      standing.policy,
 	}, nil
 }
 

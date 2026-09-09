@@ -223,7 +223,7 @@ func (repository *CreditExposureLedgers) LoadForScope(
 
 	rows, err := querier.Query(ctx,
 		`SELECT control_request_id, exposure_id, status, amount_minor, association,
-		        request_digest, exposed_at, released_at
+		        request_digest, exposed_at, released_at, credit_policy_ref
 		   FROM settlement_accounting.credit_exposure
 		  WHERE tenant_id = $1
 		    AND legal_entity = $2
@@ -247,8 +247,9 @@ func (repository *CreditExposureLedgers) LoadForScope(
 		var amountMinor int64
 		var exposedAt time.Time
 		var releasedAt *time.Time
+		var policyRef *string
 		if err := rows.Scan(&requestID, &exposureID, &status, &amountMinor,
-			&association, &digest, &exposedAt, &releasedAt); err != nil {
+			&association, &digest, &exposedAt, &releasedAt, &policyRef); err != nil {
 			return nil, fmt.Errorf("load credit exposure ledger: %w", err)
 		}
 		controlRequest, err := domain.NewControlRequestID(requestID)
@@ -276,6 +277,15 @@ func (repository *CreditExposureLedgers) LoadForScope(
 		if releasedAt != nil {
 			spec.ReleasedAt = *releasedAt
 		}
+		if policyRef != nil {
+			// NULL 是政策引用列落地之前的存量行，如实读回为零值；非 NULL 的值 CHECK 已保证非空白，
+			// 构造门在这里拒的只能是列被绕过 CHECK 改写——那是库里那一行的问题，上抛。
+			policy, err := domain.NewCreditPolicyReference(*policyRef)
+			if err != nil {
+				return nil, fmt.Errorf("load credit exposure ledger: %w", err)
+			}
+			spec.Policy = policy
+		}
 		specs = append(specs, spec)
 	}
 	if err := rows.Err(); err != nil {
@@ -289,7 +299,8 @@ func (repository *CreditExposureLedgers) LoadForScope(
 	return ledger, nil
 }
 
-// Save 把整册暴露写回。SET 只有状态与释放时间，纪律同冻结账本。
+// Save 把整册暴露写回。SET 只有状态与释放时间，纪律同冻结账本：政策引用与金额、暴露时间一样是
+// 形成时的事实，不在 SET 里，写不动——存量行释放时也不会被补上一个它当初没有的出处。
 func (repository *CreditExposureLedgers) Save(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -311,12 +322,18 @@ func (repository *CreditExposureLedgers) Save(
 			at := exposure.ReleasedAt().UTC()
 			releasedAt = &at
 		}
+		// 零值出处只属于重建回来的存量行，原样写回 NULL；新形成的暴露一律带出处（Expose 不收没换上
+		// 授权额度的状况，领域门保证）。
+		var policyRef *string
+		if reference := exposure.Policy().String(); reference != "" {
+			policyRef = &reference
+		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO settlement_accounting.credit_exposure
 				(tenant_id, legal_entity, account_id, currency, control_request_id,
 				 exposure_id, status, amount_minor, association, request_digest,
-				 exposed_at, released_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+				 exposed_at, released_at, credit_policy_ref)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 			 ON CONFLICT ON CONSTRAINT credit_exposure_pkey DO UPDATE
 			    SET status = EXCLUDED.status,
 			        released_at = EXCLUDED.released_at,
@@ -333,6 +350,7 @@ func (repository *CreditExposureLedgers) Save(
 			encodeDigest(digest),
 			exposure.ExposedAt().UTC(),
 			releasedAt,
+			policyRef,
 		); err != nil {
 			return fmt.Errorf("save credit exposure ledger: %w", err)
 		}

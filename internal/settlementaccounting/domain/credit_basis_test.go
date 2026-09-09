@@ -58,14 +58,20 @@ func TestCreditBasisIsEitherAnAmountOrARatioWithAPolicyBehindIt(t *testing.T) {
 }
 
 // Covers: ADR-0127 决定四——信用状况换上商业侧授权额度：只换额度，已占用与逾期原样留着；原值不改。
+// 额度与它的出处一起换上：登记状况自己没有政策出处，授权额度不带出处进不来——没有出处的额度就是本
+// 上下文自己发明的额度。
 func TestWithAuthorizedLimitReplacesOnlyTheLimit(t *testing.T) {
 	scope := settlementScope(t, "legal-1", "account-1", "CNY")
+	policy := creditPolicyReference(t, "credit-1/v1")
 	registered, err := domain.NewCreditStanding(scope, 1_000, 300, true)
 	if err != nil {
 		t.Fatalf("new credit standing: %v", err)
 	}
+	if registered.Policy().String() != "" {
+		t.Fatalf("registered policy = %q；登记状况没有政策出处可言", registered.Policy())
+	}
 
-	authorized, err := registered.WithAuthorizedLimit(10_000)
+	authorized, err := registered.WithAuthorizedLimit(10_000, policy)
 	if err != nil {
 		t.Fatalf("with authorized limit: %v", err)
 	}
@@ -73,16 +79,92 @@ func TestWithAuthorizedLimitReplacesOnlyTheLimit(t *testing.T) {
 		t.Fatalf("authorized = limit %d headroom %d overdue %v, want 10000 / 9700 / true",
 			authorized.LimitMinor(), authorized.Headroom(), authorized.Overdue())
 	}
+	if authorized.Policy() != policy {
+		t.Fatalf("authorized policy = %q, want %q——额度换上了，出处没跟着", authorized.Policy(), policy)
+	}
 	if authorized.Scope() != scope {
 		t.Fatal("换额度换掉了作用域")
 	}
-	if registered.LimitMinor() != 1_000 || registered.Headroom() != 700 {
+	if registered.LimitMinor() != 1_000 || registered.Headroom() != 700 || registered.Policy().String() != "" {
 		t.Fatal("原状况快照被就地改写")
 	}
-	if _, err := registered.WithAuthorizedLimit(-1); !errors.Is(err, domain.ErrInvalidCreditStanding) {
+	if _, err := registered.WithAuthorizedLimit(-1, policy); !errors.Is(err, domain.ErrInvalidCreditStanding) {
 		t.Fatalf("负额度：err = %v, want ErrInvalidCreditStanding", err)
 	}
-	if _, err := (domain.CreditStanding{}).WithAuthorizedLimit(1); !errors.Is(err, domain.ErrInvalidCreditStanding) {
+	if _, err := registered.WithAuthorizedLimit(10_000, domain.CreditPolicyReference{}); !errors.Is(err, domain.ErrInvalidCreditStanding) {
+		t.Fatalf("无出处：err = %v, want ErrInvalidCreditStanding", err)
+	}
+	if _, err := (domain.CreditStanding{}).WithAuthorizedLimit(1, policy); !errors.Is(err, domain.ErrInvalidCreditStanding) {
 		t.Fatalf("零值状况：err = %v, want ErrInvalidCreditStanding", err)
 	}
+}
+
+// Covers: CONTEXT「每项费用、冻结、信用暴露和核销必须保存实际采用的结算政策、预付/账期方式及其适用
+// 范围」的信用政策那一份（ADR-0127：三份采用依据哪一份都替不了另一份）——暴露记下它据以判额度的
+// 那一版信用政策，`业务限制`同样带（受限结果也要答得出「按哪一版额度判的」）；重放交回原暴露，出处
+// 随原暴露走、不随本次的状况换。没换上授权额度的登记状况不能来判：据它占额度就是拿登记值当政策额度
+// （ADR-0127 决定四），形成的暴露也答不出出处——这条守在账本上，编排少调一步立刻炸出来。
+func TestAnExposureKeepsTheCreditPolicyItWasJudgedAgainst(t *testing.T) {
+	scope := settlementScope(t, "legal-1", "account-1", "CNY")
+	first := creditPolicyReference(t, "credit-1/v1")
+	second := creditPolicyReference(t, "credit-1/v2")
+	registered, err := domain.NewCreditStanding(scope, 100_000, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	ledger := domain.NewCreditExposureLedger()
+	if _, err := ledger.Expose(exposureRequestFor(t, scope, "control-1", 4_000), registered); !errors.Is(err, domain.ErrStandingNotAuthorized) {
+		t.Fatalf("登记状况直接判暴露：err = %v, want ErrStandingNotAuthorized——登记的 100000 不是政策额度", err)
+	}
+
+	authorized, err := registered.WithAuthorizedLimit(5_000, first)
+	if err != nil {
+		t.Fatalf("with authorized limit: %v", err)
+	}
+	recorded, err := ledger.Expose(exposureRequestFor(t, scope, "control-1", 4_000), authorized)
+	if err != nil {
+		t.Fatalf("expose: %v", err)
+	}
+	if recorded.Status() != domain.ExposureRecorded || recorded.Policy() != first {
+		t.Fatalf("recorded = %s / policy %q, want RECORDED / %q", recorded.Status(), recorded.Policy(), first)
+	}
+
+	restricted, err := ledger.Expose(exposureRequestFor(t, scope, "control-2", 6_000), authorized)
+	if err != nil {
+		t.Fatalf("expose beyond headroom: %v", err)
+	}
+	if restricted.Status() != domain.ExposureRestricted || restricted.Policy() != first {
+		t.Fatalf("restricted = %s / policy %q, want RESTRICTED / %q——受限结果也要答得出按哪一版额度判的",
+			restricted.Status(), restricted.Policy(), first)
+	}
+
+	reauthorized, err := registered.WithAuthorizedLimit(50_000, second)
+	if err != nil {
+		t.Fatalf("with authorized limit: %v", err)
+	}
+	replayed, err := ledger.Expose(exposureRequestFor(t, scope, "control-1", 4_000), reauthorized)
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	if replayed.ExposureID() != recorded.ExposureID() || replayed.Policy() != first {
+		t.Fatalf("replayed policy = %q, want the original %q——重放交回的是原暴露，出处不随本次状况改口",
+			replayed.Policy(), first)
+	}
+}
+
+func exposureRequestFor(t *testing.T, scope domain.SettlementScope, requestID string, amountMinor int64) domain.ExposureRequest {
+	t.Helper()
+	controlRequest, err := domain.NewControlRequestID(requestID)
+	if err != nil {
+		t.Fatalf("new control request id: %v", err)
+	}
+	association, err := domain.NewBusinessAssociationReference("submission-" + requestID)
+	if err != nil {
+		t.Fatalf("new business association: %v", err)
+	}
+	request, err := domain.NewExposureRequest(controlRequest, scope, amountMinor, association, frozenAt)
+	if err != nil {
+		t.Fatalf("new exposure request: %v", err)
+	}
+	return request
 }

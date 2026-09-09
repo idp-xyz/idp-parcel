@@ -59,6 +59,21 @@ func emptyExposures() *exposureLedgerDouble {
 	return &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
 }
 
+// authorizedStanding 造一份已换上授权额度的信用状况：暴露账本不收没有政策出处的登记状况
+// （ADR-0127 决定四），释放用例要先真经领域 Expose 过一笔，就得先过这道门。
+func authorizedStanding(t *testing.T, scope domain.SettlementScope, limitMinor int64) domain.CreditStanding {
+	t.Helper()
+	registered, err := domain.NewCreditStanding(scope, 0, 0, false)
+	if err != nil {
+		t.Fatalf("new credit standing: %v", err)
+	}
+	authorized, err := registered.WithAuthorizedLimit(limitMinor, value(t, domain.NewCreditPolicyReference, "credit-1/v1"))
+	if err != nil {
+		t.Fatalf("with authorized limit: %v", err)
+	}
+	return authorized
+}
+
 func releaseCommand(t *testing.T) application.ReleasePreAcceptanceControlCommand {
 	t.Helper()
 	return application.ReleasePreAcceptanceControlCommand{
@@ -190,10 +205,7 @@ func TestAnUnreachableLedgerKeepsTheReleaseUnformed(t *testing.T) {
 func TestACombinedControlIsReleasedOnBothLedgers(t *testing.T) {
 	freezeLedger, frozen := heldLedger(t)
 	scope := releaseScope(t)
-	standing, err := domain.NewCreditStanding(scope, 10_000, 0, false)
-	if err != nil {
-		t.Fatalf("new credit standing: %v", err)
-	}
+	standing := authorizedStanding(t, scope, 10_000)
 	request, err := domain.NewExposureRequest(
 		value(t, domain.NewControlRequestID, "ctrl-req-1"),
 		scope,
@@ -237,10 +249,7 @@ func TestACombinedControlIsReleasedOnBothLedgers(t *testing.T) {
 // 放开，幂等同款；冻结账本上没有它不影响暴露那本的认领，两本都没有仍是`无可释放`。
 func TestARecordedExposureIsReleasedByItsOriginalAssociation(t *testing.T) {
 	scope := releaseScope(t)
-	standing, err := domain.NewCreditStanding(scope, 10_000, 0, false)
-	if err != nil {
-		t.Fatalf("new credit standing: %v", err)
-	}
+	standing := authorizedStanding(t, scope, 10_000)
 	request, err := domain.NewExposureRequest(
 		value(t, domain.NewControlRequestID, "ctrl-req-1"),
 		scope,

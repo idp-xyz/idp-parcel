@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"testing"
 	"time"
@@ -206,6 +207,93 @@ func TestCreditExposureLedgerRoundTripsSeparately(t *testing.T) {
 	}
 }
 
+// TestACreditExposureRoundTripsTheAdoptedCreditPolicy 证暴露行上的政策引用随册往返——CONTEXT
+// 「每项信用暴露保存实际采用的政策」的落库半边（ADR-0127 Consequences 点名留给 SA 迁移的那一格）：
+// 按授权额度形成的暴露读回后仍答得出出自哪一版信用政策；迁移之前写下的存量行没有这一列的值，读回
+// 为空而不是拒——可空只为存量行，新写入非空由应用层保证（编排只经 WithAuthorizedLimit 进 Expose）。
+// 混着存量行的整册再保存同样成立：释放存量行那条不碰政策列，也不给它编一个出处。
+func TestACreditExposureRoundTripsTheAdoptedCreditPolicy(t *testing.T) {
+	_, repository, transactor, pool := newControlLedgers(t)
+	ctx := t.Context()
+	tenant := saTenant(t, "tenant-1")
+	scope := saScope(t)
+	policy := saValue(t, domain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v3")
+
+	authorized, err := saStanding(t, 0, false).WithAuthorizedLimit(8000, policy)
+	if err != nil {
+		t.Fatalf("授权额度：%v", err)
+	}
+	ledger := domain.NewCreditExposureLedger()
+	judged, err := ledger.Expose(exposureRequest(t, "control-1", 2000), authorized)
+	if err != nil {
+		t.Fatalf("暴露：%v", err)
+	}
+	if judged.Policy() != policy {
+		t.Fatalf("形成时就没带出处：%q", judged.Policy())
+	}
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, scope, ledger)
+	}); err != nil {
+		t.Fatalf("保存暴露册：%v", err)
+	}
+
+	// 存量行：政策引用列加进来之前的行，直接以 SQL 落一条、不经适配器——适配器今天不会再写出这种行。
+	// 指纹只要求非空且是本适配器的十六进制形，内容对本例无关（不重放它）。
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.credit_exposure
+			(tenant_id, legal_entity, account_id, currency, control_request_id,
+			 exposure_id, status, amount_minor, association, request_digest, exposed_at, released_at,
+			 credit_policy_ref)
+		 VALUES ($1, $2, $3, $4, 'control-legacy', 'EXP-0002', 1, 300, 'SAC-control-legacy', $5, $6, NULL, NULL)`,
+		tenant.String(), scope.LegalEntity().String(), scope.Account().String(), scope.Currency().String(),
+		hex.EncodeToString([]byte("legacy-digest")), frozenAtFixture,
+	); err != nil {
+		t.Fatalf("写存量行：%v", err)
+	}
+
+	reloaded, err := repository.LoadForScope(ctx, tenant, scope)
+	if err != nil {
+		t.Fatalf("读回暴露册：%v", err)
+	}
+	if len(reloaded.Entries()) != 2 {
+		t.Fatalf("entries = %d, want 2", len(reloaded.Entries()))
+	}
+	kept, found := reloaded.FindByRequest(judged.RequestID())
+	if !found || kept.Policy() != policy {
+		t.Fatalf("读回的暴露 policy = %q, want %q——政策引用没有随行落库", kept.Policy(), policy)
+	}
+	legacy, found := reloaded.FindByRequest(saValue(t, domain.NewControlRequestID, "control-legacy"))
+	if !found || legacy.Policy().String() != "" || legacy.Status() != domain.ExposureRecorded {
+		t.Fatalf("存量行读回 = %+v / policy %q, want RECORDED 且出处为空", legacy, legacy.Policy())
+	}
+
+	// 混册再保存：释放存量行，整册写回；政策列两行都不动。
+	if _, err := reloaded.Release(legacy.ExposureID(), frozenAtFixture.Add(time.Hour)); err != nil {
+		t.Fatalf("释放存量行：%v", err)
+	}
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return repository.Save(txCtx, tenant, scope, reloaded)
+	}); err != nil {
+		t.Fatalf("混册再保存：%v", err)
+	}
+	var rows int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM settlement_accounting.credit_exposure`).Scan(&rows); err != nil {
+		t.Fatalf("统计暴露行数：%v", err)
+	}
+	if rows != 2 {
+		t.Fatalf("混册再保存后行数 = %d, want 2", rows)
+	}
+	again, err := repository.LoadForScope(ctx, tenant, scope)
+	if err != nil {
+		t.Fatalf("再读回：%v", err)
+	}
+	kept, _ = again.FindByRequest(judged.RequestID())
+	legacy, _ = again.FindByRequest(saValue(t, domain.NewControlRequestID, "control-legacy"))
+	if kept.Policy() != policy || legacy.Policy().String() != "" || legacy.Status() != domain.ExposureReleased {
+		t.Fatalf("再保存改了政策列：kept %q / legacy %q (%s)", kept.Policy(), legacy.Policy(), legacy.Status())
+	}
+}
+
 // TestControlWritesRefuseToRunOutsideATransaction 证两本账的写入都不会在缺少事务时
 // 改用连接池。
 func TestControlWritesRefuseToRunOutsideATransaction(t *testing.T) {
@@ -353,11 +441,17 @@ func saBalance(t *testing.T, posted int64) domain.OperationalBalance {
 	return balance
 }
 
+// saStanding 造一份已换上授权额度的信用状况：暴露账本不收没有政策出处的登记状况（ADR-0127
+// 决定四），额度出自哪一版由字面量固定，用例要证别的出处时再自己换。
 func saStanding(t *testing.T, limit int64, overdue bool) domain.CreditStanding {
 	t.Helper()
-	standing, err := domain.NewCreditStanding(saScope(t), limit, 0, overdue)
+	registered, err := domain.NewCreditStanding(saScope(t), 0, 0, overdue)
 	if err != nil {
 		t.Fatalf("信用状况：%v", err)
+	}
+	standing, err := registered.WithAuthorizedLimit(limit, saValue(t, domain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1"))
+	if err != nil {
+		t.Fatalf("授权额度：%v", err)
 	}
 	return standing
 }

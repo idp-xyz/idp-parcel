@@ -147,7 +147,9 @@ func RehydrateFreezeLedger(specs []RehydrateFundsFreezeSpec) (*FreezeLedger, err
 	return ledger, nil
 }
 
-// RehydrateCreditExposureSpec 是一条暴露在库里的样子。
+// RehydrateCreditExposureSpec 是一条暴露在库里的样子。Policy 是形成时据以判额度的信用政策版本，
+// 零值只可能是政策引用列落地之前入库的存量行——重建门不替它补一个出处，也不因它为空而拒：
+// 那一行当初确实是在没有政策出处的状况下判的，读回如实。
 type RehydrateCreditExposureSpec struct {
 	ExposureID  string
 	RequestID   ControlRequestID
@@ -158,6 +160,7 @@ type RehydrateCreditExposureSpec struct {
 	ExposedAt   time.Time
 	ReleasedAt  time.Time
 	Digest      string
+	Policy      CreditPolicyReference
 }
 
 // RehydrateCreditExposureLedger 从库里读到的产物重建信用暴露账本。代数与冻结账本
@@ -204,6 +207,7 @@ func RehydrateCreditExposureLedger(specs []RehydrateCreditExposureSpec) (*Credit
 			status:      spec.Status,
 			exposedAt:   spec.ExposedAt.UTC(),
 			releasedAt:  spec.ReleasedAt.UTC(),
+			policy:      spec.Policy,
 		}
 		ledger.byRequest[spec.RequestID] = exposureID
 		ledger.digests[spec.RequestID] = spec.Digest

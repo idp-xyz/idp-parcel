@@ -494,8 +494,8 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 		return controlStep{}, handler.haltNotFormed(command, CreditStandingUnavailable), nil
 	}
 	// 额度一律取信用依据（ADR-0127 决定五 contract 段）：登记状况里的 limit 自此只是一列登记值，
-	// 不再有「依赖未接就拿它当额度」的分支。
-	standing, err = standing.WithAuthorizedLimit(authorizedMinor)
+	// 不再有「依赖未接就拿它当额度」的分支。出处随额度一起换上，暴露入册时带着它落库。
+	standing, err = standing.WithAuthorizedLimit(authorizedMinor, basis.Policy())
 	if err != nil {
 		// 作用域不合法或额度为负都进不了各自的构造门，走到这里是编程错误，上抛。
 		return controlStep{}, nil, fmt.Errorf("expose credit: authorized limit: %w", err)

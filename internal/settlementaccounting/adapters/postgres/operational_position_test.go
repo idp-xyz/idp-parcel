@@ -111,8 +111,13 @@ func TestACreditStandingCountsRecordedExposures(t *testing.T) {
 		t.Fatalf("额度余量 = %d，逾期 = %v", fresh.Headroom(), fresh.Overdue())
 	}
 
+	// 账本不收没换上授权额度的登记状况（ADR-0127 决定四）；本例证的是余量扣减，额度照登记的数换上。
+	authorized, err := fresh.WithAuthorizedLimit(fresh.LimitMinor(), saValue(t, domain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1"))
+	if err != nil {
+		t.Fatalf("授权额度：%v", err)
+	}
 	ledger := domain.NewCreditExposureLedger()
-	if _, err := ledger.Expose(exposureRequest(t, "control-1", 2000), fresh); err != nil {
+	if _, err := ledger.Expose(exposureRequest(t, "control-1", 2000), authorized); err != nil {
 		t.Fatalf("占用额度：%v", err)
 	}
 	saWithin(t, position.transactor, ctx, func(txCtx context.Context) error {

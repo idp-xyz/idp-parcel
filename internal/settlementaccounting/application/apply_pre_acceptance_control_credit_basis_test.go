@@ -90,6 +90,10 @@ func TestTheAuthorizedLimitComesFromTheCreditBasisNotTheRegisteredStanding(t *te
 	if result.CreditPolicy().String() != "credit-1/v1" {
 		t.Fatalf("credit policy = %q, want credit-1/v1——暴露结果必须带回额度出自的政策版本", result.CreditPolicy())
 	}
+	if exposure.Policy().String() != "credit-1/v1" {
+		t.Fatalf("exposure policy = %q, want credit-1/v1——入册的暴露自己要带出处，账本落库靠的是它不是结果",
+			exposure.Policy())
+	}
 	if basis.askedWith.String() != "RES-1" {
 		t.Fatalf("授信依据视图被问到的回指 = %q, want RES-1", basis.askedWith)
 	}
