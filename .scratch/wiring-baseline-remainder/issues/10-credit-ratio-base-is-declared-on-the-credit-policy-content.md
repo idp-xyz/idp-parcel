@@ -1,7 +1,7 @@
 # 比例额度的基数由信用政策正文自己声明：封闭集、不给默认、缺席在构造门拒
 
 Category: enhancement
-Status: in-progress——2026-09-09 22:2x 通道 3 认领，分支 `mcp3-wbr10` 基 `90c025ca`，单 task-519de030-3eec-46c4-9468-f190e8926899。此前：2026-09-09 通道 1 代裁立票（用户经 IDP 队列授权「你自决，目标是全部解决」）：wbr/03「未落三件」之③、ADR-0127 决定四「比例额度的基数今天未裁……
+Status: resolved——2026-09-09 23:2x 通道 6 接续收口（作者通道 3 五笔 + 接续三笔，分支 `mcp3-wbr10` 基 `90c025ca`，已推 origin；完成记录见文末，进 main 记录归推送方）。此前：in-progress——2026-09-09 22:2x 通道 3 认领，分支 `mcp3-wbr10` 基 `90c025ca`，单 task-519de030-3eec-46c4-9468-f190e8926899。此前：2026-09-09 通道 1 代裁立票（用户经 IDP 队列授权「你自决，目标是全部解决」）：wbr/03「未落三件」之③、ADR-0127 决定四「比例额度的基数今天未裁……
 那是 `BD-*` 一类，等它自己的裁决」。裁决方向见下；封闭集的成员表交本票 `/domain-modeling` 一格定、落 ADR-0129（号由通道 1 给）
 Blocked by: 无（PC 半边与 SA 半边同票；SA 半边的 contract 段是 [09](./09-sa-credit-basis-contract-and-exposure-ledger-policy-reference.md)，本票不依赖它——`CREDIT_RATIO_BASE_UNDECIDED` 那格今天就在，本票是让它不再被走到）
 
@@ -40,6 +40,44 @@ admin-web tsc / run-tests 绿。
 ## 边界
 
 不动 ADR-0127 正文（回指即可）；不动结算政策；不给 PC 合同加任何格。
+
+## 完成记录（2026-09-09 23:2x，通道 3 五笔 + 通道 6 接续三笔；分支 `mcp3-wbr10` 基 `90c025ca`，每笔已推 origin 同 SHA——推送方重放进 main）
+
+| 笔 | SHA | 作者 | 内容 |
+|---|---|---|---|
+| ① | `23d1f33c` | 通道 3 | 票面转 in-progress |
+| ② | `b9f5a2b1` | 通道 3 | ADR-0129（封闭集 `CreditRatioBase` 两格 `POSTED_BALANCE` / `PRIOR_PERIOD_CONFIRMED_CHARGES`、每格 SA 取数路径、不给默认、缺席构造门拒、SA 折算与两格新 `NotFormedReason`、越权风险点五条）；PC CONTEXT 信用政策那句补「比例额度在政策正文里声明其基数」半句；`docs/adr/README.md` 加一行 |
+| ③ | `5eb22c3e` | 通道 3 | PC：`NewCreditRatioLimit` 收基数、缺席或集外拒，`RehydrateCreditRatioLimit` 只为存量读回「未声明」；PCC-1 加键 `ratioBase` 不换号；`ViewRevision` 比例段带基数；迁移 `0029` 给 `0020` 加 `ratio_base`（可空只为存量行，CHECK 金额行必空、非空必在集合内）；postgres 写读往返、整册装载与闭包快照各加一键、重建门对 NULL 如实读回；发布路 `CreditPolicyBodyPayload` / 受控批文 `creditPolicyBodyDocument` 各加 `ratioBase`（缺席 / 集外 / 金额带基数点名 `creditPolicy.ratioBase`）；词表读口 `CREDIT_POLICY` 答 `ratioBase` 一集；读面信用政策册比例行带 `ratioBase`；机制清点随迁移重生成 |
+| ④ | `43362615` | 通道 3 | SA：领域 `CreditRatioBase` 镜像封闭集、`CreditBasis` 比例格带基数（`NewCreditRatioBasis` 收基数、`NewUndeclaredCreditRatioBasis` 只为存量）、`LimitOnBase` 向下取整且负基数折 0；新端口 `CreditRatioBaseView` 三格照 ADR-0054；postgres 适配器 `CreditRatioBases` 读 `operational_balance.posted_minor` / 最近一张已发布对账单费用行之和（作废无替代答尚无事实）；`exposeCredit` 经 `authorizedMinorOf` 折算，`NotFormedReason` 加 `CREDIT_RATIO_BASE_UNAVAILABLE` / `CREDIT_RATIO_BASE_NOT_ESTABLISHED`，`CREDIT_RATIO_BASE_UNDECIDED` 只留给未声明基数的存量比例；`Deps` 新增 `RatioBases` mandatory；SA→PC 适配器逐格译基数、存量无基数译「未声明」；`cmd/parcel-dispatch` 接 `CreditRatioBases`；PS 夹具补 `ratioBaseDouble`；真库一正一反 |
+| ⑤ | `f733374b` | 通道 3 | admin-web：信用政策发布表单加「比例的基数」一格（`VocabularySelect` 只从词表读口取码、不内置不预选），草稿 / 载荷 / 认领路径 / `*RenderedPaths` 各加 `creditPolicy.ratioBase`；读面比例行带基数（存量无基数示「基数未声明」）；`publication-draft-api.ts` / `api.ts` / `presentation.ts` 各加一格；node:test 197/197 |
+| ⑥ | `a92526a0` | 通道 6 | 票面 Comments 记接续 |
+| ⑦ | `a2e02e52` | 通道 6 | 机制清点在 `a92526a0` 干净检出重生成：settlementaccounting 生产 80→81 / 测试 60→61 / 端口 37→38（④ 的新端口与适配器一正一反），合计与端口声明数各 +1——③ 那次重生成早于 ④，所以 tip 上有差，单独一笔 |
+| ⑧ | 本笔 | 通道 6 | 票面 → resolved + 本记录 |
+
+**第 6 步 seed（无需改，理由）**：`scripts/demo-seeds/data/commercial/publish-batch.json` 的批文里没有 `CREDIT_POLICY` 项（八类册：`SERVICE_PRODUCT` / `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` / `ACCEPTANCE_RULE_PACKAGE` / `CUSTOMER_CONTRACT` / `SETTLEMENT_POLICY` / `SUPPLIER_AGREEMENT` / `PRICE_RULE` / `AUTHORIZATION_RULE`），整个 `scripts/demo-seeds` 也无信用政策——没有一处要加 `ratioBase`；PCC-1 加键 `omitempty` 之后金额正文的规范化文档一字不变（ADR-0129 决定一），既有 seed 摘要不受影响，`cmd/parcel-commercial` 带 DSN 的用例在本 tip 上 ok。给 seed 补一条信用政策不在本票判据内，属合成 `S` 证据另议。
+
+**触及文件**（48 件，+1638/−150，`git diff --stat 90c025ca..a2e02e52`）：PC `domain/{credit_limit.go,commercial_registry.go,publication_canonicalization.go,publication_vocabulary.go}`、`ports/ports.go`、`adapters/postgres/{credit_policy.go,commercial_resolution.go,commercial_publication.go}`、`adapters/http/{publication_draft_payload.go,query_commercial_policies.go}`、`migrations/party_commercial/0029_credit_policy_ratio_base.sql`（新）；SA `domain/{credit_basis.go,credit_exposure.go}`、`ports/ports.go`、`application/apply_pre_acceptance_control.go`、`adapters/partycommercial/credit_basis.go`、`adapters/postgres/{credit_ratio_base.go（新）,pre_acceptance_control.go}`；`cmd/parcel-commercial/translate.go`、`cmd/parcel-dispatch/assemble.go`；PS `adapters/settlementaccounting/pre_acceptance_control_test.go`（只加替身，不改既有断言）；admin-web `party/` 八件；ADR-0129、README 一行、PC CONTEXT 半句、清点、本票。**未碰**：ADR-0127 正文；结算政策任何一格；PC 合同任何一格；SA 迁移（两格基数都读既有两表）。
+
+**验收对照**（票面完成判据逐项）：比例额度不带基数在构造门拒 ✓（③ `NewCreditRatioLimit`，集外 / 缺席 `ErrInvalidCreditLimit`；金额带基数拒）；带基数的比例额度经 ADR-0127 那条路到 SA 后折成金额进授信额度 ✓（④ `LimitOnBase` → `WithAuthorizedLimit`；真库一正一反在 `credit_ratio_base_test.go`）；受控批文 / 表单 / 词表 / 读面各一格 ✓（③ 批文与载荷、词表一集、读面比例行；⑤ 表单）；ADR-0129 落文 ✓、PC CONTEXT 半句 ✓、README 一行 ✓（②）；含 DSN 跑 PC 四包 + SA + `cmd/parcel-commercial` + `cmd/parcel-dispatch` ✓（作者 ④ 前后跑过 PC postgres + migrations 与 SA postgres 带 DSN 各一轮并广播；接续在 tip 跑 `cmd/*` 三包带 DSN，见下）；admin-web tsc / run-tests 绿 ✓（⑤ 与接续各跑一次）。边界三条 ✓。
+
+**验证强度**（接续，树 `D:/tops/idp-parcel-mcp3-wbr10` 钉 `a92526a0`，代码 tip `f733374b`，`status --untracked-files=all` 空）：`gofmt -l ./internal ./cmd ./migrations ./tools` 零输出；`go build ./...`、`go vet ./...` 全仓退 0；无 DSN `go test -count=1` PC 四包（domain / application / adapters/postgres / adapters/http）+ SA 四包（domain / application / adapters/postgres / adapters/partycommercial）+ `./internal/parcelshipment/adapters/settlementaccounting/` + `./internal/architecture/...`：10 ok；**含 DSN** `go test -p 1 -count=1 -v ./cmd/parcel-commercial/ ./cmd/parcel-dispatch/... ./cmd/parcel-api/...`：3 ok，`--- PASS` 292 / `--- SKIP` 0 / `--- FAIL` 0（占号 / 释号各广播一次）；admin-web `tsc -b --force` 0 错、`run-tests` 197/197；清点在 `a92526a0` 干净 detached 树重生成有差 → 落 ⑦，⑦ 之后再生成即零差（推送方在 tip 兑底）。未跑全量（作者范围口径）、未跑 `-race`。PC postgres + migrations、SA postgres 带 DSN 沿用作者 22:5x–23:0x 两轮广播的结果，接续未重跑。日志 `%TEMP%\wbr10-cmd-dsn.log`，仓内无残留。
+
+**与 main（`dec37d78`）碰面**（`git merge-tree --write-tree origin/main mcp3-wbr10` 干跑，未动树、未合）：两侧都改的只有两件——`internal/partycommercial/adapters/http/publication_draft_payload.go` 自动合并干净（awf/23 加在 `Publication` 结算政策块、本票改 `CreditPolicyBodyPayload` 两块，不相邻）；`docs/adr/README.md` 内容冲突，是同点插入（main 已 0128 → 0130 → 0132，本票 0129 行）——按号序插进 0128 与 0130 之间即解，无语义冲突。PC CONTEXT 两侧不同期改动（awf/23 那句在 `90c025ca` 之前已进 main），无重叠。
+
+**判断题**（给评审与推送方，都不阻断）：
+
+1. **地盘外两处小改**（作者 ④，广播过、无人喉）：`cmd/parcel-dispatch/assemble.go` 接 `NewCreditRatioBases` 并给 `Deps.RatioBases` 一项；PS 夹具 `internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control_test.go` 补 `ratioBaseDouble` 接进三处构造，只加不改既有断言。理由：`Deps` 新增 mandatory 项（ADR-0127 决定五 contract 纪律，票 09 已收齐、本票不再开 expand 段），缺任何一件构造门就拒，两处不同笔接就编不过。
+2. **票面候选 `DEPOSIT_BALANCE` 改名 `POSTED_BALANCE`**（ADR-0129 决定二）：SA 没有「保证金」格、「预付余额」不是运营结算余额五项之一；术语跟着 SA 算得出的那一项走。
+3. **`PRIOR_PERIOD_CONFIRMED_CHARGES` 三处裁定**（ADR-0129 风险点 ③）：对账单快照作周期代理；对账单按（账户、币种）键入、责任法人由账户蕴含；费用行合计不含调整行（代码上 `lines` 列只存费用行、调整行在 `adjustment_lines` 另一列，求和口径与注释一致）。
+4. **负入账余额折 0 进`业务限制`而不是停`待判断`**（ADR-0129 风险点 ④）。
+5. **两格新 `NotFormedReason`**（`CREDIT_RATIO_BASE_UNAVAILABLE` / `CREDIT_RATIO_BASE_NOT_ESTABLISHED`）未经产品单独裁，与 ADR-0127 三格同性质。
+6. **最近一张对账单已作废且尚无替代 → 答尚无事实**而不是退回更早一张（`priorPeriodConfirmedChargesBase` 头注）：退回会静默拿更早周期的数当分母。
+
+**wbr/09 评审三条非阻断的顺手收落**：全部落在 ④ `43362615`——(a) `CreditPolicyReference.IsZero()` 已加，三处零值判法全改——`WithAuthorizedLimit` 用 `policy.IsZero()`、`Expose` 用 `standing.Policy().IsZero()`、postgres `Save` 用 `!exposure.Policy().IsZero()`；(b) `ApplyPreAcceptanceControlDeps` 头注重写为「每一件都是 mandatory…」，「它曾经允许为 nil」那句变更史已删；(c) `CreditStanding.Policy()` 自 `Expose` 改用它起有了生产调用。
+
+**接续方看到的**（只记不改，归评审与下一张票）：读过 ④ 的 `credit_ratio_base.go` 全文与 `apply_pre_acceptance_control.go` 的 `Deps` 段，未读出语义问题；`priorPeriodConfirmedChargesBase` 的查询不带 `legal_entity`，与 ADR-0129 风险点 ③「责任法人由账户蕴含」一致——若 owner 判对账单该按作用域四维键入，改的是那一条与对账单表的键，不在本票。②③④⑤ 的其余文件接续方未逐行读，评审以代码为准。
+
+**父 spec**：`wiring-baseline-remainder/spec.md` 状态行不由本票改。
 
 ## Comments
 
