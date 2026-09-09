@@ -73,3 +73,28 @@ Blocked by: 无（二选一都是 PS 地盘内的小改，不等任何上游）
   / `go vet ./...` 退 0；`go test -count=1` PS domain + `go list` 反查的 22 个反向依赖（非 cmd 19 个无 DSN 跑，`adapters/postgres` 无 DSN
   即跳过、只作编译证）+ `internal/architecture/...` 全 ok；反向依赖里 `cmd/parcel-api` / `cmd/parcel-commercial` / `cmd/parcel-dispatch`
   带 DSN `-p 1 -count=1 -v`：284 PASS / 0 SKIP / 0 FAIL（13.9 s / 3.8 s / 27.3 s），跑在通道 1 17:3x 关窗之后。
+
+## 进 main 记录（2026-09-09 18:1x，通道 1 推送）
+
+分支 `mcp6-wbr02` 三笔在隔离树重放到 `135af96b` 之后：`e38bc18d→4ba719c8` / `eecd05d4→8c38f27c` / `58c409a9→903fda7a`。**`eecd05d4` 那笔在
+`production_wiring_baseline.txt` 头注处与 main 上 wbr/01 那一剪冲突**（两笔各在头注末尾加了一段），推送方按意图并：两段头注都留（01 在前、02 在后），
+再加一段「推送方重放注」——本笔重放到 `135af96b` 之上时两法同得剪前 3（01 已剪）、剪后 **2**（parcel-shipment 1→0，party-commercial 2 不变），
+**parcel-shipment 这一组至此清空**；`payload_canonicalization.go(+_test)` 与票面与分支逐字节同。暂存 blob LF、无 BOM（`text=auto` 归一）。
+`internal/architecture` 门禁在链上 ok。清点在链 tip 重生成 `f9bcaa6e`（本票删一个导出函数不改文件面，数字变动全来自同链的 pgtest/01）。
+推送方在 `f9bcaa6e` 干净检出含 DSN `go test -p 1 -count=1 ./...` 一次：102 ok / 0 FAIL / 15 无测试，120 s。**远端 `main = f9bcaa6e`**。
+分支指针改名 `merged/mcp6-wbr02`。
+
+## Comments
+
+**评审 ← 通道 4 · 钉 `58c409a9` · 17:38**（基 `3c9a41bd`，隔离树 `%TEMP%\idp-review-wbr02`；原文在通道 1 台账 `task-80da867c`）
+
+- **Standards**：阻断 0。非阻断 ① 基线 PS 组理由行里旧句「接它的仍是真渠道那笔工作」字面仍在，但只作被驳的历史引文（「理由行写着『…』。那句取证不支持」），
+  不是活理由——按票面意图合格；字面读法下改句一行事，不挡。无发现：注释全中文；跨文件引用皆符号名（`ClassifySourceSubmission` / `CanonicalizeSubmissionPayload` /
+  `payload_canonicalization.go`），无行号；头注记数带「在哪量的」钉 `e38bc18d`，成因写为第一种，并预写与 wbr/01 同文件在途、链 tip 由推送方重数；
+  `source_submission.go` / PSC-2 未动；ADR-0091「留在名单上」历史句未改写（合 AGENTS 不改写已接受 ADR）。
+- **Spec**：阻断 0，非阻断 0。① 测试改钉 `PSC-1:` 字面**是钉位不是镜像**：测试在 `package domain_test`，读不到未导出的 `payloadCanonicalizationVersion`；
+  从被测包读回预期值再比才是镜像（版本换了永不红），而本测试断言恰是「摘要携带产生它的版本」（ADR-0014），预期值必须来自代码之外；PSC-2 时必红是那笔工作
+  本来就要改这条测试的信号。「没有只为它写的测试」属实（删后全仓 `*.go` 零命中）。② 评审独立重数：`e38bc18d` = 4、`eecd05d4` = 3（PS 2→1），与作者同；
+  `origin/main 62e19b1b` 同法 = 3，重放后真值 3→2，作者已写由推送方重数。③ 注释句紧邻「按前缀取版本再分支」同句，无行号计数。④ 无越票改动。
+- 验证（隔离树，无 DSN）：gofmt 空；build 0；vet PS domain + architecture 0；`go test -count=1` 两包 ok。
+- **结论**：两轴无阻断，可重放。推送方处置：Standards ① 按意图读，历史引文保留，不改。

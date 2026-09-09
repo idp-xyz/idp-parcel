@@ -122,3 +122,32 @@ Blocked by: 无
 **`-p 1` 只记数不裁**：全仓 118 s 墙钟，其中 `ok` 各包自报用时合计 84 s（其余是串行编译链接）；带真库的包最慢 8.4 s（`customscompliance/adapters/postgres`），PS `adapters/postgres` 5.6 s（parallel-sessions「验证」节记的改前实测 51 s）。放不放 `-p 1` 以 `ci.yml` 带 run 号的实测为据，另立票。
 
 **尾巴**：无。
+
+## 进 main 记录（2026-09-09 18:1x，通道 1 推送）
+
+分支 `mcp5-pgtest01` 六笔在隔离树重放到 `135af96b` 之后（链上前有 wbr/02 三笔，零交集），零冲突、内容与分支逐文件零差：`f321b9c9→7a95b701` /
+`788e226c→5b1e8d44` / `8a81aa28→8c9d8ed1` / `fc2b473b→bb930f89` / `db66ea02→64e95b6b` / `7a906a86→63fe4445`。清点在链 tip 重生成 `f9bcaa6e`
+（platform 生产 15→17 / 测试 15→16；合计 875 / 831）。推送方在 `f9bcaa6e` 干净检出含 DSN `go test -p 1 -count=1 ./...` 一次：**102 ok / 0 FAIL /
+15 无测试，120 s**（上一轮 `62e19b1b` 是 101 / 0 / 16、568 s；PS `adapters/postgres` 44.8 s → 5.6 s）；探针含 DSN PASS / 无 DSN SKIP。
+**远端 `main = f9bcaa6e`**。分支指针改名 `merged/mcp5-pgtest01`。评审两条非阻断尾巴（下）**随票记，另派小票**：① `ALTER DATABASE … ALLOW_CONNECTIONS false`
+加固；② 票面判据「进程退出模板库删掉」改口为实现的形状（后来者回收、稳态恒余一个）——评审判机制诚实、改措辞不另立票，推送方照此派给作者一笔收尾。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 `7a906a86` · 17:48**（基 `74ef0da8` = merge-base，隔离树 `%TEMP%\idp-review-pgtest01`；原文在通道 1 台账 `task-a4fb6bd8`）
+
+- **Standards**：阻断 0。非阻断（判断题）① `DROP DATABASE IF EXISTS … WITH (FORCE)` 三处拼接（`database.go` `dropDatabase`、`template.go` `buildTemplate`
+  迁移失败清理、`reapOrphanTemplates`），可收成一个无 `t` 的 drop 函数供三处调。无发现：gofmt 空；build / vet 0；`diff --stat` 只有票面 + pgtest 四文件，
+  无迁移 / compose.yaml / CI 改动；`func Pool(t *testing.T) *pgxpool.Pool` 签名不动；注释全中文，跨文件引用皆符号 / 文件名无行号；「不许走的路」：
+  无 fsync、无事务回滚包裹，用例仍是独立物理库。
+- **Spec**：阻断 0。非阻断 ① 「模板库不被用例写」今天只靠约定：模板 `datallowconn` 仍为 true，任何拿到 AdminDSN 的用例 `withDatabase(adminDSN, templateName)`
+  就能连上写脏，也是「被其他用户访问」克隆失败的唯一来源——建议 `migrateTemplate` 断开后 `ALTER DATABASE … ALLOW_CONNECTIONS false`（template0 同法；
+  `CREATE DATABASE … TEMPLATE` 与 `DROP` 都不需连接），把不变式变成结构性的。② 判据「进程退出模板库删掉」→ 实现为「主人会话锁示活、下一个建模板的进程回收」，
+  稳态恒余一个 17 MB 孤儿；parallel-sessions「验证」段（权威）只写「每进程迁移一次 + 每用例 TEMPLATE 克隆」，未要求退出即删，票面字面是派生物——
+  判机制诚实（Go 测试二进制无退出钩），建议改票面判据措辞而不另立票。「活」的判据：进程 crash / kill → OS 关 socket → 后端退出 → 锁释放（实测子进程退出后
+  < 10 s 被回收）；只有宿主机整机断电才等 TCP keepalive（pgx 默认 5 min）。两个活进程互删不可能：先锁后建，试锁只在主人会话断后才拿得到；fnv32 撞键只会让孤儿
+  暂时显得有主（安全方向）。无发现：隔离（每用例 `cloneDatabase` 物理拷贝、用完 `dropDatabase` WITH (FORCE)；`migrateTemplate` 迁完即断连，主人连接连的是
+  postgres 库不是模板库）；互斥（进程内 `templateMu`；名 `parcel_tpl_<pid>_<12hex>` 不撞；`-p>1` 各进程各模板）；模板 = `migrate.Run` 真实计划、每进程新建
+  不复用、测试逐条比 `applied_migration` 与 `migrate.Plan()` 的 ID + 校验和；`recordTiming` 未设变量即返回；三测各钉判据，子进程 `os.Args[0]` 重执行在 Linux CI
+  是标准写法。实测（带 DSN，55432 零客户端）：3 PASS / 1 SKIP 0.888 s；跑前孤儿 `parcel_tpl_36996_…` 被回收，跑后余本进程一个，`parcel_test_*` 零，advisory 锁零。
+- **结论**：可推；Spec ① 一行加固建议作者随手补或推送时记为尾巴。推送方处置：① ② 合成一张收尾小票派回作者通道（见进 main 记录）。
