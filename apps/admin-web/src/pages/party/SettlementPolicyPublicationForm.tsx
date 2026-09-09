@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import {
-  listCustomerAccounts,
+  listBusinessParties,
   listCustomerContracts,
   listGroupLegalEntities,
-  type CustomerAccountListResponseBody,
+  type BusinessPartyListResponseBody,
   type GroupLegalEntityListResponseBody,
 } from './api';
 import { settlementMethodLabels } from './presentation';
@@ -40,8 +40,10 @@ import {
  * 模板导入只针对上百格的价卡。五步（预览摘要 → 存为待批准 → 批准 → 发布）由公共半边 PublicationDraftFlow 走，
  * 本组件只摆版本壳五格与政策正文，草稿 → 载荷在 settlement-policy-form.ts。
  *
- * **三样从读面选、一样从词表选、两样手填**：责任法人从集团法人册选，客户相对方从货主客户账户册选（结算按账户归集
- * ——ADR-0003 三级边界的第三级；seed 里那一格也是账户标识），合同从客户与合同目录选且**对象 + 版本两格一起落**
+ * **三样从读面选、一样从词表选、两样手填**：责任法人从集团法人册选，客户相对方从业务参与方册选（CONTEXT 结算方式
+ * 那条规则末句，票 23 裁决一：相对方是承担结算责任的法律主体，不是货主客户账户——一个账户可以按相对方拥有多个结算账户，
+ * 两者不能合并；票 15 从账户册选是照 seed 的写法，两读都通所以没锁死，现在锁死。`CounterpartyReference` 仍是未绑定册的
+ * 引用，存在性不由构造门查，这里只换选单来源），合同从客户与合同目录选且**对象 + 版本两格一起落**
  * （不让操作者手拼版本号；两段式串只许领域拼），选出的合同对象同时镜像成壳引用 references.CUSTOMER_CONTRACT
  * （CONTEXT 结算方式那条规则末句，票 23 裁决二——没有它，被引合同未发布时的排序门对本册不成立；镜像在
  * settlementPolicyPayloadOf 做，不给操作者第二个合同格）；结算方式下拉只吃服务端词表读口（票 20）答的码 × 本页中文词表，
@@ -176,21 +178,21 @@ export function SettlementPolicyPublicationForm({ onPublished }: SettlementPolic
                 readFace="集团法人册"
               />
               <ReferencePicker
-                label="客户相对方（货主客户账户）*"
+                label="客户相对方（业务参与方）*"
                 path="settlementPolicy.counterparty"
                 problems={problems}
                 value={draft.counterparty}
                 locked={locked}
                 onChange={(counterparty) => patch({ counterparty })}
-                load={listCustomerAccounts}
-                optionsOf={(body: CustomerAccountListResponseBody) =>
-                  body.accounts.map((account) => ({
-                    value: account.accountId,
-                    label: `${account.accountId} · ${account.customerPartyNameKnown ? account.customerPartyName : account.customerPartyId} · ${account.status}`,
+                load={listBusinessParties}
+                optionsOf={(body: BusinessPartyListResponseBody) =>
+                  body.parties.map((party) => ({
+                    value: party.partyId,
+                    label: `${party.partyId} · ${party.partyName} · ${party.status}`,
                   }))
                 }
-                emptyNote="当前租户尚无货主客户账户；先在客户账户册登记，再发布结算政策。"
-                readFace="货主客户账户册"
+                emptyNote="当前租户尚无业务参与方；先在业务参与方册登记，再发布结算政策。"
+                readFace="业务参与方册"
               />
               <ContractPicker
                 problems={problems}
