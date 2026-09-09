@@ -1,7 +1,7 @@
 # 22 发布表单的私有副本抬到 party 共享层：`Field` / `useLoaded` / `VocabularySelect` / 整数解析各只留一份，节根问题一律渲染
 
 Category: chore
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：12 / 13 / 14 / 15 / 17 五票的非作者评审都点了同一条 Duplicated Code 判断题，作者们都按伞票纪律「不跨文件借私有件」各留一份、记「另立票」——这就是那张票。**Blocked by [21](./21-customer-service-rule-register-read-face.md) 与 [18](./18-customer-service-rule-form.md)**：三票都动 `CommercialPoliciesPage.tsx` 与各表单文件，本票是全页重构，等 18 的第十张表单落了再一次抬齐，不和它相撞
+Status: in-progress——2026-09-09 18:3x 通道 4 认领（接续单 task-7a3944f8，通道 3 派；分支 `mcp4-awf22` 基 main `d5a35960`，隔离树 `D:/tops/idp-parcel-mcp4-awf22`，`node_modules` 走 junction 借共享树；21 / 18 已进 main，Blocked by 已无未落项）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：12 / 13 / 14 / 15 / 17 五票的非作者评审都点了同一条 Duplicated Code 判断题，作者们都按伞票纪律「不跨文件借私有件」各留一份、记「另立票」——这就是那张票。**Blocked by [21](./21-customer-service-rule-register-read-face.md) 与 [18](./18-customer-service-rule-form.md)**：三票都动 `CommercialPoliciesPage.tsx` 与各表单文件，本票是全页重构，等 18 的第十张表单落了再一次抬齐，不和它相撞
 Blocked by: 21、18
 
 ## 缺口（评审取证，锚 `3d90130c`）
