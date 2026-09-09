@@ -1,7 +1,7 @@
 # HTTP 归属视图对「其他权威」决定不渲染未决原因、续办引用与确认引用：生产上唯一走得到的 Other 路在接入面缺格
 
 Category: bug
-Status: ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/01 评审（通道 3，钉 `a5bff461`）Spec 非阻断 1 点名「拆出物无票」；
+Status: in-progress——2026-09-09 18:4x 通道 3 认领（用户 18:2x 经 IDP 队列指示由通道 3/4 自派；通道 3 18:29 点名后自领，分支 `mcp3-wbr11`，树 `D:/tops/idp-parcel-mcp3-wbr11`，基 main `d5a35960`；01 已进 main `8a1c403b`，阻断解除）。此前 ready-for-agent——2026-09-09 通道 1 代裁立票（用户授权自决）：wbr/01 评审（通道 3，钉 `a5bff461`）Spec 非阻断 1 点名「拆出物无票」；
 作者完成记录「未落 ①」写「归 PS 另立票」，这就是那张票。**Blocked by [01](./01-ps-safe-handoff-is-assessed-nowhere-because-nothing-hands-over.md) 进 main**：本票改的
 `newOwnershipView` 读的是 wbr/01 那五笔给 `ProductionOwnershipDecision` 加的评估格，01 未进 main 之前无处可接。PS 地盘。
 Blocked by: 01
