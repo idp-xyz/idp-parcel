@@ -69,7 +69,8 @@ Blocked by: 无
    中位数与合计，数字与 SHA 写进本票「取证」节。四段怎么量由作者定（`pgtest` 内打点、或 `-v` 时间戳差），写出来。**若迁移 + 建删库合计不到总时长的一半**，停下，
    本票转 needs-info 报数，不做下面两步。
 2. **模板库**：每个测试进程（每个包的 `TestMain` 或首次 `Pool(t)`）只迁移一次到一个模板库（名字带进程 / 包标识，避免并行包相撞），之后每用例
-   `CREATE DATABASE <用例库> TEMPLATE <模板库>`（文件级拷贝），用完照旧 `DROP … WITH (FORCE)`；进程退出时删模板库。**隔离语义与「证的是随产品发出的那份 SQL」一字不变**
+   `CREATE DATABASE <用例库> TEMPLATE <模板库>`（文件级拷贝），用完照旧 `DROP … WITH (FORCE)`；进程退出后模板库由下一个建模板的进程回收（原写「进程退出时删」，
+   收尾时按实现改口，理由见完成判据）。**隔离语义与「证的是随产品发出的那份 SQL」一字不变**
    ——模板库就是用那份迁移计划建的。改动只落在 `internal/platform/pgtest` 一个文件（或它的目录内），**`Pool(t)` 的签名不动**，任何一个调用方零改动。
 3. **再量**：同一组用例重跑，四段数字并列写进「取证」节；`-p 1` 能不能放**不在本票裁**——parallel-sessions 写明「以 `ci.yml` 那种带 run 号的实测为据，不凭推」，
    本票只把两组数字交出来，放不放另立票。
@@ -81,7 +82,12 @@ Blocked by: 无
 ## 完成判据
 
 四段耗时两组数字在票面；`pgtest` 模板库落地且 `Pool(t)` 签名不变；含 DSN 全仓 `go test -p 1 -count=1 ./...` 与改前同码（100 ok / 0 FAIL / 16 无测试 的口径）、
-用时写进票面；`internal/platform/pgtest` 自己的测试盖「模板库只建一次 / 每用例库独立 / 进程退出模板库删掉」。
+用时写进票面；`internal/platform/pgtest` 自己的测试盖「模板库只建一次 / 每用例库独立 / 退出进程的模板库由下一个建模板的进程回收 / 模板库不接受连接而克隆仍成」。
+
+第三条原写「进程退出模板库删掉」，2026-09-09 收尾按实现的形状改口：主人以会话级咨询锁示活、下一个建模板的进程回收、实例上稳态恒余一个模板库。理由：Go 测试
+二进制在 `m.Run` 返回后直接 `os.Exit`，没有退出钩，本包又不能要求每个调用方补 `TestMain`；parallel-sessions「验证」段（权威）只要求「每进程迁移一次 + 每用例
+TEMPLATE 克隆」，未要求退出即删——原句是派生物，评审（通道 3）判机制诚实、改措辞不另立票。第四条是评审 Spec ① 的加固：模板库建成即 `ALTER DATABASE …
+ALLOW_CONNECTIONS false`，「模板库不被任何用例写」从约定变成结构。
 
 ## 边界
 
@@ -108,14 +114,14 @@ Blocked by: 无
 | 模板库落地且 `Pool(t)` 签名不变 | ✓ | `func Pool(t *testing.T) *pgxpool.Pool` 未动；`git diff --stat 74ef0da8..HEAD` 只有本票面与 `internal/platform/pgtest/` 下四个文件，调用方零改动 |
 | 模板库只建一次 | ✓ | `TestTemplateIsBuiltOncePerProcessAndClonesCarryTheShippedPlan` PASS：两次 `Pool` 后本进程前缀的模板库恰一个；克隆库 `applied_migration` 与 `migrate.Plan()` 逐条同 ID 同校验和 |
 | 每用例库独立 | ✓ | `TestEachPoolIsAnIndependentCopyOfTheTemplate` PASS：第一个库写下的表在第二个库不可见 |
-| 进程退出模板库删掉 | ✓，有保留（见下） | `TestTemplateOfAnExitedProcessIsReapedByTheNext` PASS：子进程建模板后退出，父进程回收器删掉它、不删主人仍在的 |
+| 退出进程的模板库由后来者回收（原写「进程退出模板库删掉」，收尾改口） | ✓ | `TestTemplateOfAnExitedProcessIsReapedByTheNext` PASS：子进程建模板后退出，父进程回收器删掉它、不删主人仍在的 |
 | 含 DSN 全仓 `go test -p 1 -count=1 ./...` 与改前同码 | ✓ | 101 ok / 0 FAIL / 15 无测试，用时 118 s（17:07:22–17:09:20）。改前口径 100 / 0 / 16 量于 main `56ed4111`；差的那一个是 `internal/platform/pgtest` 自己——本支给它加了测试，从「无测试」变 ok，包总数同为 116 |
 | 不动迁移文件 / `compose.yaml` / CI 分片 | ✓ | 同上 `diff --stat`，五个文件之外无改动 |
 | 不关 `fsync`、不用事务回滚包裹 | ✓ | `internal/platform/pgtest/` 下无 `fsync`、无 `BEGIN`/`ROLLBACK`；每用例仍是自己的物理库，用完 `DROP … WITH (FORCE)` |
 
 `pgtest` 自测（`go test -count=1 -v ./internal/platform/pgtest/`，带 DSN）：3 PASS / 1 SKIP。SKIP 的是 `TestHelperTemplateOwnerProcess`，它只作为子进程被驱动，直接跑时按设计跳过，不是一条独立判据。
 
-**「进程退出模板库删掉」的保留**：Go 测试二进制在 `m.Run` 返回后直接 `os.Exit`，本包又不能要求每个调用方补 `TestMain`，所以没有「退出那一刻删」的钩子；`fc2b473b` 的解法是「主人以会话级咨询锁示活、后来者回收」——模板库在**下一个建模板的进程**启动时被删。于是实例上稳态**恒有一个**孤儿模板（最后一个进程的），直到下一次任何带 DSN 的 `pgtest` 进程起来。这是机制的形状，不是漏；票面判据字面是「进程退出时删」，若评审认为必须是退出那一刻，另立票，本票按现状记。
+**「进程退出模板库删掉」的保留**：Go 测试二进制在 `m.Run` 返回后直接 `os.Exit`，本包又不能要求每个调用方补 `TestMain`，所以没有「退出那一刻删」的钩子；`fc2b473b` 的解法是「主人以会话级咨询锁示活、后来者回收」——模板库在**下一个建模板的进程**启动时被删。于是实例上稳态**恒有一个**孤儿模板（最后一个进程的），直到下一次任何带 DSN 的 `pgtest` 进程起来。这是机制的形状，不是漏；票面判据原写「进程退出时删」——评审（通道 3，钉 `7a906a86`）判机制诚实、改措辞不另立票，判据与做法第 2 步已照实现的形状改口（见文末「收尾」）。
 
 **模板库残留（做法第 4 步）**：全仓跑完 `psql` 查 `pg_database`——`parcel_test_*` 零个；`parcel_tpl_*` 一个（`parcel_tpl_36996_eb24c4d9d592`，17 MB），即最后一个建模板的包进程留下的那一个，原因见上；前面每个包的模板都被下一个包的进程回收了（`-p 1` 串行，同一时刻最多一个活模板）。窗口前实例上的 `parcel_tpl_6648_…`（前一任 16:0x 中断遗留、主人进程已不在）已在本次第一个建模板的进程里被回收——回收器在一个真孤儿上也验过一次。
 
@@ -151,3 +157,20 @@ Blocked by: 无
   不复用、测试逐条比 `applied_migration` 与 `migrate.Plan()` 的 ID + 校验和；`recordTiming` 未设变量即返回；三测各钉判据，子进程 `os.Args[0]` 重执行在 Linux CI
   是标准写法。实测（带 DSN，55432 零客户端）：3 PASS / 1 SKIP 0.888 s；跑前孤儿 `parcel_tpl_36996_…` 被回收，跑后余本进程一个，`parcel_test_*` 零，advisory 锁零。
 - **结论**：可推；Spec ① 一行加固建议作者随手补或推送时记为尾巴。推送方处置：① ② 合成一张收尾小票派回作者通道（见进 main 记录）。
+
+### 2026-09-09 18:0x 通道 5 · 收尾（评审 Spec ① ② + Standards ①；分支 `mcp5-pgtest01-tail`，基 `506bbfd2`；本笔一次提）
+
+- **Spec ① 加固**：`template.go` `buildTemplate` 在 `migrateTemplate` 迁完断开之后加一步 `forbidConnections`——`ALTER DATABASE <tpl> ALLOW_CONNECTIONS false`
+  （template0 同法）。此后拿着 `AdminDSN` 的用例改个库名也连不上模板库，「模板库不被任何用例写」从约定变成结构；「被其他用户访问」这一克隆失败的唯一来源随之
+  关死。关许可失败与迁移失败同路：删掉半成品、关主人连接、返回错误。核过 `reapOrphanTemplates`：只在管理连接上查 `pg_database`、试锁、`DROP`，没有连模板库
+  的步骤；`CREATE DATABASE … TEMPLATE` 与 `DROP … WITH (FORCE)` 都不需要连接源库，克隆与回收不受影响。新测试 `TestTemplateRefusesConnectionsWhileClonesStillSucceed`：
+  连模板库被 PostgreSQL 以 SQLSTATE 55000 拒（钉状态码不钉文案），随后再 `Pool` 仍克隆出另一个库。
+- **Standards ①**：三处 `DROP DATABASE IF EXISTS … WITH (FORCE)` 拼接收成 `database.go` 的 `dropDatabaseOn(ctx, conn, name)`——无 `t`、不走 `runAsAdmin`
+  （回收器调用它时已在那把锁里面），`dropDatabase` / `buildTemplate` 的 `discard` / `reapOrphanTemplates` 三处改调它；语句只拼在一处。
+- **Spec ② 措辞**：完成判据第三条与做法第 2 步由「进程退出时删模板库」改口为实现的形状，理由一句写在完成判据下；完成记录里「若评审认为必须是退出那一刻，另立票」
+  改为评审判机制诚实、改措辞不另立票，已改。判据表加第四条「模板库不接受连接而克隆仍成」。
+- **验证**（带 DSN，实例 127.0.0.1:55432）：`gofmt -l` 空；`go build ./...` / `go vet ./...` 全仓退 0；`go test -count=1 -v ./internal/platform/pgtest/`
+  4 PASS / 1 SKIP（helper 按设计）1.12 s；`go test -count=1 ./internal/parcelshipment/adapters/postgres/` ok 5.2 s——克隆仍成。跑后 `pg_database` 里本进程的
+  `parcel_tpl_46244_…` `datallowconn = false`；上一进程（pgtest 自测）留下的 `allowconn=false` 模板已被它回收——回收 `allowconn=false` 的孤儿也实测过。
+  同一时刻实例上另有一个 `datallowconn = true` 的 `parcel_tpl_44616_…` 与一个活的 `parcel_test_*`：别的通道正用 main 上的旧码跑带 DSN 的包，不是本树的产物。
+  未跑全仓（推送方跑）。只动 `internal/platform/pgtest/` 三个文件与本票面。

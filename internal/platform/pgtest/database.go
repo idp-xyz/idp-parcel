@@ -204,11 +204,18 @@ func dropDatabase(t *testing.T, adminDSN, name string) {
 	t.Helper()
 
 	if err := runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
-		_, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
-		return err
+		return dropDatabaseOn(ctx, conn, name)
 	}); err != nil {
 		t.Errorf("删除测试库 %s 失败，将遗留孤儿库：%v", name, err)
 	}
+}
+
+// dropDatabaseOn 在给定的管理连接上删库。WITH (FORCE) 踢掉仍连着的会话：用例库删的那一刻连接池刚关、后端
+// 未必已退，不带它会撞「being accessed by other users」。本包凡删库（用例库、建模板半途失败、回收孤儿模板）
+// 都经这一句，语句只拼在一处；不走 runAsAdmin 是因为回收器已经在那把锁里面。
+func dropDatabaseOn(ctx context.Context, conn *pgx.Conn, name string) error {
+	_, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
+	return err
 }
 
 // withDatabase 改写连接串的库名部分，过程中不把凭据带进任何日志。

@@ -107,19 +107,37 @@ func buildTemplate(t *testing.T, adminDSN string) (string, error) {
 		_ = owner.Close(ctx)
 		return "", fmt.Errorf("创建模板库 %s：%w", name, err)
 	}
-	if err := migrateTemplate(ctx, adminDSN, name); err != nil {
-		// 迁移半途失败的库名字对、内容错，留下就是陷阱。自己收拾，不等下一个进程的
-		// 回收器；主人连接一关锁就释放，即便这里删不掉，也还有回收器兜底。
+	// 建库之后、建成之前任何一步失败的库名字对、内容错（迁移半途）或谁都连得上（许可没关上），留下就是陷阱。
+	// 自己收拾，不等下一个进程的回收器；主人连接一关锁就释放，即便这里删不掉，也还有回收器兜底。
+	discard := func(cause error) (string, error) {
 		_ = runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
-			_, err := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
-			return err
+			return dropDatabaseOn(ctx, conn, name)
 		})
 		_ = owner.Close(ctx)
-		return "", err
+		return "", cause
+	}
+	if err := migrateTemplate(ctx, adminDSN, name); err != nil {
+		return discard(err)
+	}
+	if err := forbidConnections(adminDSN, name); err != nil {
+		return discard(fmt.Errorf("关闭模板库 %s 的连接许可：%w", name, err))
 	}
 
 	templateOwner = owner
 	return name, nil
+}
+
+// forbidConnections 关掉模板库的连接许可（ALTER DATABASE … ALLOW_CONNECTIONS false，template0 同法）。
+//
+// 迁完断开之后模板库不该再有任何会话：CREATE DATABASE … TEMPLATE 拒绝拷贝仍被连着的源库，「被其他用户访问」
+// 是克隆失败的唯一来源；而拿着 AdminDSN 的用例只要改个库名就能连上模板库写脏，此前只靠约定挡着。关掉许可后
+// 连都连不上，「模板库不被任何用例写」从约定变成结构。克隆与回收都不需要连接源库（DROP 亦然），不受影响；
+// 建模板期间本包自己那条迁移连接在此之前已经断开。
+func forbidConnections(adminDSN, name string) error {
+	return runAsAdmin(adminDSN, func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, `ALTER DATABASE `+quoteIdentifier(name)+` ALLOW_CONNECTIONS false`)
+		return err
+	})
 }
 
 // migrateTemplate 对模板库施加完整迁移计划，然后断开：CREATE DATABASE … TEMPLATE 拒绝
@@ -172,7 +190,7 @@ func reapOrphanTemplates(adminDSN string) error {
 			if !free {
 				continue
 			}
-			_, dropErr := conn.Exec(ctx, `DROP DATABASE IF EXISTS `+quoteIdentifier(name)+` WITH (FORCE)`)
+			dropErr := dropDatabaseOn(ctx, conn, name)
 			// 试锁拿到的锁得还回去：管理连接活到进程结束，不还，这个名字在本进程眼里
 			// 会一直显得「有主」。
 			if _, err := conn.Exec(ctx, `SELECT pg_advisory_unlock($1, $2)`,

@@ -2,6 +2,7 @@ package pgtest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,12 +11,13 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
-// 三条判据来自票面「完成判据」：模板库只建一次 / 每用例库独立 / 进程退出模板库删掉。
+// 判据来自票面「完成判据」：模板库只建一次 / 每用例库独立 / 退出进程的模板库由后来者回收 / 模板库不接受连接而克隆仍成。
 // 全部要真库，无 DSN 时经 AdminDSN 走与 Pool 同一条跳过／失败分界。
 //
 // 这里查 pg_database 一律另开一条管理连接，不借 runAsAdmin：被测的管理面与测它的
@@ -82,6 +84,33 @@ func TestEachPoolIsAnIndependentCopyOfTheTemplate(t *testing.T) {
 	}
 	if visible {
 		t.Fatalf("第一个用例库写下的表在第二个用例库可见：两库不独立，或模板被用例写脏")
+	}
+}
+
+func TestTemplateRefusesConnectionsWhileClonesStillSucceed(t *testing.T) {
+	adminDSN := AdminDSN(t)
+	first := Pool(t)
+
+	// 模板库建成即关连接许可：拿着 AdminDSN 的用例就算改个库名也连不上，写脏模板从「别这么做」变成「做不到」。
+	// PostgreSQL 对不接受连接的库答 55000（object_not_in_prerequisite_state），钉状态码不钉文案。
+	templateDSN, err := withDatabase(adminDSN, templateName)
+	if err != nil {
+		t.Fatalf("构造模板库连接串：%v", err)
+	}
+	conn, err := pgx.Connect(t.Context(), templateDSN)
+	if err == nil {
+		_ = conn.Close(context.Background())
+		t.Fatalf("模板库 %s 接受了连接，连接许可没有关上", templateName)
+	}
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "55000" {
+		t.Fatalf("连模板库应被 PostgreSQL 以 55000 拒绝，实际：%v", err)
+	}
+
+	// 关掉许可不妨碍克隆：CREATE DATABASE … TEMPLATE 不需要连接源库（template0 同法）。
+	second := Pool(t)
+	if a, b := currentDatabase(t, first), currentDatabase(t, second); a == b {
+		t.Fatalf("两次 Pool 落在同一个库 %s", a)
 	}
 }
 
