@@ -149,6 +149,8 @@ func TestPublishBatchKeepsEarlierItemWhenALaterItemConflicts(t *testing.T) {
 
 // settlementBatchBody 造一份两项批：先发客户合同，再发结算政策连同它的六维正文。
 // 合同在前是必需的——结算政策的版本壳指名它，指名引用未发布时发布停在未决。
+// 结算政策项的 contentDigest 是 CanonicalizePublicationContent 对这份正文算出的：本册接进 PCC-1 后对账门对带正文的项
+// 开门，随手写的占位串答`未受理`；改正文任一格都要重算这个串。
 const settlementBatchBody = `{"items": [
     {
       "tenantId": "tenant-1",
@@ -167,7 +169,7 @@ const settlementBatchBody = `{"items": [
       "objectId": "settlement-1",
       "version": "v1",
       "scope": "scope-1",
-      "contentDigest": "sha256:settlement-1",
+      "contentDigest": "PCC-1:cab5c83b74127b94abb6f8dcfa27611995ffbe4cf9dfa1ee263f9f9faad0bebe",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {"CUSTOMER_CONTRACT": "contract-1"},
       "approval": {"reference": "approval-settlement-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
