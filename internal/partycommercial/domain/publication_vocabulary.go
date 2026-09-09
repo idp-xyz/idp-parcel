@@ -70,6 +70,13 @@ func PublicationVocabulary(kind CommercialObjectKind) ([]VocabularySet, error) {
 		return []VocabularySet{
 			{Name: "party", Codes: closedCodes(DeclaredCancellationParty.valid, DeclaredCancellationParty.String)},
 		}, nil
+	case CustomerServiceRuleObject:
+		// 票 18：customerServiceRuleBody 里唯一的封闭集是 claimDeadlines[].kind（三种期限，visibility-exception CONTEXT）。
+		// 起算事件、日历、索赔类型与材料都是开放引用（customer_service_rule.go 各自的头注：解释权在 VE），不成集合——
+		// 本上下文替它们造一份枚举就是发明 VE 的词。
+		return []VocabularySet{
+			{Name: "kind", Codes: closedCodes(ClaimDeadlineKind.valid, ClaimDeadlineKind.String)},
+		}, nil
 	default:
 		return []VocabularySet{}, nil
 	}

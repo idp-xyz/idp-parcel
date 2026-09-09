@@ -269,31 +269,13 @@ func NewCustomerServiceRuleVersion(
 ) (CustomerServiceRuleVersion, error) {
 	if version.kind != CustomerServiceRuleObject ||
 		version.status != CommercialVersionEffective ||
-		!applicability.valid() || !responsible.valid() || !scope.valid() ||
-		len(deadlines)+len(materials) == 0 {
+		!applicability.valid() || !responsible.valid() || !scope.valid() {
 		return CustomerServiceRuleVersion{}, ErrInvalidCustomerServiceRuleVersion
 	}
 
-	filedDeadlines := make(map[ClaimDeadlineKind]ClaimDeadlineRule, len(deadlines))
-	for _, deadline := range deadlines {
-		if !deadline.kind.valid() || !deadline.startEvent.valid() || deadline.days <= 0 || !deadline.calendar.valid() {
-			return CustomerServiceRuleVersion{}, ErrInvalidClaimDeadlineRule
-		}
-		if _, duplicate := filedDeadlines[deadline.kind]; duplicate {
-			return CustomerServiceRuleVersion{}, ErrDuplicateCustomerServiceRuleItem
-		}
-		filedDeadlines[deadline.kind] = deadline
-	}
-
-	filedMaterials := make(map[ClaimKindReference]MinimumMaterialsRule, len(materials))
-	for _, rule := range materials {
-		if !rule.claimKind.valid() || len(rule.materials) == 0 {
-			return CustomerServiceRuleVersion{}, ErrInvalidMinimumMaterialsRule
-		}
-		if _, duplicate := filedMaterials[rule.claimKind]; duplicate {
-			return CustomerServiceRuleVersion{}, ErrDuplicateCustomerServiceRuleItem
-		}
-		filedMaterials[rule.claimKind] = rule
+	filedDeadlines, filedMaterials, err := filedCustomerServiceRuleItems(deadlines, materials)
+	if err != nil {
+		return CustomerServiceRuleVersion{}, err
 	}
 
 	return CustomerServiceRuleVersion{
@@ -304,6 +286,42 @@ func NewCustomerServiceRuleVersion(
 		deadlines:     filedDeadlines,
 		materials:     filedMaterials,
 	}, nil
+}
+
+// filedCustomerServiceRuleItems 是两项正文的跨行门：合起来至少一行、每一行立得住、每一种期限与每一种索赔类型
+// 至多一行。抽成一处而不留在 NewCustomerServiceRuleVersion 里，是因为同一条规则要在两个时刻答——发布时形成
+// 版本，与发布之前预览 / 录入把正文折成规范化文档时（CustomerServiceRuleBody）；两处各写一份，改一处漂另一处
+// 无人报（判据同 filedPreAcceptanceControlItems）。错误值与判定顺序与抽出前一字不变。
+func filedCustomerServiceRuleItems(
+	deadlines []ClaimDeadlineRule,
+	materials []MinimumMaterialsRule,
+) (map[ClaimDeadlineKind]ClaimDeadlineRule, map[ClaimKindReference]MinimumMaterialsRule, error) {
+	if len(deadlines)+len(materials) == 0 {
+		return nil, nil, ErrInvalidCustomerServiceRuleVersion
+	}
+
+	filedDeadlines := make(map[ClaimDeadlineKind]ClaimDeadlineRule, len(deadlines))
+	for _, deadline := range deadlines {
+		if !deadline.kind.valid() || !deadline.startEvent.valid() || deadline.days <= 0 || !deadline.calendar.valid() {
+			return nil, nil, ErrInvalidClaimDeadlineRule
+		}
+		if _, duplicate := filedDeadlines[deadline.kind]; duplicate {
+			return nil, nil, ErrDuplicateCustomerServiceRuleItem
+		}
+		filedDeadlines[deadline.kind] = deadline
+	}
+
+	filedMaterials := make(map[ClaimKindReference]MinimumMaterialsRule, len(materials))
+	for _, rule := range materials {
+		if !rule.claimKind.valid() || len(rule.materials) == 0 {
+			return nil, nil, ErrInvalidMinimumMaterialsRule
+		}
+		if _, duplicate := filedMaterials[rule.claimKind]; duplicate {
+			return nil, nil, ErrDuplicateCustomerServiceRuleItem
+		}
+		filedMaterials[rule.claimKind] = rule
+	}
+	return filedDeadlines, filedMaterials, nil
 }
 
 func (rule CustomerServiceRuleVersion) Version() CommercialVersion {
@@ -332,8 +350,14 @@ func (rule CustomerServiceRuleVersion) ClaimDeadline(kind ClaimDeadlineKind) (Cl
 
 // ClaimDeadlines 按种类顺序交回全部期限规则（副本）。
 func (rule CustomerServiceRuleVersion) ClaimDeadlines() []ClaimDeadlineRule {
-	deadlines := make([]ClaimDeadlineRule, 0, len(rule.deadlines))
-	for _, deadline := range rule.deadlines {
+	return sortedClaimDeadlines(rule.deadlines)
+}
+
+// sortedClaimDeadlines 把按种类归档的期限规则按种类顺序展开。规则版本的读口与规范化文档都按这一序写出：
+// 种类是行的键，因此它就是这张表唯一的自然序——两处各排一次就是同一条序的两份写法。
+func sortedClaimDeadlines(filed map[ClaimDeadlineKind]ClaimDeadlineRule) []ClaimDeadlineRule {
+	deadlines := make([]ClaimDeadlineRule, 0, len(filed))
+	for _, deadline := range filed {
 		deadlines = append(deadlines, deadline)
 	}
 	sort.Slice(deadlines, func(left, right int) bool {
@@ -350,8 +374,13 @@ func (rule CustomerServiceRuleVersion) MinimumMaterialsFor(claimKind ClaimKindRe
 
 // MinimumMaterials 按索赔类型的稳定顺序交回全部材料规则（副本）。
 func (rule CustomerServiceRuleVersion) MinimumMaterials() []MinimumMaterialsRule {
-	rules := make([]MinimumMaterialsRule, 0, len(rule.materials))
-	for _, materials := range rule.materials {
+	return sortedMinimumMaterials(rule.materials)
+}
+
+// sortedMinimumMaterials 把按索赔类型归档的材料规则按类型引用串的顺序展开，理由同 sortedClaimDeadlines。
+func sortedMinimumMaterials(filed map[ClaimKindReference]MinimumMaterialsRule) []MinimumMaterialsRule {
+	rules := make([]MinimumMaterialsRule, 0, len(filed))
+	for _, materials := range filed {
 		rules = append(rules, materials)
 	}
 	sort.Slice(rules, func(left, right int) bool {

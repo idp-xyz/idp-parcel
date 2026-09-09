@@ -118,18 +118,19 @@ func TestSubmittingADraftComputesTheDigestAndStartsPendingApproval(t *testing.T)
 	}
 }
 
-// Covers: ADR-0126 Decision 一 — 没接进规范化的册录不进载体（答案是那一格，不是别的），正文与壳的类别
-// 不符也拒；壳立不住（缺范围）同样拒。
+// Covers: ADR-0126 Decision 一 — 规范化门拒的输入录不进载体（答案是那一格，不是别的）：正文缺席、正文与壳的类别
+// 不符；壳立不住（缺范围）同样拒。
 func TestSubmittingADraftIsGuardedByTheCanonicalizationAndShellGates(t *testing.T) {
 	submitter := commercialValue(t, domain.NewOperatorSubjectReference, "op-submitter")
 
-	// 「没接的册」的样本取客户服务规则（判据同 TestCanonicalizeAnswersThreeDistinctRefusals）。
+	// 样本取客户服务规则：自票 admin-write-faces/18 起它已接进规范化，只有壳没有正文答的是「正文缺席」那一格
+	// （「没接的册」那一格自此没有样本，见 TestCanonicalizeAnswersThreeDistinctRefusals）。
 	_, err := domain.SubmitPublicationDraft(
 		draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
 		domain.PublicationContent{Kind: domain.CustomerServiceRuleObject},
 		submitter, draftSubmittedAt)
-	if !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
-		t.Fatalf("customer service rule draft: err = %v, want ErrRegisterNotCanonicalized", err)
+	if !errors.Is(err, domain.ErrPublicationContentAbsent) {
+		t.Fatalf("customer service rule draft without a body: err = %v, want ErrPublicationContentAbsent", err)
 	}
 
 	mismatched := creditContent(t, 1)
@@ -283,8 +284,8 @@ func TestPreviewWalksTheSameGateAsSubmission(t *testing.T) {
 		t.Fatalf("preview of a blank scope: err = %v", err)
 	}
 	if _, err := domain.PreviewPublication(draftShell(t, domain.CustomerServiceRuleObject, "csr-1", "v1"),
-		domain.PublicationContent{Kind: domain.CustomerServiceRuleObject}); !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
-		t.Fatalf("preview of a register not yet canonicalized: err = %v", err)
+		domain.PublicationContent{Kind: domain.CustomerServiceRuleObject}); !errors.Is(err, domain.ErrPublicationContentAbsent) {
+		t.Fatalf("preview of a wired register without its body: err = %v, want ErrPublicationContentAbsent", err)
 	}
 }
 

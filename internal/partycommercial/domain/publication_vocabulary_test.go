@@ -222,7 +222,27 @@ func TestAuthorizationRuleVocabularyMatchesItsConstructorGate(t *testing.T) {
 	}
 }
 
-// Covers: 票 20 裁决三「某册没有封闭集就答空集合列表，不答 404」——每个合法 kind 都答得出来；不在第 2 波四册里的
+// Covers: 票 18「期限种类的封闭集由服务端词表读口供下拉」——键名照批文 claimDeadlines[].kind，码与 NewClaimDeadlineRule 同词、
+// 按 visibility-exception CONTEXT 三种期限的声明顺序；起算事件、日历、索赔类型与材料是开放引用，不成集合。
+func TestCustomerServiceRuleVocabularyMatchesItsConstructorGate(t *testing.T) {
+	startEvent := commercialValue(t, domain.NewDeadlineStartEventReference, "event-delivered")
+	calendar := commercialValue(t, domain.NewBusinessCalendarReference, "calendar-cn")
+
+	sets := vocabularyOf(t, domain.CustomerServiceRuleObject)
+	assertSetsMatchGates(t, sets,
+		[]string{"kind"},
+		map[string][]string{
+			"kind": codesAccepted(func(raw uint8) bool {
+				_, err := domain.NewClaimDeadlineRule(domain.ClaimDeadlineKind(raw), startEvent, 30, calendar)
+				return err == nil
+			}, func(raw uint8) string { return domain.ClaimDeadlineKind(raw).String() }),
+		})
+	if got := strings.Join(sets[0].Codes, ","); got != "FIRST_CLAIM,MATERIAL_SUPPLEMENT,CONCLUSION_REVIEW" {
+		t.Fatalf("kind = %q", got)
+	}
+}
+
+// Covers: 票 20 裁决三「某册没有封闭集就答空集合列表，不答 404」——每个合法 kind 都答得出来；正文里没有封闭集的册
 // 一律是空列表（非 nil：线上是 `[]` 不是 `null`），服务产品与客户合同点名在内。
 func TestRegistersWithoutClosedSetsAnswerAnEmptyList(t *testing.T) {
 	withSets := map[domain.CommercialObjectKind]bool{
@@ -230,6 +250,7 @@ func TestRegistersWithoutClosedSetsAnswerAnEmptyList(t *testing.T) {
 		domain.PreAcceptanceFinancialControlPolicyObject: true,
 		domain.SettlementPolicyObject:                    true,
 		domain.AuthorizationRuleObject:                   true,
+		domain.CustomerServiceRuleObject:                 true,
 	}
 	answered := 0
 	for raw := 0; raw <= math.MaxUint8; raw++ {

@@ -92,13 +92,17 @@ func TestCanonicalDigestDistinguishesContentButNotSpelling(t *testing.T) {
 func TestCanonicalizeAnswersThreeDistinctRefusals(t *testing.T) {
 	body := creditPolicyBody(t, "freight", creditAmount(t, 100), time.Time{})
 
-	// 「没接的册」的样本取客户服务规则：那一册的表单票（admin-write-faces/18）仍是 draft，是今天还没接进规范化的册里
-	// 最不会被下一张子票顺手接走的一个。
-	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CustomerServiceRuleObject})
-	if !errors.Is(err, domain.ErrRegisterNotCanonicalized) {
-		t.Fatalf("customer service rule: err = %v, want ErrRegisterNotCanonicalized", err)
+	// 「没接的册」自票 admin-write-faces/18 起没有样本：封闭集里的每一册都接进了 PCC-1，那一格对任何合法类别都答不出来。
+	// 这里改钉「全接」——某册被剪出规范化时这里红，而不是让 ErrRegisterNotCanonicalized 悄悄重新有了实例。
+	for _, kind := range allCommercialObjectKinds {
+		if !domain.IsRegisterCanonicalized(kind) {
+			t.Fatalf("%s: IsRegisterCanonicalized answers false; every register in the closed set is wired since ticket 18", kind)
+		}
+		if _, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: kind}); errors.Is(err, domain.ErrRegisterNotCanonicalized) {
+			t.Fatalf("%s: a wired register answered ErrRegisterNotCanonicalized", kind)
+		}
 	}
-	_, err = domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CreditPolicyObject})
+	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CreditPolicyObject})
 	if !errors.Is(err, domain.ErrPublicationContentAbsent) {
 		t.Fatalf("credit policy without body: err = %v, want ErrPublicationContentAbsent", err)
 	}
@@ -116,9 +120,23 @@ func TestCanonicalizeAnswersThreeDistinctRefusals(t *testing.T) {
 	if !errors.Is(err, domain.ErrInvalidCreditPolicy) {
 		t.Fatalf("zero body: err = %v, want ErrInvalidCreditPolicy", err)
 	}
-	if domain.IsRegisterCanonicalized(domain.CustomerServiceRuleObject) || !domain.IsRegisterCanonicalized(domain.CreditPolicyObject) {
-		t.Fatalf("IsRegisterCanonicalized: credit policy is canonicalized, customer service rule is not")
+	if domain.IsRegisterCanonicalized(domain.CommercialObjectKindInvalid) {
+		t.Fatalf("IsRegisterCanonicalized: a kind outside the closed set must not read as canonicalized")
 	}
+}
+
+// allCommercialObjectKinds 是封闭集的全部十格，与 TestCommercialObjectKindsStayIndependentAndClosed 列的同一份。
+var allCommercialObjectKinds = []domain.CommercialObjectKind{
+	domain.ServiceProductObject,
+	domain.CustomerContractObject,
+	domain.SupplierAgreementObject,
+	domain.AcceptanceRulePackageObject,
+	domain.PreAcceptanceFinancialControlPolicyObject,
+	domain.PriceRuleObject,
+	domain.SettlementPolicyObject,
+	domain.CreditPolicyObject,
+	domain.AuthorizationRuleObject,
+	domain.CustomerServiceRuleObject,
 }
 
 // Covers: ADR-0126 Decision 二 — 对账门三格：相等放行；旧式无版本串与算出的不等是`未受理`；带本构建

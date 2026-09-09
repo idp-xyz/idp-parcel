@@ -16,7 +16,9 @@ import (
 
 var (
 	// ErrRegisterNotCanonicalized 是「这一册今天还没接进服务端规范化」的答复。它是一格答案不是缺陷：
-	// 首例只接信用政策，其余各册由各自的子票接进同一个版本号（加册不换号，ADR-0126 Decision 一）。
+	// 首例只接信用政策，其余各册由各自的子票接进同一个版本号（加册不换号，ADR-0126 Decision 一）。封闭集里的
+	// 各册自票 admin-write-faces/18 起全部接进，这一格今天对任何合法类别都答不出来；留着它，是为下一次拓宽
+	// CommercialObjectKind 而子票尚未接进的那一册——那一册出现的那天，答案仍是这一格而不是「算不出」。
 	ErrRegisterNotCanonicalized = errors.New("party commercial: this register is not canonicalized by this build")
 	// ErrPublicationContentAbsent 表示已接的册没带正文——正文缺席时没有东西可折成文档。
 	ErrPublicationContentAbsent = errors.New("party commercial: publication content is absent")
@@ -40,6 +42,7 @@ var (
 // PCC-1 同号另接：价格政策正文（方向 × 方案绑定含发布期 planDirection / conversion × 范围 × 区间，口径节可缺），见 publication_canonicalization_price_policy.go。
 // PCC-1 同号另接：接单规则包正文（五维适用性 × 规则表 × 各声明节各自可缺），见 publication_canonicalization_acceptance_rule_package.go。
 // PCC-1 同号另接：接受前财务控制策略正文（共同通过条件 × 按判断顺序的控制项表），见 publication_canonicalization_pre_acceptance_financial_control_policy.go。
+// PCC-1 同号另接：客户服务规则正文（适用对象恰一 × 责任方 × 范围 × 按种类序的期限表 × 按索赔类型序的材料表），见 publication_canonicalization_customer_service_rule.go。
 const publicationCanonicalizationVersion = "PCC-1"
 
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
@@ -91,7 +94,7 @@ func (body CreditPolicyBody) valid() bool {
 }
 
 // PublicationContent 是一次商业发布的正文输入面：版本壳声明的类别，加上该类别的正文。各册的
-// 正文各占一格、按类别只认自己那一格；今天只有信用政策一格，其余各册由子票在此加格。
+// 正文各占一格、按类别只认自己那一格；首例是信用政策一格，其余各册由各自的子票在此加格。
 //
 // 是「类别 + 各册一格」而不是接口：十册正文各自是封闭结构，接口会让「哪一册接了」只能从实现
 // 有没有推出来，而 ErrRegisterNotCanonicalized 要能对着类别直接答。
@@ -111,6 +114,8 @@ type PublicationContent struct {
 	AcceptanceRulePackage *AcceptanceRulePackageBody
 	// PreAcceptanceFinancialControlPolicy 是接受前财务控制策略册的正文（票 admin-write-faces/13）。
 	PreAcceptanceFinancialControlPolicy *PreAcceptanceFinancialControlPolicyBody
+	// CustomerServiceRule 是客户服务规则册的正文（票 admin-write-faces/18），见 publication_canonicalization_customer_service_rule.go。
+	CustomerServiceRule *CustomerServiceRuleBody
 }
 
 // CanonicalPublicationContent 是规范化的结果：版本、摘要串与被摘要盖住的那份文档。摘要串已带版本前缀，
@@ -222,6 +227,14 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.PreAcceptanceFinancialControlPolicy = &body
 		return content, nil
 	}
+	if decoded.CustomerServiceRule != nil {
+		body, err := decoded.CustomerServiceRule.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: customer service rule: %w", err)
+		}
+		content.CustomerServiceRule = &body
+		return content, nil
+	}
 	if registerHasNoBody(kind) {
 		// 无正文的册没有「缺席」可判：两格文档就是它的全部（票 admin-write-faces/09）。文档若夹带别册的正文，
 		// 折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
@@ -236,12 +249,7 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 // CommercialObjectKindNamed 按 String() 的原词反查类别：规范化文档里的 kind、运营操作者面载荷里的 kind 都是那一个词，
 // 两处不各自抄一份名单——名单在 String() 一处，这里只是反查。集合外答 false。
 func CommercialObjectKindNamed(name string) (CommercialObjectKind, bool) {
-	for kind := ServiceProductObject; kind.valid(); kind++ {
-		if kind.String() == name {
-			return kind, true
-		}
-	}
-	return CommercialObjectKindInvalid, false
+	return closedCodeNamed(CommercialObjectKind.valid, CommercialObjectKind.String, name)
 }
 
 // CanonicalizePublicationContent 按册把正文折成规范化文档并算出内容摘要（ADR-0126 Decision 一）。
@@ -280,6 +288,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		return none, ErrPublicationContentKindMismatch
 	}
 	if content.PreAcceptanceFinancialControlPolicy != nil && content.Kind != PreAcceptanceFinancialControlPolicyObject {
+		return none, ErrPublicationContentKindMismatch
+	}
+	if content.CustomerServiceRule != nil && content.Kind != CustomerServiceRuleObject {
 		return none, ErrPublicationContentKindMismatch
 	}
 	switch content.Kind {
@@ -321,6 +332,8 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		return canonicalizeAcceptanceRulePackage(content)
 	case PreAcceptanceFinancialControlPolicyObject:
 		return canonicalizePreAcceptanceFinancialControlPolicy(content)
+	case CustomerServiceRuleObject:
+		return canonicalizeCustomerServiceRule(content)
 	default:
 		return none, ErrRegisterNotCanonicalized
 	}
@@ -348,6 +361,8 @@ func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
 		return true
 	case PreAcceptanceFinancialControlPolicyObject:
 		return true
+	case CustomerServiceRuleObject:
+		return true
 	default:
 		return false
 	}
@@ -373,6 +388,8 @@ type canonicalPublicationDocument struct {
 	AcceptanceRulePackage *canonicalAcceptanceRulePackageBody `json:"acceptanceRulePackage,omitempty"`
 	// 接受前财务控制策略一节；键名镜像批文 preAcceptanceFinancialControlPolicyBody（节内形状见 canonicalPreAcceptanceFinancialControlPolicyBody）。
 	PreAcceptanceFinancialControlPolicy *canonicalPreAcceptanceFinancialControlPolicyBody `json:"preAcceptanceFinancialControlPolicy,omitempty"`
+	// 客户服务规则一节；键名镜像批文 customerServiceRuleBody（节内形状见 canonicalCustomerServiceRuleBody）。
+	CustomerServiceRule *canonicalCustomerServiceRuleBody `json:"customerServiceRule,omitempty"`
 }
 
 // canonicalCreditPolicyBody 镜像批文 creditPolicyBodyDocument 的键名：额度两键恰一在场、区间上界可缺。
