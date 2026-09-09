@@ -1,9 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { cancellationPartyLabels } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
+import { Field, Problems, RowFrame, selectClass, useLoaded } from './PublicationFormFields';
 import {
   authorizationRuleFieldPaths,
   emptyAuthorizationRuleDraft,
@@ -33,10 +34,6 @@ export interface AuthorizationRulePublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 
 export function AuthorizationRulePublicationForm({ onPublished }: AuthorizationRulePublicationFormProps) {
@@ -80,7 +77,7 @@ function ShellFields({
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>版本壳</h3>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="授权规则对象标识 *" path="objectId" form={form}>
+        <Field label="授权规则对象标识 *" path="objectId" problems={form.problems}>
           <Input
             value={draft.objectId}
             readOnly={form.locked}
@@ -88,7 +85,7 @@ function ShellFields({
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
-        <Field label="版本号 *" path="version" form={form}>
+        <Field label="版本号 *" path="version" problems={form.problems}>
           <Input
             value={draft.version}
             readOnly={form.locked}
@@ -96,7 +93,7 @@ function ShellFields({
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
-        <Field label="适用范围 *" path="scope" form={form}>
+        <Field label="适用范围 *" path="scope" problems={form.problems}>
           <Input
             value={draft.scope}
             readOnly={form.locked}
@@ -106,7 +103,7 @@ function ShellFields({
           />
         </Field>
         <div />
-        <Field label="生效起点 *" path="effectiveStartsAt" form={form}>
+        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
           <Input
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
@@ -115,7 +112,7 @@ function ShellFields({
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" form={form}>
+        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
@@ -166,28 +163,26 @@ function CancellationAuthorityFields({
         {draft.rows.map((row, index) => {
           const path = `${rowsBase}[${index}]`;
           return (
-            <div key={index} className="rounded border border-idpxyz-border p-2 flex flex-col gap-2">
-              <div className="grid grid-cols-[1fr_2fr_auto] gap-2 items-start">
-                <Field label="请求方 *" path={`${path}.party`} form={form}>
-                  <PartyPicker value={row.party} parties={parties} locked={form.locked} onChange={(party) => patchRow(index, { party })} />
-                </Field>
-                <Field label="规则引用 *" path={`${path}.rule`} form={form}>
-                  <Input
-                    value={row.rule}
-                    readOnly={form.locked}
-                    className="font-mono text-[12px]"
-                    placeholder="取消规则引用，如 CANCEL/customer-before-intake"
-                    onChange={(event) => patchRow(index, { rule: event.target.value })}
-                  />
-                </Field>
-                <div className="pt-5">
-                  <Button variant="outline" disabled={form.locked} onClick={() => patch({ rows: draft.rows.filter((_, at) => at !== index) })}>
-                    删
-                  </Button>
-                </div>
-              </div>
-              <Problems lines={form.problems[path]} />
-            </div>
+            <RowFrame
+              key={index}
+              path={path}
+              problems={form.problems}
+              locked={form.locked}
+              onRemove={() => patch({ rows: draft.rows.filter((_, at) => at !== index) })}
+            >
+              <Field label="请求方 *" path={`${path}.party`} problems={form.problems}>
+                <PartyPicker value={row.party} parties={parties} locked={form.locked} onChange={(party) => patchRow(index, { party })} />
+              </Field>
+              <Field label="规则引用 *" path={`${path}.rule`} problems={form.problems}>
+                <Input
+                  value={row.rule}
+                  readOnly={form.locked}
+                  className="font-mono text-[12px]"
+                  placeholder="取消规则引用，如 CANCEL/customer-before-intake"
+                  onChange={(event) => patchRow(index, { rule: event.target.value })}
+                />
+              </Field>
+            </RowFrame>
           );
         })}
       </div>
@@ -198,18 +193,13 @@ function CancellationAuthorityFields({
 // ——请求方下拉：选项 = 服务端词表的码 × 本页中文词表（partyOptionsOf）。读不到时只显占位、不内置码回退、不可选——
 // 那堵墙前四口也答 403，这张表单本来就提交不了；选单第一项是空的「未选」，不预选任何一格。
 
+// 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。
+function loadAuthorizationVocabulary(): Promise<ApiResult<PublicationVocabularyResponseBody>> {
+  return fetchPublicationVocabulary('AUTHORIZATION_RULE');
+}
+
 function usePartyOptions(): PartyOptionsState {
-  const [answer, setAnswer] = useState<ApiResult<PublicationVocabularyResponseBody> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchPublicationVocabulary('AUTHORIZATION_RULE').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return partyOptionsOf(answer, cancellationPartyLabels);
+  return partyOptionsOf(useLoaded(loadAuthorizationVocabulary), cancellationPartyLabels);
 }
 
 function PartyPicker({
@@ -250,38 +240,5 @@ function PartyPicker({
             : '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'}
       </span>
     </>
-  );
-}
-
-// ——一格 = 标签 + 控件 + 服务端点名到这条路径的问题。
-
-function Field({
-  label,
-  path,
-  form,
-  children,
-}: {
-  label: string;
-  path: string;
-  form: PublicationFormContext;
-  children: ReactNode;
-}) {
-  return (
-    <div className="block">
-      <span className={fieldLabel}>{label}</span>
-      {children}
-      <Problems lines={form.problems[path]} />
-    </div>
-  );
-}
-
-function Problems({ lines }: { lines: string[] | undefined }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
   );
 }

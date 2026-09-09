@@ -1,13 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
-import {
-  listCommercialPolicies,
-  type CommercialPolicyKind,
-  type CommercialPolicyListResponseBody,
-} from './api';
+import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import {
   customerContractFieldPaths,
   emptyBindingDraft,
@@ -41,16 +38,12 @@ export interface CustomerContractPublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 
 export function CustomerContractPublicationForm({ onPublished }: CustomerContractPublicationFormProps) {
   const [draft, setDraft] = useState<CustomerContractDraft>(emptyCustomerContractDraft());
-  const rulePackages = useObjectCandidates('ACCEPTANCE_RULE_PACKAGE');
-  const controlPolicies = useObjectCandidates('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY');
+  const rulePackages = useObjectCandidates(loadRulePackages);
+  const controlPolicies = useObjectCandidates(loadControlPolicies);
 
   const patch = (change: Partial<CustomerContractDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchBinding = (index: number, change: Partial<ControlBindingDraft>) =>
@@ -97,7 +90,7 @@ function ShellFields({
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>版本壳</h3>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="合同对象标识 *" path="objectId" form={form}>
+        <Field label="合同对象标识 *" path="objectId" problems={form.problems}>
           <Input
             value={draft.objectId}
             readOnly={form.locked}
@@ -105,7 +98,7 @@ function ShellFields({
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
-        <Field label="版本号 *" path="version" form={form}>
+        <Field label="版本号 *" path="version" problems={form.problems}>
           <Input
             value={draft.version}
             readOnly={form.locked}
@@ -113,7 +106,7 @@ function ShellFields({
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
-        <Field label="适用范围 *" path="scope" form={form}>
+        <Field label="适用范围 *" path="scope" problems={form.problems}>
           <Input
             value={draft.scope}
             readOnly={form.locked}
@@ -123,7 +116,7 @@ function ShellFields({
           />
         </Field>
         <div />
-        <Field label="生效起点 *" path="effectiveStartsAt" form={form}>
+        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
           <Input
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
@@ -132,7 +125,7 @@ function ShellFields({
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" form={form}>
+        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
@@ -174,7 +167,7 @@ function ContractContentFields({
         label="接单规则包 *"
         path="customerContract.contractContent.rulePackage"
         alsoPaths={['references.ACCEPTANCE_RULE_PACKAGE', 'customerContract.contractContent']}
-        form={form}
+        problems={form.problems}
       >
         <ObjectPicker
           value={draft.rulePackage}
@@ -204,58 +197,53 @@ function ContractContentFields({
         {draft.bindings.map((binding, index) => {
           const row = `${bindingsBase}[${index}]`;
           return (
-            <div key={index} className="rounded border border-idpxyz-border p-2 flex flex-col gap-2">
-              <div className="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-start">
-                <Field label="费用范围 *" path={`${row}.chargeScope`} form={form}>
+            <RowFrame
+              key={index}
+              path={row}
+              problems={form.problems}
+              locked={form.locked}
+              columns="grid-cols-[1fr_auto_1fr_auto]"
+              onRemove={() => patch({ bindings: draft.bindings.filter((_, at) => at !== index) })}
+            >
+              <Field label="费用范围 *" path={`${row}.chargeScope`} problems={form.problems}>
+                <Input
+                  value={binding.chargeScope}
+                  readOnly={form.locked}
+                  className="font-mono text-[12px]"
+                  placeholder="费用范围引用"
+                  onChange={(event) => patchBinding(index, { chargeScope: event.target.value })}
+                />
+              </Field>
+              <div>
+                <span className={fieldLabel}>约定 *</span>
+                <BindingModePicker
+                  value={binding.mode}
+                  locked={form.locked}
+                  onChange={(mode) => patchBinding(index, { mode })}
+                />
+              </div>
+              {binding.mode === 'inapplicable' ? (
+                <Field label="不适用依据 *" path={`${row}.inapplicabilityBasis`} problems={form.problems}>
                   <Input
-                    value={binding.chargeScope}
+                    value={binding.inapplicabilityBasis}
                     readOnly={form.locked}
                     className="font-mono text-[12px]"
-                    placeholder="费用范围引用"
-                    onChange={(event) => patchBinding(index, { chargeScope: event.target.value })}
+                    placeholder="凭什么该范围不带接受前财务控制"
+                    onChange={(event) => patchBinding(index, { inapplicabilityBasis: event.target.value })}
                   />
                 </Field>
-                <div>
-                  <span className={fieldLabel}>约定 *</span>
-                  <BindingModePicker
-                    value={binding.mode}
-                    locked={form.locked}
-                    onChange={(mode) => patchBinding(index, { mode })}
+              ) : (
+                <Field label="接受前财务控制策略 *" path={`${row}.policy`} problems={form.problems}>
+                  <ObjectPicker
+                    value={binding.policy}
+                    candidates={controlPolicies}
+                    locked={form.locked || binding.mode !== 'policy'}
+                    registerName="接受前财务控制策略册"
+                    onChange={(policy) => patchBinding(index, { policy })}
                   />
-                </div>
-                {binding.mode === 'inapplicable' ? (
-                  <Field label="不适用依据 *" path={`${row}.inapplicabilityBasis`} form={form}>
-                    <Input
-                      value={binding.inapplicabilityBasis}
-                      readOnly={form.locked}
-                      className="font-mono text-[12px]"
-                      placeholder="凭什么该范围不带接受前财务控制"
-                      onChange={(event) => patchBinding(index, { inapplicabilityBasis: event.target.value })}
-                    />
-                  </Field>
-                ) : (
-                  <Field label="接受前财务控制策略 *" path={`${row}.policy`} form={form}>
-                    <ObjectPicker
-                      value={binding.policy}
-                      candidates={controlPolicies}
-                      locked={form.locked || binding.mode !== 'policy'}
-                      registerName="接受前财务控制策略册"
-                      onChange={(policy) => patchBinding(index, { policy })}
-                    />
-                  </Field>
-                )}
-                <div className="pt-5">
-                  <Button
-                    variant="outline"
-                    disabled={form.locked}
-                    onClick={() => patch({ bindings: draft.bindings.filter((_, at) => at !== index) })}
-                  >
-                    删
-                  </Button>
-                </div>
-              </div>
-              <Problems lines={form.problems[row]} />
-            </div>
+                </Field>
+              )}
+            </RowFrame>
           );
         })}
       </div>
@@ -313,7 +301,7 @@ function PreAcceptanceControlFields({
         ——缺依据的不适用与一次默认放行分不开；`要求`不得带依据。两条都由服务端裁。
       </p>
       <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
-        <Field label="要求 *" path="customerContract.preAcceptanceControl.requirement" form={form}>
+        <Field label="要求 *" path="customerContract.preAcceptanceControl.requirement" problems={form.problems} as="div">
           <div className="flex items-center gap-1">
             {requirements.map((requirement) => (
               <Button
@@ -328,7 +316,7 @@ function PreAcceptanceControlFields({
           </div>
         </Field>
         {draft.controlRequirement === 'NOT_APPLICABLE' ? (
-          <Field label="不适用依据 *" path="customerContract.preAcceptanceControl.notApplicableBasis" form={form}>
+          <Field label="不适用依据 *" path="customerContract.preAcceptanceControl.notApplicableBasis" problems={form.problems}>
             <Input
               value={draft.controlNotApplicableBasis}
               readOnly={form.locked}
@@ -352,17 +340,17 @@ type ObjectCandidates =
   | { kind: 'unconfigured' }
   | { kind: 'unavailable' };
 
-function useObjectCandidates(kind: CommercialPolicyKind): ObjectCandidates {
-  const [answer, setAnswer] = useState<ApiResult<CommercialPolicyListResponseBody> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void listCommercialPolicies(kind).then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [kind]);
+// 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。两册各一个，不由 kind 现拼。
+function loadRulePackages(): Promise<ApiResult<CommercialPolicyListResponseBody>> {
+  return listCommercialPolicies('ACCEPTANCE_RULE_PACKAGE');
+}
+
+function loadControlPolicies(): Promise<ApiResult<CommercialPolicyListResponseBody>> {
+  return listCommercialPolicies('PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY');
+}
+
+function useObjectCandidates(load: () => Promise<ApiResult<CommercialPolicyListResponseBody>>): ObjectCandidates {
+  const answer = useLoaded(load);
   if (answer === null) return { kind: 'loading' };
   if (answer.kind === 'unconfigured') return { kind: 'unconfigured' };
   if (answer.kind !== 'outcome') return { kind: 'unavailable' };
@@ -426,42 +414,5 @@ function ObjectPicker({
             : `${registerName}读不到，先手填；标识是否在册由服务端发布时判。`}
       </span>
     </>
-  );
-}
-
-// ——一格 = 标签 + 控件 + 服务端点名到这条路径（及别名路径）的问题。
-
-function Field({
-  label,
-  path,
-  alsoPaths = [],
-  form,
-  children,
-}: {
-  label: string;
-  path: string;
-  alsoPaths?: string[];
-  form: PublicationFormContext;
-  children: ReactNode;
-}) {
-  const lines = [path, ...alsoPaths].flatMap((candidate) => form.problems[candidate] ?? []);
-  // 用 div 不用 label：几格的控件是一组按钮，label 会把点标题读成点第一个按钮。
-  return (
-    <div className="block">
-      <span className={fieldLabel}>{label}</span>
-      {children}
-      <Problems lines={lines} />
-    </div>
-  );
-}
-
-function Problems({ lines }: { lines: string[] | undefined }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
   );
 }
