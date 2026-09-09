@@ -12,7 +12,7 @@
 // 本册特有的一句：「无控制」不在这里——那是客户合同的声明（ADR-0115 Decision 一），控制种类下拉只列服务端词表给的码，
 // 本文件不内置任何一格，自然也长不出它。
 
-import { normalizeMoment } from './credit-policy-form';
+import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   PreAcceptanceControlItemPayload,
@@ -78,27 +78,9 @@ export function controlPolicyFieldPaths(draft: ControlPolicyDraft): string[] {
   return paths;
 }
 
-// 与服务端 int 的入口一致：只认十进制整数文本；小数、指数、字母都组不进那个类型。
-const integerText = /^[+-]?\d+$/;
-
-function integerOf(raw: string): number | undefined {
-  const text = raw.trim();
-  if (text === '' || !integerText.test(text)) return undefined;
-  const value = Number(text);
-  return Number.isSafeInteger(value) ? value : undefined;
-}
-
-function integerProblem(raw: string): string | null {
-  const text = raw.trim();
-  if (text === '') return null;
-  if (!integerText.test(text)) return '须为十进制整数文本（不接受小数、指数与字母）';
-  if (!Number.isSafeInteger(Number(text))) return '超出页面能精确表示的整数范围';
-  return null;
-}
-
 /**
  * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有各行的判断顺序一格**——这不是校验，是组不出
- * 载荷：零与负数照发，让服务端说「须从 1 起」。
+ * 载荷：零与负数照发，让服务端说「须从 1 起」。整数文本的判据出共享层（integerOf / integerProblem），与载荷那一侧同一条。
  */
 export function controlPolicyLocalProblems(draft: ControlPolicyDraft): Record<string, string[]> {
   const problems: Record<string, string[]> = {};

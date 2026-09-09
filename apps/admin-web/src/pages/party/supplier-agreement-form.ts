@@ -5,9 +5,11 @@
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、区间先后、引用是否在册一律送上去
 // 让服务端答——预览口逐格 problems 回来挂到对应格旁；这里连「必填」都不拦，免得两处口径。
 
-import type { PriceCardRecord } from '../pricing/api';
-import { normalizeMoment } from '../pricing/series-form';
 import type { CommercialPublicationPayload, SupplierAgreementBodyPayload } from './publication-draft-api';
+import { normalizeMoment, planReferenceOf } from './publication-form-shared';
+
+// 方案版本引用的拼法曾定义在本文件、被兄弟表单借用（票 22 抬到共享层）；这里保留导出只为既有调用点与测试不改一字，定义只在共享层。
+export { planReferenceOf };
 
 /**
  * 草稿：版本壳五格 + 协议正文六格，全是文本。壳与正文各有自己的适用范围与区间——壳上的是**版本**的
@@ -90,15 +92,6 @@ export function supplierAgreementPayloadOf(draft: SupplierAgreementDraft): Comme
     payload.effectiveEndsAt = normalizeMoment(draft.effectiveEndsAt);
   }
   return payload;
-}
-
-/**
- * 价卡目录行 → 方案版本引用串。写法与 settlement-accounting 拼方案版本引用同一条（`planId@planVersion`，
- * 见 internal/settlementaccounting/adapters/parcelpricing/buy_evaluation.go）；跨上下文只传引用，表单不读方案内容，
- * 方向与绑定换算是 PRICE_RULE 那册的事。
- */
-export function planReferenceOf(card: Pick<PriceCardRecord, 'planId' | 'planVersion'>): string {
-  return `${card.planId}@${card.planVersion}`;
 }
 
 /** 「从版本壳带入」：把壳上的适用范围与区间抄进协议正文那三格，其余不动。抄的是文本，仍由服务端逐格判。 */

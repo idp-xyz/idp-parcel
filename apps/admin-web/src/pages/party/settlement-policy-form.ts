@@ -6,7 +6,7 @@
 // 币种存不存在一律送上去让服务端答——预览口逐格 problems 回来挂到对应格旁；这里连「必填」都不拦，免得两处口径。
 // 本册特有的一句：结算政策答「怎么结」不答「要不要接受前控制」（那是 0007 / 0024 两层的事），草稿里没有控制字段。
 
-import { normalizeMoment } from './credit-policy-form';
+import { normalizeMoment } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   SettlementPolicyBodyPayload,

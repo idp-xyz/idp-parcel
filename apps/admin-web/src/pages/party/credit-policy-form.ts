@@ -9,6 +9,10 @@
 // 送上去让服务端逐格点名。
 
 import type { CommercialPublicationPayload, CreditPolicyBodyPayload } from './publication-draft-api';
+import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
+
+// 时点归一曾定义在本文件、被兄弟表单借用（票 22 抬到共享层）；这里保留导出只为既有调用点与测试不改一字，定义只在共享层。
+export { normalizeMoment };
 
 export interface CreditPolicyDraft {
   objectId: string;
@@ -66,37 +70,9 @@ export const creditPolicyFieldPaths = [
   'creditPolicy.effectiveEndsAt',
 ] as const;
 
-const dateOnly = /^\d{4}-\d{2}-\d{2}$/;
-// 与服务端 *int64 的入口一致：只认十进制整数文本；小数、指数、字母都组不进那个类型。
-const integerText = /^[+-]?\d+$/;
-
-/** 日期只填到天时补成当天零点 UTC 的 RFC 3339；其余原样交给服务端解（写法同 pricing/series-form.ts）。 */
-export function normalizeMoment(raw: string): string {
-  const text = raw.trim();
-  return dateOnly.test(text) ? `${text}T00:00:00Z` : text;
-}
-
 /**
- * 整数格的文本 → 数值。空即缺席（undefined）；编不进 JSON 整数的文本也交回 undefined，由
- * creditPolicyLocalProblems 在同一判据上点名，两处不会一处放一处拦。
- */
-function integerOf(raw: string): number | undefined {
-  const text = raw.trim();
-  if (text === '' || !integerText.test(text)) return undefined;
-  const value = Number(text);
-  return Number.isSafeInteger(value) ? value : undefined;
-}
-
-function integerProblem(raw: string): string | null {
-  const text = raw.trim();
-  if (text === '') return null;
-  if (!integerText.test(text)) return '须为十进制整数文本（不接受小数、指数与字母）';
-  if (!Number.isSafeInteger(Number(text))) return '超出页面能精确表示的整数范围';
-  return null;
-}
-
-/**
- * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只此两格**——这不是校验，是组不出载荷。
+ * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只此两格**——这不是校验，是组不出载荷。整数格的
+ * 文本 → 数值与它的本地问题同出共享层一条判据（integerOf / integerProblem），两处不会一处放一处拦。
  */
 export function creditPolicyLocalProblems(draft: CreditPolicyDraft): Record<string, string[]> {
   const problems: Record<string, string[]> = {};

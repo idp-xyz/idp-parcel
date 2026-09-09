@@ -11,7 +11,7 @@
 // 本册特有的两句：起算事件、日历、索赔类型与材料都是开放引用（解释权在 visibility-exception），本文件不替它们造一份
 // 枚举；VE 那侧的两本册（通知义务、索赔类型覆盖）与本册正文归谁未裁（pc-gaps/05），这里只发布 PC 这一侧的正文。
 
-import { normalizeMoment } from './credit-policy-form';
+import { integerOf, integerProblem, normalizeMoment } from './publication-form-shared';
 import type {
   ClaimDeadlineRulePayload,
   CommercialPublicationPayload,
@@ -122,24 +122,6 @@ export function serviceRuleFieldPaths(draft: ServiceRuleDraft): string[] {
     materialLinesOf(row.materials).forEach((_, item) => paths.push(`${path}.materials[${item}]`));
   });
   return paths;
-}
-
-// 与服务端 int 的入口一致：只认十进制整数文本；小数、指数、字母都组不进那个类型。
-const integerText = /^[+-]?\d+$/;
-
-function integerOf(raw: string): number | undefined {
-  const text = raw.trim();
-  if (text === '' || !integerText.test(text)) return undefined;
-  const value = Number(text);
-  return Number.isSafeInteger(value) ? value : undefined;
-}
-
-function integerProblem(raw: string): string | null {
-  const text = raw.trim();
-  if (text === '') return null;
-  if (!integerText.test(text)) return '须为十进制整数文本（不接受小数、指数与字母）';
-  if (!Number.isSafeInteger(Number(text))) return '超出页面能精确表示的整数范围';
-  return null;
 }
 
 /**

@@ -14,7 +14,7 @@
 // 就整节送、缺的由服务端点名（三格同在同缺）。
 
 import { commercialDirectionLabels, planBindingConversionLabels, taxDispositionLabels } from './presentation';
-import { normalizeMoment } from './credit-policy-form';
+import { normalizeMoment } from './publication-form-shared';
 import type {
   CommercialPublicationPayload,
   FxCaliberPayload,
