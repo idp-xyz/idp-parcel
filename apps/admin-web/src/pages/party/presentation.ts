@@ -132,6 +132,15 @@ export const jointPassConditionLabels: Record<string, string> = {
   ALL_CONTROLS_PASS: '全部控制通过',
 };
 
+// 索赔期限种类封闭三格（domain ClaimDeadlineKind），中文逐字取 visibility-exception CONTEXT「客户首次索赔期限、
+// 资料补充期限和结论复核期限是三个独立期限」。起算事件、日历、索赔类型与材料不在这里：它们是开放引用（解释权在
+// VE），本台不替它们造词，按引用原词展示。
+export const claimDeadlineKindLabels: Record<string, string> = {
+  FIRST_CLAIM: '客户首次索赔期限',
+  MATERIAL_SUPPLEMENT: '资料补充期限',
+  CONCLUSION_REVIEW: '结论复核期限',
+};
+
 // 收寄来源封闭二值(domain DeclaredIntakeSource),对应 parcel-shipment 来源联合的两格。
 export const intakeSourceLabels: Record<string, string> = {
   NODE_INTAKE: '节点收寄',

@@ -83,6 +83,7 @@ export interface CommercialPublicationPayload {
   pricePolicy?: PricePolicyBodyPayload;
   acceptanceRulePackage?: AcceptanceRulePackageBodyPayload;
   preAcceptanceFinancialControlPolicy?: PreAcceptanceFinancialControlPolicyBodyPayload;
+  customerServiceRule?: CustomerServiceRuleBodyPayload;
 }
 
 /**
@@ -261,6 +262,40 @@ export interface PreAcceptanceControlItemPayload {
   order?: number;
   onFailure: string;
   responsibility: string;
+}
+
+/**
+ * 客户服务规则册正文（Go `CustomerServiceRuleBodyPayload`，票 admin-write-faces/18）：父行三格加两张子表（0023，
+ * ADR-0104 Decision 二），键名镜像受控批文 customerServiceRuleBody。适用对象 `serviceProduct` / `customerContract`
+ * 两键**恰一在场**由服务端判成 `customerServiceRule.applicability` 一格问题——两键都空或都填照样送上去，表单不替操作者
+ * 挑一个。`claimDeadlines[].kind` 是本正文唯一的封闭集，码由词表读口供（fetchPublicationVocabulary('CUSTOMER_SERVICE_RULE')
+ * 的 `kind` 一集），表单不内置枚举；起算事件、日历、索赔类型与材料都是开放引用（解释权在 visibility-exception），只查非空。
+ * 两项合起来至少一行、每一种期限与每一种索赔类型至多一行是跨行的门，由服务端在预览上答成成因，不在这里判。
+ */
+export interface CustomerServiceRuleBodyPayload {
+  serviceProduct?: string;
+  customerContract?: string;
+  responsible: string;
+  scope: string;
+  claimDeadlines: ClaimDeadlineRulePayload[];
+  minimumMaterials: MinimumMaterialsRulePayload[];
+}
+
+/**
+ * 一行索赔期限（Go `ClaimDeadlineRulePayload`）：种类 × 起算事件引用 × 整数天 × 日历引用。`days` 在 Go 侧是普通整数
+ * （零与缺席同义——都不是一条算得出东西的期限），这里写成可缺：表单留空即不送键，服务端点名 `.days`，不由表单替它填 0。
+ */
+export interface ClaimDeadlineRulePayload {
+  kind: string;
+  startEvent: string;
+  days?: number;
+  calendar: string;
+}
+
+/** 一行最低材料（Go `MinimumMaterialsRulePayload`）：一种索赔类型与它必须齐备的材料清单；空清单与重复由服务端答。 */
+export interface MinimumMaterialsRulePayload {
+  claimKind: string;
+  materials: string[];
 }
 
 /**
