@@ -223,6 +223,20 @@
 # 改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。同笔 production_type_reachability_baseline.txt 里
 # 「经 AssessSafeHandoff 取得」那一类七条随它出名单（那边 22→15），出处写在那边。
 #
+# 2026-09-09 随 wiring-baseline-remainder/02（MCP-6）剪掉 CurrentPayloadCanonicalizationVersion（PS 组）。成因三分是
+# **第一种（已删）**：版本报出口零消费者，版本已随 `PSC-1:` 前缀在摘要串里同行，它该有的调用方（PSC-2 的重放分类分支）
+# 今天没有代码可走——理由与出处写在 parcel-shipment 组那一段。全仓该名字此前只此一处声明，剪前先核过别处无同名声明。
+# 量在隔离 worktree 上（分支 mcp6-wbr02，不含任何人的在途改动，动手前 `git status -- internal/architecture/` 为空）：
+# `git show` 取父提交 `e38bc18d` 的本文件（其 blob 与 origin/main `3c9a41bd` 的逐字节相同）两法同得剪前 **4**，本笔单独
+# 作用于其上剪后 **3**（parcel-shipment 2→1）——两法是 UTF-8 逐行读后滤非空非注释，与字节层数行首非 `#`。两个数只对该
+# 检出成立；同一份文件 wbr/01（mcp2-wbr01）正在剪 AssessSafeHandoff，两笔谁先进 main 都会让另一笔的「剪前」不再是 tip
+# 的真值——本笔重放进 main 时父提交若不是 e38bc18d，下一个改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。
+#
+# 推送方 2026-09-09 重放注：上两段各钉自己的父提交（01 在 6a80a6da 上 4→3、02 在 e38bc18d 上 4→3），01 先进 main
+# （b43066af）、02 后进；02 那笔重放到 135af96b 之上时两法同得剪前 3（01 已剪）、剪后 **2**（parcel-shipment 1→0，
+# party-commercial 2 不变），只对该检出成立——下一个改名单的人照旧在自己那一刻的 HEAD 上重取。**parcel-shipment 这一组
+# 至此清空**，与 TF / VE / SA / CC / PP 各组清空时同一句：名单清空只判名单清空，本门禁只量导出工厂。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -251,8 +265,16 @@
 # 实现」，那句仍然有效且未被违反——它禁的是采信自报身份、从请求内容铸信封的那一种，而隔离
 # Intake 整组注入身份，且生产装配里没有通往它的代码路径（ADR-0091 判据三）。
 #
-# 版本报出口留在名单上：至今零生产调用点，接它的仍是真渠道那笔工作。
-internal/parcelshipment/domain CurrentPayloadCanonicalizationVersion
+# 版本报出口 CurrentPayloadCanonicalizationVersion 曾在这里，理由行写着「至今零生产调用点，接它的
+# 仍是真渠道那笔工作」。**那句取证不支持**：真渠道 Intake 与隔离 Intake 走同一个
+# CanonicalizeSubmissionPayload，版本已随 `PSC-1:` 前缀在摘要串里同行，Intake 没有理由再单独问
+# 一次版本。它该有的调用方是引入 PSC-2 那笔工作里的重放分类分支（ClassifySourceSubmission 按前缀
+# 取版本再分支：版本相同才比摘要，版本不同不是冲突，ADR-0014；UC-PS-001 步 2）——今天只有一版，
+# 那道分支没有代码可走。2026-09-09 随 wiring-baseline-remainder/02 **删去**（通道 1 代裁取「删」）：
+# 一个明知今天没有分支可走的导出函数留在名单上，等于让名单替它记「将来会有人用」——那是注释的
+# 活，不是名单的活；payload_canonicalization.go 里 CanonicalizeSubmissionPayload 的注释记着「届时
+# 重新导出版本出口」。成因三分是**第一种**（已删）：全仓该名字此前只此一处声明，非测试调用点为零，
+# 唯一的测试引用改钉版本字面量（那条测试证的是摘要携带版本，不是为出口写的）。
 # 票 08 的面单交易域模型（ADR-0084）曾在这里占两条（EstablishLabelTransaction 与
 # EstablishPriorLabelTransactionLink），理由是「写入方是渠道适配器，渠道墙未降前登记零行」，
 # 并写明「写编排落地那天，两条一起出名单」。ADR-0088 把面单渠道服务纳入首发，

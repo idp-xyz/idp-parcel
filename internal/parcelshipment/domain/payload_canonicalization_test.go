@@ -59,7 +59,10 @@ func TestCanonicalizeSubmissionPayloadIsStableAndCarriesItsVersion(t *testing.T)
 	if first != second {
 		t.Fatalf("digest = %q vs %q; 同一规范化内容两次算出了不同摘要", first, second)
 	}
-	prefix := domain.CurrentPayloadCanonicalizationVersion() + ":"
+	// 版本字面量钉在测试里，不经包内出口取：本测试证的是「摘要携带产生它的规范化版本」
+	// （ADR-0014），版本一换这里就该红——那是引入 PSC-2 的那笔工作要看见的信号，不是要
+	// 绕开的耦合。包外读版本的出口今天零消费者，已删。
+	prefix := "PSC-1:"
 	if !strings.HasPrefix(first.String(), prefix) {
 		t.Fatalf("digest = %q, want prefix %q; 摘要没有携带产生它的规范化版本", first, prefix)
 	}

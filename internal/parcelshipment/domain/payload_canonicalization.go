@@ -28,10 +28,6 @@ var ErrInvalidSubmissionPayload = errors.New("parcel shipment: invalid submissio
 // 不在 PSC-1 上就地扩列。
 const payloadCanonicalizationVersion = "PSC-1"
 
-// CurrentPayloadCanonicalizationVersion 报出本构建按哪套形状规范化。按其他取值记录的
-// 摘要，本构建无法重算。
-func CurrentPayloadCanonicalizationVersion() string { return payloadCanonicalizationVersion }
-
 // CanonicalContentEntry 是尚无领域模型的规范化内容条目。名做键：去空白后必须非空；
 // 值保真原样进摘要——「显式清空」与「条目缺席」是两种内容，前者是一条值为空的条目，
 // 后者根本没有这条。
@@ -91,7 +87,10 @@ type SubmissionPayloadSpec struct {
 // 摘要串自带版本前缀（`PSC-1:<sha256>`）：ADR-0014 要求已保存摘要必须携带产生它的
 // 规范化版本，而来源指纹只存摘要串一格——前缀让版本随既有存储同行，零迁移。跨版本
 // 的比较纪律（版本不同不是冲突、回放按原版本重新规范化）在只有一个版本的今天没有
-// 分支可走；引入 PSC-2 的那笔工作按前缀取版本再分支。
+// 分支可走；引入 PSC-2 的那笔工作按前缀取版本再分支，届时重新导出版本出口——那道
+// 分支要问「本构建支持哪一版、能不能按记录的那一版重算」，问的人才是版本出口的调用方。
+// 今天没有那道分支，版本已随前缀在摘要串里同行，真渠道 Intake 也不必再单独问一次，所以
+// 这里不留一个只等将来的导出。
 func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, error) {
 	if !spec.RequestReference.valid() {
 		return PayloadDigest{}, ErrInvalidSubmissionPayload
