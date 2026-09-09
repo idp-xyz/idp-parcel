@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { Field, Problems, fieldLabel } from './PublicationFormFields';
 import {
   emptyReferenceRow,
   emptyServiceProductDraft,
@@ -30,8 +31,6 @@ export interface ServiceProductPublicationFormProps {
   /** 载体到达「发布」那一步时回调，页面借它刷同页的目录读面。 */
   onPublished?: () => void;
 }
-
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
 
 export function ServiceProductPublicationForm({ onPublished }: ServiceProductPublicationFormProps) {
   const [draft, setDraft] = useState<ServiceProductDraft>(emptyServiceProductDraft());
@@ -82,8 +81,7 @@ function ServiceProductFields({
     label: string,
     placeholder: string,
   ) => (
-    <label className="block">
-      <span className={fieldLabel}>{label}</span>
+    <Field label={label} path={path} problems={form.problems}>
       <Input
         value={draft[path]}
         readOnly={form.locked}
@@ -91,8 +89,7 @@ function ServiceProductFields({
         placeholder={placeholder}
         onChange={(event) => onPatch({ [path]: event.target.value })}
       />
-      <FieldProblems lines={form.problems[path]} />
-    </label>
+    </Field>
   );
 
   return (
@@ -178,22 +175,11 @@ function ReferencesEditor({
                   删
                 </Button>
               </div>
-              <FieldProblems lines={problems[referencePath(row)]} />
+              <Problems lines={problems[referencePath(row)]} />
             </div>
           ))}
         </div>
       )}
     </div>
-  );
-}
-
-function FieldProblems({ lines }: { lines: string[] | undefined }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="mt-1 text-[11px] text-idpxyz-danger list-disc ml-4">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
   );
 }

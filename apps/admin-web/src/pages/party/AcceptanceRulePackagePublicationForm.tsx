@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
+import { Field, Problems, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
 import {
   acceptanceRulePackageFieldPaths,
   emptyAcceptanceRulePackageDraft,
@@ -43,10 +44,6 @@ export interface AcceptanceRulePackagePublicationFormProps {
   onPublished?: () => void;
 }
 
-const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
-const selectClass =
-  'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
 const sectionTitle = 'text-[13px] font-medium text-idpxyz-text';
 const hint = 'text-[11px] text-idpxyz-textMuted';
 const root = 'acceptanceRulePackage';
@@ -101,18 +98,13 @@ interface SectionProps {
 // ——词表：一口读回本册十个封闭集（票 20）。读不到时只在表单顶上说一次为什么，各下拉自己显短占位、不可选、不内置码回退
 // ——那堵墙前发布各口也答 403，这张表单本来就提交不了。
 
+// 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。
+function loadRulePackageVocabulary(): Promise<ApiResult<PublicationVocabularyResponseBody>> {
+  return fetchPublicationVocabulary('ACCEPTANCE_RULE_PACKAGE');
+}
+
 function useVocabulary(): VocabularyState {
-  const [answer, setAnswer] = useState<ApiResult<PublicationVocabularyResponseBody> | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void fetchPublicationVocabulary('ACCEPTANCE_RULE_PACKAGE').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return vocabularyStateOf(answer);
+  return vocabularyStateOf(useLoaded(loadRulePackageVocabulary));
 }
 
 function VocabularyNotice({ vocabulary }: { vocabulary: VocabularyState }) {
@@ -220,7 +212,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>版本壳</h3>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="规则包对象标识 *" path="objectId" form={form}>
+        <Field label="规则包对象标识 *" path="objectId" problems={form.problems}>
           <Input
             value={draft.objectId}
             readOnly={form.locked}
@@ -228,7 +220,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
             onChange={(event) => patch({ objectId: event.target.value })}
           />
         </Field>
-        <Field label="版本号 *" path="version" form={form}>
+        <Field label="版本号 *" path="version" problems={form.problems}>
           <Input
             value={draft.version}
             readOnly={form.locked}
@@ -236,7 +228,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
             onChange={(event) => patch({ version: event.target.value })}
           />
         </Field>
-        <Field label="适用范围 *" path="scope" form={form}>
+        <Field label="适用范围 *" path="scope" problems={form.problems}>
           <Input
             value={draft.scope}
             readOnly={form.locked}
@@ -246,7 +238,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
           />
         </Field>
         <div />
-        <Field label="生效起点 *" path="effectiveStartsAt" form={form}>
+        <Field label="生效起点 *" path="effectiveStartsAt" problems={form.problems}>
           <Input
             value={draft.effectiveStartsAt}
             readOnly={form.locked}
@@ -255,7 +247,7 @@ function ShellFields({ draft, update, form }: Omit<SectionProps, 'vocabulary'>) 
             onChange={(event) => patch({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" form={form}>
+        <Field label="生效止点（留空即无上界）" path="effectiveEndsAt" problems={form.problems}>
           <Input
             value={draft.effectiveEndsAt}
             readOnly={form.locked}
@@ -281,7 +273,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
       <h3 className={sectionTitle}>规则包正文：五维适用性与规则引用表</h3>
       <Problems lines={form.problems[path]} />
       <div className="grid grid-cols-2 gap-3">
-        <Field label="服务产品 *" path={`${path}.serviceProduct`} form={form}>
+        <Field label="服务产品 *" path={`${path}.serviceProduct`} problems={form.problems}>
           <Input
             value={draft.body.serviceProduct}
             readOnly={form.locked}
@@ -290,7 +282,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ serviceProduct: event.target.value })}
           />
         </Field>
-        <Field label="客户合同 *" path={`${path}.contract`} form={form}>
+        <Field label="客户合同 *" path={`${path}.contract`} problems={form.problems}>
           <Input
             value={draft.body.contract}
             readOnly={form.locked}
@@ -299,7 +291,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ contract: event.target.value })}
           />
         </Field>
-        <Field label="责任法人 *" path={`${path}.legalEntity`} form={form}>
+        <Field label="责任法人 *" path={`${path}.legalEntity`} problems={form.problems}>
           <Input
             value={draft.body.legalEntity}
             readOnly={form.locked}
@@ -308,7 +300,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ legalEntity: event.target.value })}
           />
         </Field>
-        <Field label="正文适用范围 *" path={`${path}.scope`} form={form}>
+        <Field label="正文适用范围 *" path={`${path}.scope`} problems={form.problems}>
           <Input
             value={draft.body.scope}
             readOnly={form.locked}
@@ -317,7 +309,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ scope: event.target.value })}
           />
         </Field>
-        <Field label="正文生效起点 *" path={`${path}.effectiveStartsAt`} form={form}>
+        <Field label="正文生效起点 *" path={`${path}.effectiveStartsAt`} problems={form.problems}>
           <Input
             value={draft.body.effectiveStartsAt}
             readOnly={form.locked}
@@ -326,7 +318,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
             onChange={(event) => patchBody({ effectiveStartsAt: event.target.value })}
           />
         </Field>
-        <Field label="正文生效止点（留空即无上界）" path={`${path}.effectiveEndsAt`} form={form}>
+        <Field label="正文生效止点（留空即无上界）" path={`${path}.effectiveEndsAt`} problems={form.problems}>
           <Input
             value={draft.body.effectiveEndsAt}
             readOnly={form.locked}
@@ -349,8 +341,8 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
         {draft.body.rules.map((rule, index) => {
           const row = `${path}.rules[${index}]`;
           return (
-            <RowFrame key={index} path={row} form={form} onRemove={() => patchBody({ rules: removeAt(draft.body.rules, index) })}>
-              <Field label="分类 *" path={`${row}.category`} form={form}>
+            <RowFrame key={index} path={row} problems={form.problems} locked={form.locked} onRemove={() => patchBody({ rules: removeAt(draft.body.rules, index) })}>
+              <Field label="分类 *" path={`${row}.category`} problems={form.problems}>
                 <CodeSelect
                   value={rule.category}
                   set="category"
@@ -359,7 +351,7 @@ function RulePackageBodyFields({ draft, update, form, vocabulary }: SectionProps
                   onChange={(category) => patchBody({ rules: replaceAt(draft.body.rules, index, { category }) })}
                 />
               </Field>
-              <Field label="规则引用 *" path={`${row}.reference`} form={form}>
+              <Field label="规则引用 *" path={`${row}.reference`} problems={form.problems}>
                 <Input
                   value={rule.reference}
                   readOnly={form.locked}
@@ -397,8 +389,8 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
       {rows.map((row, index) => {
         const rowPath = `${path}[${index}]`;
         return (
-          <RowFrame key={index} path={rowPath} form={form} onRemove={() => setRows(removeAt(rows, index))} columns="grid-cols-[1fr_1fr_1fr_auto]">
-            <Field label="判断类型 *" path={`${rowPath}.judgment`} form={form}>
+          <RowFrame key={index} path={rowPath} problems={form.problems} locked={form.locked} onRemove={() => setRows(removeAt(rows, index))} columns="grid-cols-[1fr_1fr_1fr_auto]">
+            <Field label="判断类型 *" path={`${rowPath}.judgment`} problems={form.problems}>
               <CodeSelect
                 value={row.judgment}
                 set="judgment"
@@ -407,7 +399,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
                 onChange={(judgment) => setRows(replaceAt(rows, index, { judgment }))}
               />
             </Field>
-            <Field label="时点语义引用 *" path={`${rowPath}.semantics`} form={form}>
+            <Field label="时点语义引用 *" path={`${rowPath}.semantics`} problems={form.problems}>
               <Input
                 value={row.semantics}
                 readOnly={form.locked}
@@ -416,7 +408,7 @@ function AsOfPolicyFields({ draft, update, form, vocabulary }: SectionProps) {
                 onChange={(event) => setRows(replaceAt(rows, index, { semantics: event.target.value }))}
               />
             </Field>
-            <Field label="时点政策版本 *" path={`${rowPath}.policyVersion`} form={form}>
+            <Field label="时点政策版本 *" path={`${rowPath}.policyVersion`} problems={form.problems}>
               <Input
                 value={row.policyVersion}
                 readOnly={form.locked}
@@ -447,7 +439,14 @@ function AcceptanceContentFields({ draft, update, form, vocabulary }: SectionPro
         勾选的校验组按服务端顺序上送；一格都不勾而只答了人工复核，空组由服务端在预览上答。人工复核答的是「这类委托要不要
         人工业务复核」，不是「谁有权复核」——后者归授权规则，不在本表单。
       </p>
-      <Field label="适用校验组" path={groupPaths[0] ?? `${path}.applicableGroups[0]`} alsoPaths={groupPaths.slice(1)} form={form}>
+      {/* 多选是一排各带 label 的勾选框，外层用 div：label 套 label 会让点标题变成点第一格。 */}
+      <Field
+        label="适用校验组"
+        path={groupPaths[0] ?? `${path}.applicableGroups[0]`}
+        alsoPaths={groupPaths.slice(1)}
+        problems={form.problems}
+        as="div"
+      >
         <CodeChecklist
           selected={content.applicableGroups}
           set="applicableGroups"
@@ -457,7 +456,7 @@ function AcceptanceContentFields({ draft, update, form, vocabulary }: SectionPro
         />
       </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="人工复核" path={`${path}.manualReview`} form={form}>
+        <Field label="人工复核" path={`${path}.manualReview`} problems={form.problems}>
           <CodeSelect
             value={content.manualReview}
             set="manualReview"
@@ -493,7 +492,13 @@ function IntakeQualificationFields({ draft, update, form, vocabulary }: SectionP
       <p className={hint}>
         来源一格都不勾由服务端拒；硬资格清单可以显式为空——「真没有硬资格」也要把来源允许声明出来。
       </p>
-      <Field label="允许来源" path={sourcePaths[0] ?? `${path}.sources[0]`} alsoPaths={sourcePaths.slice(1)} form={form}>
+      <Field
+        label="允许来源"
+        path={sourcePaths[0] ?? `${path}.sources[0]`}
+        alsoPaths={sourcePaths.slice(1)}
+        problems={form.problems}
+        as="div"
+      >
         <CodeChecklist
           selected={intake.sources}
           set="sources"
@@ -508,11 +513,12 @@ function IntakeQualificationFields({ draft, update, form, vocabulary }: SectionP
           <RowFrame
             key={index}
             path={rowPath}
-            form={form}
+            problems={form.problems}
+            locked={form.locked}
             columns="grid-cols-[1fr_auto]"
             onRemove={() => patchIntake({ qualifications: removeAt(intake.qualifications, index) })}
           >
-            <Field label="硬资格引用 *" path={rowPath} form={form} silent>
+            <Field label="硬资格引用 *" path={rowPath} problems={form.problems} silent>
               <Input
                 value={qualification}
                 readOnly={form.locked}
@@ -556,8 +562,8 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
       {rows.map((row, index) => {
         const rowPath = `${path}[${index}]`;
         return (
-          <RowFrame key={index} path={rowPath} form={form} onRemove={() => setRows(removeAt(rows, index))}>
-            <Field label="责任结果 *" path={`${rowPath}.outcome`} form={form}>
+          <RowFrame key={index} path={rowPath} problems={form.problems} locked={form.locked} onRemove={() => setRows(removeAt(rows, index))}>
+            <Field label="责任结果 *" path={`${rowPath}.outcome`} problems={form.problems}>
               <CodeSelect
                 value={row.outcome}
                 set="outcome"
@@ -566,7 +572,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
                 onChange={(outcome) => setRows(replaceAt(rows, index, { outcome }))}
               />
             </Field>
-            <Field label="终局种类 *" path={`${rowPath}.finalKind`} form={form}>
+            <Field label="终局种类 *" path={`${rowPath}.finalKind`} problems={form.problems}>
               <Input
                 value={row.finalKind}
                 readOnly={form.locked}
@@ -585,7 +591,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
         </div>
         <Problems lines={form.problems[validityPath]} />
         <div className="grid grid-cols-2 gap-3">
-          <Field label="起算时刻种类" path={`${validityPath}.anchor`} form={form}>
+          <Field label="起算时刻种类" path={`${validityPath}.anchor`} problems={form.problems}>
             <CodeSelect
               value={validity.anchor}
               set="anchor"
@@ -594,7 +600,7 @@ function FinalRuleFields({ draft, update, form, vocabulary }: SectionProps) {
               onChange={(anchor) => patchValidity({ anchor })}
             />
           </Field>
-          <Field label="时长（ISO-8601 子集 P[nD][T[nH][nM][nS]]）" path={`${validityPath}.duration`} form={form}>
+          <Field label="时长（ISO-8601 子集 P[nD][T[nH][nM][nS]]）" path={`${validityPath}.duration`} problems={form.problems}>
             <Input
               value={validity.duration}
               readOnly={form.locked}
@@ -638,7 +644,7 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
         closed = true 时表可以留空（这一版什么都不许改）；closed = false 时零行由服务端拒。允许性只有「允许 / 不允许」——
         「未声明」是缺格的读法，不是一行能选的值。
       </p>
-      <Field label="缺格怎么读 *" path={`${path}.closed`} form={form}>
+      <Field label="缺格怎么读 *" path={`${path}.closed`} problems={form.problems} as="div">
         <div className="flex items-center gap-1">
           {closedChoices.map((choice) => (
             <Button
@@ -658,11 +664,12 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
           <RowFrame
             key={index}
             path={rowPath}
-            form={form}
+            problems={form.problems}
+            locked={form.locked}
             columns="grid-cols-[1fr_1fr_1fr_1fr_auto]"
             onRemove={() => patchAmendment({ rules: removeAt(amendment.rules, index) })}
           >
-            <Field label="资料组 *" path={`${rowPath}.dataGroup`} form={form}>
+            <Field label="资料组 *" path={`${rowPath}.dataGroup`} problems={form.problems}>
               <Input
                 value={rule.dataGroup}
                 readOnly={form.locked}
@@ -671,7 +678,7 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
                 onChange={(event) => patchAmendment({ rules: replaceAt(amendment.rules, index, { dataGroup: event.target.value }) })}
               />
             </Field>
-            <Field label="阶段 *" path={`${rowPath}.stage`} form={form}>
+            <Field label="阶段 *" path={`${rowPath}.stage`} problems={form.problems}>
               <CodeSelect
                 value={rule.stage}
                 set="stage"
@@ -680,7 +687,7 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
                 onChange={(stage) => patchAmendment({ rules: replaceAt(amendment.rules, index, { stage }) })}
               />
             </Field>
-            <Field label="意图 *" path={`${rowPath}.intent`} form={form}>
+            <Field label="意图 *" path={`${rowPath}.intent`} problems={form.problems}>
               <CodeSelect
                 value={rule.intent}
                 set="intent"
@@ -689,7 +696,7 @@ function SourceDataAmendmentFields({ draft, update, form, vocabulary }: SectionP
                 onChange={(intent) => patchAmendment({ rules: replaceAt(amendment.rules, index, { intent }) })}
               />
             </Field>
-            <Field label="允许性 *" path={`${rowPath}.allowance`} form={form}>
+            <Field label="允许性 *" path={`${rowPath}.allowance`} problems={form.problems}>
               <CodeSelect
                 value={rule.allowance}
                 set="allowance"
@@ -767,74 +774,5 @@ function RowsHeader({ title, locked, onAdd }: { title: string; locked: boolean; 
         加一行
       </Button>
     </div>
-  );
-}
-
-// ——一行 = 几格 + 「删」+ 服务端点名到整行的问题。
-
-function RowFrame({
-  path,
-  form,
-  columns = 'grid-cols-[1fr_2fr_auto]',
-  onRemove,
-  children,
-}: {
-  path: string;
-  form: PublicationFormContext;
-  columns?: string;
-  onRemove: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded border border-idpxyz-border p-2 flex flex-col gap-2">
-      <div className={`grid ${columns} gap-2 items-start`}>
-        {children}
-        <div className="pt-5">
-          <Button variant="outline" disabled={form.locked} onClick={onRemove}>
-            删
-          </Button>
-        </div>
-      </div>
-      <Problems lines={form.problems[path]} />
-    </div>
-  );
-}
-
-// ——一格 = 标签 + 控件 + 服务端点名到这条路径（及别名路径）的问题。`silent` 给「格就是行」的那种：问题已由外层 RowFrame 显，
-// 这里不再显一遍。
-
-function Field({
-  label,
-  path,
-  alsoPaths = [],
-  form,
-  silent = false,
-  children,
-}: {
-  label: string;
-  path: string;
-  alsoPaths?: string[];
-  form: PublicationFormContext;
-  silent?: boolean;
-  children: ReactNode;
-}) {
-  const lines = silent ? [] : [path, ...alsoPaths].flatMap((candidate) => form.problems[candidate] ?? []);
-  return (
-    <div className="block">
-      <span className={fieldLabel}>{label}</span>
-      {children}
-      <Problems lines={lines} />
-    </div>
-  );
-}
-
-function Problems({ lines }: { lines: string[] | undefined }) {
-  if (!lines || lines.length === 0) return null;
-  return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
-      {lines.map((line) => (
-        <li key={line}>{line}</li>
-      ))}
-    </ul>
   );
 }
