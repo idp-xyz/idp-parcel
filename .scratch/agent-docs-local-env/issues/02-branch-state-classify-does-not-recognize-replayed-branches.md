@@ -77,3 +77,9 @@ Blocked by: 无
 
 - `-Audit` 未动，但它有同一处裸 `--`（`G log main --format=%H -- $f`）和逐文件 blob 对历史的旧判据；票面边界说不动，另票。
 - `docs/agents/parallel-sessions.md` 未动；若要写「`-Branch` 可复核 merged/ 指针」一句，另票。
+
+## 进 main 记录（2026-09-09 17:3x，通道 1 推送）
+
+纯 `.ps1` + 票面，按 parallel-sessions「不评什么」推送方**自审**：只动 `scripts/branch-state.ps1` 与本票；`-Audit` 未动；头注把新判据、三个回归案例（钉 `56ed4111`）、耗时与两处 PS 5.1 绑定暗礁都写了；判据 2 第三案例与票面预期相反处如实记、归 owner。推送方在分支树上 PS 5.1 跑 `-NoFetch -Branch merged/mcp6-awf13,salvage/mcp4-tf03,mcp2-wbr01,mcp4-wbr08,mcp6-adle02`：前两支 ABSORBED（经重放进入）、后三支当时 NOT-ABSORBED 且逐文件列出行数，与预期一致，3.5 s。无阻断。
+
+分支 `mcp6-adle02` 三笔在隔离树重放到 `3c9a41bd` 之后（`main` 自 `8f020eff` 起未动过 `branch-state.ps1`），零冲突、内容与分支零差：`1b39313c→dabe2261` / `18489aeb→83d38658` / `36d9d161→00163b45`。同链随 wbr/08 + wbr/01 一起在 `62e19b1b` 含 DSN 全量一次 101 ok / 0 FAIL。**远端 `main = 62e19b1b`**。分支指针改名 `merged/mcp6-adle02`。「全部 ref 上的分类结果」一节点名的九支 `merged/` NOT-ABSORBED 要不要追：推送方留待，不在本票。

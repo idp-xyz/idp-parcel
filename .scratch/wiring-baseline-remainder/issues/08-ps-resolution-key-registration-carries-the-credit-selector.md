@@ -82,3 +82,15 @@ Blocked by: 无（PC 侧 `CreditSelector`（等级 × 费用类型）已在 main
 3. 两层合一笔（`821282dc`）是前一任的取舍，接手方核过 diff 原样提交；理由是拆开中间那笔会红。
 4. 未 rebase 到 `56ed4111`：与在途 main 无文件重叠，推送方重放即可。
 5. 接手方通道 4 是 `9e509489` 的作者、`920bab06` / `821282dc` 的非作者读者，未跑 `/code-review` 两轴——语义评审仍靠非作者通道。
+
+## 进 main 记录（2026-09-09 17:3x，通道 1 推送）
+
+分支 `mcp4-wbr08` 五笔在隔离树重放到 `3c9a41bd` 之后（链上前有 adle/02 三笔），零冲突、内容与分支逐文件零差：`fe7c7253→c587a66b` / `920bab06→9661ce3b` / `821282dc→42d84aaa` / `9e509489→678fd8f6` / `10e90845→8dad9960`。清点在链 tip 重生成 `62e19b1b`（parcelshipment 迁移 19→20，合计 154→155；与 wbr/01 同笔清点）。推送方在 `62e19b1b` 干净检出含 DSN `go test -p 1 -count=1 ./...` 一次：101 ok / 0 FAIL / 16 无测试，568 s；探针 `TestACreditKeyResolvesAgainstTheClosure` 含 DSN PASS / 无 DSN SKIP（评审 Spec 非阻断 ① 要的非作者含 DSN 复跑即此）。**远端 `main = 62e19b1b`**。分支指针改名 `merged/mcp4-wbr08`。
+
+## Comments
+
+**评审 ← 通道 2 · 钉 `10e90845` · 17:04**（基 `74ef0da8`，隔离树 `%TEMP%\idp-review-wbr08`；原文在通道 1 台账 `task-1a9f4f2c`）
+
+- **Standards**：阻断 0。非阻断（判断项）① `validateCredit` / `creditSelectorFromRow` 与 `validateSettlement` / `settlementSelectorFromRow` 同形——Duplicated Code 判断项，但票面做法明写「照结算三维先例同形」，仓规优先不作违规；第三个选择器出现时再抽 `countGiven`。② `translate_test.go` `TestCreditSelectorTranslatesAsTwoDimensions` 只测「含」向，「credit 节缺席 ⇒ 两维零值」无断言——由 `*creditSelectorDocument == nil` 结构保证且 `validateCredit` 兜底，可选补格。无发现：注释全中文；跨文件引用皆符号 / 约束名 / ADR 号；adapters 非测试文件未新增 import，pgconn 只进 `_test.go`；0020 无 BOM、CR = 0；CHECK 两向 + `_not_blank` 与 store `nullableText` 写 NULL 一致；三层皆「含则必填、不含则必缺」无默认。gofmt 空、build/vet 0。
+- **Spec**：阻断 0。非阻断 ① 真库与闭包往返用例（`TestARegisteredCreditBasisFormsATwoDimensionSelector` / `TestChangingACreditDimensionIsAContentConflict` / `TestTheDatabaseMirrorsTheCreditPairingRule` / `TestACreditKeyResolvesAgainstTheClosure` / `TestKeyRegistrationRefusesDefaultsAndBareCalls`）无 DSN 全 SKIP（评审处 11 SKIP / 58 PASS），作者 1990/0/0 未经非作者复跑——建议推送方带 DSN 复跑（已在进 main 记录里做）。② `cmd/parcel-commercial/translate.go` `credit` 节不在做法 1–6，但 `register-resolution-key` 是唯一构造 `ResolutionKeyRegistration` 的生产入口，不加则完成判据 1 在进程口不可达；判为票内必要非蔓延。无发现：做法 1（两列可空、`_credit_paired` ⇔ 镜像、`_credit_not_blank`）、做法 2（逐维、`NewAuthorityLevel` 非空、不收整个 `CreditSelector`）、做法 3 与 PC `reference_closure.go` `minimumIdentityEstablished` 同判据、做法 4 `PriceRuleObject` 仍拒、做法 6 `internal/architecture/` 零改动；边界 PC / SA / ADR-0127 正文零改动；判断题 2 与 PC「部分给出即输入未受理」一致。
+- **结论**：可推送。推送方处置：非阻断两条随票记，不另立票（① 等第三个选择器；② 作者可选补）。
