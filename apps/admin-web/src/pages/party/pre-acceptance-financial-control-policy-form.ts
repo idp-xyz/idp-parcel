@@ -79,6 +79,20 @@ export function controlPolicyFieldPaths(draft: ControlPolicyDraft): string[] {
 }
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 PreAcceptanceFinancialControlPolicyPublicationForm 的 JSX 逐处抄：壳五格
+ * 与联合通过条件各一 Field；每条控制行显行本身，行里五格各一 Field（三个下拉经 VocabularySelect 也是一 Field）。与上面的
+ * 认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export function controlPolicyRenderedPaths(draft: ControlPolicyDraft): string[] {
+  const paths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effectiveEndsAt', `${bodyPath}.jointPassCondition`];
+  draft.controls.forEach((_, index) => {
+    const row = rowPath(index);
+    paths.push(row, `${row}.control`, `${row}.chargeScope`, `${row}.order`, `${row}.onFailure`, `${row}.responsibility`);
+  });
+  return paths;
+}
+
+/**
  * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只有各行的判断顺序一格**——这不是校验，是组不出
  * 载荷：零与负数照发，让服务端说「须从 1 起」。整数文本的判据出共享层（integerOf / integerProblem），与载荷那一侧同一条。
  */

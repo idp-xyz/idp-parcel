@@ -132,6 +132,35 @@ export const pricePolicyFieldPaths: readonly string[] = [
   'pricePolicy.caliber.fx.asOfPolicyVersion',
 ];
 
+/**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 PricePolicyPublicationForm 的 JSX 逐处抄：`kind` 一处 Problems 挂在版本壳
+ * 标题下；税务分类与体积系数是条件格，隐着时也显自己那条路径的问题（ConditionalField）；汇率节根一处 Problems 挂在三格
+ * 下；其余各一 Field（定价方案经 ReferencePicker 也是一 Field）。与上面的认领表由 publication-form-rendered-paths.test.ts
+ * 比对——改 JSX 里的 path 要同步改这里。
+ */
+export const pricePolicyRenderedPaths: readonly string[] = [
+  'kind',
+  'objectId',
+  'version',
+  'scope',
+  'effectiveStartsAt',
+  'effectiveEndsAt',
+  'pricePolicy.direction',
+  'pricePolicy.pricingPlan',
+  'pricePolicy.planDirection',
+  'pricePolicy.conversion',
+  'pricePolicy.scope',
+  'pricePolicy.effectiveStartsAt',
+  'pricePolicy.effectiveEndsAt',
+  'pricePolicy.caliber.taxDisposition',
+  'pricePolicy.caliber.taxClassification',
+  'pricePolicy.caliber.volumetricFactor',
+  'pricePolicy.caliber.fx.quoteType',
+  'pricePolicy.caliber.fx.asOfSemantics',
+  'pricePolicy.caliber.fx.asOfPolicyVersion',
+  'pricePolicy.caliber.fx',
+];
+
 /** 汇率三格是否有任一格填了：填了就整节送（缺的由服务端点名），全空即「不声明汇率口径」，整节缺席。 */
 export function declaresFx(draft: Pick<PricePolicyDraft, 'fxQuoteType' | 'fxAsOfSemantics' | 'fxAsOfPolicyVersion'>): boolean {
   return draft.fxQuoteType.trim() !== '' || draft.fxAsOfSemantics.trim() !== '' || draft.fxAsOfPolicyVersion.trim() !== '';

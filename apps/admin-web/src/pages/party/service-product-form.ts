@@ -71,6 +71,15 @@ export function serviceProductFieldPaths(draft: ServiceProductDraft): string[] {
 }
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 ServiceProductPublicationForm 的 JSX 逐处抄：壳五格各一 Field；引用表
+ * 每一行（含两格全空、不进载荷也不认领的行）行下各一 Problems 显该行键的路径——比认领表多出的空行无害，认领表少显的
+ * 才是吞问题。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export function serviceProductRenderedPaths(draft: ServiceProductDraft): string[] {
+  return [...serviceProductShellPaths, ...draft.references.map(referencePath)];
+}
+
+/**
  * 草稿 → 载荷。壳各格原样带；`effectiveEndsAt` 与 `references` 为空时**缺席**而不是空值——服务端按键
  * 在场与否分辨「没有」，空串与空对象在那边不是同一句话。引用表里两格全空的行跳过；半填的行照送，
  * 由服务端答哪一格立不住。同键两行时后一行覆盖前一行——那是 JSON 对象的形状所致，本模块用

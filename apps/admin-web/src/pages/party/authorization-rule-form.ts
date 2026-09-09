@@ -78,6 +78,21 @@ export function authorizationRuleFieldPaths(draft: AuthorizationRuleDraft): stri
 }
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 AuthorizationRulePublicationForm 的 JSX 逐处抄：壳五格各一 Field；
+ * 正文根 `authorizationRule` 与目录根各一 Problems 挂在目录节标题下（票 17 评审点名的那一格此前认领了却没处显）；
+ * 每行 RowFrame 显行本身，行里两格各一 Field。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里
+ * 的 path 要同步改这里，改认领表要先在 JSX 里找到显它的地方。
+ */
+export function authorizationRuleRenderedPaths(draft: AuthorizationRuleDraft): string[] {
+  const paths: string[] = [...shellPaths, 'authorizationRule', 'authorizationRule.cancellationAuthority'];
+  draft.rows.forEach((_, index) => {
+    const row = `authorizationRule.cancellationAuthority[${index}]`;
+    paths.push(row, `${row}.party`, `${row}.rule`);
+  });
+  return paths;
+}
+
+/**
  * 请求方下拉的选项来源，由词表读口的答复判读：读到了就是服务端码 × 本页中文词表（vocabularyOptions，集外原样）；
  * 403 是可辨的「未配置」——下拉显占位、不内置任何码顶替；别的失败与「答复里没有 `party` 集」都是读不到，同样只显占位。
  * 选项里没有任何一项带「选中」：不给默认、不预选归表单硬句。

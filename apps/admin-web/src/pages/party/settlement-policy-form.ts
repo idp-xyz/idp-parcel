@@ -77,6 +77,29 @@ export const settlementPolicyFieldPaths: readonly string[] = [
 ];
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 SettlementPolicyPublicationForm 的 JSX 逐处抄：合同两格由 ContractPicker
+ * 显——目录可用时一格选单下以 PathProblems 合显两条路径，目录不可用时退回两格各一 Field，两种形态都显这两条；其余各一
+ * Field（方式经 VocabularySelect、法人与相对方经 ReferencePicker 也是一 Field）。与上面的认领表由
+ * publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export const settlementPolicyRenderedPaths: readonly string[] = [
+  'objectId',
+  'version',
+  'scope',
+  'effectiveStartsAt',
+  'effectiveEndsAt',
+  'settlementPolicy.method',
+  'settlementPolicy.legalEntity',
+  'settlementPolicy.counterparty',
+  'settlementPolicy.contract.objectId',
+  'settlementPolicy.contract.version',
+  'settlementPolicy.chargeScope',
+  'settlementPolicy.currency',
+  'settlementPolicy.effectiveStartsAt',
+  'settlementPolicy.effectiveEndsAt',
+];
+
+/**
  * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。方式与币种原样送（只去
  * 首尾空白）：集内不集内、存在不存在由服务端答，改大小写或查表就是本地在裁。合同维是对象 + 版本两格——两段式
  * 指称串只许领域 NewQualifiedVersionLabel 一处拼，表单不拼版本号。壳上不带指名引用。**载荷里没有身份也没有摘要**：

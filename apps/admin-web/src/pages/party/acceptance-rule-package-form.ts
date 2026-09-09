@@ -285,6 +285,56 @@ export function acceptanceRulePackageFieldPaths(draft: AcceptanceRulePackageDraf
   return paths;
 }
 
+/**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 AcceptanceRulePackagePublicationForm 的 JSX 逐处抄：壳五格各一 Field；
+ * 正文、接受内容、收寄资格、面单有效期、资料修订五个节根各一 Problems 挂在节标题下（时点锚与终局规则两节没有节根路径，
+ * 认领表也没认领）；各行 RowFrame 显行本身，行里各格一 Field；校验组与来源两组勾选是一 Field 以 alsoPaths 带全组各项；
+ * 硬资格一项即一行，行框显它。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export function acceptanceRulePackageRenderedPaths(draft: AcceptanceRulePackageDraft): string[] {
+  const bodyPath = `${root}.rulePackageBody`;
+  const paths: string[] = [
+    ...shellPaths,
+    bodyPath,
+    `${bodyPath}.serviceProduct`,
+    `${bodyPath}.contract`,
+    `${bodyPath}.legalEntity`,
+    `${bodyPath}.scope`,
+    `${bodyPath}.effectiveStartsAt`,
+    `${bodyPath}.effectiveEndsAt`,
+  ];
+  draft.body.rules.forEach((_, index) => {
+    const row = `${bodyPath}.rules[${index}]`;
+    paths.push(row, `${row}.category`, `${row}.reference`);
+  });
+  draft.asOfPolicies.forEach((_, index) => {
+    const row = `${root}.asOfPolicies[${index}]`;
+    paths.push(row, `${row}.judgment`, `${row}.semantics`, `${row}.policyVersion`);
+  });
+  paths.push(`${root}.acceptanceContent`);
+  draft.acceptanceContent.applicableGroups.forEach((_, index) => {
+    paths.push(`${root}.acceptanceContent.applicableGroups[${index}]`);
+  });
+  paths.push(`${root}.acceptanceContent.manualReview`, `${root}.intakeQualification`);
+  draft.intakeQualification.sources.forEach((_, index) => {
+    paths.push(`${root}.intakeQualification.sources[${index}]`);
+  });
+  draft.intakeQualification.qualifications.forEach((_, index) => {
+    paths.push(`${root}.intakeQualification.qualifications[${index}]`);
+  });
+  draft.finalRules.forEach((_, index) => {
+    const row = `${root}.finalRules[${index}]`;
+    paths.push(row, `${row}.outcome`, `${row}.finalKind`);
+  });
+  paths.push(`${root}.finalRuleValidity`, `${root}.finalRuleValidity.anchor`, `${root}.finalRuleValidity.duration`);
+  paths.push(`${root}.sourceDataAmendment`, `${root}.sourceDataAmendment.closed`);
+  draft.sourceDataAmendment.rules.forEach((_, index) => {
+    const row = `${root}.sourceDataAmendment.rules[${index}]`;
+    paths.push(row, `${row}.dataGroup`, `${row}.stage`, `${row}.intent`, `${row}.allowance`);
+  });
+  return paths;
+}
+
 // ——词表：一口读回本册全部封闭集，各下拉各取自己那一集。码只从这里来；下面的表只给中文。
 
 /** 本册词表里各集的键名（与 Go `PublicationVocabulary` 对 ACCEPTANCE_RULE_PACKAGE 答的集名同词）。 */

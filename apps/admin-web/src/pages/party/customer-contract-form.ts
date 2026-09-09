@@ -121,3 +121,25 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
   });
   return paths;
 }
+
+/**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 CustomerContractPublicationForm 的 JSX 逐处抄：壳五格各一 Field；规则包
+ * 一格连带壳上引用与正文根（alsoPaths）；合同级声明的「要求」一格，依据格隐着时由它代显依据格的问题（alsoPaths）；
+ * 每条约定行 RowFrame 显行本身，费用范围一格，「指名策略 / 不适用依据」两格只显一格、隐着的那格的问题由显着的代显
+ * （alsoPaths）——所以隐显都不影响这张表。与上面的认领表由 publication-form-rendered-paths.test.ts 比对。
+ */
+export function customerContractRenderedPaths(draft: CustomerContractDraft): string[] {
+  const paths: string[] = [
+    ...shellPaths,
+    'customerContract.contractContent.rulePackage',
+    'references.ACCEPTANCE_RULE_PACKAGE',
+    'customerContract.contractContent',
+    'customerContract.preAcceptanceControl.requirement',
+    'customerContract.preAcceptanceControl.notApplicableBasis',
+  ];
+  draft.bindings.forEach((_, index) => {
+    const row = `customerContract.contractContent.bindings[${index}]`;
+    paths.push(row, `${row}.chargeScope`, `${row}.policy`, `${row}.inapplicabilityBasis`);
+  });
+  return paths;
+}

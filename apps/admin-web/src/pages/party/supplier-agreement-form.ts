@@ -65,6 +65,25 @@ export const supplierAgreementFieldPaths: readonly string[] = [
 ];
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 SupplierAgreementPublicationForm 的 JSX 逐处抄：十一格各一 Field（供应商、
+ * 法人、采购方案三格经 ReferencePicker 也是一 Field）。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——
+ * 改 JSX 里的 path 要同步改这里。
+ */
+export const supplierAgreementRenderedPaths: readonly string[] = [
+  'objectId',
+  'version',
+  'scope',
+  'effectiveStartsAt',
+  'effectiveEndsAt',
+  'supplierAgreement.supplier',
+  'supplierAgreement.legalEntity',
+  'supplierAgreement.scope',
+  'supplierAgreement.purchasePlan',
+  'supplierAgreement.effectiveStartsAt',
+  'supplierAgreement.effectiveEndsAt',
+];
+
+/**
  * 草稿 → 产品定义的载荷。可缺的上界缺席而不是空串：服务端按键在场与否分辨「没有上界」。壳上不带指名引用
  * （协议正文里的供应商、法人与方案已经是它的全部引用，0021 正文没有别的），不带方向。**载荷里没有身份也
  * 没有摘要**：租户与录入者由接入渠道的操作者信封给，摘要只有服务端算。

@@ -71,6 +71,28 @@ export const creditPolicyFieldPaths = [
 ] as const;
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 CreditPolicyPublicationForm 的 JSX 逐处抄：`kind` 一处 Problems 挂在版本壳
+ * 标题下，`creditPolicy.limit` 一处 Problems 挂在额度两格下，其余各一 Field。与上面的认领表由
+ * publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export const creditPolicyRenderedPaths: readonly string[] = [
+  'kind',
+  'objectId',
+  'version',
+  'scope',
+  'effectiveStartsAt',
+  'effectiveEndsAt',
+  'creditPolicy.legalEntity',
+  'creditPolicy.authorityLevel',
+  'creditPolicy.chargeType',
+  'creditPolicy.limitMinor',
+  'creditPolicy.limitRatioBasisPoints',
+  'creditPolicy.limit',
+  'creditPolicy.effectiveStartsAt',
+  'creditPolicy.effectiveEndsAt',
+];
+
+/**
  * 本地编不进 JSON 类型的格，按 JSON 路径归组；空对象即可送预览。**只此两格**——这不是校验，是组不出载荷。整数格的
  * 文本 → 数值与它的本地问题同出共享层一条判据（integerOf / integerProblem），两处不会一处放一处拦。
  */

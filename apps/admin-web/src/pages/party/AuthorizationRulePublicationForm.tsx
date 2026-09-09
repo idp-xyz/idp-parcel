@@ -158,6 +158,8 @@ function CancellationAuthorityFields({
         「谁都不许」，同一请求方第二行是冲突：两条都由服务端在预览上答，表单不代判。请求方的封闭集由服务端词表供，
         表单不内置、不预选。
       </p>
+      {/* 正文根 authorizationRule 认领了就要有处显（票 22 判据 3；票 17 评审点名）：服务端点到正文整体而不是目录时落在这里。 */}
+      <Problems lines={form.problems['authorizationRule']} />
       <Problems lines={form.problems[rowsBase]} />
       <div className="flex flex-col gap-2">
         {draft.rows.map((row, index) => {

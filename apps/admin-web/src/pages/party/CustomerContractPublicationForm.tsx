@@ -222,8 +222,14 @@ function ContractContentFields({
                   onChange={(mode) => patchBinding(index, { mode })}
                 />
               </div>
+              {/* 两格只显一格，隐着的那格认领了就要有处显（票 22 判据 3）：它的问题由显着的那格代显，服务端点到哪一格都不被吞。 */}
               {binding.mode === 'inapplicable' ? (
-                <Field label="不适用依据 *" path={`${row}.inapplicabilityBasis`} problems={form.problems}>
+                <Field
+                  label="不适用依据 *"
+                  path={`${row}.inapplicabilityBasis`}
+                  alsoPaths={[`${row}.policy`]}
+                  problems={form.problems}
+                >
                   <Input
                     value={binding.inapplicabilityBasis}
                     readOnly={form.locked}
@@ -233,7 +239,12 @@ function ContractContentFields({
                   />
                 </Field>
               ) : (
-                <Field label="接受前财务控制策略 *" path={`${row}.policy`} problems={form.problems}>
+                <Field
+                  label="接受前财务控制策略 *"
+                  path={`${row}.policy`}
+                  alsoPaths={[`${row}.inapplicabilityBasis`]}
+                  problems={form.problems}
+                >
                   <ObjectPicker
                     value={binding.policy}
                     candidates={controlPolicies}
@@ -293,6 +304,8 @@ function PreAcceptanceControlFields({
   form: PublicationFormContext;
 }) {
   const requirements: Exclude<ControlRequirementDraft, ''>[] = ['REQUIRED', 'NOT_APPLICABLE'];
+  const basisPath = 'customerContract.preAcceptanceControl.notApplicableBasis';
+  const basisShown = draft.controlRequirement === 'NOT_APPLICABLE';
   return (
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>合同级声明：这份合同要不要接受前财务控制</h3>
@@ -301,7 +314,14 @@ function PreAcceptanceControlFields({
         ——缺依据的不适用与一次默认放行分不开；`要求`不得带依据。两条都由服务端裁。
       </p>
       <div className="grid grid-cols-[auto_1fr] gap-3 items-start">
-        <Field label="要求 *" path="customerContract.preAcceptanceControl.requirement" problems={form.problems} as="div">
+        {/* 依据格只在「不适用」时显；隐着时它认领的路径由「要求」这格代显（票 22 判据 3），显着时各显各的、不重复。 */}
+        <Field
+          label="要求 *"
+          path="customerContract.preAcceptanceControl.requirement"
+          alsoPaths={basisShown ? [] : [basisPath]}
+          problems={form.problems}
+          as="div"
+        >
           <div className="flex items-center gap-1">
             {requirements.map((requirement) => (
               <Button
@@ -315,8 +335,8 @@ function PreAcceptanceControlFields({
             ))}
           </div>
         </Field>
-        {draft.controlRequirement === 'NOT_APPLICABLE' ? (
-          <Field label="不适用依据 *" path="customerContract.preAcceptanceControl.notApplicableBasis" problems={form.problems}>
+        {basisShown ? (
+          <Field label="不适用依据 *" path={basisPath} problems={form.problems}>
             <Input
               value={draft.controlNotApplicableBasis}
               readOnly={form.locked}

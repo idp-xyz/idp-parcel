@@ -125,6 +125,30 @@ export function serviceRuleFieldPaths(draft: ServiceRuleDraft): string[] {
 }
 
 /**
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 CustomerServiceRulePublicationForm 的 JSX 逐处抄：壳五格与正文四格各一
+ * Field；选定适用对象后，壳上引用 `references.<键>` 的问题带前缀显在对象标识格下；期限行与材料行各自显行本身，行里各格
+ * 一 Field，材料清单某一项（materials[j]）的问题带项号汇到文本框下。与上面的认领表由
+ * publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ */
+export function serviceRuleRenderedPaths(draft: ServiceRuleDraft): string[] {
+  const paths = ['objectId', 'version', 'scope', 'effectiveStartsAt', 'effectiveEndsAt', `${bodyPath}.applicability`];
+  if (draft.appliesTo !== '') {
+    paths.push(`${bodyPath}.${draft.appliesTo}`, `references.${shellReferenceKeyOf[draft.appliesTo]}`);
+  }
+  paths.push(`${bodyPath}.responsible`, `${bodyPath}.scope`);
+  draft.claimDeadlines.forEach((_, index) => {
+    const row = deadlineRowPath(index);
+    paths.push(row, `${row}.kind`, `${row}.startEvent`, `${row}.days`, `${row}.calendar`);
+  });
+  draft.minimumMaterials.forEach((row, index) => {
+    const path = materialsRowPath(index);
+    paths.push(path, `${path}.claimKind`);
+    materialLinesOf(row.materials).forEach((_, item) => paths.push(`${path}.materials[${item}]`));
+  });
+  return paths;
+}
+
+/**
  * 材料清单的多行文本 → 一项一串：按行切、去首尾空白、空行不是项。这是读一种输入格式，不是裁门——重复的项与整张空
  * 清单照发，「至少一项且不重复」由 NewMinimumMaterialsRule 答。
  */
