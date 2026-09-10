@@ -58,6 +58,20 @@ func TestServiceProductWithoutDeliveryConditionsStillCanonicalizesToTwoFields(t 
 	}
 }
 
+// Covers: 票 26 ⑤ / 票 25 红线「PCC-1 不换号」——把上面那条从结构推论（nil 指针 omitempty 省键、省键时字段序无关）变成
+// 断言：不带交付条件的服务产品两格文档、不带 deliveryConditions 的客户合同正文（夹具全合成），各钉一串在 66cad4c4 上算出的
+// 字面摘要。**这两串变了就是换号**：处置不是改下面的字面串，是走 ADR-0126 的换号路（新的规范化版本前缀），旧串留给旧版本。
+func TestDigestsPinnedBeforeTheDeliveryConditionSectionsStillHold(t *testing.T) {
+	bare := canonicalServiceProduct(t)
+	if got := bare.Digest().String(); got != "PCC-1:fd0683ea642de60ddd1faee0d037dff9994f72bd2049155aa7b699c3fab9a641" {
+		t.Fatalf("不带交付条件的服务产品两格文档摘要 = %s，与 66cad4c4 上钉的串不同——这是换号，走 ADR-0126", got)
+	}
+	without := canonicalCustomerContract(t, customerContractBody(t, requiredControl(), appliedControl(t, "charge-prepaid")))
+	if got := without.Digest().String(); got != "PCC-1:c32a6c319174053d452007daf0ce0fdefd1027484281f43ea953527ecd4b8363" {
+		t.Fatalf("不带 deliveryConditions 的客户合同正文摘要 = %s，与 66cad4c4 上钉的串不同——这是换号，走 ADR-0126", got)
+	}
+}
+
 // Covers: 票 25「键名镜像批文」——产品层一节落在 serviceProduct.deliveryConditions 下，三格键名与批文
 // deliveryConditionDocument 同名、没有 tightens 键；方式按字面稳定序写出，表单里换行序不换摘要。
 func TestServiceProductDeliveryConditionsMirrorTheBatchKeysAndSortMethods(t *testing.T) {
