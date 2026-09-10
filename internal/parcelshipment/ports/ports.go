@@ -998,6 +998,30 @@ type PreAcceptanceControlRelease interface {
 	ReleasePreAcceptanceControl(ctx context.Context, request ControlReleaseRequest) error
 }
 
+// ControlDispositionQuery 凭本轮已采用的商业解析回指策略正文：失败处置与责任引用按控制种类登记在闭包里
+// 已采用的接受前财务控制策略版本的正文行上，费用范围取同一闭包里已采用结算政策的适用范围——与
+// settlement-accounting 执行控制时读的同源（票 sa-preacceptance-policy-view/03 裁决、ADR-0125 决定五）。
+// 不另收费用范围一格：再让调用方送一格进来，两处就可以不一致。
+type ControlDispositionQuery struct {
+	Identity   domain.SourceIdentity
+	Resolution domain.CommercialResolutionID
+}
+
+// ControlDispositionView 读策略正文为本次委托费用范围逐种类登记的失败处置与责任引用，译成本上下文的采用
+// 引用（ADR-0132 决定三）。只在 settlement-accounting 交回含受限项的结果时才问；读回的按种类采用到受限项上，
+// 随 FinancialControlResult 落库，Decide 与读面从已记录判断取、不重读正文。
+//
+// found=false 是正文那一侧没有可读的行：闭包没采用结算政策或控制策略、正文未登记、本费用范围下一项都没写
+// ——都是租户要补的配置。「有受限项对不上」不在这里判：适配器交回范围下全部行，对不对得上由领域的
+// AdoptControlDispositions 回答，两处各判一半会让「对不上」有两种说法。答不出（回指译不动、闭包读不回或坏、
+// 正文坏、词汇集外）是 error，不折成 found=false——那会把一份坏回指伪装成租户没登记。
+type ControlDispositionView interface {
+	LoadControlDispositions(
+		ctx context.Context,
+		query ControlDispositionQuery,
+	) (map[domain.ControlItemKind]domain.AdoptedControlDisposition, bool, error)
+}
+
 // AuthorizationOutcome 是各授权端口共用的封闭答复集合。端口分开而答案集合共用：授权来源、
 // 有效期间与原因目录各不相同（那是端口分开的理由），但「答得出什么」只有这三种，且分格
 // 维度相同——按消费方的恢复动作分（ADR-0029）。共用一个集合还有一层强制力：日后多一种答复，
@@ -1097,6 +1121,41 @@ type ManualReviewAuthorization struct {
 // 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回，包括拒绝。
 type ManualReviewAuthorizer interface {
 	AuthorizeManualReview(ctx context.Context, query ManualReviewAuthorizationQuery) (ManualReviewAuthorization, error)
+}
+
+// AuthorizedDispositionAuthorizationQuery 说明谁要以什么原因、凭什么证据对哪一份停在`等待授权处置`的提交
+// 版本选定去向。与其余授权查询同样不带授权引用：调用方自带一个，就等于自己给自己签字。它不带去向：处置权
+// 是一个动作（ADR-0132 决定二），去向是获准之后选的，不是两种权。
+type AuthorizedDispositionAuthorizationQuery struct {
+	Identity          domain.SourceIdentity
+	ShipmentRequestID domain.ShipmentRequestID
+	SubmissionVersion domain.SubmissionVersionID
+	Disposer          domain.DisposerReference
+	Reason            domain.DispositionReasonReference
+	Evidence          domain.DispositionEvidenceReference
+}
+
+// AuthorizedDispositionAuthorization 只在`已授权`时携带授权引用，其余取值一律不带：交回一个零值引用，
+// 编排会把一次没拿到的授权签进处置留痕。
+type AuthorizedDispositionAuthorization struct {
+	Outcome   AuthorizationOutcome
+	Authority domain.DispositionAuthorityReference
+}
+
+// AuthorizedDispositionAuthorizer 回答 party-commercial 是否授权这位处置人对这份提交版本选定去向。授权
+// 引用由那边签发，parcel-shipment 只把它记进处置留痕——角色目录与权限等级都不属本上下文（`PAR-COM-14`）。
+//
+// 它与 ActiveRejectionAuthorizer、ManualReviewAuthorizer 都分开，理由同那两只分开的理由：处置权、复核权、
+// 拒绝权在 PC CONTEXT 里互不蕴含，合成一个端口会让一份只授复核权或只授拒绝权的规则被读成处置权——而
+// 处置的一个去向正是形成拒绝决定，读错了就是让复核角色拒单。
+//
+// 答不出与答得出分属两回事：前者是错误，后者一律经 AuthorizationOutcome 交回，包括拒绝。PC 的授权动作
+// 词汇今天没有「授权处置」一格（ADR-0132 越权风险点 2，归 PC 另票），未加之前实现方如实答`授权规则未配置`。
+type AuthorizedDispositionAuthorizer interface {
+	AuthorizeDisposition(
+		ctx context.Context,
+		query AuthorizedDispositionAuthorizationQuery,
+	) (AuthorizedDispositionAuthorization, error)
 }
 
 // WithdrawalAuthorizationQuery 说明谁要以什么原因撤回哪一份待决委托。与主动拒绝那一支同样
