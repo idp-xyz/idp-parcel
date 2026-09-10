@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
+import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { Field, Problems, fieldLabel } from './PublicationFormFields';
+import type { DeliveryConditionDraft } from './delivery-condition-section';
 import {
   emptyReferenceRow,
   emptyServiceProductDraft,
   referencePath,
+  serviceProductDeliveryConditionsPath,
   serviceProductFieldPaths,
   serviceProductLocalProblems,
   serviceProductPayloadOf,
@@ -17,9 +20,10 @@ import {
  * 服务产品版本的逐字段表单（票 admin-write-faces/09；ADR-0101 决定八）。五步「表单 → 预览摘要 → 存为待批准 →
  * 批准 → 发布」由 PublicationDraftFlow 走，本组件只摆本册的几格并把草稿组成载荷。
  *
- * **本册没有正文，表单就是壳。** 对象标识、版本号、范围引用、有效起止，加一张引用表——发布的是给合同、接单
+ * **本册的表单是壳加一节可缺的正文。** 对象标识、版本号、范围引用、有效起止，加一张引用表——发布的是给合同、接单
  * 规则包、价格政策引用的**版本身份**；产品属性与渠道映射走「登记服务形态」签与渠道产品目录页那条登记路，
- * 不在这里。摘要与批准照 08 的机制来，表单只呈现服务端答的摘要（伞票 07 硬句）。
+ * 不在这里。壳之外唯一的正文是产品层交付条件一节（票 admin-write-faces/25）：一格都不填即这一版没有交付条件。
+ * 摘要与批准照 08 的机制来，表单只呈现服务端答的摘要（伞票 07 硬句）。
  *
  * **引用表是「加一行」不是「从这几个里挑」**（票 09 硬句）：`references` 是开放词汇，键名从哪来、指向什么由发布
  * 用例与领域答；今天服务端没有词表读口，表单不代填键名、不内置词表，集合外的键由预览在对应行上逐格点名。
@@ -37,6 +41,8 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
   const patch = (change: Partial<ServiceProductDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchRow = (index: number, change: Partial<ReferenceRowDraft>) =>
     patch({ references: draft.references.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  const patchDeliveryConditions = (change: Partial<DeliveryConditionDraft>) =>
+    setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
 
   return (
     <PublicationDraftFlow
@@ -48,14 +54,23 @@ export function ServiceProductPublicationForm({ onPublished }: ServiceProductPub
       onPublished={onPublished}
     >
       {(form) => (
-        <ServiceProductFields
-          draft={draft}
-          form={form}
-          onPatch={patch}
-          onPatchRow={patchRow}
-          onAddRow={() => patch({ references: [...draft.references, emptyReferenceRow()] })}
-          onRemoveRow={(index) => patch({ references: draft.references.filter((_, at) => at !== index) })}
-        />
+        <div className="flex flex-col gap-5">
+          <ServiceProductFields
+            draft={draft}
+            form={form}
+            onPatch={patch}
+            onPatchRow={patchRow}
+            onAddRow={() => patch({ references: [...draft.references, emptyReferenceRow()] })}
+            onRemoveRow={(index) => patch({ references: draft.references.filter((_, at) => at !== index) })}
+          />
+          <DeliveryConditionFields
+            root={serviceProductDeliveryConditionsPath}
+            layer="product"
+            draft={draft.deliveryConditions}
+            form={form}
+            onPatch={patchDeliveryConditions}
+          />
+        </div>
       )}
     </PublicationDraftFlow>
   );
@@ -77,7 +92,7 @@ function ServiceProductFields({
   onRemoveRow: (index: number) => void;
 }) {
   const field = (
-    path: keyof Omit<ServiceProductDraft, 'references'>,
+    path: keyof Omit<ServiceProductDraft, 'references' | 'deliveryConditions'>,
     label: string,
     placeholder: string,
   ) => (
@@ -96,7 +111,8 @@ function ServiceProductFields({
     <div className="flex flex-col gap-4">
       <p className="text-xs text-idpxyz-textMuted">
         本册发布的是<strong>商业版本壳</strong>：给合同、接单规则包、价格政策一个可引用的版本身份。产品属性与渠道
-        映射走「登记服务形态」签与渠道产品目录页，不在这里。哪几格立不住由预览答，答什么显什么。
+        映射走「登记服务形态」签与渠道产品目录页，不在这里；壳之外唯一可带的正文是下面那一节产品层交付条件，可缺。
+        哪几格立不住由预览答，答什么显什么。
       </p>
 
       <div className="grid grid-cols-2 gap-3">

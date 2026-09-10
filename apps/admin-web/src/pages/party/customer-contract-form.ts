@@ -6,7 +6,19 @@
 // 二选一控件（行的「指名策略 / 显式不适用」、合同级的「要求 / 不适用」）只决定把哪一格放进载荷；没选、
 // 选了没填，照样送上去——答回来的是构造门对那一行 / 那一节的拒绝，不是表单替人补的一句。本册的载荷全是
 // 字符串格，没有「编不进 JSON 类型」的格，所以也没有 localProblems。
+//
+// 第三层：合同层交付条件一节（票 admin-write-faces/25，ADR-0133 决定四），纯逻辑在 delivery-condition-section.ts 与产品
+// 版本表单共用；一格都没填即整节缺席（这一版没有合同层声明），填了任一格整节送、tightens 两格空着也送由服务端点名。
+// 「只能收紧」由服务端写口答，预览看不出、发布那一步才拒——表单不自判。
 
+import {
+  deliveryConditionDeclared,
+  deliveryConditionFieldPaths,
+  deliveryConditionPayloadOf,
+  deliveryConditionRenderedPaths,
+  emptyDeliveryConditionDraft,
+  type DeliveryConditionDraft,
+} from './delivery-condition-section';
 import type {
   CommercialPublicationPayload,
   ControlBindingPayload,
@@ -37,7 +49,12 @@ export interface CustomerContractDraft {
   bindings: ControlBindingDraft[];
   controlRequirement: ControlRequirementDraft;
   controlNotApplicableBasis: string;
+  /** 合同层交付条件一节（票 25）；一格都没填即整节不进载荷。 */
+  deliveryConditions: DeliveryConditionDraft;
 }
+
+/** 第三层在载荷里的根：这一节的各格路径都挂在它下面。 */
+export const customerContractDeliveryConditionsPath = 'customerContract.deliveryConditions';
 
 export function emptyBindingDraft(): ControlBindingDraft {
   return { chargeScope: '', mode: '', policy: '', inapplicabilityBasis: '' };
@@ -54,6 +71,7 @@ export function emptyCustomerContractDraft(): CustomerContractDraft {
     bindings: [emptyBindingDraft()],
     controlRequirement: '',
     controlNotApplicableBasis: '',
+    deliveryConditions: emptyDeliveryConditionDraft(),
   };
 }
 
@@ -97,6 +115,9 @@ export function payloadOf(draft: CustomerContractDraft): CommercialPublicationPa
   if (draft.bindings.length > 0) {
     payload.customerContract!.contractContent.bindings = draft.bindings.map(bindingPayloadOf);
   }
+  if (deliveryConditionDeclared(draft.deliveryConditions, 'contract')) {
+    payload.customerContract!.deliveryConditions = deliveryConditionPayloadOf(draft.deliveryConditions, 'contract');
+  }
   return payload;
 }
 
@@ -119,6 +140,7 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
     const row = `customerContract.contractContent.bindings[${index}]`;
     paths.push(row, `${row}.chargeScope`, `${row}.policy`, `${row}.inapplicabilityBasis`);
   });
+  paths.push(...deliveryConditionFieldPaths(customerContractDeliveryConditionsPath, draft.deliveryConditions, 'contract'));
   return paths;
 }
 
@@ -126,7 +148,8 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
  * 组件里显 Problems 的路径表（票 22 判据 3），按 CustomerContractPublicationForm 的 JSX 逐处抄：壳五格各一 Field；规则包
  * 一格连带壳上引用与正文根（alsoPaths）；合同级声明的「要求」一格，依据格隐着时由它代显依据格的问题（alsoPaths）；
  * 每条约定行 RowFrame 显行本身，费用范围一格，「指名策略 / 不适用依据」两格只显一格、隐着的那格的问题由显着的代显
- * （alsoPaths）——所以隐显都不影响这张表。与上面的认领表由 publication-form-rendered-paths.test.ts 比对。
+ * （alsoPaths）——所以隐显都不影响这张表；交付条件一节照 DeliveryConditionFields 的 JSX。与上面的认领表由
+ * publication-form-rendered-paths.test.ts 比对。
  */
 export function customerContractRenderedPaths(draft: CustomerContractDraft): string[] {
   const paths: string[] = [
@@ -141,5 +164,6 @@ export function customerContractRenderedPaths(draft: CustomerContractDraft): str
     const row = `customerContract.contractContent.bindings[${index}]`;
     paths.push(row, `${row}.chargeScope`, `${row}.policy`, `${row}.inapplicabilityBasis`);
   });
+  paths.push(...deliveryConditionRenderedPaths(customerContractDeliveryConditionsPath, draft.deliveryConditions, 'contract'));
   return paths;
 }

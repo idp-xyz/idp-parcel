@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import { deepEqual, equal, notEqual, ok } from 'node:assert/strict';
+import { emptyDeliveryConditionDraft } from './delivery-condition-section';
 import { payloadKey } from './publication-draft-flow';
 import {
   customerContractFieldPaths,
@@ -14,6 +15,7 @@ import {
 //   2. 二选一控件只决定送哪一格，**不代判**：没选的行、没选的要求原样送上去，答回来的是构造门的拒绝；
 //   3. 策略侧没有「无控制」取值——「不适用」是行的一格，不是策略选单里的一项（ADR-0115 Decision 一）；
 //   4. 规则包同时进壳上的指名引用与正文，两处必须相等由服务端核。
+//   5. 第三层（票 admin-write-faces/25）：合同层交付条件一格都没填整节缺席，填了任一格整节送、tightens 两格空着也送。
 // 表单不算摘要、不裁任何门（伞票 07 硬句）：这里没有任何领域校验。
 
 function filled(over: Partial<CustomerContractDraft> = {}): CustomerContractDraft {
@@ -142,4 +144,46 @@ test('空草稿有一行空约定等人填，两层都未选；空行的默认�
   deepEqual(draft.bindings[0], emptyBindingDraft());
   equal(emptyBindingDraft().mode, '');
   equal(draft.controlRequirement, '');
+  deepEqual(draft.deliveryConditions, emptyDeliveryConditionDraft(), '第三层空着：这一版不声明合同层交付条件');
+});
+
+test('第三层：交付条件一格都没填整节缺席；填了任一格整节进 customerContract.deliveryConditions 且 tightens 两格永远送', () => {
+  equal('deliveryConditions' in payloadOf(filled()).customerContract!, false);
+
+  const declared = payloadOf(
+    filled({
+      deliveryConditions: {
+        ...emptyDeliveryConditionDraft(),
+        methodsText: 'METHOD/in-person',
+        recipientScopeRule: 'RULE/recipient-scope-1',
+        proofOfDeliveryRule: 'RULE/proof-contract-1',
+        tightensObjectId: 'SYN-PROD-01',
+        tightensVersion: 'v2',
+      },
+    }),
+  );
+  deepEqual(declared.customerContract!.deliveryConditions, {
+    methods: ['METHOD/in-person'],
+    recipientScopeRule: 'RULE/recipient-scope-1',
+    proofOfDeliveryRule: 'RULE/proof-contract-1',
+    tightens: { objectId: 'SYN-PROD-01', version: 'v2' },
+  });
+  // 只填了方式、没指名所收紧的产品版本：tightens 两格空着也送，让服务端点名 tightens.objectId / tightens.version，
+  // 而不是缺键落成一句不指格的「未受理」。
+  const untightened = payloadOf(filled({ deliveryConditions: { ...emptyDeliveryConditionDraft(), methodsText: 'METHOD/in-person' } }));
+  deepEqual(untightened.customerContract!.deliveryConditions?.tightens, { objectId: '', version: '' });
+
+  const paths = customerContractFieldPaths(filled({ deliveryConditions: { ...emptyDeliveryConditionDraft(), methodsText: 'a\nb' } }));
+  for (const want of [
+    'customerContract.deliveryConditions',
+    'customerContract.deliveryConditions.methods[0]',
+    'customerContract.deliveryConditions.methods[1]',
+    'customerContract.deliveryConditions.recipientScopeRule',
+    'customerContract.deliveryConditions.proofOfDeliveryRule',
+    'customerContract.deliveryConditions.tightens',
+    'customerContract.deliveryConditions.tightens.objectId',
+    'customerContract.deliveryConditions.tightens.version',
+  ]) {
+    ok(paths.includes(want), `缺路径 ${want}`);
+  }
 });

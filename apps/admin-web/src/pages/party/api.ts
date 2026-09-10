@@ -16,6 +16,18 @@ export interface ServiceProductRecord {
   effectiveEndsAt?: string;
   publishedAt: string;
   form?: string;
+  /** 这一版声明过的产品层交付条件（0030；票 admin-write-faces/25 裁读回折进目录行）。键缺席即这一版没有交付条件——页面先看键在不在。 */
+  deliveryConditions?: DeliveryConditionRecord;
+}
+
+// 目录行上可缺的那一节交付条件（后端 deliveryConditionBody，键名镜像受控批文）：方式集合按登记册交回的稳定序、两条规则引用、
+// 声明时刻；tightens 只在合同层在场（所收紧的服务产品版本）。方式与规则引用是开放引用，页面照字面显、不译词。
+export interface DeliveryConditionRecord {
+  tightens?: { objectId: string; version: string };
+  methods: string[];
+  recipientScopeRule: string;
+  proofOfDeliveryRule: string;
+  declaredAt: string;
 }
 
 export interface ServiceProductListResponseBody {
@@ -269,6 +281,8 @@ export interface CustomerContractRecord {
   rulePackageId?: string;
   declaredAt?: string;
   bindings: ControlBindingRecord[];
+  /** 合同层交付条件（第三层，票 25），与 0012 正文各自可缺：键缺席即这一版没有合同层声明，不由 contentRegistered 推。 */
+  deliveryConditions?: DeliveryConditionRecord;
 }
 
 export interface CustomerContractListResponseBody {
@@ -477,8 +491,8 @@ export function listCustomerAccounts(): Promise<ApiResult<CustomerAccountListRes
   return exchangeMasterData<CustomerAccountListResponseBody>('/commercial-customer-accounts');
 }
 
-// 映射目录不并进 /commercial-service-products：那边上列版本壳，这边上列登记册信封
-// （产品×渠道×区间的修订），行形状与修订轴不同（后端读口注释同一条裁决）。
+// 映射目录不并进 /commercial-service-products：那边上列版本壳（自票 25 起外加一节可缺的产品层交付条件），
+// 这边上列登记册信封（产品×渠道×区间的修订），行形状与修订轴不同（后端读口注释同一条裁决）。
 export function listProductChannelMappings(): Promise<
   ApiResult<ProductChannelMappingListResponseBody>
 > {

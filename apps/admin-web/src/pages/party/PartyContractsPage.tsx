@@ -5,6 +5,7 @@ import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
+import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   commercialRegistrationEndpoints,
@@ -72,6 +73,13 @@ const columns: ListColumn<CustomerContractRecord>[] = [
     header: '接受前财务控制约定',
     className: 'min-w-64',
     render: (row) => <ControlBindings row={row} />,
+  },
+  {
+    // 合同层交付条件（0030，票 admin-write-faces/25）：与正文是两层各自可缺，这一格不看 contentRegistered，只看键在不在。
+    id: 'delivery-conditions',
+    header: '交付条件（合同层）',
+    className: 'min-w-64',
+    render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
   },
   {
     id: 'effective',

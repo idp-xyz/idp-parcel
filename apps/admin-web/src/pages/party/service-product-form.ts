@@ -1,10 +1,11 @@
 // 服务产品版本表单的纯逻辑（票 admin-write-faces/09；ADR-0101 决定八逐字段表单）。全部是纯函数，
 // node:test 钉着；组件 ServiceProductPublicationForm.tsx 只负责摆，五步由 PublicationDraftFlow 走。
 //
-// **本册的载荷就是壳。** 服务产品版本没有正文——发布的是给合同、接单规则包、价格政策引用的版本身份；
-// 产品属性与渠道映射走另一条登记路（register_products）。所以草稿只有壳四格、有效起止与引用表，
-// 组出来的 CommercialPublicationPayload 没有任何正文格（与 Go 侧 publication_draft_payload.go 对本册
-// 不加格是同一件事）。
+// **本册的载荷是壳加一节可缺的正文。** 服务产品版本发布的是给合同、接单规则包、价格政策引用的版本身份；
+// 产品属性与渠道映射走另一条登记路（register_products）。壳之外唯一的正文是产品层交付条件一节（票
+// admin-write-faces/25，ADR-0133 决定四）：一格都没填即整节缺席，组出来的 CommercialPublicationPayload 与票 09
+// 时一样没有正文格；填了才带 `serviceProduct.deliveryConditions`（与 Go 侧 publication_draft_payload.go 对本册
+// 那一格可缺是同一件事）。那一节的纯逻辑在 delivery-condition-section.ts，与客户合同表单共用。
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 07 硬句）。空字段、时刻格式、区间先后、引用键是
 // 不是集合内的词，一律原样送上去让服务端逐格答；这里只做两件编码层的事：可缺的键缺席而不是空串，
@@ -13,6 +14,14 @@
 // **表单不得替操作者拟引用键**（票 09 硬句）：`references` 是开放词汇，键从哪来由发布用例与领域答；
 // 这里的引用表是「加一行」不是「从这几个里挑」，今天服务端没有词表读口，本文件也不内置一份。
 
+import {
+  deliveryConditionDeclared,
+  deliveryConditionFieldPaths,
+  deliveryConditionPayloadOf,
+  deliveryConditionRenderedPaths,
+  emptyDeliveryConditionDraft,
+  type DeliveryConditionDraft,
+} from './delivery-condition-section';
 import type { CommercialPublicationPayload } from './publication-draft-api';
 
 /** 引用表的一行：被引对象类别（原词，操作者自填）→ 对象标识。 */
@@ -29,10 +38,23 @@ export interface ServiceProductDraft {
   /** 留空即无上界（载荷里缺席，不送空串）。 */
   effectiveEndsAt: string;
   references: ReferenceRowDraft[];
+  /** 产品层交付条件一节（票 25）；一格都没填即整节不进载荷。 */
+  deliveryConditions: DeliveryConditionDraft;
 }
 
+/** 本册正文格在载荷里的根：这一节的各格路径都挂在它下面。 */
+export const serviceProductDeliveryConditionsPath = 'serviceProduct.deliveryConditions';
+
 export function emptyServiceProductDraft(): ServiceProductDraft {
-  return { objectId: '', version: '', scope: '', effectiveStartsAt: '', effectiveEndsAt: '', references: [] };
+  return {
+    objectId: '',
+    version: '',
+    scope: '',
+    effectiveStartsAt: '',
+    effectiveEndsAt: '',
+    references: [],
+    deliveryConditions: emptyDeliveryConditionDraft(),
+  };
 }
 
 export function emptyReferenceRow(): ReferenceRowDraft {
@@ -59,31 +81,38 @@ export function referencePath(row: ReferenceRowDraft): string {
 }
 
 /**
- * 表单渲染了哪几条 JSON 路径：壳四格加有效起止，再加引用表每一行（按键）。流程组件拿它分辨
- * 「服务端点名的路径有没有格接住」，没接住的它自己单列。
+ * 表单渲染了哪几条 JSON 路径：壳四格加有效起止，再加引用表每一行（按键），再加交付条件一节（节根、方式每项、两条
+ * 规则引用）。流程组件拿它分辨「服务端点名的路径有没有格接住」，没接住的它自己单列。
  */
 export function serviceProductFieldPaths(draft: ServiceProductDraft): string[] {
   const paths: string[] = [...serviceProductShellPaths];
   for (const row of draft.references) {
     if (!isBlankReferenceRow(row)) paths.push(referencePath(row));
   }
+  paths.push(...deliveryConditionFieldPaths(serviceProductDeliveryConditionsPath, draft.deliveryConditions, 'product'));
   return paths;
 }
 
 /**
  * 组件里显 Problems 的路径表（票 22 判据 3），按 ServiceProductPublicationForm 的 JSX 逐处抄：壳五格各一 Field；引用表
  * 每一行（含两格全空、不进载荷也不认领的行）行下各一 Problems 显该行键的路径——比认领表多出的空行无害，认领表少显的
- * 才是吞问题。与上面的认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ * 才是吞问题；交付条件一节照 DeliveryConditionFields 的 JSX（节根、两条规则引用各一 Field、方式按项号汇显）。与上面的
+ * 认领表由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
  */
 export function serviceProductRenderedPaths(draft: ServiceProductDraft): string[] {
-  return [...serviceProductShellPaths, ...draft.references.map(referencePath)];
+  return [
+    ...serviceProductShellPaths,
+    ...draft.references.map(referencePath),
+    ...deliveryConditionRenderedPaths(serviceProductDeliveryConditionsPath, draft.deliveryConditions, 'product'),
+  ];
 }
 
 /**
  * 草稿 → 载荷。壳各格原样带；`effectiveEndsAt` 与 `references` 为空时**缺席**而不是空值——服务端按键
  * 在场与否分辨「没有」，空串与空对象在那边不是同一句话。引用表里两格全空的行跳过；半填的行照送，
  * 由服务端答哪一格立不住。同键两行时后一行覆盖前一行——那是 JSON 对象的形状所致，本模块用
- * `serviceProductLocalProblems` 把它报出来，流程组件在问题清零之前不放预览。
+ * `serviceProductLocalProblems` 把它报出来，流程组件在问题清零之前不放预览。交付条件一节一格都没填
+ * 即整个 `serviceProduct` 格缺席（这一版没有交付条件，载荷仍是壳）；填了任一格整节原样送。
  */
 export function serviceProductPayloadOf(draft: ServiceProductDraft): CommercialPublicationPayload {
   const payload: CommercialPublicationPayload = {
@@ -106,6 +135,9 @@ export function serviceProductPayloadOf(draft: ServiceProductDraft): CommercialP
     // 线格式把键收窄到 CommercialObjectKindName 那个封闭集；表单按硬句不替操作者挑词，键原样送、集合外由
     // 服务端在 `references.<键>` 上逐格答。这里只是把开放词汇的对象放进收窄了的槽位，不是断言键一定在集合内。
     payload.references = references as CommercialPublicationPayload['references'];
+  }
+  if (deliveryConditionDeclared(draft.deliveryConditions, 'product')) {
+    payload.serviceProduct = { deliveryConditions: deliveryConditionPayloadOf(draft.deliveryConditions, 'product') };
   }
   return payload;
 }

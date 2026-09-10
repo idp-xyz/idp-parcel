@@ -3,9 +3,12 @@ import { Button, Input } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
+import { DeliveryConditionFields } from './DeliveryConditionFields';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { Field, RowFrame, fieldLabel, selectClass, useLoaded } from './PublicationFormFields';
+import type { DeliveryConditionDraft } from './delivery-condition-section';
 import {
+  customerContractDeliveryConditionsPath,
   customerContractFieldPaths,
   emptyBindingDraft,
   emptyCustomerContractDraft,
@@ -23,7 +26,8 @@ import {
  *
  * **两层分两节、不合并**（ADR-0115）：0012 的合同正文（接单规则包 + 按费用范围的约定表）与 0007 的合同级
  * 「要不要接受前财务控制」声明是同一份合同的两层话——前者按范围答「用哪份 / 不适用」，后者答整份合同
- * 「要不要」；并成一节会让「不适用」在两个层面上撞成同一个词。
+ * 「要不要」；并成一节会让「不适用」在两个层面上撞成同一个词。第三节是合同层交付条件（0030，票 admin-write-faces/25）：
+ * 可缺，一格都不填即这一版没有合同层声明；字段组与产品版本表单共用 DeliveryConditionFields。
  *
  * **表单不算摘要、不裁任何门、不代判**（伞票 07 硬句；票 10 硬句）：约定行的「指名策略 / 显式不适用」与合同级
  * 的「要求 / 不适用」都是二选一控件，没选、选了没填照样送上去，答回来的是构造门对那一行 / 那一节的拒绝；
@@ -48,6 +52,8 @@ export function CustomerContractPublicationForm({ onPublished }: CustomerContrac
   const patch = (change: Partial<CustomerContractDraft>) => setDraft((current) => ({ ...current, ...change }));
   const patchBinding = (index: number, change: Partial<ControlBindingDraft>) =>
     patch({ bindings: draft.bindings.map((binding, at) => (at === index ? { ...binding, ...change } : binding)) });
+  const patchDeliveryConditions = (change: Partial<DeliveryConditionDraft>) =>
+    setDraft((current) => ({ ...current, deliveryConditions: { ...current.deliveryConditions, ...change } }));
 
   return (
     <PublicationDraftFlow
@@ -69,6 +75,13 @@ export function CustomerContractPublicationForm({ onPublished }: CustomerContrac
             controlPolicies={controlPolicies}
           />
           <PreAcceptanceControlFields draft={draft} patch={patch} form={form} />
+          <DeliveryConditionFields
+            root={customerContractDeliveryConditionsPath}
+            layer="contract"
+            draft={draft.deliveryConditions}
+            form={form}
+            onPatch={patchDeliveryConditions}
+          />
         </div>
       )}
     </PublicationDraftFlow>

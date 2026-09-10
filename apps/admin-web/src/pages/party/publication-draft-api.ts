@@ -87,6 +87,34 @@ export interface CommercialPublicationPayload {
   acceptanceRulePackage?: AcceptanceRulePackageBodyPayload;
   preAcceptanceFinancialControlPolicy?: PreAcceptanceFinancialControlPolicyBodyPayload;
   customerServiceRule?: CustomerServiceRuleBodyPayload;
+  /** 服务产品册的正文格，可缺——壳单独发布仍合法（票 09）；今天格里只有产品层交付条件一节（票 25）。 */
+  serviceProduct?: ServiceProductBodyPayload;
+}
+
+/**
+ * 服务产品册正文格（Go `ServiceProductBodyPayload`，票 admin-write-faces/25）：今天只有一节可缺的产品层交付条件。整格缺席与
+ * 格在而节缺席都是「这一版没有交付条件」，服务端折出的仍是票 09 那份两格文档。
+ */
+export interface ServiceProductBodyPayload {
+  deliveryConditions?: DeliveryConditionPayload;
+}
+
+/**
+ * 交付条件一节（Go `DeliveryConditionPayload`，票 admin-write-faces/25；ADR-0133 决定四）：挂在服务产品册（产品层）或客户合同册
+ * （合同层）的正文格下，键名镜像受控批文 `declarations.deliveryConditions`。三格都是开放引用（PAR-NET-09 / PAR-COM-05 / 06 实例
+ * 半边）——表单收串不校验存在性、不给候选、不内置任何一种方式；`tightens` 只在合同层：所收紧的服务产品版本，操作者手填而不是
+ * 从壳上的指名引用推（壳上只有对象没有版本号）。层与 tightens 的配对、零方式、同方式两行、「只能收紧」都由服务端答。
+ */
+export interface DeliveryConditionPayload {
+  tightens?: TightenedProductPayload;
+  methods: string[];
+  recipientScopeRule: string;
+  proofOfDeliveryRule: string;
+}
+
+export interface TightenedProductPayload {
+  objectId: string;
+  version: string;
 }
 
 /**
@@ -311,6 +339,8 @@ export interface MinimumMaterialsRulePayload {
 export interface CustomerContractBodyPayload {
   contractContent: ContractContentPayload;
   preAcceptanceControl?: PreAcceptanceControlPayload;
+  /** 合同层交付条件（第三层，票 25），可缺：这一版没有合同层声明就是没有，不默认沿用产品层。 */
+  deliveryConditions?: DeliveryConditionPayload;
 }
 
 export interface ContractContentPayload {

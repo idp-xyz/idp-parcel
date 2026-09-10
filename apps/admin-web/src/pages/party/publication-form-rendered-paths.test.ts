@@ -60,7 +60,7 @@ function assertEveryClaimedPathRendered(form: string, claimed: readonly string[]
   deepEqual(unrenderedClaimedPaths(claimed, rendered), [], `${form}：认领了却没处显 Problems 的路径`);
 }
 
-test('service product：壳五格与引用表每行（含空行）都有处显', () => {
+test('service product：壳五格、引用表每行（含空行）与交付条件一节（含方式每项）都有处显', () => {
   const empty = emptyServiceProductDraft();
   assertEveryClaimedPathRendered('SERVICE_PRODUCT 空草稿', serviceProductFieldPaths(empty), serviceProductRenderedPaths(empty));
   const withRows = {
@@ -70,11 +70,12 @@ test('service product：壳五格与引用表每行（含空行）都有处显',
       { kind: '', objectId: '' },
       { kind: 'CUSTOMER_CONTRACT', objectId: '' },
     ],
+    deliveryConditions: { ...empty.deliveryConditions, methodsText: 'SYN-METHOD-A\n\nSYN-METHOD-B', recipientScopeRule: 'SYN-RULE-01' },
   };
-  assertEveryClaimedPathRendered('SERVICE_PRODUCT 带行', serviceProductFieldPaths(withRows), serviceProductRenderedPaths(withRows));
+  assertEveryClaimedPathRendered('SERVICE_PRODUCT 带行带交付条件', serviceProductFieldPaths(withRows), serviceProductRenderedPaths(withRows));
 });
 
-test('customer contract：合同级声明与约定行两格无论显隐都有处显', () => {
+test('customer contract：合同级声明、约定行两格无论显隐、第三层交付条件（含 tightens 两格与方式每项）都有处显', () => {
   const empty = emptyCustomerContractDraft();
   assertEveryClaimedPathRendered('CUSTOMER_CONTRACT 空草稿', customerContractFieldPaths(empty), customerContractRenderedPaths(empty));
   const modes: CustomerContractDraft['controlRequirement'][] = ['', 'REQUIRED', 'NOT_APPLICABLE'];
@@ -87,6 +88,7 @@ test('customer contract：合同级声明与约定行两格无论显隐都有处
         { ...emptyBindingDraft(), mode: 'inapplicable', inapplicabilityBasis: 'SYN-BASIS-01' },
         emptyBindingDraft(),
       ],
+      deliveryConditions: { ...empty.deliveryConditions, methodsText: 'SYN-METHOD-A\nSYN-METHOD-B', tightensObjectId: 'SYN-PROD-01' },
     };
     assertEveryClaimedPathRendered(
       `CUSTOMER_CONTRACT 要求=${controlRequirement || '未选'} 带三种模式的行`,

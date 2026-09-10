@@ -21,12 +21,13 @@ import {
   registrationTitles,
   serviceFormLabels,
 } from './presentation';
+import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
 
 const info = moduleInfoById['service-products'];
 
-// 只列版本壳(MCP-3 裁决⑥):读面交回的就是 service_product_form 的版本行;
-// 产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
+// 只列版本壳(MCP-3 裁决⑥)外加一节可缺的产品层交付条件(票 admin-write-faces/25 裁读回折进目录行):读面交回的就是
+// service_product_form 的版本行左连接 0030;产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
 const columns: ListColumn<ServiceProductRecord>[] = [
   {
     id: 'product',
@@ -53,6 +54,12 @@ const columns: ListColumn<ServiceProductRecord>[] = [
     id: 'status',
     header: '生命周期状态',
     render: (row) => labelOf(commercialStatusLabels, row.status),
+  },
+  {
+    id: 'delivery-conditions',
+    header: '交付条件（产品层）',
+    className: 'min-w-64',
+    render: (row) => <DeliveryConditionsCell conditions={row.deliveryConditions} />,
   },
   {
     id: 'effective',
