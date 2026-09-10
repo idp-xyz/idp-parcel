@@ -1,7 +1,7 @@
 # 31 实际承运商首次有效收寄：TF 侧事实聚合、版本链、登记册、outbox 与显式判断入口
 
 Category: enhancement
-Status: ready-for-agent——通道 6 于 2026-09-10 按 MCP-1 派单 task-f05bc5a3 立票，形状由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定、TF CONTEXT 同笔落词条（分支 `mcp6-adr0135`）；**只写票面，未动代码。** 「要裁的」为零
+Status: in-progress——通道 6 于 2026-09-10 按 MCP-1 派单 task-f3f0d59a 认领实施（隔离树 `D:/tops/idp-parcel-mcp6-lc31`，分支 `mcp6-lc31`，基 `76932b38`）。立票：通道 6 于同日按 MCP-1 派单 task-f05bc5a3，形状由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定、TF CONTEXT 同笔落词条（分支 `mcp6-adr0135`）；**只写票面，未动代码。** 「要裁的」为零
 Blocked by: 无（ADR-0135 与 TF CONTEXT 词条已落；本票不等 PS 侧 lc/25，反过来 lc/25 等本票）
 
 ## 缺口
