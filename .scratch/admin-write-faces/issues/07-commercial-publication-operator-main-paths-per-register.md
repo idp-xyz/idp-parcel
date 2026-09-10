@@ -1,7 +1,7 @@
 # 07 商业发布各类的运营主路径：按 ADR-0101 决定八逐册裁形
 
 Category: enhancement
-Status: in-progress——伞票；已拆十一张子票 [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md)–[18](./18-customer-service-rule-form.md)（表见「子票」节）。**08 已 resolved（2026-09-08，MCP-1 接 MCP-5 续做完，分支 `mcp1-awf08`）：公共半边落地，子票 09–17 的 Blocked by 解除、进入前沿**；接表单时各票要用的东西见 08「完成记录」（载荷线格式 `CommercialPublicationPayload`、预览口与载体三口路径、`DRAFT_AWAITS_EFFECTIVE_START` 那一格）。18 留 draft，等什么写在它的 Status 行与下表。本票转 resolved 的判据照 issue-tracker「Complete a parent」：十一张全 resolved
+Status: resolved——2026-09-10 11:2x 通道 1 收口：十一张子票 08–18 全 resolved（表见「子票」节，18 于 2026-09-09 17:5x 进 main `c2a965c9` 是最后一张），按 issue-tracker「Complete a parent」转 resolved；伞票自身无代码，公共半边 20 也已进 main。此前：in-progress——伞票；已拆十一张子票 [08](./08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md)–[18](./18-customer-service-rule-form.md)（表见「子票」节）。**08 已 resolved（2026-09-08，MCP-1 接 MCP-5 续做完，分支 `mcp1-awf08`）：公共半边落地，子票 09–17 的 Blocked by 解除、进入前沿**；接表单时各票要用的东西见 08「完成记录」（载荷线格式 `CommercialPublicationPayload`、预览口与载体三口路径、`DRAFT_AWAITS_EFFECTIVE_START` 那一格）。18 留 draft，等什么写在它的 Status 行与下表。本票转 resolved 的判据照 issue-tracker「Complete a parent」：十一张全 resolved
 Blocked by: 无（票 03 已落 JSON 镜像签）
 
 ## 缺什么
@@ -117,3 +117,4 @@ ADR-0101 Alternatives 第二条否决逐字段表单只针对上百格的价卡�
   词表跟同一条分派是同一形；一册一口要四张票四个人改 `endpoints.go`，是第 1 波刻意避开的撞点。**派单顺序**：20 + 14（14 不要词表）先开；
   20 落点广播后 12/13/15/17 点名派——四张同写 `CommercialPoliciesPage.tsx`，各自只加一个签 + 一个 import（纯加行，推送方解撞），
   表单本体各进新文件；Go 两共享文件照第 1 波「改前占号、只加自己一格」。子票表加 20 一行；12/13/15/17 的阻塞边加 20。
+- 2026-09-10 11:2x · 通道 1（收口，钉 main `84e89dc7`）：**伞票 → resolved。** 子票表十一行「状态」列全为 resolved，各票「进 main 记录」在各自票内；本票判据「十一张全 resolved」满足。管理台运营主路径十册（含 18 第十册）与公共半边（08 后端、16 前端、20 词表）都在 main。未做：不重开逐册「选形与理由」的复核（各票评审已过）；ADR-0101 决定八要求的「每册写明选形与理由」以各子票为准，本表只是索引。
