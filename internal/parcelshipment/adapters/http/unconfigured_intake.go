@@ -38,6 +38,7 @@ var (
 	_ CancellationIntake           = UnconfiguredIntake{}
 	_ ManualReviewCompletionIntake = UnconfiguredIntake{}
 	_ ActiveRejectionIntake        = UnconfiguredIntake{}
+	_ AuthorizedDispositionIntake  = UnconfiguredIntake{}
 	_ SupplementIntake             = UnconfiguredIntake{}
 	_ SourceDataAmendmentIntake    = UnconfiguredIntake{}
 )
@@ -66,6 +67,12 @@ func (UnconfiguredIntake) IntakeManualReviewCompletion(context.Context, *http.Re
 // IntakeActiveRejection 同上。
 func (UnconfiguredIntake) IntakeActiveRejection(context.Context, *http.Request) (application.RejectShipmentRequestCommand, error) {
 	return application.RejectShipmentRequestCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeAuthorizedDisposition 同上：处置人与去向整组来自认证结果，采信自报的处置人等于让任何调用方
+// 替任何角色决定一份受限委托的去向。
+func (UnconfiguredIntake) IntakeAuthorizedDisposition(context.Context, *http.Request) (application.DisposeShipmentRequestCommand, error) {
+	return application.DisposeShipmentRequestCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeSupplement 同上：补充请求的来源身份与基准版本整组来自认证结果，采信自报的身份等于

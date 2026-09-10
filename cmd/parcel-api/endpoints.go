@@ -54,6 +54,7 @@ func assembleBusinessEndpoints(
 	requestViews shipmenthttp.ShipmentRequestViewsReader,
 	manualReview shipmenthttp.ManualReviewCompletionHandler,
 	rejection shipmenthttp.ActiveRejectionHandler,
+	disposition shipmenthttp.AuthorizedDispositionHandler,
 	supplement shipmenthttp.SupplementHandler,
 	amendment shipmenthttp.AmendmentHandler,
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
@@ -191,6 +192,9 @@ func assembleBusinessEndpoints(
 		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
 		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},
 		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, rejection)},
+		// 授权处置命令口（票 sa-preacceptance-policy-view/04；ADR-0132）：授权角色对停在`等待授权处置`的
+		// 委托选去向。运营侧写行，同挂字面量 UnconfiguredIntake{}；谁是处置人属 `PAR-INT-01`（实例半边）。
+		{Pattern: "/shipment-requests/authorized-dispositions", Handler: shipmenthttp.NewDisposeShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, disposition)},
 		// 受控补充命令口（票 first-tenant-runway/09；ADR-0106 Decision 四）：客户在`已提交`委托上形成
 		// 同一委托的新提交版本，编排随新版本落库同事务铸「新提交版本已形成」信封驱动续办。它是客户
 		// 渠道的写行，同挂字面量 UnconfiguredIntake{}；谁能替哪个客户账户补充、基准版本怎么译，属

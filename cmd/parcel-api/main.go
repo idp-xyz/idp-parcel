@@ -105,6 +105,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 授权处置编排（ADR-0132）：处置授权那一格今天如实未配置（PC 授权动作词汇没有这一格），接进装配后
+	// 停在`等待授权处置`的委托才有生产入口，停点从「没有入口」变成「说得出停在授权未配置」。
+	disposition, err := buildDispositionOrchestration(db)
+	if err != nil {
+		return err
+	}
 	// 受控补充编排（ADR-0106 Decision 四）：此前它只活在测试里，接进装配后「新提交版本已形成」
 	// 信封才有生产发布方，停在`等待受控补充`并已入账的委托才有人续办。
 	supplement, err := buildCustomerSupplementOrchestration(db)
@@ -368,6 +374,7 @@ func run(logger *slog.Logger) error {
 			requestViews,
 			manualReview,
 			rejection,
+			disposition,
 			supplement,
 			amendment,
 			requestViews,

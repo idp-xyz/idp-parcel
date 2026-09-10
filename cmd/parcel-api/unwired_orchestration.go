@@ -414,6 +414,19 @@ func (unwiredRejection) Handle(
 	return shipmentapp.RejectShipmentRequestResult{}, errOrchestrationNotWired
 }
 
+// unwiredDisposition 是授权处置命令口的编排占位（票 sa-preacceptance-policy-view/04，ADR-0132）。填法同其余
+// 命令占位：不交回零值业务答案——DisposeShipmentRequestResult 的零值 outcome 是 Invalid，端点会把它判成
+// UNNAMED_OUTCOME，那条路径本是用来抓「应用层漏了一格没具名」的；稳定错误让「越过了 Intake」可观察为
+// NO_ANSWER_FORMED。
+type unwiredDisposition struct{}
+
+func (unwiredDisposition) Handle(
+	context.Context,
+	shipmentapp.DisposeShipmentRequestCommand,
+) (shipmentapp.DisposeShipmentRequestResult, error) {
+	return shipmentapp.DisposeShipmentRequestResult{}, errOrchestrationNotWired
+}
+
 // unwiredSupplement 是受控补充命令口的编排占位（票 first-tenant-runway/09，ADR-0106 Decision 四）。
 // 填法同其余命令占位：不交回零值业务答案——FormNewSubmissionVersionResult 的零值 outcome 是 Invalid，
 // 端点会把它判成 UNNAMED_OUTCOME，那条路径本是用来抓「应用层漏了一格没具名」的；稳定错误让「越过了

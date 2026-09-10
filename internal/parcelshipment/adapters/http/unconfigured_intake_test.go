@@ -43,6 +43,9 @@ func unconfiguredEndpoints(t *testing.T) map[string]unconfiguredEndpoint {
 		"amendment": {http.MethodPost, shipmenthttp.NewAmendCustomerSourceDataEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableAmendmentHandler{t: t},
 		)},
+		"disposition": {http.MethodPost, shipmenthttp.NewDisposeShipmentRequestEndpoint(
+			shipmenthttp.UnconfiguredIntake{}, unreachableDispositionHandler{t: t},
+		)},
 		"views": {http.MethodGet, shipmenthttp.NewQueryShipmentRequestViewsEndpoint(
 			shipmenthttp.UnconfiguredIntake{}, unreachableViewsReader{t: t},
 		)},
@@ -187,6 +190,16 @@ func (handler unreachableAmendmentHandler) Handle(
 ) (application.AmendCustomerSourceDataResult, error) {
 	handler.t.Fatal("a request passed the unconfigured intake and reached the orchestration")
 	return application.AmendCustomerSourceDataResult{}, nil
+}
+
+type unreachableDispositionHandler struct{ t *testing.T }
+
+func (handler unreachableDispositionHandler) Handle(
+	context.Context,
+	application.DisposeShipmentRequestCommand,
+) (application.DisposeShipmentRequestResult, error) {
+	handler.t.Fatal("a request passed the unconfigured intake and reached the orchestration")
+	return application.DisposeShipmentRequestResult{}, nil
 }
 
 type unreachableViewsReader struct{ t *testing.T }
