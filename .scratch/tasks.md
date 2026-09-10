@@ -1685,3 +1685,10 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **重放**：`%TEMP%\idp-replay-psr08` 在 `d3b82200` 上 pick 三笔全干净（`29b08395→d731b6c2` / `9decab60→0806a7e6` / `f2c96f02→c5b3edc1`）；gofmt / build / vet 0；占 55432 后带 DSN 全量 **104 ok / 0 FAIL / 0 cached · 120 s**；释号。簿记一笔在 `c5b3edc1` 之上（票 08 评审 + 进 main 记录 + 本节），ff → `push <sha>:main`。`mcp2-psr08` 改 `merged/`、远端删；树由通道 2 拆。
 - **接下来**：通道 3 awf/25、通道 6 sa/05 完工后派 4 / 5 评审 → 重放 → 全量 → ff；通道 2 空闲——**PS 地盘再无零待裁的票**（psr/01 / 03 / 08 今天全收；ve-claims/04 是 VE、lc/26 要裁），等用户对裁决走法的答复。**归用户**（不变）：CI 计费；两件 untracked；会话中断成因。
 - **本节五数**：CI main 绿/总 未量 · 集成时延 psr/08 完工报 16:0x → 推出 16:3x **约 25 分**（1 票；含通道 4 评审约 12 分）· 重放笔数 **3** · 重复开发 0 次 · 会话重置 0 次（本小节内）
+
+### 16:3x–16:5x 同一会话：sa/05 完工 → 通道 5 评审 → 进 main
+
+- **sa/05 完工报 16:3x**（通道 6，task-c9aaf964 done：`mcp6-sa05@5213ef4a` 基 `0e8d048a`，六笔，只动 `apps/admin-web/src`；tsc 0 / run-tests 208 pass 含新十例；决定集类型上只两值、403 停点原词直显、复核页 items[] 两格显出、导航接线纯加 14 行）。**评审派通道 5**（task-d8b6c412，空闲非作者、刚清过 admin-web 注释），16:5x 交：**Standards 0 阻断 / 2 非阻断**（三处「三组」跨文件计数、两条文案函数尾段同形）· **Spec 0 阻断 / 2 非阻断**（版本 subtitle 边外一根、未配置态 tone 同普通 outcome）；六点逐核属实（无通过 / 放行动作、键名逐字对 Go、不自判权限、`SubmissionVersion` 是编排真入参但端点 `UnconfiguredIntake{}` 今天不解体、抽共用后既有页逐行同、`occupationFormed` / `jointPassCondition` 两格确在「不做的」内）；六道判断题全同意。全文由推送方代落票 05。
+- **重放**：`%TEMP%\idp-replay-sa05` 在 `48ccbb2f` 上 pick 六笔全干净（`2f7c3a6d→fe239830` / `b45941d4→9243c9e8` / `85583479→796fa8ff` / `15fc0f75→96e8c890` / `ca1233e7→767e4146` / `5213ef4a→46c11d02`）；本票文件与分支逐字同；tsc 0、run-tests **208 / 208**（junction 借 node_modules，验完拆）；无 Go 改动不跑 Go 全量。簿记一笔在 `46c11d02` 之上（票 05 评审 + 进 main 记录 + 本节），ff → `push <sha>:main`。`mcp6-sa05` 改 `merged/`、远端删；树由通道 6 拆。
+- **接下来**：通道 3 awf/25（PC 四包 + admin-web 两张表单，最大的一张）完工后派 4 / 5 / 6 之一评审 → 重放 → 全量（含 DSN，cmd/parcel-commercial 夹具那格）→ ff。2 / 4 / 5 / 6 空闲——**零待裁的机制活已尽**：今天由余工表挖出的三张（痕迹清剪、psr/08、sa/05）全收，下一波 13 张票 + ve-claims/04 + 保价全等裁决，用户尚未答复走法。**归用户**（不变）：CI 计费；两件 untracked；会话中断成因。
+- **本节五数**：CI main 绿/总 未量 · 集成时延 sa/05 完工报 16:3x → 推出 16:5x **约 20 分**（1 票；含通道 5 评审约 15 分）· 重放笔数 **6** · 重复开发 0 次 · 会话重置 0 次（本小节内）
