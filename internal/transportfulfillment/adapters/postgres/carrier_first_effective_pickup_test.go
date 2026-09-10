@@ -352,6 +352,16 @@ func TestAPendingPickupVersionIsRefusedAtTheHandoffAndTheHandoffNeedsATransactio
 	}
 }
 
+// Covers: 写口在无事务上下文必须经 RequireExecutor 拒绝——版本登记与意图入队同笔落地的前提。
+func TestCarrierPickupsRefuseToRunOutsideATransaction(t *testing.T) {
+	repository, _, _, _ := newCarrierPickups(t)
+	pickup := formedCarrierPickupDB(t, "CFEP-TX", "CFEV-TX1", "PCL-TX")
+	_, err := repository.Save(t.Context(), carrierPickupRecord(pickup, carrierPickupJudgedAtDB))
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("无事务写入应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
 // Covers: 身份签发走事务、两条序列各自推进、前缀可读不承载语义。
 func TestCarrierPickupIdentitiesAreIssuedInsideATransaction(t *testing.T) {
 	_, transactor, db, _ := newCarrierPickups(t)

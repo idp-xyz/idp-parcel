@@ -132,6 +132,9 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 上列「该判哪几条」不触发判断，判断在另一条写行上，而写行挂的是字面量 UnconfiguredIntake{}，本
 	// 用例下面那半会证它仍答 403。单列在表尾的理由同上一行。
 	"/transport-fulfillment-external-tracking-facts": true,
+	// 实际承运商首次有效收寄链查阅（票 label-channel/31 读半边）同样共用运输履约查阅的 Intake 变量，启用态随它一起
+	// 放行；判据同上一行：上列一条链不触发判断，判断在另一条写行上，那一行挂的是字面量 UnconfiguredIntake{}。
+	"/transport-fulfillment-carrier-first-effective-pickups": true,
 	// 渠道择优决定查阅（票 label-channel/23）随委托查阅的注入值一起放行（第三半接口，只交出租户维）。三条判据逐条
 	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
 	// 不在这一口。单列在表尾的理由同上两行。

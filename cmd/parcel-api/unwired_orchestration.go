@@ -311,6 +311,28 @@ func (unwiredEffectiveTimeJudgment) Judge(
 	return tfapp.JudgeEffectiveTimeResult{}, errOrchestrationNotWired
 }
 
+// unwiredCarrierPickupChain 是实际承运商首次有效收寄链读口的占位（票 label-channel/31 读半边）。读不回交回稳定
+// 错误而不是空链：空链是「这个对象没有收寄」这一真答案，一次读故障顶成它会让两态在页面上同形。
+type unwiredCarrierPickupChain struct{}
+
+func (unwiredCarrierPickupChain) ListByObject(
+	context.Context,
+	tfdomain.TenantID,
+	tfdomain.CarriedObjectReference,
+) ([]tfports.CarrierFirstEffectivePickupRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredCarrierPickupJudgment 是实际承运商首次有效收寄显式判断口的编排占位（票 label-channel/31 写半边）。
+type unwiredCarrierPickupJudgment struct{}
+
+func (unwiredCarrierPickupJudgment) Judge(
+	context.Context,
+	tfapp.JudgeCarrierFirstEffectivePickupCommand,
+) (tfapp.JudgeCarrierFirstEffectivePickupResult, error) {
+	return tfapp.JudgeCarrierFirstEffectivePickupResult{}, errOrchestrationNotWired
+}
+
 // unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}

@@ -150,6 +150,7 @@ var declaredPartitionSubjects = map[string]string{
 
 	// —— transport-fulfillment ——
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":            partitionPerEnvelopePrefix + "键即信封 ID（各消耗事实互不相干）",
+	"internal/transportfulfillment/adapters/postgres/carrier_first_effective_pickup_handoff.go":  partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /carrier-first-effective-pickup）",
 	"internal/transportfulfillment/adapters/postgres/disposition_execution_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（处置执行）",
 	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":              partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /effective-delivery）",
 	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               partitionPerEnvelopePrefix + "键即信封 ID（与处置执行同键，靠类型段错开）",

@@ -82,6 +82,8 @@ func assembleBusinessEndpoints(
 	effectiveTimeRuleRegistration tfhttp.EffectiveTimeRuleRegistrar,
 	externalTrackingFactReview tfhttp.ExternalTrackingFactReviewReader,
 	effectiveTimeJudgment tfhttp.EffectiveTimeJudge,
+	carrierPickupChain tfhttp.CarrierPickupChainReader,
+	carrierPickupJudgment tfhttp.CarrierPickupJudge,
 	masterDocumentRegistration tfhttp.MasterDocumentRegistrar,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
@@ -276,6 +278,12 @@ func assembleBusinessEndpoints(
 		// 读开关换不了它。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧动作，不是承运方回传口。
 		{Pattern: "/transport-fulfillment-external-tracking-facts", Handler: tfhttp.NewQueryExternalTrackingFactsEndpoint(transportCatalogueIntake, externalTrackingFactReview)},
 		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeJudgment)},
+		// 实际承运商首次有效收寄的判断面两口（票 label-channel/31，ADR-0135 决定八）。读口按（租户，载运对象）上列整条
+		// 收寄链，是判断人的「这个对象走到哪一版」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约查阅同一个
+		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局，
+		// 同挂字面量 UnconfiguredIntake{}：读开关换不了它。
+		{Pattern: "/transport-fulfillment-carrier-first-effective-pickups", Handler: tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(transportCatalogueIntake, carrierPickupChain)},
+		{Pattern: "/transport-fulfillment-carrier-first-effective-pickup-judgments", Handler: tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(tfhttp.UnconfiguredIntake{}, carrierPickupJudgment)},
 		// 总单登记两口（ADR-0113 决定五；票 tf-carrier-master-document-register/01）：登记一份总单的首版，与对它此刻的
 		// 当前版形成一次撤销 / 替代 / 关联重述。运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
 		// 新版本口不叫 `-corrections`，理由同凭证。写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份总单登进去就成了

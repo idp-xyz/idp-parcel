@@ -197,6 +197,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 实际承运商首次有效收寄的判断面（票 label-channel/31）：写编排与读口出自同一次装配——读口就是收寄登记册本尊。
+	carrierPickupJudgment, carrierPickupChain, err := buildCarrierPickupJudgment(db)
+	if err != nil {
+		return err
+	}
 	trackingViews, err := vepostgres.NewCustomerViews(db)
 	if err != nil {
 		return err
@@ -409,6 +414,8 @@ func run(logger *slog.Logger) error {
 			effectiveTimeRuleRegistration,
 			externalTrackingFactReview,
 			effectiveTimeJudgment,
+			carrierPickupChain,
+			carrierPickupJudgment,
 			masterDocumentRegistration,
 			trackingViews,
 			projectionViews,
