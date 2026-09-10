@@ -347,6 +347,10 @@ func (handler *LabelTransactionHandler) judgmentBeat(
 	occurredAt time.Time,
 ) func(context.Context, domain.LabelTransaction) error {
 	return func(ctx context.Context, saved domain.LabelTransaction) error {
+		if handler.deps.Judgments == nil {
+			// 装配缺陷：没有判断口的后两步不得静默落库——那正是「结果已落、判断丢失」。响亮报错让事务壳回滚。
+			return fmt.Errorf("label transaction judgment handoff is not configured")
+		}
 		for _, parcel := range saved.CoveredParcels() {
 			if err := handler.deps.Judgments.HandOffLabelTransactionJudgment(ctx, ports.LabelTransactionJudgmentIntent{
 				Tenant:        saved.Tenant(),

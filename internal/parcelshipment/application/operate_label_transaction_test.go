@@ -357,8 +357,9 @@ func TestRecordingAChannelResultHandsOffOneJudgmentIntentPerCoveredParcel(t *tes
 	fixture := newLabelTransactionFixture(t)
 	fixture.mustEstablish(t, "LT-1")
 	fixture.mustSubmit(t, "LT-1")
+	fixture.mustMarkUncertain(t, "LT-1")
 	if len(fixture.judgments.intents) != 0 {
-		t.Fatalf("建立与提交交出了 %d 份判断意图——前三步不触发判断", len(fixture.judgments.intents))
+		t.Fatalf("建立、提交与「答案未确定」交出了 %d 份判断意图——前三步不触发判断", len(fixture.judgments.intents))
 	}
 
 	recorded := fixture.mustRecordResult(t, "LT-1", domain.LabelTransactionSucceeded, true)
@@ -471,6 +472,25 @@ func TestAFailedJudgmentHandoffFailsTheWholeBeat(t *testing.T) {
 	}
 	if result.Outcome() != application.LabelTransactionOutcomeInvalid {
 		t.Fatalf("入队失败仍交回了业务答案 %q", result.Outcome())
+	}
+}
+
+// Covers: 装配缺陷 fail-closed——没有判断口时后两步不得静默落库（那正是「结果已落、判断丢失」），
+// 响亮报错让事务壳回滚；前三步不需要它，照常。
+func TestTheLastTwoBeatsRefuseToLandWithoutAJudgmentHandoff(t *testing.T) {
+	repository := newLabelTransactionRepositoryDouble()
+	fixture := newLabelTransactionFixture(t)
+	fixture.handler = application.NewLabelTransactionHandler(application.LabelTransactionDeps{
+		Transactions: repository,
+		Clock:        fixedClock{at: handlerClockAt},
+	})
+	fixture.repository = repository
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+
+	_, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
+	if err == nil {
+		t.Fatal("没有判断口仍记下了结果")
 	}
 }
 
