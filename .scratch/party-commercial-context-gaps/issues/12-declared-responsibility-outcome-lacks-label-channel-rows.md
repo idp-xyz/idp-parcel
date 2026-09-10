@@ -1,7 +1,7 @@
 # `DeclaredResponsibilityOutcome` 没有面单渠道服务的两行：终局规则声明得出网络服务四格，面单渠道的「非取消终局 / 终局失败」在词汇表里没有行，PS 适配器只能如实答「终局规则未配置」
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: ready-for-agent——2026-09-10 17:1x 通道 1 推送方代裁「要裁的」三条（用户经队列授权「你自决」，读法见 tasks.md 16:5x–17:0x 节；三条均属命名 / 文档落位 / 有判据的技术选型，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无（lc/11 的 PS 半边 `JudgeLabelServiceFinalHandler` 已在 main `0e5a4ea`；本票是它「不在本票 · PC 半边」那一条）
 
 ## 缺口（取证于 `3f485e97`）
@@ -52,6 +52,12 @@ Blocked by: 无（lc/11 的 PS 半边 `JudgeLabelServiceFinalHandler` 已在 mai
 1. **两行的名字**：PS 结果代数里「非取消终局结果 / 终局失败结果」译进 PC 封闭集叫什么原词（`LABEL_CHANNEL_FINAL` / `LABEL_CHANNEL_FAILED` 只是占位，本票不定）——归 PC owner，一句。
 2. **CONTEXT 改哪一句**：加进词条「面单服务终局规则」正文，还是加进 Rules「必须显式定义正常终局边界和取消权结束条件」那条——归 PC owner，一句。
 3. **规范化换不换号**：只加封闭码、文档形不变，倾向不换；若 owner 认为「可选值集合变了就是文档形变了」则按 ADR-0014 换号——归 PC owner。
+
+**裁决（通道 1，推送方代裁；2026-09-10 17:1x；用户经队列授权「你自决」，读法见 tasks.md 16:5x–17:0x 节；三条经通道 4 分类均为 A 类——命名 / 同一份文档内的落位 / 有既定判据的技术选型，不动领域归属）**：
+
+1. **两行的原词取 `LABEL_SERVICE_COMPLETED`（非取消终局结果）与 `LABEL_SERVICE_FAILED`（终局失败结果）**，Go 常量 `DeclaredLabelServiceCompleted` / `DeclaredLabelServiceFailed`。照既有四值的构词（`EFFECTIVE_DELIVERY` / `RETURN_COMPLETED` / `SERVICE_TERMINATED` / `REGULATORY_DISPOSITION`：大写蛇形、「主体 + 结果」名词），主体取 PS 词条「面单服务终局」的 `LABEL_SERVICE`，与 `LabelServiceFinalOutcome` 同一个词根；不用 `LABEL_CHANNEL`（渠道是通道，终局是服务的）。`service_stage_content.go` 上 `DeclaredResponsibilityOutcome` 头注「封闭四值」那句随改——改成不数格（AGENTS.md「计数与行号同构」），只说「与 PS 结果联合的各格语义对应」。越权风险点（供 PC owner 事后复核）：两串原词的措辞。
+2. **CONTEXT 改词条正文**：加进 PC CONTEXT「面单服务终局规则」词条正文一句——规则可为其声明终局的责任结果含面单渠道服务的非取消终局与终局失败两格；Rules「必须显式定义正常终局边界和取消权结束条件」那条**不动**——它是不变式，两行是它的实例。
+3. **不换号**：只加封闭码、文档形不变，判据 ADR-0126 决定一「加键不换号」的同一精神（可选值集合扩大不改变已发布文档的字节），同形先例 pc-gaps/09 加 `Validity()` 槽、awf/25（`852bf7c4`）加 `omitempty` 键都未换号；写一条测试钉「既有四值声明的文档摘要与本票前逐字节同」。
 
 ## 参照
 
