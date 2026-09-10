@@ -1,8 +1,8 @@
 # 异常披露规则与冲突信号规则两册有写入口无入口：`ExceptionDisclosureRuleRegistry` / `ConflictSignalRuleRegistry` 只有 postgres 写口与读口，`parcel-ve-register` 与 `parcel-api` 都登不进去，两条编排在生产上只能读到空册
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
-Blocked by: 无
+Status: ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969 把推送方三条裁决写进票面（见「裁决」）：取 B（CLI + 端点 + 管理台）、读面另立 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)、两册并回 `CatalogRegistration`；**步一（CLI）可即开工，步二（端点 + 管理台写签）等 03 进 main**。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Blocked by: 步一无；步二 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)（两册读面——写签跟读签走，读面不在就不铺写签）
 
 ## 为什么立在这个目录
 
@@ -23,11 +23,11 @@ Blocked by: 无
 - ADR-0085 决定一（CLI 与端点消费同一登记用例）、决定四（「登记频次 × 操作者角色」由实施票逐册裁）；awf/05 owner 裁决记录：判据以决定四为准。
 - mech/08 VE-a / VE-d 对两册用途的记载（异常披露规则 → 三态披露决定；冲突信号规则 → 替代链分叉按业务时间裁不了时形成信号）。
 
-## 做法（一张两步，照 awf/05 的形；步二按裁决取舍）
+## 做法（一张两步，照 awf/05 的形；已裁 B，两步都做——步一可即开工，步二等 03 进 main）
 
 **步一 · CLI**（A、B 共有）：`parcel-ve-register` 加两命令 `exception-disclosure-rules` / `conflict-signal-rule`，走 `application.CatalogRegistration` 新增的 `RegisterExceptionDisclosureRules` / `RegisterConflictSignalRule`（形照 `RegisterNotificationPolicy`：租户绑定、`CatalogRegistrationOutcome` 三格、`channel_execution` 留痕、`approvedBy` 责任由登记方带）；输入 `-input` JSON，未知字段拒，退出码沿既有格。mech/08 当时不拆 `CatalogRegistry` 三处替身——本票要动 `CatalogRegistration` 的依赖，替身跟随（票面记为何现在拆得起：两册写入口与读口都已在，替身只是补两个方法）。
 
-**步二 · 在线登记端点 + 管理台**（仅 B）：`adapters/http/register_catalog.go` 加两个 `*Registrar` 接口与处理器，`cmd/parcel-api/endpoints.go` 加 `/visibility-catalogue-exception-disclosure-rule-registrations` / `/visibility-catalogue-conflict-signal-rule-registrations` 两行（共享接线文件，动前占号），装配以字面量 `UnconfiguredIntake{}` 起步；管理台 `pages/visibility/` 加登记签——**写签跟着读签走**：两册今天无读面（上面「缺口」第 4 条），读面先补进 `/visibility-catalogues` 或另立票，读面不在就不铺写签。
+**步二 · 在线登记端点 + 管理台**（已裁 B，做）：`adapters/http/register_catalog.go` 加两个 `*Registrar` 接口与处理器，`cmd/parcel-api/endpoints.go` 加 `/visibility-catalogue-exception-disclosure-rule-registrations` / `/visibility-catalogue-conflict-signal-rule-registrations` 两行（共享接线文件，动前占号），装配以字面量 `UnconfiguredIntake{}` 起步；管理台 `pages/visibility/` 加登记签——**写签跟着读签走**：两册今天无读面（上面「缺口」第 4 条），读面由 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md) 另立并先行，03 进 main 前本步不开工、不铺写签。
 
 ## 红线
 
@@ -48,11 +48,17 @@ Blocked by: 无
 
 `cmd/parcel-ve-register/main.go`、`internal/visibilityexception/application/register_catalog.go`（+ 三处替身）——步一；`internal/visibilityexception/adapters/http/register_catalog.go`、`cmd/parcel-api/endpoints.go` 两行、`cmd/parcel-api/assemble_ve_registration.go`、`apps/admin-web/src/pages/visibility/`——步二。不动 `adapters/postgres/**`、`ports/**`。
 
-## 要裁的
+## 要裁的（已裁，见下节「裁决」）
 
 1. **A 只补 CLI / B CLI + 端点 + 管理台**：按 ADR-0085 决定四「登记频次 × 操作者角色」——两册都是租户上线时登一次、偶尔换版的低频·合规/客服规则；与同族六册（`notification-policy` 等）已进端点表这一事实怎么权衡（同族一致 vs 逐册裁）。归 VE owner。
 2. **读面**：两册今天无查阅端点；写签跟读签走，则读面是本票步二的前置还是另立票（形照 `/visibility-catalogues` 的 `VisibilityCatalogueReader`）。归 VE owner。
 3. **`CatalogRegistration` 是否收两册**：mech/08 当时单立端口是为了不拆三处替身；本票倾向并回 `CatalogRegistration`（同一受控 CLI 桩、同一留痕），代价是替身加两方法。归 VE owner，一句。
+
+## 裁决（2026-09-10，推送方通道 1 裁、通道 4 按 task-d6660969 写入；用户 17:0x 授权「你自决」，读法见 tasks.md 16:5x–17:0x 节）
+
+1. **取 B（CLI + 端点 + 管理台），口径「同族一致」。** 同族六册（`milestone-mapping` / `triage-rules` / `notification-policy` / `claim-eligibility` / `claim-authorization` / `disclosure-policy`）已全进端点表，awf/05 是同形裁法；ADR-0085 决定四的「登记频次 × 操作者角色」是租户运营事实，今天无租户只能是假设——机制半边把入口做齐，谁用、多久用一次由实例半边定。**越权风险点**：「同族一致」这一口径本身归 VE owner 复核；若 owner 认为这两册该按决定四逐册裁成只 CLI，砍掉步二即可，步一不受影响。
+2. **读面另立 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)**（形照 `/visibility-catalogues` 的 `VisibilityCatalogueReader`：两册读面 + 管理台读签）。本票步二 Blocked by 03；步一 CLI 不阻——写签跟读签走是伞票纪律，CLI 不是签。
+3. **并回 `CatalogRegistration`**（票面倾向）。mech/08 当时单立端口只因替身代价；今天两册写口读口都在，代价只是三处替身加两方法，换来同一受控 CLI 桩、同一留痕。
 
 ## 参照
 
@@ -61,3 +67,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-10 · 通道 4：立票（task-9880bbc9）。awf/02、/05 未列过这两册，按派单口径立在本目录；未动代码。
+- 2026-09-10 · 通道 4（task-d6660969，基 `062f5228`，分支 `mcp4-adr0136`）：推送方三条裁决写入「裁决」节，立读面票 03，Status → ready-for-agent（步一可即开工；步二 Blocked by 03）。**只改 .md，未动代码。**
