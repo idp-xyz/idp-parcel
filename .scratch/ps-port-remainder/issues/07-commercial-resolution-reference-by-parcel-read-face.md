@@ -1,7 +1,7 @@
 # `parcel-shipment` 开一个按（租户，包裹身份）答「商业解析回指」的窄读口——`transport-fulfillment` 交付条件缝里对象走到合同的那一跳
 
 Category: enhancement
-Status: ready-for-agent——由 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md) 决定二与 Consequences 第一条拆出（2026-09-09，通道 2，task-f5521768，PS owner 口径代裁）；形状已裁，本票只落读口与 postgres 读面，不动 `transport-fulfillment/**` 与 `partycommercial/**`
+Status: in-progress——2026-09-10 12:4x 通道 2 认领（单 task-422c077d 派单「接着做 07」半边），分支 `mcp2-psr07` 基 `c2a119c6`（= mcp2-psr06 tip，同链，推送方按序重放）。此前 ready-for-agent——由 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md) 决定二与 Consequences 第一条拆出（2026-09-09，通道 2，task-f5521768，PS owner 口径代裁）；形状已裁，本票只落读口与 postgres 读面，不动 `transport-fulfillment/**` 与 `partycommercial/**`
 Blocked by: 无（建议排在 [06](06-delivery-place-reference-read-face.md) 之后做，复用它的包裹 → 委托解析；不阻塞）
 
 ## 缺口
