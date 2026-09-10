@@ -1,7 +1,7 @@
 # `parcel-shipment` 对不通过的接受前财务控制一律拒绝——策略正文里的失败处置（`REJECT` / `AUTHORIZED_DISPOSITION`）与责任引用没有消费方，「进入授权处置」那条路在本上下文不存在
 
 Category: enhancement
-Status: in-progress——2026-09-10 11:4x 通道 6 认领（单 task-276950ce），分支 `mcp6-sa04` 基 `84e89dc7`，按「做法」1→7 每步一笔并推；此前：ready-for-agent——2026-09-09 通道 6 代裁四问（用户 22:2x 经队列授权，task-103327c7；分支 `mcp6-sa04` 基 `91df9aaa`），裁决落 [ADR-0132](../../../docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) + PS CONTEXT 词条「授权处置」与`等待授权处置`一格，做法与完成判据见下；只裁未码。此前：draft——由票 [03](./03-parcel-shipment-expresses-per-item-control-results.md) 第 2 问拆出（2026-09-07，通道 3，ADR-0125）；PS 地盘，读口形状归 PC（已在）
+Status: resolved——2026-09-10 14:3x 通道 6（单 task-276950ce），分支 `mcp6-sa04` 基 `84e89dc7`，代码 tip `99ddc8f5`（本笔票面在其上），main 上的 SHA 由推送方重放后补；「完成记录」见文末。此前：in-progress——2026-09-10 11:4x 通道 6 认领，按「做法」1→7 每步一笔并推；ready-for-agent——2026-09-09 通道 6 代裁四问（用户 22:2x 经队列授权，task-103327c7；分支 `mcp6-sa04` 基 `91df9aaa`），裁决落 [ADR-0132](../../../docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) + PS CONTEXT 词条「授权处置」与`等待授权处置`一格，做法与完成判据见下；只裁未码。此前：draft——由票 [03](./03-parcel-shipment-expresses-per-item-control-results.md) 第 2 问拆出（2026-09-07，通道 3，ADR-0125）；PS 地盘，读口形状归 PC（已在）
 Blocked by: 无
 
 ## 缺口
@@ -72,3 +72,47 @@ PS：`internal/parcelshipment/{domain,application,ports,adapters/partycommercial
 - 2026-09-07 · 通道 3：由票 03 第 2 问拆出立票，只写票面，未动代码。能力边界同票 03「裁决」节；此外读过 PC
   `pre_acceptance_financial_control_policy.go` 全文与 UC-PS-001 校验组行。
 - 2026-09-09 · 通道 6：代裁四问，落 ADR-0132（`d85711ea`）+ PS CONTEXT 词条与等待态格 + ADR README 一行（`cf8a3c4a`）+ 本票面（本笔）；draft → ready-for-agent；只裁未码，`internal/**` 一字未动。GLOSSARY 未加行，理由见「裁决」。越权风险点六条待 owner 复核，任一被推翻改的是 ADR-0132 对应那一句与本票做法对应那一步，不改硬句。
+- 2026-09-10 · 通道 6（新会话接手，前任只留下未提交的领域 red）：按「做法」1→7 实施，九笔全部推到 `origin/mcp6-sa04`，完成记录见下。
+
+## 完成记录
+
+分支 `mcp6-sa04` 基 `84e89dc7`（= 派单时的 origin/main），代码 tip `99ddc8f5`；票面本笔在其上。逐笔（分支上的 SHA，重放进 main 后由推送方对照）：
+
+| 笔 | 步 | 内容 |
+|---|---|---|
+| `e4883039` | 1 领域 | `ResumePath` 加 `ResumeByAuthorizedDisposition`；`ControlFailureDisposition` / `ControlResponsibilityReference` / `AdoptedControlDisposition`（PS 自有封闭集，集外不吸收）；`ControlItemResult.WithAdoptedDisposition`（成立项拒、一次采用不覆盖、结论与原因不改）；`FinancialControlResult.AdoptControlDispositions`（只落受限项，对不上 `ErrControlDispositionNotAdopted` 整份不成立）与 `AwaitsAuthorizedDisposition`；`FinancialControlCheckFor` 按采用处置分路；`Decide` 认出该格（次序：客户补充 > 授权处置 > 运营登记 > 内部重试；已处置为交客户补充的版本再判不退回等处置）；`AuthorizedDisposition` 处置记录（形照 `ManualReviewCompletion`）；`ShipmentRequest.DisposeUnderAuthority`（拒绝复用抽出的 `formActiveRejection` 那道门，交客户补充只转等待态）；重建门收处置记录并拒两种拼出来的行。票面 Status → in-progress 随此笔 |
+| `8c05797e` | 2 PS→PC | `ports.ControlDispositionView` / `ControlDispositionQuery`、`ports.AuthorizedDispositionAuthorizer`（与拒绝权 / 复核权端口分立）；`adapters/partycommercial/control_disposition.go`（回指闭包 → 已采用结算政策 `ChargeScope` → 已采用控制策略版本 → `ItemsFor` → 逐种类译成采用引用，与 SA 执行控制读的同源；found=false 三格，坏回指 error）；`unconfigured_authorized_disposition.go`（如实答 `AUTHORITY_RULES_NOT_CONFIGURED`） |
+| `ca2c44e3` | 3 应用 | `AdvanceFinancialControlJudgmentHandler` 收 `ControlDispositionView`，受限结果先读处置采用到受限项再记录（`CONTROL_DISPOSITION_UNAVAILABLE` / `CONTROL_DISPOSITION_NOT_FORMED` 两格停内部续办、不记录、不折去向）；`FormAcceptanceDecisionHandler` 对`等待授权处置`走保存护栏、交回 `AUTHORIZED_DISPOSITION_PENDING`；`DisposeShipmentRequestHandler`（授权先于一切写；结果代数八格；两去向都按 `OccupationFormed` 释放；不发信封）；inbox `undecidedDisposition` 加格入账；`cmd/parcel-dispatch` 接受链装配接 `NewControlDispositionAdapter`。签名变更：`NewAdvanceFinancialControlJudgmentHandler` 加一参，六处调用点同笔 |
+| `f686e4bd` | 3 HTTP | `adapters/http/dispose_shipment_request.go`（形照主动拒绝端点）+ `UnconfiguredIntake.IntakeAuthorizedDisposition`；`cmd/parcel-api/assemble_disposition.go`（事务壳 + `buildDispositionOrchestration`：PS 真库口 + SA 释放适配器 + 未配置授权器，Intake `UnconfiguredIntake{}`）；端点 `/shipment-requests/authorized-dispositions`；`unwiredDisposition` 占位与探测表 |
+| `33fbfb6d` | 4 迁移 | `migrations/parcel_shipment/0021_authorized_disposition.sql`：两条 CHECK 对齐第五格、授权处置队列部分索引、`acceptance_financial_control_item` 加 `failure_disposition` / `responsibility_ref`（成立项必空、受限项同在或同缺、半截拒、处置只认封闭集）；`AcceptanceJudgments` 逐项读写跟随（两列 NULL 如实读回未采用）；`ShipmentRequests` 快照 `acceptanceTask.authorizedDisposition` 一格随任务往返 |
+| `1aa5b6e3` | 5 读面 | `ports.AuthorizedDispositionQueue`（行带控制结果标识与逐项受限控制：种类 / 顺序 / 受限原因 / 失败处置 / 责任引用）；`adapters/postgres/authorized_disposition_queue.go`（在 `ShipmentRequestViews` 上，受限项从判断表本版当前采用的控制结果取）；`GET /authorized-disposition-queue`（只列表，详情复用复核队列分支）；复核队列 `financialControl.items[]` 加 `failureDisposition` / `responsibility`；`cmd/parcel-api` 装配（Intake 沿用委托查阅变量，隔离读准入随之放行） |
+| `5f34f67b` | 6 文档 | UC-PS-001 三处改口（校验组行落地形、`尚未决定`段去数目措辞、`AT-PS-034` 加授权处置从不形成接受）；ADR-0125 owner 复核记录加「过渡态解除」一条，正文不改 |
+| `f66af0d0` | 7 测试 | `cmd/parcel-dispatch/authorized_disposition_loop_test.go`：场景 1 + 交客户补充、场景 3 + 拒绝，两条真库闭环（生产链 + 消费门 + 队列读面 + 处置命令；只有权威口 / 处置读口 / 处置授权口是 synR 替身） |
+| `99ddc8f5` | 清点 | `docs/product/MECHANISM-INVENTORY.md` 在 `f66af0d0` 干净 detached 检出重生成（parcelshipment 生产 143→151 / 测试 142→149 / 端口 17→18 / 迁移 20→21 / 接入面端点 11→13 / PS→PC 消费缝 14→16），只对该检出成立 |
+
+第 7 步的其余测试随各步同笔：领域（`authorized_disposition_test.go`，前任 red 本会话对过 ADR-0132 后接 green；`revision_test` 转移表加行）；应用（`dispose_shipment_request_test.go` 保存护栏三测 + 处置命令十余格、`advance_financial_control_judgment_test.go` 读处置四组）；PS→PC 适配器真库一正一反 + found=false 三格 + 坏回指两例；PG 往返 + 存量行 NULL 读回 + 库面形状五探针 + 委托登记册三条 + 队列两条；HTTP 端点两条 + 复核详情两格；架构——`AuthorizedDispositionSpec` 由处置命令消费、类型可达性棘轮无需加基线行，两份基线文件一字未动。
+
+**触及**：`internal/parcelshipment/{domain,ports,application,adapters/partycommercial,adapters/postgres,adapters/http,adapters/inbox}`、`migrations/parcel_shipment/0021`、`cmd/parcel-api`（新文件 + `endpoints.go` / `main.go` / `unwired_orchestration.go` / `endpoints_test.go` / `isolated_read_test.go` 各几行）、`cmd/parcel-dispatch`（`assemble.go` 接受链一段 + 三份既有回路测试各一行 + 新测试文件）、UC-PS-001、ADR-0125 复核记录、清点。**未碰**：SA 任何一格；PC 正文形状与授权动作词汇；`apps/`；ADR-0132 / 0094 / 0086 正文；`internal/architecture/*_baseline.txt`；`migrations.go` / `plan.go`（整目录嵌入）。
+
+**完成判据逐项**：正文登 `AUTHORIZED_DISPOSITION` 的受限控制不再自动拒绝——任务停`等待授权处置`并落库、`task_waiting_on = 5` 可查（`TestAnAwaitingDispositionRequestProjectsItsWaitState`、合成闭环）、消费门入账不重投（`TestAuthorizedDispositionIsCommittedBecauseItsResumeTriggerIsTheCommandItself`、闭环里重投跳过）✓；正文登 `REJECT` 照今天拒绝（领域 `TestFinancialControlCheckRoutesARestrictedResultByItsAdoptedDisposition`、应用 `TestARejectDispositionStillRejectsWithoutPausing`）✓；处置命令两去向各成立——`拒绝`形成授权角色拒绝决定、留痕齐（实际决定方 = 处置方、授权引用来自 PC 答复、原因、证据、时点）、依据经采用结果回指不复制校验、释放本版本占用；`交客户补充`转`等待受控补充`并释放，新版本照旧可形成（领域 `TestDisposingToCustomerSupplementMovesTheWaitWithoutDeciding` 末段）✓；受限项的`业务限制`原样保留、`Decide` 不因处置记录而通过那一组（`TestADispositionRecordNeverPassesTheFinancialControlGroup`）✓；失败处置与责任引用随 `FinancialControlResult` 落库可读回、存量行 NULL 如实读回（PG 两条）✓；处置命令未获授权不碰聚合、未配置答 `AUTHORITY_RULES_NOT_CONFIGURED`（应用三格 + parcel-api 真库装配用例）✓；gofmt / vet 0 ✓；含 DSN 跑 `./internal/parcelshipment/...`、`./migrations/...`、反向依赖含 `cmd/*` ✓；清点重生成 ✓；UC-PS-001 改口 ✓。
+
+**验证强度**（隔离树 `D:/tops/idp-parcel-mcp6-sa04`，tip `99ddc8f5`）：gofmt 空；`go build ./...` / `go vet ./...` 全仓退 0；带 DSN `-p 1 -count=1 -v` 跑 PS ports/domain 的反向依赖 23 包（`go list` 反查）+ `./cmd/...` + `./tests/...` + `./migrations/...` + `./internal/architecture/...`：34 包 ok / 2 无测试，`--- PASS` 2280 / `--- SKIP` 0 / `--- FAIL` 0。未跑全量（推送方那一跑兑底）。每一步的占 / 释 55432 都已广播。
+
+**与 main 碰面**（干跑 `git merge-tree --write-tree origin/main HEAD`，origin/main = `62c87e73`，在 `84e89dc7` 之上 16 笔：psr/06、psr/07、nr/03、pc-gaps/11）：`.go` / `.sql` **零重叠文件**；唯一冲突是生成物 `docs/product/MECHANISM-INVENTORY.md`（两边各自在自己检出上重生成，预期内），推送方在 tip 上重生成即解。psr/06/07 在 PS domain / ports / adapters/postgres 全是新文件，与本票无同名；`production_wiring_baseline.txt` 只有它们动、本票未动。
+
+**给评审的判断题**（每条都可推翻，改的是本票对应那一步，不改硬句）：
+
+1. `Decide` 里`等待授权处置`压过`等待运营登记`与内部重试、让位于客户补充（`acceptance_decision.go` 那段注释）——理由是登记与重试都产不出一次处置、而处置的一个去向本就是交客户补充；反过来排（登记先）也说得通：登记之后整轮重跑，处置那一格自会再得机会。今天两格几乎不会同时到场（财务控制是链的最后一条腿）。
+2. 已处置为`交客户补充`的版本再被判一轮时，`Decide` 把等待态留在`等待受控补充`而不退回等处置（`acceptance_decision.go`、领域 `TestADispositionRecordNeverPassesTheFinancialControlGroup`）——处置记录一版一次，退回去等于要处置角色再选一次。
+3. `AdoptControlDispositions` 对成立项那一种类的行宽容（读到不记），对受限项缺行严格（整份不成立）——适配器因此交回范围下全部行，「对不上」只在领域一处判。
+4. 处置授权的**翻译适配器没建**，只建了 `UnconfiguredAuthorizedDispositionAuthorizer`：PC 授权动作封闭集今天没有「授权处置」一格（ADR-0132 越权风险点 2），翻译适配器全部的意义在动作守卫上，而守卫要比对的动作不存在——照 `UnconfiguredSourceDataAmendmentAuthorizer` 先例。票面「同目录另加处置授权的翻译适配器」这半句因此改成随 PC 那一票落地。
+5. 处置命令的决定标识在授权之后、领域转移之前签发（同主动拒绝）：撞领域门的几格（已处置 / 任务已完结 / 没停在等处置）会消耗一个标识；授权那三格不消耗。
+6. `拒绝`去向形成的决定不带商业依据快照（`DisposeUnderAuthoritySpec` 没有 Basis 一格）——`RejectByAuthority` 本就允许 Basis 缺席，ADR-0132 决定四「依据经采用结果回指、不复制」；读面要看依据从已记录判断取。
+7. 迁移 0021 受限项两列写成「同在或同缺」而不是票面字面「受限行两列非空」：同缺是存量行与采用之前记下的行（票面同一句要求「存量行 NULL 如实读回、不补不拒」），两句只能这样同时成立；领域把同缺读回「未采用」、按 ADR-0125 过渡口径译`未通过`。
+8. `CONTROL_DISPOSITION_NOT_FORMED`（found=false 与对不上）归内部重试而不是运营登记：SA 刚按同一份正文执行完控制，正文那一侧「没有可读的行」只可能是换版竞争或坏数据，重读推得动；若把它读成 `PAR-COM-15` 未配置就该归登记——评审可判。
+9. 读处置停在记录之前：`AdvanceFinancialControlJudgmentHandler` 读不到处置时不记录结果，下一轮重新向 SA 发起控制——与今天 `JudgmentNotRecorded` 那一支同样依赖 SA 对同一请求身份的幂等（`FinancialControlRequestConflict` 那一格）。
+10. 队列读面只有列表，单份详情复用复核队列的 `?shipmentRequestId=` 分支（那里的判断三组已带两格采用引用）；`AcceptanceTaskViewRecord` 没加处置留痕字段——处置一记下等待态就转走，队列行不需要它，详情里要看处置记录归后继（读面票）。
+11. 第 3 步拆成两笔（应用 / HTTP），其余按票面顺序 1→7；第 1–3 步的中间态有两处按设计红（类型可达性棘轮点名 `AuthorizedDispositionSpec` 直到第 3 步接上；PG 两条逐格镜像用例直到第 4 步迁移），各自的提交信里写明，未加基线行也未改镜像用例的目的。
+12. 处置命令不做决定交接（不发接受决定信封）——同主动拒绝（ADR-0086 决定三保留条款）；`FormAcceptanceDecisionHandler` 的 `handOffDecision` 对拒绝也会发，两条拒绝路径在这一点上本就不同，本票没有改它。
+
+**接续方看到的**：无阻断。可另立票：admin-web 授权处置队列页与处置操作（票面「边界」已划归 admin-web 另票）；PC 授权动作词汇加「授权处置」后把装配点的未配置授权器换成翻译适配器（形照 `manual_review_authorization.go`，动作守卫比对新词）。
