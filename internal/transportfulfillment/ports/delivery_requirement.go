@@ -17,11 +17,12 @@ import (
 //
 // 适配器归 `internal/transportfulfillment/adapters/<所有者>`（ADR-0025 消费侧），本包只立形状。
 //
-// **三条缝各自接线。** 时间窗那一条已有适配器 `adapters/networkrouting.DeliveryWindows`（票 tf-segment-lifecycle-closure/13，
-// 按 ADR-0131 三问的答复落）；parcel-shipment 那一侧读哪个读面归票 12、party-commercial 那一侧条件引用指哪一版归票 14，
-// 各与所有者对齐后才落适配器。生产装配里没接的格留空，`TriggerDeliveryDispatchHandler` 于是答对应的 *_SOURCE_NOT_WIRED
-// 停在第一条没接的缝上——那是 ADR-0114 决定三要的诚实停点，不是缺陷，也不许用替身或默认值补齐。哪一票先接上线，
-// 执行器就往下走一格。
+// **三条缝都已各自接线。** 地点：`adapters/parcelshipment.DeliveryPlaceSource`（票 tf-segment-lifecycle-closure/12，按 ADR-0130
+// 的答复落）；时间窗：`adapters/networkrouting.DeliveryWindows`（票 13，按 ADR-0131 三问的答复落）；条件：
+// `adapters/partycommercial.DeliveryConditionSource`（票 14，按 ADR-0133 的答复落，跨 parcel-shipment 与 party-commercial 两个
+// 提供方）。生产装配在 `cmd/parcel-api` 的 buildDeliveryDispatchTrigger 三格全填。`TriggerDeliveryDispatchHandler` 对留空的格
+// 仍答对应的 *_SOURCE_NOT_WIRED——那一格如今只在装配漏接时出现，是 ADR-0114 决定三要的诚实停点，不许用替身或默认值补齐；
+// 所有者答「没有」照 RequirementMissing 落 REQUIREMENT_MISSING，任务保持待形成。
 
 // RequirementResolution 是一条派送要求端口的答法：所有者给了、所有者说没有。「没有」是业务答案不是错误——
 // 对象没有计划段就没有时间窗，合同没登交付条件就没有条件；任务保持待形成，不填默认。
