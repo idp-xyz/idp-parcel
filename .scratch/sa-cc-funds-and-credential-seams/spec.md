@@ -31,7 +31,7 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 |---|---|---|---|
 | [01](issues/01-buy-evaluation-to-sa-inbox-consumer.md) | `parcel-pricing.evaluation.recorded` → SA inbox 消费者 → `FormSupplierExpectedCostHandler` | SA | 无（另有一格要裁，见票） |
 | [02](issues/02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) | SA 外部资金事实采用同事务经 Outbox 发信封——**resolved，2026-09-10 19:4x 进 main**（分支 `mcp5-sacc02`，代码 tip `1af6a226`，main 重放 tip `cdd6504c`；非作者评审 ← 通道 6 两轴 0 阻断） | SA | 无 |
-| [03](issues/03-cc-inbox-consumer-receives-external-funds-fact.md) | CC inbox 消费者收那封信封 → `ReceiveFundsFact` | CC | 无（02 已进 main；信封类型 `settlement-accounting.external-funds-fact.adopted`） |
+| [03](issues/03-cc-inbox-consumer-receives-external-funds-fact.md) | CC inbox 消费者收那封信封 → `ReceiveFundsFact`——**resolved，2026-09-10 21:3x 进 main**（分支 `mcp5-sacc03`，代码 tip `f96169d2`，main 重放 tip `343b997b`、与 lc/28 同批推出；非作者评审 ← 通道 6 两轴 0 阻断；实施中新裁付款人维 A、可缺席，CC 放宽另立 12） | CC | 无 |
 | [04](issues/04-cc-credential-gate-persists-in-readiness-assessment.md) | UC-CC-003 步 7「记录凭证门禁」的持久化 | CC | 无 |
 | [05](issues/05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md) | UC-CC-009 核对向 SA 的交接（outbox 意图） | CC | 无 |
 | [06](issues/06-cc-release-gate-reads-duty-payment-verification.md) | 放行门禁核对读付款核对 | CC | 无 |
