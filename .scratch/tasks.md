@@ -1582,3 +1582,13 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **进 main**：推送方簿记一笔在 `b734f8f5` 之上（票 06 Comments 两条 + 基线 PS 段重放注「在 b734f8f5 上实测 4」+ 本节）；`./internal/architecture/...` 重跑；`ls-remote` 核 `346a6532` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp2-psr06` 树与指针**暂留**：通道 2 要在 `c2a119c6` 上开 `mcp2-psr07`，等它确认开出后再改 `merged/`、拆树、删远端；`idp-replay-psr06` 拆。
 - **接下来**：psr/07（2，同链基 `c2a119c6`，推送方按序重放——其父链六笔已在 main 换了 SHA，重放时只 pick 07 自己那几笔）/ sa/04（6，第 3 步应用层，占了 `cmd/parcel-dispatch/assemble.go` 一段 + `NewAdvanceFinancialControlJudgmentHandler` 加参签名变更，只在隔离树）/ pc-gaps/11（5）。psr/06 进 main 后 **tf/12 可派**：3 / 4 任一重起即派它（原计划通道 3 接）；都不起则等 2 交 07。**归用户**：CI 计费；两件 untracked；会话中断成因。
 - **本节五数**：CI main 绿/总 未量 · 集成时延 psr/06 完工报 12:3x → 推出 12:5x **约 20 分**（1 票）· 重放笔数 **7**（六笔作者 + 推送方清点 1；作者清点笔跳过不计）· 重复开发 0 次 · 会话重置 0 次（本小节内）
+
+### 12:5x–13:2x 同一会话：psr/06 树收尾 → psr/07 完工 → 自评 → 进 main；tf/12 派通道 2
+
+- **psr/06 收尾补记**：上一小节写「`mcp2-psr06` 暂留」，12:5x 查 `git worktree list` 时通道 2 已在 `c2a119c6` 上开出 `mcp2-psr07`（`merge-base --is-ancestor` 核过），于是当场收：本票非簿记文件对 main 逐字相同 → 树拆（干净、未加 --force）、指针改 `merged/mcp2-psr06`、远端删。
+- **psr/07 完工报 13:0x**（通道 2，send_to_session：分支 `mcp2-psr07` 基 `c2a119c6` 同链，tip `6043923a`，四笔 + 清点笔；带 DSN PS domain + postgres + architecture + cmd/* PASS 1246 / SKIP 0）。3 / 4 仍未重起、5 / 6 在票上、2 是作者 → 推送方自跑 /code-review：**Standards 0 阻断 / 1 非阻断**（「Consequences 第一条」序位引用，同 06 那条不重开）· **Spec 0 阻断 / 1 非阻断**（判据 1「集运单元引用 → 没有」在 `DeclaredParcelID` 键的口上不可表达，归 tf/14 适配器分流——写进 tf/14 派单）。四道判断题（替身落点 / 抽 helper 改 06 文件 / 内部测试钉不可达格 / `(id, bool, error)` 形）全部认可，全文落票 07 Comments。
+- **重放**：`%TEMP%\idp-replay-psr07` 在 `8bdab82e` 上只 pick 07 自己的四笔（`5018962b→21342b50` / `18b628cf→35fde705` / `1e8e2bc0→ee497195` / `6043923a→1767a9d5`），全干净；作者清点笔 `526f0cdf` 与 main 同文件冲突→跳过，tip 重生成为 `637bb3a2`。gofmt / build / vet 0、architecture ok；占 55432 广播后带 DSN 全量 **102 ok / 0 FAIL / 15 无测试 · PASS 7910 / SKIP 1 / FAIL 0 / 0 cached · 121 s**，探针 PASS，释号。
+- **tf/12 派通道 2**（13:0x，`task-b5823d32`，基 `8bdab82e`）：psr/06 进 main 即解阻塞；`branch-state -Path internal/transportfulfillment` 无在途无半成品→另起；13 / 14 都未开工，执行器生产入口归本票；`待复核`落法默认甲；点名了通道 6 此刻正占 cmd/parcel-api 几份接线文件，动前先排队列再占号。原计划「通道 3 接 tf/12」因 3 崩改为 2（代裁人，上下文最近）。
+- **进 main**：推送方簿记一笔在 `637bb3a2` 之上（票 07 Comments 两条 + 本节）；`ls-remote` 核 `8bdab82e` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp2-psr07` 比内容后改 `merged/`、远端删、树拆（2 已转 tf/12 用新树 `mcp2-tf12`）；`idp-replay-psr07` 拆。
+- **接下来**：sa/04（6，第 3 步 HTTP 半边在跑）/ pc-gaps/11（5，首笔 582e9f12 已推）/ tf/12（2）。tf/13（NR 缝）现在也可派——nr/03 已在 main；3 / 4 任一重起给它，否则等 2 交 tf/12 后接。tf/14 Blocked by pc-gaps/11（psr/07 半边今起已解）。**归用户**：CI 计费；两件 untracked；会话中断成因。
+- **本节五数**：CI main 绿/总 未量 · 集成时延 psr/07 完工报 13:0x → 推出 13:2x **约 15 分**（1 票）· 重放笔数 **5**（四笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
