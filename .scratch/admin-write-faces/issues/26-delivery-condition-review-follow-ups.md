@@ -1,7 +1,7 @@
 # 26 awf/25 两份评审留下的可改项：方式聚合序钉 `COLLATE "C"`、渲染表独立列出、票面路径表去 `.methods`、前端头注不描述后端 SQL、钉两串字面 PCC-1 摘要
 
 Category: chore
-Status: in-progress——2026-09-10 17:0x 通道 3 认领（task-87e19668；分支 `mcp3-awf26` 接着立票笔 `1254f8f0` 开，基 `66cad4c4`）。同笔：通道 1 17:0x 裁「要裁的」1 取默认（不动，见「要裁的」下「裁决」）并补一项 ⑤（钉两串字面 PCC-1 摘要，通道 4 Spec 非阻断 (1)），本票再无待裁问题。此前 ready-for-agent——2026-09-10 16:5x 通道 3 立票（取证锚远端 main `66cad4c4`，即 awf/25 进 main 那一笔之后；分支 `mcp3-awf26`）。来源是票 25 Comments 里通道 4（Go 半边）与通道 5（admin-web 半边）两份非作者评审记为「非阻断 · 可改」的那几条，推送方在票 25「进 main 记录」尾点名可攒一张小票、由作者定——定为立。全是收口：不改任何领域规则、不新增能力、不改任何行为；一条「要裁的」带默认（不裁则不动），不挡开工。每项都能各自成笔、各自验。
+Status: resolved——2026-09-10 17:2x 通道 3 交付（task-87e19668；分支 `mcp3-awf26` 基 `66cad4c4`，代码 tip `a30f6d67`，逐笔 SHA 与验证强度见文末「完成记录」；main 上的 SHA、非作者评审结论待推送方重放后补「进 main 记录」）。五项全落：① 方式聚合 `COLLATE "C"` + 真库一例；② 渲染表照 JSX 独立列出 + 变异红一次；③ 票 25 路径表去 `.methods`；④ `ServiceProductsPage.tsx` 头注改口；⑤ 两串字面 PCC-1 钉住 + 变异红一次。带 DSN 8 包 ok / PASS 1678 / SKIP 0；tsc 0 / run-tests 214。此前 in-progress——2026-09-10 17:0x 通道 3 认领（task-87e19668；分支 `mcp3-awf26` 接着立票笔 `1254f8f0` 开，基 `66cad4c4`）。同笔：通道 1 17:0x 裁「要裁的」1 取默认（不动，见「要裁的」下「裁决」）并补一项 ⑤（钉两串字面 PCC-1 摘要，通道 4 Spec 非阻断 (1)），本票再无待裁问题。此前 ready-for-agent——2026-09-10 16:5x 通道 3 立票（取证锚远端 main `66cad4c4`，即 awf/25 进 main 那一笔之后；分支 `mcp3-awf26`）。来源是票 25 Comments 里通道 4（Go 半边）与通道 5（admin-web 半边）两份非作者评审记为「非阻断 · 可改」的那几条，推送方在票 25「进 main 记录」尾点名可攒一张小票、由作者定——定为立。全是收口：不改任何领域规则、不新增能力、不改任何行为；一条「要裁的」带默认（不裁则不动），不挡开工。每项都能各自成笔、各自验。
 Blocked by: 无（25 已 resolved 且进 main）
 
 ## 从哪里来
@@ -54,6 +54,37 @@ Blocked by: 无（25 已 resolved 且进 main）
 - 票 25 Comments：通道 4 评审 Standards (1)、通道 5 评审 Standards (1) / (3) 与 Spec (1)、「进 main 记录」尾「评审非阻断随票记」一段——四条的原始判据都在那里，本票只引不复述。
 - 票 22 判据 3（渲染表与认领表独立、由 `publication-form-rendered-paths.test.ts` 比对）。
 - pc-gaps/11（交付方式是开放引用、不立词表——① 为什么会有大小写 / 非 ASCII 的可能）。
+
+## 完成记录（2026-09-10，通道 3 一任会话；分支 `mcp3-awf26`，基 main `66cad4c4`；task-87e19668）
+
+**逐笔（分支 SHA；main 上的 SHA 由进 main 记录补）**：
+
+| SHA | 内容 |
+|---|---|
+| `1254f8f0` | 立票（四项，ready-for-agent，一条要裁的带默认） |
+| `1acf5066` | 票面转 in-progress；同笔记通道 1 裁决（要裁的 1 不动）与补项 ⑤ |
+| `bd6ba2b7` | ⑤ `publication_canonicalization_delivery_condition_test.go` 加 `TestDigestsPinnedBeforeTheDeliveryConditionSectionsStillHold`：两串字面 `PCC-1:<hex>` |
+| `d7a6d4ce` | ① `operations_catalogue.go` `deliveryConditionColumns` 的方式 `ORDER BY` 加 `COLLATE "C"`、头注写理由；`operations_catalogue_delivery_condition_test.go` 加 `TestServiceProductCatalogueOrdersMethodsByBytesRegardlessOfCollation` |
+| `f88680d5` | ② `deliveryConditionRenderedPaths` 照 JSX 独立列出、按 JSX 顺序；`delivery-condition-section.test.ts` 两条 deepEqual 改集合比对 |
+| `814450f5` | ④ `ServiceProductsPage.tsx` 列定义头注改口（语义与代码未动） |
+| `a30f6d67` | ③ 票 25「做法 ①」路径表去 `.methods` + Comments 一行 |
+| 本笔 | 票面完成记录 + Status resolved；顺手把票 25 那行 Comments 的时刻从「17:2x」改准为「17:1x」（写时按估、未看钟） |
+
+**逐项对完成判据**：
+
+1. ① 真库一例在场（`METHOD/A` / `METHOD/_x` / `METHOD/b` / `method/a`，读回序 == `content.Methods()` 序 == 字节序），带 DSN `-v` PASS 非 SKIP。**改前就绿**——本机测试库 `compose.yaml` 以 `--locale=C.UTF-8` 起，`template1` 与每用例库 `datcollate` 均为 `C.UTF-8`，与字节序同；这条钉的是「不随部署库 collation 变」。取证（同一组串在测试库上跑 `string_agg(... ORDER BY m COLLATE …)`，2026-09-10 17:1x）：`"C"` 与库默认都是 `METHOD/A METHOD/_x METHOD/b method/a`；`"en_US.utf8"` 是 `method/a METHOD/A METHOD/b METHOD/_x`——不钉 collation，部署库若是 en_US 之类语言排序，目录序就与领域 `Methods()` 不同。**要裁的 1 按裁决未动**：`ListAcceptanceRulePackages` 里 `ORDER BY source.source_kind` / `ORDER BY ref.rule_reference` 两处同形先例待另票。
+2. ② `deliveryConditionRenderedPaths` 函数体不再调 `deliveryConditionFieldPaths`；`publication-form-rendered-paths.test.ts` 与 `delivery-condition-section.test.ts` 全绿（214 / 214）。变异一次：渲染表里去掉 `methods[i]` 那行 → `run-tests` 3 fail（service product / customer contract 两条「都有处显」+ 本节集合比对那条），还原后 214 / 214。**那两条 deepEqual 的处置**：改成排序后比对——渲染表按 JSX 顺序（节根 → tightens 两格 → 方式每项 → 两条规则），认领表按载荷顺序，两表各写各的，比的是同一集合不是同一顺序；一句理由写在测试里。
+3. ③ 票 25「做法 ①」那句不再含 `.methods`（键本身），`.methods[i]` 保留并补一句为什么只认领到项；票 25 Comments 多一行指向本票。
+4. ④ `ServiceProductsPage.tsx` 那段头注 `git grep` 不再命中 `service_product_form` 与「左连接」；改成说 `ServiceProductRecord.deliveryConditions` 可缺、键缺席即未声明；tsc 0。
+5. ⑤ 一例两串在场：服务产品两格文档 `PCC-1:fd0683ea642de60ddd1faee0d037dff9994f72bd2049155aa7b699c3fab9a641`、不带 `deliveryConditions` 的客户合同正文（夹具 `customerContractBody(t, requiredControl(), appliedControl(t, "charge-prepaid"))`）`PCC-1:c32a6c319174053d452007daf0ce0fdefd1027484281f43ea953527ecd4b8363`。**在哪算的**：分支树 Go 代码与 `66cad4c4` 逐字节同（写测试前 `git diff --stat 66cad4c4 -- internal/ cmd/ apps/ migrations/` 为空），先以占位串跑红两次取得实际值再钉。变异一次：`canonicalizeServiceProduct` 对 nil 正文临时交一节空 `serviceProduct` → 本例与 `…StillCanonicalizesToTwoFields` 同红（摘要变为 `PCC-1:4ceab9a5…`），还原后绿。头注写明「这两串变了就是换号，走 ADR-0126」。
+6. 验证见下。
+7. 本节。
+
+**验证强度（钉 `a30f6d67`，在分支树 `D:/tops/idp-parcel-mcp3-awf26` 上跑；`status --untracked-files=all` 零行，`apps/admin-web/node_modules` 是指向共享树的 junction、被忽略，等价于干净检出）**：`gofmt -l ./internal ./cmd ./migrations ./tools` 零输出；`go build ./...`、`go vet ./...` 退 0；**带 DSN** `go test -p 1 -count=1 -v` PC 四包（`domain` / `application` / `adapters/http` / `adapters/postgres`）+ `./internal/architecture/...` + PC postgres 的反向依赖（`go list` 反查：`cmd/parcel-api` / `cmd/parcel-commercial` / `cmd/parcel-dispatch`）→ **8 包 ok / 0 FAIL，`--- PASS` 1678 / `--- SKIP` 0，29 秒**；探针 `TestAPublishedDeliveryConditionIsAnsweredByTheResolutionKeyedReadFace` PASS 非 SKIP。admin-web（分支树，junction 借共享树 `node_modules`）：`node node_modules/typescript/bin/tsc --noEmit` 退 0；`node scripts/run-tests.mjs` **214 / 214**（与 main 同数：本票只改既有测试、不加 TS 测试）。机制清点在同一检出重生成：**零 diff**（本票没有新增或删除文件、迁移、端口、端点）。未跑全量（作者范围口径）、未跑 `-race`。证据层级 **S**。占 / 释 55432 各两轮均广播。**时刻**：本记录前几条广播里写的「17:2x / 17:3x」是估的，本机钟当时在 17:0x–17:1x；本记录起按 `Get-Date` 写。
+
+**触及**：上表八个文件。**未碰**：领域包非测试文件（⑤ 变异已还原，`git status` 核过）、`ports.go`、http 层、迁移、`DeliveryConditionFields.tsx` 的 JSX、`PublicationFormFields.tsx` / `publication-form-shared.ts`、`ListAcceptanceRulePackages` 两处 `ORDER BY`。
+
+**给评审的判断题**：(1) ① 只钉交付条件这一处、另两处按裁决不动——同意否；(2) ② 渲染表按 JSX 顺序、测试改集合比对，而不是让渲染表照认领表的顺序排——哪种更贴票 22 判据 3「按 JSX 逐处抄」；(3) ⑤ 失败信息把处置指向「走 ADR-0126 的换号路」而不是「改断言」——口径对否；(4) ① 的真库一例改前就绿、红不出来是库 collation 决定的——记为「钉不变式」而非「红绿循环」可否接受；(5) ④ 头注改口后仍留「不以空列伪装已实现」那句——它说的是页面显什么，不是后端形状，留着对否。
 
 ## Comments
 
