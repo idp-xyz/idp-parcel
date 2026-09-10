@@ -1913,9 +1913,10 @@ func (outcome ContinuedAttemptRegisterSaveOutcome) String() string {
 // 版本由聚合自己携带（`register.Revision()`）。否定的 FindByParcel 只回 false，不区分「没开过册」
 // 与「属于另一个租户」——区分它们等于泄露其他租户下是否存在该包裹。
 //
-// **本口今天没有生产写入方，这是设计而不是欠账**：形成关闭或重开决定的命令口要先过 party-commercial
-// 的授权规则校验（CONTEXT「形成关闭或重开决定时仍须重新校验当前角色与客户授权」），那是另一张票；
-// 本票立的是册、端口、持久化与读面派生四层，让那张票落地那天对着的不是一张裸表。
+// 生产写入方是 FormContinuedAttemptDecisionHandler（票 label-channel/30）：形成关闭或重开决定的命令口先过
+// party-commercial 的授权规则校验（CONTEXT「形成关闭或重开决定时仍须重新校验当前角色与客户授权」，
+// 经 ContinuedAttemptDecisionAuthorizer），再开册或读回、Append、Insert / Save。票 label-channel/10 立的是册、
+// 端口、持久化与读面派生四层，写面落地那天对着的不是一张裸表。
 type ContinuedAttemptRegisterRepository interface {
 	FindByParcel(
 		ctx context.Context,

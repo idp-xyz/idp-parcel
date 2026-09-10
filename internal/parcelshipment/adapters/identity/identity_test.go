@@ -44,10 +44,18 @@ func allMinters(t *testing.T, options ...platformidentity.Option) map[string]min
 	if err != nil {
 		t.Fatalf("构造渠道择优决定签发器：%v", err)
 	}
+	continuedAttemptDecisions, err := adapter.NewContinuedAttemptDecisions(options...)
+	if err != nil {
+		t.Fatalf("构造面单继续尝试决定签发器：%v", err)
+	}
 
 	return map[string]mintFunc{
 		"CSDN": func(ctx context.Context) (string, error) {
 			minted, err := selectionDecisions.NextChannelSelectionDecisionID(ctx)
+			return minted.String(), err
+		},
+		"CADN": func(ctx context.Context) (string, error) {
+			minted, err := continuedAttemptDecisions.NextContinuedAttemptDecisionID(ctx)
 			return minted.String(), err
 		},
 		"SUBV": func(ctx context.Context) (string, error) {

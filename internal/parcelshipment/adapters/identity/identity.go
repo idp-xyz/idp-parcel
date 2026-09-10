@@ -30,6 +30,7 @@ const (
 	sourceDataVersionPrefix        = "SDV"
 	parcelCancellationPrefix       = "PCXL"
 	channelSelectionDecisionPrefix = "CSDN"
+	continuedAttemptDecisionPrefix = "CADN"
 )
 
 // SubmissionIdentities 实现 ports.SubmissionIdentityFactory。它是五个工厂里唯一签发两个
@@ -226,4 +227,30 @@ func (factory *ChannelSelectionDecisions) NextChannelSelectionDecisionID(
 		return domain.ChannelSelectionDecisionID{}, err
 	}
 	return domain.NewChannelSelectionDecisionID(value)
+}
+
+// ContinuedAttemptDecisions 实现 ports.ContinuedAttemptDecisionIdentity（票 label-channel/30）。
+// 决定标识由它铸而不从内容派生：关过—重开—再关是三条各自的决定，内容可以逐字相同。
+type ContinuedAttemptDecisions struct {
+	minter platformidentity.Minter
+}
+
+func NewContinuedAttemptDecisions(options ...platformidentity.Option) (*ContinuedAttemptDecisions, error) {
+	minter, err := platformidentity.NewMinter(continuedAttemptDecisionPrefix, options...)
+	if err != nil {
+		return nil, err
+	}
+	return &ContinuedAttemptDecisions{minter: minter}, nil
+}
+
+var _ ports.ContinuedAttemptDecisionIdentity = (*ContinuedAttemptDecisions)(nil)
+
+func (factory *ContinuedAttemptDecisions) NextContinuedAttemptDecisionID(
+	_ context.Context,
+) (domain.ContinuedAttemptDecisionID, error) {
+	value, err := factory.minter.Next()
+	if err != nil {
+		return domain.ContinuedAttemptDecisionID{}, err
+	}
+	return domain.NewContinuedAttemptDecisionID(value)
 }
