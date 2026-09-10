@@ -1602,3 +1602,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **进 main**：推送方簿记一笔在 `fce1faa9` 之上（票 11 Comments 两条 + 本节）；`ls-remote` 核 `c0cdebba` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp5-pcgaps11` 比内容后改 `merged/`、远端删、树拆；远端 `mcp4-pcgaps11`（d9a1f571，已是 main 祖先）同删；`idp-replay-pc11` 拆。
 - **接下来**：sa/04（6，第 5 步 HTTP 读面）/ tf/12（2）/ tf/13（5）。**tf/14 两个 Blocked by 至此都在 main**（pc-gaps/11 + psr/07）——3 / 4 任一重起给它；都不起则等 2 或 5 交票后接（tf/14 与 12 / 13 共用执行器与 cmd/parcel-api，派前要看 12 / 13 进到哪）。owner 复核队列新增两条（ADR-0031 第四落点、ADR-0133 决定二产品未采用那一格），`scripts/owner-review-queue.ps1` 下次生成会带出。**归用户**：CI 计费；两件 untracked；会话中断成因。
 - **本节五数**：CI main 绿/总 未量 · 集成时延 pc-gaps/11 完工报 13:0x → 推出 13:5x **约 45 分**（1 票；评审这张最大、约 20 分）· 重放笔数 **7**（六笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
+
+### 14:3x–15:0x 同一会话：sa/04 完工 → 自评 → 进 main（今晨派出的四张落地票全部收口）
+
+- **sa/04 完工报 14:3x**（通道 6，send_to_session + task-276950ce：分支 `mcp6-sa04` 基 `84e89dc7`，tip `3df82d62`，九笔 + 票面；带 DSN 34 包 ok / PASS 2280 / SKIP 0；含迁移 0021；余量将满）。3 / 4 仍未重起、2 / 5 在票上 → 推送方自跑 /code-review：**Standards 0 阻断 / 1 非阻断**（0021 受限项两列 CHECK「同在或同缺」vs 票面字面，判断题 7，认可记一句）· **Spec 0 阻断 / 1 非阻断**（处置授权翻译适配器未建、只建未配置授权器，判断题 4，认可；PC 落词那天同笔换）。十二道判断题全部认可；硬句「人工处理不得绕过硬规则」由 `TestADispositionRecordNeverPassesTheFinancialControlGroup` 钉住。全文落票 04「进 main 记录」节。
+- **重放**：`%TEMP%\idp-replay-sa04` 在 `62c87e73` 上 pick 九笔全干净（`e4883039→6a5535e2` / `8c05797e→3c1f54bf` / `ca2c44e3→0ce6461e` / `f686e4bd→a974e6b3` / `33fbfb6d→b995f683` / `1aa5b6e3→1e589f66` / `5f34f67b→f1644897` / `f66af0d0→1f45af10` / `3df82d62→779f841e`）；作者清点笔 `99ddc8f5` 跳过，tip 重生成为 `fb38e66a`。gofmt / build / vet 0、architecture ok、0021 LF 无 BOM；占 55432 广播后带 DSN 全量 **102 ok / 0 FAIL / 15 无测试 · PASS 8011 / SKIP 1 / FAIL 0 / 0 cached · 125 s**，探针 PASS，释号。
+- **进 main**：推送方簿记一笔在 `fb38e66a` 之上（票 04「进 main 记录」+ 本节）；`ls-remote` 核 `62c87e73` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp6-sa04` 比内容后改 `merged/`、远端删、树拆；`idp-replay-sa04` 拆。
+- **今晨四张落地票全部进 main**：nr/03（346a6532）→ psr/06（8bdab82e）→ psr/07（c0cdebba）→ pc-gaps/11（62c87e73）→ sa/04（本笔）。五次评审全由推送方自跑（3 / 4 崩后未重起、其余通道各在票上），十条非阻断里四条归 owner 复核（ADR-0031 第四落点、ADR-0133 决定二产品未采用那一格、「Consequences 第 N 条」序位引用两处）。
+- **接下来**：tf/12（2，cmd/parcel-api 接线中，sa/04 进 main 后要对新 main 干跑）/ tf/13（5，ports 三步法中）；两票完工后 tf/14 可派（3 / 4 若重起先给它）；nr/03 补测试小笔（5，tf/13 后）。**归用户**：CI 计费；两件 untracked；会话中断成因（今天 8 次）。
+- **本节五数**：CI main 绿/总 未量 · 集成时延 sa/04 完工报 14:3x → 推出 15:0x **约 30 分**（1 票）· 重放笔数 **10**（九笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
