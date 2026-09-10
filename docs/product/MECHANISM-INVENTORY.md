@@ -13,14 +13,14 @@
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 143 | 142 | 17 | 26 | 8 | 14 |
+| parcelshipment | 147 | 145 | 17 | 27 | 8 | 14 |
 | partycommercial | 119 | 130 | 9 | 32 | 1 | 26 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 81 | 61 | 12 | 38 | 7 | 7 |
 | transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 881 | 837 | 114 | 244 | 51 | 119 |
+| **合计** | 885 | 840 | 114 | 245 | 51 | 119 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 55、测试 77。
 
@@ -102,7 +102,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 370 个；基线口径缺 18，精确口径缺 12
+## 端口：声明 371 个；基线口径缺 18，精确口径缺 12
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
