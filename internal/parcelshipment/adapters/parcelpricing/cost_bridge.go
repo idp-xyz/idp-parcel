@@ -68,7 +68,36 @@ func ChannelCandidateCostOf(
 	if err != nil {
 		return psdomain.ChannelCandidateCost{}, err
 	}
-	return withEvaluationReference(cost, evaluation)
+	referenced, err := withEvaluationReference(cost, evaluation)
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, err
+	}
+	if _, established := referenced.Amount(); !established {
+		return referenced, nil
+	}
+	return withRateReference(referenced, evaluation)
+}
+
+// withRateReference 给已确立的取值带上它按之出价的那张卡（票 `label-channel/29`：赢家建立面单交易时
+// Rate 那一格填的就是它）。引用照「对象/版本」两段写，与本上下文对 PC 版本引用的写法同形；不带指纹、
+// 不带卡的内容——费率正文留在提供方，本上下文只保留实际采用的依据。只有已确立那格带：出局的候选没有
+// 「适用的费率」，调用方在前面已经分了岔。
+func withRateReference(
+	cost psdomain.ChannelCandidateCost,
+	evaluation ppdomain.PricingEvaluation,
+) (psdomain.ChannelCandidateCost, error) {
+	plan := evaluation.PlanReference()
+	rate, err := psdomain.NewChannelRateReference(plan.ID() + "/" + plan.Version())
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, fmt.Errorf("%w: rate reference: %v",
+			ErrUntranslatableEvaluation, err)
+	}
+	rated, err := cost.WithRate(rate)
+	if err != nil {
+		return psdomain.ChannelCandidateCost{}, fmt.Errorf("%w: attach rate reference: %v",
+			ErrUntranslatableEvaluation, err)
+	}
+	return rated, nil
 }
 
 // withEvaluationReference 给取值带上它译自的评价的标识（票 `label-channel/14` 的留痕要指得回

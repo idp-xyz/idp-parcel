@@ -50,34 +50,79 @@ func NewSelectChannelCandidateHandler(deps SelectChannelCandidateDeps) *SelectCh
 	return &SelectChannelCandidateHandler{deps: deps}
 }
 
-// Handle 选出这一票该走的渠道。
+// Handle 选出这一票该走的渠道，只交候选标识。它是 Select 的窄面：既有调用点只要「选中了谁」，
+// 不必跟着 Select 的交回值变（票 `label-channel/29` 的 expand，旧签名不动）。
 func (handler *SelectChannelCandidateHandler) Handle(
 	ctx context.Context,
 	query ports.ChannelSelectionQuery,
 ) (domain.ChannelCandidateID, error) {
+	selected, err := handler.Select(ctx, query)
+	return selected.Candidate(), err
+}
+
+// Select 选出这一票该走的渠道，连同赢家按之出价的评价痕迹与费率引用（票 `label-channel/29`：建立面单
+// 交易时 Rate 那一格由择优步带出，翻译适配器不再问 `parcel-pricing`）。两格从 Costs 口交回的那一份
+// 取值上取，不另取——另取一遍就有了第二份「按哪张卡出的价」。并列冲突与无人参选照 Handle 的旧约：
+// 决定已记、交回的候选为零值、错误具名。
+func (handler *SelectChannelCandidateHandler) Select(
+	ctx context.Context,
+	query ports.ChannelSelectionQuery,
+) (domain.SelectedChannelCandidate, error) {
 	candidates, err := handler.deps.Assembly.AssembleChannelCandidates(ctx, query)
 	if err != nil {
-		return domain.ChannelCandidateID{}, fmt.Errorf("assemble channel candidates: %w", err)
+		return domain.SelectedChannelCandidate{}, fmt.Errorf("assemble channel candidates: %w", err)
 	}
 
 	costs, err := handler.deps.Costs.ChannelCandidateCosts(ctx, query, candidates)
 	if err != nil {
-		return domain.ChannelCandidateID{}, fmt.Errorf("read channel candidate costs: %w", err)
+		return domain.SelectedChannelCandidate{}, fmt.Errorf("read channel candidate costs: %w", err)
 	}
 	if err := coversEveryCandidate(candidates, costs); err != nil {
-		return domain.ChannelCandidateID{}, err
+		return domain.SelectedChannelCandidate{}, err
 	}
 
 	selected, err := domain.SelectChannelCandidateByCost(costs)
 	if err != nil && !errors.Is(err, domain.ErrChannelCandidateCostTied) &&
 		!errors.Is(err, domain.ErrNoQualifiedChannelCandidate) {
 		// 币种不齐（或日后其它「没比出来」的出口）：那一次没有比较发生，没有决定可记。
-		return domain.ChannelCandidateID{}, err
+		return domain.SelectedChannelCandidate{}, err
 	}
 	if recordErr := handler.recordDecision(ctx, query, costs); recordErr != nil {
-		return domain.ChannelCandidateID{}, recordErr
+		return domain.SelectedChannelCandidate{}, recordErr
 	}
-	return selected, err
+	if err != nil {
+		return domain.SelectedChannelCandidate{}, err
+	}
+	return selectedCandidateOf(selected, costs)
+}
+
+// selectedCandidateOf 把赢家与它在成本表上的那一份取值对上，带出评价痕迹与费率。找不到那一份是编排
+// 自己的矛盾（赢家正是从这张表里比出来的），按成本表不全报。
+func selectedCandidateOf(
+	candidate domain.ChannelCandidateID,
+	costs []domain.ChannelCandidateCost,
+) (domain.SelectedChannelCandidate, error) {
+	selected, err := domain.NewSelectedChannelCandidate(candidate)
+	if err != nil {
+		return domain.SelectedChannelCandidate{}, fmt.Errorf("form selected channel candidate: %w", err)
+	}
+	for _, cost := range costs {
+		if cost.Candidate() != candidate {
+			continue
+		}
+		if evaluation, present := cost.Evaluation(); present {
+			if selected, err = selected.WithEvaluation(evaluation); err != nil {
+				return domain.SelectedChannelCandidate{}, fmt.Errorf("attach evaluation to selected candidate: %w", err)
+			}
+		}
+		if rate, present := cost.Rate(); present {
+			if selected, err = selected.WithRate(rate); err != nil {
+				return domain.SelectedChannelCandidate{}, fmt.Errorf("attach rate to selected candidate: %w", err)
+			}
+		}
+		return selected, nil
+	}
+	return domain.SelectedChannelCandidate{}, fmt.Errorf("%w: selected %s has no cost entry", ErrChannelCostsIncomplete, candidate.String())
 }
 
 // recordDecision 把刚比过的这一批记成一条决定。四格由 FormChannelSelectionDecision 从同一份排序

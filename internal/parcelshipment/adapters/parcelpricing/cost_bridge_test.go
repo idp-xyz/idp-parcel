@@ -267,6 +267,13 @@ func TestAPricedEvaluationCrossesAsAnEstablishedCost(t *testing.T) {
 	if !present || reference.String() != evaluation.ID().String() {
 		t.Fatalf("评价引用 = %q/%v，want %q", reference.String(), present, evaluation.ID().String())
 	}
+	// 票 29：赢家建立面单交易时 Rate 那一格填的就是这张卡，费率引用随成本一起过来，照「对象/版本」
+	// 两段写（同 commercial_basis 那边 PC 版本引用的写法），不带指纹、不带内容。
+	plan := evaluation.PlanReference()
+	rate, carried := cost.Rate()
+	if !carried || rate.String() != plan.ID()+"/"+plan.Version() {
+		t.Fatalf("费率引用 = %q/%v，want %q", rate.String(), carried, plan.ID()+"/"+plan.Version())
+	}
 }
 
 // Covers: 四种非完成结果各自译到自己那一格，不互相顶替（`parcel-pricing` CONTEXT「依据
@@ -357,6 +364,10 @@ func TestEachUnpriceableOutcomeCrossesIntoItsOwnGrade(t *testing.T) {
 			// 出局的候选同样经过了评价，留痕要能指回它为何出局的那份评价。
 			if reference, present := cost.Evaluation(); !present || reference.String() != testCase.evaluation.ID().String() {
 				t.Fatalf("出局候选的评价引用 = %q/%v，want %q", reference.String(), present, testCase.evaluation.ID().String())
+			}
+			// 出局的候选没有「适用的费率」：这张卡没为它出过价，带过去会让下游把它当成本次交易的依据。
+			if _, carried := cost.Rate(); carried {
+				t.Fatalf("%s 的候选带上了费率引用", testCase.wantStatus)
 			}
 		})
 	}
