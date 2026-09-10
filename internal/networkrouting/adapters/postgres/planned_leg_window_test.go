@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -172,5 +173,31 @@ func TestPlannedLegWindowsAreInvisibleAcrossTenants(t *testing.T) {
 		if _, found, err := windows.LoadPlannedLegWindow(ctx, other, legReference(t, version, 1)); err != nil || found {
 			t.Errorf("他租户按 %s 读到了本租户的段：found=%v err=%v", version, found, err)
 		}
+	}
+}
+
+// Covers: 同租户下同一 plan_version 对上多于一行——签发方唯一性（RouteIdentityFactory 走序列）被破坏是坏数据，
+// planByVersion 响亮报错、不挑一行：挑了就是把两份计划的内容当一份交出去。plan_version 列今天没有唯一约束，两把
+// 不同判断键各带同一版本号经生产写口就能摆出这一格；它不是正常路径能到的形状，正因如此才要钉住读口在这里不吞。
+// 答法既不是 found=false（那会把坏数据读成「没登」）也不是随便一段的窗口。
+func TestAPlanVersionMatchingMoreThanOneRowIsAnErrorNotAWindow(t *testing.T) {
+	windows, routes, _, transactor := newLegWindowFixture(t)
+	ctx := t.Context()
+
+	first := routeKey(t, "tenant-1", "parcel-1")
+	second := routeKey(t, "tenant-1", "parcel-2")
+	saveRoute(t, transactor, ctx, routes, ports.InitialRouteRecord{
+		Key: first, Plan: formedPlan(t, first, "RPV-0001"), HasPlan: true,
+	})
+	saveRoute(t, transactor, ctx, routes, ports.InitialRouteRecord{
+		Key: second, Plan: formedPlan(t, second, "RPV-0001"), HasPlan: true,
+	})
+
+	_, found, err := windows.LoadPlannedLegWindow(ctx, first.TenantID, legReference(t, "RPV-0001", 1))
+	if err == nil || found {
+		t.Fatalf("同版本两行：found=%v err=%v，want error 且 found=false", found, err)
+	}
+	if !strings.Contains(err.Error(), "matches more than one row") {
+		t.Fatalf("报的不是多行那一格：%v", err)
 	}
 }
