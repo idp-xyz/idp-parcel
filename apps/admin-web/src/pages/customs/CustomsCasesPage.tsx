@@ -6,14 +6,17 @@ import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
   listCaseRegisters,
+  listCredentials,
   type ClosureObligationCatalogueRecord,
   type ClosureObligationListResponseBody,
+  type CredentialListResponseBody,
   type ReadinessJudgmentRecord,
   type ReadinessJudgmentListResponseBody,
   type SubmissionAuthorityRecord,
   type SubmissionAuthorityListResponseBody,
 } from './api';
 import { caseRegisterLabels, labelOf, obligationStateLabels } from './presentation';
+import { credentialRows, type RegisterRow } from './register-rows';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['customs-cases'];
@@ -22,7 +25,8 @@ const info = moduleInfoById['customs-cases'];
 //
 // 已接线的是案件配置册查阅两签——「就绪与授权」（单元维，两栏各带撤销态）与
 // 「关闭义务」（案件维，目录连义务项），都接 GET /customs-case-registers 按
-// registry 分派。
+// registry 分派；以及监管凭证册一签（票 sa-cc/10），接 GET /customs-credentials
+// ——凭证是 UC-CC-003 就绪门禁第 4 道的依据，所以挂在就绪与授权签旁。
 //
 // 四个对象族（关务案件、申报单元、正式申报资料快照、提交版本）分页签呈现：
 // 案件是稳定业务容器，单元是申报对象集合，快照是版本化资料，提交版本是
@@ -181,7 +185,7 @@ const unconfigured = {
   kind: 'unconfigured' as const,
   title: '对象族列表端点尚未建立',
   description:
-    '本页已接线的是案件配置册查阅（就绪与授权、关闭义务两签）；案件/单元/快照/提交版本四个对象族的列表端点尚未建立，这四签不发请求、不含未确认参数的默认值。',
+    '本页已接线的是案件配置册查阅（就绪与授权、关闭义务两签）与监管凭证册（凭证签）；案件/单元/快照/提交版本四个对象族的列表端点尚未建立，这四签不发请求、不含未确认参数的默认值。',
   facts: {
     owner: info.owner,
     source: info.source,
@@ -511,11 +515,77 @@ function ClosureObligationsTable() {
   );
 }
 
+// —— 监管凭证册（接真面，票 sa-cc/10）——
+//
+// 一行即一版不可变凭证（0014 自注：一身份一版，换期限或额度是另一张凭证），所以没有
+// 「当前版 / 历史版」可折。刻意不设「适用性」列：凭证对某程序、某持有人、某时点适用不适用
+// 是判断链（JudgeApplicability）的产物，查阅面转述登记册本身，不在这里替就绪门禁下判。
+// 次数额度那格的「来源未提供」与数字分得开（判读在 register-rows.ts），不显成 0。
+const credentialColumns: ListColumn<RegisterRow>[] = [
+  col('credential', '凭证身份', true),
+  col('issuer', '签发机构', true),
+  col('holder', '持有人', true),
+  col('procedure', '适用监管程序', true),
+  col('validity', '有效期', true),
+  col('uses', '次数额度'),
+  col('registeredAt', '登记时间', true),
+];
+
+function CredentialsTable() {
+  const [search, setSearch] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<CredentialListResponseBody> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listCredentials().then((result) => {
+      if (!cancelled) setAnswer(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const credentials = answer?.kind === 'outcome' ? answer.body.credentials : [];
+  const rows = credentialRows(credentials);
+  const needle = search.trim().toLowerCase();
+  const visibleRows = needle
+    ? rows.filter((row) =>
+        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
+      )
+    : rows;
+  const retry = () => setReloadKey((value) => value + 1);
+  const unprovided = credentials.filter((credential) => credential.uses === undefined).length;
+
+  return (
+    <ListPageTemplate<RegisterRow>
+      title="监管凭证"
+      description={`${info.owner}——一身份一版、不可变；附件文件只是证据，不能代替凭证身份和适用性判断。本签只列在册凭证，不判适用性，也不登余额`}
+      search={{ value: search, onChange: setSearch, placeholder: '搜索凭证身份 / 签发机构 / 持有人 / 监管程序' }}
+      filterSummary={
+        answer?.kind === 'outcome'
+          ? `凭证 ${credentials.length} 版 · 其中来源未提供次数额度 ${unprovided} 版`
+          : undefined
+      }
+      columns={credentialColumns}
+      rows={visibleRows}
+      rowKey={(row) => row.key}
+      viewState={catalogueViewState(answer, rows.length, retry, {
+        module: info,
+        endpoint: 'GET /customs-credentials',
+        emptyTitle: '当前租户尚无已登记的监管凭证',
+        emptyDescription:
+          '上列只含已登记凭证：凭证未登记时就绪门禁第 4 道停在「凭证未登记」，不读作「不适用」。真实凭证属实例半边（PAR-CUS-04 待提供），页面不会预置任何凭证。',
+      })}
+    />
+  );
+}
+
 /**
- * 关务案件与申报（customs-compliance）。已接线的案件配置册两签在前（就绪与授权、
- * 关闭义务——页面当前能如实作答的查阅面）；对象族四签（案件容器 → 申报单元 →
- * 资料快照 → 提交版本，逐层向外，越靠后越接近对外发送）列表端点未建，如实占位
- * 在后，端点建成接线时可回归对象层级排序。
+ * 关务案件与申报（customs-compliance）。已接线的三签在前（就绪与授权、监管凭证、
+ * 关闭义务——页面当前能如实作答的查阅面；凭证紧挨就绪与授权，因为它是就绪门禁第 4 道
+ * 的依据）；对象族四签（案件容器 → 申报单元 → 资料快照 → 提交版本，逐层向外，越靠后
+ * 越接近对外发送）列表端点未建，如实占位在后，端点建成接线时可回归对象层级排序。
  */
 export function CustomsCasesPage() {
   return (
@@ -523,6 +593,7 @@ export function CustomsCasesPage() {
       <Tabs defaultValue="preconditions" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="preconditions">就绪与授权</TabsTrigger>
+          <TabsTrigger value="credentials">监管凭证</TabsTrigger>
           <TabsTrigger value="closure-obligations">关闭义务</TabsTrigger>
           <TabsTrigger value="cases">关务案件</TabsTrigger>
           <TabsTrigger value="units">申报单元</TabsTrigger>
@@ -531,6 +602,9 @@ export function CustomsCasesPage() {
         </TabsList>
         <TabsContent value="preconditions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SubmissionPreconditionsTable />
+        </TabsContent>
+        <TabsContent value="credentials" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <CredentialsTable />
         </TabsContent>
         <TabsContent value="closure-obligations" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ClosureObligationsTable />

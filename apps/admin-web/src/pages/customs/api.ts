@@ -247,6 +247,98 @@ export function listPortsPaths<Registry extends PortsPathsRegistry>(
   );
 }
 
+// —— 监管凭证册(customs-cases 页凭证签,票 sa-cc/10) ——
+// 形状以 internal/customscompliance/adapters/http/query_credentials.go 为准,
+// 此处只做镜像不虚构。
+
+/**
+ * 一版监管凭证:一身份一版、不可变,换期限或额度是另一张凭证(0014 自注)。uses 只在来源
+ * 提供了次数额度时在场——缺席是「来源未提供」,**不是 0 也不是已用尽**:余额(占用 / 释放 /
+ * 核销)不是本册登记内容,页面不得把缺席译成一个数字。registeredAt 是登记动作的时钟,与
+ * validFrom / validTo 两端是三件事。
+ */
+export interface CredentialRecord {
+  credential: string;
+  issuer: string;
+  holder: string;
+  procedure: string;
+  validFrom: string;
+  validTo: string;
+  uses?: number;
+  registeredAt: string;
+}
+
+export interface CredentialListResponseBody {
+  outcome: 'CREDENTIALS_LISTED';
+  credentials: CredentialRecord[];
+}
+
+/** 凭证册只有一本,不收分派参数(判据同 listGateConditions)。 */
+export function listCredentials(): Promise<ApiResult<CredentialListResponseBody>> {
+  return exchangeMasterData<CredentialListResponseBody>('/customs-credentials');
+}
+
+// —— 税费付款协作事项册与税费付款核对册(customs-restrictions 页两签,票 sa-cc/10) ——
+// 形状以 internal/customscompliance/adapters/http/query_duty_collaborations.go 与
+// query_duty_verifications.go 为准,此处只做镜像不虚构。两册各立入口、不设 ?registry=:
+// 它们是 UC-CC-009「七层对象必须分离」里的两层,各自一口。
+
+/**
+ * 一份税费付款协作事项。kind 封闭二值:ASSESSED_DUTY 带 duty 不带 noPayBasis,
+ * EXPLICITLY_NOT_REQUIRED 反之——第三种「没有结果所以不用付」在类型上没有格(CONTEXT
+ * 「税费付款协作事项」:缺少税费结果不能被解释为无需付款)。obligor 只是法定义务人,
+ * 实际付款方与最终承担费用的客户可以不同、不能互相推导(CONTEXT 硬句 212),本行没有那两列。
+ */
+export interface DutyCollaborationRecord {
+  scope: string;
+  kind: string;
+  duty?: string;
+  noPayBasis?: string;
+  obligor: string;
+  requirement: string;
+  target: string;
+  formedAt: string;
+}
+
+export interface DutyCollaborationListResponseBody {
+  outcome: 'DUTY_COLLABORATIONS_LISTED';
+  collaborations: DutyCollaborationRecord[];
+}
+
+export function listDutyCollaborations(): Promise<ApiResult<DutyCollaborationListResponseBody>> {
+  return exchangeMasterData<DutyCollaborationListResponseBody>('/customs-duty-collaborations');
+}
+
+/**
+ * 一版税费付款核对。coverage / delta / validity 三轴各自封闭、各占一列——互斥总状态是
+ * CONTEXT 明禁形状(ADR-0137 决定三),本行没有、页面也不得折出一个「付款状态」。version
+ * 是幂等键上的内容指纹:同键多版本各自成行,迟到事实按新版本追加不覆盖,哪版是当前由
+ * 读者按 verifiedAt 判读。basis 是「凭什么把这笔资金关联到这版税费」的证据引用。
+ */
+export interface DutyVerificationRecord {
+  duty: string;
+  funds: string;
+  scope: string;
+  version: string;
+  /** 封闭三值 NONE / PARTIAL / COVERED;词表在 presentation.ts。 */
+  coverage: string;
+  /** 封闭四值 NO_DELTA / SHORT / EXCESS / PENDING。 */
+  delta: string;
+  /** 封闭四值 VALID / INVALIDATED / CONFLICTING / PENDING。 */
+  validity: string;
+  basis: string;
+  verifiedAt: string;
+}
+
+export interface DutyVerificationListResponseBody {
+  outcome: 'DUTY_VERIFICATIONS_LISTED';
+  verifications: DutyVerificationRecord[];
+}
+
+export function listDutyVerifications(): Promise<ApiResult<DutyVerificationListResponseBody>> {
+  return exchangeMasterData<DutyVerificationListResponseBody>('/customs-duty-verifications');
+}
+
 // —— 五类配置登记的在线登记口(ADR-0085,票 admin-write-faces/02 切片 02b) ——
 // 形状以 internal/customscompliance/adapters/http/register_configuration.go 为准。
 //

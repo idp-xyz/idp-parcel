@@ -56,6 +56,37 @@ export const directionLabels: Record<string, string> = {
   EXPORT: '出口',
 };
 
+// 税费付款协作事项的义务依据封闭二值(domain DutyObligationKind),中文取 CONTEXT「税费付款
+// 协作事项」词条原词。刻意没有第三格:「缺少税费结果不能被解释为无需付款」,领域枚举上就
+// 没有「没有结果所以不用付」,词表跟着没有。
+export const dutyObligationKindLabels: Record<string, string> = {
+  ASSESSED_DUTY: '已接受监管核定税费',
+  EXPLICITLY_NOT_REQUIRED: '明确无需付款依据',
+};
+
+// 税费付款核对三轴各自的封闭集(domain DutyCoverage / DutyDelta / DutyFactValidity),中文取
+// 其注释原词。三张表分开、不合成一张「付款状态」词表——合成的那张就是 CONTEXT 明禁的互斥
+// 总状态(ADR-0137 决定三)。集外取值由 labelOf 原样回显,坏数据该露出来。
+export const dutyCoverageLabels: Record<string, string> = {
+  NONE: '无覆盖',
+  PARTIAL: '部分覆盖',
+  COVERED: '已覆盖',
+};
+
+export const dutyDeltaLabels: Record<string, string> = {
+  NO_DELTA: '无差额',
+  SHORT: '不足',
+  EXCESS: '超额',
+  PENDING: '待确认',
+};
+
+export const dutyFactValidityLabels: Record<string, string> = {
+  VALID: '有效',
+  INVALIDATED: '失效',
+  CONFLICTING: '冲突',
+  PENDING: '待确认',
+};
+
 // 外部结果六层的中文取 GLOSSARY 与关务用例的领域原词(监管接收、业务受理、
 // 监管过程决定、监管核定税费、放行结果、监管处置决定),不自造译法。
 export const resultLayerLabels: Record<string, string> = {
