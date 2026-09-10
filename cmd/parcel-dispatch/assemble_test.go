@@ -225,6 +225,23 @@ func TestARegisteredEffectiveDeliveryReachesTheConsumerThroughTheRouteTable(t *t
 	}
 }
 
+// Covers: 路由表的面单交易判断意图一条（lc/26，ADR-0134）——PS 写侧在定案 / 后续动作两拍交出的
+// `label-transaction.judgment-due` 投给判断消费者。手法同前几条：毒丸载荷（缺 tenantId/transaction/parcel）
+// 让消费门显式拒收入账并交回 nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+func TestALabelTransactionJudgmentDueReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "label-judgment-1", psinbox.LabelTransactionJudgmentDueEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把面单交易判断意图投给消费者",
+			published, recordedFailureCode(t, db, "label-judgment-1"))
+	}
+}
+
 // Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：
 // 毒丸载荷（缺 tenantId/object/scope/version 四维之一）让消费门显式拒收入账并交回
 // nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。

@@ -24,6 +24,7 @@ import (
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/labelfinal"
 	psnetworkrouting "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/networkrouting"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
@@ -433,6 +434,22 @@ var effectiveDeliveryUndecidedSentinels = []error{
 	pstf.ErrFinalUndecided,
 }
 
+// labelTransactionJudgmentUndecidedSentinels 是面单交易判断意图这条链（lc/26，ADR-0134）登记的未决
+// 哨兵：目标委托尚未接受或不可见、判断编排的四个读口之一答不出、终局采用停在自己的未决——都是
+// 「等一个依赖」，重投会改变结果。
+//
+// 不在名单里的几格，恢复动作各不相同：
+//   - labelfinal.ErrJudgmentNotAccepted——信封与反查都过了命令还立不起，是适配器缺陷，重投不自愈。
+//   - labelfinal.ErrFinalHandoffPending——终局行已提交、意图还没交出去，要查的是 outbox 下游。
+//   - psdomain.ErrAmbiguousParcelTarget——两份当前已接受委托声明了同一个包裹，要人去看。
+//   - labelfinal.ErrUntranslatableEnvelope——引用坏了，编程错误。
+//   - labelfinal.ErrUnexpectedJudgmentOutcome——封闭集合外，静默入账等于替编排作判断。
+var labelTransactionJudgmentUndecidedSentinels = []error{
+	labelfinal.ErrParcelTargetNotFound,
+	labelfinal.ErrJudgmentUndecided,
+	labelfinal.ErrFinalUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -628,6 +645,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery fan-out: %w", err)
 	}
 
+	labelJudgments, err := judgeLabelFinalOnLabelTransactionConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedLabelJudgments, err := dispatch.WithUndecidedSentinels(
+		labelJudgments, labelTransactionJudgmentUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -716,6 +743,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.NodeIntakeFormedEventType:              nodeIntakeFan,
 			psinbox.OffsitePickupRegisteredEventType:       pickupFan,
 			psinbox.EffectiveDeliveryRegisteredEventType:   deliveryFan,
+			psinbox.LabelTransactionJudgmentDueEventType:   routedLabelJudgments,
 			veinbox.TransportHandoverRegisteredEventType:   veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType: veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:            veFinalOutcomeRouted,
@@ -1862,38 +1890,130 @@ func adoptEffectiveDeliveryConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: effective deliveries: %w", err)
 	}
+	chain, err := parcelFinalAdoptionChain(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+
+	processing, err := pstf.NewAdoptOnEffectiveDeliveryAdapter(
+		deliveries, chain.requests, pstf.NewDeliveryOutcomeAdapter(chain.handler))
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopt on effective delivery: %w", err)
+	}
+	consumer, err := psinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: effective delivery consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// judgeLabelFinalOnLabelTransactionConsumer 接 lc/26 那条线（ADR-0134）：面单交易写侧在定案与后续动作
+// 两拍 `Save` 成功后交出的 `label-transaction.judgment-due` 指针式信封 → 消费门 → 三路共用的处理方核
+// （按包裹反查当前已接受委托 → 终局判断编排 → 五值译成消费结论）→ 判出终局的格交既有终局采用路径。
+//
+// 判断编排的六口：交易册与继续尝试登记册各用同一只 postgres 适配器的只读半边；取消视图与终局采用路径
+// 与交付那一路**同一条链**（parcelFinalAdoptionChain）——两种服务形态的产物都叫「终局服务结果」，只认
+// FinalOutcomeStore 里那一处当前有效终局，采用路径不另建。`Validity` 接 ps-port-remainder/01 的
+// DeclaredLabelValidityRule：它按接受时固定的规则包版本读有效期那一格，声明缺席答未配置、不推算失效，
+// 与「未配置即 nil」在判断结果上同一格，接上是为了租户登记那一格之后不必再改装配。
+//
+// 写入侧（06 编排把意图入队那一半）不在这里：`LabelTransactionDeps` 的生产装配与事务壳归 lc/28 的
+// 组合根，本进程只消费。
+func judgeLabelFinalOnLabelTransactionConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	chain, err := parcelFinalAdoptionChain(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	transactions, err := pspostgres.NewLabelTransactions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label transactions: %w", err)
+	}
+	registers, err := pspostgres.NewContinuedAttemptRegisters(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: continued attempt registers: %w", err)
+	}
+	validity, err := pspartycommercial.NewDeclaredLabelValidityRule(chain.requests, chain.declared)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label validity rule: %w", err)
+	}
+	judge := psapplication.NewJudgeLabelServiceFinalHandler(psapplication.JudgeLabelServiceFinalDeps{
+		Transactions:  transactions,
+		Registers:     registers,
+		Cancellations: chain.cancellations,
+		Validity:      validity,
+		Adoption:      chain.handler,
+		Clock:         clock,
+	})
+	core, err := labelfinal.NewParcelJudgmentCore(chain.requests, judge)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label final judgment core: %w", err)
+	}
+	processing, err := labelfinal.NewLabelTransactionJudgmentAdapter(core)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment adapter: %w", err)
+	}
+	consumer, err := psinbox.NewLabelTransactionJudgmentConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// parcelFinalAdoption 是终局采用那条链装好之后交回的几样：编排本身，以及两只消费者各自还要接的
+// 只读口（包裹反查、取消视图、声明读口）。
+type parcelFinalAdoption struct {
+	handler       *psapplication.FormParcelFinalHandler
+	requests      *pspostgres.ShipmentRequests
+	cancellations *pspostgres.ParcelCancellations
+	declared      *pspartycommercial.DeclaredStageContent
+}
+
+// parcelFinalAdoptionChain 装终局采用编排（UC-PS-004 的采用路径）。有效交付与面单交易判断两条链共用它：
+// 两种服务形态的终局只认 FinalOutcomeStore 里那一处当前有效终局（judge_label_service_final.go 头注），
+// 各建一份 handler 会让委托完成派生、取消前核验与继续尝试判断看见两处。
+func parcelFinalAdoptionChain(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+) (parcelFinalAdoption, error) {
+	none := parcelFinalAdoption{}
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: shipment requests: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: shipment requests: %w", err)
 	}
 	finals, err := pspostgres.NewFinalOutcomes(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: final outcomes: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: final outcomes: %w", err)
 	}
 	cancellations, err := pspostgres.NewParcelCancellations(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: parcel cancellations: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: parcel cancellations: %w", err)
 	}
 	identities, err := psidentity.NewFinalOutcomeVersions()
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: final outcome versions: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: final outcome versions: %w", err)
 	}
 	downstream, err := pspostgres.NewOutboxFinalOutcomeHandoff(db, outboxStore, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: final outcome handoff: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: final outcome handoff: %w", err)
 	}
 
 	stageContent, err := pcpostgres.NewStageContentDeclarations(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: stage content declarations: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: stage content declarations: %w", err)
 	}
 	resolutions, err := pcpostgres.NewCommercialResolutions(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: commercial resolutions: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: commercial resolutions: %w", err)
 	}
 	owners, err := pspartycommercial.NewResolvedAdoptedStageOwner(requests, resolutions)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: adopted stage owner: %w", err)
+		return none, fmt.Errorf("parcel-dispatch: adopted stage owner: %w", err)
 	}
 	declared := pspartycommercial.NewDeclaredStageContent(
 		stageContent, stageContent, stageContent, owners,
@@ -1930,17 +2050,12 @@ func adoptEffectiveDeliveryConsumer(
 		Downstream:    downstream,
 		Clock:         clock,
 	})
-
-	processing, err := pstf.NewAdoptOnEffectiveDeliveryAdapter(
-		deliveries, requests, pstf.NewDeliveryOutcomeAdapter(handler))
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: adopt on effective delivery: %w", err)
-	}
-	consumer, err := psinbox.NewEffectiveDeliveryConsumer(db.Transactor(), inboxStore, processing)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: effective delivery consumer: %w", err)
-	}
-	return consumer, nil
+	return parcelFinalAdoption{
+		handler:       handler,
+		requests:      requests,
+		cancellations: cancellations,
+		declared:      declared,
+	}, nil
 }
 
 // nodeQualificationAuthority 是「本部署把哪一段收寄硬资格交给 node-operations 作证」的
