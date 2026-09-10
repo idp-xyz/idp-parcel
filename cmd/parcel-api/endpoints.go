@@ -107,6 +107,9 @@ func assembleBusinessEndpoints(
 	caseRegisters customshttp.CaseRegisterCatalogueReader,
 	gateConditions customshttp.GateConditionCatalogueReader,
 	portsPaths customshttp.PortsPathsCatalogueReader,
+	credentials customshttp.CredentialCatalogueReader,
+	dutyCollaborations customshttp.DutyCollaborationCatalogueReader,
+	dutyVerifications customshttp.DutyVerificationCatalogueReader,
 	interpretationRuleRegistration customshttp.InterpretationRuleRegistrar,
 	gateCatalogRegistration customshttp.GateCatalogRegistrar,
 	candidatePortRegistration customshttp.CandidatePortRegistrar,
@@ -367,6 +370,14 @@ func assembleBusinessEndpoints(
 		// 口岸与申报路径两册（票 admin-remainder-mechanism-batch/03）是一张页面的两签
 		// 查阅面，共用一个端点按 registry 分派，Intake 与关务运营读面同族同变量。
 		{Pattern: "/customs-ports-paths", Handler: customshttp.NewQueryPortsPathsEndpoint(complianceRulesIntake, portsPaths)},
+		// 凭证、税费付款协作事项、税费付款核对三册（票 sa-cc/10）各立入口、不并进任何
+		// registry 分派：凭证读签挂 customs-cases 页、协作与核对两签挂 customs-restrictions
+		// 页——三册分落两页，且都不是既有分派封闭集里的册（案件配置四册 / 口岸路径两册），
+		// 往那些集里加格等于让一个端点的参数集替两页说话。Intake 与关务运营读面同族同变量，
+		// 三条判据同上（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
+		{Pattern: "/customs-credentials", Handler: customshttp.NewQueryCredentialsEndpoint(complianceRulesIntake, credentials)},
+		{Pattern: "/customs-duty-collaborations", Handler: customshttp.NewQueryDutyCollaborationsEndpoint(complianceRulesIntake, dutyCollaborations)},
+		{Pattern: "/customs-duty-verifications", Handler: customshttp.NewQueryDutyVerificationsEndpoint(complianceRulesIntake, dutyVerifications)},
 		// 关务四类配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02b）：写准入不
 		// 另立形，判据同上。同一受控 CLI 里改「案上此刻的事实」的那些命令不在本端点族内，
 		// 范围判据在票上，此处不复述。

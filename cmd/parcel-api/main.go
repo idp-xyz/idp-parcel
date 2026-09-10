@@ -314,6 +314,16 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	credentials, err := ccpostgres.NewCredentialCatalogue(db)
+	if err != nil {
+		return err
+	}
+	// 协作事项与付款核对两册共用一个读适配器（同一迁移的两张表），接两个读口参数
+	// ——传两次的是同一个对象，两口各按自己的接口消费（票 sa-cc/10）。
+	dutyReconciliation, err := ccpostgres.NewDutyReconciliationCatalogue(db)
+	if err != nil {
+		return err
+	}
 	commercialCatalog, err := pcpostgres.NewOperationsCatalogue(db)
 	if err != nil {
 		return err
@@ -439,6 +449,9 @@ func run(logger *slog.Logger) error {
 			caseRegisters,
 			gateConditions,
 			portsPaths,
+			credentials,
+			dutyReconciliation,
+			dutyReconciliation,
 			customsRegistration.interpretationRule,
 			customsRegistration.gateCatalog,
 			customsRegistration.candidatePort,

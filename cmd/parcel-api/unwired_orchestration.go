@@ -1177,6 +1177,40 @@ func (unwiredPortsPaths) ListDeclarationPaths(
 	return nil, errOrchestrationNotWired
 }
 
+// unwiredCredentialCatalogue 是监管凭证册列表读口的占位，方法表与
+// customsports.CredentialCatalogueRead 逐一对上（票 sa-cc/10）。
+type unwiredCredentialCatalogue struct{}
+
+func (unwiredCredentialCatalogue) ListCredentials(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.CredentialCatalogueEntry, error) {
+	return nil, errOrchestrationNotWired
+}
+
+// unwiredDutyReconciliationCatalogue 是税费付款协作事项与税费付款核对两册列表读口的
+// 占位，方法表与 customsports.DutyCollaborationCatalogueRead 及
+// customsports.DutyVerificationCatalogueRead 逐一对上（票 sa-cc/10）；一个桩接两个读口
+// 参数，与生产装配里两口共用一个读适配器同形。
+type unwiredDutyReconciliationCatalogue struct{}
+
+func (unwiredDutyReconciliationCatalogue) ListDutyCollaborations(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsdomain.DutyPaymentCollaboration, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredDutyReconciliationCatalogue) ListDutyVerifications(
+	context.Context,
+	customsdomain.TenantID,
+	int,
+) ([]customsports.DutyVerificationRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredCommercialCatalogue struct{}
 
 func (unwiredCommercialCatalogue) ListServiceProducts(
