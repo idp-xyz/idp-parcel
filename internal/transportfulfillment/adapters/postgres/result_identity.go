@@ -18,6 +18,8 @@ const (
 	deliveryResultVersionPrefix   = "DRV"
 	externalTrackingFactPrefix    = "EXTF"
 	externalTrackingVersionPrefix = "EXTV"
+	carrierPickupFactPrefix       = "CFEP"
+	carrierPickupVersionPrefix    = "CFEV"
 )
 
 // ResultVersions 实现 ports.PickupIdentityFactory、ports.DeliveryIdentityFactory 与
@@ -41,7 +43,30 @@ var (
 	_ ports.PickupIdentityFactory           = (*ResultVersions)(nil)
 	_ ports.DeliveryIdentityFactory         = (*ResultVersions)(nil)
 	_ ports.ExternalTrackingIdentityFactory = (*ResultVersions)(nil)
+	_ ports.CarrierPickupIdentityFactory    = (*ResultVersions)(nil)
 )
+
+// NextCarrierFirstEffectivePickupReference 为一条新链铸收寄事实身份（ADR-0135 决定二：与载运对象分开保存）。
+func (factory *ResultVersions) NextCarrierFirstEffectivePickupReference(
+	ctx context.Context,
+) (domain.CarrierFirstEffectivePickupReference, error) {
+	sequence, err := factory.next(ctx, "transport_fulfillment.carrier_first_effective_pickup_ref_seq")
+	if err != nil {
+		return domain.CarrierFirstEffectivePickupReference{}, fmt.Errorf("next carrier first effective pickup reference: %w", err)
+	}
+	return domain.NewCarrierFirstEffectivePickupReference(fmt.Sprintf("%s-%012d", carrierPickupFactPrefix, sequence))
+}
+
+// NextCarrierFirstEffectivePickupVersion 为首登、待确认、替代与失效各签一个新版本。
+func (factory *ResultVersions) NextCarrierFirstEffectivePickupVersion(
+	ctx context.Context,
+) (domain.CarrierFirstEffectivePickupVersion, error) {
+	sequence, err := factory.next(ctx, "transport_fulfillment.carrier_first_effective_pickup_version_seq")
+	if err != nil {
+		return domain.CarrierFirstEffectivePickupVersion{}, fmt.Errorf("next carrier first effective pickup version: %w", err)
+	}
+	return domain.NewCarrierFirstEffectivePickupVersion(fmt.Sprintf("%s-%012d", carrierPickupVersionPrefix, sequence))
+}
 
 // NextExternalTrackingFactReference 为一条新认领的外部承运轨迹事实铸本上下文自己的身份。
 // 源事件标识由源给、本仓不代铸；本仓自己的身份另铸，两者分开保存（ADR-0102 决定四）。
