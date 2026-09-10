@@ -33,6 +33,7 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  Signpost,
   SlidersHorizontal,
   Split,
   Stamp,
@@ -91,6 +92,9 @@ export const navigationSections: NavigationSection[] = [
       { id: 'shipment-request', label: '提交与撤回', icon: 'shipment-request' },
       { id: 'shipment-request-inquiry', label: '委托查阅', icon: 'shipment-request-inquiry' },
       { id: 'acceptance-review', label: '接受前人工复核', icon: 'acceptance-review' },
+      // 授权处置紧挨复核：同是接受判断任务上的等待态与续办角色（ADR-0132 决定二），但决定集不同——复核
+      // 完成后决定可以是接受，处置只能选去向；两页分开，不让一项`业务限制`借复核那条路走到接受。
+      { id: 'authorized-disposition', label: '授权处置', icon: 'authorized-disposition' },
       { id: 'label-transactions', label: '面单交易', icon: 'label-transactions' },
       // 择优决定是 parcel-shipment 形成的只追加判断记录（票 label-channel/14），读面随所有权落本区、挨着
       // 消费它的面单交易；对象引用里的映射本体在主数据区的渠道产品目录页，这里只透引用。
@@ -171,6 +175,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'shipment-request': Send,
   'shipment-request-inquiry': PackageSearch,
   'acceptance-review': ClipboardCheck,
+  'authorized-disposition': Signpost,
   'label-transactions': Ticket,
   'channel-selection-decisions': Split,
   'cancel-parcel': PackageX,
@@ -241,6 +246,12 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '接受前人工复核',
     owner: '小包托运（parcel-shipment）',
     source: 'docs/domain/parcel-shipment/CONTEXT.md「适用规则显式要求人工业务判断」',
+  },
+  'authorized-disposition': {
+    title: '授权处置',
+    owner: '小包托运（parcel-shipment）',
+    source:
+      'docs/domain/parcel-shipment/CONTEXT.md「授权处置」与`等待授权处置`；docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md 决定一（去向封闭两值，放行不在集内）',
   },
   'label-transactions': {
     title: '面单交易',

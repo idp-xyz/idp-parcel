@@ -5,6 +5,7 @@ import {
   CancelParcelPage,
   LabelTransactionsPage,
   AcceptanceReviewPage,
+  AuthorizedDispositionPage,
 } from './pages/shipment-request';
 import { ChannelSelectionDecisionsPage } from './pages/channel-selection';
 import { TemplatePreviewPage } from './pages/template-preview';
@@ -67,6 +68,7 @@ export const pageById: Record<string, ComponentType> = {
   'cancel-parcel': CancelParcelPage,
   'template-preview': TemplatePreviewPage,
   'acceptance-review': AcceptanceReviewPage,
+  'authorized-disposition': AuthorizedDispositionPage,
   'exception-triage': ExceptionTriagePage,
   reconciliation: ReconciliationPage,
   'settlement-application': SettlementApplicationPage,
@@ -145,6 +147,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'exception-cases',
   'claims-recovery',
   'acceptance-review',
+  'authorized-disposition',
   'label-transactions',
   'channel-selection-decisions',
 ]);
