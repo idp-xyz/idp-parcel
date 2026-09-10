@@ -7,19 +7,23 @@ import (
 
 // 本文件是客户合同册接进服务端规范化的那一格（加册不换号，仍是 PCC-1——ADR-0126 Decision 一；票
 // admin-write-faces/10）。合同版本的正文是两层声明（ADR-0115）：0012 的正文（接单规则包 + 按费用范围的
-// 财务控制约定）与 0007 的合同级「要不要接受前财务控制」声明。受控批文把它们写成 declarations 下并列的
-// contractContent 与 preAcceptanceControl 两键；这里把两层折进本册一格，键名镜像批文。
+// 财务控制约定）与 0007 的合同级「要不要接受前财务控制」声明，加上 0030 的合同层交付条件（ADR-0133 决定四，
+// 票 admin-write-faces/25）。受控批文把它们写成 declarations 下并列的 contractContent / preAcceptanceControl /
+// deliveryConditions 三键；这里把三层折进本册一格，键名镜像批文。
 
-// CustomerContractBody 是客户合同版本的正文输入面，以领域值对象给出：NewCustomerContract 与
-// DeclarePreAcceptanceControl 各收的那几项，只是不带拥有它们的（已生效）版本——预览与录入发生在发布之前。
+// CustomerContractBody 是客户合同版本的正文输入面，以领域值对象给出：NewCustomerContract、
+// DeclarePreAcceptanceControl 与 DeclareContractDeliveryConditions 各收的那几项，只是不带拥有它们的（已生效）
+// 版本——预览与录入发生在发布之前。
 //
 // Control 可缺：批文里 preAcceptanceControl 缺键是合法的（本版没说「要不要」，下游到接受判断时得到的是
-// `未声明`，不是放行），缺席不折进文档、不影响正文那一层的字节。RulePackage 与约定表不可缺席——它们就是
-// 0012 的正文，读面「正文未登记」说的正是这一层。
+// `未声明`，不是放行），缺席不折进文档、不影响正文那一层的字节。DeliveryConditions 同理可缺——这一版没有合同层
+// 交付条件就是没有，不默认「本人签收」也不默认沿用产品层。RulePackage 与约定表不可缺席——它们就是 0012 的正文，
+// 读面「正文未登记」说的正是这一层。
 type CustomerContractBody struct {
-	RulePackage CommercialObjectID
-	Bindings    []FinancialControlBinding
-	Control     *PreAcceptanceControlBody
+	RulePackage        CommercialObjectID
+	Bindings           []FinancialControlBinding
+	Control            *PreAcceptanceControlBody
+	DeliveryConditions *DeliveryConditionBody
 }
 
 // PreAcceptanceControlBody 是合同级声明的输入面：要求二值，加只在`不适用`时在场的依据。
@@ -28,9 +32,9 @@ type PreAcceptanceControlBody struct {
 	Basis       ControlNotApplicableBasis
 }
 
-// validate 在折成文档前把两层各过一遍与发布时相同的门：规则包非零（NewCustomerContract 的那一判）、约定表经
-// declaredBindingsByScope、声明在场时经 preAcceptanceControlDeclared。不另造校验——三处判的都是同一条规则，
-// 而预览要在录入之前就把「恰一」与「不适用必带依据」答给操作者，不能等到发布那一刻。
+// validate 在折成文档前把各层过一遍与发布时相同的门：规则包非零（NewCustomerContract 的那一判）、约定表经
+// declaredBindingsByScope、声明在场时经 preAcceptanceControlDeclared、交付条件在场时经合同层那道门。不另造校验
+// ——各处判的都是同一条规则，而预览要在录入之前就把「恰一」与「不适用必带依据」答给操作者，不能等到发布那一刻。
 func (body CustomerContractBody) validate() error {
 	if !body.RulePackage.valid() {
 		return ErrInvalidCustomerContract
@@ -39,17 +43,23 @@ func (body CustomerContractBody) validate() error {
 		return err
 	}
 	if body.Control != nil {
-		return preAcceptanceControlDeclared(body.Control.Requirement, body.Control.Basis)
+		if err := preAcceptanceControlDeclared(body.Control.Requirement, body.Control.Basis); err != nil {
+			return err
+		}
+	}
+	if body.DeliveryConditions != nil {
+		return body.DeliveryConditions.validate(CustomerContractObject)
 	}
 	return nil
 }
 
-// canonicalCustomerContractBody 镜像批文 declarations 下 contractContent / preAcceptanceControl 两键的形状。
-// 约定表按费用范围排序写出：合同把约定按范围成表（FinancialControlFor 按范围取、Bindings() 按范围序交出），
-// 表单里换行序不是换正文，摘要不该跟着变。
+// canonicalCustomerContractBody 镜像批文 declarations 下 contractContent / preAcceptanceControl / deliveryConditions
+// 三键的形状。约定表按费用范围排序写出：合同把约定按范围成表（FinancialControlFor 按范围取、Bindings() 按范围序
+// 交出），表单里换行序不是换正文，摘要不该跟着变。
 type canonicalCustomerContractBody struct {
 	ContractContent      canonicalContractContent       `json:"contractContent"`
 	PreAcceptanceControl *canonicalPreAcceptanceControl `json:"preAcceptanceControl,omitempty"`
+	DeliveryConditions   *canonicalDeliveryConditions   `json:"deliveryConditions,omitempty"`
 }
 
 type canonicalContractContent struct {
@@ -94,6 +104,9 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 			document.PreAcceptanceControl.NotApplicableBasis = body.Control.Basis.String()
 		}
 	}
+	if body.DeliveryConditions != nil {
+		document.DeliveryConditions = canonicalDeliveryConditionsOf(*body.DeliveryConditions)
+	}
 	return document
 }
 
@@ -125,6 +138,13 @@ func (document canonicalCustomerContractBody) body() (CustomerContractBody, erro
 			}
 		}
 		body.Control = &control
+	}
+	if document.DeliveryConditions != nil {
+		conditions, err := document.DeliveryConditions.body()
+		if err != nil {
+			return CustomerContractBody{}, fmt.Errorf("deliveryConditions.%w", err)
+		}
+		body.DeliveryConditions = &conditions
 	}
 	if err := body.validate(); err != nil {
 		return CustomerContractBody{}, err

@@ -35,8 +35,8 @@ var (
 // 理由是一册从「没接」到「接了」不改任何已算出的字节。见 ADR-0014。
 //
 // PCC-1：信用政策正文（责任法人 × 权限等级 × 费用类型 × 额度恰一格 × 区间）。
-// PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）；服务产品无正文，文档只有两格。
-// PCC-1 同号另接：客户合同正文（规则包 × 按费用范围的约定表 × 合同级接受前控制声明可缺），见 publication_canonicalization_customer_contract.go。
+// PCC-1 同号另接：供应商协议正文（供应商 × 责任法人 × 范围 × 采购方案引用 × 区间，无方向键）；服务产品正文可缺——不带时文档只有两格，带产品层交付条件时多一节（票 admin-write-faces/25），见 publication_canonicalization_service_product.go。
+// PCC-1 同号另接：客户合同正文（规则包 × 按费用范围的约定表 × 合同级接受前控制声明可缺 × 合同层交付条件可缺），见 publication_canonicalization_customer_contract.go。
 // PCC-1 同号另接：授权规则正文（取消授权目录：请求方 × 规则引用，按请求方序），见 publication_canonicalization_authorization_rule.go。
 // PCC-1 同号另接：结算政策正文（方式 × 六维适用范围，合同维写两段式指称串），见 publication_canonicalization_settlement_policy.go。
 // PCC-1 同号另接：价格政策正文（方向 × 方案绑定含发布期 planDirection / conversion × 范围 × 区间，口径节可缺），见 publication_canonicalization_price_policy.go。
@@ -103,7 +103,10 @@ type PublicationContent struct {
 	CreditPolicy *CreditPolicyBody
 	// SupplierAgreement 是供应商协议册的正文（票 admin-write-faces/11）。
 	SupplierAgreement *SupplierAgreementBody
-	CustomerContract  *CustomerContractBody
+	// ServiceProduct 是服务产品册的正文（票 admin-write-faces/25）：只有一节可缺的产品层交付条件，nil 与零值都折出
+	// 两格文档，见 publication_canonicalization_service_product.go。
+	ServiceProduct   *ServiceProductBody
+	CustomerContract *CustomerContractBody
 	// AuthorizationRule 是授权规则册的正文（票 admin-write-faces/17）：取消授权目录，见 publication_canonicalization_authorization_rule.go。
 	AuthorizationRule *AuthorizationRuleBody
 	// SettlementPolicy 是结算政策册的正文（票 admin-write-faces/15）。
@@ -179,6 +182,14 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.SupplierAgreement = &body
 		return content, nil
 	}
+	if decoded.ServiceProduct != nil {
+		body, err := decoded.ServiceProduct.body()
+		if err != nil {
+			return none, fmt.Errorf("rehydrate publication content: service product: %w", err)
+		}
+		content.ServiceProduct = &body
+		return content, nil
+	}
 	if decoded.CustomerContract != nil {
 		body, err := decoded.CustomerContract.body()
 		if err != nil {
@@ -235,9 +246,9 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 		content.CustomerServiceRule = &body
 		return content, nil
 	}
-	if registerHasNoBody(kind) {
-		// 无正文的册没有「缺席」可判：两格文档就是它的全部（票 admin-write-faces/09）。文档若夹带别册的正文，
-		// 折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
+	if registerBodyOptional(kind) {
+		// 正文可缺的册没有「缺席」可判：两格文档就是一份合法的正文面（票 admin-write-faces/09 / 25）。文档若夹带
+		// 别册的正文，折回的正文面会在再规范化时按 kind 不符拒，这里不重复那一格。
 		return content, nil
 	}
 	if content.CreditPolicy == nil {
@@ -270,6 +281,9 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 		return none, ErrPublicationContentKindMismatch
 	}
 	if content.SupplierAgreement != nil && content.Kind != SupplierAgreementObject {
+		return none, ErrPublicationContentKindMismatch
+	}
+	if content.ServiceProduct != nil && content.Kind != ServiceProductObject {
 		return none, ErrPublicationContentKindMismatch
 	}
 	if content.CustomerContract != nil && content.Kind != CustomerContractObject {
@@ -309,7 +323,7 @@ func CanonicalizePublicationContent(content PublicationContent) (CanonicalPublic
 	case SupplierAgreementObject:
 		return canonicalizeSupplierAgreement(content)
 	case ServiceProductObject:
-		return canonicalServiceProductContent()
+		return canonicalizeServiceProduct(content)
 	case CustomerContractObject:
 		if content.CustomerContract == nil {
 			return none, ErrPublicationContentAbsent
@@ -377,7 +391,9 @@ type canonicalPublicationDocument struct {
 	CreditPolicy     *canonicalCreditPolicyBody `json:"creditPolicy,omitempty"`
 	// 供应商协议一节；键名镜像批文 supplierAgreementBody（节内形状见 canonicalSupplierAgreementBody）。
 	SupplierAgreement *canonicalSupplierAgreementBody `json:"supplierAgreement,omitempty"`
-	CustomerContract  *canonicalCustomerContractBody  `json:"customerContract,omitempty"`
+	// 服务产品一节；只在产品层交付条件在场时出现，不带时本册文档仍是两格（节内形状见 canonicalServiceProductBody）。
+	ServiceProduct   *canonicalServiceProductBody   `json:"serviceProduct,omitempty"`
+	CustomerContract *canonicalCustomerContractBody `json:"customerContract,omitempty"`
 	// 授权规则一节；键名镜像批文 declarations.cancellationAuthority 所在的册（节内形状见 canonicalAuthorizationRuleBody）。
 	AuthorizationRule *canonicalAuthorizationRuleBody `json:"authorizationRule,omitempty"`
 	// 结算政策一节；键名镜像批文 settlementPolicyBody（节内形状见 canonicalSettlementPolicyBody）。
