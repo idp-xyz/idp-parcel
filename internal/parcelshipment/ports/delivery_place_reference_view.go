@@ -6,7 +6,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件是「收件地点引用」的窄读口（ADR-0130 决定二与 Consequences 第一条；PS CONTEXT Rules「收件地点引用
+// 本文件是「收件地点引用」的窄读口（ADR-0130 决定二，与其 Consequences「PS `ports` 另立一个按（租户，包裹身份）
+// 的窄读口……不拓宽既有 `ShipmentRequestRepository` 一类写口」那条；PS CONTEXT Rules「收件地点引用
 // 按（租户，包裹身份）答」那条；票 ps-port-remainder/06）：`transport-fulfillment` 派送任务地点一格的提供方
 // 半边，TF 侧适配器（票 tf/12，ADR-0025 消费侧）以它为前置。
 //

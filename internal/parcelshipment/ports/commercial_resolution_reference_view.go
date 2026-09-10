@@ -6,7 +6,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// 本文件是「商业解析回指」的窄读口（ADR-0133 决定二与 Consequences 第一条；票 ps-port-remainder/07）：
+// 本文件是「商业解析回指」的窄读口（ADR-0133 决定二，与其 Consequences「PS `ports` 另立一个按（租户，包裹身份）答
+// 商业解析回指的窄读口……一口一问、不合并；不拓宽既有写口」那条；票 ps-port-remainder/07）：
 // `transport-fulfillment` 交付条件缝里对象走到合同的那一跳的提供方半边——TF 侧适配器（票 tf/14，ADR-0025 消费侧）
 // 拿回指再走 party-commercial 的读口解闭包，本上下文不替它解。
 //

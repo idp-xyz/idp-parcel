@@ -466,8 +466,9 @@ func (handler *SubmitShipmentRequestHandler) handOverToOtherAuthority(
 // 新准入，是对不同问题的不同回答；其中暂停既不是第四种权威身份，也不是客户业务拒绝。
 //
 // `其他权威`只在交接评估**已确认**时才是「非本产品归属结束」（ADR-0128 决定三）：接管记录与交接
-// 确认是两种证据，缺一不许交。评估未决——部分确认、超时、查询不可用、失败、通道未配置、范围不符——
-// 归属决定仍是`其他权威`，结果却落「生产归属未决」，续办引用由评估带出。没记评估的`其他权威`决定
+// 确认是两种证据，缺一不许交。评估未决（哪几种算未决、各自的证据形由 domain.HandoffObservation 与
+// domain.HandoffUnresolvedReason 定，这里不复述）——归属决定仍是`其他权威`，结果却落「生产归属未决」，
+// 续办引用由评估带出。没记评估的`其他权威`决定
 // 走不到这里（编排在 Other 分支一律先交接），但若走到，也只能按未决答：宣布交出去了而没有确认，
 // 与没有停写证据一样是替对方宣布交接完成。
 func blockedOutcome(decision domain.ProductionOwnershipDecision) SubmitOutcome {

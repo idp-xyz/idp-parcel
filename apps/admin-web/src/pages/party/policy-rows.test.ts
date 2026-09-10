@@ -211,8 +211,9 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
 });
 
 // 输入照后端 query_commercial_catalogue_test.go 里
-// TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered 钉住的三行：只有壳、按合同适用且两张
-// 子表都有内容、按产品适用且期限表为空。适用对象恰一键在场；无客户差异的子表是空数组不是缺键。
+// TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered 钉住的几种形状各取一行：只有壳、按合同
+// 适用且两张子表都有内容、按产品适用且期限表为空（夹具取形不照抄取值，那边加减行本文件不跟）。适用对象恰一键在场；
+// 无客户差异的子表是空数组不是缺键。
 const customerServiceRules: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
   kind: 'CUSTOMER_SERVICE_RULE',
@@ -372,8 +373,8 @@ test('额度两键都缺是响应不合契约，如实点名而不是显示成�
   equal(row.values.limit, '额度缺失（响应不合契约）');
 });
 
-// 输入照后端 query_commercial_catalogue_test.go 里价格政策册那三行的形状（票 admin-write-faces/14「结果在同册立刻可见（含口径列）」）：
-// 带汇率的销售口径、不涉外币且税务不适用的采购口径、只有正文没有口径的行。三处可缺的键缺席即「没有」，不是空串。
+// 输入照后端 query_commercial_catalogue_test.go 里价格政策册各行的形状（票 admin-write-faces/14「结果在同册立刻可见（含口径列）」），
+// 每种形状取一行：带汇率的销售口径、不涉外币且税务不适用的采购口径、只有正文没有口径的行。可缺的键缺席即「没有」，不是空串。
 const pricePolicies: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
   kind: 'PRICE_POLICY',

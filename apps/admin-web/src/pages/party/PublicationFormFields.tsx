@@ -9,10 +9,10 @@ import {
 
 /**
  * 发布表单组件件的共享层（票 admin-write-faces/22）：各册逐字段表单此前各自留一份的 Field / Problems / RowFrame /
- * useLoaded / ReferencePicker / VocabularySelect / vocabularyPlaceholder，这里各只有一份，十张表单全从这里导入。
+ * useLoaded / ReferencePicker / VocabularySelect / vocabularyPlaceholder，这里各只有一份，各册表单全从这里导入。
  *
- * **为什么现在才抬**：伞票 07 让九张表单并行写，纪律是「不跨文件借私有件」——那时抬共享层会让九个会话撞同一个文件；
- * 代价是同形副本九份，五张票的评审都点了同一条 Duplicated Code。表单落齐之后一次抬齐，就是本文件。
+ * **为什么现在才抬**：伞票 07 让各册表单并行写，纪律是「不跨文件借私有件」——那时抬共享层会让并行的会话撞同一个文件；
+ * 代价是每张表单各留一份同形副本，各票的非作者评审都点了同一条 Duplicated Code。表单落齐之后一次抬齐，就是本文件。
  *
  * **一条显示规则只在这里定**：一格 = 标签（带它的 JSON 路径原词）+ 控件 + 服务端点名到这条路径的问题（构造门原话，逐条
  * 列出，不改写）。路径挂在标签旁是为了让操作者把公共半边列出的「未认领路径」与眼前的格对上；此前有几张表单没显路径，
