@@ -84,9 +84,9 @@ func (rule *DeclaredLabelValidityRule) JudgeLabelLapsed(
 	return !asOf.Before(anchor.Add(validity.Duration())), true, nil
 }
 
-// validityAnchorOf 把起算时刻种类译成这笔交易上的那一刻。封闭集今天只一格「渠道结果业务时间」（ADR-0119
-// Decision 二）；日后加格在这里按格分路。default 报错不吸收（ADR-0025）：提供方开了第二种起算时刻而这里没接
-// 分支时必须炸出来，静默按结果时间算等于替租户改了规则。
+// validityAnchorOf 把起算时刻种类译成这笔交易上的那一刻，按格分路；本适配器今天只接「渠道结果业务时间」
+// （ADR-0119 Decision 二），提供方日后加格在这里加分支。default 报错不吸收（ADR-0025）：提供方开了本适配器
+// 不认识的起算时刻而这里没接分支时必须炸出来，静默按结果时间算等于替租户改了规则。
 func validityAnchorOf(kind pcdomain.ValidityAnchorKind, transaction psdomain.LabelTransaction) (time.Time, error) {
 	switch kind {
 	case pcdomain.ChannelResultObservedAnchor:

@@ -185,8 +185,8 @@ func finalRuleWithoutValidity(t *testing.T) pcdomain.FinalRuleContent {
 
 var _ psports.LabelValidityRuleView = (*adapter.DeclaredLabelValidityRule)(nil)
 
-// Covers: 票面裁决①「asOf ≥ 锚 + 时长即 lapsed=true」，锚 = ResultObservedAt（ADR-0119 Decision 二，Q1 唯一
-// 一格）。边界按「≥」：恰好到点就失效。同时核三条线路：反查用的是调用方给的租户与包裹；终局规则按接受时
+// Covers: 票面裁决①「asOf ≥ 锚 + 时长即 lapsed=true」，锚 = ResultObservedAt（ADR-0119 Decision 二，MCP-1
+// 代裁 Q1）。边界按「≥」：恰好到点就失效。同时核三条线路：反查用的是调用方给的租户与包裹；终局规则按接受时
 // 固定的那版规则包读（ADR-0062），不在 PS 另存；租户译到 PC 侧仍是同一个。
 func TestDeclaredValidityLapsesOnceAsOfReachesAnchorPlusDuration(t *testing.T) {
 	cases := []struct {
