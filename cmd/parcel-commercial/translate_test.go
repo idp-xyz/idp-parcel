@@ -232,6 +232,36 @@ func TestTranslationRefusesUnknownFieldsAndOutOfSetValues(t *testing.T) {
 	}
 }
 
+// Covers: pc-gaps/12 完成判据 4——受控批文 `finalRules[].outcome` 收面单渠道两格 LABEL_SERVICE_COMPLETED /
+// LABEL_SERVICE_FAILED，逐格进 FinalRuleContent 的声明行；集外词（票面裁掉的占位 LABEL_CHANNEL_FINAL）仍在触库前拒。
+// 反查走领域的 DeclaredResponsibilityOutcomeNamed——进程口不再自抄一份名单，封闭集再加格时这里不会无声少行。
+func TestFinalRulesTranslateLabelServiceOutcomes(t *testing.T) {
+	item := func(finalRules string) string {
+		return `{"items": [{"tenantId": "t", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "r", "version": "v1",
+			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED",
+			"declarations": {"finalRules": ` + finalRules + `}}]}`
+	}
+
+	commands, err := publishCommandsFromJSON([]byte(item(`[
+		{"outcome": "LABEL_SERVICE_FAILED", "finalKind": "LABEL_SERVICE_FAILED_FINAL"},
+		{"outcome": "LABEL_SERVICE_COMPLETED", "finalKind": "LABEL_SERVICE_DONE"}]`)))
+	if err != nil {
+		t.Fatalf("翻译面单渠道两行：%v", err)
+	}
+	rows := commands[0].Declarations.FinalRules
+	if len(rows) != 2 ||
+		rows[0].Outcome != pcdomain.DeclaredLabelServiceFailed || rows[0].FinalKind.String() != "LABEL_SERVICE_FAILED_FINAL" ||
+		rows[1].Outcome != pcdomain.DeclaredLabelServiceCompleted || rows[1].FinalKind.String() != "LABEL_SERVICE_DONE" {
+		t.Fatalf("终局声明行 = %+v", rows)
+	}
+
+	if _, err := publishCommandsFromJSON([]byte(item(`[{"outcome": "LABEL_CHANNEL_FINAL", "finalKind": "F"}]`))); err == nil {
+		t.Fatal("集合外的责任结果被翻译收下了")
+	}
+}
+
 // Covers: ADR-0120 Decision 六——批文 `sourceDataAmendment{closed, rules[]}`：closed 必填不给默认（缺席整项拒，
 // 不是「默认转复核」）；rules 在 closed=true 时可省；allowance 只收 ALLOWED / DISALLOWED，NOT_DECLARED 是缺格的
 // 读法不是一格的取值；阶段与意图取 parcel-shipment 原词、集外拒；dataGroup 开放引用只查非空；未知键拒。
