@@ -18,13 +18,13 @@
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 81 | 61 | 12 | 38 | 7 | 7 |
-| transportfulfillment | 128 | 117 | 24 | 34 | 10 | 21 |
+| transportfulfillment | 130 | 120 | 24 | 34 | 10 | 22 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 899 | 853 | 115 | 249 | 51 | 121 |
+| **合计** | 901 | 856 | 115 | 249 | 51 | 122 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 56、测试 79。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 57、测试 80。
 
-## 跨上下文消费缝：20 组，58 个生产文件
+## 跨上下文消费缝：21 组，59 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -41,6 +41,7 @@
 | parcelshipment | transportfulfillment | 4 |
 | settlementaccounting | parcelpricing | 1 |
 | settlementaccounting | partycommercial | 2 |
+| transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 1 |
 | visibilityexception | customscompliance | 2 |
 | visibilityexception | networkrouting | 1 |
@@ -65,7 +66,7 @@
 | transport_fulfillment | 19 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 109 个，消费适配器 26 个生产文件，直投路由表 17 条
+## 接线面：接入面端点 110 个，消费适配器 26 个生产文件，直投路由表 17 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -80,9 +81,9 @@
 | partycommercial | 24 |
 | pilotgovernance | 1 |
 | settlementaccounting | 4 |
-| transportfulfillment | 21 |
+| transportfulfillment | 22 |
 | visibilityexception | 13 |
-| **合计** | 109 |
+| **合计** | 110 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -102,7 +103,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 376 个；基线口径缺 18，精确口径缺 12
+## 端口：声明 376 个；基线口径缺 17，精确口径缺 11
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -120,7 +121,6 @@
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.DeliveryConditionSource` 
-- `transportfulfillment.DeliveryPlaceSource` 
 - `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
@@ -135,7 +135,6 @@
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.DeliveryConditionSource` 
-- `transportfulfillment.DeliveryPlaceSource` 
 - `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
