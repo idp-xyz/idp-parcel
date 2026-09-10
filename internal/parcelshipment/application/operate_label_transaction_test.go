@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -350,11 +351,135 @@ func TestAnUnknownTransactionIsRefusedAsBadInput(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0134 决定一 / 四——记录渠道结果那一拍 `Save` 成功后，按覆盖包裹**逐件**交一份终局判断
+// 意图（一封一包裹），意图带交易标识、包裹、`Save` 成功那一代的版本与哪一拍；前三步一封不交。
+func TestRecordingAChannelResultHandsOffOneJudgmentIntentPerCoveredParcel(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+	if len(fixture.judgments.intents) != 0 {
+		t.Fatalf("建立与提交交出了 %d 份判断意图——前三步不触发判断", len(fixture.judgments.intents))
+	}
+
+	recorded := fixture.mustRecordResult(t, "LT-1", domain.LabelTransactionSucceeded, true)
+
+	intents := fixture.judgments.intents
+	if len(intents) != len(fixture.parcels) {
+		t.Fatalf("意图 %d 份，want 覆盖包裹每件一份（%d）", len(intents), len(fixture.parcels))
+	}
+	for index, parcel := range fixture.parcels {
+		intent := intents[index]
+		if intent.Parcel != parcel || intent.TransactionID != recorded.ID() || intent.Tenant != fixture.tenant {
+			t.Fatalf("第 %d 份意图指错了对象：%#v", index, intent)
+		}
+		if intent.Beat != ports.LabelTransactionResultRecorded {
+			t.Fatalf("第 %d 份意图的拍 = %q, want RESULT_RECORDED", index, intent.Beat)
+		}
+		// 版本取 `Save` 成功那一代：仓储按预期版本加一写回，聚合本体上仍是读出时那一代。
+		if intent.Revision != recorded.Revision()+1 {
+			t.Fatalf("第 %d 份意图的版本 = %d, want %d", index, intent.Revision, recorded.Revision()+1)
+		}
+		if !intent.OccurredAt.Equal(handlerClockAt.Add(time.Hour)) {
+			t.Fatalf("第 %d 份意图的业务时间 = %v, want 渠道形成结果的时间", index, intent.OccurredAt)
+		}
+	}
+}
+
+// Covers: ADR-0134 决定四——追加后续动作（作废）那一拍同样触发：它改变关闭路径「已有成功结果均已成功
+// 作废」那一格的输入。范围只到指名包裹时仍按覆盖包裹逐件交——判断读全册，哪件被作废由判断自己看。
+func TestAppendingAFollowUpActionHandsOffJudgmentIntentsOnItsOwnBeat(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+	fixture.mustRecordResult(t, "LT-1", domain.LabelTransactionSucceeded, true)
+	fixture.judgments.intents = nil
+
+	result, err := fixture.handler.AppendFollowUpAction(context.Background(), application.AppendLabelFollowUpActionCommand{
+		Tenant:        fixture.tenant,
+		TransactionID: mustValue(t, domain.NewLabelTransactionID, "LT-1"),
+		Kind:          domain.ChannelVoidAction,
+		Parcels:       fixture.parcels[:1],
+		Reason:        mustValue(t, domain.NewChannelResultReasonReference, "VOIDED"),
+		OccurredAt:    handlerClockAt.Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("append follow-up: %v", err)
+	}
+	if result.Outcome() != application.LabelTransactionApplied {
+		t.Fatalf("outcome = %q, want APPLIED", result.Outcome())
+	}
+
+	intents := fixture.judgments.intents
+	if len(intents) != len(fixture.parcels) {
+		t.Fatalf("作废那一拍交出 %d 份意图，want 覆盖包裹每件一份（%d）", len(intents), len(fixture.parcels))
+	}
+	for _, intent := range intents {
+		if intent.Beat != ports.LabelTransactionFollowUpAppended {
+			t.Fatalf("拍 = %q, want FOLLOW_UP_APPENDED", intent.Beat)
+		}
+		if !intent.OccurredAt.Equal(handlerClockAt.Add(2 * time.Hour)) {
+			t.Fatalf("业务时间 = %v, want 作废发生的时间", intent.OccurredAt)
+		}
+	}
+}
+
+// Covers: 意图只在 `Save` 成功之后交——版本冲突（别人先写了）与状态门拒绝都不入队，否则一封信会指着
+// 一拍根本没落库的结果。
+func TestNoJudgmentIntentIsHandedOffWhenTheBeatDoesNotLand(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+
+	fixture.repository.saveOutcome = ports.LabelTransactionRevisionConflict
+	result, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("record result: %v", err)
+	}
+	if result.Outcome() != application.LabelTransactionWriteConflict {
+		t.Fatalf("outcome = %q, want REVISION_CONFLICT", result.Outcome())
+	}
+	if len(fixture.judgments.intents) != 0 {
+		t.Fatalf("版本冲突仍交出了 %d 份意图", len(fixture.judgments.intents))
+	}
+
+	fixture.repository.saveOutcome = ports.LabelTransactionSaved
+	fixture.mustRecordResult(t, "LT-1", domain.LabelTransactionSucceeded, true)
+	fixture.judgments.intents = nil
+	result, err = fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("record result twice: %v", err)
+	}
+	if result.Outcome() != application.LabelTransactionStepNotAdmitted {
+		t.Fatalf("outcome = %q, want STATE_NOT_ADMITTED", result.Outcome())
+	}
+	if len(fixture.judgments.intents) != 0 {
+		t.Fatalf("状态门拒绝仍交出了 %d 份意图", len(fixture.judgments.intents))
+	}
+}
+
+// Covers: ADR-0134 决定三——入队失败即本步 error 上抛（事务回滚，调用方重放），不交回 `APPLIED`：
+// 不留「结果已落、判断意图丢了」的中间态，那正是取乙要消掉的东西。
+func TestAFailedJudgmentHandoffFailsTheWholeBeat(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+	fixture.judgments.failWith = errors.New("outbox unavailable")
+
+	result, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
+	if !errors.Is(err, fixture.judgments.failWith) {
+		t.Fatalf("err = %v, want 入队失败原样上抛", err)
+	}
+	if result.Outcome() != application.LabelTransactionOutcomeInvalid {
+		t.Fatalf("入队失败仍交回了业务答案 %q", result.Outcome())
+	}
+}
+
 // ---- 夹具 ----
 
 type labelTransactionFixture struct {
 	handler    *application.LabelTransactionHandler
 	repository *labelTransactionRepositoryDouble
+	judgments  *judgmentHandoffDouble
 	tenant     domain.TenantID
 	parcels    []domain.DeclaredParcelID
 }
@@ -362,12 +487,15 @@ type labelTransactionFixture struct {
 func newLabelTransactionFixture(t *testing.T) *labelTransactionFixture {
 	t.Helper()
 	repository := newLabelTransactionRepositoryDouble()
+	judgments := &judgmentHandoffDouble{}
 	return &labelTransactionFixture{
 		handler: application.NewLabelTransactionHandler(application.LabelTransactionDeps{
 			Transactions: repository,
+			Judgments:    judgments,
 			Clock:        fixedClock{at: handlerClockAt},
 		}),
 		repository: repository,
+		judgments:  judgments,
 		tenant:     mustValue(t, domain.NewTenantID, "tenant-1"),
 		parcels: []domain.DeclaredParcelID{
 			mustValue(t, domain.NewDeclaredParcelID, "PARCEL-1"),
@@ -425,14 +553,18 @@ func (fixture *labelTransactionFixture) mustMarkUncertain(t *testing.T, id strin
 	return fixture.mustApplied(t, result, "mark uncertain "+id)
 }
 
-// mustRecordResult 记一次两层结果。accepted 决定两件包裹是全受理还是全不受理，交易级取值
-// 由调用方给——夹具不替用例推交易级结果，那正是 CONTEXT 禁止的层间互推。
-func (fixture *labelTransactionFixture) mustRecordResult(
+// recordResultCommand 是一次「两件包裹全受理、交易级成功」的结果记录命令。
+func (fixture *labelTransactionFixture) recordResultCommand(t *testing.T, id string) application.RecordLabelChannelResultCommand {
+	t.Helper()
+	return fixture.recordResultCommandOf(t, id, domain.LabelTransactionSucceeded, true)
+}
+
+func (fixture *labelTransactionFixture) recordResultCommandOf(
 	t *testing.T,
 	id string,
 	outcome domain.LabelTransactionState,
 	accepted bool,
-) domain.LabelTransaction {
+) application.RecordLabelChannelResultCommand {
 	t.Helper()
 	specs := make([]domain.LabelTransactionParcelResultSpec, 0, len(fixture.parcels))
 	for index, parcel := range fixture.parcels {
@@ -444,18 +576,49 @@ func (fixture *labelTransactionFixture) mustRecordResult(
 		}
 		specs = append(specs, spec)
 	}
-	result, err := fixture.handler.RecordChannelResult(context.Background(), application.RecordLabelChannelResultCommand{
+	return application.RecordLabelChannelResultCommand{
 		Tenant:        fixture.tenant,
 		TransactionID: mustValue(t, domain.NewLabelTransactionID, id),
 		Outcome:       outcome,
 		ParcelResults: specs,
 		ObservedAt:    handlerClockAt.Add(time.Hour),
-	})
+	}
+}
+
+// mustRecordResult 记一次两层结果。accepted 决定两件包裹是全受理还是全不受理，交易级取值
+// 由调用方给——夹具不替用例推交易级结果，那正是 CONTEXT 禁止的层间互推。
+func (fixture *labelTransactionFixture) mustRecordResult(
+	t *testing.T,
+	id string,
+	outcome domain.LabelTransactionState,
+	accepted bool,
+) domain.LabelTransaction {
+	t.Helper()
+	result, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommandOf(t, id, outcome, accepted))
 	if err != nil {
 		t.Fatalf("夹具记结果 %s：%v", id, err)
 	}
 	return fixture.mustApplied(t, result, "record result "+id)
 }
+
+// judgmentHandoffDouble 记下编排交出的每一份判断意图；failWith 非空时模拟入队失败。
+type judgmentHandoffDouble struct {
+	intents  []ports.LabelTransactionJudgmentIntent
+	failWith error
+}
+
+func (double *judgmentHandoffDouble) HandOffLabelTransactionJudgment(
+	_ context.Context,
+	intent ports.LabelTransactionJudgmentIntent,
+) error {
+	if double.failWith != nil {
+		return double.failWith
+	}
+	double.intents = append(double.intents, intent)
+	return nil
+}
+
+var _ ports.LabelTransactionJudgmentHandoff = (*judgmentHandoffDouble)(nil)
 
 func (fixture *labelTransactionFixture) mustApplied(
 	t *testing.T,

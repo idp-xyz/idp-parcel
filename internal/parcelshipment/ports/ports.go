@@ -615,6 +615,50 @@ type FinalOutcomeHandoff interface {
 	HandOffFinalOutcome(ctx context.Context, intent FinalOutcomeHandoffIntent) error
 }
 
+// LabelTransactionBeat 是面单交易写侧会触发包裹终局判断的两拍（ADR-0134 决定四）：记录渠道
+// 结果让定案由假变真；追加后续动作（作废 / 替代）改变关闭路径「已有成功结果均已成功作废」那一格
+// 的输入。两拍都触发，消费者不据它分支——分支就是第二套关闭路径口径；它进意图只为追溯。
+type LabelTransactionBeat uint8
+
+const (
+	LabelTransactionBeatInvalid LabelTransactionBeat = iota
+	LabelTransactionResultRecorded
+	LabelTransactionFollowUpAppended
+)
+
+func (beat LabelTransactionBeat) String() string {
+	switch beat {
+	case LabelTransactionResultRecorded:
+		return "RESULT_RECORDED"
+	case LabelTransactionFollowUpAppended:
+		return "FOLLOW_UP_APPENDED"
+	default:
+		return ""
+	}
+}
+
+// LabelTransactionJudgmentIntent 是「这件包裹值得判一次终局」的指针（ADR-0134 决定一），不是
+// 事实副本：判断的输入是此刻该包裹的全部相关交易与登记册，消费者不按它读回交易。**一封一包裹**
+// ——覆盖包裹建立即固定（ADR-0084 决定二），写入方在 `Save` 成功后逐件交出，让每件包裹各自成一次
+// 消费、反查不中那一件不拖累其余。Revision 取 `Save` 成功那一代（仓储按预期版本加一写回）：
+// 它进事件 ID，让定案那一拍与作废那一拍各自入队，少了它两封算出同一个字符串、第二封静默不入队。
+// OccurredAt 是这一拍的业务时间（渠道形成结果 / 作废发生的时间），随命令进来，不在这里铸。
+type LabelTransactionJudgmentIntent struct {
+	Tenant        domain.TenantID
+	TransactionID domain.LabelTransactionID
+	Parcel        domain.DeclaredParcelID
+	Revision      int64
+	Beat          LabelTransactionBeat
+	OccurredAt    time.Time
+}
+
+// LabelTransactionJudgmentHandoff 把判断意图写入 Outbox（`OutboxLabelTransactionJudgmentHandoff`），
+// 与写入方的 `Save` 同一事务——两者都从 ctx 取同一个事务执行器，事务由组合根的事务壳开（ADR-0134
+// 决定三）。它不是渠道调用：面单交易编排「不发起任何渠道调用」那句仍真，它只在写后留一道缝。
+type LabelTransactionJudgmentHandoff interface {
+	HandOffLabelTransactionJudgment(ctx context.Context, intent LabelTransactionJudgmentIntent) error
+}
+
 // NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
 // 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
 type NetworkIntakeHandoffIntent struct {

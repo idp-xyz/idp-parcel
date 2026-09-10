@@ -154,19 +154,26 @@ type AppendLabelFollowUpActionCommand struct {
 	OccurredAt    time.Time
 }
 
-// LabelTransactionDeps 只有仓储与时钟两项。
+// LabelTransactionDeps 是仓储、判断意图口与时钟三项。
 //
 // 时钟只铸**本仓自己动作**的时间——建立与提交渠道是我方的动作。渠道结果时间与后续动作时间
 // 一律随命令进来，不在这里铸：那两个是渠道那边的业务事实，代铸会让「渠道什么时候作废的」
 // 变成「我们什么时候听说的」，而迟到与更正正是踩这一格。
+//
+// Judgments 不是渠道调用，是写后留的一道缝（ADR-0134 决定一 / 三）：记录结果与追加后续动作两拍
+// `Save` 成功后，按覆盖包裹逐件交一份「值得判一次终局」的指针式意图，判断由下一拍的消费者形成，
+// 本编排不知道终局判断存在。它与 `Save` 同一事务——两者都从 ctx 取同一个事务执行器，事务由
+// 组合根的事务壳开；本编排刻意不持 Transactor，不在事务里调用会在 `Save` 处响亮失败。
 type LabelTransactionDeps struct {
 	Transactions ports.LabelTransactionRepository
+	Judgments    ports.LabelTransactionJudgmentHandoff
 	Clock        ports.Clock
 }
 
 // LabelTransactionHandler 是面单交易写侧的编排：建立 → 提交渠道 →（结果不确定）→ 记录结果 →
-// 追加后续动作。五步同一个 handler，因为它们操作同一个聚合、依赖同一对端口；拆成五个 handler
-// 只会让装配点多四次接线而缝一条都不少。
+// 追加后续动作。五步同一个 handler，因为它们操作同一个聚合、依赖同一组端口；拆成五个 handler
+// 只会让装配点多四次接线而缝一条都不少。后两步在 `Save` 成功后多一段写后入队（见 Judgments），
+// 前三步没有——建立、提交与「答案未确定」都不改变任何终局判断的输入。
 //
 // **它不发起任何渠道调用。** 出向那一步的形状归 ADR-0090 与票 `07`；本编排在它上面只留缝——
 // 调用方拿 `SubmitToChannel` 的结果去发请求，把回来的答案经 `MarkResultUncertain` 或
@@ -272,7 +279,7 @@ func (handler *LabelTransactionHandler) SubmitToChannel(
 	return handler.advance(ctx, "submit label transaction to channel", command.Tenant, command.TransactionID,
 		func(transaction domain.LabelTransaction) (domain.LabelTransaction, error) {
 			return transaction.SubmitToChannel(handler.deps.Clock.Now())
-		})
+		}, nil)
 }
 
 // MarkResultUncertain 记录「暂时无法确认渠道是否受理」。
@@ -287,11 +294,13 @@ func (handler *LabelTransactionHandler) MarkResultUncertain(
 	return handler.advance(ctx, "mark label result uncertain", command.Tenant, command.TransactionID,
 		func(transaction domain.LabelTransaction) (domain.LabelTransaction, error) {
 			return transaction.MarkResultUncertain()
-		})
+		}, nil)
 }
 
 // RecordChannelResult 一次写下两层结果。跨层一致性由聚合刻意不校验，本层同样不补——
 // 补上就是把 CONTEXT 禁止的「由一个层次覆盖另一个层次」搬到应用层再做一遍。
+//
+// 这一拍让定案由假变真，`Save` 成功后逐覆盖包裹交判断意图（ADR-0134 决定四）。
 func (handler *LabelTransactionHandler) RecordChannelResult(
 	ctx context.Context,
 	command RecordLabelChannelResultCommand,
@@ -303,11 +312,15 @@ func (handler *LabelTransactionHandler) RecordChannelResult(
 				ParcelResults: command.ParcelResults,
 				ObservedAt:    command.ObservedAt,
 			})
-		})
+		}, handler.judgmentBeat(ports.LabelTransactionResultRecorded, command.ObservedAt))
 }
 
 // AppendFollowUpAction 追加一条渠道作废、渠道退款或替代记录。它不改交易级状态、不改任何包裹
 // 结果、也不动定案谓词——那三条由聚合保证，本层只转交。
+//
+// 它同样触发判断（ADR-0134 决定四）：作废改变关闭路径「已有成功结果均已成功作废」那一格的输入，
+// 不触发则「成功结果全部作废后沿关闭路径形成终局」要等下一笔交易定案或一份关闭决定，而那两件
+// 可能永不发生。不按动作种类或范围筛——筛就是在这里复述一遍关闭路径的口径。
 func (handler *LabelTransactionHandler) AppendFollowUpAction(
 	ctx context.Context,
 	command AppendLabelFollowUpActionCommand,
@@ -320,20 +333,48 @@ func (handler *LabelTransactionHandler) AppendFollowUpAction(
 				Reason:     command.Reason,
 				OccurredAt: command.OccurredAt,
 			})
-		})
+		}, handler.judgmentBeat(ports.LabelTransactionFollowUpAppended, command.OccurredAt))
 }
 
-// advance 是后四步共同的骨架：读回 → 转移 → 按预期版本写回。
+// judgmentBeat 交回「`Save` 成功之后按覆盖包裹逐件入队一份判断意图」的写后动作。
+//
+// 版本取 `Save` 成功那一代：仓储按预期版本加一写回，而聚合本体上仍是读出时那一代（转移不动它），
+// 所以这里是 Revision()+1；两拍先后写回，版本相邻，各自入队。入队失败原样上抛——整步随事务回滚，
+// 调用方重放这一步（渠道答案在它手上，不需要重发渠道调用）；不照终局采用那一路「失败不翻结果、
+// 留续办引用」的形，那一形留的正是「结果已落、意图未交」的中间态。
+func (handler *LabelTransactionHandler) judgmentBeat(
+	beat ports.LabelTransactionBeat,
+	occurredAt time.Time,
+) func(context.Context, domain.LabelTransaction) error {
+	return func(ctx context.Context, saved domain.LabelTransaction) error {
+		for _, parcel := range saved.CoveredParcels() {
+			if err := handler.deps.Judgments.HandOffLabelTransactionJudgment(ctx, ports.LabelTransactionJudgmentIntent{
+				Tenant:        saved.Tenant(),
+				TransactionID: saved.ID(),
+				Parcel:        parcel,
+				Revision:      saved.Revision() + 1,
+				Beat:          beat,
+				OccurredAt:    occurredAt,
+			}); err != nil {
+				return fmt.Errorf("hand off label transaction judgment for parcel %s: %w", parcel, err)
+			}
+		}
+		return nil
+	}
+}
+
+// advance 是后四步共同的骨架：读回 → 转移 → 按预期版本写回 →（若有）写后动作。
 //
 // 抽出来而不是各写一遍，是因为这四步在**恢复动作**上完全同形——读不回怎么答、状态不允许怎么
 // 答、版本冲突怎么答，四处一字不差。各写一遍就有了四份会各自漂移的口径，而漂移在编译期
-// 不报。真正各不相同的那一格（哪个转移）是参数。
+// 不报。真正各不相同的两格（哪个转移、写后做什么）是参数；afterSave 为 nil 即这一步写后无事。
 func (handler *LabelTransactionHandler) advance(
 	ctx context.Context,
 	step string,
 	tenant domain.TenantID,
 	transactionID domain.LabelTransactionID,
 	transition func(domain.LabelTransaction) (domain.LabelTransaction, error),
+	afterSave func(context.Context, domain.LabelTransaction) error,
 ) (LabelTransactionResult, error) {
 	transaction, found, err := handler.deps.Transactions.FindByID(ctx, tenant, transactionID)
 	if err != nil {
@@ -360,6 +401,12 @@ func (handler *LabelTransactionHandler) advance(
 		// 版本冲突是业务答案（ADR-0031），不是错误：抢先那一方可能是另一次结果记录或一条
 		// 后续动作。调用方重读再重放，本层不代猜库里此刻是什么，因此也不交回手上这份陈旧的。
 		return LabelTransactionResult{outcome: LabelTransactionWriteConflict}, nil
+	}
+	if afterSave != nil {
+		// 只在 `Save` 成功之后：状态门拒绝与版本冲突都没落库，一封指着未落库结果的信不该出去。
+		if err := afterSave(ctx, advanced); err != nil {
+			return LabelTransactionResult{}, fmt.Errorf("%s: %w", step, err)
+		}
 	}
 	return labelTransactionApplied(advanced), nil
 }
