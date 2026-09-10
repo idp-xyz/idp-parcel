@@ -168,6 +168,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 末端派送任务内部触发执行器（ADR-0114 决定二；票 tf-segment-lifecycle-closure/12「生产入口」）：地点缝接
+	// parcel-shipment 真适配器，时间窗与条件两缝留空让执行器如实停在下一处未接线；拍频属调用方，Intake 未配置。
+	deliveryDispatchTrigger, err := buildDeliveryDispatchTrigger(db)
+	if err != nil {
+		return err
+	}
 	credentialRegistration, err := buildExternalCarrierCredentialRegistration(db)
 	if err != nil {
 		return err
@@ -396,6 +402,7 @@ func run(logger *slog.Logger) error {
 			movementFact,
 			segmentOps.closer,
 			segmentOps.opener,
+			deliveryDispatchTrigger,
 			segmentOps.assign,
 			segmentOps.enderOf,
 			credentialRegistration,

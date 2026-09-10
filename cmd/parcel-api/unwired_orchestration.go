@@ -210,6 +210,18 @@ func (unwiredDispatchTaskOpener) Open(
 	return tfapp.OpenDispatchTaskResult{}, errOrchestrationNotWired
 }
 
+// unwiredDeliveryDispatchTrigger 是末端派送任务内部触发执行器的占位（票 tf-segment-lifecycle-closure/12「生产入口」）。
+// 与 unwiredDispatchTaskOpener 分立：手工建任务与按拍触发是两条编排、两个处理器接口，合成一个会让装配测试盖不住
+// 「触发口接了手工建任务编排」。
+type unwiredDeliveryDispatchTrigger struct{}
+
+func (unwiredDeliveryDispatchTrigger) Trigger(
+	context.Context,
+	tfapp.TriggerDeliveryDispatchCommand,
+) (tfapp.TriggerDeliveryDispatchResult, error) {
+	return tfapp.TriggerDeliveryDispatchResult{}, errOrchestrationNotWired
+}
+
 type unwiredLoadAssigner struct{}
 
 func (unwiredLoadAssigner) Form(
