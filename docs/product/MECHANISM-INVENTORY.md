@@ -13,16 +13,16 @@
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 168 | 162 | 18 | 31 | 9 | 16 |
+| parcelshipment | 169 | 163 | 19 | 31 | 9 | 16 |
 | partycommercial | 123 | 138 | 9 | 33 | 1 | 27 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 83 | 64 | 12 | 40 | 8 | 7 |
 | transportfulfillment | 140 | 128 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 927 | 881 | 116 | 254 | 54 | 125 |
+| **合计** | 928 | 882 | 117 | 254 | 54 | 125 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 58、测试 80。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 59、测试 81。
 
 ## 跨上下文消费缝：23 组，66 个生产文件
 
@@ -107,14 +107,14 @@
 | visibilityexception | 8 |
 | **合计** | 19 |
 
-## 端口：声明 384 个；基线口径缺 14，精确口径缺 8
+## 端口：声明 384 个；基线口径缺 14，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.CurrentFinalView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.FinalOutcomes）
-- `parcelshipment.LabelChannelGateway` 
+- `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
@@ -128,7 +128,6 @@
 
 精确口径缺（无具体类型完整实现）：
 
-- `parcelshipment.LabelChannelGateway` 
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
