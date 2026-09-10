@@ -13,9 +13,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
-// 本文件对服务产品册（票 admin-write-faces/09）证传输面：本册的载荷就是壳——没有正文格，管理台表单组出来的
-// 就是这一份；同一份过预览与过录入逐字节同摘要；别册的正文夹进本册载荷由领域按 kind 不符拒成一格答案；
-// 五步（预览 → 录入 → 批准 → 发布）在四口上走通，发布答案不带任何声明通道。
+// 本文件对服务产品册（票 admin-write-faces/09）证传输面：本册的载荷可以就是壳——正文格可缺（票 admin-write-faces/25
+// 起唯一的正文是产品层交付条件一节，那一节的传输面见 publication_draft_payload_delivery_condition_test.go），管理台表单
+// 不声明交付条件时组出来的就是这一份；同一份过预览与过录入逐字节同摘要；别册的正文夹进本册载荷由领域按 kind 不符拒成
+// 一格答案；五步（预览 → 录入 → 批准 → 发布）在四口上走通，发布答案不带任何声明通道。
 
 const serviceProductPayload = `{
   "kind": "SERVICE_PRODUCT",
