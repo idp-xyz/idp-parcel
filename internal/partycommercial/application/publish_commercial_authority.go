@@ -94,6 +94,10 @@ type CommercialDeclarations struct {
 	// 外加一格「封闭」说缺格怎么读。是指针不是切片：「封闭 + 零格」是一份合法声明，len 表达不了在不在场。
 	// 未封闭却零格、某格立不住、同格两行由领域构造门拒。
 	SourceDataAmendment *SourceDataAmendmentDeclaration
+	// DeliveryConditions 挂在服务产品版本（产品层）或客户合同版本（合同层）上（ADR-0133 决定四）：允许的交付方式集合、
+	// 收件范围规则引用、交付证明规则引用。层由发布的版本类别定，不另给开关；合同层必须指名所收紧的产品版本、产品层
+	// 必须不带，两条与零方式、同方式两行一样由领域构造门拒。是指针不是切片：整节缺席就是这一版没有交付条件声明。
+	DeliveryConditions *DeliveryConditionDeclaration
 }
 
 func (declarations CommercialDeclarations) empty() bool {
@@ -114,7 +118,8 @@ func (declarations CommercialDeclarations) empty() bool {
 		declarations.CustomerServiceRuleBody == nil &&
 		declarations.PreAcceptanceFinancialControlPolicyBody == nil &&
 		len(declarations.ContractDelegations) == 0 &&
-		declarations.SourceDataAmendment == nil
+		declarations.SourceDataAmendment == nil &&
+		declarations.DeliveryConditions == nil
 }
 
 // AcceptanceContentDeclaration 是接单规则包的接受内容声明输入（ADR-0042）。
@@ -150,6 +155,15 @@ type IntakeQualificationDeclaration struct {
 type SourceDataAmendmentDeclaration struct {
 	Closed bool
 	Rules  []domain.SourceDataAmendmentRule
+}
+
+// DeliveryConditionDeclaration 是交付条件声明输入（票 party-commercial-context-gaps/11，ADR-0133 决定四）。Terms 是
+// 三格正文；Tightens 只在合同层：所收紧的服务产品版本（对象标识 + 版本号），nil 就是产品层。方式与规则引用都是开放
+// 引用，用例不解读也不给默认——不内置「本人签收」，不内置任何一条规则。合同层的方式是否真在那一版产品层之内，由
+// 持久化写口读回产品层后核（ports.PublicationRegistry.SaveDeliveryConditions 的注释），这里没有产品层可对。
+type DeliveryConditionDeclaration struct {
+	Tightens *domain.TightenedProductVersion
+	Terms    domain.DeliveryConditionTerms
 }
 
 // RulePackageBodyDeclaration 是接单规则包版本的正文输入（open-decisions D-3）：五维
@@ -269,6 +283,7 @@ const (
 	PreAcceptanceFinancialControlPolicyBodyChannel
 	ContractDelegationChannel
 	SourceDataAmendmentChannel
+	DeliveryConditionChannel
 )
 
 func (channel DeclarationChannel) String() string {
@@ -309,6 +324,8 @@ func (channel DeclarationChannel) String() string {
 		return "CONTRACT_DELEGATION"
 	case SourceDataAmendmentChannel:
 		return "SOURCE_DATA_AMENDMENT"
+	case DeliveryConditionChannel:
+		return "DELIVERY_CONDITION"
 	default:
 		return ""
 	}
@@ -1055,7 +1072,43 @@ func declarationWrites(
 		})
 	}
 
+	if declarations.DeliveryConditions != nil {
+		content, err := deliveryConditionsOf(version, *declarations.DeliveryConditions)
+		if err != nil {
+			return nil, fmt.Errorf("delivery conditions: %w", err)
+		}
+		writes = append(writes, declarationWrite{
+			channel: DeliveryConditionChannel,
+			save: func(ctx context.Context, registry ports.PublicationRegistry) (ports.DeclarationSaveOutcome, error) {
+				return registry.SaveDeliveryConditions(ctx, content)
+			},
+		})
+	}
+
 	return writes, nil
+}
+
+// deliveryConditionsOf 按发布的版本类别选层：客户合同版本走合同层的门（必须指名所收紧的产品版本），其余一律走产品层
+// 的门——产品层的门只认已生效的服务产品版本，挂在接单规则包上会在那里被拒（ADR-0133 决定四），不静默丢弃。产品层
+// 带着 Tightens 是类别错误：只有合同能收紧产品。
+func deliveryConditionsOf(
+	version domain.CommercialVersion,
+	declaration DeliveryConditionDeclaration,
+) (domain.DeliveryConditionContent, error) {
+	if version.Kind() == domain.CustomerContractObject {
+		if declaration.Tightens == nil {
+			return domain.DeliveryConditionContent{}, fmt.Errorf(
+				"%w: a customer contract's delivery conditions must name the service product version they tighten",
+				domain.ErrDeliveryConditionNotConfigured)
+		}
+		return domain.DeclareContractDeliveryConditions(version, *declaration.Tightens, declaration.Terms)
+	}
+	if declaration.Tightens != nil {
+		return domain.DeliveryConditionContent{}, fmt.Errorf(
+			"%w: only a customer contract version tightens a service product's delivery conditions",
+			domain.ErrDeliveryConditionOwner)
+	}
+	return domain.DeclareProductDeliveryConditions(version, declaration.Terms)
 }
 
 // declarationOutcomeOfPreAcceptanceFinancialControlPolicy 把策略正文册的落点折成声明通道的落点，判据同
