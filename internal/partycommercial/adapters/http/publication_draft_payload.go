@@ -89,7 +89,9 @@ type CommercialPublicationPayload struct {
 	PreAcceptanceFinancialControlPolicy *PreAcceptanceFinancialControlPolicyBodyPayload `json:"preAcceptanceFinancialControlPolicy,omitempty"`
 	// CustomerServiceRule 是客户服务规则册的正文：适用对象恰一 + 责任方 + 范围 + 期限表 + 材料表，见 publication_draft_payload_customer_service_rule.go。
 	CustomerServiceRule *CustomerServiceRuleBodyPayload `json:"customerServiceRule,omitempty"`
-	// 服务产品册没有正文格：它的载荷就是上面的壳（票 admin-write-faces/09「本册规范化判断」）。
+	// ServiceProduct 是服务产品册的正文格，可缺：壳单独发布仍合法（票 admin-write-faces/09「本册规范化判断」），今天格里只有
+	// 产品层交付条件一节（票 admin-write-faces/25），见 publication_draft_payload_delivery_condition.go。
+	ServiceProduct *ServiceProductBodyPayload `json:"serviceProduct,omitempty"`
 }
 
 // CreditPolicyBodyPayload 镜像受控批文 creditPolicyBodyDocument 与规范化文档的键名：额度两键恰一在场（由领域
@@ -212,6 +214,10 @@ func (payload CommercialPublicationPayload) Publication(tenant domain.TenantID) 
 	if payload.CustomerServiceRule != nil {
 		body := payload.CustomerServiceRule.body(problems)
 		content.CustomerServiceRule = &body
+	}
+	if payload.ServiceProduct != nil {
+		body := payload.ServiceProduct.body(problems)
+		content.ServiceProduct = &body
 	}
 
 	if problems.any() {
