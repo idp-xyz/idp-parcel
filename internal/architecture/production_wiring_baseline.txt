@@ -346,6 +346,17 @@
 # 冲突信号规则各自的写入口，与分诊条目的团队维）的 CLI / 在线登记口尚未接，那件另立票。
 
 
+# —— network-routing ——
+# 计划履约段引用的解析门 ParsePlannedLegReference（ADR-0131 决定一，票 nr-route-evidence-views/03，
+# 2026-09-10 加）：把 TF 参与关系上搬运的不透明串 PlannedSegmentReference 解析回本上下文的
+# domain.PlannedLegReference，与 String 往返相等。它的生产调用方是票 tf-segment-lifecycle-closure/13
+# 的 TF 进程内适配器（internal/transportfulfillment/adapters/networkrouting/），那张票以 03 为阻塞边、
+# 尚未开工；NR 自己的窄读口 ports.PlannedLegWindowRead 收的是已构造的引用值，不经这道门，所以本上下文
+# 内不会长出它的调用点——票 13 接线那天剪掉这一行。同笔的 NewPlannedLegReference 按 `New` 前缀被门禁
+# 跳过；InitialRoutePlan.LegAt 是方法不在网内。
+internal/networkrouting/domain ParsePlannedLegReference
+
+
 # —— transport-fulfillment ——
 # 以下各条均产出带不变式校验的领域对象，包外零引用。
 #
