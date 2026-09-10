@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：SA 读口按键取（租户 + 引用 + 版本）、走只读口不读写侧也不读目录列表（见「要裁的」下「裁决」），本票再无待裁问题；开工仍等 02 落地。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
-Blocked by: [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md)（没有那封信封，消费者无物可收）
+Blocked by: 无——[02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) 已于 2026-09-10 19:4x 进 main（信封类型 `settlement-accounting.external-funds-fact.adopted`，ID `<租户>/funds-fact/<事实>/<版本>`，分区键 `<租户>/funds-fact/<事实>`，载荷只带引用与可缺席的 `corrects`；形状见 `internal/settlementaccounting/adapters/postgres/external_funds_fact_handoff.go`）。此前 Blocked by 02（没有那封信封，消费者无物可收）
 
 ## 缺口（取证于 `3f485e97`）
 
