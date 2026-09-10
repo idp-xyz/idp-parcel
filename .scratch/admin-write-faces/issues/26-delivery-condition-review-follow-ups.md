@@ -1,7 +1,7 @@
-# 26 awf/25 两份评审留下的可改项：方式聚合序钉 `COLLATE "C"`、渲染表独立列出、票面路径表去 `.methods`、前端头注不描述后端 SQL
+# 26 awf/25 两份评审留下的可改项：方式聚合序钉 `COLLATE "C"`、渲染表独立列出、票面路径表去 `.methods`、前端头注不描述后端 SQL、钉两串字面 PCC-1 摘要
 
 Category: chore
-Status: ready-for-agent——2026-09-10 16:5x 通道 3 立票（取证锚远端 main `66cad4c4`，即 awf/25 进 main 那一笔之后；分支 `mcp3-awf26`）。来源是票 25 Comments 里通道 4（Go 半边）与通道 5（admin-web 半边）两份非作者评审记为「非阻断 · 可改」的那几条，推送方在票 25「进 main 记录」尾点名可攒一张小票、由作者定——定为立。全是收口：不改任何领域规则、不新增能力、不改任何行为；一条「要裁的」带默认（不裁则不动），不挡开工。每项都能各自成笔、各自验。
+Status: in-progress——2026-09-10 17:0x 通道 3 认领（task-87e19668；分支 `mcp3-awf26` 接着立票笔 `1254f8f0` 开，基 `66cad4c4`）。同笔：通道 1 17:0x 裁「要裁的」1 取默认（不动，见「要裁的」下「裁决」）并补一项 ⑤（钉两串字面 PCC-1 摘要，通道 4 Spec 非阻断 (1)），本票再无待裁问题。此前 ready-for-agent——2026-09-10 16:5x 通道 3 立票（取证锚远端 main `66cad4c4`，即 awf/25 进 main 那一笔之后；分支 `mcp3-awf26`）。来源是票 25 Comments 里通道 4（Go 半边）与通道 5（admin-web 半边）两份非作者评审记为「非阻断 · 可改」的那几条，推送方在票 25「进 main 记录」尾点名可攒一张小票、由作者定——定为立。全是收口：不改任何领域规则、不新增能力、不改任何行为；一条「要裁的」带默认（不裁则不动），不挡开工。每项都能各自成笔、各自验。
 Blocked by: 无（25 已 resolved 且进 main）
 
 ## 从哪里来
@@ -26,22 +26,28 @@ Blocked by: 无（25 已 resolved 且进 main）
 
 `ServiceProductsPage.tsx` 列表列定义上方那段头注写「读面交回的就是 `service_product_form` 的版本行左连接 0030」——前端注释描述后端表名与连接形状，后端改查询写法时没人会路过这句。改法：只改这一句，改成说读面契约（`ServiceProductRecord.deliveryConditions` 可缺、键缺席即这一版没有声明，与 `api.ts` 上那条字段注释同口径），不点表名、不说连接。`api.ts` 里各册「壳 + 正文左连接」那类句子是仓内既有口径、说的是读面两层各自可缺，不在本票。
 
+### ⑤ 钉两串字面 PCC-1 摘要（通道 4 Spec 非阻断 (1)；通道 1 17:0x 补）
+
+票 25 红线「PCC-1 不换号」今天由 `TestServiceProductWithoutDeliveryConditionsStillCanonicalizesToTwoFields`（nil 正文 ≡ 零值正文且恰两键）与 `TestCustomerContractDeliveryConditionsAreAThirdOptionalLayer`（整键缺席）从结构推出——「只加 omitempty nil 指针、省键时字段序无关」——没有一条钉住本节存在之前就取过证的字面串。改法：在 `publication_canonicalization_delivery_condition_test.go` 加一例两串：不带交付条件的服务产品两格文档、不带 `deliveryConditions` 的客户合同正文（夹具照既有 `customerContractBody(t, requiredControl(), appliedControl(t, "charge-prepaid"))`，全合成），各钉一串**在 `66cad4c4` 上算出的字面 `PCC-1:<hex>`**；测试头注写明「这两串变了就是换号，要走 ADR-0126 的换号路，不是改断言」。把「不换号」从结构推论变成断言，此后谁改规范化都会当场红。
+
 ## 要裁的
 
 1. **① 的另两处要不要一并加。** 同文件 `ListAcceptanceRulePackages` 那条查询里 `ORDER BY source.source_kind` 与 `ORDER BY ref.rule_reference` 是同形先例，评审原话「属仓级判断」。**默认：不动**——本票只改交付条件这一处，那是票 25 自己许过的「同序」；派单方裁「加」就同笔带上、完成记录写明，并跑过 `ListAcceptanceRulePackages` 的真库测试。不裁按默认走，不挡开工。
+   - **裁决（通道 1 · 2026-09-10 17:0x）：取默认，不动。** 理由：那两处没有一句票面要求「与领域同序」，改它要先核那一册领域有没有排序不变式，不是本票的题；完成记录点名「同形先例待另票」即可。
 
 ## 完成判据
 
 1. ① 真库测试一例（在 `operations_catalogue_delivery_condition_test.go` 加一子例即可）：方式引用大小写混排（合成串，如 `METHOD/b` / `METHOD/A` / `method/a`），目录读回的 `Methods` 序 == 领域 `Methods()` 序（Go 字节序）；带 DSN 跑 `-v` 是 PASS 不是 SKIP。若测试库默认 collation 本来就是 `C`，这条改前就绿不算错——它钉的是「不随库设置变」，完成记录写明改前是红是绿。
-2. ② `deliveryConditionRenderedPaths` 函数体不再调用 `deliveryConditionFieldPaths`；`publication-form-rendered-paths.test.ts` 与 `delivery-condition-section.test.ts` 全绿；变异一次：把 `DeliveryConditionFields.tsx` 里任一 Field 的 path 改坏（或在渲染表里漏掉 `methods[i]`），比对测试要红，还原后绿。
+2. ② `deliveryConditionRenderedPaths` 函数体不再调用 `deliveryConditionFieldPaths`；`publication-form-rendered-paths.test.ts` 与 `delivery-condition-section.test.ts` 全绿；变异一次：在渲染表里漏掉 `methods[i]`（或任一条认领过的路径），`publication-form-rendered-paths.test.ts` 要红，还原后绿。**变异落在渲染表上、不落在 JSX 上**：那份测试比的是两份 TS 声明（认领表 / 渲染表），它的头注自己写明 JSX 与渲染表的一致靠改 JSX 的人同步改声明与非作者评审对照——单改 JSX 红不出来，不是本票能改的，也不是缺。
 3. ③ 票 25 ① 那句里不再出现 `.methods`（键本身），`.methods[i]` 保留；票 25 Comments 多一行。
 4. ④ `ServiceProductsPage.tsx` 那段头注不再含表名 `service_product_form` 与「左连接」；tsc 0。
-5. 验证：`gofmt -l` 空、`go build ./...` / `go vet ./...` 退 0；`go test -count=1` 跑 `./internal/partycommercial/adapters/postgres/`（带 DSN）+ `./internal/architecture/...`；admin-web `tsc --noEmit` 退 0、`run-tests` 全绿。
-6. 完成记录逐笔 SHA、逐项对上面四条，写明「要裁的」1 裁了什么（或按默认未动）、② 那两条 deepEqual 怎么处置。
+5. ⑤ 一例两串在场，串是 `66cad4c4` 上算出的字面 `PCC-1:<hex>`（完成记录写明在哪个检出算的）；变异一次：临时给服务产品两格文档多一键（或改一个键名），这一例要红，还原后绿。
+6. 验证：`gofmt -l` 空、`go build ./...` / `go vet ./...` 退 0；`go test -count=1` 跑 PC 四包（`domain` / `application` / `adapters/http` / `adapters/postgres`，最后一个带 DSN）+ `./internal/architecture/...`；admin-web `tsc --noEmit` 退 0、`run-tests` 全绿。
+7. 完成记录逐笔 SHA、逐项对上面五条，写明「要裁的」1 按裁决未动、② 那两条 deepEqual 怎么处置。
 
 ## 边界
 
-只动：`operations_catalogue.go`（① 那一处 `ORDER BY`；裁了才动另两处）及其真库测试；`delivery-condition-section.ts` / `delivery-condition-section.test.ts`；`ServiceProductsPage.tsx` 那一段头注；票 25 一句 + Comments 一行。**不动**：领域包、`ports.go`、http 层、迁移、`DeliveryConditionFields.tsx` 的 JSX（改法是让渲染表照 JSX 抄，不是反过来改 JSX）、`PublicationFormFields.tsx` / `publication-form-shared.ts`。不改任何行为：① 只钉序，② 只换列法，③④ 只改文字。
+只动：`operations_catalogue.go`（① 那一处 `ORDER BY`；另两处已裁不动）及其真库测试；`delivery-condition-section.ts` / `delivery-condition-section.test.ts`；`ServiceProductsPage.tsx` 那一段头注；票 25 一句 + Comments 一行；`publication_canonicalization_delivery_condition_test.go`（⑤ 只加测试）。**不动**：领域包的非测试文件、`ports.go`、http 层、迁移、`DeliveryConditionFields.tsx` 的 JSX（改法是让渲染表照 JSX 抄，不是反过来改 JSX）、`PublicationFormFields.tsx` / `publication-form-shared.ts`。不改任何行为：① 只钉序，② 只换列法，③④ 只改文字。
 
 ## 参照
 
