@@ -50,19 +50,9 @@ type deliveryWindowStub struct {
 }
 
 func (stub *deliveryWindowStub) LoadDeliveryWindow(
-	_ context.Context, _ domain.TenantID, _ domain.CarriedObjectReference,
-) (time.Time, time.Time, ports.RequirementResolution, error) {
-	return stub.answer()
-}
-
-func (stub *deliveryWindowStub) LoadDeliveryWindowByPlannedSegment(
 	_ context.Context, _ domain.TenantID, planned domain.PlannedSegmentReference, present bool,
 ) (time.Time, time.Time, ports.RequirementResolution, error) {
 	stub.planned, stub.present = planned, present
-	return stub.answer()
-}
-
-func (stub *deliveryWindowStub) answer() (time.Time, time.Time, ports.RequirementResolution, error) {
 	stub.calls++
 	if stub.err != nil {
 		return time.Time{}, time.Time{}, ports.RequirementResolutionInvalid, stub.err

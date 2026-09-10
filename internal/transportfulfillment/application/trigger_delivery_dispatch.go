@@ -371,7 +371,7 @@ func (handler *TriggerDeliveryDispatchHandler) pullRequirements(
 	}
 
 	planned, present := participation.PlannedSegment()
-	windowFrom, windowTo, resolution, err := handler.deps.Windows.LoadDeliveryWindowByPlannedSegment(ctx, command.TenantID, planned, present)
+	windowFrom, windowTo, resolution, err := handler.deps.Windows.LoadDeliveryWindow(ctx, command.TenantID, planned, present)
 	if faulted := requirementFault(resolution, err); faulted {
 		undecided := deliveryDispatchUndecided(DeliveryWindowSourceUnavailable, command)
 		return deliveryRequirements{}, &undecided

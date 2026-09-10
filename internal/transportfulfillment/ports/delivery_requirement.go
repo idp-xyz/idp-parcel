@@ -17,11 +17,11 @@ import (
 //
 // 适配器归 `internal/transportfulfillment/adapters/<所有者>`（ADR-0025 消费侧），本包只立形状。
 //
-// **今天三条缝一条都没接。** 本包之外没有任何类型实现这三个接口（测试替身除外）：parcel-shipment 那一侧读哪个读面、
-// network-routing 那一侧对没有计划段的对象怎么答、party-commercial 那一侧条件引用指哪一版，各在票
-// tf-segment-lifecycle-closure/12–14 里与所有者对齐后才落适配器。生产装配把这三格留空，`TriggerDeliveryDispatchHandler`
-// 于是答 DELIVERY_PLACE_SOURCE_NOT_WIRED 停在第一条缝上——那是 ADR-0114 决定三要的诚实停点，不是缺陷，也不许用替身或
-// 默认值补齐。哪一票先接上线，执行器就往下走一格。
+// **三条缝各自接线。** 时间窗那一条已有适配器 `adapters/networkrouting.DeliveryWindows`（票 tf-segment-lifecycle-closure/13，
+// 按 ADR-0131 三问的答复落）；parcel-shipment 那一侧读哪个读面归票 12、party-commercial 那一侧条件引用指哪一版归票 14，
+// 各与所有者对齐后才落适配器。生产装配里没接的格留空，`TriggerDeliveryDispatchHandler` 于是答对应的 *_SOURCE_NOT_WIRED
+// 停在第一条没接的缝上——那是 ADR-0114 决定三要的诚实停点，不是缺陷，也不许用替身或默认值补齐。哪一票先接上线，
+// 执行器就往下走一格。
 
 // RequirementResolution 是一条派送要求端口的答法：所有者给了、所有者说没有。「没有」是业务答案不是错误——
 // 对象没有计划段就没有时间窗，合同没登交付条件就没有条件；任务保持待形成，不填默认。
@@ -53,21 +53,16 @@ type DeliveryPlaceSource interface {
 	) (place string, resolution RequirementResolution, err error)
 }
 
-// DeliveryWindowSource 取计划履约段的时间窗口（network-routing）。窗口是计划，任务照抄它作工作范围，
-// 不据它推任何实际事实（ADR-0004）。
+// DeliveryWindowSource 按计划履约段引用取那一段的计划时间窗口（network-routing；ADR-0131 决定一）。窗口是计划，任务
+// 照抄它作工作范围，不据它推任何实际事实（ADR-0004）。
 //
-// 三步法的 expand 段（票 tf-segment-lifecycle-closure/13 做法第 2 步）：按对象的旧法与按计划履约段引用的新法并存，
-// 直到执行器迁到新法、contract 段删旧并把新法改回 LoadDeliveryWindow 这个名字。
+// 按参与关系上登记方关联的引用问、不按对象问：NR 计划里没有服务动作，按对象问要 NR 推「哪一段是派送段」，ADR-0114
+// 决定一禁止那种推法；对象在执行哪条段本来就是登记方声明的事实。对象入参因此不保留——NR 侧不需要它，留着只会引诱
+// 适配器拿它去推。present=false 即对象没有计划段（待路由产品此刻还没有），也交给适配器：由它答 MISSING、不出本上下文，
+// NR 不给兜底窗口（决定三）；引用所钉那一版此刻的适用性不折进答案（决定二）。引用是 NR 一处定义的不透明拼写，本
+// 上下文只搬运不解读，拆与核都在适配器那一侧。
 type DeliveryWindowSource interface {
 	LoadDeliveryWindow(
-		ctx context.Context,
-		tenant domain.TenantID,
-		object domain.CarriedObjectReference,
-	) (from, to time.Time, resolution RequirementResolution, err error)
-	// LoadDeliveryWindowByPlannedSegment 按参与关系上登记方关联的计划履约段引用取（ADR-0131 决定一：NR 计划里没有服务
-	// 动作，按对象问要 NR 推「哪一段是派送段」，ADR-0114 决定一禁止那种推法）。present=false 即对象没有计划段，由适配器
-	// 答 MISSING、不出本上下文（ADR-0131 决定三）；引用所钉那一版的适用性不折进答案（决定二）。
-	LoadDeliveryWindowByPlannedSegment(
 		ctx context.Context,
 		tenant domain.TenantID,
 		planned domain.PlannedSegmentReference,

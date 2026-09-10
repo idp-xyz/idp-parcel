@@ -51,6 +51,8 @@ func NewDeliveryWindows(windows PlannedLegWindowSource) (*DeliveryWindows, error
 	return &DeliveryWindows{windows: windows}, nil
 }
 
+var _ tfports.DeliveryWindowSource = (*DeliveryWindows)(nil)
+
 // LoadDeliveryWindow 是全函数，五种输入各落唯一一格、无 default：
 //
 //   - 引用缺席（present=false，待路由的对象此刻没有计划段）→ MISSING，不出本上下文、不调 NR：没有计划段就没有窗口，
