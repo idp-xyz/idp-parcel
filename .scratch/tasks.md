@@ -1619,3 +1619,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **进 main**：推送方簿记一笔在 `c0ef50d3` 之上（票 12 Comments 三条 + 本节）；`ls-remote` 核 `cc2c5f6f` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp2-tf12` 比内容后改 `merged/`、远端删、树拆；`idp-replay-tf12` 拆。
 - **接下来**：tf/13（5，rebase 到新 main 后填 Windows 一格 + cmd/parcel-api 接线 + 装配测试停点改 DELIVERY_CONDITION_SOURCE_NOT_WIRED）；通道 2 空闲 → **派 tf/14**（两个 Blocked by 都在 main；2 是 ADR-0133 代裁人；派单写清：对象种类维今天没有、集运单元照 tf/12 经提供方答没有；`pcpostgres.NewDeliveryConditions(db)` 装配；Deps.Conditions 那一格；与 tf/13 在 cmd/parcel-api 同文件、按 13 → 14 顺序落或各自加行不相邻）。通道 6 待命不派（余量将满）。**归用户**：CI 计费；两件 untracked；会话中断成因。
 - **本节五数**：CI main 绿/总 未量 · 集成时延 tf/12 完工报 15:0x → 推出 15:2x **约 20 分**（1 票；含非作者评审 15 分）· 重放笔数 **7**（六笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
+
+### 15:2x–16:0x 同一会话：tf/14 派通道 2 → tf/13 完工 → 自评 → 进 main
+
+- **tf/14 派通道 2**（15:2x，`task-1d5f0b15`，基 `0c9b846f`）：两个 Blocked by（psr/07 + pc-gaps/11）都在 main；生产入口归 tf/12 不重立，只填 `Deps.Conditions`；两个「没有」默认甲；对象种类维今天没有、集运单元照 tf/12 经 PS 答没有（psr/07 与 tf/12 两条评审合成一句）；与 tf/13 在 `assemble_delivery_dispatch{,_test}.go` 同文件——先做适配器半边、再按谁先推谁先落。2 已接（估 60–80 分）。
+- **tf/13 完工报 15:5x**（通道 5，task-247c5d4d done：作者已 rebase 到 `0c9b846f`，tip `dab85498`，七笔含清点；带 DSN TF 全包 + 反向依赖 + parcel-api + parcel-dispatch + architecture 13 包 ok / PASS 1877 / SKIP 0；装配停点后移到 DELIVERY_CONDITION_SOURCE_NOT_WIRED；顺手改了 tf/12 http 替身签名一行）。2 在 tf/14、6 余量将满、3 / 4 未起 → 推送方自跑 /code-review：**Standards 0 阻断 / 1 非阻断**（`ports/delivery_requirement.go` 头注「PS 那一侧……归票 12……才落适配器」在 rebase 后过时，tf/14 改同段头注时一并改准）· **Spec 0 阻断 / 0 非阻断**。八道判断题全部认可。全文落票 13 Comments。
+- **重放**：`%TEMP%\idp-replay-tf13` 在 `0c9b846f` 上 pick 六笔全干净（`4e5d34a9→b8c3d0c1` / `30a49640→0363b088` / `0d3dd6a3→31a71b22` / `e400e8ac→eb18af94` / `9a068d2d→0c99d362` / `dab85498→636366c3`）；作者清点笔 `bdb1224c` 跳过，tip 重生成为 `1cb827b0`。gofmt / build / vet 0、architecture ok、基线实测 3；占 55432 广播后带 DSN 全量 **104 ok / 0 FAIL / 15 无测试 · PASS 8048 / SKIP 1 / FAIL 0 / 0 cached · 124 s**，探针 PASS，释号。
+- **进 main**：推送方簿记一笔在 `1cb827b0` 之上（票 13 Comments 两条 + 本节）；`ls-remote` 核 `0c9b846f` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp5-tf13` 比内容后改 `merged/`（昨晚裁决指针已占 `merged/mcp5-tf13`，本笔用 `-impl` 后缀）、远端删、树拆；`idp-replay-tf13` 拆。
+- **接下来**：tf/14（2）完工后 → 评审（5 空闲、非作者，派它）→ 重放 → 全量 → ff；tf/14 进 main 后 **tf/09 父票收口**（三条缝全接，执行器停点走到 OpenDispatchTask）由推送方一笔 .md。nr/03 补测试小笔（5，`mcp5-nr03-tail`）随到随收、自审直推。3 / 4 至今未起——今天 15:2x 后再无新崩，剩余会话稳定。**归用户**：CI 计费；两件 untracked；会话中断成因（今天 8 次，最后一次 12:2x）。
+- **本节五数**：CI main 绿/总 未量 · 集成时延 tf/13 完工报 15:5x → 推出 16:0x **约 15 分**（1 票）· 重放笔数 **7**（六笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
