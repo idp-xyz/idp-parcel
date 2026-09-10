@@ -1,7 +1,7 @@
 # 凭证 / 税费付款协作 / 税费付款核对三册没有读面：`/customs-*` 四个查阅口都不覆盖它们，写签没有读签可跟
 
 Category: enhancement
-Status: draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`。要裁的一条（A 类，呈现落点，推送方可裁）
+Status: ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：三个读签各挂同族登记册读面已在的页——凭证进 `customs-cases`、协作与核对进 `customs-restrictions`，不新开页（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`
 Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-faces.md) 步二 Blocked by 本票；本票不等 07）
 
 ## 缺口（取证于 `66cad4c4`）
@@ -22,7 +22,7 @@ Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-fac
 1. `ports` 三个伴生列表读口（形照 `GateConditionCatalogueRead`）：`CredentialCatalogueRead.ListCredentials`、`DutyCollaborationCatalogueRead.ListDutyCollaborations`、`DutyVerificationCatalogueRead.ListDutyVerifications`；租户在签名上、`limit` 非正拒、空册答空列表；postgres 实现 + 真库各一例（有 / 无 / 跨租户）。
 2. `adapters/http` 三个 `query_*.go`（或并进一个 `query_duty_registers.go` 两册 + `query_credentials.go` 一册——见「要裁的」）；响应形封闭（ADR-0022），三态逐键原值；契约测试各一例。
 3. `cmd/parcel-api/endpoints.go` 加查阅口（共享接线文件，动前占号）；`cmd/parcel-api/unwired_orchestration.go` 若有读面桩集合随之加法。
-4. 管理台 `pages/customs/` 加读签（挂哪一页见「要裁的」）：凭证列（身份 / 版本 / 签发方 / 持有人 / 有效期 / 额度依据）、协作事项列、付款核对列（三态原值 + 范围 + 核对版本 + 资金事实引用）；「未声明 / 未登记」如实显，不显默认。
+4. 管理台 `pages/customs/` 加读签（落点按「裁决」）：**凭证签进 `CustomsCasesPage.tsx`**（就绪与授权签旁——凭证是就绪门禁第 4 道的依据，awpwf/05 让该页接了就绪 / 授权 / 关闭）：身份 / 版本 / 签发方 / 持有人 / 有效期 / 额度依据；**协作事项签与付款核对签进 `CustomsRestrictionsPage.tsx`**（放行门禁目录与认定两表旁——该页 `moduleInfoById` 主责句本就是「监管核定税费与放行门禁核对」，awpwf/06 让它接了门禁两表）：协作事项列（范围 / 税费义务依据 / 付款要求来源 / 责任交接目标 / 核对入口）、付款核对列（三态原值 + 范围 + 核对版本 + 资金事实引用）；「未登记」如实显空态，不显默认。端点各立入口不并进 `/customs-case-registers` 的 `registry` 分派（照 awpwf/06 的判据：分派对应一页里的页签，各立入口对应各自独立的页——三册分落两页，各立三个入口）。
 5. `internal/architecture` 管理台路径门禁绿；机制清点 tip 重生成（接入面查阅口 +3）。
 
 ## 红线
@@ -46,6 +46,15 @@ Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-fac
 ## 要裁的
 
 1. **三个读签挂哪一页**：(甲) `customs-cases` 页加三签（案件配置四册已在那页，凭证 / 协作 / 核对与案件同族）；(乙) 新开 `customs-duties` 页放协作 + 核对两签、凭证进 `customs-cases`；(丙) 三签全新开一页。呈现落点，A 类，推送方可裁；先例：awf/06 / 21 政策页加一册、admin-web-page-wiring-frontier/04 的归属裁决。
+
+### 裁决
+
+（通道 1 推送方代裁 2026-09-10 17:5x，口径「各自挂在它同族登记册读面已在的页，没有同族页才新立；不为一册新开一页」；通道 5 核三册同族页并写入；task-a93cb825。）
+
+- **凭证册 → `customs-cases`（导航「关务案件与申报」）。** 同族页是就绪依据所在页：[awpwf/05](../../admin-web-page-wiring-frontier/issues/05-customs-cases-takes-readiness-authority-and-closure.md) 让该页接了就绪判断、提交授权、关闭核对三类；凭证是 UC-CC-003 就绪门禁第 4 道的依据，ADR-0137 决定一的凭证门禁判断册日后也挂这里。
+- **付款核对册 → `customs-restrictions`（导航「合规限制与监管税费」）。** 同族页是税费 / 放行门禁条件所在页：该页 `moduleInfoById` 主责句写「关务限制及解除、监管核定税费与放行门禁核对」，[awpwf/06](../../admin-web-page-wiring-frontier/issues/06-customs-restrictions-takes-release-gate-conditions.md) 让它接了门禁目录与认定两表；核对是 ADR-0137 决定三里「税费付款」那道门禁读的东西，与门禁两表同页一眼对得上。
+- **协作事项册 → `customs-restrictions`，随它的消费方。** 协作事项的消费方是税费付款核对（`VerifyPayment` 在协作事项未形成时答未决，票 05 做法 2），核对在哪它在哪；`moduleInfoById` 那句的「监管核定税费」本就涵盖协作事项（CC CONTEXT「税费付款协作事项」词条：依据已接受监管核定税费形成）。
+- 三册都有同族页，**不取乙（新 `customs-duties` 页）、不取丙**。口径：伞票 awf/07「写签跟着读签走」+ 不为一册新开一页（awf/06 / 21 都是往既有页加册）。票 07 步二的三个写签由此也分落两页。
 
 ## 参照
 
