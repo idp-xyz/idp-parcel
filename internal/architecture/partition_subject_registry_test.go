@@ -110,7 +110,10 @@ var declaredPartitionSubjects = map[string]string{
 	// 两链信封落同一分区（票 01 Comments 二实测）。ADR-0074 只裁了 TF×VE，这一对没有裁定
 	// 记录，按门禁第二查的口径显式带待裁句，不静默。
 	"internal/parcelshipment/adapters/postgres/acceptance_decision_handoff.go": partitionSubjectPrefix + "租户/委托请求",
-	"internal/parcelshipment/adapters/postgres/final_outcome_handoff.go":       partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "待裁——PS 采用链与 VE 四口共用包裹分区是否有意，无裁定记录（ADR-0074 只裁 TF×VE）",
+	// 继续尝试决定判断意图口（票 label-channel/30）与面单交易判断意图口同取「租户/包裹」，同为 ADR-0134 决定一的
+	// 选择：关闭 / 重开决定触发的终局判断与同一包裹的其它拍排同一条队；与 VE 四口共用那一半沿用下面的待裁句。
+	"internal/parcelshipment/adapters/postgres/continued_attempt_decision_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0134 决定一：与 PS 终局口同队有意；与 VE 四口共用包裹分区是否有意仍待裁，无裁定记录（ADR-0074 只裁 TF×VE）",
+	"internal/parcelshipment/adapters/postgres/final_outcome_handoff.go":              partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "待裁——PS 采用链与 VE 四口共用包裹分区是否有意，无裁定记录（ADR-0074 只裁 TF×VE）",
 	// 面单交易判断意图口取「租户/包裹」是 ADR-0134 决定一的选择：同一包裹跨交易的多拍与它形成的
 	// 终局（final_outcome_handoff）排同一条队；与 VE 四口共用那一半沿用上一行的待裁句，不另裁。
 	"internal/parcelshipment/adapters/postgres/label_transaction_judgment_handoff.go": partitionSubjectPrefix + "租户/包裹" + partitionRulingMark + "ADR-0134 决定一：与 PS 终局口同队有意；与 VE 四口共用包裹分区是否有意仍待裁，无裁定记录（ADR-0074 只裁 TF×VE）",
