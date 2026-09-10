@@ -1,7 +1,7 @@
 # `DeclaredResponsibilityOutcome` 没有面单渠道服务的两行：终局规则声明得出网络服务四格，面单渠道的「非取消终局 / 终局失败」在词汇表里没有行，PS 适配器只能如实答「终局规则未配置」
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:1x 通道 1 推送方代裁「要裁的」三条（用户经队列授权「你自决」，读法见 tasks.md 16:5x–17:0x 节；三条均属命名 / 文档落位 / 有判据的技术选型，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-10 19:0x 通道 4 认领（task-eff393d5），分支 `mcp4-pcgaps12` 基远端 main `dede3c2e`；此前 ready-for-agent——2026-09-10 17:1x 通道 1 推送方代裁「要裁的」三条（用户经队列授权「你自决」，读法见 tasks.md 16:5x–17:0x 节；三条均属命名 / 文档落位 / 有判据的技术选型，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无（lc/11 的 PS 半边 `JudgeLabelServiceFinalHandler` 已在 main `0e5a4ea`；本票是它「不在本票 · PC 半边」那一条）
 
 ## 缺口（取证于 `3f485e97`）
