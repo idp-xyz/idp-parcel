@@ -97,7 +97,7 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, reachability, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, synRFinancialAuthority{t: t}, base.judgments, base.requests, systemClock{}),
+			commercial, synRFinancialAuthority{t: t}, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
 		Decision: decision,
 	})
 	submittedGate, err := psinbox.NewShipmentRequestSubmittedConsumer(base.transactor, inboxStore, chain)

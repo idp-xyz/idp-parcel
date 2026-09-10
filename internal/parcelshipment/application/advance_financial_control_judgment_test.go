@@ -151,7 +151,9 @@ func undeclaredAsOfContinuation(t *testing.T) string {
 }
 
 // Covers: CONTEXT「不拥有价格、余额、冻结或信用暴露」与 UC-PS-001 结果语义 — `业务限制`
-// 和`明确无控制`都是取得的判断，本步照原样记下，不在这里升格为拒绝。
+// 和`明确无控制`都是取得的判断，本步照原样记下，不在这里升格为拒绝。受限那一支自 ADR-0132 起
+// 在记录之前要读到受限项的失败处置（正文登 REJECT 也是一种处置），夹具据此摆一行；处置本身
+// 不改这里的结论——去不去拒绝仍由接受决定那一步回答。
 func TestARestrictiveControlIsRecordedWithoutRejectingTheRequest(t *testing.T) {
 	for _, outcome := range []domain.FinancialControlOutcome{
 		domain.FinancialControlRestricted,
@@ -160,6 +162,10 @@ func TestARestrictiveControlIsRecordedWithoutRejectingTheRequest(t *testing.T) {
 		t.Run(outcome.String(), func(t *testing.T) {
 			fixture := newFinancialControlFixture(t)
 			fixture.controller.outcome = outcome
+			fixture.dispositions.found = true
+			fixture.dispositions.dispositions = map[domain.ControlItemKind]domain.AdoptedControlDisposition{
+				domain.PrepaidFreezeControlItem: adoptedDispositionFor(t, domain.RejectOnControlFailure),
+			}
 
 			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
 			if err != nil {
@@ -235,12 +241,13 @@ func TestAControlThatCannotBeRecordedDoesNotAdvanceTheTask(t *testing.T) {
 }
 
 type financialControlFixture struct {
-	handler    *application.AdvanceFinancialControlJudgmentHandler
-	commercial *commercialBasisDouble
-	controller *financialControlDouble
-	requests   *judgmentRequestStore
-	repository *awaitingRequestStore
-	calls      []string
+	handler      *application.AdvanceFinancialControlJudgmentHandler
+	commercial   *commercialBasisDouble
+	controller   *financialControlDouble
+	dispositions *controlDispositionDouble
+	requests     *judgmentRequestStore
+	repository   *awaitingRequestStore
+	calls        []string
 }
 
 func newFinancialControlFixture(t *testing.T) *financialControlFixture {
@@ -256,16 +263,184 @@ func newFinancialControlFixture(t *testing.T) *financialControlFixture {
 		record:                       record,
 	}
 	value.controller = &financialControlDouble{t: t, outcome: domain.FinancialControlHeld, record: record}
+	value.dispositions = &controlDispositionDouble{record: record}
 	value.requests = &judgmentRequestStore{}
 	value.repository = &awaitingRequestStore{t: t}
 	value.handler = application.NewAdvanceFinancialControlJudgmentHandler(
 		value.commercial,
 		value.controller,
+		value.dispositions,
 		value.requests,
 		value.repository,
 		fixedClock{at: handlerClockAt},
 	)
 	return value
+}
+
+// controlDispositionDouble 替处置读口作答：按夹具摆好的行交回，或按开关答不出 / 未形成。
+type controlDispositionDouble struct {
+	dispositions map[domain.ControlItemKind]domain.AdoptedControlDisposition
+	found        bool
+	err          error
+	record       func(string)
+	calls        int
+	lastQuery    ports.ControlDispositionQuery
+}
+
+func (double *controlDispositionDouble) LoadControlDispositions(
+	_ context.Context,
+	query ports.ControlDispositionQuery,
+) (map[domain.ControlItemKind]domain.AdoptedControlDisposition, bool, error) {
+	if double.record != nil {
+		double.record("load-control-dispositions")
+	}
+	double.calls++
+	double.lastQuery = query
+	if double.err != nil {
+		return nil, false, double.err
+	}
+	return double.dispositions, double.found, nil
+}
+
+var _ ports.ControlDispositionView = (*controlDispositionDouble)(nil)
+
+// adoptedDispositionFor 造一份采用引用，供夹具按种类摆行。
+func adoptedDispositionFor(
+	t *testing.T,
+	disposition domain.ControlFailureDisposition,
+) domain.AdoptedControlDisposition {
+	t.Helper()
+	adopted, err := domain.NewAdoptedControlDisposition(
+		disposition, mustValue(t, domain.NewControlResponsibilityReference, "CONTRACT-CLAUSE-7"))
+	if err != nil {
+		t.Fatalf("new adopted control disposition: %v", err)
+	}
+	return adopted
+}
+
+// Covers: ADR-0132 决定三——SA 交回含受限项的结果时，编排在记录之前经本上下文自己的商业缝读受限项的
+// 失败处置与责任引用，凭本轮采用的商业解析回指，采用到受限项上随同一份结果落库；成立的结果不问。
+func TestARestrictedControlAdoptsItsDispositionsBeforeItIsRecorded(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.controller.outcome = domain.FinancialControlRestricted
+	fixture.dispositions.found = true
+	fixture.dispositions.dispositions = map[domain.ControlItemKind]domain.AdoptedControlDisposition{
+		domain.PrepaidFreezeControlItem: adoptedDispositionFor(t, domain.AuthorizedDispositionOnControlFailure),
+	}
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AcceptanceJudgmentAdvanced {
+		t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
+	}
+	if got, want := fixture.calls, []string{
+		"resolve-commercial-basis",
+		"form-judgment-as-of",
+		"apply-financial-control",
+		"load-control-dispositions",
+	}; !slices.Equal(got, want) {
+		t.Fatalf("call order = %v, want %v——处置要在控制交回之后、记录之前读", got, want)
+	}
+	if fixture.dispositions.lastQuery.Resolution.String() != "RES-1" {
+		t.Fatalf("disposition query resolution = %q, want the adopted RES-1——读口要凭本轮采用的那次解析回指",
+			fixture.dispositions.lastQuery.Resolution)
+	}
+	if len(fixture.requests.recordedControl) != 1 {
+		t.Fatalf("recorded %d control results, want 1", len(fixture.requests.recordedControl))
+	}
+	recorded := fixture.requests.recordedControl[0]
+	if !recorded.AwaitsAuthorizedDisposition() {
+		t.Fatal("落库的受限结果没带上采用的处置——Decide 会按过渡口径把它拒掉")
+	}
+	adopted, present := recorded.Items()[0].AdoptedDisposition()
+	if !present || adopted.Responsibility().String() != "CONTRACT-CLAUSE-7" {
+		t.Fatalf("recorded item disposition = %+v (present=%v)", adopted, present)
+	}
+	control, present := result.FinancialControlResult()
+	if !present || !control.AwaitsAuthorizedDisposition() {
+		t.Fatal("交回的控制结果与落库的那份不一致")
+	}
+}
+
+// Covers: 同一决定的反面——成立与`明确无控制`没有去向可问，读口一次也不被叫到。
+func TestASatisfiedControlDoesNotAskForDispositions(t *testing.T) {
+	for _, outcome := range []domain.FinancialControlOutcome{
+		domain.FinancialControlHeld, domain.FinancialControlCreditExposed, domain.FinancialControlNotApplicable,
+	} {
+		t.Run(outcome.String(), func(t *testing.T) {
+			fixture := newFinancialControlFixture(t)
+			fixture.controller.outcome = outcome
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.AcceptanceJudgmentAdvanced {
+				t.Fatalf("outcome = %q, want ADVANCED", result.Outcome())
+			}
+			if fixture.dispositions.calls != 0 {
+				t.Fatalf("处置读口被问了 %d 次——%s 没有受限项，无去向可读", fixture.dispositions.calls, outcome)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0132 决定三「对不上……停在等待内部续办，不折成任一去向」——读口答不出、正文那一侧没有可读的行、
+// 范围下缺受限项那一种类的行，三格各停各的，都不记录结果、都不折成 REJECT 或授权处置，续办路径都是内部重试。
+func TestARestrictedControlWithoutAnAdoptableDispositionStopsWithoutRecording(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(*controlDispositionDouble)
+		reason  application.JudgmentPendingReason
+	}{
+		"view unavailable": {
+			arrange: func(double *controlDispositionDouble) { double.err = errors.New("pc unreachable") },
+			reason:  application.ControlDispositionUnavailable,
+		},
+		"nothing registered for the scope": {
+			arrange: func(double *controlDispositionDouble) { double.found = false },
+			reason:  application.ControlDispositionNotFormed,
+		},
+		"restricted kind missing on the scope": {
+			arrange: func(double *controlDispositionDouble) {
+				double.found = true
+				double.dispositions = map[domain.ControlItemKind]domain.AdoptedControlDisposition{
+					domain.CreditCheckControlItem: adoptedDispositionFor(t, domain.RejectOnControlFailure),
+				}
+			},
+			reason: application.ControlDispositionNotFormed,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFinancialControlFixture(t)
+			fixture.controller.outcome = domain.FinancialControlRestricted
+			tc.arrange(fixture.dispositions)
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Outcome() != application.AcceptanceJudgmentUndecided {
+				t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+			}
+			if result.PendingReason() != tc.reason {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), tc.reason)
+			}
+			if len(fixture.requests.recordedControl) != 0 {
+				t.Fatal("没读到处置的受限结果被记到了任务上——接受那一步会按过渡口径拒掉它")
+			}
+			if _, present := result.FinancialControlResult(); present {
+				t.Fatal("未决那一轮交回了控制结果")
+			}
+			if len(fixture.requests.recordedAttempts) != 1 ||
+				fixture.requests.recordedAttempts[0].ResumePath() != domain.ResumeByInternalRetry {
+				t.Fatalf("attempts = %v, want one attempt on INTERNAL_RETRY——对不上处置只有本方重读推得动",
+					fixture.requests.recordedAttempts)
+			}
+		})
+	}
 }
 
 func (value *financialControlFixture) command(t *testing.T) application.AdvanceFinancialControlJudgmentCommand {

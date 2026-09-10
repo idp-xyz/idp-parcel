@@ -40,16 +40,19 @@ func TestEveryPendingReasonHasAStringAndAResumePath(t *testing.T) {
 		// 续办路径同样不许落到零值：`WaitingOn` 拿零值当缺席，一条报告缺席的等待态等于
 		// 没人会来续办这一轮。
 		//
-		// 这里逐个列出四个等待态而不调 `ResumePath.valid()`，是有意的，别改：**这份枚举
+		// 这里逐个列出各等待态而不调 `ResumePath.valid()`，是有意的，别改：**这份枚举
 		// 是承重的**。日后再加一个等待态时本用例会变红，而那一红正是要逼人回来逐条确认
 		// 每个未决原因映得对不对——加一格几乎必然意味着某些原因该改归属（ADR-0094 就是
-		// 这么发现 *NotConfigured 那一族一直压在内部重试上的）。改成跟着 `valid()` 走，
-		// 它就永远不会红，而那件必须做的复核也就永远没人做。
+		// 这么发现 *NotConfigured 那一族一直压在内部重试上的；ADR-0132 加`等待授权处置`
+		// 时逐条复核过：只有 AuthorizedDispositionPending 归它，两格 ControlDisposition*
+		// 仍是内部重试）。改成跟着 `valid()` 走，它就永远不会红，而那件必须做的复核也就
+		// 永远没人做。
 		switch reason.resumePath() {
 		case domain.ResumeByCustomerSupplement, domain.ResumeByInternalRetry,
-			domain.ResumeByManualReview, domain.ResumeByOperatorRegistration:
+			domain.ResumeByManualReview, domain.ResumeByOperatorRegistration,
+			domain.ResumeByAuthorizedDisposition:
 		default:
-			t.Errorf("JudgmentPendingReason(%d) 的续办路径不是四个等待态之一", uint8(reason))
+			t.Errorf("JudgmentPendingReason(%d) 的续办路径不是已登记的等待态之一", uint8(reason))
 		}
 	}
 

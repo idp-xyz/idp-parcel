@@ -75,6 +75,16 @@ func TestOperatorRegistrationIsCommittedNowThatItsResumeTriggerLands(t *testing.
 	}
 }
 
+// TestAuthorizedDispositionIsCommittedBecauseItsResumeTriggerIsTheCommandItself 钉 ADR-0132 Decision 二
+// 在消费门的落点：`等待授权处置`按本份投递处理完毕入账——续办方是有处置权的角色，重投产不出一次处置；
+// 续办触发是处置命令自身（`拒绝`当场形成决定、`交客户补充`转到`等待受控补充`由新版本信封续办），与本格
+// 同笔落地，「触发不同笔不许落地」（ADR-0094 Decision 四）不被违反。谁再想把它挪回重投，先回答续办触发去哪了。
+func TestAuthorizedDispositionIsCommittedBecauseItsResumeTriggerIsTheCommandItself(t *testing.T) {
+	if err := undecidedDisposition(domain.ResumeByAuthorizedDisposition); err != nil {
+		t.Fatalf("等待授权处置应按本份投递处理完毕入账，实际 err = %v", err)
+	}
+}
+
 // TestUnknownResumePathIsLoud 钉住不留 default 那一条。
 //
 // 一个立不起来的续办路径意味着编排交回了集合外的东西，或者有人加了第五格却没回来看这里。

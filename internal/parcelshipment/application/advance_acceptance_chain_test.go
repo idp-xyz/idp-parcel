@@ -270,7 +270,7 @@ func newChainFixture(t *testing.T) *chainFixture {
 		Reachability: application.NewAdvanceAcceptanceJudgmentHandler(
 			value.commercial, value.reachability, recorder, value.requests, clock),
 		FinancialControl: application.NewAdvanceFinancialControlJudgmentHandler(
-			value.commercial, value.controller, recorder, value.requests, clock),
+			value.commercial, value.controller, &controlDispositionDouble{}, recorder, value.requests, clock),
 		Decision: application.NewFormAcceptanceDecisionHandler(application.FormAcceptanceDecisionDeps{
 			Requests:   value.requests,
 			Commercial: value.commercial,

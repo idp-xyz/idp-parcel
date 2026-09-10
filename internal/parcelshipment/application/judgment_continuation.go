@@ -129,6 +129,21 @@ const (
 	SourceDataAmendmentStageUndetermined
 	SourceDataAmendmentStageFactUnavailable
 
+	// AuthorizedDispositionPending 说的是接受判断任务停在`等待授权处置`（ADR-0132 决定二）：接受前财务
+	// 控制按共同通过条件不成立，而全部受限项在策略正文里登记的失败处置都是`进入授权处置`，去向待
+	// 授权角色选。它与 ManualReviewPending / CustomerSupplementPending 同组——续办方在进程之外，消费门
+	// 按本原因提交入账，编排交回它之前先把带等待态的聚合 Save 落库（ADR-0086 决定一那道护栏原样扩用）。
+	AuthorizedDispositionPending
+
+	// 形成控制判断那一步经本上下文自己的商业缝读受限项的失败处置（ADR-0132 决定三）的两格。
+	//
+	// `读口答不出`是那条缝调不通，等它恢复；`未形成`是正文那一侧没有可读的行、或范围下缺受限项那一种类
+	// 的行——SA 刚按同一份正文执行完控制，这只可能是换版竞争或坏数据，恢复动作是重读，不折成任一去向
+	// （也不折成 REJECT）。两格分开的理由同 SourceDataRuleUnavailable 对 NotDeclared：合成一格，续办方
+	// 就不知道该等缝恢复还是该去查那一版正文。两格都只有本方推得动，落在下面 resumePath 的 default 上。
+	ControlDispositionUnavailable
+	ControlDispositionNotFormed
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -139,7 +154,7 @@ const (
 	judgmentPendingReasonEnd
 )
 
-// resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的三个等待态一一对应。
+// resumePath 由未决原因导出续办方，取值与 CONTEXT 接受判断任务的各等待态一一对应。
 //
 // 它是原因的全函数，而不是调用点上的常量：写成常量，新增一个原因就会静默继承上一个调用点的
 // 路径，而路径错了等于催错人——依赖抖动去催客户补件，或者对着一件只有人能推进的复核无休止
@@ -150,6 +165,10 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		return domain.ResumeByCustomerSupplement
 	case ManualReviewPending:
 		return domain.ResumeByManualReview
+	case AuthorizedDispositionPending:
+		// 等的是授权处置角色选一次去向：重试推不动，客户补不出，复核角色也没有这份权——ports.go 为
+		// 「只授复核权的规则不得被读成处置权」把端口分开，续办路径在这里同样分开。
+		return domain.ResumeByAuthorizedDisposition
 	case RejectionAuthorityRulesNotConfigured,
 		WithdrawalAuthorityRulesNotConfigured,
 		SourceDataAmendmentAuthorityRulesNotConfigured,
@@ -298,6 +317,12 @@ func (reason JudgmentPendingReason) String() string {
 		return "SOURCE_DATA_AMENDMENT_STAGE_UNDETERMINED"
 	case SourceDataAmendmentStageFactUnavailable:
 		return "SOURCE_DATA_AMENDMENT_STAGE_FACT_UNAVAILABLE"
+	case AuthorizedDispositionPending:
+		return "AUTHORIZED_DISPOSITION_PENDING"
+	case ControlDispositionUnavailable:
+		return "CONTROL_DISPOSITION_UNAVAILABLE"
+	case ControlDispositionNotFormed:
+		return "CONTROL_DISPOSITION_NOT_FORMED"
 	default:
 		return ""
 	}

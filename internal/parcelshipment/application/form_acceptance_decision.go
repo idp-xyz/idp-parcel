@@ -218,7 +218,7 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		// 聚合看过全部校验后仍未形成决定：有待判断的组、有未被判断的成员或适用组，或者
 		// 规则要求的人工复核尚未完成。委托保持`已提交`，任务继续可续办。
 		reason := pendingReasonFor(decided)
-		if reason == ManualReviewPending || reason == CustomerSupplementPending {
+		if reason == ManualReviewPending || reason == CustomerSupplementPending || reason == AuthorizedDispositionPending {
 			return handler.pauseForExternalResume(ctx, command, request, decided, reason)
 		}
 		return handler.undecided(ctx, command, reason, request.State()), nil
@@ -257,14 +257,16 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 	}, nil
 }
 
-// pauseForExternalResume 把「等待人工复核」或「等待受控补充」这一停写进聚合再交回未决。
+// pauseForExternalResume 把「等待人工复核」「等待受控补充」或「等待授权处置」这一停写进聚合再交回未决。
 //
-// 这两个等待态要落库，是因为它们的续办方都在进程之外：人工复核「内部重试推进不了它，客户也
+// 这几个等待态要落库，是因为它们的续办方都在进程之外：人工复核「内部重试推进不了它，客户也
 // 补不出它」（CONTEXT 等待人工复核态，ADR-0086）；受控补充等的是客户的新提交版本，而在途那一封
 // 信封携带的是旧版本，重投它要么白烧一次失败预算、要么落到换代原因，续办只能来自新版本自己的
-// 信封（ADR-0106 Context 第 3 条）。两者重投都改变不了任何东西，不落库则各自的队列读面永远列
-// 不出「等谁的都有谁」。消费门据本轮原因把这份投递记为处理完毕（提交侧不再重投），续办分别由
-// 「复核已完成」（ADR-0086 Decision 二）与「新提交版本已形成」（ADR-0106 Decision 三）信封驱动。
+// 信封（ADR-0106 Context 第 3 条）；授权处置等的是有处置权的角色选一次去向，重投同样产不出一次
+// 处置（ADR-0132 决定二）。重投都改变不了任何东西，不落库则各自的队列读面永远列不出「等谁的都
+// 有谁」。消费门据本轮原因把这份投递记为处理完毕（提交侧不再重投），续办分别由「复核已完成」
+// （ADR-0086 Decision 二）与「新提交版本已形成」（ADR-0106 Decision 三）信封、以及处置命令自身
+// （`拒绝`在命令事务里形成决定，`交客户补充`转到`等待受控补充`再由新版本信封续办，不新增信封）驱动。
 // `等待内部续办`不走这里：它等的依赖会自己回来，回滚重投是对的。
 //
 // 保存失败或撞上版本冲突时**不**交回传入的等待原因：那个原因是消费门提交暂停的凭据，暂停
@@ -415,6 +417,8 @@ func pendingReasonFor(decided domain.ShipmentRequest) JudgmentPendingReason {
 		return CustomerSupplementPending
 	case domain.ResumeByManualReview:
 		return ManualReviewPending
+	case domain.ResumeByAuthorizedDisposition:
+		return AuthorizedDispositionPending
 	default:
 		return AcceptanceJudgmentIncomplete
 	}

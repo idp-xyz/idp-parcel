@@ -854,6 +854,17 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, err
 	}
+	// 受限项的失败处置与责任引用从同一份闭包采用的控制策略正文读（ADR-0132 决定三）：与 SA 执行控制时读的
+	// 是同一只解析库、同一版正文、同一个费用范围，受限项的种类才按行对得上。不接它，正文登了`进入授权处置`
+	// 的合同仍会按 ADR-0125 的过渡口径被自动拒绝。
+	dispositionContents, err := pcpostgres.NewPreAcceptanceFinancialControlPolicyContents(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: control disposition policy contents: %w", err)
+	}
+	dispositions, err := pspartycommercial.NewControlDispositionAdapter(resolutions, dispositionContents)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: control disposition view: %w", err)
+	}
 
 	identities, err := psidentity.NewAcceptanceDecisions()
 	if err != nil {
@@ -868,7 +879,7 @@ func acceptanceChainConsumers(
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, reachability, judgments, requests, clock),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, control, judgments, requests, clock),
+			commercial, control, dispositions, judgments, requests, clock),
 		Decision: psapplication.NewFormAcceptanceDecisionHandler(psapplication.FormAcceptanceDecisionDeps{
 			Requests:     requests,
 			Commercial:   commercial,

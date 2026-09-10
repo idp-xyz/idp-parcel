@@ -68,11 +68,12 @@ var controlStallReasons = map[ports.PreAcceptanceControlOutcome]JudgmentPendingR
 }
 
 type AdvanceFinancialControlJudgmentHandler struct {
-	commercial ports.CommercialBasisResolver
-	controller ports.PreAcceptanceFinancialController
-	recorder   ports.AcceptanceJudgmentRecorder
-	requests   ports.ShipmentRequestRepository
-	clock      ports.Clock
+	commercial   ports.CommercialBasisResolver
+	controller   ports.PreAcceptanceFinancialController
+	dispositions ports.ControlDispositionView
+	recorder     ports.AcceptanceJudgmentRecorder
+	requests     ports.ShipmentRequestRepository
+	clock        ports.Clock
 }
 
 // 时钟只用于处理尝试的发生时间。它与判断时点分开：后者由规则包声明的策略形成，本地时钟
@@ -80,19 +81,26 @@ type AdvanceFinancialControlJudgmentHandler struct {
 //
 // requests 的用处与可达性那一支相同：只在`判断时点未配置`那一停上把`等待运营登记`落库
 // （ADR-0094 Decision 五），控制结果仍经 recorder 记到任务上。
+//
+// dispositions 只在 settlement-accounting 交回含受限项的结果时被问（ADR-0132 决定三）：读回受限项
+// 在策略正文里登记的失败处置与责任引用，作为采用引用记在受限项上、随控制结果落库。它是形成控制
+// 判断这一步的一部分而不是形成决定那一步的：处置是这份判断当时按哪一版正文形成的一部分，Decide 时
+// 再读正文会让策略换版改写一份已形成的判断。
 func NewAdvanceFinancialControlJudgmentHandler(
 	commercial ports.CommercialBasisResolver,
 	controller ports.PreAcceptanceFinancialController,
+	dispositions ports.ControlDispositionView,
 	recorder ports.AcceptanceJudgmentRecorder,
 	requests ports.ShipmentRequestRepository,
 	clock ports.Clock,
 ) *AdvanceFinancialControlJudgmentHandler {
 	return &AdvanceFinancialControlJudgmentHandler{
-		commercial: commercial,
-		controller: controller,
-		recorder:   recorder,
-		requests:   requests,
-		clock:      clock,
+		commercial:   commercial,
+		controller:   controller,
+		dispositions: dispositions,
+		recorder:     recorder,
+		requests:     requests,
+		clock:        clock,
 	}
 }
 
@@ -158,6 +166,16 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		return handler.undecided(ctx, command, reason), nil
 	}
 	control := assessment.Result
+	if control.Outcome() == domain.FinancialControlRestricted {
+		// 有项受限才读处置：成立与`明确无控制`都没有去向可问。读到的处置在记录之前采用到受限项上，
+		// 因为它们要随同一份结果落库；读不到就停在这里不记录——记一份不带处置的受限结果，接受那一步
+		// 会按 ADR-0125 的过渡口径把正文登了`进入授权处置`的合同也拒掉。
+		adopted, stall := handler.adoptDispositions(ctx, command, adoptedBasisOf(adopted), control)
+		if stall != PendingReasonNone {
+			return handler.undecided(ctx, command, stall), nil
+		}
+		control = adopted
+	}
 	// 控制结果没能记到任务上就不算推进。交回一条没记下的控制，接受那一步会引用一次查不
 	// 回来的资金占用。
 	if err := handler.recorder.RecordFinancialControlResult(
@@ -170,6 +188,40 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		control:    control,
 		hasControl: true,
 	}, nil
+}
+
+// adoptedBasisOf 取本轮采用的商业解析标识——处置读口凭它回指闭包，与 SA 执行控制时读的是同一份。
+func adoptedBasisOf(adopted adoptedBasis) domain.CommercialResolutionID {
+	return adopted.snapshot.ResolutionID()
+}
+
+// adoptDispositions 经本上下文自己的商业缝读受限项的失败处置与责任引用，采用到受限项上（ADR-0132 决定三）。
+//
+// 两种停法各归一格：读口调不通是`读口答不出`（等它恢复）；正文那一侧没有可读的行、或范围下缺受限项
+// 那一种类的行以致领域采用不成立是`未形成`——SA 刚按同一份正文执行完控制，这只可能是换版竞争或坏数据，
+// 恢复动作是重读，**不折成任一去向**：折成 REJECT 是替租户拒单，折成授权处置是凭空给一项`业务限制`开
+// 一条人工的路。
+func (handler *AdvanceFinancialControlJudgmentHandler) adoptDispositions(
+	ctx context.Context,
+	command AdvanceFinancialControlJudgmentCommand,
+	resolution domain.CommercialResolutionID,
+	control domain.FinancialControlResult,
+) (domain.FinancialControlResult, JudgmentPendingReason) {
+	dispositions, found, err := handler.dispositions.LoadControlDispositions(ctx, ports.ControlDispositionQuery{
+		Identity:   command.Identity,
+		Resolution: resolution,
+	})
+	if err != nil {
+		return domain.FinancialControlResult{}, ControlDispositionUnavailable
+	}
+	if !found {
+		return domain.FinancialControlResult{}, ControlDispositionNotFormed
+	}
+	adopted, err := control.AdoptControlDispositions(dispositions)
+	if err != nil {
+		return domain.FinancialControlResult{}, ControlDispositionNotFormed
+	}
+	return adopted, PendingReasonNone
 }
 
 // undecided 的 scope 与可达性那一支同义：同一未决原因下的两种缺口靠提供方的原因引用分开。

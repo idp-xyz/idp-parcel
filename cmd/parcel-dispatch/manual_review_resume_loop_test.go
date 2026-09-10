@@ -81,7 +81,7 @@ func newManualReviewLoopFixture(t *testing.T) *manualReviewLoopFixture {
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, synRReachabilityAuthority{t: t}, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, synRFinancialAuthority{t: t}, base.judgments, base.requests, systemClock{}),
+			commercial, synRFinancialAuthority{t: t}, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
 		Decision: decision,
 	})
 	submittedGate, err := psinbox.NewShipmentRequestSubmittedConsumer(base.transactor, inboxStore, chain)
@@ -489,8 +489,20 @@ func (double synRFinancialAuthority) ApplyPreAcceptanceFinancialControl(
 	}, nil
 }
 
+// synRControlDispositions 是处置读口的合成替身：本文件与另两条续办回路里的控制都成立（HELD），编排不会问它；
+// 交回「未形成」而不是一份处置，是为了让任何一条误问到它的路都停在内部续办而不是凭空进入授权处置。
+type synRControlDispositions struct{}
+
+func (synRControlDispositions) LoadControlDispositions(
+	context.Context,
+	psports.ControlDispositionQuery,
+) (map[psdomain.ControlItemKind]psdomain.AdoptedControlDisposition, bool, error) {
+	return nil, false, nil
+}
+
 var (
 	_ psports.CommercialBasisResolver          = (*synRCommercialBasis)(nil)
 	_ psports.ReachabilityAssessor             = synRReachabilityAuthority{}
 	_ psports.PreAcceptanceFinancialController = synRFinancialAuthority{}
+	_ psports.ControlDispositionView           = synRControlDispositions{}
 )
