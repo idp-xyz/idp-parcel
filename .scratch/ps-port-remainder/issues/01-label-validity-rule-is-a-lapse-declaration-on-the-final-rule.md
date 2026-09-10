@@ -1,7 +1,7 @@
 # `LabelValidityRuleView`：「接受时固定的有效期规则」是终局规则上的一格有效期声明，PS 只消费
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 14:2x 通道 1 解阻（远端 main `5dda0fb2` 上取证）：PC 半边已随 [pc-gaps/09](../../party-commercial-context-gaps/issues/09-final-rule-content-has-no-validity-declaration.md) 进 main（`838b283e` ADR-0119 + CONTEXT / `d06192ed` 迁移 0026 + `LabelValidityDeclaration` / `ValidityAnchorKind` / `FinalRuleContent.Validity()` + `LoadFinalRule` 读回 + `FinalRuleChannel` 折进有效期 + 批文 `finalRuleValidity`；owner 复核 2026-09-09 认可），其完成记录明写「不做的：PS 适配器 `label_validity_rule.go`（ps-port-remainder/01 PS 半边，据此解阻）」；剩 PS 半边（消费适配器），见 Comments 末条——注意 `NewJudgeLabelServiceFinalHandler` 在 `cmd/` 仍无调用方（label-channel/11「不在本票」三张接线票至今未立），本票适配器落地后仍无生产调用点，属诚实状态不属欠账。此前 blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments），裁决与本票「裁决」节一致；PC 半边等 pc-gaps 批
+Status: in-progress——2026-09-10 14:3x 通道 6 认领 PS 半边（task-45b75eb2，隔离 worktree 分支 `mcp6-psr01`，基 `dd5ed934`）；此前 ready-for-agent——2026-09-10 14:2x 通道 1 解阻（远端 main `5dda0fb2` 上取证）：PC 半边已随 [pc-gaps/09](../../party-commercial-context-gaps/issues/09-final-rule-content-has-no-validity-declaration.md) 进 main（`838b283e` ADR-0119 + CONTEXT / `d06192ed` 迁移 0026 + `LabelValidityDeclaration` / `ValidityAnchorKind` / `FinalRuleContent.Validity()` + `LoadFinalRule` 读回 + `FinalRuleChannel` 折进有效期 + 批文 `finalRuleValidity`；owner 复核 2026-09-09 认可），其完成记录明写「不做的：PS 适配器 `label_validity_rule.go`（ps-port-remainder/01 PS 半边，据此解阻）」；剩 PS 半边（消费适配器），见 Comments 末条——注意 `NewJudgeLabelServiceFinalHandler` 在 `cmd/` 仍无调用方（label-channel/11「不在本票」三张接线票至今未立），本票适配器落地后仍无生产调用点，属诚实状态不属欠账。此前 blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments），裁决与本票「裁决」节一致；PC 半边等 pc-gaps 批
 Blocked by: 无（PC 半边 pc-gaps/09 已进 main）
 
 ## 端口今天说什么
