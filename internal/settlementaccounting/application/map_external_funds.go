@@ -205,7 +205,9 @@ type MapExternalFundsDeps struct {
 	Mappings     ports.FundsMappingStore
 	Applications ports.SettlementApplicationStore
 	Downstream   ports.SettlementApplicationHandoff
-	Clock        ports.Clock
+	// FactHandoff 把采用成功的资金事实交出去（票 sa-cc/02）——CC 的税费付款核对等的正是这封。
+	FactHandoff ports.ExternalFundsFactHandoff
+	Clock       ports.Clock
 }
 
 type MapExternalFundsHandler struct {
@@ -236,10 +238,10 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 	if found {
 		if existing.ContentDigest != digest {
 			// 同一事实引用携带不同金额或时间：冲突保留原引用——外部更正走版本链，
-			// 不在采用处顶替。
+			// 不在采用处顶替。冲突的那一份没有被采用，无物可交。
 			return FundsResult{outcome: FundsFactConflict}, nil
 		}
-		return FundsResult{outcome: FundsFactExisting, fact: existing, hasRecord: true}, nil
+		return handler.existingFact(ctx, existing), nil
 	}
 
 	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: fact, RecordedAt: handler.deps.Clock.Now()}
@@ -249,16 +251,46 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 	}
 	switch saved {
 	case ports.FundsFactSaved:
-		return FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true}, nil
+		result := FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true}
+		result.handoff = handler.handOffFact(ctx, record)
+		return result, nil
 	case ports.FundsFactAlreadyAdopted:
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
-		return FundsResult{outcome: FundsFactExisting, fact: winner, hasRecord: true}, nil
+		return handler.existingFact(ctx, winner), nil
 	default:
 		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
 	}
+}
+
+// existingFact 按已采用的事实作答并再交一次同一份意图：重放交的是同一封（同租户、同事实、
+// 同版本），Outbox 按认领键吞掉第二次——「重放不交」在真库上就是这样成立的；不在这里跳过
+// 交接，是为了让上一次交接失败留下的那封在重放时补上（与 existingApplication 同形）。
+func (handler *MapExternalFundsHandler) existingFact(
+	ctx context.Context,
+	record ports.FundsFactRecord,
+) FundsResult {
+	return FundsResult{
+		outcome:   FundsFactExisting,
+		fact:      record,
+		hasRecord: true,
+		handoff:   handler.handOffFact(ctx, record),
+	}
+}
+
+// handOffFact 把采用成功的资金事实交给下游（票 sa-cc/02）。投递失败不翻结果——事实已采用是
+// 真的，只是那封信还没出去——留续办引用，重放时重发同一份。
+func (handler *MapExternalFundsHandler) handOffFact(
+	ctx context.Context,
+	record ports.FundsFactRecord,
+) string {
+	if err := handler.deps.FactHandoff.HandOffExternalFundsFact(ctx, ports.ExternalFundsFactIntent{Record: record}); err == nil {
+		return ""
+	}
+	return fundsContinuation("EXTERNAL_FUNDS_FACT_HANDOFF",
+		record.Key.TenantID.String(), record.Key.Fact.String(), record.Fact.Version().String())
 }
 
 // Map 建立一条资金映射：显式依据由 MapFundsToTarget 把门（巧合不证明映射）；失败

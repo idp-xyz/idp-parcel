@@ -150,6 +150,30 @@ func (double *settlementHandoffDouble) HandOffSettlementApplication(
 	return nil
 }
 
+// fundsFactHandoffDouble 照 outboxintent.EnqueueOnce 的口径按（租户+事实+版本）认领：同一份
+// 意图交两次只算一封——重放在真库上就是这样被吞的，替身不这样做，「重放不翻倍」在应用层
+// 就无从断言。
+type fundsFactHandoffDouble struct {
+	intents map[string]ports.ExternalFundsFactIntent
+	err     error
+}
+
+func newFundsFactHandoff() *fundsFactHandoffDouble {
+	return &fundsFactHandoffDouble{intents: map[string]ports.ExternalFundsFactIntent{}}
+}
+
+func (double *fundsFactHandoffDouble) HandOffExternalFundsFact(
+	_ context.Context,
+	intent ports.ExternalFundsFactIntent,
+) error {
+	if double.err != nil {
+		return double.err
+	}
+	key := fundsFactKey(intent.Record.Key) + "|" + intent.Record.Fact.Version().String()
+	double.intents[key] = intent
+	return nil
+}
+
 type fundsClock struct{ at time.Time }
 
 func (clock fundsClock) Now() time.Time { return clock.at }
@@ -159,6 +183,7 @@ type fundsFixture struct {
 	mappings     *fundsMappingStoreDouble
 	applications *applicationStoreDouble
 	handoff      *settlementHandoffDouble
+	factHandoff  *fundsFactHandoffDouble
 	handler      *application.MapExternalFundsHandler
 }
 
@@ -169,12 +194,14 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		mappings:     newFundsMappingStore(),
 		applications: newApplicationStore(),
 		handoff:      &settlementHandoffDouble{},
+		factHandoff:  newFundsFactHandoff(),
 	}
 	fixture.handler = application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        fixture.facts,
 		Mappings:     fixture.mappings,
 		Applications: fixture.applications,
 		Downstream:   fixture.handoff,
+		FactHandoff:  fixture.factHandoff,
 		Clock:        fundsClock{at: fundsNowAt},
 	})
 	return fixture

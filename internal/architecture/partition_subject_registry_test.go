@@ -140,9 +140,12 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/pilotgovernance/adapters/postgres/governance_handoff.go": partitionSubjectPrefix + "暂停标识（暂停与恢复同区）与接管三维（对象范围/能力/事实种类），两形皆无租户段",
 
 	// —— settlement-accounting ——
-	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":       partitionPerEnvelopePrefix + "键即信封 ID（回收与其调整各自认领）",
-	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go":    partitionPerEnvelopePrefix + "键即信封 ID（费用确认一拍）",
-	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       partitionPerEnvelopePrefix + "键即信封 ID（索赔结算各拍各自认领）",
+	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":    partitionPerEnvelopePrefix + "键即信封 ID（回收与其调整各自认领）",
+	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go": partitionPerEnvelopePrefix + "键即信封 ID（费用确认一拍）",
+	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":    partitionPerEnvelopePrefix + "键即信封 ID（索赔结算各拍各自认领）",
+	// 资金事实采用口（票 sa-cc/02 裁决 1）：更正链是同一事实的版本链、排一条队；ID 带版本维管幂等，
+	// 与分区键不同源。仓内其余口没有同名主体，跨上下文那道裁段不适用。
+	"internal/settlementaccounting/adapters/postgres/external_funds_fact_handoff.go":    partitionSubjectPrefix + "租户/资金事实（/funds-fact/ 段）",
 	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              partitionSubjectPrefix + "租户/分摊（/allocation/ 段）与租户/经营结果键（范围/账期/口径，/operating-result/ 段）",
 	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": partitionSubjectPrefix + "租户/核销申请（/application/ 段）",
 	"internal/settlementaccounting/adapters/postgres/statement_handoff.go":              partitionSubjectPrefix + "租户/对账单（发布与作废同区，/statement/ 段）",

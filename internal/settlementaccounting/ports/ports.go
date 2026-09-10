@@ -860,6 +860,20 @@ type SettlementApplicationHandoff interface {
 	HandOffSettlementApplication(ctx context.Context, intent SettlementApplicationIntent) error
 }
 
+// ExternalFundsFactIntent 把一条已采用的外部资金事实交给下游——今天是 `customs-compliance`
+// 的税费付款核对（票 sa-cc/02）。载荷只带引用（租户、事实引用、采用版本），金额与币种由
+// 消费方按引用读 SA 读口：事实归银行、支付或财务系统拥有，SA 只采用一次、只发引用，不把
+// 金额复制成第二处权威（ADR-0137 决定四）。更正是回指原事实的新版本，同一事件类型再发一
+// 封（票 02 裁决 2）。重放重发同一份（ADR-0043）。
+type ExternalFundsFactIntent struct {
+	Record FundsFactRecord
+}
+
+// ExternalFundsFactHandoff 把资金事实采用写入 Outbox（`OutboxExternalFundsFactHandoff`）。
+type ExternalFundsFactHandoff interface {
+	HandOffExternalFundsFact(ctx context.Context, intent ExternalFundsFactIntent) error
+}
+
 // AllocationRuleView 取来源费用适用的分摊规则版本。found=false 表示分摊规则目录未
 // 配置——无规则不分摊、不默认均摊（实例半边，AT-SA-123）。
 type AllocationRuleView interface {
