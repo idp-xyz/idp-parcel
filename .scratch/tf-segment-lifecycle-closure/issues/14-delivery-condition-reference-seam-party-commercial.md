@@ -1,7 +1,7 @@
 # 派送要求缝三：交付条件引用（`party-commercial`）——`DeliveryConditionSource` 的消费侧适配器
 
 Category: enhancement
-Status: ready-for-agent——三问已裁（2026-09-09，通道 2，task-f5521768，用户授权 PC owner 口径代裁、第 2 问连 PS 口径；见「裁决」，理由、场景与被否替代在 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md)）；做法与完成判据见下。此前 draft——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）
+Status: in-progress——2026-09-10 15:5x 通道 2 认领（单 task-1d5f0b15-49d5-46af-afdb-436f0af8383d），分支 `mcp2-tf14` 基 `0c9b846f`（psr/07 与 pc-gaps/11 均已在此 main 上）。此前 ready-for-agent——三问已裁（2026-09-09，通道 2，task-f5521768，用户授权 PC owner 口径代裁、第 2 问连 PS 口径；见「裁决」，理由、场景与被否替代在 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md)）；做法与完成判据见下。此前 draft——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）
 Blocked by: [ps-port-remainder/07](../../ps-port-remainder/issues/07-commercial-resolution-reference-by-parcel-read-face.md)（PS 按包裹身份答商业解析回指）、[pc-gaps/11](../../party-commercial-context-gaps/issues/11-delivery-condition-declaration-family-and-resolution-keyed-read-face.md)（PC 交付条件声明族 + 按回指答有没有的读口）——两口没落之前本票只能写替身，不能接真
 
 ## 缺口
