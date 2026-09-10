@@ -1,7 +1,7 @@
 # `parcel-shipment` 开一个按（租户，包裹身份）答「收件地点引用」的窄读口——`transport-fulfillment` 派送任务地点一格的提供方半边
 
 Category: enhancement
-Status: ready-for-agent——由 [ADR-0130](../../../docs/adr/0130-delivery-place-reference-is-a-shipment-level-composite-reference-anchored-to-a-source-data-version.md) Consequences 第一条拆出（2026-09-09，通道 2，task-ddb77473，PS owner 口径代裁）；形状已裁，本票只落读口、值对象与 postgres 读面，不动 `transport-fulfillment/**`
+Status: in-progress——11:14 通道 2 认领（单 task-0dab9f5a-ed5a-4407-ba1c-45d67d53350e），分支 `mcp2-psr06` 基 `84e89dc7`。此前 ready-for-agent——由 [ADR-0130](../../../docs/adr/0130-delivery-place-reference-is-a-shipment-level-composite-reference-anchored-to-a-source-data-version.md) Consequences 第一条拆出（2026-09-09，通道 2，task-ddb77473，PS owner 口径代裁）；形状已裁，本票只落读口、值对象与 postgres 读面，不动 `transport-fulfillment/**`
 Blocked by: 无
 
 ## 缺口
