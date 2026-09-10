@@ -115,21 +115,32 @@ func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (Ship
 	if !rejection.formed() {
 		return ShipmentRequest{}, ErrInvalidActiveRejection
 	}
+	return request.formActiveRejection(spec.DecisionID, rejection, spec.Basis, spec.DecidedAt), nil
+}
 
+// formActiveRejection 是「授权角色决定不承担」越过决定边界的那一步，主动拒绝与授权处置的`拒绝`
+// 去向共用：前置各自判过，这里只写终态。拆出来是为了让两条路形成的拒绝决定在形状上只有一处
+// 定义——处置`拒绝`若另写一遍，日后决定多一格留痕时两处必然走散。
+func (request ShipmentRequest) formActiveRejection(
+	decisionID AcceptanceDecisionID,
+	rejection ActiveRejection,
+	basis CommercialBasisSnapshot,
+	decidedAt time.Time,
+) ShipmentRequest {
 	request.state = ShipmentRequestRejected
 	request.decision = AcceptanceDecision{
-		decisionID:      spec.DecisionID,
-		basis:           spec.Basis,
-		decidedAt:       spec.DecidedAt.UTC(),
+		decisionID:      decisionID,
+		basis:           basis,
+		decidedAt:       decidedAt.UTC(),
 		activeRejection: rejection,
 	}
 	request.decisionFormed = true
 	request.acceptanceTask.state = AcceptanceTaskComplete
 	// 主动拒绝可以落在一轮未决之后，而那一轮留下的续办路径必须在这里清掉：`WaitingOn` 的
-	// 契约是决定形成后报告缺席，它自己不看决定，全靠三个终态转移各自清零。留着它，编排会
+	// 契约是决定形成后报告缺席，它自己不看决定，全靠各终态转移自己清零。留着它，编排会
 	// 照一条活路径去续办一份已决委托。
 	request.acceptanceTask.waitingOn = ResumePathInvalid
-	return request, nil
+	return request
 }
 
 // ActiveRejection 区分「规则形成的拒绝」与「运营企业主动不接」。零值即前者——规则拒绝没有

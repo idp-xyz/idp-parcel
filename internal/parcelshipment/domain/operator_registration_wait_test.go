@@ -16,7 +16,7 @@ func TestOperatorRegistrationIsAFourthResumePath(t *testing.T) {
 	}
 }
 
-// TestEveryResumePathIsDistinct 守的是「四者互不相同」这条 CONTEXT 硬句在代码里的形状：
+// TestEveryResumePathIsDistinct 守的是「各等待态互不相同」这条 CONTEXT 硬句在代码里的形状：
 // 名字撞车会让两条续办路径共用同一份处理尝试记录，而它们要催的人不同。
 func TestEveryResumePathIsDistinct(t *testing.T) {
 	paths := []ResumePath{
@@ -24,6 +24,7 @@ func TestEveryResumePathIsDistinct(t *testing.T) {
 		ResumeByInternalRetry,
 		ResumeByManualReview,
 		ResumeByOperatorRegistration,
+		ResumeByAuthorizedDisposition,
 	}
 
 	seen := make(map[string]ResumePath, len(paths))
@@ -48,7 +49,7 @@ func TestInvalidResumePathStaysOutside(t *testing.T) {
 	if ResumePathInvalid.valid() {
 		t.Fatalf("零值不得合法")
 	}
-	if (ResumeByOperatorRegistration + 1).valid() {
+	if (ResumeByAuthorizedDisposition + 1).valid() {
 		t.Fatalf("上界之外不得合法")
 	}
 	if got := ResumePathInvalid.String(); got != "" {

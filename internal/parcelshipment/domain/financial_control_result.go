@@ -94,11 +94,15 @@ func (conclusion ControlItemConclusion) String() string {
 //
 // 受限必带该项自己的原因（没有原因的`业务限制`说不出限制什么），成立不带——成立的依据在提供方的
 // 占用记录本身，这里再带一份就是第二处定义，与 checkWithReason「通过的校验不带原因」同一条纪律。
+//
+// 受限项另可带一份采用引用（失败处置 × 责任引用，ADR-0132 决定三）：它不是 SA 交回的，是本上下文
+// 在形成控制判断那一步经自己的商业缝从策略正文读回的，所以不进构造器、由 WithAdoptedDisposition 补。
 type ControlItemResult struct {
 	kind       ControlItemKind
 	order      uint32
 	conclusion ControlItemConclusion
 	basis      ControlBasisReference
+	adopted    AdoptedControlDisposition
 }
 
 // NewControlItemResult 只校形状：种类与结论在集内、顺序从 1 起（零在 SQL 与领域里都不是一个位置，
@@ -141,6 +145,10 @@ func (item ControlItemResult) Satisfied() bool {
 }
 
 func (item ControlItemResult) valid() bool {
+	if item.adopted != (AdoptedControlDisposition{}) &&
+		(item.conclusion != ControlItemRestricted || !item.adopted.valid()) {
+		return false
+	}
 	return item.kind.valid() && item.order > 0 && item.conclusion.valid() &&
 		(item.conclusion == ControlItemRestricted) == item.basis.valid()
 }

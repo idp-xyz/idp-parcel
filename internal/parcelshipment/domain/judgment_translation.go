@@ -135,26 +135,38 @@ func ReachabilityCheckFor(
 //
 // `明确无控制`译成`通过`。这不是默认放行：构造期已经强制该结果携带合同声明的商业不适用
 // 依据，因此它与一次没能执行的控制分得开。
+//
+// `RESTRICTED` 按受限项采用的失败处置分路（ADR-0132 决定一、二）：全部受限项都登记
+// `AUTHORIZED_DISPOSITION` → `无法判定`、续办路径「授权处置」，原因取判断顺序最靠前的受限项
+// 自己的原因（即结果的依据）；任一受限项登记 `REJECT`，或还没采用处置（刚交回、或采用引用落库
+// 之前的存量行）→ `未通过`照今天。这里的`无法判定`说的是**接受判断**尚未确定——去向待授权角色
+// 决定——不是控制结果不确定：控制结果是确定的`业务限制`，原样保留在采用结果上。
 func FinancialControlCheckFor(result FinancialControlResult) (AcceptanceCheck, error) {
 	var outcome CheckOutcome
 	var reasonValue string
+	resumePath := ResumeByInternalRetry
 	switch result.Outcome() {
 	case FinancialControlHeld, FinancialControlNotApplicable, FinancialControlCreditExposed:
 		outcome = CheckPassed
 	case FinancialControlRestricted:
+		if result.AwaitsAuthorizedDisposition() {
+			outcome, reasonValue = CheckUndetermined, result.Basis().String()
+			resumePath = ResumeByAuthorizedDisposition
+			break
+		}
 		outcome, reasonValue = CheckFailed, "FINANCIAL_CONTROL_RESTRICTED"
 	default:
 		return AcceptanceCheck{}, ErrInvalidFinancialControlResult
 	}
 
 	// 不指名成员：控制作用在整份委托上，指名了会让聚合把它当作某个成员已被判断，从而
-	// 以遗漏方式放过其余成员。本组没有`无法判定`那一支，续办路径给什么都不会被用上。
+	// 以遗漏方式放过其余成员。
 	return checkWithReason(
 		PreAcceptanceFinancialControlCheck,
 		DeclaredParcelID{},
 		outcome,
 		reasonValue,
-		ResumeByInternalRetry,
+		resumePath,
 	)
 }
 

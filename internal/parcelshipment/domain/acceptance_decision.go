@@ -330,13 +330,24 @@ func (request ShipmentRequest) Decide(spec AcceptanceDecisionSpec) (ShipmentRequ
 	// 缺口同时存在客户侧与系统侧时报客户侧——只有那一条要通知外部并受补充期限约束，把它压在
 	// 内部重试后面等于让客户白等一轮。`等待运营登记`压过内部重试而让位于客户侧：重试产不出
 	// 一次登记（ADR-0094 Decision 二），把它折进内部重试就是对着一个从未登记的参数无休止重投；
-	// 而登记之后整轮重跑，内部那一格自会再得机会。
+	// 而登记之后整轮重跑，内部那一格自会再得机会。`等待授权处置`压过登记与重试而同样让位于
+	// 客户侧：登记与重试都产不出一次处置，而处置角色的一个去向本就是`交客户补充`——客户侧缺口
+	// 在场时先让客户补，新版本重判自会再问一次控制。
 	if classified.undetermined > 0 ||
 		!everyApplicableGroupJudged(spec.Basis.applicable, classified.judgedGroups) ||
 		!request.everyMemberJudged(classified.judgedMembers) {
 		request.acceptanceTask.waitingOn = ResumeByInternalRetry
 		if classified.awaitingRegistration {
 			request.acceptanceTask.waitingOn = ResumeByOperatorRegistration
+		}
+		if classified.awaitingDisposition {
+			request.acceptanceTask.waitingOn = ResumeByAuthorizedDisposition
+			// 本版本已处置为`交客户补充`时去向已选定，再判一轮不退回等处置：处置记录一版至多
+			// 一次，退回去等于要处置角色对同一版本再选一次。能走到这里的已处置版本只可能是
+			// `交客户补充`——`拒绝`已越过决定边界，在本方法入口就被挡住。
+			if request.acceptanceTask.authorizedDisposition.recorded() {
+				request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
+			}
 		}
 		if classified.awaitingSupplement {
 			request.acceptanceTask.waitingOn = ResumeByCustomerSupplement
@@ -369,9 +380,10 @@ type acceptanceCheckClassification struct {
 	failed             int
 	undetermined       int
 	awaitingSupplement bool
-	// awaitingRegistration 与 awaitingSupplement 并列而不合成一个 ResumePath：两者可同时为真，
-	// 先后次序由 Decide 决定，分类这一步只如实记录到场了哪几类缺口。
+	// awaitingRegistration、awaitingDisposition 与 awaitingSupplement 并列而不合成一个 ResumePath：
+	// 几者可同时为真，先后次序由 Decide 决定，分类这一步只如实记录到场了哪几类缺口。
 	awaitingRegistration bool
+	awaitingDisposition  bool
 	judgedGroups         map[AcceptanceCheckGroup]struct{}
 	judgedMembers        map[DeclaredParcelID]struct{}
 }
@@ -395,6 +407,8 @@ func classifyAcceptanceChecks(checks []AcceptanceCheck) (acceptanceCheckClassifi
 				classified.awaitingSupplement = true
 			case ResumeByOperatorRegistration:
 				classified.awaitingRegistration = true
+			case ResumeByAuthorizedDisposition:
+				classified.awaitingDisposition = true
 			}
 		}
 		// 到场即计入，无论结果如何：`无法判定`已经由 undetermined 挡住接受，这里回答的

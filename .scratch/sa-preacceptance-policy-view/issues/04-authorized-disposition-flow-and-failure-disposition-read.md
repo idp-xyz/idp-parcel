@@ -1,7 +1,7 @@
 # `parcel-shipment` 对不通过的接受前财务控制一律拒绝——策略正文里的失败处置（`REJECT` / `AUTHORIZED_DISPOSITION`）与责任引用没有消费方，「进入授权处置」那条路在本上下文不存在
 
 Category: enhancement
-Status: ready-for-agent——2026-09-09 通道 6 代裁四问（用户 22:2x 经队列授权，task-103327c7；分支 `mcp6-sa04` 基 `91df9aaa`），裁决落 [ADR-0132](../../../docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) + PS CONTEXT 词条「授权处置」与`等待授权处置`一格，做法与完成判据见下；只裁未码。此前：draft——由票 [03](./03-parcel-shipment-expresses-per-item-control-results.md) 第 2 问拆出（2026-09-07，通道 3，ADR-0125）；PS 地盘，读口形状归 PC（已在）
+Status: in-progress——2026-09-10 11:4x 通道 6 认领（单 task-276950ce），分支 `mcp6-sa04` 基 `84e89dc7`，按「做法」1→7 每步一笔并推；此前：ready-for-agent——2026-09-09 通道 6 代裁四问（用户 22:2x 经队列授权，task-103327c7；分支 `mcp6-sa04` 基 `91df9aaa`），裁决落 [ADR-0132](../../../docs/adr/0132-authorized-disposition-decides-the-destination-of-a-restricted-request-as-its-own-wait-state-and-never-passes.md) + PS CONTEXT 词条「授权处置」与`等待授权处置`一格，做法与完成判据见下；只裁未码。此前：draft——由票 [03](./03-parcel-shipment-expresses-per-item-control-results.md) 第 2 问拆出（2026-09-07，通道 3，ADR-0125）；PS 地盘，读口形状归 PC（已在）
 Blocked by: 无
 
 ## 缺口

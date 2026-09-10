@@ -52,6 +52,15 @@ func TestNoStateTransitionMovesTheAggregateRevision(t *testing.T) {
 		"AwaitOperatorRegistration": func(_ *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
 			return request.AwaitOperatorRegistration()
 		},
+		// 处置只对停在`等待授权处置`的委托开放，所以这一条要先经一轮 Decide 停到那里；中间那次
+		// Decide 同样不许动版本。
+		"DisposeUnderAuthority": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+			waiting, err := request.Decide(decisionSpec(t, checksAwaitingDisposition(t)))
+			if err != nil {
+				t.Fatalf("decide: %v", err)
+			}
+			return waiting.DisposeUnderAuthority(disposeSpec(t, domain.DisposeByCustomerSupplement))
+		},
 		// 资料修订只对`已接受`开放，所以这一条要先越过决定边界。中间那次 Decide 同样不许动
 		// 版本，链起来测反而比单测更接近真实调用序列。
 		"AmendCustomerSourceData": func(t *testing.T, request domain.ShipmentRequest) (domain.ShipmentRequest, error) {

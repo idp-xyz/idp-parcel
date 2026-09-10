@@ -123,6 +123,9 @@ type RehydrateAcceptanceTaskSpec struct {
 	// 漏了，用例要的「未决按原因分类统计」在重建之后从头数起。
 	ProcessingAttempts []ProcessingAttempt
 	ReviewCompletion   ManualReviewCompletion
+	// AuthorizedDisposition 同理收成品（ADR-0132）。漏了它，DisposeUnderAuthority 的一版一次闸门会放行
+	// 第二次处置，而`交客户补充`之后的一轮 Decide 会把等待态退回等处置——同一版本被要求处置两次。
+	AuthorizedDisposition AuthorizedDisposition
 }
 
 // RehydrateShipmentRequest 从库里读到的产物重建一份委托。
@@ -147,13 +150,14 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 	priorTasks := make([]AcceptanceDecisionTask, 0, len(snapshot.PriorTasks))
 	for _, prior := range snapshot.PriorTasks {
 		priorTasks = append(priorTasks, AcceptanceDecisionTask{
-			taskID:              prior.TaskID,
-			submissionVersionID: prior.SubmissionVersionID,
-			establishedAt:       prior.EstablishedAt,
-			state:               prior.State,
-			waitingOn:           prior.WaitingOn,
-			processingAttempts:  append([]ProcessingAttempt(nil), prior.ProcessingAttempts...),
-			reviewCompletion:    prior.ReviewCompletion,
+			taskID:                prior.TaskID,
+			submissionVersionID:   prior.SubmissionVersionID,
+			establishedAt:         prior.EstablishedAt,
+			state:                 prior.State,
+			waitingOn:             prior.WaitingOn,
+			processingAttempts:    append([]ProcessingAttempt(nil), prior.ProcessingAttempts...),
+			reviewCompletion:      prior.ReviewCompletion,
+			authorizedDisposition: prior.AuthorizedDisposition,
 		})
 	}
 	request := ShipmentRequest{
@@ -178,7 +182,8 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			processingAttempts: append(
 				[]ProcessingAttempt(nil), snapshot.AcceptanceTask.ProcessingAttempts...,
 			),
-			reviewCompletion: snapshot.AcceptanceTask.ReviewCompletion,
+			reviewCompletion:      snapshot.AcceptanceTask.ReviewCompletion,
+			authorizedDisposition: snapshot.AcceptanceTask.AuthorizedDisposition,
 		},
 		priorVersions: priorVersions,
 		priorTasks:    priorTasks,
@@ -536,6 +541,18 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 	for _, attempt := range task.processingAttempts {
 		if !attempt.valid() {
 			return rehydrationRefusal("接受判断任务上有一条不完整的处理记录")
+		}
+	}
+	// 处置记录同复核完成度只判在场，不逐项查。但它与等待态有一条命题：处置转移把等待态从`等待授权处置`
+	// 带走（`拒绝`清零、`交客户补充`转到`等待受控补充`），所以「已处置却仍停在等处置」不可能由本上下文
+	// 写出——放它进门，队列会把一份已处置的委托再列给处置角色。`拒绝`去向另有一条：它越过决定边界收了
+	// 任务的工，一条处置为`拒绝`的运行中任务同样是拼出来的。
+	if task.authorizedDisposition.recorded() {
+		if task.waitingOn == ResumeByAuthorizedDisposition {
+			return rehydrationRefusal("接受判断任务已处置却仍停在等待授权处置")
+		}
+		if task.authorizedDisposition.choice == DisposeByRejection && task.running() {
+			return rehydrationRefusal("接受判断任务已处置为拒绝却仍在运行")
 		}
 	}
 	return nil

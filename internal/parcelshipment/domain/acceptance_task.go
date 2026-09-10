@@ -124,17 +124,24 @@ func NewProcessingAttemptReason(value string) (ProcessingAttemptReason, error) {
 	return ProcessingAttemptReason{required}, err
 }
 
-// ResumePath 区分这一轮该由谁来续，取值与 CONTEXT 接受判断任务的四个等待态一一对应：
-// 等待受控补充、等待内部续办、等待人工复核、等待运营登记。CONTEXT 要求四者「使用不同原因
-// 和续办路径」，因为续办方分别是客户、系统、授权复核角色和运营企业的登记动作，后续动作互不
-// 替代——通知客户并等新提交版本、重试依赖且绝不惊动客户、把复核派给够格的角色、等运营企业
-// 按那份参数自己的登记路径补齐。合并任意两个都会让等待对象弄错：压成一个字段，依赖抖动就会
-// 变成催客户补件；把复核算作内部重试，则会永远重试一件重试推不动的事。
+// ResumePath 区分这一轮该由谁来续，取值与 CONTEXT 接受判断任务的各等待态一一对应：
+// 等待受控补充、等待内部续办、等待人工复核、等待运营登记、等待授权处置。CONTEXT 要求它们
+// 「使用不同原因和续办路径」，因为续办方分别是客户、系统、授权复核角色、运营企业的登记动作
+// 和授权处置角色，后续动作互不替代——通知客户并等新提交版本、重试依赖且绝不惊动客户、把复核
+// 派给够格的角色、等运营企业按那份参数自己的登记路径补齐、把去向交给有处置权的角色选。合并
+// 任意两个都会让等待对象弄错：压成一个字段，依赖抖动就会变成催客户补件；把复核算作内部重试，
+// 则会永远重试一件重试推不动的事。
 //
-// `等待运营登记`是第四格（ADR-0094）。它与`等待内部续办`最容易压在一起，而两者的区别不在
-// 谁失败了而在**有没有可答的东西**：权威一时答不出会自行恢复，重试是对的；某个范围一条现行
-// 规则或参数都没有登记时，权威并没有答不出，是根本没有可答的东西，重试一万次也长不出一条
-// 登记。压成一格的代价是失败预算被一件重试永远推不动的事烧尽。
+// `等待运营登记`（ADR-0094）与`等待内部续办`最容易压在一起，而两者的区别不在谁失败了而在
+// **有没有可答的东西**：权威一时答不出会自行恢复，重试是对的；某个范围一条现行规则或参数都
+// 没有登记时，权威并没有答不出，是根本没有可答的东西，重试一万次也长不出一条登记。压成一格
+// 的代价是失败预算被一件重试永远推不动的事烧尽。
+//
+// `等待授权处置`（ADR-0132）与`等待人工复核`最容易压在一起，而两者的前置相反：复核的前置是
+// 全部所需权威结果到齐**通过**、只差规则要求的复核；处置的前置是接受前财务控制按共同通过条件
+// **不成立**、策略正文把去向交给授权角色。复核完成之后决定由任务按规则形成、可以是接受；处置
+// 只选去向（`拒绝`或`交客户补充`），放行不在集内。把不通过的控制放进复核那一格，复核完成那条
+// 路就会把一项`业务限制`推到接受——那正是 CONTEXT「人工处理不得绕过硬规则」禁的。
 type ResumePath uint8
 
 const (
@@ -143,10 +150,11 @@ const (
 	ResumeByInternalRetry
 	ResumeByManualReview
 	ResumeByOperatorRegistration
+	ResumeByAuthorizedDisposition
 )
 
 func (path ResumePath) valid() bool {
-	return path >= ResumeByCustomerSupplement && path <= ResumeByOperatorRegistration
+	return path >= ResumeByCustomerSupplement && path <= ResumeByAuthorizedDisposition
 }
 
 func (path ResumePath) String() string {
@@ -159,6 +167,8 @@ func (path ResumePath) String() string {
 		return "MANUAL_REVIEW"
 	case ResumeByOperatorRegistration:
 		return "OPERATOR_REGISTRATION"
+	case ResumeByAuthorizedDisposition:
+		return "AUTHORIZED_DISPOSITION"
 	default:
 		return ""
 	}

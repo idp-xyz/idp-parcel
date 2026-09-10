@@ -133,8 +133,12 @@ type AcceptanceDecisionTask struct {
 	establishedAt       time.Time
 	processingAttempts  []ProcessingAttempt
 	reviewCompletion    ManualReviewCompletion
-	waitingOn           ResumePath
-	state               AcceptanceTaskState
+	// authorizedDisposition 是本版本上已记录的授权处置（ADR-0132），一版至多一次、不覆盖。
+	// 它与 reviewCompletion 并列而不合成一格：复核完成之后决定仍由任务按规则形成，处置则
+	// 自己选定去向，两者的读法与续办都不同。
+	authorizedDisposition AuthorizedDisposition
+	waitingOn             ResumePath
+	state                 AcceptanceTaskState
 }
 
 // AcceptanceTaskState 区分任务的两个终态。CONTEXT 把它们分开写：`已完成`只在接受或拒绝决定
