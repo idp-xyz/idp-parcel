@@ -143,6 +143,62 @@ func (fixture *dispatchTriggerFixture) enterByHandover(t *testing.T, object, ser
 	}
 }
 
+// enterByHandoverWithPlan 同 enterByHandover，但对象带着登记方关联的计划履约段引用进段（不透明串，TF 只搬运不解读）。
+func (fixture *dispatchTriggerFixture) enterByHandoverWithPlan(t *testing.T, object, serviceAction, plannedSegment string, judgedAt time.Time) {
+	t.Helper()
+	command := registerHandoverCommand(t)
+	command.Object = object
+	command.Version = "handover-result/" + object + "/v1"
+	command.JudgedAt = judgedAt
+	command.Segment = "segment-1"
+	command.SegmentServiceAction = serviceAction
+	command.PlannedSegment = plannedSegment
+	result, err := fixture.handovers.handler.Register(t.Context(), command)
+	if err != nil || result.Outcome() != application.HandoverRegistered {
+		t.Fatalf("%s 带计划段进段：%v %q", object, err, result.Outcome())
+	}
+	if result.SegmentEntryRefusal() != application.SegmentEntryRefusalNone || result.SegmentContinuationReference() != "" {
+		t.Fatalf("%s 进段被拒或欠账：%s %q", object, result.SegmentEntryRefusal(), result.SegmentContinuationReference())
+	}
+}
+
+// Covers: 票 tf-segment-lifecycle-closure/13 做法第 4 步 / ADR-0131 决定一 — 时间窗那一缝按参与关系上登记方关联的计划
+// 履约段引用问，不按对象问：执行器把引用与在场标记原样转交（拼写不拆不解读），缺席也交出去由适配器答（决定三），
+// 执行器不自己判缺席。
+func TestTheWindowSeamIsAskedByThePlannedSegmentReferenceOnTheParticipation(t *testing.T) {
+	t.Run("参与关系带计划段：引用原样交出", func(t *testing.T) {
+		fixture := newDispatchTriggerFixture(t)
+		fixture.enterByHandoverWithPlan(t, "parcel-1", "FINAL_DELIVERY", "RPV-000000000007#2", handoverJudgedTime)
+
+		result, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+		if err != nil || result.Outcome() != application.DeliveryDispatchTaskFormed {
+			t.Fatalf("触发：%v %q", err, result.Outcome())
+		}
+		if fixture.windows.calls != 1 || !fixture.windows.present || fixture.windows.planned.String() != "RPV-000000000007#2" {
+			t.Fatalf("时间窗缝收到的问法 = calls %d present %v planned %q，want 参与关系上那个引用原样到达",
+				fixture.windows.calls, fixture.windows.present, fixture.windows.planned)
+		}
+	})
+
+	t.Run("参与关系无计划段：仍问、在场标记为无，缺席由适配器答", func(t *testing.T) {
+		fixture := newDispatchTriggerFixture(t)
+		fixture.enterByHandover(t, "parcel-1", "FINAL_DELIVERY", handoverJudgedTime)
+		fixture.windows.resolution = ports.RequirementMissing
+
+		result, err := fixture.handler().Trigger(t.Context(), triggerCommand(t, "parcel-1"))
+		if err != nil || result.Outcome() != application.DeliveryDispatchRequirementMissing {
+			t.Fatalf("触发：%v %q，want REQUIREMENT_MISSING（由适配器答的缺席）", err, result.Outcome())
+		}
+		if fixture.windows.calls != 1 || fixture.windows.present || fixture.windows.planned.String() != "" {
+			t.Fatalf("时间窗缝收到的问法 = calls %d present %v planned %q，want 交出去且在场标记为无",
+				fixture.windows.calls, fixture.windows.present, fixture.windows.planned)
+		}
+		if missing := result.Missing(); len(missing) != 1 || missing[0] != application.DeliveryWindowRequirement {
+			t.Fatalf("缺件名单 = %v，want 只有时间窗一件", missing)
+		}
+	})
+}
+
 func triggerCommand(t *testing.T, object string) application.TriggerDeliveryDispatchCommand {
 	t.Helper()
 	tenant, err := domain.NewTenantID("tenant-1")

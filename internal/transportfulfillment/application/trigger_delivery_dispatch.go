@@ -276,7 +276,7 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	if unwired, any := handler.unwiredSeam(); any {
 		return deliveryDispatchUndecided(unwired, command), nil
 	}
-	requirements, undecided := handler.pullRequirements(ctx, command, object)
+	requirements, undecided := handler.pullRequirements(ctx, command, object, participation)
 	if undecided != nil {
 		return *undecided, nil
 	}
@@ -347,10 +347,15 @@ func (handler *TriggerDeliveryDispatchHandler) unwiredSeam() (DeliveryDispatchUn
 // pullRequirements 三条缝各问一次。读不到是欠账，第一条读不到的即答未决（后面的不必再问，这一拍反正要重跑）；
 // 所有者答「没有」不是欠账，记进名单继续问下一条——缺几件要一次说清。答法不在封闭集合里（零值）是适配器的缺陷，
 // 与读不到同格：不把它读成「没有」，那会让一次适配器故障变成一个业务答案。
+//
+// 时间窗那一缝按参与关系上登记方关联的计划履约段引用问，不按对象问（ADR-0131 决定一）：对象在执行哪条段是登记方
+// 声明的事实，这里原样转交，连「引用缺席」也交给适配器答（决定三）——执行器不重复判缺席，判了就是两处各说一遍
+// 同一条规则。
 func (handler *TriggerDeliveryDispatchHandler) pullRequirements(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
 	object domain.CarriedObjectReference,
+	participation domain.FulfillmentParticipation,
 ) (deliveryRequirements, *TriggerDeliveryDispatchResult) {
 	var requirements deliveryRequirements
 
@@ -365,7 +370,8 @@ func (handler *TriggerDeliveryDispatchHandler) pullRequirements(
 		requirements.place = place
 	}
 
-	windowFrom, windowTo, resolution, err := handler.deps.Windows.LoadDeliveryWindow(ctx, command.TenantID, object)
+	planned, present := participation.PlannedSegment()
+	windowFrom, windowTo, resolution, err := handler.deps.Windows.LoadDeliveryWindowByPlannedSegment(ctx, command.TenantID, planned, present)
 	if faulted := requirementFault(resolution, err); faulted {
 		undecided := deliveryDispatchUndecided(DeliveryWindowSourceUnavailable, command)
 		return deliveryRequirements{}, &undecided
