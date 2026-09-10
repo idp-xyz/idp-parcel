@@ -1090,3 +1090,61 @@ type PortsPathsCatalogueRead interface {
 		limit int,
 	) ([]DeclarationPathEntry, error)
 }
+
+// CredentialCatalogueEntry 是监管凭证登记册上列的一行：在册的不可变凭证版本连同登记
+// 时间。凭证本体直接用领域对象——身份、签发机构、持有人、程序、有效期两端、次数额度在
+// 对象上各有出口，「来源未提供次数额度」与「有额度」的区分也在对象上有格可表（Uses 的
+// 第二个返回值），上列不为读面另铸扁平行形状再把那道区分重考一遍。RegisteredAt 是登记
+// 这一动作的库时钟，不是凭证的任何业务时间（0014 自注），随行透出让读者分得开「何时
+// 登进来」与「何时有效」。
+type CredentialCatalogueEntry struct {
+	Credential   domain.RegulatoryCredential
+	RegisteredAt time.Time
+}
+
+// CredentialCatalogueRead 是监管凭证登记册的伴生列表读口（ADR-0077 Decision 一/五）：
+// 管理台 customs-cases 页上列凭证册（票 sa-cc/10 裁决：凭证是 UC-CC-003 就绪门禁第 4 道
+// 的依据，读签挂在就绪与授权签旁）。不拓宽 CredentialView 点读口：点读按凭证身份伺候
+// 适用性判断，上列按租户伺候查阅，两个调用面各答各的问题。按租户上列、不按客户过滤
+// ——本口是运营侧查阅面，客户面的隔离句（UC-CC-003：任一客户查询不得获知其他客户的
+// 存在）由客户面自己守，这里不代它过滤也不冒充它。租户在签名上、limit 非正拒、空册答
+// 空列表。
+type CredentialCatalogueRead interface {
+	ListCredentials(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]CredentialCatalogueEntry, error)
+}
+
+// DutyCollaborationCatalogueRead 是税费付款协作事项登记册的伴生列表读口（ADR-0077
+// Decision 一/五）：管理台 customs-restrictions 页上列协作事项（票 sa-cc/10 裁决：协作
+// 事项随它的消费方付款核对落在门禁两表旁）。直接交回领域对象：义务依据两格（核定税费 /
+// 明确无需付款）在对象上以 Duty / NoPayBasis 两个带布尔的出口分得开，第三种「没有结果
+// 所以不用付」在类型上没有格——换个扁平行形状就等于给它留出一格。不拓宽
+// DutyCollaborationStore 的 FindCollaboration 点读口：点读按（范围，税费引用）伺候核对
+// 编排，上列按租户伺候查阅。租户在签名上、limit 非正拒、空册答空列表。
+type DutyCollaborationCatalogueRead interface {
+	ListDutyCollaborations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]domain.DutyPaymentCollaboration, error)
+}
+
+// DutyVerificationCatalogueRead 是税费付款核对登记册的伴生列表读口（ADR-0077 Decision
+// 一/五）：管理台 customs-restrictions 页上列核对版本。行直接用 DutyVerificationRecord
+// ——上列回显的就是登记进去的东西（幂等键含核对版本指纹、三轴核对对象、关联依据），不为
+// 读面另铸第二种词形（判据同 ClosureObligationCatalogueEntry 复用 ObligationRegistration）。
+// 三轴逐格原值透出、不折总状态（ADR-0137 决定三；CONTEXT「分别表达，不能实现为一组互斥
+// 总状态」）；「待关联」是资金事实册上的派生（ExternalFundsFactRegister 注释），不是核对
+// 册的列，本口不代算它，也不推任何别的派生。全部版本连同指纹原样上列——迟到事实按新版本
+// 追加、不按到达顺序覆盖，哪一版是当前是读者按 VerifiedAt 判读的事。不拓宽
+// FindVerification 点读口。租户在签名上、limit 非正拒、空册答空列表。
+type DutyVerificationCatalogueRead interface {
+	ListDutyVerifications(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]DutyVerificationRecord, error)
+}
