@@ -608,11 +608,15 @@ func TestAPublishedSourceDataAmendmentAllowanceIsReadBackByTheContentView(t *tes
 
 // deliveryConditionBatchBody 一份服务产品版本（产品层三种方式）+ 一份客户合同版本（合同层收紧到一种，指名 product-1/v1）。
 // 产品项在前：合同层写前要在同一范围册上读回它指名的产品层（ports.PublicationRegistry.SaveDeliveryConditions 的注释）。
+//
+// 产品项的 contentDigest 是 CanonicalizePublicationContent 对这份产品层正文算出的：交付条件折进 PCC-1 后（票
+// admin-write-faces/25）对账门对带交付条件的服务产品项开门，旧式 sha256: 串会答 NOT_ACCEPTED；改正文任一格要重算。
+// 合同项不带 contractContent，仍「不在场」、门不开，声明串照旧。
 func deliveryConditionBatchBody() string {
 	return `{"items": [
     {
       "tenantId": "tenant-1", "kind": "SERVICE_PRODUCT", "objectId": "product-1", "version": "v1",
-      "scope": "scope-1", "contentDigest": "sha256:product-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "scope": "scope-1", "contentDigest": "PCC-1:47f07b0ec1fed4e0565ba6f1f90d5a11c83c7ad0b0f99ec3ff31442ac02f7bc7", "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {"reference": "approval-product-1", "source": "source-product-1", "approvedAt": "2025-12-15T00:00:00Z"},
       "approvalRoleStanding": "CONFIRMED",
       "declarations": {"deliveryConditions": {

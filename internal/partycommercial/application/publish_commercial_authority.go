@@ -623,9 +623,18 @@ func publicationContentOf(
 			Effective:    body.Effective,
 		}
 		return content, true
+	case domain.ServiceProductObject:
+		// 本册的正文只有产品层交付条件一节（票 admin-write-faces/25）：不带它的版本仍是「壳单独发布」——没有可比对象，
+		// 照今天登记声明的串（票 admin-write-faces/09「本册规范化判断」那一格不变）；带上才开门。
+		if declarations.DeliveryConditions == nil {
+			return content, false
+		}
+		content.ServiceProduct = &domain.ServiceProductBody{DeliveryConditions: deliveryConditionBodyOf(*declarations.DeliveryConditions)}
+		return content, true
 	case domain.CustomerContractObject:
-		// 正文在不在场看 0012 那一层（contractContent）：只带合同级声明不带正文的项没有可比对象，照今天登记声明的
-		// 串——批文里两键各自可缺是既有语义（ADR-0126 边界：不改受控批文既有字段语义）。
+		// 正文在不在场看 0012 那一层（contractContent）：只带合同级声明或只带交付条件、不带正文的项没有可比对象，照今天
+		// 登记声明的串——批文里各键各自可缺是既有语义（ADR-0126 边界：不改受控批文既有字段语义）。正文在场时另两层一并
+		// 折进同一个摘要。
 		if declarations.ContractContent == nil {
 			return content, false
 		}
@@ -638,6 +647,9 @@ func publicationContentOf(
 				Requirement: declarations.PreAcceptanceControl.Requirement,
 				Basis:       declarations.PreAcceptanceControl.Basis,
 			}
+		}
+		if declarations.DeliveryConditions != nil {
+			content.CustomerContract.DeliveryConditions = deliveryConditionBodyOf(*declarations.DeliveryConditions)
 		}
 		return content, true
 	case domain.AuthorizationRuleObject:
@@ -1086,6 +1098,12 @@ func declarationWrites(
 	}
 
 	return writes, nil
+}
+
+// deliveryConditionBodyOf 把声明输入折成规范化那一侧的正文输入面——两者字段一一对应，这里只是换一个包的类型，不判层：
+// 层与册的配对由 domain.DeliveryConditionBody 在折成文档时按册判，与下面 deliveryConditionsOf 按版本类别选层同一判据。
+func deliveryConditionBodyOf(declaration DeliveryConditionDeclaration) *domain.DeliveryConditionBody {
+	return &domain.DeliveryConditionBody{Tightens: declaration.Tightens, Terms: declaration.Terms}
 }
 
 // deliveryConditionsOf 按发布的版本类别选层：客户合同版本走合同层的门（必须指名所收紧的产品版本），其余一律走产品层

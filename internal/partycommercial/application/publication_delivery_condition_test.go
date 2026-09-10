@@ -13,6 +13,25 @@ import (
 // 本文件钉票 party-commercial-context-gaps/11「要建什么」3 的发布通道半边（ADR-0133 决定四）：交付条件随服务产品
 // 版本（产品层）或客户合同版本（合同层）发布、走自己的 DELIVERY_CONDITION 通道；层由发布的版本类别定，合同层必须
 // 指名所收紧的产品版本、产品层必须不带；三格正文原样到达持久化面，通道不代填任何一种方式或规则。
+//
+// 票 admin-write-faces/25 把产品层折进 PCC-1 后，对账门对带交付条件的服务产品项开门（ADR-0126 Decision 二）：本文件里
+// 产品项的壳因此配算出的摘要（deliveryConditionProductSpec），产品层过不了自己那道门的用例由 error 改答 NOT_ACCEPTED
+// 带成因——与 awf/13 接进策略册时改配既有用例是同一件事。合同项不带 contractContent 仍「不在场」，照旧。
+
+// deliveryConditionProductSpec 给带产品层交付条件的服务产品项一个算出的摘要——本册接进规范化后对账门对它开门。
+func deliveryConditionProductSpec(t *testing.T, objectID, label string, declaration application.DeliveryConditionDeclaration) domain.CommercialVersionSpec {
+	t.Helper()
+	spec := publishSpec(t, domain.ServiceProductObject, objectID, label)
+	canonical, err := domain.CanonicalizePublicationContent(domain.PublicationContent{
+		Kind:           domain.ServiceProductObject,
+		ServiceProduct: &domain.ServiceProductBody{DeliveryConditions: &domain.DeliveryConditionBody{Tightens: declaration.Tightens, Terms: declaration.Terms}},
+	})
+	if err != nil {
+		t.Fatalf("规范化产品层交付条件：%v", err)
+	}
+	spec.ContentDigest = canonical.Digest()
+	return spec
+}
 
 func deliveryTermsFor(t *testing.T, methods ...string) domain.DeliveryConditionTerms {
 	t.Helper()
@@ -44,13 +63,12 @@ func TestDeliveryConditionsPublishWithTheirOwningVersion(t *testing.T) {
 	t.Run("产品层", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		declaration := application.DeliveryConditionDeclaration{Terms: deliveryTermsFor(t, "method-b", "method-a")}
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.ServiceProductObject, "product-1", "v1"),
+			Spec:         deliveryConditionProductSpec(t, "product-1", "v1", declaration),
 			Approval:     publishApproval(t, "product-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{DeliveryConditions: &application.DeliveryConditionDeclaration{
-				Terms: deliveryTermsFor(t, "method-b", "method-a"),
-			}},
+			Declarations: application.CommercialDeclarations{DeliveryConditions: &declaration},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v", err)
@@ -131,6 +149,8 @@ func TestDeliveryConditionsPublishWithTheirOwningVersion(t *testing.T) {
 
 // Covers: 通道的门与其余通道同一条纪律——零方式 / 同方式两行 / 挂在接单规则包上 / 合同层不指名所收紧的产品版本 /
 // 产品层却带了所收紧的产品版本，都在触碰持久化面之前整项拒且一行不写；册的`内容冲突`折进报告而不是 error（ADR-0031）。
+// 产品项经对账门（票 admin-write-faces/25 之后本册正文在场即开门）：过不了自己那道门的正文同归`未受理`带成因，不再是
+// error（ADR-0126 Decision 二，同 awf/13 那次改口）；接单规则包与合同项不在场、门不开，仍是 declarationWrites 的 error。
 func TestDeliveryConditionsAreGuardedLikeTheOtherChannels(t *testing.T) {
 	for name, tc := range map[string]struct {
 		kind        domain.CommercialObjectKind
@@ -147,12 +167,20 @@ func TestDeliveryConditionsAreGuardedLikeTheOtherChannels(t *testing.T) {
 			registry := &publicationRegistryDouble{}
 			handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 			declaration := tc.declaration
-			if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
 				Spec:         publishSpec(t, tc.kind, "owner-1", "v1"),
 				Approval:     publishApproval(t, "owner-1"),
 				RoleStanding: domain.ApprovalRoleConfirmed,
 				Declarations: application.CommercialDeclarations{DeliveryConditions: &declaration},
-			}); !errors.Is(err, tc.want) {
+			})
+			if tc.kind == domain.ServiceProductObject {
+				if err != nil {
+					t.Fatalf("Handle：%v——产品项经对账门，未受理不是 error", err)
+				}
+				if result.Outcome() != application.CommercialPublicationNotAccepted || !errors.Is(result.RefusalCause(), tc.want) {
+					t.Fatalf("outcome = %q, cause = %v; want NOT_ACCEPTED / %v", result.Outcome(), result.RefusalCause(), tc.want)
+				}
+			} else if !errors.Is(err, tc.want) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
 			}
 			if len(registry.savedVersions) != 0 || len(registry.savedDeliveryConditions) != 0 {
@@ -164,13 +192,12 @@ func TestDeliveryConditionsAreGuardedLikeTheOtherChannels(t *testing.T) {
 	t.Run("内容冲突落在报告里", func(t *testing.T) {
 		registry := &publicationRegistryDouble{declarationOutcome: ports.DeclarationContentConflict}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		declaration := application.DeliveryConditionDeclaration{Terms: deliveryTermsFor(t, "method-a")}
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.ServiceProductObject, "product-1", "v1"),
+			Spec:         deliveryConditionProductSpec(t, "product-1", "v1", declaration),
 			Approval:     publishApproval(t, "product-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{DeliveryConditions: &application.DeliveryConditionDeclaration{
-				Terms: deliveryTermsFor(t, "method-a"),
-			}},
+			Declarations: application.CommercialDeclarations{DeliveryConditions: &declaration},
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v", err)

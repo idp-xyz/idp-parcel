@@ -477,15 +477,22 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 			Effective:    body.Effective,
 		}
 	}
+	if content.ServiceProduct != nil && content.ServiceProduct.DeliveryConditions != nil {
+		// 本册唯一的正文是产品层交付条件（票 admin-write-faces/25）：载体上有这一节才交这一通道，没有就是这一版没有交付条件。
+		declarations.DeliveryConditions = deliveryConditionDeclarationOf(*content.ServiceProduct.DeliveryConditions)
+	}
 	if content.CustomerContract != nil {
 		body := content.CustomerContract
 		declarations.ContractContent = &ContractContentDeclaration{RulePackage: body.RulePackage, Bindings: body.Bindings}
-		// 合同级声明缺席就不交这一通道：载体上没说「要不要」，发布用例也不替它说。
+		// 合同级声明缺席就不交这一通道：载体上没说「要不要」，发布用例也不替它说。合同层交付条件同理。
 		if body.Control != nil {
 			declarations.PreAcceptanceControl = &PreAcceptanceControlInstruction{
 				Requirement: body.Control.Requirement,
 				Basis:       body.Control.Basis,
 			}
+		}
+		if body.DeliveryConditions != nil {
+			declarations.DeliveryConditions = deliveryConditionDeclarationOf(*body.DeliveryConditions)
 		}
 	}
 	if content.AuthorizationRule != nil {
@@ -562,4 +569,9 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 		}
 	}
 	return declarations
+}
+
+// deliveryConditionDeclarationOf 是 deliveryConditionBodyOf 的反向：载体上那一节折回发布用例的声明输入，字段一一对应。
+func deliveryConditionDeclarationOf(body domain.DeliveryConditionBody) *DeliveryConditionDeclaration {
+	return &DeliveryConditionDeclaration{Tightens: body.Tightens, Terms: body.Terms}
 }

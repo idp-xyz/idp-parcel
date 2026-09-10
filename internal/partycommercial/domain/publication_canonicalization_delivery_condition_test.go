@@ -124,9 +124,10 @@ func TestCustomerContractDeliveryConditionsAreAThirdOptionalLayer(t *testing.T) 
 	}
 }
 
-// Covers: 折成文档前过的是与发布时同一套门——层与册对不上（产品层带 tightens / 合同层缺 tightens）答
-// ErrDeliveryConditionOwner，零方式或规则引用缺席答 ErrDeliveryConditionNotConfigured，同方式两行答
-// ErrConflictingDeliveryCondition；服务产品正文冒客户合同的名照旧 kind 不符。
+// Covers: 折成文档前过的是与发布时同一套门（判据与发布用例按版本类别选层那一段同）——产品层带 tightens 答
+// ErrDeliveryConditionOwner（只有合同能收紧产品），合同层缺 tightens 答 ErrDeliveryConditionNotConfigured（合同层必须
+// 指名），零方式或规则引用缺席答 ErrDeliveryConditionNotConfigured，同方式两行答 ErrConflictingDeliveryCondition；
+// 服务产品正文冒客户合同的名照旧 kind 不符。
 func TestDeliveryConditionCanonicalizationRefusesWhatPublicationWouldRefuse(t *testing.T) {
 	product := &domain.ServiceProductBody{DeliveryConditions: productDeliveryConditions(t, "METHOD/in-person")}
 	_, err := domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CustomerContractObject, ServiceProduct: product})
@@ -163,8 +164,8 @@ func TestDeliveryConditionCanonicalizationRefusesWhatPublicationWouldRefuse(t *t
 	contract := customerContractBody(t, requiredControl(), appliedControl(t, "charge-prepaid"))
 	contract.DeliveryConditions = productDeliveryConditions(t, "METHOD/in-person")
 	_, err = domain.CanonicalizePublicationContent(domain.PublicationContent{Kind: domain.CustomerContractObject, CustomerContract: &contract})
-	if !errors.Is(err, domain.ErrDeliveryConditionOwner) {
-		t.Fatalf("contract layer without tightens: err = %v, want ErrDeliveryConditionOwner", err)
+	if !errors.Is(err, domain.ErrDeliveryConditionNotConfigured) {
+		t.Fatalf("contract layer without tightens: err = %v, want ErrDeliveryConditionNotConfigured", err)
 	}
 }
 

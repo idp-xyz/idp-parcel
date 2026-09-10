@@ -56,6 +56,13 @@ func customerContractContent(t *testing.T, declarations application.CommercialDe
 			Basis:       declarations.PreAcceptanceControl.Basis,
 		}
 	}
+	// 第三层（合同层交付条件，票 admin-write-faces/25）在场时一并折进：与另两层同一份正文、同一个摘要。
+	if declarations.DeliveryConditions != nil {
+		body.DeliveryConditions = &domain.DeliveryConditionBody{
+			Tightens: declarations.DeliveryConditions.Tightens,
+			Terms:    declarations.DeliveryConditions.Terms,
+		}
+	}
 	return domain.PublicationContent{Kind: domain.CustomerContractObject, CustomerContract: body}
 }
 

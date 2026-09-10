@@ -23,26 +23,28 @@ type DeliveryConditionBody struct {
 	Terms    DeliveryConditionTerms
 }
 
-// validate 在折成文档前把这一节过一遍与发布时相同的门。层要与拥有它的册对得上：产品层带 tightens、合同层缺
-// tightens 都是把一层声明挂到另一册上，答 ErrDeliveryConditionOwner（发布用例那一路对着已生效版本也是这一格）；
-// 三格齐、方式至少一种且不重由 declareDeliveryConditions 同一处判，不另造校验。「只能收紧」不在这里：那要产品层在手，
-// 归持久化写口（pc-gaps/11 判断题 1）——预览与批准那两步因此看不出放宽，发布那一步才拒。
+// validate 在折成文档前把这一节过一遍与发布时相同的门，判据与发布用例按版本类别选层那一段逐字同：客户合同版本走合同层
+// ——缺 tightens 是声明缺件（ErrDeliveryConditionNotConfigured，合同层必须指名所收紧的产品版本）；服务产品版本走产品层
+// ——带 tightens 是类别错误（ErrDeliveryConditionOwner，只有合同能收紧产品）；两册之外没有交付条件可挂。三格齐、方式至少
+// 一种且不重由 declareDeliveryConditions 同一处判，不另造校验。「只能收紧」不在这里：那要产品层在手，归持久化写口
+// （pc-gaps/11 判断题 1）——预览与批准那两步因此看不出放宽，发布那一步才拒。
 func (body DeliveryConditionBody) validate(register CommercialObjectKind) error {
-	if body.Tightens != nil {
-		if register != CustomerContractObject {
-			return ErrDeliveryConditionOwner
-		}
-		if !body.Tightens.valid() {
+	switch register {
+	case CustomerContractObject:
+		if body.Tightens == nil || !body.Tightens.valid() {
 			return ErrDeliveryConditionNotConfigured
 		}
 		_, err := declareDeliveryConditions(CommercialVersion{}, *body.Tightens, body.Terms)
 		return err
-	}
-	if register != ServiceProductObject {
+	case ServiceProductObject:
+		if body.Tightens != nil {
+			return ErrDeliveryConditionOwner
+		}
+		_, err := declareDeliveryConditions(CommercialVersion{}, TightenedProductVersion{}, body.Terms)
+		return err
+	default:
 		return ErrDeliveryConditionOwner
 	}
-	_, err := declareDeliveryConditions(CommercialVersion{}, TightenedProductVersion{}, body.Terms)
-	return err
 }
 
 // canonicalDeliveryConditions 镜像批文 deliveryConditionDocument 的键名。方式按引用字面的稳定顺序写出——表单里换
