@@ -333,7 +333,7 @@ func TestTheClosurePathAdoptsAFailureFinalAcrossAllTransactions(t *testing.T) {
 // 与 `AT-PS-100`「两格已判出但终局规则声明尚未包含面单渠道服务 → 保持终局未决」：取消在先不走
 // 采用路径；终局规则的实例半边——租户未登记终局规则声明（PAR-COM-17）时，采用路径如实停在
 // FINAL_RULE_UNCONFIGURED，判断本身仍交回（机制半边可测）。声明已登而缺面单两行是另一格：
-// 「此产品下这种结果不形成终局」，走 FINAL_RULE_NOT_SATISFIED_YET，译法钉在 adapters/partycommercial
+// 「此产品下这种结果不形成终局」，未决原因是 FinalRuleNotSatisfiedYet，译法钉在 adapters/partycommercial
 // 的 TestFinalJudgmentTranslatesLabelServiceRows（pc-gaps/12 之后 PC 词汇表有这两行，未配置只剩没登这一种来源）。
 func TestCancellationAndUnconfiguredRulesStopTheLabelServiceFinalHonestly(t *testing.T) {
 	t.Run("a standing cancellation is not overridden", func(t *testing.T) {
