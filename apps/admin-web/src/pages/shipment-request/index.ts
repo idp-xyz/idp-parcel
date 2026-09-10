@@ -15,6 +15,9 @@ export { LabelTransactionsPage } from './LabelTransactionsPage';
 // 接受前人工复核工作流(队列与单案读 GET /acceptance-review-queue,复核完成与拒绝两个命令)。
 // 曾落在 pages/governance/,现已归位本目录——主责上下文是小包托运,读写面与其余页同住 api.ts。
 export { AcceptanceReviewPage } from './AcceptanceReviewPage';
+// 授权处置工作流(队列读 GET /authorized-disposition-queue,单份复用复核队列分支,两去向打
+// POST /shipment-requests/authorized-dispositions;票 sa-preacceptance-policy-view/05,ADR-0132)。
+export { AuthorizedDispositionPage } from './AuthorizedDispositionPage';
 export { configureShipmentRequestApi } from './api';
 export type {
   ApiResult,

@@ -17,9 +17,9 @@ import {
   type AcceptanceReviewQueueEntry,
   type AcceptanceReviewQueueListResponseBody,
   type ApiResult,
-  type RecordedJudgmentsRecord,
   type ReviewStatusRecord,
 } from './api';
+import { recordedJudgmentsBlock } from './recorded-judgments';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['acceptance-review'];
@@ -149,50 +149,6 @@ function caseDetailFields(body: AcceptanceReviewCaseResponseBody): DetailField[]
     });
   }
   return fields;
-}
-
-/**
- * 已记录的权威判断。复核角色审的正是这批行，所以三组各自缺席时如实说「尚未形成」——
- * 财务控制与采用解析整格缺席是端点的约定（不造空结果冒充判断过），折成「无」会让
- * 「问过了，答案是没有」与「还没问」在同一句话里分不开。
- */
-function recordedJudgmentsBlock(recorded: RecordedJudgmentsRecord) {
-  return (
-    <div className="flex flex-col gap-2 text-[12px]">
-      <div>
-        <span className="text-idpxyz-textMuted">可达性判断</span>
-        {recorded.reachability.length === 0 ? (
-          <p className="mt-1 text-idpxyz-textMuted">尚未形成。</p>
-        ) : (
-          <ul className="mt-1 flex flex-col gap-0.5">
-            {recorded.reachability.map((row) => (
-              <li key={`${row.parcelId}:${row.judgmentId ?? row.basis ?? row.value}`}>
-                <span className="font-mono">{row.parcelId}</span>
-                {' · '}
-                <span className="font-mono">{row.value}</span>
-                {row.basis ? ` · 依据 ${row.basis}` : ''}
-                {row.asOfAt ? ` · 截至 ${formatInstant(row.asOfAt)}` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div>
-        <span className="text-idpxyz-textMuted">财务控制</span>
-        <p className="mt-1">
-          {recorded.financialControl
-            ? `${recorded.financialControl.outcome}${
-                recorded.financialControl.basis ? ` · 依据 ${recorded.financialControl.basis}` : ''
-              }`
-            : '尚未形成。'}
-        </p>
-      </div>
-      <div>
-        <span className="text-idpxyz-textMuted">采用商务解析</span>
-        <p className="mt-1 font-mono">{recorded.adoptedResolutionId ?? '尚未形成。'}</p>
-      </div>
-    </div>
-  );
 }
 
 /** 复核留痕进审计区：这是后端事实，不是页面加工出来的展示语义。 */
