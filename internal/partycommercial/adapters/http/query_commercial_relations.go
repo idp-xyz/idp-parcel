@@ -127,18 +127,22 @@ type customerContractListResponse struct {
 // **有正文行零绑定**在「零绑定」上撞成同一个可观察签名,而两者的恢复动作相反(前者
 // 去登记正文,后者无事可做——那份合同就是没对任何费用范围作约定)。把这个区别做进
 // 结构,读的人不必去分辨;0012 迁移专门用父子两表表达的就是它。
+//
+// deliveryConditions 是合同层交付条件那一节(0030;票 admin-write-faces/25),与正文是两层各自可缺:
+// 缺席即这一版没有合同层声明,不由 contentRegistered 推,也不反过来推它。
 type customerContractBody struct {
-	ObjectID          string               `json:"objectId"`
-	Version           string               `json:"version"`
-	Scope             string               `json:"scope"`
-	Status            string               `json:"status"`
-	EffectiveStartsAt string               `json:"effectiveStartsAt"`
-	EffectiveEndsAt   string               `json:"effectiveEndsAt,omitempty"`
-	PublishedAt       string               `json:"publishedAt"`
-	ContentRegistered bool                 `json:"contentRegistered"`
-	RulePackageID     string               `json:"rulePackageId,omitempty"`
-	DeclaredAt        string               `json:"declaredAt,omitempty"`
-	Bindings          []controlBindingBody `json:"bindings"`
+	ObjectID           string                 `json:"objectId"`
+	Version            string                 `json:"version"`
+	Scope              string                 `json:"scope"`
+	Status             string                 `json:"status"`
+	EffectiveStartsAt  string                 `json:"effectiveStartsAt"`
+	EffectiveEndsAt    string                 `json:"effectiveEndsAt,omitempty"`
+	PublishedAt        string                 `json:"publishedAt"`
+	ContentRegistered  bool                   `json:"contentRegistered"`
+	RulePackageID      string                 `json:"rulePackageId,omitempty"`
+	DeclaredAt         string                 `json:"declaredAt,omitempty"`
+	Bindings           []controlBindingBody   `json:"bindings"`
+	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
 }
 
 // controlBindingBody 里 policyId 与 basis 恰有一个在场,与库上 CHECK 同形;装载口
@@ -151,14 +155,15 @@ type controlBindingBody struct {
 
 func customerContractBodyOf(row ports.CustomerContractCatalogueRow) customerContractBody {
 	body := customerContractBody{
-		ObjectID:          row.ObjectID,
-		Version:           row.VersionLabel,
-		Scope:             row.Scope,
-		Status:            row.Status,
-		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
-		PublishedAt:       rfc3339(row.PublishedAt),
-		ContentRegistered: row.HasContent,
-		Bindings:          make([]controlBindingBody, 0, len(row.Bindings)),
+		ObjectID:           row.ObjectID,
+		Version:            row.VersionLabel,
+		Scope:              row.Scope,
+		Status:             row.Status,
+		EffectiveStartsAt:  rfc3339(row.EffectiveStartsAt),
+		PublishedAt:        rfc3339(row.PublishedAt),
+		ContentRegistered:  row.HasContent,
+		Bindings:           make([]controlBindingBody, 0, len(row.Bindings)),
+		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)

@@ -42,7 +42,70 @@ func requirePositiveLimit(operation string, limit int) error {
 	return nil
 }
 
-// ListServiceProducts 上列服务产品版本(壳)并左连接形态册。
+// deliveryConditionColumns 是两条目录查询共用的交付条件一节:0030 父行的两条规则引用、所收紧的产品版本与声明时刻,
+// 方式子表以相关子查询各聚各的(与 ListAcceptanceRulePackages 同一条理由:与别的子表并列 LEFT JOIN 会互相做笛卡尔积)。
+// 父表按主键左连接到版本上、至多一行,不产生扇出;recipient_scope_rule_ref 在父表上 NOT NULL,它的在场即这一层的在场。
+// 调用方在 FROM 里以别名 delivery 左连接 0030 父表。
+const deliveryConditionColumns = `
+		        delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
+		        delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at,
+		        (SELECT COALESCE(json_agg(method.method_ref ORDER BY method.method_ref), '[]'::json)
+		           FROM party_commercial.delivery_condition_method AS method
+		          WHERE method.tenant_id     = delivery.tenant_id
+		            AND method.object_kind   = delivery.object_kind
+		            AND method.object_id     = delivery.object_id
+		            AND method.version_label = delivery.version_label)`
+
+const deliveryConditionJoin = `
+		   LEFT JOIN party_commercial.delivery_condition AS delivery
+		          ON delivery.tenant_id     = version.tenant_id
+		         AND delivery.object_kind   = version.object_kind
+		         AND delivery.object_id     = version.object_id
+		         AND delivery.version_label = version.version_label`
+
+// deliveryConditionScan 是与 deliveryConditionColumns 同序的扫描目标。
+type deliveryConditionScan struct {
+	recipientScope  *string
+	proofOfDelivery *string
+	tightensObject  *string
+	tightensVersion *string
+	declaredAt      *time.Time
+	methodsJSON     []byte
+}
+
+func (scan *deliveryConditionScan) targets() []any {
+	return []any{&scan.recipientScope, &scan.proofOfDelivery, &scan.tightensObject, &scan.tightensVersion, &scan.declaredAt, &scan.methodsJSON}
+}
+
+// row 把扫到的一节折成目录行上的可缺格:父行缺席答 nil(这一版没有交付条件),在场则方式集合与规则引用照字面转写。
+// 父行在场而方式为空在内容读口是坏数据,目录上列如实交回空集合——上列不重建领域对象,拦坏数据仍归内容读口。
+func (scan deliveryConditionScan) row() (*ports.DeliveryConditionCatalogueRow, error) {
+	if scan.recipientScope == nil {
+		return nil, nil
+	}
+	row := &ports.DeliveryConditionCatalogueRow{RecipientScopeRule: *scan.recipientScope}
+	if scan.proofOfDelivery != nil {
+		row.ProofOfDeliveryRule = *scan.proofOfDelivery
+	}
+	if scan.tightensObject != nil {
+		row.TightensObjectID = *scan.tightensObject
+	}
+	if scan.tightensVersion != nil {
+		row.TightensVersion = *scan.tightensVersion
+	}
+	if scan.declaredAt != nil {
+		row.DeclaredAt = *scan.declaredAt
+	}
+	if err := json.Unmarshal(scan.methodsJSON, &row.Methods); err != nil {
+		return nil, fmt.Errorf("delivery condition methods: %w", err)
+	}
+	if row.Methods == nil {
+		row.Methods = []string{}
+	}
+	return row, nil
+}
+
+// ListServiceProducts 上列服务产品版本(壳)并左连接形态册与交付条件册(0030 产品层)。
 //
 // 上列对象是版本壳而不是形态行,理由在 ports.ServiceProductCatalogueRow 上;装载
 // 方向与 LoadForScope 同派(0008 迁移自注:装载由 commercial_version 侧驱动)。
@@ -63,13 +126,13 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 	rows, err := querier.Query(ctx,
 		`SELECT version.object_id, version.version_label, version.scope_ref, version.status,
 		        version.effective_starts_at, version.effective_ends_at, version.published_at,
-		        product.form
+		        product.form,`+deliveryConditionColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
 		          ON product.tenant_id     = version.tenant_id
 		         AND product.object_kind   = version.object_kind
 		         AND product.object_id     = version.object_id
-		         AND product.version_label = version.version_label
+		         AND product.version_label = version.version_label`+deliveryConditionJoin+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
@@ -89,10 +152,12 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 		var status int16
 		var endsAt *time.Time
 		var form *string
-		if err := rows.Scan(
+		var delivery deliveryConditionScan
+		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt, &form,
-		); err != nil {
+		}, delivery.targets()...)
+		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list service products: %w", err)
 		}
 		statusWord := domain.CommercialVersionStatus(status).String()
@@ -107,6 +172,9 @@ func (catalogue *OperationsCatalogue) ListServiceProducts(
 		if form != nil {
 			row.Form = *form
 			row.HasForm = true
+		}
+		if row.DeliveryConditions, err = delivery.row(); err != nil {
+			return nil, fmt.Errorf("list service products: %w", err)
 		}
 		catalogueRows = append(catalogueRows, row)
 	}
@@ -543,14 +611,15 @@ func (catalogue *OperationsCatalogue) ListAsOfPolicyDeclarations(
 	return declarationRows, nil
 }
 
-// ListCustomerContracts 上列客户合同版本(壳),左连接正文册与控制约定册。
+// ListCustomerContracts 上列客户合同版本(壳),左连接正文册、控制约定册与交付条件册(0030 合同层)。
 //
-// 三张表一条语句取回,不分两次:ReadExecutor 不保证两条语句同一快照,分次会拼出
+// 四张表一条语句取回,不分两次:ReadExecutor 不保证两条语句同一快照,分次会拼出
 // 从未同时存在的壳/正文/绑定组合(与 ListAcceptanceRulePackages 同一条理由)。
 //
 // 两级 LEFT JOIN 的第二级挂在**正文**上而不是壳上,这不是写法偏好:0012 的外键
 // 就是绑定→正文,挂壳上会在正文缺席时把绑定行也带进来,而那种行库上根本不存在,
-// 读出来只会是一份自相矛盾的证据。
+// 读出来只会是一份自相矛盾的证据。交付条件父表按主键挂在壳上(与正文各自可缺,是两层),
+// 方式子表走相关子查询——与约定行并列 LEFT JOIN 会互相做笛卡尔积。
 func (catalogue *OperationsCatalogue) ListCustomerContracts(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -578,7 +647,7 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		                ORDER BY binding.charge_scope_ref
 		            ) FILTER (WHERE binding.charge_scope_ref IS NOT NULL),
 		            '[]'::json
-		        )
+		        ),`+deliveryConditionColumns+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.customer_contract_content AS content
 		          ON content.tenant_id     = version.tenant_id
@@ -589,12 +658,15 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		          ON binding.tenant_id     = content.tenant_id
 		         AND binding.object_kind   = content.object_kind
 		         AND binding.object_id     = content.object_id
-		         AND binding.version_label = content.version_label
+		         AND binding.version_label = content.version_label`+deliveryConditionJoin+`
 		  WHERE version.tenant_id   = $1
 		    AND version.object_kind = $2
 		  GROUP BY version.object_id, version.version_label, version.scope_ref, version.status,
 		           version.effective_starts_at, version.effective_ends_at, version.published_at,
-		           content.rule_package_id, content.declared_at
+		           content.rule_package_id, content.declared_at,
+		           delivery.tenant_id, delivery.object_kind, delivery.object_id, delivery.version_label,
+		           delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
+		           delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at
 		  ORDER BY version.published_at DESC, version.object_id, version.version_label
 		  LIMIT $3`,
 		tenant.String(),
@@ -614,11 +686,13 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 		var rulePackage *string
 		var declaredAt *time.Time
 		var bindingsJSON []byte
-		if err := rows.Scan(
+		var delivery deliveryConditionScan
+		targets := append([]any{
 			&row.ObjectID, &row.VersionLabel, &row.Scope, &status,
 			&row.EffectiveStartsAt, &endsAt, &row.PublishedAt,
 			&rulePackage, &declaredAt, &bindingsJSON,
-		); err != nil {
+		}, delivery.targets()...)
+		if err := rows.Scan(targets...); err != nil {
 			return nil, fmt.Errorf("list customer contracts: %w", err)
 		}
 		statusWord := domain.CommercialVersionStatus(status).String()
@@ -644,6 +718,9 @@ func (catalogue *OperationsCatalogue) ListCustomerContracts(
 			return nil, fmt.Errorf("list customer contracts: %w", err)
 		}
 		row.Bindings = bindings
+		if row.DeliveryConditions, err = delivery.row(); err != nil {
+			return nil, fmt.Errorf("list customer contracts: %w", err)
+		}
 		contractRows = append(contractRows, row)
 	}
 	if err := rows.Err(); err != nil {

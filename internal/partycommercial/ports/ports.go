@@ -1200,17 +1200,35 @@ type AuthorityGrantStore interface {
 // HasEffectiveEnd 为假即开放结束。用显式布尔而不是零值判断:零时刻是一个合法的
 // 绝对时刻,拿它兼作「没有终点」会让补历史的区间读不出来。HasForm 同理:形态未登记
 // 与登记了空形态必须可分辨,后者在库上进不来,前者是本行的常态。
+//
+// DeliveryConditions 是这一版声明过的产品层交付条件(0030,ADR-0133 决定四;票
+// admin-write-faces/25 裁读回折进目录行),nil 即这一版没有交付条件——判据同 HasForm:
+// 缺席是合法的常态,不拿零值兼作「没有」。
 type ServiceProductCatalogueRow struct {
-	ObjectID          string
-	VersionLabel      string
-	Scope             string
-	Status            string
-	EffectiveStartsAt time.Time
-	EffectiveEndsAt   time.Time
-	HasEffectiveEnd   bool
-	PublishedAt       time.Time
-	Form              string
-	HasForm           bool
+	ObjectID           string
+	VersionLabel       string
+	Scope              string
+	Status             string
+	EffectiveStartsAt  time.Time
+	EffectiveEndsAt    time.Time
+	HasEffectiveEnd    bool
+	PublishedAt        time.Time
+	Form               string
+	HasForm            bool
+	DeliveryConditions *DeliveryConditionCatalogueRow
+}
+
+// DeliveryConditionCatalogueRow 是目录行上可缺的一节:某一版(服务产品版本的产品层,或客户
+// 合同版本的合同层)声明过的交付条件——允许的方式集合(按引用字面稳定序)、两条规则引用与
+// 声明时刻。TightensObjectID / TightensVersion 只在合同层在场:所收紧的服务产品版本(库上
+// 由 CHECK 按层钉住)。目录上列只呈现不重建领域对象,方式与规则引用照登记的字面转写。
+type DeliveryConditionCatalogueRow struct {
+	Methods             []string
+	RecipientScopeRule  string
+	ProofOfDeliveryRule string
+	TightensObjectID    string
+	TightensVersion     string
+	DeclaredAt          time.Time
 }
 
 // ServiceProductCatalogueRead 是服务产品目录的伴生列表读端口(ADR-0077):管理台
@@ -1566,19 +1584,22 @@ type ControlBindingRow struct {
 // 且对任何费用范围都没作约定,与前者的恢复动作完全不同(前者去登记正文,后者无事
 // 可做)。两态在「零绑定」上撞成同一个可观察签名,只有这个布尔分得开。
 // RulePackageID 同理只在 HasContent 为真时有意义:它必存于正文行(库上 NOT NULL)。
+// DeliveryConditions 是这一版的合同层交付条件(0030,票 admin-write-faces/25),nil 即这一版
+// 没有合同层声明;它与 0012 正文是两层、各自可缺,不拿一层的在场推另一层。
 type CustomerContractCatalogueRow struct {
-	ObjectID          string
-	VersionLabel      string
-	Scope             string
-	Status            string
-	EffectiveStartsAt time.Time
-	EffectiveEndsAt   time.Time
-	HasEffectiveEnd   bool
-	PublishedAt       time.Time
-	RulePackageID     string
-	DeclaredAt        time.Time
-	HasContent        bool
-	Bindings          []ControlBindingRow
+	ObjectID           string
+	VersionLabel       string
+	Scope              string
+	Status             string
+	EffectiveStartsAt  time.Time
+	EffectiveEndsAt    time.Time
+	HasEffectiveEnd    bool
+	PublishedAt        time.Time
+	RulePackageID      string
+	DeclaredAt         time.Time
+	HasContent         bool
+	Bindings           []ControlBindingRow
+	DeliveryConditions *DeliveryConditionCatalogueRow
 }
 
 // SupplierAgreementCatalogueRow 是供应商协议目录上列的一行:一份已入册的供应商

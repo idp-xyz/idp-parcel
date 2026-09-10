@@ -71,26 +71,62 @@ type serviceProductListResponse struct {
 
 // serviceProductBody 逐字段透出版本壳与形态。form 缺席即形态未登记——那是合法
 // 缺席(ADR-0050:产品缺席不使解析退化),不是缺陷,不得为目录齐整补一个宽泛值;
-// effectiveEndsAt 缺席即开放结束。
+// effectiveEndsAt 缺席即开放结束。deliveryConditions 缺席即这一版没有产品层交付条件
+// (0030;票 admin-write-faces/25 裁读回折进目录行),同一条纪律:页面先看键在不在,
+// 不拿空数组兼作「没有」。
 type serviceProductBody struct {
-	ObjectID          string `json:"objectId"`
-	Version           string `json:"version"`
-	Scope             string `json:"scope"`
-	Status            string `json:"status"`
-	EffectiveStartsAt string `json:"effectiveStartsAt"`
-	EffectiveEndsAt   string `json:"effectiveEndsAt,omitempty"`
-	PublishedAt       string `json:"publishedAt"`
-	Form              string `json:"form,omitempty"`
+	ObjectID           string                 `json:"objectId"`
+	Version            string                 `json:"version"`
+	Scope              string                 `json:"scope"`
+	Status             string                 `json:"status"`
+	EffectiveStartsAt  string                 `json:"effectiveStartsAt"`
+	EffectiveEndsAt    string                 `json:"effectiveEndsAt,omitempty"`
+	PublishedAt        string                 `json:"publishedAt"`
+	Form               string                 `json:"form,omitempty"`
+	DeliveryConditions *deliveryConditionBody `json:"deliveryConditions,omitempty"`
+}
+
+// deliveryConditionBody 是目录行上可缺的那一节交付条件,键名镜像受控批文 deliveryConditions
+// (方式集合 / 收件范围规则引用 / 交付证明规则引用 / 仅合同层的 tightens)外加声明时刻。
+// 方式按登记册交回的稳定序照列;空集合交回 [] 不交 null——那一节在场就有它的数组。
+type deliveryConditionBody struct {
+	Tightens            *tightenedProductBody `json:"tightens,omitempty"`
+	Methods             []string              `json:"methods"`
+	RecipientScopeRule  string                `json:"recipientScopeRule"`
+	ProofOfDeliveryRule string                `json:"proofOfDeliveryRule"`
+	DeclaredAt          string                `json:"declaredAt"`
+}
+
+type tightenedProductBody struct {
+	ObjectID string `json:"objectId"`
+	Version  string `json:"version"`
+}
+
+func deliveryConditionBodyOf(row *ports.DeliveryConditionCatalogueRow) *deliveryConditionBody {
+	if row == nil {
+		return nil
+	}
+	body := &deliveryConditionBody{
+		Methods:             append([]string{}, row.Methods...),
+		RecipientScopeRule:  row.RecipientScopeRule,
+		ProofOfDeliveryRule: row.ProofOfDeliveryRule,
+		DeclaredAt:          rfc3339(row.DeclaredAt),
+	}
+	if row.TightensObjectID != "" || row.TightensVersion != "" {
+		body.Tightens = &tightenedProductBody{ObjectID: row.TightensObjectID, Version: row.TightensVersion}
+	}
+	return body
 }
 
 func serviceProductBodyOf(row ports.ServiceProductCatalogueRow) serviceProductBody {
 	body := serviceProductBody{
-		ObjectID:          row.ObjectID,
-		Version:           row.VersionLabel,
-		Scope:             row.Scope,
-		Status:            row.Status,
-		EffectiveStartsAt: rfc3339(row.EffectiveStartsAt),
-		PublishedAt:       rfc3339(row.PublishedAt),
+		ObjectID:           row.ObjectID,
+		Version:            row.VersionLabel,
+		Scope:              row.Scope,
+		Status:             row.Status,
+		EffectiveStartsAt:  rfc3339(row.EffectiveStartsAt),
+		PublishedAt:        rfc3339(row.PublishedAt),
+		DeliveryConditions: deliveryConditionBodyOf(row.DeliveryConditions),
 	}
 	if row.HasEffectiveEnd {
 		body.EffectiveEndsAt = rfc3339(row.EffectiveEndsAt)
