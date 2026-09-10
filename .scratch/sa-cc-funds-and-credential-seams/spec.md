@@ -1,7 +1,7 @@
 # `settlement-accounting` ↔ `customs-compliance` 资金与凭证那条缝：七张机制半边的票
 
 Category: chore
-Status: in-progress——2026-09-10 15:1x 通道 4 立目录与七张子票（全部 draft，task-9880bbc9）；子票全 resolved 本 spec 才 resolved。只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）把十三条「要裁的」全部写入各票「裁决」小节（B 类四条落 [ADR-0137](../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md)），01–07 转 ready-for-agent（03 等 02、07 步二等 10），另立 08 / 09 / 10（09 ready-for-agent 等 05；08 / 10 draft 各有要裁的）。此前 in-progress——2026-09-10 15:1x 通道 4 立目录与七张子票（全部 draft，task-9880bbc9）；子票全 resolved 本 spec 才 resolved。只写票面未动代码；取证锚 `3f485e97`
 
 ## 从哪里分出来
 
@@ -35,7 +35,10 @@ Status: in-progress——2026-09-10 15:1x 通道 4 立目录与七张子票（�
 | [04](issues/04-cc-credential-gate-persists-in-readiness-assessment.md) | UC-CC-003 步 7「记录凭证门禁」的持久化 | CC | 无 |
 | [05](issues/05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md) | UC-CC-009 核对向 SA 的交接（outbox 意图） | CC | 无 |
 | [06](issues/06-cc-release-gate-reads-duty-payment-verification.md) | 放行门禁核对读付款核对 | CC | 无 |
-| [07](issues/07-cc-credential-and-duty-reconciliation-registration-faces.md) | 凭证 / 协作 / 资金事实 / 付款核对的在线登记面（CLI 与端点） | CC | 无（要裁 CLI 还是端点，见票） |
+| [07](issues/07-cc-credential-and-duty-reconciliation-registration-faces.md) | 凭证 / 协作 / 付款核对三册的在线登记面（CLI + 端点 + 管理台；资金事实人工口按 ADR-0137 决定四去掉） | CC | 步二 Blocked by 10；步一不阻 |
+| [08](issues/08-sa-evaluation-request-orchestration-records-source-references.md) | UC-SA-002 步 2 请求评价编排——评价请求记下三件合格来源引用（01 裁 (c) 时另立） | SA | 无（要裁两条，见票） |
+| [09](issues/09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) | SA inbox 消费付款核对信封 → `AssessAdvanceRecoveryHandler`（05 裁「本目录加一张」） | SA | 05 |
+| [10](issues/10-cc-credential-collaboration-and-verification-read-faces.md) | 凭证 / 协作 / 付款核对三册的读面（伴生列表读口 + 查阅端点 + 管理台读签；07 裁「读面另立」） | CC | 无（要裁一条呈现落点，见票） |
 
 **留空位、不立票的一件**：放行层的代码映射 `PAR-CUS-01/02`（`receive_external_result.go` 注释「真实代码映射属实例半边，没有它接入侧拆不出种类」）——登记册待提供，到位后接入侧译装出 `ReleaseContent`，编排不改。它在这里只占一行，不成票。
 
@@ -49,3 +52,4 @@ Status: in-progress——2026-09-10 15:1x 通道 4 立目录与七张子票（�
 ## Comments
 
 - 2026-09-10 · 通道 4：立目录（task-9880bbc9）。七张子票的「要裁的」条数汇总见完工报；为零的由推送方直接转 ready-for-agent。
+- 2026-09-10 · 通道 5（task-9a2ff746）：十三条要裁的分类（task-b941ce87：A 7 / B 5 / C 1）→ 用户 17:0x 授权后 B 类四条落 ADR-0137（六条越权风险点供 CC / SA owner 复核），A 类七条与 01-1 (c)、07-1 B 照推送方裁决写入各票「裁决」；立 08 / 09 / 10、子票表补三行。**只写 .md，未动代码。**
