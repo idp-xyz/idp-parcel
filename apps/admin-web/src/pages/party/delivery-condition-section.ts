@@ -76,10 +76,16 @@ export function deliveryConditionFieldPaths(root: string, draft: DeliveryConditi
 }
 
 /**
- * 组件里显 Problems 的路径表（票 22 判据 3），按 DeliveryConditionFields 的 JSX 逐处抄：节根一处 Problems；两条规则引用各一
- * Field；方式文本框下按项号汇显 methods[i]；合同层 tightens 两格各一 Field、根由对象标识那格代显（alsoPaths）。与上面的认领表
- * 由 publication-form-rendered-paths.test.ts 比对——改 JSX 里的 path 要同步改这里。
+ * 组件里显 Problems 的路径表（票 22 判据 3），按 DeliveryConditionFields 的 JSX 逐处抄、按 JSX 顺序排：节根一处 Problems；
+ * 合同层 tightens 两格各一 Field、根由对象标识那格代显（alsoPaths）；方式文本框下按项号汇显 methods[i]（文本框那个 Field
+ * 自己的 path 是占位的 methods[i]，不算一条路径）；两条规则引用各一 Field。它与上面的认领表**各写各的**，由
+ * publication-form-rendered-paths.test.ts 比对——写成一行别名会让那份比对对本节恒真（票 admin-write-faces/26 ②）；改 JSX
+ * 里的 path 要同步改这里。
  */
 export function deliveryConditionRenderedPaths(root: string, draft: DeliveryConditionDraft, layer: DeliveryConditionLayer): string[] {
-  return deliveryConditionFieldPaths(root, draft, layer);
+  const paths = [root];
+  if (layer === 'contract') paths.push(`${root}.tightens.objectId`, `${root}.tightens`, `${root}.tightens.version`);
+  methodLinesOf(draft.methodsText).forEach((_, index) => paths.push(`${root}.methods[${index}]`));
+  paths.push(`${root}.recipientScopeRule`, `${root}.proofOfDeliveryRule`);
+  return paths;
 }

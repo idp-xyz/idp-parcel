@@ -75,6 +75,8 @@ test('认领路径随方式行数与层长；渲染表与认领表一致', () =>
     `${contractRoot}.tightens.objectId`,
     `${contractRoot}.tightens.version`,
   ]);
-  deepEqual(deliveryConditionRenderedPaths(root, draft, 'product'), deliveryConditionFieldPaths(root, draft, 'product'));
-  deepEqual(deliveryConditionRenderedPaths(contractRoot, draft, 'contract'), deliveryConditionFieldPaths(contractRoot, draft, 'contract'));
+  // 渲染表按 JSX 顺序、认领表按载荷顺序，两表各写各的（票 26 ②），比的是同一个集合，不比顺序。
+  const sorted = (paths: string[]) => [...paths].sort();
+  deepEqual(sorted(deliveryConditionRenderedPaths(root, draft, 'product')), sorted(deliveryConditionFieldPaths(root, draft, 'product')));
+  deepEqual(sorted(deliveryConditionRenderedPaths(contractRoot, draft, 'contract')), sorted(deliveryConditionFieldPaths(contractRoot, draft, 'contract')));
 });
