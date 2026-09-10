@@ -237,6 +237,13 @@
 # party-commercial 2 不变），只对该检出成立——下一个改名单的人照旧在自己那一刻的 HEAD 上重取。**parcel-shipment 这一组
 # 至此清空**，与 TF / VE / SA / CC / PP 各组清空时同一句：名单清空只判名单清空，本门禁只量导出工厂。
 #
+# 2026-09-10 随 ps-port-remainder/06（MCP-2）**新增**一条 ParseDeliveryPlaceReference（PS 组，理由写在那一行上方）。
+# 量在隔离 worktree 上（分支 mcp2-psr06，不含任何人的在途改动，动手前 `git status -- internal/architecture/` 为空）：
+# `git show` 取父提交 `eed326c5` 的本文件两法同得加前 **2**，本笔单独作用于其上加后 **3**（parcel-shipment 0→1，
+# party-commercial 2 不变）——两法是 UTF-8 逐行读后滤非空非注释，与 `git grep -c '^internal/'` 在字节层数行首。
+# 两个数只对该检出成立；同期 nr/03（mcp5-nr03）也在改本文件一行，两笔谁先进 main 都会让另一笔的「加前」不再是 tip
+# 的真值——本笔重放进 main 时父提交若不是 eed326c5，下一个改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -300,6 +307,16 @@
 # **剪之前按本门禁的提示分过三种成因**：这个名字在全仓只有一处声明（domain/
 # channel_candidate_cost.go）、一处非测试调用点（上述编排），其余命中全在测试里，
 # 因此不是「别处同名声明造成误判」那一种，是真的接上了。
+#
+# 收件地点引用规范串的重建门（ADR-0130 决定一「串自带形状版本……四段之外不多一字」；ADR-0028 重建只校验
+# 不重算；票 ps-port-remainder/06）。它该有的调用方是「按引用解析回地址内容」的读面——ADR-0130 Consequences
+# 第三条点名的第二个消费方，有自己的授权作用域问题（PS CONTEXT「授权查询作用域」），届时另立票；那个读面
+# 落地那天这一行出名单。今天没有生产路径解析这个串：提供方读口（ports.DeliveryPlaceReferenceView）从聚合
+# 造引用、只交 String()，消费方 TF 按 ADR-0130 只当不透明串存进 AttemptPlaceReference、不得解析。
+# 同票的 NewDeliveryPlaceReference / NewSourceDataVersionAnchor / NewAcceptanceBaselineAnchor 按名字被门禁跳过
+# （`New` 前缀）；DeliveryPlaceDataGroup / DeliveryPlaceReferenced / DeliveryPlaceUndeterminedResolution /
+# NoDeliveryPlaceResolution 由同包 ShipmentRequest.DeliveryPlaceReferenceFor 调用（包内裸标识符算引用），不在名单上。
+internal/parcelshipment/domain ParseDeliveryPlaceReference
 
 
 # —— visibility-exception ——
