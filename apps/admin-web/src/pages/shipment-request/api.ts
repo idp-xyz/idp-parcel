@@ -226,6 +226,20 @@ export interface ReviewReachabilityRecord {
   asOfPolicyVersion?: string;
 }
 
+/**
+ * 已记录的接受前财务控制里的一项控制。后两格是受限项上的采用引用(ADR-0132 决定三、四):
+ * 策略正文登记的失败处置与责任引用,只在受限项采用过时在场——成立项与采用之前记下的受限项两格
+ * 缺席,服务端照实透出不补造,页面同样不写「无」冒充登记过。
+ */
+export interface ReviewControlItemRecord {
+  kind: string;
+  order: number;
+  conclusion: string;
+  basis?: string;
+  failureDisposition?: string;
+  responsibility?: string;
+}
+
 export interface ReviewFinancialControlRecord {
   outcome: string;
   resultId?: string;
@@ -233,6 +247,8 @@ export interface ReviewFinancialControlRecord {
   asOfAt?: string;
   asOfSemantics?: string;
   asOfPolicyVersion?: string;
+  /** 逐项控制项结果,空数组而不是缺席;`明确无控制`没有项,照实为空。 */
+  items: ReviewControlItemRecord[];
 }
 
 /** 财务控制与采用解析尚未形成时整格缺席——不造「空结果」冒充判断过。 */
@@ -247,6 +263,72 @@ export interface AcceptanceReviewCaseResponseBody {
   request: ShipmentRequestDetail;
   review: ReviewStatusRecord;
   recordedJudgments: RecordedJudgmentsRecord;
+}
+
+// ---- 授权处置队列与处置命令的响应形状(票 sa-preacceptance-policy-view/05;ADR-0132) ----
+//
+// 队列列的是「当前停在`等待授权处置`」的委托:等待态由 Decide 看过全部校验后写在任务文档上,
+// 读面照登记过滤。只有列表——单份详情复用复核队列的 `?shipmentRequestId=` 分支(那里透出的
+// 判断三组正是处置角色要审的),页面不另请求第二份详情。
+
+/** 一项受限控制:种类、判断顺序、受限原因,以及正文登记的失败处置与责任引用(采用过才在场)。 */
+export interface RestrictedControlItemRecord {
+  kind: string;
+  order: number;
+  basis?: string;
+  failureDisposition?: string;
+  responsibility?: string;
+}
+
+/**
+ * 队列一行:委托摘要 + 最近一次未推进的处理记录(有过才在场)+ 控制结果标识 + 受限项。
+ * restrictedItems 是空数组而不是缺席:一份停在等处置的委托不该没有受限项,读到空数组是坏数据的
+ * 可观察征兆,页面要把它标出来而不是当成「没有受限项」。
+ */
+export interface AuthorizedDispositionQueueEntry extends ShipmentRequestSummary {
+  lastAttemptReason?: string;
+  lastAttemptContinuation?: string;
+  lastAttemptedAt?: string;
+  controlResultId?: string;
+  restrictedItems: RestrictedControlItemRecord[];
+}
+
+/** 列表:空队列仍是 DISPOSITION_QUEUE_LISTED + 空数组(空队列是答案不是错误)。 */
+export interface AuthorizedDispositionQueueListResponseBody {
+  outcome: 'DISPOSITION_QUEUE_LISTED';
+  entries: AuthorizedDispositionQueueEntry[];
+}
+
+/**
+ * 授权处置的去向,封闭两值(domain.AuthorizedDispositionChoice 的原字符串;ADR-0132 决定一)。
+ * 「放行」不在集内——硬句「人工处理不得绕过硬规则或把缺少的权威结果改成通过」;这个类型就是页面
+ * 上不可能长出第三个按钮的原因。
+ */
+export type AuthorizedDispositionChoice = 'REJECT' | 'CUSTOMER_SUPPLEMENT';
+
+/** 处置命令的封闭结果(application.DisposeShipmentRequestOutcome 的原字符串)。 */
+export type AuthorizedDispositionOutcome =
+  | 'RECORDED'
+  | 'ALREADY_DISPOSED'
+  | 'TASK_ALREADY_CLOSED'
+  | 'VERSION_SUPERSEDED'
+  | 'NOT_WAITING_ON_DISPOSITION'
+  | 'REVISION_CONFLICT'
+  | 'NOT_AUTHORIZED'
+  | 'AUTHORITY_RULES_NOT_CONFIGURED';
+
+/**
+ * 与 adapters/http 的 authorizedDispositionResponse 一一对应:`已记录`带去向与之后的委托状态;
+ * 撞上既有处置时带先到那一份的去向;`任务已完结`带既有决定——处置人要知道输给了什么;
+ * `版本已换代`带当前版本供重读队列;处置成立而随附释放未确定完成时带补偿续办引用。
+ */
+export interface AuthorizedDispositionResponseBody {
+  outcome: AuthorizedDispositionOutcome;
+  requestState?: string;
+  dispositionChoice?: AuthorizedDispositionChoice;
+  decisionKind?: 'ACCEPTED' | 'REJECTED';
+  currentVersion?: string;
+  compensationReference?: string;
 }
 
 // ---- 面单交易查阅响应形状(票 admin-skeleton-closure-batch/08,ADR-0084 决定七) ----
@@ -440,6 +522,21 @@ export interface ActiveRejectionDraft {
   reason: string;
 }
 
+/**
+ * 授权处置草案:审的是哪一份(委托 + 队列行上看到的那个提交版本)、选哪个去向、理由是什么——
+ * 都是页面自己手上的事实。版本随草案送出,是因为处置挂在版本的判断任务上:处置人看的是某一份
+ * 提交版本上的受限项,不指名版本就分不清签给了谁。
+ * 处置人、授权依据与证据引用不在这里,理由与复核完成草案同一条:那是「谁在签」,由 PAR-INT-01
+ * 的接入面从已认证的操作员身份翻译;页面填成任何值都是伪造采信身份。授权由编排去问
+ * party-commercial(处置权与复核权、拒绝权互不蕴含),前端不自判。
+ */
+export interface AuthorizedDispositionDraft {
+  shipmentRequestId: string;
+  submissionVersionId: string;
+  choice: AuthorizedDispositionChoice;
+  reason: string;
+}
+
 // ---- 调用结果 ----
 
 export type ApiResult<Body> =
@@ -495,6 +592,20 @@ export function findAcceptanceReviewCase(
     `/acceptance-review-queue?shipmentRequestId=${encodeURIComponent(shipmentRequestId)}`,
     { method: 'GET' },
   );
+}
+
+export function listAuthorizedDispositionQueue(): Promise<
+  ApiResult<AuthorizedDispositionQueueListResponseBody>
+> {
+  return exchange<AuthorizedDispositionQueueListResponseBody>('/authorized-disposition-queue', {
+    method: 'GET',
+  });
+}
+
+export function disposeShipmentRequest(
+  draft: AuthorizedDispositionDraft,
+): Promise<ApiResult<AuthorizedDispositionResponseBody>> {
+  return post<AuthorizedDispositionResponseBody>('/shipment-requests/authorized-dispositions', draft);
 }
 
 export function listLabelTransactions(): Promise<ApiResult<LabelTransactionsListResponseBody>> {

@@ -1,4 +1,10 @@
-import type { CancellationOutcome, SubmitOutcome, WithdrawalOutcome } from './api';
+import type {
+  AuthorizedDispositionChoice,
+  AuthorizedDispositionOutcome,
+  CancellationOutcome,
+  SubmitOutcome,
+  WithdrawalOutcome,
+} from './api';
 
 // outcome 与领域状态的中文标签。标签取 UC-PS-001 / UC-PS-005 / UC-PS-006 结果语义
 // 的原词,不自造译法;note 讲操作员的下一步,措辞守住各结果的「禁止行为」——尤其是
@@ -147,6 +153,60 @@ export const cancellationPendingReasonViews: Record<string, PendingReasonView> =
   CANCELLATION_IDENTITY_UNAVAILABLE: {
     label: '取消标识签发暂不可用',
     note: '取消决定标识本次没能签发,决定未形成。可稍后按续办引用续办。',
+  },
+};
+
+// 授权处置的去向(domain.AuthorizedDispositionChoice 的字符串)。词取 ADR-0132 决定一原词:两个去向
+// 都是「决定去向」,不是对受限控制的表决;这张表没有也不会有「放行」——硬句「人工处理不得绕过
+// 硬规则或把缺少的权威结果改成通过」。
+export const dispositionChoiceLabels: Record<AuthorizedDispositionChoice, string> = {
+  REJECT: '拒绝',
+  CUSTOMER_SUPPLEMENT: '交客户补充',
+};
+
+// 策略正文登记的失败处置(ControlFailureDisposition 的字符串)。词取 PC CONTEXT「失败处置只回答委托的
+// 去向——按策略拒绝或进入授权处置」;它答的是委托去向,不拥有拒绝决定。
+export const controlFailureDispositionLabels: Record<string, string> = {
+  REJECT: '按策略拒绝',
+  AUTHORIZED_DISPOSITION: '进入授权处置',
+};
+
+// 授权处置命令的结果词表(AuthorizedDispositionOutcome 的字符串)。分格照复核完成:`已记录`是本次动作
+// 成立;`已有处置`/`任务已完结`/`版本已换代`/`未停在等待授权处置`/`并发冲突`都是同等有效的业务答案,
+// 不画成错误;`未获授权`是确定的业务答案不是未决;`授权规则未登记`是唯一的未配置态。
+export const authorizedDispositionOutcomeViews: Record<AuthorizedDispositionOutcome, OutcomeView> = {
+  RECORDED: {
+    label: '已记录',
+    affirmative: true,
+    note: '处置已记录并在同一命令事务里收口:「拒绝」形成授权角色拒绝决定,「交客户补充」把任务转入等待受控补充;两个去向都释放本版本已成立项的占用。处置从不形成接受。',
+  },
+  ALREADY_DISPOSED: {
+    label: '已有处置',
+    note: '本提交版本已由先到的处置记录定了去向(一版至多一次,不覆盖),交回的是先到那一份的去向。',
+  },
+  TASK_ALREADY_CLOSED: {
+    label: '任务已完结',
+    note: '接受判断任务已由既有决定收口或已随撤回停止,去向没有可选的对象;交回既有决定,处置不再可用。',
+  },
+  VERSION_SUPERSEDED: {
+    label: '版本已换代',
+    note: '客户已形成新的提交版本,这一份版本上的等待态随之失效。处置不会签到新版本头上;请按当前版本重读队列。',
+  },
+  NOT_WAITING_ON_DISPOSITION: {
+    label: '未停在等待授权处置',
+    note: '该委托当前停在别的等待态或根本没停,处置在此刻没有对象;本次不形成处置。',
+  },
+  REVISION_CONFLICT: {
+    label: '并发冲突',
+    note: '委托在处置期间被另一次写入推进,本次未落地。重读后再处置,重放不会形成第二份处置。',
+  },
+  NOT_AUTHORIZED: {
+    label: '未获授权',
+    note: '处置人没有本次处置的有效授权(处置权与复核权、拒绝权互不蕴含),委托当前状态不变。这是确定的业务答案,不是未决。',
+  },
+  AUTHORITY_RULES_NOT_CONFIGURED: {
+    label: '授权规则未登记',
+    note: '租户尚未登记授权处置的授权规则(PAR-COM-14 实例半边;首发期 party-commercial 的授权动作词汇里还没有这一格),什么也不落库。系统不默认任何角色可处置,恢复动作是租户登记授权规则——重试或改请求都不会改变答案。',
   },
 };
 
