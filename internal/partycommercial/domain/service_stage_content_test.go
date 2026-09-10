@@ -145,6 +145,61 @@ func TestFinalRuleContentSpeaksByDeclaredRowsOnly(t *testing.T) {
 	})
 }
 
+// Covers: PC CONTEXT「面单服务终局规则」词条——规则可为其声明终局的责任结果含面单渠道服务的
+// 非取消终局结果与终局失败结果两格（票 party-commercial-context-gaps/12）。两格各可声明一行、
+// 原词照裁决取 LABEL_SERVICE_COMPLETED / LABEL_SERVICE_FAILED；同一格两行仍是冲突；只声明网络
+// 服务各格时面单两格缺行——缺行是真话，PS 适配器据以答「此产品下不形成终局」而不是「未配置」。
+func TestFinalRuleContentDeclaresLabelServiceOutcomes(t *testing.T) {
+	owner := rulePackage(t)
+	if got := domain.DeclaredLabelServiceCompleted.String(); got != "LABEL_SERVICE_COMPLETED" {
+		t.Fatalf("DeclaredLabelServiceCompleted.String() = %q", got)
+	}
+	if got := domain.DeclaredLabelServiceFailed.String(); got != "LABEL_SERVICE_FAILED" {
+		t.Fatalf("DeclaredLabelServiceFailed.String() = %q", got)
+	}
+
+	content, err := domain.NewFinalRuleContent(owner, []domain.FinalizationDeclaration{
+		{Outcome: domain.DeclaredLabelServiceFailed, FinalKind: commercialValue(t, domain.NewRuleReference, "LABEL_SERVICE_FAILED_FINAL")},
+		{Outcome: domain.DeclaredLabelServiceCompleted, FinalKind: commercialValue(t, domain.NewRuleReference, "LABEL_SERVICE_DONE")},
+		{Outcome: domain.DeclaredEffectiveDelivery, FinalKind: commercialValue(t, domain.NewRuleReference, "NETWORK_SERVICE_DELIVERED")},
+	})
+	if err != nil {
+		t.Fatalf("new final rule content with label service rows: %v", err)
+	}
+	if kind, declared := content.FinalKindFor(domain.DeclaredLabelServiceCompleted); !declared || kind.String() != "LABEL_SERVICE_DONE" {
+		t.Fatalf("completed: kind = %v declared = %v", kind, declared)
+	}
+	if kind, declared := content.FinalKindFor(domain.DeclaredLabelServiceFailed); !declared || kind.String() != "LABEL_SERVICE_FAILED_FINAL" {
+		t.Fatalf("failed: kind = %v declared = %v", kind, declared)
+	}
+	declarations := content.Declarations()
+	if len(declarations) != 3 ||
+		declarations[0].Outcome != domain.DeclaredEffectiveDelivery ||
+		declarations[1].Outcome != domain.DeclaredLabelServiceCompleted ||
+		declarations[2].Outcome != domain.DeclaredLabelServiceFailed {
+		t.Fatalf("declarations = %#v; 网络服务各格在前、面单两格随后，顺序稳定", declarations)
+	}
+
+	if _, err := domain.NewFinalRuleContent(owner, []domain.FinalizationDeclaration{
+		{Outcome: domain.DeclaredLabelServiceCompleted, FinalKind: commercialValue(t, domain.NewRuleReference, "A")},
+		{Outcome: domain.DeclaredLabelServiceCompleted, FinalKind: commercialValue(t, domain.NewRuleReference, "B")},
+	}); !errors.Is(err, domain.ErrConflictingFinalization) {
+		t.Fatalf("err = %v; 面单同一格两行声明分不出真假", err)
+	}
+
+	networkOnly, err := domain.NewFinalRuleContent(owner, []domain.FinalizationDeclaration{
+		{Outcome: domain.DeclaredEffectiveDelivery, FinalKind: commercialValue(t, domain.NewRuleReference, "NETWORK_SERVICE_DELIVERED")},
+	})
+	if err != nil {
+		t.Fatalf("new network-only content: %v", err)
+	}
+	for _, outcome := range []domain.DeclaredResponsibilityOutcome{domain.DeclaredLabelServiceCompleted, domain.DeclaredLabelServiceFailed} {
+		if _, declared := networkOnly.FinalKindFor(outcome); declared {
+			t.Fatalf("%s: 只声明网络服务格的规则包替面单格答成了形成终局", outcome)
+		}
+	}
+}
+
 // Covers: PAR-COM-17 取消授权目录的机制半边——有行即允许带规则引用；缺行是真话
 // （此授权规则下这种请求方不许取消），不是配置缺件；同一请求方格两行是冲突；零行是
 // 缺件（没声明不等于永不允许，更不等于默认客户可取消）。拥有对象钉在已生效授权规则上。

@@ -121,8 +121,12 @@ func (content IntakeQualificationContent) Qualifications() []RuleReference {
 	return append([]RuleReference(nil), content.qualifications...)
 }
 
-// DeclaredResponsibilityOutcome 是规则可为其声明终局的责任结果封闭四值，与
-// parcel-shipment 结果联合的四格语义对应。
+// DeclaredResponsibilityOutcome 是规则可为其声明终局的责任结果封闭集，与 parcel-shipment
+// 结果联合的各格语义对应：网络服务的各格，加面单渠道服务的「非取消终局结果」与「终局失败
+// 结果」两格（CONTEXT「面单服务终局规则」词条）。取消结果不在此列——取消终局由 parcel-shipment
+// 直接形成，不是终局规则声明的对象。原词是本上下文的：面单两格的主体取「面单服务终局」的
+// LABEL_SERVICE，与 PS 那一侧的 LabelServiceOutcome / LabelServiceFailure 同一个词根、不是同一个词，
+// 逐格翻译在 PS 消费侧适配器。
 type DeclaredResponsibilityOutcome uint8
 
 const (
@@ -131,10 +135,12 @@ const (
 	DeclaredReturnCompleted
 	DeclaredServiceTerminated
 	DeclaredRegulatoryDisposition
+	DeclaredLabelServiceCompleted
+	DeclaredLabelServiceFailed
 )
 
 func (outcome DeclaredResponsibilityOutcome) valid() bool {
-	return outcome >= DeclaredEffectiveDelivery && outcome <= DeclaredRegulatoryDisposition
+	return outcome >= DeclaredEffectiveDelivery && outcome <= DeclaredLabelServiceFailed
 }
 
 func (outcome DeclaredResponsibilityOutcome) String() string {
@@ -147,6 +153,10 @@ func (outcome DeclaredResponsibilityOutcome) String() string {
 		return "SERVICE_TERMINATED"
 	case DeclaredRegulatoryDisposition:
 		return "REGULATORY_DISPOSITION"
+	case DeclaredLabelServiceCompleted:
+		return "LABEL_SERVICE_COMPLETED"
+	case DeclaredLabelServiceFailed:
+		return "LABEL_SERVICE_FAILED"
 	default:
 		return ""
 	}

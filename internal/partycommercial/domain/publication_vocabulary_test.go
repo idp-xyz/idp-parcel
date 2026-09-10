@@ -141,6 +141,12 @@ func TestAcceptanceRulePackageVocabularyCarriesTheWordsTheFormTicketNames(t *tes
 	if got := strings.Join(byName["allowance"], ","); got != "ALLOWED,DISALLOWED" {
 		t.Fatalf("allowance = %q; NOT_DECLARED must not be offered as a value", got)
 	}
+	// pc-gaps/12 完成判据 7：接单规则包表单的责任结果下拉与 /publication-vocabulary 读面真列出面单渠道两格——
+	// 表单不内置枚举，能不能选到这两行只取决于这一栏。
+	wantOutcomes := "EFFECTIVE_DELIVERY,RETURN_COMPLETED,SERVICE_TERMINATED,REGULATORY_DISPOSITION,LABEL_SERVICE_COMPLETED,LABEL_SERVICE_FAILED"
+	if got := strings.Join(byName["outcome"], ","); got != wantOutcomes {
+		t.Fatalf("outcome = %q, want %q", got, wantOutcomes)
+	}
 	wantStages := "ACCEPTED_NOT_YET_RECEIVED,RECEIVED_OR_MEASURED,LABELLED_OR_BAGGED,CUSTOMS_DATA_FORMING_NOT_SUBMITTED,CUSTOMS_SUBMITTED,CASE_CLOSED_OR_SERVICE_COMPLETED"
 	if got := strings.Join(byName["stage"], ","); got != wantStages {
 		t.Fatalf("stage = %q, want %q", got, wantStages)

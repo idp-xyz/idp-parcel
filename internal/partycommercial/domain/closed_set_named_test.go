@@ -77,9 +77,14 @@ func TestClosedSetNamedLookupsRoundTripAndRefuseOutsiders(t *testing.T) {
 		closedSetNamed("DeclaredIntakeSource", domain.DeclaredIntakeSourceNamed,
 			[]domain.DeclaredIntakeSource{domain.DeclaredNodeIntake, domain.DeclaredOffsitePickup},
 			"", "node_intake"),
+		// 集外词里 LABEL_CHANNEL_FINAL 是 pc-gaps/12 票面上被裁掉的占位（渠道是通道，终局是服务的），
+		// LABEL_SERVICE_OUTCOME 是 parcel-shipment 那一侧的原词——两边同一个词根、不是同一个词，翻译在 PS 适配器。
 		closedSetNamed("DeclaredResponsibilityOutcome", domain.DeclaredResponsibilityOutcomeNamed,
-			[]domain.DeclaredResponsibilityOutcome{domain.DeclaredEffectiveDelivery, domain.DeclaredRegulatoryDisposition},
-			"", "effective_delivery"),
+			[]domain.DeclaredResponsibilityOutcome{
+				domain.DeclaredEffectiveDelivery, domain.DeclaredRegulatoryDisposition,
+				domain.DeclaredLabelServiceCompleted, domain.DeclaredLabelServiceFailed,
+			},
+			"", "effective_delivery", "LABEL_CHANNEL_FINAL", "LABEL_SERVICE_OUTCOME", "label_service_completed"),
 		closedSetNamed("ValidityAnchorKind", domain.ValidityAnchorKindNamed,
 			[]domain.ValidityAnchorKind{domain.ChannelResultObservedAnchor},
 			"", "LABEL_ISSUED"),

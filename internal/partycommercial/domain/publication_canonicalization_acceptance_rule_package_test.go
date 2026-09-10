@@ -115,6 +115,42 @@ func reversed[T any](items []T) []T {
 	return out
 }
 
+// Covers: pc-gaps/12 裁决 3「不换号」——DeclaredResponsibilityOutcome 加面单渠道两格只扩大可选值集合，不改变任何已发布
+// 文档的字节（ADR-0126 决定一「加键不换号」的同一精神；同形先例 pc-gaps/09 加 Validity() 槽、awf/25 加 omitempty 键都未换号）。
+// 字面摘要取自本票改动前（基线 dede3c2e）对同一正文算得的值：既有各格声明的文档在本票前后逐字节同，仍按 PCC-1 重放。
+// 与它并列的第二段证新两格真进了文档且折得回正文——加格是加可选值，不是加键。
+func TestLabelServiceOutcomesDoNotRenumberTheCanonicalization(t *testing.T) {
+	const digestBeforeThisTicket = "PCC-1:03bd7ee53502ffb6dd91bc41560ac092a5490d2fd62a7f3a2354a3265cd305a1"
+	networkOnly := canonicalRulePackage(t, fullRulePackageBody(t))
+	if got := networkOnly.Digest().String(); got != digestBeforeThisTicket {
+		t.Fatalf("既有各格声明的文档摘要变了：got %s, want %s（本票只加可选值，不得换号也不得改字节）", got, digestBeforeThisTicket)
+	}
+
+	withLabelRows := fullRulePackageBody(t)
+	withLabelRows.FinalRules = append(withLabelRows.FinalRules,
+		finalRule(t, domain.DeclaredLabelServiceFailed, "FINAL/label-failed"),
+		finalRule(t, domain.DeclaredLabelServiceCompleted, "FINAL/label-completed"),
+	)
+	canonical := canonicalRulePackage(t, withLabelRows)
+	if canonical.Canonicalization() != "PCC-1" {
+		t.Fatalf("canonicalization = %s, want PCC-1", canonical.Canonicalization())
+	}
+	document := string(canonical.Document())
+	completedAt := strings.Index(document, `{"outcome":"LABEL_SERVICE_COMPLETED","finalKind":"FINAL/label-completed"}`)
+	failedAt := strings.Index(document, `{"outcome":"LABEL_SERVICE_FAILED","finalKind":"FINAL/label-failed"}`)
+	if completedAt < 0 || failedAt < 0 || failedAt < completedAt {
+		t.Fatalf("面单两行没按声明顺序进文档：%s", document)
+	}
+	rehydrated, err := domain.RehydratePublicationContent(canonical.Canonicalization(), canonical.Document())
+	if err != nil {
+		t.Fatalf("rehydrate: %v", err)
+	}
+	rows := rehydrated.AcceptanceRulePackage.FinalRules
+	if len(rows) != 4 || rows[2].Outcome != domain.DeclaredLabelServiceCompleted || rows[3].Outcome != domain.DeclaredLabelServiceFailed {
+		t.Fatalf("rehydrated final rules = %#v", rows)
+	}
+}
+
 // Covers: ADR-0126 Decision 一（加册不换号）— 接单规则包接进 PCC-1：同一正文两次算逐字节同串；规则、时点锚、校验组、
 // 来源、终局行、修订格各自换行序不换摘要——归一是服务端的事，表单里的行序不是正文。
 func TestAcceptanceRulePackageDigestIsStableAndOrderInsensitive(t *testing.T) {
