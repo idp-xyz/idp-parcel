@@ -1,0 +1,64 @@
+# `DeclaredResponsibilityOutcome` 没有面单渠道服务的两行：终局规则声明得出网络服务四格，面单渠道的「非取消终局 / 终局失败」在词汇表里没有行，PS 适配器只能如实答「终局规则未配置」
+
+Category: enhancement
+Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Blocked by: 无（lc/11 的 PS 半边 `JudgeLabelServiceFinalHandler` 已在 main `0e5a4ea`；本票是它「不在本票 · PC 半边」那一条）
+
+## 缺口（取证于 `3f485e97`）
+
+- `internal/partycommercial/domain/service_stage_content.go` 的 `DeclaredResponsibilityOutcome` 封闭四值：`EFFECTIVE_DELIVERY` / `RETURN_COMPLETED` / `SERVICE_TERMINATED` / `REGULATORY_DISPOSITION`，头注写「与 parcel-shipment 结果联合的四格语义对应」——四格全是网络服务的责任结果。核：`git show HEAD:internal/partycommercial/domain/service_stage_content.go`。
+- PS 消费侧适配器 `internal/parcelshipment/adapters/partycommercial/service_stage_rules.go` 注释原句：「面单渠道服务的两格（非取消终局结果 / 终局失败结果）在提供方的声明词汇表里今天没有行」；那两格在适配器里 found=false，编排停在 `FINAL_RULE_UNCONFIGURED`。核：`git grep -n 面单渠道 -- internal/parcelshipment/adapters/partycommercial/service_stage_rules.go`。
+- 于是首个面单渠道产品的租户**没有办法登记**「面单渠道非取消终局形成哪种终局类型 / 终局失败形成哪种」这两行声明；`JudgeLabelServiceFinalHandler`（PS，lc/11 落 `0e5a4ea`）对面单渠道包裹永远拿不到规则，只能未决。这是 [remaining-work-dd5ed934.md](../../unresolved-review-20260904/remaining-work-dd5ed934.md) 五-3。
+- `PublicationVocabulary`（`publication_vocabulary.go`）把 `outcome` 一栏按 `DeclaredResponsibilityOutcome.valid` 列封闭码，管理台表单据它供下拉（awf/20）——词汇表少两行，表单就选不出来。
+
+## 语言从哪里来
+
+- PC `CONTEXT.md` 词条「面单服务终局规则」：「接单规则包版本对面单渠道服务终局边界、适用结果作出的商业定义……规则必须明确授权角色、适用范围、关闭责任来源和硬限制前置条件。」Rules 节：「面单服务终局规则必须显式定义正常终局边界和取消权结束条件」。
+- PS `CONTEXT.md` 词条「终局服务结果」：「网络服务和面单渠道服务可以具有不同终局结果，实际交付不是所有服务形态的统一完成条件」；Rules：「面单渠道服务在面单服务终局边界成立或形成有效取消结果时判断终局，不默认等待实际运输交付，也不把渠道受理成功直接当作终局」；生命周期：「`transport-fulfillment` 提供实际承运商首次有效收寄事件 → 面单渠道服务非取消终局结果」与「当前受控关闭已经生效且未被重开……→ 终局服务结果」。
+- lc/11 `## Answer`「不在本票 · PC 半边」原句：「`DeclaredResponsibilityOutcome` 加面单渠道两行并在 `service_stage_rules.go` 补逐格翻译（删掉本票那一格）。PC 地盘，建议另立票；落地前面单渠道终局的采用一律停在 `FINAL_RULE_UNCONFIGURED`。」
+- PS 侧的两格名从 `judge_label_service_final.go` 的结果代数取，不在本票另起名。
+
+## 做法（按裁决落地；顺序即依赖）
+
+1. **先改 CONTEXT 一句**：PC `CONTEXT.md` 词条「面单服务终局规则」或 Rules 那句「面单服务终局规则必须显式定义正常终局边界和取消权结束条件」——补一句声明形状：终局规则对面单渠道服务的**非取消终局**与**终局失败**两种责任结果各可声明一行终局类型；缺行在采用层读成「此产品下不形成终局」（与网络服务四格同一读法，`FinalizationDeclaration` 头注已有这句）。封闭集加格是领域语言改动，先改文再改码。
+2. **领域**：`DeclaredResponsibilityOutcome` 加两值（名字照 PS 结果代数译成本上下文词，`String()` 给原词），`valid()` 上界随之；`closedSetNamed` / `DeclaredResponsibilityOutcomeNamed` 反查跟随；`FinalRuleContent` 构造门对「同一结果两行」的拒绝不变。
+3. **规范化与库**：`publication_canonicalization_acceptance_rule_package.go` 的 `outcome` 反查与文档写法是否换号按 ADR-0014 判（只加封闭码、文档形不变 → 倾向不换号，票面记理由）；迁移 `party_commercial/0013` 的 `final_rule_*` CHECK 若钉了四个字面量，**新开序号**放宽（不改已施加迁移）。
+4. **发布与批文**：`PublicationVocabulary` 的 `outcome` 一栏自然多两行；`cmd/parcel-commercial/translate.go` 的 `finalRuleDocument` 与 awf/12 接单规则包表单的下拉不改代码只多两个可选值——完成判据要核它们真列出来。
+5. **PS 适配器**：`service_stage_rules.go` 补两格翻译、删「今天没有行」那句注释；`JudgeLabelServiceFinalHandler` 的 `FINAL_RULE_UNCONFIGURED` 对面单渠道从此只在租户真没登时出现。
+
+## 红线
+
+- 只加声明槽，不给任何默认终局类型；首个面单渠道产品的终局类型取值属实例半边（`PAR-COM-12` / `PAR-COM-17`），一行都不预填。
+- 不在 PC 复制 PS 的终局生命周期（PC CONTEXT Rules：「具体请求、决定、权威截断、并发裁决、继续尝试判断和终局历史由 `parcel-shipment` 拥有，不在本上下文复制第二套生命周期」）——本票只多两个可声明的责任结果，不多任何判断。
+- 不改已施加迁移；不改 lc/11 已 resolved 票面 Status。
+- 面单渠道的**取消**结果不进这两行：取消不是终局规则声明的对象（PS CONTEXT「除已经形成的有效取消结果外……」）。
+
+## 完成判据（非作者评审逐项对）
+
+1. PC `CONTEXT.md` 那一句先于代码改动进 main，票面引其原句。
+2. `DeclaredResponsibilityOutcome` 六值往返：`String()` / `DeclaredResponsibilityOutcomeNamed` / `closedSetNamed` 用例覆盖新两值；`NewFinalRuleContent` 对新两值各一行成立、同值两行仍拒。
+3. 真库：`SaveFinalRule` / `LoadFinalRule` 对带新两行的正文往返，`0013` 的 CHECK 不再拒它们（若原 CHECK 钉字面量，新迁移序号在票面写明）。
+4. 规范化：`PCC-*` 是否换号在票面写理由并有用例钉住旧文档仍按原版本重放。
+5. `service_stage_rules.go`：面单渠道两格从 found=false 变成有行时能译回、没行时仍 found=false；「今天没有行」注释删去；`judge_label_service_final_test.go` 里靠「PC 无行」造未决的用例改为靠「租户未登」造。
+6. `go build ./...` / `go vet ./...` 零信号；`internal/architecture` 两道棘轮不加宽；机制清点在 tip 重生成。
+7. 管理台接单规则包表单（awf/12）与 `/publication-vocabulary` 读面（awf/20）实际列出两行——只核列出，不改前端。
+
+## 地盘
+
+`internal/partycommercial/domain/`、`internal/partycommercial/adapters/postgres/`（`stage_content_declaration.go` / `declaration_publication.go` 若 CHECK 要放宽）、`migrations/party_commercial/`（新序号）、`docs/domain/party-commercial/CONTEXT.md`、`internal/parcelshipment/adapters/partycommercial/service_stage_rules.go`（PS 消费侧一文件，跨地盘要在频道占号）。`cmd/parcel-commercial/translate.go` 预计零改动。
+
+## 要裁的
+
+1. **两行的名字**：PS 结果代数里「非取消终局结果 / 终局失败结果」译进 PC 封闭集叫什么原词（`LABEL_CHANNEL_FINAL` / `LABEL_CHANNEL_FAILED` 只是占位，本票不定）——归 PC owner，一句。
+2. **CONTEXT 改哪一句**：加进词条「面单服务终局规则」正文，还是加进 Rules「必须显式定义正常终局边界和取消权结束条件」那条——归 PC owner，一句。
+3. **规范化换不换号**：只加封闭码、文档形不变，倾向不换；若 owner 认为「可选值集合变了就是文档形变了」则按 ADR-0014 换号——归 PC owner。
+
+## 参照
+
+- [lc/11](../../label-channel-service-first-release/issues/11-parcel-final-across-transactions.md)（`## Answer`「不在本票」）；[remaining-work-dd5ed934.md](../../unresolved-review-20260904/remaining-work-dd5ed934.md) 五-3。
+- ADR-0058（阶段内容归接单规则包版本）、ADR-0062、ADR-0088（面单渠道服务进首发）、ADR-0119（终局规则上的有效期声明槽——同一份正文上一次加槽的先例）、ADR-0014（规范化换号）。
+- 同族先例：pc-gaps/09（`FinalRuleContent` 加 `Validity()` 槽，迁移 0026 / `d06192ed`）——形状、迁移与批文都照它。
+
+## Comments
+
+- 2026-09-10 · 通道 4：立票（task-9880bbc9）。起因是 remaining-work-dd5ed934 五-3 判「仍余且机制半边且无票」；本目录 spec 14:4x 刚按十一张全 resolved 收口，本票同笔把 spec 改回 in-progress 并记原因。未动代码。

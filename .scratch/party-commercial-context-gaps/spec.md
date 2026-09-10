@@ -1,7 +1,7 @@
 # `party-commercial` 声明拥有、但今天没有执行器的四处（写侧待裁）
 
 Category: chore
-Status: resolved——2026-09-10 14:4x 通道 1 按 issue-tracker「Complete a parent」收口：01–11 十一张子票 `Status:` 逐文件读过均为 resolved（07 → ADR-0115；08 → ADR-0116，`0cfe3571`..`44bcac4d`；09 → ADR-0119，`838b283e`..`d58ceecc`；10 → ADR-0120；11 → ADR-0133 落地，进 main `62c87e73` 前），本笔只改本行；08 / 09 留下的 PS 半边由 ps-port-remainder/03、/01 承接（今天已转 ready-for-agent 并派单）。此前 in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 resolved（三处已由 MCP-3 裁，裁决落 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；MCP-4 于分支 `mcp4-pcgaps05` 做完，2026-09-04 由 MCP-1 重放入 main `aa0608f7`..`469bb9ba`，迁移 `party_commercial/0023`；VE 侧后继票 `ve-claims-read-seams/03` 随之立、同日派 MCP-4），07 draft（接受前财务控制策略正文表，2026-09-04 随 admin-write-faces/06 裁②立票，待 `/domain-modeling`）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，05/07 两格由通道 2 于 2026-09-04 对票面重核后对齐，05 入 main 后由 MCP-1 同日再对齐一次
+Status: in-progress——2026-09-10 15:1x 通道 4 改回（task-9880bbc9）：新立子票 [12](issues/12-declared-responsibility-outcome-lacks-label-channel-rows.md)（draft，`DeclaredResponsibilityOutcome` 缺面单渠道两行，出处 lc/11「不在本票 · PC 半边」与 remaining-work-dd5ed934 五-3），按「Complete a parent」子票全 resolved 才 resolved，故本行如实改回；01–11 的收口原文照留在下一句。此前 resolved——2026-09-10 14:4x 通道 1 按 issue-tracker「Complete a parent」收口：01–11 十一张子票 `Status:` 逐文件读过均为 resolved（07 → ADR-0115；08 → ADR-0116，`0cfe3571`..`44bcac4d`；09 → ADR-0119，`838b283e`..`d58ceecc`；10 → ADR-0120；11 → ADR-0133 落地，进 main `62c87e73` 前），本笔只改本行；08 / 09 留下的 PS 半边由 ps-port-remainder/03、/01 承接（今天已转 ready-for-agent 并派单）。此前 in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 resolved（三处已由 MCP-3 裁，裁决落 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；MCP-4 于分支 `mcp4-pcgaps05` 做完，2026-09-04 由 MCP-1 重放入 main `aa0608f7`..`469bb9ba`，迁移 `party_commercial/0023`；VE 侧后继票 `ve-claims-read-seams/03` 随之立、同日派 MCP-4），07 draft（接受前财务控制策略正文表，2026-09-04 随 admin-write-faces/06 裁②立票，待 `/domain-modeling`）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，05/07 两格由通道 2 于 2026-09-04 对票面重核后对齐，05 入 main 后由 MCP-1 同日再对齐一次
 
 ## 这四处是怎么被看见的
 
@@ -40,6 +40,12 @@ Status: resolved——2026-09-10 14:4x 通道 1 按 issue-tracker「Complete a p
 
 按国际小包业务的实际权重，建议裁决顺序是 01 → 02 → 03 → 04：前两项是业务上会立刻硌到的
 （客户自有渠道账号是主流商业形态；汇率口径直接改卖价），后两项是让已有的解析结果真正可用。
+
+**首批之后追加的子票**（05–11 各自的出处与去向记在上面 `Status:` 行，此处只列仍未 resolved 的）：
+
+| 票 | 缺口 | 一句话 |
+|---|---|---|
+| [12](issues/12-declared-responsibility-outcome-lacks-label-channel-rows.md) | 面单渠道终局的责任结果两行 | `DeclaredResponsibilityOutcome` 只有网络服务四格，面单渠道「非取消终局 / 终局失败」在声明词汇表里没有行，PS 适配器只能答「终局规则未配置」（draft，2026-09-10 通道 4 立） |
 
 ## 边界（四票共用）
 
