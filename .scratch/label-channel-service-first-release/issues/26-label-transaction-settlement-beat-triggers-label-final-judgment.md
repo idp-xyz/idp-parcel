@@ -1,7 +1,7 @@
 # 26 面单交易定案那一拍 → `JudgeLabelServiceFinalHandler`：同一次调用里判，还是落库后交一封信再判
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9（用户授权代裁，PS owner 口径）裁「要裁的」两条：1 取**乙**、2 **两拍都触发**，正文在 [ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md)，「做法」按乙写实，见下方「裁决」与「做法（乙）」。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 两条路的代价并列在「两条路」节，留作裁决记录
+Status: in-progress——2026-09-10 18:0x 通道 2 按通道 1 派单 task-02bb25bb 认领，分支 `mcp2-lc26` 基远端 main `76932b38`，隔离树 `D:/tops/idp-parcel-mcp2-lc26`。此前 ready-for-agent——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9（用户授权代裁，PS owner 口径）裁「要裁的」两条：1 取**乙**、2 **两拍都触发**，正文在 [ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md)，「做法」按乙写实，见下方「裁决」与「做法（乙）」。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 两条路的代价并列在「两条路」节，留作裁决记录
 Blocked by: 无（机制半边：乙路每一件都能在替身与真库上做出来并测到）。**生产可达随 [`28`](./28-channel-selection-composition-root-and-call-entry.md)**（推送方 2026-09-10 已裁取乙：整条写链一个组合根）：`LabelTransactionHandler` 自身在 `cmd/` 零调用方，本票接上的触发点在组合根落地前没有生产事件流过它——这是事实不是阻塞，票面如实记；06 编排的事务壳（本票「做法」第 0 步）由 `28` 的组合根立，本票只要求它存在并在真库用例里自己开事务
 
 ## 缺口
