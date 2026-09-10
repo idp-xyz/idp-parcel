@@ -25,6 +25,12 @@ var (
 	// 的合同没有把这一决定委派给它持的等级。它 Is ErrNotAuthorized——恢复动作同在业务侧（客户在合同里
 	// 委派），不是租户去登记规则（ADR-0116 Decision 三，按 ADR-0029 的恢复动作分格）。
 	ErrDelegationAbsent = fmt.Errorf("%w: no effective contract delegation hands this decision to the requesting operator role", ErrNotAuthorized)
+	// ErrCustomerAccountCannotDecide 是 ErrNotAuthorized 的另一个具名分格：客户账户自己来请求受控关闭或重开。
+	// PS CONTEXT「货主……只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权角色范围」——那条
+	// 例外支首发不开、留位（票 party-commercial-context-gaps/13 裁决 ③），于是客户账户即便持有命中 grant 的
+	// 等级也不能是决定方。它 Is ErrNotAuthorized：恢复动作在业务侧（由授权的运营角色来形成决定），不是租户去
+	// 登记规则；日后开例外支改的是这一道拒绝与一条新的委派方向。
+	ErrCustomerAccountCannotDecide = fmt.Errorf("%w: a customer account may only request a controlled closure or reopening; the decision is formed by an authorized operator role", ErrNotAuthorized)
 )
 
 // AuthorityLevel 是商业权限等级，不是人事职级。它是版本化的业务授权：职务名称、
@@ -51,8 +57,13 @@ func NewEvidenceReference(value string) (EvidenceReference, error) {
 }
 
 // AuthorizedAction 是一份授权允许做的事。人工复核与主动拒绝是两个动作，因为获准
-// 复核并不等于获准直接拒掉这单业务；接受后客户原始资料的修订是第三个，同一条理由
-// 逐字成立——三者互不蕴含、不得互相顶替（CONTEXT Rules，ADR-0116 Decision 一）。
+// 复核并不等于获准直接拒掉这单业务；接受后客户原始资料的修订是又一个，同一条理由
+// 逐字成立——各格互不蕴含、不得互相顶替（CONTEXT Rules，ADR-0116 Decision 一）。
+// 受控关闭与重开再各占一格：CONTEXT 把关闭权与重开权分开说（PS「关闭权限可由授权运营
+// 角色单独使用；重开必须由同级或更高授权角色形成」），获准关闭不等于获准重开；原词取
+// parcel-shipment 的 ContinuedAttemptDecisionKind 同词，两侧一个词。「同级或更高」不由
+// 本上下文比较等级——谁可重开由登进 REOPENING 那一格的等级集合承担（CONTEXT Rules，
+// 票 party-commercial-context-gaps/13 裁决 ①）。
 // 撤回不在集内：一票一格，它归 `PAR-COM-14`「客户及其授权代表」那条线。
 type AuthorizedAction uint8
 
@@ -61,17 +72,27 @@ const (
 	ManualReviewAction
 	ActiveRejectionAction
 	SourceDataAmendmentAction
+	ControlledClosureAction
+	ReopeningAction
 )
 
 func (action AuthorizedAction) valid() bool {
-	return action >= ManualReviewAction && action <= SourceDataAmendmentAction
+	return action >= ManualReviewAction && action <= ReopeningAction
 }
 
 // decidedByCustomer 回答这个动作的决定权归不归客户。资料修订改的是客户已接受委托的原始资料，
 // 决定权在客户：运营角色代录时必须经合同委派解出实际决定方，客户也只能委派自己拥有的决定。
-// 人工复核与主动拒绝是运营侧凭授权规则自己作的决定，委派不参与。
+// 人工复核、主动拒绝、受控关闭与重开是运营侧凭授权规则自己作的决定，委派不参与。
 func (action AuthorizedAction) decidedByCustomer() bool {
 	return action == SourceDataAmendmentAction
+}
+
+// formedOnlyByOperatorRole 回答这个动作是不是客户账户连「决定方 = 请求方」那一支都走不了的：受控关闭与重开
+// 「必须由运营企业责任法人授权的业务角色明确形成」，货主只能提出请求（PS CONTEXT Rules）。人工复核与主动拒绝
+// 虽也是运营侧的决定，但既有解法对客户账户请求方不设这道拒绝，本票不改它们（票 party-commercial-context-gaps/13
+// 「既有三格一字不动」）。
+func (action AuthorizedAction) formedOnlyByOperatorRole() bool {
+	return action == ControlledClosureAction || action == ReopeningAction
 }
 
 func (action AuthorizedAction) String() string {
@@ -82,6 +103,10 @@ func (action AuthorizedAction) String() string {
 		return "ACTIVE_REJECTION"
 	case SourceDataAmendmentAction:
 		return "SOURCE_DATA_AMENDMENT"
+	case ControlledClosureAction:
+		return "CONTROLLED_CLOSURE"
+	case ReopeningAction:
+		return "REOPENING"
 	default:
 		return ""
 	}
@@ -363,12 +388,18 @@ func Authorize(
 }
 
 // resolveDecider 按请求方解实际决定方：客户账户自己请求，决定方就是它；运营角色请求它自己
-// 拥有的动作（人工复核、主动拒绝），决定方就是它；运营角色代客户请求决定权归客户的动作，
-// 决定方是把这一决定委派给它所持等级的委派方——没有委派，登录操作人不能顶替。
+// 拥有的动作（人工复核、主动拒绝、受控关闭、重开），决定方就是它；运营角色代客户请求决定权归客户
+// 的动作，决定方是把这一决定委派给它所持等级的委派方——没有委派，登录操作人不能顶替。
 // 没带请求方（旧构造器）解不出决定方，交回零值，由 Authorization.Decider 报为「未指名」。
+//
+// 客户账户请求只能由运营角色形成的动作（受控关闭、重开）在这里拒，不靠「客户不持等级、命不中 grant」
+// 兜——那样理由就落在数据形状上而不在领域里；拒绝放在命中之后，规则缺席时照旧先答未配置。
 func resolveDecider(delegations []ContractDelegation, request AuthorizationRequest) (Decider, error) {
 	if !request.requester.valid() {
 		return Decider{}, nil
+	}
+	if request.requester.kind == CustomerAccountRequester && request.action.formedOnlyByOperatorRole() {
+		return Decider{}, ErrCustomerAccountCannotDecide
 	}
 	if request.requester.kind == CustomerAccountRequester || !request.action.decidedByCustomer() {
 		return request.requester.decider(), nil

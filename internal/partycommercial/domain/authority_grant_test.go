@@ -215,6 +215,136 @@ func TestActiveRejectionRequiresStructuredReasonAndEvidence(t *testing.T) {
 	}
 }
 
+func operatorRequestFor(t *testing.T, action domain.AuthorizedAction, level, scope string) domain.AuthorizationRequest {
+	t.Helper()
+	return requestBy(t, operatorRequester(t, "operator-1", "account-1"), action, level, scope)
+}
+
+// Covers: PC CONTEXT Rules「受控关闭与重开是与前述各动作并列的两个授权动作……关闭权不蕴含重开权，也不与既有动作
+// 互相顶替」（票 party-commercial-context-gaps/13，裁决 ①：机制不给 AuthorityLevel 算序，谁可重开由登进来的
+// REOPENING 授权承担）。原词与 parcel-shipment 的 ContinuedAttemptDecisionKind 同词——两侧一个词。四格代数照旧：
+// 无规则未配置、有规则不含拒绝、命中即许且决定方 = 运营角色。
+func TestControlledClosureAndReopeningAreTwoSeparateAuthorizedActions(t *testing.T) {
+	if got := domain.ControlledClosureAction.String(); got != "CONTROLLED_CLOSURE" {
+		t.Fatalf("ControlledClosureAction.String() = %q", got)
+	}
+	if got := domain.ReopeningAction.String(); got != "REOPENING" {
+		t.Fatalf("ReopeningAction.String() = %q", got)
+	}
+
+	closure := []domain.AuthorityGrant{
+		authorityGrant(t, "auth-close", domain.ControlledClosureAction, "level-commercial", "scope-a"),
+	}
+	t.Run("a closure grant does not authorize a reopening", func(t *testing.T) {
+		if _, err := domain.Authorize(closure, nil, operatorRequestFor(t, domain.ReopeningAction, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+			t.Fatalf("error = %v; 关闭权蕴含了重开权", err)
+		}
+	})
+	t.Run("a reopening grant does not authorize a closure", func(t *testing.T) {
+		reopening := []domain.AuthorityGrant{
+			authorityGrant(t, "auth-reopen", domain.ReopeningAction, "level-commercial", "scope-a"),
+		}
+		if _, err := domain.Authorize(reopening, nil, operatorRequestFor(t, domain.ControlledClosureAction, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+			t.Fatalf("error = %v; 重开权蕴含了关闭权", err)
+		}
+	})
+	t.Run("neither is implied by the existing actions nor implies them", func(t *testing.T) {
+		rejection := []domain.AuthorityGrant{
+			authorityGrant(t, "auth-reject", domain.ActiveRejectionAction, "level-commercial", "scope-a"),
+		}
+		for _, action := range []domain.AuthorizedAction{domain.ControlledClosureAction, domain.ReopeningAction} {
+			if _, err := domain.Authorize(rejection, nil, operatorRequestFor(t, action, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+				t.Fatalf("%s: error = %v; 主动拒绝授权顶替了它", action, err)
+			}
+		}
+		if _, err := domain.Authorize(closure, nil, rejectionRequest(t, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrNotAuthorized) {
+			t.Fatalf("error = %v; 关闭授权顶替了主动拒绝", err)
+		}
+	})
+	t.Run("no rule at all is unconfigured, not a refusal", func(t *testing.T) {
+		for _, action := range []domain.AuthorizedAction{domain.ControlledClosureAction, domain.ReopeningAction} {
+			if _, err := domain.Authorize(nil, nil, operatorRequestFor(t, action, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+				t.Fatalf("%s: error = %v, want ErrAuthorityRulesNotConfigured", action, err)
+			}
+		}
+	})
+	t.Run("a matching grant authorizes and the operator role is the decider", func(t *testing.T) {
+		authorized, err := domain.Authorize(closure, nil, operatorRequestFor(t, domain.ControlledClosureAction, "level-commercial", "scope-a"))
+		if err != nil {
+			t.Fatalf("authorize: %v", err)
+		}
+		if authorized.Action() != domain.ControlledClosureAction || authorized.GrantVersion().ObjectID().String() != "auth-close" {
+			t.Fatalf("authorization = %#v", authorized)
+		}
+		decider, named := authorized.Decider()
+		if !named || decider.Kind() != domain.OperatorRoleDecider || decider.Reference() != "operator-1" {
+			t.Fatalf("decider = %#v named = %v; 运营侧凭授权规则形成的决定，决定方就是运营角色", decider, named)
+		}
+	})
+	t.Run("neither can be handed out by a contract delegation", func(t *testing.T) {
+		// CONTEXT：两者都是运营侧凭授权规则形成的决定，合同委派不参与——客户只能委派自己拥有的决定。
+		contract := effectiveContract(t, "contract-1")
+		for _, action := range []domain.AuthorizedAction{domain.ControlledClosureAction, domain.ReopeningAction} {
+			if _, err := domain.NewContractDelegation(
+				contract, accountDelegator(t, "account-1"), action,
+				commercialValue(t, domain.NewCommercialScopeReference, "scope-a"),
+				commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
+				mustInterval(t),
+			); !errors.Is(err, domain.ErrInvalidContractDelegation) {
+				t.Fatalf("%s: error = %v; 合同把关闭 / 重开决定权委派了出去", action, err)
+			}
+		}
+	})
+	t.Run("the old constructor without a requester still forms the request", func(t *testing.T) {
+		// 关闭 / 重开的决定权不归客户，旧构造器与人工复核、主动拒绝同待——不要求请求方。
+		if _, err := domain.NewAuthorizationRequest(
+			domain.ReopeningAction,
+			commercialValue(t, domain.NewLegalEntityReference, "legal-1"),
+			commercialValue(t, domain.NewAuthorityLevel, "level-commercial"),
+			commercialValue(t, domain.NewCommercialScopeReference, "scope-a"),
+			commercialValue(t, domain.NewStructuredReason, "CUSTOMER_INSTRUCTION"),
+			commercialValue(t, domain.NewEvidenceReference, "evidence-1"),
+			authorityAt,
+		); err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+	})
+}
+
+// Covers: PS CONTEXT「货主、渠道服务方和代理商只能提出请求，除非客户合同或明确授权把其纳入可直接形成决定的授权
+// 角色范围」——例外支首发不开、留位（票 party-commercial-context-gaps/13 裁决 ③）：客户账户作请求方来请求关闭 /
+// 重开，即便持有的等级命中一条 grant，也在领域里显式拒绝（Is ErrNotAuthorized），理由钉在领域而不是靠命不中。
+// 无规则时仍是未配置——拒绝不顶替租户尚未登记规则这一格。
+func TestACustomerAccountMayOnlyRequestClosureAndReopening(t *testing.T) {
+	customer := customerRequester(t, "account-1")
+	for _, action := range []domain.AuthorizedAction{domain.ControlledClosureAction, domain.ReopeningAction} {
+		t.Run(action.String(), func(t *testing.T) {
+			grants := []domain.AuthorityGrant{
+				authorityGrant(t, "auth-"+action.String(), action, "level-commercial", "scope-a"),
+			}
+			_, err := domain.Authorize(grants, nil, requestBy(t, customer, action, "level-commercial", "scope-a"))
+			if !errors.Is(err, domain.ErrCustomerAccountCannotDecide) || !errors.Is(err, domain.ErrNotAuthorized) {
+				t.Fatalf("error = %v, want ErrCustomerAccountCannotDecide (Is ErrNotAuthorized)", err)
+			}
+			if errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+				t.Fatal("客户账户被拒与未配置互相 Is，恢复动作分不开")
+			}
+
+			if _, err := domain.Authorize(nil, nil, requestBy(t, customer, action, "level-commercial", "scope-a")); !errors.Is(err, domain.ErrAuthorityRulesNotConfigured) {
+				t.Fatalf("error = %v; 无规则仍是未配置，不是拒绝", err)
+			}
+		})
+	}
+
+	// 既有动作对客户账户请求方的解法一字不动：资料修订的决定方就是客户自己。
+	amendment := []domain.AuthorityGrant{
+		authorityGrant(t, "auth-amend", domain.SourceDataAmendmentAction, "level-commercial", "scope-a"),
+	}
+	if _, err := domain.Authorize(amendment, nil, requestBy(t, customer, domain.SourceDataAmendmentAction, "level-commercial", "scope-a")); err != nil {
+		t.Fatalf("authorize amendment: %v", err)
+	}
+}
+
 // Covers: CONTEXT 商业版本共同不变量 — 授权挂在一个当前可用的授权规则版本上。
 func TestAuthorityGrantNeedsAUsableAuthorizationRuleVersion(t *testing.T) {
 	t.Run("refuses a draft", func(t *testing.T) {
