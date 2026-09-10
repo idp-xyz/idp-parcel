@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** PS 半边形状已定（照有效交付那一路）；它要消费的 TF 信封的形状已于同日由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定（见「裁决」），TF 半边立为 [`31`](./31-carrier-first-effective-pickup-fact-registry-and-handoff.md)；本票在 `31` resolved 之前不得开工
-Blocked by: 31（TF 侧「实际承运商首次有效收寄」事实、登记册与信封——ADR-0135 已裁形，票已立、ready-for-agent）。另两件**不阻塞**：`Deps.Validity` 填 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 的适配器，它未进 main 前填 nil（编排按「未配置」办，不推算失效）；PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行未立票，落地前采用停在 `FINAL_RULE_UNCONFIGURED`，是诚实停点不是本票的阻塞
+Blocked by: 无——`31`（TF 侧「实际承运商首次有效收寄」事实、登记册与信封）已于 2026-09-10 在分支 `mcp6-lc31` resolved（tip `1d9a24c0`，等非作者评审与进 main）；信封类型 `transport-fulfillment.carrier-first-effective-pickup.registered`、载荷 `{tenantId, fact, version, object}`、读口 `CarrierFirstEffectivePickupRegistry.FindByKey`（指名那一代）与 TF 侧记录形状均已落地，本票可开工。另两件**不阻塞**：`Deps.Validity` 填 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 的适配器，它未进 main 前填 nil（编排按「未配置」办，不推算失效）；PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行未立票，落地前采用停在 `FINAL_RULE_UNCONFIGURED`，是诚实停点不是本票的阻塞
 
 ## 缺口
 

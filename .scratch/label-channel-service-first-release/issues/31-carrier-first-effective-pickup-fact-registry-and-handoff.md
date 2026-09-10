@@ -1,7 +1,7 @@
 # 31 实际承运商首次有效收寄：TF 侧事实聚合、版本链、登记册、outbox 与显式判断入口
 
 Category: enhancement
-Status: in-progress——通道 6 于 2026-09-10 按 MCP-1 派单 task-f3f0d59a 认领实施（隔离树 `D:/tops/idp-parcel-mcp6-lc31`，分支 `mcp6-lc31`，基 `76932b38`）。立票：通道 6 于同日按 MCP-1 派单 task-f05bc5a3，形状由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定、TF CONTEXT 同笔落词条（分支 `mcp6-adr0135`）；**只写票面，未动代码。** 「要裁的」为零
+Status: resolved——通道 6 于 2026-09-10 按 MCP-1 派单 task-f3f0d59a 实施完毕（隔离树 `D:/tops/idp-parcel-mcp6-lc31`，分支 `mcp6-lc31`，基 `76932b38`，代码 tip `1d9a24c0`、清点笔 `27bb2dc1`；main 上的 SHA 由推送方重放后在 Comments 补），完成记录见文末，等非作者评审。立票：通道 6 于同日按 MCP-1 派单 task-f05bc5a3，形状由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定、TF CONTEXT 同笔落词条（分支 `mcp6-adr0135`）；**只写票面，未动代码。** 「要裁的」为零
 Blocked by: 无（ADR-0135 与 TF CONTEXT 词条已落；本票不等 PS 侧 lc/25，反过来 lc/25 等本票）
 
 ## 缺口
@@ -58,3 +58,37 @@ ADR-0135 裁了形状：**新一类独立控制事实**，在合格来源之上�
 ## Comments
 
 - 2026-09-10 · 通道 6（task-f05bc5a3，基 `062f5228`，分支 `mcp6-adr0135`）：立票。**只写票面，未动代码。** 能力边界写在 ADR-0135 的 Status 行，此处不复制；票面「做法」里凡写「实施时以代码为准」的地方，是我没读全文只按符号名与头注判的：`rederive_fulfillment_participation.go` 两条来源的挂法、`ExternalTrackingFacts` 按版本读回的那一口、lc/21 两个口的装配文件。
+- 2026-09-10 · 通道 6（task-f3f0d59a，基 `76932b38`，分支 `mcp6-lc31`）：实施完毕，见「完成记录」。
+
+## 完成记录（2026-09-10，通道 6，分支 `mcp6-lc31`）
+
+八笔，全部在隔离 worktree 里写完、每笔推 origin，共享树上没出现过在途 `.go`：
+
+- `0b89f99e` 认领（Status → in-progress）。
+- `5b6ce319` **领域**：`CarrierFirstEffectivePickup` 聚合（三道构造门 / 三个转换门 / 重建门）、`CarrierPickupBasis`、结果与原因封闭词表；`ParticipationEntryKind` 第三格 `CARRIER_FIRST_EFFECTIVE_PICKUP`、`EstablishSegmentWithCarrierPickup` / `JoinWithCarrierPickup` / `RederiveParticipationWithCarrierPickup`、段重建门认第三格并许其失效。
+- `14608699` **端口 + 应用**：`CarrierFirstEffectivePickupRegistry` / `CarrierPickupIdentityFactory` / `CarrierFirstEffectivePickupHandoff`；`JudgeCarrierFirstEffectivePickupHandler.Judge` 十一格结果代数（见下）。
+- `55bfdf15` **postgres**：迁移 TF `0020`（版本表 + 依据表 + 两序列 + 参与表两条 CHECK 放开第三格）、`CarrierFirstEffectivePickups`、`OutboxCarrierFirstEffectivePickupHandoff`、`ResultVersions` 两个签发口。
+- `8795a1b6` **http**：`POST /transport-fulfillment-carrier-first-effective-pickup-judgments`、`GET /transport-fulfillment-carrier-first-effective-pickups?object=`、`UnconfiguredIntake` 同堵一口。
+- `ce8afd68` **cmd/parcel-api**：`buildCarrierPickupJudgment` 全缝接真并包事务（`NewCarrierIdentityDirectory` 首次接上生产：PC 参与方册 / 法人册一只 `PartyIdentityRegistrations` 担两口）、路由两行、隔离读放行表一行、unwired 占位两只；架构门禁：分区主体登记一行、TF postgres `Save` 无事务负向用例。
+- `1d9a24c0` **领域补漏**：待确认版本携带承运主体名称素材（`Material`）、`HoldPending` 亦可从失效链尾长出——这些改动写于 `5b6ce319` 之后、被随后三笔依赖却漏提，本笔补入；**分支中间几笔单独检出不可编译，tip 可**，推送方重放时若逐笔编译请把 `1d9a24c0` 与 `5b6ce319` 合看。
+- `27bb2dc1` 机制清点在 `1d9a24c0` 的干净 detached 检出上重生成。
+
+**完成判据逐条**：
+
+1. 领域：构造门「已形成缺承运主体 / 缺业务时间 / 缺判断时间 / 缺依据 / 缺租户 / 缺对象 / 缺身份 / 缺版本 / 依据重复同一代」各拒 ✓、「待确认缺原因 / 缺素材 / 缺判断时间」各拒 ✓、沿用原版本号拒 ✓；失效只从已形成长出（`ErrCarrierPickupNotFormed`）✓、已形成不回待确认（`ErrCarrierPickupAlreadyFormed`）✓；链尾失效后再次形成回指失效版本 ✓；第三格 `String()` 与解析往返、第四格仍答空串 ✓。**一处与票面措辞不同**：「被更正的必须恰是当前依据」不在收寄聚合的 `Supersede` / `Void` 门上（聚合不知道更正关系），而在编排（`BasedOn` → `BASIS_NOT_CURRENT`）与段的重派生门（`currentParticipationEnteredBy` → `ErrNoParticipationToRederive`）两处守——各有用例。
+2. 应用：结果代数**十一格**（票面写「至少六格」）：`PICKUP_FORMED` / `PICKUP_SUPERSEDED` / `PICKUP_VOIDED` / `PICKUP_PENDING` / `NOT_A_PICKUP` / `NOT_FIRST` / `BASIS_UNAVAILABLE` / `BASIS_NOT_CURRENT` / `ALREADY_RECORDED` / `INPUT_NOT_ACCEPTED` / `PICKUP_UNDECIDED`（五个未决理由），逐格有用例；「对象已凭场外揽收进段 → 非首次不落版本」✓；「轨迹事实有效时间待判断 → 依据不可用」「不存在的一代 / 别的对象 → 未受理」✓；「名称素材不在册 → 待确认（未登记）→ 登记后同依据 → 已形成回指前版、此时才进段才发意图」✓；「两条依据指向不同承运主体 → 待确认（来源冲突）全部依据保留、同主体第二条仍是未登记」✓；已形成后 `enterFulfillmentSegment` 铸出第三格参与且实际承运商判断当前版为已识别、依据即收寄依据 ✓；段引用缺席时事实照登、意图照发、不进段 ✓；重派生：替代版本 → 替代参与版本（起点随新业务时间）、失效版本 → 失效参与版本（段内无有效参与）、更正的不是链尾依据 → `BASIS_NOT_CURRENT` 不落版本 ✓；已形成后另一来源 → 非首次不收回 ✓；登记册 / 身份读口不可用 → 未决带续办引用 ✓。
+3. postgres（真库 `-v` PASS 非 SKIP）：三代同链往返、`FindByKey` 交指名那一代而不是链尾、`FindCurrentByObject` 链尾、`ListByObject` 整链、另一租户不可见 ✓；同版本重放 / 同对象第二条首登 / 同一前版回指两次各答已登记且撞键后同事务仍能读回链尾 ✓；CHECK 拦「待确认却带承运主体」「不回指的失效」「原因用了无合格证据」✓；参与表接受第三格与其失效版本、第四个词拒 ✓；outbox 三代各入一份 ID 异分区同、载荷四维指名自己那一代、事件类型 ✓、待确认拒绝入队 ✓、无事务拒 ✓；签发走事务、两前缀 ✓。
+4. 在线口：POST 新落收寄版本 201、待确认 / 不构成 200 且 outcome 区分、严格解码（自报租户 / 来源词集外 / 时刻解不出 / 分支词集外 400）、GET 用 POST 405、未配置 Intake 403 ✓；GET 按对象交回整链、对象缺席 400 ✓；隔离读放行按 ADR-0078 判入格（`isolated_read_test.go` 表加一行）✓。
+5. `gofmt -l cmd internal migrations` 空、`go build ./...` / `go vet ./...` 退 0；**带 DSN** `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/... ./internal/architecture/... ./migrations/... ./internal/platform/migrate/...` 22 包 ok；TF postgres + cmd/parcel-api + platform/migrate 三包 `-v` 下 **PASS 391 / SKIP 0 / FAIL 0**；机制清点在 tip 的干净检出重生成 ✓。未跑全量（按派单）。
+6. 本记录即「刻意不含」核对：收寄判读规则目录与规则那一路的节拍（随第一家真源，ADR-0135 决定八）、PS 半边（lc/25，本票 resolved 后其 Blocked by 解除——已在 lc/25 票面回填）、有效交付在轨迹事实之上的判断（另一题）、管理台页面（先有事实再谈面）——四件都没做，各有归处。
+
+**判断题（交非作者评审）**：
+
+1. **待确认版本携带名称素材（`claimed_material` 列）**——ADR-0135 决定二只列五件，我按 CONTEXT「不据名称铸身份，名称作为素材随依据保留」把素材放在待确认版本上（已形成 / 失效不带，CHECK 同形），并用它分「同主体第二条证据（仍是身份未登记）」与「不同主体（来源冲突）」：素材大小写不敏感相等即同主体。这是对 ADR 的一处加法，不是改法；若评审认为素材该落依据表逐条而不是版本一列，改的是一列的位置。
+2. **`HoldPending` 亦可从失效链尾长出**——ADR-0135 生命周期只写「再次形成从失效版本长出新版本」（已形成）；失效之后新到证据身份未登记时，我让链上长一版待确认而不是答未受理（后者会让「等身份登记」变成「改输入」，ADR-0029 分格不对）。
+3. **重派生的触发是显式判断，不是轨迹更正落库后的自动一拍**——票面「做法」3 写了「触发点挂在轨迹事实更正落库之后的一拍」，但更正后「仍表达 / 不再表达收寄」本身是一次读法（决定四），规则那一路未立时没有人能自动给；所以更正走的是：判断方对更正后那一代再次 `POST`（`expressesControl` 为真 → 替代、为假 → 失效），编排从读回的回指取「更正了哪一代」（命令也可显式指名）。ADR-0135 决定八「显式判断先行、规则那一路另立」与此一致；规则那一路落地时挂自动一拍到同一个 `Judge`。
+4. **「首次」的判据**——对象有当前有效参与（`FindActiveSegments` 非空）即非首次；已离场的历史参与不算（对象一程走几段，后一段的承运证据仍可能是它的首次有效收寄）。若评审认为「曾进过任何段」即非首次，改 `objectUnderControl` 用 `FindSegmentsForObject`。
+5. **进段 vs 重派生的分路**——新版本回指的前版**已形成**才走重派生（`priorEnteredSegment` 按键读回前版核结果），前版是待确认 / 失效时新的已形成版本走进段（这条链第一次成为收寄）。前版读不回按「没进过」办，进段那道门会拒对象已在段内。
+6. **业务发生时间取依据有效时间**——ADR-0135 越权风险点 3 原样落地；非轨迹事实来源（扫描 / 凭证 / 交接）本上下文没有登记册可读，由判断方连同证据交来 `occurredAt`，缺席拒。
+7. **`NewCarrierIdentityDirectory` 首次接上生产**——此前 TF 对 PC 身份的消费侧适配器没有任何 cmd 调用点；本票把它接进收寄判断与随之的实际承运商判断（`FormActualCarrierJudgmentHandler` 作为收寄依据交给判断的口，也是首次进 cmd）。两只都以 PC 的 `PartyIdentityRegistrations` 作参与方册与法人册两口的实现。
+8. **HTTP 状态码**——只有已形成 / 替代 / 失效答 201；待确认答 200（即便新落了一版待确认），因为 201 在这里说的是「新落一版**收寄**」，待确认不构成收寄。若评审认为「新落一版（任何结果）」才是 201 的判据，改 `writeCarrierPickupJudgmentOutcome` 一处。
