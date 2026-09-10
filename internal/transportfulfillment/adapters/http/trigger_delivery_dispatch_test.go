@@ -98,7 +98,7 @@ func seedHandoverParticipation(t *testing.T, registry *segmentRegistryDouble, ob
 
 type resolvedWindow struct{ from, to time.Time }
 
-func (window resolvedWindow) LoadDeliveryWindow(context.Context, domain.TenantID, domain.CarriedObjectReference) (time.Time, time.Time, ports.RequirementResolution, error) {
+func (window resolvedWindow) LoadDeliveryWindow(context.Context, domain.TenantID, domain.PlannedSegmentReference, bool) (time.Time, time.Time, ports.RequirementResolution, error) {
 	return window.from, window.to, ports.RequirementResolved, nil
 }
 
