@@ -1592,3 +1592,13 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **进 main**：推送方簿记一笔在 `637bb3a2` 之上（票 07 Comments 两条 + 本节）；`ls-remote` 核 `8bdab82e` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp2-psr07` 比内容后改 `merged/`、远端删、树拆（2 已转 tf/12 用新树 `mcp2-tf12`）；`idp-replay-psr07` 拆。
 - **接下来**：sa/04（6，第 3 步 HTTP 半边在跑）/ pc-gaps/11（5，首笔 582e9f12 已推）/ tf/12（2）。tf/13（NR 缝）现在也可派——nr/03 已在 main；3 / 4 任一重起给它，否则等 2 交 tf/12 后接。tf/14 Blocked by pc-gaps/11（psr/07 半边今起已解）。**归用户**：CI 计费；两件 untracked；会话中断成因。
 - **本节五数**：CI main 绿/总 未量 · 集成时延 psr/07 完工报 13:0x → 推出 13:2x **约 15 分**（1 票）· 重放笔数 **5**（四笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
+
+### 13:0x–13:5x 同一会话：pc-gaps/11 完工 → tf/13 派通道 5 → 自评 → 进 main
+
+- **tf/12 第 5 步答通道 2**（13:4x）：取甲（端点 `/transport-fulfillment-delivery-dispatch-triggers` + `UnconfiguredIntake{}`，照 dispatch-task-registrations 先例；拍频归调用方即「作配置不作默认」）；TF adapters/http 新增一件端点文件准（地盘外一件，完成记录记一句）；乙要新开 TF 工作面读口 + postgres，越地盘另票。
+- **pc-gaps/11 完工报 13:0x**（通道 5，task-4649070b done：分支 `mcp5-pcgaps11` 基 `d9a1f571`，tip `3e513732`，六笔含清点；带 DSN 23 包 ok / PASS 2201 / SKIP 0；含迁移 0030）。**tf/13 派通道 5**（13:3x，`task-247c5d4d`，基 `c0cdebba`；nr/03 已在 main 解阻塞；TF 地盘 branch-state 无在途——但 tf/12 同期在 2 手上，派单写死顺序：先做不碰共享文件的适配器新包 + 测试，再问 2 之后才动 ports/delivery_requirement.go / 执行器 / cmd/parcel-api，三步法 + 开窗；生产入口归 tf/12）。
+- **pc-gaps/11 评审**（推送方自跑，非作者；3 / 4 未回、2 / 6 在票上）：**Standards 0 阻断 / 1 非阻断**（`SaveDeliveryConditions` 以 error 表达业务拒件——ADR-0031 三格外第四种落点，作者判断题 1，归 owner 复核）· **Spec 0 阻断 / 1 非阻断**（产品版本未采用不单列一格 vs ADR-0133 决定二字面，作者判断题 5，归 owner 复核）。开放引用裁法认可（CONTEXT / GLOSSARY 未动）。全文落票 11 Comments。
+- **重放**：`%TEMP%\idp-replay-pc11` 在 `c0cdebba` 上 pick 六笔（`d9a1f571→d656b99b` / `582e9f12→545b2483` / `d7bd4132→e0edc701` / `697c9dc5→1ad8d81f` / `7f18b156→08084300` / `3e513732→92a059dc`）——第一遍漏了基底 `d9a1f571` 致票面笔冲突，重置重来后全干净（教训：改派票的基底笔也是这张票的一笔，pick 时从分支的 merge-base 起数，别从「作者的第一笔代码」起数）；作者清点笔 `aff5537d` 跳过，tip 重生成为 `fce1faa9`。gofmt / build / vet 0、architecture ok、0030 LF 无 BOM；占 55432 广播后带 DSN 全量 **102 ok / 0 FAIL / 15 无测试 · PASS 7939 / SKIP 1 / FAIL 0 / 0 cached · 122 s**，探针 PASS，释号。
+- **进 main**：推送方簿记一笔在 `fce1faa9` 之上（票 11 Comments 两条 + 本节）；`ls-remote` 核 `c0cdebba` 未动 → ff → `push <sha>:main`，SHA 见推后广播。`mcp5-pcgaps11` 比内容后改 `merged/`、远端删、树拆；远端 `mcp4-pcgaps11`（d9a1f571，已是 main 祖先）同删；`idp-replay-pc11` 拆。
+- **接下来**：sa/04（6，第 5 步 HTTP 读面）/ tf/12（2）/ tf/13（5）。**tf/14 两个 Blocked by 至此都在 main**（pc-gaps/11 + psr/07）——3 / 4 任一重起给它；都不起则等 2 或 5 交票后接（tf/14 与 12 / 13 共用执行器与 cmd/parcel-api，派前要看 12 / 13 进到哪）。owner 复核队列新增两条（ADR-0031 第四落点、ADR-0133 决定二产品未采用那一格），`scripts/owner-review-queue.ps1` 下次生成会带出。**归用户**：CI 计费；两件 untracked；会话中断成因。
+- **本节五数**：CI main 绿/总 未量 · 集成时延 pc-gaps/11 完工报 13:0x → 推出 13:5x **约 45 分**（1 票；评审这张最大、约 20 分）· 重放笔数 **7**（六笔作者 + 推送方清点 1）· 重复开发 0 次 · 会话重置 0 次（本小节内）
