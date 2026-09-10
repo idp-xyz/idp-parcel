@@ -327,6 +327,8 @@ type taskDocument struct {
 	WaitingOn           uint8             `json:"waitingOn,omitempty"`
 	ProcessingAttempts  []attemptDocument `json:"processingAttempts,omitempty"`
 	ReviewCompletion    *reviewDocument   `json:"reviewCompletion,omitempty"`
+	// AuthorizedDisposition 是本版本上已记录的授权处置（ADR-0132），落法照 ReviewCompletion：缺席即没处置过。
+	AuthorizedDisposition *dispositionDocument `json:"authorizedDisposition,omitempty"`
 }
 
 type attemptDocument struct {
@@ -341,6 +343,17 @@ type reviewDocument struct {
 	Reviewer    string    `json:"reviewer"`
 	Evidence    string    `json:"evidence"`
 	CompletedAt time.Time `json:"completedAt"`
+}
+
+// dispositionDocument 的去向存名字不存数字：快照里其余枚举存数字是历史形状，这一格新开，名字读回时经封闭集
+// 逐字对，集外在重建门上暴露而不是被静默当成某一格。
+type dispositionDocument struct {
+	Choice     string    `json:"choice"`
+	Authority  string    `json:"authority"`
+	Disposer   string    `json:"disposer"`
+	Reason     string    `json:"reason"`
+	Evidence   string    `json:"evidence"`
+	DisposedAt time.Time `json:"disposedAt"`
 }
 
 // documentOf 从聚合的公开访问器摊出文档。只读不判断：状态门在读回那一侧的
@@ -446,6 +459,16 @@ func taskDocumentOf(task domain.AcceptanceDecisionTask) taskDocument {
 			Reviewer:    completion.Reviewer().String(),
 			Evidence:    completion.Evidence().String(),
 			CompletedAt: completion.CompletedAt().UTC(),
+		}
+	}
+	if disposition, recorded := task.AuthorizedDisposition(); recorded {
+		document.AuthorizedDisposition = &dispositionDocument{
+			Choice:     disposition.Choice().String(),
+			Authority:  disposition.Authority().String(),
+			Disposer:   disposition.Disposer().String(),
+			Reason:     disposition.Reason().String(),
+			Evidence:   disposition.Evidence().String(),
+			DisposedAt: disposition.DisposedAt().UTC(),
 		}
 	}
 	return document
@@ -716,7 +739,52 @@ func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) 
 		}
 		spec.ReviewCompletion = completion
 	}
+	if document.AuthorizedDisposition != nil {
+		disposition, err := authorizedDispositionOf(*document.AuthorizedDisposition)
+		if err != nil {
+			return domain.RehydrateAcceptanceTaskSpec{}, err
+		}
+		spec.AuthorizedDisposition = disposition
+	}
 	return spec, nil
+}
+
+// authorizedDispositionOf 逐字段过领域构造门：去向逐字对封闭集，四引用与时点由 NewAuthorizedDisposition 再验
+// 一遍——一行坏数据在构造门上暴露，不会变成一份看起来合法的处置记录。
+func authorizedDispositionOf(document dispositionDocument) (domain.AuthorizedDisposition, error) {
+	var choice domain.AuthorizedDispositionChoice
+	switch document.Choice {
+	case domain.DisposeByRejection.String():
+		choice = domain.DisposeByRejection
+	case domain.DisposeByCustomerSupplement.String():
+		choice = domain.DisposeByCustomerSupplement
+	default:
+		return domain.AuthorizedDisposition{}, fmt.Errorf("unknown authorized disposition choice %q", document.Choice)
+	}
+	authority, err := domain.NewDispositionAuthorityReference(document.Authority)
+	if err != nil {
+		return domain.AuthorizedDisposition{}, err
+	}
+	disposer, err := domain.NewDisposerReference(document.Disposer)
+	if err != nil {
+		return domain.AuthorizedDisposition{}, err
+	}
+	reason, err := domain.NewDispositionReasonReference(document.Reason)
+	if err != nil {
+		return domain.AuthorizedDisposition{}, err
+	}
+	evidence, err := domain.NewDispositionEvidenceReference(document.Evidence)
+	if err != nil {
+		return domain.AuthorizedDisposition{}, err
+	}
+	return domain.NewAuthorizedDisposition(domain.AuthorizedDispositionSpec{
+		Choice:     choice,
+		Authority:  authority,
+		Disposer:   disposer,
+		Reason:     reason,
+		Evidence:   evidence,
+		DisposedAt: document.DisposedAt,
+	})
 }
 
 func decisionDocumentOf(decision domain.AcceptanceDecision) *acceptanceDecisionDocument {

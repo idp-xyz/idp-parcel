@@ -117,13 +117,20 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 	}
 
 	// 逐项与父行同一事务、同一时点键：同一次控制的重放在父行撞 ON CONFLICT DO NOTHING，项也照样
-	// 不重写。`明确无控制`没有项，这个循环不转。
+	// 不重写。`明确无控制`没有项，这个循环不转。受限项的采用引用（失败处置 × 责任引用，ADR-0132 决定三）
+	// 随项同行落库；没采用的项两列写 NULL，读回如实是「未采用」。
 	for _, item := range result.Items() {
+		var disposition, responsibility any
+		if adopted, present := item.AdoptedDisposition(); present {
+			disposition = adopted.FailureDisposition().String()
+			responsibility = adopted.Responsibility().String()
+		}
 		_, err = executor.Exec(ctx,
 			`INSERT INTO parcel_shipment.acceptance_financial_control_item
 				(tenant_id, shipment_request_id, submission_version, as_of_at,
-				 control_kind, evaluation_order, item_conclusion, basis_ref)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+				 control_kind, evaluation_order, item_conclusion, basis_ref,
+				 failure_disposition, responsibility_ref)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 			 ON CONFLICT DO NOTHING`,
 			tenant.String(),
 			requestID.String(),
@@ -133,6 +140,8 @@ func (repository *AcceptanceJudgments) RecordFinancialControlResult(
 			int32(item.Order()),
 			item.Conclusion().String(),
 			nullableText(item.Basis().String()),
+			disposition,
+			responsibility,
 		)
 		if err != nil {
 			return fmt.Errorf("record financial control item: %w", err)
@@ -372,7 +381,8 @@ func loadFinancialControlItems(
 	asOfAt time.Time,
 ) ([]controlItemRow, error) {
 	rows, err := querier.Query(ctx,
-		`SELECT control_kind, evaluation_order, item_conclusion, basis_ref
+		`SELECT control_kind, evaluation_order, item_conclusion, basis_ref,
+		        failure_disposition, responsibility_ref
 		   FROM parcel_shipment.acceptance_financial_control_item
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
@@ -392,7 +402,9 @@ func loadFinancialControlItems(
 	var items []controlItemRow
 	for rows.Next() {
 		var row controlItemRow
-		if err := rows.Scan(&row.kind, &row.order, &row.conclusion, &row.basis); err != nil {
+		if err := rows.Scan(
+			&row.kind, &row.order, &row.conclusion, &row.basis, &row.disposition, &row.responsibility,
+		); err != nil {
 			return nil, fmt.Errorf("load financial control items: %w", err)
 		}
 		items = append(items, row)
@@ -463,6 +475,10 @@ type controlItemRow struct {
 	order      int32
 	conclusion string
 	basis      *string
+	// disposition 与 responsibility 成对：受限项采用的失败处置与责任引用（迁移 0021），存量行与采用之前
+	// 记下的行两者皆 NULL。
+	disposition    *string
+	responsibility *string
 }
 
 // rebuildReachabilityJudgment 逐字段过领域构造门，`不适用`带依据、其余三值带标识由
@@ -553,7 +569,44 @@ func rebuildControlItem(row controlItemRow) (domain.ControlItemResult, error) {
 			return domain.ControlItemResult{}, err
 		}
 	}
-	return domain.NewControlItemResult(kind, uint32(row.order), conclusion, basis)
+	item, err := domain.NewControlItemResult(kind, uint32(row.order), conclusion, basis)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	// 两列同缺即「未采用」，如实读回（ADR-0125 过渡口径由领域译）；同在则过采用门——成立项带处置、
+	// 集外处置都在门上暴露。半截行 CHECK 已拒，读到只可能是绕过库面写的坏数据，同样报错不吸收。
+	if row.disposition == nil && row.responsibility == nil {
+		return item, nil
+	}
+	if row.disposition == nil || row.responsibility == nil {
+		return domain.ControlItemResult{}, fmt.Errorf(
+			"control item %s carries half an adopted disposition", row.kind)
+	}
+	disposition, err := controlFailureDispositionFrom(*row.disposition)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	responsibility, err := domain.NewControlResponsibilityReference(*row.responsibility)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	adopted, err := domain.NewAdoptedControlDisposition(disposition, responsibility)
+	if err != nil {
+		return domain.ControlItemResult{}, err
+	}
+	return item.WithAdoptedDisposition(adopted)
+}
+
+// controlFailureDispositionFrom 逐字对本上下文自有封闭集，集外报错不吸收（与 controlItemKindFrom 同一纪律）。
+func controlFailureDispositionFrom(raw string) (domain.ControlFailureDisposition, error) {
+	switch raw {
+	case domain.RejectOnControlFailure.String():
+		return domain.RejectOnControlFailure, nil
+	case domain.AuthorizedDispositionOnControlFailure.String():
+		return domain.AuthorizedDispositionOnControlFailure, nil
+	default:
+		return domain.ControlFailureDispositionInvalid, fmt.Errorf("unknown control failure disposition %q", raw)
+	}
 }
 
 // judgmentAsOf 从行重建时点。走 NewEchoedAsOfPolicy 是唯一的路：NewJudgmentAsOf 收不下

@@ -118,6 +118,93 @@ func TestACombinedControlRoundTripsEveryItemAndTheJointPassCondition(t *testing.
 	}
 }
 
+// TestARestrictedItemRoundTripsItsAdoptedDisposition 证受限项的采用引用（失败处置 × 责任引用，ADR-0132 决定三，
+// 迁移 0021）随项落库并原样读回：读回的结果 `AwaitsAuthorizedDisposition` 为真——正文登了`进入授权处置`的受限
+// 控制在读面与决定那一步都不再按过渡口径拒绝；成立项两列为空、读回不带处置。
+func TestARestrictedItemRoundTripsItsAdoptedDisposition(t *testing.T) {
+	judgments, transactor, _ := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	responsibility := mustBuild(t, domain.NewControlResponsibilityReference, "CONTRACT-CLAUSE-7")
+	adopted, err := domain.NewAdoptedControlDisposition(domain.AuthorizedDispositionOnControlFailure, responsibility)
+	if err != nil {
+		t.Fatalf("形成采用引用：%v", err)
+	}
+	combined, err := executedControlResult(t, "REQ-1/VER-1", taskAsOfFirst,
+		controlItem(t, domain.PrepaidFreezeControlItem, 1, domain.ControlItemSatisfied, ""),
+		controlItem(t, domain.CreditCheckControlItem, 2, domain.ControlItemRestricted, "AVAILABLE_CREDIT_INSUFFICIENT"),
+	).AdoptControlDispositions(map[domain.ControlItemKind]domain.AdoptedControlDisposition{
+		domain.CreditCheckControlItem: adopted,
+	})
+	if err != nil {
+		t.Fatalf("采用处置：%v", err)
+	}
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), combined)
+	})
+
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
+	if err != nil {
+		t.Fatalf("读回已采用判断：%v", err)
+	}
+	if !reflect.DeepEqual(recorded.FinancialControl, combined) {
+		t.Fatalf("带采用引用的控制结果往返变形：%+v", recorded.FinancialControl)
+	}
+	if !recorded.FinancialControl.AwaitsAuthorizedDisposition() {
+		t.Fatal("读回的受限结果没带上采用的处置——决定那一步会按过渡口径把它拒掉")
+	}
+	items := recorded.FinancialControl.Items()
+	if _, present := items[0].AdoptedDisposition(); present {
+		t.Fatal("成立项读回带着处置")
+	}
+	got, present := items[1].AdoptedDisposition()
+	if !present || got.FailureDisposition() != domain.AuthorizedDispositionOnControlFailure ||
+		got.Responsibility() != responsibility {
+		t.Fatalf("受限项的采用引用读回 %+v (present=%v)", got, present)
+	}
+}
+
+// TestARestrictedItemRecordedWithoutADispositionReadsBackUnadopted 证存量行的读法（迁移 0021「存量行 NULL 如实
+// 读回、不补不拒」，ADR-0028 只校验不重算）：采用之前记下的受限项两列为 NULL，读回如实是「未采用」，
+// `AwaitsAuthorizedDisposition` 为假——它仍按 ADR-0125 的过渡口径译`未通过`，不凭空进入授权处置。
+func TestARestrictedItemRecordedWithoutADispositionReadsBackUnadopted(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+
+	legacy := executedControlResult(t, "REQ-1/VER-1", taskAsOfFirst,
+		controlItem(t, domain.CreditCheckControlItem, 1, domain.ControlItemRestricted, "AVAILABLE_CREDIT_INSUFFICIENT"),
+	)
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		return judgments.RecordFinancialControlResult(txCtx, tenant, requestID, taskVersion(t, "VER-1"), legacy)
+	})
+	var dispositions, responsibilities int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(failure_disposition), count(responsibility_ref)
+		   FROM parcel_shipment.acceptance_financial_control_item
+		  WHERE tenant_id = 'tenant-1' AND shipment_request_id = 'REQ-1'`).Scan(&dispositions, &responsibilities); err != nil {
+		t.Fatalf("数两列：%v", err)
+	}
+	if dispositions != 0 || responsibilities != 0 {
+		t.Fatalf("没采用处置的受限项写下了 %d 个处置 / %d 个责任引用——那是替租户选去向", dispositions, responsibilities)
+	}
+
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, taskVersion(t, "VER-1"))
+	if err != nil {
+		t.Fatalf("读回已采用判断：%v", err)
+	}
+	if !reflect.DeepEqual(recorded.FinancialControl, legacy) {
+		t.Fatalf("未采用处置的控制结果往返变形：%+v", recorded.FinancialControl)
+	}
+	if recorded.FinancialControl.AwaitsAuthorizedDisposition() {
+		t.Fatal("存量行读回凭空进入了授权处置")
+	}
+	if _, present := recorded.FinancialControl.Items()[0].AdoptedDisposition(); present {
+		t.Fatal("两列皆 NULL 的受限项读回带着处置")
+	}
+}
+
 // TestAStoredConclusionThatContradictsItsItemsIsRefusedOnRead 证重建门只校验不重算（ADR-0028）：把库里
 // 记的结论改成与逐项对不上的 HELD，读回不是静默按今天的推导改成 CREDIT_EXPOSED，而是拒绝——那一行不
 // 可能是本上下文判出来的，读的人要去查那一行。
@@ -573,6 +660,24 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 		t.Error("两项抢同一个判断顺序溜进了控制库——答不出该按哪条")
 	}
 
+	// 迁移 0021：受限项的采用引用两列成对——成立项必空、受限项同在或同缺、半截拒、处置只认封闭集。
+	for name, values := range map[string]string{
+		"成立项带处置":   "'PREPAID_FREEZE', 1, 'SATISFIED', NULL, 'REJECT', 'customer'",
+		"受限项只有处置":  "'PREPAID_FREEZE', 1, 'RESTRICTED', 'SOME_REASON', 'REJECT', NULL",
+		"受限项只有责任":  "'PREPAID_FREEZE', 1, 'RESTRICTED', 'SOME_REASON', NULL, 'customer'",
+		"受限项责任为空串": "'PREPAID_FREEZE', 1, 'RESTRICTED', 'SOME_REASON', 'REJECT', '  '",
+		"处置集外":     "'PREPAID_FREEZE', 1, 'RESTRICTED', 'SOME_REASON', 'RELEASE', 'customer'",
+	} {
+		if _, err := pool.Exec(ctx,
+			`INSERT INTO parcel_shipment.acceptance_financial_control_item
+				(tenant_id, shipment_request_id, submission_version, as_of_at,
+				 control_kind, evaluation_order, item_conclusion, basis_ref,
+				 failure_disposition, responsibility_ref)
+			 VALUES ('tenant-1', 'REQ-parent', 'VER-x', $1, `+values+`)`, parentAt); err == nil {
+			t.Errorf("%s 的控制项结果溜进了控制库", name)
+		}
+	}
+
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO parcel_shipment.acceptance_processing_attempt
 			(tenant_id, shipment_request_id, continuation_ref, attempted_at,
@@ -588,14 +693,14 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 // dispatch.publish_failed（票 first-tenant-runway/07 在真库上量到过；迁移 0011 对齐后本条才绿）。
 //
 // 集合以 String() 非空为界，与领域那条遍历门禁同一口径；不写死条数——日后再加一格，这里自动
-// 跟着走，而库面镜像没跟时它就红。单独钉一句 OPERATOR_REGISTRATION 在遍历里，是防遍历口径
-// 变了之后本条空转成绿。
+// 跟着走，而库面镜像没跟时它就红（第五格`等待授权处置`由迁移 0021 对齐，本条在那之前红过一轮）。
+// 单独钉最后一格在遍历里，是防遍历口径变了之后本条空转成绿。
 func TestEveryResumePathLandsInTheAttemptTable(t *testing.T) {
 	judgments, transactor, _ := newAcceptanceJudgments(t)
 	ctx := t.Context()
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	sawOperatorRegistration := false
+	sawAuthorizedDisposition := false
 	for path := domain.ResumePath(1); path.String() != ""; path++ {
 		attempt := taskAttempt(t, "SOME_REASON", path, "CONT-"+path.String(), taskAttemptedAt)
 		if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -603,10 +708,10 @@ func TestEveryResumePathLandsInTheAttemptTable(t *testing.T) {
 		}); err != nil {
 			t.Errorf("续办路径 %s 写不进处理尝试库——库面镜像落后于领域封闭集合：%v", path, err)
 		}
-		sawOperatorRegistration = sawOperatorRegistration || path == domain.ResumeByOperatorRegistration
+		sawAuthorizedDisposition = sawAuthorizedDisposition || path == domain.ResumeByAuthorizedDisposition
 	}
-	if !sawOperatorRegistration {
-		t.Fatal("遍历没走到 OPERATOR_REGISTRATION——String() 的遍历口径变了，本条要跟着改")
+	if !sawAuthorizedDisposition {
+		t.Fatal("遍历没走到 AUTHORIZED_DISPOSITION——String() 的遍历口径变了，本条要跟着改")
 	}
 }
 
@@ -632,8 +737,8 @@ func TestTaskWaitingOnProjectionMirrorsEveryResumePath(t *testing.T) {
 		}
 		last = path
 	}
-	if last != domain.ResumeByOperatorRegistration {
-		t.Fatalf("遍历止于 %s，want OPERATOR_REGISTRATION——String() 的遍历口径变了，本条要跟着改", last)
+	if last != domain.ResumeByAuthorizedDisposition {
+		t.Fatalf("遍历止于 %s，want AUTHORIZED_DISPOSITION——String() 的遍历口径变了，本条要跟着改", last)
 	}
 	if _, err := pool.Exec(ctx,
 		`UPDATE parcel_shipment.shipment_request SET task_waiting_on = $1
