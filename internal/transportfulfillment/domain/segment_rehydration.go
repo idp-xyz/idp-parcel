@@ -121,8 +121,10 @@ func rehydrateParticipation(row RehydrateParticipationSpec) (FulfillmentParticip
 	if row.Supersedes.valid() && row.Supersedes == row.EntryBasis {
 		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
 	}
-	// 失效版本必回指前版且只出自交接更正——与迁移 0019 的 CHECK 同一形，行上就看得出。
-	if row.Voided && (!row.Supersedes.valid() || row.EntryKind != EnteredByTransportHandover) {
+	// 失效版本必回指前版，且只出自交接更正或收寄链的失效版本（ADR-0112 决定四；ADR-0135 决定六）——揽收更正在
+	// 构造期就拒「更正成失败到访」，走不到这一格。与迁移 0019 / 0020 的 CHECK 同一形，行上就看得出。
+	if row.Voided && (!row.Supersedes.valid() ||
+		(row.EntryKind != EnteredByTransportHandover && row.EntryKind != EnteredByCarrierFirstEffectivePickup)) {
 		return FulfillmentParticipation{}, ErrInvalidFulfillmentSegment
 	}
 
@@ -181,7 +183,7 @@ func (segment *ActualFulfillmentSegment) markSupersededByChain() error {
 }
 
 func (kind ParticipationEntryKind) valid() bool {
-	return kind == EnteredByOffsitePickup || kind == EnteredByTransportHandover
+	return kind == EnteredByOffsitePickup || kind == EnteredByTransportHandover || kind == EnteredByCarrierFirstEffectivePickup
 }
 
 func (kind ParticipationEndKind) valid() bool {

@@ -54,14 +54,17 @@ func NewParticipationBasisReference(value string) (ParticipationBasisReference, 
 	return ParticipationBasisReference{required}, err
 }
 
-// ParticipationEntryKind 是参与起点的封闭二来源：有效收寄（场外揽收）或`已交接`的
-// 权威交接。刻意没有第三格——扫描、装载、订舱确认都立不起参与（CONTEXT 79）。
+// ParticipationEntryKind 是参与起点的封闭三来源：场外揽收、`已交接`的权威交接、**已形成的**实际承运商
+// 首次有效收寄（ADR-0135 决定五）。第三格不是扫描——扫描、装载、订舱确认仍立不起参与（CONTEXT「载运对象
+// 通过有效收寄或权威交接进入运输方控制时……才成立」那句的反面）；它是本上下文判过「取得运输控制」的控制
+// 事实，正是那句硬话许可的那种进入。
 type ParticipationEntryKind uint8
 
 const (
 	ParticipationEntryKindInvalid ParticipationEntryKind = iota
 	EnteredByOffsitePickup
 	EnteredByTransportHandover
+	EnteredByCarrierFirstEffectivePickup
 )
 
 func (kind ParticipationEntryKind) String() string {
@@ -70,6 +73,8 @@ func (kind ParticipationEntryKind) String() string {
 		return "OFFSITE_PICKUP"
 	case EnteredByTransportHandover:
 		return "TRANSPORT_HANDOVER"
+	case EnteredByCarrierFirstEffectivePickup:
+		return "CARRIER_FIRST_EFFECTIVE_PICKUP"
 	default:
 		return ""
 	}
@@ -220,6 +225,20 @@ func EstablishSegmentWithHandover(
 	return established.JoinWithHandover(handover, planned)
 }
 
+// EstablishSegmentWithCarrierPickup 由首个对象的实际承运商首次有效收寄成立段（ADR-0135 决定五）：承运商
+// 揽走面单渠道包裹那一刻，对象在本上下文里没有任何参与关系，承运商的段就从这条控制事实立起来。
+func EstablishSegmentWithCarrierPickup(
+	segment FulfillmentSegmentReference,
+	pickup CarrierFirstEffectivePickup,
+	planned PlannedSegmentReference,
+) (ActualFulfillmentSegment, error) {
+	established := ActualFulfillmentSegment{tenantID: pickup.TenantID(), segment: segment}
+	if !segment.valid() || !pickup.TenantID().valid() {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	return established.JoinWithCarrierPickup(pickup, planned)
+}
+
 func (segment ActualFulfillmentSegment) TenantID() TenantID {
 	return segment.tenantID
 }
@@ -344,6 +363,30 @@ func (segment ActualFulfillmentSegment) JoinWithHandover(
 	}, handover.TenantID())
 }
 
+// JoinWithCarrierPickup 让对象凭**已形成的**实际承运商首次有效收寄加入段。待确认与失效版本不构成收寄、
+// 不进段（CONTEXT 词条），自然也立不起参与——与 JoinWithHandover 对拒收 / 待确认同一格 ErrSegmentNeedsAControlFact。
+// 起点取收寄的业务发生时间（ADR-0135 决定三）。
+func (segment ActualFulfillmentSegment) JoinWithCarrierPickup(
+	pickup CarrierFirstEffectivePickup,
+	planned PlannedSegmentReference,
+) (ActualFulfillmentSegment, error) {
+	occurredAt, formed := pickup.OccurredAt()
+	if !pickup.Formed() || !formed {
+		return ActualFulfillmentSegment{}, ErrSegmentNeedsAControlFact
+	}
+	basis, err := carrierPickupBasisReference(pickup.Version())
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	return segment.join(FulfillmentParticipation{
+		object:     pickup.Object(),
+		planned:    planned,
+		entryKind:  EnteredByCarrierFirstEffectivePickup,
+		entryBasis: basis,
+		enteredAt:  occurredAt,
+	}, pickup.TenantID())
+}
+
 func (segment ActualFulfillmentSegment) join(
 	participation FulfillmentParticipation,
 	tenant TenantID,
@@ -430,7 +473,35 @@ func (segment ActualFulfillmentSegment) RederiveParticipationWithHandover(handov
 	return segment.rederive(handover.TenantID(), handover.Object(), EnteredByTransportHandover, replaced, basis, current.enteredAt, true)
 }
 
-// rederive 是两种来源共用的替代门，失效版本也从这里进（voided 为是）。被替代的必须是该对象**当前**参与
+// RederiveParticipationWithCarrierPickup 以收寄链上的新版本在同段内形成下一版参与（ADR-0135 决定五 / 六，
+// 形取 RederiveParticipationWithHandover）：替代版本（更正后仍是收寄）起点随新版本的业务时间；失效版本
+// （更正后不再表达收寄）回指前版、标失效、起点沿用被失效那一版。被替代的必须是该对象当前参与，且入场依据恰是
+// 被回指的那一版收寄——不是更正、更正的是前前版、对象不在段里，都无可替代。待确认的新版本没有参与可长：它回指
+// 的若是待确认前版，前版本就没进过段；若它回指已形成的前版，构造门已经拒了（已形成不回待确认）。
+func (segment ActualFulfillmentSegment) RederiveParticipationWithCarrierPickup(pickup CarrierFirstEffectivePickup) (ActualFulfillmentSegment, error) {
+	prior, corrected := pickup.Supersedes()
+	if !corrected || pickup.Result() == CarrierPickupPending {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	replaced, err := carrierPickupBasisReference(prior)
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	basis, err := carrierPickupBasisReference(pickup.Version())
+	if err != nil {
+		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
+	}
+	current, present := segment.currentParticipationEnteredBy(pickup.Object(), EnteredByCarrierFirstEffectivePickup, replaced)
+	if !present {
+		return ActualFulfillmentSegment{}, ErrNoParticipationToRederive
+	}
+	if occurredAt, formed := pickup.OccurredAt(); pickup.Formed() && formed {
+		return segment.rederive(pickup.TenantID(), pickup.Object(), EnteredByCarrierFirstEffectivePickup, replaced, basis, occurredAt, false)
+	}
+	return segment.rederive(pickup.TenantID(), pickup.Object(), EnteredByCarrierFirstEffectivePickup, replaced, basis, current.enteredAt, true)
+}
+
+// rederive 是三种来源共用的替代门，失效版本也从这里进（voided 为是）。被替代的必须是该对象**当前**参与
 // （链尾）且入场依据恰是被更正的那一版——更正一个已被替代的前版是分叉，更正别的来源种类是另一件事，都拒。
 // 新版本继承原参与的离场三件：对象的控制终点是它自己的事实，更正入场不改它；更正后的起点晚于继承的终点
 // 即先结束再进入，拒——失效版本的起点沿用前版，这一格在它身上不可能发生。

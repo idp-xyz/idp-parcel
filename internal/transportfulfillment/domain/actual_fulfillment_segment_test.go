@@ -293,8 +293,9 @@ func TestInterruptionDoesNotEndTheSegment(t *testing.T) {
 	})
 
 	t.Run("the entry and end kind sets are closed", func(t *testing.T) {
-		if domain.ParticipationEntryKind(3).String() != "" {
-			t.Fatal("第三个参与起点取值带了标签——封闭集合被悄悄放开")
+		// 第三格是已形成的实际承运商首次有效收寄（ADR-0135 决定五），第四格仍不该有。
+		if domain.ParticipationEntryKind(4).String() != "" {
+			t.Fatal("第四个参与起点取值带了标签——封闭集合被悄悄放开")
 		}
 		if domain.ParticipationEndKind(4).String() != "" {
 			t.Fatal("第四个参与终点取值带了标签——封闭集合被悄悄放开")
