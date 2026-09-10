@@ -244,6 +244,10 @@
 # 两个数只对该检出成立；同期 nr/03（mcp5-nr03）也在改本文件一行，两笔谁先进 main 都会让另一笔的「加前」不再是 tip
 # 的真值——本笔重放进 main 时父提交若不是 eed326c5，下一个改名单的人在自己那一刻的 HEAD 上重取，别拿这两个数加减。
 #
+# 推送方 2026-09-10 重放注：上一段预言的那件事发生了——nr/03 先进 main（346a6532，NR 组 +1，本文件 NR 段有它的重放注
+# 「在 85d238ce 上实测 3」），psr/06 随后重放到它之上；**在 b734f8f5 上实测 4**（非注释非空行：party-commercial 2、
+# network-routing 1、parcel-shipment 1），只对该 SHA 成立。两笔各自的「2→3」都对，量的不是同一棵树，不相加。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
