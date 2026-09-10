@@ -315,8 +315,9 @@ func (unconfiguredLabelChannelGateway) FetchLabelDocuments(
 func (unconfiguredLabelChannelGateway) QuerySubmission(
 	context.Context, shipmentports.LabelChannelRequest,
 ) (shipmentports.LabelSubmissionQueryOutcome, error) {
-	// 查询口有没有是渠道的事实；渠道都没配，如实答「未配置」而不是「该源无查询口」——后者会把这一笔交人对账。
-	return shipmentports.LabelSubmissionQueryOutcome{Support: shipmentports.LabelChannelQueryOffered, Outcome: outbound.Unconfigured()}, nil
+	// 「这家渠道提不提供查询口」是渠道的事实；渠道都没配，这一问没有对象。Support 留零值不作任何主张——答「提供」
+	// 是编一个事实，答「该源无查询口」会把这一笔交人对账；读的人先看 Outcome 的未配置格：调用没有发生过。
+	return shipmentports.LabelSubmissionQueryOutcome{Outcome: outbound.Unconfigured()}, nil
 }
 
 // 三个取数口与三个源的显式未配置实现。它们不读请求、不构造任何东西、不作任何业务判断，只把「未配置」按各自
