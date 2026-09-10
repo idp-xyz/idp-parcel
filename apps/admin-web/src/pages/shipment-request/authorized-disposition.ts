@@ -110,7 +110,7 @@ export function dispositionCommandNoteOf(
   }
 }
 
-// 八格 outcome 都是形成了的业务答案,按词表呈现;随附凭据有才显:去向(原词与中文并列)、之后的
+// 每一格 outcome 都是形成了的业务答案,按词表呈现;随附凭据有才显:去向(原词与中文并列)、之后的
 // 委托状态、既有决定、当前版本、补偿续办引用。
 function dispositionOutcomeText(label: string, body: AuthorizedDispositionResponseBody): string {
   const view = authorizedDispositionOutcomeViews[body.outcome];
