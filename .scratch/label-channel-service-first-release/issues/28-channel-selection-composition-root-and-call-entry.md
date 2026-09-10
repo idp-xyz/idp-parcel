@@ -58,7 +58,7 @@ Blocked by: 29（候选标识 → 七类依据引用的翻译适配器；乙路�
 
 ## 完成判据（按 2026-09-10 裁决写的实施判据；29 进 main 前不认领）
 
-1. **「择优结果」对象**落 PS 领域或应用层（作者定形、写理由）：候选 `ChannelCandidateID` + 七类依据引用（与 `EstablishLabelTransactionCommand` 七格同型）+ 评价痕迹引用（`ChannelCostEvaluationReference`，可缺席——没登记价卡的候选没经过评价）；构造门拒七格任一空白。06 编排的建立一步改收它（`EstablishLabelTransactionCommand` 的七格从它取，或命令直接嵌它，作者定）；**编排不问它从哪来**——头注写明系统择优与日后人工择优都产同一个对象。
+1. **「择优结果」对象由 [`29`](./29-channel-selection-result-to-label-transaction-basis-translation.md) 定义并产出（通道 1 17:4x 补强 ①，免成环），本票只接线**：候选 `ChannelCandidateID` + 七类依据引用（与 `EstablishLabelTransactionCommand` 七格同型）+ 评价痕迹引用（可缺席）。06 编排的建立一步改收它（`EstablishLabelTransactionCommand` 的七格从它取，或命令直接嵌它，作者定）；**编排不问它从哪来**——头注写明系统择优与日后人工择优都产同一个对象。
 2. **前置步**：一个应用层编排（或组合根内的一段装配）把 `SelectChannelCandidateHandler.Handle` 交回的候选，经票 `29` 的翻译适配器换成「择优结果」对象，再交 `Establish`。择优交回冲突 / 未配置 / 翻译停下时**不建立交易**，停点各自可分辨（不折成一格）。
 3. **装配函数清单**（`cmd/parcel-api`，照既有 `build*Orchestration` 家族）：择优编排 + 其两个适配器（`channel_candidate_assembly.go` / `cost_source.go`）+ 留痕三件全装（`Decisions` / `DecisionIDs` / `Clock`，红线原句）+ 29 的翻译适配器 + 06 编排 + 07 出向端口的未配置壳 + 三取数口显式未配置（照 `UnconfiguredIntakeQualificationEvidence{}` 那一路）。`unwired_orchestration.go` 里两张读面的隔离占位随之改口或摘掉，以其头注约定为准。
 4. **验收路径**：合成租户下走一遍前置步——三取数口未配置 → 链在择优装配那一格停在「未配置」，不建立交易、不写决定记录；测试替身把三口配上（合成串）→ 择优落定 → 翻译 → `Establish` → `Submit` → 07 壳答未配置 → 停在出向缝；每个停点断言到具名错误或结果格，不看日志。
@@ -68,7 +68,7 @@ Blocked by: 29（候选标识 → 七类依据引用的翻译适配器；乙路�
 
 ## 地盘
 
-裁定后（乙）：`cmd/parcel-api/` 的装配文件与 `unwired_orchestration.go`；`internal/parcelshipment/application/`（06 编排输入形状 + 前置步编排）与「择优结果」对象所在的那一层；端点表 / 探针 / 放行表三处共享接线**预期不动**，要动先占号。**不含** `internal/parcelshipment/adapters/partycommercial/` 的翻译适配器——那是 `29` 的地盘。
+裁定后（乙）：`cmd/parcel-api/` 的装配文件与 `unwired_orchestration.go`；`internal/parcelshipment/application/`（06 编排输入形状 + 前置步编排；`select_channel_candidate.go` 的交回值 expand 归 `29`）；端点表 / 探针 / 放行表三处共享接线**预期不动**，要动先占号。**不含**「择优结果」对象本身与 `internal/parcelshipment/adapters/partycommercial/` 的翻译适配器——那是 `29` 的地盘。
 
 ## 参照
 
