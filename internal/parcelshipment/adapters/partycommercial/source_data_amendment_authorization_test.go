@@ -13,8 +13,9 @@ import (
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
-// 本文件钉资料修订授权适配器的翻译表（票 ps-port-remainder/03，ADR-0116 Decision 三）。与撤回、
-// 拒绝两只的区别只有一处：这一口的答复多一格「实际决定方」，而它**必须从 PC 的裁定里读出来**，
+// 本文件钉资料修订授权适配器的翻译表（票 ps-port-remainder/03，ADR-0116 Decision 三）。与
+// withdrawal_authorization_test.go / active_rejection_test.go 钉的表相比，区别只有一处：这一口的答复多一格
+// 「实际决定方」，而它**必须从 PC 的裁定里读出来**，
 // 不能由 PS 看着请求方自己判——UC-PS-002「登录操作人不能替代实际决定方」。所以用例里 grants 与
 // delegations 双方都用 PC 领域对象直接构造，决定方的期望值取自委派方，不取自请求方。
 

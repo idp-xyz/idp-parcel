@@ -21,8 +21,9 @@ import (
 // 所代的客户账户只能是询问身份上的那一个，两者由适配器钉死，映射改不了——否则一份映射就能把
 // 只授复核权或拒绝权的规则读成修订权，或替别的客户提请求。
 //
-// RequesterKind 取 PC 的两格；OperatorRole 只在运营角色代录时读。用 Kind 而不用「OperatorRole 为空即
-// 客户自己」，理由与 PC 两个请求方构造器分立的理由相同：空值分不清「客户自己来的」与「忘了填运营角色」。
+// 本适配器接客户账户 / 运营角色两种请求方，RequesterKind 说是哪一种；OperatorRole 只在运营角色代录时读。
+// 用 Kind 而不用「OperatorRole 为空即客户自己」，理由与 PC 把请求方构造器按种类分立的理由相同：空值分不清
+// 「客户自己来的」与「忘了填运营角色」。
 type SourceDataAmendmentRequestCoordinates struct {
 	RequesterKind pcdomain.RequesterKind
 	OperatorRole  pcdomain.OperatorRoleReference
@@ -45,7 +46,7 @@ type SourceDataAmendmentAuthorizationRequestSource interface {
 }
 
 // SourceDataAmendmentAuthorizationAdapter 把 parcel-shipment 的资料修订授权口接到 party-commercial 的
-// 裁定编排上（ADR-0025），与撤回、拒绝两只同形。多出的一格是实际决定方：本适配器**只转写 PC 交回的
+// 裁定编排上（ADR-0025），形状照 withdrawal_authorization.go / active_rejection.go。多出的一格是实际决定方：本适配器**只转写 PC 交回的
 // 决定方**，一处都不自判——请求方是客户还是代录的运营角色、代录时决定权经哪条合同委派落在谁身上，
 // 都是 PC 在 Authorize 里解出的（ADR-0116 Decision 三）；PS 端口头注禁「调用方声明」，在这里是结构性的：
 // pcdomain.Decider 没有公开构造器，PS 想编也编不出。

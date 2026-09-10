@@ -6,15 +6,15 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// UnconfiguredSourceDataAmendmentAuthorizer 是资料修订授权口在提供方那半还没立起来之前的如实答复：
-// 对每个询问不读内容、不采信请求方，一律答`授权规则未配置`。
+// UnconfiguredSourceDataAmendmentAuthorizer 是资料修订授权口的未配置替身：对每个询问不读内容、不采信
+// 请求方，一律答`授权规则未配置`。
 //
-// 提供方缺的不是一条登记（party-commercial 的授权动作封闭集今天没有「资料修订」这一格，裁定结果
-// 也不带实际决定方——票 ps-port-remainder/03），所以严格说恢复动作是「PC 侧建模」而不是「去登记」。
-// 仍取`未配置`这一格而不是交回 error：error 那格的恢复动作是重试，重试改不了一个还没人建的规则；
+// 它不是生产装配的选择——那里接的是 SourceDataAmendmentAuthorizationAdapter（PC 裁定编排 + 真授权册 +
+// 真委派册，票 ps-port-remainder/03 落地）。它留给两类地方：装配用例要一个不碰 PC 库、答复不随询问
+// 内容变的授权口；以及没有 PC 库可接的路径（那里没有登记册可问，如实答`未配置`比造一份替身规则诚实）。
+// 取`未配置`这一格而不是交回 error：error 那格的恢复动作是重试，重试改不了一个还没人登记的规则；
 // `未配置`至少说对了要办的事是让规则存在（ADR-0063 对「显式未配置」的分界）。编排据以停在未决
-// （`SourceDataAmendmentAuthorityRulesNotConfigured`），不判客户越权，也不放行。提供方那半落地后
-// 在装配点换成照 WithdrawalAuthorizationAdapter 形状的适配器，本类型随之退场。
+// （`SourceDataAmendmentAuthorityRulesNotConfigured`），不判客户越权，也不放行。
 type UnconfiguredSourceDataAmendmentAuthorizer struct{}
 
 var _ psports.SourceDataAmendmentAuthorizer = UnconfiguredSourceDataAmendmentAuthorizer{}

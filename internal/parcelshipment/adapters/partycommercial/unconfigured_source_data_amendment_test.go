@@ -8,8 +8,9 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// Covers: 票 ps-port-remainder/04 第 2 条——提供方那半没立之前，未配置的授权适配器对任何询问都答
-// 最保守的那一格，且答复不随询问内容变：答`规则未配置`（不是`已授权`也不是`拒绝`，两项引用空着）。
+// Covers: 票 ps-port-remainder/04 第 2 条——不接 PC 库的未配置替身对任何询问都答最保守的那一格，
+// 且答复不随询问内容变：答`规则未配置`（不是`已授权`也不是`拒绝`，两项引用空着）。真适配器的翻译表
+// 在 source_data_amendment_authorization_test.go。
 // 答复随内容变化是采信了内容的第一个征兆。矩阵那只未配置适配器原先也在这里证，已随票 02 余段接真退场，
 // 真读法的用例在 source_data_amendment_allowance_test.go。
 func TestUnconfiguredSourceDataAmendmentAuthorizerAnswersConservativelyAndIdentically(t *testing.T) {
