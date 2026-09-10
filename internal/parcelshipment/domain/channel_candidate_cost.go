@@ -180,6 +180,9 @@ type ChannelCandidateCost struct {
 	// evaluation 是这份取值译自哪一份 `BUY` 评价，可缺席（没登记价卡的候选没经过评价）。它不参与
 	// 比较，只随取值带给决定记录（票 `14`）——留痕要能指回评价，而金额本身指不回去。
 	evaluation ChannelCostEvaluationReference
+	// rate 是已确立的取值按之出价的费率引用（评价所用的价卡版本），可缺席；只有已确立那格能带
+	// （票 `29`：赢家的费率由择优步带出，建立面单交易时填 Rate 那一格）。它同样不参与比较。
+	rate ChannelRateReference
 }
 
 // PricedChannelCandidate 造一个成本已确立的候选。
@@ -255,6 +258,21 @@ func (cost ChannelCandidateCost) WithEvaluation(
 // Evaluation 交出所用评价引用，第二个返回值为 false 即缺席。
 func (cost ChannelCandidateCost) Evaluation() (ChannelCostEvaluationReference, bool) {
 	return cost.evaluation, cost.evaluation.valid()
+}
+
+// WithRate 给**已确立**的取值带上它按之出价的费率引用。出局的候选没有「适用的费率」可言——价卡排除、
+// 冲突、未形成都不是按某份费率算出的价，给它带费率会让下游把一份没出过价的卡当成本次交易的依据。
+func (cost ChannelCandidateCost) WithRate(rate ChannelRateReference) (ChannelCandidateCost, error) {
+	if !cost.candidate.valid() || !cost.established || !rate.valid() {
+		return ChannelCandidateCost{}, ErrInvalidChannelCandidateCost
+	}
+	cost.rate = rate
+	return cost, nil
+}
+
+// Rate 交出费率引用，第二个返回值为 false 即缺席。
+func (cost ChannelCandidateCost) Rate() (ChannelRateReference, bool) {
+	return cost.rate, cost.rate.valid()
 }
 
 // SelectChannelCandidateByCost 按成本单维择优。`PAR-NET-16` 首发只按成本单维，其余维度

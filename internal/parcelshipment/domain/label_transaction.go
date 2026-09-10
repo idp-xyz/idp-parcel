@@ -81,7 +81,9 @@ func NewChannelRateReference(value string) (ChannelRateReference, error) {
 	return ChannelRateReference{required}, err
 }
 
-// ResponsibilityBasisSnapshotReference 指名建立时固定下来的渠道角色与责任依据快照。
+// ResponsibilityBasisSnapshotReference 回指委托接受时的商业解析（CommercialResolutionID 的字面）。
+// 建立时固定下来的「渠道角色与责任依据快照」本体就是本交易上的七格引用（SelectedChannelBasis，票
+// label-channel/29）；这一格保留的是那份快照与委托接受时快照的关系，不是另一张表的键。
 type ResponsibilityBasisSnapshotReference struct{ requiredValue }
 
 func NewResponsibilityBasisSnapshotReference(value string) (ResponsibilityBasisSnapshotReference, error) {
