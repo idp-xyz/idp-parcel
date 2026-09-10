@@ -161,6 +161,8 @@ type PendingCarrierFirstEffectivePickupSpec struct {
 	Fact     CarrierFirstEffectivePickupReference
 	Version  CarrierFirstEffectivePickupVersion
 	Reason   PendingPickupReason
+	// Material 是证据指名的承运主体名称素材——身份未登记时不据名称铸身份，名称作为素材随依据保留（CONTEXT）。
+	Material string
 	JudgedAt time.Time
 	Bases    []CarrierPickupBasis
 }
@@ -181,6 +183,7 @@ type CarrierFirstEffectivePickup struct {
 	occurredAt time.Time
 	judgedAt   time.Time
 	reason     PendingPickupReason
+	material   string
 	bases      []CarrierPickupBasis
 	supersedes CarrierFirstEffectivePickupVersion
 }
@@ -215,6 +218,7 @@ func HoldCarrierFirstEffectivePickupPending(spec PendingCarrierFirstEffectivePic
 		result:   CarrierPickupPending,
 		judgedAt: spec.JudgedAt.UTC(),
 		reason:   spec.Reason,
+		material: strings.TrimSpace(spec.Material),
 		bases:    append([]CarrierPickupBasis(nil), spec.Bases...),
 	}
 	if !pickup.valid() {
@@ -252,6 +256,9 @@ func (pickup CarrierFirstEffectivePickup) OccurredAt() (time.Time, bool) {
 	}
 	return pickup.occurredAt, true
 }
+
+// Material 只在待确认的版本上给出：证据指名的承运主体名称素材，身份未登记时随依据保留。
+func (pickup CarrierFirstEffectivePickup) Material() string { return pickup.material }
 
 // PendingReason 只在待确认的版本上给出。
 func (pickup CarrierFirstEffectivePickup) PendingReason() (PendingPickupReason, bool) {
@@ -311,18 +318,18 @@ func (pickup CarrierFirstEffectivePickup) Supersede(supersession CarrierPickupSu
 type CarrierPickupPendingSupersession struct {
 	Version  CarrierFirstEffectivePickupVersion
 	Reason   PendingPickupReason
+	Material string
 	JudgedAt time.Time
 	Bases    []CarrierPickupBasis
 }
 
-// HoldPending 在待确认的链尾上再长一版待确认（全部依据保留，原因可换）。已形成不回待确认（ADR-0135 决定六）；
-// 失效版本上也不长待确认——链尾失效即当前无收寄，再来的证据要么形成、要么什么都不留。
+// HoldPending 在待确认或失效的链尾上再长一版待确认（全部依据保留，原因可换）。已形成不回待确认（ADR-0135
+// 决定六）；失效之后新到的证据身份未登记时同样落待确认——链是同一条，等身份登记后凭同一依据形成。
 func (pickup CarrierFirstEffectivePickup) HoldPending(supersession CarrierPickupPendingSupersession) (CarrierFirstEffectivePickup, error) {
 	if pickup.result == CarrierPickupFormed {
 		return CarrierFirstEffectivePickup{}, ErrCarrierPickupAlreadyFormed
 	}
-	if !pickup.valid() || pickup.result != CarrierPickupPending ||
-		!supersession.Version.valid() || supersession.Version == pickup.version {
+	if !pickup.valid() || !supersession.Version.valid() || supersession.Version == pickup.version {
 		return CarrierFirstEffectivePickup{}, ErrInvalidCarrierFirstEffectivePickup
 	}
 	next, err := HoldCarrierFirstEffectivePickupPending(PendingCarrierFirstEffectivePickupSpec{
@@ -331,6 +338,7 @@ func (pickup CarrierFirstEffectivePickup) HoldPending(supersession CarrierPickup
 		Fact:     pickup.fact,
 		Version:  supersession.Version,
 		Reason:   supersession.Reason,
+		Material: supersession.Material,
 		JudgedAt: supersession.JudgedAt,
 		Bases:    supersession.Bases,
 	})
@@ -396,11 +404,11 @@ func (pickup CarrierFirstEffectivePickup) valid() bool {
 	}
 	switch pickup.result {
 	case CarrierPickupFormed:
-		return pickup.carrier.valid() && !pickup.occurredAt.IsZero() && !pickup.reason.valid()
+		return pickup.carrier.valid() && !pickup.occurredAt.IsZero() && !pickup.reason.valid() && pickup.material == ""
 	case CarrierPickupPending:
-		return !pickup.carrier.valid() && pickup.occurredAt.IsZero() && pickup.reason.valid()
+		return !pickup.carrier.valid() && pickup.occurredAt.IsZero() && pickup.reason.valid() && pickup.material != ""
 	case CarrierPickupVoided:
-		return !pickup.carrier.valid() && pickup.occurredAt.IsZero() && !pickup.reason.valid() && pickup.supersedes.valid()
+		return !pickup.carrier.valid() && pickup.occurredAt.IsZero() && !pickup.reason.valid() && pickup.material == "" && pickup.supersedes.valid()
 	default:
 		return false
 	}

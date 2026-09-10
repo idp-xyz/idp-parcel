@@ -125,6 +125,7 @@ func TestAPendingPickupIsAVersionWithAReasonAndNoCarrier(t *testing.T) {
 		Fact:     mustValue(t, domain.NewCarrierFirstEffectivePickupReference, "CFEP-1"),
 		Version:  mustValue(t, domain.NewCarrierFirstEffectivePickupVersion, "CFEV-1"),
 		Reason:   domain.PickupCarrierIdentityNotRegistered,
+		Material: "Carrier X Express",
 		JudgedAt: carrierPickupJudgedAt,
 		Bases:    []domain.CarrierPickupBasis{carrierPickupBasis(t, "EXTF-1", "EXTV-1")},
 	}
@@ -249,6 +250,7 @@ func TestAPendingChainMovesToFormedOrToConflict(t *testing.T) {
 		Fact:     mustValue(t, domain.NewCarrierFirstEffectivePickupReference, "CFEP-1"),
 		Version:  mustValue(t, domain.NewCarrierFirstEffectivePickupVersion, "CFEV-1"),
 		Reason:   domain.PickupCarrierIdentityNotRegistered,
+		Material: "Carrier X Express",
 		JudgedAt: carrierPickupJudgedAt,
 		Bases:    []domain.CarrierPickupBasis{carrierPickupBasis(t, "EXTF-1", "EXTV-1")},
 	})
@@ -258,6 +260,7 @@ func TestAPendingChainMovesToFormedOrToConflict(t *testing.T) {
 	conflict, err := pending.HoldPending(domain.CarrierPickupPendingSupersession{
 		Version:  mustValue(t, domain.NewCarrierFirstEffectivePickupVersion, "CFEV-2"),
 		Reason:   domain.PickupSourceConflict,
+		Material: "Carrier Y",
 		JudgedAt: carrierPickupJudgedAt.Add(time.Minute),
 		Bases:    []domain.CarrierPickupBasis{carrierPickupBasis(t, "EXTF-1", "EXTV-1"), carrierPickupBasis(t, "EXTF-2", "EXTV-1")},
 	})
@@ -281,6 +284,7 @@ func TestAPendingChainMovesToFormedOrToConflict(t *testing.T) {
 	if _, err := formed.HoldPending(domain.CarrierPickupPendingSupersession{
 		Version:  mustValue(t, domain.NewCarrierFirstEffectivePickupVersion, "CFEV-4"),
 		Reason:   domain.PickupSourceConflict,
+		Material: "Carrier Z",
 		JudgedAt: carrierPickupJudgedAt.Add(2 * time.Hour),
 		Bases:    []domain.CarrierPickupBasis{carrierPickupBasis(t, "EXTF-3", "EXTV-1")},
 	}); !errors.Is(err, domain.ErrCarrierPickupAlreadyFormed) {

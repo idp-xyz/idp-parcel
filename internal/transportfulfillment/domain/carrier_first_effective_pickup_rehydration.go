@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,7 @@ type RehydrateCarrierFirstEffectivePickupSpec struct {
 	OccurredAt time.Time
 	JudgedAt   time.Time
 	Reason     PendingPickupReason
+	Material   string
 	Bases      []CarrierPickupBasis
 	Supersedes CarrierFirstEffectivePickupVersion
 }
@@ -39,6 +41,7 @@ func RehydrateCarrierFirstEffectivePickup(spec RehydrateCarrierFirstEffectivePic
 		occurredAt: spec.OccurredAt.UTC(),
 		judgedAt:   spec.JudgedAt.UTC(),
 		reason:     spec.Reason,
+		material:   strings.TrimSpace(spec.Material),
 		bases:      append([]CarrierPickupBasis(nil), spec.Bases...),
 		supersedes: spec.Supersedes,
 	}

@@ -50,6 +50,7 @@ func TestPendingAndVoidedPickupVersionsCannotEnterASegment(t *testing.T) {
 		Fact:     mustValue(t, domain.NewCarrierFirstEffectivePickupReference, "CFEP-1"),
 		Version:  mustValue(t, domain.NewCarrierFirstEffectivePickupVersion, "CFEV-1"),
 		Reason:   domain.PickupCarrierIdentityNotRegistered,
+		Material: "Carrier X Express",
 		JudgedAt: carrierPickupJudgedAt,
 		Bases:    []domain.CarrierPickupBasis{carrierPickupBasis(t, "EXTF-1", "EXTV-1")},
 	})
