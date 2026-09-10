@@ -127,8 +127,8 @@ func TestNoDeliveryPlaceIsHandedOverAsMissing(t *testing.T) {
 	}
 }
 
-// Covers: 源侧「收件地点未定」→ 按做法第 2 步取甲：译成 RequirementMissing（所有者说未定，不是说没有——端口今天没有
-// 「未定」那一格，任务同样待形成）。不给引用、不猜一版。
+// Covers: 源侧「收件地点未定」→ 按票面做法「先定`待复核`在 TF 端口上的落法」取甲：译成 RequirementMissing（所有者说未定，
+// 不是说没有——端口今天没有「未定」那一格，任务同样待形成）。不给引用、不猜一版。
 func TestAnUndeterminedDeliveryPlaceIsHandedOverAsMissingUnderRulingA(t *testing.T) {
 	stub := &referenceLookupStub{resolution: psdomain.DeliveryPlaceUndeterminedResolution()}
 	place, resolution, err := loadThrough(t, stub, "parcel-1")

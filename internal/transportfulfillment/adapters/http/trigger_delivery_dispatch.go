@@ -51,7 +51,7 @@ func NewTriggerDeliveryDispatchEndpoint(intake DeliveryDispatchTriggerIntake, tr
 	}, writeDeliveryDispatchTriggerOutcome)
 }
 
-// deliveryDispatchTriggerResponse 是触发口的封闭响应形状：结果代数六格逐字透出，`不是触发事实`带 refusal、`要求缺失`
+// deliveryDispatchTriggerResponse 是触发口的封闭响应形状：结果代数逐格逐字透出，`不是触发事实`带 refusal、`要求缺失`
 // 带 missing 名单、`未决`带 undecidedReason 与续办引用，`已形成`/`已在册`带任务。任务的 Place 就是所有者交回的引用串
 // ——这里照抄不解析（ADR-0130 决定一「TF 只当不透明串」）。
 type deliveryDispatchTriggerResponse struct {
