@@ -839,13 +839,16 @@ func delegatorFrom(kind, reference string) (pcdomain.Delegator, error) {
 	}
 }
 
-// authorizedActionFrom 是 pcdomain.AuthorizedAction 的名字镜像。这里认全部三格而不只认可委派的那一格：哪些动作
-// 客户委派得了是领域的判据（NewContractDelegation），翻译层只做名字到封闭集的映射，不复制第二套口径。
+// authorizedActionFrom 是 pcdomain.AuthorizedAction 的名字镜像。这里认封闭集的全部格而不只认可委派的那一格：哪些动作
+// 客户委派得了是领域的判据（NewContractDelegation），翻译层只做名字到封闭集的映射，不复制第二套口径。领域加格时这份
+// 名单要跟（pc-gaps/08、/13 各加过一次）。
 func authorizedActionFrom(name string) (pcdomain.AuthorizedAction, error) {
 	for _, action := range []pcdomain.AuthorizedAction{
 		pcdomain.ManualReviewAction,
 		pcdomain.ActiveRejectionAction,
 		pcdomain.SourceDataAmendmentAction,
+		pcdomain.ControlledClosureAction,
+		pcdomain.ReopeningAction,
 	} {
 		if action.String() == name {
 			return action, nil

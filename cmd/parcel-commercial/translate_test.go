@@ -850,6 +850,21 @@ func TestContractDelegationsTranslateTheirFiveDimensions(t *testing.T) {
 		t.Fatal("没给终点的区间翻成了有界")
 	}
 
+	// pc-gaps/13：关闭 / 重开两格进了授权动作封闭集，翻译层照旧只做名字映射——它们能不能委派由构造门
+	//（NewContractDelegation 只收决定权归客户的动作）在发布用例里拒，与人工复核、主动拒绝同待。
+	t.Run("controlled closure and reopening are names in the closed set", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(contractDelegationBatchJSON(`
+			{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "CONTROLLED_CLOSURE", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"},
+			{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "REOPENING", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`)))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		rows := commands[0].Declarations.ContractDelegations
+		if len(rows) != 2 || rows[0].Action != pcdomain.ControlledClosureAction || rows[1].Action != pcdomain.ReopeningAction {
+			t.Fatalf("委派动作 = %+v", rows)
+		}
+	})
+
 	for name, body := range map[string]string{
 		"a delegator kind outside the closed set": `{"delegatorKind": "OPERATOR_ROLE", "delegator": "operator-1", "action": "SOURCE_DATA_AMENDMENT", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
 		"an action outside the closed set":        `{"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "WITHDRAWAL", "scope": "scope-1", "level": "level-clerk", "effectiveStartsAt": "2026-01-01T00:00:00Z"}`,
