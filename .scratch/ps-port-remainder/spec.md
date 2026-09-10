@@ -1,7 +1,7 @@
 # PS 端口余口：三口的机制半边各能立什么
 
 Category: chore
-Status: in-progress——十问已由 MCP-1 代裁（owner 授权，2026-09-07，逐票 Comments）：01、03 转 blocked 等 PC 半边（pc-gaps 批，MCP-3）；04（资料修订生产入口机制半边）已 resolved（通道 2，分支 `mcp2-ps-ports`：`38c2aa82` + `a1a1d16f` + `baff5fdd`）；02 的 PS 半边中不依赖 PC 的那段已由通道 2 按 task-d5558bc6（接管 task-b77525c9）在同一分支落地（`7ec02162` + `3da37e07` + 文档笔，ADR-0118 已取号）；**05（CC/NO 按包裹键读面 + PS 接线）已 resolved**（通道 2 按 task-2f035050，分支 `mcp2-psr05`：`13f3ba65` + `72b77de0` + `f91100c2`），02 的读面接线段随之落地，02 余下消费适配器那段仍 Blocked by PC 半边。此前 draft（通道 2 于 2026-09-07 按 task-0c472fed 立三票：每口一次 `/domain-modeling`，机制半边的头一半都在 PC，PS 单方面无可落代码）
+Status: in-progress——**2026-09-10 14:2x 通道 1 对齐**：01、03 的 PC 半边（pc-gaps/09 → ADR-0119、pc-gaps/08 → ADR-0116）09-07 已进 main、owner 09-09 认可，两票 blocked → ready-for-agent（`dd5ed934`）并于 14:3x 分派（03 → 通道 2 `task-0450f54b`，01 → 通道 6 `task-45b75eb2`）；06 / 07（ADR-0130 / 0133 拆出的两只读口）已于 2026-09-10 resolved 进 main（`8bdab82e` / `c0cdebba`）。此前：十问已由 MCP-1 代裁（owner 授权，2026-09-07，逐票 Comments）：01、03 转 blocked 等 PC 半边（pc-gaps 批，MCP-3）；04（资料修订生产入口机制半边）已 resolved（通道 2，分支 `mcp2-ps-ports`：`38c2aa82` + `a1a1d16f` + `baff5fdd`）；02 的 PS 半边中不依赖 PC 的那段已由通道 2 按 task-d5558bc6（接管 task-b77525c9）在同一分支落地（`7ec02162` + `3da37e07` + 文档笔，ADR-0118 已取号）；**05（CC/NO 按包裹键读面 + PS 接线）已 resolved**（通道 2 按 task-2f035050，分支 `mcp2-psr05`：`13f3ba65` + `72b77de0` + `f91100c2`），02 的读面接线段随之落地，02 余下消费适配器那段仍 Blocked by PC 半边。此前 draft（通道 2 于 2026-09-07 按 task-0c472fed 立三票：每口一次 `/domain-modeling`，机制半边的头一半都在 PC，PS 单方面无可落代码）
 
 ## 从哪里来
 

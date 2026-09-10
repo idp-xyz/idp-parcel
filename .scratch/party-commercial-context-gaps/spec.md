@@ -1,7 +1,7 @@
 # `party-commercial` 声明拥有、但今天没有执行器的四处（写侧待裁）
 
 Category: chore
-Status: in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 resolved（三处已由 MCP-3 裁，裁决落 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；MCP-4 于分支 `mcp4-pcgaps05` 做完，2026-09-04 由 MCP-1 重放入 main `aa0608f7`..`469bb9ba`，迁移 `party_commercial/0023`；VE 侧后继票 `ve-claims-read-seams/03` 随之立、同日派 MCP-4），07 draft（接受前财务控制策略正文表，2026-09-04 随 admin-write-faces/06 裁②立票，待 `/domain-modeling`）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，05/07 两格由通道 2 于 2026-09-04 对票面重核后对齐，05 入 main 后由 MCP-1 同日再对齐一次
+Status: resolved——2026-09-10 14:4x 通道 1 按 issue-tracker「Complete a parent」收口：01–11 十一张子票 `Status:` 逐文件读过均为 resolved（07 → ADR-0115；08 → ADR-0116，`0cfe3571`..`44bcac4d`；09 → ADR-0119，`838b283e`..`d58ceecc`；10 → ADR-0120；11 → ADR-0133 落地，进 main `62c87e73` 前），本笔只改本行；08 / 09 留下的 PS 半边由 ps-port-remainder/03、/01 承接（今天已转 ready-for-agent 并派单）。此前 in-progress——01/02/03/04/06 resolved（02 的三层随 06 落 `29085fe`），05 resolved（三处已由 MCP-3 裁，裁决落 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md)；MCP-4 于分支 `mcp4-pcgaps05` 做完，2026-09-04 由 MCP-1 重放入 main `aa0608f7`..`469bb9ba`，迁移 `party_commercial/0023`；VE 侧后继票 `ve-claims-read-seams/03` 随之立、同日派 MCP-4），07 draft（接受前财务控制策略正文表，2026-09-04 随 admin-write-faces/06 裁②立票，待 `/domain-modeling`）；状态行由 MCP-3 于 2026-09-03 对票面重核后改写，05/07 两格由通道 2 于 2026-09-04 对票面重核后对齐，05 入 main 后由 MCP-1 同日再对齐一次
 
 ## 这四处是怎么被看见的
 

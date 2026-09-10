@@ -1,7 +1,7 @@
 # 生产接线棘轮基线余项：九条零调用点导出工厂的逐条处置
 
 Category: chore
-Status: in-progress——PP 四条已在本目录第一笔处置（三删一留，分支 `mcp6-pp-ratchet` 的 `1d13d510`，进 main 为 `7cef122f`，2026-09-07 16:00）；**PC 三条 03/04/05 全部 resolved 并进 main（2026-09-08：05 剪 `1ebd7e4b`；04 并入 Authorize `d41862bd`；03 接上 + ADR-0127，进 main 的 SHA 见票 03「进 main 记录」）——`ValidateBeforeDecision`、`ManualReviewRequirementFor`、`ResolveCreditPolicy` 三条目都已出名单，成因与取证在基线头注**；PS 二条 01/02 仍是只读取证 draft，PS 地盘待派；PP 两张后继票：07 已 resolved（ADR-0123，MCP-4 四笔 + MCP-6 收口，2026-09-07），06 记的是留待留下的那件事
+Status: resolved——2026-09-10 14:4x 通道 1 按 issue-tracker「Complete a parent」收口：01–11 十一张子票 `Status:` 逐文件读过均为 resolved（最后一张 11 于 2026-09-09 进 main `94893c35`），本笔只改本行。此前 in-progress——PP 四条已在本目录第一笔处置（三删一留，分支 `mcp6-pp-ratchet` 的 `1d13d510`，进 main 为 `7cef122f`，2026-09-07 16:00）；**PC 三条 03/04/05 全部 resolved 并进 main（2026-09-08：05 剪 `1ebd7e4b`；04 并入 Authorize `d41862bd`；03 接上 + ADR-0127，进 main 的 SHA 见票 03「进 main 记录」）——`ValidateBeforeDecision`、`ManualReviewRequirementFor`、`ResolveCreditPolicy` 三条目都已出名单，成因与取证在基线头注**；PS 二条 01/02 仍是只读取证 draft，PS 地盘待派；PP 两张后继票：07 已 resolved（ADR-0123，MCP-4 四笔 + MCP-6 收口，2026-09-07），06 记的是留待留下的那件事
 
 ## 来源
 
