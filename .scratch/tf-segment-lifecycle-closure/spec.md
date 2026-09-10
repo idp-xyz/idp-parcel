@@ -1,7 +1,7 @@
 # 实际履约段的生命周期收口：关段声明口、承运商判断、端点接线
 
 Category: enhancement
-Status: in-progress——01、02、03、04、05、06、07 resolved（02 于 2026-09-04 入 main：代码 tip `56d2a437`、票面 `fe5b3a35`、`cmd/parcel-api` 装配行 `9e8a9202`；ADR-0103）；08 resolved（裁决 `bca02e5`；MCP-3 2026-09-04 于分支 `mcp3-tf08` 完工，MCP-1 重放入 main `91fab19d`..`27116c52`，TF 迁移 `0015` 换 `offsite_pickup` 主键纳入版本、更正版 handoff ID 加版本段、端点 `/transport-fulfillment/offsite-pickup-corrections`；PS 采用口把更正版当第二责任起点的缺口立 `label-channel/24`，段侧重派生立本目录 `10`，均 draft）；09 **in-progress 父票**（2026-09-07 通道 4：建模、ADR-0114、段服务动作、三条端口、触发执行器已落于分支 `mcp4-tf09`，三条缝立 12–14 draft，子票全 resolved 才 resolved）；10 draft（来源更正 → 参与关系重派生，覆盖交接与揽收两种来源）；06 「补刀二」裁「采」（`3f3a675`，封存笔 `mcp4-tf03@44808f3`）已由 MCP-1 于 2026-09-04 在 main 上重放为 `4cbe5266`（与 tf/02 的 `enterFulfillmentSegment` 挂点自动合并无冲突）
+Status: resolved——2026-09-10 14:2x 通道 1 按 issue-tracker「Complete a parent」收口：01–14 十四张子票 `Status:` 逐文件读过均为 resolved（09 父票随 tf/14 进 main `5dda0fb2` 收口，10 / 11 分别于 2026-09-07 / 09-08 resolved），本笔只改本行。此前 in-progress——01、02、03、04、05、06、07 resolved（02 于 2026-09-04 入 main：代码 tip `56d2a437`、票面 `fe5b3a35`、`cmd/parcel-api` 装配行 `9e8a9202`；ADR-0103）；08 resolved（裁决 `bca02e5`；MCP-3 2026-09-04 于分支 `mcp3-tf08` 完工，MCP-1 重放入 main `91fab19d`..`27116c52`，TF 迁移 `0015` 换 `offsite_pickup` 主键纳入版本、更正版 handoff ID 加版本段、端点 `/transport-fulfillment/offsite-pickup-corrections`；PS 采用口把更正版当第二责任起点的缺口立 `label-channel/24`，段侧重派生立本目录 `10`，均 draft）；09 **in-progress 父票**（2026-09-07 通道 4：建模、ADR-0114、段服务动作、三条端口、触发执行器已落于分支 `mcp4-tf09`，三条缝立 12–14 draft，子票全 resolved 才 resolved）；10 draft（来源更正 → 参与关系重派生，覆盖交接与揽收两种来源）；06 「补刀二」裁「采」（`3f3a675`，封存笔 `mcp4-tf03@44808f3`）已由 MCP-1 于 2026-09-04 在 main 上重放为 `4cbe5266`（与 tf/02 的 `enterFulfillmentSegment` 挂点自动合并无冲突）
 
 ## 从哪里分出来
 

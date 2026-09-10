@@ -1,8 +1,8 @@
 # `SourceDataAmendmentAuthorizer`：PC 授权动作没有「资料修订」这一格、裁定结果不带实际决定方；PS 适配器照撤回那只
 
 Category: enhancement
-Status: blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；**PC 半边（`AuthorizedAction` 加「资料修订」格 + 合同委派执行器 + 裁定结果带实际决定方）等 pc-gaps 批（MCP-3，pc-gaps/08 起）**；**PS 半边（适配器照撤回那只）Blocked by PC 半边**；「顺带量到」的生产入口机制半边已按代裁拆到 [04](./04-amendment-production-entry-mechanism-half.md) 承接
-Blocked by: PC 半边（pc-gaps 批，由 MCP-3 立票承接；本目录不替 PC 立票）
+Status: ready-for-agent——2026-09-10 14:2x 通道 1 解阻（远端 main `5dda0fb2` 上取证）：PC 半边已随 [pc-gaps/08](../../party-commercial-context-gaps/issues/08-authorized-action-lacks-source-data-amendment-and-adjudication-names-no-decider.md) 进 main（`0cfe3571` 领域 + 端口 + 迁移 0025 / `31903cc5` 合同委派册 / `02ff5205` 发布通道 + 批文；ADR-0116，owner 复核 2026-09-09 认可），生产入口已随本目录 [04](./04-amendment-production-entry-mechanism-half.md) 落 `cmd/parcel-api` 且今天接的是 `UnconfiguredSourceDataAmendmentAuthorizer{}`；剩 PS 半边（适配器照撤回那只 + 换掉那只未配置 + 剪基线两条），见 Comments 末条。此前 blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments）；PC 半边等 pc-gaps 批；「顺带量到」的生产入口机制半边已按代裁拆到 04 承接
+Blocked by: 无（PC 半边 pc-gaps/08 已进 main）
 
 ## 端口今天说什么
 
@@ -51,3 +51,4 @@ Blocked by: PC 半边（pc-gaps 批，由 MCP-3 立票承接；本目录不替 P
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码。** 能力边界：读过端口、编排授权段、PS 两个引用类型、PC `authority_grant.go` 全文、两只先例适配器全文、UC-PS-002 全文；**没读** `AdjudicateCommercialAuthorizationHandler` 的编排细节与 PC 有没有任何委派相关的表——「委派无执行器」是按 `party-commercial-context-gaps` 四票清单与 PC 迁移目录名反推的，PC owner 开工时以代码为准。
 - 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 实际决定方 = 委派方；**Q2** PC 现在立合同委派执行器——是，并入 PC 批队列（MCP-3 当前批后，pc-gaps/08 起），MCP-1 已知会 MCP-3；**Q3** 生产入口现在接——是，拆为本目录 04 票由通道 2 实施。Status 由 draft 改 blocked（等 PC 半边）。
+- 2026-09-10 14:2x · 通道 1（解阻簿记，未动代码；取证于远端 main `5dda0fb2`）：**PC 半边两件都在 main 上了**，PS 半边转 ready-for-agent。对号：(a) `AuthorizedAction` 加 `SourceDataAmendmentAction`、`NewAuthorizationRequestBy` 带请求方（`RequestedByCustomerAccount` / `RequestedByOperatorRole(operator, onBehalfOf)`）——`0cfe3571`；(b) `Decider`（客户账户 | 责任法人 | 运营角色，只由 `Authorize` 解出）、`ContractDelegation` 族、端口 `EffectiveContractDelegationView`、编排 `NewAdjudicateCommercialAuthorizationHandlerWithDelegations`（旧构造器保留，走到运营角色代录资料修订那一格报错、不装成空切片）——`0cfe3571` / `31903cc5`；发布通道 `CONTRACT_DELEGATION` + 批文——`02ff5205`。裁决口径与 ADR-0116 一致（Q1 实际决定方 = 委派方；grant 在场而委派缺席 → `ErrDelegationAbsent`，Is `ErrNotAuthorized`）。**PS 半边今天剩三件**：① 适配器 `adapters/partycommercial/source_data_amendment_authorization.go` 照撤回那只（`RequestSource` 折成带资料修订动作的 `AuthorizationRequest`；PC 四格译四格；`Authority` = grant 版本引用；`Decider` 取 PC 交回的实际决定方，PS 不自判）；② `cmd/parcel-api` `buildCustomerAmendmentOrchestration` 把 `UnconfiguredSourceDataAmendmentAuthorizer{}` 换成真适配器（`pcpostgres.NewAuthorityGrants` + 委派读适配器 + 带委派的裁定编排；`RequestSource` 与撤回那只同样留 nil——实例半边）；③ `production_wiring_baseline.txt` 里 pc-gaps/08 留下的 `RequestedByCustomerAccount` / `RequestedByOperatorRole` 两条随之出名单（那两行上方的理由写的就是「ps-port-remainder/03 落地那天」）。派单另记。
