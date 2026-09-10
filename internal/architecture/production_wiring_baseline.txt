@@ -354,6 +354,9 @@
 # 尚未开工；NR 自己的窄读口 ports.PlannedLegWindowRead 收的是已构造的引用值，不经这道门，所以本上下文
 # 内不会长出它的调用点——票 13 接线那天剪掉这一行。同笔的 NewPlannedLegReference 按 `New` 前缀被门禁
 # 跳过；InitialRoutePlan.LegAt 是方法不在网内。
+# 推送方 2026-09-10 重放注：上一段随票 nr-route-evidence-views/03 进 main 时未记数，此处补——**在 85d238ce
+# 上实测 3**（非注释非空行；其父链基 84e89dc7 为 2），只对该 SHA 成立。同日 ps-port-remainder/06（通道 2）在
+# 自己分支上另加 PS 一条并自记 2→3，两笔先后进 main 后由后进的那一笔在 tip 上重数，不拿两个 3 相加。
 internal/networkrouting/domain ParsePlannedLegReference
 
 
