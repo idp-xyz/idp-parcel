@@ -1,7 +1,7 @@
 # admin-web 授权处置队列页与处置操作：读 `/authorized-disposition-queue`，两去向发 `/shipment-requests/authorized-dispositions`（未配置档），照复核页的形
 
 Category: enhancement
-Status: in-progress——2026-09-10 15:2x 通道 6 立票并同笔认领（task-c9aaf964，隔离 worktree 分支 `mcp6-sa05`，基 `0e8d048a`）：「要裁的」为零（页面位置有复核页先例、字段有服务端键名、去向有 ADR-0132、停点显法有复核页对 `UnconfiguredIntake` 的处理），按派单判据立票笔推 origin 后直接开工
+Status: resolved——2026-09-10 15:5x 通道 6 完成（task-c9aaf964，分支 `mcp6-sa05` 基 `0e8d048a`，代码 tip `ca1233e7`，五笔见「完成记录」，票面笔随其后；进 main 的 SHA 由推送方重放后补记）；此前 in-progress——2026-09-10 15:2x 通道 6 立票并同笔认领（隔离 worktree 分支 `mcp6-sa05`，基 `0e8d048a`）：「要裁的」为零（页面位置有复核页先例、字段有服务端键名、去向有 ADR-0132、停点显法有复核页对 `UnconfiguredIntake` 的处理），按派单判据立票笔推 origin 后直接开工
 Blocked by: 无（后端两口已随 [04](./04-authorized-disposition-flow-and-failure-disposition-read.md) 进 main：`GET /authorized-disposition-queue` 与 `POST /shipment-requests/authorized-dispositions`）
 
 ## 从哪里来
@@ -15,7 +15,7 @@ Blocked by: 无（后端两口已随 [04](./04-authorized-disposition-flow-and-f
 ## 范围
 
 1. **队列页**（新页 `AuthorizedDispositionPage`，照 `AcceptanceReviewPage` 的形：`ReviewFlowTemplate` 队列 → 详情 → 决定 → 审计）：读 `/authorized-disposition-queue`；队列行显委托标识、客户账户、声明包裹数、提交时刻、受限项数；详情复用 `findAcceptanceReviewCase`（同一个 `?shipmentRequestId=` 分支）显委托字段与已记录判断三组；`detailExtra` 逐条列出本行 `restrictedItems[]`（种类 / 顺序 / 受限原因 / 失败处置 / 责任引用，原词直显）；空队列如实显空（「空队列是答案不是缺陷」）；`restrictedItems` 为空数组的行在队列上标出「受限项为空」不遮盖。
-2. **处置操作**：决定集**只有两去向**——`拒绝`（`REJECT`）与`交客户补充`（`CUSTOMER_SUPPLEMENT`），ADR-0132 决定一「放行不在集内」；页面上不得出现任何「通过」「放行」「批准」按钮或措辞。发 `/shipment-requests/authorized-dispositions`，草案只送页面手上的事实 `{ shipmentRequestId, choice, reason }`——处置人、授权依据、证据引用不在草案里（同 `ManualReviewCompletionDraft`「故意只有这两个字段」：那是「谁在签」，由 `PAR-INT-01` 的接入面从已认证的操作员身份翻译）。未配置档的停点原词直显（照复核页 `commandNoteOf` 对 `unconfigured` 的处理：`HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED`，不退化成「稍后重试」，不造开发用采信身份绕过）；八格 `outcome` 各自的中文标签取 ADR-0132 / `dispose_shipment_request.go` 注释原词，`AUTHORITY_RULES_NOT_CONFIGURED` 标为未配置态（恢复动作是租户登记 `PAR-COM-14`，不是重试、不是越权）；前端不自判权限。
+2. **处置操作**：决定集**只有两去向**——`拒绝`（`REJECT`）与`交客户补充`（`CUSTOMER_SUPPLEMENT`），ADR-0132 决定一「放行不在集内」；页面上不得出现任何「通过」「放行」「批准」按钮或措辞。发 `/shipment-requests/authorized-dispositions`，草案只送页面手上的事实 `{ shipmentRequestId, submissionVersionId, choice, reason }`（版本取队列行上看到的那一份：处置签在版本的判断任务上，不指名版本分不清签给了谁——`DisposeShipmentRequestCommand` 把版本设为本层必填的门）——处置人、授权依据、证据引用不在草案里（同 `ManualReviewCompletionDraft`「故意只有这两个字段」：那是「谁在签」，由 `PAR-INT-01` 的接入面从已认证的操作员身份翻译）。未配置档的停点原词直显（照复核页 `commandNoteOf` 对 `unconfigured` 的处理：`HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED`，不退化成「稍后重试」，不造开发用采信身份绕过）；八格 `outcome` 各自的中文标签取 ADR-0132 / `dispose_shipment_request.go` 注释原词，`AUTHORITY_RULES_NOT_CONFIGURED` 标为未配置态（恢复动作是租户登记 `PAR-COM-14`，不是重试、不是越权）；前端不自判权限。
 3. **既有复核页**：`ReviewFinancialControlRecord` 加 `items[]`（`kind` / `order` / `conclusion` / `basis` / `failureDisposition` / `responsibility`），`recordedJudgmentsBlock` 的「财务控制」格逐项列出，两格采用引用有才显、没有不补「无」。
 4. **导航与页名**：落「委托受理」区、紧挨「接受前人工复核」；条目 id `authorized-disposition`，页名「授权处置」（PS CONTEXT 词条原词）；`moduleInfoById` 记主责 `小包托运（parcel-shipment）` 与出处（CONTEXT「授权处置」词条与`等待授权处置`、ADR-0132）；`page-registry` 登记并进 `liveIds`（页面对真实端点发请求）。
 
@@ -43,6 +43,37 @@ Blocked by: 无（后端两口已随 [04](./04-authorized-disposition-flow-and-f
 
 票 [04](./04-authorized-disposition-flow-and-failure-disposition-read.md)「裁决」与「完成记录」第 3、5 步；ADR-0132 决定一、二；ADR-0085、ADR-0055、ADR-0022；`internal/parcelshipment/adapters/http/query_authorized_disposition_queue.go` 与 `dispose_shipment_request.go` 的响应形状；`apps/admin-web/src/pages/shipment-request/AcceptanceReviewPage.tsx` / `api.ts` / `presentation.ts`；`ReviewFlowTemplate`；PS CONTEXT「授权处置」词条。
 
+## 完成记录（通道 6 · 2026-09-10 · 分支 `mcp6-sa05`，基 `0e8d048a` = 派单时的 origin/main）
+
+**每笔（分支上的 SHA，作封存出处；进 main 的 SHA 由推送方重放后并列补记）**
+
+1. `2f7c3a6d` docs：立票，「要裁的」为零，同笔 in-progress。
+2. `b45941d4` feat：`api.ts` 加队列 / 处置命令的响应形状与 `listAuthorizedDispositionQueue` / `disposeShipmentRequest` 两个出口、`AuthorizedDispositionDraft`、复核单份 `ReviewFinancialControlRecord.items[]`（`ReviewControlItemRecord` 带 `failureDisposition` / `responsibility`）；`presentation.ts` 加 `dispositionChoiceLabels` / `controlFailureDispositionLabels` / `authorizedDispositionOutcomeViews`；`authorized-disposition.ts` 纯函数（`dispositionChoiceOptions` 恰两去向、`dispositionQueueRowOf`、`restrictedItemText`、`dispositionCommandNoteOf`、`dispositionQueueViewState` 与空队列措辞）+ `authorized-disposition.test.ts` 十例。红先绿后：测试先编不过（模块未定义），再落实现。
+3. `85583479` feat：`AuthorizedDispositionPage.tsx`（`ReviewFlowTemplate`：队列 → 详情复用 `findAcceptanceReviewCase` → 两去向 → 命令答复；受限项逐条原词直显；空数组标坏数据征兆）；已记录判断三组抽成 `recorded-judgments.tsx` 与复核页共用，`financialControl.items[]` 逐项列出、两格采用引用有才显；`AcceptanceReviewPage.tsx` 删本地那份改引用；`index.ts` 导出。
+4. `15fc0f75` feat：`navigation.ts`（委托受理区紧挨接受前人工复核加条目 `authorized-disposition`、`Signpost` 图标、`moduleInfoById` 记主责与出处）、`page-registry.tsx`（`pageById` + `liveIds` 各一行）。共享文件占号 15:4x / 释号 15:5x 各广播过，纯加行零删行。
+5. `ca1233e7` docs：一处注释去掉对 Go 侧 outcome 封闭集的计数措辞。
+
+**触及**：`apps/admin-web/src/pages/shipment-request/{api.ts, presentation.ts, index.ts, AcceptanceReviewPage.tsx}` 各加一段 / 改引用；新文件 `AuthorizedDispositionPage.tsx`、`recorded-judgments.tsx`、`authorized-disposition.ts`、`authorized-disposition.test.ts`；共享文件 `navigation.ts`、`page-registry.tsx` 各几行；本票面。**未碰**：Go 侧任何文件；`ReviewFlowTemplate` 与 `templates/**`；`catalogue-api` / `catalogue-view`；`pages/party/**`（通道 3 / 5 地盘）；任何 `.sql` / `.go`。
+
+**范围四件对照**
+
+- ① 队列页：读 `GET /authorized-disposition-queue`；队列行显委托标识、客户账户、包裹数、提交版本、提交时刻、受限项数；详情复用复核队列的 `?shipmentRequestId=` 分支（读面只有列表，页面不请求第二份详情）显委托字段、控制结果标识、最近未推进、已形成决定，`detailExtra` 逐条列 `restrictedItems[]`（种类 / 顺序 / 受限原因 / 失败处置原词 + PC CONTEXT 中文 / 责任引用）；空队列 `empty` 态措辞「空队列是答案，不是缺陷」，进队列条件取 ADR-0132 决定一原句；`restrictedItems` 空数组 → 队列行状态字「受限项为空（坏数据征兆）」、详情说明它不是「没有受限项」。
+- ② 处置操作：决定集在类型上就只有 `REJECT` / `CUSTOMER_SUPPLEMENT`（`AuthorizedDispositionChoice`），标签「拒绝」/「交客户补充」，图标 `XCircle` / `Undo2`（不用对勾）；理由必填由模板把守；草案 `{ shipmentRequestId, submissionVersionId, choice, reason }`；403 译成未配置停点（原词 `HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED`、点名 `PAR-INT-01`、不说「稍后重试」、不造采信身份）；结果词表逐格：`NOT_AUTHORIZED` 写「确定的业务答案，不是未决」，`AUTHORITY_RULES_NOT_CONFIGURED` 是唯一未配置态、恢复动作是登记 `PAR-COM-14`；`TASK_ALREADY_CLOSED` 带既有决定、`VERSION_SUPERSEDED` 带当前版本、`RECORDED` 带去向与之后的委托状态、补偿续办引用有才显。命令成立才重读队列（403 后不白跑）。前端零处判权限。
+- ③ 复核页：`recordedJudgmentsBlock` 的「财务控制」格在结论 / 依据下逐项列 `items[]`，受限项的失败处置与责任引用有才显；`明确无控制`零项照实为空。两页共用同一份。
+- ④ 导航与页名：委托受理区、紧挨「接受前人工复核」；id `authorized-disposition`、页名「授权处置」（PS CONTEXT 词条原词）；`moduleInfoById` 出处指 CONTEXT「授权处置」词条与 ADR-0132 决定一；`liveIds` 登记（页面对真实端点发请求）；`pageTitleById` 由 `moduleInfoById` 派生。
+
+**完成判据逐项**：`node node_modules/typescript/bin/tsc --noEmit` 退 0 ✓；`node scripts/run-tests.mjs` 208 pass / 0 fail ✓（本目录新增十例：决定集恰两去向且标签不含「通过 / 放行 / 批准」；空 → `empty` 且说「空队列是答案」；有项 → `ready`、队列行与受限项文案带 `CREDIT_CHECK` / `CREDIT_LIMIT_EXCEEDED` / `AUTHORIZED_DISPOSITION` / `PARTY-FIN-1` 原词；采用引用缺席不写「无」；空数组标坏数据；403 停点含 `403 ACCESS_CHANNEL_NOT_CONFIGURED` 与 `PAR-INT-01`、不含「稍后重试」；`RECORDED` 带去向原词；`NOT_AUTHORIZED` / `AUTHORITY_RULES_NOT_CONFIGURED` 各说各的恢复动作；`TASK_ALREADY_CLOSED` / `VERSION_SUPERSEDED` 带凭据；4xx / 5xx / 传输层三格）；导航条目、页面登记、`liveIds` 三处齐 ✓。以上两项在 `ca1233e7` 的**干净 detached 检出**上（node_modules 走 junction 借共享树，拆前先 `rmdir` 掉 junction 再拆树）重跑同绿。无 Go 改动未跑 Go。
+
+**给评审的判断题**
+
+1. **「页面上不能有任何通过按钮」怎么证**：`AuthorizedDispositionChoice` 只有两值，`dispositionChoiceOptions` 的类型是它的数组，第三格在类型上写不出；测试钉 id 恰是 `['REJECT', 'CUSTOMER_SUPPLEMENT']` 且标签不含「通过 / 放行 / 批准」；页面组件只给这两格配图标，不另造决定；两个图标都不是对勾。
+2. **草案多送 `submissionVersionId`**（派单只写了「两去向」，未点名版本）：`DisposeShipmentRequestCommand` 把版本设为本层必填的门（「不指名版本的处置无从判断它签给了谁」），队列行上正好带着它，送出去让服务端能答`版本已换代`而不是页面猜当前版。Intake 今天是 `UnconfiguredIntake{}` 不读请求体，键名照其余草案是页面侧暂定。若评审认为该等 Intake 落地再加，删一行加一处注释即可。
+3. **已记录判断三组抽成共用文件**（`recorded-judgments.tsx`）而不是在复核页原地加 `items[]`：两页审的是同一批行，分两处写就得在两处约定哪一份是准的；复核页因此有一处删本地函数改引用（-45 +1），行为不变、多显 `items[]`。
+4. **失败处置的中文标签取「按策略拒绝 / 进入授权处置」**（PC CONTEXT「失败处置只回答委托的去向——按策略拒绝或进入授权处置」），与去向标签「拒绝 / 交客户补充」分两张表：前者是正文登记的去向，后者是处置人选的去向，同一个 `REJECT` 串在两处含义不同，合成一张表会把「正文说拒」显成「处置人选了拒」。
+5. **单份详情读不回时页面照样显受限项**：受限项来自队列行（本页自己的读面），已记录判断三组来自复核单份分支（另一次请求）；前者在场后者缺席时如实说「已记录判断未取回：缺在哪一步」，不因一口不通把另一口也藏起来。
+6. **不在本票补的读面缺口**：复核单份 `financialControl` 的 `jointPassCondition` / `occupationFormed` 服务端有、前端类型没有——处置角色选「拒绝」前想知道「结论受限时第一项是否仍占着钱」得看 `occupationFormed`；本票按派单「读面缺一格票面记、不补」只记不补，前端类型也未加（加了不显是死字段）。可另立小票随复核页读面一起加。
+
 ## Comments
 
 - 2026-09-10 15:2x · 通道 6（task-c9aaf964）：立票；「要裁的」为零，同笔认领 in-progress。能力边界：读过两口的 Go 响应形状与端点表、复核页三件（页 / api / presentation）、`ReviewFlowTemplate`、`navigation.ts` / `page-registry.tsx`、ADR-0132 决定一至四、票 04 全文；**没读** `@idpxyz/ui-*` 组件源码——页面只用复核页已用过的那几个。
+- 2026-09-10 15:5x · 通道 6（task-c9aaf964）：五笔落地，Status 转 resolved，细节全在上方「完成记录」；开工前与共享文件落笔前各排过队列，占 / 释号各广播一次，无撞号。等非作者评审与推送方重放；进 main 的 SHA 由推送方补记。
