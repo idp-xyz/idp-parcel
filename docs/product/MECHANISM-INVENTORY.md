@@ -18,13 +18,13 @@
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 81 | 61 | 12 | 38 | 7 | 7 |
-| transportfulfillment | 130 | 120 | 24 | 34 | 10 | 22 |
+| transportfulfillment | 131 | 121 | 24 | 34 | 10 | 22 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 901 | 856 | 115 | 249 | 51 | 122 |
+| **合计** | 902 | 857 | 115 | 249 | 51 | 122 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 57、测试 80。
 
-## 跨上下文消费缝：21 组，59 个生产文件
+## 跨上下文消费缝：22 组，60 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -41,6 +41,7 @@
 | parcelshipment | transportfulfillment | 4 |
 | settlementaccounting | parcelpricing | 1 |
 | settlementaccounting | partycommercial | 2 |
+| transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 1 |
 | visibilityexception | customscompliance | 2 |
@@ -103,7 +104,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 376 个；基线口径缺 17，精确口径缺 11
+## 端口：声明 376 个；基线口径缺 16，精确口径缺 10
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -121,7 +122,6 @@
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.DeliveryConditionSource` 
-- `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
 
@@ -135,6 +135,5 @@
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.DeliveryConditionSource` 
-- `transportfulfillment.DeliveryWindowSource` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
