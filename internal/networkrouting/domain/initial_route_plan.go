@@ -266,6 +266,15 @@ func (plan InitialRoutePlan) Legs() []PlannedLeg {
 	return append([]PlannedLeg(nil), plan.legs...)
 }
 
+// LegAt 按序位取段，序位自首段起计、首段为 1（PlannedLegReference 的同一口径）。越界答「没有」
+// 而不 panic：引用指到段链之外是一个业务答案（版本对上、段不存在），窄读口据此答未找到。
+func (plan InitialRoutePlan) LegAt(ordinal int) (PlannedLeg, bool) {
+	if ordinal < 1 || ordinal > len(plan.legs) {
+		return PlannedLeg{}, false
+	}
+	return plan.legs[ordinal-1], true
+}
+
 // Nodes 按段链推导有序计划节点序列。节点不单独存一份：两份就可能各说各话，而段链连续
 // 由构造期保证。
 func (plan InitialRoutePlan) Nodes() []PlanNodeReference {
