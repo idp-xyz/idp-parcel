@@ -1,7 +1,7 @@
 # 面单渠道服务首发机制半边
 
 Category: feature
-Status: in-progress——24 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出；`22` 于 2026-09-04 随 `19` 收口立；`23` 于同日随 `14` 收口立；`24` 于同日由 tf/08 的 PS 侧核查立）；`01`..`19`、`21`、`23`、`24` 已 resolved（`19`、`21` 自分支 `mcp5-lc19-21`、`14` 自分支 `mcp2-lc14`、`23` 自分支 `mcp2-lc23`，均于 2026-09-04 进 main；`23` 的六处接线由 MCP-1 在 `4c466b0a` 落；`24` 自分支 `mcp5-ps-lc24` 同日快进入 main `24d94c94`..`11ee57aa`——ADR-0117，PS 迁移 `0017`，同来源更正版本在采用口形成新采用判断版本并回指前版，AT-PS-049 不动）；`20`、`22` draft（等 `18` 之后的第一家真源，`22` 另阻塞于 `20`）。状态行由通道 2 于 2026-09-04 对票面重核后改写，`14`/`19`/`21`/`22`/`23`/`24` 六格由 MCP-1 于同日重放入 main 后对齐，`24` 于同日 23:5x 由 MCP-1 再对齐一次（此后**以各票文件 `Status:` 为准**）
+Status: in-progress——28 张子票（`18`–`21` 于 2026-09-03 随 `16` 收口拆出；`22` 于 2026-09-04 随 `19` 收口立；`23` 于同日随 `14` 收口立；`24` 于同日由 tf/08 的 PS 侧核查立；`25`–`28` 于 2026-09-10 由通道 3 按 `11` / `12` 收口留下的后继立，均 draft）；`01`..`19`、`21`、`23`、`24` 已 resolved（`19`、`21` 自分支 `mcp5-lc19-21`、`14` 自分支 `mcp2-lc14`、`23` 自分支 `mcp2-lc23`，均于 2026-09-04 进 main；`23` 的六处接线由 MCP-1 在 `4c466b0a` 落；`24` 自分支 `mcp5-ps-lc24` 同日快进入 main `24d94c94`..`11ee57aa`——ADR-0117，PS 迁移 `0017`，同来源更正版本在采用口形成新采用判断版本并回指前版，AT-PS-049 不动）；`20`、`22` draft（等 `18` 之后的第一家真源，`22` 另阻塞于 `20`）。状态行由通道 2 于 2026-09-04 对票面重核后改写，`14`/`19`/`21`/`22`/`23`/`24` 六格由 MCP-1 于同日重放入 main 后对齐，`24` 于同日 23:5x 由 MCP-1 再对齐一次（此后**以各票文件 `Status:` 为准**）
 
 ## 这个 feature 是什么
 
@@ -34,7 +34,7 @@ Status: in-progress——24 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 
 ## 子票
 
-清单 21 张（`18`–`21` 随 `16` 收口拆出）。**清单尚未闭合**：三处已收口票的 Answer 里埋着的后继今天没有子票承接——`12` 收口 Comment 留下的择优链组合根与调用入口、`11` 留下的 `JudgeLabelServiceFinalHandler` 三个调用方（TF 首次有效收寄事实到达、面单交易定案、受控关闭/重开决定生效）、PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行（取证见 [`unresolved-review-20260904/remaining-work-a3a4814.md`](../unresolved-review-20260904/remaining-work-a3a4814.md) 第五节）；`18`–`21` 全是轨迹侧，没有一张承接它们，立票归 owner。四张裁决票（`01`..`04`）不写实现，它们阻塞其后的实现票——不先裁，后面每张都会各自假设一个答案，而**重复或分叉的实现在 `go build` 与 `go test` 下全绿**，要到集成才看得见。
+清单 28 张。`11` 留下的 `JudgeLabelServiceFinalHandler` 三个调用方与 `12` 留下的择优链组合根与调用入口已于 2026-09-10 立为 `25`–`28`（通道 3，均 draft）。**清单仍未闭合的一处**：PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行（取证见 [`unresolved-review-20260904/remaining-work-a3a4814.md`](../unresolved-review-20260904/remaining-work-a3a4814.md) 第五节）今天仍无子票承接，立票归 owner；另 `25` 与 `27` 各量到一张自己上游的票也没立（TF 侧首次有效收寄判断、关闭 / 重开决定写面），记在各自票面「要裁的」。四张裁决票（`01`..`04`）不写实现，它们阻塞其后的实现票——不先裁，后面每张都会各自假设一个答案，而**重复或分叉的实现在 `go build` 与 `go test` 下全绿**，要到集成才看得见。
 
 ### 裁决票（四张均已 resolved，2026-09-02 由 MCP-4 经 owner 授权裁定）
 
@@ -71,6 +71,10 @@ Status: in-progress——24 张子票（`18`–`21` 于 2026-09-03 随 `16` 收�
 | [`22` 按已登记规则批量重判待判断事实](./issues/22-rejudge-pending-facts-by-registered-rule.md) | 规则登记之后的回填入口：显式触发、不随登记自动发生、复用规则判断路径；随第一家真源一起立实施 | `draft`｜`20` |
 | [`23` 渠道择优决定的运营查阅面](./issues/23-channel-selection-decision-operations-read-face.md) | **已落地**：读端口 `ChannelSelectionDecisionRead` 另立（TIED 列表 + 按标识取逐候选，不拓宽登记册端口）+ postgres 读适配器 + `GET /channel-selection-decisions`（`view=tied` / `decisionId=`，隔离读放行按 ADR-0078 判入格）+ 管理台「委托受理」区新页；无金额无评价内容列、无隐式时间截断；并列冲突的人工裁决动作留待 `/domain-modeling` | `resolved` |
 | [`24` 更正版本在 PS 采用口被当作第二责任起点](./issues/24-source-correction-version-refused-as-second-responsibility-start.md) | tf/08 核查所得：`AdoptNetworkIntakeHandler` 采用键按版本幂等，但随后 `FindResponsibilityStart` 命中首登版本，更正版落 `SOURCE_NOT_ADOPTED`；UC-PS-003「一致性」节与 AT-PS-050「来源更正形成新的采用判断版本」无代码——链到 PS 为止今天是断的 | `draft` |
+| [`25` 实际承运商首次有效收寄到达 → 终局判断](./issues/25-external-carrier-first-pickup-triggers-label-final-judgment.md) | `11` 三个调用方之一：PS 侧 inbox 消费者 + 处理方适配器（照有效交付那一路）→ `JudgeLabelServiceFinalCommand` 含 `FirstEffectivePickup`。**量到 TF 今天没有「实际承运商首次有效收寄」事实与信封**——`external-carrier-tracking.judged` 按 TF CONTEXT 不构成收寄，lc/11 那句「PS 侧消费该信封」是误读；PS 半边形状已定，等 TF 侧那张票 | `draft`｜TF 侧首次有效收寄判断（无票，「要裁的」1） |
+| [`26` 面单交易定案那一拍 → 终局判断](./issues/26-label-transaction-settlement-beat-triggers-label-final-judgment.md) | `11` 三个调用方之二：`RecordChannelResult`（及可能的 `AppendFollowUpAction`）`Save` 之后判。两条路并列——同一次调用内 / 落库后交一封信后置一拍——代价写在票面「要裁的」，不自己定；06 编排今天无 Transactor 无 handoff，两路都要先加事务边界 | `draft`｜无（生产可达随 `28`） |
+| [`27` 受控关闭 / 重开决定生效 → 终局判断](./issues/27-controlled-close-reopen-decision-triggers-label-final-judgment.md) | `11` 三个调用方之三：决定写面 `Save` 之后判，两种决定都触发、分格归领域判断；「生效」= 追加即生效（`standingClosure` 不看时钟），无需定时重判。**决定口今天连写入方都没有**（端口头注与 lc/10「刻意没做」原句），写面票至今没立；余工表「`RehydrateContinuedAttemptRegister` 仍在基线」已过期 | `draft`｜关闭 / 重开决定写面（无票，「要裁的」1）；触发形状随 `26` 裁决 |
+| [`28` 渠道择优链的组合根与调用入口](./issues/28-channel-selection-composition-root-and-call-entry.md) | `12` 收口留下的「生产可达仍差两步」：`cmd/` 下择优、06、07 至今零装配，只接了两张读面；甲（运营端点）/ 乙（06 编排前置步）代价以 lc/12 两条 Comment 为权威，本票只记此后变了的三件（`14` 已清、`23` 读面已在、三取数口未重核）与新量到的一段缺翻译（候选标识 → 06 七类依据引用）；留 draft 等 owner | `draft`｜无（是决定不是阻塞） |
 
 ### 盘点判为「无缺口」因而不立票的三段
 

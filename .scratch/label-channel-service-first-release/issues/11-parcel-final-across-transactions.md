@@ -125,3 +125,7 @@ TF 首次有效收寄事实（票 `16`，`ExternalCarrierTrackingFact`，PS 只�
   PC 地盘，建议另立票；落地前面单渠道终局的采用一律停在 `FINAL_RULE_UNCONFIGURED`。
 - **有效期规则读口的适配器**：接受时固定的面单有效期规则是实例登记面，无 PAR 编号，随首个面单渠道产品的实例登记一起立。
 - `cmd/parcel-api` / `cmd/parcel-dispatch` 无装配：与上面第一条同落。
+
+## Comments
+
+- 2026-09-10 · 通道 3（task-b5dba034，取证锚 `c7e3522c`；只写票面，未动代码，本票 Status 不改）：**「不在本票」第一条的三张接线票已立**——[`25`](./25-external-carrier-first-pickup-triggers-label-final-judgment.md)（TF 首次有效收寄到达）、[`26`](./26-label-transaction-settlement-beat-triggers-label-final-judgment.md)（面单交易定案那一拍）、[`27`](./27-controlled-close-reopen-decision-triggers-label-final-judgment.md)（受控关闭 / 重开决定生效）；第四条「`cmd/` 无装配」与 lc/12 的组合根一并归 [`28`](./28-channel-selection-composition-root-and-call-entry.md)。**一处口径更正**：本 Answer 把第一路写成「`external-carrier-tracking` 信封的 PS 侧 inbox 消费者」，票 `25` 量出那封信（`transport-fulfillment.external-carrier-tracking.judged`）按 TF CONTEXT「外部承运轨迹事实」Rules **不构成**实际承运商首次有效收寄，TF 今天也没有收寄那一类事实与信封——PS 侧消费者等的信要 TF 先立，读到本 Answer 那句的人以 `25` 为新。第三条「有效期规则读口的适配器」已由 ps-port-remainder/01 承接（PC 半边 pc-gaps/09 已进 main，PS 半边 2026-09-10 派通道 6），本 Answer「无 PAR 编号」那句以 ps-port-remainder/01 的 `PAR-COM-17` 口径为准（那张票 Comments 已记）。

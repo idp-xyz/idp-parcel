@@ -156,3 +156,5 @@ Consequences，渠道候选来自**产品—渠道映射与渠道约束**，那�
   **乙 · 面单交易编排的前置步**（在 `EstablishLabelTransaction` 之前择优）：要改票 06 编排的输入
   形状（渠道从调用方给改为编排选出），且必须先有票 `14` 的落选留痕，否则并列→冲突→人工裁决
   那条路在编排里没有落点；好处是不新增端点，生产可达一步到位。两条都不在本票内。
+
+- 2026-09-10 · 通道 3（task-b5dba034，取证锚 `c7e3522c`；只写票面，未动代码，本票 Status 不改）：上两条留下的「组合根 + 调用入口」已立为 [`28`](./28-channel-selection-composition-root-and-call-entry.md)（draft，等 owner 裁甲 / 乙）。`28` 以上面两条 Comment 为代价分析的唯一权威，只补此后变了的三件（`14` 已 resolved、`23` 读面已进 `cmd/parcel-api`、三取数口未重核）与一段两路共有、这里没提的缺翻译：择优交回的 `ChannelCandidateID` 到票 `06` `EstablishLabelTransactionCommand` 七类依据引用之间没有适配器。
