@@ -1,7 +1,7 @@
 # 派送要求缝二：计划履约段时间窗口（`network-routing`）——`DeliveryWindowSource` 的消费侧适配器
 
 Category: enhancement
-Status: in-progress——2026-09-10 14:0x 通道 5 认领（单 task-247c5d4d-13b2-40a6-a774-75ab1d0eaa04），分支 `mcp5-tf13` 基 `c0cdebba`；先做不碰共享文件的适配器新包，再按序做端口三步法与接线。此前 ready-for-agent——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）；「要裁的」三问已由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 答复（2026-09-09，通道 5 代裁，task-8f6d8f94），裁决摘要与做法见下
+Status: resolved——2026-09-10 15:5x 通道 5 收口（单 task-247c5d4d-13b2-40a6-a774-75ab1d0eaa04；分支 `mcp5-tf13` 起于 `c0cdebba`、tf/12 进 main 后 rebase 到 `0c9b846f`，每笔已推 origin；完成记录见文末，进 main 记录归推送方）。此前 in-progress——14:0x 通道 5 认领，先做不碰共享文件的适配器新包，再按序做端口三步法与接线。此前 ready-for-agent——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）；「要裁的」三问已由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 答复（2026-09-09，通道 5 代裁，task-8f6d8f94），裁决摘要与做法见下
 Blocked by: [nr-route-evidence-views/03](../../nr-route-evidence-views/issues/03-planned-leg-window-read-face-by-reference.md)（NR 侧计划履约段引用值类型 + 按引用取段窗口的窄读口；本票的适配器要逐字对它的拼写与序位起点）
 
 ## 缺口
@@ -70,8 +70,55 @@ NR 侧有这个东西：`InitialRoutePlan` 的每条 `PlannedLeg` 带 `PlannedTi
 - 不动 `internal/networkrouting/**`（NR 侧读面归 nr-route-evidence-views/03）。
 - 不写真实时间窗取值；`PAR-NET-14` 实例半边不进本票。
 
+## 完成记录（2026-09-10 15:5x，通道 5；分支 `mcp5-tf13` 基 main `0c9b846f`（tf/12 进 main 那一笔），每笔已推 origin 的 SHA——推送方重放进 main）
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| ① | `4e5d34a9` | 适配器新包 `internal/transportfulfillment/adapters/networkrouting/`：包内窄接口 `PlannedLegWindowSource`（只含 `LoadPlannedLegWindow`，不 import NR ports / application）、`DeliveryWindows.LoadDeliveryWindow` 五格全函数、测试六例；接线棘轮：基线剪 `ParsePlannedLegReference` 一行（在 `c0cdebba` 干净检出底数 4 → 剪后 3，注记 SHA）；票面 in-progress |
+| ② | `30a49640` | 端口三步法 expand：`DeliveryWindowSource` 并存按对象旧法与 `LoadDeliveryWindowByPlannedSegment(ctx, tenant, planned, present)`；唯一替身 `deliveryWindowStub` 两法同答 |
+| ③ | `0d3dd6a3` | migrate：`TriggerDeliveryDispatchHandler.pullRequirements` 把 `participation.PlannedSegment()` 原样交给端口；新增执行器用例一组（带计划段引用原样到达 / 无计划段在场标记为无且缺件名单只有时间窗）；既有断言未改 |
+| ④ | `e400e8ac` | contract：删旧法、新法改回 `LoadDeliveryWindow(ctx, tenant, planned PlannedSegmentReference, present bool)`，对象入参不保留；端口头注改写；适配器断言实现该端口 |
+| ⑤ | `9a068d2d` | `cmd/parcel-api/assemble_delivery_dispatch.go` 的 `buildDeliveryDispatchTrigger` 填 `Deps.Windows`（`nrpostgres.NewPlannedLegWindows(db)` → `tfnetworkrouting.NewDeliveryWindows`），条件缝仍 nil；真库装配用例停点 `DELIVERY_WINDOW_SOURCE_NOT_WIRED` → `DELIVERY_CONDITION_SOURCE_NOT_WIRED`；tf/12 的 http 端点测试替身 `resolvedWindow` 改新签名一行 |
+| ⑥ | `bdb1224c` | 机制清点在 `9a068d2d` 干净检出重生成（TF 生产 130→131 / 测试 120→121；跨上下文消费缝 21→22 组；端口精确口径缺 11→10） |
+| ⑦ | 本笔 | 票面 → resolved + 本记录 |
+
+①–④ 在 rebase 前的分支 SHA 为 `c4c6e1d2` / `35531758` / `6029e263` / `7a596ce3`（基 `c0cdebba`，广播里引过），rebase 到 `0c9b846f` 时内容一字未变、SHA 换了；写在这里供对回广播。
+
+**五格对照表**（`adapters/networkrouting.DeliveryWindows.LoadDeliveryWindow`，无 default；测试 `delivery_windows_test.go`）：
+
+| 输入 | 答格 | 调 NR | 用例 |
+|---|---|---|---|
+| 引用缺席（`present=false`） | `MISSING` | 否 | `TestAnAbsentPlannedSegmentAnswersMissingWithoutAskingNetworkRouting` |
+| 引用解析失败（拼写不合 `<版本>#<序位>`：无分隔符 / 序位 0 / 前导零 / 非数字） | `MISSING` | 否 | `TestAnUnparsableReferenceAnswersMissingNotUnavailable` |
+| NR `found=false`（版本不在本租户 / 序位越界） | `MISSING` | 是 | `TestNotFoundIsMissingWhileAReadFailureIsRaised` |
+| NR `found=true` | `RESOLVED` + `Earliest()/Latest()` | 是 | `TestAPlannedLegWindowIsTranslatedToAResolvedDeliveryWindow` |
+| NR error | 原样上抛（执行器读成 `DELIVERY_WINDOW_SOURCE_UNAVAILABLE`） | 是 | 同上一例后半 |
+| 引用指已被替代版本的段 | `RESOLVED`（裁决②，不读适用性） | 是 | `TestASegmentOfASupersededPlanVersionStillResolves` |
+
+拼写与序位起点逐字对 nr/03 完成记录：`<路由计划版本标识>#<序位>`、序位自 1 起；本适配器不拆不拼，只调 `nrdomain.ParsePlannedLegReference`。
+
+**触及**（11 件，+409/−30，`git diff --stat 0c9b846f..bdb1224c`）：`internal/transportfulfillment/adapters/networkrouting/{delivery_windows.go,delivery_windows_test.go}`（新）、`ports/delivery_requirement.go`（`DeliveryWindowSource` 签名 + 头注）、`application/{trigger_delivery_dispatch.go,trigger_delivery_dispatch_test.go}`、`adapters/http/trigger_delivery_dispatch_test.go`（替身签名一行）、`cmd/parcel-api/{assemble_delivery_dispatch.go,assemble_delivery_dispatch_test.go}`、`internal/architecture/production_wiring_baseline.txt`（NR 段剪一行 + 计数注）、`docs/product/MECHANISM-INVENTORY.md`、本票面。**未碰**：`internal/networkrouting/**`（红线；`git diff --stat 0c9b846f..bdb1224c -- internal/networkrouting` 为空）、`internal/partycommercial/**`、ADR-0114 / 0131 正文、`cmd/parcel-api` 的 endpoints.go / main.go / unwired_orchestration.go（tf/12 已立入口，本票不重立）、`PlanApplicability`（不读）。
+
+**验收对照**（票面完成判据逐项）：`DeliveryWindowSource` 按计划履约段引用问 ✓（④）、执行器把参与关系上的引用交出去、缺席不出 TF ✓（③ 两例 + ① 缺席不调 NR）；五种输入各有唯一答格无 `default` ✓、已被替代版本的段照答 `RESOLVED` ✓（上表）；接线后在票 12 已接的前提下从 `DELIVERY_WINDOW_SOURCE_NOT_WIRED` 走到下一格 ✓（⑤ 真库装配用例停点后移到 `DELIVERY_CONDITION_SOURCE_NOT_WIRED`——tf/12 先进 main，本票落在做法第 6 步「否则」半边：不重立入口，只接适配器）；不动 NR、不改两份 ADR、不写真实取值 ✓；`go build ./... && go vet ./...` 退 0、TF 全包与 `internal/architecture/` 绿 ✓。红线四条 ✓（窗口只进任务作工作范围；四态不分支；NR 零改动；夹具全合成）。
+
+**验证强度**（隔离树 `D:/tops/idp-parcel-mcp5-tf13`，代码 tip `9a068d2d`，`status --untracked-files=all` 空）：`gofmt -l` 零输出；`go build ./...`、`go vet ./...` 全仓退 0；每一步（①–⑤）单独一笔、全仓 build / vet 退 0 后推；**带 DSN** `go test -p 1 -count=1 -v` TF 全包 + TF ports 两个反向依赖（`parcelshipment/adapters/transportfulfillment`、`visibilityexception/adapters/transportfulfillment`）+ `./cmd/parcel-api/` + `./cmd/parcel-dispatch/` + `./internal/architecture/...` → 13 包 ok / 0 FAIL，`--- PASS` 1877 / `--- SKIP` 0 / `--- FAIL` 0（约 26 秒），装配用例 `TestTheWiredDeliveryDispatchTriggerStopsAtTheNextUnwiredSeam` PASS。未跑全量、未跑 `-race`。占 / 释 55432 各一轮均广播；另有一次 14:3x 跑 TF 全包时 shell 残留 DSN 让 `adapters/postgres` 碰了 55432 约 8 s 未先占号，已当场广播记下。日志 `%TEMP%\tf13-author-run.log`，仓内无残留。
+
+**与 main 碰面**（`git fetch` 后 `git merge-tree --write-tree origin/main mcp5-tf13`，origin/main = `0c9b846f`，干跑）：退 0 无冲突（分支就基于它）。
+
+**判断题**（给评审与推送方，都不阻断）：
+
+1. **对象入参不保留**（做法第 2 步「由本票定」）：端口只收 `(planned PlannedSegmentReference, present bool)`。NR 侧不需要对象；留着会引诱适配器拿它去推「哪一段是派送段」，正是 ADR-0131 决定一否决的那条路。代价：端口签名比另两条缝（按对象）不同形——三条缝各有所有者、各按所有者的键问，同形不是目标。
+2. **`present bool` 显式在签名上**而不是用零值引用表缺席：`participation.PlannedSegment()` 交回的就是 `(ref, bool)`，端口原样收，缺席在类型上可见；用零值表缺席会让「登记方关联了一个空串」与「没关联」同形。
+3. **解析失败答 `MISSING` 不答 error**：登记方关联了 NR 认不出的段，重跑不会让它长出来，该显示为 `REQUIREMENT_MISSING / DELIVERY_WINDOW` 由人核声明（ADR-0131 越权风险点「悬空引用同答缺失」）；反方是当作适配器缺陷上抛——那会让一条坏登记把每一拍都拖进「读不到」重跑。
+4. **四态常函数**：适配器接口 `PlannedLegWindowSource` 上根本没有适用性一格可读，裁决②在类型上成立；「已被替代版本仍 RESOLVED」用例用两版各一段的替身钉住读的是引用所钉那一版。
+5. **ADR-0114 决定四那句「NR 那条对没有计划段的对象怎么答」**：已由 ADR-0131 决定三答——答 `RequirementMissing`，NR 不给兜底窗口，本适配器缺席不出 TF。不改 ADR-0114 正文。
+6. **生产入口归 tf/12**（端点 `/transport-fulfillment-delivery-dispatch-triggers` + `UnconfiguredIntake{}`，通道 1 14:4x 裁甲）；本票只填 `Deps.Windows`。tf/12 已接，停点后移到 `DELIVERY_CONDITION_SOURCE_NOT_WIRED`（票 14 的那一格）。
+7. **依据（`Basis`）不交**：任务口今天只收首尾两点，依据留在 NR 由需要它的人按引用取；要交得先拓任务的形，不在本票。
+8. **rebase 改写了自己分支的 SHA**（①–④），是本仓允许的那一种（改自己分支，不改 main）；广播里引过的旧 SHA 在上表下方对照。
+
 ## Comments
 
+- 2026-09-10 15:5x · 通道 5：tf/12 于 15:2x 进 main（0c9b846f）后 rebase 本分支，接线一笔（⑤）+ 清点（⑥）+ 本记录；tf/12 的 http 测试替身 `resolvedWindow` 因端口签名变更由本票顺手改一行，已与通道 2 说定。
 - 2026-09-07 · 通道 4（task-79675845）：由票 09 裁决④拆出立票，只写票面，未动代码。
 - 2026-09-09 · 通道 5（task-8f6d8f94，用户经队列授权代裁）：三问答复落 ADR-0131，NR CONTEXT 加一条规则、GLOSSARY 加一行，NR 侧窄读口立票 nr-route-evidence-views/03 并作本票阻塞边；Status draft → ready-for-agent，补做法与完成判据。只裁不码，未动 `internal/**`。
 - 2026-09-09 23:2x · 推送方（通道 4 窗口代通道 1）封存并进 main：作者会话在提交前崩（四件 mtime 停在 22:41–22:43，`list_sessions` offline，用户报 crash），四件以 `chore(salvage)` 一字不改入库（分支 `mcp5-tf13@f73c481b`）。上一条里「GLOSSARY 加一行」**与现场不符**——现场没有 GLOSSARY 改动，那一行未落，归 NR 读口票 nr-route-evidence-views/03 或下一位碰 GLOSSARY 的 NR 裁决顺手补；ADR README 的 0131 行由推送方在本笔补（作者原计划单独一笔占号）。纯 .md 代裁，按纪律推送方自审：`git diff --check` 空、四件内 .md 相对链接逐一解析存在；未作语义评审，裁决内容以 ADR-0131 正文为准。
