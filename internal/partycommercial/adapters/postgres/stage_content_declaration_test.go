@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -87,6 +89,44 @@ func TestStageContentRoundTrips(t *testing.T) {
 	}
 	if _, declared := catalog.RuleFor(domain.DeclaredOperationsCancellation); declared {
 		t.Fatal("没声明的请求方格答成了允许")
+	}
+}
+
+// Covers: pc-gaps/12 完成判据 3——终局规则声明带面单渠道两行时经 SaveFinalRule / LoadFinalRule 往返保真；0013 钉四个字面量的
+// final_rule_declaration_closed_set 经 0031 放宽后不再拒 LABEL_SERVICE_COMPLETED / LABEL_SERVICE_FAILED，集外词照旧拒在
+// CHECK（TestStageContentClosedSetsAreMirroredInTheDatabase 那一格不变）。只声明面单两格、不声明网络服务格的规则包，网络格读回即缺行。
+func TestFinalRuleLabelServiceRowsRoundTripThroughTheDatabase(t *testing.T) {
+	repository, transactor, db := newDeclarationFixture(t)
+	rules := effectiveRulePackage(t, "rules-label", "v1")
+	tenant := pcTenant(t, "tenant-1")
+
+	content, err := domain.NewFinalRuleContent(rules, []domain.FinalizationDeclaration{
+		{Outcome: domain.DeclaredLabelServiceCompleted, FinalKind: pcValue(t, domain.NewRuleReference, "LABEL_SERVICE_DONE")},
+		{Outcome: domain.DeclaredLabelServiceFailed, FinalKind: pcValue(t, domain.NewRuleReference, "LABEL_SERVICE_FAILED_FINAL")},
+	})
+	if err != nil {
+		t.Fatalf("组面单渠道终局声明：%v", err)
+	}
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveFinalRule(txCtx, content)
+	}, ports.DeclarationSaved)
+
+	reader, err := adapter.NewStageContentDeclarations(db)
+	if err != nil {
+		t.Fatalf("构造读口：%v", err)
+	}
+	loaded, found, err := reader.LoadFinalRule(t.Context(), tenant, rules)
+	if err != nil || !found {
+		t.Fatalf("读回面单渠道终局声明：found = %v err = %v", found, err)
+	}
+	if kind, declared := loaded.FinalKindFor(domain.DeclaredLabelServiceCompleted); !declared || kind.String() != "LABEL_SERVICE_DONE" {
+		t.Fatalf("completed: kind = %v declared = %v", kind, declared)
+	}
+	if kind, declared := loaded.FinalKindFor(domain.DeclaredLabelServiceFailed); !declared || kind.String() != "LABEL_SERVICE_FAILED_FINAL" {
+		t.Fatalf("failed: kind = %v declared = %v", kind, declared)
+	}
+	if _, declared := loaded.FinalKindFor(domain.DeclaredEffectiveDelivery); declared {
+		t.Fatal("只声明面单两格的规则包替有效交付答成了形成终局")
 	}
 }
 
