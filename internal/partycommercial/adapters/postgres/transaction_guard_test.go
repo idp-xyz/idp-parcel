@@ -60,4 +60,7 @@ func TestDeclarationContentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := publications.SaveSourceDataAmendmentAllowance(ctx, domain.SourceDataAmendmentAllowanceContent{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记资料修订允许声明应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := publications.SaveDeliveryConditions(ctx, domain.DeliveryConditionContent{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记交付条件声明应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }

@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -74,6 +75,10 @@ func contractDeliveryConditionsOf(t *testing.T, contract domain.CommercialVersio
 	return content
 }
 
+// errDeliveryConditionSaveAccepted 是「本该被拒的合同层写成了」的哨兵：闭包只做 IO 并回 error（架构门禁
+// TestNoTransactionClosureCarriesAGoexitAssertion），断言留在闭包外。
+var errDeliveryConditionSaveAccepted = errors.New("delivery condition save was accepted")
+
 // saveDeliveryConditionsExpectingError 在一个会回滚的事务里跑 Save，交回它报的 error（无 error 即失败）。
 func saveDeliveryConditionsExpectingError(
 	t *testing.T,
@@ -85,12 +90,12 @@ func saveDeliveryConditionsExpectingError(
 	err := transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		outcome, err := repository.SaveDeliveryConditions(txCtx, content)
 		if err == nil {
-			t.Fatalf("本该被拒的合同层写成了 %s", outcome)
+			return fmt.Errorf("%w: outcome %s", errDeliveryConditionSaveAccepted, outcome)
 		}
 		return err
 	})
-	if err == nil {
-		t.Fatal("事务没把 Save 的 error 带出来")
+	if err == nil || errors.Is(err, errDeliveryConditionSaveAccepted) {
+		t.Fatalf("本该被拒的合同层没被拒：%v", err)
 	}
 	return err
 }

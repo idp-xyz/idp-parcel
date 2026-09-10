@@ -606,6 +606,131 @@ func TestAPublishedSourceDataAmendmentAllowanceIsReadBackByTheContentView(t *tes
 	}
 }
 
+// deliveryConditionBatchBody 一份服务产品版本（产品层三种方式）+ 一份客户合同版本（合同层收紧到一种，指名 product-1/v1）。
+// 产品项在前：合同层写前要在同一范围册上读回它指名的产品层（ports.PublicationRegistry.SaveDeliveryConditions 的注释）。
+func deliveryConditionBatchBody() string {
+	return `{"items": [
+    {
+      "tenantId": "tenant-1", "kind": "SERVICE_PRODUCT", "objectId": "product-1", "version": "v1",
+      "scope": "scope-1", "contentDigest": "sha256:product-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-product-1", "source": "source-product-1", "approvedAt": "2025-12-15T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {"deliveryConditions": {
+        "methods": ["METHOD/in-person", "METHOD/safe-drop", "METHOD/locker"],
+        "recipientScopeRule": "RULE/recipient-scope-1", "proofOfDeliveryRule": "RULE/proof-1"
+      }}
+    },
+    {
+      "tenantId": "tenant-1", "kind": "CUSTOMER_CONTRACT", "objectId": "contract-1", "version": "v1",
+      "scope": "scope-1", "contentDigest": "sha256:contract-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {"reference": "approval-contract-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {"deliveryConditions": {
+        "tightens": {"objectId": "product-1", "version": "v1"},
+        "methods": ["METHOD/in-person"],
+        "recipientScopeRule": "RULE/recipient-scope-1", "proofOfDeliveryRule": "RULE/proof-contract-1"
+      }}
+    }
+  ]}`
+}
+
+// Covers: 票 pc-gaps/11 完成判据 3 真库端到端——受控批文 `deliveryConditions` 一节经进程口发布，产品层与合同层写进 0030
+// 两表（合同层写前对着同册的产品层核过收紧）；再按这两版被采用的闭包回指，经 TF 适配器将来读的那个口
+// （DeliveryConditions.LoadDeliveryConditionReference）答「交付条件引用」，且引用就是回指本身（ADR-0133 决定一 / 二 / 四）。
+func TestAPublishedDeliveryConditionIsAnsweredByTheResolutionKeyedReadFace(t *testing.T) {
+	dsn := freshMigratedDSN(t)
+	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, deliveryConditionBatchBody())); code != exitLanded {
+		t.Fatalf("交付条件批 exit = %d, want %d", code, exitLanded)
+	}
+
+	registry := loadScope(t, dsn, "tenant-1", "scope-1")
+	tenant, err := pcdomain.NewTenantID("tenant-1")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	if registry.Count() != 2 {
+		t.Fatalf("整册 %d 版，want 产品 + 合同两版", registry.Count())
+	}
+
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池点读：%v", err)
+	}
+	defer pool.Close()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("框架 DB：%v", err)
+	}
+
+	var productMethods, contractMethods int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT
+		   (SELECT count(*) FROM party_commercial.delivery_condition_method WHERE object_kind = 1 AND object_id = 'product-1'),
+		   (SELECT count(*) FROM party_commercial.delivery_condition_method WHERE object_kind = 2 AND object_id = 'contract-1')`,
+	).Scan(&productMethods, &contractMethods); err != nil {
+		t.Fatalf("数两层：%v", err)
+	}
+	if productMethods != 3 || contractMethods != 1 {
+		t.Fatalf("两层方式行 = 产品 %d / 合同 %d，want 3 / 1", productMethods, contractMethods)
+	}
+
+	// 委托接受时固定的闭包：按同一把范围键同时采用这两版（ADR-0133 决定一钉的那条路），经解析库固定后再按回指来问。
+	anchorPolicy, err := pcdomain.NewAnchorPolicyVersion("anchor-policy-v1")
+	if err != nil {
+		t.Fatalf("锚点策略：%v", err)
+	}
+	anchor, err := pcdomain.NewSelectionAnchor(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), anchorPolicy)
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	scope, err := pcdomain.NewCommercialScopeReference("scope-1")
+	if err != nil {
+		t.Fatalf("范围：%v", err)
+	}
+	account, err := pcdomain.NewCustomerAccountID("customer-1")
+	if err != nil {
+		t.Fatalf("客户账户：%v", err)
+	}
+	legalEntity, err := pcdomain.NewLegalEntityReference("legal-1")
+	if err != nil {
+		t.Fatalf("责任法人：%v", err)
+	}
+	closure := pcdomain.ResolveCommercialClosure(registry, pcdomain.ClosureResolutionKey{
+		TenantID:             tenant,
+		CustomerAccountID:    account,
+		LegalEntityCandidate: legalEntity,
+		Scope:                scope,
+		Purpose:              pcdomain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		RequiredBases:        []pcdomain.CommercialObjectKind{pcdomain.CustomerContractObject, pcdomain.ServiceProductObject},
+	}, nil)
+	if closure.Outcome() != pcdomain.UniquelyResolved {
+		t.Fatalf("闭包 outcome = %q（%v），want UNIQUELY_RESOLVED", closure.Outcome(), closure.Reason())
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		t.Fatalf("构造解析库：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, err := resolutions.Save(txCtx, closure)
+		return err
+	}); err != nil {
+		t.Fatalf("固定闭包：%v", err)
+	}
+
+	reader, err := pcpostgres.NewDeliveryConditions(db)
+	if err != nil {
+		t.Fatalf("构造交付条件读口：%v", err)
+	}
+	reference, found, err := reader.LoadDeliveryConditionReference(t.Context(), tenant, closure.ResolutionID())
+	if err != nil || !found {
+		t.Fatalf("按回指读交付条件：found=%v err=%v", found, err)
+	}
+	if reference.Resolution() != closure.ResolutionID() || reference.String() != closure.ResolutionID().String() {
+		t.Fatalf("引用 = %s，want 回指本身 %s", reference, closure.ResolutionID())
+	}
+}
+
 func TestAPublishedPreAcceptanceFinancialControlPolicyIsReadBackByTheContentView(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	if code := runCLI(t, dsn, "publish", "-input", batchFile(t, controlPolicyBatchBody())); code != exitLanded {

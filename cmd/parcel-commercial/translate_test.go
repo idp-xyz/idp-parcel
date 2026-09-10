@@ -305,6 +305,74 @@ func TestSourceDataAmendmentTranslatesExactlyTheDeclaredShape(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0133 决定四——批文 `deliveryConditions{tightens?, methods[], recipientScopeRule, proofOfDeliveryRule}`：方式与
+// 规则引用是开放引用只查非空、照字面搬运；tightens 在场即两格都要非空；未知键拒；缺键就是没这一节。零方式、同方式两行、
+// 层与 tightens 对不上留给领域（用例测试钉），翻译层不代判。
+func TestDeliveryConditionsTranslateExactlyTheDeclaredShape(t *testing.T) {
+	item := func(kind, declarations string) string {
+		return `{"items": [{"tenantId": "t", "kind": "` + kind + `", "objectId": "o", "version": "v1",
+			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED",
+			"declarations": {"deliveryConditions": ` + declarations + `}}]}`
+	}
+
+	t.Run("产品层三格照字面翻过去", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(item("SERVICE_PRODUCT",
+			`{"methods": ["METHOD/safe-drop", "METHOD/in-person"], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": "RULE/proof"}`)))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		declared := commands[0].Declarations.DeliveryConditions
+		if declared == nil || declared.Tightens != nil || len(declared.Terms.Methods) != 2 ||
+			declared.Terms.Methods[0].String() != "METHOD/safe-drop" || declared.Terms.Methods[1].String() != "METHOD/in-person" ||
+			declared.Terms.RecipientScopeRule.String() != "RULE/scope" || declared.Terms.ProofOfDeliveryRule.String() != "RULE/proof" {
+			t.Fatalf("声明 = %+v，翻译变形", declared)
+		}
+	})
+
+	t.Run("合同层带所收紧的产品版本", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(item("CUSTOMER_CONTRACT",
+			`{"tightens": {"objectId": "product-1", "version": "v3"}, "methods": ["METHOD/in-person"], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": "RULE/proof"}`)))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		declared := commands[0].Declarations.DeliveryConditions
+		if declared == nil || declared.Tightens == nil ||
+			declared.Tightens.ObjectID().String() != "product-1" || declared.Tightens.Version().String() != "v3" || len(declared.Terms.Methods) != 1 {
+			t.Fatalf("声明 = %+v，所收紧的产品版本没翻过去", declared)
+		}
+	})
+
+	t.Run("缺键就是没这一节", func(t *testing.T) {
+		commands, err := publishCommandsFromJSON([]byte(`{"items": [{"tenantId": "t", "kind": "SERVICE_PRODUCT", "objectId": "o", "version": "v1",
+			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
+			"approvalRoleStanding": "CONFIRMED"}]}`))
+		if err != nil {
+			t.Fatalf("翻译：%v", err)
+		}
+		if commands[0].Declarations.DeliveryConditions != nil {
+			t.Fatal("没给这一节却翻出了一份声明")
+		}
+	})
+
+	refusals := map[string]string{
+		"方式为空串":         `{"methods": ["  "], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": "RULE/proof"}`,
+		"收件范围规则引用缺席":    `{"methods": ["METHOD/in-person"], "proofOfDeliveryRule": "RULE/proof"}`,
+		"交付证明规则引用为空":    `{"methods": ["METHOD/in-person"], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": ""}`,
+		"tightens 缺版本号": `{"tightens": {"objectId": "product-1"}, "methods": ["METHOD/in-person"], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": "RULE/proof"}`,
+		"未知键":           `{"methods": ["METHOD/in-person"], "recipientScopeRule": "RULE/scope", "proofOfDeliveryRule": "RULE/proof", "default": "METHOD/in-person"}`,
+	}
+	for name, declarations := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(item("SERVICE_PRODUCT", declarations))); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}
+
 // Covers: ADR-0119 Decision 五——批文时长只认 ISO-8601 的 `P[nD][T[nH][nM][nS]]` 子集：整数、按序至多一次、
 // 至少一段；年 / 月 / 周 / 小数 / 逆序 / 重复 / 空 T 都拒。零时长由领域拒，不在本表。
 func TestISODurationSubsetParsesExactlyTheDeclaredShape(t *testing.T) {

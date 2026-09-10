@@ -70,6 +70,25 @@ type declarationsDocument struct {
 	// sourceDataAmendment 挂在接单规则包版本上（ADR-0120）：接受后客户原始资料按（资料组 × 阶段 × 意图）能不能改，
 	// 外加 closed 说缺格怎么读。缺键 = 整节没声明；键在则 closed 必填不给默认。
 	SourceDataAmendment *sourceDataAmendmentDocument `json:"sourceDataAmendment,omitempty"`
+	// deliveryConditions 挂在服务产品版本（产品层）或客户合同版本（合同层）上（ADR-0133 决定四，票
+	// party-commercial-context-gaps/11）：允许的交付方式集合 + 收件范围规则引用 + 交付证明规则引用；合同层多一键 tightens
+	// 指名所收紧的产品版本。缺键 = 整节没声明（这一版没有交付条件，不默认「本人签收」）。
+	DeliveryConditions *deliveryConditionDocument `json:"deliveryConditions,omitempty"`
+}
+
+// deliveryConditionDocument 是交付条件声明（ADR-0133 决定四）。三格都是开放引用（PAR-NET-09 / PAR-COM-05 / PAR-COM-06
+// 实例半边）：翻译层只查非空、不认词表、不内置任何一种方式；零方式、同方式两行、层与 tightens 对不上（合同层缺它、
+// 产品层带它）、挂在两层之外的版本上，都留给领域构造门。tightens 只在合同层：所收紧的服务产品版本的对象标识与版本号。
+type deliveryConditionDocument struct {
+	Tightens            *tightenedProductDocument `json:"tightens,omitempty"`
+	Methods             []string                  `json:"methods"`
+	RecipientScopeRule  string                    `json:"recipientScopeRule"`
+	ProofOfDeliveryRule string                    `json:"proofOfDeliveryRule"`
+}
+
+type tightenedProductDocument struct {
+	ObjectID string `json:"objectId"`
+	Version  string `json:"version"`
 }
 
 // sourceDataAmendmentDocument 是资料修订允许声明（票 party-commercial-context-gaps/10，ADR-0120 Decision 六）。
@@ -644,7 +663,51 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 		declarations.SourceDataAmendment = declared
 	}
 
+	if document.DeliveryConditions != nil {
+		declared, err := deliveryConditionsFrom(*document.DeliveryConditions)
+		if err != nil {
+			return declarations, err
+		}
+		declarations.DeliveryConditions = declared
+	}
+
 	return declarations, nil
+}
+
+// deliveryConditionsFrom 把批文一节译成发布用例的声明输入：每一格只做非空，方式与规则引用照字面搬运——本上下文
+// 登引用不登词表。tightens 在场即两格都要非空；它该不该在场（合同层要、产品层不要）由领域按发布版本的类别判。
+func deliveryConditionsFrom(document deliveryConditionDocument) (*pcapplication.DeliveryConditionDeclaration, error) {
+	declared := &pcapplication.DeliveryConditionDeclaration{}
+	for _, raw := range document.Methods {
+		method, err := pcdomain.NewDeliveryMethodReference(raw)
+		if err != nil {
+			return nil, fmt.Errorf("交付条件的一种方式：%w", err)
+		}
+		declared.Terms.Methods = append(declared.Terms.Methods, method)
+	}
+	var err error
+	if declared.Terms.RecipientScopeRule, err = pcdomain.NewDeliveryRuleReference(document.RecipientScopeRule); err != nil {
+		return nil, fmt.Errorf("交付条件的收件范围规则引用：%w", err)
+	}
+	if declared.Terms.ProofOfDeliveryRule, err = pcdomain.NewDeliveryRuleReference(document.ProofOfDeliveryRule); err != nil {
+		return nil, fmt.Errorf("交付条件的交付证明规则引用：%w", err)
+	}
+	if document.Tightens != nil {
+		objectID, err := pcdomain.NewCommercialObjectID(document.Tightens.ObjectID)
+		if err != nil {
+			return nil, fmt.Errorf("交付条件所收紧的产品版本：%w", err)
+		}
+		version, err := pcdomain.NewCommercialVersionLabel(document.Tightens.Version)
+		if err != nil {
+			return nil, fmt.Errorf("交付条件所收紧的产品版本：%w", err)
+		}
+		tightens, err := pcdomain.NewTightenedProductVersion(objectID, version)
+		if err != nil {
+			return nil, fmt.Errorf("交付条件所收紧的产品版本：%w", err)
+		}
+		declared.Tightens = &tightens
+	}
+	return declared, nil
 }
 
 // sourceDataAmendmentFrom 把批文一节译成发布用例的声明输入。closed 缺席即拒——它不是可省的旁注；归属与格的
