@@ -43,6 +43,11 @@ var _ psports.ActiveRejectionAuthorizer = (*ActiveRejectionAdapter)(nil)
 //
 // 询问折不成提供方请求时停在未形成：缺的是范围/时点映射，不是授权规则本身。
 // 提供方四格按恢复动作翻译：已授权带所采用版本引用；不允许；未配置；其余 error。
+//
+// 映射折出的请求动作必须是 ActiveRejectionAction，守卫与 ManualReviewAuthorizationAdapter 那道同形：
+// 一份映射若折出了复核动作，一条只授复核权的规则就会被读成拒绝权——获准复核并不等于获准直接拒掉
+// 这单业务（PC CONTEXT）。撤回那只没有这道守卫，不是漏了：PC 今天没有撤回动作，它的映射借现有
+// 动作占位，无可比对（理由钉在它的头注上）。
 func (adapter *ActiveRejectionAdapter) AuthorizeActiveRejection(
 	ctx context.Context,
 	query psports.ActiveRejectionAuthorizationQuery,
@@ -58,6 +63,10 @@ func (adapter *ActiveRejectionAdapter) AuthorizeActiveRejection(
 	if !formed {
 		return psports.ActiveRejectionAuthorization{}, fmt.Errorf(
 			"authorize active rejection: commercial scope or as-of time is not formed")
+	}
+	if request.Action() != pcdomain.ActiveRejectionAction {
+		return psports.ActiveRejectionAuthorization{}, fmt.Errorf(
+			"%w: request mapping formed action %q, want ACTIVE_REJECTION", ErrUntranslatableAnswer, request.Action())
 	}
 
 	tenant, err := pcdomain.NewTenantID(query.Identity.TenantID().String())

@@ -125,6 +125,44 @@ func TestActiveRejectionDoesNotCallTheProviderWhenTheRequestCannotBeFormed(t *te
 	}
 }
 
+// Covers: 本口只问「许不许主动拒绝」——映射若折出了别的动作（如人工复核），一条只授复核权的规则会被读成
+// 拒绝权，而获准复核并不等于获准直接拒掉这单业务（PC CONTEXT）。这是词汇表之外的输入，按
+// ErrUntranslatableAnswer 拒且不问提供方；折出拒绝动作的映射则照常交给提供方（用读失败的哨兵证它到了那里）。
+// 守卫与 ManualReviewAuthorizationAdapter 那道同形（票 ps-port-remainder/08 第 3 件）。
+func TestActiveRejectionOnlyTranslatesAMappingThatFormsTheRejectionAction(t *testing.T) {
+	providerAsked := errors.New("提供方被问到了")
+
+	t.Run("a mapping forming the rejection action reaches the provider", func(t *testing.T) {
+		authorizer := adapter.NewActiveRejectionAdapter(
+			pcapplication.NewAdjudicateCommercialAuthorizationHandler(&grantStoreDouble{err: providerAsked}),
+			&rejectionRequestSource{request: rejectionPCRequest(t), formed: true},
+		)
+
+		_, err := authorizer.AuthorizeActiveRejection(t.Context(), rejectionQuery(t))
+		if !errors.Is(err, providerAsked) {
+			t.Fatalf("error = %v, want the provider to have been asked", err)
+		}
+		if errors.Is(err, adapter.ErrUntranslatableAnswer) {
+			t.Fatal("折出的是拒绝动作，守卫却拒译了")
+		}
+	})
+
+	t.Run("a mapping forming another action is refused before the provider", func(t *testing.T) {
+		authorizer := adapter.NewActiveRejectionAdapter(
+			pcapplication.NewAdjudicateCommercialAuthorizationHandler(&grantStoreDouble{err: providerAsked}),
+			&rejectionRequestSource{request: reviewPCRequest(t, pcdomain.ManualReviewAction), formed: true},
+		)
+
+		_, err := authorizer.AuthorizeActiveRejection(t.Context(), rejectionQuery(t))
+		if !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+			t.Fatalf("error = %v, want ErrUntranslatableAnswer——映射折出的不是主动拒绝动作", err)
+		}
+		if errors.Is(err, providerAsked) {
+			t.Fatal("映射折出别的动作，适配器仍去问了提供方")
+		}
+	})
+}
+
 func rejectionQuery(t *testing.T) psports.ActiveRejectionAuthorizationQuery {
 	t.Helper()
 	identity, err := psdomain.NewSourceIdentity(
