@@ -1,7 +1,7 @@
 # 凭证 / 税费付款协作 / 税费付款核对三册没有读面：`/customs-*` 四个查阅口都不覆盖它们，写签没有读签可跟
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：三个读签各挂同族登记册读面已在的页——凭证进 `customs-cases`、协作与核对进 `customs-restrictions`，不新开页（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`
+Status: in-progress——2026-09-10 21:5x 通道 5 按通道 1 派单 task-7e1d15e1 认领，分支 `mcp5-sacc10` 基远端 main `9ddbafcf`；此前 ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：三个读签各挂同族登记册读面已在的页——凭证进 `customs-cases`、协作与核对进 `customs-restrictions`，不新开页（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`
 Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-faces.md) 步二 Blocked by 本票；本票不等 07）
 
 ## 缺口（取证于 `66cad4c4`）
