@@ -20,6 +20,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 )
 
 // amendmentBoundary 是资料修订编排里委托落库那一层的事务壳：Save 切一个事务，不发信封。
@@ -113,11 +114,15 @@ func (boundary sourceDataHandoffBoundary) HandOffSourceDataVersion(
 // 经 sourceDataHandoffBoundary 携 OutboxSourceDataHandoff 入队，事件类型
 // `parcel-shipment.source-data-version.formed`。
 //
-// 授权那一口今天接的仍是**未配置**答复（party-commercial 授权那半尚未立，票 ps-port-remainder/03）：
-// 编排会如实停在授权未决（`SourceDataAmendmentAuthorityRulesNotConfigured`）——那正是接上这条入口的
-// 意义：停点从「没有入口」变成「有入口、说得出停在哪」。PC 半边落地时在这里换成真适配器，端点、壳与
-// 编排都不动。客户渠道的采信身份属 `PAR-INT-01` / `BD-PS-009`：端点表那一行以 `UnconfiguredIntake{}`
-// 起步，本函数不带任何默认身份。
+// 授权那一口已接真（票 ps-port-remainder/03，ADR-0116）：经 buildSourceDataAmendmentAuthorizer 接 PC 的裁定
+// 编排、真授权册与真合同委派册，实际决定方由 PC 解出（客户自己 / 代录时经委派解出委派方），PS 不自判。
+// 商业坐标映射（法人、等级、范围、原因、证据、时点，与请求方是客户还是代录角色）是实例半边
+// （`BD-PS-009` / `PAR-COM-14`），与撤回那只一样留 nil——适配器答未形成，编排如实停在
+// `SourceDataAmendmentAuthorityUnavailable`，不代拟坐标、不冒充`授权规则未配置`、不默认任何人有修订权。
+// 接线前后的区别不在结果在来源：此前这里摆的是 UnconfiguredSourceDataAmendmentAuthorizer{}，停在
+// 「等 PC 立规则」；接真之后恢复动作从「写代码」变成「登记参数」（ADR-0063）——停点后移一格，
+// 是本票唯一可观察的生产变化。客户渠道的采信身份属 `PAR-INT-01` / `BD-PS-009`：端点表那一行以
+// `UnconfiguredIntake{}` 起步，本函数不带任何默认身份。
 //
 // 允许矩阵那一口已接真（票 ps-port-remainder/02 余段，ADR-0120）：经 buildSourceDataAmendmentAllowance
 // 回指接受时固定的接单规则包版本、读 party-commercial 的资料修订允许声明、按（资料组 × 阶段 × 意图）
@@ -138,13 +143,30 @@ func buildCustomerAmendmentOrchestration(db *bentopg.DB) (shipmenthttp.Amendment
 	if err != nil {
 		return nil, err
 	}
-	return assembleCustomerAmendmentOrchestration(
-		db,
-		pspartycommercial.UnconfiguredSourceDataAmendmentAuthorizer{},
-		rules,
-		customs,
-		consolidation,
-	)
+	authorizer, err := buildSourceDataAmendmentAuthorizer(db)
+	if err != nil {
+		return nil, err
+	}
+	return assembleCustomerAmendmentOrchestration(db, authorizer, rules, customs, consolidation)
+}
+
+// buildSourceDataAmendmentAuthorizer 装资料修订授权那一口的真适配器：PC 裁定编排接满两个读口（授权治理册 +
+// 合同委派册——运营角色代录那一格没有委派读口答不出实际决定方，旧构造器在那一格报错），套 PS 的
+// SourceDataAmendmentAuthorizationAdapter。RequestSource 留 nil：实例半边，理由见 buildCustomerAmendmentOrchestration。
+func buildSourceDataAmendmentAuthorizer(db *bentopg.DB) (ports.SourceDataAmendmentAuthorizer, error) {
+	grants, err := pcpostgres.NewAuthorityGrants(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: authority grants: %w", err)
+	}
+	delegations, err := pcpostgres.NewContractDelegations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: contract delegations: %w", err)
+	}
+	return pspartycommercial.NewSourceDataAmendmentAuthorizationAdapter(
+		pcapplication.NewAdjudicateCommercialAuthorizationHandlerWithDelegations(grants, delegations),
+		// RequestSource 留空：实例半边，见 buildCustomerAmendmentOrchestration 注释。
+		nil,
+	), nil
 }
 
 // buildSourceDataAmendmentAllowance 装资料修订允许矩阵那一口的真读法：委托仓储 + PC 解析库回指采用的接单
@@ -199,8 +221,9 @@ func buildAmendmentStageFactViews(db *bentopg.DB) (ports.CustomsStageView, ports
 }
 
 // assembleCustomerAmendmentOrchestration 是 buildCustomerAmendmentOrchestration 的形状半边：两个提供方口与
-// 两个邻接上下文读口由调用方给，生产给未配置的授权答复、真矩阵读法与真读面，装配用例给放行的授权替身以证
-// 「授权过了之后阶段按真读面判出、矩阵按真声明答」那几个更深的格——生产装配自己走不到它们（授权先停）。
+// 两个邻接上下文读口由调用方给，生产给真授权适配器（坐标映射留 nil）、真矩阵读法与真读面，装配用例给放行的
+// 授权替身以证「授权过了之后阶段按真读面判出、矩阵按真声明答」那几个更深的格——生产装配自己走不到它们
+// （授权先停在未形成）。
 func assembleCustomerAmendmentOrchestration(
 	db *bentopg.DB,
 	authorizer ports.SourceDataAmendmentAuthorizer,

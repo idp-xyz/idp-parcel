@@ -248,6 +248,21 @@
 # 「在 85d238ce 上实测 3」），psr/06 随后重放到它之上；**在 b734f8f5 上实测 4**（非注释非空行：party-commercial 2、
 # network-routing 1、parcel-shipment 1），只对该 SHA 成立。两笔各自的「2→3」都对，量的不是同一棵树，不相加。
 #
+# 2026-09-10 随 ps-port-remainder/03（MCP-2）剪掉 party-commercial 组两条 RequestedByCustomerAccount /
+# RequestedByOperatorRole——加它们那天写的「PS 侧那只适配器落地那天这两行一起出名单」兑现，出处写在该组那一段。
+# 成因三分是**第二种**（真接上：parcelshipment/adapters/partycommercial/source_data_amendment_authorization.go 的
+# formSourceDataAmendmentRequest 是两者的生产调用方，按坐标里的请求方种类各调一只）。剪前先核过：全仓这两个名字各只有
+# 一处声明（domain/contract_delegation.go），本笔新增的符号（SourceDataAmendmentRequestCoordinates /
+# SourceDataAmendmentAuthorizationRequestSource / SourceDataAmendmentAuthorizationAdapter）都不与它们同名，门禁比的是
+# 精确相等不是子串（tf-unwired-seven/05 那段核过匹配码），不存在第三种。量在隔离 worktree 上（分支 mcp2-psr03，不含任何人
+# 的在途改动，动手前 `git status -- internal/architecture/` 为空）：`git show` 取父提交 `39c1206d` 的本文件（其 blob 与
+# 基 `dd5ed934` 的逐字节相同——该笔只加了适配器两个新文件）两法同得剪前 **3**，本笔单独作用于其上剪后 **1**
+# （party-commercial 2→0，parcel-shipment 1 不变）——两法是 UTF-8 逐行读后滤非空非注释，与 `git grep -c '^internal/'`
+# 在字节层数行首。两个数只对该检出成立；本笔重放进 main 时父提交若不是 39c1206d，下一个改名单的人在自己那一刻的 HEAD
+# 上重取，别拿这两个数加减。**party-commercial 这一组至此清空**，与 TF / VE / SA / CC / PP / PS 各组清空时同一句：名单
+# 清空只判名单清空，本门禁只量导出工厂——资料修订授权的坐标映射（RequestSource）在生产装配里仍是 nil、实例半边，
+# 那件不是工厂，这里量不到。
+#
 # 下面那些理由行的取证强度曾经不齐：初版逐条读过签名与调用点的只有 parcel-pricing 与
 # party-commercial 两组、以及 AssessSafeHandoff 与 FormSupplierExpectedCost 两条，其余按组写。
 # 2026-08-24 已逐条补核（锚 b44dd51，方法与逐条结果见 production-wiring-ratchet-gate 票 01
@@ -525,17 +540,18 @@ internal/parcelshipment/domain ParseDeliveryPlaceReference
 # 族界那句（「它落在网里但不是工厂——返回 bool 是个谓词。留着不排除是有意的」）随条目一起退场；它并列过的
 # ValidateBeforeDecision 早一步在同日随 wiring-baseline-remainder/05 删去（成因同为第一种）。这一组由 MCP-6
 # 补的「谁是调用方、那一层何时落」理由行到此兑现，兑现的方式是那一层今天落了，而不是那个谓词接上了。
-# 授权请求方的两扇门（票 party-commercial-context-gaps/08，ADR-0116 Decision 三）：客户账户自己 / 运营
-# 角色代某客户账户。它们造的是 NewAuthorizationRequestBy 的入参，而带请求方的请求今天只有资料修订
-# 那一格需要——PS 侧那只适配器（ps-port-remainder/03 的 source_data_amendment_authorization.go，
-# 照撤回那只、Decider 取 PC 交回）落地那天这两行一起出名单；PS 两只既有适配器仍走不带请求方的
-# 旧构造器（三步法，迁完删旧）。成因三分先分过：全仓这两个名字各只有一处声明（domain/
-# contract_delegation.go），非测试调用点为零，是第三种「切片还没到」——消费适配器在 PS 地盘，本票
-# 不动它。同票的 NewAuthorizationRequestBy / NewContractDelegation / NewContractDelegationContent /
+# 授权请求方的两扇门 RequestedByCustomerAccount / RequestedByOperatorRole（票 party-commercial-context-gaps/08，
+# ADR-0116 Decision 三：客户账户自己 / 运营角色代某客户账户）曾在这里，加它们那天写的是「PS 侧那只适配器
+# （ps-port-remainder/03 的 source_data_amendment_authorization.go）落地那天这两行一起出名单」——2026-09-10 该
+# 适配器落地，formSourceDataAmendmentRequest 按坐标里的请求方种类各调一只、再交 NewAuthorizationRequestBy 形成
+# 带资料修订动作的请求，按上句剪掉（计数见头部当日那段）。成因三分先分过：全仓这两个名字各只有一处声明
+# （domain/contract_delegation.go），是第二种。**它们出名单不等于那一口全部闭合**：生产装配里适配器的坐标映射
+# （RequestSource）仍是 nil——法人、等级、范围、原因、证据、时点与「请求方是客户还是代录角色」都是实例半边
+# （`BD-PS-009` / `PAR-COM-14`），编排如实停在授权未形成；PS 两只既有适配器（撤回、拒绝）仍走不带请求方的旧构造器
+# （三步法，迁完删旧，不在本票）。同票的 NewAuthorizationRequestBy / NewContractDelegation / NewContractDelegationContent /
 # NewOperatorRoleReference 按名字被门禁跳过（`New` 前缀）；DelegatedByCustomerAccount /
 # DelegatedByLegalEntity 由受控批文 cmd/parcel-commercial/translate.go 与 postgres 读适配器调用，是生产路径。
-internal/partycommercial/domain RequestedByCustomerAccount
-internal/partycommercial/domain RequestedByOperatorRole
+# **party-commercial 这一组至此清空**——留着这一段是为了让下一个往本组加条目的人看见这段历史。
 
 
 # —— parcel-pricing ——

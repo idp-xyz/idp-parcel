@@ -27,8 +27,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证资料修订编排的装配（票 ps-port-remainder/04，形照 ADR-0106 决定四）：
-// 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（提供方授权那半
-// 未立，票 03），授权过了阶段按关务与装袋两面真读面判出（ADR-0118；票 05 接线前这里停在判不出阶段），
+// 入口接上之后编排不是从此能改资料，而是**说得出停在哪**——生产装配下停在授权未决（授权口已接 PC 裁定
+// 编排与真授权册 / 委派册，票 03；商业坐标映射是实例半边留 nil，适配器答未形成），授权过了阶段按关务与装袋两面真读面判出（ADR-0118；票 05 接线前这里停在判不出阶段），
 // 再问矩阵：矩阵那一口已接 party-commercial 的资料修订允许声明（票 02 余段，ADR-0120）——闭包不在或
 // 声明未登记停在待复核，登了声明就按声明答（允许则形成版本并入队意图、不允许是业务拒绝、封闭声明的
 // 缺格读不允许）。另一条钉住交接壳：意图在自己的事务里入队恰好一封、重放不翻倍——版本与意图不同事务
@@ -138,10 +138,14 @@ func preservedSourceRows(t *testing.T, db *bentopg.DB, identity domain.SourceIde
 	return count
 }
 
-// Covers: 票 04 装配用例①——生产装配下修订请求越过 Intake 后停在**授权未决**，原因是
-// `SourceDataAmendmentAuthorityRulesNotConfigured`（提供方那半未立），带续办引用；不形成版本、不入队意图；
-// 停点之前来源保全已留痕。这一格与「客户越权」（NOT_AUTHORIZED）必须分得开：没有规则不是有人被拒。
-func TestTheProductionAmendmentAssemblyStopsAtUnconfiguredAuthorization(t *testing.T) {
+// Covers: 票 04 装配用例①（票 03 PS 半边接真后改写）——生产装配下修订请求越过 Intake 后停在**授权未决**，
+// 原因是 `SourceDataAmendmentAuthorityUnavailable`：授权口已接真适配器（PC 裁定编排 + 真授权册 + 真委派册），
+// 而商业坐标映射是实例半边（`BD-PS-009` / `PAR-COM-14`）留 nil，适配器答未形成、编排把它留在 error 格。
+// 接真之前这里停在`授权规则未配置`——那是提供方对自己登记册的答案，而今天没人问到登记册，说成未配置就是
+// 假话；停点从「等 PC 立规则」后移到「等消费侧接映射」，是本票唯一可观察的生产变化。带续办引用；不形成
+// 版本、不入队意图；停点之前来源保全已留痕。这一格与「客户越权」（NOT_AUTHORIZED）必须分得开：映射没接
+// 不是有人被拒。
+func TestTheProductionAmendmentAssemblyStopsAtUnformedAuthorization(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -159,10 +163,10 @@ func TestTheProductionAmendmentAssemblyStopsAtUnconfiguredAuthorization(t *testi
 		t.Fatalf("资料修订：%v", err)
 	}
 	if got := result.Outcome(); got != shipmentapp.AmendmentUndecided {
-		t.Fatalf("outcome = %q, want UNDECIDED——提供方授权那半没立，既不能放行也不能判越权", got)
+		t.Fatalf("outcome = %q, want UNDECIDED——坐标映射未接，既不能放行也不能判越权", got)
 	}
-	if got := result.PendingReason(); got != shipmentapp.SourceDataAmendmentAuthorityRulesNotConfigured {
-		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED", got)
+	if got := result.PendingReason(); got != shipmentapp.SourceDataAmendmentAuthorityUnavailable {
+		t.Fatalf("pending reason = %q, want SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE——映射未接是消费侧自己的缺口，不是提供方登记册未配置", got)
 	}
 	if result.ContinuationReference().String() == "" {
 		t.Fatal("未决没有带续办引用")
@@ -221,7 +225,7 @@ func TestTheHonestStopIsObservableAtTheAmendmentEndpoint(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode %s: %v", response.Body, err)
 	}
-	if body.Outcome != "UNDECIDED" || body.PendingReason != "SOURCE_DATA_AMENDMENT_AUTHORITY_RULES_NOT_CONFIGURED" {
+	if body.Outcome != "UNDECIDED" || body.PendingReason != "SOURCE_DATA_AMENDMENT_AUTHORITY_UNAVAILABLE" {
 		t.Fatalf("线上没说出停在哪：%s", response.Body)
 	}
 	if body.ContinuationReference == "" || body.SourceDataVersionID != "" {
