@@ -1,8 +1,8 @@
 # 30 受控关闭 / 重开决定的写面（PS 半边）：命令编排 + 入口壳 + 授权适配器——请求方 / 实际决定方 / 授权角色 / 授权依据快照四件从授权答复取，PS 不自判
 
 Category: enhancement
-Status: draft——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 立票（用户授权代裁，[`27`](./27-controlled-close-reopen-decision-triggers-label-final-judgment.md)「裁决」把写面拆两半的 PS 半边）；取证锚远端 main `062f5228`；**只写票面，未动代码。** 要裁的一条（截断边界取什么值，倾向已写）+ 随 pc-gaps/13 三条的裁决定形；裁完即可转 ready-for-agent
-Blocked by: [pc-gaps/13](../../party-commercial-context-gaps/issues/13-authorized-action-lacks-controlled-closure-and-reopening.md)（授权动作先有「受控关闭」「重开」两格，本票的适配器才有动作可请求；其「要裁的」1 / 2 的裁决决定本票编排要不要比等级、要不要核同一货主账户）。**不阻塞但相关**：[`26`](./26-label-transaction-settlement-beat-triggers-label-final-judgment.md) 落下三路共用的处理方核与 handoff 形之后，本票 `Save` 后的触发尾段照抄（[ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md) 决定一 / 三）；`26` 未落时本票先落写面、尾段留缝，`27` 补
+Status: draft（blocked by pc-gaps/13）——**要裁的已清零**：2026-09-10 17:5x 通道 1（推送方，用户授权代裁）裁「`AuthoritativeCutoffBoundary` = 关闭决定标识」，pc-gaps/13 三条同刻裁定（本票编排不比等级、PS 侧核同一货主账户 + 证据非空、例外支不开），见「裁决」；pc-gaps/13 落地即转 ready-for-agent，不必再裁。此前 draft——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 立票（[`27`](./27-controlled-close-reopen-decision-triggers-label-final-judgment.md)「裁决」把写面拆两半的 PS 半边）；取证锚远端 main `062f5228`；**只写票面，未动代码**
+Blocked by: [pc-gaps/13](../../party-commercial-context-gaps/issues/13-authorized-action-lacks-controlled-closure-and-reopening.md)（授权动作先有「受控关闭」「重开」两格，本票的适配器才有动作可请求；已 ready-for-agent）。**不阻塞但相关**：[`26`](./26-label-transaction-settlement-beat-triggers-label-final-judgment.md) 落下三路共用的处理方核与 handoff 形之后，本票 `Save` 后的触发尾段照抄（[ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md) 决定一 / 三）；`26` 未落时本票先落写面、尾段留缝，`27` 补
 
 ## 缺口
 
@@ -21,11 +21,18 @@ lc/10 落了登记册四层（册、端口、持久化、读面派生），刻�
 3. **命令编排**（`application/`，新文件；两条命令一个 handler，理由同 06 五步一个 handler）：`FormControlledClosureCommand{Identity, Parcel, Requester(可缺席), Reason, EffectiveAt, ClosureResponsibilitySource, 授权查询所需项}` 与 `FormReopeningCommand{…, RelatedPriorClosure}`。步骤：问授权（未配置 → 停在`授权未决`，不允许 → 拒绝，都不写册）→ 读当前有效终局（`FinalOutcomeStore.FindCurrentFinal`，`record.Finalized` 即 `currentFinalPresent`；读不回 → 未决）→ 开册或读回 → 铸决定标识（本上下文签发器，照 `CSDN` 那一类）→ 关闭时形成 `CutoffBoundary`（「要裁的」1）→ `Append` → `Insert` / `Save`（版本冲突是业务答案，照 06 `advance`）→ **`Save` 成功后的触发尾段**：落库同事务入队一封指针式信封（`27`「做法」，ADR-0134 决定一 / 三：一封一决定、决定标识进事件 ID、分区键租户 + 包裹、入队失败即整步回滚）。结果代数按恢复动作分格：`已形成` / `重放`（同决定标识再追加读回既有）/ `不允许`（授权拒绝）/ `授权未决` / `此刻不允许这一步`（`ErrContinuedAttemptDecisionNotAdmitted`：如当前有效终局在场时重开）/ `输入未受理` / `版本冲突`。编排不持 Transactor。
 4. **入口壳**（`cmd/parcel-api/`，形照 `assemble_withdrawal.go`）：`transactionalContinuedAttemptDecision{transactor, inner}`；`POST` 两个受控编排端点（路径归实施，与既有 `cmd/parcel-api` 受控编排壳同族），Intake 起步 `UnconfiguredIntake{}` 照 ADR-0055 未配置格；端点表 / 探针 / 放行表三处共享接线**占号**（并行会话纪律）；`LabelTransactionDeps` 那一路的装配不在本票。
 5. **头注改口**：`ContinuedAttemptRegisterRepository` 头注「本口今天没有生产写入方」随本票改口，不留旧话（`27` 完成判据核对它）。
-6. **随 pc-gaps/13 裁决定形的两处**：其「要裁的」1 若取 (a) 机制不算序，本票编排不比等级，只把原关闭的 `AuthorityRole` 与重开的授权答复并存；若取 (b) / (c)，本票重开编排多一步读原关闭等级并比较或带给 PC。其「要裁的」2 若取 (a) PS 侧核，本票重开编排读 `RelatedPriorClosure` 所指关闭的 `ClosureResponsibilitySource`，属货主指令时要求命令带该货主账户的新有效授权证据引用、核与原关闭 `Requester` 同一账户；否则不加。**开工前读 pc-gaps/13 Comments 里那两条的裁决。**
+6. **随 pc-gaps/13 裁决已定形的两处**（裁决见下节）：本票编排**不比等级**——只把原关闭的 `AuthorityRole` 与重开的授权答复并存供审计，不读原关闭等级、不带给 PC；重开编排读 `RelatedPriorClosure` 所指关闭的 `ClosureResponsibilitySource`，属货主指令时要求命令带该货主账户的新有效授权证据引用，核「与原关闭 `Requester` 同一账户」与「证据非空」两件，PC 仍只被问一次运营角色的 `REOPENING` 授权；不属货主指令则不加这一步。
+7. **`CutoffBoundary` 的值 = 本次关闭决定的标识**（裁决）：铸决定标识之后以同一个串 `NewAuthoritativeCutoffBoundary`；与关闭路径终局的来源版本 `CONTINUED-ATTEMPT-CLOSURE/<决定标识>` 同一个标识，一个事一个名。
 
-## 要裁的
+## 裁决（2026-09-10 17:5x · 通道 1 推送方代裁，用户授权；按 task-3ebcdc45 写入）
 
-1. **`AuthoritativeCutoffBoundary` 取什么值。** 领域只说它「不是时间戳」、是「裁决并发的新尝试是否合法」的稳定领域边界（`continued_attempt.go` 头注、CONTEXT 词条）；lc/10 把它做成必填不透明串，值由写面给。倾向：**值 = 该关闭决定的标识**（本上下文签发、与册同事务落定、可审计、与生效时间分立）；「边界前 / 后」由面单交易建立那一侧核册时读到的最新生效关闭裁——**那一格今天无票**：06 `Establish` 不核登记册，「关闭生效后拒绝把该包裹纳入边界后的新重试、替代或换单交易」这句硬句在代码里没有守卫，本票只形成边界不做那道门，后继票归派单方（已报通道 1）。代价：边界值本身不携带顺序信息，顺序靠册的版本链与建立决定的领域顺序，不靠比串。
+- **`AuthoritativeCutoffBoundary` 取什么值 → 取倾向：= 关闭决定标识。** 理由：与关闭路径形成终局时的来源版本（`responsibilityOutcomeOf` 的 `CONTINUED-ATTEMPT-CLOSURE/<决定标识>`）是同一个标识，一个事一个名；本上下文签发、与册同事务落定、可审计、与生效时间分立，不携带也不需要携带顺序信息——「边界前 / 后」由建立那一侧核册裁（lc/32）。
+- **随 pc-gaps/13 三条**：① 首发机制不算等级序 → 本票不比等级；② PS 侧核同一货主账户 + 证据非空 → 本票「做法」第 6 步；③ 例外支首发不开 → 本票请求方一律是运营角色，货主只作 `Requester` 证据。
+- **「06 `Establish` 不核登记册」那道缺门 → 立 [`32`](./32-establish-label-transaction-checks-continued-attempt-register.md)**（Blocked by 本票：边界先能形成），本票只形成边界不做门。
+
+## 要裁的（已清零）
+
+1. **`AuthoritativeCutoffBoundary` 取什么值。** → 裁 = 关闭决定标识（见「裁决」）。原文与候选留作记录： 领域只说它「不是时间戳」、是「裁决并发的新尝试是否合法」的稳定领域边界（`continued_attempt.go` 头注、CONTEXT 词条）；lc/10 把它做成必填不透明串，值由写面给。倾向：**值 = 该关闭决定的标识**（本上下文签发、与册同事务落定、可审计、与生效时间分立）；「边界前 / 后」由面单交易建立那一侧核册时读到的最新生效关闭裁——那一格立票时无票，已随裁决立为 [`32`](./32-establish-label-transaction-checks-continued-attempt-register.md)。代价：边界值本身不携带顺序信息，顺序靠册的版本链与建立决定的领域顺序，不靠比串。
 
 ## 红线
 
@@ -39,8 +46,8 @@ lc/10 落了登记册四层（册、端口、持久化、读面派生），刻�
 
 ## 完成判据（非作者评审逐项对）
 
-1. 关闭：授权许 → 册上一条关闭决定，四件与 PC 答复一致、`CutoffBoundary` 非空且等于决定标识（若「要裁的」1 取倾向）；授权拒 / 未配置 → 不写册、结果分格正确；`Requester` 缺席可关闭。
-2. 重开：当前无有效终局且授权许 → 追加成功；当前有效终局在场 → `此刻不允许这一步`且不写册；生效时间不晚于关闭 → 拒；同决定标识重放返原。
+1. 关闭：授权许 → 册上一条关闭决定，四件与 PC 答复一致、`CutoffBoundary` 等于该决定标识；授权拒 / 未配置 → 不写册、结果分格正确；`Requester` 缺席可关闭。
+2. 重开：当前无有效终局且授权许 → 追加成功；当前有效终局在场 → `此刻不允许这一步`且不写册；生效时间不晚于关闭 → 拒；同决定标识重放返原；原关闭责任来源为货主指令而命令缺该货主账户的新授权证据、或账户与原关闭 `Requester` 不同 → 拒且不写册；编排里没有任何对等级的比较（各有用例）。
 3. 授权适配器四格逐格用例；`RequestSource` 折不出 → error 不译成未配置；`Decider` / `AuthorityRole` / `Authority` 取自 PC 答复而非命令。
 4. `Save` 成功后 outbox 一封、事件 ID 含决定标识、分区键租户 + 包裹；`Save` 失败 / 冲突不入队；入队失败整步回滚（真库）。`26` 未落时此条改为「尾段留缝、替身记录」并在 Comments 写明由 `27` 补。
 5. 入口壳：不在事务里调用编排 → `Save` 处 error；端点表 / 探针 / 放行表三处各有一行；`UnconfiguredIntake{}` 起步。
@@ -58,3 +65,4 @@ lc/10 完成记录「刻意没做」；lc/27「缺口」与「裁决」；`inter
 ## Comments
 
 - 2026-09-10 · 通道 2（task-138ab1c9，分支 `mcp2-adr0134` 基 `062f5228`）：立票。**只写票面，未动代码。** 能力边界：读过 lc/27 全文、`continued_attempt.go` 的 spec 与两格、`ContinuedAttemptRegisterRepository` / `SourceDataAmendmentAuthorizer` / `WithdrawalAuthorizer` 头注、`withdrawal_authorization.go` 上半、`assemble_withdrawal.go` 的事务壳形状、PC `authority_grant.go` 全文；**没读** `continued_attempt_register.go` 全文（`Append` 对 `currentFinalPresent` 的全部分支按 lc/27 转述）、`cmd/parcel-api` 端点表与放行表的当前形（开工时占号再核）。「要裁的」1 与「06 `Establish` 不核册」那道缺门是立票时新量到的，已报通道 1；随 pc-gaps/13 定形的两处在其票面。
+- 2026-09-10 17:5x · 通道 2 按通道 1 派单 task-3ebcdc45 写入：**通道 1（推送方，用户授权代裁）裁 `AuthoritativeCutoffBoundary` = 关闭决定标识；pc-gaps/13 三条同刻裁定，本票「做法」第 6 / 7 步据以写实；缺门立 [`32`](./32-establish-label-transaction-checks-continued-attempt-register.md)。** 本票要裁的清零，Status 仍 draft（blocked by pc-gaps/13，已 ready-for-agent），13 落地即转 ready。只写票面，未动代码。

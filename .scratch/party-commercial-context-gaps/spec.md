@@ -46,7 +46,7 @@ Status: in-progress——2026-09-10 15:1x 通道 4 改回（task-9880bbc9）：�
 | 票 | 缺口 | 一句话 |
 |---|---|---|
 | [12](issues/12-declared-responsibility-outcome-lacks-label-channel-rows.md) | 面单渠道终局的责任结果两行 | `DeclaredResponsibilityOutcome` 只有网络服务四格，面单渠道「非取消终局 / 终局失败」在声明词汇表里没有行，PS 适配器只能答「终局规则未配置」（draft，2026-09-10 通道 4 立） |
-| [13](issues/13-authorized-action-lacks-controlled-closure-and-reopening.md) | 授权动作没有「受控关闭」「重开」两格 | lc/27 裁决拆出的写面 PC 半边：`AuthorizedAction` 加两格 + 新迁移重建五值 CHECK + PC CONTEXT 授权那句加一句，照 ADR-0116「加格不要 ADR」；委派 CHECK 不扩。另冒出 PC 拥有的「关闭与重开的条件」三问（同级或更高怎么判、货主指令关闭后重开的授权、货主直接形成决定的例外支），倾向已写、归 owner（draft，2026-09-10 通道 2 立，lc/30 Blocked by 它） |
+| [13](issues/13-authorized-action-lacks-controlled-closure-and-reopening.md) | 授权动作没有「受控关闭」「重开」两格 | lc/27 裁决拆出的写面 PC 半边：`AuthorizedAction` 加两格 + 新迁移重建五值 CHECK + PC CONTEXT 授权那句加一句，照 ADR-0116「加格不要 ADR」；委派 CHECK 不扩。PC 拥有的「关闭与重开的条件」三问已由通道 1 于 2026-09-10 17:5x 代裁：① 首发机制不算等级序、由授权规则登记内容承担（越权点归 PC owner：`AuthorityLevel` 要不要变有序）；② PS 侧核同一货主账户 + 证据非空；③ 例外支首发不开、留位（**ready-for-agent**，2026-09-10 通道 2 立，lc/30 Blocked by 它） |
 
 ## 边界（四票共用）
 
