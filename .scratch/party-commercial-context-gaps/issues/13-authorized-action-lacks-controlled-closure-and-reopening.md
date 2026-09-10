@@ -1,7 +1,7 @@
 # 授权动作没有「受控关闭」「重开」两格——PS 形成关闭 / 重开决定的写面因此没有动作可请求
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:5x 通道 1（推送方，用户授权代裁）裁「要裁的」三条：① 取 (a) 首发机制不算等级序、「谁可重开」由授权规则登记内容承担（越权点一条归 PC owner）；② 取倾向 PS 侧核同一账户 + 证据非空、PC 不新开对象；③ 例外支首发不开、留位。见「裁决」；「要建什么」按裁决写实。此前 draft——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 立票（写面拆两半的 PC 半边，出处 [lc/27](../../label-channel-service-first-release/issues/27-controlled-close-reopen-decision-triggers-label-final-judgment.md)「裁决」）；取证锚远端 main `062f5228`；**只写票面，未动代码、未改 CONTEXT**
+Status: in-progress——2026-09-10 20:3x 通道 4 认领（task-46cd2d7a），分支 `mcp4-pcgaps13` 基远端 main `b40b1804`；迁移序号重取为 `0032`（`0031` 已被 pc-gaps/12 用掉）。此前 ready-for-agent——2026-09-10 17:5x 通道 1（推送方，用户授权代裁）裁「要裁的」三条：① 取 (a) 首发机制不算等级序、「谁可重开」由授权规则登记内容承担（越权点一条归 PC owner）；② 取倾向 PS 侧核同一账户 + 证据非空、PC 不新开对象；③ 例外支首发不开、留位。见「裁决」；「要建什么」按裁决写实。此前 draft——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 立票（写面拆两半的 PC 半边，出处 [lc/27](../../label-channel-service-first-release/issues/27-controlled-close-reopen-decision-triggers-label-final-judgment.md)「裁决」）；取证锚远端 main `062f5228`；**只写票面，未动代码、未改 CONTEXT**
 Blocked by: 无（PC CONTEXT 授权那句先改再动代码，是本票内部顺序，不是阻塞边）
 
 ## 从哪里来
