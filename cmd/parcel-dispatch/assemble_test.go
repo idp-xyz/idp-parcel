@@ -11,6 +11,9 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
+	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume"
@@ -22,6 +25,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
+	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
@@ -240,6 +246,84 @@ func TestALabelTransactionJudgmentDueReachesTheConsumerThroughTheRouteTable(t *t
 		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把面单交易判断意图投给消费者",
 			published, recordedFailureCode(t, db, "label-judgment-1"))
 	}
+}
+
+// Covers: 路由表的 SA 资金事实采用一条（sa-cc/03）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
+// 正：SA 采用过的事实（带来源提供的付款人）经 `external-funds-fact.adopted` 引用式信封到 CC 消费者，按
+// （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 的 external_funds_fact 落一行；
+// 反：信封所指的版本 SA 还没有 → 可见性滞后是未决，不定稿、不毒丸，失败码落 dispatch.consumer_undecided。
+func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	facts, err := sapostgres.NewExternalFundsFacts(db)
+	if err != nil {
+		t.Fatalf("SA 资金事实库：%v", err)
+	}
+	adopted, err := sadomain.AdoptExternalFundsFact(sadomain.ExternalFundsFactSpec{
+		Fact:        saTestValue(t, sadomain.NewFundsFactReference, "bank-fact-1"),
+		Source:      saTestValue(t, sadomain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
+		Payer:       saTestValue(t, sadomain.NewFundsPayerReference, "payer-customer-7"),
+		Kind:        sadomain.FundsReceiptConfirmed,
+		Currency:    saTestValue(t, sadomain.NewCurrencyCode, "USD"),
+		AmountMinor: 8000,
+		Version:     saTestValue(t, sadomain.NewFundsFactVersion, "bank-fact/v1"),
+		OccurredAt:  beatInstant().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("SA 采用事实：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, saports.FundsFactRecord{
+			Key:           saports.FundsFactKey{TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Fact: adopted.Fact()},
+			ContentDigest: "digest-bank-fact-1",
+			Fact:          adopted,
+			RecordedAt:    beatInstant(),
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("写 SA 事实：%v", err)
+	}
+
+	enqueueForBeat(t, db, store, "funds-fact-1", ccinbox.ExternalFundsFactAdoptedEventType,
+		`{"tenantId":"tenant-a","fact":"bank-fact-1","version":"bank-fact/v1"}`)
+	enqueueForBeat(t, db, store, "funds-fact-2", ccinbox.ExternalFundsFactAdoptedEventType,
+		`{"tenantId":"tenant-a","fact":"bank-fact-1","version":"bank-fact/v9"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1（正：v1 定稿；反：v9 未决）；失败码 v1 = %q，v9 = %q",
+			published, recordedFailureCode(t, db, "funds-fact-1"), recordedFailureCode(t, db, "funds-fact-2"))
+	}
+	if got := recordedFailureCode(t, db, "funds-fact-2"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("SA 还没有的版本：failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+
+	register, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		t.Fatalf("CC 登记册：%v", err)
+	}
+	registration, found, err := register.LoadFundsFact(t.Context(),
+		saTestValue(t, ccdomain.NewTenantID, "tenant-a"),
+		saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-1"))
+	if err != nil || !found {
+		t.Fatalf("CC 入向登记：found = %v err = %v——信封到了消费者却没落登记", found, err)
+	}
+	if registration.Source != "source-bank-feed-1" || registration.Payer != "payer-customer-7" ||
+		registration.Currency != "USD" || registration.AmountMinor != 8000 {
+		t.Fatalf("登记 = %+v，want 来源 / 付款人 / 币种 / 金额照 SA 那一版转述", registration)
+	}
+}
+
+// saTestValue 构造一个值对象，失败即用例失败。只给上面那条用例用，别处各有自己的同形助手。
+func saTestValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+	t.Helper()
+	value, err := construct(raw)
+	if err != nil {
+		t.Fatalf("构造 %q：%v", raw, err)
+	}
+	return value
 }
 
 // Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：

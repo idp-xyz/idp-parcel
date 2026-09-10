@@ -31,19 +31,19 @@ func newAdoptedFundsFactViewFixture(t *testing.T) (*adapter.ExternalFundsFacts, 
 	return facts, view, db
 }
 
+// saveFundsFact 在事务里写一条；闭包只做 IO 并回 error，断言留在闭包外（事务闭包门禁）。
 func saveFundsFact(t *testing.T, db *bentopg.DB, facts *adapter.ExternalFundsFacts, record ports.FundsFactRecord) {
 	t.Helper()
+	var saved ports.FundsFactSaveOutcome
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		saved, err := facts.Save(txCtx, record)
-		if err != nil {
-			return err
-		}
-		if saved != ports.FundsFactSaved {
-			t.Fatalf("saved = %d, want FundsFactSaved", saved)
-		}
-		return nil
+		var err error
+		saved, err = facts.Save(txCtx, record)
+		return err
 	}); err != nil {
 		t.Fatalf("写资金事实：%v", err)
+	}
+	if saved != ports.FundsFactSaved {
+		t.Fatalf("saved = %d, want FundsFactSaved", saved)
 	}
 }
 

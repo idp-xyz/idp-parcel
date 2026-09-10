@@ -14,7 +14,10 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
+	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrparcelshipment "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment"
 	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
@@ -450,6 +453,14 @@ var labelTransactionJudgmentUndecidedSentinels = []error{
 	labelfinal.ErrFinalUndecided,
 }
 
+// externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
+// 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用。编排的 `未受理`
+// 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）。
+var externalFundsFactUndecidedSentinels = []error{
+	ccsettlement.ErrAdoptedFactNotVisible,
+	ccsettlement.ErrFundsFactReceiveUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -655,6 +666,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment undecided translation: %w", err)
 	}
 
+	fundsFacts, err := receiveExternalFundsFactConsumer(db, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedFundsFacts, err := dispatch.WithUndecidedSentinels(fundsFacts, externalFundsFactUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: external funds fact undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -744,6 +764,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.OffsitePickupRegisteredEventType:       pickupFan,
 			psinbox.EffectiveDeliveryRegisteredEventType:   deliveryFan,
 			psinbox.LabelTransactionJudgmentDueEventType:   routedLabelJudgments,
+			ccinbox.ExternalFundsFactAdoptedEventType:      routedFundsFacts,
 			veinbox.TransportHandoverRegisteredEventType:   veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType: veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:            veFinalOutcomeRouted,
@@ -1960,6 +1981,47 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 	consumer, err := psinbox.NewLabelTransactionJudgmentConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// receiveExternalFundsFactConsumer 接 sa-cc/03 那条线：SA 采用一条外部资金事实后交出的
+// `settlement-accounting.external-funds-fact.adopted` 引用式信封 → CC 消费门 → 按（租户 + 事实 + 版本）
+// 向 SA 只读视图回查事实本体（取信封所指那一版，不取 latest）→ 译成入向登记交 UC-CC-009 步 6 的
+// `ReceiveFundsFact`。跨上下文翻译只在 CC 的 `adapters/settlementaccounting`；CC application 不 import SA。
+//
+// 消费者不关联、不核对（票面红线）：`VerifyPayment` 的调用方今天不在本进程，这里只让事实进得来。
+// 登记编排只用到 `Funds` 一口；协作事项与核对两口在这条线上不被调用，装配不为它们造无用的适配器。
+func receiveExternalFundsFactConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	adoptedFacts, err := sapostgres.NewAdoptedFundsFactView(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted funds fact view: %w", err)
+	}
+	source, err := ccsettlement.NewSettlementAdoptedFundsFactSource(adoptedFacts)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted funds fact source: %w", err)
+	}
+	reconciliation, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment reconciliation store: %w", err)
+	}
+	receiver := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+		Collaborations: reconciliation,
+		Funds:          reconciliation,
+		Verifications:  reconciliation,
+		Clock:          clock,
+	})
+	processing, err := ccsettlement.NewReceiveOnAdoptedFundsFactAdapter(source, receiver)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: receive on adopted funds fact: %w", err)
+	}
+	consumer, err := ccinbox.NewExternalFundsFactConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: external funds fact consumer: %w", err)
 	}
 	return consumer, nil
 }

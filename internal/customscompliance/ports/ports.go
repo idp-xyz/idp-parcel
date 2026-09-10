@@ -1002,11 +1002,37 @@ type ExternalFundsFactRegistration struct {
 	OccurredAt  time.Time
 }
 
+// AdoptedFundsFact 是按 `settlement-accounting` 采用信封所带的引用回查到的一条已采用事实的
+// 内容——入向登记（ExternalFundsFactRegistration）最少要读的几维：来源身份、付款人、金额、
+// 币种、业务时间。本上下文只读它来登引用，不把它复制成第二处权威：金额与币种的权威仍在
+// `settlement-accounting`，这里登的是核对所需维度（票 sa-cc/03 红线）。Payer 为空即来源未提供
+// ——提供方那一侧显式缺席，本上下文照样读回，要不要收由 ReceiveFundsFact 自己答。
+type AdoptedFundsFact struct {
+	Source      string
+	Payer       string
+	Currency    string
+	AmountMinor int64
+	OccurredAt  time.Time
+}
+
+// AdoptedFundsFactSource 按（租户、资金事实引用、采用版本）向 `settlement-accounting` 取回
+// 已采用事实的内容（票 sa-cc/03 裁决：走 SA 的只读口、取信封所指的那一版而不取 latest）。
+// 消费侧适配器 `adapters/settlementaccounting` 实现它；`application` 不 import 提供方。
+// found=false 即那一版在提供方还看不见——是续办不是毒丸，重投会改变结果。
+type AdoptedFundsFactSource interface {
+	LoadAdoptedFundsFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.ExternalFundsFactReference,
+		version string,
+	) (AdoptedFundsFact, bool, error)
+}
+
 // ExternalFundsFactRegister 是外部资金事实入向登记册的两半。事实按引用幂等（同引用重登
 // 交回`已登记`，内容由编排读回比）；「待关联」不是列而是派生——没有任何核对引用它的
 // 事实就是待关联，所以这里没有状态推进的写口。这条缝的另一半（SA 在事实采用时发信封、
-// CC 以 inbox 消费者接进本口）今天不存在（取证于 b3d3343：AdoptFundsFact 不发信封），
-// 归 SA 另立票；本口先以应用层入口为缝。
+// CC 以 inbox 消费者接进本口）由票 sa-cc/02（SA 采用发信封）与 sa-cc/03（本上下文的
+// `adapters/inbox` 消费者 → AdoptedFundsFactSource 回查 → ReceiveFundsFact）接上。
 type ExternalFundsFactRegister interface {
 	RegisterFundsFact(
 		ctx context.Context,
