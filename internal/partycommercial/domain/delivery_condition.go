@@ -74,7 +74,7 @@ func (target TightenedProductVersion) valid() bool {
 
 // DeliveryConditionTerms 是一层交付条件的正文三格：允许的交付方式集合、收件范围规则引用、交付证明规则引用。三格在
 // 两层都必填——一层登了方式却没说凭什么算有效交付，等于让消费方自己补一条规则，那正是「不以通用签名规则替代合同」
-//（UC-TF-006）要拦的事。
+// （UC-TF-006）要拦的事。
 type DeliveryConditionTerms struct {
 	Methods             []DeliveryMethodReference
 	RecipientScopeRule  DeliveryRuleReference

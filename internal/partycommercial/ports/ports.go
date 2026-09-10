@@ -311,6 +311,26 @@ type CommercialResolutionView interface {
 	) (domain.CommercialClosure, bool, error)
 }
 
+// DeliveryConditionView 按（租户，商业解析回指）答「有没有交付条件」（ADR-0133 决定二、四；票
+// party-commercial-context-gaps/11），供 transport-fulfillment 的派送任务形成那一拍在进程内消费。
+//
+// 封闭四格：found=true 交回交付条件引用——它就是这个回指本身，不另造；found=false 且 err=nil 是「没有交付条件」
+// （闭包在场、已采用的服务产品版本与客户合同版本两层都没有声明——商业责任方去登）；error 两格各有哨兵——
+// domain.ErrDeliveryConditionClosureAbsent（闭包不在场：对一份已接受委托的回指是提供方缺数据，不冒充「没登」，
+// 判据同 ADR-0080 决定四）与 domain.ErrDeliveryConditionContractNotAdopted（闭包在场却未采用客户合同版本，判据同
+// ADR-0062 决定三），消费方按哨兵分格译，不按 found。
+//
+// 只答有没有，不交内容：内容读口（一线作业端按引用取允许集与证据规则，UC-TF-006 步骤 5）是第二个消费方，另立。
+// 本口不认识包裹——对象怎么走到回指是 parcel-shipment 按（租户，包裹身份）答的事。实现按解析读口取闭包、按闭包已
+// 采用的两个版本各读一层声明，声明经领域构造门重建，坏行走 error 不折成「没有」。
+type DeliveryConditionView interface {
+	LoadDeliveryConditionReference(
+		ctx context.Context,
+		tenant domain.TenantID,
+		resolution domain.ResolutionID,
+	) (domain.DeliveryConditionReference, bool, error)
+}
+
 // CommercialResolutionStore 按解析标识取回并固定一次已解析的闭包。
 //
 // 用例步骤 5 要求本上下文「固定解析标识、判断时间、锚点、版本、有效区间和当前修订」并「返回
@@ -798,6 +818,18 @@ type PublicationRegistry interface {
 	SaveSourceDataAmendmentAllowance(
 		ctx context.Context,
 		content domain.SourceDataAmendmentAllowanceContent,
+	) (DeclarationSaveOutcome, error)
+	// SaveDeliveryConditions 登记一层交付条件声明（ADR-0133 决定四；0030）：产品层挂服务产品版本，合同层挂客户合同
+	// 版本并指名所收紧的产品版本。判据同其余声明表：同拥有版本、同方式集合、同两条规则引用（合同层再加同一个所
+	// 收紧的产品版本）是重放；任一格不同是内容冲突，绝不覆盖也绝不并写——改条件发新版本。
+	//
+	// 合同层多一道：写前在同一事务里读回它指名的那一版产品层，经 DeliveryConditionContent.TightensWithin 核「只能在其
+	// 内收紧」——产品层不在册、或方式集合放宽，返回 error 而不是三格之一：那是登记方的输入立不住（与领域构造门拒件
+	// 同一类），不是重放也不是冲突，整项随事务回滚一行不写。核放在这里而不在用例，是因为核要产品层在手，而发布用例
+	// 的声明构造刻意不读库（全部构造先于全部写入）。读口在 DeliveryConditionView（按回指），本口不另开按版本的读口。
+	SaveDeliveryConditions(
+		ctx context.Context,
+		content domain.DeliveryConditionContent,
 	) (DeclarationSaveOutcome, error)
 }
 

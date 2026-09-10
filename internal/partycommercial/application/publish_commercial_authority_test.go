@@ -69,6 +69,18 @@ type publicationRegistryDouble struct {
 	savedDelegations []domain.ContractDelegationContent
 
 	savedSourceDataAmendments []domain.SourceDataAmendmentAllowanceContent
+
+	savedDeliveryConditions []domain.DeliveryConditionContent
+}
+
+func (double *publicationRegistryDouble) SaveDeliveryConditions(
+	_ context.Context,
+	content domain.DeliveryConditionContent,
+) (ports.DeclarationSaveOutcome, error) {
+	if double.declarationErr == nil {
+		double.savedDeliveryConditions = append(double.savedDeliveryConditions, content)
+	}
+	return double.declarationAnswer("delivery-conditions")
 }
 
 func (double *publicationRegistryDouble) SaveContractDelegations(

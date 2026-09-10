@@ -1015,6 +1015,12 @@ func (stub stubPublicationRegistry) SaveSourceDataAmendmentAllowance(
 	return stub.declaration()
 }
 
+func (stub stubPublicationRegistry) SaveDeliveryConditions(
+	context.Context, domain.DeliveryConditionContent,
+) (ports.DeclarationSaveOutcome, error) {
+	return stub.declaration()
+}
+
 func (stub stubPublicationRegistry) SaveAcceptanceRuleContent(
 	context.Context, domain.AcceptanceRuleContent,
 ) (ports.DeclarationSaveOutcome, error) {
