@@ -1,7 +1,7 @@
 # `LabelValidityRuleView`：「接受时固定的有效期规则」是终局规则上的一格有效期声明，PS 只消费
 
 Category: enhancement
-Status: in-progress——2026-09-10 14:3x 通道 6 认领 PS 半边（task-45b75eb2，隔离 worktree 分支 `mcp6-psr01`，基 `dd5ed934`）；此前 ready-for-agent——2026-09-10 14:2x 通道 1 解阻（远端 main `5dda0fb2` 上取证）：PC 半边已随 [pc-gaps/09](../../party-commercial-context-gaps/issues/09-final-rule-content-has-no-validity-declaration.md) 进 main（`838b283e` ADR-0119 + CONTEXT / `d06192ed` 迁移 0026 + `LabelValidityDeclaration` / `ValidityAnchorKind` / `FinalRuleContent.Validity()` + `LoadFinalRule` 读回 + `FinalRuleChannel` 折进有效期 + 批文 `finalRuleValidity`；owner 复核 2026-09-09 认可），其完成记录明写「不做的：PS 适配器 `label_validity_rule.go`（ps-port-remainder/01 PS 半边，据此解阻）」；剩 PS 半边（消费适配器），见 Comments 末条——注意 `NewJudgeLabelServiceFinalHandler` 在 `cmd/` 仍无调用方（label-channel/11「不在本票」三张接线票至今未立），本票适配器落地后仍无生产调用点，属诚实状态不属欠账。此前 blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments），裁决与本票「裁决」节一致；PC 半边等 pc-gaps 批
+Status: resolved——2026-09-10 14:4x 通道 6 完成 PS 半边（task-45b75eb2，分支 `mcp6-psr01` tip `1a23f5b2`，基 `dd5ed934`，见「完成记录」；进 main 的 SHA 由推送方重放后补记）；此前 in-progress——2026-09-10 14:3x 通道 6 认领 PS 半边（隔离 worktree 分支 `mcp6-psr01`，基 `dd5ed934`）；此前 ready-for-agent——2026-09-10 14:2x 通道 1 解阻（远端 main `5dda0fb2` 上取证）：PC 半边已随 [pc-gaps/09](../../party-commercial-context-gaps/issues/09-final-rule-content-has-no-validity-declaration.md) 进 main（`838b283e` ADR-0119 + CONTEXT / `d06192ed` 迁移 0026 + `LabelValidityDeclaration` / `ValidityAnchorKind` / `FinalRuleContent.Validity()` + `LoadFinalRule` 读回 + `FinalRuleChannel` 折进有效期 + 批文 `finalRuleValidity`；owner 复核 2026-09-09 认可），其完成记录明写「不做的：PS 适配器 `label_validity_rule.go`（ps-port-remainder/01 PS 半边，据此解阻）」；剩 PS 半边（消费适配器），见 Comments 末条——注意 `NewJudgeLabelServiceFinalHandler` 在 `cmd/` 仍无调用方（label-channel/11「不在本票」三张接线票至今未立），本票适配器落地后仍无生产调用点，属诚实状态不属欠账。此前 blocked——三问已由 MCP-1 代裁（owner 授权，2026-09-07，见 Comments），裁决与本票「裁决」节一致；PC 半边等 pc-gaps 批
 Blocked by: 无（PC 半边 pc-gaps/09 已进 main）
 
 ## 端口今天说什么
@@ -44,9 +44,58 @@ Blocked by: 无（PC 半边 pc-gaps/09 已进 main）
 
 `internal/parcelshipment/ports/ports.go` 的 `LabelValidityRuleView` 头注；`application/judge_label_service_final.go` 的 `lapsedTransactions`；`domain/label_transaction.go` 的 `ResultObservedAt`；`adapters/partycommercial/stage_content_declarations.go`；`migrations/party_commercial/0013_stage_content_declarations.sql` 的 `final_rule_*`；`pcports.FinalRuleContentView`；ADR-0058、ADR-0062、ADR-0025、ADR-0084；PS CONTEXT 与 PC CONTEXT 上引各句；`PAR-COM-17`。
 
+## 完成记录（PS 半边 · 通道 6 · 2026-09-10 · 分支 `mcp6-psr01`，基 `dd5ed934` = 当时的 origin/main）
+
+**每笔（分支上的 SHA，作封存出处；进 main 的 SHA 由推送方重放后并列补记）**
+
+- `560f51a7` feat：新文件 `internal/parcelshipment/adapters/partycommercial/label_validity_rule.go`（`DeclaredLabelValidityRule` + `NewDeclaredLabelValidityRule` + 未导出 `validityAnchorOf`）与 `label_validity_rule_test.go`；票面 Status 转 in-progress 随笔。
+- `c9ba714f` docs：机制清点在 `560f51a7` 的干净 detached 检出上重生成——parcelshipment 生产 159→160 / 测试 155→156，PS→PC 消费缝 16→17，端口基线口径缺 15→14、精确口径缺 9→8（`parcelshipment.LabelValidityRuleView` 出两份缺口名单）。数字只作此刻取证，推送方在 tip 上重生成兑底。
+- `1a23f5b2` docs：两处注释去掉对 PC 封闭集的计数措辞（AGENTS.md「计数与行号同构」），语义与代码未动；自评审 Standards 轴拿住的唯一一条。
+
+**触及 / 未碰**
+
+- 触及：上列两份新 `.go`、本票面、`docs/product/MECHANISM-INVENTORY.md`（生成物）。
+- 未碰：该包既有文件、`ports.go`（`LabelValidityRuleView` 与 `JudgeLabelServiceFinalHandler.lapsedTransactions` 语义一字不改）、`domain/label_transaction.go`、`internal/partycommercial/**`、`cmd/**`、`migrations/**`、ADR-0119 / 0058 / 0062 正文。无 `.sql`。
+
+**形状（一处与派单措辞不同，明写供评审判）**：派单写「适配器依赖三口」（`CurrentAcceptedParcelTargetView` / `AdoptedStageOwner` / `pcports.FinalRuleContentView`）。落地依赖两口：`psports.CurrentAcceptedParcelTargetView` + 包内既有 `FinalContentSource`。理由：`FinalContentSource`（`service_stage_rules.go`）就是「来源身份 → 接受时固定那版的 `FinalRuleContent`」这条缝，`DeclaredStageContent.FinalContentFor` 已经实现了 owner 回指 → 租户翻译 → `LoadFinalRule`；再写一遍是同一条路的第二份。运行时路径与派单一字不差（测试夹具就是 `NewDeclaredStageContent(nil, finalView, nil, owner)`），三格语义（owner found=false → 未配置；读口 error → error）由那只既有适配器承重，其自身用例在 `stage_content_declarations_test.go`。生产装配时把已装好的 `DeclaredStageContent` 直接传进来即可，不必再装一遍 owner。
+
+**裁决①②对照**
+
+- ① PS 半边：包裹 → `FindCurrentAcceptedByParcel`（用调用方给的租户与包裹，用例核过）→ `AdoptedStageOwner.AcceptanceRulePackageFor`（经 `DeclaredStageContent`，用例核过读的是接受时固定的那版 `CommercialVersion`，`SameVersionAs`）→ `LoadFinalRule` → `Validity()` → 锚按种类分路：`ChannelResultObservedAnchor` → `transaction.ResultObservedAt()`；`!asOf.Before(锚 + Duration())` 即 `lapsed=true, configured=true`。找不到委托 / owner found=false / `LoadFinalRule` found=false / `Validity()` 第二值为 false → `configured=false`；读口 error / 集外锚种类 → error。**「接受时固定」不在 PS 另存**：适配器无状态、无缓存、无自己的存储。
+- ② 不填任何时长：适配器里没有一个 `time.Duration` 字面量；用例里的 `72 * time.Hour` 明写「夹具锚点，不是任何租户的声明（PAR-COM-17 待提供）」。无声明恒不失效见下。不拿墙钟：文件里没有 `time.Now`、没有 `Clock` 依赖。
+- 红线第二条：没给 `LabelTransaction` 加任何状态，失效是读时算出来的；`JudgeLabelServiceFinal` 领域判断未动。
+
+**用例对照（派单六例 → 实际）**
+
+| 派单 | 用例 | 结果 |
+|---|---|---|
+| 有声明且已过期 | `TestDeclaredValidityLapsesOnceAsOfReachesAnchorPlusDuration`：asOf == 锚 + 时长（边界「≥」）、asOf 晚 30 天 | `true/true`；同时核租户、包裹、规则包版本、PC 租户 |
+| 有声明未过期 | `TestDeclaredValidityDoesNotLapseBeforeAnchorPlusDuration`：差一纳秒、asOf == 结果观察时刻 | `false/true` |
+| 无声明 | `TestFinalRuleWithoutValidityDeclarationLeavesLapseUnconfigured`：`NewFinalRuleContent` 行在场、无有效期 | `false/false`，读口恰点一次 |
+| 无委托 | `TestParcelWithoutCurrentAcceptedRequestLeavesLapseUnconfigured` | `false/false`，终局规则读口零次 |
+| 未固定规则包 | `TestUnfixedRulePackageLeavesLapseUnconfigured`（`UnconfiguredAdoptedStageOwner{}`） | `false/false`，终局规则读口零次 |
+| 读口 error | `TestReadFailuresPropagateAsErrors`：包裹反查 / 终局规则读口各一例 | `errors.Is` 原错，`false/false` |
+| （加）无父行 | `TestFinalRuleWithoutParentRowLeavesLapseUnconfigured`：`LoadFinalRule` found=false | `false/false` |
+| （加）结果未回 | `TestTransactionWithoutChannelResultIsUntranslatable`：已提交无结果 → `ResultObservedAt` 零值 | `ErrUntranslatableAnswer` |
+| （加）nil 依赖 | `TestDeclaredLabelValidityRuleRejectsNilDependencies` | 构造期拒 |
+
+红先绿后：先写测试文件，`go vet` 报 `undefined: adapter.DeclaredLabelValidityRule`，再落实现。落地后做过一次变异核：把 `!asOf.Before(…)` 换成 `asOf.After(…)`，「asOf 恰在锚 + 时长」那例红，换回。
+
+**验证强度（作者层）**：`gofmt -l` 空；`go build ./...` / `go vet ./...` 全仓 0；`go test -count=1` 于 `./internal/parcelshipment/adapters/partycommercial/ ./internal/parcelshipment/application/ ./internal/architecture/...` 全 ok；以上四项在 `1a23f5b2` 的**干净 detached 检出**上重跑同绿，且在该检出上重生成机制清点无漂移。反向依赖照 `go list -f '{{.ImportPath}} {{.Deps}}'` 反查：`cmd/parcel-api`、`cmd/parcel-commercial`、`cmd/parcel-dispatch`、`internal/parcelshipment/adapters/postgres` 四个包依赖本包——本笔只新增导出符号、未改任何既有签名，四包对它零引用，`go build` / `go vet` 全仓绿即证它们编译不变；按派单「不跑全量」，未带 DSN 跑 `cmd/*`（无 `.sql`、无 `cmd` 改动，真库用例的答案不可能被一个没人引用的新类型改变）。未跑：全量、`-race`、PG。基 `dd5ed934` 到远端 main `9dddaf65`（14:4x `ls-remote`）之间只动了 `.scratch/**` 四份 `.md`，与本分支文件零重叠，重放应干净。
+
+**与生产接线的关系（如实写）**：`NewJudgeLabelServiceFinalHandler` 在 `cmd/` 零调用方（label-channel/11「不在本票」三个触发点各一张接线票至今未立，见 `unresolved-review-20260904/remaining-work-a3a4814.md`「面单渠道链」第 2 条），所以本适配器落地后**无生产调用点，等三张接线票**；届时装配处只需把本适配器填进 `JudgeLabelServiceFinalDeps` 的 `Validity`（`targets` 给 PS `ShipmentRequests` 仓储、`final` 给已装好的 `DeclaredStageContent`）。本笔不在 `cmd/` 装一个没人调的编排。适配器包不在接线棘轮扫描范围，未加基线。
+
+**给评审的判断题**
+
+1. **「无声明恒不失效」怎么证**：`TestFinalRuleWithoutValidityDeclarationLeavesLapseUnconfigured` 用 `NewFinalRuleContent`（终局规则行在场、`Validity()` 第二值 false）且 asOf 取结果后一年，仍答 `configured=false`——分辨这一格的是 `Validity()` 的第二个返回值，不是 `LoadFinalRule` 的 found；实现里没有任何从「其它行在场」推出「已配置」的路径。请核实现的 `if !declared { return false, false, nil }` 位置在 `LoadFinalRule` found 之后、锚翻译之前。
+2. **「不拿墙钟」怎么证**：实现文件无 `time.Now` / `Clock`；用例时刻全在过去（结果 2026-08-20 11:00Z，72 小时后到点），「未过期」两例若适配器偷拿墙钟会在 2026-08-23 之后的任何一台机器上答 `true`，它们绿着就是证据；时间只单向前进，这条证据只会更强。
+3. **两处派单没点名的守卫要不要**：(a) `ResultObservedAt` 零值（结果未回）报 `ErrUntranslatableAnswer` 而不是拿零值当锚——零值当锚会让任何 asOf 都算已过期，消费编排只对已受理的结果问本口，走到这里是契约被打破；(b) nil 依赖构造期拒绝，形照 `NewControlDispositionAdapter`。若评审认为 (a) 该答 `lapsed=false, configured=true`（「没结果就没失效」）而不是 error，那是口径之争，改一行加改一例即可。
+4. **两口而非三口**（见「形状」）：评审若认为必须直接依赖 `AdoptedStageOwner` + `pcports.FinalRuleContentView`，改法是把 `FinalContentSource` 换成两口并在适配器里重写 owner → 租户 → `LoadFinalRule` 那十来行，用例夹具从 `NewDeclaredStageContent(...)` 改成直接传 owner 与 view，断言不变。
+
 ## Comments
 
 - 2026-09-07 · 通道 2：立票（draft），一次 `/domain-modeling` 的产物。**只写票面，未动代码。** 能力边界：读过端口头注、消费编排、`LabelTransaction` 的结果时间、PC 0013 迁移的表名与 `FinalRuleContentView` 声明、ADR-0058 全文、两处 CONTEXT 的相关句；**没读** `FinalRuleContent` 领域类型全文与 `publish_commercial_authority.go` 的 `FinalRuleChannel` 分支细节——「加一格」在那两处怎么落归 PC owner。
 - 2026-09-07 · 通道 2（task-b77525c9 ④ 取证）：**`NewJudgeLabelServiceFinalHandler` 无生产入口是 label-channel/11 有意留的，不是本口欠的。** 该票 Answer「不在本票」节明写三个触发点（TF 首次有效收寄事实到达的 PS 侧 inbox 消费者、面单交易定案那一拍、受控关闭/重开决定生效）「各自一张接线票」且「`cmd/parcel-api` / `cmd/parcel-dispatch` 无装配：与上面第一条同落」。**但那三张接线票至今没立**——`unresolved-review-20260904/remaining-work-a3a4814.md`「面单渠道链」第 2 条已记为余工并指出 label-channel spec 没有一张子票承接；本目录不替那边立票（地盘归 label-channel 目录持有者 / MCP-1 派单）。另：lc/11 把有效期规则读口记为「实例登记面，无 PAR 编号，随首个面单渠道产品的实例登记一起立」，本票裁决把它归到终局规则的声明（`PAR-COM-17`），以本票为准——两处口径不同，读到 lc/11 那句的人以这里为新。
 - 2026-09-07 · MCP-1 代裁，owner 授权（task-b77525c9，由通道 2 落票面）：**Q1** 起算时刻种类首发只开「渠道结果业务时间」一格；**Q2** 按 CONTEXT 字面归终局规则（接受时固定），不落映射侧——若日后真规则按渠道走，那是新一版声明不是改归属；**Q3** 不在本批，归 `label-channel-service-first-release/20`（第一家真源）。PC 半边并入 PC 批队列（MCP-3 当前批后），PS 半边 Blocked by 它。Status 由 draft 改 blocked。
 - 2026-09-10 14:2x · 通道 1（解阻簿记，未动代码；取证于远端 main `5dda0fb2`）：**PC 半边在 main 上了**，PS 半边转 ready-for-agent。对号本票裁决①的 PC 半边三件：有效期声明一格——`final_rule_content` 加 `validity_anchor` / `validity_duration`（迁移 0026，同在同缺 / 时长为正 / 种类封闭三条 CHECK），领域 `ValidityAnchorKind`（首发只 `ChannelResultObservedAnchor` 一格，串值 `CHANNEL_RESULT_OBSERVED`，与 Q1 裁决一致）、`LabelValidityDeclaration`、`FinalRuleContent.Validity()` 与分立构造器 `NewFinalRuleContentWithValidity`；读口——`LoadFinalRule` 读回按在不在场选构造门，**没有这一格就是没有**（`Validity()` 缺席即消费方答 `configured=false`）；发布通道——折进同一 `FinalRuleChannel`，批文 `declarations.finalRuleValidity{anchor, duration}`（ISO-8601 子集）。均在 `d06192ed`；ADR-0119（`838b283e`）越权点 owner 复核 2026-09-09 认可。**PS 半边今天剩一件**：适配器 `adapters/partycommercial/label_validity_rule.go` 实现 `ports.LabelValidityRuleView`——包裹 → `CurrentAcceptedParcelTargetView.FindCurrentAcceptedByParcel` → `AdoptedStageOwner.AcceptanceRulePackageFor` → `LoadFinalRule` → `Validity()`；锚 = `transaction.ResultObservedAt()`；`asOf ≥ 锚 + 时长` 即 `lapsed=true`；找不到委托 / 未固定规则包 / 声明无有效期 → `configured=false`；读口出错 → error。**与生产接线的关系要如实写**：`NewJudgeLabelServiceFinalHandler` 在 `cmd/` 仍零调用方（label-channel/11「不在本票」三张接线票至今未立，`unresolved-review-20260904/remaining-work-a3a4814.md`「面单渠道链」第 2 条），所以本适配器落地后暂无生产装配点可换；适配器包不在接线棘轮扫描范围（门禁只扫 `internal/*/domain`），不必加基线，但完成记录要写一句「无生产调用点，等三张接线票」。派单另记。
+- 2026-09-10 14:4x · 通道 6（task-45b75eb2，隔离 worktree 分支 `mcp6-psr01`，基 `dd5ed934`）：PS 半边落地，`560f51a7` + `c9ba714f` + `1a23f5b2`，Status 转 resolved，细节全在上方「完成记录」。开工前与落笔前各排过一次队列，期间只有通道 1 的派单结果广播，无撞号。等非作者评审与推送方重放；进 main 的 SHA 由推送方补记。
