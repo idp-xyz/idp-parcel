@@ -32,3 +32,4 @@ ADR-0130 决定一 / 二与 Consequences；PS CONTEXT「收件地点引用」词
 ## Comments
 
 - 2026-09-09 · 通道 2（task-ddb77473）：立票（ready-for-agent）。形状在 ADR-0130，本票不再裁；ADR-0130 越权风险点 2（「没有」藏完整性问题）与 4（基线上已有值的首次更正走哪一格）若 owner 复核后改口径，本票随之改读口那一格，不回改 ADR。
+- 2026-09-10 11:5x · 通道 2 新会话接手（单 task-422c077d-ac6f-4bb0-a0ec-0178a46e7490），从 `1d7affa5` + 树上四份未提交领域文件接续（`delivery_place_reference{,_test}.go`、`delivery_place_resolution{,_test}.go`，mtime 11:18–11:22）。按 parallel-sessions「接手别人在途产出时」先写自己的一片 red 再读现场：判据全对上（`DPR-1:` 前缀、四段顺序、重建门重渲染逐字比、`DeliveryPlaceDataGroup()` 原词、经 `baseline.covers` 走声明成员、`待复核`→未定、非成员/未接受→没有、派生复用 `CurrentSourceDataAdoption`）。一处形状差异：前任另立 `SourceDataVersionAnchor` 而非复用 `SourceDataBasis`——ADR-0130 原话是「同形」，且免于把 `NewSupplementOnAcceptanceBaseline` 一类修订意图词借给引用锚，接受。我方 red 里前任表中没有的输入（尾随空白/换行、小写前缀、外来前缀 `PSC-1:`、包裹范围 × 版本锚往返）并入前任测试，不留第二份镜像。
