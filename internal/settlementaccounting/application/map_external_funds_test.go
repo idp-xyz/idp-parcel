@@ -21,6 +21,9 @@ var (
 type fundsFactStoreDouble struct {
 	records map[string]ports.FundsFactRecord
 	findErr error
+	// beforeSave 在 Save 查重之前跑一次就清掉：用来在 FindByKey 与 Save 之间塞进另一位写入方——
+	// 真库上唯一键把并发采用判成 FundsFactAlreadyAdopted 的正是这一格，替身不开这个口就到不了。
+	beforeSave func()
 }
 
 func newFundsFactStore() *fundsFactStoreDouble {
@@ -46,6 +49,11 @@ func (double *fundsFactStoreDouble) Save(
 	_ context.Context,
 	record ports.FundsFactRecord,
 ) (ports.FundsFactSaveOutcome, error) {
+	if double.beforeSave != nil {
+		hook := double.beforeSave
+		double.beforeSave = nil
+		hook()
+	}
 	if _, exists := double.records[fundsFactKey(record.Key)]; exists {
 		return ports.FundsFactAlreadyAdopted, nil
 	}

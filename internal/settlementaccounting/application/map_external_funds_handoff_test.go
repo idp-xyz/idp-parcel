@@ -106,3 +106,42 @@ func TestAFailedFundsFactHandoffLeavesAContinuationAndReplayResends(t *testing.T
 		t.Fatalf("补交后意图数 = %d, want 1", got)
 	}
 }
+
+// Covers: sa-cc/02 完成判据 1「重放不交」的并发形——FindByKey 未见、Save 却答 FundsFactAlreadyAdopted
+// （另一位写入方在两步之间赢了唯一键）。输的这一次答 EXISTING，而交出去的引用必须是**已采用的那一版**：
+// 载荷只带引用、金额由消费方按引用回查（票面红线），引用若指向一个从未被采用的版本，回查就落空。
+func TestALostAdoptionRaceHandsOffTheAdoptedVersionOnceNotTheLosers(t *testing.T) {
+	fixture := newFundsFixture(t)
+	loser := adoptCommand(t, domain.FundsReceiptConfirmed)
+	winner := loser
+	winner.Version = "bank-receipt-1/v-winner"
+	fixture.facts.beforeSave = func() {
+		won, err := fixture.handler.AdoptFact(context.Background(), winner)
+		if err != nil || won.Outcome() != application.FundsFactAdopted {
+			t.Fatalf("赢家采用：outcome = %q, err = %v", won.Outcome(), err)
+		}
+	}
+
+	lost, err := fixture.handler.AdoptFact(context.Background(), loser)
+	if err != nil {
+		t.Fatalf("输家采用：%v", err)
+	}
+	if lost.Outcome() != application.FundsFactExisting {
+		t.Fatalf("输家 outcome = %q, want EXISTING_FUNDS_FACT", lost.Outcome())
+	}
+	adopted, ok := lost.Fact()
+	if !ok || adopted.Fact.Version().String() != winner.Version {
+		t.Fatalf("输家拿到的已采用版本 = %q, want %q", adopted.Fact.Version().String(), winner.Version)
+	}
+	if lost.FundsHandoffReference() != "" {
+		t.Fatalf("交接成功不该留续办引用，实得 %q", lost.FundsHandoffReference())
+	}
+	if got := len(fixture.factHandoff.intents); got != 1 {
+		t.Fatalf("两次采用后意图数 = %d, want 1——输家若交自己那份，版本键不同、认领吞不掉，就成两封", got)
+	}
+	for _, intent := range fixture.factHandoff.intents {
+		if got := intent.Record.Fact.Version().String(); got != winner.Version {
+			t.Fatalf("交出去的采用版本 = %q, want 赢家的 %q", got, winner.Version)
+		}
+	}
+}
