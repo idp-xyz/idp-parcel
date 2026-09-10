@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -193,6 +194,99 @@ func TestASourceDataAmendmentGrantRoundTripsThroughTheBook(t *testing.T) {
 	if !errors.Is(err, domain.ErrNotAuthorized) {
 		t.Fatalf("error = %v, want ErrNotAuthorized", err)
 	}
+}
+
+// Covers: pc-gaps/13 完成判据 3——0003 / 0025 钉死字面量的 authorization_grant_action_closed 经 0032 重建后收
+// CONTROLLED_CLOSURE / REOPENING：两格经 SaveGrant → LoadEffectiveGrants 往返，裁定编排照四格代数答——范围里只登了
+// 另一等级的重开授权时，本等级请求重开是不允许（机制只看有无、不比等级高低，裁决 ①）；集外词仍拒在 CHECK；
+// contract_delegation 的 action CHECK 未扩——关闭 / 重开的委派行进不了库（CONTEXT：合同委派不参与）。
+func TestClosureAndReopeningGrantsRoundTripAndTheChecksHold(t *testing.T) {
+	// 授权册与发布登记册要共用同一个 DB：事务归属按 DB 实例判，两个实例各开一套事务互不相认。
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	grants, err := adapter.NewAuthorityGrants(db)
+	if err != nil {
+		t.Fatalf("构造授权治理册：%v", err)
+	}
+	publications, err := adapter.NewCommercialPublications(db)
+	if err != nil {
+		t.Fatalf("构造发布登记册：%v", err)
+	}
+	transactor := db.Transactor()
+	ctx := t.Context()
+	tenant := pcTenant(t, "tenant-1")
+	mustSaveGrant(t, transactor, ctx, grants,
+		persistedGrant(t, "tenant-1", "auth-close", domain.ControlledClosureAction, "level-commercial", "scope-a"))
+	mustSaveGrant(t, transactor, ctx, grants,
+		persistedGrant(t, "tenant-1", "auth-reopen", domain.ReopeningAction, "level-senior", "scope-a"))
+
+	loaded, err := grants.LoadEffectiveGrants(ctx, tenant, pcValue(t, domain.NewCommercialScopeReference, "scope-a"), grantJudgedAt)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	actions := map[domain.AuthorizedAction]string{}
+	for _, grant := range loaded {
+		actions[grant.Action()] = grant.Version().ObjectID().String()
+	}
+	if len(loaded) != 2 || actions[domain.ControlledClosureAction] != "auth-close" || actions[domain.ReopeningAction] != "auth-reopen" {
+		t.Fatalf("loaded = %+v, want one CONTROLLED_CLOSURE and one REOPENING grant", loaded)
+	}
+
+	handler := application.NewAdjudicateCommercialAuthorizationHandler(grants)
+	if _, err := handler.Handle(ctx, tenant, grantRequestFor(t, domain.ReopeningAction, "level-commercial", "scope-a", grantJudgedAt)); !errors.Is(err, domain.ErrNotAuthorized) {
+		t.Fatalf("error = %v; 持关闭授权的等级请求重开应不允许——关闭权不蕴含重开权，机制也不替等级排序", err)
+	}
+	authorized, err := handler.Handle(ctx, tenant, grantRequestFor(t, domain.ReopeningAction, "level-senior", "scope-a", grantJudgedAt))
+	if err != nil || authorized.GrantVersion().ObjectID().String() != "auth-reopen" {
+		t.Fatalf("authorized = %+v err = %v", authorized, err)
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO party_commercial.authorization_grant
+			(tenant_id, object_id, version_label, action, legal_entity_ref, authority_level, scope_ref,
+			 effective_starts_at, content_digest, snapshot)
+		 VALUES ('tenant-1', 'auth-x', 'v1', 'WITHDRAWAL', 'legal-1', 'level-commercial', 'scope-a',
+			 now(), 'sha256:x', '{}'::jsonb)`); err == nil {
+		t.Fatal("封闭集外的授权动作进了表")
+	}
+
+	// 委派册的动作 CHECK 不随本票放宽：先经写口落一条合法的资料修订委派（父行随之在场），再裸插一行关闭委派。
+	contract := effectiveContract(t, "contract-1", "v1", "digest-c1")
+	mustSaveVersion(t, transactor, ctx, publications, contract)
+	mustSaveDelegations(t, transactor, ctx, publications, delegationsOn(t, contract,
+		delegationRow(t, accountDelegatorRow(t, "account-1"), "level-commercial", "scope-1", delegationInterval(t)),
+	))
+	for _, action := range []string{"CONTROLLED_CLOSURE", "REOPENING"} {
+		_, err := pool.Exec(ctx,
+			`INSERT INTO party_commercial.contract_delegation
+				(tenant_id, object_kind, object_id, version_label, action, scope_ref, authority_level,
+				 delegator_kind, delegator_ref, effective_starts_at)
+			 VALUES ('tenant-1', 2, 'contract-1', 'v1', $1, 'scope-1', 'level-clerk', 'CUSTOMER_ACCOUNT', 'account-1', now())`,
+			action)
+		if err == nil || !strings.Contains(err.Error(), "contract_delegation_action_delegable") {
+			t.Fatalf("%s: err = %v; 委派册的动作 CHECK 收下了关闭 / 重开", action, err)
+		}
+	}
+}
+
+func grantRequestFor(t *testing.T, action domain.AuthorizedAction, level, scope string, at time.Time) domain.AuthorizationRequest {
+	t.Helper()
+	request, err := domain.NewAuthorizationRequest(
+		action,
+		pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		pcValue(t, domain.NewAuthorityLevel, level),
+		pcValue(t, domain.NewCommercialScopeReference, scope),
+		pcValue(t, domain.NewStructuredReason, "CUSTOMER_INSTRUCTION"),
+		pcValue(t, domain.NewEvidenceReference, "evidence-1"),
+		at,
+	)
+	if err != nil {
+		t.Fatalf("authorization request: %v", err)
+	}
+	return request
 }
 
 func newAuthorityGrants(t *testing.T) (*adapter.AuthorityGrants, bentoapp.Transactor, *pgxpool.Pool) {

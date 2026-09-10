@@ -215,12 +215,14 @@ func grantFromSnapshot(raw []byte) (domain.AuthorityGrant, error) {
 }
 
 // authorizedActionFrom 是 domain.AuthorizedAction 的名字镜像，default 报错不吸收——库上 CHECK 已经
-// 钉死三值，读回集外取值即库与领域分叉。
+// 钉死封闭集，读回集外取值即库与领域分叉。领域加格时这份名单要跟（pc-gaps/08、/13 各加过一次）。
 func authorizedActionFrom(raw string) (domain.AuthorizedAction, error) {
 	for _, action := range []domain.AuthorizedAction{
 		domain.ManualReviewAction,
 		domain.ActiveRejectionAction,
 		domain.SourceDataAmendmentAction,
+		domain.ControlledClosureAction,
+		domain.ReopeningAction,
 	} {
 		if action.String() == raw {
 			return action, nil
