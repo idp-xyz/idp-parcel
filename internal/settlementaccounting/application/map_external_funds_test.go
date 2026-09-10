@@ -301,6 +301,45 @@ func TestAFundsFactAdoptsOnceAsAReference(t *testing.T) {
 	}
 }
 
+// Covers: sa-cc/03 裁决「付款人维取 A、在 SA 可缺席」的编排面——来源提供的付款人随采用命令进来、
+// 落在事实上；不提供照样采用、事实上显式缺席；付款人是内容的一维，同引用换付款人是冲突而不是重放。
+func TestAdoptingCarriesTheSourceProvidedPayerAndTreatsItAsContent(t *testing.T) {
+	fixture := newFundsFixture(t)
+
+	withPayer := adoptCommand(t, domain.FundsReceiptConfirmed)
+	withPayer.Payer = "payer-customer-7"
+	adopted, err := fixture.handler.AdoptFact(context.Background(), withPayer)
+	if err != nil || adopted.Outcome() != application.FundsFactAdopted {
+		t.Fatalf("adopt with payer: outcome = %q err = %v", adopted.Outcome(), err)
+	}
+	record, ok := adopted.Fact()
+	if !ok {
+		t.Fatal("采用成功该带记录")
+	}
+	if payer, provided := record.Fact.Payer(); !provided || payer.String() != "payer-customer-7" {
+		t.Fatalf("Payer() = (%q, %v), want (payer-customer-7, true)", payer, provided)
+	}
+
+	changedPayer := withPayer
+	changedPayer.Payer = "payer-customer-8"
+	conflict, err := fixture.handler.AdoptFact(context.Background(), changedPayer)
+	if err != nil || conflict.Outcome() != application.FundsFactConflict {
+		t.Fatalf("同引用换付款人：outcome = %q err = %v, want FUNDS_FACT_CONFLICT", conflict.Outcome(), err)
+	}
+
+	withoutPayer := adoptCommand(t, domain.FundsReceiptConfirmed)
+	withoutPayer.Fact = "bank-receipt-2"
+	withoutPayer.Version = "bank-receipt-2/v1"
+	adoptedWithout, err := fixture.handler.AdoptFact(context.Background(), withoutPayer)
+	if err != nil || adoptedWithout.Outcome() != application.FundsFactAdopted {
+		t.Fatalf("adopt without payer: outcome = %q err = %v——来源未提供付款人不拒绝采用", adoptedWithout.Outcome(), err)
+	}
+	record, _ = adoptedWithout.Fact()
+	if _, provided := record.Fact.Payer(); provided {
+		t.Fatal("来源未提供付款人，事实上却有付款人")
+	}
+}
+
 // Covers: UC-SA-005「金额相同/同一客户/同一时间不单独证明映射」与「付款失败的事实
 // 不可映射」的编排面——显式依据必备（缺依据未受理）；失败付款 → UNFUNDABLE_FACT
 // 业务负向（ErrUnfundableFact 哨兵分格）；未采用的事实映射不了。

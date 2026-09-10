@@ -38,6 +38,23 @@ func NewFundsSourceRegistrationReference(value string) (FundsSourceRegistrationR
 	return FundsSourceRegistrationReference{required}, err
 }
 
+// FundsPayerReference 指名来源提供的付款人——银行、支付或财务系统在事实里带来的付款方引用。
+// 它是外部事实自带的一维，本上下文只在采用时保留、不判断、不推导（CONTEXT「它不修改外部资金
+// 事实」）；`customs-compliance` 的税费付款核对把付款人列为「来源提供或真实程序要求的」维度，
+// 而事实进产品只有本上下文采用这一口（ADR-0137 决定四），来源给了本上下文不登，下游就永远拿
+// 不到。来源未提供时事实照样采用，付款人在事实上显式缺席（`ExternalFundsFact.Payer` 第二值为
+// false），不用空串顶替。**不要与「付款方身份」混名**：那是实际代垫成立判断的输入（CONTEXT
+// 「实际代垫成立判断」词条），是本上下文自己的概念，不是外部事实带来的这一维。
+type FundsPayerReference struct{ requiredValue }
+
+func NewFundsPayerReference(value string) (FundsPayerReference, error) {
+	required, err := newRequiredValue("funds payer reference", value)
+	if err != nil {
+		return FundsPayerReference{}, ErrInvalidFundsFact
+	}
+	return FundsPayerReference{required}, nil
+}
+
 // FundsFactVersion 是外部事实引用的版本：金额被更正时保留原版本，按新有效版本重算
 // （AT-SA-114）。
 type FundsFactVersion struct{ requiredValue }
@@ -77,8 +94,10 @@ func (kind FundsFactKind) String() string {
 
 // ExternalFundsFactSpec 是采用一条外部资金事实引用所需的全部输入。
 type ExternalFundsFactSpec struct {
-	Fact        FundsFactReference
-	Source      FundsSourceRegistrationReference
+	Fact   FundsFactReference
+	Source FundsSourceRegistrationReference
+	// Payer 可缺席：来源没提供付款人时留零值，采用不因此被拒（见 FundsPayerReference）。
+	Payer       FundsPayerReference
 	Kind        FundsFactKind
 	Currency    CurrencyCode
 	AmountMinor int64
@@ -92,6 +111,7 @@ type ExternalFundsFactSpec struct {
 type ExternalFundsFact struct {
 	fact        FundsFactReference
 	source      FundsSourceRegistrationReference
+	payer       FundsPayerReference
 	kind        FundsFactKind
 	currency    CurrencyCode
 	amountMinor int64
@@ -114,6 +134,7 @@ func AdoptExternalFundsFact(spec ExternalFundsFactSpec) (ExternalFundsFact, erro
 	return ExternalFundsFact{
 		fact:        spec.Fact,
 		source:      spec.Source,
+		payer:       spec.Payer,
 		kind:        spec.Kind,
 		currency:    spec.Currency,
 		amountMinor: spec.AmountMinor,
@@ -128,6 +149,14 @@ func (fact ExternalFundsFact) Fact() FundsFactReference {
 
 func (fact ExternalFundsFact) Source() FundsSourceRegistrationReference {
 	return fact.source
+}
+
+// Payer 交回来源提供的付款人；第二值为 false 即来源未提供——是事实的一个诚实状态，不是缺件。
+func (fact ExternalFundsFact) Payer() (FundsPayerReference, bool) {
+	if !fact.payer.valid() {
+		return FundsPayerReference{}, false
+	}
+	return fact.payer, true
 }
 
 func (fact ExternalFundsFact) Kind() FundsFactKind {

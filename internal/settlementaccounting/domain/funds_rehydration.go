@@ -7,6 +7,7 @@ import "time"
 type RehydrateExternalFundsFactSpec struct {
 	Fact        FundsFactReference
 	Source      FundsSourceRegistrationReference
+	Payer       FundsPayerReference
 	Kind        FundsFactKind
 	Currency    CurrencyCode
 	AmountMinor int64
@@ -20,6 +21,7 @@ func RehydrateExternalFundsFact(spec RehydrateExternalFundsFactSpec) (ExternalFu
 	fact, err := AdoptExternalFundsFact(ExternalFundsFactSpec{
 		Fact:        spec.Fact,
 		Source:      spec.Source,
+		Payer:       spec.Payer,
 		Kind:        spec.Kind,
 		Currency:    spec.Currency,
 		AmountMinor: spec.AmountMinor,

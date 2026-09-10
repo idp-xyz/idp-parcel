@@ -121,6 +121,64 @@ func TestAnAdoptedFundsFactIsAReferenceNotABalance(t *testing.T) {
 
 // Covers: UC-SA-005 匹配纪律「金额相同、同一客户或同一时间不单独证明映射」（依据必填
 // 的结构防线，AT-SA-104/105）与 `AT-SA-111`「付款失败事实不形成收款或核销」。
+// Covers: sa-cc/03 裁决「付款人维取 A、在 SA 可缺席」——付款人是外部事实自带、由来源提供的维度
+// （CC CONTEXT「税费付款核对」把它列为「来源提供或真实程序要求的」），本上下文只保留不判断：
+// 来源给了就登，没给就显式「未提供」而不是空串默认、更不拒绝采用；更正版本同型带着它走。
+// 它与「付款方身份」（代垫判断的输入）不是一个词。
+func TestAFundsFactCarriesTheSourceProvidedPayerOnlyWhenGiven(t *testing.T) {
+	withoutPayer := adoptedFact(t, domain.FundsReceiptConfirmed, 8000)
+	if payer, provided := withoutPayer.Payer(); provided || payer.String() != "" {
+		t.Fatalf("来源未提供付款人时 Payer() = (%q, %v)，want 显式未提供", payer, provided)
+	}
+
+	if _, err := domain.NewFundsPayerReference("  "); !errors.Is(err, domain.ErrInvalidFundsFact) {
+		t.Fatalf("空白付款人引用应拒，实得 %v——「未提供」用缺席表达，不用空串", err)
+	}
+
+	withPayer, err := domain.AdoptExternalFundsFact(domain.ExternalFundsFactSpec{
+		Fact:        settlementValue(t, domain.NewFundsFactReference, "bank-fact-3"),
+		Source:      settlementValue(t, domain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
+		Payer:       settlementValue(t, domain.NewFundsPayerReference, "payer-customer-7"),
+		Kind:        domain.FundsReceiptConfirmed,
+		Currency:    settlementValue(t, domain.NewCurrencyCode, "USD"),
+		AmountMinor: 8000,
+		Version:     settlementValue(t, domain.NewFundsFactVersion, "bank-fact-3/v1"),
+		OccurredAt:  fundsOccurredAt,
+	})
+	if err != nil {
+		t.Fatalf("adopt with payer: %v", err)
+	}
+	if payer, provided := withPayer.Payer(); !provided || payer.String() != "payer-customer-7" {
+		t.Fatalf("Payer() = (%q, %v), want (payer-customer-7, true)", payer, provided)
+	}
+
+	corrected, err := withPayer.CorrectAmount(
+		9000, settlementValue(t, domain.NewFundsFactVersion, "bank-fact-3/v2"), fundsOccurredAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("correct amount: %v", err)
+	}
+	if payer, provided := corrected.Payer(); !provided || payer.String() != "payer-customer-7" {
+		t.Fatalf("更正版本 Payer() = (%q, %v)，want 同型带着付款人", payer, provided)
+	}
+
+	rehydrated, err := domain.RehydrateExternalFundsFact(domain.RehydrateExternalFundsFactSpec{
+		Fact:        withPayer.Fact(),
+		Source:      withPayer.Source(),
+		Payer:       settlementValue(t, domain.NewFundsPayerReference, "payer-customer-7"),
+		Kind:        withPayer.Kind(),
+		Currency:    settlementValue(t, domain.NewCurrencyCode, "USD"),
+		AmountMinor: 8000,
+		Version:     withPayer.Version(),
+		OccurredAt:  withPayer.OccurredAt(),
+	})
+	if err != nil {
+		t.Fatalf("rehydrate with payer: %v", err)
+	}
+	if rehydrated != withPayer {
+		t.Fatalf("读回 = %#v, want 与采用时同值", rehydrated)
+	}
+}
+
 func TestMappingNeedsExplicitBasisBeyondCoincidence(t *testing.T) {
 	fact := adoptedFact(t, domain.FundsReceiptConfirmed, 8000)
 

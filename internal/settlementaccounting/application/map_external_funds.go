@@ -107,9 +107,12 @@ func (reason FundsUndecidedReason) String() string {
 // AdoptFundsFactCommand 携带一次外部资金事实采用：只形成引用与待匹配入口，不直接
 // 成为已核销（AT-SA-101）。
 type AdoptFundsFactCommand struct {
-	TenantID    domain.TenantID
-	Fact        string
-	Source      string
+	TenantID domain.TenantID
+	Fact     string
+	Source   string
+	// Payer 是来源提供的付款人，可缺席（空即来源未提供）——本上下文只保留不判断，
+	// 理由在 domain.FundsPayerReference 头注。
+	Payer       string
 	Kind        domain.FundsFactKind
 	Currency    string
 	AmountMinor int64
@@ -522,6 +525,11 @@ func factFrom(command AdoptFundsFactCommand) (domain.ExternalFundsFact, error) {
 	if spec.Source, err = domain.NewFundsSourceRegistrationReference(command.Source); err != nil {
 		return domain.ExternalFundsFact{}, err
 	}
+	if strings.TrimSpace(command.Payer) != "" {
+		if spec.Payer, err = domain.NewFundsPayerReference(command.Payer); err != nil {
+			return domain.ExternalFundsFact{}, err
+		}
+	}
 	if spec.Currency, err = domain.NewCurrencyCode(command.Currency); err != nil {
 		return domain.ExternalFundsFact{}, err
 	}
@@ -608,9 +616,11 @@ func fundsContinuation(parts ...string) string {
 	return "CONT-" + hex.EncodeToString(digest[:8])
 }
 
+// adoptDigest 把付款人算进内容：同引用换付款人是另一份内容（冲突），不是重放。
 func adoptDigest(command AdoptFundsFactCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		command.Source,
+		strings.TrimSpace(command.Payer),
 		fmt.Sprintf("%d", command.Kind),
 		command.Currency,
 		fmt.Sprintf("%d", command.AmountMinor),

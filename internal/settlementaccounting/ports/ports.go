@@ -792,6 +792,25 @@ type ExternalFundsFactStore interface {
 	Save(ctx context.Context, record FundsFactRecord) (FundsFactSaveOutcome, error)
 }
 
+// AdoptedFundsFactView 按（租户、资金事实引用、采用版本）取回一条已采用事实的只读本体——
+// 给下游按 `settlement-accounting.external-funds-fact.adopted` 信封所带的引用回查内容用
+// （今天是 `customs-compliance` 的税费付款核对，票 sa-cc/03）。
+//
+// 键带版本、取信封所指的那一版而不取当前版：信封先后与版本先后不同源，按 latest 读会把后到的
+// 更正当成原事实（票 lc/24 的教训）。库里还没有那一版（可见性滞后，或存的是另一版）就诚实答
+// found=false，由消费方按自己的续办纪律处置。
+//
+// 与 ExternalFundsFactStore 分名（形照 parcel-shipment 的 LabelTransactionsByParcelView）：读方拿到
+// 事实本体，但不该拿到 Save；写侧登记面的键也不带版本。
+type AdoptedFundsFactView interface {
+	LoadAdoptedFundsFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.FundsFactReference,
+		version domain.FundsFactVersion,
+	) (domain.ExternalFundsFact, bool, error)
+}
+
 // FundsMappingKey 是资金映射的幂等键。
 type FundsMappingKey struct {
 	TenantID domain.TenantID

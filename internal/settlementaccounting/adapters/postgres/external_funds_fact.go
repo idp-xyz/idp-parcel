@@ -36,43 +36,56 @@ func (repository *ExternalFundsFacts) FindByKey(
 		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
 	}
 
-	var source, kindName, currency, version, digest string
-	var amount int64
-	var occurredAt, recordedAt time.Time
-	var corrects *string
-	var correctedAt *time.Time
-	err = querier.QueryRow(ctx,
-		`SELECT source_ref, kind, currency, amount_minor, version, occurred_at,
-		        corrects, corrected_at, content_digest, recorded_at
-		   FROM settlement_accounting.external_funds_fact
+	record, found, err := scanExternalFundsFact(querier.QueryRow(ctx,
+		externalFundsFactSelect+`
 		  WHERE tenant_id = $1
 		    AND fact_id = $2`,
 		key.TenantID.String(),
 		key.Fact.String(),
-	).Scan(&source, &kindName, &currency, &amount, &version, &occurredAt,
+	), key)
+	if err != nil {
+		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+	}
+	return record, found, nil
+}
+
+// externalFundsFactSelect 是资金事实行的读回列；写侧 FindByKey 与只读视图 AdoptedFundsFactView
+// 共用同一段扫描（scanExternalFundsFact），两处读回的形状不会各自漂。
+const externalFundsFactSelect = `SELECT source_ref, payer_ref, kind, currency, amount_minor, version, occurred_at,
+		        corrects, corrected_at, content_digest, recorded_at
+		   FROM settlement_accounting.external_funds_fact`
+
+// scanExternalFundsFact 把一行扫成记录并经重建门复验更正两半。无行只回 false。
+func scanExternalFundsFact(row pgx.Row, key ports.FundsFactKey) (ports.FundsFactRecord, bool, error) {
+	var source, kindName, currency, version, digest string
+	var payer, corrects *string
+	var amount int64
+	var occurredAt, recordedAt time.Time
+	var correctedAt *time.Time
+	err := row.Scan(&source, &payer, &kindName, &currency, &amount, &version, &occurredAt,
 		&corrects, &correctedAt, &digest, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.FundsFactRecord{}, false, nil
 	}
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 
 	sourceRef, err := domain.NewFundsSourceRegistrationReference(source)
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 	kind, err := fundsFactKindFrom(kindName)
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 	currencyCode, err := domain.NewCurrencyCode(currency)
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 	versionRef, err := domain.NewFundsFactVersion(version)
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 	spec := domain.RehydrateExternalFundsFactSpec{
 		Fact:        key.Fact,
@@ -83,10 +96,17 @@ func (repository *ExternalFundsFacts) FindByKey(
 		Version:     versionRef,
 		OccurredAt:  occurredAt,
 	}
+	// NULL 就是「来源未提供」：不造一个空付款人，事实上显式缺席。
+	if payer != nil {
+		spec.Payer, err = domain.NewFundsPayerReference(*payer)
+		if err != nil {
+			return ports.FundsFactRecord{}, false, err
+		}
+	}
 	if corrects != nil {
 		spec.Corrects, err = domain.NewFundsFactVersion(*corrects)
 		if err != nil {
-			return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+			return ports.FundsFactRecord{}, false, err
 		}
 	}
 	if correctedAt != nil {
@@ -94,7 +114,7 @@ func (repository *ExternalFundsFacts) FindByKey(
 	}
 	fact, err := domain.RehydrateExternalFundsFact(spec)
 	if err != nil {
-		return ports.FundsFactRecord{}, false, fmt.Errorf("find external funds fact: %w", err)
+		return ports.FundsFactRecord{}, false, err
 	}
 	return ports.FundsFactRecord{
 		Key:           key,
@@ -117,15 +137,17 @@ func (repository *ExternalFundsFacts) Save(
 	currency, amount := record.Fact.Amount()
 	corrects, hasCorrects := record.Fact.Corrects()
 	correctedAt, _ := record.Fact.CorrectedAt()
+	payer, hasPayer := record.Fact.Payer()
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO settlement_accounting.external_funds_fact
-			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
+			(tenant_id, fact_id, source_ref, payer_ref, kind, currency, amount_minor, version,
 			 occurred_at, corrects, corrected_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Fact.String(),
 		record.Fact.Source().String(),
+		optionalRef(payer, hasPayer),
 		record.Fact.Kind().String(),
 		currency.String(),
 		amount,
