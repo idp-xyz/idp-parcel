@@ -46,10 +46,13 @@ func requirePositiveLimit(operation string, limit int) error {
 // 方式子表以相关子查询各聚各的(与 ListAcceptanceRulePackages 同一条理由:与别的子表并列 LEFT JOIN 会互相做笛卡尔积)。
 // 父表按主键左连接到版本上、至多一行,不产生扇出;recipient_scope_rule_ref 在父表上 NOT NULL,它的在场即这一层的在场。
 // 调用方在 FROM 里以别名 delivery 左连接 0030 父表。
+// 方式按 COLLATE "C" 排:领域 declareDeliveryConditions 用 Go 字节序排方式,目录只转写不重建,序要与
+// DeliveryConditionContent.Methods() 逐字同;方式引用是开放引用,大小写混排或含非 ASCII 时语言排序(en_US 之类)与字节序
+// 不同,不钉 collation 就成了「部署库的 locale 决定目录序」(票 admin-write-faces/26 ①)。
 const deliveryConditionColumns = `
 		        delivery.recipient_scope_rule_ref, delivery.proof_of_delivery_rule_ref,
 		        delivery.tightens_object_id, delivery.tightens_version_label, delivery.declared_at,
-		        (SELECT COALESCE(json_agg(method.method_ref ORDER BY method.method_ref), '[]'::json)
+		        (SELECT COALESCE(json_agg(method.method_ref ORDER BY method.method_ref COLLATE "C"), '[]'::json)
 		           FROM party_commercial.delivery_condition_method AS method
 		          WHERE method.tenant_id     = delivery.tenant_id
 		            AND method.object_kind   = delivery.object_kind

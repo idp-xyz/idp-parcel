@@ -59,6 +59,45 @@ func TestServiceProductCatalogueCarriesTheProductLayerDeliveryConditions(t *test
 	}
 }
 
+// Covers: 票 26 ①——目录行上方式的序是字节序、与领域 DeliveryConditionContent.Methods() 同序，不随库的 collation 变：
+// 大小写混排的合成方式串读回是「大写 < 下划线 < 小写」。本机测试库由 compose.yaml 以 C.UTF-8 起，这一例在 ORDER BY 加
+// COLLATE "C" 之前就绿——它钉的是部署库换成 en_US 之类语言排序时目录序仍不变（同一组串在 en_US.utf8 下排成
+// method/a METHOD/A METHOD/b METHOD/_x，与领域不同序；取证见票 26 完成记录）。
+func TestServiceProductCatalogueOrdersMethodsByBytesRegardlessOfCollation(t *testing.T) {
+	catalogue, repository, transactor := newCatalogue(t)
+	ctx := t.Context()
+
+	product := effectiveServiceProductVersion(t, "product-1", "v1", "digest-p1")
+	mustSaveVersion(t, transactor, ctx, repository, product)
+	content := productDeliveryConditionsOf(t, product, "method/a", "METHOD/b", "METHOD/_x", "METHOD/A")
+	mustSaveDeclaration(t, transactor, func(txCtx context.Context) (ports.DeclarationSaveOutcome, error) {
+		return repository.SaveDeliveryConditions(txCtx, content)
+	}, ports.DeclarationSaved)
+
+	rows, err := catalogue.ListServiceProducts(ctx, pcTenant(t, "tenant-1"), 10)
+	if err != nil {
+		t.Fatalf("上列服务产品：%v", err)
+	}
+	if len(rows) != 1 || rows[0].DeliveryConditions == nil {
+		t.Fatalf("上列 = %d 行，交付条件 = %#v", len(rows), rows)
+	}
+	want := []string{"METHOD/A", "METHOD/_x", "METHOD/b", "method/a"}
+	for i, method := range content.Methods() {
+		if method.String() != want[i] {
+			t.Fatalf("领域 Methods() = %v，与字节序 %v 不同——先例本身变了", content.Methods(), want)
+		}
+	}
+	got := rows[0].DeliveryConditions.Methods
+	if len(got) != len(want) {
+		t.Fatalf("目录方式 = %v，want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("目录方式序 = %v，want 与领域同的字节序 %v", got, want)
+		}
+	}
+}
+
 // Covers: 客户合同目录行——合同层随行并带所收紧的产品版本；交付条件与 0012 正文是两层各自可缺：只登正文不登交付条件的
 // 版本那一格为 nil、只登交付条件不登正文的版本 HasContent 为假而那一格在场；他租户不可见。
 func TestCustomerContractCatalogueCarriesTheContractLayerDeliveryConditions(t *testing.T) {
