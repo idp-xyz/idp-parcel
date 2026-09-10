@@ -96,19 +96,17 @@ func labelTransactionRefused(outcome LabelTransactionOutcome, transaction *domai
 
 // EstablishLabelTransactionCommand 建立一笔面单交易。
 //
-// 覆盖范围与七类依据引用逐项由聚合构造门把守，本层不重复校验——重复一遍就有了第二处口径，
-// 而它必然先于聚合那处过期。PriorTransactionID 留零值即首笔交易。
+// 七类依据引用不逐格进命令，而是整份「择优结果」（domain.SelectedChannelBasis）进来（票 label-channel/28
+// 判据 1 的形状约束）：**建立一步不问它从哪来**——系统择优作前置步产出它（EstablishSelectedLabelTransactionHandler），
+// 日后运营端点人工择优也产同一个对象，06 的输入形状只改这一次。覆盖范围与七格逐项仍由聚合构造门把守，
+// 本层不重复校验——重复一遍就有了第二处口径，而它必然先于聚合那处过期。PriorTransactionID 留零值即首笔交易。
 type EstablishLabelTransactionCommand struct {
-	Tenant                 domain.TenantID
-	TransactionID          domain.LabelTransactionID
-	CoveredParcels         []domain.DeclaredParcelID
-	ChannelAccount         domain.ChannelAccountReference
-	AccountHolder          domain.ChannelAccountHolderReference
-	ServiceProvider        domain.ChannelServiceProviderReference
-	SettlementCounterparty domain.SettlementCounterpartyReference
-	Contract               domain.ChannelContractReference
-	Rate                   domain.ChannelRateReference
-	ResponsibilityBasis    domain.ResponsibilityBasisSnapshotReference
+	Tenant         domain.TenantID
+	TransactionID  domain.LabelTransactionID
+	CoveredParcels []domain.DeclaredParcelID
+	// Basis 是这笔交易按之建立的择优结果：选中的候选与七类依据引用（评价痕迹引用随它、可缺席）。
+	// 候选本身不进聚合——哪些候选参过选、为什么是它，在择优步写下的渠道择优决定记录里。
+	Basis domain.SelectedChannelBasis
 	// PriorTransactionID 与 PriorLinkKind 成对给出：重试或替代关系指回的那一笔。
 	// 关系由本层按原交易**本体**建立（聚合要求原交易已定案），调用方给标识即可。
 	PriorTransactionID domain.LabelTransactionID
@@ -175,9 +173,12 @@ type LabelTransactionDeps struct {
 // 只会让装配点多四次接线而缝一条都不少。后两步在 `Save` 成功后多一段写后入队（见 Judgments），
 // 前三步没有——建立、提交与「答案未确定」都不改变任何终局判断的输入。
 //
-// **它不发起任何渠道调用。** 出向那一步的形状归 ADR-0090 与票 `07`；本编排在它上面只留缝——
+// **它不发起任何渠道调用，也不择优。** 出向那一步的形状归 ADR-0090 与票 `07`；本编排在它上面只留缝——
 // 调用方拿 `SubmitToChannel` 的结果去发请求，把回来的答案经 `MarkResultUncertain` 或
 // `RecordChannelResult` 交回来。把出向塞进这里会让「答案未确定不得重发」这条纪律散落在编排里。
+// 择优在它前面（票 label-channel/28 裁乙）：EstablishSelectedLabelTransactionHandler 先择优、译出「择优结果」，
+// 再调本编排的 Establish——本编排只收那份对象，不认识择优编排，也不认识翻译适配器；两条缝分开留，
+// 是为了让日后人工择优产出同一份对象时不必再改这里。
 type LabelTransactionHandler struct {
 	deps LabelTransactionDeps
 }
@@ -207,13 +208,13 @@ func (handler *LabelTransactionHandler) Establish(
 		Tenant:                 command.Tenant,
 		ID:                     command.TransactionID,
 		CoveredParcels:         command.CoveredParcels,
-		ChannelAccount:         command.ChannelAccount,
-		AccountHolder:          command.AccountHolder,
-		ServiceProvider:        command.ServiceProvider,
-		SettlementCounterparty: command.SettlementCounterparty,
-		Contract:               command.Contract,
-		Rate:                   command.Rate,
-		ResponsibilityBasis:    command.ResponsibilityBasis,
+		ChannelAccount:         command.Basis.ChannelAccount(),
+		AccountHolder:          command.Basis.AccountHolder(),
+		ServiceProvider:        command.Basis.ServiceProvider(),
+		SettlementCounterparty: command.Basis.SettlementCounterparty(),
+		Contract:               command.Basis.Contract(),
+		Rate:                   command.Basis.Rate(),
+		ResponsibilityBasis:    command.Basis.ResponsibilityBasis(),
 		EstablishedAt:          handler.deps.Clock.Now(),
 		PriorLink:              link,
 	})

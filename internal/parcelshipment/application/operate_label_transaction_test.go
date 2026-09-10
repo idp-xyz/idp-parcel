@@ -47,6 +47,25 @@ func TestEstablishingALabelTransactionFixesItsCoverageAndBasis(t *testing.T) {
 	}
 }
 
+// Covers: 票 label-channel/28 判据 1——建立一步只收整份「择优结果」：没带它（零值）就是七格全空，聚合构造门
+// 在建立处拒成`输入未受理`，不落库；编排不替它补任何一格。
+func TestEstablishingWithoutASelectedBasisIsNotAccepted(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	command := fixture.establishCommand(t, "LT-1")
+	command.Basis = domain.SelectedChannelBasis{}
+
+	result, err := fixture.handler.Establish(context.Background(), command)
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+	if result.Outcome() != application.LabelTransactionNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", result.Outcome())
+	}
+	if fixture.repository.inserted != nil {
+		t.Fatal("没带择优结果的建立落了库")
+	}
+}
+
 // Covers: ADR-0031 写入代数`已存在`那一格——同标识再建一次是重放，读回既有那一笔，
 // **不覆盖**。建立时固定的依据此后改不了，所以「同标识不同内容」不是一次更正。
 func TestEstablishingTheSameTransactionTwiceReadsBackTheExistingOne(t *testing.T) {
@@ -524,12 +543,23 @@ func newLabelTransactionFixture(t *testing.T) *labelTransactionFixture {
 	}
 }
 
+// establishCommand 造一条建立命令。七类依据不再逐格给：建立一步只收一份「择优结果」对象（票 label-channel/28
+// 判据 1 的形状约束），谁产出它编排不问——这里由夹具直接造，与系统择优或日后人工择优产出的是同一个对象。
 func (fixture *labelTransactionFixture) establishCommand(t *testing.T, id string) application.EstablishLabelTransactionCommand {
 	t.Helper()
 	return application.EstablishLabelTransactionCommand{
-		Tenant:                 fixture.tenant,
-		TransactionID:          mustValue(t, domain.NewLabelTransactionID, id),
-		CoveredParcels:         fixture.parcels,
+		Tenant:         fixture.tenant,
+		TransactionID:  mustValue(t, domain.NewLabelTransactionID, id),
+		CoveredParcels: fixture.parcels,
+		Basis:          selectedBasisFixture(t),
+	}
+}
+
+// selectedBasisFixture 是一份七格齐备的择优结果，取值全为合成串。
+func selectedBasisFixture(t *testing.T) domain.SelectedChannelBasis {
+	t.Helper()
+	basis, err := domain.NewSelectedChannelBasis(domain.SelectedChannelBasisSpec{
+		Candidate:              mustValue(t, domain.NewChannelCandidateID, "CAND-1"),
 		ChannelAccount:         mustValue(t, domain.NewChannelAccountReference, "ACCT-1"),
 		AccountHolder:          mustValue(t, domain.NewChannelAccountHolderReference, "HOLDER-1"),
 		ServiceProvider:        mustValue(t, domain.NewChannelServiceProviderReference, "PROVIDER-1"),
@@ -537,7 +567,11 @@ func (fixture *labelTransactionFixture) establishCommand(t *testing.T, id string
 		Contract:               mustValue(t, domain.NewChannelContractReference, "CONTRACT-1"),
 		Rate:                   mustValue(t, domain.NewChannelRateReference, "RATE-1"),
 		ResponsibilityBasis:    mustValue(t, domain.NewResponsibilityBasisSnapshotReference, "BASIS-1"),
+	})
+	if err != nil {
+		t.Fatalf("造择优结果：%v", err)
 	}
+	return basis
 }
 
 func (fixture *labelTransactionFixture) mustEstablish(t *testing.T, id string) domain.LabelTransaction {
