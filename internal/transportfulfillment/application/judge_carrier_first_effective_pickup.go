@@ -259,13 +259,10 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) Judge(
 		// 已形成之后另一来源到达：不是收寄的事，是段级实际承运商判断的来源冲突（决定六）。
 		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotFirst}, nil
 	}
-	if !found || current.Pickup.Voided() {
-		active, err := handler.objectUnderControl(ctx, command.TenantID, object)
-		if err != nil {
-			return handler.answer(command, CarrierPickupUndecided, CarrierPickupSegmentRegistryUnavailable), nil
-		}
-		if active {
-			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotFirst}, nil
+	if !found || !current.Pickup.Formed() {
+		// 链上无版本、链尾失效或待确认：这一步都可能让链上出现已形成版本，首次判据在此问一次（lc/33）。
+		if refused, answered := handler.answerIfNotFirst(ctx, command, object); answered {
+			return refused, nil
 		}
 	}
 	return handler.formOrHold(ctx, command, object, current, found, input)
@@ -354,6 +351,10 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) reconsiderPending(
 	if !command.ExpressesControl {
 		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupPendingOutcome, record: current, hasRecord: true}, nil
 	}
+	// 待确认期间对象可能已凭别的控制事实进段；这一步一旦形成就是收寄，所以先问首次判据（lc/33）。
+	if refused, answered := handler.answerIfNotFirst(ctx, command, current.Pickup.Object()); answered {
+		return refused, nil
+	}
 	subject, _, outcome := handler.resolveSubject(ctx, command)
 	if outcome != CarrierPickupJudgmentOutcomeInvalid {
 		if outcome == CarrierPickupUndecided {
@@ -380,6 +381,8 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) reconsiderPending(
 }
 
 // rederive 走更正那条路：读法仍是收寄 → 替代版本（承运主体、业务时间随新一代）；读法不再是收寄 → 失效版本。
+// 被更正的依据挂在待确认链尾上时，替代出来的才是这条链第一个已形成版本，所以先问首次判据（lc/33）；链尾已形成
+// 的替代不问——对象在控正是这条链自己的参与。
 func (handler *JudgeCarrierFirstEffectivePickupHandler) rederive(
 	ctx context.Context,
 	command JudgeCarrierFirstEffectivePickupCommand,
@@ -387,6 +390,11 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) rederive(
 	current ports.CarrierFirstEffectivePickupRecord,
 	input pickupBasisInput,
 ) (JudgeCarrierFirstEffectivePickupResult, error) {
+	if command.ExpressesControl && !current.Pickup.Formed() {
+		if refused, answered := handler.answerIfNotFirst(ctx, command, object); answered {
+			return refused, nil
+		}
+	}
 	now := handler.deps.Clock.Now()
 	version, err := handler.deps.Identities.NextCarrierFirstEffectivePickupVersion(ctx)
 	if err != nil {
@@ -420,7 +428,6 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) rederive(
 	if err != nil {
 		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
 	}
-	_ = object
 	return handler.persist(ctx, command, next, now, true)
 }
 
@@ -638,6 +645,25 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) resolveSubject(
 		material = claimed.Reference()
 	}
 	return domain.CarrierSubject{}, material, CarrierPickupJudgmentOutcomeInvalid
+}
+
+// answerIfNotFirst 在「这一步会让链上出现已形成版本」之前问首次判据：对象已有当前有效参与 → `非首次`，不形成版本
+// （ADR-0135 决定四），证据留给实际承运商判断那条路；段登记册读不通 → `未决`。第二个返回值为 false 即首次仍成立，
+// 调用方接着走。凡链尾不是已形成的入口——首登、失效后再登、待确认后同一依据再来或另一依据到达、更正待确认的依据
+// ——都经这里；链尾已形成的替代不问，对象在控正是这条链自己的参与。
+func (handler *JudgeCarrierFirstEffectivePickupHandler) answerIfNotFirst(
+	ctx context.Context,
+	command JudgeCarrierFirstEffectivePickupCommand,
+	object domain.CarriedObjectReference,
+) (JudgeCarrierFirstEffectivePickupResult, bool) {
+	active, err := handler.objectUnderControl(ctx, command.TenantID, object)
+	if err != nil {
+		return handler.answer(command, CarrierPickupUndecided, CarrierPickupSegmentRegistryUnavailable), true
+	}
+	if active {
+		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotFirst}, true
+	}
+	return JudgeCarrierFirstEffectivePickupResult{}, false
 }
 
 // objectUnderControl 答对象此刻有没有当前有效履约参与（首次判据）。段登记册缺席按无参与办——派生一侧缺席不让

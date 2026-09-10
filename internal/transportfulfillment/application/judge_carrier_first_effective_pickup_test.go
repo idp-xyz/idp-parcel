@@ -356,6 +356,85 @@ func TestEvidenceForAnObjectAlreadyUnderControlIsNotAFirstPickup(t *testing.T) {
 	}
 }
 
+// bringUnderControl 让对象凭场外揽收进段，造出首次判据要看的「当前有效参与」——与
+// TestEvidenceForAnObjectAlreadyUnderControlIsNotAFirstPickup 走同一条路，只是共用本夹具的段登记册，
+// 好让「先待确认、后在控」这个先后顺序在同一份夹具上摆出来。
+func (fixture *carrierPickupFixture) bringUnderControl(t *testing.T, object string) {
+	t.Helper()
+	handler := application.NewRegisterOffsitePickupHandler(application.RegisterOffsitePickupDeps{
+		Pickups:    newPickupRegistry(),
+		Segments:   fixture.segments,
+		Judgments:  fixture.judgments,
+		Versions:   &pickupRegVersionFactory{},
+		Downstream: &pickupRegHandoffDouble{},
+		Clock:      pickupRegClock{at: pickupRegisteredAt},
+	})
+	command := pickupRegistrationCommand(t)
+	command.Object = object
+	command.Segment = "segment-1"
+	if _, err := handler.Register(t.Context(), command); err != nil {
+		t.Fatalf("凭场外揽收进段：%v", err)
+	}
+}
+
+// Covers: lc/33 判据 1 / ADR-0135 决定四「非首次……不形成版本」——链尾待确认期间对象已凭别的控制事实进段，
+// 之后到达的每一条本会让链尾成为已形成的入口都得先问首次判据：在控就答`非首次`，不落版本、不发意图，
+// 待确认链尾留原样（失效也是一版，且领域只让已形成失效）。
+func TestAPendingChainDoesNotFormWhenTheObjectIsAlreadyUnderControl(t *testing.T) {
+	tenant := mustTenant(t, "tenant-1")
+	object := mustRefValue(t, domain.NewCarriedObjectReference, "PCL-1")
+
+	holdPending := func(t *testing.T) *carrierPickupFixture {
+		t.Helper()
+		fixture := newCarrierPickupFixture(t)
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+		if pending := fixture.judge(t, trackingPickupCommand(t)); pending.Outcome() != application.CarrierPickupPendingOutcome {
+			t.Fatalf("前置：outcome = %s，期望 PICKUP_PENDING", pending.Outcome())
+		}
+		fixture.bringUnderControl(t, "PCL-1")
+		return fixture
+	}
+	assertNotFirstAndUntouched := func(t *testing.T, fixture *carrierPickupFixture, result application.JudgeCarrierFirstEffectivePickupResult) {
+		t.Helper()
+		if result.Outcome() != application.CarrierPickupNotFirst {
+			t.Fatalf("outcome = %s，期望 NOT_FIRST", result.Outcome())
+		}
+		if len(fixture.pickups.rows) != 1 || len(fixture.handoff.intents) != 0 {
+			t.Fatalf("不该落版本或发意图：行数 %d，意图 %d", len(fixture.pickups.rows), len(fixture.handoff.intents))
+		}
+		current, found, err := fixture.pickups.FindCurrentByObject(t.Context(), tenant, object)
+		if err != nil || !found || current.Pickup.Result() != domain.CarrierPickupPending {
+			t.Fatalf("待确认链尾应留原样：%v %v", err, found)
+		}
+	}
+
+	t.Run("the same basis after the carrier is registered", func(t *testing.T) {
+		fixture := holdPending(t)
+		fixture.directory.registered[carrierX(t).Kind().String()+"|"+carrierX(t).Reference()] = true
+		assertNotFirstAndUntouched(t, fixture, fixture.judge(t, trackingPickupCommand(t)))
+	})
+
+	t.Run("another basis naming a registered carrier", func(t *testing.T) {
+		fixture := holdPending(t)
+		fixture.addTrackingFact(t, "EXTF-2", "EXTV-1", "PCL-1", carrierPickupEffectiveAt.Add(time.Minute), "")
+		carrierY := mustSubject(t, domain.ExternalCarrierParty, "party/carrier-y")
+		fixture.directory.registered[carrierY.Kind().String()+"|"+carrierY.Reference()] = true
+		other := trackingPickupCommand(t)
+		other.EvidenceReference = "EXTF-2"
+		other.SubjectReference = carrierY.Reference()
+		assertNotFirstAndUntouched(t, fixture, fixture.judge(t, other))
+	})
+
+	t.Run("a correction of the pending basis that still reads as a pickup", func(t *testing.T) {
+		fixture := holdPending(t)
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-2", "PCL-1", carrierPickupEffectiveAt.Add(time.Minute), "EXTV-1")
+		fixture.directory.registered[carrierX(t).Kind().String()+"|"+carrierX(t).Reference()] = true
+		corrected := trackingPickupCommand(t)
+		corrected.EvidenceVersion = "EXTV-2"
+		assertNotFirstAndUntouched(t, fixture, fixture.judge(t, corrected))
+	})
+}
+
 // Covers: ADR-0135 决定三——有效时间待判断的轨迹事实不得作依据 → 依据不可用；指名不存在的一代或别的对象 → 未受理。
 func TestAPendingEffectiveTimeMakesTheBasisUnavailable(t *testing.T) {
 	fixture := newCarrierPickupFixture(t, carrierX(t))
