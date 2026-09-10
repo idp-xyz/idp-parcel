@@ -53,13 +53,25 @@ type DeliveryPlaceSource interface {
 	) (place string, resolution RequirementResolution, err error)
 }
 
-// DeliveryWindowSource 按载运对象取其计划履约段的时间窗口（network-routing）。窗口是计划，任务照抄它作工作范围，
+// DeliveryWindowSource 取计划履约段的时间窗口（network-routing）。窗口是计划，任务照抄它作工作范围，
 // 不据它推任何实际事实（ADR-0004）。
+//
+// 三步法的 expand 段（票 tf-segment-lifecycle-closure/13 做法第 2 步）：按对象的旧法与按计划履约段引用的新法并存，
+// 直到执行器迁到新法、contract 段删旧并把新法改回 LoadDeliveryWindow 这个名字。
 type DeliveryWindowSource interface {
 	LoadDeliveryWindow(
 		ctx context.Context,
 		tenant domain.TenantID,
 		object domain.CarriedObjectReference,
+	) (from, to time.Time, resolution RequirementResolution, err error)
+	// LoadDeliveryWindowByPlannedSegment 按参与关系上登记方关联的计划履约段引用取（ADR-0131 决定一：NR 计划里没有服务
+	// 动作，按对象问要 NR 推「哪一段是派送段」，ADR-0114 决定一禁止那种推法）。present=false 即对象没有计划段，由适配器
+	// 答 MISSING、不出本上下文（ADR-0131 决定三）；引用所钉那一版的适用性不折进答案（决定二）。
+	LoadDeliveryWindowByPlannedSegment(
+		ctx context.Context,
+		tenant domain.TenantID,
+		planned domain.PlannedSegmentReference,
+		present bool,
 	) (from, to time.Time, resolution RequirementResolution, err error)
 }
 
