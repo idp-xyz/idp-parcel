@@ -205,10 +205,15 @@ func NewJudgeCarrierFirstEffectivePickupHandler(deps JudgeCarrierFirstEffectiveP
 }
 
 // pickupBasisInput 是一条证据经受理与读回之后的样子：依据本体、业务时间（已形成才用）、它更正了哪一代（若有）。
+//
+// correctsDerived 记下回指是编排从轨迹事实的回指上自动取的，还是命令显式指名的。两者在链上有版本时同义；链上
+// 无版本时分开——显式指名的更正没有对象，是提交矛盾；自动派生的只说明「这一代更正过前代」，而前代从未被判过，
+// 这条证据就是这条链的第一次判断（lc/33）。
 type pickupBasisInput struct {
-	basis      domain.CarrierPickupBasis
-	occurredAt time.Time
-	corrects   string
+	basis           domain.CarrierPickupBasis
+	occurredAt      time.Time
+	corrects        string
+	correctsDerived bool
 }
 
 // Judge 就一条合格证据形成实际承运商首次有效收寄的判断（CONTEXT 生命周期「实际承运商首次有效收寄」）：
@@ -244,12 +249,15 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) Judge(
 		return handler.reconsiderPending(ctx, command, current, input)
 	}
 
-	// 更正那条路先走：被更正的那一代必须恰是链尾的依据，否则「更正」没有对象。
+	// 更正那条路先走：被更正的那一代必须恰是链尾的依据（ADR-0135 决定六），否则「更正」没有对象。唯一的例外是
+	// 链上还没有任何版本而回指是自动派生的：被更正的前代从未被判，没有东西可替代或失效，这条证据按首次判断走正路。
 	if input.corrects != "" {
-		if !found || !current.Pickup.BasedOn(input.basis.Reference(), input.corrects) {
+		switch {
+		case found && current.Pickup.BasedOn(input.basis.Reference(), input.corrects):
+			return handler.rederive(ctx, command, object, current, input)
+		case found || !input.correctsDerived:
 			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupBasisNotCurrent}, nil
 		}
-		return handler.rederive(ctx, command, object, current, input)
 	}
 	if !command.ExpressesControl {
 		// 读法说这条证据不表达取得控制，又不是对某一代的更正：不构成，什么都不留（ADR-0135 决定四）。
@@ -608,7 +616,7 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) resolveBasis(
 	input.occurredAt = effectiveAt
 	if input.corrects == "" {
 		if prior, has := record.Fact.Supersedes(); has {
-			input.corrects = prior.String()
+			input.corrects, input.correctsDerived = prior.String(), true
 		}
 	}
 	return input, CarrierPickupJudgmentOutcomeInvalid, CarrierPickupUndecidedReasonNone

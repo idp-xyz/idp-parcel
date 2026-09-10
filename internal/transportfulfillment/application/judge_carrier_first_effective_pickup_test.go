@@ -616,6 +616,64 @@ func TestACorrectedBasisSupersedesOrVoidsThePickupAndRederivesTheParticipation(t
 	})
 }
 
+// Covers: lc/33 判据 2——对象上第一条被判的轨迹版本本身是更正代（v1 从未被判、v2 更正 v1 才表达收寄）：回指是编排
+// 从事实上自动派生的，链上又没有任何可被替代或失效的版本，这条证据就是这条链的第一次判断——照正路首登、首版不回指、
+// 进段；读法不为收寄则什么都不留。命令显式指名回指而链上无版本仍是「依据不是当前依据」（ADR-0135 决定六原句不动）。
+func TestADerivedCorrectionOnAnEmptyChainIsJudgedAsTheFirstPickup(t *testing.T) {
+	newFixture := func(t *testing.T) *carrierPickupFixture {
+		t.Helper()
+		fixture := newCarrierPickupFixture(t, carrierX(t))
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-2", "PCL-1", carrierPickupEffectiveAt.Add(10*time.Minute), "EXTV-1")
+		return fixture
+	}
+	corrected := func(t *testing.T) application.JudgeCarrierFirstEffectivePickupCommand {
+		t.Helper()
+		command := trackingPickupCommand(t)
+		command.EvidenceVersion = "EXTV-2"
+		return command
+	}
+
+	t.Run("derived correction forms the first version without a prior", func(t *testing.T) {
+		fixture := newFixture(t)
+		result := fixture.judge(t, corrected(t))
+		if result.Outcome() != application.CarrierPickupFormedOutcome {
+			t.Fatalf("outcome = %s，期望 PICKUP_FORMED", result.Outcome())
+		}
+		record, _ := result.Record()
+		if _, has := record.Pickup.Supersedes(); has || len(fixture.pickups.rows) != 1 {
+			t.Fatalf("首版不该回指：行数 %d", len(fixture.pickups.rows))
+		}
+		if at, _ := record.Pickup.OccurredAt(); !at.Equal(carrierPickupEffectiveAt.Add(10 * time.Minute)) {
+			t.Fatalf("业务时间应取被判那一代的有效时间：%s", at)
+		}
+		if len(fixture.handoff.intents) != 1 {
+			t.Fatalf("意图应交出恰一份：%d", len(fixture.handoff.intents))
+		}
+		if keys, _ := fixture.segments.FindActiveSegments(t.Context(), mustTenant(t, "tenant-1"), mustRefValue(t, domain.NewCarriedObjectReference, "PCL-1")); len(keys) != 1 {
+			t.Fatalf("已形成后应进段")
+		}
+	})
+
+	t.Run("derived correction read as not a pickup leaves nothing", func(t *testing.T) {
+		fixture := newFixture(t)
+		command := corrected(t)
+		command.ExpressesControl = false
+		if result := fixture.judge(t, command); result.Outcome() != application.CarrierPickupNotAPickup || len(fixture.pickups.rows) != 0 {
+			t.Fatalf("outcome = %s，行数 %d", result.Outcome(), len(fixture.pickups.rows))
+		}
+	})
+
+	t.Run("an explicitly named correction on an empty chain is still not current", func(t *testing.T) {
+		fixture := newFixture(t)
+		command := corrected(t)
+		command.CorrectsSourceVersion = "EXTV-1"
+		if result := fixture.judge(t, command); result.Outcome() != application.CarrierPickupBasisNotCurrent || len(fixture.pickups.rows) != 0 {
+			t.Fatalf("outcome = %s，行数 %d", result.Outcome(), len(fixture.pickups.rows))
+		}
+	})
+}
+
 // Covers: 已形成之后另一来源到达 → 非首次（不收回、不落版本），那是段级实际承运商判断的事（ADR-0135 决定六）。
 func TestAnotherSourceAfterFormationIsNotFirstAndDoesNotRetract(t *testing.T) {
 	fixture := newCarrierPickupFixture(t, carrierX(t))
