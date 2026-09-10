@@ -1,0 +1,51 @@
+# CC 入向登记要付款人非空，而 SA 采用的事实可以没有付款人：来源未提供且真实程序不要求时，CC 应「明确记录」而不是拒收
+
+Category: enhancement
+Status: draft——2026-09-10 22:0x 通道 5 立票（sa-cc/03 实施中按通道 1 裁决「CC 放宽另立 draft」，task-764b20a1）。只写票面未动代码；取证锚 `f96169d2`
+Blocked by: 无（03 已落地；本票要裁的一条归 CC owner）
+
+## 缺口（取证于 `f96169d2`）
+
+- `internal/customscompliance/application/reconcile_duty_payment.go` 的 `ReceiveFundsFact` 对空 `Payer` 答 `未受理`；迁移 `customs_compliance/0016` 的 `external_funds_fact.payer_ref text NOT NULL` + 非空 CHECK。
+- SA 侧（sa-cc/03 落地）：`domain.ExternalFundsFact.Payer()` 第二值为 false 即「来源未提供」，采用不拒；`settlement_accounting/0018` `payer_ref` 可空。
+- 于是一条来源没给付款人的事实，经 `settlement-accounting.external-funds-fact.adopted` 信封到 CC 消费者，`ReceiveOnAdoptedFundsFactAdapter` 如实交空、编排答 `未受理`、消费门入账不重投（`receive_on_adopted_funds_fact.go` 头注）——事实进不了税费付款核对的入向登记册，**这是有意的诚实停点，不是 bug**（03 判断题 ③）。
+
+## 语言从哪里来
+
+- CC `CONTEXT.md`「税费付款核对」词条：「按明确申报范围、法定义务以及**来源提供或真实程序要求的**付款人、金额、币种、业务时间等维度进行的版本化比较判断」——付款人是「来源提供**或**真实程序要求」的维度，两种来处都成立时才必备。
+- CC `CONTEXT.md`（sa-cc/03 票面引）：「来源未提供且程序不要求的维度要『明确记录』」。
+- mech/07 CC-c 把付款人列为关联核对最少要读的四件之一——与上一句的张力正是本票要裁的。
+
+## 做法（待裁后）
+
+1. `ExternalFundsFactRegistration.Payer` 允许「来源未提供」的显式形（不是空串默认：领域上一格，或 `(string, bool)`），`ReceiveFundsFact` 不再因付款人缺席答 `未受理`。
+2. 新迁移（序号重取）放宽 `customs_compliance.external_funds_fact.payer_ref` 为可空 + 拒空白 CHECK；`0016` 不改。
+3. `VerifyPayment` 的调用方在关联核对时看得见「付款人未提供」这一格——真实程序要求付款人而来源没给时，核对该停在哪一格（待确认？不适用？）随裁决定。
+4. `ReceiveOnAdoptedFundsFactAdapter` 不改：它今天已如实转述缺席。
+
+## 红线
+
+- 不拿 SA 的来源身份或别的维顶替付款人；不写任何真实银行 / 支付字段。
+- 「程序要不要求付款人」若属实例半边（`PAR-CUS-*`），一行都不预填。
+
+## 完成判据
+
+1. 应用层：来源未提供付款人的事实 → `已接收`，登记里付款人显式「未提供」；同引用重放 → `已存在`；程序要求而未提供时核对的停格如裁决。
+2. 真库：放宽后的往返；`0016` 一字未动。
+3. sa-cc/03 的越权风险点 (b) 由 CC owner 在本票一并复核。
+
+## 地盘
+
+`internal/customscompliance/{ports,application,adapters/postgres}`、`migrations/customs_compliance/`（新序号）。SA 侧不动。
+
+## 要裁的
+
+1. **「真实程序要求付款人」是实例半边还是登记的规则**：是每个真实程序登记进门禁目录 / 核对规则的一格（形照 ADR-0137 决定三的规则型目录行），还是 `PAR-CUS-*` 待提供参数——归 CC owner，一句。裁前 `ReceiveFundsFact` 保持必填。
+
+## 参照
+
+[03](03-cc-inbox-consumer-receives-external-funds-fact.md)（裁决与越权风险点 (b)）；[02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md)；ADR-0137 决定四。
+
+## Comments
+
+- 2026-09-10 · 通道 5：立票（按通道 1 于 sa-cc/03 的裁决「CC 放宽（B）另立 sa-cc 新票 draft」）。未动代码。
