@@ -48,6 +48,7 @@ var _ ParticipationTerminationIntake = UnconfiguredIntake{}
 var _ CredentialIntake = UnconfiguredIntake{}
 var _ EffectiveTimeRuleIntake = UnconfiguredIntake{}
 var _ EffectiveTimeJudgmentIntake = UnconfiguredIntake{}
+var _ CarrierPickupJudgmentIntake = UnconfiguredIntake{}
 var _ MasterDocumentIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
@@ -139,6 +140,12 @@ func (UnconfiguredIntake) IntakeEffectiveTimeRuleRegistration(context.Context, *
 // 渠道未就位前没有可采信的所有者身份，连命令都不构造。
 func (UnconfiguredIntake) IntakeEffectiveTimeJudgment(context.Context, *http.Request) (application.JudgeEffectiveTimeCommand, error) {
 	return application.JudgeEffectiveTimeCommand{}, ErrAccessChannelNotConfigured
+}
+
+// 实际承运商首次有效收寄显式判断口（label-channel/31）同堵：一次判断落的是控制事实——立段、结束取消权、交
+// parcel-shipment 形成终局，比有效时间判断更不能让无渠道的请求穿过去，连命令都不构造。
+func (UnconfiguredIntake) IntakeCarrierPickupJudgment(context.Context, *http.Request) (application.JudgeCarrierFirstEffectivePickupCommand, error) {
+	return application.JudgeCarrierFirstEffectivePickupCommand{}, ErrAccessChannelNotConfigured
 }
 
 // 总单登记两口（ADR-0113 决定五）同堵：一份总单登进去就成了 parcel-pricing 主单级评价可引的身份（ADR-0111），
