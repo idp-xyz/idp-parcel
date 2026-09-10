@@ -1,8 +1,8 @@
 # 28 渠道择优链的组合根与调用入口：`cmd/` 下整条面单渠道写链至今零装配，择优是运营端点还是面单交易编排的前置步
 
 Category: enhancement
-Status: blocked——2026-09-10 17:3x 通道 3 按通道 1 两条裁决改写（task-bc04bfc2；用户 17:0x 经队列授权「你自决」，读法在 `.scratch/tasks.md` 16:5x–17:0x 节）：「要裁的」1 取**乙**（择优作 06 编排的前置步）并带一条编排输入的形状约束，「要裁的」2 **另立 [`29`](./29-channel-selection-result-to-label-transaction-basis-translation.md)**；本票 Blocked by 29，29 进 main 后转 ready-for-agent。裁决原文见「要裁的」下「裁决」，实施判据已按裁决补齐。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；只写票面，未动代码
-Blocked by: 29（候选标识 → 七类依据引用的翻译适配器；乙路的前置步没有它接不到 `Establish`）
+Status: in-progress——2026-09-10 22:0x 通道 4 认领：29 已于 19:34 进 main（`32778486`），阻塞解除，由通道 1 派单 task-03394bb6 直转 in-progress（原派通道 3 task-049e6dcd 未开工即 crash）；分支 `mcp4-lc28` 基远端 main `53173062`，隔离树 `D:/tops/idp-parcel-mcp4-lc28`。此前 blocked——2026-09-10 17:3x 通道 3 按通道 1 两条裁决改写（task-bc04bfc2；用户 17:0x 经队列授权「你自决」，读法在 `.scratch/tasks.md` 16:5x–17:0x 节）：「要裁的」1 取**乙**（择优作 06 编排的前置步）并带一条编排输入的形状约束，「要裁的」2 **另立 [`29`](./29-channel-selection-result-to-label-transaction-basis-translation.md)**；本票 Blocked by 29，29 进 main 后转 ready-for-agent。裁决原文见「要裁的」下「裁决」，实施判据已按裁决补齐。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；只写票面，未动代码
+Blocked by: 无（29 已进 main `32778486`；此前 Blocked by 29——候选标识 → 七类依据引用的翻译适配器，乙路的前置步没有它接不到 `Establish`）
 
 ## 事实（`c7e3522c` 上量，逐符号名）
 
