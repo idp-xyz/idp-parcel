@@ -1,7 +1,7 @@
 # CC 没有 inbox：SA 发出的资金事实信封到不了 `ReceiveFundsFact`，税费付款核对只能靠测试喂事实
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：SA 读口按键取（租户 + 引用 + 版本）、走只读口不读写侧也不读目录列表（见「要裁的」下「裁决」），本票再无待裁问题；开工仍等 02 落地。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md)（没有那封信封，消费者无物可收）
 
 ## 缺口（取证于 `3f485e97`）
@@ -40,6 +40,12 @@ Blocked by: [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md)（
 ## 要裁的
 
 1. **SA 读口用哪个**：`ports.ExternalFundsFactStore` 是 SA 内部写侧登记面，消费侧适配器读它还是读 `catalogue_read.go` 的 `ExternalFundsFactCatalogueRow` 目录读口——前者是按键取一条，后者是列表。归 SA owner 一句（CC 是消费方，形照 PS 读 PC 的消费侧适配器）。
+
+### 裁决
+
+（通道 1 推送方裁、通道 5 写入，2026-09-10 17:0x；task-b941ce87 分类 A、task-9a2ff746 落笔。A 类不落 ADR。）
+
+- **1 → 按键取（租户 + 资金事实引用 + 采用版本），走 SA 的只读口；既不读写侧 `ExternalFundsFactStore`，也不读目录列表。** SA 今天若没有按键取一条的只读半边，就在 SA `ports` 补一个只读视图（形照 PS 的 `LabelTransactionsByParcelView` 那种只读视图：一口一问、不拓宽写口），CC 消费侧适配器 `adapters/settlementaccounting/` 实现 CC 自己的端口去调它。**取信封所指的那一版，不取 latest**（票 lc/24 的教训：信封先后与版本先后不同源，按 latest 读会把后到的更正当成原事实）。补只读口这一步属 SA 地盘，动前占号；单一权威仍在 SA，CC 登记册只存引用 + 核对所需维度（票面红线不变）。
 
 ## 参照
 

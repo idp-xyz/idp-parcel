@@ -1,7 +1,7 @@
 # 放行门禁核对不读税费付款核对：`VerifyReleaseGate` 的依赖里没有 `DutyVerificationStore`，「税费付款」那一道门禁今天只能由调用方口头交进来
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：折法是登记进来的规则（三态各自接受集合，无默认；[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三）、门禁记录加一列核对版本引用（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -41,6 +41,13 @@ Blocked by: 无
 
 1. **三态怎么折成一道门禁**：（已覆盖 · 无差额 · 有效）才算满足，还是「超额」也算、「部分覆盖」按真实程序定——CONTEXT 只说分别表达，没说门禁怎么读；真实规则是实例半边，机制半边要裁的是「折法是登记进来的规则（门禁目录一行）还是编排常量」。归 CC owner。
 2. **门禁记录要不要多一列核对版本引用**：ADR 层面是「引用还是快照」；本票倾向引用（CC 自己的表，同上下文内引用不违反 ADR-0013）。归 CC owner。
+
+### 裁决
+
+（1 由用户 17:0x 授权、通道 5 按 CC owner 口径代裁并落 [ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三；2 是 A 类由通道 1 推送方裁；通道 5 写入，2026-09-10 17:2x；task-b941ce87 分类、task-9a2ff746 落笔。拿不准的在 ADR「越权风险点」3 / 4。）
+
+- **1 → 折法是登记进来的规则，不是编排常量；规则挂门禁目录既有登记册（`GateConditionRegistry` 那一族，范围 / 动作 / 边界三维键），这一道的目录行登规则而不登结论性认定。** 规则正文两种形之一：「税费付款不构成本动作在本边界的前置条件」，或三个接受集合——覆盖 ⊆ {无覆盖, 部分覆盖, 已覆盖}、差额 ⊆ {无差额, 不足, 超额}、有效性 ⊆ {有效, 失效}，三态各落在自己的接受集合内才满足。`待确认` / `冲突` 不可登记为接受，三态任一为它们时该道门禁未决并指名；没有付款核对版本同样未决；目录里没有这一道的规则行 → 答「规则未配置」诚实停点，不取任何默认折法。理由：CC CONTEXT「税费支付是否是放行前置条件，取决于当前监管程序的适用规则；本上下文不得统一假设『先税后放』或『先放后税』」与 AGENTS 红线「未确认参数保持可配置或显式未决」同时排除常量；「三态分别表达」→ 门禁记录带三态原值不带合成布尔。规则取值属实例半边 `PAR-CUS-0x`。做法 3「裁前只做有核对记引用 / 无核对未决」由此改为「有规则且有核对 → 按规则折；无规则 → 规则未配置；无核对 → 未决」。
+- **2 → 加一列核对版本引用（引用，不快照）。** 同上下文内引用，[ADR-0013](../../../docs/adr/0013-pricing-owns-versioned-external-reference-series.md) 的「引用 vs 快照」判据只约束跨上下文的外部数值序列；本票红线本已写「门禁记录带三态原值 + 引用」。新迁移序号开工时重取、票面写明。
 
 ## 参照
 

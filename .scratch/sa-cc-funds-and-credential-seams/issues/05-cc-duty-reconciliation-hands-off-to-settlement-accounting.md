@@ -1,7 +1,7 @@
 # UC-CC-009 的税费付款核对形成后不向 `settlement-accounting` 交接：`VerifyPayment` 落库即止，SA 的实际代垫成立判断拿不到「关务税费及付款核对」这一项输入
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：分区主体取租户 / 申报范围、SA 侧消费者另立 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md)（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -43,6 +43,13 @@ Blocked by: 无
 
 1. **分区主体**：租户 / 申报范围（同范围的核对版本有序）还是租户 / 监管核定税费版本。归 CC owner，一句。
 2. **SA 侧消费者归谁立**：本目录再加一张，还是并进 SA 的 `UC-SA-001` 实际代垫编排票（今天那条编排是否存在要先核 `assess_advance_recovery.go`）。归 SA owner。
+
+### 裁决
+
+（通道 1 推送方裁、通道 5 写入，2026-09-10 17:0x；task-b941ce87 分类两条均 A、task-9a2ff746 落笔。A 类不落 ADR。）
+
+- **1 → 租户 / 申报范围。** 同票 02 的口径：「ID 管幂等、分区键管顺序：同一主体的版本链排一条队」（[ADR-0069](../../../docs/adr/0069-customs-case-chain-ordering-absorbed-by-reread-and-retry.md) 决定二）；核对版本按申报范围逐笔形成（CC CONTEXT「按真实程序逐范围分别形成覆盖状态、差额状态和有效性状态」），有版本链的主体是「这一申报范围的付款核对」，不是税费版本（税费更正只是新核对版本的来源之一）。主体名「租户 / 申报范围」按 [ADR-0074](../../../docs/adr/0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md) 决定五进中心登记表，随本票落地同笔。
+- **2 → 本目录加一张 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md)「SA 消费付款核对信封 → 接 `assess_advance_recovery.go`」。** `internal/settlementaccounting/application/assess_advance_recovery.go` 已存在（通道 5 于 66cad4c4 核），消费者接它即可，不重开已 resolved 的 UC-SA-001 票；SA CONTEXT「不由任一单项输入直接推导」仍由那条编排守，消费者只译不判。
 
 ## 参照
 

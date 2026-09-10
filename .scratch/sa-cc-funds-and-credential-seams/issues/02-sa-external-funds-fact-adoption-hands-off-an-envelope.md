@@ -1,7 +1,7 @@
 # SA 的外部资金事实采用不发信封：`map_external_funds.go` 采用一条事实后 Outbox 里什么都没有，CC 的税费付款核对拿不到它
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：分区主体取租户 / 资金事实引用、更正 / 撤销复用同一事件类型带回指（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -43,6 +43,13 @@ Blocked by: 无
 
 1. **分区主体**：租户 / 资金事实引用（MCP-3 建议）还是租户 / 申报范围——前者让同一事实的更正链有序，后者让同范围多笔事实有序；CC 核对按范围逐笔判，本票倾向前者。归 SA owner，一句。
 2. **更正 / 撤销复用同一事件类型**还是另开 `*.superseded`：仓内先例是核销「applied / reversed」两型分开；本票倾向同型带回指（事实本身就是新版本）。归 SA owner。
+
+### 裁决
+
+（通道 1 推送方裁、通道 5 写入，2026-09-10 17:0x；task-b941ce87 分类两条均 A、task-9a2ff746 落笔。A 类不落 ADR。）
+
+- **1 → 租户 / 资金事实引用。** 口径是仓内既有的「ID 管幂等、分区键管顺序：同一主体的版本链排一条队」（[ADR-0069](../../../docs/adr/0069-customs-case-chain-ordering-absorbed-by-reread-and-retry.md) 决定二「分区键收窄到业务主体」；SA `supplier_bill_handoff.go` / `operating_handoff.go` 头注同句）。SA CONTEXT「外部资金事实撤销、更正或退回时……追加映射更正」——更正链是同一事实的版本链，主体就是资金事实；同范围多笔事实之间没有先后可言（CC 按范围逐笔核对，每笔各自成核对来源）。主体名「租户 / 资金事实」按 [ADR-0074](../../../docs/adr/0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md) 决定五进中心登记表，随本票落地同笔。
+- **2 → 同一事件类型带回指。** 两侧 CONTEXT 已定语义：SA 更正 / 撤销是新事实回指原事实；CC「资金退回、付款撤销或外部资金事实更正只作为重新核对的来源事实」——消费方对三者一视同仁地重新核对，不需要按类型分路。核销 applied / reversed 两型是两个生命周期态而非同一事实的新版本，不构成反例。载荷带回指（原事实引用）由消费方按引用读 SA 只读口取事实内容与更正关系。
 
 ## 参照
 

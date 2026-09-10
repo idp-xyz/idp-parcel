@@ -1,8 +1,8 @@
 # BUY 评价已发出的信封没有 SA 侧消费者：`parcel-pricing.evaluation.recorded` 落进 Outbox 后无人接，`FormSupplierExpectedCostHandler` 只有测试调得到
 
 Category: enhancement
-Status: draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
-Blocked by: 无
+Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：「要裁的」1 取 (c)，本票范围是「信封到未决」，三件引用等 [08](08-sa-evaluation-request-orchestration-records-source-references.md)（见「要裁的」下「裁决」）。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Blocked by: 无（(c) 范围不等 08；08 落地后「形成」那条路另补）
 
 ## 缺口（取证于 `3f485e97`）
 
@@ -34,7 +34,7 @@ Blocked by: 无
 ## 完成判据
 
 1. `git grep -w NewFormSupplierExpectedCostHandler -- cmd/` 有非测试调用点（dispatch 装配）。
-2. 应用层：BUY 信封 → 形成 / 未决两条路各有用例；非 BUY 信封不处理。
+2. 应用层：BUY 信封 → 未决并指名「等评价请求记录（票 08）」一条路有用例；「形成」那条路等 08 落地后由 08 或其后继票补，本票不做；非 BUY 信封不处理。
 3. 真库：`cmd/parcel-dispatch` 装配用例一正一反（含 DSN PASS，无 DSN SKIP）。
 4. 基线不加宽；机制清点 tip 重生成（消费缝新增 SA→PP 一组）。
 
@@ -45,6 +45,10 @@ Blocked by: 无
 ## 要裁的
 
 1. **三件引用从哪来**：发生项（TF）、费用项目、供应商协议引用不在信封里。选项 (a) 先立 UC-SA-002 步 2「结算提交主要范围、计算目的和合格来源引用」那条请求评价的编排，评价请求本身记下三件、消费者按评价引用回查；(b) 消费者从 TF 收费发生项登记册按评价的输入反查；(c) 本票只做「信封到未决」，三件等 (a) 另票。归 SA owner。
+
+### 裁决
+
+- **1 → (c) + 立 [08](08-sa-evaluation-request-orchestration-records-source-references.md)**（通道 1 推送方裁、通道 5 写入，2026-09-10 17:0x；task-b941ce87 分类 B、task-9a2ff746 落笔）。本票只做「信封到未决」：消费者收 BUY 信封、按评价引用取评价、对「命令齐不齐」答 `ExpectedCostUndecided` 并指名等评价请求记录；三件引用由 08「UC-SA-002 步 2 请求评价编排（评价请求记下三件引用）」提供，08 是实现 UC-SA-002 步 2 已写明的「结算提交主要范围、计算目的和合格来源引用」。**(b) 否**：SA→TF 新跨上下文读口要动 CONTEXT-MAP，且按评价输入反查登记册是推导不是引用（SA CONTEXT「结算输入已接收……的采用版本」——采用的是引用，不是反查出来的匹配）。本票 Status 转 ready-for-agent（(c) 范围），完成判据 2 随改；08 立票时若冒出 UC 空白列进 08 的「要裁的」。
 
 ## 参照
 
