@@ -13,18 +13,18 @@
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 159 | 155 | 18 | 30 | 8 | 16 |
+| parcelshipment | 160 | 156 | 18 | 30 | 8 | 16 |
 | partycommercial | 121 | 133 | 9 | 33 | 1 | 26 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 81 | 61 | 12 | 38 | 7 | 7 |
 | transportfulfillment | 132 | 123 | 24 | 34 | 10 | 22 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 903 | 859 | 115 | 249 | 51 | 122 |
+| **合计** | 904 | 860 | 115 | 249 | 51 | 122 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 57、测试 80。
 
-## 跨上下文消费缝：22 组，61 个生产文件
+## 跨上下文消费缝：22 组，62 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -35,7 +35,7 @@
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 4 |
 | parcelshipment | parcelpricing | 3 |
-| parcelshipment | partycommercial | 16 |
+| parcelshipment | partycommercial | 17 |
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 2 |
 | parcelshipment | transportfulfillment | 4 |
@@ -104,7 +104,7 @@
 | visibilityexception | 8 |
 | **合计** | 17 |
 
-## 端口：声明 376 个；基线口径缺 15，精确口径缺 9
+## 端口：声明 376 个；基线口径缺 14，精确口径缺 8
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -112,7 +112,6 @@
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.CurrentFinalView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.FinalOutcomes）
 - `parcelshipment.LabelChannelGateway` 
-- `parcelshipment.LabelValidityRuleView` 
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
@@ -127,7 +126,6 @@
 精确口径缺（无具体类型完整实现）：
 
 - `parcelshipment.LabelChannelGateway` 
-- `parcelshipment.LabelValidityRuleView` 
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
 - `settlementaccounting.ContractResponsibilityView` 
