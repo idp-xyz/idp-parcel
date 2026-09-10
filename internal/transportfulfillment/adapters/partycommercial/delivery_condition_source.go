@@ -52,7 +52,8 @@ type DeliveryConditionReferenceSource interface {
 //   - PS 的「没有」：对象不属任何已接受委托的成员集合（集运单元、不可见对象、仅已提交），没有采用的合同可指——要去
 //     parcel-shipment 那一侧问这个对象为什么不在册；
 //   - PC 的「没有」：闭包在场、合同也采用了，只是服务产品与客户合同两层都没登交付条件声明——商业责任方去 party-commercial
-//     登声明（今天 PC 没有这一族，每一份都会答这一格，那是真话）。
+//     登声明（这一族的表与写口 party-commercial-context-gaps/11 已落，今天缺的是租户登的声明——实例半边；没有租户
+//     登过之前每一份都会答这一格，那是真话）。
 //
 // 执行器今天只有一格 REQUIREMENT_MISSING / DELIVERY_CONDITION 承接两行；要分子原因是 TF 结果形状的事，等三条缝都接上
 // 再看要不要统一加（票面同一步写的默认判据），届时改这里两行与执行器，不改端口。

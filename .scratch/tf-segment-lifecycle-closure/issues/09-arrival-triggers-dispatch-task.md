@@ -1,8 +1,8 @@
 # 到达事实触发建立派送任务：触发条件先裁
 
 Category: enhancement
-Status: in-progress——**转父票**（2026-09-07，通道 4，task-79675845）。四条裁决里 ①②③ 已落（派送段声明建模、ADR-0114、段服务动作、触发执行器，见「完成记录」）；④ 的三条输入缝各自成票 [12](12-delivery-place-reference-seam-parcel-shipment.md)、[13](13-delivery-window-seam-network-routing.md)、[14](14-delivery-condition-reference-seam-party-commercial.md)（均 draft，等各所有者裁），按 issue-tracker「Complete a parent」——子票全 resolved 本票才 resolved。此前状态行写的「开工前置一次 `/domain-modeling` 与三条缝各自成票」两件都已做
-Blocked by: 12, 13, 14（父票阻塞边；本票自身不再有代码可做——执行器已落，缝接上一条它就往下走一格，不必回本票改代码）
+Status: resolved——2026-09-10 16:4x 推送方（通道 1）收口：三条输入缝 12 / 13 / 14 全部 resolved 并进 main（12 → `0c9b846f`、13 → `ffdf1d5c`、14 → 随本笔），执行器在生产装配下再无 `*_SOURCE_NOT_WIRED` 停点——空登记册一拍走到三个所有者答 `REQUIREMENT_MISSING [DELIVERY_PLACE DELIVERY_WINDOW DELIVERY_CONDITION]`（tf/14 装配用例），三所有者都给时任务形成（tf/14 执行器用例）。按 issue-tracker「Complete a parent」子票全 resolved 本票才 resolved，本票自身无代码改动。此前：in-progress——**转父票**（2026-09-07，通道 4，task-79675845）。四条裁决里 ①②③ 已落（派送段声明建模、ADR-0114、段服务动作、触发执行器，见「完成记录」）；④ 的三条输入缝各自成票 [12](12-delivery-place-reference-seam-parcel-shipment.md)、[13](13-delivery-window-seam-network-routing.md)、[14](14-delivery-condition-reference-seam-party-commercial.md)（均 draft，等各所有者裁），按 issue-tracker「Complete a parent」——子票全 resolved 本票才 resolved。此前状态行写的「开工前置一次 `/domain-modeling` 与三条缝各自成票」两件都已做
+Blocked by: 无（原阻塞边 12 / 13 / 14 均已进 main；父票阻塞边解除于 2026-09-10 16:4x）
 
 ## 完成记录（分支 `mcp4-tf09`，基 `origin/main` = `299f2a2e`；进 main 后的 SHA 由 MCP-1 重放时补记）
 
