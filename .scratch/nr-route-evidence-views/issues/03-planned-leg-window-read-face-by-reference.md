@@ -1,7 +1,7 @@
 # 计划履约段引用与按引用取段窗口的窄读口（`network-routing` 侧，供 TF 派送时间窗口缝消费）
 
 Category: enhancement
-Status: ready-for-agent——由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 决定一派生（2026-09-09，通道 5 代裁，task-8f6d8f94）；票 [tf-segment-lifecycle-closure/13](../../tf-segment-lifecycle-closure/issues/13-delivery-window-seam-network-routing.md) 以本票为阻塞边
+Status: in-progress——2026-09-10 11:1x 通道 5 认领（单 task-a8cbfc83-3174-46be-b46c-5117d772d087），分支 `mcp5-nr03` 基 `84e89dc7`。此前：ready-for-agent——由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 决定一派生（2026-09-09，通道 5 代裁，task-8f6d8f94）；票 [tf-segment-lifecycle-closure/13](../../tf-segment-lifecycle-closure/issues/13-delivery-window-seam-network-routing.md) 以本票为阻塞边
 Blocked by: 无
 
 ## 缺口
