@@ -1,8 +1,8 @@
 # 26 面单交易定案那一拍 → `JudgeLabelServiceFinalHandler`：同一次调用里判，还是落库后交一封信再判
 
 Category: enhancement
-Status: draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 两条路的代价并列在「要裁的」，本票不自己定
-Blocked by: 无（机制半边：两条路任一都能在替身上做出来并测到）。**生产可达随 [`28`](./28-channel-selection-composition-root-and-call-entry.md)**：`LabelTransactionHandler` 自身在 `cmd/` 零调用方，本票接上的触发点在组合根落地前没有生产事件流过它——这是事实不是阻塞，票面如实记
+Status: ready-for-agent——2026-09-10 通道 2 按通道 1 派单 task-138ab1c9（用户授权代裁，PS owner 口径）裁「要裁的」两条：1 取**乙**、2 **两拍都触发**，正文在 [ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md)，「做法」按乙写实，见下方「裁决」与「做法（乙）」。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 两条路的代价并列在「两条路」节，留作裁决记录
+Blocked by: 无（机制半边：乙路每一件都能在替身与真库上做出来并测到）。**生产可达随 [`28`](./28-channel-selection-composition-root-and-call-entry.md)**（推送方 2026-09-10 已裁取乙：整条写链一个组合根）：`LabelTransactionHandler` 自身在 `cmd/` 零调用方，本票接上的触发点在组合根落地前没有生产事件流过它——这是事实不是阻塞，票面如实记；06 编排的事务壳（本票「做法」第 0 步）由 `28` 的组合根立，本票只要求它存在并在真库用例里自己开事务
 
 ## 缺口
 
@@ -14,7 +14,7 @@ Blocked by: 无（机制半边：两条路任一都能在替身上做出来并�
 
 **编排今天的形状决定了两条路各要加什么。** `LabelTransactionDeps` 只有 `Transactions`（`LabelTransactionRepository`）与 `Clock` 两口；后四步共用 `advance`：读回 → 转移 → 按预期版本 `Save`——**没有 Transactor、没有 handoff 口、没有任何「之后做什么」的缝**。PS 今天也没有面单交易的任何出向信封（`adapters/postgres/*_handoff.go` 的事件类型里没有 `label-transaction`）。`JudgeLabelServiceFinalCommand` 要委托来源身份与委托标识，而交易聚合只有租户与 `CoveredParcels`（覆盖可跨委托，ADR-0084 决定一）——不论哪条路，都要逐覆盖包裹经 `CurrentAcceptedParcelTargetView.FindCurrentAcceptedByParcel` 反查目标委托（与票 `25` 同一段翻译，可共用一只处理方适配器）。
 
-## 两条路（代价并列，本票不定）
+## 两条路（代价并列——已裁取乙，本节留作裁决记录不改写）
 
 **甲 · 同一次调用内**：`LabelTransactionHandler` 在 `RecordChannelResult`（及「要裁的」2 若裁为两拍，则也在 `AppendFollowUpAction`）`Save` 成功之后，逐覆盖包裹反查目标、折命令、调 `JudgeLabelServiceFinalHandler.Handle`。
 
@@ -35,6 +35,23 @@ Blocked by: 无（机制半边：两条路任一都能在替身上做出来并�
 1. **甲还是乙。** 上面两节是全部代价；本票不给倾向——它牵动 06 编排的事务边界与 28 的组合根形状，归 owner / 产品流程。
 2. **触发点范围**：只 `RecordChannelResult`（定案），还是也含 `AppendLabelFollowUpAction`（作废 / 替代改变关闭路径的输入）。倾向**两拍都触发**：判断本身不写、不形成时无副作用、采用按（租户 + 包裹 + 来源种类 + 来源版本）幂等，多判一次不会多形成一次；不触发作废那一拍，则「成功结果全部作废后沿关闭路径形成终局」要等下一笔交易定案或关闭决定才成，而那两件可能永不发生。
 
+## 裁决
+
+- **谁 / 何时 / 口径**：通道 2，2026-09-10，按通道 1 派单 task-138ab1c9；用户 17:0x 经队列授权「你自决」，B 类按 **PS owner 口径**代裁——硬句不改、拿不准的单列越权风险点供 owner 事后复核。正文与越权风险点在 [ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md)，此处只对号。
+- **要裁的 1 → 取乙**（ADR-0134 决定一、三）。理由四条：① 06 编排的调用方握着 ADR-0090「答案未确定不得重发」在等回执，N 个包裹的终局判断串在写路径上会把一个读口故障压到出向那一侧；② 甲今天「同事务」不成立，是「同一次调用、非原子」——结果已落、判断途中失败 → 判断丢失且无重试载体；乙有载体（inbox 重投）、失败不后退（ADR-0029）；③ 三个触发点（`25` 收寄本就是 inbox、本票定案、`27` 关闭 / 重开）共用一只处理方适配器 + 一套消费结论翻译（决定二）；④ 06 编排头注「不发起任何渠道调用……只留缝」仍真——handoff 是缝不是渠道调用，06 不知道终局判断存在。先例 `ports.FinalOutcomeHandoff` / TF `ExternalTrackingFactHandoff`（意图与登记同事务入队）。**本票原写「两路都要先加事务边界」那一句，ADR-0134 核过**：`LabelTransactions.Insert` / `Save` 与 `outboxintent.EnqueueOnce` 都 `RequireExecutor(ctx)`，同事务是既有约束的直接结果，06 编排**不加 Transactor**，事务由组合根事务壳开（`cmd/parcel-api` 的 `transactionalWithdrawal` 那一族形）。ADR 在票面倾向之上多定了三件：**一封一包裹**（ID 含包裹、分区键租户加包裹，让 lc/26 完成判据 2「各自成消费」成立）、**入队失败即整步回滚**（不照 `FormParcelFinalHandler.handOff` 留续办引用）、**两拍共用一个事件类型**——三件都列在 ADR 越权风险点。
+- **要裁的 2 → 两拍都触发**（ADR-0134 决定四；A 类，推送方已裁，ADR 照写）。
+
+## 做法（乙，按 ADR-0134；开工时以 ADR 决定号为准，本节是它在本票地盘上的展开）
+
+0. **事务边界不在本票加**：06 编排不持 Transactor；生产上由 `28` 的组合根事务壳开事务。本票的真库用例自己用 `db.Transactor().WithinTransaction` 包住一次 `RecordChannelResult` / `AppendFollowUpAction`，断言 outbox 行与交易行同一事务落地；另加一条「不在事务里调用 → `Save` 处 error、outbox 零行」的用例，把 fail-closed 钉住。
+1. **端口**（`internal/parcelshipment/ports/`，纯加法）：`LabelTransactionHandoff` 一族——意图带（租户、交易标识、包裹、`Revision()`、哪一拍），形照 `FinalOutcomeHandoffIntent`；头注写明它是「值得判一次」的指针，不是事实副本。
+2. **outbox 适配器**（`adapters/postgres/`，新文件，形照 `final_outcome_handoff.go`）：事件类型一个（两拍共用，名字归实施，`parcel-shipment.label-transaction.` 前缀）；事件 ID = 租户 / 交易标识 / 包裹 / revision 加类型段（版本必须在里面，理由同 TF `externalTrackingFactEventID` 头注）；Subject = 包裹；**分区键 = 租户 + 包裹**（同 `OutboxFinalOutcomeHandoff` 的理由：同一包裹的多拍在一条队里）；载荷指针式 `{tenantId, transaction, parcel, revision, beat}`；经 `outboxintent.EnqueueOnce` 入队。
+3. **06 编排**（`operate_label_transaction.go`）：`LabelTransactionDeps` 长一格 handoff 口；`advance` 长一个写后尾段参数——`RecordChannelResult` 与 `AppendFollowUpAction` 在 `Save` 成功后按 `CoveredParcels()` 逐件调 handoff；`Establish` / `SubmitToChannel` / `MarkResultUncertain` 不入队；`Save` 失败或版本冲突不入队；**入队返错 → 本步 error 上抛**（事务回滚，调用方重放），不交回 `APPLIED`。两处头注改口：「五步同一个 handler……缝一条都不少」改成写明后两步多一个写后入队的尾段；「`LabelTransactionDeps` 只有仓储与时钟两项」改成三项并写明第三项为何不是渠道调用。
+4. **inbox 消费者**（`adapters/inbox/`，新文件，形照 `effective_delivery_consumer.go`）：稳定消费者名与既有各路不同；事件类型字符串由消费方自己写出；`Decode` 三维（租户 + 交易 + 包裹）缺一即 `ErrPoisonEnvelope`，`beat` 与 `revision` 不读（那是事件 ID 的事）；门走 `inboxconsume.New`。
+5. **处理方适配器**（新文件，落 `adapters/` 下一个三路可共用的包；`25` / `27` 日后在同一只上加口）：核 = 按（租户 + 包裹）`CurrentAcceptedParcelTargetView.FindCurrentAcceptedByParcel` 反查 → 折 `JudgeLabelServiceFinalCommand{Identity, ShipmentRequestID, Parcel}`（不带 `FirstEffectivePickup`）→ `Handle` → 五值译成消费结论（`25` 做法 3 那张表，ADR-0134 决定二逐格）：`LabelServiceFinalAdopted` → `Adoption()` 交 `finalconsume.Consumption`；`NotFinal` / `CancellationStands` → 已消费；`JudgmentUndecided` → 未决哨兵（返错重投）；`JudgmentNotAccepted` → 响亮报错不吸收。反查不中 → `ErrParcelTargetNotFound`。**不读回交易**：判断读全册且读当下，信封里的交易标识与 revision 只用于幂等与追溯。
+6. **装配**（`cmd/parcel-dispatch/assemble.go`）：路由表加该事件类型一行；`JudgeLabelServiceFinalDeps` 六口按 `25` 做法 4 那一段装（`Validity` 按 ps-port-remainder/01 是否进 main 填适配器或 nil，装配处注释写明是哪一种）；`assemble_test.go` 补一条「该类型有路由」。`cmd/parcel-api` 侧 handoff 适配器装进 `LabelTransactionDeps` 归 `28`，本票只保证装配函数存在且不接受 nil。
+7. **幂等 / 失败不后退**：inbox 键管一次投递只处理一次；判断本身不写；采用按四维幂等——来源版本 = 生效关闭决定标识（关闭路径），同一份重放返原；消费者返错 → dispatch 重投；毒丸 → 入账交 nil；`ErrParcelTargetNotFound` 按交付适配器那一格办。
+
 ## 红线
 
 - 不动 `JudgeLabelServiceFinal` 的领域判断与 `Finalized()` 谓词；不给 `LabelTransaction` 加任何「已判终局」列（ADR-0084 决定四同理）。
@@ -42,19 +59,20 @@ Blocked by: 无（机制半边：两条路任一都能在替身上做出来并�
 - 不为让路走通而在 `LabelTransactionHandler` 里猜委托：反查不中如实报 `ErrParcelTargetNotFound`（照交付适配器）。
 - 不写任何真实渠道、账号、结果码（实例半边 `PAR-INT-02`）。
 
-## 完成判据（非作者评审逐项对；按裁定的那条路取对应一组）
+## 完成判据（非作者评审逐项对；乙路一组，甲路判据已随裁决作废）
 
-1. 裁定的触发拍上，`Save` 成功后判断被调用（甲：替身记录调用；乙：outbox 里有一封且事件 ID 带 revision），`Save` 失败或版本冲突时**不**调用 / 不入队——各有用例。
-2. 多包裹交易逐包裹各判一次，命令不带 `FirstEffectivePickup`；反查不中那一件不拖累其余包裹（乙：各自成消费；甲：写明是否继续）。
-3. `LabelServiceFinalOutcome` 五值逐格译成调用方 / 消费者结论，与票 `25` 同一张表（若共用适配器，用例证共用）。
-4. 乙路另加：inbox 消费者三维缺一毒丸、事件类型不符拒收；`cmd/parcel-dispatch/assemble.go` 路由表有该类型；`assemble_test.go` 补一条。
-5. 06 编排头注「五步同一个 handler……」与 `LabelTransactionDeps` 头注「只有仓储与时钟两项」随改动改口，不留旧话。
-6. `gofmt -l` 空、`go build` / `go vet` 退 0、`go test -count=1 ./...` 绿并注明含不含真库（乙路动 outbox 入队，真库必须实跑）。
-7. 完成记录写明：`LabelTransactionHandler` 在 `cmd/` 仍无调用方（等 `28`），本票的触发点因此暂无生产事件流过——与 ps-port-remainder/01 同款诚实句。
+1. `RecordChannelResult` 与 `AppendFollowUpAction` 两拍 `Save` 成功后，outbox 里每件覆盖包裹各一封、事件 ID 含 revision 与包裹、分区键 = 租户 + 包裹；`Save` 失败或版本冲突时**不**入队；同一拍重放不出第二封（`EnqueueOnce`）；两拍各自成封（revision 不同）——各有用例，真库实跑。
+2. 不在事务里调用 → `Save` 处 error 且 outbox 零行；入队返错 → 本步 error、交易行未落（事务回滚）——两条 fail-closed 用例。
+3. 多包裹交易逐包裹各成一次消费，命令不带 `FirstEffectivePickup`；反查不中那一件落 `ErrParcelTargetNotFound`，其余包裹的消费不受影响。
+4. `LabelServiceFinalOutcome` 五值逐格译成消费结论，与票 `25` 做法 3 同一张表（共用核，用例逐格）。
+5. inbox 消费者三维缺一毒丸、事件类型不符拒收、消费者名与既有各路不同；`cmd/parcel-dispatch/assemble.go` 路由表有该类型；`assemble_test.go` 补一条。
+6. 06 编排头注「五步同一个 handler……」与 `LabelTransactionDeps` 头注「只有仓储与时钟两项」随改动改口，不留旧话；`Establish` / `SubmitToChannel` / `MarkResultUncertain` 三步不入队有用例钉住。
+7. `gofmt -l` 空、`go build` / `go vet` 退 0、`go test -count=1 ./...` 绿并注明含不含真库（本票动 outbox 入队，真库必须实跑）。
+8. 完成记录写明：`LabelTransactionHandler` 在 `cmd/` 仍无调用方（等 `28`），本票的触发点因此暂无生产事件流过——与 ps-port-remainder/01 同款诚实句；`production_wiring_baseline.txt` 若因新增工厂无调用点而红，按既有纪律加行并写明等 `28`。
 
 ## 地盘
 
-`internal/parcelshipment/application/operate_label_transaction.go` 与其测试（两路都要动它）；乙路另加 `internal/parcelshipment/ports/`（handoff 口，纯加法）、`internal/parcelshipment/adapters/postgres/`（新 handoff 文件）、`internal/parcelshipment/adapters/inbox/`（新消费者）、`internal/parcelshipment/adapters/transportfulfillment/` 或新包（处理方适配器，若与 `25` 共用则在 `25` 那只上加口）、`cmd/parcel-dispatch/`；本票面。**不动** `domain/**`。
+`internal/parcelshipment/application/operate_label_transaction.go` 与其测试；`internal/parcelshipment/ports/`（handoff 口，纯加法）、`internal/parcelshipment/adapters/postgres/`（新 handoff 文件）、`internal/parcelshipment/adapters/inbox/`（新消费者）、处理方适配器所在的新包（三路共用的核先在本票落；`25` / `27` 日后在同一只上加口）、`cmd/parcel-dispatch/`（`assemble.go` 路由表与一个装配函数 + `assemble_test.go` 一条）；本票面。**不动** `domain/**`、`cmd/parcel-api/**`（事务壳与 `LabelTransactionDeps` 的生产装配归 `28`）。
 
 ## 参照
 
@@ -63,3 +81,4 @@ Blocked by: 无（机制半边：两条路任一都能在替身上做出来并�
 ## Comments
 
 - 2026-09-10 · 通道 3（task-b5dba034，取证锚 `c7e3522c`）：立票。**只写票面，未动代码。** 能力边界：读过 `operate_label_transaction.go` 全文、`judge_label_service_final.go` 全文、`Finalized` / `ParcelResult` / `FollowUpActions` 三处访问器与头注、PS 全部 `*_handoff.go` 的事件类型常量、`LabelTransactionRepository` 头注；**没读** `FormParcelFinalHandler.Handle` 全文与 `bentoapp.Transactor` 在 PS 各编排里的用法——甲路「同事务是否可达」的那一句因此写成「实施时核」而不是结论。
+- 2026-09-10 · 通道 2（task-138ab1c9，分支 `mcp2-adr0134` 基 `062f5228`；只写票面，未动代码）：**裁决落 [ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md)，要裁的 1 取乙、2 两拍都触发，本票转 ready-for-agent。** 「做法（乙）」按 ADR 四决定在本票地盘上展开；完成判据改为乙路一组。上一条能力边界里留的「同事务是否可达」这一问 ADR 核过：`LabelTransactions.Insert` / `Save` 与 `outboxintent.EnqueueOnce` 都 `RequireExecutor(ctx)`，同事务由既有约束保证，编排不加 Transactor、事务由组合根事务壳开。ADR 在票面倾向之上多定的三件（一封一包裹 / 入队失败回滚 / 两拍一个事件类型）与窗口内读面旧终局、三路共用适配器是否压扣差异，共六条越权风险点列在 ADR 末，归 owner 复核；任一条被推翻都是本票「做法」改一步，不动裁决方向。**能力边界**：没读 `inboxconsume.Gate` 全文与 `bentoapp.Transactor` 实现，「消费者在事务里跑」按 `cmd/parcel-dispatch/assemble.go` 里 PS 既有的每一只 inbox 消费者都以 `db.Transactor()` 装配这一事实判。
