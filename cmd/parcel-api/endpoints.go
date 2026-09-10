@@ -63,6 +63,7 @@ func assembleBusinessEndpoints(
 	labelTransactions shipmenthttp.LabelTransactionsReader,
 	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionsReader,
 	cancellation shipmenthttp.CancellationHandler,
+	continuedAttemptDecisions shipmenthttp.ContinuedAttemptDecisionHandler,
 	reception nodeopshttp.ReceptionHandler,
 	nodeOperationsRecords nodeopshttp.ReviewCatalogueReader,
 	delivery tfhttp.DeliveryHandler,
@@ -195,6 +196,10 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
+		// 受控关闭 / 重开决定两个命令口（票 label-channel/30）：同一只编排两条命令，运营侧写行，同挂字面量
+		// UnconfiguredIntake{}；请求方与货主账户属 `PAR-INT-01`（实例半边），隔离读准入换不了写行。
+		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
+		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
 		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
 		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
 		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},

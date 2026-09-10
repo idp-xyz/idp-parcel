@@ -144,6 +144,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	continuedAttemptDecisions, err := buildContinuedAttemptDecisionOrchestration(db)
+	if err != nil {
+		return err
+	}
 	reception, err := buildReceptionOrchestration(db)
 	if err != nil {
 		return err
@@ -405,6 +409,7 @@ func run(logger *slog.Logger) error {
 			labelTransactions,
 			channelSelectionDecisions,
 			cancellation,
+			continuedAttemptDecisions,
 			reception,
 			nodeOperationsRecords,
 			delivery,

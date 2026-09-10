@@ -1552,6 +1552,24 @@ func (unwiredCancellation) Handle(
 	return shipmentapp.CancelParcelResult{}, errOrchestrationNotWired
 }
 
+// unwiredContinuedAttemptDecisions 是关闭 / 重开决定写面的占位（票 label-channel/30）：两条命令同一只，装配测试
+// 用它证端点表两行都接到了处理器、且未配置 Intake 拒在编排之前。
+type unwiredContinuedAttemptDecisions struct{}
+
+func (unwiredContinuedAttemptDecisions) FormControlledClosure(
+	context.Context,
+	shipmentapp.FormControlledClosureCommand,
+) (shipmentapp.ContinuedAttemptDecisionResult, error) {
+	return shipmentapp.ContinuedAttemptDecisionResult{}, errOrchestrationNotWired
+}
+
+func (unwiredContinuedAttemptDecisions) FormReopening(
+	context.Context,
+	shipmentapp.FormReopeningCommand,
+) (shipmentapp.ContinuedAttemptDecisionResult, error) {
+	return shipmentapp.ContinuedAttemptDecisionResult{}, errOrchestrationNotWired
+}
+
 type unwiredClaims struct{}
 
 func (unwiredClaims) ReceiveClaim(
