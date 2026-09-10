@@ -1,7 +1,7 @@
 # 派送要求缝二：计划履约段时间窗口（`network-routing`）——`DeliveryWindowSource` 的消费侧适配器
 
 Category: enhancement
-Status: ready-for-agent——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）；「要裁的」三问已由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 答复（2026-09-09，通道 5 代裁，task-8f6d8f94），裁决摘要与做法见下
+Status: in-progress——2026-09-10 14:0x 通道 5 认领（单 task-247c5d4d-13b2-40a6-a774-75ab1d0eaa04），分支 `mcp5-tf13` 基 `c0cdebba`；先做不碰共享文件的适配器新包，再按序做端口三步法与接线。此前 ready-for-agent——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）；「要裁的」三问已由 [ADR-0131](../../../docs/adr/0131-planned-leg-is-referenced-by-plan-version-and-ordinal-and-the-delivery-window-seam-answers-content-not-applicability.md) 答复（2026-09-09，通道 5 代裁，task-8f6d8f94），裁决摘要与做法见下
 Blocked by: [nr-route-evidence-views/03](../../nr-route-evidence-views/issues/03-planned-leg-window-read-face-by-reference.md)（NR 侧计划履约段引用值类型 + 按引用取段窗口的窄读口；本票的适配器要逐字对它的拼写与序位起点）
 
 ## 缺口

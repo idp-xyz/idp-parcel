@@ -378,7 +378,14 @@ internal/parcelshipment/domain ParseDeliveryPlaceReference
 # 推送方 2026-09-10 重放注：上一段随票 nr-route-evidence-views/03 进 main 时未记数，此处补——**在 85d238ce
 # 上实测 3**（非注释非空行；其父链基 84e89dc7 为 2），只对该 SHA 成立。同日 ps-port-remainder/06（通道 2）在
 # 自己分支上另加 PS 一条并自记 2→3，两笔先后进 main 后由后进的那一笔在 tip 上重数，不拿两个 3 相加。
-internal/networkrouting/domain ParsePlannedLegReference
+# 2026-09-10 随 tf-segment-lifecycle-closure/13 剪掉 ParsePlannedLegReference——上一段预言的那天到了：
+# internal/transportfulfillment/adapters/networkrouting/delivery_windows.go 的 LoadDeliveryWindow 是它的生产
+# 调用方（把参与关系上搬运的串解回 NR 的引用再问窄读口）。成因三分先分过：全仓该名字只有一处声明
+# （networkrouting/domain/planned_leg_reference.go），不存在「别处同名声明造成误判」那一种，是第二种（调用方
+# 落地）。量法照上面各段：动手前 `git status -- internal/architecture/` 为空，在隔离树 mcp5-tf13 的干净检出
+# c0cdebba 上量得底数 **4**（非注释非空行：parcel-shipment 1、network-routing 1、party-commercial 2），
+# 剪后实测 **3**，两个数锚在同一棵树上，只对该检出成立。NR 段自此又空了——但别把「这一组空了」读成 NR 都接上了，
+# 本门禁只量导出工厂。
 
 
 # —— transport-fulfillment ——
