@@ -40,6 +40,8 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 | [09](issues/09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) | SA inbox 消费付款核对信封 → `AssessAdvanceRecoveryHandler`（05 裁「本目录加一张」） | SA | 05 |
 | [10](issues/10-cc-credential-collaboration-and-verification-read-faces.md) | 凭证 / 协作 / 付款核对三册的读面（伴生列表读口 + 查阅端点 + 管理台读签：凭证进 customs-cases、协作与核对进 customs-restrictions；07 裁「读面另立」）——**resolved，2026-09-10 22:4x 落分支**（`mcp5-sacc10`，代码 tip `0017f49b`、清点 `6b731816`；等非作者评审与进 main） | CC | 无 |
 | [11](issues/11-pp-inbox-consumer-receives-evaluation-request-envelope.md) | PP inbox 消费评价请求信封 → 形成计价输入快照与评价并回指请求（08 裁「走信封」时因 PP 无 inbox 先例另立） | PP | 08 的发信封半边（要裁一条 PP 入口形状，见票） |
+| [12](issues/12-cc-funds-fact-payer-may-be-explicitly-unprovided.md) | CC 入向登记放宽付款人可缺席（03 裁决 2 取 A 时「CC 放宽另立 draft」）；要裁一条「真实程序要求付款人」是实例半边还是登记规则，归 CC owner | CC | 无（draft） |
+| [13](issues/13-cc-correction-version-inbound-registration-and-rereconciliation.md) | CC 入向登记加版本维——SA 更正版本今天到 CC 落成 `内容冲突`、只留 inbox 痕、到不了 UC-CC-009 重新核对（03 非作者评审 Spec ①；与 12 同根异题）；要裁「CC 登记要不要版本维」+ 一条范围题，归 CC owner | CC | 无（draft） |
 
 **留空位、不立票的一件**：放行层的代码映射 `PAR-CUS-01/02`（`receive_external_result.go` 注释「真实代码映射属实例半边，没有它接入侧拆不出种类」）——登记册待提供，到位后接入侧译装出 `ReleaseContent`，编排不改。它在这里只占一行，不成票。
 
