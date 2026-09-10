@@ -31,17 +31,28 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 type UnconfiguredIntake struct{}
 
 var (
-	_ SubmissionIntake             = UnconfiguredIntake{}
-	_ WithdrawalIntake             = UnconfiguredIntake{}
-	_ ShipmentRequestViewsIntake   = UnconfiguredIntake{}
-	_ LabelTransactionQueryIntake  = UnconfiguredIntake{}
-	_ CancellationIntake           = UnconfiguredIntake{}
-	_ ManualReviewCompletionIntake = UnconfiguredIntake{}
-	_ ActiveRejectionIntake        = UnconfiguredIntake{}
-	_ AuthorizedDispositionIntake  = UnconfiguredIntake{}
-	_ SupplementIntake             = UnconfiguredIntake{}
-	_ SourceDataAmendmentIntake    = UnconfiguredIntake{}
+	_ SubmissionIntake               = UnconfiguredIntake{}
+	_ WithdrawalIntake               = UnconfiguredIntake{}
+	_ ShipmentRequestViewsIntake     = UnconfiguredIntake{}
+	_ LabelTransactionQueryIntake    = UnconfiguredIntake{}
+	_ CancellationIntake             = UnconfiguredIntake{}
+	_ ManualReviewCompletionIntake   = UnconfiguredIntake{}
+	_ ActiveRejectionIntake          = UnconfiguredIntake{}
+	_ AuthorizedDispositionIntake    = UnconfiguredIntake{}
+	_ SupplementIntake               = UnconfiguredIntake{}
+	_ SourceDataAmendmentIntake      = UnconfiguredIntake{}
+	_ ContinuedAttemptDecisionIntake = UnconfiguredIntake{}
 )
+
+// IntakeControlledClosure 同上：请求方、货主账户与授权证据整组来自认证结果，采信自报的就是让任何调用方替任何货主签字。
+func (UnconfiguredIntake) IntakeControlledClosure(context.Context, *http.Request) (application.FormControlledClosureCommand, error) {
+	return application.FormControlledClosureCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeReopening 同上。
+func (UnconfiguredIntake) IntakeReopening(context.Context, *http.Request) (application.FormReopeningCommand, error) {
+	return application.FormReopeningCommand{}, ErrAccessChannelNotConfigured
+}
 
 // IntakeSubmission 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeSubmission(context.Context, *http.Request) (application.SubmitShipmentRequestCommand, error) {
