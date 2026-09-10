@@ -1,7 +1,7 @@
 # 派送要求缝一：收件地点引用（`parcel-shipment`）——`DeliveryPlaceSource` 的消费侧适配器
 
 Category: enhancement
-Status: ready-for-agent——三问已裁（2026-09-09，通道 2，task-ddb77473，用户授权 PS owner 口径代裁；见「裁决」，理由与被否替代在 [ADR-0130](../../../docs/adr/0130-delivery-place-reference-is-a-shipment-level-composite-reference-anchored-to-a-source-data-version.md)）；做法与完成判据见下。此前 draft——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）
+Status: in-progress——2026-09-10 13:2x 通道 2 认领（单 task-b5823d32-0393-40a7-bf55-dbc101f543af），分支 `mcp2-tf12` 基 `8bdab82e`（psr/06 已在此 main 上）。此前 ready-for-agent——三问已裁（2026-09-09，通道 2，task-ddb77473，用户授权 PS owner 口径代裁；见「裁决」，理由与被否替代在 [ADR-0130](../../../docs/adr/0130-delivery-place-reference-is-a-shipment-level-composite-reference-anchored-to-a-source-data-version.md)）；做法与完成判据见下。此前 draft——由票 [09](09-arrival-triggers-dispatch-task.md) 裁决④与 ADR-0114 决定三/四拆出（2026-09-07，通道 4，task-79675845）
 Blocked by: [ps-port-remainder/06](../../ps-port-remainder/issues/06-delivery-place-reference-read-face.md)（PS 侧读口与值对象；本票的适配器翻译它的四格，它没落之前本票只能写替身，不能接真）
 
 ## 缺口
