@@ -246,35 +246,84 @@ func TestFinalJudgmentTranslatesDeclaredRows(t *testing.T) {
 		t.Fatalf("judgment = %#v", satisfied)
 	}
 
-	// 面单渠道服务的两格在提供方词汇表里没有行：即便声明已配置，也如实答「未配置」——
-	// 不是「此产品下不形成终局」，也不硬译成某个网络格（票 label-channel/11）。
-	t.Run("label service outcomes are unconfigured until the provider declares them", func(t *testing.T) {
-		for _, kind := range []psdomain.ResponsibilityOutcomeKind{psdomain.LabelServiceOutcome, psdomain.LabelServiceFailure} {
-			labelOutcome, err := psdomain.NewResponsibilityOutcome(psdomain.ResponsibilityOutcomeSpec{
-				Kind:       kind,
-				Parcel:     value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
-				Decision:   value(t, psdomain.NewResponsibilityDecisionReference, "LABEL-SERVICE-FINAL/parcel-1/FINAL_BY_FIRST_PICKUP/TF-7@v1"),
-				Execution:  value(t, psdomain.NewExecutionEvidenceReference, "TF-7@v1"),
-				Version:    value(t, psdomain.NewResponsibilityOutcomeVersion, "v1"),
-				OccurredAt: time.Date(2026, 8, 10, 15, 0, 0, 0, time.UTC),
-			})
-			if err != nil {
-				t.Fatalf("new label service outcome: %v", err)
-			}
-			judgment, configured, err := newStageRules(
-				intakeContentDouble{},
-				finalContentDouble{content: withDelivery, configured: true},
-				nil,
-				nil,
-			).JudgeFinalOutcome(context.Background(), stageIdentity(t), labelOutcome)
-			if err != nil {
-				t.Fatalf("%s: judge: %v", kind, err)
-			}
-			if configured || judgment.Satisfied {
-				t.Fatalf("%s: configured = %v judgment = %#v；提供方还说不出这个词，只能答未配置", kind, configured, judgment)
-			}
-		}
+}
+
+func labelServiceOutcome(t *testing.T, kind psdomain.ResponsibilityOutcomeKind) psdomain.ResponsibilityOutcome {
+	t.Helper()
+	outcome, err := psdomain.NewResponsibilityOutcome(psdomain.ResponsibilityOutcomeSpec{
+		Kind:       kind,
+		Parcel:     value(t, psdomain.NewDeclaredParcelID, "parcel-1"),
+		Decision:   value(t, psdomain.NewResponsibilityDecisionReference, "LABEL-SERVICE-FINAL/parcel-1/FINAL_BY_FIRST_PICKUP/TF-7@v1"),
+		Execution:  value(t, psdomain.NewExecutionEvidenceReference, "TF-7@v1"),
+		Version:    value(t, psdomain.NewResponsibilityOutcomeVersion, "v1"),
+		OccurredAt: time.Date(2026, 8, 10, 15, 0, 0, 0, time.UTC),
 	})
+	if err != nil {
+		t.Fatalf("new label service outcome %s: %v", kind, err)
+	}
+	return outcome
+}
+
+// Covers: PC CONTEXT「面单服务终局规则」词条的面单渠道两格经适配器逐格译成 PS 终局判断（票
+// party-commercial-context-gaps/12，接 label-channel/11「不在本票 · PC 半边」）——非取消终局结果对
+// LABEL_SERVICE_COMPLETED 行、终局失败结果对 LABEL_SERVICE_FAILED 行：有行即满足带声明的终局类型；
+// 只声明网络服务格的规则包对面单格是缺行——「此产品下这种结果不形成终局」带依据，不再是「未配置」；
+// 租户根本没登终局规则才是 found=false。两边同一个词根不是同一个词，翻译只在这里一处。
+func TestFinalJudgmentTranslatesLabelServiceRows(t *testing.T) {
+	labelRows, err := pcdomain.NewFinalRuleContent(stageRulePackage(t), []pcdomain.FinalizationDeclaration{
+		{Outcome: pcdomain.DeclaredLabelServiceCompleted, FinalKind: commercialRule(t, "LABEL_SERVICE_DONE")},
+		{Outcome: pcdomain.DeclaredLabelServiceFailed, FinalKind: commercialRule(t, "LABEL_SERVICE_FAILED_FINAL")},
+	})
+	if err != nil {
+		t.Fatalf("new label service final content: %v", err)
+	}
+	networkOnly, err := pcdomain.NewFinalRuleContent(stageRulePackage(t), []pcdomain.FinalizationDeclaration{
+		{Outcome: pcdomain.DeclaredEffectiveDelivery, FinalKind: commercialRule(t, "NETWORK_SERVICE_DELIVERED")},
+	})
+	if err != nil {
+		t.Fatalf("new network-only final content: %v", err)
+	}
+
+	for _, row := range []struct {
+		kind      psdomain.ResponsibilityOutcomeKind
+		finalKind string
+		declared  string
+	}{
+		{psdomain.LabelServiceOutcome, "LABEL_SERVICE_DONE", "LABEL_SERVICE_COMPLETED"},
+		{psdomain.LabelServiceFailure, "LABEL_SERVICE_FAILED_FINAL", "LABEL_SERVICE_FAILED"},
+	} {
+		t.Run(row.kind.String(), func(t *testing.T) {
+			outcome := labelServiceOutcome(t, row.kind)
+
+			satisfied, configured, err := newStageRules(
+				intakeContentDouble{}, finalContentDouble{content: labelRows, configured: true}, nil, nil,
+			).JudgeFinalOutcome(context.Background(), stageIdentity(t), outcome)
+			if err != nil || !configured {
+				t.Fatalf("declared row: configured = %v err = %v", configured, err)
+			}
+			if !satisfied.Satisfied ||
+				satisfied.Kind.String() != row.finalKind ||
+				satisfied.RuleVersion.String() != "PAR-COM-17/"+row.finalKind {
+				t.Fatalf("judgment = %#v; 有行即满足带声明的终局类型", satisfied)
+			}
+
+			missing, configured, err := newStageRules(
+				intakeContentDouble{}, finalContentDouble{content: networkOnly, configured: true}, nil, nil,
+			).JudgeFinalOutcome(context.Background(), stageIdentity(t), outcome)
+			if err != nil || !configured {
+				t.Fatalf("missing row: configured = %v err = %v；缺行是声明的真话，不是未配置", configured, err)
+			}
+			if missing.Satisfied || missing.Basis.String() != "OUTCOME_NOT_FINAL_FOR_PRODUCT/"+row.declared {
+				t.Fatalf("judgment = %#v; 缺行应不满足带依据", missing)
+			}
+
+			if _, configured, err := newStageRules(
+				intakeContentDouble{}, finalContentDouble{configured: false}, nil, nil,
+			).JudgeFinalOutcome(context.Background(), stageIdentity(t), outcome); err != nil || configured {
+				t.Fatalf("unregistered: configured = %v err = %v；租户未登终局规则才是未配置", configured, err)
+			}
+		})
+	}
 }
 
 type cancellationContentDouble struct {

@@ -64,8 +64,7 @@ func (kind ResponsibilityOutcomeKind) String() string {
 	}
 }
 
-// IsLabelService 说这一格属面单渠道服务那两行。终局规则的提供方（party-commercial 的声明
-// 词汇表）今天只有网络服务四行的词，消费侧适配器据此如实答「未配置」而不是硬译成某个网络格。
+// IsLabelService 说这一格属面单渠道服务那两行（非取消终局结果 / 终局失败结果），与网络服务各格相对。
 func (kind ResponsibilityOutcomeKind) IsLabelService() bool {
 	return kind == LabelServiceOutcome || kind == LabelServiceFailure
 }

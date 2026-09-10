@@ -171,13 +171,6 @@ func (adapter *ServiceStageRulesAdapter) JudgeFinalOutcome(
 	if !configured {
 		return psports.FinalRuleJudgment{}, false, nil
 	}
-	if outcome.Kind().IsLabelService() {
-		// 面单渠道服务的两格（非取消终局结果 / 终局失败结果）在提供方的声明词汇表里今天没有行
-		// ——pcdomain.DeclaredResponsibilityOutcome 只有网络服务四行。如实答「终局规则未配置」：
-		// 这不是「此产品下不形成终局」（那是声明的话，而声明还说不出这个词），也不硬译成某个
-		// 网络格。提供方补词汇表那天这一格删掉、进下面的逐格翻译（票 label-channel/11 记着）。
-		return psports.FinalRuleJudgment{}, false, nil
-	}
 
 	declared, err := declaredOutcomeFor(outcome.Kind())
 	if err != nil {
@@ -280,6 +273,8 @@ func declaredSourceFor(kind psdomain.IntakeSourceKind) (pcdomain.DeclaredIntakeS
 	}
 }
 
+// declaredOutcomeFor 逐格翻译责任结果：网络服务各格与面单渠道服务两格（PS 的「非取消终局结果 / 终局失败结果」
+// 对提供方词汇表的 LABEL_SERVICE_COMPLETED / LABEL_SERVICE_FAILED）。两边同一个词根不是同一个词，翻译只在这里。
 func declaredOutcomeFor(kind psdomain.ResponsibilityOutcomeKind) (pcdomain.DeclaredResponsibilityOutcome, error) {
 	switch kind {
 	case psdomain.EffectiveDeliveryOutcome:
@@ -290,6 +285,10 @@ func declaredOutcomeFor(kind psdomain.ResponsibilityOutcomeKind) (pcdomain.Decla
 		return pcdomain.DeclaredServiceTerminated, nil
 	case psdomain.RegulatoryDispositionExecuted:
 		return pcdomain.DeclaredRegulatoryDisposition, nil
+	case psdomain.LabelServiceOutcome:
+		return pcdomain.DeclaredLabelServiceCompleted, nil
+	case psdomain.LabelServiceFailure:
+		return pcdomain.DeclaredLabelServiceFailed, nil
 	default:
 		return pcdomain.DeclaredResponsibilityOutcomeInvalid, fmt.Errorf(
 			"%w: responsibility outcome kind %d", ErrUntranslatableAnswer, kind)
