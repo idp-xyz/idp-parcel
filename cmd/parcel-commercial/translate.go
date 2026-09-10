@@ -1622,8 +1622,8 @@ func intakeSourceFrom(name string) (pcdomain.DeclaredIntakeSource, error) {
 	}
 }
 
-// responsibilityOutcomeFrom 走领域的反查而不在这里再抄一份名单：此前这里抄的四值在封闭集加面单渠道两格时无声少了
-// 两行，批文里合法的词在触库前就被当成集外拒掉（pc-gaps/12）。名单只在 String() 一处，反查就该问它。
+// responsibilityOutcomeFrom 走领域的反查而不在这里再抄一份名单：此前这里自抄的名单在封闭集加面单渠道两格时无声少了
+// 那两行，批文里合法的词在触库前就被当成集外拒掉（pc-gaps/12）。名单只在 String() 一处，反查就该问它。
 func responsibilityOutcomeFrom(name string) (pcdomain.DeclaredResponsibilityOutcome, error) {
 	if outcome, known := pcdomain.DeclaredResponsibilityOutcomeNamed(name); known {
 		return outcome, nil

@@ -377,8 +377,8 @@ func declaredIntakeSourceFrom(raw string) (domain.DeclaredIntakeSource, error) {
 	return domain.DeclaredIntakeSourceInvalid, fmt.Errorf("unknown intake source %q", raw)
 }
 
-// declaredResponsibilityOutcomeFrom 走领域的反查而不在这里再抄一份名单：此前这里抄的四值在封闭集加面单渠道两格时
-// 无声地少了两行——库里 CHECK 放行的词读回却报 unknown（pc-gaps/12）。名单只在 String() 一处，反查就该问它。
+// declaredResponsibilityOutcomeFrom 走领域的反查而不在这里再抄一份名单：此前这里自抄的名单在封闭集加面单渠道两格时
+// 无声地少了那两行——库里 CHECK 放行的词读回却报 unknown（pc-gaps/12）。名单只在 String() 一处，反查就该问它。
 func declaredResponsibilityOutcomeFrom(raw string) (domain.DeclaredResponsibilityOutcome, error) {
 	if outcome, known := domain.DeclaredResponsibilityOutcomeNamed(raw); known {
 		return outcome, nil

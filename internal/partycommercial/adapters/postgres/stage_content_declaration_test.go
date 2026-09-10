@@ -92,7 +92,7 @@ func TestStageContentRoundTrips(t *testing.T) {
 	}
 }
 
-// Covers: pc-gaps/12 完成判据 3——终局规则声明带面单渠道两行时经 SaveFinalRule / LoadFinalRule 往返保真；0013 钉四个字面量的
+// Covers: pc-gaps/12 完成判据 3——终局规则声明带面单渠道两行时经 SaveFinalRule / LoadFinalRule 往返保真；0013 钉死字面量的
 // final_rule_declaration_closed_set 经 0031 放宽后不再拒 LABEL_SERVICE_COMPLETED / LABEL_SERVICE_FAILED，集外词照旧拒在
 // CHECK（TestStageContentClosedSetsAreMirroredInTheDatabase 那一格不变）。只声明面单两格、不声明网络服务格的规则包，网络格读回即缺行。
 func TestFinalRuleLabelServiceRowsRoundTripThroughTheDatabase(t *testing.T) {
