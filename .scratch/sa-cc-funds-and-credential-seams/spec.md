@@ -38,7 +38,7 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 | [07](issues/07-cc-credential-and-duty-reconciliation-registration-faces.md) | 凭证 / 协作 / 付款核对三册的在线登记面（CLI + 端点 + 管理台；资金事实人工口按 ADR-0137 决定四去掉） | CC | 步二 Blocked by 10；步一不阻 |
 | [08](issues/08-sa-evaluation-request-orchestration-records-source-references.md) | UC-SA-002 步 2 请求评价编排——评价请求登记册（铸造 ID + 自然键唯一）同事务发信封给 PP（01 裁 (c) 时另立） | SA | 11（登记册与发信封半边可先落；「请求 → 评价引用」要 11） |
 | [09](issues/09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) | SA inbox 消费付款核对信封 → `AssessAdvanceRecoveryHandler`（05 裁「本目录加一张」） | SA | 05 |
-| [10](issues/10-cc-credential-collaboration-and-verification-read-faces.md) | 凭证 / 协作 / 付款核对三册的读面（伴生列表读口 + 查阅端点 + 管理台读签：凭证进 customs-cases、协作与核对进 customs-restrictions；07 裁「读面另立」） | CC | 无 |
+| [10](issues/10-cc-credential-collaboration-and-verification-read-faces.md) | 凭证 / 协作 / 付款核对三册的读面（伴生列表读口 + 查阅端点 + 管理台读签：凭证进 customs-cases、协作与核对进 customs-restrictions；07 裁「读面另立」）——**resolved，2026-09-10 22:4x 落分支**（`mcp5-sacc10`，代码 tip `0017f49b`、清点 `6b731816`；等非作者评审与进 main） | CC | 无 |
 | [11](issues/11-pp-inbox-consumer-receives-evaluation-request-envelope.md) | PP inbox 消费评价请求信封 → 形成计价输入快照与评价并回指请求（08 裁「走信封」时因 PP 无 inbox 先例另立） | PP | 08 的发信封半边（要裁一条 PP 入口形状，见票） |
 
 **留空位、不立票的一件**：放行层的代码映射 `PAR-CUS-01/02`（`receive_external_result.go` 注释「真实代码映射属实例半边，没有它接入侧拆不出种类」）——登记册待提供，到位后接入侧译装出 `ReleaseContent`，编排不改。它在这里只占一行，不成票。

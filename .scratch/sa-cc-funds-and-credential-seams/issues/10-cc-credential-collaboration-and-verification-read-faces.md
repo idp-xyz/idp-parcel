@@ -1,7 +1,7 @@
 # 凭证 / 税费付款协作 / 税费付款核对三册没有读面：`/customs-*` 四个查阅口都不覆盖它们，写签没有读签可跟
 
 Category: enhancement
-Status: in-progress——2026-09-10 21:5x 通道 5 按通道 1 派单 task-7e1d15e1 认领，分支 `mcp5-sacc10` 基远端 main `9ddbafcf`；此前 ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：三个读签各挂同族登记册读面已在的页——凭证进 `customs-cases`、协作与核对进 `customs-restrictions`，不新开页（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`
+Status: resolved——2026-09-10 22:4x 通道 5（task-7e1d15e1）落分支 `mcp5-sacc10`（代码 tip `0017f49b`，清点 `6b731816`），等非作者评审与进 main（进 main 记录由推送方补）；此前 in-progress——2026-09-10 21:5x 通道 5 按通道 1 派单 task-7e1d15e1 认领，分支 `mcp5-sacc10` 基远端 main `9ddbafcf`；此前 ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：三个读签各挂同族登记册读面已在的页——凭证进 `customs-cases`、协作与核对进 `customs-restrictions`，不新开页（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 裁「读面另立」时点名），只写票面未动代码；取证锚 `66cad4c4`
 Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-faces.md) 步二 Blocked by 本票；本票不等 07）
 
 ## 缺口（取证于 `66cad4c4`）
@@ -60,6 +60,28 @@ Blocked by: 无（[07](07-cc-credential-and-duty-reconciliation-registration-fac
 
 票 [07](07-cc-credential-and-duty-reconciliation-registration-faces.md)「要裁的」3 与「裁决」；ADR-0077 决定一 / 五、ADR-0022、ADR-0137 决定三；`internal/customscompliance/ports/ports.go` 的 `GateConditionCatalogueRead` 头注（伴生列表读口先例）；[awf/06](../../admin-write-faces/issues/06-pre-acceptance-financial-control-policy-versions-have-no-read-face.md) / [awf/21](../../admin-write-faces/issues/21-customer-service-rule-register-read-face.md)（读面另立先例）；[admin-web-page-wiring-frontier/04](../../admin-web-page-wiring-frontier/issues/04-registered-but-unreadable-rows-need-a-nav-ruling.md)（页面归属裁决先例）。
 
+## 完成记录
+
+（通道 5，task-7e1d15e1，2026-09-10 21:5x–22:4x；分支 `mcp5-sacc10` 基远端 main `9ddbafcf`，六笔全部已推 origin。）
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| 1 | `444d10fe` | 票面 Status → in-progress |
+| 2 | `3dba4fd9` | 做法 1：`ports` 三个伴生列表读口 `CredentialCatalogueRead` / `DutyCollaborationCatalogueRead` / `DutyVerificationCatalogueRead`（行：`CredentialCatalogueEntry` = 领域凭证 + 登记时间；协作事项直接交回 `DutyPaymentCollaboration`；核对复用 `DutyVerificationRecord`）；`adapters/postgres` 新增 `CredentialCatalogue`、`DutyReconciliationCatalogue`（一型两口）；真库用例 14 例 |
+| 3 | `3654d711` | 做法 2：`adapters/http` 新增 `query_credentials.go` / `query_duty_collaborations.go` / `query_duty_verifications.go`，各立入口 GET `/customs-credentials` / `/customs-duty-collaborations` / `/customs-duty-verifications`，响应形封闭；契约测试 15 例 |
+| 4 | `0d8cd298` | 做法 3：`cmd/parcel-api` 五文件接线（纯加 67 行、不动邻行；占号→推→释号） |
+| 5 | `0017f49b` | 做法 4：管理台凭证签进 `CustomsCasesPage`（紧挨就绪与授权）、协作与核对两签进 `CustomsRestrictionsPage`（挨着放行门禁核对）；`register-rows.ts` 纯函数 + 6 例测试 |
+| 6 | `6b731816` | 做法 5：机制清点重生成（干净 detached 检出；CC 接入面端点 10 → 13，端口 384 → 387） |
+
+**验证**（均在隔离树 `mcp5-sacc10` 上）：`gofmt -l` 空；`go build ./...` / `go vet ./...` 全仓 0；`go test -p 1 -count=1`（带 DSN）CC 包组 + 反向依赖（`cmd/parcel-api`、`cmd/parcel-customs-register`、`cmd/parcel-dispatch`、PS / VE 的 `adapters/customscompliance`）+ `internal/architecture` 全 ok / 0 FAIL；CC `adapters/postgres` 整包 `-v` 0 SKIP、新增 14 例全 PASS；`cmd/parcel-api` `-v` 72 PASS / 0 SKIP；admin-web `tsc --noEmit` 0、`run-tests` 220 pass / 0 fail（含新 6 例）。未跑全量（推送方那一跑是唯一真值）。
+
+**完成判据对照**：1 三口真库各三例（空 / 有行逐格 + 跨租户 / limit）+ 构造期拒 nil；http 各五例（405 / 未配置 403 / 空册空数组且不采信自报参数 / 有行逐键 / 读不回 5xx），核对那例断言键集恰好九键 ✓。2 三个查阅口在 `endpoints.go` 在册；`internal/architecture` 绿（管理台路径门禁含三条新路径）✓。3 三读签可见；空册走 `catalogueViewState` 空态，文案各说各话（凭证未登记 → 门禁停「凭证未登记」不读作不适用；无协作事项 → 核对未决不读作无需付款；无核对版本 → 门禁那一道未决不读作已付）✓。4 清点重生成 ✓。
+
+**两处照领域形状而非票面字面的列**（不算裁决，记下免得评审再找）：凭证签没有单独「版本」列——`RegulatoryCredential` 一身份一版、无版本维（0014 自注），换期限或额度是另一张凭证；「额度依据」落成「次数额度」一列，缺席显「来源未提供」。协作事项签没有单独「核对入口」列——核对册按（范围，税费引用）回指本册，两册对读即得，本册对象上没有那个字段，不虚构。
+
+**红线核**：三轴三列无合成列、核对签摘要只报版本数（不数「几版悬着」）；「待关联」不在两册读口里代算；`internal/customscompliance/application/**` 零改动、三册写侧形零改动；夹具全 `SYN-` 合成串。
+
 ## Comments
 
 - 2026-09-10 · 通道 5（task-9a2ff746）：立票，未动代码。能力边界：读过票 07 全文、`ports.go` 三册写侧接口名与 `GateConditionCatalogueRead` 头注、`adapters/http` 四个 `query_*.go` 文件名；没读三册的行字段与管理台 `pages/customs/` 的页面文件——列什么字段开工时以 `ports` 行类型为准。
+- 2026-09-10 · 通道 5（task-7e1d15e1）：实施完工，见「完成记录」。非作者评审与进 main 记录由推送方 / 评审通道补。
