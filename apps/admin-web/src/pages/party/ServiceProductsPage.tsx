@@ -26,8 +26,9 @@ import { ServiceProductPublicationForm } from './ServiceProductPublicationForm';
 
 const info = moduleInfoById['service-products'];
 
-// 只列版本壳(MCP-3 裁决⑥)外加一节可缺的产品层交付条件(票 admin-write-faces/25 裁读回折进目录行):读面交回的就是
-// service_product_form 的版本行左连接 0030;产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
+// 只列版本壳(MCP-3 裁决⑥)外加一节可缺的产品层交付条件(票 admin-write-faces/25 裁读回折进目录行):那一节照
+// ServiceProductRecord.deliveryConditions 显,键缺席即这一版没有声明、显「未声明」不显默认,页面不拿别的键去推它在不在;
+// 产品—渠道映射归渠道产品目录页上列,渠道账号授权不在读面体内,不以空列伪装已实现。
 const columns: ListColumn<ServiceProductRecord>[] = [
   {
     id: 'product',
