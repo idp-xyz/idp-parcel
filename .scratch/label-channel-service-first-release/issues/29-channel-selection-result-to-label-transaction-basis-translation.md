@@ -1,7 +1,7 @@
 # 29 择优结果 → 面单交易七类依据引用的翻译适配器：候选标识译成 `Establish` 要的账号 / 持有人 / 服务方 / 结算相对方 / 合同 / 费率 / 责任依据
 
 Category: enhancement
-Status: in-progress——2026-09-10 18:0x 通道 3 认领（task-8e799b96；分支 `mcp3-lc29` 基 `76932b38`，隔离树 `D:/tops/idp-parcel-mcp3-lc29`；按 /tdd 从领域值对象起）。此前 ready-for-agent——2026-09-10 17:5x 通道 1 推送方对四条「要裁的」逐条裁（全取默认）并补强两条（「择优结果」对象由本票定义并产出；PC 取不到的那格落为新对象的字段），三条越权风险点记「裁决」尾供 owner 复核；通道 3 照写（task-8ede4724），「做法」按裁决写实，本票再无待裁问题。此前 draft——通道 3 于 2026-09-10 17:3x 按通道 1 裁决（[`28`](./28-channel-selection-composition-root-and-call-entry.md)「要裁的」2 另立，task-bc04bfc2）立票，取证锚远端 main `062f5228`；只写票面，未动代码；「七类引用各从 PC 哪个对象取」以代码为准逐格取证（见「取证」），四格答得出、三格答不出
+Status: resolved——2026-09-10 19:3x 通道 3 接管单（task-6cda77fa；原单 task-8e799b96 因会话重置由通道 1 结 failed）收口：三笔代码 `18f79dda` / `944e97b7` / `2d19bc32`（代码 tip）由上一会话写完并推，本会话按票面逐条核判据 1–7 **一行未改**，补机制清点 `03ce7c1b` 与票面本笔；分支 `mcp3-lc29` 基 `76932b38`，待推送方重放进 main，main 上的 SHA 在 Comments 补。逐笔 SHA、七格取处对照「取证」表、对象最终类型名与择优步交回值的形状、验证强度见文末「完成记录」。此前 in-progress——2026-09-10 18:0x 通道 3 认领（task-8e799b96；分支 `mcp3-lc29` 基 `76932b38`，隔离树 `D:/tops/idp-parcel-mcp3-lc29`；按 /tdd 从领域值对象起）。此前 ready-for-agent——2026-09-10 17:5x 通道 1 推送方对四条「要裁的」逐条裁（全取默认）并补强两条（「择优结果」对象由本票定义并产出；PC 取不到的那格落为新对象的字段），三条越权风险点记「裁决」尾供 owner 复核；通道 3 照写（task-8ede4724），「做法」按裁决写实，本票再无待裁问题。此前 draft——通道 3 于 2026-09-10 17:3x 按通道 1 裁决（[`28`](./28-channel-selection-composition-root-and-call-entry.md)「要裁的」2 另立，task-bc04bfc2）立票，取证锚远端 main `062f5228`；只写票面，未动代码；「七类引用各从 PC 哪个对象取」以代码为准逐格取证（见「取证」），四格答得出、三格答不出
 Blocked by: 无（`28` Blocked by 本票；本票定义「择优结果」对象，`28` 只接线——不成环）
 
 ## 从哪里来
@@ -87,3 +87,54 @@ Blocked by: 无（`28` Blocked by 本票；本票定义「择优结果」对象�
 
 - 2026-09-10 17:3x · 通道 3（task-bc04bfc2，取证锚远端 main `062f5228`；分支 `mcp3-lc28`）：立票。**只写票面，未动代码。** 能力边界：读过 `channel_candidate_assembly.go` 全文、`label_transaction.go` 七个引用类型头注、`EstablishLabelTransactionCommand`、`cost_source.go` 两个取数口、`channel_candidate_cost.go` 的 `evaluation` 格、`acceptance_basis.go` 的 `CommercialBasisSnapshot` 字段、PC `ChannelAccountUseAuthorization` 与 `SupplierAgreement` 的字段与构造门、PC `ports.go` 的 `ChannelAccountUseAuthorizationRegistry` / `SupplierAgreementContentView` / `ProductChannelMappingRegistry` / `CommercialPublicationView`、PC 与 PS CONTEXT 相关词条；**没读** `commercial_basis.go` 的三阶段正文、`label_transaction.go` 的聚合构造门正文、PP `PricingPlanVersion` 的标识形状、TF 侧「运输委托实际采用的协议快照」的写法（要裁的 4 若取 (b) 可照它的形，开工时再读）。「渠道产品 → 供应商协议在 PC 无绑定」这一条是 `grep ChannelProductReference` 在 PC 领域非测试文件只命中三处（`service_product.go` / `product_channel_registration.go` / `channel_account_use_authorization.go`）得出的，`supplier_agreement.go` 不在其中。
 - 2026-09-10 17:5x · 通道 3（task-8ede4724）：照写通道 1 四条裁决 + 两条补强 + 三条越权风险点（见「要裁的」下「裁决」），「做法」「完成判据」「地盘」按裁决写实，Status draft → ready-for-agent。**只写票面，未动代码。** 两处是通道 3 对裁决的读法、不是裁决原句，评审时请对：(i) 裁决 (4)「其中一格是接受时商业解析回指」读作 `ResponsibilityBasis` 那格填接受时 `CommercialResolutionID`、其余六格 + 候选是「实际使用的映射和授权依据」——因此多出第三个实例半边源 `AcceptanceResolutionSource`（`query` 今天不带委托引用）；(ii) 裁决 (3)「费率引用就是那一格」读作择优步带出 `PlanEvaluationTarget`、评价标识与价卡版本各落一格，择优编排交回值要 expand。
+- 2026-09-10 19:3x · 通道 3（task-6cda77fa，接管单）：上一会话在 `mcp3-lc29` 上写完三笔代码后重置，票面停在 in-progress。本会话按「接手别人在途实现」的规矩——核每条判据前先按票面写下自己期望的形状，再读代码——逐条对判据 1–7，形状全部对上，三笔一行未改；补清点一笔与本票面笔，Status → resolved。完成记录见下。
+
+## 完成记录（通道 3 · 2026-09-10 19:3x · task-6cda77fa）
+
+**分支 `mcp3-lc29`（基 `76932b38`，隔离树 `D:/tops/idp-parcel-mcp3-lc29`，每笔已推 origin），逐笔：**
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| 认领 | `68c3e72a` | 票面转 in-progress |
+| 1 | `18f79dda` | PS `domain`：`SelectedChannelBasis` / `SelectedChannelBasisSpec` / `SelectedChannelCandidate`；`ChannelCandidateCost.WithRate` / `Rate`；`ResponsibilityBasisSnapshotReference` 头注改口（判据 1、判据 2 的领域半边、判据 4） |
+| 2 | `944e97b7` | `SelectChannelCandidateHandler.Select` expand；`adapters/parcelpricing` 成本桥 `withRateReference`（判据 2） |
+| 3 | `2d19bc32` | 端口 `psports.ChannelSelectionBasisTranslator`；`adapters/partycommercial/channel_selection_basis.go` 与测试（判据 3、5）——**代码 tip** |
+| 清点 | `03ce7c1b` | 机制清点在 `2d19bc32` 的干净 detached 检出上重生成，单独成笔 |
+| 票面 | 本笔 | Status → resolved + 本节 |
+
+main 上的 SHA 由推送方重放后在 Comments 补；票面此刻记的全是分支上的 SHA。
+
+**对象的最终类型名与择优步交回值的形状（判据 7 点名）：**
+
+- 「择优结果」= `psdomain.SelectedChannelBasis`，Spec 构造 `NewSelectedChannelBasis(SelectedChannelBasisSpec)`：候选 + 七格（`ChannelAccount` / `AccountHolder` / `ServiceProvider` / `SettlementCounterparty` / `Contract` / `Rate` / `ResponsibilityBasis`，与 `EstablishLabelTransactionSpec` 同型，`TestASelectedChannelBasisFeedsTheLabelTransactionEstablishGate` 钉的）+ 可缺席的 `Evaluation`；候选与七格任一空白 → `ErrInvalidSelectedChannelBasis`。名字取立票时的提名，未改。
+- 择优步交出的 = `psdomain.SelectedChannelCandidate`：`Candidate()`、`Evaluation() (ChannelCostEvaluationReference, bool)`、`Rate() (ChannelRateReference, bool)`——票面说的「评价目标（评价标识 + 价卡版本）」拆成评价痕迹与费率两格、各自可缺席，不把 PP 的 `PlanEvaluationTarget` 引进 PS 领域。带上时空白 → `ErrInvalidSelectedChannelCandidate`。
+- expand 的形状：新增 `SelectChannelCandidateHandler.Select(ctx, query) (SelectedChannelCandidate, error)`；`Handle(ctx, query) (ChannelCandidateID, error)` 签名不动、改为 `Select` 的窄面。两格从 `Costs` 口交回的那一份 `ChannelCandidateCost` 上取（`selectedCandidateOf`），不另取；赢家在成本表上找不到按 `ErrChannelCostsIncomplete` 报。`TestASelectionHandsOverTheWinnersEvaluationAndRate` 证与 `Costs` 同源、`Handle` 与 `Select` 同一个候选。
+- 费率从哪来：`adapters/parcelpricing/cost_bridge.go` 的 `withRateReference` 把 `ppdomain.PricingEvaluation.PlanReference()` 写成「对象/版本」两段挂到已确立的 `ChannelCandidateCost` 上（`WithRate`，出局格拒）；翻译适配器只读 `SelectedChannelCandidate.Rate()`，**不问 PP**（裁决 (3)）。
+
+**七格各从哪个 PC 对象、经哪个读口取（对照上面「取证」表）：**
+
+| 格 | 「取证」表当时答 | 现在的取处 | 经哪个读口 | 「这次该用哪一份」谁答 |
+|---|---|---|---|---|
+| `ChannelAccount` | 对象答得出、选法要裁 | `ChannelAccountUseAuthorization.Account()` | `ChannelAccountUseReader.LoadLatest(tenant, authorization)`——`pcports.ChannelAccountUseAuthorizationRegistry` 的只读半边，留在本包（同 `ProductChannelMappingReader` 的理由） | `ChannelAccountUseSource.AuthorizationFor(query, candidate)` |
+| `AccountHolder` | 随上 | 同一条授权的 `Grantor()` | 随上 | 随上 |
+| `ServiceProvider` | **答不出** | `SupplierAgreement.Supplier()` | `pcports.SupplierAgreementContentView.LoadSupplierAgreement(tenant, version)` | `SupplierAgreementSource.AgreementFor(query, candidate)` |
+| `SettlementCounterparty` | **答不出** | 同一份协议的 `Supplier()`（裁决 (2)；`selectedChannelBasisOf` 头注写明同源是首发实例事实、非类型同义） | 随上 | 随上 |
+| `Contract` | 对象答得出、版本要裁 | `SupplierAgreement.Version()` → `ObjectID/Version` 两段 | 随上 | 随上 |
+| `Rate` | 取 (a) 还是 (b) 要裁 | 不从 PC 取：`SelectedChannelCandidate.Rate()`（(a) PP 价卡版本，择优步带出） | 无——本包不问 PP | 择优步 |
+| `ResponsibilityBasis` | **答不出** | PS 自己的 `CommercialResolutionID`（接受时商业解析回指，裁决 (4)） | 无 PC 读口 | `AcceptanceResolutionSource.ResolutionFor(query)`——本票量到的第三处实例半边源 |
+
+取回后的核对（`authorizationOf` / `agreementOf`）：授权四条——`Channel()` 等于候选译成的 `ChannelProductReference`、`Grantee()` 等于源答的运营企业、`Scope()` 等于 `providerKeysOf(query)` 的范围、`AllowsUseAt(query.At)`；协议一条——`SupportsProcurementAt(query.At)`。允不允许问 PC 谓词，本包只把「不允许」按事实分格：有撤销时刻且不晚于 `query.At` → 已撤销，否则 → 不在有效期；协议同法分已终止 / 不在有效期。不复制任何 PC 规则，任一不满足即停、不换一条。
+
+**停点具名（判据 3）：** `ErrChannelAccountUseNotConfigured` / `ErrSupplierAgreementNotConfigured` / `ErrAcceptanceResolutionNotConfigured`（源未装与源答未配置同一格）、`ErrChannelAccountUseNotRegistered` / `ErrSupplierAgreementNotRegistered`（读口答不在册）、`ErrChannelAccountUseChannelMismatch` / `ErrChannelAccountUseGranteeMismatch` / `ErrChannelAccountUseScopeMismatch`、`ErrChannelAccountUseRevoked` / `ErrChannelAccountUseNotEffective`、`ErrSupplierAgreementTerminated` / `ErrSupplierAgreementNotEffective`、`ErrSelectedCandidateRateAbsent`（赢家没带费率，不代填、不问 PP）、`ErrUntranslatableQuery`（零值候选译不成渠道产品引用）。`TestEachTranslationStopIsNamed` 逐格一个子用例，费率缺席与译不过去另各一条，断言全部 `errors.Is` 到具名错误、不看字符串；正路 `TestASelectedCandidateTranslatesIntoAllSevenReferences` 三源配上 → 七格齐 → 照抄进 `EstablishLabelTransaction` 过门，服务方与结算相对方同值。
+
+**与票面字句的三处出入，供评审对：**
+
+1. `ChannelAccountUseSource.AuthorizationFor` 交回的不是裸 `ChannelAccountUseAuthorizationID`，是 `ChannelAccountUseSelection{Authorization, Grantee}`。票面要「核 `grantee` 是运营企业」但没说运营企业的 `PartyID` 从哪来；PC 没有「租户的运营企业是哪个 party」这个概念，它与授权选法同属实例半边、出自同一处登记，故放进同一个答复而不另开一格配置。
+2. 停点比票面「完成判据」3 列的多四格（授权 / 协议不在册、授权范围不符、费率缺席）。前两格是读口 `found=false` 那一支，票面「取回」一词把它含在里面；范围不符是「做法」里「核 `scope` 与 `effective` 覆盖 `query.At`」那条核对的具名；费率缺席是费率改由择优步带出之后才有的一格。
+3. 「译不过去」只测了查询出不去那一向（`ErrUntranslatableQuery`）；答复进不来那一向（`ErrUntranslatableAnswer`）在 `selectedChannelBasisOf` 六处 PC→PS 转换各有包裹，但没有用例能走到——PC 的构造门不放空白的账号 / 参与方 / 版本出来，合成一个走得到那一支的 PC 对象要绕它的门。记为未覆盖。
+
+**判据 5（架构门禁）：** `channel_selection_basis.go` 只导入 `psdomain` / `psports` / `pcdomain` / `pcports`（`go list -f '{{.Imports}}'` 于 `2d19bc32`）；不导入 PP、不导入 PC `adapters/postgres`。本包非测试文件另有 `pcapplication` 导入，是 `commercial_basis.go` 等在基 `76932b38` 上就有的，不是本票带进来的。`./internal/architecture/...` 绿；两份棘轮基线**未改**——新工厂按 `New*` 前缀不入函数名棘轮，两个新类型经 `Select` / `TranslateSelectedCandidate` 的签名可达，无需加条目，也就没有要重数的数。
+
+**判据 6（验证，钉在代码 tip `2d19bc32`，隔离树，带 DSN `-p 1 -count=1`）：** `gofmt -l .` 空、`go build ./...` / `go vet ./...` 退 0；`go test` 跑 `./internal/parcelshipment/...` + `./cmd/...` + 四个反向依赖适配器包（`networkrouting/adapters/parcelshipment`、`transportfulfillment/adapters/parcelshipment`、`transportfulfillment/adapters/partycommercial`、`visibilityexception/adapters/parcelshipment`，按 `go list -f '{{.ImportPath}} {{.Deps}}'` 对 PS `domain` / `ports` / `application` / 两个适配器包反查）+ `./internal/architecture/...` 全 ok。`-v` 下：PS `adapters/postgres` PASS 168 / SKIP 0、PS `adapters/partycommercial` PASS 195 / SKIP 0、PS `domain` 705 / 0、PS `application` 325 / 0、PS `adapters/parcelpricing` 16 / 0、`cmd/parcel-api` 67 / 0、`cmd/parcel-commercial` 146 / 0、`cmd/parcel-dispatch` 93 / 0，FAIL 全 0（计数含子用例，只作此刻取证）。票面「不动 postgres 不带 DSN」那句照 2026-09-09 裁定升格：反向依赖里的 `cmd/*` 一律带 DSN。全量一次由推送方在重放 tip 上跑。
+
+**不动的：** PC / PP 任何包、`operate_label_transaction*`、inbox、`cmd/`；任何候选 / 账号 / 映射 / 价卡 / 协议版本 / 接受时解析的取值。三条越权风险点原样留在「裁决」尾供 owner 复核。`28` 据此解除阻塞：它接的对象是 `psdomain.SelectedChannelBasis`，前置步调 `Select` 再调 `TranslateSelectedCandidate`，三个实例半边源由组合根按「显式未配置」装 nil。
