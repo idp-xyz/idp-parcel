@@ -13,14 +13,14 @@
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 161 | 157 | 18 | 30 | 8 | 16 |
+| parcelshipment | 165 | 160 | 18 | 31 | 9 | 16 |
 | partycommercial | 123 | 138 | 9 | 33 | 1 | 27 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 81 | 61 | 12 | 38 | 7 | 7 |
 | transportfulfillment | 132 | 123 | 24 | 34 | 10 | 22 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 907 | 866 | 115 | 249 | 51 | 123 |
+| **合计** | 911 | 869 | 115 | 250 | 52 | 123 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 57、测试 80。
 
@@ -67,7 +67,7 @@
 | transport_fulfillment | 19 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 110 个，消费适配器 26 个生产文件，直投路由表 17 条
+## 接线面：接入面端点 110 个，消费适配器 27 个生产文件，直投路由表 18 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -91,20 +91,20 @@
 | 消费方 | inbox | adoptconsume | finalconsume | veconsume | 合计 |
 |---|---|---|---|---|---|
 | networkrouting | 2 | 0 | 0 | 0 | 2 |
-| parcelshipment | 8 | 1 | 1 | 0 | 10 |
+| parcelshipment | 9 | 1 | 1 | 0 | 11 |
 | visibilityexception | 12 | 0 | 0 | 2 | 14 |
-| **合计** | 22 | 1 | 1 | 2 | 26 |
+| **合计** | 23 | 1 | 1 | 2 | 27 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
 | 事件类型所属消费方 | 条目 |
 |---|---|
 | networkrouting | 2 |
-| parcelshipment | 7 |
+| parcelshipment | 8 |
 | visibilityexception | 8 |
-| **合计** | 17 |
+| **合计** | 18 |
 
-## 端口：声明 376 个；基线口径缺 14，精确口径缺 8
+## 端口：声明 377 个；基线口径缺 14，精确口径缺 8
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
