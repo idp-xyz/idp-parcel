@@ -1,7 +1,7 @@
 # 25 交付条件声明的管理台写面 + 读回 + 载荷 + 折进 PCC-1 一格：产品版本表单与客户合同表单各长一节「交付条件」，服务产品册从「没有正文」变成「正文可缺」
 
 Category: enhancement
-Status: draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-910498f2 立票，取证锚远端 main `93349f83`（pc-gaps/11 进 main 于 `62c87e73`）；**只写票面，未动代码。** 三件（表单 / 载荷 / 折进 PCC-1）形状已裁清、照先例可直接做；第四件读回的落点是一条要裁的（后端今天没有任何读 0030 的目录口，两条路都要把地盘扩到 `ports` 与 `adapters/postgres`），见「要裁的」。裁定后本票转 ready-for-agent
+Status: in-progress——2026-09-10 16:1x 通道 3 认领（task-910498f2，分支 `mcp3-awf25` 基 `93349f83`，紧接立票笔 `92fb79af`；派单方明示不必 rebase，main 自 `93349f83` 起的改动与本票文件不重叠）；同笔经 ready-for-agent：「要裁的」1 由通道 1 16:1x 代裁取乙（见「要裁的」节下「裁决」），本票再无待裁问题。此前 draft——通道 3 于 2026-09-10 立票，取证锚远端 main `93349f83`（pc-gaps/11 进 main 于 `62c87e73`）；三件（表单 / 载荷 / 折进 PCC-1）形状照先例裁清，第四件读回的落点是一条要裁的（后端今天没有任何读 0030 的目录口，两条路都要把地盘扩到 `ports` 与 `adapters/postgres`）
 Blocked by: 无——pc-gaps/11 已进 main（领域 / 端口 / 迁移 0030 / 发布通道 / 批文 `deliveryConditions` 全在）；08（公共半边）、09（产品版本表单）、10（客户合同表单）、22（共享层）均已 resolved
 
 ## 从哪里来
@@ -39,7 +39,12 @@ Blocked by: 无——pc-gaps/11 已进 main（领域 / 端口 / 迁移 0030 / �
 - `publication-draft-api.ts`：`CommercialPublicationPayload` 加 `serviceProduct?: { deliveryConditions?: DeliveryConditionPayload }`，`CustomerContractBodyPayload` 加 `deliveryConditions?`；`DeliveryConditionPayload{tightens?: {objectId, version}, methods: string[], recipientScopeRule, proofOfDeliveryRule}` 键名与批文逐字同。
 - **改既有表单文件前广播占号**（通道 5 同期在 `apps/admin-web` 改注释，会先占 `PublicationFormFields.tsx` / `publication-form-shared.ts`——本票不动那两个文件；两张表单文件与 `publication-draft-api.ts` 动手前另发占号）。
 
-### ② 读回：见「要裁的」1（裁定后补做法）
+### ② 读回：折进两张既有目录行（「要裁的」1 裁乙）
+
+- **端口**：`ports.ServiceProductCatalogueRow` 与 `ports.CustomerContractCatalogueRow` 各加一格可缺的 `DeliveryConditions *DeliveryConditionCatalogueRow`（只加格，不改既有签名与既有字段）；`DeliveryConditionCatalogueRow{Methods []string; RecipientScopeRule; ProofOfDeliveryRule; TightensObjectID / TightensVersion（仅合同层在场）; DeclaredAt}`。nil = 这一版没有交付条件声明——与 `HasContent` 那条纪律同：页面先看在不在，不拿键的有无去推。
+- **postgres**：`OperationsCatalogue.ListServiceProducts` / `ListCustomerContracts` 两条查询各 LEFT JOIN 0030 父表（按租户 + 对象 + 版本 + 层别）并聚合子表方式行（稳定序，与领域 `Methods()` 同序）；读回不重过构造门（目录是呈现不是重建）；他租户同号版本的声明渗不进来由既有租户条件守。真库测试各一例：有声明 / 无声明 / 跨租户。
+- **http**：`query_service_products.go` 与 `query_commercial_relations.go` 两个 body 各加 `deliveryConditions` 可缺一节（`omitempty`；节内键名照批文 `tightens{objectId, version}` / `methods` / `recipientScopeRule` / `proofOfDeliveryRule` + `declaredAt`），契约测试各一例钉「没声明无键、有声明逐键」。
+- **admin-web**：`api.ts` 的 `ServiceProductRecord` / `CustomerContractRecord` 各加 `deliveryConditions?`；`ServiceProductsPage.tsx` 的版本表与 `PartyContractsPage.tsx` 的合同表各显一节——没声明显「未声明」不显默认；合同行显 `tightens`（所收紧的产品版本）**只显自己这半**，不去产品行对照——这是选的不是漏的（甲的「一处对照两层」是叠加项，日后另立政策页册的票不冲突）。`api.ts` 上「那边上列版本壳」那句随改。
 
 ### ③ 载荷：`adapters/http/publication_draft_payload_*` 加 `deliveryConditions` 一节
 
@@ -75,6 +80,7 @@ Blocked by: 无——pc-gaps/11 已进 main（领域 / 端口 / 迁移 0030 / �
    - **甲 · 政策页新一册 `?kind=DELIVERY_CONDITION`**（照 0007 合同级声明 `PRE_ACCEPTANCE_CONTROL` 那一册的形，一字不改）：`ports.DeliveryConditionRow{OwnerKind, ObjectID, Version, Tightens?, Methods, RecipientScopeRule, ProofOfDeliveryRule, DeclaredAt}` + `OperationsCatalogue.ListDeliveryConditions`（一条查询父子两表，两层同列带层别）+ `query_commercial_policies.go` 一 kind 常量 / 一 `serve*` / `CommercialPolicyCatalogueReader` 加一法（→ `query_commercial_catalogue_test.go` 等替身跟随、**`cmd/parcel-api/unwired_orchestration.go` 的 `unwiredCommercialCatalogue` 加一法**）+ admin-web `CommercialPolicyKind` 加格 / Record / 列向 / 标签 / 页签与来源提示句（awf/06 / 21 的做法，本通道做过 21）。好处：一处列两层，合同层收紧对着哪一版产品层一眼可见；照先例零设计。代价：写在产品页 / 合同页、读在政策页，写签读签分两页（伞票判据「写签跟着读签走」反着来）；动 `cmd/parcel-api` 一处。
    - **乙 · 折进两张既有目录行**（照 0012 合同正文左连接进 `CustomerContractCatalogueRow` 的形）：`ServiceProductCatalogueRow` / `CustomerContractCatalogueRow` 各加一格可缺的 `DeliveryConditions`（合同行另带 `Tightens`）+ 两条查询各 LEFT JOIN 0030 父表并聚合子表方式行 + `query_service_products.go` / `query_commercial_relations.go` 两个 body 各加一可缺节（`omitempty`，没声明就没有键——照 `contentRegistered` 那条「页面先看布尔 / 键在不在」的纪律）+ admin-web `ServiceProductRecord` / `CustomerContractRecord` 各加可缺一节、两张表各显一节（没声明显「未声明」不显默认）。好处：声明显在它挂的版本旁，写签读签同页，与派单原话「版本详情里显声明」一致；不动 `cmd/parcel-api`。代价：两处改而不是一处；`/commercial-service-products` 从「上列版本壳」变成壳 + 一节可缺正文（与 Go 侧本册的变化同向，`api.ts` 那句注释随改）；合同层「收紧对着哪一版」要在合同行里显 `tightens`，两层不在一处对照。
    - **倾向乙**：派单原话与伞票「写签跟着读签走」都指向它，合同目录行已经这样带着 0012 正文；甲的唯一优势（两层同列对照）可以由乙里合同行显 `tightens` 补一半。**不自裁**：两条路的地盘不同（甲多动 `cmd/parcel-api`，乙多动两个查询处理器），且都超出派单地盘。
+   - **裁决（通道 1，推送方代裁，属管理台呈现落点不属领域归属；2026-09-10 16:1x）：取乙。** 理由三条：① 伞票 07 自己的口径「写签跟着读签走」——声明在版本表单里写，就在版本旁读；甲把读放政策页是反着的。② 交付条件挂在版本上（ADR-0133 决定四），与 0012 合同正文已经 LEFT JOIN 进合同行是同一个形，照它不新开形。③ 不动 `cmd/parcel-api`（甲要给 `unwiredCommercialCatalogue` 加法）。甲的好处（两层一处对照）是叠加项：日后运营真要一页看两层，再立一张政策页册的票不冲突；合同行只显 `tightens` 自己那半这一点写进完成记录供评审知道是选的不是漏的。**地盘扩到 `ports.go`（两行只加可缺格不改既有签名）与 `adapters/postgres` 目录读两条查询：认可**，PC 地盘此刻只通道 3 一人；改共享接线文件前照旧广播占号。派单点名的两问（方式多行文本一行一项、对账门「已接且正文在场才比」不改）认可。
 
 ## 红线
 
@@ -96,7 +102,7 @@ Blocked by: 无——pc-gaps/11 已进 main（领域 / 端口 / 迁移 0030 / �
 
 ## 地盘
 
-`apps/admin-web/src/pages/party/`（`service-product-form.ts` + 测试、`ServiceProductPublicationForm.tsx`、`customer-contract-form.ts` + 测试、`CustomerContractPublicationForm.tsx`、`publication-draft-api.ts`、`publication-form-rendered-paths.test.ts`；**不动** `PublicationFormFields.tsx` / `publication-form-shared.ts`——通道 5 在占）；`internal/partycommercial/domain/`（`publication_canonicalization.go` 加格加支、`_service_product.go` / `_customer_contract.go` 加层、新测试；**不动** `delivery_condition.go`）；`internal/partycommercial/application/`（`publish_commercial_authority.go` 的 `publicationContentOf` 一支、`publication_draft.go` 的 `declarationsOfContent` 一支、测试）；`internal/partycommercial/adapters/http/`（`publication_draft_payload.go` 一格、`_customer_contract.go` 一格、新 `_delivery_condition.go` + 测试）；`cmd/parcel-commercial/publish_batch_test.go` 一串。**待裁定后扩**：`internal/partycommercial/ports/ports.go`、`adapters/postgres/operations_catalogue.go` + 测试、`adapters/http/query_*.go` + 测试、admin-web `api.ts` 与页面（乙）或 `cmd/parcel-api/unwired_orchestration.go`（甲）。共享文件动手前逐份占号。
+`apps/admin-web/src/pages/party/`（`service-product-form.ts` + 测试、`ServiceProductPublicationForm.tsx`、`customer-contract-form.ts` + 测试、`CustomerContractPublicationForm.tsx`、`publication-draft-api.ts`、`publication-form-rendered-paths.test.ts`；**不动** `PublicationFormFields.tsx` / `publication-form-shared.ts`——通道 5 在占）；`internal/partycommercial/domain/`（`publication_canonicalization.go` 加格加支、`_service_product.go` / `_customer_contract.go` 加层、新测试；**不动** `delivery_condition.go`）；`internal/partycommercial/application/`（`publish_commercial_authority.go` 的 `publicationContentOf` 一支、`publication_draft.go` 的 `declarationsOfContent` 一支、测试）；`internal/partycommercial/adapters/http/`（`publication_draft_payload.go` 一格、`_customer_contract.go` 一格、新 `_delivery_condition.go` + 测试）；`cmd/parcel-commercial/publish_batch_test.go` 一串。**裁乙后扩入**：`internal/partycommercial/ports/ports.go`（两行各加一可缺格）、`adapters/postgres/operations_catalogue.go` 两条查询 + 真库测试、`adapters/http/query_service_products.go` / `query_commercial_relations.go` + 测试、admin-web `api.ts` 两个 Record 与 `ServiceProductsPage.tsx` / `PartyContractsPage.tsx` 两张表。**不动** `cmd/parcel-api`。共享文件动手前逐份占号。
 
 ## 参照
 
