@@ -379,6 +379,8 @@ func run(logger *slog.Logger) error {
 			amendment,
 			requestViews,
 			reviewJudgments,
+			// 授权处置队列读口就是委托查阅适配器（ports.AuthorizedDispositionQueue 在其上补齐，同表同作用域纪律）。
+			requestViews,
 			labelTransactions,
 			channelSelectionDecisions,
 			cancellation,

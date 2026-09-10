@@ -59,6 +59,7 @@ func assembleBusinessEndpoints(
 	amendment shipmenthttp.AmendmentHandler,
 	reviewQueue shipmenthttp.AcceptanceReviewQueueReader,
 	reviewJudgments shipmenthttp.RecordedJudgmentsReader,
+	dispositionQueue shipmenthttp.AuthorizedDispositionQueueReader,
 	labelTransactions shipmenthttp.LabelTransactionsReader,
 	channelSelectionDecisions shipmenthttp.ChannelSelectionDecisionsReader,
 	cancellation shipmenthttp.CancellationHandler,
@@ -209,6 +210,9 @@ func assembleBusinessEndpoints(
 		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
 		// 准入（ADR-0078）启用时随委托查阅一起换值，不另立第二种准入形。
 		{Pattern: "/acceptance-review-queue", Handler: shipmenthttp.NewQueryAcceptanceReviewQueueEndpoint(shipmentViewsIntake, reviewQueue, reviewJudgments)},
+		// 授权处置队列查阅（票 sa-preacceptance-policy-view/04，ADR-0132 决定二）：同为委托查阅面的子集视图，
+		// Intake 沿用同一变量；单份详情复用复核队列的 `?shipmentRequestId=` 分支，这里只有列表。
+		{Pattern: "/authorized-disposition-queue", Handler: shipmenthttp.NewQueryAuthorizedDispositionQueueEndpoint(shipmentViewsIntake, dispositionQueue)},
 		// 面单交易查阅（票 admin-skeleton-closure-batch/08，ADR-0084 决定七）：**另立一种
 		// 准入形**而不是复用委托查阅那个变量。两者由同一个隔离读开关、同一个装配点换值
 		// （决定七要的「沿用同一开关」），但接口不同：面单交易没有账户维可分，收一个必带

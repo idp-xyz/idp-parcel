@@ -1516,6 +1516,47 @@ type CustomerSupplementQueue interface {
 	) ([]CustomerSupplementQueueRecord, error)
 }
 
+// RestrictedControlItemRecord 是授权处置队列行上的一项受限控制：种类、判断顺序、受限原因，以及正文登记
+// 的失败处置与责任引用（受限项上的采用引用，ADR-0132 决定三、四）。处置角色据责任引用知道这次不通过的
+// 责任在谁；本上下文只透出，不据它裁任何事。
+type RestrictedControlItemRecord struct {
+	Kind               domain.ControlItemKind
+	Order              uint32
+	Basis              domain.ControlBasisReference
+	FailureDisposition domain.ControlFailureDisposition
+	Responsibility     domain.ControlResponsibilityReference
+}
+
+// AuthorizedDispositionQueueRecord 是「等待授权处置」队列上的一行：一份当前停在`等待授权处置`的`已提交`
+// 委托（ADR-0132 决定二「读面照各自的队列开一格」）。概要与最近一次处理记录之外带控制结果标识与逐项受限
+// 控制——处置角色选去向要看的正是「哪几项没成立、正文说去向归谁、责任在谁」。没有处置留痕那组字段：
+// 处置一记下等待态就转走或清零，这份委托随之出队，出队靠等待态不靠读侧折叠（与另几个队列同一条纪律）。
+type AuthorizedDispositionQueueRecord struct {
+	ShipmentRequestSummaryRecord
+	HasAttempt              bool
+	LastAttemptReason       string
+	LastAttemptContinuation string
+	LastAttemptedAt         time.Time
+	ControlResultID         domain.FinancialControlResultID
+	RestrictedItems         []RestrictedControlItemRecord
+}
+
+// AuthorizedDispositionQueue 是授权处置队列查阅的读口。队列的定义就是投影列上的
+// `waitingOn = AUTHORIZED_DISPOSITION` 且 `state = SUBMITTED`（迁移 0021 的部分索引逐字吻合）——由 Decide
+// 看过全部校验后写下、由处置命令与各终态转移改写或清零，读口照登记过滤，不在读侧重推域判断。
+//
+// 受限项取自本版当前采用的那一次控制结果的逐项（与形成决定那一步读的是同一批行），不重读策略正文：
+// 处置与责任引用是当时采用的那一版正文说的，正文换版不改队列上已停等的委托看到的东西。
+//
+// 排序同其余队列：老的在前（先停的先处置），同刻按委托标识正序保证分页可重复。Limit 必须为正。
+type AuthorizedDispositionQueue interface {
+	ListAwaitingAuthorizedDisposition(
+		ctx context.Context,
+		scope domain.AuthorizedQueryScope,
+		limit int,
+	) ([]AuthorizedDispositionQueueRecord, error)
+}
+
 // OperatorRegistrationQueueRecord 是「等待运营登记」队列上的一行：一份在决定形成之前停在
 // `等待运营登记`的`已提交`委托，带的正是重驱接受判断链要的那几样（AdvanceAcceptanceChainCommand
 // 的输入）。它不是查阅读面：没有概要、没有处理记录——那些归 ShipmentRequestViews；这里只给续办

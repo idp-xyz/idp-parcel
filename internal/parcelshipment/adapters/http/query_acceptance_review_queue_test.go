@@ -117,6 +117,19 @@ func recordedJudgmentsFixture(t *testing.T) ports.RecordedJudgments {
 	if err != nil {
 		t.Fatalf("财务控制结果：%v", err)
 	}
+	// 受限项采用了正文登记的失败处置与责任引用（ADR-0132 决定三）：读面要把两格照实透出，成立项不带。
+	adopted, err := domain.NewAdoptedControlDisposition(
+		domain.AuthorizedDispositionOnControlFailure,
+		mustValue(t, domain.NewControlResponsibilityReference, "CONTRACT-CLAUSE-7"))
+	if err != nil {
+		t.Fatalf("采用引用：%v", err)
+	}
+	control, err = control.AdoptControlDispositions(map[domain.ControlItemKind]domain.AdoptedControlDisposition{
+		domain.CreditCheckControlItem: adopted,
+	})
+	if err != nil {
+		t.Fatalf("采用处置：%v", err)
+	}
 
 	return ports.RecordedJudgments{
 		Reachability:                []domain.ReachabilityJudgment{reachable, notApplicable},
@@ -319,10 +332,12 @@ func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 				JointPassCondition string `json:"jointPassCondition"`
 				OccupationFormed   bool   `json:"occupationFormed"`
 				Items              []struct {
-					Kind       string `json:"kind"`
-					Order      uint32 `json:"order"`
-					Conclusion string `json:"conclusion"`
-					Basis      string `json:"basis"`
+					Kind               string `json:"kind"`
+					Order              uint32 `json:"order"`
+					Conclusion         string `json:"conclusion"`
+					Basis              string `json:"basis"`
+					FailureDisposition string `json:"failureDisposition"`
+					Responsibility     string `json:"responsibility"`
 				} `json:"items"`
 			} `json:"financialControl"`
 			AdoptedResolutionID string `json:"adoptedResolutionId"`
@@ -373,6 +388,12 @@ func TestReviewCaseAnswersDetailWithJudgments(t *testing.T) {
 		control.Items[1].Kind != "CREDIT_CHECK" || control.Items[1].Order != 2 ||
 		control.Items[1].Conclusion != "RESTRICTED" || control.Items[1].Basis != "AVAILABLE_CREDIT_INSUFFICIENT" {
 		t.Fatalf("逐项变形：%+v", control.Items)
+	}
+	// 受限项上的采用引用两格照实透出、成立项两格缺席（ADR-0132 决定三、四）。
+	if control.Items[0].FailureDisposition != "" || control.Items[0].Responsibility != "" ||
+		control.Items[1].FailureDisposition != "AUTHORIZED_DISPOSITION" ||
+		control.Items[1].Responsibility != "CONTRACT-CLAUSE-7" {
+		t.Fatalf("采用引用两格变形：%+v", control.Items)
 	}
 	if body.Judgments.AdoptedResolutionID != "RES-1" {
 		t.Fatalf("采用解析 = %q", body.Judgments.AdoptedResolutionID)

@@ -507,6 +507,19 @@ func (unwiredChannelSelectionDecisions) FindChannelSelectionDecision(
 	return shipmentdomain.ChannelSelectionDecision{}, false, errOrchestrationNotWired
 }
 
+// unwiredDispositionQueue 是授权处置队列读口的占位（票 sa-preacceptance-policy-view/04）。生产装配交入的是
+// 委托查阅适配器本尊（同表同作用域纪律）；这里独立成形，装配测试才盖得住「队列口接错适配器」。读不回交回
+// 稳定错误而不是空册，理由同 unwiredReviewQueue。
+type unwiredDispositionQueue struct{}
+
+func (unwiredDispositionQueue) ListAwaitingAuthorizedDisposition(
+	context.Context,
+	shipmentdomain.AuthorizedQueryScope,
+	int,
+) ([]shipmentports.AuthorizedDispositionQueueRecord, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredReviewJudgments struct{}
 
 func (unwiredReviewJudgments) LoadRecordedJudgments(

@@ -76,6 +76,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 必然随它一起放行——这一行不是可选项，漏了它就等于断言「同一个 Intake 会给出两种
 	// 答案」，而那是装不出来的形状（票 admin-skeleton-closure-batch/09）。
 	"/acceptance-review-queue": true,
+	// 授权处置队列同样是委托查阅面的子集视图、共用同一个 Intake 变量，启用态必然随它一起放行（票
+	// sa-preacceptance-policy-view/04）。三条判据逐条满足：消费本上下文自己的存储读面、零持久化、
+	// 作用域来自运营侧授权结果——队列只列不处置，处置在另一条写行上，那一行挂字面量 UnconfiguredIntake{}。
+	"/authorized-disposition-queue": true,
 	// 面单交易查阅同样共用委托查阅的 Intake 变量，因此启用态必然随它一起放行（票
 	// admin-skeleton-closure-batch/08）。它照样满足那三条判据：消费本上下文自己的存储
 	// 读面、零持久化、作用域来自运营侧授权结果——查阅一笔面单交易不触发任何判断、派生

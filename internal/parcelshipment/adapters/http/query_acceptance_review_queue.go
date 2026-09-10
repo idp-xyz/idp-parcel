@@ -223,11 +223,15 @@ type reviewFinancialControlBody struct {
 	Items              []reviewControlItemBody `json:"items"`
 }
 
+// reviewControlItemBody 的后两格是受限项上的采用引用（ADR-0132 决定三、四）：正文登记的失败处置与责任引用，
+// 只在受限项采用过时在场；成立项与采用之前记下的受限项两格缺席，照实透出不补造。
 type reviewControlItemBody struct {
-	Kind       string `json:"kind"`
-	Order      uint32 `json:"order"`
-	Conclusion string `json:"conclusion"`
-	Basis      string `json:"basis,omitempty"`
+	Kind               string `json:"kind"`
+	Order              uint32 `json:"order"`
+	Conclusion         string `json:"conclusion"`
+	Basis              string `json:"basis,omitempty"`
+	FailureDisposition string `json:"failureDisposition,omitempty"`
+	Responsibility     string `json:"responsibility,omitempty"`
 }
 
 func reviewQueueEntryBodyOf(record ports.AcceptanceReviewQueueRecord) reviewQueueEntryBody {
@@ -292,12 +296,17 @@ func recordedJudgmentsBodyOf(recorded ports.RecordedJudgments) recordedJudgments
 			Items:              make([]reviewControlItemBody, 0, len(items)),
 		}
 		for _, item := range items {
-			control.Items = append(control.Items, reviewControlItemBody{
+			row := reviewControlItemBody{
 				Kind:       item.Kind().String(),
 				Order:      item.Order(),
 				Conclusion: item.Conclusion().String(),
 				Basis:      item.Basis().String(),
-			})
+			}
+			if adopted, present := item.AdoptedDisposition(); present {
+				row.FailureDisposition = adopted.FailureDisposition().String()
+				row.Responsibility = adopted.Responsibility().String()
+			}
+			control.Items = append(control.Items, row)
 		}
 		if asOf := recorded.FinancialControl.AsOf(); !asOf.At().IsZero() {
 			control.AsOfAt = asOf.At().UTC().Format(time.RFC3339Nano)
