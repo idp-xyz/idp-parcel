@@ -226,3 +226,5 @@ powershell -File scripts/owner-review-queue.ps1 -Out .scratch/owner-review-queue
   ③ 待裁|要裁的|归 owner 定|等 owner 定|owner 定|等 owner|待 owner|交 MCP-1 定|归 MCP-1 定|未裁|待定|未决|等用户|交用户|要裁
   ④ 暂留|后续剪|稍后剪|落地后改|落地后剪|落地后补|落地那票|届时|先留|留到|回看|要补这一路|替身|基线行|头注|过渡态|暂时|暂且|先按|先只|今日形状|占位|临时
 ```
+
+痕迹可剪七处 → [issues/01](./issues/01-review-residue-cleanup.md)（2026-09-10 通道 5 立票并实施）。
