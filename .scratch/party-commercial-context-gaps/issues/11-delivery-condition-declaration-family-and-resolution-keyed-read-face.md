@@ -1,7 +1,7 @@
 # 「交付条件」是服务产品版本声明、客户合同版本只能收紧的商业条件——PC 今天没有这一族，也没有按商业解析回指答「有没有交付条件」的读口
 
 Category: enhancement
-Status: ready-for-agent——由 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md) 决定四与 Consequences 第二条拆出（2026-09-09，通道 2，task-f5521768，PC owner 口径代裁）；归属与对外形状已裁（越权风险点 2 单列供 owner 复核），声明的字段形状、发布通道与批文由本票按下面「要建什么」落，不再裁归属
+Status: in-progress——10:5x 通道 4 认领（单 task-8359632c），分支 `mcp4-pcgaps11` 基 `84e89dc7`；按「要建什么」1→5 逐笔接。此前 ready-for-agent——由 [ADR-0133](../../../docs/adr/0133-delivery-condition-reference-is-the-acceptance-time-commercial-resolution-reference.md) 决定四与 Consequences 第二条拆出（2026-09-09，通道 2，task-f5521768，PC owner 口径代裁）；归属与对外形状已裁（越权风险点 2 单列供 owner 复核），声明的字段形状、发布通道与批文由本票按下面「要建什么」落，不再裁归属
 Blocked by: 无
 
 ## 从哪里来
