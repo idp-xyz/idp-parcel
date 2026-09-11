@@ -53,11 +53,9 @@ func (double *credentialGateRegistryDouble) LoadCredentialGate(
 
 func credentialGateDeps(credentials *credentialStoreDouble, registry *credentialGateRegistryDouble) application.RecordCredentialGateDeps {
 	return application.RecordCredentialGateDeps{
-		Judge: application.NewJudgeCredentialApplicabilityHandler(application.JudgeCredentialApplicabilityDeps{
-			View: credentials,
-		}),
-		Registry: registry,
-		Clock:    fixedClock{at: credentialGateJudgedAt},
+		Credentials: credentials,
+		Registry:    registry,
+		Clock:       fixedClock{at: credentialGateJudgedAt},
 	}
 }
 
@@ -265,7 +263,7 @@ func TestTheCredentialGateHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		name   string
 		mutate func(*application.RecordCredentialGateDeps)
 	}{
-		{"credential applicability judge", func(deps *application.RecordCredentialGateDeps) { deps.Judge = nil }},
+		{"credential view", func(deps *application.RecordCredentialGateDeps) { deps.Credentials = nil }},
 		{"credential gate registry", func(deps *application.RecordCredentialGateDeps) { deps.Registry = nil }},
 		{"clock", func(deps *application.RecordCredentialGateDeps) { deps.Clock = nil }},
 	}

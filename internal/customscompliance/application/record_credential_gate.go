@@ -89,20 +89,19 @@ type RecordCredentialGateCommand struct {
 	Role       domain.ResponsibleRoleReference
 }
 
-// CredentialApplicabilityJudge 是判断半边的口。以接口而不是具体类型进 Deps，理由与其余口一致：
-// 用例替身能不带凭证册直接给出四格之一，装配点接的仍是 JudgeCredentialApplicabilityHandler。
-type CredentialApplicabilityJudge interface {
-	Handle(ctx context.Context, command JudgeCredentialApplicabilityCommand) (CredentialApplicabilityOutcome, error)
-}
-
+// RecordCredentialGateDeps 是三口：凭证册的读半边（判断半边读它）、门禁判断登记册的写半边、时钟。
+// 判断半边不作一口交进来而由构造门自己接上 JudgeCredentialApplicabilityHandler：它是 UC-CC-003 步 7
+// 的判断半边，本编排是它的记录半边，两半合起来才是那一步——装配点要接的是「步 7」，不是两个各
+// 自的口；替身也照旧落在凭证册读口上（判断口自己的用例就这么做），不必为本编排另铸一层。
 type RecordCredentialGateDeps struct {
-	Judge    CredentialApplicabilityJudge
-	Registry ports.CredentialGateRegistry
-	Clock    ports.Clock
+	Credentials ports.CredentialView
+	Registry    ports.CredentialGateRegistry
+	Clock       ports.Clock
 }
 
 type RecordCredentialGateHandler struct {
-	deps RecordCredentialGateDeps
+	deps  RecordCredentialGateDeps
+	judge *JudgeCredentialApplicabilityHandler
 }
 
 // NewRecordCredentialGateHandler 构造门逐口拒 nil（形照 NewDutyPaymentReconciliationHandler；沿用
@@ -112,7 +111,7 @@ func NewRecordCredentialGateHandler(deps RecordCredentialGateDeps) (*RecordCrede
 		name    string
 		missing bool
 	}{
-		{"credential applicability judge", deps.Judge == nil},
+		{"credential view", deps.Credentials == nil},
 		{"credential gate registry", deps.Registry == nil},
 		{"clock", deps.Clock == nil},
 	} {
@@ -120,7 +119,10 @@ func NewRecordCredentialGateHandler(deps RecordCredentialGateDeps) (*RecordCrede
 			return nil, fmt.Errorf("%w: credential gate %s", ErrNilDependency, dependency.name)
 		}
 	}
-	return &RecordCredentialGateHandler{deps: deps}, nil
+	return &RecordCredentialGateHandler{
+		deps:  deps,
+		judge: NewJudgeCredentialApplicabilityHandler(JudgeCredentialApplicabilityDeps{View: deps.Credentials}),
+	}, nil
 }
 
 // Handle 判一次、登一版。受理门分两层：租户、单元、依据引用、责任角色本编排守；凭证身份、程序、
@@ -135,7 +137,7 @@ func (handler *RecordCredentialGateHandler) Handle(
 		return CredentialGateResult{outcome: CredentialGateNotAccepted}, nil
 	}
 
-	applicability, err := handler.deps.Judge.Handle(ctx, JudgeCredentialApplicabilityCommand{
+	applicability, err := handler.judge.Handle(ctx, JudgeCredentialApplicabilityCommand{
 		TenantID:   command.TenantID,
 		Credential: command.Credential,
 		Procedure:  command.Procedure,

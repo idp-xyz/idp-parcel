@@ -15,7 +15,7 @@ import (
 
 // 凭证门禁判断登记册写口与读口的往返用例（0018 建表，票 sa-cc/04）。做法承 credential_registry_test.go
 // 头注：断言穿读口取回、写入一律进环境事务。写入代数与其余登记册同款——不可覆盖、同键只答`已登记`
-// ——但按本册的键（三维 + 指纹）与九列逐格钉一遍：这张表的约束与 SQL 是新写的，先例的绿证不了它们。
+// ——但按本册的键（三维 + 指纹）与各列逐格钉一遍：这张表的约束与 SQL 是新写的，先例的绿证不了它们。
 
 var (
 	gateAsOf     = time.Date(2026, 9, 15, 8, 0, 0, 0, time.UTC)
@@ -36,7 +36,7 @@ func newCredentialGateRegistry(t *testing.T) (*adapter.CredentialGateRegistratio
 	return registry, view, fixture
 }
 
-// synGateRecord 构造一条九件齐全的合成判断连同它的幂等键；结论与依据由用例给，因为四格与换版各要单独钉。
+// synGateRecord 构造一条各维齐全的合成判断连同它的幂等键；结论与依据由用例给，因为四格与换版各要单独钉。
 func synGateRecord(t *testing.T, conclusion domain.CredentialGateConclusion, basis string) ports.CredentialGateRecord {
 	t.Helper()
 	judgment, err := domain.RecordCredentialGate(domain.CredentialGateSpec{
@@ -76,7 +76,7 @@ func registerGate(
 	})
 }
 
-// Covers: 登记往返——九件逐格如实读回（AT-CC-056：适用性与截至时点都在），两个时间各归各轴。
+// Covers: 登记往返——逐格如实读回（AT-CC-056：适用性与截至时点都在），两个时间各归各轴。
 func TestACredentialGateJudgmentRoundTripsThroughTheView(t *testing.T) {
 	registry, view, fixture := newCredentialGateRegistry(t)
 	record := synGateRecord(t, domain.CredentialGateApplicable, "SYN-CRED-EVIDENCE/2026-09")
