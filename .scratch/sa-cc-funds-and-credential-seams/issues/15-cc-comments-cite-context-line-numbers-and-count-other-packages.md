@@ -2,7 +2,7 @@
 
 Category: chore
 Status: ready-for-agent——2026-09-11 14:2x 通道 1 推送方立票并直接转 ready（要裁的为零；收下 sa-cc/10 非作者评审 Standards ① 与 sa-cc/07 步一评审 Standards ① 两条非阻断，扩到同族全部）；取证锚 main `0b027ab8`
-Blocked by: 无（硬）。**软阻**：第五波 sa-cc/04（通道 4）/ 05（通道 5）/ 07 步二（通道 2）都在 `internal/customscompliance/**` 与 `cmd/parcel-customs-register/` 动手，本票是同目录大面积注释改动，先于它们进 main 会让三条分支 rebase 时逐文件解注释冲突——**等这三票进 main 后再开工**，推送方广播后转派
+Blocked by: 无（硬）。**软阻**：第五波 sa-cc/04（通道 4）/ 05（通道 5）/ 07 步二（通道 2）都在 `internal/customscompliance/**` 与 `cmd/parcel-customs-register/` 动手，本票是同目录大面积注释改动，先于它们进 main 会让三条分支 rebase 时逐文件解注释冲突——**等这三票进 main 后再开工**，推送方广播后转派——**05 已 15:1x 进 main、07 步二已 16:0x 进 main（2026-09-11，通道 1 推送方记），只剩 04**；07 步二评审又点了两处同族（`adapters/http/register_credential_and_duty.go` 头注「同一套八格」与 `writeDutyReconciliationAnswer` 头注「资金事实那三格」、`apps/admin-web/src/pages/customs/api.ts` `dutyRegistrationOutcomeLabels` 注释「资金事实三格」），随本票一并收。05 评审 Spec ② 与 07 步二判断项 ①（CLI 与 HTTP 答复面都未透出 `HandoffReference()`）**不并入本票**——那是答复形改动，本票零行为；归 CC owner 另立一张小票（tasks.md 15:0x 节写的「并入 sa-cc/15」由 16:0x 节更正）
 
 ## 缺口（取证于 `0b027ab8`；数本身是论点，故写数并锚 SHA）
 
