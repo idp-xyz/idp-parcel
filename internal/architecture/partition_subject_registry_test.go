@@ -151,6 +151,7 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/advance_recovery_handoff.go":       partitionPerEnvelopePrefix + "键即信封 ID（回收与其调整各自认领）",
 	"internal/settlementaccounting/adapters/postgres/charge_confirmation_handoff.go":    partitionPerEnvelopePrefix + "键即信封 ID（费用确认一拍）",
 	"internal/settlementaccounting/adapters/postgres/claim_settlement_handoff.go":       partitionPerEnvelopePrefix + "键即信封 ID（索赔结算各拍各自认领）",
+	"internal/settlementaccounting/adapters/postgres/evaluation_request_handoff.go":     partitionSubjectPrefix + "租户/评价请求（首发一请求一封，/submitted 状态段只进 ID；/evaluation-request/ 段）",
 	"internal/settlementaccounting/adapters/postgres/external_funds_fact_handoff.go":    partitionSubjectPrefix + "租户/资金事实（更正版本与原版本同区排队，/funds-fact/ 段）",
 	"internal/settlementaccounting/adapters/postgres/operating_handoff.go":              partitionSubjectPrefix + "租户/分摊（/allocation/ 段）与租户/经营结果键（范围/账期/口径，/operating-result/ 段）",
 	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": partitionSubjectPrefix + "租户/核销申请（/application/ 段）",
