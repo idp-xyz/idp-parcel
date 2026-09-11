@@ -23,15 +23,15 @@ const codeUnnamedRefusalReason = "UNNAMED_REFUSAL_REASON"
 
 // MilestoneMappingRegistrationIntake 把一次已认证的接入请求翻译成里程碑映射登记命令。
 //
-// 六个 Intake 都是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：
+// 各 Intake 都是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：
 // 登记快照本体的翻译已在 registrationjson 落定一份，但「渠道原始载荷 → 登记快照」的边界
 // 与操作者认证属渠道接入契约，`PAR-INT-01` 待提供；采信自报租户会穿透 ADR-0003 的隔离
 // 边界。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
 //
-// 逐类分设接口而不合成一个按种类分派的口子，判据同登记 CLI 的命令族：六类的命令互不相同，
+// 逐类分设接口而不合成一个按种类分派的口子，判据同登记 CLI 的命令族：各类的命令互不相同，
 // 合成一个就得在 Intake 里先认种类再定形状，装配点从此可以把一类的翻译接到另一类的端点上
-// 而编译仍绿。查阅面 /visibility-catalogues 折成 ?kind= 一口不构成先例——那里六种共用同一
-// 个作用域与同一个读口，写面每一类各有自己的命令与授权对象。
+// 而编译仍绿。查阅面 /visibility-catalogues 折成 ?kind= 一口不构成先例——那里各种册子共用
+// 同一个作用域与同一个读口，写面每一类各有自己的命令与授权对象。
 type MilestoneMappingRegistrationIntake interface {
 	IntakeMilestoneMappingRegistration(
 		ctx context.Context,

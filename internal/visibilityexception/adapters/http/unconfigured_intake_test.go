@@ -26,8 +26,8 @@ type unconfiguredCase struct {
 // 是「被调即失败」的替身：未配置 Intake 的合同就是不构造查询键也不构造命令，下游若被
 // 触到，说明有请求穿过了未配置格。
 //
-// 六个配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）一并进这张表，判据与读面
-// 同一条：写面的未配置格也住在 Intake 缝里，且它更要紧——穿过去的不是一次读，是一次写。
+// 各配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02d；两册规则登记随票
+// ve-disclosure-policy-view/02 步二加入）一并进这张表，判据与读面同一条：写面的未配置格也住在 Intake 缝里，且它更要紧——穿过去的不是一次读，是一次写。
 func unconfiguredVisibilityEndpoints(t *testing.T) map[string]unconfiguredCase {
 	t.Helper()
 	unconfigured := visibilityhttp.UnconfiguredIntake{}

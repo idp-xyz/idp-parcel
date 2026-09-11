@@ -16,12 +16,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件对六类配置登记端点（ADR-0085，票 admin-write-faces/02 切片 02d）证传输面：方法门、
-// Intake 失败分流、答案逐名转写、依赖故障 5xx、没有名字的答案不上线；并钉住 ADR-0078 的
-// 排除仍然成立——隔离读 Intake 装不进任何一个登记口。
+// 本文件对各类配置登记端点（ADR-0085，票 admin-write-faces/02 切片 02d；两册规则登记随票
+// ve-disclosure-policy-view/02 步二加入）证传输面：方法门、Intake 失败分流、答案逐名转写、
+// 依赖故障 5xx、没有名字的答案不上线；并钉住 ADR-0078 的排除仍然成立——隔离读 Intake 装
+// 不进任何一个登记口。
 //
 // 未配置 403 与「不读内容、答复不随请求变」由 unconfigured_intake_test.go 的那张表覆盖，
-// 六个登记端点已加进去，此处不重复。
+// 各登记端点已加进去，此处不重复。
 
 // milestoneMappingIntakeDouble 交回测试预先备好的命令，对请求零读取。
 //
@@ -175,8 +176,8 @@ func milestoneMappingEndpointOver(
 	)
 }
 
-// catalogRegistrationEndpoints 遍历六个登记端点，各配一个「被调即失败」的编排替身。
-// 逐个走一遍而不是只测一类：端点体虽由 newCatalogRegistrationEndpoint 共用，六个构造函数
+// catalogRegistrationEndpoints 遍历各登记端点，各配一个「被调即失败」的编排替身。
+// 逐个走一遍而不是只测一类：端点体虽由 newCatalogRegistrationEndpoint 共用，各构造函数
 // 各自把哪个 Intake 方法接到哪个编排上是逐类写的，接错那一格只有逐类走过才看得见。
 func catalogRegistrationEndpoints(t *testing.T) map[string]http.Handler {
 	t.Helper()
@@ -201,8 +202,8 @@ func catalogRegistrationEndpoints(t *testing.T) map[string]http.Handler {
 	}
 }
 
-// unreachableRegistrar 是六类共用的「被调即失败」编排替身。泛型按命令类型实例化，因此
-// 它顶替得了六个 Registrar 契约中的任何一个，而实例之间互不相容——把一类的替身接到另一
+// unreachableRegistrar 是各类共用的「被调即失败」编排替身。泛型按命令类型实例化，因此
+// 它顶替得了各 Registrar 契约中的任何一个，而实例之间互不相容——把一类的替身接到另一
 // 类的端点上编译期就红。
 type unreachableRegistrar[Command any] struct{ t *testing.T }
 
@@ -368,7 +369,7 @@ func TestCatalogRegistrationEndpointRefusesToShipAnAnswerWithoutAName(t *testing
 	}
 }
 
-// TestOnlineRegistrationTakesTheSameSnapshotShapeAsTheCLI 是一条编译期断言：六类 Intake
+// TestOnlineRegistrationTakesTheSameSnapshotShapeAsTheCLI 是一条编译期断言：各类 Intake
 // 契约要交出的命令，正是 registrationjson 从登记快照本体译出的那一个。两侧共用一个类型
 // 参数，谁另写一份翻译、或让某一类的在线口收起了与 CLI -input 不同的形状，这里就编译不过。
 func TestOnlineRegistrationTakesTheSameSnapshotShapeAsTheCLI(t *testing.T) {

@@ -18,7 +18,7 @@ import (
 	visibilityapp "go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
-// Covers: 网络七族、关务四类与 VE 六类登记端点的第二参是真编排——三个 build* 在真实
+// Covers: 网络七族、关务四类与 VE 各类登记端点的第二参是真编排——三个 build* 在真实
 // PostgreSQL 上装得起来，且各自的事务壳**确实提交**。
 //
 // 各族的委托接没接对不在本文件证：每个内层方法收的命令类型互不相同，把一族的编排接到
@@ -29,6 +29,11 @@ import (
 //     只能靠读回同一只适配器的列面来证。
 //   - 关务口岸册的重放格 `EXISTING` 本身就要读回首行才答得出来，重放即提交证据。
 //   - VE 目录的重放答 `REFUSED`/`VERSION_NOT_OVERWRITABLE`，同理要读回首行。
+//
+// VE 另加异常披露规则（0023）与冲突信号规则（0025）两链（票 ve-disclosure-policy-view/02
+// 步二）而不搭里程碑那一条：这两册在 ports 侧是单立的登记口，postgres 写口落在另两张表
+// 族，`NewCatalogRegistration` 收的合成接口能不能由同一只 `CatalogRegistrar` 整体满足、
+// 那两张表在本装配的迁移集里到底有没有，都只有真库上走一遍才看得见。
 //
 // 测试输入是隔离合成，只记 `S`，不进生产装配。
 func TestTheWiredCatalogRegistrationsRecordAgainstARealDatabase(t *testing.T) {
@@ -142,6 +147,72 @@ func TestTheWiredCatalogRegistrationsRecordAgainstARealDatabase(t *testing.T) {
 		if replayed.Outcome() != visibilityapp.CatalogRegistrationRefused ||
 			replayed.RefusalReason() != visibilityapp.CatalogVersionNotOverwritable {
 			t.Fatalf("里程碑映射重放 outcome = %s / refusal = %s，想要 REFUSED / VERSION_NOT_OVERWRITABLE"+
+				"——读不到首行说明首登事务没提交", replayed.Outcome(), replayed.RefusalReason())
+		}
+	})
+
+	t.Run("VE 异常披露规则", func(t *testing.T) {
+		registration, err := buildVERegistrationOrchestration(db)
+		if err != nil {
+			t.Fatalf("装配 VE 登记编排：%v", err)
+		}
+		command, err := veregistrationjson.ExceptionDisclosureRulesFromJSON([]byte(
+			`{"tenantId":"SYN-TENANT-API-VE-EDR","version":"SYN-API-EDR-V1",` +
+				`"approvedBy":"SYN-approver-1","effectiveFrom":"2026-09-01T00:00:00Z",` +
+				`"entries":[{"customer":"SYN-CUSTOMER-1","signalKind":"SYN-SIGNAL-STALL",` +
+				`"confidence":"SYN-CONF-HIGH","disclosable":true,"autoRelease":false,` +
+				`"content":"SYN-CONTENT-STALL"}]}`))
+		if err != nil {
+			t.Fatalf("译装异常披露规则登记：%v", err)
+		}
+
+		registered, err := registration.exceptionDisclosureRules.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("异常披露规则首登：%v", err)
+		}
+		if registered.Outcome() != visibilityapp.CatalogRegistered {
+			t.Fatalf("异常披露规则首登 outcome = %s（refusal %s），想要 REGISTERED",
+				registered.Outcome(), registered.RefusalReason())
+		}
+		replayed, err := registration.exceptionDisclosureRules.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("异常披露规则重放：%v", err)
+		}
+		if replayed.Outcome() != visibilityapp.CatalogRegistrationRefused ||
+			replayed.RefusalReason() != visibilityapp.CatalogVersionNotOverwritable {
+			t.Fatalf("异常披露规则重放 outcome = %s / refusal = %s，想要 REFUSED / VERSION_NOT_OVERWRITABLE"+
+				"——读不到首行说明首登事务没提交", replayed.Outcome(), replayed.RefusalReason())
+		}
+	})
+
+	t.Run("VE 冲突信号规则", func(t *testing.T) {
+		registration, err := buildVERegistrationOrchestration(db)
+		if err != nil {
+			t.Fatalf("装配 VE 登记编排：%v", err)
+		}
+		command, err := veregistrationjson.ConflictSignalRuleFromJSON([]byte(
+			`{"tenantId":"SYN-TENANT-API-VE-CSR","signalKind":"SYN-SIGNAL-FACT-CONFLICT",` +
+				`"version":"SYN-API-RULE-V1","confidence":"SYN-CONF-MEDIUM","approvedBy":"SYN-approver-1"}`))
+		if err != nil {
+			t.Fatalf("译装冲突信号规则登记：%v", err)
+		}
+
+		registered, err := registration.conflictSignalRule.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("冲突信号规则首登：%v", err)
+		}
+		if registered.Outcome() != visibilityapp.CatalogRegistered {
+			t.Fatalf("冲突信号规则首登 outcome = %s（refusal %s），想要 REGISTERED",
+				registered.Outcome(), registered.RefusalReason())
+		}
+		// 一租户一条（0025）：撞既有行是这册唯一的治理答案，原行不被顶替。
+		replayed, err := registration.conflictSignalRule.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("冲突信号规则重放：%v", err)
+		}
+		if replayed.Outcome() != visibilityapp.CatalogRegistrationRefused ||
+			replayed.RefusalReason() != visibilityapp.CatalogVersionNotOverwritable {
+			t.Fatalf("冲突信号规则重放 outcome = %s / refusal = %s，想要 REFUSED / VERSION_NOT_OVERWRITABLE"+
 				"——读不到首行说明首登事务没提交", replayed.Outcome(), replayed.RefusalReason())
 		}
 	})
