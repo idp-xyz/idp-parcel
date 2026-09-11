@@ -1,7 +1,7 @@
 # sa-cc/03 评审留下的两处小改：SA `adoptDigest` 头注补「0018 起含付款人、存量零不回算」；CC `NewDutyPaymentReconciliationHandler` 构造期拒 nil
 
 Category: chore
-Status: in-progress——2026-09-11 11:3x 通道 5 按通道 1 派单 task-f955ead7 认领，分支 `mcp5-sacc14` 基远端 main `2c7326ef`；此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Standards 非阻断 ① ② 的后继，一张小票包两处）。要裁的为零。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: resolved——2026-09-11 11:3x 通道 5（task-f955ead7）落分支 `mcp5-sacc14`（代码 tip `62420c95`），等非作者评审与进 main（进 main 记录由推送方补；完成记录见 Comments）；此前 in-progress——2026-09-11 11:2x 通道 5 按通道 1 派单 task-f955ead7 认领，分支 `mcp5-sacc14` 基远端 main `2c7326ef`；此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Standards 非阻断 ① ② 的后继，一张小票包两处）。要裁的为零。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[03](03-cc-inbox-consumer-receives-external-funds-fact.md) 已进 main）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
@@ -61,3 +61,11 @@ Blocked by: 无（[03](03-cc-inbox-consumer-receives-external-funds-fact.md) 已
 ## Comments
 
 - 2026-09-10 22:0x · 通道 4（task-d00c5556，取证锚 main `9ddbafcf`）：立票，Status 直接 ready-for-agent（要裁的为零）。**只写票面，未动代码。** 能力边界：读过 `adoptDigest` / `AdoptFact` 一带与 `FundsFactRecord.ContentDigest` 的比法、`0018` 头注、`NewDutyPaymentReconciliationHandler` 与 CC application 全部 `New*Handler` 的形、`NewApplyPreAcceptanceControlHandler` 的拒 nil 表、`receiveExternalFundsFactConsumer` 全文、03 / 02 两票评审原话；**没读** 两处测试夹具今天装了哪几口——做法 2 因此写成两可，作者开工时看。sa-cc/02 Standards 1 点名的 `NewMapExternalFundsHandler` / `FactHandoff` 那一处**不在本票**：它在 SA，评审处方是「mech/06 SA 在线面接上时同时装它」，归那张票；这里只记同形，不顺手改。
+- 2026-09-11 11:3x · 通道 5（task-f955ead7）· **完成记录**，分支 `mcp5-sacc14` 基远端 main `2c7326ef`，代码 tip `62420c95`（推送方重放后 main 上 SHA 会换，对照由推送方在「进 main 记录」补）：
+  - 认领笔 `5690bd33`（票面 + spec 14 行，无代码）。
+  - **一 · SA `adoptDigest` 头注 `f3104dd8`**：`internal/settlementaccounting/application/map_external_funds.go` 只加注释——付款人自 `0018_external_funds_fact_payer.sql` 起进摘要；摘要元素一变、变之前落下的行重投同一内容会答`内容冲突`而不是`已存在`；0018 之前采用无生产入口、存量为零故不回算旧行；日后再改要么回算存量要么在这里再记一版起点。算法与元素顺序一字未动；引迁移用文件名，无行号无计数。
+  - **二 · CC `NewDutyPaymentReconciliationHandler` 构造期拒 nil `8de0fdcd`**：`reconcile_duty_payment.go` 返 `(*DutyPaymentReconciliationHandler, error)`，新哨兵 `ErrNilDependency`（名照 SA 先例；错误文本 `customs compliance: duty payment reconciliation dependency is nil`），表驱动逐口点名 `duty collaboration store` / `external funds fact register` / `duty verification store` / `clock`，`fmt.Errorf("%w: %s", …)` 形照 `NewApplyPreAcceptanceControlHandler`。调用点三处：`cmd/parcel-dispatch/assemble.go` `receiveExternalFundsFactConsumer` 接错误（`parcel-dispatch: duty payment reconciliation handler: %w`，该函数唯一 hunk，+4/-1）；`reconcile_duty_payment_test.go` 夹具 `newDutyHandler(t, store)` 构造失败即 Fatal，抽 `fullDutyDeps` 供新用例复用；`receive_on_adopted_funds_fact_test.go` 夹具此前只装 `Funds` + `Clock`，按做法 2「按测试意图补替身」加 `unreachedDutyStores`（碰到即 `t.Fatal`——替身同时守票面红线「消费者不关联、不核对」）。新用例 `TestTheReconciliationHandlerNamesWhichDependencyIsMissing`：每口各缺一 → `errors.Is(err, ErrNilDependency)` 且错误文本含那一口名、不交出编排；口齐全不拒。
+  - **评审修 `62420c95`**：`/code-review` Standards 轴自查（子代理不可用，两轴串行自跑）挑出三处对 `Deps` 字段的计数（「四口」「另两口」，AGENTS.md「写代码注释」禁数别处的东西），改成点名 / 「每一口」，注释顺带写明「加口不加表，这里不会红」。Spec 轴自查无发现。**自查不代替非作者评审**。
+  - **判据逐项**：① `git grep -n '不回算' -- internal/settlementaccounting/application/map_external_funds.go` 一处命中，同文件 `0018` 命中在 `adoptDigest` 头注；SA application `go test -count=1` ok，行为零变化。② 签名已改；每口缺一的用例断言到具名错误；`git grep -n 'NewDutyPaymentReconciliationHandler(' -- '*.go'` 四处调用（assemble.go、两处夹具、新用例两次）全部接了 `err`。③ 带 DSN `cmd/parcel-dispatch` ok，`TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable` -v PASS；`assemble.go` 只有那一块 diff。④ `gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；`go test -count=1` SA application + CC application + CC adapters/settlementaccounting + `./internal/architecture/...` ok；带 DSN `cmd/parcel-dispatch` -v PASS 95 / SKIP 0 / FAIL 0（11:31:09→11:31:35，占 55432 前后已广播）；机制清点在隔离树重生成 `git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 为空。⑤ 本条即逐笔 SHA。
+  - **未动**：迁移、`ports`、CC 其余 application 构造器（`NewEstablishCaseHandler` 等仍是旧形，归另一张风格票）；`assemble.go` 路由表；业务判断与列。
+  - **下游**：sa-cc/07 步二（通道 2）在 `cmd/parcel-api` 装配时按新签名接错误。
