@@ -61,9 +61,7 @@ func TestJudgmentsKeepTheirFourPartsAndNeverDeleteEachOther(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「监管凭证」语言「凭证具有独立身份、不可变版本、适用辖区、商品、
-// 程序、线路、有效期以及适用次数或额度；附件文件只是其证据，不能代替凭证身份和适用
-// 性判断」——七件缺一立不起（有效期倒置拒、负额度矛盾拒）；适用性按程序×持有人×时点
+// Covers: CC CONTEXT「监管凭证」语言「凭证具有独立身份、不可变版本、适用辖区、商品、程序、线路、有效期以及适用次数或额度；附件文件只是其证据，不能代替凭证身份和适用性判断」——七件缺一立不起（有效期倒置拒、负额度矛盾拒）；适用性按程序×持有人×时点
 // 三维判，任一不符独立哨兵拒。
 func TestCredentialApplicabilityIsAThreeWayJudgment(t *testing.T) {
 	credential, err := domain.RegisterCredential(

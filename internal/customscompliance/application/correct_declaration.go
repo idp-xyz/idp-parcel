@@ -16,8 +16,8 @@ var ErrFollowUpTargetInconsistent = fmt.Errorf(
 	"customs compliance: the follow-up target disagrees with the unit it claims to correct")
 
 // CorrectDeclarationCommand 携带一次原案内更正/补充的全部输入。单元身份四件（单元、
-// 案件、程序、组成）用于与在册单元核对——原案内更正保留申报单元身份（CONTEXT 硬句
-// 169/172），身份任何一件不同都不是更正，是撞身份冲突。Trigger 与 Kind 指名已形成的
+// 案件、程序、组成）用于与在册单元核对——原案内更正保留申报单元身份（CONTEXT「监管规则允许的更正或补充在原案件内形成新的正式申报资料和提交版本」
+// 「同版本技术再次尝试、原案内补充、原案内更正、撤销动作和重报替代必须分别表达」），身份任何一件不同都不是更正，是撞身份冲突。Trigger 与 Kind 指名已形成的
 // 后续动作目标：目标按（触发依据+被更正版本+动作类型）立键，被更正版本由编排取当前
 // 版补齐，不采信调用方自报。
 type CorrectDeclarationCommand struct {
@@ -58,9 +58,7 @@ func NewCorrectDeclarationHandler(deps CorrectDeclarationDeps) *CorrectDeclarati
 	return &CorrectDeclarationHandler{deps: deps}
 }
 
-// Handle 在原案件内形成新的提交版本（CONTEXT「原提交及其结果永久保留」、生命周期「原案内补充或更正
-// 目标已形成 → 形成新的正式申报资料准备版本，并针对新的拟提交动作重新经过就绪、
-// 授权、提交」）：受理（单元四件+新资料快照+目标指名）→ 当前版在册（无版无可更正）→
+// Handle 在原案件内形成新的提交版本（CONTEXT「原提交及其结果永久保留」、生命周期「原案内补充或更正目标已形成 → 形成新的正式申报资料准备版本，并针对新的拟提交动作重新经过就绪、授权、提交」）：受理（单元四件+新资料快照+目标指名）→ 当前版在册（无版无可更正）→
 // 幂等（新内容与当前版同指纹即重放返原）→ 单元身份核对（更正保留身份，任何一件不同
 // 即冲突）→ 后续动作目标按**当前版**键住（目标缺席、目标对旧版、并发换版三种情形同
 // 一格：对当前版重新形成后续决定再来）→ 就绪与授权重新取得（不得复用首次申报的判断，

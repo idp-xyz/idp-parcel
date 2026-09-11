@@ -198,7 +198,7 @@ func NewSubmissionAuthorityReference(value string) (SubmissionAuthorityReference
 }
 
 // SubmissionAuthorization 是提交授权判断——与 ReadinessJudgment 同形的另一条轨
-// （CONTEXT 244：「提交授权与就绪判断分别形成和失效」）。授权失效不是删除：原依据
+// （CONTEXT「提交授权与就绪判断分别形成和失效」）。授权失效不是删除：原依据
 // 与授予时间保留，但不得继续支持实际提交；没有这半边，失效授权在读口上只能被误读成
 // 「未配置」或「仍有效」。
 type SubmissionAuthorization struct {

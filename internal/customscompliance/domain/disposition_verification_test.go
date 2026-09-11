@@ -96,8 +96,7 @@ func TestVerificationDemandsFactsAndComparesProvidedQuantities(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「数量、期限、条件……未提供或不适用的内容必须明确记录，不能猜测补齐」——来源未提供数量时数量不是核对维度：范围相符即已覆盖，不虚构一个「默认
-// 数量」去比；范围不符的执行事实是事实冲突（拿别的范围的执行凑数分不出真假）。
+// Covers: CC CONTEXT「数量、期限、条件……未提供或不适用的内容必须明确记录，不能猜测补齐」——来源未提供数量时数量不是核对维度：范围相符即已覆盖，不虚构一个「默认数量」去比；范围不符的执行事实是事实冲突（拿别的范围的执行凑数分不出真假）。
 func TestUnprovidedDimensionsAreHonestlyOutOfScope(t *testing.T) {
 	noQuantity := decision(t, domain.RequiredQuantity{})
 

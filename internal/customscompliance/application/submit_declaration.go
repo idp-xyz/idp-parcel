@@ -180,7 +180,7 @@ func NewSubmitDeclarationHandler(deps SubmitDeclarationDeps) *SubmitDeclarationH
 // Handle 把一个申报单元推进到不可覆盖的提交版本：受理（单元+案件+资料/角色快照）→
 // 幂等/冲突按内容指纹分界（重放返原版本不重形成，CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」；重放的案件一致性对单元
 // 本体核）→ 案件反查核存在（悬空引用拒绝，ADR-0073 决定五）→ 就绪读口（未配置→
-// 未决；不再就绪→业务负向）→ 提交授权（与就绪分开，双有效才成版，CONTEXT 244）→
+// 未决；不再就绪→业务负向）→ 提交授权（与就绪分开，CONTEXT「提交授权与就绪判断分别形成和失效」）→
 // 单元本体落册（同键异身份→冲突，ADR-0073 决定一/二）→ FixSubmissionVersion+
 // InitialAttempt → 原子提交 → 发布意图（载荷带案件维）。
 func (handler *SubmitDeclarationHandler) Handle(
@@ -269,7 +269,7 @@ func (handler *SubmitDeclarationHandler) Handle(
 			continuation: declarationContinuation("AUTHORITY_UNAVAILABLE", command.UnitID)}, nil
 	}
 	if !granted {
-		// 授权与就绪分别形成和失效：就绪在场也顶替不了授权（CONTEXT 244）。
+		// 授权与就绪分别形成和失效：就绪在场也顶替不了授权（CONTEXT「提交授权与就绪判断分别形成和失效」）。
 		return SubmitDeclarationResult{outcome: DeclarationUndecided, reason: AuthorityUnconfigured,
 			continuation: declarationContinuation("AUTHORITY_UNCONFIGURED", command.UnitID)}, nil
 	}

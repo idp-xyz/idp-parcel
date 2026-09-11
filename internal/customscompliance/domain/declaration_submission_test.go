@@ -67,8 +67,7 @@ func versionSpec(t *testing.T) domain.CustomsSubmissionVersionSpec {
 	}
 }
 
-// Covers: CC CONTEXT「申报单元必须具有独立身份和可追溯组成」与「申报单元的组成在
-// 逻辑提交版本形成时固定……已提交版本保持不变」——版本固定时快照组成，值类型无回写
+// Covers: CC CONTEXT「申报单元必须具有独立身份和可追溯组成」与「申报单元的组成在逻辑提交版本形成时固定……已提交版本保持不变」——版本固定时快照组成，值类型无回写
 // 入口；重复成员拒；版本上没有传输/受理/放行字段（版本存在不证明那些，结构性）。
 func TestAVersionFreezesTheUnitCompositionAtFixTime(t *testing.T) {
 	version, err := domain.FixSubmissionVersion(versionSpec(t))

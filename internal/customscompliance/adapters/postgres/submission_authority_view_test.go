@@ -72,7 +72,7 @@ func TestRevokedSubmissionAuthorityIsReportedAsFoundButNoLongerEffective(t *test
 	}
 }
 
-// 两条轨分表存放，因此一条的登记不会替另一条作答（CONTEXT 244）。就绪在场顶替不了
+// 两条轨分表存放，因此一条的登记不会替另一条作答（CONTEXT「提交授权与就绪判断分别形成和失效」）。就绪在场顶替不了
 // 授权，这一条把它钉在读口层面。
 func TestReadinessAndSubmissionAuthorityAnswerIndependently(t *testing.T) {
 	fixture := newViewFixture(t)

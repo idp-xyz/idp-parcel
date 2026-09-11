@@ -40,8 +40,8 @@ func acceptRule(t *testing.T) domain.DutyPaymentGateRule {
 	return rule
 }
 
-// Covers: ADR-0137 决定三——规则正文两形之一：三个接受集合各非空，或「税费付款不构成本动作在此
-// 边界的前置条件」；两形在类型上分得开，读口各答各的。
+// Covers: ADR-0137 决定三——规则正文两形之一：三个接受集合各非空，或「税费付款不构成本动作在本边界的前置条件」；
+// 两形在类型上分得开，读口各答各的。
 func TestADutyPaymentGateRuleTakesExactlyTwoShapes(t *testing.T) {
 	rule := acceptRule(t)
 	if rule.NotAPrecondition() {
@@ -103,7 +103,7 @@ func TestADutyPaymentGateRuleRefusesPendingConflictingAndEmptyAcceptance(t *test
 }
 
 // Covers: 三态各落在自己的接受集合内才满足，任一不在即未满足（ADR-0137 决定三）；判出的三态原值
-// 随读数原样带回，不折成合成布尔（CONTEXT「覆盖状态、差额状态和有效性状态分别表达」）。
+// 随读数原样带回，不折成合成布尔（CONTEXT「覆盖状态（无覆盖、部分覆盖、已覆盖）、差额状态（无差额、不足、超额或待确认）和有效性状态（有效、失效、冲突或待确认）分别表达」）。
 func TestAcceptanceSetsJudgeEachAxisSeparately(t *testing.T) {
 	rule := acceptRule(t)
 
@@ -127,8 +127,8 @@ func TestAcceptanceSetsJudgeEachAxisSeparately(t *testing.T) {
 	}
 }
 
-// Covers: 三态任一为`待确认` / `冲突`时这道门禁未决并指名——不是未满足也不是满足（UC-CC-003「未知
-// 不能当作可选、不适用、有效或已解除」）；「不构成前置条件」的规则不判核对。
+// Covers: 三态任一为`待确认` / `冲突`时这道门禁未决并指名——不是未满足也不是满足（UC-CC-003「未知不能当作可选、不适用、有效或已解除」）；
+// 「不构成前置条件」的规则不判核对。
 func TestPendingOrConflictingAxesLeaveTheDutyGateUndecided(t *testing.T) {
 	rule := acceptRule(t)
 	for name, verification := range map[string]domain.DutyPaymentVerification{

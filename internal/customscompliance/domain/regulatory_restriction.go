@@ -160,8 +160,8 @@ type ActionAdmissibility struct {
 	blockedBy  []RestrictionID
 }
 
-// JudgeActionAdmissibility 判断一个方向性动作对明确对象是否可继续：「只有作用于当前
-// 对象和拟执行动作的全部阻断性限制均已解除，相应动作才可继续」。范围不合或不约束
+// JudgeActionAdmissibility 判断一个方向性动作对明确对象是否可继续：CONTEXT「只有作用于当前对象和拟执行动作的全部阻断性限制均已解除，相应动作才可继续」。
+// 范围不合或不约束
 // 此动作的限制不参与；仍有效且约束此动作的限制逐一列进阻断清单——部分解除仍阻断。
 func JudgeActionAdmissibility(
 	action GuardedAction,

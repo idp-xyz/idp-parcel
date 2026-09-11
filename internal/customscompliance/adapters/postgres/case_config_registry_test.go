@@ -293,7 +293,7 @@ func TestSubmissionAuthorityRegistrationRoundTripsAndRevokesInPlace(t *testing.T
 	}
 }
 
-// 就绪与授权分表分口那条：撤销了授权不该连带动就绪那一轨（CONTEXT 244）。
+// 就绪与授权分表分口那条：撤销了授权不该连带动就绪那一轨（CONTEXT「提交授权与就绪判断分别形成和失效」）。
 func TestRevokingAuthorityLeavesReadinessUntouched(t *testing.T) {
 	fixture := newViewFixture(t)
 	readiness, err := adapter.NewReadinessRegistrations(fixture.db)

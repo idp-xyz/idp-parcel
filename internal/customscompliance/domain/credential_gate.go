@@ -8,8 +8,8 @@ import (
 var ErrInvalidCredentialGate = errors.New("customs compliance: invalid credential gate judgment")
 
 // 凭证门禁判断——UC-CC-003 就绪门禁第 4 道「监管凭证」在一次评估请求上判出的那一格，逐门禁
-// 判断的第一册（ADR-0137 决定一）。CONTEXT 的话：「逐门禁判断（凭证门禁为第一册）是本上下文
-// 登记的不可覆盖事实，就绪判断按不可变引用绑定它们、不内嵌其内部结构」。它只记判断，不占用、
+// 判断的第一册（ADR-0137 决定一）。CONTEXT 的话：「逐门禁判断（凭证门禁为第一册）是本上下文登记的不可覆盖事实，就绪判断按不可变引用绑定它们、不内嵌其内部结构」。
+// 它只记判断，不占用、
 // 不释放、不核销——那三件是凭证使用的生命周期（UC-CC-005 步 7/9、UC-CC-006 步 7），时点由
 // 真实程序定（PAR-CUS-04）。
 //
@@ -19,7 +19,7 @@ var ErrInvalidCredentialGate = errors.New("customs compliance: invalid credentia
 
 // CredentialGateConclusion 是凭证门禁判断的结论封闭四格，与 JudgeCredentialApplicability 判出的
 // 四格同词。「凭证未登记」与「不适用」刻意分立：前者是实例半边还没到、续办是登记；后者是判断
-// 结论、续办是由凭证责任流程形成有效依据后再发一次评估请求（UC-CC-003 门禁表第 4 行）。
+// 结论、续办是由凭证责任流程形成有效依据后再发一次评估请求（UC-CC-003 门禁表「4. 监管凭证」行「由凭证责任流程形成有效依据后重新评估」）。
 // 「未决」记的是这次评估请求上这道门没判出来（读凭证册的口故障），不是「不适用」。
 type CredentialGateConclusion uint8
 
@@ -66,8 +66,8 @@ func NewCredentialGateBasisReference(value string) (CredentialGateBasisReference
 	return CredentialGateBasisReference{required}, err
 }
 
-// ResponsibleRoleReference 指名对这次门禁判断负责的角色（UC-CC-003 范围节「保存每项门禁的……
-// 责任角色」）——发起评估请求的那个角色，不是操作员登录身份。
+// ResponsibleRoleReference 指名对这次门禁判断负责的角色（UC-CC-003 范围节「保存每项门禁的……责任角色」）
+// ——发起评估请求的那个角色，不是操作员登录身份。
 type ResponsibleRoleReference struct{ requiredValue }
 
 func NewResponsibleRoleReference(value string) (ResponsibleRoleReference, error) {

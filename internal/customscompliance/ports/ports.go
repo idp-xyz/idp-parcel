@@ -514,8 +514,7 @@ const (
 	DeclarationUnitAlreadyRecorded
 )
 
-// DeclarationUnitStore 是申报单元的持久化本体（ADR-0073 决定一：CONTEXT 要求「独立身份和可追溯组成」，jsonb 快照给不出独立身份）。Save 只建立、无更新路径——「同一
-// 单元的案件维不得变更」由此在结构上承载（决定二）：同键已在册答`已有记录`，内容是否
+// DeclarationUnitStore 是申报单元的持久化本体（ADR-0073 决定一：CONTEXT 要求「独立身份和可追溯组成」，jsonb 快照给不出独立身份）。Save 只建立、无更新路径——「同一单元的案件维不得变更」由此在结构上承载（决定二）：同键已在册答`已有记录`，内容是否
 // 一致由编排读回自己比，换案件即换（替代）单元。FindByID 供提交链取回单元身份与案件
 // 维（重放一致性核对与意图载荷取数）；「案件→单元集」的反向查询按表上案件列带索引
 // 查询即得（决定三），今天没有消费方，端口不预设方法。
@@ -592,7 +591,7 @@ type DeclarationSubmissionStore interface {
 
 // ReadinessView 取申报单元的就绪判断。found=false 表示资格目录/就绪规则未配置——
 // 实例半边未提供时停在未决；found=true 而判断已失效即`不再就绪`，由调用方按业务
-// 结果分格（就绪与授权分别形成和失效，CONTEXT 244）。
+// 结果分格（就绪与授权分别形成和失效，CONTEXT「提交授权与就绪判断分别形成和失效」）。
 type ReadinessView interface {
 	LoadReadiness(
 		ctx context.Context,
@@ -603,7 +602,7 @@ type ReadinessView interface {
 
 // SubmissionAuthorityView 取申报单元的提交授权判断。与就绪读口同形三态：found=false
 // 表示授权未配置（实例半边）；found=true 而判断已失效即`授权已失效`——分别形成和
-// 失效的那半边在形状上有格可表，适配器不必把失效谎报成未配置或仍有效（CONTEXT 244）。
+// 失效的那半边在形状上有格可表，适配器不必把失效谎报成未配置或仍有效（CONTEXT「提交授权与就绪判断分别形成和失效」）。
 type SubmissionAuthorityView interface {
 	LoadSubmissionAuthority(
 		ctx context.Context,
@@ -645,7 +644,7 @@ type ReadinessRegistry interface {
 }
 
 // SubmissionAuthorityRegistry 是 SubmissionAuthorityView 的写口半边。与就绪分表分口
-// ——两条轨分别形成和失效（CONTEXT 244），一个写口写两张表就等于让它们同生同灭。
+// ——两条轨分别形成和失效（CONTEXT「提交授权与就绪判断分别形成和失效」），一个写口写两张表就等于让它们同生同灭。
 //
 // 同 SubmissionAuthorityView 的告诫：**这本册子不是接入认证**。这里登记的是「这个申报
 // 单元有没有有效的提交授权依据」，不是「这个请求来自哪个租户」——租户是入参。

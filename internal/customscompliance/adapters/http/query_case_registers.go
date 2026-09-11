@@ -227,9 +227,9 @@ type readinessJudgmentBody struct {
 	RevokedAt string `json:"revokedAt,omitempty"`
 }
 
-// submissionAuthorityBody 与就绪同形的另一条轨（CONTEXT 244：分别形成和失效）。两册
-// 分端点分派、分格转写，页面上分列两栏——不得合成一个「可提交」标记（CONTEXT 硬句
-// 164，票 05 形状约束一）。
+// submissionAuthorityBody 与就绪同形的另一条轨（CONTEXT「提交授权与就绪判断分别形成和失效」）。两册
+// 分端点分派、分格转写，页面上分列两栏——不得合成一个「可提交」标记（CONTEXT「申报就绪判断与提交授权必须独立存在」，
+// 票 05 形状约束一）。
 type submissionAuthorityBody struct {
 	Unit      string `json:"unit"`
 	Authority string `json:"authority"`

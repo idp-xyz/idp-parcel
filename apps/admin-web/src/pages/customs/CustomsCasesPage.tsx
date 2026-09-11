@@ -89,8 +89,7 @@ const caseColumns: ListColumn<CustomsCaseRow>[] = [
 ];
 
 /**
- * 申报单元列表行。字段取 customs-compliance CONTEXT.md「申报单元」「受控跨客户
- * 合报」「申报就绪判断」「申报替代关系」原词。
+ * 申报单元列表行。字段取 customs-compliance CONTEXT.md「申报单元」「受控跨客户合报」「申报就绪判断」「申报替代关系」原词。
  */
 export interface DeclarationUnitRow {
   /** 申报单元标识。 */

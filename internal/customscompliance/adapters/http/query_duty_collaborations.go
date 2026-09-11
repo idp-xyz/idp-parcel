@@ -30,8 +30,8 @@ const outcomeDutyCollaborationsListed = "DUTY_COLLABORATIONS_LISTED"
 // （GET /customs-duty-collaborations，票 sa-cc/10）。
 //
 // 独立端点、不与付款核对册合成一个 `?registry=` 分派：两册同归 customs-restrictions 页，
-// 但票 sa-cc/10 裁决「端点各立三个入口」——协作事项与核对是 UC-CC-009「七层对象必须
-// 分离」里的两层，各自一口让「一层的译装接到另一层的端点上」在装配处就对不上。
+// 但票 sa-cc/10 裁决「端点各立三个入口」——协作事项与核对是 UC-CC-009「七层对象必须分离」里的两层，
+// 各自一口让「一层的译装接到另一层的端点上」在装配处就对不上。
 //
 // 义务依据两格逐字段转写、互不串格：核定税费格带 duty 不带 noPayBasis，明确无需付款格
 // 反之——领域构造只放这两种形状（FormDutyCollaboration），第三种「没有结果所以不用付」

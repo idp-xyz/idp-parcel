@@ -86,8 +86,8 @@ func (outcome DutyReconciliationOutcome) String() string {
 }
 
 // DutyReconciliationReason 指名未决停在哪一步等谁。DutyObligationBasisAbsent 是业务上的未决
-// （UC-CC-009 步 4 的第四个结果「未决」）：既无核定税费也无明确无需付款依据——「缺少税费结果
-// 不能被解释为无需付款」，编排不形成支付指令也不替它选一格。其余三格是依赖故障。
+// （UC-CC-009 步 4 的第四个结果「未决」）：既无核定税费也无明确无需付款依据——UC-CC-009「没有税费结果不能被解释为无需付款」，
+// 编排不形成支付指令也不替它选一格。其余三格是依赖故障。
 type DutyReconciliationReason uint8
 
 const (

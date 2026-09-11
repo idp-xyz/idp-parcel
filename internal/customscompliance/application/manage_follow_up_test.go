@@ -133,8 +133,7 @@ func followUpKey(t *testing.T, kind domain.FollowUpActionKind) ports.FollowUpTar
 // 目标和关系」）；重报目标至多一份拟替代（同替代单元重放返原、异替代单元冲突不顶替
 // ——换单元先处置原拟替代）；生效只凭外部结果（`AT-CC-201` 的生效半边「全部替代生效
 // 条件满足→形成范围明确的有效替代关系」与 `AT-CC-202` 的拒生效半边「只取得技术成功、
-// 监管接收……→不形成有效替代」）且已生效重放按已生效作答（CONTEXT 267：内部决定、
-// 请求发出或技术成功都不等于替代成立）。
+// 监管接收……→不形成有效替代」）且已生效重放按已生效作答（CONTEXT 生命周期「真实程序要求的撤销、重报及外部结果均已满足 → 拟替代关系可以形成有效替代关系」：内部决定、请求发出或技术成功都不等于替代成立）。
 func TestFollowUpTargetsProposalsAndEffectsStayDisciplined(t *testing.T) {
 	fixture := newFollowUpFixture(t)
 	tenant := mustValue(t, domain.NewTenantID, "tenant-1")

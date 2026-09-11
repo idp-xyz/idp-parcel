@@ -185,8 +185,8 @@ type RevokeSubmissionAuthorityCommand struct {
 	At       time.Time
 }
 
-// GrantSubmissionAuthority 登记提交授权。与就绪同形而分走两条轨（CONTEXT 244：提交
-// 授权与就绪判断分别形成和失效），因此不共用类型也不共用写口。
+// GrantSubmissionAuthority 登记提交授权。与就绪同形而分走两条轨（CONTEXT「提交授权与就绪判断分别形成和失效」），
+// 因此不共用类型也不共用写口。
 func (handler *RegisterCaseConfigurationHandler) GrantSubmissionAuthority(
 	ctx context.Context,
 	command GrantSubmissionAuthorityCommand,

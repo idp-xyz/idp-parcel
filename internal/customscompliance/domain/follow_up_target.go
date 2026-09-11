@@ -175,9 +175,8 @@ func (relation ReplacementRelation) ExternalResult() (string, bool) {
 	return relation.externalResult, relation.effective
 }
 
-// TakeEffect 依据真实程序要求的权威外部结果把拟替代升为有效替代（CONTEXT 生命周期
-// 267：「真实程序要求的撤销、重报及外部结果均已满足→拟替代关系可以形成有效替代
-// 关系」）。外部结果必备——内部决定、请求发出或技术成功都不等于替代成立；有效替代
+// TakeEffect 依据真实程序要求的权威外部结果把拟替代升为有效替代（CONTEXT 生命周期「真实程序要求的撤销、重报及外部结果均已满足 → 拟替代关系可以形成有效替代关系」）。
+// 外部结果必备——内部决定、请求发出或技术成功都不等于替代成立；有效替代
 // 不删除原对象（这里只有引用，删无可删）；已生效不再生效第二次。
 func (relation ReplacementRelation) TakeEffect(
 	externalResult string,

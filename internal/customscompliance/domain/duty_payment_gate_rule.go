@@ -10,8 +10,7 @@ var (
 	ErrDutyPaymentGateUndecided   = errors.New("customs compliance: the duty payment gate cannot be judged from this verification")
 )
 
-// 放行门禁里「税费付款」那一道的读法（票 sa-cc/06，ADR-0137 决定三）。CONTEXT 的话：「税费支付是否
-// 是放行前置条件，取决于当前监管程序的适用规则；本上下文不得统一假设『先税后放』或『先放后税』」
+// 放行门禁里「税费付款」那一道的读法（票 sa-cc/06，ADR-0137 决定三）。CONTEXT 的话：「税费支付是否是放行前置条件，取决于当前监管程序的适用规则；本上下文不得统一假设“先税后放”或“先放后税”」
 // ——所以折法不是编排常量，是登记进来的规则；规则的取值（哪个程序下什么差额能放行）属实例半边
 // `PAR-CUS-0x`，这里一个都不拟，连「已覆盖 · 无差额 · 有效才满足」也不拟。
 
@@ -152,7 +151,7 @@ func (reference DutyVerificationReference) valid() bool {
 }
 
 // DutyPaymentGateReading 是门禁记录上「税费付款」那一道的读数：按规则折出的判断、三态原值、核对版本
-// 引用。没有合成布尔——CONTEXT「覆盖状态、差额状态和有效性状态分别表达，不能实现为一组互斥总状态」。
+// 引用。没有合成布尔——CONTEXT「覆盖状态（无覆盖、部分覆盖、已覆盖）、差额状态（无差额、不足、超额或待确认）和有效性状态（有效、失效、冲突或待确认）分别表达，不能实现为一组互斥总状态」。
 type DutyPaymentGateReading struct {
 	State        PreconditionState
 	Coverage     DutyCoverage

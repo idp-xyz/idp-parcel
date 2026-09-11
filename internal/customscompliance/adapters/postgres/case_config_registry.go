@@ -108,7 +108,7 @@ func (registry *ReadinessRegistrations) RevokeReadiness(
 }
 
 // SubmissionAuthorityRegistrations 实现 ports.SubmissionAuthorityRegistry。与就绪
-// 同形而分表分类型：两条轨分别形成和失效（CONTEXT 244），共用一个类型就迟早共用一次
+// 同形而分表分类型：两条轨分别形成和失效（CONTEXT「提交授权与就绪判断分别形成和失效」），共用一个类型就迟早共用一次
 // 写入。
 type SubmissionAuthorityRegistrations struct {
 	db *bentopg.DB
