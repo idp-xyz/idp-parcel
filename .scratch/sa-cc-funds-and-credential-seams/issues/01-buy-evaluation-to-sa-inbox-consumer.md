@@ -1,7 +1,7 @@
 # BUY 评价已发出的信封没有 SA 侧消费者：`parcel-pricing.evaluation.recorded` 落进 Outbox 后无人接，`FormSupplierExpectedCostHandler` 只有测试调得到
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：「要裁的」1 取 (c)，本票范围是「信封到未决」，三件引用等 [08](08-sa-evaluation-request-orchestration-records-source-references.md)（见「要裁的」下「裁决」）。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-11 21:2x 通道 5 认领（task-35caf74b；分支 `mcp5-sacc01` 基 `02e1dfc4`，隔离树 `D:/tops/idp-parcel-mcp5-sacc01`）。派单取证与票面的差别：「`adapters/inbox/`（新目录）」已过时——sa-cc/09 已建该目录（`duty_payment_verification_consumer{,_test}.go`），本票照那只的形新增文件、不动它；08 已进 main，但「形成」那条路按裁决仍不在本票。此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：「要裁的」1 取 (c)，本票范围是「信封到未决」，三件引用等 [08](08-sa-evaluation-request-orchestration-records-source-references.md)（见「要裁的」下「裁决」）。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无（(c) 范围不等 08；08 落地后「形成」那条路另补）
 
 ## 缺口（取证于 `3f485e97`）
