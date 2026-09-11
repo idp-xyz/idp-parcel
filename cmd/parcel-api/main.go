@@ -143,7 +143,7 @@ func run(logger *slog.Logger) error {
 	// 面单渠道写链（票 label-channel/34）：启动时装配**只为 fail-fast**——组合根里 PC / PS 的读适配器与 outbox
 	// 任一构造失败，进程在此带原因退出（同函数开池段那条纪律），而不是等到某天接上触发面才发现。产物今天没有
 	// 消费者（乙路无运营端点、无进程内触发面；谁在什么业务时点发起一笔面单交易的建立是产品题，触发面另票），
-	// 构造即丢；六个实例半边缝仍全部显式未配置，不为此变绿种任何行。
+	// 构造即丢；实例半边缝仍全部显式未配置，不为此变绿种任何行。
 	if _, err := buildLabelChannelOrchestration(db); err != nil {
 		return err
 	}
