@@ -248,6 +248,24 @@ func TestALabelTransactionJudgmentDueReachesTheConsumerThroughTheRouteTable(t *t
 	}
 }
 
+// Covers: 路由表的关闭 / 重开决定判断意图一条（lc/27，ADR-0134）——PS 写侧在决定落册后交出的
+// `continued-attempt-decision.judgment-due` 投给它自己的判断消费者。手法同前几条：毒丸载荷（缺
+// tenantId/parcel/decision）让消费门显式拒收入账并交回 nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是
+// 无订阅者；挂到 26 那扇门上的话，26 的消费者按类型响亮拒收，这里同样不会 published = 1。
+func TestAContinuedAttemptDecisionJudgmentDueReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "decision-judgment-1", psinbox.ContinuedAttemptDecisionJudgmentDueEventType, `{}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把关闭 / 重开决定判断意图投给消费者",
+			published, recordedFailureCode(t, db, "decision-judgment-1"))
+	}
+}
+
 // Covers: 路由表的 SA 资金事实采用一条（sa-cc/03）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
 // 正：SA 采用过的事实（带来源提供的付款人）经 `external-funds-fact.adopted` 引用式信封到 CC 消费者，按
 // （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 的 external_funds_fact 落一行；

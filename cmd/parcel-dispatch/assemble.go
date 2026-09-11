@@ -453,6 +453,11 @@ var labelTransactionJudgmentUndecidedSentinels = []error{
 	labelfinal.ErrFinalUndecided,
 }
 
+// continuedAttemptDecisionJudgmentUndecidedSentinels 是关闭 / 重开决定判断意图这条链（lc/27，ADR-0134）
+// 登记的未决哨兵。它与面单交易那一路是**同一张名单**：两路的处理方是同一只 labelfinal.ParcelJudgmentCore，
+// 未决与不在名单里的几格由核一处回答，这里只是让名字各指各路——名单不抄第二份。
+var continuedAttemptDecisionJudgmentUndecidedSentinels = labelTransactionJudgmentUndecidedSentinels
+
 // externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
 // 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用。编排的 `未受理`
 // 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）。
@@ -666,6 +671,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment undecided translation: %w", err)
 	}
 
+	decisionJudgments, err := judgeLabelFinalOnContinuedAttemptDecisionConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedDecisionJudgments, err := dispatch.WithUndecidedSentinels(
+		decisionJudgments, continuedAttemptDecisionJudgmentUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: continued attempt decision judgment undecided translation: %w", err)
+	}
+
 	fundsFacts, err := receiveExternalFundsFactConsumer(db, inboxStore, clock)
 	if err != nil {
 		return nil, err
@@ -754,25 +769,26 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
-			psinbox.ShipmentRequestSubmittedEventType:      routedChain,
-			psinbox.ManualReviewCompletedEventType:         routedResume,
-			psinbox.OperatorRegistrationCompletedEventType: routedRegistration,
-			psinbox.SubmissionVersionFormedEventType:       routedSupplement,
-			nrinbox.AcceptedDecisionEventType:              acceptanceFan,
-			nrinbox.AdoptedNetworkIntakeEventType:          routedIntakes,
-			psinbox.NodeIntakeFormedEventType:              nodeIntakeFan,
-			psinbox.OffsitePickupRegisteredEventType:       pickupFan,
-			psinbox.EffectiveDeliveryRegisteredEventType:   deliveryFan,
-			psinbox.LabelTransactionJudgmentDueEventType:   routedLabelJudgments,
-			ccinbox.ExternalFundsFactAdoptedEventType:      routedFundsFacts,
-			veinbox.TransportHandoverRegisteredEventType:   veHandoverRouted,
-			veinbox.ExternalCarrierTrackingJudgedEventType: veExternalTrackingRouted,
-			veinbox.FinalOutcomeFormedEventType:            veFinalOutcomeRouted,
-			veinbox.InitialRouteFormedEventType:            veInitialRouteRouted,
-			veinbox.ExceptionJourneyRecordedEventType:      veExceptionJourneyRouted,
-			veinbox.CustomsCaseEstablishedEventType:        veCustomsCaseRouted,
-			veinbox.DeclarationSubmissionFormedEventType:   veDeclarationSubmissionRouted,
-			veinbox.TrackingProjectionDerivedEventType:     veCustomerViewRouted,
+			psinbox.ShipmentRequestSubmittedEventType:            routedChain,
+			psinbox.ManualReviewCompletedEventType:               routedResume,
+			psinbox.OperatorRegistrationCompletedEventType:       routedRegistration,
+			psinbox.SubmissionVersionFormedEventType:             routedSupplement,
+			nrinbox.AcceptedDecisionEventType:                    acceptanceFan,
+			nrinbox.AdoptedNetworkIntakeEventType:                routedIntakes,
+			psinbox.NodeIntakeFormedEventType:                    nodeIntakeFan,
+			psinbox.OffsitePickupRegisteredEventType:             pickupFan,
+			psinbox.EffectiveDeliveryRegisteredEventType:         deliveryFan,
+			psinbox.LabelTransactionJudgmentDueEventType:         routedLabelJudgments,
+			psinbox.ContinuedAttemptDecisionJudgmentDueEventType: routedDecisionJudgments,
+			ccinbox.ExternalFundsFactAdoptedEventType:            routedFundsFacts,
+			veinbox.TransportHandoverRegisteredEventType:         veHandoverRouted,
+			veinbox.ExternalCarrierTrackingJudgedEventType:       veExternalTrackingRouted,
+			veinbox.FinalOutcomeFormedEventType:                  veFinalOutcomeRouted,
+			veinbox.InitialRouteFormedEventType:                  veInitialRouteRouted,
+			veinbox.ExceptionJourneyRecordedEventType:            veExceptionJourneyRouted,
+			veinbox.CustomsCaseEstablishedEventType:              veCustomsCaseRouted,
+			veinbox.DeclarationSubmissionFormedEventType:         veDeclarationSubmissionRouted,
+			veinbox.TrackingProjectionDerivedEventType:           veCustomerViewRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -1928,24 +1944,21 @@ func adoptEffectiveDeliveryConsumer(
 	return consumer, nil
 }
 
-// judgeLabelFinalOnLabelTransactionConsumer 接 lc/26 那条线（ADR-0134）：面单交易写侧在定案与后续动作
-// 两拍 `Save` 成功后交出的 `label-transaction.judgment-due` 指针式信封 → 消费门 → 三路共用的处理方核
-// （按包裹反查当前已接受委托 → 终局判断编排 → 五值译成消费结论）→ 判出终局的格交既有终局采用路径。
+// labelFinalJudgmentCore 装配面单渠道服务终局判断三路触发共用的处理方核（ADR-0134 决定二）：按包裹反查
+// 当前已接受委托 → 终局判断编排 → 五值译成消费结论 → 判出终局的格交既有终局采用路径。面单交易那一路
+// （lc/26）与关闭 / 重开决定那一路（lc/27）各自的消费者都接它——核只装一次的形，两路各装一只实例是因为
+// 两扇消费门各持自己的处理方，实例之间不共享状态。
 //
 // 判断编排的六口：交易册与继续尝试登记册各用同一只 postgres 适配器的只读半边；取消视图与终局采用路径
 // 与交付那一路**同一条链**（parcelFinalAdoptionChain）——两种服务形态的产物都叫「终局服务结果」，只认
 // FinalOutcomeStore 里那一处当前有效终局，采用路径不另建。`Validity` 接 ps-port-remainder/01 的
 // DeclaredLabelValidityRule：它按接受时固定的规则包版本读有效期那一格，声明缺席答未配置、不推算失效，
 // 与「未配置即 nil」在判断结果上同一格，接上是为了租户登记那一格之后不必再改装配。
-//
-// 写入侧（06 编排把意图入队那一半）不在这里：`LabelTransactionDeps` 的生产装配与事务壳归 lc/28 的
-// 组合根，本进程只消费。
-func judgeLabelFinalOnLabelTransactionConsumer(
+func labelFinalJudgmentCore(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
-	inboxStore *inbox.Store,
 	clock systemClock,
-) (dispatch.Consumer, error) {
+) (*labelfinal.ParcelJudgmentCore, error) {
 	chain, err := parcelFinalAdoptionChain(db, outboxStore, clock)
 	if err != nil {
 		return nil, err
@@ -1973,6 +1986,53 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 	core, err := labelfinal.NewParcelJudgmentCore(chain.requests, judge)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: label final judgment core: %w", err)
+	}
+	return core, nil
+}
+
+// judgeLabelFinalOnContinuedAttemptDecisionConsumer 接 lc/27 那条线（ADR-0134）：`面单继续尝试决定`写侧在
+// 关闭 / 重开决定落册后交出的 `continued-attempt-decision.judgment-due` 指针式信封 → 消费门 → 与 lc/26 共用
+// 的处理方核。两种决定都到这里，分格归 JudgeLabelServiceFinal：关闭之后按 CONTEXT 判失败 / 服务结果 / 不形成，
+// 重开之后判 NOT_FINAL；消费者与装配都不按决定种类挑（票 label-channel/27 红线）。
+//
+// 写入侧（lc/30 的命令编排把意图入队那一半）不在这里：它的组合根与事务壳在 `cmd/parcel-api`，本进程只消费。
+// 系统不自动形成任何关闭或重开决定（CONTEXT 硬句）——这条线只在人形成的决定落库之后判终局。
+func judgeLabelFinalOnContinuedAttemptDecisionConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	core, err := labelFinalJudgmentCore(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	processing, err := labelfinal.NewContinuedAttemptDecisionJudgmentAdapter(core)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: continued attempt decision judgment adapter: %w", err)
+	}
+	consumer, err := psinbox.NewContinuedAttemptDecisionJudgmentConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: continued attempt decision judgment consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// judgeLabelFinalOnLabelTransactionConsumer 接 lc/26 那条线（ADR-0134）：面单交易写侧在定案与后续动作
+// 两拍 `Save` 成功后交出的 `label-transaction.judgment-due` 指针式信封 → 消费门 → 三路共用的处理方核
+// （labelFinalJudgmentCore）→ 判出终局的格交既有终局采用路径。
+//
+// 写入侧（06 编排把意图入队那一半）不在这里：`LabelTransactionDeps` 的生产装配与事务壳归 lc/28 的
+// 组合根，本进程只消费。
+func judgeLabelFinalOnLabelTransactionConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	core, err := labelFinalJudgmentCore(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
 	}
 	processing, err := labelfinal.NewLabelTransactionJudgmentAdapter(core)
 	if err != nil {
