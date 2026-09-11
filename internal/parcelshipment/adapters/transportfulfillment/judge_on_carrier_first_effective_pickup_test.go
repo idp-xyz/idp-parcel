@@ -306,7 +306,8 @@ func TestAnEnvelopeWithoutAnObjectReadsItFromThePickup(t *testing.T) {
 	}
 }
 
-// Covers: CANCELLATION_STANDS → 入账，不交采用路径——取消在先时收寄不盖非取消终局（CONTEXT 规则 1）。
+// Covers: CANCELLATION_STANDS → 入账，不交采用路径——取消在先时收寄不盖非取消终局：PS CONTEXT
+// 「除已经形成的有效取消结果外，实际承运商首次有效收寄即形成终局」那句的前半。
 func TestAStandingCancellationOutranksTheFirstPickup(t *testing.T) {
 	f := newCarrierPickupFixture(t)
 	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))
@@ -321,7 +322,8 @@ func TestAStandingCancellationOutranksTheFirstPickup(t *testing.T) {
 }
 
 // Covers: LABEL_SERVICE_NOT_FINAL 在本路**结构上到不了**：夹具是面单交易那一路判 NOT_FINAL 的输入（没开过册、
-// 无交易），而本路的命令总带一份已形成的收寄，CONTEXT 规则 2 先于关闭路径成立。这条用例钉的是这一点，
+// 无交易），而本路的命令总带一份已形成的收寄，PS CONTEXT「实际承运商首次有效收寄即形成终局」先于
+// 「否则，只有在当前受控关闭已经生效且未被重开」那条关闭路径成立。这条用例钉的是这一点，
 // 五值翻译表里那一格的译法由 labelfinal 自己的用例守。
 func TestNotFinalIsStructurallyUnreachableOnThePickupRoute(t *testing.T) {
 	f := newCarrierPickupFixture(t)
