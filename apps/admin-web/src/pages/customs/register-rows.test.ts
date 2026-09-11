@@ -97,7 +97,7 @@ function verification(over: Partial<DutyVerificationRecord>): DutyVerificationRe
   };
 }
 
-// Covers: ADR-0137 决定三 / CONTEXT 硬句 214 — 三轴三列各译各的词表，行上没有任何合成
+// Covers: ADR-0137 决定三 / CONTEXT「不能实现为一组互斥总状态」 — 三轴三列各译各的词表，行上没有任何合成
 // 「状态」列；集外词原样回显，不被译成一句像样的话。
 test('核对三轴各占一列、不折总状态，集外词原样回显', () => {
   const [row] = verificationRows([verification({})]);

@@ -316,7 +316,7 @@ function ReleaseGatesTable() {
 // 的派生，不是这两册的列。
 
 // 义务依据一列按格取字段（判读在 register-rows.ts）；法定义务人只是法定义务人——实际付款
-// 方与最终承担费用的客户可以不同、不能互相推导（CONTEXT 硬句 212），本表没有那两列。
+// 方与最终承担费用的客户可以不同、不能互相推导（CONTEXT「不能互相推导」），本表没有那两列。
 // 「核对入口」不另设列：核对册按（范围，税费引用）回指本册，两册对读即得。
 const collaborationColumns: ListColumn<RegisterRow>[] = [
   gateCol('scope', '申报范围', true),

@@ -311,8 +311,8 @@ function col(id: string, header: string, mono = false): ListColumn<CatalogueRow>
   };
 }
 
-// 就绪与授权两栏并排、各带自己的依据/时间/现况三列（CONTEXT 硬句 164：申报就绪判断
-// 与提交授权必须独立存在；票 05 形状约束一）。并排只对齐单元行——不设「可提交」合成
+// 就绪与授权两栏并排、各带自己的依据/时间/现况三列（CONTEXT「申报就绪判断与提交授权必须
+// 独立存在」；票 05 形状约束一）。并排只对齐单元行——不设「可提交」合成
 // 列：0006 迁移自注点名「就绪还在、授权已撤销」是必须表达得出的一格，合成布尔正好把
 // 它抹掉。
 const preconditionColumns: ListColumn<CatalogueRow>[] = [
@@ -471,7 +471,7 @@ function closureRows(catalogues: ClosureObligationCatalogueRecord[]): CatalogueR
         scope: item.scope,
         state: labelOf(obligationStateLabels, item.state),
         basis: item.basis,
-        // 承接方只在承接项在场（CONTEXT 硬句 219）；非承接项由 col 的 '—' 兜底。
+        // 承接方只在承接项在场（CONTEXT「来源责任方、接收责任方、接受决定及权限」）；非承接项由 col 的 '—' 兜底。
         ...(item.handedTo ? { handedTo: item.handedTo } : {}),
         applies: formatRange(item.appliesFrom, item.appliesUntil),
       },

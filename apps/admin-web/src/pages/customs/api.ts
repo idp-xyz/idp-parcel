@@ -84,7 +84,7 @@ export interface ClosureObligationItemRecord {
   /** 封闭三值 CONCLUDED / HANDED_OVER / UNRESOLVED;词表在 presentation.ts。 */
   state: string;
   basis: string;
-  /** 只在承接项在场(承接必须指名接收责任方,CONTEXT 硬句 219)。 */
+  /** 只在承接项在场(承接必须指名接收责任方,CONTEXT「来源责任方、接收责任方、接受决定及权限」)。 */
   handedTo?: string;
   appliesFrom: string;
   /** 缺席即尚无终点,不是已失效。 */
@@ -287,7 +287,7 @@ export function listCredentials(): Promise<ApiResult<CredentialListResponseBody>
  * 一份税费付款协作事项。kind 封闭二值:ASSESSED_DUTY 带 duty 不带 noPayBasis,
  * EXPLICITLY_NOT_REQUIRED 反之——第三种「没有结果所以不用付」在类型上没有格(CONTEXT
  * 「税费付款协作事项」:缺少税费结果不能被解释为无需付款)。obligor 只是法定义务人,
- * 实际付款方与最终承担费用的客户可以不同、不能互相推导(CONTEXT 硬句 212),本行没有那两列。
+ * 实际付款方与最终承担费用的客户可以不同、不能互相推导(CONTEXT「不能互相推导」),本行没有那两列。
  */
 export interface DutyCollaborationRecord {
   scope: string;
@@ -447,7 +447,7 @@ export function registerDutyReconciliation(
  * 协作 / 核对两口的登记答案代数(application.DutyReconciliationOutcome 原名),逐格中文。两口
  * 共一张表:同一个枚举、同一格不因来自哪一口而换说法(判据同受控 CLI 的一族一张表)。
  *
- * 资金事实三格(FUNDS_FACT_RECEIVED / EXISTING_FUNDS_FACT / FUNDS_FACT_CONTENT_CONFLICT)不在表上:
+ * 资金事实那族格(FUNDS_FACT_RECEIVED / EXISTING_FUNDS_FACT / FUNDS_FACT_CONTENT_CONFLICT)不在表上:
  * 没有任何在线口能交回它们——资金事实只经 settlement-accounting 的采用信封进 CC(ADR-0137 决定
  * 四),列出来就是给一格走不到的答案配中文。核对没有「内容冲突」格:同三维换内容是新版本追加
  * (迟到事实按新版本进、不按到达顺序覆盖),答的仍是形成——表上没有这一格不是漏,是该族的形状。
