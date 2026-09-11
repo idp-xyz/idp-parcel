@@ -58,8 +58,9 @@ type dutyClock struct{ at time.Time }
 
 func (clock dutyClock) Now() time.Time { return clock.at }
 
-// unreachedDutyStores 补齐编排构造期要求的另两口（协作事项库、核对库）。本适配器只走 ReceiveFundsFact，
-// 这两口不该被碰到；碰到即测试失败——替身守的是票面红线「消费者不关联、不核对」，不是给它们内存实现。
+// unreachedDutyStores 顶住编排构造期要求、而本适配器不走的那些口（协作事项库、核对库）。本适配器只走
+// ReceiveFundsFact，这些口不该被碰到；碰到即测试失败——替身守的是票面红线「消费者不关联、不核对」，
+// 不是给它们内存实现。
 type unreachedDutyStores struct{ t *testing.T }
 
 func (double unreachedDutyStores) FindCollaboration(

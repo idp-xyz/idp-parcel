@@ -149,8 +149,9 @@ func fullDutyDeps(store *dutyStoreDouble) application.DutyPaymentReconciliationD
 	}
 }
 
-// 构造门：四口各缺一，构造期就以具名错误停下，不等到 FormCollaboration / ReceiveFundsFact /
-// VerifyPayment 解引用时才 panic（票 sa-cc/14；形照 SA NewApplyPreAcceptanceControlHandler）。
+// 构造门：DutyPaymentReconciliationDeps 每一口各缺一次，构造期就以具名错误停下，不等到
+// FormCollaboration / ReceiveFundsFact / VerifyPayment 解引用时才 panic（票 sa-cc/14；形照 SA
+// NewApplyPreAcceptanceControlHandler）。表里的口要与 Deps 的字段一一对上——加口不加表，这里不会红。
 func TestTheReconciliationHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 	store := newDutyStore()
 	cases := []struct {
@@ -177,7 +178,7 @@ func TestTheReconciliationHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		}
 	}
 	if _, err := application.NewDutyPaymentReconciliationHandler(fullDutyDeps(store)); err != nil {
-		t.Fatalf("四口齐全却被拒：%v", err)
+		t.Fatalf("口齐全却被拒：%v", err)
 	}
 }
 
