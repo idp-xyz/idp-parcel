@@ -213,14 +213,14 @@ func (registration transactionalDutyPaymentVerificationRegistration) VerifyPayme
 // handler：端点表按类各接一格，收成一格就得在装配行上现取字段，那正是要避免的「谁接
 // 谁在装配点看不出来」。
 type customsRegistrationOrchestration struct {
-	interpretationRule       transactionalInterpretationRuleRegistration
-	gateCatalog              transactionalGateCatalogRegistration
-	candidatePort            transactionalCandidatePortRegistration
-	declarationPath          transactionalDeclarationPathRegistration
-	caseRequirement          transactionalCaseRequirementRegistration
-	regulatoryCredential     transactionalRegulatoryCredentialRegistration
-	dutyCollaboration        transactionalDutyCollaborationRegistration
-	dutyPaymentVerification  transactionalDutyPaymentVerificationRegistration
+	interpretationRule      transactionalInterpretationRuleRegistration
+	gateCatalog             transactionalGateCatalogRegistration
+	candidatePort           transactionalCandidatePortRegistration
+	declarationPath         transactionalDeclarationPathRegistration
+	caseRequirement         transactionalCaseRequirementRegistration
+	regulatoryCredential    transactionalRegulatoryCredentialRegistration
+	dutyCollaboration       transactionalDutyCollaborationRegistration
+	dutyPaymentVerification transactionalDutyPaymentVerificationRegistration
 }
 
 // buildCustomsRegistrationOrchestration 装配各 `/customs-*-registrations` 的真编排。
