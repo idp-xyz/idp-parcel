@@ -19,8 +19,8 @@ var ErrEvaluationRequestDigestDrift = errors.New("settlement accounting postgres
 // EvaluationRequests 实现 ports.EvaluationRequestRegistry（登记面）与 ports.EvaluationRequestView（只读
 // 半边），同一张表、同一份行模型——分开实现就是第二处定义。
 //
-// 幂等由库上的两条唯一约束守：主键（租户+铸造 ID）拦同一份重放，自然键（租户+主要范围+计算目的+引用
-// 集合摘要）拦另一个 ID 带同一组成分再来（票 sa-cc/08 裁决 2）。两条撞上都答`已存在`、不覆盖先到者
+// 幂等由库上的唯一约束守：主键（租户+铸造 ID）拦同一份重放，自然键（租户+主要范围+计算目的+引用集合
+// 摘要）拦另一个 ID 带同一组成分再来（票 sa-cc/08 裁决 2）。撞上哪一条都答`已存在`、不覆盖先到者
 // （写入代数同 ADR-0031）。
 type EvaluationRequests struct {
 	db *bentopg.DB

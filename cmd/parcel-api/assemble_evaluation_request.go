@@ -13,7 +13,7 @@ import (
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 )
 
-// 本文件是 UC-SA-002 步 2「请求评价」SA 半边的组合根（票 sa-cc/08）：登记册、铸造口、Outbox 交接口与时钟四口
+// 本文件是 UC-SA-002 步 2「请求评价」SA 半边的组合根（票 sa-cc/08）：登记册、铸造口、Outbox 交接口与时钟
 // 全接真适配器，编排的一次 Handle 包进一笔事务——登记与信封同事务是裁决 1 的前提，事务边界归装配点。
 //
 // `main` 的 `run` 在启动时装配它，**只为 fail-fast**（照面单渠道写链 label-channel/34 的同一条纪律）：组合根里
@@ -30,7 +30,8 @@ type evaluationRequestOrchestration struct {
 	inner      *saapplication.RequestBuyEvaluationHandler
 }
 
-// buildEvaluationRequestOrchestration 是生产装配：四口全是真适配器。
+// buildEvaluationRequestOrchestration 是生产装配：每一口都是真适配器，没有替身位——本编排没有实例半边的缝
+// 要留（三件引用由命令交进来，不在装配点取数），测试要走通只需一只真库。
 func buildEvaluationRequestOrchestration(db *bentopg.DB) (evaluationRequestOrchestration, error) {
 	none := evaluationRequestOrchestration{}
 	if db == nil {
