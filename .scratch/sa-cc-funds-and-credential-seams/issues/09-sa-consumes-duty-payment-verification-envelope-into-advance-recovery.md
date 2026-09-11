@@ -1,7 +1,7 @@
 # CC 的付款核对信封发出后 SA 没人接：`customs-compliance.duty-payment-verification.formed` 落进 Outbox，`AssessAdvanceRecoveryHandler` 拿不到「关务税费及付款核对」这一项输入
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [05](05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md)「要裁的」2 裁「本目录加一张」时点名），只写票面未动代码；取证锚 `66cad4c4`。要裁的为零：读口选型照 [03](03-cc-inbox-consumer-receives-external-funds-fact.md) 的裁决同口径
+Status: in-progress——2026-09-11 15:37 通道 5 认领（task-c4d63735；分支 `mcp5-sacc09` 基 `7c37253f`，隔离树 `D:/tops/idp-parcel-mcp5-sacc09`）。此前 ready-for-agent——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [05](05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md)「要裁的」2 裁「本目录加一张」时点名），只写票面未动代码；取证锚 `66cad4c4`。要裁的为零：读口选型照 [03](03-cc-inbox-consumer-receives-external-funds-fact.md) 的裁决同口径
 Blocked by: [05](05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md)（没有那封信封，消费者无物可收）——**05 已进 main（2026-09-11 15:1x，main 重放 tip `4ab49c65`）**，信封 `customs-compliance.duty-payment-verification.formed` 载荷 `{tenantId, scope, duty, funds, digest}`、分区键 `租户/duty-payment-verification/申报范围`、CC 读口 `DutyVerificationStore.FindVerification` 按三维键 + 指纹交那一版，本票可开工（2026-09-11 通道 1 推送方记）
 
 ## 缺口（取证于 `66cad4c4`）
