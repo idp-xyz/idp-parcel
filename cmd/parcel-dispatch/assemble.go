@@ -2115,7 +2115,7 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 // 只接 `carrier-first-effective-pickup.registered`，不接 `external-carrier-tracking.judged`：外部承运轨迹事实按
 // TF CONTEXT 不构成收寄，PS 消费它等于替 TF 判「这条状态词算收寄」（票 label-channel/25 红线）；那封信在本进程
 // 只投 VE 投影（deriveExternalTrackingConsumer）。本路不 FanOut 给 VE：VE 侧今天没有收寄登记的消费者，登记
-// 接不住的比不登记更糟（ADR-0049 第三条）。
+// 接不住的比不登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」）。
 //
 // TF 登记册接 tfpostgres.CarrierFirstEffectivePickups 的只读一口（FindByKey）：信封每份代表一代，按键取、不问
 // 链尾（票 label-channel/24 的教训）。`Deps.Validity` 随 labelFinalJudgmentCore 接 ps-port-remainder/01 的
