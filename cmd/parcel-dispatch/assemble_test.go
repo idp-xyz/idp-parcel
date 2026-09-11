@@ -30,6 +30,7 @@ import (
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/veconsume"
@@ -289,6 +290,17 @@ func TestACarrierFirstEffectivePickupRegisteredReachesTheConsumerThroughTheRoute
 	}
 	if got := recordedFailureCode(t, db, "carrier-pickup-2"); got != "dispatch.consumer_undecided" {
 		t.Fatalf("TF 登记册里没有的那一代：failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+}
+
+// Covers: PS 消费者自写的收寄登记类型串与 TF outbox 适配器写出的那一个相等（lc/27「取舍两处」①同一取舍：
+// 消费者不 import 提供方，两串各写一份，由一条对照用例钉住）。对照落在本包而不是 PS `adapters/inbox` 的测试里，
+// 因为只有组合根本来就同时装配两边——PS 的 inbox 包不为一条断言去 import 另一个上下文的持久化适配器。
+// 任一侧改一字这里就红；路由表引的是 psinbox 那一个，这里一红，路由表认的类型就与 TF 写出的对不上。
+func TestTheCarrierPickupConsumerAndTheTFHandoffAgreeOnTheEventType(t *testing.T) {
+	if string(psinbox.CarrierFirstEffectivePickupRegisteredEventType) != tfpostgres.CarrierFirstEffectivePickupRegisteredEventType {
+		t.Fatalf("PS 消费者认 %q，TF 写出 %q",
+			psinbox.CarrierFirstEffectivePickupRegisteredEventType, tfpostgres.CarrierFirstEffectivePickupRegisteredEventType)
 	}
 }
 

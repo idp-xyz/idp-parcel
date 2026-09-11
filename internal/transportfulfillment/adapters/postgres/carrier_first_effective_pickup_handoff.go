@@ -14,7 +14,12 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-const carrierFirstEffectivePickupEventType = "transport-fulfillment.carrier-first-effective-pickup.registered"
+// CarrierFirstEffectivePickupRegisteredEventType 是「TF 就一个载运对象登记了一版已形成 / 替代 / 失效的实际承运商
+// 首次有效收寄」那封指针式信封的类型（ADR-0135 决定七；票 label-channel/31 写、票 label-channel/25 消费）。导出
+// **只为测试对照**：消费者按 inbox 惯例自写自己的 `eventing.EventType` 常量、路由表引的是那一个，生产代码里不
+// import 本适配器（票 27「取舍两处」①同一取舍）；对照两串相等的用例落在同时装配两边的 cmd/parcel-dispatch——
+// PS 的 inbox 包不为一条断言去 import 另一个上下文的持久化适配器。
+const CarrierFirstEffectivePickupRegisteredEventType = "transport-fulfillment.carrier-first-effective-pickup.registered"
 
 // OutboxCarrierFirstEffectivePickupHandoff 把一版已形成 / 替代 / 失效的收寄写入 Outbox，实现
 // ports.CarrierFirstEffectivePickupHandoff（ADR-0135 决定七）。入队一步由 outboxintent.EnqueueOnce 承担。
@@ -94,7 +99,7 @@ func (handoff *OutboxCarrierFirstEffectivePickupHandoff) HandOffCarrierFirstEffe
 		SpecVersion:  eventing.SpecVersion,
 		ID:           eventing.EventID(carrierFirstEffectivePickupEventID(key)),
 		Source:       tfEventSource,
-		Type:         carrierFirstEffectivePickupEventType,
+		Type:         CarrierFirstEffectivePickupRegisteredEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      pickup.Object().String() + "/" + key.Fact.String(),

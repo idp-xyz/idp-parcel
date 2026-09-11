@@ -85,8 +85,10 @@ func carrierPickupEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	}
 }
 
-// Covers: 消费者认的类型串就是 TF 侧 OutboxCarrierFirstEffectivePickupHandoff 写出的那一个（ADR-0135 决定七）。
-// 提供方那个常量未导出、消费方按本包惯例自写，两串各改一边这里就红。
+// Covers: 消费者认的类型串钉在 ADR-0135 决定七写定的那一个上。消费方按本包惯例自写、不 import 提供方，这里只钉
+// 自己这一侧的字面；与 TF 侧 OutboxCarrierFirstEffectivePickupHandoff 写出的 CarrierFirstEffectivePickupRegisteredEventType
+// 相等由 cmd/parcel-dispatch 的 TestTheCarrierPickupConsumerAndTheTFHandoffAgreeOnTheEventType 对照——那里本来就同时
+// 装配两边，PS 的 inbox 包不为一条断言去 import 另一个上下文的持久化适配器。
 func TestTheCarrierPickupConsumerAcceptsTheTypeTheWriterEmits(t *testing.T) {
 	if got := string(psinbox.CarrierFirstEffectivePickupRegisteredEventType); got != "transport-fulfillment.carrier-first-effective-pickup.registered" {
 		t.Fatalf("消费者认 %q", got)
