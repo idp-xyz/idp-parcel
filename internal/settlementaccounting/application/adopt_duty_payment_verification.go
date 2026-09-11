@@ -116,7 +116,7 @@ func (handler *AssessAdvanceRecoveryHandler) AdoptDutyPaymentVerification(
 	}
 
 	key := ports.DutyPaymentVerificationAdoptionKey{TenantID: command.TenantID, Verification: verification}
-	existing, found, err := handler.deps.Inputs.FindByKey(ctx, key)
+	existing, found, err := handler.deps.SettlementInputs.FindByKey(ctx, key)
 	if err != nil {
 		return settlementInputUndecided(InputStoreUnavailable, command), nil
 	}
@@ -125,7 +125,7 @@ func (handler *AssessAdvanceRecoveryHandler) AdoptDutyPaymentVerification(
 	}
 
 	record := ports.DutyPaymentVerificationAdoptionRecord{Key: key, Adoption: adoption}
-	saved, err := handler.deps.Inputs.Save(ctx, record)
+	saved, err := handler.deps.SettlementInputs.Save(ctx, record)
 	if err != nil {
 		return settlementInputUndecided(InputStoreUnavailable, command), nil
 	}
@@ -133,7 +133,7 @@ func (handler *AssessAdvanceRecoveryHandler) AdoptDutyPaymentVerification(
 	case ports.DutyPaymentVerificationAdoptionSaved:
 		return SettlementInputResult{outcome: DutyPaymentVerificationAdopted, adoption: record, hasRecord: true}, nil
 	case ports.DutyPaymentVerificationAlreadyAdopted:
-		winner, found, err := handler.deps.Inputs.FindByKey(ctx, key)
+		winner, found, err := handler.deps.SettlementInputs.FindByKey(ctx, key)
 		if err != nil || !found {
 			return settlementInputUndecided(InputStoreUnavailable, command), nil
 		}

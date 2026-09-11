@@ -40,6 +40,8 @@ import (
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	sacustoms "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/customscompliance"
+	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	sapartycommercial "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -466,6 +468,15 @@ var externalFundsFactUndecidedSentinels = []error{
 	ccsettlement.ErrFundsFactReceiveUndecided,
 }
 
+// dutyPaymentVerificationUndecidedSentinels 是 CC 付款核对形成信封 → SA 结算输入采用这条线（sa-cc/09）登记的
+// 未决哨兵：信封所指那一版在提供方还看不见（可见性滞后）、采用编排停在登记册不可用。编排的 `已存在` 与
+// `未受理` 不在名单里——它们是编排给出的答案、入账不重投（AdoptOnDutyPaymentVerificationAdapter 头注）；
+// sacustoms.ErrUntranslatableReference 也不在——两侧词汇分歧是编程错误，重投不自愈。
+var dutyPaymentVerificationUndecidedSentinels = []error{
+	sacustoms.ErrVerificationNotVisible,
+	sacustoms.ErrAdoptionUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -487,7 +498,8 @@ var externalFundsFactUndecidedSentinels = []error{
 // 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、CC 申报提交版本形成 →
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
 // ADR-0066）、VE 投影派生 → 客户视图
-// （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）。
+// （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）、SA 资金事实采用 → CC 入向
+// 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）。
 // 「PS 有效网络收寄采用结果」那一路单投 network-routing；各类 FanOut 同一 EventType
 // 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局
 // 规则墙或路由证据墙上。
@@ -690,6 +702,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: external funds fact undecided translation: %w", err)
 	}
 
+	verifications, err := adoptDutyPaymentVerificationConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedVerifications, err := dispatch.WithUndecidedSentinels(verifications, dutyPaymentVerificationUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -781,6 +802,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.LabelTransactionJudgmentDueEventType:         routedLabelJudgments,
 			psinbox.ContinuedAttemptDecisionJudgmentDueEventType: routedDecisionJudgments,
 			ccinbox.ExternalFundsFactAdoptedEventType:            routedFundsFacts,
+			sainbox.DutyPaymentVerificationFormedEventType:       routedVerifications,
 			veinbox.TransportHandoverRegisteredEventType:         veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:       veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                  veFinalOutcomeRouted,
@@ -2093,6 +2115,75 @@ func receiveExternalFundsFactConsumer(
 	consumer, err := ccinbox.NewExternalFundsFactConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: external funds fact consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// adoptDutyPaymentVerificationConsumer 接 sa-cc/09 那条线：CC 形成一版税费付款核对后交出的
+// `customs-compliance.duty-payment-verification.formed` 引用式信封 → SA 消费门 → 按（租户 + 申报范围 + 税费 +
+// 资金事实 + 版本指纹）向 CC 只读半边核那一版在册（取信封所指那一版，不取 latest）→ 译成采用命令交
+// UC-SA-001 步 2 的 `AdoptDutyPaymentVerification`。跨上下文翻译只在 SA 的 `adapters/customscompliance`；SA
+// application 不 import CC。它与 receiveExternalFundsFactConsumer 是同一条缝的两个方向：那一路 SA 发 CC 收，
+// 这一路 CC 发 SA 收。
+//
+// 消费者只译不判（票面红线）：采用一格不形成实际代垫判断、不形成回收、不交任何回收意图。处理方是同一只
+// `AssessAdvanceRecoveryHandler`（判据 1「NewAssessAdvanceRecoveryHandler 在 cmd/ 有非测试调用点」），
+// 其余五口在这条线上不被调用，但都接真：评估 / 回收 / 调整三库与回收交接是本上下文自己的 postgres 适配器；
+// 合同责任目录属实例半边（`PAR-SET-08`），接显式未配置口——FormRecovery 走到那一步答 `CONTRACT_UNCONFIGURED`
+// 未决，而 nil 在那里是 panic，两者的恢复动作完全不同。生产装配里不放任何替身。
+//
+// CC 只读半边接 `ccpostgres.DutyPaymentReconciliation`：它同时实现三口，这里经 `sacustoms.DutyVerificationReader`
+// 窄接口只拿 FindVerification 一口——写口在类型上就不进本上下文的依赖图。
+func adoptDutyPaymentVerificationConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	reconciliation, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification reader: %w", err)
+	}
+	view, err := sacustoms.NewCustomsDutyPaymentVerificationView(reconciliation)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification view: %w", err)
+	}
+	adoptions, err := sapostgres.NewDutyPaymentVerificationAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification adoptions: %w", err)
+	}
+	assessments, err := sapostgres.NewAdvanceAssessments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: advance assessments: %w", err)
+	}
+	recoveries, err := sapostgres.NewAdvanceRecoveries(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: advance recoveries: %w", err)
+	}
+	adjustments, err := sapostgres.NewRecoveryAdjustments(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: recovery adjustments: %w", err)
+	}
+	recoveryHandoff, err := sapostgres.NewOutboxAdvanceRecoveryHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: advance recovery handoff: %w", err)
+	}
+	adopter := saapplication.NewAssessAdvanceRecoveryHandler(saapplication.AssessAdvanceRecoveryDeps{
+		Assessments:      assessments,
+		Recoveries:       recoveries,
+		Adjustments:      adjustments,
+		Contracts:        sapartycommercial.UnconfiguredContractResponsibility{},
+		Downstream:       recoveryHandoff,
+		SettlementInputs: adoptions,
+		Clock:            clock,
+	})
+	processing, err := sacustoms.NewAdoptOnDutyPaymentVerificationAdapter(view, adopter)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopt on duty payment verification: %w", err)
+	}
+	consumer, err := sainbox.NewDutyPaymentVerificationConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification consumer: %w", err)
 	}
 	return consumer, nil
 }

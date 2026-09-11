@@ -66,13 +66,13 @@ func newInputFixture(t *testing.T) *inputFixture {
 	t.Helper()
 	fixture := &inputFixture{advanceFixture: newAdvanceFixture(t), inputs: newAdoptionStore()}
 	fixture.handler = application.NewAssessAdvanceRecoveryHandler(application.AssessAdvanceRecoveryDeps{
-		Assessments: fixture.assessments,
-		Recoveries:  fixture.recoveries,
-		Adjustments: fixture.adjustments,
-		Contracts:   fixture.contracts,
-		Downstream:  fixture.handoff,
-		Inputs:      fixture.inputs,
-		Clock:       advanceClock{at: advanceNowAt},
+		Assessments:      fixture.assessments,
+		Recoveries:       fixture.recoveries,
+		Adjustments:      fixture.adjustments,
+		Contracts:        fixture.contracts,
+		Downstream:       fixture.handoff,
+		SettlementInputs: fixture.inputs,
+		Clock:            advanceClock{at: advanceNowAt},
 	})
 	return fixture
 }
@@ -263,13 +263,13 @@ func TestALostAdoptionRaceReadsBackTheWinner(t *testing.T) {
 	// 首次 FindByKey 答「没有」、Save 答「已采用」、再读才见赢家：模拟两次读之间另一方先落。
 	racing := &racingAdoptionStore{inner: fixture.inputs}
 	fixture.handler = application.NewAssessAdvanceRecoveryHandler(application.AssessAdvanceRecoveryDeps{
-		Assessments: fixture.assessments,
-		Recoveries:  fixture.recoveries,
-		Adjustments: fixture.adjustments,
-		Contracts:   fixture.contracts,
-		Downstream:  fixture.handoff,
-		Inputs:      racing,
-		Clock:       advanceClock{at: advanceNowAt},
+		Assessments:      fixture.assessments,
+		Recoveries:       fixture.recoveries,
+		Adjustments:      fixture.adjustments,
+		Contracts:        fixture.contracts,
+		Downstream:       fixture.handoff,
+		SettlementInputs: racing,
+		Clock:            advanceClock{at: advanceNowAt},
 	})
 
 	result, err := fixture.handler.AdoptDutyPaymentVerification(t.Context(), command)

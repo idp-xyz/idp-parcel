@@ -14,6 +14,7 @@ import (
 	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume"
@@ -25,6 +26,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -331,6 +333,105 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 	if registration.Source != "source-bank-feed-1" || registration.Payer != "payer-customer-7" ||
 		registration.Currency != "USD" || registration.AmountMinor != 8000 {
 		t.Fatalf("登记 = %+v，want 来源 / 付款人 / 币种 / 金额照 SA 那一版转述", registration)
+	}
+}
+
+// Covers: 路由表的 CC 付款核对形成一条（sa-cc/09）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
+// 正：CC 落过一版核对（连同它外键前置的入向资金事实）→ 用 CC 的真 Outbox 适配器把信封入队（事件类型由
+// 提供方写，路由表按消费方自写的常量认——两串相等在这里被真库钉住）→ SA 消费者按五维回查 CC 只读半边、
+// 译成采用命令 → SA 的 duty_payment_verification_adoption 落一行，advance_assessment 零行（采用不是判断）；
+// 反：信封所指的版本 CC 还没有 → 可见性滞后是未决，不定稿、不毒丸，失败码落 dispatch.consumer_undecided。
+func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	register, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		t.Fatalf("CC 核对册：%v", err)
+	}
+	verificationAt := beatInstant().Add(-time.Hour)
+	tenant := saTestValue(t, ccdomain.NewTenantID, "tenant-a")
+	duty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
+	funds := saTestValue(t, ccdomain.NewExternalFundsFactReference, "SYN-FUNDS-01")
+	scope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-UNIT-01")
+	verification, err := ccdomain.VerifyDutyPayment(duty, funds, scope,
+		ccdomain.CoverageFull, ccdomain.DeltaNone, ccdomain.FundsFactValid, verificationAt)
+	if err != nil {
+		t.Fatalf("CC 核对：%v", err)
+	}
+	record := ccports.DutyVerificationRecord{
+		Key:          ccports.DutyVerificationKey{TenantID: tenant, Duty: duty, Funds: funds, Scope: scope, Digest: "digest-v1"},
+		Verification: verification,
+		Basis:        "SYN-RULE-01: assessment reference quoted on the remittance",
+	}
+	handoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("CC 核对交接：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		if _, err := register.RegisterFundsFact(txCtx, tenant, ccports.ExternalFundsFactRegistration{
+			Fact: funds, Source: "SYN-BANK-01", Payer: "SYN-PAYER-01", Currency: "XTS", AmountMinor: 12500,
+			OccurredAt: verificationAt.Add(-time.Hour),
+		}); err != nil {
+			return err
+		}
+		if _, err := register.SaveVerification(txCtx, record); err != nil {
+			return err
+		}
+		return handoff.HandOffDutyPaymentVerification(txCtx, ccports.DutyPaymentVerificationHandoffIntent{
+			Key: record.Key, Verification: verification,
+		})
+	}); err != nil {
+		t.Fatalf("CC 侧落核对并入队：%v", err)
+	}
+	// 反例：同一范围、CC 还没有的指纹。
+	enqueueForBeat(t, db, store, "duty-verification-missing", sainbox.DutyPaymentVerificationFormedEventType,
+		`{"tenantId":"tenant-a","scope":"SYN-UNIT-01","duty":"SYN-DUTY-01/v1","funds":"SYN-FUNDS-01","digest":"digest-v9"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1（正：digest-v1 定稿；反：digest-v9 未决）；失败码 v9 = %q",
+			published, recordedFailureCode(t, db, "duty-verification-missing"))
+	}
+	if got := recordedFailureCode(t, db, "duty-verification-missing"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("CC 还没有的版本：failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+
+	adoptions, err := sapostgres.NewDutyPaymentVerificationAdoptions(db)
+	if err != nil {
+		t.Fatalf("SA 采用册：%v", err)
+	}
+	reference, err := sadomain.NewDutyPaymentVerificationReference(
+		saTestValue(t, sadomain.NewDeclarationScopeReference, "SYN-UNIT-01"),
+		saTestValue(t, sadomain.NewTaxObligationReference, "SYN-DUTY-01/v1"),
+		saTestValue(t, sadomain.NewFundsFactReference, "SYN-FUNDS-01"),
+		saTestValue(t, sadomain.NewDutyVerificationVersion, "digest-v1"),
+	)
+	if err != nil {
+		t.Fatalf("SA 引用：%v", err)
+	}
+	adopted, found, err := adoptions.FindByKey(t.Context(), saports.DutyPaymentVerificationAdoptionKey{
+		TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Verification: reference,
+	})
+	if err != nil || !found {
+		t.Fatalf("SA 采用：found = %v err = %v——信封到了消费者却没落采用", found, err)
+	}
+	if adopted.Adoption.AdoptedAt().IsZero() {
+		t.Fatal("采用时刻为零")
+	}
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var assessmentRows int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM settlement_accounting.advance_assessment WHERE tenant_id = $1`, "tenant-a",
+	).Scan(&assessmentRows); err != nil {
+		t.Fatalf("数评估行：%v", err)
+	}
+	if assessmentRows != 0 {
+		t.Fatalf("采用付款核对不得形成实际代垫判断：advance_assessment 有 %d 行", assessmentRows)
 	}
 }
 
