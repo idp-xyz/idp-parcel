@@ -1,8 +1,8 @@
 # 32 06 `Establish` 核继续尝试登记册：关闭生效后拒绝把该包裹纳入边界后的新交易
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:5x 通道 2 按通道 1 派单 task-3ebcdc45 立票（通道 1 推送方代裁「缺门无票 → 立 32」，用户授权）；取证锚远端 main `062f5228`；**只写票面，未动代码。** 要裁的为零：形状由派单裁定（`Establish` 前读登记册当前有效关闭，在场则拒、无册照旧；不动 [`30`](./30-controlled-close-reopen-decision-write-face-ps-half.md) 的写面），余下的都是 06 编排既有代数与 lc/10 既有读口上的照抄
-Blocked by: [`30`](./30-controlled-close-reopen-decision-write-face-ps-half.md)（边界先能形成——没有写面，登记册上永远没有关闭，这道门开了也永远不关；`30` 又 Blocked by pc-gaps/13）。**不阻塞但相关**：[`28`](./28-channel-selection-composition-root-and-call-entry.md) 落组合根之后本门才有生产事件流过，与 `26` 同款诚实句
+Status: in-progress——2026-09-11 11:3x 通道 3 按通道 1 派单 task-287429ec 认领，分支 `mcp3-lc32` 基远端 main `2c7326ef`（隔离树 `D:/tops/idp-parcel-mcp3-lc32`），按「做法」1–6 与「完成判据」1–6 走 `/implement`。此前 ready-for-agent——2026-09-10 17:5x 通道 2 按通道 1 派单 task-3ebcdc45 立票（通道 1 推送方代裁「缺门无票 → 立 32」，用户授权）；取证锚远端 main `062f5228`；**只写票面，未动代码。** 要裁的为零：形状由派单裁定（`Establish` 前读登记册当前有效关闭，在场则拒、无册照旧；不动 [`30`](./30-controlled-close-reopen-decision-write-face-ps-half.md) 的写面），余下的都是 06 编排既有代数与 lc/10 既有读口上的照抄
+Blocked by: 无——[`30`](./30-controlled-close-reopen-decision-write-face-ps-half.md) 已 2026-09-11 11:1x 进 main `2c7326ef`（原阻塞理由：边界先能形成——没有写面，登记册上永远没有关闭，这道门开了也永远不关）。**不阻塞但相关**：[`28`](./28-channel-selection-composition-root-and-call-entry.md) 已进 main，组合根已装配 `LabelTransactionDeps`，本票在其上补两格；触发面归 `34`，落地前本门仍无生产事件流过，与 `26` 同款诚实句
 
 ## 缺口
 
