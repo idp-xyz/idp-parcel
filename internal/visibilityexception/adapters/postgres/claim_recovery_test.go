@@ -122,7 +122,7 @@ func (fixture *claimRecoveryFixture) loadClaim(t *testing.T, ctx context.Context
 
 // TestClaimJudgmentHistoryRoundTripsStepByStep 证三判分步的判断历史逐步往返：每步
 // 落库后重建，在重建出的对象上继续下一判——重建不重演，但生命周期方法照常工作；
-// 复核换版后前版保留（CONTEXT 253）。
+// 复核换版后前版保留（CONTEXT「形成受控复核和新的结论版本；原结论保留」）。
 func TestClaimJudgmentHistoryRoundTripsStepByStep(t *testing.T) {
 	fixture := newClaimRecoveryFixture(t)
 	ctx := t.Context()

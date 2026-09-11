@@ -12,7 +12,7 @@ var (
 )
 
 // ETASourceKind 是预测来源口径的封闭二值：承运商提供与运营企业派生分别保留来源和
-// 口径（CONTEXT 硬句 103），不混在一个「预测」里。
+// 口径（CONTEXT「分别保留来源和口径」），不混在一个「预测」里。
 type ETASourceKind uint8
 
 const (
@@ -60,7 +60,7 @@ func NewPredictionInputsReference(value string) (PredictionInputsReference, erro
 	return PredictionInputsReference{required}, err
 }
 
-// ETAPredictionSpec 是形成一次预测所需的全部输入（CONTEXT 硬句 102 七件）。
+// ETAPredictionSpec 是形成一次预测所需的全部输入（CONTEXT「必须明确预测对象、目标里程碑、预测时点」那一句的七件）。
 type ETAPredictionSpec struct {
 	Version     ETAVersionID
 	Parcel      TrackedParcelReference
@@ -178,8 +178,8 @@ func RehydrateETAPrediction(spec ETAPredictionSpec, prior ETAVersionID) (ETAPred
 	return eta, nil
 }
 
-// Refresh 形成新的预测版本：换版本、换输入与区间、指回原版；历史预测不覆盖（CONTEXT
-// 硬句 103），也不修改客户承诺、路由计划或实际事实——这里根本没有它们。
+// Refresh 形成新的预测版本：换版本、换输入与区间、指回原版；CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」，
+// 也不修改客户承诺、路由计划或实际事实——这里根本没有它们。
 func (eta ETAPrediction) Refresh(spec ETAPredictionSpec) (ETAPrediction, error) {
 	if spec.Version == eta.version || spec.Parcel != eta.parcel || spec.Milestone != eta.milestone {
 		return ETAPrediction{}, ErrInvalidETA
@@ -210,7 +210,7 @@ func NewObservationWindowReference(value string) (ObservationWindowReference, er
 
 // VisibilityGap 是可见性缺口：明确预期某项观察且版本化观察窗口届满仍未取得。它只
 // 证明预期数据尚未获得——类型上没有延误、停止移动或遗失字段，无扫描直接推不出那些
-// 结论（CONTEXT 硬句 105）。
+// 结论（CONTEXT「不能直接形成延误、停止移动或遗失结论」）。
 type VisibilityGap struct {
 	parcel      TrackedParcelReference
 	expectation ExpectedObservationReference

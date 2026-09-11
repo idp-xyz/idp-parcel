@@ -119,7 +119,7 @@ func disclosureRegistration(t *testing.T, version string, from time.Time) ports.
 	}
 }
 
-// Covers: 完成标准「limit 非正即拒」。零与负数不是「不限量」，六个方法一致地拒——
+// Covers: 完成标准「limit 非正即拒」。零与负数不是「不限量」，各方法一致地拒——
 // 页大小的裁决归接入面，读口对无意义取值不猜一个默认。
 func TestCatalogueListRejectsNonPositiveLimit(t *testing.T) {
 	fixture := newRegistrarFixture(t)
@@ -170,7 +170,7 @@ func TestCatalogueListRejectsNonPositiveLimit(t *testing.T) {
 	}
 }
 
-// Covers: 完成标准「空册如实答空不折成未配置」。六个方法对零登记的租户都交回空列表
+// Covers: 完成标准「空册如实答空不折成未配置」。各方法对零登记的租户都交回空列表
 // 而不是错误——空册本身就是内容（ADR-0077 Decision 四），续办是登记责任方去
 // parcel-ve-register 登记；这与五个装载口对同一份空册答「未配置」不冲突，两口答的
 // 不是同一个问题。
@@ -591,7 +591,7 @@ func TestConflictSignalRuleListIsTenantScoped(t *testing.T) {
 	}
 }
 
-// Covers: 完成标准「租户隔离」。两个租户各登一份同形数据，六个方法对租户 A 都只交回
+// Covers: 完成标准「租户隔离」。两个租户各登一份同形数据，各方法对租户 A 都只交回
 // A 自己的行——目录表全部以 tenant_id 打头，读口不得跨租户串册。
 func TestCatalogueListsAreTenantScoped(t *testing.T) {
 	fixture := newRegistrarFixture(t)

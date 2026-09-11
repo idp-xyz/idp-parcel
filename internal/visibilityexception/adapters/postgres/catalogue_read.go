@@ -541,7 +541,7 @@ func (catalogue *OperationsCatalogue) ListExceptionDisclosureRules(
 
 // ListConflictSignalRules 上列冲突信号规则（`PAR-VIS-04` 事实冲突那一类，0025；票
 // ve-disclosure-policy-view/03）。一租户至多一行，仍走同族的租户条件 + LIMIT 形状；序取
-// 信号类型——单行时序无所谓，写成稳定序是为了这一族八法对「稳定序」不留例外。
+// 信号类型——单行时序无所谓，写成稳定序是为了这一族对「稳定序」不留例外。
 func (catalogue *OperationsCatalogue) ListConflictSignalRules(
 	ctx context.Context,
 	tenant domain.TenantID,

@@ -12,7 +12,7 @@ var (
 )
 
 // EvidenceItemID 是证据项的标识。同一证据项可以被异常案件、客户索赔项和追偿事项
-// 分别引用（CONTEXT 硬句 170）——引用在各对象上，这里是被引的本体。
+// 分别引用（CONTEXT「客户索赔项和追偿事项分别引用」）——引用在各对象上，这里是被引的本体。
 type EvidenceItemID struct{ requiredValue }
 
 func NewEvidenceItemID(value string) (EvidenceItemID, error) {
@@ -38,7 +38,7 @@ func NewEvidenceContentDigest(value string) (EvidenceContentDigest, error) {
 }
 
 // EvidenceAppraisal 是证据评价的封闭三值：已收到（默认——材料收到不证明陈述成立，
-// CONTEXT 硬句 171）、经调查采信、经调查不采信。
+// CONTEXT「只表示材料已经收到」）、经调查采信、经调查不采信。
 type EvidenceAppraisal uint8
 
 const (
@@ -65,8 +65,8 @@ func (appraisal EvidenceAppraisal) String() string {
 	}
 }
 
-// EvidenceItem 是一项证据。提交只表示材料已经收到——评价起点恒为`已收到`，采信是
-// 之后的显式判断（171）；证据冲突保留双方进入调查，这里没有删除入口。
+// EvidenceItem 是一项证据。CONTEXT「只表示材料已经收到」——评价起点恒为`已收到`，采信是
+// 之后的显式判断；CONTEXT「证据冲突必须保留并进入适用调查或裁决」，这里没有删除入口。
 type EvidenceItem struct {
 	id             EvidenceItemID
 	provider       EvidenceProviderReference
@@ -186,8 +186,8 @@ func (item EvidenceItem) Appraise(appraisal EvidenceAppraisal, basis string, at 
 	return appraised, nil
 }
 
-// EvidenceDisclosureVersion 是证据的对外披露版本：明确披露范围或脱敏版本（CONTEXT
-// 硬句 170 后半），锚定原件指纹——「来源不明、内容不一致的附件」造不出与原件的对应。
+// EvidenceDisclosureVersion 是证据的对外披露版本：CONTEXT「必须形成明确披露范围或脱敏版本」，
+// 锚定原件指纹——「来源不明、内容不一致的附件」造不出与原件的对应。
 type EvidenceDisclosureVersion struct {
 	item       EvidenceItemID
 	original   EvidenceContentDigest

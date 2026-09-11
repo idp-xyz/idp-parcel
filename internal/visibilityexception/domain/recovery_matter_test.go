@@ -29,9 +29,8 @@ func openMatter(t *testing.T) domain.RecoveryMatter {
 	return matter
 }
 
-// Covers: VE CONTEXT 硬句 183/184「追偿在通知或主张条件成立时即可独立发起，无需等待
-// 客户提出索赔、客户责任结论或客户赔付」「每个追偿事项必须按责任相对方和责任依据分别
-// 固定运营责任法人、协议或保险条款版本、责任范围、证据范围及适用期限」——七件缺一
+// Covers: VE CONTEXT「相应通知或主张条件成立时即可独立发起」「无需等待客户提出索赔」
+// 「按责任相对方和责任依据分别固定」——七件缺一
 // 立不起；类型上没有客户索赔前置字段（独立发起是结构性的）。
 func TestARecoveryMatterOpensIndependentlyWithItsFullShape(t *testing.T) {
 	matter := openMatter(t)
@@ -69,9 +68,8 @@ func TestARecoveryMatterOpensIndependentlyWithItsFullShape(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 184 末句「预先通知和正式主张不能合并为一个模糊的『已追偿』」
-// 与 185「每个追偿通知或主张动作必须分别记录准备完成、对外提交、渠道接受、送达、对方
-// 确认、提交失败和送达失败」——动作种类封闭二值、过程节点封闭七值、义务判据引用必备
+// Covers: VE CONTEXT「不能合并为一个模糊的“已追偿”」与「必须分别记录准备完成、对外提交」
+// ——动作种类封闭二值、过程节点封闭七值、义务判据引用必备
 // （准备完成/渠道接受/内部审批不能默认满足对外义务——满足哪个节点由协议说了算）。
 func TestActionsKeepNoticeAndAssertionApart(t *testing.T) {
 	matter := openMatter(t)
@@ -116,8 +114,8 @@ func TestActionsKeepNoticeAndAssertionApart(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 186「提交或送达失败是外部动作结果，不是对方拒绝责任。期限
-// 内可以按规则重试或更换获准渠道，所有尝试和内容版本保留」——失败是七值节点之二（类型
+// Covers: VE CONTEXT「提交或送达失败是外部动作结果」「所有尝试和内容版本保留」
+// ——失败是七值节点之二（类型
 // 上没有对方拒绝字段），重试是 attempt 递增的新记录，前次记录原样存在。
 func TestFailuresAreOutcomesNotRefusalsAndRetriesAreNewRecords(t *testing.T) {
 	matter := openMatter(t)

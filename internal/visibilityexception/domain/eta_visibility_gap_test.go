@@ -26,9 +26,8 @@ func etaSpec(t *testing.T, version string) domain.ETAPredictionSpec {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 102「每次 ETA 必须明确预测对象、目标里程碑、预测时点、
-// 输入事实、规则或模型版本、预计时间范围和可信程度。信息不足时允许不形成 ETA，不得
-// 以计划时间或客户承诺填充」——七件缺一立不起（缺模型版本即拒，没有可填充的旁路）；
+// Covers: VE CONTEXT「必须明确预测对象、目标里程碑、预测时点」「不得以计划时间或客户承诺填充」
+// ——七件缺一立不起（缺模型版本即拒，没有可填充的旁路）；
 // 区间倒置拒；来源口径封闭二值。
 func TestAnETADemandsItsSevenParts(t *testing.T) {
 	eta, err := domain.FormETAPrediction(etaSpec(t, "eta-1/v1"))
@@ -53,7 +52,7 @@ func TestAnETADemandsItsSevenParts(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 103「新的 ETA 形成新版本，不覆盖历史预测」——刷新换版本
+// Covers: VE CONTEXT「新的 ETA 形成新版本，不覆盖历史预测」——刷新换版本
 // 指回原版、原预测不可变；跨包裹或跨里程碑的刷新不是同一条预测线。
 func TestARefreshedETAKeepsItsHistory(t *testing.T) {
 	first, err := domain.FormETAPrediction(etaSpec(t, "eta-1/v1"))
@@ -85,9 +84,8 @@ func TestARefreshedETAKeepsItsHistory(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 105「只有适用产品或履约段明确预期某项观察，且版本化观察
-// 窗口已经届满时，才能形成可见性缺口信号。无扫描不能直接形成延误、停止移动或遗失
-// 结论」——窗口未届满独立哨兵拒（提前的缺口与无扫描即延误没有区别）；预期与窗口规则
+// Covers: VE CONTEXT「且版本化观察窗口已经届满时」「不能直接形成延误、停止移动或遗失结论」
+// ——窗口未届满独立哨兵拒（提前的缺口与无扫描即延误没有区别）；预期与窗口规则
 // 必备；类型上没有延误/遗失字段。
 func TestAGapFormsOnlyAfterTheWindowElapses(t *testing.T) {
 	windowEnd := predictedAt.Add(24 * time.Hour)

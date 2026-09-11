@@ -28,7 +28,7 @@ func receivedClaim(t *testing.T) *domain.ClaimItem {
 	return claim
 }
 
-// Covers: CONTEXT 硬句 186「按申请人授权、客户账户……判断资格」与 `AT-VE-125`（申请
+// Covers: VE CONTEXT「再按申请人授权、客户账户」判断资格那一维与 `AT-VE-125`（申请
 // 人授权与客户账户并列，两者不是一回事）——申请人是原始提交事实的一格，受理必带；
 // 存量行没有这一格：重建门容缺，Applicant() 如实报缺席，授权维据此答核不了而不是
 // 拿客户账户顶替。
@@ -80,8 +80,8 @@ func TestAClaimCarriesItsApplicantAndLegacyRowsRebuildWithoutOne(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 173「收到客户索赔、通过资格审核和确认赔偿责任是不同判断。
-// 系统必须先保留原始提交事实，再按……判断资格」——受理只留提交事实（无资格无结论）；
+// Covers: VE CONTEXT「确认赔偿责任是不同判断」「系统必须先保留原始提交事实」——受理只留
+// 提交事实（无资格无结论）；
 // 资格审核带依据且不审第二次；资格未通过形不成责任结论；类型上没有赔付金额字段。
 func TestReceiptScreeningAndLiabilityAreThreeJudgments(t *testing.T) {
 	claim := receivedClaim(t)
@@ -120,8 +120,8 @@ func TestReceiptScreeningAndLiabilityAreThreeJudgments(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 生命周期 251「最终责任结论前收到有效撤回——索赔项以已撤回结束
-// 后续审核，保留提交和证据；撤回不取消异常案件或独立追偿事项」——结论前可撤（提交
+// Covers: VE CONTEXT 生命周期「索赔项以已撤回结束后续审核」「撤回不取消异常案件或独立追偿事项」
+// ——结论前可撤（提交
 // 事实保留）、撤后审核与结论都拒；已有结论撤不回；类型上没有案件/追偿字段。
 func TestWithdrawalEndsReviewButNotTheCase(t *testing.T) {
 	claim := receivedClaim(t)
@@ -151,9 +151,8 @@ func TestWithdrawalEndsReviewButNotTheCase(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 生命周期 253/254「复核期限内出现有效异议或关键新证据——形成
-// 受控复核和新的结论版本；原结论保留」「复核期限届满……后续复核请求形成有依据的不
-// 受理，不改变原责任结论」——期限内换结论原结论进 PriorConclusion；届满独立哨兵拒；
+// Covers: VE CONTEXT 生命周期「形成受控复核和新的结论版本；原结论保留」「后续复核请求形成有依据的不受理」
+// ——期限内换结论原结论进 PriorConclusion；届满独立哨兵拒；
 // 同值复核是矛盾输入。
 func TestReviewIsControlledByItsWindow(t *testing.T) {
 	claim := receivedClaim(t)

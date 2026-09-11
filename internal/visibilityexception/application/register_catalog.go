@@ -171,9 +171,9 @@ type RegisterConflictSignalRuleCommand struct {
 }
 
 // CatalogRegistry 是本用例对写入口的全部要求：目录册写口（ports.CatalogRegistry）加异常
-// 披露规则与冲突信号规则两册的写口。ports 里三口分立是 mech/08 当时为了不拆替身；用例只有
+// 披露规则与冲突信号规则两册的写口。ports 里各写口分立是 mech/08 当时为了不拆替身；用例只有
 // 一个、受控入口只有一个、留痕只有一处，所以在这里合成一口——生产写入方
-// postgres.CatalogRegistrar 三口本就齐备，代价只落在测试替身各补两个方法。
+// postgres.CatalogRegistrar 各写口本就齐备，代价只落在测试替身补齐那两册的写法。
 type CatalogRegistry interface {
 	ports.CatalogRegistry
 	ports.ExceptionDisclosureRuleRegistry

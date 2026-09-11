@@ -76,7 +76,7 @@ func (judgment SourceJudgment) String() string {
 	}
 }
 
-// CancellationAnswer 是目标上下文对取消/替代意图的答复封闭四值（CONTEXT 硬句 149：
+// CancellationAnswer 是目标上下文对取消/替代意图的答复封闭四值（CONTEXT
 // 「目标上下文必须分别返回取消已接受、部分取消、已无法取消或拒绝取消」）。
 type CancellationAnswer uint8
 
@@ -143,7 +143,7 @@ type DispositionRequest struct {
 }
 
 // SendDispositionRequest 形成并发送一份请求：目标、动作、范围、原因、证据与时限
-// 缺一不可（CONTEXT 硬句 145）。受理有效期可缺席（如适用）。
+// 缺一不可（CONTEXT「处置请求必须明确目标对象、请求动作」）。受理有效期可缺席（如适用）。
 func SendDispositionRequest(spec DispositionRequestSpec) (*DispositionRequest, error) {
 	if !spec.ID.valid() ||
 		!spec.Case.valid() ||
@@ -292,7 +292,7 @@ func RehydrateDispositionRequest(snapshot DispositionRequestSnapshot) (*Disposit
 }
 
 // RecordSourceJudgment 记录源上下文的判断。受理有效期届满后，尚未被接受的范围不得
-// 再按旧请求启动（CONTEXT 硬句 150）——过期请求不再吸收接受；已判断的请求不判第二次。
+// 再按旧请求启动（CONTEXT「不得再按旧请求启动」）——过期请求不再吸收接受；已判断的请求不判第二次。
 func (request *DispositionRequest) RecordSourceJudgment(judgment SourceJudgment, at time.Time) error {
 	if _, judged := request.Judgment(); judged {
 		return ErrRequestAlreadyJudged
@@ -310,7 +310,7 @@ func (request *DispositionRequest) RecordSourceJudgment(judgment SourceJudgment,
 }
 
 // RecordCancellationAnswer 记录目标上下文对取消/替代意图的答复。取消只改变未来意图，
-// 不撤销已经发生的源业务事实（CONTEXT 硬句 149）——答复是四值封闭，「已无法取消」和
+// 不撤销已经发生的源业务事实（CONTEXT「不撤销已经发生的源业务事实」）——答复是四值封闭，「已无法取消」和
 // 「部分取消」都是如实结果；已接受或已开始的范围继续按事实返回执行结果，那不在这里。
 // 只有已判断的请求才谈得上取消——还没人接的请求撤回是另一回事（未判断即无外部意图）。
 func (request *DispositionRequest) RecordCancellationAnswer(answer CancellationAnswer, at time.Time) error {
@@ -328,8 +328,7 @@ func (request *DispositionRequest) RecordCancellationAnswer(answer CancellationA
 }
 
 // SupersedeWith 以新请求替代本请求的未来意图：新请求必须是不同身份、更高意图版本。
-// 原请求与其已有判断原样保留——替代不是删除，案件状态变化也不能静默使旧请求失效
-// （CONTEXT 硬句 148）。
+// 原请求与其已有判断原样保留——替代不是删除，CONTEXT「案件状态变化不能静默使旧请求失效」。
 func (request *DispositionRequest) SupersedeWith(successor *DispositionRequest) error {
 	if successor == nil ||
 		successor.id == request.id ||

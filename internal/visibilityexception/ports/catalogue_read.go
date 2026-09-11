@@ -162,7 +162,7 @@ type ExceptionDisclosureRuleCatalogueRow struct {
 // 替代链分叉形成异常信号时，用哪个信号类型、哪一版识别规则、记什么可信度依据。这份目录
 // 一租户至多一行（键只有租户）且没有生效区间——换版是一次治理动作而不是接续闭合（0025
 // 头注），所以行上没有 HasEffectiveTo；RegisteredAt 是库落下的登记时刻，照实转写。仍以
-// 列表交回而不是单值加布尔：与同族七法同形，空册同样如实答空列表。
+// 列表交回而不是单值加布尔：与同族各法同形，空册同样如实答空列表。
 type ConflictSignalRuleCatalogueRow struct {
 	SignalKind   string
 	Version      string
@@ -173,7 +173,7 @@ type ConflictSignalRuleCatalogueRow struct {
 
 // CatalogueListRead 是 VE 目录的伴生列表读端口。八个方法一口装下而不按页面分组拆
 // 三个接口：分组（判断规则/披露口径/索赔前置）是页面层的呈现裁决，端口的封闭集要
-// 与写入口逐一对上——前六法对 CatalogRegistry 的六个方法，后两法对单立的
+// 与写入口逐一对上——目录册各法对 CatalogRegistry 的各方法，其余各法对单立的
 // ExceptionDisclosureRuleRegistry / ConflictSignalRuleRegistry（票
 // ve-disclosure-policy-view/03）——「本上下文支持哪几类目录查阅」从这一个接口就
 // 读得出来，页面重新分组不改端口。

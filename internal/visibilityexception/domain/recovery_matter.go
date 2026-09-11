@@ -43,7 +43,7 @@ func NewLegalEntityReference(value string) (LegalEntityReference, error) {
 }
 
 // RecoveryMatterSpec 是建立一项追偿事项所需的全部输入：按责任相对方和责任依据分别
-// 固定运营责任法人、协议/条款版本、责任范围、证据范围与适用期限（CONTEXT 硬句 184）。
+// 固定运营责任法人、协议/条款版本、责任范围、证据范围与适用期限（CONTEXT「按责任相对方和责任依据分别固定」）。
 type RecoveryMatterSpec struct {
 	ID           RecoveryMatterID
 	Case         CaseID
@@ -57,7 +57,7 @@ type RecoveryMatterSpec struct {
 }
 
 // RecoveryMatter 是供应商或保险追偿事项。它在通知或主张条件成立时独立发起——无需
-// 等待客户索赔、客户责任结论或客户赔付（CONTEXT 硬句 183）：类型上没有任何客户索赔
+// 等待客户索赔、客户责任结论或客户赔付（CONTEXT「无需等待客户提出索赔」）：类型上没有任何客户索赔
 // 前置字段。一个案件可关联多个追偿事项，各自拥有资格、时限与证据。
 type RecoveryMatter struct {
 	id           RecoveryMatterID
@@ -134,8 +134,8 @@ func (matter RecoveryMatter) OpenedAt() time.Time {
 	return matter.openedAt
 }
 
-// RecoveryActionKind 是追偿动作的封闭二值：预先通知与正式主张不能合并为一个模糊的
-// 「已追偿」（CONTEXT 硬句 184 末句）。
+// RecoveryActionKind 是追偿动作的封闭二值：预先通知与正式主张
+// CONTEXT「不能合并为一个模糊的“已追偿”」。
 type RecoveryActionKind uint8
 
 const (
@@ -159,8 +159,8 @@ func (kind RecoveryActionKind) String() string {
 	}
 }
 
-// RecoveryActionMilestone 是一次动作的过程节点封闭集合（CONTEXT 硬句 185：准备完成、
-// 对外提交、渠道接受、送达、对方确认、提交失败和送达失败分别记录）。
+// RecoveryActionMilestone 是一次动作的过程节点封闭集合（CONTEXT「必须分别记录准备完成、对外提交」那一句：
+// 准备完成、对外提交、渠道接受、送达、对方确认、提交失败和送达失败分别记录）。
 type RecoveryActionMilestone uint8
 
 const (

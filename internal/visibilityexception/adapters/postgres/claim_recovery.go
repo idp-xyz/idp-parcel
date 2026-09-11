@@ -20,7 +20,7 @@ var ErrClaimHistoryStale = errors.New("visibility exception postgres: claim supp
 
 // Claims 实现 ports.ClaimStore。索赔是判断历史推进的聚合（受理→过审→结论→复核/
 // 撤回），Save 走 UPSERT 按键整行更新——三判形状由迁移 CHECK 与领域重建口两头把门，
-// 复核换版走前版列（原结论保留，CONTEXT 253），不翻旧插新。
+// 复核换版走前版列（CONTEXT「形成受控复核和新的结论版本；原结论保留」），不翻旧插新。
 //
 // 补充期限历史是另一回事：它是只增序列，Save 只追加不重写（见 appendSupplementDeadlines）。
 type Claims struct {
@@ -320,7 +320,7 @@ func (repository *Claims) Save(
 	return ports.ClaimSaved, nil
 }
 
-// Recoveries 实现 ports.RecoveryStore。事项要件成立即固定（硬句 184）——插入即
+// Recoveries 实现 ports.RecoveryStore。事项要件成立即固定（CONTEXT「按责任相对方和责任依据分别固定」）——插入即
 // 不可回写，适配器没有事项的 UPDATE 语句；动作只增（重试是新记录不是改写）。
 type Recoveries struct {
 	db *bentopg.DB
@@ -458,8 +458,8 @@ func (repository *Recoveries) CountActions(
 	return attempts, nil
 }
 
-// AppendAction 追记一条动作节点。只增：没有 UPDATE 与 DELETE，所有尝试与内容版本
-// 保留（硬句 185）。行无业务唯一约束（同一尝试的多个过程节点各占一行，主键是
+// AppendAction 追记一条动作节点。只增：没有 UPDATE 与 DELETE，CONTEXT「所有尝试和内容版本保留」。
+// 行无业务唯一约束（同一尝试的多个过程节点各占一行，主键是
 // identity seq）——没有 23505 可撞，无需 ON CONFLICT。
 func (repository *Recoveries) AppendAction(
 	ctx context.Context,

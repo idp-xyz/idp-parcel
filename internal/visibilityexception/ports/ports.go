@@ -371,7 +371,7 @@ type ExceptionDisclosureRuleRegistration struct {
 // ExceptionDisclosureRuleRegistry 是异常披露规则目录的写入口（`PAR-VIS-07` 的披露与自动
 // 发布范围那一半；渠道那一半在 CatalogRegistry.RegisterNotificationPolicy）。
 //
-// 单立端口而不并进 CatalogRegistry：那个接口已有六口，每加一口就拆一遍它全部的测试
+// 单立端口而不并进 CatalogRegistry：那个接口每加一口就拆一遍它全部的测试
 // 替身与受控 CLI 的桩；本目录的登记入口（CLI / 在线登记口）另立票接，先把写入方与读口
 // 立起来。事务纪律同 CatalogRegistry：在调用方的事务内执行，一版抬头与整版条目同一提交。
 type ExceptionDisclosureRuleRegistry interface {
@@ -965,7 +965,7 @@ type DisclosurePolicyRegistration struct {
 }
 
 // CatalogRegistry 是 VE 五类规则与策略目录的写入口（`PAR-VIS-01`/`05`/`07`/`08`/`09`；
-// `PAR-VIS-08` 跨索赔资格与申请人授权两组表，故六个方法）。与五个只读装载口成对：
+// `PAR-VIS-08` 跨索赔资格与申请人授权两组表，故它一类占两法）。与五个只读装载口成对：
 // 那五口至今只能答`未配置`，是因为除测试外没有任何东西写得进这些表。
 //
 // 目录**内容**属实例半边、待租户提供，本端口只建门：它不带任何默认条目，也不在缺件

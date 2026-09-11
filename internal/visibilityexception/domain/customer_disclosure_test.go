@@ -30,8 +30,7 @@ func disclosureDecision(t *testing.T, conclusion domain.DisclosureConclusion, co
 	return decision
 }
 
-// Covers: VE CONTEXT 硬句 159/165「客户可见性必须根据……信息披露规则形成版本化决定」
-// 「披露条件不成立或授权不足时分别形成暂不披露或待授权结果」——结论三值封闭（两个非
+// Covers: VE CONTEXT「信息披露规则形成版本化决定」「分别形成暂不披露或待授权结果」——结论三值封闭（两个非
 // 披露格分开，等条件与等授权是不同续办路）；披露必带内容快照、非披露必不带（两向拦）。
 func TestDisclosureKeepsItsThreeConclusionsHonest(t *testing.T) {
 	disclosed := disclosureDecision(t, domain.DiscloseToCustomer, "content/customer-1/v1")
@@ -67,9 +66,8 @@ func TestDisclosureKeepsItsThreeConclusionsHonest(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 162/163「客户异常通知必须保存通知对象、内容快照、披露依据、
-// 目标客户、要求时限和适用渠道」「已生成、已提交消息渠道、渠道已接受、已送达、失败和
-// 客户确认必须分别记录。合同要求送达或确认时，只有相应结果成立才满足通知义务」——
+// Covers: VE CONTEXT「客户异常通知必须保存通知对象、内容快照」「通知已生成、已提交消息渠道」
+// 「只有相应结果成立才满足通知义务」——
 // 非披露结论生成不了通知；节点分别追加不覆盖（失败后送达两节点并存）；义务按要求节点
 // 查（要求确认时仅送达不满足）。
 func TestNotificationMilestonesAccrueAndObligationIsExplicit(t *testing.T) {

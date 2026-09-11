@@ -24,8 +24,8 @@ func submittedEvidence(t *testing.T) domain.EvidenceItem {
 	return item
 }
 
-// Covers: VE CONTEXT 硬句 171「客户或合作伙伴提交证据只表示材料已经收到，不证明其
-// 陈述、事实或责任成立」——评价起点恒为已收到且不由调用方指定（提交即采信构造上
+// Covers: VE CONTEXT「只表示材料已经收到」「不证明其陈述、事实或责任成立」
+// ——评价起点恒为已收到且不由调用方指定（提交即采信构造上
 // 不可能）；采信/不采信是显式判断带依据；已评价不再评价（异议走调查不走改写）。
 func TestSubmissionMeansReceivedNotCredited(t *testing.T) {
 	item := submittedEvidence(t)
@@ -59,8 +59,8 @@ func TestSubmissionMeansReceivedNotCredited(t *testing.T) {
 	}
 }
 
-// Covers: VE CONTEXT 硬句 170「对外披露必须形成明确披露范围或脱敏版本，不能复制出
-// 来源不明、内容不一致的附件」——披露版本锚定原件指纹（对得回原件）、披露范围必备、
+// Covers: VE CONTEXT「必须形成明确披露范围或脱敏版本」「不能复制出来源不明、内容不一致的附件」
+// ——披露版本锚定原件指纹（对得回原件）、披露范围必备、
 // 脱敏指纹与原件相同即原件外流拒。
 func TestDisclosureVersionsAnchorTheOriginal(t *testing.T) {
 	item := submittedEvidence(t)

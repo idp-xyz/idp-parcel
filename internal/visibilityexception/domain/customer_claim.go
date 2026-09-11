@@ -170,8 +170,8 @@ type SupplementDeadlineVersion struct {
 	EstablishedAt time.Time
 }
 
-// LiabilityConclusion 是责任审核的封闭四值（CONTEXT 生命周期 252：「全部成立、部分
-// 成立、不成立或当前无法认定」）。金额结算独立处理——这里没有金额。
+// LiabilityConclusion 是责任审核的封闭四值（CONTEXT 生命周期「全部成立、部分成立、不成立或当前无法认定」）。
+// 金额结算独立处理——这里没有金额。
 type LiabilityConclusion uint8
 
 const (
@@ -202,8 +202,8 @@ func (conclusion LiabilityConclusion) String() string {
 }
 
 // ClaimItemSpec 是受理一项索赔所需的全部输入：一个货主客户账户、合同责任范围、目标
-// 范围与索赔类型逐项固定（CONTEXT 硬句 172）；申请人随提交事实到达——资格审核的
-// 授权维（硬句 186）核的就是它，受理时缺席的话那一维永远无从核起。
+// 范围与索赔类型逐项固定（CONTEXT「目标包裹或明确服务范围及索赔类型」）；申请人随提交事实到达——
+// 资格审核的授权维（CONTEXT「再按申请人授权、客户账户」）核的就是它，受理时缺席的话那一维永远无从核起。
 type ClaimItemSpec struct {
 	ID          ClaimItemID
 	Batch       ClaimBatchReference
@@ -215,8 +215,8 @@ type ClaimItemSpec struct {
 	SubmittedAt time.Time
 }
 
-// ClaimItem 是一项客户索赔。收到、通过资格审核和确认赔偿责任是三个不同判断（CONTEXT
-// 硬句 173）——受理只保留原始提交事实，资格与责任各是显式一步；类型上没有赔付金额
+// ClaimItem 是一项客户索赔。收到、通过资格审核和确认赔偿责任是三个不同判断
+// （CONTEXT「确认赔偿责任是不同判断」）——受理只保留原始提交事实，资格与责任各是显式一步；类型上没有赔付金额
 // 字段，金额结算独立处理。
 type ClaimItem struct {
 	// revision 是这份索赔被读出时的持久化修订，不是判断历史的一部分——三判各步推进
@@ -555,8 +555,8 @@ func (claim *ClaimItem) ExtendSupplementDeadline(deadline time.Time, at time.Tim
 	return nil
 }
 
-// ConcludeLiability 形成责任结论：结论按明确责任范围和证据形成，金额结算独立处理
-// （CONTEXT 生命周期 252）。资格未审或未通过形不成责任结论；复核期限随结论固定。
+// ConcludeLiability 形成责任结论：CONTEXT 生命周期「结论按明确责任范围和证据形成」，金额结算
+// 独立处理。资格未审或未通过形不成责任结论；复核期限随结论固定。
 func (claim *ClaimItem) ConcludeLiability(
 	conclusion LiabilityConclusion,
 	reviewBy time.Time,
@@ -581,8 +581,8 @@ func (claim *ClaimItem) ConcludeLiability(
 	return nil
 }
 
-// Withdraw 在最终责任结论前记录有效撤回：后续审核以已撤回结束，提交与证据保留
-// （CONTEXT 生命周期 251）；撤回不取消异常案件或独立追偿事项——类型上没有那些字段。
+// Withdraw 在最终责任结论前记录有效撤回：CONTEXT 生命周期「索赔项以已撤回结束后续审核」，提交
+// 与证据保留；撤回不取消异常案件或独立追偿事项——类型上没有那些字段。
 // 已有结论的索赔撤不回。
 func (claim *ClaimItem) Withdraw(at time.Time) error {
 	if claim.withdrawn {
@@ -600,8 +600,8 @@ func (claim *ClaimItem) Withdraw(at time.Time) error {
 }
 
 // ReviewConclusion 在复核期限内依据有效异议或关键新证据形成新的结论版本：原结论
-// 保留在 PriorConclusion 上（CONTEXT 生命周期 253）；期限届满后拒——后续复核请求
-// 形成有依据的不受理，不改变原责任结论（254）。
+// 保留在 PriorConclusion 上（CONTEXT 生命周期「形成受控复核和新的结论版本；原结论保留」）；
+// 期限届满后拒——CONTEXT 生命周期「后续复核请求形成有依据的不受理」，不改变原责任结论。
 func (claim *ClaimItem) ReviewConclusion(
 	conclusion LiabilityConclusion,
 	at time.Time,

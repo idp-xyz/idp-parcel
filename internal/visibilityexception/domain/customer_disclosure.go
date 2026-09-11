@@ -11,7 +11,7 @@ var (
 )
 
 // DisclosurePolicyReference 指名版本化信息披露规则（产品、合同、可信度、影响范围与
-// 披露规则共同决定客户可见性——CONTEXT 硬句 159）。
+// 披露规则共同决定客户可见性——CONTEXT「信息披露规则形成版本化决定」）。
 type DisclosurePolicyReference struct{ requiredValue }
 
 func NewDisclosurePolicyReference(value string) (DisclosurePolicyReference, error) {
@@ -28,9 +28,8 @@ func NewDisclosureContentReference(value string) (DisclosureContentReference, er
 	return DisclosureContentReference{required}, err
 }
 
-// DisclosureConclusion 是披露决定的封闭三值（CONTEXT 硬句 165：「披露条件不成立或
-// 授权不足时分别形成暂不披露或待授权结果」——两个非披露格分开，等条件与等授权是
-// 不同的续办路）。
+// DisclosureConclusion 是披露决定的封闭三值（CONTEXT「分别形成暂不披露或待授权结果」——
+// 两个非披露格分开，等条件与等授权是不同的续办路）。
 type DisclosureConclusion uint8
 
 const (
@@ -57,10 +56,9 @@ func (conclusion DisclosureConclusion) String() string {
 	}
 }
 
-// DisclosureDecision 是从内部信号或案件形成的客户可见异常版本化决定。内部信号、内部
-// 案件和客户可见异常不是同一对象（CONTEXT 159）——这里只引用内部来源；异常案件存在
-// 不自动要求披露（165）。披露格必带内容快照，非披露格必不带——无中生有与有中不给
-// 两向都在构造期拦下。
+// DisclosureDecision 是从内部信号或案件形成的客户可见异常版本化决定。CONTEXT
+// 「内部案件和客户可见异常不是同一对象」——这里只引用内部来源；CONTEXT「异常案件存在不自动要求披露」。
+// 披露格必带内容快照，非披露格必不带——无中生有与有中不给两向都在构造期拦下。
 type DisclosureDecision struct {
 	episode    EpisodeID
 	customer   CustomerAccountReference
@@ -139,8 +137,8 @@ func NewNotificationChannelReference(value string) (NotificationChannelReference
 	return NotificationChannelReference{required}, err
 }
 
-// NotificationMilestone 是通知过程节点的封闭六值（CONTEXT 硬句 163：已生成、已提交
-// 消息渠道、渠道已接受、已送达、失败和客户确认分别记录）。
+// NotificationMilestone 是通知过程节点的封闭六值（CONTEXT「通知已生成、已提交消息渠道」那一句：
+// 已生成、已提交消息渠道、渠道已接受、已送达、失败和客户确认分别记录）。
 type NotificationMilestone uint8
 
 const (
@@ -177,8 +175,9 @@ func (milestone NotificationMilestone) String() string {
 }
 
 // CustomerNotification 是客户异常通知决定：通知对象、内容快照、披露依据、目标客户、
-// 要求时限和适用渠道六件必备（CONTEXT 硬句 162）。类型上没有源事实、案件责任、限制
-// 或索赔字段——客户通知、确认或异议都不能直接修改它们（164）；门户展示能否满足通知
+// 要求时限和适用渠道六件必备（CONTEXT「客户异常通知必须保存通知对象、内容快照」）。类型上
+// 没有源事实、案件责任、限制或索赔字段——客户通知、确认或异议
+// CONTEXT「都不能直接修改源事实、异常案件责任」；门户展示能否满足通知
 // 义务由合同另行判断，这里只带义务判据引用。
 type CustomerNotification struct {
 	id         NotificationID
@@ -279,7 +278,7 @@ func (notification *CustomerNotification) RecordMilestone(milestone Notification
 }
 
 // ObligationMetBy 报告按给定的义务节点要求，本通知是否已满足义务——只有相应结果
-// 成立才满足（合同要求送达就查送达、要求确认就查确认，CONTEXT 硬句 163）；哪个节点
+// 成立才满足（合同要求送达就查送达、要求确认就查确认，CONTEXT「只有相应结果成立才满足通知义务」）；哪个节点
 // 是要求来自义务判据，这里不猜。
 func (notification *CustomerNotification) ObligationMetBy(required NotificationMilestone) bool {
 	if !required.valid() {
