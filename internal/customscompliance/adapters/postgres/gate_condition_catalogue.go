@@ -87,8 +87,14 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 		          WHERE finding.tenant_id    = catalog.tenant_id
 		            AND finding.scope_ref    = catalog.scope_ref
 		            AND finding.action       = catalog.action
-		            AND finding.boundary_ref = catalog.boundary_ref)
+		            AND finding.boundary_ref = catalog.boundary_ref),
+		        rule.not_a_precondition, rule.accept_coverage, rule.accept_delta, rule.accept_validity
 		   FROM customs_compliance.gate_condition_catalog AS catalog
+		   LEFT JOIN customs_compliance.gate_condition_duty_payment_rule AS rule
+		     ON rule.tenant_id    = catalog.tenant_id
+		    AND rule.scope_ref    = catalog.scope_ref
+		    AND rule.action       = catalog.action
+		    AND rule.boundary_ref = catalog.boundary_ref
 		  WHERE catalog.tenant_id = $1
 		  ORDER BY catalog.scope_ref, catalog.action, catalog.boundary_ref
 		  LIMIT $2`,
@@ -105,9 +111,21 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 			scopeRaw, actionRaw, boundaryRaw string
 			registeredAt                     time.Time
 			findingsJSON                     []byte
+			// 规则行是 LEFT JOIN 来的：这一道尚未登规则时四列皆 NULL，上列如实透出空位（票 sa-cc/06）。
+			notAPrecondition                      *bool
+			coverageJSON, deltaJSON, validityJSON []byte
 		)
-		if err := rows.Scan(&scopeRaw, &actionRaw, &boundaryRaw, &registeredAt, &findingsJSON); err != nil {
+		if err := rows.Scan(&scopeRaw, &actionRaw, &boundaryRaw, &registeredAt, &findingsJSON,
+			&notAPrecondition, &coverageJSON, &deltaJSON, &validityJSON); err != nil {
 			return nil, fmt.Errorf("list gate conditions: %w", err)
+		}
+		var dutyRule *domain.DutyPaymentGateRule
+		if notAPrecondition != nil {
+			rebuilt, err := rebuildDutyPaymentGateRule(*notAPrecondition, coverageJSON, deltaJSON, validityJSON)
+			if err != nil {
+				return nil, fmt.Errorf("rebuild gate condition catalogue: %w", err)
+			}
+			dutyRule = &rebuilt
 		}
 		scope, err := domain.NewDecisionScopeReference(scopeRaw)
 		if err != nil {
@@ -134,11 +152,12 @@ func (catalogue *GateConditionCatalogue) ListGateConditions(
 			findings = append(findings, finding)
 		}
 		entries = append(entries, ports.GateConditionCatalogueEntry{
-			Scope:        scope,
-			Action:       action,
-			Boundary:     boundary,
-			RegisteredAt: registeredAt.UTC(),
-			Findings:     findings,
+			Scope:           scope,
+			Action:          action,
+			Boundary:        boundary,
+			RegisteredAt:    registeredAt.UTC(),
+			Findings:        findings,
+			DutyPaymentRule: dutyRule,
 		})
 	}
 	if err := rows.Err(); err != nil {

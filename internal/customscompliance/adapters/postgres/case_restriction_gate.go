@@ -455,15 +455,19 @@ func (repository *GateVerifications) FindByKey(
 		preconditionsRaw []byte
 		conclusionRaw    string
 		verifiedAt       time.Time
+		reading          dutyReadingColumns
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT preconditions, conclusion, verified_at
+		`SELECT preconditions, conclusion, verified_at,
+		        duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest
 		   FROM customs_compliance.gate_verification
 		  WHERE tenant_id = $1 AND scope_ref = $2 AND action = $3
 		    AND boundary_ref = $4 AND findings_digest = $5`,
 		key.TenantID.String(), key.Scope.String(), key.Action.String(),
 		key.Boundary.String(), key.Digest,
-	).Scan(&preconditionsRaw, &conclusionRaw, &verifiedAt)
+	).Scan(&preconditionsRaw, &conclusionRaw, &verifiedAt,
+		&reading.state, &reading.coverage, &reading.delta, &reading.validity,
+		&reading.duty, &reading.funds, &reading.version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.ReleaseGateVerification{}, false, nil
 	}
@@ -493,7 +497,76 @@ func (repository *GateVerifications) FindByKey(
 	if err != nil {
 		return domain.ReleaseGateVerification{}, false, fmt.Errorf("rebuild gate verification: %w", err)
 	}
+	if reading.present() {
+		attached, err := reading.attachTo(gate)
+		if err != nil {
+			return domain.ReleaseGateVerification{}, false, fmt.Errorf("rebuild gate verification: %w", err)
+		}
+		gate = attached
+	}
 	return gate, true, nil
+}
+
+// dutyReadingColumns 是门禁记录上「税费付款」那一道读数的七列（0019 加列，票 sa-cc/06），同生同灭。
+// 没挂读数的版本七列皆 NULL——不构成前置条件那一形，或加列之前的旧版。
+type dutyReadingColumns struct {
+	state, coverage, delta, validity *string
+	duty, funds, version             *string
+}
+
+func (columns dutyReadingColumns) present() bool {
+	return columns.state != nil
+}
+
+// attachTo 把七列折回读数挂到判断上；词形经封闭集译回，集外即库被旁路改过。
+func (columns dutyReadingColumns) attachTo(gate domain.ReleaseGateVerification) (domain.ReleaseGateVerification, error) {
+	if columns.coverage == nil || columns.delta == nil || columns.validity == nil ||
+		columns.duty == nil || columns.funds == nil || columns.version == nil {
+		return domain.ReleaseGateVerification{}, errors.New("the duty payment reading columns are not paired")
+	}
+	state, err := closedWord(*columns.state, domain.PreconditionMet, domain.PreconditionUnmet)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	coverage, err := closedWord(*columns.coverage, domain.CoverageNone, domain.CoveragePartial, domain.CoverageFull)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	delta, err := closedWord(*columns.delta, domain.DeltaNone, domain.DeltaShort, domain.DeltaExcess)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	validity, err := closedWord(*columns.validity, domain.FundsFactValid, domain.FundsFactInvalidated)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	duty, err := domain.NewAssessedDutyReference(*columns.duty)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	funds, err := domain.NewExternalFundsFactReference(*columns.funds)
+	if err != nil {
+		return domain.ReleaseGateVerification{}, err
+	}
+	return gate.WithDutyPayment(domain.DutyPaymentGateReading{
+		State:        state,
+		Coverage:     coverage,
+		Delta:        delta,
+		Validity:     validity,
+		Verification: domain.DutyVerificationReference{Duty: duty, Funds: funds, Version: *columns.version},
+	})
+}
+
+// dutyReadingArgs 把判断上的读数展成七个 INSERT 参数；没挂读数即七个 NULL。
+func dutyReadingArgs(gate domain.ReleaseGateVerification) []any {
+	reading, has := gate.DutyPayment()
+	if !has {
+		return []any{nil, nil, nil, nil, nil, nil, nil}
+	}
+	return []any{
+		reading.State.String(), reading.Coverage.String(), reading.Delta.String(), reading.Validity.String(),
+		reading.Verification.Duty.String(), reading.Verification.Funds.String(), reading.Verification.Version,
+	}
 }
 
 // Save 写下一次门禁核对。同键已有记录时答`已有记录`（ADR-0031）——同一条件状态
@@ -521,12 +594,7 @@ func (repository *GateVerifications) Save(
 		return ports.GateVerificationSaveOutcomeInvalid, fmt.Errorf("save gate verification: %w", err)
 	}
 
-	tag, err := executor.Exec(ctx,
-		`INSERT INTO customs_compliance.gate_verification
-			(tenant_id, scope_ref, action, boundary_ref, findings_digest,
-			 preconditions, conclusion, verified_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		 ON CONFLICT DO NOTHING`,
+	args := []any{
 		key.TenantID.String(),
 		key.Scope.String(),
 		key.Action.String(),
@@ -535,6 +603,16 @@ func (repository *GateVerifications) Save(
 		preconditionsRaw,
 		gate.Conclusion().String(),
 		gate.VerifiedAt(),
+	}
+	args = append(args, dutyReadingArgs(gate)...)
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO customs_compliance.gate_verification
+			(tenant_id, scope_ref, action, boundary_ref, findings_digest,
+			 preconditions, conclusion, verified_at,
+			 duty_state, duty_coverage, duty_delta, duty_validity, duty_ref, funds_ref, duty_version_digest)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		 ON CONFLICT DO NOTHING`,
+		args...,
 	)
 	if err != nil {
 		return ports.GateVerificationSaveOutcomeInvalid, fmt.Errorf("save gate verification: %w", err)
