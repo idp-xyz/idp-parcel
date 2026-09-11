@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/partycommercial"
@@ -14,9 +14,10 @@ import (
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件是两个应用层唯一相遇的地方（ADR-0025）：提供方一侧用真编排（ResolveCommercialBasisHandler
-// 对着真登记册解闭包），只有权威读口、解析库、正文读口与 VE 自己的册用替身——它们各自的行为
-// 由各自的包证，这里证的是翻译。夹具里的天数、日历、材料取值只是取值，不作断言依据。
+// 本文件证的是翻译（ADR-0025）：两个提供方的读口——parcel-shipment 的回指读口与 party-commercial 的闭包读口、
+// 正文读口——与 VE 自己的册全用替身，各自的行为由各自的包证。闭包本身用 PC 领域的 ResolveCommercialClosure 对着
+// 真登记册解出来，而不是手搓一份：适配器读的是「接受时固定的闭包」，它的形状（采用了哪些类别、回指怎么算）由
+// 提供方定义，替身只负责把它按（租户，回指）交回来。夹具里的天数、日历、材料取值只是取值，不作断言依据。
 
 var anchorAt = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
 
@@ -29,10 +30,10 @@ func value[T any](t *testing.T, construct func(string) (T, error), raw string) T
 	return built
 }
 
-// effectiveIn 用导出 API 把一个已发布生效的商业版本放进登记册并交回它（形状照抄 PS 侧同名夹具）。
-func effectiveIn(
+// liveVersion 用导出 API 造一个已发布生效的商业版本（形状照抄 PS 侧同名夹具）。
+func liveVersion(
 	t *testing.T,
-	registry *pcdomain.CommercialRegistry,
+	tenant string,
 	kind pcdomain.CommercialObjectKind,
 	objectID, version, digest, scope string,
 ) pcdomain.CommercialVersion {
@@ -43,7 +44,7 @@ func effectiveIn(
 		t.Fatalf("new effective interval: %v", err)
 	}
 	draft, err := pcdomain.NewCommercialDraft(pcdomain.CommercialVersionSpec{
-		TenantID:      value(t, pcdomain.NewTenantID, "tenant-1"),
+		TenantID:      value(t, pcdomain.NewTenantID, tenant),
 		Kind:          kind,
 		ObjectID:      value(t, pcdomain.NewCommercialObjectID, objectID),
 		Version:       value(t, pcdomain.NewCommercialVersionLabel, version),
@@ -71,51 +72,72 @@ func effectiveIn(
 	if err != nil {
 		t.Fatalf("take effect: %v", err)
 	}
+	return live
+}
+
+// effectiveIn 把一个已发布生效的商业版本放进登记册并交回它。
+func effectiveIn(
+	t *testing.T,
+	registry *pcdomain.CommercialRegistry,
+	tenant string,
+	kind pcdomain.CommercialObjectKind,
+	objectID, version, digest, scope string,
+) pcdomain.CommercialVersion {
+	t.Helper()
+	live := liveVersion(t, tenant, kind, objectID, version, digest, scope)
 	if _, err := registry.Register(live); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	return live
 }
 
-type authorityDouble struct {
-	registry *pcdomain.CommercialRegistry
-	err      error
+type referenceSourceDouble struct {
+	reference   psdomain.CommercialResolutionID
+	present     bool
+	err         error
+	asked       int
+	askedTenant psdomain.TenantID
+	askedParcel psdomain.DeclaredParcelID
 }
 
-func (double *authorityDouble) LoadScope(
+func (double *referenceSourceDouble) LoadCommercialResolutionReference(
 	_ context.Context,
-	_ pcdomain.TenantID,
-	_ pcdomain.CommercialScopeReference,
-) (*pcdomain.CommercialRegistry, error) {
+	tenant psdomain.TenantID,
+	parcel psdomain.DeclaredParcelID,
+) (psdomain.CommercialResolutionID, bool, error) {
+	double.asked++
+	double.askedTenant, double.askedParcel = tenant, parcel
 	if double.err != nil {
-		return nil, double.err
+		return psdomain.CommercialResolutionID{}, false, double.err
 	}
-	return double.registry, nil
+	return double.reference, double.present, nil
 }
 
-type resolutionStoreDouble struct {
-	saved []pcdomain.CommercialClosure
+var _ adapter.CommercialResolutionReferenceSource = (*referenceSourceDouble)(nil)
+
+type closureViewDouble struct {
+	closure         pcdomain.CommercialClosure
+	found           bool
+	err             error
+	asked           int
+	askedTenant     pcdomain.TenantID
+	askedResolution pcdomain.ResolutionID
 }
 
-func (double *resolutionStoreDouble) LoadResolution(
+func (double *closureViewDouble) LoadResolution(
 	_ context.Context,
-	_ pcdomain.TenantID,
-	_ pcdomain.ResolutionID,
+	tenant pcdomain.TenantID,
+	resolution pcdomain.ResolutionID,
 ) (pcdomain.CommercialClosure, bool, error) {
-	return pcdomain.CommercialClosure{}, false, nil
+	double.asked++
+	double.askedTenant, double.askedResolution = tenant, resolution
+	if double.err != nil {
+		return pcdomain.CommercialClosure{}, false, double.err
+	}
+	return double.closure, double.found, nil
 }
 
-func (double *resolutionStoreDouble) Save(
-	_ context.Context,
-	closure pcdomain.CommercialClosure,
-) (pcports.ResolutionSaveOutcome, error) {
-	double.saved = append(double.saved, closure)
-	return pcports.ResolutionSaved, nil
-}
-
-type fixedClock struct{ at time.Time }
-
-func (clock fixedClock) Now() time.Time { return clock.at }
+var _ pcports.CommercialResolutionView = (*closureViewDouble)(nil)
 
 type ownRulesDouble struct {
 	rules    veports.EligibilityRules
@@ -135,25 +157,11 @@ func (double *ownRulesDouble) RulesForClaim(
 	return double.rules, double.declared, nil
 }
 
-type keySourceDouble struct {
-	key    pcdomain.ClosureResolutionKey
-	formed bool
-	err    error
-	asked  int
-}
-
-func (double *keySourceDouble) FormRuleResolutionKey(
-	_ context.Context,
-	_ veports.EligibilityQuery,
-) (pcdomain.ClosureResolutionKey, bool, error) {
-	double.asked++
-	return double.key, double.formed, double.err
-}
-
 type contentsDouble struct {
 	rule        pcdomain.CustomerServiceRuleVersion
 	found       bool
 	err         error
+	asked       int
 	askedTenant pcdomain.TenantID
 	askedRule   pcdomain.CommercialVersion
 }
@@ -163,6 +171,7 @@ func (double *contentsDouble) LoadCustomerServiceRule(
 	tenant pcdomain.TenantID,
 	rule pcdomain.CommercialVersion,
 ) (pcdomain.CustomerServiceRuleVersion, bool, error) {
+	double.asked++
 	double.askedTenant, double.askedRule = tenant, rule
 	if double.err != nil {
 		return pcdomain.CustomerServiceRuleVersion{}, false, double.err
@@ -173,31 +182,34 @@ func (double *contentsDouble) LoadCustomerServiceRule(
 var _ pcports.CustomerServiceRuleContentView = (*contentsDouble)(nil)
 
 type fixture struct {
-	registry  *pcdomain.CommercialRegistry
-	authority *authorityDouble
-	store     *resolutionStoreDouble
-	version   pcdomain.CommercialVersion
-	own       *ownRulesDouble
-	keys      *keySourceDouble
-	contents  *contentsDouble
+	registry   *pcdomain.CommercialRegistry
+	contract   pcdomain.CommercialVersion
+	version    pcdomain.CommercialVersion
+	anchor     pcdomain.SelectionAnchor
+	closure    pcdomain.CommercialClosure
+	own        *ownRulesDouble
+	references *referenceSourceDouble
+	closures   *closureViewDouble
+	contents   *contentsDouble
 }
 
-// newFixture 造一份「VE 自己的册在场且类型在保、PC 里恰有一版生效的客户服务规则、键来源能成键」
-// 的世界；正文由各用例按需塞进 contents。
+// newFixture 造一份「VE 自己的册在场且类型在保、PC 里恰有一版客户合同与一版客户服务规则生效、目标包裹所属委托
+// 接受时固定的闭包同时采用了这两版、PS 按目标包裹答得出那份闭包的回指」的世界；正文由各用例按需塞进 contents。
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
 	registry := pcdomain.NewCommercialRegistry()
-	version := effectiveIn(t, registry, pcdomain.CustomerServiceRuleObject, "csr-1", "v1", "sha256:csr1", "scope-a")
+	contract := effectiveIn(t, registry, "tenant-1", pcdomain.CustomerContractObject, "contract-1", "v1", "sha256:contract1", "scope-a")
+	version := effectiveIn(t, registry, "tenant-1", pcdomain.CustomerServiceRuleObject, "csr-1", "v1", "sha256:csr1", "scope-a")
 	anchor, err := pcdomain.NewSelectionAnchor(anchorAt, value(t, pcdomain.NewAnchorPolicyVersion, "anchor-policy-v1"))
 	if err != nil {
 		t.Fatalf("new selection anchor: %v", err)
 	}
-	return &fixture{
-		registry:  registry,
-		authority: &authorityDouble{registry: registry},
-		store:     &resolutionStoreDouble{},
-		version:   version,
+	fixture := &fixture{
+		registry: registry,
+		contract: contract,
+		version:  version,
+		anchor:   anchor,
 		own: &ownRulesDouble{
 			declared: true,
 			rules: veports.EligibilityRules{
@@ -212,31 +224,58 @@ func newFixture(t *testing.T) *fixture {
 				},
 			},
 		},
-		keys: &keySourceDouble{formed: true, key: pcdomain.ClosureResolutionKey{
-			TenantID:             value(t, pcdomain.NewTenantID, "tenant-1"),
-			CustomerAccountID:    value(t, pcdomain.NewCustomerAccountID, "customer-1"),
-			LegalEntityCandidate: value(t, pcdomain.NewLegalEntityReference, "legal-1"),
-			Scope:                value(t, pcdomain.NewCommercialScopeReference, "scope-a"),
-			Purpose:              pcdomain.AcceptanceControlPurpose,
-			Anchor:               anchor,
-			RequiredBases:        []pcdomain.CommercialObjectKind{pcdomain.CustomerServiceRuleObject},
-		}},
-		contents: &contentsDouble{},
+		references: &referenceSourceDouble{},
+		closures:   &closureViewDouble{},
+		contents:   &contentsDouble{},
 	}
+	fixture.hold(t, fixture.closureFor(t, "tenant-1", pcdomain.CustomerContractObject, pcdomain.CustomerServiceRuleObject))
+	return fixture
 }
 
-func (fixture *fixture) adapter(t *testing.T, keys adapter.RuleResolutionKeySource) *adapter.ClaimServiceRules {
+// closureFor 让 PC 领域对着夹具登记册解一份唯一闭包——必需依据由用例指名，闭包采用了什么由解析决定。
+func (fixture *fixture) closureFor(t *testing.T, tenant string, bases ...pcdomain.CommercialObjectKind) pcdomain.CommercialClosure {
 	t.Helper()
-	built, err := adapter.NewClaimServiceRules(adapter.ClaimServiceRulesDeps{
-		Rules:    fixture.own,
-		Resolve:  pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixture.store, fixedClock{at: anchorAt}),
-		Contents: fixture.contents,
-		Keys:     keys,
-	})
+	closure := pcdomain.ResolveCommercialClosure(fixture.registry, pcdomain.ClosureResolutionKey{
+		TenantID:             value(t, pcdomain.NewTenantID, tenant),
+		CustomerAccountID:    value(t, pcdomain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: value(t, pcdomain.NewLegalEntityReference, "legal-1"),
+		Scope:                value(t, pcdomain.NewCommercialScopeReference, "scope-a"),
+		Purpose:              pcdomain.AcceptanceControlPurpose,
+		Anchor:               fixture.anchor,
+		RequiredBases:        bases,
+	}, nil)
+	if closure.Outcome() != pcdomain.UniquelyResolved {
+		t.Fatalf("closure outcome = %q reason %q, want UNIQUELY_RESOLVED", closure.Outcome(), closure.Reason())
+	}
+	return closure
+}
+
+// hold 让两个提供方替身对同一份闭包说话：PS 按目标包裹答它的回指，PC 按回指交回它。
+func (fixture *fixture) hold(t *testing.T, closure pcdomain.CommercialClosure) {
+	t.Helper()
+	fixture.closure = closure
+	fixture.references.reference = value(t, psdomain.NewCommercialResolutionID, closure.ResolutionID().String())
+	fixture.references.present = true
+	fixture.closures.closure = closure
+	fixture.closures.found = true
+}
+
+func (fixture *fixture) adapter(t *testing.T) *adapter.ClaimServiceRules {
+	t.Helper()
+	built, err := adapter.NewClaimServiceRules(fixture.deps())
 	if err != nil {
 		t.Fatalf("new claim service rules: %v", err)
 	}
 	return built
+}
+
+func (fixture *fixture) deps() adapter.ClaimServiceRulesDeps {
+	return adapter.ClaimServiceRulesDeps{
+		Rules:      fixture.own,
+		References: fixture.references,
+		Closures:   fixture.closures,
+		Contents:   fixture.contents,
+	}
 }
 
 func (fixture *fixture) query(t *testing.T) veports.EligibilityQuery {
@@ -282,7 +321,7 @@ func (fixture *fixture) content(t *testing.T, deadlines []pcdomain.ClaimDeadline
 	t.Helper()
 	rule, err := pcdomain.NewCustomerServiceRuleVersion(
 		fixture.version,
-		pcdomain.CustomerServiceRuleAppliesToServiceProduct(value(t, pcdomain.NewCommercialObjectID, "product-1")),
+		pcdomain.CustomerServiceRuleAppliesToCustomerContract(value(t, pcdomain.NewCommercialObjectID, "contract-1")),
 		value(t, pcdomain.NewPartyID, "operator-1"),
 		value(t, pcdomain.NewCommercialScopeReference, "scope-a"),
 		deadlines, materials,
@@ -293,11 +332,16 @@ func (fixture *fixture) content(t *testing.T, deadlines []pcdomain.ClaimDeadline
 	fixture.contents.rule, fixture.contents.found = rule, true
 }
 
-// Covers: 票面「要做什么」第 2、3 条与 ADR-0104 Decision 五——两维从 PC 正文翻译：Registered 为真、
-// RuleVersion 冻三段版本引用、起算事件与日历照引用转写、Scope 取索赔目标范围、Required 与 PC 条目逐项
-// 相等；Deadline / SupplementDeadline / Notice 是票面「裁决」留的格，必须仍是零值——填了就是造实例参数。
-// VE 自己的册交出的其余三样一字不改，正文按闭包采用的那一版、以查询租户点读。
-func TestClaimServiceRulesOverlayBothDimensionsFromTheResolvedRule(t *testing.T) {
+func (fixture *fixture) firstDeadlineContent(t *testing.T) {
+	t.Helper()
+	fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
+}
+
+// Covers: 判据 2「已登记」格与 ADR-0136 决定二三段——目标包裹原样作声明包裹身份问 PS、回指原样作解析标识问 PC、
+// 正文按闭包采用的那一版以查询租户点读；两维从正文翻译：Registered 为真、RuleVersion 冻三段版本引用、起算事件
+// 与日历照引用转写、Scope 取索赔目标范围、Required 与 PC 条目逐项相等；Deadline / SupplementDeadline / Notice 是
+// 票 03「裁决」留的格，必须仍是零值——填了就是造实例参数。VE 自己的册交出的其余三样一字不改。
+func TestClaimServiceRulesOverlayBothDimensionsFromTheAcceptanceTimeRule(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.content(t,
 		[]pcdomain.ClaimDeadlineRule{
@@ -310,7 +354,7 @@ func TestClaimServiceRulesOverlayBothDimensionsFromTheResolvedRule(t *testing.T)
 		},
 	)
 
-	rules, declared, err := fixture.adapter(t, fixture.keys).RulesForClaim(context.Background(), fixture.query(t))
+	rules, declared, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 	if err != nil || !declared {
 		t.Fatalf("declared=%v err=%v", declared, err)
 	}
@@ -352,55 +396,42 @@ func TestClaimServiceRulesOverlayBothDimensionsFromTheResolvedRule(t *testing.T)
 		!rules.Authorization.Registered || len(rules.Authorization.AuthorizedApplicants) != 1 {
 		t.Fatalf("VE 自己的册交出的三维被改动了：%#v", rules)
 	}
+	if fixture.references.askedTenant.String() != "tenant-1" || fixture.references.askedParcel.String() != "parcel-1" {
+		t.Fatalf("问 PS 用的租户/包裹 = %q/%q，要是查询租户与原样的目标范围引用",
+			fixture.references.askedTenant, fixture.references.askedParcel)
+	}
+	if fixture.closures.askedTenant.String() != "tenant-1" || fixture.closures.askedResolution != fixture.closure.ResolutionID() {
+		t.Fatalf("问 PC 用的租户/回指 = %q/%q，要是查询租户与 PS 答的回指原样",
+			fixture.closures.askedTenant, fixture.closures.askedResolution)
+	}
 	if fixture.contents.askedTenant.String() != "tenant-1" ||
 		fixture.contents.askedRule.ObjectID().String() != "csr-1" ||
 		fixture.contents.askedRule.Version().String() != "v1" {
 		t.Fatalf("点读用的租户/版本 = %q/%q/%q，要是查询租户与闭包采用的那一版",
 			fixture.contents.askedTenant, fixture.contents.askedRule.ObjectID(), fixture.contents.askedRule.Version())
 	}
-	if len(fixture.store.saved) != 1 {
-		t.Fatalf("唯一解析要固定进 PC 解析库（ADR-0027），实得 %d 笔", len(fixture.store.saved))
-	}
 }
 
 // Covers: 端口合同「第二个返回值为 false 只有『合同的索赔资格声明不在场』一个意思」——VE 自己的册
-// 说不在场时原样交回，不去问 PC：连「这个类型在不在保」都无从谈起，两维也没有可挂的地方。
+// 说不在场时原样交回，不去问任何提供方：连「这个类型在不在保」都无从谈起，两维也没有可挂的地方。
 func TestClaimServiceRulesPassThroughWhenTheOwnCatalogueIsAbsent(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.own.declared = false
-	fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
+	fixture.firstDeadlineContent(t)
 
-	rules, declared, err := fixture.adapter(t, fixture.keys).RulesForClaim(context.Background(), fixture.query(t))
+	rules, declared, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 	if err != nil || declared {
 		t.Fatalf("declared=%v err=%v，要原样交回「声明不在场」", declared, err)
 	}
 	if rules.FilingDeadline.Registered || rules.Materials.Registered {
 		t.Fatal("声明不在场却给两维挂了登记")
 	}
-	if fixture.keys.asked != 0 {
-		t.Fatal("声明不在场还去问了 PC")
+	if fixture.references.asked != 0 || fixture.closures.asked != 0 || fixture.contents.asked != 0 {
+		t.Fatal("声明不在场还去问了提供方")
 	}
 }
 
-// Covers: 票面「裁决」——解析键的翻译是实例半边，没有键来源就是显式未配置：两维如实答未登记（恢复
-// 方向是去登记），VE 自己的册交出的三维照旧。
-func TestClaimServiceRulesAnswerUnregisteredWithoutAKeySource(t *testing.T) {
-	fixture := newFixture(t)
-	fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
-
-	rules, declared, err := fixture.adapter(t, nil).RulesForClaim(context.Background(), fixture.query(t))
-	if err != nil || !declared {
-		t.Fatalf("declared=%v err=%v", declared, err)
-	}
-	if rules.FilingDeadline.Registered || rules.Materials.Registered {
-		t.Fatalf("没有键来源却答了登记：%#v", rules)
-	}
-	if rules.RuleVersion != "SYN-CLAIM-RULES-1" || !rules.KindCovered || !rules.Authorization.Registered {
-		t.Fatalf("VE 自己的册交出的三维被改动了：%#v", rules)
-	}
-}
-
-// Covers: 票面「裁决」第一条——Registered 各维按「PC 那一项有没有行」答，版本壳在场不等于两维都登记。
+// Covers: 票 03「裁决」第一条——Registered 各维按「PC 那一项有没有行」答，版本壳在场不等于两维都登记。
 func TestClaimServiceRulesAnswerEachDimensionByItsOwnRow(t *testing.T) {
 	cases := map[string]struct {
 		arrange      func(t *testing.T, fixture *fixture)
@@ -408,9 +439,7 @@ func TestClaimServiceRulesAnswerEachDimensionByItsOwnRow(t *testing.T) {
 		wantMaterial bool
 	}{
 		"只登了首次索赔期限": {
-			arrange: func(t *testing.T, fixture *fixture) {
-				fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
-			},
+			arrange:      func(t *testing.T, fixture *fixture) { fixture.firstDeadlineContent(t) },
 			wantDeadline: true,
 		},
 		"只登了本类型的材料清单": {
@@ -435,7 +464,7 @@ func TestClaimServiceRulesAnswerEachDimensionByItsOwnRow(t *testing.T) {
 			fixture := newFixture(t)
 			tc.arrange(t, fixture)
 
-			rules, declared, err := fixture.adapter(t, fixture.keys).RulesForClaim(context.Background(), fixture.query(t))
+			rules, declared, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 			if err != nil || !declared {
 				t.Fatalf("declared=%v err=%v", declared, err)
 			}
@@ -449,28 +478,52 @@ func TestClaimServiceRulesAnswerEachDimensionByItsOwnRow(t *testing.T) {
 	}
 }
 
-// Covers: 提供方没东西可交的三种缺席都是「未登记」而不是 error——键来源答形不成键（映射没登）、闭包
-// `无适用依据`（这个范围里没有生效的规则版本）、点读 found=false（壳在正文没登）。三种的恢复动作都是
-// 去登记，只是登的东西不同；一律不折成报错，报错的恢复动作是重试依赖，那对这三种都无用。
+// Covers: 判据 2 的三个「未登记」格（ADR-0136 决定二第三段），恢复动作都是去登记、登的东西各不同，一律不折成
+// 报错——报错的恢复动作是重试依赖，对这三格都无用：
+//   - PS 答「没有」：目标不属任何已接受委托的成员集合（含目标是明确服务责任范围）——不再往 PC 问，与本票之前
+//     键来源未配置那一行同一可观察行为；
+//   - 闭包在场、合同也采用了，却未采用客户服务规则版本：租户没在 PS 解析键登记面把它列进必需依据——正文读口
+//     不该被问到，问了就是在替一次没固定的接受补一版规则；
+//   - 规则版本在场而正文未登（found=false）：去 PC 登正文。
 func TestClaimServiceRulesAnswerUnregisteredWhenTheProviderHasNothing(t *testing.T) {
-	cases := map[string]func(t *testing.T, fixture *fixture){
-		"键来源形不成键": func(_ *testing.T, fixture *fixture) {
-			fixture.keys.formed = false
+	cases := map[string]struct {
+		arrange func(t *testing.T, fixture *fixture)
+		assert  func(t *testing.T, fixture *fixture)
+	}{
+		"目标不属任何已接受委托": {
+			arrange: func(t *testing.T, fixture *fixture) {
+				fixture.references.present = false
+				fixture.references.reference = psdomain.CommercialResolutionID{}
+				fixture.firstDeadlineContent(t)
+			},
+			assert: func(t *testing.T, fixture *fixture) {
+				if fixture.closures.asked != 0 {
+					t.Fatal("PS 答没有回指，却还去 PC 问了闭包")
+				}
+			},
 		},
-		"范围里没有生效的规则版本": func(t *testing.T, fixture *fixture) {
-			fixture.authority.registry = pcdomain.NewCommercialRegistry()
-			fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
+		"接受时闭包未采用客户服务规则版本": {
+			arrange: func(t *testing.T, fixture *fixture) {
+				fixture.hold(t, fixture.closureFor(t, "tenant-1", pcdomain.CustomerContractObject))
+				fixture.firstDeadlineContent(t)
+			},
+			assert: func(t *testing.T, fixture *fixture) {
+				if fixture.contents.asked != 0 {
+					t.Fatal("闭包没采用客户服务规则版本，却还去点读了正文")
+				}
+			},
 		},
-		"壳在正文没登": func(_ *testing.T, fixture *fixture) {
-			fixture.contents.found = false
+		"规则版本在场而正文没登": {
+			arrange: func(_ *testing.T, fixture *fixture) { fixture.contents.found = false },
+			assert:  func(_ *testing.T, _ *fixture) {},
 		},
 	}
-	for name, arrange := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			fixture := newFixture(t)
-			arrange(t, fixture)
+			tc.arrange(t, fixture)
 
-			rules, declared, err := fixture.adapter(t, fixture.keys).RulesForClaim(context.Background(), fixture.query(t))
+			rules, declared, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 			if err != nil || !declared {
 				t.Fatalf("declared=%v err=%v，缺席不是 error", declared, err)
 			}
@@ -480,19 +533,24 @@ func TestClaimServiceRulesAnswerUnregisteredWhenTheProviderHasNothing(t *testing
 			if !rules.KindCovered || !rules.Authorization.Registered {
 				t.Fatalf("VE 自己的册交出的维被改动了：%#v", rules)
 			}
+			tc.assert(t, fixture)
 		})
 	}
 }
 
-// Covers: 端口合同「依赖调不通作为错误返回」与 ADR-0025 全函数——下列每一格都不许折成「未登记」：
-// 折了会把租户支去登一份其实已经存在（或根本不是缺登记）的东西。键配错（缺客户服务规则那一类、
-// 或答成别的租户）是配置缺陷走哨兵；`适用冲突`要商业责任方修重叠、权威读不到要重试，两者走
-// ErrCustomerServiceRuleUnresolved；VE 自己的册、键来源与正文读口的 error 原样上抛。
+// Covers: 判据 2 的两个 error 格与「租户不符仍报 ErrUntranslatableAnswer」，加端口合同「依赖调不通作为错误返回」
+// 与 ADR-0025 全函数——下列每一格都不许折成「未登记」，折了会把租户支去登一份其实已经存在（或根本不是缺登记）
+// 的东西：
+//   - 闭包不在场（ErrCommercialClosureAbsent）：对一份已接受委托的回指是提供方缺数据；
+//   - 闭包在场却未采用客户合同版本（ErrCustomerContractNotAdopted）：接受流的装配缺陷（ADR-0136 决定三）；
+//   - 提供方阶段契约被打破（ErrUntranslatableAnswer）：PS 答在场却没有回指、PC 交回别的租户或别的回指的闭包、
+//     闭包在客户服务规则那一格采用了客户合同版本冒名；
+//   - VE 自己的册、PS 回指读口、PC 闭包读口与正文读口的 error 原样上抛。
 func TestClaimServiceRulesReportErrorsInsteadOfFoldingThemIntoUnregistered(t *testing.T) {
 	ownErr := errors.New("own catalogue unreachable")
-	keysErr := errors.New("key store unreachable")
+	referencesErr := errors.New("shipment request store unreachable")
+	closuresErr := errors.New("resolution store unreachable")
 	contentsErr := errors.New("content store unreachable")
-	authorityErr := errors.New("authority unreachable")
 
 	cases := map[string]struct {
 		arrange func(t *testing.T, fixture *fixture)
@@ -502,31 +560,66 @@ func TestClaimServiceRulesReportErrorsInsteadOfFoldingThemIntoUnregistered(t *te
 			arrange: func(_ *testing.T, fixture *fixture) { fixture.own.err = ownErr },
 			want:    ownErr,
 		},
-		"键来源报错": {
-			arrange: func(_ *testing.T, fixture *fixture) { fixture.keys.err = keysErr },
-			want:    keysErr,
+		"PS 回指读口报错": {
+			arrange: func(_ *testing.T, fixture *fixture) { fixture.references.err = referencesErr },
+			want:    referencesErr,
 		},
-		"键没把客户服务规则列为必需依据": {
+		"PS 答在场却没有回指": {
 			arrange: func(_ *testing.T, fixture *fixture) {
-				fixture.keys.key.RequiredBases = []pcdomain.CommercialObjectKind{pcdomain.CustomerContractObject}
+				fixture.references.reference = psdomain.CommercialResolutionID{}
 			},
 			want: adapter.ErrUntranslatableAnswer,
 		},
-		"键答成了别的租户": {
+		"闭包不在场": {
+			arrange: func(_ *testing.T, fixture *fixture) {
+				fixture.closures.found = false
+				fixture.closures.closure = pcdomain.CommercialClosure{}
+			},
+			want: adapter.ErrCommercialClosureAbsent,
+		},
+		"PC 闭包读口报错": {
+			arrange: func(_ *testing.T, fixture *fixture) { fixture.closures.err = closuresErr },
+			want:    closuresErr,
+		},
+		"闭包未采用客户合同版本": {
 			arrange: func(t *testing.T, fixture *fixture) {
-				fixture.keys.key.TenantID = value(t, pcdomain.NewTenantID, "tenant-2")
+				fixture.hold(t, fixture.closureFor(t, "tenant-1", pcdomain.CustomerServiceRuleObject))
+			},
+			want: adapter.ErrCustomerContractNotAdopted,
+		},
+		"PC 交回别的租户的闭包": {
+			arrange: func(t *testing.T, fixture *fixture) {
+				effectiveIn(t, fixture.registry, "tenant-2", pcdomain.CustomerContractObject, "contract-1", "v1", "sha256:contract1", "scope-a")
+				effectiveIn(t, fixture.registry, "tenant-2", pcdomain.CustomerServiceRuleObject, "csr-1", "v1", "sha256:csr1", "scope-a")
+				fixture.hold(t, fixture.closureFor(t, "tenant-2", pcdomain.CustomerContractObject, pcdomain.CustomerServiceRuleObject))
 			},
 			want: adapter.ErrUntranslatableAnswer,
 		},
-		"同范围两版规则都生效": {
+		"PC 交回别的回指的闭包": {
 			arrange: func(t *testing.T, fixture *fixture) {
-				effectiveIn(t, fixture.registry, pcdomain.CustomerServiceRuleObject, "csr-2", "v1", "sha256:csr2", "scope-a")
+				fixture.references.reference = value(t, psdomain.NewCommercialResolutionID, "CLO-other")
 			},
-			want: adapter.ErrCustomerServiceRuleUnresolved,
+			want: adapter.ErrUntranslatableAnswer,
 		},
-		"权威读不到": {
-			arrange: func(_ *testing.T, fixture *fixture) { fixture.authority.err = authorityErr },
-			want:    adapter.ErrCustomerServiceRuleUnresolved,
+		"闭包在客户服务规则那一格采用了合同版本冒名": {
+			arrange: func(t *testing.T, fixture *fixture) {
+				impostor, err := pcdomain.RehydrateCommercialClosure(pcdomain.RehydrateCommercialClosureSpec{
+					Outcome:      pcdomain.UniquelyResolved,
+					ResolutionID: value(t, pcdomain.NewResolutionID, "CLO-impostor"),
+					Key:          fixture.closure.ResolutionKey(),
+					Anchor:       fixture.anchor,
+					ViewRevision: value(t, pcdomain.NewAuthorityViewRevision, "view-1"),
+					Adopted: []pcdomain.RehydrateAdoptedBasisSpec{
+						{Kind: pcdomain.CustomerContractObject, Version: fixture.contract},
+						{Kind: pcdomain.CustomerServiceRuleObject, Version: fixture.contract},
+					},
+				})
+				if err != nil {
+					t.Fatalf("rehydrate impostor closure: %v", err)
+				}
+				fixture.hold(t, impostor)
+			},
+			want: adapter.ErrUntranslatableAnswer,
 		},
 		"正文读口报错": {
 			arrange: func(_ *testing.T, fixture *fixture) { fixture.contents.err = contentsErr },
@@ -536,10 +629,10 @@ func TestClaimServiceRulesReportErrorsInsteadOfFoldingThemIntoUnregistered(t *te
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			fixture := newFixture(t)
-			fixture.content(t, []pcdomain.ClaimDeadlineRule{fixture.deadline(t, pcdomain.FirstClaimDeadline, "event-delivered", 30, "calendar-cn")}, nil)
+			fixture.firstDeadlineContent(t)
 			tc.arrange(t, fixture)
 
-			rules, declared, err := fixture.adapter(t, fixture.keys).RulesForClaim(context.Background(), fixture.query(t))
+			rules, declared, err := fixture.adapter(t).RulesForClaim(context.Background(), fixture.query(t))
 			if !errors.Is(err, tc.want) {
 				t.Fatalf("err = %v, want %v", err, tc.want)
 			}
@@ -550,21 +643,26 @@ func TestClaimServiceRulesReportErrorsInsteadOfFoldingThemIntoUnregistered(t *te
 	}
 }
 
-// Covers: 装配缺陷在构造期就拒——三个非可选协作方缺一即 error。Keys 可缺（显式未配置），其余不可：
-// 本适配器一旦装上就是要真去问商业侧的，缺一半而静默答未登记会让装配疏漏与租户没登记长得一样。
+// Covers: 装配缺陷在构造期就拒（ADR-0079 决定八）——四个协作方缺一即 error，没有可选的一半：本适配器一旦装上
+// 就是要真去问两个提供方的，缺一半而静默答未登记会让装配疏漏与租户没登记长得一样。
 func TestClaimServiceRulesRefuseToBeBuiltWithoutTheirCollaborators(t *testing.T) {
 	fixture := newFixture(t)
-	resolve := pcapplication.NewResolveCommercialBasisHandler(fixture.authority, fixture.store, fixedClock{at: anchorAt})
-	cases := map[string]adapter.ClaimServiceRulesDeps{
-		"缺 VE 自己的册": {Resolve: resolve, Contents: fixture.contents},
-		"缺解析编排":     {Rules: fixture.own, Contents: fixture.contents},
-		"缺正文读口":     {Rules: fixture.own, Resolve: resolve},
+	cases := map[string]func(deps *adapter.ClaimServiceRulesDeps){
+		"缺 VE 自己的册":  func(deps *adapter.ClaimServiceRulesDeps) { deps.Rules = nil },
+		"缺 PS 回指读口":  func(deps *adapter.ClaimServiceRulesDeps) { deps.References = nil },
+		"缺 PC 闭包读口":  func(deps *adapter.ClaimServiceRulesDeps) { deps.Closures = nil },
+		"缺 PC 正文点读口": func(deps *adapter.ClaimServiceRulesDeps) { deps.Contents = nil },
 	}
-	for name, deps := range cases {
+	for name, drop := range cases {
 		t.Run(name, func(t *testing.T) {
+			deps := fixture.deps()
+			drop(&deps)
 			if _, err := adapter.NewClaimServiceRules(deps); err == nil {
 				t.Fatal("缺协作方却装配成功")
 			}
 		})
+	}
+	if _, err := adapter.NewClaimServiceRules(fixture.deps()); err != nil {
+		t.Fatalf("四个协作方齐全却拒绝装配：%v", err)
 	}
 }

@@ -8,8 +8,8 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
-	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
 	vepartycommercial "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/partycommercial"
@@ -83,66 +83,15 @@ func (claims transactionalClaims) ScreenClaim(
 // 成立、限期补充可以推进——「无从查起」那一格随显式未配置桩退役。
 //
 // 资格缝的首次索赔期限与最低材料两维由消费侧适配器叠在 VE 自己的册上、从 PC 客户服务
-// 规则正文读（票 ve-claims-read-seams/03）；解析键来源留 nil，理由见 buildClaimEligibilityRules。
+// 规则正文读（票 ve-claims-read-seams/03）；按哪一版读，由目标包裹所属委托接受时固定的商业
+// 解析回指决定（ADR-0136），装配见 buildClaimEligibilityRules。
 func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
-	return buildClaimsOrchestrationWith(db, nil)
-}
-
-// buildClaimEligibilityRules 装配资格规则读面：VE 自己的册（合同责任范围 + 申请人授权目录，多租户
-// 形状）在下，PC 客户服务规则正文的两维叠在上（ADR-0104 Consequences；适配器
-// vepartycommercial.ClaimServiceRules）。解析走 PC 既有闭包编排与解析库，正文经点读口。
-//
-// keys 是 VE 词到 PC 闭包键的翻译（商业范围、责任法人候选、锚点），属实例半边：今天没有任何租户
-// 登记过这份映射，也还没有登记面，生产装配传 nil——两维如实答未登记，编排照旧停在指名到维的
-// 未决，行为与本票之前一字不变。装配测试经同一函数注入一份键来源钉「已登记」态；登记面另立票。
-// 不在这里拿系统时间或任何默认范围顶一个键：那会把「租户还没登记」变成一次有依据的解析。
-func buildClaimEligibilityRules(
-	db *bentopg.DB,
-	clock systemClock,
-	keys vepartycommercial.RuleResolutionKeySource,
-) (veports.EligibilityRuleView, error) {
-	own, err := vepostgres.NewMultiTenantClaimEligibilityRules(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: claim eligibility rules: %w", err)
-	}
-	publications, err := pcpostgres.NewCommercialPublications(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: commercial publications: %w", err)
-	}
-	authority, err := pcpostgres.NewCommercialAuthority(publications)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: commercial authority: %w", err)
-	}
-	resolutions, err := pcpostgres.NewCommercialResolutions(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: commercial resolutions: %w", err)
-	}
-	contents, err := pcpostgres.NewCustomerServiceRuleContents(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: customer service rule contents: %w", err)
-	}
-	eligibility, err := vepartycommercial.NewClaimServiceRules(vepartycommercial.ClaimServiceRulesDeps{
-		Rules:    own,
-		Resolve:  pcapplication.NewResolveCommercialBasisHandler(authority, resolutions, clock),
-		Contents: contents,
-		Keys:     keys,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: claim service rules: %w", err)
-	}
-	return eligibility, nil
-}
-
-func buildClaimsOrchestrationWith(
-	db *bentopg.DB,
-	keys vepartycommercial.RuleResolutionKeySource,
-) (transactionalClaims, error) {
 	claimStore, err := vepostgres.NewClaims(db)
 	if err != nil {
 		return transactionalClaims{}, fmt.Errorf("parcel-api: claim store: %w", err)
 	}
 	clock := systemClock{}
-	eligibility, err := buildClaimEligibilityRules(db, clock, keys)
+	eligibility, err := buildClaimEligibilityRules(db)
 	if err != nil {
 		return transactionalClaims{}, err
 	}
@@ -176,4 +125,45 @@ func buildClaimsOrchestrationWith(
 		Clock:       clock,
 	})
 	return transactionalClaims{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildClaimEligibilityRules 装配资格规则读面：VE 自己的册（合同责任范围 + 申请人授权目录，多租户
+// 形状）在下，PC 客户服务规则正文的两维叠在上（ADR-0104 Consequences；适配器
+// vepartycommercial.ClaimServiceRules）。
+//
+// 两维按哪一版规则读，由目标包裹所属委托接受时固定的商业解析回指决定（ADR-0136 决定一 / 二）：
+// 回指由 PS 的委托仓储按（租户，包裹身份）答（它兼实现 PS 的回指读口），闭包由 PC 的解析库按
+// （租户，回指）交回，正文经点读口。这里没有解析编排、没有时钟、没有键——VE 不自己解析商业依据，
+// 选用时点已固定在闭包里；不在任何一处拿系统时间或默认范围顶一个键，那会把「租户还没登记」变成
+// 一次有依据的解析。实例半边落在 PS 的解析键登记面（那一行的必需依据要含客户服务规则与客户合同，
+// ADR-0136 决定三 / 四），VE 侧没有键登记面。机制接上而登记面尚未让闭包形成时，PS 那一头对每个
+// 对象都答「没有」、两维停在未登记——与本票之前键来源留 nil 的可观察行为一字不变（ADR-0136
+// Consequences）。四个协作方缺一即装配失败（ADR-0079 决定八），没有可选的一半。
+func buildClaimEligibilityRules(db *bentopg.DB) (veports.EligibilityRuleView, error) {
+	own, err := vepostgres.NewMultiTenantClaimEligibilityRules(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: claim eligibility rules: %w", err)
+	}
+	references, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	closures, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial resolutions: %w", err)
+	}
+	contents, err := pcpostgres.NewCustomerServiceRuleContents(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer service rule contents: %w", err)
+	}
+	eligibility, err := vepartycommercial.NewClaimServiceRules(vepartycommercial.ClaimServiceRulesDeps{
+		Rules:      own,
+		References: references,
+		Closures:   closures,
+		Contents:   contents,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: claim service rules: %w", err)
+	}
+	return eligibility, nil
 }

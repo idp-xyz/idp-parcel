@@ -7,7 +7,12 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
