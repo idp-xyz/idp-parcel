@@ -107,8 +107,7 @@ func TestAVersionFreezesTheUnitCompositionAtFixTime(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 生命周期「已就绪 → 不再就绪：原判断保留，但不得继续支持实际
-// 提交」与「提交授权与就绪判断分别形成和失效。只有两者……均有效才形成新的提交版本」
+// Covers: CC CONTEXT 生命周期「已就绪 → 不再就绪……原判断保留，但不得继续支持实际提交」与「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」
 // ——撤销后的就绪固定不出版本；撤销保留原依据与时间；重复撤销拒；别的单元的就绪
 // 支持不了这个单元。
 func TestRevokedReadinessCannotSupportASubmission(t *testing.T) {
@@ -148,8 +147,7 @@ func TestRevokedReadinessCannotSupportASubmission(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 244「提交授权与就绪判断分别形成和失效。只有两者……均有效才形成
-// 新的提交版本」的授权半边——失效授权固定不出版本（就绪在场也不行）；失效保留原授予；
+// Covers: CC CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」的授权半边——失效授权固定不出版本（就绪在场也不行）；失效保留原授予；
 // 重复失效拒；别的单元的授权支持不了这个单元。
 func TestRevokedAuthorizationCannotSupportASubmission(t *testing.T) {
 	granted := authorization(t)
@@ -188,8 +186,7 @@ func TestRevokedAuthorizationCannotSupportASubmission(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「同一次提交的通信超时或结果缺失必须保持待确认……只有形成安全
-// 再次发送判断……才可以形成受控新尝试；在此之前不得盲目重发」——首次尝试随版本形成，
+// Covers: CC CONTEXT「同一次提交的通信超时或结果缺失必须保持待确认……才可以形成安全再次发送判断；在此之前不得盲目重发」——首次尝试随版本形成，
 // 结果三值含待确认（超时不解释为失败）；无安全判断重发独立哨兵拒；受控重发换序号带
 // 安全判断引用、前次尝试不动。
 func TestResendIsControlledByTheSafeResendJudgment(t *testing.T) {

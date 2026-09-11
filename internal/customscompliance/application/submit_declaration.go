@@ -70,7 +70,7 @@ func (outcome DeclarationOutcome) String() string {
 }
 
 // DeclarationUndecidedReason 指名提交停在哪一步等谁。就绪规则与提交授权各占一格——
-// 它们是两条实例缝，未配置分别可见（CONTEXT 244 双轨）。
+// 它们是两条实例缝，未配置分别可见（CONTEXT「提交授权与就绪判断分别形成和失效」）。
 type DeclarationUndecidedReason uint8
 
 const (

@@ -69,7 +69,7 @@ export interface ReadinessJudgmentRecord {
   revokedAt?: string;
 }
 
-/** 一条提交授权,与就绪同形的另一条轨(CONTEXT 244:分别形成和失效)。 */
+/** 一条提交授权,与就绪同形的另一条轨(CONTEXT「提交授权与就绪判断分别形成和失效」)。 */
 export interface SubmissionAuthorityRecord {
   unit: string;
   authority: string;

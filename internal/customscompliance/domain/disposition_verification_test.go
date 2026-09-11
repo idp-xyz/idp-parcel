@@ -50,8 +50,7 @@ func execution(t *testing.T, reference, scope string, units int) domain.Executio
 	return built
 }
 
-// Covers: CC CONTEXT「实际隔离、移交、开封、重封、销毁……由执行事实证明，不能由决定
-// 本身推导」与 `AT-PS-092` 引用的两半——无执行事实即证据不足（决定单独形不成核对
+// Covers: CC CONTEXT「实际隔离、移交、开封、重封、销毁……由执行事实证明，不能由决定本身推导」与 `AT-PS-092` 引用的两半——无执行事实即证据不足（决定单独形不成核对
 // 覆盖）；数量由来源提供时按合计比较，等于才是已覆盖；核对结果类型上没有任何义务
 // 终结字段（核对完成不自动终结监管义务）。
 func TestVerificationDemandsFactsAndComparesProvidedQuantities(t *testing.T) {
@@ -97,8 +96,7 @@ func TestVerificationDemandsFactsAndComparesProvidedQuantities(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「数量、期限、条件……未提供或不适用的内容必须明确记录，不能猜测
-// 补齐」——来源未提供数量时数量不是核对维度：范围相符即已覆盖，不虚构一个「默认
+// Covers: CC CONTEXT「数量、期限、条件……未提供或不适用的内容必须明确记录，不能猜测补齐」——来源未提供数量时数量不是核对维度：范围相符即已覆盖，不虚构一个「默认
 // 数量」去比；范围不符的执行事实是事实冲突（拿别的范围的执行凑数分不出真假）。
 func TestUnprovidedDimensionsAreHonestlyOutOfScope(t *testing.T) {
 	noQuantity := decision(t, domain.RequiredQuantity{})
@@ -124,8 +122,7 @@ func TestUnprovidedDimensionsAreHonestlyOutOfScope(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「监管处置决定必须具有可唯一关联的决定身份、来源、法律动作语义
-// 和明确适用对象或范围」——四件缺一立不起；声称提供却给非正数数量的决定是矛盾输入。
+// Covers: CC CONTEXT「监管处置决定必须具有可唯一关联的决定身份、来源、法律动作语义和明确适用对象或范围」——四件缺一立不起；声称提供却给非正数数量的决定是矛盾输入。
 func TestADecisionDemandsItsFullIdentity(t *testing.T) {
 	cases := map[string]domain.RegulatoryDecisionSpec{
 		"no authority": {

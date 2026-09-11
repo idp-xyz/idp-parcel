@@ -31,8 +31,7 @@ func NewComplianceRuleVersionReference(value string) (ComplianceRuleVersionRefer
 	return ComplianceRuleVersionReference{required}, err
 }
 
-// JudgmentMode 是判断方式的封闭二值：规则自动或授权角色人工（CONTEXT「自动与人工合规判断都
-// 必须保存适用规则版本、事实依据、决定方式和责任角色」）。
+// JudgmentMode 是判断方式的封闭二值：规则自动或授权角色人工（CONTEXT「自动与人工合规判断都必须保存适用规则版本、事实依据、决定方式和责任角色」）。
 type JudgmentMode uint8
 
 const (

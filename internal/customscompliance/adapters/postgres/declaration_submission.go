@@ -213,8 +213,7 @@ func (repository *DeclarationSubmissions) Save(
 }
 
 // SaveCorrection 落一份原案内更正/补充版本：同一事务里把 CorrectedFrom 指名的当前版
-// 转为非当前、插入新当前版行与其首次尝试行。前版内容一列不改（CONTEXT「原提交及其结果
-// 永久保留」）。翻转到零行即`当前版已被换`——并发更正先落或前身早已非当前，
+// 转为非当前、插入新当前版行与其首次尝试行。前版内容一列不改（CONTEXT「原提交及其结果永久保留」）。翻转到零行即`当前版已被换`——并发更正先落或前身早已非当前，
 // 由部分唯一索引与这条 WHERE 共同裁决，调用方读回当前版再作答，这里绝不顶替。
 func (repository *DeclarationSubmissions) SaveCorrection(
 	ctx context.Context,

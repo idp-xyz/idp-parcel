@@ -78,7 +78,7 @@ func TestEmptyCaseRegistersAnswerEmptyLists(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 244 / 0006 自注 — 撤销态如实读回：有效行与已失效行同册并列，原判断
+// Covers: CONTEXT「提交授权与就绪判断分别形成和失效」 / 0006 自注 — 撤销态如实读回：有效行与已失效行同册并列，原判断
 // （依据与形成时间）原样在场，失效不折成未配置也不谎报成仍有效；跨租户不可见；单元
 // 键序稳定。
 func TestReadinessAndAuthorityListsCarryRevocationHonestly(t *testing.T) {

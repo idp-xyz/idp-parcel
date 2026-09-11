@@ -195,8 +195,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 	if command.Release != nil && command.Layer != domain.ReleaseResultLayer {
-		// 非放行层携带放行三件：把放行夹带进低层结果，正是 CONTEXT「任何前一层成功都不能自动
-		// 生成后一层结果」禁的那种推导。矛盾输入不进幂等比对——它构造不出任何一层的事实。
+		// 非放行层携带放行三件：把放行夹带进低层结果，正是 CONTEXT「任何前一层成功都不能自动生成后一层结果」禁的那种推导。矛盾输入不进幂等比对——它构造不出任何一层的事实。
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 

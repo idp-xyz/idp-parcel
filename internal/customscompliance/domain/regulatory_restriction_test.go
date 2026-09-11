@@ -25,8 +25,7 @@ func restriction(t *testing.T, id string, constrains ...domain.GuardedAction) do
 	return built
 }
 
-// Covers: CC CONTEXT「尚未放行或存在方向性限制时，必须阻断其明确约束的出库、装载
-// 出发、跨关务区域移动或交付」——限制只阻断它明确约束的动作（没列的照行），阻断清单
+// Covers: CC CONTEXT「尚未放行或存在方向性限制时，必须阻断其明确约束的出库、装载出发、跨关务区域移动或交付」——限制只阻断它明确约束的动作（没列的照行），阻断清单
 // 列全（处置者要知道等谁）；接收、隔离、测量在动作枚举里没有格——「不因此阻止」是
 // 结构性的，问不出「被阻断了吗」。
 func TestARestrictionBlocksOnlyWhatItExplicitlyConstrains(t *testing.T) {
@@ -62,8 +61,7 @@ func TestARestrictionBlocksOnlyWhatItExplicitlyConstrains(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「执行方形成的控制或隔离事实不能解除扣留，只有责任来源接受的
-// 监管结果才能解除相应监管限制」与「全部阻断性限制均已解除，相应动作才可继续」——
+// Covers: CC CONTEXT「执行方形成的控制或隔离事实不能解除扣留，只有责任来源接受的监管结果才能解除相应监管限制」与「全部阻断性限制均已解除，相应动作才可继续」——
 // 解除只凭监管结果引用（专名类型，隔离事实换不成它）；两限制解除其一仍阻断，全部
 // 解除才放行；重复解除与早于生效的解除拒。
 func TestReleaseComesOnlyFromRegulatoryOutcomesAndMustBeComplete(t *testing.T) {

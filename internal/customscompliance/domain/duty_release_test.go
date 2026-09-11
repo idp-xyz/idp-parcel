@@ -10,8 +10,7 @@ import (
 
 var verifiedAt = time.Date(2026, 8, 11, 16, 0, 0, 0, time.UTC)
 
-// Covers: CC CONTEXT「覆盖状态、差额状态和有效性状态分别表达，不能实现为
-// 一组互斥总状态」——三个独立枚举各自取值（部分覆盖+不足+有效并存），任一轴缺失
+// Covers: CC CONTEXT「覆盖状态（无覆盖、部分覆盖、已覆盖）、差额状态（无差额、不足、超额或待确认）和有效性状态（有效、失效、冲突或待确认）分别表达，不能实现为一组互斥总状态」——三个独立枚举各自取值（部分覆盖+不足+有效并存），任一轴缺失
 // 立不起核对；类型上无付款/回收/放行字段。
 func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 	verification, err := domain.VerifyDutyPayment(
@@ -46,8 +45,7 @@ func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「放行结果不能由技术成功、业务受理、税费支付或内部合规解除
-// 推导」与「放行可以针对全部、部分或附条件范围形成」——监管来源引用必备（别的东西
+// Covers: CC CONTEXT「放行结果不能由技术成功、业务受理、税费支付或内部合规解除推导」与「放行可以针对全部、部分或附条件范围形成」——监管来源引用必备（别的东西
 // 换不成它）；附条件必带条件、全部放行不带条件（两向拦）。
 func TestAReleaseOutcomeComesOnlyFromTheAuthority(t *testing.T) {
 	conditional, err := domain.ReceiveReleaseOutcome(
@@ -94,8 +92,7 @@ func TestAReleaseOutcomeComesOnlyFromTheAuthority(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT「放行门禁核对……可以形成待满足、部分满足、满足、冲突或不适用
-// 判断，但不代替监管机构形成放行结果，也不能复用于其他动作或监管边界」——五值封闭、
+// Covers: CC CONTEXT「放行门禁核对……可以形成待满足、部分满足、满足、冲突或不适用等判断，但不代替监管机构形成放行结果，也不能复用于其他动作或监管边界」——五值封闭、
 // 动作与边界构造期绑定（AppliesTo 供消费方核对）、非不适用必带前置条件清单；类型上
 // 无放行字段。
 func TestAGateVerificationBindsItsActionAndBoundary(t *testing.T) {

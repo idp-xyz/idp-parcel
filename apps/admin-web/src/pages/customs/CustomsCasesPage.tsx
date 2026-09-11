@@ -120,8 +120,7 @@ const unitColumns: ListColumn<DeclarationUnitRow>[] = [
 ];
 
 /**
- * 正式申报资料快照列表行。字段取 customs-compliance CONTEXT.md「正式申报资料
- * 快照」「字段级溯源」原词：快照保留客户原始声明、节点实测或观察、关务判断
+ * 正式申报资料快照列表行。字段取 customs-compliance CONTEXT.md「正式申报资料快照」「字段级溯源」原词：快照保留客户原始声明、节点实测或观察、关务判断
  * 之间的区别，不覆盖任何来源值。
  */
 export interface DeclarationSnapshotRow {
@@ -311,8 +310,7 @@ function col(id: string, header: string, mono = false): ListColumn<CatalogueRow>
   };
 }
 
-// 就绪与授权两栏并排、各带自己的依据/时间/现况三列（CONTEXT「申报就绪判断与提交授权必须
-// 独立存在」；票 05 形状约束一）。并排只对齐单元行——不设「可提交」合成
+// 就绪与授权两栏并排、各带自己的依据/时间/现况三列（CONTEXT「申报就绪判断与提交授权必须独立存在」；票 05 形状约束一）。并排只对齐单元行——不设「可提交」合成
 // 列：0006 迁移自注点名「就绪还在、授权已撤销」是必须表达得出的一格，合成布尔正好把
 // 它抹掉。
 const preconditionColumns: ListColumn<CatalogueRow>[] = [

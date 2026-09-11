@@ -27,9 +27,7 @@ func followUpTarget(t *testing.T, kind domain.FollowUpActionKind) domain.FollowU
 	return target
 }
 
-// Covers: CC CONTEXT「后续申报动作目标……必须关联触发依据、原案件、原申报单元、原
-// 提交版本、明确范围和拟提交动作；目标形成不等于资料已准备、已经提交或监管结果已经
-// 成立」——六件缺一立不起；四道封闭分立（技术再次尝试不在此列，它走受控重发）；类型
+// Covers: CC CONTEXT「后续申报动作目标……必须关联触发依据、原案件、原申报单元、原提交版本、明确范围和拟提交动作；目标形成不等于资料已准备、已经提交或监管结果已经成立」——六件缺一立不起；四道封闭分立（技术再次尝试不在此列，它走受控重发）；类型
 // 上没有资料/提交/结果字段。
 func TestAFollowUpTargetDemandsItsSixAnchors(t *testing.T) {
 	for _, kind := range []domain.FollowUpActionKind{

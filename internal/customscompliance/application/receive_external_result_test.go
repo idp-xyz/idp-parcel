@@ -325,8 +325,7 @@ func TestAnAttributedResultIsInterpretedAndHandedOff(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按
-// 最后到达直接改变当前判断」——归属不上留存不猜（无意图）；同层冲突留存双方带标记。
+// Covers: CONTEXT「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按最后到达直接改变当前判断」——归属不上留存不猜（无意图）；同层冲突留存双方带标记。
 func TestUnattributableAndLayerConflictsAreKeptNotGuessed(t *testing.T) {
 	t.Run("an unattributable response is kept without guessing", func(t *testing.T) {
 		fixture := newResultFixture(t)

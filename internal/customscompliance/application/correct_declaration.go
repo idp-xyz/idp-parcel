@@ -92,8 +92,7 @@ func (handler *CorrectDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
 	if command.Kind != domain.InCaseSupplement && command.Kind != domain.InCaseCorrection {
-		// 撤销是自身提交的新监管动作、重报是新逻辑申报目标（CONTEXT「撤销动作和重报替代必须
-		// 分别表达」）——都不产生原案内新版本，收下等于替它们伪造一条捷径。
+		// 撤销是自身提交的新监管动作、重报是新逻辑申报目标（CONTEXT「撤销动作和重报替代必须分别表达」）——都不产生原案内新版本，收下等于替它们伪造一条捷径。
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
 	if command.TenantID.String() == "" || command.Target == "" || command.SentAt.IsZero() {

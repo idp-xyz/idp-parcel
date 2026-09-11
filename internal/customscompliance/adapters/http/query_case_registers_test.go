@@ -168,7 +168,7 @@ func TestUnconfiguredCaseRegisterIntakeRefusesAllRegistriesIdentically(t *testin
 	}
 }
 
-// Covers: CONTEXT 244 / 票 05 形状约束一二 — 就绪与授权分册分格转写：有效行撤销两列
+// Covers: CONTEXT「提交授权与就绪判断分别形成和失效」 / 票 05 形状约束一二 — 就绪与授权分册分格转写：有效行撤销两列
 // 缺席，失效行原判断与失效两列同场；租户与页大小从作用域来，不采信请求自报。
 func TestReadinessAndAuthorityListsTranscribeRevocationVerbatim(t *testing.T) {
 	revoked, err := readinessOf(t, "unit-2", "basis-2", catalogueBaseAt).

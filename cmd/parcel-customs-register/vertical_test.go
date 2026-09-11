@@ -67,7 +67,7 @@ func TestCustomsRegisterVerticalOnRealPostgres(t *testing.T) {
 	mustExecute(commandReadinessRevoke, revoke, exitRegistered, "REVOKED")
 	mustExecute(commandReadinessRevoke, revoke, exitRegistered, "ALREADY_REVOKED")
 
-	// 撤销是状态推进不是删除：行还在、原依据原样、失效可见（CONTEXT 243/244）。
+	// 撤销是状态推进不是删除：行还在、原依据原样、失效可见（CONTEXT「原判断保留，但不得继续支持实际提交」「提交授权与就绪判断分别形成和失效」）。
 	readinessView, err := adapter.NewReadinessView(db)
 	if err != nil {
 		t.Fatalf("构造就绪读口：%v", err)

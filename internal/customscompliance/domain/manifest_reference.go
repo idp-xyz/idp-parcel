@@ -186,9 +186,7 @@ type AssociationCandidate struct {
 	Scope     DecisionScopeReference
 }
 
-// Associate 依据唯一匹配建立与申报单元的受控关联（CONTEXT 生命周期「能够与
-// 关务案件、申报单元和运输对象逐范围唯一匹配→形成业务关联和当前采用关系；无法唯一
-// 匹配时保持待关联，不创建占位对象或按最近客户、班次猜测」）——程序、方向与范围三维
+// Associate 依据唯一匹配建立与申报单元的受控关联（CONTEXT 生命周期「能够与关务案件、申报单元和运输对象逐范围唯一匹配 → 形成业务关联和当前采用关系；无法唯一匹配时保持待关联，不创建占位对象或按最近客户、班次猜测」）——程序、方向与范围三维
 // 都相符的候选恰一个才关联；零个或多个都保持待关联（独立哨兵）。
 func (reference ExternalManifestReference) Associate(
 	candidates []AssociationCandidate,

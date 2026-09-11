@@ -250,8 +250,7 @@ const registrationTargets: RegistrationTarget[] = registrationKinds.map((kind) =
 }));
 
 /**
- * 口岸与申报路径（customs-compliance）。词取两处原句：CONTEXT-MAP「customs-compliance
- * ↔ network-routing」——关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由
+ * 口岸与申报路径（customs-compliance）。词取两处原句：CONTEXT-MAP「customs-compliance ↔ network-routing」——关务提供合规候选区域、口岸、申报路径、限制及解除结果，路由
  * 只在合格候选中选择；customs-compliance CONTEXT.md 所有权句——本上下文拥有合规候选
  * 区域、口岸、申报路径和关务适用性判断。
  *

@@ -10,8 +10,7 @@ var (
 	ErrReplacementNotEffective = errors.New("customs compliance: the replacement is not yet effective")
 )
 
-// FollowUpActionKind 是后续申报动作的封闭四值（CONTEXT「同版本技术再次
-// 尝试、原案内补充、原案内更正、撤销动作和重报替代必须分别表达」——技术再次尝试走
+// FollowUpActionKind 是后续申报动作的封闭四值（CONTEXT「同版本技术再次尝试、原案内补充、原案内更正、撤销动作和重报替代必须分别表达」——技术再次尝试走
 // SubmissionAttempt 的受控重发，不在这里；其余四道各占一格）。
 type FollowUpActionKind uint8
 
@@ -50,8 +49,7 @@ func NewFollowUpTriggerReference(value string) (FollowUpTriggerReference, error)
 	return FollowUpTriggerReference{required}, err
 }
 
-// FollowUpTargetSpec 是形成一个后续申报动作目标所需的全部输入（CONTEXT「后续申报
-// 动作目标」语言：必须关联触发依据、原案件、原申报单元、原提交版本、明确范围和拟
+// FollowUpTargetSpec 是形成一个后续申报动作目标所需的全部输入（CONTEXT「后续申报动作目标」语言：必须关联触发依据、原案件、原申报单元、原提交版本、明确范围和拟
 // 提交动作）。
 type FollowUpTargetSpec struct {
 	Kind     FollowUpActionKind
@@ -126,8 +124,7 @@ func (target FollowUpTarget) FormedAt() time.Time {
 	return target.formedAt
 }
 
-// ReplacementRelation 是重报替代的新旧对象关系。建立时只能是拟替代（CONTEXT「申报
-// 替代关系」语言）；只有真实程序要求的提交及外部结果已经成立，才可形成有效替代——
+// ReplacementRelation 是重报替代的新旧对象关系。建立时只能是拟替代（CONTEXT「申报替代关系」语言）；只有真实程序要求的提交及外部结果已经成立，才可形成有效替代——
 // 原对象及其全部历史永久保留，拟替代目标不得把原申报改成已撤销、已作废或已被有效
 // 替代（175）。
 type ReplacementRelation struct {

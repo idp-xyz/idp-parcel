@@ -10,10 +10,7 @@ var (
 	ErrLayerConflict         = errors.New("customs compliance: conflicting facts on the same layer")
 )
 
-// ResultLayer 是外部监管结果的封闭六层（CONTEXT「提交尝试、技术回执、
-// 监管接收、业务受理、监管过程决定、监管核定税费、放行结果和监管处置决定必须分层
-// 保存。任何前一层成功都不能自动生成后一层结果，也不能使用一个『清关成功』状态覆盖
-// 各层事实」——提交尝试与技术回执在提交对象上，这里是监管侧六层）。类型上没有任何
+// ResultLayer 是外部监管结果的封闭六层（CONTEXT「提交尝试、技术回执、监管接收、业务受理、监管过程决定、监管核定税费、放行结果和监管处置决定必须分层保存。任何前一层成功都不能自动生成后一层结果，也不能使用一个“清关成功”状态覆盖各层事实」——提交尝试与技术回执在提交对象上，这里是监管侧六层）。类型上没有任何
 // 从一层派生另一层的方法：不虚构缺失结果是结构性的。
 type ResultLayer uint8
 
@@ -67,8 +64,7 @@ func NewInterpretationRuleReference(value string) (InterpretationRuleReference, 
 	return InterpretationRuleReference{required}, err
 }
 
-// ExternalResultSpec 是保存一项外部结果所需的全部输入（CONTEXT「每项外部结果必须保存来源
-// 身份……」逐件：来源身份、权威角色、原始语义、业务发生或适用时间、接收时间、解释规则、
+// ExternalResultSpec 是保存一项外部结果所需的全部输入（CONTEXT「每项外部结果必须保存来源身份……」逐件：来源身份、权威角色、原始语义、业务发生或适用时间、接收时间、解释规则、
 // 与提交版本/尝试和明确结果范围的关系）。
 type ExternalResultSpec struct {
 	Layer        ResultLayer
@@ -168,8 +164,7 @@ func (result ExternalResult) ReceivedAt() time.Time {
 	return result.receivedAt
 }
 
-// CheckLayerConsistency 把新到结果与同层既有事实逐一比对（CONTEXT「与
-// 同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按最后到达直接改变当前判断」）：
+// CheckLayerConsistency 把新到结果与同层既有事实逐一比对（CONTEXT「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按最后到达直接改变当前判断」）：
 // 同层、同提交版本、同范围而原始语义不同即冲突——独立哨兵，调用方保留双方事实形成
 // 冲突关系，不选边。不同层或不同范围的事实各归各位，不构成冲突。
 func CheckLayerConsistency(existing []ExternalResult, incoming ExternalResult) error {

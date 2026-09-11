@@ -514,8 +514,7 @@ const (
 	DeclarationUnitAlreadyRecorded
 )
 
-// DeclarationUnitStore 是申报单元的持久化本体（ADR-0073 决定一：CONTEXT 要求「独立
-// 身份和可追溯组成」，jsonb 快照给不出独立身份）。Save 只建立、无更新路径——「同一
+// DeclarationUnitStore 是申报单元的持久化本体（ADR-0073 决定一：CONTEXT 要求「独立身份和可追溯组成」，jsonb 快照给不出独立身份）。Save 只建立、无更新路径——「同一
 // 单元的案件维不得变更」由此在结构上承载（决定二）：同键已在册答`已有记录`，内容是否
 // 一致由编排读回自己比，换案件即换（替代）单元。FindByID 供提交链取回单元身份与案件
 // 维（重放一致性核对与意图载荷取数）；「案件→单元集」的反向查询按表上案件列带索引
@@ -535,8 +534,7 @@ type DeclarationUnitStore interface {
 }
 
 // DeclarationSubmissionKey 是提交申报的幂等键：同一逻辑申报目标（租户+申报单元+监管
-// 程序）重复提交返回原版本，不重复形成（CONTEXT「首次实际对外发送前都必须形成不可覆盖的
-// 提交版本」）。
+// 程序）重复提交返回原版本，不重复形成（CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」）。
 type DeclarationSubmissionKey struct {
 	TenantID  domain.TenantID
 	Unit      domain.DeclarationUnitID
@@ -970,8 +968,7 @@ type PortsPathsView interface {
 // 以及经该包裹当前所在申报单元的案件维——两路都是本上下文自己写下的关联，漏掉任一路都会把
 // 一个已关闭的案件读成没关。
 //
-// 「尚无提交版本的申报单元」不算被替代的单元：原申报单元不能继续使用（CONTEXT「替代申报
-// 单元」），它的形成中不再是这个包裹的形成中。已固定的提交版本按组成快照反查、永久保留，
+// 「尚无提交版本的申报单元」不算被替代的单元：原申报单元不能继续使用（CONTEXT「替代申报单元」），它的形成中不再是这个包裹的形成中。已固定的提交版本按组成快照反查、永久保留，
 // 不随单元被替代而消失——交出去的那一份就是交出去了，替代改变的是后续怎么办，不是它有没有
 // 发生。
 type ParcelDeclarationFacts struct {
@@ -1275,8 +1272,7 @@ type DutyCollaborationCatalogueRead interface {
 // 一/五）：管理台 customs-restrictions 页上列核对版本。行直接用 DutyVerificationRecord
 // ——上列回显的就是登记进去的东西（幂等键含核对版本指纹、三轴核对对象、关联依据），不为
 // 读面另铸第二种词形（判据同 ClosureObligationCatalogueEntry 复用 ObligationRegistration）。
-// 三轴逐格原值透出、不折总状态（ADR-0137 决定三；CONTEXT「分别表达，不能实现为一组互斥
-// 总状态」）；「待关联」是资金事实册上的派生（ExternalFundsFactRegister 注释），不是核对
+// 三轴逐格原值透出、不折总状态（ADR-0137 决定三；CONTEXT「分别表达，不能实现为一组互斥总状态」）；「待关联」是资金事实册上的派生（ExternalFundsFactRegister 注释），不是核对
 // 册的列，本口不代算它，也不推任何别的派生。全部版本连同指纹原样上列——迟到事实按新版本
 // 追加、不按到达顺序覆盖，哪一版是当前是读者按 VerifiedAt 判读的事。不拓宽
 // FindVerification 点读口。租户在签名上、limit 非正拒、空册答空列表。

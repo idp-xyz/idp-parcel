@@ -394,7 +394,7 @@ func TestAReplayReturnsTheOriginalVersionWithoutReforming(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT 244「就绪判断与提交授权分别形成和失效，双有效才成版」——就绪未配置
+// Covers: CONTEXT「提交授权与就绪判断分别形成和失效。只有两者在逻辑提交首次实际发送时均有效，才形成新的提交版本」——就绪未配置
 // 与授权未配置各占一格未决（互不顶替）；不再就绪是业务负向不是未决。
 func TestReadinessAndAuthorityAreTwoSeparateTracks(t *testing.T) {
 	t.Run("unconfigured readiness is undecided", func(t *testing.T) {

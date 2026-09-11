@@ -57,8 +57,7 @@ export const directionLabels: Record<string, string> = {
   EXPORT: '出口',
 };
 
-// 税费付款协作事项的义务依据封闭二值(domain DutyObligationKind),中文取 CONTEXT「税费付款
-// 协作事项」词条原词。刻意没有第三格:「缺少税费结果不能被解释为无需付款」,领域枚举上就
+// 税费付款协作事项的义务依据封闭二值(domain DutyObligationKind),中文取 CONTEXT「税费付款协作事项」词条原词。刻意没有第三格:「缺少税费结果不能被解释为无需付款」,领域枚举上就
 // 没有「没有结果所以不用付」,词表跟着没有。
 export const dutyObligationKindLabels: Record<string, string> = {
   ASSESSED_DUTY: '已接受监管核定税费',
