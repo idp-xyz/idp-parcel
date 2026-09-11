@@ -893,6 +893,52 @@ type ExternalFundsFactHandoff interface {
 	HandOffExternalFundsFact(ctx context.Context, intent ExternalFundsFactIntent) error
 }
 
+// DutyPaymentVerificationAdoptionKey 是结算输入版本里「付款核对」一格的幂等键：租户加提供方核对版本的
+// 完整引用（申报范围、税费义务、资金事实、版本指纹）。同一版重放答`已采用`；没有「同键异内容」这一格
+// ——核对版本在 customs-compliance 那头不可变，内容变了是新指纹、新版本、新信封，到这里就是另一个键。
+type DutyPaymentVerificationAdoptionKey struct {
+	TenantID     domain.TenantID
+	Verification domain.DutyPaymentVerificationReference
+}
+
+// DutyPaymentVerificationAdoptionRecord 是一次采用越过提交边界留下的东西。没有 ContentDigest：键就是
+// 全部内容，采用时刻不参与重放比对——同一版第二次到达是重放，不是另一次采用。
+type DutyPaymentVerificationAdoptionRecord struct {
+	Key      DutyPaymentVerificationAdoptionKey
+	Adoption domain.DutyPaymentVerificationAdoption
+}
+
+type DutyPaymentVerificationAdoptionSaveOutcome uint8
+
+const (
+	DutyPaymentVerificationAdoptionSaveOutcomeInvalid DutyPaymentVerificationAdoptionSaveOutcome = iota
+	DutyPaymentVerificationAdoptionSaved
+	DutyPaymentVerificationAlreadyAdopted
+)
+
+// DutyPaymentVerificationAdoptionStore 按幂等键找回并保存付款核对的采用（写入代数同 ADR-0031）。它是
+// 结算输入版本今天唯一落成的一格（票 sa-cc/09）：税费版本、资金事实、付款方、合同责任几格的采用口另有
+// 各自的票，不预开。
+type DutyPaymentVerificationAdoptionStore interface {
+	FindByKey(ctx context.Context, key DutyPaymentVerificationAdoptionKey) (DutyPaymentVerificationAdoptionRecord, bool, error)
+	Save(ctx context.Context, record DutyPaymentVerificationAdoptionRecord) (DutyPaymentVerificationAdoptionSaveOutcome, error)
+}
+
+// DutyPaymentVerificationView 按引用向 `customs-compliance` 问：信封所指的那一版税费付款核对在不在册
+// （票 sa-cc/09 做法 2，口径同票 03 裁决：按键取、走提供方只读口、取信封所指版本不取 latest）。
+// 消费侧适配器 `adapters/customscompliance` 实现它；`application` 不 import 提供方。
+//
+// 只答在不在，不带三态：采用一格只需要确认引用指得到一版真实存在的核对；覆盖 / 差额 / 有效性由
+// customs-compliance 持有，实际代垫判断形成时再按同一引用回读，不在采用时转述——转述一次就多一处口径。
+// found=false 即那一版在提供方还看不见：可见性滞后是续办不是毒丸，重投会改变结果。
+type DutyPaymentVerificationView interface {
+	DutyPaymentVerificationExists(
+		ctx context.Context,
+		tenant domain.TenantID,
+		verification domain.DutyPaymentVerificationReference,
+	) (bool, error)
+}
+
 // AllocationRuleView 取来源费用适用的分摊规则版本。found=false 表示分摊规则目录未
 // 配置——无规则不分摊、不默认均摊（实例半边，AT-SA-123）。
 type AllocationRuleView interface {

@@ -192,7 +192,11 @@ type AssessAdvanceRecoveryDeps struct {
 	Adjustments ports.RecoveryAdjustmentStore
 	Contracts   ports.ContractResponsibilityView
 	Downstream  ports.AdvanceRecoveryHandoff
-	Clock       ports.Clock
+	// Inputs 是结算输入版本里付款核对一格的登记册（UC-SA-001 步 2），只由 AdoptDutyPaymentVerification
+	// 走；Assess / FormRecovery / Adjust 三条路不碰它——采用输入与形成判断是两步，共用一只处理方只为
+	// 让「谁在推进 UC-SA-001」在装配上是一处。
+	Inputs ports.DutyPaymentVerificationAdoptionStore
+	Clock  ports.Clock
 }
 
 type AssessAdvanceRecoveryHandler struct {
