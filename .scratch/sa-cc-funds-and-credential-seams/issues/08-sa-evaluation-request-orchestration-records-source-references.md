@@ -1,7 +1,7 @@
 # UC-SA-002 步 2「请求评价」的编排今天不存在：没有任何东西记下一次 BUY 评价请求携带的发生项 / 费用项目 / 供应商协议三件引用，`FormSupplierExpectedCostHandler` 永远凑不齐命令
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：SA→PP 走信封不同步调用、评价请求身份用铸造 ID + 自然键唯一约束守幂等（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [01](01-buy-evaluation-to-sa-inbox-consumer.md)「要裁的」1 裁 (c) 时点名另立），只写票面未动代码；取证锚 `66cad4c4`
+Status: in-progress——2026-09-11 14:0x 通道 6 按通道 1 派单 task-b5cadbb5 认领，分支 `mcp6-sacc08` 基 `51ca1270`，做「做法」1 / 2 / 4 与判据 1 / 2 / 3 / 5（判据 4 等 11）。此前 ready-for-agent——2026-09-10 17:5x 通道 5 按通道 1 派单 task-a93cb825 写入裁决：SA→PP 走信封不同步调用、评价请求身份用铸造 ID + 自然键唯一约束守幂等（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 17:3x 通道 5 立票（task-9a2ff746；票 [01](01-buy-evaluation-to-sa-inbox-consumer.md)「要裁的」1 裁 (c) 时点名另立），只写票面未动代码；取证锚 `66cad4c4`
 Blocked by: [11](11-pp-inbox-consumer-receives-evaluation-request-envelope.md)（PP 今天没有 inbox 消费者先例，`internal/parcelpricing/adapters` 只有 `http` / `postgres` / `sourcefeed`；本票的登记册与发信封半边可先落，但完成判据「请求 → 评价引用」要 11 在场）。[01](01-buy-evaluation-to-sa-inbox-consumer.md) 的 (c) 范围不等本票
 
 ## 缺口（取证于 `66cad4c4`）
