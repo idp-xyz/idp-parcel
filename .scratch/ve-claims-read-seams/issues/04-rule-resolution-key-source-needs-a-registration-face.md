@@ -61,6 +61,10 @@ Blocked by: 无（[03](./03-claim-deadline-and-materials-read-party-commercial-r
 5. **开工第一件事**：核 PC `adapters/postgres/commercial_resolution.go` 闭包快照是否落已采用的客户服务规则版本并读得回（ADR-0136 越权风险点 3）——不对称即先报 PC 地盘，不在本票里绕。
 6. `gofmt -l` 空、`go build` / `go vet` 退 0、VE 全包与 `cmd/parcel-api` 带 DSN 绿；机制清点 tip 重生成（跨上下文消费缝 VE→PS +1）。
 
+## 地盘
+
+`internal/visibilityexception/adapters/partycommercial/`（`claim_service_rules.go` 三段改写、新窄接口 `CommercialResolutionReferenceSource` 及其用例；退役件同包）、`cmd/parcel-api/assemble_claims.go`（`buildClaimEligibilityRules` 签名与装配注释）+ 其装配测试（`syntheticRuleKeys` 退役、两态用例）。**不动** `internal/partycommercial/**`（判据 5 核出不对称时先报 PC 地盘，不在本票绕）、`internal/parcelshipment/**`（回指读口 `CommercialResolutionReferenceView` 与 `pspostgres` 实现只消费不改）、VE 两本册与 `parcel-ve-register`、迁移。共享接线文件：`cmd/parcel-api/assemble_claims.go` 今天只有本票动，若同期有人动 `cmd/parcel-api` 其他装配文件互不相干；装配测试若要经 `parcel-commercial` 登记用例登 SYN 解析键，只调用不改它。（2026-09-11 通道 1 推送方补：票面此前缺本节，派单前补齐；内容从「要做什么」1–4 抄出，不加宽。）
+
 ## 边界
 
 - 不动 `party-commercial`；不改 VE 两本册；不在任何一处拿系统时间或默认范围顶键。
@@ -72,3 +76,4 @@ Blocked by: 无（[03](./03-claim-deadline-and-materials-read-party-commercial-r
 - 2026-09-04 MCP-4：随票 03 立（draft）。票 03 落地时生产装配 Keys=nil、行为与之前一字不变；本票
   是让那一格真正点亮的那一步。
 - 2026-09-10 · 通道 4（task-d6660969，基 `062f5228`，分支 `mcp4-adr0136`）：四问经用户授权代裁落 ADR-0136，本票「要做什么」按裁决改写、Blocked by 改无、Status → ready-for-agent。**只改 .md，未动代码。** 与派单预期的出入（VE 登记面不立）见「裁决」末段与 ADR-0136 越权风险点 4。
+- 2026-09-11 14:1x · 通道 1 推送方：票面缺「地盘」节（11:2x 节记为不派的原因），从「要做什么」1–4 抄出补齐，不加宽；Status 不变（ready-for-agent），下一波可派。**只改 .md，未动代码。**

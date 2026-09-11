@@ -1,8 +1,8 @@
 # 25 实际承运商首次有效收寄到达 → `JudgeLabelServiceFinalHandler`：PS 侧 inbox 消费者，以及它今天收不到的那封信
 
 Category: enhancement
-Status: draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** PS 半边形状已定（照有效交付那一路）；它要消费的 TF 信封的形状已于同日由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定（见「裁决」），TF 半边立为 [`31`](./31-carrier-first-effective-pickup-fact-registry-and-handoff.md)；本票在 `31` resolved 之前不得开工
-Blocked by: 无——`31`（TF 侧「实际承运商首次有效收寄」事实、登记册与信封）已于 2026-09-10 在分支 `mcp6-lc31` resolved（tip `1d9a24c0`，等非作者评审与进 main）；信封类型 `transport-fulfillment.carrier-first-effective-pickup.registered`、载荷 `{tenantId, fact, version, object}`、读口 `CarrierFirstEffectivePickupRegistry.FindByKey`（指名那一代）与 TF 侧记录形状均已落地，本票可开工。另两件**不阻塞**：`Deps.Validity` 填 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 的适配器，它未进 main 前填 nil（编排按「未配置」办，不推算失效）；PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行未立票，落地前采用停在 `FINAL_RULE_UNCONFIGURED`，是诚实停点不是本票的阻塞
+Status: ready-for-agent——2026-09-11 14:1x 通道 1 推送方改口：[`31`](./31-carrier-first-effective-pickup-fact-registry-and-handoff.md) 已于 2026-09-10 19:30 进 main（非作者评审两轴 0 阻断，见票 31「进 main 记录」），本票「前提」四件（租户、事实、版本、载运对象 + 读口按版本交指名那一代）全在 main；「要裁的」1 由 ADR-0135 答毕，标已裁；新增「要裁的」2（失效版本重派生，归 PS owner）**不阻开工**——实施时该格先按红线落显式未决并在完成记录点名，owner 裁后另笔。此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** PS 半边形状已定（照有效交付那一路）；它要消费的 TF 信封的形状已于同日由 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 裁定（见「裁决」），TF 半边立为 [`31`](./31-carrier-first-effective-pickup-fact-registry-and-handoff.md)
+Blocked by: 无——`31`（TF 侧「实际承运商首次有效收寄」事实、登记册与信封）**已进 main（2026-09-10 19:30，分支 `mcp6-lc31` tip `1d9a24c0` 作封存出处，main 上 SHA 见票 31「进 main 记录」）**；信封类型 `transport-fulfillment.carrier-first-effective-pickup.registered`、载荷 `{tenantId, fact, version, object}`、读口 `CarrierFirstEffectivePickupRegistry.FindByKey`（指名那一代）与 TF 侧记录形状均已落地，本票可开工。另两件**不阻塞**：`Deps.Validity` 填 [ps-port-remainder/01](../../ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md) 的适配器，它未进 main 前填 nil（编排按「未配置」办，不推算失效）；PC 半边 `DeclaredResponsibilityOutcome` 加面单渠道两行未立票，落地前采用停在 `FINAL_RULE_UNCONFIGURED`，是诚实停点不是本票的阻塞
 
 ## 缺口
 
@@ -35,7 +35,8 @@ Blocked by: 无——`31`（TF 侧「实际承运商首次有效收寄」事实�
 
 ## 要裁的
 
-1. **TF 侧「实际承运商首次有效收寄」那张票立不立、立在哪。** 本目录有 TF 地盘票的先例（`16` / `18` / `19` 都落 TF），也可另立 TF 目录。它的形状（新一类 TF 事实带自己的登记册与 outbox？还是对外部承运轨迹事实之上的一次显式判断形成新版本并另发一种事件？`ParticipationEntryKind` 要不要长第三格？）归 TF owner 走 `/domain-modeling`，很可能要先改 TF CONTEXT 与一篇 ADR（同 `03` → `16` 那条路）。**本票不预判形状**，只列出 PS 半边对信封的最小要求（上节「前提」）。
+1. **（已裁，见下节「裁决」；TF 半边已落 `31` 并进 main）** ~~TF 侧「实际承运商首次有效收寄」那张票立不立、立在哪。~~ 原题：本目录有 TF 地盘票的先例（`16` / `18` / `19` 都落 TF），也可另立 TF 目录。它的形状（新一类 TF 事实带自己的登记册与 outbox？还是对外部承运轨迹事实之上的一次显式判断形成新版本并另发一种事件？`ParticipationEntryKind` 要不要长第三格？）归 TF owner 走 `/domain-modeling`。答案：ADR-0135 决定一 / 五 / 七——新一类独立控制事实、`ParticipationEntryKind` 长第三格、信封 `transport-fulfillment.carrier-first-effective-pickup.registered` 载荷 `{tenantId, fact, version, object}`；PS 半边的「前提」四件全部成立，`CarrierTrackingFactReference` 头注改口随本票（见「裁决」末条）。
+2. **失效版本到达后，已据前版形成的非取消终局怎么重派生**（ADR-0135 决定六 / 越权风险点 4）。TF 会发失效版本（依据被源更正为不再表达收寄）；`LabelServiceFinalOutcome` 五值之外这是第六格。归 PS owner。**不阻开工**：实施时该格先按 AGENTS.md 红线「未确认规则保持显式未决」落**未决哨兵**（不吸收、不重派生、不写任何采用），用例钉住「失效版本 → 未决且零写入」，完成记录点名此格待裁；owner 裁定后（可循 ADR-0117 同来源更正的采用版本链）另笔接。（2026-09-11 通道 1 推送方按 A 类代裁「怎么停」，「怎么重派生」仍归 owner。）
 
 ### 裁决（2026-09-10，通道 6 按 task-f05bc5a3 用户授权 TF owner 口径代裁，落 [ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md)）
 
@@ -77,3 +78,4 @@ Blocked by: 无——`31`（TF 侧「实际承运商首次有效收寄」事实�
 
 - 2026-09-10 · 通道 3（task-b5dba034，取证锚 `c7e3522c`）：立票。**只写票面，未动代码。** 能力边界：读过 lc/11 Answer 全文、`judge_label_service_final.go` 全文、TF `external_carrier_tracking_fact.go` / `ports/external_tracking_fact.go` / `external_tracking_fact_handoff.go` 全文、VE 与 PS 的 inbox 消费者各一只、交付那一路的处理方适配器全文、`cmd/parcel-dispatch/assemble.go` 的路由表与交付那一扇门、TF CONTEXT 上引两节、`actual_carrier_judgment.go` 头注；**没读** TF `actual_fulfillment_segment.go` 全文与 `register_offsite_pickup.go` 编排（「TF 有效收寄今天只有场外揽收」按 `ParticipationEntryKind` 头注与 grep 结果判，TF owner 开工以代码为准）。**票面与 lc/11 Answer 的一处口径差**：lc/11 把本路写成「`external-carrier-tracking` 信封的 PS 侧 inbox 消费者」，本票量出那封信不是收寄事实，以本票为新；已在 lc/11 Comments 追一条指过来。
 - 2026-09-10 · 通道 6（task-f05bc5a3，基 `062f5228`，分支 `mcp6-adr0135`）：「要裁的」1 由 ADR-0135 答，裁决要点写进「要裁的」下的「裁决」小节；Blocked by 改为 `31`；新增一件本票要接的（失效版本）与 `CarrierTrackingFactReference` 头注改口的落法。**只写票面，未动代码。** 未改「做法」正文与「完成判据」——它们对着 ADR-0135 逐条核过仍成立，只多出失效版本那一格，记在「裁决」里等实施时补进分格表。
+- 2026-09-11 14:1x · 通道 1 推送方：`31` 已进 main（09-10 19:30）而本票仍 draft、「要裁的」1 仍写着立不立——按 11:2x 节记下的「先按 ADR-0135 改口」办：要裁的 1 标已裁并抄答案；失效版本那一格从「裁决」末段抬成「要裁的」2（归 PS owner，怎么停已按红线定为显式未决，怎么重派生待裁），Status → ready-for-agent，Blocked by 改「31 已进 main」，lc spec 25 行同步。**只改 .md，未动代码。**
