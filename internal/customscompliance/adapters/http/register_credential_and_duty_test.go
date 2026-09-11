@@ -250,7 +250,9 @@ func TestCredentialRegistrationSharesTheConfigurationTranscription(t *testing.T)
 // register_configuration_test 的 candidatePortUseCase）。只有「零值答案」与「编排返错」
 // 两格用替身，那两格用例本就造不出。
 
-// dutyStoreStub 是三口一体的存储替身：每口的写入代数与读回按格给定。
+// dutyStoreStub 是存储三口加结算交接口一体的替身：每口的写入代数与读回按格给定。交接口
+// （票 sa-cc/05）默认成功；它失败不翻核对、只留续办引用，本文件的转写断言不碰那一格——答复
+// 面透不透续办引用归 sa-cc/15 与 CLI 一并裁。
 type dutyStoreStub struct {
 	saveOutcome ports.CaseConfigurationSaveOutcome
 	saveErr     error
@@ -261,6 +263,14 @@ type dutyStoreStub struct {
 
 	fundsFound bool
 	fundsErr   error
+
+	handoffErr error
+}
+
+func (stub dutyStoreStub) HandOffDutyPaymentVerification(
+	context.Context, ports.DutyPaymentVerificationHandoffIntent,
+) error {
+	return stub.handoffErr
 }
 
 func (stub dutyStoreStub) FindCollaboration(
@@ -362,7 +372,7 @@ func verificationCommand(t *testing.T, basis string) application.VerifyDutyPayme
 func dutyHandlerOver(t *testing.T, stub dutyStoreStub) *application.DutyPaymentReconciliationHandler {
 	t.Helper()
 	handler, err := application.NewDutyPaymentReconciliationHandler(application.DutyPaymentReconciliationDeps{
-		Collaborations: stub, Funds: stub, Verifications: stub, Clock: dutyTestClock{},
+		Collaborations: stub, Funds: stub, Verifications: stub, Handoff: stub, Clock: dutyTestClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)
