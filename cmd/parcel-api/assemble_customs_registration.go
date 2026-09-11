@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
@@ -304,6 +305,17 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs duty payment reconciliation store: %w", err)
 	}
+	// 核对形成那一格同事务向 settlement-accounting 交信封（票 sa-cc/05）：交接口拿的是与
+	// 登记册同一只 db，事务壳给的环境事务因此同时罩住核对行与 Outbox 意图——两者同生共死，
+	// 形照 parcel-customs-register 的 buildRegistrar。
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs outbox store: %w", err)
+	}
+	verificationHandoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs duty payment verification handoff: %w", err)
+	}
 
 	configurations := customsapp.NewRegisterCaseConfigurationHandler(customsapp.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
@@ -330,6 +342,7 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 			Collaborations: dutyReconciliation,
 			Funds:          dutyReconciliation,
 			Verifications:  dutyReconciliation,
+			Handoff:        verificationHandoff,
 			Clock:          systemClock{},
 		})
 	if err != nil {
