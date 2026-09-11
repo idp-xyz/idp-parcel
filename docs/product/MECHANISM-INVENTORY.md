@@ -13,18 +13,18 @@
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
-| parcelshipment | 169 | 163 | 19 | 31 | 9 | 16 |
+| parcelshipment | 174 | 167 | 20 | 32 | 10 | 17 |
 | partycommercial | 123 | 138 | 9 | 33 | 1 | 27 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 83 | 64 | 12 | 40 | 8 | 7 |
 | transportfulfillment | 140 | 128 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 933 | 887 | 117 | 256 | 54 | 128 |
+| **合计** | 938 | 891 | 118 | 257 | 55 | 129 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 59、测试 81。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 60、测试 82。
 
-## 跨上下文消费缝：23 组，66 个生产文件
+## 跨上下文消费缝：23 组，67 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -36,7 +36,7 @@
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 4 |
 | parcelshipment | parcelpricing | 3 |
-| parcelshipment | partycommercial | 19 |
+| parcelshipment | partycommercial | 20 |
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 2 |
 | parcelshipment | transportfulfillment | 4 |
@@ -68,7 +68,7 @@
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 115 个，消费适配器 28 个生产文件，直投路由表 19 条
+## 接线面：接入面端点 117 个，消费适配器 28 个生产文件，直投路由表 19 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -79,13 +79,13 @@
 | networkrouting | 9 |
 | nodeoperations | 2 |
 | parcelpricing | 11 |
-| parcelshipment | 13 |
+| parcelshipment | 15 |
 | partycommercial | 24 |
 | pilotgovernance | 1 |
 | settlementaccounting | 4 |
 | transportfulfillment | 24 |
 | visibilityexception | 13 |
-| **合计** | 115 |
+| **合计** | 117 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -107,7 +107,7 @@
 | visibilityexception | 8 |
 | **合计** | 19 |
 
-## 端口：声明 387 个；基线口径缺 14，精确口径缺 7
+## 端口：声明 390 个；基线口径缺 14，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
