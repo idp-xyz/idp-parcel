@@ -71,6 +71,7 @@ export function MultiRegistrationPanel({
         submit={selected.submit}
         outcomeLabels={selected.outcomeLabels}
         refusalReasonLabels={selected.refusalReasonLabels}
+        undecidedReasonLabels={selected.undecidedReasonLabels}
         declarationLandingLabels={selected.declarationLandingLabels}
         problemNote={problemNote}
       />

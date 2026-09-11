@@ -2,22 +2,29 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationPanel } from '../../components/registration';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   customsRegistrationEndpoints,
+  dutyRegistrationEndpoints,
+  dutyRegistrationOutcomeLabels,
+  dutyUndecidedReasonLabels,
   listDutyCollaborations,
   listDutyVerifications,
   listGateConditions,
   registerCustomsConfiguration,
+  registerDutyReconciliation,
   registrationOutcomeLabels,
   type DutyCollaborationListResponseBody,
+  type DutyRegistrationKind,
   type DutyVerificationListResponseBody,
   type GateConditionCatalogueRecord,
   type GateConditionListResponseBody,
 } from './api';
 import {
+  dutyRegistrationSnapshotHints,
+  dutyRegistrationTitles,
   guardedActionLabels,
   labelOf,
   preconditionStateLabels,
@@ -434,25 +441,60 @@ function DutyVerificationsTable() {
   );
 }
 
-// —— 门禁目录登记签（ADR-0085，票 admin-write-faces/02 切片 02b）——
+// —— 登记签：门禁目录（ADR-0085，票 admin-write-faces/02 切片 02b）+ 税费付款协作事项与核对
+// （票 sa-cc/07 步二）——
 //
-// 本页三本册里只有门禁目录有在线登记口：内部限制与监管税费两族连查阅端点都还没有，
-// 更没有登记用例可接（票 02「无用例可接就如实跳过，不为凑齐而造用例」）。
+// 本页有在线登记口的是这三本：内部限制与监管税费两族连查阅端点都还没有，更没有登记用例
+// 可接（票 02「无用例可接就如实跳过，不为凑齐而造用例」）。三本一页多册，按 MultiRegistrationPanel
+// 选册——换册即换草稿，各册快照形状互不相容。
 //
-// 登的是目录在场本身——某（范围·动作·边界）这本前置条件目录存在，没有可比内容，所以
-// 它的答案代数里没有内容冲突那一格。目录里的逐项认定（门禁发现）是另一个命令，按票 02
+// 门禁目录登的是目录在场本身——某（范围·动作·边界）这本前置条件目录存在，没有可比内容，
+// 所以它的答案代数里没有内容冲突那一格。目录里的逐项认定（门禁发现）是另一个命令，按票 02
 // 的范围裁定属「案上此刻的事实」不进写面，本签因此不收它。
+//
+// 协作与核对两口的答案代数是另一族（DutyReconciliationResult），词表另给一张：它的「未决」
+// 分业务未决（200 带 undecidedReason，编排形成了答案、在等核定税费）与依赖故障（5xx）两半，
+// 配置族那张表把 UNDECIDED 留在表外正是因为它到不了 200——两族的这一格含义相反，不能共表。
+// 资金事实没有登记签：它只经 settlement-accounting 的采用信封进 CC（ADR-0137 决定四），人工
+// 补录口是第二个铸造点，票 sa-cc/07 裁决 2 去掉了它。
+const dutyRegistrationTarget = (kind: DutyRegistrationKind, label: string): RegistrationTarget => ({
+  id: kind,
+  label,
+  title: dutyRegistrationTitles[kind],
+  endpoint: `POST ${dutyRegistrationEndpoints[kind]}`,
+  snapshotHint: dutyRegistrationSnapshotHints[kind],
+  submit: (snapshot: unknown) => registerDutyReconciliation(kind, snapshot),
+  outcomeLabels: dutyRegistrationOutcomeLabels,
+  undecidedReasonLabels: dutyUndecidedReasonLabels,
+});
+
+// 选册键与按钮中文取读签已有的词：门禁目录用写口词 gate-catalog（读签是门禁条件册整本，
+// 没有单独的册名词），协作 / 核对用各自的读签标题。
+const registrationTargets: RegistrationTarget[] = [
+  {
+    id: 'gate-catalog',
+    label: '门禁前置条件目录',
+    title: registrationTitles['gate-catalog'],
+    endpoint: `POST ${customsRegistrationEndpoints['gate-catalog']}`,
+    snapshotHint: registrationSnapshotHints['gate-catalog'],
+    submit: (snapshot: unknown) => registerCustomsConfiguration('gate-catalog', snapshot),
+    outcomeLabels: registrationOutcomeLabels,
+  },
+  dutyRegistrationTarget('duty-collaboration', '税费付款协作事项'),
+  dutyRegistrationTarget('duty-payment-verification', '税费付款核对'),
+];
 
 /**
  * 合规限制与监管税费（customs-compliance）。已接线的三张读签在前——放行门禁核对、
  * 税费付款协作事项、税费付款核对（页面当前能如实作答的查阅面；协作与核对紧挨门禁，
  * 因为核对是门禁「税费付款」那一道读的东西）；内部限制与税费两族列表端点未建，如实
- * 占位在后；门禁目录的登记签排在所有读签之后，读写各占各的签。端点建成接线时可回归
+ * 占位在后；登记签排在所有读签之后，读写各占各的签。端点建成接线时可回归
  * 「动作被放行前要过的层」那个顺序（内部限制 → 税费义务 → 门禁核对），与 customs-cases
  * 页同一处置。
  *
  * 门禁满足也不生成放行：放行结果始终是监管机构的外部事实，本页各签都不表达它。
- * 登记签同理不表达放行——它只登「这本目录在场」，不登任何一次核对结论。
+ * 登记签同理不表达放行——门禁目录那册只登「这本目录在场」，协作事项不等于支付指令或付款
+ * 交易，核对不形成实际付款、客户回收或监管放行。
  */
 export function CustomsRestrictionsPage() {
   return (
@@ -464,7 +506,7 @@ export function CustomsRestrictionsPage() {
           <TabsTrigger value="duty-verifications">税费付款核对</TabsTrigger>
           <TabsTrigger value="restrictions">内部合规限制</TabsTrigger>
           <TabsTrigger value="duties">监管核定税费</TabsTrigger>
-          <TabsTrigger value="register">登记门禁目录</TabsTrigger>
+          <TabsTrigger value="register">登记</TabsTrigger>
         </TabsList>
         <TabsContent value="gates" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <ReleaseGatesTable />
@@ -482,13 +524,9 @@ export function CustomsRestrictionsPage() {
           <RegulatoryDutiesTable />
         </TabsContent>
         <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
-          <RegistrationPanel
+          <MultiRegistrationPanel
             moduleId="customs-restrictions"
-            title={registrationTitles['gate-catalog']}
-            endpoint={`POST ${customsRegistrationEndpoints['gate-catalog']}`}
-            snapshotHint={registrationSnapshotHints['gate-catalog']}
-            submit={(snapshot) => registerCustomsConfiguration('gate-catalog', snapshot)}
-            outcomeLabels={registrationOutcomeLabels}
+            targets={registrationTargets}
             problemNote={problemNote}
           />
         </TabsContent>

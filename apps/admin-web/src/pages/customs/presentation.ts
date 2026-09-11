@@ -5,6 +5,7 @@ import type {
   CaseRegisterRegistry,
   ComplianceRegistry,
   CustomsRegistrationKind,
+  DutyRegistrationKind,
   PortsPathsRegistry,
 } from './api';
 
@@ -117,11 +118,13 @@ export function problemNote(code: string): string {
 // ——以下为登记签的页面口径(ADR-0085,票 admin-write-faces/02 切片 02b)。
 
 /**
- * 五类登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
+ * 配置族登记签的标题。册名与本文件上方的查阅词表同词——同一本册不因换到写签而换名;
  * 门禁目录登的是目录本身而不是目录里的条件项,标题因此说「目录」不说「条件」。
  *
  * 只有建案要求规则的标题不带「版本」二字:它没有版本维,是键上的当前判断(换判断走同键
  * 重登,由登记册答冲突)。标题跟着册的形状走,不为整齐划一而给它一个不存在的版本维。
+ * 监管凭证的标题也不带「版本」:一身份一版、不可变,换期限或额度是另一张凭证,没有「下一版」
+ * 可登(0014 自注)。
  */
 export const registrationTitles: Record<CustomsRegistrationKind, string> = {
   'interpretation-rule': '登记解释规则版本',
@@ -129,11 +132,20 @@ export const registrationTitles: Record<CustomsRegistrationKind, string> = {
   'gate-catalog': '登记门禁前置条件目录',
   'candidate-port': '登记合规候选口岸版本',
   'declaration-path': '登记申报路径版本',
+  'regulatory-credential': '登记监管凭证',
 };
 
-// 登记快照形状的提示句。五类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
-// 拼出:抄五遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
-function snapshotHint(kind: CustomsRegistrationKind, fields: string): string {
+// 协作 / 核对两口的标题。动词取用例原词(形成 / 核对)而不叫「登记」:协作事项与核对是编排在
+// 环境事务里**形成**的判断,形成时间取服务端时钟、不是登记输入——这与目录登记「把一份既有
+// 事实登进册」不是同一个动作,标题照实说。
+export const dutyRegistrationTitles: Record<DutyRegistrationKind, string> = {
+  'duty-collaboration': '形成税费付款协作事项',
+  'duty-payment-verification': '登记税费付款核对',
+};
+
+// 登记快照形状的提示句。各类只差子命令一词(与端点路径、CLI 子命令同字),所以由一处
+// 拼出:逐类抄一遍会让「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+function snapshotHint(kind: CustomsRegistrationKind | DutyRegistrationKind, fields: string): string {
   return (
     `登记快照 JSON 的形状与受控登记口 parcel-customs-register ${kind} -input 吃的同一份;` +
     '本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约,随 PAR-INT-01 提供。' +
@@ -181,5 +193,37 @@ export const registrationSnapshotHints: Record<CustomsRegistrationKind, string> 
     '键为 tenantId / pathRef / portRef / direction / declarationMode / appliesFrom;' +
       '进出口方向取封闭两词 IMPORT / EXPORT,申报模式是引用不是封闭词表(真实模式集属实例半边)。' +
       '终点不是输入——换版登新起点。',
+  ),
+  // 凭证的两端有效期都是输入——它不是版本册,没有「换版落定终点」那回事;uses 缺席与 0 同义
+  // (来源未提供次数额度),不是「额度已用尽」,提示句把这一格点出来,免得登记方为「没有额度」
+  // 特意填 0 还是空。
+  'regulatory-credential': snapshotHint(
+    'regulatory-credential',
+    '键为 tenantId / credentialId / issuerRef / holderRef / procedureRef / validFrom / validTo / uses;' +
+      'validFrom 与 validTo 两端都是输入(一身份一版、不可变,换期限是另一张凭证);' +
+      'uses 缺席与 0 同义——来源未提供次数额度,不是已用尽。同身份换任何一项都答内容冲突,不覆盖。',
+  ),
+};
+
+/**
+ * 协作 / 核对两口的快照形状提示。三轴与关联依据由登记方交进来——真实程序的关联规则属实例
+ * 半边,入口不从金额相等推任何一轴,提示句因此明说「不代判」;kind 缺席刻意放行到编排答业务
+ * 未决(缺少税费结果不能被解释为无需付款),提示句把这一格说成「等」而不是「填错」。
+ */
+export const dutyRegistrationSnapshotHints: Record<DutyRegistrationKind, string> = {
+  'duty-collaboration': snapshotHint(
+    'duty-collaboration',
+    '键为 tenantId / kind / dutyRef / noPayBasis / scopeRef / obligorRef / requirementRef / targetRef;' +
+      '义务依据 kind 取封闭两词 ASSESSED_DUTY(带 dutyRef、不带 noPayBasis)/ EXPLICITLY_NOT_REQUIRED(反之)。' +
+      'kind 缺席不是填错:既无核定税费也无明确无需付款依据时编排答业务未决 DUTY_OBLIGATION_BASIS_ABSENT,' +
+      '等税费结果到了重发同一份。形成时间取服务端时钟,不是输入。',
+  ),
+  'duty-payment-verification': snapshotHint(
+    'duty-payment-verification',
+    '键为 tenantId / dutyRef / fundsRef / scopeRef / coverage / delta / validity / basis;' +
+      '三轴各取封闭词:coverage NONE / PARTIAL / COVERED,delta NO_DELTA / SHORT / EXCESS / PENDING,' +
+      'validity VALID / INVALIDATED / CONFLICTING / PENDING——三轴分别给出,本口不从金额相等推任何一轴。' +
+      'basis 是「凭什么把这笔资金关联到这版税费」的权威依据引用,空白答待关联、不关联。' +
+      '同三维换内容是新版本追加,不是冲突;资金事实与协作事项两道前置未齐时原名答回,等前置落册后重发同一份。',
   ),
 };

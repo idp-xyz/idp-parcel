@@ -2,11 +2,15 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
+  customsRegistrationEndpoints,
   listCaseRegisters,
   listCredentials,
+  registerCustomsConfiguration,
+  registrationOutcomeLabels,
   type ClosureObligationCatalogueRecord,
   type ClosureObligationListResponseBody,
   type CredentialListResponseBody,
@@ -15,7 +19,14 @@ import {
   type SubmissionAuthorityRecord,
   type SubmissionAuthorityListResponseBody,
 } from './api';
-import { caseRegisterLabels, labelOf, obligationStateLabels } from './presentation';
+import {
+  caseRegisterLabels,
+  labelOf,
+  obligationStateLabels,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+} from './presentation';
 import { credentialRows, type RegisterRow } from './register-rows';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -26,7 +37,10 @@ const info = moduleInfoById['customs-cases'];
 // 已接线的是案件配置册查阅两签——「就绪与授权」（单元维，两栏各带撤销态）与
 // 「关闭义务」（案件维，目录连义务项），都接 GET /customs-case-registers 按
 // registry 分派；以及监管凭证册一签（票 sa-cc/10），接 GET /customs-credentials
-// ——凭证是 UC-CC-003 就绪门禁第 4 道的依据，所以挂在就绪与授权签旁。
+// ——凭证是 UC-CC-003 就绪门禁第 4 道的依据，所以挂在就绪与授权签旁；凭证的登记签
+// （票 sa-cc/07 步二，接 POST /customs-regulatory-credential-registrations）跟着读签
+// 落在本页——写签跟着读签走。本页只有凭证一本册有在线登记口：就绪、授权与关闭义务
+// 改的是案上此刻的事实，按票 admin-write-faces/02 的范围裁定不进写面。
 //
 // 四个对象族（关务案件、申报单元、正式申报资料快照、提交版本）分页签呈现：
 // 案件是稳定业务容器，单元是申报对象集合，快照是版本化资料，提交版本是
@@ -586,6 +600,10 @@ function CredentialsTable() {
  * 关闭义务——页面当前能如实作答的查阅面；凭证紧挨就绪与授权，因为它是就绪门禁第 4 道
  * 的依据）；对象族四签（案件容器 → 申报单元 → 资料快照 → 提交版本，逐层向外，越靠后
  * 越接近对外发送）列表端点未建，如实占位在后，端点建成接线时可回归对象层级排序。
+ * 凭证的登记签排在所有读签之后，读写各占各的签（与 customs-restrictions 页同一处置）。
+ *
+ * 登记签登的是一版不可变凭证本身，不判它对哪个程序、哪个持有人、哪个时点适用——适用性
+ * 是就绪门禁判断链的产物，读签不替它下判，写签同样不替它下判。
  */
 export function CustomsCasesPage() {
   return (
@@ -599,6 +617,7 @@ export function CustomsCasesPage() {
           <TabsTrigger value="units">申报单元</TabsTrigger>
           <TabsTrigger value="snapshots">资料快照</TabsTrigger>
           <TabsTrigger value="submissions">提交版本</TabsTrigger>
+          <TabsTrigger value="register">登记监管凭证</TabsTrigger>
         </TabsList>
         <TabsContent value="preconditions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SubmissionPreconditionsTable />
@@ -620,6 +639,19 @@ export function CustomsCasesPage() {
         </TabsContent>
         <TabsContent value="submissions" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
           <SubmissionVersionsTable />
+        </TabsContent>
+        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 本页只有一本册可在线登记，直接摆 RegistrationPanel，不套选册（判据在 MultiRegistrationPanel
+              文件头）。凭证交回配置族那套答案，词表复用 registrationOutcomeLabels。 */}
+          <RegistrationPanel
+            moduleId="customs-cases"
+            title={registrationTitles['regulatory-credential']}
+            endpoint={`POST ${customsRegistrationEndpoints['regulatory-credential']}`}
+            snapshotHint={registrationSnapshotHints['regulatory-credential']}
+            submit={(snapshot) => registerCustomsConfiguration('regulatory-credential', snapshot)}
+            outcomeLabels={registrationOutcomeLabels}
+            problemNote={problemNote}
+          />
         </TabsContent>
       </Tabs>
     </div>

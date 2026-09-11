@@ -353,22 +353,27 @@ export function listDutyVerifications(): Promise<ApiResult<DutyVerificationListR
 // 真渠道接线时以渠道契约为准重谈,不得反过来把这里当成已发布的 Schema。
 
 /**
- * 可在线登记的关务配置册封闭五格。词与端点路径、受控 CLI 的子命令逐字同一个——同一本
- * 册在写口与 CLI 不换词。解释规则的读口参数是 interpretation 而写口词是
- * interpretation-rule,两处不同源自各自端点,本类型跟写口,不改读口那半。
+ * 交回案件配置族答案（application.CaseConfigurationOutcome）的可在线登记关务册。词与端点
+ * 路径、受控 CLI 的子命令逐字同一个——同一本册在写口与 CLI 不换词。解释规则的读口参数是
+ * interpretation 而写口词是 interpretation-rule,两处不同源自各自端点,本类型跟写口,不改读口那半。
  *
- * 建案要求规则是第五格,比另四格晚一步进来:票 02 的关务片把十二个用例分成「配置四类」
- * 与「案件事实七类」,四加七只有十一个,漏掉的第十二个正是它,端点随之补建。
+ * 建案要求规则比配置四类晚一步进来:票 02 的关务片把十二个用例分成「配置四类」与「案件
+ * 事实七类」,四加七只有十一个,漏掉的第十二个正是它,端点随之补建。监管凭证（票 sa-cc/07
+ * 步二）不是配置册而是一版不可变凭证,进本类型是因为它的登记用例交回同一套配置族答案,
+ * `registrationOutcomeLabels` 那张表对它逐格成立;换期限 / 持有人 / 额度在册上全是内容冲突
+ * ——那是另一张凭证,走另一个身份登记。
  *
  * 案件事实那七个命令(就绪、提交授权及其撤销、关闭义务目录与明细、门禁发现)按票 02 的
- * 范围裁定本就不进写面——它们改的是案上此刻的事实,不是这个租户怎么配置。
+ * 范围裁定本就不进写面——它们改的是案上此刻的事实,不是这个租户怎么配置。税费付款协作
+ * 与核对两口的答案代数是另一族,见下面 DutyRegistrationKind。
  */
 export type CustomsRegistrationKind =
   | 'interpretation-rule'
   | 'case-requirement'
   | 'gate-catalog'
   | 'candidate-port'
-  | 'declaration-path';
+  | 'declaration-path'
+  | 'regulatory-credential';
 
 export const customsRegistrationEndpoints: Record<CustomsRegistrationKind, string> = {
   'interpretation-rule': '/customs-interpretation-rule-registrations',
@@ -376,6 +381,7 @@ export const customsRegistrationEndpoints: Record<CustomsRegistrationKind, strin
   'gate-catalog': '/customs-gate-catalog-registrations',
   'candidate-port': '/customs-candidate-port-registrations',
   'declaration-path': '/customs-declaration-path-registrations',
+  'regulatory-credential': '/customs-regulatory-credential-registrations',
 };
 
 /**
@@ -410,4 +416,66 @@ export const registrationOutcomeLabels: Record<string, string> = {
   CONTENT_CONFLICT:
     '内容冲突——同键异内容绝不顶替,原行原样留着;续办先核对既有登记,改法随该册有无版本维而异',
   NOT_ACCEPTED: '受理门拒绝——缺件或形状不合,补齐后重登;原行不被顶替',
+};
+
+// —— 税费付款协作事项与税费付款核对两口的在线登记(ADR-0085,票 sa-cc/07 步二) ——
+// 形状以 internal/customscompliance/adapters/http/register_credential_and_duty.go 为准。
+//
+// 两口与上面配置族分开成一族,不并进 CustomsRegistrationKind:它们的登记用例交回的是另一套
+// 答案代数(application.DutyReconciliationResult),「未决」在那一族分业务未决与依赖故障两半
+// ——前者是形成了的答案(200 带 undecidedReason),后者才是没形成答案(5xx)。并进配置族就得让
+// registrationOutcomeLabels 那张表替两族说话,而两族有重名格(NOT_ACCEPTED)、续办说法不同。
+//
+// 写准入、请求体形状与墙降前必答 403 的口径同上面配置族,此处不复述。
+
+/** 协作 / 核对两口封闭二格,词与端点路径、受控 CLI 子命令逐字同一个。 */
+export type DutyRegistrationKind = 'duty-collaboration' | 'duty-payment-verification';
+
+export const dutyRegistrationEndpoints: Record<DutyRegistrationKind, string> = {
+  'duty-collaboration': '/customs-duty-collaboration-registrations',
+  'duty-payment-verification': '/customs-duty-payment-verification-registrations',
+};
+
+export function registerDutyReconciliation(
+  kind: DutyRegistrationKind,
+  snapshot: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(dutyRegistrationEndpoints[kind], snapshot);
+}
+
+/**
+ * 协作 / 核对两口的登记答案代数(application.DutyReconciliationOutcome 原名),逐格中文。两口
+ * 共一张表:同一个枚举、同一格不因来自哪一口而换说法(判据同受控 CLI 的一族一张表)。
+ *
+ * 资金事实三格(FUNDS_FACT_RECEIVED / EXISTING_FUNDS_FACT / FUNDS_FACT_CONTENT_CONFLICT)不在表上:
+ * 没有任何在线口能交回它们——资金事实只经 settlement-accounting 的采用信封进 CC(ADR-0137 决定
+ * 四),列出来就是给一格走不到的答案配中文。核对没有「内容冲突」格:同三维换内容是新版本追加
+ * (迟到事实按新版本进、不按到达顺序覆盖),答的仍是形成——表上没有这一格不是漏,是该族的形状。
+ *
+ * UNDECIDED 这一格**在表上**,与配置族那张表相反:那边用例把依赖故障折成 UNDECIDED、传输层写成
+ * 5xx,它到不了表;这边 200 带 outcome=UNDECIDED 只有一种来路——义务依据缺席的业务未决(等核定
+ * 税费或明确无需付款依据到了重发同一份),原因在 dutyUndecidedReasonLabels 逐格说。
+ *
+ * 负向各格续办动作不同,逐格分开说:待关联要补权威关联依据(金额相等、同范围、同付款人都不算)
+ * 再登;两道前置未齐要等前置落册后重发同一份;受理门拒绝要改内容;冲突要人工核对。
+ */
+export const dutyRegistrationOutcomeLabels: Record<string, string> = {
+  COLLABORATION_FORMED: '协作事项已形成',
+  EXISTING_COLLABORATION: '协作事项已存在——同键同内容的重放,原行不动',
+  COLLABORATION_CONTENT_CONFLICT:
+    '协作事项内容冲突——同(范围,税费引用)已在册且内容不同,绝不顶替;先核对既有协作事项',
+  DUTY_VERIFICATION_FORMED: '核对已形成',
+  EXISTING_DUTY_VERIFICATION: '核对已存在——同三维同内容的重放,原行不动;换内容是新版本追加,不是冲突',
+  FUNDS_FACT_PENDING_ASSOCIATION:
+    '待关联——无权威关联依据不关联;金额相等、同范围、同付款人都不单独构成依据,补上依据再登',
+  FUNDS_FACT_NOT_RECEIVED: '资金事实未接收——前置未齐;等 settlement-accounting 采用的资金事实到了 CC 再重发同一份',
+  COLLABORATION_NOT_FORMED: '协作事项未形成——前置未齐;先登协作事项再重发同一份',
+  NOT_ACCEPTED: '受理门拒绝——缺件或形状不合,补齐后重登;原行不被顶替',
+  UNDECIDED: '业务未决——编排形成了答案但在等前置,见「在等」;等到了重发同一份即可',
+};
+
+/** 业务未决原因的逐格中文(application.DutyReconciliationReason 里唯一能随 200 到场的那一格)。 */
+export const dutyUndecidedReasonLabels: Record<string, string> = {
+  DUTY_OBLIGATION_BASIS_ABSENT:
+    '义务依据缺席——既无已接受的监管核定税费,也无明确无需付款依据;缺少税费结果不能被解释为无需付款',
 };

@@ -55,6 +55,16 @@ export interface RegistrationResponseBody {
    */
   pendingCause?: string;
   /**
+   * 业务未决的**具名**原因（customs-compliance 的税费付款协作 / 核对两口是首例，票 sa-cc/07）。
+   * 它只随 `UNDECIDED` 在场，说的是编排在等谁（「等核定税费或明确无需付款依据」）——那是一个
+   * 形成了的业务答案，按 ADR-0022 走 200；依赖故障那种未决不带 outcome、走 5xx，到不了这一格。
+   *
+   * 不与 `pendingCause` 共用：那一格是散文、原样示出；这一格是封闭枚举原名，逐格有中文词表
+   * （`undecidedReasonLabels`），缺格时原名过线。也不与 `refusalReason` 共用：受理门拒绝要改
+   * 内容再来，业务未决要等前置到了重发同一份——续办动作相反，同名会让两种动作看起来是一回事。
+   */
+  undecidedReason?: string;
+  /**
    * 随本次发布一并登记的各声明通道落点。
    *
    * **这一栏不能省。** 声明与版本同笔落库，某个通道撞上同键异内容时版本仍可能答
@@ -82,6 +92,8 @@ export interface RegistrationPanelProps {
   outcomeLabels: Record<string, string>;
   /** 受理门拒绝理由的逐格中文；只有答案带 `refusalReason` 的登记口需要给。 */
   refusalReasonLabels?: Record<string, string>;
+  /** 业务未决原因的逐格中文；只有答案带 `undecidedReason` 的登记口需要给。 */
+  undecidedReasonLabels?: Record<string, string>;
   /**
    * 声明通道落点的逐格中文；只有答案带 `declarations` 的登记口需要给。
    *
@@ -108,6 +120,7 @@ export function RegistrationPanel({
   submit,
   outcomeLabels,
   refusalReasonLabels,
+  undecidedReasonLabels,
   declarationLandingLabels,
   problemNote,
 }: RegistrationPanelProps) {
@@ -161,6 +174,7 @@ export function RegistrationPanel({
               owner={info.owner}
               outcomeLabels={outcomeLabels}
               refusalReasonLabels={refusalReasonLabels}
+              undecidedReasonLabels={undecidedReasonLabels}
               declarationLandingLabels={declarationLandingLabels}
               problemNote={problemNote}
             />
@@ -176,6 +190,7 @@ function AnswerNote({
   owner,
   outcomeLabels,
   refusalReasonLabels,
+  undecidedReasonLabels,
   declarationLandingLabels,
   problemNote,
 }: {
@@ -183,6 +198,7 @@ function AnswerNote({
   owner: string;
   outcomeLabels: Record<string, string>;
   refusalReasonLabels?: Record<string, string>;
+  undecidedReasonLabels?: Record<string, string>;
   declarationLandingLabels?: Record<string, string>;
   problemNote: (code: string) => string;
 }) {
@@ -199,7 +215,9 @@ function AnswerNote({
       // 未收录的 outcome 原样示出：服务端新增一格时，页面宁可显示英文原名，也不把它
       // 归进某个既有中文说法——那会让一种新答案冒充另一种。拒绝理由同一纪律。
       const reason = answer.body.refusalReason;
-      // 散文原因与未决原因原样示出，不查表也不截断：它们没有代数可查，而截断掉的
+      // 业务未决的具名原因与拒绝理由同一纪律：查表译中文，未收录原名过线。
+      const undecided = answer.body.undecidedReason;
+      // 散文原因与发布未决原因原样示出，不查表也不截断：它们没有代数可查，而截断掉的
       // 往往正是「册上最新为几、收到几」那半句——登记方要改的就是那个数。
       const prose = answer.body.cause ?? answer.body.pendingCause;
       const landings = answer.body.declarations ?? [];
@@ -211,6 +229,12 @@ function AnswerNote({
               <>
                 ；拒绝理由：<span className="font-mono">{reason}</span> ——{' '}
                 {refusalReasonLabels?.[reason] ?? reason}
+              </>
+            ) : null}
+            {undecided ? (
+              <>
+                ；在等：<span className="font-mono">{undecided}</span> ——{' '}
+                {undecidedReasonLabels?.[undecided] ?? undecided}
               </>
             ) : null}
           </p>
