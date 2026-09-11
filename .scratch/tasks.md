@@ -2024,3 +2024,24 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **拆树**：`mcp4-sacc06` → `merged/`（指针留）、远端删、作者树 `D:/tops/idp-parcel-mcp4-sacc06` 比内容后代拆（通道 4 收工报已说树干净等评审）；`mcp5-sacc15` **不改名不拆**（wip 在途）；`%TEMP%\idp-replay-w5c` / `idp-replay-15on06` / `idp-review-sacc06` / `idp-review-sacc15b` 推完拆。均不加 `--force`。
 - **在途 / 下游**：lc/25（通道 4，只到认领笔，下次从 `3034099f` 接着做）；ve-claims/04（task-0a43458e pending，通道 3 未认领，下次重派前先 `branch-state.ps1 -Path internal/visibilityexception`）；15 wip 归通道 5（rebase 到新 main 收成正式补笔 + Spec 重核）；sa-cc/11 draft 等 PP owner。**候选后继（归 owner）**：CC——06 评审 S① 两处非原句引文 + S② `attachTo`「七列」+ S③ `findings_digest` 列名一句、Spec ② `RegisterGateFinding` 拒这一道无独立理由格；规则行登记面（CLI / 端点 / 管理台）归 07 家族。**归用户**：原通道 1 crash 一次；评审子代理鉴权错持续一天，非作者评审三次退化为推送方自跑（05 / 07 步一 / 06）——不是纪律问题，是工具问题。
 - **本节五数**（17:5x–18:4x 段，本机时钟）：CI 未量 · 集成时延（完工报→推出）sa-cc/06 17:11→18:4x **约 95 分**（含等通道 3 评审未交 + 通道 1 crash）、sa-cc/15 16:51→18:4x **约 115 分**（含 06 先后与补笔）；两票中位 **约 105 分** · 重放笔数 **16**（06 七 + 15 九；推送方清点 1 另计）· 重复开发 0 · 会话重置 **2**（通道 1 crash；通道 3 17:48 自报新会话）
+
+## 2026-09-11 19:2x 通道 1 新会话接续（接手时 `main = origin/main = 8557afd7`；用户先要一次自带 `ask_question`，再「监听队列」→ 通道 4 lc/25 来信 →「这些还在，现在可以 replay 了吗：`D:\tops\idp-parcel-mcp5-sacc15` / `-mcp1-sacc15-tail` / `-mcp4-lc25`」→「需要」）
+
+### 18:4x–19:0x 原通道 1 最后一段（从 git 反推，原会话无台账）
+
+- 上节写「15 wip 归通道 5 收成」，实际原通道 1 19:00 自己收成：新分支 `mcp1-sacc15-tail` 基 main tip `8557afd7` 一笔 **`da52715a`**（wip `0b4da637` 22 件 + 通道 1 收尾 9 件，零行为只注释，含 06 评审 Standards ① 两处非原句引文），未推 origin、未广播、无票面记录，随后会话重置。本节补记，票 15 Comments 19:2x 条同。
+
+### 19:2x–19:3x 来信与接管核
+
+- **lc/25 ← 通道 4**：票面（lc/26 写的 `labelfinal` 包头注「那一段日后加在本包」）与门禁 `TestBusinessModulesDoNotReachIntoEachOther` 不符——`isCrossContextAdapter` 只认 `internal/<consumer>/adapters/<provider>/`，`labelfinal` 不是模块名。核过门禁读法属实、`parcelshipment/adapters/transportfulfillment/` 已存在、三处工作树无未提交；回信同意其按票面 + ADR-0025 落 `adapters/transportfulfillment/` 新文件、调 `labelfinal.ParcelJudgmentCore.JudgeParcel`，并顺手改头注那一句。19:3x 收其占号广播，与通道 1 地盘零重叠，未答。
+- **接管核**（`branch-state.ps1 -Classify`，不读自报）：四棵树。`mcp1-sacc15-tail@da52715a` 基 main tip、领先 1 笔、未推、NOT-ABSORBED 31 件；`mcp5-sacc15@0b4da637` 领先 10 笔，`74bb70cf` 及之前已吸收于 `af40abf7`，只剩 wip；`mcp4-lc25` 在途（核对期间 tip `3034099f→1d80eb64`，不动）。共享树「76 行未提交」`--ignore-cr-at-eol` 后真改动 0 件，全是 CRLF 幻影。
+
+### 19:3x–19:5x sa-cc/15 补笔二进 main
+
+- **包含性核**：`%TEMP%\idp-replay-check-15tail` detached `8557afd7` pick `0b4da637` 零冲突 → 与 `da52715a` 比只差通道 1 收尾 9 件，wip 22 件字节一致；核毕拆。
+- **判据复跑于 `da52715a`**：1 / 2 三个 grep（含 `CONTEXT\s*NNN`）零；3 地盘外 0、`git diff -U0` 非注释行 0；4 `gofmt -l` 空、build / vet 0、不带 DSN CC + CLI + architecture ok、admin-web `tsc` 0 / 220 pass（junction 已 rmdir）；5 清点 tip 重生成 porcelain 空。**Spec 重核代评审**（按 18:4x 补笔一先例，用户 19:4x「需要」裁可）：`+` 行引文段 74 处、71 处在 docs / .scratch 逐字命中；未命中 3 处（「端点各立三个入口」「一层的译装接到另一层的端点上」「这个请求来自哪个租户」）为基线已有的票面裁决转述、本笔只并行未改字。Standards 轴未做。
+- 19:4x 占号广播（55432 + 两地盘）；带 DSN 全量 **110 ok / 0 FAIL / 15 无测试 / 0 cached**（19:41:18→19:43:25，127 s；CC `adapters/postgres` 8.9 s 真跑）。
+- 簿记一笔在其上（票 15 Status + 补笔二进 main 记录、sa-cc spec 15 行、本节）；`ls-remote` 核 `8557afd7` 未动 → 共享树 `merge --ff-only` → `push <sha>:main`。**远端 main = 本笔 tip**（SHA 推后广播）；代码 `da52715a` 不换号，重放 0 笔 cherry-pick。
+- **拆树**：`mcp5-sacc15` → `merged/mcp5-sacc15`（wip `0b4da637` 作封存出处，指针留）、远端删、树 `D:/tops/idp-parcel-mcp5-sacc15` 拆；`mcp1-sacc15-tail` → `merged/mcp1-sacc15-tail`、树拆。两树均干净，均不加 `--force`。`mcp4-lc25` 不动。
+- **在途 / 下游**：lc/25（通道 4 在做，头注一句已同意）；ve-claims/04（task-0a43458e 是否仍 pending 本节未查）；sa-cc/11 draft 等 PP owner；06 评审余下非阻断（S② `attachTo`「七列」、S③ `findings_digest` 列名、Spec ② `RegisterGateFinding` 理由格）仍归 CC owner——S① 两处已随本笔收。**归用户**：原通道 1 19:0x 成笔后再重置一次（无台账）。
+- **本节五数**（19:2x–19:5x，本机时钟）：CI 未量 · 集成时延 sa-cc/15 补笔二 19:00（`da52715a` 成笔，无完工报）→ 19:5x 推出 **约 50 分**（1 票，含原会话重置与用户裁可等待）· 重放笔数 **0**（纯 ff）· 重复开发 0 · 会话重置 **1**（通道 1 本会话新起）
