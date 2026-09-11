@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：取 B（三册 CLI + 端点 + 管理台，同族一致）、`external-funds-fact` 人工口去掉（[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定四）、读面另立 [10](10-cc-credential-collaboration-and-verification-read-faces.md)（见「要裁的」下「裁决」）。**步一 CLI 可开工**；步二端点 + 管理台等 10。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
-Blocked by: 步二 Blocked by [10](10-cc-credential-collaboration-and-verification-read-faces.md)（写签跟着读签走）——**10 已落分支 `mcp5-sacc10`（2026-09-10 22:4x，代码 tip `0017f49b`），等进 main**；进 main 后步二的三个写签各挂 10 落的读签旁（凭证 → `CustomsCasesPage` 凭证签；协作 / 核对 → `CustomsRestrictionsPage` 两签）。步一不阻。资金事实那一口由 [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) + [03](03-cc-inbox-consumer-receives-external-funds-fact.md) 的信封驱动，本票不再含它
+Blocked by: 步二 Blocked by [10](10-cc-credential-collaboration-and-verification-read-faces.md)（写签跟着读签走）——**10 已进 main（2026-09-11 10:5x，重放 tip `99ceb975`，见票 10「进 main 记录」）**，步二不再被它阻；步二的三个写签各挂 10 落的读签旁（凭证 → `CustomsCasesPage` 凭证签；协作 / 核对 → `CustomsRestrictionsPage` 两签）。步一不阻。资金事实那一口由 [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) + [03](03-cc-inbox-consumer-receives-external-funds-fact.md) 的信封驱动，本票不再含它
 
 ## 缺口（取证于 `3f485e97`）
 
