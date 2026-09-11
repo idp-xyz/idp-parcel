@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -106,6 +107,12 @@ func (handler *AssessAdvanceRecoveryHandler) AdoptDutyPaymentVerification(
 	ctx context.Context,
 	command AdoptDutyPaymentVerificationCommand,
 ) (SettlementInputResult, error) {
+	// 租户零值与引用四维缺席同一格：它是导出方法，不能指望调用方都像 inbox 适配器那样先过 NewTenantID。
+	// 不在这里拦，空租户会走到登记册撞 refs_not_blank 而被译成`未决`重投——重投不会长出租户来（与
+	// RequestBuyEvaluationHandler.Handle 对租户空白先答`未受理`同形）。
+	if strings.TrimSpace(command.TenantID.String()) == "" {
+		return SettlementInputResult{outcome: SettlementInputNotAccepted}, nil
+	}
 	verification, err := verificationReferenceFrom(command)
 	if err != nil {
 		return SettlementInputResult{outcome: SettlementInputNotAccepted}, nil

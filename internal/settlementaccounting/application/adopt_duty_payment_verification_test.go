@@ -200,6 +200,8 @@ func TestAVerificationReferenceMissingADimensionIsNotAccepted(t *testing.T) {
 		return command
 	}
 	cases := map[string]application.AdoptDutyPaymentVerificationCommand{
+		// 租户零值不该走到登记册撞 refs_not_blank 被译成`未决`——那一格重投不自愈（sa-cc/09 评审 Standards (1)）。
+		"缺租户":   blank(func(c *application.AdoptDutyPaymentVerificationCommand) { c.TenantID = domain.TenantID{} }),
 		"缺申报范围": blank(func(c *application.AdoptDutyPaymentVerificationCommand) { c.Scope = " " }),
 		"缺税费义务": blank(func(c *application.AdoptDutyPaymentVerificationCommand) { c.Duty = "" }),
 		"缺资金事实": blank(func(c *application.AdoptDutyPaymentVerificationCommand) { c.Funds = "" }),
