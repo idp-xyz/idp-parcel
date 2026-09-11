@@ -29,6 +29,7 @@ lc/10 落了登记册四层（册、端口、持久化、读面派生），刻�
 - **`AuthoritativeCutoffBoundary` 取什么值 → 取倾向：= 关闭决定标识。** 理由：与关闭路径形成终局时的来源版本（`responsibilityOutcomeOf` 的 `CONTINUED-ATTEMPT-CLOSURE/<决定标识>`）是同一个标识，一个事一个名；本上下文签发、与册同事务落定、可审计、与生效时间分立，不携带也不需要携带顺序信息——「边界前 / 后」由建立那一侧核册裁（lc/32）。
 - **随 pc-gaps/13 三条**：① 首发机制不算等级序 → 本票不比等级；② PS 侧核同一货主账户 + 证据非空 → 本票「做法」第 6 步；③ 例外支首发不开 → 本票请求方一律是运营角色，货主只作 `Requester` 证据。
 - **「06 `Establish` 不核登记册」那道缺门 → 立 [`32`](./32-establish-label-transaction-checks-continued-attempt-register.md)**（Blocked by 本票：边界先能形成），本票只形成边界不做门。
+- **22:0x 三条当场裁决（2026-09-10 通道 3 报，推送方当场裁，用户授权代裁；原句在 main `e8fe7bf9` `.scratch/tasks.md`「lc/30 要裁的」条，2026-09-11 通道 4 按评审阻断回修时照抄补入——评审 grep 零命中，票面此前漏记）**：① 地盘随做法 3 / 4 扩三处（`adapters/identity/` 新签发器、`adapters/postgres/` 新 `OutboxContinuedAttemptDecisionHandoff`——事件类型名逐字照 lc/27 票面、`adapters/http/` 新端点文件 + `UnconfiguredIntake` 两个加法方法）**准**，只加新文件不改既有行。② 重开时认原关闭「属货主指令」：**取 (a)**——关闭命令带封闭三值「货主指令 / 运营操作 / 其他」（PILOT-SCOPE 原词），编排合成带种类段的责任来源引用（照 `CONTINUED-ATTEMPT-CLOSURE/<决定标识>` 先例），合成 / 解析收在一对函数；**认不出种类段 → 不放行、不默认「其他」**；否 (b)（用 Requester 代推，与 GLOSSARY「三者分别记录」相悖、渠道方请求也带 Requester）。越权风险点三条归 owner：种类由命令声明 vs 由 PC「关闭责任来源规则」答（PC / PS owner）；domain 应否显式带种类格（PS owner）；重开决定应否保存货主新授权证据引用（本票只核不存，PS owner）。③ `AuthorityRole` 取请求坐标等级（PC `Authorization` 不暴露 grant 等级，`permits` 要求两值相等）：接受，头注按符号名指到该谓词并写明是暂行；PC 暴露 grant 等级归后继候选。
 
 ## 要裁的（已清零）
 
@@ -47,7 +48,7 @@ lc/10 落了登记册四层（册、端口、持久化、读面派生），刻�
 ## 完成判据（非作者评审逐项对）
 
 1. 关闭：授权许 → 册上一条关闭决定，四件与 PC 答复一致、`CutoffBoundary` 等于该决定标识；授权拒 / 未配置 → 不写册、结果分格正确；`Requester` 缺席可关闭。
-2. 重开：当前无有效终局且授权许 → 追加成功；当前有效终局在场 → `此刻不允许这一步`且不写册；生效时间不晚于关闭 → 拒；同决定标识重放返原；原关闭责任来源为货主指令而命令缺该货主账户的新授权证据、或账户与原关闭 `Requester` 不同 → 拒且不写册；编排里没有任何对等级的比较（各有用例）。
+2. 重开：当前无有效终局且授权许 → 追加成功；当前有效终局在场 → `此刻不允许这一步`且不写册；生效时间不晚于关闭 → 拒；同决定标识重放返原（2026-09-11 改口：标识 PS 铸、命令不带，同标识重放无从发生；HTTP 写行幂等归接入层来源身份（评审判断题 (a) 同意））；原关闭责任来源为货主指令而命令缺该货主账户的新授权证据、或账户与原关闭 `Requester` 不同 → 拒且不写册；编排里没有任何对等级的比较（各有用例）。
 3. 授权适配器四格逐格用例；`RequestSource` 折不出 → error 不译成未配置；`Decider` / `AuthorityRole` / `Authority` 取自 PC 答复而非命令。
 4. `Save` 成功后 outbox 一封、事件 ID 含决定标识、分区键租户 + 包裹；`Save` 失败 / 冲突不入队；入队失败整步回滚（真库）。`26` 未落时此条改为「尾段留缝、替身记录」并在 Comments 写明由 `27` 补。
 5. 入口壳：不在事务里调用编排 → `Save` 处 error；端点表 / 探针 / 放行表三处各有一行；`UnconfiguredIntake{}` 起步。
@@ -80,3 +81,4 @@ lc/10 完成记录「刻意没做」；lc/27「缺口」与「裁决」；`inter
   **不做的**：`27` 的消费者（`cmd/parcel-dispatch` 路由表，事件类型常量已导出给它）；运营端点之外的触发面；接入层 Intake（`PAR-INT-01`）；映射（`PAR-COM-13` / `PAR-COM-14`）；管理台写面；lc/32 的建立核册。
   **地盘外零改动**：`internal/parcelshipment/domain/**`、`internal/partycommercial/**`、`cmd/parcel-dispatch/**`、`isolated_read_test.go`、`internal/architecture/*_baseline.txt`；共享接线四处各只加自己那块（`git diff cb467233 -- cmd/parcel-api/endpoints.go cmd/parcel-api/main.go cmd/parcel-api/endpoints_test.go cmd/parcel-api/unwired_orchestration.go` 全为加行）。
   **能力边界**：/tdd 的红在编排一段可见（前身 red 先在、`go vet` 报 undefined 后转绿）；适配器与两端点那两段是实现与测试同笔、红未单独可见——评审按此读。没读 `cmd/parcel-dispatch` 与 lc/27 票面全文，消费者半边只按 `f6cf9d03` 导出的常量对接。分支上 `f6cf9d03` 之前的工作（三个口）由通道 3 前会话完成，本会话逐文件读过、未改一字。
+  **评审回修（2026-09-11 通道 4，通道 1 转通道 6 Spec 阻断一条）**：`5681d97d` fix——`shipperReauthorizationGate` 原对「种类段 ≠ 货主指令」一律放行，原关闭种类段认不出时被当成非货主指令放过去，与 22:0x 裁决 ②「认不出种类段 → 不放行、不默认『其他』」反向；现改三路：认不出 → `INPUT_NOT_ACCEPTED · RESPONSIBILITY_SOURCE_UNKNOWN`（签发标识之前拒，不消耗标识、不写册、不交接），货主指令 → 照旧核同一账户 + 证据非空，运营企业操作 / 外部硬限制 → 照旧放行，`!found` 仍归聚合 `Append`。新用例 `TestReopeningAClosureWhoseResponsibilitySourceKindCannotBeReadIsNotAccepted` 四子例（无分隔符 / 种类不在封闭集 × 命令带 / 不带证据；先 red 四例皆 `FORMED`，后 green），册经 `RehydrateContinuedAttemptRegister` 直接造入以模拟不经写面的坏数据；断言标识签发器 / 写口 / 交接零调用、授权口恰一次（共用路径上授权先于读册与这道门，与证据缺席 / 账户不符两格同一顺序——要授权口也为零得把读册挪到授权之前，那是共用路径重排且会让未获授权者探到册的状态，不在本次「只修这一处」内，记给通道 6 判）。不加新 .go 文件。不带 DSN：`gofmt -l` 空、`go vet ./internal/parcelshipment/...` 退 0、`go test -count=1 ./internal/parcelshipment/application/ ./cmd/parcel-api/ ./internal/architecture/` 三包 ok。票面两句（本笔）：「裁决」节补 22:0x 三条；判据 2「同决定标识重放返原」后加改口括注。其余非阻断项由通道 1 代落票面。
