@@ -1,7 +1,7 @@
 # sa-cc/08 / 09 两份非作者评审 Standards 非阻断收口：`NewRequestBuyEvaluationHandler` 拒 nil 包 `ErrNilDependency`、`EvaluationRequests.Save` 核键与对象一致、`inserted_at` 从不读回的处置、`AdoptDutyPaymentVerification` 空租户先拒、`ErrUntranslatableReference` 上抛路径核
 
 Category: chore
-Status: resolved——2026-09-11 21:5x 通道 6 完工（task-63bd3adc），分支 `mcp6-sacc16` 基远端 main `02e1dfc4`，代码四笔 `9d48e8ca` / `0d25b898` / `2aa0c463` / 本笔（⑤ 注释 + 完成记录同笔），等非作者评审与推送方进 main；「要裁的」一条不阻；此前 in-progress——2026-09-11 21:2x 通道 6 按通道 1 派单 task-63bd3adc 自立自做（08 作者收自己票的评审尾巴，awf/26 先例；09 两条是通道 5 的票，它在 sa-cc/01 上，代收），分支 `mcp6-sacc16` 基远端 main `02e1dfc4`，隔离树 `D:/tops/idp-parcel-mcp6-sacc16`。五条全是两位评审者与推送方认可的 A 类；要裁的见下（一条，不阻本票、本票不改它）
+Status: resolved——2026-09-11 21:5x 通道 6 完工（task-63bd3adc），分支 `mcp6-sacc16` 基远端 main `02e1dfc4`，代码 `9d48e8ca` / `0d25b898` / `2aa0c463` / `dab69b4f`（⑤ 注释 + 完成记录同笔）+ 要裁的 1 裁准补笔（本笔：`errors.Is` 穿过 + 一例 + 票面同笔），等非作者评审与推送方进 main；「要裁的」一条已裁；此前 in-progress——2026-09-11 21:2x 通道 6 按通道 1 派单 task-63bd3adc 自立自做（08 作者收自己票的评审尾巴，awf/26 先例；09 两条是通道 5 的票，它在 sa-cc/01 上，代收），分支 `mcp6-sacc16` 基远端 main `02e1dfc4`，隔离树 `D:/tops/idp-parcel-mcp6-sacc16`。五条全是两位评审者与推送方认可的 A 类；要裁的见下（一条，不阻本票、本票不改它）
 Blocked by: 无（[08](08-sa-evaluation-request-orchestration-records-source-references.md) 与 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) 均已进 main）
 
 ## 缺口（取证于 `02e1dfc4`，逐符号名）
@@ -68,7 +68,7 @@ Blocked by: 无（[08](08-sa-evaluation-request-orchestration-records-source-ref
 
 ## 要裁的
 
-1. **`HandleFormedDutyPaymentVerification` 包装读口错误时要不要让 `ErrUntranslatableReference` 原样穿过**（09 评审 Standards (2) 的处方）。本票作者的判断：**该穿**——包装前一句 `errors.Is(err, ErrUntranslatableReference)` 原样上抛，代价一行，换来 `assemble.go` 头注「`ErrUntranslatableReference` 不在名单」对读口内部那条也成立，而不是靠两侧构造门恰好同形。今天不可达、不阻任何票；按派单「不自己改」，落这里等推送方 / SA owner 一句，裁「改」即随下一张 SA 票一行收。
+1. **（已裁——2026-09-11 21:5x 通道 1 推送方：准，同分支再一笔收）** ~~`HandleFormedDutyPaymentVerification` 包装读口错误时要不要让 `ErrUntranslatableReference` 原样穿过~~（09 评审 Standards (2) 的处方）。本票作者的判断：**该穿**——包装前一句 `errors.Is(err, ErrUntranslatableReference)` 原样上抛，代价一行，换来 `assemble.go` 头注「`ErrUntranslatableReference` 不在名单」对读口内部那条也成立，而不是靠两侧构造门恰好同形。今天不可达、不阻任何票。**裁决**：准。理由：ADR-0029 按恢复动作分格——译不出是编程 / 数据错误，重投不自愈，折进重投哨兵一旦可达就是永远重投；与同函数对自己译出的那几处原样上抛同形；不可达的防律与本票 ④ 同一类。落法：一行 `errors.Is` 穿过 + 一例（替身读口回 `ErrUntranslatableReference` → 结果 `errors.Is` 它且不是 `ErrVerificationNotVisible`），⑤ 那句注释随之改口；不带 DSN。
 
 ## 参照
 
@@ -86,3 +86,4 @@ Blocked by: 无（[08](08-sa-evaluation-request-orchestration-records-source-ref
   - **判据逐项**：1 ✓（SA application ok；`-v -run TestTheHandlerRefusesANilDependencyAtConstruction` PASS）。2 ✓（带 DSN SA adapters/postgres **PASS 139 / SKIP 0 / FAIL 0**，含新用例；21:4x 占号 / 释号已广播）。3 ✓（`git grep -n '审计列' -- internal/settlementaccounting/adapters/postgres/evaluation_request.go` 一处、同段含 `recorded_at`；`git diff --stat 02e1dfc4 -- migrations/` 空）。4 ✓（`-v -run TestAVerificationReferenceMissingADimensionIsNotAccepted` 五例 PASS 含缺租户）。5 ✓（`adopt_on_duty_payment_verification.go` diff 只注释；`git diff --stat 02e1dfc4 -- cmd/` 空；要裁的 1 已写）。6 ✓（`gofmt -l ./internal ./cmd` 空；`go build ./...` / `go vet ./...` 退 0；`go test -count=1 ./internal/settlementaccounting/... ./internal/architecture/...` 全 ok（未设 DSN，PG 用例跳过；SA adapters/postgres 另带 DSN 跑过一次见判据 2）；机制清点 `tools/mechanism-inventory` 在本树重生成 `git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 空）。7 ✓（本条即；完成记录与 ⑤ 同笔）。
   - **未动**：`adapters/inbox/**`、`cmd/**`、迁移、`ports`、`domain`、`apply_pre_acceptance_control.go`（`ErrNilDependency` 文本）。
   - **判断题**：(a) ③ 取 (b) 而非新迁移——理由见上，与推送方倾向同向。(b) `Save` 的零值门放在相等核之前——零值对象的 ID 与零值键相等，单比相等拦不住。(c) ⑤ 的注释写在包装处而不是 `ErrVerificationNotVisible` 头注——读到 `%v` 折链那一行的人才会问「里面有没有别的哨兵」。(d) 一笔收 ② + ③：同一文件、③ 只注释，拆两笔要 patch 级暂存，收益不抵。
+  - **要裁的 1 裁准后补笔（本笔，21:5x）**：`adopt_on_duty_payment_verification.go` `HandleFormedDutyPaymentVerification` 读口错误包装前加 `errors.Is(err, ErrUntranslatableReference)` 原样上抛，⑤ 那句注释改口为「唯有它穿过、为什么、今天不可达是防律」；新例 `TestAnUntranslatableReferenceFromTheViewIsNotDressedAsInvisibility`（替身读口回 `ErrUntranslatableReference` → 结果 `errors.Is` 它、不是 `ErrVerificationNotVisible`、零采用）。`gofmt -l` 空、`go vet` 该包 0、`go test -count=1` SA adapters/customscompliance + `cmd/parcel-dispatch`（未设 DSN）ok；不带 DSN（纯应用层适配器）。判据 5「语义零改」自此改为「按裁决改一格」，`cmd/**` 仍零 diff——`assemble.go` 头注「`ErrUntranslatableReference` 也不在」现在对读口路径也靠分格成立，不再靠不可达。

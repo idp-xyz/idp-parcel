@@ -3,6 +3,7 @@ package customscompliance_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -233,6 +234,24 @@ func TestAnInvisibleVerificationIsUndecidedAndNothingIsAdopted(t *testing.T) {
 	err = fixture.handler.HandleFormedDutyPaymentVerification(t.Context(), formed())
 	if !errors.Is(err, adapter.ErrVerificationNotVisible) {
 		t.Fatalf("读口故障：err = %v, want ErrVerificationNotVisible", err)
+	}
+}
+
+// Covers: 票 sa-cc/16 要裁的 1（裁准）——读口把同一引用译成提供方键时交回 ErrUntranslatableReference，它得原样
+// 穿过而不是折进可见性滞后：译不出是编程 / 数据错误，重投不自愈，折进重投哨兵一旦可达就是永远重投。
+func TestAnUntranslatableReferenceFromTheViewIsNotDressedAsInvisibility(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.view.err = fmt.Errorf("%w: tenant: synthetic mismatch", adapter.ErrUntranslatableReference)
+
+	err := fixture.handler.HandleFormedDutyPaymentVerification(t.Context(), formed())
+	if !errors.Is(err, adapter.ErrUntranslatableReference) {
+		t.Fatalf("err = %v, want ErrUntranslatableReference 原样穿过", err)
+	}
+	if errors.Is(err, adapter.ErrVerificationNotVisible) {
+		t.Fatal("词汇分歧被登成了可见性滞后——重投不会长出词来")
+	}
+	if len(fixture.store.records) != 0 {
+		t.Fatal("译不出的引用被采用了")
 	}
 }
 

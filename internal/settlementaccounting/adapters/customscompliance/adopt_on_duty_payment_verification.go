@@ -76,12 +76,15 @@ func (adapter *AdoptOnDutyPaymentVerificationAdapter) HandleFormedDutyPaymentVer
 		return err
 	}
 
-	// 读口的一切错误都折进可见性滞后、原因只留文本不留链——含 CustomsDutyPaymentVerificationView 把同一引用译成
-	// 提供方键时可能交回的 ErrUntranslatableReference。今天这样包不会吞掉词汇分歧：上面的构造门（租户与 verificationReference）
-	// 与提供方那一侧的构造门同为非空白校验，本上下文构造得出的引用提供方必构造得出，读口里那条分支在生产上走不到；
-	// 生产装配名单里「ErrUntranslatableReference 不在未决名单」对本函数自己译出的那几处因此写实（原样上抛、
-	// 落 publish_failed）。要不要让它从读口错误里原样穿过，记在票 sa-cc/16「要裁的」，不在此改分格。
+	// 读口的错误折进可见性滞后、原因只留文本不留链——唯有 ErrUntranslatableReference 原样穿过：
+	// CustomsDutyPaymentVerificationView 把同一引用译成提供方键时也可能交回它，那是编程 / 数据错误，重投不自愈
+	// （ADR-0029 按恢复动作分格），折进重投哨兵一旦可达就是永远重投。今天它走不到（本函数的构造门与提供方那一侧
+	// 同为非空白校验），这一句是防律，与生产装配名单「ErrUntranslatableReference 不在未决名单」对本函数自己译出
+	// 的那几处的归格同一条（票 sa-cc/16 要裁的 1，通道 1 裁准）。
 	visible, err := adapter.view.DutyPaymentVerificationExists(ctx, tenant, verification)
+	if errors.Is(err, ErrUntranslatableReference) {
+		return err
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrVerificationNotVisible, err)
 	}
