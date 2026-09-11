@@ -25,6 +25,8 @@ type catalogueReaderDouble struct {
 	eligibilities  []ports.ClaimEligibilityCatalogueRow
 	authorizations []ports.ClaimAuthorizationCatalogueRow
 	disclosures    []ports.DisclosurePolicyCatalogueRow
+	disclosureRule []ports.ExceptionDisclosureRuleCatalogueRow
+	conflictRules  []ports.ConflictSignalRuleCatalogueRow
 	err            error
 }
 
@@ -88,6 +90,24 @@ func (double *catalogueReaderDouble) ListDisclosurePolicies(
 	return double.disclosures, nil
 }
 
+func (double *catalogueReaderDouble) ListExceptionDisclosureRules(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
+	if err := double.record(tenant, limit); err != nil {
+		return nil, err
+	}
+	return double.disclosureRule, nil
+}
+
+func (double *catalogueReaderDouble) ListConflictSignalRules(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.ConflictSignalRuleCatalogueRow, error) {
+	if err := double.record(tenant, limit); err != nil {
+		return nil, err
+	}
+	return double.conflictRules, nil
+}
+
 // unreachableCatalogueReader 是「被调即失败」的替身：未配置 Intake 的合同就是不构造
 // 查询，读口若被触到，说明有请求穿过了未配置格。
 type unreachableCatalogueReader struct{ t *testing.T }
@@ -138,9 +158,24 @@ func (reader unreachableCatalogueReader) ListDisclosurePolicies(
 	return nil, nil
 }
 
+func (reader unreachableCatalogueReader) ListExceptionDisclosureRules(
+	context.Context, domain.TenantID, int,
+) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
+	reader.fail()
+	return nil, nil
+}
+
+func (reader unreachableCatalogueReader) ListConflictSignalRules(
+	context.Context, domain.TenantID, int,
+) ([]ports.ConflictSignalRuleCatalogueRow, error) {
+	reader.fail()
+	return nil, nil
+}
+
 var visibilityCatalogueKinds = []string{
 	"MILESTONE_MAPPING", "TRIAGE_RULE", "NOTIFICATION_POLICY",
 	"CLAIM_ELIGIBILITY", "CLAIM_AUTHORIZATION", "DISCLOSURE_POLICY",
+	"EXCEPTION_DISCLOSURE_RULE", "CONFLICT_SIGNAL_RULE",
 }
 
 func vcServe(
@@ -391,6 +426,105 @@ func TestVisibilityCataloguesListEachKindVerbatim(t *testing.T) {
 	}
 	if empty.Code != http.StatusOK || emptyBody.Catalogues == nil {
 		t.Fatalf("空册 = %d %s；want 200 + 空数组", empty.Code, empty.Body.String())
+	}
+}
+
+// Covers: 异常披露规则（0023）与冲突信号规则（0025）两册各自 200 + kind 回显 + 行体逐键透出
+// （票 ve-disclosure-policy-view/03）；两册的空册同答 LISTED + 空数组而不是 null（ADR-0077
+// Decision 四）。规则条目的 content 只在 disclosable 时在场——缺席即「这一条不带内容来处」，
+// 与空引用分得开（0023 成对约束的传输镜像）。
+func TestVisibilityCataloguesListRuleCataloguesVerbatim(t *testing.T) {
+	intake := operationsIntakeDouble{query: operationsScope(t)}
+	registeredAt := operationsBaseAt.Add(time.Hour)
+	reader := &catalogueReaderDouble{
+		disclosureRule: []ports.ExceptionDisclosureRuleCatalogueRow{{
+			Version:       "disclose-rule/v1",
+			EffectiveFrom: operationsBaseAt,
+			ApprovedBy:    "tracking-ops",
+			Entries: []ports.ExceptionDisclosureRuleEntryRow{
+				{
+					Customer: "CUST-01", SignalKind: "ADDRESS_UNKNOWN", Confidence: "HEURISTIC",
+					Disclosable: false, AutoRelease: false,
+				},
+				{
+					Customer: "CUST-02", SignalKind: "DELIVERY_FAILED", Confidence: "CARRIER_CONFIRMED",
+					Disclosable: true, AutoRelease: true, Content: "delivery-failed/plain",
+				},
+			},
+		}},
+		conflictRules: []ports.ConflictSignalRuleCatalogueRow{{
+			SignalKind: "FACT_CONFLICT_PENDING", Version: "conflict/v1",
+			Confidence: "ALTERNATIVE_CHAIN_FORK", ApprovedBy: "tracking-ops", RegisteredAt: registeredAt,
+		}},
+	}
+
+	type envelope struct {
+		Outcome    string            `json:"outcome"`
+		Kind       string            `json:"kind"`
+		Catalogues []json.RawMessage `json:"catalogues"`
+	}
+	decode := func(t *testing.T, reader visibilityhttp.VisibilityCatalogueReader, kind string) envelope {
+		t.Helper()
+		response := vcServe(t, intake, reader, http.MethodGet, "/visibility-catalogues?kind="+kind)
+		if response.Code != http.StatusOK {
+			t.Fatalf("kind=%s：status = %d body = %s", kind, response.Code, response.Body.String())
+		}
+		var body envelope
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("kind=%s decode: %v", kind, err)
+		}
+		if body.Outcome != "VISIBILITY_CATALOGUES_LISTED" || body.Kind != kind {
+			t.Fatalf("kind=%s：outcome = %q kind = %q", kind, body.Outcome, body.Kind)
+		}
+		return body
+	}
+
+	rule := decode(t, reader, "EXCEPTION_DISCLOSURE_RULE")
+	if reader.tenant.String() != "tenant-1" || reader.limit != 50 {
+		t.Fatalf("读口收到 tenant=%q limit=%d，应来自 Intake 裁决（tenant-1/50）", reader.tenant, reader.limit)
+	}
+	var ruleBody struct {
+		Version       string            `json:"version"`
+		EffectiveFrom string            `json:"effectiveFrom"`
+		EffectiveTo   any               `json:"effectiveTo"`
+		ApprovedBy    string            `json:"approvedBy"`
+		Entries       []json.RawMessage `json:"entries"`
+	}
+	if len(rule.Catalogues) != 1 {
+		t.Fatalf("规则册应一版，实得 %d", len(rule.Catalogues))
+	}
+	if err := json.Unmarshal(rule.Catalogues[0], &ruleBody); err != nil {
+		t.Fatalf("decode rule: %v", err)
+	}
+	if ruleBody.Version != "disclose-rule/v1" || ruleBody.EffectiveTo != nil ||
+		ruleBody.EffectiveFrom != operationsBaseAt.Format(time.RFC3339Nano) ||
+		ruleBody.ApprovedBy != "tracking-ops" || len(ruleBody.Entries) != 2 {
+		t.Fatalf("异常披露规则行体走样（当前版不得带 effectiveTo）：%+v", ruleBody)
+	}
+	if string(ruleBody.Entries[0]) !=
+		`{"customer":"CUST-01","signalKind":"ADDRESS_UNKNOWN","confidence":"HEURISTIC","disclosable":false,"autoRelease":false}` {
+		t.Fatalf("不披露条目不得带 content 字段：%s", ruleBody.Entries[0])
+	}
+	if string(ruleBody.Entries[1]) !=
+		`{"customer":"CUST-02","signalKind":"DELIVERY_FAILED","confidence":"CARRIER_CONFIRMED","disclosable":true,"autoRelease":true,"content":"delivery-failed/plain"}` {
+		t.Fatalf("披露条目应逐键带内容来处：%s", ruleBody.Entries[1])
+	}
+
+	conflict := decode(t, reader, "CONFLICT_SIGNAL_RULE")
+	if len(conflict.Catalogues) != 1 {
+		t.Fatalf("冲突信号规则册应一行，实得 %d", len(conflict.Catalogues))
+	}
+	if string(conflict.Catalogues[0]) !=
+		`{"signalKind":"FACT_CONFLICT_PENDING","version":"conflict/v1","confidence":"ALTERNATIVE_CHAIN_FORK","approvedBy":"tracking-ops","registeredAt":"`+
+			registeredAt.Format(time.RFC3339Nano)+`"}` {
+		t.Fatalf("冲突信号规则行体应逐键透出：%s", conflict.Catalogues[0])
+	}
+
+	for _, kind := range []string{"EXCEPTION_DISCLOSURE_RULE", "CONFLICT_SIGNAL_RULE"} {
+		empty := decode(t, &catalogueReaderDouble{}, kind)
+		if empty.Catalogues == nil || len(empty.Catalogues) != 0 {
+			t.Fatalf("kind=%s 空册应为 LISTED + 空数组，实得 %v", kind, empty.Catalogues)
+		}
 	}
 }
 

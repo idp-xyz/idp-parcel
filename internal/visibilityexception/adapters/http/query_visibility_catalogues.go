@@ -9,7 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// VisibilityCatalogueReader 是六类目录查阅端点消费的读口。
+// VisibilityCatalogueReader 是目录查阅端点消费的读口：六类规则与策略目录，加异常披露
+// 规则与冲突信号规则两册（票 ve-disclosure-policy-view/03）。
 type VisibilityCatalogueReader interface {
 	ListMilestoneMappings(
 		ctx context.Context,
@@ -41,6 +42,16 @@ type VisibilityCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.DisclosurePolicyCatalogueRow, error)
+	ListExceptionDisclosureRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.ExceptionDisclosureRuleCatalogueRow, error)
+	ListConflictSignalRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.ConflictSignalRuleCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义，只消费票
@@ -51,19 +62,25 @@ var _ VisibilityCatalogueReader = ports.CatalogueListRead(nil)
 // 这一格（ADR-0077 Decision 四，空册本身就是内容，不折成未配置）。
 const outcomeVisibilityCataloguesListed = "VISIBILITY_CATALOGUES_LISTED"
 
-// 目录种类的封闭集（?kind= 分派，形状循 /commercial-policies）。六格与写入口
-// CatalogRegistry 的六个 Register 方法逐一对上——种类命名册子，与端口方法同词根。
+// 目录种类的封闭集（?kind= 分派，形状循 /commercial-policies）。前六格与写入口
+// CatalogRegistry 的六个 Register 方法逐一对上，后两格对单立的两个登记口——种类命名
+// 册子，与端口方法同词根。异常披露规则（EXCEPTION_DISCLOSURE_RULE，0023）与披露策略
+// （DISCLOSURE_POLICY，0012）是相邻的两本册，词里的「规则」与「策略」就是分册的记号，
+// 不得互相顶替。
 const (
-	kindMilestoneMapping   = "MILESTONE_MAPPING"
-	kindTriageRule         = "TRIAGE_RULE"
-	kindNotificationPolicy = "NOTIFICATION_POLICY"
-	kindClaimEligibility   = "CLAIM_ELIGIBILITY"
-	kindClaimAuthorization = "CLAIM_AUTHORIZATION"
-	kindDisclosurePolicy   = "DISCLOSURE_POLICY"
+	kindMilestoneMapping        = "MILESTONE_MAPPING"
+	kindTriageRule              = "TRIAGE_RULE"
+	kindNotificationPolicy      = "NOTIFICATION_POLICY"
+	kindClaimEligibility        = "CLAIM_ELIGIBILITY"
+	kindClaimAuthorization      = "CLAIM_AUTHORIZATION"
+	kindDisclosurePolicy        = "DISCLOSURE_POLICY"
+	kindExceptionDisclosureRule = "EXCEPTION_DISCLOSURE_RULE"
+	kindConflictSignalRule      = "CONFLICT_SIGNAL_RULE"
 )
 
-// NewQueryVisibilityCataloguesEndpoint 交回 VE 六类规则与策略目录查阅的 HTTP 入口
-// （GET /visibility-catalogues?kind=，票 admin-web-page-wiring-frontier/02）。
+// NewQueryVisibilityCataloguesEndpoint 交回 VE 规则与策略目录查阅的 HTTP 入口
+// （GET /visibility-catalogues?kind=，票 admin-web-page-wiring-frontier/02；两册规则目录
+// 随票 ve-disclosure-policy-view/03 加入同一端点，多两个 kind，不另立路径）。
 //
 // 准入复用运营追踪查阅的 OperationsTrackingIntake，不新立一路：目录查阅与投影查阅
 // 同属租户内运营读面，授权边界同为租户（ADR-0078 的隔离读注入对两者同形适用）。
@@ -84,7 +101,8 @@ func NewQueryVisibilityCataloguesEndpoint(
 		kind := request.URL.Query().Get("kind")
 		switch kind {
 		case kindMilestoneMapping, kindTriageRule, kindNotificationPolicy,
-			kindClaimEligibility, kindClaimAuthorization, kindDisclosurePolicy:
+			kindClaimEligibility, kindClaimAuthorization, kindDisclosurePolicy,
+			kindExceptionDisclosureRule, kindConflictSignalRule:
 		default:
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
@@ -110,6 +128,10 @@ func NewQueryVisibilityCataloguesEndpoint(
 			serveClaimAuthorizationCatalogues(response, request, reader, tenant, query.Limit)
 		case kindDisclosurePolicy:
 			serveDisclosurePolicyCatalogues(response, request, reader, tenant, query.Limit)
+		case kindExceptionDisclosureRule:
+			serveExceptionDisclosureRuleCatalogues(response, request, reader, tenant, query.Limit)
+		case kindConflictSignalRule:
+			serveConflictSignalRuleCatalogues(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -124,7 +146,7 @@ func serveMilestoneMappingCatalogues(
 	rows, err := reader.ListMilestoneMappings(request.Context(), tenant, limit)
 	if err != nil {
 		// 读不回是答案未形成，不是「空册」——伪装成后者会让一次该重试的故障变成一份
-		// 看起来如实的空册。六个分支同一条理由，下同。
+		// 看起来如实的空册。各 kind 分支同一条理由，下同。
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
@@ -320,6 +342,77 @@ func serveDisclosurePolicyCatalogues(
 	})
 }
 
+func serveExceptionDisclosureRuleCatalogues(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader VisibilityCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListExceptionDisclosureRules(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]exceptionDisclosureRuleCatalogueBody, 0, len(rows))
+	for _, row := range rows {
+		body := exceptionDisclosureRuleCatalogueBody{
+			Version:       row.Version,
+			EffectiveFrom: catalogueInstant(row.EffectiveFrom),
+			ApprovedBy:    row.ApprovedBy,
+			Entries:       make([]exceptionDisclosureRuleEntryBody, 0, len(row.Entries)),
+		}
+		if row.HasEffectiveTo {
+			body.EffectiveTo = catalogueInstant(row.EffectiveTo)
+		}
+		for _, entry := range row.Entries {
+			body.Entries = append(body.Entries, exceptionDisclosureRuleEntryBody{
+				Customer:    entry.Customer,
+				SignalKind:  entry.SignalKind,
+				Confidence:  entry.Confidence,
+				Disclosable: entry.Disclosable,
+				AutoRelease: entry.AutoRelease,
+				Content:     entry.Content,
+			})
+		}
+		bodies = append(bodies, body)
+	}
+	writeJSON(response, http.StatusOK, exceptionDisclosureRuleListResponse{
+		Outcome:    outcomeVisibilityCataloguesListed,
+		Kind:       kindExceptionDisclosureRule,
+		Catalogues: bodies,
+	})
+}
+
+func serveConflictSignalRuleCatalogues(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader VisibilityCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListConflictSignalRules(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]conflictSignalRuleBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, conflictSignalRuleBody{
+			SignalKind:   row.SignalKind,
+			Version:      row.Version,
+			Confidence:   row.Confidence,
+			ApprovedBy:   row.ApprovedBy,
+			RegisteredAt: catalogueInstant(row.RegisteredAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, conflictSignalRuleListResponse{
+		Outcome:    outcomeVisibilityCataloguesListed,
+		Kind:       kindConflictSignalRule,
+		Catalogues: bodies,
+	})
+}
+
 // catalogueInstant 是目录区间时刻的传输词形。本包投影查阅同用 RFC3339Nano，两处读面
 // 对同类时刻不摆两种词形。
 func catalogueInstant(value time.Time) string {
@@ -448,4 +541,48 @@ type disclosureCellBody struct {
 
 func disclosureCellBodyOf(cell ports.DisclosureDimensionCell) disclosureCellBody {
 	return disclosureCellBody{State: cell.State, Content: cell.Content}
+}
+
+type exceptionDisclosureRuleListResponse struct {
+	Outcome    string                                 `json:"outcome"`
+	Kind       string                                 `json:"kind"`
+	Catalogues []exceptionDisclosureRuleCatalogueBody `json:"catalogues"`
+}
+
+// exceptionDisclosureRuleCatalogueBody 是一版异常披露规则连同整版条目（0023）。它与
+// disclosurePolicyCatalogueBody 抬头同形、条目不同形：那边按客户答四维态，这边按客户 ×
+// 信号 × 可信度答三件——两本相邻的册各自成形，不共享条目壳。
+type exceptionDisclosureRuleCatalogueBody struct {
+	Version       string                             `json:"version"`
+	EffectiveFrom string                             `json:"effectiveFrom"`
+	EffectiveTo   string                             `json:"effectiveTo,omitempty"`
+	ApprovedBy    string                             `json:"approvedBy"`
+	Entries       []exceptionDisclosureRuleEntryBody `json:"entries"`
+}
+
+// exceptionDisclosureRuleEntryBody 的 content 只在 disclosable 时在场（0023 的成对约束），
+// 缺席字段照实转写读口的空串——与披露策略条目的 content 同一条传输纪律。
+type exceptionDisclosureRuleEntryBody struct {
+	Customer    string `json:"customer"`
+	SignalKind  string `json:"signalKind"`
+	Confidence  string `json:"confidence"`
+	Disclosable bool   `json:"disclosable"`
+	AutoRelease bool   `json:"autoRelease"`
+	Content     string `json:"content,omitempty"`
+}
+
+type conflictSignalRuleListResponse struct {
+	Outcome    string                   `json:"outcome"`
+	Kind       string                   `json:"kind"`
+	Catalogues []conflictSignalRuleBody `json:"catalogues"`
+}
+
+// conflictSignalRuleBody 无生效区间字段：这份目录一租户一条、换版是治理动作（0025 头注），
+// 行上只有库落下的登记时刻；registeredAt 与区间时刻同用 catalogueInstant 的词形。
+type conflictSignalRuleBody struct {
+	SignalKind   string `json:"signalKind"`
+	Version      string `json:"version"`
+	Confidence   string `json:"confidence"`
+	ApprovedBy   string `json:"approvedBy"`
+	RegisteredAt string `json:"registeredAt"`
 }

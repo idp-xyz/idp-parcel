@@ -1403,6 +1403,24 @@ func (unwiredVisibilityCatalogue) ListDisclosurePolicies(
 	return nil, errOrchestrationNotWired
 }
 
+// 异常披露规则与冲突信号规则两册随票 ve-disclosure-policy-view/03 进同一读口：占位随端口
+// 方法表补齐两法，端点表那一行不变（同一端点多两个 kind）。
+func (unwiredVisibilityCatalogue) ListExceptionDisclosureRules(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ExceptionDisclosureRuleCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredVisibilityCatalogue) ListConflictSignalRules(
+	context.Context,
+	visibilitydomain.TenantID,
+	int,
+) ([]visibilityports.ConflictSignalRuleCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredCaseReview 是 VE 案件侧三读口（分诊两册、案件单册、理赔追偿三册）的占位，
 // 方法表与 visibilityports 的 TriageReviewRead/CaseReviewRead/ClaimsRecoveryReviewRead
 // 逐一对上（票 admin-skeleton-closure-batch/06）。一型三用不违「盖住接错适配器」：
