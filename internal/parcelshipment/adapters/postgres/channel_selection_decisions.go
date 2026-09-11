@@ -21,8 +21,10 @@ import (
 // ——单行形状由库内 CHECK 钉，跨行命题（选中至多一个且与并列互斥、结论与结果互证）由重建门核
 // （ADR-0028）。两层各自有牙。
 //
-// 本适配器今天没有生产装配点：择优编排 SelectChannelCandidateHandler 自身尚无组合根（票 12 收口
-// Comment「生产可达仍差两步」），留痕随那条接线一起可达。机制先立起来，接线那天对着的不是一张裸表。
+// 本适配器的生产装配点是 `cmd/parcel-api` 的 `buildLabelChannelOrchestration`（票 label-channel/28；`main` 启动时
+// 装配，票 34）：择优编排 SelectChannelCandidateHandler 在那里带留痕三件全装，决定记录在择优那一段的事务里写进这只
+// 登记册；`/channel-selection-decisions` 读面（票 23）读的也是它。那条链今天没有触发面、三取数口显式未配置，所以
+// 生产上它仍是空册——空册是如实答案，不是这一层的欠账。
 type ChannelSelectionDecisions struct {
 	db *bentopg.DB
 }
