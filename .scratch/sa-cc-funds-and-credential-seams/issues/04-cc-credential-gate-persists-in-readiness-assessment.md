@@ -1,7 +1,7 @@
 # UC-CC-003 步 7「记录凭证门禁」只判不记：`JudgeCredentialApplicability` 算得出四格，没有任何编排把它落成就绪判断里的一格
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：一册（独立「凭证门禁判断」登记册，就绪判断按引用绑定）、评估请求到达时算一次（[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定一 / 二，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-11 15:3x 通道 4 接单 task-f9d6cd97（接替 crash 的 task-42663c03），树 `D:/tops/idp-parcel-mcp4-sacc04` 分支 `mcp4-sacc04` 基 main `7c37253f`；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：一册（独立「凭证门禁判断」登记册，就绪判断按引用绑定）、评估请求到达时算一次（[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定一 / 二，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -58,3 +58,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-10 · 通道 4：立票。未动代码。
+- 2026-09-11 15:3x · 通道 4：接单 task-f9d6cd97 开工，基 main `7c37253f`，按「裁决」一册 + 评估请求到达时算一次实现；本笔只改 Status。
