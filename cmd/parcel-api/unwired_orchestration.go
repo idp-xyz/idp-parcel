@@ -822,6 +822,39 @@ func (unwiredCaseRequirementRegistration) Handle(
 	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
 }
 
+// 凭证、税费付款协作事项、税费付款核对三册登记的命令占位（票 sa-cc/07 步二）。三个类型
+// 分立，随生产侧的三个事务包装：协作与核对在生产上共用一只 DutyPaymentReconciliationHandler，
+// 但传输层按用例方法名分成两个契约，一个占位同时实现两个方法就盖不住「协作口接了核对
+// 编排」——那正是把契约按方法名分开要换来的那道编译期红。核对与协作不交回零值结果：
+// DutyReconciliationResult 零值的 outcome 是 Invalid，端点会判成 UNNAMED_OUTCOME，那条路径本
+// 是用来抓「应用层漏了一格没具名」的。
+type unwiredRegulatoryCredentialRegistration struct{}
+
+func (unwiredRegulatoryCredentialRegistration) Handle(
+	context.Context,
+	customsapp.RegisterCredentialCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return customsapp.CaseConfigurationOutcomeInvalid, errOrchestrationNotWired
+}
+
+type unwiredDutyCollaborationRegistration struct{}
+
+func (unwiredDutyCollaborationRegistration) FormCollaboration(
+	context.Context,
+	customsapp.FormDutyCollaborationCommand,
+) (customsapp.DutyReconciliationResult, error) {
+	return customsapp.DutyReconciliationResult{}, errOrchestrationNotWired
+}
+
+type unwiredDutyPaymentVerificationRegistration struct{}
+
+func (unwiredDutyPaymentVerificationRegistration) VerifyPayment(
+	context.Context,
+	customsapp.VerifyDutyPaymentCommand,
+) (customsapp.DutyReconciliationResult, error) {
+	return customsapp.DutyReconciliationResult{}, errOrchestrationNotWired
+}
+
 // VE 六类配置登记的命令占位（票 admin-write-faces/02 切片 02d）。六个类型分立不是抄
 // 六遍：六个 Registrar 契约的方法同名 `Handle` 而命令类型互不相同，一个类型实现不了
 // 六个。
