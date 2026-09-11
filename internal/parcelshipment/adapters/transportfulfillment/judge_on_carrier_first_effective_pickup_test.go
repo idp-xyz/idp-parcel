@@ -282,6 +282,59 @@ func TestARegisteredCarrierPickupIsFetchedAtTheEnvelopeVersionAndJudgedAsFinal(t
 	}
 }
 
+// Covers: 信封指向**替代代** v2——TF `Supersede` 的产物仍是 `CarrierPickupFormed`（ADR-0135 决定六：更正沿来源更正
+// 关系换替代版本，已形成的性质不变），到这里走已形成格、不走失效格：取回用的键是 v2 不是 v1，折进命令的
+// 收寄三件与交给采用路径的执行证据 / 版本 / 生效时间全是 v2 那一代的（EffectiveAt = v2 的业务发生时间，
+// 即更正后的时间）。与上一条合起来：三种入队版本里已形成 / 替代各有直接用例，失效见下文显式未决那一条。
+func TestASupersedingCarrierPickupVersionIsJudgedAtItsOwnOccurrenceTime(t *testing.T) {
+	f := newCarrierPickupFixture(t)
+	first := formedCarrierPickup(t, "parcel-1")
+	second, err := first.Supersede(tfdomain.CarrierPickupSupersession{
+		Version:    value(t, tfdomain.NewCarrierFirstEffectivePickupVersion, "CFEV-2"),
+		Carrier:    mustCarrier(t, first),
+		OccurredAt: pickupCorrected,
+		JudgedAt:   pickupJudgedAt.Add(time.Minute),
+		Bases:      carrierPickupBases(t, "v2"),
+	})
+	if err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	if second.Result() != tfdomain.CarrierPickupFormed {
+		t.Fatalf("替代代的结果 = %q，want 已形成——前提不成立时下面证的就不是替代格", second.Result())
+	}
+	f.put(recordOf(t, first))
+	f.put(recordOf(t, second))
+
+	err = f.handle(t, registeredCarrierPickupRef("CFEV-2"))
+	if !errors.Is(err, finalconsume.ErrUnexpectedFinalOutcome) {
+		t.Fatalf("替代代应照已形成格判到采用路径并经 finalconsume 收口，实得：%v", err)
+	}
+	if len(f.pickups.asked) != 1 || f.pickups.asked[0] != carrierPickupKey(t, "tenant-1", "CFEP-1", "CFEV-2") {
+		t.Fatalf("取回用的键 = %+v，want 信封所指的 v2", f.pickups.asked)
+	}
+	if len(f.judge.commands) != 1 {
+		t.Fatalf("判断次数 = %d, want 1", len(f.judge.commands))
+	}
+	want := psdomain.CarrierFirstEffectivePickupSpec{
+		Fact:        value(t, psdomain.NewCarrierTrackingFactReference, "CFEP-1"),
+		Version:     value(t, psdomain.NewCarrierTrackingFactVersion, "CFEV-2"),
+		EffectiveAt: pickupCorrected,
+	}
+	if got := f.judge.commands[0].FirstEffectivePickup; got != want {
+		t.Fatalf("收寄三件 = %#v，want %#v（v2 那一代，生效时间是更正后的业务发生时间）", got, want)
+	}
+	if len(f.adopter.commands) != 1 {
+		t.Fatalf("采用路径调用次数 = %d, want 1", len(f.adopter.commands))
+	}
+	outcome := f.adopter.commands[0].Outcome
+	if outcome.Kind != psdomain.LabelServiceOutcome ||
+		outcome.Execution.String() != "CFEP-1@CFEV-2" ||
+		outcome.Version.String() != "CFEV-2" ||
+		!outcome.OccurredAt.Equal(pickupCorrected) {
+		t.Fatalf("责任结果 = %#v，want 证据 CFEP-1@CFEV-2、版本 CFEV-2、生效 %s", outcome, pickupCorrected)
+	}
+}
+
 func mustCarrier(t *testing.T, pickup tfdomain.CarrierFirstEffectivePickup) tfdomain.CarrierSubject {
 	t.Helper()
 	carrier, ok := pickup.Carrier()
