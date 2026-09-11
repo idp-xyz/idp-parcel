@@ -22,7 +22,7 @@ func NewComplianceTopicReference(value string) (ComplianceTopicReference, error)
 
 // ComplianceRuleVersionReference 指名本次判断实际采用的规则版本。这是记录侧陈述：判断
 // 历史存下引用，事后追得回「用了哪一版」。它不回答选择侧问题——在某个法定适用时点该用
-// 哪一版由登记册的形状决定（硬句 191），本引用不构成任何登记册在选择侧的许可；两侧的
+// 哪一版由登记册的形状决定（CONTEXT「不能统一替代规则的法定适用时点」），本引用不构成任何登记册在选择侧的许可；两侧的
 // 分界由 ADR-0070 裁定。
 type ComplianceRuleVersionReference struct{ requiredValue }
 
@@ -31,8 +31,8 @@ func NewComplianceRuleVersionReference(value string) (ComplianceRuleVersionRefer
 	return ComplianceRuleVersionReference{required}, err
 }
 
-// JudgmentMode 是判断方式的封闭二值：规则自动或授权角色人工（CONTEXT 硬句 159：
-// 自动与人工都必须保存规则版本、事实依据、决定方式和责任角色）。
+// JudgmentMode 是判断方式的封闭二值：规则自动或授权角色人工（CONTEXT「自动与人工合规判断都
+// 必须保存适用规则版本、事实依据、决定方式和责任角色」）。
 type JudgmentMode uint8
 
 const (

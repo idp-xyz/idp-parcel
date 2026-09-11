@@ -37,7 +37,7 @@ func (kind DutyObligationKind) String() string {
 }
 
 // LegalObligorReference 指名法定义务人。法定义务人、实际付款方和最终承担费用的客户
-// 可以不同，不能互相推导（CONTEXT 硬句 212）——这里只记法定义务人，另两个各归其
+// 可以不同，不能互相推导（CONTEXT「不能互相推导」）——这里只记法定义务人，另两个各归其
 // 所有者。
 type LegalObligorReference struct{ requiredValue }
 

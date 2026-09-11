@@ -13,7 +13,7 @@ import (
 //
 // 三册分属两个答案代数，端点体因此是两份而不是一份：凭证册由 RegisterCredentialHandler
 // 交回案件配置族的 CaseConfigurationOutcome，端点体直接复用 newConfigurationRegistrationEndpoint
-// ——它与解释规则、口岸目录那几本是同一套八格，另抄一份转写只会让同一条规则摊到两处；
+// ——它与解释规则、口岸目录那几本是同一套案件配置族的格，另抄一份转写只会让同一条规则摊到两处；
 // 协作与核对两口由 DutyPaymentReconciliationHandler 交回 DutyReconciliationResult，那族的
 // 「未决」分业务未决与依赖故障两半（见 writeDutyReconciliationAnswer），配置族的转写把
 // UNDECIDED 一律折成「没形成答案」，套用它会把一个形成了的业务答案报成 5xx。
@@ -174,7 +174,7 @@ type dutyReconciliationRegistrationResponse struct {
 // 「没形成答案」一侧——ADR-0022 点名判错的方向是把依赖不可用报成客户端不再重试的那类，
 // 一格业务答案被多重试几次比一条该重试的请求被丢掉便宜。
 //
-// 201 只给这两口走得到的两个形成格。资金事实那三格在同一个枚举上，但没有任何在线口能
+// 201 只给这两口走得到的两个形成格。资金事实那族格在同一个枚举上，但没有任何在线口能
 // 交回它们（资金事实只经 SA 采用信封进 CC，ADR-0137 Decision 四），写出来就是一段走不到的
 // 分派，判据同配置族不列撤销格；其余具名格原名过线，用例多一格对新格仍然诚实。
 func writeDutyReconciliationAnswer(

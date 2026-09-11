@@ -680,7 +680,7 @@ func gateFindingCommand(t *testing.T, state domain.PreconditionState) applicatio
 	}
 }
 
-// 同一前置条件换判断是冲突：门禁判断绑定动作与边界（硬句 216），改判断要走复核而不
+// 同一前置条件换判断是冲突：门禁判断绑定动作与边界（CONTEXT「不能复用于其他动作或监管边界」），改判断要走复核而不
 // 是把原判断顶掉。
 func TestReRegisteringAGateFindingWithADifferentStateConflicts(t *testing.T) {
 	store := newGateConfigStore()

@@ -150,7 +150,7 @@ func correctionCommand(t *testing.T) application.CorrectDeclarationCommand {
 	}
 }
 
-// Covers: CONTEXT 硬句 169 与生命周期「原案内补充或更正目标已形成 → 形成新的正式申报
+// Covers: CONTEXT「原提交及其结果永久保留」与生命周期「原案内补充或更正目标已形成 → 形成新的正式申报
 // 资料准备版本，并针对新的拟提交动作重新经过就绪、授权、提交」——目标在场即成新版，
 // 新版携带前身、保留单元身份，意图按新版交出一份。
 func TestAFormedCorrectionTargetYieldsANewVersionOnTheSameUnit(t *testing.T) {

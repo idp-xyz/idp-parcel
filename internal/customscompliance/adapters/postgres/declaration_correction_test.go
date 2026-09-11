@@ -90,7 +90,7 @@ func submissionRecordWithDossier(
 	}
 }
 
-// Covers: CONTEXT 硬句 169——更正翻旧插新后当前版是新版，原提交及其结果永久保留：
+// Covers: CONTEXT「原提交及其结果永久保留」——更正翻旧插新后当前版是新版，原提交及其结果永久保留：
 // 前身仍可按版本原样读回（内容一列不改），两版各有自己的尝试链，前身引用随新版携带。
 func TestACorrectionSupersedesTheCurrentVersionAndKeepsThePrior(t *testing.T) {
 	fixture := newDeclarationFixture(t)

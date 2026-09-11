@@ -24,9 +24,9 @@ func obligation(name string, state domain.ObligationItemState) domain.ClosureObl
 }
 
 // Covers: CC CONTEXT「关务案件关闭核对……可以证明案件可关闭或指出未决项，但不等于
-// 已经形成关闭决定」与硬句 218「只有每项依据均为已终结或已被有权接收方有效承接时，
+// 已经形成关闭决定」与 CONTEXT「只有每项依据均为已终结或已被有权接收方有效承接时，
 // 案件才可关闭；任一未解决或冲突项都阻止关闭」——未决清单列全、关闭被独立哨兵挡；
-// 承接项必须指名接收方（发送交接不证明移交，219）。
+// 承接项必须指名接收方（CONTEXT「发送交接、技术送达……都不能证明全部责任已经移交」）。
 func TestClosureIsBlockedByAnyUnresolvedItem(t *testing.T) {
 	blocked, err := domain.VerifyClosure(mustValue(t, domain.NewCustomsCaseID, "case-1"), closureCutoffAt, []domain.ClosureObligationItem{
 		obligation("declaration-submitted", domain.ObligationConcluded),
@@ -58,7 +58,7 @@ func TestClosureIsBlockedByAnyUnresolvedItem(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 生命周期 233/234「进行中→已关闭：只在关闭核对覆盖全部适用义务
+// Covers: CC CONTEXT 生命周期「进行中→已关闭：只在关闭核对覆盖全部适用义务
 // ……由有权责任角色形成关闭决定时成立」「已关闭→重新打开：依据关闭决定、受影响关闭
 // 依据项、原责任来源及当前授权形成受控重开决定；原关闭记录和关闭期间事实继续保留」
 // ——可关闭的核对加决定人成立关闭；重开三件必备且受影响项必须指向真实义务；重开是

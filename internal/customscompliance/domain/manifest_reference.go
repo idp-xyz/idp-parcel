@@ -11,7 +11,7 @@ var (
 )
 
 // ExternalManifestID 是承运商外部监管舱单的外部身份。舱单的形成与提交由承运商在本
-// 产品之外拥有——本上下文只接受、关联和解释引用（CONTEXT 硬句 147）。
+// 产品之外拥有——本上下文只接受、关联和解释引用（CONTEXT「监管舱单均由承运商在外部形成并提交」）。
 type ExternalManifestID struct{ requiredValue }
 
 func NewExternalManifestID(value string) (ExternalManifestID, error) {
@@ -30,7 +30,7 @@ func NewManifestSourceVersion(value string) (ManifestSourceVersion, error) {
 
 // CarrierResponsibilityReference 指名承运商责任。关联只能基于承运商责任、监管程序、
 // 方向、适用时间和明确范围形成——同编号、同袋、同总单、同班次不自动证明同一对象
-// （CONTEXT 硬句 148）。
+// （CONTEXT「运输总单和运输舱单具有不同身份」）。
 type CarrierResponsibilityReference struct{ requiredValue }
 
 func NewCarrierResponsibilityReference(value string) (CarrierResponsibilityReference, error) {
@@ -186,7 +186,7 @@ type AssociationCandidate struct {
 	Scope     DecisionScopeReference
 }
 
-// Associate 依据唯一匹配建立与申报单元的受控关联（CONTEXT 生命周期 258：「能够与
+// Associate 依据唯一匹配建立与申报单元的受控关联（CONTEXT 生命周期「能够与
 // 关务案件、申报单元和运输对象逐范围唯一匹配→形成业务关联和当前采用关系；无法唯一
 // 匹配时保持待关联，不创建占位对象或按最近客户、班次猜测」）——程序、方向与范围三维
 // 都相符的候选恰一个才关联；零个或多个都保持待关联（独立哨兵）。
@@ -216,7 +216,7 @@ func (reference ExternalManifestReference) Associate(
 }
 
 // Revise 依据承运商明确的更正、撤销、替代或范围变化形成新来源版本：换版本、换范围、
-// 指回原版本；原引用、原范围和历史关联保留（CONTEXT 硬句 150），既有申报与监管事实
+// 指回原版本；原引用、原范围和历史关联保留（CONTEXT「原来源、版本、范围和关联历史不得覆盖」），既有申报与监管事实
 // 不回退——这里没有它们的字段。关联不随版本自动搬移：新版本重新走唯一匹配。
 func (reference ExternalManifestReference) Revise(
 	version ManifestSourceVersion,

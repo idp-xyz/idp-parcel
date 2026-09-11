@@ -132,7 +132,7 @@ func TestAnEmptyDutyVerificationRegisterAnswersAnEmptyArray(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0137 决定三 / CONTEXT 硬句 214 — 三轴逐键原值、没有任何合成总状态列；同键
+// Covers: ADR-0137 决定三 / CONTEXT「不能实现为一组互斥总状态」 — 三轴逐键原值、没有任何合成总状态列；同键
 // 多版本各自成行、版本指纹与关联依据原样透出。响应形封闭：键集就是这些，多一个「status」
 // 都是把三轴折回互斥总状态。
 func TestDutyVerificationListTranscribesThreeAxesVerbatimWithoutFolding(t *testing.T) {

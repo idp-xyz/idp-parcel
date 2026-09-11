@@ -82,7 +82,7 @@ func TestAReleaseLayerResultWithoutReleaseContentIsUndecided(t *testing.T) {
 }
 
 // 非放行层带着放行三件进来是矛盾输入——业务受理携带放行内容就是把放行夹带进低层结果
-// （CONTEXT 硬句 185：任何前一层成功都不能自动生成后一层结果）。不受理，不落。
+// （CONTEXT「任何前一层成功都不能自动生成后一层结果」：任何前一层成功都不能自动生成后一层结果）。不受理，不落。
 func TestReleaseContentOnANonReleaseLayerIsNotAccepted(t *testing.T) {
 	fixture := newResultFixture(t)
 	command := releaseCommand(t, "source-release-3", domain.FullRelease, "")

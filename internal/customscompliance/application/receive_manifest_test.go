@@ -120,7 +120,7 @@ func manifestCandidate(t *testing.T, unit, scope string) domain.AssociationCandi
 	}
 }
 
-// Covers: CC CONTEXT 生命周期 258「能够唯一匹配→形成业务关联；无法唯一匹配时保持
+// Covers: CC CONTEXT 生命周期「能够唯一匹配→形成业务关联；无法唯一匹配时保持
 // 待关联，不创建占位对象或按最近客户、班次猜测」的编排面——恰一候选关联、零候选与
 // 多候选都待关联入册；同舱单同版本重放返原。点名 `AT-CC-380`「唯一关联→形成逐对象、
 // 逐范围关系」、`AT-CC-381`「可能关联两个客户……→形成待关联或冲突，不以先到请求取得
@@ -207,7 +207,7 @@ func TestManifestsAssociateOnlyOnUniqueMatch(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 硬句 150 的编排面——修订换版本换范围指回前版，关联不随版本自动
+// Covers: CC CONTEXT「原来源、版本、范围和关联历史不得覆盖」的编排面——修订换版本换范围指回前版，关联不随版本自动
 // 搬移（新版本重新走唯一匹配）；同版本重复修订按已有作答；没有引用无从修订。点名
 // `AT-CC-389`「承运商明确提供 V2 更正 V1→形成新版本和更正关系，保留 V1、原范围和
 // 原结果历史」。

@@ -58,7 +58,7 @@ func NewCorrectDeclarationHandler(deps CorrectDeclarationDeps) *CorrectDeclarati
 	return &CorrectDeclarationHandler{deps: deps}
 }
 
-// Handle 在原案件内形成新的提交版本（CONTEXT 硬句 169、生命周期「原案内补充或更正
+// Handle 在原案件内形成新的提交版本（CONTEXT「原提交及其结果永久保留」、生命周期「原案内补充或更正
 // 目标已形成 → 形成新的正式申报资料准备版本，并针对新的拟提交动作重新经过就绪、
 // 授权、提交」）：受理（单元四件+新资料快照+目标指名）→ 当前版在册（无版无可更正）→
 // 幂等（新内容与当前版同指纹即重放返原）→ 单元身份核对（更正保留身份，任何一件不同
@@ -92,8 +92,8 @@ func (handler *CorrectDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
 	if command.Kind != domain.InCaseSupplement && command.Kind != domain.InCaseCorrection {
-		// 撤销是自身提交的新监管动作、重报是新逻辑申报目标（CONTEXT 硬句 172 四道
-		// 分立）——都不产生原案内新版本，收下等于替它们伪造一条捷径。
+		// 撤销是自身提交的新监管动作、重报是新逻辑申报目标（CONTEXT「撤销动作和重报替代必须
+		// 分别表达」）——都不产生原案内新版本，收下等于替它们伪造一条捷径。
 		return SubmitDeclarationResult{outcome: DeclarationNotAccepted}, nil
 	}
 	if command.TenantID.String() == "" || command.Target == "" || command.SentAt.IsZero() {
@@ -132,7 +132,7 @@ func (handler *CorrectDeclarationHandler) Handle(
 	}
 	if !sameUnitIdentity(stored, unit) {
 		// 原案内更正保留申报单元身份（案件、程序、组成）；改身份走替代申报单元或
-		// 替代案件（CONTEXT 硬句 174），不在这里吸收。
+		// 替代案件（CONTEXT「不得原地修改原案件吸收」），不在这里吸收。
 		return SubmitDeclarationResult{outcome: DeclarationUnitConflict}, nil
 	}
 

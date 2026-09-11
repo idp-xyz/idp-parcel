@@ -57,9 +57,10 @@ func TestAFollowUpTargetDemandsItsSixAnchors(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 硬句 174/175「原申报单元不能继续使用……建立替代申报单元」「拟
+// Covers: CC CONTEXT「原申报单元不能继续使用……建立替代申报单元」「拟
 // 替代目标……不得把原申报改成已撤销、已作废或已被有效替代；有效替代必须依据真实程序
-// 要求的权威外部结果形成」与生命周期 267——拟替代只来自重报目标且替代单元必须是新
+// 要求的权威外部结果形成」与生命周期「重报替代目标已形成 → 建立新的逻辑申报目标及拟替代关系」
+// ——拟替代只来自重报目标且替代单元必须是新
 // 身份；生效必须带外部结果（内部决定与技术成功换不来）；已生效不再生效；原对象全程
 // 只有引用（删无可删、改无可改）。
 func TestReplacementTakesEffectOnlyByExternalResults(t *testing.T) {

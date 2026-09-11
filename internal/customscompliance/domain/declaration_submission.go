@@ -17,7 +17,7 @@ var (
 )
 
 // DeclarationUnitID 是申报单元的独立身份——包裹、客户委托、集运单元、总单、运输
-// 舱单、监管舱单或班次都不能直接替代它（CONTEXT 硬句 143）。
+// 舱单、监管舱单或班次都不能直接替代它（CONTEXT「申报单元必须具有独立身份和可追溯组成」）。
 type DeclarationUnitID struct{ requiredValue }
 
 func NewDeclarationUnitID(value string) (DeclarationUnitID, error) {
@@ -448,7 +448,7 @@ func NewSafeResendReference(value string) (SafeResendReference, error) {
 }
 
 // SubmissionAttempt 是针对明确提交版本实际发起的一次对外发送。首次尝试随版本形成；
-// 同版本再次尝试必须携带安全再次发送判断——在那之前不得盲目重发（CONTEXT 硬句 170）。
+// 同版本再次尝试必须携带安全再次发送判断——在那之前不得盲目重发（CONTEXT「在此之前不得盲目重发」）。
 type SubmissionAttempt struct {
 	version    SubmissionVersionID
 	sequence   int
@@ -548,7 +548,7 @@ func (attempt SubmissionAttempt) Snapshot() SubmissionAttemptSnapshot {
 }
 
 // RehydrateSubmissionAttempt 从快照重建发送尝试并重验形状：首次尝试没有安全再次
-// 发送判断、受控重发必须携带（硬句 170 的构造期与读回期是同一道门）。
+// 发送判断、受控重发必须携带（CONTEXT「在此之前不得盲目重发」的构造期与读回期是同一道门）。
 func RehydrateSubmissionAttempt(snapshot SubmissionAttemptSnapshot) (SubmissionAttempt, error) {
 	if !snapshot.Version.valid() ||
 		snapshot.Sequence < 1 ||

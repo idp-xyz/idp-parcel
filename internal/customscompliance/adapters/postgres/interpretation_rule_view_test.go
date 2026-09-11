@@ -91,7 +91,7 @@ func TestOneLayersRuleDoesNotAnswerForAnother(t *testing.T) {
 }
 
 // 辖区维隔离：JURIS/DE 的版本不替 JURIS/US 作答——多辖区租户下按错辖区选版正是
-// 硬句 191 要挡的实错，单辖区期间这一维也不许折叠掉（ADR-0070 问三丙的错法）。
+// CONTEXT「不能统一替代规则的法定适用时点」要挡的实错，单辖区期间这一维也不许折叠掉（ADR-0070 问三丙的错法）。
 func TestOneJurisdictionsRuleDoesNotAnswerForAnother(t *testing.T) {
 	view, fixture := newInterpretationRuleView(t)
 	fixture.seed(t,

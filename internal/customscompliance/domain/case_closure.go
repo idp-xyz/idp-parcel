@@ -14,7 +14,7 @@ var (
 )
 
 // ObligationItemState 是关闭依据项的封闭三值：已终结、已被有权接收方有效承接、未
-// 解决。前两者可关，任一未解决阻止关闭（CONTEXT 硬句 218）。
+// 解决。前两者可关，任一未解决阻止关闭（CONTEXT「任一未解决或冲突项都阻止关闭」）。
 type ObligationItemState uint8
 
 const (
@@ -140,7 +140,7 @@ type CustomsCaseClosure struct {
 
 // ControlledReopening 是一次受控重开：迟到监管事实仍属原固定案件身份和同一监管程序，
 // 且依据使当前关闭期成立的关闭决定、受影响关闭依据项、原责任来源及当前授权形成
-// （CONTEXT 生命周期 234）。
+// （CONTEXT 生命周期「已关闭 → 重新打开」）。
 type ControlledReopening struct {
 	LateFact      string
 	AffectedItems []string

@@ -93,7 +93,7 @@ type dutyCollaborationListResponse struct {
 // dutyCollaborationBody 逐字段透出一份协作事项。kind 封闭二值（ASSESSED_DUTY /
 // EXPLICITLY_NOT_REQUIRED）；duty 与 noPayBasis 按格只在一个上在场——两者同在或同缺都
 // 立不起领域对象，读口上就抛了，传输层不会遇到。法定义务人（obligor）、实际付款方与
-// 最终承担费用的客户可以不同、不能互相推导（CONTEXT 硬句 212）——这里只有法定义务人
+// 最终承担费用的客户可以不同、不能互相推导（CONTEXT「不能互相推导」）——这里只有法定义务人
 // 一列，另两个各归其所有者。
 type dutyCollaborationBody struct {
 	Scope       string `json:"scope"`

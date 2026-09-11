@@ -16,7 +16,7 @@ import (
 
 // DeclarationSubmissions 实现 ports.DeclarationSubmissionStore（写入代数同 ADR-0031）。
 // 版本表与尝试表分表同库、Save/SaveCorrection 同一事务两表写入（照 VE 发作期/结论的
-// 同笔纪律）：版本是首次实际发送前固定的不可覆盖快照（CONTEXT 硬句 168），**内容列**
+// 同笔纪律）：版本是首次实际发送前固定的不可覆盖快照（CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」），**内容列**
 // 没有 UPDATE 语句；SaveCorrection 唯一翻动的是前版的 is_current 当前指针（迁移 0012，
 // 先例 TF 交付登记翻旧插新），不属版本内容。尝试不可能先于版本存在由外键承担。
 type DeclarationSubmissions struct {
@@ -67,7 +67,7 @@ func (repository *DeclarationSubmissions) FindByKey(
 }
 
 // FindByVersion 按版本标识读回留存版本——当前版或已被更正的历史版皆可（CONTEXT
-// 硬句 169：原提交及其结果永久保留）。下游按信封宣告的版本取数走这里，当前版推进
+// 「原提交及其结果永久保留」）。下游按信封宣告的版本取数走这里，当前版推进
 // 不改变已发出信封的所指。
 func (repository *DeclarationSubmissions) FindByVersion(
 	ctx context.Context,
@@ -213,8 +213,8 @@ func (repository *DeclarationSubmissions) Save(
 }
 
 // SaveCorrection 落一份原案内更正/补充版本：同一事务里把 CorrectedFrom 指名的当前版
-// 转为非当前、插入新当前版行与其首次尝试行。前版内容一列不改（CONTEXT 硬句 169：原
-// 提交及其结果永久保留）。翻转到零行即`当前版已被换`——并发更正先落或前身早已非当前，
+// 转为非当前、插入新当前版行与其首次尝试行。前版内容一列不改（CONTEXT「原提交及其结果
+// 永久保留」）。翻转到零行即`当前版已被换`——并发更正先落或前身早已非当前，
 // 由部分唯一索引与这条 WHERE 共同裁决，调用方读回当前版再作答，这里绝不顶替。
 func (repository *DeclarationSubmissions) SaveCorrection(
 	ctx context.Context,

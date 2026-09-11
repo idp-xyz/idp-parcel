@@ -30,7 +30,7 @@ func externalResult(t *testing.T, layer domain.ResultLayer, semantics string) do
 	return result
 }
 
-// Covers: CC CONTEXT 硬句 185/186「监管接收、业务受理、监管过程决定、监管核定税费、
+// Covers: CC CONTEXT「监管接收、业务受理、监管过程决定、监管核定税费、
 // 放行结果和监管处置决定必须分层保存……不能使用一个『清关成功』状态覆盖各层事实」
 // 「每项外部结果必须保存来源身份、权威角色、原始业务语义、业务时间、接收时间、解释
 // 规则及其与提交版本、尝试和结果范围的关系」——六层封闭各自成立、八件缺一立不起、
@@ -64,7 +64,7 @@ func TestSixLayersStandAloneWithTheirEightAnchors(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 硬句 187「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次
+// Covers: CC CONTEXT「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次
 // 或按最后到达直接改变当前判断」——同层同版本同范围异语义即冲突（独立哨兵，双方保留
 // 不选边）；不同层与不同范围的事实各归各位不构成冲突。
 func TestSameLayerConflictsAreDetectedNotOverwritten(t *testing.T) {

@@ -345,7 +345,7 @@ func TestAReadyAuthorizedUnitFixesAVersionWithItsFirstAttempt(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 硬句 168「首次实际发送前形成不可覆盖版本」——重放返回原版本且不重
+// Covers: CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」——重放返回原版本且不重
 // 形成（版本厂只签一次）；同目标不同内容不顶替已固定版本。
 func TestAReplayReturnsTheOriginalVersionWithoutReforming(t *testing.T) {
 	fixture := newDeclarationFixture(t)

@@ -178,7 +178,7 @@ func NewSubmitDeclarationHandler(deps SubmitDeclarationDeps) *SubmitDeclarationH
 }
 
 // Handle 把一个申报单元推进到不可覆盖的提交版本：受理（单元+案件+资料/角色快照）→
-// 幂等/冲突按内容指纹分界（重放返原版本不重形成，硬句 168；重放的案件一致性对单元
+// 幂等/冲突按内容指纹分界（重放返原版本不重形成，CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」；重放的案件一致性对单元
 // 本体核）→ 案件反查核存在（悬空引用拒绝，ADR-0073 决定五）→ 就绪读口（未配置→
 // 未决；不再就绪→业务负向）→ 提交授权（与就绪分开，双有效才成版，CONTEXT 244）→
 // 单元本体落册（同键异身份→冲突，ADR-0073 决定一/二）→ FixSubmissionVersion+
@@ -222,7 +222,7 @@ func (handler *SubmitDeclarationHandler) Handle(
 			// 已形成的后续动作目标）；不保留身份的走撤销重报（新逻辑申报目标）。
 			return SubmitDeclarationResult{outcome: DeclarationSourceConflict}, nil
 		}
-		// 重复提交：返回原版本，不重复形成（硬句 168）。内容指纹不含案件维（案件属
+		// 重复提交：返回原版本，不重复形成（CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」）。内容指纹不含案件维（案件属
 		// 单元身份不属提交内容），重放的案件一致性对单元本体核——同单元换案件不是
 		// 重放，是撞上「案件维成立即定」（ADR-0073 决定二）。
 		stored, unitFound, err := handler.deps.Units.FindByID(ctx, command.TenantID, unit.ID())

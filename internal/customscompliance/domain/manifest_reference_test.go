@@ -38,7 +38,7 @@ func candidate(t *testing.T, unit, scope string, direction domain.ManifestDirect
 	}
 }
 
-// Covers: CC CONTEXT 硬句 147「本上下文只接受外部监管舱单引用……不形成本地监管舱单
+// Covers: CC CONTEXT「本上下文只接受外部监管舱单引用……不形成本地监管舱单
 // 草稿、提交版本或提交尝试」与八件形状——承运商责任、程序、方向、范围、来源事实缺一
 // 立不起；类型上没有草稿/提交字段（只引用是结构性的）。
 func TestAManifestReferenceIsAcceptedNotAuthored(t *testing.T) {
@@ -64,8 +64,8 @@ func TestAManifestReferenceIsAcceptedNotAuthored(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 生命周期 258「能够逐范围唯一匹配→形成业务关联；无法唯一匹配时
-// 保持待关联，不创建占位对象或按最近客户、班次猜测」与硬句 148「同一编号、同袋、同
+// Covers: CC CONTEXT 生命周期「能够逐范围唯一匹配→形成业务关联；无法唯一匹配时
+// 保持待关联，不创建占位对象或按最近客户、班次猜测」与 CONTEXT「同一编号、同袋、同
 // 总单……不自动证明它们是同一对象」——三维全符恰一个才关联；零匹配与多匹配都独立
 // 哨兵拒（方向不符的候选不算匹配）。
 func TestAssociationDemandsAUniqueThreeDimensionalMatch(t *testing.T) {
@@ -102,7 +102,7 @@ func TestAssociationDemandsAUniqueThreeDimensionalMatch(t *testing.T) {
 	}
 }
 
-// Covers: CC CONTEXT 硬句 150「外部监管舱单更正、撤销、替代或范围变化形成新的引用
+// Covers: CC CONTEXT「外部监管舱单更正、撤销、替代或范围变化形成新的引用
 // 关系和当前采用判断，原来源、版本、范围和关联历史不得覆盖」——修订换版本换范围指回
 // 原版、原引用不可变；关联不随版本自动搬移（新版本重新走唯一匹配）；重号修订拒。
 func TestRevisionKeepsHistoryAndDropsTheStaleAssociation(t *testing.T) {

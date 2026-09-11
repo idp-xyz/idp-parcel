@@ -622,7 +622,7 @@ func TestAnObligationWithNoEndRemainsApplicableFarInTheFuture(t *testing.T) {
 	}
 }
 
-// 承接项的接收责任方随项往返（CONTEXT 硬句 219）；非承接项写 NULL，否则库的双向
+// 承接项的接收责任方随项往返（CONTEXT「来源责任方、接收责任方、接受决定及权限」）；非承接项写 NULL，否则库的双向
 // CHECK 会把空串当成「带了一个空名字」挡下。
 func TestAHandedOverObligationCarriesItsRecipientBackThroughTheView(t *testing.T) {
 	registry, view, fixture := newObligationRegistry(t)
@@ -794,7 +794,7 @@ func TestGateFindingsRoundTripThroughTheView(t *testing.T) {
 	}
 }
 
-// 门禁判断绑定动作与边界，不得复用于其他动作（CONTEXT 硬句 216）：换个动作是另一本
+// 门禁判断绑定动作与边界，不得复用于其他动作（CONTEXT「不能复用于其他动作或监管边界」）：换个动作是另一本
 // 目录，未登记即未决。
 func TestAGateCatalogDoesNotAnswerForAnotherAction(t *testing.T) {
 	registry, view, fixture := newGateRegistry(t)

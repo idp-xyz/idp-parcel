@@ -325,7 +325,7 @@ func TestAnAttributedResultIsInterpretedAndHandedOff(t *testing.T) {
 	}
 }
 
-// Covers: CONTEXT 硬句 187「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按
+// Covers: CONTEXT「与同层现有事实冲突时，不得据此猜测提交、补造缺失层次或按
 // 最后到达直接改变当前判断」——归属不上留存不猜（无意图）；同层冲突留存双方带标记。
 func TestUnattributableAndLayerConflictsAreKeptNotGuessed(t *testing.T) {
 	t.Run("an unattributable response is kept without guessing", func(t *testing.T) {
@@ -443,7 +443,7 @@ func TestUnconfiguredRulesAndDependencyFailuresStayUndecided(t *testing.T) {
 
 // 规则选择侧的输入按 ADR-0070 取值：评估时点 = 业务发生或适用时间（问二甲），适用
 // 辖区 = 范围→单元→案件回指（问三甲）。任何一样取不出都显式停在未决——绝不拿消息
-// 到达时间当适用时点（硬句 191 点名禁止），也不留「当前唯一辖区」的兜底缝。
+// 到达时间当适用时点（CONTEXT「不能统一替代规则的法定适用时点」点名禁止），也不留「当前唯一辖区」的兜底缝。
 func TestRuleSelectionInputsAreResolvedOrUndecided(t *testing.T) {
 	t.Run("the rule is resolved with the case jurisdiction at the occurrence instant", func(t *testing.T) {
 		fixture := newResultFixture(t)

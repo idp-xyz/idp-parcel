@@ -69,7 +69,7 @@ func TestCollaborationTakesExactlyTwoObligationShapes(t *testing.T) {
 // Covers: CC CONTEXT「缺少税费结果不能被解释为无需付款」——没有义务依据的输入走不进
 // 任何一格（独立哨兵，编排据以保持未决：不形成支付指令，也不默认无需付款）；法定
 // 义务人必备（法定义务人、实际付款方与最终承担客户不能互相推导——这里只记第一个，
-// 硬句 212）。
+// CONTEXT「不能互相推导」）。
 func TestMissingDutyResultsCannotMeanNoPaymentNeeded(t *testing.T) {
 	unfounded := domain.DutyCollaborationSpec{
 		Scope:       mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),

@@ -149,7 +149,7 @@ func verifyCommand(t *testing.T) application.VerifyDispositionCommand {
 // Covers: CC CONTEXT「处置执行核对」经编排端到端——无事实即证据不足如实入册（空清单
 // 是领域答案不是依赖故障，`AT-CC-233` 的证据不足半边「事实不足时形成核对证据不足」）；
 // 同决定同事实集指纹只出一版（重放返原核对不重出版本），新事实到达换指纹换版且两版
-// 并存（部分执行→再次执行的版本化比较，硬句 208；`AT-CC-237`「执行事实迟到……按事实
+// 并存（部分执行→再次执行的版本化比较，CONTEXT「数量差异和再次执行事实」；`AT-CC-237`「执行事实迟到……按事实
 // 时间、有效性和范围更新新核对版本；历史结果和已完成范围保留」）。
 func TestVerificationIsIdempotentPerFactSetAndVersionsAccrue(t *testing.T) {
 	fixture := newVerifyFixture(t)

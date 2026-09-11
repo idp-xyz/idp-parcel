@@ -10,7 +10,7 @@ var (
 	ErrReplacementNotEffective = errors.New("customs compliance: the replacement is not yet effective")
 )
 
-// FollowUpActionKind 是后续申报动作的封闭四值（CONTEXT 硬句 172：「同版本技术再次
+// FollowUpActionKind 是后续申报动作的封闭四值（CONTEXT「同版本技术再次
 // 尝试、原案内补充、原案内更正、撤销动作和重报替代必须分别表达」——技术再次尝试走
 // SubmissionAttempt 的受控重发，不在这里；其余四道各占一格）。
 type FollowUpActionKind uint8

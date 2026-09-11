@@ -274,7 +274,7 @@ func ObligationItemFromJSON(raw []byte) (application.RegisterObligationItemComma
 			return none, fmt.Errorf("义务项登记缺 %s——内容格逐格必填，无默认值", field)
 		}
 	}
-	// 承接配对双向核（CONTEXT 硬句 219 承接项必须指名接收责任方；库 CHECK 同句）。
+	// 承接配对双向核（CONTEXT「来源责任方、接收责任方、接受决定及权限」承接项必须指名接收责任方；库 CHECK 同句）。
 	// 反向也拒：非承接项带承接对象会被写口静默折成 NULL，操作员会以为登进去的比
 	// 实际多——静默丢弃正是译装要挡的事。
 	handedTo := strings.TrimSpace(document.HandedTo)
@@ -689,7 +689,7 @@ func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentC
 }
 
 // gateKeyFrom 译装门禁两命令共用的判断身份三维加租户。门禁判断绑定动作与边界
-// （CONTEXT 硬句 216），键上四件缺一不可。
+// （CONTEXT「不能复用于其他动作或监管边界」），键上四件缺一不可。
 func gateKeyFrom(tenantID, scopeRef, actionText, boundaryRef string) (
 	domain.TenantID,
 	domain.DecisionScopeReference,

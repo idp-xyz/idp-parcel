@@ -40,7 +40,7 @@ func seedObligationCatalog(t *testing.T, fixture *viewFixture, tenant, caseRef s
 		 VALUES ($1, $2, $3)`, tenant, caseRef, viewBaseAt)
 }
 
-// 目录未登记 → 未决。绝不是「没有义务所以可关」（CONTEXT 硬句 218）。
+// 目录未登记 → 未决。绝不是「没有义务所以可关」（CONTEXT「关闭前必须在明确业务截点盘点全部适用」义务）。
 func TestObligationInventoryIsUnconfiguredWithoutACatalog(t *testing.T) {
 	view, _ := newObligationInventoryView(t)
 	items, configured := loadObligations(t, view, "tenant-a", "case-1", viewBaseAt)

@@ -119,7 +119,7 @@ func TestDutyCollaborationCatalogueListsBothKindsVerbatim(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0137 决定三 / CONTEXT 硬句 214 — 三轴逐格原值读回，不折总状态；同三维键的
+// Covers: ADR-0137 决定三 / CONTEXT「不能实现为一组互斥总状态」 — 三轴逐格原值读回，不折总状态；同三维键的
 // 多版本连指纹与依据一起全部上列（迟到事实按新版本追加，不按到达顺序覆盖）；跨租户不可见；
 // 版本按核对时间升序。
 func TestDutyVerificationCatalogueListsEveryVersionWithItsThreeAxes(t *testing.T) {

@@ -17,8 +17,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证申报链库的行为：提交版本不可覆盖（同目标第二份答
-// `已有记录`且尝试链不被搅动）、尝试不可能先于版本存在（外键——硬句 168 可钉的那半）、
-// 重发形状入 CHECK（硬句 170）、租户隔离由 SQL 条件承担。断言一律在事务闭包外。
+// `已有记录`且尝试链不被搅动）、尝试不可能先于版本存在（外键——CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」可钉的那半）、
+// 重发形状入 CHECK（CONTEXT「在此之前不得盲目重发」）、租户隔离由 SQL 条件承担。断言一律在事务闭包外。
 
 var declarationFixedAt = time.Date(2026, 8, 14, 10, 0, 0, 0, time.UTC)
 
@@ -216,9 +216,9 @@ func TestSecondSubmissionGetsAlreadyRecorded(t *testing.T) {
 	}
 }
 
-// TestAttemptCannotExistWithoutItsVersion 证硬句 168 可钉的那半在库内：尝试行指不到
+// TestAttemptCannotExistWithoutItsVersion 证 CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」可钉的那半在库内：尝试行指不到
 // 版本行就进不来（外键），受控重发缺安全判断、首发带安全判断同样被 CHECK 拦住
-// （硬句 170）。
+// （CONTEXT「在此之前不得盲目重发」）。
 func TestAttemptCannotExistWithoutItsVersion(t *testing.T) {
 	fixture := newDeclarationFixture(t)
 	ctx := t.Context()

@@ -31,7 +31,7 @@ func NewSubmissionIndex(db *bentopg.DB) (*SubmissionIndex, error) {
 var _ ports.SubmissionIndex = (*SubmissionIndex)(nil)
 
 // FindSubmission 报告该租户下是否存在此提交版本。found=false 是「归属不上」的如实
-// 答案，接收编排据以留存不猜（CONTEXT 硬句 187）——因此这里绝不能把读取失败折成
+// 答案，接收编排据以留存不猜（CONTEXT「不得据此猜测提交、补造缺失层次」）——因此这里绝不能把读取失败折成
 // false：那会让一次依赖故障被读成「监管机构回的是一份我们没提交过的申报」。
 func (index *SubmissionIndex) FindSubmission(
 	ctx context.Context,

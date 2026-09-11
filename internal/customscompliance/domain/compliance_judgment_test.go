@@ -24,7 +24,7 @@ func judgmentSpec(t *testing.T, mode domain.JudgmentMode) domain.ComplianceJudgm
 	}
 }
 
-// Covers: CC CONTEXT 硬句 159「自动与人工合规判断都必须保存适用规则版本、事实依据、
+// Covers: CC CONTEXT「自动与人工合规判断都必须保存适用规则版本、事实依据、
 // 决定方式和责任角色。人工判断不能删除自动判断，后续自动计算也不能覆盖已经形成的
 // 人工判断历史」——四件缺一立不起（自动与人工一视同仁）；替版指回前版方式与规则、
 // 原判断不可变；跨事项替版不是同一条判断线。

@@ -243,7 +243,7 @@ type closureObligationItemBody struct {
 	Scope      string `json:"scope"`
 	State      string `json:"state"`
 	Basis      string `json:"basis"`
-	// handedTo 只在承接项在场（CONTEXT 硬句 219：承接必须指名接收责任方；库 CHECK
+	// handedTo 只在承接项在场（CONTEXT「来源责任方、接收责任方、接受决定及权限」：承接必须指名接收责任方；库 CHECK
 	// 双向配对），非承接项缺席。
 	HandedTo string `json:"handedTo,omitempty"`
 	// 适用区间原样透出（appliesUntil 缺席即尚无终点）。截点判读归读者：本端点不收

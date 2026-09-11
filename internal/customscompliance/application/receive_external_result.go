@@ -113,7 +113,7 @@ type ReleaseContent struct {
 
 // ReceiveExternalResultCommand 携带一条外部监管响应的全部来源。Release 只在放行层给出
 // （UC-CC-006 步 5 的放行层，票 mechanism-executor-triage/07 CC-b）：放行层缺它是解释未决，
-// 其他层带它是矛盾输入（把放行夹带进低层结果，硬句 185 禁的那种推导），不受理。
+// 其他层带它是矛盾输入（把放行夹带进低层结果，CONTEXT「任何前一层成功都不能自动生成后一层结果」禁的那种推导），不受理。
 type ReceiveExternalResultCommand struct {
 	TenantID       domain.TenantID
 	SourceID       string
@@ -195,8 +195,8 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 	if command.Release != nil && command.Layer != domain.ReleaseResultLayer {
-		// 非放行层携带放行三件：把放行夹带进低层结果，正是硬句 185 禁的「前一层成功生成
-		// 后一层结果」。矛盾输入不进幂等比对——它构造不出任何一层的事实。
+		// 非放行层携带放行三件：把放行夹带进低层结果，正是 CONTEXT「任何前一层成功都不能自动
+		// 生成后一层结果」禁的那种推导。矛盾输入不进幂等比对——它构造不出任何一层的事实。
 		return ReceiveExternalResultResult{outcome: ResultNotAccepted}, nil
 	}
 
@@ -225,7 +225,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 	}
 	if !attributed {
 		// 归属不上原提交：留存原始响应与其声称的版本，不猜测提交、不补造层次
-		// （CONTEXT 硬句 187）。留存的不是监管事实，不交意图。
+		// （CONTEXT「不得据此猜测提交、补造缺失层次」）。留存的不是监管事实，不交意图。
 		record := ports.ExternalResultRecord{
 			Key:            key,
 			ContentDigest:  digest,
@@ -239,7 +239,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 
 	// 评估时点 = 业务发生或适用时间（ADR-0070 问二甲）。来源未给出（零值）或给出因果
 	// 上立不住的值（业务发生晚于接收）即显式未决——绝不改拿消息到达或系统当前时间
-	// 顶替，那正是硬句 191 点名禁止的替代，当前指针册子的缺陷不能原样藏进版本化册子。
+	// 顶替，那正是 CONTEXT「不能统一替代规则的法定适用时点」点名禁止的替代，当前指针册子的缺陷不能原样藏进版本化册子。
 	if command.OccurredAt.IsZero() ||
 		(!command.ReceivedAt.IsZero() && command.OccurredAt.After(command.ReceivedAt)) {
 		return ReceiveExternalResultResult{outcome: ResultUndecided, reason: EvaluationInstantUntrusted,
