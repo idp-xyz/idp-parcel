@@ -73,7 +73,7 @@ func (useCase milestoneMappingUseCase) Handle(
 	return useCase.service.RegisterMilestoneMapping(ctx, command)
 }
 
-// stubCatalogRegistry 是写入口替身：六个方法同答一格。写入口的三格代数（已登记 / 版本
+// stubCatalogRegistry 是写入口替身：各方法同答一格。写入口的三格代数（已登记 / 版本
 // 已在册 / 区间重叠）由它给出，用例据以译成登记册答案。
 type stubCatalogRegistry struct {
 	outcome ports.CatalogRegistrationOutcome
@@ -111,6 +111,18 @@ func (registry stubCatalogRegistry) RegisterClaimAuthorization(
 
 func (registry stubCatalogRegistry) RegisterDisclosurePolicy(
 	context.Context, domain.TenantID, ports.DisclosurePolicyRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.outcome, nil
+}
+
+func (registry stubCatalogRegistry) RegisterExceptionDisclosureRules(
+	context.Context, domain.TenantID, ports.ExceptionDisclosureRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.outcome, nil
+}
+
+func (registry stubCatalogRegistry) RegisterConflictSignalRule(
+	context.Context, domain.TenantID, ports.ConflictSignalRuleRegistration,
 ) (ports.CatalogRegistrationOutcome, error) {
 	return registry.outcome, nil
 }

@@ -13,7 +13,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证 buildRegistrars 装配的整条登记链（隔离合成 S）：
-// 目录册六条命令各自贯通「翻译 → 用例 → 真库 → 留痕」，同版本号重放答版本不可覆盖、
+// 目录册各命令各自贯通「翻译 → 用例 → 真库 → 留痕」，同版本号重放答版本不可覆盖、
 // 区间重叠被写入侧防重叠拦下、缺件拒绝不落行不留痕；归集面两命令另测于下。内容全为
 // SYN- 合成值，只证「可填且归类」，不进任何生产装配。
 func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
@@ -47,7 +47,7 @@ func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
 			command)
 	}
 
-	// 六命令各自贯通，逐张目录表点数。
+	// 目录册各命令各自贯通，逐张目录表点数。
 	steps := []struct {
 		command    string
 		input      string
@@ -121,6 +121,29 @@ func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
 					"SYN-TEN-VE15")
 			},
 		},
+		{
+			command: commandExceptionDisclosureRules,
+			input: `{"tenantId":"SYN-TEN-VE15","version":"SYN-EDR-V1","approvedBy":"SYN-approver-1",
+				"effectiveFrom":"2026-09-01T00:00:00Z",
+				"entries":[{"customer":"SYN-CUSTOMER-1","signalKind":"SYN-SIGNAL-STALL",
+				"confidence":"SYN-CONF-HIGH","disclosable":true,"autoRelease":false,
+				"content":"SYN-CONTENT-STALL"}]}`,
+			tableCount: func() int {
+				return countRows(
+					`SELECT count(*) FROM visibility_exception.exception_disclosure_rule_version WHERE tenant_id = $1`,
+					"SYN-TEN-VE15")
+			},
+		},
+		{
+			command: commandConflictSignalRule,
+			input: `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-FACT-CONFLICT",
+				"version":"SYN-RULE-V1","confidence":"SYN-CONF-MEDIUM","approvedBy":"SYN-approver-1"}`,
+			tableCount: func() int {
+				return countRows(
+					`SELECT count(*) FROM visibility_exception.conflict_signal_rule WHERE tenant_id = $1`,
+					"SYN-TEN-VE15")
+			},
+		},
 	}
 	for _, step := range steps {
 		if message, code := execute(ctx, step.command, []byte(step.input), identity, regs); code != exitRegistered {
@@ -145,6 +168,23 @@ func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
 	}
 	if count := countTraces(replay.command); count != 1 {
 		t.Fatalf("重放留痕 = %d，要 1（拒绝不留痕）", count)
+	}
+
+	// 冲突信号规则一租户一条（0025）：换一版再登撞的是同一行，写入口答 AlreadyRegistered、
+	// 译成版本不可覆盖（2），原行不被顶替、不留痕——换版是治理动作，登记口不替它静默换掉。
+	conflictReplay := `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-FACT-CONFLICT",
+		"version":"SYN-RULE-V2","confidence":"SYN-CONF-MEDIUM","approvedBy":"SYN-approver-1"}`
+	if message, code := execute(ctx, commandConflictSignalRule, []byte(conflictReplay), identity, regs); code != exitGovernance ||
+		!strings.Contains(message, "VERSION_NOT_OVERWRITABLE") {
+		t.Fatalf("冲突信号规则重登 = %d（%s），要 2 且指名版本不可覆盖", code, message)
+	}
+	if count := countRows(
+		`SELECT count(*) FROM visibility_exception.conflict_signal_rule WHERE tenant_id = $1 AND rule_version = $2`,
+		"SYN-TEN-VE15", "SYN-RULE-V1"); count != 1 {
+		t.Fatalf("冲突信号规则原行被顶替：V1 行数 = %d，要 1", count)
+	}
+	if count := countTraces(commandConflictSignalRule); count != 1 {
+		t.Fatalf("冲突信号规则重登留痕 = %d，要 1（拒绝不留痕）", count)
 	}
 
 	// 区间重叠：已闭区间撞上在册未闭版本（已闭区间不触发接续，补历史必须落在空档里），

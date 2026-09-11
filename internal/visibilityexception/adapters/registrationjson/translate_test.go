@@ -173,6 +173,75 @@ func TestDisclosurePolicyTranslatesAllThreeDimensionStates(t *testing.T) {
 	}
 }
 
+// TestExceptionDisclosureRulesTranslateEveryField 证异常披露规则（0023）快照逐字段落到
+// 命令上：条目字段名照读面 /visibility-catalogues?kind=EXCEPTION_DISCLOSURE_RULE 落下的原词
+// （customer / signalKind / confidence / disclosable / autoRelease / content），登记方对着读签
+// 写快照不必换词。content 缺席留零值——内容随披露的成对判据归用例（ENTRY_INCOMPLETE），
+// 这里不代填也不拒。
+func TestExceptionDisclosureRulesTranslateEveryField(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-TEN-VE15",
+		"version": "SYN-EDR-V1",
+		"approvedBy": "SYN-approver-1",
+		"effectiveFrom": "2026-09-01T00:00:00Z",
+		"entries": [
+			{"customer": "SYN-CUSTOMER-1", "signalKind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-HIGH",
+			 "disclosable": true, "autoRelease": true, "content": "SYN-CONTENT-STALL"},
+			{"customer": "SYN-CUSTOMER-1", "signalKind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-LOW",
+			 "disclosable": false, "autoRelease": false}
+		]
+	}`)
+	command, err := registrationjson.ExceptionDisclosureRulesFromJSON(raw)
+	if err != nil {
+		t.Fatalf("翻译：%v", err)
+	}
+	if command.TenantID.String() != "SYN-TEN-VE15" ||
+		command.Header.Version != "SYN-EDR-V1" ||
+		command.Header.ApprovedBy != "SYN-approver-1" ||
+		command.Header.HasEffectiveTo {
+		t.Fatalf("抬头 = %+v（租户 %s）", command.Header, command.TenantID)
+	}
+	if len(command.Entries) != 2 {
+		t.Fatalf("条目数 = %d，要 2", len(command.Entries))
+	}
+	shown := command.Entries[0]
+	if shown.Customer.String() != "SYN-CUSTOMER-1" ||
+		shown.Kind.String() != "SYN-SIGNAL-STALL" ||
+		shown.Confidence.String() != "SYN-CONF-HIGH" ||
+		!shown.Disclosable || !shown.AutoRelease ||
+		shown.Content.String() != "SYN-CONTENT-STALL" {
+		t.Fatalf("披露条目 = %+v", shown)
+	}
+	withheld := command.Entries[1]
+	if withheld.Disclosable || withheld.AutoRelease || withheld.Content.String() != "" {
+		t.Fatalf("不披露条目 = %+v，content 应留零值", withheld)
+	}
+}
+
+// TestConflictSignalRuleTranslatesEveryField 证冲突信号规则（0025）快照逐字段落到命令上。
+// 字段名同样照读面原词（signalKind / version / confidence / approvedBy）；version 在这册里
+// 就是识别规则版本引用——它没有目录版本抬头，一租户一条。
+func TestConflictSignalRuleTranslatesEveryField(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-TEN-VE15",
+		"signalKind": "SYN-SIGNAL-FACT-CONFLICT",
+		"version": "SYN-RULE-V1",
+		"confidence": "SYN-CONF-MEDIUM",
+		"approvedBy": "SYN-approver-1"
+	}`)
+	command, err := registrationjson.ConflictSignalRuleFromJSON(raw)
+	if err != nil {
+		t.Fatalf("翻译：%v", err)
+	}
+	if command.TenantID.String() != "SYN-TEN-VE15" ||
+		command.Kind.String() != "SYN-SIGNAL-FACT-CONFLICT" ||
+		command.Rule.String() != "SYN-RULE-V1" ||
+		command.Confidence.String() != "SYN-CONF-MEDIUM" ||
+		command.ApprovedBy != "SYN-approver-1" {
+		t.Fatalf("命令 = %+v", command)
+	}
+}
+
 // TestTranslationRejectsWhatIsNotThisEntranceShape 逐格证翻译处的拒绝：未知字段、
 // 集合外取值、矛盾声明、构造门缺件。错误信息不逐字断言——它是给操作员看的话，
 // 断言拒绝本身与大致指向即可。
@@ -250,6 +319,19 @@ func TestTranslationRejectsWhatIsNotThisEntranceShape(t *testing.T) {
 			translate: func(raw []byte) error { _, err := registrationjson.ClaimEligibilityFromJSON(raw); return err },
 			raw:       `{"tenantId":"  ","version":"v1","approvedBy":"a","contract":"c","coveredKinds":["k"]}`,
 			hint:      "tenant",
+		},
+		{
+			name:      "异常披露规则条目字段名照读面原词——kind 不是 signalKind",
+			translate: func(raw []byte) error { _, err := registrationjson.ExceptionDisclosureRulesFromJSON(raw); return err },
+			raw: `{"tenantId":"SYN-TEN","version":"v1","approvedBy":"a","effectiveFrom":"2026-09-01T00:00:00Z",
+				"entries":[{"customer":"c","kind":"k","confidence":"x","disclosable":false,"autoRelease":false}]}`,
+			hint: "kind",
+		},
+		{
+			name:      "冲突信号规则的识别规则版本构造门缺件",
+			translate: func(raw []byte) error { _, err := registrationjson.ConflictSignalRuleFromJSON(raw); return err },
+			raw:       `{"tenantId":"SYN-TEN","signalKind":"k","version":" ","confidence":"c","approvedBy":"a"}`,
+			hint:      "signal rule version",
 		},
 	}
 	for _, testCase := range cases {

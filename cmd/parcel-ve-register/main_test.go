@@ -95,9 +95,21 @@ func (registry *cliCatalogRegistry) RegisterDisclosurePolicy(
 	return registry.record(commandDisclosurePolicy, tenant)
 }
 
-var _ ports.CatalogRegistry = (*cliCatalogRegistry)(nil)
+func (registry *cliCatalogRegistry) RegisterExceptionDisclosureRules(
+	_ context.Context, tenant domain.TenantID, _ ports.ExceptionDisclosureRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.record(commandExceptionDisclosureRules, tenant)
+}
 
-func newTestRegistrars(t *testing.T, registry ports.CatalogRegistry, tracer executionTracer) registrars {
+func (registry *cliCatalogRegistry) RegisterConflictSignalRule(
+	_ context.Context, tenant domain.TenantID, _ ports.ConflictSignalRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.record(commandConflictSignalRule, tenant)
+}
+
+var _ application.CatalogRegistry = (*cliCatalogRegistry)(nil)
+
+func newTestRegistrars(t *testing.T, registry application.CatalogRegistry, tracer executionTracer) registrars {
 	t.Helper()
 	catalogs, err := application.NewCatalogRegistration(registry)
 	if err != nil {
@@ -111,11 +123,16 @@ func newTestRegistrars(t *testing.T, registry ports.CatalogRegistry, tracer exec
 	}
 }
 
-// validInputByCommand 给六命令各一份过得了翻译与用例门的最小输入（隔离合成 S）。
+// validInputByCommand 给目录册各命令一份过得了翻译与用例门的最小输入（隔离合成 S）。
 func validInputByCommand() map[string]string {
 	versionHeader := `"tenantId":"SYN-TEN-VE15","version":"SYN-V1","approvedBy":"SYN-approver-1",` +
 		`"effectiveFrom":"2026-09-01T00:00:00Z"`
 	return map[string]string{
+		commandExceptionDisclosureRules: `{` + versionHeader + `,"entries":[
+			{"customer":"SYN-CUSTOMER","signalKind":"SYN-SIGNAL","confidence":"SYN-CONF",
+			"disclosable":true,"autoRelease":false,"content":"SYN-CONTENT"}]}`,
+		commandConflictSignalRule: `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT",
+			"version":"SYN-RULE-V1","confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`,
 		commandMilestoneMapping: `{` + versionHeader + `,"entries":[
 			{"source":"PARCEL_SHIPMENT","factKind":"SYN_KIND","milestone":"SYN-MILESTONE"}]}`,
 		commandTriageRules: `{` + versionHeader + `,"entries":[
@@ -135,17 +152,19 @@ func validInputByCommand() map[string]string {
 }
 
 // expectedReferenceByCommand 是留痕引用的口径：区间型目录用租户+版本，键型目录用
-// 租户+键身份。
+// 租户+键身份；冲突信号规则的键只有租户，痕上再带识别规则版本（理由见 translateCommand）。
 var expectedReferenceByCommand = map[string]string{
-	commandMilestoneMapping:   "SYN-TEN-VE15/SYN-V1",
-	commandTriageRules:        "SYN-TEN-VE15/SYN-V1",
-	commandNotificationPolicy: "SYN-TEN-VE15/SYN-POLICY-1",
-	commandClaimEligibility:   "SYN-TEN-VE15/SYN-CONTRACT",
-	commandClaimAuthorization: "SYN-TEN-VE15/SYN-CUSTOMER",
-	commandDisclosurePolicy:   "SYN-TEN-VE15/SYN-V1",
+	commandMilestoneMapping:         "SYN-TEN-VE15/SYN-V1",
+	commandTriageRules:              "SYN-TEN-VE15/SYN-V1",
+	commandNotificationPolicy:       "SYN-TEN-VE15/SYN-POLICY-1",
+	commandClaimEligibility:         "SYN-TEN-VE15/SYN-CONTRACT",
+	commandClaimAuthorization:       "SYN-TEN-VE15/SYN-CUSTOMER",
+	commandDisclosurePolicy:         "SYN-TEN-VE15/SYN-V1",
+	commandExceptionDisclosureRules: "SYN-TEN-VE15/SYN-V1",
+	commandConflictSignalRule:       "SYN-TEN-VE15/SYN-RULE-V1",
 }
 
-// TestExecuteRoutesEachCommandAndTracesTheRegistration 证六命令各自到达对的登记
+// TestExecuteRoutesEachCommandAndTracesTheRegistration 证目录册各命令各自到达对的登记
 // 方法，且已登记的执行带着两样通道技术身份与固定时钟落痕。
 func TestExecuteRoutesEachCommandAndTracesTheRegistration(t *testing.T) {
 	for command, input := range validInputByCommand() {
@@ -253,6 +272,122 @@ func TestExecuteRegistryErrorTurnsUndecided(t *testing.T) {
 	if len(tracer.executions) != 0 {
 		t.Fatalf("依赖故障留了痕：%+v", tracer.executions)
 	}
+}
+
+// TestExecuteRuleRegistriesFollowTheCatalogueExitCodes 证两册规则命令（票
+// ve-disclosure-policy-view/02 步一）走目录册同一套退出码：治理答案 2 不留痕、用例缺件 1
+// 不碰写入口、翻译拒收（未知字段）1、依赖故障 3。绿路径与留痕在
+// TestExecuteRoutesEachCommandAndTracesTheRegistration 的表里随其余目录命令一并证。
+func TestExecuteRuleRegistriesFollowTheCatalogueExitCodes(t *testing.T) {
+	inputs := validInputByCommand()
+
+	t.Run("治理答案走 2 不留痕", func(t *testing.T) {
+		for _, testCase := range []struct {
+			command string
+			outcome ports.CatalogRegistrationOutcome
+			hint    string
+		}{
+			{commandExceptionDisclosureRules, ports.CatalogVersionAlreadyRegistered, "VERSION_NOT_OVERWRITABLE"},
+			{commandExceptionDisclosureRules, ports.CatalogVersionOverlapsExisting, "VERSION_OVERLAPS_EXISTING"},
+			// 冲突信号规则一租户一条：撞既有行是它唯一的治理答案（0025），没有区间可重叠。
+			{commandConflictSignalRule, ports.CatalogVersionAlreadyRegistered, "VERSION_NOT_OVERWRITABLE"},
+		} {
+			registry := &cliCatalogRegistry{outcome: testCase.outcome}
+			tracer := &traceRecorder{}
+			regs := newTestRegistrars(t, registry, tracer)
+
+			message, code := execute(t.Context(), testCase.command, []byte(inputs[testCase.command]), testIdentity, regs)
+			if code != exitGovernance || !strings.Contains(message, testCase.hint) {
+				t.Fatalf("%s 退出码 = %d（%s），要 2 且指名 %s", testCase.command, code, message, testCase.hint)
+			}
+			if len(tracer.executions) != 0 {
+				t.Fatalf("%s 治理答案留了痕：%+v", testCase.command, tracer.executions)
+			}
+		}
+	})
+
+	t.Run("用例缺件走 1 不碰写入口", func(t *testing.T) {
+		for _, testCase := range []struct {
+			command string
+			input   string
+			hint    string
+		}{
+			{commandExceptionDisclosureRules,
+				`{"tenantId":"SYN-TEN-VE15","version":"","approvedBy":"SYN-approver-1",
+				"effectiveFrom":"2026-09-01T00:00:00Z","entries":[
+				{"customer":"SYN-CUSTOMER","signalKind":"SYN-SIGNAL","confidence":"SYN-CONF",
+				"disclosable":true,"autoRelease":false,"content":"SYN-CONTENT"}]}`,
+				"VERSION_MISSING"},
+			// 0023 的成对纪律在用例门拒：声明披露却没有内容来处。
+			{commandExceptionDisclosureRules,
+				`{"tenantId":"SYN-TEN-VE15","version":"SYN-V1","approvedBy":"SYN-approver-1",
+				"effectiveFrom":"2026-09-01T00:00:00Z","entries":[
+				{"customer":"SYN-CUSTOMER","signalKind":"SYN-SIGNAL","confidence":"SYN-CONF",
+				"disclosable":true,"autoRelease":false}]}`,
+				"ENTRY_INCOMPLETE"},
+			{commandConflictSignalRule,
+				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT","version":"SYN-RULE-V1",
+				"confidence":"SYN-CONF","approvedBy":""}`,
+				"APPROVAL_MISSING"},
+		} {
+			registry := &cliCatalogRegistry{outcome: ports.CatalogVersionRegistered}
+			tracer := &traceRecorder{}
+			regs := newTestRegistrars(t, registry, tracer)
+
+			message, code := execute(t.Context(), testCase.command, []byte(testCase.input), testIdentity, regs)
+			if code != exitUsage || !strings.Contains(message, testCase.hint) {
+				t.Fatalf("%s 退出码 = %d（%s），要 1 且指名 %s", testCase.command, code, message, testCase.hint)
+			}
+			if len(registry.calls) != 0 || len(tracer.executions) != 0 {
+				t.Fatalf("%s 缺件拒绝碰了写入口或留痕：calls=%v traces=%d",
+					testCase.command, registry.calls, len(tracer.executions))
+			}
+		}
+	})
+
+	t.Run("未知字段在翻译处拒收走 1", func(t *testing.T) {
+		for _, testCase := range []struct {
+			command string
+			input   string
+		}{
+			// 打错字段名（kind 而非 signalKind）不得静默变成「没给」再被用例当缺件拒。
+			{commandExceptionDisclosureRules,
+				`{"tenantId":"SYN-TEN-VE15","version":"SYN-V1","approvedBy":"SYN-approver-1",
+				"effectiveFrom":"2026-09-01T00:00:00Z","entries":[
+				{"customer":"SYN-CUSTOMER","kind":"SYN-SIGNAL","confidence":"SYN-CONF",
+				"disclosable":false,"autoRelease":false}]}`},
+			{commandConflictSignalRule,
+				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT","ruleVersion":"SYN-RULE-V1",
+				"confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`},
+		} {
+			registry := &cliCatalogRegistry{outcome: ports.CatalogVersionRegistered}
+			regs := newTestRegistrars(t, registry, &traceRecorder{})
+
+			message, code := execute(t.Context(), testCase.command, []byte(testCase.input), testIdentity, regs)
+			if code != exitUsage || !strings.Contains(message, "输入被拒") {
+				t.Fatalf("%s 退出码 = %d（%s），要 1 且报输入被拒", testCase.command, code, message)
+			}
+			if len(registry.calls) != 0 {
+				t.Fatalf("%s 翻译拒收后仍碰了写入口：%v", testCase.command, registry.calls)
+			}
+		}
+	})
+
+	t.Run("依赖故障走 3", func(t *testing.T) {
+		for _, command := range []string{commandExceptionDisclosureRules, commandConflictSignalRule} {
+			registry := &cliCatalogRegistry{err: errors.New("registry down")}
+			tracer := &traceRecorder{}
+			regs := newTestRegistrars(t, registry, tracer)
+
+			message, code := execute(t.Context(), command, []byte(inputs[command]), testIdentity, regs)
+			if code != exitUndecided {
+				t.Fatalf("%s 退出码 = %d（%s），要 3", command, code, message)
+			}
+			if len(tracer.executions) != 0 {
+				t.Fatalf("%s 依赖故障留了痕：%+v", command, tracer.executions)
+			}
+		}
+	})
 }
 
 // TestExecuteRejectsCommandsOutsideTheSet 证集合外命令（含别的登记口的命令）点名拒绝。

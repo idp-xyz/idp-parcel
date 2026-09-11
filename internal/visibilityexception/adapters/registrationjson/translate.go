@@ -528,3 +528,111 @@ func DisclosurePolicyFromJSON(raw []byte) (application.RegisterDisclosurePolicyC
 		Entries:  entries,
 	}, nil
 }
+
+// exceptionDisclosureRuleEntryDocument 是异常披露规则（0023）的一条条目。字段名照读面
+// /visibility-catalogues?kind=EXCEPTION_DISCLOSURE_RULE 落下的原词（票
+// ve-disclosure-policy-view/03），登记方对着读签写快照不必换词；分诊那册写口沿用更早的
+// kind 一词，历史形状不在本票改。content 只在 disclosable 时在场——成对与否的判据在用例
+// （ENTRY_INCOMPLETE），这里只把在场的字面译成引用、缺席的留零值，与分诊条目的 team 同一
+// 条处理。
+type exceptionDisclosureRuleEntryDocument struct {
+	Customer    string `json:"customer"`
+	SignalKind  string `json:"signalKind"`
+	Confidence  string `json:"confidence"`
+	Disclosable bool   `json:"disclosable"`
+	AutoRelease bool   `json:"autoRelease"`
+	Content     string `json:"content,omitempty"`
+}
+
+type exceptionDisclosureRulesDocument struct {
+	versionHeaderDocument
+	Entries []exceptionDisclosureRuleEntryDocument `json:"entries"`
+}
+
+func ExceptionDisclosureRulesFromJSON(raw []byte) (application.RegisterExceptionDisclosureRulesCommand, error) {
+	none := application.RegisterExceptionDisclosureRulesCommand{}
+	var document exceptionDisclosureRulesDocument
+	if err := decodeStrict(raw, &document, "异常披露规则"); err != nil {
+		return none, err
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	entries := make([]ports.ExceptionDisclosureRuleEntry, 0, len(document.Entries))
+	for _, entry := range document.Entries {
+		customer, err := domain.NewCustomerAccountReference(entry.Customer)
+		if err != nil {
+			return none, err
+		}
+		kind, err := domain.NewExceptionSignalKindReference(entry.SignalKind)
+		if err != nil {
+			return none, err
+		}
+		confidence, err := domain.NewConfidenceReference(entry.Confidence)
+		if err != nil {
+			return none, err
+		}
+		var content domain.DisclosureContentReference
+		if strings.TrimSpace(entry.Content) != "" {
+			if content, err = domain.NewDisclosureContentReference(entry.Content); err != nil {
+				return none, err
+			}
+		}
+		entries = append(entries, ports.ExceptionDisclosureRuleEntry{
+			Customer:    customer,
+			Kind:        kind,
+			Confidence:  confidence,
+			Disclosable: entry.Disclosable,
+			AutoRelease: entry.AutoRelease,
+			Content:     content,
+		})
+	}
+	return application.RegisterExceptionDisclosureRulesCommand{
+		TenantID: tenant,
+		Header:   document.header(),
+		Entries:  entries,
+	}, nil
+}
+
+// conflictSignalRuleDocument 没有版本抬头：这份目录一租户一条、换版是治理动作（0025），
+// version 在这册里就是识别规则版本引用。字段名同样照读面原词。
+type conflictSignalRuleDocument struct {
+	TenantID   string `json:"tenantId"`
+	SignalKind string `json:"signalKind"`
+	Version    string `json:"version"`
+	Confidence string `json:"confidence"`
+	ApprovedBy string `json:"approvedBy"`
+}
+
+func ConflictSignalRuleFromJSON(raw []byte) (application.RegisterConflictSignalRuleCommand, error) {
+	none := application.RegisterConflictSignalRuleCommand{}
+	var document conflictSignalRuleDocument
+	if err := decodeStrict(raw, &document, "冲突信号规则"); err != nil {
+		return none, err
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	kind, err := domain.NewExceptionSignalKindReference(document.SignalKind)
+	if err != nil {
+		return none, err
+	}
+	rule, err := domain.NewSignalRuleVersionReference(document.Version)
+	if err != nil {
+		return none, err
+	}
+	confidence, err := domain.NewConfidenceReference(document.Confidence)
+	if err != nil {
+		return none, err
+	}
+	// 批准责任缺件的判据在用例（APPROVAL_MISSING），这里只管形状。
+	return application.RegisterConflictSignalRuleCommand{
+		TenantID:   tenant,
+		Kind:       kind,
+		Rule:       rule,
+		Confidence: confidence,
+		ApprovedBy: document.ApprovedBy,
+	}, nil
+}

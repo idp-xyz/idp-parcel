@@ -6,11 +6,16 @@
 // 票 12 已裁治理类登记不受 ADR-0055 业务端点章程管）。它也不碰任何装配接线——
 // `tenantBoundCustomerViewDerive` 那格哨兵等的是目录内容（实例半边），不是代码接线。
 //
-// 目录册六个登记种类覆盖五类七表（`PAR-VIS-08` 跨索赔资格与申请人授权两组表）：
+// 目录册的登记种类（`PAR-VIS-08` 跨索赔资格与申请人授权两组表）：
 // milestone-mapping（`PAR-VIS-01`）、triage-rules（`PAR-VIS-05`）、
-// notification-policy（`PAR-VIS-07`）、claim-eligibility / claim-authorization
-// （`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）。此外材料归集面两命令
-// claim-material-receipt / claim-material-receipt-revocation（票
+// notification-policy（`PAR-VIS-07` 的渠道与时限半边）、claim-eligibility /
+// claim-authorization（`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）、
+// exception-disclosure-rules（`PAR-VIS-07` 的披露与自动发布范围半边，0023）、
+// conflict-signal-rule（`PAR-VIS-04`，0025；票 ve-disclosure-policy-view/02 接入后两册）。
+// 后两册的命令名对齐读口 /visibility-catalogues?kind= 的原词 EXCEPTION_DISCLOSURE_RULE /
+// CONFLICT_SIGNAL_RULE，按 DISCLOSURE_POLICY ↔ disclosure-policy 的既有变形；异常披露规则
+// 与披露策略是相邻的两本册，命令名里「规则」「策略」两词就是分册的记号。此外材料归集面
+// 两命令 claim-material-receipt / claim-material-receipt-revocation（票
 // ve-claims-read-seams/02）登的是收讫事实不是规则册——材料实物经租户的客服/作业面
 // 收到后由操作者在此登记收讫，客户自助提交材料属 PAR-INT-01 之后的渠道工作，不在
 // 本入口。
@@ -72,12 +77,14 @@ const (
 	commandClaimEligibility          = "claim-eligibility"
 	commandClaimAuthorization        = "claim-authorization"
 	commandDisclosurePolicy          = "disclosure-policy"
+	commandExceptionDisclosureRules  = "exception-disclosure-rules"
+	commandConflictSignalRule        = "conflict-signal-rule"
 	commandMaterialReceipt           = "claim-material-receipt"
 	commandMaterialReceiptRevocation = "claim-material-receipt-revocation"
 )
 
 // registerCommands 是本入口开的全部登记种类，用法提示与路由共用一份，不各列一遍。
-// 前六个是目录册，后两个是材料归集面的事实登记（票 ve-claims-read-seams/02）——两族
+// 目录册各命令在前，材料归集面的两条事实登记（票 ve-claims-read-seams/02）在末——两族
 // 的答案代数不同（见 executeMaterialReceipt），路由在 execute 分岔。
 var registerCommands = []string{
 	commandMilestoneMapping,
@@ -86,6 +93,8 @@ var registerCommands = []string{
 	commandClaimEligibility,
 	commandClaimAuthorization,
 	commandDisclosurePolicy,
+	commandExceptionDisclosureRules,
+	commandConflictSignalRule,
 	commandMaterialReceipt,
 	commandMaterialReceiptRevocation,
 }
@@ -250,7 +259,7 @@ func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	}, nil
 }
 
-// registration 是翻译产物：一次登记的执行闭包加留痕引用。六种命令的类型差异收在
+// registration 是翻译产物：一次登记的执行闭包加留痕引用。各目录命令的类型差异收在
 // 翻译处，事务与留痕编排只写一遍。
 type registration struct {
 	// reference 指名这次执行送达的登记：区间型目录用租户+版本，键型目录用租户+键身份。
@@ -325,6 +334,30 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			reference: cmd.TenantID.String() + "/" + cmd.Header.Version,
 			perform: func(ctx context.Context, catalogs *application.CatalogRegistration) (application.RegisterCatalogResult, error) {
 				return catalogs.RegisterDisclosurePolicy(ctx, cmd)
+			},
+		}, nil
+	case commandExceptionDisclosureRules:
+		cmd, err := registrationjson.ExceptionDisclosureRulesFromJSON(raw)
+		if err != nil {
+			return none, err
+		}
+		return registration{
+			reference: cmd.TenantID.String() + "/" + cmd.Header.Version,
+			perform: func(ctx context.Context, catalogs *application.CatalogRegistration) (application.RegisterCatalogResult, error) {
+				return catalogs.RegisterExceptionDisclosureRules(ctx, cmd)
+			},
+		}, nil
+	case commandConflictSignalRule:
+		cmd, err := registrationjson.ConflictSignalRuleFromJSON(raw)
+		if err != nil {
+			return none, err
+		}
+		return registration{
+			// 一租户一条（0025），键只有租户；痕上再带识别规则版本，是因为换版是一次治理
+			// 动作、旧行不被顶替——痕要答得出这一次登的是哪一版，光记租户答不出。
+			reference: cmd.TenantID.String() + "/" + cmd.Rule.String(),
+			perform: func(ctx context.Context, catalogs *application.CatalogRegistration) (application.RegisterCatalogResult, error) {
+				return catalogs.RegisterConflictSignalRule(ctx, cmd)
 			},
 		}, nil
 	default:

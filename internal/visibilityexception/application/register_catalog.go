@@ -151,6 +151,35 @@ type RegisterDisclosurePolicyCommand struct {
 	Entries  []ports.DisclosurePolicyEntry
 }
 
+// RegisterExceptionDisclosureRulesCommand 登记一版异常披露规则（`PAR-VIS-07` 的披露与
+// 自动发布范围半边，0023）。与 RegisterDisclosurePolicyCommand 是相邻的两本册：那册按
+// 客户答四维展示什么，这册按（客户+信号类型+可信度）答异常要不要对外说、能不能自动发。
+type RegisterExceptionDisclosureRulesCommand struct {
+	TenantID domain.TenantID
+	Header   ports.CatalogVersionHeader
+	Entries  []ports.ExceptionDisclosureRuleEntry
+}
+
+// RegisterConflictSignalRuleCommand 登记本租户的冲突信号规则（`PAR-VIS-04`，0025）。没有
+// 版本抬头：一租户一条，换版是治理动作不是接续闭合（ports.ConflictSignalRuleRegistry）。
+type RegisterConflictSignalRuleCommand struct {
+	TenantID   domain.TenantID
+	Kind       domain.ExceptionSignalKindReference
+	Rule       domain.SignalRuleVersionReference
+	Confidence domain.ConfidenceReference
+	ApprovedBy string
+}
+
+// CatalogRegistry 是本用例对写入口的全部要求：目录册写口（ports.CatalogRegistry）加异常
+// 披露规则与冲突信号规则两册的写口。ports 里三口分立是 mech/08 当时为了不拆替身；用例只有
+// 一个、受控入口只有一个、留痕只有一处，所以在这里合成一口——生产写入方
+// postgres.CatalogRegistrar 三口本就齐备，代价只落在测试替身各补两个方法。
+type CatalogRegistry interface {
+	ports.CatalogRegistry
+	ports.ExceptionDisclosureRuleRegistry
+	ports.ConflictSignalRuleRegistry
+}
+
 // CatalogRegistration 是 VE 五类规则与策略目录的版本化登记用例。
 //
 // 它站在写入口之前，只作一件事：**把不完整的登记挡在库外**。目录内容属实例半边、
@@ -165,10 +194,10 @@ type RegisterDisclosurePolicyCommand struct {
 // 事务边界不归本用例：一版抬头与它的整版条目必须同一提交，而事务由进程级入口开启
 // （与本上下文其余写路一致）。
 type CatalogRegistration struct {
-	registry ports.CatalogRegistry
+	registry CatalogRegistry
 }
 
-func NewCatalogRegistration(registry ports.CatalogRegistry) (*CatalogRegistration, error) {
+func NewCatalogRegistration(registry CatalogRegistry) (*CatalogRegistration, error) {
 	if registry == nil {
 		return nil, fmt.Errorf("visibility exception application: catalog registry is required")
 	}
@@ -319,6 +348,60 @@ func (service *CatalogRegistration) RegisterDisclosurePolicy(
 	return translateRegistryOutcome(outcome)
 }
 
+// RegisterExceptionDisclosureRules 登记一版异常披露规则。抬头与条目纪律同其余区间型目录；
+// 条目的成对判据见 exceptionDisclosureEntryComplete。
+func (service *CatalogRegistration) RegisterExceptionDisclosureRules(
+	ctx context.Context,
+	command RegisterExceptionDisclosureRulesCommand,
+) (RegisterCatalogResult, error) {
+	if reason := checkVersionHeader(command.TenantID, command.Header); reason != CatalogRefusalReasonNone {
+		return refused(reason), nil
+	}
+	if reason := checkEntries(command.Entries, exceptionDisclosureEntryComplete, exceptionDisclosureEntryKey); reason != CatalogRefusalReasonNone {
+		return refused(reason), nil
+	}
+
+	outcome, err := service.registry.RegisterExceptionDisclosureRules(ctx, command.TenantID,
+		ports.ExceptionDisclosureRuleRegistration{Header: command.Header, Entries: command.Entries})
+	if err != nil {
+		return RegisterCatalogResult{}, fmt.Errorf("register exception disclosure rules: %w", err)
+	}
+	return translateRegistryOutcome(outcome)
+}
+
+// RegisterConflictSignalRule 登记本租户的冲突信号规则，形照 RegisterNotificationPolicy：
+// 缺租户是缺管辖，缺批准责任是缺审批，规则三件（类型、识别规则版本、可信度依据）任缺一件
+// 都是条目缺维——「每个信号必须保存对象、类型、规则版本、判断时间、事实依据、可信度」
+// （CONTEXT），编排形成信号时一样都不补，登记口因此也一样都不放。写入口撞既有行答
+// AlreadyRegistered，照目录册代数译成版本不可覆盖：换规则版本是治理动作，原行不被顶替。
+func (service *CatalogRegistration) RegisterConflictSignalRule(
+	ctx context.Context,
+	command RegisterConflictSignalRuleCommand,
+) (RegisterCatalogResult, error) {
+	switch {
+	case !present(command.TenantID.String()):
+		return refused(CatalogScopeMissing), nil
+	case !present(command.ApprovedBy):
+		return refused(CatalogApprovalMissing), nil
+	case !present(command.Kind.String()),
+		!present(command.Rule.String()),
+		!present(command.Confidence.String()):
+		return refused(CatalogEntryIncomplete), nil
+	}
+
+	outcome, err := service.registry.RegisterConflictSignalRule(ctx, command.TenantID,
+		ports.ConflictSignalRuleRegistration{
+			Kind:       command.Kind,
+			Rule:       command.Rule,
+			Confidence: command.Confidence,
+			ApprovedBy: command.ApprovedBy,
+		})
+	if err != nil {
+		return RegisterCatalogResult{}, fmt.Errorf("register conflict signal rule: %w", err)
+	}
+	return translateRegistryOutcome(outcome)
+}
+
 // translateRegistryOutcome 把写入口的三格译成用例结果。写入口交回一个它自己都不认识
 // 的格是实现坏了，不是业务答案——交回错误，不吸收成某一格。
 func translateRegistryOutcome(outcome ports.CatalogRegistrationOutcome) (RegisterCatalogResult, error) {
@@ -451,6 +534,30 @@ func disclosureEntryComplete(entry ports.DisclosurePolicyEntry) bool {
 
 func disclosureEntryKey(entry ports.DisclosurePolicyEntry) string {
 	return entry.Customer.String()
+}
+
+// exceptionDisclosureEntryComplete 除键三件必备外还核 0023 的两条成对纪律：内容随披露
+// （披露必带内容快照、不披露必不带），自动发布不越过披露（不披露就谈不上自动发）。在
+// 这里拒而不是交给库上的 CHECK：撞 CHECK 的 INSERT 会把整个事务打进中止态（ADR-0031
+// 不捕 23505 的同一条理由），而且登记方拿到的是依赖故障而不是指名的拒绝——恢复动作从
+// 「改内容」变成了「重试」，重试多少次都不会好。
+func exceptionDisclosureEntryComplete(entry ports.ExceptionDisclosureRuleEntry) bool {
+	if !present(entry.Customer.String()) ||
+		!present(entry.Kind.String()) ||
+		!present(entry.Confidence.String()) {
+		return false
+	}
+	if entry.Disclosable != present(entry.Content.String()) {
+		return false
+	}
+	return entry.Disclosable || !entry.AutoRelease
+}
+
+// exceptionDisclosureEntryKey 与 0023 主键同维（客户+信号类型+可信度）：披露决定按这三维
+// 查规则，同一版里同一键只能有一条；键含可信度，因为同一类信号在不同可信度下披露与否
+// 本就可以不同。
+func exceptionDisclosureEntryKey(entry ports.ExceptionDisclosureRuleEntry) string {
+	return entry.Customer.String() + "\x00" + entry.Kind.String() + "\x00" + entry.Confidence.String()
 }
 
 // dimensionPresent 只核这一维在不在。展示必带内容、待确认与不展示必不带那条不变量由

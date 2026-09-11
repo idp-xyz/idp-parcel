@@ -20,13 +20,15 @@ type recordingRegistry struct {
 	outcome ports.CatalogRegistrationOutcome
 	err     error
 
-	calls    int
-	mapping  ports.MilestoneMappingRegistration
-	triage   ports.TriageRuleRegistration
-	notify   ports.NotificationPolicyRegistration
-	claim    ports.ClaimEligibilityRegistration
-	authz    ports.ClaimAuthorizationRegistration
-	disclose ports.DisclosurePolicyRegistration
+	calls           int
+	mapping         ports.MilestoneMappingRegistration
+	triage          ports.TriageRuleRegistration
+	notify          ports.NotificationPolicyRegistration
+	claim           ports.ClaimEligibilityRegistration
+	authz           ports.ClaimAuthorizationRegistration
+	disclose        ports.DisclosurePolicyRegistration
+	disclosureRules ports.ExceptionDisclosureRuleRegistration
+	conflictSignal  ports.ConflictSignalRuleRegistration
 }
 
 func newRecordingRegistry() *recordingRegistry {
@@ -83,7 +85,21 @@ func (registry *recordingRegistry) RegisterDisclosurePolicy(
 	return registry.answer()
 }
 
-func newRegistration(t *testing.T, registry ports.CatalogRegistry) *application.CatalogRegistration {
+func (registry *recordingRegistry) RegisterExceptionDisclosureRules(
+	_ context.Context, _ domain.TenantID, registration ports.ExceptionDisclosureRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	registry.disclosureRules = registration
+	return registry.answer()
+}
+
+func (registry *recordingRegistry) RegisterConflictSignalRule(
+	_ context.Context, _ domain.TenantID, registration ports.ConflictSignalRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	registry.conflictSignal = registration
+	return registry.answer()
+}
+
+func newRegistration(t *testing.T, registry application.CatalogRegistry) *application.CatalogRegistration {
 	t.Helper()
 	service, err := application.NewCatalogRegistration(registry)
 	if err != nil {
@@ -506,5 +522,236 @@ func TestDisclosureRegistrationRequiresAllFourDimensions(t *testing.T) {
 	content, shownOK := registry.disclose.Entries[0].Milestones.Content()
 	if !shownOK || content.String() != "content/milestones" {
 		t.Fatalf("展示维的内容来处没有原样到达写入口，实得 %+v", registry.disclose.Entries[0])
+	}
+}
+
+func exceptionDisclosureRuleCommand(t *testing.T) application.RegisterExceptionDisclosureRulesCommand {
+	t.Helper()
+	return application.RegisterExceptionDisclosureRulesCommand{
+		TenantID: registerTenant(t),
+		Header: ports.CatalogVersionHeader{
+			Version:       "SYN-EDR-V1",
+			ApprovedBy:    "SYN-approver-1",
+			EffectiveFrom: registerBaseAt,
+		},
+		Entries: []ports.ExceptionDisclosureRuleEntry{{
+			Customer:    catalogScalar(t, domain.NewCustomerAccountReference, "SYN-CUSTOMER-1"),
+			Kind:        catalogScalar(t, domain.NewExceptionSignalKindReference, "SYN-SIGNAL-STALL"),
+			Confidence:  catalogScalar(t, domain.NewConfidenceReference, "SYN-CONF-HIGH"),
+			Disclosable: true,
+			AutoRelease: true,
+			Content:     catalogScalar(t, domain.NewDisclosureContentReference, "SYN-CONTENT-STALL"),
+		}},
+	}
+}
+
+// Covers: 票 ve-disclosure-policy-view/02 步一——异常披露规则（0023）并回 CatalogRegistration。
+// 正路走得通且条目三格（披露与否、能否自动发布、内容来处）原样到达写入口：登记口不替换、
+// 不补齐、不丢弃任何一维。
+func TestExceptionDisclosureRuleRegistrationReachesTheRegistryVerbatim(t *testing.T) {
+	registry := newRecordingRegistry()
+	service := newRegistration(t, registry)
+
+	result, err := service.RegisterExceptionDisclosureRules(t.Context(), exceptionDisclosureRuleCommand(t))
+	if err != nil {
+		t.Fatalf("登记异常披露规则：%v", err)
+	}
+	if result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("正路应答已登记，实得 %s / %s", result.Outcome(), result.RefusalReason())
+	}
+	if registry.calls != 1 {
+		t.Fatalf("写入口应被调用一次，实得 %d", registry.calls)
+	}
+	if registry.disclosureRules.Header.Version != "SYN-EDR-V1" ||
+		registry.disclosureRules.Header.ApprovedBy != "SYN-approver-1" ||
+		registry.disclosureRules.Header.HasEffectiveTo {
+		t.Fatalf("抬头没有原样到达写入口，实得 %+v", registry.disclosureRules.Header)
+	}
+	if len(registry.disclosureRules.Entries) != 1 {
+		t.Fatalf("条目数 = %d，要 1", len(registry.disclosureRules.Entries))
+	}
+	entry := registry.disclosureRules.Entries[0]
+	if !entry.Disclosable || !entry.AutoRelease || entry.Content.String() != "SYN-CONTENT-STALL" {
+		t.Fatalf("条目三格没有原样到达写入口，实得 %+v", entry)
+	}
+}
+
+// Covers: 0023 的两条成对纪律在用例门就拒——内容随披露（披露必带、不披露必不带）、自动发布
+// 不越过披露。不在这里拒而交给库上的 CHECK，撞约束的 INSERT 会把整个事务打进中止态
+// （ADR-0031 不捕 23505 的同一条理由），而且登记方拿到的是一条依赖故障而不是指名的拒绝，
+// 恢复动作就错了（重试 vs 改内容）。抬头缺件走与其余区间型目录同一套判据，只钉一格。
+func TestIncompleteExceptionDisclosureRuleRegistrationIsRefusedByNamedGap(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*application.RegisterExceptionDisclosureRulesCommand)
+		reason application.CatalogRefusalReason
+	}{
+		{"缺版本号", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Header.Version = " "
+		}, application.CatalogVersionMissing},
+		{"一条条目都没有", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries = nil
+		}, application.CatalogEntriesMissing},
+		{"条目缺客户账户", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Customer = domain.CustomerAccountReference{}
+		}, application.CatalogEntryIncomplete},
+		{"条目缺信号类型", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Kind = domain.ExceptionSignalKindReference{}
+		}, application.CatalogEntryIncomplete},
+		{"条目缺可信度", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Confidence = domain.ConfidenceReference{}
+		}, application.CatalogEntryIncomplete},
+		{"声明披露却缺内容来处", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Content = domain.DisclosureContentReference{}
+		}, application.CatalogEntryIncomplete},
+		{"声明不披露却带了内容", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Disclosable = false
+			command.Entries[0].AutoRelease = false
+		}, application.CatalogEntryIncomplete},
+		{"不披露却声明自动发布", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			command.Entries[0].Disclosable = false
+			command.Entries[0].Content = domain.DisclosureContentReference{}
+			command.Entries[0].AutoRelease = true
+		}, application.CatalogEntryIncomplete},
+		{"同版内两条落在同一（客户+类型+可信度）键上", func(command *application.RegisterExceptionDisclosureRulesCommand) {
+			duplicate := command.Entries[0]
+			duplicate.AutoRelease = false
+			command.Entries = append(command.Entries, duplicate)
+		}, application.CatalogEntryDuplicated},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := newRecordingRegistry()
+			service := newRegistration(t, registry)
+			command := exceptionDisclosureRuleCommand(t)
+			testCase.mutate(&command)
+
+			result, err := service.RegisterExceptionDisclosureRules(t.Context(), command)
+			if err != nil {
+				t.Fatalf("缺件是业务答复不是错误，实得：%v", err)
+			}
+			if result.Outcome() != application.CatalogRegistrationRefused {
+				t.Fatalf("「%s」应被拒，实得 %s", testCase.name, result.Outcome())
+			}
+			if result.RefusalReason() != testCase.reason {
+				t.Fatalf("「%s」应指名 %s，实得 %s",
+					testCase.name, testCase.reason, result.RefusalReason())
+			}
+			if registry.calls != 0 {
+				t.Fatal("缺件的登记不该到达写入口")
+			}
+		})
+	}
+
+	// 键含可信度：同一（客户+类型）在两个可信度下各一条是 0023 主键允许的正当形状，
+	// 不是撞键——把它拒了等于宣布同一类信号不分可信度一律同一披露决定。
+	registry := newRecordingRegistry()
+	service := newRegistration(t, registry)
+	command := exceptionDisclosureRuleCommand(t)
+	command.Entries = append(command.Entries, ports.ExceptionDisclosureRuleEntry{
+		Customer:    command.Entries[0].Customer,
+		Kind:        command.Entries[0].Kind,
+		Confidence:  catalogScalar(t, domain.NewConfidenceReference, "SYN-CONF-LOW"),
+		Disclosable: false,
+	})
+	result, err := service.RegisterExceptionDisclosureRules(t.Context(), command)
+	if err != nil {
+		t.Fatalf("登记两可信度条目：%v", err)
+	}
+	if result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("同客户同类型不同可信度应登记成功，实得 %s / %s", result.Outcome(), result.RefusalReason())
+	}
+}
+
+func conflictSignalRuleCommand(t *testing.T) application.RegisterConflictSignalRuleCommand {
+	t.Helper()
+	return application.RegisterConflictSignalRuleCommand{
+		TenantID:   registerTenant(t),
+		Kind:       catalogScalar(t, domain.NewExceptionSignalKindReference, "SYN-SIGNAL-FACT-CONFLICT"),
+		Rule:       catalogScalar(t, domain.NewSignalRuleVersionReference, "SYN-RULE-V1"),
+		Confidence: catalogScalar(t, domain.NewConfidenceReference, "SYN-CONF-MEDIUM"),
+		ApprovedBy: "SYN-approver-1",
+	}
+}
+
+// Covers: 票 ve-disclosure-policy-view/02 步一——冲突信号规则（0025）并回 CatalogRegistration，
+// 形照 RegisterNotificationPolicy：没有版本抬头（一租户一条），缺租户是缺管辖、缺批准责任
+// 是缺审批，三件规则内容（类型、识别规则版本、可信度依据）任缺一件都是条目缺维——「每个信号
+// 必须保存对象、类型、规则版本、判断时间、事实依据、可信度」（CONTEXT），编排一样都不补，
+// 所以登记口也一样都不放。
+func TestConflictSignalRuleRegistrationRequiresKindRuleConfidenceAndApproval(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*application.RegisterConflictSignalRuleCommand)
+		reason application.CatalogRefusalReason
+	}{
+		{"缺租户", func(command *application.RegisterConflictSignalRuleCommand) {
+			command.TenantID = domain.TenantID{}
+		}, application.CatalogScopeMissing},
+		{"缺发布批准责任", func(command *application.RegisterConflictSignalRuleCommand) {
+			command.ApprovedBy = "  "
+		}, application.CatalogApprovalMissing},
+		{"缺信号类型", func(command *application.RegisterConflictSignalRuleCommand) {
+			command.Kind = domain.ExceptionSignalKindReference{}
+		}, application.CatalogEntryIncomplete},
+		{"缺识别规则版本", func(command *application.RegisterConflictSignalRuleCommand) {
+			command.Rule = domain.SignalRuleVersionReference{}
+		}, application.CatalogEntryIncomplete},
+		{"缺可信度依据", func(command *application.RegisterConflictSignalRuleCommand) {
+			command.Confidence = domain.ConfidenceReference{}
+		}, application.CatalogEntryIncomplete},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := newRecordingRegistry()
+			service := newRegistration(t, registry)
+			command := conflictSignalRuleCommand(t)
+			testCase.mutate(&command)
+
+			result, err := service.RegisterConflictSignalRule(t.Context(), command)
+			if err != nil {
+				t.Fatalf("缺件是业务答复不是错误，实得：%v", err)
+			}
+			if result.RefusalReason() != testCase.reason {
+				t.Fatalf("「%s」应指名 %s，实得 %s",
+					testCase.name, testCase.reason, result.RefusalReason())
+			}
+			if registry.calls != 0 {
+				t.Fatal("缺件的登记不该到达写入口")
+			}
+		})
+	}
+
+	registry := newRecordingRegistry()
+	service := newRegistration(t, registry)
+	result, err := service.RegisterConflictSignalRule(t.Context(), conflictSignalRuleCommand(t))
+	if err != nil {
+		t.Fatalf("登记冲突信号规则：%v", err)
+	}
+	if result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("正路应答已登记，实得 %s / %s", result.Outcome(), result.RefusalReason())
+	}
+	if registry.conflictSignal.Kind.String() != "SYN-SIGNAL-FACT-CONFLICT" ||
+		registry.conflictSignal.Rule.String() != "SYN-RULE-V1" ||
+		registry.conflictSignal.Confidence.String() != "SYN-CONF-MEDIUM" ||
+		registry.conflictSignal.ApprovedBy != "SYN-approver-1" {
+		t.Fatalf("规则三件与批准责任没有原样到达写入口，实得 %+v", registry.conflictSignal)
+	}
+}
+
+// Covers: 0025 头注「一租户一条、不可覆盖」——写入口撞既有行答 AlreadyRegistered，用例照
+// 目录册既有代数译成版本不可覆盖：换规则版本是一次治理动作，登记口不替它静默换掉一条
+// 已据以形成过信号的规则；答案不是失败，原行未被顶替。
+func TestConflictSignalRuleAlreadyRegisteredTranslatesToNotOverwritable(t *testing.T) {
+	registry := newRecordingRegistry()
+	registry.outcome = ports.CatalogVersionAlreadyRegistered
+	service := newRegistration(t, registry)
+
+	result, err := service.RegisterConflictSignalRule(t.Context(), conflictSignalRuleCommand(t))
+	if err != nil {
+		t.Fatalf("写入口的业务答复不该变成错误，实得：%v", err)
+	}
+	if result.Outcome() != application.CatalogRegistrationRefused ||
+		result.RefusalReason() != application.CatalogVersionNotOverwritable {
+		t.Fatalf("撞既有行应答 REFUSED / VERSION_NOT_OVERWRITABLE，实得 %s / %s",
+			result.Outcome(), result.RefusalReason())
 	}
 }
