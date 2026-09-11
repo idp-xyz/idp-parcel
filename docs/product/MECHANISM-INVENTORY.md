@@ -17,14 +17,14 @@
 | partycommercial | 123 | 138 | 9 | 33 | 1 | 27 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 17 | 16 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 96 | 76 | 14 | 43 | 9 | 7 |
+| settlementaccounting | 98 | 78 | 14 | 43 | 9 | 7 |
 | transportfulfillment | 140 | 128 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 962 | 916 | 121 | 263 | 57 | 130 |
+| **合计** | 964 | 918 | 121 | 263 | 57 | 130 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 61、测试 85。
 
-## 跨上下文消费缝：24 组，71 个生产文件
+## 跨上下文消费缝：24 组，72 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -41,7 +41,7 @@
 | parcelshipment | settlementaccounting | 2 |
 | parcelshipment | transportfulfillment | 5 |
 | settlementaccounting | customscompliance | 2 |
-| settlementaccounting | parcelpricing | 1 |
+| settlementaccounting | parcelpricing | 2 |
 | settlementaccounting | partycommercial | 3 |
 | transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
@@ -69,7 +69,7 @@
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 122 个，消费适配器 31 个生产文件，直投路由表 22 条
+## 接线面：接入面端点 122 个，消费适配器 32 个生产文件，直投路由表 23 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -95,9 +95,9 @@
 | customscompliance | 1 | 0 | 0 | 0 | 1 |
 | networkrouting | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 11 | 1 | 1 | 0 | 13 |
-| settlementaccounting | 1 | 0 | 0 | 0 | 1 |
+| settlementaccounting | 2 | 0 | 0 | 0 | 2 |
 | visibilityexception | 12 | 0 | 0 | 2 | 14 |
-| **合计** | 27 | 1 | 1 | 2 | 31 |
+| **合计** | 28 | 1 | 1 | 2 | 32 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -106,9 +106,9 @@
 | customscompliance | 1 |
 | networkrouting | 2 |
 | parcelshipment | 10 |
-| settlementaccounting | 1 |
+| settlementaccounting | 2 |
 | visibilityexception | 8 |
-| **合计** | 22 |
+| **合计** | 23 |
 
 ## 端口：声明 402 个；基线口径缺 13，精确口径缺 6
 
