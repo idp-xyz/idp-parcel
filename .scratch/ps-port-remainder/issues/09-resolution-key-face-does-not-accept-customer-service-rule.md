@@ -1,7 +1,7 @@
 # `parcel-shipment` 解析键登记面不收 `CUSTOMER_SERVICE_RULE`：0007 / 0008 的必需依据白名单与 `commercialKindFrom` 名集各少一格——ADR-0136 让索赔资格规则按接受时闭包选用，这条缝今天在生产上到不了「已登记」
 
 Category: bug
-Status: ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
+Status: in-progress——2026-09-11 23:5x 通道 3 认领（task-1c76951b；分支 `mcp3-psr09` 基远端 main `1b06bb18`，树 `D:/tops/idp-parcel-mcp3-psr09`；迁移序号钉 0022）。此前 ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
 Blocked by: 无（硬）。~~软阻：ve-claims/04 正在动手~~ **ve-claims/04 已 23:5x 进 main（通道 1 推送方记），软阻解除，可派**；它那条「已登记」态装配用例的负断言由本票做法 4 翻回真走 PS 登记面
 
 ## 缺口（取证于 `262e8c0a`，逐符号名）
