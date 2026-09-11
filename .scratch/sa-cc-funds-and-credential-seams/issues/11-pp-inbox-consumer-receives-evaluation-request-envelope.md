@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: draft——2026-09-10 17:5x 通道 5 立票（task-a93cb825；票 [08](08-sa-evaluation-request-orchestration-records-source-references.md)「要裁的」1 裁「走信封」时，因 PP 无 inbox 消费者先例而点名另立），只写票面未动代码；取证锚 `66cad4c4`。要裁的一条，归 PP owner
-Blocked by: [08](08-sa-evaluation-request-orchestration-records-source-references.md) 的登记册与发信封半边（没有那封信封，消费者无物可收）；本票落地后 08 的完成判据 4 与 [01](01-buy-evaluation-to-sa-inbox-consumer.md) 的「形成」路才走得通
+Blocked by: [08](08-sa-evaluation-request-orchestration-records-source-references.md) 的登记册与发信封半边（没有那封信封，消费者无物可收）——**08 已进 main（2026-09-11 16:3x，main 上代码 `c9aae85f` / `8d75bfc7`），信封 `settlement-accounting.evaluation-request.submitted` 载荷 `{tenantId, evaluationRequestId}`、分区主体 租户 / 评价请求、SA 读口 `EvaluationRequests`（按铸造 ID 取）在，硬阻已解；本票仍 draft，开工前要 PP owner 裁「要裁的」那一条入口形状（2026-09-11 通道 1 推送方记）**；本票落地后 08 的完成判据 4 与 [01](01-buy-evaluation-to-sa-inbox-consumer.md) 的「形成」路才走得通
 
 ## 缺口（取证于 `66cad4c4`）
 
