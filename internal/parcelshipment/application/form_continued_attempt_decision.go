@@ -107,7 +107,8 @@ const (
 	ContinuedAttemptRefusalNone ContinuedAttemptRefusal = iota
 	// ContinuedAttemptDecisionInvalid：领域构造门拒了（缺必备项、重开生效时间不晚于所解关闭……）。
 	ContinuedAttemptDecisionInvalid
-	// ContinuedAttemptResponsibilitySourceUnknown：关闭责任来源的种类不在封闭集内，或主体为空。
+	// ContinuedAttemptResponsibilitySourceUnknown：关闭责任来源的种类不在封闭集内，或主体为空；重开时原关闭的种类段
+	// 读不出也落这一格（裁决 ②：认不出不放行、不默认「其他」）。
 	ContinuedAttemptResponsibilitySourceUnknown
 	// ContinuedAttemptShipperReauthorizationMissing：原关闭因货主指令形成，重开命令没带该货主账户新的有效授权证据
 	// （CONTEXT「因货主指令形成的关闭，重开还必须有同一货主账户新的有效授权」）。
@@ -371,9 +372,14 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 	})
 }
 
-// shipperReauthorizationGate 只在原关闭因货主指令形成时开口。原关闭不在册上时不在这里答——那是「指不到生效关闭」，
-// 归聚合的 Append，本层不抢答；同理原关闭的种类段认不出时也不拦：能读到的关闭都是本编排写的、带种类段，认不出说明
-// 有人绕过写面改了库，那要人去看，不是拿一次拒绝盖过去。
+// shipperReauthorizationGate 读原关闭的种类段，按它分三路：认不出 → 不放行；货主指令 → 核同一货主账户的新有效授权
+// 证据；运营企业操作 / 外部硬限制 → 两格不读、放行。原关闭不在册上时不在这里答——那是「指不到生效关闭」，归聚合的
+// Append，本层不抢答。
+//
+// 认不出为什么不放行（票 label-channel/30 裁决 ②「认不出种类段 → 不放行、不默认『其他』」）：认不出不等于「不是
+// 货主指令」。能读到的关闭都该是本编排写的、带种类段，读不出说明这一条不是经写面落的；若把它当非货主指令放过去，
+// CONTEXT「因货主指令形成的关闭，重开还必须有同一货主账户新的有效授权」就被一条坏数据绕开——这道门是为货主设的，
+// 默认放行等于替货主签了字。拒在签发标识之前，不消耗标识、不再问 PC、不写册。
 func (handler *FormContinuedAttemptDecisionHandler) shipperReauthorizationGate(
 	register domain.ContinuedAttemptRegister,
 	command FormReopeningCommand,
@@ -386,7 +392,14 @@ func (handler *FormContinuedAttemptDecisionHandler) shipperReauthorizationGate(
 			break
 		}
 	}
-	if !found || closureResponsibilitySourceKindOf(closure.ClosureResponsibilitySource()) != ShipperInstructionResponsibilitySource {
+	if !found {
+		return ContinuedAttemptDecisionResult{}
+	}
+	switch closureResponsibilitySourceKindOf(closure.ClosureResponsibilitySource()) {
+	case ClosureResponsibilitySourceKindInvalid:
+		return continuedAttemptNotAccepted(ContinuedAttemptResponsibilitySourceUnknown)
+	case ShipperInstructionResponsibilitySource:
+	default:
 		return ContinuedAttemptDecisionResult{}
 	}
 	if strings.TrimSpace(command.ShipperAuthorizationEvidence) == "" {

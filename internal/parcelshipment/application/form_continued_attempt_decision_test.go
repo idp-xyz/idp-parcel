@@ -589,6 +589,87 @@ func TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorizati
 	})
 }
 
+// seedClosureWithRawResponsibilitySource 绕过写面直接把一条关闭放进册。写面合成的责任来源一定带种类段，
+// 「原关闭的种类段读不出」这一格只能这样造——它模拟的正是那条不经写面落下的坏数据。
+func (fixture *continuedAttemptFixture) seedClosureWithRawResponsibilitySource(t *testing.T, source string) domain.ContinuedAttemptDecision {
+	t.Helper()
+	granted := grantedContinuedAttemptAuthority(t)
+	id := mustValue(t, domain.NewContinuedAttemptDecisionID, "SYN-CADN-SEEDED")
+	register, err := domain.RehydrateContinuedAttemptRegister(domain.RehydrateContinuedAttemptRegisterSpec{
+		Revision: 1,
+		Tenant:   fixture.identity.TenantID(),
+		Parcel:   fixture.parcel,
+		Decisions: []domain.ContinuedAttemptDecisionSpec{{
+			ID:                          id,
+			Kind:                        domain.ControlledClosureDecision,
+			Requester:                   mustValue(t, domain.NewRequesterReference, "SYN-SHIPPER-ACCOUNT-1"),
+			Decider:                     granted.Decider,
+			AuthorityRole:               granted.AuthorityRole,
+			AuthoritySnapshot:           granted.Authority,
+			Reason:                      mustValue(t, domain.NewContinuedAttemptReasonReference, "SYN-REASON-SHIPPER-STOP"),
+			EffectiveAt:                 continuedAttemptDecidedAt.Add(time.Hour),
+			CutoffBoundary:              mustValue(t, domain.NewAuthoritativeCutoffBoundary, id.String()),
+			ClosureResponsibilitySource: mustValue(t, domain.NewClosureResponsibilitySourceReference, source),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("造册：%v", err)
+	}
+	fixture.registers.stored[registerKey(fixture.identity.TenantID(), fixture.parcel)] = register
+	return register.Decisions()[0]
+}
+
+func TestReopeningAClosureWhoseResponsibilitySourceKindCannotBeReadIsNotAccepted(t *testing.T) {
+	// 裁决 ②：认不出种类段 → 不放行、不默认「其他」。认不出不等于「不是货主指令」——当非货主指令放过去，
+	// 「同一货主账户新的有效授权」那道门就被一条坏数据绕开了；命令带不带证据都一样，证据是货主指令那一格才读的。
+	for _, tc := range []struct {
+		name     string
+		source   string
+		evidence string
+	}{
+		{name: "无分隔符·命令带证据", source: "SYN-LEGACY-SOURCE", evidence: "SYN-SHIPPER-REAUTH-EVIDENCE-3"},
+		{name: "无分隔符·命令不带证据", source: "SYN-LEGACY-SOURCE", evidence: ""},
+		{name: "种类不在封闭集·命令带证据", source: "OTHER/SYN-SUBJECT-1", evidence: "SYN-SHIPPER-REAUTH-EVIDENCE-3"},
+		{name: "种类不在封闭集·命令不带证据", source: "OTHER/SYN-SUBJECT-1", evidence: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newContinuedAttemptFixture(t)
+			closure := fixture.seedClosureWithRawResponsibilitySource(t, tc.source)
+			command := fixture.reopeningCommand(t, closure.ID())
+			command.ShipperAuthorizationEvidence = tc.evidence
+
+			result, err := fixture.handler.FormReopening(t.Context(), command)
+			if err != nil {
+				t.Fatalf("形成重开：%v", err)
+			}
+			if result.Outcome() != application.ContinuedAttemptDecisionNotAccepted ||
+				result.Refusal() != application.ContinuedAttemptResponsibilitySourceUnknown {
+				t.Fatalf("outcome / refusal = %v / %v, want INPUT_NOT_ACCEPTED / RESPONSIBILITY_SOURCE_UNKNOWN",
+					result.Outcome(), result.Refusal())
+			}
+			if _, present := result.Decision(); present {
+				t.Fatal("没形成却交回了决定")
+			}
+			// 册是直接造进去的、没经写面：标识签发器、写口、交接都必须是零，册上仍只那一条。
+			if fixture.identities.next != 0 {
+				t.Fatalf("消耗了 %d 个决定标识, want 0", fixture.identities.next)
+			}
+			if fixture.registers.inserts != 0 || fixture.registers.saves != 0 || len(fixture.handoff.intents) != 0 {
+				t.Fatalf("不写册也不交接：inserts %d / saves %d / intents %d",
+					fixture.registers.inserts, fixture.registers.saves, len(fixture.handoff.intents))
+			}
+			if got := len(fixture.registers.decisions(fixture.identity.TenantID(), fixture.parcel)); got != 1 {
+				t.Fatalf("册上 %d 条决定, want 1", got)
+			}
+			// 授权口问过恰一次：共用路径上授权先于读册与这道门（`FormControlledClosure` 头注「授权先于一切写动作与标识签发」），
+			// 与证据缺席 / 账户不符两格同一顺序；这道门不再多问 PC。
+			if len(fixture.authorizer.queries) != 1 {
+				t.Fatalf("问授权 %d 次, want 1", len(fixture.authorizer.queries))
+			}
+		})
+	}
+}
+
 func TestReopeningWithoutARegisterOrAStandingClosureIsNotAdmitted(t *testing.T) {
 	t.Run("没开过册", func(t *testing.T) {
 		fixture := newContinuedAttemptFixture(t)
