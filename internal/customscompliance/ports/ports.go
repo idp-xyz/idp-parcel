@@ -982,13 +982,14 @@ type CredentialGateKey struct {
 
 // CredentialGateDigest 是一条凭证门禁判断的内容指纹：程序、持有人、截至时点、结论、依据引用、
 // 责任角色。判断时刻不进指纹——重放时时钟已经走了，而重放比的是内容不是时刻（判据同
-// sameCollaboration 不比形成时间）；身份三维在键上，也不进。
+// sameCollaboration 不比形成时间）；身份三维在键上，也不进。结论以封闭词形入指纹而不以枚举整数：
+// 整数是声明顺序的副产品，枚举中间插一格旧指纹会静默失配，词形是登记册与库列共用的稳定名。
 func CredentialGateDigest(judgment domain.CredentialGateJudgment) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		judgment.Procedure().String(),
 		judgment.Holder().String(),
 		judgment.AsOf().UTC().Format(time.RFC3339Nano),
-		strconv.Itoa(int(judgment.Conclusion())),
+		judgment.Conclusion().String(),
 		judgment.Basis().String(),
 		judgment.Role().String(),
 	}, "\x00")))
