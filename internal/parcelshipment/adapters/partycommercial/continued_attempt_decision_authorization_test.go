@@ -66,18 +66,50 @@ func continuedAttemptQuery(t *testing.T, kind psdomain.ContinuedAttemptDecisionK
 	}
 }
 
-func newContinuedAttemptAuthorizer(grants *grantStoreDouble, requests adapter.ContinuedAttemptDecisionAuthorizationRequestSource) *adapter.ContinuedAttemptDecisionAuthorizationAdapter {
-	return adapter.NewContinuedAttemptDecisionAuthorizationAdapter(
+func newContinuedAttemptAuthorizer(
+	t *testing.T,
+	grants *grantStoreDouble,
+	requests adapter.ContinuedAttemptDecisionAuthorizationRequestSource,
+) *adapter.ContinuedAttemptDecisionAuthorizationAdapter {
+	t.Helper()
+	authorizer, err := adapter.NewContinuedAttemptDecisionAuthorizationAdapter(
 		pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
 		requests,
 	)
+	if err != nil {
+		t.Fatalf("构造关闭 / 重开授权适配器：%v", err)
+	}
+	return authorizer
+}
+
+// Covers: 票 label-channel/36 条 5——两口一拒一不拒：裁定编排为 nil 是装配缺件，构造期就拒、不交出适配器；
+// 请求坐标映射为 nil 是有意的「显式未配置」，构造成功，询问到达时如实答未形成（那一格在
+// TestContinuedAttemptDecisionStopsBeforeTheProviderWhenCoordinatesCannotBeFormed「映射未配置」）。
+func TestTheAuthorizerRefusesANilAdjudicatorButAcceptsAnUnconfiguredRequestMapping(t *testing.T) {
+	authorizer, err := adapter.NewContinuedAttemptDecisionAuthorizationAdapter(
+		nil, &continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true})
+	if err == nil {
+		t.Fatal("裁定编排为 nil 仍构造出了适配器")
+	}
+	if authorizer != nil {
+		t.Fatal("拒了还交出适配器")
+	}
+
+	authorizer, err = adapter.NewContinuedAttemptDecisionAuthorizationAdapter(
+		pcapplication.NewAdjudicateCommercialAuthorizationHandler(&grantStoreDouble{}), nil)
+	if err != nil {
+		t.Fatalf("映射未配置被当成了装配缺件：%v", err)
+	}
+	if authorizer == nil {
+		t.Fatal("映射未配置却没交出适配器")
+	}
 }
 
 // Covers: 判据 3 的`已授权`格——命中该范围的关闭授权，三件从裁定取：授权依据快照是所采用 grant 的版本引用、授权角色
 // 是那条 grant 的权限等级、实际决定方是提出请求的运营角色（关闭是运营侧自己的决定，PC `resolveDecider` 不经委派）。
 // 三件都不是询问里的请求方（货主账户）。
 func TestAControlledClosureIsGrantedWithTheProvidersThreeItems(t *testing.T) {
-	authorizer := newContinuedAttemptAuthorizer(
+	authorizer := newContinuedAttemptAuthorizer(t,
 		&grantStoreDouble{grants: []pcdomain.AuthorityGrant{rejectionGrant(t, "auth-close", pcdomain.ControlledClosureAction)}},
 		&continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true},
 	)
@@ -115,7 +147,7 @@ func TestClosureAndReopeningAreTwoGrantsThatDoNotImplyEachOther(t *testing.T) {
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
-			authorizer := newContinuedAttemptAuthorizer(
+			authorizer := newContinuedAttemptAuthorizer(t,
 				&grantStoreDouble{grants: []pcdomain.AuthorityGrant{rejectionGrant(t, "auth-one", testCase.granted)}},
 				&continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true},
 			)
@@ -136,7 +168,7 @@ func TestClosureAndReopeningAreTwoGrantsThatDoNotImplyEachOther(t *testing.T) {
 
 // Covers: 重开走 REOPENING 那一格——授了重开权就答`已授权`，三件同样取自裁定。
 func TestAReopeningIsGrantedAgainstTheReopeningGrant(t *testing.T) {
-	authorizer := newContinuedAttemptAuthorizer(
+	authorizer := newContinuedAttemptAuthorizer(t,
 		&grantStoreDouble{grants: []pcdomain.AuthorityGrant{rejectionGrant(t, "auth-reopen", pcdomain.ReopeningAction)}},
 		&continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true},
 	)
@@ -152,7 +184,7 @@ func TestAReopeningIsGrantedAgainstTheReopeningGrant(t *testing.T) {
 
 // Covers: 该范围该时点一条规则都没有——答`授权规则未配置`（等租户登记 `PAR-COM-13`），不判越权、三件全空。
 func TestContinuedAttemptDecisionReportsRulesNotConfiguredWhenTheBookIsEmpty(t *testing.T) {
-	authorizer := newContinuedAttemptAuthorizer(
+	authorizer := newContinuedAttemptAuthorizer(t,
 		&grantStoreDouble{},
 		&continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true},
 	)
@@ -172,7 +204,7 @@ func TestContinuedAttemptDecisionReportsRulesNotConfiguredWhenTheBookIsEmpty(t *
 // Covers: 权威读不回上抛——error 格的恢复动作是重试，不得冒充`不允许`或`未配置`。
 func TestContinuedAttemptDecisionSurfacesAuthorityReadFailure(t *testing.T) {
 	unavailable := errors.New("权威不可读")
-	authorizer := newContinuedAttemptAuthorizer(
+	authorizer := newContinuedAttemptAuthorizer(t,
 		&grantStoreDouble{err: unavailable},
 		&continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true},
 	)
@@ -187,7 +219,7 @@ func TestContinuedAttemptDecisionSurfacesAuthorityReadFailure(t *testing.T) {
 func TestContinuedAttemptDecisionStopsBeforeTheProviderWhenCoordinatesCannotBeFormed(t *testing.T) {
 	t.Run("映射答折不出", func(t *testing.T) {
 		grants := &grantStoreDouble{err: errors.New("不该被问到")}
-		authorizer := newContinuedAttemptAuthorizer(grants, &continuedAttemptRequestSource{formed: false})
+		authorizer := newContinuedAttemptAuthorizer(t, grants, &continuedAttemptRequestSource{formed: false})
 
 		result, err := authorizer.AuthorizeContinuedAttemptDecision(t.Context(), continuedAttemptQuery(t, psdomain.ControlledClosureDecision))
 		if err == nil {
@@ -195,7 +227,7 @@ func TestContinuedAttemptDecisionStopsBeforeTheProviderWhenCoordinatesCannotBeFo
 		}
 	})
 	t.Run("映射出错", func(t *testing.T) {
-		authorizer := newContinuedAttemptAuthorizer(
+		authorizer := newContinuedAttemptAuthorizer(t,
 			&grantStoreDouble{err: errors.New("不该被问到")},
 			&continuedAttemptRequestSource{err: errors.New("mapping store down")},
 		)
@@ -204,7 +236,7 @@ func TestContinuedAttemptDecisionStopsBeforeTheProviderWhenCoordinatesCannotBeFo
 		}
 	})
 	t.Run("映射未配置", func(t *testing.T) {
-		authorizer := newContinuedAttemptAuthorizer(&grantStoreDouble{err: errors.New("不该被问到")}, nil)
+		authorizer := newContinuedAttemptAuthorizer(t, &grantStoreDouble{err: errors.New("不该被问到")}, nil)
 		if _, err := authorizer.AuthorizeContinuedAttemptDecision(t.Context(), continuedAttemptQuery(t, psdomain.ControlledClosureDecision)); err == nil {
 			t.Fatal("映射未配置时没有停下")
 		}
@@ -214,7 +246,7 @@ func TestContinuedAttemptDecisionStopsBeforeTheProviderWhenCoordinatesCannotBeFo
 // Covers: 认不出的决定种类是编程错误——error，且映射与提供方都不被问。
 func TestAnUnknownDecisionKindIsAnErrorBeforeAnyoneIsAsked(t *testing.T) {
 	requests := &continuedAttemptRequestSource{coordinates: continuedAttemptCoordinates(t), formed: true}
-	authorizer := newContinuedAttemptAuthorizer(&grantStoreDouble{err: errors.New("不该被问到")}, requests)
+	authorizer := newContinuedAttemptAuthorizer(t, &grantStoreDouble{err: errors.New("不该被问到")}, requests)
 
 	_, err := authorizer.AuthorizeContinuedAttemptDecision(t.Context(), continuedAttemptQuery(t, psdomain.ContinuedAttemptDecisionKindInvalid))
 	if err == nil {

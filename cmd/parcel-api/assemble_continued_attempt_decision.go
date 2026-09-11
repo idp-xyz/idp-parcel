@@ -138,10 +138,13 @@ func buildContinuedAttemptDecisionOrchestrationWith(db *bentopg.DB, seams contin
 
 	// 授权适配器接 PC 裁定编排的旧构造器即可：关闭与重开是运营侧自己的决定，决定方不经委派解出，委派读口在
 	// 这两格不会被问到（适配器构造器头注）。RequestSource 按缝：生产为 nil，见文件头注。
-	authorizer := psparty.NewContinuedAttemptDecisionAuthorizationAdapter(
+	authorizer, err := psparty.NewContinuedAttemptDecisionAuthorizationAdapter(
 		pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
 		seams.Requests,
 	)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: continued attempt decision authorizer: %w", err)
+	}
 
 	handler, err := shipmentapp.NewFormContinuedAttemptDecisionHandler(shipmentapp.FormContinuedAttemptDecisionDeps{
 		Authorizer: authorizer,

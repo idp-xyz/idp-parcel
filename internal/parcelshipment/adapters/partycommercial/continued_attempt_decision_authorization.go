@@ -46,11 +46,19 @@ type ContinuedAttemptDecisionAuthorizationAdapter struct {
 
 // NewContinuedAttemptDecisionAuthorizationAdapter 接的裁定编排用旧构造器即可：关闭与重开是运营侧凭授权规则自己作的
 // 决定，决定方不经委派解出（PC `resolveDecider`），委派读口在这两格不会被问到。
+//
+// 两口一拒一不拒（票 label-channel/36 条 5）：`adjudicate` 为 nil 是装配缺件——没有裁定编排这只适配器什么都答不了，
+// 拖到第一次询问才报只会把一处装配错报成一次业务失败，所以构造期就拒；`requests` 为 nil **不拒**，它是有意的
+// 「显式未配置」——请求坐标映射属实例半边（`PAR-COM-13` / `PAR-COM-14`），生产装配今天就是 nil，询问到达时由
+// AuthorizeContinuedAttemptDecision 如实答未形成，那一格是这只适配器的正当运行态而不是缺件。
 func NewContinuedAttemptDecisionAuthorizationAdapter(
 	adjudicate *pcapplication.AdjudicateCommercialAuthorizationHandler,
 	requests ContinuedAttemptDecisionAuthorizationRequestSource,
-) *ContinuedAttemptDecisionAuthorizationAdapter {
-	return &ContinuedAttemptDecisionAuthorizationAdapter{adjudicate: adjudicate, requests: requests}
+) (*ContinuedAttemptDecisionAuthorizationAdapter, error) {
+	if adjudicate == nil {
+		return nil, errors.New("continued attempt decision authorization adapter: adjudication handler is nil")
+	}
+	return &ContinuedAttemptDecisionAuthorizationAdapter{adjudicate: adjudicate, requests: requests}, nil
 }
 
 var _ psports.ContinuedAttemptDecisionAuthorizer = (*ContinuedAttemptDecisionAuthorizationAdapter)(nil)
@@ -68,9 +76,6 @@ func (adapter *ContinuedAttemptDecisionAuthorizationAdapter) AuthorizeContinuedA
 	if adapter.requests == nil {
 		return none, fmt.Errorf(
 			"authorize continued attempt decision: authorization request mapping is not configured")
-	}
-	if adapter.adjudicate == nil {
-		return none, fmt.Errorf("authorize continued attempt decision: adjudication handler is nil")
 	}
 	action, err := authorizedActionOf(query.Kind)
 	if err != nil {
@@ -117,6 +122,8 @@ func (adapter *ContinuedAttemptDecisionAuthorizationAdapter) AuthorizeContinuedA
 	}
 	// 授权角色取所采用 grant 的权限等级。PC 的 Authorization 只交回 grant 的版本引用不交回等级，而命中的 grant
 	// 与请求在等级上逐字相等（PC `permits` 的判据之一）——所以请求上的等级就是 grant 的等级，不是 PS 自报的一格。
+	// **这是暂行取法**（票 label-channel/30 裁决 ③）：它成立只因 PC 今天按等级逐字相等命中；PC 若改成「同级或更高」
+	// 命中，请求上的等级就不再等于 grant 的等级，届时要 PC 在 Authorization 上交回等级，本处随之改读那一格。
 	authorityRole, err := psdomain.NewContinuedAttemptAuthorityRoleReference(request.Level().String())
 	if err != nil {
 		return none, fmt.Errorf("%w: authority level: %v", ErrUntranslatableAnswer, err)
