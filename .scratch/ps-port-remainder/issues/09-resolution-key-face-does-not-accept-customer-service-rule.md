@@ -1,7 +1,7 @@
 # `parcel-shipment` 解析键登记面不收 `CUSTOMER_SERVICE_RULE`：0007 / 0008 的必需依据白名单与 `commercialKindFrom` 名集各少一格——ADR-0136 让索赔资格规则按接受时闭包选用，这条缝今天在生产上到不了「已登记」
 
 Category: bug
-Status: in-progress——2026-09-11 23:5x 通道 3 认领（task-1c76951b；分支 `mcp3-psr09` 基远端 main `1b06bb18`，树 `D:/tops/idp-parcel-mcp3-psr09`；迁移序号钉 0022）。此前 ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
+Status: resolved——2026-09-12 00:1x 通道 3 作者完工（task-1c76951b；分支 `mcp3-psr09` 基远端 main `1b06bb18`，认领 `7348bce6`，代码 + 本完成记录同笔，SHA 见完工报）：迁移 0022 重加白名单收 `CUSTOMER_SERVICE_RULE`、`commercialKindFrom` 加一格、真库两例、ve-claims/04 绊线翻回两态皆经 PS 登记面；带 DSN 六包全 ok，0007 / 0008 零 diff；「必登」未动（归 PS owner，看法见完成记录）。等非作者评审 → 推送方重放进 main。此前 in-progress——2026-09-11 23:5x 通道 3 认领（树 `D:/tops/idp-parcel-mcp3-psr09`；迁移序号钉 0022）。此前 ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
 Blocked by: 无（硬）。~~软阻：ve-claims/04 正在动手~~ **ve-claims/04 已 23:5x 进 main（通道 1 推送方记），软阻解除，可派**；它那条「已登记」态装配用例的负断言由本票做法 4 翻回真走 PS 登记面
 
 ## 缺口（取证于 `262e8c0a`，逐符号名）
@@ -47,6 +47,30 @@ Blocked by: 无（硬）。~~软阻：ve-claims/04 正在动手~~ **ve-claims/04
 
 ADR-0136 决定三 / 越权风险点 2；[ve-claims/04](../../ve-claims-read-seams/issues/04-rule-resolution-key-source-needs-a-registration-face.md)「裁决」与 23:3x 中途裁；[07](07-commercial-resolution-reference-by-parcel-read-face.md)（同族：PS 为 VE / TF 开的回指读口）；[syn-wall-door-audit 03](../../syn-wall-door-audit/issues/03-network-definition-register-no-writer-no-resolver.md) 件 2（`commercial_resolution_key` 登记面经 `parcel-commercial` CLI）；`internal/platform/migrate`（已施加迁移 checksum 纪律）。
 
+## 完成记录
+
+（通道 3 · task-1c76951b · 2026-09-11 23:5x–2026-09-12 00:1x · 树 `D:/tops/idp-parcel-mcp3-psr09`，分支 `mcp3-psr09` 基远端 main `1b06bb18`，未 rebase。）
+
+**逐笔**：认领 `7348bce6`（Status → in-progress）；代码 + 本完成记录同一笔（SHA 见完工报）。
+
+**动过的文件**：新增 `migrations/parcel_shipment/0022_resolution_key_bases_accept_customer_service_rule.sql`（照 0008 改 0007 的形 DROP + ADD `commercial_resolution_key_registration_bases_closed`，白名单加 `CUSTOMER_SERVICE_RULE` 一格；头注引 ADR-0136 决定三原句「客户合同版本与客户服务规则版本都必须在接受时闭包的必需依据里」，单行逐字；`migrations/migrations.go` 按目录 `embed` 收，不动）；`internal/parcelshipment/adapters/partycommercial/commercial_resolution_keys.go` `commercialKindFrom` 名集加 `CustomerServiceRuleObject` 一格 + 头注（同文件无反向译回表——`Register` 用 `kind.String()` 写行，PC 的 `String()` 就是反向）；新增 `internal/parcelshipment/adapters/postgres/commercial_resolution_key_store_test.go`（真库一例：登含 `CUSTOMER_CONTRACT` + `CUSTOMER_SERVICE_RULE` 的行、读回 `required_bases` 逐字同、其余维照登记值、结算 / 信用维空）；`commercial_resolution_keys_test.go` 加一例（`FormResolutionKey` 对该行形成的键 `RequiredBases` 含 `CustomerServiceRuleObject` 与 `CustomerContractObject`，最小身份成立，结算 / 信用选择器空）；`cmd/parcel-api/assemble_claims_test.go` 只动 `TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment` 一条（做法 4，占号后动）。**第三道闸不存在**：`cmd/parcel-commercial/translate.go` 的同名 `commercialKindFrom` 早已含 `CustomerServiceRuleObject`，`registrationjson` 一族无封闭提示词，CLI 侧零改。
+
+**判据逐项**：
+1. ✓ `git grep -n CUSTOMER_SERVICE_RULE -- migrations/parcel_shipment` 只命中 0022；`git diff 1b06bb18 -- 0007 0008` 零。
+2. ✓ `commercialKindFrom("CUSTOMER_SERVICE_RULE")` → `CustomerServiceRuleObject`（经 `FormResolutionKey` 用例证）；未知名仍 error，既有用例（含 `PRICE_RULE` 拒、集外拒）一字未动、全 ok。
+3. ✓ 真库两例带 DSN PASS、无 DSN SKIP（`pgtest.Pool` 跳过）。
+4. ✓ `gofmt -l` 空；`go build ./...` / `go vet` 退 0；带 DSN `go test -p 1 -count=1`：`internal/platform/migrate`（0022 随全套迁移重跑）、PS `adapters/postgres`、PS `adapters/partycommercial`、`cmd/parcel-commercial`、`cmd/parcel-api`、`internal/architecture/...` 全 ok（00:07，55432 占 / 释已报通道 1）。机制清点由推送方在干净检出重生成（迁移 +1），本记录不预报数字。
+5. ✓ 本记录随代码同笔；ve-claims/04「裁决」末条的后继句归推送方进 main 时改口。
+
+**做法 4 · 翻 ve-claims/04 的绊线**：负断言「含 `CUSTOMER_SERVICE_RULE` 的一行登不进去」删；「键直给 PC 真解析器」那段删。解析键登记面按（租户，客户账户）一行，两种登记行因此要两个货主客户账户：委托二 / 索赔二改属 `SYN-CUSTOMER-2`（`secondSubmissionCommand` 换客户），客户一登含客户合同 + 客户服务规则的行、客户二只含客户合同；两态都经 `FormResolutionKey` 成键 → PC 真 `ResolveCommercialBasisHandler` 解出并固定闭包 → PS 真 `ShipmentRequests` Decide → Save。用例头注「PS 登记面收下客户服务规则那天…」改口为两态皆经登记面、点名 0022 与 `commercialKindFrom` 各加一格并引本票路径。VE 两本册按（租户，合同）作答，两个客户共用同一合同声明，无需加登。`cmd/parcel-api/assemble_claims.go` 零改。
+
+**「必登」的看法**（票面「要裁的」1，归 PS owner，本票未动）：倾向 (a) 不必登。理由：PC CONTEXT 说合同版本恒在，才有 ADR-0133 / 0136 对「闭包未采用客户合同 → error」的判法；客户服务规则是 ADR-0104 决定三「对首发两项都无客户差异就是不登记」的那一类——一个租户可以合法地没有任何客户服务规则版本，登记面若强制必登，接受流会在这类租户身上整行拒登，把「没有差异规则」变成「接受不了委托」；VE 侧对「未采用 → 未登记」已有诚实的停格（ve-claims/04 态一）。反方 (b) 的收益是索赔两维在接受时就有答案，但那要先有「每个租户都必须发布一版客户服务规则」这句商业语言，今天没有。
+
+**判断项**：
+1. 两个客户账户共用同一份 VE 索赔资格声明（`RegisterClaimEligibility` 按合同一行）：这是 VE 册的既有键形，本用例只是用到它；若评审认为两客户应各登一份更贴近生产，加一行即可，断言不变。
+2. `commercialKindFrom` 头注提到「迁移 0022 同笔」——是本票内的同笔事实，不是跨文件计数；日后若再加格，头注的 ADR 指向仍成立。
+
 ## Comments
 
 - 2026-09-11 23:3x · 通道 1 推送方：立票并直接 ready。**只写票面，未动代码。** 能力边界：两道闸由通道 3 在 ve-claims/04 中途实测、通道 1 只复核了两处 `git grep`；`parcel-commercial` CLI 那一侧有没有第三道闸（封闭提示词集）没查，写进做法 3 由实施者量。
+- 2026-09-12 00:1x · 通道 3（task-1c76951b）：作者完工。迁移 0022 + `commercialKindFrom` 一格 + 真库两例 + ve-claims/04 绊线翻回（两态皆经 PS 登记面，委托二换客户二）；CLI 侧无第三道闸（`translate.go` 同名函数早已含该类）。带 DSN 六包全 ok，0007 / 0008 零 diff。「必登」倾向 (a) 不必登，理由见完成记录。分支已推 origin；等非作者评审后重放。

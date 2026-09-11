@@ -186,6 +186,38 @@ func TestARegisteredKeyFormsACompleteResolutionKey(t *testing.T) {
 	}
 }
 
+// Covers: 票 ps-port-remainder/09 完成判据 3 后半 / ADR-0136 决定三——登记面收下含 CUSTOMER_SERVICE_RULE 的
+// 必需依据（库内白名单由迁移 0022 放行），FormResolutionKey 把它译回 CustomerServiceRuleObject 落进键的
+// RequiredBases；没有随它同进同出的选择维度，键上别的维一如客户合同那一格。索赔资格两维要按接受时闭包
+// 采用的客户服务规则版本选用，这一格进不了键，接受时闭包就永远没有那一成员。
+func TestARegisteredCustomerServiceRuleBasisFormsAKeyRequiringIt(t *testing.T) {
+	keys, transactor := newResolutionKeys(t)
+	registration := keyRegistration(t, "tenant-1", "customer-1", "scope-1")
+	registration.RequiredBases = []pcdomain.CommercialObjectKind{
+		pcdomain.CustomerContractObject,
+		pcdomain.CustomerServiceRuleObject,
+	}
+	mustRegisterKey(t, transactor, keys, registration, adapter.ResolutionKeySaved)
+
+	key, formed, err := keys.FormResolutionKey(t.Context(), basisQuery(t, "tenant-1", "customer-1"))
+	if err != nil {
+		t.Fatalf("FormResolutionKey：%v", err)
+	}
+	if !formed {
+		t.Fatal("登记过含客户服务规则的键没形成")
+	}
+	if !key.MinimumIdentityEstablished() {
+		t.Fatal("形成的键最小身份不成立")
+	}
+	if !slices.Contains(key.RequiredBases, pcdomain.CustomerServiceRuleObject) ||
+		!slices.Contains(key.RequiredBases, pcdomain.CustomerContractObject) {
+		t.Fatalf("必需依据 = %v, want 含客户服务规则与客户合同两类", key.RequiredBases)
+	}
+	if !key.Settlement.Empty() || !key.Credit.Empty() {
+		t.Fatalf("客户服务规则不带选择维度，结算 / 信用选择器却非空：%+v %+v", key.Settlement, key.Credit)
+	}
+}
+
 // Covers: ADR-0080 —— 登记面放行 SETTLEMENT_POLICY，携三维不携合同维；折出的键最小身份
 // 成立，合同维留空等闭包解出的合同来填。
 //

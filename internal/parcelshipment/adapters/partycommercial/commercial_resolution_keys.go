@@ -348,6 +348,9 @@ func creditSelectorFromRow(row ResolutionKeyRow) (pcdomain.CreditSelector, error
 	return selector, nil
 }
 
+// commercialKindFrom 把登记行上的名字译回 party-commercial 的类别。名集与库内 `..._bases_closed` 白名单是
+// 同一集合的两份镜像；客户服务规则那一格随 ADR-0136 决定三进来（迁移 0022 同笔）——索赔资格两维要按接受时
+// 闭包采用的客户服务规则版本选用，租户把它列进必需依据时，这里得译得回去，接受流才成得了键。
 func commercialKindFrom(name string) (pcdomain.CommercialObjectKind, error) {
 	for _, kind := range []pcdomain.CommercialObjectKind{
 		pcdomain.ServiceProductObject,
@@ -359,6 +362,7 @@ func commercialKindFrom(name string) (pcdomain.CommercialObjectKind, error) {
 		pcdomain.SettlementPolicyObject,
 		pcdomain.CreditPolicyObject,
 		pcdomain.AuthorizationRuleObject,
+		pcdomain.CustomerServiceRuleObject,
 	} {
 		if kind.String() == name {
 			return kind, nil
