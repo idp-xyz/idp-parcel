@@ -1,7 +1,7 @@
 # VE 词到 PC 闭包键的翻译缺登记面——生产装配的 `RuleResolutionKeySource` 今天只能留 nil
 
 Category: enhancement
-Status: in-progress——2026-09-11 21:2x 通道 4 按通道 1 派单 task-c28ddfb5 认领，分支 `mcp4-veclaims04` 基 `02e1dfc4`，树 `D:/tops/idp-parcel-mcp4-veclaims04`；开工第一件事 = 判据 5。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969（用户授权代裁）落 [ADR-0136](../../../docs/adr/0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)，四问全裁，「要做什么」按裁决改写；此前 draft（2026-09-04 随票 03 立）
+Status: in-progress——2026-09-11 23:2x **通道 3 接手**（task-6afdcc42；通道 4 会话已无，其 21:36–21:42 未提交现场由推送方 21:45 封存为 chore(salvage)，原样一字未改）：分支 `mcp4-veclaims04` 在树 `D:/tops/idp-parcel-mcp4-veclaims04` 内 `git rebase origin/main` 到 **`262e8c0a`** 零冲突，`--force-with-lease` 推送，SHA 对照 认领 `a41e1669 → f0a454cf`、封存 `3730ef63 → 3d54438e`；从 `3d54438e` 接着做，先判据 5。此前 in-progress——2026-09-11 21:2x 通道 4 按通道 1 派单 task-c28ddfb5 认领，分支 `mcp4-veclaims04` 基 `02e1dfc4`，树 `D:/tops/idp-parcel-mcp4-veclaims04`；开工第一件事 = 判据 5。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969（用户授权代裁）落 [ADR-0136](../../../docs/adr/0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)，四问全裁，「要做什么」按裁决改写；此前 draft（2026-09-04 随票 03 立）
 Blocked by: 无（[03](./03-claim-deadline-and-materials-read-party-commercial-rule-content.md) 已 resolved；PS 回指窄读口 `CommercialResolutionReferenceView` 已在 main，见 ADR-0133 Consequences 点名的 ps-port-remainder/07）
 
 ## 事实
