@@ -1,7 +1,7 @@
 # 27 受控关闭 / 重开决定生效 → `JudgeLabelServiceFinalHandler`：决定口今天连写入方都没有，先要那张写面票
 
 Category: enhancement
-Status: draft——**要裁的已清零**（2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 裁，见「裁决」），转 ready-for-agent 只等 Blocked by 两张落地；此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 触发本身很小，但它挂的那一拍（决定被追加进登记册）今天没有生产路径能到，见 Blocked by
+Status: in-progress——2026-09-11 11:4x 通道 4 认领（task-c2983660，通道 1 派单；分支 `mcp4-lc27` 基远端 main `b68baddf`（代码 = `2c7326ef`），隔离树 `D:/tops/idp-parcel-mcp4-lc27`）。**两张 Blocked by 已解**（`30` 2026-09-11 11:1x 进 main、pc-gaps/13 2026-09-10 20:3x 进 main），由 draft 直转 in-progress、经 ready 不停——要裁的早已清零，票面只等它们落地。写面那半（`Save` / `Insert` 后同事务入队、事件 ID 含决定标识、分区键租户 + 包裹、入队失败整步回滚、`ContinuedAttemptRegisterRepository` 头注改口）已由 `30` 落地，本票只核对不重做；本票做消费者半边。此前 draft——**要裁的已清零**（2026-09-10 通道 2 按通道 1 派单 task-138ab1c9 裁，见「裁决」），转 ready-for-agent 只等 Blocked by 两张落地；此前 draft——通道 3 于 2026-09-10 按 MCP-1 派单 task-b5dba034 立票，取证锚远端 main `c7e3522c`；**只写票面，未动代码。** 触发本身很小，但它挂的那一拍（决定被追加进登记册）今天没有生产路径能到，见 Blocked by
 Blocked by: [`30`](./30-controlled-close-reopen-decision-write-face-ps-half.md)（PS 半边：形成受控关闭 / 重开决定的命令编排 + 入口壳 + 授权适配器）、[pc-gaps/13](../../party-commercial-context-gaps/issues/13-authorized-action-lacks-controlled-closure-and-reopening.md)（PC 半边：授权动作封闭集加关闭、重开两格）；`30` 自身 Blocked by 13。触发形状已随 [`26`](./26-label-transaction-settlement-beat-triggers-label-final-judgment.md) 的裁决定为**乙**（[ADR-0134](../../../docs/adr/0134-label-service-final-judgment-triggers-are-deferred-one-beat-through-pointer-envelopes.md) 决定一），不另裁
 
 ## 缺口
