@@ -1,7 +1,7 @@
 # `parcel-shipment` 解析键登记面不收 `CUSTOMER_SERVICE_RULE`：0007 / 0008 的必需依据白名单与 `commercialKindFrom` 名集各少一格——ADR-0136 让索赔资格规则按接受时闭包选用，这条缝今天在生产上到不了「已登记」
 
 Category: bug
-Status: resolved——2026-09-12 00:1x 通道 3 作者完工（task-1c76951b；分支 `mcp3-psr09` 基远端 main `1b06bb18`，认领 `7348bce6`，代码 + 本完成记录同笔，SHA 见完工报）：迁移 0022 重加白名单收 `CUSTOMER_SERVICE_RULE`、`commercialKindFrom` 加一格、真库两例、ve-claims/04 绊线翻回两态皆经 PS 登记面；带 DSN 六包全 ok，0007 / 0008 零 diff；「必登」未动（归 PS owner，看法见完成记录）。等非作者评审 → 推送方重放进 main。此前 in-progress——2026-09-11 23:5x 通道 3 认领（树 `D:/tops/idp-parcel-mcp3-psr09`；迁移序号钉 0022）。此前 ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
+Status: resolved——**已进 main，2026-09-12 00:2x**（通道 1 接管会话重放：`main 1b06bb18` 之上**纯 ff 不换号** `7348bce6` / `9fa2ddc6` + 清点 `590282b0` + 本簿记笔；**证据层级如实记：本次没有非作者评审**——推送方接管会话即作者（原通道 3），全网无第二个会话，用户 00:2x 裁「作者两轴自评进 main、后补非作者评审」，自评全文与后继见「进 main 记录」）。此前 resolved——2026-09-12 00:1x 通道 3 作者完工（task-1c76951b；分支 `mcp3-psr09` 基远端 main `1b06bb18`，认领 `7348bce6`，代码 + 本完成记录同笔 `9fa2ddc6`）：迁移 0022 重加白名单收 `CUSTOMER_SERVICE_RULE`、`commercialKindFrom` 加一格、真库两例、ve-claims/04 绊线翻回两态皆经 PS 登记面；带 DSN 六包全 ok，0007 / 0008 零 diff；「必登」未动（归 PS owner，看法见完成记录）。等非作者评审 → 推送方重放进 main。此前 in-progress——2026-09-11 23:5x 通道 3 认领（树 `D:/tops/idp-parcel-mcp3-psr09`；迁移序号钉 0022）。此前 ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
 Blocked by: 无（硬）。~~软阻：ve-claims/04 正在动手~~ **ve-claims/04 已 23:5x 进 main（通道 1 推送方记），软阻解除，可派**；它那条「已登记」态装配用例的负断言由本票做法 4 翻回真走 PS 登记面
 
 ## 缺口（取证于 `262e8c0a`，逐符号名）
@@ -69,6 +69,15 @@ ADR-0136 决定三 / 越权风险点 2；[ve-claims/04](../../ve-claims-read-sea
 **判断项**：
 1. 两个客户账户共用同一份 VE 索赔资格声明（`RegisterClaimEligibility` 按合同一行）：这是 VE 册的既有键形，本用例只是用到它；若评审认为两客户应各登一份更贴近生产，加一行即可，断言不变。
 2. `commercialKindFrom` 头注提到「迁移 0022 同笔」——是本票内的同笔事实，不是跨文件计数；日后若再加格，头注的 ADR 指向仍成立。
+
+## 进 main 记录（通道 1 接管会话 = 作者，2026-09-12 00:1x–00:2x）
+
+- **点名**：00:14 广播、截止 00:17，0 个应答（`list_sessions` 只有通道 1 / 3 在线，两者是同一会话；通道 2 离线）。非作者评审排队给通道 2（task-50cd7049，钉 `9fa2ddc6`）——它上线即接，作为**后补**非作者评审；用户 00:2x 告知「现在只有你自己了」并裁「作者两轴自评、如实记、后补非作者评审」进 main。
+- **作者两轴自评（钉 `9fa2ddc6`，与完成记录同一双眼睛，只能证「没漏检」不能证「没盲区」）**：Standards——阻断 0；非阻断 0；无发现：迁移 0022 照 0008 改 0007 的形 DROP + ADD 同名约束，白名单既有八项原样 + `CUSTOMER_SERVICE_RULE`，`PRICE_RULE` 仍不在；0007 / 0008 零 diff；头注引 ADR-0136 决定三首句单行逐字；`commercialKindFrom` 与 `pcdomain.CommercialObjectKind.String()` 对齐；注释中文无行号无跨文件计数；不为任何租户预填键。Spec——阻断 0；非阻断 1：判断项 1（两客户共用同一份 VE 索赔资格声明）是 VE 册按（租户，合同）作答的既有键形，接受；无发现：判据 1–5 逐项如完成记录；做法 4 只动一条用例、`assemble_claims.go` 零改；CLI 无第三道闸（`translate.go` 同名函数含该类，核过）。
+- **重放**：`merge-base(main, mcp3-psr09) = main` → 纯 ff 不换号。`%TEMP%\idp-replay-psr09` detached `9fa2ddc6`，清点在其上重生成 `590282b0`（PS 测试 172→173、合计 919→920；迁移 parcel_shipment 21→22、合计 167→168；生产 / 端口 / 消费缝 / 路由表零差）。
+- **验证钉 `590282b0`**：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；00:18 占号，带 DSN `go test -p 1 -count=1 ./...` **110 ok / 0 FAIL / 15 无测试 / 0 cached**（00:19:22→00:21:30），00:21 释号。
+- **进 main**：本簿记笔（票 09 Status + 本节；ve-claims/04「裁决」5 后继句改口；tasks.md 节）在 `590282b0` 之上；`ls-remote` 核 `1b06bb18` 未动 → 共享树 `merge --ff-only` → `push <sha>:main`。SHA 见推送后 tasks.md。
+- **后继**：① 非作者评审后补（task-50cd7049 留在通道 2 队列，钉 `9fa2ddc6`，已进 main；评审结论回落本节）；② 「必登」归 PS owner（「要裁的」1）；③ ADR-0136 越权风险点 2 补 `262e8c0a` 实测一句归 ADR owner。
 
 ## Comments
 
