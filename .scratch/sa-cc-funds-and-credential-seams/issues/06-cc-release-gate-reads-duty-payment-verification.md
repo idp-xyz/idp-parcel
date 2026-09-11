@@ -1,7 +1,7 @@
 # 放行门禁核对不读税费付款核对：`VerifyReleaseGate` 的依赖里没有 `DutyVerificationStore`，「税费付款」那一道门禁今天只能由调用方口头交进来
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：折法是登记进来的规则（三态各自接受集合，无默认；[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三）、门禁记录加一列核对版本引用（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-11 16:4x 通道 4 接单 task-18848394，树 `D:/tops/idp-parcel-mcp4-sacc06` 分支 `mcp4-sacc06` 基 main `620f7fed`（04 已进 main 同目录串接）；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：折法是登记进来的规则（三态各自接受集合，无默认；[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三）、门禁记录加一列核对版本引用（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -56,3 +56,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-10 · 通道 4：立票。未动代码。
+- 2026-09-11 16:4x · 通道 4：接单 task-18848394 开工，基 main `620f7fed`，按「裁决」1 / 2 实现（规则登目录行、门禁记录带三态原值 + 核对版本引用、迁移钉 0019）；本笔只改 Status。
