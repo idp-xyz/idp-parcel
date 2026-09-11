@@ -617,6 +617,11 @@ func fundsContinuation(parts ...string) string {
 }
 
 // adoptDigest 把付款人算进内容：同引用换付款人是另一份内容（冲突），不是重放。
+//
+// 付款人自 migrations/settlement_accounting/0018_external_funds_fact_payer.sql 起进摘要（票 sa-cc/03）。
+// 摘要元素一变，变之前落下的行重投同一内容会撞 ContentDigest 答`内容冲突`而不是`已存在`——幂等
+// 不变式在版本边界上断开。0018 之前本上下文的采用没有生产入口、存量为零，故不回算旧行的摘要，
+// 靠的只是这一条（与该迁移头注同一句）。日后再改摘要元素，要么回算存量，要么在这里再记一版起点。
 func adoptDigest(command AdoptFundsFactCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		command.Source,
