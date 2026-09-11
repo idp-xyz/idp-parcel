@@ -1,7 +1,7 @@
 # 34 lc/28 组合根的触发面：`buildLabelChannelOrchestration` 无生产调用方，`parcel-api` 从不构造这条链，构造期错误不在启动时暴露
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ② / 判断题 (b) 的后继）。要裁的为零：本票只做「`main` 启动时装配、构造期错误 fail-fast」这一步；谁在什么业务时点发起一笔面单交易的建立（运营端点 / 进程内触发）是产品题，不在本票。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: in-progress——2026-09-11 11:2x 通道 4 认领（task-c7390f8a，通道 1 派单；分支 `mcp4-lc34` 基远端 main `2c7326ef`，隔离树 `D:/tops/idp-parcel-mcp4-lc34`）。此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ② / 判断题 (b) 的后继）。要裁的为零：本票只做「`main` 启动时装配、构造期错误 fail-fast」这一步；谁在什么业务时点发起一笔面单交易的建立（运营端点 / 进程内触发）是产品题，不在本票。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[`28`](./28-channel-selection-composition-root-and-call-entry.md) 已进 main `784ad076`）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
