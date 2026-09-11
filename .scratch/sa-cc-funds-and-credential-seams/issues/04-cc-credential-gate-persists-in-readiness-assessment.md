@@ -1,7 +1,7 @@
 # UC-CC-003 步 7「记录凭证门禁」只判不记：`JudgeCredentialApplicability` 算得出四格，没有任何编排把它落成就绪判断里的一格
 
 Category: enhancement
-Status: in-progress——2026-09-11 15:3x 通道 4 接单 task-f9d6cd97（接替 crash 的 task-42663c03），树 `D:/tops/idp-parcel-mcp4-sacc04` 分支 `mcp4-sacc04` 基 main `7c37253f`；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：一册（独立「凭证门禁判断」登记册，就绪判断按引用绑定）、评估请求到达时算一次（[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定一 / 二，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: resolved——2026-09-11 16:1x 通道 4 完工，等非作者评审进 main（分支 `mcp4-sacc04`，基 main `7c37253f`，代码 tip `d69e18c7`；完成记录见文末）；此前 in-progress——2026-09-11 15:3x 通道 4 接单 task-f9d6cd97（接替 crash 的 task-42663c03），树 `D:/tops/idp-parcel-mcp4-sacc04`；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：一册（独立「凭证门禁判断」登记册，就绪判断按引用绑定）、评估请求到达时算一次（[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定一 / 二，见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -59,3 +59,45 @@ Blocked by: 无
 
 - 2026-09-10 · 通道 4：立票。未动代码。
 - 2026-09-11 15:3x · 通道 4：接单 task-f9d6cd97 开工，基 main `7c37253f`，按「裁决」一册 + 评估请求到达时算一次实现；本笔只改 Status。
+- 2026-09-11 16:1x · 通道 4：完工，Status → resolved，完成记录见下。两轴评审子代理两次都以「Authentication error」空转（同通道 1 15:0x 所记），改由作者按 `/code-review` 正文串行自跑两遍、结果随记；**这不顶替非作者评审**，进 main 前仍要一位非作者评。
+
+## 完成记录（通道 4，2026-09-11）
+
+### 逐笔 SHA（分支 `mcp4-sacc04`，基 main `7c37253f`）
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| 1 | `d59015d3` | 票面 Status → in-progress |
+| 2 | `a6874e0f` | domain `credential_gate.go`（`CredentialGateJudgment` / `CredentialGateConclusion` / `CredentialGateBasisReference` / `ResponsibleRoleReference` / `RecordCredentialGate`）+ ports（`CredentialGateKey` / `CredentialGateDigest` / `CredentialGateRecord` / `CredentialGateRegistry` 写口 / `CredentialGateView` 读口）+ application `record_credential_gate.go`（`RecordCredentialGateHandler`）与三份用例 |
+| 3 | `2a503c00` | `migrations/customs_compliance/0018_credential_gate_judgment.sql` + postgres `credential_gate_registry.go`（`CredentialGateRegistrations` / `CredentialGateView`）+ 真库用例 |
+| 4 | `3a2454d9` | 机制清点在 `2a503c00` 干净检出重生成（CC 生产 84→87 / 测试 84→87、应用编排 16→17、postgres 适配器 38→39、迁移 163→164、端口声明 391→393；缺口两口径不变） |
+| 5 | `d69e18c7` | 两轴自评修：判断半边接进构造门（去掉只有一个实现的 `CredentialApplicabilityJudge` 接口，Deps 改收 `ports.CredentialView`）；postgres 用例头注去跨文件计数 |
+
+代码 tip = 分支 tip = `d69e18c7`。动过的文件：上表五笔所列，另 `docs/product/MECHANISM-INVENTORY.md`（生成物）与本票面。**没动**：`register_case_configuration.go`（`RegisterReadiness` 的形）、`parcel-api` 端点表、`internal/architecture/*baseline.txt`、`reconcile_duty_payment.go`。
+
+### 完成判据逐项
+
+1. **`JudgeCredentialApplicability` 有 application 层以外的调用（编排或装配）**——**编排有、装配无，如实记**。编排：`record_credential_gate.go` 的构造门 `NewRecordCredentialGateHandler` 接上 `NewJudgeCredentialApplicabilityHandler`，`Handle` 调它算四格（`git grep -n -E "JudgeCredentialApplicability(Handler|Command)" -- 'internal/*.go' ':(exclude)*_test.go'` 在 `d69e18c7` 命中该文件的构造与调用两处，此前零）。票面写的 `git grep -w JudgeCredentialApplicability …` 那条以 `-w` 只匹配得到注释——生产标识符是 `…Handler` / `…Command`，`-w` 不认前缀，那条 grep 的字面结果与「有没有调用方」无关，评审请以上一条为准。装配：**今天没有装配点**。`cmd/parcel-dispatch/assemble.go` 的 CC 消费者一族全是 inbox 驱动，仓内没有「评估请求到达」的入向面（UC-CC-003 步 1–2 就绪接入尚无票）；`cmd/parcel-api/unwired_orchestration.go` 只列端点表上已登、编排未接的口，而本票不动端点表（且该文件正在通道 2 sa-cc/07 步二占号中），所以也没在那里列。装配点属「就绪接入」那张后继票：它接进来的是 `RecordCredentialGateDeps{Credentials, Registry, Clock}` 一口整步。
+2. **应用层四格各一条落库路径；重放 / 换内容两格**——`TestEveryCredentialGateConclusionHasItsOwnRecordedWord`（不适用 / 凭证未登记 / 未决）+ `TestAnApplicableCredentialGateIsJudgedAndRecorded`（适用）四格各落一版；`TestReplayingACredentialGateSplitsExistingFromANewVersion` 重放`已存在`（时钟走了不算换内容）、换依据追加新版首版原样。
+3. **真库往返；`AT-CC-056` 用例点名 Covers**——postgres 七条用例（往返、四格各自读回同一词、同键不顶替 + 换内容追加、键与判断不符拒、未登记 found=false / 空指纹拒、CHECK 旁路拒、无事务 `ErrTransactionRequired`）带 DSN 全 PASS 0 SKIP；`AT-CC-056` 在 domain / application / postgres 三份用例的 Covers 里各点名一次。
+4. **基线不加宽；清点 tip 重生成**——`internal/architecture` 两份 baseline 零改动（`git diff --stat 7c37253f -- internal/architecture` 空），`./internal/architecture/...` 绿；清点 `3a2454d9` 在 `2a503c00` 干净 worktree 重生成。
+
+### 判断题（供评审）
+
+- **幂等键含申报单元**：ADR-0137 决定一列的行内容没有「单元」，但就绪判断是按单元登记的（`RegisterReadinessCommand.Unit`），UC-CC-003「每个判断必须绑定……申报单元」；门禁记录若不带单元，两个单元同一张凭证同一截至时点会撞成一版，就绪判断绑引用时分不出谁的。故键取（租户、单元、凭证身份）+ 内容指纹。
+- **责任角色进指纹、判断时刻不进**：同请求换角色重发读作另一版（那一版由谁负责是内容），时钟走了不是（重放比内容不比时刻，判据同 `sameCollaboration`）。
+- **「凭证身份与版本」折成一列**：凭证册是「一身份一版」（0014 自注），没有第二个版本维可引；表与注释都写明这是折而不是漏。
+- **`未决`也落一版**：判断口的`未决`是读凭证册的口故障，落成的是「这次评估请求上这道门没判出来」；重试是再发一次请求另成一版，不改这一版。按票面「四格各一条落库路径」做；若 owner 认为技术未决不该成为登记事实，改的是 `gateConclusionOf` 一处与 CHECK 一词。
+- **「评估请求到达 → 判断 → 登记 → 就绪判断绑引用」里的最后一格不在本票**：ADR-0137 Consequences 把它写在票 04 一句里，但把单道门禁的结果绑成就绪判断等于替 UC-CC-003 步 10 的合取做决定（「所有适用门禁是合取关系」），今天没有逐门禁汇总的编排，本票只交出可绑定的键（`CredentialGateResult.Key`）。这一格归就绪接入 / 步 10–11 的后继票，票面「做法」1–4 与「完成判据」1–4 也没要它。
+
+### 两轴自评（`/code-review`，基线 `7c37253f`，作者串行自跑，不顶替非作者评审）
+
+**Standards**：① 判断半边原以 `CredentialApplicabilityJudge` 接口进 Deps、全仓只有一个实现——Speculative Generality，已修（`d69e18c7`），改收 `ports.CredentialView` 由构造门自己接判断口；② postgres 用例头注「九件 / 九列」数的是另一文件里的列——AGENTS「不数别处的东西」，已修（同笔）。其余：注释中文；无「硬句 NNN」行号引用；`String()` 四格齐（enum 门禁绿）；PBC08 负向证据 `TestCredentialGateWritesRefuseToRunOutsideATransaction` 在（架构门禁绿）；`WithinTransaction` 闭包内无 `t.Fatal`；夹具全 `SYN-`。0 未修。
+
+**Spec**：① 判据 1 的「装配」半边今天接不上（见上），如实记，非阻断；② ADR Consequences 那句「就绪判断绑引用」不在本票（见判断题末条），非阻断；③ 键含单元 / 角色进指纹 / 未决落版三处是作者裁的形，已列判断题。缺失 0、越界 0、看着实现了但形不对 0（按作者读法）。
+
+### 验证（tip `d69e18c7`）
+
+- `gofmt -l internal/customscompliance` 空；`go build ./...`、`go vet ./internal/customscompliance/... ./migrations/...` 退 0。
+- 带 DSN（55432 占号 / 释号各两轮）：`go test -count=1 -p 1 ./internal/customscompliance/... ./internal/architecture/... ./migrations/... ./cmd/...` 全绿 0 FAIL；`-run CredentialGate ./internal/customscompliance/adapters/postgres/ -v` 7 PASS 0 SKIP。不跑全量（派单如此）。
+- 新 `.go` 全部 `gofmt -w` 后入库，`git ls-files --eol` 皆 `i/lf w/lf`；`0018_*.sql` CR 数 0、无 BOM，`migrations` 的 EOL 守卫绿。
