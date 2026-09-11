@@ -328,6 +328,10 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 		ObligationView: obligationView,
 		Gates:          gates,
 		GateView:       gateView,
+		// 「税费付款」规则行的写读两半与目录 / 认定同一对适配器（票 sa-cc/06）；登记面（端点 / CLI）今天
+		// 没有收这一格的口，接上只为让组合根不留 nil、后继登记面来接时一处可核。
+		DutyRules:    gates,
+		DutyRuleView: gateView,
 	})
 	portsPathsHandler := customsapp.NewRegisterPortsPathsHandler(
 		customsapp.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPathsView})
