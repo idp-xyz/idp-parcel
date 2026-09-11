@@ -124,17 +124,21 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
-// recordingJudge 包住真判断编排，记下它收到的命令。
+// recordingJudge 包住真判断编排，记下它收到的命令与交回的结果——结果留着是为了在适配器这一层核
+// 「判断答的是哪一格、为什么」（NOT_FINAL 的原因不进消费结论，只能在这里看）。
 type recordingJudge struct {
 	inner    *psapplication.JudgeLabelServiceFinalHandler
 	commands []psapplication.JudgeLabelServiceFinalCommand
+	results  []psapplication.LabelServiceFinalResult
 }
 
 func (judge *recordingJudge) Handle(
 	ctx context.Context, command psapplication.JudgeLabelServiceFinalCommand,
 ) (psapplication.LabelServiceFinalResult, error) {
 	judge.commands = append(judge.commands, command)
-	return judge.inner.Handle(ctx, command)
+	result, err := judge.inner.Handle(ctx, command)
+	judge.results = append(judge.results, result)
+	return result, err
 }
 
 type fixture struct {
