@@ -268,6 +268,30 @@ func TestAContinuedAttemptDecisionJudgmentDueReachesTheConsumerThroughTheRouteTa
 	}
 }
 
+// Covers: 路由表的 TF 实际承运商首次有效收寄登记一条（lc/25，ADR-0135）与它在生产依赖图上的未决翻译——
+// 正：毒丸载荷（缺 tenantId/fact/version）让消费门显式拒收入账并交回 nil，这一条定稿；漏挂或挂错的话这里撞的
+// 是无订阅者。反：三维齐全但 TF 登记册里没有那一代 → 可见性滞后是未决，不定稿、不毒丸，失败码落
+// dispatch.consumer_undecided——这一格证的是 carrierFirstEffectivePickupJudgmentUndecidedSentinels 真接在路由条目上，
+// 而不是错落成 publish_failed。
+func TestACarrierFirstEffectivePickupRegisteredReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "carrier-pickup-1", psinbox.CarrierFirstEffectivePickupRegisteredEventType, `{}`)
+	enqueueForBeat(t, db, store, "carrier-pickup-2", psinbox.CarrierFirstEffectivePickupRegisteredEventType,
+		`{"tenantId":"tenant-a","fact":"CFEP-1","version":"CFEV-1","object":"parcel-1"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1（正：毒丸定稿；反：读不回的那一代未决）；失败码 毒丸 = %q，未决 = %q",
+			published, recordedFailureCode(t, db, "carrier-pickup-1"), recordedFailureCode(t, db, "carrier-pickup-2"))
+	}
+	if got := recordedFailureCode(t, db, "carrier-pickup-2"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("TF 登记册里没有的那一代：failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+}
+
 // Covers: 路由表的 SA 资金事实采用一条（sa-cc/03）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
 // 正：SA 采用过的事实（带来源提供的付款人）经 `external-funds-fact.adopted` 引用式信封到 CC 消费者，按
 // （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 的 external_funds_fact 落一行；

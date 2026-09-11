@@ -460,6 +460,30 @@ var labelTransactionJudgmentUndecidedSentinels = []error{
 // 未决与不在名单里的几格由核一处回答，这里只是让名字各指各路——名单不抄第二份。
 var continuedAttemptDecisionJudgmentUndecidedSentinels = labelTransactionJudgmentUndecidedSentinels
 
+// carrierFirstEffectivePickupJudgmentUndecidedSentinels 是 TF 实际承运商首次有效收寄登记 → 面单渠道终局判断
+// 这条链（lc/25，ADR-0135）登记的未决哨兵。核那一段与面单交易 / 关闭重开两路是同一只 labelfinal.ParcelJudgmentCore，
+// 核的几格因此直接取那份名单不抄第二份；本路在核之前多出「按信封所指版本取回 TF 事实」一段，未决面多两格：
+//   - pstf.ErrCarrierPickupNotVisible——信封所指那一代在 TF 登记册还读不回，可见性滞后是续办，重投会改变结果。
+//   - pstf.ErrVoidedCarrierPickupRederivationUndecided——TF 交出失效版本（ADR-0135 决定六），已据前版形成的
+//     非取消终局怎么重派生归 PS owner、尚未裁定（票 label-channel/25「要裁的」2）。按「未确认规则保持显式未决」
+//     停在这一格：不吸收、不重派生、零写入；owner 裁定并在适配器接上重派生之后这一格随之消失。
+//
+// 不在名单里的几格，恢复动作各不相同，保持 publish_failed：
+//   - pstf.ErrCarrierPickupRecordInconsistent——取回的登记指着另一个键 / 另一个对象，或取回的是待确认版本（TF
+//     对待确认版本响亮拒绝入队，ADR-0135 决定七），是提供方交接口或仓储不变量已破，重投不自愈；适配器头注明写
+//     生产装配不得把它进未决。
+//   - pstf.ErrUntranslatableAnswer——信封三维译不成 TF 的键，引用坏了，编程错误。
+//   - labelfinal.ErrJudgmentNotAccepted / ErrFinalHandoffPending / ErrUntranslatableEnvelope /
+//     ErrUnexpectedJudgmentOutcome 与 psdomain.ErrAmbiguousParcelTarget——与面单交易那一路同一套理由，见
+//     labelTransactionJudgmentUndecidedSentinels 的头注。
+var carrierFirstEffectivePickupJudgmentUndecidedSentinels = append(
+	[]error{
+		pstf.ErrCarrierPickupNotVisible,
+		pstf.ErrVoidedCarrierPickupRederivationUndecided,
+	},
+	labelTransactionJudgmentUndecidedSentinels...,
+)
+
 // externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
 // 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用。编排的 `未受理`
 // 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）。
@@ -489,6 +513,8 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // （UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
 // 再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）、
 // TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
+// TF 实际承运商首次有效收寄登记 → 只投 PS 面单渠道终局判断（lc/25，ADR-0135；不 FanOut：
+// VE 侧今天没有它的消费者，登记接不住的比不登记更糟）、
 // TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
 // PS 包裹服务终局形成 → 只投 VE 投影（不 FanOut：终局是 PS 自家事实，让它经调度器
 // 消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
@@ -504,6 +530,8 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局
 // 规则墙或路由证据墙上。
 // 「TF 有效交付登记」只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。
+// 「TF 实际承运商首次有效收寄登记」只接 `carrier-first-effective-pickup.registered`，不接
+// `external-carrier-tracking.judged`——后者按 TF CONTEXT 不构成收寄，在本进程只投 VE 投影。
 // 「TF 权威交接登记」只接 `transport-handover.registered`，不接 PS。
 //
 // 上面几处一律按名字指，不按「第几条」——本注释的枚举刚被 ADR-0086 的两扇门从头部
@@ -693,6 +721,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: continued attempt decision judgment undecided translation: %w", err)
 	}
 
+	pickupJudgments, err := judgeLabelFinalOnCarrierFirstEffectivePickupConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedPickupJudgments, err := dispatch.WithUndecidedSentinels(
+		pickupJudgments, carrierFirstEffectivePickupJudgmentUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: carrier first effective pickup judgment undecided translation: %w", err)
+	}
+
 	fundsFacts, err := receiveExternalFundsFactConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
 		return nil, err
@@ -790,27 +828,28 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
-			psinbox.ShipmentRequestSubmittedEventType:            routedChain,
-			psinbox.ManualReviewCompletedEventType:               routedResume,
-			psinbox.OperatorRegistrationCompletedEventType:       routedRegistration,
-			psinbox.SubmissionVersionFormedEventType:             routedSupplement,
-			nrinbox.AcceptedDecisionEventType:                    acceptanceFan,
-			nrinbox.AdoptedNetworkIntakeEventType:                routedIntakes,
-			psinbox.NodeIntakeFormedEventType:                    nodeIntakeFan,
-			psinbox.OffsitePickupRegisteredEventType:             pickupFan,
-			psinbox.EffectiveDeliveryRegisteredEventType:         deliveryFan,
-			psinbox.LabelTransactionJudgmentDueEventType:         routedLabelJudgments,
-			psinbox.ContinuedAttemptDecisionJudgmentDueEventType: routedDecisionJudgments,
-			ccinbox.ExternalFundsFactAdoptedEventType:            routedFundsFacts,
-			sainbox.DutyPaymentVerificationFormedEventType:       routedVerifications,
-			veinbox.TransportHandoverRegisteredEventType:         veHandoverRouted,
-			veinbox.ExternalCarrierTrackingJudgedEventType:       veExternalTrackingRouted,
-			veinbox.FinalOutcomeFormedEventType:                  veFinalOutcomeRouted,
-			veinbox.InitialRouteFormedEventType:                  veInitialRouteRouted,
-			veinbox.ExceptionJourneyRecordedEventType:            veExceptionJourneyRouted,
-			veinbox.CustomsCaseEstablishedEventType:              veCustomsCaseRouted,
-			veinbox.DeclarationSubmissionFormedEventType:         veDeclarationSubmissionRouted,
-			veinbox.TrackingProjectionDerivedEventType:           veCustomerViewRouted,
+			psinbox.ShipmentRequestSubmittedEventType:              routedChain,
+			psinbox.ManualReviewCompletedEventType:                 routedResume,
+			psinbox.OperatorRegistrationCompletedEventType:         routedRegistration,
+			psinbox.SubmissionVersionFormedEventType:               routedSupplement,
+			nrinbox.AcceptedDecisionEventType:                      acceptanceFan,
+			nrinbox.AdoptedNetworkIntakeEventType:                  routedIntakes,
+			psinbox.NodeIntakeFormedEventType:                      nodeIntakeFan,
+			psinbox.OffsitePickupRegisteredEventType:               pickupFan,
+			psinbox.EffectiveDeliveryRegisteredEventType:           deliveryFan,
+			psinbox.LabelTransactionJudgmentDueEventType:           routedLabelJudgments,
+			psinbox.ContinuedAttemptDecisionJudgmentDueEventType:   routedDecisionJudgments,
+			psinbox.CarrierFirstEffectivePickupRegisteredEventType: routedPickupJudgments,
+			ccinbox.ExternalFundsFactAdoptedEventType:              routedFundsFacts,
+			sainbox.DutyPaymentVerificationFormedEventType:         routedVerifications,
+			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
+			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
+			veinbox.FinalOutcomeFormedEventType:                    veFinalOutcomeRouted,
+			veinbox.InitialRouteFormedEventType:                    veInitialRouteRouted,
+			veinbox.ExceptionJourneyRecordedEventType:              veExceptionJourneyRouted,
+			veinbox.CustomsCaseEstablishedEventType:                veCustomsCaseRouted,
+			veinbox.DeclarationSubmissionFormedEventType:           veDeclarationSubmissionRouted,
+			veinbox.TrackingProjectionDerivedEventType:             veCustomerViewRouted,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -1968,8 +2007,8 @@ func adoptEffectiveDeliveryConsumer(
 
 // labelFinalJudgmentCore 装配面单渠道服务终局判断各路触发共用的处理方核（ADR-0134 决定二）：按包裹反查
 // 当前已接受委托 → 终局判断编排 → 五值译成消费结论 → 判出终局的格交既有终局采用路径。面单交易那一路
-// （lc/26）与关闭 / 重开决定那一路（lc/27）各自的消费者都接它——核只装一次的形，两路各装一只实例是因为
-// 两扇消费门各持自己的处理方，实例之间不共享状态。
+// （lc/26）、关闭 / 重开决定那一路（lc/27）与 TF 首次有效收寄那一路（lc/25）各自的消费者都接它——核只装一次
+// 的形，各路各装一只实例是因为每扇消费门各持自己的处理方，实例之间不共享状态。
 //
 // 判断编排的各口：交易册与继续尝试登记册各用同一只 postgres 适配器的只读半边；取消视图与终局采用路径
 // 与交付那一路**同一条链**（parcelFinalAdoptionChain）——两种服务形态的产物都叫「终局服务结果」，只认
@@ -2063,6 +2102,45 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 	consumer, err := psinbox.NewLabelTransactionJudgmentConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: label transaction judgment consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// judgeLabelFinalOnCarrierFirstEffectivePickupConsumer 接 lc/25 那条线（ADR-0135）：TF 就一个载运对象登记一版
+// 实际承运商首次有效收寄后交出的 `carrier-first-effective-pickup.registered` 指针式信封 → 消费门 → 按信封所指
+// （租户 + 事实 + 版本）向 TF 登记册取回**指名那一代**、核键与本体一致、把（事实、版本、业务发生时间）折成
+// CarrierFirstEffectivePickupSpec → 与 lc/26、lc/27 共用的处理方核。它是 PS CONTEXT 生命周期里「`transport-fulfillment`
+// 提供实际承运商首次有效收寄事件 → 面单渠道服务非取消终局结果」那一步在本进程的落点。
+//
+// 只接 `carrier-first-effective-pickup.registered`，不接 `external-carrier-tracking.judged`：外部承运轨迹事实按
+// TF CONTEXT 不构成收寄，PS 消费它等于替 TF 判「这条状态词算收寄」（票 label-channel/25 红线）；那封信在本进程
+// 只投 VE 投影（deriveExternalTrackingConsumer）。本路不 FanOut 给 VE：VE 侧今天没有收寄登记的消费者，登记
+// 接不住的比不登记更糟（ADR-0049 第三条）。
+//
+// TF 登记册接 tfpostgres.CarrierFirstEffectivePickups 的只读一口（FindByKey）：信封每份代表一代，按键取、不问
+// 链尾（票 label-channel/24 的教训）。`Deps.Validity` 随 labelFinalJudgmentCore 接 ps-port-remainder/01 的
+// DeclaredLabelValidityRule——它已进 main，票 label-channel/25「未进 main 前填 nil」那一格不再成立。
+func judgeLabelFinalOnCarrierFirstEffectivePickupConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	pickups, err := tfpostgres.NewCarrierFirstEffectivePickups(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: carrier first effective pickups: %w", err)
+	}
+	core, err := labelFinalJudgmentCore(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	processing, err := pstf.NewJudgeOnCarrierFirstEffectivePickupAdapter(pickups, core)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: judge on carrier first effective pickup: %w", err)
+	}
+	consumer, err := psinbox.NewCarrierFirstEffectivePickupConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: carrier first effective pickup consumer: %w", err)
 	}
 	return consumer, nil
 }

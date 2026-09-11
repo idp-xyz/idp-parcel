@@ -2,7 +2,8 @@
 // 两拍、受控关闭 / 重开决定生效；哪几路由 ADR-0134 定）**共用的处理方核**与那一套消费结论翻译（ADR-0134
 // 决定二）。各路只有译码与取事实那一层不同：面单交易那一路（lc/26）不带收寄事实，关闭 / 重开那一路（lc/27）也不带；
 // 收寄那一路（lc/25）在核之前多一段「按信封所指版本取回 TF 事实、核有效时间」并把引用折进命令——
-// 那一段日后加在本包，核与翻译表不另写第二份。
+// 那一段在 adapters/transportfulfillment 的 JudgeOnCarrierFirstEffectivePickupAdapter（它要认 TF 的键与记录形状，
+// 本包不 import 提供方），核与翻译表不另写第二份。
 //
 // 它放在 parcel-shipment 的适配器层而不是 platform：它认得 psapplication 的封闭结果集合。
 package labelfinal

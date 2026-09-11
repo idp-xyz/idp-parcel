@@ -17,8 +17,9 @@ import (
 // 别的包裹的登记册。判断不替编排猜它想问哪件包裹。
 var ErrInvalidLabelServiceFinalInput = errors.New("parcel shipment: invalid label service final input")
 
-// CarrierTrackingFactReference 指名 transport-fulfillment 拥有的一条外部承运轨迹事实。只引用：
-// 事实的来源、凭证、状态与有效时间规则都在那边，这里连一列都不复制。
+// CarrierTrackingFactReference 指名 transport-fulfillment 拥有的一条实际承运商首次有效收寄事实（ADR-0135；
+// 类型名沿用立票时的叫法，是否改名归另笔）。只引用：事实的依据、承运主体、业务发生时间与版本规则都在那边，
+// 这里连一列都不复制。
 type CarrierTrackingFactReference struct{ requiredValue }
 
 func NewCarrierTrackingFactReference(value string) (CarrierTrackingFactReference, error) {
