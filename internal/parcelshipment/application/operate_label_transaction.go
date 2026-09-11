@@ -212,15 +212,30 @@ type LabelTransactionHandler struct {
 	deps LabelTransactionDeps
 }
 
-// NewLabelTransactionHandler 构造期拒掉缺席的两个只读口。它们只在建立那一步用，漏装要到第一次建立才 panic，
-// 而建立是整条写链的第一拍——没有它们的门等于没有门。其余几口不在这里拒：`Judgments` 由后两步在 `Save` 之后
-// 运行期响亮拒（judgmentBeat，lc/26 的取法）；仓储与时钟缺了在第一步就 panic，没有静默放行的失效形态。
+// ErrNilDependency 是构造门对缺件的唯一答复；哪一口缺在包装信息里点名。它必须是构造期的错误而不是运行期
+// 的 panic 或运行期的 error：装配疏漏要在进程启动那一刻炸出来（与组合根 fail-fast 同一纪律，票 label-channel/34），
+// 而不是等第一笔建立或第一次 `Save` 之后才发现——那时一半写动作已经落库。形照 customscompliance/application
+// 的同名哨兵（票 sa-cc/14）。
+var ErrNilDependency = errors.New("parcel shipment: application dependency is nil")
+
+// NewLabelTransactionHandler 构造期逐口拒 nil，五口全部必填。此前只拒两个只读口、让 `Judgments` 在 `Save` 之后运行期
+// 响亮拒（lc/26 的取法），理由写的是「漏装要到第一次建立才 panic」——那条理由不成立：nil 接口在任何一步都会响亮 panic，
+// 不会静默放行，所以两个只读口并不比其余三口更需要构造期的门；真正的分界在**何时**发现，装配错要在启动时露出来，
+// 不是在第一笔业务上。运行期那道 `Judgments` 门随之撤掉：构造门保证了它不可能为 nil，留着就是第二处口径。
 func NewLabelTransactionHandler(deps LabelTransactionDeps) (*LabelTransactionHandler, error) {
-	if deps.Registers == nil {
-		return nil, errors.New("label transaction handler: continued attempt register view is nil")
-	}
-	if deps.Finals == nil {
-		return nil, errors.New("label transaction handler: current final view is nil")
+	for _, dependency := range []struct {
+		name    string
+		missing bool
+	}{
+		{"label transaction repository", deps.Transactions == nil},
+		{"label transaction judgment handoff", deps.Judgments == nil},
+		{"continued attempt register view", deps.Registers == nil},
+		{"current final view", deps.Finals == nil},
+		{"clock", deps.Clock == nil},
+	} {
+		if dependency.missing {
+			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
+		}
 	}
 	return &LabelTransactionHandler{deps: deps}, nil
 }
@@ -328,7 +343,7 @@ func (handler *LabelTransactionHandler) priorLink(
 	prior, found, err := handler.deps.Transactions.FindByID(ctx, command.Tenant, command.PriorTransactionID)
 	if err != nil {
 		return domain.PriorLabelTransactionLink{}, LabelTransactionOutcomeInvalid,
-			fmt.Errorf("establish label transaction: 读原交易：%w", err)
+			fmt.Errorf("establish label transaction: read prior transaction: %w", err)
 	}
 	if !found {
 		// 指名一笔查不到的原交易：改输入重来，不是等它出现。
@@ -361,14 +376,14 @@ func (handler *LabelTransactionHandler) closedParcels(
 		current, found, err := handler.deps.Finals.FindCurrentFinal(ctx, tenant, parcel)
 		if err != nil {
 			return nil, LabelTransactionOutcomeInvalid,
-				fmt.Errorf("establish label transaction: 读包裹 %s 当前有效终局：%w", parcel, err)
+				fmt.Errorf("establish label transaction: read current final for parcel %s: %w", parcel, err)
 		}
 		currentFinalPresent := found && current.Finalized
 
 		register, found, err := handler.deps.Registers.FindByParcel(ctx, tenant, parcel)
 		if err != nil {
 			return nil, LabelTransactionOutcomeInvalid,
-				fmt.Errorf("establish label transaction: 读包裹 %s 继续尝试登记册：%w", parcel, err)
+				fmt.Errorf("establish label transaction: read continued attempt register for parcel %s: %w", parcel, err)
 		}
 		if !found {
 			if register, err = domain.OpenContinuedAttemptRegister(tenant, parcel); err != nil {
@@ -458,10 +473,6 @@ func (handler *LabelTransactionHandler) judgmentBeat(
 	occurredAt time.Time,
 ) func(context.Context, domain.LabelTransaction) error {
 	return func(ctx context.Context, saved domain.LabelTransaction) error {
-		if handler.deps.Judgments == nil {
-			// 装配缺陷：没有判断口的后两步不得静默落库——那正是「结果已落、判断丢失」。响亮报错让事务壳回滚。
-			return fmt.Errorf("label transaction judgment handoff is not configured")
-		}
 		for _, parcel := range saved.CoveredParcels() {
 			if err := handler.deps.Judgments.HandOffLabelTransactionJudgment(ctx, ports.LabelTransactionJudgmentIntent{
 				Tenant:        saved.Tenant(),

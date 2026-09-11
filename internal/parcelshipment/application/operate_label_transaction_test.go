@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -494,26 +495,8 @@ func TestAFailedJudgmentHandoffFailsTheWholeBeat(t *testing.T) {
 	}
 }
 
-// Covers: 装配缺陷 fail-closed——没有判断口时后两步不得静默落库（那正是「结果已落、判断丢失」），
-// 响亮报错让事务壳回滚；前三步不需要它，照常。
-func TestTheLastTwoBeatsRefuseToLandWithoutAJudgmentHandoff(t *testing.T) {
-	repository := newLabelTransactionRepositoryDouble()
-	fixture := newLabelTransactionFixture(t)
-	fixture.handler = mustNewLabelTransactionHandler(t, application.LabelTransactionDeps{
-		Transactions: repository,
-		Registers:    fixture.registers,
-		Finals:       fixture.finals,
-		Clock:        fixedClock{at: handlerClockAt},
-	})
-	fixture.repository = repository
-	fixture.mustEstablish(t, "LT-1")
-	fixture.mustSubmit(t, "LT-1")
-
-	_, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
-	if err == nil {
-		t.Fatal("没有判断口仍记下了结果")
-	}
-}
+// 「没有判断口时后两步不得静默落库」这一格不再在运行期证：判断口缺席在构造期就被拒（见
+// TestTheLabelTransactionHandlerNamesWhichDependencyIsMissing），一个构造不出来的编排没有后两步可跑。
 
 // Covers: 票 lc/32 判据 1 前两句——CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易」与
 // 「多包裹交易中，目标包裹关闭不关闭其他包裹或整笔交易」的建立侧落点：两件覆盖包裹里只一件有生效关闭，整笔
@@ -710,30 +693,46 @@ func TestTheLaterBeatsStillLandForAParcelUnderControlledClosure(t *testing.T) {
 	}
 }
 
-// Covers: 构造期拒掉缺席的两个只读口——它们只在建立那一步用，漏装到第一次建立才 panic，而建立是整条写链的第一拍，
-// 没有它们的门等于没有门。
-func TestTheHandlerRefusesToBeBuiltWithoutTheRegisterOrFinalViews(t *testing.T) {
+// Covers: 构造门逐口拒 nil 并点名缺的是哪一口（票 label-channel/36 条 3，形照 customscompliance 的
+// TestTheReconciliationHandlerNamesWhichDependencyIsMissing）：五口各缺一 → ErrNilDependency 且错误文本含口名、
+// 不交出编排；口齐不拒。`Judgments` 也在构造期拒——lc/26 让它在 `Save` 之后运行期拒的那道门已撤。
+func TestTheLabelTransactionHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 	fixture := newLabelTransactionFixture(t)
-	complete := application.LabelTransactionDeps{
-		Transactions: fixture.repository,
-		Judgments:    fixture.judgments,
-		Registers:    fixture.registers,
-		Finals:       fixture.finals,
-		Clock:        fixedClock{at: handlerClockAt},
+	complete := func() application.LabelTransactionDeps {
+		return application.LabelTransactionDeps{
+			Transactions: fixture.repository,
+			Judgments:    fixture.judgments,
+			Registers:    fixture.registers,
+			Finals:       fixture.finals,
+			Clock:        fixedClock{at: handlerClockAt},
+		}
 	}
-
-	withoutRegisters := complete
-	withoutRegisters.Registers = nil
-	if _, err := application.NewLabelTransactionHandler(withoutRegisters); err == nil {
-		t.Fatal("没有登记册读口仍构造出了 handler")
+	cases := []struct {
+		name   string
+		mutate func(*application.LabelTransactionDeps)
+	}{
+		{"label transaction repository", func(deps *application.LabelTransactionDeps) { deps.Transactions = nil }},
+		{"label transaction judgment handoff", func(deps *application.LabelTransactionDeps) { deps.Judgments = nil }},
+		{"continued attempt register view", func(deps *application.LabelTransactionDeps) { deps.Registers = nil }},
+		{"current final view", func(deps *application.LabelTransactionDeps) { deps.Finals = nil }},
+		{"clock", func(deps *application.LabelTransactionDeps) { deps.Clock = nil }},
 	}
-	withoutFinals := complete
-	withoutFinals.Finals = nil
-	if _, err := application.NewLabelTransactionHandler(withoutFinals); err == nil {
-		t.Fatal("没有当前有效终局读口仍构造出了 handler")
+	for _, testCase := range cases {
+		deps := complete()
+		testCase.mutate(&deps)
+		handler, err := application.NewLabelTransactionHandler(deps)
+		if !errors.Is(err, application.ErrNilDependency) {
+			t.Fatalf("缺 %s：err = %v, want ErrNilDependency", testCase.name, err)
+		}
+		if !strings.Contains(err.Error(), testCase.name) {
+			t.Fatalf("缺 %s：错误没点名那一口：%v", testCase.name, err)
+		}
+		if handler != nil {
+			t.Fatalf("缺 %s：拒了还交出编排", testCase.name)
+		}
 	}
-	if _, err := application.NewLabelTransactionHandler(complete); err != nil {
-		t.Fatalf("两口齐备仍拒绝构造：%v", err)
+	if _, err := application.NewLabelTransactionHandler(complete()); err != nil {
+		t.Fatalf("口齐全却被拒：%v", err)
 	}
 }
 
