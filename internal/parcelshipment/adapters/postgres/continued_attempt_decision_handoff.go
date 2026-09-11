@@ -15,8 +15,9 @@ import (
 
 // ContinuedAttemptDecisionEventType 是「一条关闭 / 重开决定已落册，这件包裹值得判一次面单服务终局」那封
 // 指针式信封的类型（票 label-channel/30 写、票 label-channel/27 消费）。两种决定共用它：一个处理方、一扇
-// 消费门认一种类型；哪一种在载荷里只作追溯，消费者不据它分支（ADR-0134 决定五）。导出是给 27 的消费者
-// 与 cmd/parcel-dispatch 路由表引同一个串，不在两处各抄一遍。
+// 消费门认一种类型；哪一种在载荷里只作追溯，消费者不据它分支（ADR-0134 决定五）。导出**只为测试对照**：
+// 消费者按 inbox 惯例自写自己的 `eventing.EventType` 常量、路由表引的是那一个，生产代码里不 import 本适配器
+// （票 27「取舍两处」①）；消费者的测试拿本常量比两串相等，装配用例拿它数信封。
 const ContinuedAttemptDecisionEventType = "parcel-shipment.continued-attempt-decision.judgment-due"
 
 // OutboxContinuedAttemptDecisionHandoff 把`面单继续尝试决定`写侧交出的判断意图写入 Outbox，实现
