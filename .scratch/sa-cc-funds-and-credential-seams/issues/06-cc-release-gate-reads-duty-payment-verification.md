@@ -1,7 +1,7 @@
 # 放行门禁核对不读税费付款核对：`VerifyReleaseGate` 的依赖里没有 `DutyVerificationStore`，「税费付款」那一道门禁今天只能由调用方口头交进来
 
 Category: enhancement
-Status: in-progress——2026-09-11 16:4x 通道 4 接单 task-18848394，树 `D:/tops/idp-parcel-mcp4-sacc06` 分支 `mcp4-sacc06` 基 main `620f7fed`（04 已进 main 同目录串接）；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：折法是登记进来的规则（三态各自接受集合，无默认；[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三）、门禁记录加一列核对版本引用（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: resolved——2026-09-11 17:1x 通道 4 完工，等非作者评审进 main（分支 `mcp4-sacc06`，基 main `620f7fed`，代码 tip `455cacbd`；迁移钉 `0019_duty_payment_gate_rule_and_reading.sql`；完成记录见文末）；此前 in-progress——2026-09-11 16:4x 通道 4 接单 task-18848394，树 `D:/tops/idp-parcel-mcp4-sacc06`；此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁，CC owner 口径）写入裁决：折法是登记进来的规则（三态各自接受集合，无默认；[ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rule-is-registered-and-funds-facts-are-minted-only-in-settlement-accounting.md) 决定三）、门禁记录加一列核对版本引用（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
@@ -57,3 +57,49 @@ Blocked by: 无
 
 - 2026-09-10 · 通道 4：立票。未动代码。
 - 2026-09-11 16:4x · 通道 4：接单 task-18848394 开工，基 main `620f7fed`，按「裁决」1 / 2 实现（规则登目录行、门禁记录带三态原值 + 核对版本引用、迁移钉 0019）；本笔只改 Status。
+- 2026-09-11 17:1x · 通道 4：完工，Status → resolved，完成记录见下。两轴评审子代理本会话仍是「Authentication error」（同 04），作者按 `/code-review` 正文串行自跑两遍、结果随记；**不顶替非作者评审**。
+
+## 完成记录（通道 4，2026-09-11）
+
+### 逐笔 SHA（分支 `mcp4-sacc06`，基 main `620f7fed`）
+
+| 笔 | SHA | 内容 |
+|---|---|---|
+| 1 | `810fbd09` | 票面 Status → in-progress |
+| 2 | `23b7f671` | **顺手 · 04 评审 S①**：`ports.CredentialGateDigest` 结论以 `String()` 封闭词入指纹，不再用枚举整数 |
+| 3 | `da4d8369` | domain `duty_payment_gate_rule.go`（`DutyPaymentGateRule` 两形、`Judge`、`DutyPaymentGateReading`、`DutyVerificationReference`、`DutyPaymentPrecondition`、`ReleaseGateVerification.WithDutyPayment` / `DutyPayment`）+ ports（`DutyPaymentGateRuleRegistry` / `DutyPaymentGateRuleView`、`CurrentDutyVerificationView`、`GateVersionDigest`、`GateConditionCatalogueEntry.DutyPaymentRule`）+ application（`VerifyReleaseGate` 改读规则与当前核对、`VerifyGateUndecidedReason`、构造门拒 nil；`RegisterDutyPaymentGateRule`；`RegisterGateFinding` 对这一道关门）与三份用例 |
+| 4 | `664116c9` | 迁移 `0019_duty_payment_gate_rule_and_reading.sql` + postgres `duty_payment_gate_rule.go`（规则写读、当前核对读）、`case_restriction_gate.go`（门禁记录读数各列）、`gate_condition_catalogue.go`（上列带规则）+ 真库用例 |
+| 5 | `99608e4b` | `cmd/parcel-api/assemble_customs_registration.go`、`cmd/parcel-customs-register/main.go`：组合根填 `DutyRules` / `DutyRuleView`（不加端点、不加子命令、不写默认规则） |
+| 6 | `d4f1a1e6` | 机制清点在 `99608e4b` 干净检出重生成（CC 生产 88→90 / 测试 88→91、postgres 适配器 39→40、迁移 165→166、端口声明 397→400；缺口两口径不变）；`455cacbd` 上复跑零差 |
+| 7 | `455cacbd` | 两轴自评修：规则集合编解码抽泛型、门禁指纹两函数共用行、注释去跨文件计数（零行为） |
+
+代码 tip = 分支 tip = `455cacbd`（本票面笔在其后）。**没动**：`receive_external_result.go`、`RegisterReadiness` 的形、`parcel-api` 端点表、`apps/`、`internal/architecture/*baseline.txt`。
+
+### 完成判据逐项（按裁决改读）
+
+1. **`VerifyReleaseGate` 有读付款核对的路径：有核对 → 门禁记录带核对版本引用；无核对 → 未决并指名**——✓。`VerifyReleaseGateDeps` 多 `DutyRules`（规则读半边）与 `DutyVerifications`（`CurrentDutyVerificationView`，按租户 + 范围取当前版）；编排：取规则 → 规则要读核对则取当前版 → `rule.Judge` 折三态 → 这一道以 `DutyPaymentPrecondition` 进清单 → 领域折叠 → 记录 `WithDutyPayment`（三态原值 + `DutyVerificationReference{Duty, Funds, Version=核对指纹}`）。停点各有名（`VerifyGateUndecidedReason`）：`DutyPaymentGateRuleNotConfigured`（规则未配置）/ `DutyVerificationAbsent`（无核对）/ `DutyVerificationPending`（三态待确认或冲突）/ `DutyPaymentFindingRegisteredBesideRule`（认定与规则并存）；都不是「未满足」，都不入册。
+2. **应用层用例覆盖有 / 无 / 待确认三条**——✓ 并多几条：`TestTheDutyPaymentGateIsJudgedByTheRegisteredRuleAndRecordedByReference`（有核对、满足、带引用；核对换版门禁另成一版）、`TestTheDutyPaymentGateAnswersUnmetByRuleAndIsSkippedWhenNotAPrecondition`（不在集内 → 未满足；不构成前置条件 → 不读核对不挂读数）、`TestTheDutyPaymentGateStopsHonestlyInsteadOfAnsweringUnmet`（规则未配置 / 规则读口故障 / 无核对 / 核对读口故障 / 差额待确认 / 有效性冲突 / 认定与规则并存七个停点）、构造门表。规则登记面 `register_duty_payment_gate_rule_test.go`：两形登记、重放 / 冲突、受理门（两形互斥、空集、待确认、冲突、集外）、依赖故障、这一道拒认定。
+3. **真库：门禁记录往返带引用列**——✓ `TestAGateVerificationRoundTripsItsDutyPaymentReadingByReference`（读数各列往返、核对换版另行首版不改、无读数版本各列空）；迁移 **`migrations/customs_compliance/0019_duty_payment_gate_rule_and_reading.sql`**：`gate_condition_duty_payment_rule` 新表（与目录同键、外键到目录行）+ `gate_verification` 加 `duty_state / duty_coverage / duty_delta / duty_validity / duty_ref / funds_ref / duty_version_digest`（同生同灭 CHECK、封闭词 CHECK；PENDING / CONFLICTING 进不来）。另七条真库用例见笔 4。
+
+### 判断项（供评审）
+
+- **「当前版本」怎么定**：`CurrentDutyVerificationView.LoadCurrentDutyVerification(tenant, scope)` 取 `verified_at DESC, version_digest ASC` 第一行——核对时刻最新那版，不按到达顺序、不按指纹；同刻并存按指纹字典序取定，让「当前」在同一份数据上只有一个答案。**不按监管边界过滤**：付款核对的身份是税费版本 / 资金事实 / 范围三维，表上没有程序列，边界在门禁自己的键上（做法 1 写的「按（租户、申报范围、监管程序）」里那第三维在核对册上不存在，如实记）。
+- **规则行落在目录哪一格**：新表 `gate_condition_duty_payment_rule`，主键 = 门禁目录三维键、外键到 `gate_condition_catalog`——同一册的第二张表（0008 已是「目录表 + 认定明细表」两张，这是第三张），一个目录行至多一条规则；不改 `gate_condition_finding` 的形（既有认定行一字不变，ADR-0137 Consequences 那句）。规则正文：`not_a_precondition` + 三个 jsonb 数组接受集合，CHECK 两形互斥、各轴词封闭（`accept_delta <@ '["NO_DELTA","SHORT","EXCESS"]'` 等）。
+- **这一道的引用是机制常量 `DutyPaymentPrecondition = "DUTY_PAYMENT"`**：规则行按目录键落，没有登记方给的前置条件引用；这一道进清单要一个名字，取机制侧固定名（CONTEXT 把「税费付款核对」点名为门禁绑定的前置条件之一），不是实例参数。由此 `RegisterGateFinding` 对这个引用关门（ADR-0137 决定三「不再由人登结论性的认定」），编排遇到册上认定与规则并存停下（`DutyPaymentFindingRegisteredBesideRule`）而不选边。
+- **读数上带 `State`（MET / UNMET）算不算「合成布尔」**：它是规则折出的这一道认定（ADR 说的「编排拿当前付款核对版本对着规则折出认定」），与三态原值并列而不是替代——三态原值三列各自在册（CONTEXT「分别表达」），`State` 是 `FoldGateConclusion` 要吃的那一格。若 owner 认为不该落库，去掉 `duty_state` 一列即可，编排不变。
+- **读数进门禁指纹**（`GateVersionDigest`）：核对换版而折出的判断不变时，门禁另成一版指向新引用——否则记录里的引用会永远指向首版核对。没挂读数时与 `FindingsDigest` 逐字节相同，旧行照旧能撞上。`FindingsDigest` 自身仍以枚举整数入行（本册既有指纹，改会让已入库门禁版本全部换指纹），与 04 S① 的改法不一致，如实记；要改另起一票同步。
+- **「不构成前置条件」那一形**：不读核对、这一道不进清单、不挂读数；只登目录 + 这一形且无其它认定 → 空清单 → `不适用`（此动作在此边界本就不受门禁），与既有折叠一致。
+- **登记面**：规则行今天只有 application 口 `RegisterDutyPaymentGateRule` 与组合根接线，**没有 CLI 子命令、没有端点、没有管理台**——「规则未配置」停点在生产里今天没有解法，与 04 的装配缺口同类，如实记；登记面归 07 家族另票（票面「地盘」未列 CLI / 端点；派单写「若要多收这一格写清不写默认」，本票没收）。
+- `NewVerifyReleaseGateHandler` 改为 `(*Handler, error)` 构造期拒 nil（派单红线）；全仓生产无调用方（与 04 同：本编排今天无装配点），只改用例。
+
+### 两轴自评（`/code-review`，基线 `620f7fed`，作者串行自跑，不顶替非作者评审）
+
+**Standards**：① `dutyRuleSetsJSON` / `rebuildDutyPaymentGateRule` 三轴各写一遍编解码循环、`GateVersionDigest` 与 `FindingsDigest` 各拼一遍行——Duplicated Code，已修（`455cacbd`：泛型 `closedWords` / `closedSet`、共用 `findingDigestLines`）；② postgres 适配器与用例注释「七列」数的是迁移里的列——AGENTS「不数别处的东西」，已修（同笔）。其余：注释中文；`verify_release_gate.go` / `register_case_configuration.go` 原有的「硬句 216」两处顺手换成引文、未新添；`VerifyGateUndecidedReason.String()` 九格齐（enum 门禁绿）；PBC08 负向证据 `TestDutyPaymentGateRuleWritesRefuseToRunOutsideATransaction` 在；`WithinTransaction` 闭包内无 `t.Fatal`；夹具 `SYN-` / `syn-`（顺手把 `verify_release_gate_test.go` 里 `US-IMPORT/TYPE-86` 换成 `SYN-PROC-IMPORT`）。0 未修。
+
+**Spec**：① 做法 1「按（租户、申报范围、监管程序）取当前版」——核对册无程序维，按（租户、范围）取，非阻断如实记（判断项首条）；② 规则登记面缺席（判断项末二条），非阻断；③ `RegisterGateFinding` 对 `DUTY_PAYMENT` 关门是票面没点名的行为变化（ADR-0137 决定三的直接推论），非阻断供评。缺失 0、越界 0（`apps/` 零改动、`receive_external_result.go` 零改动、PP / SA 零改动）。
+
+### 验证（tip `455cacbd`）
+
+- `gofmt -l internal/customscompliance cmd` 空；`go build ./...`、`go vet ./internal/customscompliance/... ./cmd/parcel-api/ ./cmd/parcel-customs-register/` 退 0。
+- 带 DSN（55432 占号 / 释号各两轮）：`go test -count=1 -p 1 ./internal/customscompliance/... ./internal/architecture/... ./migrations/... ./cmd/...` 全绿 0 FAIL；新 postgres 用例 `-v` 7 PASS 0 SKIP；迁移 0019 首施加成功。不跑全量（派单如此）。
+- 新 `.go` 全部 `gofmt -w` 后入库、`git ls-files --eol` 皆 `i/lf w/lf`；`0019_*.sql` CR 数 0、无 BOM，`migrations` EOL 守卫绿。
