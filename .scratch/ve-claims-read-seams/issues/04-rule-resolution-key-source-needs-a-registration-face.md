@@ -1,7 +1,7 @@
 # VE 词到 PC 闭包键的翻译缺登记面——生产装配的 `RuleResolutionKeySource` 今天只能留 nil
 
 Category: enhancement
-Status: in-progress——2026-09-11 23:2x **通道 3 接手**（task-6afdcc42；通道 4 会话已无，其 21:36–21:42 未提交现场由推送方 21:45 封存为 chore(salvage)，原样一字未改）：分支 `mcp4-veclaims04` 在树 `D:/tops/idp-parcel-mcp4-veclaims04` 内 `git rebase origin/main` 到 **`262e8c0a`** 零冲突，`--force-with-lease` 推送，SHA 对照 认领 `a41e1669 → f0a454cf`、封存 `3730ef63 → 3d54438e`；从 `3d54438e` 接着做，先判据 5。此前 in-progress——2026-09-11 21:2x 通道 4 按通道 1 派单 task-c28ddfb5 认领，分支 `mcp4-veclaims04` 基 `02e1dfc4`，树 `D:/tops/idp-parcel-mcp4-veclaims04`；开工第一件事 = 判据 5。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969（用户授权代裁）落 [ADR-0136](../../../docs/adr/0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)，四问全裁，「要做什么」按裁决改写；此前 draft（2026-09-04 随票 03 立）
+Status: resolved——2026-09-11 23:4x 通道 3 作者完工（task-6afdcc42；分支 `mcp4-veclaims04` 基 `262e8c0a`，代码 + 本完成记录同笔，SHA 见完工报）：ADR-0136 落地——VE→PS 回指窄读缝、`ClaimServiceRules` 三段、退役 `RuleResolutionKeySource` / `ErrCustomerServiceRuleUnresolved`、`buildClaimEligibilityRules` 去 Keys 收两只读口、装配测试三态；带 DSN VE `adapters/partycommercial` + `cmd/parcel-api` + `internal/architecture` 全 ok。**判据 3 的「SYN 解析键那一行必需依据含 CustomerServiceRuleObject」在 `262e8c0a` 上做不到**——PS 解析键登记面（迁移 0008 CHECK 白名单 + PS `commercialKindFrom` 名集）今天不收 `CUSTOMER_SERVICE_RULE`，属 PS 地盘；装配测试对着真登记面把这个事实钉成负断言，闭包改经 PC 重建门 + 真解析库落（形照同包 `seedAdoptedClosure`），见「完成记录」判断项 1。等非作者评审 → 推送方重放进 main。此前 in-progress——2026-09-11 23:2x **通道 3 接手**（task-6afdcc42；通道 4 会话已无，其 21:36–21:42 未提交现场由推送方 21:45 封存为 chore(salvage)，原样一字未改）：分支 `mcp4-veclaims04` 在树 `D:/tops/idp-parcel-mcp4-veclaims04` 内 `git rebase origin/main` 到 **`262e8c0a`** 零冲突，`--force-with-lease` 推送，SHA 对照 认领 `a41e1669 → f0a454cf`、封存 `3730ef63 → 3d54438e`；从 `3d54438e` 接着做，先判据 5。此前 in-progress——2026-09-11 21:2x 通道 4 按通道 1 派单 task-c28ddfb5 认领，分支 `mcp4-veclaims04` 基 `02e1dfc4`，树 `D:/tops/idp-parcel-mcp4-veclaims04`；开工第一件事 = 判据 5。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969（用户授权代裁）落 [ADR-0136](../../../docs/adr/0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md)，四问全裁，「要做什么」按裁决改写；此前 draft（2026-09-04 随票 03 立）
 Blocked by: 无（[03](./03-claim-deadline-and-materials-read-party-commercial-rule-content.md) 已 resolved；PS 回指窄读口 `CommercialResolutionReferenceView` 已在 main，见 ADR-0133 Consequences 点名的 ps-port-remainder/07）
 
 ## 事实
@@ -71,9 +71,35 @@ Blocked by: 无（[03](./03-claim-deadline-and-materials-read-party-commercial-r
 - 不替明确服务范围为目标的索赔项选键（ADR-0136 越权风险点 1）；它两维照旧未登记。
 - 不改 PS 解析键登记面的校验强度（ADR-0136 越权风险点 2 归 PS owner）。
 
+## 完成记录
+
+（通道 4 起手 21:2x–21:4x，通道 3 接手 23:2x–23:4x · task-6afdcc42 · 树 `D:/tops/idp-parcel-mcp4-veclaims04`，分支 `mcp4-veclaims04` 基远端 main `262e8c0a`。）
+
+**逐笔**：认领 `f0a454cf`（通道 4，原 `a41e1669`）；封存 `3d54438e`（推送方 21:45 封存通道 4 未提交现场，原 `3730ef63`；`git rebase origin/main` 到 `262e8c0a` 零冲突后 `--force-with-lease` 换号）；接手笔 `5cead8f5`；代码 + 本完成记录同一笔（SHA 见完工报）。
+
+**谁做了什么**：封存件（通道 4）——`claim_service_rules.go` 三段改写 + 两只新哨兵 + 退役四件、`claim_service_rules_test.go` 重写、`assemble_claims.go` 的 `buildClaimEligibilityRules` 去 Keys 改收 PS 回指读口（`pspostgres.NewShipmentRequests`）与 PC 闭包读口（`pcpostgres.NewCommercialResolutions`），这三件接手时已按「要做什么」1–3 落齐，通道 3 一字未改。通道 3——按 parallel-sessions.md「镜像测试」先写自己的第一片 red `claim_service_rules_resolution_test.go`（六格 + 租户不符 + 两提供方 error + nil）再读封存实现：判据逐格同形，连哨兵名都一致（`ErrCommercialClosureAbsent` / `ErrCustomerContractNotAdopted`），形上只差 deps 字段名（`References`），对齐后两份测试对同一实现全绿——留作交叉验证，不删；`assemble_claims_test.go` 从未编译的半成品改写为三态用例（态零「PS 没有」、态一「闭包未采用客户服务规则」、态二「已登记」）+ 三个夹具（`acceptSecondShipmentOnRealAssembly` / `seedClaimRuleClosure` / `effectiveCommercialShell`），退役 `syntheticRuleKeys` 与 `buildClaimsOrchestrationWith` 的引用。
+
+**判据 5（开工第一件事）· PC 闭包快照读写对称**：**对称。** `internal/partycommercial/adapters/postgres/commercial_resolution.go` `documentOfClosure` 对 `closure.Adopted()` 逐项通写 `kind` + 整份 `versionDocument`，不按类别筛，只有 ServiceProduct / SettlementPolicy / CreditBasis 三类附件按在场追加；`closureDocument.closure()` 逐项通读成 `RehydrateAdoptedBasisSpec` 并以已采用的 kinds 重建 `RequiredBases`；`RehydrateCommercialClosure` 只对那三类附件做类别校验，客户服务规则无附件——`AdoptedFor(CustomerServiceRuleObject)` 读得回。真库实证就是装配测试态二：闭包经 PC 真解析库 `Save`，VE 适配器经同一库 `LoadResolution` 读回并取到 `SYN-CSR-1/v1`。
+
+**判据逐项**：
+1. ✓ `git grep -n RuleResolutionKeySource -- internal/ cmd/` 零；`ErrCustomerServiceRuleUnresolved` 零。
+2. ✓ 适配器用例六格各有：PS 没有 / 闭包不在场（`ErrCommercialClosureAbsent`）/ 未采用合同（`ErrCustomerContractNotAdopted`）/ 未采用客户服务规则（未登记，不点读）/ 正文未登（未登记）/ 已登记；租户不符（闭包属另一户）→ `ErrUntranslatableAnswer`。两份文件各一套（封存 `claim_service_rules_test.go` + 交叉验证 `claim_service_rules_resolution_test.go`）。
+3. **部分 ✓，一处改口待裁**：真库三态钉住（态零 PS 没有 → 未登记、编排停 `ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED`，这就是生产装配今天的行为，与 Keys=nil 一字不变；态一 闭包只采用客户合同 → 未登记；态二 闭包采用合同 + 客户服务规则、PC 登正文 → 两维 Registered、`SYN-TENANT-1/SYN-CSR-1/v1`、Required 逐项相等、留格三样零值，编排差材料 → `SUPPLEMENT_DEADLINE_UNDERIVABLE`、材料齐 → `FILING_DEADLINE_UNDERIVABLE`；委托二的索赔不借委托一的规则）。**「SYN 解析键那一行的必需依据含 CustomerServiceRuleObject」做不到**——见判断项 1；用例改为对真登记面钉负断言（含 `CUSTOMER_SERVICE_RULE` 的一行登不进去）+ 正断言（只含客户合同的一行登得进去），两份闭包经 PC 重建门造、经 PC 真解析库落，回指经 PS 真委托仓储 Decide → Save 指向它。
+4. ✓ 包注释与 `buildClaimEligibilityRules` 头注改口（封存件已写）；签名 `buildClaimEligibilityRules(db *bentopg.DB)`，无 Keys、无 clock。
+5. ✓ 见上节。
+6. ✓ `gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；带 DSN `go test -p 1 -count=1` VE `adapters/partycommercial` + `cmd/parcel-api` + `internal/architecture/...` 全 ok（23:37，55432 占 / 释已报通道 1）；无 DSN 同三包亦 ok。机制清点由推送方在干净检出重生成（跨上下文消费缝 VE→PS +1），本记录不预报数字。
+
+**红线核**：`git diff --name-only 262e8c0a` 只有 `internal/visibilityexception/adapters/partycommercial/{claim_service_rules.go,claim_service_rules_test.go,claim_service_rules_resolution_test.go}`、`cmd/parcel-api/{assemble_claims.go,assemble_claims_test.go}` 与本票面；`internal/partycommercial/**`、`internal/parcelshipment/**`、VE 两本册、迁移、`parcel-ve-register` 零改。适配器不拿系统时间、不带默认范围：`buildClaimEligibilityRules` 里没有时钟、没有键。
+
+**判断项**（请评审与 owner 裁）：
+1. **PS 解析键登记面今天不收 `CUSTOMER_SERVICE_RULE`**（`262e8c0a` 实测，两道闸）：迁移 `migrations/parcel_shipment/0008_resolution_key_settlement_selector.sql` 的 CHECK `commercial_resolution_key_registration_bases_closed` 白名单没有它（0020 未改这条）；PS `adapters/partycommercial/commercial_resolution_keys.go` `commercialKindFrom` 的名集也没有 `CustomerServiceRuleObject`——即便行进了库，接受流 `FormResolutionKey` 也会报 unknown kind。所以 ADR-0136 越权风险点 2 写的「客户服务规则可登」在今天不成立，是**不可登**；生产上在 PS owner 开这两道闸之前，没有任何租户能让接受时闭包采用客户服务规则，这条缝恒停在「未采用客户服务规则 → 未登记」。建议：判据 3 那句改口为「闭包采用依据含 CustomerServiceRuleObject 与 CustomerContractObject」；另立 PS 票（两道闸 + 是否必登，归 PS owner，ADR-0136 风险点 2 的实测续记）。装配测试里的负断言在 PS 开门那天会翻红——那是有意的：翻红的处置写在用例头注（改为经登记面登、走接受形成，删重建门那两份）。反方：一条会因别人的正确改动翻红的断言，评审若不接受，去掉负断言只留正断言即可，别的不动。
+2. 两份适配器测试并存（封存的 `claim_service_rules_test.go` 用 PC 真解析器 `ResolveCommercialClosure` 造闭包；交叉验证的 `claim_service_rules_resolution_test.go` 用重建门造）：按「镜像测试」纪律保留，判据同、切法不同（一份证闭包由提供方形状定义，一份证快照读回形状）。若评审认为重复，删交叉验证那份，封存那份已覆盖六格。
+3. 装配测试用 `RehydrateCommercialClosure` 造闭包而不是跑 PC 真 `ResolveCommercialBasisHandler`：同包 `seedAdoptedClosure` 先例同形；真解析器造的话回指由它派生，要再改 `acceptedOnRealAssembly` 的固定 `SYN-RES-1`，收益只是「闭包由解析而来」这一层，而那一层已由 PC 自己的包与封存测试证过。
+
 ## Comments
 
 - 2026-09-04 MCP-4：随票 03 立（draft）。票 03 落地时生产装配 Keys=nil、行为与之前一字不变；本票
   是让那一格真正点亮的那一步。
 - 2026-09-10 · 通道 4（task-d6660969，基 `062f5228`，分支 `mcp4-adr0136`）：四问经用户授权代裁落 ADR-0136，本票「要做什么」按裁决改写、Blocked by 改无、Status → ready-for-agent。**只改 .md，未动代码。** 与派单预期的出入（VE 登记面不立）见「裁决」末段与 ADR-0136 越权风险点 4。
 - 2026-09-11 14:1x · 通道 1 推送方：票面缺「地盘」节（11:2x 节记为不派的原因），从「要做什么」1–4 抄出补齐，不加宽；Status 不变（ready-for-agent），下一波可派。**只改 .md，未动代码。**
+- 2026-09-11 23:4x · 通道 3（task-6afdcc42，接通道 4 封存 `3d54438e`）：作者完工。判据 5 对称；判据 1 / 2 / 4 / 6 全过；判据 3 三态钉住但「解析键含 CSR」做不到——PS 登记面两道闸不收 `CUSTOMER_SERVICE_RULE`（PS 地盘，已中途报推送方），用例改为负断言 + 重建门闭包，改口与 PS 后继票归 owner 裁（判断项 1）。分支已推 origin；等非作者评审后重放。

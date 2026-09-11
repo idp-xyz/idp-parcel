@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
-	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -195,30 +196,24 @@ func TestTheWiredClaimsAnswerHonestlyAgainstARealDatabase(t *testing.T) {
 	}
 }
 
-// syntheticRuleKeys 是装配测试注入的解析键来源。生产装配传 nil——VE 词到 PC 闭包键的映射属实例
-// 半边、今天没有登记面（票 ve-claims-read-seams/03「裁决」）；这里用一份 SYN 键把「已登记」态
-// 钉出来，只在本测试里存在，不进生产装配，只记 `S`。别的租户形不成键，与登记面「无行即未配置」
-// 同形。
-type syntheticRuleKeys struct{ key pcdomain.ClosureResolutionKey }
-
-func (keys syntheticRuleKeys) FormRuleResolutionKey(
-	_ context.Context,
-	query veports.EligibilityQuery,
-) (pcdomain.ClosureResolutionKey, bool, error) {
-	if query.Tenant.String() != keys.key.TenantID.String() {
-		return pcdomain.ClosureResolutionKey{}, false, nil
-	}
-	return keys.key, true, nil
-}
-
-// Covers: 票 ve-claims-read-seams/03 完成标准——资格缝的首次索赔期限与最低材料两维经消费侧适配器
-// 从 PC 客户服务规则正文读（ADR-0104 Consequences），对真库钉两态：本租户在 PC 没有生效的规则版本时
-// 两维照旧未登记、编排停的格不变；PC 登了正文之后两维 Registered 为真、RuleVersion 是 PC 三段版本引用
-// （Decision 五）、Required 与 PC 材料条目逐项相等，而票面留格的 Deadline / SupplementDeadline / Notice
-// 仍是零值。编排侧按票 ve-claims-read-seams/05 钉三态：PC 没登→FILING_DEADLINE_NOT_REGISTERED；登了、
-// 差材料→SUPPLEMENT_DEADLINE_UNDERIVABLE；登了、材料齐→FILING_DEADLINE_UNDERIVABLE。另钉一格：生产装配
-// （键来源 nil）在 PC 登了正文之后**行为一字不变**——那是显式未配置，不是接错。测试输入是隔离合成，只记 `S`。
-func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T) {
+// Covers: 票 ve-claims-read-seams/04「要做什么」4 与完成判据 3（ADR-0136 决定二 / 四）——资格缝的两维按目标
+// 包裹所属委托**接受时固定的商业解析回指**选规则版本：PS 真委托仓储按（租户，包裹身份）答回指，PC 真解析库按
+// （租户，回指）读回快照里已采用的客户服务规则版本（判据 5 读写对称的真库实证），再点读正文。对真库钉三态：
+// 态零「PS 没有」——目标不属任何已接受委托，两维未登记、编排照旧停在 ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED，
+// 这就是生产装配今天对每一封索赔的可观察行为（PS 登记面尚未让闭包形成，ADR-0136 Consequences），与本票之前
+// 键来源留 nil 一字不变；态一「闭包未采用客户服务规则」——委托已接受、闭包只采用了客户合同，两维未登记（恢复
+// 动作是去 PS 解析键登记面列进必需依据，不是登正文）；态二「已登记」——闭包采用了客户合同与客户服务规则、PC
+// 登了正文，两维 Registered、RuleVersion 是 PC 三段版本引用、Required 与 PC 条目逐项相等、留格三样仍零值；编排
+// 侧照票 05 钉差材料 → SUPPLEMENT_DEADLINE_UNDERIVABLE、材料齐 → FILING_DEADLINE_UNDERIVABLE。
+//
+// **闭包怎么来**：ADR-0136 决定四让实例半边落在 PS 的解析键登记面，本用例先对着真登记面钉一个事实——它在
+// 今天（main `262e8c0a`）**不收** `CUSTOMER_SERVICE_RULE`：迁移 `parcel_shipment/0008` 的 CHECK
+// `commercial_resolution_key_registration_bases_closed` 白名单没有它，PS `commercialKindFrom` 的名集也没有。所以
+// 「含客户服务规则的解析键经登记面登、走接受形成闭包」这条路今天走不通（归 PS owner，票面判据 3 随之改口），
+// 两份闭包改由 PC 领域重建门造、经 PC 真解析库落库（形照同包 seedAdoptedClosure），接受决定上的回指指向它——
+// VE 这一头读的每一段（PS 回指读口、PC 快照读回、正文点读）都是真件。PS 登记面收下客户服务规则那天，把
+// 那条负断言翻过来、换成经登记面登再走接受，别的不用动。测试输入是隔离合成，只记 `S`。
+func TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -228,45 +223,41 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 
 	tenant := mustValue(t, pcdomain.NewTenantID, "SYN-TENANT-1")
 	scope := mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-1")
-	anchor, err := pcdomain.NewSelectionAnchor(
-		time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC),
-		mustValue(t, pcdomain.NewAnchorPolicyVersion, "SYN-ANCHOR-POLICY-1"))
-	if err != nil {
-		t.Fatalf("选择锚点：%v", err)
-	}
-	keys := syntheticRuleKeys{key: pcdomain.ClosureResolutionKey{
-		TenantID:             tenant,
-		CustomerAccountID:    mustValue(t, pcdomain.NewCustomerAccountID, "SYN-CUSTOMER-1"),
-		LegalEntityCandidate: mustValue(t, pcdomain.NewLegalEntityReference, "SYN-LEGAL-1"),
-		Scope:                scope,
-		Purpose:              pcdomain.AcceptanceControlPurpose,
-		Anchor:               anchor,
-		RequiredBases:        []pcdomain.CommercialObjectKind{pcdomain.CustomerServiceRuleObject},
-	}}
 
-	claims, err := buildClaimsOrchestrationWith(db, keys)
+	// 生产装配本身就是被测对象：`buildClaimsOrchestration` 接的读面与 `buildClaimEligibilityRules` 同一份。
+	claims, err := buildClaimsOrchestration(db)
 	if err != nil {
 		t.Fatalf("装配索赔编排：%v", err)
 	}
-	rules, err := buildClaimEligibilityRules(db, systemClock{}, keys)
+	rules, err := buildClaimEligibilityRules(db)
 	if err != nil {
 		t.Fatalf("装配资格规则读面：%v", err)
 	}
 
-	command := visibilityapp.ReceiveClaimCommand{
-		TenantID:    mustValue(t, visibilitydomain.NewTenantID, "SYN-TENANT-1"),
-		Batch:       mustValue(t, visibilitydomain.NewClaimBatchReference, "SYN-CLAIM-BATCH-1"),
-		Item:        mustValue(t, visibilitydomain.NewClaimItemID, "SYN-CLAIM-ITEM-1"),
-		Customer:    mustValue(t, visibilitydomain.NewCustomerAccountReference, "SYN-CUSTOMER-1"),
-		Applicant:   mustValue(t, visibilitydomain.NewApplicantReference, "SYN-APPLICANT-1"),
-		Contract:    mustValue(t, visibilitydomain.NewContractScopeReference, "SYN-CONTRACT-1"),
-		Target:      mustValue(t, visibilitydomain.NewRequestScopeReference, "SYN-PARCEL-1"),
-		Kind:        mustValue(t, visibilitydomain.NewClaimKindReference, "SYN-KIND-LOSS"),
-		SubmittedAt: time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC),
+	// 两项索赔同租户同客户同合同：一项指向随后接受的委托一（闭包采用客户合同 + 客户服务规则），另一项指向
+	// 委托二（闭包只采用客户合同）。目标范围引用原样是 PS 的声明包裹身份。
+	submission := submissionCommand(t)
+	receive := func(item, target string) visibilityapp.ReceiveClaimCommand {
+		t.Helper()
+		command := visibilityapp.ReceiveClaimCommand{
+			TenantID:    mustValue(t, visibilitydomain.NewTenantID, submission.Identity.TenantID().String()),
+			Batch:       mustValue(t, visibilitydomain.NewClaimBatchReference, "SYN-CLAIM-BATCH-1"),
+			Item:        mustValue(t, visibilitydomain.NewClaimItemID, item),
+			Customer:    mustValue(t, visibilitydomain.NewCustomerAccountReference, submission.Identity.CustomerAccountID().String()),
+			Applicant:   mustValue(t, visibilitydomain.NewApplicantReference, "SYN-APPLICANT-1"),
+			Contract:    mustValue(t, visibilitydomain.NewContractScopeReference, "SYN-CONTRACT-1"),
+			Target:      mustValue(t, visibilitydomain.NewRequestScopeReference, target),
+			Kind:        mustValue(t, visibilitydomain.NewClaimKindReference, "SYN-KIND-LOSS"),
+			SubmittedAt: time.Date(2026, 8, 22, 10, 0, 0, 0, time.UTC),
+		}
+		if received, err := claims.ReceiveClaim(ctx, command); err != nil || received.Outcome() != visibilityapp.ClaimReceived {
+			t.Fatalf("受理索赔 %s：outcome=%v err=%v", item, received.Outcome(), err)
+		}
+		return command
 	}
-	if received, err := claims.ReceiveClaim(ctx, command); err != nil || received.Outcome() != visibilityapp.ClaimReceived {
-		t.Fatalf("受理索赔：outcome=%v err=%v", received.Outcome(), err)
-	}
+	first := receive("SYN-CLAIM-ITEM-1", submission.DeclaredParcelIDs[0].String())
+	second := receive("SYN-CLAIM-ITEM-2", "syn-parcel-2")
+
 	registrar, err := vepostgres.NewCatalogRegistrar(db)
 	if err != nil {
 		t.Fatalf("构造目录写入方：%v", err)
@@ -274,11 +265,11 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 	var eligibilityOutcome veports.CatalogRegistrationOutcome
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
 		var registerErr error
-		eligibilityOutcome, registerErr = registrar.RegisterClaimEligibility(txCtx, command.TenantID,
+		eligibilityOutcome, registerErr = registrar.RegisterClaimEligibility(txCtx, first.TenantID,
 			veports.ClaimEligibilityRegistration{
 				Header:       veports.CatalogApprovalHeader{Version: "SYN-CLAIM-RULES-1", ApprovedBy: "SYN-OPERATOR-1"},
-				Contract:     command.Contract,
-				CoveredKinds: []visibilitydomain.ClaimKindReference{command.Kind},
+				Contract:     first.Contract,
+				CoveredKinds: []visibilitydomain.ClaimKindReference{first.Kind},
 			})
 		return registerErr
 	}); err != nil {
@@ -288,19 +279,14 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 		t.Fatalf("登记索赔声明应成功，实得 %s", eligibilityOutcome)
 	}
 
-	query := veports.EligibilityQuery{
-		Tenant:    command.TenantID,
-		Batch:     command.Batch,
-		Item:      command.Item,
-		Customer:  command.Customer,
-		Contract:  command.Contract,
-		Target:    command.Target,
-		Kind:      command.Kind,
-		Applicant: command.Applicant,
+	queryFor := func(command visibilityapp.ReceiveClaimCommand) veports.EligibilityQuery {
+		return veports.EligibilityQuery{
+			Tenant: command.TenantID, Batch: command.Batch, Item: command.Item, Customer: command.Customer,
+			Contract: command.Contract, Target: command.Target, Kind: command.Kind, Applicant: command.Applicant,
+		}
 	}
-	// 解析要固定闭包进 PC 解析库（ADR-0027），读面因此只在事务内可用——生产路径上索赔编排
-	// 本来就包在一笔事务里（transactionalClaims）。
-	readRules := func() veports.EligibilityRules {
+	// 读面走 RequireExecutor，只在事务内可用——生产路径上索赔编排本来就包在一笔事务里（transactionalClaims）。
+	readRules := func(query veports.EligibilityQuery) veports.EligibilityRules {
 		t.Helper()
 		var answer veports.EligibilityRules
 		var declared bool
@@ -316,29 +302,84 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 		}
 		return answer
 	}
-	screenCommand := visibilityapp.ScreenClaimCommand{TenantID: command.TenantID, Batch: command.Batch, Item: command.Item}
+	screenFor := func(command visibilityapp.ReceiveClaimCommand) visibilityapp.ScreenClaimCommand {
+		return visibilityapp.ScreenClaimCommand{TenantID: command.TenantID, Batch: command.Batch, Item: command.Item}
+	}
 
-	// 态一：VE 的册在场、PC 这个范围里没有生效的客户服务规则版本——两维照旧未登记，编排停的格不变。
-	before := readRules()
+	// 态零：目标不属任何已接受委托——PS 答没有，不进 PC；两维未登记，编排照旧停在 FILING_DEADLINE_NOT_REGISTERED。
+	// 这一格就是生产装配今天的行为，与本票之前键来源留 nil 一字不变。
+	before := readRules(queryFor(first))
 	if before.FilingDeadline.Registered || before.Materials.Registered {
-		t.Fatalf("PC 没登规则却答了登记：%#v", before)
+		t.Fatalf("PS 没有回指却答了登记：%#v", before)
 	}
 	if !before.KindCovered {
 		t.Fatal("VE 自己的册说类型在保，叠两维之后丢了")
 	}
-	screened, err := claims.ScreenClaim(ctx, screenCommand)
+	screened, err := claims.ScreenClaim(ctx, screenFor(first))
 	if err != nil || screened.Outcome() != visibilityapp.HandleClaimUndecided ||
 		screened.UndecidedReason() != visibilityapp.EligibilityFilingDeadlineNotRegistered {
-		t.Fatalf("PC 没登规则时的审核：outcome=%v reason=%v err=%v，要照旧停在 ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED",
+		t.Fatalf("PS 没有回指时的审核：outcome=%v reason=%v err=%v，要照旧停在 ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED",
 			screened.Outcome(), screened.UndecidedReason(), err)
 	}
 
-	// 态二：PC 发布一版客户服务规则壳并登记正文（首次索赔期限一行 + 本索赔类型一份材料清单）。
+	// PS 解析键登记面的事实钉：含 CUSTOMER_SERVICE_RULE 的一行今天登不进去（CHECK 白名单没有它）；只含客户合同的
+	// 一行登得进去。前者翻绿那天，本用例的两份闭包改为经登记面登、走接受形成。
+	keyStore, err := pspostgres.NewCommercialResolutionKeyStore(db)
+	if err != nil {
+		t.Fatalf("构造解析键登记面：%v", err)
+	}
+	keys, err := pspartycommercial.NewCommercialResolutionKeys(keyStore)
+	if err != nil {
+		t.Fatalf("构造解析键适配器：%v", err)
+	}
+	registerKey := func(bases ...pcdomain.CommercialObjectKind) (pspartycommercial.ResolutionKeySaveOutcome, error) {
+		var outcome pspartycommercial.ResolutionKeySaveOutcome
+		err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			var registerErr error
+			outcome, registerErr = keys.Register(txCtx, pspartycommercial.ResolutionKeyRegistration{
+				TenantID:          submission.Identity.TenantID(),
+				CustomerAccountID: submission.Identity.CustomerAccountID(),
+				Scope:             scope,
+				LegalEntity:       mustValue(t, pcdomain.NewLegalEntityReference, "SYN-LEGAL-1"),
+				AnchorPolicy:      mustValue(t, pcdomain.NewAnchorPolicyVersion, "SYN-ANCHOR-POLICY-1"),
+				AnchorAt:          time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC),
+				RequiredBases:     bases,
+			})
+			return registerErr
+		})
+		return outcome, err
+	}
+	if _, err := registerKey(pcdomain.CustomerContractObject, pcdomain.CustomerServiceRuleObject); err == nil {
+		t.Fatal("PS 解析键登记面收下了含 CUSTOMER_SERVICE_RULE 的一行——它开门了：把本用例的闭包改为经登记面登、走接受形成，删掉重建门那两份")
+	}
+	if outcome, err := registerKey(pcdomain.CustomerContractObject); err != nil || outcome != pspartycommercial.ResolutionKeySaved {
+		t.Fatalf("只含客户合同的解析键登不进 PS 登记面：outcome=%s err=%v", outcome, err)
+	}
+
+	// 态一：委托二已接受，闭包只采用了客户合同（租户没把客户服务规则列进必需依据）——两维未登记，
+	// 恢复动作是去 PS 解析键登记面列进那一类，不是去 PC 登正文。
+	contract := effectiveCommercialShell(t, tenant, pcdomain.CustomerContractObject, "SYN-CONTRACT-1", scope)
+	acceptSecondShipmentOnRealAssembly(t, db, "SYN-RES-2")
+	seedClaimRuleClosure(t, db, "SYN-RES-2", contract)
+	contractOnly := readRules(queryFor(second))
+	if contractOnly.FilingDeadline.Registered || contractOnly.Materials.Registered {
+		t.Fatalf("闭包没采用客户服务规则却答了登记：%#v", contractOnly)
+	}
+	screened, err = claims.ScreenClaim(ctx, screenFor(second))
+	if err != nil || screened.UndecidedReason() != visibilityapp.EligibilityFilingDeadlineNotRegistered {
+		t.Fatalf("闭包未采用客户服务规则时的审核：reason=%v err=%v，要停在 ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED",
+			screened.UndecidedReason(), err)
+	}
+
+	// 态二：委托一已接受，闭包采用了客户合同与客户服务规则；PC 发布那一版客户服务规则壳并登记正文（首次索赔
+	// 期限一行 + 本索赔类型一份材料清单）。
+	version := effectiveCustomerServiceRule(t, tenant, scope)
+	acceptedOnRealAssembly(t, db)
+	seedClaimRuleClosure(t, db, "SYN-RES-1", contract, version)
 	publications, err := pcpostgres.NewCommercialPublications(db)
 	if err != nil {
 		t.Fatalf("构造商业发布登记册：%v", err)
 	}
-	version := effectiveCustomerServiceRule(t, tenant, scope)
 	content, err := pcdomain.NewCustomerServiceRuleVersion(
 		version,
 		pcdomain.CustomerServiceRuleAppliesToCustomerContract(mustValue(t, pcdomain.NewCommercialObjectID, "SYN-CONTRACT-1")),
@@ -366,11 +407,12 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 		t.Fatalf("发布壳 = %s、登记正文 = %s，两步都应成功", shellOutcome, contentOutcome)
 	}
 
-	after := readRules()
+	command, screenCommand := first, screenFor(first)
+	after := readRules(queryFor(first))
 	deadline := after.FilingDeadline
 	if !deadline.Registered || deadline.RuleVersion != "SYN-TENANT-1/SYN-CSR-1/v1" ||
 		deadline.StartEvent != "SYN-EVENT-DELIVERED" || deadline.Calendar != "SYN-CALENDAR-1" ||
-		deadline.Scope != "SYN-PARCEL-1" {
+		deadline.Scope != first.Target.String() {
 		t.Fatalf("首次索赔期限维 = %#v，要 Registered、PC 三段版本引用、照引用转写的起算事件与日历、索赔目标范围", deadline)
 	}
 	if !deadline.Deadline.IsZero() {
@@ -433,16 +475,173 @@ func TestTheWiredClaimsReadCustomerServiceRulesFromPartyCommercial(t *testing.T)
 		t.Fatalf("reason = %v, want ELIGIBILITY_FILING_DEADLINE_UNDERIVABLE——规则在 PC 里，缺的是起算事实与日历能力", got)
 	}
 
-	// 生产装配：键来源 nil 是显式未配置，PC 登了正文也不改答案——两维仍未登记，编排停的格与本票之前一字不变。
-	production, err := buildClaimsOrchestration(db)
+	// 委托二那项索赔不因委托一的闭包改口：两维按各自目标包裹的回指各选各的，闭包只采用了客户合同的仍未登记。
+	if again := readRules(queryFor(second)); again.FilingDeadline.Registered || again.Materials.Registered {
+		t.Fatalf("委托二的索赔借了委托一的规则：%#v", again)
+	}
+}
+
+// acceptSecondShipmentOnRealAssembly 在 submissionCommand 那份委托之外再提交并接受第二份（同租户同客户，另一把来源键、
+// 另一件包裹），接受决定上的回指指向 resolution。形照 acceptedOnRealAssembly：走生产提交装配，再经领域 Decide + 真仓储 Save。
+func acceptSecondShipmentOnRealAssembly(t *testing.T, db *bentopg.DB, resolution string) {
+	t.Helper()
+	base := submissionCommand(t)
+	identity, err := psdomain.NewSourceIdentity(
+		base.Identity.TenantID(), base.Identity.CustomerAccountID(), base.Identity.Source(),
+		mustValue(t, psdomain.NewSourceRequestKey, "SYN-KEY-2"))
 	if err != nil {
-		t.Fatalf("生产装配：%v", err)
+		t.Fatalf("第二份来源身份：%v", err)
 	}
-	screened, err = production.ScreenClaim(ctx, screenCommand)
-	if err != nil || screened.UndecidedReason() != visibilityapp.EligibilityFilingDeadlineNotRegistered {
-		t.Fatalf("生产装配的审核：reason=%v err=%v，键来源未配置时要照旧停在 ELIGIBILITY_FILING_DEADLINE_NOT_REGISTERED",
-			screened.UndecidedReason(), err)
+	command := base
+	command.Identity = identity
+	command.PayloadDigest = mustValue(t, psdomain.NewPayloadDigest, "syn-digest-2")
+	command.BatchID = mustValue(t, psdomain.NewSubmissionBatchID, "syn-batch-2")
+	command.ShipmentRequestID = mustValue(t, psdomain.NewShipmentRequestID, "syn-request-2")
+	command.DeclaredParcelIDs = []psdomain.DeclaredParcelID{mustValue(t, psdomain.NewDeclaredParcelID, "syn-parcel-2")}
+
+	submission, _ := envelopeMintingSubmission(t, db)
+	if submitted, err := submission.Handle(t.Context(), command); err != nil || submitted.Outcome() != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("提交第二份委托：outcome=%v err=%v", submitted.Outcome(), err)
 	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), identity)
+	if err != nil || !found {
+		t.Fatalf("取回第二份委托：err=%v found=%v", err, found)
+	}
+	applicable, err := psdomain.NewApplicableCheckGroups(psdomain.NetworkReachabilityCheck)
+	if err != nil {
+		t.Fatalf("适用校验组：%v", err)
+	}
+	basis, err := psdomain.NewCommercialBasisSnapshot(psdomain.CommercialBasisSnapshotSpec{
+		ResolutionID: mustValue(t, psdomain.NewCommercialResolutionID, resolution),
+		RulePackage:  mustValue(t, psdomain.NewRulePackageReference, "SYN-RULES-1/v1"),
+		ViewRevision: mustValue(t, psdomain.NewCommercialViewRevision, "SYN-VIEW-1"),
+		Applicable:   applicable,
+		ManualReview: psdomain.ManualReviewNotRequiredByRules,
+	})
+	if err != nil {
+		t.Fatalf("商业依据快照：%v", err)
+	}
+	check, err := psdomain.NewAcceptanceCheck(psdomain.NetworkReachabilityCheck, command.DeclaredParcelIDs[0], psdomain.CheckPassed, psdomain.CheckReason{})
+	if err != nil {
+		t.Fatalf("接受校验：%v", err)
+	}
+	accepted, err := request.Decide(psdomain.AcceptanceDecisionSpec{
+		DecisionID: mustValue(t, psdomain.NewAcceptanceDecisionID, "SYN-DECISION-2"),
+		Checks:     []psdomain.AcceptanceCheck{check},
+		Basis:      basis,
+		DecidedAt:  time.Date(2026, 8, 21, 10, 30, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("形成接受：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		saved, err := requests.Save(txCtx, identity, accepted)
+		if err != nil {
+			return err
+		}
+		if saved != psports.ShipmentRequestSaved {
+			return fmt.Errorf("save outcome = %v", saved)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("存已接受的第二份委托：%v", err)
+	}
+}
+
+// seedClaimRuleClosure 给回指 resolution 落一份 PC 唯一已解析闭包，采用依据由调用方给（客户合同、客户服务规则）；
+// 经 PC 领域重建门造、经 PC 真解析库落库（形照 seedAdoptedClosure）。为什么不经 PS 登记面走接受形成，见用例头注。
+func seedClaimRuleClosure(t *testing.T, db *bentopg.DB, resolution string, adopted ...pcdomain.CommercialVersion) {
+	t.Helper()
+	identity := submissionCommand(t).Identity
+	anchor, err := pcdomain.NewSelectionAnchor(
+		time.Date(2026, 8, 21, 10, 0, 0, 0, time.UTC),
+		mustValue(t, pcdomain.NewAnchorPolicyVersion, "SYN-ANCHOR-POLICY-1"))
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	specs := make([]pcdomain.RehydrateAdoptedBasisSpec, 0, len(adopted))
+	bases := make([]pcdomain.CommercialObjectKind, 0, len(adopted))
+	for _, version := range adopted {
+		specs = append(specs, pcdomain.RehydrateAdoptedBasisSpec{Kind: version.Kind(), Version: version})
+		bases = append(bases, version.Kind())
+	}
+	closure, err := pcdomain.RehydrateCommercialClosure(pcdomain.RehydrateCommercialClosureSpec{
+		Outcome:      pcdomain.UniquelyResolved,
+		ResolutionID: mustValue(t, pcdomain.NewResolutionID, resolution),
+		Key: pcdomain.ClosureResolutionKey{
+			TenantID:             mustValue(t, pcdomain.NewTenantID, identity.TenantID().String()),
+			CustomerAccountID:    mustValue(t, pcdomain.NewCustomerAccountID, identity.CustomerAccountID().String()),
+			LegalEntityCandidate: mustValue(t, pcdomain.NewLegalEntityReference, "SYN-LEGAL-1"),
+			Scope:                mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-1"),
+			Purpose:              pcdomain.AcceptanceControlPurpose,
+			Anchor:               anchor,
+			RequiredBases:        bases,
+		},
+		Anchor:       anchor,
+		ViewRevision: mustValue(t, pcdomain.NewAuthorityViewRevision, "SYN-VIEW-1"),
+		Adopted:      specs,
+	})
+	if err != nil {
+		t.Fatalf("重建唯一已解析闭包：%v", err)
+	}
+	resolutions, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		t.Fatalf("构造解析库：%v", err)
+	}
+	var outcome pcports.ResolutionSaveOutcome
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		var saveErr error
+		outcome, saveErr = resolutions.Save(txCtx, closure)
+		return saveErr
+	}); err != nil {
+		t.Fatalf("存闭包：%v", err)
+	}
+	if outcome != pcports.ResolutionSaved {
+		t.Fatalf("闭包 save outcome = %s, want 首次写入", outcome)
+	}
+}
+
+// effectiveCommercialShell 用导出 API 造一版已生效的商业版本壳（客户合同一类在这里只当闭包的采用依据，不登正文）。
+func effectiveCommercialShell(t *testing.T, tenant pcdomain.TenantID, kind pcdomain.CommercialObjectKind, objectID string, scope pcdomain.CommercialScopeReference) pcdomain.CommercialVersion {
+	t.Helper()
+	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	draft, err := pcdomain.NewCommercialDraft(pcdomain.CommercialVersionSpec{
+		TenantID:      tenant,
+		Kind:          kind,
+		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, objectID),
+		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, "v1"),
+		Scope:         scope,
+		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:"+objectID),
+		Effective:     interval,
+	})
+	if err != nil {
+		t.Fatalf("商业草稿：%v", err)
+	}
+	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	basis, err := pcdomain.NewApprovalBasis(
+		mustValue(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-"+objectID),
+		mustValue(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-"+objectID),
+		approvedAt,
+	)
+	if err != nil {
+		t.Fatalf("批准依据：%v", err)
+	}
+	published, err := draft.Publish(basis, pcdomain.ApprovalRoleConfirmed, approvedAt, nil)
+	if err != nil {
+		t.Fatalf("发布：%v", err)
+	}
+	live, err := published.TakeEffect(approvedAt)
+	if err != nil {
+		t.Fatalf("生效：%v", err)
+	}
+	return live
 }
 
 // effectiveCustomerServiceRule 用导出 API 造一版已生效的客户服务规则壳，范围与锚点落在同一处。
