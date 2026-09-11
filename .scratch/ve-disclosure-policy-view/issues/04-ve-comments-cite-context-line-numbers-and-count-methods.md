@@ -1,7 +1,7 @@
 # VE 注释里的「硬句 NNN」是 CONTEXT 行号；目录读口一族头注数着「六法 / 七法 / 八法」——一笔改口成引文与点名，零行为
 
 Category: chore
-Status: ready-for-agent——2026-09-11 14:2x 通道 1 推送方立票并直接转 ready（要裁的为零；收下 12:0x 节「VE 注释『六法 / 八法 / 七法』计数一族归 VE owner」那条候选后继，扩到同族行号引用）；取证锚 main `0b027ab8`
+Status: in-progress——2026-09-11 22:5x 通道 3 认领（task-7309fe70；分支 `mcp3-vedisc04-2` 基远端 main `609e334b`，隔离树 `D:/tops/idp-parcel-mcp3-vedisc04`；21:2x 前会话的认领笔只在 salvage 分支上、零代码，不用）。此前 ready-for-agent——2026-09-11 14:2x 通道 1 推送方立票并直接转 ready（要裁的为零；收下 12:0x 节「VE 注释『六法 / 八法 / 七法』计数一族归 VE owner」那条候选后继，扩到同族行号引用）；取证锚 main `0b027ab8`
 Blocked by: 无（硬）。**软阻**：第五波 ve-disc/02（通道 3）正在 `internal/visibilityexception/application` / `adapters/http` 与 `cmd/parcel-ve-register` 动手——本票在 `internal/visibilityexception/**` 大面积改注释，先于它进 main 会让它 rebase 时逐文件解注释冲突；**等 ve-disc/02 进 main 后再开工**，推送方广播后转派——**ve-disc/02 已 16:5x 进 main（2026-09-11，通道 1 推送方记），软阻解除，可派**；02 评审又点了一处同族（`application/register_catalog.go` `CatalogRegistry` 头注「ports 里三口分立」「`postgres.CatalogRegistrar` 三口本就齐备」数的是 ports / postgres 两包的东西），随本票一并收；02 评审 Standards ②（`application.CatalogRegistry` 与 `ports.CatalogRegistry` 两包同名不同型）是改名题不是注释题，**不并入本票**，归 VE owner
 
 ## 缺口（取证于 `0b027ab8`；数本身是论点，故写数并锚 SHA）
