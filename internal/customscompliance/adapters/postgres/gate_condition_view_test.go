@@ -107,7 +107,7 @@ func TestAConflictingFindingSurvivesTheRoundTrip(t *testing.T) {
 	}
 }
 
-// 门禁判断不能复用于其他动作或监管边界（CONTEXT 硬句 216）。动作在主键里，因此换
+// 门禁判断不能复用于其他动作或监管边界（CONTEXT「不能复用于其他动作或监管边界」）。动作在主键里，因此换
 // 一个动作就是另一份目录——这条把它钉在读口上。
 func TestGateConditionsDoNotLeakAcrossActionsOrBoundaries(t *testing.T) {
 	view, fixture := newGateConditionView(t)

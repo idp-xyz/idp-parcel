@@ -116,8 +116,8 @@ func NewExternalFundsFactReference(value string) (ExternalFundsFactReference, er
 }
 
 // DutyPaymentVerification 是一次版本化的税费付款核对：覆盖、差额与有效性三轴分别
-// 表达（CONTEXT 硬句 214 明禁实现为一组互斥总状态——三个独立枚举正是那半句的类型
-// 面）。它不形成实际付款、客户回收或监管放行——类型上没有那些字段。
+// 表达（CONTEXT 明禁「实现为一组互斥总状态」——三个独立枚举正是那半句的类型面）。它不形成
+// 实际付款、客户回收或监管放行——类型上没有那些字段。
 type DutyPaymentVerification struct {
 	duty       AssessedDutyReference
 	funds      ExternalFundsFactReference
@@ -381,7 +381,7 @@ func FoldGateConclusion(findings []PreconditionFinding) (GateConclusion, error) 
 
 // ReleaseGateVerification 是针对明确申报范围、拟执行动作和适用监管边界的放行前置
 // 条件版本化判断。动作绑定构造期固定——门禁判断不能复用于其他动作或监管边界
-// （CONTEXT 硬句 216）；类型上没有放行字段——门禁满足不生成放行，放行结果仍由外部
+// （CONTEXT「不能复用于其他动作或监管边界」）；类型上没有放行字段——门禁满足不生成放行，放行结果仍由外部
 // 事实接收。
 type ReleaseGateVerification struct {
 	scope         DecisionScopeReference

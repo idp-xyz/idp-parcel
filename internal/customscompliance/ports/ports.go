@@ -26,7 +26,7 @@ type ExternalResultKey struct {
 }
 
 // ExternalResultRecord 是一次外部结果接收越过提交边界留下的东西。归属不上原提交的
-// 响应以 Unattributable 留存原始语义与其声称的版本——留存不猜（CONTEXT 硬句 187：
+// 响应以 Unattributable 留存原始语义与其声称的版本——留存不猜（CONTEXT「不得据此猜测提交、补造缺失层次」：
 // 不得据此猜测提交、补造缺失层次或按最后到达直接改变当前判断）；同层冲突以
 // LayerConflict 标记，双方事实都在库里，不选边。
 type ExternalResultRecord struct {
@@ -77,7 +77,7 @@ type SubmissionIndex interface {
 
 // InterpretationRuleView 按（租户，结果层，适用辖区）在评估时点上解析该层外部响应
 // 适用的解释规则版本（选择侧，ADR-0070 决定一/二）。登记册按法定生效区间半开解析：
-// evaluatedAt 取业务发生或适用时间，绝不取消息到达或系统当前时间（CONTEXT 硬句 191）。
+// evaluatedAt 取业务发生或适用时间，绝不取消息到达或系统当前时间（CONTEXT「不能统一替代规则的法定适用时点」）。
 // found=false 表示该辖区该层在该时点没有已登记的规则版本——实例半边未提供时解释停在
 // 未决，不用默认口径猜测监管语义，也不拿当前指针兜底。
 type InterpretationRuleView interface {
@@ -535,8 +535,8 @@ type DeclarationUnitStore interface {
 }
 
 // DeclarationSubmissionKey 是提交申报的幂等键：同一逻辑申报目标（租户+申报单元+监管
-// 程序）重复提交返回原版本，不重复形成（CONTEXT 硬句 168：首次实际发送前形成不可
-// 覆盖版本）。
+// 程序）重复提交返回原版本，不重复形成（CONTEXT「首次实际对外发送前都必须形成不可覆盖的
+// 提交版本」）。
 type DeclarationSubmissionKey struct {
 	TenantID  domain.TenantID
 	Unit      domain.DeclarationUnitID
@@ -551,7 +551,7 @@ type DeclarationSubmissionRecord struct {
 	Version       domain.CustomsSubmissionVersion
 	Attempt       domain.SubmissionAttempt
 	RecordedAt    time.Time
-	// CorrectedFrom 指名被本版本更正的前一版（原案内更正/补充，CONTEXT 硬句 169）；
+	// CorrectedFrom 指名被本版本更正的前一版（原案内更正/补充，CONTEXT「原提交及其结果永久保留」）；
 	// 零值即首版。替代关系由源上下文随更正一并给出（VE CONTEXT「来源事实替代关系」
 	// 的所有权句），这一格就是它的来处——下游消费按它登记替代，不自行推断谁更正了谁。
 	CorrectedFrom domain.SubmissionVersionID
@@ -578,7 +578,7 @@ const (
 
 // DeclarationSubmissionStore 按幂等键找回并保存提交申报（写入代数同 ADR-0031）。
 // FindByKey 交回当前版；FindByVersion 按版本读回留存版本（原案内更正后原版本永久
-// 保留，CONTEXT 硬句 169——下游按信封宣告的版本取数，不受当前版推进影响）。
+// 保留，CONTEXT「原提交及其结果永久保留」——下游按信封宣告的版本取数，不受当前版推进影响）。
 // SaveCorrection 在同一事务里把 CorrectedFrom 指名的当前版转为非当前并落新版本行，
 // 前版内容一列不改。
 type DeclarationSubmissionStore interface {

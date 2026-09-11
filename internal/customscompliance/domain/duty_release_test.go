@@ -10,7 +10,7 @@ import (
 
 var verifiedAt = time.Date(2026, 8, 11, 16, 0, 0, 0, time.UTC)
 
-// Covers: CC CONTEXT 硬句 214「覆盖状态、差额状态和有效性状态分别表达，不能实现为
+// Covers: CC CONTEXT「覆盖状态、差额状态和有效性状态分别表达，不能实现为
 // 一组互斥总状态」——三个独立枚举各自取值（部分覆盖+不足+有效并存），任一轴缺失
 // 立不起核对；类型上无付款/回收/放行字段。
 func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
