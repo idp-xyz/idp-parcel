@@ -49,6 +49,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -223,6 +224,16 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造税费付款协作与核对写口：%w", err)
 	}
+	// 核对形成那一格同事务向 settlement-accounting 交信封（票 sa-cc/05）；本口一次调用一笔事务，
+	// 意图与核对行因此同生共死。
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		return none, fmt.Errorf("构造 Outbox Store：%w", err)
+	}
+	verificationHandoff, err := adapter.NewOutboxDutyPaymentVerificationHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造税费付款核对交接口：%w", err)
+	}
 
 	configurations := application.NewRegisterCaseConfigurationHandler(application.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
@@ -247,6 +258,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 			Collaborations: dutyReconciliation,
 			Funds:          dutyReconciliation,
 			Verifications:  dutyReconciliation,
+			Handoff:        verificationHandoff,
 			Clock:          systemClock{},
 		})
 	if err != nil {

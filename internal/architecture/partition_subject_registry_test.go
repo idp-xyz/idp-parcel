@@ -91,6 +91,11 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/customscompliance/adapters/postgres/manifest_handoff.go":               partitionSubjectPrefix + "租户/舱单",
 	"internal/customscompliance/adapters/postgres/restriction_handoff.go":            partitionSubjectPrefix + "租户/范围（限制决定范围）",
 	"internal/customscompliance/adapters/postgres/verification_handoff.go":           partitionSubjectPrefix + "租户/处置执行决定",
+	// 税费付款核对交接口（票 sa-cc/05 裁决 1）按申报范围排队：同一范围的核对版本链一条队，税费版本
+	// 只是新核对版本的来源之一。键带口名段与 restriction_handoff 的「租户/范围」错开——两口的范围是
+	// 同一个 DecisionScopeReference 字符串，不带段就共队，而两口之间没有消费方依赖跨口到达序
+	// （理由同 ADR-0074 决定二）。
+	"internal/customscompliance/adapters/postgres/duty_payment_verification_handoff.go": partitionSubjectPrefix + "租户/申报范围（同范围核对版本链同区排队，/duty-payment-verification/ 段）",
 
 	// —— network-routing ——
 	"internal/networkrouting/adapters/postgres/initial_route_handoff.go": partitionPerEnvelopePrefix + "键即信封 ID（判断键含接受基线）",

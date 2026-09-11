@@ -59,11 +59,13 @@ func (book *fakeCredentialBook) LoadCredential(
 }
 
 // fakeDutyBook 一本替身充当协作事项、资金事实引用、付款核对三口——与真库适配器
-// DutyPaymentReconciliation 三口一体同形；三张表各自的键互不相干。
+// DutyPaymentReconciliation 三口一体同形；三张表各自的键互不相干。核对形成那一格向 SA 交
+// 信封的交接口（票 sa-cc/05）也挂在这本上，记下每一份意图，本口证的是子命令把它接通了。
 type fakeDutyBook struct {
 	collaborations   map[string]domain.DutyPaymentCollaboration
 	funds            map[string]ports.ExternalFundsFactRegistration
 	verifications    map[string]ports.DutyVerificationRecord
+	handoffs         []ports.DutyPaymentVerificationHandoffIntent
 	collaborationErr error
 	verificationErr  error
 }
@@ -158,6 +160,14 @@ func (book *fakeDutyBook) SaveVerification(
 	return ports.CaseConfigurationRegistered, nil
 }
 
+func (book *fakeDutyBook) HandOffDutyPaymentVerification(
+	_ context.Context,
+	intent ports.DutyPaymentVerificationHandoffIntent,
+) error {
+	book.handoffs = append(book.handoffs, intent)
+	return nil
+}
+
 type dutyFixture struct {
 	registrar   registrar
 	credentials *fakeCredentialBook
@@ -176,6 +186,7 @@ func newDutyFixture(t *testing.T) *dutyFixture {
 			Collaborations: duties,
 			Funds:          duties,
 			Verifications:  duties,
+			Handoff:        duties,
 			Clock:          fixedClock{now: registerClockNow},
 		})
 	if err != nil {
@@ -437,7 +448,8 @@ func seedCollaboration(t *testing.T, fixture *dutyFixture) {
 // TestExecuteDutyPaymentVerificationLandsReplaysAndAppendsVersions 证核对子命令：两道前置
 // 齐备时形成 0 且三轴、依据、三维键原样到册（核对时间取时钟）；同一份重放 0 含 EXISTING；
 // 换一轴不是冲突而是新版本追加——迟到事实按新版本进、不按到达顺序覆盖（UC-CC-009），两版
-// 并存。这族没有「内容冲突」格，本口也不替它造一个。
+// 并存。这族没有「内容冲突」格，本口也不替它造一个。结算交接随形成走（票 sa-cc/05）：每形成
+// 一版交一封、重放不交，本口只证接通了，信封内容归适配器自己的用例。
 func TestExecuteDutyPaymentVerificationLandsReplaysAndAppendsVersions(t *testing.T) {
 	fixture := newDutyFixture(t)
 	ctx := context.Background()
@@ -468,12 +480,18 @@ func TestExecuteDutyPaymentVerificationLandsReplaysAndAppendsVersions(t *testing
 		if !record.Verification.VerifiedAt().Equal(registerClockNow) {
 			t.Fatalf("核对时间 = %s，要取时钟 %s", record.Verification.VerifiedAt(), registerClockNow)
 		}
+		if len(fixture.duties.handoffs) != 1 || fixture.duties.handoffs[0].Key != record.Key {
+			t.Fatalf("形成后该向 SA 交出恰好一封、认领刚落册那一版：%+v", fixture.duties.handoffs)
+		}
 	}
 
 	message, code = execute(ctx, commandDutyPaymentVerification,
 		verificationInput("PARTIAL", "SYN-RULE-01: remittance quotes assessment"), fixture.registrar)
 	if code != exitRegistered || !strings.Contains(message, "EXISTING_DUTY_VERIFICATION") {
 		t.Fatalf("重放 = %d（%s），要 0 且含 EXISTING_DUTY_VERIFICATION", code, message)
+	}
+	if len(fixture.duties.handoffs) != 1 {
+		t.Fatalf("重放后意图数 = %d，要仍是 1——`已存在`不重发", len(fixture.duties.handoffs))
 	}
 	message, code = execute(ctx, commandDutyPaymentVerification,
 		verificationInput("COVERED", "SYN-RULE-01: remittance quotes assessment"), fixture.registrar)
@@ -482,6 +500,9 @@ func TestExecuteDutyPaymentVerificationLandsReplaysAndAppendsVersions(t *testing
 	}
 	if len(fixture.duties.verifications) != 2 {
 		t.Fatalf("核对册行数 = %d，要两版并存", len(fixture.duties.verifications))
+	}
+	if len(fixture.duties.handoffs) != 2 {
+		t.Fatalf("新版本后意图数 = %d，要每版各一封", len(fixture.duties.handoffs))
 	}
 }
 

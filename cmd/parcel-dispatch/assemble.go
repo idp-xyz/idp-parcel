@@ -681,7 +681,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: continued attempt decision judgment undecided translation: %w", err)
 	}
 
-	fundsFacts, err := receiveExternalFundsFactConsumer(db, inboxStore, clock)
+	fundsFacts, err := receiveExternalFundsFactConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
 		return nil, err
 	}
@@ -2052,8 +2052,11 @@ func judgeLabelFinalOnLabelTransactionConsumer(
 //
 // 消费者不关联、不核对（票面红线）：`VerifyPayment` 的调用方今天不在本进程，这里只让事实进得来。
 // 登记编排只用到 `Funds` 一口；协作事项与核对两口在这条线上不被调用，装配不为它们造无用的适配器。
+// 核对形成那一格向 SA 交信封的 `Handoff` 口（票 sa-cc/05）同理在这条线上不被调用，但构造门逐口拒
+// nil，所以接的是真 Outbox 适配器而不是替身——生产装配里不放任何替身。
 func receiveExternalFundsFactConsumer(
 	db *bentopg.DB,
+	outboxStore *outbox.Store,
 	inboxStore *inbox.Store,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
@@ -2069,10 +2072,15 @@ func receiveExternalFundsFactConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: duty payment reconciliation store: %w", err)
 	}
+	verificationHandoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment verification handoff: %w", err)
+	}
 	receiver, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
 		Collaborations: reconciliation,
 		Funds:          reconciliation,
 		Verifications:  reconciliation,
+		Handoff:        verificationHandoff,
 		Clock:          clock,
 	})
 	if err != nil {

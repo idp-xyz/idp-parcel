@@ -24,8 +24,12 @@ import (
 // 核对的三轴（覆盖/差额/有效性）与关联依据由调用方交进来，编排不从金额相等推：真实程序
 // 的付款条件与关联规则属实例半边（UC-CC-009「付款义务与门禁关系规则」那行），今天没有
 // 它们，编排能守的是「无依据不关联」（无权威依据时保持外部资金事实待关联）与「三轴集外不受
-// 理」。与 RegisterGateFinding 收登记方判断的形状同一族。步 8 向 settlement-accounting 的
-// 交接不在本编排——它是下一张票的 outbox 意图，这里只把核对落成可被交接的记录。
+// 理」。与 RegisterGateFinding 收登记方判断的形状同一族。
+//
+// 步 8 向 settlement-accounting 的交接（票 sa-cc/05）在核对**形成**那一格同事务交出：信封只带
+// 引用（租户、申报范围、税费引用、资金事实引用、版本指纹），三轴留在本上下文的核对册里由 SA
+// 按引用回读——CC 是核对的权威，「核对形成」也不是「代垫成立」（SA CONTEXT：任一单项输入不能
+// 直接推导实际代垫）。`已存在`不重发、前置未齐与待关联不发：信封说的是「这一版核对已形成」。
 // 事务由进程级入口给出。
 
 // DutyReconciliationOutcome 是本编排三个方法共用的应用处理结果。
@@ -110,8 +114,9 @@ func (reason DutyReconciliationReason) String() string {
 }
 
 type DutyReconciliationResult struct {
-	outcome DutyReconciliationOutcome
-	reason  DutyReconciliationReason
+	outcome    DutyReconciliationOutcome
+	reason     DutyReconciliationReason
+	handoffRef string
 }
 
 func (result DutyReconciliationResult) Outcome() DutyReconciliationOutcome {
@@ -121,6 +126,13 @@ func (result DutyReconciliationResult) Outcome() DutyReconciliationOutcome {
 // UndecidedReason 只在`未决`时非零。
 func (result DutyReconciliationResult) UndecidedReason() DutyReconciliationReason {
 	return result.reason
+}
+
+// HandoffReference 非空说明这一版核对已入册但结算意图还没交出去；只在`核对已形成`那一格
+// 可能非空。它不像本上下文其余编排那样靠「重放重发」兑现：本口`已存在`不重发（VerifyPayment
+// 注释里的理由），续办引用因此是给运维看的坐标，不是给下一次调用的重投指令。
+func (result DutyReconciliationResult) HandoffReference() string {
+	return result.handoffRef
 }
 
 func dutyUndecided(reason DutyReconciliationReason) DutyReconciliationResult {
@@ -165,7 +177,10 @@ type DutyPaymentReconciliationDeps struct {
 	Collaborations ports.DutyCollaborationStore
 	Funds          ports.ExternalFundsFactRegister
 	Verifications  ports.DutyVerificationStore
-	Clock          ports.Clock
+	// Handoff 是步 8 的结算交接口，只被 VerifyPayment 在核对形成那一格调用。只走 FormCollaboration
+	// 或 ReceiveFundsFact 的装配点也得接真口——构造门对每一口一视同仁，漏装要在启动那一刻炸出来。
+	Handoff ports.DutyPaymentVerificationHandoff
+	Clock   ports.Clock
 }
 
 type DutyPaymentReconciliationHandler struct {
@@ -186,6 +201,7 @@ func NewDutyPaymentReconciliationHandler(deps DutyPaymentReconciliationDeps) (*D
 		{"duty collaboration store", deps.Collaborations == nil},
 		{"external funds fact register", deps.Funds == nil},
 		{"duty verification store", deps.Verifications == nil},
+		{"duty payment verification handoff", deps.Handoff == nil},
 		{"clock", deps.Clock == nil},
 	} {
 		if dependency.missing {
@@ -299,6 +315,12 @@ func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 // VerifyPayment 形成税费付款核对（步 7）。两道前置各有自己的格（资金事实未接收 / 协作事项
 // 未形成），无关联依据保持待关联；三轴集外由领域构造拒。同三维同内容是重放，同三维换内容
 // 是新版本追加——迟到事实按新版本进，不按到达顺序覆盖。
+//
+// 形成那一格同事务交结算意图（步 8）。`已存在`不重发，与本上下文其余编排「重放重发同一份」
+// 不同形，理由在事务边界上：信封与核对版本由同一笔事务落下，库侧入队失败会让整笔事务连核对
+// 一起中止，重跑仍走`形成`那一格并再铸同一封——重放时没有「版本在、信封不在」要补的那一格；
+// 而每一版核对各有自己的信封（ID 含指纹），重放`已存在`再交一次只会被 EnqueueOnce 吞掉，
+// 对下游是零信息。续办引用覆盖的是非库侧的交接失败（装配缺陷一类），那一格响亮而不是等重放。
 func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	ctx context.Context,
 	command VerifyDutyPaymentCommand,
@@ -352,10 +374,27 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		return dutyUndecided(DutyVerificationStoreUnavailable), nil
 	}
 	if saved == ports.CaseConfigurationRegistered {
-		return DutyReconciliationResult{outcome: DutyVerificationFormed}, nil
+		result := DutyReconciliationResult{outcome: DutyVerificationFormed}
+		result.handoffRef = handler.handOffVerification(ctx, record.Key, verification)
+		return result, nil
 	}
 	// 指纹里已含三轴与依据：撞键即同内容，不必再读回比。
 	return DutyReconciliationResult{outcome: DutyVerificationExisting}, nil
+}
+
+// handOffVerification 交结算意图。失败不翻核对，留续办引用指名哪一版没交出去。
+func (handler *DutyPaymentReconciliationHandler) handOffVerification(
+	ctx context.Context,
+	key ports.DutyVerificationKey,
+	verification domain.DutyPaymentVerification,
+) string {
+	if err := handler.deps.Handoff.HandOffDutyPaymentVerification(ctx, ports.DutyPaymentVerificationHandoffIntent{
+		Key:          key,
+		Verification: verification,
+	}); err == nil {
+		return ""
+	}
+	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8]
 }
 
 // verificationDigest 是核对内容的稳定指纹：三轴加关联依据。三维身份在键上，不进指纹。

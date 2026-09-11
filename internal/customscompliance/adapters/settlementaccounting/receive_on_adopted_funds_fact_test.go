@@ -95,6 +95,14 @@ func (double unreachedDutyStores) SaveVerification(
 	return ccports.CaseConfigurationSaveOutcomeInvalid, nil
 }
 
+func (double unreachedDutyStores) HandOffDutyPaymentVerification(
+	context.Context, ccports.DutyPaymentVerificationHandoffIntent,
+) error {
+	double.t.Helper()
+	double.t.Fatal("消费适配器不该向结算交核对信封——它不核对，也就无物可交")
+	return nil
+}
+
 // adoptedSourceDouble 是本上下文读提供方那口的替身：按（租户|事实|版本）给内容。
 type adoptedSourceDouble struct {
 	facts map[string]ccports.AdoptedFundsFact
@@ -125,6 +133,7 @@ func newFixture(t *testing.T) *fixture {
 		Collaborations: unreachedDutyStores{t: t},
 		Funds:          register,
 		Verifications:  unreachedDutyStores{t: t},
+		Handoff:        unreachedDutyStores{t: t},
 		Clock:          dutyClock{at: fundsOccurredAt.Add(time.Hour)},
 	})
 	if err != nil {

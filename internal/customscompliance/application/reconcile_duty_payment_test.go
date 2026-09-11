@@ -15,16 +15,21 @@ import (
 // UC-CC-009 步 4–7 的行为面（票 mechanism-executor-triage/07 CC-c）：协作事项两格分立且「缺少
 // 税费结果」保持未决；外部资金事实按引用入向登记；核对须先有协作事项与已接收的资金事实、
 // 且必带关联依据——无依据即保持待关联，不按金额相等猜。替身照真库代数：同键只答`已登记`。
+// 步 8 的结算交接（票 sa-cc/05）也在这里钉：核对形成那一格交一封、其余格不交、交接失败不翻结果。
 
 var dutyBaseAt = time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
 
+// dutyStoreDouble 同一本替身充当三口登记册加交接口。交接半边记下每一份意图与调用次数——
+// 「`已存在`不重发」要能从调用次数上读出来，不能只靠认领键吞重去证。
 type dutyStoreDouble struct {
 	collaborations   map[string]domain.DutyPaymentCollaboration
 	funds            map[string]ports.ExternalFundsFactRegistration
 	verifications    map[string]ports.DutyVerificationRecord
+	handoffs         []ports.DutyPaymentVerificationHandoffIntent
 	collaborationErr error
 	fundsErr         error
 	verificationErr  error
+	handoffErr       error
 }
 
 func newDutyStore() *dutyStoreDouble {
@@ -127,6 +132,17 @@ func (double *dutyStoreDouble) SaveVerification(
 	return ports.CaseConfigurationRegistered, nil
 }
 
+func (double *dutyStoreDouble) HandOffDutyPaymentVerification(
+	_ context.Context,
+	intent ports.DutyPaymentVerificationHandoffIntent,
+) error {
+	if double.handoffErr != nil {
+		return double.handoffErr
+	}
+	double.handoffs = append(double.handoffs, intent)
+	return nil
+}
+
 type dutyClock struct{ at time.Time }
 
 func (clock dutyClock) Now() time.Time { return clock.at }
@@ -145,6 +161,7 @@ func fullDutyDeps(store *dutyStoreDouble) application.DutyPaymentReconciliationD
 		Collaborations: store,
 		Funds:          store,
 		Verifications:  store,
+		Handoff:        store,
 		Clock:          dutyClock{at: dutyBaseAt},
 	}
 }
@@ -161,6 +178,7 @@ func TestTheReconciliationHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		{"duty collaboration store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Collaborations = nil }},
 		{"external funds fact register", func(deps *application.DutyPaymentReconciliationDeps) { deps.Funds = nil }},
 		{"duty verification store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Verifications = nil }},
+		{"duty payment verification handoff", func(deps *application.DutyPaymentReconciliationDeps) { deps.Handoff = nil }},
 		{"clock", func(deps *application.DutyPaymentReconciliationDeps) { deps.Clock = nil }},
 	}
 	for _, testCase := range cases {
@@ -409,6 +427,134 @@ func TestAChangedVerificationAppendsANewVersion(t *testing.T) {
 	}
 	if len(store.verifications) != 2 {
 		t.Fatalf("改判覆盖了前版：%d", len(store.verifications))
+	}
+}
+
+// 步 8 的结算交接（票 sa-cc/05 完成判据 1）：核对形成那一格交一封，意图由核对幂等键认领、
+// 携带的就是刚落册那一版的三维键与指纹；同内容重核是`已存在`，**不再调交接口**——信封随形成
+// 那一版同事务入队，重放没有可补的那一格；改判是新版本，再交一封、键上指纹不同。
+func TestAFormedVerificationHandsOffOneEnvelopeAndReplayDoesNotResend(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	if _, err := handler.ReceiveFundsFact(t.Context(), fundsFactCommand(t)); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+
+	formed, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+	if err != nil || formed.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("核对：err=%v outcome=%v", err, formed.Outcome())
+	}
+	if formed.HandoffReference() != "" {
+		t.Fatalf("交接成功不该留续办引用，实得 %q", formed.HandoffReference())
+	}
+	if len(store.handoffs) != 1 {
+		t.Fatalf("形成后意图数 = %d，want 1", len(store.handoffs))
+	}
+	for key, record := range store.verifications {
+		intent := store.handoffs[0]
+		if verificationKey(intent.Key) != key {
+			t.Fatalf("意图认领的键 = %+v，不是刚落册那一版 %s", intent.Key, key)
+		}
+		if intent.Key.Digest == "" || intent.Verification.Duty() != record.Verification.Duty() ||
+			intent.Verification.Funds() != record.Verification.Funds() ||
+			intent.Verification.Scope() != record.Verification.Scope() ||
+			!intent.Verification.VerifiedAt().Equal(record.Verification.VerifiedAt()) {
+			t.Fatalf("意图携带的核对与落册那份不是同一件：%+v", intent)
+		}
+	}
+
+	replay, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+	if err != nil || replay.Outcome() != application.DutyVerificationExisting {
+		t.Fatalf("重核：err=%v outcome=%v", err, replay.Outcome())
+	}
+	if len(store.handoffs) != 1 {
+		t.Fatalf("`已存在`后意图数 = %d，want 1——重放不重发", len(store.handoffs))
+	}
+
+	invalidated := verifyDutyCommand(t)
+	invalidated.Validity = domain.FundsFactInvalidated
+	invalidated.Coverage = domain.CoverageNone
+	invalidated.Basis = "SYN-BANK-01: remittance reversed"
+	if result, err := handler.VerifyPayment(t.Context(), invalidated); err != nil ||
+		result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("改判：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.handoffs) != 2 || store.handoffs[0].Key.Digest == store.handoffs[1].Key.Digest {
+		t.Fatalf("改判该另交一封且指纹不同：%d 封", len(store.handoffs))
+	}
+}
+
+// 没形成核对的每一格都不交：无依据的待关联、资金事实未接收、协作事项未形成、三轴集外、
+// 核对库故障——信封说的是「这一版核对已形成」，没形成就无物可交。
+func TestNoEnvelopeLeavesWhenNoVerificationIsFormed(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+
+	noBasis := verifyDutyCommand(t)
+	noBasis.Basis = ""
+	if result, err := handler.VerifyPayment(t.Context(), noBasis); err != nil ||
+		result.Outcome() != application.FundsFactPendingAssociation {
+		t.Fatalf("待关联：err=%v outcome=%v", err, result.Outcome())
+	}
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.FundsFactNotReceived {
+		t.Fatalf("资金事实未接收：err=%v outcome=%v", err, result.Outcome())
+	}
+	if _, err := handler.ReceiveFundsFact(t.Context(), fundsFactCommand(t)); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.CollaborationNotFormed {
+		t.Fatalf("协作事项未形成：err=%v outcome=%v", err, result.Outcome())
+	}
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	offAxis := verifyDutyCommand(t)
+	offAxis.Delta = domain.DutyDeltaInvalid
+	if result, err := handler.VerifyPayment(t.Context(), offAxis); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("三轴集外：err=%v outcome=%v", err, result.Outcome())
+	}
+	store.verificationErr = errors.New("verification store down")
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.DutyReconciliationUndecided {
+		t.Fatalf("核对库故障：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.handoffs) != 0 {
+		t.Fatalf("没形成核对却交了 %d 封", len(store.handoffs))
+	}
+}
+
+// 交接失败按仓内既有形（close_customs_case 的 handOffClosure）：核对已落册不翻成未决，续办引用
+// 非空指名哪一版的信封没交出去。这里不再有「重放补交」那半——`已存在`不重发是本口有意的选择：
+// 真库上信封与核对同一事务，库侧入队失败会把整笔事务连核对一起中止，重跑仍走`形成`那一格。
+func TestAFailedHandoffLeavesTheVerificationFormedWithAContinuationReference(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	if _, err := handler.ReceiveFundsFact(t.Context(), fundsFactCommand(t)); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+	store.handoffErr = errors.New("outbox unavailable")
+
+	result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+	if err != nil || result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("核对已落册，交接失败不翻它：err=%v outcome=%v", err, result.Outcome())
+	}
+	if result.HandoffReference() == "" {
+		t.Fatal("交接失败必须留续办引用")
+	}
+	if len(store.verifications) != 1 {
+		t.Fatalf("核对行数 = %d，want 1", len(store.verifications))
+	}
+	if len(store.handoffs) != 0 {
+		t.Fatalf("失败的交接不该留下意图：%d", len(store.handoffs))
 	}
 }
 

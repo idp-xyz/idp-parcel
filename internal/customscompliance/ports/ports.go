@@ -1072,6 +1072,27 @@ type DutyVerificationStore interface {
 	SaveVerification(ctx context.Context, record DutyVerificationRecord) (CaseConfigurationSaveOutcome, error)
 }
 
+// DutyPaymentVerificationHandoffIntent 把一版已形成的税费付款核对交给 `settlement-accounting`
+// （UC-CC-009 步 8 的结算交接；SA 的实际代垫成立判断以「关务税费及付款核对」为输入之一，票
+// sa-cc/05）。意图由核对幂等键认领——三维身份加内容指纹就是核对版本，迟到事实换指纹换版，
+// 每版各自一封；重放同一版由 outboxintent.EnqueueOnce 吞掉（ADR-0043）。
+//
+// 载荷只带引用：租户、申报范围、税费引用、资金事实引用与版本指纹。覆盖 / 差额 / 有效性三轴
+// **不进信封**——CC 是核对的权威，SA 按引用回读 DutyVerificationStore 取那一版；信封带上结论
+// 就成了第二处口径，而「核对形成」本身也不是「代垫成立」（SA CONTEXT：任一单项输入不能
+// 直接推导）。Verification 随意图交进来只为适配器取核对时刻作 OccurredAt。
+type DutyPaymentVerificationHandoffIntent struct {
+	Key          DutyVerificationKey
+	Verification domain.DutyPaymentVerification
+}
+
+// DutyPaymentVerificationHandoff 把核对版本写入 Outbox（`OutboxDutyPaymentVerificationHandoff`）。
+// 信封 ID 由核对幂等键认领，分区主体是「租户 / 申报范围」——同一范围的核对版本链排一条队
+// （ADR-0069 决定二的口径：ID 管幂等、分区键管顺序），入队由 outboxintent.EnqueueOnce 承担。
+type DutyPaymentVerificationHandoff interface {
+	HandOffDutyPaymentVerification(ctx context.Context, intent DutyPaymentVerificationHandoffIntent) error
+}
+
 // PortsPathsCatalogueRead 是两本目录的伴生列表读口（ADR-0077 Decision 一/五）：
 // 管理台 customs-ports-paths 页上列口岸目录与申报路径目录两册（票
 // admin-remainder-mechanism-batch/03）。查阅不触发判断、决定或披露——它接存储读面，
