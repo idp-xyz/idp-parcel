@@ -95,3 +95,33 @@ func (UnconfiguredIntake) IntakeCaseRequirementRegistration(
 ) (application.RegisterCaseRequirementRuleCommand, error) {
 	return application.RegisterCaseRequirementRuleCommand{}, ErrAccessChannelNotConfigured
 }
+
+// 凭证、税费付款协作事项、税费付款核对三口的未配置实现（票 sa-cc/07 步二），分界同上：
+// 不读业务内容、不采信自报身份、不构造命令。写准入不另立形（ADR-0085 Decision 二），
+// 隔离读放行同样装不进这三口。
+var (
+	_ RegulatoryCredentialRegistrationIntake    = UnconfiguredIntake{}
+	_ DutyCollaborationRegistrationIntake       = UnconfiguredIntake{}
+	_ DutyPaymentVerificationRegistrationIntake = UnconfiguredIntake{}
+)
+
+func (UnconfiguredIntake) IntakeRegulatoryCredentialRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterCredentialCommand, error) {
+	return application.RegisterCredentialCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDutyCollaborationRegistration(
+	context.Context,
+	*http.Request,
+) (application.FormDutyCollaborationCommand, error) {
+	return application.FormDutyCollaborationCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeDutyPaymentVerificationRegistration(
+	context.Context,
+	*http.Request,
+) (application.VerifyDutyPaymentCommand, error) {
+	return application.VerifyDutyPaymentCommand{}, ErrAccessChannelNotConfigured
+}
