@@ -35,7 +35,7 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 | [04](issues/04-cc-credential-gate-persists-in-readiness-assessment.md) | UC-CC-003 步 7「记录凭证门禁」的持久化 | CC | 无 |
 | [05](issues/05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md) | UC-CC-009 核对向 SA 的交接（outbox 意图） | CC | 无 |
 | [06](issues/06-cc-release-gate-reads-duty-payment-verification.md) | 放行门禁核对读付款核对 | CC | 无 |
-| [07](issues/07-cc-credential-and-duty-reconciliation-registration-faces.md) | 凭证 / 协作 / 付款核对三册的在线登记面（CLI + 端点 + 管理台；资金事实人工口按 ADR-0137 决定四去掉） | CC | 步二 Blocked by 10；步一不阻 |
+| [07](issues/07-cc-credential-and-duty-reconciliation-registration-faces.md) | 凭证 / 协作 / 付款核对三册的在线登记面（CLI + 端点 + 管理台；资金事实人工口按 ADR-0137 决定四去掉）——**步一 CLI 已进 main，2026-09-11 13:4x**（分支 `mcp2-sacc07-cli`，代码 tip `40f3d6d3`；main 重放 tip `3ec86aaa`、清点 `fa386a29`；非作者评审 ← 通道 1 推送方自跑两轴 0 阻断，非阻断两条随票记）；**步二在途**（`mcp2-sacc07-web`，通道 2） | CC | 步二 Blocked by 10 → 10 已进 main，不再阻；步一无 |
 | [08](issues/08-sa-evaluation-request-orchestration-records-source-references.md) | UC-SA-002 步 2 请求评价编排——评价请求登记册（铸造 ID + 自然键唯一）同事务发信封给 PP（01 裁 (c) 时另立） | SA | 11（登记册与发信封半边可先落；「请求 → 评价引用」要 11） |
 | [09](issues/09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) | SA inbox 消费付款核对信封 → `AssessAdvanceRecoveryHandler`（05 裁「本目录加一张」） | SA | 05 |
 | [10](issues/10-cc-credential-collaboration-and-verification-read-faces.md) | 凭证 / 协作 / 付款核对三册的读面（伴生列表读口 + 查阅端点 + 管理台读签：凭证进 customs-cases、协作与核对进 customs-restrictions；07 裁「读面另立」）——**resolved，2026-09-11 10:5x 进 main**（分支 `mcp5-sacc10`，代码 tip `0017f49b`；main 重放 tip `99ceb975` 含清点；非作者评审 ← 通道 2 两轴 0 阻断，非阻断六条随票记） | CC | 无 |
