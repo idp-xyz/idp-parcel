@@ -12,10 +12,10 @@ import (
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
 
-// 关务四类配置登记的生产装配（ADR-0085，票 admin-write-faces/02 切片 02b）。四类分属
-// 两个登记用例 handler（案件配置面与口岸路径面），传输层却按类各要一个 Registrar：
-// 四个包装类型因此不合并，判据同价卡那两格——合并就得把四组 Handle 挤进一个类型再按
-// 命令分派，装配测试会盖不住「某一格接错了编排」。
+// 关务配置登记写面的生产装配（ADR-0085，票 admin-write-faces/02 切片 02b；凭证与税费
+// 付款协作 / 核对三册随票 sa-cc/07 步二进来）。各类分属不同的登记用例 handler，传输层
+// 却按类各要一个 Registrar：包装类型因此不合并，判据同价卡那两格——合并就得把各组
+// 方法挤进一个类型再按命令分派，装配测试会盖不住「某一格接错了编排」。
 //
 // 事务边界与 transactionalPriceCardRegistration 同源：登记册写口按框架合同无事务即拒，
 // 一次调用一笔事务，登记与它的冲突判定读回因此看同一份快照；用例交回业务答案（含重放
@@ -128,18 +128,102 @@ func (registration transactionalCaseRequirementRegistration) Handle(
 		})
 }
 
-// customsRegistrationOrchestration 收拢五格，供装配点一次取回。分五个字段而不是一个
+// 凭证册与税费付款协作 / 核对两册的事务壳（票 sa-cc/07 步二）。凭证册交回配置族的
+// CaseConfigurationOutcome，壳照上面几格；协作与核对交回 DutyReconciliationResult，壳另立
+// 一份 dutyReconciliationInTransaction——两族答案类型不同，硬套同一个泛型壳就得在装配层
+// 引入类型参数，而这一层要的是「谁接谁一眼看得出」。
+type transactionalRegulatoryCredentialRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *customsapp.RegisterCredentialHandler
+}
+
+var _ customshttp.RegulatoryCredentialRegistrar = transactionalRegulatoryCredentialRegistration{}
+
+func (registration transactionalRegulatoryCredentialRegistration) Handle(
+	ctx context.Context,
+	command customsapp.RegisterCredentialCommand,
+) (customsapp.CaseConfigurationOutcome, error) {
+	return caseConfigurationInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (customsapp.CaseConfigurationOutcome, error) {
+			return registration.inner.Handle(txCtx, command)
+		})
+}
+
+// dutyReconciliationInTransaction 是协作与核对两格共用的事务壳，边界判据同
+// caseConfigurationInTransaction：用例交回业务答案（含重放、前置未齐与业务未决）时提交，
+// 返回错误时整笔回滚。一次调用一笔事务，核对读两道前置与落核对因此看同一份快照。
+func dutyReconciliationInTransaction(
+	ctx context.Context,
+	transactor bentoapp.Transactor,
+	register func(context.Context) (customsapp.DutyReconciliationResult, error),
+) (customsapp.DutyReconciliationResult, error) {
+	var result customsapp.DutyReconciliationResult
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		registered, registerErr := register(txCtx)
+		if registerErr != nil {
+			return registerErr
+		}
+		result = registered
+		return nil
+	})
+	if err != nil {
+		return customsapp.DutyReconciliationResult{}, err
+	}
+	return result, nil
+}
+
+// 协作与核对两个包装类型各自只暴露端点要的那一个用例方法：内层是同一个
+// DutyPaymentReconciliationHandler，它本身就同时满足两个 Registrar 契约，但直接把它接进
+// 端点表就绕过了事务壳——登记写口无环境事务即拒，形照 parcel-customs-register 的 execute。
+type transactionalDutyCollaborationRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *customsapp.DutyPaymentReconciliationHandler
+}
+
+var _ customshttp.DutyCollaborationRegistrar = transactionalDutyCollaborationRegistration{}
+
+func (registration transactionalDutyCollaborationRegistration) FormCollaboration(
+	ctx context.Context,
+	command customsapp.FormDutyCollaborationCommand,
+) (customsapp.DutyReconciliationResult, error) {
+	return dutyReconciliationInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (customsapp.DutyReconciliationResult, error) {
+			return registration.inner.FormCollaboration(txCtx, command)
+		})
+}
+
+type transactionalDutyPaymentVerificationRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *customsapp.DutyPaymentReconciliationHandler
+}
+
+var _ customshttp.DutyPaymentVerificationRegistrar = transactionalDutyPaymentVerificationRegistration{}
+
+func (registration transactionalDutyPaymentVerificationRegistration) VerifyPayment(
+	ctx context.Context,
+	command customsapp.VerifyDutyPaymentCommand,
+) (customsapp.DutyReconciliationResult, error) {
+	return dutyReconciliationInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (customsapp.DutyReconciliationResult, error) {
+			return registration.inner.VerifyPayment(txCtx, command)
+		})
+}
+
+// customsRegistrationOrchestration 收拢各格，供装配点一次取回。分字段而不是一个
 // handler：端点表按类各接一格，收成一格就得在装配行上现取字段，那正是要避免的「谁接
 // 谁在装配点看不出来」。
 type customsRegistrationOrchestration struct {
-	interpretationRule transactionalInterpretationRuleRegistration
-	gateCatalog        transactionalGateCatalogRegistration
-	candidatePort      transactionalCandidatePortRegistration
-	declarationPath    transactionalDeclarationPathRegistration
-	caseRequirement    transactionalCaseRequirementRegistration
+	interpretationRule       transactionalInterpretationRuleRegistration
+	gateCatalog              transactionalGateCatalogRegistration
+	candidatePort            transactionalCandidatePortRegistration
+	declarationPath          transactionalDeclarationPathRegistration
+	caseRequirement          transactionalCaseRequirementRegistration
+	regulatoryCredential     transactionalRegulatoryCredentialRegistration
+	dutyCollaboration        transactionalDutyCollaborationRegistration
+	dutyPaymentVerification  transactionalDutyPaymentVerificationRegistration
 }
 
-// buildCustomsRegistrationOrchestration 装配四个 `/customs-*-registrations` 的真编排。
+// buildCustomsRegistrationOrchestration 装配各 `/customs-*-registrations` 的真编排。
 // 接真不等墙降，判据同价卡首切片。
 //
 // 案件配置面的十只适配器全建而不只建解释规则与门禁那四只：`RegisterCaseConfigurationDeps`
@@ -205,6 +289,21 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: customs case requirement view: %w", err)
 	}
+	credentialRegistry, err := ccpostgres.NewCredentialRegistrations(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs credential registry: %w", err)
+	}
+	credentialView, err := ccpostgres.NewCredentialView(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs credential view: %w", err)
+	}
+	// 协作事项、资金事实引用、付款核对三口在同一个适配器上（同一迁移的三张表）；编排
+	// 的三个依赖都指它，资金事实那一口只被核对读前置——它的写入来自 SA 采用信封的消费者
+	// （ADR-0137 Decision 四），本进程没有登它的端点。
+	dutyReconciliation, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs duty payment reconciliation store: %w", err)
+	}
 
 	configurations := customsapp.NewRegisterCaseConfigurationHandler(customsapp.RegisterCaseConfigurationDeps{
 		Readiness:      readiness,
@@ -222,13 +321,30 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 		customsapp.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPathsView})
 	requirementHandler := customsapp.NewRegisterCaseRequirementRuleHandler(
 		customsapp.RegisterCaseRequirementRuleDeps{Rules: requirements, View: requirementView})
+	credentialHandler := customsapp.NewRegisterCredentialHandler(
+		customsapp.RegisterCredentialDeps{Registry: credentialRegistry, View: credentialView})
+	// 构造门在构造期拒 nil 依赖（票 sa-cc/14 的纪律）：装配疏漏在进程启动那一刻炸出来，
+	// 不等第一份协作事项到达。
+	dutyReconciliationHandler, err := customsapp.NewDutyPaymentReconciliationHandler(
+		customsapp.DutyPaymentReconciliationDeps{
+			Collaborations: dutyReconciliation,
+			Funds:          dutyReconciliation,
+			Verifications:  dutyReconciliation,
+			Clock:          systemClock{},
+		})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: customs duty payment reconciliation orchestration: %w", err)
+	}
 
 	transactor := db.Transactor()
 	return customsRegistrationOrchestration{
-		interpretationRule: transactionalInterpretationRuleRegistration{transactor: transactor, inner: configurations},
-		gateCatalog:        transactionalGateCatalogRegistration{transactor: transactor, inner: configurations},
-		candidatePort:      transactionalCandidatePortRegistration{transactor: transactor, inner: portsPathsHandler},
-		declarationPath:    transactionalDeclarationPathRegistration{transactor: transactor, inner: portsPathsHandler},
-		caseRequirement:    transactionalCaseRequirementRegistration{transactor: transactor, inner: requirementHandler},
+		interpretationRule:      transactionalInterpretationRuleRegistration{transactor: transactor, inner: configurations},
+		gateCatalog:             transactionalGateCatalogRegistration{transactor: transactor, inner: configurations},
+		candidatePort:           transactionalCandidatePortRegistration{transactor: transactor, inner: portsPathsHandler},
+		declarationPath:         transactionalDeclarationPathRegistration{transactor: transactor, inner: portsPathsHandler},
+		caseRequirement:         transactionalCaseRequirementRegistration{transactor: transactor, inner: requirementHandler},
+		regulatoryCredential:    transactionalRegulatoryCredentialRegistration{transactor: transactor, inner: credentialHandler},
+		dutyCollaboration:       transactionalDutyCollaborationRegistration{transactor: transactor, inner: dutyReconciliationHandler},
+		dutyPaymentVerification: transactionalDutyPaymentVerificationRegistration{transactor: transactor, inner: dutyReconciliationHandler},
 	}, nil
 }
