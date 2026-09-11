@@ -76,6 +76,11 @@ func (adapter *AdoptOnDutyPaymentVerificationAdapter) HandleFormedDutyPaymentVer
 		return err
 	}
 
+	// 读口的一切错误都折进可见性滞后、原因只留文本不留链——含 CustomsDutyPaymentVerificationView 把同一引用译成
+	// 提供方键时可能交回的 ErrUntranslatableReference。今天这样包不会吞掉词汇分歧：上面的构造门（租户与 verificationReference）
+	// 与提供方那一侧的构造门同为非空白校验，本上下文构造得出的引用提供方必构造得出，读口里那条分支在生产上走不到；
+	// 生产装配名单里「ErrUntranslatableReference 不在未决名单」对本函数自己译出的那几处因此写实（原样上抛、
+	// 落 publish_failed）。要不要让它从读口错误里原样穿过，记在票 sa-cc/16「要裁的」，不在此改分格。
 	visible, err := adapter.view.DutyPaymentVerificationExists(ctx, tenant, verification)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrVerificationNotVisible, err)
