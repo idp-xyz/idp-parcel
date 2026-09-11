@@ -1,7 +1,7 @@
 # UC-CC-009 的税费付款核对形成后不向 `settlement-accounting` 交接：`VerifyPayment` 落库即止，SA 的实际代垫成立判断拿不到「关务税费及付款核对」这一项输入
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：分区主体取租户 / 申报范围、SA 侧消费者另立 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md)（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-11 14:1x 通道 5 按通道 1 派单 task-3de4ab39 开工，分支 `mcp5-sacc05`（派单写基 `51ca1270`，开工时 `ls-remote` 远端 main 已到 `5d6fda3f`，其间两笔只动 `.scratch/`，故基 `5d6fda3f`）。此前 ready-for-agent——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff746（用户授权代裁）写入裁决：分区主体取租户 / 申报范围、SA 侧消费者另立 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md)（见「要裁的」下「裁决」），本票再无待裁问题。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 无
 
 ## 缺口（取证于 `3f485e97`）
